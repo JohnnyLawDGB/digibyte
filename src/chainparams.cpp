@@ -156,7 +156,7 @@ public:
         vSeeds.emplace_back("eu.digibyteseed.com"); // Jan De Jong @jongjan88
         vSeeds.emplace_back("seed.digibyte.link"); // Bastian Driessen @bastiandriessen
         vSeeds.emplace_back("seed.quakeguy.com"); // Paul Morgan Quakeitup @SnKQuaKe
-
+        vSeeds.emplace_back("seed.aroundtheblock.app); // Mark McNiel @JohnnyLaw2021
         // DigiByte MAINNET Full Nodes: (These will eventually be removed to be replaced with genuine DigiByte Seeders above.)
         vSeeds.emplace_back("seed2.digibyte.io"); // Jared Tate
         vSeeds.emplace_back("seed.digibyte.host"); // SashaD

@@ -153,7 +153,7 @@ public:
 
         // DigiByte MAINNET DNS Seed Server:
         vSeeds.emplace_back("seed.digibyte.io"); // Jared Tate @JaredTate
-        vSeeds.emplace_back("seed.digibyte.help"); // Olly Stedall @saltedlolly 
+        vSeeds.emplace_back("seed.diginode.tools"); // Olly Stedall @saltedlolly 
         vSeeds.emplace_back("seed.digibyteblockchain.org"); // John Song @j50ng
         vSeeds.emplace_back("eu.digibyteseed.com"); // Jan De Jong @jongjan88
         vSeeds.emplace_back("seed.digibyte.link"); // Bastian Driessen @bastiandriessen
@@ -411,7 +411,7 @@ public:
         // nodes with support for servicebits filtering should be at the top
 
         // DigiByte TESTNET DNS Seed Servers:
-        vSeeds.emplace_back("testnetseed.digibyte.help"); // Olly Stedall @saltedlolly 
+        vSeeds.emplace_back("testnetseed.diginode.tools"); // Olly Stedall @saltedlolly 
         vSeeds.emplace_back("testseed.digibyteblockchain.org"); // John Song @j50ng
         vSeeds.emplace_back("testnet.digibyteseed.com"); // Jan De Jong @jongjan88
         vSeeds.emplace_back("testnetseed.digibyte.link"); // Bastian Driessen @bastiandriessen

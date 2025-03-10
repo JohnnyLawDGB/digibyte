@@ -20,9 +20,18 @@ class WalletRBFTest(DigiByteTestFramework):
         self.generate(self.nodes[0], COINBASE_MATURITY_2 + 1)
 
         # sending a transaction without fee estimations must be possible by default on regtest
+        # with the default non-zero fallback fee
         self.nodes[0].sendtoaddress(self.nodes[0].getnewaddress(), 1)
+        
+        # Create multiple recipients for sendmany test
+        recipients = {}
+        for _ in range(5):
+            recipients[self.nodes[0].getnewaddress()] = 0.1
+        
+        # sendmany should also work with default non-zero fallback fee
+        self.nodes[0].sendmany("", recipients)
 
-        # test sending a tx with disabled fallback fee (must fail)
+        # test sending a tx with explicitly disabled fallback fee (must fail)
         self.restart_node(0, extra_args=["-fallbackfee=0"])
         assert_raises_rpc_error(-6, "Fee estimation failed", lambda: self.nodes[0].sendtoaddress(self.nodes[0].getnewaddress(), 1))
         assert_raises_rpc_error(-4, "Fee estimation failed", lambda: self.nodes[0].fundrawtransaction(self.nodes[0].createrawtransaction([], {self.nodes[0].getnewaddress(): 1})))

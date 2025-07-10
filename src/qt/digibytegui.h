@@ -9,7 +9,7 @@
 #include <config/digibyte-config.h>
 #endif
 
-#include <qt/bitcoinunits.h>
+#include <qt/digibyteunits.h>
 #include <qt/clientmodel.h>
 #include <qt/guiutil.h>
 #include <qt/optionsdialog.h>

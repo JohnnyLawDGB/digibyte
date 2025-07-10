@@ -1,4 +1,4 @@
-package org.bitcoincore.qt;
+package org.digibytecore.qt;
 
 import android.os.Bundle;
 import android.system.ErrnoException;
@@ -13,9 +13,9 @@ public class BitcoinQtActivity extends QtActivity
     @Override
     public void onCreate(Bundle savedInstanceState)
     {
-        final File bitcoinDir = new File(getFilesDir().getAbsolutePath() + "/.bitcoin");
-        if (!bitcoinDir.exists()) {
-            bitcoinDir.mkdir();
+        final File digibyteDir = new File(getFilesDir().getAbsolutePath() + "/.digibyte");
+        if (!digibyteDir.exists()) {
+            digibyteDir.mkdir();
         }
 
         super.onCreate(savedInstanceState);

@@ -429,7 +429,7 @@ caching. A sample config for apache2 could look like:
     SSLCertificateFile /etc/apache2/ssl/server.crt
     SSLCertificateKeyFile /etc/apache2/ssl/server.key
 
-    <Location /bitcoinrpc>
+    <Location /digibyterpc>
         ProxyPass http://127.0.0.1:8332/
         ProxyPassReverse http://127.0.0.1:8332/
         # optional enable digest auth
@@ -438,7 +438,7 @@ caching. A sample config for apache2 could look like:
 
         # optional bypass digibyted rpc basic auth
         # RequestHeader set Authorization "Basic <hash>"
-        # get the <hash> from the shell with: base64 <<< bitcoinrpc:<password>
+        # get the <hash> from the shell with: base64 <<< digibyterpc:<password>
     </Location>
 
     # Or, balance the load:

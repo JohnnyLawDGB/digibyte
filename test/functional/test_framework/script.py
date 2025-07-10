@@ -4,7 +4,7 @@
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Functionality to build scripts, as well as signature hash functions.
 
-This file is modified from python-bitcoinlib.
+This file is modified from python-digibytelib.
 """
 
 from collections import namedtuple

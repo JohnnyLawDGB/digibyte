@@ -16,7 +16,7 @@ import os
 
 EXCLUDE = [
     # auto generated:
-    'src/qt/bitcoinstrings.cpp',
+    'src/qt/digibytestrings.cpp',
     'src/chainparamsseeds.h',
     # other external copyrights:
     'src/reverse_iterator.h',

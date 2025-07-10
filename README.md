@@ -1,10 +1,10 @@
 DigiByte Core integration/staging tree
 =====================================
 
-https://bitcoincore.org
+https://digibytecore.org
 
 For an immediately usable, binary version of the DigiByte Core software, see
-https://bitcoincore.org/en/download/.
+https://digibytecore.org/en/download/.
 
 What is DigiByte Core?
 ---------------------

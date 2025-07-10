@@ -2,8 +2,8 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef BITCOIN_POLICY_PACKAGES_H
-#define BITCOIN_POLICY_PACKAGES_H
+#ifndef DIGIBYTE_POLICY_PACKAGES_H
+#define DIGIBYTE_POLICY_PACKAGES_H
 
 #include <consensus/consensus.h>
 #include <consensus/validation.h>
@@ -67,4 +67,4 @@ bool IsChildWithParents(const Package& package);
  * other (the package is a "tree").
  */
 bool IsChildWithParentsTree(const Package& package);
-#endif // BITCOIN_POLICY_PACKAGES_H
+#endif // DIGIBYTE_POLICY_PACKAGES_H

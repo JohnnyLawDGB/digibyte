@@ -12,7 +12,7 @@ src/digibyte-util
 src/digibyte-chainstate
 src/digibyte-wallet
 src/test/fuzz/fuzz
-src/test/test_bitcoin
+src/test/test_digibyte
 src/qt/test/test_digibyte-qt
 
 # autoreconf
@@ -116,7 +116,7 @@ releases
 *.gcno
 *.gcda
 /*.info
-test_bitcoin.coverage/
+test_digibyte.coverage/
 total.coverage/
 fuzz.coverage/
 coverage_percent.txt

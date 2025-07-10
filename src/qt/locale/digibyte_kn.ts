@@ -34,7 +34,7 @@ Signing is only possible with addresses of the type 'legacy'.</source>
         <translation type="unfinished">ವಾಲೆಟ್ ಪಾಸ್‌ಫ್ರೇಸ್ ಹಳೆಯ ಮತ್ತು ಹೊಸ ಪಾಸ್‌ಫ್ರೇಸ್ ನಮೂದಿಸಲು ಸಿದ್ಧವಿರಿ.</translation>
     </message>
     <message>
-        <source>Remember that encrypting your wallet cannot fully protect your bitcoins from being stolen by malware infecting your computer.</source>
+        <source>Remember that encrypting your wallet cannot fully protect your digibytes from being stolen by malware infecting your computer.</source>
         <translation type="unfinished">ನಿಮ್ಮ ವಾಲೆಟ್ ಎನ್ಕ್ರಿಪ್ಟ್ ಮಾಡುವುದರಿಂದ ನಿಮ್ಮ ಕಂಪ್ಯೂಟರ್ ಸೋಕಿದ ಮಲ್ವೇರ್ ನೋಂದಣಿಗೆ ಬಲಗೊಳಿಸುವ ಕಾದಂಬರಿಗೆ ನಿಮ್ಮ ಬಿಟ್‌ಕಾಯಿನ್ ಪೂರ್ತಿಯಾಗಿ ಸುರಕ್ಷಿತವಾಗುವುದಿಲ್ಲವೆಂದು ನೆನಪಿಡಿ.</translation>
     </message>
     <message>
@@ -194,7 +194,7 @@ Signing is only possible with addresses of the type 'legacy'.</source>
     <message>
         <source>Incompatible options: -dnsseed=1 was explicitly specified, but -onlynet forbids connections to IPv4/IPv6</source>
         <translation type="unfinished">ಅಸಮರ್ಥ ಆಯ್ಕೆಗಳು: -dnsseed=1 ದೃಷ್ಟಿಯಲ್ಲಿದ್ದರೂ, -onlynet ದ್ವಾರಾ IPv4/IPv6 ಸಂಪರ್ಕಗಳನ್ನು ನಿಷೇಧಿಸುತ್ತದೆ.
- 
+
  </translation>
     </message>
     <message>
@@ -204,7 +204,7 @@ Signing is only possible with addresses of the type 'legacy'.</source>
     <message>
         <source>Outbound connections restricted to Tor (-onlynet=onion) but the proxy for reaching the Tor network is not provided: none of -proxy, -onion or -listenonion is given</source>
         <translation type="unfinished">ಹೊರಗಡೆಯ ಸಂಪರ್ಕಗಳು Tor ಗೆ ಮಿತಿಮೀರಿರುವುದು (-onlynet=onion), ಆದರೆ Tor ನೆಟ್ವರ್ಕ್ ತಲುಪಲು ಪ್ರಾಕ್ಸಿ ಒದಗಿಸಲ್ಪಡುವುದಿಲ್ಲ: -proxy, -onion ಅಥವಾ -listenonion ಯಲ್ಲಿ ಯಾವುದೇ ಒಂದು ನೀಡಲಾಗಿಲ್ಲ.
- 
+
  </translation>
     </message>
     <message>

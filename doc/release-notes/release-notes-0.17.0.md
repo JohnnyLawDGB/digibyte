@@ -1,6 +1,6 @@
 DigiByte Core version 0.17.0 is now available from:
 
-  <https://bitcoincore.org/bin/digibyte-core-0.17.0/>
+  <https://digibytecore.org/bin/digibyte-core-0.17.0/>
 
 This is a new major version release, including new features, various bugfixes
 and performance improvements, as well as updated translations.
@@ -11,7 +11,7 @@ Please report bugs using the issue tracker at GitHub:
 
 To receive security and update notifications, please subscribe to:
 
-  <https://bitcoincore.org/en/list/announcements/join/>
+  <https://digibytecore.org/en/list/announcements/join/>
 
 How to Upgrade
 ==============
@@ -747,7 +747,7 @@ Support for Python 2 has been discontinued for all test files and tools.
 - #13219 `08516e0` bench: Add block assemble benchmark (MarcoFalke)
 - #13530 `b1dc39d` bench: Add missing pow.h header (laanwj)
 - #12686 `2643fa5` Add -ftrapv to CFLAGS and CXXFLAGS when --enable-debug is used. Enable -ftrapv in Travis (practicalswift)
-- #12882 `d96bdd7` Make `test_bitcoin` pass under ThreadSanitzer (clang). Fix lock-order-inversion (potential deadlock) (practicalswift)
+- #12882 `d96bdd7` Make `test_digibyte` pass under ThreadSanitzer (clang). Fix lock-order-inversion (potential deadlock) (practicalswift)
 - #13535 `2328039` `wallet_basic`: Specify minimum required amount for listunspent (MarcoFalke)
 - #13551 `c93c360` Fix incorrect documentation for test case `cuckoocache_hit_rate_ok` (practicalswift)
 - #13563 `b330f3f` bench: Simplify coinselection (promag)
@@ -774,7 +774,7 @@ Support for Python 2 has been discontinued for all test files and tools.
 - #13779 `d25079a` travis: Improve readability of travis.yml and log outputs (scravy)
 - #13822 `0fb9c87` bench: Make coinselection output groups pass eligibility filter (achow101)
 - #13247 `e83d82a` Add tests to SingleThreadedSchedulerClient() and document the memory model (skeees)
-- #13811 `660abc1` travis: Run `bench_bitcoin` once (MarcoFalke)
+- #13811 `660abc1` travis: Run `bench_digibyte` once (MarcoFalke)
 - #13837 `990e182` Extract `rpc_timewait` as test param (MarcoFalke)
 - #13851 `9c4324d` fix locale for lint-shell (scravy)
 - #13823 `489b51b` quote path in authproxy for external multiwallets (MarcoFalke)
@@ -935,7 +935,7 @@ Support for Python 2 has been discontinued for all test files and tools.
 - #13625 `7146672` Add release notes for -printtoconsole and -debuglogfile changes (satwo)
 - #13718 `f7f574d` Specify preferred Python string formatting technique (masonicboom)
 - #12764 `10b9a81` Remove field in getblocktemplate help that has never been used (conscott)
-- #13742 `d2186b3` Adjust bitcoincore.org links (MarcoFalke)
+- #13742 `d2186b3` Adjust digibytecore.org links (MarcoFalke)
 - #13706 `94dd89e` Minor improvements to release-process.md (MitchellCash)
 - #13775 `ef4fac0` Remove newlines from error message (practicalswift)
 - #13803 `feb7dd9` add note to contributor docs about warranted PR's (kallewoof)

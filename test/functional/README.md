@@ -140,7 +140,7 @@ The following are useful modules for test developers. They are located in
 [test/functional/test_framework/](test_framework).
 
 #### [authproxy.py](test_framework/authproxy.py)
-Taken from the [python-bitcoinrpc repository](https://github.com/jgarzik/python-bitcoinrpc).
+Taken from the [python-digibyterpc repository](https://github.com/jgarzik/python-digibyterpc).
 
 #### [test_framework.py](test_framework/test_framework.py)
 Base class for functional tests.
@@ -152,7 +152,7 @@ Generally useful functions.
 Test objects for interacting with a digibyted node over the p2p interface.
 
 #### [script.py](test_framework/script.py)
-Utilities for manipulating transaction scripts (originally from python-bitcoinlib)
+Utilities for manipulating transaction scripts (originally from python-digibytelib)
 
 #### [key.py](test_framework/key.py)
 Test-only secp256k1 elliptic curve implementation

@@ -403,7 +403,7 @@ to see it.
 
 If you are testing multi-machine code that needs to operate across the internet,
 you can run with either the `-signet` or the `-testnet` config option to test
-with "play bitcoins" on a test network.
+with "play digibytes" on a test network.
 
 If you are testing something that can run on one machine, run with the
 `-regtest` option.  In regression test mode, blocks can be created on demand;
@@ -468,9 +468,9 @@ which includes known Valgrind warnings in our dependencies that cannot be fixed
 in-tree. Example use:
 
 ```shell
-$ valgrind --suppressions=contrib/valgrind.supp src/test/test_bitcoin
+$ valgrind --suppressions=contrib/valgrind.supp src/test/test_digibyte
 $ valgrind --suppressions=contrib/valgrind.supp --leak-check=full \
-      --show-leak-kinds=all src/test/test_bitcoin --log_level=test_suite
+      --show-leak-kinds=all src/test/test_digibyte --log_level=test_suite
 $ valgrind -v --leak-check=full src/digibyted -printtoconsole
 $ ./test/functional/test_runner.py --valgrind
 ```
@@ -488,7 +488,7 @@ To enable LCOV report generation during test runs:
 make
 make cov
 
-# A coverage report will now be accessible at `./test_bitcoin.coverage/index.html`,
+# A coverage report will now be accessible at `./test_digibyte.coverage/index.html`,
 # which covers unit tests, and `./total.coverage/index.html`, which covers
 # unit and functional tests.
 ```

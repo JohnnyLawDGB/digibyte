@@ -1,6 +1,6 @@
 DigiByte Core version 0.16.0 is now available from:
 
-  <https://bitcoincore.org/bin/digibyte-core-0.16.0/>
+  <https://digibytecore.org/bin/digibyte-core-0.16.0/>
 
 This is a new major version release, including new features, various bugfixes
 and performance improvements, as well as updated translations.
@@ -11,7 +11,7 @@ Please report bugs using the issue tracker at GitHub:
 
 To receive security and update notifications, please subscribe to:
 
-  <https://bitcoincore.org/en/list/announcements/join/>
+  <https://digibytecore.org/en/list/announcements/join/>
 
 How to Upgrade
 ==============
@@ -127,7 +127,7 @@ The SHA256 hashing optimizations for architectures supporting SSE4, which lead t
 
 GUI changes
 -----------
-- Uses of "µBTC" in the GUI now also show the more colloquial term "bits", specified in BIP176.
+- Uses of "µDGB" in the GUI now also show the more colloquial term "bits", specified in BIP176.
 - The option to reuse a previous address has now been removed. This was justified by the need to "resend" an invoice, but now that we have the request history, that need should be gone.
 - Support for searching by TXID has been added, rather than just address and label.
 - A "Use available balance" option has been added to the send coins dialog, to add the remaining available wallet balance to a transaction output.
@@ -342,7 +342,7 @@ Testing changes
 - #11616 `8585bb8` Update ban-state in case of dirty-state during periodic sweep (jonasschnelli)
 - #11605 `f19ca12` Enable RBF by default in QT (Sjors)
 - #12074 `a1136f0` Optimizes boolean expression model && model->haveWatchOnly() (251Labs)
-- #12035 `eeb6d52` Change µBTC to bits (jb55)
+- #12035 `eeb6d52` Change µDGB to bits (jb55)
 - #12092 `fd4ca17` Replaces numbered place marker %2 with %1 (251Labs)
 - #12173 `bbc91b7` Use flexible font size for QRCode image address (jonasschnelli)
 - #12211 `10d10d7` Avoid potential null dereference in ReceiveCoinsDialog constructor (ryanofsky)
@@ -366,7 +366,7 @@ Testing changes
 - #11541 `bb9ab0f` Build: Fix Automake warnings when running autogen.sh (fanquake)
 - #11611 `0e70791` [build] Don't fail when passed --disable-lcov and lcov isn't available (fanquake)
 - #11651 `3c098a8` refactor: Make all #includes relative to project root (laanwj, MeshCollider, ryanofsky)
-- #11621 `1f7695b` [build] Add temp_bitcoin_locale_qrc to CLEAN_QT to fix make distcheck (fanquake)
+- #11621 `1f7695b` [build] Add temp_digibyte_locale_qrc to CLEAN_QT to fix make distcheck (fanquake)
 - #11755 `84fa645` [Docs] Bump minimum required version of GCC to 4.8 (fanquake)
 - #9254 `6d3dc52` [depends] ZeroMQ 4.2.2 (fanquake)
 - #11842 `3c8f0a3` [build] Add missing stuff to clean-local (kallewoof)
@@ -376,7 +376,7 @@ Testing changes
 - #11903 `8f68fd2` [trivial] Add required package dependencies for depends cross compilation (jonasschnelli)
 - #12168 `45cf8a0`  #include sys/fcntl.h to just fcntl.h (without sys/) (jsarenik)
 - #12095 `3fa1ab4` Use BDB_LIBS/CFLAGS and pass --disable-replication (fanquake)
-- #11711 `6378e5c` bitcoin_qt.m4: Minor fixes and clean-ups (fanquake)
+- #11711 `6378e5c` digibyte_qt.m4: Minor fixes and clean-ups (fanquake)
 - #11989 `90d4104` .gitignore: add QT Creator artifacts (Sjors)
 - #11577 `c0ae864` Fix warnings (-Wsign-compare) when building with DEBUG_ADDRMAN (practicalswift)
 

@@ -3,7 +3,7 @@
 
 DigiByte Core version 0.21.0 is now available from:
 
-  <https://bitcoincore.org/bin/digibyte-core-0.21.0/>
+  <https://digibytecore.org/bin/digibyte-core-0.21.0/>
 
 This release includes new features, various bug fixes and performance
 improvements, as well as updated translations.
@@ -14,7 +14,7 @@ Please report bugs using the issue tracker at GitHub:
 
 To receive security and update notifications, please subscribe to:
 
-  <https://bitcoincore.org/en/list/announcements/join/>
+  <https://digibytecore.org/en/list/announcements/join/>
 
 How to Upgrade
 ==============
@@ -172,10 +172,10 @@ Updated RPCs
   it is recommended to instead use the `connection_type` field (it will return
   `manual` when addnode is true). (#19725)
 
-- The `getpeerinfo` RPC no longer returns the `whitelisted` field by default. 
-  This field will be fully removed in the next major release. It can be accessed 
-  with the configuration option `-deprecatedrpc=getpeerinfo_whitelisted`. However, 
-  it is recommended to instead use the `permissions` field to understand if specific 
+- The `getpeerinfo` RPC no longer returns the `whitelisted` field by default.
+  This field will be fully removed in the next major release. It can be accessed
+  with the configuration option `-deprecatedrpc=getpeerinfo_whitelisted`. However,
+  it is recommended to instead use the `permissions` field to understand if specific
   privileges have been granted to the peer. (#19770)
 
 - The `walletcreatefundedpsbt` RPC call will now fail with
@@ -1139,7 +1139,7 @@ Tests
 - #18939 Add c++17-enable flag to fuzzing instructions (mzumsande)
 - #18957 Add a link from ZMQ doc to ZMQ example in contrib/ (meeDamian)
 - #19058 Drop protobuf stuff (hebasto)
-- #19061 Add link to Visual Studio build readme (maitrebitcoin)
+- #19061 Add link to Visual Studio build readme (maitredigibyte)
 - #19072 Expand section on Getting Started (MarcoFalke)
 - #18968 noban precludes maxuploadtarget disconnects (MarcoFalke)
 - #19005 Add documentation for 'checklevel' argument in 'verifychain' RPC… (kcalvinalvin)

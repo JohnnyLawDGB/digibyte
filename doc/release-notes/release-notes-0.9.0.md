@@ -18,7 +18,7 @@ earlier versions of DigiByte, then run the installer (on Windows) or just copy
 over /Applications/DigiByte-Qt (on Mac) or digibyted/digibyte-qt (on Linux).
 
 If you are upgrading from version 0.7.2 or earlier, the first time you run
-0.9.0 your blockchain files will be re-indexed, which will take anywhere from 
+0.9.0 your blockchain files will be re-indexed, which will take anywhere from
 30 minutes to several hours, depending on the speed of your machine.
 
 On Windows, do not forget to uninstall all earlier versions of the DigiByte
@@ -86,7 +86,7 @@ For 0.9.0 we switched to an autotools-based build system instead of individual
 (q)makefiles.
 
 Using the standard "./autogen.sh; ./configure; make" to build DigiByte-Qt and
-digibyted makes it easier for experienced open source developers to contribute 
+digibyted makes it easier for experienced open source developers to contribute
 to the project.
 
 Be sure to check doc/build-*.md for your platform before building from source.
@@ -124,7 +124,7 @@ the old one:
 Transaction malleability-related fixes
 --------------------------------------
 
-This release contains a few fixes for transaction ID (TXID) malleability 
+This release contains a few fixes for transaction ID (TXID) malleability
 issues:
 
 - -nospendzeroconfchange command-line option, to avoid spending
@@ -143,7 +143,7 @@ Transaction Fees
 
 This release drops the default fee required to relay transactions across the
 network and for miners to consider the transaction in their blocks to
-0.01mBTC per kilobyte.
+0.01mDGB per kilobyte.
 
 Note that getting a transaction relayed across the network does NOT guarantee
 that the transaction will be accepted by a miner; by default, miners fill
@@ -156,7 +156,7 @@ the mintxfee setting to determine which low-priority transactions should
 be considered for inclusion in blocks.
 
 The wallet code still uses a default fee for low-priority transactions of
-0.1mBTC per kilobyte. During periods of heavy transaction volume, even this
+0.1mDGB per kilobyte. During periods of heavy transaction volume, even this
 fee may not be enough to get transactions confirmed quickly; the mintxfee
 option may be used to override the default.
 
@@ -239,7 +239,7 @@ Mining:
 
 Protocol and network:
 
-- Drop the fee required to relay a transaction to 0.01mBTC per kilobyte
+- Drop the fee required to relay a transaction to 0.01mDGB per kilobyte
 - Send tx relay flag with version
 - New 'reject' P2P message (BIP 0061, see
   https://gist.github.com/gavinandresen/7079034 for draft)
@@ -254,7 +254,7 @@ Protocol and network:
 - Improve logging of failed connections
 - Bump protocol version to 70002
 - Add some additional logging to give extra network insight
-- Added new DNS seed from bitcoinstats.com
+- Added new DNS seed from digibytestats.com
 
 Validation:
 
@@ -270,7 +270,7 @@ Validation:
 Build system:
 
 - Switch to autotools-based build system
-- Build without wallet by passing `--disable-wallet` to configure, this 
+- Build without wallet by passing `--disable-wallet` to configure, this
   removes the BerkeleyDB dependency
 - Upgrade gitian dependencies (libpng, libz, libupnpc, boost, openssl) to more
   recent versions
@@ -301,7 +301,7 @@ GUI:
 - Don't regenerate autostart link on every client startup
 - Show and store message of normal digibyte:URI
 - Fix richtext detection hang issue on very old Qt versions
-- OS X: Make use of the 10.8+ user notification center to display Growl-like 
+- OS X: Make use of the 10.8+ user notification center to display Growl-like
   notifications
 - OS X: Added NSHighResolutionCapable flag to Info.plist for better font
   rendering on Retina displays.
@@ -378,7 +378,7 @@ Thanks to everyone who contributed to this release:
 - paveljanik
 - Peter Todd
 - phantomcircuit
-- phelixbtc
+- phelixdgb
 - Philip Kaufmann
 - Pieter Wuille
 - Rav3nPL

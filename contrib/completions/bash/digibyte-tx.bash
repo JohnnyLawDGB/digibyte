@@ -3,13 +3,13 @@
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-_bitcoin_tx() {
+_digibyte_tx() {
     local cur prev words=() cword
-    local bitcoin_tx
+    local digibyte_tx
 
     # save and use original argument to invoke digibyte-tx for -help
     # it might not be in $PATH
-    bitcoin_tx="$1"
+    digibyte_tx="$1"
 
     COMPREPLY=()
     _get_comp_words_by_ref -n =: cur prev words cword
@@ -29,13 +29,13 @@ _bitcoin_tx() {
         # only options (or an uncompletable hex-string) allowed
         # parse digibyte-tx -help for options
         local helpopts
-        helpopts=$($bitcoin_tx -help | sed -e '/^  -/ p' -e d )
+        helpopts=$($digibyte_tx -help | sed -e '/^  -/ p' -e d )
         COMPREPLY=( $( compgen -W "$helpopts" -- "$cur" ) )
     else
         # only commands are allowed
         # parse -help for commands
         local helpcmds
-        helpcmds=$($bitcoin_tx -help | sed -e '1,/Commands:/d' -e 's/=.*/=/' -e '/^  [a-z]/ p' -e d )
+        helpcmds=$($digibyte_tx -help | sed -e '1,/Commands:/d' -e 's/=.*/=/' -e '/^  [a-z]/ p' -e d )
         COMPREPLY=( $( compgen -W "$helpcmds" -- "$cur" ) )
     fi
 
@@ -46,7 +46,7 @@ _bitcoin_tx() {
 
     return 0
 } &&
-complete -F _bitcoin_tx digibyte-tx
+complete -F _digibyte_tx digibyte-tx
 
 # Local variables:
 # mode: shell-script

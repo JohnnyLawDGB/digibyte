@@ -5,7 +5,7 @@ Setup
 ---------------------
 DigiByte Core is the original DigiByte client and it builds the backbone of the network. It downloads and, by default, stores the entire history of DigiByte transactions, which requires a few hundred gigabytes of disk space. Depending on the speed of your computer and network connection, the synchronization process can take anywhere from a few hours to a day or more.
 
-To download DigiByte Core, visit [bitcoincore.org](https://bitcoincore.org/en/download/).
+To download DigiByte Core, visit [digibytecore.org](https://digibytecore.org/en/download/).
 
 Running
 ---------------------

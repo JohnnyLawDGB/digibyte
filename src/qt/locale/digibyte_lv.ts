@@ -47,11 +47,11 @@
     </message>
     <message>
         <source>Choose the address to send coins to</source>
-        <translation type="unfinished">Izvēlies adresi uz kuru sūtīt bitcoins</translation>
+        <translation type="unfinished">Izvēlies adresi uz kuru sūtīt digibytes</translation>
     </message>
     <message>
         <source>Choose the address to receive coins with</source>
-        <translation type="unfinished">Izvēlies adresi ar kuru saņemt bitcoins</translation>
+        <translation type="unfinished">Izvēlies adresi ar kuru saņemt digibytes</translation>
     </message>
     <message>
         <source>C&amp;hoose</source>

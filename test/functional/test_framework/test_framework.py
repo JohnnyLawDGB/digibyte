@@ -46,7 +46,7 @@ TEST_EXIT_PASSED = 0
 TEST_EXIT_FAILED = 1
 TEST_EXIT_SKIPPED = 77
 
-TMPDIR_PREFIX = "bitcoin_func_test_"
+TMPDIR_PREFIX = "digibyte_func_test_"
 
 
 class SkipTest(Exception):
@@ -232,9 +232,9 @@ class BitcoinTestFramework(metaclass=BitcoinTestMetaClass):
 
         binaries = {
             "digibyted": ("digibyted", "DIGIBYTED"),
-            "digibyte-cli": ("bitcoincli", "DIGIBYTECLI"),
-            "digibyte-util": ("bitcoinutil", "DIGIBYTEUTIL"),
-            "digibyte-wallet": ("bitcoinwallet", "DIGIBYTEWALLET"),
+            "digibyte-cli": ("digibytecli", "DIGIBYTECLI"),
+            "digibyte-util": ("digibyteutil", "DIGIBYTEUTIL"),
+            "digibyte-wallet": ("digibytewallet", "DIGIBYTEWALLET"),
         }
         for binary, [attribute_name, env_variable_name] in binaries.items():
             default_filename = os.path.join(
@@ -517,7 +517,7 @@ class BitcoinTestFramework(metaclass=BitcoinTestMetaClass):
                 timewait=self.rpc_timeout,
                 timeout_factor=self.options.timeout_factor,
                 digibyted=binary[i],
-                bitcoin_cli=binary_cli[i],
+                digibyte_cli=binary_cli[i],
                 version=versions[i],
                 coverage_dir=self.options.coveragedir,
                 cwd=self.options.tmpdir,
@@ -804,7 +804,7 @@ class BitcoinTestFramework(metaclass=BitcoinTestMetaClass):
                     timewait=self.rpc_timeout,
                     timeout_factor=self.options.timeout_factor,
                     digibyted=self.options.digibyted,
-                    bitcoin_cli=self.options.digibytecli,
+                    digibyte_cli=self.options.digibytecli,
                     coverage_dir=None,
                     cwd=self.options.tmpdir,
                     descriptors=self.options.descriptors,
@@ -933,9 +933,9 @@ class BitcoinTestFramework(metaclass=BitcoinTestMetaClass):
         if not self.is_wallet_tool_compiled():
             raise SkipTest("digibyte-wallet has not been compiled")
 
-    def skip_if_no_bitcoin_util(self):
+    def skip_if_no_digibyte_util(self):
         """Skip the running test if digibyte-util has not been compiled."""
-        if not self.is_bitcoin_util_compiled():
+        if not self.is_digibyte_util_compiled():
             raise SkipTest("digibyte-util has not been compiled")
 
     def skip_if_no_cli(self):
@@ -985,7 +985,7 @@ class BitcoinTestFramework(metaclass=BitcoinTestMetaClass):
         """Checks whether digibyte-wallet was compiled."""
         return self.config["components"].getboolean("ENABLE_WALLET_TOOL")
 
-    def is_bitcoin_util_compiled(self):
+    def is_digibyte_util_compiled(self):
         """Checks whether digibyte-util was compiled."""
         return self.config["components"].getboolean("ENABLE_DIGIBYTE_UTIL")
 

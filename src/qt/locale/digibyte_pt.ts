@@ -184,8 +184,8 @@ A assinatura só é possível com endereços do tipo "legado".</translation>
         <translation type="unfinished">Insira a frase de segurança antiga e a nova para a carteira.</translation>
     </message>
     <message>
-        <source>Remember that encrypting your wallet cannot fully protect your bitcoins from being stolen by malware infecting your computer.</source>
-        <translation type="unfinished">Lembre-se que a encriptação da sua carteira não impede totalmente os seus bitcoins de serem roubados por programas maliciosos (malware) que infetem o seu computador.</translation>
+        <source>Remember that encrypting your wallet cannot fully protect your digibytes from being stolen by malware infecting your computer.</source>
+        <translation type="unfinished">Lembre-se que a encriptação da sua carteira não impede totalmente os seus digibytes de serem roubados por programas maliciosos (malware) que infetem o seu computador.</translation>
     </message>
     <message>
         <source>Wallet to be encrypted</source>
@@ -1470,8 +1470,8 @@ O processo de migração criará uma cópia de segurança da carteira antes da m
         <translation type="unfinished">As transações recentes podem ainda não ser visíveis e, por isso, o saldo da sua carteira pode estar incorreto. Esta informação estará correta assim que a sua carteira terminar a sincronização com a rede digibyte, conforme detalhado abaixo.</translation>
     </message>
     <message>
-        <source>Attempting to spend bitcoins that are affected by not-yet-displayed transactions will not be accepted by the network.</source>
-        <translation type="unfinished">A rede não aceitará tentativas de gastar bitcoins afetados por transações que ainda não foram mostradas.</translation>
+        <source>Attempting to spend digibytes that are affected by not-yet-displayed transactions will not be accepted by the network.</source>
+        <translation type="unfinished">A rede não aceitará tentativas de gastar digibytes afetados por transações que ainda não foram mostradas.</translation>
     </message>
     <message>
         <source>Number of blocks left</source>
@@ -3298,8 +3298,8 @@ Nota: como a taxa é calculada por byte, uma taxa de "100 satoshis por kvB" para
         <translation type="unfinished">A quantia a enviar na unidade selecionada</translation>
     </message>
     <message>
-        <source>The fee will be deducted from the amount being sent. The recipient will receive less bitcoins than you enter in the amount field. If multiple recipients are selected, the fee is split equally.</source>
-        <translation type="unfinished">A taxa será deduzida à quantia que está a ser enviada. O destinatário irá receber menos bitcoins do que as que inseridas no campo da quantia. Se estiverem selecionados múltiplos destinatários, a taxa será repartida equitativamente.</translation>
+        <source>The fee will be deducted from the amount being sent. The recipient will receive less digibytes than you enter in the amount field. If multiple recipients are selected, the fee is split equally.</source>
+        <translation type="unfinished">A taxa será deduzida à quantia que está a ser enviada. O destinatário irá receber menos digibytes do que as que inseridas no campo da quantia. Se estiverem selecionados múltiplos destinatários, a taxa será repartida equitativamente.</translation>
     </message>
     <message>
         <source>S&amp;ubtract fee from amount</source>
@@ -3344,8 +3344,8 @@ Nota: como a taxa é calculada por byte, uma taxa de "100 satoshis por kvB" para
         <translation type="unfinished">&amp;Assinar mensagem</translation>
     </message>
     <message>
-        <source>You can sign messages/agreements with your addresses to prove you can receive bitcoins sent to them. Be careful not to sign anything vague or random, as phishing attacks may try to trick you into signing your identity over to them. Only sign fully-detailed statements you agree to.</source>
-        <translation type="unfinished">Pode assinar mensagens/acordos com os seus endereços para provar que pode receber bitcoins enviados para eles. Tenha cuidado para não assinar nada vago ou aleatório, pois os ataques de phishing podem tentar induzi-lo a assinar a sua identidade. Assine apenas declarações totalmente detalhadas com as quais concorda.</translation>
+        <source>You can sign messages/agreements with your addresses to prove you can receive digibytes sent to them. Be careful not to sign anything vague or random, as phishing attacks may try to trick you into signing your identity over to them. Only sign fully-detailed statements you agree to.</source>
+        <translation type="unfinished">Pode assinar mensagens/acordos com os seus endereços para provar que pode receber digibytes enviados para eles. Tenha cuidado para não assinar nada vago ou aleatório, pois os ataques de phishing podem tentar induzi-lo a assinar a sua identidade. Assine apenas declarações totalmente detalhadas com as quais concorda.</translation>
     </message>
     <message>
         <source>The DigiByte address to sign the message with</source>

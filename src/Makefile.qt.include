@@ -40,11 +40,11 @@ QT_MOC_CPP = \
   qt/moc_askpassphrasedialog.cpp \
   qt/moc_createwalletdialog.cpp \
   qt/moc_bantablemodel.cpp \
-  qt/moc_bitcoin.cpp \
-  qt/moc_bitcoinaddressvalidator.cpp \
-  qt/moc_bitcoinamountfield.cpp \
-  qt/moc_bitcoingui.cpp \
-  qt/moc_bitcoinunits.cpp \
+  qt/moc_digibyte.cpp \
+  qt/moc_digibyteaddressvalidator.cpp \
+  qt/moc_digibyteamountfield.cpp \
+  qt/moc_digibytegui.cpp \
+  qt/moc_digibyteunits.cpp \
   qt/moc_clientmodel.cpp \
   qt/moc_coincontroldialog.cpp \
   qt/moc_coincontroltreewidget.cpp \
@@ -95,15 +95,15 @@ DIGIBYTE_MM = \
   qt/macos_appnap.mm
 
 QT_MOC = \
-  qt/bitcoinamountfield.moc \
+  qt/digibyteamountfield.moc \
   qt/intro.moc \
   qt/overviewpage.moc \
   qt/rpcconsole.moc
 
-QT_QRC_CPP = qt/qrc_bitcoin.cpp
+QT_QRC_CPP = qt/qrc_digibyte.cpp
 QT_QRC = qt/digibyte.qrc
-QT_QRC_LOCALE_CPP = qt/qrc_bitcoin_locale.cpp
-QT_QRC_LOCALE = qt/bitcoin_locale.qrc
+QT_QRC_LOCALE_CPP = qt/qrc_digibyte_locale.cpp
+QT_QRC_LOCALE = qt/digibyte_locale.qrc
 
 DIGIBYTE_QT_H = \
   qt/addressbookpage.h \
@@ -111,10 +111,10 @@ DIGIBYTE_QT_H = \
   qt/askpassphrasedialog.h \
   qt/bantablemodel.h \
   qt/digibyte.h \
-  qt/bitcoinaddressvalidator.h \
-  qt/bitcoinamountfield.h \
-  qt/bitcoingui.h \
-  qt/bitcoinunits.h \
+  qt/digibyteaddressvalidator.h \
+  qt/digibyteamountfield.h \
+  qt/digibytegui.h \
+  qt/digibyteunits.h \
   qt/clientmodel.h \
   qt/coincontroldialog.h \
   qt/coincontroltreewidget.h \
@@ -175,7 +175,7 @@ QT_RES_ICONS = \
   qt/res/icons/add.png \
   qt/res/icons/address-book.png \
   qt/res/icons/digibyte.ico \
-  qt/res/icons/bitcoin_testnet.ico \
+  qt/res/icons/digibyte_testnet.ico \
   qt/res/icons/digibyte.png \
   qt/res/icons/chevron.png \
   qt/res/icons/clock1.png \
@@ -222,10 +222,10 @@ QT_RES_ICONS = \
 DIGIBYTE_QT_BASE_CPP = \
   qt/bantablemodel.cpp \
   qt/digibyte.cpp \
-  qt/bitcoinaddressvalidator.cpp \
-  qt/bitcoinamountfield.cpp \
-  qt/bitcoingui.cpp \
-  qt/bitcoinunits.cpp \
+  qt/digibyteaddressvalidator.cpp \
+  qt/digibyteamountfield.cpp \
+  qt/digibytegui.cpp \
+  qt/digibyteunits.cpp \
   qt/clientmodel.cpp \
   qt/csvmodelwriter.cpp \
   qt/guiutil.cpp \
@@ -313,91 +313,91 @@ QT_FORMS_H=$(join $(dir $(QT_FORMS_UI)),$(addprefix ui_, $(notdir $(QT_FORMS_UI:
 # Most files will depend on the forms and moc files as includes. Generate them
 # before anything else.
 $(QT_MOC): $(QT_FORMS_H)
-$(qt_libdigibyteqt_a_OBJECTS) $(qt_bitcoin_qt_OBJECTS) $(bitcoin_gui_OBJECTS) : | $(QT_MOC)
+$(qt_libdigibyteqt_a_OBJECTS) $(qt_digibyte_qt_OBJECTS) $(digibyte_gui_OBJECTS) : | $(QT_MOC)
 
 # digibyte-qt and digibyte-gui binaries #
-bitcoin_qt_cppflags = $(AM_CPPFLAGS) $(DIGIBYTE_INCLUDES) $(DIGIBYTE_QT_INCLUDES) \
+digibyte_qt_cppflags = $(AM_CPPFLAGS) $(DIGIBYTE_INCLUDES) $(DIGIBYTE_QT_INCLUDES) \
   $(QT_INCLUDES) $(QR_CFLAGS)
-bitcoin_qt_cxxflags = $(AM_CXXFLAGS) $(QT_PIE_FLAGS)
+digibyte_qt_cxxflags = $(AM_CXXFLAGS) $(QT_PIE_FLAGS)
 
-bitcoin_qt_sources = qt/main.cpp
+digibyte_qt_sources = qt/main.cpp
 if TARGET_WINDOWS
-  bitcoin_qt_sources += $(DIGIBYTE_QT_RC)
+  digibyte_qt_sources += $(DIGIBYTE_QT_RC)
 endif
-bitcoin_qt_ldadd = qt/libdigibyteqt.a $(LIBDIGIBYTE_NODE)
+digibyte_qt_ldadd = qt/libdigibyteqt.a $(LIBDIGIBYTE_NODE)
 if ENABLE_WALLET
-bitcoin_qt_ldadd += $(LIBDIGIBYTE_UTIL) $(LIBDIGIBYTE_WALLET)
+digibyte_qt_ldadd += $(LIBDIGIBYTE_UTIL) $(LIBDIGIBYTE_WALLET)
 endif
 if ENABLE_ZMQ
-bitcoin_qt_ldadd += $(LIBDIGIBYTE_ZMQ) $(ZMQ_LIBS)
+digibyte_qt_ldadd += $(LIBDIGIBYTE_ZMQ) $(ZMQ_LIBS)
 endif
-bitcoin_qt_ldadd += $(LIBDIGIBYTE_CLI) $(LIBDIGIBYTE_COMMON) $(LIBDIGIBYTE_UTIL) $(LIBDIGIBYTE_CONSENSUS) $(LIBDIGIBYTE_CRYPTO) $(LIBUNIVALUE) $(LIBLEVELDB) $(LIBMEMENV) \
+digibyte_qt_ldadd += $(LIBDIGIBYTE_CLI) $(LIBDIGIBYTE_COMMON) $(LIBDIGIBYTE_UTIL) $(LIBDIGIBYTE_CONSENSUS) $(LIBDIGIBYTE_CRYPTO) $(LIBUNIVALUE) $(LIBLEVELDB) $(LIBMEMENV) \
   $(QT_LIBS) $(QT_DBUS_LIBS) $(QR_LIBS) $(BDB_LIBS) $(MINIUPNPC_LIBS) $(NATPMP_LIBS) $(LIBSECP256K1) \
   $(EVENT_PTHREADS_LIBS) $(EVENT_LIBS) $(SQLITE_LIBS)
-bitcoin_qt_ldflags = $(RELDFLAGS) $(AM_LDFLAGS) $(QT_LDFLAGS) $(LIBTOOL_APP_LDFLAGS) $(PTHREAD_FLAGS)
-bitcoin_qt_libtoolflags = $(AM_LIBTOOLFLAGS) --tag CXX
+digibyte_qt_ldflags = $(RELDFLAGS) $(AM_LDFLAGS) $(QT_LDFLAGS) $(LIBTOOL_APP_LDFLAGS) $(PTHREAD_FLAGS)
+digibyte_qt_libtoolflags = $(AM_LIBTOOLFLAGS) --tag CXX
 
-qt_bitcoin_qt_CPPFLAGS = $(bitcoin_qt_cppflags)
-qt_bitcoin_qt_CXXFLAGS = $(bitcoin_qt_cxxflags)
-qt_bitcoin_qt_SOURCES = $(bitcoin_qt_sources) init/digibyte-qt.cpp
-qt_bitcoin_qt_LDADD = $(bitcoin_qt_ldadd)
-qt_bitcoin_qt_LDFLAGS = $(bitcoin_qt_ldflags)
-qt_bitcoin_qt_LIBTOOLFLAGS = $(bitcoin_qt_libtoolflags)
+qt_digibyte_qt_CPPFLAGS = $(digibyte_qt_cppflags)
+qt_digibyte_qt_CXXFLAGS = $(digibyte_qt_cxxflags)
+qt_digibyte_qt_SOURCES = $(digibyte_qt_sources) init/digibyte-qt.cpp
+qt_digibyte_qt_LDADD = $(digibyte_qt_ldadd)
+qt_digibyte_qt_LDFLAGS = $(digibyte_qt_ldflags)
+qt_digibyte_qt_LIBTOOLFLAGS = $(digibyte_qt_libtoolflags)
 
-bitcoin_gui_CPPFLAGS = $(bitcoin_qt_cppflags)
-bitcoin_gui_CXXFLAGS = $(bitcoin_qt_cxxflags)
-bitcoin_gui_SOURCES = $(bitcoin_qt_sources) init/digibyte-gui.cpp
-bitcoin_gui_LDADD = $(bitcoin_qt_ldadd) $(LIBDIGIBYTE_IPC) $(LIBDIGIBYTE_UTIL) $(LIBMULTIPROCESS_LIBS)
-bitcoin_gui_LDFLAGS = $(bitcoin_qt_ldflags)
-bitcoin_gui_LIBTOOLFLAGS = $(bitcoin_qt_libtoolflags)
+digibyte_gui_CPPFLAGS = $(digibyte_qt_cppflags)
+digibyte_gui_CXXFLAGS = $(digibyte_qt_cxxflags)
+digibyte_gui_SOURCES = $(digibyte_qt_sources) init/digibyte-gui.cpp
+digibyte_gui_LDADD = $(digibyte_qt_ldadd) $(LIBDIGIBYTE_IPC) $(LIBDIGIBYTE_UTIL) $(LIBMULTIPROCESS_LIBS)
+digibyte_gui_LDFLAGS = $(digibyte_qt_ldflags)
+digibyte_gui_LIBTOOLFLAGS = $(digibyte_qt_libtoolflags)
 
 #locale/foo.ts -> locale/foo.qm
 QT_QM=$(QT_TS:.ts=.qm)
 
 SECONDARY: $(QT_QM)
 
-$(srcdir)/qt/bitcoinstrings.cpp: FORCE
+$(srcdir)/qt/digibytestrings.cpp: FORCE
 	@test -n $(XGETTEXT) || echo "xgettext is required for updating translations"
 	$(AM_V_GEN) cd $(srcdir); XGETTEXT=$(XGETTEXT) COPYRIGHT_HOLDERS="$(COPYRIGHT_HOLDERS)" $(PYTHON) ../share/qt/extract_strings_qt.py \
     $(libdigibyte_node_a_SOURCES) $(libdigibyte_wallet_a_SOURCES) $(libdigibyte_common_a_SOURCES) \
     $(libdigibyte_zmq_a_SOURCES) $(libdigibyte_consensus_a_SOURCES) $(libdigibyte_util_a_SOURCES) \
     $(DIGIBYTE_QT_BASE_CPP) $(DIGIBYTE_QT_WINDOWS_CPP) $(DIGIBYTE_QT_WALLET_CPP) $(DIGIBYTE_QT_H) $(DIGIBYTE_MM)
 
-# The resulted bitcoin_en.xlf source file should follow Transifex requirements.
+# The resulted digibyte_en.xlf source file should follow Transifex requirements.
 # See: https://docs.transifex.com/formats/xliff#how-to-distinguish-between-a-source-file-and-a-translation-file
-translate: $(srcdir)/qt/bitcoinstrings.cpp $(QT_FORMS_UI) $(QT_FORMS_UI) $(DIGIBYTE_QT_BASE_CPP) $(DIGIBYTE_QT_WINDOWS_CPP) $(DIGIBYTE_QT_WALLET_CPP) $(DIGIBYTE_QT_H) $(DIGIBYTE_MM)
+translate: $(srcdir)/qt/digibytestrings.cpp $(QT_FORMS_UI) $(QT_FORMS_UI) $(DIGIBYTE_QT_BASE_CPP) $(DIGIBYTE_QT_WINDOWS_CPP) $(DIGIBYTE_QT_WALLET_CPP) $(DIGIBYTE_QT_H) $(DIGIBYTE_MM)
 	@test -n $(LUPDATE) || echo "lupdate is required for updating translations"
-	$(AM_V_GEN) QT_SELECT=$(QT_SELECT) $(LUPDATE) -no-obsolete -I $(srcdir) -locations relative $^ -ts $(srcdir)/qt/locale/bitcoin_en.ts
+	$(AM_V_GEN) QT_SELECT=$(QT_SELECT) $(LUPDATE) -no-obsolete -I $(srcdir) -locations relative $^ -ts $(srcdir)/qt/locale/digibyte_en.ts
 	@test -n $(LCONVERT) || echo "lconvert is required for updating translations"
-	$(AM_V_GEN) QT_SELECT=$(QT_SELECT) $(LCONVERT) -drop-translations -o $(srcdir)/qt/locale/bitcoin_en.xlf -i $(srcdir)/qt/locale/bitcoin_en.ts
-	@$(SED) -i.old -e 's|source-language="en" target-language="en"|source-language="en"|' -e '/<target xml:space="preserve"><\/target>/d' $(srcdir)/qt/locale/bitcoin_en.xlf
-	@rm -f $(srcdir)/qt/locale/bitcoin_en.xlf.old
+	$(AM_V_GEN) QT_SELECT=$(QT_SELECT) $(LCONVERT) -drop-translations -o $(srcdir)/qt/locale/digibyte_en.xlf -i $(srcdir)/qt/locale/digibyte_en.ts
+	@$(SED) -i.old -e 's|source-language="en" target-language="en"|source-language="en"|' -e '/<target xml:space="preserve"><\/target>/d' $(srcdir)/qt/locale/digibyte_en.xlf
+	@rm -f $(srcdir)/qt/locale/digibyte_en.xlf.old
 
 $(QT_QRC_LOCALE_CPP): $(QT_QRC_LOCALE) $(QT_QM)
 	@test -f $(RCC) || (echo "rcc $(RCC) not found, but is required for generating qrc cpp files"; exit 1)
 	@cp -f $< $(@D)/temp_$(<F)
-	$(AM_V_GEN) QT_SELECT=$(QT_SELECT) $(RCC) -name bitcoin_locale --format-version 1 $(@D)/temp_$(<F) > $@
+	$(AM_V_GEN) QT_SELECT=$(QT_SELECT) $(RCC) -name digibyte_locale --format-version 1 $(@D)/temp_$(<F) > $@
 	@rm $(@D)/temp_$(<F)
 
 $(QT_QRC_CPP): $(QT_QRC) $(QT_FORMS_H) $(QT_RES_FONTS) $(QT_RES_ICONS) $(QT_RES_ANIMATION)
 	@test -f $(RCC) || (echo "rcc $(RCC) not found, but is required for generating qrc cpp files"; exit 1)
 	$(AM_V_GEN) QT_SELECT=$(QT_SELECT) $(RCC) -name digibyte --format-version 1 $< > $@
 
-CLEAN_QT = $(nodist_qt_libdigibyteqt_a_SOURCES) $(QT_QM) $(QT_FORMS_H) qt/*.gcda qt/*.gcno qt/temp_bitcoin_locale.qrc
+CLEAN_QT = $(nodist_qt_libdigibyteqt_a_SOURCES) $(QT_QM) $(QT_FORMS_H) qt/*.gcda qt/*.gcno qt/temp_digibyte_locale.qrc
 
 CLEANFILES += $(CLEAN_QT)
 
-bitcoin_qt_clean: FORCE
-	rm -f $(CLEAN_QT) $(qt_libdigibyteqt_a_OBJECTS) $(qt_bitcoin_qt_OBJECTS) qt/digibyte-qt$(EXEEXT) $(LIBDIGIBYTEQT)
+digibyte_qt_clean: FORCE
+	rm -f $(CLEAN_QT) $(qt_libdigibyteqt_a_OBJECTS) $(qt_digibyte_qt_OBJECTS) qt/digibyte-qt$(EXEEXT) $(LIBDIGIBYTEQT)
 
-bitcoin_qt : qt/digibyte-qt$(EXEEXT)
+digibyte_qt : qt/digibyte-qt$(EXEEXT)
 
 APK_LIB_DIR = qt/android/libs/$(ANDROID_ARCH)
 QT_BASE_VERSION = $(lastword $(shell $(MOC) --version))
 QT_BASE_PATH = $(shell find ../depends/sources/ -maxdepth 1 -type f -regex ".*qtbase.*$(QT_BASE_VERSION)\.tar.xz")
 QT_BASE_TLD = $(shell tar tf $(QT_BASE_PATH) --exclude='*/*')
 
-bitcoin_qt_apk: FORCE
+digibyte_qt_apk: FORCE
 	mkdir -p $(APK_LIB_DIR)
 	cp $(dir $(lastword $(CC)))../sysroot/usr/lib/$(host_alias)/libc++_shared.so $(APK_LIB_DIR)
 	tar xf $(QT_BASE_PATH) -C qt/android/src/ $(QT_BASE_TLD)src/android/jar/src --strip-components=5

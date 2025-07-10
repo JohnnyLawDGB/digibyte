@@ -773,16 +773,16 @@ nodist_libdigibyte_util_a_SOURCES = $(srcdir)/obj/build.h
 #
 
 # digibyted & digibyte-node binaries #
-bitcoin_daemon_sources = digibyted.cpp
-bitcoin_bin_cppflags = $(AM_CPPFLAGS) $(DIGIBYTE_INCLUDES)
-bitcoin_bin_cxxflags = $(AM_CXXFLAGS) $(PIE_FLAGS)
-bitcoin_bin_ldflags = $(RELDFLAGS) $(AM_LDFLAGS) $(LIBTOOL_APP_LDFLAGS) $(PTHREAD_FLAGS)
+digibyte_daemon_sources = digibyted.cpp
+digibyte_bin_cppflags = $(AM_CPPFLAGS) $(DIGIBYTE_INCLUDES)
+digibyte_bin_cxxflags = $(AM_CXXFLAGS) $(PIE_FLAGS)
+digibyte_bin_ldflags = $(RELDFLAGS) $(AM_LDFLAGS) $(LIBTOOL_APP_LDFLAGS) $(PTHREAD_FLAGS)
 
 if TARGET_WINDOWS
-bitcoin_daemon_sources += digibyted-res.rc
+digibyte_daemon_sources += digibyted-res.rc
 endif
 
-bitcoin_bin_ldadd = \
+digibyte_bin_ldadd = \
   $(LIBDIGIBYTE_WALLET) \
   $(LIBDIGIBYTE_COMMON) \
   $(LIBDIGIBYTE_UTIL) \
@@ -794,51 +794,51 @@ bitcoin_bin_ldadd = \
   $(LIBMEMENV) \
   $(LIBSECP256K1)
 
-bitcoin_bin_ldadd += $(BDB_LIBS) $(MINIUPNPC_LIBS) $(NATPMP_LIBS) $(EVENT_PTHREADS_LIBS) $(EVENT_LIBS) $(ZMQ_LIBS) $(SQLITE_LIBS)
+digibyte_bin_ldadd += $(BDB_LIBS) $(MINIUPNPC_LIBS) $(NATPMP_LIBS) $(EVENT_PTHREADS_LIBS) $(EVENT_LIBS) $(ZMQ_LIBS) $(SQLITE_LIBS)
 
-digibyted_SOURCES = $(bitcoin_daemon_sources) init/digibyted.cpp
-digibyted_CPPFLAGS = $(bitcoin_bin_cppflags)
-digibyted_CXXFLAGS = $(bitcoin_bin_cxxflags)
-digibyted_LDFLAGS = $(bitcoin_bin_ldflags)
-digibyted_LDADD = $(LIBDIGIBYTE_NODE) $(bitcoin_bin_ldadd)
+digibyted_SOURCES = $(digibyte_daemon_sources) init/digibyted.cpp
+digibyted_CPPFLAGS = $(digibyte_bin_cppflags)
+digibyted_CXXFLAGS = $(digibyte_bin_cxxflags)
+digibyted_LDFLAGS = $(digibyte_bin_ldflags)
+digibyted_LDADD = $(LIBDIGIBYTE_NODE) $(digibyte_bin_ldadd)
 
-bitcoin_node_SOURCES = $(bitcoin_daemon_sources) init/digibyte-node.cpp
-bitcoin_node_CPPFLAGS = $(bitcoin_bin_cppflags)
-bitcoin_node_CXXFLAGS = $(bitcoin_bin_cxxflags)
-bitcoin_node_LDFLAGS = $(bitcoin_bin_ldflags)
-bitcoin_node_LDADD = $(LIBDIGIBYTE_NODE) $(bitcoin_bin_ldadd) $(LIBDIGIBYTE_IPC) $(LIBMULTIPROCESS_LIBS)
+digibyte_node_SOURCES = $(digibyte_daemon_sources) init/digibyte-node.cpp
+digibyte_node_CPPFLAGS = $(digibyte_bin_cppflags)
+digibyte_node_CXXFLAGS = $(digibyte_bin_cxxflags)
+digibyte_node_LDFLAGS = $(digibyte_bin_ldflags)
+digibyte_node_LDADD = $(LIBDIGIBYTE_NODE) $(digibyte_bin_ldadd) $(LIBDIGIBYTE_IPC) $(LIBMULTIPROCESS_LIBS)
 
 # digibyte-cli binary #
-bitcoin_cli_SOURCES = digibyte-cli.cpp
-bitcoin_cli_CPPFLAGS = $(AM_CPPFLAGS) $(DIGIBYTE_INCLUDES) $(EVENT_CFLAGS)
-bitcoin_cli_CXXFLAGS = $(AM_CXXFLAGS) $(PIE_FLAGS)
-bitcoin_cli_LDFLAGS = $(RELDFLAGS) $(AM_LDFLAGS) $(LIBTOOL_APP_LDFLAGS) $(PTHREAD_FLAGS)
+digibyte_cli_SOURCES = digibyte-cli.cpp
+digibyte_cli_CPPFLAGS = $(AM_CPPFLAGS) $(DIGIBYTE_INCLUDES) $(EVENT_CFLAGS)
+digibyte_cli_CXXFLAGS = $(AM_CXXFLAGS) $(PIE_FLAGS)
+digibyte_cli_LDFLAGS = $(RELDFLAGS) $(AM_LDFLAGS) $(LIBTOOL_APP_LDFLAGS) $(PTHREAD_FLAGS)
 
 if TARGET_WINDOWS
-bitcoin_cli_SOURCES += digibyte-cli-res.rc
+digibyte_cli_SOURCES += digibyte-cli-res.rc
 endif
 
-bitcoin_cli_LDADD = \
+digibyte_cli_LDADD = \
   $(LIBDIGIBYTE_CLI) \
   $(LIBUNIVALUE) \
   $(LIBDIGIBYTE_COMMON) \
   $(LIBDIGIBYTE_UTIL) \
   $(LIBDIGIBYTE_CRYPTO)
 
-bitcoin_cli_LDADD += $(EVENT_LIBS)
+digibyte_cli_LDADD += $(EVENT_LIBS)
 #
 
 # digibyte-tx binary #
-bitcoin_tx_SOURCES = digibyte-tx.cpp
-bitcoin_tx_CPPFLAGS = $(AM_CPPFLAGS) $(DIGIBYTE_INCLUDES)
-bitcoin_tx_CXXFLAGS = $(AM_CXXFLAGS) $(PIE_FLAGS)
-bitcoin_tx_LDFLAGS = $(RELDFLAGS) $(AM_LDFLAGS) $(LIBTOOL_APP_LDFLAGS) $(PTHREAD_FLAGS)
+digibyte_tx_SOURCES = digibyte-tx.cpp
+digibyte_tx_CPPFLAGS = $(AM_CPPFLAGS) $(DIGIBYTE_INCLUDES)
+digibyte_tx_CXXFLAGS = $(AM_CXXFLAGS) $(PIE_FLAGS)
+digibyte_tx_LDFLAGS = $(RELDFLAGS) $(AM_LDFLAGS) $(LIBTOOL_APP_LDFLAGS) $(PTHREAD_FLAGS)
 
 if TARGET_WINDOWS
-bitcoin_tx_SOURCES += digibyte-tx-res.rc
+digibyte_tx_SOURCES += digibyte-tx-res.rc
 endif
 
-bitcoin_tx_LDADD = \
+digibyte_tx_LDADD = \
   $(LIBUNIVALUE) \
   $(LIBDIGIBYTE_COMMON) \
   $(LIBDIGIBYTE_UTIL) \
@@ -848,12 +848,12 @@ bitcoin_tx_LDADD = \
 #
 
 # digibyte-wallet binary #
-bitcoin_wallet_SOURCES = digibyte-wallet.cpp
-bitcoin_wallet_SOURCES += init/digibyte-wallet.cpp
-bitcoin_wallet_CPPFLAGS = $(bitcoin_bin_cppflags)
-bitcoin_wallet_CXXFLAGS = $(bitcoin_bin_cxxflags)
-bitcoin_wallet_LDFLAGS = $(bitcoin_bin_ldflags)
-bitcoin_wallet_LDADD = \
+digibyte_wallet_SOURCES = digibyte-wallet.cpp
+digibyte_wallet_SOURCES += init/digibyte-wallet.cpp
+digibyte_wallet_CPPFLAGS = $(digibyte_bin_cppflags)
+digibyte_wallet_CXXFLAGS = $(digibyte_bin_cxxflags)
+digibyte_wallet_LDFLAGS = $(digibyte_bin_ldflags)
+digibyte_wallet_LDADD = \
   $(LIBDIGIBYTE_WALLET_TOOL) \
   $(LIBDIGIBYTE_WALLET) \
   $(LIBDIGIBYTE_COMMON) \
@@ -866,21 +866,21 @@ bitcoin_wallet_LDADD = \
   $(SQLITE_LIBS)
 
 if TARGET_WINDOWS
-bitcoin_wallet_SOURCES += digibyte-wallet-res.rc
+digibyte_wallet_SOURCES += digibyte-wallet-res.rc
 endif
 #
 
 # digibyte-util binary #
-bitcoin_util_SOURCES = digibyte-util.cpp
-bitcoin_util_CPPFLAGS = $(AM_CPPFLAGS) $(DIGIBYTE_INCLUDES)
-bitcoin_util_CXXFLAGS = $(AM_CXXFLAGS) $(PIE_FLAGS)
-bitcoin_util_LDFLAGS = $(RELDFLAGS) $(AM_LDFLAGS) $(LIBTOOL_APP_LDFLAGS) $(PTHREAD_FLAGS)
+digibyte_util_SOURCES = digibyte-util.cpp
+digibyte_util_CPPFLAGS = $(AM_CPPFLAGS) $(DIGIBYTE_INCLUDES)
+digibyte_util_CXXFLAGS = $(AM_CXXFLAGS) $(PIE_FLAGS)
+digibyte_util_LDFLAGS = $(RELDFLAGS) $(AM_LDFLAGS) $(LIBTOOL_APP_LDFLAGS) $(PTHREAD_FLAGS)
 
 if TARGET_WINDOWS
-bitcoin_util_SOURCES += digibyte-util-res.rc
+digibyte_util_SOURCES += digibyte-util-res.rc
 endif
 
-bitcoin_util_LDADD = \
+digibyte_util_LDADD = \
   $(LIBDIGIBYTE_COMMON) \
   $(LIBDIGIBYTE_UTIL) \
   $(LIBUNIVALUE) \
@@ -890,19 +890,19 @@ bitcoin_util_LDADD = \
 #
 
 # digibyte-chainstate binary #
-bitcoin_chainstate_SOURCES = digibyte-chainstate.cpp
-bitcoin_chainstate_CPPFLAGS = $(AM_CPPFLAGS) $(DIGIBYTE_INCLUDES) $(BOOST_CPPFLAGS)
-bitcoin_chainstate_CXXFLAGS = $(AM_CXXFLAGS) $(PIE_FLAGS)
+digibyte_chainstate_SOURCES = digibyte-chainstate.cpp
+digibyte_chainstate_CPPFLAGS = $(AM_CPPFLAGS) $(DIGIBYTE_INCLUDES) $(BOOST_CPPFLAGS)
+digibyte_chainstate_CXXFLAGS = $(AM_CXXFLAGS) $(PIE_FLAGS)
 
-bitcoin_chainstate_LDFLAGS = $(RELDFLAGS) $(AM_LDFLAGS) $(PTHREAD_FLAGS) $(LIBTOOL_APP_LDFLAGS) -static
-bitcoin_chainstate_LDADD = $(LIBDIGIBYTEKERNEL)
+digibyte_chainstate_LDFLAGS = $(RELDFLAGS) $(AM_LDFLAGS) $(PTHREAD_FLAGS) $(LIBTOOL_APP_LDFLAGS) -static
+digibyte_chainstate_LDADD = $(LIBDIGIBYTEKERNEL)
 
 # libtool is unable to calculate this indirect dependency, presumably because it's a subproject.
 # libsecp256k1 only needs to be linked in when libdigibytekernel is static.
-bitcoin_chainstate_LDADD += $(LIBSECP256K1)
+digibyte_chainstate_LDADD += $(LIBSECP256K1)
 #
 
-# bitcoinkernel library #
+# digibytekernel library #
 if BUILD_DIGIBYTE_KERNEL_LIB
 lib_LTLIBRARIES += $(LIBDIGIBYTEKERNEL)
 
@@ -922,7 +922,7 @@ libdigibytekernel_la_CXXFLAGS = $(AM_CXXFLAGS) $(PIE_FLAGS) -fvisibility=default
 #       and more modules are decoupled from the consensus engine, this list will
 #       shrink to only those which are absolutely necessary.
 libdigibytekernel_la_SOURCES = \
-  kernel/bitcoinkernel.cpp \
+  kernel/digibytekernel.cpp \
   arith_uint256.cpp \
   chain.cpp \
   clientversion.cpp \

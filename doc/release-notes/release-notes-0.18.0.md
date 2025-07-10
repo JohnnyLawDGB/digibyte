@@ -1,6 +1,6 @@
 DigiByte Core version 0.18.0 is now available from:
 
-  <https://bitcoincore.org/bin/digibyte-core-0.18.0/>
+  <https://digibytecore.org/bin/digibyte-core-0.18.0/>
 
 This is a new major version release, including new features, various bug
 fixes and performance improvements, as well as updated translations.
@@ -11,7 +11,7 @@ Please report bugs using the issue tracker at GitHub:
 
 To receive security and update notifications, please subscribe to:
 
-  <https://bitcoincore.org/en/list/announcements/join/>
+  <https://digibytecore.org/en/list/announcements/join/>
 
 How to Upgrade
 ==============
@@ -119,7 +119,7 @@ Configuration option changes
   disconnect/ban behavior will not cause a node that is whitelisting
   another to be dropped by peers.  Users can still explicitly enable
   this behavior with the command line option (and may want to consider
-  [contacting](https://bitcoincore.org/en/contact/) the DigiByte Core
+  [contacting](https://digibytecore.org/en/contact/) the DigiByte Core
   project to let us know about their use-case, as this feature could be
   deprecated in the future).
 
@@ -589,7 +589,7 @@ Changes for particular platforms
 - #14023 Remove accounts RPCs (jnewbery)
 - #13825 Kill accounts (jnewbery)
 - #10605 Add AssertLockHeld assertions in CWallet::ListCoins (ryanofsky)
-- #12490 Remove deprecated wallet rpc features from `bitcoin_server` (jnewbery)
+- #12490 Remove deprecated wallet rpc features from `digibyte_server` (jnewbery)
 - #14138 Set `encrypted_batch` to nullptr after delete. Avoid double free in the case of NDEBUG (practicalswift)
 - #14168 Remove `ENABLE_WALLET` from `libdigibyte_server.a` (jnewbery)
 - #12493 Reopen CDBEnv after encryption instead of shutting down (achow101)
@@ -859,7 +859,7 @@ Changes for particular platforms
 - #14631 Move deterministic address import to `setup_nodes` (jnewbery)
 - #14630 test: Remove travis specific code (MarcoFalke)
 - #14528 travis: Compile once on xenial (MarcoFalke)
-- #14092 Dry run `bench_bitcoin` as part `make check` to allow for quick identification of assertion/sanitizer failures in benchmarking code (practicalswift)
+- #14092 Dry run `bench_digibyte` as part `make check` to allow for quick identification of assertion/sanitizer failures in benchmarking code (practicalswift)
 - #14664 `example_test.py`: fixup coinbase height argument, derive number clearly (instagibbs)
 - #14522 Add invalid P2P message tests (jamesob)
 - #14619 Fix value display name in `test_runner` help text (merland)
@@ -903,7 +903,7 @@ Changes for particular platforms
 - #14969 Fix `cuckoocache_tests` TSAN failure introduced in 14935 (practicalswift)
 - #14964 Fix race in `mempool_accept` (MarcoFalke)
 - #14829 travis: Enable functional tests in the threadsanitizer (tsan) build job (practicalswift)
-- #14985 Remove `thread_local` from `test_bitcoin` (MarcoFalke)
+- #14985 Remove `thread_local` from `test_digibyte` (MarcoFalke)
 - #15005 Bump timeout to run tests in travis thread sanitizer (MarcoFalke)
 - #15013 Avoid race in `p2p_timeouts` (MarcoFalke)
 - #14960 lint/format-strings: Correctly exclude escaped percent symbols (luke-jr)
@@ -1122,7 +1122,7 @@ Thanks to everyone who directly contributed to this release:
 - Ben Carman
 - Ben Woosley
 - benthecarman
-- bitcoinhodler
+- digibytehodler
 - Carl Dong
 - Chakib Benziane
 - Chris Moore

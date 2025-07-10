@@ -3,7 +3,7 @@
 
 DigiByte Core version 22.0 is now available from:
 
-  <https://bitcoincore.org/bin/digibyte-core-22.0/>
+  <https://digibytecore.org/bin/digibyte-core-22.0/>
 
 This release includes new features, various bug fixes and performance
 improvements, as well as updated translations.
@@ -14,7 +14,7 @@ Please report bugs using the issue tracker at GitHub:
 
 To receive security and update notifications, please subscribe to:
 
-  <https://bitcoincore.org/en/list/announcements/join/>
+  <https://digibytecore.org/en/list/announcements/join/>
 
 How to Upgrade
 ==============
@@ -524,7 +524,7 @@ A detailed list of changes in this version follows. To keep the list to a manage
 - digibyte-core/gui#375 Emit dataChanged signal to dynamically re-sort Peers table (hebasto)
 - digibyte-core/gui#393 Fix regression in "Encrypt Wallet" menu item (hebasto)
 - digibyte-core/gui#396 Ensure external signer option remains disabled without signers (achow101)
-- digibyte-core/gui#406 Handle new added plurals in `bitcoin_en.ts` (hebasto)
+- digibyte-core/gui#406 Handle new added plurals in `digibyte_en.ts` (hebasto)
 
 ### Build system
 - digibyte/digibyte#17227 Add Android packaging support (icota)
@@ -611,7 +611,7 @@ A detailed list of changes in this version follows. To keep the list to a manage
 - digibyte/digibyte#21495 build, qt: Fix static builds on macOS Big Sur (hebasto)
 - digibyte/digibyte#21497 Do not opt-in unused CoreWLAN stuff in depends for macOS (hebasto)
 - digibyte/digibyte#21543 Enable safe warnings for msvc builds (hebasto)
-- digibyte/digibyte#21565 Make `bitcoin_qt.m4` more generic (fanquake)
+- digibyte/digibyte#21565 Make `digibyte_qt.m4` more generic (fanquake)
 - digibyte/digibyte#21610 remove -Wdeprecated-register from NOWARN flags (fanquake)
 - digibyte/digibyte#21613 enable -Wdocumentation (fanquake)
 - digibyte/digibyte#21629 Fix configuring when building depends with `NO_BDB=1` (fanquake)
@@ -806,7 +806,7 @@ A detailed list of changes in this version follows. To keep the list to a manage
 - digibyte/digibyte#21810 fuzz: Various RPC fuzzer follow-ups (practicalswift)
 - digibyte/digibyte#21814 Fix `feature_config_args.py` intermittent issue (MarcoFalke)
 - digibyte/digibyte#21821 Add missing test for empty P2WSH redeem (MarcoFalke)
-- digibyte/digibyte#21822 Resolve bug in `interface_bitcoin_cli.py` (klementtan)
+- digibyte/digibyte#21822 Resolve bug in `interface_digibyte_cli.py` (klementtan)
 - digibyte/digibyte#21846 fuzz: Add `-fsanitize=integer` suppression needed for RPC fuzzer (`generateblock`) (practicalswift)
 - digibyte/digibyte#21849 fuzz: Limit toxic test globals to their respective scope (MarcoFalke)
 - digibyte/digibyte#21867 use MiniWallet for `p2p_blocksonly.py` (theStack)

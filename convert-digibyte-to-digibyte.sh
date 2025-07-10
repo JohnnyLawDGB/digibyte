@@ -75,12 +75,12 @@ find . -type f \( \
     -name "AUTHORS*" -o -name "INSTALL*" -o -name "NEWS*" -o \
     -name "CONTRIBUTING*" -o -name "*.1" -o -name "*.5" \
     \) | grep -v ".git/" | while read file; do
-    
+
     echo "  Processing: $file"
-    
+
     # Create temporary file for sed operations
     cp "$file" "$file.tmp"
-    
+
     # Binary names (order matters - do specific before general)
     sed -i \
         -e 's/digibyted/digibyted/g' \
@@ -92,7 +92,7 @@ find . -type f \( \
         -e 's/digibyte-chainstate/digibyte-chainstate/g' \
         -e 's/digibyte-node/digibyte-node/g' \
         "$file.tmp"
-    
+
     # Library names
     sed -i \
         -e 's/libdigibyteconsensus/libdigibyteconsensus/g' \
@@ -104,7 +104,7 @@ find . -type f \( \
         -e 's/digibyteconsensus/digibyteconsensus/g' \
         -e 's/DIGIBYTECONSENSUS/DIGIBYTECONSENSUS/g' \
         "$file.tmp"
-    
+
     # Header guards and macros
     sed -i \
         -e 's/DIGIBYTE_/DIGIBYTE_/g' \
@@ -113,7 +113,7 @@ find . -type f \( \
         -e 's/HAVE_DIGIBYTE/HAVE_DIGIBYTE/g' \
         -e 's/USE_DIGIBYTE/USE_DIGIBYTE/g' \
         "$file.tmp"
-    
+
     # Class and namespace names
     sed -i \
         -e 's/DigiByteGUI/DigiByteGUI/g' \
@@ -125,7 +125,7 @@ find . -type f \( \
         -e 's/::DigiByte/::DigiByte/g' \
         -e 's/namespace digibyte/namespace digibyte/g' \
         "$file.tmp"
-    
+
     # Configuration and data files
     sed -i \
         -e 's/digibyte\.conf/digibyte.conf/g' \
@@ -134,7 +134,7 @@ find . -type f \( \
         -e 's/DIGIBYTE_CONF_FILENAME/DIGIBYTE_CONF_FILENAME/g' \
         -e 's/DIGIBYTE_PID_FILENAME/DIGIBYTE_PID_FILENAME/g' \
         "$file.tmp"
-    
+
     # Network and protocol
     sed -i \
         -e 's/digibyte:/digibyte:/g' \
@@ -143,21 +143,21 @@ find . -type f \( \
         -e 's/digibytetalk/digibytetalk/g' \
         -e 's/digibyte-dev/digibyte-dev/g' \
         "$file.tmp"
-    
+
     # Currency codes (word boundaries to avoid partial matches)
     sed -i \
-        -e 's/\bBTC\b/DGB/g' \
-        -e 's/\bbtc\b/dgb/g' \
+        -e 's/\bDGB\b/DGB/g' \
+        -e 's/\bdgb\b/dgb/g' \
         -e 's/\bXBT\b/DGB/g' \
         -e 's/\bxbt\b/dgb/g' \
-        -e 's/\bmBTC\b/mDGB/g' \
-        -e 's/\bmbtc\b/mdgb/g' \
-        -e 's/\buBTC\b/uDGB/g' \
-        -e 's/\bubtc\b/udgb/g' \
-        -e 's/\bsBTC\b/sDGB/g' \
-        -e 's/\bsbtc\b/sdgb/g' \
+        -e 's/\bmDGB\b/mDGB/g' \
+        -e 's/\bmdgb\b/mdgb/g' \
+        -e 's/\buDGB\b/uDGB/g' \
+        -e 's/\budgb\b/udgb/g' \
+        -e 's/\bsDGB\b/sDGB/g' \
+        -e 's/\bsdgb\b/sdgb/g' \
         "$file.tmp"
-    
+
     # Package and project names
     sed -i \
         -e 's/org\.digibyte/org.digibyte/g' \
@@ -166,7 +166,7 @@ find . -type f \( \
         -e 's/digibyte-project/digibyte-project/g' \
         -e 's/digibyte_project/digibyte_project/g' \
         "$file.tmp"
-    
+
     # General replacements (do these last to avoid double-replacements)
     sed -i \
         -e 's/DigiByte Core/DigiByte Core/g' \
@@ -181,10 +181,10 @@ find . -type f \( \
         -e 's/DigiByte developers/DigiByte developers/g' \
         -e 's/The DigiByte/The DigiByte/g' \
         -e 's/\bBitcoin\b/DigiByte/g' \
-        -e 's/\bbitcoin\b/digibyte/g' \
+        -e 's/\bdigibyte\b/digibyte/g' \
         -e 's/DIGIBYTE/DIGIBYTE/g' \
         "$file.tmp"
-    
+
     # Move temporary file back
     mv "$file.tmp" "$file"
 done

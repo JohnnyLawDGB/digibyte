@@ -2,7 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include <qt/bitcoinunits.h>
+#include <qt/digibyteunits.h>
 
 #include <consensus/amount.h>
 
@@ -10,7 +10,7 @@
 
 #include <cassert>
 
-static constexpr auto MAX_DIGITS_BTC = 16;
+static constexpr auto MAX_DIGITS_DGB = 16;
 
 DigiByteUnits::DigiByteUnits(QObject *parent):
         QAbstractListModel(parent),
@@ -33,7 +33,7 @@ QString DigiByteUnits::longName(Unit unit)
     switch (unit) {
     case Unit::DGB: return QString("DGB");
     case Unit::mDGB: return QString("mDGB");
-    case Unit::uDGB: return QString::fromUtf8("µBTC (bits)");
+    case Unit::uDGB: return QString::fromUtf8("µDGB (bits)");
     case Unit::SAT: return QString("Satoshi (sat)");
     } // no default case, so the compiler can warn about missing cases
     assert(false);
@@ -94,7 +94,7 @@ QString DigiByteUnits::format(Unit unit, const CAmount& nIn, bool fPlus, Separat
     qint64 quotient = n_abs / coin;
     QString quotient_str = QString::number(quotient);
     if (justify) {
-        quotient_str = quotient_str.rightJustified(MAX_DIGITS_BTC - num_decimals, ' ');
+        quotient_str = quotient_str.rightJustified(MAX_DIGITS_DGB - num_decimals, ' ');
     }
 
     // Use SI-style thin space separators as these are locale independent and can't be

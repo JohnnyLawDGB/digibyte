@@ -4,7 +4,7 @@
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 # call $digibyte-cli for RPC
-_bitcoin_rpc() {
+_digibyte_rpc() {
     # determine already specified args necessary for RPC
     local rpcargs=()
     for i in ${COMP_LINE}; do
@@ -14,16 +14,16 @@ _bitcoin_rpc() {
                 ;;
         esac
     done
-    $bitcoin_cli "${rpcargs[@]}" "$@"
+    $digibyte_cli "${rpcargs[@]}" "$@"
 }
 
-_bitcoin_cli() {
+_digibyte_cli() {
     local cur prev words=() cword
-    local bitcoin_cli
+    local digibyte_cli
 
     # save and use original argument to invoke digibyte-cli for -help, help and RPC
     # as digibyte-cli might not be in $PATH
-    bitcoin_cli="$1"
+    digibyte_cli="$1"
 
     COMPREPLY=()
     _get_comp_words_by_ref -n = cur prev words cword
@@ -112,12 +112,12 @@ _bitcoin_cli() {
 
             # only parse -help if senseful
             if [[ -z "$cur" || "$cur" =~ ^- ]]; then
-                helpopts=$($bitcoin_cli -help 2>&1 | awk '$1 ~ /^-/ { sub(/=.*/, "="); print $1 }' )
+                helpopts=$($digibyte_cli -help 2>&1 | awk '$1 ~ /^-/ { sub(/=.*/, "="); print $1 }' )
             fi
 
             # only parse help if senseful
             if [[ -z "$cur" || "$cur" =~ ^[a-z] ]]; then
-                commands=$(_bitcoin_rpc help 2>/dev/null | awk '$1 ~ /^[a-z]/ { print $1; }')
+                commands=$(_digibyte_rpc help 2>/dev/null | awk '$1 ~ /^[a-z]/ { print $1; }')
             fi
 
             COMPREPLY=( $( compgen -W "$helpopts $commands" -- "$cur" ) )
@@ -130,7 +130,7 @@ _bitcoin_cli() {
             ;;
     esac
 } &&
-complete -F _bitcoin_cli digibyte-cli
+complete -F _digibyte_cli digibyte-cli
 
 # Local variables:
 # mode: shell-script

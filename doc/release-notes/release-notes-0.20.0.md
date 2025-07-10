@@ -3,7 +3,7 @@
 
 DigiByte Core version 0.20.0 is now available from:
 
-  <https://bitcoincore.org/bin/digibyte-core-0.20.0/>
+  <https://digibytecore.org/bin/digibyte-core-0.20.0/>
 
 This release includes new features, various bug fixes and performance
 improvements, as well as updated translations.
@@ -14,7 +14,7 @@ Please report bugs using the issue tracker at GitHub:
 
 To receive security and update notifications, please subscribe to:
 
-  <https://bitcoincore.org/en/list/announcements/join/>
+  <https://digibytecore.org/en/list/announcements/join/>
 
 How to Upgrade
 ==============
@@ -206,7 +206,7 @@ GUI changes
   peer selection. See the `-asmap` configuration option in _New
   Settings_, above.  (#18402)
 
-- A "known bug" [announced](https://bitcoincore.org/en/releases/0.18.0/#wallet-gui)
+- A "known bug" [announced](https://digibytecore.org/en/releases/0.18.0/#wallet-gui)
   in the release notes of version 0.18 has been fixed.  The issue
   affected anyone who simultaneously used multiple DigiByte Core wallets
   and the GUI coin control feature. (#18894)
@@ -450,7 +450,7 @@ Build system
 - #15756 Add shortcuts for tab tools (promag)
 - #16944 create PSBT with watch-only wallet (Sjors)
 - #16964 Change sendcoins dialogue Yes to Send (instagibbs)
-- #17068 Always generate `bitcoinstrings.cpp` on `make translate` (D4nte)
+- #17068 Always generate `digibytestrings.cpp` on `make translate` (D4nte)
 - #17096 Rename debug window (Zero-1729)
 - #17105 Make RPCConsole::TabTypes an enum class (promag)
 - #17125 Add toolTip and placeholderText to sign message fields (dannmat)
@@ -544,7 +544,7 @@ Build system
 - #18290 Set minimum Automake version to 1.13 (hebasto)
 - #18320 guix: Remove now-unnecessary gcc make flag (dongcarl)
 - #18331 Use git archive as source tarball (hebasto)
-- #18397 Fix libevent linking for `bench_bitcoin` binary (hebasto)
+- #18397 Fix libevent linking for `bench_digibyte` binary (hebasto)
 - #18426 scripts: `Previous_release`: improve behaviour on failed download (theStack)
 - #18429 Remove double `LIBDIGIBYTE_SERVER` from bench-Makefile (brakmic)
 - #18528 Create `test_fuzz` library from src/test/fuzz/fuzz.cpp (brakmic)
@@ -679,7 +679,7 @@ Build system
 - #18008 fix fuzzing using libFuzzer on macOS (fanquake)
 - #18013 bench: Fix benchmarks filters (elichai)
 - #18018 reset fIsBareMultisigStd after bare-multisig tests (fanquake)
-- #18022 Fix appveyor `test_bitcoin` build of `*.raw` (MarcoFalke)
+- #18022 Fix appveyor `test_digibyte` build of `*.raw` (MarcoFalke)
 - #18037 util: Allow scheduler to be mocked (amitiuttarwar)
 - #18056 ci: Check for submodules (emilengler)
 - #18069 Replace 'regtest' leftovers by self.chain (theStack)

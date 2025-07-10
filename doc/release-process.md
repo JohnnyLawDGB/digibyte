@@ -54,11 +54,11 @@ Release Process
 - Clear the release notes and move them to the wiki (see "Write the release notes" below).
 - Translations on Transifex:
     - Pull translations from Transifex into the master branch.
-    - Create [a new resource](https://www.transifex.com/digibyte/digibyte/content/) named after the major version with the slug `qt-translation-<RRR>x`, where `RRR` is the major branch number padded with zeros. Use `src/qt/locale/bitcoin_en.xlf` to create it.
+    - Create [a new resource](https://www.transifex.com/digibyte/digibyte/content/) named after the major version with the slug `qt-translation-<RRR>x`, where `RRR` is the major branch number padded with zeros. Use `src/qt/locale/digibyte_en.xlf` to create it.
     - In the project workflow settings, ensure that [Translation Memory Fill-up](https://help.transifex.com/en/articles/6224817-setting-up-translation-memory-fill-up) is enabled and that [Translation Memory Context Matching](https://help.transifex.com/en/articles/6224753-translation-memory-with-context) is disabled.
     - Update the Transifex slug in [`.tx/config`](/.tx/config) to the slug of the resource created in the first step. This identifies which resource the translations will be synchronized from.
     - Make an announcement that translators can start translating for the new version. You can use one of the [previous announcements](https://www.transifex.com/digibyte/communication/) as a template.
-    - Change the auto-update URL for the resource to `master`, e.g. `https://raw.githubusercontent.com/digibyte/digibyte/master/src/qt/locale/bitcoin_en.xlf`. (Do this only after the previous steps, to prevent an auto-update from interfering.)
+    - Change the auto-update URL for the resource to `master`, e.g. `https://raw.githubusercontent.com/digibyte/digibyte/master/src/qt/locale/digibyte_en.xlf`. (Do this only after the previous steps, to prevent an auto-update from interfering.)
 
 #### After branch-off (on the major release branch)
 
@@ -67,7 +67,7 @@ Release Process
 - Clear the release notes: `cp doc/release-notes-empty-template.md doc/release-notes.md`
 - Create a pinned meta-issue for testing the release candidate (see [this issue](https://github.com/digibyte/digibyte/issues/27621) for an example) and provide a link to it in the release announcements where useful.
 - Translations on Transifex
-    - Change the auto-update URL for the new major version's resource away from `master` and to the branch, e.g. `https://raw.githubusercontent.com/digibyte/digibyte/<branch>/src/qt/locale/bitcoin_en.xlf`. Do not forget this or it will keep tracking the translations on master instead, drifting away from the specific major release.
+    - Change the auto-update URL for the new major version's resource away from `master` and to the branch, e.g. `https://raw.githubusercontent.com/digibyte/digibyte/<branch>/src/qt/locale/digibyte_en.xlf`. Do not forget this or it will keep tracking the translations on master instead, drifting away from the specific major release.
 - Prune inputs from the qa-assets repo (See [pruning
   inputs](https://github.com/digibyte-core/qa-assets#pruning-inputs)).
 
@@ -223,7 +223,7 @@ cat "$VERSION"/*/all.SHA256SUMS.asc > SHA256SUMS.asc
 ```
 
 
-- Upload to the bitcoincore.org server (`/var/www/bin/digibyte-core-${VERSION}/`):
+- Upload to the digibytecore.org server (`/var/www/bin/digibyte-core-${VERSION}/`):
     1. The contents of each `./digibyte/guix-build-${VERSION}/output/${HOST}/` directory, except for
        `*-debug*` files.
 
@@ -236,11 +236,11 @@ cat "$VERSION"/*/all.SHA256SUMS.asc > SHA256SUMS.asc
        for troubleshooting by developers. It is assumed that anyone that is
        interested in debugging can run guix to generate the files for
        themselves. To avoid end-user confusion about which file to pick, as well
-       as save storage space *do not upload these to the bitcoincore.org server,
+       as save storage space *do not upload these to the digibytecore.org server,
        nor put them in the torrent*.
 
        ```sh
-       find guix-build-${VERSION}/output/ -maxdepth 2 -type f -not -name "SHA256SUMS.part" -and -not -name "*debug*" -exec scp {} user@bitcoincore.org:/var/www/bin/digibyte-core-${VERSION} \;
+       find guix-build-${VERSION}/output/ -maxdepth 2 -type f -not -name "SHA256SUMS.part" -and -not -name "*debug*" -exec scp {} user@digibytecore.org:/var/www/bin/digibyte-core-${VERSION} \;
        ```
 
     2. The `SHA256SUMS` file
@@ -259,24 +259,24 @@ cat "$VERSION"/*/all.SHA256SUMS.asc > SHA256SUMS.asc
   ```
 
   Insert the magnet URI into the announcement sent to mailing lists. This permits
-  people without access to `bitcoincore.org` to download the binary distribution.
+  people without access to `digibytecore.org` to download the binary distribution.
   Also put it into the `optional_magnetlink:` slot in the YAML file for
-  bitcoincore.org.
+  digibytecore.org.
 
 - Update other repositories and websites for new version
 
-  - bitcoincore.org blog post
+  - digibytecore.org blog post
 
-  - bitcoincore.org maintained versions update:
-    [table](https://github.com/digibyte-core/bitcoincore.org/commits/master/_includes/posts/maintenance-table.md)
+  - digibytecore.org maintained versions update:
+    [table](https://github.com/digibyte-core/digibytecore.org/commits/master/_includes/posts/maintenance-table.md)
 
   - Delete post-EOL [release branches](https://github.com/digibyte/digibyte/branches/all) and create a tag `v${branch_name}-final`.
 
   - Delete ["Needs backport" labels](https://github.com/digibyte/digibyte/labels?q=backport) for non-existing branches.
 
-  - bitcoincore.org RPC documentation update
+  - digibytecore.org RPC documentation update
 
-      - See https://github.com/digibyte-core/bitcoincore.org/blob/master/contrib/doc-gen/
+      - See https://github.com/digibyte-core/digibytecore.org/blob/master/contrib/doc-gen/
 
   - Update packaging repo
 
@@ -294,9 +294,9 @@ cat "$VERSION"/*/all.SHA256SUMS.asc > SHA256SUMS.asc
 
   - digibyte-dev and digibyte-core-dev mailing list
 
-  - DigiByte Core announcements list https://bitcoincore.org/en/list/announcements/join/
+  - DigiByte Core announcements list https://digibytecore.org/en/list/announcements/join/
 
-  - DigiByte Core Twitter https://twitter.com/bitcoincoreorg
+  - DigiByte Core Twitter https://twitter.com/digibytecoreorg
 
   - Celebrate
 

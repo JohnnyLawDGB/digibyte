@@ -8,7 +8,7 @@
 #else
 #define UNUSED
 #endif
-static const char UNUSED *bitcoin_strings[] = {
+static const char UNUSED *digibyte_strings[] = {
 QT_TRANSLATE_NOOP("digibyte-core", "The %s developers"),
 QT_TRANSLATE_NOOP("digibyte-core", ""
 "%s corrupt. Try using the wallet tool digibyte-wallet to salvage or restoring "

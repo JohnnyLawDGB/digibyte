@@ -7,7 +7,7 @@ define(_CLIENT_VERSION_IS_RELEASE, true)
 define(_COPYRIGHT_YEAR, 2024)
 define(_COPYRIGHT_HOLDERS,[The %s developers])
 define(_COPYRIGHT_HOLDERS_SUBSTITUTION,[[DigiByte Core]])
-AC_INIT([DigiByte Core],m4_join([.], _CLIENT_VERSION_MAJOR, _CLIENT_VERSION_MINOR, _CLIENT_VERSION_BUILD)m4_if(_CLIENT_VERSION_RC, [0], [], [rc]_CLIENT_VERSION_RC),[https://github.com/digibyte/digibyte/issues],[digibyte],[https://bitcoincore.org/])
+AC_INIT([DigiByte Core],m4_join([.], _CLIENT_VERSION_MAJOR, _CLIENT_VERSION_MINOR, _CLIENT_VERSION_BUILD)m4_if(_CLIENT_VERSION_RC, [0], [], [rc]_CLIENT_VERSION_RC),[https://github.com/digibyte/digibyte/issues],[digibyte],[https://digibyte.org/])
 AC_CONFIG_SRCDIR([src/validation.cpp])
 AC_CONFIG_HEADERS([src/config/digibyte-config.h])
 AC_CONFIG_AUX_DIR([build-aux])
@@ -31,7 +31,7 @@ fi
 
 DIGIBYTE_DAEMON_NAME=digibyted
 DIGIBYTE_GUI_NAME=digibyte-qt
-DIGIBYTE_TEST_NAME=test_bitcoin
+DIGIBYTE_TEST_NAME=test_digibyte
 DIGIBYTE_CLI_NAME=digibyte-cli
 DIGIBYTE_TX_NAME=digibyte-tx
 DIGIBYTE_UTIL_NAME=digibyte-util
@@ -631,48 +631,48 @@ CORE_CPPFLAGS="$CORE_CPPFLAGS -DHAVE_BUILD_INFO"
 AC_ARG_WITH([utils],
   [AS_HELP_STRING([--with-utils],
   [build digibyte-cli digibyte-tx digibyte-util digibyte-wallet (default=yes)])],
-  [build_bitcoin_utils=$withval],
-  [build_bitcoin_utils=yes])
+  [build_digibyte_utils=$withval],
+  [build_digibyte_utils=yes])
 
 AC_ARG_ENABLE([util-cli],
   [AS_HELP_STRING([--enable-util-cli],
   [build digibyte-cli])],
-  [build_bitcoin_cli=$enableval],
-  [build_bitcoin_cli=$build_bitcoin_utils])
+  [build_digibyte_cli=$enableval],
+  [build_digibyte_cli=$build_digibyte_utils])
 
 AC_ARG_ENABLE([util-tx],
   [AS_HELP_STRING([--enable-util-tx],
   [build digibyte-tx])],
-  [build_bitcoin_tx=$enableval],
-  [build_bitcoin_tx=$build_bitcoin_utils])
+  [build_digibyte_tx=$enableval],
+  [build_digibyte_tx=$build_digibyte_utils])
 
 AC_ARG_ENABLE([util-wallet],
   [AS_HELP_STRING([--enable-util-wallet],
   [build digibyte-wallet])],
-  [build_bitcoin_wallet=$enableval],
-  [build_bitcoin_wallet=$build_bitcoin_utils])
+  [build_digibyte_wallet=$enableval],
+  [build_digibyte_wallet=$build_digibyte_utils])
 
 AC_ARG_ENABLE([util-util],
   [AS_HELP_STRING([--enable-util-util],
   [build digibyte-util])],
-  [build_bitcoin_util=$enableval],
-  [build_bitcoin_util=$build_bitcoin_utils])
+  [build_digibyte_util=$enableval],
+  [build_digibyte_util=$build_digibyte_utils])
 
 AC_ARG_ENABLE([experimental-util-chainstate],
   [AS_HELP_STRING([--enable-experimental-util-chainstate],
   [build experimental digibyte-chainstate executable (default=no)])],
-  [build_bitcoin_chainstate=$enableval],
-  [build_bitcoin_chainstate=no])
+  [build_digibyte_chainstate=$enableval],
+  [build_digibyte_chainstate=no])
 
 AC_ARG_WITH([libs],
   [AS_HELP_STRING([--with-libs],
   [build libraries (default=yes)])],
-  [build_bitcoin_libs=$withval],
-  [build_bitcoin_libs=yes])
+  [build_digibyte_libs=$withval],
+  [build_digibyte_libs=yes])
 
 AC_ARG_WITH([experimental-kernel-lib],
   [AS_HELP_STRING([--with-experimental-kernel-lib],
-  [build experimental bitcoinkernel library (default is to build if we're building libraries and the experimental build-chainstate executable)])],
+  [build experimental digibytekernel library (default is to build if we're building libraries and the experimental build-chainstate executable)])],
   [build_experimental_kernel_lib=$withval],
   [build_experimental_kernel_lib=auto])
 
@@ -1310,17 +1310,17 @@ AC_DEFUN([SUPPRESS_WARNINGS],
 dnl enable-fuzz should disable all other targets
 if test "$enable_fuzz" = "yes"; then
   AC_MSG_WARN([enable-fuzz will disable all other targets and force --enable-fuzz-binary=yes])
-  build_bitcoin_utils=no
-  build_bitcoin_cli=no
-  build_bitcoin_tx=no
-  build_bitcoin_util=no
-  build_bitcoin_chainstate=no
-  build_bitcoin_wallet=no
+  build_digibyte_utils=no
+  build_digibyte_cli=no
+  build_digibyte_tx=no
+  build_digibyte_util=no
+  build_digibyte_chainstate=no
+  build_digibyte_wallet=no
   build_digibyted=no
-  build_bitcoin_libs=no
-  bitcoin_enable_qt=no
-  bitcoin_enable_qt_test=no
-  bitcoin_enable_qt_dbus=no
+  build_digibyte_libs=no
+  digibyte_enable_qt=no
+  digibyte_enable_qt_test=no
+  digibyte_enable_qt_dbus=no
   use_bench=no
   use_tests=no
   use_external_signer=no
@@ -1333,7 +1333,7 @@ if test "$enable_fuzz" = "yes"; then
 else
   DIGIBYTE_QT_INIT
 
-  dnl sets $bitcoin_enable_qt, $bitcoin_enable_qt_test, $bitcoin_enable_qt_dbus
+  dnl sets $digibyte_enable_qt, $digibyte_enable_qt_test, $digibyte_enable_qt_dbus
   DIGIBYTE_QT_CONFIGURE([5.11.3])
 
   dnl Keep a copy of the original $QT_INCLUDES and use it when invoking qt's moc
@@ -1417,7 +1417,7 @@ if test "$use_usdt" != "no"; then
 fi
 AM_CONDITIONAL([ENABLE_USDT_TRACEPOINTS], [test "$use_usdt" = "yes"])
 
-if test "$build_digibyted$bitcoin_enable_qt$use_bench$use_tests" = "nononono"; then
+if test "$build_digibyted$digibyte_enable_qt$use_bench$use_tests" = "nononono"; then
   use_upnp=no
   use_natpmp=no
   use_zmq=no
@@ -1466,7 +1466,7 @@ if test "$use_natpmp" != "no"; then
   CPPFLAGS="$TEMP_CPPFLAGS"
 fi
 
-if test "$build_bitcoin_wallet$build_bitcoin_cli$build_bitcoin_tx$build_bitcoin_util$build_digibyted$bitcoin_enable_qt$use_tests$use_bench$enable_fuzz_binary" = "nonononononononono"; then
+if test "$build_digibyte_wallet$build_digibyte_cli$build_digibyte_tx$build_digibyte_util$build_digibyted$digibyte_enable_qt$use_tests$use_bench$enable_fuzz_binary" = "nonononononononono"; then
   use_boost=no
 else
   use_boost=yes
@@ -1555,7 +1555,7 @@ fi
 dnl libevent check
 
 use_libevent=no
-if test "$build_bitcoin_cli$build_digibyted$bitcoin_enable_qt$enable_fuzz_binary$use_tests$use_bench" != "nononononono"; then
+if test "$build_digibyte_cli$build_digibyted$digibyte_enable_qt$enable_fuzz_binary$use_tests$use_bench" != "nononononono"; then
   PKG_CHECK_MODULES([EVENT], [libevent >= 2.1.8], [use_libevent=yes], [AC_MSG_ERROR([libevent version 2.1.8 or greater not found.])])
   if test "$TARGET_OS" != "windows"; then
     PKG_CHECK_MODULES([EVENT_PTHREADS], [libevent_pthreads >= 2.1.8], [], [AC_MSG_ERROR([libevent_pthreads version 2.1.8 or greater not found.])])
@@ -1657,41 +1657,41 @@ AM_CONDITIONAL([BUILD_DIGIBYTED], [test $build_digibyted = "yes"])
 AC_MSG_RESULT($build_digibyted)
 
 AC_MSG_CHECKING([whether to build digibyte-cli])
-AM_CONDITIONAL([BUILD_DIGIBYTE_CLI], [test $build_bitcoin_cli = "yes"])
-AC_MSG_RESULT($build_bitcoin_cli)
+AM_CONDITIONAL([BUILD_DIGIBYTE_CLI], [test $build_digibyte_cli = "yes"])
+AC_MSG_RESULT($build_digibyte_cli)
 
 AC_MSG_CHECKING([whether to build digibyte-tx])
-AM_CONDITIONAL([BUILD_DIGIBYTE_TX], [test $build_bitcoin_tx = "yes"])
-AC_MSG_RESULT($build_bitcoin_tx)
+AM_CONDITIONAL([BUILD_DIGIBYTE_TX], [test $build_digibyte_tx = "yes"])
+AC_MSG_RESULT($build_digibyte_tx)
 
 AC_MSG_CHECKING([whether to build digibyte-wallet])
-AM_CONDITIONAL([BUILD_DIGIBYTE_WALLET], [test $build_bitcoin_wallet = "yes"])
-AC_MSG_RESULT($build_bitcoin_wallet)
+AM_CONDITIONAL([BUILD_DIGIBYTE_WALLET], [test $build_digibyte_wallet = "yes"])
+AC_MSG_RESULT($build_digibyte_wallet)
 
 AC_MSG_CHECKING([whether to build digibyte-util])
-AM_CONDITIONAL([BUILD_DIGIBYTE_UTIL], [test $build_bitcoin_util = "yes"])
-AC_MSG_RESULT($build_bitcoin_util)
+AM_CONDITIONAL([BUILD_DIGIBYTE_UTIL], [test $build_digibyte_util = "yes"])
+AC_MSG_RESULT($build_digibyte_util)
 
 AC_MSG_CHECKING([whether to build experimental digibyte-chainstate])
-if test "$build_bitcoin_chainstate" = "yes"; then
+if test "$build_digibyte_chainstate" = "yes"; then
   if test "$build_experimental_kernel_lib" = "no"; then
-    AC_MSG_ERROR([experimental digibyte-chainstate cannot be built without the experimental bitcoinkernel library. Use --with-experimental-kernel-lib]);
+    AC_MSG_ERROR([experimental digibyte-chainstate cannot be built without the experimental digibytekernel library. Use --with-experimental-kernel-lib]);
   fi
 fi
-AM_CONDITIONAL([BUILD_DIGIBYTE_CHAINSTATE], [test $build_bitcoin_chainstate = "yes"])
-AC_MSG_RESULT($build_bitcoin_chainstate)
+AM_CONDITIONAL([BUILD_DIGIBYTE_CHAINSTATE], [test $build_digibyte_chainstate = "yes"])
+AC_MSG_RESULT($build_digibyte_chainstate)
 
 AC_MSG_CHECKING([whether to build libraries])
-AM_CONDITIONAL([BUILD_DIGIBYTE_LIBS], [test $build_bitcoin_libs = "yes"])
+AM_CONDITIONAL([BUILD_DIGIBYTE_LIBS], [test $build_digibyte_libs = "yes"])
 
-if test "$build_bitcoin_libs" = "yes"; then
+if test "$build_digibyte_libs" = "yes"; then
   AC_DEFINE([HAVE_CONSENSUS_LIB], [1], [Define this symbol if the consensus lib has been built])
   AC_CONFIG_FILES([libdigibyteconsensus.pc:libdigibyteconsensus.pc.in])
 fi
 
-AM_CONDITIONAL([BUILD_DIGIBYTE_KERNEL_LIB], [test "$build_experimental_kernel_lib" != "no" && ( test "$build_experimental_kernel_lib" = "yes" || test "$build_bitcoin_chainstate" = "yes" )])
+AM_CONDITIONAL([BUILD_DIGIBYTE_KERNEL_LIB], [test "$build_experimental_kernel_lib" != "no" && ( test "$build_experimental_kernel_lib" = "yes" || test "$build_digibyte_chainstate" = "yes" )])
 
-AC_MSG_RESULT($build_bitcoin_libs)
+AC_MSG_RESULT($build_digibyte_libs)
 
 AC_LANG_POP
 
@@ -1770,13 +1770,13 @@ fi
 
 dnl these are only used when qt is enabled
 BUILD_TEST_QT=""
-if test "$bitcoin_enable_qt" != "no"; then
+if test "$digibyte_enable_qt" != "no"; then
   dnl enable dbus support
   AC_MSG_CHECKING([whether to build GUI with support for D-Bus])
-  if test "$bitcoin_enable_qt_dbus" != "no"; then
+  if test "$digibyte_enable_qt_dbus" != "no"; then
     AC_DEFINE([USE_DBUS], [1], [Define if dbus support should be compiled in])
   fi
-  AC_MSG_RESULT([$bitcoin_enable_qt_dbus])
+  AC_MSG_RESULT([$digibyte_enable_qt_dbus])
 
   dnl enable qr support
   AC_MSG_CHECKING([whether to build GUI with support for QR codes])
@@ -1798,7 +1798,7 @@ if test "$bitcoin_enable_qt" != "no"; then
   fi
 
   AC_MSG_CHECKING([whether to build test_digibyte-qt])
-  if test "$use_gui_tests$bitcoin_enable_qt_test" = "yesyes"; then
+  if test "$use_gui_tests$digibyte_enable_qt_test" = "yesyes"; then
     AC_MSG_RESULT([yes])
     BUILD_TEST_QT="yes"
   else
@@ -1806,7 +1806,7 @@ if test "$bitcoin_enable_qt" != "no"; then
   fi
 fi
 
-AC_MSG_CHECKING([whether to build test_bitcoin])
+AC_MSG_CHECKING([whether to build test_digibyte])
 if test "$use_tests" = "yes"; then
   if test "$enable_fuzz" = "yes"; then
     AC_MSG_RESULT([no, because fuzzing is enabled])
@@ -1826,7 +1826,7 @@ else
   AC_MSG_RESULT([no])
 fi
 
-if test "$build_bitcoin_wallet$build_bitcoin_cli$build_bitcoin_tx$build_bitcoin_util$build_bitcoin_libs$build_digibyted$bitcoin_enable_qt$enable_fuzz_binary$use_bench$use_tests" = "nononononononononono"; then
+if test "$build_digibyte_wallet$build_digibyte_cli$build_digibyte_tx$build_digibyte_util$build_digibyte_libs$build_digibyted$digibyte_enable_qt$enable_fuzz_binary$use_bench$use_tests" = "nononononononononono"; then
   AC_MSG_ERROR([No targets! Please specify at least one of: --with-utils --with-libs --with-daemon --with-gui --enable-fuzz(-binary) --enable-bench or --enable-tests])
 fi
 
@@ -1840,7 +1840,7 @@ AM_CONDITIONAL([USE_BDB], [test "$use_bdb" = "yes"])
 AM_CONDITIONAL([ENABLE_TESTS], [test "$BUILD_TEST" = "yes"])
 AM_CONDITIONAL([ENABLE_FUZZ], [test "$enable_fuzz" = "yes"])
 AM_CONDITIONAL([ENABLE_FUZZ_BINARY], [test "$enable_fuzz_binary" = "yes"])
-AM_CONDITIONAL([ENABLE_QT], [test "$bitcoin_enable_qt" = "yes"])
+AM_CONDITIONAL([ENABLE_QT], [test "$digibyte_enable_qt" = "yes"])
 AM_CONDITIONAL([ENABLE_QT_TESTS], [test "$BUILD_TEST_QT" = "yes"])
 AM_CONDITIONAL([ENABLE_BENCH], [test "$use_bench" = "yes"])
 AM_CONDITIONAL([USE_QRCODE], [test "$use_qr" = "yes"])
@@ -1976,21 +1976,21 @@ echo
 echo "Options used to compile and link:"
 echo "  external signer = $use_external_signer"
 echo "  multiprocess    = $build_multiprocess"
-echo "  with libs       = $build_bitcoin_libs"
+echo "  with libs       = $build_digibyte_libs"
 echo "  with wallet     = $enable_wallet"
 if test "$enable_wallet" != "no"; then
     echo "    with sqlite   = $use_sqlite"
     echo "    with bdb      = $use_bdb"
 fi
-echo "  with gui / qt   = $bitcoin_enable_qt"
-if test $bitcoin_enable_qt != "no"; then
+echo "  with gui / qt   = $digibyte_enable_qt"
+if test $digibyte_enable_qt != "no"; then
     echo "    with qr       = $use_qr"
 fi
 echo "  with zmq        = $use_zmq"
 if test $enable_fuzz = "no"; then
     echo "  with test       = $use_tests"
 else
-    echo "  with test       = not building test_bitcoin because fuzzing is enabled"
+    echo "  with test       = not building test_digibyte because fuzzing is enabled"
 fi
 echo "  with fuzz binary = $enable_fuzz_binary"
 echo "  with bench      = $use_bench"

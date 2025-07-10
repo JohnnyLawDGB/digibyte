@@ -3,7 +3,7 @@
 
 DigiByte Core version 24.1 is now available from:
 
-  <https://bitcoincore.org/bin/digibyte-core-24.1/>
+  <https://digibytecore.org/bin/digibyte-core-24.1/>
 
 This release includes various bug fixes and performance
 improvements, as well as updated translations.
@@ -14,7 +14,7 @@ Please report bugs using the issue tracker at GitHub:
 
 To receive security and update notifications, please subscribe to:
 
-  <https://bitcoincore.org/en/list/announcements/join/>
+  <https://digibytecore.org/en/list/announcements/join/>
 
 How to Upgrade
 ==============
@@ -89,7 +89,7 @@ Thanks to everyone who directly contributed to this release:
 - Martin Zumsande
 - Matthew Zipkin
 - Michael Ford
-- pablomartin4btc
+- pablomartin4dgb
 - Sebastian Falbesoner
 - Suhas Daftuar
 - Thomas Nguyen

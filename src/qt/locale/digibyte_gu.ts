@@ -184,7 +184,7 @@ Signing is only possible with addresses of the type 'legacy'.</source>
         <translation type="unfinished">પાકીટ માટે જુના શબ્દસમૂહ અને નવા શબ્દસમૂહ દાખલ કરો.</translation>
     </message>
     <message>
-        <source>Remember that encrypting your wallet cannot fully protect your bitcoins from being stolen by malware infecting your computer.</source>
+        <source>Remember that encrypting your wallet cannot fully protect your digibytes from being stolen by malware infecting your computer.</source>
         <translation type="unfinished">યાદ રાખો કે તમારા વૉલેટને એન્ક્રિપ્ટ કરવાથી તમારા કમ્પ્યુટરને સંક્રમિત કરતા માલવેર દ્વારા ચોરાઈ જવાથી તમારા બિટકોઈનને સંપૂર્ણપણે સુરક્ષિત કરી શકાશે નહીં.</translation>
     </message>
     <message>
@@ -827,7 +827,7 @@ Signing is only possible with addresses of the type 'legacy'.</source>
     <message>
         <source>Type: %1
 </source>
-        <translation type="unfinished">પ્રકાર: %1 
+        <translation type="unfinished">પ્રકાર: %1
 </translation>
     </message>
     <message>
@@ -839,7 +839,7 @@ Signing is only possible with addresses of the type 'legacy'.</source>
     <message>
         <source>Address: %1
 </source>
-        <translation type="unfinished">સરનામું: %1 
+        <translation type="unfinished">સરનામું: %1
 </translation>
     </message>
     <message>
@@ -1477,7 +1477,7 @@ The migration process will create a backup of the wallet before migrating. This 
         <translation type="unfinished">તાજેતરના વ્યવહારો હજુ સુધી દેખાતા ન હોઈ શકે અને તેથી તમારા વૉલેટનું બેલેન્સ ખોટું હોઈ શકે છે. એકવાર તમારું વૉલેટ બિટકોઇન નેટવર્ક સાથે સિંક્રનાઇઝ થઈ જાય પછી આ માહિતી સાચી હશે, જેમ કે નીચે વિગતવાર છે.</translation>
     </message>
     <message>
-        <source>Attempting to spend bitcoins that are affected by not-yet-displayed transactions will not be accepted by the network.</source>
+        <source>Attempting to spend digibytes that are affected by not-yet-displayed transactions will not be accepted by the network.</source>
         <translation type="unfinished">હજુ સુધી પ્રદર્શિત ન થયેલા વ્યવહારોથી પ્રભાવિત બિટકોઇન્સનો ખર્ચ કરવાનો પ્રયાસ નેટવર્ક દ્વારા સ્વીકારવામાં આવશે નહીં.</translation>
     </message>
     <message>

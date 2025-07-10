@@ -11,7 +11,7 @@ Please report bugs using the issue tracker at github:
 
 To receive security and update notifications, please subscribe to:
 
-  <https://bitcoincore.org/en/list/announcements/join/>
+  <https://digibytecore.org/en/list/announcements/join/>
 
 Compatibility
 ==============
@@ -108,7 +108,7 @@ command without running the commands separately.
 
 The nested RPC commands use bracket syntax (i.e. `getwalletinfo()`) and can
 be nested (i.e. `getblock(getblockhash(1))`). Simple queries can be
-done with square brackets where object values are accessed with either an 
+done with square brackets where object values are accessed with either an
 array index or a non-quoted string (i.e. `listunspent()[0][txid]`). Both
 commas and spaces can be used to separate parameters in both the bracket syntax
 and normal RPC command syntax.
@@ -117,9 +117,9 @@ Network Activity Toggle
 -----------------------
 
 A RPC command and GUI toggle have been added to enable or disable all p2p
-network activity. The network status icon in the bottom right hand corner 
+network activity. The network status icon in the bottom right hand corner
 is now the GUI toggle. Clicking the icon will either enable or disable all
-p2p network activity. If network activity is disabled, the icon will 
+p2p network activity. If network activity is disabled, the icon will
 be grayed out with an X on top of it.
 
 Additionally the `setnetworkactive` RPC command has been added which does
@@ -189,7 +189,7 @@ commands such as `prioritisetransaction` so that those changes will not be lost.
 Final Alert
 -----------
 
-The Alert System was [disabled and deprecated](https://digibyte.org/en/alert/2016-11-01-alert-retirement) in DigiByte Core 0.12.1 and removed in 0.13.0. 
+The Alert System was [disabled and deprecated](https://digibyte.org/en/alert/2016-11-01-alert-retirement) in DigiByte Core 0.12.1 and removed in 0.13.0.
 The Alert System was retired with a maximum sequence final alert which causes any nodes
 supporting the Alert System to display a static hard-coded "Alert Key Compromised" message which also
 prevents any other alerts from overriding it. This final alert is hard-coded into this release
@@ -198,15 +198,15 @@ so that all old nodes receive the final alert.
 GUI Changes
 -----------
 
- - After resetting the options by clicking the `Reset Options` button 
-   in the options dialog or with the `-resetguioptions` startup option, 
-   the user will be prompted to choose the data directory again. This 
-   is to ensure that custom data directories will be kept after the 
-   option reset which clears the custom data directory set via the choose 
+ - After resetting the options by clicking the `Reset Options` button
+   in the options dialog or with the `-resetguioptions` startup option,
+   the user will be prompted to choose the data directory again. This
+   is to ensure that custom data directories will be kept after the
+   option reset which clears the custom data directory set via the choose
    datadir dialog.
 
- - Multiple peers can now be selected in the list of peers in the debug 
-   window. This allows for users to ban or disconnect multiple peers 
+ - Multiple peers can now be selected in the list of peers in the debug
+   window. This allows for users to ban or disconnect multiple peers
    simultaneously instead of banning them one at a time.
 
  - An indicator has been added to the bottom right hand corner of the main
@@ -221,7 +221,7 @@ Low-level RPC changes
    an optional third arg, which was always ignored. Make sure to never pass more
    than two arguments.
 
- - The first boolean argument to `getaddednodeinfo` has been removed. This is 
+ - The first boolean argument to `getaddednodeinfo` has been removed. This is
    an incompatible change.
 
  - RPC command `getmininginfo` loses the "testnet" field in favor of the more
@@ -231,8 +231,8 @@ Low-level RPC changes
    precious. A precious block will be treated as if it were received earlier
    than a competing block.
 
- - A new RPC command `importmulti` has been added which receives an array of 
-   JSON objects representing the intention of importing a public key, a 
+ - A new RPC command `importmulti` has been added which receives an array of
+   JSON objects representing the intention of importing a public key, a
    private key, an address and script/p2sh
 
  - Use of `getrawtransaction` for retrieving confirmed transactions with unspent
@@ -254,7 +254,7 @@ HTTP REST Changes
 -----------------
 
  - UTXO set query (`GET /rest/getutxos/<checkmempool>/<txid>-<n>/<txid>-<n>
-   /.../<txid>-<n>.<bin|hex|json>`) responses were changed to return status 
+   /.../<txid>-<n>.<bin|hex|json>`) responses were changed to return status
    code `HTTP_BAD_REQUEST` (400) instead of `HTTP_INTERNAL_SERVER_ERROR` (500)
    when requests contain invalid parameters.
 
@@ -402,7 +402,7 @@ and git merge commit are mentioned.
 - #9133 `434e683` Unset fImporting for loading mempool (morcos)
 - #9179 `b9a87b4` Set `DEFAULT_LIMITFREERELAY` = 0 kB/minute (MarcoFalke)
 - #9239 `3fbf079` Disable fee estimates for 1-block target (morcos)
-- #7562 `1eef038` Bump transaction version default to 2 (btcdrak)
+- #7562 `1eef038` Bump transaction version default to 2 (dgbdrak)
 - #9313,#9367 If we don't allow free txs, always send a fee filter (morcos)
 - #9346 `b99a093` Batch construct batches (sipa)
 - #9262 `5a70572` Prefer coins that have fewer ancestors, sanity check txn before ATMP (instagibbs)
@@ -504,7 +504,7 @@ and git merge commit are mentioned.
 - #8604 `f256843` build,doc: Update for 0.13.0+ and OpenBSD 5.9 (laanwj)
 - #8640 `2663e51` depends: Remove Qt46 package (fanquake)
 - #8645 `8ea4440` Remove unused Qt 4.6 patch (droark)
-- #8608 `7e9ab95` Install manpages via make install, also add some autogenerated manpages (nomnombtc)
+- #8608 `7e9ab95` Install manpages via make install, also add some autogenerated manpages (nomnomdgb)
 - #8781 `ca69ef4` contrib: delete `qt_translations.py` (MarcoFalke)
 - #8783 `64dc645` share: remove qt/protobuf.pri (MarcoFalke)
 - #8423 `3166dff` depends: expat 2.2.0, ccache 3.3.1, fontconfig 2.12.1 (fanquake)
@@ -514,7 +514,7 @@ and git merge commit are mentioned.
 - #8819 `c841816` depends: Boost 1.61.0 (fanquake)
 - #8826 `f560d95` Do not include `env_win.cc` on non-Windows systems (paveljanik)
 - #8948 `e077e00` Reorder Windows gitian build order to match Linux (Michagogo)
-- #8568 `078900d` new var `DIST_CONTRIB` adds useful things for packagers from contrib (nomnombtc)
+- #8568 `078900d` new var `DIST_CONTRIB` adds useful things for packagers from contrib (nomnomdgb)
 - #9114 `21e6c6b` depends: Set `OSX_MIN_VERSION` to 10.8 (fanquake)
 - #9140 `018a4eb` Bugfix: Correctly replace generated headers and fail cleanly (luke-jr)
 - #9156 `a8b2a82` Add compile and link options echo to configure (jonasschnelli)
@@ -640,7 +640,7 @@ and git merge commit are mentioned.
 - #9049 `71bc39e` Remove duplicatable duplicate-input check from CheckTransaction (TheBlueMatt)
 - #9136 `b422913` sync\_blocks cleanup (ryanofsky)
 - #9151 `4333b1c` proxy\_test: Calculate hardcoded port numbers (MarcoFalke)
-- #9206 `e662d28` Make test constant consistent with consensus.h (btcdrak)
+- #9206 `e662d28` Make test constant consistent with consensus.h (dgbdrak)
 - #9139 `0de7fd3` Change sync\_blocks to pick smarter maxheight (on top of #9196) (ryanofsky)
 - #9100 `97ec6e5` tx\_valid: re-order inputs to how they are encoded (dcousens)
 - #9202 `e56cf67` bench: Add support for measuring CPU cycles (laanwj)
@@ -665,7 +665,7 @@ and git merge commit are mentioned.
 - #9628 `f895023` Increase a sync\_blocks timeout in pruning.py (sdaftuar)
 - #9638 `a7ea2f8` Actually test assertions in pruning.py (MarcoFalke)
 - #9647 `e99f0d7` Skip RAII event tests if libevent is built without `event_set_mem_functions` (luke-jr)
-- #9691 `fc67cd2` Init ECC context for `test_bitcoin_fuzzy` (gmaxwell)
+- #9691 `fc67cd2` Init ECC context for `test_digibyte_fuzzy` (gmaxwell)
 - #9712 `d304fef` bench: Fix initialization order in registration (laanwj)
 - #9707 `b860915` Fix RPC failure testing (jnewbery)
 - #9269 `43e8150` Align struct COrphan definition (sipa)
@@ -841,7 +841,7 @@ Thanks to everyone who directly contributed to this release:
 - mrbandrews
 - mruddy
 - Nicolas DORIER
-- nomnombtc
+- nomnomdgb
 - Patrick Strateman
 - Pavel Janík
 - Pedro Branco

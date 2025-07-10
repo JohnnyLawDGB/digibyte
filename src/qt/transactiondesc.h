@@ -5,7 +5,7 @@
 #ifndef DIGIBYTE_QT_TRANSACTIONDESC_H
 #define DIGIBYTE_QT_TRANSACTIONDESC_H
 
-#include <qt/bitcoinunits.h>
+#include <qt/digibyteunits.h>
 
 #include <QObject>
 #include <QString>

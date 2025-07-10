@@ -37,7 +37,7 @@ Some of them might no longer be applicable. So if you are interested, but
 unsure, you might want to leave a comment on the issue first.
 
 You may also participate in the weekly
-[DigiByte Core PR Review Club](https://bitcoincore.reviews/) meeting.
+[DigiByte Core PR Review Club](https://digibytecore.reviews/) meeting.
 
 ### Good First Issue Label
 

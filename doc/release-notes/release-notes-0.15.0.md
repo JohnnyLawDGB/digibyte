@@ -11,13 +11,13 @@ Please report bugs using the issue tracker at GitHub:
 
 To receive security and update notifications, please subscribe to:
 
-  <https://bitcoincore.org/en/list/announcements/join/>
+  <https://digibytecore.org/en/list/announcements/join/>
 
 How to Upgrade
 ==============
 
 If you are running an older version, shut it down. Wait until it has completely
-shut down (which might take a few minutes for older versions), then run the 
+shut down (which might take a few minutes for older versions), then run the
 installer (on Windows) or just copy over `/Applications/DigiByte-Qt` (on Mac)
 or `digibyted`/`digibyte-qt` (on Linux).
 
@@ -596,7 +596,7 @@ Low-level RPC changes
 - #10152 `080d7c7` [trivial] remove unused line in Travis config (jnewbery)
 - #10159 `df1ca9e` [tests] color test results and sort alphabetically (jnewbery)
 - #10124 `88799ea` [test] Suppress test logging spam (jnewbery)
-- #10142 `ed09dd3` Run bitcoin_test-qt under minimal QPA platform (ryanofsky)
+- #10142 `ed09dd3` Run digibyte_test-qt under minimal QPA platform (ryanofsky)
 - #9949 `a27dbc5` [bench] Avoid function call arguments which are pointers to uninitialized values (practicalswift)
 - #10187 `b44adf9` tests: Fix test_runner return value in case of skipped test (laanwj)
 - #10197 `d86bb07` [tests] Functional test warnings (jnewbery)
@@ -740,7 +740,7 @@ Low-level RPC changes
 - #10728 `7397af9` fix typo in help text for removeprunedfunds (AkioNak)
 - #10193 `6dbcc74` scripted-diff: Remove #include <boost/foreach.hpp> (jtimon)
 - #10676 `379aed0` document script-based return fields for validateaddress (instagibbs)
-- #10651 `cef4b5c` Verify binaries from bitcoincore.org and digibyte.org (TheBlueMatt)
+- #10651 `cef4b5c` Verify binaries from digibytecore.org and digibyte.org (TheBlueMatt)
 - #10786 `ca4c545` Add PR description to merge commit in github-merge.py (sipa)
 - #10812 `c5904e8` [utils] Allow digibyte-cli's -rpcconnect option to be used with square brackets (jnewbery)
 - #10842 `3895e25` Fix incorrect Doxygen tag (@ince → @since). Doxygen parameter name matching (practicalswift)

@@ -5,7 +5,7 @@
 """Script for verifying DigiByte Core release binaries.
 
 This script attempts to download the sum file SHA256SUMS and corresponding
-signature file SHA256SUMS.asc from bitcoincore.org and digibyte.org and
+signature file SHA256SUMS.asc from digibytecore.org and digibyte.org and
 compares them.
 
 The sum-signature file is signed by a number of builder keys. This script
@@ -46,7 +46,7 @@ from hashlib import sha256
 from pathlib import PurePath, Path
 
 # The primary host; this will fail if we can't retrieve files from here.
-HOST1 = "https://bitcoincore.org"
+HOST1 = "https://digibytecore.org"
 HOST2 = "https://digibyte.org"
 VERSIONPREFIX = "digibyte-core-"
 SUMS_FILENAME = 'SHA256SUMS'
@@ -459,7 +459,7 @@ def verify_binary_hashes(hashes_to_verify: t.List[t.List[str]]) -> t.Tuple[Retur
 
 
 def verify_published_handler(args: argparse.Namespace) -> ReturnCode:
-    WORKINGDIR = Path(tempfile.gettempdir()) / f"bitcoin_verify_binaries.{args.version}"
+    WORKINGDIR = Path(tempfile.gettempdir()) / f"digibyte_verify_binaries.{args.version}"
 
     def cleanup():
         log.info("cleaning up files")
@@ -517,7 +517,7 @@ def verify_published_handler(args: argparse.Namespace) -> ReturnCode:
         log.error("no files matched the platform specified")
         return ReturnCode.NO_BINARIES_MATCH
 
-    # remove binaries that are known not to be hosted by bitcoincore.org
+    # remove binaries that are known not to be hosted by digibytecore.org
     fragments_to_remove = ['-unsigned', '-debug', '-codesignatures']
     for fragment in fragments_to_remove:
         nobinaries = [i for i in hashes_to_verify if fragment in i[1]]
@@ -690,7 +690,7 @@ def main():
         default=bool_from_env('BINVERIFY_REQUIRE_ALL_HOSTS'),
         help=(
             f'If set, require all hosts ({HOST1}, {HOST2}) to provide signatures. '
-            '(Sometimes digibyte.org lags behind bitcoincore.org.)')
+            '(Sometimes digibyte.org lags behind digibytecore.org.)')
     )
 
     bin_parser = subparsers.add_parser("bin", help="Verify local binaries.")

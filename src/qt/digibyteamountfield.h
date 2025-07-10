@@ -6,7 +6,7 @@
 #define DIGIBYTE_QT_DIGIBYTEAMOUNTFIELD_H
 
 #include <consensus/amount.h>
-#include <qt/bitcoinunits.h>
+#include <qt/digibyteunits.h>
 
 #include <QWidget>
 

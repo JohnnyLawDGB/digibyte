@@ -77,7 +77,7 @@ Obviously, it is important to build and run the tests at appropriate times -- bu
 ```sh
 make src/digibyted src/digibyte-cli
 make src/qt/digibyte-qt
-make -C src bitcoin_bench
+make -C src digibyte_bench
 ```
 
 (You can and should combine this with `-j`, as above, for a parallel build.)

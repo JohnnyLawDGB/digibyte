@@ -9,7 +9,7 @@
 #include <key_io.h>
 #include <node/psbt.h>
 #include <policy/policy.h>
-#include <qt/bitcoinunits.h>
+#include <qt/digibyteunits.h>
 #include <qt/forms/ui_psbtoperationsdialog.h>
 #include <qt/guiutil.h>
 #include <qt/optionsmodel.h>

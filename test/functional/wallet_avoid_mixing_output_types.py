@@ -14,8 +14,8 @@ where output type is one of the following:
 This test verifies that mixing different output types is avoided unless
 absolutely necessary. Both wallets start with zero funds. Alice mines
 enough blocks to have spendable coinbase outputs. Alice sends three
-random value payments which sum to 10BTC for each output type to Bob,
-for a total of 40BTC in Bob's wallet.
+random value payments which sum to 10DGB for each output type to Bob,
+for a total of 40DGB in Bob's wallet.
 
 Bob then sends random valued payments back to Alice, some of which need
 unconfirmed change, and we verify that none of these payments contain mixed

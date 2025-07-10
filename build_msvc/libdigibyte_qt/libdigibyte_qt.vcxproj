@@ -12,11 +12,11 @@
     <ClCompile Include="..\..\src\qt\askpassphrasedialog.cpp" />
     <ClCompile Include="..\..\src\qt\bantablemodel.cpp" />
     <ClCompile Include="..\..\src\qt\digibyte.cpp" />
-    <ClCompile Include="..\..\src\qt\bitcoinaddressvalidator.cpp" />
-    <ClCompile Include="..\..\src\qt\bitcoinamountfield.cpp" />
-    <ClCompile Include="..\..\src\qt\bitcoingui.cpp" />
-    <ClCompile Include="..\..\src\qt\bitcoinstrings.cpp" />
-    <ClCompile Include="..\..\src\qt\bitcoinunits.cpp" />
+    <ClCompile Include="..\..\src\qt\digibyteaddressvalidator.cpp" />
+    <ClCompile Include="..\..\src\qt\digibyteamountfield.cpp" />
+    <ClCompile Include="..\..\src\qt\digibytegui.cpp" />
+    <ClCompile Include="..\..\src\qt\digibytestrings.cpp" />
+    <ClCompile Include="..\..\src\qt\digibyteunits.cpp" />
     <ClCompile Include="..\..\src\qt\clientmodel.cpp" />
     <ClCompile Include="..\..\src\qt\coincontroldialog.cpp" />
     <ClCompile Include="..\..\src\qt\coincontroltreewidget.cpp" />
@@ -68,11 +68,11 @@
     <ClCompile Include="$(GeneratedFilesOutDir)\moc\moc_addresstablemodel.cpp" />
     <ClCompile Include="$(GeneratedFilesOutDir)\moc\moc_askpassphrasedialog.cpp" />
     <ClCompile Include="$(GeneratedFilesOutDir)\moc\moc_bantablemodel.cpp" />
-    <ClCompile Include="$(GeneratedFilesOutDir)\moc\moc_bitcoin.cpp" />
-    <ClCompile Include="$(GeneratedFilesOutDir)\moc\moc_bitcoinaddressvalidator.cpp" />
-    <ClCompile Include="$(GeneratedFilesOutDir)\moc\moc_bitcoinamountfield.cpp" />
-    <ClCompile Include="$(GeneratedFilesOutDir)\moc\moc_bitcoingui.cpp" />
-    <ClCompile Include="$(GeneratedFilesOutDir)\moc\moc_bitcoinunits.cpp" />
+    <ClCompile Include="$(GeneratedFilesOutDir)\moc\moc_digibyte.cpp" />
+    <ClCompile Include="$(GeneratedFilesOutDir)\moc\moc_digibyteaddressvalidator.cpp" />
+    <ClCompile Include="$(GeneratedFilesOutDir)\moc\moc_digibyteamountfield.cpp" />
+    <ClCompile Include="$(GeneratedFilesOutDir)\moc\moc_digibytegui.cpp" />
+    <ClCompile Include="$(GeneratedFilesOutDir)\moc\moc_digibyteunits.cpp" />
     <ClCompile Include="$(GeneratedFilesOutDir)\moc\moc_clientmodel.cpp" />
     <ClCompile Include="$(GeneratedFilesOutDir)\moc\moc_coincontroldialog.cpp" />
     <ClCompile Include="$(GeneratedFilesOutDir)\moc\moc_coincontroltreewidget.cpp" />
@@ -120,8 +120,8 @@
     <ClCompile Include="$(GeneratedFilesOutDir)\moc\moc_walletmodeltransaction.cpp" />
     <ClCompile Include="$(GeneratedFilesOutDir)\moc\moc_walletview.cpp" />
     <ClCompile Include="$(GeneratedFilesOutDir)\moc\moc_winshutdownmonitor.cpp" />
-    <ClCompile Include="$(GeneratedFilesOutDir)\rcc\qrc_bitcoin.cpp" />
-    <ClCompile Include="$(GeneratedFilesOutDir)\rcc\qrc_bitcoin_locale.cpp" />
+    <ClCompile Include="$(GeneratedFilesOutDir)\rcc\qrc_digibyte.cpp" />
+    <ClCompile Include="$(GeneratedFilesOutDir)\rcc\qrc_digibyte_locale.cpp" />
   </ItemGroup>
 
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
@@ -142,7 +142,7 @@
   </ItemDefinitionGroup>
 
   <ItemGroup>
-    <QT_MOC Include="..\..\src\qt\bitcoinamountfield.cpp" />
+    <QT_MOC Include="..\..\src\qt\digibyteamountfield.cpp" />
     <QT_MOC Include="..\..\src\qt\intro.cpp" />
     <QT_MOC Include="..\..\src\qt\overviewpage.cpp" />
     <QT_MOC Include="..\..\src\qt\rpcconsole.cpp" />

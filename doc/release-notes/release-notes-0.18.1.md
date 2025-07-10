@@ -1,6 +1,6 @@
 DigiByte Core version 0.18.1 is now available from:
 
-  <https://bitcoincore.org/bin/digibyte-core-0.18.1/>
+  <https://digibytecore.org/bin/digibyte-core-0.18.1/>
 
 This is a new minor version release, including new features, various bug
 fixes and performance improvements, as well as updated translations.
@@ -11,7 +11,7 @@ Please report bugs using the issue tracker at GitHub:
 
 To receive security and update notifications, please subscribe to:
 
-  <https://bitcoincore.org/en/list/announcements/join/>
+  <https://digibytecore.org/en/list/announcements/join/>
 
 How to Upgrade
 ==============
@@ -84,9 +84,9 @@ not to use coin control features with multiple wallets loaded.
 - #15957 Show "No wallets available" in open menu instead of nothing (meshcollider)
 - #16118 Enable open wallet menu on setWalletController (promag)
 - #16135 Set progressDialog to nullptr (promag)
-- #16231 Fix open wallet menu initialization order (promag) 
-- #16254 Set `AA_EnableHighDpiScaling` attribute early (hebasto) 
-- #16122 Enable console line edit on setClientModel (promag) 
+- #16231 Fix open wallet menu initialization order (promag)
+- #16254 Set `AA_EnableHighDpiScaling` attribute early (hebasto)
+- #16122 Enable console line edit on setClientModel (promag)
 - #16348 Assert QMetaObject::invokeMethod result (promag)
 
 ### Build system

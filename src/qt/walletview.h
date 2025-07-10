@@ -6,7 +6,7 @@
 #define DIGIBYTE_QT_WALLETVIEW_H
 
 #include <consensus/amount.h>
-#include <qt/bitcoinunits.h>
+#include <qt/digibyteunits.h>
 
 #include <QStackedWidget>
 

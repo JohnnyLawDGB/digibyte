@@ -18,10 +18,10 @@ libdigibyte_util/libdigibyte_util.vcxproj
 libdigibyte_wallet_tool/libdigibyte_wallet_tool.vcxproj
 libdigibyte_wallet/libdigibyte_wallet.vcxproj
 libdigibyte_zmq/libdigibyte_zmq.vcxproj
-bench_bitcoin/bench_bitcoin.vcxproj
+bench_digibyte/bench_digibyte.vcxproj
 libtest_util/libtest_util.vcxproj
 
-/bitcoin_config.h
+/digibyte_config.h
 /common.init.vcxproj
 
 */Win32

@@ -1,6 +1,6 @@
 DigiByte Core version 0.19.0.1 is now available from:
 
-  <https://bitcoincore.org/bin/digibyte-core-0.19.0.1/>
+  <https://digibytecore.org/bin/digibyte-core-0.19.0.1/>
 
 This release includes new features, various bug fixes and performance
 improvements, as well as updated translations.
@@ -11,7 +11,7 @@ Please report bugs using the issue tracker at GitHub:
 
 To receive security and update notifications, please subscribe to:
 
-  <https://bitcoincore.org/en/list/announcements/join/>
+  <https://digibytecore.org/en/list/announcements/join/>
 
 How to Upgrade
 ==============
@@ -641,7 +641,7 @@ Build system changes
 - #16408 Prune X packages (dongcarl)
 - #16386 disable unused Qt features (fanquake)
 - #16424 Treat -Wswitch as error when --enable-werror (MarcoFalke)
-- #16441 remove qt libjpeg check from bitcoin_qt.m4 (fanquake)
+- #16441 remove qt libjpeg check from digibyte_qt.m4 (fanquake)
 - #16434 Specify AM_CPPFLAGS for ZMQ (domob1812)
 - #16534 add Qt Creator Makefile.am.user to .gitignore (Bushstar)
 - #16573 disable building libsecp256k1 benchmarks (fanquake)
@@ -654,7 +654,7 @@ Build system changes
 - #16654 build: update RapidCheck Makefile (jonatack)
 - #16370 cleanup package configure flags (fanquake)
 - #16746 msbuild: Ignore linker warning (sipsorcery)
-- #16750 msbuild: adds bench_bitcoin to auto generated project files (sipsorcery)
+- #16750 msbuild: adds bench_digibyte to auto generated project files (sipsorcery)
 - #16810 guix: Remove ssp spec file hack (dongcarl)
 - #16477 skip deploying plugins we dont use in macdeployqtplus (fanquake)
 - #16413 Bump QT to LTS release 5.9.8 (THETCR)
@@ -691,13 +691,13 @@ Build system changes
 - #15773 Add BitcoinTestFramework::sync_* methods (MarcoFalke)
 - #15797 travis: Bump second timeout to 33 minutes, add rationale (MarcoFalke)
 - #15788 Unify testing setups for fuzz, bench, and unit tests (MarcoFalke)
-- #15352 Reduce noise level in test_bitcoin output (practicalswift)
+- #15352 Reduce noise level in test_digibyte output (practicalswift)
 - #15779 Add wallet_balance benchmark (MarcoFalke)
 - #15843 fix outdated include in blockfilter_index_tests (jamesob)
 - #15866 Add missing syncwithvalidationinterfacequeue to wallet_import_rescan (MarcoFalke)
 - #15697 Make swap_magic_bytes in p2p_invalid_messages atomic (MarcoFalke)
 - #15895 Avoid re-reading config.ini unnecessarily (luke-jr)
-- #15896 feature_filelock, interface_bitcoin_cli: Use PACKAGE_NAME in messages rather than hardcoding DigiByte Core (luke-jr)
+- #15896 feature_filelock, interface_digibyte_cli: Use PACKAGE_NAME in messages rather than hardcoding DigiByte Core (luke-jr)
 - #15897 QA/mininode: Send all headers upfront in send_blocks_and_test to avoid sending an unconnected one (luke-jr)
 - #15696 test_runner: Move feature_pruning to base tests (MarcoFalke)
 - #15869 Add settings merge test to prevent regresssions (ryanofsky)
@@ -751,7 +751,7 @@ Build system changes
 - #16505 Changes verbosity of msbuild from quiet to normal in the appveyor script (sipsorcery)
 - #16293 Make test cases separate functions (MarcoFalke)
 - #16470 Fail early on disconnect in mininode.wait_for_* (MarcoFalke)
-- #16277 Suppress output in test_bitcoin for expected errors (gertjaap)
+- #16277 Suppress output in test_digibyte for expected errors (gertjaap)
 - #16493 Fix test failures (MarcoFalke)
 - #16538 Add missing sync_blocks to feature_pruning (MarcoFalke)
 - #16509 Adapt test framework for chains other than "regtest" (MarcoFalke)
@@ -859,7 +859,7 @@ Build system changes
 - #17095 util: Filter control characters out of log messages (laanwj)
 - #17085 init: Change fallback locale to C.UTF-8 (laanwj)
 - #16957 9% less memory: make SaltedOutpointHasher noexcept (martinus)
-- #17449 fix uninitialized variable nMinerConfirmationWindow (bitcoinVBR)
+- #17449 fix uninitialized variable nMinerConfirmationWindow (digibyteVBR)
 
 ### Documentation
 - #15514 Update Transifex links (fanquake)
@@ -891,7 +891,7 @@ Build system changes
 - #15777 Add doxygen comments for keypool classes (jnewbery)
 - #15820 Add productivity notes for dummy rebases (dongcarl)
 - #15922 Explain how to pass in non-fundamental types into functions (MarcoFalke)
-- #16080 build/doc: update bitcoin_config.h packages, release process (jonatack)
+- #16080 build/doc: update digibyte_config.h packages, release process (jonatack)
 - #16047 analyzepsbt description in doc/psbt.md (jonatack)
 - #16039 add release note for 14954 (fanquake)
 - #16139 Add riscv64 to outputs list in release-process.md (JeremyRand)

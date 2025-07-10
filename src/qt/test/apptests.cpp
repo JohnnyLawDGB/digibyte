@@ -8,7 +8,7 @@
 #include <key.h>
 #include <logging.h>
 #include <qt/digibyte.h>
-#include <qt/bitcoingui.h>
+#include <qt/digibytegui.h>
 #include <qt/networkstyle.h>
 #include <qt/rpcconsole.h>
 #include <shutdown.h>

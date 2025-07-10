@@ -12,11 +12,11 @@ See the [Transifex DigiByte project](https://www.transifex.com/digibyte/digibyte
 
 ### Writing code with translations
 We use automated scripts to help extract translations in both Qt, and non-Qt source files. It is rarely necessary to manually edit the files in `src/qt/locale/`. The translation source files must adhere to the following format:
-`bitcoin_xx_YY.ts or bitcoin_xx.ts`
+`digibyte_xx_YY.ts or digibyte_xx.ts`
 
-`src/qt/locale/bitcoin_en.ts` is treated in a special way. It is used as the source for all other translations. Whenever a string in the source code is changed, this file must be updated to reflect those changes. A custom script is used to extract strings from the non-Qt parts. This script makes use of `gettext`, so make sure that utility is installed (ie, `apt-get install gettext` on Ubuntu/Debian). Once this has been updated, `lupdate` (included in the Qt SDK) is used to update `bitcoin_en.ts`.
+`src/qt/locale/digibyte_en.ts` is treated in a special way. It is used as the source for all other translations. Whenever a string in the source code is changed, this file must be updated to reflect those changes. A custom script is used to extract strings from the non-Qt parts. This script makes use of `gettext`, so make sure that utility is installed (ie, `apt-get install gettext` on Ubuntu/Debian). Once this has been updated, `lupdate` (included in the Qt SDK) is used to update `digibyte_en.ts`.
 
-To automatically regenerate the `bitcoin_en.ts` file, run the following commands:
+To automatically regenerate the `digibyte_en.ts` file, run the following commands:
 ```sh
 cd src/
 make translate
@@ -34,7 +34,7 @@ When an updated source file is merged into the GitHub repo, Transifex will autom
 
 To create the pull-request, use the following commands:
 ```
-git add src/qt/bitcoinstrings.cpp src/qt/locale/bitcoin_en.ts
+git add src/qt/digibytestrings.cpp src/qt/locale/digibyte_en.ts
 git commit
 ```
 
@@ -76,7 +76,7 @@ git commit -a
 ### Handling Plurals (in source files)
 When new plurals are added to the source file, it's important to do the following steps:
 
-1. Open `bitcoin_en.ts` in Qt Linguist (included in the Qt SDK)
+1. Open `digibyte_en.ts` in Qt Linguist (included in the Qt SDK)
 2. Search for `%n`, which will take you to the parts in the translation that use plurals
 3. Look for empty `English Translation (Singular)` and `English Translation (Plural)` fields
 4. Add the appropriate strings for the singular and plural form of the base string
@@ -85,11 +85,11 @@ When new plurals are added to the source file, it's important to do the followin
 7. Save the source file
 
 ### Translating a new language
-To create a new language template, you will need to edit the languages manifest file `src/qt/bitcoin_locale.qrc` and add a new entry. Below is an example of the English language entry.
+To create a new language template, you will need to edit the languages manifest file `src/qt/digibyte_locale.qrc` and add a new entry. Below is an example of the English language entry.
 
 ```xml
 <qresource prefix="/translations">
-    <file alias="en">locale/bitcoin_en.qm</file>
+    <file alias="en">locale/digibyte_en.qm</file>
     ...
 </qresource>
 ```

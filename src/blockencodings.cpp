@@ -1,9 +1,5 @@
-<<<<<<< HEAD
-// Copyright (c) 2016-2020 The Bitcoin Core developers
-// Copyright (c) 2016-2020 The DigiByte Core developers
-=======
+// Copyright (c) 2016-2022 The Bitcoin Core developers
 // Copyright (c) 2016-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -12,23 +8,13 @@
 #include <common/system.h>
 #include <consensus/consensus.h>
 #include <consensus/validation.h>
-<<<<<<< HEAD
-#include <chainparams.h>
-#include <crypto/sha256.h>
-#include <crypto/siphash.h>
-=======
 #include <crypto/sha256.h>
 #include <crypto/siphash.h>
 #include <logging.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <random.h>
 #include <streams.h>
 #include <txmempool.h>
 #include <validation.h>
-<<<<<<< HEAD
-#include <util/system.h>
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 #include <unordered_map>
 
@@ -219,12 +205,8 @@ ReadStatus PartiallyDownloadedBlock::FillBlock(CBlock& block, const std::vector<
         return READ_STATUS_INVALID;
 
     BlockValidationState state;
-<<<<<<< HEAD
-    if (!CheckBlock(block, state, Params().GetConsensus())) {
-=======
     CheckBlockFn check_block = m_check_block_mock ? m_check_block_mock : CheckBlock;
     if (!check_block(block, state, Params().GetConsensus(), /*fCheckPoW=*/true, /*fCheckMerkleRoot=*/true)) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         // TODO: We really want to just check merkle tree manually here,
         // but that is expensive, and CheckBlock caches a block's
         // "checked-status" (in the CBlock?). CBlock should be able to

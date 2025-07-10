@@ -1,9 +1,5 @@
-<<<<<<< HEAD
 // Copyright (c) 2012-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
-// Copyright (c) 2012-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// Copyright (c) 2014-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -71,11 +67,7 @@ private:
     bool m_request_stop GUARDED_BY(m_mutex){false};
 
     /** Internal function that does bulk of the verification work. */
-<<<<<<< HEAD
-    bool Loop(bool fMaster)
-=======
     bool Loop(bool fMaster) EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     {
         std::condition_variable& cond = fMaster ? m_master_cv : m_worker_cv;
         std::vector<T> vChecks;
@@ -120,19 +112,9 @@ private:
                 // * Try to account for idle jobs which will instantly start helping.
                 // * Don't do batches smaller than 1 (duh), or larger than nBatchSize.
                 nNow = std::max(1U, std::min(nBatchSize, (unsigned int)queue.size() / (nTotal + nIdle + 1)));
-<<<<<<< HEAD
-                vChecks.resize(nNow);
-                for (unsigned int i = 0; i < nNow; i++) {
-                    // We want the lock on the m_mutex to be as short as possible, so swap jobs from the global
-                    // queue to the local batch vector instead of copying.
-                    vChecks[i].swap(queue.back());
-                    queue.pop_back();
-                }
-=======
                 auto start_it = queue.end() - nNow;
                 vChecks.assign(std::make_move_iterator(start_it), std::make_move_iterator(queue.end()));
                 queue.erase(start_it, queue.end());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 // Check whether we need to do work at all
                 fOk = fAllOk;
             }
@@ -155,11 +137,7 @@ public:
     }
 
     //! Create a pool of new worker threads.
-<<<<<<< HEAD
-    void StartWorkerThreads(const int threads_num)
-=======
     void StartWorkerThreads(const int threads_num) EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     {
         {
             LOCK(m_mutex);
@@ -185,30 +163,6 @@ public:
     //! Add a batch of checks to the queue
     void Add(std::vector<T>&& vChecks) EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
     {
-<<<<<<< HEAD
-        LOCK(m_mutex);
-        for (T& check : vChecks) {
-            queue.push_back(T());
-            check.swap(queue.back());
-        }
-        nTodo += vChecks.size();
-        if (vChecks.size() == 1)
-            m_worker_cv.notify_one();
-        else if (vChecks.size() > 1)
-            m_worker_cv.notify_all();
-    }
-
-    //! Stop all of the worker threads.
-    void StopWorkerThreads()
-    {
-        WITH_LOCK(m_mutex, m_request_stop = true);
-        m_worker_cv.notify_all();
-        for (std::thread& t : m_worker_threads) {
-            t.join();
-        }
-        m_worker_threads.clear();
-        WITH_LOCK(m_mutex, m_request_stop = false);
-=======
         if (vChecks.empty()) {
             return;
         }
@@ -224,7 +178,6 @@ public:
         } else {
             m_worker_cv.notify_all();
         }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     //! Stop all of the worker threads.

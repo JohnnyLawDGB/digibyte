@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-// Copyright (c) 2020 The DigiByte Core developers
-=======
 // Copyright (c) 2020-2021 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -14,17 +10,12 @@
 #include <random.h>
 #include <uint256.h>
 
-<<<<<<< HEAD
-#include <boost/multi_index_container.hpp>
-#include <boost/multi_index/ordered_index.hpp>
-=======
 #include <boost/multi_index/indexed_by.hpp>
 #include <boost/multi_index/ordered_index.hpp>
 #include <boost/multi_index/sequenced_index.hpp>
 #include <boost/multi_index/tag.hpp>
 #include <boost/multi_index_container.hpp>
 #include <boost/tuple/tuple.hpp>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 #include <chrono>
 #include <unordered_map>
@@ -82,11 +73,7 @@ struct Announcement {
     const bool m_is_wtxid : 1;
 
     /** What state this announcement is in.
-<<<<<<< HEAD
-     *  This is a uint8_t instead of a State to silence a GCC warning in versions prior to 8.4 and 9.3.
-=======
      *  This is a uint8_t instead of a State to silence a GCC warning in versions prior to 9.3.
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
      *  See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=61414 */
     uint8_t m_state : 3;
 
@@ -137,11 +124,7 @@ public:
 
     Priority operator()(const uint256& txhash, NodeId peer, bool preferred) const
     {
-<<<<<<< HEAD
-        uint64_t low_bits = CSipHasher(m_k0, m_k1).Write(txhash.begin(), txhash.size()).Write(peer).Finalize() >> 1;
-=======
         uint64_t low_bits = CSipHasher(m_k0, m_k1).Write(txhash).Write(peer).Finalize() >> 1;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         return low_bits | uint64_t{preferred} << 63;
     }
 
@@ -321,11 +304,7 @@ std::map<uint256, TxHashInfo> ComputeTxHashInfo(const Index& index, const Priori
 
 GenTxid ToGenTxid(const Announcement& ann)
 {
-<<<<<<< HEAD
-    return {ann.m_is_wtxid, ann.m_txhash};
-=======
     return ann.m_is_wtxid ? GenTxid::Wtxid(ann.m_txhash) : GenTxid::Txid(ann.m_txhash);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 }  // namespace

@@ -1,9 +1,5 @@
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
-// Copyright (c) 2015-2021 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// Copyright (c) 2015-2022 The Bitcoin Core developers
+// Copyright (c) 2014-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -13,26 +9,8 @@
 #ifndef DIGIBYTE_TORCONTROL_H
 #define DIGIBYTE_TORCONTROL_H
 
-<<<<<<< HEAD
-#include <fs.h>
-#include <netaddress.h>
-
-#include <boost/signals2/signal.hpp>
-
-#include <event2/bufferevent.h>
-#include <event2/event.h>
-
-#include <cstdlib>
-#include <deque>
-#include <functional>
-#include <string>
-#include <vector>
-
-class CService;
-=======
 #include <netaddress.h>
 #include <util/fs.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 #include <event2/util.h>
 
@@ -102,11 +80,6 @@ public:
      */
     bool Command(const std::string &cmd, const ReplyHandlerCB& reply_handler);
 
-<<<<<<< HEAD
-    /** Response handlers for async replies */
-    boost::signals2::signal<void(TorControlConnection &,const TorControlReply &)> async_handler;
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 private:
     /** Callback when ready for use */
     std::function<void(TorControlConnection&)> connected;
@@ -115,11 +88,7 @@ private:
     /** Libevent event base */
     struct event_base *base;
     /** Connection to control socket */
-<<<<<<< HEAD
-    struct bufferevent *b_conn;
-=======
     struct bufferevent* b_conn{nullptr};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     /** Message being received */
     TorControlReply message;
     /** Response handlers */
@@ -166,11 +135,8 @@ private:
     std::vector<uint8_t> clientNonce;
 
 public:
-<<<<<<< HEAD
-=======
     /** Callback for GETINFO net/listeners/socks result */
     void get_socks_cb(TorControlConnection& conn, const TorControlReply& reply);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     /** Callback for ADD_ONION result */
     void add_onion_cb(TorControlConnection& conn, const TorControlReply& reply);
     /** Callback for AUTHENTICATE result */
@@ -188,8 +154,4 @@ public:
     static void reconnect_cb(evutil_socket_t fd, short what, void *arg);
 };
 
-<<<<<<< HEAD
-#endif /* DIGIBYTE_TORCONTROL_H */
-=======
 #endif // DIGIBYTE_TORCONTROL_H
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion

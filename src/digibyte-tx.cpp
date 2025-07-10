@@ -1,9 +1,5 @@
-<<<<<<< HEAD
-// Copyright (c) 2009-2018 The Bitcoin Core developers
-// Copyright (c) 2009-2020 The DigiByte Core developers
-=======
+// Copyright (c) 2009-2022 The Bitcoin Core developers
 // Copyright (c) 2009-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -27,24 +23,15 @@
 #include <script/sign.h>
 #include <script/signingprovider.h>
 #include <univalue.h>
-<<<<<<< HEAD
-=======
 #include <util/exception.h>
 #include <util/fs.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <util/moneystr.h>
 #include <util/rbf.h>
 #include <util/strencodings.h>
 #include <util/string.h>
-<<<<<<< HEAD
-#include <util/system.h>
-#include <util/translation.h>
-
-=======
 #include <util/translation.h>
 
 #include <cstdio>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <functional>
 #include <memory>
 
@@ -54,11 +41,7 @@ static const int CONTINUE_EXECUTION=-1;
 
 const std::function<std::string(const char*)> G_TRANSLATION_FUN = nullptr;
 
-<<<<<<< HEAD
 static void SetupDigiByteTxArgs(ArgsManager &argsman)
-=======
-static void SetupBitcoinTxArgs(ArgsManager &argsman)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     SetupHelpOptions(argsman);
 
@@ -101,11 +84,7 @@ static void SetupBitcoinTxArgs(ArgsManager &argsman)
 //
 static int AppInitRawTx(int argc, char* argv[])
 {
-<<<<<<< HEAD
     SetupDigiByteTxArgs(gArgs);
-=======
-    SetupBitcoinTxArgs(gArgs);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     std::string error;
     if (!gArgs.ParseParameters(argc, argv, error)) {
         tfm::format(std::cerr, "Error parsing command line arguments: %s\n", error);
@@ -125,16 +104,6 @@ static int AppInitRawTx(int argc, char* argv[])
     if (argc < 2 || HelpRequested(gArgs) || gArgs.IsArgSet("-version")) {
         // First part of help message is specific to this utility
         std::string strUsage = PACKAGE_NAME " digibyte-tx utility version " + FormatFullVersion() + "\n";
-<<<<<<< HEAD
-        if (!gArgs.IsArgSet("-version")) {
-            strUsage += "\n"
-                "Usage:  digibyte-tx [options] <hex-tx> [commands]  Update hex-encoded digibyte transaction\n"
-                "or:     digibyte-tx [options] -create [commands]   Create hex-encoded digibyte transaction\n"
-                "\n";
-            strUsage += gArgs.GetHelpMessage();
-        }
-
-=======
 
         if (gArgs.IsArgSet("-version")) {
             strUsage += FormatParagraph(LicenseInfo());
@@ -146,7 +115,6 @@ static int AppInitRawTx(int argc, char* argv[])
             strUsage += gArgs.GetHelpMessage();
         }
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         tfm::format(std::cout, "%s", strUsage);
 
         if (argc < 2) {
@@ -308,14 +276,9 @@ static void MutateTxAddInput(CMutableTransaction& tx, const std::string& strInpu
 
     // extract the optional sequence number
     uint32_t nSequenceIn = CTxIn::SEQUENCE_FINAL;
-<<<<<<< HEAD
-    if (vStrInputParts.size() > 2)
-        nSequenceIn = std::stoul(vStrInputParts[2]);
-=======
     if (vStrInputParts.size() > 2) {
         nSequenceIn = TrimAndParse<uint32_t>(vStrInputParts.at(2), "invalid TX sequence id");
     }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // append to transaction input list
     CTxIn txin(txid, vout, CScript(), nSequenceIn);
@@ -797,11 +760,7 @@ static void MutateTx(CMutableTransaction& tx, const std::string& command,
 static void OutputTxJSON(const CTransaction& tx)
 {
     UniValue entry(UniValue::VOBJ);
-<<<<<<< HEAD
-    TxToUniv(tx, uint256(), /* include_addresses */ false, entry);
-=======
     TxToUniv(tx, /*block_hash=*/uint256(), entry);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     std::string jsonOutput = entry.write(4);
     tfm::format(std::cout, "%s\n", jsonOutput);

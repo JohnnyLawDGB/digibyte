@@ -1,18 +1,11 @@
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
 // Copyright (c) 2016-2022 The Bitcoin Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// Copyright (c) 2014-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <consensus/params.h>
-<<<<<<< HEAD
-=======
 #include <util/check.h>
 #include <versionbits.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 ThresholdState AbstractThresholdConditionChecker::GetStateFor(const CBlockIndex* pindexPrev, const Consensus::Params& params, ThresholdConditionCache& cache) const
 {
@@ -107,11 +100,7 @@ ThresholdState AbstractThresholdConditionChecker::GetStateFor(const CBlockIndex*
     return state;
 }
 
-<<<<<<< HEAD
-BIP9Stats AbstractThresholdConditionChecker::GetStateStatisticsFor(const CBlockIndex* pindex, const Consensus::Params& params) const
-=======
 BIP9Stats AbstractThresholdConditionChecker::GetStateStatisticsFor(const CBlockIndex* pindex, const Consensus::Params& params, std::vector<bool>* signalling_blocks) const
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     BIP9Stats stats = {};
 
@@ -218,11 +207,7 @@ ThresholdState VersionBitsCache::State(const CBlockIndex* pindexPrev, const Cons
     return VersionBitsConditionChecker(pos).GetStateFor(pindexPrev, params, m_caches[pos]);
 }
 
-<<<<<<< HEAD
-BIP9Stats VersionBitsCache::Statistics(const CBlockIndex* pindexPrev, const Consensus::Params& params, Consensus::DeploymentPos pos)
-=======
 BIP9Stats VersionBitsCache::Statistics(const CBlockIndex* pindex, const Consensus::Params& params, Consensus::DeploymentPos pos, std::vector<bool>* signalling_blocks)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     return VersionBitsConditionChecker(pos).GetStateStatisticsFor(pindex, params, signalling_blocks);
 }
@@ -238,17 +223,10 @@ uint32_t VersionBitsCache::Mask(const Consensus::Params& params, Consensus::Depl
     return VersionBitsConditionChecker(pos).Mask(params);
 }
 
-<<<<<<< HEAD
 int32_t VersionBitsCache::ComputeBlockVersion(const CBlockIndex* pindexPrev, const Consensus::Params& params, int algo)
 {
     LOCK(m_mutex);
     int32_t nVersion = VERSIONBITS_TOP_BITS | BLOCK_VERSION_DEFAULT;
-=======
-int32_t VersionBitsCache::ComputeBlockVersion(const CBlockIndex* pindexPrev, const Consensus::Params& params)
-{
-    LOCK(m_mutex);
-    int32_t nVersion = VERSIONBITS_TOP_BITS;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     for (int i = 0; i < (int)Consensus::MAX_VERSION_BITS_DEPLOYMENTS; i++) {
         Consensus::DeploymentPos pos = static_cast<Consensus::DeploymentPos>(i);
@@ -258,11 +236,10 @@ int32_t VersionBitsCache::ComputeBlockVersion(const CBlockIndex* pindexPrev, con
         }
     }
 
-<<<<<<< HEAD
+    //! DigiByte: Add algorithm-specific version bits
     nVersion |= GetVersionForAlgo(algo);
 
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
     return nVersion;
 }
 

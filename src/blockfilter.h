@@ -1,28 +1,10 @@
-<<<<<<< HEAD
-// Copyright (c) 2018-2019 The DigiByte Core developers
-=======
 // Copyright (c) 2018-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #ifndef DIGIBYTE_BLOCKFILTER_H
 #define DIGIBYTE_BLOCKFILTER_H
 
-<<<<<<< HEAD
-#include <stdint.h>
-#include <string>
-#include <set>
-#include <unordered_set>
-#include <vector>
-
-#include <primitives/block.h>
-#include <serialize.h>
-#include <uint256.h>
-#include <undo.h>
-#include <util/bytevectorhash.h>
-
-=======
 #include <cstddef>
 #include <cstdint>
 #include <ios>
@@ -39,7 +21,7 @@
 class CBlock;
 class CBlockUndo;
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
 /**
  * This implements a Golomb-coded set as defined in BIP 158. It is a
  * compact, probabilistic data structure for testing set membership.
@@ -82,23 +64,14 @@ public:
     explicit GCSFilter(const Params& params = Params());
 
     /** Reconstructs an already-created filter from an encoding. */
-<<<<<<< HEAD
-    GCSFilter(const Params& params, std::vector<unsigned char> encoded_filter);
-=======
     GCSFilter(const Params& params, std::vector<unsigned char> encoded_filter, bool skip_decode_check);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     /** Builds a new filter from the params and set of elements. */
     GCSFilter(const Params& params, const ElementSet& elements);
 
     uint32_t GetN() const { return m_N; }
-<<<<<<< HEAD
-    const Params& GetParams() const { return m_params; }
-    const std::vector<unsigned char>& GetEncoded() const { return m_encoded; }
-=======
     const Params& GetParams() const LIFETIMEBOUND { return m_params; }
     const std::vector<unsigned char>& GetEncoded() const LIFETIMEBOUND { return m_encoded; }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     /**
      * Checks if the element may be in the set. False positives are possible
@@ -154,27 +127,16 @@ public:
 
     //! Reconstruct a BlockFilter from parts.
     BlockFilter(BlockFilterType filter_type, const uint256& block_hash,
-<<<<<<< HEAD
-                std::vector<unsigned char> filter);
-=======
                 std::vector<unsigned char> filter, bool skip_decode_check);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     //! Construct a new BlockFilter of the specified type from a block.
     BlockFilter(BlockFilterType filter_type, const CBlock& block, const CBlockUndo& block_undo);
 
     BlockFilterType GetFilterType() const { return m_filter_type; }
-<<<<<<< HEAD
-    const uint256& GetBlockHash() const { return m_block_hash; }
-    const GCSFilter& GetFilter() const { return m_filter; }
-
-    const std::vector<unsigned char>& GetEncodedFilter() const
-=======
     const uint256& GetBlockHash() const LIFETIMEBOUND { return m_block_hash; }
     const GCSFilter& GetFilter() const LIFETIMEBOUND { return m_filter; }
 
     const std::vector<unsigned char>& GetEncodedFilter() const LIFETIMEBOUND
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     {
         return m_filter.GetEncoded();
     }
@@ -207,11 +169,7 @@ public:
         if (!BuildParams(params)) {
             throw std::ios_base::failure("unknown filter_type");
         }
-<<<<<<< HEAD
-        m_filter = GCSFilter(params, std::move(encoded_filter));
-=======
         m_filter = GCSFilter(params, std::move(encoded_filter), /*skip_decode_check=*/false);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 };
 

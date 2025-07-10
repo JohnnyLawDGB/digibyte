@@ -5,23 +5,16 @@
 #ifndef DIGIBYTE_CUCKOOCACHE_H
 #define DIGIBYTE_CUCKOOCACHE_H
 
-<<<<<<< HEAD
-=======
 #include <util/fastrange.h>
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <algorithm> // std::find
 #include <array>
 #include <atomic>
 #include <cmath>
 #include <cstring>
-<<<<<<< HEAD
-#include <memory>
-=======
 #include <limits>
 #include <memory>
 #include <optional>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <utility>
 #include <vector>
 
@@ -205,11 +198,7 @@ private:
     /** depth_limit determines how many elements insert should try to replace.
      * Should be set to log2(n).
      */
-<<<<<<< HEAD
-    uint8_t depth_limit;
-=======
     uint8_t depth_limit{0};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     /** hash_function is a const instance of the hash function. It cannot be
      * static or initialized at call time as it may have internal state (such as
@@ -234,18 +223,8 @@ private:
      * One option would be to implement the same trick the compiler uses and compute the
      *  constants for exact division based on the size, as described in "{N}-bit Unsigned
      *  Division via {N}-bit Multiply-Add" by Arch D. Robison in 2005. But that code is
-<<<<<<< HEAD
-     *  somewhat complicated and the result is still slower than other options:
-     *
-     * Instead we treat the 32-bit random number as a Q32 fixed-point number in the range
-     *  [0, 1) and simply multiply it by the size. Then we just shift the result down by
-     *  32-bits to get our bucket number. The result has non-uniformity the same as a
-     *  mod, but it is much faster to compute. More about this technique can be found at
-     *  https://lemire.me/blog/2016/06/27/a-fast-alternative-to-the-modulo-reduction/ .
-=======
      *  somewhat complicated and the result is still slower than an even simpler option:
      *  see the FastRange32 function in util/fastrange.h.
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
      *
      * The resulting non-uniformity is also more equally distributed which would be
      *  advantageous for something like linear probing, though it shouldn't matter
@@ -379,14 +358,9 @@ public:
      *
      * @param bytes the approximate number of bytes to use for this data
      * structure
-<<<<<<< HEAD
-     * @returns the maximum number of elements storable (see setup()
-     * documentation for more detail)
-=======
      * @returns A pair of the maximum number of elements storable (see setup()
      * documentation for more detail) and the approxmiate total size of these
      * elements in bytes or std::nullopt if the size requested is too large.
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
      */
     std::optional<std::pair<uint32_t, size_t>> setup_bytes(size_t bytes)
     {

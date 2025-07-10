@@ -1,10 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
-// Copyright (c) 2009-2021 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// Copyright (c) 2009-2021 The Bitcoin Core developers
+// Copyright (c) 2014-2021 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -25,8 +21,4 @@ void SetfLargeWorkInvalidChainFound(bool flag);
  */
 bilingual_str GetWarnings(bool verbose);
 
-<<<<<<< HEAD
-#endif //  DIGIBYTE_WARNINGS_H
-=======
 #endif // DIGIBYTE_WARNINGS_H
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion

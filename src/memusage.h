@@ -1,9 +1,5 @@
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
 // Copyright (c) 2015-2022 The Bitcoin Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// Copyright (c) 2014-2020 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -12,18 +8,11 @@
 
 #include <indirectmap.h>
 #include <prevector.h>
-<<<<<<< HEAD
-
-#include <stdlib.h>
-
-#include <cassert>
-=======
 #include <support/allocators/pool.h>
 
 #include <cassert>
 #include <cstdlib>
 #include <list>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <map>
 #include <memory>
 #include <set>

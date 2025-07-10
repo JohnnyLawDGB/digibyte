@@ -386,6 +386,5 @@ util::Result<int> SighashFromStr(const std::string& sighash)
         return it->second;
     } else {
         return util::Error{Untranslated("'" + sighash + "' is not a valid sighash parameter.")};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 }

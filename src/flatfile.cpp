@@ -1,9 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-<<<<<<< HEAD
-// Copyright (c) 2009-2019 The DigiByte Core developers
-=======
+// Copyright (c) 2009-2022 The Bitcoin Core developers
 // Copyright (c) 2009-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -12,11 +9,7 @@
 #include <flatfile.h>
 #include <logging.h>
 #include <tinyformat.h>
-<<<<<<< HEAD
-#include <util/system.h>
-=======
 #include <util/fs_helpers.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 FlatFileSeq::FlatFileSeq(fs::path dir, const char* prefix, size_t chunk_size) :
     m_dir(std::move(dir)),
@@ -35,11 +28,7 @@ std::string FlatFilePos::ToString() const
 
 fs::path FlatFileSeq::FileName(const FlatFilePos& pos) const
 {
-<<<<<<< HEAD
-    return m_dir / strprintf("%s%05u.dat", m_prefix, pos.nFile);
-=======
     return m_dir / fs::u8path(strprintf("%s%05u.dat", m_prefix, pos.nFile));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 FILE* FlatFileSeq::Open(const FlatFilePos& pos, bool read_only)
@@ -53,19 +42,11 @@ FILE* FlatFileSeq::Open(const FlatFilePos& pos, bool read_only)
     if (!file && !read_only)
         file = fsbridge::fopen(path, "wb+");
     if (!file) {
-<<<<<<< HEAD
-        LogPrintf("Unable to open file %s\n", path.string());
-        return nullptr;
-    }
-    if (pos.nPos && fseek(file, pos.nPos, SEEK_SET)) {
-        LogPrintf("Unable to seek to position %u of %s\n", pos.nPos, path.string());
-=======
         LogPrintf("Unable to open file %s\n", fs::PathToString(path));
         return nullptr;
     }
     if (pos.nPos && fseek(file, pos.nPos, SEEK_SET)) {
         LogPrintf("Unable to seek to position %u of %s\n", pos.nPos, fs::PathToString(path));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         fclose(file);
         return nullptr;
     }

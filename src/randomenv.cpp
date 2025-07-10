@@ -1,9 +1,5 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The DigiByte Core developers
-=======
 // Copyright (c) 2009-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -14,18 +10,6 @@
 #include <randomenv.h>
 
 #include <clientversion.h>
-<<<<<<< HEAD
-#include <compat/cpuid.h>
-#include <crypto/sha512.h>
-#include <support/cleanse.h>
-#include <util/time.h> // for GetTime()
-#ifdef WIN32
-#include <compat.h> // for Windows API
-#endif
-
-#include <algorithm>
-#include <atomic>
-=======
 #include <compat/compat.h>
 #include <compat/cpuid.h>
 #include <crypto/sha512.h>
@@ -36,25 +20,17 @@
 #include <atomic>
 #include <cstdint>
 #include <cstring>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <chrono>
 #include <climits>
 #include <thread>
 #include <vector>
 
-<<<<<<< HEAD
-#include <stdint.h>
-#include <string.h>
-#ifndef WIN32
-#include <sys/types.h> // must go before a number of other headers
-=======
 #include <sys/types.h> // must go before a number of other headers
 
 #ifdef WIN32
 #include <windows.h>
 #include <winreg.h>
 #else
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <fcntl.h>
 #include <netinet/in.h>
 #include <sys/resource.h>
@@ -79,20 +55,11 @@
 #include <sys/vmmeter.h>
 #endif
 #endif
-<<<<<<< HEAD
-#if defined(HAVE_STRONG_GETAUXVAL) || defined(HAVE_WEAK_GETAUXVAL)
-#include <sys/auxv.h>
-#endif
-
-//! Necessary on some platforms
-extern char** environ;
-=======
 #if defined(HAVE_STRONG_GETAUXVAL)
 #include <sys/auxv.h>
 #endif
 
 extern char** environ; // NOLINT(readability-redundant-declaration): Necessary on some platforms
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 namespace {
 
@@ -285,11 +252,7 @@ void RandAddDynamicEnv(CSHA512& hasher)
     gettimeofday(&tv, nullptr);
     hasher << tv;
 #endif
-<<<<<<< HEAD
-    // Probably redundant, but also use all the clocks C++11 provides:
-=======
     // Probably redundant, but also use all the standard library clocks:
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     hasher << std::chrono::system_clock::now().time_since_epoch().count();
     hasher << std::chrono::steady_clock::now().time_since_epoch().count();
     hasher << std::chrono::high_resolution_clock::now().time_since_epoch().count();
@@ -364,11 +327,7 @@ void RandAddStaticEnv(CSHA512& hasher)
     // DigiByte client version
     hasher << CLIENT_VERSION;
 
-<<<<<<< HEAD
-#if defined(HAVE_STRONG_GETAUXVAL) || defined(HAVE_WEAK_GETAUXVAL)
-=======
 #if defined(HAVE_STRONG_GETAUXVAL)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     // Information available through getauxval()
 #  ifdef AT_HWCAP
     hasher << getauxval(AT_HWCAP);
@@ -388,11 +347,7 @@ void RandAddStaticEnv(CSHA512& hasher)
     const char* exec_str = (const char*)getauxval(AT_EXECFN);
     if (exec_str) hasher.Write((const unsigned char*)exec_str, strlen(exec_str) + 1);
 #  endif
-<<<<<<< HEAD
-#endif // HAVE_STRONG_GETAUXVAL || HAVE_WEAK_GETAUXVAL
-=======
 #endif // HAVE_STRONG_GETAUXVAL
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 #ifdef HAVE_GETCPUID
     AddAllCPUID(hasher);
@@ -409,17 +364,10 @@ void RandAddStaticEnv(CSHA512& hasher)
 
 #if HAVE_DECL_GETIFADDRS && HAVE_DECL_FREEIFADDRS
     // Network interfaces
-<<<<<<< HEAD
-    struct ifaddrs *ifad = NULL;
-    getifaddrs(&ifad);
-    struct ifaddrs *ifit = ifad;
-    while (ifit != NULL) {
-=======
     struct ifaddrs *ifad = nullptr;
     getifaddrs(&ifad);
     struct ifaddrs *ifit = ifad;
     while (ifit != nullptr) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         hasher.Write((const unsigned char*)&ifit, sizeof(ifit));
         hasher.Write((const unsigned char*)ifit->ifa_name, strlen(ifit->ifa_name) + 1);
         hasher.Write((const unsigned char*)&ifit->ifa_flags, sizeof(ifit->ifa_flags));

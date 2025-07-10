@@ -1,28 +1,12 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
-// Copyright (c) 2009-2020 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// Copyright (c) 2009-2022 The Bitcoin Core developers
+// Copyright (c) 2014-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <uint256.h>
 
 #include <util/strencodings.h>
-<<<<<<< HEAD
-
-#include <string.h>
-
-template <unsigned int BITS>
-base_blob<BITS>::base_blob(const std::vector<unsigned char>& vch)
-{
-    assert(vch.size() == sizeof(m_data));
-    memcpy(m_data, vch.data(), sizeof(m_data));
-}
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 template <unsigned int BITS>
 std::string base_blob<BITS>::GetHex() const
@@ -37,11 +21,7 @@ std::string base_blob<BITS>::GetHex() const
 template <unsigned int BITS>
 void base_blob<BITS>::SetHex(const char* psz)
 {
-<<<<<<< HEAD
-    memset(m_data, 0, sizeof(m_data));
-=======
     std::fill(m_data.begin(), m_data.end(), 0);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // skip leading spaces
     while (IsSpace(*psz))
@@ -55,11 +35,7 @@ void base_blob<BITS>::SetHex(const char* psz)
     size_t digits = 0;
     while (::HexDigit(psz[digits]) != -1)
         digits++;
-<<<<<<< HEAD
-    unsigned char* p1 = (unsigned char*)m_data;
-=======
     unsigned char* p1 = m_data.data();
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     unsigned char* pend = p1 + WIDTH;
     while (digits > 0 && p1 < pend) {
         *p1 = ::HexDigit(psz[--digits]);

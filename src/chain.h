@@ -208,7 +208,8 @@ public:
 
     //! (memory only) Maximum nTime in the chain up to and including this block.
     unsigned int nTimeMax{0};
-<<<<<<< HEAD
+
+    //! DigiByte: Track last block per algorithm for multi-algo mining
     CBlockIndex *lastAlgoBlocks[NUM_ALGOS_IMPL];
 
     /**
@@ -222,22 +223,9 @@ public:
      */
     explicit CBlockIndex(const CBlockHeader& block);
 
-    FlatFilePos GetBlockPos() const {
-=======
-
-    explicit CBlockIndex(const CBlockHeader& block)
-        : nVersion{block.nVersion},
-          hashMerkleRoot{block.hashMerkleRoot},
-          nTime{block.nTime},
-          nBits{block.nBits},
-          nNonce{block.nNonce}
-    {
-    }
-
     FlatFilePos GetBlockPos() const EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
     {
         AssertLockHeld(::cs_main);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         FlatFilePos ret;
         if (nStatus & BLOCK_HAVE_DATA) {
             ret.nFile = nFile;
@@ -246,13 +234,9 @@ public:
         return ret;
     }
 
-<<<<<<< HEAD
-    FlatFilePos GetUndoPos() const {
-=======
     FlatFilePos GetUndoPos() const EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
     {
         AssertLockHeld(::cs_main);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         FlatFilePos ret;
         if (nStatus & BLOCK_HAVE_UNDO) {
             ret.nFile = nFile;
@@ -280,27 +264,20 @@ public:
         return *phashBlock;
     }
 
-<<<<<<< HEAD
+    //! DigiByte: Get block PoW hash based on algorithm
     uint256 GetBlockPoWHash() const
     {
         CBlockHeader block = GetBlockHeader();
         return GetPoWAlgoHash(block);
     }
 
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
     /**
      * Check whether this block's and all previous blocks' transactions have been
      * downloaded (and stored to disk) at some point.
      *
      * Does not imply the transactions are consensus-valid (ConnectTip might fail)
      * Does not imply the transactions are still stored on disk. (IsBlockPruned might return true)
-<<<<<<< HEAD
-     */
-    int GetAlgo() const;
-
-    bool HaveTxsDownloaded() const { return nChainTx != 0; }
-=======
      *
      * Note that this will be true for the snapshot base block, if one is loaded (and
      * all subsequent assumed-valid blocks) since its nChainTx value will have been set
@@ -308,11 +285,13 @@ public:
      */
     bool HaveNumChainTxs() const { return nChainTx != 0; }
 
+    //! DigiByte: Get mining algorithm for this block
+    int GetAlgo() const;
+
     NodeSeconds Time() const
     {
         return NodeSeconds{std::chrono::seconds{nTime}};
     }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     int64_t GetBlockTime() const
     {
@@ -444,14 +423,9 @@ public:
 
     SERIALIZE_METHODS(CDiskBlockIndex, obj)
     {
-<<<<<<< HEAD
-        int _nVersion = s.GetVersion();
-        if (!(s.GetType() & SER_GETHASH)) READWRITE(VARINT_MODE(_nVersion, VarIntMode::NONNEGATIVE_SIGNED));
-=======
         LOCK(::cs_main);
         int _nVersion = DUMMY_VERSION;
         READWRITE(VARINT_MODE(_nVersion, VarIntMode::NONNEGATIVE_SIGNED));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         READWRITE(VARINT_MODE(obj.nHeight, VarIntMode::NONNEGATIVE_SIGNED));
         READWRITE(VARINT(obj.nStatus));
@@ -550,13 +524,11 @@ public:
     CBlockIndex* FindEarliestAtLeast(int64_t nTime, int height) const;
 };
 
-<<<<<<< HEAD
-=======
 /** Get a locator for a block index entry. */
 CBlockLocator GetLocator(const CBlockIndex* index);
 
 /** Construct a list of hash entries to put in a locator.  */
 std::vector<uint256> LocatorEntries(const CBlockIndex* index);
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
 #endif // DIGIBYTE_CHAIN_H

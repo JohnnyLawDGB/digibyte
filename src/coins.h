@@ -1,10 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
-// Copyright (c) 2009-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// Copyright (c) 2009-2022 The Bitcoin Core developers
+// Copyright (c) 2014-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -223,11 +219,7 @@ public:
     uint256 GetBestBlock() const override;
     std::vector<uint256> GetHeadBlocks() const override;
     void SetBackend(CCoinsView &viewIn);
-<<<<<<< HEAD
-    bool BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock) override;
-=======
     bool BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock, bool erase = true) override;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     std::unique_ptr<CCoinsViewCursor> Cursor() const override;
     size_t EstimateSize() const override;
 };
@@ -264,11 +256,7 @@ public:
     bool HaveCoin(const COutPoint &outpoint) const override;
     uint256 GetBestBlock() const override;
     void SetBestBlock(const uint256 &hashBlock);
-<<<<<<< HEAD
-    bool BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock) override;
-=======
     bool BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock, bool erase = true) override;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     std::unique_ptr<CCoinsViewCursor> Cursor() const override {
         throw std::logic_error("CCoinsViewCache cursor iteration not supported.");
     }
@@ -353,12 +341,9 @@ public:
     //! See: https://stackoverflow.com/questions/42114044/how-to-release-unordered-map-memory
     void ReallocateCache();
 
-<<<<<<< HEAD
-=======
     //! Run an internal sanity check on the cache data structure. */
     void SanityCheck() const;
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 private:
     /**
      * @note this is marked const, but may actually append to `cacheCoins`, increasing
@@ -398,10 +383,7 @@ public:
     }
 
     bool GetCoin(const COutPoint &outpoint, Coin &coin) const override;
-<<<<<<< HEAD
-=======
     bool HaveCoin(const COutPoint &outpoint) const override;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 private:
     /** A list of callbacks to execute upon leveldb read error. */

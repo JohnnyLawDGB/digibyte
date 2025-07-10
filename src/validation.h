@@ -355,43 +355,6 @@ bool CheckBlock(const CBlock& block, BlockValidationState& state, const Consensu
 /** Check a block is completely valid from start to finish (only works on top of our current best block) */
 bool TestBlockValidity(BlockValidationState& state,
                        const CChainParams& chainparams,
-<<<<<<< HEAD
-                       CChainState& chainstate,
-                       const CBlock& block,
-                       CBlockIndex* pindexPrev,
-                       bool fCheckPOW = true,
-                       bool fCheckMerkleRoot = true) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
-
-/** Update uncommitted block structures (currently: only the witness reserved value). This is safe for submitted blocks. */
-void UpdateUncommittedBlockStructures(CBlock& block, const CBlockIndex* pindexPrev, const Consensus::Params& consensusParams);
-
-/** Produce the necessary coinbase commitment for a block (modifies the hash, don't call for mined blocks). */
-std::vector<unsigned char> GenerateCoinbaseCommitment(CBlock& block, const CBlockIndex* pindexPrev, const Consensus::Params& consensusParams);
-
-/** RAII wrapper for VerifyDB: Verify consistency of the block and coin databases */
-class CVerifyDB {
-public:
-    CVerifyDB();
-    ~CVerifyDB();
-    bool VerifyDB(
-        CChainState& chainstate,
-        const CChainParams& chainparams,
-        CCoinsView& coinsview,
-        int nCheckLevel,
-        int nCheckDepth) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
-};
-
-enum DisconnectResult
-{
-    DISCONNECT_OK,      // All good.
-    DISCONNECT_UNCLEAN, // Rolled back, but UTXO set was inconsistent with block.
-    DISCONNECT_FAILED   // Something else went wrong.
-};
-
-class ConnectTrace;
-
-/** @see CChainState::FlushStateToDisk */
-=======
                        Chainstate& chainstate,
                        const CBlock& block,
                        CBlockIndex* pindexPrev,
@@ -443,7 +406,6 @@ enum DisconnectResult
 class ConnectTrace;
 
 /** @see Chainstate::FlushStateToDisk */
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 enum class FlushStateMode {
     NONE,
     IF_NEEDED,
@@ -451,7 +413,6 @@ enum class FlushStateMode {
     ALWAYS
 };
 
-<<<<<<< HEAD
 struct CBlockIndexWorkComparator
 {
     bool operator()(const CBlockIndex *pa, const CBlockIndex *pb) const;
@@ -461,12 +422,12 @@ struct CBlockIndexWorkComparator
  * Maintains a tree of blocks (stored in `m_block_index`) which is consulted
  * to determine where the most-work tip is.
  *
- * This data is used mostly in `CChainState` - information about, e.g.,
+ * This data is used mostly in `Chainstate` - information about, e.g.,
  * candidate tips is not maintained here.
  */
 class BlockManager
 {
-    friend CChainState;
+    friend Chainstate;
 
 private:
     /* Calculate the block/rev files to delete based on height specified by user with RPC command pruneblockchain */
@@ -1152,7 +1113,6 @@ bool LoadMempool(CTxMemPool& pool, CChainState& active_chainstate, FopenFn mocka
  */
 const AssumeutxoData* ExpectedAssumeutxo(const int height, const CChainParams& params);
 
-=======
 /**
  * A convenience class for constructing the CCoinsView* hierarchy used
  * to facilitate access to the UTXO set.
@@ -2020,5 +1980,4 @@ bool IsBIP30Repeat(const CBlockIndex& block_index);
 /** Identifies blocks which coinbase output was subsequently overwritten in the UTXO set (see BIP30) */
 bool IsBIP30Unspendable(const CBlockIndex& block_index);
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #endif // DIGIBYTE_VALIDATION_H

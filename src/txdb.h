@@ -1,10 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
-// Copyright (c) 2009-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// Copyright (c) 2009-2022 The Bitcoin Core developers
+// Copyright (c) 2014-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -17,11 +13,8 @@
 #include <sync.h>
 #include <util/fs.h>
 
-<<<<<<< HEAD
-=======
 #include <cstddef>
 #include <cstdint>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <memory>
 #include <optional>
 #include <vector>
@@ -48,10 +41,6 @@ static const int64_t max_filter_index_cache = 1024;
 //! Max memory allocated to coin DB specific cache (MiB)
 static const int64_t nMaxCoinsDBCache = 8;
 
-<<<<<<< HEAD
-// Actually declared in validation.cpp; can't include because of circular dependency.
-extern RecursiveMutex cs_main;
-=======
 //! User-controlled performance and debug options.
 struct CoinsViewOptions {
     //! Maximum database write batch size in bytes.
@@ -60,66 +49,27 @@ struct CoinsViewOptions {
     //! probability.
     int simulate_crash_ratio = 0;
 };
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 /** CCoinsView backed by the coin database (chainstate/) */
 class CCoinsViewDB final : public CCoinsView
 {
 protected:
-<<<<<<< HEAD
-    std::unique_ptr<CDBWrapper> m_db;
-    fs::path m_ldb_path;
-    bool m_is_memory;
-public:
-    /**
-     * @param[in] ldb_path    Location in the filesystem where leveldb data will be stored.
-     */
-    explicit CCoinsViewDB(fs::path ldb_path, size_t nCacheSize, bool fMemory, bool fWipe);
-=======
     DBParams m_db_params;
     CoinsViewOptions m_options;
     std::unique_ptr<CDBWrapper> m_db;
 public:
     explicit CCoinsViewDB(DBParams db_params, CoinsViewOptions options);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     bool GetCoin(const COutPoint &outpoint, Coin &coin) const override;
     bool HaveCoin(const COutPoint &outpoint) const override;
     uint256 GetBestBlock() const override;
     std::vector<uint256> GetHeadBlocks() const override;
-<<<<<<< HEAD
-    bool BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock) override;
-=======
     bool BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock, bool erase = true) override;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     std::unique_ptr<CCoinsViewCursor> Cursor() const override;
 
     //! Whether an unsupported database format is used.
     bool NeedsUpgrade();
     size_t EstimateSize() const override;
-<<<<<<< HEAD
-
-    //! Dynamically alter the underlying leveldb cache size.
-    void ResizeCache(size_t new_cache_size) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
-};
-
-/** Access to the block database (blocks/index/) */
-class CBlockTreeDB : public CDBWrapper
-{
-public:
-    explicit CBlockTreeDB(size_t nCacheSize, bool fMemory = false, bool fWipe = false);
-
-    bool WriteBatchSync(const std::vector<std::pair<int, const CBlockFileInfo*> >& fileInfo, int nLastFile, const std::vector<const CBlockIndex*>& blockinfo);
-    bool ReadBlockFileInfo(int nFile, CBlockFileInfo &info);
-    bool ReadLastBlockFile(int &nFile);
-    bool WriteReindexing(bool fReindexing);
-    void ReadReindexing(bool &fReindexing);
-    bool WriteFlag(const std::string &name, bool fValue);
-    bool ReadFlag(const std::string &name, bool &fValue);
-    bool LoadBlockIndexGuts(const Consensus::Params& consensusParams, std::function<CBlockIndex*(const uint256&)> insertBlockIndex, int& nHighest);
-};
-
-=======
 
     //! Dynamically alter the underlying leveldb cache size.
     void ResizeCache(size_t new_cache_size) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
@@ -128,5 +78,5 @@ public:
     std::optional<fs::path> StoragePath() { return m_db->StoragePath(); }
 };
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
 #endif // DIGIBYTE_TXDB_H

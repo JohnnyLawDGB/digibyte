@@ -1,13 +1,3 @@
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The DigiByte Core developers
-// Distributed under the MIT software license, see the accompanying
-// file COPYING or http://www.opensource.org/licenses/mit-license.php.
-
-#include <net_permissions.h>
-#include <netbase.h>
-#include <util/error.h>
-#include <util/system.h>
-=======
 // Copyright (c) 2009-2021 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
@@ -16,7 +6,6 @@
 #include <net_permissions.h>
 #include <netbase.h>
 #include <util/error.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <util/translation.h>
 
 const std::vector<std::string> NET_PERMISSIONS_DOC{
@@ -82,15 +71,6 @@ bool TryParsePermissionFlags(const std::string& str, NetPermissionFlags& output,
 std::vector<std::string> NetPermissions::ToStrings(NetPermissionFlags flags)
 {
     std::vector<std::string> strings;
-<<<<<<< HEAD
-    if (NetPermissions::HasFlag(flags, NetPermissionFlags::BloomFilter)) strings.push_back("bloomfilter");
-    if (NetPermissions::HasFlag(flags, NetPermissionFlags::NoBan)) strings.push_back("noban");
-    if (NetPermissions::HasFlag(flags, NetPermissionFlags::ForceRelay)) strings.push_back("forcerelay");
-    if (NetPermissions::HasFlag(flags, NetPermissionFlags::Relay)) strings.push_back("relay");
-    if (NetPermissions::HasFlag(flags, NetPermissionFlags::Mempool)) strings.push_back("mempool");
-    if (NetPermissions::HasFlag(flags, NetPermissionFlags::Download)) strings.push_back("download");
-    if (NetPermissions::HasFlag(flags, NetPermissionFlags::Addr)) strings.push_back("addr");
-=======
     if (NetPermissions::HasFlag(flags, NetPermissionFlags::BloomFilter)) strings.emplace_back("bloomfilter");
     if (NetPermissions::HasFlag(flags, NetPermissionFlags::NoBan)) strings.emplace_back("noban");
     if (NetPermissions::HasFlag(flags, NetPermissionFlags::ForceRelay)) strings.emplace_back("forcerelay");
@@ -98,7 +78,6 @@ std::vector<std::string> NetPermissions::ToStrings(NetPermissionFlags flags)
     if (NetPermissions::HasFlag(flags, NetPermissionFlags::Mempool)) strings.emplace_back("mempool");
     if (NetPermissions::HasFlag(flags, NetPermissionFlags::Download)) strings.emplace_back("download");
     if (NetPermissions::HasFlag(flags, NetPermissionFlags::Addr)) strings.emplace_back("addr");
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     return strings;
 }
 
@@ -109,31 +88,18 @@ bool NetWhitebindPermissions::TryParse(const std::string& str, NetWhitebindPermi
     if (!TryParsePermissionFlags(str, flags, offset, error)) return false;
 
     const std::string strBind = str.substr(offset);
-<<<<<<< HEAD
-    CService addrBind;
-    if (!Lookup(strBind, addrBind, 0, false)) {
-        error = ResolveErrMsg("whitebind", strBind);
-        return false;
-    }
-    if (addrBind.GetPort() == 0) {
-=======
     const std::optional<CService> addrBind{Lookup(strBind, 0, false)};
     if (!addrBind.has_value()) {
         error = ResolveErrMsg("whitebind", strBind);
         return false;
     }
     if (addrBind.value().GetPort() == 0) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         error = strprintf(_("Need to specify a port with -whitebind: '%s'"), strBind);
         return false;
     }
 
     output.m_flags = flags;
-<<<<<<< HEAD
-    output.m_service = addrBind;
-=======
     output.m_service = addrBind.value();
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     error = Untranslated("");
     return true;
 }

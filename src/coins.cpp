@@ -1,9 +1,5 @@
-<<<<<<< HEAD
-// Copyright (c) 2012-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
-// Copyright (c) 2012-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// Copyright (c) 2012-2022 The Bitcoin Core developers
+// Copyright (c) 2014-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -12,20 +8,13 @@
 #include <consensus/consensus.h>
 #include <logging.h>
 #include <random.h>
-<<<<<<< HEAD
-=======
 #include <util/trace.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <version.h>
 
 bool CCoinsView::GetCoin(const COutPoint &outpoint, Coin &coin) const { return false; }
 uint256 CCoinsView::GetBestBlock() const { return uint256(); }
 std::vector<uint256> CCoinsView::GetHeadBlocks() const { return std::vector<uint256>(); }
-<<<<<<< HEAD
-bool CCoinsView::BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock) { return false; }
-=======
 bool CCoinsView::BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock, bool erase) { return false; }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 std::unique_ptr<CCoinsViewCursor> CCoinsView::Cursor() const { return nullptr; }
 
 bool CCoinsView::HaveCoin(const COutPoint &outpoint) const
@@ -40,13 +29,6 @@ bool CCoinsViewBacked::HaveCoin(const COutPoint &outpoint) const { return base->
 uint256 CCoinsViewBacked::GetBestBlock() const { return base->GetBestBlock(); }
 std::vector<uint256> CCoinsViewBacked::GetHeadBlocks() const { return base->GetHeadBlocks(); }
 void CCoinsViewBacked::SetBackend(CCoinsView &viewIn) { base = &viewIn; }
-<<<<<<< HEAD
-bool CCoinsViewBacked::BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock) { return base->BatchWrite(mapCoins, hashBlock); }
-std::unique_ptr<CCoinsViewCursor> CCoinsViewBacked::Cursor() const { return base->Cursor(); }
-size_t CCoinsViewBacked::EstimateSize() const { return base->EstimateSize(); }
-
-CCoinsViewCache::CCoinsViewCache(CCoinsView *baseIn) : CCoinsViewBacked(baseIn), cachedCoinsUsage(0) {}
-=======
 bool CCoinsViewBacked::BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock, bool erase) { return base->BatchWrite(mapCoins, hashBlock, erase); }
 std::unique_ptr<CCoinsViewCursor> CCoinsViewBacked::Cursor() const { return base->Cursor(); }
 size_t CCoinsViewBacked::EstimateSize() const { return base->EstimateSize(); }
@@ -55,7 +37,6 @@ CCoinsViewCache::CCoinsViewCache(CCoinsView* baseIn, bool deterministic) :
     CCoinsViewBacked(baseIn), m_deterministic(deterministic),
     cacheCoins(0, SaltedOutpointHasher(/*deterministic=*/deterministic), CCoinsMap::key_equal{}, &m_cache_coins_memory_resource)
 {}
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 size_t CCoinsViewCache::DynamicMemoryUsage() const {
     return memusage::DynamicUsage(cacheCoins) + cachedCoinsUsage;
@@ -337,9 +318,6 @@ void CCoinsViewCache::ReallocateCache()
     // Cache should be empty when we're calling this.
     assert(cacheCoins.size() == 0);
     cacheCoins.~CCoinsMap();
-<<<<<<< HEAD
-    ::new (&cacheCoins) CCoinsMap();
-=======
     m_cache_coins_memory_resource.~CCoinsMapMemoryResource();
     ::new (&m_cache_coins_memory_resource) CCoinsMapMemoryResource{};
     ::new (&cacheCoins) CCoinsMap{0, SaltedOutpointHasher{/*deterministic=*/m_deterministic}, CCoinsMap::key_equal{}, &m_cache_coins_memory_resource};
@@ -360,7 +338,6 @@ void CCoinsViewCache::SanityCheck() const
         recomputed_usage += entry.coin.DynamicMemoryUsage();
     }
     assert(recomputed_usage == cachedCoinsUsage);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 static const size_t MIN_TRANSACTION_OUTPUT_WEIGHT = WITNESS_SCALE_FACTOR * ::GetSerializeSize(CTxOut(), PROTOCOL_VERSION);
@@ -377,13 +354,6 @@ const Coin& AccessByTxid(const CCoinsViewCache& view, const uint256& txid)
     return coinEmpty;
 }
 
-<<<<<<< HEAD
-bool CCoinsViewErrorCatcher::GetCoin(const COutPoint &outpoint, Coin &coin) const {
-    try {
-        return CCoinsViewBacked::GetCoin(outpoint, coin);
-    } catch(const std::runtime_error& e) {
-        for (auto f : m_err_callbacks) {
-=======
 template <typename Func>
 static bool ExecuteBackedWrapper(Func func, const std::vector<std::function<void()>>& err_callbacks)
 {
@@ -391,7 +361,6 @@ static bool ExecuteBackedWrapper(Func func, const std::vector<std::function<void
         return func();
     } catch(const std::runtime_error& e) {
         for (const auto& f : err_callbacks) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             f();
         }
         LogPrintf("Error reading from database: %s\n", e.what());
@@ -402,9 +371,6 @@ static bool ExecuteBackedWrapper(Func func, const std::vector<std::function<void
         std::abort();
     }
 }
-<<<<<<< HEAD
-=======
-
 bool CCoinsViewErrorCatcher::GetCoin(const COutPoint &outpoint, Coin &coin) const {
     return ExecuteBackedWrapper([&]() { return CCoinsViewBacked::GetCoin(outpoint, coin); }, m_err_callbacks);
 }
@@ -412,4 +378,3 @@ bool CCoinsViewErrorCatcher::GetCoin(const COutPoint &outpoint, Coin &coin) cons
 bool CCoinsViewErrorCatcher::HaveCoin(const COutPoint &outpoint) const {
     return ExecuteBackedWrapper([&]() { return CCoinsViewBacked::HaveCoin(outpoint); }, m_err_callbacks);
 }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion

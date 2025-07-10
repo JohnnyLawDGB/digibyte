@@ -46,11 +46,6 @@ class MempoolCoinbaseTest(DigiByteTestFramework):
             ],
             []
         ]
-<<<<<<< HEAD
-
-    def run_test(self):
-        wallet = MiniWallet(self.nodes[0])
-=======
 
     def test_reorg_relay(self):
         self.log.info("Test that transactions from disconnected blocks are available for relay immediately")

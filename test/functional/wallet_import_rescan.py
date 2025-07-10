@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-<<<<<<< HEAD
-# Copyright (c) 2014-2021 The DigiByte Core developers
-=======
 # Copyright (c) 2014-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test wallet import RPCs.
@@ -24,14 +20,10 @@ happened previously.
 """
 
 from test_framework.test_framework import DigiByteTestFramework
-<<<<<<< HEAD
-from test_framework.address import AddressType
-=======
 from test_framework.address import (
     AddressType,
     ADDRESS_BCRT1_UNSPENDABLE,
 )
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 from test_framework.util import (
     assert_equal,
     set_node_times,
@@ -86,11 +78,7 @@ class Variant(collections.namedtuple("Variant", "call data address_type rescan p
                 request.update({"redeemscript": self.address['embedded']['scriptPubKey']})
             response = self.node.importmulti(
                 requests=[request],
-<<<<<<< HEAD
-                options={"rescan": self.rescan in (Rescan.yes, Rescan.late_timestamp)},
-=======
                 rescan=self.rescan in (Rescan.yes, Rescan.late_timestamp),
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             )
             assert_equal(response, [{"success": True}])
 

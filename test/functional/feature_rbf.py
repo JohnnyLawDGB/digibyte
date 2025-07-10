@@ -1,35 +1,11 @@
 #!/usr/bin/env python3
-<<<<<<< HEAD
-# Copyright (c) 2014-2020 The Bitcoin Core developers
-# Copyright (c) 2020-2022 The DigiByte Core developers
-=======
 # Copyright (c) 2014-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test the RBF code."""
 
 from decimal import Decimal
 
-<<<<<<< HEAD
-from test_framework.blocktools import COINBASE_MATURITY
-from test_framework.messages import (
-    BIP125_SEQUENCE_NUMBER,
-    COIN,
-    COutPoint,
-    CTransaction,
-    CTxIn,
-    CTxOut,
-)
-from test_framework.script import CScript, OP_DROP
-from test_framework.test_framework import DigiByteTestFramework
-from test_framework.util import assert_equal, assert_raises_rpc_error, satoshi_round
-from test_framework.script_util import DUMMY_P2WPKH_SCRIPT, DUMMY_2_P2WPKH_SCRIPT
-from test_framework.wallet import MiniWallet
-
-MAX_REPLACEMENT_LIMIT = 100
-
-=======
 from test_framework.messages import (
     MAX_BIP125_RBF_SEQUENCE,
     COIN,
@@ -47,32 +23,20 @@ MAX_REPLACEMENT_LIMIT = 100
 class ReplaceByFeeTest(DigiByteTestFramework):
     def add_options(self, parser):
         self.add_wallet_options(parser)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 class ReplaceByFeeTest(DigiByteTestFramework):
     def set_test_params(self):
-<<<<<<< HEAD
-        self.num_nodes = 1
-        self.extra_args = [
-            [
-                "-acceptnonstdtxn=1",
-=======
         self.num_nodes = 2
         self.extra_args = [
             [
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 "-maxorphantx=1000",
                 "-limitancestorcount=50",
                 "-limitancestorsize=101",
                 "-limitdescendantcount=200",
                 "-limitdescendantsize=101",
             ],
-<<<<<<< HEAD
         ]
-        self.supports_cli = False        
-
-    def skip_test_if_missing_module(self):
-        self.skip_if_no_wallet()
+        self.supports_cli = False
 
     def make_utxo(self, node, amount, confirmed=True, scriptPubKey=DUMMY_P2WPKH_SCRIPT):
         """Create a txout with a given amount and scriptPubKey
@@ -170,12 +134,8 @@ class ReplaceByFeeTest(DigiByteTestFramework):
         self.log.info("Running test replacement relay fee...")
         self.test_replacement_relay_fee()
 
-<<<<<<< HEAD
-=======
         self.log.info("Running test full replace by fee...")
         self.test_fullrbf()
-
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         self.log.info("Passed")
 
     def make_utxo(self, node, amount, *, confirmed=True, scriptPubKey=None):
@@ -200,12 +160,7 @@ class ReplaceByFeeTest(DigiByteTestFramework):
 
     def test_simple_doublespend(self):
         """Simple doublespend"""
-<<<<<<< HEAD
         tx0_outpoint = self.make_utxo(self.nodes[0], int(1.1 * COIN))
-
-        # make_utxo may have generated a bunch of blocks, so we need to sync
-        # before we can spend the coins generated, or else the resulting
-        # transactions might not be accepted by our peers.
         self.sync_all()
 
         tx1a = CTransaction()
@@ -259,22 +214,20 @@ class ReplaceByFeeTest(DigiByteTestFramework):
     def test_doublespend_chain(self):
         """Doublespend of a long chain"""
 
-<<<<<<< HEAD
-        initial_nValue = 72000 * COIN
-=======
         initial_nValue = 5 * COIN
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         tx0_outpoint = self.make_utxo(self.nodes[0], initial_nValue)
 
         prevout = tx0_outpoint
         remaining_value = initial_nValue
         chain_txids = []
-<<<<<<< HEAD
-        while remaining_value > 14400 * COIN:
-            remaining_value -= 1440 * COIN
-            tx = CTransaction()
-            tx.vin = [CTxIn(prevout, nSequence=0)]
-            tx.vout = [CTxOut(remaining_value, CScript([1, OP_DROP] * 15 + [1]))]
+        while remaining_value > 10000:
+            remaining_value -= 1000
+            utxo = self.wallet.send_to(
+                from_node=self.nodes[0],
+                scriptPubKey=ADDRESS_BCRT1_UNSPENDABLE,
+                amount=remaining_value,
+                utxo_to_spend=prevout,
+            )
             tx_hex = tx.serialize().hex()
             txid = self.nodes[0].sendrawtransaction(tx_hex, 0)
             chain_txids.append(txid)

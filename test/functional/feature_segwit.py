@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-<<<<<<< HEAD
-# Copyright (c) 2016-2021 The DigiByte Core developers
-=======
 # Copyright (c) 2016-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test the SegWit changeover logic."""
@@ -76,11 +72,6 @@ def find_spendable_utxo(node, min_value):
             return utxo
 
     raise AssertionError(f"Unspent output equal or higher than {min_value} not found")
-<<<<<<< HEAD
-
-
-txs_mined = {}  # txindex from txid to blockhash
-
 
 class SegWitTest(DigiByteTestFramework):
 =======
@@ -102,31 +93,19 @@ class SegWitTest(DigiByteTestFramework):
             [
                 "-acceptnonstdtxn=1",
                 "-rpcserialversion=0",
-<<<<<<< HEAD
-                "-testactivationheight=segwit@432",
-=======
                 "-deprecatedrpc=serialversion",
                 "-testactivationheight=segwit@165",
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 "-addresstype=legacy",
             ],
             [
                 "-acceptnonstdtxn=1",
                 "-rpcserialversion=1",
-<<<<<<< HEAD
-                "-testactivationheight=segwit@432",
-=======
                 "-testactivationheight=segwit@165",
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 "-addresstype=legacy",
             ],
             [
                 "-acceptnonstdtxn=1",
-<<<<<<< HEAD
-                "-testactivationheight=segwit@432",
-=======
                 "-testactivationheight=segwit@165",
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 "-addresstype=legacy",
             ],
         ]
@@ -141,8 +120,7 @@ class SegWitTest(DigiByteTestFramework):
         self.sync_all()
 
     def success_mine(self, node, txid, sign, redeem_script=""):
-<<<<<<< HEAD
-        send_to_witness(1, node, getutxo(txid), self.pubkey[0], False, Decimal("71999.998"), sign, redeem_script)
+        send_to_witness(1, node, getutxo(txid), self.pubkey[0], False, Decimal("49.998"), sign, redeem_script)
         block = self.generate(node, 1)
         assert_equal(len(node.getblock(block[0])["tx"]), 2)
         self.sync_blocks()
@@ -232,12 +210,9 @@ class SegWitTest(DigiByteTestFramework):
         self.generate(self.nodes[0], 1)  # block 163
 
         # Make sure all nodes recognize the transactions as theirs
-<<<<<<< HEAD
-        assert_equal(self.nodes[0].getbalance(), balance_presetup - 60 * 72000 + 20 * Decimal("71999.999") + 72000)
-        assert_equal(self.nodes[1].getbalance(), 20 * Decimal("71999.999"))
-        assert_equal(self.nodes[2].getbalance(), 20 * Decimal("71999.999"))
-
-        self.generate(self.nodes[0], 260)  # block 423
+        assert_equal(self.nodes[0].getbalance(), balance_presetup - 60 * 50 + 20 * Decimal("49.999") + 50)
+        assert_equal(self.nodes[1].getbalance(), 20 * Decimal("49.999"))
+        assert_equal(self.nodes[2].getbalance(), 20 * Decimal("49.999"))
 
         self.log.info("Verify witness txs are skipped for mining before the fork")
         self.skip_mine(self.nodes[2], wit_ids[NODE_2][P2WPKH][0], True)  # block 424
@@ -254,9 +229,6 @@ class SegWitTest(DigiByteTestFramework):
         self.fail_accept(self.nodes[2], "mandatory-script-verify-flag-failed (Operation not valid with the current stack size)", p2sh_ids[NODE_2][P2WPKH][1], sign=False)
         self.fail_accept(self.nodes[2], "mandatory-script-verify-flag-failed (Operation not valid with the current stack size)", p2sh_ids[NODE_2][P2WSH][1], sign=False)
 
-<<<<<<< HEAD
-        self.generate(self.nodes[2], 4)  # blocks 428-431
-=======
         self.generate(self.nodes[0], 1)  # block 164
 
         self.log.info("Verify witness txs are mined as soon as segwit activates")
@@ -265,14 +237,9 @@ class SegWitTest(DigiByteTestFramework):
         send_to_witness(1, self.nodes[2], getutxo(wit_ids[NODE_2][P2WSH][0]), self.pubkey[0], encode_p2sh=False, amount=Decimal("49.998"), sign=True)
         send_to_witness(1, self.nodes[2], getutxo(p2sh_ids[NODE_2][P2WPKH][0]), self.pubkey[0], encode_p2sh=False, amount=Decimal("49.998"), sign=True)
         send_to_witness(1, self.nodes[2], getutxo(p2sh_ids[NODE_2][P2WSH][0]), self.pubkey[0], encode_p2sh=False, amount=Decimal("49.998"), sign=True)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         assert_equal(len(self.nodes[2].getrawmempool()), 4)
-<<<<<<< HEAD
-        blockhash = self.generate(self.nodes[2], 1)[0]  # block 432 (first block with new rules; 432 = 144 * 3)
-=======
         blockhash = self.generate(self.nodes[2], 1)[0]  # block 165 (first block with new rules)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         assert_equal(len(self.nodes[2].getrawmempool()), 0)
         segwit_tx_list = self.nodes[2].getblock(blockhash)["tx"]
         assert_equal(len(segwit_tx_list), 5)

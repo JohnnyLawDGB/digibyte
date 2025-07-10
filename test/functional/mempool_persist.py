@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-<<<<<<< HEAD
-# Copyright (c) 2014-2020 The Bitcoin Core developers
-# Copyright (c) 2015-2022 The DigiByte Core developers
-=======
 # Copyright (c) 2014-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test mempool persistence.
@@ -51,18 +46,12 @@ from test_framework.util import (
     assert_greater_than_or_equal,
     assert_raises_rpc_error,
 )
-<<<<<<< HEAD
-
-class MempoolPersistTest(DigiByteTestFramework):
-=======
 from test_framework.wallet import MiniWallet, COIN
 
 
 class MempoolPersistTest(DigiByteTestFramework):
     def add_options(self, parser):
         self.add_wallet_options(parser, legacy=False)
-
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     def set_test_params(self):
         self.num_nodes = 3
         self.extra_args = [[], ["-persistmempool=0"], []]

@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-<<<<<<< HEAD
-# Copyright (c) 2017-2021 The DigiByte Core developers
-=======
 # Copyright (c) 2017-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test multiwallet.
@@ -15,18 +11,11 @@ from threading import Thread
 import os
 import shutil
 import stat
-<<<<<<< HEAD
-import time
-
-from test_framework.authproxy import JSONRPCException
-from test_framework.blocktools import COINBASE_MATURITY_2
-=======
 import sys
 import time
 
 from test_framework.authproxy import JSONRPCException
 from test_framework.blocktools import COINBASE_MATURITY
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.test_node import ErrorMatch
 from test_framework.util import (
@@ -63,10 +52,7 @@ class MultiWalletTest(DigiByteTestFramework):
         self.skip_if_no_wallet()
 
     def add_options(self, parser):
-<<<<<<< HEAD
-=======
         self.add_wallet_options(parser)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         parser.add_argument(
             '--data_wallets_dir',
             default=os.path.join(os.path.dirname(os.path.realpath(__file__)), 'data/wallets/'),
@@ -76,11 +62,7 @@ class MultiWalletTest(DigiByteTestFramework):
     def run_test(self):
         node = self.nodes[0]
 
-<<<<<<< HEAD
-        data_dir = lambda *p: os.path.join(node.datadir, self.chain, *p)
-=======
         data_dir = lambda *p: os.path.join(node.chain_path, *p)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         wallet_dir = lambda *p: data_dir('wallets', *p)
         wallet = lambda name: node.get_wallet_rpc(name)
 

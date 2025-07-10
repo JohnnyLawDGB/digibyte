@@ -1,36 +1,16 @@
 #!/usr/bin/env python3
-<<<<<<< HEAD
-# Copyright (c) 2017-2021 The DigiByte Core developers
-=======
 # Copyright (c) 2017-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test that the wallet resends transactions periodically."""
 import time
 
-<<<<<<< HEAD
-=======
 from decimal import Decimal
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 from test_framework.blocktools import (
     create_block,
     create_coinbase,
 )
-<<<<<<< HEAD
-from test_framework.p2p import P2PTxInvStore
-from test_framework.test_framework import DigiByteTestFramework
-from test_framework.util import assert_equal
-
-
-class ResendWalletTransactionsTest(DigiByteTestFramework):
-    def set_test_params(self):
-        self.num_nodes = 1
-        self.extra_args = [[
-            '-easypow',
-        ]]        
-=======
 from test_framework.messages import DEFAULT_MEMPOOL_EXPIRY_HOURS
 from test_framework.p2p import P2PTxInvStore
 from test_framework.test_framework import DigiByteTestFramework
@@ -47,7 +27,6 @@ class ResendWalletTransactionsTest(DigiByteTestFramework):
 
     def set_test_params(self):
         self.num_nodes = 1
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()
@@ -58,28 +37,14 @@ class ResendWalletTransactionsTest(DigiByteTestFramework):
         peer_first = node.add_p2p_connection(P2PTxInvStore())
 
         self.log.info("Create a new transaction and wait until it's broadcast")
-<<<<<<< HEAD
-        txid = node.sendtoaddress(node.getnewaddress(), 1)
-
-        # Wallet rebroadcast is first scheduled 1 sec after startup (see
-        # nNextResend in ResendWalletTransactions()). Tell scheduler to call
-        # MaybeResendWalletTxn now to initialize nNextResend before the first
-        # setmocktime call below.
-        node.mockscheduler(1)
-=======
         parent_utxo, indep_utxo = node.listunspent()[:2]
         addr = node.getnewaddress()
         txid = node.send(outputs=[{addr: 1}], inputs=[parent_utxo])["txid"]
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # Can take a few seconds due to transaction trickling
         peer_first.wait_for_broadcast([txid])
 
-<<<<<<< HEAD
-        # Add a second peer since txs aren't rebroadcast to the same peer (see filterInventoryKnown)
-=======
         # Add a second peer since txs aren't rebroadcast to the same peer (see m_tx_inventory_known_filter)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         peer_second = node.add_p2p_connection(P2PTxInvStore())
 
         self.log.info("Create a block")
@@ -92,11 +57,7 @@ class ResendWalletTransactionsTest(DigiByteTestFramework):
         block.solve()
         node.submitblock(block.serialize().hex())
 
-<<<<<<< HEAD
-        # Set correct m_best_block_time, which is used in ResendWalletTransactions
-=======
         # Set correct m_best_block_time, which is used in ResubmitWalletTransactions
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         node.syncwithvalidationinterfacequeue()
         now = int(time.time())
 
@@ -105,25 +66,12 @@ class ResendWalletTransactionsTest(DigiByteTestFramework):
         twelve_hrs = 12 * 60 * 60
         two_min = 2 * 60
         node.setmocktime(now + twelve_hrs - two_min)
-<<<<<<< HEAD
-        node.mockscheduler(1)  # Tell scheduler to call MaybeResendWalletTxn now
-=======
         node.mockscheduler(60)  # Tell scheduler to call MaybeResendWalletTxs now
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         assert_equal(int(txid, 16) in peer_second.get_invs(), False)
 
         self.log.info("Bump time & check that transaction is rebroadcast")
         # Transaction should be rebroadcast approximately 24 hours in the future,
         # but can range from 12-36. So bump 36 hours to be sure.
-<<<<<<< HEAD
-        with node.assert_debug_log(['ResendWalletTransactions: resubmit 1 unconfirmed transactions']):
-            node.setmocktime(now + 36 * 60 * 60)
-            # Tell scheduler to call MaybeResendWalletTxn now.
-            node.mockscheduler(1)
-        # Give some time for trickle to occur
-        node.setmocktime(now + 36 * 60 * 60 + 600)
-        peer_second.wait_for_broadcast([txid])
-=======
         with node.assert_debug_log(['resubmit 1 unconfirmed transactions']):
             node.setmocktime(now + 36 * 60 * 60)
             # Tell scheduler to call MaybeResendWalletTxs now.
@@ -198,7 +146,6 @@ class ResendWalletTransactionsTest(DigiByteTestFramework):
             node.mockscheduler(60)
         node.getmempoolentry(txid)
         node.getmempoolentry(child_txid)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 
 if __name__ == '__main__':

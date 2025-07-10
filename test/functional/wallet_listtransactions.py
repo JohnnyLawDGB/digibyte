@@ -1,12 +1,4 @@
 #!/usr/bin/env python3
-<<<<<<< HEAD
-# Copyright (c) 2014-2020 The Bitcoin Core developers
-# Distributed under the MIT software license, see the accompanying
-# file COPYING or http://www.opensource.org/licenses/mit-license.php.
-"""Test the listtransactions API."""
-from decimal import Decimal
-
-=======
 # Copyright (c) 2014-2022 The DigiByte Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
@@ -15,8 +7,6 @@ from decimal import Decimal
 from decimal import Decimal
 import os
 import shutil
-
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 from test_framework.messages import (
     COIN,
     tx_from_hex,
@@ -25,13 +15,6 @@ from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import (
     assert_array_result,
     assert_equal,
-<<<<<<< HEAD
-)
-
-class ListTransactionsTest(DigiByteTestFramework):
-    def set_test_params(self):
-        self.num_nodes = 2
-=======
     assert_raises_rpc_error,
 )
 
@@ -45,19 +28,12 @@ class ListTransactionsTest(DigiByteTestFramework):
         # This test isn't testing txn relay/timing, so set whitelist on the
         # peers for instant txn relay. This speeds up the test run time 2-3x.
         self.extra_args = [["-whitelist=noban@127.0.0.1", "-walletrbf=0"]] * self.num_nodes
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()
 
     def run_test(self):
-<<<<<<< HEAD
-        self.generate(self.nodes[0], 1)  # Get out of IBD
-        self.sync_all()
-        # Simple send, 0 to 1:
-=======
         self.log.info("Test simple send from node0 to node1")
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         txid = self.nodes[0].sendtoaddress(self.nodes[1].getnewaddress(), 0.1)
         self.sync_all()
         assert_array_result(self.nodes[0].listtransactions(),
@@ -65,18 +41,10 @@ class ListTransactionsTest(DigiByteTestFramework):
                             {"category": "send", "amount": Decimal("-0.1"), "confirmations": 0, "trusted": True})
         assert_array_result(self.nodes[1].listtransactions(),
                             {"txid": txid},
-<<<<<<< HEAD
-                            {"category": "receive", "amount": Decimal("0.1"), "confirmations": 0})
-        # mine a block, confirmations should change:
-        blockhash = self.generate(self.nodes[0], 1)[0]
-        blockheight = self.nodes[0].getblockheader(blockhash)['height']
-        self.sync_all()
-=======
                             {"category": "receive", "amount": Decimal("0.1"), "confirmations": 0, "trusted": False})
         self.log.info("Test confirmations change after mining a block")
         blockhash = self.generate(self.nodes[0], 1)[0]
         blockheight = self.nodes[0].getblockheader(blockhash)['height']
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         assert_array_result(self.nodes[0].listtransactions(),
                             {"txid": txid},
                             {"category": "send", "amount": Decimal("-0.1"), "confirmations": 1, "blockhash": blockhash, "blockheight": blockheight})
@@ -127,19 +95,12 @@ class ListTransactionsTest(DigiByteTestFramework):
 
         if not self.options.descriptors:
             # include_watchonly is a legacy wallet feature, so don't test it for descriptor wallets
-<<<<<<< HEAD
-=======
             self.log.info("Test 'include_watchonly' feature (legacy wallet)")
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             pubkey = self.nodes[1].getaddressinfo(self.nodes[1].getnewaddress())['pubkey']
             multisig = self.nodes[1].createmultisig(1, [pubkey])
             self.nodes[0].importaddress(multisig["redeemScript"], "watchonly", False, True)
             txid = self.nodes[1].sendtoaddress(multisig["address"], 0.1)
             self.generate(self.nodes[1], 1)
-<<<<<<< HEAD
-            self.sync_all()
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             assert_equal(len(self.nodes[0].listtransactions(label="watchonly", include_watchonly=True)), 1)
             assert_equal(len(self.nodes[0].listtransactions(dummy="watchonly", include_watchonly=True)), 1)
             assert len(self.nodes[0].listtransactions(label="watchonly", count=100, include_watchonly=False)) == 0
@@ -250,9 +211,6 @@ class ListTransactionsTest(DigiByteTestFramework):
             assert_equal(n.gettransaction(txid_3b)["bip125-replaceable"], "yes")
             assert_equal(n.gettransaction(txid_4)["bip125-replaceable"], "unknown")
 
-<<<<<<< HEAD
-        # After mining a transaction, it's no longer BIP125-replaceable
-=======
         self.log.info("Test bip125-replaceable status with listsinceblock")
         for n in self.nodes[0:2]:
             txs = {tx['txid']: tx['bip125-replaceable'] for tx in n.listsinceblock()['transactions']}
@@ -263,7 +221,6 @@ class ListTransactionsTest(DigiByteTestFramework):
             assert_equal(txs[txid_4], "unknown")
 
         self.log.info("Test mined transactions are no longer bip125-replaceable")
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         self.generate(self.nodes[0], 1)
         assert txid_3b not in self.nodes[0].getrawmempool()
         assert_equal(self.nodes[0].gettransaction(txid_3b)["bip125-replaceable"], "no")

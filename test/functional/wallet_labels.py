@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-<<<<<<< HEAD
-# Copyright (c) 2016-2021 The DigiByte Core developers
-=======
 # Copyright (c) 2016-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test label RPCs.
@@ -15,21 +11,6 @@ RPCs tested are:
 """
 from collections import defaultdict
 
-<<<<<<< HEAD
-from test_framework.blocktools import COINBASE_MATURITY_2
-from test_framework.test_framework import DigiByteTestFramework
-from test_framework.util import assert_equal, assert_raises_rpc_error
-from test_framework.wallet_util import test_address
-
-
-class WalletLabelsTest(DigiByteTestFramework):
-    def set_test_params(self):
-        self.setup_clean_chain = True
-        self.num_nodes = 1
-
-    def skip_test_if_missing_module(self):
-        self.skip_if_no_wallet()
-=======
 from test_framework.blocktools import COINBASE_MATURITY
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import assert_equal, assert_raises_rpc_error

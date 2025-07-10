@@ -1,37 +1,19 @@
 #!/usr/bin/env python3
-<<<<<<< HEAD
-# Copyright (c) 2017-2021 The DigiByte Core developers
-=======
 # Copyright (c) 2017-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test the listsinceblock RPC."""
 
 from test_framework.address import key_to_p2wpkh
-<<<<<<< HEAD
-from test_framework.blocktools import COINBASE_MATURITY_2
-from test_framework.key import ECKey
-from test_framework.test_framework import DigiByteTestFramework
-from test_framework.messages import BIP125_SEQUENCE_NUMBER
-=======
 from test_framework.blocktools import COINBASE_MATURITY
 from test_framework.descriptors import descsum_create
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.messages import MAX_BIP125_RBF_SEQUENCE
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 from test_framework.util import (
     assert_array_result,
     assert_equal,
     assert_raises_rpc_error,
 )
-<<<<<<< HEAD
-from test_framework.wallet_util import bytes_to_wif
-
-from decimal import Decimal
-
-class ListSinceBlockTest(DigiByteTestFramework):
-=======
 from test_framework.wallet_util import generate_keypair
 
 from decimal import Decimal
@@ -39,8 +21,6 @@ from decimal import Decimal
 class ListSinceBlockTest(DigiByteTestFramework):
     def add_options(self, parser):
         self.add_wallet_options(parser)
-
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     def set_test_params(self):
         self.num_nodes = 4
         self.setup_clean_chain = True
@@ -57,11 +37,7 @@ class ListSinceBlockTest(DigiByteTestFramework):
         # All nodes are in IBD from genesis, so they'll need the miner (node2) to be an outbound connection, or have
         # only one connection. (See fPreferredDownload in net_processing)
         self.connect_nodes(1, 2)
-<<<<<<< HEAD
-        self.generate(self.nodes[2], COINBASE_MATURITY_2 + 1)
-=======
         self.generate(self.nodes[2], COINBASE_MATURITY + 1)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         self.test_no_blockhash()
         self.test_invalid_blockhash()
@@ -70,14 +46,11 @@ class ListSinceBlockTest(DigiByteTestFramework):
         self.test_double_send()
         self.double_spends_filtered()
         self.test_targetconfirmations()
-<<<<<<< HEAD
-=======
         if self.options.descriptors:
             self.test_desc()
         self.test_send_to_self()
         self.test_op_return()
         self.test_label()
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     def test_no_blockhash(self):
         self.log.info("Test no blockhash")

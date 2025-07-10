@@ -364,9 +364,6 @@ class PruneTest(DigiByteTestFramework):
         self.connect_nodes(0, 5)
         nds = [self.nodes[0], self.nodes[5]]
         self.sync_blocks(nds, wait=5, timeout=300)
-<<<<<<< HEAD
-        self.restart_node(5, extra_args=["-prune=550"]) # restart to trigger rescan
-=======
         self.restart_node(5, extra_args=["-prune=550", "-blockfilterindex=1"]) # restart to trigger rescan
         self.log.info("Success")
 

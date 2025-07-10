@@ -1,44 +1,23 @@
 #!/usr/bin/env python3
-<<<<<<< HEAD
-# Copyright (c) 2014-2020 The Bitcoin Core developers
-# Copyright (c) 2015-2022 The DigiByte Core developers
-=======
 # Copyright (c) 2014-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test descendant package tracking code."""
 
 from decimal import Decimal
 
-<<<<<<< HEAD
-from test_framework.blocktools import COINBASE_MATURITY, COINBASE_MATURITY_2
-from test_framework.messages import COIN
-=======
+from test_framework.blocktools import COINBASE_MATURITY
 from test_framework.messages import (
+    COIN,
     DEFAULT_ANCESTOR_LIMIT,
     DEFAULT_DESCENDANT_LIMIT,
 )
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 from test_framework.p2p import P2PTxInvStore
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import (
     assert_equal,
     assert_raises_rpc_error,
-<<<<<<< HEAD
-    chain_transaction,
     satoshi_round,
-)
-
-# default limits
-MAX_ANCESTORS = 25
-MAX_DESCENDANTS = 25
-# custom limits for node1
-MAX_ANCESTORS_CUSTOM = 5
-MAX_DESCENDANTS_CUSTOM = 10
-assert MAX_DESCENDANTS_CUSTOM >= MAX_ANCESTORS_CUSTOM
-
-=======
 )
 from test_framework.wallet import MiniWallet
 
@@ -46,9 +25,6 @@ from test_framework.wallet import MiniWallet
 CUSTOM_ANCESTOR_LIMIT = 5
 CUSTOM_DESCENDANT_LIMIT = 10
 assert CUSTOM_DESCENDANT_LIMIT >= CUSTOM_ANCESTOR_LIMIT
-
-
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 class MempoolPackagesTest(DigiByteTestFramework):
     def set_test_params(self):
         self.num_nodes = 2
@@ -59,41 +35,6 @@ class MempoolPackagesTest(DigiByteTestFramework):
             ],
             [
                 "-maxorphantx=1000",
-<<<<<<< HEAD
-                "-limitancestorcount={}".format(MAX_ANCESTORS_CUSTOM),
-                "-limitdescendantcount={}".format(MAX_DESCENDANTS_CUSTOM),
-            ],
-        ]
-
-    def skip_test_if_missing_module(self):
-        self.skip_if_no_wallet()
-
-    def run_test(self):
-        # Mine some blocks and have them mature.
-        peer_inv_store = self.nodes[0].add_p2p_connection(P2PTxInvStore()) # keep track of invs
-        self.generate(self.nodes[0], COINBASE_MATURITY_2 + 1)
-        utxo = self.nodes[0].listunspent(10)
-        txid = utxo[0]['txid']
-        vout = utxo[0]['vout']
-        value = utxo[0]['amount']
-
-        fee = Decimal("0.0015")
-        # MAX_ANCESTORS transactions off a confirmed tx should be fine
-        chain = []
-        witness_chain = []
-        for _ in range(MAX_ANCESTORS):
-            (txid, sent_value) = chain_transaction(self.nodes[0], [txid], [0], value, fee, 1)
-            value = sent_value
-            chain.append(txid)
-            # We need the wtxids to check P2P announcements
-            fulltx = self.nodes[0].getrawtransaction(txid)
-            witnesstx = self.nodes[0].decoderawtransaction(fulltx, True)
-            witness_chain.append(witnesstx['hash'])
-
-        # Wait until mempool transactions have passed initial broadcast (sent inv and received getdata)
-        # Otherwise, getrawmempool may be inconsistent with getmempoolentry if unbroadcast changes in between
-        peer_inv_store.wait_for_broadcast(witness_chain)
-=======
                 "-limitancestorcount={}".format(CUSTOM_ANCESTOR_LIMIT),
                 "-limitdescendantcount={}".format(CUSTOM_DESCENDANT_LIMIT),
             ],

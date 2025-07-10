@@ -1,30 +1,13 @@
-<<<<<<< HEAD
-// Copyright (c) 2018-2020 The DigiByte Core developers
-=======
 // Copyright (c) 2018-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <mutex>
-<<<<<<< HEAD
-#include <sstream>
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <set>
 
 #include <blockfilter.h>
 #include <crypto/siphash.h>
 #include <hash.h>
-<<<<<<< HEAD
-#include <primitives/transaction.h>
-#include <script/script.h>
-#include <streams.h>
-#include <util/golombrice.h>
-
-/// SerType used to serialize parameters in GCS filter encoding.
-static constexpr int GCS_SER_TYPE = SER_NETWORK;
-=======
 #include <primitives/block.h>
 #include <primitives/transaction.h>
 #include <script/script.h>
@@ -32,7 +15,6 @@ static constexpr int GCS_SER_TYPE = SER_NETWORK;
 #include <undo.h>
 #include <util/golombrice.h>
 #include <util/string.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 /// Protocol version used to serialize parameters in GCS filter encoding.
 static constexpr int GCS_SER_VERSION = 0;
@@ -41,52 +23,12 @@ static const std::map<BlockFilterType, std::string> g_filter_types = {
     {BlockFilterType::BASIC, "basic"},
 };
 
-<<<<<<< HEAD
-// Map a value x that is uniformly distributed in the range [0, 2^64) to a
-// value uniformly distributed in [0, n) by returning the upper 64 bits of
-// x * n.
-//
-// See: https://lemire.me/blog/2016/06/27/a-fast-alternative-to-the-modulo-reduction/
-static uint64_t MapIntoRange(uint64_t x, uint64_t n)
-{
-#ifdef __SIZEOF_INT128__
-    return (static_cast<unsigned __int128>(x) * static_cast<unsigned __int128>(n)) >> 64;
-#else
-    // To perform the calculation on 64-bit numbers without losing the
-    // result to overflow, split the numbers into the most significant and
-    // least significant 32 bits and perform multiplication piece-wise.
-    //
-    // See: https://stackoverflow.com/a/26855440
-    uint64_t x_hi = x >> 32;
-    uint64_t x_lo = x & 0xFFFFFFFF;
-    uint64_t n_hi = n >> 32;
-    uint64_t n_lo = n & 0xFFFFFFFF;
-
-    uint64_t ac = x_hi * n_hi;
-    uint64_t ad = x_hi * n_lo;
-    uint64_t bc = x_lo * n_hi;
-    uint64_t bd = x_lo * n_lo;
-
-    uint64_t mid34 = (bd >> 32) + (bc & 0xFFFFFFFF) + (ad & 0xFFFFFFFF);
-    uint64_t upper64 = ac + (bc >> 32) + (ad >> 32) + (mid34 >> 32);
-    return upper64;
-#endif
-}
-
-uint64_t GCSFilter::HashToRange(const Element& element) const
-{
-    uint64_t hash = CSipHasher(m_params.m_siphash_k0, m_params.m_siphash_k1)
-        .Write(element.data(), element.size())
-        .Finalize();
-    return MapIntoRange(hash, m_F);
-=======
 uint64_t GCSFilter::HashToRange(const Element& element) const
 {
     uint64_t hash = CSipHasher(m_params.m_siphash_k0, m_params.m_siphash_k1)
         .Write(element)
         .Finalize();
     return FastRange64(hash, m_F);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 std::vector<uint64_t> GCSFilter::BuildHashedSet(const ElementSet& elements) const
@@ -104,17 +46,10 @@ GCSFilter::GCSFilter(const Params& params)
     : m_params(params), m_N(0), m_F(0), m_encoded{0}
 {}
 
-<<<<<<< HEAD
-GCSFilter::GCSFilter(const Params& params, std::vector<unsigned char> encoded_filter)
-    : m_params(params), m_encoded(std::move(encoded_filter))
-{
-    VectorReader stream(GCS_SER_TYPE, GCS_SER_VERSION, m_encoded, 0);
-=======
 GCSFilter::GCSFilter(const Params& params, std::vector<unsigned char> encoded_filter, bool skip_decode_check)
     : m_params(params), m_encoded(std::move(encoded_filter))
 {
     SpanReader stream{GCS_SER_VERSION, m_encoded};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     uint64_t N = ReadCompactSize(stream);
     m_N = static_cast<uint32_t>(N);
@@ -123,17 +58,11 @@ GCSFilter::GCSFilter(const Params& params, std::vector<unsigned char> encoded_fi
     }
     m_F = static_cast<uint64_t>(m_N) * static_cast<uint64_t>(m_params.m_M);
 
-<<<<<<< HEAD
-    // Verify that the encoded filter contains exactly N elements. If it has too much or too little
-    // data, a std::ios_base::failure exception will be raised.
-    BitStreamReader<VectorReader> bitreader(stream);
-=======
     if (skip_decode_check) return;
 
     // Verify that the encoded filter contains exactly N elements. If it has too much or too little
     // data, a std::ios_base::failure exception will be raised.
     BitStreamReader<SpanReader> bitreader{stream};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     for (uint64_t i = 0; i < m_N; ++i) {
         GolombRiceDecode(bitreader, m_params.m_P);
     }
@@ -152,11 +81,7 @@ GCSFilter::GCSFilter(const Params& params, const ElementSet& elements)
     }
     m_F = static_cast<uint64_t>(m_N) * static_cast<uint64_t>(m_params.m_M);
 
-<<<<<<< HEAD
-    CVectorWriter stream(GCS_SER_TYPE, GCS_SER_VERSION, m_encoded, 0);
-=======
     CVectorWriter stream(GCS_SER_VERSION, m_encoded, 0);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     WriteCompactSize(stream, m_N);
 
@@ -178,21 +103,13 @@ GCSFilter::GCSFilter(const Params& params, const ElementSet& elements)
 
 bool GCSFilter::MatchInternal(const uint64_t* element_hashes, size_t size) const
 {
-<<<<<<< HEAD
-    VectorReader stream(GCS_SER_TYPE, GCS_SER_VERSION, m_encoded, 0);
-=======
     SpanReader stream{GCS_SER_VERSION, m_encoded};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // Seek forward by size of N
     uint64_t N = ReadCompactSize(stream);
     assert(N == m_N);
 
-<<<<<<< HEAD
-    BitStreamReader<VectorReader> bitreader(stream);
-=======
     BitStreamReader<SpanReader> bitreader{stream};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     uint64_t value = 0;
     size_t hashes_index = 0;
@@ -230,11 +147,7 @@ bool GCSFilter::MatchAny(const ElementSet& elements) const
 
 const std::string& BlockFilterTypeName(BlockFilterType filter_type)
 {
-<<<<<<< HEAD
-    static std::string unknown_retval = "";
-=======
     static std::string unknown_retval;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     auto it = g_filter_types.find(filter_type);
     return it != g_filter_types.end() ? it->second : unknown_retval;
 }
@@ -255,11 +168,7 @@ const std::set<BlockFilterType>& AllBlockFilterTypes()
 
     static std::once_flag flag;
     std::call_once(flag, []() {
-<<<<<<< HEAD
-            for (auto entry : g_filter_types) {
-=======
             for (const auto& entry : g_filter_types) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 types.insert(entry.first);
             }
         });
@@ -269,23 +178,7 @@ const std::set<BlockFilterType>& AllBlockFilterTypes()
 
 const std::string& ListBlockFilterTypes()
 {
-<<<<<<< HEAD
-    static std::string type_list;
-
-    static std::once_flag flag;
-    std::call_once(flag, []() {
-            std::stringstream ret;
-            bool first = true;
-            for (auto entry : g_filter_types) {
-                if (!first) ret << ", ";
-                ret << entry.second;
-                first = false;
-            }
-            type_list = ret.str();
-        });
-=======
     static std::string type_list{Join(g_filter_types, ", ", [](const auto& entry) { return entry.second; })};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     return type_list;
 }
@@ -315,22 +208,14 @@ static GCSFilter::ElementSet BasicFilterElements(const CBlock& block,
 }
 
 BlockFilter::BlockFilter(BlockFilterType filter_type, const uint256& block_hash,
-<<<<<<< HEAD
-                         std::vector<unsigned char> filter)
-=======
                          std::vector<unsigned char> filter, bool skip_decode_check)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     : m_filter_type(filter_type), m_block_hash(block_hash)
 {
     GCSFilter::Params params;
     if (!BuildParams(params)) {
         throw std::invalid_argument("unknown filter_type");
     }
-<<<<<<< HEAD
-    m_filter = GCSFilter(params, std::move(filter));
-=======
     m_filter = GCSFilter(params, std::move(filter), skip_decode_check);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 BlockFilter::BlockFilter(BlockFilterType filter_type, const CBlock& block, const CBlockUndo& block_undo)
@@ -361,29 +246,10 @@ bool BlockFilter::BuildParams(GCSFilter::Params& params) const
 
 uint256 BlockFilter::GetHash() const
 {
-<<<<<<< HEAD
-    const std::vector<unsigned char>& data = GetEncodedFilter();
-
-    uint256 result;
-    CHash256().Write(data).Finalize(result);
-    return result;
-=======
     return Hash(GetEncodedFilter());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 uint256 BlockFilter::ComputeHeader(const uint256& prev_header) const
 {
-<<<<<<< HEAD
-    const uint256& filter_hash = GetHash();
-
-    uint256 result;
-    CHash256()
-        .Write(filter_hash)
-        .Write(prev_header)
-        .Finalize(result);
-    return result;
-=======
     return Hash(GetHash(), prev_header);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }

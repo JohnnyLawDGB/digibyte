@@ -1,10 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
-// Copyright (c) 2009-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// Copyright (c) 2009-2022 The Bitcoin Core developers
+// Copyright (c) 2014-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -14,10 +10,7 @@
 #include <serialize.h>
 #include <span.h>
 #include <support/allocators/zeroafterfree.h>
-<<<<<<< HEAD
-=======
 #include <util/overflow.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 #include <algorithm>
 #include <assert.h>
@@ -27,10 +20,6 @@
 #include <limits>
 #include <optional>
 #include <stdint.h>
-<<<<<<< HEAD
-#include <stdio.h>
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <string.h>
 #include <string>
 #include <utility>
@@ -92,10 +81,6 @@ public:
     }
 
     int GetVersion() const { return nVersion; }
-<<<<<<< HEAD
-    int GetType() const { return nType; }
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     size_t size() const { return stream->size(); }
     void ignore(size_t size) { return stream->ignore(size); }
 };
@@ -150,64 +135,13 @@ class CVectorWriter
     {
         return nVersion;
     }
-<<<<<<< HEAD
-    int GetType() const
-    {
-        return nType;
-    }
-=======
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 private:
     const int nVersion;
     std::vector<unsigned char>& vchData;
     size_t nPos;
 };
 
-<<<<<<< HEAD
-/** Minimal stream for reading from an existing vector by reference
- */
-class VectorReader
-{
-private:
-    const int m_type;
-    const int m_version;
-    const std::vector<unsigned char>& m_data;
-    size_t m_pos = 0;
-
-public:
-
-    /**
-     * @param[in]  type Serialization Type
-     * @param[in]  version Serialization Version (including any flags)
-     * @param[in]  data Referenced byte vector to overwrite/append
-     * @param[in]  pos Starting position. Vector index where reads should start.
-     */
-    VectorReader(int type, int version, const std::vector<unsigned char>& data, size_t pos)
-        : m_type(type), m_version(version), m_data(data), m_pos(pos)
-    {
-        if (m_pos > m_data.size()) {
-            throw std::ios_base::failure("VectorReader(...): end of data (m_pos > m_data.size())");
-        }
-    }
-
-    /**
-     * (other params same as above)
-     * @param[in]  args  A list of items to deserialize starting at pos.
-     */
-    template <typename... Args>
-    VectorReader(int type, int version, const std::vector<unsigned char>& data, size_t pos,
-                  Args&&... args)
-        : VectorReader(type, version, data, pos)
-    {
-        ::UnserializeMany(*this, std::forward<Args>(args)...);
-    }
-
-    template<typename T>
-    VectorReader& operator>>(T&& obj)
-    {
-        // Unserialize from this stream
-=======
 /** Minimal stream for reading from an existing byte array by Span.
  */
 class SpanReader
@@ -227,22 +161,11 @@ public:
     template<typename T>
     SpanReader& operator>>(T&& obj)
     {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         ::Unserialize(*this, obj);
         return (*this);
     }
 
     int GetVersion() const { return m_version; }
-<<<<<<< HEAD
-    int GetType() const { return m_type; }
-
-    size_t size() const { return m_data.size() - m_pos; }
-    bool empty() const { return m_data.size() == m_pos; }
-
-    void read(char* dst, size_t n)
-    {
-        if (n == 0) {
-=======
 
     size_t size() const { return m_data.size(); }
     bool empty() const { return m_data.empty(); }
@@ -250,25 +173,15 @@ public:
     void read(Span<std::byte> dst)
     {
         if (dst.size() == 0) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             return;
         }
 
         // Read from the beginning of the buffer
-<<<<<<< HEAD
-        size_t pos_next = m_pos + n;
-        if (pos_next > m_data.size()) {
-            throw std::ios_base::failure("VectorReader::read(): end of data");
-        }
-        memcpy(dst, m_data.data() + m_pos, n);
-        m_pos = pos_next;
-=======
         if (dst.size() > m_data.size()) {
             throw std::ios_base::failure("SpanReader::read(): end of data");
         }
         memcpy(dst.data(), m_data.data(), dst.size());
         m_data = m_data.subspan(dst.size());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 };
 
@@ -282,16 +195,7 @@ class DataStream
 protected:
     using vector_type = SerializeData;
     vector_type vch;
-<<<<<<< HEAD
-    unsigned int nReadPos{0};
-
-    int nType;
-    int nVersion;
-
-=======
     vector_type::size_type m_read_pos{0};
-
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 public:
     typedef vector_type::allocator_type   allocator_type;
     typedef vector_type::size_type        size_type;
@@ -303,28 +207,9 @@ public:
     typedef vector_type::const_iterator   const_iterator;
     typedef vector_type::reverse_iterator reverse_iterator;
 
-<<<<<<< HEAD
-    explicit CDataStream(int nTypeIn, int nVersionIn)
-        : nType{nTypeIn},
-          nVersion{nVersionIn} {}
-
-    explicit CDataStream(Span<const uint8_t> sp, int nTypeIn, int nVersionIn)
-        : vch(sp.data(), sp.data() + sp.size()),
-          nType{nTypeIn},
-          nVersion{nVersionIn} {}
-
-    template <typename... Args>
-    CDataStream(int nTypeIn, int nVersionIn, Args&&... args)
-        : nType{nTypeIn},
-          nVersion{nVersionIn}
-    {
-        ::SerializeMany(*this, std::forward<Args>(args)...);
-    }
-=======
     explicit DataStream() {}
     explicit DataStream(Span<const uint8_t> sp) : DataStream{AsBytes(sp)} {}
     explicit DataStream(Span<const value_type> sp) : vch(sp.data(), sp.data() + sp.size()) {}
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     std::string str() const
     {
@@ -339,84 +224,6 @@ public:
     iterator begin()                                 { return vch.begin() + m_read_pos; }
     const_iterator end() const                       { return vch.end(); }
     iterator end()                                   { return vch.end(); }
-<<<<<<< HEAD
-    size_type size() const                           { return vch.size() - nReadPos; }
-    bool empty() const                               { return vch.size() == nReadPos; }
-    void resize(size_type n, value_type c=0)         { vch.resize(n + nReadPos, c); }
-    void reserve(size_type n)                        { vch.reserve(n + nReadPos); }
-    const_reference operator[](size_type pos) const  { return vch[pos + nReadPos]; }
-    reference operator[](size_type pos)              { return vch[pos + nReadPos]; }
-    void clear()                                     { vch.clear(); nReadPos = 0; }
-    iterator insert(iterator it, const uint8_t x) { return vch.insert(it, x); }
-    void insert(iterator it, size_type n, const uint8_t x) { vch.insert(it, n, x); }
-    value_type* data()                               { return vch.data() + nReadPos; }
-    const value_type* data() const                   { return vch.data() + nReadPos; }
-
-    void insert(iterator it, std::vector<uint8_t>::const_iterator first, std::vector<uint8_t>::const_iterator last)
-    {
-        if (last == first) return;
-        assert(last - first > 0);
-        if (it == vch.begin() + nReadPos && (unsigned int)(last - first) <= nReadPos)
-        {
-            // special case for inserting at the front when there's room
-            nReadPos -= (last - first);
-            memcpy(&vch[nReadPos], &first[0], last - first);
-        }
-        else
-            vch.insert(it, first, last);
-    }
-
-    void insert(iterator it, const char* first, const char* last)
-    {
-        if (last == first) return;
-        assert(last - first > 0);
-        if (it == vch.begin() + nReadPos && (unsigned int)(last - first) <= nReadPos)
-        {
-            // special case for inserting at the front when there's room
-            nReadPos -= (last - first);
-            memcpy(&vch[nReadPos], &first[0], last - first);
-        }
-        else
-            vch.insert(it, first, last);
-    }
-
-    iterator erase(iterator it)
-    {
-        if (it == vch.begin() + nReadPos)
-        {
-            // special case for erasing from the front
-            if (++nReadPos >= vch.size())
-            {
-                // whenever we reach the end, we take the opportunity to clear the buffer
-                nReadPos = 0;
-                return vch.erase(vch.begin(), vch.end());
-            }
-            return vch.begin() + nReadPos;
-        }
-        else
-            return vch.erase(it);
-    }
-
-    iterator erase(iterator first, iterator last)
-    {
-        if (first == vch.begin() + nReadPos)
-        {
-            // special case for erasing from the front
-            if (last == vch.end())
-            {
-                nReadPos = 0;
-                return vch.erase(vch.begin(), vch.end());
-            }
-            else
-            {
-                nReadPos = (last - vch.begin());
-                return last;
-            }
-        }
-        else
-            return vch.erase(first, last);
-    }
-=======
     size_type size() const                           { return vch.size() - m_read_pos; }
     bool empty() const                               { return vch.size() == m_read_pos; }
     void resize(size_type n, value_type c = value_type{}) { vch.resize(n + m_read_pos, c); }
@@ -426,7 +233,6 @@ public:
     void clear()                                     { vch.clear(); m_read_pos = 0; }
     value_type* data()                               { return vch.data() + m_read_pos; }
     const value_type* data() const                   { return vch.data() + m_read_pos; }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     inline void Compact()
     {
@@ -438,15 +244,6 @@ public:
     {
         // Total rewind if no size is passed
         if (!n) {
-<<<<<<< HEAD
-            nReadPos = 0;
-            return true;
-        }
-        // Rewind by n characters if the buffer hasn't been compacted yet
-        if (*n > nReadPos)
-            return false;
-        nReadPos -= *n;
-=======
             m_read_pos = 0;
             return true;
         }
@@ -454,7 +251,6 @@ public:
         if (*n > m_read_pos)
             return false;
         m_read_pos -= *n;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         return true;
     }
 

@@ -1,42 +1,10 @@
-<<<<<<< HEAD
 // Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
-// Copyright (c) 2015-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// Copyright (c) 2014-2022 The DigiByte Core developers
 // Copyright (c) 2017 The Zcash developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <torcontrol.h>
-<<<<<<< HEAD
-
-#include <chainparams.h>
-#include <chainparamsbase.h>
-#include <compat.h>
-#include <crypto/hmac_sha256.h>
-#include <net.h>
-#include <netaddress.h>
-#include <netbase.h>
-#include <util/readwritefile.h>
-#include <util/strencodings.h>
-#include <util/system.h>
-#include <util/thread.h>
-#include <util/time.h>
-
-#include <deque>
-#include <functional>
-#include <set>
-#include <stdlib.h>
-#include <vector>
-
-#include <boost/signals2/signal.hpp>
-#include <boost/algorithm/string/split.hpp>
-#include <boost/algorithm/string/classification.hpp>
-#include <boost/algorithm/string/replace.hpp>
-
-#include <event2/bufferevent.h>
-=======
 
 #include <chainparams.h>
 #include <chainparamsbase.h>
@@ -69,7 +37,6 @@
 #include <utility>
 #include <vector>
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <event2/buffer.h>
 #include <event2/bufferevent.h>
 #include <event2/event.h>
@@ -99,13 +66,8 @@ static const uint16_t DEFAULT_TOR_SOCKS_PORT = 9050;
 
 /****** Low-level TorControlConnection ********/
 
-<<<<<<< HEAD
-TorControlConnection::TorControlConnection(struct event_base *_base):
-    base(_base), b_conn(nullptr)
-=======
 TorControlConnection::TorControlConnection(struct event_base* _base)
     : base(_base)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
 }
 
@@ -181,13 +143,6 @@ bool TorControlConnection::Connect(const std::string& tor_control_center, const 
 {
     if (b_conn) {
         Disconnect();
-<<<<<<< HEAD
-    // Parse tor_control_center address:port
-    struct sockaddr_storage connect_to_addr;
-    int connect_to_addrlen = sizeof(connect_to_addr);
-    if (evutil_parse_sockaddr_port(tor_control_center.c_str(),
-        (struct sockaddr*)&connect_to_addr, &connect_to_addrlen)<0) {
-=======
     }
 
     const std::optional<CService> control_service{Lookup(tor_control_center, DEFAULT_TOR_CONTROL_PORT, fNameLookup)};
@@ -199,7 +154,6 @@ bool TorControlConnection::Connect(const std::string& tor_control_center, const 
     struct sockaddr_storage control_address;
     socklen_t control_address_len = sizeof(control_address);
     if (!control_service.value().GetSockAddr(reinterpret_cast<struct sockaddr*>(&control_address), &control_address_len)) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         LogPrintf("tor: Error parsing socket address %s\n", tor_control_center);
         return false;
     }
@@ -215,11 +169,7 @@ bool TorControlConnection::Connect(const std::string& tor_control_center, const 
     this->disconnected = _disconnected;
 
     // Finally, connect to tor_control_center
-<<<<<<< HEAD
-    if (bufferevent_socket_connect(b_conn, (struct sockaddr*)&connect_to_addr, connect_to_addrlen) < 0) {
-=======
     if (bufferevent_socket_connect(b_conn, reinterpret_cast<struct sockaddr*>(&control_address), control_address_len) < 0) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         LogPrintf("tor: Error connecting to address %s\n", tor_control_center);
         return false;
     }
@@ -367,12 +317,7 @@ std::map<std::string,std::string> ParseTorReplyMapping(const std::string &s)
 
 TorController::TorController(struct event_base* _base, const std::string& tor_control_center, const CService& target):
     base(_base),
-<<<<<<< HEAD
-    m_tor_control_center(tor_control_center), conn(base), reconnect(true), reconnect_ev(0),
-    reconnect_timeout(RECONNECT_TIMEOUT_START),
-=======
     m_tor_control_center(tor_control_center), conn(base), reconnect(true), reconnect_timeout(RECONNECT_TIMEOUT_START),
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     m_target(target)
 {
     reconnect_ev = event_new(base, -1, 0, reconnect_cb, this);
@@ -489,11 +434,7 @@ void TorController::add_onion_cb(TorControlConnection& _conn, const TorControlRe
             return;
         }
         service = LookupNumeric(std::string(service_id+".onion"), Params().GetDefaultPort());
-<<<<<<< HEAD
-        LogPrintf("tor: Got service ID %s, advertising service %s\n", service_id, service.ToString());
-=======
         LogPrintfCategory(BCLog::TOR, "Got service ID %s, advertising service %s\n", service_id, service.ToStringAddrPort());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         if (WriteBinaryFile(GetPrivateKeyFile(), private_key)) {
             LogPrint(BCLog::TOR, "Cached service private key to %s\n", fs::PathToString(GetPrivateKeyFile()));
         } else {
@@ -516,14 +457,7 @@ void TorController::auth_cb(TorControlConnection& _conn, const TorControlReply& 
         // Now that we know Tor is running setup the proxy for onion addresses
         // if -onion isn't set to something else.
         if (gArgs.GetArg("-onion", "") == "") {
-<<<<<<< HEAD
-            CService resolved(LookupNumeric("127.0.0.1", 9050));
-            proxyType addrOnion = proxyType(resolved, true);
-            SetProxy(NET_ONION, addrOnion);
-            SetReachable(NET_ONION, true);
-=======
             _conn.Command("GETINFO net/listeners/socks", std::bind(&TorController::get_socks_cb, this, std::placeholders::_1, std::placeholders::_2));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
 
         // Finally - now create the service
@@ -532,11 +466,7 @@ void TorController::auth_cb(TorControlConnection& _conn, const TorControlReply& 
         }
         // Request onion service, redirect port.
         // Note that the 'virtual' port is always the default port to avoid decloaking nodes using other ports.
-<<<<<<< HEAD
-        _conn.Command(strprintf("ADD_ONION %s Port=%i,%s", private_key, Params().GetDefaultPort(), m_target.ToStringIPPort()),
-=======
         _conn.Command(strprintf("ADD_ONION %s Port=%i,%s", private_key, Params().GetDefaultPort(), m_target.ToStringAddrPort()),
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             std::bind(&TorController::add_onion_cb, this, std::placeholders::_1, std::placeholders::_2));
     } else {
         LogPrintf("tor: Authentication failed\n");
@@ -645,23 +575,14 @@ void TorController::protocolinfo_cb(TorControlConnection& _conn, const TorContro
         std::string torpassword = gArgs.GetArg("-torpassword", "");
         if (!torpassword.empty()) {
             if (methods.count("HASHEDPASSWORD")) {
-<<<<<<< HEAD
-                LogPrint(BCLog::TOR, "tor: Using HASHEDPASSWORD authentication\n");
-                boost::replace_all(torpassword, "\"", "\\\"");
-=======
                 LogPrint(BCLog::TOR, "Using HASHEDPASSWORD authentication\n");
                 ReplaceAll(torpassword, "\"", "\\\"");
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 _conn.Command("AUTHENTICATE \"" + torpassword + "\"", std::bind(&TorController::auth_cb, this, std::placeholders::_1, std::placeholders::_2));
             } else {
                 LogPrintf("tor: Password provided with -torpassword, but HASHEDPASSWORD authentication is not available\n");
             }
         } else if (methods.count("NULL")) {
-<<<<<<< HEAD
-            LogPrint(BCLog::TOR, "tor: Using NULL authentication\n");
-=======
             LogPrint(BCLog::TOR, "Using NULL authentication\n");
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             _conn.Command("AUTHENTICATE", std::bind(&TorController::auth_cb, this, std::placeholders::_1, std::placeholders::_2));
         } else if (methods.count("SAFECOOKIE")) {
             // Cookie: hexdump -e '32/1 "%02x""\n"'  ~/.tor/control_auth_cookie
@@ -671,11 +592,7 @@ void TorController::protocolinfo_cb(TorControlConnection& _conn, const TorContro
                 // _conn.Command("AUTHENTICATE " + HexStr(status_cookie.second), std::bind(&TorController::auth_cb, this, std::placeholders::_1, std::placeholders::_2));
                 cookie = std::vector<uint8_t>(status_cookie.second.begin(), status_cookie.second.end());
                 clientNonce = std::vector<uint8_t>(TOR_NONCE_SIZE, 0);
-<<<<<<< HEAD
-                GetRandBytes(clientNonce.data(), TOR_NONCE_SIZE);
-=======
                 GetRandBytes(clientNonce);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 _conn.Command("AUTHCHALLENGE SAFECOOKIE " + HexStr(clientNonce), std::bind(&TorController::authchallenge_cb, this, std::placeholders::_1, std::placeholders::_2));
             } else {
                 if (status_cookie.first) {
@@ -711,11 +628,7 @@ void TorController::disconnected_cb(TorControlConnection& _conn)
     if (!reconnect)
         return;
 
-<<<<<<< HEAD
-    LogPrint(BCLog::TOR, "tor: Not connected to Tor control port %s, trying to reconnect\n", m_tor_control_center);
-=======
     LogPrint(BCLog::TOR, "Not connected to Tor control port %s, trying to reconnect\n", m_tor_control_center);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // Single-shot timer for reconnect. Use exponential backoff.
     struct timeval time = MillisToTimeval(int64_t(reconnect_timeout * 1000.0));

@@ -1,9 +1,5 @@
-<<<<<<< HEAD
-// Copyright (c) 2015-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
-// Copyright (c) 2015-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// Copyright (c) 2015-2022 The Bitcoin Core developers
+// Copyright (c) 2014-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -14,24 +10,6 @@
 #include <httpserver.h>
 
 #include <chainparamsbase.h>
-<<<<<<< HEAD
-#include <compat.h>
-#include <netbase.h>
-#include <node/ui_interface.h>
-#include <rpc/protocol.h> // For HTTP status codes
-#include <shutdown.h>
-#include <sync.h>
-#include <util/strencodings.h>
-#include <util/system.h>
-#include <util/threadnames.h>
-#include <util/translation.h>
-
-#include <deque>
-#include <memory>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string>
-=======
 #include <common/args.h>
 #include <compat/compat.h>
 #include <logging.h>
@@ -53,7 +31,6 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -101,11 +78,7 @@ private:
     Mutex cs;
     std::condition_variable cond GUARDED_BY(cs);
     std::deque<std::unique_ptr<WorkItem>> queue GUARDED_BY(cs);
-<<<<<<< HEAD
-    bool running GUARDED_BY(cs);
-=======
     bool running GUARDED_BY(cs){true};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     const size_t maxDepth;
 
 public:
@@ -174,11 +147,6 @@ static std::vector<CSubNet> rpc_allow_subnets;
 //! Work queue for handling longer requests off the event loop thread
 static std::unique_ptr<WorkQueue<HTTPClosure>> g_work_queue{nullptr};
 //! Handlers for (sub)paths
-<<<<<<< HEAD
-static std::vector<HTTPPathHandler> pathHandlers;
-//! Bound listening sockets
-static std::vector<evhttp_bound_socket *> boundSockets;
-=======
 static GlobalMutex g_httppathhandlers_mutex;
 static std::vector<HTTPPathHandler> pathHandlers GUARDED_BY(g_httppathhandlers_mutex);
 //! Bound listening sockets
@@ -238,7 +206,6 @@ public:
 };
 //! Track active requests
 static HTTPRequestTracker g_requests;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 /** Check if a network address is allowed to access the HTTP server */
 static bool ClientAllowed(const CNetAddr& netaddr)
@@ -324,11 +291,7 @@ static void http_request_cb(struct evhttp_request* req, void* arg)
     // Early address-based allow check
     if (!ClientAllowed(hreq->GetPeer())) {
         LogPrint(BCLog::HTTP, "HTTP request from %s rejected: Client network is not allowed RPC access\n",
-<<<<<<< HEAD
-                 hreq->GetPeer().ToString());
-=======
                  hreq->GetPeer().ToStringAddrPort());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         hreq->WriteReply(HTTP_FORBIDDEN);
         return;
     }
@@ -336,21 +299,13 @@ static void http_request_cb(struct evhttp_request* req, void* arg)
     // Early reject unknown HTTP methods
     if (hreq->GetRequestMethod() == HTTPRequest::UNKNOWN) {
         LogPrint(BCLog::HTTP, "HTTP request from %s rejected: Unknown HTTP request method\n",
-<<<<<<< HEAD
-                 hreq->GetPeer().ToString());
-=======
                  hreq->GetPeer().ToStringAddrPort());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         hreq->WriteReply(HTTP_BAD_METHOD);
         return;
     }
 
     LogPrint(BCLog::HTTP, "Received a %s request for %s from %s\n",
-<<<<<<< HEAD
-             RequestMethodString(hreq->GetRequestMethod()), SanitizeString(hreq->GetURI(), SAFE_CHARS_URI).substr(0, 100), hreq->GetPeer().ToString());
-=======
              RequestMethodString(hreq->GetRequestMethod()), SanitizeString(hreq->GetURI(), SAFE_CHARS_URI).substr(0, 100), hreq->GetPeer().ToStringAddrPort());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // Find registered handler for prefix
     std::string strURI = hreq->GetURI();
@@ -405,22 +360,13 @@ static void ThreadHTTP(struct event_base* base)
 /** Bind HTTP server to specified addresses */
 static bool HTTPBindAddresses(struct evhttp* http)
 {
-<<<<<<< HEAD
-    uint16_t http_port{static_cast<uint16_t>(gArgs.GetArg("-rpcport", BaseParams().RPCPort()))};
-=======
     uint16_t http_port{static_cast<uint16_t>(gArgs.GetIntArg("-rpcport", BaseParams().RPCPort()))};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     std::vector<std::pair<std::string, uint16_t>> endpoints;
 
     // Determine what addresses to bind to
     if (!(gArgs.IsArgSet("-rpcallowip") && gArgs.IsArgSet("-rpcbind"))) { // Default to loopback if not allowing external IPs
-<<<<<<< HEAD
-        endpoints.push_back(std::make_pair("::1", http_port));
-        endpoints.push_back(std::make_pair("127.0.0.1", http_port));
-=======
         endpoints.emplace_back("::1", http_port);
         endpoints.emplace_back("127.0.0.1", http_port);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         if (gArgs.IsArgSet("-rpcallowip")) {
             LogPrintf("WARNING: option -rpcallowip was specified without -rpcbind; this doesn't usually make sense\n");
         }
@@ -441,13 +387,8 @@ static bool HTTPBindAddresses(struct evhttp* http)
         LogPrintf("Binding RPC on address %s port %i\n", i->first, i->second);
         evhttp_bound_socket *bind_handle = evhttp_bind_socket_with_handle(http, i->first.empty() ? nullptr : i->first.c_str(), i->second);
         if (bind_handle) {
-<<<<<<< HEAD
-            CNetAddr addr;
-            if (i->first.empty() || (LookupHost(i->first, addr, false) && addr.IsBindAny())) {
-=======
             const std::optional<CNetAddr> addr{LookupHost(i->first, false)};
             if (i->first.empty() || (addr.has_value() && addr->IsBindAny())) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 LogPrintf("WARNING: the RPC server is not safe to expose to untrusted networks such as the public internet\n");
             }
             boundSockets.push_back(bind_handle);
@@ -493,17 +434,8 @@ bool InitHTTPServer()
 
     // Redirect libevent's logging to our own log
     event_set_log_callback(&libevent_log_cb);
-<<<<<<< HEAD
-    // Update libevent's log handling. Returns false if our version of
-    // libevent doesn't support debug logging, in which case we should
-    // clear the BCLog::LIBEVENT flag.
-    if (!UpdateHTTPServerLogging(LogInstance().WillLogCategory(BCLog::LIBEVENT))) {
-        LogInstance().DisableCategory(BCLog::LIBEVENT);
-    }
-=======
     // Update libevent's log handling.
     UpdateHTTPServerLogging(LogInstance().WillLogCategory(BCLog::LIBEVENT));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 #ifdef WIN32
     evthread_use_windows_threads();
@@ -556,13 +488,8 @@ static std::vector<std::thread> g_thread_http_workers;
 void StartHTTPServer()
 {
     LogPrint(BCLog::HTTP, "Starting HTTP server\n");
-<<<<<<< HEAD
-    int rpcThreads = std::max((long)gArgs.GetArg("-rpcthreads", DEFAULT_HTTP_THREADS), 1L);
-    LogPrintf("HTTP: starting %d worker threads\n", rpcThreads);
-=======
     int rpcThreads = std::max((long)gArgs.GetIntArg("-rpcthreads", DEFAULT_HTTP_THREADS), 1L);
     LogPrintfCategory(BCLog::HTTP, "starting %d worker threads\n", rpcThreads);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     g_thread_http = std::thread(ThreadHTTP, eventBase);
 
     for (int i = 0; i < rpcThreads; i++) {
@@ -591,8 +518,6 @@ void StopHTTPServer()
             thread.join();
         }
         g_thread_http_workers.clear();
-<<<<<<< HEAD
-=======
     }
     // Unlisten sockets, these are what make the event loop running, which means
     // that after this and all connections are closed the event loop will quit.
@@ -614,26 +539,10 @@ void StopHTTPServer()
             evhttp_free(eventHTTP);
             eventHTTP = nullptr;
         }, nullptr, nullptr);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
-    // Unlisten sockets, these are what make the event loop running, which means
-    // that after this and all connections are closed the event loop will quit.
-    for (evhttp_bound_socket *socket : boundSockets) {
-        evhttp_del_accept_socket(eventHTTP, socket);
-    }
-    boundSockets.clear();
     if (eventBase) {
         LogPrint(BCLog::HTTP, "Waiting for HTTP event thread to exit\n");
         if (g_thread_http.joinable()) g_thread_http.join();
-<<<<<<< HEAD
-    }
-    if (eventHTTP) {
-        evhttp_free(eventHTTP);
-        eventHTTP = nullptr;
-    }
-    if (eventBase) {
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         event_base_free(eventBase);
         eventBase = nullptr;
     }

@@ -54,13 +54,7 @@ using node::UpdateTime;
  * If 'height' is -1, compute the estimate from current chain tip.
  * If 'height' is a valid block height, compute the estimate at the time when a given block was found.
  */
-<<<<<<< HEAD
 static UniValue GetNetworkHashPS(int lookup, int height, const CChain& active_chain, int algo) {
-    const CBlockIndex* pb = active_chain.Tip();
-
-    if (height >= 0 && height < active_chain.Height()) {
-=======
-static UniValue GetNetworkHashPS(int lookup, int height, const CChain& active_chain) {
     if (lookup < -1 || lookup == 0) {
         throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid nblocks. Must be a positive number or -1.");
     }
@@ -72,7 +66,6 @@ static UniValue GetNetworkHashPS(int lookup, int height, const CChain& active_ch
     const CBlockIndex* pb = active_chain.Tip();
 
     if (height >= 0) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         pb = active_chain[height];
     }
 
@@ -87,16 +80,13 @@ static UniValue GetNetworkHashPS(int lookup, int height, const CChain& active_ch
     if (lookup > pb->nHeight)
         lookup = pb->nHeight;
 
-<<<<<<< HEAD
+    // DigiByte: Find the last block for this algorithm
     while(pb->GetAlgo() != algo) {
         assert (pb->pprev);
         pb = pb->pprev;
     }
 
-    const CBlockIndex *pb0 = pb;
-=======
     const CBlockIndex* pb0 = pb;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     int64_t minTime = pb0->GetBlockTime();
     int64_t maxTime = minTime;
     arith_uint256 workDiff = GetBlockProof(*pb0, algo); 
@@ -214,7 +204,7 @@ static bool getScriptFromDescriptor(const std::string& descriptor, CScript& scri
         std::vector<CScript> scripts;
         if (!desc->Expand(0, key_provider, scripts, provider)) {
 <<<<<<< HEAD
-            throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, strprintf("Cannot derive script without private keys"));
+            throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Cannot derive script without private keys");
 =======
             throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Cannot derive script without private keys");
 >>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
@@ -294,26 +284,12 @@ static RPCHelpMan generate()
 static RPCHelpMan generatetoaddress()
 {
     return RPCHelpMan{"generatetoaddress",
-<<<<<<< HEAD
-                "\nMine blocks immediately to a specified address (before the RPC call returns)\n",
-                {
-                    {"nblocks", RPCArg::Type::NUM, RPCArg::Optional::NO, "How many blocks are generated immediately."},
-                    {"address", RPCArg::Type::STR, RPCArg::Optional::NO, "The address to send the newly generated digibyte to."},
-                    {"maxtries", RPCArg::Type::NUM, RPCArg::Default{DEFAULT_MAX_TRIES}, "How many iterations to try."},
-                    {"algo", RPCArg::Type::STR, RPCArg::Default{GetAlgoName(ALGO_SCRYPT)}, "Which mining algorithm to use."},
-                },
-                RPCResult{
-                    RPCResult::Type::ARR, "", "hashes of blocks generated",
-                    {
-                        {RPCResult::Type::STR_HEX, "", "blockhash"},
-                    }},
-                RPCExamples{
-=======
         "Mine to a specified address and return the block hashes.",
          {
              {"nblocks", RPCArg::Type::NUM, RPCArg::Optional::NO, "How many blocks are generated."},
              {"address", RPCArg::Type::STR, RPCArg::Optional::NO, "The address to send the newly generated digibyte to."},
              {"maxtries", RPCArg::Type::NUM, RPCArg::Default{DEFAULT_MAX_TRIES}, "How many iterations to try."},
+             {"algo", RPCArg::Type::STR, RPCArg::Default{GetAlgoName(ALGO_SCRYPT)}, "Which mining algorithm to use."},
          },
          RPCResult{
              RPCResult::Type::ARR, "", "hashes of blocks generated",
@@ -321,7 +297,6 @@ static RPCHelpMan generatetoaddress()
                  {RPCResult::Type::STR_HEX, "", "blockhash"},
              }},
          RPCExamples{
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             "\nGenerate 11 blocks to myaddress\n"
             + HelpExampleCli("generatetoaddress", "11 \"myaddress\"")
             + "If you are using the " PACKAGE_NAME " wallet, you can get a new address to send the newly generated digibyte to with:\n"
@@ -329,14 +304,9 @@ static RPCHelpMan generatetoaddress()
                 },
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
 {
-<<<<<<< HEAD
-    const int num_blocks{request.params[0].get_int()};
-    const uint64_t max_tries{request.params[2].isNull() ? DEFAULT_MAX_TRIES : request.params[2].get_int()};
-    const int algo{request.params[3].isNull() ? miningAlgo : GetAlgoByName(request.params[3].get_str(), miningAlgo)};
-=======
     const int num_blocks{request.params[0].getInt<int>()};
     const uint64_t max_tries{request.params[2].isNull() ? DEFAULT_MAX_TRIES : request.params[2].getInt<int>()};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+    const int algo{request.params[3].isNull() ? miningAlgo : GetAlgoByName(request.params[3].get_str(), miningAlgo)};
 
     CTxDestination destination = DecodeDestination(request.params[1].get_str());
     if (!IsValidDestination(destination)) {
@@ -349,11 +319,7 @@ static RPCHelpMan generatetoaddress()
 
     CScript coinbase_script = GetScriptForDestination(destination);
 
-<<<<<<< HEAD
     return generateBlocks(chainman, mempool, coinbase_script, num_blocks, max_tries, algo);
-=======
-    return generateBlocks(chainman, mempool, coinbase_script, num_blocks, max_tries);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 },
     };
 }
@@ -361,11 +327,7 @@ static RPCHelpMan generatetoaddress()
 static RPCHelpMan generateblock()
 {
     return RPCHelpMan{"generateblock",
-<<<<<<< HEAD
-        "\nMine a block with a set of ordered transactions immediately to a specified address or descriptor (before the RPC call returns)\n",
-=======
         "Mine a set of ordered transactions to a specified address or descriptor and return the block hash.",
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         {
             {"output", RPCArg::Type::STR, RPCArg::Optional::NO, "The address or descriptor to send the newly generated digibyte to."},
             {"transactions", RPCArg::Type::ARR, RPCArg::Optional::NO, "An array of hex strings which are either txids or raw transactions.\n"
@@ -375,19 +337,13 @@ static RPCHelpMan generateblock()
                     {"rawtx/txid", RPCArg::Type::STR_HEX, RPCArg::Optional::OMITTED, ""},
                 },
             },
-<<<<<<< HEAD
-=======
             {"submit", RPCArg::Type::BOOL, RPCArg::Default{true}, "Whether to submit the block before the RPC call returns or to return it as hex."},
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         },
         RPCResult{
             RPCResult::Type::OBJ, "", "",
             {
                 {RPCResult::Type::STR_HEX, "hash", "hash of generated block"},
-<<<<<<< HEAD
-=======
                 {RPCResult::Type::STR_HEX, "hex", /*optional=*/true, "hex of generated block, only present when submit=false"},
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             }
         },
         RPCExamples{
@@ -436,25 +392,15 @@ static RPCHelpMan generateblock()
         }
     }
 
-<<<<<<< HEAD
-    CChainParams chainparams(Params());
-=======
     const bool process_new_block{request.params[2].isNull() ? true : request.params[2].get_bool()};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     CBlock block;
 
     ChainstateManager& chainman = EnsureChainman(node);
     {
         LOCK(cs_main);
 
-<<<<<<< HEAD
-        CTxMemPool empty_mempool;
-
-//  Passing Generate Default DGB BLock Type of Scrypt
-        std::unique_ptr<CBlockTemplate> blocktemplate(BlockAssembler(chainman.ActiveChainstate(), empty_mempool, chainparams).CreateNewBlock(coinbase_script,ALGO_SCRYPT));
-=======
-        std::unique_ptr<CBlockTemplate> blocktemplate(BlockAssembler{chainman.ActiveChainstate(), nullptr}.CreateNewBlock(coinbase_script));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+        // DigiByte: Use Scrypt as default algorithm for generateblock
+        std::unique_ptr<CBlockTemplate> blocktemplate(BlockAssembler{chainman.ActiveChainstate(), nullptr}.CreateNewBlock(coinbase_script, ALGO_SCRYPT));
         if (!blocktemplate) {
             throw JSONRPCError(RPC_INTERNAL_ERROR, "Couldn't create new block");
         }
@@ -471,33 +417,23 @@ static RPCHelpMan generateblock()
         LOCK(cs_main);
 
         BlockValidationState state;
-<<<<<<< HEAD
-        if (!TestBlockValidity(state, chainparams, chainman.ActiveChainstate(), block, chainman.m_blockman.LookupBlockIndex(block.hashPrevBlock), false, false)) {
-=======
         if (!TestBlockValidity(state, chainman.GetParams(), chainman.ActiveChainstate(), block, chainman.m_blockman.LookupBlockIndex(block.hashPrevBlock), GetAdjustedTime, false, false)) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             throw JSONRPCError(RPC_VERIFY_ERROR, strprintf("TestBlockValidity failed: %s", state.ToString()));
         }
     }
 
-<<<<<<< HEAD
-    uint256 block_hash;
-    uint64_t max_tries{DEFAULT_MAX_TRIES};
-    unsigned int extra_nonce{0};
-
-    if (!GenerateBlock(chainman, block, max_tries, extra_nonce, block_hash) || block_hash.IsNull()) {
-=======
     std::shared_ptr<const CBlock> block_out;
     uint64_t max_tries{DEFAULT_MAX_TRIES};
 
     if (!GenerateBlock(chainman, block, max_tries, block_out, process_new_block) || !block_out) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         throw JSONRPCError(RPC_MISC_ERROR, "Failed to make block.");
     }
 
     UniValue obj(UniValue::VOBJ);
-<<<<<<< HEAD
-    obj.pushKV("hash", block_hash.GetHex());
+    obj.pushKV("hash", block_out->GetHash().GetHex());
+    if (!process_new_block) {
+        obj.pushKV("hex", EncodeHexBlock(*block_out));
+    }
     return obj;
 },
     };

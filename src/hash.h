@@ -1,10 +1,5 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
 // Copyright (c) 2009-2022 The Bitcoin Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -143,8 +138,6 @@ public:
         return ReadLE64(result.begin());
     }
 
-<<<<<<< HEAD
-=======
     template <typename T>
     HashWriter& operator<<(const T& obj)
     {
@@ -163,7 +156,6 @@ public:
 
     int GetVersion() const { return nVersion; }
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     template<typename T>
     CHashWriter& operator<<(const T& obj) {
         ::Serialize(*this, obj);
@@ -212,8 +204,6 @@ class HashedSourceWriter : public HashWriter
 private:
     Source& m_source;
 
-<<<<<<< HEAD
-=======
 public:
     explicit HashedSourceWriter(Source& source LIFETIMEBOUND) : HashWriter{}, m_source{source} {}
 
@@ -231,7 +221,6 @@ public:
     }
 };
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 /** Single-SHA256 a 32-byte input (represented as uint256). */
 [[nodiscard]] uint256 SHA256Uint256(const uint256& input);
 
@@ -239,16 +228,6 @@ unsigned int MurmurHash3(unsigned int nHashSeed, Span<const unsigned char> vData
 
 void BIP32Hash(const ChainCode &chainCode, unsigned int nChild, unsigned char header, const unsigned char data[32], unsigned char output[64]);
 
-<<<<<<< HEAD
-/** Return a CHashWriter primed for tagged hashes (as specified in BIP 340).
- *
- * The returned object will have SHA256(tag) written to it twice (= 64 bytes).
- * A tagged hash can be computed by feeding the message into this object, and
- * then calling CHashWriter::GetSHA256().
- */
-CHashWriter TaggedHash(const std::string& tag);
-
-=======
 /** Return a HashWriter primed for tagged hashes (as specified in BIP 340).
  *
  * The returned object will have SHA256(tag) written to it twice (= 64 bytes).
@@ -264,6 +243,4 @@ inline uint160 RIPEMD160(Span<const unsigned char> data)
     CRIPEMD160().Write(data.data(), data.size()).Finalize(result.begin());
     return result;
 }
-
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #endif // DIGIBYTE_HASH_H

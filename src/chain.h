@@ -1,10 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
-// Copyright (c) 2009-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// Copyright (c) 2009-2022 The Bitcoin Core developers
+// Copyright (c) 2014-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -14,15 +10,11 @@
 #include <arith_uint256.h>
 #include <consensus/params.h>
 #include <flatfile.h>
-<<<<<<< HEAD
-#include <primitives/block.h>
-#include <pow.h>
-#include <tinyformat.h>
-=======
 #include <kernel/cs_main.h>
 #include <primitives/block.h>
+#include <pow.h>
 #include <sync.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+#include <tinyformat.h>
 #include <uint256.h>
 #include <util/time.h>
 
@@ -72,39 +64,16 @@ public:
         READWRITE(VARINT(obj.nTimeLast));
     }
 
-<<<<<<< HEAD
-    void SetNull() {
-         nBlocks = 0;
-         nSize = 0;
-         nUndoSize = 0;
-         nHeightFirst = 0;
-         nHeightLast = 0;
-         nTimeFirst = 0;
-         nTimeLast = 0;
-    }
-
-    CBlockFileInfo() {
-         SetNull();
-    }
-=======
     CBlockFileInfo() {}
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     std::string ToString() const;
 
     /** update statistics (does not update nSize) */
-<<<<<<< HEAD
-    void AddBlock(unsigned int nHeightIn, uint64_t nTimeIn) {
-        if (nBlocks==0 || nHeightFirst > nHeightIn)
-            nHeightFirst = nHeightIn;
-        if (nBlocks==0 || nTimeFirst > nTimeIn)
-=======
     void AddBlock(unsigned int nHeightIn, uint64_t nTimeIn)
     {
         if (nBlocks == 0 || nHeightFirst > nHeightIn)
             nHeightFirst = nHeightIn;
         if (nBlocks == 0 || nTimeFirst > nTimeIn)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             nTimeFirst = nTimeIn;
         nBlocks++;
         if (nHeightIn > nHeightLast)
@@ -191,15 +160,6 @@ public:
     int nHeight{0};
 
     //! Which # file this block is stored in (blk?????.dat)
-<<<<<<< HEAD
-    int nFile{0};
-
-    //! Byte offset within blk?????.dat where this block's data is stored
-    unsigned int nDataPos{0};
-
-    //! Byte offset within rev?????.dat where this block's undo data is stored
-    unsigned int nUndoPos{0};
-=======
     int nFile GUARDED_BY(::cs_main){0};
 
     //! Byte offset within blk?????.dat where this block's data is stored
@@ -207,7 +167,6 @@ public:
 
     //! Byte offset within rev?????.dat where this block's undo data is stored
     unsigned int nUndoPos GUARDED_BY(::cs_main){0};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     //! (memory only) Total amount of work (expected number of hashes) in the chain up to and including this block
     arith_uint256 nChainWork{};
@@ -221,11 +180,7 @@ public:
 
     //! (memory only) Number of transactions in the chain up to and including this block.
     //! This value will be non-zero only if and only if transactions for this block and all its parents are available.
-<<<<<<< HEAD
-    //! Change to 64-bit type when necessary; won't happen before 2030
-=======
     //! Change to 64-bit type before 2024 (assuming worst case of 60 byte transactions).
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     //!
     //! Note: this value is faked during use of a UTXO snapshot because we don't
     //! have the underlying block data available during snapshot load.
@@ -239,11 +194,7 @@ public:
     //! load to avoid the block index being spuriously rewound.
     //! @sa NeedsRedownload
     //! @sa ActivateSnapshot
-<<<<<<< HEAD
-    uint32_t nStatus{0};
-=======
     uint32_t nStatus GUARDED_BY(::cs_main){0};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     //! block header
     int32_t nVersion{0};

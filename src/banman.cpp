@@ -1,25 +1,16 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The DigiByte Core developers
-=======
 // Copyright (c) 2009-2022 The Bitcoin Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// Copyright (c) 2014-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <banman.h>
 
-<<<<<<< HEAD
-#include <netaddress.h>
-#include <node/ui_interface.h>
-#include <util/system.h>
-=======
 #include <common/system.h>
 #include <logging.h>
 #include <netaddress.h>
 #include <node/interface_ui.h>
 #include <sync.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <util/time.h>
 #include <util/translation.h>
 
@@ -27,24 +18,7 @@
 BanMan::BanMan(fs::path ban_file, CClientUIInterface* client_interface, int64_t default_ban_time)
     : m_client_interface(client_interface), m_ban_db(std::move(ban_file)), m_default_ban_time(default_ban_time)
 {
-<<<<<<< HEAD
-    if (m_client_interface) m_client_interface->InitMessage(_("Loading banlist…").translated);
-
-    int64_t n_start = GetTimeMillis();
-    if (m_ban_db.Read(m_banned, m_is_dirty)) {
-        SweepBanned(); // sweep out unused entries
-
-        LogPrint(BCLog::NET, "Loaded %d banned node addresses/subnets  %dms\n", m_banned.size(),
-                 GetTimeMillis() - n_start);
-    } else {
-        LogPrintf("Recreating the banlist database\n");
-        m_banned = {};
-        m_is_dirty = true;
-    }
-
-=======
     LoadBanlist();
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     DumpBanlist();
 }
 
@@ -53,24 +27,6 @@ BanMan::~BanMan()
     DumpBanlist();
 }
 
-<<<<<<< HEAD
-void BanMan::DumpBanlist()
-{
-    SweepBanned(); // clean unused entries (if bantime has expired)
-
-    if (!BannedSetIsDirty()) return;
-
-    int64_t n_start = GetTimeMillis();
-
-    banmap_t banmap;
-    GetBanned(banmap);
-    if (m_ban_db.Write(banmap)) {
-        SetBannedSetDirty(false);
-    }
-
-    LogPrint(BCLog::NET, "Flushed %d banned node addresses/subnets to disk  %dms\n", banmap.size(),
-             GetTimeMillis() - n_start);
-=======
 void BanMan::LoadBanlist()
 {
     LOCK(m_cs_banned);
@@ -111,7 +67,6 @@ void BanMan::DumpBanlist()
 
     LogPrint(BCLog::NET, "Flushed %d banned node addresses/subnets to disk  %dms\n", banmap.size(),
              Ticks<std::chrono::milliseconds>(SteadyClock::now() - start));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 void BanMan::ClearBanned()
@@ -226,25 +181,6 @@ void BanMan::GetBanned(banmap_t& banmap)
 
 void BanMan::SweepBanned()
 {
-<<<<<<< HEAD
-    int64_t now = GetTime();
-    bool notify_ui = false;
-    {
-        LOCK(m_cs_banned);
-        banmap_t::iterator it = m_banned.begin();
-        while (it != m_banned.end()) {
-            CSubNet sub_net = (*it).first;
-            CBanEntry ban_entry = (*it).second;
-            if (!sub_net.IsValid() || now > ban_entry.nBanUntil) {
-                m_banned.erase(it++);
-                m_is_dirty = true;
-                notify_ui = true;
-                LogPrint(BCLog::NET, "Removed banned node address/subnet: %s\n", sub_net.ToString());
-            } else
-                ++it;
-        }
-    }
-=======
     AssertLockHeld(m_cs_banned);
 
     int64_t now = GetTime();
@@ -263,7 +199,6 @@ void BanMan::SweepBanned()
         }
     }
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     // update UI
     if (notify_ui && m_client_interface) {
         m_client_interface->BannedListChanged();

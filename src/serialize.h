@@ -1,10 +1,5 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
 // Copyright (c) 2009-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -53,15 +48,6 @@ static const unsigned int MAX_VECTOR_ALLOCATE = 5000000;
 struct deserialize_type {};
 constexpr deserialize_type deserialize {};
 
-<<<<<<< HEAD
-//! Safely convert odd char pointer types to standard ones.
-inline char* CharCast(char* c) { return c; }
-inline char* CharCast(unsigned char* c) { return (char*)c; }
-inline const char* CharCast(const char* c) { return c; }
-inline const char* CharCast(const unsigned char* c) { return (const char*)c; }
-
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 /*
  * Lowest-level serialization and conversion.
  */
@@ -88,11 +74,6 @@ template<typename Stream> inline void ser_writedata32be(Stream &s, uint32_t obj)
 {
     obj = htobe32(obj);
     s.write(AsBytes(Span{&obj, 1}));
-}
-template<typename Stream> inline void ser_writedata32be(Stream &s, uint32_t obj)
-{
-    obj = htobe32(obj);
-    s.write((char*)&obj, 4);
 }
 template<typename Stream> inline void ser_writedata64(Stream &s, uint64_t obj)
 {
@@ -126,11 +107,7 @@ template<typename Stream> inline uint32_t ser_readdata32(Stream &s)
 template<typename Stream> inline uint32_t ser_readdata32be(Stream &s)
 {
     uint32_t obj;
-<<<<<<< HEAD
-    s.read((char*)&obj, 4);
-=======
     s.read(AsWritableBytes(Span{&obj, 1}));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     return be32toh(obj);
 }
 template<typename Stream> inline uint64_t ser_readdata64(Stream &s)
@@ -189,16 +166,9 @@ const Out& AsBase(const In& x)
     return x;
 }
 
-<<<<<<< HEAD
-#define READWRITE(...) (::SerReadWriteMany(s, ser_action, __VA_ARGS__))
-#define READWRITEAS(type, obj) (::SerReadWriteMany(s, ser_action, ReadWriteAsHelper<type>(obj)))
-#define SER_READ(obj, code) ::SerRead(s, ser_action, obj, [&](Stream& s, typename std::remove_const<Type>::type& obj) { code; })
-#define SER_WRITE(obj, code) ::SerWrite(s, ser_action, obj, [&](Stream& s, const Type& obj) { code; })
-=======
 #define READWRITE(...) (ser_action.SerReadWriteMany(s, __VA_ARGS__))
 #define SER_READ(obj, code) ser_action.SerRead(s, obj, [&](Stream& s, typename std::remove_const<Type>::type& obj) { code; })
 #define SER_WRITE(obj, code) ser_action.SerWrite(s, obj, [&](Stream& s, const Type& obj) { code; })
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 /**
  * Implement the Ser and Unser methods needed for implementing a formatter (see Using below).
@@ -218,35 +188,6 @@ const Out& AsBase(const In& x)
  */
 #define FORMATTER_METHODS(cls, obj) \
     template<typename Stream> \
-<<<<<<< HEAD
-    static void Ser(Stream& s, const cls& obj) { SerializationOps(obj, s, CSerActionSerialize()); } \
-    template<typename Stream> \
-    static void Unser(Stream& s, cls& obj) { SerializationOps(obj, s, CSerActionUnserialize()); } \
-    template<typename Stream, typename Type, typename Operation> \
-    static inline void SerializationOps(Type& obj, Stream& s, Operation ser_action) \
-
-/**
- * Implement the Serialize and Unserialize methods by delegating to a single templated
- * static method that takes the to-be-(de)serialized object as a parameter. This approach
- * has the advantage that the constness of the object becomes a template parameter, and
- * thus allows a single implementation that sees the object as const for serializing
- * and non-const for deserializing, without casts.
- */
-#define SERIALIZE_METHODS(cls, obj)                                                 \
-    template<typename Stream>                                                       \
-    void Serialize(Stream& s) const                                                 \
-    {                                                                               \
-        static_assert(std::is_same<const cls&, decltype(*this)>::value, "Serialize type mismatch"); \
-        Ser(s, *this);                                                              \
-    }                                                                               \
-    template<typename Stream>                                                       \
-    void Unserialize(Stream& s)                                                     \
-    {                                                                               \
-        static_assert(std::is_same<cls&, decltype(*this)>::value, "Unserialize type mismatch"); \
-        Unser(s, *this);                                                            \
-    }                                                                               \
-    FORMATTER_METHODS(cls, obj)
-=======
     static void Ser(Stream& s, const cls& obj) { SerializationOps(obj, s, ActionSerialize{}); } \
     template<typename Stream> \
     static void Unser(Stream& s, cls& obj) { SerializationOps(obj, s, ActionUnserialize{}); } \
@@ -307,7 +248,6 @@ const Out& AsBase(const In& x)
         static_assert(std::is_same<cls&, decltype(*this)>::value, "Unserialize type mismatch");     \
         Unser(s, *this);                                                                            \
     }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 /**
  * Implement the Serialize and Unserialize methods by delegating to a single templated
@@ -342,17 +282,10 @@ template<typename Stream> inline void Serialize(Stream& s, int32_t a ) { ser_wri
 template<typename Stream> inline void Serialize(Stream& s, uint32_t a) { ser_writedata32(s, a); }
 template<typename Stream> inline void Serialize(Stream& s, int64_t a ) { ser_writedata64(s, a); }
 template<typename Stream> inline void Serialize(Stream& s, uint64_t a) { ser_writedata64(s, a); }
-<<<<<<< HEAD
-template<typename Stream, int N> inline void Serialize(Stream& s, const char (&a)[N]) { s.write(a, N); }
-template<typename Stream, int N> inline void Serialize(Stream& s, const unsigned char (&a)[N]) { s.write(CharCast(a), N); }
-template<typename Stream> inline void Serialize(Stream& s, const Span<const unsigned char>& span) { s.write(CharCast(span.data()), span.size()); }
-template<typename Stream> inline void Serialize(Stream& s, const Span<unsigned char>& span) { s.write(CharCast(span.data()), span.size()); }
-=======
 template<typename Stream, int N> inline void Serialize(Stream& s, const char (&a)[N]) { s.write(MakeByteSpan(a)); }
 template<typename Stream, int N> inline void Serialize(Stream& s, const unsigned char (&a)[N]) { s.write(MakeByteSpan(a)); }
 template <typename Stream, typename B, std::size_t N> void Serialize(Stream& s, const std::array<B, N>& a) { (void)/* force byte-type */UCharCast(a.data()); s.write(MakeByteSpan(a)); }
 template <typename Stream, typename B> void Serialize(Stream& s, Span<B> span) { (void)/* force byte-type */UCharCast(span.data()); s.write(AsBytes(span)); }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 #ifndef CHAR_EQUALS_INT8
 template <typename Stream> void Unserialize(Stream&, char) = delete; // char serialization forbidden. Use uint8_t or int8_t
@@ -366,14 +299,6 @@ template<typename Stream> inline void Unserialize(Stream& s, int32_t& a ) { a = 
 template<typename Stream> inline void Unserialize(Stream& s, uint32_t& a) { a = ser_readdata32(s); }
 template<typename Stream> inline void Unserialize(Stream& s, int64_t& a ) { a = ser_readdata64(s); }
 template<typename Stream> inline void Unserialize(Stream& s, uint64_t& a) { a = ser_readdata64(s); }
-<<<<<<< HEAD
-template<typename Stream, int N> inline void Unserialize(Stream& s, char (&a)[N]) { s.read(a, N); }
-template<typename Stream, int N> inline void Unserialize(Stream& s, unsigned char (&a)[N]) { s.read(CharCast(a), N); }
-template<typename Stream> inline void Unserialize(Stream& s, Span<unsigned char>& span) { s.read(CharCast(span.data()), span.size()); }
-
-template <typename Stream> inline void Serialize(Stream& s, bool a) { uint8_t f = a; ser_writedata8(s, f); }
-template <typename Stream> inline void Unserialize(Stream& s, bool& a) { uint8_t f = ser_readdata8(s); a = f; }
-=======
 template<typename Stream, int N> inline void Unserialize(Stream& s, char (&a)[N]) { s.read(MakeWritableByteSpan(a)); }
 template<typename Stream, int N> inline void Unserialize(Stream& s, unsigned char (&a)[N]) { s.read(MakeWritableByteSpan(a)); }
 template <typename Stream, typename B, std::size_t N> void Unserialize(Stream& s, std::array<B, N>& a) { (void)/* force byte-type */UCharCast(a.data()); s.read(MakeWritableByteSpan(a)); }
@@ -382,7 +307,6 @@ template <typename Stream, typename B> void Unserialize(Stream& s, Span<B> span)
 template <typename Stream> inline void Serialize(Stream& s, bool a) { uint8_t f = a; ser_writedata8(s, f); }
 template <typename Stream> inline void Unserialize(Stream& s, bool& a) { uint8_t f = ser_readdata8(s); a = f; }
 // clang-format on
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 
 /**
@@ -634,17 +558,10 @@ struct CustomUintFormatter
         if (v < 0 || v > MAX) throw std::ios_base::failure("CustomUintFormatter value out of range");
         if (BigEndian) {
             uint64_t raw = htobe64(v);
-<<<<<<< HEAD
-            s.write(((const char*)&raw) + 8 - Bytes, Bytes);
-        } else {
-            uint64_t raw = htole64(v);
-            s.write((const char*)&raw, Bytes);
-=======
             s.write(AsBytes(Span{&raw, 1}).last(Bytes));
         } else {
             uint64_t raw = htole64(v);
             s.write(AsBytes(Span{&raw, 1}).first(Bytes));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
     }
 
@@ -654,25 +571,16 @@ struct CustomUintFormatter
         static_assert(std::numeric_limits<U>::max() >= MAX && std::numeric_limits<U>::min() <= 0, "Assigned type too small");
         uint64_t raw = 0;
         if (BigEndian) {
-<<<<<<< HEAD
-            s.read(((char*)&raw) + 8 - Bytes, Bytes);
-            v = static_cast<I>(be64toh(raw));
-        } else {
-            s.read((char*)&raw, Bytes);
-=======
             s.read(AsWritableBytes(Span{&raw, 1}).last(Bytes));
             v = static_cast<I>(be64toh(raw));
         } else {
             s.read(AsWritableBytes(Span{&raw, 1}).first(Bytes));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             v = static_cast<I>(le64toh(raw));
         }
     }
 };
 
 template<int Bytes> using BigEndianFormatter = CustomUintFormatter<Bytes, true>;
-<<<<<<< HEAD
-=======
 
 /** Formatter for integers in CompactSize format. */
 template<bool RangeCheck>
@@ -727,33 +635,6 @@ protected:
     uint64_t n;
 public:
     explicit CompactSizeWriter(uint64_t n_in) : n(n_in) { }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
-
-/** Formatter for integers in CompactSize format. */
-template<bool RangeCheck>
-struct CompactSizeFormatter
-{
-    template<typename Stream, typename I>
-    void Unser(Stream& s, I& v)
-    {
-        uint64_t n = ReadCompactSize<Stream>(s, RangeCheck);
-        if (n < std::numeric_limits<I>::min() || n > std::numeric_limits<I>::max()) {
-            throw std::ios_base::failure("CompactSize exceeds limit of type");
-        }
-        v = n;
-    }
-<<<<<<< HEAD
-
-    template<typename Stream, typename I>
-    void Ser(Stream& s, I v)
-    {
-        static_assert(std::is_unsigned<I>::value, "CompactSize only supported for unsigned integers");
-        static_assert(std::numeric_limits<I>::max() <= std::numeric_limits<uint64_t>::max(), "CompactSize only supports 64-bit integers and below");
-
-        WriteCompactSize<Stream>(s, v);
-    }
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 };
 
 template<size_t Limit>
@@ -767,11 +648,7 @@ struct LimitedStringFormatter
             throw std::ios_base::failure("String length limit exceeded");
         }
         v.resize(size);
-<<<<<<< HEAD
-        if (size != 0) s.read((char*)v.data(), size);
-=======
         if (size != 0) s.read(MakeWritableByteSpan(v));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     template<typename Stream>
@@ -850,12 +727,6 @@ template<typename Stream, unsigned int N, typename T> inline void Unserialize(St
  * vector
  * vectors of unsigned char are a special case and are intended to be serialized as a single opaque blob.
  */
-<<<<<<< HEAD
-template<typename Stream, typename T, typename A> void Serialize_impl(Stream& os, const std::vector<T, A>& v, const unsigned char&);
-template<typename Stream, typename T, typename A> void Serialize_impl(Stream& os, const std::vector<T, A>& v, const bool&);
-template<typename Stream, typename T, typename A, typename V> void Serialize_impl(Stream& os, const std::vector<T, A>& v, const V&);
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 template<typename Stream, typename T, typename A> inline void Serialize(Stream& os, const std::vector<T, A>& v);
 template<typename Stream, typename T, typename A> inline void Unserialize(Stream& is, std::vector<T, A>& v);
 
@@ -952,46 +823,12 @@ void Unserialize(Stream& is, std::basic_string<C>& str)
 template <typename Stream, unsigned int N, typename T>
 void Serialize(Stream& os, const prevector<N, T>& v)
 {
-<<<<<<< HEAD
-    WriteCompactSize(os, v.size());
-    if (!v.empty())
-        os.write((char*)v.data(), v.size() * sizeof(T));
-}
-
-template<typename Stream, unsigned int N, typename T, typename V>
-void Serialize_impl(Stream& os, const prevector<N, T>& v, const V&)
-{
-    Serialize(os, Using<VectorFormatter<DefaultFormatter>>(v));
-}
-
-template<typename Stream, unsigned int N, typename T>
-inline void Serialize(Stream& os, const prevector<N, T>& v)
-{
-    Serialize_impl(os, v, T());
-}
-
-
-template<typename Stream, unsigned int N, typename T>
-void Unserialize_impl(Stream& is, prevector<N, T>& v, const unsigned char&)
-{
-    // Limit size per read so bogus size value won't cause out of memory
-    v.clear();
-    unsigned int nSize = ReadCompactSize(is);
-    unsigned int i = 0;
-    while (i < nSize)
-    {
-        unsigned int blk = std::min(nSize - i, (unsigned int)(1 + 4999999 / sizeof(T)));
-        v.resize_uninitialized(i + blk);
-        is.read((char*)&v[i], blk * sizeof(T));
-        i += blk;
-=======
     if constexpr (std::is_same_v<T, unsigned char>) {
         WriteCompactSize(os, v.size());
         if (!v.empty())
             os.write(MakeByteSpan(v));
     } else {
         Serialize(os, Using<VectorFormatter<DefaultFormatter>>(v));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 }
 
@@ -999,9 +836,6 @@ void Unserialize_impl(Stream& is, prevector<N, T>& v, const unsigned char&)
 template <typename Stream, unsigned int N, typename T>
 void Unserialize(Stream& is, prevector<N, T>& v)
 {
-<<<<<<< HEAD
-    Unserialize(is, Using<VectorFormatter<DefaultFormatter>>(v));
-=======
     if constexpr (std::is_same_v<T, unsigned char>) {
         // Limit size per read so bogus size value won't cause out of memory
         v.clear();
@@ -1016,7 +850,6 @@ void Unserialize(Stream& is, prevector<N, T>& v)
     } else {
         Unserialize(is, Using<VectorFormatter<DefaultFormatter>>(v));
     }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 
@@ -1026,51 +859,6 @@ void Unserialize(Stream& is, prevector<N, T>& v)
 template <typename Stream, typename T, typename A>
 void Serialize(Stream& os, const std::vector<T, A>& v)
 {
-<<<<<<< HEAD
-    WriteCompactSize(os, v.size());
-    if (!v.empty())
-        os.write((char*)v.data(), v.size() * sizeof(T));
-}
-
-template<typename Stream, typename T, typename A>
-void Serialize_impl(Stream& os, const std::vector<T, A>& v, const bool&)
-{
-    // A special case for std::vector<bool>, as dereferencing
-    // std::vector<bool>::const_iterator does not result in a const bool&
-    // due to std::vector's special casing for bool arguments.
-    WriteCompactSize(os, v.size());
-    for (bool elem : v) {
-        ::Serialize(os, elem);
-    }
-}
-
-template<typename Stream, typename T, typename A, typename V>
-void Serialize_impl(Stream& os, const std::vector<T, A>& v, const V&)
-{
-    Serialize(os, Using<VectorFormatter<DefaultFormatter>>(v));
-}
-
-template<typename Stream, typename T, typename A>
-inline void Serialize(Stream& os, const std::vector<T, A>& v)
-{
-    Serialize_impl(os, v, T());
-}
-
-
-template<typename Stream, typename T, typename A>
-void Unserialize_impl(Stream& is, std::vector<T, A>& v, const unsigned char&)
-{
-    // Limit size per read so bogus size value won't cause out of memory
-    v.clear();
-    unsigned int nSize = ReadCompactSize(is);
-    unsigned int i = 0;
-    while (i < nSize)
-    {
-        unsigned int blk = std::min(nSize - i, (unsigned int)(1 + 4999999 / sizeof(T)));
-        v.resize(i + blk);
-        is.read((char*)&v[i], blk * sizeof(T));
-        i += blk;
-=======
     if constexpr (std::is_same_v<T, unsigned char>) {
         WriteCompactSize(os, v.size());
         if (!v.empty())
@@ -1085,7 +873,6 @@ void Unserialize_impl(Stream& is, std::vector<T, A>& v, const unsigned char&)
         }
     } else {
         Serialize(os, Using<VectorFormatter<DefaultFormatter>>(v));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 }
 
@@ -1093,9 +880,6 @@ void Unserialize_impl(Stream& is, std::vector<T, A>& v, const unsigned char&)
 template <typename Stream, typename T, typename A>
 void Unserialize(Stream& is, std::vector<T, A>& v)
 {
-<<<<<<< HEAD
-    Unserialize(is, Using<VectorFormatter<DefaultFormatter>>(v));
-=======
     if constexpr (std::is_same_v<T, unsigned char>) {
         // Limit size per read so bogus size value won't cause out of memory
         v.clear();
@@ -1110,7 +894,6 @@ void Unserialize(Stream& is, std::vector<T, A>& v)
     } else {
         Unserialize(is, Using<VectorFormatter<DefaultFormatter>>(v));
     }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 
@@ -1236,11 +1019,7 @@ inline void UnserializeMany(Stream& s, Args&&... args)
 }
 
 /**
-<<<<<<< HEAD
- * Support for SERIALIZE_METHODS and READWRITE macro.
-=======
  * Support for all macros providing or using the ser_action parameter of the SerializationOps method.
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
  */
 struct ActionSerialize {
     static constexpr bool ForRead() { return false; }
@@ -1301,11 +1080,7 @@ protected:
 
     const int nVersion;
 public:
-<<<<<<< HEAD
-    explicit CSizeComputer(int nVersionIn) : nSize(0), nVersion(nVersionIn) {}
-=======
     explicit CSizeComputer(int nVersionIn) : nVersion(nVersionIn) {}
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     void write(Span<const std::byte> src)
     {
@@ -1332,67 +1107,6 @@ public:
     int GetVersion() const { return nVersion; }
 };
 
-<<<<<<< HEAD
-template<typename Stream>
-void SerializeMany(Stream& s)
-{
-}
-
-template<typename Stream, typename Arg, typename... Args>
-void SerializeMany(Stream& s, const Arg& arg, const Args&... args)
-{
-    ::Serialize(s, arg);
-    ::SerializeMany(s, args...);
-}
-
-template<typename Stream>
-inline void UnserializeMany(Stream& s)
-{
-}
-
-template<typename Stream, typename Arg, typename... Args>
-inline void UnserializeMany(Stream& s, Arg&& arg, Args&&... args)
-{
-    ::Unserialize(s, arg);
-    ::UnserializeMany(s, args...);
-}
-
-template<typename Stream, typename... Args>
-inline void SerReadWriteMany(Stream& s, CSerActionSerialize ser_action, const Args&... args)
-{
-    ::SerializeMany(s, args...);
-}
-
-template<typename Stream, typename... Args>
-inline void SerReadWriteMany(Stream& s, CSerActionUnserialize ser_action, Args&&... args)
-{
-    ::UnserializeMany(s, args...);
-}
-
-template<typename Stream, typename Type, typename Fn>
-inline void SerRead(Stream& s, CSerActionSerialize ser_action, Type&&, Fn&&)
-{
-}
-
-template<typename Stream, typename Type, typename Fn>
-inline void SerRead(Stream& s, CSerActionUnserialize ser_action, Type&& obj, Fn&& fn)
-{
-    fn(s, std::forward<Type>(obj));
-}
-
-template<typename Stream, typename Type, typename Fn>
-inline void SerWrite(Stream& s, CSerActionSerialize ser_action, Type&& obj, Fn&& fn)
-{
-    fn(s, std::forward<Type>(obj));
-}
-
-template<typename Stream, typename Type, typename Fn>
-inline void SerWrite(Stream& s, CSerActionUnserialize ser_action, Type&&, Fn&&)
-{
-}
-
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 template<typename I>
 inline void WriteVarInt(CSizeComputer &s, I n)
 {
@@ -1418,8 +1132,6 @@ size_t GetSerializeSizeMany(int nVersion, const T&... t)
     return sc.size();
 }
 
-<<<<<<< HEAD
-=======
 /** Wrapper that overrides the GetParams() function of a stream (and hides GetVersion/GetType). */
 template <typename Params, typename SubStream>
 class ParamsStream
@@ -1488,6 +1200,4 @@ static auto WithParams(const Params& params, T&& t)
 #define SER_PARAMS_OPFUNC \
     template <typename T> \
     auto operator()(T&& t) const { return WithParams(*this, t); }
-
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #endif // DIGIBYTE_SERIALIZE_H

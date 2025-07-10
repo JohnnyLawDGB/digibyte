@@ -1,10 +1,6 @@
 // Copyright (c) 2012 Pieter Wuille
-<<<<<<< HEAD
-// Copyright (c) 2012-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
 // Copyright (c) 2012-2022 The Bitcoin Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// Copyright (c) 2014-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -13,35 +9,6 @@
 
 #include <hash.h>
 #include <logging.h>
-<<<<<<< HEAD
-#include <netaddress.h>
-#include <serialize.h>
-
-#include <cmath>
-#include <optional>
-#include <unordered_map>
-#include <unordered_set>
-
-int CAddrInfo::GetTriedBucket(const uint256& nKey, const std::vector<bool> &asmap) const
-{
-    uint64_t hash1 = (CHashWriter(SER_GETHASH, 0) << nKey << GetKey()).GetCheapHash();
-    uint64_t hash2 = (CHashWriter(SER_GETHASH, 0) << nKey << GetGroup(asmap) << (hash1 % ADDRMAN_TRIED_BUCKETS_PER_GROUP)).GetCheapHash();
-    int tried_bucket = hash2 % ADDRMAN_TRIED_BUCKET_COUNT;
-    uint32_t mapped_as = GetMappedAS(asmap);
-    LogPrint(BCLog::NET, "IP %s mapped to AS%i belongs to tried bucket %i\n", ToStringIP(), mapped_as, tried_bucket);
-    return tried_bucket;
-}
-
-int CAddrInfo::GetNewBucket(const uint256& nKey, const CNetAddr& src, const std::vector<bool> &asmap) const
-{
-    std::vector<unsigned char> vchSourceGroupKey = src.GetGroup(asmap);
-    uint64_t hash1 = (CHashWriter(SER_GETHASH, 0) << nKey << GetGroup(asmap) << vchSourceGroupKey).GetCheapHash();
-    uint64_t hash2 = (CHashWriter(SER_GETHASH, 0) << nKey << vchSourceGroupKey << (hash1 % ADDRMAN_NEW_BUCKETS_PER_SOURCE_GROUP)).GetCheapHash();
-    int new_bucket = hash2 % ADDRMAN_NEW_BUCKET_COUNT;
-    uint32_t mapped_as = GetMappedAS(asmap);
-    LogPrint(BCLog::NET, "IP %s mapped to AS%i belongs to new bucket %i\n", ToStringIP(), mapped_as, new_bucket);
-    return new_bucket;
-=======
 #include <logging/timer.h>
 #include <netaddress.h>
 #include <protocol.h>
@@ -90,16 +57,11 @@ int AddrInfo::GetNewBucket(const uint256& nKey, const CNetAddr& src, const NetGr
     uint64_t hash1 = (HashWriter{} << nKey << netgroupman.GetGroup(*this) << vchSourceGroupKey).GetCheapHash();
     uint64_t hash2 = (HashWriter{} << nKey << vchSourceGroupKey << (hash1 % ADDRMAN_NEW_BUCKETS_PER_SOURCE_GROUP)).GetCheapHash();
     return hash2 % ADDRMAN_NEW_BUCKET_COUNT;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 int AddrInfo::GetBucketPosition(const uint256& nKey, bool fNew, int bucket) const
 {
-<<<<<<< HEAD
-    uint64_t hash1 = (CHashWriter(SER_GETHASH, 0) << nKey << (fNew ? uint8_t{'N'} : uint8_t{'K'}) << nBucket << GetKey()).GetCheapHash();
-=======
     uint64_t hash1 = (HashWriter{} << nKey << (fNew ? uint8_t{'N'} : uint8_t{'K'}) << bucket << GetKey()).GetCheapHash();
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     return hash1 % ADDRMAN_BUCKET_SIZE;
 }
 
@@ -143,42 +105,6 @@ double AddrInfo::GetChance(NodeSeconds now) const
     return fChance;
 }
 
-<<<<<<< HEAD
-void CAddrMan::RemoveInvalid()
-{
-    for (size_t bucket = 0; bucket < ADDRMAN_NEW_BUCKET_COUNT; ++bucket) {
-        for (size_t i = 0; i < ADDRMAN_BUCKET_SIZE; ++i) {
-            const auto id = vvNew[bucket][i];
-            if (id != -1 && !mapInfo[id].IsValid()) {
-                ClearNew(bucket, i);
-            }
-        }
-    }
-
-    for (size_t bucket = 0; bucket < ADDRMAN_TRIED_BUCKET_COUNT; ++bucket) {
-        for (size_t i = 0; i < ADDRMAN_BUCKET_SIZE; ++i) {
-            const auto id = vvTried[bucket][i];
-            if (id == -1) {
-                continue;
-            }
-            const auto& addr_info = mapInfo[id];
-            if (addr_info.IsValid()) {
-                continue;
-            }
-            vvTried[bucket][i] = -1;
-            --nTried;
-            SwapRandom(addr_info.nRandomPos, vRandom.size() - 1);
-            vRandom.pop_back();
-            mapAddr.erase(addr_info);
-            mapInfo.erase(id);
-            m_tried_collisions.erase(id);
-        }
-    }
-}
-
-CAddrInfo* CAddrMan::Find(const CNetAddr& addr, int* pnId)
-{
-=======
 AddrManImpl::AddrManImpl(const NetGroupManager& netgroupman, bool deterministic, int32_t consistency_check_ratio)
     : insecure_rand{deterministic}
     , nKey{deterministic ? uint256{1} : insecure_rand.rand256()}
@@ -473,7 +399,6 @@ void AddrManImpl::Unserialize(Stream& s_)
 
 AddrInfo* AddrManImpl::Find(const CService& addr, int* pnId)
 {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     AssertLockHeld(cs);
 
     const auto it = mapAddr.find(addr);
@@ -583,11 +508,7 @@ void AddrManImpl::MakeTried(AddrInfo& info, int nId)
     assert(info.nRefCount == 0);
 
     // which tried bucket to move the entry to
-<<<<<<< HEAD
-    int nKBucket = info.GetTriedBucket(nKey, m_asmap);
-=======
     int nKBucket = info.GetTriedBucket(nKey, m_netgroupman);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     int nKBucketPos = info.GetBucketPosition(nKey, false, nKBucket);
 
     // first make space to add it (the existing tried entry there is moved to new, deleting whatever is there).
@@ -604,11 +525,7 @@ void AddrManImpl::MakeTried(AddrInfo& info, int nId)
         m_network_counts[infoOld.GetNetwork()].n_tried--;
 
         // find which new bucket it belongs to
-<<<<<<< HEAD
-        int nUBucket = infoOld.GetNewBucket(nKey, m_asmap);
-=======
         int nUBucket = infoOld.GetNewBucket(nKey, m_netgroupman);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         int nUBucketPos = infoOld.GetBucketPosition(nKey, true, nUBucket);
         ClearNew(nUBucket, nUBucketPos);
         assert(vvNew[nUBucket][nUBucketPos] == -1);
@@ -632,79 +549,7 @@ void AddrManImpl::MakeTried(AddrInfo& info, int nId)
 bool AddrManImpl::AddSingle(const CAddress& addr, const CNetAddr& source, std::chrono::seconds time_penalty)
 {
     AssertLockHeld(cs);
-<<<<<<< HEAD
 
-    int nId;
-
-    nLastGood = nTime;
-
-    CAddrInfo* pinfo = Find(addr, &nId);
-
-    // if not found, bail out
-    if (!pinfo)
-        return;
-
-    CAddrInfo& info = *pinfo;
-
-    // check whether we are talking about the exact same CService (including same port)
-    if (info != addr)
-        return;
-
-    // update info
-    info.nLastSuccess = nTime;
-    info.nLastTry = nTime;
-    info.nAttempts = 0;
-    // nTime is not updated here, to avoid leaking information about
-    // currently-connected peers.
-
-    // if it is already in the tried set, don't do anything else
-    if (info.fInTried)
-        return;
-
-    // find a bucket it is in now
-    int nRnd = insecure_rand.randrange(ADDRMAN_NEW_BUCKET_COUNT);
-    int nUBucket = -1;
-    for (unsigned int n = 0; n < ADDRMAN_NEW_BUCKET_COUNT; n++) {
-        int nB = (n + nRnd) % ADDRMAN_NEW_BUCKET_COUNT;
-        int nBpos = info.GetBucketPosition(nKey, true, nB);
-        if (vvNew[nB][nBpos] == nId) {
-            nUBucket = nB;
-            break;
-        }
-    }
-
-    // if no bucket is found, something bad happened;
-    // TODO: maybe re-add the node, but for now, just bail out
-    if (nUBucket == -1)
-        return;
-
-    // which tried bucket to move the entry to
-    int tried_bucket = info.GetTriedBucket(nKey, m_asmap);
-    int tried_bucket_pos = info.GetBucketPosition(nKey, false, tried_bucket);
-
-    // Will moving this address into tried evict another entry?
-    if (test_before_evict && (vvTried[tried_bucket][tried_bucket_pos] != -1)) {
-        // Output the entry we'd be colliding with, for debugging purposes
-        auto colliding_entry = mapInfo.find(vvTried[tried_bucket][tried_bucket_pos]);
-        LogPrint(BCLog::ADDRMAN, "Collision inserting element into tried table (%s), moving %s to m_tried_collisions=%d\n", colliding_entry != mapInfo.end() ? colliding_entry->second.ToString() : "", addr.ToString(), m_tried_collisions.size());
-        if (m_tried_collisions.size() < ADDRMAN_SET_TRIED_COLLISION_SIZE) {
-            m_tried_collisions.insert(nId);
-        }
-    } else {
-        LogPrint(BCLog::ADDRMAN, "Moving %s to tried\n", addr.ToString());
-
-        // move nId to the tried tables
-        MakeTried(info, nId);
-    }
-}
-
-bool CAddrMan::Add_(const CAddress& addr, const CNetAddr& source, int64_t nTimePenalty)
-{
-    AssertLockHeld(cs);
-
-=======
-
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (!addr.IsRoutable())
         return false;
 
@@ -751,11 +596,7 @@ bool CAddrMan::Add_(const CAddress& addr, const CNetAddr& source, int64_t nTimeP
         pinfo->nTime = std::max(NodeSeconds{0s}, pinfo->nTime - time_penalty);
     }
 
-<<<<<<< HEAD
-    int nUBucket = pinfo->GetNewBucket(nKey, source, m_asmap);
-=======
     int nUBucket = pinfo->GetNewBucket(nKey, source, m_netgroupman);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     int nUBucketPos = pinfo->GetBucketPosition(nKey, true, nUBucket);
     bool fInsert = vvNew[nUBucket][nUBucketPos] == -1;
     if (vvNew[nUBucket][nUBucketPos] != nId) {
@@ -785,9 +626,6 @@ bool AddrManImpl::Good_(const CService& addr, bool test_before_evict, NodeSecond
 {
     AssertLockHeld(cs);
 
-<<<<<<< HEAD
-    CAddrInfo* pinfo = Find(addr);
-=======
     int nId;
 
     m_last_good = time;
@@ -855,7 +693,6 @@ void AddrManImpl::Attempt_(const CService& addr, bool fCountFailure, NodeSeconds
     AssertLockHeld(cs);
 
     AddrInfo* pinfo = Find(addr);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // if not found, bail out
     if (!pinfo)
@@ -874,52 +711,9 @@ void AddrManImpl::Attempt_(const CService& addr, bool fCountFailure, NodeSeconds
 std::pair<CAddress, NodeSeconds> AddrManImpl::Select_(bool new_only, std::optional<Network> network) const
 {
     AssertLockHeld(cs);
-<<<<<<< HEAD
-
-    if (vRandom.empty())
-        return CAddrInfo();
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     if (vRandom.empty()) return {};
 
-<<<<<<< HEAD
-    // Use a 50% chance for choosing between tried and new table entries.
-    if (!newOnly &&
-       (nTried > 0 && (nNew == 0 || insecure_rand.randbool() == 0))) {
-        // use a tried node
-        double fChanceFactor = 1.0;
-        while (1) {
-            int nKBucket = insecure_rand.randrange(ADDRMAN_TRIED_BUCKET_COUNT);
-            int nKBucketPos = insecure_rand.randrange(ADDRMAN_BUCKET_SIZE);
-            while (vvTried[nKBucket][nKBucketPos] == -1) {
-                nKBucket = (nKBucket + insecure_rand.randbits(ADDRMAN_TRIED_BUCKET_COUNT_LOG2)) % ADDRMAN_TRIED_BUCKET_COUNT;
-                nKBucketPos = (nKBucketPos + insecure_rand.randbits(ADDRMAN_BUCKET_SIZE_LOG2)) % ADDRMAN_BUCKET_SIZE;
-            }
-            int nId = vvTried[nKBucket][nKBucketPos];
-            assert(mapInfo.count(nId) == 1);
-            CAddrInfo& info = mapInfo[nId];
-            if (insecure_rand.randbits(30) < fChanceFactor * info.GetChance() * (1 << 30))
-                return info;
-            fChanceFactor *= 1.2;
-        }
-    } else {
-        // use a new node
-        double fChanceFactor = 1.0;
-        while (1) {
-            int nUBucket = insecure_rand.randrange(ADDRMAN_NEW_BUCKET_COUNT);
-            int nUBucketPos = insecure_rand.randrange(ADDRMAN_BUCKET_SIZE);
-            while (vvNew[nUBucket][nUBucketPos] == -1) {
-                nUBucket = (nUBucket + insecure_rand.randbits(ADDRMAN_NEW_BUCKET_COUNT_LOG2)) % ADDRMAN_NEW_BUCKET_COUNT;
-                nUBucketPos = (nUBucketPos + insecure_rand.randbits(ADDRMAN_BUCKET_SIZE_LOG2)) % ADDRMAN_BUCKET_SIZE;
-            }
-            int nId = vvNew[nUBucket][nUBucketPos];
-            assert(mapInfo.count(nId) == 1);
-            CAddrInfo& info = mapInfo[nId];
-            if (insecure_rand.randbits(30) < fChanceFactor * info.GetChance() * (1 << 30))
-                return info;
-            fChanceFactor *= 1.2;
-=======
     size_t new_count = nNew;
     size_t tried_count = nTried;
 
@@ -1163,7 +957,6 @@ void AddrManImpl::ResolveCollisions_()
             m_tried_collisions.erase(it++);
         } else {
             it++;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
     }
 }
@@ -1172,10 +965,6 @@ std::pair<CAddress, NodeSeconds> AddrManImpl::SelectTriedCollision_()
 {
     AssertLockHeld(cs);
 
-<<<<<<< HEAD
-    std::unordered_set<int> setTried;
-    std::unordered_map<int, int> mapNew;
-=======
     if (m_tried_collisions.size() == 0) return {};
 
     std::set<int>::iterator it = m_tried_collisions.begin();
@@ -1270,7 +1059,6 @@ int AddrManImpl::CheckAddrman() const
     std::unordered_set<int> setTried;
     std::unordered_map<int, int> mapNew;
     std::unordered_map<Network, NewTriedCount> local_counts;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     if (vRandom.size() != (size_t)(nTried + nNew))
         return -7;
@@ -1315,17 +1103,6 @@ int AddrManImpl::CheckAddrman() const
 
     for (int n = 0; n < ADDRMAN_TRIED_BUCKET_COUNT; n++) {
         for (int i = 0; i < ADDRMAN_BUCKET_SIZE; i++) {
-<<<<<<< HEAD
-             if (vvTried[n][i] != -1) {
-                 if (!setTried.count(vvTried[n][i]))
-                     return -11;
-                 if (mapInfo[vvTried[n][i]].GetTriedBucket(nKey, m_asmap) != n)
-                     return -17;
-                 if (mapInfo[vvTried[n][i]].GetBucketPosition(nKey, false, n) != i)
-                     return -18;
-                 setTried.erase(vvTried[n][i]);
-             }
-=======
             if (vvTried[n][i] != -1) {
                 if (!setTried.count(vvTried[n][i]))
                     return -11;
@@ -1338,7 +1115,6 @@ int AddrManImpl::CheckAddrman() const
                 }
                 setTried.erase(vvTried[n][i]);
             }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
     }
 
@@ -1378,40 +1154,6 @@ int AddrManImpl::CheckAddrman() const
     return 0;
 }
 
-<<<<<<< HEAD
-void CAddrMan::GetAddr_(std::vector<CAddress>& vAddr, size_t max_addresses, size_t max_pct, std::optional<Network> network)
-{
-    AssertLockHeld(cs);
-
-    size_t nNodes = vRandom.size();
-    if (max_pct != 0) {
-        nNodes = max_pct * nNodes / 100;
-    }
-    if (max_addresses != 0) {
-        nNodes = std::min(nNodes, max_addresses);
-    }
-
-    // gather a list of random nodes, skipping those of low quality
-    const int64_t now{GetAdjustedTime()};
-    for (unsigned int n = 0; n < vRandom.size(); n++) {
-        if (vAddr.size() >= nNodes)
-            break;
-
-        int nRndPos = insecure_rand.randrange(vRandom.size() - n) + n;
-        SwapRandom(n, nRndPos);
-        assert(mapInfo.count(vRandom[n]) == 1);
-
-        const CAddrInfo& ai = mapInfo[vRandom[n]];
-
-        // Filter by network (optional)
-        if (network != std::nullopt && ai.GetNetClass() != network) continue;
-
-        // Filter for quality
-        if (ai.IsTerrible(now)) continue;
-
-        vAddr.push_back(ai);
-    }
-=======
 size_t AddrManImpl::Size(std::optional<Network> net, std::optional<bool> in_new) const
 {
     LOCK(cs);
@@ -1419,120 +1161,19 @@ size_t AddrManImpl::Size(std::optional<Network> net, std::optional<bool> in_new)
     auto ret = Size_(net, in_new);
     Check();
     return ret;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 bool AddrManImpl::Add(const std::vector<CAddress>& vAddr, const CNetAddr& source, std::chrono::seconds time_penalty)
 {
-<<<<<<< HEAD
-    AssertLockHeld(cs);
-
-    CAddrInfo* pinfo = Find(addr);
-
-    // if not found, bail out
-    if (!pinfo)
-        return;
-
-    CAddrInfo& info = *pinfo;
-
-    // check whether we are talking about the exact same CService (including same port)
-    if (info != addr)
-        return;
-
-    // update info
-    int64_t nUpdateInterval = 20 * 60;
-    if (nTime - info.nTime > nUpdateInterval)
-        info.nTime = nTime;
-=======
     LOCK(cs);
     Check();
     auto ret = Add_(vAddr, source, time_penalty);
     Check();
     return ret;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 bool AddrManImpl::Good(const CService& addr, NodeSeconds time)
 {
-<<<<<<< HEAD
-    AssertLockHeld(cs);
-
-    CAddrInfo* pinfo = Find(addr);
-
-    // if not found, bail out
-    if (!pinfo)
-        return;
-
-    CAddrInfo& info = *pinfo;
-
-    // check whether we are talking about the exact same CService (including same port)
-    if (info != addr)
-        return;
-
-    // update info
-    info.nServices = nServices;
-}
-
-void CAddrMan::ResolveCollisions_()
-{
-    AssertLockHeld(cs);
-
-    for (std::set<int>::iterator it = m_tried_collisions.begin(); it != m_tried_collisions.end();) {
-        int id_new = *it;
-
-        bool erase_collision = false;
-
-        // If id_new not found in mapInfo remove it from m_tried_collisions
-        if (mapInfo.count(id_new) != 1) {
-            erase_collision = true;
-        } else {
-            CAddrInfo& info_new = mapInfo[id_new];
-
-            // Which tried bucket to move the entry to.
-            int tried_bucket = info_new.GetTriedBucket(nKey, m_asmap);
-            int tried_bucket_pos = info_new.GetBucketPosition(nKey, false, tried_bucket);
-            if (!info_new.IsValid()) { // id_new may no longer map to a valid address
-                erase_collision = true;
-            } else if (vvTried[tried_bucket][tried_bucket_pos] != -1) { // The position in the tried bucket is not empty
-
-                // Get the to-be-evicted address that is being tested
-                int id_old = vvTried[tried_bucket][tried_bucket_pos];
-                CAddrInfo& info_old = mapInfo[id_old];
-
-                // Has successfully connected in last X hours
-                if (GetAdjustedTime() - info_old.nLastSuccess < ADDRMAN_REPLACEMENT_HOURS*(60*60)) {
-                    erase_collision = true;
-                } else if (GetAdjustedTime() - info_old.nLastTry < ADDRMAN_REPLACEMENT_HOURS*(60*60)) { // attempted to connect and failed in last X hours
-
-                    // Give address at least 60 seconds to successfully connect
-                    if (GetAdjustedTime() - info_old.nLastTry > 60) {
-                        LogPrint(BCLog::ADDRMAN, "Replacing %s with %s in tried table\n", info_old.ToString(), info_new.ToString());
-
-                        // Replaces an existing address already in the tried table with the new address
-                        Good_(info_new, false, GetAdjustedTime());
-                        erase_collision = true;
-                    }
-                } else if (GetAdjustedTime() - info_new.nLastSuccess > ADDRMAN_TEST_WINDOW) {
-                    // If the collision hasn't resolved in some reasonable amount of time,
-                    // just evict the old entry -- we must not be able to
-                    // connect to it for some reason.
-                    LogPrint(BCLog::ADDRMAN, "Unable to test; replacing %s with %s in tried table anyway\n", info_old.ToString(), info_new.ToString());
-                    Good_(info_new, false, GetAdjustedTime());
-                    erase_collision = true;
-                }
-            } else { // Collision is not actually a collision anymore
-                Good_(info_new, false, GetAdjustedTime());
-                erase_collision = true;
-            }
-        }
-
-        if (erase_collision) {
-            m_tried_collisions.erase(it++);
-        } else {
-            it++;
-        }
-    }
-=======
     LOCK(cs);
     Check();
     auto ret = Good_(addr, /*test_before_evict=*/true, time);
@@ -1546,38 +1187,10 @@ void AddrManImpl::Attempt(const CService& addr, bool fCountFailure, NodeSeconds 
     Check();
     Attempt_(addr, fCountFailure, time);
     Check();
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 void AddrManImpl::ResolveCollisions()
 {
-<<<<<<< HEAD
-    AssertLockHeld(cs);
-
-    if (m_tried_collisions.size() == 0) return CAddrInfo();
-
-    std::set<int>::iterator it = m_tried_collisions.begin();
-
-    // Selects a random element from m_tried_collisions
-    std::advance(it, insecure_rand.randrange(m_tried_collisions.size()));
-    int id_new = *it;
-
-    // If id_new not found in mapInfo remove it from m_tried_collisions
-    if (mapInfo.count(id_new) != 1) {
-        m_tried_collisions.erase(it);
-        return CAddrInfo();
-    }
-
-    const CAddrInfo& newInfo = mapInfo[id_new];
-
-    // which tried bucket to move the entry to
-    int tried_bucket = newInfo.GetTriedBucket(nKey, m_asmap);
-    int tried_bucket_pos = newInfo.GetBucketPosition(nKey, false, tried_bucket);
-
-    int id_old = vvTried[tried_bucket][tried_bucket_pos];
-
-    return mapInfo[id_old];
-=======
     LOCK(cs);
     Check();
     ResolveCollisions_();
@@ -1728,32 +1341,4 @@ void AddrMan::SetServices(const CService& addr, ServiceFlags nServices)
 std::optional<AddressPosition> AddrMan::FindAddressEntry(const CAddress& addr)
 {
     return m_impl->FindAddressEntry(addr);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
-}
-
-std::vector<bool> CAddrMan::DecodeAsmap(fs::path path)
-{
-    std::vector<bool> bits;
-    FILE *filestr = fsbridge::fopen(path, "rb");
-    CAutoFile file(filestr, SER_DISK, CLIENT_VERSION);
-    if (file.IsNull()) {
-        LogPrintf("Failed to open asmap file from disk\n");
-        return bits;
-    }
-    fseek(filestr, 0, SEEK_END);
-    int length = ftell(filestr);
-    LogPrintf("Opened asmap file %s (%d bytes) from disk\n", path, length);
-    fseek(filestr, 0, SEEK_SET);
-    uint8_t cur_byte;
-    for (int i = 0; i < length; ++i) {
-        file >> cur_byte;
-        for (int bit = 0; bit < 8; ++bit) {
-            bits.push_back((cur_byte >> bit) & 1);
-        }
-    }
-    if (!SanityCheckASMap(bits)) {
-        LogPrintf("Sanity check of asmap file %s failed\n", path);
-        return {};
-    }
-    return bits;
 }

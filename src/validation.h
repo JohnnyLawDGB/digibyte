@@ -1,10 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
-// Copyright (c) 2009-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// Copyright (c) 2009-2022 The Bitcoin Core developers
+// Copyright (c) 2014-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -15,39 +11,22 @@
 #include <config/digibyte-config.h>
 #endif
 
-<<<<<<< HEAD
-#include <amount.h>
-#include <attributes.h>
-#include <coins.h>
-#include <consensus/validation.h>
-#include <crypto/common.h> // for ReadLE64
-#include <fs.h>
-#include <node/utxo_snapshot.h>
-#include <policy/feerate.h>
-#include <policy/packages.h>
-#include <protocol.h> // For CMessageHeader::MessageStartChars
-#include <script/script_error.h>
-#include <sync.h>
-#include <txmempool.h> // For CTxMemPool::cs
-#include <txdb.h>
-#include <serialize.h>
-#include <util/check.h>
-#include <util/hasher.h>
-#include <util/translation.h>
-=======
 #include <arith_uint256.h>
 #include <attributes.h>
 #include <chain.h>
 #include <kernel/chain.h>
 #include <consensus/amount.h>
+#include <consensus/validation.h>
 #include <deploymentstatus.h>
 #include <kernel/chainparams.h>
 #include <kernel/chainstatemanager_opts.h>
 #include <kernel/cs_main.h> // IWYU pragma: export
 #include <node/blockstorage.h>
+#include <node/utxo_snapshot.h>
 #include <policy/feerate.h>
 #include <policy/packages.h>
 #include <policy/policy.h>
+#include <protocol.h> // For CMessageHeader::MessageStartChars
 #include <script/script_error.h>
 #include <sync.h>
 #include <txdb.h>
@@ -59,7 +38,6 @@
 #include <util/result.h>
 #include <util/translation.h>
 #include <versionbits.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 #include <atomic>
 #include <map>
@@ -69,7 +47,7 @@
 #include <stdint.h>
 #include <string>
 #include <thread>
-<<<<<<< HEAD
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -82,7 +60,7 @@
 #define DAYS_PER_YEAR 365
 #define SECONDS_PER_MONTH (SECONDS * MINUTES * HOURS * DAYS_PER_YEAR / MONTHS_PER_YEAR);
 
-class CChainState;
+class Chainstate;
 class BlockValidationState;
 class CBlockIndex;
 class CBlockTreeDB;
@@ -92,33 +70,6 @@ struct CCheckpointData;
 class CInv;
 class CConnman;
 class CScriptCheck;
-class CTxMemPool;
-class ChainstateManager;
-struct ChainTxData;
-
-struct DisconnectedBlockTransactions;
-struct PrecomputedTransactionData;
-struct LockPoints;
-struct AssumeutxoData;
-
-/** Default for -minrelaytxfee, minimum relay fee for transactions */
-static const unsigned int DEFAULT_MIN_RELAY_TX_FEE = 100000;
-/** Default for -limitancestorcount, max number of in-mempool ancestors */
-static const unsigned int DEFAULT_ANCESTOR_LIMIT = 25;
-/** Default for -limitancestorsize, maximum kilobytes of tx + all in-mempool ancestors */
-static const unsigned int DEFAULT_ANCESTOR_SIZE_LIMIT = 101;
-/** Default for -limitdescendantcount, max number of in-mempool descendants */
-static const unsigned int DEFAULT_DESCENDANT_LIMIT = 25;
-/** Default for -limitdescendantsize, maximum kilobytes of in-mempool descendants */
-static const unsigned int DEFAULT_DESCENDANT_SIZE_LIMIT = 101;
-/** Default for -mempoolexpiry, expiration time for mempool transactions in hours */
-static const unsigned int DEFAULT_MEMPOOL_EXPIRY = 336;
-=======
-#include <type_traits>
-#include <utility>
-#include <vector>
-
-class Chainstate;
 class CTxMemPool;
 class ChainstateManager;
 struct ChainTxData;
@@ -135,32 +86,14 @@ struct Params;
 namespace util {
 class SignalInterrupt;
 } // namespace util
-
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 /** Maximum number of dedicated script-checking threads allowed */
 static const int MAX_SCRIPTCHECK_THREADS = 15;
 /** -par default (number of script-checking threads, 0 = auto) */
 static const int DEFAULT_SCRIPTCHECK_THREADS = 0;
-<<<<<<< HEAD
-static const int64_t DEFAULT_MAX_TIP_AGE = 24 * 60 * 60;
-static const bool DEFAULT_CHECKPOINTS_ENABLED = true;
-static const bool DEFAULT_TXINDEX = false;
-static constexpr bool DEFAULT_COINSTATSINDEX{false};
-static const char* const DEFAULT_BLOCKFILTERINDEX = "0";
-/** Default for -persistmempool */
-static const bool DEFAULT_PERSIST_MEMPOOL = true;
-/** Default for -stopatheight */
-static const int DEFAULT_STOPATHEIGHT = 0;
-/** Block files containing a block-height within MIN_BLOCKS_TO_KEEP of ::ChainActive().Tip() will not be pruned. */
-static const unsigned int MIN_BLOCKS_TO_KEEP = 288;
-static const signed int DEFAULT_CHECKBLOCKS = 6;
-static const unsigned int DEFAULT_CHECKLEVEL = 3;
-=======
 /** Block files containing a block-height within MIN_BLOCKS_TO_KEEP of ActiveChain().Tip() will not be pruned. */
 static const unsigned int MIN_BLOCKS_TO_KEEP = 288;
 static const signed int DEFAULT_CHECKBLOCKS = 6;
 static constexpr int DEFAULT_CHECKLEVEL{3};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Require that user allocate at least 550 MiB for block & undo files (blk???.dat and rev???.dat)
 // At 1MB per block, 288 blocks = 288MB.
 // Add 15% for Undo data = 331MB
@@ -178,68 +111,17 @@ enum class SynchronizationState {
     POST_INIT
 };
 
-<<<<<<< HEAD
-extern RecursiveMutex cs_main;
-typedef std::unordered_map<uint256, CBlockIndex*, BlockHasher> BlockMap;
-extern Mutex g_best_block_mutex;
-extern std::condition_variable g_best_block_cv;
-extern uint256 g_best_block;
-/** Whether there are dedicated script-checking threads running.
- * False indicates all script checking is done on the main threadMessageHandler thread.
- */
-extern bool g_parallel_script_checks;
-extern bool fRequireStandard;
-extern bool fCheckBlockIndex;
-extern bool fCheckpointsEnabled;
-/** A fee rate smaller than this is considered zero fee (for relaying, mining and transaction creation) */
-extern CFeeRate minRelayTxFee;
-/** If the tip is older than this (in seconds), the node is considered to be in initial block download. */
-extern int64_t nMaxTipAge;
-
-/** Block hash whose ancestors we will assume to have valid scripts without checking them. */
-extern uint256 hashAssumeValid;
-
-/** Minimum work we will assume exists on some valid chain. */
-extern arith_uint256 nMinimumChainWork;
-
-/** Best header we've seen so far (used for getheaders queries' starting points). */
-extern CBlockIndex *pindexBestHeader;
-=======
 extern GlobalMutex g_best_block_mutex;
 extern std::condition_variable g_best_block_cv;
 /** Used to notify getblocktemplate RPC of new tips. */
 extern uint256 g_best_block;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 /** Documentation for argument 'checklevel'. */
 extern const std::vector<std::string> CHECKLEVEL_DOC;
-
-<<<<<<< HEAD
-/** Unload database information */
-void UnloadBlockIndex(CTxMemPool* mempool, ChainstateManager& chainman);
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 /** Run instances of script checking worker threads */
 void StartScriptCheckWorkerThreads(int threads_num);
 /** Stop all of the script checking worker threads */
 void StopScriptCheckWorkerThreads();
-<<<<<<< HEAD
-/**
- * Return transaction from the block at block_index.
- * If block_index is not provided, fall back to mempool.
- * If mempool is not provided or the tx couldn't be found in mempool, fall back to g_txindex.
- *
- * @param[in]  block_index     The block to read from disk, or nullptr
- * @param[in]  mempool         If block_index is not provided, look in the mempool, if provided
- * @param[in]  hash            The txid
- * @param[in]  consensusParams The params
- * @param[out] hashBlock       The hash of block_index, if the tx was found via block_index
- * @returns                    The tx if found, otherwise nullptr
- */
-CTransactionRef GetTransaction(const CBlockIndex* const block_index, const CTxMemPool* const mempool, const uint256& hash, const Consensus::Params& consensusParams, uint256& hashBlock);
-=======
-
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams);
 CAmount GetDGBSubsidy(int nHeight,  const Consensus::Params& consensusParams);
 
@@ -251,11 +133,7 @@ bool FatalError(kernel::Notifications& notifications, BlockValidationState& stat
 double GuessVerificationProgress(const ChainTxData& data, const CBlockIndex* pindex);
 
 /** Prune block files up to a given height */
-<<<<<<< HEAD
-void PruneBlockFilesManual(CChainState& active_chainstate, int nManualPruneHeight);
-=======
 void PruneBlockFilesManual(Chainstate& active_chainstate, int nManualPruneHeight);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 /**
 * Validation result for a single transaction mempool acceptance.
@@ -265,83 +143,6 @@ struct MempoolAcceptResult {
     enum class ResultType {
         VALID, //!> Fully validated, valid.
         INVALID, //!> Invalid.
-<<<<<<< HEAD
-    };
-    const ResultType m_result_type;
-    const TxValidationState m_state;
-
-    // The following fields are only present when m_result_type = ResultType::VALID
-    /** Mempool transactions replaced by the tx per BIP 125 rules. */
-    const std::optional<std::list<CTransactionRef>> m_replaced_transactions;
-    /** Raw base fees in satoshis. */
-    const std::optional<CAmount> m_base_fees;
-    static MempoolAcceptResult Failure(TxValidationState state) {
-        return MempoolAcceptResult(state);
-    }
-
-    static MempoolAcceptResult Success(std::list<CTransactionRef>&& replaced_txns, CAmount fees) {
-        return MempoolAcceptResult(std::move(replaced_txns), fees);
-    }
-
-// Private constructors. Use static methods MempoolAcceptResult::Success, etc. to construct.
-private:
-    /** Constructor for failure case */
-    explicit MempoolAcceptResult(TxValidationState state)
-        : m_result_type(ResultType::INVALID), m_state(state) {
-            Assume(!state.IsValid()); // Can be invalid or error
-        }
-
-    /** Constructor for success case */
-    explicit MempoolAcceptResult(std::list<CTransactionRef>&& replaced_txns, CAmount fees)
-        : m_result_type(ResultType::VALID),
-        m_replaced_transactions(std::move(replaced_txns)), m_base_fees(fees) {}
-};
-
-/**
-* Validation result for package mempool acceptance.
-*/
-struct PackageMempoolAcceptResult
-{
-    const PackageValidationState m_state;
-    /**
-    * Map from wtxid to finished MempoolAcceptResults. The client is responsible
-    * for keeping track of the transaction objects themselves. If a result is not
-    * present, it means validation was unfinished for that transaction.
-    */
-    std::map<const uint256, const MempoolAcceptResult> m_tx_results;
-
-    explicit PackageMempoolAcceptResult(PackageValidationState state,
-                                        std::map<const uint256, const MempoolAcceptResult>&& results)
-        : m_state{state}, m_tx_results(std::move(results)) {}
-
-    /** Constructor to create a PackageMempoolAcceptResult from a single MempoolAcceptResult */
-    explicit PackageMempoolAcceptResult(const uint256& wtxid, const MempoolAcceptResult& result)
-        : m_tx_results{ {wtxid, result} } {}
-};
-
-/**
- * (Try to) add a transaction to the memory pool.
- * @param[in]  bypass_limits   When true, don't enforce mempool fee limits.
- * @param[in]  test_accept     When true, run validation checks but don't submit to mempool.
- */
-MempoolAcceptResult AcceptToMemoryPool(CChainState& active_chainstate, CTxMemPool& pool, const CTransactionRef& tx,
-                                       bool bypass_limits, bool test_accept=false) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
-
-/**
-* Atomically test acceptance of a package. If the package only contains one tx, package rules still
-* apply. Package validation does not allow BIP125 replacements, so the transaction(s) cannot spend
-* the same inputs as any transaction in the mempool.
-* @param[in]    txns                Group of transactions which may be independent or contain
-*                                   parent-child dependencies. The transactions must not conflict
-*                                   with each other, i.e., must not spend the same inputs. If any
-*                                   dependencies exist, parents must appear before children.
-* @returns a PackageMempoolAcceptResult which includes a MempoolAcceptResult for each transaction.
-* If a transaction fails, validation will exit early and some results may be missing.
-*/
-PackageMempoolAcceptResult ProcessNewPackage(CChainState& active_chainstate, CTxMemPool& pool,
-                                                   const Package& txns, bool test_accept)
-                                                   EXCLUSIVE_LOCKS_REQUIRED(cs_main);
-=======
         MEMPOOL_ENTRY, //!> Valid, transaction was already in the mempool.
         DIFFERENT_WITNESS, //!> Not validated. A same-txid-different-witness tx (see m_other_wtxid) already exists in the mempool and was not replaced.
     };
@@ -388,8 +189,6 @@ PackageMempoolAcceptResult ProcessNewPackage(CChainState& active_chainstate, CTx
         return MempoolAcceptResult(std::move(replaced_txns), vsize, fees,
                                    effective_feerate, wtxids_fee_calculations);
     }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
-
     static MempoolAcceptResult MempoolTx(int64_t vsize, CAmount fees) {
         return MempoolAcceptResult(vsize, fees);
     }
@@ -490,11 +289,7 @@ PackageMempoolAcceptResult ProcessNewPackage(Chainstate& active_chainstate, CTxM
 /**
  * Check if transaction will be final in the next block to be created.
  */
-<<<<<<< HEAD
-bool CheckFinalTx(const CBlockIndex* active_chain_tip, const CTransaction &tx, int flags = -1) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
-=======
 bool CheckFinalTxAtTip(const CBlockIndex& active_chain_tip, const CTransaction& tx) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 /**
  * Calculate LockPoints required to check if transaction will be BIP68 final in the next block
@@ -514,50 +309,6 @@ bool CheckFinalTxAtTip(const CBlockIndex& active_chain_tip, const CTransaction& 
  * @returns The resulting height and time calculated and the hash of the block needed for
  *          calculation, or std::nullopt if there is an error.
  */
-<<<<<<< HEAD
-bool TestLockPointValidity(CChain& active_chain, const LockPoints* lp) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
-=======
-std::optional<LockPoints> CalculateLockPointsAtTip(
-    CBlockIndex* tip,
-    const CCoinsView& coins_view,
-    const CTransaction& tx);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
-
-/**
- * Check if transaction will be BIP68 final in the next block to be created on top of tip.
- * @param[in]   tip             Chain tip to check tx sequence locks against. For example,
- *                              the tip of the current active chain.
-<<<<<<< HEAD
- * @param[in]   coins_view      Any CCoinsView that provides access to the relevant coins for
- *                              checking sequence locks. For example, it can be a CCoinsViewCache
- *                              that isn't connected to anything but contains all the relevant
- *                              coins, or a CCoinsViewMemPool that is connected to the
- *                              mempool and chainstate UTXO set. In the latter case, the caller is
- *                              responsible for holding the appropriate locks to ensure that
- *                              calls to GetCoin() return correct coins.
- * Simulates calling SequenceLocks() with data from the tip passed in.
- * Optionally stores in LockPoints the resulting height and time calculated and the hash
- * of the block needed for calculation or skips the calculation and uses the LockPoints
- * passed in for evaluation.
- * The LockPoints should not be considered valid if CheckSequenceLocks returns false.
- *
- * See consensus/consensus.h for flag definitions.
- */
-bool CheckSequenceLocks(CBlockIndex* tip,
-                        const CCoinsView& coins_view,
-                        const CTransaction& tx,
-                        int flags,
-                        LockPoints* lp = nullptr,
-                        bool useExistingLockPoints = false);
-=======
- * @param[in]   lock_points     LockPoints containing the height and time at which this
- *                              transaction is final.
- * Simulates calling SequenceLocks() with data from the tip passed in.
- * The LockPoints should not be considered valid if CheckSequenceLocksAtTip returns false.
- */
-bool CheckSequenceLocksAtTip(CBlockIndex* tip,
-                             const LockPoints& lock_points);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 /**
  * Closure representing one script verification
@@ -594,11 +345,7 @@ static_assert(std::is_nothrow_move_constructible_v<CScriptCheck>);
 static_assert(std::is_nothrow_destructible_v<CScriptCheck>);
 
 /** Initializes the script-execution cache */
-<<<<<<< HEAD
-void InitScriptExecutionCache();
-=======
 [[nodiscard]] bool InitScriptExecutionCache(size_t max_size_bytes);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 /** Functions for validating blocks and updating the block tree */
 

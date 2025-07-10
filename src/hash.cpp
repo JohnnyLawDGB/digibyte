@@ -1,11 +1,6 @@
 
-// Copyright (c) 2013-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The Bitcoin Core developers
-Copyright (c) 2014-2020 The DigiByte Core developers
-
 // Copyright (c) 2013-2022 The Bitcoin Core developers
-Copyright (c) 2013-2022 The DigiByte Core developers
-
+// Copyright (c) 2013-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -23,8 +18,6 @@ inline uint32_t ROTL32(uint32_t x, int8_t r)
 
 unsigned int MurmurHash3(unsigned int nHashSeed, Span<const unsigned char> vDataToHash)
 {
-
-    // The following is MurmurHash3 (x86_32), see https://code.google.com/p/smhasher/source/browse/trunk/MurmurHash3.cpp
 
     // The following is MurmurHash3 (x86_32), see https://github.com/aappleby/smhasher/blob/master/src/MurmurHash3.cpp
 
@@ -98,14 +91,9 @@ uint256 SHA256Uint256(const uint256& input)
 }
 
 
-CHashWriter TaggedHash(const std::string& tag)
-{
-    CHashWriter writer(SER_GETHASH, 0);
-
 HashWriter TaggedHash(const std::string& tag)
 {
     HashWriter writer{};
-
     uint256 taghash;
     CSHA256().Write((const unsigned char*)tag.data(), tag.size()).Finalize(taghash.begin());
     writer << taghash << taghash;

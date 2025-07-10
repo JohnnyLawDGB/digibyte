@@ -159,15 +159,15 @@ bool OptionsModel::Init(bilingual_str& error)
     fMinimizeOnClose = settings.value("fMinimizeOnClose").toBool();
 
     // Display
-    if (!settings.contains("DisplayBitcoinUnit")) {
-        settings.setValue("DisplayBitcoinUnit", QVariant::fromValue(BitcoinUnit::DGB));
+    if (!settings.contains("DisplayDigiByteUnit")) {
+        settings.setValue("DisplayDigiByteUnit", QVariant::fromValue(DigiByteUnit::DGB));
     }
-    QVariant unit = settings.value("DisplayBitcoinUnit");
-    if (unit.canConvert<BitcoinUnit>()) {
-        m_display_digibyte_unit = unit.value<BitcoinUnit>();
+    QVariant unit = settings.value("DisplayDigiByteUnit");
+    if (unit.canConvert<DigiByteUnit>()) {
+        m_display_digibyte_unit = unit.value<DigiByteUnit>();
     } else {
-        m_display_digibyte_unit = BitcoinUnit::DGB;
-        settings.setValue("DisplayBitcoinUnit", QVariant::fromValue(m_display_digibyte_unit));
+        m_display_digibyte_unit = DigiByteUnit::DGB;
+        settings.setValue("DisplayDigiByteUnit", QVariant::fromValue(m_display_digibyte_unit));
     }
 
     if (!settings.contains("strThirdPartyTxUrls"))
@@ -650,10 +650,10 @@ bool OptionsModel::setOption(OptionID option, const QVariant& value, const std::
 
 void OptionsModel::setDisplayUnit(const QVariant& new_unit)
 {
-    if (new_unit.isNull() || new_unit.value<BitcoinUnit>() == m_display_digibyte_unit) return;
-    m_display_digibyte_unit = new_unit.value<BitcoinUnit>();
+    if (new_unit.isNull() || new_unit.value<DigiByteUnit>() == m_display_digibyte_unit) return;
+    m_display_digibyte_unit = new_unit.value<DigiByteUnit>();
     QSettings settings;
-    settings.setValue("DisplayBitcoinUnit", QVariant::fromValue(m_display_digibyte_unit));
+    settings.setValue("DisplayDigiByteUnit", QVariant::fromValue(m_display_digibyte_unit));
     Q_EMIT displayUnitChanged(m_display_digibyte_unit);
 }
 

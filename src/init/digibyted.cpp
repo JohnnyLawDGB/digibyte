@@ -17,10 +17,10 @@ using node::NodeContext;
 
 namespace init {
 namespace {
-class BitcoindInit : public interfaces::Init
+class DigiBytedInit : public interfaces::Init
 {
 public:
-    BitcoindInit(NodeContext& node) : m_node(node)
+    DigiBytedInit(NodeContext& node) : m_node(node)
     {
         m_node.args = &gArgs;
         m_node.init = this;

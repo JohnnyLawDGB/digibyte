@@ -6,10 +6,10 @@
 import random
 import string
 
-from test_framework.test_framework import BitcoinTestFramework
+from test_framework.test_framework import DigiByteTestFramework
 from test_framework.test_node import ErrorMatch
 
-class FilelockTest(BitcoinTestFramework):
+class FilelockTest(DigiByteTestFramework):
     def add_options(self, parser):
         self.add_wallet_options(parser)
 

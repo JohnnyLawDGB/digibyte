@@ -108,9 +108,9 @@ public:
 private:
     QList<Unit> unitlist;
 };
-typedef DigiByteUnits::Unit BitcoinUnit;
+typedef DigiByteUnits::Unit DigiByteUnit;
 
-QDataStream& operator<<(QDataStream& out, const BitcoinUnit& unit);
-QDataStream& operator>>(QDataStream& in, BitcoinUnit& unit);
+QDataStream& operator<<(QDataStream& out, const DigiByteUnit& unit);
+QDataStream& operator>>(QDataStream& in, DigiByteUnit& unit);
 
 #endif // DIGIBYTE_QT_DIGIBYTEUNITS_H

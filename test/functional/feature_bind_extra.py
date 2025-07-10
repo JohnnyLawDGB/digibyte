@@ -14,7 +14,7 @@ from test_framework.netutil import (
     get_bind_addrs,
 )
 from test_framework.test_framework import (
-    BitcoinTestFramework,
+    DigiByteTestFramework,
     SkipTest,
 )
 from test_framework.util import (
@@ -24,7 +24,7 @@ from test_framework.util import (
 )
 
 
-class BindExtraTest(BitcoinTestFramework):
+class BindExtraTest(DigiByteTestFramework):
     def set_test_params(self):
         self.setup_clean_chain = True
         # Avoid any -bind= on the command line. Force the framework to avoid

@@ -13,7 +13,7 @@ from test_framework.descriptors import descsum_create
 from test_framework.messages import (
     COIN,
 )
-from test_framework.test_framework import BitcoinTestFramework
+from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import (
     assert_approx,
     assert_equal,
@@ -36,7 +36,7 @@ def get_unspent(listunspent, amount):
             return utx
     raise AssertionError('Could not find unspent with amount={}'.format(amount))
 
-class RawTransactionsTest(BitcoinTestFramework):
+class RawTransactionsTest(DigiByteTestFramework):
     def add_options(self, parser):
         self.add_wallet_options(parser)
 

@@ -141,7 +141,7 @@ void AddButtonShortcut(QAbstractButton* button, const QKeySequence& shortcut)
     QObject::connect(new QShortcut(shortcut, button), &QShortcut::activated, [button]() { button->animateClick(); });
 }
 
-bool parseBitcoinURI(const QUrl &uri, SendCoinsRecipient *out)
+bool parseDigiByteURI(const QUrl &uri, SendCoinsRecipient *out)
 {
     // return if URI is not valid or is no digibyte: URI
     if(!uri.isValid() || uri.scheme() != QString("digibyte"))
@@ -180,7 +180,7 @@ bool parseBitcoinURI(const QUrl &uri, SendCoinsRecipient *out)
         {
             if(!i->second.isEmpty())
             {
-                if (!DigiByteUnits::parse(BitcoinUnit::DGB, i->second, &rv.amount)) {
+                if (!DigiByteUnits::parse(DigiByteUnit::DGB, i->second, &rv.amount)) {
                     return false;
                 }
             }
@@ -197,13 +197,13 @@ bool parseBitcoinURI(const QUrl &uri, SendCoinsRecipient *out)
     return true;
 }
 
-bool parseBitcoinURI(QString uri, SendCoinsRecipient *out)
+bool parseDigiByteURI(QString uri, SendCoinsRecipient *out)
 {
     QUrl uriInstance(uri);
-    return parseBitcoinURI(uriInstance, out);
+    return parseDigiByteURI(uriInstance, out);
 }
 
-QString formatBitcoinURI(const SendCoinsRecipient &info)
+QString formatDigiByteURI(const SendCoinsRecipient &info)
 {
     bool bech_32 = info.address.startsWith(QString::fromStdString(Params().Bech32HRP() + "1"));
 
@@ -212,7 +212,7 @@ QString formatBitcoinURI(const SendCoinsRecipient &info)
 
     if (info.amount)
     {
-        ret += QString("?amount=%1").arg(DigiByteUnits::format(BitcoinUnit::DGB, info.amount, false, DigiByteUnits::SeparatorStyle::NEVER));
+        ret += QString("?amount=%1").arg(DigiByteUnits::format(DigiByteUnit::DGB, info.amount, false, DigiByteUnits::SeparatorStyle::NEVER));
         paramCount++;
     }
 
@@ -430,7 +430,7 @@ void openDebugLogfile()
         QDesktopServices::openUrl(QUrl::fromLocalFile(PathToQString(pathDebug)));
 }
 
-bool openBitcoinConf()
+bool openDigiByteConf()
 {
     fs::path pathConfig = gArgs.GetConfigFilePath();
 

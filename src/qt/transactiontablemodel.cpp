@@ -231,7 +231,7 @@ public:
         return nullptr;
     }
 
-    QString describe(interfaces::Node& node, interfaces::Wallet& wallet, TransactionRecord* rec, BitcoinUnit unit)
+    QString describe(interfaces::Node& node, interfaces::Wallet& wallet, TransactionRecord* rec, DigiByteUnit unit)
     {
         return TransactionDesc::toHTML(node, wallet, rec, unit);
     }

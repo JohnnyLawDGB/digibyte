@@ -18,9 +18,9 @@ DigiByteUnits::DigiByteUnits(QObject *parent):
 {
 }
 
-QList<BitcoinUnit> DigiByteUnits::availableUnits()
+QList<DigiByteUnit> DigiByteUnits::availableUnits()
 {
-    QList<BitcoinUnit> unitlist;
+    QList<DigiByteUnit> unitlist;
     unitlist.append(Unit::DGB);
     unitlist.append(Unit::mDGB);
     unitlist.append(Unit::uDGB);
@@ -53,9 +53,9 @@ QString DigiByteUnits::shortName(Unit unit)
 QString DigiByteUnits::description(Unit unit)
 {
     switch (unit) {
-    case Unit::DGB: return QString("Bitcoins");
-    case Unit::mDGB: return QString("Milli-Bitcoins (1 / 1" THIN_SP_UTF8 "000)");
-    case Unit::uDGB: return QString("Micro-Bitcoins (bits) (1 / 1" THIN_SP_UTF8 "000" THIN_SP_UTF8 "000)");
+    case Unit::DGB: return QString("DigiBytes");
+    case Unit::mDGB: return QString("Milli-DigiBytes (1 / 1" THIN_SP_UTF8 "000)");
+    case Unit::uDGB: return QString("Micro-DigiBytes (bits) (1 / 1" THIN_SP_UTF8 "000" THIN_SP_UTF8 "000)");
     case Unit::SAT: return QString("Satoshi (sat) (1 / 100" THIN_SP_UTF8 "000" THIN_SP_UTF8 "000)");
     } // no default case, so the compiler can warn about missing cases
     assert(false);
@@ -229,35 +229,35 @@ CAmount DigiByteUnits::maxMoney()
 }
 
 namespace {
-qint8 ToQint8(BitcoinUnit unit)
+qint8 ToQint8(DigiByteUnit unit)
 {
     switch (unit) {
-    case BitcoinUnit::DGB: return 0;
-    case BitcoinUnit::mDGB: return 1;
-    case BitcoinUnit::uDGB: return 2;
-    case BitcoinUnit::SAT: return 3;
+    case DigiByteUnit::DGB: return 0;
+    case DigiByteUnit::mDGB: return 1;
+    case DigiByteUnit::uDGB: return 2;
+    case DigiByteUnit::SAT: return 3;
     } // no default case, so the compiler can warn about missing cases
     assert(false);
 }
 
-BitcoinUnit FromQint8(qint8 num)
+DigiByteUnit FromQint8(qint8 num)
 {
     switch (num) {
-    case 0: return BitcoinUnit::DGB;
-    case 1: return BitcoinUnit::mDGB;
-    case 2: return BitcoinUnit::uDGB;
-    case 3: return BitcoinUnit::SAT;
+    case 0: return DigiByteUnit::DGB;
+    case 1: return DigiByteUnit::mDGB;
+    case 2: return DigiByteUnit::uDGB;
+    case 3: return DigiByteUnit::SAT;
     }
     assert(false);
 }
 } // namespace
 
-QDataStream& operator<<(QDataStream& out, const BitcoinUnit& unit)
+QDataStream& operator<<(QDataStream& out, const DigiByteUnit& unit)
 {
     return out << ToQint8(unit);
 }
 
-QDataStream& operator>>(QDataStream& in, BitcoinUnit& unit)
+QDataStream& operator>>(QDataStream& in, DigiByteUnit& unit)
 {
     qint8 input;
     in >> input;

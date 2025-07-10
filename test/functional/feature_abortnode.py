@@ -9,10 +9,10 @@
 - Mine a fork that requires disconnecting the tip.
 - Verify that digibyted AbortNode's.
 """
-from test_framework.test_framework import BitcoinTestFramework
+from test_framework.test_framework import DigiByteTestFramework
 
 
-class AbortNodeTest(BitcoinTestFramework):
+class AbortNodeTest(DigiByteTestFramework):
     def set_test_params(self):
         self.setup_clean_chain = True
         self.num_nodes = 2

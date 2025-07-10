@@ -3,19 +3,19 @@
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-from test_framework.test_framework import BitcoinTestFramework
+from test_framework.test_framework import DigiByteTestFramework
 
 class TestShell:
-    """Wrapper Class for BitcoinTestFramework.
+    """Wrapper Class for DigiByteTestFramework.
 
-    The TestShell class extends the BitcoinTestFramework
+    The TestShell class extends the DigiByteTestFramework
     rpc & daemon process management functionality to external
     python environments.
 
     It is a singleton class, which ensures that users only
     start a single TestShell at a time."""
 
-    class __TestShell(BitcoinTestFramework):
+    class __TestShell(DigiByteTestFramework):
         def add_options(self, parser):
             self.add_wallet_options(parser)
 
@@ -31,7 +31,7 @@ class TestShell:
                 return
 
             # Num_nodes parameter must be set
-            # by BitcoinTestFramework child class.
+            # by DigiByteTestFramework child class.
             self.num_nodes = 1
 
             # User parameters override default values.

@@ -9,6 +9,7 @@
 #include <QDialog>
 #include <QValidator>
 
+class ClientModel;
 class OptionsModel;
 class QValidatedLineEdit;
 
@@ -46,6 +47,7 @@ public:
         TAB_NETWORK,
     };
 
+    void setClientModel(ClientModel* client_model);
     void setModel(OptionsModel *model);
     void setMapper();
     void setCurrentTab(OptionsDialog::Tab tab);
@@ -69,11 +71,13 @@ private Q_SLOTS:
 
 Q_SIGNALS:
     void proxyIpChecks(QValidatedLineEdit *pUiProxyIp, uint16_t nProxyPort);
+    void quitOnReset();
 
 private:
     Ui::OptionsDialog *ui;
-    OptionsModel *model;
-    QDataWidgetMapper *mapper;
+    ClientModel* m_client_model{nullptr};
+    OptionsModel* model{nullptr};
+    QDataWidgetMapper* mapper{nullptr};
 };
 
 #endif // DIGIBYTE_QT_OPTIONSDIALOG_H

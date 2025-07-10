@@ -1,22 +1,38 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
+<<<<<<< HEAD
 // Copyright (c) 2009-2020 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <fs.h>
 #include <streams.h>
+=======
+// Copyright (c) 2009-2021 The DigiByte Core developers
+// Distributed under the MIT software license, see the accompanying
+// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
+#include <streams.h>
+#include <util/fs.h>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <util/translation.h>
 #include <wallet/bdb.h>
 #include <wallet/salvage.h>
 #include <wallet/wallet.h>
 #include <wallet/walletdb.h>
 
+<<<<<<< HEAD
+=======
+#include <db_cxx.h>
+
+namespace wallet {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 /* End of headers, beginning of key/value data */
 static const char *HEADER_END = "HEADER=END";
 /* End of key/value data */
 static const char *DATA_END = "DATA=END";
 typedef std::pair<std::vector<unsigned char>, std::vector<unsigned char> > KeyValPair;
 
+<<<<<<< HEAD
 static bool KeyFilter(const std::string& type)
 {
     return WalletBatch::IsKeyType(type) || type == DBKeys::HDCHAIN;
@@ -26,6 +42,59 @@ bool RecoverDatabaseFile(const fs::path& file_path, bilingual_str& error, std::v
 {
     DatabaseOptions options;
     DatabaseStatus status;
+=======
+class DummyCursor : public DatabaseCursor
+{
+    Status Next(DataStream& key, DataStream& value) override { return Status::FAIL; }
+};
+
+/** RAII class that provides access to a DummyDatabase. Never fails. */
+class DummyBatch : public DatabaseBatch
+{
+private:
+    bool ReadKey(DataStream&& key, DataStream& value) override { return true; }
+    bool WriteKey(DataStream&& key, DataStream&& value, bool overwrite=true) override { return true; }
+    bool EraseKey(DataStream&& key) override { return true; }
+    bool HasKey(DataStream&& key) override { return true; }
+    bool ErasePrefix(Span<const std::byte> prefix) override { return true; }
+
+public:
+    void Flush() override {}
+    void Close() override {}
+
+    std::unique_ptr<DatabaseCursor> GetNewCursor() override { return std::make_unique<DummyCursor>(); }
+    std::unique_ptr<DatabaseCursor> GetNewPrefixCursor(Span<const std::byte> prefix) override { return GetNewCursor(); }
+    bool TxnBegin() override { return true; }
+    bool TxnCommit() override { return true; }
+    bool TxnAbort() override { return true; }
+};
+
+/** A dummy WalletDatabase that does nothing and never fails. Only used by salvage.
+ **/
+class DummyDatabase : public WalletDatabase
+{
+public:
+    void Open() override {};
+    void AddRef() override {}
+    void RemoveRef() override {}
+    bool Rewrite(const char* pszSkip=nullptr) override { return true; }
+    bool Backup(const std::string& strDest) const override { return true; }
+    void Close() override {}
+    void Flush() override {}
+    bool PeriodicFlush() override { return true; }
+    void IncrementUpdateCounter() override { ++nUpdateCounter; }
+    void ReloadDbEnv() override {}
+    std::string Filename() override { return "dummy"; }
+    std::string Format() override { return "dummy"; }
+    std::unique_ptr<DatabaseBatch> MakeBatch(bool flush_on_close = true) override { return std::make_unique<DummyBatch>(); }
+};
+
+bool RecoverDatabaseFile(const ArgsManager& args, const fs::path& file_path, bilingual_str& error, std::vector<bilingual_str>& warnings)
+{
+    DatabaseOptions options;
+    DatabaseStatus status;
+    ReadDatabaseArgs(args, options);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     options.require_existing = true;
     options.verify = false;
     options.require_format = DatabaseFormat::BERKELEY;
@@ -45,7 +114,11 @@ bool RecoverDatabaseFile(const fs::path& file_path, bilingual_str& error, std::v
     // Call Salvage with fAggressive=true to
     // get as much data as possible.
     // Rewrite salvaged data to fresh wallet file
+<<<<<<< HEAD
     // Set -rescan so any missing transactions will be
+=======
+    // Rescan so any missing transactions will be
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     // found.
     int64_t now = GetTime();
     std::string newFilename = strprintf("%s.%d.bak", filename, now);
@@ -101,7 +174,11 @@ bool RecoverDatabaseFile(const fs::path& file_path, bilingual_str& error, std::v
                 warnings.push_back(Untranslated("Salvage: WARNING: Number of keys in data does not match number of values."));
                 break;
             }
+<<<<<<< HEAD
             salvagedData.push_back(make_pair(ParseHex(keyHex), ParseHex(valueHex)));
+=======
+            salvagedData.emplace_back(ParseHex(keyHex), ParseHex(valueHex));
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
     }
 
@@ -132,6 +209,7 @@ bool RecoverDatabaseFile(const fs::path& file_path, bilingual_str& error, std::v
         return false;
     }
 
+<<<<<<< HEAD
     DbTxn* ptxn = env->TxnBegin();
     CWallet dummyWallet(nullptr, "", CreateDummyWalletDatabase());
     for (KeyValPair& row : salvagedData)
@@ -149,6 +227,32 @@ bool RecoverDatabaseFile(const fs::path& file_path, bilingual_str& error, std::v
         if (!KeyFilter(strType)) {
             continue;
         }
+=======
+    DbTxn* ptxn = env->TxnBegin(DB_TXN_WRITE_NOSYNC);
+    CWallet dummyWallet(nullptr, "", std::make_unique<DummyDatabase>());
+    for (KeyValPair& row : salvagedData)
+    {
+        /* Filter for only private key type KV pairs to be added to the salvaged wallet */
+        DataStream ssKey{row.first};
+        DataStream ssValue(row.second);
+        std::string strType, strErr;
+
+        // We only care about KEY, MASTER_KEY, CRYPTED_KEY, and HDCHAIN types
+        ssKey >> strType;
+        bool fReadOK = false;
+        if (strType == DBKeys::KEY) {
+            fReadOK = LoadKey(&dummyWallet, ssKey, ssValue, strErr);
+        } else if (strType == DBKeys::CRYPTED_KEY) {
+            fReadOK = LoadCryptedKey(&dummyWallet, ssKey, ssValue, strErr);
+        } else if (strType == DBKeys::MASTER_KEY) {
+            fReadOK = LoadEncryptionKey(&dummyWallet, ssKey, ssValue, strErr);
+        } else if (strType == DBKeys::HDCHAIN) {
+            fReadOK = LoadHDChain(&dummyWallet, ssValue, strErr);
+        } else {
+            continue;
+        }
+
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         if (!fReadOK)
         {
             warnings.push_back(strprintf(Untranslated("WARNING: WalletBatch::Recover skipping %s: %s"), strType, strErr));
@@ -165,3 +269,7 @@ bool RecoverDatabaseFile(const fs::path& file_path, bilingual_str& error, std::v
 
     return fSuccess;
 }
+<<<<<<< HEAD
+=======
+} // namespace wallet
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion

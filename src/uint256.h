@@ -1,17 +1,29 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
+<<<<<<< HEAD
 // Copyright (c) 2009-2020 The Bitcoin Core developers
 // Copyright (c) 2014-2020 The DigiByte Core developers
+=======
+// Copyright (c) 2009-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #ifndef DIGIBYTE_UINT256_H
 #define DIGIBYTE_UINT256_H
 
-#include <assert.h>
+#include <crypto/common.h>
+#include <span.h>
+
+#include <algorithm>
+#include <array>
+#include <cassert>
 #include <cstring>
 #include <stdint.h>
 #include <string>
+<<<<<<< HEAD
 #include <vector>
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 /** Template base class for fixed-sized opaque blobs. */
 template<unsigned int BITS>
@@ -19,40 +31,68 @@ class base_blob
 {
 protected:
     static constexpr int WIDTH = BITS / 8;
+<<<<<<< HEAD
     uint8_t m_data[WIDTH];
+=======
+    static_assert(BITS % 8 == 0, "base_blob currently only supports whole bytes.");
+    std::array<uint8_t, WIDTH> m_data;
+    static_assert(WIDTH == sizeof(m_data), "Sanity check");
+
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 public:
     /* construct 0 value by default */
     constexpr base_blob() : m_data() {}
 
     /* constructor for constants between 1 and 255 */
     constexpr explicit base_blob(uint8_t v) : m_data{v} {}
+<<<<<<< HEAD
+=======
 
-    explicit base_blob(const std::vector<unsigned char>& vch);
-
-    bool IsNull() const
+    constexpr explicit base_blob(Span<const unsigned char> vch)
     {
+        assert(vch.size() == WIDTH);
+        std::copy(vch.begin(), vch.end(), m_data.begin());
+    }
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
+    constexpr bool IsNull() const
+    {
+<<<<<<< HEAD
         for (int i = 0; i < WIDTH; i++)
             if (m_data[i] != 0)
                 return false;
         return true;
+=======
+        return std::all_of(m_data.begin(), m_data.end(), [](uint8_t val) {
+            return val == 0;
+        });
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
-    void SetNull()
+    constexpr void SetNull()
     {
+<<<<<<< HEAD
         memset(m_data, 0, sizeof(m_data));
     }
 
     inline int Compare(const base_blob& other) const { return memcmp(m_data, other.m_data, sizeof(m_data)); }
+=======
+        std::fill(m_data.begin(), m_data.end(), 0);
+    }
 
-    friend inline bool operator==(const base_blob& a, const base_blob& b) { return a.Compare(b) == 0; }
-    friend inline bool operator!=(const base_blob& a, const base_blob& b) { return a.Compare(b) != 0; }
-    friend inline bool operator<(const base_blob& a, const base_blob& b) { return a.Compare(b) < 0; }
+    constexpr int Compare(const base_blob& other) const { return std::memcmp(m_data.data(), other.m_data.data(), WIDTH); }
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
+    friend constexpr bool operator==(const base_blob& a, const base_blob& b) { return a.Compare(b) == 0; }
+    friend constexpr bool operator!=(const base_blob& a, const base_blob& b) { return a.Compare(b) != 0; }
+    friend constexpr bool operator<(const base_blob& a, const base_blob& b) { return a.Compare(b) < 0; }
 
     std::string GetHex() const;
     void SetHex(const char* psz);
     void SetHex(const std::string& str);
     std::string ToString() const;
 
+<<<<<<< HEAD
     const unsigned char* data() const { return m_data; }
     unsigned char* data() { return m_data; }
 
@@ -93,17 +133,39 @@ public:
                ((uint64_t)ptr[6]) << 48 | \
                ((uint64_t)ptr[7]) << 56;
     }
+=======
+    constexpr const unsigned char* data() const { return m_data.data(); }
+    constexpr unsigned char* data() { return m_data.data(); }
+
+    constexpr unsigned char* begin() { return m_data.data(); }
+    constexpr unsigned char* end() { return m_data.data() + WIDTH; }
+
+    constexpr const unsigned char* begin() const { return m_data.data(); }
+    constexpr const unsigned char* end() const { return m_data.data() + WIDTH; }
+
+    static constexpr unsigned int size() { return WIDTH; }
+
+    constexpr uint64_t GetUint64(int pos) const { return ReadLE64(m_data.data() + pos * 8); }
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     template<typename Stream>
     void Serialize(Stream& s) const
     {
+<<<<<<< HEAD
         s.write((char*)m_data, sizeof(m_data));
+=======
+        s << Span(m_data);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     template<typename Stream>
     void Unserialize(Stream& s)
     {
+<<<<<<< HEAD
         s.read((char*)m_data, sizeof(m_data));
+=======
+        s.read(MakeWritableByteSpan(m_data));
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 };
 
@@ -113,8 +175,13 @@ public:
  */
 class uint160 : public base_blob<160> {
 public:
+<<<<<<< HEAD
     constexpr uint160() {}
     explicit uint160(const std::vector<unsigned char>& vch) : base_blob<160>(vch) {}
+=======
+    constexpr uint160() = default;
+    constexpr explicit uint160(Span<const unsigned char> vch) : base_blob<160>(vch) {}
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 };
 
 /** 256-bit opaque blob.
@@ -124,6 +191,7 @@ public:
  */
 class uint256 : public base_blob<256> {
 public:
+<<<<<<< HEAD
     constexpr uint256() {}
     constexpr explicit uint256(uint8_t v) : base_blob<256>(v) {}
     explicit uint256(const std::vector<unsigned char>& vch) : base_blob<256>(vch) {}
@@ -151,6 +219,13 @@ public:
         return ret;
     }	
     
+=======
+    constexpr uint256() = default;
+    constexpr explicit uint256(uint8_t v) : base_blob<256>(v) {}
+    constexpr explicit uint256(Span<const unsigned char> vch) : base_blob<256>(vch) {}
+    static const uint256 ZERO;
+    static const uint256 ONE;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 };
 
 /* uint256 from const char *.

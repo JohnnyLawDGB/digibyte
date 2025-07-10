@@ -1,15 +1,26 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
+<<<<<<< HEAD
 // Copyright (c) 2009-2020 The DigiByte Core developers
+=======
+// Copyright (c) 2009-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #ifndef DIGIBYTE_BANMAN_H
 #define DIGIBYTE_BANMAN_H
 
 #include <addrdb.h>
+<<<<<<< HEAD
 #include <bloom.h>
 #include <fs.h>
 #include <net_types.h> // For banmap_t
 #include <sync.h>
+=======
+#include <common/bloom.h>
+#include <net_types.h> // For banmap_t
+#include <sync.h>
+#include <util/fs.h>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 #include <chrono>
 #include <cstdint>
@@ -80,19 +91,35 @@ public:
     void DumpBanlist();
 
 private:
+<<<<<<< HEAD
+=======
+    void LoadBanlist() EXCLUSIVE_LOCKS_REQUIRED(!m_cs_banned);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     bool BannedSetIsDirty();
     //!set the "dirty" flag for the banlist
     void SetBannedSetDirty(bool dirty = true);
     //!clean unused entries (if bantime has expired)
+<<<<<<< HEAD
     void SweepBanned();
 
     RecursiveMutex m_cs_banned;
     banmap_t m_banned GUARDED_BY(m_cs_banned);
     bool m_is_dirty GUARDED_BY(m_cs_banned);
+=======
+    void SweepBanned() EXCLUSIVE_LOCKS_REQUIRED(m_cs_banned);
+
+    RecursiveMutex m_cs_banned;
+    banmap_t m_banned GUARDED_BY(m_cs_banned);
+    bool m_is_dirty GUARDED_BY(m_cs_banned){false};
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     CClientUIInterface* m_client_interface = nullptr;
     CBanDB m_ban_db;
     const int64_t m_default_ban_time;
     CRollingBloomFilter m_discouraged GUARDED_BY(m_cs_banned) {50000, 0.000001};
 };
 
+<<<<<<< HEAD
 #endif
+=======
+#endif // DIGIBYTE_BANMAN_H
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion

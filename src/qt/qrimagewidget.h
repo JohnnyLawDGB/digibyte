@@ -41,7 +41,11 @@ protected:
     virtual void contextMenuEvent(QContextMenuEvent *event) override;
 
 private:
+<<<<<<< HEAD
     QMenu *contextMenu;
+=======
+    QMenu* contextMenu{nullptr};
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 };
 
 #endif // DIGIBYTE_QT_QRIMAGEWIDGET_H

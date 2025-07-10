@@ -5,6 +5,7 @@
 #ifndef DIGIBYTE_MAPPORT_H
 #define DIGIBYTE_MAPPORT_H
 
+<<<<<<< HEAD
 #ifdef USE_UPNP
 static constexpr bool DEFAULT_UPNP = USE_UPNP;
 #else
@@ -16,6 +17,11 @@ static constexpr bool DEFAULT_NATPMP = USE_NATPMP;
 #else
 static constexpr bool DEFAULT_NATPMP = false;
 #endif // USE_NATPMP
+=======
+static constexpr bool DEFAULT_UPNP = false;
+
+static constexpr bool DEFAULT_NATPMP = false;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 enum MapPortProtoFlag : unsigned int {
     NONE = 0x00,

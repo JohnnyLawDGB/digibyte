@@ -1,5 +1,5 @@
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
+// Copyright (c) 2009-2022 The Bitcoin Core developers
+// Copyright (c) 2014-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -38,9 +38,6 @@ protected:
     void closeEvent(QCloseEvent *event) override;
 
 public Q_SLOTS:
-    /** Hide the splash screen window and schedule the splash screen object for deletion */
-    void finish();
-
     /** Show message and progress */
     void showMessage(const QString &message, int alignment, const QColor &color);
 
@@ -61,12 +58,13 @@ private:
     QPixmap pixmap;
     QString curMessage;
     QColor curColor;
-    int curAlignment;
+    int curAlignment{0};
 
     interfaces::Node* m_node = nullptr;
     bool m_shutdown = false;
     std::unique_ptr<interfaces::Handler> m_handler_init_message;
     std::unique_ptr<interfaces::Handler> m_handler_show_progress;
+    std::unique_ptr<interfaces::Handler> m_handler_init_wallet;
     std::unique_ptr<interfaces::Handler> m_handler_load_wallet;
     std::list<std::unique_ptr<interfaces::Wallet>> m_connected_wallets;
     std::list<std::unique_ptr<interfaces::Handler>> m_connected_wallet_handlers;

@@ -4,43 +4,6 @@
 
 This guide describes how to build digibyted, command-line utilities, and GUI on macOS
 
-**Note:** The following is for Intel Macs only!
-
-## Dependencies
-
-The following dependencies are **required**:
-
-Library                                                    | Purpose    | Description
------------------------------------------------------------|------------|----------------------
-[automake](https://formulae.brew.sh/formula/automake)      | Build      | Generate makefile
-[libtool](https://formulae.brew.sh/formula/libtool)        | Build      | Shared library support
-[pkg-config](https://formulae.brew.sh/formula/pkg-config)  | Build      | Configure compiler and linker flags
-[boost](https://formulae.brew.sh/formula/boost)            | Utility    | Library for threading, data structures, etc
-[libevent](https://formulae.brew.sh/formula/libevent)      | Networking | OS independent asynchronous networking
-
-The following dependencies are **optional**:
-
-Library                                                         | Purpose          | Description
---------------------------------------------------------------- |------------------|----------------------
-[berkeley-db@4](https://formulae.brew.sh/formula/berkeley-db@4) | Berkeley DB      | Wallet storage (only needed when wallet enabled)
-[qt@5](https://formulae.brew.sh/formula/qt@5)                   | GUI              | GUI toolkit (only needed when GUI enabled)
-[qrencode](https://formulae.brew.sh/formula/qrencode)           | QR codes in GUI  | Generating QR codes (only needed when GUI enabled)
-[zeromq](https://formulae.brew.sh/formula/zeromq)               | ZMQ notification | Allows generating ZMQ notifications (requires ZMQ version >= 4.0.0)
-[sqlite](https://formulae.brew.sh/formula/sqlite)               | SQLite DB        | Wallet storage (only needed when wallet enabled)
-[miniupnpc](https://formulae.brew.sh/formula/miniupnpc)         | UPnP Support     | Firewall-jumping support (needed for port mapping support)
-[libnatpmp](https://formulae.brew.sh/formula/libnatpmp)         | NAT-PMP Support  | Firewall-jumping support (needed for port mapping support)
-[python3](https://formulae.brew.sh/formula/python@3.9)          | Testing          | Python Interpreter (only needed when running the test suite)
-
-The following dependencies are **optional** packages required for deploying:
-
-Library                                             | Purpose          | Description
-----------------------------------------------------|------------------|----------------------
-[librsvg](https://formulae.brew.sh/formula/librsvg) | Deploy Dependency| Library to render SVG files
-[ds_store](https://pypi.org/project/ds-store/)      | Deploy Dependency| Examine and modify .DS_Store files
-[mac_alias](https://pypi.org/project/mac-alias/)    | Deploy Dependency| Generate/Read binary alias and bookmark records
-
-See [dependencies.md](dependencies.md) for a complete overview.
-
 ## Preparation
 
 The commands in this guide should be executed in a Terminal application.
@@ -79,6 +42,9 @@ Note: If you run into issues while installing Homebrew or pulling packages, refe
 
 The first step is to download the required dependencies.
 These dependencies represent the packages required to get a barebones installation up and running.
+
+See [dependencies.md](dependencies.md) for a complete overview.
+
 To install, run the following from your terminal:
 
 ``` bash
@@ -92,7 +58,7 @@ Now that all the required dependencies are installed, let's clone the DigiByte C
 All build scripts and commands will run from this directory.
 
 ``` bash
-git clone https://github.com/digibyte-core/digibyte.git
+git clone https://github.com/digibyte/digibyte.git
 ```
 
 ### 5. Install Optional Dependencies
@@ -100,29 +66,21 @@ git clone https://github.com/digibyte-core/digibyte.git
 #### Wallet Dependencies
 
 It is not necessary to build wallet functionality to run `digibyted` or  `digibyte-qt`.
-To enable legacy wallets, you must install `berkeley-db@4`.
-To enable [descriptor wallets](https://github.com/digibyte-core/digibyte/blob/master/doc/descriptors.md), `sqlite` is required.
-Skip `berkeley-db@4` if you intend to *exclusively* use descriptor wallets.
+
+###### Descriptor Wallet Support
+
+`sqlite` is required to support for descriptor wallets.
+
+macOS ships with a useable `sqlite` package, meaning you don't need to
+install anything.
 
 ###### Legacy Wallet Support
 
-`berkeley-db@4` is required to enable support for legacy wallets.
+`berkeley-db@4` is only required to support for legacy wallets.
 Skip if you don't intend to use legacy wallets.
 
 ``` bash
 brew install berkeley-db@4
-```
-
-###### Descriptor Wallet Support
-
-Note: Apple has included a useable `sqlite` package since macOS 10.14.
-You may not need to install this package.
-
-`sqlite` is required to enable support for descriptor wallets.
-Skip if you don't intend to use descriptor wallets.
-
-``` bash
-brew install sqlite
 ```
 ---
 
@@ -138,16 +96,8 @@ Skip if you don't intend to use the GUI.
 brew install qt@5
 ```
 
-Ensure that the `qt@5` package is installed, not the `qt` package.
-If 'qt' is installed, the build process will fail.
-if installed, remove the `qt` package with the following command:
-
-``` bash
-brew uninstall qt
-```
-
 Note: Building with Qt binaries downloaded from the Qt website is not officially supported.
-See the notes in [#7714](https://github.com/digibyte-core/digibyte/issues/7714).
+See the notes in [#7714](https://github.com/digibyte/digibyte/issues/7714).
 
 ###### qrencode
 
@@ -213,18 +163,8 @@ brew install python
 
 #### Deploy Dependencies
 
-You can deploy a `.dmg` containing the DigiByte Core application using `make deploy`.
-This command depends on a couple of python packages, so it is required that you have `python` installed.
-
-Ensuring that `python` is installed, you can install the deploy dependencies by running the following commands in your terminal:
-
-``` bash
-brew install librsvg
-```
-
-``` bash
-pip3 install ds_store mac_alias
-```
+You can deploy a `.zip` containing the DigiByte Core application using `make deploy`.
+It is required that you have `python` installed.
 
 ## Building DigiByte Core
 
@@ -284,7 +224,7 @@ make check  # Run tests if Python 3 is available
 
 ### 3. Deploy (optional)
 
-You can also create a  `.dmg` containing the `.app` bundle by running the following command:
+You can also create a  `.zip` containing the `.app` bundle by running the following command:
 
 ``` bash
 make deploy

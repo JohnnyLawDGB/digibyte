@@ -3,7 +3,7 @@
 
 DigiByte Core version 0.21.0 is now available from:
 
-  <https://digibyte.org/bin/digibyte-core-0.21.0/>
+  <https://digibytecore.org/bin/digibyte-core-0.21.0/>
 
 This release includes new features, various bug fixes and performance
 improvements, as well as updated translations.
@@ -14,7 +14,7 @@ Please report bugs using the issue tracker at GitHub:
 
 To receive security and update notifications, please subscribe to:
 
-  <https://digibyte.org/en/list/announcements/join/>
+  <https://digibytecore.org/en/list/announcements/join/>
 
 How to Upgrade
 ==============
@@ -172,10 +172,10 @@ Updated RPCs
   it is recommended to instead use the `connection_type` field (it will return
   `manual` when addnode is true). (#19725)
 
-- The `getpeerinfo` RPC no longer returns the `whitelisted` field by default. 
-  This field will be fully removed in the next major release. It can be accessed 
-  with the configuration option `-deprecatedrpc=getpeerinfo_whitelisted`. However, 
-  it is recommended to instead use the `permissions` field to understand if specific 
+- The `getpeerinfo` RPC no longer returns the `whitelisted` field by default.
+  This field will be fully removed in the next major release. It can be accessed
+  with the configuration option `-deprecatedrpc=getpeerinfo_whitelisted`. However,
+  it is recommended to instead use the `permissions` field to understand if specific
   privileges have been granted to the peer. (#19770)
 
 - The `walletcreatefundedpsbt` RPC call will now fail with

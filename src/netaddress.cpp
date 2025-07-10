@@ -1,6 +1,10 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
+<<<<<<< HEAD
 // Copyright (c) 2009-2020 The Bitcoin Core developers
 // Copyright (c) 2014-2020 The DigiByte Core developers
+=======
+// Copyright (c) 2009-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -11,7 +15,10 @@
 #include <hash.h>
 #include <prevector.h>
 #include <tinyformat.h>
+<<<<<<< HEAD
 #include <util/asmap.h>
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <util/strencodings.h>
 #include <util/string.h>
 
@@ -22,9 +29,12 @@
 #include <iterator>
 #include <tuple>
 
+<<<<<<< HEAD
 constexpr size_t CNetAddr::V1_SERIALIZATION_SIZE;
 constexpr size_t CNetAddr::MAX_ADDRV2_SIZE;
 
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 CNetAddr::BIP155Network CNetAddr::GetBIP155Network() const
 {
     switch (m_net) {
@@ -103,7 +113,11 @@ bool CNetAddr::SetNetFromBIP155Network(uint8_t possible_bip155_net, size_t addre
  *
  * @note This address is considered invalid by CNetAddr::IsValid()
  */
+<<<<<<< HEAD
 CNetAddr::CNetAddr() {}
+=======
+CNetAddr::CNetAddr() = default;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 void CNetAddr::SetIP(const CNetAddr& ipIn)
 {
@@ -166,7 +180,11 @@ void CNetAddr::SetLegacyIPv6(Span<const uint8_t> ipv6)
 }
 
 /**
+<<<<<<< HEAD
  * Create an "internal" address that represents a name or FQDN. CAddrMan uses
+=======
+ * Create an "internal" address that represents a name or FQDN. AddrMan uses
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
  * these fake addresses to keep track of which DNS seeds were used.
  * @returns Whether or not the operation was successful.
  * @see NET_INTERNAL, INTERNAL_IN_IPV6_PREFIX, CNetAddr::IsInternal(), CNetAddr::IsRFC4193()
@@ -184,7 +202,11 @@ bool CNetAddr::SetInternal(const std::string &name)
 }
 
 namespace torv3 {
+<<<<<<< HEAD
 // https://gitweb.torproject.org/torspec.git/tree/rend-spec-v3.txt#n2135
+=======
+// https://gitweb.torproject.org/torspec.git/tree/rend-spec-v3.txt?id=7116c9cdaba248aae07a3f1d0e15d9dd102f62c5#n2175
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 static constexpr size_t CHECKSUM_LEN = 2;
 static const unsigned char VERSION[] = {3};
 static constexpr size_t TOTAL_LEN = ADDR_TORV3_SIZE + CHECKSUM_LEN + sizeof(VERSION);
@@ -197,7 +219,11 @@ static void Checksum(Span<const uint8_t> addr_pubkey, uint8_t (&checksum)[CHECKS
 
     SHA3_256 hasher;
 
+<<<<<<< HEAD
     hasher.Write(MakeSpan(prefix).first(prefix_len));
+=======
+    hasher.Write(Span{prefix}.first(prefix_len));
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     hasher.Write(addr_pubkey);
     hasher.Write(VERSION);
 
@@ -212,7 +238,11 @@ static void Checksum(Span<const uint8_t> addr_pubkey, uint8_t (&checksum)[CHECKS
 
 bool CNetAddr::SetSpecial(const std::string& addr)
 {
+<<<<<<< HEAD
     if (!ValidAsCString(addr)) {
+=======
+    if (!ContainsNoNUL(addr)) {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         return false;
     }
 
@@ -236,6 +266,7 @@ bool CNetAddr::SetTor(const std::string& addr)
         return false;
     }
 
+<<<<<<< HEAD
     bool invalid;
     const auto& input = DecodeBase32(addr.substr(0, addr.size() - suffix_len).c_str(), &invalid);
 
@@ -247,6 +278,18 @@ bool CNetAddr::SetTor(const std::string& addr)
         Span<const uint8_t> input_pubkey{input.data(), ADDR_TORV3_SIZE};
         Span<const uint8_t> input_checksum{input.data() + ADDR_TORV3_SIZE, torv3::CHECKSUM_LEN};
         Span<const uint8_t> input_version{input.data() + ADDR_TORV3_SIZE + torv3::CHECKSUM_LEN, sizeof(torv3::VERSION)};
+=======
+    auto input = DecodeBase32(std::string_view{addr}.substr(0, addr.size() - suffix_len));
+
+    if (!input) {
+        return false;
+    }
+
+    if (input->size() == torv3::TOTAL_LEN) {
+        Span<const uint8_t> input_pubkey{input->data(), ADDR_TORV3_SIZE};
+        Span<const uint8_t> input_checksum{input->data() + ADDR_TORV3_SIZE, torv3::CHECKSUM_LEN};
+        Span<const uint8_t> input_version{input->data() + ADDR_TORV3_SIZE + torv3::CHECKSUM_LEN, sizeof(torv3::VERSION)};
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         if (input_version != torv3::VERSION) {
             return false;
@@ -282,15 +325,25 @@ bool CNetAddr::SetI2P(const std::string& addr)
     // can decode it.
     const std::string b32_padded = addr.substr(0, b32_len) + "====";
 
+<<<<<<< HEAD
     bool invalid;
     const auto& address_bytes = DecodeBase32(b32_padded.c_str(), &invalid);
 
     if (invalid || address_bytes.size() != ADDR_I2P_SIZE) {
+=======
+    auto address_bytes = DecodeBase32(b32_padded);
+
+    if (!address_bytes || address_bytes->size() != ADDR_I2P_SIZE) {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         return false;
     }
 
     m_net = NET_I2P;
+<<<<<<< HEAD
     m_addr.assign(address_bytes.begin(), address_bytes.end());
+=======
+    m_addr.assign(address_bytes->begin(), address_bytes->end());
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     return true;
 }
@@ -304,7 +357,11 @@ CNetAddr::CNetAddr(const struct in_addr& ipv4Addr)
 
 CNetAddr::CNetAddr(const struct in6_addr& ipv6Addr, const uint32_t scope)
 {
+<<<<<<< HEAD
     SetLegacyIPv6(Span<const uint8_t>(reinterpret_cast<const uint8_t*>(&ipv6Addr), sizeof(ipv6Addr)));
+=======
+    SetLegacyIPv6({reinterpret_cast<const uint8_t*>(&ipv6Addr), sizeof(ipv6Addr)});
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     m_scope_id = scope;
 }
 
@@ -315,10 +372,13 @@ bool CNetAddr::IsBindAny() const
     }
     return std::all_of(m_addr.begin(), m_addr.end(), [](uint8_t b) { return b == 0; });
 }
+<<<<<<< HEAD
 
 bool CNetAddr::IsIPv4() const { return m_net == NET_IPV4; }
 
 bool CNetAddr::IsIPv6() const { return m_net == NET_IPV6; }
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 bool CNetAddr::IsRFC1918() const
 {
@@ -400,6 +460,14 @@ bool CNetAddr::IsRFC7343() const
 {
     return IsIPv6() && HasPrefix(m_addr, std::array<uint8_t, 3>{0x20, 0x01, 0x00}) &&
            (m_addr[3] & 0xF0) == 0x20;
+<<<<<<< HEAD
+=======
+}
+
+bool CNetAddr::IsHeNet() const
+{
+    return IsIPv6() && HasPrefix(m_addr, std::array<uint8_t, 4>{0x20, 0x01, 0x04, 0x70});
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 bool CNetAddr::IsHeNet() const
@@ -457,8 +525,12 @@ bool CNetAddr::IsValid() const
         return false;
     }
 
+<<<<<<< HEAD
     // CJDNS addresses always start with 0xfc
     if (IsCJDNS() && (m_addr[0] != 0xFC)) {
+=======
+    if (IsCJDNS() && !HasCJDNSPrefix()) {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         return false;
     }
 
@@ -531,6 +603,7 @@ enum Network CNetAddr::GetNetwork() const
         return NET_UNROUTABLE;
 
     return m_net;
+<<<<<<< HEAD
 }
 
 static std::string IPv4ToString(Span<const uint8_t> a)
@@ -604,9 +677,106 @@ static std::string OnionToString(Span<const uint8_t> addr)
     address.insert(address.end(), checksum, checksum + torv3::CHECKSUM_LEN);
     address.insert(address.end(), torv3::VERSION, torv3::VERSION + sizeof(torv3::VERSION));
     return EncodeBase32(address) + ".onion";
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
-std::string CNetAddr::ToStringIP() const
+static std::string IPv4ToString(Span<const uint8_t> a)
+{
+<<<<<<< HEAD
+    switch (m_net) {
+    case NET_IPV4:
+        return IPv4ToString(m_addr);
+    case NET_IPV6:
+        return IPv6ToString(m_addr, m_scope_id);
+    case NET_ONION:
+        return OnionToString(m_addr);
+    case NET_I2P:
+        return EncodeBase32(m_addr, false /* don't pad with = */) + ".b32.i2p";
+    case NET_CJDNS:
+        return IPv6ToString(m_addr, 0);
+    case NET_INTERNAL:
+        return EncodeBase32(m_addr) + ".internal";
+    case NET_UNROUTABLE: // m_net is never and should not be set to NET_UNROUTABLE
+    case NET_MAX:        // m_net is never and should not be set to NET_MAX
+        assert(false);
+    } // no default case, so the compiler can warn about missing cases
+
+    assert(false);
+=======
+    return strprintf("%u.%u.%u.%u", a[0], a[1], a[2], a[3]);
+}
+
+// Return an IPv6 address text representation with zero compression as described in RFC 5952
+// ("A Recommendation for IPv6 Address Text Representation").
+static std::string IPv6ToString(Span<const uint8_t> a, uint32_t scope_id)
+{
+    assert(a.size() == ADDR_IPV6_SIZE);
+    const std::array groups{
+        ReadBE16(&a[0]),
+        ReadBE16(&a[2]),
+        ReadBE16(&a[4]),
+        ReadBE16(&a[6]),
+        ReadBE16(&a[8]),
+        ReadBE16(&a[10]),
+        ReadBE16(&a[12]),
+        ReadBE16(&a[14]),
+    };
+
+    // The zero compression implementation is inspired by Rust's std::net::Ipv6Addr, see
+    // https://github.com/rust-lang/rust/blob/cc4103089f40a163f6d143f06359cba7043da29b/library/std/src/net/ip.rs#L1635-L1683
+    struct ZeroSpan {
+        size_t start_index{0};
+        size_t len{0};
+    };
+
+    // Find longest sequence of consecutive all-zero fields. Use first zero sequence if two or more
+    // zero sequences of equal length are found.
+    ZeroSpan longest, current;
+    for (size_t i{0}; i < groups.size(); ++i) {
+        if (groups[i] != 0) {
+            current = {i + 1, 0};
+            continue;
+        }
+        current.len += 1;
+        if (current.len > longest.len) {
+            longest = current;
+        }
+    }
+
+    std::string r;
+    r.reserve(39);
+    for (size_t i{0}; i < groups.size(); ++i) {
+        // Replace the longest sequence of consecutive all-zero fields with two colons ("::").
+        if (longest.len >= 2 && i >= longest.start_index && i < longest.start_index + longest.len) {
+            if (i == longest.start_index) {
+                r += "::";
+            }
+            continue;
+        }
+        r += strprintf("%s%x", ((!r.empty() && r.back() != ':') ? ":" : ""), groups[i]);
+    }
+
+    if (scope_id != 0) {
+        r += strprintf("%%%u", scope_id);
+    }
+
+    return r;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+}
+
+std::string OnionToString(Span<const uint8_t> addr)
+{
+    uint8_t checksum[torv3::CHECKSUM_LEN];
+    torv3::Checksum(addr, checksum);
+    // TORv3 onion_address = base32(PUBKEY | CHECKSUM | VERSION) + ".onion"
+    prevector<torv3::TOTAL_LEN, uint8_t> address{addr.begin(), addr.end()};
+    address.insert(address.end(), checksum, checksum + torv3::CHECKSUM_LEN);
+    address.insert(address.end(), torv3::VERSION, torv3::VERSION + sizeof(torv3::VERSION));
+    return EncodeBase32(address) + ".onion";
+}
+
+std::string CNetAddr::ToStringAddr() const
 {
     switch (m_net) {
     case NET_IPV4:
@@ -627,11 +797,6 @@ std::string CNetAddr::ToStringIP() const
     } // no default case, so the compiler can warn about missing cases
 
     assert(false);
-}
-
-std::string CNetAddr::ToString() const
-{
-    return ToStringIP();
 }
 
 bool operator==(const CNetAddr& a, const CNetAddr& b)
@@ -664,7 +829,11 @@ bool CNetAddr::GetInAddr(struct in_addr* pipv4Addr) const
 }
 
 /**
+<<<<<<< HEAD
  * Try to get our IPv6 address.
+=======
+ * Try to get our IPv6 (or CJDNS) address.
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
  *
  * @param[out] pipv6Addr The in6_addr struct to which to copy.
  *
@@ -675,7 +844,7 @@ bool CNetAddr::GetInAddr(struct in_addr* pipv4Addr) const
  */
 bool CNetAddr::GetIn6Addr(struct in6_addr* pipv6Addr) const
 {
-    if (!IsIPv6()) {
+    if (!IsIPv6() && !IsCJDNS()) {
         return false;
     }
     assert(sizeof(*pipv6Addr) == m_addr.size());
@@ -684,6 +853,7 @@ bool CNetAddr::GetIn6Addr(struct in6_addr* pipv6Addr) const
 }
 
 bool CNetAddr::HasLinkedIPv4() const
+<<<<<<< HEAD
 {
     return IsRoutable() && (IsIPv4() || IsRFC6145() || IsRFC6052() || IsRFC3964() || IsRFC4380());
 }
@@ -834,23 +1004,69 @@ uint64_t CNetAddr::GetHash() const
     uint64_t nRet;
     memcpy(&nRet, &hash, sizeof(nRet));
     return nRet;
+=======
+{
+    return IsRoutable() && (IsIPv4() || IsRFC6145() || IsRFC6052() || IsRFC3964() || IsRFC4380());
+}
+
+uint32_t CNetAddr::GetLinkedIPv4() const
+{
+    if (IsIPv4()) {
+        return ReadBE32(m_addr.data());
+    } else if (IsRFC6052() || IsRFC6145()) {
+        // mapped IPv4, SIIT translated IPv4: the IPv4 address is the last 4 bytes of the address
+        return ReadBE32(Span{m_addr}.last(ADDR_IPV4_SIZE).data());
+    } else if (IsRFC3964()) {
+        // 6to4 tunneled IPv4: the IPv4 address is in bytes 2-6
+        return ReadBE32(Span{m_addr}.subspan(2, ADDR_IPV4_SIZE).data());
+    } else if (IsRFC4380()) {
+        // Teredo tunneled IPv4: the IPv4 address is in the last 4 bytes of the address, but bitflipped
+        return ~ReadBE32(Span{m_addr}.last(ADDR_IPV4_SIZE).data());
+    }
+    assert(false);
+}
+
+Network CNetAddr::GetNetClass() const
+{
+    // Make sure that if we return NET_IPV6, then IsIPv6() is true. The callers expect that.
+
+    // Check for "internal" first because such addresses are also !IsRoutable()
+    // and we don't want to return NET_UNROUTABLE in that case.
+    if (IsInternal()) {
+        return NET_INTERNAL;
+    }
+    if (!IsRoutable()) {
+        return NET_UNROUTABLE;
+    }
+    if (HasLinkedIPv4()) {
+        return NET_IPV4;
+    }
+    return m_net;
+}
+
+std::vector<unsigned char> CNetAddr::GetAddrBytes() const
+{
+    if (IsAddrV1Compatible()) {
+        uint8_t serialized[V1_SERIALIZATION_SIZE];
+        SerializeV1Array(serialized);
+        return {std::begin(serialized), std::end(serialized)};
+    }
+    return std::vector<unsigned char>(m_addr.begin(), m_addr.end());
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 // private extensions to enum Network, only returned by GetExtNetwork,
 // and only used in GetReachabilityFrom
-static const int NET_UNKNOWN = NET_MAX + 0;
-static const int NET_TEREDO  = NET_MAX + 1;
-int static GetExtNetwork(const CNetAddr *addr)
+static const int NET_TEREDO = NET_MAX;
+int static GetExtNetwork(const CNetAddr& addr)
 {
-    if (addr == nullptr)
-        return NET_UNKNOWN;
-    if (addr->IsRFC4380())
+    if (addr.IsRFC4380())
         return NET_TEREDO;
-    return addr->GetNetwork();
+    return addr.GetNetwork();
 }
 
 /** Calculates a metric for how reachable (*this) is from a given partner */
-int CNetAddr::GetReachabilityFrom(const CNetAddr *paddrPartner) const
+int CNetAddr::GetReachabilityFrom(const CNetAddr& paddrPartner) const
 {
     enum Reachability {
         REACH_UNREACHABLE,
@@ -865,7 +1081,7 @@ int CNetAddr::GetReachabilityFrom(const CNetAddr *paddrPartner) const
     if (!IsRoutable() || IsInternal())
         return REACH_UNREACHABLE;
 
-    int ourNet = GetExtNetwork(this);
+    int ourNet = GetExtNetwork(*this);
     int theirNet = GetExtNetwork(paddrPartner);
     bool fTunnel = IsRFC3964() || IsRFC6052() || IsRFC6145();
 
@@ -893,6 +1109,14 @@ int CNetAddr::GetReachabilityFrom(const CNetAddr *paddrPartner) const
         case NET_I2P: return REACH_PRIVATE;
         default: return REACH_DEFAULT;
         }
+<<<<<<< HEAD
+=======
+    case NET_CJDNS:
+        switch (ourNet) {
+        case NET_CJDNS: return REACH_PRIVATE;
+        default: return REACH_DEFAULT;
+        }
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     case NET_TEREDO:
         switch(ourNet) {
         default:          return REACH_DEFAULT;
@@ -900,7 +1124,6 @@ int CNetAddr::GetReachabilityFrom(const CNetAddr *paddrPartner) const
         case NET_IPV6:    return REACH_IPV6_WEAK;
         case NET_IPV4:    return REACH_IPV4;
         }
-    case NET_UNKNOWN:
     case NET_UNROUTABLE:
     default:
         switch(ourNet) {
@@ -994,7 +1217,7 @@ bool CService::GetSockAddr(struct sockaddr* paddr, socklen_t *addrlen) const
         paddrin->sin_port = htons(port);
         return true;
     }
-    if (IsIPv6()) {
+    if (IsIPv6() || IsCJDNS()) {
         if (*addrlen < (socklen_t)sizeof(struct sockaddr_in6))
             return false;
         *addrlen = sizeof(struct sockaddr_in6);
@@ -1021,23 +1244,22 @@ std::vector<unsigned char> CService::GetKey() const
     return key;
 }
 
-std::string CService::ToStringPort() const
+std::string CService::ToStringAddrPort() const
 {
-    return strprintf("%u", port);
-}
+    const auto port_str = strprintf("%u", port);
 
+<<<<<<< HEAD
 std::string CService::ToStringIPPort() const
 {
     if (IsIPv4() || IsTor() || IsI2P() || IsInternal()) {
         return ToStringIP() + ":" + ToStringPort();
+=======
+    if (IsIPv4() || IsTor() || IsI2P() || IsInternal()) {
+        return ToStringAddr() + ":" + port_str;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     } else {
-        return "[" + ToStringIP() + "]:" + ToStringPort();
+        return "[" + ToStringAddr() + "]:" + port_str;
     }
-}
-
-std::string CService::ToString() const
-{
-    return ToStringIPPort();
 }
 
 CSubNet::CSubNet():
@@ -1203,7 +1425,11 @@ std::string CSubNet::ToString() const
         break;
     }
 
+<<<<<<< HEAD
     return network.ToString() + suffix;
+=======
+    return network.ToStringAddr() + suffix;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 bool CSubNet::IsValid() const

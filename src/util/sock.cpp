@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 // Copyright (c) 2020-2021 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
@@ -13,6 +14,22 @@
 #include <codecvt>
 #include <cwchar>
 #include <locale>
+=======
+// Copyright (c) 2020-2022 The DigiByte Core developers
+// Distributed under the MIT software license, see the accompanying
+// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
+#include <common/system.h>
+#include <compat/compat.h>
+#include <logging.h>
+#include <tinyformat.h>
+#include <util/sock.h>
+#include <util/syserror.h>
+#include <util/threadinterrupt.h>
+#include <util/time.h>
+
+#include <memory>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <stdexcept>
 #include <string>
 
@@ -25,8 +42,11 @@ static inline bool IOErrorIsPermanent(int err)
     return err != WSAEAGAIN && err != WSAEINTR && err != WSAEWOULDBLOCK && err != WSAEINPROGRESS;
 }
 
+<<<<<<< HEAD
 Sock::Sock() : m_socket(INVALID_SOCKET) {}
 
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 Sock::Sock(SOCKET s) : m_socket(s) {}
 
 Sock::Sock(Sock&& other)
@@ -35,16 +55,25 @@ Sock::Sock(Sock&& other)
     other.m_socket = INVALID_SOCKET;
 }
 
+<<<<<<< HEAD
 Sock::~Sock() { Reset(); }
 
 Sock& Sock::operator=(Sock&& other)
 {
     Reset();
+=======
+Sock::~Sock() { Close(); }
+
+Sock& Sock::operator=(Sock&& other)
+{
+    Close();
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     m_socket = other.m_socket;
     other.m_socket = INVALID_SOCKET;
     return *this;
 }
 
+<<<<<<< HEAD
 SOCKET Sock::Get() const { return m_socket; }
 
 SOCKET Sock::Release()
@@ -56,6 +85,8 @@ SOCKET Sock::Release()
 
 void Sock::Reset() { CloseSocket(m_socket); }
 
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 ssize_t Sock::Send(const void* data, size_t len, int flags) const
 {
     return send(m_socket, static_cast<const char*>(data), len, flags);
@@ -71,11 +102,51 @@ int Sock::Connect(const sockaddr* addr, socklen_t addr_len) const
     return connect(m_socket, addr, addr_len);
 }
 
+<<<<<<< HEAD
+=======
+int Sock::Bind(const sockaddr* addr, socklen_t addr_len) const
+{
+    return bind(m_socket, addr, addr_len);
+}
+
+int Sock::Listen(int backlog) const
+{
+    return listen(m_socket, backlog);
+}
+
+std::unique_ptr<Sock> Sock::Accept(sockaddr* addr, socklen_t* addr_len) const
+{
+#ifdef WIN32
+    static constexpr auto ERR = INVALID_SOCKET;
+#else
+    static constexpr auto ERR = SOCKET_ERROR;
+#endif
+
+    std::unique_ptr<Sock> sock;
+
+    const auto socket = accept(m_socket, addr, addr_len);
+    if (socket != ERR) {
+        try {
+            sock = std::make_unique<Sock>(socket);
+        } catch (const std::exception&) {
+#ifdef WIN32
+            closesocket(socket);
+#else
+            close(socket);
+#endif
+        }
+    }
+
+    return sock;
+}
+
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 int Sock::GetSockOpt(int level, int opt_name, void* opt_val, socklen_t* opt_len) const
 {
     return getsockopt(m_socket, level, opt_name, static_cast<char*>(opt_val), opt_len);
 }
 
+<<<<<<< HEAD
 bool Sock::Wait(std::chrono::milliseconds timeout, Event requested, Event* occurred) const
 {
 #ifdef USE_POLL
@@ -90,10 +161,61 @@ bool Sock::Wait(std::chrono::milliseconds timeout, Event requested, Event* occur
     }
 
     if (poll(&fd, 1, count_milliseconds(timeout)) == SOCKET_ERROR) {
+=======
+int Sock::SetSockOpt(int level, int opt_name, const void* opt_val, socklen_t opt_len) const
+{
+    return setsockopt(m_socket, level, opt_name, static_cast<const char*>(opt_val), opt_len);
+}
+
+int Sock::GetSockName(sockaddr* name, socklen_t* name_len) const
+{
+    return getsockname(m_socket, name, name_len);
+}
+
+bool Sock::SetNonBlocking() const
+{
+#ifdef WIN32
+    u_long on{1};
+    if (ioctlsocket(m_socket, FIONBIO, &on) == SOCKET_ERROR) {
+        return false;
+    }
+#else
+    const int flags{fcntl(m_socket, F_GETFL, 0)};
+    if (flags == SOCKET_ERROR) {
+        return false;
+    }
+    if (fcntl(m_socket, F_SETFL, flags | O_NONBLOCK) == SOCKET_ERROR) {
+        return false;
+    }
+#endif
+    return true;
+}
+
+bool Sock::IsSelectable() const
+{
+#if defined(USE_POLL) || defined(WIN32)
+    return true;
+#else
+    return m_socket < FD_SETSIZE;
+#endif
+}
+
+bool Sock::Wait(std::chrono::milliseconds timeout, Event requested, Event* occurred) const
+{
+    // We need a `shared_ptr` owning `this` for `WaitMany()`, but don't want
+    // `this` to be destroyed when the `shared_ptr` goes out of scope at the
+    // end of this function. Create it with a custom noop deleter.
+    std::shared_ptr<const Sock> shared{this, [](const Sock*) {}};
+
+    EventsPerSock events_per_sock{std::make_pair(shared, Events{requested})};
+
+    if (!WaitMany(timeout, events_per_sock)) {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         return false;
     }
 
     if (occurred != nullptr) {
+<<<<<<< HEAD
         *occurred = 0;
         if (fd.revents & POLLIN) {
             *occurred |= RECV;
@@ -135,6 +257,93 @@ bool Sock::Wait(std::chrono::milliseconds timeout, Event requested, Event* occur
         }
         if (FD_ISSET(m_socket, &fdset_send)) {
             *occurred |= SEND;
+=======
+        *occurred = events_per_sock.begin()->second.occurred;
+    }
+
+    return true;
+}
+
+bool Sock::WaitMany(std::chrono::milliseconds timeout, EventsPerSock& events_per_sock) const
+{
+#ifdef USE_POLL
+    std::vector<pollfd> pfds;
+    for (const auto& [sock, events] : events_per_sock) {
+        pfds.emplace_back();
+        auto& pfd = pfds.back();
+        pfd.fd = sock->m_socket;
+        if (events.requested & RECV) {
+            pfd.events |= POLLIN;
+        }
+        if (events.requested & SEND) {
+            pfd.events |= POLLOUT;
+        }
+    }
+
+    if (poll(pfds.data(), pfds.size(), count_milliseconds(timeout)) == SOCKET_ERROR) {
+        return false;
+    }
+
+    assert(pfds.size() == events_per_sock.size());
+    size_t i{0};
+    for (auto& [sock, events] : events_per_sock) {
+        assert(sock->m_socket == static_cast<SOCKET>(pfds[i].fd));
+        events.occurred = 0;
+        if (pfds[i].revents & POLLIN) {
+            events.occurred |= RECV;
+        }
+        if (pfds[i].revents & POLLOUT) {
+            events.occurred |= SEND;
+        }
+        if (pfds[i].revents & (POLLERR | POLLHUP)) {
+            events.occurred |= ERR;
+        }
+        ++i;
+    }
+
+    return true;
+#else
+    fd_set recv;
+    fd_set send;
+    fd_set err;
+    FD_ZERO(&recv);
+    FD_ZERO(&send);
+    FD_ZERO(&err);
+    SOCKET socket_max{0};
+
+    for (const auto& [sock, events] : events_per_sock) {
+        if (!sock->IsSelectable()) {
+            return false;
+        }
+        const auto& s = sock->m_socket;
+        if (events.requested & RECV) {
+            FD_SET(s, &recv);
+        }
+        if (events.requested & SEND) {
+            FD_SET(s, &send);
+        }
+        FD_SET(s, &err);
+        socket_max = std::max(socket_max, s);
+    }
+
+    timeval tv = MillisToTimeval(timeout);
+
+    if (select(socket_max + 1, &recv, &send, &err, &tv) == SOCKET_ERROR) {
+        return false;
+    }
+
+    for (auto& [sock, events] : events_per_sock) {
+        const auto& s = sock->m_socket;
+        events.occurred = 0;
+        if (FD_ISSET(s, &recv)) {
+            events.occurred |= RECV;
+        }
+        if (FD_ISSET(s, &send)) {
+            events.occurred |= SEND;
+        }
+        if (FD_ISSET(s, &err)) {
+            events.occurred |= ERR;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
     }
 
@@ -291,6 +500,7 @@ bool Sock::IsConnected(std::string& errmsg) const
     }
 }
 
+<<<<<<< HEAD
 #ifdef WIN32
 std::string NetworkErrorString(int err)
 {
@@ -340,4 +550,35 @@ bool CloseSocket(SOCKET& hSocket)
     }
     hSocket = INVALID_SOCKET;
     return ret != SOCKET_ERROR;
+=======
+void Sock::Close()
+{
+    if (m_socket == INVALID_SOCKET) {
+        return;
+    }
+#ifdef WIN32
+    int ret = closesocket(m_socket);
+#else
+    int ret = close(m_socket);
+#endif
+    if (ret) {
+        LogPrintf("Error closing socket %d: %s\n", m_socket, NetworkErrorString(WSAGetLastError()));
+    }
+    m_socket = INVALID_SOCKET;
+}
+
+bool Sock::operator==(SOCKET s) const
+{
+    return m_socket == s;
+};
+
+std::string NetworkErrorString(int err)
+{
+#if defined(WIN32)
+    return Win32ErrorString(err);
+#else
+    // On BSD sockets implementations, NetworkErrorString is the same as SysErrorString.
+    return SysErrorString(err);
+#endif
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }

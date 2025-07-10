@@ -1,5 +1,9 @@
+<<<<<<< HEAD
 // Copyright (c) 2009-2020 The Bitcoin Core developers
 // Copyright (c) 2014-2020 The DigiByte Core developers
+=======
+// Copyright (c) 2011-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -12,30 +16,44 @@
 #include <qt/peertablesortproxy.h>
 
 #include <clientversion.h>
+#include <common/args.h>
+#include <common/system.h>
 #include <interfaces/handler.h>
 #include <interfaces/node.h>
 #include <net.h>
 #include <netbase.h>
+<<<<<<< HEAD
 #include <util/system.h>
 #include <util/threadnames.h>
+=======
+#include <util/threadnames.h>
+#include <util/time.h>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <validation.h>
 
 #include <stdint.h>
 #include <functional>
 
 #include <QDebug>
+<<<<<<< HEAD
+=======
+#include <QMetaObject>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <QThread>
 #include <QTimer>
 
-static int64_t nLastHeaderTipUpdateNotification = 0;
-static int64_t nLastBlockTipUpdateNotification = 0;
+static SteadyClock::time_point g_last_header_tip_update_notification{};
+static SteadyClock::time_point g_last_block_tip_update_notification{};
 
 ClientModel::ClientModel(interfaces::Node& node, OptionsModel *_optionsModel, QObject *parent) :
     QObject(parent),
     m_node(node),
     optionsModel(_optionsModel),
+<<<<<<< HEAD
     peerTableModel(nullptr),
     banTableModel(nullptr),
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     m_thread(new QThread(this))
 {
     cachedBestHeaderHeight = -1;
@@ -123,6 +141,32 @@ int ClientModel::getNumBlocks() const
         m_cached_num_blocks = m_node.getNumBlocks();
     }
     return m_cached_num_blocks;
+<<<<<<< HEAD
+}
+
+uint256 ClientModel::getBestBlockHash()
+{
+    uint256 tip{WITH_LOCK(m_cached_tip_mutex, return m_cached_tip_blocks)};
+
+    if (!tip.IsNull()) {
+        return tip;
+    }
+
+    // Lock order must be: first `cs_main`, then `m_cached_tip_mutex`.
+    // The following will lock `cs_main` (and release it), so we must not
+    // own `m_cached_tip_mutex` here.
+    tip = m_node.getBestBlockHash();
+
+    LOCK(m_cached_tip_mutex);
+    // We checked that `m_cached_tip_blocks` is not null above, but then we
+    // released the mutex `m_cached_tip_mutex`, so it could have changed in the
+    // meantime. Thus, check again.
+    if (m_cached_tip_blocks.IsNull()) {
+        m_cached_tip_blocks = tip;
+    }
+    return m_cached_tip_blocks;
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 uint256 ClientModel::getBestBlockHash()
@@ -148,30 +192,10 @@ uint256 ClientModel::getBestBlockHash()
     return m_cached_tip_blocks;
 }
 
-void ClientModel::updateNumConnections(int numConnections)
+BlockSource ClientModel::getBlockSource() const
 {
-    Q_EMIT numConnectionsChanged(numConnections);
-}
-
-void ClientModel::updateNetworkActive(bool networkActive)
-{
-    Q_EMIT networkActiveChanged(networkActive);
-}
-
-void ClientModel::updateAlert()
-{
-    Q_EMIT alertsChanged(getStatusBarWarnings());
-}
-
-enum BlockSource ClientModel::getBlockSource() const
-{
-    if (m_node.getReindex())
-        return BlockSource::REINDEX;
-    else if (m_node.getImporting())
-        return BlockSource::DISK;
-    else if (getNumConnections() > 0)
-        return BlockSource::NETWORK;
-
+    if (m_node.isLoadingBlocks()) return BlockSource::DISK;
+    if (getNumConnections() > 0) return BlockSource::NETWORK;
     return BlockSource::NONE;
 }
 
@@ -217,27 +241,31 @@ bool ClientModel::isReleaseVersion() const
 
 QString ClientModel::formatClientStartupTime() const
 {
-    return QDateTime::fromTime_t(GetStartupTime()).toString();
+    return QDateTime::fromSecsSinceEpoch(GetStartupTime()).toString();
 }
 
 QString ClientModel::dataDir() const
 {
+<<<<<<< HEAD
     return GUIUtil::boostPathToQString(gArgs.GetDataDirNet());
 }
 
 QString ClientModel::blocksDir() const
 {
     return GUIUtil::boostPathToQString(gArgs.GetBlocksDirPath());
+=======
+    return GUIUtil::PathToQString(gArgs.GetDataDirNet());
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
-void ClientModel::updateBanlist()
+QString ClientModel::blocksDir() const
 {
-    banTableModel->refresh();
+    return GUIUtil::PathToQString(gArgs.GetBlocksDirPath());
 }
 
-// Handlers for core signals
-static void ShowProgress(ClientModel *clientmodel, const std::string &title, int nProgress)
+void ClientModel::TipChanged(SynchronizationState sync_state, interfaces::BlockTip tip, double verification_progress, SyncType synctype)
 {
+<<<<<<< HEAD
     // emits signal "showProgress"
     bool invoked = QMetaObject::invokeMethod(clientmodel, "showProgress", Qt::QueuedConnection,
                               Q_ARG(QString, QString::fromStdString(title)),
@@ -289,10 +317,26 @@ static void BlockTipChanged(ClientModel* clientmodel, SynchronizationState sync_
     const bool throttle = (sync_state != SynchronizationState::POST_INIT && !fHeader) || sync_state == SynchronizationState::INIT_REINDEX;
     const int64_t now = throttle ? GetTimeMillis() : 0;
     int64_t& nLastUpdateNotification = fHeader ? nLastHeaderTipUpdateNotification : nLastBlockTipUpdateNotification;
+=======
+    if (synctype == SyncType::HEADER_SYNC) {
+        // cache best headers time and height to reduce future cs_main locks
+        cachedBestHeaderHeight = tip.block_height;
+        cachedBestHeaderTime = tip.block_time;
+    } else if (synctype == SyncType::BLOCK_SYNC) {
+        m_cached_num_blocks = tip.block_height;
+        WITH_LOCK(m_cached_tip_mutex, m_cached_tip_blocks = tip.block_hash;);
+    }
+
+    // Throttle GUI notifications about (a) blocks during initial sync, and (b) both blocks and headers during reindex.
+    const bool throttle = (sync_state != SynchronizationState::POST_INIT && synctype == SyncType::BLOCK_SYNC) || sync_state == SynchronizationState::INIT_REINDEX;
+    const auto now{throttle ? SteadyClock::now() : SteadyClock::time_point{}};
+    auto& nLastUpdateNotification = synctype != SyncType::BLOCK_SYNC ? g_last_header_tip_update_notification : g_last_block_tip_update_notification;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (throttle && now < nLastUpdateNotification + MODEL_UPDATE_DELAY) {
         return;
     }
 
+<<<<<<< HEAD
     bool invoked = QMetaObject::invokeMethod(clientmodel, "numBlocksChanged", Qt::QueuedConnection,
         Q_ARG(int, tip.block_height),
         Q_ARG(QDateTime, QDateTime::fromTime_t(tip.block_time)),
@@ -300,11 +344,15 @@ static void BlockTipChanged(ClientModel* clientmodel, SynchronizationState sync_
         Q_ARG(bool, fHeader),
         Q_ARG(SynchronizationState, sync_state));
     assert(invoked);
+=======
+    Q_EMIT numBlocksChanged(tip.block_height, QDateTime::fromSecsSinceEpoch(tip.block_time), verification_progress, synctype, sync_state);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     nLastUpdateNotification = now;
 }
 
 void ClientModel::subscribeToCoreSignals()
 {
+<<<<<<< HEAD
     // Connect signals to client
     m_handler_show_progress = m_node.handleShowProgress(std::bind(ShowProgress, this, std::placeholders::_1, std::placeholders::_2));
     m_handler_notify_num_connections_changed = m_node.handleNotifyNumConnectionsChanged(std::bind(NotifyNumConnectionsChanged, this, std::placeholders::_1));
@@ -313,11 +361,42 @@ void ClientModel::subscribeToCoreSignals()
     m_handler_banned_list_changed = m_node.handleBannedListChanged(std::bind(BannedListChanged, this));
     m_handler_notify_block_tip = m_node.handleNotifyBlockTip(std::bind(BlockTipChanged, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, false));
     m_handler_notify_header_tip = m_node.handleNotifyHeaderTip(std::bind(BlockTipChanged, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, true));
+=======
+    m_handler_show_progress = m_node.handleShowProgress(
+        [this](const std::string& title, int progress, [[maybe_unused]] bool resume_possible) {
+            Q_EMIT showProgress(QString::fromStdString(title), progress);
+        });
+    m_handler_notify_num_connections_changed = m_node.handleNotifyNumConnectionsChanged(
+        [this](int new_num_connections) {
+            Q_EMIT numConnectionsChanged(new_num_connections);
+        });
+    m_handler_notify_network_active_changed = m_node.handleNotifyNetworkActiveChanged(
+        [this](bool network_active) {
+            Q_EMIT networkActiveChanged(network_active);
+        });
+    m_handler_notify_alert_changed = m_node.handleNotifyAlertChanged(
+        [this]() {
+            qDebug() << "ClientModel: NotifyAlertChanged";
+            Q_EMIT alertsChanged(getStatusBarWarnings());
+        });
+    m_handler_banned_list_changed = m_node.handleBannedListChanged(
+        [this]() {
+            qDebug() << "ClienModel: Requesting update for peer banlist";
+            QMetaObject::invokeMethod(banTableModel, [this] { banTableModel->refresh(); });
+        });
+    m_handler_notify_block_tip = m_node.handleNotifyBlockTip(
+        [this](SynchronizationState sync_state, interfaces::BlockTip tip, double verification_progress) {
+            TipChanged(sync_state, tip, verification_progress, SyncType::BLOCK_SYNC);
+        });
+    m_handler_notify_header_tip = m_node.handleNotifyHeaderTip(
+        [this](SynchronizationState sync_state, interfaces::BlockTip tip, bool presync) {
+            TipChanged(sync_state, tip, /*verification_progress=*/0.0, presync ? SyncType::HEADER_PRESYNC : SyncType::HEADER_SYNC);
+        });
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 void ClientModel::unsubscribeFromCoreSignals()
 {
-    // Disconnect signals from client
     m_handler_show_progress->disconnect();
     m_handler_notify_num_connections_changed->disconnect();
     m_handler_notify_network_active_changed->disconnect();
@@ -329,9 +408,9 @@ void ClientModel::unsubscribeFromCoreSignals()
 
 bool ClientModel::getProxyInfo(std::string& ip_port) const
 {
-    proxyType ipv4, ipv6;
+    Proxy ipv4, ipv6;
     if (m_node.getProxy((Network) 1, ipv4) && m_node.getProxy((Network) 2, ipv6)) {
-      ip_port = ipv4.proxy.ToStringIPPort();
+      ip_port = ipv4.proxy.ToStringAddrPort();
       return true;
     }
     return false;

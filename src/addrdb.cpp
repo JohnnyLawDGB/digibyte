@@ -1,6 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
+// Copyright (c) 2009-2022 The Bitcoin Core developers
+// Copyright (c) 2014-2025 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -9,16 +9,21 @@
 #include <addrman.h>
 #include <chainparams.h>
 #include <clientversion.h>
+#include <common/args.h>
+#include <common/settings.h>
 #include <cstdint>
 #include <hash.h>
+#include <logging.h>
 #include <logging/timer.h>
 #include <netbase.h>
+#include <netgroup.h>
 #include <random.h>
 #include <streams.h>
 #include <tinyformat.h>
 #include <univalue.h>
-#include <util/settings.h>
-#include <util/system.h>
+#include <util/fs.h>
+#include <util/fs_helpers.h>
+#include <util/translation.h>
 
 CBanEntry::CBanEntry(const UniValue& json)
     : nVersion(json["version"].get_int()), nCreateTime(json["ban_created"].get_int64()),
@@ -36,6 +41,11 @@ UniValue CBanEntry::ToJson() const
 }
 
 namespace {
+
+class DbNotFoundError : public std::exception
+{
+    using std::exception::exception;
+};
 
 static const char* BANMAN_JSON_ADDR_KEY = "address";
 

@@ -1,5 +1,9 @@
+<<<<<<< HEAD
 // Copyright (c) 2009-2020 The Bitcoin Core developers
 // Copyright (c) 2014-2020 The DigiByte Core developers
+=======
+// Copyright (c) 2015-2021 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -24,8 +28,11 @@ static const struct {
     /* Other: linux, unix, ... */
     {"other", true, true, false}
 };
+<<<<<<< HEAD
 
 QColor DigiByteBlue(43, 100, 197);
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 namespace {
 /* Local functions for colorizing single-color images */
@@ -86,8 +93,13 @@ QColor PlatformStyle::TextColor() const
 QColor PlatformStyle::SingleColor() const
 {
     if (colorizeIcons) {
+<<<<<<< HEAD
         const QColor colorHighlightBg(QApplication::palette().color(QPalette::Highlight));
         const QColor colorHighlightFg(DigiByteBlue);
+=======
+        QColor colorHighlightBg(QApplication::palette().color(QPalette::Highlight));
+        QColor colorHighlightFg(QApplication::palette().color(QPalette::HighlightedText));
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         const QColor colorText(QApplication::palette().color(QPalette::WindowText));
         const int colorTextLightness = colorText.lightness();
         if (abs(colorHighlightBg.lightness() - colorTextLightness) < abs(colorHighlightFg.lightness() - colorTextLightness)) {
@@ -95,7 +107,11 @@ QColor PlatformStyle::SingleColor() const
         }
         return colorHighlightFg;
     }
+<<<<<<< HEAD
     return DigiByteBlue;
+=======
+    return {0, 0, 0};
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 QImage PlatformStyle::SingleColorImage(const QString& filename) const

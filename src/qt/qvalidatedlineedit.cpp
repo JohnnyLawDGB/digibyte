@@ -8,12 +8,16 @@
 #include <qt/digibyteaddressvalidator.h>
 #include <qt/guiconstants.h>
 
-QValidatedLineEdit::QValidatedLineEdit(QWidget *parent) :
-    QLineEdit(parent),
-    valid(true),
-    checkValidator(nullptr)
+QValidatedLineEdit::QValidatedLineEdit(QWidget* parent)
+    : QLineEdit(parent)
 {
     connect(this, &QValidatedLineEdit::textChanged, this, &QValidatedLineEdit::markValid);
+}
+
+void QValidatedLineEdit::setText(const QString& text)
+{
+    QLineEdit::setText(text);
+    checkValidity();
 }
 
 void QValidatedLineEdit::setValid(bool _valid)
@@ -29,7 +33,7 @@ void QValidatedLineEdit::setValid(bool _valid)
     }
     else
     {
-        setStyleSheet(STYLE_INVALID);
+        setStyleSheet("QValidatedLineEdit { " STYLE_INVALID "}");
     }
     this->valid = _valid;
 }
@@ -107,6 +111,7 @@ void QValidatedLineEdit::checkValidity()
 void QValidatedLineEdit::setCheckValidator(const QValidator *v)
 {
     checkValidator = v;
+    checkValidity();
 }
 
 bool QValidatedLineEdit::isValid()

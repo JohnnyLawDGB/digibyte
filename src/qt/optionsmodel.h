@@ -1,19 +1,32 @@
+<<<<<<< HEAD
 // Copyright (c) 2009-2020 The Bitcoin Core developers
 // Copyright (c) 2014-2020 The DigiByte Core developers
+=======
+// Copyright (c) 2011-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #ifndef DIGIBYTE_QT_OPTIONSMODEL_H
 #define DIGIBYTE_QT_OPTIONSMODEL_H
 
+<<<<<<< HEAD
 #include <amount.h>
 #include <cstdint>
+=======
+#include <cstdint>
+#include <qt/digibyteunits.h>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <qt/guiconstants.h>
 
 #include <QAbstractListModel>
 
 #include <assert.h>
 
+<<<<<<< HEAD
+=======
+struct bilingual_str;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 namespace interfaces {
 class Node;
 }
@@ -42,7 +55,11 @@ class OptionsModel : public QAbstractListModel
     Q_OBJECT
 
 public:
+<<<<<<< HEAD
     explicit OptionsModel(QObject *parent = nullptr, bool resetSettings = false);
+=======
+    explicit OptionsModel(interfaces::Node& node, QObject *parent = nullptr);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     enum OptionID {
         StartAtStartup,         // bool
@@ -57,12 +74,17 @@ public:
         ProxyUseTor,            // bool
         ProxyIPTor,             // QString
         ProxyPortTor,           // int
+<<<<<<< HEAD
         DisplayUnit,            // DigiByteUnits::Unit
+=======
+        DisplayUnit,            // DigiByteUnit
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         ThirdPartyTxUrls,       // QString
         Theme,                  // QString
         Language,               // QString
         UseEmbeddedMonospacedFont, // bool
         CoinControlFeatures,    // bool
+        SubFeeFromAmount,       // bool
         ThreadsScriptVerif,     // int
         Prune,                  // bool
         PruneSize,              // int
@@ -70,31 +92,51 @@ public:
         ExternalSignerPath,     // QString
         SpendZeroConfChange,    // bool
         Listen,                 // bool
+        Server,                 // bool
+        EnablePSDGBontrols,     // bool
+        MaskValues,             // bool
         OptionIDRowCount,
     };
 
-    void Init(bool resetSettings = false);
+    bool Init(bilingual_str& error);
     void Reset();
 
     int rowCount(const QModelIndex & parent = QModelIndex()) const override;
     QVariant data(const QModelIndex & index, int role = Qt::DisplayRole) const override;
     bool setData(const QModelIndex & index, const QVariant & value, int role = Qt::EditRole) override;
+<<<<<<< HEAD
     /** Updates current unit in memory, settings and emits displayUnitChanged(newUnit) signal */
     void setDisplayUnit(const QVariant &value);
+=======
+    QVariant getOption(OptionID option, const std::string& suffix="") const;
+    bool setOption(OptionID option, const QVariant& value, const std::string& suffix="");
+    /** Updates current unit in memory, settings and emits displayUnitChanged(new_unit) signal */
+    void setDisplayUnit(const QVariant& new_unit);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     /* Explicit getters */
     bool getShowTrayIcon() const { return m_show_tray_icon; }
     bool getMinimizeToTray() const { return fMinimizeToTray; }
     bool getMinimizeOnClose() const { return fMinimizeOnClose; }
-    int getDisplayUnit() const { return nDisplayUnit; }
+    DigiByteUnit getDisplayUnit() const { return m_display_digibyte_unit; }
     QString getThirdPartyTxUrls() const { return strThirdPartyTxUrls; }
     bool getUseEmbeddedMonospacedFont() const { return m_use_embedded_monospaced_font; }
     bool getCoinControlFeatures() const { return fCoinControlFeatures; }
+    bool getSubFeeFromAmount() const { return m_sub_fee_from_amount; }
+    bool getEnablePSDGBontrols() const { return m_enable_psbt_controls; }
     const QString& getOverriddenByCommandLine() { return strOverriddenByCommandLine; }
 
+<<<<<<< HEAD
     /* Explicit setters */
     void SetPruneEnabled(bool prune, bool force = false);
     void SetPruneTargetGB(int prune_target_gb, bool force = false);
+=======
+    /** Whether -signer was set or not */
+    bool hasSigner();
+
+    /* Explicit setters */
+    void SetPruneTargetGB(int prune_target_gb);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     /* Restart flag helper */
     void setRestartRequired(bool fRequired);
@@ -110,10 +152,14 @@ private:
     bool fMinimizeToTray;
     bool fMinimizeOnClose;
     QString language;
-    int nDisplayUnit;
+    DigiByteUnit m_display_digibyte_unit;
     QString strThirdPartyTxUrls;
     bool m_use_embedded_monospaced_font;
     bool fCoinControlFeatures;
+    bool m_sub_fee_from_amount;
+    bool m_enable_psbt_controls;
+    bool m_mask_values;
+
     /* settings that were overridden by command-line */
     QString strOverriddenByCommandLine;
 
@@ -122,8 +168,9 @@ private:
 
     // Check settings version and upgrade default values if required
     void checkAndMigrate();
+
 Q_SIGNALS:
-    void displayUnitChanged(int unit);
+    void displayUnitChanged(DigiByteUnit unit);
     void coinControlFeaturesChanged(bool);
     void showTrayIconChanged(bool);
     void useEmbeddedMonospacedFontChanged(bool);

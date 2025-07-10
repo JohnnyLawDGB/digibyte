@@ -10,13 +10,13 @@ To generate that file this test uses the helper scripts available
 in contrib/linearize.
 """
 
-import os
+from pathlib import Path
 import subprocess
 import sys
 import tempfile
 import urllib
 
-from test_framework.blocktools import COINBASE_MATURITY_2
+from test_framework.blocktools import COINBASE_MATURITY
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import assert_equal
 
@@ -29,15 +29,15 @@ class LoadblockTest(DigiByteTestFramework):
 
     def run_test(self):
         self.nodes[1].setnetworkactive(state=False)
-        self.generate(self.nodes[0], COINBASE_MATURITY_2, sync_fun=self.no_op)
+        self.generate(self.nodes[0], COINBASE_MATURITY, sync_fun=self.no_op)
 
         # Parsing the url of our node to get settings for config file
-        data_dir = self.nodes[0].datadir
+        data_dir = self.nodes[0].datadir_path
         node_url = urllib.parse.urlparse(self.nodes[0].url)
-        cfg_file = os.path.join(data_dir, "linearize.cfg")
-        bootstrap_file = os.path.join(self.options.tmpdir, "bootstrap.dat")
+        cfg_file = data_dir / "linearize.cfg"
+        bootstrap_file = Path(self.options.tmpdir) / "bootstrap.dat"
         genesis_block = self.nodes[0].getblockhash(0)
-        blocks_dir = os.path.join(data_dir, self.chain, "blocks")
+        blocks_dir = self.nodes[0].blocks_path
         hash_list = tempfile.NamedTemporaryFile(dir=data_dir,
                                                 mode='w',
                                                 delete=False,
@@ -58,17 +58,16 @@ class LoadblockTest(DigiByteTestFramework):
             cfg.write(f"hashlist={hash_list.name}\n")
 
         base_dir = self.config["environment"]["SRCDIR"]
-        linearize_dir = os.path.join(base_dir, "contrib", "linearize")
+        linearize_dir = Path(base_dir) / "contrib" / "linearize"
 
         self.log.info("Run linearization of block hashes")
-        linearize_hashes_file = os.path.join(linearize_dir, "linearize-hashes.py")
-
+        linearize_hashes_file = linearize_dir / "linearize-hashes.py"
         subprocess.run([sys.executable, linearize_hashes_file, cfg_file],
                        stdout=hash_list,
                        check=True)
 
         self.log.info("Run linearization of block data")
-        linearize_data_file = os.path.join(linearize_dir, "linearize-data.py")
+        linearize_data_file = linearize_dir / "linearize-data.py"
         subprocess.run([sys.executable, linearize_data_file, cfg_file],
                        check=True)
 

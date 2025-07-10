@@ -56,7 +56,11 @@ class RPCBindTest(DigiByteTestFramework):
         self.nodes[0].rpchost = None
         self.start_nodes([node_args])
         # connect to node through non-loopback interface
+<<<<<<< HEAD
         node = get_rpc_proxy(rpc_url(self.nodes[0].datadir, 0, self.chain, "%s:%d" % (rpchost, rpcport)), 0, coveragedir=self.options.coveragedir)
+=======
+        node = get_rpc_proxy(rpc_url(self.nodes[0].datadir_path, 0, self.chain, "%s:%d" % (rpchost, rpcport)), 0, coveragedir=self.options.coveragedir)
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         node.getnetworkinfo()
         self.stop_nodes()
 

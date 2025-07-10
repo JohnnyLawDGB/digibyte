@@ -1,5 +1,9 @@
+<<<<<<< HEAD
 // Copyright (c) 2009-2020 The Bitcoin Core developers
 // Copyright (c) 2014-2020 The DigiByte Core developers
+=======
+// Copyright (c) 2011-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -15,10 +19,16 @@
 #include <QList>
 #include <QTimer>
 
+<<<<<<< HEAD
 PeerTableModel::PeerTableModel(interfaces::Node& node, QObject* parent) :
     QAbstractTableModel(parent),
     m_node(node),
     timer(nullptr)
+=======
+PeerTableModel::PeerTableModel(interfaces::Node& node, QObject* parent)
+    : QAbstractTableModel(parent),
+      m_node(node)
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     // set up timer for auto refresh
     timer = new QTimer(this);
@@ -29,10 +39,7 @@ PeerTableModel::PeerTableModel(interfaces::Node& node, QObject* parent) :
     refresh();
 }
 
-PeerTableModel::~PeerTableModel()
-{
-    // Intentionally left empty
-}
+PeerTableModel::~PeerTableModel() = default;
 
 void PeerTableModel::startAutoRefresh()
 {
@@ -72,11 +79,25 @@ QVariant PeerTableModel::data(const QModelIndex& index, int role) const
         switch (column) {
         case NetNodeId:
             return (qint64)rec->nodeStats.nodeid;
+        case Age:
+            return GUIUtil::FormatPeerAge(rec->nodeStats.m_connected);
         case Address:
+<<<<<<< HEAD
             // prepend to peer address down-arrow symbol for inbound connection and up-arrow for outbound connection
             return QString::fromStdString((rec->nodeStats.fInbound ? "↓ " : "↑ ") + rec->nodeStats.addrName);
         case ConnectionType:
             return GUIUtil::ConnectionTypeToQString(rec->nodeStats.m_conn_type, /* prepend_direction */ false);
+=======
+            return QString::fromStdString(rec->nodeStats.m_addr_name);
+        case Direction:
+            return QString(rec->nodeStats.fInbound ?
+                               //: An Inbound Connection from a Peer.
+                               tr("Inbound") :
+                               //: An Outbound Connection to a Peer.
+                               tr("Outbound"));
+        case ConnectionType:
+            return GUIUtil::ConnectionTypeToQString(rec->nodeStats.m_conn_type, /*prepend_direction=*/false);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         case Network:
             return GUIUtil::NetworkToQString(rec->nodeStats.m_network);
         case Ping:
@@ -92,9 +113,17 @@ QVariant PeerTableModel::data(const QModelIndex& index, int role) const
     } else if (role == Qt::TextAlignmentRole) {
         switch (column) {
         case NetNodeId:
+<<<<<<< HEAD
             return QVariant(Qt::AlignRight | Qt::AlignVCenter);
         case Address:
             return {};
+=======
+        case Age:
+            return QVariant(Qt::AlignRight | Qt::AlignVCenter);
+        case Address:
+            return {};
+        case Direction:
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         case ConnectionType:
         case Network:
             return QVariant(Qt::AlignCenter);

@@ -1,4 +1,5 @@
-// Copyright (c) 2011-2020 The DigiByte Core developers
+// Copyright (c) 2011-2021 The Bitcoin Core developers
+// Copyright (c) 2011-2021 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -9,7 +10,7 @@
 #include <config/digibyte-config.h>
 #endif
 
-#include <amount.h>
+#include <consensus/amount.h>
 #include <serialize.h>
 
 #include <string>

@@ -1,5 +1,9 @@
+<<<<<<< HEAD
 // Copyright (c) 2009-2019 The Bitcoin Core developers
 // Copyright (c) 2014-2019 The DigiByte Core developers
+=======
+// Copyright (c) 2014-2021 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -7,6 +11,12 @@
 
 #include <base58.h>
 #include <bech32.h>
+<<<<<<< HEAD
+=======
+#include <script/interpreter.h>
+#include <script/solver.h>
+#include <tinyformat.h>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <util/strencodings.h>
 
 #include <algorithm>
@@ -65,24 +75,44 @@ public:
 
     std::string operator()(const WitnessUnknown& id) const
     {
-        if (id.version < 1 || id.version > 16 || id.length < 2 || id.length > 40) {
+        const std::vector<unsigned char>& program = id.GetWitnessProgram();
+        if (id.GetWitnessVersion() < 1 || id.GetWitnessVersion() > 16 || program.size() < 2 || program.size() > 40) {
             return {};
         }
+<<<<<<< HEAD
         std::vector<unsigned char> data = {(unsigned char)id.version};
         data.reserve(1 + (id.length * 8 + 4) / 5);
         ConvertBits<8, 5, true>([&](unsigned char c) { data.push_back(c); }, id.program, id.program + id.length);
+=======
+        std::vector<unsigned char> data = {(unsigned char)id.GetWitnessVersion()};
+        data.reserve(1 + (program.size() * 8 + 4) / 5);
+        ConvertBits<8, 5, true>([&](unsigned char c) { data.push_back(c); }, program.begin(), program.end());
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         return bech32::Encode(bech32::Encoding::BECH32M, m_params.Bech32HRP(), data);
     }
 
     std::string operator()(const CNoDestination& no) const { return {}; }
+    std::string operator()(const PubKeyDestination& pk) const { return {}; }
 };
 
+<<<<<<< HEAD
 CTxDestination DecodeDestination(const std::string& str, const CChainParams& params, std::string& error_str)
+=======
+CTxDestination DecodeDestination(const std::string& str, const CChainParams& params, std::string& error_str, std::vector<int>* error_locations)
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     std::vector<unsigned char> data;
     uint160 hash;
     error_str = "";
+<<<<<<< HEAD
     if (DecodeBase58Check(str, data, 21)) {
+=======
+
+    // Note this will be false if it is a valid Bech32 address for a different network
+    bool is_bech32 = (ToLower(str.substr(0, params.Bech32HRP().size())) == params.Bech32HRP());
+
+    if (!is_bech32 && DecodeBase58Check(str, data, 21)) {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         // base58-encoded DigiByte addresses.
         // Public-key-hash-addresses have version 0 (or 111 testnet).
         // The data vector contains RIPEMD160(SHA256(pubkey)), where pubkey is the serialized public key.
@@ -99,17 +129,50 @@ CTxDestination DecodeDestination(const std::string& str, const CChainParams& par
             return ScriptHash(hash);
         }
 
+<<<<<<< HEAD
         // Set potential error message.
         // This message may be changed if the address can also be interpreted as a Bech32 address.
         error_str = "Invalid prefix for Base58-encoded address";
+=======
+        // If the prefix of data matches either the script or pubkey prefix, the length must have been wrong
+        if ((data.size() >= script_prefix.size() &&
+                std::equal(script_prefix.begin(), script_prefix.end(), data.begin())) ||
+            (data.size() >= pubkey_prefix.size() &&
+                std::equal(pubkey_prefix.begin(), pubkey_prefix.end(), data.begin()))) {
+            error_str = "Invalid length for Base58 address (P2PKH or P2SH)";
+        } else {
+            error_str = "Invalid or unsupported Base58-encoded address.";
+        }
+        return CNoDestination();
+    } else if (!is_bech32) {
+        // Try Base58 decoding without the checksum, using a much larger max length
+        if (!DecodeBase58(str, data, 100)) {
+            error_str = "Invalid or unsupported Segwit (Bech32) or Base58 encoding.";
+        } else {
+            error_str = "Invalid checksum or length of Base58 address (P2PKH or P2SH)";
+        }
+        return CNoDestination();
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
+
     data.clear();
     const auto dec = bech32::Decode(str);
+<<<<<<< HEAD
     if ((dec.encoding == bech32::Encoding::BECH32 || dec.encoding == bech32::Encoding::BECH32M) && dec.data.size() > 0) {
         // Bech32 decoding
         error_str = "";
         if (dec.hrp != params.Bech32HRP()) {
             error_str = "Invalid prefix for Bech32 address";
+=======
+    if (dec.encoding == bech32::Encoding::BECH32 || dec.encoding == bech32::Encoding::BECH32M) {
+        if (dec.data.empty()) {
+            error_str = "Empty Bech32 data section";
+            return CNoDestination();
+        }
+        // Bech32 decoding
+        if (dec.hrp != params.Bech32HRP()) {
+            error_str = strprintf("Invalid or unsupported prefix for Segwit (Bech32) address (expected %s, got %s).", params.Bech32HRP(), dec.hrp);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             return CNoDestination();
         }
         int version = dec.data[0]; // The first 5 bit symbol is the witness version (0-16)
@@ -124,6 +187,12 @@ CTxDestination DecodeDestination(const std::string& str, const CChainParams& par
         // The rest of the symbols are converted witness program bytes.
         data.reserve(((dec.data.size() - 1) * 5) / 8);
         if (ConvertBits<5, 8, false>([&](unsigned char c) { data.push_back(c); }, dec.data.begin() + 1, dec.data.end())) {
+<<<<<<< HEAD
+=======
+
+            std::string_view byte_str{data.size() == 1 ? "byte" : "bytes"};
+
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             if (version == 0) {
                 {
                     WitnessV0KeyHash keyid;
@@ -140,7 +209,11 @@ CTxDestination DecodeDestination(const std::string& str, const CChainParams& par
                     }
                 }
 
+<<<<<<< HEAD
                 error_str = "Invalid Bech32 v0 address data size";
+=======
+                error_str = strprintf("Invalid Bech32 v0 address program size (%d %s), per BIP141", data.size(), byte_str);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 return CNoDestination();
             }
 
@@ -157,6 +230,7 @@ CTxDestination DecodeDestination(const std::string& str, const CChainParams& par
             }
 
             if (data.size() < 2 || data.size() > BECH32_WITNESS_PROG_MAX_LEN) {
+<<<<<<< HEAD
                 error_str = "Invalid Bech32 address data size";
                 return CNoDestination();
             }
@@ -172,6 +246,23 @@ CTxDestination DecodeDestination(const std::string& str, const CChainParams& par
     // Set error message if address can't be interpreted as Base58 or Bech32.
     if (error_str.empty()) error_str = "Invalid address format";
 
+=======
+                error_str = strprintf("Invalid Bech32 address program size (%d %s)", data.size(), byte_str);
+                return CNoDestination();
+            }
+
+            return WitnessUnknown{version, data};
+        } else {
+            error_str = strprintf("Invalid padding in Bech32 data section");
+            return CNoDestination();
+        }
+    }
+
+    // Perform Bech32 error location
+    auto res = bech32::LocateErrors(str);
+    error_str = res.first;
+    if (error_locations) *error_locations = std::move(res.second);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     return CNoDestination();
 }
 } // namespace
@@ -259,9 +350,15 @@ std::string EncodeDestination(const CTxDestination& dest)
     return std::visit(DestinationEncoder(Params()), dest);
 }
 
+<<<<<<< HEAD
 CTxDestination DecodeDestination(const std::string& str, std::string& error_msg)
 {
     return DecodeDestination(str, Params(), error_msg);
+=======
+CTxDestination DecodeDestination(const std::string& str, std::string& error_msg, std::vector<int>* error_locations)
+{
+    return DecodeDestination(str, Params(), error_msg, error_locations);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 CTxDestination DecodeDestination(const std::string& str)
@@ -273,7 +370,11 @@ CTxDestination DecodeDestination(const std::string& str)
 bool IsValidDestinationString(const std::string& str, const CChainParams& params)
 {
     std::string error_msg;
+<<<<<<< HEAD
     return IsValidDestination(DecodeDestination(str, params, error_msg));
+=======
+    return IsValidDestination(DecodeDestination(str, params, error_msg, nullptr));
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 bool IsValidDestinationString(const std::string& str)

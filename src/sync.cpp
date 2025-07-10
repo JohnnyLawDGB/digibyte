@@ -1,5 +1,9 @@
+<<<<<<< HEAD
 // Copyright (c) 2009-2020 The Bitcoin Core developers
 // Copyright (c) 2014-2020 The DigiByte Core developers
+=======
+// Copyright (c) 2011-2021 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -23,6 +27,7 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+<<<<<<< HEAD
 
 #ifdef DEBUG_LOCKCONTENTION
 #if !defined(HAVE_THREAD_LOCAL)
@@ -34,6 +39,8 @@ void PrintLockContention(const char* pszName, const char* pszFile, int nLine)
     LogPrintf("Locker: %s:%d\n", pszFile, nLine);
 }
 #endif /* DEBUG_LOCKCONTENTION */
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 #ifdef DEBUG_LOCKORDER
 //
@@ -109,27 +116,41 @@ static void potential_deadlock_detected(const LockPair& mismatch, const LockStac
     LogPrintf("POTENTIAL DEADLOCK DETECTED\n");
     LogPrintf("Previous lock order was:\n");
     for (const LockStackItem& i : s1) {
+<<<<<<< HEAD
+=======
+        std::string prefix{};
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         if (i.first == mismatch.first) {
-            LogPrintf(" (1)"); /* Continued */
+            prefix = " (1)";
         }
         if (i.first == mismatch.second) {
-            LogPrintf(" (2)"); /* Continued */
+            prefix = " (2)";
         }
-        LogPrintf(" %s\n", i.second.ToString());
+        LogPrintf("%s %s\n", prefix, i.second.ToString());
     }
 
     std::string mutex_a, mutex_b;
     LogPrintf("Current lock order is:\n");
     for (const LockStackItem& i : s2) {
+<<<<<<< HEAD
         if (i.first == mismatch.first) {
             LogPrintf(" (1)"); /* Continued */
             mutex_a = i.second.Name();
         }
         if (i.first == mismatch.second) {
             LogPrintf(" (2)"); /* Continued */
+=======
+        std::string prefix{};
+        if (i.first == mismatch.first) {
+            prefix = " (1)";
+            mutex_a = i.second.Name();
+        }
+        if (i.first == mismatch.second) {
+            prefix = " (2)";
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             mutex_b = i.second.Name();
         }
-        LogPrintf(" %s\n", i.second.ToString());
+        LogPrintf("%s %s\n", prefix, i.second.ToString());
     }
     if (g_debug_lockorder_abort) {
         tfm::format(std::cerr, "Assertion failed: detected inconsistent lock order for %s, details in debug log.\n", s2.back().second.ToString());
@@ -143,10 +164,18 @@ static void double_lock_detected(const void* mutex, const LockStack& lock_stack)
     LogPrintf("DOUBLE LOCK DETECTED\n");
     LogPrintf("Lock order:\n");
     for (const LockStackItem& i : lock_stack) {
+<<<<<<< HEAD
         if (i.first == mutex) {
             LogPrintf(" (*)"); /* Continued */
         }
         LogPrintf(" %s\n", i.second.ToString());
+=======
+        std::string prefix{};
+        if (i.first == mutex) {
+            prefix = " (*)";
+        }
+        LogPrintf("%s %s\n", prefix, i.second.ToString());
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     if (g_debug_lockorder_abort) {
         tfm::format(std::cerr,

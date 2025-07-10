@@ -1,10 +1,15 @@
+<<<<<<< HEAD
 // Copyright (c) 2017-2020 The Bitcoin Core developers
 // Copyright (c) 2017-2020 The DigiByte Core developers
+=======
+// Copyright (c) 2017-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <index/disktxpos.h>
 #include <index/txindex.h>
+<<<<<<< HEAD
 #include <node/blockstorage.h>
 #include <node/ui_interface.h>
 #include <shutdown.h>
@@ -15,6 +20,17 @@
 constexpr uint8_t DB_BEST_BLOCK{'B'};
 constexpr uint8_t DB_TXINDEX{'t'};
 constexpr uint8_t DB_TXINDEX_BLOCK{'T'};
+=======
+
+#include <clientversion.h>
+#include <common/args.h>
+#include <index/disktxpos.h>
+#include <logging.h>
+#include <node/blockstorage.h>
+#include <validation.h>
+
+constexpr uint8_t DB_TXINDEX{'t'};
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 std::unique_ptr<TxIndex> g_txindex;
 
@@ -30,11 +46,7 @@ public:
     bool ReadTxPos(const uint256& txid, CDiskTxPos& pos) const;
 
     /// Write a batch of transaction positions to the DB.
-    bool WriteTxs(const std::vector<std::pair<uint256, CDiskTxPos>>& v_pos);
-
-    /// Migrate txindex data from the block tree DB, where it may be for older nodes that have not
-    /// been upgraded yet to the new database.
-    bool MigrateData(CBlockTreeDB& block_tree_db, const CBlockLocator& best_locator);
+    [[nodiscard]] bool WriteTxs(const std::vector<std::pair<uint256, CDiskTxPos>>& v_pos);
 };
 
 TxIndex::DB::DB(size_t n_cache_size, bool f_memory, bool f_wipe) :
@@ -55,6 +67,7 @@ bool TxIndex::DB::WriteTxs(const std::vector<std::pair<uint256, CDiskTxPos>>& v_
     return WriteBatch(batch);
 }
 
+<<<<<<< HEAD
 /*
  * Safely persist a transfer of data from the old txindex database to the new one, and compact the
  * range of keys updated. This is used internally by MigrateData.
@@ -194,14 +207,20 @@ bool TxIndex::DB::MigrateData(CBlockTreeDB& block_tree_db, const CBlockLocator& 
 
 TxIndex::TxIndex(size_t n_cache_size, bool f_memory, bool f_wipe)
     : m_db(std::make_unique<TxIndex::DB>(n_cache_size, f_memory, f_wipe))
+=======
+TxIndex::TxIndex(std::unique_ptr<interfaces::Chain> chain, size_t n_cache_size, bool f_memory, bool f_wipe)
+    : BaseIndex(std::move(chain), "txindex"), m_db(std::make_unique<TxIndex::DB>(n_cache_size, f_memory, f_wipe))
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {}
 
-TxIndex::~TxIndex() {}
+TxIndex::~TxIndex() = default;
 
-bool TxIndex::Init()
+bool TxIndex::CustomAppend(const interfaces::BlockInfo& block)
 {
-    LOCK(cs_main);
+    // Exclude genesis block transaction because outputs are not spendable.
+    if (block.height == 0) return true;
 
+<<<<<<< HEAD
     // Attempt to migrate txindex from the old database to the new one. Even if
     // chain_tip is null, the node could be reindexing and we still want to
     // delete txindex records in the old database.
@@ -218,9 +237,13 @@ bool TxIndex::WriteBlock(const CBlock& block, const CBlockIndex* pindex)
     if (pindex->nHeight == 0) return true;
 
     CDiskTxPos pos(pindex->GetBlockPos(), GetSizeOfCompactSize(block.vtx.size()));
+=======
+    assert(block.data);
+    CDiskTxPos pos({block.file_number, block.data_pos}, GetSizeOfCompactSize(block.data->vtx.size()));
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     std::vector<std::pair<uint256, CDiskTxPos>> vPos;
-    vPos.reserve(block.vtx.size());
-    for (const auto& tx : block.vtx) {
+    vPos.reserve(block.data->vtx.size());
+    for (const auto& tx : block.data->vtx) {
         vPos.emplace_back(tx->GetHash(), pos);
         pos.nTxOffset += ::GetSerializeSize(*tx, CLIENT_VERSION);
     }
@@ -236,7 +259,7 @@ bool TxIndex::FindTx(const uint256& tx_hash, uint256& block_hash, CTransactionRe
         return false;
     }
 
-    CAutoFile file(OpenBlockFile(postx, true), SER_DISK, CLIENT_VERSION);
+    CAutoFile file{m_chainstate->m_blockman.OpenBlockFile(postx, true)};
     if (file.IsNull()) {
         return error("%s: OpenBlockFile failed", __func__);
     }

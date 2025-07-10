@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
+<<<<<<< HEAD
 # Copyright (c) 2017-2021 The DigiByte Core developers
+=======
+# Copyright (c) 2017-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """An example functional test
@@ -14,8 +18,20 @@ is testing and *how* it's being tested
 from collections import defaultdict
 
 # Avoid wildcard * imports
+<<<<<<< HEAD
 from test_framework.blocktools import (create_block, create_coinbase)
 from test_framework.messages import CInv, MSG_BLOCK
+=======
+# Use lexicographically sorted multi-line imports
+from test_framework.blocktools import (
+    create_block,
+    create_coinbase,
+)
+from test_framework.messages import (
+    CInv,
+    MSG_BLOCK,
+)
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 from test_framework.p2p import (
     P2PInterface,
     msg_block,
@@ -71,6 +87,9 @@ class ExampleTest(DigiByteTestFramework):
 
     # Override the set_test_params(), skip_test_if_missing_module(), add_options(), setup_chain(), setup_network()
     # and setup_nodes() methods to customize the test setup as required.
+
+    def add_options(self, parser):
+        self.add_wallet_options(parser)
 
     def set_test_params(self):
         """Override test parameters for your individual test.

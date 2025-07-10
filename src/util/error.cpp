@@ -1,13 +1,25 @@
+<<<<<<< HEAD
 // Copyright (c) 2010-2020 The DigiByte Core developers
+=======
+// Copyright (c) 2010-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <util/error.h>
 
 #include <tinyformat.h>
+<<<<<<< HEAD
 #include <util/system.h>
 #include <util/translation.h>
 
+=======
+#include <util/translation.h>
+
+#include <cassert>
+#include <string>
+
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 bilingual_str TransactionErrorString(const TransactionError err)
 {
     switch (err) {
@@ -20,9 +32,15 @@ bilingual_str TransactionErrorString(const TransactionError err)
         case TransactionError::P2P_DISABLED:
             return Untranslated("Peer-to-peer functionality missing or disabled");
         case TransactionError::MEMPOOL_REJECTED:
+<<<<<<< HEAD
             return Untranslated("Transaction rejected by AcceptToMemoryPool");
         case TransactionError::MEMPOOL_ERROR:
             return Untranslated("AcceptToMemoryPool failed");
+=======
+            return Untranslated("Transaction rejected by mempool");
+        case TransactionError::MEMPOOL_ERROR:
+            return Untranslated("Mempool internal error");
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         case TransactionError::INVALID_PSBT:
             return Untranslated("PSBT is not well-formed");
         case TransactionError::PSBT_MISMATCH:
@@ -31,10 +49,20 @@ bilingual_str TransactionErrorString(const TransactionError err)
             return Untranslated("Specified sighash value does not match value stored in PSBT");
         case TransactionError::MAX_FEE_EXCEEDED:
             return Untranslated("Fee exceeds maximum configured by user (e.g. -maxtxfee, maxfeerate)");
+<<<<<<< HEAD
+=======
+        case TransactionError::MAX_BURN_EXCEEDED:
+            return Untranslated("Unspendable output exceeds maximum configured by user (maxburnamount)");
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         case TransactionError::EXTERNAL_SIGNER_NOT_FOUND:
             return Untranslated("External signer not found");
         case TransactionError::EXTERNAL_SIGNER_FAILED:
             return Untranslated("External signer failed to sign");
+<<<<<<< HEAD
+=======
+        case TransactionError::INVALID_PACKAGE:
+            return Untranslated("Transaction rejected due to invalid package");
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         // no default case, so the compiler can warn about missing cases
     }
     assert(false);
@@ -45,6 +73,14 @@ bilingual_str ResolveErrMsg(const std::string& optname, const std::string& strBi
     return strprintf(_("Cannot resolve -%s address: '%s'"), optname, strBind);
 }
 
+<<<<<<< HEAD
+=======
+bilingual_str InvalidPortErrMsg(const std::string& optname, const std::string& invalid_value)
+{
+    return strprintf(_("Invalid port specified in %s: '%s'"), optname, invalid_value);
+}
+
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 bilingual_str AmountHighWarn(const std::string& optname)
 {
     return strprintf(_("%s is set very high!"), optname);

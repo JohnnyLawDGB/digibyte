@@ -1,15 +1,29 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
+<<<<<<< HEAD
 // Copyright (c) 2009-2019 The Bitcoin Core developers
 // Copyright (c) 2014-2019 The DigiByte Core developers
+=======
+// Copyright (c) 2009-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <util/moneystr.h>
 
+<<<<<<< HEAD
+=======
+#include <consensus/amount.h>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <tinyformat.h>
 #include <util/strencodings.h>
 #include <util/string.h>
 
+<<<<<<< HEAD
+=======
+#include <cstdint>
+#include <optional>
+
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 std::string FormatMoney(const CAmount n)
 {
     // Note: not using straight sprintf here because we do NOT want
@@ -31,11 +45,16 @@ std::string FormatMoney(const CAmount n)
         str.erase(str.size()-nTrim, nTrim);
 
     if (n < 0)
+<<<<<<< HEAD
         str.insert((unsigned int)0, 1, '-');
+=======
+        str.insert(uint32_t{0}, 1, '-');
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     return str;
 }
 
 
+<<<<<<< HEAD
 bool ParseMoney(const std::string& money_string, CAmount& nRet)
 {
     if (!ValidAsCString(money_string)) {
@@ -44,6 +63,16 @@ bool ParseMoney(const std::string& money_string, CAmount& nRet)
     const std::string str = TrimString(money_string);
     if (str.empty()) {
         return false;
+=======
+std::optional<CAmount> ParseMoney(const std::string& money_string)
+{
+    if (!ContainsNoNUL(money_string)) {
+        return std::nullopt;
+    }
+    const std::string str = TrimString(money_string);
+    if (str.empty()) {
+        return std::nullopt;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     std::string strWhole;
@@ -63,6 +92,7 @@ bool ParseMoney(const std::string& money_string, CAmount& nRet)
             break;
         }
         if (IsSpace(*p))
+<<<<<<< HEAD
             return false;
         if (!IsDigit(*p))
             return false;
@@ -80,4 +110,26 @@ bool ParseMoney(const std::string& money_string, CAmount& nRet)
 
     nRet = nValue;
     return true;
+=======
+            return std::nullopt;
+        if (!IsDigit(*p))
+            return std::nullopt;
+        strWhole.insert(strWhole.end(), *p);
+    }
+    if (*p) {
+        return std::nullopt;
+    }
+    if (strWhole.size() > 10) // guard against 63 bit overflow
+        return std::nullopt;
+    if (nUnits < 0 || nUnits > COIN)
+        return std::nullopt;
+    int64_t nWhole = LocaleIndependentAtoi<int64_t>(strWhole);
+    CAmount value = nWhole * COIN + nUnits;
+
+    if (!MoneyRange(value)) {
+        return std::nullopt;
+    }
+
+    return value;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }

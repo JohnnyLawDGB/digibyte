@@ -1,11 +1,19 @@
+<<<<<<< HEAD
 // Copyright (c) 2011-2020 The Bitcoin Core developers
 // Copyright (c) 2013-2021 The DigiByte Core developers
+=======
+// Copyright (c) 2011-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <qt/transactiontablemodel.h>
 
 #include <qt/addresstablemodel.h>
+<<<<<<< HEAD
+=======
+#include <qt/digibyteunits.h>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <qt/clientmodel.h>
 #include <qt/guiconstants.h>
 #include <qt/guiutil.h>
@@ -17,6 +25,10 @@
 
 #include <core_io.h>
 #include <interfaces/handler.h>
+<<<<<<< HEAD
+=======
+#include <tinyformat.h>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <uint256.h>
 
 #include <algorithm>
@@ -33,11 +45,11 @@
 
 // Amount column is right-aligned it contains numbers
 static int column_alignments[] = {
-        Qt::AlignLeft|Qt::AlignVCenter, /* status */
-        Qt::AlignLeft|Qt::AlignVCenter, /* watchonly */
-        Qt::AlignLeft|Qt::AlignVCenter, /* date */
-        Qt::AlignLeft|Qt::AlignVCenter, /* type */
-        Qt::AlignLeft|Qt::AlignVCenter, /* address */
+        Qt::AlignLeft|Qt::AlignVCenter, /*status=*/
+        Qt::AlignLeft|Qt::AlignVCenter, /*watchonly=*/
+        Qt::AlignLeft|Qt::AlignVCenter, /*date=*/
+        Qt::AlignLeft|Qt::AlignVCenter, /*type=*/
+        Qt::AlignLeft|Qt::AlignVCenter, /*address=*/
         Qt::AlignRight|Qt::AlignVCenter /* amount */
     };
 
@@ -62,7 +74,11 @@ struct TxLessThan
 struct TransactionNotification
 {
 public:
+<<<<<<< HEAD
     TransactionNotification() {}
+=======
+    TransactionNotification() = default;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     TransactionNotification(uint256 _hash, ChangeType _status, bool _showTransaction):
         hash(_hash), status(_status), showTransaction(_showTransaction) {}
 
@@ -93,10 +109,7 @@ public:
 
     TransactionTableModel *parent;
 
-    /* Local cache of wallet.
-     * As it is in the same order as the CWallet, by definition
-     * this is sorted by sha256.
-     */
+    //! Local cache of wallet sorted by transaction hash
     QList<TransactionRecord> cachedWallet;
 
     /** True when model finishes loading all wallet transactions on start */
@@ -233,7 +246,7 @@ public:
         return nullptr;
     }
 
-    QString describe(interfaces::Node& node, interfaces::Wallet& wallet, TransactionRecord *rec, int unit)
+    QString describe(interfaces::Node& node, interfaces::Wallet& wallet, TransactionRecord* rec, DigiByteUnit unit)
     {
         return TransactionDesc::toHTML(node, wallet, rec, unit);
     }
@@ -253,7 +266,6 @@ TransactionTableModel::TransactionTableModel(const PlatformStyle *_platformStyle
         QAbstractTableModel(parent),
         walletModel(parent),
         priv(new TransactionTablePriv(this)),
-        fProcessingQueuedTransactions(false),
         platformStyle(_platformStyle)
 {
     subscribeToCoreSignals();
@@ -317,12 +329,6 @@ QString TransactionTableModel::formatTxStatus(const TransactionRecord *wtx) cons
 
     switch(wtx->status.status)
     {
-    case TransactionStatus::OpenUntilBlock:
-        status = tr("Open for %n more block(s)","",wtx->status.open_for);
-        break;
-    case TransactionStatus::OpenUntilDate:
-        status = tr("Open until %1").arg(GUIUtil::dateTimeStr(wtx->status.open_for));
-        break;
     case TransactionStatus::Unconfirmed:
         status = tr("Unconfirmed");
         break;
@@ -387,8 +393,6 @@ QString TransactionTableModel::formatTxType(const TransactionRecord *wtx) const
     case TransactionRecord::SendToAddress:
     case TransactionRecord::SendToOther:
         return tr("Sent to");
-    case TransactionRecord::SendToSelf:
-        return tr("Payment to yourself");
     case TransactionRecord::Generated:
         return tr("Mined");
     default:
@@ -431,8 +435,11 @@ QString TransactionTableModel::formatTxToAddress(const TransactionRecord *wtx, b
         return lookupAddress(wtx->address, tooltip) + watchAddress;
     case TransactionRecord::SendToOther:
         return QString::fromStdString(wtx->address) + watchAddress;
+<<<<<<< HEAD
     case TransactionRecord::SendToSelf:
         return lookupAddress(wtx->address, tooltip) + watchAddress;
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     default:
         return tr("(n/a)") + watchAddress;
     }
@@ -451,8 +458,6 @@ QVariant TransactionTableModel::addressColor(const TransactionRecord *wtx) const
         if(label.isEmpty())
             return COLOR_BAREADDRESS;
         } break;
-    case TransactionRecord::SendToSelf:
-        return COLOR_BAREADDRESS;
     default:
         break;
     }
@@ -476,9 +481,6 @@ QVariant TransactionTableModel::txStatusDecoration(const TransactionRecord *wtx)
 {
     switch(wtx->status.status)
     {
-    case TransactionStatus::OpenUntilBlock:
-    case TransactionStatus::OpenUntilDate:
-        return COLOR_TX_STATUS_OPENUNTILDATE;
     case TransactionStatus::Unconfirmed:
         return QIcon(":/icons/transaction_0");
     case TransactionStatus::Abandoned:
@@ -573,7 +575,7 @@ QVariant TransactionTableModel::data(const QModelIndex &index, int role) const
         case Status:
             return QString::fromStdString(rec->status.sortKey);
         case Date:
-            return rec->time;
+            return QString::fromStdString(strprintf("%020s-%s", rec->time, rec->status.sortKey));
         case Type:
             return formatTxType(rec);
         case Watchonly:
@@ -611,7 +613,7 @@ QVariant TransactionTableModel::data(const QModelIndex &index, int role) const
     case TypeRole:
         return rec->type;
     case DateRole:
-        return QDateTime::fromTime_t(static_cast<uint>(rec->time));
+        return QDateTime::fromSecsSinceEpoch(rec->time);
     case WatchonlyRole:
         return rec->involvesWatchAddress;
     case WatchonlyDecorationRole:
@@ -631,7 +633,7 @@ QVariant TransactionTableModel::data(const QModelIndex &index, int role) const
     case TxPlainTextRole:
         {
             QString details;
-            QDateTime date = QDateTime::fromTime_t(static_cast<uint>(rec->time));
+            QDateTime date = QDateTime::fromSecsSinceEpoch(rec->time);
             QString txLabel = walletModel->getAddressTableModel()->labelForAddress(QString::fromStdString(rec->address));
 
             details.append(date.toString("M/d/yy HH:mm"));

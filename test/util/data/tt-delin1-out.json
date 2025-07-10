@@ -194,8 +194,13 @@
             "n": 0,
             "scriptPubKey": {
                 "asm": "OP_DUP OP_HASH160 8fd139bb39ced713f231c58a4d07bf6954d1c201 OP_EQUALVERIFY OP_CHECKSIG",
+                "desc": "addr(1E7SGgAZFCHDnVZLuRViX3gUmxpMfdvd2o)#xvg87vgr",
                 "hex": "76a9148fd139bb39ced713f231c58a4d07bf6954d1c20188ac",
+<<<<<<< HEAD
                 "address": "DJFXow7CYcBWKVjwe1VH4or5f6YetLH1hw",
+=======
+                "address": "1E7SGgAZFCHDnVZLuRViX3gUmxpMfdvd2o",
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 "type": "pubkeyhash"
             }
         },
@@ -204,8 +209,13 @@
             "n": 1,
             "scriptPubKey": {
                 "asm": "OP_DUP OP_HASH160 6c772e9cf96371bba3da8cb733da70a2fcf20078 OP_EQUALVERIFY OP_CHECKSIG",
+                "desc": "addr(1AtWkdmfmYkErU16d3KYykJUbEp9MAj9Sb)#tsyprkms",
                 "hex": "76a9146c772e9cf96371bba3da8cb733da70a2fcf2007888ac",
+<<<<<<< HEAD
                 "address": "DF2cHtiK4xeXPUBhMdK7XWU5UNYSg2KFvt",
+=======
+                "address": "1AtWkdmfmYkErU16d3KYykJUbEp9MAj9Sb",
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 "type": "pubkeyhash"
             }
         }

@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 // Copyright (c) 2019-2020 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
@@ -6,6 +7,26 @@
 #include <vector>
 #include <assert.h>
 #include <crypto/common.h>
+=======
+// Copyright (c) 2019-2022 The DigiByte Core developers
+// Distributed under the MIT software license, see the accompanying
+// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
+#include <util/asmap.h>
+
+#include <clientversion.h>
+#include <crypto/common.h>
+#include <logging.h>
+#include <serialize.h>
+#include <streams.h>
+#include <util/fs.h>
+
+#include <algorithm>
+#include <cassert>
+#include <cstdio>
+#include <utility>
+#include <vector>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 namespace {
 
@@ -183,3 +204,34 @@ bool SanityCheckASMap(const std::vector<bool>& asmap, int bits)
     }
     return false; // Reached EOF without RETURN instruction
 }
+<<<<<<< HEAD
+=======
+
+std::vector<bool> DecodeAsmap(fs::path path)
+{
+    std::vector<bool> bits;
+    FILE *filestr = fsbridge::fopen(path, "rb");
+    AutoFile file{filestr};
+    if (file.IsNull()) {
+        LogPrintf("Failed to open asmap file from disk\n");
+        return bits;
+    }
+    fseek(filestr, 0, SEEK_END);
+    int length = ftell(filestr);
+    LogPrintf("Opened asmap file %s (%d bytes) from disk\n", fs::quoted(fs::PathToString(path)), length);
+    fseek(filestr, 0, SEEK_SET);
+    uint8_t cur_byte;
+    for (int i = 0; i < length; ++i) {
+        file >> cur_byte;
+        for (int bit = 0; bit < 8; ++bit) {
+            bits.push_back((cur_byte >> bit) & 1);
+        }
+    }
+    if (!SanityCheckASMap(bits, 128)) {
+        LogPrintf("Sanity check of asmap file %s failed\n", fs::quoted(fs::PathToString(path)));
+        return {};
+    }
+    return bits;
+}
+
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion

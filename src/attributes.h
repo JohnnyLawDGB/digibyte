@@ -16,4 +16,11 @@
 #  define LIFETIMEBOUND
 #endif
 
+#if defined(__GNUC__)
+#  define ALWAYS_INLINE inline __attribute__((always_inline))
+#elif defined(_MSC_VER)
+#  define ALWAYS_INLINE __forceinline
+#else
+#  error No known always_inline attribute for this platform.
+#endif
 #endif // DIGIBYTE_ATTRIBUTES_H

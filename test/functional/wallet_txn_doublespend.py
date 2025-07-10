@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
+<<<<<<< HEAD
 # Copyright (c) 2014-2021 The DigiByte Core developers
+=======
+# Copyright (c) 2014-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test the wallet accounts properly when there is a double-spend conflict."""
@@ -22,6 +26,7 @@ class TxnMallTest(DigiByteTestFramework):
         self.skip_if_no_wallet()
 
     def add_options(self, parser):
+        self.add_wallet_options(parser)
         parser.add_argument("--mineblock", dest="mine_block", default=False, action="store_true",
                             help="Test double-spend of 1-confirmed transaction")
 
@@ -38,12 +43,17 @@ class TxnMallTest(DigiByteTestFramework):
         return self.nodes[0].sendrawtransaction(tx['hex'])
 
     def run_test(self):
+<<<<<<< HEAD
         # All nodes should start with 50 mature transactions,
         # having 72000 per (mature) coinbase transaction, each.
         # The fourth address from TestNode.PRIV_KEYS should have
         # 41 mature blocks, but only 8 immature blocks.
         # This is caused by the different COINBASE_MATURITY parameter in digibyte. 
         starting_balance = 25 * 72000
+=======
+        # All nodes should start with 1,250 DGB:
+        starting_balance = 1250
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # All nodes should be out of IBD.
         # If the nodes are not all out of IBD, that can interfere with
@@ -53,9 +63,13 @@ class TxnMallTest(DigiByteTestFramework):
             assert n.getblockchaininfo()["initialblockdownload"] == False
 
         for i in range(3):
+<<<<<<< HEAD
             balance = self.nodes[i].getbalance()
             print(f"Node {i} balance: {balance}")  # Log statement
             assert_equal(balance, starting_balance)
+=======
+            assert_equal(self.nodes[i].getbalance(), starting_balance)
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # Assign coins to foo and bar addresses:
         node0_address_foo = self.nodes[0].getnewaddress()
@@ -73,7 +87,7 @@ class TxnMallTest(DigiByteTestFramework):
         # Coins are sent to node1_address
         node1_address = self.nodes[1].getnewaddress()
 
-        # First: use raw transaction API to send 1240 BTC to node1_address,
+        # First: use raw transaction API to send 1240 DGB to node1_address,
         # but don't broadcast:
         doublespend_fee = Decimal('-.2')
         rawtx_input_0 = {}
@@ -102,7 +116,7 @@ class TxnMallTest(DigiByteTestFramework):
         tx1 = self.nodes[0].gettransaction(txid1)
         tx2 = self.nodes[0].gettransaction(txid2)
 
-        # Node0's balance should be starting balance, plus 50BTC for another
+        # Node0's balance should be starting balance, plus 50DGB for another
         # matured block, minus 40, minus 20, and minus transaction fees:
         expected = starting_balance + fund_foo_tx["fee"] + fund_bar_tx["fee"]
         if self.options.mine_block:
@@ -144,15 +158,23 @@ class TxnMallTest(DigiByteTestFramework):
         assert_equal(tx1["confirmations"], -2)
         assert_equal(tx2["confirmations"], -2)
 
+<<<<<<< HEAD
         # Node0's total balance should be starting balance
         # minus 1240 for the double-spend, plus fees (which are negative):
         expected = starting_balance + 142760 + fund_foo_tx["fee"] + fund_bar_tx["fee"] + doublespend_fee
         print(f"Expected balance: {expected}") 
         print(f"Node 0 balance: {self.nodes[0].getbalance()}")  
+=======
+        # Node0's total balance should be starting balance, plus 100DGB for
+        # two more matured blocks, minus 1240 for the double-spend, plus fees (which are
+        # negative):
+        expected = starting_balance + 100 - 1240 + fund_foo_tx["fee"] + fund_bar_tx["fee"] + doublespend_fee
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         assert_equal(self.nodes[0].getbalance(), expected)
 
         # Node1's balance should be its initial balance (50 block rewards) plus the doublespend:
         assert_equal(self.nodes[1].getbalance(), starting_balance + 1240)
+
 
 
 if __name__ == '__main__':

@@ -1,5 +1,9 @@
+<<<<<<< HEAD
 // Copyright (c) 2011-2020 The Bitcoin Core developers
 // Copyright (c) 2013-2021 The DigiByte Core developers
+=======
+// Copyright (c) 2011-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -11,14 +15,23 @@
 #include <qt/qvalidatedlineedit.h>
 #include <qt/sendcoinsrecipient.h>
 
+#include <addresstype.h>
 #include <base58.h>
 #include <chainparams.h>
+<<<<<<< HEAD
 #include <interfaces/node.h>
 #include <key_io.h>
+=======
+#include <common/args.h>
+#include <interfaces/node.h>
+#include <key_io.h>
+#include <logging.h>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <policy/policy.h>
 #include <primitives/transaction.h>
 #include <protocol.h>
 #include <script/script.h>
+<<<<<<< HEAD
 #include <script/standard.h>
 #include <util/system.h>
 
@@ -26,6 +39,15 @@
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
+=======
+#include <util/chaintype.h>
+#include <util/exception.h>
+#include <util/fs.h>
+#include <util/fs_helpers.h>
+#include <util/time.h>
+
+#ifdef WIN32
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <shellapi.h>
 #include <shlobj.h>
 #include <shlwapi.h>
@@ -37,6 +59,10 @@
 #include <QClipboard>
 #include <QDateTime>
 #include <QDesktopServices>
+<<<<<<< HEAD
+=======
+#include <QDialog>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <QDoubleValidator>
 #include <QFileDialog>
 #include <QFont>
@@ -45,6 +71,10 @@
 #include <QGuiApplication>
 #include <QJsonObject>
 #include <QKeyEvent>
+<<<<<<< HEAD
+=======
+#include <QKeySequence>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <QLatin1String>
 #include <QLineEdit>
 #include <QList>
@@ -53,10 +83,18 @@
 #include <QMouseEvent>
 #include <QPluginLoader>
 #include <QProgressDialog>
+<<<<<<< HEAD
+=======
+#include <QRegularExpression>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <QScreen>
 #include <QSettings>
 #include <QShortcut>
 #include <QSize>
+<<<<<<< HEAD
+=======
+#include <QStandardPaths>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <QString>
 #include <QTextDocument> // for Qt::mightBeRichText
 #include <QThread>
@@ -65,14 +103,28 @@
 
 #include <cassert>
 #include <chrono>
+<<<<<<< HEAD
 
 #if defined(Q_OS_MAC)
+=======
+#include <exception>
+#include <fstream>
+#include <string>
+#include <vector>
+
+#if defined(Q_OS_MACOS)
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 #include <QProcess>
 
 void ForceActivation();
 #endif
 
+<<<<<<< HEAD
+=======
+using namespace std::chrono_literals;
+
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 namespace GUIUtil {
 
 QString dateTimeStr(const QDateTime &date)
@@ -82,7 +134,7 @@ QString dateTimeStr(const QDateTime &date)
 
 QString dateTimeStr(qint64 nTime)
 {
-    return dateTimeStr(QDateTime::fromTime_t((qint32)nTime));
+    return dateTimeStr(QDateTime::fromSecsSinceEpoch(nTime));
 }
 
 QFont fixedPitchFont(bool use_embedded_font)
@@ -168,8 +220,12 @@ bool parseDigiByteURI(const QUrl &uri, SendCoinsRecipient *out)
         {
             if(!i->second.isEmpty())
             {
+<<<<<<< HEAD
                 if(!DigiByteUnits::parse(DigiByteUnits::DGB, i->second, &rv.amount))
                 {
+=======
+                if (!DigiByteUnits::parse(DigiByteUnit::DGB, i->second, &rv.amount)) {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                     return false;
                 }
             }
@@ -201,7 +257,11 @@ QString formatDigiByteURI(const SendCoinsRecipient &info)
 
     if (info.amount)
     {
+<<<<<<< HEAD
         ret += QString("?amount=%1").arg(DigiByteUnits::format(DigiByteUnits::DGB, info.amount, false, DigiByteUnits::SeparatorStyle::NEVER));
+=======
+        ret += QString("?amount=%1").arg(DigiByteUnits::format(DigiByteUnit::DGB, info.amount, false, DigiByteUnits::SeparatorStyle::NEVER));
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         paramCount++;
     }
 
@@ -272,9 +332,32 @@ bool hasEntryData(const QAbstractItemView *view, int column, int role)
     return !selection.at(0).data(role).toString().isEmpty();
 }
 
+<<<<<<< HEAD
 QString getDefaultDataDirectory()
 {
     return boostPathToQString(GetDefaultDataDir());
+=======
+void LoadFont(const QString& file_name)
+{
+    const int id = QFontDatabase::addApplicationFont(file_name);
+    assert(id != -1);
+}
+
+QString getDefaultDataDirectory()
+{
+    return PathToQString(GetDefaultDataDir());
+}
+
+QString ExtractFirstSuffixFromFilter(const QString& filter)
+{
+    QRegularExpression filter_re(QStringLiteral(".* \\(\\*\\.(.*)[ \\)]"), QRegularExpression::InvertedGreedinessOption);
+    QString suffix;
+    QRegularExpressionMatch m = filter_re.match(filter);
+    if (m.hasMatch()) {
+        suffix = m.captured(1);
+    }
+    return suffix;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 QString getSaveFileName(QWidget *parent, const QString &caption, const QString &dir,
@@ -294,13 +377,7 @@ QString getSaveFileName(QWidget *parent, const QString &caption, const QString &
     /* Directly convert path to native OS path separators */
     QString result = QDir::toNativeSeparators(QFileDialog::getSaveFileName(parent, caption, myDir, filter, &selectedFilter));
 
-    /* Extract first suffix from filter pattern "Description (*.foo)" or "Description (*.foo *.bar ...) */
-    QRegExp filter_re(".* \\(\\*\\.(.*)[ \\)]");
-    QString selectedSuffix;
-    if(filter_re.exactMatch(selectedFilter))
-    {
-        selectedSuffix = filter_re.cap(1);
-    }
+    QString selectedSuffix = ExtractFirstSuffixFromFilter(selectedFilter);
 
     /* Add suffix if needed */
     QFileInfo info(result);
@@ -342,14 +419,8 @@ QString getOpenFileName(QWidget *parent, const QString &caption, const QString &
 
     if(selectedSuffixOut)
     {
-        /* Extract first suffix from filter pattern "Description (*.foo)" or "Description (*.foo *.bar ...) */
-        QRegExp filter_re(".* \\(\\*\\.(.*)[ \\)]");
-        QString selectedSuffix;
-        if(filter_re.exactMatch(selectedFilter))
-        {
-            selectedSuffix = filter_re.cap(1);
-        }
-        *selectedSuffixOut = selectedSuffix;
+        *selectedSuffixOut = ExtractFirstSuffixFromFilter(selectedFilter);
+        ;
     }
     return result;
 }
@@ -384,7 +455,11 @@ bool isObscured(QWidget *w)
 
 void bringToFront(QWidget* w)
 {
+<<<<<<< HEAD
 #ifdef Q_OS_MAC
+=======
+#ifdef Q_OS_MACOS
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     ForceActivation();
 #endif
 
@@ -402,7 +477,11 @@ void bringToFront(QWidget* w)
 
 void handleCloseWindowShortcut(QWidget* w)
 {
+<<<<<<< HEAD
     QObject::connect(new QShortcut(QKeySequence(Qt::CTRL + Qt::Key_W), w), &QShortcut::activated, w, &QWidget::close);
+=======
+    QObject::connect(new QShortcut(QKeySequence(QObject::tr("Ctrl+W")), w), &QShortcut::activated, w, &QWidget::close);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 void openDebugLogfile()
@@ -411,15 +490,22 @@ void openDebugLogfile()
 
     /* Open debug.log with the associated application */
     if (fs::exists(pathDebug))
-        QDesktopServices::openUrl(QUrl::fromLocalFile(boostPathToQString(pathDebug)));
+        QDesktopServices::openUrl(QUrl::fromLocalFile(PathToQString(pathDebug)));
 }
 
 bool openDigiByteConf()
 {
+<<<<<<< HEAD
     fs::path pathConfig = GetConfigFile(gArgs.GetArg("-conf", DIGIBYTE_CONF_FILENAME));
 
     /* Create the file */
     fsbridge::ofstream configFile(pathConfig, std::ios_base::app);
+=======
+    fs::path pathConfig = gArgs.GetConfigFilePath();
+
+    /* Create the file */
+    std::ofstream configFile{pathConfig, std::ios_base::app};
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     if (!configFile.good())
         return false;
@@ -427,11 +513,19 @@ bool openDigiByteConf()
     configFile.close();
 
     /* Open digibyte.conf with the associated application */
+<<<<<<< HEAD
     bool res = QDesktopServices::openUrl(QUrl::fromLocalFile(boostPathToQString(pathConfig)));
 #ifdef Q_OS_MAC
     // Workaround for macOS-specific behavior; see #15409.
     if (!res) {
         res = QProcess::startDetached("/usr/bin/open", QStringList{"-t", boostPathToQString(pathConfig)});
+=======
+    bool res = QDesktopServices::openUrl(QUrl::fromLocalFile(PathToQString(pathConfig)));
+#ifdef Q_OS_MACOS
+    // Workaround for macOS-specific behavior; see #15409.
+    if (!res) {
+        res = QProcess::startDetached("/usr/bin/open", QStringList{"-t", PathToQString(pathConfig)});
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 #endif
 
@@ -488,12 +582,21 @@ bool LabelOutOfFocusEventFilter::eventFilter(QObject* watched, QEvent* event)
 #ifdef WIN32
 fs::path static StartupShortcutPath()
 {
+<<<<<<< HEAD
     std::string chain = gArgs.GetChainName();
     if (chain == CBaseChainParams::MAIN)
         return GetSpecialFolderPath(CSIDL_STARTUP) / "DigiByte.lnk";
     if (chain == CBaseChainParams::TESTNET) // Remove this special case when CBaseChainParams::TESTNET = "testnet4"
         return GetSpecialFolderPath(CSIDL_STARTUP) / "DigiByte (testnet).lnk";
     return GetSpecialFolderPath(CSIDL_STARTUP) / strprintf("DigiByte (%s).lnk", chain);
+=======
+    ChainType chain = gArgs.GetChainType();
+    if (chain == ChainType::MAIN)
+        return GetSpecialFolderPath(CSIDL_STARTUP) / "DigiByte.lnk";
+    if (chain == ChainType::TESTNET) // Remove this special case when testnet CBaseChainParams::DataDir() is incremented to "testnet4"
+        return GetSpecialFolderPath(CSIDL_STARTUP) / "DigiByte (testnet).lnk";
+    return GetSpecialFolderPath(CSIDL_STARTUP) / fs::u8path(strprintf("DigiByte (%s).lnk", ChainTypeToString(chain)));
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 bool GetStartOnSystemStartup()
@@ -526,7 +629,11 @@ bool SetStartOnSystemStartup(bool fAutoStart)
             // Start client minimized
             QString strArgs = "-min";
             // Set -testnet /-regtest options
+<<<<<<< HEAD
             strArgs += QString::fromStdString(strprintf(" -chain=%s", gArgs.GetChainName()));
+=======
+            strArgs += QString::fromStdString(strprintf(" -chain=%s", gArgs.GetChainTypeString()));
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
             // Set the path to the shortcut target
             psl->SetPath(pszExePath);
@@ -571,15 +678,26 @@ fs::path static GetAutostartDir()
 
 fs::path static GetAutostartFilePath()
 {
+<<<<<<< HEAD
     std::string chain = gArgs.GetChainName();
     if (chain == CBaseChainParams::MAIN)
         return GetAutostartDir() / "digibyte.desktop";
     return GetAutostartDir() / strprintf("digibyte-%s.desktop", chain);
+=======
+    ChainType chain = gArgs.GetChainType();
+    if (chain == ChainType::MAIN)
+        return GetAutostartDir() / "digibyte.desktop";
+    return GetAutostartDir() / fs::u8path(strprintf("digibyte-%s.desktop", ChainTypeToString(chain)));
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 bool GetStartOnSystemStartup()
 {
+<<<<<<< HEAD
     fsbridge::ifstream optionFile(GetAutostartFilePath());
+=======
+    std::ifstream optionFile{GetAutostartFilePath()};
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (!optionFile.good())
         return false;
     // Scan through file for "Hidden=true":
@@ -603,13 +721,15 @@ bool SetStartOnSystemStartup(bool fAutoStart)
     else
     {
         char pszExePath[MAX_PATH+1];
-        ssize_t r = readlink("/proc/self/exe", pszExePath, sizeof(pszExePath) - 1);
-        if (r == -1)
+        ssize_t r = readlink("/proc/self/exe", pszExePath, sizeof(pszExePath));
+        if (r == -1 || r > MAX_PATH) {
             return false;
+        }
         pszExePath[r] = '\0';
 
         fs::create_directories(GetAutostartDir());
 
+<<<<<<< HEAD
         fsbridge::ofstream optionFile(GetAutostartFilePath(), std::ios_base::out | std::ios_base::trunc);
         if (!optionFile.good())
             return false;
@@ -622,6 +742,20 @@ bool SetStartOnSystemStartup(bool fAutoStart)
         else
             optionFile << strprintf("Name=DigiByte (%s)\n", chain);
         optionFile << "Exec=" << pszExePath << strprintf(" -min -chain=%s\n", chain);
+=======
+        std::ofstream optionFile{GetAutostartFilePath(), std::ios_base::out | std::ios_base::trunc};
+        if (!optionFile.good())
+            return false;
+        ChainType chain = gArgs.GetChainType();
+        // Write a digibyte.desktop file to the autostart directory:
+        optionFile << "[Desktop Entry]\n";
+        optionFile << "Type=Application\n";
+        if (chain == ChainType::MAIN)
+            optionFile << "Name=DigiByte\n";
+        else
+            optionFile << strprintf("Name=DigiByte (%s)\n", ChainTypeToString(chain));
+        optionFile << "Exec=" << pszExePath << strprintf(" -min -chain=%s\n", ChainTypeToString(chain));
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         optionFile << "Terminal=false\n";
         optionFile << "Hidden=false\n";
         optionFile.close();
@@ -645,13 +779,18 @@ void setClipboard(const QString& str)
     }
 }
 
-fs::path qstringToBoostPath(const QString &path)
+fs::path QStringToPath(const QString &path)
 {
+<<<<<<< HEAD
     return fs::path(path.toStdString());
+=======
+    return fs::u8path(path.toStdString());
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
-QString boostPathToQString(const fs::path &path)
+QString PathToQString(const fs::path &path)
 {
+<<<<<<< HEAD
     return QString::fromStdString(path.string());
 }
 
@@ -685,16 +824,32 @@ QString ConnectionTypeToQString(ConnectionType conn_type, bool prepend_direction
     case ConnectionType::ADDR_FETCH: return prefix + QObject::tr("Address Fetch");
     } // no default case, so the compiler can warn about missing cases
     assert(false);
+=======
+    return QString::fromStdString(path.u8string());
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
-QString formatDurationStr(int secs)
+QString NetworkToQString(Network net)
 {
-    QStringList strList;
-    int days = secs / 86400;
-    int hours = (secs % 86400) / 3600;
-    int mins = (secs % 3600) / 60;
-    int seconds = secs % 60;
+    switch (net) {
+    case NET_UNROUTABLE: return QObject::tr("Unroutable");
+    //: Name of IPv4 network in peer info
+    case NET_IPV4: return QObject::tr("IPv4", "network name");
+    //: Name of IPv6 network in peer info
+    case NET_IPV6: return QObject::tr("IPv6", "network name");
+    //: Name of Tor network in peer info
+    case NET_ONION: return QObject::tr("Onion", "network name");
+    //: Name of I2P network in peer info
+    case NET_I2P: return QObject::tr("I2P", "network name");
+    //: Name of CJDNS network in peer info
+    case NET_CJDNS: return QObject::tr("CJDNS", "network name");
+    case NET_INTERNAL: return "Internal";  // should never actually happen
+    case NET_MAX: assert(false);
+    } // no default case, so the compiler can warn about missing cases
+    assert(false);
+}
 
+<<<<<<< HEAD
     if (days)
         strList.append(QObject::tr("%1 d").arg(days));
     if (hours)
@@ -703,8 +858,61 @@ QString formatDurationStr(int secs)
         strList.append(QObject::tr("%1 m").arg(mins));
     if (seconds || (!days && !hours && !mins))
         strList.append(QObject::tr("%1 s").arg(seconds));
+=======
+QString ConnectionTypeToQString(ConnectionType conn_type, bool prepend_direction)
+{
+    QString prefix;
+    if (prepend_direction) {
+        prefix = (conn_type == ConnectionType::INBOUND) ?
+                     /*: An inbound connection from a peer. An inbound connection
+                         is a connection initiated by a peer. */
+                     QObject::tr("Inbound") :
+                     /*: An outbound connection to a peer. An outbound connection
+                         is a connection initiated by us. */
+                     QObject::tr("Outbound") + " ";
+    }
+    switch (conn_type) {
+    case ConnectionType::INBOUND: return prefix;
+    //: Peer connection type that relays all network information.
+    case ConnectionType::OUTBOUND_FULL_RELAY: return prefix + QObject::tr("Full Relay");
+    /*: Peer connection type that relays network information about
+        blocks and not transactions or addresses. */
+    case ConnectionType::BLOCK_RELAY: return prefix + QObject::tr("Block Relay");
+    //: Peer connection type established manually through one of several methods.
+    case ConnectionType::MANUAL: return prefix + QObject::tr("Manual");
+    //: Short-lived peer connection type that tests the aliveness of known addresses.
+    case ConnectionType::FEELER: return prefix + QObject::tr("Feeler");
+    //: Short-lived peer connection type that solicits known addresses from a peer.
+    case ConnectionType::ADDR_FETCH: return prefix + QObject::tr("Address Fetch");
+    } // no default case, so the compiler can warn about missing cases
+    assert(false);
+}
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
-    return strList.join(" ");
+QString formatDurationStr(std::chrono::seconds dur)
+{
+    using days = std::chrono::duration<int, std::ratio<86400>>; // can remove this line after C++20
+    const auto d{std::chrono::duration_cast<days>(dur)};
+    const auto h{std::chrono::duration_cast<std::chrono::hours>(dur - d)};
+    const auto m{std::chrono::duration_cast<std::chrono::minutes>(dur - d - h)};
+    const auto s{std::chrono::duration_cast<std::chrono::seconds>(dur - d - h - m)};
+    QStringList str_list;
+    if (auto d2{d.count()}) str_list.append(QObject::tr("%1 d").arg(d2));
+    if (auto h2{h.count()}) str_list.append(QObject::tr("%1 h").arg(h2));
+    if (auto m2{m.count()}) str_list.append(QObject::tr("%1 m").arg(m2));
+    const auto s2{s.count()};
+    if (s2 || str_list.empty()) str_list.append(QObject::tr("%1 s").arg(s2));
+    return str_list.join(" ");
+}
+
+QString FormatPeerAge(std::chrono::seconds time_connected)
+{
+    const auto time_now{GetTime<std::chrono::seconds>()};
+    const auto age{time_now - time_connected};
+    if (age >= 24h) return QObject::tr("%1 d").arg(age / 24h);
+    if (age >= 1h) return QObject::tr("%1 h").arg(age / 1h);
+    if (age >= 1min) return QObject::tr("%1 m").arg(age / 1min);
+    return QObject::tr("%1 s").arg(age / 1s);
 }
 
 QString formatServicesStr(quint64 mask)
@@ -849,7 +1057,11 @@ bool ItemDelegate::eventFilter(QObject *object, QEvent *event)
 
 void PolishProgressDialog(QProgressDialog* dialog)
 {
+<<<<<<< HEAD
 #ifdef Q_OS_MAC
+=======
+#ifdef Q_OS_MACOS
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     // Workaround for macOS-only Qt bug; see: QTBUG-65750, QTBUG-70357.
     const int margin = TextWidth(dialog->fontMetrics(), ("X"));
     dialog->resize(dialog->width() + 2 * margin, dialog->height());
@@ -863,11 +1075,15 @@ void PolishProgressDialog(QProgressDialog* dialog)
 
 int TextWidth(const QFontMetrics& fm, const QString& text)
 {
+<<<<<<< HEAD
 #if (QT_VERSION >= QT_VERSION_CHECK(5, 11, 0))
     return fm.horizontalAdvance(text);
 #else
     return fm.width(text);
 #endif
+=======
+    return fm.horizontalAdvance(text);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 void LogQtInfo()
@@ -956,7 +1172,21 @@ void PrintSlotException(
     std::string description = sender->metaObject()->className();
     description += "->";
     description += receiver->metaObject()->className();
+<<<<<<< HEAD
     PrintExceptionContinue(exception, description.c_str());
 }
 
 } // namespace GUIUtil
+=======
+    PrintExceptionContinue(exception, description);
+}
+
+void ShowModalDialogAsynchronously(QDialog* dialog)
+{
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
+    dialog->setWindowModality(Qt::ApplicationModal);
+    dialog->show();
+}
+
+} // namespace GUIUtil
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion

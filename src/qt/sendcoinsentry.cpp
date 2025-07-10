@@ -1,5 +1,9 @@
+<<<<<<< HEAD
 // Copyright (c) 2011-2019 The Bitcoin Core developers
 // Copyright (c) 2013-2021 The DigiByte Core developers
+=======
+// Copyright (c) 2011-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -21,9 +25,12 @@
 #include <QClipboard>
 
 SendCoinsEntry::SendCoinsEntry(const PlatformStyle *_platformStyle, QWidget *parent) :
-    QStackedWidget(parent),
+    QWidget(parent),
     ui(new Ui::SendCoinsEntry),
+<<<<<<< HEAD
     model(nullptr),
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     platformStyle(_platformStyle)
 {
     ui->setupUi(this);
@@ -31,25 +38,28 @@ SendCoinsEntry::SendCoinsEntry(const PlatformStyle *_platformStyle, QWidget *par
     ui->addressBookButton->setIcon(platformStyle->SingleColorIcon(":/icons/address-book"));
     ui->pasteButton->setIcon(platformStyle->SingleColorIcon(":/icons/editpaste"));
     ui->deleteButton->setIcon(platformStyle->SingleColorIcon(":/icons/remove"));
-    ui->deleteButton_is->setIcon(platformStyle->SingleColorIcon(":/icons/remove"));
-    ui->deleteButton_s->setIcon(platformStyle->SingleColorIcon(":/icons/remove"));
-
-    setCurrentWidget(ui->SendCoins);
 
     if (platformStyle->getUseExtraSpacing())
         ui->payToLayout->setSpacing(4);
 
+<<<<<<< HEAD
     // normal digibyte address field
     GUIUtil::setupAddressWidget(ui->payTo, this);
     // just a label for displaying digibyte address(es)
     ui->payTo_is->setFont(GUIUtil::fixedPitchFont());
+=======
+    GUIUtil::setupAddressWidget(ui->payTo, this);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // Connect signals
     connect(ui->payAmount, &DigiByteAmountField::valueChanged, this, &SendCoinsEntry::payAmountChanged);
     connect(ui->checkboxSubtractFeeFromAmount, &QCheckBox::toggled, this, &SendCoinsEntry::subtractFeeFromAmountChanged);
     connect(ui->deleteButton, &QPushButton::clicked, this, &SendCoinsEntry::deleteClicked);
+<<<<<<< HEAD
     connect(ui->deleteButton_is, &QPushButton::clicked, this, &SendCoinsEntry::deleteClicked);
     connect(ui->deleteButton_s, &QPushButton::clicked, this, &SendCoinsEntry::deleteClicked);
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     connect(ui->useAvailableBalanceButton, &QPushButton::clicked, this, &SendCoinsEntry::useAvailableBalanceClicked);
 }
 
@@ -98,18 +108,12 @@ void SendCoinsEntry::clear()
     ui->payTo->clear();
     ui->addAsLabel->clear();
     ui->payAmount->clear();
-    ui->checkboxSubtractFeeFromAmount->setCheckState(Qt::Unchecked);
+    if (model && model->getOptionsModel()) {
+        ui->checkboxSubtractFeeFromAmount->setChecked(model->getOptionsModel()->getSubFeeFromAmount());
+    }
     ui->messageTextLabel->clear();
     ui->messageTextLabel->hide();
     ui->messageLabel->hide();
-    // clear UI elements for unauthenticated payment request
-    ui->payTo_is->clear();
-    ui->memoTextLabel_is->clear();
-    ui->payAmount_is->clear();
-    // clear UI elements for authenticated payment request
-    ui->payTo_s->clear();
-    ui->memoTextLabel_s->clear();
-    ui->payAmount_s->clear();
 
     // update the display unit, to not use the default ("DGB")
     updateDisplayUnit();
@@ -218,7 +222,7 @@ void SendCoinsEntry::setAmount(const CAmount &amount)
 
 bool SendCoinsEntry::isClear()
 {
-    return ui->payTo->text().isEmpty() && ui->payTo_is->text().isEmpty() && ui->payTo_s->text().isEmpty();
+    return ui->payTo->text().isEmpty();
 }
 
 void SendCoinsEntry::setFocus()
@@ -228,12 +232,8 @@ void SendCoinsEntry::setFocus()
 
 void SendCoinsEntry::updateDisplayUnit()
 {
-    if(model && model->getOptionsModel())
-    {
-        // Update payAmount with the current unit
+    if (model && model->getOptionsModel()) {
         ui->payAmount->setDisplayUnit(model->getOptionsModel()->getDisplayUnit());
-        ui->payAmount_is->setDisplayUnit(model->getOptionsModel()->getDisplayUnit());
-        ui->payAmount_s->setDisplayUnit(model->getOptionsModel()->getDisplayUnit());
     }
 }
 
@@ -243,11 +243,17 @@ void SendCoinsEntry::changeEvent(QEvent* e)
         ui->addressBookButton->setIcon(platformStyle->SingleColorIcon(QStringLiteral(":/icons/address-book")));
         ui->pasteButton->setIcon(platformStyle->SingleColorIcon(QStringLiteral(":/icons/editpaste")));
         ui->deleteButton->setIcon(platformStyle->SingleColorIcon(QStringLiteral(":/icons/remove")));
+<<<<<<< HEAD
         ui->deleteButton_is->setIcon(platformStyle->SingleColorIcon(QStringLiteral(":/icons/remove")));
         ui->deleteButton_s->setIcon(platformStyle->SingleColorIcon(QStringLiteral(":/icons/remove")));
     }
 
     QStackedWidget::changeEvent(e);
+=======
+    }
+
+    QWidget::changeEvent(e);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 bool SendCoinsEntry::updateLabel(const QString &address)

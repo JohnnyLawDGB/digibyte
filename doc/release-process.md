@@ -5,62 +5,82 @@ Release Process
 
 ### Before every release candidate
 
-* Update translations see [translation_process.md](https://github.com/digibyte-core/digibyte/blob/master/doc/translation_process.md#synchronising-translations).
-* Update manpages, see [gen-manpages.sh](https://github.com/digibyte-core/digibyte/blob/master/contrib/devtools/README.md#gen-manpagessh).
+* Update translations see [translation_process.md](https://github.com/digibyte/digibyte/blob/master/doc/translation_process.md#synchronising-translations).
 * Update release candidate version in `configure.ac` (`CLIENT_VERSION_RC`).
+* Update manpages (after rebuilding the binaries), see [gen-manpages.py](https://github.com/digibyte/digibyte/blob/master/contrib/devtools/README.md#gen-manpagespy).
+* Update digibyte.conf and commit, see [gen-digibyte-conf.sh](https://github.com/digibyte/digibyte/blob/master/contrib/devtools/README.md#gen-digibyte-confsh).
 
 ### Before every major and minor release
 
-* Update [bips.md](bips.md) to account for changes since the last release (don't forget to bump the version number on the first line).
+* Update [bips.md](bips.md) to account for changes since the last release.
 * Update version in `configure.ac` (don't forget to set `CLIENT_VERSION_RC` to `0`).
+* Update manpages (see previous section)
 * Write release notes (see "Write the release notes" below).
 
 ### Before every major release
 
 * On both the master branch and the new release branch:
   - update `CLIENT_VERSION_MAJOR` in [`configure.ac`](../configure.ac)
-  - update `CLIENT_VERSION_MAJOR`, `PACKAGE_VERSION`, and `PACKAGE_STRING` in [`build_msvc/digibyte_config.h`](/build_msvc/digibyte_config.h)
-* On the new release branch in [`configure.ac`](../configure.ac) and [`build_msvc/digibyte_config.h`](/build_msvc/digibyte_config.h) (see [this commit](https://github.com/digibyte-core/digibyte/commit/742f7dd)):
+* On the new release branch in [`configure.ac`](../configure.ac)(see [this commit](https://github.com/digibyte/digibyte/commit/742f7dd)):
   - set `CLIENT_VERSION_MINOR` to `0`
   - set `CLIENT_VERSION_BUILD` to `0`
   - set `CLIENT_VERSION_IS_RELEASE` to `true`
 
 #### Before branch-off
 
-* Update hardcoded [seeds](/contrib/seeds/README.md), see [this pull request](https://github.com/digibyte-core/digibyte/pull/7415) for an example.
-* Update [`src/chainparams.cpp`](/src/chainparams.cpp) m_assumed_blockchain_size and m_assumed_chain_state_size with the current size plus some overhead (see [this](#how-to-calculate-assumed-blockchain-and-chain-state-size) for information on how to calculate them).
-* Update [`src/chainparams.cpp`](/src/chainparams.cpp) chainTxData with statistics about the transaction count and rate. Use the output of the `getchaintxstats` RPC, see
-  [this pull request](https://github.com/digibyte-core/digibyte/pull/20263) for an example. Reviewers can verify the results by running `getchaintxstats <window_block_count> <window_final_block_hash>` with the `window_block_count` and `window_final_block_hash` from your output.
-* Update `src/chainparams.cpp` nMinimumChainWork and defaultAssumeValid (and the block height comment) with information from the `getblockheader` (and `getblockhash`) RPCs.
-  - The selected value must not be orphaned so it may be useful to set the value two blocks back from the tip.
-  - Testnet should be set some tens of thousands back from the tip due to reorgs there.
-  - This update should be reviewed with a reindex-chainstate with assumevalid=0 to catch any defect
-     that causes rejection of blocks in the past history.
+* Update hardcoded [seeds](/contrib/seeds/README.md), see [this pull request](https://github.com/digibyte/digibyte/pull/27488) for an example.
+* Update the following variables in [`src/kernel/chainparams.cpp`](/src/kernel/chainparams.cpp) for mainnet, testnet, and signet:
+  - `m_assumed_blockchain_size` and `m_assumed_chain_state_size` with the current size plus some overhead (see
+    [this](#how-to-calculate-assumed-blockchain-and-chain-state-size) for information on how to calculate them).
+  - The following updates should be reviewed with `reindex-chainstate` and `assumevalid=0` to catch any defect
+    that causes rejection of blocks in the past history.
+  - `chainTxData` with statistics about the transaction count and rate. Use the output of the `getchaintxstats` RPC with an
+    `nBlocks` of 4096 (28 days) and a `bestblockhash` of RPC `getbestblockhash`; see
+    [this pull request](https://github.com/digibyte/digibyte/pull/28591) for an example. Reviewers can verify the results by running
+    `getchaintxstats <window_block_count> <window_final_block_hash>` with the `window_block_count` and `window_final_block_hash` from your output.
+  - `defaultAssumeValid` with the output of RPC `getblockhash` using the `height` of `window_final_block_height` above
+    (and update the block height comment with that height), taking into account the following:
+    - On mainnet, the selected value must not be orphaned, so it may be useful to set the height two blocks back from the tip.
+    - Testnet should be set with a height some tens of thousands back from the tip, due to reorgs there.
+  - `nMinimumChainWork` with the "chainwork" value of RPC `getblockheader` using the same height as that selected for the previous step.
+* Consider updating the headers synchronization tuning parameters to account for the chainparams updates.
+  The optimal values change very slowly, so this isn't strictly necessary every release, but doing so doesn't hurt.
+  - Update configuration variables in [`contrib/devtools/headerssync-params.py`](/contrib/devtools/headerssync-params.py):
+    - Set `TIME` to the software's expected supported lifetime -- after this time, its ability to defend against a high bandwidth timewarp attacker will begin to degrade.
+    - Set `MINCHAINWORK_HEADERS` to the height used for the `nMinimumChainWork` calculation above.
+    - Check that the other variables still look reasonable.
+  - Run the script. It works fine in CPython, but PyPy is much faster (seconds instead of minutes): `pypy3 contrib/devtools/headerssync-params.py`.
+  - Paste the output defining `HEADER_COMMITMENT_PERIOD` and `REDOWNLOAD_BUFFER_SIZE` into the top of [`src/headerssync.cpp`](/src/headerssync.cpp).
 - Clear the release notes and move them to the wiki (see "Write the release notes" below).
-- Translations on Transifex
-    - Create [a new resource](https://www.transifex.com/digibyte/digibyte/content/) named after the major version with the slug `[digibyte.qt-translation-<RRR>x]`, where `RRR` is the major branch number padded with zeros. Use `src/qt/locale/digibyte_en.xlf` to create it.
-    - In the project workflow settings, ensure that [Translation Memory Fill-up](https://docs.transifex.com/translation-memory/enabling-autofill) is enabled and that [Translation Memory Context Matching](https://docs.transifex.com/translation-memory/translation-memory-with-context) is disabled.
+- Translations on Transifex:
+    - Pull translations from Transifex into the master branch.
+    - Create [a new resource](https://www.transifex.com/digibyte/digibyte/content/) named after the major version with the slug `qt-translation-<RRR>x`, where `RRR` is the major branch number padded with zeros. Use `src/qt/locale/digibyte_en.xlf` to create it.
+    - In the project workflow settings, ensure that [Translation Memory Fill-up](https://help.transifex.com/en/articles/6224817-setting-up-translation-memory-fill-up) is enabled and that [Translation Memory Context Matching](https://help.transifex.com/en/articles/6224753-translation-memory-with-context) is disabled.
     - Update the Transifex slug in [`.tx/config`](/.tx/config) to the slug of the resource created in the first step. This identifies which resource the translations will be synchronized from.
-    - Make an announcement that translators can start translating for the new version. You can use one of the [previous announcements](https://www.transifex.com/digibyte/digibyte/announcements/) as a template.
+    - Make an announcement that translators can start translating for the new version. You can use one of the [previous announcements](https://www.transifex.com/digibyte/communication/) as a template.
     - Change the auto-update URL for the resource to `master`, e.g. `https://raw.githubusercontent.com/digibyte/digibyte/master/src/qt/locale/digibyte_en.xlf`. (Do this only after the previous steps, to prevent an auto-update from interfering.)
 
 #### After branch-off (on the major release branch)
 
 - Update the versions.
-- Create a pinned meta-issue for testing the release candidate (see [this issue](https://github.com/digibyte-core/digibyte/issues/17079) for an example) and provide a link to it in the release announcements where useful.
+- Create the draft, named "*version* Release Notes Draft", as a [collaborative wiki](https://github.com/digibyte-core/digibyte-devwiki/wiki/_new).
+- Clear the release notes: `cp doc/release-notes-empty-template.md doc/release-notes.md`
+- Create a pinned meta-issue for testing the release candidate (see [this issue](https://github.com/digibyte/digibyte/issues/27621) for an example) and provide a link to it in the release announcements where useful.
 - Translations on Transifex
     - Change the auto-update URL for the new major version's resource away from `master` and to the branch, e.g. `https://raw.githubusercontent.com/digibyte/digibyte/<branch>/src/qt/locale/digibyte_en.xlf`. Do not forget this or it will keep tracking the translations on master instead, drifting away from the specific major release.
+- Prune inputs from the qa-assets repo (See [pruning
+  inputs](https://github.com/digibyte-core/qa-assets#pruning-inputs)).
 
 #### Before final release
 
-- Merge the release notes from the wiki into the branch.
+- Merge the release notes from [the wiki](https://github.com/digibyte-core/digibyte-devwiki/wiki/) into the branch.
 - Ensure the "Needs release note" label is removed from all relevant pull requests and issues.
 
 #### Tagging a release (candidate)
 
 To tag the version (or release candidate) in git, use the `make-tag.py` script from [digibyte-maintainer-tools](https://github.com/digibyte-core/digibyte-maintainer-tools). From the root of the repository run:
 
-    ../digibyte-maintainer-tools/make-tag.py v(new version, e.g. 0.20.0)
+    ../digibyte-maintainer-tools/make-tag.py v(new version, e.g. 25.0)
 
 This will perform a few last-minute consistency checks in the build system files, and if they pass, create a signed tag.
 
@@ -76,7 +96,7 @@ Check out the source code in the following directory hierarchy.
     cd /path/to/your/toplevel/build
     git clone https://github.com/digibyte-core/guix.sigs.git
     git clone https://github.com/digibyte-core/digibyte-detached-sigs.git
-    git clone https://github.com/digibyte-core/digibyte.git
+    git clone https://github.com/digibyte/digibyte.git
 
 ### Write the release notes
 
@@ -84,11 +104,9 @@ Open a draft of the release notes for collaborative editing at https://github.co
 
 For the period during which the notes are being edited on the wiki, the version on the branch should be wiped and replaced with a link to the wiki which should be used for all announcements until `-final`.
 
-Generate the change log. As this is a huge amount of work to do manually, there is the `list-pulls` script to do a pre-sorting step based on github PR metadata. See the [documentation in the README.md](https://github.com/digibyte-core/digibyte-maintainer-tools/blob/master/README.md#list-pulls).
-
 Generate list of authors:
 
-    git log --format='- %aN' v(current version, e.g. 0.20.0)..v(new version, e.g. 0.20.1) | sort -fiu
+    git log --format='- %aN' v(current version, e.g. 25.0)..v(new version, e.g. 25.1) | grep -v 'merge-script' | sort -fiu
 
 ### Setup and perform Guix builds
 
@@ -97,8 +115,8 @@ Checkout the DigiByte Core version you'd like to build:
 ```sh
 pushd ./digibyte
 SIGNER='(your builder key, ie bluematt, sipa, etc)'
-VERSION='(new version without v-prefix, e.g. 0.20.0)'
-git fetch "v${VERSION}"
+VERSION='(new version without v-prefix, e.g. 25.0)'
+git fetch origin "v${VERSION}"
 git checkout "v${VERSION}"
 popd
 ```
@@ -110,57 +128,54 @@ against other `guix-attest` signatures.
 git -C ./guix.sigs pull
 ```
 
-### Create the macOS SDK tarball: (first time, or when SDK version changes)
+### Create the macOS SDK tarball (first time, or when SDK version changes)
 
 Create the macOS SDK tarball, see the [macdeploy
-instructions](/contrib/macdeploy/README.md#deterministic-macos-dmg-notes) for
+instructions](/contrib/macdeploy/README.md#deterministic-macos-app-notes) for
 details.
 
-### Build and attest to build outputs:
+### Build and attest to build outputs
 
 Follow the relevant Guix README.md sections:
-- [Performing a build](/contrib/guix/README.md#performing-a-build)
+- [Building](/contrib/guix/README.md#building)
 - [Attesting to build outputs](/contrib/guix/README.md#attesting-to-build-outputs)
 
-### Verify other builders' signatures to your own. (Optional)
+### Verify other builders' signatures to your own (optional)
 
-Add other builders keys to your gpg keyring, and/or refresh keys: See `../digibyte/contrib/builder-keys/README.md`.
-
-Follow the relevant Guix README.md sections:
 - [Verifying build output attestations](/contrib/guix/README.md#verifying-build-output-attestations)
 
-### Next steps:
-
-Commit your signature to guix.sigs:
+### Commit your non codesigned signature to guix.sigs
 
 ```sh
 pushd ./guix.sigs
 git add "${VERSION}/${SIGNER}"/noncodesigned.SHA256SUMS{,.asc}
-git commit -m "Add ${VERSION} unsigned sigs for ${SIGNER}"
-git push  # Assuming you can push to the guix.sigs tree
+git commit -m "Add attestations by ${SIGNER} for ${VERSION} non-codesigned"
 popd
 ```
 
-Codesigner only: Create Windows/macOS detached signatures:
-- Only one person handles codesigning. Everyone else should skip to the next step.
-- Only once the Windows/macOS builds each have 3 matching signatures may they be signed with their respective release keys.
+Then open a Pull Request to the [guix.sigs repository](https://github.com/digibyte-core/guix.sigs).
 
-Codesigner only: Sign the macOS binary:
+## Codesigning
 
-    transfer digibyte-osx-unsigned.tar.gz to macOS for signing
+### macOS codesigner only: Create detached macOS signatures (assuming [signapple](https://github.com/achow101/signapple/) is installed and up to date with master branch)
+
     tar xf digibyte-osx-unsigned.tar.gz
-    ./detached-sig-create.sh -s "Key ID"
+    ./detached-sig-create.sh /path/to/codesign.p12
     Enter the keychain password and authorize the signature
-    Move signature-osx.tar.gz back to the guix-build host
+    signature-osx.tar.gz will be created
 
-Codesigner only: Sign the windows binaries:
+### Windows codesigner only: Create detached Windows signatures
 
     tar xf digibyte-win-unsigned.tar.gz
     ./detached-sig-create.sh -key /path/to/codesign.key
     Enter the passphrase for the key when prompted
     signature-win.tar.gz will be created
 
-Codesigner only: Commit the detached codesign payloads:
+### Windows and macOS codesigners only: test code signatures
+It is advised to test that the code signature attaches properly prior to tagging by performing the `guix-codesign` step.
+However if this is done, once the release has been tagged in the digibyte-detached-sigs repo, the `guix-codesign` step must be performed again in order for the guix attestation to be valid when compared against the attestations of non-codesigner builds.
+
+### Windows and macOS codesigners only: Commit the detached codesign payloads
 
 ```sh
 pushd ./digibyte-detached-sigs
@@ -175,59 +190,62 @@ git push the current branch and new tag
 popd
 ```
 
-Non-codesigners: wait for Windows/macOS detached signatures:
+### Non-codesigners: wait for Windows and macOS detached signatures
 
-- Once the Windows/macOS builds each have 3 matching signatures, they will be signed with their respective release keys.
+- Once the Windows and macOS builds each have 3 matching signatures, they will be signed with their respective release keys.
 - Detached signatures will then be committed to the [digibyte-detached-sigs](https://github.com/digibyte-core/digibyte-detached-sigs) repository, which can be combined with the unsigned apps to create signed binaries.
 
-Create (and optionally verify) the codesigned outputs:
+### Create the codesigned build outputs
 
-- [Codesigning](/contrib/guix/README.md#codesigning)
+- [Codesigning build outputs](/contrib/guix/README.md#codesigning-build-outputs)
 
-Commit your signature for the signed macOS/Windows binaries:
+### Verify other builders' signatures to your own (optional)
+
+- [Verifying build output attestations](/contrib/guix/README.md#verifying-build-output-attestations)
+
+### Commit your codesigned signature to guix.sigs (for the signed macOS/Windows binaries)
 
 ```sh
 pushd ./guix.sigs
 git add "${VERSION}/${SIGNER}"/all.SHA256SUMS{,.asc}
-git commit -m "Add ${SIGNER} ${VERSION} signed binaries signatures"
-git push  # Assuming you can push to the guix.sigs tree
+git commit -m "Add attestations by ${SIGNER} for ${VERSION} codesigned"
 popd
 ```
 
-### After 3 or more people have guix-built and their results match:
+Then open a Pull Request to the [guix.sigs repository](https://github.com/digibyte-core/guix.sigs).
 
-Combine `all.SHA256SUMS` and `all.SHA256SUMS.asc` into a clear-signed
-`SHA256SUMS.asc` message:
+## After 3 or more people have guix-built and their results match
 
-```sh
-echo -e "-----BEGIN PGP SIGNED MESSAGE-----\nHash: SHA256\n\n$(cat all.SHA256SUMS)\n$(cat filename.txt.asc)" > SHA256SUMS.asc
-```
-
-Here's an equivalent, more readable command if you're confident that you won't
-mess up whitespaces when copy-pasting:
+Combine the `all.SHA256SUMS.asc` file from all signers into `SHA256SUMS.asc`:
 
 ```bash
-cat << EOF > SHA256SUMS.asc
------BEGIN PGP SIGNED MESSAGE-----
-Hash: SHA256
-
-$(cat all.SHA256SUMS)
-$(cat all.SHA256SUMS.asc)
-EOF
+cat "$VERSION"/*/all.SHA256SUMS.asc > SHA256SUMS.asc
 ```
 
-- Upload to the digibyte.org server (`/var/www/bin/digibyte-core-${VERSION}`):
-    1. The contents of `./digibyte/guix-build-${VERSION}/output`, except for
+
+- Upload to the digibytecore.org server (`/var/www/bin/digibyte-core-${VERSION}/`):
+    1. The contents of each `./digibyte/guix-build-${VERSION}/output/${HOST}/` directory, except for
        `*-debug*` files.
+
+       Guix will output all of the results into host subdirectories, but the SHA256SUMS
+       file does not include these subdirectories. In order for downloads via torrent
+       to verify without directory structure modification, all of the uploaded files
+       need to be in the same directory as the SHA256SUMS file.
 
        The `*-debug*` files generated by the guix build contain debug symbols
        for troubleshooting by developers. It is assumed that anyone that is
        interested in debugging can run guix to generate the files for
        themselves. To avoid end-user confusion about which file to pick, as well
-       as save storage space *do not upload these to the digibyte.org server,
+       as save storage space *do not upload these to the digibytecore.org server,
        nor put them in the torrent*.
 
-    2. The combined clear-signed message you just created `SHA256SUMS.asc`
+       ```sh
+       find guix-build-${VERSION}/output/ -maxdepth 2 -type f -not -name "SHA256SUMS.part" -and -not -name "*debug*" -exec scp {} user@digibytecore.org:/var/www/bin/digibyte-core-${VERSION} \;
+       ```
+
+    2. The `SHA256SUMS` file
+
+    3. The `SHA256SUMS.asc` combined signature file you just created
 
 - Create a torrent of the `/var/www/bin/digibyte-core-${VERSION}` directory such
   that at the top level there is only one file: the `digibyte-core-${VERSION}`
@@ -241,67 +259,42 @@ EOF
   ```
 
   Insert the magnet URI into the announcement sent to mailing lists. This permits
-  people without access to `digibyte.org` to download the binary distribution.
+  people without access to `digibytecore.org` to download the binary distribution.
   Also put it into the `optional_magnetlink:` slot in the YAML file for
-  digibyte.org.
+  digibytecore.org.
 
 - Update other repositories and websites for new version
 
-  - digibyte.org blog post
+  - digibytecore.org blog post
 
-  - digibyte.org maintained versions update:
-    [table](https://github.com/digibyte-core/digibyte.org/commits/master/_includes/posts/maintenance-table.md)
+  - digibytecore.org maintained versions update:
+    [table](https://github.com/digibyte-core/digibytecore.org/commits/master/_includes/posts/maintenance-table.md)
 
-  - digibyte.org RPC documentation update
+  - Delete post-EOL [release branches](https://github.com/digibyte/digibyte/branches/all) and create a tag `v${branch_name}-final`.
 
-      - Install [golang](https://golang.org/doc/install)
+  - Delete ["Needs backport" labels](https://github.com/digibyte/digibyte/labels?q=backport) for non-existing branches.
 
-      - Install the new DigiByte Core release
+  - digibytecore.org RPC documentation update
 
-      - Run digibyted on regtest
-
-      - Clone the [digibyte.org repository](https://github.com/digibyte-core/digibyte.org)
-
-      - Run: `go run generate.go` while being in `contrib/doc-gen` folder, and with digibyte-cli in PATH
-
-      - Add the generated files to git
+      - See https://github.com/digibyte-core/digibytecore.org/blob/master/contrib/doc-gen/
 
   - Update packaging repo
 
       - Push the flatpak to flathub, e.g. https://github.com/flathub/org.digibytecore.digibyte-qt/pull/2
 
-      - Push the latest version to master (if applicable), e.g. https://github.com/digibyte-core/packaging/pull/32
-
-      - Create a new branch for the major release "0.xx" from master (used to build the snap package) and request the
-        track (if applicable), e.g. https://forum.snapcraft.io/t/track-request-for-digibyte-core-snap/10112/7
-
-      - Notify MarcoFalke so that he can start building the snap package
-
-        - https://code.launchpad.net/~digibyte-core/digibyte-core-snap/+git/packaging (Click "Import Now" to fetch the branch)
-        - https://code.launchpad.net/~digibyte-core/digibyte-core-snap/+git/packaging/+ref/0.xx (Click "Create snap package")
-        - Name it "digibyte-core-snap-0.xx"
-        - Leave owner and series as-is
-        - Select architectures that are compiled via guix
-        - Leave "automatically build when branch changes" unticked
-        - Tick "automatically upload to store"
-        - Put "digibyte-core" in the registered store package name field
-        - Tick the "edge" box
-        - Put "0.xx" in the track field
-        - Click "create snap package"
-        - Click "Request builds" for every new release on this branch (after updating the snapcraft.yml in the branch to reflect the latest guix results)
-        - Promote release on https://snapcraft.io/digibyte-core/releases if it passes sanity checks
+      - Push the snap, see https://github.com/digibyte-core/packaging/blob/main/snap/local/build.md
 
   - This repo
 
       - Archive the release notes for the new version to `doc/release-notes/` (branch `master` and branch of the release)
 
-      - Create a [new GitHub release](https://github.com/digibyte-core/digibyte/releases/new) with a link to the archived release notes
+      - Create a [new GitHub release](https://github.com/digibyte/digibyte/releases/new) with a link to the archived release notes
 
 - Announce the release:
 
   - digibyte-dev and digibyte-core-dev mailing list
 
-  - DigiByte Core announcements list https://digibyte.org/en/list/announcements/join/
+  - DigiByte Core announcements list https://digibytecore.org/en/list/announcements/join/
 
   - DigiByte Core Twitter https://twitter.com/digibytecoreorg
 
@@ -314,15 +307,16 @@ EOF
 Both variables are used as a guideline for how much space the user needs on their drive in total, not just strictly for the blockchain.
 Note that all values should be taken from a **fully synced** node and have an overhead of 5-10% added on top of its base value.
 
-To calculate `m_assumed_blockchain_size`:
-- For `mainnet` -> Take the size of the data directory, excluding `/regtest` and `/testnet3` directories.
-- For `testnet` -> Take the size of the `/testnet3` directory.
+To calculate `m_assumed_blockchain_size`, take the size in GiB of these directories:
+- For `mainnet` -> the data directory, excluding the `/testnet3`, `/signet`, and `/regtest` directories and any overly large files, e.g. a huge `debug.log`
+- For `testnet` -> `/testnet3`
+- For `signet` -> `/signet`
 
-
-To calculate `m_assumed_chain_state_size`:
-- For `mainnet` -> Take the size of the `/chainstate` directory.
-- For `testnet` -> Take the size of the `/testnet3/chainstate` directory.
+To calculate `m_assumed_chain_state_size`, take the size in GiB of these directories:
+- For `mainnet` -> `/chainstate`
+- For `testnet` -> `/testnet3/chainstate`
+- For `signet` -> `/signet/chainstate`
 
 Notes:
 - When taking the size for `m_assumed_blockchain_size`, there's no need to exclude the `/chainstate` directory since it's a guideline value and an overhead will be added anyway.
-- The expected overhead for growth may change over time, so it may not be the same value as last release; pay attention to that when changing the variables.
+- The expected overhead for growth may change over time. Consider whether the percentage needs to be changed in response; if so, update it here in this section.

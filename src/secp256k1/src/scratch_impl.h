@@ -25,11 +25,18 @@ static secp256k1_scratch* secp256k1_scratch_create(const secp256k1_callback* err
 
 static void secp256k1_scratch_destroy(const secp256k1_callback* error_callback, secp256k1_scratch* scratch) {
     if (scratch != NULL) {
+<<<<<<< HEAD
         VERIFY_CHECK(scratch->alloc_size == 0); /* all checkpoints should be applied */
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         if (secp256k1_memcmp_var(scratch->magic, "scratch", 8) != 0) {
             secp256k1_callback_call(error_callback, "invalid scratch space");
             return;
         }
+<<<<<<< HEAD
+=======
+        VERIFY_CHECK(scratch->alloc_size == 0); /* all checkpoints should be applied */
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         memset(scratch->magic, 0, sizeof(scratch->magic));
         free(scratch);
     }

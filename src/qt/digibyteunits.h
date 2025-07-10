@@ -1,14 +1,25 @@
+<<<<<<< HEAD
 // Copyright (c) 2011-2018 The Bitcoin Core developers
 // Copyright (c) 2011-2020 The DigiByte Core developers
+=======
+// Copyright (c) 2011-2021 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #ifndef DIGIBYTE_QT_DIGIBYTEUNITS_H
 #define DIGIBYTE_QT_DIGIBYTEUNITS_H
 
+<<<<<<< HEAD
 #include <amount.h>
 
 #include <QAbstractListModel>
+=======
+#include <consensus/amount.h>
+
+#include <QAbstractListModel>
+#include <QDataStream>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <QString>
 
 // U+2009 THIN SPACE = UTF-8 E2 80 89
@@ -37,15 +48,25 @@ public:
     explicit DigiByteUnits(QObject *parent);
 
     /** DigiByte units.
+<<<<<<< HEAD
       @note Source: https://dgbwiki.com/index.php?title=DigiByte#Subunits . Please add only sensible ones
      */
     enum Unit
     {
+=======
+      @note Source: https://en.digibyte.it/wiki/Units . Please add only sensible ones
+     */
+    enum class Unit {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         DGB,
         mDGB,
         uDGB,
         SAT
     };
+<<<<<<< HEAD
+=======
+    Q_ENUM(Unit)
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     enum class SeparatorStyle
     {
@@ -60,6 +81,7 @@ public:
 
     //! Get list of units, for drop-down box
     static QList<Unit> availableUnits();
+<<<<<<< HEAD
     //! Is unit ID valid?
     static bool valid(int unit);
     //! Long name
@@ -84,6 +106,30 @@ public:
     static bool parse(int unit, const QString &value, CAmount *val_out);
     //! Gets title for amount column including current display unit if optionsModel reference available */
     static QString getAmountColumnTitle(int unit);
+=======
+    //! Long name
+    static QString longName(Unit unit);
+    //! Short name
+    static QString shortName(Unit unit);
+    //! Longer description
+    static QString description(Unit unit);
+    //! Number of Satoshis (1e-8) per unit
+    static qint64 factor(Unit unit);
+    //! Number of decimals left
+    static int decimals(Unit unit);
+    //! Format as string
+    static QString format(Unit unit, const CAmount& amount, bool plussign = false, SeparatorStyle separators = SeparatorStyle::STANDARD, bool justify = false);
+    //! Format as string (with unit)
+    static QString formatWithUnit(Unit unit, const CAmount& amount, bool plussign = false, SeparatorStyle separators = SeparatorStyle::STANDARD);
+    //! Format as HTML string (with unit)
+    static QString formatHtmlWithUnit(Unit unit, const CAmount& amount, bool plussign = false, SeparatorStyle separators = SeparatorStyle::STANDARD);
+    //! Format as string (with unit) of fixed length to preserve privacy, if it is set.
+    static QString formatWithPrivacy(Unit unit, const CAmount& amount, SeparatorStyle separators, bool privacy);
+    //! Parse string to coin amount
+    static bool parse(Unit unit, const QString& value, CAmount* val_out);
+    //! Gets title for amount column including current display unit if optionsModel reference available */
+    static QString getAmountColumnTitle(Unit unit);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     ///@}
 
     //! @name AbstractListModel implementation
@@ -104,6 +150,7 @@ public:
         return text;
     }
 
+<<<<<<< HEAD
     //! Return maximum number of base units (DigiSatoshis)
     static CAmount maxMoney();
 
@@ -112,4 +159,17 @@ private:
 };
 typedef DigiByteUnits::Unit DigiByteUnit;
 
+=======
+    //! Return maximum number of base units (Satoshis)
+    static CAmount maxMoney();
+
+private:
+    QList<Unit> unitlist;
+};
+typedef DigiByteUnits::Unit DigiByteUnit;
+
+QDataStream& operator<<(QDataStream& out, const DigiByteUnit& unit);
+QDataStream& operator>>(QDataStream& in, DigiByteUnit& unit);
+
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #endif // DIGIBYTE_QT_DIGIBYTEUNITS_H

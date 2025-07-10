@@ -1,5 +1,9 @@
+<<<<<<< HEAD
 // Copyright (c) 2009-2020 The Bitcoin Core developers
 // Copyright (c) 2014-2020 The DigiByte Core developers
+=======
+// Copyright (c) 2014-2019 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -240,7 +244,7 @@ void Transform(uint32_t* s, const unsigned char* chunk)
 
 ////// RIPEMD160
 
-CRIPEMD160::CRIPEMD160() : bytes(0)
+CRIPEMD160::CRIPEMD160()
 {
     ripemd160::Initialize(s);
 }

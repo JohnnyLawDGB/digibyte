@@ -1,12 +1,17 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
+<<<<<<< HEAD
 // Copyright (c) 2009-2020 The Bitcoin Core developers
 // Copyright (c) 2014-2020 The DigiByte Core developers
+=======
+// Copyright (c) 2009-2022 The Bitcoin Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #ifndef DIGIBYTE_TXMEMPOOL_H
 #define DIGIBYTE_TXMEMPOOL_H
 
+<<<<<<< HEAD
 #include <atomic>
 #include <map>
 #include <optional>
@@ -16,27 +21,61 @@
 #include <vector>
 
 #include <amount.h>
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <coins.h>
+#include <consensus/amount.h>
 #include <indirectmap.h>
+#include <kernel/cs_main.h>
+#include <kernel/mempool_entry.h>          // IWYU pragma: export
+#include <kernel/mempool_limits.h>         // IWYU pragma: export
+#include <kernel/mempool_options.h>        // IWYU pragma: export
+#include <kernel/mempool_removal_reason.h> // IWYU pragma: export
 #include <policy/feerate.h>
+#include <policy/packages.h>
 #include <primitives/transaction.h>
+<<<<<<< HEAD
 #include <random.h>
 #include <sync.h>
 #include <util/epochguard.h>
 #include <util/hasher.h>
+=======
+#include <sync.h>
+#include <util/epochguard.h>
+#include <util/hasher.h>
+#include <util/result.h>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
-#include <boost/multi_index_container.hpp>
 #include <boost/multi_index/hashed_index.hpp>
+#include <boost/multi_index/identity.hpp>
+#include <boost/multi_index/indexed_by.hpp>
 #include <boost/multi_index/ordered_index.hpp>
 #include <boost/multi_index/sequenced_index.hpp>
+<<<<<<< HEAD
 
 class CBlockIndex;
 class CChainState;
 extern RecursiveMutex cs_main;
+=======
+#include <boost/multi_index/tag.hpp>
+#include <boost/multi_index_container.hpp>
+
+#include <atomic>
+#include <map>
+#include <optional>
+#include <set>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
+
+class CChain;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 /** Fake height value used in Coin to signify they are only in the memory pool (since 0.8) */
 static const uint32_t MEMPOOL_HEIGHT = 0x7FFFFFFF;
 
+<<<<<<< HEAD
 struct LockPoints
 {
     // Will be set to the blockchain height and median time past
@@ -77,8 +116,14 @@ struct CompareIteratorByHash {
  * (nCountWithDescendants, nSizeWithDescendants, and nModFeesWithDescendants) for
  * all ancestors of the newly added transaction.
  *
+=======
+/**
+ * Test whether the LockPoints height and time are still valid on the current chain
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
  */
+bool TestLockPointValidity(CChain& active_chain, const LockPoints& lp) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
+<<<<<<< HEAD
 class CTxMemPoolEntry
 {
 public:
@@ -214,6 +259,8 @@ private:
     const LockPoints& lp;
 };
 
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // extracts a transaction hash from CTxMemPoolEntry or CTransactionRef
 struct mempoolentry_txid
 {
@@ -384,12 +431,17 @@ struct TxMempoolInfo
     CAmount fee;
 
     /** Virtual size of the transaction. */
+<<<<<<< HEAD
     size_t vsize;
+=======
+    int32_t vsize;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     /** The fee delta. */
     int64_t nFeeDelta;
 };
 
+<<<<<<< HEAD
 /** Reason why a transaction was removed from the mempool,
  * this is passed to the notification signal.
  */
@@ -402,6 +454,8 @@ enum class MemPoolRemovalReason {
     REPLACED,    //!< Removed for replacement
 };
 
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 /**
  * CTxMemPool stores valid-according-to-the-current-best-chain transactions
  * that may be included in the next block.
@@ -412,7 +466,7 @@ enum class MemPoolRemovalReason {
  * - a transaction which doesn't meet the minimum fee requirements.
  * - a new transaction that double-spends an input of a transaction already in
  * the pool where the new transaction does not meet the Replace-By-Fee
- * requirements as defined in BIP 125.
+ * requirements as defined in doc/policy/mempool-replacements.md.
  * - a non-standard transaction.
  *
  * CTxMemPool::mapTx, and CTxMemPoolEntry bookkeeping:
@@ -482,6 +536,7 @@ protected:
     std::atomic<unsigned int> nTransactionsUpdated{0}; //!< Used by getblocktemplate to trigger CreateNewBlock() invocation
     CBlockPolicyEstimator* const minerPolicyEstimator;
 
+<<<<<<< HEAD
     uint64_t totalTxSize GUARDED_BY(cs);      //!< sum of all mempool tx's virtual sizes. Differs from serialized tx size since witness data is discounted. Defined in BIP 141.
     CAmount m_total_fee GUARDED_BY(cs);       //!< sum of all mempool tx's fees (NOT modified fee)
     uint64_t cachedInnerUsage GUARDED_BY(cs); //!< sum of dynamic memory usage of all the map elements (NOT the maps themselves)
@@ -490,6 +545,16 @@ protected:
     mutable bool blockSinceLastRollingFeeBump GUARDED_BY(cs);
     mutable double rollingMinimumFeeRate GUARDED_BY(cs); //!< minimum fee to get into the pool, decreases exponentially
     mutable Epoch m_epoch GUARDED_BY(cs);
+=======
+    uint64_t totalTxSize GUARDED_BY(cs){0};      //!< sum of all mempool tx's virtual sizes. Differs from serialized tx size since witness data is discounted. Defined in BIP 141.
+    CAmount m_total_fee GUARDED_BY(cs){0};       //!< sum of all mempool tx's fees (NOT modified fee)
+    uint64_t cachedInnerUsage GUARDED_BY(cs){0}; //!< sum of dynamic memory usage of all the map elements (NOT the maps themselves)
+
+    mutable int64_t lastRollingFeeUpdate GUARDED_BY(cs){GetTime()};
+    mutable bool blockSinceLastRollingFeeBump GUARDED_BY(cs){false};
+    mutable double rollingMinimumFeeRate GUARDED_BY(cs){0}; //!< minimum fee to get into the pool, decreases exponentially
+    mutable Epoch m_epoch GUARDED_BY(cs){};
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // In-memory counter for external mempool tracking purposes.
     // This number is incremented once every time a transaction
@@ -498,8 +563,14 @@ protected:
 
     void trackPackageRemoved(const CFeeRate& rate) EXCLUSIVE_LOCKS_REQUIRED(cs);
 
+<<<<<<< HEAD
     bool m_is_loaded GUARDED_BY(cs){false};
     const bool m_is_stempool;
+=======
+    bool m_load_tried GUARDED_BY(cs){false};
+
+    CFeeRate GetMinFee(size_t sizelimit) const;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 public:
 
@@ -546,7 +617,11 @@ public:
      * By design, it is guaranteed that:
      *
      * 1. Locking both `cs_main` and `mempool.cs` will give a view of mempool
+<<<<<<< HEAD
      *    that is consistent with current chain tip (`::ChainActive()` and
+=======
+     *    that is consistent with current chain tip (`ActiveChain()` and
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
      *    `CoinsTip()`) and is fully populated. Fully populated means that if the
      *    current active chain is missing transactions that were present in a
      *    previously active chain, all the missing transactions will have been
@@ -572,6 +647,11 @@ public:
 
     typedef std::set<txiter, CompareIteratorByHash> setEntries;
 
+<<<<<<< HEAD
+=======
+    using Limits = kernel::MemPoolLimits;
+
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     uint64_t CalculateDescendantMaximum(txiter entry) const EXCLUSIVE_LOCKS_REQUIRED(cs);
 private:
     typedef std::map<txiter, setEntries, CompareIteratorByHash> cacheMap;
@@ -587,19 +667,62 @@ private:
      */
     std::set<uint256> m_unbroadcast_txids GUARDED_BY(cs);
 
+<<<<<<< HEAD
 public:
     indirectmap<COutPoint, const CTransaction*> mapNextTx GUARDED_BY(cs);
     std::map<uint256, CAmount> mapDeltas GUARDED_BY(cs);
+=======
+
+    /**
+     * Helper function to calculate all in-mempool ancestors of staged_ancestors and apply ancestor
+     * and descendant limits (including staged_ancestors themselves, entry_size and entry_count).
+     *
+     * @param[in]   entry_size          Virtual size to include in the limits.
+     * @param[in]   entry_count         How many entries to include in the limits.
+     * @param[in]   staged_ancestors    Should contain entries in the mempool.
+     * @param[in]   limits              Maximum number and size of ancestors and descendants
+     *
+     * @return all in-mempool ancestors, or an error if any ancestor or descendant limits were hit
+     */
+    util::Result<setEntries> CalculateAncestorsAndCheckLimits(int64_t entry_size,
+                                                              size_t entry_count,
+                                                              CTxMemPoolEntry::Parents &staged_ancestors,
+                                                              const Limits& limits
+                                                              ) const EXCLUSIVE_LOCKS_REQUIRED(cs);
+
+public:
+    indirectmap<COutPoint, const CTransaction*> mapNextTx GUARDED_BY(cs);
+    std::map<uint256, CAmount> mapDeltas GUARDED_BY(cs);
+
+    using Options = kernel::MemPoolOptions;
+
+    const int64_t m_max_size_bytes;
+    const std::chrono::seconds m_expiry;
+    const CFeeRate m_incremental_relay_feerate;
+    const CFeeRate m_min_relay_feerate;
+    const CFeeRate m_dust_relay_feerate;
+    const bool m_permit_bare_multisig;
+    const std::optional<unsigned> m_max_datacarrier_bytes;
+    const bool m_require_standard;
+    const bool m_full_rbf;
+
+    const Limits m_limits;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     /** Create a new CTxMemPool.
      * Sanity checks will be off by default for performance, because otherwise
      * accepting transactions becomes O(N^2) where N is the number of transactions
      * in the pool.
+<<<<<<< HEAD
      *
      * @param[in] estimator is used to estimate appropriate transaction fees.
      * @param[in] check_ratio is the ratio used to determine how often sanity checks will run.
      */
     explicit CTxMemPool(CBlockPolicyEstimator* estimator = nullptr, int check_ratio = 0, bool isStempool = false);
+=======
+     */
+    explicit CTxMemPool(const Options& opts);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     /**
      * If sanity-checking is turned on, check makes sure the pool is
@@ -607,7 +730,11 @@ public:
      * all inputs are in the mapNextTx array). If sanity-checking is turned off,
      * check does nothing.
      */
+<<<<<<< HEAD
     void check(CChainState& active_chainstate) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+=======
+    void check(const CCoinsViewCache& active_coins_tip, int64_t spendheight) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // addUnchecked must updated state for all ancestors of a given transaction,
     // to track size/count of descendant transactions.  First version of
@@ -620,12 +747,26 @@ public:
     void addUnchecked(const CTxMemPoolEntry& entry, setEntries& setAncestors, bool validFeeEstimate = true) EXCLUSIVE_LOCKS_REQUIRED(cs, cs_main);
 
     void removeRecursive(const CTransaction& tx, MemPoolRemovalReason reason) EXCLUSIVE_LOCKS_REQUIRED(cs);
+<<<<<<< HEAD
     void removeForReorg(CChainState& active_chainstate, int flags) EXCLUSIVE_LOCKS_REQUIRED(cs, cs_main);
     void removeConflicts(const CTransaction& tx) EXCLUSIVE_LOCKS_REQUIRED(cs);
     void removeForBlock(const std::vector<CTransactionRef>& vtx, unsigned int nBlockHeight) EXCLUSIVE_LOCKS_REQUIRED(cs);
 
     void clear();
     void _clear() EXCLUSIVE_LOCKS_REQUIRED(cs); //lock free
+=======
+    /** After reorg, filter the entries that would no longer be valid in the next block, and update
+     * the entries' cached LockPoints if needed.  The mempool does not have any knowledge of
+     * consensus rules. It just appplies the callable function and removes the ones for which it
+     * returns true.
+     * @param[in]   filter_final_and_mature   Predicate that checks the relevant validation rules
+     *                                        and updates an entry's LockPoints.
+     * */
+    void removeForReorg(CChain& chain, std::function<bool(txiter)> filter_final_and_mature) EXCLUSIVE_LOCKS_REQUIRED(cs, cs_main);
+    void removeConflicts(const CTransaction& tx) EXCLUSIVE_LOCKS_REQUIRED(cs);
+    void removeForBlock(const std::vector<CTransactionRef>& vtx, unsigned int nBlockHeight) EXCLUSIVE_LOCKS_REQUIRED(cs);
+
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     bool CompareDepthAndScore(const uint256& hasha, const uint256& hashb, bool wtxid=false);
     void queryHashes(std::vector<uint256>& vtxid) const;
     bool isSpent(const COutPoint& outpoint) const;
@@ -642,14 +783,42 @@ public:
     void ApplyDelta(const uint256& hash, CAmount &nFeeDelta) const EXCLUSIVE_LOCKS_REQUIRED(cs);
     void ClearPrioritisation(const uint256& hash) EXCLUSIVE_LOCKS_REQUIRED(cs);
 
+<<<<<<< HEAD
+=======
+    struct delta_info {
+        /** Whether this transaction is in the mempool. */
+        const bool in_mempool;
+        /** The fee delta added using PrioritiseTransaction(). */
+        const CAmount delta;
+        /** The modified fee (base fee + delta) of this entry. Only present if in_mempool=true. */
+        std::optional<CAmount> modified_fee;
+        /** The prioritised transaction's txid. */
+        const uint256 txid;
+    };
+    /** Return a vector of all entries in mapDeltas with their corresponding delta_info. */
+    std::vector<delta_info> GetPrioritisedTransactions() const EXCLUSIVE_LOCKS_REQUIRED(!cs);
+
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     /** Get the transaction in the pool that spends the same prevout */
     const CTransaction* GetConflictTx(const COutPoint& prevout) const EXCLUSIVE_LOCKS_REQUIRED(cs);
 
     /** Returns an iterator to the given hash, if found */
     std::optional<txiter> GetIter(const uint256& txid) const EXCLUSIVE_LOCKS_REQUIRED(cs);
 
+<<<<<<< HEAD
     /** Translate a set of hashes into a set of pool iterators to avoid repeated lookups */
     setEntries GetIterSet(const std::set<uint256>& hashes) const EXCLUSIVE_LOCKS_REQUIRED(cs);
+=======
+    /** Translate a set of hashes into a set of pool iterators to avoid repeated lookups.
+     * Does not require that all of the hashes correspond to actual transactions in the mempool,
+     * only returns the ones that exist. */
+    setEntries GetIterSet(const std::set<uint256>& hashes) const EXCLUSIVE_LOCKS_REQUIRED(cs);
+
+    /** Translate a list of hashes into a list of mempool iterators to avoid repeated lookups.
+     * The nth element in txids becomes the nth element in the returned vector. If any of the txids
+     * don't actually exist in the mempool, returns an empty vector. */
+    std::vector<txiter> GetIterVec(const std::vector<uint256>& txids) const EXCLUSIVE_LOCKS_REQUIRED(cs);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     /** Remove a set of transactions from the mempool.
      *  If a transaction is in this set, then all in-mempool descendants must
@@ -660,28 +829,78 @@ public:
      */
     void RemoveStaged(setEntries& stage, bool updateDescendants, MemPoolRemovalReason reason) EXCLUSIVE_LOCKS_REQUIRED(cs);
 
-    /** When adding transactions from a disconnected block back to the mempool,
-     *  new mempool entries may have children in the mempool (which is generally
-     *  not the case when otherwise adding transactions).
-     *  UpdateTransactionsFromBlock() will find child transactions and update the
-     *  descendant state for each transaction in vHashesToUpdate (excluding any
-     *  child transactions present in vHashesToUpdate, which are already accounted
-     *  for).  Note: vHashesToUpdate should be the set of transactions from the
-     *  disconnected block that have been accepted back into the mempool.
+    /** UpdateTransactionsFromBlock is called when adding transactions from a
+     * disconnected block back to the mempool, new mempool entries may have
+     * children in the mempool (which is generally not the case when otherwise
+     * adding transactions).
+     *  @post updated descendant state for descendants of each transaction in
+     *        vHashesToUpdate (excluding any child transactions present in
+     *        vHashesToUpdate, which are already accounted for). Updated state
+     *        includes add fee/size information for such descendants to the
+     *        parent and updated ancestor state to include the parent.
+     *
+     * @param[in] vHashesToUpdate          The set of txids from the
+     *     disconnected block that have been accepted back into the mempool.
      */
     void UpdateTransactionsFromBlock(const std::vector<uint256>& vHashesToUpdate) EXCLUSIVE_LOCKS_REQUIRED(cs, cs_main) LOCKS_EXCLUDED(m_epoch);
 
-    /** Try to calculate all in-mempool ancestors of entry.
-     *  (these are all calculated including the tx itself)
-     *  limitAncestorCount = max number of ancestors
-     *  limitAncestorSize = max size of ancestors
-     *  limitDescendantCount = max number of descendants any ancestor can have
-     *  limitDescendantSize = max size of descendants any ancestor can have
-     *  errString = populated with error reason if any limits are hit
-     *  fSearchForParents = whether to search a tx's vin for in-mempool parents, or
-     *    look up parents from mapLinks. Must be true for entries not in the mempool
+    /**
+     * Try to calculate all in-mempool ancestors of entry.
+     * (these are all calculated including the tx itself)
+     *
+     * @param[in]   entry               CTxMemPoolEntry of which all in-mempool ancestors are calculated
+     * @param[in]   limits              Maximum number and size of ancestors and descendants
+     * @param[in]   fSearchForParents   Whether to search a tx's vin for in-mempool parents, or look
+     *                                  up parents from mapLinks. Must be true for entries not in
+     *                                  the mempool
+     *
+     * @return all in-mempool ancestors, or an error if any ancestor or descendant limits were hit
      */
-    bool CalculateMemPoolAncestors(const CTxMemPoolEntry& entry, setEntries& setAncestors, uint64_t limitAncestorCount, uint64_t limitAncestorSize, uint64_t limitDescendantCount, uint64_t limitDescendantSize, std::string& errString, bool fSearchForParents = true) const EXCLUSIVE_LOCKS_REQUIRED(cs);
+    util::Result<setEntries> CalculateMemPoolAncestors(const CTxMemPoolEntry& entry,
+                                   const Limits& limits,
+                                   bool fSearchForParents = true) const EXCLUSIVE_LOCKS_REQUIRED(cs);
+
+    /**
+     * Same as CalculateMemPoolAncestors, but always returns a (non-optional) setEntries.
+     * Should only be used when it is assumed CalculateMemPoolAncestors would not fail. If
+     * CalculateMemPoolAncestors does unexpectedly fail, an empty setEntries is returned and the
+     * error is logged to BCLog::MEMPOOL with level BCLog::Level::Error. In debug builds, failure
+     * of CalculateMemPoolAncestors will lead to shutdown due to assertion failure.
+     *
+     * @param[in]   calling_fn_name     Name of calling function so we can properly log the call site
+     *
+     * @return a setEntries corresponding to the result of CalculateMemPoolAncestors or an empty
+     *         setEntries if it failed
+     *
+     * @see CTXMemPool::CalculateMemPoolAncestors()
+     */
+    setEntries AssumeCalculateMemPoolAncestors(
+        std::string_view calling_fn_name,
+        const CTxMemPoolEntry &entry,
+        const Limits& limits,
+        bool fSearchForParents = true) const EXCLUSIVE_LOCKS_REQUIRED(cs);
+
+    /** Collect the entire cluster of connected transactions for each transaction in txids.
+     * All txids must correspond to transaction entries in the mempool, otherwise this returns an
+     * empty vector. This call will also exit early and return an empty vector if it collects 500 or
+     * more transactions as a DoS protection. */
+    std::vector<txiter> GatherClusters(const std::vector<uint256>& txids) const EXCLUSIVE_LOCKS_REQUIRED(cs);
+
+    /** Calculate all in-mempool ancestors of a set of transactions not already in the mempool and
+     * check ancestor and descendant limits. Heuristics are used to estimate the ancestor and
+     * descendant count of all entries if the package were to be added to the mempool.  The limits
+     * are applied to the union of all package transactions. For example, if the package has 3
+     * transactions and limits.ancestor_count = 25, the union of all 3 sets of ancestors (including the
+     * transactions themselves) must be <= 22.
+     * @param[in]       package                 Transaction package being evaluated for acceptance
+     *                                          to mempool. The transactions need not be direct
+     *                                          ancestors/descendants of each other.
+     * @param[in]       total_vsize             Sum of virtual sizes for all transactions in package.
+     * @param[out]      errString               Populated with error reason if a limit is hit.
+     */
+    bool CheckPackageLimits(const Package& package,
+                            int64_t total_vsize,
+                            std::string &errString) const EXCLUSIVE_LOCKS_REQUIRED(cs);
 
     /** Populate setDescendants with all in-mempool descendants of hash.
      *  Assumes that setDescendants includes all in-mempool descendants of anything
@@ -689,12 +908,14 @@ public:
     void CalculateDescendants(txiter it, setEntries& setDescendants) const EXCLUSIVE_LOCKS_REQUIRED(cs);
 
     /** The minimum fee to get into the mempool, which may itself not be enough
-      *  for larger-sized transactions.
-      *  The incrementalRelayFee policy variable is used to bound the time it
-      *  takes the fee rate to go back down all the way to 0. When the feerate
-      *  would otherwise be half of this, it is set to 0 instead.
-      */
-    CFeeRate GetMinFee(size_t sizelimit) const;
+     *  for larger-sized transactions.
+     *  The m_incremental_relay_feerate policy variable is used to bound the time it
+     *  takes the fee rate to go back down all the way to 0. When the feerate
+     *  would otherwise be half of this, it is set to 0 instead.
+     */
+    CFeeRate GetMinFee() const {
+        return GetMinFee(m_max_size_bytes);
+    }
 
     /** Remove transactions from the mempool until its dynamic size is <= sizelimit.
       *  pvNoSpendsRemaining, if set, will be populated with the list of outpoints
@@ -708,14 +929,30 @@ public:
     /**
      * Calculate the ancestor and descendant count for the given transaction.
      * The counts include the transaction itself.
+     * When ancestors is non-zero (ie, the transaction itself is in the mempool),
+     * ancestorsize and ancestorfees will also be set to the appropriate values.
      */
-    void GetTransactionAncestry(const uint256& txid, size_t& ancestors, size_t& descendants) const;
+    void GetTransactionAncestry(const uint256& txid, size_t& ancestors, size_t& descendants, size_t* ancestorsize = nullptr, CAmount* ancestorfees = nullptr) const;
 
+<<<<<<< HEAD
     /** @returns true if the mempool is fully loaded */
     bool IsLoaded() const;
 
     /** Sets the current loaded state */
     void SetIsLoaded(bool loaded);
+=======
+    /**
+     * @returns true if an initial attempt to load the persisted mempool was made, regardless of
+     *          whether the attempt was successful or not
+     */
+    bool GetLoadTried() const;
+
+    /**
+     * Set whether or not an initial attempt to load the persisted mempool was made (regardless
+     * of whether the attempt was successful or not)
+     */
+    void SetLoadTried(bool load_tried);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     unsigned long size() const
     {
@@ -730,9 +967,24 @@ public:
     }
 
     CAmount GetTotalFee() const EXCLUSIVE_LOCKS_REQUIRED(cs)
+<<<<<<< HEAD
     {
         AssertLockHeld(cs);
         return m_total_fee;
+=======
+    {
+        AssertLockHeld(cs);
+        return m_total_fee;
+    }
+
+    bool exists(const GenTxid& gtxid) const
+    {
+        LOCK(cs);
+        if (gtxid.IsWtxid()) {
+            return (mapTx.get<index_by_wtxid>().count(gtxid.GetHash()) != 0);
+        }
+        return (mapTx.count(gtxid.GetHash()) != 0);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     bool exists(const GenTxid& gtxid) const
@@ -751,8 +1003,17 @@ public:
         AssertLockHeld(cs);
         return mapTx.project<0>(mapTx.get<index_by_wtxid>().find(wtxid));
     }
+<<<<<<< HEAD
     TxMempoolInfo info(const uint256& hash) const;
     TxMempoolInfo info(const GenTxid& gtxid) const;
+=======
+    TxMempoolInfo info(const GenTxid& gtxid) const;
+
+    /** Returns info for a transaction if its entry_sequence < last_sequence */
+    TxMempoolInfo info_for_relay(const GenTxid& gtxid, uint64_t last_sequence) const;
+
+    std::vector<CTxMemPoolEntryRef> entryAll() const EXCLUSIVE_LOCKS_REQUIRED(cs);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     std::vector<TxMempoolInfo> infoAll() const;
 
     size_t DynamicMemoryUsage() const;
@@ -763,7 +1024,11 @@ public:
         LOCK(cs);
         // Sanity check the transaction is in the mempool & insert into
         // unbroadcast set.
+<<<<<<< HEAD
         if (exists(txid)) m_unbroadcast_txids.insert(txid);
+=======
+        if (exists(GenTxid::Txid(txid))) m_unbroadcast_txids.insert(txid);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     };
 
     /** Removes a transaction from the unbroadcast set */
@@ -791,28 +1056,45 @@ public:
     uint64_t GetSequence() const EXCLUSIVE_LOCKS_REQUIRED(cs) {
         return m_sequence_number;
     }
+<<<<<<< HEAD
 
     bool isStempool() const {
         return this->m_is_stempool;
     }
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 private:
     /** UpdateForDescendants is used by UpdateTransactionsFromBlock to update
      *  the descendants for a single transaction that has been added to the
      *  mempool but may have child transactions in the mempool, eg during a
-     *  chain reorg.  setExclude is the set of descendant transactions in the
-     *  mempool that must not be accounted for (because any descendants in
-     *  setExclude were added to the mempool after the transaction being
-     *  updated and hence their state is already reflected in the parent
-     *  state).
+     *  chain reorg.
      *
-     *  cachedDescendants will be updated with the descendants of the transaction
-     *  being updated, so that future invocations don't need to walk the
-     *  same transaction again, if encountered in another transaction chain.
+     * @pre CTxMemPoolEntry::m_children is correct for the given tx and all
+     *      descendants.
+     * @pre cachedDescendants is an accurate cache where each entry has all
+     *      descendants of the corresponding key, including those that should
+     *      be removed for violation of ancestor limits.
+     * @post if updateIt has any non-excluded descendants, cachedDescendants has
+     *       a new cache line for updateIt.
+     * @post descendants_to_remove has a new entry for any descendant which exceeded
+     *       ancestor limits relative to updateIt.
+     *
+     * @param[in] updateIt the entry to update for its descendants
+     * @param[in,out] cachedDescendants a cache where each line corresponds to all
+     *     descendants. It will be updated with the descendants of the transaction
+     *     being updated, so that future invocations don't need to walk the same
+     *     transaction again, if encountered in another transaction chain.
+     * @param[in] setExclude the set of descendant transactions in the mempool
+     *     that must not be accounted for (because any descendants in setExclude
+     *     were added to the mempool after the transaction being updated and hence
+     *     their state is already reflected in the parent state).
+     * @param[out] descendants_to_remove Populated with the txids of entries that
+     *     exceed ancestor limits. It's the responsibility of the caller to
+     *     removeRecursive them.
      */
-    void UpdateForDescendants(txiter updateIt,
-            cacheMap &cachedDescendants,
-            const std::set<uint256> &setExclude) EXCLUSIVE_LOCKS_REQUIRED(cs);
+    void UpdateForDescendants(txiter updateIt, cacheMap& cachedDescendants,
+                              const std::set<uint256>& setExclude, std::set<uint256>& descendants_to_remove) EXCLUSIVE_LOCKS_REQUIRED(cs);
     /** Update ancestors of hash to add/remove it as a descendant transaction. */
     void UpdateAncestorsOf(bool add, txiter hash, setEntries &setAncestors) EXCLUSIVE_LOCKS_REQUIRED(cs);
     /** Set ancestor state for an entry */
@@ -874,15 +1156,27 @@ class CCoinsViewMemPool : public CCoinsViewBacked
     * validation, since we can access transaction outputs without submitting them to mempool.
     */
     std::unordered_map<COutPoint, Coin, SaltedOutpointHasher> m_temp_added;
+<<<<<<< HEAD
+=======
+
+    /**
+     * Set of all coins that have been fetched from mempool or created using PackageAddTransaction
+     * (not base). Used to track the origin of a coin, see GetNonBaseCoins().
+     */
+    mutable std::unordered_set<COutPoint, SaltedOutpointHasher> m_non_base_coins;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 protected:
     const CTxMemPool& mempool;
 
 public:
     CCoinsViewMemPool(CCoinsView* baseIn, const CTxMemPool& mempoolIn);
+    /** GetCoin, returning whether it exists and is not spent. Also updates m_non_base_coins if the
+     * coin is not fetched from base. */
     bool GetCoin(const COutPoint &outpoint, Coin &coin) const override;
     /** Add the coins created by this transaction. These coins are only temporarily stored in
      * m_temp_added and cannot be flushed to the back end. Only used for package validation. */
     void PackageAddTransaction(const CTransactionRef& tx);
+<<<<<<< HEAD
 };
 
 /**
@@ -976,4 +1270,11 @@ struct DisconnectedBlockTransactions {
     }
 };
 
+=======
+    /** Get all coins in m_non_base_coins. */
+    std::unordered_set<COutPoint, SaltedOutpointHasher> GetNonBaseCoins() const { return m_non_base_coins; }
+    /** Clear m_temp_added and m_non_base_coins. */
+    void Reset();
+};
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #endif // DIGIBYTE_TXMEMPOOL_H

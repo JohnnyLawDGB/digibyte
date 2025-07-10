@@ -4,7 +4,10 @@
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test gettxoutproof and verifytxoutproof RPCs."""
 
+<<<<<<< HEAD
 from test_framework.blocktools import COINBASE_MATURITY
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 from test_framework.messages import (
     CMerkleBlock,
     from_hex,
@@ -20,7 +23,10 @@ from test_framework.wallet import MiniWallet
 class MerkleBlockTest(DigiByteTestFramework):
     def set_test_params(self):
         self.num_nodes = 2
+<<<<<<< HEAD
         self.setup_clean_chain = True
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         self.extra_args = [
             [],
             ["-txindex"],
@@ -28,12 +34,18 @@ class MerkleBlockTest(DigiByteTestFramework):
 
     def run_test(self):
         miniwallet = MiniWallet(self.nodes[0])
+<<<<<<< HEAD
         # Add enough mature utxos to the wallet, so that all txs spend confirmed coins
         self.generate(miniwallet, 5)
         self.generate(self.nodes[0], COINBASE_MATURITY)
 
         chain_height = self.nodes[1].getblockcount()
         assert_equal(chain_height, COINBASE_MATURITY + 5)
+=======
+
+        chain_height = self.nodes[1].getblockcount()
+        assert_equal(chain_height, 200)
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         txid1 = miniwallet.send_self_transfer(from_node=self.nodes[0])['txid']
         txid2 = miniwallet.send_self_transfer(from_node=self.nodes[0])['txid']

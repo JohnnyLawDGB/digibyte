@@ -2,6 +2,10 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 //
+<<<<<<< HEAD
+=======
+
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <boost/test/unit_test.hpp>
 
 #include <map>

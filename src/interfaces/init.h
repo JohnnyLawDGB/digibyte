@@ -1,10 +1,15 @@
+<<<<<<< HEAD
 // Copyright (c) 2021 The DigiByte Core developers
+=======
+// Copyright (c) 2021-2022 The Bitcoin Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #ifndef DIGIBYTE_INTERFACES_INIT_H
 #define DIGIBYTE_INTERFACES_INIT_H
 
+<<<<<<< HEAD
 #include <memory>
 
 struct NodeContext;
@@ -15,6 +20,21 @@ class Echo;
 class Ipc;
 class Node;
 class WalletClient;
+=======
+#include <interfaces/chain.h>
+#include <interfaces/echo.h>
+#include <interfaces/node.h>
+#include <interfaces/wallet.h>
+
+#include <memory>
+
+namespace node {
+struct NodeContext;
+} // namespace node
+
+namespace interfaces {
+class Ipc;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 //! Initial interface created when a process is first started, and used to give
 //! and get access to other interfaces (Node, Chain, Wallet, etc).
@@ -27,11 +47,19 @@ class Init
 {
 public:
     virtual ~Init() = default;
+<<<<<<< HEAD
     virtual std::unique_ptr<Node> makeNode();
     virtual std::unique_ptr<Chain> makeChain();
     virtual std::unique_ptr<WalletClient> makeWalletClient(Chain& chain);
     virtual std::unique_ptr<Echo> makeEcho();
     virtual Ipc* ipc();
+=======
+    virtual std::unique_ptr<Node> makeNode() { return nullptr; }
+    virtual std::unique_ptr<Chain> makeChain() { return nullptr; }
+    virtual std::unique_ptr<WalletLoader> makeWalletLoader(Chain& chain) { return nullptr; }
+    virtual std::unique_ptr<Echo> makeEcho() { return nullptr; }
+    virtual Ipc* ipc() { return nullptr; }
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 };
 
 //! Return implementation of Init interface for the node process. If the argv
@@ -40,7 +68,11 @@ public:
 //! status code to exit with. If this returns non-null, the caller can start up
 //! normally and use the Init object to spawn and connect to other processes
 //! while it is running.
+<<<<<<< HEAD
 std::unique_ptr<Init> MakeNodeInit(NodeContext& node, int argc, char* argv[], int& exit_status);
+=======
+std::unique_ptr<Init> MakeNodeInit(node::NodeContext& node, int argc, char* argv[], int& exit_status);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 //! Return implementation of Init interface for the wallet process.
 std::unique_ptr<Init> MakeWalletInit(int argc, char* argv[], int& exit_status);

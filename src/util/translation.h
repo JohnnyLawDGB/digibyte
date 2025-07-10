@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 // Copyright (c) 2019-2020 The DigiByte Core developers
+=======
+// Copyright (c) 2019-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -6,7 +10,13 @@
 #define DIGIBYTE_UTIL_TRANSLATION_H
 
 #include <tinyformat.h>
+<<<<<<< HEAD
 #include <functional>
+=======
+
+#include <functional>
+#include <string>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 /**
  * Bilingual messages:
@@ -28,6 +38,15 @@ struct bilingual_str {
     {
         return original.empty();
     }
+<<<<<<< HEAD
+=======
+
+    void clear()
+    {
+        original.clear();
+        translated.clear();
+    }
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 };
 
 inline bilingual_str operator+(bilingual_str lhs, const bilingual_str& rhs)
@@ -39,11 +58,27 @@ inline bilingual_str operator+(bilingual_str lhs, const bilingual_str& rhs)
 /** Mark a bilingual_str as untranslated */
 inline bilingual_str Untranslated(std::string original) { return {original, original}; }
 
+<<<<<<< HEAD
+=======
+// Provide an overload of tinyformat::format which can take bilingual_str arguments.
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 namespace tinyformat {
 template <typename... Args>
 bilingual_str format(const bilingual_str& fmt, const Args&... args)
 {
+<<<<<<< HEAD
     return bilingual_str{format(fmt.original, args...), format(fmt.translated, args...)};
+=======
+    const auto translate_arg{[](const auto& arg, bool translated) -> const auto& {
+        if constexpr (std::is_same_v<decltype(arg), const bilingual_str&>) {
+            return translated ? arg.translated : arg.original;
+        } else {
+            return arg;
+        }
+    }};
+    return bilingual_str{tfm::format(fmt.original, translate_arg(args, false)...),
+                         tfm::format(fmt.translated, translate_arg(args, true)...)};
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 } // namespace tinyformat
 

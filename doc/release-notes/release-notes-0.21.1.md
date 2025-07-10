@@ -3,7 +3,7 @@
 
 DigiByte Core version 0.21.1 is now available from:
 
-  <https://digibyte.org/bin/digibyte-core-0.21.1/>
+  <https://digibytecore.org/bin/digibyte-core-0.21.1/>
 
 This minor release includes various bug fixes and performance
 improvements, as well as updated translations.
@@ -14,7 +14,7 @@ Please report bugs using the issue tracker at GitHub:
 
 To receive security and update notifications, please subscribe to:
 
-  <https://digibyte.org/en/list/announcements/join/>
+  <https://digibytecore.org/en/list/announcements/join/>
 
 How to Upgrade
 ==============
@@ -97,14 +97,14 @@ activates.  Alternatively, miners may manually start signaling on bit 2
 at any time; if taproot activates, they will need to ensure they update
 their nodes before block 709632 or non-upgraded nodes could cause them to mine on
 an invalid chain.  See the [versionbits
-FAQ](https://digibyte.org/en/2016/06/08/version-bits-miners-faq/) for
+FAQ](https://digibytecore.org/en/2016/06/08/version-bits-miners-faq/) for
 details.
 
 
 For more information about taproot, please see the following resources:
 
 - Technical specifications
-  - [BIP340 Schnorr signatures for secp256k1](https://github.com/digibyte/bips/blob/master/bip-0340.mediawiki) 
+  - [BIP340 Schnorr signatures for secp256k1](https://github.com/digibyte/bips/blob/master/bip-0340.mediawiki)
   - [BIP341 Taproot: SegWit version 1 spending rules](https://github.com/digibyte/bips/blob/master/bip-0341.mediawiki)
   - [BIP342 Validation of Taproot scripts](https://github.com/digibyte/bips/blob/master/bip-0342.mediawiki)
 

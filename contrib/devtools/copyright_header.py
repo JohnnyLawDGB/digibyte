@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Copyright (c) 2016-2018 The Bitcoin Core developers
-# Copyright (c) 2016-2020 The DigiByte Core developers
+# Copyright (c) 2016-2022 The DigiByte Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -34,8 +34,8 @@ EXCLUDE_DIRS = [
     # git subtrees
     "src/crypto/ctaes/",
     "src/leveldb/",
+    "src/minisketch",
     "src/secp256k1/",
-    "src/univalue/",
     "src/crc32c/",
 ]
 
@@ -93,29 +93,18 @@ def compile_copyright_regex(copyright_style, year_style, name):
     return re.compile(r'%s %s,? %s( +\*)?\n' % (copyright_style, year_style, name))
 
 EXPECTED_HOLDER_NAMES = [
-    "Satoshi Nakamoto\n",
-    "The DigiByte Core developers\n",
-    "The DigiByte Core developers \n",
-    "DigiByte Core Developers\n",
-    "the DigiByte Core developers\n",
-    "The DigiByte developers\n",
-    "The LevelDB Authors\. All rights reserved\.\n",
-    "BitPay Inc\.\n",
-    "BitPay, Inc\.\n",
-    "University of Illinois at Urbana-Champaign\.\n",
-    "MarcoFalke\n",
-    "Pieter Wuille\n",
-    "Pieter Wuille +\*\n",
-    "Pieter Wuille, Gregory Maxwell +\*\n",
-    "Pieter Wuille, Andrew Poelstra +\*\n",
-    "Andrew Poelstra +\*\n",
-    "Wladimir J. van der Laan\n",
-    "Jeff Garzik\n",
-    "Diederik Huys, Pieter Wuille +\*\n",
-    "Thomas Daede, Cory Fields +\*\n",
-    "Jan-Klaas Kollhof\n",
-    "Sam Rushing\n",
-    "ArtForz -- public domain half-a-node\n",
+    r"Satoshi Nakamoto",
+    r"The DigiByte Core developers",
+    r"BitPay Inc\.",
+    r"University of Illinois at Urbana-Champaign\.",
+    r"Pieter Wuille",
+    r"Wladimir J\. van der Laan",
+    r"Jeff Garzik",
+    r"Jan-Klaas Kollhof",
+    r"ArtForz -- public domain half-a-node",
+    r"Intel Corporation ?",
+    r"The Zcash developers",
+    r"Jeremy Rubin",
 ]
 
 DOMINANT_STYLE_COMPILED = {}
@@ -331,15 +320,13 @@ def get_most_recent_git_change_year(filename):
 ################################################################################
 
 def read_file_lines(filename):
-    f = open(filename, 'r', encoding="utf8")
-    file_lines = f.readlines()
-    f.close()
+    with open(filename, 'r', encoding="utf8") as f:
+        file_lines = f.readlines()
     return file_lines
 
 def write_file_lines(filename, file_lines):
-    f = open(filename, 'w', encoding="utf8")
-    f.write(''.join(file_lines))
-    f.close()
+    with open(filename, 'w', encoding="utf8") as f:
+        f.write(''.join(file_lines))
 
 ################################################################################
 # update header years execution
@@ -382,7 +369,7 @@ def create_updated_copyright_line(line, last_git_change_year):
     space_split = after_copyright.split(' ')
     year_range = space_split[0]
     start_year, end_year = parse_year_range(year_range)
-    if end_year == last_git_change_year:
+    if end_year >= last_git_change_year:
         return line
     return (before_copyright + copyright_splitter +
             year_range_to_str(start_year, last_git_change_year) + ' ' +

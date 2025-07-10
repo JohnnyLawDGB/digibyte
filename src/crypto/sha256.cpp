@@ -1,5 +1,9 @@
+<<<<<<< HEAD
 // Copyright (c) 2009-2020 The Bitcoin Core developers
 // Copyright (c) 2014-2020 The DigiByte Core developers
+=======
+// Copyright (c) 2014-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -10,6 +14,19 @@
 #include <string.h>
 
 #include <compat/cpuid.h>
+<<<<<<< HEAD
+=======
+
+#if defined(__linux__) && defined(ENABLE_ARM_SHANI) && !defined(BUILD_DIGIBYTE_INTERNAL)
+#include <sys/auxv.h>
+#include <asm/hwcap.h>
+#endif
+
+#if defined(MAC_OSX) && defined(ENABLE_ARM_SHANI) && !defined(BUILD_DIGIBYTE_INTERNAL)
+#include <sys/types.h>
+#include <sys/sysctl.h>
+#endif
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 #if defined(__x86_64__) || defined(__amd64__) || defined(__i386__)
 #if defined(USE_ASM)
@@ -30,14 +47,24 @@ namespace sha256d64_avx2
 void Transform_8way(unsigned char* out, const unsigned char* in);
 }
 
-namespace sha256d64_shani
+namespace sha256d64_x86_shani
 {
 void Transform_2way(unsigned char* out, const unsigned char* in);
 }
 
-namespace sha256_shani
+namespace sha256_x86_shani
 {
 void Transform(uint32_t* s, const unsigned char* chunk, size_t blocks);
+}
+
+namespace sha256_arm_shani
+{
+void Transform(uint32_t* s, const unsigned char* chunk, size_t blocks);
+}
+
+namespace sha256d64_arm_shani
+{
+void Transform_2way(unsigned char* out, const unsigned char* in);
 }
 
 // Internal implementation code.
@@ -560,28 +587,35 @@ bool AVXEnabled()
 } // namespace
 
 
-std::string SHA256AutoDetect()
+std::string SHA256AutoDetect(sha256_implementation::UseImplementation use_implementation)
 {
     std::string ret = "standard";
+<<<<<<< HEAD
+=======
+    Transform = sha256::Transform;
+    TransformD64 = sha256::TransformD64;
+    TransformD64_2way = nullptr;
+    TransformD64_4way = nullptr;
+    TransformD64_8way = nullptr;
+
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #if defined(USE_ASM) && defined(HAVE_GETCPUID)
     bool have_sse4 = false;
     bool have_xsave = false;
     bool have_avx = false;
-    bool have_avx2 = false;
-    bool have_shani = false;
-    bool enabled_avx = false;
-
-    (void)AVXEnabled;
-    (void)have_sse4;
-    (void)have_avx;
-    (void)have_xsave;
-    (void)have_avx2;
-    (void)have_shani;
-    (void)enabled_avx;
+    [[maybe_unused]] bool have_avx2 = false;
+    [[maybe_unused]] bool have_x86_shani = false;
+    [[maybe_unused]] bool enabled_avx = false;
 
     uint32_t eax, ebx, ecx, edx;
     GetCPUID(1, 0, eax, ebx, ecx, edx);
+<<<<<<< HEAD
     have_sse4 = (ecx >> 19) & 1;
+=======
+    if (use_implementation & sha256_implementation::USE_SSE4) {
+        have_sse4 = (ecx >> 19) & 1;
+    }
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     have_xsave = (ecx >> 27) & 1;
     have_avx = (ecx >> 28) & 1;
     if (have_xsave && have_avx) {
@@ -589,6 +623,7 @@ std::string SHA256AutoDetect()
     }
     if (have_sse4) {
         GetCPUID(7, 0, eax, ebx, ecx, edx);
+<<<<<<< HEAD
         have_avx2 = (ebx >> 5) & 1;
         have_shani = (ebx >> 29) & 1;
     }
@@ -599,6 +634,22 @@ std::string SHA256AutoDetect()
         TransformD64 = TransformD64Wrapper<sha256_shani::Transform>;
         TransformD64_2way = sha256d64_shani::Transform_2way;
         ret = "shani(1way,2way)";
+=======
+        if (use_implementation & sha256_implementation::USE_AVX2) {
+            have_avx2 = (ebx >> 5) & 1;
+        }
+        if (use_implementation & sha256_implementation::USE_SHANI) {
+            have_x86_shani = (ebx >> 29) & 1;
+        }
+    }
+
+#if defined(ENABLE_X86_SHANI) && !defined(BUILD_DIGIBYTE_INTERNAL)
+    if (have_x86_shani) {
+        Transform = sha256_x86_shani::Transform;
+        TransformD64 = TransformD64Wrapper<sha256_x86_shani::Transform>;
+        TransformD64_2way = sha256d64_x86_shani::Transform_2way;
+        ret = "x86_shani(1way,2way)";
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         have_sse4 = false; // Disable SSE4/AVX2;
         have_avx2 = false;
     }
@@ -622,6 +673,39 @@ std::string SHA256AutoDetect()
         ret += ",avx2(8way)";
     }
 #endif
+#endif // defined(USE_ASM) && defined(HAVE_GETCPUID)
+
+#if defined(ENABLE_ARM_SHANI) && !defined(BUILD_DIGIBYTE_INTERNAL)
+    bool have_arm_shani = false;
+    if (use_implementation & sha256_implementation::USE_SHANI) {
+#if defined(__linux__)
+#if defined(__arm__) // 32-bit
+        if (getauxval(AT_HWCAP2) & HWCAP2_SHA2) {
+            have_arm_shani = true;
+        }
+#endif
+#if defined(__aarch64__) // 64-bit
+        if (getauxval(AT_HWCAP) & HWCAP_SHA2) {
+            have_arm_shani = true;
+        }
+#endif
+#endif
+
+#if defined(MAC_OSX)
+        int val = 0;
+        size_t len = sizeof(val);
+        if (sysctlbyname("hw.optional.arm.FEAT_SHA256", &val, &len, nullptr, 0) == 0) {
+            have_arm_shani = val != 0;
+        }
+#endif
+    }
+
+    if (have_arm_shani) {
+        Transform = sha256_arm_shani::Transform;
+        TransformD64 = TransformD64Wrapper<sha256_arm_shani::Transform>;
+        TransformD64_2way = sha256d64_arm_shani::Transform_2way;
+        ret = "arm_shani(1way,2way)";
+    }
 #endif
 
     assert(SelfTest());
@@ -630,7 +714,7 @@ std::string SHA256AutoDetect()
 
 ////// SHA-256
 
-CSHA256::CSHA256() : bytes(0)
+CSHA256::CSHA256()
 {
     sha256::Initialize(s);
 }

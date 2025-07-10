@@ -1,16 +1,29 @@
+<<<<<<< HEAD
 // Copyright (c) 2017-2020 The Bitcoin Core developers
 // Copyright (c) 2017-2020 The DigiByte Core developers
+=======
+// Copyright (c) 2017-2021 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #ifndef DIGIBYTE_WALLET_WALLETUTIL_H
 #define DIGIBYTE_WALLET_WALLETUTIL_H
 
+<<<<<<< HEAD
 #include <fs.h>
 #include <script/descriptor.h>
 
 #include <vector>
 
+=======
+#include <script/descriptor.h>
+#include <util/fs.h>
+
+#include <vector>
+
+namespace wallet {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 /** (client) version numbers for particular wallet features */
 enum WalletFeature
 {
@@ -53,10 +66,25 @@ enum WalletFlags : uint64_t {
     //! Flag set when a wallet contains no HD seed and no private keys, scripts,
     //! addresses, and other watch only things, and is therefore "blank."
     //!
+<<<<<<< HEAD
     //! The only function this flag serves is to distinguish a blank wallet from
     //! a newly created wallet when the wallet database is loaded, to avoid
     //! initialization that should only happen on first run.
     //!
+=======
+    //! The main function this flag serves is to distinguish a blank wallet from
+    //! a newly created wallet when the wallet database is loaded, to avoid
+    //! initialization that should only happen on first run.
+    //!
+    //! A secondary function of this flag, which applies to descriptor wallets
+    //! only, is to serve as an ongoing indication that descriptors in the
+    //! wallet should be created manually, and that the wallet should not
+    //! generate automatically generate new descriptors if it is later
+    //! encrypted. To support this behavior, descriptor wallets unlike legacy
+    //! wallets do not automatically unset the BLANK flag when things are
+    //! imported.
+    //!
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     //! This flag is also a mandatory flag to prevent previous versions of
     //! digibyte from opening the wallet, thinking it was newly created, and
     //! then improperly reinitializing it.
@@ -104,5 +132,9 @@ public:
     WalletDescriptor() {}
     WalletDescriptor(std::shared_ptr<Descriptor> descriptor, uint64_t creation_time, int32_t range_start, int32_t range_end, int32_t next_index) : descriptor(descriptor), creation_time(creation_time), range_start(range_start), range_end(range_end), next_index(next_index) {}
 };
+<<<<<<< HEAD
+=======
+} // namespace wallet
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 #endif // DIGIBYTE_WALLET_WALLETUTIL_H

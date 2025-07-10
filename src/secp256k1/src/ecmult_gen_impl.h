@@ -12,6 +12,7 @@
 #include "group.h"
 #include "ecmult_gen.h"
 #include "hash_impl.h"
+<<<<<<< HEAD
 #ifdef USE_ECMULT_STATIC_PRECOMPUTATION
 #include "ecmult_static_context.h"
 #endif
@@ -98,10 +99,17 @@ static void secp256k1_ecmult_gen_context_build(secp256k1_ecmult_gen_context *ctx
     (void)prealloc;
     ctx->prec = (secp256k1_ge_storage (*)[ECMULT_GEN_PREC_N][ECMULT_GEN_PREC_G])secp256k1_ecmult_static_context;
 #endif
+=======
+#include "precomputed_ecmult_gen.h"
+
+static void secp256k1_ecmult_gen_context_build(secp256k1_ecmult_gen_context *ctx) {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     secp256k1_ecmult_gen_blind(ctx, NULL);
+    ctx->built = 1;
 }
 
 static int secp256k1_ecmult_gen_context_is_built(const secp256k1_ecmult_gen_context* ctx) {
+<<<<<<< HEAD
     return ctx->prec != NULL;
 }
 
@@ -117,25 +125,54 @@ static void secp256k1_ecmult_gen_context_finalize_memcpy(secp256k1_ecmult_gen_co
 }
 
 static void secp256k1_ecmult_gen_context_clear(secp256k1_ecmult_gen_context *ctx) {
-    secp256k1_scalar_clear(&ctx->blind);
-    secp256k1_gej_clear(&ctx->initial);
-    ctx->prec = NULL;
+=======
+    return ctx->built;
 }
 
+static void secp256k1_ecmult_gen_context_clear(secp256k1_ecmult_gen_context *ctx) {
+    ctx->built = 0;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+    secp256k1_scalar_clear(&ctx->blind);
+    secp256k1_gej_clear(&ctx->initial);
+}
+
+/* For accelerating the computation of a*G:
+ * To harden against timing attacks, use the following mechanism:
+ * * Break up the multiplicand into groups of PREC_BITS bits, called n_0, n_1, n_2, ..., n_(PREC_N-1).
+ * * Compute sum(n_i * (PREC_G)^i * G + U_i, i=0 ... PREC_N-1), where:
+ *   * U_i = U * 2^i, for i=0 ... PREC_N-2
+ *   * U_i = U * (1-2^(PREC_N-1)), for i=PREC_N-1
+ *   where U is a point with no known corresponding scalar. Note that sum(U_i, i=0 ... PREC_N-1) = 0.
+ * For each i, and each of the PREC_G possible values of n_i, (n_i * (PREC_G)^i * G + U_i) is
+ * precomputed (call it prec(i, n_i)). The formula now becomes sum(prec(i, n_i), i=0 ... PREC_N-1).
+ * None of the resulting prec group elements have a known scalar, and neither do any of
+ * the intermediate sums while computing a*G.
+ * The prec values are stored in secp256k1_ecmult_gen_prec_table[i][n_i] = n_i * (PREC_G)^i * G + U_i.
+ */
 static void secp256k1_ecmult_gen(const secp256k1_ecmult_gen_context *ctx, secp256k1_gej *r, const secp256k1_scalar *gn) {
+    int bits = ECMULT_GEN_PREC_BITS;
+    int g = ECMULT_GEN_PREC_G(bits);
+    int n = ECMULT_GEN_PREC_N(bits);
+
     secp256k1_ge add;
     secp256k1_ge_storage adds;
     secp256k1_scalar gnb;
-    int bits;
-    int i, j;
+    int i, j, n_i;
+    
     memset(&adds, 0, sizeof(adds));
     *r = ctx->initial;
     /* Blind scalar/point multiplication by computing (n-b)G + bG instead of nG. */
     secp256k1_scalar_add(&gnb, gn, &ctx->blind);
     add.infinity = 0;
+<<<<<<< HEAD
     for (j = 0; j < ECMULT_GEN_PREC_N; j++) {
         bits = secp256k1_scalar_get_bits(&gnb, j * ECMULT_GEN_PREC_B, ECMULT_GEN_PREC_B);
         for (i = 0; i < ECMULT_GEN_PREC_G; i++) {
+=======
+    for (i = 0; i < n; i++) {
+        n_i = secp256k1_scalar_get_bits(&gnb, i * bits, bits);
+        for (j = 0; j < g; j++) {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             /** This uses a conditional move to avoid any secret data in array indexes.
              *   _Any_ use of secret indexes has been demonstrated to result in timing
              *   sidechannels, even when the cache-line access patterns are uniform.
@@ -146,12 +183,12 @@ static void secp256k1_ecmult_gen(const secp256k1_ecmult_gen_context *ctx, secp25
              *    by Dag Arne Osvik, Adi Shamir, and Eran Tromer
              *    (https://www.tau.ac.il/~tromer/papers/cache.pdf)
              */
-            secp256k1_ge_storage_cmov(&adds, &(*ctx->prec)[j][i], i == bits);
+            secp256k1_ge_storage_cmov(&adds, &secp256k1_ecmult_gen_prec_table[i][j], j == n_i);
         }
         secp256k1_ge_from_storage(&add, &adds);
         secp256k1_gej_add_ge(r, r, &add);
     }
-    bits = 0;
+    n_i = 0;
     secp256k1_ge_clear(&add);
     secp256k1_scalar_clear(&gnb);
 }
@@ -163,32 +200,43 @@ static void secp256k1_ecmult_gen_blind(secp256k1_ecmult_gen_context *ctx, const 
     secp256k1_fe s;
     unsigned char nonce32[32];
     secp256k1_rfc6979_hmac_sha256 rng;
+<<<<<<< HEAD
     int overflow;
     unsigned char keydata[64] = {0};
+=======
+    unsigned char keydata[64];
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (seed32 == NULL) {
         /* When seed is NULL, reset the initial point and blinding value. */
         secp256k1_gej_set_ge(&ctx->initial, &secp256k1_ge_const_g);
         secp256k1_gej_neg(&ctx->initial, &ctx->initial);
         secp256k1_scalar_set_int(&ctx->blind, 1);
+        return;
     }
     /* The prior blinding value (if not reset) is chained forward by including it in the hash. */
-    secp256k1_scalar_get_b32(nonce32, &ctx->blind);
+    secp256k1_scalar_get_b32(keydata, &ctx->blind);
     /** Using a CSPRNG allows a failure free interface, avoids needing large amounts of random data,
      *   and guards against weak or adversarial seeds.  This is a simpler and safer interface than
      *   asking the caller for blinding values directly and expecting them to retry on failure.
      */
-    memcpy(keydata, nonce32, 32);
-    if (seed32 != NULL) {
-        memcpy(keydata + 32, seed32, 32);
-    }
-    secp256k1_rfc6979_hmac_sha256_initialize(&rng, keydata, seed32 ? 64 : 32);
+    VERIFY_CHECK(seed32 != NULL);
+    memcpy(keydata + 32, seed32, 32);
+    secp256k1_rfc6979_hmac_sha256_initialize(&rng, keydata, 64);
     memset(keydata, 0, sizeof(keydata));
+<<<<<<< HEAD
     /* Accept unobservably small non-uniformity. */
     secp256k1_rfc6979_hmac_sha256_generate(&rng, nonce32, 32);
     overflow = !secp256k1_fe_set_b32(&s, nonce32);
     overflow |= secp256k1_fe_is_zero(&s);
     secp256k1_fe_cmov(&s, &secp256k1_fe_one, overflow);
     /* Randomize the projection to defend against multiplier sidechannels. */
+=======
+    secp256k1_rfc6979_hmac_sha256_generate(&rng, nonce32, 32);
+    secp256k1_fe_set_b32_mod(&s, nonce32);
+    secp256k1_fe_cmov(&s, &secp256k1_fe_one, secp256k1_fe_normalizes_to_zero(&s));
+    /* Randomize the projection to defend against multiplier sidechannels.
+       Do this before our own call to secp256k1_ecmult_gen below. */
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     secp256k1_gej_rescale(&ctx->initial, &s);
     secp256k1_fe_clear(&s);
     secp256k1_rfc6979_hmac_sha256_generate(&rng, nonce32, 32);
@@ -197,6 +245,7 @@ static void secp256k1_ecmult_gen_blind(secp256k1_ecmult_gen_context *ctx, const 
     secp256k1_scalar_cmov(&b, &secp256k1_scalar_one, secp256k1_scalar_is_zero(&b));
     secp256k1_rfc6979_hmac_sha256_finalize(&rng);
     memset(nonce32, 0, 32);
+    /* The random projection in ctx->initial ensures that gb will have a random projection. */
     secp256k1_ecmult_gen(ctx, &gb, &b);
     secp256k1_scalar_negate(&b, &b);
     ctx->blind = b;

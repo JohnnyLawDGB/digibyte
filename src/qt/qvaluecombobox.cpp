@@ -1,12 +1,16 @@
+<<<<<<< HEAD
 // Copyright (c) 2009-2020 The Bitcoin Core developers
 // Copyright (c) 2014-2020 The DigiByte Core developers
+=======
+// Copyright (c) 2011-2021 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <qt/qvaluecombobox.h>
 
-QValueComboBox::QValueComboBox(QWidget *parent) :
-        QComboBox(parent), role(Qt::UserRole)
+QValueComboBox::QValueComboBox(QWidget* parent)
+    : QComboBox(parent)
 {
     connect(this, qOverload<int>(&QComboBox::currentIndexChanged), this, &QValueComboBox::handleSelectionChanged);
 }

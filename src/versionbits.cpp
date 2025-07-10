@@ -1,10 +1,18 @@
+<<<<<<< HEAD
 // Copyright (c) 2009-2020 The Bitcoin Core developers
 // Copyright (c) 2014-2020 The DigiByte Core developers
+=======
+// Copyright (c) 2016-2022 The Bitcoin Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include <versionbits.h>
 #include <consensus/params.h>
+<<<<<<< HEAD
+=======
+#include <util/check.h>
+#include <versionbits.h>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 ThresholdState AbstractThresholdConditionChecker::GetStateFor(const CBlockIndex* pindexPrev, const Consensus::Params& params, ThresholdConditionCache& cache) const
 {
@@ -99,29 +107,42 @@ ThresholdState AbstractThresholdConditionChecker::GetStateFor(const CBlockIndex*
     return state;
 }
 
+<<<<<<< HEAD
 BIP9Stats AbstractThresholdConditionChecker::GetStateStatisticsFor(const CBlockIndex* pindex, const Consensus::Params& params) const
+=======
+BIP9Stats AbstractThresholdConditionChecker::GetStateStatisticsFor(const CBlockIndex* pindex, const Consensus::Params& params, std::vector<bool>* signalling_blocks) const
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     BIP9Stats stats = {};
 
     stats.period = Period(params);
     stats.threshold = Threshold(params);
 
-    if (pindex == nullptr)
-        return stats;
+    if (pindex == nullptr) return stats;
 
-    // Find beginning of period
-    const CBlockIndex* pindexEndOfPrevPeriod = pindex->GetAncestor(pindex->nHeight - ((pindex->nHeight + 1) % stats.period));
-    stats.elapsed = pindex->nHeight - pindexEndOfPrevPeriod->nHeight;
+    // Find how many blocks are in the current period
+    int blocks_in_period = 1 + (pindex->nHeight % stats.period);
 
-    // Count from current block to beginning of period
-    int count = 0;
-    const CBlockIndex* currentIndex = pindex;
-    while (pindexEndOfPrevPeriod->nHeight != currentIndex->nHeight){
-        if (Condition(currentIndex, params))
-            count++;
-        currentIndex = currentIndex->pprev;
+    // Reset signalling_blocks
+    if (signalling_blocks) {
+        signalling_blocks->assign(blocks_in_period, false);
     }
 
+    // Count from current block to beginning of period
+    int elapsed = 0;
+    int count = 0;
+    const CBlockIndex* currentIndex = pindex;
+    do {
+        ++elapsed;
+        --blocks_in_period;
+        if (Condition(currentIndex, params)) {
+            ++count;
+            if (signalling_blocks) signalling_blocks->at(blocks_in_period) = true;
+        }
+        currentIndex = currentIndex->pprev;
+    } while(blocks_in_period > 0);
+
+    stats.elapsed = elapsed;
     stats.count = count;
     stats.possible = (stats.period - stats.threshold ) >= (stats.elapsed - count);
 
@@ -150,7 +171,7 @@ int AbstractThresholdConditionChecker::GetStateSinceHeightFor(const CBlockIndex*
     // if we are computing for the last block of a period, then pindexPrev points to the second to last block of the period, and
     // if we are computing for the first block of a period, then pindexPrev points to the last block of the previous period.
     // The parent of the genesis block is represented by nullptr.
-    pindexPrev = pindexPrev->GetAncestor(pindexPrev->nHeight - ((pindexPrev->nHeight + 1) % nPeriod));
+    pindexPrev = Assert(pindexPrev->GetAncestor(pindexPrev->nHeight - ((pindexPrev->nHeight + 1) % nPeriod)));
 
     const CBlockIndex* previousPeriodParent = pindexPrev->GetAncestor(pindexPrev->nHeight - nPeriod);
 
@@ -186,7 +207,7 @@ protected:
 
 public:
     explicit VersionBitsConditionChecker(Consensus::DeploymentPos id_) : id(id_) {}
-    uint32_t Mask(const Consensus::Params& params) const { return ((uint32_t)1) << params.vDeployments[id].bit; }
+    uint32_t Mask(const Consensus::Params& params) const { return (uint32_t{1}) << params.vDeployments[id].bit; }
 };
 
 } // namespace
@@ -197,9 +218,13 @@ ThresholdState VersionBitsCache::State(const CBlockIndex* pindexPrev, const Cons
     return VersionBitsConditionChecker(pos).GetStateFor(pindexPrev, params, m_caches[pos]);
 }
 
+<<<<<<< HEAD
 BIP9Stats VersionBitsCache::Statistics(const CBlockIndex* pindexPrev, const Consensus::Params& params, Consensus::DeploymentPos pos)
+=======
+BIP9Stats VersionBitsCache::Statistics(const CBlockIndex* pindex, const Consensus::Params& params, Consensus::DeploymentPos pos, std::vector<bool>* signalling_blocks)
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
-    return VersionBitsConditionChecker(pos).GetStateStatisticsFor(pindexPrev, params);
+    return VersionBitsConditionChecker(pos).GetStateStatisticsFor(pindex, params, signalling_blocks);
 }
 
 int VersionBitsCache::StateSinceHeight(const CBlockIndex* pindexPrev, const Consensus::Params& params, Consensus::DeploymentPos pos)
@@ -213,10 +238,17 @@ uint32_t VersionBitsCache::Mask(const Consensus::Params& params, Consensus::Depl
     return VersionBitsConditionChecker(pos).Mask(params);
 }
 
+<<<<<<< HEAD
 int32_t VersionBitsCache::ComputeBlockVersion(const CBlockIndex* pindexPrev, const Consensus::Params& params, int algo)
 {
     LOCK(m_mutex);
     int32_t nVersion = VERSIONBITS_TOP_BITS | BLOCK_VERSION_DEFAULT;
+=======
+int32_t VersionBitsCache::ComputeBlockVersion(const CBlockIndex* pindexPrev, const Consensus::Params& params)
+{
+    LOCK(m_mutex);
+    int32_t nVersion = VERSIONBITS_TOP_BITS;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     for (int i = 0; i < (int)Consensus::MAX_VERSION_BITS_DEPLOYMENTS; i++) {
         Consensus::DeploymentPos pos = static_cast<Consensus::DeploymentPos>(i);
@@ -226,8 +258,11 @@ int32_t VersionBitsCache::ComputeBlockVersion(const CBlockIndex* pindexPrev, con
         }
     }
 
+<<<<<<< HEAD
     nVersion |= GetVersionForAlgo(algo);
 
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     return nVersion;
 }
 

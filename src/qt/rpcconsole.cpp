@@ -1,5 +1,9 @@
+<<<<<<< HEAD
 // Copyright (c) 2011-2020 The Bitcoin Core developers
 // Copyright (c) 2013-2021 The DigiByte Core developers
+=======
+// Copyright (c) 2011-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -11,10 +15,19 @@
 #include <qt/forms/ui_debugwindow.h>
 
 #include <chainparams.h>
+<<<<<<< HEAD
 #include <interfaces/node.h>
 #include <netbase.h>
 #include <qt/bantablemodel.h>
 #include <qt/clientmodel.h>
+=======
+#include <common/system.h>
+#include <interfaces/node.h>
+#include <node/connection_types.h>
+#include <qt/bantablemodel.h>
+#include <qt/clientmodel.h>
+#include <qt/guiutil.h>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <qt/peertablesortproxy.h>
 #include <qt/platformstyle.h>
 #include <qt/walletmodel.h>
@@ -22,11 +35,15 @@
 #include <rpc/server.h>
 #include <util/strencodings.h>
 #include <util/string.h>
+<<<<<<< HEAD
 #include <util/system.h>
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <util/threadnames.h>
 
 #include <univalue.h>
 
+<<<<<<< HEAD
 #ifdef ENABLE_WALLET
 #ifdef USE_BDB
 #include <wallet/bdb.h>
@@ -35,11 +52,17 @@
 #include <wallet/wallet.h>
 #endif
 
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <QAbstractButton>
 #include <QAbstractItemModel>
 #include <QDateTime>
 #include <QFont>
 #include <QKeyEvent>
+<<<<<<< HEAD
+=======
+#include <QKeySequence>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <QLatin1String>
 #include <QLocale>
 #include <QMenu>
@@ -53,6 +76,11 @@
 #include <QTime>
 #include <QTimer>
 #include <QVariant>
+<<<<<<< HEAD
+=======
+
+#include <chrono>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 const int CONSOLE_HISTORY = 50;
 const int INITIAL_TRAFFIC_GRAPH_MINS = 30;
@@ -117,7 +145,11 @@ public:
         connect(&timer, &QTimer::timeout, [this]{ func(); });
         timer.start(millis);
     }
+<<<<<<< HEAD
     ~QtRPCTimerBase() {}
+=======
+    ~QtRPCTimerBase() = default;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 private:
     QTimer timer;
     std::function<void()> func;
@@ -126,7 +158,11 @@ private:
 class QtRPCTimerInterface: public RPCTimerInterface
 {
 public:
+<<<<<<< HEAD
     ~QtRPCTimerInterface() {}
+=======
+    ~QtRPCTimerInterface() = default;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     const char *Name() override { return "Qt"; }
     RPCTimerBase* NewTimer(std::function<void()>& func, int64_t millis) override
     {
@@ -174,7 +210,7 @@ public:
 bool RPCConsole::RPCParseCommandLine(interfaces::Node* node, std::string &strResult, const std::string &strCommand, const bool fExecute, std::string * const pstrFilteredOut, const WalletModel* wallet_model)
 {
     std::vector< std::vector<std::string> > stack;
-    stack.push_back(std::vector<std::string>());
+    stack.emplace_back();
 
     enum CmdParseState
     {
@@ -202,7 +238,7 @@ bool RPCConsole::RPCParseCommandLine(interfaces::Node* node, std::string &strRes
         }
         // Make sure stack is not empty before adding something
         if (stack.empty()) {
-            stack.push_back(std::vector<std::string>());
+            stack.emplace_back();
         }
         stack.back().push_back(strArg);
     };
@@ -211,7 +247,7 @@ bool RPCConsole::RPCParseCommandLine(interfaces::Node* node, std::string &strRes
         if (nDepthInsideSensitive) {
             if (!--nDepthInsideSensitive) {
                 assert(filter_begin_pos);
-                filter_ranges.push_back(std::make_pair(filter_begin_pos, chpos));
+                filter_ranges.emplace_back(filter_begin_pos, chpos);
                 filter_begin_pos = 0;
             }
         }
@@ -248,13 +284,21 @@ bool RPCConsole::RPCParseCommandLine(interfaces::Node* node, std::string &strRes
                                 UniValue subelement;
                                 if (lastResult.isArray())
                                 {
+<<<<<<< HEAD
                                     for(char argch: curarg)
                                         if (!IsDigit(argch))
                                             throw std::runtime_error("Invalid result query");
                                     subelement = lastResult[atoi(curarg.c_str())];
+=======
+                                    const auto parsed{ToIntegral<size_t>(curarg)};
+                                    if (!parsed) {
+                                        throw std::runtime_error("Invalid result query");
+                                    }
+                                    subelement = lastResult[parsed.value()];
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                                 }
                                 else if (lastResult.isObject())
-                                    subelement = find_value(lastResult, curarg);
+                                    subelement = lastResult.find_value(curarg);
                                 else
                                     throw std::runtime_error("Invalid result query"); //no array or object: abort
                                 lastResult = subelement;
@@ -310,7 +354,7 @@ bool RPCConsole::RPCParseCommandLine(interfaces::Node* node, std::string &strRes
                             if (nDepthInsideSensitive) {
                                 ++nDepthInsideSensitive;
                             }
-                            stack.push_back(std::vector<std::string>());
+                            stack.emplace_back();
                         }
 
                         // don't allow commands after executed commands on baselevel
@@ -453,8 +497,8 @@ void RPCExecutor::request(const QString &command, const WalletModel* wallet_mode
     {
         try // Nice formatting for standard-format error
         {
-            int code = find_value(objError, "code").get_int();
-            std::string message = find_value(objError, "message").get_str();
+            int code = objError.find_value("code").getInt<int>();
+            std::string message = objError.find_value("message").get_str();
             Q_EMIT reply(RPCConsole::CMD_ERROR, QString::fromStdString(message) + " (code " + QString::number(code) + ")");
         }
         catch (const std::runtime_error&) // raised when converting to invalid type, i.e. missing code or message
@@ -496,17 +540,53 @@ RPCConsole::RPCConsole(interfaces::Node& node, const PlatformStyle *_platformSty
 
     constexpr QChar nonbreaking_hyphen(8209);
     const std::vector<QString> CONNECTION_TYPE_DOC{
+<<<<<<< HEAD
         tr("Inbound: initiated by peer"),
         tr("Outbound Full Relay: default"),
         tr("Outbound Block Relay: does not relay transactions or addresses"),
+=======
+        //: Explanatory text for an inbound peer connection.
+        tr("Inbound: initiated by peer"),
+        /*: Explanatory text for an outbound peer connection that
+            relays all network information. This is the default behavior for
+            outbound connections. */
+        tr("Outbound Full Relay: default"),
+        /*: Explanatory text for an outbound peer connection that relays
+            network information about blocks and not transactions or addresses. */
+        tr("Outbound Block Relay: does not relay transactions or addresses"),
+        /*: Explanatory text for an outbound peer connection that was
+            established manually through one of several methods. The numbered
+            arguments are stand-ins for the methods available to establish
+            manual connections. */
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         tr("Outbound Manual: added using RPC %1 or %2/%3 configuration options")
             .arg("addnode")
             .arg(QString(nonbreaking_hyphen) + "addnode")
             .arg(QString(nonbreaking_hyphen) + "connect"),
+<<<<<<< HEAD
         tr("Outbound Feeler: short-lived, for testing addresses"),
         tr("Outbound Address Fetch: short-lived, for soliciting addresses")};
     const QString list{"<ul><li>" + Join(CONNECTION_TYPE_DOC, QString("</li><li>")) + "</li></ul>"};
     ui->peerConnectionTypeLabel->setToolTip(ui->peerConnectionTypeLabel->toolTip().arg(list));
+=======
+        /*: Explanatory text for a short-lived outbound peer connection that
+            is used to test the aliveness of known addresses. */
+        tr("Outbound Feeler: short-lived, for testing addresses"),
+        /*: Explanatory text for a short-lived outbound peer connection that is used
+            to request addresses from a peer. */
+        tr("Outbound Address Fetch: short-lived, for soliciting addresses")};
+    const QString connection_types_list{"<ul><li>" + Join(CONNECTION_TYPE_DOC, QString("</li><li>")) + "</li></ul>"};
+    ui->peerConnectionTypeLabel->setToolTip(ui->peerConnectionTypeLabel->toolTip().arg(connection_types_list));
+    const std::vector<QString> TRANSPORT_TYPE_DOC{
+        //: Explanatory text for "detecting" transport type.
+        tr("detecting: peer could be v1 or v2"),
+        //: Explanatory text for v1 transport type.
+        tr("v1: unencrypted, plaintext transport protocol"),
+        //: Explanatory text for v2 transport type.
+        tr("v2: BIP324 encrypted transport protocol")};
+    const QString transport_types_list{"<ul><li>" + Join(TRANSPORT_TYPE_DOC, QString("</li><li>")) + "</li></ul>"};
+    ui->peerTransportTypeLabel->setToolTip(ui->peerTransportTypeLabel->toolTip().arg(transport_types_list));
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     const QString hb_list{"<ul><li>\""
         + ts.to + "\" – " + tr("we selected the peer for high bandwidth relay") + "</li><li>\""
         + ts.from + "\" – " + tr("the peer selected us for high bandwidth relay") + "</li><li>\""
@@ -600,17 +680,21 @@ bool RPCConsole::eventFilter(QObject* obj, QEvent *event)
         case Qt::Key_Down: if(obj == ui->lineEdit) { browseHistory(1); return true; } break;
         case Qt::Key_PageUp: /* pass paging keys to messages widget */
         case Qt::Key_PageDown:
-            if(obj == ui->lineEdit)
-            {
-                QApplication::postEvent(ui->messagesWidget, new QKeyEvent(*keyevt));
+            if (obj == ui->lineEdit) {
+                QApplication::sendEvent(ui->messagesWidget, keyevt);
                 return true;
             }
             break;
         case Qt::Key_Return:
         case Qt::Key_Enter:
             // forward these events to lineEdit
+<<<<<<< HEAD
             if(obj == autoCompleter->popup()) {
                 QApplication::postEvent(ui->lineEdit, new QKeyEvent(*keyevt));
+=======
+            if (obj == autoCompleter->popup()) {
+                QApplication::sendEvent(ui->lineEdit, keyevt);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 autoCompleter->popup()->hide();
                 return true;
             }
@@ -624,7 +708,7 @@ bool RPCConsole::eventFilter(QObject* obj, QEvent *event)
                   ((mod & Qt::ShiftModifier) && key == Qt::Key_Insert)))
             {
                 ui->lineEdit->setFocus();
-                QApplication::postEvent(ui->lineEdit, new QKeyEvent(*keyevt));
+                QApplication::sendEvent(ui->lineEdit, keyevt);
                 return true;
             }
         }
@@ -652,7 +736,11 @@ void RPCConsole::setClientModel(ClientModel *model, int bestblock_height, int64_
         setNumConnections(model->getNumConnections());
         connect(model, &ClientModel::numConnectionsChanged, this, &RPCConsole::setNumConnections);
 
+<<<<<<< HEAD
         setNumBlocks(bestblock_height, QDateTime::fromTime_t(bestblock_date), verification_progress, false);
+=======
+        setNumBlocks(bestblock_height, QDateTime::fromSecsSinceEpoch(bestblock_date), verification_progress, SyncType::BLOCK_SYNC);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         connect(model, &ClientModel::numBlocksChanged, this, &RPCConsole::setNumBlocks);
 
         updateNetworkState();
@@ -676,11 +764,23 @@ void RPCConsole::setClientModel(ClientModel *model, int bestblock_height, int64_
             ui->peerWidget->setColumnWidth(PeerTableModel::Subversion, SUBVERSION_COLUMN_WIDTH);
             ui->peerWidget->setColumnWidth(PeerTableModel::Ping, PING_COLUMN_WIDTH);
         }
+<<<<<<< HEAD
+=======
+        ui->peerWidget->horizontalHeader()->setSectionResizeMode(PeerTableModel::Age, QHeaderView::ResizeToContents);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         ui->peerWidget->horizontalHeader()->setStretchLastSection(true);
         ui->peerWidget->setItemDelegateForColumn(PeerTableModel::NetNodeId, new PeerIdViewDelegate(this));
 
         // create peer table context menu
         peersTableContextMenu = new QMenu(this);
+<<<<<<< HEAD
+=======
+        //: Context menu action to copy the address of a peer.
+        peersTableContextMenu->addAction(tr("&Copy address"), [this] {
+            GUIUtil::copyEntryData(ui->peerWidget, PeerTableModel::Address, Qt::DisplayRole);
+        });
+        peersTableContextMenu->addSeparator();
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         peersTableContextMenu->addAction(tr("&Disconnect"), this, &RPCConsole::disconnectSelectedNode);
         peersTableContextMenu->addAction(ts.ban_for + " " + tr("1 &hour"), [this] { banSelectedNode(60 * 60); });
         peersTableContextMenu->addAction(ts.ban_for + " " + tr("1 d&ay"), [this] { banSelectedNode(60 * 60 * 24); });
@@ -703,10 +803,24 @@ void RPCConsole::setClientModel(ClientModel *model, int bestblock_height, int64_
             ui->banlistWidget->setColumnWidth(BanTableModel::Address, BANSUBNET_COLUMN_WIDTH);
             ui->banlistWidget->setColumnWidth(BanTableModel::Bantime, BANTIME_COLUMN_WIDTH);
         }
+<<<<<<< HEAD
+=======
+        ui->banlistWidget->horizontalHeader()->setSectionResizeMode(BanTableModel::Address, QHeaderView::ResizeToContents);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         ui->banlistWidget->horizontalHeader()->setStretchLastSection(true);
 
         // create ban table context menu
         banTableContextMenu = new QMenu(this);
+<<<<<<< HEAD
+=======
+        /*: Context menu action to copy the IP/Netmask of a banned peer.
+            IP/Netmask is the combination of a peer's IP address and its Netmask.
+            For IP address, see: https://en.wikipedia.org/wiki/IP_address. */
+        banTableContextMenu->addAction(tr("&Copy IP/Netmask"), [this] {
+            GUIUtil::copyEntryData(ui->banlistWidget, BanTableModel::Address, Qt::DisplayRole);
+        });
+        banTableContextMenu->addSeparator();
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         banTableContextMenu->addAction(tr("&Unban"), this, &RPCConsole::unbanSelectedNode);
         connect(ui->banlistWidget, &QTableView::customContextMenuRequested, this, &RPCConsole::showBanTableContextMenu);
 
@@ -722,7 +836,7 @@ void RPCConsole::setClientModel(ClientModel *model, int bestblock_height, int64_
         ui->dataDir->setText(model->dataDir());
         ui->blocksDir->setText(model->blocksDir());
         ui->startupTime->setText(model->formatClientStartupTime());
-        ui->networkName->setText(QString::fromStdString(Params().NetworkIDString()));
+        ui->networkName->setText(QString::fromStdString(Params().GetChainTypeString()));
 
         //Setup autocomplete and attach it
         QStringList wordList;
@@ -757,8 +871,13 @@ void RPCConsole::addWallet(WalletModel * const walletModel)
 {
     // use name for text and wallet model for internal data object (to allow to move to a wallet id later)
     ui->WalletSelector->addItem(walletModel->getDisplayName(), QVariant::fromValue(walletModel));
+<<<<<<< HEAD
     if (ui->WalletSelector->count() == 2 && !isVisible()) {
         // First wallet added, set to default so long as the window isn't presently visible (and potentially in use)
+=======
+    if (ui->WalletSelector->count() == 2) {
+        // First wallet added, set to default to match wallet RPC behavior
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         ui->WalletSelector->setCurrentIndex(1);
     }
     if (ui->WalletSelector->count() > 2) {
@@ -774,6 +893,12 @@ void RPCConsole::removeWallet(WalletModel * const walletModel)
         ui->WalletSelector->setVisible(false);
         ui->WalletSelectorLabel->setVisible(false);
     }
+}
+
+void RPCConsole::setCurrentWallet(WalletModel* const wallet_model)
+{
+    QVariant data = QVariant::fromValue(wallet_model);
+    ui->WalletSelector->setCurrentIndex(ui->WalletSelector->findData(data));
 }
 #endif
 
@@ -818,7 +943,11 @@ void RPCConsole::setFontSize(int newSize)
 
     // clear console (reset icon sizes, default stylesheet) and re-add the content
     float oldPosFactor = 1.0 / ui->messagesWidget->verticalScrollBar()->maximum() * ui->messagesWidget->verticalScrollBar()->value();
+<<<<<<< HEAD
     clear(/* keep_prompt */ true);
+=======
+    clear(/*keep_prompt=*/true);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     ui->messagesWidget->setHtml(str);
     ui->messagesWidget->verticalScrollBar()->setValue(oldPosFactor * ui->messagesWidget->verticalScrollBar()->maximum());
 }
@@ -840,7 +969,11 @@ void RPCConsole::clear(bool keep_prompt)
     }
 
     // Set default style sheet
+#ifdef Q_OS_MACOS
+    QFontInfo fixedFontInfo(GUIUtil::fixedPitchFont(/*use_embedded_font=*/true));
+#else
     QFontInfo fixedFontInfo(GUIUtil::fixedPitchFont());
+#endif
     ui->messagesWidget->document()->setDefaultStyleSheet(
         QString(
                 "table { }"
@@ -880,8 +1013,7 @@ void RPCConsole::clear(bool keep_prompt)
 
 void RPCConsole::keyPressEvent(QKeyEvent *event)
 {
-    if(windowType() != Qt::Widget && event->key() == Qt::Key_Escape)
-    {
+    if (windowType() != Qt::Widget && GUIUtil::IsEscapeOrBack(event->key())) {
         close();
     }
 }
@@ -947,9 +1079,9 @@ void RPCConsole::setNetworkActive(bool networkActive)
     updateNetworkState();
 }
 
-void RPCConsole::setNumBlocks(int count, const QDateTime& blockDate, double nVerificationProgress, bool headers)
+void RPCConsole::setNumBlocks(int count, const QDateTime& blockDate, double nVerificationProgress, SyncType synctype)
 {
-    if (!headers) {
+    if (synctype == SyncType::BLOCK_SYNC) {
         ui->numberOfBlocks->setText(QString::number(count));
         ui->lastBlockTime->setText(blockDate.toString());
     }
@@ -959,10 +1091,11 @@ void RPCConsole::setMempoolSize(long numberOfTxs, size_t dynUsage)
 {
     ui->mempoolNumberTxs->setText(QString::number(numberOfTxs));
 
-    if (dynUsage < 1000000)
-        ui->mempoolSize->setText(QString::number(dynUsage/1000.0, 'f', 2) + " KB");
-    else
-        ui->mempoolSize->setText(QString::number(dynUsage/1000000.0, 'f', 2) + " MB");
+    if (dynUsage < 1000000) {
+        ui->mempoolSize->setText(QObject::tr("%1 kB").arg(dynUsage / 1000.0, 0, 'f', 2));
+    } else {
+        ui->mempoolSize->setText(QObject::tr("%1 MB").arg(dynUsage / 1000000.0, 0, 'f', 2));
+    }
 }
 
 void RPCConsole::on_lineEdit_returnPressed()
@@ -998,8 +1131,14 @@ void RPCConsole::on_lineEdit_returnPressed()
 
     ui->lineEdit->clear();
 
+<<<<<<< HEAD
 #ifdef ENABLE_WALLET
     WalletModel* wallet_model = ui->WalletSelector->currentData().value<WalletModel*>();
+=======
+    WalletModel* wallet_model{nullptr};
+#ifdef ENABLE_WALLET
+    wallet_model = ui->WalletSelector->currentData().value<WalletModel*>();
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     if (m_last_wallet_model != wallet_model) {
         if (wallet_model) {
@@ -1015,7 +1154,14 @@ void RPCConsole::on_lineEdit_returnPressed()
     //: A console message indicating an entered command is currently being executed.
     message(CMD_REPLY, tr("Executing…"));
     m_is_executing = true;
+<<<<<<< HEAD
     Q_EMIT cmdRequest(cmd, m_last_wallet_model);
+=======
+
+    QMetaObject::invokeMethod(m_executor, [this, cmd, wallet_model] {
+        m_executor->request(cmd, wallet_model);
+    });
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     cmd = QString::fromStdString(strFilteredCmd);
 
@@ -1057,11 +1203,15 @@ void RPCConsole::browseHistory(int offset)
 
 void RPCConsole::startExecutor()
 {
-    RPCExecutor *executor = new RPCExecutor(m_node);
-    executor->moveToThread(&thread);
+    m_executor = new RPCExecutor(m_node);
+    m_executor->moveToThread(&thread);
 
     // Replies from executor object must go to this object
+<<<<<<< HEAD
     connect(executor, &RPCExecutor::reply, this, [this](int category, const QString& command) {
+=======
+    connect(m_executor, &RPCExecutor::reply, this, [this](int category, const QString& command) {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         // Remove "Executing…" message.
         ui->messagesWidget->undo();
         message(category, command);
@@ -1069,16 +1219,25 @@ void RPCConsole::startExecutor()
         m_is_executing = false;
     });
 
+<<<<<<< HEAD
     // Requests from this object must go to executor
     connect(this, &RPCConsole::cmdRequest, executor, &RPCExecutor::request);
 
     // Make sure executor object is deleted in its own thread
     connect(&thread, &QThread::finished, executor, &RPCExecutor::deleteLater);
+=======
+    // Make sure executor object is deleted in its own thread
+    connect(&thread, &QThread::finished, m_executor, &RPCExecutor::deleteLater);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // Default implementation of QThread::run() simply spins up an event loop in the thread,
     // which is what we want.
     thread.start();
+<<<<<<< HEAD
     QTimer::singleShot(0, executor, []() {
+=======
+    QTimer::singleShot(0, m_executor, []() {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         util::ThreadRename("qt-rpcconsole");
     });
 }
@@ -1110,8 +1269,8 @@ void RPCConsole::on_sldGraphRange_valueChanged(int value)
 
 void RPCConsole::setTrafficGraphRange(int mins)
 {
-    ui->trafficGraph->setGraphRangeMins(mins);
-    ui->lblGraphRange->setText(GUIUtil::formatDurationStr(mins * 60));
+    ui->trafficGraph->setGraphRange(std::chrono::minutes{mins});
+    ui->lblGraphRange->setText(GUIUtil::formatDurationStr(std::chrono::minutes{mins}));
 }
 
 void RPCConsole::updateTrafficStats(quint64 totalBytesIn, quint64 totalBytesOut)
@@ -1130,29 +1289,46 @@ void RPCConsole::updateDetailWidget()
     }
     const auto stats = selected_peers.first().data(PeerTableModel::StatsRole).value<CNodeCombinedStats*>();
     // update the detail ui with latest node information
+<<<<<<< HEAD
     QString peerAddrDetails(QString::fromStdString(stats->nodeStats.addrName) + " ");
+=======
+    QString peerAddrDetails(QString::fromStdString(stats->nodeStats.m_addr_name) + " ");
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     peerAddrDetails += tr("(peer: %1)").arg(QString::number(stats->nodeStats.nodeid));
     if (!stats->nodeStats.addrLocal.empty())
         peerAddrDetails += "<br />" + tr("via %1").arg(QString::fromStdString(stats->nodeStats.addrLocal));
     ui->peerHeading->setText(peerAddrDetails);
+<<<<<<< HEAD
     ui->peerServices->setText(GUIUtil::formatServicesStr(stats->nodeStats.nServices));
     ui->peerRelayTxes->setText(stats->nodeStats.fRelayTxes ? ts.yes : ts.no);
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     QString bip152_hb_settings;
     if (stats->nodeStats.m_bip152_highbandwidth_to) bip152_hb_settings = ts.to;
     if (stats->nodeStats.m_bip152_highbandwidth_from) bip152_hb_settings += (bip152_hb_settings.isEmpty() ? ts.from : QLatin1Char('/') + ts.from);
     if (bip152_hb_settings.isEmpty()) bip152_hb_settings = ts.no;
     ui->peerHighBandwidth->setText(bip152_hb_settings);
+<<<<<<< HEAD
     const int64_t time_now{GetTimeSeconds()};
     ui->peerConnTime->setText(GUIUtil::formatDurationStr(time_now - stats->nodeStats.nTimeConnected));
     ui->peerLastBlock->setText(TimeDurationField(time_now, stats->nodeStats.nLastBlockTime));
     ui->peerLastTx->setText(TimeDurationField(time_now, stats->nodeStats.nLastTXTime));
     ui->peerLastSend->setText(TimeDurationField(time_now, stats->nodeStats.nLastSend));
     ui->peerLastRecv->setText(TimeDurationField(time_now, stats->nodeStats.nLastRecv));
+=======
+    const auto time_now{GetTime<std::chrono::seconds>()};
+    ui->peerConnTime->setText(GUIUtil::formatDurationStr(time_now - stats->nodeStats.m_connected));
+    ui->peerLastBlock->setText(TimeDurationField(time_now, stats->nodeStats.m_last_block_time));
+    ui->peerLastTx->setText(TimeDurationField(time_now, stats->nodeStats.m_last_tx_time));
+    ui->peerLastSend->setText(TimeDurationField(time_now, stats->nodeStats.m_last_send));
+    ui->peerLastRecv->setText(TimeDurationField(time_now, stats->nodeStats.m_last_recv));
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     ui->peerBytesSent->setText(GUIUtil::formatBytes(stats->nodeStats.nSendBytes));
     ui->peerBytesRecv->setText(GUIUtil::formatBytes(stats->nodeStats.nRecvBytes));
     ui->peerPingTime->setText(GUIUtil::formatPingTime(stats->nodeStats.m_last_ping_time));
     ui->peerMinPing->setText(GUIUtil::formatPingTime(stats->nodeStats.m_min_ping_time));
     ui->timeoffset->setText(GUIUtil::formatTimeOffset(stats->nodeStats.nTimeOffset));
+<<<<<<< HEAD
     ui->peerVersion->setText(QString::number(stats->nodeStats.nVersion));
     ui->peerSubversion->setText(QString::fromStdString(stats->nodeStats.cleanSubVer));
     ui->peerConnectionType->setText(GUIUtil::ConnectionTypeToQString(stats->nodeStats.m_conn_type, /* prepend_direction */ true));
@@ -1162,6 +1338,30 @@ void RPCConsole::updateDetailWidget()
     } else {
         QStringList permissions;
         for (const auto& permission : NetPermissions::ToStrings(stats->nodeStats.m_permissionFlags)) {
+=======
+    if (stats->nodeStats.nVersion) {
+        ui->peerVersion->setText(QString::number(stats->nodeStats.nVersion));
+    }
+    if (!stats->nodeStats.cleanSubVer.empty()) {
+        ui->peerSubversion->setText(QString::fromStdString(stats->nodeStats.cleanSubVer));
+    }
+    ui->peerConnectionType->setText(GUIUtil::ConnectionTypeToQString(stats->nodeStats.m_conn_type, /*prepend_direction=*/true));
+    ui->peerTransportType->setText(QString::fromStdString(TransportTypeAsString(stats->nodeStats.m_transport_type)));
+    if (stats->nodeStats.m_transport_type == TransportProtocolType::V2) {
+        ui->peerSessionIdLabel->setVisible(true);
+        ui->peerSessionId->setVisible(true);
+        ui->peerSessionId->setText(QString::fromStdString(stats->nodeStats.m_session_id));
+    } else {
+        ui->peerSessionIdLabel->setVisible(false);
+        ui->peerSessionId->setVisible(false);
+    }
+    ui->peerNetwork->setText(GUIUtil::NetworkToQString(stats->nodeStats.m_network));
+    if (stats->nodeStats.m_permission_flags == NetPermissionFlags::None) {
+        ui->peerPermissions->setText(ts.na);
+    } else {
+        QStringList permissions;
+        for (const auto& permission : NetPermissions::ToStrings(stats->nodeStats.m_permission_flags)) {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             permissions.append(QString::fromStdString(permission));
         }
         ui->peerPermissions->setText(permissions.join(" & "));
@@ -1171,6 +1371,10 @@ void RPCConsole::updateDetailWidget()
     // This check fails for example if the lock was busy and
     // nodeStateStats couldn't be fetched.
     if (stats->fNodeStateStatsAvailable) {
+<<<<<<< HEAD
+=======
+        ui->peerServices->setText(GUIUtil::formatServicesStr(stats->nodeStateStats.their_services));
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         // Sync height is init to -1
         if (stats->nodeStateStats.nSyncHeight > -1) {
             ui->peerSyncHeight->setText(QString("%1").arg(stats->nodeStateStats.nSyncHeight));
@@ -1185,6 +1389,13 @@ void RPCConsole::updateDetailWidget()
         }
         ui->peerHeight->setText(QString::number(stats->nodeStateStats.m_starting_height));
         ui->peerPingWait->setText(GUIUtil::formatPingTime(stats->nodeStateStats.m_ping_wait));
+<<<<<<< HEAD
+=======
+        ui->peerAddrRelayEnabled->setText(stats->nodeStateStats.m_addr_relay_enabled ? ts.yes : ts.no);
+        ui->peerAddrProcessed->setText(QString::number(stats->nodeStateStats.m_addr_processed));
+        ui->peerAddrRateLimited->setText(QString::number(stats->nodeStateStats.m_addr_rate_limited));
+        ui->peerRelayTxes->setText(stats->nodeStateStats.m_relay_txs ? ts.yes : ts.no);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     ui->peersTabRightPanel->show();
@@ -1274,6 +1485,7 @@ void RPCConsole::unbanSelectedNode()
 
     // Get selected ban addresses
     QList<QModelIndex> nodes = GUIUtil::getEntryData(ui->banlistWidget, BanTableModel::Address);
+<<<<<<< HEAD
     for(int i = 0; i < nodes.count(); i++)
     {
         // Get currently selected ban address
@@ -1285,6 +1497,15 @@ void RPCConsole::unbanSelectedNode()
         {
             clientModel->getBanTableModel()->refresh();
         }
+=======
+    BanTableModel* ban_table_model{clientModel->getBanTableModel()};
+    bool unbanned{false};
+    for (const auto& node_index : nodes) {
+        unbanned |= ban_table_model->unban(node_index);
+    }
+    if (unbanned) {
+        ban_table_model->refresh();
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 }
 
@@ -1308,6 +1529,32 @@ void RPCConsole::showOrHideBanTableIfRequired()
 void RPCConsole::setTabFocus(enum TabTypes tabType)
 {
     ui->tabWidget->setCurrentIndex(int(tabType));
+<<<<<<< HEAD
+=======
+}
+
+QString RPCConsole::tabTitle(TabTypes tab_type) const
+{
+    return ui->tabWidget->tabText(int(tab_type));
+}
+
+QKeySequence RPCConsole::tabShortcut(TabTypes tab_type) const
+{
+    switch (tab_type) {
+    case TabTypes::INFO: return QKeySequence(tr("Ctrl+I"));
+    case TabTypes::CONSOLE: return QKeySequence(tr("Ctrl+T"));
+    case TabTypes::GRAPH: return QKeySequence(tr("Ctrl+N"));
+    case TabTypes::PEERS: return QKeySequence(tr("Ctrl+P"));
+    } // no default case, so the compiler can warn about missing cases
+
+    assert(false);
+}
+
+void RPCConsole::updateAlerts(const QString& warnings)
+{
+    this->ui->label_alerts->setVisible(!warnings.isEmpty());
+    this->ui->label_alerts->setText(warnings);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 QString RPCConsole::tabTitle(TabTypes tab_type) const

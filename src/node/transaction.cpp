@@ -1,18 +1,35 @@
 // Copyright (c) 2010 Satoshi Nakamoto
+<<<<<<< HEAD
 // Copyright (c) 2009-2020 The DigiByte Core developers
+=======
+// Copyright (c) 2009-2021 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <consensus/validation.h>
+<<<<<<< HEAD
 #include <net.h>
 #include <net_processing.h>
 #include <node/context.h>
+=======
+#include <index/txindex.h>
+#include <net.h>
+#include <net_processing.h>
+#include <node/blockstorage.h>
+#include <node/context.h>
+#include <txmempool.h>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <validation.h>
 #include <validationinterface.h>
 #include <node/transaction.h>
 
 #include <future>
 
+<<<<<<< HEAD
+=======
+namespace node {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 static TransactionError HandleATMPError(const TxValidationState& state, std::string& err_string_out)
 {
     err_string_out = state.ToString();
@@ -67,11 +84,16 @@ TransactionError BroadcastTransaction(NodeContext& node, const CTransactionRef t
             if (max_tx_fee > 0) {
                 // First, call ATMP with test_accept and check the fee. If ATMP
                 // fails here, return error immediately.
+<<<<<<< HEAD
                 const MempoolAcceptResult result = AcceptToMemoryPool(node.chainman->ActiveChainstate(), *node.mempool, tx, false, true);
+=======
+                const MempoolAcceptResult result = node.chainman->ProcessTransaction(tx, /*test_accept=*/ true);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 if (result.m_result_type != MempoolAcceptResult::ResultType::VALID) {
                     return HandleATMPError(result.m_state, err_string);
                 } else if (result.m_base_fees.value() > max_tx_fee) {
                     return TransactionError::MAX_FEE_EXCEEDED;
+<<<<<<< HEAD
                 } else {
                     // This doesnt really matter, as its just a test; but may as well be consistent
                     AcceptToMemoryPool(node.chainman->ActiveChainstate(), *node.stempool, tx, false, true);
@@ -88,6 +110,14 @@ TransactionError BroadcastTransaction(NodeContext& node, const CTransactionRef t
                 if (result.m_result_type != MempoolAcceptResult::ResultType::VALID) {
                     return HandleATMPError(result.m_state, err_string);
                 }
+=======
+                }
+            }
+            // Try to submit the transaction to the mempool.
+            const MempoolAcceptResult result = node.chainman->ProcessTransaction(tx, /*test_accept=*/ false);
+            if (result.m_result_type != MempoolAcceptResult::ResultType::VALID) {
+                return HandleATMPError(result.m_state, err_string);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             }
 
             // Transaction was accepted to the mempool.
@@ -122,6 +152,7 @@ TransactionError BroadcastTransaction(NodeContext& node, const CTransactionRef t
     }
 
     if (relay) {
+<<<<<<< HEAD
         if (gArgs.GetBoolArg("-dandelion", DEFAULT_DANDELION)) {
             auto current_time = GetTime<std::chrono::milliseconds>();
             std::chrono::microseconds nEmbargo = DANDELION_EMBARGO_MINIMUM + PoissonNextSend(current_time, DANDELION_EMBARGO_AVG_ADD);
@@ -132,8 +163,47 @@ TransactionError BroadcastTransaction(NodeContext& node, const CTransactionRef t
             node.connman->localDandelionDestinationPushInventory(embargoTx);
             return TransactionError::OK;
         }
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         node.peerman->RelayTransaction(txid, wtxid);
     }
 
     return TransactionError::OK;
 }
+<<<<<<< HEAD
+=======
+
+CTransactionRef GetTransaction(const CBlockIndex* const block_index, const CTxMemPool* const mempool, const uint256& hash, uint256& hashBlock, const BlockManager& blockman)
+{
+    if (mempool && !block_index) {
+        CTransactionRef ptx = mempool->get(hash);
+        if (ptx) return ptx;
+    }
+    if (g_txindex) {
+        CTransactionRef tx;
+        uint256 block_hash;
+        if (g_txindex->FindTx(hash, block_hash, tx)) {
+            if (!block_index || block_index->GetBlockHash() == block_hash) {
+                // Don't return the transaction if the provided block hash doesn't match.
+                // The case where a transaction appears in multiple blocks (e.g. reorgs or
+                // BIP30) is handled by the block lookup below.
+                hashBlock = block_hash;
+                return tx;
+            }
+        }
+    }
+    if (block_index) {
+        CBlock block;
+        if (blockman.ReadBlockFromDisk(block, *block_index)) {
+            for (const auto& tx : block.vtx) {
+                if (tx->GetHash() == hash) {
+                    hashBlock = block_index->GetBlockHash();
+                    return tx;
+                }
+            }
+        }
+    }
+    return nullptr;
+}
+} // namespace node
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion

@@ -1,6 +1,10 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
+<<<<<<< HEAD
 // Copyright (c) 2009-2020 The Bitcoin Core developers
 // Copyright (c) 2016-2021 The DigiByte Core developers
+=======
+// Copyright (c) 2009-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -10,12 +14,21 @@
 
 #include <chainparamsbase.h>
 #include <clientversion.h>
+<<<<<<< HEAD
+=======
+#include <common/args.h>
+#include <common/system.h>
+#include <common/url.h>
+#include <compat/compat.h>
+#include <compat/stdin.h>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <policy/feerate.h>
 #include <rpc/client.h>
 #include <rpc/mining.h>
 #include <rpc/protocol.h>
 #include <rpc/request.h>
 #include <tinyformat.h>
+<<<<<<< HEAD
 #include <util/strencodings.h>
 #include <util/system.h>
 #include <util/translation.h>
@@ -28,6 +41,22 @@
 #include <memory>
 #include <optional>
 #include <stdio.h>
+=======
+#include <univalue.h>
+#include <util/chaintype.h>
+#include <util/exception.h>
+#include <util/strencodings.h>
+#include <util/time.h>
+#include <util/translation.h>
+
+#include <algorithm>
+#include <chrono>
+#include <cmath>
+#include <cstdio>
+#include <functional>
+#include <memory>
+#include <optional>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <string>
 #include <tuple>
 
@@ -39,8 +68,15 @@
 #include <event2/keyvalq_struct.h>
 #include <support/events.h>
 
+<<<<<<< HEAD
 #include <univalue.h>
 #include <compat/stdin.h>
+=======
+// The server returns time values from a mockable system clock, but it is not
+// trivial to get the mocked time from the server, nor is it needed for now, so
+// just use a plain system_clock.
+using CliClock = std::chrono::system_clock;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 const std::function<std::string(const char*)> G_TRANSLATION_FUN = nullptr;
 UrlDecodeFn* const URL_DECODE = urlDecode;
@@ -51,6 +87,13 @@ static constexpr int DEFAULT_WAIT_CLIENT_TIMEOUT = 0;
 static const bool DEFAULT_NAMED=false;
 static const int CONTINUE_EXECUTION=-1;
 static constexpr int8_t UNKNOWN_NETWORK{-1};
+<<<<<<< HEAD
+=======
+// See GetNetworkName() in netbase.cpp
+static constexpr std::array NETWORKS{"not_publicly_routable", "ipv4", "ipv6", "onion", "i2p", "cjdns", "internal"};
+static constexpr std::array NETWORK_SHORT_NAMES{"npr", "ipv4", "ipv6", "onion", "i2p", "cjdns", "int"};
+static constexpr std::array UNREACHABLE_NETWORK_IDS{/*not_publicly_routable*/0, /*internal*/6};
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 /** Default number of blocks to generate for RPC generatetoaddress. */
 static const std::string DEFAULT_NBLOCKS = "1";
@@ -62,14 +105,22 @@ static void SetupCliArgs(ArgsManager& argsman)
 {
     SetupHelpOptions(argsman);
 
+<<<<<<< HEAD
     const auto defaultBaseParams = CreateBaseChainParams(CBaseChainParams::MAIN);
     const auto testnetBaseParams = CreateBaseChainParams(CBaseChainParams::TESTNET);
     const auto signetBaseParams = CreateBaseChainParams(CBaseChainParams::SIGNET);
     const auto regtestBaseParams = CreateBaseChainParams(CBaseChainParams::REGTEST);
+=======
+    const auto defaultBaseParams = CreateBaseChainParams(ChainType::MAIN);
+    const auto testnetBaseParams = CreateBaseChainParams(ChainType::TESTNET);
+    const auto signetBaseParams = CreateBaseChainParams(ChainType::SIGNET);
+    const auto regtestBaseParams = CreateBaseChainParams(ChainType::REGTEST);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     argsman.AddArg("-version", "Print version and exit", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-conf=<file>", strprintf("Specify configuration file. Relative paths will be prefixed by datadir location. (default: %s)", DIGIBYTE_CONF_FILENAME), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-datadir=<dir>", "Specify data directory", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
+<<<<<<< HEAD
     argsman.AddArg("-generate", strprintf("Generate blocks immediately, equivalent to RPC getnewaddress followed by RPC generatetoaddress. Optional positional integer arguments are number of blocks to generate (default: %s) and maximum iterations to try (default: %s), equivalent to RPC generatetoaddress nblocks and maxtries arguments. Example: digibyte-cli -generate 4 1000", DEFAULT_NBLOCKS, DEFAULT_MAX_TRIES), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-addrinfo", "Get the number of addresses known to the node, per network and total.", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-getinfo", "Get general information from the remote server. Note that unlike server-side RPC calls, the results of -getinfo is the result of multiple non-atomic requests. Some entries in the result may represent results from different states (e.g. wallet balance may be as of a different block from the chain state reported)", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
@@ -77,6 +128,20 @@ static void SetupCliArgs(ArgsManager& argsman)
 
     SetupChainParamsBaseOptions(argsman);
     argsman.AddArg("-color=<when>", strprintf("Color setting for CLI output (default: %s). Valid values: always, auto (add color codes when standard output is connected to a terminal and OS is not WIN32), never.", DEFAULT_COLOR_SETTING), ArgsManager::ALLOW_STRING, OptionsCategory::OPTIONS);
+=======
+    argsman.AddArg("-generate",
+                   strprintf("Generate blocks, equivalent to RPC getnewaddress followed by RPC generatetoaddress. Optional positional integer "
+                             "arguments are number of blocks to generate (default: %s) and maximum iterations to try (default: %s), equivalent to "
+                             "RPC generatetoaddress nblocks and maxtries arguments. Example: digibyte-cli -generate 4 1000",
+                             DEFAULT_NBLOCKS, DEFAULT_MAX_TRIES),
+                   ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
+    argsman.AddArg("-addrinfo", "Get the number of addresses known to the node, per network and total, after filtering for quality and recency. The total number of addresses known to the node may be higher.", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
+    argsman.AddArg("-getinfo", "Get general information from the remote server. Note that unlike server-side RPC calls, the output of -getinfo is the result of multiple non-atomic requests. Some entries in the output may represent results from different states (e.g. wallet balance may be as of a different block from the chain state reported)", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
+    argsman.AddArg("-netinfo", "Get network peer connection information from the remote server. An optional integer argument from 0 to 4 can be passed for different peers listings (default: 0). Pass \"help\" for detailed help documentation.", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
+
+    SetupChainParamsBaseOptions(argsman);
+    argsman.AddArg("-color=<when>", strprintf("Color setting for CLI output (default: %s). Valid values: always, auto (add color codes when standard output is connected to a terminal and OS is not WIN32), never.", DEFAULT_COLOR_SETTING), ArgsManager::ALLOW_ANY | ArgsManager::DISALLOW_NEGATION, OptionsCategory::OPTIONS);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     argsman.AddArg("-named", strprintf("Pass named instead of positional arguments (default: %s)", DEFAULT_NAMED), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-rpcclienttimeout=<n>", strprintf("Timeout in seconds during HTTP requests, or 0 for no timeout. (default: %d)", DEFAULT_HTTP_CLIENT_TIMEOUT), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-rpcconnect=<ip>", strprintf("Send commands to node running on <ip> (default: %s)", DEFAULT_RPCCONNECT), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
@@ -85,7 +150,11 @@ static void SetupCliArgs(ArgsManager& argsman)
     argsman.AddArg("-rpcport=<port>", strprintf("Connect to JSON-RPC on <port> (default: %u, testnet: %u, signet: %u, regtest: %u)", defaultBaseParams->RPCPort(), testnetBaseParams->RPCPort(), signetBaseParams->RPCPort(), regtestBaseParams->RPCPort()), ArgsManager::ALLOW_ANY | ArgsManager::NETWORK_ONLY, OptionsCategory::OPTIONS);
     argsman.AddArg("-rpcuser=<user>", "Username for JSON-RPC connections", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-rpcwait", "Wait for RPC server to start", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
+<<<<<<< HEAD
     argsman.AddArg("-rpcwaittimeout=<n>", strprintf("Timeout in seconds to wait for the RPC server to start, or 0 for no timeout. (default: %d)", DEFAULT_WAIT_CLIENT_TIMEOUT), ArgsManager::ALLOW_INT, OptionsCategory::OPTIONS);
+=======
+    argsman.AddArg("-rpcwaittimeout=<n>", strprintf("Timeout in seconds to wait for the RPC server to start, or 0 for no timeout. (default: %d)", DEFAULT_WAIT_CLIENT_TIMEOUT), ArgsManager::ALLOW_ANY | ArgsManager::DISALLOW_NEGATION, OptionsCategory::OPTIONS);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     argsman.AddArg("-rpcwallet=<walletname>", "Send RPC for non-default wallet on RPC server (needs to exactly match corresponding -wallet option passed to digibyted). This changes the RPC endpoint used, e.g. http://127.0.0.1:8332/wallet/<walletname>", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-stdin", "Read extra arguments from standard input, one per line until EOF/Ctrl-D (recommended for sensitive information such as passphrases). When combined with -stdinrpcpass, the first line from standard input is used for the RPC password.", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-stdinrpcpass", "Read RPC password from standard input as a single line. When combined with -stdin, the first line from standard input is used for the RPC password. When combined with -stdinwalletpassphrase, -stdinrpcpass consumes the first line, and -stdinwalletpassphrase consumes the second.", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
@@ -95,9 +164,12 @@ static void SetupCliArgs(ArgsManager& argsman)
 /** libevent event log callback */
 static void libevent_log_cb(int severity, const char *msg)
 {
+<<<<<<< HEAD
 #ifndef EVENT_LOG_ERR // EVENT_LOG_ERR was added in 2.0.19; but before then _EVENT_LOG_ERR existed.
 # define EVENT_LOG_ERR _EVENT_LOG_ERR
 #endif
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     // Ignore everything other than errors
     if (severity >= EVENT_LOG_ERR) {
         throw std::runtime_error(strprintf("libevent error: %s", msg));
@@ -132,7 +204,14 @@ static int AppInitRPC(int argc, char* argv[])
     }
     if (argc < 2 || HelpRequested(gArgs) || gArgs.IsArgSet("-version")) {
         std::string strUsage = PACKAGE_NAME " RPC client version " + FormatFullVersion() + "\n";
+<<<<<<< HEAD
         if (!gArgs.IsArgSet("-version")) {
+=======
+
+        if (gArgs.IsArgSet("-version")) {
+            strUsage += FormatParagraph(LicenseInfo());
+        } else {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             strUsage += "\n"
                 "Usage:  digibyte-cli [options] <command> [params]  Send command to " PACKAGE_NAME "\n"
                 "or:     digibyte-cli [options] -named <command> [name=value]...  Send command to " PACKAGE_NAME " (with named arguments)\n"
@@ -148,7 +227,11 @@ static int AppInitRPC(int argc, char* argv[])
         }
         return EXIT_SUCCESS;
     }
+<<<<<<< HEAD
     if (!CheckDataDirOption()) {
+=======
+    if (!CheckDataDirOption(gArgs)) {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         tfm::format(std::cerr, "Error: Specified data directory \"%s\" does not exist.\n", gArgs.GetArg("-datadir", ""));
         return EXIT_FAILURE;
     }
@@ -158,7 +241,11 @@ static int AppInitRPC(int argc, char* argv[])
     }
     // Check for chain settings (BaseParams() calls are only valid after this clause)
     try {
+<<<<<<< HEAD
         SelectBaseParams(gArgs.GetChainName());
+=======
+        SelectBaseParams(gArgs.GetChainType());
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     } catch (const std::exception& e) {
         tfm::format(std::cerr, "Error: %s\n", e.what());
         return EXIT_FAILURE;
@@ -170,17 +257,27 @@ static int AppInitRPC(int argc, char* argv[])
 /** Reply structure for request_done to fill in */
 struct HTTPReply
 {
+<<<<<<< HEAD
     HTTPReply(): status(0), error(-1) {}
 
     int status;
     int error;
+=======
+    HTTPReply() = default;
+
+    int status{0};
+    int error{-1};
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     std::string body;
 };
 
 static std::string http_errorstring(int code)
 {
     switch(code) {
+<<<<<<< HEAD
 #if LIBEVENT_VERSION_NUMBER >= 0x02010300
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     case EVREQ_HTTP_TIMEOUT:
         return "timeout reached";
     case EVREQ_HTTP_EOF:
@@ -193,7 +290,10 @@ static std::string http_errorstring(int code)
         return "request was canceled";
     case EVREQ_HTTP_DATA_TOO_LONG:
         return "response body is larger than allowed";
+<<<<<<< HEAD
 #endif
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     default:
         return "unknown";
     }
@@ -224,13 +324,19 @@ static void http_request_done(struct evhttp_request *req, void *ctx)
     }
 }
 
+<<<<<<< HEAD
 #if LIBEVENT_VERSION_NUMBER >= 0x02010300
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 static void http_error_cb(enum evhttp_request_error err, void *ctx)
 {
     HTTPReply *reply = static_cast<HTTPReply*>(ctx);
     reply->error = err;
 }
+<<<<<<< HEAD
 #endif
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 /** Class that handles the conversion from a command-line to a JSON-RPC request,
  * as well as converting back to a JSON object that can be shown as result.
@@ -238,7 +344,11 @@ static void http_error_cb(enum evhttp_request_error err, void *ctx)
 class BaseRequestHandler
 {
 public:
+<<<<<<< HEAD
     virtual ~BaseRequestHandler() {}
+=======
+    virtual ~BaseRequestHandler() = default;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     virtual UniValue PrepareRequest(const std::string& method, const std::vector<std::string>& args) = 0;
     virtual UniValue ProcessReply(const UniValue &batch_in) = 0;
 };
@@ -247,11 +357,18 @@ public:
 class AddrinfoRequestHandler : public BaseRequestHandler
 {
 private:
+<<<<<<< HEAD
     static constexpr std::array m_networks{"ipv4", "ipv6", "torv2", "torv3", "i2p"};
     int8_t NetworkStringToId(const std::string& str) const
     {
         for (size_t i = 0; i < m_networks.size(); ++i) {
             if (str == m_networks.at(i)) return i;
+=======
+    int8_t NetworkStringToId(const std::string& str) const
+    {
+        for (size_t i = 0; i < NETWORKS.size(); ++i) {
+            if (str == NETWORKS[i]) return i;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
         return UNKNOWN_NETWORK;
     }
@@ -273,6 +390,7 @@ public:
         if (!nodes.empty() && nodes.at(0)["network"].isNull()) {
             throw std::runtime_error("-addrinfo requires digibyted server to be running v22.0 and up");
         }
+<<<<<<< HEAD
         // Count the number of peers we know by network, including torv2 versus torv3.
         std::array<uint64_t, m_networks.size()> counts{{}};
         for (const UniValue& node : nodes) {
@@ -280,6 +398,12 @@ public:
             if (network_name == "onion") {
                 network_name = node["address"].get_str().size() > 22 ? "torv3" : "torv2";
             }
+=======
+        // Count the number of peers known to our node, by network.
+        std::array<uint64_t, NETWORKS.size()> counts{{}};
+        for (const UniValue& node : nodes) {
+            std::string network_name{node["network"].get_str()};
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             const int8_t network_id{NetworkStringToId(network_name)};
             if (network_id == UNKNOWN_NETWORK) continue;
             ++counts.at(network_id);
@@ -287,8 +411,13 @@ public:
         // Prepare result to return to user.
         UniValue result{UniValue::VOBJ}, addresses{UniValue::VOBJ};
         uint64_t total{0}; // Total address count
+<<<<<<< HEAD
         for (size_t i = 0; i < m_networks.size(); ++i) {
             addresses.pushKV(m_networks.at(i), counts.at(i));
+=======
+        for (size_t i = 1; i < NETWORKS.size() - 1; ++i) {
+            addresses.pushKV(NETWORKS[i], counts.at(i));
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             total += counts.at(i);
         }
         addresses.pushKV("total", total);
@@ -345,8 +474,13 @@ public:
         connections.pushKV("total", batch[ID_NETWORKINFO]["result"]["connections"]);
         result.pushKV("connections", connections);
 
+<<<<<<< HEAD
         result.pushKV("difficulties", batch[ID_BLOCKCHAININFO]["result"]["difficulties"]);
         result.pushKV("proxy", batch[ID_NETWORKINFO]["result"]["networks"][0]["proxy"]);
+=======
+        result.pushKV("networks", batch[ID_NETWORKINFO]["result"]["networks"]);
+        result.pushKV("difficulty", batch[ID_BLOCKCHAININFO]["result"]["difficulty"]);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         result.pushKV("chain", UniValue(batch[ID_BLOCKCHAININFO]["result"]["chain"]));
         if (!batch[ID_WALLETINFO]["result"].isNull()) {
             result.pushKV("has_wallet", true);
@@ -371,14 +505,23 @@ class NetinfoRequestHandler : public BaseRequestHandler
 {
 private:
     static constexpr uint8_t MAX_DETAIL_LEVEL{4};
+<<<<<<< HEAD
     static constexpr std::array m_networks{"ipv4", "ipv6", "onion", "i2p"};
     std::array<std::array<uint16_t, m_networks.size() + 1>, 3> m_counts{{{}}}; //!< Peer counts by (in/out/total, networks/total)
+=======
+    std::array<std::array<uint16_t, NETWORKS.size() + 1>, 3> m_counts{{{}}}; //!< Peer counts by (in/out/total, networks/total)
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     uint8_t m_block_relay_peers_count{0};
     uint8_t m_manual_peers_count{0};
     int8_t NetworkStringToId(const std::string& str) const
     {
+<<<<<<< HEAD
         for (size_t i = 0; i < m_networks.size(); ++i) {
             if (str == m_networks.at(i)) return i;
+=======
+        for (size_t i = 0; i < NETWORKS.size(); ++i) {
+            if (str == NETWORKS[i]) return i;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
         return UNKNOWN_NETWORK;
     }
@@ -388,7 +531,13 @@ private:
     bool IsVersionSelected() const { return m_details_level == 3 || m_details_level == 4; }
     bool m_is_asmap_on{false};
     size_t m_max_addr_length{0};
+<<<<<<< HEAD
     size_t m_max_age_length{3};
+=======
+    size_t m_max_addr_processed_length{5};
+    size_t m_max_addr_rate_limited_length{6};
+    size_t m_max_age_length{5};
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     size_t m_max_id_length{2};
     struct Peer {
         std::string addr;
@@ -398,6 +547,11 @@ private:
         std::string age;
         double min_ping;
         double ping;
+<<<<<<< HEAD
+=======
+        int64_t addr_processed;
+        int64_t addr_rate_limited;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         int64_t last_blck;
         int64_t last_recv;
         int64_t last_send;
@@ -405,19 +559,41 @@ private:
         int id;
         int mapped_as;
         int version;
+<<<<<<< HEAD
         bool is_bip152_hb_from;
         bool is_bip152_hb_to;
         bool is_block_relay;
         bool is_outbound;
+=======
+        bool is_addr_relay_enabled;
+        bool is_bip152_hb_from;
+        bool is_bip152_hb_to;
+        bool is_outbound;
+        bool is_tx_relay;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         bool operator<(const Peer& rhs) const { return std::tie(is_outbound, min_ping) < std::tie(rhs.is_outbound, rhs.min_ping); }
     };
     std::vector<Peer> m_peers;
     std::string ChainToString() const
     {
+<<<<<<< HEAD
         if (gArgs.GetChainName() == CBaseChainParams::TESTNET) return " testnet";
         if (gArgs.GetChainName() == CBaseChainParams::SIGNET) return " signet";
         if (gArgs.GetChainName() == CBaseChainParams::REGTEST) return " regtest";
         return "";
+=======
+        switch (gArgs.GetChainType()) {
+        case ChainType::TESTNET:
+            return " testnet";
+        case ChainType::SIGNET:
+            return " signet";
+        case ChainType::REGTEST:
+            return " regtest";
+        case ChainType::MAIN:
+            return "";
+        }
+        assert(false);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     std::string PingTimeToString(double seconds) const
     {
@@ -433,7 +609,10 @@ private:
         if (conn_type == "addr-fetch") return "addr";
         return "";
     }
+<<<<<<< HEAD
     const int64_t m_time_now{GetTimeSeconds()};
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 public:
     static constexpr int ID_PEERINFO = 0;
@@ -462,9 +641,16 @@ public:
         if (!batch[ID_NETWORKINFO]["error"].isNull()) return batch[ID_NETWORKINFO];
 
         const UniValue& networkinfo{batch[ID_NETWORKINFO]["result"]};
+<<<<<<< HEAD
         if (networkinfo["version"].get_int() < 209900) {
             throw std::runtime_error("-netinfo requires digibyted server to be running v0.21.0 and up");
         }
+=======
+        if (networkinfo["version"].getInt<int>() < 209900) {
+            throw std::runtime_error("-netinfo requires digibyted server to be running v0.21.0 and up");
+        }
+        const int64_t time_now{TicksSinceEpoch<std::chrono::seconds>(CliClock::now())};
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         // Count peer connection totals, and if DetailsRequested(), store peer data in a vector of structs.
         for (const UniValue& peer : batch[ID_PEERINFO]["result"].getValues()) {
@@ -472,16 +658,26 @@ public:
             const int8_t network_id{NetworkStringToId(network)};
             if (network_id == UNKNOWN_NETWORK) continue;
             const bool is_outbound{!peer["inbound"].get_bool()};
+<<<<<<< HEAD
             const bool is_block_relay{!peer["relaytxes"].get_bool()};
             const std::string conn_type{peer["connection_type"].get_str()};
             ++m_counts.at(is_outbound).at(network_id);        // in/out by network
             ++m_counts.at(is_outbound).at(m_networks.size()); // in/out overall
             ++m_counts.at(2).at(network_id);                  // total by network
             ++m_counts.at(2).at(m_networks.size());           // total overall
+=======
+            const bool is_tx_relay{peer["relaytxes"].isNull() ? true : peer["relaytxes"].get_bool()};
+            const std::string conn_type{peer["connection_type"].get_str()};
+            ++m_counts.at(is_outbound).at(network_id);      // in/out by network
+            ++m_counts.at(is_outbound).at(NETWORKS.size()); // in/out overall
+            ++m_counts.at(2).at(network_id);                // total by network
+            ++m_counts.at(2).at(NETWORKS.size());           // total overall
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             if (conn_type == "block-relay-only") ++m_block_relay_peers_count;
             if (conn_type == "manual") ++m_manual_peers_count;
             if (DetailsRequested()) {
                 // Push data for this peer to the peers vector.
+<<<<<<< HEAD
                 const int peer_id{peer["id"].get_int()};
                 const int mapped_as{peer["mapped_as"].isNull() ? 0 : peer["mapped_as"].get_int()};
                 const int version{peer["version"].get_int()};
@@ -499,6 +695,30 @@ public:
                 const bool is_bip152_hb_to{peer["bip152_hb_to"].get_bool()};
                 m_peers.push_back({addr, sub_version, conn_type, network, age, min_ping, ping, last_blck, last_recv, last_send, last_trxn, peer_id, mapped_as, version, is_bip152_hb_from, is_bip152_hb_to, is_block_relay, is_outbound});
                 m_max_addr_length = std::max(addr.length() + 1, m_max_addr_length);
+=======
+                const int peer_id{peer["id"].getInt<int>()};
+                const int mapped_as{peer["mapped_as"].isNull() ? 0 : peer["mapped_as"].getInt<int>()};
+                const int version{peer["version"].getInt<int>()};
+                const int64_t addr_processed{peer["addr_processed"].isNull() ? 0 : peer["addr_processed"].getInt<int64_t>()};
+                const int64_t addr_rate_limited{peer["addr_rate_limited"].isNull() ? 0 : peer["addr_rate_limited"].getInt<int64_t>()};
+                const int64_t conn_time{peer["conntime"].getInt<int64_t>()};
+                const int64_t last_blck{peer["last_block"].getInt<int64_t>()};
+                const int64_t last_recv{peer["lastrecv"].getInt<int64_t>()};
+                const int64_t last_send{peer["lastsend"].getInt<int64_t>()};
+                const int64_t last_trxn{peer["last_transaction"].getInt<int64_t>()};
+                const double min_ping{peer["minping"].isNull() ? -1 : peer["minping"].get_real()};
+                const double ping{peer["pingtime"].isNull() ? -1 : peer["pingtime"].get_real()};
+                const std::string addr{peer["addr"].get_str()};
+                const std::string age{conn_time == 0 ? "" : ToString((time_now - conn_time) / 60)};
+                const std::string sub_version{peer["subver"].get_str()};
+                const bool is_addr_relay_enabled{peer["addr_relay_enabled"].isNull() ? false : peer["addr_relay_enabled"].get_bool()};
+                const bool is_bip152_hb_from{peer["bip152_hb_from"].get_bool()};
+                const bool is_bip152_hb_to{peer["bip152_hb_to"].get_bool()};
+                m_peers.push_back({addr, sub_version, conn_type, NETWORK_SHORT_NAMES[network_id], age, min_ping, ping, addr_processed, addr_rate_limited, last_blck, last_recv, last_send, last_trxn, peer_id, mapped_as, version, is_addr_relay_enabled, is_bip152_hb_from, is_bip152_hb_to, is_outbound, is_tx_relay});
+                m_max_addr_length = std::max(addr.length() + 1, m_max_addr_length);
+                m_max_addr_processed_length = std::max(ToString(addr_processed).length(), m_max_addr_processed_length);
+                m_max_addr_rate_limited_length = std::max(ToString(addr_rate_limited).length(), m_max_addr_rate_limited_length);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 m_max_age_length = std::max(age.length(), m_max_age_length);
                 m_max_id_length = std::max(ToString(peer_id).length(), m_max_id_length);
                 m_is_asmap_on |= (mapped_as != 0);
@@ -506,23 +726,39 @@ public:
         }
 
         // Generate report header.
+<<<<<<< HEAD
         std::string result{strprintf("%s %s%s - %i%s\n\n", PACKAGE_NAME, FormatFullVersion(), ChainToString(), networkinfo["protocolversion"].get_int(), networkinfo["subversion"].get_str())};
+=======
+        std::string result{strprintf("%s client %s%s - server %i%s\n\n", PACKAGE_NAME, FormatFullVersion(), ChainToString(), networkinfo["protocolversion"].getInt<int>(), networkinfo["subversion"].get_str())};
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         // Report detailed peer connections list sorted by direction and minimum ping time.
         if (DetailsRequested() && !m_peers.empty()) {
             std::sort(m_peers.begin(), m_peers.end());
+<<<<<<< HEAD
             result += strprintf("<->   type   net  mping   ping send recv  txn  blk  hb %*s ", m_max_age_length, "age");
+=======
+            result += strprintf("<->   type   net  mping   ping send recv  txn  blk  hb %*s%*s%*s ",
+                                m_max_addr_processed_length, "addrp",
+                                m_max_addr_rate_limited_length, "addrl",
+                                m_max_age_length, "age");
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             if (m_is_asmap_on) result += " asmap ";
             result += strprintf("%*s %-*s%s\n", m_max_id_length, "id", IsAddressSelected() ? m_max_addr_length : 0, IsAddressSelected() ? "address" : "", IsVersionSelected() ? "version" : "");
             for (const Peer& peer : m_peers) {
                 std::string version{ToString(peer.version) + peer.sub_version};
                 result += strprintf(
+<<<<<<< HEAD
                     "%3s %6s %5s%7s%7s%5s%5s%5s%5s  %2s %*s%*i %*s %-*s%s\n",
+=======
+                    "%3s %6s %5s%7s%7s%5s%5s%5s%5s  %2s %*s%*s%*s%*i %*s %-*s%s\n",
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                     peer.is_outbound ? "out" : "in",
                     ConnectionTypeForNetinfo(peer.conn_type),
                     peer.network,
                     PingTimeToString(peer.min_ping),
                     PingTimeToString(peer.ping),
+<<<<<<< HEAD
                     peer.last_send == 0 ? "" : ToString(m_time_now - peer.last_send),
                     peer.last_recv == 0 ? "" : ToString(m_time_now - peer.last_recv),
                     peer.last_trxn == 0 ? "" : ToString((m_time_now - peer.last_trxn) / 60),
@@ -532,12 +768,28 @@ public:
                     peer.age,
                     m_is_asmap_on ? 7 : 0, // variable spacing
                     m_is_asmap_on && peer.mapped_as != 0 ? ToString(peer.mapped_as) : "",
+=======
+                    peer.last_send ? ToString(time_now - peer.last_send) : "",
+                    peer.last_recv ? ToString(time_now - peer.last_recv) : "",
+                    peer.last_trxn ? ToString((time_now - peer.last_trxn) / 60) : peer.is_tx_relay ? "" : "*",
+                    peer.last_blck ? ToString((time_now - peer.last_blck) / 60) : "",
+                    strprintf("%s%s", peer.is_bip152_hb_to ? "." : " ", peer.is_bip152_hb_from ? "*" : " "),
+                    m_max_addr_processed_length, // variable spacing
+                    peer.addr_processed ? ToString(peer.addr_processed) : peer.is_addr_relay_enabled ? "" : ".",
+                    m_max_addr_rate_limited_length, // variable spacing
+                    peer.addr_rate_limited ? ToString(peer.addr_rate_limited) : "",
+                    m_max_age_length, // variable spacing
+                    peer.age,
+                    m_is_asmap_on ? 7 : 0, // variable spacing
+                    m_is_asmap_on && peer.mapped_as ? ToString(peer.mapped_as) : "",
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                     m_max_id_length, // variable spacing
                     peer.id,
                     IsAddressSelected() ? m_max_addr_length : 0, // variable spacing
                     IsAddressSelected() ? peer.addr : "",
                     IsVersionSelected() && version != "0" ? version : "");
             }
+<<<<<<< HEAD
             result += strprintf("                     ms     ms  sec  sec  min  min     %*s\n\n", m_max_age_length, "min");
         }
 
@@ -552,6 +804,40 @@ public:
             result += strprintf("\n%-5s  %5i   %5i   %5i", rows.at(i), m_counts.at(i).at(0), m_counts.at(i).at(1), m_counts.at(i).at(2)); // ipv4/ipv6/onion peers counts
             if (any_i2p_peers) result += strprintf("   %5i", m_counts.at(i).at(3)); // i2p peers count
             result += strprintf("   %5i", m_counts.at(i).at(m_networks.size())); // total peers count
+=======
+            result += strprintf("                     ms     ms  sec  sec  min  min                %*s\n\n", m_max_age_length, "min");
+        }
+
+        // Report peer connection totals by type.
+        result += "     ";
+        std::vector<int8_t> reachable_networks;
+        for (const UniValue& network : networkinfo["networks"].getValues()) {
+            if (network["reachable"].get_bool()) {
+                const std::string& network_name{network["name"].get_str()};
+                const int8_t network_id{NetworkStringToId(network_name)};
+                if (network_id == UNKNOWN_NETWORK) continue;
+                result += strprintf("%8s", network_name); // column header
+                reachable_networks.push_back(network_id);
+            }
+        };
+
+        for (const size_t network_id : UNREACHABLE_NETWORK_IDS) {
+            if (m_counts.at(2).at(network_id) == 0) continue;
+            result += strprintf("%8s", NETWORK_SHORT_NAMES.at(network_id)); // column header
+            reachable_networks.push_back(network_id);
+        }
+
+        result += "   total   block";
+        if (m_manual_peers_count) result += "  manual";
+
+        const std::array rows{"in", "out", "total"};
+        for (size_t i = 0; i < rows.size(); ++i) {
+            result += strprintf("\n%-5s", rows[i]); // row header
+            for (int8_t n : reachable_networks) {
+                result += strprintf("%8i", m_counts.at(i).at(n)); // network peers count
+            }
+            result += strprintf("   %5i", m_counts.at(i).at(NETWORKS.size())); // total peers count
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             if (i == 1) { // the outbound row has two extra columns for block relay and manual peer counts
                 result += strprintf("   %5i", m_block_relay_peers_count);
                 if (m_manual_peers_count) result += strprintf("   %5i", m_manual_peers_count);
@@ -569,7 +855,11 @@ public:
                 max_addr_size = std::max(addr["address"].get_str().length() + 1, max_addr_size);
             }
             for (const UniValue& addr : local_addrs) {
+<<<<<<< HEAD
                 result += strprintf("\n%-*s    port %6i    score %6i", max_addr_size, addr["address"].get_str(), addr["port"].get_int(), addr["score"].get_int());
+=======
+                result += strprintf("\n%-*s    port %6i    score %6i", max_addr_size, addr["address"].get_str(), addr["port"].getInt<int>(), addr["score"].getInt<int>());
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             }
         }
 
@@ -587,8 +877,14 @@ public:
         "Suggestion: use with the Linux watch(1) command for a live dashboard; see example below.\n\n"
         "Arguments:\n"
         + strprintf("1. level (integer 0-%d, optional)  Specify the info level of the peers dashboard (default 0):\n", MAX_DETAIL_LEVEL) +
+<<<<<<< HEAD
         "                                  0 - Connection counts and local addresses\n"
         "                                  1 - Like 0 but with a peers listing (without address or version columns)\n"
+=======
+        "                                  0 - Peer counts for each reachable network as well as for block relay peers\n"
+        "                                      and manual peers, and the list of local addresses and ports\n"
+        "                                  1 - Like 0 but preceded by a peers listing (without address and version columns)\n"
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         "                                  2 - Like 1 but with an address column\n"
         "                                  3 - Like 1 but with a version column\n"
         "                                  4 - Like 1 but with both address and version columns\n"
@@ -606,22 +902,37 @@ public:
         "           \"manual\" - peer we manually added using RPC addnode or the -addnode/-connect config options\n"
         "           \"feeler\" - short-lived connection for testing addresses\n"
         "           \"addr\"   - address fetch; short-lived connection for requesting addresses\n"
+<<<<<<< HEAD
         "  net      Network the peer connected through (\"ipv4\", \"ipv6\", \"onion\", \"i2p\", or \"cjdns\")\n"
+=======
+        "  net      Network the peer connected through (\"ipv4\", \"ipv6\", \"onion\", \"i2p\", \"cjdns\", or \"npr\" (not publicly routable))\n"
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         "  mping    Minimum observed ping time, in milliseconds (ms)\n"
         "  ping     Last observed ping time, in milliseconds (ms)\n"
         "  send     Time since last message sent to the peer, in seconds\n"
         "  recv     Time since last message received from the peer, in seconds\n"
         "  txn      Time since last novel transaction received from the peer and accepted into our mempool, in minutes\n"
+<<<<<<< HEAD
+=======
+        "           \"*\" - we do not relay transactions to this peer (relaytxes is false)\n"
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         "  blk      Time since last novel block passing initial validity checks received from the peer, in minutes\n"
         "  hb       High-bandwidth BIP152 compact block relay\n"
         "           \".\" (to)   - we selected the peer as a high-bandwidth peer\n"
         "           \"*\" (from) - the peer selected us as a high-bandwidth peer\n"
+<<<<<<< HEAD
+=======
+        "  addrp    Total number of addresses processed, excluding those dropped due to rate limiting\n"
+        "           \".\" - we do not relay addresses to this peer (addr_relay_enabled is false)\n"
+        "  addrl    Total number of addresses dropped due to rate limiting\n"
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         "  age      Duration of connection to the peer, in minutes\n"
         "  asmap    Mapped AS (Autonomous System) number in the BGP route to the peer, used for diversifying\n"
         "           peer selection (only displayed if the -asmap config option is set)\n"
         "  id       Peer index, in increasing order of peer connections since node startup\n"
         "  address  IP address and port of the peer\n"
         "  version  Peer version and subversion concatenated, e.g. \"70016/Satoshi:21.0.0/\"\n\n"
+<<<<<<< HEAD
         "* The connection counts table displays the number of peers by direction, network, and the totals\n"
         "  for each, as well as two special outbound columns for block relay peers and manual peers.\n\n"
         "* The local addresses table lists each local address broadcast by the node, the port, and the score.\n\n"
@@ -629,6 +940,15 @@ public:
         "Connection counts and local addresses only\n"
         "> digibyte-cli -netinfo\n\n"
         "Compact peers listing\n"
+=======
+        "* The peer counts table displays the number of peers for each reachable network as well as\n"
+        "  the number of block relay peers and manual peers.\n\n"
+        "* The local addresses table lists each local address broadcast by the node, the port, and the score.\n\n"
+        "Examples:\n\n"
+        "Peer counts table of reachable networks and list of local addresses\n"
+        "> digibyte-cli -netinfo\n\n"
+        "The same, preceded by a peers listing without address and version columns\n"
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         "> digibyte-cli -netinfo 1\n\n"
         "Full dashboard\n"
         + strprintf("> digibyte-cli -netinfo %d\n\n", MAX_DETAIL_LEVEL) +
@@ -689,7 +1009,11 @@ static UniValue CallRPC(BaseRequestHandler* rh, const std::string& strMethod, co
     //     3. default port for chain
     uint16_t port{BaseParams().RPCPort()};
     SplitHostPort(gArgs.GetArg("-rpcconnect", DEFAULT_RPCCONNECT), port, host);
+<<<<<<< HEAD
     port = static_cast<uint16_t>(gArgs.GetArg("-rpcport", port));
+=======
+    port = static_cast<uint16_t>(gArgs.GetIntArg("-rpcport", port));
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // Obtain event base
     raii_event_base base = obtain_event_base();
@@ -699,7 +1023,11 @@ static UniValue CallRPC(BaseRequestHandler* rh, const std::string& strMethod, co
 
     // Set connection timeout
     {
+<<<<<<< HEAD
         const int timeout = gArgs.GetArg("-rpcclienttimeout", DEFAULT_HTTP_CLIENT_TIMEOUT);
+=======
+        const int timeout = gArgs.GetIntArg("-rpcclienttimeout", DEFAULT_HTTP_CLIENT_TIMEOUT);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         if (timeout > 0) {
             evhttp_connection_set_timeout(evcon.get(), timeout);
         } else {
@@ -713,11 +1041,19 @@ static UniValue CallRPC(BaseRequestHandler* rh, const std::string& strMethod, co
 
     HTTPReply response;
     raii_evhttp_request req = obtain_evhttp_request(http_request_done, (void*)&response);
+<<<<<<< HEAD
     if (req == nullptr)
         throw std::runtime_error("create http request failed");
 #if LIBEVENT_VERSION_NUMBER >= 0x02010300
     evhttp_request_set_error_cb(req.get(), http_error_cb);
 #endif
+=======
+    if (req == nullptr) {
+        throw std::runtime_error("create http request failed");
+    }
+
+    evhttp_request_set_error_cb(req.get(), http_error_cb);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // Get credentials
     std::string strRPCUserColonPass;
@@ -773,7 +1109,11 @@ static UniValue CallRPC(BaseRequestHandler* rh, const std::string& strMethod, co
         if (failedToGetAuthCookie) {
             throw std::runtime_error(strprintf(
                 "Could not locate RPC credentials. No authentication cookie could be found, and RPC password is not set.  See -rpcpassword and -stdinrpcpass.  Configuration file: (%s)",
+<<<<<<< HEAD
                 GetConfigFile(gArgs.GetArg("-conf", DIGIBYTE_CONF_FILENAME)).string()));
+=======
+                fs::PathToString(gArgs.GetConfigFilePath())));
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         } else {
             throw std::runtime_error("Authorization failed: Incorrect rpcuser or rpcpassword");
         }
@@ -788,7 +1128,11 @@ static UniValue CallRPC(BaseRequestHandler* rh, const std::string& strMethod, co
     UniValue valReply(UniValue::VSTR);
     if (!valReply.read(response.body))
         throw std::runtime_error("couldn't parse reply from server");
+<<<<<<< HEAD
     const UniValue reply = rh->ProcessReply(valReply);
+=======
+    UniValue reply = rh->ProcessReply(valReply);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (reply.empty())
         throw std::runtime_error("expected reply to have result, error and id properties");
 
@@ -809,22 +1153,36 @@ static UniValue ConnectAndCallRPC(BaseRequestHandler* rh, const std::string& str
     UniValue response(UniValue::VOBJ);
     // Execute and handle connection failures with -rpcwait.
     const bool fWait = gArgs.GetBoolArg("-rpcwait", false);
+<<<<<<< HEAD
     const int timeout = gArgs.GetArg("-rpcwaittimeout", DEFAULT_WAIT_CLIENT_TIMEOUT);
     const auto deadline{GetTime<std::chrono::microseconds>() + 1s * timeout};
+=======
+    const int timeout = gArgs.GetIntArg("-rpcwaittimeout", DEFAULT_WAIT_CLIENT_TIMEOUT);
+    const auto deadline{std::chrono::steady_clock::now() + 1s * timeout};
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     do {
         try {
             response = CallRPC(rh, strMethod, args, rpcwallet);
             if (fWait) {
+<<<<<<< HEAD
                 const UniValue& error = find_value(response, "error");
                 if (!error.isNull() && error["code"].get_int() == RPC_IN_WARMUP) {
+=======
+                const UniValue& error = response.find_value("error");
+                if (!error.isNull() && error["code"].getInt<int>() == RPC_IN_WARMUP) {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                     throw CConnectionFailed("server in warmup");
                 }
             }
             break; // Connection succeeded, no need to retry.
         } catch (const CConnectionFailed& e) {
+<<<<<<< HEAD
             const auto now{GetTime<std::chrono::microseconds>()};
             if (fWait && (timeout <= 0 || now < deadline)) {
+=======
+            if (fWait && (timeout <= 0 || std::chrono::steady_clock::now() < deadline)) {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 UninterruptibleSleep(1s);
             } else {
                 throw CConnectionFailed(strprintf("timeout on transient error: %s", e.what()));
@@ -845,21 +1203,34 @@ static void ParseResult(const UniValue& result, std::string& strPrint)
 static void ParseError(const UniValue& error, std::string& strPrint, int& nRet)
 {
     if (error.isObject()) {
+<<<<<<< HEAD
         const UniValue& err_code = find_value(error, "code");
         const UniValue& err_msg = find_value(error, "message");
+=======
+        const UniValue& err_code = error.find_value("code");
+        const UniValue& err_msg = error.find_value("message");
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         if (!err_code.isNull()) {
             strPrint = "error code: " + err_code.getValStr() + "\n";
         }
         if (err_msg.isStr()) {
             strPrint += ("error message:\n" + err_msg.get_str());
         }
+<<<<<<< HEAD
         if (err_code.isNum() && err_code.get_int() == RPC_WALLET_NOT_SPECIFIED) {
+=======
+        if (err_code.isNum() && err_code.getInt<int>() == RPC_WALLET_NOT_SPECIFIED) {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             strPrint += "\nTry adding \"-rpcwallet=<filename>\" option to digibyte-cli command line.";
         }
     } else {
         strPrint = "error: " + error.write();
     }
+<<<<<<< HEAD
     nRet = abs(error["code"].get_int());
+=======
+    nRet = abs(error["code"].getInt<int>());
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 /**
@@ -872,28 +1243,69 @@ static void GetWalletBalances(UniValue& result)
 {
     DefaultRequestHandler rh;
     const UniValue listwallets = ConnectAndCallRPC(&rh, "listwallets", /* args=*/{});
+<<<<<<< HEAD
     if (!find_value(listwallets, "error").isNull()) return;
     const UniValue& wallets = find_value(listwallets, "result");
+=======
+    if (!listwallets.find_value("error").isNull()) return;
+    const UniValue& wallets = listwallets.find_value("result");
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (wallets.size() <= 1) return;
 
     UniValue balances(UniValue::VOBJ);
     for (const UniValue& wallet : wallets.getValues()) {
+<<<<<<< HEAD
         const std::string wallet_name = wallet.get_str();
         const UniValue getbalances = ConnectAndCallRPC(&rh, "getbalances", /* args=*/{}, wallet_name);
         const UniValue& balance = find_value(getbalances, "result")["mine"]["trusted"];
+=======
+        const std::string& wallet_name = wallet.get_str();
+        const UniValue getbalances = ConnectAndCallRPC(&rh, "getbalances", /* args=*/{}, wallet_name);
+        const UniValue& balance = getbalances.find_value("result")["mine"]["trusted"];
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         balances.pushKV(wallet_name, balance);
     }
     result.pushKV("balances", balances);
 }
 
 /**
+<<<<<<< HEAD
+=======
+ * GetProgressBar constructs a progress bar with 5% intervals.
+ *
+ * @param[in]   progress      The proportion of the progress bar to be filled between 0 and 1.
+ * @param[out]  progress_bar  String representation of the progress bar.
+ */
+static void GetProgressBar(double progress, std::string& progress_bar)
+{
+    if (progress < 0 || progress > 1) return;
+
+    static constexpr double INCREMENT{0.05};
+    static const std::string COMPLETE_BAR{"\u2592"};
+    static const std::string INCOMPLETE_BAR{"\u2591"};
+
+    for (int i = 0; i < progress / INCREMENT; ++i) {
+        progress_bar += COMPLETE_BAR;
+    }
+
+    for (int i = 0; i < (1 - progress) / INCREMENT; ++i) {
+        progress_bar += INCOMPLETE_BAR;
+    }
+}
+
+/**
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
  * ParseGetInfoResult takes in -getinfo result in UniValue object and parses it
  * into a user friendly UniValue string to be printed on the console.
  * @param[out] result  Reference to UniValue result containing the -getinfo output.
  */
 static void ParseGetInfoResult(UniValue& result)
 {
+<<<<<<< HEAD
     if (!find_value(result, "error").isNull()) return;
+=======
+    if (!result.find_value("error").isNull()) return;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     std::string RESET, GREEN, BLUE, YELLOW, MAGENTA, CYAN;
     bool should_colorize = false;
@@ -928,6 +1340,7 @@ static void ParseGetInfoResult(UniValue& result)
     std::string result_string = strprintf("%sChain: %s%s\n", BLUE, result["chain"].getValStr(), RESET);
     result_string += strprintf("Blocks: %s\n", result["blocks"].getValStr());
     result_string += strprintf("Headers: %s\n", result["headers"].getValStr());
+<<<<<<< HEAD
     result_string += strprintf("Verification progress: %.4f%%\n", result["verificationprogress"].get_real() * 100);
 
     for (int algo = 0; algo < NUM_ALGOS_IMPL; ++algo) {
@@ -938,6 +1351,21 @@ static void ParseGetInfoResult(UniValue& result)
         }
     }
 
+=======
+
+    const double ibd_progress{result["verificationprogress"].get_real()};
+    std::string ibd_progress_bar;
+    // Display the progress bar only if IBD progress is less than 99%
+    if (ibd_progress < 0.99) {
+      GetProgressBar(ibd_progress, ibd_progress_bar);
+      // Add padding between progress bar and IBD progress
+      ibd_progress_bar += " ";
+    }
+
+    result_string += strprintf("Verification progress: %s%.4f%%\n", ibd_progress_bar, ibd_progress * 100);
+    result_string += strprintf("Difficulty: %s\n\n", result["difficulty"].getValStr());
+
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     result_string += strprintf(
         "%sNetwork: in %s, out %s, total %s%s\n",
         GREEN,
@@ -947,8 +1375,32 @@ static void ParseGetInfoResult(UniValue& result)
         RESET);
     result_string += strprintf("Version: %s\n", result["version"].getValStr());
     result_string += strprintf("Time offset (s): %s\n", result["timeoffset"].getValStr());
+<<<<<<< HEAD
     const std::string proxy = result["proxy"].getValStr();
     result_string += strprintf("Proxy: %s\n", proxy.empty() ? "N/A" : proxy);
+=======
+
+    // proxies
+    std::map<std::string, std::vector<std::string>> proxy_networks;
+    std::vector<std::string> ordered_proxies;
+
+    for (const UniValue& network : result["networks"].getValues()) {
+        const std::string proxy = network["proxy"].getValStr();
+        if (proxy.empty()) continue;
+        // Add proxy to ordered_proxy if has not been processed
+        if (proxy_networks.find(proxy) == proxy_networks.end()) ordered_proxies.push_back(proxy);
+
+        proxy_networks[proxy].push_back(network["name"].getValStr());
+    }
+
+    std::vector<std::string> formatted_proxies;
+    formatted_proxies.reserve(ordered_proxies.size());
+    for (const std::string& proxy : ordered_proxies) {
+        formatted_proxies.emplace_back(strprintf("%s (%s)", proxy, Join(proxy_networks.find(proxy)->second, ", ")));
+    }
+    result_string += strprintf("Proxies: %s\n", formatted_proxies.empty() ? "n/a" : Join(formatted_proxies, ", "));
+
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     result_string += strprintf("Min tx relay fee rate (%s/kvB): %s\n\n", CURRENCY_UNIT, result["relayfee"].getValStr());
 
     if (!result["has_wallet"].isNull()) {
@@ -983,7 +1435,13 @@ static void ParseGetInfoResult(UniValue& result)
         result_string += "\n";
     }
 
+<<<<<<< HEAD
     result_string += strprintf("%sWarnings:%s %s", YELLOW, RESET, result["warnings"].getValStr());
+=======
+    const std::string warnings{result["warnings"].getValStr()};
+    result_string += strprintf("%sWarnings:%s %s", YELLOW, RESET, warnings.empty() ? "(none)" : warnings);
+
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     result.setStr(result_string);
 }
 
@@ -1081,9 +1539,15 @@ static int CommandLineRPC(int argc, char *argv[])
             rh.reset(new NetinfoRequestHandler());
         } else if (gArgs.GetBoolArg("-generate", false)) {
             const UniValue getnewaddress{GetNewAddress()};
+<<<<<<< HEAD
             const UniValue& error{find_value(getnewaddress, "error")};
             if (error.isNull()) {
                 SetGenerateToAddressArgs(find_value(getnewaddress, "result").get_str(), args);
+=======
+            const UniValue& error{getnewaddress.find_value("error")};
+            if (error.isNull()) {
+                SetGenerateToAddressArgs(getnewaddress.find_value("result").get_str(), args);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 rh.reset(new GenerateToAddressRequestHandler());
             } else {
                 ParseError(error, strPrint, nRet);
@@ -1105,8 +1569,13 @@ static int CommandLineRPC(int argc, char *argv[])
             const UniValue reply = ConnectAndCallRPC(rh.get(), method, args, wallet_name);
 
             // Parse reply
+<<<<<<< HEAD
             UniValue result = find_value(reply, "result");
             const UniValue& error = find_value(reply, "error");
+=======
+            UniValue result = reply.find_value("result");
+            const UniValue& error = reply.find_value("error");
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             if (error.isNull()) {
                 if (gArgs.GetBoolArg("-getinfo", false)) {
                     if (!gArgs.IsArgSet("-rpcwallet")) {
@@ -1134,6 +1603,7 @@ static int CommandLineRPC(int argc, char *argv[])
     return nRet;
 }
 
+<<<<<<< HEAD
 #ifdef WIN32
 // Export main() and ensure working ASLR on Windows.
 // Exporting a symbol will prevent the linker from stripping
@@ -1147,6 +1617,13 @@ __declspec(dllexport) int main(int argc, char* argv[])
 #else
 int main(int argc, char* argv[])
 {
+=======
+MAIN_FUNCTION
+{
+#ifdef WIN32
+    common::WinCmdLineArgs winArgs;
+    std::tie(argc, argv) = winArgs.get();
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #endif
     SetupEnvironment();
     if (!SetupNetworking()) {
@@ -1178,4 +1655,8 @@ int main(int argc, char* argv[])
         PrintExceptionContinue(nullptr, "CommandLineRPC()");
     }
     return ret;
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion

@@ -51,8 +51,8 @@ protected:
 
 private:
     Ui::OverviewPage *ui;
-    ClientModel *clientModel;
-    WalletModel *walletModel;
+    ClientModel* clientModel{nullptr};
+    WalletModel* walletModel{nullptr};
     interfaces::WalletBalances m_balances;
     bool m_privacy{false};
 
@@ -62,6 +62,7 @@ private:
     std::unique_ptr<TransactionFilterProxy> filter;
 
 private Q_SLOTS:
+    void LimitTransactionRows();
     void updateDisplayUnit();
     void handleTransactionClicked(const QModelIndex &index);
     void updateAlerts(const QString &warnings);

@@ -1,5 +1,9 @@
+<<<<<<< HEAD
 // Copyright (c) 2009-2020 The Bitcoin Core developers
 // Copyright (c) 2014-2020 The DigiByte Core developers
+=======
+// Copyright (c) 2011-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -9,6 +13,10 @@
 
 #include <checkqueue.h>
 #include <clientversion.h>
+<<<<<<< HEAD
+=======
+#include <consensus/amount.h>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <consensus/tx_check.h>
 #include <consensus/validation.h>
 #include <core_io.h>
@@ -19,8 +27,15 @@
 #include <script/script_error.h>
 #include <script/sign.h>
 #include <script/signingprovider.h>
+<<<<<<< HEAD
 #include <script/standard.h>
 #include <streams.h>
+=======
+#include <script/solver.h>
+#include <streams.h>
+#include <test/util/json.h>
+#include <test/util/random.h>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <test/util/script.h>
 #include <test/util/transaction_utils.h>
 #include <util/strencodings.h>
@@ -31,16 +46,19 @@
 #include <map>
 #include <string>
 
-#include <boost/algorithm/string/classification.hpp>
-#include <boost/algorithm/string/split.hpp>
 #include <boost/test/unit_test.hpp>
 
 #include <univalue.h>
 
 typedef std::vector<unsigned char> valtype;
 
+<<<<<<< HEAD
 // In script_tests.cpp
 UniValue read_json(const std::string& jsondata);
+=======
+static CFeeRate g_dust{DUST_RELAY_TX_FEE};
+static bool g_bare_multi{DEFAULT_PERMIT_BAREMULTISIG};
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 static std::map<std::string, unsigned int> mapFlagNames = {
     {std::string("P2SH"), (unsigned int)SCRIPT_VERIFY_P2SH},
@@ -70,8 +88,7 @@ unsigned int ParseScriptFlags(std::string strFlags)
 {
     if (strFlags.empty() || strFlags == "NONE") return 0;
     unsigned int flags = 0;
-    std::vector<std::string> words;
-    boost::algorithm::split(words, strFlags, boost::algorithm::is_any_of(","));
+    std::vector<std::string> words = SplitString(strFlags, ',');
 
     for (const std::string& word : words)
     {
@@ -191,10 +208,14 @@ BOOST_AUTO_TEST_CASE(tx_valid)
 {
     BOOST_CHECK_MESSAGE(CheckMapFlagNames(), "mapFlagNames is missing a script verification flag");
     // Read tests from test/data/tx_valid.json
+<<<<<<< HEAD
     UniValue tests = read_json(std::string(json_tests::tx_valid, json_tests::tx_valid + sizeof(json_tests::tx_valid)));
+=======
+    UniValue tests = read_json(json_tests::tx_valid);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     for (unsigned int idx = 0; idx < tests.size(); idx++) {
-        UniValue test = tests[idx];
+        const UniValue& test = tests[idx];
         std::string strTest = test.write();
         if (test[0].isArray())
         {
@@ -214,17 +235,17 @@ BOOST_AUTO_TEST_CASE(tx_valid)
                     fValid = false;
                     break;
                 }
-                UniValue vinput = input.get_array();
+                const UniValue& vinput = input.get_array();
                 if (vinput.size() < 3 || vinput.size() > 4)
                 {
                     fValid = false;
                     break;
                 }
-                COutPoint outpoint(uint256S(vinput[0].get_str()), vinput[1].get_int());
+                COutPoint outpoint{uint256S(vinput[0].get_str()), uint32_t(vinput[1].getInt<int>())};
                 mapprevOutScriptPubKeys[outpoint] = ParseScript(vinput[2].get_str());
                 if (vinput.size() >= 4)
                 {
-                    mapprevOutValues[outpoint] = vinput[3].get_int64();
+                    mapprevOutValues[outpoint] = vinput[3].getInt<int64_t>();
                 }
             }
             if (!fValid)
@@ -249,26 +270,42 @@ BOOST_AUTO_TEST_CASE(tx_valid)
                 BOOST_ERROR("Bad test flags: " << strTest);
             }
 
+<<<<<<< HEAD
             BOOST_CHECK_MESSAGE(CheckTxScripts(tx, mapprevOutScriptPubKeys, mapprevOutValues, ~verify_flags, txdata, strTest, /* expect_valid */ true),
+=======
+            BOOST_CHECK_MESSAGE(CheckTxScripts(tx, mapprevOutScriptPubKeys, mapprevOutValues, ~verify_flags, txdata, strTest, /*expect_valid=*/true),
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                                 "Tx unexpectedly failed: " << strTest);
 
             // Backwards compatibility of script verification flags: Removing any flag(s) should not invalidate a valid transaction
             for (const auto& [name, flag] : mapFlagNames) {
                 // Removing individual flags
                 unsigned int flags = TrimFlags(~(verify_flags | flag));
+<<<<<<< HEAD
                 if (!CheckTxScripts(tx, mapprevOutScriptPubKeys, mapprevOutValues, flags, txdata, strTest, /* expect_valid */ true)) {
+=======
+                if (!CheckTxScripts(tx, mapprevOutScriptPubKeys, mapprevOutValues, flags, txdata, strTest, /*expect_valid=*/true)) {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                     BOOST_ERROR("Tx unexpectedly failed with flag " << name << " unset: " << strTest);
                 }
                 // Removing random combinations of flags
                 flags = TrimFlags(~(verify_flags | (unsigned int)InsecureRandBits(mapFlagNames.size())));
+<<<<<<< HEAD
                 if (!CheckTxScripts(tx, mapprevOutScriptPubKeys, mapprevOutValues, flags, txdata, strTest, /* expect_valid */ true)) {
+=======
+                if (!CheckTxScripts(tx, mapprevOutScriptPubKeys, mapprevOutValues, flags, txdata, strTest, /*expect_valid=*/true)) {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                     BOOST_ERROR("Tx unexpectedly failed with random flags " << ToString(flags) << ": " << strTest);
                 }
             }
 
             // Check that flags are maximal: transaction should fail if any unset flags are set.
             for (auto flags_excluding_one : ExcludeIndividualFlags(verify_flags)) {
+<<<<<<< HEAD
                 if (!CheckTxScripts(tx, mapprevOutScriptPubKeys, mapprevOutValues, ~flags_excluding_one, txdata, strTest, /* expect_valid */ false)) {
+=======
+                if (!CheckTxScripts(tx, mapprevOutScriptPubKeys, mapprevOutValues, ~flags_excluding_one, txdata, strTest, /*expect_valid=*/false)) {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                     BOOST_ERROR("Too many flags unset: " << strTest);
                 }
             }
@@ -279,10 +316,14 @@ BOOST_AUTO_TEST_CASE(tx_valid)
 BOOST_AUTO_TEST_CASE(tx_invalid)
 {
     // Read tests from test/data/tx_invalid.json
+<<<<<<< HEAD
     UniValue tests = read_json(std::string(json_tests::tx_invalid, json_tests::tx_invalid + sizeof(json_tests::tx_invalid)));
+=======
+    UniValue tests = read_json(json_tests::tx_invalid);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     for (unsigned int idx = 0; idx < tests.size(); idx++) {
-        UniValue test = tests[idx];
+        const UniValue& test = tests[idx];
         std::string strTest = test.write();
         if (test[0].isArray())
         {
@@ -302,17 +343,17 @@ BOOST_AUTO_TEST_CASE(tx_invalid)
                     fValid = false;
                     break;
                 }
-                UniValue vinput = input.get_array();
+                const UniValue& vinput = input.get_array();
                 if (vinput.size() < 3 || vinput.size() > 4)
                 {
                     fValid = false;
                     break;
                 }
-                COutPoint outpoint(uint256S(vinput[0].get_str()), vinput[1].get_int());
+                COutPoint outpoint{uint256S(vinput[0].get_str()), uint32_t(vinput[1].getInt<int>())};
                 mapprevOutScriptPubKeys[outpoint] = ParseScript(vinput[2].get_str());
                 if (vinput.size() >= 4)
                 {
-                    mapprevOutValues[outpoint] = vinput[3].get_int64();
+                    mapprevOutValues[outpoint] = vinput[3].getInt<int64_t>();
                 }
             }
             if (!fValid)
@@ -340,26 +381,42 @@ BOOST_AUTO_TEST_CASE(tx_invalid)
             }
 
             // Not using FillFlags() in the main test, in order to detect invalid verifyFlags combination
+<<<<<<< HEAD
             BOOST_CHECK_MESSAGE(CheckTxScripts(tx, mapprevOutScriptPubKeys, mapprevOutValues, verify_flags, txdata, strTest, /* expect_valid */ false),
+=======
+            BOOST_CHECK_MESSAGE(CheckTxScripts(tx, mapprevOutScriptPubKeys, mapprevOutValues, verify_flags, txdata, strTest, /*expect_valid=*/false),
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                                 "Tx unexpectedly passed: " << strTest);
 
             // Backwards compatibility of script verification flags: Adding any flag(s) should not validate an invalid transaction
             for (const auto& [name, flag] : mapFlagNames) {
                 unsigned int flags = FillFlags(verify_flags | flag);
                 // Adding individual flags
+<<<<<<< HEAD
                 if (!CheckTxScripts(tx, mapprevOutScriptPubKeys, mapprevOutValues, flags, txdata, strTest, /* expect_valid */ false)) {
+=======
+                if (!CheckTxScripts(tx, mapprevOutScriptPubKeys, mapprevOutValues, flags, txdata, strTest, /*expect_valid=*/false)) {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                     BOOST_ERROR("Tx unexpectedly passed with flag " << name << " set: " << strTest);
                 }
                 // Adding random combinations of flags
                 flags = FillFlags(verify_flags | (unsigned int)InsecureRandBits(mapFlagNames.size()));
+<<<<<<< HEAD
                 if (!CheckTxScripts(tx, mapprevOutScriptPubKeys, mapprevOutValues, flags, txdata, strTest, /* expect_valid */ false)) {
+=======
+                if (!CheckTxScripts(tx, mapprevOutScriptPubKeys, mapprevOutValues, flags, txdata, strTest, /*expect_valid=*/false)) {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                     BOOST_ERROR("Tx unexpectedly passed with random flags " << name << ": " << strTest);
                 }
             }
 
             // Check that flags are minimal: transaction should succeed if any set flags are unset.
             for (auto flags_excluding_one : ExcludeIndividualFlags(verify_flags)) {
+<<<<<<< HEAD
                 if (!CheckTxScripts(tx, mapprevOutScriptPubKeys, mapprevOutValues, flags_excluding_one, txdata, strTest, /* expect_valid */ true)) {
+=======
+                if (!CheckTxScripts(tx, mapprevOutScriptPubKeys, mapprevOutValues, flags_excluding_one, txdata, strTest, /*expect_valid=*/true)) {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                     BOOST_ERROR("Too many flags set: " << strTest);
                 }
             }
@@ -406,7 +463,11 @@ BOOST_AUTO_TEST_CASE(test_Get)
     t1.vout[0].nValue = 90*CENT;
     t1.vout[0].scriptPubKey << OP_1;
 
+<<<<<<< HEAD
     BOOST_CHECK(AreInputsStandard(CTransaction(t1), coins, false));
+=======
+    BOOST_CHECK(AreInputsStandard(CTransaction(t1), coins));
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 static void CreateCreditAndSpend(const FillableSigningProvider& keystore, const CScript& outscript, CTransactionRef& output, CMutableTransaction& input, bool success = true)
@@ -435,7 +496,8 @@ static void CreateCreditAndSpend(const FillableSigningProvider& keystore, const 
     inputm.vout.resize(1);
     inputm.vout[0].nValue = 1;
     inputm.vout[0].scriptPubKey = CScript();
-    bool ret = SignSignature(keystore, *output, inputm, 0, SIGHASH_ALL);
+    SignatureData empty;
+    bool ret = SignSignature(keystore, *output, inputm, 0, SIGHASH_ALL, empty);
     assert(ret == success);
     CDataStream ssin(SER_NETWORK, PROTOCOL_VERSION);
     ssin << inputm;
@@ -447,7 +509,7 @@ static void CreateCreditAndSpend(const FillableSigningProvider& keystore, const 
     assert(input.vin[0].scriptWitness.stack == inputm.vin[0].scriptWitness.stack);
 }
 
-static void CheckWithFlag(const CTransactionRef& output, const CMutableTransaction& input, int flags, bool success)
+static void CheckWithFlag(const CTransactionRef& output, const CMutableTransaction& input, uint32_t flags, bool success)
 {
     ScriptError error;
     CTransaction inputi(input);
@@ -519,7 +581,8 @@ BOOST_AUTO_TEST_CASE(test_big_witness_transaction)
 
     // sign all inputs
     for(uint32_t i = 0; i < mtx.vin.size(); i++) {
-        bool hashSigned = SignSignature(keystore, scriptPubKey, mtx, i, 1000, sigHashes.at(i % sigHashes.size()));
+        SignatureData empty;
+        bool hashSigned = SignSignature(keystore, scriptPubKey, mtx, i, 1000, sigHashes.at(i % sigHashes.size()), empty);
         assert(hashSigned);
     }
 
@@ -546,10 +609,8 @@ BOOST_AUTO_TEST_CASE(test_big_witness_transaction)
 
     for(uint32_t i = 0; i < mtx.vin.size(); i++) {
         std::vector<CScriptCheck> vChecks;
-        CScriptCheck check(coins[tx.vin[i].prevout.n].out, tx, i, SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_WITNESS, false, &txdata);
-        vChecks.push_back(CScriptCheck());
-        check.swap(vChecks.back());
-        control.Add(vChecks);
+        vChecks.emplace_back(coins[tx.vin[i].prevout.n].out, tx, i, SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_WITNESS, false, &txdata);
+        control.Add(std::move(vChecks));
     }
 
     bool controlCheck = control.Wait();
@@ -562,7 +623,7 @@ SignatureData CombineSignatures(const CMutableTransaction& input1, const CMutabl
     SignatureData sigdata;
     sigdata = DataFromTransaction(input1, 0, tx->vout[0]);
     sigdata.MergeSignatureData(DataFromTransaction(input2, 0, tx->vout[0]));
-    ProduceSignature(DUMMY_SIGNING_PROVIDER, MutableTransactionSignatureCreator(&input1, 0, tx->vout[0].nValue), tx->vout[0].scriptPubKey, sigdata);
+    ProduceSignature(DUMMY_SIGNING_PROVIDER, MutableTransactionSignatureCreator(input1, 0, tx->vout[0].nValue, SIGHASH_ALL), tx->vout[0].scriptPubKey, sigdata);
     return sigdata;
 }
 
@@ -748,7 +809,10 @@ BOOST_AUTO_TEST_CASE(test_witness)
 
 BOOST_AUTO_TEST_CASE(test_IsStandard)
 {
+<<<<<<< HEAD
     LOCK(cs_main);
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     FillableSigningProvider keystore;
     CCoinsView coinsDummy;
     CCoinsViewCache coins(&coinsDummy);
@@ -766,6 +830,7 @@ BOOST_AUTO_TEST_CASE(test_IsStandard)
     key.MakeNewKey(true);
     t.vout[0].scriptPubKey = GetScriptForDestination(PKHash(key.GetPubKey()));
 
+<<<<<<< HEAD
     std::string reason;
     BOOST_CHECK(IsStandardTx(CTransaction(t), reason));
 
@@ -803,12 +868,54 @@ BOOST_AUTO_TEST_CASE(test_IsStandard)
 
     t.nVersion = 2;
     BOOST_CHECK(IsStandardTx(CTransaction(t), reason));
+=======
+    constexpr auto CheckIsStandard = [](const auto& t) {
+        std::string reason;
+        BOOST_CHECK(IsStandardTx(CTransaction{t}, MAX_OP_RETURN_RELAY, g_bare_multi, g_dust, reason));
+        BOOST_CHECK(reason.empty());
+    };
+    constexpr auto CheckIsNotStandard = [](const auto& t, const std::string& reason_in) {
+        std::string reason;
+        BOOST_CHECK(!IsStandardTx(CTransaction{t}, MAX_OP_RETURN_RELAY, g_bare_multi, g_dust, reason));
+        BOOST_CHECK_EQUAL(reason_in, reason);
+    };
+
+    CheckIsStandard(t);
+
+    // Check dust with default relay fee:
+    CAmount nDustThreshold = 182 * g_dust.GetFeePerK() / 1000;
+    BOOST_CHECK_EQUAL(nDustThreshold, 546);
+    // dust:
+    t.vout[0].nValue = nDustThreshold - 1;
+    CheckIsNotStandard(t, "dust");
+    // not dust:
+    t.vout[0].nValue = nDustThreshold;
+    CheckIsStandard(t);
+
+    // Disallowed nVersion
+    t.nVersion = -1;
+    CheckIsNotStandard(t, "version");
+
+    t.nVersion = 0;
+    CheckIsNotStandard(t, "version");
+
+    t.nVersion = 3;
+    CheckIsNotStandard(t, "version");
+
+    // Allowed nVersion
+    t.nVersion = 1;
+    CheckIsStandard(t);
+
+    t.nVersion = 2;
+    CheckIsStandard(t);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // Check dust with odd relay fee to verify rounding:
     // nDustThreshold = 182 * 3702 / 1000
-    dustRelayFee = CFeeRate(3702);
+    g_dust = CFeeRate(3702);
     // dust:
     t.vout[0].nValue = 674 - 1;
+<<<<<<< HEAD
     reason.clear();
     BOOST_CHECK(!IsStandardTx(CTransaction(t), reason));
     BOOST_CHECK_EQUAL(reason, "dust");
@@ -821,15 +928,30 @@ BOOST_AUTO_TEST_CASE(test_IsStandard)
     reason.clear();
     BOOST_CHECK(!IsStandardTx(CTransaction(t), reason));
     BOOST_CHECK_EQUAL(reason, "scriptpubkey");
+=======
+    CheckIsNotStandard(t, "dust");
+    // not dust:
+    t.vout[0].nValue = 674;
+    CheckIsStandard(t);
+    g_dust = CFeeRate{DUST_RELAY_TX_FEE};
+
+    t.vout[0].scriptPubKey = CScript() << OP_1;
+    CheckIsNotStandard(t, "scriptpubkey");
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // MAX_OP_RETURN_RELAY-byte TxoutType::NULL_DATA (standard)
     t.vout[0].scriptPubKey = CScript() << OP_RETURN << ParseHex("04678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef3804678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38");
     BOOST_CHECK_EQUAL(MAX_OP_RETURN_RELAY, t.vout[0].scriptPubKey.size());
+<<<<<<< HEAD
     BOOST_CHECK(IsStandardTx(CTransaction(t), reason));
+=======
+    CheckIsStandard(t);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // MAX_OP_RETURN_RELAY+1-byte TxoutType::NULL_DATA (non-standard)
     t.vout[0].scriptPubKey = CScript() << OP_RETURN << ParseHex("04678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef3804678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef3800");
     BOOST_CHECK_EQUAL(MAX_OP_RETURN_RELAY + 1, t.vout[0].scriptPubKey.size());
+<<<<<<< HEAD
     reason.clear();
     BOOST_CHECK(!IsStandardTx(CTransaction(t), reason));
     BOOST_CHECK_EQUAL(reason, "scriptpubkey");
@@ -850,11 +972,33 @@ BOOST_AUTO_TEST_CASE(test_IsStandard)
     reason.clear();
     BOOST_CHECK(!IsStandardTx(CTransaction(t), reason));
     BOOST_CHECK_EQUAL(reason, "scriptpubkey");
+=======
+    CheckIsNotStandard(t, "scriptpubkey");
+
+    // Data payload can be encoded in any way...
+    t.vout[0].scriptPubKey = CScript() << OP_RETURN << ParseHex("");
+    CheckIsStandard(t);
+    t.vout[0].scriptPubKey = CScript() << OP_RETURN << ParseHex("00") << ParseHex("01");
+    CheckIsStandard(t);
+    // OP_RESERVED *is* considered to be a PUSHDATA type opcode by IsPushOnly()!
+    t.vout[0].scriptPubKey = CScript() << OP_RETURN << OP_RESERVED << -1 << 0 << ParseHex("01") << 2 << 3 << 4 << 5 << 6 << 7 << 8 << 9 << 10 << 11 << 12 << 13 << 14 << 15 << 16;
+    CheckIsStandard(t);
+    t.vout[0].scriptPubKey = CScript() << OP_RETURN << 0 << ParseHex("01") << 2 << ParseHex("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+    CheckIsStandard(t);
+
+    // ...so long as it only contains PUSHDATA's
+    t.vout[0].scriptPubKey = CScript() << OP_RETURN << OP_RETURN;
+    CheckIsNotStandard(t, "scriptpubkey");
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // TxoutType::NULL_DATA w/o PUSHDATA
     t.vout.resize(1);
     t.vout[0].scriptPubKey = CScript() << OP_RETURN;
+<<<<<<< HEAD
     BOOST_CHECK(IsStandardTx(CTransaction(t), reason));
+=======
+    CheckIsStandard(t);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // Only one TxoutType::NULL_DATA permitted in all cases
     t.vout.resize(2);
@@ -862,6 +1006,7 @@ BOOST_AUTO_TEST_CASE(test_IsStandard)
     t.vout[0].nValue = 0;
     t.vout[1].scriptPubKey = CScript() << OP_RETURN << ParseHex("04678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38");
     t.vout[1].nValue = 0;
+<<<<<<< HEAD
     reason.clear();
     BOOST_CHECK(!IsStandardTx(CTransaction(t), reason));
     BOOST_CHECK_EQUAL(reason, "multi-op-return");
@@ -877,6 +1022,17 @@ BOOST_AUTO_TEST_CASE(test_IsStandard)
     reason.clear();
     BOOST_CHECK(!IsStandardTx(CTransaction(t), reason));
     BOOST_CHECK_EQUAL(reason, "multi-op-return");
+=======
+    CheckIsNotStandard(t, "multi-op-return");
+
+    t.vout[0].scriptPubKey = CScript() << OP_RETURN << ParseHex("04678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38");
+    t.vout[1].scriptPubKey = CScript() << OP_RETURN;
+    CheckIsNotStandard(t, "multi-op-return");
+
+    t.vout[0].scriptPubKey = CScript() << OP_RETURN;
+    t.vout[1].scriptPubKey = CScript() << OP_RETURN;
+    CheckIsNotStandard(t, "multi-op-return");
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // Check large scriptSig (non-standard if size is >1650 bytes)
     t.vout.resize(1);
@@ -884,12 +1040,19 @@ BOOST_AUTO_TEST_CASE(test_IsStandard)
     t.vout[0].scriptPubKey = GetScriptForDestination(PKHash(key.GetPubKey()));
     // OP_PUSHDATA2 with len (3 bytes) + data (1647 bytes) = 1650 bytes
     t.vin[0].scriptSig = CScript() << std::vector<unsigned char>(1647, 0); // 1650
+<<<<<<< HEAD
     BOOST_CHECK(IsStandardTx(CTransaction(t), reason));
 
     t.vin[0].scriptSig = CScript() << std::vector<unsigned char>(1648, 0); // 1651
     reason.clear();
     BOOST_CHECK(!IsStandardTx(CTransaction(t), reason));
     BOOST_CHECK_EQUAL(reason, "scriptsig-size");
+=======
+    CheckIsStandard(t);
+
+    t.vin[0].scriptSig = CScript() << std::vector<unsigned char>(1648, 0); // 1651
+    CheckIsNotStandard(t, "scriptsig-size");
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // Check scriptSig format (non-standard if there are any other ops than just PUSHs)
     t.vin[0].scriptSig = CScript()
@@ -898,7 +1061,11 @@ BOOST_AUTO_TEST_CASE(test_IsStandard)
         << std::vector<unsigned char>(235, 0)     // OP_PUSHDATA1 x [...x bytes...]
         << std::vector<unsigned char>(1234, 0)    // OP_PUSHDATA2 x [...x bytes...]
         << OP_9;
+<<<<<<< HEAD
     BOOST_CHECK(IsStandardTx(CTransaction(t), reason));
+=======
+    CheckIsStandard(t);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     const std::vector<unsigned char> non_push_ops = { // arbitrary set of non-push operations
         OP_NOP, OP_VERIFY, OP_IF, OP_ROT, OP_3DUP, OP_SIZE, OP_EQUAL, OP_ADD, OP_SUB,
@@ -918,11 +1085,18 @@ BOOST_AUTO_TEST_CASE(test_IsStandard)
         // replace current push-op with each non-push-op
         for (auto op : non_push_ops) {
             t.vin[0].scriptSig[index] = op;
+<<<<<<< HEAD
             BOOST_CHECK(!IsStandardTx(CTransaction(t), reason));
             BOOST_CHECK_EQUAL(reason, "scriptsig-not-pushonly");
         }
         t.vin[0].scriptSig[index] = orig_op; // restore op
         BOOST_CHECK(IsStandardTx(CTransaction(t), reason));
+=======
+            CheckIsNotStandard(t, "scriptsig-not-pushonly");
+        }
+        t.vin[0].scriptSig[index] = orig_op; // restore op
+        CheckIsStandard(t);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     // Check tx-size (non-standard if transaction weight is > MAX_STANDARD_TX_WEIGHT)
@@ -935,11 +1109,16 @@ BOOST_AUTO_TEST_CASE(test_IsStandard)
     //                      ===============================
     //                                total: 400000 vbytes
     BOOST_CHECK_EQUAL(GetTransactionWeight(CTransaction(t)), 400000);
+<<<<<<< HEAD
     BOOST_CHECK(IsStandardTx(CTransaction(t), reason));
+=======
+    CheckIsStandard(t);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // increase output size by one byte, so we end up with 400004 vbytes
     t.vout[0].scriptPubKey = CScript() << OP_RETURN << std::vector<unsigned char>(20, 0); // output size: 31 bytes
     BOOST_CHECK_EQUAL(GetTransactionWeight(CTransaction(t)), 400004);
+<<<<<<< HEAD
     reason.clear();
     BOOST_CHECK(!IsStandardTx(CTransaction(t), reason));
     BOOST_CHECK_EQUAL(reason, "tx-size");
@@ -956,6 +1135,79 @@ BOOST_AUTO_TEST_CASE(test_IsStandard)
     BOOST_CHECK(!IsStandardTx(CTransaction(t), reason));
     BOOST_CHECK_EQUAL(reason, "bare-multisig");
     fIsBareMultisigStd = DEFAULT_PERMIT_BAREMULTISIG;
+=======
+    CheckIsNotStandard(t, "tx-size");
+
+    // Check bare multisig (standard if policy flag g_bare_multi is set)
+    g_bare_multi = true;
+    t.vout[0].scriptPubKey = GetScriptForMultisig(1, {key.GetPubKey()}); // simple 1-of-1
+    t.vin.resize(1);
+    t.vin[0].scriptSig = CScript() << std::vector<unsigned char>(65, 0);
+    CheckIsStandard(t);
+
+    g_bare_multi = false;
+    CheckIsNotStandard(t, "bare-multisig");
+    g_bare_multi = DEFAULT_PERMIT_BAREMULTISIG;
+
+    // Check compressed P2PK outputs dust threshold (must have leading 02 or 03)
+    t.vout[0].scriptPubKey = CScript() << std::vector<unsigned char>(33, 0x02) << OP_CHECKSIG;
+    t.vout[0].nValue = 576;
+    CheckIsStandard(t);
+    t.vout[0].nValue = 575;
+    CheckIsNotStandard(t, "dust");
+
+    // Check uncompressed P2PK outputs dust threshold (must have leading 04/06/07)
+    t.vout[0].scriptPubKey = CScript() << std::vector<unsigned char>(65, 0x04) << OP_CHECKSIG;
+    t.vout[0].nValue = 672;
+    CheckIsStandard(t);
+    t.vout[0].nValue = 671;
+    CheckIsNotStandard(t, "dust");
+
+    // Check P2PKH outputs dust threshold
+    t.vout[0].scriptPubKey = CScript() << OP_DUP << OP_HASH160 << std::vector<unsigned char>(20, 0) << OP_EQUALVERIFY << OP_CHECKSIG;
+    t.vout[0].nValue = 546;
+    CheckIsStandard(t);
+    t.vout[0].nValue = 545;
+    CheckIsNotStandard(t, "dust");
+
+    // Check P2SH outputs dust threshold
+    t.vout[0].scriptPubKey = CScript() << OP_HASH160 << std::vector<unsigned char>(20, 0) << OP_EQUAL;
+    t.vout[0].nValue = 540;
+    CheckIsStandard(t);
+    t.vout[0].nValue = 539;
+    CheckIsNotStandard(t, "dust");
+
+    // Check P2WPKH outputs dust threshold
+    t.vout[0].scriptPubKey = CScript() << OP_0 << std::vector<unsigned char>(20, 0);
+    t.vout[0].nValue = 294;
+    CheckIsStandard(t);
+    t.vout[0].nValue = 293;
+    CheckIsNotStandard(t, "dust");
+
+    // Check P2WSH outputs dust threshold
+    t.vout[0].scriptPubKey = CScript() << OP_0 << std::vector<unsigned char>(32, 0);
+    t.vout[0].nValue = 330;
+    CheckIsStandard(t);
+    t.vout[0].nValue = 329;
+    CheckIsNotStandard(t, "dust");
+
+    // Check P2TR outputs dust threshold (Invalid xonly key ok!)
+    t.vout[0].scriptPubKey = CScript() << OP_1 << std::vector<unsigned char>(32, 0);
+    t.vout[0].nValue = 330;
+    CheckIsStandard(t);
+    t.vout[0].nValue = 329;
+    CheckIsNotStandard(t, "dust");
+
+    // Check future Witness Program versions dust threshold (non-32-byte pushes are undefined for version 1)
+    for (int op = OP_1; op <= OP_16; op += 1) {
+        t.vout[0].scriptPubKey = CScript() << (opcodetype)op << std::vector<unsigned char>(2, 0);
+        t.vout[0].nValue = 240;
+        CheckIsStandard(t);
+
+        t.vout[0].nValue = 239;
+        CheckIsNotStandard(t, "dust");
+    }
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 BOOST_AUTO_TEST_SUITE_END()

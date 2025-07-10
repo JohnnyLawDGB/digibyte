@@ -1,5 +1,4 @@
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
+// Copyright (c) 2014-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -12,7 +11,7 @@
 
 #include <compat/byteswap.h>
 
-#include <stdint.h>
+#include <cstdint>
 
 #if defined(HAVE_ENDIAN_H)
 #include <endian.h>

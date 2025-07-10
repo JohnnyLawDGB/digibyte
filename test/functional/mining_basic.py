@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
+<<<<<<< HEAD
 # Copyright (c) 2014-2021 The DigiByte Core developers
+=======
+# Copyright (c) 2014-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test mining RPCs
@@ -16,12 +20,21 @@ from test_framework.blocktools import (
     get_witness_script,
     NORMAL_GBT_REQUEST_PARAMS,
     TIME_GENESIS_BLOCK,
+<<<<<<< HEAD
     VERSIONBITS_TOP_BITS,
 )
 from test_framework.messages import (
     CBlock,
     CBlockHeader,
     BLOCK_HEADER_SIZE,
+=======
+)
+from test_framework.messages import (
+    BLOCK_HEADER_SIZE,
+    CBlock,
+    CBlockHeader,
+    COIN,
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     ser_uint256,
 )
 from test_framework.p2p import P2PDataStore
@@ -29,11 +42,22 @@ from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import (
     assert_equal,
     assert_raises_rpc_error,
+<<<<<<< HEAD
 )
 
 VERSIONBITS_TOP_BITS = 0x20000000
 VERSIONBITS_DEPLOYMENT_TESTDUMMY_BIT = 27
 VERSIONBITS_DEPLOYMENT_TAPROOT_BIT = 0x02
+=======
+    get_fee,
+)
+from test_framework.wallet import MiniWallet
+
+
+VERSIONBITS_TOP_BITS = 0x20000000
+VERSIONBITS_DEPLOYMENT_TESTDUMMY_BIT = 28
+DEFAULT_BLOCK_MIN_TX_FEE = 1000  # default `-blockmintxfee` setting [sat/kvB]
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 
 def assert_template(node, block, expect, rehash=True):
@@ -53,6 +77,7 @@ class MiningTest(DigiByteTestFramework):
         self.setup_clean_chain = True
         self.supports_cli = False
 
+<<<<<<< HEAD
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()
 
@@ -63,10 +88,20 @@ class MiningTest(DigiByteTestFramework):
             self.generate(self.nodes[0], 1, sync_fun=self.no_op)
         mining_info = self.nodes[0].getmininginfo()
         assert_equal(mining_info['blocks'], 240)
+=======
+    def mine_chain(self):
+        self.log.info('Create some old blocks')
+        for t in range(TIME_GENESIS_BLOCK, TIME_GENESIS_BLOCK + 200 * 600, 600):
+            self.nodes[0].setmocktime(t)
+            self.generate(self.wallet, 1, sync_fun=self.no_op)
+        mining_info = self.nodes[0].getmininginfo()
+        assert_equal(mining_info['blocks'], 200)
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         assert_equal(mining_info['currentblocktx'], 0)
         assert_equal(mining_info['currentblockweight'], 4000)
 
         self.log.info('test blockversion')
+<<<<<<< HEAD
         block_version = 255 | VERSIONBITS_TOP_BITS
         self.restart_node(0, extra_args=[f'-mocktime={t}', '-blockversion={}'.format(block_version)])
         self.connect_nodes(0, 1)
@@ -76,10 +111,67 @@ class MiningTest(DigiByteTestFramework):
         assert_equal(VERSIONBITS_TOP_BITS + (1 << VERSIONBITS_DEPLOYMENT_TESTDUMMY_BIT) + (VERSIONBITS_DEPLOYMENT_TAPROOT_BIT), self.nodes[0].getblocktemplate(NORMAL_GBT_REQUEST_PARAMS)['version'])
         self.restart_node(0)
         self.connect_nodes(0, 1)
+=======
+        self.restart_node(0, extra_args=[f'-mocktime={t}', '-blockversion=1337'])
+        self.connect_nodes(0, 1)
+        assert_equal(1337, self.nodes[0].getblocktemplate(NORMAL_GBT_REQUEST_PARAMS)['version'])
+        self.restart_node(0, extra_args=[f'-mocktime={t}'])
+        self.connect_nodes(0, 1)
+        assert_equal(VERSIONBITS_TOP_BITS + (1 << VERSIONBITS_DEPLOYMENT_TESTDUMMY_BIT), self.nodes[0].getblocktemplate(NORMAL_GBT_REQUEST_PARAMS)['version'])
+        self.restart_node(0)
+        self.connect_nodes(0, 1)
+
+    def test_blockmintxfee_parameter(self):
+        self.log.info("Test -blockmintxfee setting")
+        self.restart_node(0, extra_args=['-minrelaytxfee=0', '-persistmempool=0'])
+        node = self.nodes[0]
+
+        # test default (no parameter), zero and a bunch of arbitrary blockmintxfee rates [sat/kvB]
+        for blockmintxfee_sat_kvb in (DEFAULT_BLOCK_MIN_TX_FEE, 0, 50, 100, 500, 2500, 5000, 21000, 333333, 2500000):
+            blockmintxfee_dgb_kvb = blockmintxfee_sat_kvb / Decimal(COIN)
+            if blockmintxfee_sat_kvb == DEFAULT_BLOCK_MIN_TX_FEE:
+                self.log.info(f"-> Default -blockmintxfee setting ({blockmintxfee_sat_kvb} sat/kvB)...")
+            else:
+                blockmintxfee_parameter = f"-blockmintxfee={blockmintxfee_dgb_kvb:.8f}"
+                self.log.info(f"-> Test {blockmintxfee_parameter} ({blockmintxfee_sat_kvb} sat/kvB)...")
+                self.restart_node(0, extra_args=[blockmintxfee_parameter, '-minrelaytxfee=0', '-persistmempool=0'])
+                self.wallet.rescan_utxos()  # to avoid spending outputs of txs that are not in mempool anymore after restart
+
+            # submit one tx with exactly the blockmintxfee rate, and one slightly below
+            tx_with_min_feerate = self.wallet.send_self_transfer(from_node=node, fee_rate=blockmintxfee_dgb_kvb)
+            assert_equal(tx_with_min_feerate["fee"], get_fee(tx_with_min_feerate["tx"].get_vsize(), blockmintxfee_dgb_kvb))
+            if blockmintxfee_dgb_kvb > 0:
+                lowerfee_dgb_kvb = blockmintxfee_dgb_kvb - Decimal(10)/COIN  # 0.01 sat/vbyte lower
+                tx_below_min_feerate = self.wallet.send_self_transfer(from_node=node, fee_rate=lowerfee_dgb_kvb)
+                assert_equal(tx_below_min_feerate["fee"], get_fee(tx_below_min_feerate["tx"].get_vsize(), lowerfee_dgb_kvb))
+            else:  # go below zero fee by using modified fees
+                tx_below_min_feerate = self.wallet.send_self_transfer(from_node=node, fee_rate=blockmintxfee_dgb_kvb)
+                node.prioritisetransaction(tx_below_min_feerate["txid"], 0, -1)
+
+            # check that tx below specified fee-rate is neither in template nor in the actual block
+            block_template = node.getblocktemplate(NORMAL_GBT_REQUEST_PARAMS)
+            block_template_txids = [tx['txid'] for tx in block_template['transactions']]
+            self.generate(self.wallet, 1, sync_fun=self.no_op)
+            block = node.getblock(node.getbestblockhash(), verbosity=2)
+            block_txids = [tx['txid'] for tx in block['tx']]
+
+            assert tx_with_min_feerate['txid'] in block_template_txids
+            assert tx_with_min_feerate['txid'] in block_txids
+            assert tx_below_min_feerate['txid'] not in block_template_txids
+            assert tx_below_min_feerate['txid'] not in block_txids
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     def run_test(self):
         self.mine_chain()
         node = self.nodes[0]
+        self.wallet = MiniWallet(node)
+        self.mine_chain()
+
+        def assert_submitblock(block, result_str_1, result_str_2=None):
+            block.solve()
+            result_str_2 = result_str_2 or 'duplicate-invalid'
+            assert_equal(result_str_1, node.submitblock(hexdata=block.serialize().hex()))
+            assert_equal(result_str_2, node.submitblock(hexdata=block.serialize().hex()))
 
         def assert_submitblock(block, result_str_1, result_str_2=None):
             block.solve()
@@ -89,6 +181,7 @@ class MiningTest(DigiByteTestFramework):
 
         self.log.info('getmininginfo')
         mining_info = node.getmininginfo()
+<<<<<<< HEAD
         assert_equal(mining_info['blocks'], 240)
         assert_equal(mining_info['chain'], self.chain)
         assert 'currentblocktx' not in mining_info
@@ -99,6 +192,18 @@ class MiningTest(DigiByteTestFramework):
 
         self.log.info("getblocktemplate: Test default witness commitment")
         txid = int(node.sendtoaddress(node.getnewaddress(), 1), 16)
+=======
+        assert_equal(mining_info['blocks'], 200)
+        assert_equal(mining_info['chain'], self.chain)
+        assert 'currentblocktx' not in mining_info
+        assert 'currentblockweight' not in mining_info
+        assert_equal(mining_info['difficulty'], Decimal('4.656542373906925E-10'))
+        assert_equal(mining_info['networkhashps'], Decimal('0.003333333333333334'))
+        assert_equal(mining_info['pooledtx'], 0)
+
+        self.log.info("getblocktemplate: Test default witness commitment")
+        txid = int(self.wallet.send_self_transfer(from_node=node)['wtxid'], 16)
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         tmpl = node.getblocktemplate(NORMAL_GBT_REQUEST_PARAMS)
 
         # Check that default_witness_commitment is present.
@@ -133,7 +238,11 @@ class MiningTest(DigiByteTestFramework):
         block.vtx = [coinbase_tx]
 
         self.log.info("getblocktemplate: segwit rule must be set")
+<<<<<<< HEAD
         assert_raises_rpc_error(-8, "getblocktemplate must be called with the segwit rule set", node.getblocktemplate)
+=======
+        assert_raises_rpc_error(-8, "getblocktemplate must be called with the segwit rule set", node.getblocktemplate, {})
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         self.log.info("getblocktemplate: Test valid block")
         assert_template(node, block, None)
@@ -148,6 +257,10 @@ class MiningTest(DigiByteTestFramework):
         assert_template(node, bad_block, 'bad-cb-missing')
 
         self.log.info("submitblock: Test invalid coinbase transaction")
+<<<<<<< HEAD
+=======
+        assert_raises_rpc_error(-22, "Block does not start with a coinbase", node.submitblock, CBlock().serialize().hex())
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         assert_raises_rpc_error(-22, "Block does not start with a coinbase", node.submitblock, bad_block.serialize().hex())
 
         self.log.info("getblocktemplate: Test truncated final transaction")
@@ -203,7 +316,11 @@ class MiningTest(DigiByteTestFramework):
 
         self.log.info("getblocktemplate: Test bad timestamps")
         bad_block = copy.deepcopy(block)
+<<<<<<< HEAD
         bad_block.nTime = 2**31 - 1
+=======
+        bad_block.nTime = 2**32 - 1
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         assert_template(node, bad_block, 'time-too-new')
         assert_submitblock(bad_block, 'time-too-new', 'time-too-new')
         bad_block.nTime = 0
@@ -225,7 +342,11 @@ class MiningTest(DigiByteTestFramework):
         block.solve()
 
         def chain_tip(b_hash, *, status='headers-only', branchlen=1):
+<<<<<<< HEAD
             return {'hash': b_hash, 'height': 242, 'branchlen': branchlen, 'status': status}
+=======
+            return {'hash': b_hash, 'height': 202, 'branchlen': branchlen, 'status': status}
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         assert chain_tip(block.hash) not in node.getchaintips()
         node.submitheader(hexdata=block.serialize().hex())
@@ -281,6 +402,11 @@ class MiningTest(DigiByteTestFramework):
         node.submitheader(hexdata=CBlockHeader(bad_block_root).serialize().hex())
         assert_equal(node.submitblock(hexdata=block.serialize().hex()), 'duplicate')  # valid
 
+<<<<<<< HEAD
+=======
+        self.test_blockmintxfee_parameter()
+
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 if __name__ == '__main__':
     MiningTest().main()

@@ -1,39 +1,40 @@
 // Copyright (c) 2010 Satoshi Nakamoto
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
+// Copyright (c) 2009-2022 The Bitcoin Core developers
+// Copyright (c) 2014-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include <amount.h>
 #include <chain.h>
 #include <chainparams.h>
+#include <common/system.h>
+#include <consensus/amount.h>
 #include <consensus/consensus.h>
+#include <consensus/merkle.h>
 #include <consensus/params.h>
 #include <consensus/validation.h>
 #include <core_io.h>
 #include <deploymentinfo.h>
 #include <deploymentstatus.h>
 #include <key_io.h>
-#include <miner.h>
 #include <net.h>
 #include <node/context.h>
-#include <policy/fees.h>
+#include <node/miner.h>
 #include <pow.h>
 #include <rpc/blockchain.h>
 #include <rpc/mining.h>
 #include <rpc/net.h>
 #include <rpc/server.h>
+#include <rpc/server_util.h>
 #include <rpc/util.h>
 #include <script/descriptor.h>
 #include <script/script.h>
 #include <script/signingprovider.h>
 #include <shutdown.h>
+#include <timedata.h>
 #include <txmempool.h>
 #include <univalue.h>
-#include <util/fees.h>
 #include <util/strencodings.h>
 #include <util/string.h>
-#include <util/system.h>
 #include <util/translation.h>
 #include <validation.h>
 #include <validationinterface.h>
@@ -42,15 +43,36 @@
 #include <memory>
 #include <stdint.h>
 
+using node::BlockAssembler;
+using node::CBlockTemplate;
+using node::NodeContext;
+using node::RegenerateCommitments;
+using node::UpdateTime;
 /**
  * Return average network hashes per second based on the last 'lookup' blocks,
- * or from the last difficulty change if 'lookup' is nonpositive.
- * If 'height' is nonnegative, compute the estimate at the time when a given block was found.
+ * or from the last difficulty change if 'lookup' is -1.
+ * If 'height' is -1, compute the estimate from current chain tip.
+ * If 'height' is a valid block height, compute the estimate at the time when a given block was found.
  */
+<<<<<<< HEAD
 static UniValue GetNetworkHashPS(int lookup, int height, const CChain& active_chain, int algo) {
     const CBlockIndex* pb = active_chain.Tip();
 
     if (height >= 0 && height < active_chain.Height()) {
+=======
+static UniValue GetNetworkHashPS(int lookup, int height, const CChain& active_chain) {
+    if (lookup < -1 || lookup == 0) {
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid nblocks. Must be a positive number or -1.");
+    }
+
+    if (height < -1 || height > active_chain.Height()) {
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "Block does not exist at specified height");
+    }
+
+    const CBlockIndex* pb = active_chain.Tip();
+
+    if (height >= 0) {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         pb = active_chain[height];
     }
 
@@ -58,19 +80,23 @@ static UniValue GetNetworkHashPS(int lookup, int height, const CChain& active_ch
         return 0;
 
     // If lookup is -1, then use blocks since last difficulty change.
-    if (lookup <= 0)
+    if (lookup == -1)
         lookup = pb->nHeight % Params().GetConsensus().DifficultyAdjustmentInterval() + 1;
 
     // If lookup is larger than chain, then set it to chain length.
     if (lookup > pb->nHeight)
         lookup = pb->nHeight;
 
+<<<<<<< HEAD
     while(pb->GetAlgo() != algo) {
         assert (pb->pprev);
         pb = pb->pprev;
     }
 
     const CBlockIndex *pb0 = pb;
+=======
+    const CBlockIndex* pb0 = pb;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     int64_t minTime = pb0->GetBlockTime();
     int64_t maxTime = minTime;
     arith_uint256 workDiff = GetBlockProof(*pb0, algo); 
@@ -101,7 +127,7 @@ static RPCHelpMan getnetworkhashps()
                 "Pass in [blocks] to override # of blocks, -1 specifies since last difficulty change.\n"
                 "Pass in [height] to estimate the network speed at the time when a certain block was found.\n",
                 {
-                    {"nblocks", RPCArg::Type::NUM, RPCArg::Default{120}, "The number of blocks, or -1 for blocks since last difficulty change."},
+                    {"nblocks", RPCArg::Type::NUM, RPCArg::Default{120}, "The number of previous blocks to calculate estimate from, or -1 for blocks since last difficulty change."},
                     {"height", RPCArg::Type::NUM, RPCArg::Default{-1}, "To estimate at the time of the given height."},
                     {"algo", RPCArg::Type::STR, RPCArg::Default{GetAlgoName(miningAlgo)}, "Which mining algorithm to use."},
                 },
@@ -115,6 +141,7 @@ static RPCHelpMan getnetworkhashps()
 {
     ChainstateManager& chainman = EnsureAnyChainman(request.context);
     LOCK(cs_main);
+    // DigiByte: Support algorithm parameter for multi-algo mining
     int algo = miningAlgo;
     if (!request.params[2].isNull()) {
         algo = GetAlgoByName(request.params[2].get_str(), algo);
@@ -124,18 +151,13 @@ static RPCHelpMan getnetworkhashps()
     };
 }
 
-static bool GenerateBlock(ChainstateManager& chainman, CBlock& block, uint64_t& max_tries, unsigned int& extra_nonce, uint256& block_hash)
+static bool GenerateBlock(ChainstateManager& chainman, CBlock& block, uint64_t& max_tries, std::shared_ptr<const CBlock>& block_out, bool process_new_block)
 {
-    block_hash.SetNull();
+    block_out.reset();
+    block.hashMerkleRoot = BlockMerkleRoot(block);
 
-    {
-        LOCK(cs_main);
-        IncrementExtraNonce(&block, chainman.ActiveChain().Tip(), extra_nonce);
-    }
-
-    CChainParams chainparams(Params());
-
-    while (max_tries > 0 && block.nNonce < std::numeric_limits<uint32_t>::max() && !CheckProofOfWork(GetPoWAlgoHash(block), block.nBits, chainparams.GetConsensus()) && !ShutdownRequested()) {
+    // DigiByte: Use GetPoWAlgoHash for multi-algorithm support
+    while (max_tries > 0 && block.nNonce < std::numeric_limits<uint32_t>::max() && !CheckProofOfWork(GetPoWAlgoHash(block), block.nBits, chainman.GetConsensus()) && !ShutdownRequested()) {
         ++block.nNonce;
         --max_tries;
     }
@@ -146,42 +168,34 @@ static bool GenerateBlock(ChainstateManager& chainman, CBlock& block, uint64_t& 
         return true;
     }
 
-    std::shared_ptr<const CBlock> shared_pblock = std::make_shared<const CBlock>(block);
-    if (!chainman.ProcessNewBlock(chainparams, shared_pblock, true, nullptr)) {
+    block_out = std::make_shared<const CBlock>(block);
+
+    if (!process_new_block) return true;
+
+    if (!chainman.ProcessNewBlock(block_out, /*force_processing=*/true, /*min_pow_checked=*/true, nullptr)) {
         throw JSONRPCError(RPC_INTERNAL_ERROR, "ProcessNewBlock, block not accepted");
     }
 
-    block_hash = block.GetHash();
     return true;
 }
 
 static UniValue generateBlocks(ChainstateManager& chainman, const CTxMemPool& mempool, const CScript& coinbase_script, int nGenerate, uint64_t nMaxTries, int algo)
 {
-    int nHeightEnd = 0;
-    int nHeight = 0;
-
-    {   // Don't keep cs_main locked
-        LOCK(cs_main);
-        nHeight = chainman.ActiveChain().Height();
-        nHeightEnd = nHeight+nGenerate;
-    }
-    unsigned int nExtraNonce = 0;
     UniValue blockHashes(UniValue::VARR);
-    while (nHeight < nHeightEnd && !ShutdownRequested())
-    {
-        std::unique_ptr<CBlockTemplate> pblocktemplate(BlockAssembler(chainman.ActiveChainstate(), mempool, Params()).CreateNewBlock(coinbase_script, algo));
+    while (nGenerate > 0 && !ShutdownRequested()) {
+        // DigiByte: Pass algorithm to CreateNewBlock for multi-algo support
+        std::unique_ptr<CBlockTemplate> pblocktemplate(BlockAssembler{chainman.ActiveChainstate(), &mempool}.CreateNewBlock(coinbase_script, algo));
         if (!pblocktemplate.get())
             throw JSONRPCError(RPC_INTERNAL_ERROR, "Couldn't create new block");
-        CBlock *pblock = &pblocktemplate->block;
 
-        uint256 block_hash;
-        if (!GenerateBlock(chainman, *pblock, nMaxTries, nExtraNonce, block_hash)) {
+        std::shared_ptr<const CBlock> block_out;
+        if (!GenerateBlock(chainman, pblocktemplate->block, nMaxTries, block_out, /*process_new_block=*/true)) {
             break;
         }
 
-        if (!block_hash.IsNull()) {
-            ++nHeight;
-            blockHashes.push_back(block_hash.GetHex());
+        if (block_out) {
+            --nGenerate;
+            blockHashes.push_back(block_out->GetHash().GetHex());
         }
     }
     return blockHashes;
@@ -199,7 +213,11 @@ static bool getScriptFromDescriptor(const std::string& descriptor, CScript& scri
         FlatSigningProvider provider;
         std::vector<CScript> scripts;
         if (!desc->Expand(0, key_provider, scripts, provider)) {
+<<<<<<< HEAD
             throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, strprintf("Cannot derive script without private keys"));
+=======
+            throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Cannot derive script without private keys");
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
 
         // Combo descriptors can have 2 or 4 scripts, so we can't just check scripts.size() == 1
@@ -225,9 +243,9 @@ static RPCHelpMan generatetodescriptor()
 {
     return RPCHelpMan{
         "generatetodescriptor",
-        "\nMine blocks immediately to a specified descriptor (before the RPC call returns)\n",
+        "Mine to a specified descriptor and return the block hashes.",
         {
-            {"num_blocks", RPCArg::Type::NUM, RPCArg::Optional::NO, "How many blocks are generated immediately."},
+            {"num_blocks", RPCArg::Type::NUM, RPCArg::Optional::NO, "How many blocks are generated."},
             {"descriptor", RPCArg::Type::STR, RPCArg::Optional::NO, "The descriptor to send the newly generated digibyte to."},
             {"maxtries", RPCArg::Type::NUM, RPCArg::Default{DEFAULT_MAX_TRIES}, "How many iterations to try."},
             {"algo", RPCArg::Type::STR, RPCArg::Default{GetAlgoName(ALGO_SCRYPT)}, "Which mining algorithm to use."},
@@ -242,14 +260,16 @@ static RPCHelpMan generatetodescriptor()
             "\nGenerate 11 blocks to mydesc\n" + HelpExampleCli("generatetodescriptor", "11 \"mydesc\"")},
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
 {
-    const int num_blocks{request.params[0].get_int()};
-    const uint64_t max_tries{request.params[2].isNull() ? DEFAULT_MAX_TRIES : request.params[2].get_int()};
+    const auto num_blocks{self.Arg<int>(0)};
+    const auto max_tries{self.Arg<uint64_t>(2)};
 
     CScript coinbase_script;
     std::string error;
-    if (!getScriptFromDescriptor(request.params[1].get_str(), coinbase_script, error)) {
+    if (!getScriptFromDescriptor(self.Arg<std::string>(1), coinbase_script, error)) {
         throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, error);
     }
+    
+    // DigiByte: Support algorithm parameter for multi-algo mining
     int algo = miningAlgo;
     if (!request.params[3].isNull()) {
         algo = GetAlgoByName(request.params[3].get_str(), algo);
@@ -274,6 +294,7 @@ static RPCHelpMan generate()
 static RPCHelpMan generatetoaddress()
 {
     return RPCHelpMan{"generatetoaddress",
+<<<<<<< HEAD
                 "\nMine blocks immediately to a specified address (before the RPC call returns)\n",
                 {
                     {"nblocks", RPCArg::Type::NUM, RPCArg::Optional::NO, "How many blocks are generated immediately."},
@@ -287,6 +308,20 @@ static RPCHelpMan generatetoaddress()
                         {RPCResult::Type::STR_HEX, "", "blockhash"},
                     }},
                 RPCExamples{
+=======
+        "Mine to a specified address and return the block hashes.",
+         {
+             {"nblocks", RPCArg::Type::NUM, RPCArg::Optional::NO, "How many blocks are generated."},
+             {"address", RPCArg::Type::STR, RPCArg::Optional::NO, "The address to send the newly generated digibyte to."},
+             {"maxtries", RPCArg::Type::NUM, RPCArg::Default{DEFAULT_MAX_TRIES}, "How many iterations to try."},
+         },
+         RPCResult{
+             RPCResult::Type::ARR, "", "hashes of blocks generated",
+             {
+                 {RPCResult::Type::STR_HEX, "", "blockhash"},
+             }},
+         RPCExamples{
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             "\nGenerate 11 blocks to myaddress\n"
             + HelpExampleCli("generatetoaddress", "11 \"myaddress\"")
             + "If you are using the " PACKAGE_NAME " wallet, you can get a new address to send the newly generated digibyte to with:\n"
@@ -294,9 +329,14 @@ static RPCHelpMan generatetoaddress()
                 },
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
 {
+<<<<<<< HEAD
     const int num_blocks{request.params[0].get_int()};
     const uint64_t max_tries{request.params[2].isNull() ? DEFAULT_MAX_TRIES : request.params[2].get_int()};
     const int algo{request.params[3].isNull() ? miningAlgo : GetAlgoByName(request.params[3].get_str(), miningAlgo)};
+=======
+    const int num_blocks{request.params[0].getInt<int>()};
+    const uint64_t max_tries{request.params[2].isNull() ? DEFAULT_MAX_TRIES : request.params[2].getInt<int>()};
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     CTxDestination destination = DecodeDestination(request.params[1].get_str());
     if (!IsValidDestination(destination)) {
@@ -309,7 +349,11 @@ static RPCHelpMan generatetoaddress()
 
     CScript coinbase_script = GetScriptForDestination(destination);
 
+<<<<<<< HEAD
     return generateBlocks(chainman, mempool, coinbase_script, num_blocks, max_tries, algo);
+=======
+    return generateBlocks(chainman, mempool, coinbase_script, num_blocks, max_tries);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 },
     };
 }
@@ -317,7 +361,11 @@ static RPCHelpMan generatetoaddress()
 static RPCHelpMan generateblock()
 {
     return RPCHelpMan{"generateblock",
+<<<<<<< HEAD
         "\nMine a block with a set of ordered transactions immediately to a specified address or descriptor (before the RPC call returns)\n",
+=======
+        "Mine a set of ordered transactions to a specified address or descriptor and return the block hash.",
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         {
             {"output", RPCArg::Type::STR, RPCArg::Optional::NO, "The address or descriptor to send the newly generated digibyte to."},
             {"transactions", RPCArg::Type::ARR, RPCArg::Optional::NO, "An array of hex strings which are either txids or raw transactions.\n"
@@ -327,11 +375,19 @@ static RPCHelpMan generateblock()
                     {"rawtx/txid", RPCArg::Type::STR_HEX, RPCArg::Optional::OMITTED, ""},
                 },
             },
+<<<<<<< HEAD
+=======
+            {"submit", RPCArg::Type::BOOL, RPCArg::Default{true}, "Whether to submit the block before the RPC call returns or to return it as hex."},
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         },
         RPCResult{
             RPCResult::Type::OBJ, "", "",
             {
                 {RPCResult::Type::STR_HEX, "hash", "hash of generated block"},
+<<<<<<< HEAD
+=======
+                {RPCResult::Type::STR_HEX, "hex", /*optional=*/true, "hex of generated block, only present when submit=false"},
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             }
         },
         RPCExamples{
@@ -380,17 +436,25 @@ static RPCHelpMan generateblock()
         }
     }
 
+<<<<<<< HEAD
     CChainParams chainparams(Params());
+=======
+    const bool process_new_block{request.params[2].isNull() ? true : request.params[2].get_bool()};
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     CBlock block;
 
     ChainstateManager& chainman = EnsureChainman(node);
     {
         LOCK(cs_main);
 
+<<<<<<< HEAD
         CTxMemPool empty_mempool;
 
 //  Passing Generate Default DGB BLock Type of Scrypt
         std::unique_ptr<CBlockTemplate> blocktemplate(BlockAssembler(chainman.ActiveChainstate(), empty_mempool, chainparams).CreateNewBlock(coinbase_script,ALGO_SCRYPT));
+=======
+        std::unique_ptr<CBlockTemplate> blocktemplate(BlockAssembler{chainman.ActiveChainstate(), nullptr}.CreateNewBlock(coinbase_script));
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         if (!blocktemplate) {
             throw JSONRPCError(RPC_INTERNAL_ERROR, "Couldn't create new block");
         }
@@ -407,20 +471,32 @@ static RPCHelpMan generateblock()
         LOCK(cs_main);
 
         BlockValidationState state;
+<<<<<<< HEAD
         if (!TestBlockValidity(state, chainparams, chainman.ActiveChainstate(), block, chainman.m_blockman.LookupBlockIndex(block.hashPrevBlock), false, false)) {
+=======
+        if (!TestBlockValidity(state, chainman.GetParams(), chainman.ActiveChainstate(), block, chainman.m_blockman.LookupBlockIndex(block.hashPrevBlock), GetAdjustedTime, false, false)) {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             throw JSONRPCError(RPC_VERIFY_ERROR, strprintf("TestBlockValidity failed: %s", state.ToString()));
         }
     }
 
+<<<<<<< HEAD
     uint256 block_hash;
     uint64_t max_tries{DEFAULT_MAX_TRIES};
     unsigned int extra_nonce{0};
 
     if (!GenerateBlock(chainman, block, max_tries, extra_nonce, block_hash) || block_hash.IsNull()) {
+=======
+    std::shared_ptr<const CBlock> block_out;
+    uint64_t max_tries{DEFAULT_MAX_TRIES};
+
+    if (!GenerateBlock(chainman, block, max_tries, block_out, process_new_block) || !block_out) {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         throw JSONRPCError(RPC_MISC_ERROR, "Failed to make block.");
     }
 
     UniValue obj(UniValue::VOBJ);
+<<<<<<< HEAD
     obj.pushKV("hash", block_hash.GetHex());
     return obj;
 },
@@ -507,7 +583,11 @@ static RPCHelpMan prioritisetransaction()
                 "Accepts the transaction into mined blocks at a higher (or lower) priority\n",
                 {
                     {"txid", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "The transaction id."},
+<<<<<<< HEAD
                     {"dummy", RPCArg::Type::NUM, RPCArg::Optional::OMITTED_NAMED_ARG, "API-Compatibility for previous API. Must be zero or null.\n"
+=======
+                    {"dummy", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "API-Compatibility for previous API. Must be zero or null.\n"
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             "                  DEPRECATED. For forward compatibility use named arguments and omit this parameter."},
                     {"fee_delta", RPCArg::Type::NUM, RPCArg::Optional::NO, "The fee value (in satoshis) to add (or subtract, if negative).\n"
             "                  Note, that this value is not a fee rate. It is a value to modify absolute fee of the TX.\n"
@@ -525,9 +605,14 @@ static RPCHelpMan prioritisetransaction()
     LOCK(cs_main);
 
     uint256 hash(ParseHashV(request.params[0], "txid"));
+<<<<<<< HEAD
     CAmount nAmount = request.params[2].get_int64();
+=======
+    const auto dummy{self.MaybeArg<double>(1)};
+    CAmount nAmount = request.params[2].getInt<int64_t>();
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
-    if (!(request.params[1].isNull() || request.params[1].get_real() == 0)) {
+    if (dummy && *dummy != 0) {
         throw JSONRPCError(RPC_INVALID_PARAMETER, "Priority is no longer supported, dummy argument to prioritisetransaction must be 0.");
     }
 
@@ -535,6 +620,43 @@ static RPCHelpMan prioritisetransaction()
     return true;
 },
     };
+<<<<<<< HEAD
+=======
+}
+
+static RPCHelpMan getprioritisedtransactions()
+{
+    return RPCHelpMan{"getprioritisedtransactions",
+        "Returns a map of all user-created (see prioritisetransaction) fee deltas by txid, and whether the tx is present in mempool.",
+        {},
+        RPCResult{
+            RPCResult::Type::OBJ_DYN, "prioritisation-map", "prioritisation keyed by txid",
+            {
+                {RPCResult::Type::OBJ, "txid", "", {
+                    {RPCResult::Type::NUM, "fee_delta", "transaction fee delta in satoshis"},
+                    {RPCResult::Type::BOOL, "in_mempool", "whether this transaction is currently in mempool"},
+                }}
+            },
+        },
+        RPCExamples{
+            HelpExampleCli("getprioritisedtransactions", "")
+            + HelpExampleRpc("getprioritisedtransactions", "")
+        },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            NodeContext& node = EnsureAnyNodeContext(request.context);
+            CTxMemPool& mempool = EnsureMemPool(node);
+            UniValue rpc_result{UniValue::VOBJ};
+            for (const auto& delta_info : mempool.GetPrioritisedTransactions()) {
+                UniValue result_inner{UniValue::VOBJ};
+                result_inner.pushKV("fee_delta", delta_info.delta);
+                result_inner.pushKV("in_mempool", delta_info.in_mempool);
+                rpc_result.pushKV(delta_info.txid.GetHex(), result_inner);
+            }
+            return rpc_result;
+        },
+    };
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 
@@ -542,7 +664,7 @@ static RPCHelpMan prioritisetransaction()
 static UniValue BIP22ValidationResult(const BlockValidationState& state)
 {
     if (state.IsValid())
-        return NullUniValue;
+        return UniValue::VNULL;
 
     if (state.IsError())
         throw JSONRPCError(RPC_VERIFY_ERROR, state.ToString());
@@ -577,10 +699,17 @@ static RPCHelpMan getblocktemplate()
         "    https://github.com/digibyte/bips/blob/master/bip-0009.mediawiki#getblocktemplate_changes\n"
         "    https://github.com/digibyte/bips/blob/master/bip-0145.mediawiki\n",
         {
+<<<<<<< HEAD
             {"template_request", RPCArg::Type::OBJ, RPCArg::Default{UniValue::VOBJ}, "Format of the template",
             {
                 {"mode", RPCArg::Type::STR, /* treat as named arg */ RPCArg::Optional::OMITTED_NAMED_ARG, "This must be set to \"template\", \"proposal\" (see BIP 23), or omitted"},
                 {"capabilities", RPCArg::Type::ARR, /* treat as named arg */ RPCArg::Optional::OMITTED_NAMED_ARG, "A list of strings",
+=======
+            {"template_request", RPCArg::Type::OBJ, RPCArg::Optional::NO, "Format of the template",
+            {
+                {"mode", RPCArg::Type::STR, /* treat as named arg */ RPCArg::Optional::OMITTED, "This must be set to \"template\", \"proposal\" (see BIP 23), or omitted"},
+                {"capabilities", RPCArg::Type::ARR, /* treat as named arg */ RPCArg::Optional::OMITTED, "A list of strings",
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 {
                     {"str", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "client side supported feature, 'longpoll', 'coinbasevalue', 'proposal', 'serverlist', 'workid'"},
                 }},
@@ -589,9 +718,16 @@ static RPCHelpMan getblocktemplate()
                     {"segwit", RPCArg::Type::STR, RPCArg::Optional::NO, "(literal) indicates client side segwit support"},
                     {"str", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "other client side supported softfork deployment"},
                 }},
+<<<<<<< HEAD
             },
                         "\"template_request\""},
             {"algo", RPCArg::Type::STR, RPCArg::Default{GetAlgoName(ALGO_SCRYPT)}, "Which mining algorithm to use."},
+=======
+                {"longpollid", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "delay processing request until the result would vary significantly from the \"longpollid\" of a prior template"},
+                {"data", RPCArg::Type::STR_HEX, RPCArg::Optional::OMITTED, "proposed block data to check, encoded in hexadecimal; valid only for mode=\"proposal\""},
+            },
+            },
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         },
         {
             RPCResult{"If the proposal was accepted with mode=='proposal'", RPCResult::Type::NONE, "", ""},
@@ -607,6 +743,13 @@ static RPCHelpMan getblocktemplate()
                 {
                     {RPCResult::Type::NUM, "rulename", "identifies the bit number as indicating acceptance and readiness for the named softfork rule"},
                 }},
+<<<<<<< HEAD
+=======
+                {RPCResult::Type::ARR, "capabilities", "",
+                {
+                    {RPCResult::Type::STR, "value", "A supported feature, for example 'proposal'"},
+                }},
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 {RPCResult::Type::NUM, "vbrequired", "bit mask of versionbits the server requires set in submissions"},
                 {RPCResult::Type::STR, "previousblockhash", "The hash of current highest block"},
                 {RPCResult::Type::ARR, "transactions", "contents of non-coinbase transactions that should be included in the next block",
@@ -640,11 +783,20 @@ static RPCHelpMan getblocktemplate()
                 {RPCResult::Type::STR_HEX, "noncerange", "A range of valid nonces"},
                 {RPCResult::Type::NUM, "sigoplimit", "limit of sigops in blocks"},
                 {RPCResult::Type::NUM, "sizelimit", "limit of block size"},
+<<<<<<< HEAD
                 {RPCResult::Type::NUM, "weightlimit", "limit of block weight"},
                 {RPCResult::Type::NUM_TIME, "curtime", "current timestamp in " + UNIX_EPOCH_TIME},
                 {RPCResult::Type::STR, "bits", "compressed target of next block"},
                 {RPCResult::Type::NUM, "height", "The height of the next block"},
                 {RPCResult::Type::STR, "default_witness_commitment", /* optional */ true, "a valid witness commitment for the unmodified block template"},
+=======
+                {RPCResult::Type::NUM, "weightlimit", /*optional=*/true, "limit of block weight"},
+                {RPCResult::Type::NUM_TIME, "curtime", "current timestamp in " + UNIX_EPOCH_TIME},
+                {RPCResult::Type::STR, "bits", "compressed target of next block"},
+                {RPCResult::Type::NUM, "height", "The height of the next block"},
+                {RPCResult::Type::STR_HEX, "signet_challenge", /*optional=*/true, "Only on signet"},
+                {RPCResult::Type::STR_HEX, "default_witness_commitment", /*optional=*/true, "a valid witness commitment for the unmodified block template"},
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             }},
         },
         RPCExamples{
@@ -660,13 +812,17 @@ static RPCHelpMan getblocktemplate()
     std::string strMode = "template";
     UniValue lpval = NullUniValue;
     std::set<std::string> setClientRules;
+<<<<<<< HEAD
     int64_t nMaxVersionPreVB = -1;
     CChainState& active_chainstate = chainman.ActiveChainstate();
+=======
+    Chainstate& active_chainstate = chainman.ActiveChainstate();
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     CChain& active_chain = active_chainstate.m_chain;
     if (!request.params[0].isNull())
     {
         const UniValue& oparam = request.params[0].get_obj();
-        const UniValue& modeval = find_value(oparam, "mode");
+        const UniValue& modeval = oparam.find_value("mode");
         if (modeval.isStr())
             strMode = modeval.get_str();
         else if (modeval.isNull())
@@ -675,11 +831,11 @@ static RPCHelpMan getblocktemplate()
         }
         else
             throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid mode");
-        lpval = find_value(oparam, "longpollid");
+        lpval = oparam.find_value("longpollid");
 
         if (strMode == "proposal")
         {
-            const UniValue& dataval = find_value(oparam, "data");
+            const UniValue& dataval = oparam.find_value("data");
             if (!dataval.isStr())
                 throw JSONRPCError(RPC_TYPE_ERROR, "Missing data String key for proposal");
 
@@ -702,21 +858,19 @@ static RPCHelpMan getblocktemplate()
             if (block.hashPrevBlock != pindexPrev->GetBlockHash())
                 return "inconclusive-not-best-prevblk";
             BlockValidationState state;
+<<<<<<< HEAD
             TestBlockValidity(state, Params(), active_chainstate, block, pindexPrev, false, true);
+=======
+            TestBlockValidity(state, chainman.GetParams(), active_chainstate, block, pindexPrev, GetAdjustedTime, false, true);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             return BIP22ValidationResult(state);
         }
 
-        const UniValue& aClientRules = find_value(oparam, "rules");
+        const UniValue& aClientRules = oparam.find_value("rules");
         if (aClientRules.isArray()) {
             for (unsigned int i = 0; i < aClientRules.size(); ++i) {
                 const UniValue& v = aClientRules[i];
                 setClientRules.insert(v.get_str());
-            }
-        } else {
-            // NOTE: It is important that this NOT be read if versionbits is supported
-            const UniValue& uvMaxVersion = find_value(oparam, "maxversion");
-            if (uvMaxVersion.isNum()) {
-                nMaxVersionPreVB = uvMaxVersion.get_int64();
             }
         }
     }
@@ -730,13 +884,21 @@ static RPCHelpMan getblocktemplate()
     if (strMode != "template")
         throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid mode");
 
+<<<<<<< HEAD
     if (!Params().IsTestChain()) {
+=======
+    if (!chainman.GetParams().IsTestChain()) {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         const CConnman& connman = EnsureConnman(node);
         if (connman.GetNodeCount(ConnectionDirection::Both) == 0) {
             throw JSONRPCError(RPC_CLIENT_NOT_CONNECTED, PACKAGE_NAME " is not connected!");
         }
 
+<<<<<<< HEAD
         if (active_chainstate.IsInitialBlockDownload()) {
+=======
+        if (chainman.IsInitialBlockDownload()) {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             throw JSONRPCError(RPC_CLIENT_IN_INITIAL_DOWNLOAD, PACKAGE_NAME " is in initial sync and waiting for blocks...");
         }
     }
@@ -754,10 +916,14 @@ static RPCHelpMan getblocktemplate()
         if (lpval.isStr())
         {
             // Format: <hashBestChain><nTransactionsUpdatedLast>
-            std::string lpstr = lpval.get_str();
+            const std::string& lpstr = lpval.get_str();
 
             hashWatchedChain = ParseHashV(lpstr.substr(0, 64), "longpollid");
+<<<<<<< HEAD
             nTransactionsUpdatedLastLP = atoi64(lpstr.substr(64));
+=======
+            nTransactionsUpdatedLastLP = LocaleIndependentAtoi<int64_t>(lpstr.substr(64));
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
         else
         {
@@ -791,7 +957,11 @@ static RPCHelpMan getblocktemplate()
         // TODO: Maybe recheck connections/IBD and (if something wrong) send an expires-immediately template to stop miners?
     }
 
+<<<<<<< HEAD
     const Consensus::Params& consensusParams = Params().GetConsensus();
+=======
+    const Consensus::Params& consensusParams = chainman.GetParams().GetConsensus();
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // GBT must be called with 'signet' set in the rules for signet chains
     if (consensusParams.signet_blocks && setClientRules.count("signet") != 1) {
@@ -805,12 +975,17 @@ static RPCHelpMan getblocktemplate()
 
     // Update block
     static CBlockIndex* pindexPrev;
-    static int64_t nStart;
+    static int64_t time_start;
     static std::unique_ptr<CBlockTemplate> pblocktemplate;
+<<<<<<< HEAD
     static int lastAlgo;
     if (pindexPrev != active_chain.Tip() ||
         (mempool.GetTransactionsUpdated() != nTransactionsUpdatedLast && GetTime() - nStart > 5) ||
         algo != lastAlgo)
+=======
+    if (pindexPrev != active_chain.Tip() ||
+        (mempool.GetTransactionsUpdated() != nTransactionsUpdatedLast && GetTime() - time_start > 5))
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     {
         // Clear pindexPrev so future calls make a new block, despite any failures from here on
         pindexPrev = nullptr;
@@ -818,11 +993,19 @@ static RPCHelpMan getblocktemplate()
         // Store the pindexBest used before CreateNewBlock, to avoid races
         nTransactionsUpdatedLast = mempool.GetTransactionsUpdated();
         CBlockIndex* pindexPrevNew = active_chain.Tip();
+<<<<<<< HEAD
         nStart = GetTime();
         lastAlgo = algo;
         // Create new block
         CScript scriptDummy = CScript() << OP_TRUE;
         pblocktemplate = BlockAssembler(active_chainstate, mempool, Params()).CreateNewBlock(scriptDummy, algo);
+=======
+        time_start = GetTime();
+
+        // Create new block
+        CScript scriptDummy = CScript() << OP_TRUE;
+        pblocktemplate = BlockAssembler{active_chainstate, &mempool}.CreateNewBlock(scriptDummy);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         if (!pblocktemplate)
             throw JSONRPCError(RPC_OUT_OF_MEMORY, "Out of memory");
 
@@ -837,7 +1020,11 @@ static RPCHelpMan getblocktemplate()
     pblock->nNonce = 0;
 
     // NOTE: If at some point we support pre-segwit miners post-segwit-activation, this needs to take segwit support into consideration
+<<<<<<< HEAD
     const bool fPreSegWit = !DeploymentActiveAfter(pindexPrev, consensusParams, Consensus::DEPLOYMENT_SEGWIT);
+=======
+    const bool fPreSegWit = !DeploymentActiveAfter(pindexPrev, chainman, Consensus::DEPLOYMENT_SEGWIT);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     UniValue aCaps(UniValue::VARR); aCaps.push_back("proposal");
 
@@ -903,7 +1090,11 @@ static RPCHelpMan getblocktemplate()
     UniValue vbavailable(UniValue::VOBJ);
     for (int j = 0; j < (int)Consensus::MAX_VERSION_BITS_DEPLOYMENTS; ++j) {
         Consensus::DeploymentPos pos = Consensus::DeploymentPos(j);
+<<<<<<< HEAD
         ThresholdState state = g_versionbitscache.State(pindexPrev, consensusParams, pos);
+=======
+        ThresholdState state = chainman.m_versionbitscache.State(pindexPrev, consensusParams, pos);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         switch (state) {
             case ThresholdState::DEFINED:
             case ThresholdState::FAILED:
@@ -911,7 +1102,11 @@ static RPCHelpMan getblocktemplate()
                 break;
             case ThresholdState::LOCKED_IN:
                 // Ensure bit is set in block version
+<<<<<<< HEAD
                 pblock->nVersion |= g_versionbitscache.Mask(consensusParams, pos);
+=======
+                pblock->nVersion |= chainman.m_versionbitscache.Mask(consensusParams, pos);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 [[fallthrough]];
             case ThresholdState::STARTED:
             {
@@ -920,7 +1115,11 @@ static RPCHelpMan getblocktemplate()
                 if (setClientRules.find(vbinfo.name) == setClientRules.end()) {
                     if (!vbinfo.gbt_force) {
                         // If the client doesn't support this, don't indicate it in the [default] version
+<<<<<<< HEAD
                         pblock->nVersion &= ~g_versionbitscache.Mask(consensusParams, pos);
+=======
+                        pblock->nVersion &= ~chainman.m_versionbitscache.Mask(consensusParams, pos);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                     }
                 }
                 break;
@@ -933,7 +1132,6 @@ static RPCHelpMan getblocktemplate()
                 if (setClientRules.find(vbinfo.name) == setClientRules.end()) {
                     // Not supported by the client; make sure it's safe to proceed
                     if (!vbinfo.gbt_force) {
-                        // If we do anything other than throw an exception here, be sure version/force isn't sent to old clients
                         throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Support for '%s' rule requires explicit client support", vbinfo.name));
                     }
                 }
@@ -945,14 +1143,6 @@ static RPCHelpMan getblocktemplate()
     result.pushKV("rules", aRules);
     result.pushKV("vbavailable", vbavailable);
     result.pushKV("vbrequired", int(0));
-
-    if (nMaxVersionPreVB >= 2) {
-        // If VB is supported by the client, nMaxVersionPreVB is -1, so we won't get here
-        // Because BIP 34 changed how the generation transaction is serialized, we can only use version/force back to v2 blocks
-        // This is safe to do [otherwise-]unconditionally only because we are throwing an exception above if a non-force deployment gets activated
-        // Note that this can probably also be removed entirely after the first BIP9 non-force deployment (ie, probably segwit) gets activated
-        aMutable.push_back("version/force");
-    }
 
     result.pushKV("previousblockhash", pblock->hashPrevBlock.GetHex());
     result.pushKV("transactions", transactions);
@@ -999,10 +1189,14 @@ class submitblock_StateCatcher final : public CValidationInterface
 {
 public:
     uint256 hash;
+<<<<<<< HEAD
     bool found;
+=======
+    bool found{false};
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     BlockValidationState state;
 
-    explicit submitblock_StateCatcher(const uint256 &hashIn) : hash(hashIn), found(false), state() {}
+    explicit submitblock_StateCatcher(const uint256 &hashIn) : hash(hashIn), state() {}
 
 protected:
     void BlockChecked(const CBlock& block, const BlockValidationState& stateIn) override {
@@ -1062,14 +1256,18 @@ static RPCHelpMan submitblock()
         LOCK(cs_main);
         const CBlockIndex* pindex = chainman.m_blockman.LookupBlockIndex(block.hashPrevBlock);
         if (pindex) {
-            UpdateUncommittedBlockStructures(block, pindex, Params().GetConsensus());
+            chainman.UpdateUncommittedBlockStructures(block, pindex);
         }
     }
 
     bool new_block;
     auto sc = std::make_shared<submitblock_StateCatcher>(block.GetHash());
     RegisterSharedValidationInterface(sc);
+<<<<<<< HEAD
     bool accepted = chainman.ProcessNewBlock(Params(), blockptr, /* fForceProcessing */ true, /* fNewBlock */ &new_block);
+=======
+    bool accepted = chainman.ProcessNewBlock(blockptr, /*force_processing=*/true, /*min_pow_checked=*/true, /*new_block=*/&new_block);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     UnregisterSharedValidationInterface(sc);
     if (!new_block && accepted) {
         return "duplicate";
@@ -1097,6 +1295,7 @@ static RPCHelpMan submitheader()
                     HelpExampleRpc("submitheader", "\"aabbcc\"")
                 },
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+<<<<<<< HEAD
 {
     CBlockHeader h;
     if (!DecodeHexBlockHeader(h, request.params[0].get_str())) {
@@ -1169,10 +1368,22 @@ static RPCHelpMan estimatesmartfee()
         FeeEstimateMode fee_mode;
         if (!FeeModeFromString(request.params[1].get_str(), fee_mode)) {
             throw JSONRPCError(RPC_INVALID_PARAMETER, InvalidEstimateModeErrorMessage());
+=======
+{
+    CBlockHeader h;
+    if (!DecodeHexBlockHeader(h, request.params[0].get_str())) {
+        throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "Block header decode failed");
+    }
+    ChainstateManager& chainman = EnsureAnyChainman(request.context);
+    {
+        LOCK(cs_main);
+        if (!chainman.m_blockman.LookupBlockIndex(h.hashPrevBlock)) {
+            throw JSONRPCError(RPC_VERIFY_ERROR, "Must submit previous header (" + h.hashPrevBlock.GetHex() + ") first");
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
-        if (fee_mode == FeeEstimateMode::ECONOMICAL) conservative = false;
     }
 
+<<<<<<< HEAD
     UniValue result(UniValue::VOBJ);
     UniValue errors(UniValue::VARR);
     FeeCalculation feeCalc;
@@ -1185,10 +1396,20 @@ static RPCHelpMan estimatesmartfee()
     }
     result.pushKV("blocks", feeCalc.returnedTarget);
     return result;
+=======
+    BlockValidationState state;
+    chainman.ProcessNewBlockHeaders({h}, /*min_pow_checked=*/true, state);
+    if (state.IsValid()) return UniValue::VNULL;
+    if (state.IsError()) {
+        throw JSONRPCError(RPC_VERIFY_ERROR, state.ToString());
+    }
+    throw JSONRPCError(RPC_VERIFY_ERROR, state.GetRejectReason());
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 },
     };
 }
 
+<<<<<<< HEAD
 static RPCHelpMan estimaterawfee()
 {
     return RPCHelpMan{"estimaterawfee",
@@ -1337,4 +1558,25 @@ static const CRPCCommand commands[] =
     for (const auto& c : commands) {
         t.appendCommand(c.name, &c);
     }
+=======
+void RegisterMiningRPCCommands(CRPCTable& t)
+{
+    static const CRPCCommand commands[]{
+        {"mining", &getnetworkhashps},
+        {"mining", &getmininginfo},
+        {"mining", &prioritisetransaction},
+        {"mining", &getprioritisedtransactions},
+        {"mining", &getblocktemplate},
+        {"mining", &submitblock},
+        {"mining", &submitheader},
+
+        {"hidden", &generatetoaddress},
+        {"hidden", &generatetodescriptor},
+        {"hidden", &generateblock},
+        {"hidden", &generate},
+    };
+    for (const auto& c : commands) {
+        t.appendCommand(c.name, &c);
+    }
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }

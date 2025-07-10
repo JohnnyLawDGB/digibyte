@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2014-2021 The DigiByte Core developers
+# Copyright (c) 2014-2022 The DigiByte Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Linux network utilities.
@@ -24,6 +24,11 @@ import os
 # STATE_LAST_ACK = '09'
 STATE_LISTEN = '0A'
 # STATE_CLOSING = '0B'
+
+# Address manager size constants as defined in addrman_impl.h
+ADDRMAN_NEW_BUCKET_COUNT = 1 << 10
+ADDRMAN_TRIED_BUCKET_COUNT = 1 << 8
+ADDRMAN_BUCKET_SIZE = 1 << 6
 
 def get_socket_inodes(pid):
     '''
@@ -144,7 +149,6 @@ def test_ipv6_local():
     '''
     Check for (local) IPv6 support.
     '''
-    import socket
     # By using SOCK_DGRAM this will not actually make a connection, but it will
     # fail if there is no route to IPv6 localhost.
     have_ipv6 = True

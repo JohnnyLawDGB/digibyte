@@ -1,18 +1,20 @@
 // Copyright 2014 BitPay Inc.
 // Copyright 2015 DigiByte Core Developers
 // Distributed under the MIT software license, see the accompanying
-// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+// file COPYING or https://opensource.org/licenses/mit-license.php.
 
-#include <stdint.h>
-#include <errno.h>
-#include <string.h>
-#include <stdlib.h>
-#include <stdexcept>
-#include <vector>
+#include <univalue.h>
+
+#include <cerrno>
+#include <cstdint>
+#include <cstdlib>
+#include <cstring>
 #include <limits>
+#include <locale>
+#include <sstream>
+#include <stdexcept>
 #include <string>
-
-#include "univalue.h"
+#include <vector>
 
 namespace
 {
@@ -27,6 +29,7 @@ static bool ParsePrechecks(const std::string& str)
     return true;
 }
 
+<<<<<<< HEAD
 bool ParseInt32(const std::string& str, int32_t *out)
 {
     if (!ParsePrechecks(str))
@@ -58,6 +61,8 @@ bool ParseInt64(const std::string& str, int64_t *out)
         n <= std::numeric_limits<int64_t>::max();
 }
 
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 bool ParseDouble(const std::string& str, double *out)
 {
     if (!ParsePrechecks(str))
@@ -75,8 +80,7 @@ bool ParseDouble(const std::string& str, double *out)
 
 const std::vector<std::string>& UniValue::getKeys() const
 {
-    if (typ != VOBJ)
-        throw std::runtime_error("JSON value is not an object as expected");
+    checkType(VOBJ);
     return keys;
 }
 
@@ -89,42 +93,19 @@ const std::vector<UniValue>& UniValue::getValues() const
 
 bool UniValue::get_bool() const
 {
-    if (typ != VBOOL)
-        throw std::runtime_error("JSON value is not a boolean as expected");
-    return getBool();
+    checkType(VBOOL);
+    return isTrue();
 }
 
 const std::string& UniValue::get_str() const
 {
-    if (typ != VSTR)
-        throw std::runtime_error("JSON value is not a string as expected");
+    checkType(VSTR);
     return getValStr();
-}
-
-int UniValue::get_int() const
-{
-    if (typ != VNUM)
-        throw std::runtime_error("JSON value is not an integer as expected");
-    int32_t retval;
-    if (!ParseInt32(getValStr(), &retval))
-        throw std::runtime_error("JSON integer out of range");
-    return retval;
-}
-
-int64_t UniValue::get_int64() const
-{
-    if (typ != VNUM)
-        throw std::runtime_error("JSON value is not an integer as expected");
-    int64_t retval;
-    if (!ParseInt64(getValStr(), &retval))
-        throw std::runtime_error("JSON integer out of range");
-    return retval;
 }
 
 double UniValue::get_real() const
 {
-    if (typ != VNUM)
-        throw std::runtime_error("JSON value is not a number as expected");
+    checkType(VNUM);
     double retval;
     if (!ParseDouble(getValStr(), &retval))
         throw std::runtime_error("JSON double out of range");
@@ -133,15 +114,12 @@ double UniValue::get_real() const
 
 const UniValue& UniValue::get_obj() const
 {
-    if (typ != VOBJ)
-        throw std::runtime_error("JSON value is not an object as expected");
+    checkType(VOBJ);
     return *this;
 }
 
 const UniValue& UniValue::get_array() const
 {
-    if (typ != VARR)
-        throw std::runtime_error("JSON value is not an array as expected");
+    checkType(VARR);
     return *this;
 }
-

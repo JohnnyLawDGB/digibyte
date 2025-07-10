@@ -1,20 +1,37 @@
+<<<<<<< HEAD
 // Copyright (c) 2021 The DigiByte Core developers
+=======
+// Copyright (c) 2021-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #ifndef DIGIBYTE_WALLET_TRANSACTION_H
 #define DIGIBYTE_WALLET_TRANSACTION_H
 
+<<<<<<< HEAD
 #include <amount.h>
 #include <primitives/transaction.h>
 #include <serialize.h>
 #include <wallet/ismine.h>
 #include <threadsafety.h>
 #include <tinyformat.h>
+=======
+#include <bitset>
+#include <cstdint>
+#include <consensus/amount.h>
+#include <primitives/transaction.h>
+#include <serialize.h>
+#include <wallet/types.h>
+#include <threadsafety.h>
+#include <tinyformat.h>
+#include <util/overloaded.h>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <util/strencodings.h>
 #include <util/string.h>
 
 #include <list>
+<<<<<<< HEAD
 #include <vector>
 
 struct COutputEntry;
@@ -40,6 +57,133 @@ static inline void WriteOrderPos(const int64_t& nOrderPos, mapValue_t& mapValue)
         return;
     mapValue["n"] = ToString(nOrderPos);
 }
+=======
+#include <variant>
+#include <vector>
+
+namespace wallet {
+//! State of transaction confirmed in a block.
+struct TxStateConfirmed {
+    uint256 confirmed_block_hash;
+    int confirmed_block_height;
+    int position_in_block;
+
+    explicit TxStateConfirmed(const uint256& block_hash, int height, int index) : confirmed_block_hash(block_hash), confirmed_block_height(height), position_in_block(index) {}
+    std::string toString() const { return strprintf("Confirmed (block=%s, height=%i, index=%i)", confirmed_block_hash.ToString(), confirmed_block_height, position_in_block); }
+};
+
+//! State of transaction added to mempool.
+struct TxStateInMempool {
+    std::string toString() const { return strprintf("InMempool"); }
+};
+
+//! State of rejected transaction that conflicts with a confirmed block.
+struct TxStateConflicted {
+    uint256 conflicting_block_hash;
+    int conflicting_block_height;
+
+    explicit TxStateConflicted(const uint256& block_hash, int height) : conflicting_block_hash(block_hash), conflicting_block_height(height) {}
+    std::string toString() const { return strprintf("Conflicted (block=%s, height=%i)", conflicting_block_hash.ToString(), conflicting_block_height); }
+};
+
+//! State of transaction not confirmed or conflicting with a known block and
+//! not in the mempool. May conflict with the mempool, or with an unknown block,
+//! or be abandoned, never broadcast, or rejected from the mempool for another
+//! reason.
+struct TxStateInactive {
+    bool abandoned;
+
+    explicit TxStateInactive(bool abandoned = false) : abandoned(abandoned) {}
+    std::string toString() const { return strprintf("Inactive (abandoned=%i)", abandoned); }
+};
+
+//! State of transaction loaded in an unrecognized state with unexpected hash or
+//! index values. Treated as inactive (with serialized hash and index values
+//! preserved) by default, but may enter another state if transaction is added
+//! to the mempool, or confirmed, or abandoned, or found conflicting.
+struct TxStateUnrecognized {
+    uint256 block_hash;
+    int index;
+
+    TxStateUnrecognized(const uint256& block_hash, int index) : block_hash(block_hash), index(index) {}
+    std::string toString() const { return strprintf("Unrecognized (block=%s, index=%i)", block_hash.ToString(), index); }
+};
+
+//! All possible CWalletTx states
+using TxState = std::variant<TxStateConfirmed, TxStateInMempool, TxStateConflicted, TxStateInactive, TxStateUnrecognized>;
+
+//! Subset of states transaction sync logic is implemented to handle.
+using SyncTxState = std::variant<TxStateConfirmed, TxStateInMempool, TxStateInactive>;
+
+//! Try to interpret deserialized TxStateUnrecognized data as a recognized state.
+static inline TxState TxStateInterpretSerialized(TxStateUnrecognized data)
+{
+    if (data.block_hash == uint256::ZERO) {
+        if (data.index == 0) return TxStateInactive{};
+    } else if (data.block_hash == uint256::ONE) {
+        if (data.index == -1) return TxStateInactive{/*abandoned=*/true};
+    } else if (data.index >= 0) {
+        return TxStateConfirmed{data.block_hash, /*height=*/-1, data.index};
+    } else if (data.index == -1) {
+        return TxStateConflicted{data.block_hash, /*height=*/-1};
+    }
+    return data;
+}
+
+//! Get TxState serialized block hash. Inverse of TxStateInterpretSerialized.
+static inline uint256 TxStateSerializedBlockHash(const TxState& state)
+{
+    return std::visit(util::Overloaded{
+        [](const TxStateInactive& inactive) { return inactive.abandoned ? uint256::ONE : uint256::ZERO; },
+        [](const TxStateInMempool& in_mempool) { return uint256::ZERO; },
+        [](const TxStateConfirmed& confirmed) { return confirmed.confirmed_block_hash; },
+        [](const TxStateConflicted& conflicted) { return conflicted.conflicting_block_hash; },
+        [](const TxStateUnrecognized& unrecognized) { return unrecognized.block_hash; }
+    }, state);
+}
+
+//! Get TxState serialized block index. Inverse of TxStateInterpretSerialized.
+static inline int TxStateSerializedIndex(const TxState& state)
+{
+    return std::visit(util::Overloaded{
+        [](const TxStateInactive& inactive) { return inactive.abandoned ? -1 : 0; },
+        [](const TxStateInMempool& in_mempool) { return 0; },
+        [](const TxStateConfirmed& confirmed) { return confirmed.position_in_block; },
+        [](const TxStateConflicted& conflicted) { return -1; },
+        [](const TxStateUnrecognized& unrecognized) { return unrecognized.index; }
+    }, state);
+}
+
+//! Return TxState or SyncTxState as a string for logging or debugging.
+template<typename T>
+std::string TxStateString(const T& state)
+{
+    return std::visit([](const auto& s) { return s.toString(); }, state);
+}
+
+/**
+ * Cachable amount subdivided into watchonly and spendable parts.
+ */
+struct CachableAmount
+{
+    // NO and ALL are never (supposed to be) cached
+    std::bitset<ISMINE_ENUM_ELEMENTS> m_cached;
+    CAmount m_value[ISMINE_ENUM_ELEMENTS];
+    inline void Reset()
+    {
+        m_cached.reset();
+    }
+    void Set(isminefilter filter, CAmount value)
+    {
+        m_cached.set(filter);
+        m_value[filter] = value;
+    }
+};
+
+
+typedef std::map<std::string, std::string> mapValue_t;
+
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 /** Legacy class used for deserializing vtxPrev for backwards compatibility.
  * vtxPrev was removed in commit 93a18a3650292afbb441a47d1fa1b94aeb0164e3,
@@ -67,6 +211,7 @@ public:
  */
 class CWalletTx
 {
+<<<<<<< HEAD
 private:
     const CWallet* const pwallet;
 
@@ -75,6 +220,8 @@ private:
      */
     static constexpr const uint256& ABANDON_HASH = uint256::ONE;
 
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 public:
     /**
      * Key/value map with information about the transaction.
@@ -126,7 +273,10 @@ public:
 
     // memory only
     enum AmountType { DEBIT, CREDIT, IMMATURE_CREDIT, AVAILABLE_CREDIT, AMOUNTTYPE_ENUM_ELEMENTS };
+<<<<<<< HEAD
     CAmount GetCachableAmount(AmountType type, const isminefilter& filter, bool recalculate = false) const;
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     mutable CachableAmount m_amounts[AMOUNTTYPE_ENUM_ELEMENTS];
     /**
      * This flag is true if all m_amounts caches are empty. This is particularly
@@ -136,12 +286,18 @@ public:
      */
     mutable bool m_is_cache_empty{true};
     mutable bool fChangeCached;
+<<<<<<< HEAD
     mutable bool fInMempool;
     mutable CAmount nChangeCached;
 
     CWalletTx(const CWallet* wallet, CTransactionRef arg)
         : pwallet(wallet),
           tx(std::move(arg))
+=======
+    mutable CAmount nChangeCached;
+
+    CWalletTx(CTransactionRef tx, const TxState& state) : tx(std::move(tx)), m_state(state)
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     {
         Init();
     }
@@ -155,6 +311,7 @@ public:
         nTimeSmart = 0;
         fFromMe = false;
         fChangeCached = false;
+<<<<<<< HEAD
         fInMempool = false;
         nChangeCached = 0;
         nOrderPos = -1;
@@ -192,6 +349,14 @@ public:
     };
 
     Confirmation m_confirm;
+=======
+        nChangeCached = 0;
+        nOrderPos = -1;
+    }
+
+    CTransactionRef tx;
+    TxState m_state;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     template<typename Stream>
     void Serialize(Stream& s) const
@@ -199,7 +364,13 @@ public:
         mapValue_t mapValueCopy = mapValue;
 
         mapValueCopy["fromaccount"] = "";
+<<<<<<< HEAD
         WriteOrderPos(nOrderPos, mapValueCopy);
+=======
+        if (nOrderPos != -1) {
+            mapValueCopy["n"] = ToString(nOrderPos);
+        }
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         if (nTimeSmart) {
             mapValueCopy["timesmart"] = strprintf("%u", nTimeSmart);
         }
@@ -207,8 +378,13 @@ public:
         std::vector<uint8_t> dummy_vector1; //!< Used to be vMerkleBranch
         std::vector<uint8_t> dummy_vector2; //!< Used to be vtxPrev
         bool dummy_bool = false; //!< Used to be fSpent
+<<<<<<< HEAD
         uint256 serializedHash = isAbandoned() ? ABANDON_HASH : m_confirm.hashBlock;
         int serializedIndex = isAbandoned() || isConflicted() ? -1 : m_confirm.nIndex;
+=======
+        uint256 serializedHash = TxStateSerializedBlockHash(m_state);
+        int serializedIndex = TxStateSerializedIndex(m_state);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         s << tx << serializedHash << dummy_vector1 << serializedIndex << dummy_vector2 << mapValueCopy << vOrderForm << fTimeReceivedIsTxTime << nTimeReceived << fFromMe << dummy_bool;
     }
 
@@ -220,6 +396,7 @@ public:
         std::vector<uint256> dummy_vector1; //!< Used to be vMerkleBranch
         std::vector<CMerkleTx> dummy_vector2; //!< Used to be vtxPrev
         bool dummy_bool; //! Used to be fSpent
+<<<<<<< HEAD
         int serializedIndex;
         s >> tx >> m_confirm.hashBlock >> dummy_vector1 >> serializedIndex >> dummy_vector2 >> mapValue >> vOrderForm >> fTimeReceivedIsTxTime >> nTimeReceived >> fFromMe >> dummy_bool;
 
@@ -241,6 +418,18 @@ public:
 
         ReadOrderPos(nOrderPos, mapValue);
         nTimeSmart = mapValue.count("timesmart") ? (unsigned int)atoi64(mapValue["timesmart"]) : 0;
+=======
+        uint256 serialized_block_hash;
+        int serializedIndex;
+        s >> tx >> serialized_block_hash >> dummy_vector1 >> serializedIndex >> dummy_vector2 >> mapValue >> vOrderForm >> fTimeReceivedIsTxTime >> nTimeReceived >> fFromMe >> dummy_bool;
+
+        m_state = TxStateInterpretSerialized({serialized_block_hash, serializedIndex});
+
+        const auto it_op = mapValue.find("n");
+        nOrderPos = (it_op != mapValue.end()) ? LocaleIndependentAtoi<int64_t>(it_op->second) : -1;
+        const auto it_ts = mapValue.find("timesmart");
+        nTimeSmart = (it_ts != mapValue.end()) ? static_cast<unsigned int>(LocaleIndependentAtoi<int64_t>(it_ts->second)) : 0;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         mapValue.erase("fromaccount");
         mapValue.erase("spent");
@@ -264,6 +453,7 @@ public:
         m_is_cache_empty = true;
     }
 
+<<<<<<< HEAD
     //! filter decides which addresses will count towards the debit
     CAmount GetDebit(const isminefilter& filter) const;
     CAmount GetCredit(const isminefilter& filter) const;
@@ -290,10 +480,13 @@ public:
         return (GetDebit(filter) > 0);
     }
 
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     /** True if only scriptSigs are different */
     bool IsEquivalentTo(const CWalletTx& tx) const;
 
     bool InMempool() const;
+<<<<<<< HEAD
     bool IsTrusted() const;
 
     int64_t GetTxTime() const;
@@ -355,4 +548,40 @@ public:
     void operator=(CWalletTx const &x) = delete;
 };
 
+=======
+
+    int64_t GetTxTime() const;
+
+    template<typename T> const T* state() const { return std::get_if<T>(&m_state); }
+    template<typename T> T* state() { return std::get_if<T>(&m_state); }
+
+    bool isAbandoned() const { return state<TxStateInactive>() && state<TxStateInactive>()->abandoned; }
+    bool isConflicted() const { return state<TxStateConflicted>(); }
+    bool isInactive() const { return state<TxStateInactive>(); }
+    bool isUnconfirmed() const { return !isAbandoned() && !isConflicted() && !isConfirmed(); }
+    bool isConfirmed() const { return state<TxStateConfirmed>(); }
+    const uint256& GetHash() const { return tx->GetHash(); }
+    const uint256& GetWitnessHash() const { return tx->GetWitnessHash(); }
+    bool IsCoinBase() const { return tx->IsCoinBase(); }
+
+private:
+    // Disable copying of CWalletTx objects to prevent bugs where instances get
+    // copied in and out of the mapWallet map, and fields are updated in the
+    // wrong copy.
+    CWalletTx(const CWalletTx&) = default;
+    CWalletTx& operator=(const CWalletTx&) = default;
+public:
+    // Instead have an explicit copy function
+    void CopyFrom(const CWalletTx&);
+};
+
+struct WalletTxOrderComparator {
+    bool operator()(const CWalletTx* a, const CWalletTx* b) const
+    {
+        return a->nOrderPos < b->nOrderPos;
+    }
+};
+} // namespace wallet
+
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #endif // DIGIBYTE_WALLET_TRANSACTION_H

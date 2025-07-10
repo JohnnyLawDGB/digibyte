@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 // Copyright (c) 2017-2020 The DigiByte Core developers
+=======
+// Copyright (c) 2017-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -7,7 +11,13 @@
 
 #include <map>
 #include <string>
+<<<<<<< HEAD
 
+=======
+#include <optional>
+
+struct bilingual_str;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 class FillableSigningProvider;
 class UniValue;
 struct CMutableTransaction;
@@ -25,7 +35,11 @@ class SigningProvider;
  * @param result         JSON object where signed transaction results accumulate
  */
 void SignTransaction(CMutableTransaction& mtx, const SigningProvider* keystore, const std::map<COutPoint, Coin>& coins, const UniValue& hashType, UniValue& result);
+<<<<<<< HEAD
 void SignTransactionResultToJSON(CMutableTransaction& mtx, bool complete, const std::map<COutPoint, Coin>& coins, const std::map<int, std::string>& input_errors, UniValue& result);
+=======
+void SignTransactionResultToJSON(CMutableTransaction& mtx, bool complete, const std::map<COutPoint, Coin>& coins, const std::map<int, bilingual_str>& input_errors, UniValue& result);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 /**
   * Parse a prevtxs UniValue array and get the map of coins from it
@@ -36,7 +50,19 @@ void SignTransactionResultToJSON(CMutableTransaction& mtx, bool complete, const 
   */
 void ParsePrevouts(const UniValue& prevTxsUnival, FillableSigningProvider* keystore, std::map<COutPoint, Coin>& coins);
 
+<<<<<<< HEAD
 /** Create a transaction from univalue parameters */
 CMutableTransaction ConstructTransaction(const UniValue& inputs_in, const UniValue& outputs_in, const UniValue& locktime, bool rbf);
+=======
+
+/** Normalize univalue-represented inputs and add them to the transaction */
+void AddInputs(CMutableTransaction& rawTx, const UniValue& inputs_in, bool rbf);
+
+/** Normalize univalue-represented outputs and add them to the transaction */
+void AddOutputs(CMutableTransaction& rawTx, const UniValue& outputs_in);
+
+/** Create a transaction from univalue parameters */
+CMutableTransaction ConstructTransaction(const UniValue& inputs_in, const UniValue& outputs_in, const UniValue& locktime, std::optional<bool> rbf);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 #endif // DIGIBYTE_RPC_RAWTRANSACTION_UTIL_H

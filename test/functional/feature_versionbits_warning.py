@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
+<<<<<<< HEAD
 # Copyright (c) 2016-2021 The DigiByte Core developers
+=======
+# Copyright (c) 2016-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test version bits warning system.
@@ -60,7 +64,8 @@ class VersionBitsWarningTest(DigiByteTestFramework):
 
     def versionbits_in_alert_file(self):
         """Test that the versionbits warning has been written to the alert file."""
-        alert_text = open(self.alert_filename, 'r', encoding='utf8').read()
+        with open(self.alert_filename, 'r', encoding='utf8') as f:
+            alert_text = f.read()
         return VB_PATTERN.search(alert_text) is not None
 
     def run_test(self):

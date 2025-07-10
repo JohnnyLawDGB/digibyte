@@ -1,5 +1,5 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-// Copyright (c) 2009-2020 The DigiByte Core developers
+// Copyright (c) 2009-2021 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -8,6 +8,7 @@
 #ifndef DIGIBYTE_COMPAT_ASSUMPTIONS_H
 #define DIGIBYTE_COMPAT_ASSUMPTIONS_H
 
+#include <cstddef>
 #include <limits>
 
 // Assumption: We assume that the macro NDEBUG is not defined.

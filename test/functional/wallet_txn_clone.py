@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
+<<<<<<< HEAD
 # Copyright (c) 2014-2021 The DigiByte Core developers
+=======
+# Copyright (c) 2014-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test the wallet accounts properly when there are cloned transactions with malleated scriptsigs."""
@@ -24,6 +28,7 @@ class TxnMallTest(DigiByteTestFramework):
         self.skip_if_no_wallet()
 
     def add_options(self, parser):
+        self.add_wallet_options(parser)
         parser.add_argument("--mineblock", dest="mine_block", default=False, action="store_true",
                             help="Test double-spend of 1-confirmed transaction")
         parser.add_argument("--segwit", dest="segwit", default=False, action="store_true",
@@ -47,12 +52,17 @@ class TxnMallTest(DigiByteTestFramework):
         else:
             output_type = "legacy"
 
+<<<<<<< HEAD
         # All nodes should start with 50 mature transactions,
         # having 72000 per (mature) coinbase transaction, each.
         # The fourth address from TestNode.PRIV_KEYS should have
         # 41 mature blocks, but only 8 immature blocks.
         # This is caused by the different COINBASE_MATURITY parameter in digibyte. 
         starting_balance = 25 * 72000
+=======
+        # All nodes should start with 1,250 DGB:
+        starting_balance = 1250
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         for i in range(3):
             assert_equal(self.nodes[i].getbalance(), starting_balance)
 
@@ -98,17 +108,20 @@ class TxnMallTest(DigiByteTestFramework):
         # Have node0 mine a block, if requested:
         if (self.options.mine_block):
             self.generate(self.nodes[0], 1, sync_fun=lambda: self.sync_blocks(self.nodes[0:2]))
+<<<<<<< HEAD
             # Initialize expected variable
             expected = starting_balance + node0_tx1["fee"] + node0_tx2["fee"]
             expected += 72000  # Add block reward for the mined block
         else:
             # Initialize expected variable for the case when mine_block is not set
             expected = starting_balance + node0_tx1["fee"] + node0_tx2["fee"]
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         tx1 = self.nodes[0].gettransaction(txid1)
         tx2 = self.nodes[0].gettransaction(txid2)
 
-        # Node0's balance should be starting balance, plus 50BTC for another
+        # Node0's balance should be starting balance, plus 50DGB for another
         # matured block, minus tx1 and tx2 amounts, and minus transaction fees:
         expected += tx1["amount"] + tx1["fee"]
         expected += tx2["amount"] + tx2["fee"]
@@ -138,9 +151,12 @@ class TxnMallTest(DigiByteTestFramework):
         self.nodes[2].sendrawtransaction(node0_tx2["hex"])
         self.nodes[2].sendrawtransaction(tx2["hex"])
         self.generate(self.nodes[2], 1)  # Mine another block to make sure we sync
+<<<<<<< HEAD
 
         # Add block rewards from the mined blocks by node 2
         expected += 72000 * 2  # 2 blocks mined by node 2
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # Re-fetch transaction info:
         tx1 = self.nodes[0].gettransaction(txid1)
@@ -152,6 +168,12 @@ class TxnMallTest(DigiByteTestFramework):
         assert_equal(tx1_clone["confirmations"], 2)
         assert_equal(tx2["confirmations"], 1)
 
+<<<<<<< HEAD
+=======
+        # Check node0's total balance; should be same as before the clone, + 100 DGB for 2 matured,
+        # less possible orphaned matured subsidy
+        expected += 100
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         if (self.options.mine_block):
             # In DigiByte, since COINBASE_MATURITY is only set to 8,
             # node0's txs are already matured. No emission will mature

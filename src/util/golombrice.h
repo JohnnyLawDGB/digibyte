@@ -1,10 +1,19 @@
+<<<<<<< HEAD
 // Copyright (c) 2018-2020 The DigiByte Core developers
+=======
+// Copyright (c) 2018-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #ifndef DIGIBYTE_UTIL_GOLOMBRICE_H
 #define DIGIBYTE_UTIL_GOLOMBRICE_H
 
+<<<<<<< HEAD
+=======
+#include <util/fastrange.h>
+
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <streams.h>
 
 #include <cstdint>

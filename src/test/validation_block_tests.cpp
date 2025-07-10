@@ -1,5 +1,9 @@
+<<<<<<< HEAD
 // Copyright (c) 2018-2020 The Bitcoin Core developers
 // Copyright (c) 2018-2020 The DigiByte Core developers
+=======
+// Copyright (c) 2018-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -8,10 +12,14 @@
 #include <chainparams.h>
 #include <consensus/merkle.h>
 #include <consensus/validation.h>
-#include <miner.h>
+#include <node/miner.h>
 #include <pow.h>
 #include <random.h>
+<<<<<<< HEAD
 #include <script/standard.h>
+=======
+#include <test/util/random.h>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <test/util/script.h>
 #include <test/util/setup_common.h>
 #include <util/time.h>
@@ -19,9 +27,14 @@
 #include <validationinterface.h>
 
 #include <thread>
+<<<<<<< HEAD
     
 #define ADVANCE() SetMockTime(GetTime() + Params().GetConsensus().nTargetSpacing * 2 + 1)
 #define APPLY_BLOCK_TIME(block) SetMockTime((block)->nTime)
+=======
+
+using node::BlockAssembler;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 namespace validation_block_tests {
 struct MinerTestingSetup : public RegTestingSetup {
@@ -45,7 +58,11 @@ struct TestSubscriber final : public CValidationInterface {
         BOOST_CHECK_EQUAL(m_expected_tip, pindexNew->GetBlockHash());
     }
 
+<<<<<<< HEAD
     void BlockConnected(const std::shared_ptr<const CBlock>& block, const CBlockIndex* pindex) override
+=======
+    void BlockConnected(ChainstateRole role, const std::shared_ptr<const CBlock>& block, const CBlockIndex* pindex) override
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     {
         BOOST_CHECK_EQUAL(m_expected_tip, block->hashPrevBlock);
         BOOST_CHECK_EQUAL(m_expected_tip, pindex->pprev->GetBlockHash());
@@ -67,7 +84,11 @@ std::shared_ptr<CBlock> MinerTestingSetup::Block(const uint256& prev_hash)
     static int i = 0;
     static uint64_t time = Params().GenesisBlock().nTime;
 
+<<<<<<< HEAD
     auto ptemplate = BlockAssembler(m_node.chainman->ActiveChainstate(), *m_node.mempool, Params()).CreateNewBlock(CScript{} << i++ << OP_TRUE, ALGO_SCRYPT);
+=======
+    auto ptemplate = BlockAssembler{m_node.chainman->ActiveChainstate(), m_node.mempool.get()}.CreateNewBlock(CScript{} << i++ << OP_TRUE);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     auto pblock = std::make_shared<CBlock>(ptemplate->block);
     pblock->hashPrevBlock = prev_hash;
     pblock->nTime = ++time;
@@ -81,6 +102,8 @@ std::shared_ptr<CBlock> MinerTestingSetup::Block(const uint256& prev_hash)
     txCoinbase.vout[1].nValue = txCoinbase.vout[0].nValue;
     txCoinbase.vout[0].nValue = 0;
     txCoinbase.vin[0].scriptWitness.SetNull();
+    // Always pad with OP_0 at the end to avoid bad-cb-length error
+    txCoinbase.vin[0].scriptSig = CScript{} << WITH_LOCK(::cs_main, return m_node.chainman->m_blockman.LookupBlockIndex(prev_hash)->nHeight + 1) << OP_0;
     pblock->vtx[0] = MakeTransactionRef(std::move(txCoinbase));
 
     return pblock;
@@ -88,6 +111,7 @@ std::shared_ptr<CBlock> MinerTestingSetup::Block(const uint256& prev_hash)
 
 std::shared_ptr<CBlock> MinerTestingSetup::FinalizeBlock(std::shared_ptr<CBlock> pblock)
 {
+<<<<<<< HEAD
     LOCK(cs_main); // For m_node.chainman->m_blockman.LookupBlockIndex
     auto consensus = Params().GetConsensus();
     
@@ -99,11 +123,21 @@ std::shared_ptr<CBlock> MinerTestingSetup::FinalizeBlock(std::shared_ptr<CBlock>
     CBlockHeader header = pblock->GetBlockHeader();
     auto prevIndex = m_node.chainman->m_blockman.LookupBlockIndex(pblock->hashPrevBlock);
     pblock->nBits = GetNextWorkRequired(prevIndex, &header, consensus, pblock->GetAlgo());
+=======
+    const CBlockIndex* prev_block{WITH_LOCK(::cs_main, return m_node.chainman->m_blockman.LookupBlockIndex(pblock->hashPrevBlock))};
+    m_node.chainman->GenerateCoinbaseCommitment(*pblock, prev_block);
+
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     pblock->hashMerkleRoot = BlockMerkleRoot(*pblock);
 
     while (!CheckProofOfWork(GetPoWAlgoHash(pblock->GetBlockHeader()), pblock->nBits, Params().GetConsensus())) {
         ++(pblock->nNonce);
     }
+
+    // submit block header, so that miner can get the block height from the
+    // global state and the node has the topology of the chain
+    BlockValidationState ignored;
+    BOOST_CHECK(Assert(m_node.chainman)->ProcessNewBlockHeaders({pblock->GetBlockHeader()}, true, ignored));
 
     return pblock;
 }
@@ -120,7 +154,7 @@ std::shared_ptr<const CBlock> MinerTestingSetup::BadBlock(const uint256& prev_ha
     auto pblock = Block(prev_hash);
 
     CMutableTransaction coinbase_spend;
-    coinbase_spend.vin.push_back(CTxIn(COutPoint(pblock->vtx[0]->GetHash(), 0), CScript(), 0));
+    coinbase_spend.vin.emplace_back(COutPoint(pblock->vtx[0]->GetHash(), 0), CScript(), 0);
     coinbase_spend.vout.push_back(pblock->vtx[0]->vout[0]);
 
     CTransactionRef tx = MakeTransactionRef(coinbase_spend);
@@ -159,6 +193,7 @@ BOOST_AUTO_TEST_CASE(processnewblock_signals_ordering)
     }
 
     bool ignored;
+<<<<<<< HEAD
     BlockValidationState state;
     std::vector<CBlockHeader> headers;
     std::transform(blocks.begin(), blocks.end(), std::back_inserter(headers), [](std::shared_ptr<const CBlock> b) { return b->GetBlockHeader(); });
@@ -169,6 +204,10 @@ BOOST_AUTO_TEST_CASE(processnewblock_signals_ordering)
 
     // Connect the genesis block and drain any outstanding events
     BOOST_CHECK(Assert(m_node.chainman)->ProcessNewBlock(Params(), std::make_shared<CBlock>(Params().GenesisBlock()), true, &ignored));
+=======
+    // Connect the genesis block and drain any outstanding events
+    BOOST_CHECK(Assert(m_node.chainman)->ProcessNewBlock(std::make_shared<CBlock>(Params().GenesisBlock()), true, true, &ignored));
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     SyncWithValidationInterfaceQueue();
 
     // subscribe to events (this subscriber will validate event ordering)
@@ -184,19 +223,31 @@ BOOST_AUTO_TEST_CASE(processnewblock_signals_ordering)
     // this will create parallelism and randomness inside validation - the ValidationInterface
     // will subscribe to events generated during block validation and assert on ordering invariance
     std::vector<std::thread> threads;
+<<<<<<< HEAD
+=======
+    threads.reserve(10);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     for (int i = 0; i < 10; i++) {
         threads.emplace_back([&]() {
             bool ignored;
             FastRandomContext insecure;
             for (int i = 0; i < 1000; i++) {
                 auto block = blocks[insecure.randrange(blocks.size() - 1)];
+<<<<<<< HEAD
                 Assert(m_node.chainman)->ProcessNewBlock(Params(), block, true, &ignored);
+=======
+                Assert(m_node.chainman)->ProcessNewBlock(block, true, true, &ignored);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             }
 
             // to make sure that eventually we process the full chain - do it here
-            for (auto block : blocks) {
+            for (const auto& block : blocks) {
                 if (block->vtx.size() == 1) {
+<<<<<<< HEAD
                     bool processed = Assert(m_node.chainman)->ProcessNewBlock(Params(), block, true, &ignored);
+=======
+                    bool processed = Assert(m_node.chainman)->ProcessNewBlock(block, true, true, &ignored);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                     assert(processed);
                 }
             }
@@ -235,8 +286,12 @@ BOOST_AUTO_TEST_CASE(mempool_locks_reorg)
 {
     bool ignored;
     auto ProcessBlock = [&](std::shared_ptr<const CBlock> block) -> bool {
+<<<<<<< HEAD
         APPLY_BLOCK_TIME(block);                
         return Assert(m_node.chainman)->ProcessNewBlock(Params(), block, /* fForceProcessing */ true, /* fNewBlock */ &ignored);
+=======
+        return Assert(m_node.chainman)->ProcessNewBlock(block, /*force_processing=*/true, /*min_pow_checked=*/true, /*new_block=*/&ignored);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     };
 
     // Process all mined blocks
@@ -246,7 +301,11 @@ BOOST_AUTO_TEST_CASE(mempool_locks_reorg)
 
     // Run the test multiple times
     for (int test_runs = 3; test_runs > 0; --test_runs) {
+<<<<<<< HEAD
         BOOST_CHECK_EQUAL(last_mined->GetHash(), m_node.chainman->ActiveChain().Tip()->GetBlockHash());
+=======
+        BOOST_CHECK_EQUAL(last_mined->GetHash(), WITH_LOCK(Assert(m_node.chainman)->GetMutex(), return m_node.chainman->ActiveChain().Tip()->GetBlockHash()));
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         // Later on split from here
         const uint256 split_hash{last_mined->hashPrevBlock};
@@ -256,10 +315,17 @@ BOOST_AUTO_TEST_CASE(mempool_locks_reorg)
         std::vector<CTransactionRef> txs;
         for (int num_txs = 22; num_txs > 0; --num_txs) {
             CMutableTransaction mtx;
+<<<<<<< HEAD
             mtx.vin.push_back(CTxIn{COutPoint{last_mined->vtx[0]->GetHash(), 1}, CScript{}});
             mtx.vin[0].scriptWitness.stack.push_back(WITNESS_STACK_ELEM_OP_TRUE);
             mtx.vout.push_back(last_mined->vtx[0]->vout[1]);
             mtx.vout[0].nValue -= 10000;
+=======
+            mtx.vin.emplace_back(COutPoint{last_mined->vtx[0]->GetHash(), 1}, CScript{});
+            mtx.vin[0].scriptWitness.stack.push_back(WITNESS_STACK_ELEM_OP_TRUE);
+            mtx.vout.push_back(last_mined->vtx[0]->vout[1]);
+            mtx.vout[0].nValue -= 1000;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             txs.push_back(MakeTransactionRef(mtx));
 
             last_mined = GoodBlock(last_mined->GetHash());
@@ -267,7 +333,11 @@ BOOST_AUTO_TEST_CASE(mempool_locks_reorg)
         }
 
         // Mature the inputs of the txs
+<<<<<<< HEAD
         for (int j = COINBASE_MATURITY_2; j > 0; --j) {
+=======
+        for (int j = COINBASE_MATURITY; j > 0; --j) {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             last_mined = GoodBlock(last_mined->GetHash());
             BOOST_REQUIRE(ProcessBlock(last_mined));
         }
@@ -278,7 +348,11 @@ BOOST_AUTO_TEST_CASE(mempool_locks_reorg)
         std::vector<std::shared_ptr<const CBlock>> reorg;
         last_mined = GoodBlock(split_hash);
         reorg.push_back(last_mined);
+<<<<<<< HEAD
         for (size_t j = COINBASE_MATURITY_2 + txs.size() + 1; j > 0; --j) {
+=======
+        for (size_t j = COINBASE_MATURITY + txs.size() + 1; j > 0; --j) {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             last_mined = GoodBlock(last_mined->GetHash());
             reorg.push_back(last_mined);
         }
@@ -287,7 +361,11 @@ BOOST_AUTO_TEST_CASE(mempool_locks_reorg)
         {
             LOCK(cs_main);
             for (const auto& tx : txs) {
+<<<<<<< HEAD
                 const MempoolAcceptResult result = AcceptToMemoryPool(m_node.chainman->ActiveChainstate(), *m_node.mempool, tx, false /* bypass_limits */);
+=======
+                const MempoolAcceptResult result = m_node.chainman->ProcessTransaction(tx);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 BOOST_REQUIRE(result.m_result_type == MempoolAcceptResult::ResultType::VALID);
             }
         }
@@ -328,7 +406,11 @@ BOOST_AUTO_TEST_CASE(mempool_locks_reorg)
             ProcessBlock(b);
         }
         // Check that the reorg was eventually successful
+<<<<<<< HEAD
         BOOST_CHECK_EQUAL(last_mined->GetHash(), m_node.chainman->ActiveChain().Tip()->GetBlockHash());
+=======
+        BOOST_CHECK_EQUAL(last_mined->GetHash(), WITH_LOCK(Assert(m_node.chainman)->GetMutex(), return m_node.chainman->ActiveChain().Tip()->GetBlockHash()));
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         // We can join the other thread, which returns when the reorg was successful
         rpc_thread.join();
@@ -337,9 +419,16 @@ BOOST_AUTO_TEST_CASE(mempool_locks_reorg)
 
 BOOST_AUTO_TEST_CASE(witness_commitment_index)
 {
+<<<<<<< HEAD
     CScript pubKey;
     pubKey << 1 << OP_TRUE;
     auto ptemplate = BlockAssembler(m_node.chainman->ActiveChainstate(), *m_node.mempool, Params()).CreateNewBlock(pubKey, ALGO_SCRYPT);
+=======
+    LOCK(Assert(m_node.chainman)->GetMutex());
+    CScript pubKey;
+    pubKey << 1 << OP_TRUE;
+    auto ptemplate = BlockAssembler{m_node.chainman->ActiveChainstate(), m_node.mempool.get()}.CreateNewBlock(pubKey);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     CBlock pblock = ptemplate->block;
 
     CTxOut witness;

@@ -1,23 +1,29 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
+// Copyright (c) 2009-2021 The Bitcoin Core developers
+// Copyright (c) 2014-2025 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #ifndef DIGIBYTE_ADDRDB_H
 #define DIGIBYTE_ADDRDB_H
 
-#include <fs.h>
-#include <net_types.h> // For banmap_t
+#include <net_types.h>
 #include <serialize.h>
 #include <univalue.h>
+#include <util/fs.h>
+#include <util/result.h>
 
+#include <memory>
 #include <string>
 #include <vector>
 
+class ArgsManager;
+class AddrMan;
 class CAddress;
 class CAddrMan;
 class CDataStream;
+class DataStream;
+class NetGroupManager;
 
 class CBanEntry
 {
@@ -66,6 +72,11 @@ public:
 };
 
 /** Access to the (IP) address database (peers.dat) */
+/** Only used by tests. */
+void ReadFromStream(AddrMan& addr, DataStream& ssPeers);
+
+bool DumpPeerAddresses(const ArgsManager& args, const AddrMan& addr);
+
 class CAddrDB
 {
 private:

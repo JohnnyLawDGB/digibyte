@@ -1,5 +1,9 @@
+<<<<<<< HEAD
 // Copyright (c) 2009-2020 The Bitcoin Core developers
 // Copyright (c) 2014-2020 The DigiByte Core developers
+=======
+// Copyright (c) 2011-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -14,21 +18,30 @@
 #include <qt/paymentserver.h>
 #include <qt/transactionrecord.h>
 
+#include <common/system.h>
 #include <consensus/consensus.h>
 #include <interfaces/node.h>
 #include <interfaces/wallet.h>
 #include <key_io.h>
+<<<<<<< HEAD
 #include <policy/policy.h>
 #include <script/script.h>
 #include <util/system.h>
 #include <validation.h>
 #include <wallet/ismine.h>
+=======
+#include <logging.h>
+#include <policy/policy.h>
+#include <validation.h>
+#include <wallet/types.h>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 #include <stdint.h>
 #include <string>
 
 #include <QLatin1String>
 
+<<<<<<< HEAD
 QString TransactionDesc::FormatTxStatus(const interfaces::WalletTx& wtx, const interfaces::WalletTxStatus& status, bool inMempool, int numBlocks)
 {
     if (!status.is_final)
@@ -51,6 +64,53 @@ QString TransactionDesc::FormatTxStatus(const interfaces::WalletTx& wtx, const i
         } else {
             return tr("%1 confirmations").arg(nDepth);
         }
+=======
+using wallet::ISMINE_ALL;
+using wallet::ISMINE_SPENDABLE;
+using wallet::ISMINE_WATCH_ONLY;
+using wallet::isminetype;
+
+QString TransactionDesc::FormatTxStatus(const interfaces::WalletTxStatus& status, bool inMempool)
+{
+    int depth = status.depth_in_main_chain;
+    if (depth < 0) {
+        /*: Text explaining the current status of a transaction, shown in the
+            status field of the details window for this transaction. This status
+            represents an unconfirmed transaction that conflicts with a confirmed
+            transaction. */
+        return tr("conflicted with a transaction with %1 confirmations").arg(-depth);
+    } else if (depth == 0) {
+        QString s;
+        if (inMempool) {
+            /*: Text explaining the current status of a transaction, shown in the
+                status field of the details window for this transaction. This status
+                represents an unconfirmed transaction that is in the memory pool. */
+            s = tr("0/unconfirmed, in memory pool");
+        } else {
+            /*: Text explaining the current status of a transaction, shown in the
+                status field of the details window for this transaction. This status
+                represents an unconfirmed transaction that is not in the memory pool. */
+            s = tr("0/unconfirmed, not in memory pool");
+        }
+        if (status.is_abandoned) {
+            /*: Text explaining the current status of a transaction, shown in the
+                status field of the details window for this transaction. This
+                status represents an abandoned transaction. */
+            s += QLatin1String(", ") + tr("abandoned");
+        }
+        return s;
+    } else if (depth < 6) {
+        /*: Text explaining the current status of a transaction, shown in the
+            status field of the details window for this transaction. This
+            status represents a transaction confirmed in at least one block,
+            but less than 6 blocks. */
+        return tr("%1/unconfirmed").arg(depth);
+    } else {
+        /*: Text explaining the current status of a transaction, shown in the
+            status field of the details window for this transaction. This status
+            represents a transaction confirmed in 6 or more blocks. */
+        return tr("%1 confirmations").arg(depth);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 }
 
@@ -82,7 +142,11 @@ bool GetPaymentRequestMerchant(const std::string& pr, QString& merchant)
     return false;
 }
 
+<<<<<<< HEAD
 QString TransactionDesc::toHTML(interfaces::Node& node, interfaces::Wallet& wallet, TransactionRecord *rec, int unit)
+=======
+QString TransactionDesc::toHTML(interfaces::Node& node, interfaces::Wallet& wallet, TransactionRecord* rec, DigiByteUnit unit)
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     int numBlocks;
     interfaces::WalletTxStatus status;
@@ -100,7 +164,11 @@ QString TransactionDesc::toHTML(interfaces::Node& node, interfaces::Wallet& wall
     CAmount nDebit = wtx.debit;
     CAmount nNet = nCredit - nDebit;
 
+<<<<<<< HEAD
     strHTML += "<b>" + tr("Status") + ":</b> " + FormatTxStatus(wtx, status, inMempool, numBlocks);
+=======
+    strHTML += "<b>" + tr("Status") + ":</b> " + FormatTxStatus(status, inMempool);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     strHTML += "<br>";
 
     strHTML += "<b>" + tr("Date") + ":</b> " + (nTime ? GUIUtil::dateTimeStr(nTime) : "") + "<br>";
@@ -227,9 +295,9 @@ QString TransactionDesc::toHTML(interfaces::Node& node, interfaces::Wallet& wall
                             strHTML += GUIUtil::HtmlEscape(name) + " ";
                         strHTML += GUIUtil::HtmlEscape(EncodeDestination(address));
                         if(toSelf == ISMINE_SPENDABLE)
-                            strHTML += " (own address)";
+                            strHTML += " (" + tr("own address") + ")";
                         else if(toSelf & ISMINE_WATCH_ONLY)
-                            strHTML += " (watch-only)";
+                            strHTML += " (" + tr("watch-only") + ")";
                         strHTML += "<br>";
                     }
                 }

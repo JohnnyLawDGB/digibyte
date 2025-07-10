@@ -1,5 +1,9 @@
+<<<<<<< HEAD
 // Copyright (c) 2017-2020 The Bitcoin Core developers
 // Copyright (c) 2017-2020 The DigiByte Core developers
+=======
+// Copyright (c) 2017-2021 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -9,7 +13,10 @@
 #include <policy/policy.h>
 #include <primitives/transaction.h>
 #include <script/script.h>
+<<<<<<< HEAD
 #include <script/standard.h>
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <test/util/setup_common.h>
 #include <validation.h>
 
@@ -38,8 +45,12 @@ BOOST_FIXTURE_TEST_CASE(tx_mempool_reject_coinbase, TestChain100Setup)
     LOCK(cs_main);
 
     unsigned int initialPoolSize = m_node.mempool->size();
+<<<<<<< HEAD
     const MempoolAcceptResult result = AcceptToMemoryPool(m_node.chainman->ActiveChainstate(), *m_node.mempool, MakeTransactionRef(coinbaseTx),
                 true /* bypass_limits */);
+=======
+    const MempoolAcceptResult result = m_node.chainman->ProcessTransaction(MakeTransactionRef(coinbaseTx));
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     BOOST_CHECK(result.m_result_type == MempoolAcceptResult::ResultType::INVALID);
 
@@ -51,6 +62,7 @@ BOOST_FIXTURE_TEST_CASE(tx_mempool_reject_coinbase, TestChain100Setup)
     BOOST_CHECK_EQUAL(result.m_state.GetRejectReason(), "coinbase");
     BOOST_CHECK(result.m_state.GetResult() == TxValidationResult::TX_CONSENSUS);
 }
+<<<<<<< HEAD
 
 // Create placeholder transactions that have no meaning.
 inline CTransactionRef create_placeholder_tx(size_t num_inputs, size_t num_outputs)
@@ -146,4 +158,6 @@ BOOST_FIXTURE_TEST_CASE(package_tests, TestChain100Setup)
     // Check that mempool size hasn't changed.
     BOOST_CHECK_EQUAL(m_node.mempool->size(), initialPoolSize);
 }
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 BOOST_AUTO_TEST_SUITE_END()

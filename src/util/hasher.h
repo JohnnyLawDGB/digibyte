@@ -1,14 +1,30 @@
+<<<<<<< HEAD
 // Copyright (c) 2019 The DigiByte Core developers
+=======
+// Copyright (c) 2019-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #ifndef DIGIBYTE_UTIL_HASHER_H
 #define DIGIBYTE_UTIL_HASHER_H
 
+<<<<<<< HEAD
+=======
+#include <crypto/common.h>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <crypto/siphash.h>
 #include <primitives/transaction.h>
 #include <uint256.h>
 
+<<<<<<< HEAD
+=======
+#include <cstdint>
+#include <cstring>
+
+template <typename C> class Span;
+
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 class SaltedTxidHasher
 {
 private:
@@ -30,6 +46,7 @@ private:
     const uint64_t k0, k1;
 
 public:
+<<<<<<< HEAD
     SaltedOutpointHasher();
 
     /**
@@ -37,6 +54,11 @@ public:
      * unordered_map will behave unpredictably if the custom hasher returns a
      * uint64_t, resulting in failures when syncing the chain (#4634).
      *
+=======
+    SaltedOutpointHasher(bool deterministic = false);
+
+    /**
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
      * Having the hash noexcept allows libstdc++'s unordered_map to recalculate
      * the hash during rehash, so it does not have to cache the value. This
      * reduces node's memory by sizeof(size_t). The required recalculation has

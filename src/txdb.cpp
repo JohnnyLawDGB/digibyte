@@ -1,11 +1,16 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
+<<<<<<< HEAD
 // Copyright (c) 2009-2020 The Bitcoin Core developers
 // Copyright (c) 2014-2020 The DigiByte Core developers
+=======
+// Copyright (c) 2009-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <txdb.h>
 
+<<<<<<< HEAD
 #include <node/ui_interface.h>
 #include <pow.h>
 #include <random.h>
@@ -13,11 +18,24 @@
 #include <uint256.h>
 #include <util/system.h>
 #include <util/translation.h>
+=======
+#include <coins.h>
+#include <dbwrapper.h>
+#include <logging.h>
+#include <primitives/transaction.h>
+#include <random.h>
+#include <serialize.h>
+#include <uint256.h>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <util/vector.h>
 
-#include <stdint.h>
+#include <cassert>
+#include <cstdlib>
+#include <iterator>
+#include <utility>
 
 static constexpr uint8_t DB_COIN{'C'};
+<<<<<<< HEAD
 static constexpr uint8_t DB_COINS{'c'};
 static constexpr uint8_t DB_BLOCK_FILES{'f'};
 static constexpr uint8_t DB_BLOCK_INDEX{'b'};
@@ -27,6 +45,21 @@ static constexpr uint8_t DB_HEAD_BLOCKS{'H'};
 static constexpr uint8_t DB_FLAG{'F'};
 static constexpr uint8_t DB_REINDEX_FLAG{'R'};
 static constexpr uint8_t DB_LAST_BLOCK{'l'};
+=======
+static constexpr uint8_t DB_BEST_BLOCK{'B'};
+static constexpr uint8_t DB_HEAD_BLOCKS{'H'};
+// Keys used in previous version that might still be found in the DB:
+static constexpr uint8_t DB_COINS{'c'};
+
+bool CCoinsViewDB::NeedsUpgrade()
+{
+    std::unique_ptr<CDBIterator> cursor{m_db->NewIterator()};
+    // DB_COINS was deprecated in v0.15.0, commit
+    // 1088b02f0ccd7358d2b7076bb9e122d59d502d02
+    cursor->Seek(std::make_pair(DB_COINS, uint256{}));
+    return cursor->Valid();
+}
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 namespace {
 
@@ -38,23 +71,40 @@ struct CoinEntry {
     SERIALIZE_METHODS(CoinEntry, obj) { READWRITE(obj.key, obj.outpoint->hash, VARINT(obj.outpoint->n)); }
 };
 
-}
+} // namespace
 
+<<<<<<< HEAD
 CCoinsViewDB::CCoinsViewDB(fs::path ldb_path, size_t nCacheSize, bool fMemory, bool fWipe) :
     m_db(std::make_unique<CDBWrapper>(ldb_path, nCacheSize, fMemory, fWipe, true)),
     m_ldb_path(ldb_path),
     m_is_memory(fMemory) { }
+=======
+CCoinsViewDB::CCoinsViewDB(DBParams db_params, CoinsViewOptions options) :
+    m_db_params{std::move(db_params)},
+    m_options{std::move(options)},
+    m_db{std::make_unique<CDBWrapper>(m_db_params)} { }
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 void CCoinsViewDB::ResizeCache(size_t new_cache_size)
 {
     // We can't do this operation with an in-memory DB since we'll lose all the coins upon
     // reset.
+<<<<<<< HEAD
     if (!m_is_memory) {
         // Have to do a reset first to get the original `m_db` state to release its
         // filesystem lock.
         m_db.reset();
         m_db = std::make_unique<CDBWrapper>(
             m_ldb_path, new_cache_size, m_is_memory, /*fWipe*/ false, /*obfuscate*/ true);
+=======
+    if (!m_db_params.memory_only) {
+        // Have to do a reset first to get the original `m_db` state to release its
+        // filesystem lock.
+        m_db.reset();
+        m_db_params.cache_bytes = new_cache_size;
+        m_db_params.wipe_data = false;
+        m_db = std::make_unique<CDBWrapper>(m_db_params);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 }
 
@@ -81,12 +131,14 @@ std::vector<uint256> CCoinsViewDB::GetHeadBlocks() const {
     return vhashHeadBlocks;
 }
 
+<<<<<<< HEAD
 bool CCoinsViewDB::BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock) {
+=======
+bool CCoinsViewDB::BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock, bool erase) {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     CDBBatch batch(*m_db);
     size_t count = 0;
     size_t changed = 0;
-    size_t batch_size = (size_t)gArgs.GetArg("-dbbatchsize", nDefaultDbBatchSize);
-    int crash_simulate = gArgs.GetArg("-dbcrashratio", 0);
     assert(!hashBlock.IsNull());
 
     uint256 old_tip = GetBestBlock();
@@ -94,6 +146,9 @@ bool CCoinsViewDB::BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock) {
         // We may be in the middle of replaying.
         std::vector<uint256> old_heads = GetHeadBlocks();
         if (old_heads.size() == 2) {
+            if (old_heads[0] != hashBlock) {
+                LogPrintLevel(BCLog::COINDB, BCLog::Level::Error, "The coins database detected an inconsistent state, likely due to a previous crash or shutdown. You will need to restart digibyted with the -reindex-chainstate or -reindex configuration option.\n");
+            }
             assert(old_heads[0] == hashBlock);
             old_tip = old_heads[1];
         }
@@ -116,15 +171,14 @@ bool CCoinsViewDB::BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock) {
             changed++;
         }
         count++;
-        CCoinsMap::iterator itOld = it++;
-        mapCoins.erase(itOld);
-        if (batch.SizeEstimate() > batch_size) {
+        it = erase ? mapCoins.erase(it) : std::next(it);
+        if (batch.SizeEstimate() > m_options.batch_write_bytes) {
             LogPrint(BCLog::COINDB, "Writing partial batch of %.2f MiB\n", batch.SizeEstimate() * (1.0 / 1048576.0));
             m_db->WriteBatch(batch);
             batch.Clear();
-            if (crash_simulate) {
+            if (m_options.simulate_crash_ratio) {
                 static FastRandomContext rng;
-                if (rng.randrange(crash_simulate) == 0) {
+                if (rng.randrange(m_options.simulate_crash_ratio) == 0) {
                     LogPrintf("Simulating a crash. Goodbye.\n");
                     _Exit(0);
                 }
@@ -147,6 +201,7 @@ size_t CCoinsViewDB::EstimateSize() const
     return m_db->EstimateSize(DB_COIN, uint8_t(DB_COIN + 1));
 }
 
+<<<<<<< HEAD
 CBlockTreeDB::CBlockTreeDB(size_t nCacheSize, bool fMemory, bool fWipe) : CDBWrapper(gArgs.GetDataDirNet() / "blocks" / "index", nCacheSize, fMemory, fWipe) {
 }
 
@@ -169,6 +224,8 @@ bool CBlockTreeDB::ReadLastBlockFile(int &nFile) {
     return Read(DB_LAST_BLOCK, nFile);
 }
 
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 /** Specialization of CCoinsViewCursor to iterate over a CCoinsViewDB */
 class CCoinsViewDBCursor: public CCoinsViewCursor
 {
@@ -177,11 +234,18 @@ public:
     // cache warmup on instantiation.
     CCoinsViewDBCursor(CDBIterator* pcursorIn, const uint256&hashBlockIn):
         CCoinsViewCursor(hashBlockIn), pcursor(pcursorIn) {}
+<<<<<<< HEAD
     ~CCoinsViewDBCursor() {}
 
     bool GetKey(COutPoint &key) const override;
     bool GetValue(Coin &coin) const override;
     unsigned int GetValueSize() const override;
+=======
+    ~CCoinsViewDBCursor() = default;
+
+    bool GetKey(COutPoint &key) const override;
+    bool GetValue(Coin &coin) const override;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     bool Valid() const override;
     void Next() override;
@@ -227,11 +291,6 @@ bool CCoinsViewDBCursor::GetValue(Coin &coin) const
     return pcursor->GetValue(coin);
 }
 
-unsigned int CCoinsViewDBCursor::GetValueSize() const
-{
-    return pcursor->GetValueSize();
-}
-
 bool CCoinsViewDBCursor::Valid() const
 {
     return keyTmp.first == DB_COIN;
@@ -247,6 +306,7 @@ void CCoinsViewDBCursor::Next()
         keyTmp.first = entry.key;
     }
 }
+<<<<<<< HEAD
 
 bool CBlockTreeDB::WriteBatchSync(const std::vector<std::pair<int, const CBlockFileInfo*> >& fileInfo, int nLastFile, const std::vector<const CBlockIndex*>& blockinfo) {
     CDBBatch batch(*this);
@@ -447,3 +507,5 @@ bool CCoinsViewDB::Upgrade() {
     LogPrintf("[%s].\n", ShutdownRequested() ? "CANCELLED" : "DONE");
     return !ShutdownRequested();
 }
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion

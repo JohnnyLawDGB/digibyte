@@ -1,6 +1,16 @@
+<<<<<<< HEAD
 // Copyright (c) 2018-2020 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
+=======
+// Copyright (c) 2018-2022 The DigiByte Core developers
+// Distributed under the MIT software license, see the accompanying
+// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
+#include <qt/test/util.h>
+
+#include <chrono>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 #include <QApplication>
 #include <QMessageBox>
@@ -9,7 +19,7 @@
 #include <QTimer>
 #include <QWidget>
 
-void ConfirmMessage(QString* text, int msec)
+void ConfirmMessage(QString* text, std::chrono::milliseconds msec)
 {
     QTimer::singleShot(msec, [text]() {
         for (QWidget* widget : QApplication::topLevelWidgets()) {

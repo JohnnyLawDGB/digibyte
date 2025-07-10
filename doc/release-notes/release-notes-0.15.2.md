@@ -1,6 +1,6 @@
 DigiByte Core version *0.15.2* is now available from:
 
-  <https://digibyte.org/bin/digibyte-core-0.15.2/>
+  <https://digibytecore.org/bin/digibyte-core-0.15.2/>
 
 This is a new minor version release, including various bugfixes and
 performance improvements, as well as updated translations.
@@ -11,13 +11,13 @@ Please report bugs using the issue tracker at GitHub:
 
 To receive security and update notifications, please subscribe to:
 
-  <https://digibyte.org/en/list/announcements/join/>
+  <https://digibytecore.org/en/list/announcements/join/>
 
 How to Upgrade
 ==============
 
 If you are running an older version, shut it down. Wait until it has completely
-shut down (which might take a few minutes for older versions), then run the 
+shut down (which might take a few minutes for older versions), then run the
 installer (on Windows) or just copy over `/Applications/DigiByte-Qt` (on Mac)
 or `digibyted`/`digibyte-qt` (on Linux).
 
@@ -77,11 +77,11 @@ the vulnerable versions to 0.15.2 or 0.16.3 as soon as possible.
 
 ### Consensus
 - #14247 `4b8a3f5` Fix crash bug with duplicate inputs within a transaction (TheBlueMatt, sdaftuar)
- 
+
 ### RPC
 - #11676 `7af2457` contrib/init: Update openrc-run filename (Luke Dashjr)
 - #11277 `7026845` Fix uninitialized URI in batch RPC requests (Russell Yanofsky)
- 
+
 ### Wallet
 - #11289 `3f1db56` Wrap dumpwallet warning and note scripts aren't dumped (MeshCollider)
 - #11289 `42ea47d` Add wallet backup text to import*, add* and dumpwallet RPCs (MeshCollider)

@@ -1,20 +1,33 @@
+<<<<<<< HEAD
 // Copyright (c) 2018-2020 The DigiByte Core developers
+=======
+// Copyright (c) 2018-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <interfaces/wallet.h>
 
+<<<<<<< HEAD
 #include <amount.h>
+=======
+#include <common/args.h>
+#include <consensus/amount.h>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <interfaces/chain.h>
 #include <interfaces/handler.h>
 #include <policy/fees.h>
 #include <primitives/transaction.h>
 #include <rpc/server.h>
+<<<<<<< HEAD
 #include <script/standard.h>
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <support/allocators/secure.h>
 #include <sync.h>
 #include <uint256.h>
 #include <util/check.h>
+<<<<<<< HEAD
 #include <util/system.h>
 #include <util/ui_change_type.h>
 #include <wallet/context.h>
@@ -23,6 +36,19 @@
 #include <wallet/ismine.h>
 #include <wallet/load.h>
 #include <wallet/rpcwallet.h>
+=======
+#include <util/translation.h>
+#include <util/ui_change_type.h>
+#include <wallet/coincontrol.h>
+#include <wallet/context.h>
+#include <wallet/feebumper.h>
+#include <wallet/fees.h>
+#include <wallet/types.h>
+#include <wallet/load.h>
+#include <wallet/receive.h>
+#include <wallet/rpc/wallet.h>
+#include <wallet/spend.h>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <wallet/wallet.h>
 
 #include <memory>
@@ -33,11 +59,20 @@
 using interfaces::Chain;
 using interfaces::FoundBlock;
 using interfaces::Handler;
+<<<<<<< HEAD
 using interfaces::MakeHandler;
 using interfaces::Wallet;
 using interfaces::WalletAddress;
 using interfaces::WalletBalances;
 using interfaces::WalletClient;
+=======
+using interfaces::MakeSignalHandler;
+using interfaces::Wallet;
+using interfaces::WalletAddress;
+using interfaces::WalletBalances;
+using interfaces::WalletLoader;
+using interfaces::WalletMigrationResult;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 using interfaces::WalletOrderForm;
 using interfaces::WalletTx;
 using interfaces::WalletTxOut;
@@ -45,6 +80,11 @@ using interfaces::WalletTxStatus;
 using interfaces::WalletValueMap;
 
 namespace wallet {
+<<<<<<< HEAD
+=======
+// All members of the classes in this namespace are intentionally public, as the
+// classes themselves are private.
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 namespace {
 //! Construct wallet tx struct.
 WalletTx MakeWalletTx(CWallet& wallet, const CWalletTx& wtx)
@@ -54,21 +94,35 @@ WalletTx MakeWalletTx(CWallet& wallet, const CWalletTx& wtx)
     result.tx = wtx.tx;
     result.txin_is_mine.reserve(wtx.tx->vin.size());
     for (const auto& txin : wtx.tx->vin) {
+<<<<<<< HEAD
         result.txin_is_mine.emplace_back(wallet.IsMine(txin));
+=======
+        result.txin_is_mine.emplace_back(InputIsMine(wallet, txin));
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     result.txout_is_mine.reserve(wtx.tx->vout.size());
     result.txout_address.reserve(wtx.tx->vout.size());
     result.txout_address_is_mine.reserve(wtx.tx->vout.size());
     for (const auto& txout : wtx.tx->vout) {
         result.txout_is_mine.emplace_back(wallet.IsMine(txout));
+<<<<<<< HEAD
+=======
+        result.txout_is_change.push_back(OutputIsChange(wallet, txout));
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         result.txout_address.emplace_back();
         result.txout_address_is_mine.emplace_back(ExtractDestination(txout.scriptPubKey, result.txout_address.back()) ?
                                                       wallet.IsMine(result.txout_address.back()) :
                                                       ISMINE_NO);
     }
+<<<<<<< HEAD
     result.credit = wtx.GetCredit(ISMINE_ALL);
     result.debit = wtx.GetDebit(ISMINE_ALL);
     result.change = wtx.GetChange();
+=======
+    result.credit = CachedTxGetCredit(wallet, wtx, ISMINE_ALL);
+    result.debit = CachedTxGetDebit(wallet, wtx, ISMINE_ALL);
+    result.change = CachedTxGetChange(wallet, wtx);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     result.time = wtx.GetTxTime();
     result.value_map = wtx.mapValue;
     result.is_coinbase = wtx.IsCoinBase();
@@ -77,6 +131,7 @@ WalletTx MakeWalletTx(CWallet& wallet, const CWalletTx& wtx)
 
 //! Construct wallet tx status struct.
 WalletTxStatus MakeWalletTxStatus(const CWallet& wallet, const CWalletTx& wtx)
+<<<<<<< HEAD
 {
     WalletTxStatus result;
     result.block_height = wtx.m_confirm.block_height > 0 ? wtx.m_confirm.block_height : std::numeric_limits<int>::max();
@@ -89,6 +144,25 @@ WalletTxStatus MakeWalletTxStatus(const CWallet& wallet, const CWalletTx& wtx)
     result.is_abandoned = wtx.isAbandoned();
     result.is_coinbase = wtx.IsCoinBase();
     result.is_in_main_chain = wtx.IsInMainChain();
+=======
+    EXCLUSIVE_LOCKS_REQUIRED(wallet.cs_wallet)
+{
+    AssertLockHeld(wallet.cs_wallet);
+
+    WalletTxStatus result;
+    result.block_height =
+        wtx.state<TxStateConfirmed>() ? wtx.state<TxStateConfirmed>()->confirmed_block_height :
+        wtx.state<TxStateConflicted>() ? wtx.state<TxStateConflicted>()->conflicting_block_height :
+        std::numeric_limits<int>::max();
+    result.blocks_to_maturity = wallet.GetTxBlocksToMaturity(wtx);
+    result.depth_in_main_chain = wallet.GetTxDepthInMainChain(wtx);
+    result.time_received = wtx.nTimeReceived;
+    result.lock_time = wtx.tx->nLockTime;
+    result.is_trusted = CachedTxIsTrusted(wallet, wtx);
+    result.is_abandoned = wtx.isAbandoned();
+    result.is_coinbase = wtx.IsCoinBase();
+    result.is_in_main_chain = wallet.IsTxInMainChain(wtx);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     return result;
 }
 
@@ -102,14 +176,33 @@ WalletTxOut MakeWalletTxOut(const CWallet& wallet,
     result.txout = wtx.tx->vout[n];
     result.time = wtx.GetTxTime();
     result.depth_in_main_chain = depth;
+<<<<<<< HEAD
     result.is_spent = wallet.IsSpent(wtx.GetHash(), n);
+=======
+    result.is_spent = wallet.IsSpent(COutPoint(wtx.GetHash(), n));
+    return result;
+}
+
+WalletTxOut MakeWalletTxOut(const CWallet& wallet,
+    const COutput& output) EXCLUSIVE_LOCKS_REQUIRED(wallet.cs_wallet)
+{
+    WalletTxOut result;
+    result.txout = output.txout;
+    result.time = output.time;
+    result.depth_in_main_chain = output.depth;
+    result.is_spent = wallet.IsSpent(output.outpoint);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     return result;
 }
 
 class WalletImpl : public Wallet
 {
 public:
+<<<<<<< HEAD
     explicit WalletImpl(const std::shared_ptr<CWallet>& wallet) : m_wallet(wallet) {}
+=======
+    explicit WalletImpl(WalletContext& context, const std::shared_ptr<CWallet>& wallet) : m_context(context), m_wallet(wallet) {}
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     bool encryptWallet(const SecureString& wallet_passphrase) override
     {
@@ -127,11 +220,18 @@ public:
     void abortRescan() override { m_wallet->AbortRescan(); }
     bool backupWallet(const std::string& filename) override { return m_wallet->BackupWallet(filename); }
     std::string getWalletName() override { return m_wallet->GetName(); }
+<<<<<<< HEAD
     bool getNewDestination(const OutputType type, const std::string label, CTxDestination& dest) override
     {
         LOCK(m_wallet->cs_wallet);
         std::string error;
         return m_wallet->GetNewDestination(type, label, dest, error);
+=======
+    util::Result<CTxDestination> getNewDestination(const OutputType type, const std::string& label) override
+    {
+        LOCK(m_wallet->cs_wallet);
+        return m_wallet->GetNewDestination(type, label);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     bool getPubKey(const CScript& script, const CKeyID& address, CPubKey& pub_key) override
     {
@@ -158,7 +258,11 @@ public:
         }
         return false;
     };
+<<<<<<< HEAD
     bool setAddressBook(const CTxDestination& dest, const std::string& name, const std::string& purpose) override
+=======
+    bool setAddressBook(const CTxDestination& dest, const std::string& name, const std::optional<AddressPurpose>& purpose) override
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     {
         return m_wallet->SetAddressBook(dest, name, purpose);
     }
@@ -169,6 +273,7 @@ public:
     bool getAddress(const CTxDestination& dest,
         std::string* name,
         isminetype* is_mine,
+<<<<<<< HEAD
         std::string* purpose) override
     {
         LOCK(m_wallet->cs_wallet);
@@ -195,6 +300,39 @@ public:
             if (item.second.IsChange()) continue;
             result.emplace_back(item.first, m_wallet->IsMine(item.first), item.second.GetLabel(), item.second.purpose);
         }
+=======
+        AddressPurpose* purpose) override
+    {
+        LOCK(m_wallet->cs_wallet);
+        const auto& entry = m_wallet->FindAddressBookEntry(dest, /*allow_change=*/false);
+        if (!entry) return false; // addr not found
+        if (name) {
+            *name = entry->GetLabel();
+        }
+        std::optional<isminetype> dest_is_mine;
+        if (is_mine || purpose) {
+            dest_is_mine = m_wallet->IsMine(dest);
+        }
+        if (is_mine) {
+            *is_mine = *dest_is_mine;
+        }
+        if (purpose) {
+            // In very old wallets, address purpose may not be recorded so we derive it from IsMine
+            *purpose = entry->purpose.value_or(*dest_is_mine ? AddressPurpose::RECEIVE : AddressPurpose::SEND);
+        }
+        return true;
+    }
+    std::vector<WalletAddress> getAddresses() const override
+    {
+        LOCK(m_wallet->cs_wallet);
+        std::vector<WalletAddress> result;
+        m_wallet->ForEachAddrBookEntry([&](const CTxDestination& dest, const std::string& label, bool is_change, const std::optional<AddressPurpose>& purpose) EXCLUSIVE_LOCKS_REQUIRED(m_wallet->cs_wallet) {
+            if (is_change) return;
+            isminetype is_mine = m_wallet->IsMine(dest);
+            // In very old wallets, address purpose may not be recorded so we derive it from IsMine
+            result.emplace_back(dest, is_mine, purpose.value_or(is_mine ? AddressPurpose::RECEIVE : AddressPurpose::SEND), label);
+        });
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         return result;
     }
     std::vector<std::string> getAddressReceiveRequests() override {
@@ -202,15 +340,35 @@ public:
         return m_wallet->GetAddressReceiveRequests();
     }
     bool setAddressReceiveRequest(const CTxDestination& dest, const std::string& id, const std::string& value) override {
+<<<<<<< HEAD
         LOCK(m_wallet->cs_wallet);
         WalletBatch batch{m_wallet->GetDatabase()};
         return m_wallet->SetAddressReceiveRequest(batch, dest, id, value);
+=======
+        // Note: The setAddressReceiveRequest interface used by the GUI to store
+        // receive requests is a little awkward and could be improved in the
+        // future:
+        //
+        // - The same method is used to save requests and erase them, but
+        //   having separate methods could be clearer and prevent bugs.
+        //
+        // - Request ids are passed as strings even though they are generated as
+        //   integers.
+        //
+        // - Multiple requests can be stored for the same address, but it might
+        //   be better to only allow one request or only keep the current one.
+        LOCK(m_wallet->cs_wallet);
+        WalletBatch batch{m_wallet->GetDatabase()};
+        return value.empty() ? m_wallet->EraseAddressReceiveRequest(batch, dest, id)
+                             : m_wallet->SetAddressReceiveRequest(batch, dest, id, value);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     bool displayAddress(const CTxDestination& dest) override
     {
         LOCK(m_wallet->cs_wallet);
         return m_wallet->DisplayAddress(dest);
     }
+<<<<<<< HEAD
     void lockCoin(const COutPoint& output) override
     {
         LOCK(m_wallet->cs_wallet);
@@ -220,17 +378,35 @@ public:
     {
         LOCK(m_wallet->cs_wallet);
         return m_wallet->UnlockCoin(output);
+=======
+    bool lockCoin(const COutPoint& output, const bool write_to_db) override
+    {
+        LOCK(m_wallet->cs_wallet);
+        std::unique_ptr<WalletBatch> batch = write_to_db ? std::make_unique<WalletBatch>(m_wallet->GetDatabase()) : nullptr;
+        return m_wallet->LockCoin(output, batch.get());
+    }
+    bool unlockCoin(const COutPoint& output) override
+    {
+        LOCK(m_wallet->cs_wallet);
+        std::unique_ptr<WalletBatch> batch = std::make_unique<WalletBatch>(m_wallet->GetDatabase());
+        return m_wallet->UnlockCoin(output, batch.get());
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     bool isLockedCoin(const COutPoint& output) override
     {
         LOCK(m_wallet->cs_wallet);
+<<<<<<< HEAD
         return m_wallet->IsLockedCoin(output.hash, output.n);
+=======
+        return m_wallet->IsLockedCoin(output);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     void listLockedCoins(std::vector<COutPoint>& outputs) override
     {
         LOCK(m_wallet->cs_wallet);
         return m_wallet->ListLockedCoins(outputs);
     }
+<<<<<<< HEAD
     CTransactionRef createTransaction(const std::vector<CRecipient>& recipients,
         const CCoinControl& coin_control,
         bool sign,
@@ -246,6 +422,23 @@ public:
             return {};
         }
         return tx;
+=======
+    util::Result<CTransactionRef> createTransaction(const std::vector<CRecipient>& recipients,
+        const CCoinControl& coin_control,
+        bool sign,
+        int& change_pos,
+        CAmount& fee) override
+    {
+        LOCK(m_wallet->cs_wallet);
+        auto res = CreateTransaction(*m_wallet, recipients, change_pos,
+                                     coin_control, sign);
+        if (!res) return util::Error{util::ErrorString(res)};
+        const auto& txr = *res;
+        fee = txr.fee;
+        change_pos = txr.change_pos;
+
+        return txr.tx;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     void commitTransaction(CTransactionRef tx,
         WalletValueMap value_map,
@@ -271,7 +464,12 @@ public:
         CAmount& new_fee,
         CMutableTransaction& mtx) override
     {
+<<<<<<< HEAD
         return feebumper::CreateRateBumpTransaction(*m_wallet.get(), txid, coin_control, errors, old_fee, new_fee, mtx) == feebumper::Result::OK;
+=======
+        std::vector<CTxOut> outputs; // just an empty list of new recipients for now
+        return feebumper::CreateRateBumpTransaction(*m_wallet.get(), txid, coin_control, errors, old_fee, new_fee, mtx, /* require_mine= */ true, outputs) == feebumper::Result::OK;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     bool signBumpTransaction(CMutableTransaction& mtx) override { return feebumper::SignTransaction(*m_wallet.get(), mtx); }
     bool commitBumpTransaction(const uint256& txid,
@@ -300,6 +498,7 @@ public:
         }
         return {};
     }
+<<<<<<< HEAD
     std::vector<WalletTx> getWalletTxs() override
     {
         LOCK(m_wallet->cs_wallet);
@@ -307,6 +506,14 @@ public:
         result.reserve(m_wallet->mapWallet.size());
         for (const auto& entry : m_wallet->mapWallet) {
             result.emplace_back(MakeWalletTx(*m_wallet, entry.second));
+=======
+    std::set<WalletTx> getWalletTxs() override
+    {
+        LOCK(m_wallet->cs_wallet);
+        std::set<WalletTx> result;
+        for (const auto& entry : m_wallet->mapWallet) {
+            result.emplace(MakeWalletTx(*m_wallet, entry.second));
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
         return result;
     }
@@ -357,7 +564,11 @@ public:
     }
     WalletBalances getBalances() override
     {
+<<<<<<< HEAD
         const auto bal = m_wallet->GetBalance();
+=======
+        const auto bal = GetBalance(*m_wallet);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         WalletBalances result;
         result.balance = bal.m_mine_trusted;
         result.unconfirmed_balance = bal.m_mine_untrusted_pending;
@@ -380,15 +591,43 @@ public:
         balances = getBalances();
         return true;
     }
+<<<<<<< HEAD
     CAmount getBalance() override { return m_wallet->GetBalance().m_mine_trusted; }
     CAmount getAvailableBalance(const CCoinControl& coin_control) override
     {
         return m_wallet->GetAvailableBalance(&coin_control);
+=======
+    CAmount getBalance() override { return GetBalance(*m_wallet).m_mine_trusted; }
+    CAmount getAvailableBalance(const CCoinControl& coin_control) override
+    {
+        LOCK(m_wallet->cs_wallet);
+        CAmount total_amount = 0;
+        // Fetch selected coins total amount
+        if (coin_control.HasSelected()) {
+            FastRandomContext rng{};
+            CoinSelectionParams params(rng);
+            // Note: for now, swallow any error.
+            if (auto res = FetchSelectedInputs(*m_wallet, coin_control, params)) {
+                total_amount += res->total_amount;
+            }
+        }
+
+        // And fetch the wallet available coins
+        if (coin_control.m_allow_other_inputs) {
+            total_amount += AvailableCoins(*m_wallet, &coin_control).GetTotalAmount();
+        }
+
+        return total_amount;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     isminetype txinIsMine(const CTxIn& txin) override
     {
         LOCK(m_wallet->cs_wallet);
+<<<<<<< HEAD
         return m_wallet->IsMine(txin);
+=======
+        return InputIsMine(*m_wallet, txin);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     isminetype txoutIsMine(const CTxOut& txout) override
     {
@@ -403,17 +642,29 @@ public:
     CAmount getCredit(const CTxOut& txout, isminefilter filter) override
     {
         LOCK(m_wallet->cs_wallet);
+<<<<<<< HEAD
         return m_wallet->GetCredit(txout, filter);
+=======
+        return OutputGetCredit(*m_wallet, txout, filter);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     CoinsList listCoins() override
     {
         LOCK(m_wallet->cs_wallet);
         CoinsList result;
+<<<<<<< HEAD
         for (const auto& entry : m_wallet->ListCoins()) {
             auto& group = result[entry.first];
             for (const auto& coin : entry.second) {
                 group.emplace_back(COutPoint(coin.tx->GetHash(), coin.i),
                     MakeWalletTxOut(*m_wallet, *coin.tx, coin.i, coin.nDepth));
+=======
+        for (const auto& entry : ListCoins(*m_wallet)) {
+            auto& group = result[entry.first];
+            for (const auto& coin : entry.second) {
+                group.emplace_back(coin.outpoint,
+                    MakeWalletTxOut(*m_wallet, coin));
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             }
         }
         return result;
@@ -427,7 +678,11 @@ public:
             result.emplace_back();
             auto it = m_wallet->mapWallet.find(output.hash);
             if (it != m_wallet->mapWallet.end()) {
+<<<<<<< HEAD
                 int depth = it->second.GetDepthInMainChain();
+=======
+                int depth = m_wallet->GetTxDepthInMainChain(it->second);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 if (depth >= 0) {
                     result.back() = MakeWalletTxOut(*m_wallet, it->second, output.n, depth);
                 }
@@ -453,15 +708,28 @@ public:
     bool canGetAddresses() override { return m_wallet->CanGetAddresses(); }
     bool hasExternalSigner() override { return m_wallet->IsWalletFlagSet(WALLET_FLAG_EXTERNAL_SIGNER); }
     bool privateKeysDisabled() override { return m_wallet->IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS); }
+<<<<<<< HEAD
+=======
+    bool taprootEnabled() override {
+        if (m_wallet->IsLegacy()) return false;
+        auto spk_man = m_wallet->GetScriptPubKeyMan(OutputType::BECH32M, /*internal=*/false);
+        return spk_man != nullptr;
+    }
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     OutputType getDefaultAddressType() override { return m_wallet->m_default_address_type; }
     CAmount getDefaultMaxTxFee() override { return m_wallet->m_default_max_tx_fee; }
     void remove() override
     {
+<<<<<<< HEAD
         RemoveWallet(m_wallet, false /* load_on_start */);
+=======
+        RemoveWallet(m_context, m_wallet, /*load_on_start=*/false);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     bool isLegacy() override { return m_wallet->IsLegacy(); }
     std::unique_ptr<Handler> handleUnload(UnloadFn fn) override
     {
+<<<<<<< HEAD
         return MakeHandler(m_wallet->NotifyUnload.connect(fn));
     }
     std::unique_ptr<Handler> handleShowProgress(ShowProgressFn fn) override
@@ -481,10 +749,32 @@ public:
     std::unique_ptr<Handler> handleTransactionChanged(TransactionChangedFn fn) override
     {
         return MakeHandler(m_wallet->NotifyTransactionChanged.connect(
+=======
+        return MakeSignalHandler(m_wallet->NotifyUnload.connect(fn));
+    }
+    std::unique_ptr<Handler> handleShowProgress(ShowProgressFn fn) override
+    {
+        return MakeSignalHandler(m_wallet->ShowProgress.connect(fn));
+    }
+    std::unique_ptr<Handler> handleStatusChanged(StatusChangedFn fn) override
+    {
+        return MakeSignalHandler(m_wallet->NotifyStatusChanged.connect([fn](CWallet*) { fn(); }));
+    }
+    std::unique_ptr<Handler> handleAddressBookChanged(AddressBookChangedFn fn) override
+    {
+        return MakeSignalHandler(m_wallet->NotifyAddressBookChanged.connect(
+            [fn](const CTxDestination& address, const std::string& label, bool is_mine,
+                 AddressPurpose purpose, ChangeType status) { fn(address, label, is_mine, purpose, status); }));
+    }
+    std::unique_ptr<Handler> handleTransactionChanged(TransactionChangedFn fn) override
+    {
+        return MakeSignalHandler(m_wallet->NotifyTransactionChanged.connect(
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             [fn](const uint256& txid, ChangeType status) { fn(txid, status); }));
     }
     std::unique_ptr<Handler> handleWatchOnlyChanged(WatchOnlyChangedFn fn) override
     {
+<<<<<<< HEAD
         return MakeHandler(m_wallet->NotifyWatchonlyChanged.connect(fn));
     }
     std::unique_ptr<Handler> handleCanGetAddressesChanged(CanGetAddressesChangedFn fn) override
@@ -500,11 +790,33 @@ class WalletClientImpl : public WalletClient
 {
 public:
     WalletClientImpl(Chain& chain, ArgsManager& args)
+=======
+        return MakeSignalHandler(m_wallet->NotifyWatchonlyChanged.connect(fn));
+    }
+    std::unique_ptr<Handler> handleCanGetAddressesChanged(CanGetAddressesChangedFn fn) override
+    {
+        return MakeSignalHandler(m_wallet->NotifyCanGetAddressesChanged.connect(fn));
+    }
+    CWallet* wallet() override { return m_wallet.get(); }
+
+    WalletContext& m_context;
+    std::shared_ptr<CWallet> m_wallet;
+};
+
+class WalletLoaderImpl : public WalletLoader
+{
+public:
+    WalletLoaderImpl(Chain& chain, ArgsManager& args)
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     {
         m_context.chain = &chain;
         m_context.args = &args;
     }
+<<<<<<< HEAD
     ~WalletClientImpl() override { UnloadWallets(); }
+=======
+    ~WalletLoaderImpl() override { UnloadWallets(m_context); }
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     //! ChainClient methods
     void registerRpcs() override
@@ -518,6 +830,7 @@ public:
             m_rpc_handlers.emplace_back(m_context.chain->handleRpc(m_rpc_commands.back()));
         }
     }
+<<<<<<< HEAD
     bool verify() override { return VerifyWallets(*m_context.chain); }
     bool load() override { return LoadWallets(*m_context.chain); }
     void start(CScheduler& scheduler) override { return StartWallets(scheduler, *Assert(m_context.args)); }
@@ -546,27 +859,108 @@ public:
     std::string getWalletDir() override
     {
         return GetWalletDir().string();
+=======
+    bool verify() override { return VerifyWallets(m_context); }
+    bool load() override { return LoadWallets(m_context); }
+    void start(CScheduler& scheduler) override { return StartWallets(m_context, scheduler); }
+    void flush() override { return FlushWallets(m_context); }
+    void stop() override { return StopWallets(m_context); }
+    void setMockTime(int64_t time) override { return SetMockTime(time); }
+
+    //! WalletLoader methods
+    util::Result<std::unique_ptr<Wallet>> createWallet(const std::string& name, const SecureString& passphrase, uint64_t wallet_creation_flags, std::vector<bilingual_str>& warnings) override
+    {
+        DatabaseOptions options;
+        DatabaseStatus status;
+        ReadDatabaseArgs(*m_context.args, options);
+        options.require_create = true;
+        options.create_flags = wallet_creation_flags;
+        options.create_passphrase = passphrase;
+        bilingual_str error;
+        std::unique_ptr<Wallet> wallet{MakeWallet(m_context, CreateWallet(m_context, name, /*load_on_start=*/true, options, status, error, warnings))};
+        if (wallet) {
+            return {std::move(wallet)};
+        } else {
+            return util::Error{error};
+        }
+    }
+    util::Result<std::unique_ptr<Wallet>> loadWallet(const std::string& name, std::vector<bilingual_str>& warnings) override
+    {
+        DatabaseOptions options;
+        DatabaseStatus status;
+        ReadDatabaseArgs(*m_context.args, options);
+        options.require_existing = true;
+        bilingual_str error;
+        std::unique_ptr<Wallet> wallet{MakeWallet(m_context, LoadWallet(m_context, name, /*load_on_start=*/true, options, status, error, warnings))};
+        if (wallet) {
+            return {std::move(wallet)};
+        } else {
+            return util::Error{error};
+        }
+    }
+    util::Result<std::unique_ptr<Wallet>> restoreWallet(const fs::path& backup_file, const std::string& wallet_name, std::vector<bilingual_str>& warnings) override
+    {
+        DatabaseStatus status;
+        bilingual_str error;
+        std::unique_ptr<Wallet> wallet{MakeWallet(m_context, RestoreWallet(m_context, backup_file, wallet_name, /*load_on_start=*/true, status, error, warnings))};
+        if (wallet) {
+            return {std::move(wallet)};
+        } else {
+            return util::Error{error};
+        }
+    }
+    util::Result<WalletMigrationResult> migrateWallet(const std::string& name, const SecureString& passphrase) override
+    {
+        auto res = wallet::MigrateLegacyToDescriptor(name, passphrase, m_context);
+        if (!res) return util::Error{util::ErrorString(res)};
+        WalletMigrationResult out{
+            .wallet = MakeWallet(m_context, res->wallet),
+            .watchonly_wallet_name = res->watchonly_wallet ? std::make_optional(res->watchonly_wallet->GetName()) : std::nullopt,
+            .solvables_wallet_name = res->solvables_wallet ? std::make_optional(res->solvables_wallet->GetName()) : std::nullopt,
+            .backup_path = res->backup_path,
+        };
+        return {std::move(out)}; // std::move to work around clang bug
+    }
+    std::string getWalletDir() override
+    {
+        return fs::PathToString(GetWalletDir());
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     std::vector<std::string> listWalletDir() override
     {
         std::vector<std::string> paths;
         for (auto& path : ListDatabases(GetWalletDir())) {
+<<<<<<< HEAD
             paths.push_back(path.string());
+=======
+            paths.push_back(fs::PathToString(path));
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
         return paths;
     }
     std::vector<std::unique_ptr<Wallet>> getWallets() override
     {
         std::vector<std::unique_ptr<Wallet>> wallets;
+<<<<<<< HEAD
         for (const auto& wallet : GetWallets()) {
             wallets.emplace_back(MakeWallet(wallet));
+=======
+        for (const auto& wallet : GetWallets(m_context)) {
+            wallets.emplace_back(MakeWallet(m_context, wallet));
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
         return wallets;
     }
     std::unique_ptr<Handler> handleLoadWallet(LoadWalletFn fn) override
     {
+<<<<<<< HEAD
         return HandleLoadWallet(std::move(fn));
     }
+=======
+        return HandleLoadWallet(m_context, std::move(fn));
+    }
+    WalletContext* context() override  { return &m_context; }
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     WalletContext m_context;
     const std::vector<std::string> m_wallet_filenames;
@@ -577,10 +971,18 @@ public:
 } // namespace wallet
 
 namespace interfaces {
+<<<<<<< HEAD
 std::unique_ptr<Wallet> MakeWallet(const std::shared_ptr<CWallet>& wallet) { return wallet ? std::make_unique<wallet::WalletImpl>(wallet) : nullptr; }
 
 std::unique_ptr<WalletClient> MakeWalletClient(Chain& chain, ArgsManager& args)
 {
     return std::make_unique<wallet::WalletClientImpl>(chain, args);
+=======
+std::unique_ptr<Wallet> MakeWallet(wallet::WalletContext& context, const std::shared_ptr<wallet::CWallet>& wallet) { return wallet ? std::make_unique<wallet::WalletImpl>(context, wallet) : nullptr; }
+
+std::unique_ptr<WalletLoader> MakeWalletLoader(Chain& chain, ArgsManager& args)
+{
+    return std::make_unique<wallet::WalletLoaderImpl>(chain, args);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 } // namespace interfaces

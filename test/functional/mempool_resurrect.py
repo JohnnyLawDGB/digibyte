@@ -4,7 +4,10 @@
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test resurrection of mined transactions when the blockchain is re-organized."""
 
+<<<<<<< HEAD
 from test_framework.blocktools import COINBASE_MATURITY
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import assert_equal
 from test_framework.wallet import MiniWallet
@@ -19,10 +22,13 @@ class MempoolCoinbaseTest(DigiByteTestFramework):
         node = self.nodes[0]
         wallet = MiniWallet(node)
 
+<<<<<<< HEAD
         # Add enough mature utxos to the wallet so that all txs spend confirmed coins
         self.generate(wallet, 3)
         self.generate(node, COINBASE_MATURITY)
 
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         # Spend block 1/2/3's coinbase transactions
         # Mine a block
         # Create three more transactions, spending the spends

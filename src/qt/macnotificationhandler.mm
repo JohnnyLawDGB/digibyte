@@ -1,5 +1,9 @@
+<<<<<<< HEAD
 // Copyright (c) 2011-2013 The Bitcoin Core developers
 // Copyright (c) 2014-2020 The DigiByte Core developers
+=======
+// Copyright (c) 2011-2020 The Bitcoin Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -14,7 +18,11 @@
 - (NSString *)__bundleIdentifier
 {
     if (self == [NSBundle mainBundle]) {
+<<<<<<< HEAD
         return @"org.digibyte.DigiByte-Qt";
+=======
+        return @"org.digibytefoundation.Bitcoin-Qt";
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     } else {
         return [self __bundleIdentifier];
     }

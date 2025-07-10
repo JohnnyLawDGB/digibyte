@@ -1,8 +1,13 @@
+<<<<<<< HEAD
 // Copyright (c) 2020 The DigiByte Core developers
+=======
+// Copyright (c) 2020-2021 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <key.h>
+<<<<<<< HEAD
 #include <script/standard.h>
 #include <test/util/setup_common.h>
 #include <wallet/scriptpubkeyman.h>
@@ -10,6 +15,17 @@
 
 #include <boost/test/unit_test.hpp>
 
+=======
+#include <test/util/setup_common.h>
+#include <script/solver.h>
+#include <wallet/scriptpubkeyman.h>
+#include <wallet/wallet.h>
+#include <wallet/test/util.h>
+
+#include <boost/test/unit_test.hpp>
+
+namespace wallet {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 BOOST_FIXTURE_TEST_SUITE(scriptpubkeyman_tests, BasicTestingSetup)
 
 // Test LegacyScriptPubKeyMan::CanProvide behavior, making sure it returns true
@@ -17,7 +33,11 @@ BOOST_FIXTURE_TEST_SUITE(scriptpubkeyman_tests, BasicTestingSetup)
 BOOST_AUTO_TEST_CASE(CanProvide)
 {
     // Set up wallet and keyman variables.
+<<<<<<< HEAD
     CWallet wallet(m_node.chain.get(), "", CreateDummyWalletDatabase());
+=======
+    CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase());
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     LegacyScriptPubKeyMan& keyman = *wallet.GetOrCreateLegacyScriptPubKeyMan();
 
     // Make a 1 of 2 multisig script
@@ -39,3 +59,7 @@ BOOST_AUTO_TEST_CASE(CanProvide)
 }
 
 BOOST_AUTO_TEST_SUITE_END()
+<<<<<<< HEAD
+=======
+} // namespace wallet
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion

@@ -1,17 +1,29 @@
+<<<<<<< HEAD
 // Copyright (c) 2009-2020 The Bitcoin Core developers
 // Copyright (c) 2014-2020 The DigiByte Core developers
+=======
+// Copyright (c) 2012-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <key.h>
 
+#include <common/system.h>
 #include <key_io.h>
 #include <streams.h>
+<<<<<<< HEAD
+=======
+#include <test/util/random.h>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <test/util/setup_common.h>
 #include <uint256.h>
 #include <util/strencodings.h>
 #include <util/string.h>
+<<<<<<< HEAD
 #include <util/system.h>
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 #include <string>
 #include <vector>
@@ -203,9 +215,14 @@ BOOST_AUTO_TEST_CASE(key_key_negation)
     // create a dummy hash for signature comparison
     unsigned char rnd[8];
     std::string str = "DigiByte key verification\n";
+<<<<<<< HEAD
     GetRandBytes(rnd, sizeof(rnd));
     uint256 hash;
     CHash256().Write(MakeUCharSpan(str)).Write(rnd).Finalize(hash);
+=======
+    GetRandBytes(rnd);
+    uint256 hash{Hash(str, rnd)};
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // import the static test key
     CKey key = DecodeSecret(strSecret1C);
@@ -232,7 +249,11 @@ BOOST_AUTO_TEST_CASE(key_key_negation)
 
 static CPubKey UnserializePubkey(const std::vector<uint8_t>& data)
 {
+<<<<<<< HEAD
     CDataStream stream{SER_NETWORK, INIT_PROTO_VERSION};
+=======
+    DataStream stream{};
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     stream << data;
     CPubKey pubkey;
     stream >> pubkey;
@@ -250,7 +271,11 @@ static unsigned int GetLen(unsigned char chHeader)
 
 static void CmpSerializationPubkey(const CPubKey& pubkey)
 {
+<<<<<<< HEAD
     CDataStream stream{SER_NETWORK, INIT_PROTO_VERSION};
+=======
+    DataStream stream{};
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     stream << pubkey;
     CPubKey pubkey2;
     stream >> pubkey2;
@@ -320,7 +345,11 @@ BOOST_AUTO_TEST_CASE(bip340_test_vectors)
         key.Set(sec.begin(), sec.end(), true);
         XOnlyPubKey pubkey(key.GetPubKey());
         BOOST_CHECK(std::equal(pubkey.begin(), pubkey.end(), pub.begin(), pub.end()));
+<<<<<<< HEAD
         bool ok = key.SignSchnorr(msg256, sig64, nullptr, &aux256);
+=======
+        bool ok = key.SignSchnorr(msg256, sig64, nullptr, aux256);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         BOOST_CHECK(ok);
         BOOST_CHECK(std::vector<unsigned char>(sig64, sig64 + 64) == sig);
         // Verify those signatures for good measure.
@@ -336,11 +365,38 @@ BOOST_AUTO_TEST_CASE(bip340_test_vectors)
             BOOST_CHECK(tweaked);
             XOnlyPubKey tweaked_key = tweaked->first;
             aux256 = InsecureRand256();
+<<<<<<< HEAD
             bool ok = key.SignSchnorr(msg256, sig64, &merkle_root, &aux256);
+=======
+            bool ok = key.SignSchnorr(msg256, sig64, &merkle_root, aux256);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             BOOST_CHECK(ok);
             BOOST_CHECK(tweaked_key.VerifySchnorr(msg256, sig64));
         }
     }
 }
 
+<<<<<<< HEAD
+=======
+BOOST_AUTO_TEST_CASE(key_ellswift)
+{
+    for (const auto& secret : {strSecret1, strSecret2, strSecret1C, strSecret2C}) {
+        CKey key = DecodeSecret(secret);
+        BOOST_CHECK(key.IsValid());
+
+        uint256 ent32 = InsecureRand256();
+        auto ellswift = key.EllSwiftCreate(AsBytes(Span{ent32}));
+
+        CPubKey decoded_pubkey = ellswift.Decode();
+        if (!key.IsCompressed()) {
+            // The decoding constructor returns a compressed pubkey. If the
+            // original was uncompressed, we must decompress the decoded one
+            // to compare.
+            decoded_pubkey.Decompress();
+        }
+        BOOST_CHECK(key.GetPubKey() == decoded_pubkey);
+    }
+}
+
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 BOOST_AUTO_TEST_SUITE_END()

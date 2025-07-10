@@ -12,7 +12,7 @@ Please report bugs using the issue tracker at github:
 
 To receive security and update notifications, please subscribe to:
 
-  <https://digibyte.org/en/list/announcements/join/>
+  <https://digibytecore.org/en/list/announcements/join/>
 
 Compatibility
 ==============
@@ -36,8 +36,8 @@ No attempt is made to prevent installing or running the software on Windows XP,
 you can still do so at your own risk, but do not expect it to work: do not
 report issues about Windows XP to the issue tracker.
 
-From 0.13.1 onwards OS X 10.7 is no longer supported. 0.13.0 was intended to work on 10.7+, 
-but severe issues with the libc++ version on 10.7.x keep it from running reliably. 
+From 0.13.1 onwards OS X 10.7 is no longer supported. 0.13.0 was intended to work on 10.7+,
+but severe issues with the libc++ version on 10.7.x keep it from running reliably.
 0.13.1 now requires 10.8+, and will communicate that to 10.7 users, rather than crashing unexpectedly.
 
 Notable changes
@@ -159,13 +159,13 @@ For more information about segwit, please see the [segwit FAQ][], the
 operator, please see the [versionbits FAQ][] for information about
 signaling support for a soft fork.
 
-[Segwit FAQ]: https://digibyte.org/en/2016/01/26/segwit-benefits/
-[segwit wallet developers guide]: https://digibyte.org/en/segwit_wallet_dev/
+[Segwit FAQ]: https://digibytecore.org/en/2016/01/26/segwit-benefits/
+[segwit wallet developers guide]: https://digibytecore.org/en/segwit_wallet_dev/
 [BIP141]: https://github.com/digibyte/bips/blob/master/bip-0141.mediawiki
 [BIP143]: https://github.com/digibyte/bips/blob/master/bip-0143.mediawiki
 [BIP144]: https://github.com/digibyte/bips/blob/master/bip-0144.mediawiki
 [BIP145]: https://github.com/digibyte/bips/blob/master/bip-0145.mediawiki
-[versionbits FAQ]: https://digibyte.org/en/2016/06/08/version-bits-miners-faq/
+[versionbits FAQ]: https://digibytecore.org/en/2016/06/08/version-bits-miners-faq/
 
 
 Null dummy soft fork

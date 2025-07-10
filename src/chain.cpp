@@ -1,16 +1,15 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-// Copyright (c) 2009-2019 The Bitcoin Core developers
-// Copyright (c) 2014-2019 The DigiByte Core developers
+// Copyright (c) 2009-2022 The Bitcoin Core developers
+// Copyright (c) 2014-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <chain.h>
 #include <chainparams.h>
 #include <validation.h>
-
-// Include whatever header actually declares LogPrintf in your codebase.
-// In DigiByte, it might be "logging.h" or "util/system.h". Adjust as needed:
-#include <logging.h> // or #include <util/system.h> or #include "util.h"
+#include <tinyformat.h>
+#include <util/time.h>
+#include <logging.h>
 
 /**
  * CBlockIndex default constructor
@@ -48,7 +47,18 @@ CBlockIndex::CBlockIndex(const CBlockHeader& block)
     }
 }
 
-void CChain::SetTip(CBlockIndex *pindex) {
+std::string CBlockFileInfo::ToString() const
+{
+    return strprintf("CBlockFileInfo(blocks=%u, size=%u, heights=%u...%u, time=%s...%s)", nBlocks, nSize, nHeightFirst, nHeightLast, FormatISO8601Date(nTimeFirst), FormatISO8601Date(nTimeLast));
+}
+
+std::string CBlockIndex::ToString() const
+{
+    return strprintf("CBlockIndex(pprev=%p, nHeight=%d, merkle=%s, hashBlock=%s)",
+                     pprev, nHeight, hashMerkleRoot.ToString(), GetBlockHash().ToString());
+}
+
+void CChain::SetTip(CBlockIndex* pindex) {
     if (pindex == nullptr) {
         vChain.clear();
         return;
@@ -60,32 +70,33 @@ void CChain::SetTip(CBlockIndex *pindex) {
     }
 }
 
-CBlockLocator CChain::GetLocator(const CBlockIndex *pindex) const {
-    int nStep = 1;
-    std::vector<uint256> vHave;
-    vHave.reserve(32);
+std::vector<uint256> LocatorEntries(const CBlockIndex* index)
+{
+    int step = 1;
+    std::vector<uint256> have;
+    if (index == nullptr) return have;
 
-    if (!pindex)
-        pindex = Tip();
-    while (pindex) {
-        vHave.push_back(pindex->GetBlockHash());
-        // Stop when we have added the genesis block.
-        if (pindex->nHeight == 0)
-            break;
+    have.reserve(32);
+    while (index) {
+        have.emplace_back(index->GetBlockHash());
+        if (index->nHeight == 0) break;
         // Exponentially larger steps back, plus the genesis block.
-        int nHeight = std::max(pindex->nHeight - nStep, 0);
-        if (Contains(pindex)) {
-            // Use O(1) CChain index if possible.
-            pindex = (*this)[nHeight];
-        } else {
-            // Otherwise, use O(log n) skiplist.
-            pindex = pindex->GetAncestor(nHeight);
-        }
-        if (vHave.size() > 10)
-            nStep *= 2;
+        int height = std::max(index->nHeight - step, 0);
+        // Use skiplist.
+        index = index->GetAncestor(height);
+        if (have.size() > 10) step *= 2;
     }
+    return have;
+}
 
-    return CBlockLocator(vHave);
+CBlockLocator GetLocator(const CBlockIndex* index)
+{
+    return CBlockLocator{LocatorEntries(index)};
+}
+
+CBlockLocator CChain::GetLocator() const
+{
+    return ::GetLocator(Tip());
 }
 
 const CBlockIndex *CChain::FindFork(const CBlockIndex *pindex) const {
@@ -102,12 +113,8 @@ const CBlockIndex *CChain::FindFork(const CBlockIndex *pindex) const {
 CBlockIndex* CChain::FindEarliestAtLeast(int64_t nTime, int height) const
 {
     std::pair<int64_t, int> blockparams = std::make_pair(nTime, height);
-    auto lower = std::lower_bound(
-        vChain.begin(), vChain.end(), blockparams,
-        [](CBlockIndex* pBlock, const std::pair<int64_t, int>& bp) {
-            return pBlock->GetBlockTimeMax() < bp.first || pBlock->nHeight < bp.second;
-        }
-    );
+    std::vector<CBlockIndex*>::const_iterator lower = std::lower_bound(vChain.begin(), vChain.end(), blockparams,
+        [](CBlockIndex* pBlock, const std::pair<int64_t, int>& blockparams) -> bool { return pBlock->GetBlockTimeMax() < blockparams.first || pBlock->nHeight < blockparams.second; });
     return (lower == vChain.end() ? nullptr : *lower);
 }
 
@@ -302,7 +309,7 @@ int64_t GetBlockProofEquivalentTime(const CBlockIndex& to, const CBlockIndex& fr
     if (r.bits() > 63) {
         return sign * std::numeric_limits<int64_t>::max();
     }
-    return sign * r.GetLow64();
+    return sign * int64_t(r.GetLow64());
 }
 
 const CBlockIndex* LastCommonAncestor(const CBlockIndex* pa, const CBlockIndex* pb)

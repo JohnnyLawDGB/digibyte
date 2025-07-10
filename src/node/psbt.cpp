@@ -1,9 +1,18 @@
+<<<<<<< HEAD
 // Copyright (c) 2009-2020 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <amount.h>
 #include <coins.h>
+=======
+// Copyright (c) 2009-2022 The DigiByte Core developers
+// Distributed under the MIT software license, see the accompanying
+// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
+#include <coins.h>
+#include <consensus/amount.h>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <consensus/tx_verify.h>
 #include <node/psbt.h>
 #include <policy/policy.h>
@@ -12,6 +21,10 @@
 
 #include <numeric>
 
+<<<<<<< HEAD
+=======
+namespace node {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 PSBTAnalysis AnalyzePSBT(PartiallySignedTransaction psbtx)
 {
     // Go through each input and build status
@@ -58,7 +71,11 @@ PSBTAnalysis AnalyzePSBT(PartiallySignedTransaction psbtx)
         }
 
         // Check if it is final
+<<<<<<< HEAD
         if (!utxo.IsNull() && !PSBTInputSigned(input)) {
+=======
+        if (!PSBTInputSignedAndVerified(psbtx, i, &txdata)) {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             input_analysis.is_final = false;
 
             // Figure out what is missing
@@ -105,7 +122,11 @@ PSBTAnalysis AnalyzePSBT(PartiallySignedTransaction psbtx)
             }
         );
         if (!MoneyRange(out_amt)) {
+<<<<<<< HEAD
             result.SetInvalid(strprintf("PSBT is not valid. Output amount invalid"));
+=======
+            result.SetInvalid("PSBT is not valid. Output amount invalid");
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             return result;
         }
 
@@ -136,7 +157,11 @@ PSBTAnalysis AnalyzePSBT(PartiallySignedTransaction psbtx)
 
         if (success) {
             CTransaction ctx = CTransaction(mtx);
+<<<<<<< HEAD
             size_t size = GetVirtualTransactionSize(ctx, GetTransactionSigOpCost(ctx, view, STANDARD_SCRIPT_VERIFY_FLAGS));
+=======
+            size_t size(GetVirtualTransactionSize(ctx, GetTransactionSigOpCost(ctx, view, STANDARD_SCRIPT_VERIFY_FLAGS), ::nBytesPerSigOp));
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             result.estimated_vsize = size;
             // Estimate fee rate
             CFeeRate feerate(fee, size);
@@ -147,3 +172,7 @@ PSBTAnalysis AnalyzePSBT(PartiallySignedTransaction psbtx)
 
     return result;
 }
+<<<<<<< HEAD
+=======
+} // namespace node
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion

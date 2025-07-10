@@ -85,7 +85,11 @@ class NodeNetworkLimitedTest(DigiByteTestFramework):
         self.connect_nodes(0, 2)
         try:
             self.sync_blocks([self.nodes[0], self.nodes[2]], timeout=5)
+<<<<<<< HEAD
         except:
+=======
+        except Exception:
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             pass
         # node2 must remain at height 0
         assert_equal(self.nodes[2].getblockheader(self.nodes[2].getbestblockhash())['height'], 0)

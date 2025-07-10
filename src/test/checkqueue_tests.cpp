@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 // Copyright (c) 2009-2020 The Bitcoin Core developers
 // Copyright (c) 2014-2020 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
@@ -9,6 +10,18 @@
 #include <sync.h>
 #include <test/util/setup_common.h>
 #include <util/system.h>
+=======
+// Copyright (c) 2012-2022 The DigiByte Core developers
+// Distributed under the MIT software license, see the accompanying
+// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
+#include <checkqueue.h>
+#include <common/args.h>
+#include <sync.h>
+#include <test/util/random.h>
+#include <test/util/setup_common.h>
+#include <util/chaintype.h>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <util/time.h>
 
 #include <boost/test/unit_test.hpp>
@@ -21,7 +34,25 @@
 #include <utility>
 #include <vector>
 
+<<<<<<< HEAD
 BOOST_FIXTURE_TEST_SUITE(checkqueue_tests, TestingSetup)
+=======
+/**
+ * Identical to TestingSetup but excludes lock contention logging if
+ * `DEBUG_LOCKCONTENTION` is defined, as some of these tests are designed to be
+ * heavily contested to trigger race conditions or other issues.
+ */
+struct NoLockLoggingTestingSetup : public TestingSetup {
+    NoLockLoggingTestingSetup()
+#ifdef DEBUG_LOCKCONTENTION
+        : TestingSetup{ChainType::MAIN, /*extra_args=*/{"-debugexclude=lock"}} {}
+#else
+        : TestingSetup{ChainType::MAIN} {}
+#endif
+};
+
+BOOST_FIXTURE_TEST_SUITE(checkqueue_tests, NoLockLoggingTestingSetup)
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 static const unsigned int QUEUE_BATCH_SIZE = 128;
 static const int SCRIPT_CHECK_THREADS = 3;
@@ -31,7 +62,6 @@ struct FakeCheck {
     {
         return true;
     }
-    void swap(FakeCheck& x){};
 };
 
 struct FakeCheckCheckCompletion {
@@ -41,21 +71,19 @@ struct FakeCheckCheckCompletion {
         n_calls.fetch_add(1, std::memory_order_relaxed);
         return true;
     }
-    void swap(FakeCheckCheckCompletion& x){};
 };
 
 struct FailingCheck {
     bool fails;
     FailingCheck(bool _fails) : fails(_fails){};
+<<<<<<< HEAD
     FailingCheck() : fails(true){};
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     bool operator()() const
     {
         return !fails;
     }
-    void swap(FailingCheck& x)
-    {
-        std::swap(fails, x.fails);
-    };
 };
 
 struct UniqueCheck {
@@ -63,14 +91,12 @@ struct UniqueCheck {
     static std::unordered_multiset<size_t> results GUARDED_BY(m);
     size_t check_id;
     UniqueCheck(size_t check_id_in) : check_id(check_id_in){};
-    UniqueCheck() : check_id(0){};
     bool operator()()
     {
         LOCK(m);
         results.insert(check_id);
         return true;
     }
-    void swap(UniqueCheck& x) { std::swap(x.check_id, check_id); };
 };
 
 
@@ -81,7 +107,6 @@ struct MemoryCheck {
     {
         return true;
     }
-    MemoryCheck(){};
     MemoryCheck(const MemoryCheck& x)
     {
         // We have to do this to make sure that destructor calls are paired
@@ -98,21 +123,24 @@ struct MemoryCheck {
     {
         fake_allocated_memory.fetch_sub(b, std::memory_order_relaxed);
     };
-    void swap(MemoryCheck& x) { std::swap(b, x.b); };
 };
 
 struct FrozenCleanupCheck {
     static std::atomic<uint64_t> nFrozen;
     static std::condition_variable cv;
     static std::mutex m;
+<<<<<<< HEAD
     // Freezing can't be the default initialized behavior given how the queue
     // swaps in default initialized Checks.
     bool should_freeze {false};
+=======
+    bool should_freeze{true};
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     bool operator()() const
     {
         return true;
     }
-    FrozenCleanupCheck() {}
+    FrozenCleanupCheck() = default;
     ~FrozenCleanupCheck()
     {
         if (should_freeze) {
@@ -122,7 +150,17 @@ struct FrozenCleanupCheck {
             cv.wait(l, []{ return nFrozen.load(std::memory_order_relaxed) == 0;});
         }
     }
-    void swap(FrozenCleanupCheck& x){std::swap(should_freeze, x.should_freeze);};
+    FrozenCleanupCheck(FrozenCleanupCheck&& other) noexcept
+    {
+        should_freeze = other.should_freeze;
+        other.should_freeze = false;
+    }
+    FrozenCleanupCheck& operator=(FrozenCleanupCheck&& other) noexcept
+    {
+        should_freeze = other.should_freeze;
+        other.should_freeze = false;
+        return *this;
+    }
 };
 
 // Static Allocations
@@ -152,19 +190,28 @@ static void Correct_Queue_range(std::vector<size_t> range)
     small_queue->StartWorkerThreads(SCRIPT_CHECK_THREADS);
     // Make vChecks here to save on malloc (this test can be slow...)
     std::vector<FakeCheckCheckCompletion> vChecks;
+<<<<<<< HEAD
+=======
+    vChecks.reserve(9);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     for (const size_t i : range) {
         size_t total = i;
         FakeCheckCheckCompletion::n_calls = 0;
         CCheckQueueControl<FakeCheckCheckCompletion> control(small_queue.get());
         while (total) {
-            vChecks.resize(std::min(total, (size_t) InsecureRandRange(10)));
+            vChecks.clear();
+            vChecks.resize(std::min<size_t>(total, InsecureRandRange(10)));
             total -= vChecks.size();
-            control.Add(vChecks);
+            control.Add(std::move(vChecks));
         }
         BOOST_REQUIRE(control.Wait());
+<<<<<<< HEAD
         if (FakeCheckCheckCompletion::n_calls != i) {
             BOOST_REQUIRE_EQUAL(FakeCheckCheckCompletion::n_calls, i);
         }
+=======
+        BOOST_REQUIRE_EQUAL(FakeCheckCheckCompletion::n_calls, i);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     small_queue->StopWorkerThreads();
 }
@@ -174,7 +221,7 @@ static void Correct_Queue_range(std::vector<size_t> range)
 BOOST_AUTO_TEST_CASE(test_CheckQueue_Correct_Zero)
 {
     std::vector<size_t> range;
-    range.push_back((size_t)0);
+    range.push_back(size_t{0});
     Correct_Queue_range(range);
 }
 /** Test that 1 check is correct
@@ -182,7 +229,7 @@ BOOST_AUTO_TEST_CASE(test_CheckQueue_Correct_Zero)
 BOOST_AUTO_TEST_CASE(test_CheckQueue_Correct_One)
 {
     std::vector<size_t> range;
-    range.push_back((size_t)1);
+    range.push_back(size_t{1});
     Correct_Queue_range(range);
 }
 /** Test that MAX check is correct
@@ -221,7 +268,7 @@ BOOST_AUTO_TEST_CASE(test_CheckQueue_Catches_Failure)
             vChecks.reserve(r);
             for (size_t k = 0; k < r && remaining; k++, remaining--)
                 vChecks.emplace_back(remaining == 1);
-            control.Add(vChecks);
+            control.Add(std::move(vChecks));
         }
         bool success = control.Wait();
         if (i > 0) {
@@ -246,7 +293,7 @@ BOOST_AUTO_TEST_CASE(test_CheckQueue_Recovers_From_Failure)
                 std::vector<FailingCheck> vChecks;
                 vChecks.resize(100, false);
                 vChecks[99] = end_fails;
-                control.Add(vChecks);
+                control.Add(std::move(vChecks));
             }
             bool r =control.Wait();
             BOOST_REQUIRE(r != end_fails);
@@ -272,7 +319,7 @@ BOOST_AUTO_TEST_CASE(test_CheckQueue_UniqueCheck)
             std::vector<UniqueCheck> vChecks;
             for (size_t k = 0; k < r && total; k++)
                 vChecks.emplace_back(--total);
-            control.Add(vChecks);
+            control.Add(std::move(vChecks));
         }
     }
     {
@@ -310,7 +357,7 @@ BOOST_AUTO_TEST_CASE(test_CheckQueue_Memory)
                     // to catch any sort of deallocation failure
                     vChecks.emplace_back(total == 0 || total == i || total == i/2);
                 }
-                control.Add(vChecks);
+                control.Add(std::move(vChecks));
             }
         }
         BOOST_REQUIRE_EQUAL(MemoryCheck::fake_allocated_memory, 0U);
@@ -328,11 +375,15 @@ BOOST_AUTO_TEST_CASE(test_CheckQueue_FrozenCleanup)
     std::thread t0([&]() {
         CCheckQueueControl<FrozenCleanupCheck> control(queue.get());
         std::vector<FrozenCleanupCheck> vChecks(1);
+<<<<<<< HEAD
         // Freezing can't be the default initialized behavior given how the queue
         // swaps in default initialized Checks (otherwise freezing destructor
         // would get called twice).
         vChecks[0].should_freeze = true;
         control.Add(vChecks);
+=======
+        control.Add(std::move(vChecks));
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         bool waitResult = control.Wait(); // Hangs here
         assert(waitResult);
     });

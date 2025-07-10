@@ -1,16 +1,38 @@
+<<<<<<< HEAD
 // Copyright (c) 2009-2020 The Bitcoin Core developers
 // Copyright (c) 2014-2020 The DigiByte Core developers
+=======
+// Copyright (c) 2011-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <qt/walletframe.h>
 
+<<<<<<< HEAD
 #include <qt/overviewpage.h>
+=======
+#include <node/interface_ui.h>
+#include <psbt.h>
+#include <qt/guiutil.h>
+#include <qt/overviewpage.h>
+#include <qt/psbtoperationsdialog.h>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <qt/walletmodel.h>
 #include <qt/walletview.h>
+#include <util/fs.h>
+#include <util/fs_helpers.h>
 
 #include <cassert>
+<<<<<<< HEAD
 
+=======
+#include <fstream>
+#include <string>
+
+#include <QApplication>
+#include <QClipboard>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -46,9 +68,7 @@ WalletFrame::WalletFrame(const PlatformStyle* _platformStyle, QWidget* parent)
     walletStack->addWidget(no_wallet_group);
 }
 
-WalletFrame::~WalletFrame()
-{
-}
+WalletFrame::~WalletFrame() = default;
 
 void WalletFrame::setClientModel(ClientModel *_clientModel)
 {
@@ -59,14 +79,21 @@ void WalletFrame::setClientModel(ClientModel *_clientModel)
     }
 }
 
+<<<<<<< HEAD
 bool WalletFrame::addWallet(WalletModel* walletModel, WalletView* walletView)
 {
     if (!clientModel || !walletModel) return false;
 
     if (mapWalletViews.count(walletModel) > 0) return false;
+=======
+bool WalletFrame::addView(WalletView* walletView)
+{
+    if (!clientModel) return false;
+
+    if (mapWalletViews.count(walletView->getWalletModel()) > 0) return false;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     walletView->setClientModel(clientModel);
-    walletView->setWalletModel(walletModel);
     walletView->showOutOfSyncWarning(bOutOfSync);
 
     WalletView* current_wallet_view = currentWalletView();
@@ -77,7 +104,11 @@ bool WalletFrame::addWallet(WalletModel* walletModel, WalletView* walletView)
     }
 
     walletStack->addWidget(walletView);
+<<<<<<< HEAD
     mapWalletViews[walletModel] = walletView;
+=======
+    mapWalletViews[walletView->getWalletModel()] = walletView;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     return true;
 }
@@ -104,7 +135,12 @@ void WalletFrame::setCurrentWallet(WalletModel* wallet_model)
     walletView->updateGeometry();
 
     walletStack->setCurrentWidget(walletView);
+<<<<<<< HEAD
     walletView->updateEncryptionStatus();
+=======
+
+    Q_EMIT currentWalletSet();
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 void WalletFrame::removeWallet(WalletModel* wallet_model)
@@ -185,10 +221,54 @@ void WalletFrame::gotoVerifyMessageTab(QString addr)
 
 void WalletFrame::gotoLoadPSBT(bool from_clipboard)
 {
+<<<<<<< HEAD
     WalletView *walletView = currentWalletView();
     if (walletView) {
         walletView->gotoLoadPSBT(from_clipboard);
     }
+=======
+    std::vector<unsigned char> data;
+
+    if (from_clipboard) {
+        std::string raw = QApplication::clipboard()->text().toStdString();
+        auto result = DecodeBase64(raw);
+        if (!result) {
+            Q_EMIT message(tr("Error"), tr("Unable to decode PSBT from clipboard (invalid base64)"), CClientUIInterface::MSG_ERROR);
+            return;
+        }
+        data = std::move(*result);
+    } else {
+        QString filename = GUIUtil::getOpenFileName(this,
+            tr("Load Transaction Data"), QString(),
+            tr("Partially Signed Transaction (*.psbt)"), nullptr);
+        if (filename.isEmpty()) return;
+        if (GetFileSize(filename.toLocal8Bit().data(), MAX_FILE_SIZE_PSBT) == MAX_FILE_SIZE_PSBT) {
+            Q_EMIT message(tr("Error"), tr("PSBT file must be smaller than 100 MiB"), CClientUIInterface::MSG_ERROR);
+            return;
+        }
+        std::ifstream in{filename.toLocal8Bit().data(), std::ios::binary};
+        data.assign(std::istreambuf_iterator<char>{in}, {});
+
+        // Some psbt files may be base64 strings in the file rather than binary data
+        std::string b64_str{data.begin(), data.end()};
+        b64_str.erase(b64_str.find_last_not_of(" \t\n\r\f\v") + 1); // Trim trailing whitespace
+        auto b64_dec = DecodeBase64(b64_str);
+        if (b64_dec.has_value()) {
+            data = b64_dec.value();
+        }
+    }
+
+    std::string error;
+    PartiallySignedTransaction psbtx;
+    if (!DecodeRawPSBT(psbtx, MakeByteSpan(data), error)) {
+        Q_EMIT message(tr("Error"), tr("Unable to decode PSBT") + "\n" + QString::fromStdString(error), CClientUIInterface::MSG_ERROR);
+        return;
+    }
+
+    auto dlg = new PSBTOperationsDialog(this, currentWalletModel(), clientModel);
+    dlg->openWithPSBT(psbtx);
+    GUIUtil::ShowModalDialogAsynchronously(dlg);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 void WalletFrame::encryptWallet()

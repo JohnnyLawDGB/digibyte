@@ -1,6 +1,10 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
+<<<<<<< HEAD
 // Copyright (c) 2009-2020 The Bitcoin Core developers
 // Copyright (c) 2014-2020 The DigiByte Core developers
+=======
+// Copyright (c) 2009-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -9,16 +13,20 @@
 
 #include <coins.h>
 #include <dbwrapper.h>
-#include <chain.h>
-#include <primitives/block.h>
+#include <kernel/cs_main.h>
+#include <sync.h>
+#include <util/fs.h>
 
+<<<<<<< HEAD
+=======
+#include <cstddef>
+#include <cstdint>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <memory>
-#include <string>
-#include <utility>
+#include <optional>
 #include <vector>
 
-class CBlockIndex;
-class CCoinsViewDBCursor;
+class COutPoint;
 class uint256;
 
 //! -dbcache default (MiB)
@@ -40,13 +48,25 @@ static const int64_t max_filter_index_cache = 1024;
 //! Max memory allocated to coin DB specific cache (MiB)
 static const int64_t nMaxCoinsDBCache = 8;
 
+<<<<<<< HEAD
 // Actually declared in validation.cpp; can't include because of circular dependency.
 extern RecursiveMutex cs_main;
+=======
+//! User-controlled performance and debug options.
+struct CoinsViewOptions {
+    //! Maximum database write batch size in bytes.
+    size_t batch_write_bytes = nDefaultDbBatchSize;
+    //! If non-zero, randomly exit when the database is flushed with (1/ratio)
+    //! probability.
+    int simulate_crash_ratio = 0;
+};
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 /** CCoinsView backed by the coin database (chainstate/) */
 class CCoinsViewDB final : public CCoinsView
 {
 protected:
+<<<<<<< HEAD
     std::unique_ptr<CDBWrapper> m_db;
     fs::path m_ldb_path;
     bool m_is_memory;
@@ -55,17 +75,29 @@ public:
      * @param[in] ldb_path    Location in the filesystem where leveldb data will be stored.
      */
     explicit CCoinsViewDB(fs::path ldb_path, size_t nCacheSize, bool fMemory, bool fWipe);
+=======
+    DBParams m_db_params;
+    CoinsViewOptions m_options;
+    std::unique_ptr<CDBWrapper> m_db;
+public:
+    explicit CCoinsViewDB(DBParams db_params, CoinsViewOptions options);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     bool GetCoin(const COutPoint &outpoint, Coin &coin) const override;
     bool HaveCoin(const COutPoint &outpoint) const override;
     uint256 GetBestBlock() const override;
     std::vector<uint256> GetHeadBlocks() const override;
+<<<<<<< HEAD
     bool BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock) override;
+=======
+    bool BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock, bool erase = true) override;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     std::unique_ptr<CCoinsViewCursor> Cursor() const override;
 
-    //! Attempt to update from an older database format. Returns whether an error occurred.
-    bool Upgrade();
+    //! Whether an unsupported database format is used.
+    bool NeedsUpgrade();
     size_t EstimateSize() const override;
+<<<<<<< HEAD
 
     //! Dynamically alter the underlying leveldb cache size.
     void ResizeCache(size_t new_cache_size) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
@@ -87,4 +119,14 @@ public:
     bool LoadBlockIndexGuts(const Consensus::Params& consensusParams, std::function<CBlockIndex*(const uint256&)> insertBlockIndex, int& nHighest);
 };
 
+=======
+
+    //! Dynamically alter the underlying leveldb cache size.
+    void ResizeCache(size_t new_cache_size) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+
+    //! @returns filesystem path to on-disk storage or std::nullopt if in memory.
+    std::optional<fs::path> StoragePath() { return m_db->StoragePath(); }
+};
+
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #endif // DIGIBYTE_TXDB_H

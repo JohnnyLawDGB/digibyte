@@ -1,9 +1,18 @@
+<<<<<<< HEAD
 // Copyright (c) 2009-2020 The DigiByte Core developers
+=======
+// Copyright (c) 2009-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <psbt.h>
 
+<<<<<<< HEAD
+=======
+#include <policy/policy.h>
+#include <script/signingprovider.h>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <util/check.h>
 #include <util/strencodings.h>
 
@@ -32,6 +41,16 @@ bool PartiallySignedTransaction::Merge(const PartiallySignedTransaction& psbt)
     for (unsigned int i = 0; i < outputs.size(); ++i) {
         outputs[i].Merge(psbt.outputs[i]);
     }
+<<<<<<< HEAD
+=======
+    for (auto& xpub_pair : psbt.m_xpubs) {
+        if (m_xpubs.count(xpub_pair.first) == 0) {
+            m_xpubs[xpub_pair.first] = xpub_pair.second;
+        } else {
+            m_xpubs[xpub_pair.first].insert(xpub_pair.second.begin(), xpub_pair.second.end());
+        }
+    }
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     unknown.insert(psbt.unknown.begin(), psbt.unknown.end());
 
     return true;
@@ -106,6 +125,40 @@ void PSBTInput::FillSignatureData(SignatureData& sigdata) const
     for (const auto& key_pair : hd_keypaths) {
         sigdata.misc_pubkeys.emplace(key_pair.first.GetID(), key_pair);
     }
+<<<<<<< HEAD
+=======
+    if (!m_tap_key_sig.empty()) {
+        sigdata.taproot_key_path_sig = m_tap_key_sig;
+    }
+    for (const auto& [pubkey_leaf, sig] : m_tap_script_sigs) {
+        sigdata.taproot_script_sigs.emplace(pubkey_leaf, sig);
+    }
+    if (!m_tap_internal_key.IsNull()) {
+        sigdata.tr_spenddata.internal_key = m_tap_internal_key;
+    }
+    if (!m_tap_merkle_root.IsNull()) {
+        sigdata.tr_spenddata.merkle_root = m_tap_merkle_root;
+    }
+    for (const auto& [leaf_script, control_block] : m_tap_scripts) {
+        sigdata.tr_spenddata.scripts.emplace(leaf_script, control_block);
+    }
+    for (const auto& [pubkey, leaf_origin] : m_tap_bip32_paths) {
+        sigdata.taproot_misc_pubkeys.emplace(pubkey, leaf_origin);
+        sigdata.tap_pubkeys.emplace(Hash160(pubkey), pubkey);
+    }
+    for (const auto& [hash, preimage] : ripemd160_preimages) {
+        sigdata.ripemd160_preimages.emplace(std::vector<unsigned char>(hash.begin(), hash.end()), preimage);
+    }
+    for (const auto& [hash, preimage] : sha256_preimages) {
+        sigdata.sha256_preimages.emplace(std::vector<unsigned char>(hash.begin(), hash.end()), preimage);
+    }
+    for (const auto& [hash, preimage] : hash160_preimages) {
+        sigdata.hash160_preimages.emplace(std::vector<unsigned char>(hash.begin(), hash.end()), preimage);
+    }
+    for (const auto& [hash, preimage] : hash256_preimages) {
+        sigdata.hash256_preimages.emplace(std::vector<unsigned char>(hash.begin(), hash.end()), preimage);
+    }
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 void PSBTInput::FromSignatureData(const SignatureData& sigdata)
@@ -135,24 +188,66 @@ void PSBTInput::FromSignatureData(const SignatureData& sigdata)
     for (const auto& entry : sigdata.misc_pubkeys) {
         hd_keypaths.emplace(entry.second);
     }
+<<<<<<< HEAD
+=======
+    if (!sigdata.taproot_key_path_sig.empty()) {
+        m_tap_key_sig = sigdata.taproot_key_path_sig;
+    }
+    for (const auto& [pubkey_leaf, sig] : sigdata.taproot_script_sigs) {
+        m_tap_script_sigs.emplace(pubkey_leaf, sig);
+    }
+    if (!sigdata.tr_spenddata.internal_key.IsNull()) {
+        m_tap_internal_key = sigdata.tr_spenddata.internal_key;
+    }
+    if (!sigdata.tr_spenddata.merkle_root.IsNull()) {
+        m_tap_merkle_root = sigdata.tr_spenddata.merkle_root;
+    }
+    for (const auto& [leaf_script, control_block] : sigdata.tr_spenddata.scripts) {
+        m_tap_scripts.emplace(leaf_script, control_block);
+    }
+    for (const auto& [pubkey, leaf_origin] : sigdata.taproot_misc_pubkeys) {
+        m_tap_bip32_paths.emplace(pubkey, leaf_origin);
+    }
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 void PSBTInput::Merge(const PSBTInput& input)
 {
     if (!non_witness_utxo && input.non_witness_utxo) non_witness_utxo = input.non_witness_utxo;
     if (witness_utxo.IsNull() && !input.witness_utxo.IsNull()) {
+<<<<<<< HEAD
         // TODO: For segwit v1, we will want to clear out the non-witness utxo when setting a witness one. For v0 and non-segwit, this is not safe
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         witness_utxo = input.witness_utxo;
     }
 
     partial_sigs.insert(input.partial_sigs.begin(), input.partial_sigs.end());
+<<<<<<< HEAD
     hd_keypaths.insert(input.hd_keypaths.begin(), input.hd_keypaths.end());
     unknown.insert(input.unknown.begin(), input.unknown.end());
+=======
+    ripemd160_preimages.insert(input.ripemd160_preimages.begin(), input.ripemd160_preimages.end());
+    sha256_preimages.insert(input.sha256_preimages.begin(), input.sha256_preimages.end());
+    hash160_preimages.insert(input.hash160_preimages.begin(), input.hash160_preimages.end());
+    hash256_preimages.insert(input.hash256_preimages.begin(), input.hash256_preimages.end());
+    hd_keypaths.insert(input.hd_keypaths.begin(), input.hd_keypaths.end());
+    unknown.insert(input.unknown.begin(), input.unknown.end());
+    m_tap_script_sigs.insert(input.m_tap_script_sigs.begin(), input.m_tap_script_sigs.end());
+    m_tap_scripts.insert(input.m_tap_scripts.begin(), input.m_tap_scripts.end());
+    m_tap_bip32_paths.insert(input.m_tap_bip32_paths.begin(), input.m_tap_bip32_paths.end());
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     if (redeem_script.empty() && !input.redeem_script.empty()) redeem_script = input.redeem_script;
     if (witness_script.empty() && !input.witness_script.empty()) witness_script = input.witness_script;
     if (final_script_sig.empty() && !input.final_script_sig.empty()) final_script_sig = input.final_script_sig;
     if (final_script_witness.IsNull() && !input.final_script_witness.IsNull()) final_script_witness = input.final_script_witness;
+<<<<<<< HEAD
+=======
+    if (m_tap_key_sig.empty() && !input.m_tap_key_sig.empty()) m_tap_key_sig = input.m_tap_key_sig;
+    if (m_tap_internal_key.IsNull() && !input.m_tap_internal_key.IsNull()) m_tap_internal_key = input.m_tap_internal_key;
+    if (m_tap_merkle_root.IsNull() && !input.m_tap_merkle_root.IsNull()) m_tap_merkle_root = input.m_tap_merkle_root;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 void PSBTOutput::FillSignatureData(SignatureData& sigdata) const
@@ -166,6 +261,25 @@ void PSBTOutput::FillSignatureData(SignatureData& sigdata) const
     for (const auto& key_pair : hd_keypaths) {
         sigdata.misc_pubkeys.emplace(key_pair.first.GetID(), key_pair);
     }
+<<<<<<< HEAD
+=======
+    if (!m_tap_tree.empty() && m_tap_internal_key.IsFullyValid()) {
+        TaprootBuilder builder;
+        for (const auto& [depth, leaf_ver, script] : m_tap_tree) {
+            builder.Add((int)depth, script, (int)leaf_ver, /*track=*/true);
+        }
+        assert(builder.IsComplete());
+        builder.Finalize(m_tap_internal_key);
+        TaprootSpendData spenddata = builder.GetSpendData();
+
+        sigdata.tr_spenddata.internal_key = m_tap_internal_key;
+        sigdata.tr_spenddata.Merge(spenddata);
+    }
+    for (const auto& [pubkey, leaf_origin] : m_tap_bip32_paths) {
+        sigdata.taproot_misc_pubkeys.emplace(pubkey, leaf_origin);
+        sigdata.tap_pubkeys.emplace(Hash160(pubkey), pubkey);
+    }
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 void PSBTOutput::FromSignatureData(const SignatureData& sigdata)
@@ -179,6 +293,18 @@ void PSBTOutput::FromSignatureData(const SignatureData& sigdata)
     for (const auto& entry : sigdata.misc_pubkeys) {
         hd_keypaths.emplace(entry.second);
     }
+<<<<<<< HEAD
+=======
+    if (!sigdata.tr_spenddata.internal_key.IsNull()) {
+        m_tap_internal_key = sigdata.tr_spenddata.internal_key;
+    }
+    if (sigdata.tr_builder.has_value() && sigdata.tr_builder->HasScripts()) {
+        m_tap_tree = sigdata.tr_builder->GetTreeTuples();
+    }
+    for (const auto& [pubkey, leaf_origin] : sigdata.taproot_misc_pubkeys) {
+        m_tap_bip32_paths.emplace(pubkey, leaf_origin);
+    }
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 bool PSBTOutput::IsNull() const
@@ -190,15 +316,58 @@ void PSBTOutput::Merge(const PSBTOutput& output)
 {
     hd_keypaths.insert(output.hd_keypaths.begin(), output.hd_keypaths.end());
     unknown.insert(output.unknown.begin(), output.unknown.end());
+<<<<<<< HEAD
 
     if (redeem_script.empty() && !output.redeem_script.empty()) redeem_script = output.redeem_script;
     if (witness_script.empty() && !output.witness_script.empty()) witness_script = output.witness_script;
 }
+=======
+    m_tap_bip32_paths.insert(output.m_tap_bip32_paths.begin(), output.m_tap_bip32_paths.end());
+
+    if (redeem_script.empty() && !output.redeem_script.empty()) redeem_script = output.redeem_script;
+    if (witness_script.empty() && !output.witness_script.empty()) witness_script = output.witness_script;
+    if (m_tap_internal_key.IsNull() && !output.m_tap_internal_key.IsNull()) m_tap_internal_key = output.m_tap_internal_key;
+    if (m_tap_tree.empty() && !output.m_tap_tree.empty()) m_tap_tree = output.m_tap_tree;
+}
+
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 bool PSBTInputSigned(const PSBTInput& input)
 {
     return !input.final_script_sig.empty() || !input.final_script_witness.IsNull();
 }
 
+<<<<<<< HEAD
+=======
+bool PSBTInputSignedAndVerified(const PartiallySignedTransaction psbt, unsigned int input_index, const PrecomputedTransactionData* txdata)
+{
+    CTxOut utxo;
+    assert(psbt.inputs.size() >= input_index);
+    const PSBTInput& input = psbt.inputs[input_index];
+
+    if (input.non_witness_utxo) {
+        // If we're taking our information from a non-witness UTXO, verify that it matches the prevout.
+        COutPoint prevout = psbt.tx->vin[input_index].prevout;
+        if (prevout.n >= input.non_witness_utxo->vout.size()) {
+            return false;
+        }
+        if (input.non_witness_utxo->GetHash() != prevout.hash) {
+            return false;
+        }
+        utxo = input.non_witness_utxo->vout[prevout.n];
+    } else if (!input.witness_utxo.IsNull()) {
+        utxo = input.witness_utxo;
+    } else {
+        return false;
+    }
+
+    if (txdata) {
+        return VerifyScript(input.final_script_sig, utxo.scriptPubKey, &input.final_script_witness, STANDARD_SCRIPT_VERIFY_FLAGS, MutableTransactionSignatureChecker{&(*psbt.tx), input_index, utxo.nValue, *txdata, MissingDataBehavior::FAIL});
+    } else {
+        return VerifyScript(input.final_script_sig, utxo.scriptPubKey, &input.final_script_witness, STANDARD_SCRIPT_VERIFY_FLAGS, MutableTransactionSignatureChecker{&(*psbt.tx), input_index, utxo.nValue, MissingDataBehavior::FAIL});
+    }
+}
+
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 size_t CountPSBTUnsignedInputs(const PartiallySignedTransaction& psbt) {
     size_t count = 0;
     for (const auto& input : psbt.inputs) {
@@ -223,7 +392,11 @@ void UpdatePSBTOutput(const SigningProvider& provider, PartiallySignedTransactio
     // Construct a would-be spend of this output, to update sigdata with.
     // Note that ProduceSignature is used to fill in metadata (not actual signatures),
     // so provider does not need to provide any private keys (it can be a HidingSigningProvider).
+<<<<<<< HEAD
     MutableTransactionSignatureCreator creator(&tx, /* index */ 0, out.nValue, SIGHASH_ALL);
+=======
+    MutableTransactionSignatureCreator creator(tx, /*input_idx=*/0, out.nValue, SIGHASH_ALL);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     ProduceSignature(provider, creator, out.scriptPubKey, sigdata);
 
     // Put redeem_script, witness_script, key paths, into PSBTOutput.
@@ -247,12 +420,20 @@ PrecomputedTransactionData PrecomputePSBTData(const PartiallySignedTransaction& 
     return txdata;
 }
 
+<<<<<<< HEAD
 bool SignPSBTInput(const SigningProvider& provider, PartiallySignedTransaction& psbt, int index, const PrecomputedTransactionData* txdata, int sighash, SignatureData* out_sigdata)
+=======
+bool SignPSBTInput(const SigningProvider& provider, PartiallySignedTransaction& psbt, int index, const PrecomputedTransactionData* txdata, int sighash,  SignatureData* out_sigdata, bool finalize)
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     PSBTInput& input = psbt.inputs.at(index);
     const CMutableTransaction& tx = *psbt.tx;
 
+<<<<<<< HEAD
     if (PSBTInputSigned(input)) {
+=======
+    if (PSBTInputSignedAndVerified(psbt, index, txdata)) {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         return true;
     }
 
@@ -290,11 +471,16 @@ bool SignPSBTInput(const SigningProvider& provider, PartiallySignedTransaction& 
     if (txdata == nullptr) {
         sig_complete = ProduceSignature(provider, DUMMY_SIGNATURE_CREATOR, utxo.scriptPubKey, sigdata);
     } else {
+<<<<<<< HEAD
         MutableTransactionSignatureCreator creator(&tx, index, utxo.nValue, txdata, sighash);
+=======
+        MutableTransactionSignatureCreator creator(tx, index, utxo.nValue, txdata, sighash);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         sig_complete = ProduceSignature(provider, creator, utxo.scriptPubKey, sigdata);
     }
     // Verify that a witness signature was produced in case one was required.
     if (require_witness_sig && !sigdata.witness) return false;
+<<<<<<< HEAD
     input.FromSignatureData(sigdata);
 
     // If we have a witness signature, put a witness UTXO.
@@ -302,6 +488,20 @@ bool SignPSBTInput(const SigningProvider& provider, PartiallySignedTransaction& 
     if (sigdata.witness) {
         input.witness_utxo = utxo;
         // input.non_witness_utxo = nullptr;
+=======
+
+    // If we are not finalizing, set sigdata.complete to false to not set the scriptWitness
+    if (!finalize && sigdata.complete) sigdata.complete = false;
+
+    input.FromSignatureData(sigdata);
+
+    // If we have a witness signature, put a witness UTXO.
+    if (sigdata.witness) {
+        input.witness_utxo = utxo;
+        // We can remove the non_witness_utxo if and only if there are no non-segwit or segwit v0
+        // inputs in this transaction. Since this requires inspecting the entire transaction, this
+        // is something for the caller to deal with (i.e. FillPSBT).
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     // Fill in the missing info
@@ -315,6 +515,41 @@ bool SignPSBTInput(const SigningProvider& provider, PartiallySignedTransaction& 
     return sig_complete;
 }
 
+<<<<<<< HEAD
+=======
+void RemoveUnnecessaryTransactions(PartiallySignedTransaction& psbtx, const int& sighash_type)
+{
+    // Only drop non_witness_utxos if sighash_type != SIGHASH_ANYONECANPAY
+    if ((sighash_type & 0x80) != SIGHASH_ANYONECANPAY) {
+        // Figure out if any non_witness_utxos should be dropped
+        std::vector<unsigned int> to_drop;
+        for (unsigned int i = 0; i < psbtx.inputs.size(); ++i) {
+            const auto& input = psbtx.inputs.at(i);
+            int wit_ver;
+            std::vector<unsigned char> wit_prog;
+            if (input.witness_utxo.IsNull() || !input.witness_utxo.scriptPubKey.IsWitnessProgram(wit_ver, wit_prog)) {
+                // There's a non-segwit input or Segwit v0, so we cannot drop any witness_utxos
+                to_drop.clear();
+                break;
+            }
+            if (wit_ver == 0) {
+                // Segwit v0, so we cannot drop any non_witness_utxos
+                to_drop.clear();
+                break;
+            }
+            if (input.non_witness_utxo) {
+                to_drop.push_back(i);
+            }
+        }
+
+        // Drop the non_witness_utxos that we can drop
+        for (unsigned int i : to_drop) {
+            psbtx.inputs.at(i).non_witness_utxo = nullptr;
+        }
+    }
+}
+
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 bool FinalizePSBT(PartiallySignedTransaction& psbtx)
 {
     // Finalize input signatures -- in case we have partial signatures that add up to a complete
@@ -324,7 +559,11 @@ bool FinalizePSBT(PartiallySignedTransaction& psbtx)
     bool complete = true;
     const PrecomputedTransactionData txdata = PrecomputePSBTData(psbtx);
     for (unsigned int i = 0; i < psbtx.tx->vin.size(); ++i) {
+<<<<<<< HEAD
         complete &= SignPSBTInput(DUMMY_SIGNING_PROVIDER, psbtx, i, &txdata, SIGHASH_ALL);
+=======
+        complete &= SignPSBTInput(DUMMY_SIGNING_PROVIDER, psbtx, i, &txdata, SIGHASH_ALL, nullptr, true);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     return complete;
@@ -373,6 +612,7 @@ std::string PSBTRoleName(PSBTRole role) {
 
 bool DecodeBase64PSBT(PartiallySignedTransaction& psbt, const std::string& base64_tx, std::string& error)
 {
+<<<<<<< HEAD
     bool invalid;
     std::string tx_data = DecodeBase64(base64_tx, &invalid);
     if (invalid) {
@@ -385,6 +625,19 @@ bool DecodeBase64PSBT(PartiallySignedTransaction& psbt, const std::string& base6
 bool DecodeRawPSBT(PartiallySignedTransaction& psbt, const std::string& tx_data, std::string& error)
 {
     CDataStream ss_data(MakeUCharSpan(tx_data), SER_NETWORK, PROTOCOL_VERSION);
+=======
+    auto tx_data = DecodeBase64(base64_tx);
+    if (!tx_data) {
+        error = "invalid base64";
+        return false;
+    }
+    return DecodeRawPSBT(psbt, MakeByteSpan(*tx_data), error);
+}
+
+bool DecodeRawPSBT(PartiallySignedTransaction& psbt, Span<const std::byte> tx_data, std::string& error)
+{
+    CDataStream ss_data(tx_data, SER_NETWORK, PROTOCOL_VERSION);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     try {
         ss_data >> psbt;
         if (!ss_data.empty()) {
@@ -397,3 +650,14 @@ bool DecodeRawPSBT(PartiallySignedTransaction& psbt, const std::string& tx_data,
     }
     return true;
 }
+<<<<<<< HEAD
+=======
+
+uint32_t PartiallySignedTransaction::GetVersion() const
+{
+    if (m_version != std::nullopt) {
+        return *m_version;
+    }
+    return 0;
+}
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion

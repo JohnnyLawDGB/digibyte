@@ -24,6 +24,9 @@
      </property>
      <item>
       <layout class="QFormLayout" name="formLayoutCoinControl1">
+       <property name="labelAlignment">
+        <set>Qt::AlignLeft|Qt::AlignVCenter</set>
+       </property>
        <property name="horizontalSpacing">
         <number>10</number>
        </property>
@@ -133,6 +136,7 @@
          </property>
          <property name="text">
           <string notr="true">0.00 DGB</string>
+<<<<<<< HEAD
          </property>
          <property name="textInteractionFlags">
           <set>Qt::LinksAccessibleByMouse|Qt::TextSelectableByKeyboard|Qt::TextSelectableByMouse</set>
@@ -168,6 +172,8 @@
          </property>
          <property name="text">
           <string notr="true">no</string>
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
          </property>
          <property name="textInteractionFlags">
           <set>Qt::LinksAccessibleByMouse|Qt::TextSelectableByKeyboard|Qt::TextSelectableByMouse</set>
@@ -223,6 +229,9 @@
      </item>
      <item>
       <layout class="QFormLayout" name="formLayoutCoinControl4">
+       <property name="labelAlignment">
+        <set>Qt::AlignLeft|Qt::AlignVCenter</set>
+       </property>
        <property name="horizontalSpacing">
         <number>10</number>
        </property>

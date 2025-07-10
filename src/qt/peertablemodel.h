@@ -1,5 +1,9 @@
+<<<<<<< HEAD
 // Copyright (c) 2009-2020 The Bitcoin Core developers
 // Copyright (c) 2014-2020 The DigiByte Core developers
+=======
+// Copyright (c) 2011-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -48,7 +52,13 @@ public:
 
     enum ColumnIndex {
         NetNodeId = 0,
+<<<<<<< HEAD
         Address,
+=======
+        Age,
+        Address,
+        Direction,
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         ConnectionType,
         Network,
         Ping,
@@ -82,9 +92,21 @@ private:
         /*: Title of Peers Table column which contains a
             unique number used to identify a connection. */
         tr("Peer"),
+<<<<<<< HEAD
         /*: Title of Peers Table column which contains the
             IP/Onion/I2P address of the connected peer. */
         tr("Address"),
+=======
+        /*: Title of Peers Table column which indicates the duration (length of time)
+            since the peer connection started. */
+        tr("Age"),
+        /*: Title of Peers Table column which contains the
+            IP/Onion/I2P address of the connected peer. */
+        tr("Address"),
+        /*: Title of Peers Table column which indicates the direction
+            the peer connection was initiated from. */
+        tr("Direction"),
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         /*: Title of Peers Table column which describes the type of
             peer connection. The "type" describes why the connection exists. */
         tr("Type"),
@@ -103,7 +125,11 @@ private:
         /*: Title of Peers Table column which contains the peer's
             User Agent string. */
         tr("User Agent")};
+<<<<<<< HEAD
     QTimer *timer;
+=======
+    QTimer* timer{nullptr};
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 };
 
 #endif // DIGIBYTE_QT_PEERTABLEMODEL_H

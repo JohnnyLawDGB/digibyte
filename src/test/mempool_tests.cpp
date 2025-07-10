@@ -1,11 +1,20 @@
+<<<<<<< HEAD
 // Copyright (c) 2009-2020 The Bitcoin Core developers
 // Copyright (c) 2014-2020 The DigiByte Core developers
+=======
+// Copyright (c) 2011-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <common/system.h>
 #include <policy/policy.h>
+#include <test/util/txmempool.h>
 #include <txmempool.h>
+<<<<<<< HEAD
 #include <util/system.h>
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <util/time.h>
 
 #include <test/util/setup_common.h>
@@ -17,6 +26,15 @@ BOOST_FIXTURE_TEST_SUITE(mempool_tests, TestingSetup)
 
 static constexpr auto REMOVAL_REASON_DUMMY = MemPoolRemovalReason::REPLACED;
 
+<<<<<<< HEAD
+=======
+class MemPoolTest final : public CTxMemPool
+{
+public:
+    using CTxMemPool::GetMinFee;
+};
+
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 BOOST_AUTO_TEST_CASE(MempoolRemoveTest)
 {
     // Test CTxMemPool::remove functionality
@@ -57,8 +75,13 @@ BOOST_AUTO_TEST_CASE(MempoolRemoveTest)
     }
 
 
+<<<<<<< HEAD
     CTxMemPool testPool;
     LOCK2(cs_main, testPool.cs);
+=======
+    CTxMemPool& testPool = *Assert(m_node.mempool);
+    LOCK2(::cs_main, testPool.cs);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // Nothing in pool, remove should do nothing:
     unsigned int poolSize = testPool.size();
@@ -109,12 +132,12 @@ BOOST_AUTO_TEST_CASE(MempoolRemoveTest)
     BOOST_CHECK_EQUAL(testPool.size(), 0U);
 }
 
-template<typename name>
-static void CheckSort(CTxMemPool &pool, std::vector<std::string> &sortedOrder) EXCLUSIVE_LOCKS_REQUIRED(pool.cs)
+template <typename name>
+static void CheckSort(CTxMemPool& pool, std::vector<std::string>& sortedOrder) EXCLUSIVE_LOCKS_REQUIRED(pool.cs)
 {
     BOOST_CHECK_EQUAL(pool.size(), sortedOrder.size());
     typename CTxMemPool::indexed_transaction_set::index<name>::type::iterator it = pool.mapTx.get<name>().begin();
-    int count=0;
+    int count = 0;
     for (; it != pool.mapTx.get<name>().end(); ++it, ++count) {
         BOOST_CHECK_EQUAL(it->GetTx().GetHash().ToString(), sortedOrder[count]);
     }
@@ -122,7 +145,11 @@ static void CheckSort(CTxMemPool &pool, std::vector<std::string> &sortedOrder) E
 
 BOOST_AUTO_TEST_CASE(MempoolIndexingTest)
 {
+<<<<<<< HEAD
     CTxMemPool pool;
+=======
+    CTxMemPool& pool = *Assert(m_node.mempool);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     LOCK2(cs_main, pool.cs);
     TestMemPoolEntryHelper entry;
 
@@ -159,7 +186,11 @@ BOOST_AUTO_TEST_CASE(MempoolIndexingTest)
     tx5.vout.resize(1);
     tx5.vout[0].scriptPubKey = CScript() << OP_11 << OP_EQUAL;
     tx5.vout[0].nValue = 11 * COIN;
+<<<<<<< HEAD
     entry.nTime = 1;
+=======
+    entry.time = NodeSeconds{1s};
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     pool.addUnchecked(entry.Fee(10000LL).FromTx(tx5));
     BOOST_CHECK_EQUAL(pool.size(), 5U);
 
@@ -196,10 +227,9 @@ BOOST_AUTO_TEST_CASE(MempoolIndexingTest)
     tx7.vout[1].scriptPubKey = CScript() << OP_11 << OP_EQUAL;
     tx7.vout[1].nValue = 1 * COIN;
 
-    CTxMemPool::setEntries setAncestorsCalculated;
-    std::string dummy;
-    BOOST_CHECK_EQUAL(pool.CalculateMemPoolAncestors(entry.Fee(2000000LL).FromTx(tx7), setAncestorsCalculated, 100, 1000000, 1000, 1000000, dummy), true);
-    BOOST_CHECK(setAncestorsCalculated == setAncestors);
+    auto ancestors_calculated{pool.CalculateMemPoolAncestors(entry.Fee(2000000LL).FromTx(tx7), CTxMemPool::Limits::NoLimits())};
+    BOOST_REQUIRE(ancestors_calculated.has_value());
+    BOOST_CHECK(*ancestors_calculated == setAncestors);
 
     pool.addUnchecked(entry.FromTx(tx7), setAncestors);
     BOOST_CHECK_EQUAL(pool.size(), 7U);
@@ -219,7 +249,11 @@ BOOST_AUTO_TEST_CASE(MempoolIndexingTest)
     tx8.vout[0].scriptPubKey = CScript() << OP_11 << OP_EQUAL;
     tx8.vout[0].nValue = 10 * COIN;
     setAncestors.insert(pool.mapTx.find(tx7.GetHash()));
+<<<<<<< HEAD
     pool.addUnchecked(entry.Fee(0LL).Time(2).FromTx(tx8), setAncestors);
+=======
+    pool.addUnchecked(entry.Fee(0LL).Time(NodeSeconds{2s}).FromTx(tx8), setAncestors);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // Now tx8 should be sorted low, but tx6/tx both high
     sortedOrder.insert(sortedOrder.begin(), tx8.GetHash().ToString());
@@ -233,7 +267,11 @@ BOOST_AUTO_TEST_CASE(MempoolIndexingTest)
     tx9.vout.resize(1);
     tx9.vout[0].scriptPubKey = CScript() << OP_11 << OP_EQUAL;
     tx9.vout[0].nValue = 1 * COIN;
+<<<<<<< HEAD
     pool.addUnchecked(entry.Fee(0LL).Time(3).FromTx(tx9), setAncestors);
+=======
+    pool.addUnchecked(entry.Fee(0LL).Time(NodeSeconds{3s}).FromTx(tx9), setAncestors);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // tx9 should be sorted low
     BOOST_CHECK_EQUAL(pool.size(), 9U);
@@ -255,9 +293,9 @@ BOOST_AUTO_TEST_CASE(MempoolIndexingTest)
     tx10.vout[0].scriptPubKey = CScript() << OP_11 << OP_EQUAL;
     tx10.vout[0].nValue = 10 * COIN;
 
-    setAncestorsCalculated.clear();
-    BOOST_CHECK_EQUAL(pool.CalculateMemPoolAncestors(entry.Fee(200000LL).Time(4).FromTx(tx10), setAncestorsCalculated, 100, 1000000, 1000, 1000000, dummy), true);
-    BOOST_CHECK(setAncestorsCalculated == setAncestors);
+    ancestors_calculated = pool.CalculateMemPoolAncestors(entry.Fee(200000LL).Time(NodeSeconds{4s}).FromTx(tx10), CTxMemPool::Limits::NoLimits());
+    BOOST_REQUIRE(ancestors_calculated);
+    BOOST_CHECK(*ancestors_calculated == setAncestors);
 
     pool.addUnchecked(entry.FromTx(tx10), setAncestors);
 
@@ -295,7 +333,11 @@ BOOST_AUTO_TEST_CASE(MempoolIndexingTest)
 
 BOOST_AUTO_TEST_CASE(MempoolAncestorIndexingTest)
 {
+<<<<<<< HEAD
     CTxMemPool pool;
+=======
+    CTxMemPool& pool = *Assert(m_node.mempool);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     LOCK2(cs_main, pool.cs);
     TestMemPoolEntryHelper entry;
 
@@ -424,7 +466,11 @@ BOOST_AUTO_TEST_CASE(MempoolAncestorIndexingTest)
 
 BOOST_AUTO_TEST_CASE(MempoolSizeLimitTest)
 {
+<<<<<<< HEAD
     CTxMemPool pool;
+=======
+    auto& pool = static_cast<MemPoolTest&>(*Assert(m_node.mempool));
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     LOCK2(cs_main, pool.cs);
     TestMemPoolEntryHelper entry;
 
@@ -445,12 +491,12 @@ BOOST_AUTO_TEST_CASE(MempoolSizeLimitTest)
     pool.addUnchecked(entry.Fee(5000LL).FromTx(tx2));
 
     pool.TrimToSize(pool.DynamicMemoryUsage()); // should do nothing
-    BOOST_CHECK(pool.exists(tx1.GetHash()));
-    BOOST_CHECK(pool.exists(tx2.GetHash()));
+    BOOST_CHECK(pool.exists(GenTxid::Txid(tx1.GetHash())));
+    BOOST_CHECK(pool.exists(GenTxid::Txid(tx2.GetHash())));
 
     pool.TrimToSize(pool.DynamicMemoryUsage() * 3 / 4); // should remove the lower-feerate transaction
-    BOOST_CHECK(pool.exists(tx1.GetHash()));
-    BOOST_CHECK(!pool.exists(tx2.GetHash()));
+    BOOST_CHECK(pool.exists(GenTxid::Txid(tx1.GetHash())));
+    BOOST_CHECK(!pool.exists(GenTxid::Txid(tx2.GetHash())));
 
     pool.addUnchecked(entry.FromTx(tx2));
     CMutableTransaction tx3 = CMutableTransaction();
@@ -463,17 +509,26 @@ BOOST_AUTO_TEST_CASE(MempoolSizeLimitTest)
     pool.addUnchecked(entry.Fee(20000LL).FromTx(tx3));
 
     pool.TrimToSize(pool.DynamicMemoryUsage() * 3 / 4); // tx3 should pay for tx2 (CPFP)
-    BOOST_CHECK(!pool.exists(tx1.GetHash()));
-    BOOST_CHECK(pool.exists(tx2.GetHash()));
-    BOOST_CHECK(pool.exists(tx3.GetHash()));
+    BOOST_CHECK(!pool.exists(GenTxid::Txid(tx1.GetHash())));
+    BOOST_CHECK(pool.exists(GenTxid::Txid(tx2.GetHash())));
+    BOOST_CHECK(pool.exists(GenTxid::Txid(tx3.GetHash())));
 
     pool.TrimToSize(GetVirtualTransactionSize(CTransaction(tx1))); // mempool is limited to tx1's size in memory usage, so nothing fits
+<<<<<<< HEAD
     BOOST_CHECK(!pool.exists(tx1.GetHash()));
     BOOST_CHECK(!pool.exists(tx2.GetHash()));
     BOOST_CHECK(!pool.exists(tx3.GetHash()));
 
     CFeeRate maxFeeRateRemoved(25000, GetVirtualTransactionSize(CTransaction(tx3)) + GetVirtualTransactionSize(CTransaction(tx2)));
     BOOST_CHECK_EQUAL(pool.GetMinFee(1).GetFeePerK(), maxFeeRateRemoved.GetFeePerK() + 10000);
+=======
+    BOOST_CHECK(!pool.exists(GenTxid::Txid(tx1.GetHash())));
+    BOOST_CHECK(!pool.exists(GenTxid::Txid(tx2.GetHash())));
+    BOOST_CHECK(!pool.exists(GenTxid::Txid(tx3.GetHash())));
+
+    CFeeRate maxFeeRateRemoved(25000, GetVirtualTransactionSize(CTransaction(tx3)) + GetVirtualTransactionSize(CTransaction(tx2)));
+    BOOST_CHECK_EQUAL(pool.GetMinFee(1).GetFeePerK(), maxFeeRateRemoved.GetFeePerK() + 1000);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     CMutableTransaction tx4 = CMutableTransaction();
     tx4.vin.resize(2);
@@ -530,19 +585,23 @@ BOOST_AUTO_TEST_CASE(MempoolSizeLimitTest)
 
     // we only require this to remove, at max, 2 txn, because it's not clear what we're really optimizing for aside from that
     pool.TrimToSize(pool.DynamicMemoryUsage() - 1);
-    BOOST_CHECK(pool.exists(tx4.GetHash()));
-    BOOST_CHECK(pool.exists(tx6.GetHash()));
-    BOOST_CHECK(!pool.exists(tx7.GetHash()));
+    BOOST_CHECK(pool.exists(GenTxid::Txid(tx4.GetHash())));
+    BOOST_CHECK(pool.exists(GenTxid::Txid(tx6.GetHash())));
+    BOOST_CHECK(!pool.exists(GenTxid::Txid(tx7.GetHash())));
 
+<<<<<<< HEAD
     if (!pool.exists(tx5.GetHash()))
+=======
+    if (!pool.exists(GenTxid::Txid(tx5.GetHash())))
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         pool.addUnchecked(entry.Fee(1000LL).FromTx(tx5));
     pool.addUnchecked(entry.Fee(9000LL).FromTx(tx7));
 
     pool.TrimToSize(pool.DynamicMemoryUsage() / 2); // should maximize mempool size by only removing 5/7
-    BOOST_CHECK(pool.exists(tx4.GetHash()));
-    BOOST_CHECK(!pool.exists(tx5.GetHash()));
-    BOOST_CHECK(pool.exists(tx6.GetHash()));
-    BOOST_CHECK(!pool.exists(tx7.GetHash()));
+    BOOST_CHECK(pool.exists(GenTxid::Txid(tx4.GetHash())));
+    BOOST_CHECK(!pool.exists(GenTxid::Txid(tx5.GetHash())));
+    BOOST_CHECK(pool.exists(GenTxid::Txid(tx6.GetHash())));
+    BOOST_CHECK(!pool.exists(GenTxid::Txid(tx7.GetHash())));
 
     pool.addUnchecked(entry.Fee(1000LL).FromTx(tx5));
     pool.addUnchecked(entry.Fee(9000LL).FromTx(tx7));
@@ -597,7 +656,11 @@ BOOST_AUTO_TEST_CASE(MempoolAncestryTests)
 {
     size_t ancestors, descendants;
 
+<<<<<<< HEAD
     CTxMemPool pool;
+=======
+    CTxMemPool& pool = *Assert(m_node.mempool);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     LOCK2(cs_main, pool.cs);
     TestMemPoolEntryHelper entry;
 
@@ -605,7 +668,11 @@ BOOST_AUTO_TEST_CASE(MempoolAncestryTests)
     //
     // [tx1]
     //
+<<<<<<< HEAD
     CTransactionRef tx1 = make_tx(/* output_values */ {10 * COIN});
+=======
+    CTransactionRef tx1 = make_tx(/*output_values=*/{10 * COIN});
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     pool.addUnchecked(entry.Fee(10000LL).FromTx(tx1));
 
     // Ancestors / descendants should be 1 / 1 (itself / itself)
@@ -617,7 +684,11 @@ BOOST_AUTO_TEST_CASE(MempoolAncestryTests)
     //
     // [tx1].0 <- [tx2]
     //
+<<<<<<< HEAD
     CTransactionRef tx2 = make_tx(/* output_values */ {495 * CENT, 5 * COIN}, /* inputs */ {tx1});
+=======
+    CTransactionRef tx2 = make_tx(/*output_values=*/{495 * CENT, 5 * COIN}, /*inputs=*/{tx1});
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     pool.addUnchecked(entry.Fee(10000LL).FromTx(tx2));
 
     // Ancestors / descendants should be:
@@ -636,7 +707,11 @@ BOOST_AUTO_TEST_CASE(MempoolAncestryTests)
     //
     // [tx1].0 <- [tx2].0 <- [tx3]
     //
+<<<<<<< HEAD
     CTransactionRef tx3 = make_tx(/* output_values */ {290 * CENT, 200 * CENT}, /* inputs */ {tx2});
+=======
+    CTransactionRef tx3 = make_tx(/*output_values=*/{290 * CENT, 200 * CENT}, /*inputs=*/{tx2});
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     pool.addUnchecked(entry.Fee(10000LL).FromTx(tx3));
 
     // Ancestors / descendants should be:
@@ -661,7 +736,11 @@ BOOST_AUTO_TEST_CASE(MempoolAncestryTests)
     //              |
     //              \---1 <- [tx4]
     //
+<<<<<<< HEAD
     CTransactionRef tx4 = make_tx(/* output_values */ {290 * CENT, 250 * CENT}, /* inputs */ {tx2}, /* input_indices */ {1});
+=======
+    CTransactionRef tx4 = make_tx(/*output_values=*/{290 * CENT, 250 * CENT}, /*inputs=*/{tx2}, /*input_indices=*/{1});
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     pool.addUnchecked(entry.Fee(10000LL).FromTx(tx4));
 
     // Ancestors / descendants should be:
@@ -697,14 +776,18 @@ BOOST_AUTO_TEST_CASE(MempoolAncestryTests)
     CAmount v = 5 * COIN;
     for (uint64_t i = 0; i < 5; i++) {
         CTransactionRef& tyi = *ty[i];
-        tyi = make_tx(/* output_values */ {v}, /* inputs */ i > 0 ? std::vector<CTransactionRef>{*ty[i - 1]} : std::vector<CTransactionRef>{});
+        tyi = make_tx(/*output_values=*/{v}, /*inputs=*/i > 0 ? std::vector<CTransactionRef>{*ty[i - 1]} : std::vector<CTransactionRef>{});
         v -= 50 * CENT;
         pool.addUnchecked(entry.Fee(10000LL).FromTx(tyi));
         pool.GetTransactionAncestry(tyi->GetHash(), ancestors, descendants);
         BOOST_CHECK_EQUAL(ancestors, i+1);
         BOOST_CHECK_EQUAL(descendants, i+1);
     }
+<<<<<<< HEAD
     CTransactionRef ty6 = make_tx(/* output_values */ {5 * COIN}, /* inputs */ {tx3, ty5});
+=======
+    CTransactionRef ty6 = make_tx(/*output_values=*/{5 * COIN}, /*inputs=*/{tx3, ty5});
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     pool.addUnchecked(entry.Fee(10000LL).FromTx(ty6));
 
     // Ancestors / descendants should be:
@@ -763,6 +846,51 @@ BOOST_AUTO_TEST_CASE(MempoolAncestryTests)
     tc = make_tx(/* output_values */ {2 * COIN}, /* inputs */ {tb}, /* input_indices */ {1});
     td = make_tx(/* output_values */ {6 * COIN}, /* inputs */ {tb, tc}, /* input_indices */ {0, 0});
     pool.clear();
+    pool.addUnchecked(entry.Fee(10000LL).FromTx(ta));
+    pool.addUnchecked(entry.Fee(10000LL).FromTx(tb));
+    pool.addUnchecked(entry.Fee(10000LL).FromTx(tc));
+    pool.addUnchecked(entry.Fee(10000LL).FromTx(td));
+
+    // Ancestors / descendants should be:
+    // transaction  ancestors           descendants
+    // ============ =================== ===========
+    // ta           1 (ta               4 (ta,tb,tc,td)
+    // tb           2 (ta,tb)           4 (ta,tb,tc,td)
+    // tc           3 (ta,tb,tc)        4 (ta,tb,tc,td)
+    // td           4 (ta,tb,tc,td)     4 (ta,tb,tc,td)
+    pool.GetTransactionAncestry(ta->GetHash(), ancestors, descendants);
+    BOOST_CHECK_EQUAL(ancestors, 1ULL);
+    BOOST_CHECK_EQUAL(descendants, 4ULL);
+    pool.GetTransactionAncestry(tb->GetHash(), ancestors, descendants);
+    BOOST_CHECK_EQUAL(ancestors, 2ULL);
+    BOOST_CHECK_EQUAL(descendants, 4ULL);
+    pool.GetTransactionAncestry(tc->GetHash(), ancestors, descendants);
+    BOOST_CHECK_EQUAL(ancestors, 3ULL);
+    BOOST_CHECK_EQUAL(descendants, 4ULL);
+    pool.GetTransactionAncestry(td->GetHash(), ancestors, descendants);
+    BOOST_CHECK_EQUAL(ancestors, 4ULL);
+    BOOST_CHECK_EQUAL(descendants, 4ULL);
+}
+
+BOOST_AUTO_TEST_CASE(MempoolAncestryTestsDiamond)
+{
+    size_t ancestors, descendants;
+
+    CTxMemPool& pool = *Assert(m_node.mempool);
+    LOCK2(::cs_main, pool.cs);
+    TestMemPoolEntryHelper entry;
+
+    /* Ancestors represented more than once ("diamond") */
+    //
+    // [ta].0 <- [tb].0 -----<------- [td].0
+    //            |                    |
+    //            \---1 <- [tc].0 --<--/
+    //
+    CTransactionRef ta, tb, tc, td;
+    ta = make_tx(/*output_values=*/{10 * COIN});
+    tb = make_tx(/*output_values=*/{5 * COIN, 3 * COIN}, /*inputs=*/ {ta});
+    tc = make_tx(/*output_values=*/{2 * COIN}, /*inputs=*/{tb}, /*input_indices=*/{1});
+    td = make_tx(/*output_values=*/{6 * COIN}, /*inputs=*/{tb, tc}, /*input_indices=*/{0, 0});
     pool.addUnchecked(entry.Fee(10000LL).FromTx(ta));
     pool.addUnchecked(entry.Fee(10000LL).FromTx(tb));
     pool.addUnchecked(entry.Fee(10000LL).FromTx(tc));

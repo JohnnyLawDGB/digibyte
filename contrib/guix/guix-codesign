@@ -3,7 +3,7 @@ export LC_ALL=C
 set -e -o pipefail
 
 # Source the common prelude, which:
-#   1. Checks if we're at the top directory of the DigiByte Core repository
+#   1. Checks if we're at the top directory of the Bitcoin Core repository
 #   2. Defines a few common functions and variables
 #
 # shellcheck source=libexec/prelude.bash
@@ -152,10 +152,10 @@ outdir_for_host() {
 unsigned_tarball_for_host() {
     case "$1" in
         *mingw*)
-            echo "$(outdir_for_host "$1")/${DISTNAME}-win-unsigned.tar.gz"
+            echo "$(outdir_for_host "$1")/${DISTNAME}-win64-unsigned.tar.gz"
             ;;
         *darwin*)
-            echo "$(outdir_for_host "$1")/${DISTNAME}-osx-unsigned.tar.gz"
+            echo "$(outdir_for_host "$1")/${DISTNAME}-${1}-unsigned.tar.gz"
             ;;
         *)
             exit 1
@@ -220,21 +220,7 @@ fi
 JOBS="${JOBS:-$(nproc)}"
 
 # Determine the reference time used for determinism (overridable by environment)
-SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-$(git log --format=%at -1)}"
-
-# Execute "$@" in a pinned, possibly older version of Guix, for reproducibility
-# across time.
-time-machine() {
-    # shellcheck disable=SC2086
-    guix time-machine --url=https://git.savannah.gnu.org/git/guix.git \
-                      --commit=aa34d4d28dfe25ba47d5800d05000fb7221788c0 \
-                      --cores="$JOBS" \
-                      --keep-failed \
-                      --fallback \
-                      ${SUBSTITUTE_URLS:+--substitute-urls="$SUBSTITUTE_URLS"} \
-                      ${ADDITIONAL_GUIX_COMMON_FLAGS} ${ADDITIONAL_GUIX_TIMEMACHINE_FLAGS} \
-                      -- "$@"
-}
+SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-$(git -c log.showSignature=false log --format=%at -1)}"
 
 # Make sure an output directory exists for our builds
 OUTDIR_BASE="${OUTDIR_BASE:-${VERSION_BASE}/output}"
@@ -270,7 +256,7 @@ output directory.
 EOF
 }
 
-# Deterministically build DigiByte Core
+# Deterministically build Bitcoin Core
 # shellcheck disable=SC2153
 for host in $HOSTS; do
 

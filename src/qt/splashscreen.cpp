@@ -1,5 +1,9 @@
+<<<<<<< HEAD
 // Copyright (c) 2009-2020 The Bitcoin Core developers
 // Copyright (c) 2014-2020 The DigiByte Core developers
+=======
+// Copyright (c) 2011-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -10,13 +14,17 @@
 #include <qt/splashscreen.h>
 
 #include <clientversion.h>
+#include <common/system.h>
 #include <interfaces/handler.h>
 #include <interfaces/node.h>
 #include <interfaces/wallet.h>
 #include <qt/guiutil.h>
 #include <qt/networkstyle.h>
 #include <qt/walletmodel.h>
+<<<<<<< HEAD
 #include <util/system.h>
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <util/translation.h>
 
 #include <functional>
@@ -29,7 +37,11 @@
 
 
 SplashScreen::SplashScreen(const NetworkStyle* networkStyle)
+<<<<<<< HEAD
     : QWidget(), curAlignment(0)
+=======
+    : QWidget()
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     // set reference point, paddings
     int paddingRight            = 50;
@@ -44,8 +56,13 @@ SplashScreen::SplashScreen(const NetworkStyle* networkStyle)
     // define text to place
     QString titleText       = PACKAGE_NAME;
     QString versionText     = QString("Version %1").arg(QString::fromStdString(FormatFullVersion()));
+<<<<<<< HEAD
     QString copyrightText   = QString::fromUtf8(CopyrightHolders(strprintf("\xc2\xA9 %u-%u ", 2014, COPYRIGHT_YEAR)).c_str());
     QString titleAddText    = networkStyle->getTitleAddText();
+=======
+    QString copyrightText   = QString::fromUtf8(CopyrightHolders(strprintf("\xc2\xA9 %u-%u ", 2009, COPYRIGHT_YEAR)).c_str());
+    const QString& titleAddText    = networkStyle->getTitleAddText();
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     QString font            = QApplication::font().toString();
 
@@ -67,7 +84,11 @@ SplashScreen::SplashScreen(const NetworkStyle* networkStyle)
     pixPaint.fillRect(rGradient, gradient);
 
     // draw the digibyte icon, expected size of PNG: 1024x1024
+<<<<<<< HEAD
     QRect rectIcon(QPoint(-160,-122), QSize(430,430));
+=======
+    QRect rectIcon(QPoint(-150,-122), QSize(430,430));
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     const QSize requiredSize(1024,1024);
     QPixmap icon(networkStyle->getAppIcon().pixmap(requiredSize));
@@ -162,6 +183,7 @@ bool SplashScreen::eventFilter(QObject * obj, QEvent * ev) {
     return QObject::eventFilter(obj, ev);
 }
 
+<<<<<<< HEAD
 void SplashScreen::finish()
 {
     /* If the window is minimized, hide() will be ignored. */
@@ -172,6 +194,8 @@ void SplashScreen::finish()
     deleteLater(); // No more need for this
 }
 
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 static void InitMessage(SplashScreen *splash, const std::string &message)
 {
     bool invoked = QMetaObject::invokeMethod(splash, "showMessage",
@@ -185,8 +209,13 @@ static void InitMessage(SplashScreen *splash, const std::string &message)
 static void ShowProgress(SplashScreen *splash, const std::string &title, int nProgress, bool resume_possible)
 {
     InitMessage(splash, title + std::string("\n") +
+<<<<<<< HEAD
             (resume_possible ? _("(press q to shutdown and continue later)").translated
                                 : _("press q to shutdown").translated) +
+=======
+            (resume_possible ? SplashScreen::tr("(press q to shutdown and continue later)").toStdString()
+                                : SplashScreen::tr("press q to shutdown").toStdString()) +
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             strprintf("\n%d", nProgress) + "%");
 }
 
@@ -195,13 +224,21 @@ void SplashScreen::subscribeToCoreSignals()
     // Connect signals to client
     m_handler_init_message = m_node->handleInitMessage(std::bind(InitMessage, this, std::placeholders::_1));
     m_handler_show_progress = m_node->handleShowProgress(std::bind(ShowProgress, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+<<<<<<< HEAD
+=======
+    m_handler_init_wallet = m_node->handleInitWallet([this]() { handleLoadWallet(); });
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 void SplashScreen::handleLoadWallet()
 {
 #ifdef ENABLE_WALLET
     if (!WalletModel::isWalletEnabled()) return;
+<<<<<<< HEAD
     m_handler_load_wallet = m_node->walletClient().handleLoadWallet([this](std::unique_ptr<interfaces::Wallet> wallet) {
+=======
+    m_handler_load_wallet = m_node->walletLoader().handleLoadWallet([this](std::unique_ptr<interfaces::Wallet> wallet) {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         m_connected_wallet_handlers.emplace_back(wallet->handleShowProgress(std::bind(ShowProgress, this, std::placeholders::_1, std::placeholders::_2, false)));
         m_connected_wallets.emplace_back(std::move(wallet));
     });

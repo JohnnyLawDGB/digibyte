@@ -1,13 +1,30 @@
+<<<<<<< HEAD
 // Copyright (c) 2018-2020 The DigiByte Core developers
+=======
+// Copyright (c) 2018-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <map>
 
+<<<<<<< HEAD
 #include <dbwrapper.h>
 #include <index/blockfilterindex.h>
 #include <node/blockstorage.h>
 #include <util/system.h>
+=======
+#include <clientversion.h>
+#include <common/args.h>
+#include <dbwrapper.h>
+#include <hash.h>
+#include <index/blockfilterindex.h>
+#include <logging.h>
+#include <node/blockstorage.h>
+#include <undo.h>
+#include <util/fs_helpers.h>
+#include <validation.h>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 /* The index database stores three items for each block: the disk location of the encoded filter,
  * its dSHA256 hash, and the header. Those belonging to blocks on the active chain are indexed by
@@ -91,22 +108,39 @@ struct DBHashKey {
 
 static std::map<BlockFilterType, BlockFilterIndex> g_filter_indexes;
 
+<<<<<<< HEAD
 BlockFilterIndex::BlockFilterIndex(BlockFilterType filter_type,
                                    size_t n_cache_size, bool f_memory, bool f_wipe)
     : m_filter_type(filter_type)
+=======
+BlockFilterIndex::BlockFilterIndex(std::unique_ptr<interfaces::Chain> chain, BlockFilterType filter_type,
+                                   size_t n_cache_size, bool f_memory, bool f_wipe)
+    : BaseIndex(std::move(chain), BlockFilterTypeName(filter_type) + " block filter index")
+    , m_filter_type(filter_type)
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     const std::string& filter_name = BlockFilterTypeName(filter_type);
     if (filter_name.empty()) throw std::invalid_argument("unknown filter_type");
 
+<<<<<<< HEAD
     fs::path path = gArgs.GetDataDirNet() / "indexes" / "blockfilter" / filter_name;
     fs::create_directories(path);
 
     m_name = filter_name + " block filter index";
+=======
+    fs::path path = gArgs.GetDataDirNet() / "indexes" / "blockfilter" / fs::u8path(filter_name);
+    fs::create_directories(path);
+
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     m_db = std::make_unique<BaseIndex::DB>(path / "db", n_cache_size, f_memory, f_wipe);
     m_filter_fileseq = std::make_unique<FlatFileSeq>(std::move(path), "fltr", FLTR_FILE_CHUNK_SIZE);
 }
 
+<<<<<<< HEAD
 bool BlockFilterIndex::Init()
+=======
+bool BlockFilterIndex::CustomInit(const std::optional<interfaces::BlockKey>& block)
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     if (!m_db->Read(DB_FILTER_POS, m_next_filter_pos)) {
         // Check that the cause of the read failure is that the key does not exist. Any other errors
@@ -121,15 +155,26 @@ bool BlockFilterIndex::Init()
         m_next_filter_pos.nFile = 0;
         m_next_filter_pos.nPos = 0;
     }
+<<<<<<< HEAD
     return BaseIndex::Init();
 }
 
 bool BlockFilterIndex::CommitInternal(CDBBatch& batch)
+=======
+    return true;
+}
+
+bool BlockFilterIndex::CustomCommit(CDBBatch& batch)
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     const FlatFilePos& pos = m_next_filter_pos;
 
     // Flush current filter file to disk.
+<<<<<<< HEAD
     CAutoFile file(m_filter_fileseq->Open(pos), SER_DISK, CLIENT_VERSION);
+=======
+    AutoFile file{m_filter_fileseq->Open(pos)};
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (file.IsNull()) {
         return error("%s: Failed to open filter file %d", __func__, pos.nFile);
     }
@@ -138,21 +183,39 @@ bool BlockFilterIndex::CommitInternal(CDBBatch& batch)
     }
 
     batch.Write(DB_FILTER_POS, pos);
+<<<<<<< HEAD
     return BaseIndex::CommitInternal(batch);
 }
 
 bool BlockFilterIndex::ReadFilterFromDisk(const FlatFilePos& pos, BlockFilter& filter) const
 {
     CAutoFile filein(m_filter_fileseq->Open(pos, true), SER_DISK, CLIENT_VERSION);
+=======
+    return true;
+}
+
+bool BlockFilterIndex::ReadFilterFromDisk(const FlatFilePos& pos, const uint256& hash, BlockFilter& filter) const
+{
+    AutoFile filein{m_filter_fileseq->Open(pos, true)};
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (filein.IsNull()) {
         return false;
     }
 
+<<<<<<< HEAD
+=======
+    // Check that the hash of the encoded_filter matches the one stored in the db.
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     uint256 block_hash;
     std::vector<uint8_t> encoded_filter;
     try {
         filein >> block_hash >> encoded_filter;
+<<<<<<< HEAD
         filter = BlockFilter(GetFilterType(), block_hash, std::move(encoded_filter));
+=======
+        if (Hash(encoded_filter) != hash) return error("Checksum mismatch in filter decode.");
+        filter = BlockFilter(GetFilterType(), block_hash, std::move(encoded_filter), /*skip_decode_check=*/true);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     catch (const std::exception& e) {
         return error("%s: Failed to deserialize block filter from disk: %s", __func__, e.what());
@@ -171,7 +234,11 @@ size_t BlockFilterIndex::WriteFilterToDisk(FlatFilePos& pos, const BlockFilter& 
 
     // If writing the filter would overflow the file, flush and move to the next one.
     if (pos.nPos + data_size > MAX_FLTR_FILE_SIZE) {
+<<<<<<< HEAD
         CAutoFile last_file(m_filter_fileseq->Open(pos), SER_DISK, CLIENT_VERSION);
+=======
+        AutoFile last_file{m_filter_fileseq->Open(pos)};
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         if (last_file.IsNull()) {
             LogPrintf("%s: Failed to open filter file %d\n", __func__, pos.nFile);
             return 0;
@@ -197,7 +264,11 @@ size_t BlockFilterIndex::WriteFilterToDisk(FlatFilePos& pos, const BlockFilter& 
         return 0;
     }
 
+<<<<<<< HEAD
     CAutoFile fileout(m_filter_fileseq->Open(pos), SER_DISK, CLIENT_VERSION);
+=======
+    AutoFile fileout{m_filter_fileseq->Open(pos)};
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (fileout.IsNull()) {
         LogPrintf("%s: Failed to open filter file %d\n", __func__, pos.nFile);
         return 0;
@@ -207,22 +278,42 @@ size_t BlockFilterIndex::WriteFilterToDisk(FlatFilePos& pos, const BlockFilter& 
     return data_size;
 }
 
+<<<<<<< HEAD
 bool BlockFilterIndex::WriteBlock(const CBlock& block, const CBlockIndex* pindex)
+=======
+bool BlockFilterIndex::CustomAppend(const interfaces::BlockInfo& block)
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     CBlockUndo block_undo;
     uint256 prev_header;
 
+<<<<<<< HEAD
     if (pindex->nHeight > 0) {
         if (!UndoReadFromDisk(block_undo, pindex)) {
+=======
+    if (block.height > 0) {
+        // pindex variable gives indexing code access to node internals. It
+        // will be removed in upcoming commit
+        const CBlockIndex* pindex = WITH_LOCK(cs_main, return m_chainstate->m_blockman.LookupBlockIndex(block.hash));
+        if (!m_chainstate->m_blockman.UndoReadFromDisk(block_undo, *pindex)) {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             return false;
         }
 
         std::pair<uint256, DBVal> read_out;
+<<<<<<< HEAD
         if (!m_db->Read(DBHeightKey(pindex->nHeight - 1), read_out)) {
             return false;
         }
 
         uint256 expected_block_hash = pindex->pprev->GetBlockHash();
+=======
+        if (!m_db->Read(DBHeightKey(block.height - 1), read_out)) {
+            return false;
+        }
+
+        uint256 expected_block_hash = *Assert(block.prev_hash);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         if (read_out.first != expected_block_hash) {
             return error("%s: previous block header belongs to unexpected block %s; expected %s",
                          __func__, read_out.first.ToString(), expected_block_hash.ToString());
@@ -231,18 +322,30 @@ bool BlockFilterIndex::WriteBlock(const CBlock& block, const CBlockIndex* pindex
         prev_header = read_out.second.header;
     }
 
+<<<<<<< HEAD
     BlockFilter filter(m_filter_type, block, block_undo);
+=======
+    BlockFilter filter(m_filter_type, *Assert(block.data), block_undo);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     size_t bytes_written = WriteFilterToDisk(m_next_filter_pos, filter);
     if (bytes_written == 0) return false;
 
     std::pair<uint256, DBVal> value;
+<<<<<<< HEAD
     value.first = pindex->GetBlockHash();
+=======
+    value.first = block.hash;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     value.second.hash = filter.GetHash();
     value.second.header = filter.ComputeHeader(prev_header);
     value.second.pos = m_next_filter_pos;
 
+<<<<<<< HEAD
     if (!m_db->Write(DBHeightKey(pindex->nHeight), value)) {
+=======
+    if (!m_db->Write(DBHeightKey(block.height), value)) {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         return false;
     }
 
@@ -250,7 +353,11 @@ bool BlockFilterIndex::WriteBlock(const CBlock& block, const CBlockIndex* pindex
     return true;
 }
 
+<<<<<<< HEAD
 static bool CopyHeightIndexToHashIndex(CDBIterator& db_it, CDBBatch& batch,
+=======
+[[nodiscard]] static bool CopyHeightIndexToHashIndex(CDBIterator& db_it, CDBBatch& batch,
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                                        const std::string& index_name,
                                        int start_height, int stop_height)
 {
@@ -276,17 +383,26 @@ static bool CopyHeightIndexToHashIndex(CDBIterator& db_it, CDBBatch& batch,
     return true;
 }
 
+<<<<<<< HEAD
 bool BlockFilterIndex::Rewind(const CBlockIndex* current_tip, const CBlockIndex* new_tip)
 {
     assert(current_tip->GetAncestor(new_tip->nHeight) == new_tip);
 
+=======
+bool BlockFilterIndex::CustomRewind(const interfaces::BlockKey& current_tip, const interfaces::BlockKey& new_tip)
+{
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     CDBBatch batch(*m_db);
     std::unique_ptr<CDBIterator> db_it(m_db->NewIterator());
 
     // During a reorg, we need to copy all filters for blocks that are getting disconnected from the
     // height index to the hash index so we can still find them when the height index entries are
     // overwritten.
+<<<<<<< HEAD
     if (!CopyHeightIndexToHashIndex(*db_it, batch, m_name, new_tip->nHeight, current_tip->nHeight)) {
+=======
+    if (!CopyHeightIndexToHashIndex(*db_it, batch, m_name, new_tip.height, current_tip.height)) {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         return false;
     }
 
@@ -296,7 +412,11 @@ bool BlockFilterIndex::Rewind(const CBlockIndex* current_tip, const CBlockIndex*
     batch.Write(DB_FILTER_POS, m_next_filter_pos);
     if (!m_db->WriteBatch(batch)) return false;
 
+<<<<<<< HEAD
     return BaseIndex::Rewind(current_tip, new_tip);
+=======
+    return true;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 static bool LookupOne(const CDBWrapper& db, const CBlockIndex* block_index, DBVal& result)
@@ -379,7 +499,11 @@ bool BlockFilterIndex::LookupFilter(const CBlockIndex* block_index, BlockFilter&
         return false;
     }
 
+<<<<<<< HEAD
     return ReadFilterFromDisk(entry.pos, filter_out);
+=======
+    return ReadFilterFromDisk(entry.pos, entry.hash, filter_out);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 bool BlockFilterIndex::LookupFilterHeader(const CBlockIndex* block_index, uint256& header_out)
@@ -423,7 +547,11 @@ bool BlockFilterIndex::LookupFilterRange(int start_height, const CBlockIndex* st
     filters_out.resize(entries.size());
     auto filter_pos_it = filters_out.begin();
     for (const auto& entry : entries) {
+<<<<<<< HEAD
         if (!ReadFilterFromDisk(entry.pos, *filter_pos_it)) {
+=======
+        if (!ReadFilterFromDisk(entry.pos, entry.hash, *filter_pos_it)) {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             return false;
         }
         ++filter_pos_it;
@@ -460,12 +588,20 @@ void ForEachBlockFilterIndex(std::function<void (BlockFilterIndex&)> fn)
     for (auto& entry : g_filter_indexes) fn(entry.second);
 }
 
+<<<<<<< HEAD
 bool InitBlockFilterIndex(BlockFilterType filter_type,
+=======
+bool InitBlockFilterIndex(std::function<std::unique_ptr<interfaces::Chain>()> make_chain, BlockFilterType filter_type,
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                           size_t n_cache_size, bool f_memory, bool f_wipe)
 {
     auto result = g_filter_indexes.emplace(std::piecewise_construct,
                                            std::forward_as_tuple(filter_type),
+<<<<<<< HEAD
                                            std::forward_as_tuple(filter_type,
+=======
+                                           std::forward_as_tuple(make_chain(), filter_type,
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                                                                  n_cache_size, f_memory, f_wipe));
     return result.second;
 }

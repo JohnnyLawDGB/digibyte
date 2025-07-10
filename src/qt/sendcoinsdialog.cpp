@@ -1,5 +1,9 @@
+<<<<<<< HEAD
 // Copyright (c) 2011-2020 The Bitcoin Core developers
 // Copyright (c) 2013-2021 The DigiByte Core developers
+=======
+// Copyright (c) 2011-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -22,20 +26,40 @@
 #include <chainparams.h>
 #include <interfaces/node.h>
 #include <key_io.h>
+<<<<<<< HEAD
 #include <node/ui_interface.h>
 #include <policy/fees.h>
 #include <txmempool.h>
+=======
+#include <node/interface_ui.h>
+#include <policy/fees.h>
+#include <txmempool.h>
+#include <validation.h>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <wallet/coincontrol.h>
 #include <wallet/fees.h>
 #include <wallet/wallet.h>
 
+<<<<<<< HEAD
 #include <validation.h>
+=======
+#include <array>
+#include <chrono>
+#include <fstream>
+#include <memory>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 #include <QFontMetrics>
 #include <QScrollBar>
 #include <QSettings>
 #include <QTextDocument>
 
+<<<<<<< HEAD
+=======
+using wallet::CCoinControl;
+using wallet::DEFAULT_PAY_TX_FEE;
+
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 static constexpr std::array confTargets{2, 4, 6, 12, 24, 48, 144, 504, 1008};
 int getConfTargetForIndex(int index) {
     if (index+1 > static_cast<int>(confTargets.size())) {
@@ -58,11 +82,15 @@ int getIndexForConfTarget(int target) {
 SendCoinsDialog::SendCoinsDialog(const PlatformStyle *_platformStyle, QWidget *parent) :
     QDialog(parent, GUIUtil::dialog_flags),
     ui(new Ui::SendCoinsDialog),
+<<<<<<< HEAD
     clientModel(nullptr),
     model(nullptr),
     m_coin_control(new CCoinControl),
     fNewRecipientAllowed(true),
     fFeeMinimized(true),
+=======
+    m_coin_control(new CCoinControl),
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     platformStyle(_platformStyle)
 {
     ui->setupUi(this);
@@ -95,21 +123,22 @@ SendCoinsDialog::SendCoinsDialog(const PlatformStyle *_platformStyle, QWidget *p
     QAction *clipboardFeeAction = new QAction(tr("Copy fee"), this);
     QAction *clipboardAfterFeeAction = new QAction(tr("Copy after fee"), this);
     QAction *clipboardBytesAction = new QAction(tr("Copy bytes"), this);
-    QAction *clipboardLowOutputAction = new QAction(tr("Copy dust"), this);
     QAction *clipboardChangeAction = new QAction(tr("Copy change"), this);
     connect(clipboardQuantityAction, &QAction::triggered, this, &SendCoinsDialog::coinControlClipboardQuantity);
     connect(clipboardAmountAction, &QAction::triggered, this, &SendCoinsDialog::coinControlClipboardAmount);
     connect(clipboardFeeAction, &QAction::triggered, this, &SendCoinsDialog::coinControlClipboardFee);
     connect(clipboardAfterFeeAction, &QAction::triggered, this, &SendCoinsDialog::coinControlClipboardAfterFee);
     connect(clipboardBytesAction, &QAction::triggered, this, &SendCoinsDialog::coinControlClipboardBytes);
+<<<<<<< HEAD
     connect(clipboardLowOutputAction, &QAction::triggered, this, &SendCoinsDialog::coinControlClipboardLowOutput);
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     connect(clipboardChangeAction, &QAction::triggered, this, &SendCoinsDialog::coinControlClipboardChange);
     ui->labelCoinControlQuantity->addAction(clipboardQuantityAction);
     ui->labelCoinControlAmount->addAction(clipboardAmountAction);
     ui->labelCoinControlFee->addAction(clipboardFeeAction);
     ui->labelCoinControlAfterFee->addAction(clipboardAfterFeeAction);
     ui->labelCoinControlBytes->addAction(clipboardBytesAction);
-    ui->labelCoinControlLowOutput->addAction(clipboardLowOutputAction);
     ui->labelCoinControlChange->addAction(clipboardChangeAction);
 
     // init transaction fee section
@@ -158,11 +187,17 @@ void SendCoinsDialog::setModel(WalletModel *_model)
             }
         }
 
+<<<<<<< HEAD
         interfaces::WalletBalances balances = _model->wallet().getBalances();
         setBalance(balances);
         connect(_model, &WalletModel::balanceChanged, this, &SendCoinsDialog::setBalance);
         connect(_model->getOptionsModel(), &OptionsModel::displayUnitChanged, this, &SendCoinsDialog::updateDisplayUnit);
         updateDisplayUnit();
+=======
+        connect(_model, &WalletModel::balanceChanged, this, &SendCoinsDialog::setBalance);
+        connect(_model->getOptionsModel(), &OptionsModel::displayUnitChanged, this, &SendCoinsDialog::refreshBalance);
+        refreshBalance();
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         // Coin Control
         connect(_model->getOptionsModel(), &OptionsModel::displayUnitChanged, this, &SendCoinsDialog::coinControlUpdateLabels);
@@ -186,9 +221,14 @@ void SendCoinsDialog::setModel(WalletModel *_model)
 #endif
 
         connect(ui->customFee, &DigiByteAmountField::valueChanged, this, &SendCoinsDialog::coinControlUpdateLabels);
+<<<<<<< HEAD
         // Digibyte: Disable RBF
         // connect(ui->optInRBF, &QCheckBox::stateChanged, this, &SendCoinsDialog::updateSmartFeeLabel);
         // connect(ui->optInRBF, &QCheckBox::stateChanged, this, &SendCoinsDialog::coinControlUpdateLabels);
+=======
+        connect(ui->optInRBF, &QCheckBox::stateChanged, this, &SendCoinsDialog::updateSmartFeeLabel);
+        connect(ui->optInRBF, &QCheckBox::stateChanged, this, &SendCoinsDialog::coinControlUpdateLabels);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         CAmount requiredFee = model->wallet().getRequiredFee(1000);
         ui->customFee->SetMinValue(requiredFee);
         if (ui->customFee->value() < requiredFee) {
@@ -206,6 +246,22 @@ void SendCoinsDialog::setModel(WalletModel *_model)
             //: "device" usually means a hardware wallet
             ui->sendButton->setText(tr("Sign on device"));
             if (gArgs.GetArg("-signer", "") != "") {
+                ui->sendButton->setEnabled(true);
+                ui->sendButton->setToolTip(tr("Connect your hardware wallet first."));
+            } else {
+                ui->sendButton->setEnabled(false);
+                //: "External signer" means using devices such as hardware wallets.
+                ui->sendButton->setToolTip(tr("Set external signer script path in Options -> Wallet"));
+            }
+        } else if (model->wallet().privateKeysDisabled()) {
+            ui->sendButton->setText(tr("Cr&eate Unsigned"));
+            ui->sendButton->setToolTip(tr("Creates a Partially Signed DigiByte Transaction (PSBT) for use with e.g. an offline %1 wallet, or a PSBT-compatible hardware wallet.").arg(PACKAGE_NAME));
+        }
+
+        if (model->wallet().hasExternalSigner()) {
+            //: "device" usually means a hardware wallet.
+            ui->sendButton->setText(tr("Sign on device"));
+            if (model->getOptionsModel()->hasSigner()) {
                 ui->sendButton->setEnabled(true);
                 ui->sendButton->setToolTip(tr("Connect your hardware wallet first."));
             } else {
@@ -287,7 +343,13 @@ bool SendCoinsDialog::PrepareSendText(QString& question_string, QString& informa
 
     updateCoinControlState();
 
+<<<<<<< HEAD
     prepareStatus = model->prepareTransaction(*m_current_transaction, *m_coin_control);
+=======
+    CCoinControl coin_control = *m_coin_control;
+    coin_control.m_allow_other_inputs = !coin_control.HasSelected(); // future, could introduce a checkbox to customize this value.
+    prepareStatus = model->prepareTransaction(*m_current_transaction, coin_control);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // process prepareStatus and on error generate message shown to user
     processSendCoinsReturn(prepareStatus,
@@ -327,6 +389,7 @@ bool SendCoinsDialog::PrepareSendText(QString& question_string, QString& informa
         formatted.append(recipientElement);
     }
 
+<<<<<<< HEAD
     if (model->wallet().privateKeysDisabled() && !model->wallet().hasExternalSigner()) {
         question_string.append(tr("Do you want to draft this transaction?"));
     } else {
@@ -337,6 +400,24 @@ bool SendCoinsDialog::PrepareSendText(QString& question_string, QString& informa
     if (model->wallet().privateKeysDisabled() && !model->wallet().hasExternalSigner()) {
         question_string.append(tr("Please, review your transaction proposal. This will produce a Partially Signed DigiByte Transaction (PSBT) which you can save or copy and then sign with e.g. an offline %1 wallet, or a PSBT-compatible hardware wallet.").arg(PACKAGE_NAME));
     } else {
+=======
+    /*: Message displayed when attempting to create a transaction. Cautionary text to prompt the user to verify
+        that the displayed transaction details represent the transaction the user intends to create. */
+    question_string.append(tr("Do you want to create this transaction?"));
+    question_string.append("<br /><span style='font-size:10pt;'>");
+    if (model->wallet().privateKeysDisabled() && !model->wallet().hasExternalSigner()) {
+        /*: Text to inform a user attempting to create a transaction of their current options. At this stage,
+            a user can only create a PSBT. This string is displayed when private keys are disabled and an external
+            signer is not available. */
+        question_string.append(tr("Please, review your transaction proposal. This will produce a Partially Signed DigiByte Transaction (PSBT) which you can save or copy and then sign with e.g. an offline %1 wallet, or a PSBT-compatible hardware wallet.").arg(PACKAGE_NAME));
+    } else if (model->getOptionsModel()->getEnablePSDGBontrols()) {
+        /*: Text to inform a user attempting to create a transaction of their current options. At this stage,
+            a user can send their transaction or create a PSBT. This string is displayed when both private keys
+            and PSBT controls are enabled. */
+        question_string.append(tr("Please, review your transaction. You can create and send this transaction or create a Partially Signed DigiByte Transaction (PSBT), which you can save or copy and then sign with, e.g., an offline %1 wallet, or a PSBT-compatible hardware wallet.").arg(PACKAGE_NAME));
+    } else {
+        /*: Text to prompt a user to review the details of the transaction they are attempting to send. */
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         question_string.append(tr("Please, review your transaction."));
     }
     question_string.append("</span>%1");
@@ -349,7 +430,12 @@ bool SendCoinsDialog::PrepareSendText(QString& question_string, QString& informa
         question_string.append("</b>");
 
         // append transaction size
+<<<<<<< HEAD
         question_string.append(" (" + QString::number((double)m_current_transaction->getTransactionSize() / 1000) + " kB): ");
+=======
+        //: When reviewing a newly created PSBT (via Send flow), the transaction fee is shown, with "virtual size" of the transaction displayed for context
+        question_string.append(" (" + tr("%1 kvB", "PSBT transaction creation").arg((double)m_current_transaction->getTransactionSize() / 1000, 0, 'g', 3) + "): ");
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         // append transaction fee value
         question_string.append("<span style='color:#aa0000; font-weight:bold;'>");
@@ -357,7 +443,10 @@ bool SendCoinsDialog::PrepareSendText(QString& question_string, QString& informa
         question_string.append("</span><br />");
 
         // append RBF message according to transaction's signalling
+<<<<<<< HEAD
         /* Digibyte: Disable RBF
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         question_string.append("<span style='font-size:10pt; font-weight:normal;'>");
         if (ui->optInRBF->isChecked()) {
             question_string.append(tr("You can increase the fee later (signals Replace-By-Fee, BIP-125)."));
@@ -365,15 +454,22 @@ bool SendCoinsDialog::PrepareSendText(QString& question_string, QString& informa
             question_string.append(tr("Not signalling Replace-By-Fee, BIP-125."));
         }
         question_string.append("</span>");
+<<<<<<< HEAD
         */
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     // add total amount in all subdivision units
     question_string.append("<hr />");
     CAmount totalAmount = m_current_transaction->getTotalTransactionAmount() + txFee;
     QStringList alternativeUnits;
+<<<<<<< HEAD
     for (const DigiByteUnits::Unit u : DigiByteUnits::availableUnits())
     {
+=======
+    for (const DigiByteUnit u : DigiByteUnits::availableUnits()) {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         if(u != model->getOptionsModel()->getDisplayUnit())
             alternativeUnits.append(DigiByteUnits::formatHtmlWithUnit(u, totalAmount));
     }
@@ -389,6 +485,7 @@ bool SendCoinsDialog::PrepareSendText(QString& question_string, QString& informa
     } else {
         question_string = question_string.arg("<br /><br />" + formatted.at(0));
     }
+<<<<<<< HEAD
 
     return true;
 }
@@ -407,14 +504,115 @@ void SendCoinsDialog::sendButtonClicked([[maybe_unused]] bool checked)
     SendConfirmationDialog confirmationDialog(confirmation, question_string, informative_text, detailed_text, SEND_CONFIRM_DELAY, confirmButtonText, this);
     confirmationDialog.exec();
     QMessageBox::StandardButton retval = static_cast<QMessageBox::StandardButton>(confirmationDialog.result());
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
-    if(retval != QMessageBox::Yes)
+    return true;
+}
+
+void SendCoinsDialog::presentPSBT(PartiallySignedTransaction& psbtx)
+{
+    // Serialize the PSBT
+    CDataStream ssTx(SER_NETWORK, PROTOCOL_VERSION);
+    ssTx << psbtx;
+    GUIUtil::setClipboard(EncodeBase64(ssTx.str()).c_str());
+    QMessageBox msgBox(this);
+    //: Caption of "PSBT has been copied" messagebox
+    msgBox.setText(tr("Unsigned Transaction", "PSBT copied"));
+    msgBox.setInformativeText(tr("The PSBT has been copied to the clipboard. You can also save it."));
+    msgBox.setStandardButtons(QMessageBox::Save | QMessageBox::Discard);
+    msgBox.setDefaultButton(QMessageBox::Discard);
+    switch (msgBox.exec()) {
+    case QMessageBox::Save: {
+        QString selectedFilter;
+        QString fileNameSuggestion = "";
+        bool first = true;
+        for (const SendCoinsRecipient &rcp : m_current_transaction->getRecipients()) {
+            if (!first) {
+                fileNameSuggestion.append(" - ");
+            }
+            QString labelOrAddress = rcp.label.isEmpty() ? rcp.address : rcp.label;
+            QString amount = DigiByteUnits::formatWithUnit(model->getOptionsModel()->getDisplayUnit(), rcp.amount);
+            fileNameSuggestion.append(labelOrAddress + "-" + amount);
+            first = false;
+        }
+        fileNameSuggestion.append(".psbt");
+        QString filename = GUIUtil::getSaveFileName(this,
+            tr("Save Transaction Data"), fileNameSuggestion,
+            //: Expanded name of the binary PSBT file format. See: BIP 174.
+            tr("Partially Signed Transaction (Binary)") + QLatin1String(" (*.psbt)"), &selectedFilter);
+        if (filename.isEmpty()) {
+            return;
+        }
+        std::ofstream out{filename.toLocal8Bit().data(), std::ofstream::out | std::ofstream::binary};
+        out << ssTx.str();
+        out.close();
+        //: Popup message when a PSBT has been saved to a file
+        Q_EMIT message(tr("PSBT saved"), tr("PSBT saved to disk"), CClientUIInterface::MSG_INFORMATION);
+        break;
+    }
+    case QMessageBox::Discard:
+        break;
+    default:
+        assert(false);
+    } // msgBox.exec()
+}
+
+bool SendCoinsDialog::signWithExternalSigner(PartiallySignedTransaction& psbtx, CMutableTransaction& mtx, bool& complete) {
+    TransactionError err;
+    try {
+        err = model->wallet().fillPSBT(SIGHASH_ALL, /*sign=*/true, /*bip32derivs=*/true, /*n_signed=*/nullptr, psbtx, complete);
+    } catch (const std::runtime_error& e) {
+        QMessageBox::critical(nullptr, tr("Sign failed"), e.what());
+        return false;
+    }
+    if (err == TransactionError::EXTERNAL_SIGNER_NOT_FOUND) {
+        //: "External signer" means using devices such as hardware wallets.
+        const QString msg = tr("External signer not found");
+        QMessageBox::critical(nullptr, msg, msg);
+        return false;
+    }
+    if (err == TransactionError::EXTERNAL_SIGNER_FAILED) {
+        //: "External signer" means using devices such as hardware wallets.
+        const QString msg = tr("External signer failure");
+        QMessageBox::critical(nullptr, msg, msg);
+        return false;
+    }
+    if (err != TransactionError::OK) {
+        tfm::format(std::cerr, "Failed to sign PSBT");
+        processSendCoinsReturn(WalletModel::TransactionCreationFailed);
+        return false;
+    }
+    // fillPSBT does not always properly finalize
+    complete = FinalizeAndExtractPSBT(psbtx, mtx);
+    return true;
+}
+
+void SendCoinsDialog::sendButtonClicked([[maybe_unused]] bool checked)
+{
+    if(!model || !model->getOptionsModel())
+        return;
+
+    QString question_string, informative_text, detailed_text;
+    if (!PrepareSendText(question_string, informative_text, detailed_text)) return;
+    assert(m_current_transaction);
+
+    const QString confirmation = tr("Confirm send coins");
+    const bool enable_send{!model->wallet().privateKeysDisabled() || model->wallet().hasExternalSigner()};
+    const bool always_show_unsigned{model->getOptionsModel()->getEnablePSDGBontrols()};
+    auto confirmationDialog = new SendConfirmationDialog(confirmation, question_string, informative_text, detailed_text, SEND_CONFIRM_DELAY, enable_send, always_show_unsigned, this);
+    confirmationDialog->setAttribute(Qt::WA_DeleteOnClose);
+    // TODO: Replace QDialog::exec() with safer QDialog::show().
+    const auto retval = static_cast<QMessageBox::StandardButton>(confirmationDialog->exec());
+
+    if(retval != QMessageBox::Yes && retval != QMessageBox::Save)
     {
         fNewRecipientAllowed = true;
         return;
     }
 
     bool send_failure = false;
+<<<<<<< HEAD
     if (model->wallet().privateKeysDisabled()) {
         CMutableTransaction mtx = CMutableTransaction{*(m_current_transaction->getWtx())};
         PartiallySignedTransaction psbtx(mtx);
@@ -525,6 +723,55 @@ void SendCoinsDialog::sendButtonClicked([[maybe_unused]] bool checked)
             Q_EMIT coinsSent(m_current_transaction->getWtx()->GetHash());
         } else {
             send_failure = true;
+=======
+    if (retval == QMessageBox::Save) {
+        // "Create Unsigned" clicked
+        CMutableTransaction mtx = CMutableTransaction{*(m_current_transaction->getWtx())};
+        PartiallySignedTransaction psbtx(mtx);
+        bool complete = false;
+        // Fill without signing
+        TransactionError err = model->wallet().fillPSBT(SIGHASH_ALL, /*sign=*/false, /*bip32derivs=*/true, /*n_signed=*/nullptr, psbtx, complete);
+        assert(!complete);
+        assert(err == TransactionError::OK);
+
+        // Copy PSBT to clipboard and offer to save
+        presentPSBT(psbtx);
+    } else {
+        // "Send" clicked
+        assert(!model->wallet().privateKeysDisabled() || model->wallet().hasExternalSigner());
+        bool broadcast = true;
+        if (model->wallet().hasExternalSigner()) {
+            CMutableTransaction mtx = CMutableTransaction{*(m_current_transaction->getWtx())};
+            PartiallySignedTransaction psbtx(mtx);
+            bool complete = false;
+            // Always fill without signing first. This prevents an external signer
+            // from being called prematurely and is not expensive.
+            TransactionError err = model->wallet().fillPSBT(SIGHASH_ALL, /*sign=*/false, /*bip32derivs=*/true, /*n_signed=*/nullptr, psbtx, complete);
+            assert(!complete);
+            assert(err == TransactionError::OK);
+            send_failure = !signWithExternalSigner(psbtx, mtx, complete);
+            // Don't broadcast when user rejects it on the device or there's a failure:
+            broadcast = complete && !send_failure;
+            if (!send_failure) {
+                // A transaction signed with an external signer is not always complete,
+                // e.g. in a multisig wallet.
+                if (complete) {
+                    // Prepare transaction for broadcast transaction if complete
+                    const CTransactionRef tx = MakeTransactionRef(mtx);
+                    m_current_transaction->setWtx(tx);
+                } else {
+                    presentPSBT(psbtx);
+                }
+            }
+        }
+
+        // Broadcast the transaction, unless an external signer was used and it
+        // failed, or more signatures are needed.
+        if (broadcast) {
+            // now send the prepared transaction
+            model->sendCoins(*m_current_transaction);
+            Q_EMIT coinsSent(m_current_transaction->getWtx()->GetHash());
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
     }
     if (!send_failure) {
@@ -580,10 +827,15 @@ SendCoinsEntry *SendCoinsDialog::addEntry()
     entry->clear();
     entry->setFocus();
     ui->scrollAreaWidgetContents->resize(ui->scrollAreaWidgetContents->sizeHint());
-    qApp->processEvents();
-    QScrollBar* bar = ui->scrollArea->verticalScrollBar();
-    if(bar)
-        bar->setSliderPosition(bar->maximum());
+
+    // Scroll to the newly added entry on a QueuedConnection because Qt doesn't
+    // adjust the scroll area and scrollbar immediately when the widget is added.
+    // Invoking on a DirectConnection will only scroll to the second-to-last entry.
+    QMetaObject::invokeMethod(ui->scrollArea, [this] {
+        if (ui->scrollArea->verticalScrollBar()) {
+            ui->scrollArea->verticalScrollBar()->setValue(ui->scrollArea->verticalScrollBar()->maximum());
+        }
+    }, Qt::QueuedConnection);
 
     updateTabsAndLabels();
     return entry;
@@ -683,7 +935,11 @@ void SendCoinsDialog::setBalance(const interfaces::WalletBalances& balances)
         CAmount balance = balances.balance;
         if (model->wallet().hasExternalSigner()) {
             ui->labelBalanceName->setText(tr("External balance:"));
+<<<<<<< HEAD
         } else if (model->wallet().privateKeysDisabled()) {
+=======
+        } else if (model->wallet().isLegacy() && model->wallet().privateKeysDisabled()) {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             balance = balances.watch_only_balance;
             ui->labelBalanceName->setText(tr("Watch-only balance:"));
         }
@@ -691,9 +947,9 @@ void SendCoinsDialog::setBalance(const interfaces::WalletBalances& balances)
     }
 }
 
-void SendCoinsDialog::updateDisplayUnit()
+void SendCoinsDialog::refreshBalance()
 {
-    setBalance(model->wallet().getBalances());
+    setBalance(model->getCachedBalance());
     ui->customFee->setDisplayUnit(model->getOptionsModel()->getDisplayUnit());
     updateSmartFeeLabel();
 }
@@ -729,10 +985,13 @@ void SendCoinsDialog::processSendCoinsReturn(const WalletModel::SendCoinsReturn 
         break;
     case WalletModel::AbsurdFee:
         msgParams.first = tr("A fee higher than %1 is considered an absurdly high fee.").arg(DigiByteUnits::formatWithUnit(model->getOptionsModel()->getDisplayUnit(), model->wallet().getDefaultMaxTxFee()));
+<<<<<<< HEAD
         break;
     case WalletModel::PaymentRequestExpired:
         msgParams.first = tr("Payment request expired.");
         msgParams.second = CClientUIInterface::MSG_ERROR;
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         break;
     // included to prevent a compiler warning.
     case WalletModel::OK:
@@ -768,9 +1027,20 @@ void SendCoinsDialog::useAvailableBalance(SendCoinsEntry* entry)
 {
     // Include watch-only for wallets without private key
     m_coin_control->fAllowWatchOnly = model->wallet().privateKeysDisabled() && !model->wallet().hasExternalSigner();
+<<<<<<< HEAD
 
     // Calculate available amount to send.
     CAmount amount = model->wallet().getAvailableBalance(*m_coin_control);
+=======
+
+    // Same behavior as send: if we have selected coins, only obtain their available balance.
+    // Copy to avoid modifying the member's data.
+    CCoinControl coin_control = *m_coin_control;
+    coin_control.m_allow_other_inputs = !coin_control.HasSelected();
+
+    // Calculate available amount to send.
+    CAmount amount = model->getAvailableBalance(&coin_control);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     for (int i = 0; i < ui->entries->count(); ++i) {
         SendCoinsEntry* e = qobject_cast<SendCoinsEntry*>(ui->entries->itemAt(i)->widget());
         if (e && !e->isHidden() && e != entry) {
@@ -806,7 +1076,11 @@ void SendCoinsDialog::updateFeeMinimizedLabel()
     if (ui->radioSmartFee->isChecked())
         ui->labelFeeMinimized->setText(ui->labelSmartFee->text());
     else {
+<<<<<<< HEAD
         ui->labelFeeMinimized->setText(DigiByteUnits::formatWithUnit(model->getOptionsModel()->getDisplayUnit(), ui->customFee->value()) + "/kvB");
+=======
+        ui->labelFeeMinimized->setText(tr("%1/kvB").arg(DigiByteUnits::formatWithUnit(model->getOptionsModel()->getDisplayUnit(), ui->customFee->value())));
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 }
 
@@ -820,13 +1094,21 @@ void SendCoinsDialog::updateCoinControlState()
     // Avoid using global defaults when sending money from the GUI
     // Either custom fee will be used or if not selected, the confirmation target from dropdown box
     m_coin_control->m_confirm_target = getConfTargetForIndex(ui->confTargetSelector->currentIndex());
+<<<<<<< HEAD
     // Digibyte: Disable RBF GUI
     m_coin_control->m_signal_bip125_rbf = false;
+=======
+    m_coin_control->m_signal_bip125_rbf = ui->optInRBF->isChecked();
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     // Include watch-only for wallets without private key
     m_coin_control->fAllowWatchOnly = model->wallet().privateKeysDisabled() && !model->wallet().hasExternalSigner();
 }
 
+<<<<<<< HEAD
 void SendCoinsDialog::updateNumberOfBlocks(int count, const QDateTime& blockDate, double nVerificationProgress, bool headers, SynchronizationState sync_state) {
+=======
+void SendCoinsDialog::updateNumberOfBlocks(int count, const QDateTime& blockDate, double nVerificationProgress, SyncType synctype, SynchronizationState sync_state) {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (sync_state == SynchronizationState::POST_INIT) {
         updateSmartFeeLabel();
     }
@@ -842,7 +1124,11 @@ void SendCoinsDialog::updateSmartFeeLabel()
     FeeReason reason;
     CFeeRate feeRate = CFeeRate(model->wallet().getMinimumFee(1000, *m_coin_control, &returned_target, &reason));
 
+<<<<<<< HEAD
     ui->labelSmartFee->setText(DigiByteUnits::formatWithUnit(model->getOptionsModel()->getDisplayUnit(), feeRate.GetFeePerK()) + "/kvB");
+=======
+    ui->labelSmartFee->setText(tr("%1/kvB").arg(DigiByteUnits::formatWithUnit(model->getOptionsModel()->getDisplayUnit(), feeRate.GetFeePerK())));
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     if (reason == FeeReason::FALLBACK) {
         ui->labelSmartFee2->show(); // (Smart fee not initialized yet. This usually takes a few blocks...)
@@ -893,12 +1179,6 @@ void SendCoinsDialog::coinControlClipboardBytes()
     GUIUtil::setClipboard(ui->labelCoinControlBytes->text().replace(ASYMP_UTF8, ""));
 }
 
-// Coin Control: copy label "Dust" to clipboard
-void SendCoinsDialog::coinControlClipboardLowOutput()
-{
-    GUIUtil::setClipboard(ui->labelCoinControlLowOutput->text());
-}
-
 // Coin Control: copy label "Change" to clipboard
 void SendCoinsDialog::coinControlClipboardChange()
 {
@@ -920,9 +1200,15 @@ void SendCoinsDialog::coinControlFeatureChanged(bool checked)
 // Coin Control: button inputs -> show actual coin control dialog
 void SendCoinsDialog::coinControlButtonClicked()
 {
+<<<<<<< HEAD
     CoinControlDialog dlg(*m_coin_control, model, platformStyle);
     dlg.exec();
     coinControlUpdateLabels();
+=======
+    auto dlg = new CoinControlDialog(*m_coin_control, model, platformStyle);
+    connect(dlg, &QDialog::finished, this, &SendCoinsDialog::coinControlUpdateLabels);
+    GUIUtil::ShowModalDialogAsynchronously(dlg);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 // Coin Control: checkbox custom change address
@@ -1036,8 +1322,13 @@ void SendCoinsDialog::coinControlUpdateLabels()
     }
 }
 
+<<<<<<< HEAD
 SendConfirmationDialog::SendConfirmationDialog(const QString& title, const QString& text, const QString& informative_text, const QString& detailed_text, int _secDelay, const QString& _confirmButtonText, QWidget* parent)
     : QMessageBox(parent), secDelay(_secDelay), confirmButtonText(_confirmButtonText)
+=======
+SendConfirmationDialog::SendConfirmationDialog(const QString& title, const QString& text, const QString& informative_text, const QString& detailed_text, int _secDelay, bool enable_send, bool always_show_unsigned, QWidget* parent)
+    : QMessageBox(parent), secDelay(_secDelay), m_enable_send(enable_send)
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     setIcon(QMessageBox::Question);
     setWindowTitle(title); // On macOS, the window title is ignored (as required by the macOS Guidelines).
@@ -1045,26 +1336,35 @@ SendConfirmationDialog::SendConfirmationDialog(const QString& title, const QStri
     setInformativeText(informative_text);
     setDetailedText(detailed_text);
     setStandardButtons(QMessageBox::Yes | QMessageBox::Cancel);
+<<<<<<< HEAD
+=======
+    if (always_show_unsigned || !enable_send) addButton(QMessageBox::Save);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     setDefaultButton(QMessageBox::Cancel);
     yesButton = button(QMessageBox::Yes);
     if (confirmButtonText.isEmpty()) {
         confirmButtonText = yesButton->text();
     }
+<<<<<<< HEAD
     updateYesButton();
+=======
+    m_psbt_button = button(QMessageBox::Save);
+    updateButtons();
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     connect(&countDownTimer, &QTimer::timeout, this, &SendConfirmationDialog::countDown);
 }
 
 int SendConfirmationDialog::exec()
 {
-    updateYesButton();
-    countDownTimer.start(1000);
+    updateButtons();
+    countDownTimer.start(1s);
     return QMessageBox::exec();
 }
 
 void SendConfirmationDialog::countDown()
 {
     secDelay--;
-    updateYesButton();
+    updateButtons();
 
     if(secDelay <= 0)
     {
@@ -1072,16 +1372,33 @@ void SendConfirmationDialog::countDown()
     }
 }
 
-void SendConfirmationDialog::updateYesButton()
+void SendConfirmationDialog::updateButtons()
 {
     if(secDelay > 0)
     {
         yesButton->setEnabled(false);
+<<<<<<< HEAD
         yesButton->setText(confirmButtonText + " (" + QString::number(secDelay) + ")");
     }
     else
     {
         yesButton->setEnabled(true);
         yesButton->setText(confirmButtonText);
+=======
+        yesButton->setText(confirmButtonText + (m_enable_send ? (" (" + QString::number(secDelay) + ")") : QString("")));
+        if (m_psbt_button) {
+            m_psbt_button->setEnabled(false);
+            m_psbt_button->setText(m_psbt_button_text + " (" + QString::number(secDelay) + ")");
+        }
+    }
+    else
+    {
+        yesButton->setEnabled(m_enable_send);
+        yesButton->setText(confirmButtonText);
+        if (m_psbt_button) {
+            m_psbt_button->setEnabled(true);
+            m_psbt_button->setText(m_psbt_button_text);
+        }
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 }

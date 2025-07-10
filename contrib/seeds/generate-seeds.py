@@ -3,7 +3,7 @@
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 '''
-Script to generate list of seed nodes for chainparams.cpp.
+Script to generate list of seed nodes for kernel/chainparams.cpp.
 
 This script expects two text files in the directory that is passed as an
 argument:
@@ -61,7 +61,7 @@ def name_to_bip155(addr):
             raise ValueError(f'Invalid I2P {vchAddr}')
     elif '.' in addr: # IPv4
         return (BIP155Network.IPV4, bytes((int(x) for x in addr.split('.'))))
-    elif ':' in addr: # IPv6
+    elif ':' in addr: # IPv6 or CJDNS
         sub = [[], []] # prefix, suffix
         x = 0
         addr = addr.split(':')
@@ -70,14 +70,21 @@ def name_to_bip155(addr):
                 if i == 0 or i == (len(addr)-1): # skip empty component at beginning or end
                     continue
                 x += 1 # :: skips to suffix
-                assert(x < 2)
+                assert x < 2
             else: # two bytes per component
                 val = int(comp, 16)
                 sub[x].append(val >> 8)
                 sub[x].append(val & 0xff)
         nullbytes = 16 - len(sub[0]) - len(sub[1])
-        assert((x == 0 and nullbytes == 0) or (x == 1 and nullbytes > 0))
-        return (BIP155Network.IPV6, bytes(sub[0] + ([0] * nullbytes) + sub[1]))
+        assert (x == 0 and nullbytes == 0) or (x == 1 and nullbytes > 0)
+        addr_bytes = bytes(sub[0] + ([0] * nullbytes) + sub[1])
+        if addr_bytes[0] == 0xfc:
+            # Assume that seeds with fc00::/8 addresses belong to CJDNS,
+            # not to the publicly unroutable "Unique Local Unicast" network, see
+            # RFC4193: https://datatracker.ietf.org/doc/html/rfc4193#section-8
+            return (BIP155Network.CJDNS, addr_bytes)
+        else:
+            return (BIP155Network.IPV6, addr_bytes)
     else:
         raise ValueError('Could not parse address %s' % addr)
 

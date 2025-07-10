@@ -10,7 +10,10 @@ Runs automatically during `make check`.
 Can also be run manually."""
 
 import argparse
+<<<<<<<< HEAD:test/util/digibyte-util-test.py
 import binascii
+========
+>>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion:test/util/test_runner.py
 import configparser
 import difflib
 import json
@@ -23,7 +26,12 @@ import sys
 def main():
     config = configparser.ConfigParser()
     config.optionxform = str
+<<<<<<<< HEAD:test/util/digibyte-util-test.py
     config.read_file(open(os.path.join(os.path.dirname(__file__), "../config.ini"), encoding="utf8"))
+========
+    with open(os.path.join(os.path.dirname(__file__), "../config.ini"), encoding="utf8") as f:
+        config.read_file(f)
+>>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion:test/util/test_runner.py
     env_conf = dict(config.items('environment'))
 
     parser = argparse.ArgumentParser(description=__doc__)
@@ -44,7 +52,8 @@ def main():
 def bctester(testDir, input_basename, buildenv):
     """ Loads and parses the input file, runs all tests and reports results"""
     input_filename = os.path.join(testDir, input_basename)
-    raw_data = open(input_filename, encoding="utf8").read()
+    with open(input_filename, encoding="utf8") as f:
+        raw_data = f.read()
     input_data = json.loads(raw_data)
 
     failed_testcases = []
@@ -53,7 +62,7 @@ def bctester(testDir, input_basename, buildenv):
         try:
             bctest(testDir, testObj, buildenv)
             logging.info("PASSED: " + testObj["description"])
-        except:
+        except Exception:
             logging.info("FAILED: " + testObj["description"])
             failed_testcases.append(testObj["description"])
 
@@ -73,6 +82,11 @@ def bctest(testDir, testObj, buildenv):
     """
     # Get the exec names and arguments
     execprog = os.path.join(buildenv["BUILDDIR"], "src", testObj["exec"] + buildenv["EXEEXT"])
+    if testObj["exec"] == "./digibyte-util":
+        execprog = os.getenv("DIGIBYTEUTIL", default=execprog)
+    elif testObj["exec"] == "./digibyte-tx":
+        execprog = os.getenv("DIGIBYTETX", default=execprog)
+
     execargs = testObj['args']
     execrun = [execprog] + execargs
 
@@ -81,7 +95,8 @@ def bctest(testDir, testObj, buildenv):
     inputData = None
     if "input" in testObj:
         filename = os.path.join(testDir, testObj["input"])
-        inputData = open(filename, encoding="utf8").read()
+        with open(filename, encoding="utf8") as f:
+            inputData = f.read()
         stdinCfg = subprocess.PIPE
 
     # Read the expected output data (if there is any)
@@ -92,9 +107,10 @@ def bctest(testDir, testObj, buildenv):
         outputFn = testObj['output_cmp']
         outputType = os.path.splitext(outputFn)[1][1:]  # output type from file extension (determines how to compare)
         try:
-            outputData = open(os.path.join(testDir, outputFn), encoding="utf8").read()
-        except:
-            logging.error("Output file " + outputFn + " can not be opened")
+            with open(os.path.join(testDir, outputFn), encoding="utf8") as f:
+                outputData = f.read()
+        except Exception:
+            logging.error("Output file " + outputFn + " cannot be opened")
             raise
         if not outputData:
             logging.error("Output data missing for " + outputFn)
@@ -104,7 +120,7 @@ def bctest(testDir, testObj, buildenv):
             raise Exception
 
     # Run the test
-    proc = subprocess.Popen(execrun, stdin=stdinCfg, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+    proc = subprocess.Popen(execrun, stdin=stdinCfg, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     try:
         outs = proc.communicate(input=inputData)
     except OSError:
@@ -167,7 +183,7 @@ def parse_output(a, fmt):
     if fmt == 'json':  # json: compare parsed data
         return json.loads(a)
     elif fmt == 'hex':  # hex: parse and compare binary data
-        return binascii.a2b_hex(a.strip())
+        return bytes.fromhex(a.strip())
     else:
         raise NotImplementedError("Don't know how to compare %s" % fmt)
 

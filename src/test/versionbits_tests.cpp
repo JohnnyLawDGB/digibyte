@@ -1,15 +1,27 @@
+<<<<<<< HEAD
 // Copyright (c) 2009-2020 The Bitcoin Core developers
 // Copyright (c) 2014-2020 The DigiByte Core developers
+=======
+// Copyright (c) 2014-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <chain.h>
+<<<<<<< HEAD
 #include <versionbits.h>
 #include <chainparams.h>
 #include <consensus/params.h>
 #include <deploymentstatus.h>
 #include <test/util/setup_common.h>
 #include <validation.h>
+=======
+#include <chainparams.h>
+#include <consensus/params.h>
+#include <test/util/random.h>
+#include <test/util/setup_common.h>
+#include <util/chaintype.h>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <versionbits.h>
 
 #include <boost/test/unit_test.hpp>
@@ -17,7 +29,11 @@
 /* Define a virtual block time, one block per 10 minutes after Nov 14 2014, 0:55:36am */
 static int32_t TestTime(int nHeight) { return 1415926536 + 600 * nHeight; }
 
+<<<<<<< HEAD
 static const std::string StateName(ThresholdState state)
+=======
+static std::string StateName(ThresholdState state)
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     switch (state) {
     case ThresholdState::DEFINED:   return "DEFINED";
@@ -186,7 +202,7 @@ public:
     CBlockIndex* Tip() { return vpblock.empty() ? nullptr : vpblock.back(); }
 };
 
-BOOST_FIXTURE_TEST_SUITE(versionbits_tests, TestingSetup)
+BOOST_FIXTURE_TEST_SUITE(versionbits_tests, BasicTestingSetup)
 
 BOOST_AUTO_TEST_CASE(versionbits_test)
 {
@@ -259,10 +275,17 @@ BOOST_AUTO_TEST_CASE(versionbits_test)
 }
 
 /** Check that ComputeBlockVersion will set the appropriate bit correctly */
+<<<<<<< HEAD
 static void check_computeblockversion(const Consensus::Params& params, Consensus::DeploymentPos dep)
 {
     // This implicitly uses g_versionbitscache, so clear it every time
     g_versionbitscache.Clear();
+=======
+static void check_computeblockversion(VersionBitsCache& versionbitscache, const Consensus::Params& params, Consensus::DeploymentPos dep)
+{
+    // Clear the cache every time
+    versionbitscache.Clear();
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     int64_t bit = params.vDeployments[dep].bit;
     int64_t nStartTime = params.vDeployments[dep].nStartTime;
@@ -270,13 +293,21 @@ static void check_computeblockversion(const Consensus::Params& params, Consensus
     int min_activation_height = params.vDeployments[dep].min_activation_height;
 
     // should not be any signalling for first block
+<<<<<<< HEAD
     BOOST_CHECK_EQUAL(g_versionbitscache.ComputeBlockVersion(nullptr, params, ALGO_SCRYPT) & VERSIONBITS_TOP_MASK, VERSIONBITS_TOP_BITS);
+=======
+    BOOST_CHECK_EQUAL(versionbitscache.ComputeBlockVersion(nullptr, params), VERSIONBITS_TOP_BITS);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // always/never active deployments shouldn't need to be tested further
     if (nStartTime == Consensus::BIP9Deployment::ALWAYS_ACTIVE ||
         nStartTime == Consensus::BIP9Deployment::NEVER_ACTIVE)
     {
         BOOST_CHECK_EQUAL(min_activation_height, 0);
+<<<<<<< HEAD
+=======
+        BOOST_CHECK_EQUAL(nTimeout, Consensus::BIP9Deployment::NO_TIMEOUT);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         return;
     }
 
@@ -287,8 +318,15 @@ static void check_computeblockversion(const Consensus::Params& params, Consensus
     // Make sure that no deployment tries to set an invalid bit.
     BOOST_REQUIRE(((1 << bit) & VERSIONBITS_TOP_MASK) == 0);
     BOOST_REQUIRE(min_activation_height >= 0);
+<<<<<<< HEAD
 
     const uint32_t bitmask{g_versionbitscache.Mask(params, dep)};
+=======
+    // Check min_activation_height is on a retarget boundary
+    BOOST_REQUIRE_EQUAL(min_activation_height % params.nMinerConfirmationWindow, 0U);
+
+    const uint32_t bitmask{versionbitscache.Mask(params, dep)};
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     BOOST_CHECK_EQUAL(bitmask, uint32_t{1} << bit);
 
     // In the first chain, test that the bit is set by CBV until it has failed.
@@ -307,9 +345,15 @@ static void check_computeblockversion(const Consensus::Params& params, Consensus
         // earlier time, so will transition from DEFINED to STARTED at the
         // end of the first period by mining blocks at nTime == 0
         lastBlock = firstChain.Mine(params.nMinerConfirmationWindow - 1, nTime, VERSIONBITS_LAST_OLD_BLOCK_VERSION).Tip();
+<<<<<<< HEAD
         BOOST_CHECK_EQUAL(g_versionbitscache.ComputeBlockVersion(lastBlock, params, ALGO_SCRYPT) & (1 << bit), 0);
         lastBlock = firstChain.Mine(params.nMinerConfirmationWindow, nTime, VERSIONBITS_LAST_OLD_BLOCK_VERSION).Tip();
         BOOST_CHECK((g_versionbitscache.ComputeBlockVersion(lastBlock, params, ALGO_SCRYPT) & (1 << bit)) != 0);
+=======
+        BOOST_CHECK_EQUAL(versionbitscache.ComputeBlockVersion(lastBlock, params) & (1 << bit), 0);
+        lastBlock = firstChain.Mine(params.nMinerConfirmationWindow, nTime, VERSIONBITS_LAST_OLD_BLOCK_VERSION).Tip();
+        BOOST_CHECK((versionbitscache.ComputeBlockVersion(lastBlock, params) & (1 << bit)) != 0);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         // then we'll keep mining at nStartTime...
     } else {
         // use a time 1s earlier than start time to check we stay DEFINED
@@ -317,28 +361,48 @@ static void check_computeblockversion(const Consensus::Params& params, Consensus
 
         // Start generating blocks before nStartTime
         lastBlock = firstChain.Mine(params.nMinerConfirmationWindow, nTime, VERSIONBITS_LAST_OLD_BLOCK_VERSION).Tip();
+<<<<<<< HEAD
         BOOST_CHECK_EQUAL(g_versionbitscache.ComputeBlockVersion(lastBlock, params, ALGO_SCRYPT) & (1 << bit), 0);
+=======
+        BOOST_CHECK_EQUAL(versionbitscache.ComputeBlockVersion(lastBlock, params) & (1 << bit), 0);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         // Mine more blocks (4 less than the adjustment period) at the old time, and check that CBV isn't setting the bit yet.
         for (uint32_t i = 1; i < params.nMinerConfirmationWindow - 4; i++) {
             lastBlock = firstChain.Mine(params.nMinerConfirmationWindow + i, nTime, VERSIONBITS_LAST_OLD_BLOCK_VERSION).Tip();
+<<<<<<< HEAD
             BOOST_CHECK_EQUAL(g_versionbitscache.ComputeBlockVersion(lastBlock, params, ALGO_SCRYPT) & (1 << bit), 0);
+=======
+            BOOST_CHECK_EQUAL(versionbitscache.ComputeBlockVersion(lastBlock, params) & (1 << bit), 0);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
         // Now mine 5 more blocks at the start time -- MTP should not have passed yet, so
         // CBV should still not yet set the bit.
         nTime = nStartTime;
         for (uint32_t i = params.nMinerConfirmationWindow - 4; i <= params.nMinerConfirmationWindow; i++) {
             lastBlock = firstChain.Mine(params.nMinerConfirmationWindow + i, nTime, VERSIONBITS_LAST_OLD_BLOCK_VERSION).Tip();
+<<<<<<< HEAD
             BOOST_CHECK_EQUAL(g_versionbitscache.ComputeBlockVersion(lastBlock, params, ALGO_SCRYPT) & (1 << bit), 0);
+=======
+            BOOST_CHECK_EQUAL(versionbitscache.ComputeBlockVersion(lastBlock, params) & (1 << bit), 0);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
         // Next we will advance to the next period and transition to STARTED,
     }
 
+<<<<<<< HEAD
     lastBlock = firstChain.Mine(params.nMinerConfirmationWindow * 3, nTime, ALGO_SCRYPT).Tip();
     // so ComputeBlockVersion should now set the bit,
     BOOST_CHECK((g_versionbitscache.ComputeBlockVersion(lastBlock, params, ALGO_SCRYPT) & (1 << bit)) != 0);
     // and should also be using the VERSIONBITS_TOP_BITS.
     BOOST_CHECK_EQUAL(g_versionbitscache.ComputeBlockVersion(lastBlock, params, ALGO_SCRYPT) & VERSIONBITS_TOP_MASK, VERSIONBITS_TOP_BITS);
+=======
+    lastBlock = firstChain.Mine(params.nMinerConfirmationWindow * 3, nTime, VERSIONBITS_LAST_OLD_BLOCK_VERSION).Tip();
+    // so ComputeBlockVersion should now set the bit,
+    BOOST_CHECK((versionbitscache.ComputeBlockVersion(lastBlock, params) & (1 << bit)) != 0);
+    // and should also be using the VERSIONBITS_TOP_BITS.
+    BOOST_CHECK_EQUAL(versionbitscache.ComputeBlockVersion(lastBlock, params) & VERSIONBITS_TOP_MASK, VERSIONBITS_TOP_BITS);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // Check that ComputeBlockVersion will set the bit until nTimeout
     nTime += 600;
@@ -347,8 +411,13 @@ static void check_computeblockversion(const Consensus::Params& params, Consensus
     // These blocks are all before nTimeout is reached.
     while (nTime < nTimeout && blocksToMine > 0) {
         lastBlock = firstChain.Mine(nHeight+1, nTime, VERSIONBITS_LAST_OLD_BLOCK_VERSION).Tip();
+<<<<<<< HEAD
         BOOST_CHECK((g_versionbitscache.ComputeBlockVersion(lastBlock, params, ALGO_SCRYPT) & (1 << bit)) != 0);
         BOOST_CHECK_EQUAL(g_versionbitscache.ComputeBlockVersion(lastBlock, params, ALGO_SCRYPT) & VERSIONBITS_TOP_MASK, VERSIONBITS_TOP_BITS);
+=======
+        BOOST_CHECK((versionbitscache.ComputeBlockVersion(lastBlock, params) & (1 << bit)) != 0);
+        BOOST_CHECK_EQUAL(versionbitscache.ComputeBlockVersion(lastBlock, params) & VERSIONBITS_TOP_MASK, VERSIONBITS_TOP_BITS);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         blocksToMine--;
         nTime += 600;
         nHeight += 1;
@@ -362,7 +431,11 @@ static void check_computeblockversion(const Consensus::Params& params, Consensus
         // finish the last period before we start timing out
         while (nHeight % params.nMinerConfirmationWindow != 0) {
             lastBlock = firstChain.Mine(nHeight+1, nTime - 1, VERSIONBITS_LAST_OLD_BLOCK_VERSION).Tip();
+<<<<<<< HEAD
             BOOST_CHECK((g_versionbitscache.ComputeBlockVersion(lastBlock, params, ALGO_SCRYPT) & (1 << bit)) != 0);
+=======
+            BOOST_CHECK((versionbitscache.ComputeBlockVersion(lastBlock, params) & (1 << bit)) != 0);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             nHeight += 1;
         }
 
@@ -370,12 +443,20 @@ static void check_computeblockversion(const Consensus::Params& params, Consensus
         // the bit until the period transition.
         for (uint32_t i = 0; i < params.nMinerConfirmationWindow - 1; i++) {
             lastBlock = firstChain.Mine(nHeight+1, nTime, VERSIONBITS_LAST_OLD_BLOCK_VERSION).Tip();
+<<<<<<< HEAD
             BOOST_CHECK((g_versionbitscache.ComputeBlockVersion(lastBlock, params, ALGO_SCRYPT) & (1 << bit)) != 0);
+=======
+            BOOST_CHECK((versionbitscache.ComputeBlockVersion(lastBlock, params) & (1 << bit)) != 0);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             nHeight += 1;
         }
         // The next block should trigger no longer setting the bit.
         lastBlock = firstChain.Mine(nHeight+1, nTime, VERSIONBITS_LAST_OLD_BLOCK_VERSION).Tip();
+<<<<<<< HEAD
         BOOST_CHECK_EQUAL(g_versionbitscache.ComputeBlockVersion(lastBlock, params, ALGO_SCRYPT) & (1 << bit), 0);
+=======
+        BOOST_CHECK_EQUAL(versionbitscache.ComputeBlockVersion(lastBlock, params) & (1 << bit), 0);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     // On a new chain:
@@ -386,23 +467,36 @@ static void check_computeblockversion(const Consensus::Params& params, Consensus
     // Mine one period worth of blocks, and check that the bit will be on for the
     // next period.
     lastBlock = secondChain.Mine(params.nMinerConfirmationWindow, nTime, VERSIONBITS_LAST_OLD_BLOCK_VERSION).Tip();
+<<<<<<< HEAD
     BOOST_CHECK((g_versionbitscache.ComputeBlockVersion(lastBlock, params, ALGO_SCRYPT) & (1 << bit)) != 0);
+=======
+    BOOST_CHECK((versionbitscache.ComputeBlockVersion(lastBlock, params) & (1 << bit)) != 0);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // Mine another period worth of blocks, signaling the new bit.
     lastBlock = secondChain.Mine(params.nMinerConfirmationWindow * 2, nTime, VERSIONBITS_TOP_BITS | (1<<bit)).Tip();
     // After one period of setting the bit on each block, it should have locked in.
     // We keep setting the bit for one more period though, until activation.
+<<<<<<< HEAD
     BOOST_CHECK((g_versionbitscache.ComputeBlockVersion(lastBlock, params, ALGO_SCRYPT) & (1 << bit)) != 0);
+=======
+    BOOST_CHECK((versionbitscache.ComputeBlockVersion(lastBlock, params) & (1 << bit)) != 0);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // Now check that we keep mining the block until the end of this period, and
     // then stop at the beginning of the next period.
     lastBlock = secondChain.Mine((params.nMinerConfirmationWindow * 3) - 1, nTime, VERSIONBITS_LAST_OLD_BLOCK_VERSION).Tip();
+<<<<<<< HEAD
     BOOST_CHECK((g_versionbitscache.ComputeBlockVersion(lastBlock, params, ALGO_SCRYPT) & (1 << bit)) != 0);
+=======
+    BOOST_CHECK((versionbitscache.ComputeBlockVersion(lastBlock, params) & (1 << bit)) != 0);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     lastBlock = secondChain.Mine(params.nMinerConfirmationWindow * 3, nTime, VERSIONBITS_LAST_OLD_BLOCK_VERSION).Tip();
 
     if (lastBlock->nHeight + 1 < min_activation_height) {
         // check signalling continues while min_activation_height is not reached
         lastBlock = secondChain.Mine(min_activation_height - 1, nTime, VERSIONBITS_LAST_OLD_BLOCK_VERSION).Tip();
+<<<<<<< HEAD
         BOOST_CHECK((g_versionbitscache.ComputeBlockVersion(lastBlock, params, ALGO_SCRYPT) & (1 << bit)) != 0);
         // then reach min_activation_height, which was already REQUIRE'd to start a new period
         lastBlock = secondChain.Mine(min_activation_height + params.nMinerConfirmationWindow, nTime, VERSIONBITS_LAST_OLD_BLOCK_VERSION).Tip();
@@ -410,14 +504,32 @@ static void check_computeblockversion(const Consensus::Params& params, Consensus
 
     // Check that we don't signal after activation
     BOOST_CHECK_EQUAL(g_versionbitscache.ComputeBlockVersion(lastBlock, params, ALGO_SCRYPT) & (1 << bit), 0);
+=======
+        BOOST_CHECK((versionbitscache.ComputeBlockVersion(lastBlock, params) & (1 << bit)) != 0);
+        // then reach min_activation_height, which was already REQUIRE'd to start a new period
+        lastBlock = secondChain.Mine(min_activation_height, nTime, VERSIONBITS_LAST_OLD_BLOCK_VERSION).Tip();
+    }
+
+    // Check that we don't signal after activation
+    BOOST_CHECK_EQUAL(versionbitscache.ComputeBlockVersion(lastBlock, params) & (1 << bit), 0);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 BOOST_AUTO_TEST_CASE(versionbits_computeblockversion)
 {
+<<<<<<< HEAD
     // check that any deployment on any chain can conceivably reach both
     // ACTIVE and FAILED states in roughly the way we expect
     for (const auto& chain_name : {CBaseChainParams::MAIN, CBaseChainParams::TESTNET, CBaseChainParams::SIGNET, CBaseChainParams::REGTEST}) {
         const auto chainParams = CreateChainParams(*m_node.args, chain_name);
+=======
+    VersionBitsCache vbcache;
+
+    // check that any deployment on any chain can conceivably reach both
+    // ACTIVE and FAILED states in roughly the way we expect
+    for (const auto& chain_type: {ChainType::MAIN, ChainType::TESTNET, ChainType::SIGNET, ChainType::REGTEST}) {
+        const auto chainParams = CreateChainParams(*m_node.args, chain_type);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         uint32_t chain_all_vbits{0};
         for (int i = 0; i < (int)Consensus::MAX_VERSION_BITS_DEPLOYMENTS; ++i) {
             const auto dep = static_cast<Consensus::DeploymentPos>(i);
@@ -426,11 +538,18 @@ BOOST_AUTO_TEST_CASE(versionbits_computeblockversion)
             // not take precedence over STARTED/LOCKED_IN. So all softforks on
             // the same bit might overlap, even when non-overlapping start-end
             // times are picked.
+<<<<<<< HEAD
             const uint32_t dep_mask{g_versionbitscache.Mask(chainParams->GetConsensus(), dep)};
             BOOST_CHECK(!(chain_all_vbits & dep_mask));
             chain_all_vbits |= dep_mask;
 
             check_computeblockversion(chainParams->GetConsensus(), dep);
+=======
+            const uint32_t dep_mask{vbcache.Mask(chainParams->GetConsensus(), dep)};
+            BOOST_CHECK(!(chain_all_vbits & dep_mask));
+            chain_all_vbits |= dep_mask;
+            check_computeblockversion(vbcache, chainParams->GetConsensus(), dep);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
     }
 
@@ -439,8 +558,13 @@ BOOST_AUTO_TEST_CASE(versionbits_computeblockversion)
         // deployment that's not always/never active
         ArgsManager args;
         args.ForceSetArg("-vbparams", "testdummy:1199145601:1230767999"); // January 1, 2008 - December 31, 2008
+<<<<<<< HEAD
         const auto chainParams = CreateChainParams(args, CBaseChainParams::REGTEST);
         check_computeblockversion(chainParams->GetConsensus(), Consensus::DEPLOYMENT_TESTDUMMY);
+=======
+        const auto chainParams = CreateChainParams(args, ChainType::REGTEST);
+        check_computeblockversion(vbcache, chainParams->GetConsensus(), Consensus::DEPLOYMENT_TESTDUMMY);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     {
@@ -449,8 +573,13 @@ BOOST_AUTO_TEST_CASE(versionbits_computeblockversion)
         // live deployment
         ArgsManager args;
         args.ForceSetArg("-vbparams", "testdummy:1199145601:1230767999:403200"); // January 1, 2008 - December 31, 2008, min act height 403200
+<<<<<<< HEAD
         const auto chainParams = CreateChainParams(args, CBaseChainParams::REGTEST);
         check_computeblockversion(chainParams->GetConsensus(), Consensus::DEPLOYMENT_TESTDUMMY);
+=======
+        const auto chainParams = CreateChainParams(args, ChainType::REGTEST);
+        check_computeblockversion(vbcache, chainParams->GetConsensus(), Consensus::DEPLOYMENT_TESTDUMMY);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 }
 

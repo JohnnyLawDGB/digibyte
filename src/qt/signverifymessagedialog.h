@@ -1,5 +1,5 @@
-// Copyright (c) 2011-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
+// Copyright (c) 2011-2021 The Bitcoin Core developers
+// Copyright (c) 2014-2021 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -36,7 +36,7 @@ protected:
 
 private:
     Ui::SignVerifyMessageDialog *ui;
-    WalletModel *model;
+    WalletModel* model{nullptr};
     const PlatformStyle *platformStyle;
 
 private Q_SLOTS:

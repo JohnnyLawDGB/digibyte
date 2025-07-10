@@ -1,15 +1,39 @@
+<<<<<<< HEAD
 // Copyright (c) 2020 The DigiByte Core developers
+=======
+// Copyright (c) 2020-2021 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #ifndef DIGIBYTE_WALLET_CONTEXT_H
 #define DIGIBYTE_WALLET_CONTEXT_H
 
+<<<<<<< HEAD
 class ArgsManager;
 namespace interfaces {
 class Chain;
 } // namespace interfaces
 
+=======
+#include <sync.h>
+
+#include <functional>
+#include <list>
+#include <memory>
+#include <vector>
+
+class ArgsManager;
+namespace interfaces {
+class Chain;
+class Wallet;
+} // namespace interfaces
+
+namespace wallet {
+class CWallet;
+using LoadWalletFn = std::function<void(std::unique_ptr<interfaces::Wallet> wallet)>;
+
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 //! WalletContext struct containing references to state shared between CWallet
 //! instances, like the reference to the chain interface, and the list of opened
 //! wallets.
@@ -22,7 +46,16 @@ class Chain;
 //! behavior.
 struct WalletContext {
     interfaces::Chain* chain{nullptr};
+<<<<<<< HEAD
     ArgsManager* args{nullptr};
+=======
+    ArgsManager* args{nullptr}; // Currently a raw pointer because the memory is not managed by this struct
+    // It is unsafe to lock this after locking a CWallet::cs_wallet mutex because
+    // this could introduce inconsistent lock ordering and cause deadlocks.
+    Mutex wallets_mutex;
+    std::vector<std::shared_ptr<CWallet>> wallets GUARDED_BY(wallets_mutex);
+    std::list<LoadWalletFn> wallet_load_fns GUARDED_BY(wallets_mutex);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     //! Declare default constructor and destructor that are not inline, so code
     //! instantiating the WalletContext struct doesn't need to #include class
@@ -30,5 +63,9 @@ struct WalletContext {
     WalletContext();
     ~WalletContext();
 };
+<<<<<<< HEAD
+=======
+} // namespace wallet
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 #endif // DIGIBYTE_WALLET_CONTEXT_H

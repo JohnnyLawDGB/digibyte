@@ -45,14 +45,23 @@ CSipHasher& CSipHasher::Write(uint64_t data)
     return *this;
 }
 
+<<<<<<< HEAD
 CSipHasher& CSipHasher::Write(const unsigned char* data, size_t size)
+=======
+CSipHasher& CSipHasher::Write(Span<const unsigned char> data)
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     uint64_t v0 = v[0], v1 = v[1], v2 = v[2], v3 = v[3];
     uint64_t t = tmp;
     uint8_t c = count;
 
+<<<<<<< HEAD
     while (size--) {
         t |= ((uint64_t)(*(data++))) << (8 * (c % 8));
+=======
+    while (data.size() > 0) {
+        t |= uint64_t{data.front()} << (8 * (c % 8));
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         c++;
         if ((c & 7) == 0) {
             v3 ^= t;
@@ -61,6 +70,10 @@ CSipHasher& CSipHasher::Write(const unsigned char* data, size_t size)
             v0 ^= t;
             t = 0;
         }
+<<<<<<< HEAD
+=======
+        data = data.subspan(1);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     v[0] = v0;
@@ -119,10 +132,17 @@ uint64_t SipHashUint256(uint64_t k0, uint64_t k1, const uint256& val)
     SIPROUND;
     SIPROUND;
     v0 ^= d;
+<<<<<<< HEAD
     v3 ^= ((uint64_t)4) << 59;
     SIPROUND;
     SIPROUND;
     v0 ^= ((uint64_t)4) << 59;
+=======
+    v3 ^= (uint64_t{4}) << 59;
+    SIPROUND;
+    SIPROUND;
+    v0 ^= (uint64_t{4}) << 59;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     v2 ^= 0xFF;
     SIPROUND;
     SIPROUND;
@@ -159,7 +179,11 @@ uint64_t SipHashUint256Extra(uint64_t k0, uint64_t k1, const uint256& val, uint3
     SIPROUND;
     SIPROUND;
     v0 ^= d;
+<<<<<<< HEAD
     d = (((uint64_t)36) << 56) | extra;
+=======
+    d = ((uint64_t{36}) << 56) | extra;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     v3 ^= d;
     SIPROUND;
     SIPROUND;

@@ -1,5 +1,9 @@
+<<<<<<< HEAD
 // Copyright (c) 2016-2020 The Bitcoin Core developers
 // Copyright (c) 2016-2020 The DigiByte Core developers
+=======
+// Copyright (c) 2016-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -9,7 +13,11 @@
 #include <script/digibyteconsensus.h>
 #endif
 #include <script/script.h>
+<<<<<<< HEAD
 #include <script/standard.h>
+=======
+#include <script/interpreter.h>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <streams.h>
 #include <test/util/transaction_utils.h>
 
@@ -19,10 +27,16 @@
 // modified to measure performance of other types of scripts.
 static void VerifyScriptBench(benchmark::Bench& bench)
 {
+<<<<<<< HEAD
     const ECCVerifyHandle verify_handle;
     ECC_Start();
 
     const int flags = SCRIPT_VERIFY_WITNESS | SCRIPT_VERIFY_P2SH;
+=======
+    ECC_Start();
+
+    const uint32_t flags{SCRIPT_VERIFY_WITNESS | SCRIPT_VERIFY_P2SH};
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     const int witnessversion = 0;
 
     // Key pair.
@@ -97,5 +111,10 @@ static void VerifyNestedIfScript(benchmark::Bench& bench)
     });
 }
 
+<<<<<<< HEAD
 BENCHMARK(VerifyScriptBench);
 BENCHMARK(VerifyNestedIfScript);
+=======
+BENCHMARK(VerifyScriptBench, benchmark::PriorityLevel::HIGH);
+BENCHMARK(VerifyNestedIfScript, benchmark::PriorityLevel::HIGH);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion

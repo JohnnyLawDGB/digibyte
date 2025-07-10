@@ -11,13 +11,13 @@ Please report bugs using the issue tracker at GitHub:
 
 To receive security and update notifications, please subscribe to:
 
-  <https://digibyte.org/en/list/announcements/join/>
+  <https://digibytecore.org/en/list/announcements/join/>
 
 How to Upgrade
 ==============
 
 If you are running an older version, shut it down. Wait until it has completely
-shut down (which might take a few minutes for older versions), then run the 
+shut down (which might take a few minutes for older versions), then run the
 installer (on Windows) or just copy over `/Applications/DigiByte-Qt` (on Mac)
 or `digibyted`/`digibyte-qt` (on Linux).
 
@@ -634,7 +634,7 @@ Low-level RPC changes
 - #10415 `217b416` [tests] Speed up fuzzing by ~200x when using afl-fuzz (practicalswift)
 - #10445 `b4b057a` Add test for empty chain and reorg consistency for gettxoutsetinfo (gmaxwell)
 - #10423 `1aefc94` [tests] skipped tests should clean up after themselves (jnewbery)
-- #10359 `329fc1d` [tests] functional tests should call DigiByteTestFramework start/stop node methods (jnewbery)
+- #10359 `329fc1d` [tests] functional tests should call BitcoinTestFramework start/stop node methods (jnewbery)
 - #10514 `e103b3f` Bugfix: missing == 0 after randrange (sipa)
 - #10515 `c871f32` [test] Add test for getchaintxstats (jimmysong)
 - #10509 `bea5b00` Remove xvfb configuration from travis (ryanofsky)
@@ -653,7 +653,7 @@ Low-level RPC changes
 - #10612 `7c87a9c` The young person's guide to the test_framework (jnewbery)
 - #10659 `acb1153` [qa] blockchain: Pass on closed connection during generate call (MarcoFalke)
 - #10690 `416af3e` [qa] Bugfix: allow overriding extra_args in ComparisonTestFramework (sdaftuar)
-- #10556 `65cc7aa` Move stop/start functions from utils.py into DigiByteTestFramework (jnewbery)
+- #10556 `65cc7aa` Move stop/start functions from utils.py into BitcoinTestFramework (jnewbery)
 - #10704 `dd07f47` [tests] nits in dbcrash.py (jnewbery)
 - #10743 `be82498` [test] don't run dbcrash.py on Travis (jnewbery)
 - #10761 `d3b5870` [tests] fix replace_by_fee.py (jnewbery)
@@ -740,7 +740,7 @@ Low-level RPC changes
 - #10728 `7397af9` fix typo in help text for removeprunedfunds (AkioNak)
 - #10193 `6dbcc74` scripted-diff: Remove #include <boost/foreach.hpp> (jtimon)
 - #10676 `379aed0` document script-based return fields for validateaddress (instagibbs)
-- #10651 `cef4b5c` Verify binaries from digibyte.org and digibyte.org (TheBlueMatt)
+- #10651 `cef4b5c` Verify binaries from digibytecore.org and digibyte.org (TheBlueMatt)
 - #10786 `ca4c545` Add PR description to merge commit in github-merge.py (sipa)
 - #10812 `c5904e8` [utils] Allow digibyte-cli's -rpcconnect option to be used with square brackets (jnewbery)
 - #10842 `3895e25` Fix incorrect Doxygen tag (@ince → @since). Doxygen parameter name matching (practicalswift)

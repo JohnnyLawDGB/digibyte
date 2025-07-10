@@ -1,5 +1,9 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
+<<<<<<< HEAD
 // Copyright (c) 2009-2020 The DigiByte Core developers
+=======
+// Copyright (c) 2009-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -9,11 +13,20 @@
 
 #include <chainparams.h>
 #include <clientversion.h>
+<<<<<<< HEAD
 #include <compat.h>
+=======
+#include <common/args.h>
+#include <common/init.h>
+#include <common/system.h>
+#include <common/url.h>
+#include <compat/compat.h>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <init.h>
 #include <interfaces/chain.h>
 #include <interfaces/init.h>
 #include <node/context.h>
+<<<<<<< HEAD
 #include <node/ui_interface.h>
 #include <noui.h>
 #include <shutdown.h>
@@ -24,11 +37,28 @@
 #include <util/tokenpipe.h>
 #include <util/translation.h>
 #include <util/url.h>
+=======
+#include <node/interface_ui.h>
+#include <noui.h>
+#include <shutdown.h>
+#include <util/check.h>
+#include <util/exception.h>
+#include <util/strencodings.h>
+#include <util/syserror.h>
+#include <util/threadnames.h>
+#include <util/tokenpipe.h>
+#include <util/translation.h>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 #include <any>
 #include <functional>
 #include <optional>
 
+<<<<<<< HEAD
+=======
+using node::NodeContext;
+
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 const std::function<std::string(const char*)> G_TRANSLATION_FUN = nullptr;
 UrlDecodeFn* const URL_DECODE = urlDecode;
 
@@ -105,6 +135,7 @@ int fork_daemon(bool nochdir, bool noclose, TokenPipeEnd& endpoint)
 
 #endif
 
+<<<<<<< HEAD
 static bool AppInit(NodeContext& node, int argc, char* argv[])
 {
     bool fRet = false;
@@ -119,13 +150,46 @@ static bool AppInit(NodeContext& node, int argc, char* argv[])
         return InitError(Untranslated(strprintf("Error parsing command line arguments: %s\n", error)));
     }
 
+=======
+static bool ParseArgs(ArgsManager& args, int argc, char* argv[])
+{
+    // If Qt is used, parameters/digibyte.conf are parsed in qt/digibyte.cpp's main()
+    SetupServerArgs(args);
+    std::string error;
+    if (!args.ParseParameters(argc, argv, error)) {
+        return InitError(Untranslated(strprintf("Error parsing command line arguments: %s", error)));
+    }
+
+    if (auto error = common::InitConfig(args)) {
+        return InitError(error->message, error->details);
+    }
+
+    // Error out when loose non-argument tokens are encountered on command line
+    for (int i = 1; i < argc; i++) {
+        if (!IsSwitchChar(argv[i][0])) {
+            return InitError(Untranslated(strprintf("Command line contains unexpected token '%s', see digibyted -h for a list of options.", argv[i])));
+        }
+    }
+    return true;
+}
+
+static bool ProcessInitCommands(ArgsManager& args)
+{
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     // Process help and version before taking care about datadir
     if (HelpRequested(args) || args.IsArgSet("-version")) {
         std::string strUsage = PACKAGE_NAME " version " + FormatFullVersion() + "\n";
 
+<<<<<<< HEAD
         if (!args.IsArgSet("-version")) {
             strUsage += FormatParagraph(LicenseInfo()) + "\n"
                 "\nUsage:  digibyted [options]                     Start " PACKAGE_NAME "\n"
+=======
+        if (args.IsArgSet("-version")) {
+            strUsage += FormatParagraph(LicenseInfo());
+        } else {
+            strUsage += "\nUsage:  digibyted [options]                     Start " PACKAGE_NAME "\n"
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 "\n";
             strUsage += args.GetHelpMessage();
         }
@@ -134,6 +198,17 @@ static bool AppInit(NodeContext& node, int argc, char* argv[])
         return true;
     }
 
+<<<<<<< HEAD
+=======
+    return false;
+}
+
+static bool AppInit(NodeContext& node)
+{
+    bool fRet = false;
+    ArgsManager& args = *Assert(node.args);
+
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #if HAVE_DECL_FORK
     // Communication with parent after daemonizing. This is used for signalling in the following ways:
     // - a boolean token is sent when the initialization process (all the Init* functions) have finished to indicate
@@ -145,6 +220,7 @@ static bool AppInit(NodeContext& node, int argc, char* argv[])
     std::any context{&node};
     try
     {
+<<<<<<< HEAD
         if (!CheckDataDirOption()) {
             return InitError(Untranslated(strprintf("Specified data directory \"%s\" does not exist.\n", args.GetArg("-datadir", ""))));
         }
@@ -170,12 +246,18 @@ static bool AppInit(NodeContext& node, int argc, char* argv[])
             return false;
         }
 
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         // -server defaults to true for digibyted but not for the GUI so do this here
         args.SoftSetBoolArg("-server", true);
         // Set this early so that parameter interactions go to console
         InitLogging(args);
         InitParameterInteraction(args);
+<<<<<<< HEAD
         if (!AppInitBasicSetup(args)) {
+=======
+        if (!AppInitBasicSetup(args, node.exit_status)) {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             // InitError will have been called with detailed error, which ends up on console
             return false;
         }
@@ -183,11 +265,21 @@ static bool AppInit(NodeContext& node, int argc, char* argv[])
             // InitError will have been called with detailed error, which ends up on console
             return false;
         }
+<<<<<<< HEAD
         if (!AppInitSanityChecks())
+=======
+
+        node.kernel = std::make_unique<kernel::Context>();
+        if (!AppInitSanityChecks(*node.kernel))
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         {
             // InitError will have been called with detailed error, which ends up on console
             return false;
         }
+<<<<<<< HEAD
+=======
+
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         if (args.GetBoolArg("-daemon", DEFAULT_DAEMON) || args.GetBoolArg("-daemonwait", DEFAULT_DAEMONWAIT)) {
 #if HAVE_DECL_FORK
             tfm::format(std::cout, PACKAGE_NAME " starting\n");
@@ -202,19 +294,31 @@ static bool AppInit(NodeContext& node, int argc, char* argv[])
                 }
                 break;
             case -1: // Error happened.
+<<<<<<< HEAD
                 return InitError(Untranslated(strprintf("fork_daemon() failed: %s\n", strerror(errno))));
+=======
+                return InitError(Untranslated(strprintf("fork_daemon() failed: %s", SysErrorString(errno))));
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             default: { // Parent: wait and exit.
                 int token = daemon_ep.TokenRead();
                 if (token) { // Success
                     exit(EXIT_SUCCESS);
                 } else { // fRet = false or token read error (premature exit).
+<<<<<<< HEAD
                     tfm::format(std::cerr, "Error during initializaton - check debug.log for details\n");
+=======
+                    tfm::format(std::cerr, "Error during initialization - check debug.log for details\n");
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                     exit(EXIT_FAILURE);
                 }
             }
             }
 #else
+<<<<<<< HEAD
             return InitError(Untranslated("-daemon is not supported on this operating system\n"));
+=======
+            return InitError(Untranslated("-daemon is not supported on this operating system"));
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #endif // HAVE_DECL_FORK
         }
         // Lock data directory after daemonization
@@ -238,6 +342,7 @@ static bool AppInit(NodeContext& node, int argc, char* argv[])
         daemon_ep.Close();
     }
 #endif
+<<<<<<< HEAD
     if (fRet) {
         WaitForShutdown();
     }
@@ -251,6 +356,15 @@ int main(int argc, char* argv[])
 {
 #ifdef WIN32
     util::WinCmdLineArgs winArgs;
+=======
+    return fRet;
+}
+
+MAIN_FUNCTION
+{
+#ifdef WIN32
+    common::WinCmdLineArgs winArgs;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     std::tie(argc, argv) = winArgs.get();
 #endif
 
@@ -266,5 +380,26 @@ int main(int argc, char* argv[])
     // Connect digibyted signal handlers
     noui_connect();
 
+<<<<<<< HEAD
     return (AppInit(node, argc, argv) ? EXIT_SUCCESS : EXIT_FAILURE);
+=======
+    util::ThreadSetInternalName("init");
+
+    // Interpret command line arguments
+    ArgsManager& args = *Assert(node.args);
+    if (!ParseArgs(args, argc, argv)) return EXIT_FAILURE;
+    // Process early info return commands such as -help or -version
+    if (ProcessInitCommands(args)) return EXIT_SUCCESS;
+
+    // Start application
+    if (AppInit(node)) {
+        WaitForShutdown();
+    } else {
+        node.exit_status = EXIT_FAILURE;
+    }
+    Interrupt(node);
+    Shutdown(node);
+
+    return node.exit_status;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }

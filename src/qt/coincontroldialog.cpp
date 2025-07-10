@@ -1,5 +1,9 @@
+<<<<<<< HEAD
 // Copyright (c) 2011-2020 The Bitcoin Core developers
 // Copyright (c) 2013-2021 The DigiByte Core developers
+=======
+// Copyright (c) 2011-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -17,10 +21,14 @@
 #include <qt/platformstyle.h>
 #include <qt/walletmodel.h>
 
-#include <wallet/coincontrol.h>
 #include <interfaces/node.h>
 #include <key_io.h>
 #include <policy/policy.h>
+<<<<<<< HEAD
+=======
+#include <wallet/coincontrol.h>
+#include <wallet/coinselection.h>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <wallet/wallet.h>
 
 #include <QApplication>
@@ -31,6 +39,8 @@
 #include <QIcon>
 #include <QSettings>
 #include <QTreeWidget>
+
+using wallet::CCoinControl;
 
 QList<CAmount> CoinControlDialog::payAmounts;
 bool CoinControlDialog::fSubtractFeeFromAmount = false;
@@ -56,7 +66,11 @@ CoinControlDialog::CoinControlDialog(CCoinControl& coin_control, WalletModel* _m
     contextMenu->addAction(tr("&Copy address"), this, &CoinControlDialog::copyAddress);
     contextMenu->addAction(tr("Copy &label"), this, &CoinControlDialog::copyLabel);
     contextMenu->addAction(tr("Copy &amount"), this, &CoinControlDialog::copyAmount);
+<<<<<<< HEAD
     copyTransactionHashAction = contextMenu->addAction(tr("Copy transaction &ID"), this, &CoinControlDialog::copyTransactionHash);
+=======
+    m_copy_transaction_outpoint_action = contextMenu->addAction(tr("Copy transaction &ID and output index"), this, &CoinControlDialog::copyTransactionOutpoint);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     contextMenu->addSeparator();
     lockAction = contextMenu->addAction(tr("L&ock unspent"), this, &CoinControlDialog::lockCoin);
     unlockAction = contextMenu->addAction(tr("&Unlock unspent"), this, &CoinControlDialog::unlockCoin);
@@ -68,7 +82,6 @@ CoinControlDialog::CoinControlDialog(CCoinControl& coin_control, WalletModel* _m
     QAction *clipboardFeeAction = new QAction(tr("Copy fee"), this);
     QAction *clipboardAfterFeeAction = new QAction(tr("Copy after fee"), this);
     QAction *clipboardBytesAction = new QAction(tr("Copy bytes"), this);
-    QAction *clipboardLowOutputAction = new QAction(tr("Copy dust"), this);
     QAction *clipboardChangeAction = new QAction(tr("Copy change"), this);
 
     connect(clipboardQuantityAction, &QAction::triggered, this, &CoinControlDialog::clipboardQuantity);
@@ -76,7 +89,10 @@ CoinControlDialog::CoinControlDialog(CCoinControl& coin_control, WalletModel* _m
     connect(clipboardFeeAction, &QAction::triggered, this, &CoinControlDialog::clipboardFee);
     connect(clipboardAfterFeeAction, &QAction::triggered, this, &CoinControlDialog::clipboardAfterFee);
     connect(clipboardBytesAction, &QAction::triggered, this, &CoinControlDialog::clipboardBytes);
+<<<<<<< HEAD
     connect(clipboardLowOutputAction, &QAction::triggered, this, &CoinControlDialog::clipboardLowOutput);
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     connect(clipboardChangeAction, &QAction::triggered, this, &CoinControlDialog::clipboardChange);
 
     ui->labelCoinControlQuantity->addAction(clipboardQuantityAction);
@@ -84,7 +100,6 @@ CoinControlDialog::CoinControlDialog(CCoinControl& coin_control, WalletModel* _m
     ui->labelCoinControlFee->addAction(clipboardFeeAction);
     ui->labelCoinControlAfterFee->addAction(clipboardAfterFeeAction);
     ui->labelCoinControlBytes->addAction(clipboardBytesAction);
-    ui->labelCoinControlLowOutput->addAction(clipboardLowOutputAction);
     ui->labelCoinControlChange->addAction(clipboardChangeAction);
 
     // toggle tree/list mode
@@ -181,7 +196,11 @@ void CoinControlDialog::showMenu(const QPoint &point)
         // disable some items (like Copy Transaction ID, lock, unlock) for tree roots in context menu
         if (item->data(COLUMN_ADDRESS, TxHashRole).toString().length() == 64) // transaction hash is 64 characters (this means it is a child node, so it is not a parent node in tree mode)
         {
+<<<<<<< HEAD
             copyTransactionHashAction->setEnabled(true);
+=======
+            m_copy_transaction_outpoint_action->setEnabled(true);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             if (model->wallet().isLockedCoin(COutPoint(uint256S(item->data(COLUMN_ADDRESS, TxHashRole).toString().toStdString()), item->data(COLUMN_ADDRESS, VOutRole).toUInt())))
             {
                 lockAction->setEnabled(false);
@@ -195,7 +214,7 @@ void CoinControlDialog::showMenu(const QPoint &point)
         }
         else // this means click on parent node in tree mode -> disable all
         {
-            copyTransactionHashAction->setEnabled(false);
+            m_copy_transaction_outpoint_action->setEnabled(false);
             lockAction->setEnabled(false);
             unlockAction->setEnabled(false);
         }
@@ -229,10 +248,18 @@ void CoinControlDialog::copyAddress()
         GUIUtil::setClipboard(contextMenuItem->text(COLUMN_ADDRESS));
 }
 
-// context menu action: copy transaction id
-void CoinControlDialog::copyTransactionHash()
+// context menu action: copy transaction id and vout index
+void CoinControlDialog::copyTransactionOutpoint()
 {
+<<<<<<< HEAD
     GUIUtil::setClipboard(contextMenuItem->data(COLUMN_ADDRESS, TxHashRole).toString());
+=======
+    const QString address = contextMenuItem->data(COLUMN_ADDRESS, TxHashRole).toString();
+    const QString vout = contextMenuItem->data(COLUMN_ADDRESS, VOutRole).toString();
+    const QString outpoint = QString("%1:%2").arg(address).arg(vout);
+
+    GUIUtil::setClipboard(outpoint);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 // context menu action: lock coin
@@ -242,7 +269,11 @@ void CoinControlDialog::lockCoin()
         contextMenuItem->setCheckState(COLUMN_CHECKBOX, Qt::Unchecked);
 
     COutPoint outpt(uint256S(contextMenuItem->data(COLUMN_ADDRESS, TxHashRole).toString().toStdString()), contextMenuItem->data(COLUMN_ADDRESS, VOutRole).toUInt());
+<<<<<<< HEAD
     model->wallet().lockCoin(outpt);
+=======
+    model->wallet().lockCoin(outpt, /* write_to_db = */ true);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     contextMenuItem->setDisabled(true);
     contextMenuItem->setIcon(COLUMN_CHECKBOX, platformStyle->SingleColorIcon(":/icons/lock_closed"));
     updateLabelLocked();
@@ -286,12 +317,6 @@ void CoinControlDialog::clipboardAfterFee()
 void CoinControlDialog::clipboardBytes()
 {
     GUIUtil::setClipboard(ui->labelCoinControlBytes->text().replace(ASYMP_UTF8, ""));
-}
-
-// copy label "Dust" to clipboard
-void CoinControlDialog::clipboardLowOutput()
-{
-    GUIUtil::setClipboard(ui->labelCoinControlLowOutput->text());
 }
 
 // copy label "Change" to clipboard
@@ -384,6 +409,7 @@ void CoinControlDialog::updateLabels(CCoinControl& m_coin_control, WalletModel *
 
     // nPayAmount
     CAmount nPayAmount = 0;
+<<<<<<< HEAD
     bool fDust = false;
     for (const CAmount &amount : CoinControlDialog::payAmounts)
     {
@@ -395,6 +421,10 @@ void CoinControlDialog::updateLabels(CCoinControl& m_coin_control, WalletModel *
             CTxOut txout(amount, CScript() << std::vector<unsigned char>(24, 0));
             fDust |= IsDust(txout, model->node().getDustRelayFee());
         }
+=======
+    for (const CAmount &amount : CoinControlDialog::payAmounts) {
+        nPayAmount += amount;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     CAmount nAmount             = 0;
@@ -406,8 +436,12 @@ void CoinControlDialog::updateLabels(CCoinControl& m_coin_control, WalletModel *
     unsigned int nQuantity      = 0;
     bool fWitness               = false;
 
+<<<<<<< HEAD
     std::vector<COutPoint> vCoinControl;
     m_coin_control.ListSelected(vCoinControl);
+=======
+    auto vCoinControl{m_coin_control.ListSelected()};
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     size_t i = 0;
     for (const auto& out : model->wallet().getCoins(vCoinControl)) {
@@ -434,7 +468,19 @@ void CoinControlDialog::updateLabels(CCoinControl& m_coin_control, WalletModel *
         std::vector<unsigned char> witnessprogram;
         if (out.txout.scriptPubKey.IsWitnessProgram(witnessversion, witnessprogram))
         {
-            nBytesInputs += (32 + 4 + 1 + (107 / WITNESS_SCALE_FACTOR) + 4);
+            // add input skeleton bytes (outpoint, scriptSig size, nSequence)
+            nBytesInputs += (32 + 4 + 1 + 4);
+
+            if (witnessversion == 0) { // P2WPKH
+                // 1 WU (witness item count) + 72 WU (ECDSA signature with len byte) + 34 WU (pubkey with len byte)
+                nBytesInputs += 107 / WITNESS_SCALE_FACTOR;
+            } else if (witnessversion == 1) { // P2TR key-path spend
+                // 1 WU (witness item count) + 65 WU (Schnorr signature with len byte)
+                nBytesInputs += 66 / WITNESS_SCALE_FACTOR;
+            } else {
+                // not supported, should be unreachable
+                throw std::runtime_error("Trying to spend future segwit version script");
+            }
             fWitness = true;
         }
         else if(ExtractDestination(out.txout.scriptPubKey, address))
@@ -471,7 +517,11 @@ void CoinControlDialog::updateLabels(CCoinControl& m_coin_control, WalletModel *
                 nBytes -= 34;
 
         // Fee
+<<<<<<< HEAD
         nPayFee = model->wallet().getMinimumFee(nBytes, m_coin_control, nullptr /* returned_target */, nullptr /* reason */);
+=======
+        nPayFee = model->wallet().getMinimumFee(nBytes, m_coin_control, /*returned_target=*/nullptr, /*reason=*/nullptr);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         if (nPayAmount > 0)
         {
@@ -479,11 +529,18 @@ void CoinControlDialog::updateLabels(CCoinControl& m_coin_control, WalletModel *
             if (!CoinControlDialog::fSubtractFeeFromAmount)
                 nChange -= nPayFee;
 
+<<<<<<< HEAD
             // Never create dust outputs; if we would, just add the dust to the fee.
             if (nChange > 0 && nChange < MIN_CHANGE)
             {
                 // Assumes a p2pkh script size
                 CTxOut txout(nChange, CScript() << std::vector<unsigned char>(24, 0));
+=======
+            if (nChange > 0) {
+                // Assumes a p2pkh script size
+                CTxOut txout(nChange, CScript() << std::vector<unsigned char>(24, 0));
+                // Never create dust outputs; if we would, just add the dust to the fee.
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 if (IsDust(txout, model->node().getDustRelayFee()))
                 {
                     nPayFee += nChange;
@@ -502,7 +559,11 @@ void CoinControlDialog::updateLabels(CCoinControl& m_coin_control, WalletModel *
     }
 
     // actually update labels
+<<<<<<< HEAD
     int nDisplayUnit = DigiByteUnits::DGB;
+=======
+    DigiByteUnit nDisplayUnit = DigiByteUnit::DGB;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (model && model->getOptionsModel())
         nDisplayUnit = model->getOptionsModel()->getDisplayUnit();
 
@@ -511,12 +572,9 @@ void CoinControlDialog::updateLabels(CCoinControl& m_coin_control, WalletModel *
     QLabel *l3 = dialog->findChild<QLabel *>("labelCoinControlFee");
     QLabel *l4 = dialog->findChild<QLabel *>("labelCoinControlAfterFee");
     QLabel *l5 = dialog->findChild<QLabel *>("labelCoinControlBytes");
-    QLabel *l7 = dialog->findChild<QLabel *>("labelCoinControlLowOutput");
     QLabel *l8 = dialog->findChild<QLabel *>("labelCoinControlChange");
 
-    // enable/disable "dust" and "change"
-    dialog->findChild<QLabel *>("labelCoinControlLowOutputText")->setEnabled(nPayAmount > 0);
-    dialog->findChild<QLabel *>("labelCoinControlLowOutput")    ->setEnabled(nPayAmount > 0);
+    // enable/disable "change"
     dialog->findChild<QLabel *>("labelCoinControlChangeText")   ->setEnabled(nPayAmount > 0);
     dialog->findChild<QLabel *>("labelCoinControlChange")       ->setEnabled(nPayAmount > 0);
 
@@ -526,7 +584,10 @@ void CoinControlDialog::updateLabels(CCoinControl& m_coin_control, WalletModel *
     l3->setText(DigiByteUnits::formatWithUnit(nDisplayUnit, nPayFee));        // Fee
     l4->setText(DigiByteUnits::formatWithUnit(nDisplayUnit, nAfterFee));      // After Fee
     l5->setText(((nBytes > 0) ? ASYMP_UTF8 : "") + QString::number(nBytes));        // Bytes
+<<<<<<< HEAD
     l7->setText(fDust ? tr("yes") : tr("no"));                               // Dust
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     l8->setText(DigiByteUnits::formatWithUnit(nDisplayUnit, nChange));        // Change
     if (nPayFee > 0)
     {
@@ -536,12 +597,6 @@ void CoinControlDialog::updateLabels(CCoinControl& m_coin_control, WalletModel *
             l8->setText(ASYMP_UTF8 + l8->text());
     }
 
-    // turn label red when dust
-    l7->setStyleSheet((fDust) ? "color:red;" : "");
-
-    // tool tips
-    QString toolTipDust = tr("This label turns red if any recipient receives an amount smaller than the current dust threshold.");
-
     // how many satoshis the estimated fee can vary per byte we guess wrong
     double dFeeVary = (nBytes != 0) ? (double)nPayFee / nBytes : 0;
 
@@ -549,12 +604,10 @@ void CoinControlDialog::updateLabels(CCoinControl& m_coin_control, WalletModel *
 
     l3->setToolTip(toolTip4);
     l4->setToolTip(toolTip4);
-    l7->setToolTip(toolTipDust);
     l8->setToolTip(toolTip4);
     dialog->findChild<QLabel *>("labelCoinControlFeeText")      ->setToolTip(l3->toolTip());
     dialog->findChild<QLabel *>("labelCoinControlAfterFeeText") ->setToolTip(l4->toolTip());
     dialog->findChild<QLabel *>("labelCoinControlBytesText")    ->setToolTip(l5->toolTip());
-    dialog->findChild<QLabel *>("labelCoinControlLowOutputText")->setToolTip(l7->toolTip());
     dialog->findChild<QLabel *>("labelCoinControlChangeText")   ->setToolTip(l8->toolTip());
 
     // Insufficient funds
@@ -583,9 +636,9 @@ void CoinControlDialog::updateView()
     ui->treeWidget->setEnabled(false); // performance, otherwise updateLabels would be called for every checked checkbox
     ui->treeWidget->setAlternatingRowColors(!treeMode);
     QFlags<Qt::ItemFlag> flgCheckbox = Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemIsUserCheckable;
-    QFlags<Qt::ItemFlag> flgTristate = Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemIsUserCheckable | Qt::ItemIsTristate;
+    QFlags<Qt::ItemFlag> flgTristate = Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemIsUserCheckable | Qt::ItemIsAutoTristate;
 
-    int nDisplayUnit = model->getOptionsModel()->getDisplayUnit();
+    DigiByteUnit nDisplayUnit = model->getOptionsModel()->getDisplayUnit();
 
     for (const auto& coins : model->wallet().listCoins()) {
         CCoinControlWidgetItem* itemWalletAddress{nullptr};

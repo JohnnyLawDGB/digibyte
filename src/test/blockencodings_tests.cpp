@@ -1,5 +1,9 @@
+<<<<<<< HEAD
 // Copyright (c) 2009-2020 The Bitcoin Core developers
 // Copyright (c) 2014-2020 The DigiByte Core developers
+=======
+// Copyright (c) 2011-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -8,6 +12,11 @@
 #include <consensus/merkle.h>
 #include <pow.h>
 #include <streams.h>
+<<<<<<< HEAD
+=======
+#include <test/util/random.h>
+#include <test/util/txmempool.h>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 #include <test/util/setup_common.h>
 
@@ -55,7 +64,7 @@ constexpr long SHARED_TX_OFFSET{3};
 
 BOOST_AUTO_TEST_CASE(SimpleRoundTripTest)
 {
-    CTxMemPool pool;
+    CTxMemPool& pool = *Assert(m_node.mempool);
     TestMemPoolEntryHelper entry;
     CBlock block(BuildBlockTestCase());
 
@@ -65,7 +74,7 @@ BOOST_AUTO_TEST_CASE(SimpleRoundTripTest)
 
     // Do a simple ShortTxIDs RT
     {
-        CBlockHeaderAndShortTxIDs shortIDs(block, true);
+        CBlockHeaderAndShortTxIDs shortIDs{block};
 
         CDataStream stream(SER_NETWORK, PROTOCOL_VERSION);
         stream << shortIDs;
@@ -123,7 +132,7 @@ public:
         stream >> *this;
     }
     explicit TestHeaderAndShortIDs(const CBlock& block) :
-        TestHeaderAndShortIDs(CBlockHeaderAndShortTxIDs(block, true)) {}
+        TestHeaderAndShortIDs(CBlockHeaderAndShortTxIDs{block}) {}
 
     uint64_t GetShortID(const uint256& txhash) const {
         CDataStream stream(SER_NETWORK, PROTOCOL_VERSION);
@@ -138,7 +147,7 @@ public:
 
 BOOST_AUTO_TEST_CASE(NonCoinbasePreforwardRTTest)
 {
-    CTxMemPool pool;
+    CTxMemPool& pool = *Assert(m_node.mempool);
     TestMemPoolEntryHelper entry;
     CBlock block(BuildBlockTestCase());
 
@@ -208,7 +217,7 @@ BOOST_AUTO_TEST_CASE(NonCoinbasePreforwardRTTest)
 
 BOOST_AUTO_TEST_CASE(SufficientPreforwardRTTest)
 {
-    CTxMemPool pool;
+    CTxMemPool& pool = *Assert(m_node.mempool);
     TestMemPoolEntryHelper entry;
     CBlock block(BuildBlockTestCase());
 
@@ -259,7 +268,7 @@ BOOST_AUTO_TEST_CASE(SufficientPreforwardRTTest)
 
 BOOST_AUTO_TEST_CASE(EmptyBlockRoundTripTest)
 {
-    CTxMemPool pool;
+    CTxMemPool& pool = *Assert(m_node.mempool);
     CMutableTransaction coinbase;
     coinbase.vin.resize(1);
     coinbase.vin[0].scriptSig.resize(10);
@@ -280,7 +289,7 @@ BOOST_AUTO_TEST_CASE(EmptyBlockRoundTripTest)
 
     // Test simple header round-trip with only coinbase
     {
-        CBlockHeaderAndShortTxIDs shortIDs(block, false);
+        CBlockHeaderAndShortTxIDs shortIDs{block};
 
         CDataStream stream(SER_NETWORK, PROTOCOL_VERSION);
         stream << shortIDs;
@@ -310,7 +319,7 @@ BOOST_AUTO_TEST_CASE(TransactionsRequestSerializationTest) {
     req1.indexes[2] = 3;
     req1.indexes[3] = 4;
 
-    CDataStream stream(SER_NETWORK, PROTOCOL_VERSION);
+    DataStream stream{};
     stream << req1;
 
     BlockTransactionsRequest req2;
@@ -330,7 +339,11 @@ BOOST_AUTO_TEST_CASE(TransactionsRequestDeserializationMaxTest) {
     req0.blockhash = InsecureRand256();
     req0.indexes.resize(1);
     req0.indexes[0] = 0xffff;
+<<<<<<< HEAD
     CDataStream stream(SER_NETWORK, PROTOCOL_VERSION);
+=======
+    DataStream stream{};
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     stream << req0;
 
     BlockTransactionsRequest req1;
@@ -350,7 +363,11 @@ BOOST_AUTO_TEST_CASE(TransactionsRequestDeserializationOverflowTest) {
     req0.indexes[0] = 0x7000;
     req0.indexes[1] = 0x10000 - 0x7000 - 2;
     req0.indexes[2] = 0;
+<<<<<<< HEAD
     CDataStream stream(SER_NETWORK, PROTOCOL_VERSION);
+=======
+    DataStream stream{};
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     stream << req0.blockhash;
     WriteCompactSize(stream, req0.indexes.size());
     WriteCompactSize(stream, req0.indexes[0]);

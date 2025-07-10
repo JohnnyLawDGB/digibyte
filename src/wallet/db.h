@@ -1,6 +1,10 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
+<<<<<<< HEAD
 // Copyright (c) 2009-2020 The Bitcoin Core developers
 // Copyright (c) 2014-2020 The DigiByte Core developers
+=======
+// Copyright (c) 2009-2021 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -8,15 +12,22 @@
 #define DIGIBYTE_WALLET_DB_H
 
 #include <clientversion.h>
+<<<<<<< HEAD
 #include <fs.h>
 #include <streams.h>
 #include <support/allocators/secure.h>
+=======
+#include <streams.h>
+#include <support/allocators/secure.h>
+#include <util/fs.h>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 #include <atomic>
 #include <memory>
 #include <optional>
 #include <string>
 
+<<<<<<< HEAD
 struct bilingual_str;
 
 void SplitWalletPath(const fs::path& wallet_path, fs::path& env_directory, std::string& database_filename);
@@ -194,6 +205,165 @@ public:
     std::string Filename() override { return "dummy"; }
     std::string Format() override { return "dummy"; }
     std::unique_ptr<DatabaseBatch> MakeBatch(bool flush_on_close = true) override { return std::make_unique<DummyBatch>(); }
+=======
+class ArgsManager;
+struct bilingual_str;
+
+namespace wallet {
+void SplitWalletPath(const fs::path& wallet_path, fs::path& env_directory, std::string& database_filename);
+
+class DatabaseCursor
+{
+public:
+    explicit DatabaseCursor() {}
+    virtual ~DatabaseCursor() {}
+
+    DatabaseCursor(const DatabaseCursor&) = delete;
+    DatabaseCursor& operator=(const DatabaseCursor&) = delete;
+
+    enum class Status
+    {
+        FAIL,
+        MORE,
+        DONE,
+    };
+
+    virtual Status Next(DataStream& key, DataStream& value) { return Status::FAIL; }
+};
+
+/** RAII class that provides access to a WalletDatabase */
+class DatabaseBatch
+{
+private:
+    virtual bool ReadKey(DataStream&& key, DataStream& value) = 0;
+    virtual bool WriteKey(DataStream&& key, DataStream&& value, bool overwrite = true) = 0;
+    virtual bool EraseKey(DataStream&& key) = 0;
+    virtual bool HasKey(DataStream&& key) = 0;
+
+public:
+    explicit DatabaseBatch() {}
+    virtual ~DatabaseBatch() {}
+
+    DatabaseBatch(const DatabaseBatch&) = delete;
+    DatabaseBatch& operator=(const DatabaseBatch&) = delete;
+
+    virtual void Flush() = 0;
+    virtual void Close() = 0;
+
+    template <typename K, typename T>
+    bool Read(const K& key, T& value)
+    {
+        DataStream ssKey{};
+        ssKey.reserve(1000);
+        ssKey << key;
+
+        CDataStream ssValue(SER_DISK, CLIENT_VERSION);
+        if (!ReadKey(std::move(ssKey), ssValue)) return false;
+        try {
+            ssValue >> value;
+            return true;
+        } catch (const std::exception&) {
+            return false;
+        }
+    }
+
+    template <typename K, typename T>
+    bool Write(const K& key, const T& value, bool fOverwrite = true)
+    {
+        DataStream ssKey{};
+        ssKey.reserve(1000);
+        ssKey << key;
+
+        CDataStream ssValue(SER_DISK, CLIENT_VERSION);
+        ssValue.reserve(10000);
+        ssValue << value;
+
+        return WriteKey(std::move(ssKey), std::move(ssValue), fOverwrite);
+    }
+
+    template <typename K>
+    bool Erase(const K& key)
+    {
+        DataStream ssKey{};
+        ssKey.reserve(1000);
+        ssKey << key;
+
+        return EraseKey(std::move(ssKey));
+    }
+
+    template <typename K>
+    bool Exists(const K& key)
+    {
+        DataStream ssKey{};
+        ssKey.reserve(1000);
+        ssKey << key;
+
+        return HasKey(std::move(ssKey));
+    }
+    virtual bool ErasePrefix(Span<const std::byte> prefix) = 0;
+
+    virtual std::unique_ptr<DatabaseCursor> GetNewCursor() = 0;
+    virtual std::unique_ptr<DatabaseCursor> GetNewPrefixCursor(Span<const std::byte> prefix) = 0;
+    virtual bool TxnBegin() = 0;
+    virtual bool TxnCommit() = 0;
+    virtual bool TxnAbort() = 0;
+};
+
+/** An instance of this class represents one database.
+ **/
+class WalletDatabase
+{
+public:
+    /** Create dummy DB handle */
+    WalletDatabase() : nUpdateCounter(0) {}
+    virtual ~WalletDatabase() {};
+
+    /** Open the database if it is not already opened. */
+    virtual void Open() = 0;
+
+    //! Counts the number of active database users to be sure that the database is not closed while someone is using it
+    std::atomic<int> m_refcount{0};
+    /** Indicate the a new database user has began using the database. Increments m_refcount */
+    virtual void AddRef() = 0;
+    /** Indicate that database user has stopped using the database and that it could be flushed or closed. Decrement m_refcount */
+    virtual void RemoveRef() = 0;
+
+    /** Rewrite the entire database on disk, with the exception of key pszSkip if non-zero
+     */
+    virtual bool Rewrite(const char* pszSkip=nullptr) = 0;
+
+    /** Back up the entire database to a file.
+     */
+    virtual bool Backup(const std::string& strDest) const = 0;
+
+    /** Make sure all changes are flushed to database file.
+     */
+    virtual void Flush() = 0;
+    /** Flush to the database file and close the database.
+     *  Also close the environment if no other databases are open in it.
+     */
+    virtual void Close() = 0;
+    /* flush the wallet passively (TRY_LOCK)
+       ideal to be called periodically */
+    virtual bool PeriodicFlush() = 0;
+
+    virtual void IncrementUpdateCounter() = 0;
+
+    virtual void ReloadDbEnv() = 0;
+
+    /** Return path to main database file for logs and error messages. */
+    virtual std::string Filename() = 0;
+
+    virtual std::string Format() = 0;
+
+    std::atomic<unsigned int> nUpdateCounter;
+    unsigned int nLastSeen{0};
+    unsigned int nLastFlushed{0};
+    int64_t nLastWalletUpdate{0};
+
+    /** Make a DatabaseBatch connected to this database */
+    virtual std::unique_ptr<DatabaseBatch> MakeBatch(bool flush_on_close = true) = 0;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 };
 
 enum class DatabaseFormat {
@@ -207,7 +377,16 @@ struct DatabaseOptions {
     std::optional<DatabaseFormat> require_format;
     uint64_t create_flags = 0;
     SecureString create_passphrase;
+<<<<<<< HEAD
     bool verify = true;
+=======
+
+    // Specialized options. Not every option is supported by every backend.
+    bool verify = true;             //!< Check data integrity on load.
+    bool use_unsafe_sync = false;   //!< Disable file sync for faster performance.
+    bool use_shared_memory = false; //!< Let other processes access the database.
+    int64_t max_log_mb = 100;       //!< Max log size to allow before consolidating.
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 };
 
 enum class DatabaseStatus {
@@ -221,16 +400,28 @@ enum class DatabaseStatus {
     FAILED_LOAD,
     FAILED_VERIFY,
     FAILED_ENCRYPT,
+<<<<<<< HEAD
+=======
+    FAILED_INVALID_BACKUP_FILE,
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 };
 
 /** Recursively list database paths in directory. */
 std::vector<fs::path> ListDatabases(const fs::path& path);
 
+<<<<<<< HEAD
+=======
+void ReadDatabaseArgs(const ArgsManager& args, DatabaseOptions& options);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 std::unique_ptr<WalletDatabase> MakeDatabase(const fs::path& path, const DatabaseOptions& options, DatabaseStatus& status, bilingual_str& error);
 
 fs::path BDBDataFile(const fs::path& path);
 fs::path SQLiteDataFile(const fs::path& path);
 bool IsBDBFile(const fs::path& path);
 bool IsSQLiteFile(const fs::path& path);
+<<<<<<< HEAD
+=======
+} // namespace wallet
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 #endif // DIGIBYTE_WALLET_DB_H

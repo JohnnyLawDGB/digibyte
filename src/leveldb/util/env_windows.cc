@@ -194,7 +194,11 @@ class WindowsRandomAccessFile : public RandomAccessFile {
   Status Read(uint64_t offset, size_t n, Slice* result,
               char* scratch) const override {
     DWORD bytes_read = 0;
+<<<<<<< HEAD
     OVERLAPPED overlapped = {0};
+=======
+    OVERLAPPED overlapped = {};
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     overlapped.OffsetHigh = static_cast<DWORD>(offset >> 32);
     overlapped.Offset = static_cast<DWORD>(offset);
@@ -798,7 +802,11 @@ class SingletonEnv {
  public:
   SingletonEnv() {
 #if !defined(NDEBUG)
+<<<<<<< HEAD
     env_initialized_.store(true, std::memory_order::memory_order_relaxed);
+=======
+    env_initialized_.store(true, std::memory_order_relaxed);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #endif  // !defined(NDEBUG)
     static_assert(sizeof(env_storage_) >= sizeof(EnvType),
                   "env_storage_ will not fit the Env");
@@ -815,7 +823,11 @@ class SingletonEnv {
 
   static void AssertEnvNotInitialized() {
 #if !defined(NDEBUG)
+<<<<<<< HEAD
     assert(!env_initialized_.load(std::memory_order::memory_order_relaxed));
+=======
+    assert(!env_initialized_.load(std::memory_order_relaxed));
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #endif  // !defined(NDEBUG)
   }
 

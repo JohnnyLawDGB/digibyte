@@ -2,10 +2,10 @@
 export LC_ALL=C
 set -e -o pipefail
 
-# shellcheck source=../../shell/realpath.bash
+# shellcheck source=contrib/shell/realpath.bash
 source contrib/shell/realpath.bash
 
-# shellcheck source=../../shell/git-utils.bash
+# shellcheck source=contrib/shell/git-utils.bash
 source contrib/shell/git-utils.bash
 
 ################
@@ -46,10 +46,26 @@ exit 1
 fi
 
 ################
+# Execute "$@" in a pinned, possibly older version of Guix, for reproducibility
+# across time.
+time-machine() {
+    # shellcheck disable=SC2086
+    guix time-machine --url=https://git.savannah.gnu.org/git/guix.git \
+                      --commit=160f78a4d92205df986ed9efcce7d3aac188cb24 \
+                      --cores="$JOBS" \
+                      --keep-failed \
+                      --fallback \
+                      ${SUBSTITUTE_URLS:+--substitute-urls="$SUBSTITUTE_URLS"} \
+                      ${ADDITIONAL_GUIX_COMMON_FLAGS} ${ADDITIONAL_GUIX_TIMEMACHINE_FLAGS} \
+                      -- "$@"
+}
+
+
+################
 # Set common variables
 ################
 
-VERSION="${VERSION:-$(git_head_version)}"
+VERSION="${FORCE_VERSION:-$(git_head_version)}"
 DISTNAME="${DISTNAME:-digibyte-${VERSION}}"
 
 version_base_prefix="${PWD}/guix-build-"

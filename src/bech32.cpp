@@ -1,11 +1,15 @@
 // Copyright (c) 2017, 2021 Pieter Wuille
+// Copyright (c) 2021-2025 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <bech32.h>
 #include <util/vector.h>
 
+#include <array>
 #include <assert.h>
+#include <numeric>
+#include <optional>
 
 namespace bech32
 {

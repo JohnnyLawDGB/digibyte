@@ -3,9 +3,10 @@
 # Copyright (c) 2015-2022 The DigiByte Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
-"""Test the listreceivedbyaddress RPC."""
+"""Test the listreceivedbyaddress, listreceivedbylabel, getreceivedybaddress, and getreceivedbylabel RPCs."""
 from decimal import Decimal
 
+from test_framework.blocktools import COINBASE_MATURITY
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import (
     assert_array_result,
@@ -16,16 +17,22 @@ from test_framework.wallet_util import test_address
 
 
 class ReceivedByTest(DigiByteTestFramework):
+    def add_options(self, parser):
+        self.add_wallet_options(parser)
+
     def set_test_params(self):
         self.num_nodes = 2
+        # whitelist peers to speed up tx relay / mempool sync
+        self.extra_args = [["-whitelist=noban@127.0.0.1"]] * self.num_nodes
 
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()
         self.skip_if_no_cli()
 
     def run_test(self):
-        # Generate block to get out of IBD
-        self.generate(self.nodes[0], 1)
+        # Generate block to get out of IBD and get spendable coins
+        # DigiByte: Generate enough blocks for coinbase maturity
+        self.generate(self.nodes[0], COINBASE_MATURITY + 1)
         self.sync_blocks()
 
         # save the number of coinbase reward addresses so far
@@ -80,7 +87,6 @@ class ReceivedByTest(DigiByteTestFramework):
         other_addr = self.nodes[1].getnewaddress()
         txid2 = self.nodes[0].sendtoaddress(other_addr, 0.1)
         self.generate(self.nodes[0], 1)
-
         self.sync_all()
         # Same test as above should still pass
         expected = {"address": addr, "label": "", "amount": Decimal("0.1"), "confirmations": 11, "txids": [txid, ]}
@@ -116,9 +122,8 @@ class ReceivedByTest(DigiByteTestFramework):
         balance = self.nodes[1].getreceivedbyaddress(addr, 0)
         assert_equal(balance, Decimal("0.1"))
 
-        # Bury Tx under 10 block so it will be returned by the default getreceivedbyaddress
+        # Bury Tx under 10 blocks so it will be returned by the default getreceivedbyaddress
         self.generate(self.nodes[1], 10)
-
         self.sync_all()
         balance = self.nodes[1].getreceivedbyaddress(addr)
         assert_equal(balance, Decimal("0.1"))
@@ -138,17 +143,19 @@ class ReceivedByTest(DigiByteTestFramework):
         txid = self.nodes[0].sendtoaddress(addr, 0.1)
         self.sync_all()
 
+        # getreceivedbylabel returns an error if the wallet doesn't own the label
+        assert_raises_rpc_error(-4, "Label not found in wallet", self.nodes[0].getreceivedbylabel, "dummy")
+
         # listreceivedbylabel should return received_by_label_json because of 0 confirmations
         assert_array_result(self.nodes[1].listreceivedbylabel(),
                             {"label": label},
                             received_by_label_json)
 
-        # getreceivedbyaddress should return same balance because of 0 confirmations
+        # getreceivedbylabel should return same balance because of 0 confirmations
         balance = self.nodes[1].getreceivedbylabel(label)
         assert_equal(balance, balance_by_label)
-        
-        self.generate(self.nodes[1], 10)
 
+        self.generate(self.nodes[1], 10)
         self.sync_all()
         # listreceivedbylabel should return updated received list
         assert_array_result(self.nodes[1].listreceivedbylabel(),
@@ -170,6 +177,90 @@ class ReceivedByTest(DigiByteTestFramework):
         # Test getreceivedbylabel for 0 amount labels
         balance = self.nodes[1].getreceivedbylabel("mynewlabel")
         assert_equal(balance, Decimal("0.0"))
+
+        self.log.info("Test -walletbroadcast")
+        self.stop_nodes()
+        self.start_node(0, ["-walletbroadcast=0"])
+        self.start_node(1, ["-walletbroadcast=0"])
+        self.connect_nodes(0, 1)
+
+        txid = self.nodes[0].sendtoaddress(addr, 0.1)
+
+        # Check that node 1 received the tx
+        assert_equal(self.nodes[0].gettransaction(txid, True)["txid"], txid)
+        assert_equal(self.nodes[1].listtransactions(label="*", count=10000, include_watchonly=True)[0]["txid"], txid)
+
+        # Check that the tx is on chain
+        self.generate(self.nodes[0], 1)
+        self.sync_all()
+        assert_equal(self.nodes[0].gettransaction(txid, True)["confirmations"], 1)
+        assert_equal(self.nodes[1].gettransaction(txid, True)["confirmations"], 1)
+
+        self.log.info("Test getreceivedbyaddress with minconf > 1")
+        
+        # Send more transactions
+        addr2 = self.nodes[1].getnewaddress()
+        for _ in range(5):
+            self.nodes[0].sendtoaddress(addr2, 0.2)
+        self.sync_all()
+        
+        # Mine 5 blocks - transactions will have 5 confirmations
+        self.generate(self.nodes[0], 5)
+        self.sync_all()
+        
+        # Check with minconf=1
+        balance_1conf = self.nodes[1].getreceivedbyaddress(addr2, 1)
+        assert_equal(balance_1conf, Decimal("1.0"))  # 5 * 0.2
+        
+        # Check with minconf=5
+        balance_5conf = self.nodes[1].getreceivedbyaddress(addr2, 5)
+        assert_equal(balance_5conf, Decimal("1.0"))
+        
+        # Check with minconf=6 (should be 0 as we only have 5 confirmations)
+        balance_6conf = self.nodes[1].getreceivedbyaddress(addr2, 6)
+        assert_equal(balance_6conf, Decimal("0.0"))
+
+        self.log.info("Test listreceivedbylabel with includeempty=false")
+        
+        # Create a new empty label
+        empty_label_addr = self.nodes[1].getnewaddress("empty_label")
+        
+        # Check that empty label is not shown with includeempty=false
+        labels_no_empty = self.nodes[1].listreceivedbylabel(minconf=0, include_empty=False)
+        empty_labels = [r for r in labels_no_empty if r["label"] == "empty_label"]
+        assert_equal(len(empty_labels), 0)
+        
+        # Check that empty label is shown with includeempty=true
+        labels_with_empty = self.nodes[1].listreceivedbylabel(minconf=0, include_empty=True)
+        empty_labels = [r for r in labels_with_empty if r["label"] == "empty_label"]
+        assert_equal(len(empty_labels), 1)
+        assert_equal(empty_labels[0]["amount"], Decimal("0.0"))
+
+        self.log.info("Test include_watchonly parameter")
+        
+        # Import a watch-only address
+        watch_addr = self.nodes[0].getnewaddress()
+        self.nodes[1].importaddress(watch_addr, "watch_label", False)
+        
+        # Send to watch-only address
+        watch_txid = self.nodes[0].sendtoaddress(watch_addr, 0.5)
+        self.generate(self.nodes[0], 1)
+        self.sync_all()
+        
+        # Check that watchonly is excluded by default
+        received_default = self.nodes[1].listreceivedbyaddress()
+        watch_entries = [r for r in received_default if r["address"] == watch_addr]
+        assert_equal(len(watch_entries), 0)
+        
+        # Check that watchonly is included when specified
+        received_watchonly = self.nodes[1].listreceivedbyaddress(minconf=0, include_empty=True, include_watchonly=True)
+        watch_entries = [r for r in received_watchonly if r["address"] == watch_addr]
+        assert_equal(len(watch_entries), 1)
+        assert_equal(watch_entries[0]["amount"], Decimal("0.5"))
+        assert_equal(watch_entries[0]["involvesWatchonly"], True)
+
+        self.log.info("All listreceivedby tests completed successfully!")
+
 
 if __name__ == '__main__':
     ReceivedByTest().main()

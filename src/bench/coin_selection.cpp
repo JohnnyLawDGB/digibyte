@@ -1,15 +1,31 @@
-// Copyright (c) 2012-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
+// Copyright (c) 2012-2022 The Bitcoin Core developers
+// Copyright (c) 2014-2025 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <bench/bench.h>
 #include <interfaces/chain.h>
 #include <node/context.h>
+#include <policy/policy.h>
 #include <wallet/coinselection.h>
+#include <wallet/spend.h>
 #include <wallet/wallet.h>
+#include <wallet/test/util.h>
 
 #include <set>
+
+using node::NodeContext;
+using wallet::AttemptSelection;
+using wallet::CHANGE_LOWER;
+using wallet::COutput;
+using wallet::CWallet;
+using wallet::CWalletTx;
+using wallet::CoinEligibilityFilter;
+using wallet::CoinSelectionParams;
+using wallet::CreateMockableWalletDatabase;
+using wallet::OutputGroup;
+using wallet::SelectCoinsBnB;
+using wallet::TxStateInactive;
 
 static void addCoin(const CAmount& nValue, const CWallet& wallet, std::vector<std::unique_ptr<CWalletTx>>& wtxs)
 {
@@ -113,5 +129,5 @@ static void BnBExhaustion(benchmark::Bench& bench)
     });
 }
 
-BENCHMARK(CoinSelection);
-BENCHMARK(BnBExhaustion);
+BENCHMARK(CoinSelection, benchmark::PriorityLevel::HIGH);
+BENCHMARK(BnBExhaustion, benchmark::PriorityLevel::HIGH);

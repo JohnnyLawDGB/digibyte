@@ -3,42 +3,62 @@
  * Distributed under the MIT software license, see the accompanying    *
  * file COPYING or https://www.opensource.org/licenses/mit-license.php.*
  ***********************************************************************/
+<<<<<<< HEAD
 
 #if defined HAVE_CONFIG_H
 #include "libsecp256k1-config.h"
 #endif
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 #include <stdio.h>
 #include <stdlib.h>
-
 #include <time.h>
-
-#undef USE_ECMULT_STATIC_PRECOMPUTATION
 
 #ifndef EXHAUSTIVE_TEST_ORDER
 /* see group_impl.h for allowable values */
 #define EXHAUSTIVE_TEST_ORDER 13
 #endif
 
+<<<<<<< HEAD
 #include "include/secp256k1.h"
 #include "assumptions.h"
 #include "group.h"
-#include "secp256k1.c"
-#include "testrand_impl.h"
+=======
+/* These values of B are all values in [1, 8] that result in a curve with even order. */
+#define EXHAUSTIVE_TEST_CURVE_HAS_EVEN_ORDER (SECP256K1_B == 1 || SECP256K1_B == 6 || SECP256K1_B == 8)
 
+#ifdef USE_EXTERNAL_DEFAULT_CALLBACKS
+    #pragma message("Ignoring USE_EXTERNAL_CALLBACKS in exhaustive_tests.")
+    #undef USE_EXTERNAL_DEFAULT_CALLBACKS
+#endif
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+#include "secp256k1.c"
+
+<<<<<<< HEAD
+=======
+#include "../include/secp256k1.h"
+#include "assumptions.h"
+#include "group.h"
+#include "testrand_impl.h"
+#include "ecmult_compute_table_impl.h"
+#include "ecmult_gen_compute_table_impl.h"
+#include "util.h"
+
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 static int count = 2;
 
 /** stolen from tests.c */
-void ge_equals_ge(const secp256k1_ge *a, const secp256k1_ge *b) {
+static void ge_equals_ge(const secp256k1_ge *a, const secp256k1_ge *b) {
     CHECK(a->infinity == b->infinity);
     if (a->infinity) {
         return;
     }
-    CHECK(secp256k1_fe_equal_var(&a->x, &b->x));
-    CHECK(secp256k1_fe_equal_var(&a->y, &b->y));
+    CHECK(secp256k1_fe_equal(&a->x, &b->x));
+    CHECK(secp256k1_fe_equal(&a->y, &b->y));
 }
 
-void ge_equals_gej(const secp256k1_ge *a, const secp256k1_gej *b) {
+static void ge_equals_gej(const secp256k1_ge *a, const secp256k1_gej *b) {
     secp256k1_fe z2s;
     secp256k1_fe u1, u2, s1, s2;
     CHECK(a->infinity == b->infinity);
@@ -48,21 +68,38 @@ void ge_equals_gej(const secp256k1_ge *a, const secp256k1_gej *b) {
     /* Check a.x * b.z^2 == b.x && a.y * b.z^3 == b.y, to avoid inverses. */
     secp256k1_fe_sqr(&z2s, &b->z);
     secp256k1_fe_mul(&u1, &a->x, &z2s);
-    u2 = b->x; secp256k1_fe_normalize_weak(&u2);
+    u2 = b->x;
     secp256k1_fe_mul(&s1, &a->y, &z2s); secp256k1_fe_mul(&s1, &s1, &b->z);
-    s2 = b->y; secp256k1_fe_normalize_weak(&s2);
-    CHECK(secp256k1_fe_equal_var(&u1, &u2));
-    CHECK(secp256k1_fe_equal_var(&s1, &s2));
+    s2 = b->y;
+    CHECK(secp256k1_fe_equal(&u1, &u2));
+    CHECK(secp256k1_fe_equal(&s1, &s2));
 }
 
-void random_fe(secp256k1_fe *x) {
+static void random_fe(secp256k1_fe *x) {
     unsigned char bin[32];
     do {
         secp256k1_testrand256(bin);
+<<<<<<< HEAD
         if (secp256k1_fe_set_b32(x, bin)) {
+=======
+        if (secp256k1_fe_set_b32_limit(x, bin)) {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             return;
         }
     } while(1);
+}
+
+static void random_fe_non_zero(secp256k1_fe *nz) {
+    int tries = 10;
+    while (--tries >= 0) {
+        random_fe(nz);
+        secp256k1_fe_normalize(nz);
+        if (!secp256k1_fe_is_zero(nz)) {
+            break;
+        }
+    }
+    /* Infinitesimal probability of spurious failure here */
+    CHECK(tries >= 0);
 }
 /** END stolen from tests.c */
 
@@ -75,7 +112,11 @@ SECP256K1_INLINE static int skip_section(uint64_t* iter) {
     return ((((uint32_t)*iter ^ (*iter >> 32)) * num_cores) >> 32) != this_core;
 }
 
+<<<<<<< HEAD
 int secp256k1_nonce_function_smallint(unsigned char *nonce32, const unsigned char *msg32,
+=======
+static int secp256k1_nonce_function_smallint(unsigned char *nonce32, const unsigned char *msg32,
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                                       const unsigned char *key32, const unsigned char *algo16,
                                       void *data, unsigned int attempt) {
     secp256k1_scalar s;
@@ -95,7 +136,11 @@ int secp256k1_nonce_function_smallint(unsigned char *nonce32, const unsigned cha
     return 1;
 }
 
+<<<<<<< HEAD
 void test_exhaustive_endomorphism(const secp256k1_ge *group) {
+=======
+static void test_exhaustive_endomorphism(const secp256k1_ge *group) {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     int i;
     for (i = 0; i < EXHAUSTIVE_TEST_ORDER; i++) {
         secp256k1_ge res;
@@ -104,7 +149,11 @@ void test_exhaustive_endomorphism(const secp256k1_ge *group) {
     }
 }
 
+<<<<<<< HEAD
 void test_exhaustive_addition(const secp256k1_ge *group, const secp256k1_gej *groupj) {
+=======
+static void test_exhaustive_addition(const secp256k1_ge *group, const secp256k1_gej *groupj) {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     int i, j;
     uint64_t iter = 0;
 
@@ -164,7 +213,11 @@ void test_exhaustive_addition(const secp256k1_ge *group, const secp256k1_gej *gr
     }
 }
 
+<<<<<<< HEAD
 void test_exhaustive_ecmult(const secp256k1_context *ctx, const secp256k1_ge *group, const secp256k1_gej *groupj) {
+=======
+static void test_exhaustive_ecmult(const secp256k1_ge *group, const secp256k1_gej *groupj) {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     int i, j, r_log;
     uint64_t iter = 0;
     for (r_log = 1; r_log < EXHAUSTIVE_TEST_ORDER; r_log++) {
@@ -176,6 +229,7 @@ void test_exhaustive_ecmult(const secp256k1_context *ctx, const secp256k1_ge *gr
                 secp256k1_scalar_set_int(&na, i);
                 secp256k1_scalar_set_int(&ng, j);
 
+<<<<<<< HEAD
                 secp256k1_ecmult(&ctx->ecmult_ctx, &tmp, &groupj[r_log], &na, &ng);
                 ge_equals_gej(&group[(i * r_log + j) % EXHAUSTIVE_TEST_ORDER], &tmp);
 
@@ -183,6 +237,42 @@ void test_exhaustive_ecmult(const secp256k1_context *ctx, const secp256k1_ge *gr
                     secp256k1_ecmult_const(&tmp, &group[i], &ng, 256);
                     ge_equals_gej(&group[(i * j) % EXHAUSTIVE_TEST_ORDER], &tmp);
                 }
+=======
+                secp256k1_ecmult(&tmp, &groupj[r_log], &na, &ng);
+                ge_equals_gej(&group[(i * r_log + j) % EXHAUSTIVE_TEST_ORDER], &tmp);
+
+            }
+        }
+    }
+
+    for (j = 0; j < EXHAUSTIVE_TEST_ORDER; j++) {
+        for (i = 0; i < EXHAUSTIVE_TEST_ORDER; i++) {
+            int ret;
+            secp256k1_gej tmp;
+            secp256k1_fe xn, xd, tmpf;
+            secp256k1_scalar ng;
+
+            if (skip_section(&iter)) continue;
+
+            secp256k1_scalar_set_int(&ng, j);
+
+            /* Test secp256k1_ecmult_const. */
+            secp256k1_ecmult_const(&tmp, &group[i], &ng);
+            ge_equals_gej(&group[(i * j) % EXHAUSTIVE_TEST_ORDER], &tmp);
+
+            if (i != 0 && j != 0) {
+                /* Test secp256k1_ecmult_const_xonly with all curve X coordinates, and xd=NULL. */
+                ret = secp256k1_ecmult_const_xonly(&tmpf, &group[i].x, NULL, &ng, 0);
+                CHECK(ret);
+                CHECK(secp256k1_fe_equal(&tmpf, &group[(i * j) % EXHAUSTIVE_TEST_ORDER].x));
+
+                /* Test secp256k1_ecmult_const_xonly with all curve X coordinates, with random xd. */
+                random_fe_non_zero(&xd);
+                secp256k1_fe_mul(&xn, &xd, &group[i].x);
+                ret = secp256k1_ecmult_const_xonly(&tmpf, &xn, &xd, &ng, 0);
+                CHECK(ret);
+                CHECK(secp256k1_fe_equal(&tmpf, &group[(i * j) % EXHAUSTIVE_TEST_ORDER].x));
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             }
         }
     }
@@ -200,7 +290,11 @@ static int ecmult_multi_callback(secp256k1_scalar *sc, secp256k1_ge *pt, size_t 
     return 1;
 }
 
+<<<<<<< HEAD
 void test_exhaustive_ecmult_multi(const secp256k1_context *ctx, const secp256k1_ge *group) {
+=======
+static void test_exhaustive_ecmult_multi(const secp256k1_context *ctx, const secp256k1_ge *group) {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     int i, j, k, x, y;
     uint64_t iter = 0;
     secp256k1_scratch *scratch = secp256k1_scratch_create(&ctx->error_callback, 4096);
@@ -220,7 +314,11 @@ void test_exhaustive_ecmult_multi(const secp256k1_context *ctx, const secp256k1_
                         data.pt[0] = group[x];
                         data.pt[1] = group[y];
 
+<<<<<<< HEAD
                         secp256k1_ecmult_multi_var(&ctx->error_callback, &ctx->ecmult_ctx, scratch, &tmp, &g_sc, ecmult_multi_callback, &data, 2);
+=======
+                        secp256k1_ecmult_multi_var(&ctx->error_callback, scratch, &tmp, &g_sc, ecmult_multi_callback, &data, 2);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                         ge_equals_gej(&group[(i * x + j * y + k) % EXHAUSTIVE_TEST_ORDER], &tmp);
                     }
                 }
@@ -230,7 +328,11 @@ void test_exhaustive_ecmult_multi(const secp256k1_context *ctx, const secp256k1_
     secp256k1_scratch_destroy(&ctx->error_callback, scratch);
 }
 
+<<<<<<< HEAD
 void r_from_k(secp256k1_scalar *r, const secp256k1_ge *group, int k, int* overflow) {
+=======
+static void r_from_k(secp256k1_scalar *r, const secp256k1_ge *group, int k, int* overflow) {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     secp256k1_fe x;
     unsigned char x_bin[32];
     k %= EXHAUSTIVE_TEST_ORDER;
@@ -240,7 +342,11 @@ void r_from_k(secp256k1_scalar *r, const secp256k1_ge *group, int k, int* overfl
     secp256k1_scalar_set_b32(r, x_bin, overflow);
 }
 
+<<<<<<< HEAD
 void test_exhaustive_verify(const secp256k1_context *ctx, const secp256k1_ge *group) {
+=======
+static void test_exhaustive_verify(const secp256k1_context *ctx, const secp256k1_ge *group) {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     int s, r, msg, key;
     uint64_t iter = 0;
     for (s = 1; s < EXHAUSTIVE_TEST_ORDER; s++) {
@@ -293,7 +399,11 @@ void test_exhaustive_verify(const secp256k1_context *ctx, const secp256k1_ge *gr
     }
 }
 
+<<<<<<< HEAD
 void test_exhaustive_sign(const secp256k1_context *ctx, const secp256k1_ge *group) {
+=======
+static void test_exhaustive_sign(const secp256k1_context *ctx, const secp256k1_ge *group) {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     int i, j, k;
     uint64_t iter = 0;
 
@@ -303,6 +413,7 @@ void test_exhaustive_sign(const secp256k1_context *ctx, const secp256k1_ge *grou
             if (skip_section(&iter)) continue;
             for (k = 1; k < EXHAUSTIVE_TEST_ORDER; k++) {  /* nonce */
                 const int starting_k = k;
+                int ret;
                 secp256k1_ecdsa_signature sig;
                 secp256k1_scalar sk, msg, r, s, expected_r;
                 unsigned char sk32[32], msg32[32];
@@ -311,7 +422,8 @@ void test_exhaustive_sign(const secp256k1_context *ctx, const secp256k1_ge *grou
                 secp256k1_scalar_get_b32(sk32, &sk);
                 secp256k1_scalar_get_b32(msg32, &msg);
 
-                secp256k1_ecdsa_sign(ctx, &sig, msg32, sk32, secp256k1_nonce_function_smallint, &k);
+                ret = secp256k1_ecdsa_sign(ctx, &sig, msg32, sk32, secp256k1_nonce_function_smallint, &k);
+                CHECK(ret == 1);
 
                 secp256k1_ecdsa_signature_load(ctx, &r, &s, &sig);
                 /* Note that we compute expected_r *after* signing -- this is important
@@ -341,6 +453,7 @@ void test_exhaustive_sign(const secp256k1_context *ctx, const secp256k1_ge *grou
 }
 
 #ifdef ENABLE_MODULE_RECOVERY
+<<<<<<< HEAD
 #include "src/modules/recovery/tests_exhaustive_impl.h"
 #endif
 
@@ -350,6 +463,21 @@ void test_exhaustive_sign(const secp256k1_context *ctx, const secp256k1_ge *grou
 
 #ifdef ENABLE_MODULE_SCHNORRSIG
 #include "src/modules/schnorrsig/tests_exhaustive_impl.h"
+=======
+#include "modules/recovery/tests_exhaustive_impl.h"
+#endif
+
+#ifdef ENABLE_MODULE_EXTRAKEYS
+#include "modules/extrakeys/tests_exhaustive_impl.h"
+#endif
+
+#ifdef ENABLE_MODULE_SCHNORRSIG
+#include "modules/schnorrsig/tests_exhaustive_impl.h"
+#endif
+
+#ifdef ENABLE_MODULE_ELLSWIFT
+#include "modules/ellswift/tests_exhaustive_impl.h"
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #endif
 
 int main(int argc, char** argv) {
@@ -389,9 +517,19 @@ int main(int argc, char** argv) {
         printf("running tests for core %lu (out of [0..%lu])\n", (unsigned long)this_core, (unsigned long)num_cores - 1);
     }
 
+<<<<<<< HEAD
     while (count--) {
         /* Build context */
         ctx = secp256k1_context_create(SECP256K1_CONTEXT_SIGN | SECP256K1_CONTEXT_VERIFY);
+=======
+    /* Recreate the ecmult{,_gen} tables using the right generator (as selected via EXHAUSTIVE_TEST_ORDER) */
+    secp256k1_ecmult_gen_compute_table(&secp256k1_ecmult_gen_prec_table[0][0], &secp256k1_ge_const_g, ECMULT_GEN_PREC_BITS);
+    secp256k1_ecmult_compute_two_tables(secp256k1_pre_g, secp256k1_pre_g_128, WINDOW_G, &secp256k1_ge_const_g);
+
+    while (count--) {
+        /* Build context */
+        ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         secp256k1_testrand256(rand32);
         CHECK(secp256k1_context_randomize(ctx, rand32));
 
@@ -421,15 +559,24 @@ int main(int argc, char** argv) {
 
                 CHECK(group[i].infinity == 0);
                 CHECK(generated.infinity == 0);
+<<<<<<< HEAD
                 CHECK(secp256k1_fe_equal_var(&generated.x, &group[i].x));
                 CHECK(secp256k1_fe_equal_var(&generated.y, &group[i].y));
+=======
+                CHECK(secp256k1_fe_equal(&generated.x, &group[i].x));
+                CHECK(secp256k1_fe_equal(&generated.y, &group[i].y));
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             }
         }
 
         /* Run the tests */
         test_exhaustive_endomorphism(group);
         test_exhaustive_addition(group, groupj);
+<<<<<<< HEAD
         test_exhaustive_ecmult(ctx, group, groupj);
+=======
+        test_exhaustive_ecmult(group, groupj);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         test_exhaustive_ecmult_multi(ctx, group);
         test_exhaustive_sign(ctx, group);
         test_exhaustive_verify(ctx, group);
@@ -442,6 +589,18 @@ int main(int argc, char** argv) {
 #endif
 #ifdef ENABLE_MODULE_SCHNORRSIG
         test_exhaustive_schnorrsig(ctx);
+<<<<<<< HEAD
+=======
+#endif
+#ifdef ENABLE_MODULE_ELLSWIFT
+    /* The ellswift algorithm does have additional edge cases when operating on
+     * curves of even order, which are not included in the code as secp256k1 is
+     * of odd order. Skip the ellswift tests if the used exhaustive tests curve
+     * is even-ordered accordingly. */
+    #if !EXHAUSTIVE_TEST_CURVE_HAS_EVEN_ORDER
+        test_exhaustive_ellswift(ctx, group);
+    #endif
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #endif
 
         secp256k1_context_destroy(ctx);

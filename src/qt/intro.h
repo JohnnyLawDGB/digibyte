@@ -1,5 +1,5 @@
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
+// Copyright (c) 2011-2021 The Bitcoin Core developers
+// Copyright (c) 2014-2021 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -65,9 +65,9 @@ private Q_SLOTS:
 
 private:
     Ui::Intro *ui;
-    QThread *thread;
+    QThread* thread{nullptr};
     QMutex mutex;
-    bool signalled;
+    bool signalled{false};
     QString pathToCheck;
     const int64_t m_blockchain_size_gb;
     const int64_t m_chain_state_size_gb;

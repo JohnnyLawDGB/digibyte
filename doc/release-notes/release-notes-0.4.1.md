@@ -25,7 +25,7 @@ new private keys are properly backed up you should:
 1. Run DigiByte and let it rewrite the wallet.dat file
 
 2. Run it again, then ask it for a new digibyte address.
-wxDigiByte: new address visible on main window
+wxBitcoin: new address visible on main window
 digibyted: run the 'walletpassphrase' RPC command to unlock the wallet,  then run the 'getnewaddress' RPC command.
 
 3. If your encrypted wallet.dat may have been copied or stolen, send all of your digibytes to the new digibyte address.

@@ -1,5 +1,9 @@
+<<<<<<< HEAD
 // Copyright (c) 2011-2020 The Bitcoin Core developers
 // Copyright (c) 2013-2021 The DigiByte Core developers
+=======
+// Copyright (c) 2011-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -35,9 +39,14 @@ class TxViewDelegate : public QAbstractItemDelegate
 {
     Q_OBJECT
 public:
+<<<<<<< HEAD
     explicit TxViewDelegate(const PlatformStyle *_platformStyle, QObject *parent=nullptr):
         QAbstractItemDelegate(parent), unit(DigiByteUnits::DGB),
         platformStyle(_platformStyle)
+=======
+    explicit TxViewDelegate(const PlatformStyle* _platformStyle, QObject* parent = nullptr)
+        : QAbstractItemDelegate(parent), platformStyle(_platformStyle)
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     {
         connect(this, &TxViewDelegate::width_changed, this, &TxViewDelegate::sizeHintChanged);
     }
@@ -126,7 +135,11 @@ public:
         return {DECORATION_SIZE + 8 + minimum_text_width, DECORATION_SIZE};
     }
 
+<<<<<<< HEAD
     int unit;
+=======
+    DigiByteUnit unit{DigiByteUnit::DGB};
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 Q_SIGNALS:
     //! An intermediate signal for emitting from the `paint() const` member function.
@@ -142,14 +155,15 @@ private:
 OverviewPage::OverviewPage(const PlatformStyle *platformStyle, QWidget *parent) :
     QWidget(parent),
     ui(new Ui::OverviewPage),
+<<<<<<< HEAD
     clientModel(nullptr),
     walletModel(nullptr),
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     m_platform_style{platformStyle},
     txdelegate(new TxViewDelegate(platformStyle, this))
 {
     ui->setupUi(this);
-
-    m_balances.balance = -1;
 
     // use a SingleColorIcon for the "out of sync warning" icon
     QIcon icon = m_platform_style->SingleColorIcon(QStringLiteral(":/icons/warning"));
@@ -179,8 +193,15 @@ void OverviewPage::handleTransactionClicked(const QModelIndex &index)
 void OverviewPage::setPrivacy(bool privacy)
 {
     m_privacy = privacy;
+<<<<<<< HEAD
     if (m_balances.balance != -1) {
         setBalance(m_balances);
+=======
+    clientModel->getOptionsModel()->setOption(OptionsModel::OptionID::MaskValues, privacy);
+    const auto& balances = walletModel->getCachedBalance();
+    if (balances.balance != -1) {
+        setBalance(balances);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     ui->listTransactions->setVisible(!m_privacy);
@@ -198,8 +219,12 @@ OverviewPage::~OverviewPage()
 
 void OverviewPage::setBalance(const interfaces::WalletBalances& balances)
 {
+<<<<<<< HEAD
     int unit = walletModel->getOptionsModel()->getDisplayUnit();
     m_balances = balances;
+=======
+    DigiByteUnit unit = walletModel->getOptionsModel()->getDisplayUnit();
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (walletModel->wallet().isLegacy()) {
         if (walletModel->wallet().privateKeysDisabled()) {
             ui->labelBalance->setText(DigiByteUnits::formatWithPrivacy(unit, balances.watch_only_balance, DigiByteUnits::SeparatorStyle::ALWAYS, m_privacy));
@@ -268,7 +293,6 @@ void OverviewPage::setWalletModel(WalletModel *model)
         // Set up transaction list
         filter.reset(new TransactionFilterProxy());
         filter->setSourceModel(model->getTransactionTableModel());
-        filter->setLimit(NUM_ITEMS);
         filter->setDynamicSortFilter(true);
         filter->setSortRole(Qt::EditRole);
         filter->setShowInactive(false);
@@ -277,8 +301,18 @@ void OverviewPage::setWalletModel(WalletModel *model)
         ui->listTransactions->setModel(filter.get());
         ui->listTransactions->setModelColumn(TransactionTableModel::ToAddress);
 
+        connect(filter.get(), &TransactionFilterProxy::rowsInserted, this, &OverviewPage::LimitTransactionRows);
+        connect(filter.get(), &TransactionFilterProxy::rowsRemoved, this, &OverviewPage::LimitTransactionRows);
+        connect(filter.get(), &TransactionFilterProxy::rowsMoved, this, &OverviewPage::LimitTransactionRows);
+        LimitTransactionRows();
         // Keep up to date with wallet
+        setBalance(model->getCachedBalance());
+        connect(model, &WalletModel::balanceChanged, this, &OverviewPage::setBalance);
+
+        connect(model->getOptionsModel(), &OptionsModel::displayUnitChanged, this, &OverviewPage::updateDisplayUnit);
+
         interfaces::Wallet& wallet = model->wallet();
+<<<<<<< HEAD
         interfaces::WalletBalances balances = wallet.getBalances();
         setBalance(balances);
         connect(model, &WalletModel::balanceChanged, this, &OverviewPage::setBalance);
@@ -286,6 +320,9 @@ void OverviewPage::setWalletModel(WalletModel *model)
         connect(model->getOptionsModel(), &OptionsModel::displayUnitChanged, this, &OverviewPage::updateDisplayUnit);
 
         updateWatchOnlyLabels(wallet.haveWatchOnly() && !model->wallet().privateKeysDisabled());
+=======
+        updateWatchOnlyLabels(wallet.haveWatchOnly() && !wallet.privateKeysDisabled());
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         connect(model, &WalletModel::notifyWatchonlyChanged, [this](bool showWatchOnly) {
             updateWatchOnlyLabels(showWatchOnly && !walletModel->wallet().privateKeysDisabled());
         });
@@ -306,12 +343,25 @@ void OverviewPage::changeEvent(QEvent* e)
     QWidget::changeEvent(e);
 }
 
+<<<<<<< HEAD
+=======
+// Only show most recent NUM_ITEMS rows
+void OverviewPage::LimitTransactionRows()
+{
+    if (filter && ui->listTransactions && ui->listTransactions->model() && filter.get() == ui->listTransactions->model()) {
+        for (int i = 0; i < filter->rowCount(); ++i) {
+            ui->listTransactions->setRowHidden(i, i >= NUM_ITEMS);
+        }
+    }
+}
+
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 void OverviewPage::updateDisplayUnit()
 {
-    if(walletModel && walletModel->getOptionsModel())
-    {
-        if (m_balances.balance != -1) {
-            setBalance(m_balances);
+    if (walletModel && walletModel->getOptionsModel()) {
+        const auto& balances = walletModel->getCachedBalance();
+        if (balances.balance != -1) {
+            setBalance(balances);
         }
 
         // Update txdelegate->unit with the current unit
@@ -345,4 +395,8 @@ void OverviewPage::setMonospacedFont(bool use_embedded_font)
     ui->labelWatchPending->setFont(f);
     ui->labelWatchImmature->setFont(f);
     ui->labelWatchTotal->setFont(f);
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion

@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
+<<<<<<< HEAD
 # Copyright (c) 2015-2021 The DigiByte Core developers
+=======
+# Copyright (c) 2015-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test BIP66 (DER SIG).
@@ -10,9 +14,13 @@ Test the DERSIG soft-fork activation on regtest.
 from test_framework.blocktools import (
     create_block,
     create_coinbase,
+<<<<<<< HEAD
     VERSIONBITS_TOP_BITS,
 )
 
+=======
+)
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 from test_framework.messages import msg_block
 from test_framework.p2p import P2PInterface
 from test_framework.script import CScript
@@ -59,10 +67,17 @@ class BIP66Test(DigiByteTestFramework):
 
     def create_tx(self, input_txid):
         utxo_to_spend = self.miniwallet.get_utxo(txid=input_txid, mark_as_spent=False)
+<<<<<<< HEAD
         return self.miniwallet.create_self_transfer(from_node=self.nodes[0], utxo_to_spend=utxo_to_spend)['tx']
 
     def test_dersig_info(self, *, is_active):
         assert_equal(self.nodes[0].getblockchaininfo()['softforks']['bip66'],
+=======
+        return self.miniwallet.create_self_transfer(utxo_to_spend=utxo_to_spend)['tx']
+
+    def test_dersig_info(self, *, is_active):
+        assert_equal(self.nodes[0].getdeploymentinfo()['deployments']['bip66'],
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             {
                 "active": is_active,
                 "height": DERSIG_HEIGHT,
@@ -100,7 +115,11 @@ class BIP66Test(DigiByteTestFramework):
         self.log.info("Test that blocks must now be at least version 3")
         tip = block.sha256
         block_time += 1
+<<<<<<< HEAD
         block = create_block(tip, create_coinbase(DERSIG_HEIGHT), block_time, version=0x02)
+=======
+        block = create_block(tip, create_coinbase(DERSIG_HEIGHT), block_time, version=2)
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         block.solve()
 
         with self.nodes[0].assert_debug_log(expected_msgs=[f'{block.hash}, bad-version(0x00000002)']):
@@ -109,7 +128,11 @@ class BIP66Test(DigiByteTestFramework):
             peer.sync_with_ping()
 
         self.log.info("Test that transactions with non-DER signatures cannot appear in a block")
+<<<<<<< HEAD
         block.nVersion = VERSIONBITS_TOP_BITS | 0x03
+=======
+        block.nVersion = 4
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         spendtx = self.create_tx(self.coinbase_txids[1])
         unDERify(spendtx)
@@ -122,7 +145,11 @@ class BIP66Test(DigiByteTestFramework):
                 'txid': spendtx.hash,
                 'wtxid': spendtx.getwtxid(),
                 'allowed': False,
+<<<<<<< HEAD
                 'reject-reason': 'non-mandatory-script-verify-flag (Non-canonical DER signature)',
+=======
+                'reject-reason': 'mandatory-script-verify-flag-failed (Non-canonical DER signature)',
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             }],
             self.nodes[0].testmempoolaccept(rawtxs=[spendtx.serialize().hex()], maxfeerate=0),
         )
@@ -132,7 +159,11 @@ class BIP66Test(DigiByteTestFramework):
         block.hashMerkleRoot = block.calc_merkle_root()
         block.solve()
 
+<<<<<<< HEAD
         with self.nodes[0].assert_debug_log(expected_msgs=[f'CheckInputScripts on {block.vtx[-1].hash} failed with non-mandatory-script-verify-flag (Non-canonical DER signature)']):
+=======
+        with self.nodes[0].assert_debug_log(expected_msgs=[f'CheckInputScripts on {block.vtx[-1].hash} failed with mandatory-script-verify-flag-failed (Non-canonical DER signature)']):
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             peer.send_and_ping(msg_block(block))
             assert_equal(int(self.nodes[0].getbestblockhash(), 16), tip)
             peer.sync_with_ping()

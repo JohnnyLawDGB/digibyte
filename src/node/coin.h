@@ -1,4 +1,4 @@
-// Copyright (c) 2019 The DigiByte Core developers
+// Copyright (c) 2019-2021 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -9,6 +9,8 @@
 
 class COutPoint;
 class Coin;
+
+namespace node {
 struct NodeContext;
 
 /**
@@ -20,5 +22,6 @@ struct NodeContext;
  * @param[in,out] coins map to fill
  */
 void FindCoins(const NodeContext& node, std::map<COutPoint, Coin>& coins);
+} // namespace node
 
 #endif // DIGIBYTE_NODE_COIN_H

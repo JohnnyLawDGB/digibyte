@@ -8,6 +8,8 @@
 
 #include <QDialog>
 
+class PlatformStyle;
+
 namespace Ui {
     class OpenURIDialog;
 }
@@ -17,16 +19,19 @@ class OpenURIDialog : public QDialog
     Q_OBJECT
 
 public:
-    explicit OpenURIDialog(QWidget *parent);
+    explicit OpenURIDialog(const PlatformStyle* platformStyle, QWidget* parent);
     ~OpenURIDialog();
 
     QString getURI();
 
 protected Q_SLOTS:
     void accept() override;
+    void changeEvent(QEvent* e) override;
 
 private:
-    Ui::OpenURIDialog *ui;
+    Ui::OpenURIDialog* ui;
+
+    const PlatformStyle* m_platform_style;
 };
 
 #endif // DIGIBYTE_QT_OPENURIDIALOG_H

@@ -9,7 +9,7 @@
 #include <primitives/transaction.h>
 #include <qt/sendcoinsrecipient.h>
 
-#include <amount.h>
+#include <consensus/amount.h>
 
 #include <QObject>
 
@@ -42,7 +42,7 @@ public:
 private:
     QList<SendCoinsRecipient> recipients;
     CTransactionRef wtx;
-    CAmount fee;
+    CAmount fee{0};
 };
 
 #endif // DIGIBYTE_QT_WALLETMODELTRANSACTION_H

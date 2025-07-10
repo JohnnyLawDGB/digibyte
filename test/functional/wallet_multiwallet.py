@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
+<<<<<<< HEAD
 # Copyright (c) 2017-2021 The DigiByte Core developers
+=======
+# Copyright (c) 2017-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test multiwallet.
@@ -11,10 +15,18 @@ from threading import Thread
 import os
 import shutil
 import stat
+<<<<<<< HEAD
 import time
 
 from test_framework.authproxy import JSONRPCException
 from test_framework.blocktools import COINBASE_MATURITY_2
+=======
+import sys
+import time
+
+from test_framework.authproxy import JSONRPCException
+from test_framework.blocktools import COINBASE_MATURITY
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.test_node import ErrorMatch
 from test_framework.util import (
@@ -51,6 +63,10 @@ class MultiWalletTest(DigiByteTestFramework):
         self.skip_if_no_wallet()
 
     def add_options(self, parser):
+<<<<<<< HEAD
+=======
+        self.add_wallet_options(parser)
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         parser.add_argument(
             '--data_wallets_dir',
             default=os.path.join(os.path.dirname(os.path.realpath(__file__)), 'data/wallets/'),
@@ -60,7 +76,11 @@ class MultiWalletTest(DigiByteTestFramework):
     def run_test(self):
         node = self.nodes[0]
 
+<<<<<<< HEAD
         data_dir = lambda *p: os.path.join(node.datadir, self.chain, *p)
+=======
+        data_dir = lambda *p: os.path.join(node.chain_path, *p)
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         wallet_dir = lambda *p: data_dir('wallets', *p)
         wallet = lambda name: node.get_wallet_rpc(name)
 
@@ -141,7 +161,11 @@ class MultiWalletTest(DigiByteTestFramework):
 
         # should raise rpc error if wallet path can't be created
         err_code = -4 if self.options.descriptors else -1
+<<<<<<< HEAD
         assert_raises_rpc_error(err_code, "boost::filesystem::create_director", self.nodes[0].createwallet, "w8/bad")
+=======
+        assert_raises_rpc_error(err_code, "filesystem error:" if sys.platform != 'win32' else "create_directories:", self.nodes[0].createwallet, "w8/bad")
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # check that all requested wallets were created
         self.stop_node(0)
@@ -230,8 +254,13 @@ class MultiWalletTest(DigiByteTestFramework):
         assert_raises_rpc_error(-19, "Wallet file not specified", node.getwalletinfo)
 
         w1, w2, w3, w4, *_ = wallets
+<<<<<<< HEAD
         self.generatetoaddress(node, nblocks=COINBASE_MATURITY_2 + 1, address=w1.getnewaddress(), sync_fun=self.no_op)
         assert_equal(w1.getbalance(), 72000 * 2)
+=======
+        self.generatetoaddress(node, nblocks=COINBASE_MATURITY + 1, address=w1.getnewaddress(), sync_fun=self.no_op)
+        assert_equal(w1.getbalance(), 100)
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         assert_equal(w2.getbalance(), 0)
         assert_equal(w3.getbalance(), 0)
         assert_equal(w4.getbalance(), 0)
@@ -251,9 +280,15 @@ class MultiWalletTest(DigiByteTestFramework):
         self.log.info('Check for per-wallet settxfee call')
         assert_equal(w1.getwalletinfo()['paytxfee'], 0)
         assert_equal(w2.getwalletinfo()['paytxfee'], 0)
+<<<<<<< HEAD
         w2.settxfee(0.1)
         assert_equal(w1.getwalletinfo()['paytxfee'], 0)
         assert_equal(w2.getwalletinfo()['paytxfee'], Decimal('0.100000'))
+=======
+        w2.settxfee(0.001)
+        assert_equal(w1.getwalletinfo()['paytxfee'], 0)
+        assert_equal(w2.getwalletinfo()['paytxfee'], Decimal('0.00100000'))
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         self.log.info("Test dynamic wallet loading")
 
@@ -297,6 +332,7 @@ class MultiWalletTest(DigiByteTestFramework):
         assert_equal(set(self.nodes[0].listwallets()), set(wallet_names))
 
         # Fail to load if wallet doesn't exist
+<<<<<<< HEAD
         path = os.path.join(self.options.tmpdir, "node0", "regtest", "wallets", "wallets")
         assert_raises_rpc_error(-18, "Wallet file verification failed. Failed to load database path '{}'. Path does not exist.".format(path), self.nodes[0].loadwallet, 'wallets')
 
@@ -312,6 +348,19 @@ class MultiWalletTest(DigiByteTestFramework):
             path = os.path.join(self.options.tmpdir, "node0", "regtest", "wallets", "wallet.dat")
             assert_raises_rpc_error(-35, "Wallet file verification failed. Refusing to load database. Data file '{}' is already loaded.".format(path), self.nodes[0].loadwallet, 'wallet.dat')
 
+=======
+        path = wallet_dir("wallets")
+        assert_raises_rpc_error(-18, "Wallet file verification failed. Failed to load database path '{}'. Path does not exist.".format(path), self.nodes[0].loadwallet, 'wallets')
+
+        # Fail to load duplicate wallets
+        assert_raises_rpc_error(-35, "Wallet \"w1\" is already loaded.", self.nodes[0].loadwallet, wallet_names[0])
+        if not self.options.descriptors:
+            # This tests the default wallet that BDB makes, so SQLite wallet doesn't need to test this
+            # Fail to load duplicate wallets by different ways (directory and filepath)
+            path = wallet_dir("wallet.dat")
+            assert_raises_rpc_error(-35, "Wallet file verification failed. Refusing to load database. Data file '{}' is already loaded.".format(path), self.nodes[0].loadwallet, 'wallet.dat')
+
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             # Only BDB doesn't open duplicate wallet files. SQLite does not have this limitation. While this may be desired in the future, it is not necessary
             # Fail to load if one wallet is a copy of another
             assert_raises_rpc_error(-4, "BerkeleyDatabase: Can't open database w8_copy (duplicates fileid", self.nodes[0].loadwallet, 'w8_copy')
@@ -324,13 +373,21 @@ class MultiWalletTest(DigiByteTestFramework):
 
         # Fail to load if a directory is specified that doesn't contain a wallet
         os.mkdir(wallet_dir('empty_wallet_dir'))
+<<<<<<< HEAD
         path = os.path.join(self.options.tmpdir, "node0", "regtest", "wallets", "empty_wallet_dir")
+=======
+        path = wallet_dir("empty_wallet_dir")
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         assert_raises_rpc_error(-18, "Wallet file verification failed. Failed to load database path '{}'. Data is not in recognized format.".format(path), self.nodes[0].loadwallet, 'empty_wallet_dir')
 
         self.log.info("Test dynamic wallet creation.")
 
         # Fail to create a wallet if it already exists.
+<<<<<<< HEAD
         path = os.path.join(self.options.tmpdir, "node0", "regtest", "wallets", "w2")
+=======
+        path = wallet_dir("w2")
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         assert_raises_rpc_error(-4, "Failed to create database path '{}'. Database already exists.".format(path), self.nodes[0].createwallet, 'w2')
 
         # Successfully create a wallet with a new name
@@ -355,7 +412,7 @@ class MultiWalletTest(DigiByteTestFramework):
         self.log.info("Test dynamic wallet unloading")
 
         # Test `unloadwallet` errors
-        assert_raises_rpc_error(-1, "JSON value is not a string as expected", self.nodes[0].unloadwallet)
+        assert_raises_rpc_error(-3, "JSON value of type null is not of expected type string", self.nodes[0].unloadwallet)
         assert_raises_rpc_error(-18, "Requested wallet does not exist or is not loaded", self.nodes[0].unloadwallet, "dummy")
         assert_raises_rpc_error(-18, "Requested wallet does not exist or is not loaded", node.get_wallet_rpc("dummy").unloadwallet)
         assert_raises_rpc_error(-8, "RPC endpoint wallet and wallet_name parameter specify different wallets", w1.unloadwallet, "w2"),

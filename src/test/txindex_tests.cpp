@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 // Copyright (c) 2017-2020 The Bitcoin Core developers
 // Copyright (c) 2017-2020 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
@@ -8,6 +9,18 @@
 #include <script/standard.h>
 #include <test/util/setup_common.h>
 #include <util/time.h>
+=======
+// Copyright (c) 2017-2022 The DigiByte Core developers
+// Distributed under the MIT software license, see the accompanying
+// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
+#include <addresstype.h>
+#include <chainparams.h>
+#include <index/txindex.h>
+#include <interfaces/chain.h>
+#include <test/util/index.h>
+#include <test/util/setup_common.h>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <validation.h>
 
 #include <boost/test/unit_test.hpp>
@@ -16,7 +29,8 @@ BOOST_AUTO_TEST_SUITE(txindex_tests)
 
 BOOST_FIXTURE_TEST_CASE(txindex_initial_sync, TestChain100Setup)
 {
-    TxIndex txindex(1 << 20, true);
+    TxIndex txindex(interfaces::MakeChain(m_node), 1 << 20, true);
+    BOOST_REQUIRE(txindex.Init());
 
     CTransactionRef tx_disk;
     uint256 block_hash;
@@ -29,6 +43,7 @@ BOOST_FIXTURE_TEST_CASE(txindex_initial_sync, TestChain100Setup)
     // BlockUntilSyncedToCurrentChain should return false before txindex is started.
     BOOST_CHECK(!txindex.BlockUntilSyncedToCurrentChain());
 
+<<<<<<< HEAD
     BOOST_REQUIRE(txindex.Start(m_node.chainman->ActiveChainstate()));
 
     // Allow tx index to catch up with the block index.
@@ -38,6 +53,12 @@ BOOST_FIXTURE_TEST_CASE(txindex_initial_sync, TestChain100Setup)
         BOOST_REQUIRE(time_start + timeout_ms > GetTimeMillis());
         UninterruptibleSleep(std::chrono::milliseconds{100});
     }
+=======
+    BOOST_REQUIRE(txindex.StartBackgroundSync());
+
+    // Allow tx index to catch up with the block index.
+    IndexWaitSynced(txindex);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // Check that txindex excludes genesis block transactions.
     const CBlock& genesis_block = Params().GenesisBlock();
@@ -56,7 +77,10 @@ BOOST_FIXTURE_TEST_CASE(txindex_initial_sync, TestChain100Setup)
 
     // Check that new transactions in new blocks make it into the index.
     for (int i = 0; i < 10; i++) {
+<<<<<<< HEAD
         SetMockTime(GetTime() + 1);
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         CScript coinbase_script_pub_key = GetScriptForDestination(PKHash(coinbaseKey.GetPubKey()));
         std::vector<CMutableTransaction> no_txns;
         const CBlock& block = CreateAndProcessBlock(no_txns, coinbase_script_pub_key);
@@ -70,11 +94,24 @@ BOOST_FIXTURE_TEST_CASE(txindex_initial_sync, TestChain100Setup)
         }
     }
 
+<<<<<<< HEAD
     // shutdown sequence (c.f. Shutdown() in init.cpp)
     txindex.Stop();
 
     // Let scheduler events finish running to avoid accessing any memory related to txindex after it is destructed
     SyncWithValidationInterfaceQueue();
+=======
+    // It is not safe to stop and destroy the index until it finishes handling
+    // the last BlockConnected notification. The BlockUntilSyncedToCurrentChain()
+    // call above is sufficient to ensure this, but the
+    // SyncWithValidationInterfaceQueue() call below is also needed to ensure
+    // TSAN always sees the test thread waiting for the notification thread, and
+    // avoid potential false positive reports.
+    SyncWithValidationInterfaceQueue();
+
+    // shutdown sequence (c.f. Shutdown() in init.cpp)
+    txindex.Stop();
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 BOOST_AUTO_TEST_SUITE_END()

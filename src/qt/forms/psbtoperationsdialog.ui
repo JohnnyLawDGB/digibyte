@@ -11,7 +11,11 @@
    </rect>
   </property>
   <property name="windowTitle">
+<<<<<<< HEAD
    <string>Dialog</string>
+=======
+   <string>PSBT Operations</string>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <property name="spacing">

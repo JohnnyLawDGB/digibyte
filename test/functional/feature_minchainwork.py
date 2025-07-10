@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
+<<<<<<< HEAD
 # Copyright (c) 2017-2021 The DigiByte Core developers
+=======
+# Copyright (c) 2017-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test logic for setting nMinimumChainWork on command line.
@@ -17,6 +21,10 @@ only succeeds past a given node once its nMinimumChainWork has been exceeded.
 
 import time
 
+<<<<<<< HEAD
+=======
+from test_framework.p2p import P2PInterface, msg_getheaders
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import assert_equal
 
@@ -40,6 +48,12 @@ class MinimumChainWorkTest(DigiByteTestFramework):
         self.setup_nodes()
         for i in range(self.num_nodes-1):
             self.connect_nodes(i+1, i)
+<<<<<<< HEAD
+=======
+
+        # Set clock of node2 2 days ahead, to keep it in IBD during this test.
+        self.nodes[2].setmocktime(int(time.time()) + 48*60*60)
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     def run_test(self):
         # Start building a chain on node0.  node2 shouldn't be able to sync until node1's
@@ -71,6 +85,15 @@ class MinimumChainWorkTest(DigiByteTestFramework):
         assert self.nodes[1].getbestblockhash() != self.nodes[0].getbestblockhash()
         assert_equal(self.nodes[2].getblockcount(), starting_blockcount)
 
+        self.log.info("Check that getheaders requests to node2 are ignored")
+        peer = self.nodes[2].add_p2p_connection(P2PInterface())
+        msg = msg_getheaders()
+        msg.locator.vHave = [int(self.nodes[2].getbestblockhash(), 16)]
+        msg.hashstop = 0
+        peer.send_and_ping(msg)
+        time.sleep(5)
+        assert "headers" not in peer.last_message or len(peer.last_message["headers"].headers) == 0
+
         self.log.info("Generating one more block")
         self.generate(self.nodes[0], 1)
 
@@ -84,6 +107,25 @@ class MinimumChainWorkTest(DigiByteTestFramework):
 
         self.sync_all()
         self.log.info(f"Blockcounts: {[n.getblockcount() for n in self.nodes]}")
+<<<<<<< HEAD
+=======
+
+        self.log.info("Test that getheaders requests to node2 are not ignored")
+        peer.send_and_ping(msg)
+        assert "headers" in peer.last_message
+
+        # Verify that node2 is in fact still in IBD (otherwise this test may
+        # not be exercising the logic we want!)
+        assert_equal(self.nodes[2].getblockchaininfo()['initialblockdownload'], True)
+
+        self.log.info("Test -minimumchainwork with a non-hex value")
+        self.stop_node(0)
+        self.nodes[0].assert_start_raises_init_error(
+            ["-minimumchainwork=test"],
+            expected_msg='Error: Invalid non-hex (test) minimum chain work value specified',
+        )
+
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 if __name__ == '__main__':
     MinimumChainWorkTest().main()

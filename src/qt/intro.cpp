@@ -1,5 +1,9 @@
+<<<<<<< HEAD
 // Copyright (c) 2009-2020 The Bitcoin Core developers
 // Copyright (c) 2014-2020 The DigiByte Core developers
+=======
+// Copyright (c) 2011-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -8,16 +12,26 @@
 #endif
 
 #include <chainparams.h>
+<<<<<<< HEAD
 #include <fs.h>
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <qt/intro.h>
 #include <qt/forms/ui_intro.h>
+#include <util/chaintype.h>
+#include <util/fs.h>
 
 #include <qt/guiconstants.h>
 #include <qt/guiutil.h>
 #include <qt/optionsmodel.h>
 
+#include <common/args.h>
 #include <interfaces/node.h>
+<<<<<<< HEAD
 #include <util/system.h>
+=======
+#include <util/fs_helpers.h>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <validation.h>
 
 #include <QFileDialog>
@@ -68,7 +82,7 @@ FreespaceChecker::FreespaceChecker(Intro *_intro)
 void FreespaceChecker::check()
 {
     QString dataDirStr = intro->getPathToCheck();
-    fs::path dataDir = GUIUtil::qstringToBoostPath(dataDirStr);
+    fs::path dataDir = GUIUtil::QStringToPath(dataDirStr);
     uint64_t freeBytesAvailable = 0;
     int replyStatus = ST_OK;
     QString replyMessage = tr("A new data directory will be created.");
@@ -114,7 +128,11 @@ namespace {
 //! Return pruning size that will be used if automatic pruning is enabled.
 int GetPruneTargetGB()
 {
+<<<<<<< HEAD
     int64_t prune_target_mib = gArgs.GetArg("-prune", 0);
+=======
+    int64_t prune_target_mib = gArgs.GetIntArg("-prune", 0);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     // >1 means automatic pruning is enabled by config, 1 means manual pruning, 0 means no pruning.
     return prune_target_mib > 1 ? PruneMiBtoGB(prune_target_mib) : DEFAULT_PRUNE_TARGET_GB;
 }
@@ -123,8 +141,11 @@ int GetPruneTargetGB()
 Intro::Intro(QWidget *parent, int64_t blockchain_size_gb, int64_t chain_state_size_gb) :
     QDialog(parent, GUIUtil::dialog_flags),
     ui(new Ui::Intro),
+<<<<<<< HEAD
     thread(nullptr),
     signalled(false),
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     m_blockchain_size_gb(blockchain_size_gb),
     m_chain_state_size_gb(chain_state_size_gb),
     m_prune_target_gb{GetPruneTargetGB()}
@@ -136,14 +157,22 @@ Intro::Intro(QWidget *parent, int64_t blockchain_size_gb, int64_t chain_state_si
     ui->lblExplanation1->setText(ui->lblExplanation1->text()
         .arg(PACKAGE_NAME)
         .arg(m_blockchain_size_gb)
+<<<<<<< HEAD
         .arg(2014)
+=======
+        .arg(2009)
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         .arg(tr("DigiByte"))
     );
     ui->lblExplanation2->setText(ui->lblExplanation2->text().arg(PACKAGE_NAME));
 
     const int min_prune_target_GB = std::ceil(MIN_DISK_SPACE_FOR_BLOCK_FILES / 1e9);
     ui->pruneGB->setRange(min_prune_target_GB, std::numeric_limits<int>::max());
+<<<<<<< HEAD
     if (gArgs.GetArg("-prune", 0) > 1) { // -prune=1 means enabled, above that it's a size in MiB
+=======
+    if (gArgs.GetIntArg("-prune", 0) > 1) { // -prune=1 means enabled, above that it's a size in MiB
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         ui->prune->setChecked(true);
         ui->prune->setEnabled(false);
     }
@@ -217,17 +246,25 @@ bool Intro::showIfNeeded(bool& did_show_intro, int64_t& prune_MiB)
     /* 2) Allow QSettings to override default dir */
     dataDir = settings.value("strDataDir", dataDir).toString();
 
-    if(!fs::exists(GUIUtil::qstringToBoostPath(dataDir)) || gArgs.GetBoolArg("-choosedatadir", DEFAULT_CHOOSE_DATADIR) || settings.value("fReset", false).toBool() || gArgs.GetBoolArg("-resetguisettings", false))
+    if(!fs::exists(GUIUtil::QStringToPath(dataDir)) || gArgs.GetBoolArg("-choosedatadir", DEFAULT_CHOOSE_DATADIR) || settings.value("fReset", false).toBool() || gArgs.GetBoolArg("-resetguisettings", false))
     {
         /* Use selectParams here to guarantee Params() can be used by node interface */
         try {
+<<<<<<< HEAD
             SelectParams(gArgs.GetChainName());
+=======
+            SelectParams(gArgs.GetChainType());
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         } catch (const std::exception&) {
             return false;
         }
 
         /* If current default data directory does not exist, let the user choose one */
+<<<<<<< HEAD
         Intro intro(0, Params().AssumedBlockchainSize(), Params().AssumedChainStateSize());
+=======
+        Intro intro(nullptr, Params().AssumedBlockchainSize(), Params().AssumedChainStateSize());
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         intro.setDataDirectory(dataDir);
         intro.setWindowIcon(QIcon(":icons/digibyte"));
         did_show_intro = true;
@@ -241,9 +278,9 @@ bool Intro::showIfNeeded(bool& did_show_intro, int64_t& prune_MiB)
             }
             dataDir = intro.getDataDirectory();
             try {
-                if (TryCreateDirectories(GUIUtil::qstringToBoostPath(dataDir))) {
+                if (TryCreateDirectories(GUIUtil::QStringToPath(dataDir))) {
                     // If a new data directory has been created, make wallets subdirectory too
-                    TryCreateDirectories(GUIUtil::qstringToBoostPath(dataDir) / "wallets");
+                    TryCreateDirectories(GUIUtil::QStringToPath(dataDir) / "wallets");
                 }
                 break;
             } catch (const fs::filesystem_error&) {
@@ -264,7 +301,11 @@ bool Intro::showIfNeeded(bool& did_show_intro, int64_t& prune_MiB)
      * (to be consistent with digibyted behavior)
      */
     if(dataDir != GUIUtil::getDefaultDataDirectory()) {
+<<<<<<< HEAD
         gArgs.SoftSetArg("-datadir", GUIUtil::qstringToBoostPath(dataDir).string()); // use OS locale for path setting
+=======
+        gArgs.SoftSetArg("-datadir", fs::PathToString(GUIUtil::QStringToPath(dataDir))); // use OS locale for path setting
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     return true;
 }
@@ -288,7 +329,11 @@ void Intro::setStatus(int status, const QString &message, quint64 bytesAvailable
         ui->freeSpace->setText("");
     } else {
         m_bytes_available = bytesAvailable;
+<<<<<<< HEAD
         if (ui->prune->isEnabled()) {
+=======
+        if (ui->prune->isEnabled() && !(gArgs.IsArgSet("-prune") && gArgs.GetIntArg("-prune", 0) == 0)) {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             ui->prune->setChecked(m_bytes_available < (m_blockchain_size_gb + m_chain_state_size_gb + 10) * GB_BYTES);
         }
         UpdateFreeSpaceLabel();
@@ -299,12 +344,21 @@ void Intro::setStatus(int status, const QString &message, quint64 bytesAvailable
 
 void Intro::UpdateFreeSpaceLabel()
 {
+<<<<<<< HEAD
     QString freeString = tr("%1 GB of free space available").arg(m_bytes_available / GB_BYTES);
     if (m_bytes_available < m_required_space_gb * GB_BYTES) {
         freeString += " " + tr("(of %1 GB needed)").arg(m_required_space_gb);
         ui->freeSpace->setStyleSheet("QLabel { color: #800000 }");
     } else if (m_bytes_available / GB_BYTES - m_required_space_gb < 10) {
         freeString += " " + tr("(%1 GB needed for full chain)").arg(m_required_space_gb);
+=======
+    QString freeString = tr("%n GB of space available", "", m_bytes_available / GB_BYTES);
+    if (m_bytes_available < m_required_space_gb * GB_BYTES) {
+        freeString += " " + tr("(of %n GB needed)", "", m_required_space_gb);
+        ui->freeSpace->setStyleSheet("QLabel { color: #800000 }");
+    } else if (m_bytes_available / GB_BYTES - m_required_space_gb < 10) {
+        freeString += " " + tr("(%n GB needed for full chain)", "", m_required_space_gb);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         ui->freeSpace->setStyleSheet("QLabel { color: #999900 }");
     } else {
         ui->freeSpace->setStyleSheet("");
@@ -321,7 +375,11 @@ void Intro::on_dataDirectory_textChanged(const QString &dataDirStr)
 
 void Intro::on_ellipsisButton_clicked()
 {
+<<<<<<< HEAD
     QString dir = QDir::toNativeSeparators(QFileDialog::getExistingDirectory(nullptr, "Choose data directory", ui->dataDirectory->text()));
+=======
+    QString dir = QDir::toNativeSeparators(QFileDialog::getExistingDirectory(nullptr, tr("Choose data directory"), ui->dataDirectory->text()));
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if(!dir.isEmpty())
         ui->dataDirectory->setText(dir);
 }

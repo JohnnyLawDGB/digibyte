@@ -5,7 +5,7 @@
 #ifndef DIGIBYTE_UTIL_GETUNIQUEPATH_H
 #define DIGIBYTE_UTIL_GETUNIQUEPATH_H
 
-#include <fs.h>
+#include <util/fs.h>
 
 /**
  * Helper function for getting a unique path

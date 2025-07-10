@@ -4,11 +4,17 @@
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test longpolling with getblocktemplate."""
 
+<<<<<<< HEAD
 from decimal import Decimal
 import random
 import threading
 
 from test_framework.blocktools import COINBASE_MATURITY
+=======
+import random
+import threading
+
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import get_rpc_proxy
 from test_framework.wallet import MiniWallet
@@ -43,20 +49,28 @@ class GetBlockTemplateLPTest(DigiByteTestFramework):
 
         self.log.info("Test that longpoll waits if we do nothing")
         thr = LongpollThread(self.nodes[0])
-        thr.start()
+        with self.nodes[0].assert_debug_log(["ThreadRPCServer method=getblocktemplate"], timeout=3):
+            thr.start()
         # check that thread still lives
         thr.join(5)  # wait 5 seconds or until thread exits
         assert thr.is_alive()
 
+<<<<<<< HEAD
         miniwallets = [MiniWallet(node) for node in self.nodes]
         self.log.info("Test that longpoll will terminate if another node generates a block")
         self.generate(miniwallets[1], 1)  # generate a block on another node
+=======
+        self.miniwallet = MiniWallet(self.nodes[0])
+        self.log.info("Test that longpoll will terminate if another node generates a block")
+        self.generate(self.nodes[1], 1)  # generate a block on another node
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         # check that thread will exit now that new transaction entered mempool
         thr.join(5)  # wait 5 seconds or until thread exits
         assert not thr.is_alive()
 
         self.log.info("Test that longpoll will terminate if we generate a block ourselves")
         thr = LongpollThread(self.nodes[0])
+<<<<<<< HEAD
         thr.start()
         self.generate(miniwallets[0], 1)  # generate a block on own node
         thr.join(5)  # wait 5 seconds or until thread exits
@@ -73,6 +87,20 @@ class GetBlockTemplateLPTest(DigiByteTestFramework):
         fee_rate = min_relay_fee + Decimal('0.00000010') * random.randint(0,20)
         miniwallets[0].send_self_transfer(from_node=random.choice(self.nodes),
                                           fee_rate=fee_rate)
+=======
+        with self.nodes[0].assert_debug_log(["ThreadRPCServer method=getblocktemplate"], timeout=3):
+            thr.start()
+        self.generate(self.nodes[0], 1)  # generate a block on own node
+        thr.join(5)  # wait 5 seconds or until thread exits
+        assert not thr.is_alive()
+
+        self.log.info("Test that introducing a new transaction into the mempool will terminate the longpoll")
+        thr = LongpollThread(self.nodes[0])
+        with self.nodes[0].assert_debug_log(["ThreadRPCServer method=getblocktemplate"], timeout=3):
+            thr.start()
+        # generate a transaction and submit it
+        self.miniwallet.send_self_transfer(from_node=random.choice(self.nodes))
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         # after one minute, every 10 seconds the mempool is probed, so in 80 seconds it should have returned
         thr.join(60 + 20)
         assert not thr.is_alive()

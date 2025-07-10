@@ -12,7 +12,11 @@
 
     <application android:hardwareAccelerated="true" android:name="org.qtproject.qt5.android.bindings.QtApplication" android:label="DigiByte Core">
         <activity android:configChanges="orientation|uiMode|screenLayout|screenSize|smallestScreenSize|layoutDirection|locale|fontScale|keyboard|keyboardHidden|navigation|mcc|mnc|density"
+<<<<<<< HEAD
                   android:name="org.digibytecore.qt.DigiByteQtActivity"
+=======
+                  android:name="org.digibytecore.qt.BitcoinQtActivity"
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                   android:label="DigiByte Core"
                   android:icon="@drawable/digibyte"
                   android:screenOrientation="unspecified"
@@ -32,7 +36,12 @@
             <meta-data android:name="android.app.background_running" android:value="true"/>
             <meta-data android:name="android.app.auto_screen_scale_factor" android:value="true"/>
             <meta-data android:name="android.app.extract_android_style" android:value="default"/>
+<<<<<<< HEAD
     </activity>
+=======
+            <meta-data android:name="android.app.load_local_libs_resource_id" android:resource="@array/load_local_libs"/>
+        </activity>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     </application>
 </manifest>

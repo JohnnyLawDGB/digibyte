@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Copyright (c) 2010 ArtForz -- public domain half-a-node
 # Copyright (c) 2012 Jeff Garzik
-# Copyright (c) 2010-2021 The DigiByte Core developers
+# Copyright (c) 2010-2022 The DigiByte Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test objects for interacting with a digibyted node over the p2p protocol.
@@ -27,7 +27,6 @@ import logging
 import struct
 import sys
 import threading
-import time
 
 from test_framework.messages import (
     CBlockHeader,
@@ -48,6 +47,9 @@ from test_framework.messages import (
     msg_getaddr,
     msg_getblocks,
     msg_getblocktxn,
+    msg_getcfcheckpt,
+    msg_getcfheaders,
+    msg_getcfilters,
     msg_getdata,
     msg_getheaders,
     msg_headers,
@@ -60,6 +62,7 @@ from test_framework.messages import (
     msg_sendaddrv2,
     msg_sendcmpct,
     msg_sendheaders,
+    msg_sendtxrcncl,
     msg_tx,
     MSG_TX,
     MSG_TYPE_MASK,
@@ -74,7 +77,7 @@ from test_framework.messages import (
 from test_framework.util import (
     MAX_NODES,
     p2p_port,
-    wait_until_helper,
+    wait_until_helper_internal,
 )
 
 logger = logging.getLogger("TestFramework.p2p")
@@ -83,7 +86,7 @@ logger = logging.getLogger("TestFramework.p2p")
 MIN_P2P_VERSION_SUPPORTED = 60001
 # The P2P version that this test framework implements and sends in its `version` message
 # Version 70016 supports wtxid relay
-P2P_VERSION = 70018
+P2P_VERSION = 70016
 # The services that this test framework offers in its `version` message
 P2P_SERVICES = NODE_NETWORK | NODE_WITNESS
 # The P2P user agent string that this test framework sends in its `version` message
@@ -92,8 +95,12 @@ P2P_SUBVERSION = "/python-p2p-tester:0.0.3/"
 P2P_VERSION_RELAY = 1
 # Delay after receiving a tx inv before requesting transactions from non-preferred peers, in seconds
 NONPREF_PEER_TX_DELAY = 2
-# protocol version required for wtids
-WTXID_RELAY_VERSION = 70018
+# Delay for requesting transactions via txids if we have wtxid-relaying peers, in seconds
+TXID_RELAY_DELAY = 2
+# Delay for requesting transactions if the peer has MAX_PEER_TX_REQUEST_IN_FLIGHT or more requests
+OVERLOADED_PEER_TX_DELAY = 2
+# How long to wait before downloading a transaction from an additional peer
+GETDATA_TX_INTERVAL = 60
 
 MESSAGEMAP = {
     b"addr": msg_addr,
@@ -111,6 +118,9 @@ MESSAGEMAP = {
     b"getaddr": msg_getaddr,
     b"getblocks": msg_getblocks,
     b"getblocktxn": msg_getblocktxn,
+    b"getcfcheckpt": msg_getcfcheckpt,
+    b"getcfheaders": msg_getcfheaders,
+    b"getcfilters": msg_getcfilters,
     b"getdata": msg_getdata,
     b"getheaders": msg_getheaders,
     b"headers": msg_headers,
@@ -123,6 +133,7 @@ MESSAGEMAP = {
     b"sendaddrv2": msg_sendaddrv2,
     b"sendcmpct": msg_sendcmpct,
     b"sendheaders": msg_sendheaders,
+    b"sendtxrcncl": msg_sendtxrcncl,
     b"tx": msg_tx,
     b"verack": msg_verack,
     b"version": msg_version,
@@ -130,8 +141,8 @@ MESSAGEMAP = {
 }
 
 MAGIC_BYTES = {
-    "mainnet": b"\xfa\xc3\xb6\xda",   # mainnet
-    "testnet4": b"\xfd\xc8\xbd\xdd",  # testnet3
+    "mainnet": b"\xf9\xbe\xb4\xd9",   # mainnet
+    "testnet3": b"\x0b\x11\x09\x07",  # testnet3
     "regtest": b"\xfa\xbf\xb5\xda",   # regtest
     "signet": b"\x0a\x03\xcf\x40",    # signet
 }
@@ -380,7 +391,7 @@ class P2PInterface(P2PConnection):
                 self.message_count[msgtype] += 1
                 self.last_message[msgtype] = message
                 getattr(self, 'on_' + msgtype)(message)
-            except:
+            except Exception:
                 print("ERROR delivering %s (%s)" % (repr(message), sys.exc_info()[0]))
                 raise
 
@@ -418,6 +429,7 @@ class P2PInterface(P2PConnection):
     def on_sendaddrv2(self, message): pass
     def on_sendcmpct(self, message): pass
     def on_sendheaders(self, message): pass
+    def on_sendtxrcncl(self, message): pass
     def on_tx(self, message): pass
     def on_wtxidrelay(self, message): pass
 
@@ -437,12 +449,14 @@ class P2PInterface(P2PConnection):
 
     def on_version(self, message):
         assert message.nVersion >= MIN_P2P_VERSION_SUPPORTED, "Version {} received. Test framework only supports versions greater than {}".format(message.nVersion, MIN_P2P_VERSION_SUPPORTED)
-        if message.nVersion >= 70017 and self.wtxidrelay:
+        if message.nVersion >= 70016 and self.wtxidrelay:
             self.send_message(msg_wtxidrelay())
         if self.support_addrv2:
             self.send_message(msg_sendaddrv2())
         self.send_message(msg_verack())
         self.nServices = message.nServices
+        self.relay = message.relay
+        self.send_message(msg_getaddr())
 
     # Connection helper methods
 
@@ -452,11 +466,11 @@ class P2PInterface(P2PConnection):
                 assert self.is_connected
             return test_function_in()
 
-        wait_until_helper(test_function, timeout=timeout, lock=p2p_lock, timeout_factor=self.timeout_factor)
+        wait_until_helper_internal(test_function, timeout=timeout, lock=p2p_lock, timeout_factor=self.timeout_factor)
 
     def wait_for_connect(self, timeout=60):
         test_function = lambda: self.is_connected
-        wait_until_helper(test_function, timeout=timeout, lock=p2p_lock)
+        self.wait_until(test_function, timeout=timeout, check_connected=False)
 
     def wait_for_disconnect(self, timeout=60):
         test_function = lambda: not self.is_connected
@@ -544,16 +558,12 @@ class P2PInterface(P2PConnection):
         self.send_message(message)
         self.sync_with_ping(timeout=timeout)
 
-    def sync_send_with_ping(self, timeout=60):
-        """Ensure SendMessages is called on this connection"""
-        # Calling sync_with_ping twice requires that the node calls
+    def sync_with_ping(self, timeout=60):
+        """Ensure ProcessMessages and SendMessages is called on this connection"""
+        # Sending two pings back-to-back, requires that the node calls
         # `ProcessMessage` twice, and thus ensures `SendMessages` must have
         # been called at least once
-        self.sync_with_ping()
-        self.sync_with_ping()
-
-    def sync_with_ping(self, timeout=60):
-        """Ensure ProcessMessages is called on this connection"""
+        self.send_message(msg_ping(nonce=0))
         self.send_message(msg_ping(nonce=self.ping_counter))
 
         def test_function():
@@ -592,7 +602,7 @@ class NetworkThread(threading.Thread):
     def close(self, timeout=10):
         """Close the connections and network event loop."""
         self.network_event_loop.call_soon_threadsafe(self.network_event_loop.stop)
-        wait_until_helper(lambda: not self.network_event_loop.is_running(), timeout=timeout)
+        wait_until_helper_internal(lambda: not self.network_event_loop.is_running(), timeout=timeout)
         self.network_event_loop.close()
         self.join(timeout)
         # Safe to remove event loop.
@@ -779,11 +789,7 @@ class P2PTxInvStore(P2PInterface):
         super().on_inv(message) # Send getdata in response.
         # Store how many times invs have been received for each tx.
         for i in message.inv:
-            if (i.type == MSG_TX):
-                # save txid
-                self.tx_invs_received[i.hash] += 1
-
-            if (i.type == MSG_WTX):
+            if (i.type == MSG_TX) or (i.type == MSG_WTX):
                 # save txid
                 self.tx_invs_received[i.hash] += 1
 

@@ -1,19 +1,40 @@
+<<<<<<< HEAD
 // Copyright (c) 2009-2020 The Bitcoin Core developers
 // Copyright (c) 2014-2020 The DigiByte Core developers
+=======
+// Copyright (c) 2015-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #ifndef DIGIBYTE_SCHEDULER_H
 #define DIGIBYTE_SCHEDULER_H
+<<<<<<< HEAD
 
 #include <condition_variable>
 #include <functional>
 #include <list>
 #include <map>
 #include <thread>
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
+#include <attributes.h>
 #include <sync.h>
+#include <threadsafety.h>
 
+<<<<<<< HEAD
+=======
+#include <chrono>
+#include <condition_variable>
+#include <cstddef>
+#include <functional>
+#include <list>
+#include <map>
+#include <thread>
+#include <utility>
+
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 /**
  * Simple class for background tasks that should be run
  * periodically or once "after a while"
@@ -42,12 +63,21 @@ public:
     typedef std::function<void()> Function;
 
     /** Call func at/after time t */
+<<<<<<< HEAD
     void schedule(Function f, std::chrono::system_clock::time_point t);
 
     /** Call f once after the delta has passed */
     void scheduleFromNow(Function f, std::chrono::milliseconds delta)
     {
         schedule(std::move(f), std::chrono::system_clock::now() + delta);
+=======
+    void schedule(Function f, std::chrono::steady_clock::time_point t) EXCLUSIVE_LOCKS_REQUIRED(!newTaskMutex);
+
+    /** Call f once after the delta has passed */
+    void scheduleFromNow(Function f, std::chrono::milliseconds delta) EXCLUSIVE_LOCKS_REQUIRED(!newTaskMutex)
+    {
+        schedule(std::move(f), std::chrono::steady_clock::now() + delta);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     /**
@@ -56,13 +86,18 @@ public:
      * The timing is not exact: Every time f is finished, it is rescheduled to run again after delta. If you need more
      * accurate scheduling, don't use this method.
      */
+<<<<<<< HEAD
     void scheduleEvery(Function f, std::chrono::milliseconds delta);
+=======
+    void scheduleEvery(Function f, std::chrono::milliseconds delta) EXCLUSIVE_LOCKS_REQUIRED(!newTaskMutex);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     /**
      * Mock the scheduler to fast forward in time.
      * Iterates through items on taskQueue and reschedules them
      * to be delta_seconds sooner.
      */
+<<<<<<< HEAD
     void MockForward(std::chrono::seconds delta_seconds);
 
     /**
@@ -94,11 +129,49 @@ public:
 
     /** Returns true if there are threads actively running in serviceQueue() */
     bool AreThreadsServicingQueue() const;
+=======
+    void MockForward(std::chrono::seconds delta_seconds) EXCLUSIVE_LOCKS_REQUIRED(!newTaskMutex);
+
+    /**
+     * Services the queue 'forever'. Should be run in a thread.
+     */
+    void serviceQueue() EXCLUSIVE_LOCKS_REQUIRED(!newTaskMutex);
+
+    /** Tell any threads running serviceQueue to stop as soon as the current task is done */
+    void stop() EXCLUSIVE_LOCKS_REQUIRED(!newTaskMutex)
+    {
+        WITH_LOCK(newTaskMutex, stopRequested = true);
+        newTaskScheduled.notify_all();
+        if (m_service_thread.joinable()) m_service_thread.join();
+    }
+    /** Tell any threads running serviceQueue to stop when there is no work left to be done */
+    void StopWhenDrained() EXCLUSIVE_LOCKS_REQUIRED(!newTaskMutex)
+    {
+        WITH_LOCK(newTaskMutex, stopWhenEmpty = true);
+        newTaskScheduled.notify_all();
+        if (m_service_thread.joinable()) m_service_thread.join();
+    }
+
+    /**
+     * Returns number of tasks waiting to be serviced,
+     * and first and last task times
+     */
+    size_t getQueueInfo(std::chrono::steady_clock::time_point& first,
+                        std::chrono::steady_clock::time_point& last) const
+        EXCLUSIVE_LOCKS_REQUIRED(!newTaskMutex);
+
+    /** Returns true if there are threads actively running in serviceQueue() */
+    bool AreThreadsServicingQueue() const EXCLUSIVE_LOCKS_REQUIRED(!newTaskMutex);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 private:
     mutable Mutex newTaskMutex;
     std::condition_variable newTaskScheduled;
+<<<<<<< HEAD
     std::multimap<std::chrono::system_clock::time_point, Function> taskQueue GUARDED_BY(newTaskMutex);
+=======
+    std::multimap<std::chrono::steady_clock::time_point, Function> taskQueue GUARDED_BY(newTaskMutex);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     int nThreadsServicingQueue GUARDED_BY(newTaskMutex){0};
     bool stopRequested GUARDED_BY(newTaskMutex){false};
     bool stopWhenEmpty GUARDED_BY(newTaskMutex){false};
@@ -118,17 +191,29 @@ private:
 class SingleThreadedSchedulerClient
 {
 private:
+<<<<<<< HEAD
     CScheduler* m_pscheduler;
 
     RecursiveMutex m_cs_callbacks_pending;
     std::list<std::function<void()>> m_callbacks_pending GUARDED_BY(m_cs_callbacks_pending);
     bool m_are_callbacks_running GUARDED_BY(m_cs_callbacks_pending) = false;
+=======
+    CScheduler& m_scheduler;
 
-    void MaybeScheduleProcessQueue();
-    void ProcessQueue();
+    Mutex m_callbacks_mutex;
+    std::list<std::function<void()>> m_callbacks_pending GUARDED_BY(m_callbacks_mutex);
+    bool m_are_callbacks_running GUARDED_BY(m_callbacks_mutex) = false;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
+    void MaybeScheduleProcessQueue() EXCLUSIVE_LOCKS_REQUIRED(!m_callbacks_mutex);
+    void ProcessQueue() EXCLUSIVE_LOCKS_REQUIRED(!m_callbacks_mutex);
 
 public:
+<<<<<<< HEAD
     explicit SingleThreadedSchedulerClient(CScheduler* pschedulerIn) : m_pscheduler(pschedulerIn) {}
+=======
+    explicit SingleThreadedSchedulerClient(CScheduler& scheduler LIFETIMEBOUND) : m_scheduler{scheduler} {}
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     /**
      * Add a callback to be executed. Callbacks are executed serially
@@ -136,15 +221,23 @@ public:
      * Practically, this means that callbacks can behave as if they are executed
      * in order by a single thread.
      */
+<<<<<<< HEAD
     void AddToProcessQueue(std::function<void()> func);
+=======
+    void AddToProcessQueue(std::function<void()> func) EXCLUSIVE_LOCKS_REQUIRED(!m_callbacks_mutex);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     /**
      * Processes all remaining queue members on the calling thread, blocking until queue is empty
      * Must be called after the CScheduler has no remaining processing threads!
      */
+<<<<<<< HEAD
     void EmptyQueue();
+=======
+    void EmptyQueue() EXCLUSIVE_LOCKS_REQUIRED(!m_callbacks_mutex);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
-    size_t CallbacksPending();
+    size_t CallbacksPending() EXCLUSIVE_LOCKS_REQUIRED(!m_callbacks_mutex);
 };
 
-#endif
+#endif // DIGIBYTE_SCHEDULER_H

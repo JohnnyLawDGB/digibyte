@@ -1,19 +1,29 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
+<<<<<<< HEAD
 // Copyright (c) 2009-2020 The DigiByte Core developers
+=======
+// Copyright (c) 2009-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #ifndef DIGIBYTE_UTIL_TIME_H
 #define DIGIBYTE_UTIL_TIME_H
 
+<<<<<<< HEAD
 #include <compat.h>
 
 #include <chrono>
 #include <stdint.h>
+=======
+#include <chrono> // IWYU pragma: export
+#include <cstdint>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <string>
 
 using namespace std::chrono_literals;
 
+<<<<<<< HEAD
 void UninterruptibleSleep(const std::chrono::microseconds& n);
 
 /**
@@ -26,10 +36,52 @@ void UninterruptibleSleep(const std::chrono::microseconds& n);
  * This helper is used to convert durations before passing them over an
  * interface that doesn't support std::chrono (e.g. RPC, debug log, or the GUI)
  */
+=======
+/** Mockable clock in the context of tests, otherwise the system clock */
+struct NodeClock : public std::chrono::system_clock {
+    using time_point = std::chrono::time_point<NodeClock>;
+    /** Return current system time or mocked time, if set */
+    static time_point now() noexcept;
+    static std::time_t to_time_t(const time_point&) = delete; // unused
+    static time_point from_time_t(std::time_t) = delete;      // unused
+};
+using NodeSeconds = std::chrono::time_point<NodeClock, std::chrono::seconds>;
+
+using SteadyClock = std::chrono::steady_clock;
+using SteadySeconds = std::chrono::time_point<std::chrono::steady_clock, std::chrono::seconds>;
+using SteadyMilliseconds = std::chrono::time_point<std::chrono::steady_clock, std::chrono::milliseconds>;
+using SteadyMicroseconds = std::chrono::time_point<std::chrono::steady_clock, std::chrono::microseconds>;
+
+using SystemClock = std::chrono::system_clock;
+
+void UninterruptibleSleep(const std::chrono::microseconds& n);
+
+/**
+ * Helper to count the seconds of a duration/time_point.
+ *
+ * All durations/time_points should be using std::chrono and calling this should generally
+ * be avoided in code. Though, it is still preferred to an inline t.count() to
+ * protect against a reliance on the exact type of t.
+ *
+ * This helper is used to convert durations/time_points before passing them over an
+ * interface that doesn't support std::chrono (e.g. RPC, debug log, or the GUI)
+ */
+template <typename Dur1, typename Dur2>
+constexpr auto Ticks(Dur2 d)
+{
+    return std::chrono::duration_cast<Dur1>(d).count();
+}
+template <typename Duration, typename Timepoint>
+constexpr auto TicksSinceEpoch(Timepoint t)
+{
+    return Ticks<Duration>(t.time_since_epoch());
+}
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 constexpr int64_t count_seconds(std::chrono::seconds t) { return t.count(); }
 constexpr int64_t count_milliseconds(std::chrono::milliseconds t) { return t.count(); }
 constexpr int64_t count_microseconds(std::chrono::microseconds t) { return t.count(); }
 
+<<<<<<< HEAD
 using SecondsDouble = std::chrono::duration<double, std::chrono::seconds::period>;
 
 /**
@@ -50,6 +102,22 @@ int64_t GetTimeMicros();
 /** Returns the system time (not mockable) */
 int64_t GetTimeSeconds(); // Like GetTime(), but not mockable
 
+=======
+using HoursDouble = std::chrono::duration<double, std::chrono::hours::period>;
+using SecondsDouble = std::chrono::duration<double, std::chrono::seconds::period>;
+using MillisecondsDouble = std::chrono::duration<double, std::chrono::milliseconds::period>;
+
+/**
+ * DEPRECATED
+ * Use either ClockType::now() or Now<TimePointType>() if a cast is needed.
+ * ClockType is
+ * - SteadyClock/std::chrono::steady_clock for steady time
+ * - SystemClock/std::chrono::system_clock for system time
+ * - NodeClock                             for mockable system time
+ */
+int64_t GetTime();
+
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 /**
  * DEPRECATED
  * Use SetMockTime with chrono type
@@ -64,9 +132,27 @@ void SetMockTime(std::chrono::seconds mock_time_in);
 /** For testing */
 std::chrono::seconds GetMockTime();
 
+<<<<<<< HEAD
 /** Return system time (or mocked time, if set) */
 template <typename T>
 T GetTime();
+=======
+/**
+ * Return the current time point cast to the given precision. Only use this
+ * when an exact precision is needed, otherwise use T::clock::now() directly.
+ */
+template <typename T>
+T Now()
+{
+    return std::chrono::time_point_cast<typename T::duration>(T::clock::now());
+}
+/** DEPRECATED, see GetTime */
+template <typename T>
+T GetTime()
+{
+    return Now<std::chrono::time_point<NodeClock, T>>().time_since_epoch();
+}
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 /**
  * ISO 8601 formatting is preferred. Use the FormatISO8601{DateTime,Date}
@@ -74,7 +160,10 @@ T GetTime();
  */
 std::string FormatISO8601DateTime(int64_t nTime);
 std::string FormatISO8601Date(int64_t nTime);
+<<<<<<< HEAD
 int64_t ParseISO8601DateTime(const std::string& str);
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 /**
  * Convert milliseconds to a struct timeval for e.g. select.

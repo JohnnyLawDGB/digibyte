@@ -1,5 +1,9 @@
+<<<<<<< HEAD
 // Copyright (c) 2009-2020 The Bitcoin Core developers
 // Copyright (c) 2014-2020 The DigiByte Core developers
+=======
+// Copyright (c) 2011-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -14,11 +18,17 @@
 #include <qt/optionsmodel.h>
 
 #include <chainparams.h>
+#include <common/args.h>
 #include <interfaces/node.h>
 #include <key_io.h>
+<<<<<<< HEAD
 #include <node/ui_interface.h>
 #include <policy/policy.h>
 #include <util/system.h>
+=======
+#include <node/interface_ui.h>
+#include <policy/policy.h>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <wallet/wallet.h>
 
 #include <cstdlib>
@@ -52,7 +62,11 @@ static QString ipcServerName()
     // Append a simple hash of the datadir
     // Note that gArgs.GetDataDirNet() returns a different path
     // for -testnet versus main net
+<<<<<<< HEAD
     QString ddir(GUIUtil::boostPathToQString(gArgs.GetDataDirNet()));
+=======
+    QString ddir(GUIUtil::PathToQString(gArgs.GetDataDirNet()));
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     name.append(QString::number(qHash(ddir)));
 
     return name;
@@ -79,9 +93,9 @@ void PaymentServer::ipcParseCommandLine(int argc, char* argv[])
     for (int i = 1; i < argc; i++)
     {
         QString arg(argv[i]);
-        if (arg.startsWith("-"))
-            continue;
+        if (arg.startsWith("-")) continue;
 
+<<<<<<< HEAD
         // If the digibyte: URI contains a payment request, we are not able to detect the
         // network as that would require fetching and parsing the payment request.
         // That means clicking such an URI which contains a testnet payment request
@@ -105,6 +119,11 @@ void PaymentServer::ipcParseCommandLine(int argc, char* argv[])
                     }
                 }
             }
+=======
+        if (arg.startsWith(DIGIBYTE_IPC_PREFIX, Qt::CaseInsensitive)) // digibyte: URI
+        {
+            savedPaymentRequests.insert(arg);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
     }
 }
@@ -148,11 +167,16 @@ bool PaymentServer::ipcSendCommandLine()
     return fResult;
 }
 
+<<<<<<< HEAD
 PaymentServer::PaymentServer(QObject* parent, bool startLocalServer) :
     QObject(parent),
     saveURIs(true),
     uriServer(nullptr),
     optionsModel(nullptr)
+=======
+PaymentServer::PaymentServer(QObject* parent, bool startLocalServer)
+    : QObject(parent)
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     // Install global event filter to catch QFileOpenEvents
     // on Mac: sent when you click digibyte: links
@@ -180,9 +204,13 @@ PaymentServer::PaymentServer(QObject* parent, bool startLocalServer) :
     }
 }
 
+<<<<<<< HEAD
 PaymentServer::~PaymentServer()
 {
 }
+=======
+PaymentServer::~PaymentServer() = default;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 //
 // OSX-specific way of handling digibyte: URIs

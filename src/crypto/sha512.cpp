@@ -1,5 +1,9 @@
+<<<<<<< HEAD
 // Copyright (c) 2009-2020 The Bitcoin Core developers
 // Copyright (c) 2014-2020 The DigiByte Core developers
+=======
+// Copyright (c) 2014-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -31,7 +35,7 @@ void inline Round(uint64_t a, uint64_t b, uint64_t c, uint64_t& d, uint64_t e, u
     h = t1 + t2;
 }
 
-/** Initialize SHA-256 state. */
+/** Initialize SHA-512 state. */
 void inline Initialize(uint64_t* s)
 {
     s[0] = 0x6a09e667f3bcc908ull;
@@ -152,7 +156,7 @@ void Transform(uint64_t* s, const unsigned char* chunk)
 
 ////// SHA-512
 
-CSHA512::CSHA512() : bytes(0)
+CSHA512::CSHA512()
 {
     sha512::Initialize(s);
 }

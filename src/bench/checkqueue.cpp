@@ -1,15 +1,15 @@
-// Copyright (c) 2015-2020 The Bitcoin Core developers
-// Copyright (c) 2015-2020 The DigiByte Core developers
+// Copyright (c) 2015-2022 The Bitcoin Core developers
+// Copyright (c) 2015-2025 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <bench/bench.h>
 #include <checkqueue.h>
+#include <common/system.h>
 #include <key.h>
 #include <prevector.h>
 #include <pubkey.h>
 #include <random.h>
-#include <util/system.h>
 
 #include <vector>
 
@@ -26,7 +26,6 @@ static void CCheckQueueSpeedPrevectorJob(benchmark::Bench& bench)
     // We shouldn't ever be running with the checkqueue on a single core machine.
     if (GetNumCores() <= 1) return;
 
-    const ECCVerifyHandle verify_handle;
     ECC_Start();
 
     struct PrevectorJob {
@@ -69,4 +68,4 @@ static void CCheckQueueSpeedPrevectorJob(benchmark::Bench& bench)
     queue.StopWorkerThreads();
     ECC_Stop();
 }
-BENCHMARK(CCheckQueueSpeedPrevectorJob);
+BENCHMARK(CCheckQueueSpeedPrevectorJob, benchmark::PriorityLevel::HIGH);

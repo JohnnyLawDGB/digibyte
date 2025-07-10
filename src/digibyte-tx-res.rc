@@ -2,12 +2,20 @@
 #include "clientversion.h"       // holds the needed client version information
 
 #define VER_PRODUCTVERSION     CLIENT_VERSION_MAJOR,CLIENT_VERSION_MINOR,CLIENT_VERSION_BUILD
+<<<<<<< HEAD
 #define VER_PRODUCTVERSION_STR STRINGIZE(CLIENT_VERSION_MAJOR) "." STRINGIZE(CLIENT_VERSION_MINOR) "." STRINGIZE(CLIENT_VERSION_BUILD)
 #define VER_FILEVERSION        VER_PRODUCTVERSION
 #define VER_FILEVERSION_STR    VER_PRODUCTVERSION_STR
 
 #pragma message "PRODUCTVERSION: " VER_PRODUCTVERSION
 #pragma message "PRODUCT_VERSION_STR: " VER_PRODUCTVERSION_STR
+=======
+<<<<<<<< HEAD:src/digibyte-util-res.rc
+#define VER_PRODUCTVERSION_STR STRINGIZE(CLIENT_VERSION_MAJOR) "." STRINGIZE(CLIENT_VERSION_MINOR) "." STRINGIZE(CLIENT_VERSION_BUILD)
+========
+>>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion:src/digibyte-tx-res.rc
+#define VER_FILEVERSION        VER_PRODUCTVERSION
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 VS_VERSION_INFO VERSIONINFO
 FILEVERSION     VER_FILEVERSION
@@ -19,15 +27,37 @@ BEGIN
     BEGIN
         BLOCK "040904E4" // U.S. English - multilingual (hex)
         BEGIN
+<<<<<<< HEAD
             VALUE "CompanyName",        "DigiByte"
             VALUE "FileDescription",    "digibyte-tx (CLI DigiByte transaction editor utility)"
             VALUE "FileVersion",        VER_FILEVERSION_STR
+=======
+<<<<<<<< HEAD:src/digibyte-util-res.rc
+            VALUE "CompanyName",        "DigiByte"
+            VALUE "FileDescription",    "digibyte-util (CLI DigiByte utility)"
+            VALUE "FileVersion",        VER_FILEVERSION_STR
+            VALUE "InternalName",       "digibyte-util"
+            VALUE "LegalCopyright",     COPYRIGHT_STR
+            VALUE "LegalTrademarks1",   "Distributed under the MIT software license, see the accompanying file COPYING or http://www.opensource.org/licenses/mit-license.php."
+            VALUE "OriginalFilename",   "digibyte-util.exe"
+            VALUE "ProductName",        "digibyte-util"
+            VALUE "ProductVersion",     VER_PRODUCTVERSION_STR
+========
+            VALUE "CompanyName",        "Bitcoin"
+            VALUE "FileDescription",    "digibyte-tx (CLI Bitcoin transaction editor utility)"
+            VALUE "FileVersion",        PACKAGE_VERSION
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             VALUE "InternalName",       "digibyte-tx"
             VALUE "LegalCopyright",     COPYRIGHT_STR
             VALUE "LegalTrademarks1",   "Distributed under the MIT software license, see the accompanying file COPYING or http://www.opensource.org/licenses/mit-license.php."
             VALUE "OriginalFilename",   "digibyte-tx.exe"
             VALUE "ProductName",        "digibyte-tx"
+<<<<<<< HEAD
             VALUE "ProductVersion",     VER_PRODUCTVERSION_STR
+=======
+            VALUE "ProductVersion",     PACKAGE_VERSION
+>>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion:src/digibyte-tx-res.rc
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         END
     END
 

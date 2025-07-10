@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
+<<<<<<< HEAD
 # Copyright (c) 2015-2021 The DigiByte Core developers
+=======
+# Copyright (c) 2015-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test behavior of -maxuploadtarget.
@@ -13,10 +17,26 @@ if uploadtarget has been reached.
 from collections import defaultdict
 import time
 
+<<<<<<< HEAD
 from test_framework.messages import CInv, MSG_BLOCK, msg_getdata
 from test_framework.p2p import P2PInterface
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import assert_equal, mine_large_block
+=======
+from test_framework.messages import (
+    CInv,
+    MSG_BLOCK,
+    msg_getdata,
+)
+from test_framework.p2p import P2PInterface
+from test_framework.test_framework import DigiByteTestFramework
+from test_framework.util import (
+    assert_equal,
+    mine_large_block,
+)
+from test_framework.wallet import MiniWallet
+
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 class TestP2PConn(P2PInterface):
     def __init__(self):
@@ -37,12 +57,18 @@ class MaxUploadTest(DigiByteTestFramework):
         self.num_nodes = 1
         self.extra_args = [[
             "-maxuploadtarget=800M",
+<<<<<<< HEAD
             "-acceptnonstdtxn=1",
         ]]
         self.supports_cli = False
 
         # Cache for utxos, as the listunspent may take a long time later in the test
         self.utxo_cache = []
+=======
+            "-datacarriersize=100000",
+        ]]
+        self.supports_cli = False
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()
@@ -55,7 +81,12 @@ class MaxUploadTest(DigiByteTestFramework):
         self.nodes[0].setmocktime(old_time)
 
         # Generate some old blocks
+<<<<<<< HEAD
         self.generate(self.nodes[0], 130)
+=======
+        self.wallet = MiniWallet(self.nodes[0])
+        self.generate(self.wallet, 130)
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # p2p_conns[0] will only request old blocks
         # p2p_conns[1] will only request new blocks
@@ -66,7 +97,11 @@ class MaxUploadTest(DigiByteTestFramework):
             p2p_conns.append(self.nodes[0].add_p2p_connection(TestP2PConn()))
 
         # Now mine a big block
+<<<<<<< HEAD
         mine_large_block(self, self.nodes[0], self.utxo_cache)
+=======
+        mine_large_block(self, self.wallet, self.nodes[0])
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # Store the hash; we'll request this later
         big_old_block = self.nodes[0].getbestblockhash()
@@ -77,7 +112,11 @@ class MaxUploadTest(DigiByteTestFramework):
         self.nodes[0].setmocktime(int(time.time()) - 2*60*60*24)
 
         # Mine one more block, so that the prior block looks old
+<<<<<<< HEAD
         mine_large_block(self, self.nodes[0], self.utxo_cache)
+=======
+        mine_large_block(self, self.wallet, self.nodes[0])
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # We'll be requesting this new block too
         big_new_block = self.nodes[0].getbestblockhash()
@@ -154,12 +193,24 @@ class MaxUploadTest(DigiByteTestFramework):
 
         getdata_request.inv = [CInv(MSG_BLOCK, big_old_block)]
         peer.send_and_ping(getdata_request)
+<<<<<<< HEAD
 
         self.log.info("Peer still connected after trying to download old block (download permission)")
         peer_info = self.nodes[0].getpeerinfo()
         assert_equal(len(peer_info), 1)  # node is still connected
         assert_equal(peer_info[0]['permissions'], ['download'])
 
+=======
+
+        self.log.info("Peer still connected after trying to download old block (download permission)")
+        peer_info = self.nodes[0].getpeerinfo()
+        assert_equal(len(peer_info), 1)  # node is still connected
+        assert_equal(peer_info[0]['permissions'], ['download'])
+
+        self.log.info("Test passing an unparsable value to -maxuploadtarget throws an error")
+        self.stop_node(0)
+        self.nodes[0].assert_start_raises_init_error(extra_args=["-maxuploadtarget=abc"], expected_msg="Error: Unable to parse -maxuploadtarget: 'abc'")
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 if __name__ == '__main__':
     MaxUploadTest().main()

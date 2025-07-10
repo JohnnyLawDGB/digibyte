@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 // Copyright (c) 2011-2020 The DigiByte Core developers
+=======
+// Copyright (c) 2011-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -9,16 +13,28 @@
 #include <mapport.h>
 
 #include <clientversion.h>
+<<<<<<< HEAD
+=======
+#include <common/system.h>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <logging.h>
 #include <net.h>
 #include <netaddress.h>
 #include <netbase.h>
+<<<<<<< HEAD
 #include <threadinterrupt.h>
 #include <util/system.h>
 #include <util/thread.h>
 
 #ifdef USE_NATPMP
 #include <compat.h>
+=======
+#include <util/thread.h>
+#include <util/threadinterrupt.h>
+
+#ifdef USE_NATPMP
+#include <compat/compat.h>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <natpmp.h>
 #endif // USE_NATPMP
 
@@ -26,9 +42,15 @@
 #include <miniupnpc/miniupnpc.h>
 #include <miniupnpc/upnpcommands.h>
 #include <miniupnpc/upnperrors.h>
+<<<<<<< HEAD
 // The minimum supported miniUPnPc API version is set to 10. This keeps compatibility
 // with Ubuntu 16.04 LTS and Debian 8 libminiupnpc-dev packages.
 static_assert(MINIUPNPC_API_VERSION >= 10, "miniUPnPc API version >= 10 assumed");
+=======
+// The minimum supported miniUPnPc API version is set to 17. This excludes
+// versions with known vulnerabilities.
+static_assert(MINIUPNPC_API_VERSION >= 17, "miniUPnPc API version >= 17 assumed");
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #endif // USE_UPNP
 
 #include <atomic>
@@ -103,7 +125,11 @@ static bool NatpmpMapping(natpmp_t* natpmp, const struct in_addr& external_ipv4_
                     AddLocal(external, LOCAL_MAPPED);
                     external_ip_discovered = true;
                 }
+<<<<<<< HEAD
                 LogPrintf("natpmp: Port mapping successful. External address = %s\n", external.ToString());
+=======
+                LogPrintf("natpmp: Port mapping successful. External address = %s\n", external.ToStringAddrPort());
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 return true;
             } else {
                 LogPrintf("natpmp: Port mapping failed.\n");
@@ -158,17 +184,29 @@ static bool ProcessUpnp()
     char lanaddr[64];
 
     int error = 0;
+<<<<<<< HEAD
 #if MINIUPNPC_API_VERSION < 14
     devlist = upnpDiscover(2000, multicastif, minissdpdpath, 0, 0, &error);
 #else
     devlist = upnpDiscover(2000, multicastif, minissdpdpath, 0, 0, 2, &error);
 #endif
+=======
+    devlist = upnpDiscover(2000, multicastif, minissdpdpath, 0, 0, 2, &error);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     struct UPNPUrls urls;
     struct IGDdatas data;
     int r;
+<<<<<<< HEAD
 
     r = UPNP_GetValidIGD(devlist, &urls, &data, lanaddr, sizeof(lanaddr));
+=======
+#if MINIUPNPC_API_VERSION <= 17
+    r = UPNP_GetValidIGD(devlist, &urls, &data, lanaddr, sizeof(lanaddr));
+#else
+    r = UPNP_GetValidIGD(devlist, &urls, &data, lanaddr, sizeof(lanaddr), nullptr, 0);
+#endif
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (r == 1)
     {
         if (fDiscover) {
@@ -178,10 +216,17 @@ static bool ProcessUpnp()
                 LogPrintf("UPnP: GetExternalIPAddress() returned %d\n", r);
             } else {
                 if (externalIPAddress[0]) {
+<<<<<<< HEAD
                     CNetAddr resolved;
                     if (LookupHost(externalIPAddress, resolved, false)) {
                         LogPrintf("UPnP: ExternalIPAddress = %s\n", resolved.ToString());
                         AddLocal(resolved, LOCAL_MAPPED);
+=======
+                    std::optional<CNetAddr> resolved{LookupHost(externalIPAddress, false)};
+                    if (resolved.has_value()) {
+                        LogPrintf("UPnP: ExternalIPAddress = %s\n", resolved->ToStringAddr());
+                        AddLocal(resolved.value(), LOCAL_MAPPED);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                     }
                 } else {
                     LogPrintf("UPnP: GetExternalIPAddress failed.\n");
@@ -192,7 +237,11 @@ static bool ProcessUpnp()
         std::string strDesc = PACKAGE_NAME " " + FormatFullVersion();
 
         do {
+<<<<<<< HEAD
             r = UPNP_AddPortMapping(urls.controlURL, data.first.servicetype, port.c_str(), port.c_str(), lanaddr, strDesc.c_str(), "TCP", 0, "0");
+=======
+            r = UPNP_AddPortMapping(urls.controlURL, data.first.servicetype, port.c_str(), port.c_str(), lanaddr, strDesc.c_str(), "TCP", nullptr, "0");
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
             if (r != UPNPCOMMAND_SUCCESS) {
                 ret = false;
@@ -205,7 +254,11 @@ static bool ProcessUpnp()
         } while (g_mapport_interrupt.sleep_for(PORT_MAPPING_REANNOUNCE_PERIOD));
         g_mapport_interrupt.reset();
 
+<<<<<<< HEAD
         r = UPNP_DeletePortMapping(urls.controlURL, data.first.servicetype, port.c_str(), "TCP", 0);
+=======
+        r = UPNP_DeletePortMapping(urls.controlURL, data.first.servicetype, port.c_str(), "TCP", nullptr);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         LogPrintf("UPNP_DeletePortMapping() returned: %d\n", r);
         freeUPNPDevlist(devlist); devlist = nullptr;
         FreeUPNPUrls(&urls);

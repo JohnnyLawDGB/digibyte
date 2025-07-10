@@ -1,6 +1,10 @@
 // Copyright (c) 2012 Pieter Wuille
+<<<<<<< HEAD
 // Copyright (c) 2012-2020 The Bitcoin Core developers
 // Copyright (c) 2014-2020 The DigiByte Core developers
+=======
+// Copyright (c) 2012-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -12,7 +16,9 @@
 #include <fs.h>
 #include <hash.h>
 #include <netaddress.h>
+#include <netgroup.h>
 #include <protocol.h>
+<<<<<<< HEAD
 #include <random.h>
 #include <streams.h>
 #include <sync.h>
@@ -25,24 +31,38 @@
 #include <set>
 #include <stdint.h>
 #include <unordered_map>
+=======
+#include <streams.h>
+#include <util/time.h>
+
+#include <cstdint>
+#include <memory>
+#include <optional>
+#include <utility>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <vector>
 
-/**
- * Extended statistics about a CAddress
- */
-class CAddrInfo : public CAddress
+class InvalidAddrManVersionError : public std::ios_base::failure
 {
 public:
+<<<<<<< HEAD
     //! last try whatsoever by us (memory only)
     int64_t nLastTry{0};
 
     //! last counted attempt (memory only)
     int64_t nLastCountAttempt{0};
+=======
+    InvalidAddrManVersionError(std::string msg) : std::ios_base::failure(msg) { }
+};
 
-private:
-    //! where knowledge about this address first came from
-    CNetAddr source;
+class AddrManImpl;
+class AddrInfo;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
+/** Default for -checkaddrman */
+static constexpr int32_t DEFAULT_ADDRMAN_CONSISTENCY_CHECKS{0};
+
+<<<<<<< HEAD
     //! last successful connection by us
     int64_t nLastSuccess{0};
 
@@ -96,6 +116,31 @@ public:
 
     //! Calculate the relative chance this entry should be given when selecting nodes to connect to
     double GetChance(int64_t nNow = GetAdjustedTime()) const;
+=======
+/** Location information for an address in AddrMan */
+struct AddressPosition {
+    // Whether the address is in the new or tried table
+    const bool tried;
+
+    // Addresses in the tried table should always have a multiplicity of 1.
+    // Addresses in the new table can have multiplicity between 1 and
+    // ADDRMAN_NEW_BUCKETS_PER_ADDRESS
+    const int multiplicity;
+
+    // If the address is in the new table, the bucket and position are
+    // populated based on the first source who sent the address.
+    // In certain edge cases, this may not be where the address is currently
+    // located.
+    const int bucket;
+    const int position;
+
+    bool operator==(AddressPosition other) {
+        return std::tie(tried, multiplicity, bucket, position) ==
+               std::tie(other.tried, other.multiplicity, other.bucket, other.position);
+    }
+    explicit AddressPosition(bool tried_in, int multiplicity_in, int bucket_in, int position_in)
+        : tried{tried_in}, multiplicity{multiplicity_in}, bucket{bucket_in}, position{position_in} {}
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 };
 
 /** Stochastic address manager
@@ -105,24 +150,29 @@ public:
  *  * Make sure no (localized) attacker can fill the entire table with his nodes/addresses.
  *
  * To that end:
- *  * Addresses are organized into buckets.
- *    * Addresses that have not yet been tried go into 1024 "new" buckets.
- *      * Based on the address range (/16 for IPv4) of the source of information, 64 buckets are selected at random.
+ *  * Addresses are organized into buckets that can each store up to 64 entries.
+ *    * Addresses to which our node has not successfully connected go into 1024 "new" buckets.
+ *      * Based on the address range (/16 for IPv4) of the source of information, or if an asmap is provided,
+ *        the AS it belongs to (for IPv4/IPv6), 64 buckets are selected at random.
  *      * The actual bucket is chosen from one of these, based on the range in which the address itself is located.
+ *      * The position in the bucket is chosen based on the full address.
  *      * One single address can occur in up to 8 different buckets to increase selection chances for addresses that
  *        are seen frequently. The chance for increasing this multiplicity decreases exponentially.
- *      * When adding a new address to a full bucket, a randomly chosen entry (with a bias favoring less recently seen
- *        ones) is removed from it first.
+ *      * When adding a new address to an occupied position of a bucket, it will not replace the existing entry
+ *        unless that address is also stored in another bucket or it doesn't meet one of several quality criteria
+ *        (see IsTerrible for exact criteria).
  *    * Addresses of nodes that are known to be accessible go into 256 "tried" buckets.
  *      * Each address range selects at random 8 of these buckets.
  *      * The actual bucket is chosen from one of these, based on the full address.
- *      * When adding a new good address to a full bucket, a randomly chosen entry (with a bias favoring less recently
- *        tried ones) is evicted from it, back to the "new" buckets.
+ *      * When adding a new good address to an occupied position of a bucket, a FEELER connection to the
+ *        old address is attempted. The old entry is only replaced and moved back to the "new" buckets if this
+ *        attempt was unsuccessful.
  *    * Bucket selection is based on cryptographic hashing, using a randomly-generated 256-bit key, which should not
  *      be observable by adversaries.
- *    * Several indexes are kept for high performance. Defining DEBUG_ADDRMAN will introduce frequent (and expensive)
- *      consistency checks for the entire data structure.
+ *    * Several indexes are kept for high performance. Setting m_consistency_check_ratio with the -checkaddrman
+ *      configuration option will introduce (expensive) consistency checks for the entire data structure.
  */
+<<<<<<< HEAD
 
 //! total number of buckets for tried addresses
 #define ADDRMAN_TRIED_BUCKET_COUNT_LOG2 8
@@ -216,11 +266,48 @@ public:
      *   * number of elements
      *   * for each element: index in the serialized "all new addresses"
      * * asmap checksum
+=======
+class AddrMan
+{
+protected:
+    const std::unique_ptr<AddrManImpl> m_impl;
+
+public:
+    explicit AddrMan(const NetGroupManager& netgroupman, bool deterministic, int32_t consistency_check_ratio);
+
+    ~AddrMan();
+
+    template <typename Stream>
+    void Serialize(Stream& s_) const;
+
+    template <typename Stream>
+    void Unserialize(Stream& s_);
+
+    /**
+    * Return size information about addrman.
+    *
+    * @param[in] net              Select addresses only from specified network (nullopt = all)
+    * @param[in] in_new           Select addresses only from one table (true = new, false = tried, nullopt = both)
+    * @return                     Number of unique addresses that match specified options.
+    */
+    size_t Size(std::optional<Network> net = std::nullopt, std::optional<bool> in_new = std::nullopt) const;
+
+    /**
+     * Attempt to add one or more addresses to addrman's new table.
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
      *
-     * 2**30 is xorred with the number of buckets to make addrman deserializer v0 detect it
-     * as incompatible. This is necessary because it did not check the version number on
-     * deserialization.
+     * @param[in] vAddr           Address records to attempt to add.
+     * @param[in] source          The address of the node that sent us these addr records.
+     * @param[in] time_penalty    A "time penalty" to apply to the address record's nTime. If a peer
+     *                            sends us an address record with nTime=n, then we'll add it to our
+     *                            addrman with nTime=(n - time_penalty).
+     * @return    true if at least one address is successfully added. */
+    bool Add(const std::vector<CAddress>& vAddr, const CNetAddr& source, std::chrono::seconds time_penalty = 0s);
+
+    /**
+     * Mark an address record as accessible and attempt to move it to addrman's tried table.
      *
+<<<<<<< HEAD
      * vvNew, vvTried, mapInfo, mapAddr and vRandom are never encoded explicitly;
      * they are instead reconstructed from the other information.
      *
@@ -576,10 +663,42 @@ public:
         Check();
         return ret;
     }
+=======
+     * @param[in] addr            Address record to attempt to move to tried table.
+     * @param[in] time            The time that we were last connected to this peer.
+     * @return    true if the address is successfully moved from the new table to the tried table.
+     */
+    bool Good(const CService& addr, NodeSeconds time = Now<NodeSeconds>());
+
+    //! Mark an entry as connection attempted to.
+    void Attempt(const CService& addr, bool fCountFailure, NodeSeconds time = Now<NodeSeconds>());
+
+    //! See if any to-be-evicted tried table entries have been tested and if so resolve the collisions.
+    void ResolveCollisions();
+
+    /**
+     * Randomly select an address in the tried table that another address is
+     * attempting to evict.
+     *
+     * @return CAddress The record for the selected tried peer.
+     *         seconds  The last time we attempted to connect to that peer.
+     */
+    std::pair<CAddress, NodeSeconds> SelectTriedCollision();
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     /**
      * Choose an address to connect to.
+     *
+     * @param[in] new_only Whether to only select addresses from the new table. Passing `true` returns
+     *                     an address from the new table or an empty pair. Passing `false` will return an
+     *                     empty pair or an address from either the new or tried table (it does not
+     *                     guarantee a tried entry).
+     * @param[in] network  Select only addresses of this network (nullopt = all). Passing a network may
+     *                     slow down the search.
+     * @return    CAddress The record for the selected peer.
+     *            seconds  The last time we attempted to connect to that peer.
      */
+<<<<<<< HEAD
     CAddrInfo Select(bool newOnly = false)
         EXCLUSIVE_LOCKS_REQUIRED(!cs)
     {
@@ -589,6 +708,9 @@ public:
         Check();
         return addrRet;
     }
+=======
+    std::pair<CAddress, NodeSeconds> Select(bool new_only = false, std::optional<Network> network = std::nullopt) const;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     /**
      * Return all or many randomly selected addresses, optionally by network.
@@ -596,6 +718,7 @@ public:
      * @param[in] max_addresses  Maximum number of addresses to return (0 = all).
      * @param[in] max_pct        Maximum percentage of addresses to return (0 = all).
      * @param[in] network        Select only addresses of this network (nullopt = all).
+<<<<<<< HEAD
      */
     std::vector<CAddress> GetAddr(size_t max_addresses, size_t max_pct, std::optional<Network> network)
         EXCLUSIVE_LOCKS_REQUIRED(!cs)
@@ -775,6 +898,48 @@ private:
     void RemoveInvalid() EXCLUSIVE_LOCKS_REQUIRED(cs);
 
     friend class CAddrManTest;
+=======
+     *
+     * @return                   A vector of randomly selected addresses from vRandom.
+     */
+    std::vector<CAddress> GetAddr(size_t max_addresses, size_t max_pct, std::optional<Network> network) const;
+
+    /**
+     * Returns an information-location pair for all addresses in the selected addrman table.
+     * If an address appears multiple times in the new table, an information-location pair
+     * is returned for each occurence. Addresses only ever appear once in the tried table.
+     *
+     * @param[in] from_tried     Selects which table to return entries from.
+     *
+     * @return                   A vector consisting of pairs of AddrInfo and AddressPosition.
+     */
+    std::vector<std::pair<AddrInfo, AddressPosition>> GetEntries(bool from_tried) const;
+
+    /** We have successfully connected to this peer. Calling this function
+     *  updates the CAddress's nTime, which is used in our IsTerrible()
+     *  decisions and gossiped to peers. Callers should be careful that updating
+     *  this information doesn't leak topology information to network spies.
+     *
+     *  net_processing calls this function when it *disconnects* from a peer to
+     *  not leak information about currently connected peers.
+     *
+     * @param[in]   addr     The address of the peer we were connected to
+     * @param[in]   time     The time that we were last connected to this peer
+     */
+    void Connected(const CService& addr, NodeSeconds time = Now<NodeSeconds>());
+
+    //! Update an entry's service bits.
+    void SetServices(const CService& addr, ServiceFlags nServices);
+
+    /** Test-only function
+     * Find the address record in AddrMan and return information about its
+     * position.
+     * @param[in] addr       The address record to look up.
+     * @return               Information about the address record in AddrMan
+     *                       or nullopt if address is not found.
+     */
+    std::optional<AddressPosition> FindAddressEntry(const CAddress& addr);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 };
 
 #endif // DIGIBYTE_ADDRMAN_H

@@ -295,6 +295,11 @@ void CConnman::DandelionShuffle()
     LogPrint(BCLog::DANDELION, "After Dandelion shuffle:\n%s", GetDandelionRoutingDataDebugString());
 }
 
+bool CConnman::usingDandelion() const
+{
+    return vDandelionDestination.size() > 0;
+}
+
 void CConnman::ThreadDandelionShuffle()
 {
     while (!ShutdownRequested()) {

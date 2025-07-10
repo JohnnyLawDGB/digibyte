@@ -59,7 +59,7 @@ To run:
 
 #### Other .h/cpp files
 
-* UI elements like DigiByteAmountField, which inherit from QWidget.
+* UI elements like BitcoinAmountField, which inherit from QWidget.
 * `digibytestrings.cpp`: automatically generated
 * `digibyteunits.(h/cpp)`: DGB / mDGB / etc. handling
 * `callback.h`

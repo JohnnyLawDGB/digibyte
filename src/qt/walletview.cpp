@@ -1,5 +1,9 @@
+<<<<<<< HEAD
 // Copyright (c) 2011-2020 The Bitcoin Core developers
 // Copyright (c) 2013-2021 The DigiByte Core developers
+=======
+// Copyright (c) 2011-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -21,6 +25,7 @@
 #include <qt/walletmodel.h>
 
 #include <interfaces/node.h>
+<<<<<<< HEAD
 #include <node/ui_interface.h>
 #include <psbt.h>
 #include <util/strencodings.h>
@@ -29,25 +34,43 @@
 #include <QActionGroup>
 #include <QApplication>
 #include <QClipboard>
+=======
+#include <node/interface_ui.h>
+#include <util/strencodings.h>
+
+#include <QAction>
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <QFileDialog>
 #include <QHBoxLayout>
 #include <QProgressDialog>
 #include <QPushButton>
 #include <QVBoxLayout>
 
+<<<<<<< HEAD
 WalletView::WalletView(const PlatformStyle *_platformStyle, QWidget *parent):
     QStackedWidget(parent),
     clientModel(nullptr),
     walletModel(nullptr),
     platformStyle(_platformStyle)
+=======
+WalletView::WalletView(WalletModel* wallet_model, const PlatformStyle* _platformStyle, QWidget* parent)
+    : QStackedWidget(parent),
+      walletModel(wallet_model),
+      platformStyle(_platformStyle)
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
+    assert(walletModel);
+
     // Create tabs
     overviewPage = new OverviewPage(platformStyle);
+    overviewPage->setWalletModel(walletModel);
 
     transactionsPage = new QWidget(this);
     QVBoxLayout *vbox = new QVBoxLayout();
     QHBoxLayout *hbox_buttons = new QHBoxLayout();
     transactionView = new TransactionView(platformStyle, this);
+    transactionView->setModel(walletModel);
+
     vbox->addWidget(transactionView);
     QPushButton *exportButton = new QPushButton(tr("&Export"), this);
     exportButton->setToolTip(tr("Export the data in the current tab to a file"));
@@ -60,10 +83,16 @@ WalletView::WalletView(const PlatformStyle *_platformStyle, QWidget *parent):
     transactionsPage->setLayout(vbox);
 
     receiveCoinsPage = new ReceiveCoinsDialog(platformStyle);
+    receiveCoinsPage->setModel(walletModel);
+
     sendCoinsPage = new SendCoinsDialog(platformStyle);
+    sendCoinsPage->setModel(walletModel);
 
     usedSendingAddressesPage = new AddressBookPage(platformStyle, AddressBookPage::ForEditing, AddressBookPage::SendingTab, this);
+    usedSendingAddressesPage->setModel(walletModel->getAddressTableModel());
+
     usedReceivingAddressesPage = new AddressBookPage(platformStyle, AddressBookPage::ForEditing, AddressBookPage::ReceivingTab, this);
+    usedReceivingAddressesPage->setModel(walletModel->getAddressTableModel());
 
     addWidget(overviewPage);
     addWidget(transactionsPage);
@@ -89,11 +118,33 @@ WalletView::WalletView(const PlatformStyle *_platformStyle, QWidget *parent):
     connect(transactionView, &TransactionView::message, this, &WalletView::message);
 
     connect(this, &WalletView::setPrivacy, overviewPage, &OverviewPage::setPrivacy);
+<<<<<<< HEAD
 }
 
 WalletView::~WalletView()
 {
 }
+=======
+    connect(this, &WalletView::setPrivacy, this, &WalletView::disableTransactionView);
+
+    // Receive and pass through messages from wallet model
+    connect(walletModel, &WalletModel::message, this, &WalletView::message);
+
+    // Handle changes in encryption status
+    connect(walletModel, &WalletModel::encryptionStatusChanged, this, &WalletView::encryptionStatusChanged);
+
+    // Balloon pop-up for new transaction
+    connect(walletModel->getTransactionTableModel(), &TransactionTableModel::rowsInserted, this, &WalletView::processNewTransaction);
+
+    // Ask for passphrase if needed
+    connect(walletModel, &WalletModel::requireUnlock, this, &WalletView::unlockWallet);
+
+    // Show progress dialog
+    connect(walletModel, &WalletModel::showProgress, this, &WalletView::showProgress);
+}
+
+WalletView::~WalletView() = default;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 void WalletView::setClientModel(ClientModel *_clientModel)
 {
@@ -101,6 +152,7 @@ void WalletView::setClientModel(ClientModel *_clientModel)
 
     overviewPage->setClientModel(_clientModel);
     sendCoinsPage->setClientModel(_clientModel);
+<<<<<<< HEAD
     if (walletModel) walletModel->setClientModel(_clientModel);
 }
 
@@ -137,13 +189,17 @@ void WalletView::setWalletModel(WalletModel *_walletModel)
         // Show progress dialog
         connect(_walletModel, &WalletModel::showProgress, this, &WalletView::showProgress);
     }
+=======
+    walletModel->setClientModel(_clientModel);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 void WalletView::processNewTransaction(const QModelIndex& parent, int start, int /*end*/)
 {
     // Prevent balloon-spam when initial block download is in progress
-    if (!walletModel || !clientModel || clientModel->node().isInitialBlockDownload())
+    if (!clientModel || clientModel->node().isInitialBlockDownload()) {
         return;
+    }
 
     TransactionTableModel *ttm = walletModel->getTransactionTableModel();
     if (!ttm || ttm->processingQueuedTransactions())
@@ -254,8 +310,9 @@ void WalletView::showOutOfSyncWarning(bool fShow)
     overviewPage->showOutOfSyncWarning(fShow);
 }
 
-void WalletView::updateEncryptionStatus()
+void WalletView::encryptWallet()
 {
+<<<<<<< HEAD
     Q_EMIT encryptionStatusChanged();
 }
 
@@ -268,6 +325,12 @@ void WalletView::encryptWallet()
     dlg.exec();
 
     updateEncryptionStatus();
+=======
+    auto dlg = new AskPassphraseDialog(AskPassphraseDialog::Encrypt, this);
+    dlg->setModel(walletModel);
+    connect(dlg, &QDialog::finished, this, &WalletView::encryptionStatusChanged);
+    GUIUtil::ShowModalDialogAsynchronously(dlg);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 void WalletView::backupWallet()
@@ -292,37 +355,42 @@ void WalletView::backupWallet()
 
 void WalletView::changePassphrase()
 {
-    AskPassphraseDialog dlg(AskPassphraseDialog::ChangePass, this);
-    dlg.setModel(walletModel);
-    dlg.exec();
+    auto dlg = new AskPassphraseDialog(AskPassphraseDialog::ChangePass, this);
+    dlg->setModel(walletModel);
+    GUIUtil::ShowModalDialogAsynchronously(dlg);
 }
 
 void WalletView::unlockWallet()
 {
-    if(!walletModel)
-        return;
     // Unlock wallet when requested by wallet model
-    if (walletModel->getEncryptionStatus() == WalletModel::Locked)
-    {
+    if (walletModel->getEncryptionStatus() == WalletModel::Locked) {
         AskPassphraseDialog dlg(AskPassphraseDialog::Unlock, this);
         dlg.setModel(walletModel);
+        // A modal dialog must be synchronous here as expected
+        // in the WalletModel::requestUnlock() function.
         dlg.exec();
     }
 }
 
 void WalletView::usedSendingAddresses()
 {
+<<<<<<< HEAD
     if(!walletModel)
         return;
 
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     GUIUtil::bringToFront(usedSendingAddressesPage);
 }
 
 void WalletView::usedReceivingAddresses()
 {
+<<<<<<< HEAD
     if(!walletModel)
         return;
 
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     GUIUtil::bringToFront(usedReceivingAddressesPage);
 }
 
@@ -347,4 +415,13 @@ void WalletView::showProgress(const QString &title, int nProgress)
             progressDialog->setValue(nProgress);
         }
     }
+<<<<<<< HEAD
 }
+=======
+}
+
+void WalletView::disableTransactionView(bool disable)
+{
+    transactionView->setDisabled(disable);
+}
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion

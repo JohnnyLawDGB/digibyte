@@ -14,6 +14,7 @@
 #include "group.h"
 #include "scalar.h"
 #include "ecmult.h"
+#include "precomputed_ecmult.h"
 
 #if defined(EXHAUSTIVE_TEST_ORDER)
 /* We need to lower these values for exhaustive tests because
@@ -21,13 +22,10 @@
  * affine-isomorphism stuff which tracks z-ratios) */
 #  if EXHAUSTIVE_TEST_ORDER > 128
 #    define WINDOW_A 5
-#    define WINDOW_G 8
 #  elif EXHAUSTIVE_TEST_ORDER > 8
 #    define WINDOW_A 4
-#    define WINDOW_G 4
 #  else
 #    define WINDOW_A 2
-#    define WINDOW_G 2
 #  endif
 #else
 /* optimal for 128-bit and 256-bit exponents. */
@@ -40,6 +38,7 @@
  *  be larger due to platform-specific padding and alignment.
  *  Two tables of this size are used (due to the endomorphism
  *  optimization).
+<<<<<<< HEAD
  */
 #  define WINDOW_G ECMULT_WINDOW_SIZE
 #endif
@@ -81,10 +80,43 @@
  *  the values [1*a,3*a,...,(2*n-1)*a], so it space for n values. zr[0] will
  *  contain prej[0].z / a.z. The other zr[i] values = prej[i].z / prej[i-1].z.
  *  Prej's Z values are undefined, except for the last value.
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
  */
-static void secp256k1_ecmult_odd_multiples_table(int n, secp256k1_gej *prej, secp256k1_fe *zr, const secp256k1_gej *a) {
-    secp256k1_gej d;
-    secp256k1_ge a_ge, d_ge;
+#endif
+
+#define WNAF_BITS 128
+#define WNAF_SIZE_BITS(bits, w) (((bits) + (w) - 1) / (w))
+#define WNAF_SIZE(w) WNAF_SIZE_BITS(WNAF_BITS, w)
+
+/* The number of objects allocated on the scratch space for ecmult_multi algorithms */
+#define PIPPENGER_SCRATCH_OBJECTS 6
+#define STRAUSS_SCRATCH_OBJECTS 5
+
+#define PIPPENGER_MAX_BUCKET_WINDOW 12
+
+/* Minimum number of points for which pippenger_wnaf is faster than strauss wnaf */
+#define ECMULT_PIPPENGER_THRESHOLD 88
+
+#define ECMULT_MAX_POINTS_PER_BATCH 5000000
+
+/** Fill a table 'pre_a' with precomputed odd multiples of a.
+ *  pre_a will contain [1*a,3*a,...,(2*n-1)*a], so it needs space for n group elements.
+ *  zr needs space for n field elements.
+ *
+ *  Although pre_a is an array of _ge rather than _gej, it actually represents elements
+ *  in Jacobian coordinates with their z coordinates omitted. The omitted z-coordinates
+ *  can be recovered using z and zr. Using the notation z(b) to represent the omitted
+ *  z coordinate of b:
+ *  - z(pre_a[n-1]) = 'z'
+ *  - z(pre_a[i-1]) = z(pre_a[i]) / zr[i] for n > i > 0
+ *
+ *  Lastly the zr[0] value, which isn't used above, is set so that:
+ *  - a.z = z(pre_a[0]) / zr[0]
+ */
+static void secp256k1_ecmult_odd_multiples_table(int n, secp256k1_ge *pre_a, secp256k1_fe *zr, secp256k1_fe *z, const secp256k1_gej *a) {
+    secp256k1_gej d, ai;
+    secp256k1_ge d_ge;
     int i;
 
     VERIFY_CHECK(!a->infinity);
@@ -92,31 +124,41 @@ static void secp256k1_ecmult_odd_multiples_table(int n, secp256k1_gej *prej, sec
     secp256k1_gej_double_var(&d, a, NULL);
 
     /*
-     * Perform the additions on an isomorphism where 'd' is affine: drop the z coordinate
-     * of 'd', and scale the 1P starting value's x/y coordinates without changing its z.
+     * Perform the additions using an isomorphic curve Y^2 = X^3 + 7*C^6 where C := d.z.
+     * The isomorphism, phi, maps a secp256k1 point (x, y) to the point (x*C^2, y*C^3) on the other curve.
+     * In Jacobian coordinates phi maps (x, y, z) to (x*C^2, y*C^3, z) or, equivalently to (x, y, z/C).
+     *
+     *     phi(x, y, z) = (x*C^2, y*C^3, z) = (x, y, z/C)
+     *   d_ge := phi(d) = (d.x, d.y, 1)
+     *     ai := phi(a) = (a.x*C^2, a.y*C^3, a.z)
+     *
+     * The group addition functions work correctly on these isomorphic curves.
+     * In particular phi(d) is easy to represent in affine coordinates under this isomorphism.
+     * This lets us use the faster secp256k1_gej_add_ge_var group addition function that we wouldn't be able to use otherwise.
      */
-    d_ge.x = d.x;
-    d_ge.y = d.y;
-    d_ge.infinity = 0;
+    secp256k1_ge_set_xy(&d_ge, &d.x, &d.y);
+    secp256k1_ge_set_gej_zinv(&pre_a[0], a, &d.z);
+    secp256k1_gej_set_ge(&ai, &pre_a[0]);
+    ai.z = a->z;
 
-    secp256k1_ge_set_gej_zinv(&a_ge, a, &d.z);
-    prej[0].x = a_ge.x;
-    prej[0].y = a_ge.y;
-    prej[0].z = a->z;
-    prej[0].infinity = 0;
-
+    /* pre_a[0] is the point (a.x*C^2, a.y*C^3, a.z*C) which is equivalent to a.
+     * Set zr[0] to C, which is the ratio between the omitted z(pre_a[0]) value and a.z.
+     */
     zr[0] = d.z;
+
     for (i = 1; i < n; i++) {
-        secp256k1_gej_add_ge_var(&prej[i], &prej[i-1], &d_ge, &zr[i]);
+        secp256k1_gej_add_ge_var(&ai, &ai, &d_ge, &zr[i]);
+        secp256k1_ge_set_xy(&pre_a[i], &ai.x, &ai.y);
     }
 
-    /*
-     * Each point in 'prej' has a z coordinate too small by a factor of 'd.z'. Only
-     * the final point's z coordinate is actually used though, so just update that.
+    /* Multiply the last z-coordinate by C to undo the isomorphism.
+     * Since the z-coordinates of the pre_a values are implied by the zr array of z-coordinate ratios,
+     * undoing the isomorphism here undoes the isomorphism for all pre_a values.
      */
-    secp256k1_fe_mul(&prej[n-1].z, &prej[n-1].z, &d.z);
+    secp256k1_fe_mul(z, &ai.z, &d.z);
 }
 
+<<<<<<< HEAD
 /** Fill a table 'pre' with precomputed odd multiples of a.
  *
  *  There are two versions of this function:
@@ -365,6 +407,44 @@ static int secp256k1_ecmult_context_is_built(const secp256k1_ecmult_context *ctx
 
 static void secp256k1_ecmult_context_clear(secp256k1_ecmult_context *ctx) {
     secp256k1_ecmult_context_init(ctx);
+=======
+SECP256K1_INLINE static void secp256k1_ecmult_table_verify(int n, int w) {
+    (void)n;
+    (void)w;
+    VERIFY_CHECK(((n) & 1) == 1);
+    VERIFY_CHECK((n) >= -((1 << ((w)-1)) - 1));
+    VERIFY_CHECK((n) <=  ((1 << ((w)-1)) - 1));
+}
+
+SECP256K1_INLINE static void secp256k1_ecmult_table_get_ge(secp256k1_ge *r, const secp256k1_ge *pre, int n, int w) {
+    secp256k1_ecmult_table_verify(n,w);
+    if (n > 0) {
+        *r = pre[(n-1)/2];
+    } else {
+        *r = pre[(-n-1)/2];
+        secp256k1_fe_negate(&(r->y), &(r->y), 1);
+    }
+}
+
+SECP256K1_INLINE static void secp256k1_ecmult_table_get_ge_lambda(secp256k1_ge *r, const secp256k1_ge *pre, const secp256k1_fe *x, int n, int w) {
+    secp256k1_ecmult_table_verify(n,w);
+    if (n > 0) {
+        secp256k1_ge_set_xy(r, &x[(n-1)/2], &pre[(n-1)/2].y);
+    } else {
+        secp256k1_ge_set_xy(r, &x[(-n-1)/2], &pre[(-n-1)/2].y);
+        secp256k1_fe_negate(&(r->y), &(r->y), 1);
+    }
+}
+
+SECP256K1_INLINE static void secp256k1_ecmult_table_get_ge_storage(secp256k1_ge *r, const secp256k1_ge_storage *pre, int n, int w) {
+    secp256k1_ecmult_table_verify(n,w);
+    if (n > 0) {
+        secp256k1_ge_from_storage(r, &pre[(n-1)/2]);
+    } else {
+        secp256k1_ge_from_storage(r, &pre[(-n-1)/2]);
+        secp256k1_fe_negate(&(r->y), &(r->y), 1);
+    }
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 /** Convert a number to WNAF notation. The number becomes represented by sum(2^i * wnaf[i], i=0..bits),
@@ -418,20 +498,36 @@ static int secp256k1_ecmult_wnaf(int *wnaf, int len, const secp256k1_scalar *a, 
         bit += now;
     }
 #ifdef VERIFY
+<<<<<<< HEAD
     CHECK(carry == 0);
     while (bit < 256) {
         CHECK(secp256k1_scalar_get_bits(&s, bit++, 1) == 0);
+=======
+    {
+        int verify_bit = bit;
+
+        VERIFY_CHECK(carry == 0);
+
+        while (verify_bit < 256) {
+            VERIFY_CHECK(secp256k1_scalar_get_bits(&s, verify_bit, 1) == 0);
+            verify_bit++;
+        }
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 #endif
     return last_set_bit + 1;
 }
 
 struct secp256k1_strauss_point_state {
+<<<<<<< HEAD
     secp256k1_scalar na_1, na_lam;
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     int wnaf_na_1[129];
     int wnaf_na_lam[129];
     int bits_na_1;
     int bits_na_lam;
+<<<<<<< HEAD
     size_t input_pos;
 };
 
@@ -447,6 +543,21 @@ static void secp256k1_ecmult_strauss_wnaf(const secp256k1_ecmult_context *ctx, c
     secp256k1_ge tmpa;
     secp256k1_fe Z;
     /* Splitted G factors. */
+=======
+};
+
+struct secp256k1_strauss_state {
+    /* aux is used to hold z-ratios, and then used to hold pre_a[i].x * BETA values. */
+    secp256k1_fe* aux;
+    secp256k1_ge* pre_a;
+    struct secp256k1_strauss_point_state* ps;
+};
+
+static void secp256k1_ecmult_strauss_wnaf(const struct secp256k1_strauss_state *state, secp256k1_gej *r, size_t num, const secp256k1_gej *a, const secp256k1_scalar *na, const secp256k1_scalar *ng) {
+    secp256k1_ge tmpa;
+    secp256k1_fe Z;
+    /* Split G factors. */
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     secp256k1_scalar ng_1, ng_128;
     int wnaf_ng_1[129];
     int bits_ng_1 = 0;
@@ -457,6 +568,7 @@ static void secp256k1_ecmult_strauss_wnaf(const secp256k1_ecmult_context *ctx, c
     size_t np;
     size_t no = 0;
 
+<<<<<<< HEAD
     for (np = 0; np < num; ++np) {
         if (secp256k1_scalar_is_zero(&na[np]) || secp256k1_gej_is_infinity(&a[np])) {
             continue;
@@ -468,6 +580,21 @@ static void secp256k1_ecmult_strauss_wnaf(const secp256k1_ecmult_context *ctx, c
         /* build wnaf representation for na_1 and na_lam. */
         state->ps[no].bits_na_1   = secp256k1_ecmult_wnaf(state->ps[no].wnaf_na_1,   129, &state->ps[no].na_1,   WINDOW_A);
         state->ps[no].bits_na_lam = secp256k1_ecmult_wnaf(state->ps[no].wnaf_na_lam, 129, &state->ps[no].na_lam, WINDOW_A);
+=======
+    secp256k1_fe_set_int(&Z, 1);
+    for (np = 0; np < num; ++np) {
+        secp256k1_gej tmp;
+        secp256k1_scalar na_1, na_lam;
+        if (secp256k1_scalar_is_zero(&na[np]) || secp256k1_gej_is_infinity(&a[np])) {
+            continue;
+        }
+        /* split na into na_1 and na_lam (where na = na_1 + na_lam*lambda, and na_1 and na_lam are ~128 bit) */
+        secp256k1_scalar_split_lambda(&na_1, &na_lam, &na[np]);
+
+        /* build wnaf representation for na_1 and na_lam. */
+        state->ps[no].bits_na_1   = secp256k1_ecmult_wnaf(state->ps[no].wnaf_na_1,   129, &na_1,   WINDOW_A);
+        state->ps[no].bits_na_lam = secp256k1_ecmult_wnaf(state->ps[no].wnaf_na_lam, 129, &na_lam, WINDOW_A);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         VERIFY_CHECK(state->ps[no].bits_na_1 <= 129);
         VERIFY_CHECK(state->ps[no].bits_na_lam <= 129);
         if (state->ps[no].bits_na_1 > bits) {
@@ -476,6 +603,7 @@ static void secp256k1_ecmult_strauss_wnaf(const secp256k1_ecmult_context *ctx, c
         if (state->ps[no].bits_na_lam > bits) {
             bits = state->ps[no].bits_na_lam;
         }
+<<<<<<< HEAD
         ++no;
     }
 
@@ -505,11 +633,41 @@ static void secp256k1_ecmult_strauss_wnaf(const secp256k1_ecmult_context *ctx, c
         secp256k1_ge_globalz_set_table_gej(ECMULT_TABLE_SIZE(WINDOW_A) * no, state->pre_a, &Z, state->prej, state->zr);
     } else {
         secp256k1_fe_set_int(&Z, 1);
+=======
+
+        /* Calculate odd multiples of a.
+         * All multiples are brought to the same Z 'denominator', which is stored
+         * in Z. Due to secp256k1' isomorphism we can do all operations pretending
+         * that the Z coordinate was 1, use affine addition formulae, and correct
+         * the Z coordinate of the result once at the end.
+         * The exception is the precomputed G table points, which are actually
+         * affine. Compared to the base used for other points, they have a Z ratio
+         * of 1/Z, so we can use secp256k1_gej_add_zinv_var, which uses the same
+         * isomorphism to efficiently add with a known Z inverse.
+         */
+        tmp = a[np];
+        if (no) {
+            secp256k1_gej_rescale(&tmp, &Z);
+        }
+        secp256k1_ecmult_odd_multiples_table(ECMULT_TABLE_SIZE(WINDOW_A), state->pre_a + no * ECMULT_TABLE_SIZE(WINDOW_A), state->aux + no * ECMULT_TABLE_SIZE(WINDOW_A), &Z, &tmp);
+        if (no) secp256k1_fe_mul(state->aux + no * ECMULT_TABLE_SIZE(WINDOW_A), state->aux + no * ECMULT_TABLE_SIZE(WINDOW_A), &(a[np].z));
+
+        ++no;
+    }
+
+    /* Bring them to the same Z denominator. */
+    if (no) {
+        secp256k1_ge_table_set_globalz(ECMULT_TABLE_SIZE(WINDOW_A) * no, state->pre_a, state->aux);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     for (np = 0; np < no; ++np) {
         for (i = 0; i < ECMULT_TABLE_SIZE(WINDOW_A); i++) {
+<<<<<<< HEAD
             secp256k1_ge_mul_lambda(&state->pre_a_lam[np * ECMULT_TABLE_SIZE(WINDOW_A) + i], &state->pre_a[np * ECMULT_TABLE_SIZE(WINDOW_A) + i]);
+=======
+            secp256k1_fe_mul(&state->aux[np * ECMULT_TABLE_SIZE(WINDOW_A) + i], &state->pre_a[np * ECMULT_TABLE_SIZE(WINDOW_A) + i].x, &secp256k1_const_beta);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
     }
 
@@ -535,20 +693,28 @@ static void secp256k1_ecmult_strauss_wnaf(const secp256k1_ecmult_context *ctx, c
         secp256k1_gej_double_var(r, r, NULL);
         for (np = 0; np < no; ++np) {
             if (i < state->ps[np].bits_na_1 && (n = state->ps[np].wnaf_na_1[i])) {
+<<<<<<< HEAD
                 ECMULT_TABLE_GET_GE(&tmpa, state->pre_a + np * ECMULT_TABLE_SIZE(WINDOW_A), n, WINDOW_A);
                 secp256k1_gej_add_ge_var(r, r, &tmpa, NULL);
             }
             if (i < state->ps[np].bits_na_lam && (n = state->ps[np].wnaf_na_lam[i])) {
                 ECMULT_TABLE_GET_GE(&tmpa, state->pre_a_lam + np * ECMULT_TABLE_SIZE(WINDOW_A), n, WINDOW_A);
+=======
+                secp256k1_ecmult_table_get_ge(&tmpa, state->pre_a + np * ECMULT_TABLE_SIZE(WINDOW_A), n, WINDOW_A);
+                secp256k1_gej_add_ge_var(r, r, &tmpa, NULL);
+            }
+            if (i < state->ps[np].bits_na_lam && (n = state->ps[np].wnaf_na_lam[i])) {
+                secp256k1_ecmult_table_get_ge_lambda(&tmpa, state->pre_a + np * ECMULT_TABLE_SIZE(WINDOW_A), state->aux + np * ECMULT_TABLE_SIZE(WINDOW_A), n, WINDOW_A);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 secp256k1_gej_add_ge_var(r, r, &tmpa, NULL);
             }
         }
         if (i < bits_ng_1 && (n = wnaf_ng_1[i])) {
-            ECMULT_TABLE_GET_GE_STORAGE(&tmpa, *ctx->pre_g, n, WINDOW_G);
+            secp256k1_ecmult_table_get_ge_storage(&tmpa, secp256k1_pre_g, n, WINDOW_G);
             secp256k1_gej_add_zinv_var(r, r, &tmpa, &Z);
         }
         if (i < bits_ng_128 && (n = wnaf_ng_128[i])) {
-            ECMULT_TABLE_GET_GE_STORAGE(&tmpa, *ctx->pre_g_128, n, WINDOW_G);
+            secp256k1_ecmult_table_get_ge_storage(&tmpa, secp256k1_pre_g_128, n, WINDOW_G);
             secp256k1_gej_add_zinv_var(r, r, &tmpa, &Z);
         }
     }
@@ -558,6 +724,7 @@ static void secp256k1_ecmult_strauss_wnaf(const secp256k1_ecmult_context *ctx, c
     }
 }
 
+<<<<<<< HEAD
 static void secp256k1_ecmult(const secp256k1_ecmult_context *ctx, secp256k1_gej *r, const secp256k1_gej *a, const secp256k1_scalar *na, const secp256k1_scalar *ng) {
     secp256k1_gej prej[ECMULT_TABLE_SIZE(WINDOW_A)];
     secp256k1_fe zr[ECMULT_TABLE_SIZE(WINDOW_A)];
@@ -580,6 +747,26 @@ static size_t secp256k1_strauss_scratch_size(size_t n_points) {
 }
 
 static int secp256k1_ecmult_strauss_batch(const secp256k1_callback* error_callback, const secp256k1_ecmult_context *ctx, secp256k1_scratch *scratch, secp256k1_gej *r, const secp256k1_scalar *inp_g_sc, secp256k1_ecmult_multi_callback cb, void *cbdata, size_t n_points, size_t cb_offset) {
+=======
+static void secp256k1_ecmult(secp256k1_gej *r, const secp256k1_gej *a, const secp256k1_scalar *na, const secp256k1_scalar *ng) {
+    secp256k1_fe aux[ECMULT_TABLE_SIZE(WINDOW_A)];
+    secp256k1_ge pre_a[ECMULT_TABLE_SIZE(WINDOW_A)];
+    struct secp256k1_strauss_point_state ps[1];
+    struct secp256k1_strauss_state state;
+
+    state.aux = aux;
+    state.pre_a = pre_a;
+    state.ps = ps;
+    secp256k1_ecmult_strauss_wnaf(&state, r, 1, a, na, ng);
+}
+
+static size_t secp256k1_strauss_scratch_size(size_t n_points) {
+    static const size_t point_size = (sizeof(secp256k1_ge) + sizeof(secp256k1_fe)) * ECMULT_TABLE_SIZE(WINDOW_A) + sizeof(struct secp256k1_strauss_point_state) + sizeof(secp256k1_gej) + sizeof(secp256k1_scalar);
+    return n_points*point_size;
+}
+
+static int secp256k1_ecmult_strauss_batch(const secp256k1_callback* error_callback, secp256k1_scratch *scratch, secp256k1_gej *r, const secp256k1_scalar *inp_g_sc, secp256k1_ecmult_multi_callback cb, void *cbdata, size_t n_points, size_t cb_offset) {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     secp256k1_gej* points;
     secp256k1_scalar* scalars;
     struct secp256k1_strauss_state state;
@@ -591,6 +778,7 @@ static int secp256k1_ecmult_strauss_batch(const secp256k1_callback* error_callba
         return 1;
     }
 
+<<<<<<< HEAD
     points = (secp256k1_gej*)secp256k1_scratch_alloc(error_callback, scratch, n_points * sizeof(secp256k1_gej));
     scalars = (secp256k1_scalar*)secp256k1_scratch_alloc(error_callback, scratch, n_points * sizeof(secp256k1_scalar));
     state.prej = (secp256k1_gej*)secp256k1_scratch_alloc(error_callback, scratch, n_points * ECMULT_TABLE_SIZE(WINDOW_A) * sizeof(secp256k1_gej));
@@ -600,6 +788,18 @@ static int secp256k1_ecmult_strauss_batch(const secp256k1_callback* error_callba
     state.ps = (struct secp256k1_strauss_point_state*)secp256k1_scratch_alloc(error_callback, scratch, n_points * sizeof(struct secp256k1_strauss_point_state));
 
     if (points == NULL || scalars == NULL || state.prej == NULL || state.zr == NULL || state.pre_a == NULL || state.pre_a_lam == NULL || state.ps == NULL) {
+=======
+    /* We allocate STRAUSS_SCRATCH_OBJECTS objects on the scratch space. If these
+     * allocations change, make sure to update the STRAUSS_SCRATCH_OBJECTS
+     * constant and strauss_scratch_size accordingly. */
+    points = (secp256k1_gej*)secp256k1_scratch_alloc(error_callback, scratch, n_points * sizeof(secp256k1_gej));
+    scalars = (secp256k1_scalar*)secp256k1_scratch_alloc(error_callback, scratch, n_points * sizeof(secp256k1_scalar));
+    state.aux = (secp256k1_fe*)secp256k1_scratch_alloc(error_callback, scratch, n_points * ECMULT_TABLE_SIZE(WINDOW_A) * sizeof(secp256k1_fe));
+    state.pre_a = (secp256k1_ge*)secp256k1_scratch_alloc(error_callback, scratch, n_points * ECMULT_TABLE_SIZE(WINDOW_A) * sizeof(secp256k1_ge));
+    state.ps = (struct secp256k1_strauss_point_state*)secp256k1_scratch_alloc(error_callback, scratch, n_points * sizeof(struct secp256k1_strauss_point_state));
+
+    if (points == NULL || scalars == NULL || state.aux == NULL || state.pre_a == NULL || state.ps == NULL) {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         secp256k1_scratch_apply_checkpoint(error_callback, scratch, scratch_checkpoint);
         return 0;
     }
@@ -612,14 +812,23 @@ static int secp256k1_ecmult_strauss_batch(const secp256k1_callback* error_callba
         }
         secp256k1_gej_set_ge(&points[i], &point);
     }
+<<<<<<< HEAD
     secp256k1_ecmult_strauss_wnaf(ctx, &state, r, n_points, points, scalars, inp_g_sc);
+=======
+    secp256k1_ecmult_strauss_wnaf(&state, r, n_points, points, scalars, inp_g_sc);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     secp256k1_scratch_apply_checkpoint(error_callback, scratch, scratch_checkpoint);
     return 1;
 }
 
 /* Wrapper for secp256k1_ecmult_multi_func interface */
+<<<<<<< HEAD
 static int secp256k1_ecmult_strauss_batch_single(const secp256k1_callback* error_callback, const secp256k1_ecmult_context *actx, secp256k1_scratch *scratch, secp256k1_gej *r, const secp256k1_scalar *inp_g_sc, secp256k1_ecmult_multi_callback cb, void *cbdata, size_t n) {
     return secp256k1_ecmult_strauss_batch(error_callback, actx, scratch, r, inp_g_sc, cb, cbdata, n, 0);
+=======
+static int secp256k1_ecmult_strauss_batch_single(const secp256k1_callback* error_callback, secp256k1_scratch *scratch, secp256k1_gej *r, const secp256k1_scalar *inp_g_sc, secp256k1_ecmult_multi_callback cb, void *cbdata, size_t n) {
+    return secp256k1_ecmult_strauss_batch(error_callback, scratch, r, inp_g_sc, cb, cbdata, n, 0);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 static size_t secp256k1_strauss_max_points(const secp256k1_callback* error_callback, secp256k1_scratch *scratch) {
@@ -866,7 +1075,11 @@ static size_t secp256k1_pippenger_scratch_size(size_t n_points, int bucket_windo
     return (sizeof(secp256k1_gej) << bucket_window) + sizeof(struct secp256k1_pippenger_state) + entries * entry_size;
 }
 
+<<<<<<< HEAD
 static int secp256k1_ecmult_pippenger_batch(const secp256k1_callback* error_callback, const secp256k1_ecmult_context *ctx, secp256k1_scratch *scratch, secp256k1_gej *r, const secp256k1_scalar *inp_g_sc, secp256k1_ecmult_multi_callback cb, void *cbdata, size_t n_points, size_t cb_offset) {
+=======
+static int secp256k1_ecmult_pippenger_batch(const secp256k1_callback* error_callback, secp256k1_scratch *scratch, secp256k1_gej *r, const secp256k1_scalar *inp_g_sc, secp256k1_ecmult_multi_callback cb, void *cbdata, size_t n_points, size_t cb_offset) {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     const size_t scratch_checkpoint = secp256k1_scratch_checkpoint(error_callback, scratch);
     /* Use 2(n+1) with the endomorphism, when calculating batch
      * sizes. The reason for +1 is that we add the G scalar to the list of
@@ -881,13 +1094,25 @@ static int secp256k1_ecmult_pippenger_batch(const secp256k1_callback* error_call
     int i, j;
     int bucket_window;
 
+<<<<<<< HEAD
     (void)ctx;
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     secp256k1_gej_set_infinity(r);
     if (inp_g_sc == NULL && n_points == 0) {
         return 1;
     }
+<<<<<<< HEAD
 
     bucket_window = secp256k1_pippenger_bucket_window(n_points);
+=======
+    bucket_window = secp256k1_pippenger_bucket_window(n_points);
+
+    /* We allocate PIPPENGER_SCRATCH_OBJECTS objects on the scratch space. If
+     * these allocations change, make sure to update the
+     * PIPPENGER_SCRATCH_OBJECTS constant and pippenger_scratch_size
+     * accordingly. */
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     points = (secp256k1_ge *) secp256k1_scratch_alloc(error_callback, scratch, entries * sizeof(*points));
     scalars = (secp256k1_scalar *) secp256k1_scratch_alloc(error_callback, scratch, entries * sizeof(*scalars));
     state_space = (struct secp256k1_pippenger_state *) secp256k1_scratch_alloc(error_callback, scratch, sizeof(*state_space));
@@ -895,10 +1120,16 @@ static int secp256k1_ecmult_pippenger_batch(const secp256k1_callback* error_call
         secp256k1_scratch_apply_checkpoint(error_callback, scratch, scratch_checkpoint);
         return 0;
     }
+<<<<<<< HEAD
 
     state_space->ps = (struct secp256k1_pippenger_point_state *) secp256k1_scratch_alloc(error_callback, scratch, entries * sizeof(*state_space->ps));
     state_space->wnaf_na = (int *) secp256k1_scratch_alloc(error_callback, scratch, entries*(WNAF_SIZE(bucket_window+1)) * sizeof(int));
     buckets = (secp256k1_gej *) secp256k1_scratch_alloc(error_callback, scratch, (1<<bucket_window) * sizeof(*buckets));
+=======
+    state_space->ps = (struct secp256k1_pippenger_point_state *) secp256k1_scratch_alloc(error_callback, scratch, entries * sizeof(*state_space->ps));
+    state_space->wnaf_na = (int *) secp256k1_scratch_alloc(error_callback, scratch, entries*(WNAF_SIZE(bucket_window+1)) * sizeof(int));
+    buckets = (secp256k1_gej *) secp256k1_scratch_alloc(error_callback, scratch, ((size_t)1 << bucket_window) * sizeof(*buckets));
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (state_space->ps == NULL || state_space->wnaf_na == NULL || buckets == NULL) {
         secp256k1_scratch_apply_checkpoint(error_callback, scratch, scratch_checkpoint);
         return 0;
@@ -941,8 +1172,13 @@ static int secp256k1_ecmult_pippenger_batch(const secp256k1_callback* error_call
 }
 
 /* Wrapper for secp256k1_ecmult_multi_func interface */
+<<<<<<< HEAD
 static int secp256k1_ecmult_pippenger_batch_single(const secp256k1_callback* error_callback, const secp256k1_ecmult_context *actx, secp256k1_scratch *scratch, secp256k1_gej *r, const secp256k1_scalar *inp_g_sc, secp256k1_ecmult_multi_callback cb, void *cbdata, size_t n) {
     return secp256k1_ecmult_pippenger_batch(error_callback, actx, scratch, r, inp_g_sc, cb, cbdata, n, 0);
+=======
+static int secp256k1_ecmult_pippenger_batch_single(const secp256k1_callback* error_callback, secp256k1_scratch *scratch, secp256k1_gej *r, const secp256k1_scalar *inp_g_sc, secp256k1_ecmult_multi_callback cb, void *cbdata, size_t n) {
+    return secp256k1_ecmult_pippenger_batch(error_callback, scratch, r, inp_g_sc, cb, cbdata, n, 0);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 /**
@@ -986,6 +1222,7 @@ static size_t secp256k1_pippenger_max_points(const secp256k1_callback* error_cal
 
 /* Computes ecmult_multi by simply multiplying and adding each point. Does not
  * require a scratch space */
+<<<<<<< HEAD
 static int secp256k1_ecmult_multi_simple_var(const secp256k1_ecmult_context *ctx, secp256k1_gej *r, const secp256k1_scalar *inp_g_sc, secp256k1_ecmult_multi_callback cb, void *cbdata, size_t n_points) {
     size_t point_idx;
     secp256k1_scalar szero;
@@ -996,6 +1233,16 @@ static int secp256k1_ecmult_multi_simple_var(const secp256k1_ecmult_context *ctx
     secp256k1_gej_set_infinity(&tmpj);
     /* r = inp_g_sc*G */
     secp256k1_ecmult(ctx, r, &tmpj, &szero, inp_g_sc);
+=======
+static int secp256k1_ecmult_multi_simple_var(secp256k1_gej *r, const secp256k1_scalar *inp_g_sc, secp256k1_ecmult_multi_callback cb, void *cbdata, size_t n_points) {
+    size_t point_idx;
+    secp256k1_gej tmpj;
+
+    secp256k1_gej_set_infinity(r);
+    secp256k1_gej_set_infinity(&tmpj);
+    /* r = inp_g_sc*G */
+    secp256k1_ecmult(r, &tmpj, &secp256k1_scalar_zero, inp_g_sc);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     for (point_idx = 0; point_idx < n_points; point_idx++) {
         secp256k1_ge point;
         secp256k1_gej pointj;
@@ -1005,7 +1252,11 @@ static int secp256k1_ecmult_multi_simple_var(const secp256k1_ecmult_context *ctx
         }
         /* r += scalar*point */
         secp256k1_gej_set_ge(&pointj, &point);
+<<<<<<< HEAD
         secp256k1_ecmult(ctx, &tmpj, &pointj, &scalar, NULL);
+=======
+        secp256k1_ecmult(&tmpj, &pointj, &scalar, NULL);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         secp256k1_gej_add_var(r, r, &tmpj, NULL);
     }
     return 1;
@@ -1031,11 +1282,19 @@ static int secp256k1_ecmult_multi_batch_size_helper(size_t *n_batches, size_t *n
     return 1;
 }
 
+<<<<<<< HEAD
 typedef int (*secp256k1_ecmult_multi_func)(const secp256k1_callback* error_callback, const secp256k1_ecmult_context*, secp256k1_scratch*, secp256k1_gej*, const secp256k1_scalar*, secp256k1_ecmult_multi_callback cb, void*, size_t);
 static int secp256k1_ecmult_multi_var(const secp256k1_callback* error_callback, const secp256k1_ecmult_context *ctx, secp256k1_scratch *scratch, secp256k1_gej *r, const secp256k1_scalar *inp_g_sc, secp256k1_ecmult_multi_callback cb, void *cbdata, size_t n) {
     size_t i;
 
     int (*f)(const secp256k1_callback* error_callback, const secp256k1_ecmult_context*, secp256k1_scratch*, secp256k1_gej*, const secp256k1_scalar*, secp256k1_ecmult_multi_callback cb, void*, size_t, size_t);
+=======
+typedef int (*secp256k1_ecmult_multi_func)(const secp256k1_callback* error_callback, secp256k1_scratch*, secp256k1_gej*, const secp256k1_scalar*, secp256k1_ecmult_multi_callback cb, void*, size_t);
+static int secp256k1_ecmult_multi_var(const secp256k1_callback* error_callback, secp256k1_scratch *scratch, secp256k1_gej *r, const secp256k1_scalar *inp_g_sc, secp256k1_ecmult_multi_callback cb, void *cbdata, size_t n) {
+    size_t i;
+
+    int (*f)(const secp256k1_callback* error_callback, secp256k1_scratch*, secp256k1_gej*, const secp256k1_scalar*, secp256k1_ecmult_multi_callback cb, void*, size_t, size_t);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     size_t n_batches;
     size_t n_batch_points;
 
@@ -1043,6 +1302,7 @@ static int secp256k1_ecmult_multi_var(const secp256k1_callback* error_callback, 
     if (inp_g_sc == NULL && n == 0) {
         return 1;
     } else if (n == 0) {
+<<<<<<< HEAD
         secp256k1_scalar szero;
         secp256k1_scalar_set_int(&szero, 0);
         secp256k1_ecmult(ctx, r, r, &szero, inp_g_sc);
@@ -1050,6 +1310,13 @@ static int secp256k1_ecmult_multi_var(const secp256k1_callback* error_callback, 
     }
     if (scratch == NULL) {
         return secp256k1_ecmult_multi_simple_var(ctx, r, inp_g_sc, cb, cbdata, n);
+=======
+        secp256k1_ecmult(r, r, &secp256k1_scalar_zero, inp_g_sc);
+        return 1;
+    }
+    if (scratch == NULL) {
+        return secp256k1_ecmult_multi_simple_var(r, inp_g_sc, cb, cbdata, n);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     /* Compute the batch sizes for Pippenger's algorithm given a scratch space. If it's greater than
@@ -1057,13 +1324,21 @@ static int secp256k1_ecmult_multi_var(const secp256k1_callback* error_callback, 
      * As a first step check if there's enough space for Pippenger's algo (which requires less space
      * than Strauss' algo) and if not, use the simple algorithm. */
     if (!secp256k1_ecmult_multi_batch_size_helper(&n_batches, &n_batch_points, secp256k1_pippenger_max_points(error_callback, scratch), n)) {
+<<<<<<< HEAD
         return secp256k1_ecmult_multi_simple_var(ctx, r, inp_g_sc, cb, cbdata, n);
+=======
+        return secp256k1_ecmult_multi_simple_var(r, inp_g_sc, cb, cbdata, n);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     if (n_batch_points >= ECMULT_PIPPENGER_THRESHOLD) {
         f = secp256k1_ecmult_pippenger_batch;
     } else {
         if (!secp256k1_ecmult_multi_batch_size_helper(&n_batches, &n_batch_points, secp256k1_strauss_max_points(error_callback, scratch), n)) {
+<<<<<<< HEAD
             return secp256k1_ecmult_multi_simple_var(ctx, r, inp_g_sc, cb, cbdata, n);
+=======
+            return secp256k1_ecmult_multi_simple_var(r, inp_g_sc, cb, cbdata, n);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
         f = secp256k1_ecmult_strauss_batch;
     }
@@ -1071,7 +1346,11 @@ static int secp256k1_ecmult_multi_var(const secp256k1_callback* error_callback, 
         size_t nbp = n < n_batch_points ? n : n_batch_points;
         size_t offset = n_batch_points*i;
         secp256k1_gej tmp;
+<<<<<<< HEAD
         if (!f(error_callback, ctx, scratch, &tmp, i == 0 ? inp_g_sc : NULL, cb, cbdata, nbp, offset)) {
+=======
+        if (!f(error_callback, scratch, &tmp, i == 0 ? inp_g_sc : NULL, cb, cbdata, nbp, offset)) {
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             return 0;
         }
         secp256k1_gej_add_var(r, r, &tmp, NULL);

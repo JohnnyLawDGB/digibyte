@@ -1,26 +1,39 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
+<<<<<<< HEAD
 // Copyright (c) 2009-2020 The Bitcoin Core developers
 // Copyright (c) 2014-2020 The DigiByte Core developers
+=======
+// Copyright (c) 2009-2022 The DigiByte Core developers
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #ifndef DIGIBYTE_VALIDATIONINTERFACE_H
 #define DIGIBYTE_VALIDATIONINTERFACE_H
 
+#include <kernel/cs_main.h>
+#include <kernel/chain.h>
 #include <primitives/transaction.h> // CTransaction(Ref)
 #include <sync.h>
 
 #include <functional>
 #include <memory>
 
+<<<<<<< HEAD
 extern RecursiveMutex cs_main;
+=======
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 class BlockValidationState;
 class CBlock;
 class CBlockIndex;
 struct CBlockLocator;
+<<<<<<< HEAD
 class CConnman;
 class CValidationInterface;
 class uint256;
+=======
+class CValidationInterface;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 class CScheduler;
 enum class MemPoolRemovalReason;
 
@@ -90,7 +103,7 @@ protected:
      * but may not be called on every intermediate tip. If the latter behavior is desired,
      * subscribe to BlockConnected() instead.
      *
-     * Called on a background thread.
+     * Called on a background thread. Only called for the active chainstate.
      */
     virtual void UpdatedBlockTip(const CBlockIndex *pindexNew, const CBlockIndex *pindexFork, bool fInitialDownload) {}
     /**
@@ -139,11 +152,16 @@ protected:
      *
      * Called on a background thread.
      */
+<<<<<<< HEAD
     virtual void BlockConnected(const std::shared_ptr<const CBlock> &block, const CBlockIndex *pindex) {}
+=======
+    virtual void BlockConnected(ChainstateRole role, const std::shared_ptr<const CBlock> &block, const CBlockIndex *pindex) {}
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     /**
      * Notifies listeners of a block being disconnected
      *
-     * Called on a background thread.
+     * Called on a background thread. Only called for the active chainstate, since
+     * background chainstates should never disconnect blocks.
      */
     virtual void BlockDisconnected(const std::shared_ptr<const CBlock> &block, const CBlockIndex* pindex) {}
     /**
@@ -162,25 +180,34 @@ protected:
      *
      * Called on a background thread.
      */
+<<<<<<< HEAD
     virtual void ChainStateFlushed(const CBlockLocator &locator) {}
+=======
+    virtual void ChainStateFlushed(ChainstateRole role, const CBlockLocator &locator) {}
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     /**
      * Notifies listeners of a block validation result.
      * If the provided BlockValidationState IsValid, the provided block
      * is guaranteed to be the current best block at the time the
-     * callback was generated (not necessarily now)
+     * callback was generated (not necessarily now).
      */
     virtual void BlockChecked(const CBlock&, const BlockValidationState&) {}
     /**
      * Notifies listeners that a block which builds directly on our current tip
-     * has been received and connected to the headers tree, though not validated yet */
+     * has been received and connected to the headers tree, though not validated yet.
+     */
     virtual void NewPoWValidBlock(const CBlockIndex *pindex, const std::shared_ptr<const CBlock>& block) {};
     friend class CMainSignals;
+<<<<<<< HEAD
+=======
+    friend class ValidationInterfaceTest;
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 };
 
-struct MainSignalsInstance;
+class MainSignalsImpl;
 class CMainSignals {
 private:
-    std::unique_ptr<MainSignalsInstance> m_internals;
+    std::unique_ptr<MainSignalsImpl> m_internals;
 
     friend void ::RegisterSharedValidationInterface(std::shared_ptr<CValidationInterface>);
     friend void ::UnregisterValidationInterface(CValidationInterface*);
@@ -201,9 +228,15 @@ public:
     void UpdatedBlockTip(const CBlockIndex *, const CBlockIndex *, bool fInitialDownload);
     void TransactionAddedToMempool(const CTransactionRef&, uint64_t mempool_sequence);
     void TransactionRemovedFromMempool(const CTransactionRef&, MemPoolRemovalReason, uint64_t mempool_sequence);
+<<<<<<< HEAD
     void BlockConnected(const std::shared_ptr<const CBlock> &, const CBlockIndex *pindex);
     void BlockDisconnected(const std::shared_ptr<const CBlock> &, const CBlockIndex* pindex);
     void ChainStateFlushed(const CBlockLocator &);
+=======
+    void BlockConnected(ChainstateRole, const std::shared_ptr<const CBlock> &, const CBlockIndex *pindex);
+    void BlockDisconnected(const std::shared_ptr<const CBlock> &, const CBlockIndex* pindex);
+    void ChainStateFlushed(ChainstateRole, const CBlockLocator &);
+>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     void BlockChecked(const CBlock&, const BlockValidationState&);
     void NewPoWValidBlock(const CBlockIndex *, const std::shared_ptr<const CBlock>&);
 };

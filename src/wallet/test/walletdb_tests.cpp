@@ -29,9 +29,6 @@ BOOST_AUTO_TEST_CASE(walletdb_readkeyvalue)
     BOOST_CHECK_THROW(ssValue >> dummy, std::ios_base::failure);
 }
 
-<<<<<<< HEAD
-BOOST_AUTO_TEST_SUITE_END()
-=======
 BOOST_AUTO_TEST_CASE(walletdb_read_write_deadlock)
 {
     // Exercises a db read write operation that shouldn't deadlock.
@@ -60,4 +57,3 @@ BOOST_AUTO_TEST_CASE(walletdb_read_write_deadlock)
 
 BOOST_AUTO_TEST_SUITE_END()
 } // namespace wallet
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion

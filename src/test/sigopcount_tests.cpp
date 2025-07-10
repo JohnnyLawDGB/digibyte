@@ -1,29 +1,17 @@
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-// Distributed under the MIT software license, see the accompanying
-// file COPYING or http://www.opensource.org/licenses/mit-license.php.
-
-=======
-// Copyright (c) 2012-2022 The DigiByte Core developers
+// Copyright (c) 2012-2022 The Bitcoin Core developers
+// Copyright (c) 2014-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <addresstype.h>
 #include <coins.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <consensus/consensus.h>
 #include <consensus/tx_verify.h>
 #include <key.h>
 #include <pubkey.h>
-<<<<<<< HEAD
-#include <script/script.h>
-#include <script/standard.h>
-=======
 #include <script/interpreter.h>
 #include <script/script.h>
 #include <script/solver.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <test/util/setup_common.h>
 #include <uint256.h>
 

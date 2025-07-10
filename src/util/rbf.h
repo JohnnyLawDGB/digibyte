@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-// Copyright (c) 2016-2019 The DigiByte Core developers
-=======
 // Copyright (c) 2016-2021 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -13,13 +9,6 @@
 
 class CTransaction;
 
-<<<<<<< HEAD
-static const uint32_t MAX_BIP125_RBF_SEQUENCE = 0xfffffffd;
-
-// Check whether the sequence numbers on this transaction are signaling
-// opt-in to replace-by-fee, according to BIP 125
-bool SignalsOptInRBF(const CTransaction &tx);
-=======
 static constexpr uint32_t MAX_BIP125_RBF_SEQUENCE{0xfffffffd};
 
 /** Check whether the sequence numbers on this transaction are signaling opt-in to replace-by-fee,
@@ -30,6 +19,5 @@ static constexpr uint32_t MAX_BIP125_RBF_SEQUENCE{0xfffffffd};
 * inputs rather than just one is for the sake of multi-party protocols, where we don't want a single
 * party to be able to disable replacement by opting out in their own input. */
 bool SignalsOptInRBF(const CTransaction& tx);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 #endif // DIGIBYTE_UTIL_RBF_H

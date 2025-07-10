@@ -44,7 +44,4 @@ WalletFeature GetClosestWalletFeature(int version)
     }
     return static_cast<WalletFeature>(0);
 }
-<<<<<<< HEAD
-=======
 } // namespace wallet
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion

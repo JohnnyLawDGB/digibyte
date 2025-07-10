@@ -1,9 +1,4 @@
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
 // Copyright (c) 2011-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -18,10 +13,6 @@
 #include <limits>
 #include <sstream>
 #include <string>
-<<<<<<< HEAD
-#include <version.h>
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <vector>
 
 BOOST_AUTO_TEST_SUITE(arith_uint256_tests)

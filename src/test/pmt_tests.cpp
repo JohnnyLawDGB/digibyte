@@ -1,21 +1,12 @@
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
 // Copyright (c) 2012-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include <arith_uint256.h>
 #include <consensus/merkle.h>
 #include <merkleblock.h>
 #include <serialize.h>
 #include <streams.h>
-<<<<<<< HEAD
-=======
 #include <test/util/random.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <test/util/setup_common.h>
 #include <uint256.h>
 #include <version.h>

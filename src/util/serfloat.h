@@ -1,19 +1,11 @@
-<<<<<<< HEAD
-// Copyright (c) 2021 The DigiByte Core developers
-=======
 // Copyright (c) 2021-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #ifndef DIGIBYTE_UTIL_SERFLOAT_H
 #define DIGIBYTE_UTIL_SERFLOAT_H
 
-<<<<<<< HEAD
-#include <stdint.h>
-=======
 #include <cstdint>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 /* Encode a double using the IEEE 754 binary64 format. All NaNs are encoded as x86/ARM's
  * positive quiet NaN with payload 0. */

@@ -14,11 +14,7 @@ class CRIPEMD160
 private:
     uint32_t s[5];
     unsigned char buf[64];
-<<<<<<< HEAD
-    size_t bytes;
-=======
     uint64_t bytes{0};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 public:
     static const size_t OUTPUT_SIZE = 20;

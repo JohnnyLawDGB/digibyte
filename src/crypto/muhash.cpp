@@ -299,14 +299,9 @@ void Num3072::ToBytes(unsigned char (&out)[BYTE_SIZE]) {
 Num3072 MuHash3072::ToNum3072(Span<const unsigned char> in) {
     unsigned char tmp[Num3072::BYTE_SIZE];
 
-<<<<<<< HEAD
-    uint256 hashed_in = (CHashWriter(SER_DISK, 0) << in).GetSHA256();
-    ChaCha20(hashed_in.data(), hashed_in.size()).Keystream(tmp, Num3072::BYTE_SIZE);
-=======
     uint256 hashed_in{(HashWriter{} << in).GetSHA256()};
     static_assert(sizeof(tmp) % ChaCha20Aligned::BLOCKLEN == 0);
     ChaCha20Aligned{MakeByteSpan(hashed_in)}.Keystream(MakeWritableByteSpan(tmp));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     Num3072 out{tmp};
 
     return out;
@@ -325,11 +320,7 @@ void MuHash3072::Finalize(uint256& out) noexcept
     unsigned char data[Num3072::BYTE_SIZE];
     m_numerator.ToBytes(data);
 
-<<<<<<< HEAD
-    out = (CHashWriter(SER_DISK, 0) << data).GetSHA256();
-=======
     out = (HashWriter{} << data).GetSHA256();
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 MuHash3072& MuHash3072::operator*=(const MuHash3072& mul) noexcept

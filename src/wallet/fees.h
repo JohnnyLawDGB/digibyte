@@ -44,9 +44,6 @@ CFeeRate GetMinimumFeeRate(const CWallet& wallet, const CCoinControl& coin_contr
  * Return the maximum feerate for discarding change.
  */
 CFeeRate GetDiscardRate(const CWallet& wallet);
-<<<<<<< HEAD
-=======
 } // namespace wallet
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 #endif // DIGIBYTE_WALLET_FEES_H

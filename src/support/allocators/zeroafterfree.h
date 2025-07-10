@@ -1,10 +1,5 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-<<<<<<< HEAD
-// Copyright (c) 2009-2018 The Bitcoin Core developers
-// Copyright (c) 2014-2019 The DigiByte Core developers
-=======
 // Copyright (c) 2009-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -51,10 +46,6 @@ struct zero_after_free_allocator {
 };
 
 /** Byte-vector that clears its contents before deletion. */
-<<<<<<< HEAD
-using SerializeData = std::vector<uint8_t, zero_after_free_allocator<uint8_t>>;
-=======
 using SerializeData = std::vector<std::byte, zero_after_free_allocator<std::byte>>;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 #endif // DIGIBYTE_SUPPORT_ALLOCATORS_ZEROAFTERFREE_H

@@ -49,11 +49,7 @@ BOOST_AUTO_TEST_CASE(GetFeeTest)
     BOOST_CHECK_EQUAL(feeRate.GetFee(9e3), CAmount(-9e3));
 
     feeRate = CFeeRate(123);
-<<<<<<< HEAD
-    // Truncates the result, if not integer
-=======
     // Rounds up the result, if not integer
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     BOOST_CHECK_EQUAL(feeRate.GetFee(0), CAmount(0));
     BOOST_CHECK_EQUAL(feeRate.GetFee(8), CAmount(1)); // Special case: returns 1 instead of 0
     BOOST_CHECK_EQUAL(feeRate.GetFee(9), CAmount(2));
@@ -89,13 +85,9 @@ BOOST_AUTO_TEST_CASE(GetFeeTest)
     BOOST_CHECK(CFeeRate(CAmount(26), 789) == CFeeRate(32));
     BOOST_CHECK(CFeeRate(CAmount(27), 789) == CFeeRate(34));
     // Maximum size in bytes, should not crash
-<<<<<<< HEAD
     size_t MAX_MONEY2;
     MAX_MONEY2 = MAX_MONEY / 1000;
     CFeeRate(MAX_MONEY2, std::numeric_limits<uint32_t>::max()).GetFeePerK();
-=======
-    CFeeRate(MAX_MONEY, std::numeric_limits<uint32_t>::max()).GetFeePerK();
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 BOOST_AUTO_TEST_CASE(BinaryOperatorTest)

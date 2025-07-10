@@ -18,11 +18,6 @@
 #include <string>
 
 using namespace std::literals;
-<<<<<<< HEAD
-
-UniValue read_json(const std::string& jsondata);
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 BOOST_FIXTURE_TEST_SUITE(base58_tests, BasicTestingSetup)
 

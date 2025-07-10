@@ -94,10 +94,6 @@ BOOST_AUTO_TEST_CASE(bech32_testvectors_invalid)
 
     int i = 0;
     for (const std::string& str : CASES) {
-<<<<<<< HEAD
-        const auto dec = bech32::Decode(str);
-        BOOST_CHECK(dec.encoding == bech32::Encoding::INVALID);
-=======
         const auto& err = ERRORS[i];
         const auto dec = bech32::Decode(str);
         BOOST_CHECK(dec.encoding == bech32::Encoding::INVALID);
@@ -105,7 +101,6 @@ BOOST_AUTO_TEST_CASE(bech32_testvectors_invalid)
         BOOST_CHECK_EQUAL(err.first, error);
         BOOST_CHECK(err.second == error_locations);
         i++;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 }
 
@@ -125,13 +120,6 @@ BOOST_AUTO_TEST_CASE(bech32m_testvectors_invalid)
         "au1s5cgom",
         "M1VUXWEZ",
         "16plkw9",
-<<<<<<< HEAD
-        "1p2gdwpf"
-    };
-    for (const std::string& str : CASES) {
-        const auto dec = bech32::Decode(str);
-        BOOST_CHECK(dec.encoding == bech32::Encoding::INVALID);
-=======
         "1p2gdwpf",
         "abcdef1l7aum6echk45nj2s0wdvt2fg8x9yrzpqzd3ryx",
         "test1zg69v7y60n00qy352euf40x77qcusag6",
@@ -165,7 +153,6 @@ BOOST_AUTO_TEST_CASE(bech32m_testvectors_invalid)
         BOOST_CHECK_EQUAL(err.first, error);
         BOOST_CHECK(err.second == error_locations);
         i++;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 }
 

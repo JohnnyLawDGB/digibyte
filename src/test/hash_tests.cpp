@@ -1,19 +1,11 @@
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
 // Copyright (c) 2013-2021 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <clientversion.h>
 #include <crypto/siphash.h>
 #include <hash.h>
-<<<<<<< HEAD
-=======
 #include <test/util/random.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <test/util/setup_common.h>
 #include <util/strencodings.h>
 

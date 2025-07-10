@@ -1,9 +1,5 @@
-<<<<<<< HEAD
-// Copyright (c) 2018 The Bitcoin Core developers
-// Copyright (c) 2018-2020 The DigiByte Core developers
-=======
 // Copyright (c) 2018-2022 The Bitcoin Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// Copyright (c) 2018-2020 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -61,15 +57,8 @@ static RPCHelpMan getzmqnotifications()
     };
 }
 
-<<<<<<< HEAD
-const CRPCCommand commands[] =
-{ //  category           actor (function)
-  //  -----------------  -----------------------
-    { "zmq",             &getzmqnotifications,    },
-=======
 const CRPCCommand commands[]{
     {"zmq", &getzmqnotifications},
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 };
 
 } // anonymous namespace

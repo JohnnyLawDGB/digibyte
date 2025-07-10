@@ -1,10 +1,5 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-<<<<<<< HEAD
-// Copyright (c) 2009-2019 The Bitcoin Core developers
-// Copyright (c) 2014-2019 The DigiByte Core developers
-=======
 // Copyright (c) 2009-2021 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -62,8 +57,6 @@ struct secure_allocator {
 // TODO: Consider finding a way to make incoming RPC request.params[i] mlock()ed as well
 typedef std::basic_string<char, std::char_traits<char>, secure_allocator<char> > SecureString;
 
-<<<<<<< HEAD
-=======
 template<typename T>
 struct SecureUniqueDeleter {
     void operator()(T* t) noexcept {
@@ -81,12 +74,11 @@ secure_unique_ptr<T> make_secure_unique(Args&&... as)
 
     // initialize in place, and return as secure_unique_ptr
     try {
-        return secure_unique_ptr<T>(new (p) T(std::forward(as)...));
+        return secure_unique_ptr<T>(new (p) T(std::forward<Args>(as)...));
     } catch (...) {
         secure_allocator<T>().deallocate(p, 1);
         throw;
     }
 }
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #endif // DIGIBYTE_SUPPORT_ALLOCATORS_SECURE_H

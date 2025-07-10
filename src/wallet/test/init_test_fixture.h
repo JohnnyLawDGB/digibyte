@@ -21,15 +21,8 @@ struct InitWalletDirTestingSetup: public BasicTestingSetup {
     fs::path m_datadir;
     fs::path m_cwd;
     std::map<std::string, fs::path> m_walletdir_path_cases;
-<<<<<<< HEAD
-    std::unique_ptr<interfaces::WalletClient> m_wallet_client;
-};
-
-#endif // DIGIBYTE_WALLET_TEST_INIT_TEST_FIXTURE_H
-=======
     std::unique_ptr<interfaces::WalletLoader> m_wallet_loader;
 };
 
 #endif // DIGIBYTE_WALLET_TEST_INIT_TEST_FIXTURE_H
 } // namespace wallet
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion

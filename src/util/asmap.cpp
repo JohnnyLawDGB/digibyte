@@ -1,13 +1,3 @@
-<<<<<<< HEAD
-// Copyright (c) 2019-2020 The DigiByte Core developers
-// Distributed under the MIT software license, see the accompanying
-// file COPYING or http://www.opensource.org/licenses/mit-license.php.
-
-#include <map>
-#include <vector>
-#include <assert.h>
-#include <crypto/common.h>
-=======
 // Copyright (c) 2019-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
@@ -26,7 +16,6 @@
 #include <cstdio>
 #include <utility>
 #include <vector>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 namespace {
 
@@ -204,8 +193,6 @@ bool SanityCheckASMap(const std::vector<bool>& asmap, int bits)
     }
     return false; // Reached EOF without RETURN instruction
 }
-<<<<<<< HEAD
-=======
 
 std::vector<bool> DecodeAsmap(fs::path path)
 {
@@ -233,5 +220,3 @@ std::vector<bool> DecodeAsmap(fs::path path)
     }
     return bits;
 }
-
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion

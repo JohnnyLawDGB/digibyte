@@ -7,7 +7,7 @@ define(_CLIENT_VERSION_IS_RELEASE, false)
 define(_COPYRIGHT_YEAR, 2025)
 define(_COPYRIGHT_HOLDERS,[The %s developers])
 define(_COPYRIGHT_HOLDERS_SUBSTITUTION,[[DigiByte Core]])
-AC_INIT([DigiByte Core],m4_join([.], _CLIENT_VERSION_MAJOR, _CLIENT_VERSION_MINOR, _CLIENT_VERSION_BUILD)m4_if(_CLIENT_VERSION_RC, [0], [], [rc]_CLIENT_VERSION_RC),[https://github.com/DigiByte-Core/digibyte/issues],[digibyte],[https://digibyte.org/])
+AC_INIT([DigiByte Core],m4_join([.], _CLIENT_VERSION_MAJOR, _CLIENT_VERSION_MINOR, _CLIENT_VERSION_BUILD)m4_if(_CLIENT_VERSION_RC, [0], [], [rc]_CLIENT_VERSION_RC),[https://github.com/digibyte/digibyte/issues],[digibyte],[https://digibyte.org/])
 AC_CONFIG_SRCDIR([src/validation.cpp])
 AC_CONFIG_HEADERS([src/config/digibyte-config.h])
 AC_CONFIG_AUX_DIR([build-aux])
@@ -53,9 +53,6 @@ AC_CANONICAL_HOST
 AH_TOP([#ifndef DIGIBYTE_CONFIG_H])
 AH_TOP([#define DIGIBYTE_CONFIG_H])
 AH_BOTTOM([#endif //DIGIBYTE_CONFIG_H])
-
-dnl faketime breaks configure and is only needed for make. Disable it here.
-unset FAKETIME
 
 dnl Automake init set-up and checks
 AM_INIT_AUTOMAKE([1.13 no-define subdir-objects foreign])
@@ -111,6 +108,7 @@ AX_CXX_COMPILE_STDCXX([17], [noext], [mandatory])
 else
 AX_CXX_COMPILE_STDCXX([20], [noext], [mandatory])
 fi
+
 dnl Unless the user specified OBJCXX, force it to be the same as CXX. This ensures
 dnl that we get the same -std flags for both.
 m4_ifdef([AC_PROG_OBJCXX],[
@@ -166,6 +164,7 @@ AC_ARG_ENABLE([usdt],
   [enable tracepoints for Userspace, Statically Defined Tracing (default is yes if sys/sdt.h is found)])],
   [use_usdt=$enableval],
   [use_usdt=yes])
+
 AC_ARG_WITH([miniupnpc],
   [AS_HELP_STRING([--with-miniupnpc],
   [enable UPNP (default is yes if libminiupnpc is found)])],
@@ -177,18 +176,6 @@ AC_ARG_WITH([natpmp],
                             [enable NAT-PMP (default is yes if libnatpmp is found)])],
             [use_natpmp=$withval],
             [use_natpmp=auto])
-
-AC_ARG_WITH([natpmp],
-            [AS_HELP_STRING([--with-natpmp],
-                            [enable NAT-PMP (default is yes if libnatpmp is found)])],
-            [use_natpmp=$withval],
-            [use_natpmp=auto])
-
-AC_ARG_ENABLE([natpmp-default],
-              [AS_HELP_STRING([--enable-natpmp-default],
-                              [if NAT-PMP is enabled, turn it on at startup (default is no)])],
-              [use_natpmp_default=$enableval],
-              [use_natpmp_default=no])
 
 AC_ARG_ENABLE(tests,
     AS_HELP_STRING([--disable-tests],[do not compile tests (default is to compile)]),
@@ -203,7 +190,7 @@ AC_ARG_ENABLE(gui-tests,
 AC_ARG_ENABLE(bench,
     AS_HELP_STRING([--disable-bench],[do not compile benchmarks (default is to compile)]),
     [use_bench=$enableval],
-    [use_bench=no])
+    [use_bench=yes])
 
 AC_ARG_ENABLE([extended-functional-tests],
     AS_HELP_STRING([--enable-extended-functional-tests],[enable expensive functional tests when using lcov (default no)]),
@@ -255,6 +242,7 @@ AC_ARG_ENABLE([suppress-external-warnings],
                   [Do not suppress warnings from external headers (default is to suppress)])],
   [suppress_external_warnings=$enableval],
   [suppress_external_warnings=yes])
+
 AC_ARG_ENABLE([lcov],
   [AS_HELP_STRING([--enable-lcov],
   [enable lcov testing (default is no)])],
@@ -270,12 +258,6 @@ AC_ARG_ENABLE([lcov-branch-coverage],
 AC_ARG_ENABLE([threadlocal],
   [AS_HELP_STRING([--enable-threadlocal],
   [enable features that depend on the c++ thread_local keyword (currently just thread names in debug logs). (default is to enable if there is platform support)])],
-  [use_thread_local=$enableval],
-  [use_thread_local=auto])
-
-AC_ARG_ENABLE([threadlocal],
-  [AS_HELP_STRING([--enable-threadlocal],
-  [enable features that depend on the c++ thread_local keyword (currently just thread names in debug logs). (default is to enabled if there is platform support and glibc-back-compat is not enabled)])],
   [use_thread_local=$enableval],
   [use_thread_local=auto])
 
@@ -366,6 +348,7 @@ dnl a compile with -Werror can succeed. This is important because the compiler m
 dnl warning about something unrelated, for example about some path issue. If that is the case,
 dnl -Werror cannot be used because all of those warnings would be turned into errors.
 AX_CHECK_COMPILE_FLAG([-Werror], [CXXFLAG_WERROR="-Werror"], [CXXFLAG_WERROR=""])
+
 dnl Check for a flag to turn linker warnings into errors. When flags are passed to linkers via the
 dnl compiler driver using a -Wl,-foo flag, linker warnings may be swallowed rather than bubbling up.
 dnl See note above, the same applies here as well.
@@ -390,6 +373,7 @@ if test "$enable_debug" = "yes"; then
 
   dnl Disable all optimizations
   AX_CHECK_COMPILE_FLAG([-O0], [DEBUG_CXXFLAGS="$DEBUG_CXXFLAGS -O0"], [], [$CXXFLAG_WERROR])
+
   dnl Prefer -g3, fall back to -g if that is unavailable.
   AX_CHECK_COMPILE_FLAG(
     [-g3],
@@ -410,7 +394,8 @@ if test "$enable_lto" = "yes"; then
   AX_CHECK_LINK_FLAG([-flto], [LTO_LDFLAGS="$LTO_LDFLAGS -flto"], [AC_MSG_ERROR([link failed with -flto])], [$CXXFLAG_WERROR])
 fi
 
-if test "$use_sanitizers" != ""; then  dnl First check if the compiler accepts flags. If an incompatible pair like
+if test "$use_sanitizers" != ""; then
+  dnl First check if the compiler accepts flags. If an incompatible pair like
   dnl -fsanitize=address,thread is used here, this check will fail. This will also
   dnl fail if a bad argument is passed, e.g. -fsanitize=undfeined
   AX_CHECK_COMPILE_FLAG(
@@ -425,7 +410,8 @@ if test "$use_sanitizers" != ""; then  dnl First check if the compiler accepts f
   dnl libs are missing.
   AX_CHECK_LINK_FLAG(
     [-fsanitize=$use_sanitizers],
-    [SANITIZER_LDFLAGS="-fsanitize=$use_sanitizers"],    [AC_MSG_ERROR([linker did not accept requested flags, you are missing required libraries])],
+    [SANITIZER_LDFLAGS="-fsanitize=$use_sanitizers"],
+    [AC_MSG_ERROR([linker did not accept requested flags, you are missing required libraries])],
     [],
     [AC_LANG_PROGRAM([[
     #include <cstdint>
@@ -499,6 +485,7 @@ enable_avx2=no
 enable_x86_shani=no
 
 if test "$use_asm" = "yes"; then
+
 dnl Check for optional instruction set support. Enabling these does _not_ imply that all code will
 dnl be compiled with them, rather that specific objects/libs may use them after checking for runtime
 dnl compatibility.
@@ -529,7 +516,8 @@ fi
 
 TEMP_CXXFLAGS="$CXXFLAGS"
 CXXFLAGS="$SSE42_CXXFLAGS $CXXFLAGS"
-AC_MSG_CHECKING([for SSE4.2 intrinsics])AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+AC_MSG_CHECKING([for SSE4.2 intrinsics])
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
     #include <stdint.h>
     #if defined(_MSC_VER)
     #include <intrin.h>
@@ -544,7 +532,8 @@ AC_MSG_CHECKING([for SSE4.2 intrinsics])AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
     return l;
   ]])],
  [ AC_MSG_RESULT([yes]); enable_sse42=yes],
- [ AC_MSG_RESULT([no])])
+ [ AC_MSG_RESULT([no])]
+)
 CXXFLAGS="$TEMP_CXXFLAGS"
 
 TEMP_CXXFLAGS="$CXXFLAGS"
@@ -600,7 +589,8 @@ AX_CHECK_COMPILE_FLAG([-march=armv8-a+crypto], [ARM_SHANI_CXXFLAGS="-march=armv8
 
 TEMP_CXXFLAGS="$CXXFLAGS"
 CXXFLAGS="$ARM_CRC_CXXFLAGS $CXXFLAGS"
-AC_MSG_CHECKING([for ARMv8 CRC32 intrinsics])AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+AC_MSG_CHECKING([for ARMv8 CRC32 intrinsics])
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
     #include <arm_acle.h>
     #include <arm_neon.h>
   ]],[[
@@ -630,12 +620,14 @@ AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
     vsha256su1q_u32(a, b, c);
   ]])],
  [ AC_MSG_RESULT([yes]); enable_arm_shani=yes; AC_DEFINE([ENABLE_ARM_SHANI], [1], [Define this symbol to build code that uses ARMv8 SHA-NI intrinsics]) ],
- [ AC_MSG_RESULT([no])])
+ [ AC_MSG_RESULT([no])]
+)
 CXXFLAGS="$TEMP_CXXFLAGS"
 
 fi
 
 CORE_CPPFLAGS="$CORE_CPPFLAGS -DHAVE_BUILD_INFO"
+
 AC_ARG_WITH([utils],
   [AS_HELP_STRING([--with-utils],
   [build digibyte-cli digibyte-tx digibyte-util digibyte-wallet (default=yes)])],
@@ -711,6 +703,7 @@ case $host in
      dnl -static is interpreted by libtool, where it has a different meaning.
      dnl In libtool-speak, it's -all-static.
      AX_CHECK_LINK_FLAG([-static], [LIBTOOL_APP_LDFLAGS="$LIBTOOL_APP_LDFLAGS -all-static"])
+
      AC_PATH_PROG([MAKENSIS], [makensis], [none])
      if test "$MAKENSIS" = "none"; then
        AC_MSG_WARN([makensis not found. Cannot create installer.])
@@ -727,6 +720,7 @@ case $host in
      dnl Prevent the definition of min/max macros.
      dnl We always want to use the standard library.
      CORE_CPPFLAGS="$CORE_CPPFLAGS -DNOMINMAX"
+
      dnl libtool insists upon adding -nostdlib and a list of objects/libs to link against.
      dnl That breaks our ability to build dll's with static libgcc/libstdc++/libssp. Override
      dnl its command here, with the predeps/postdeps removed, and -static inserted. Postdeps are
@@ -747,7 +741,8 @@ case $host in
      if  test $cross_compiling != "yes"; then
        BUILD_OS=darwin
        AC_CHECK_PROG([BREW], [brew], [brew])
-       if test "$BREW" = "brew"; then         dnl These Homebrew packages may be keg-only, meaning that they won't be found
+       if test "$BREW" = "brew"; then
+         dnl These Homebrew packages may be keg-only, meaning that they won't be found
          dnl in expected paths because they may conflict with system files. Ask
          dnl Homebrew where each one is located, then adjust paths accordingly.
          dnl It's safe to add these paths even if the functionality is disabled by
@@ -772,7 +767,7 @@ case $host in
 
          if $BREW list --versions qt@5 >/dev/null; then
            export PKG_CONFIG_PATH="$($BREW --prefix qt@5 2>/dev/null)/lib/pkgconfig:$PKG_CONFIG_PATH"
-        fi
+         fi
 
          case $host in
            *aarch64*)
@@ -811,6 +806,7 @@ case $host in
            AC_PATH_TOOL([INSTALL_NAME_TOOL], [install_name_tool], [install_name_tool])
            AC_PATH_TOOL([OTOOL], [otool], [otool])
            AC_PATH_PROG([ZIP], [zip], [zip])
+
            dnl libtool will try to strip the static lib, which is a problem for
            dnl cross-builds because strip attempts to call a hard-coded ld,
            dnl which may not exist in the path. Stripping the .a is not
@@ -821,7 +817,8 @@ case $host in
      fi
 
      AX_CHECK_LINK_FLAG([-Wl,-headerpad_max_install_names], [CORE_LDFLAGS="$CORE_LDFLAGS -Wl,-headerpad_max_install_names"], [], [$LDFLAG_WERROR])
-     CORE_CPPFLAGS="$CORE_CPPFLAGS -DMAC_OSX -DOBJC_OLD_DISPATCH_PROTOTYPES=0"     OBJCXXFLAGS="$CXXFLAGS"
+     CORE_CPPFLAGS="$CORE_CPPFLAGS -DMAC_OSX -DOBJC_OLD_DISPATCH_PROTOTYPES=0"
+     OBJCXXFLAGS="$CXXFLAGS"
      ;;
    *android*)
      dnl make sure android stays above linux for hosts like *linux-android*
@@ -836,14 +833,16 @@ case $host in
         *armv7a*)
           ANDROID_ARCH=armeabi-v7a
           ;;
-        *) AC_MSG_ERROR([Could not determine Android arch, or it is unsupported]) ;;      esac
+        *) AC_MSG_ERROR([Could not determine Android arch, or it is unsupported]) ;;
+      esac
      ;;
    *linux*)
      TARGET_OS=linux
      ;;
 esac
 
-if test "$use_extended_functional_tests" != "no"; then  AC_SUBST(EXTENDED_FUNCTIONAL_TESTS, --extended)
+if test "$use_extended_functional_tests" != "no"; then
+  AC_SUBST(EXTENDED_FUNCTIONAL_TESTS, --extended)
 fi
 
 if test "$use_lcov" = "yes"; then
@@ -891,14 +890,12 @@ if test "$use_lcov" = "yes"; then
   if test "$CXXFLAGS_overridden" = "no"; then
   CXXFLAGS=""
   fi
-  CORE_CXXFLAGS="$CORE_CXXFLAGS -Og -O0"fi
+  CORE_CXXFLAGS="$CORE_CXXFLAGS -Og -O0"
+fi
 
 if test "$use_lcov_branch" != "no"; then
   AC_SUBST(LCOV_OPTS, "$LCOV_OPTS --rc lcov_branch_coverage=1")
 fi
-
-dnl Check for __int128
-AC_CHECK_TYPES([__int128])
 
 dnl Check for endianness
 AC_C_BIGENDIAN
@@ -928,7 +925,8 @@ if test "$ac_cv_sys_large_files" != "" &&
   CORE_CPPFLAGS="$CORE_CPPFLAGS -D_LARGE_FILES=$ac_cv_sys_large_files"
 fi
 
-if test "$enable_gprof" = "yes"; then    dnl -pg is incompatible with -pie. Since hardening and profiling together doesn't make sense,
+if test "$enable_gprof" = "yes"; then
+    dnl -pg is incompatible with -pie. Since hardening and profiling together doesn't make sense,
     dnl we simply make them mutually exclusive here. Additionally, hardened toolchains may force
     dnl -pie by default, in which case it needs to be turned off with -no-pie.
 
@@ -949,11 +947,13 @@ if test "$TARGET_OS" != "windows"; then
   AX_CHECK_COMPILE_FLAG([-fPIC], [PIC_FLAGS="-fPIC"])
 fi
 
-if test "$use_hardening" != "no"; then  use_hardening=yes
+if test "$use_hardening" != "no"; then
+  use_hardening=yes
   AX_CHECK_COMPILE_FLAG([-Wstack-protector], [HARDENED_CXXFLAGS="$HARDENED_CXXFLAGS -Wstack-protector"])
   AX_CHECK_COMPILE_FLAG([-fstack-protector-all], [HARDENED_CXXFLAGS="$HARDENED_CXXFLAGS -fstack-protector-all"])
 
   AX_CHECK_COMPILE_FLAG([-fcf-protection=full], [HARDENED_CXXFLAGS="$HARDENED_CXXFLAGS -fcf-protection=full"])
+
   case $host in
     *mingw*)
       dnl stack-clash-protection doesn't compile with GCC 10 and earlier.
@@ -1010,11 +1010,11 @@ if test "$TARGET_OS" = "darwin"; then
 fi
 
 AC_CHECK_HEADERS([endian.h sys/endian.h byteswap.h sys/select.h sys/prctl.h sys/sysctl.h vm/vm_param.h sys/vmmeter.h sys/resources.h])
+
 AC_CHECK_DECLS([getifaddrs, freeifaddrs],[CHECK_SOCKET],,
     [#include <sys/types.h>
     #include <ifaddrs.h>]
 )
-AC_CHECK_DECLS([strnlen])
 
 dnl These are used for daemonization in digibyted
 AC_CHECK_DECLS([fork])
@@ -1049,7 +1049,8 @@ AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[ ]], [[
   (void) __builtin_clzll(0);
   ]])],
  [ AC_MSG_RESULT([yes]); have_clzll=yes; AC_DEFINE([HAVE_BUILTIN_CLZLL], [1], [Define this symbol if you have __builtin_clzll])],
- [ AC_MSG_RESULT([no]); have_clzll=no;])
+ [ AC_MSG_RESULT([no]); have_clzll=no;]
+)
 
 dnl Check for malloc_info (for memory statistics information in getmemoryinfo)
 AC_MSG_CHECKING([for getmemoryinfo])
@@ -1070,7 +1071,8 @@ AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <malloc.h>]],
 dnl Check for posix_fallocate
 AC_MSG_CHECKING([for posix_fallocate])
 AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
-                   // same as in src/util/fs_helpers.cpp                   #ifdef __linux__
+                   // same as in src/util/fs_helpers.cpp
+                   #ifdef __linux__
                    #ifdef _POSIX_C_SOURCE
                    #undef _POSIX_C_SOURCE
                    #endif
@@ -1079,7 +1081,8 @@ AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
                    #include <fcntl.h>]],
                    [[ int f = posix_fallocate(0, 0, 0); ]])],
  [ AC_MSG_RESULT([yes]); AC_DEFINE([HAVE_POSIX_FALLOCATE], [1], [Define this symbol if you have posix_fallocate]) ],
- [ AC_MSG_RESULT([no])])
+ [ AC_MSG_RESULT([no])]
+)
 
 AC_MSG_CHECKING([for default visibility attribute])
 AC_COMPILE_IFELSE([AC_LANG_SOURCE([
@@ -1088,7 +1091,8 @@ AC_COMPILE_IFELSE([AC_LANG_SOURCE([
   ])],
   [
     AC_DEFINE([HAVE_DEFAULT_VISIBILITY_ATTRIBUTE], [1], [Define if the visibility attribute is supported.])
-    AC_MSG_RESULT([yes])  ],
+    AC_MSG_RESULT([yes])
+  ],
   [
     AC_MSG_RESULT([no])
     if test "$use_reduce_exports" = "yes"; then
@@ -1109,7 +1113,8 @@ AC_COMPILE_IFELSE([AC_LANG_SOURCE([
   [AC_MSG_RESULT([no])]
 )
 
-if test "$use_thread_local" = "yes" || test "$use_thread_local" = "auto"; then  TEMP_LDFLAGS="$LDFLAGS"
+if test "$use_thread_local" = "yes" || test "$use_thread_local" = "auto"; then
+  TEMP_LDFLAGS="$LDFLAGS"
   LDFLAGS="$TEMP_LDFLAGS $PTHREAD_CFLAGS"
   AC_MSG_CHECKING([for thread_local support])
   AC_LINK_IFELSE([AC_LANG_SOURCE([
@@ -1127,7 +1132,8 @@ if test "$use_thread_local" = "yes" || test "$use_thread_local" = "auto"; then  
           dnl mingw32's implementation of thread_local has also been shown to behave
           dnl erroneously under concurrent usage; see:
           dnl https://gist.github.com/jamesob/fe9a872051a88b2025b1aa37bfa98605
-          AC_MSG_RESULT([no])          ;;
+          AC_MSG_RESULT([no])
+          ;;
         *freebsd*)
           dnl FreeBSD's implementation of thread_local is also buggy (per
           dnl https://groups.google.com/d/msg/bsdmailinglist/22ncTZAbDp4/Dii_pII5AwAJ)
@@ -1135,11 +1141,13 @@ if test "$use_thread_local" = "yes" || test "$use_thread_local" = "auto"; then  
           ;;
         *)
           AC_DEFINE([HAVE_THREAD_LOCAL], [1], [Define if thread_local is supported.])
-          AC_MSG_RESULT([yes])          ;;
+          AC_MSG_RESULT([yes])
+          ;;
       esac
     ],
     [
-      AC_MSG_RESULT([no])    ]
+      AC_MSG_RESULT([no])
+    ]
   )
   LDFLAGS="$TEMP_LDFLAGS"
 fi
@@ -1155,7 +1163,8 @@ AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <ctime>]],
     AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <ctime>]],
        [[ gmtime_s((struct tm *) nullptr, (const time_t *) nullptr); ]])],
        [ AC_MSG_RESULT([yes])],
-       [ AC_MSG_RESULT([no]); AC_MSG_ERROR([Both gmtime_r and gmtime_s are unavailable]) ]    )
+       [ AC_MSG_RESULT([no]); AC_MSG_ERROR([Both gmtime_r and gmtime_s are unavailable]) ]
+    )
   ]
 )
 
@@ -1165,7 +1174,8 @@ AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
   #include <sys/random.h>]],
  [[ getrandom(nullptr, 32, 0); ]])],
  [ AC_MSG_RESULT([yes]); AC_DEFINE([HAVE_GETRANDOM], [1], [Define this symbol if the Linux getrandom function call is available]) ],
- [ AC_MSG_RESULT([no])])
+ [ AC_MSG_RESULT([no])]
+)
 
 AC_MSG_CHECKING([for getentropy via sys/random.h])
 AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
@@ -1175,14 +1185,16 @@ AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
  [ AC_MSG_RESULT([no])]
 )
 
-AC_MSG_CHECKING([for sysctl])AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <sys/types.h>
+AC_MSG_CHECKING([for sysctl])
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <sys/types.h>
   #include <sys/sysctl.h>]],
  [[ #ifdef __linux__
     #error "Don't use sysctl on Linux, it's deprecated even when it works"
     #endif
     sysctl(nullptr, 2, nullptr, nullptr, nullptr, 0); ]])],
  [ AC_MSG_RESULT([yes]); AC_DEFINE([HAVE_SYSCTL], [1], [Define this symbol if the BSD sysctl() is available]) ],
- [ AC_MSG_RESULT([no])])
+ [ AC_MSG_RESULT([no])]
+)
 
 AC_MSG_CHECKING([for sysctl KERN_ARND])
 AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <sys/types.h>
@@ -1223,11 +1235,13 @@ AC_MSG_CHECKING([for O_CLOEXEC])
 AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <fcntl.h>]],
  [[ open("", O_CLOEXEC); ]])],
  [ AC_MSG_RESULT([yes]); HAVE_O_CLOEXEC=1 ],
- [ AC_MSG_RESULT([no]); HAVE_O_CLOEXEC=0 ])
+ [ AC_MSG_RESULT([no]); HAVE_O_CLOEXEC=0 ]
+)
 AC_DEFINE_UNQUOTED([HAVE_O_CLOEXEC], [$HAVE_O_CLOEXEC], [Define to 1 if O_CLOEXEC flag is available.])
 
 dnl crc32c platform checks
-AC_MSG_CHECKING([for __builtin_prefetch])AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[ ]], [[
+AC_MSG_CHECKING([for __builtin_prefetch])
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[ ]], [[
   char data = 0;
   const char* address = &data;
   __builtin_prefetch(address, 0, 0);
@@ -1236,7 +1250,8 @@ AC_MSG_CHECKING([for __builtin_prefetch])AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[ ]
  [ AC_MSG_RESULT([no]); HAVE_BUILTIN_PREFETCH=0 ]
 )
 
-AC_MSG_CHECKING([for _mm_prefetch])AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <xmmintrin.h>]], [[
+AC_MSG_CHECKING([for _mm_prefetch])
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <xmmintrin.h>]], [[
   char data = 0;
   const char* address = &data;
   _mm_prefetch(address, _MM_HINT_NTA);
@@ -1246,7 +1261,8 @@ AC_MSG_CHECKING([for _mm_prefetch])AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include
 )
 
 AC_MSG_CHECKING([for strong getauxval support in the system headers])
-AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[    #include <sys/auxv.h>
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+    #include <sys/auxv.h>
   ]], [[
     getauxval(AT_HWCAP);
   ]])],
@@ -1254,14 +1270,16 @@ AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[    #include <sys/auxv.h>
  [ AC_MSG_RESULT([no]); HAVE_STRONG_GETAUXVAL=0 ]
 )
 
-have_any_system=noAC_MSG_CHECKING([for std::system])
+have_any_system=no
+AC_MSG_CHECKING([for std::system])
 AC_LINK_IFELSE(
     [ AC_LANG_PROGRAM(
         [[ #include <cstdlib> ]],
         [[ int nErr = std::system(""); ]]
     )],
     [ AC_MSG_RESULT([yes]); have_any_system=yes],
-    [ AC_MSG_RESULT([no]) ])
+    [ AC_MSG_RESULT([no]) ]
+)
 
 AC_MSG_CHECKING([for ::_wsystem])
 AC_LINK_IFELSE(
@@ -1276,6 +1294,7 @@ AC_LINK_IFELSE(
 if test "$have_any_system" != "no"; then
   AC_DEFINE([HAVE_SYSTEM], [1], [Define to 1 if std::system or ::wsystem is available.])
 fi
+
 dnl SUPPRESSED_CPPFLAGS=SUPPRESS_WARNINGS([$SOME_CPPFLAGS])
 dnl Replace -I with -isystem in $SOME_CPPFLAGS to suppress warnings from
 dnl headers from its include directories and return the result.
@@ -1290,7 +1309,8 @@ AC_DEFUN([SUPPRESS_WARNINGS],
 
 dnl enable-fuzz should disable all other targets
 if test "$enable_fuzz" = "yes"; then
-  AC_MSG_WARN([enable-fuzz will disable all other targets and force --enable-fuzz-binary=yes])  build_digibyte_utils=no
+  AC_MSG_WARN([enable-fuzz will disable all other targets and force --enable-fuzz-binary=yes])
+  build_digibyte_utils=no
   build_digibyte_cli=no
   build_digibyte_tx=no
   build_digibyte_util=no
@@ -1302,13 +1322,15 @@ if test "$enable_fuzz" = "yes"; then
   digibyte_enable_qt_test=no
   digibyte_enable_qt_dbus=no
   use_bench=no
-  use_tests=no  use_external_signer=no
+  use_tests=no
+  use_external_signer=no
   use_upnp=no
   use_natpmp=no
   use_zmq=no
   enable_fuzz_binary=yes
 
-  AX_CHECK_PREPROC_FLAG([-DABORT_ON_FAILED_ASSUME], [DEBUG_CPPFLAGS="$DEBUG_CPPFLAGS -DABORT_ON_FAILED_ASSUME"], [], [$CXXFLAG_WERROR])else
+  AX_CHECK_PREPROC_FLAG([-DABORT_ON_FAILED_ASSUME], [DEBUG_CPPFLAGS="$DEBUG_CPPFLAGS -DABORT_ON_FAILED_ASSUME"], [], [$CXXFLAG_WERROR])
+else
   DIGIBYTE_QT_INIT
 
   dnl sets $digibyte_enable_qt, $digibyte_enable_qt_test, $digibyte_enable_qt_dbus
@@ -1316,7 +1338,8 @@ if test "$enable_fuzz" = "yes"; then
 
   dnl Keep a copy of the original $QT_INCLUDES and use it when invoking qt's moc
   QT_INCLUDES_UNSUPPRESSED=$QT_INCLUDES
-  if test "$suppress_external_warnings" != "no" ; then    QT_INCLUDES=SUPPRESS_WARNINGS($QT_INCLUDES)
+  if test "$suppress_external_warnings" != "no" ; then
+    QT_INCLUDES=SUPPRESS_WARNINGS($QT_INCLUDES)
     QT_DBUS_INCLUDES=SUPPRESS_WARNINGS($QT_DBUS_INCLUDES)
     QT_TEST_INCLUDES=SUPPRESS_WARNINGS($QT_TEST_INCLUDES)
   fi
@@ -1345,7 +1368,8 @@ if test "$enable_wallet" != "no"; then
     dnl Check for libdb_cxx only if wallet enabled
     if test "$use_bdb" != "no"; then
       DIGIBYTE_FIND_BDB48
-      if test "$suppress_external_warnings" != "no" ; then        BDB_CPPFLAGS=SUPPRESS_WARNINGS($BDB_CPPFLAGS)
+      if test "$suppress_external_warnings" != "no" ; then
+        BDB_CPPFLAGS=SUPPRESS_WARNINGS($BDB_CPPFLAGS)
       fi
     fi
 
@@ -1357,11 +1381,13 @@ if test "$enable_wallet" != "no"; then
     if test "$use_sqlite" = "no"; then
       use_sqlite=no
     elif test "$have_sqlite" = "no"; then
-      if test "$use_sqlite" = "yes"; then        AC_MSG_ERROR([sqlite support requested but cannot be built. Use --without-sqlite])
+      if test "$use_sqlite" = "yes"; then
+        AC_MSG_ERROR([sqlite support requested but cannot be built. Use --without-sqlite])
       fi
       use_sqlite=no
     else
-      if test "$use_sqlite" != "no"; then        AC_DEFINE([USE_SQLITE],[1],[Define if sqlite support should be compiled in])
+      if test "$use_sqlite" != "no"; then
+        AC_DEFINE([USE_SQLITE],[1],[Define if sqlite support should be compiled in])
         use_sqlite=yes
       fi
     fi
@@ -1369,7 +1395,8 @@ if test "$enable_wallet" != "no"; then
 
     dnl Disable wallet if both --without-bdb and --without-sqlite
     if test "$use_bdb$use_sqlite" = "nono"; then
-        if test "$enable_wallet" = "yes"; then            AC_MSG_ERROR([wallet functionality requested but no BDB or SQLite support available.])
+        if test "$enable_wallet" = "yes"; then
+            AC_MSG_ERROR([wallet functionality requested but no BDB or SQLite support available.])
         fi
         enable_wallet=no
     fi
@@ -1393,7 +1420,8 @@ AM_CONDITIONAL([ENABLE_USDT_TRACEPOINTS], [test "$use_usdt" = "yes"])
 if test "$build_digibyted$digibyte_enable_qt$use_bench$use_tests" = "nononono"; then
   use_upnp=no
   use_natpmp=no
-  use_zmq=nofi
+  use_zmq=no
+fi
 
 dnl Check for libminiupnpc (optional)
 if test "$use_upnp" != "no"; then
@@ -1425,7 +1453,8 @@ if test "$use_upnp" != "no"; then
       have_miniupnpc=no
     ])
   fi
-  CPPFLAGS="$TEMP_CPPFLAGS"fi
+  CPPFLAGS="$TEMP_CPPFLAGS"
+fi
 
 dnl Check for libnatpmp (optional).
 if test "$use_natpmp" != "no"; then
@@ -1440,7 +1469,8 @@ fi
 if test "$build_digibyte_wallet$build_digibyte_cli$build_digibyte_tx$build_digibyte_util$build_digibyted$digibyte_enable_qt$use_tests$use_bench$enable_fuzz_binary" = "nonononononononono"; then
   use_boost=no
 else
-  use_boost=yesfi
+  use_boost=yes
+fi
 
 if test "$use_boost" = "yes"; then
 
@@ -1523,6 +1553,7 @@ if test "$use_tests" = "yes"; then
 fi
 
 dnl libevent check
+
 use_libevent=no
 if test "$build_digibyte_cli$build_digibyted$digibyte_enable_qt$enable_fuzz_binary$use_tests$use_bench" != "nononononono"; then
   PKG_CHECK_MODULES([EVENT], [libevent >= 2.1.8], [use_libevent=yes], [AC_MSG_ERROR([libevent version 2.1.8 or greater not found.])])
@@ -1616,7 +1647,8 @@ if test "$build_multiprocess" != "no"; then
   if test "$with_mpgen" = "yes" || test "$with_mpgen" = "auto"; then
     MPGEN_PREFIX="$libmultiprocess_prefix"
   elif test "$with_mpgen" != "no"; then
-    MPGEN_PREFIX="$with_mpgen";  fi
+    MPGEN_PREFIX="$with_mpgen";
+  fi
   AC_SUBST(MPGEN_PREFIX)
 fi
 
@@ -1658,6 +1690,7 @@ if test "$build_digibyte_libs" = "yes"; then
 fi
 
 AM_CONDITIONAL([BUILD_DIGIBYTE_KERNEL_LIB], [test "$build_experimental_kernel_lib" != "no" && ( test "$build_experimental_kernel_lib" = "yes" || test "$build_digibyte_chainstate" = "yes" )])
+
 AC_MSG_RESULT($build_digibyte_libs)
 
 AC_LANG_POP
@@ -1699,7 +1732,8 @@ if test "$have_miniupnpc" = "no"; then
   if test "$use_upnp" = "yes"; then
      AC_MSG_ERROR([UPnP requested but cannot be built. Use --without-miniupnpc])
   fi
-  AC_MSG_RESULT([no])  use_upnp=no
+  AC_MSG_RESULT([no])
+  use_upnp=no
 else
   if test "$use_upnp" != "no"; then
     AC_MSG_RESULT([yes])
@@ -1734,34 +1768,6 @@ else
   fi
 fi
 
-dnl Enable NAT-PMP support.
-AC_MSG_CHECKING([whether to build with support for NAT-PMP])
-if test "x$have_natpmp" = xno; then
-  if test "x$use_natpmp" = xyes; then
-     AC_MSG_ERROR([NAT-PMP requested but cannot be built. Use --without-natpmp])
-  fi
-  AC_MSG_RESULT([no])
-  use_natpmp=no
-else
-  if test "x$use_natpmp" != xno; then
-    AC_MSG_RESULT([yes])
-    AC_MSG_CHECKING([whether to build with NAT-PMP enabled by default])
-    use_natpmp=yes
-    natpmp_setting=0
-    if test "x$use_natpmp_default" != xno; then
-      use_natpmp_default=yes
-      natpmp_setting=1
-    fi
-    AC_MSG_RESULT($use_natpmp_default)
-    AC_DEFINE_UNQUOTED([USE_NATPMP], [$natpmp_setting], [NAT-PMP support not compiled if undefined, otherwise value (0 or 1) determines default state])
-    if test x$TARGET_OS = xwindows; then
-      NATPMP_CPPFLAGS="-DSTATICLIB -DNATPMP_STATICLIB"
-    fi
-  else
-    AC_MSG_RESULT([no])
-  fi
-fi
-
 dnl these are only used when qt is enabled
 BUILD_TEST_QT=""
 if test "$digibyte_enable_qt" != "no"; then
@@ -1775,12 +1781,14 @@ if test "$digibyte_enable_qt" != "no"; then
   dnl enable qr support
   AC_MSG_CHECKING([whether to build GUI with support for QR codes])
   if test "$have_qrencode" = "no"; then
-    if test "$use_qr" = "yes"; then      AC_MSG_ERROR([QR support requested but cannot be built. Use --without-qrencode])
+    if test "$use_qr" = "yes"; then
+      AC_MSG_ERROR([QR support requested but cannot be built. Use --without-qrencode])
     fi
     use_qr=no
   else
     if test "$use_qr" != "no"; then
-      AC_DEFINE([USE_QRCODE], [1], [Define if QR support should be compiled in])      use_qr=yes
+      AC_DEFINE([USE_QRCODE], [1], [Define if QR support should be compiled in])
+      use_qr=yes
     fi
   fi
   AC_MSG_RESULT([$use_qr])
@@ -1790,7 +1798,8 @@ if test "$digibyte_enable_qt" != "no"; then
   fi
 
   AC_MSG_CHECKING([whether to build test_digibyte-qt])
-  if test "$use_gui_tests$digibyte_enable_qt_test" = "yesyes"; then    AC_MSG_RESULT([yes])
+  if test "$use_gui_tests$digibyte_enable_qt_test" = "yesyes"; then
+    AC_MSG_RESULT([yes])
     BUILD_TEST_QT="yes"
   else
     AC_MSG_RESULT([no])
@@ -1799,7 +1808,8 @@ fi
 
 AC_MSG_CHECKING([whether to build test_digibyte])
 if test "$use_tests" = "yes"; then
-  if test "$enable_fuzz" = "yes"; then    AC_MSG_RESULT([no, because fuzzing is enabled])
+  if test "$enable_fuzz" = "yes"; then
+    AC_MSG_RESULT([no, because fuzzing is enabled])
   else
     AC_MSG_RESULT([yes])
   fi
@@ -1858,7 +1868,8 @@ AC_DEFINE([CLIENT_VERSION_BUILD], [_CLIENT_VERSION_BUILD], [Version Build])
 AC_DEFINE([CLIENT_VERSION_IS_RELEASE], [_CLIENT_VERSION_IS_RELEASE], [Version is release])
 AC_DEFINE([COPYRIGHT_YEAR], [_COPYRIGHT_YEAR], [Copyright year])
 AC_DEFINE([COPYRIGHT_HOLDERS], ["_COPYRIGHT_HOLDERS"], [Copyright holder(s) before %s replacement])
-AC_DEFINE([COPYRIGHT_HOLDERS_SUBSTITUTION], ["_COPYRIGHT_HOLDERS_SUBSTITUTION"], [Replacement for %s in copyright holders string])define(_COPYRIGHT_HOLDERS_FINAL, [patsubst(_COPYRIGHT_HOLDERS, [%s], [_COPYRIGHT_HOLDERS_SUBSTITUTION])])
+AC_DEFINE([COPYRIGHT_HOLDERS_SUBSTITUTION], ["_COPYRIGHT_HOLDERS_SUBSTITUTION"], [Replacement for %s in copyright holders string])
+define(_COPYRIGHT_HOLDERS_FINAL, [patsubst(_COPYRIGHT_HOLDERS, [%s], [_COPYRIGHT_HOLDERS_SUBSTITUTION])])
 AC_DEFINE([COPYRIGHT_HOLDERS_FINAL], ["_COPYRIGHT_HOLDERS_FINAL"], [Copyright holder(s)])
 AC_SUBST(CLIENT_VERSION_MAJOR, _CLIENT_VERSION_MAJOR)
 AC_SUBST(CLIENT_VERSION_MINOR, _CLIENT_VERSION_MINOR)
@@ -1874,7 +1885,8 @@ AC_SUBST(DIGIBYTE_TEST_NAME)
 AC_SUBST(DIGIBYTE_CLI_NAME)
 AC_SUBST(DIGIBYTE_TX_NAME)
 AC_SUBST(DIGIBYTE_UTIL_NAME)
-AC_SUBST(DIGIBYTE_CHAINSTATE_NAME)AC_SUBST(DIGIBYTE_WALLET_TOOL_NAME)
+AC_SUBST(DIGIBYTE_CHAINSTATE_NAME)
+AC_SUBST(DIGIBYTE_WALLET_TOOL_NAME)
 AC_SUBST(DIGIBYTE_MP_NODE_NAME)
 AC_SUBST(DIGIBYTE_MP_GUI_NAME)
 
@@ -1904,23 +1916,18 @@ AC_SUBST(CLMUL_CXXFLAGS)
 AC_SUBST(AVX2_CXXFLAGS)
 AC_SUBST(X86_SHANI_CXXFLAGS)
 AC_SUBST(ARM_CRC_CXXFLAGS)
-AC_SUBST(ARM_SHANI_CXXFLAGS)AC_SUBST(LIBTOOL_APP_LDFLAGS)
+AC_SUBST(ARM_SHANI_CXXFLAGS)
+AC_SUBST(LIBTOOL_APP_LDFLAGS)
 AC_SUBST(USE_SQLITE)
 AC_SUBST(USE_BDB)
 AC_SUBST(ENABLE_EXTERNAL_SIGNER)
 AC_SUBST(USE_UPNP)
 AC_SUBST(USE_QRCODE)
-AC_SUBST(BOOST_LIBS)
-AC_SUBST(SQLITE_LIBS)
 AC_SUBST(TESTDEFS)
 AC_SUBST(MINIUPNPC_CPPFLAGS)
 AC_SUBST(MINIUPNPC_LIBS)
 AC_SUBST(NATPMP_CPPFLAGS)
 AC_SUBST(NATPMP_LIBS)
-AC_SUBST(EVENT_LIBS)
-AC_SUBST(EVENT_PTHREADS_LIBS)
-AC_SUBST(ZMQ_LIBS)
-AC_SUBST(QR_LIBS)
 AC_SUBST(HAVE_GMTIME_R)
 AC_SUBST(HAVE_FDATASYNC)
 AC_SUBST(HAVE_FULLFSYNC)
@@ -1933,12 +1940,14 @@ AC_SUBST(HAVE_EVHTTP_CONNECTION_GET_PEER_CONST_CHAR)
 AC_CONFIG_FILES([Makefile src/Makefile doc/man/Makefile share/setup.nsi share/qt/Info.plist test/config.ini])
 AC_CONFIG_FILES([contrib/devtools/split-debug.sh],[chmod +x contrib/devtools/split-debug.sh])
 AM_COND_IF([HAVE_DOXYGEN], [AC_CONFIG_FILES([doc/Doxyfile])])
-AC_CONFIG_LINKS([contrib/devtools/iwyu/digibyte.core.imp:contrib/devtools/iwyu/digibyte.core.imp])AC_CONFIG_LINKS([contrib/filter-lcov.py:contrib/filter-lcov.py])
+AC_CONFIG_LINKS([contrib/devtools/iwyu/digibyte.core.imp:contrib/devtools/iwyu/digibyte.core.imp])
+AC_CONFIG_LINKS([contrib/filter-lcov.py:contrib/filter-lcov.py])
 AC_CONFIG_LINKS([src/.bear-tidy-config:src/.bear-tidy-config])
 AC_CONFIG_LINKS([src/.clang-tidy:src/.clang-tidy])
 AC_CONFIG_LINKS([test/functional/test_runner.py:test/functional/test_runner.py])
 AC_CONFIG_LINKS([test/fuzz/test_runner.py:test/fuzz/test_runner.py])
-AC_CONFIG_LINKS([test/util/test_runner.py:test/util/test_runner.py])AC_CONFIG_LINKS([test/util/rpcauth-test.py:test/util/rpcauth-test.py])
+AC_CONFIG_LINKS([test/util/test_runner.py:test/util/test_runner.py])
+AC_CONFIG_LINKS([test/util/rpcauth-test.py:test/util/rpcauth-test.py])
 AC_CONFIG_LINKS([src/qt/Makefile:src/qt/Makefile])
 AC_CONFIG_LINKS([src/qt/test/Makefile:src/qt/test/Makefile])
 AC_CONFIG_LINKS([src/test/Makefile:src/test/Makefile])
@@ -1950,7 +1959,8 @@ CPPFLAGS_TEMP="$CPPFLAGS"
 unset CPPFLAGS
 CPPFLAGS="$CPPFLAGS_TEMP"
 
-ac_configure_args="${ac_configure_args} --disable-shared --with-pic --enable-benchmark=no --enable-module-recovery --disable-module-ecdh"AC_CONFIG_SUBDIRS([src/secp256k1])
+ac_configure_args="${ac_configure_args} --disable-shared --with-pic --enable-benchmark=no --enable-module-recovery --disable-module-ecdh"
+AC_CONFIG_SUBDIRS([src/secp256k1])
 
 AC_OUTPUT
 
@@ -1968,7 +1978,8 @@ echo "  external signer = $use_external_signer"
 echo "  multiprocess    = $build_multiprocess"
 echo "  with libs       = $build_digibyte_libs"
 echo "  with wallet     = $enable_wallet"
-if test "$enable_wallet" != "no"; then    echo "    with sqlite   = $use_sqlite"
+if test "$enable_wallet" != "no"; then
+    echo "    with sqlite   = $use_sqlite"
     echo "    with bdb      = $use_bdb"
 fi
 echo "  with gui / qt   = $digibyte_enable_qt"
@@ -1981,17 +1992,20 @@ if test $enable_fuzz = "no"; then
 else
     echo "  with test       = not building test_digibyte because fuzzing is enabled"
 fi
-echo "  with fuzz binary = $enable_fuzz_binary"echo "  with bench      = $use_bench"
+echo "  with fuzz binary = $enable_fuzz_binary"
+echo "  with bench      = $use_bench"
 echo "  with upnp       = $use_upnp"
 echo "  with natpmp     = $use_natpmp"
 echo "  use asm         = $use_asm"
-echo "  USDT tracing    = $use_usdt"echo "  sanitizers      = $use_sanitizers"
+echo "  USDT tracing    = $use_usdt"
+echo "  sanitizers      = $use_sanitizers"
 echo "  debug enabled   = $enable_debug"
 echo "  gprof enabled   = $enable_gprof"
 echo "  werror          = $enable_werror"
 echo "  LTO             = $enable_lto"
 echo
-echo "  target os       = $host_os"echo "  build os        = $build_os"
+echo "  target os       = $host_os"
+echo "  build os        = $build_os"
 echo
 echo "  CC              = $CC"
 echo "  CFLAGS          = $PTHREAD_CFLAGS $CFLAGS"
@@ -1999,5 +2013,6 @@ echo "  CPPFLAGS        = $DEBUG_CPPFLAGS $HARDENED_CPPFLAGS $CORE_CPPFLAGS $CPP
 echo "  CXX             = $CXX"
 echo "  CXXFLAGS        = $LTO_CXXFLAGS $DEBUG_CXXFLAGS $HARDENED_CXXFLAGS $WARN_CXXFLAGS $NOWARN_CXXFLAGS $ERROR_CXXFLAGS $GPROF_CXXFLAGS $CORE_CXXFLAGS $CXXFLAGS"
 echo "  LDFLAGS         = $LTO_LDFLAGS $PTHREAD_LIBS $HARDENED_LDFLAGS $GPROF_LDFLAGS $CORE_LDFLAGS $LDFLAGS"
-echo "  AR              = $AR"echo "  ARFLAGS         = $ARFLAGS"
+echo "  AR              = $AR"
+echo "  ARFLAGS         = $ARFLAGS"
 echo

@@ -1,27 +1,16 @@
-<<<<<<< HEAD
-// Copyright (c) 2015-2020 The DigiByte Core developers
-=======
 // Copyright (c) 2015-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <qt/test/wallettests.h>
 #include <qt/test/util.h>
 
-<<<<<<< HEAD
-#include <interfaces/chain.h>
-#include <interfaces/node.h>
-#include <qt/digibyteamountfield.h>
-#include <qt/callback.h>
-=======
 #include <wallet/coincontrol.h>
 #include <interfaces/chain.h>
 #include <interfaces/node.h>
 #include <key_io.h>
 #include <qt/digibyteamountfield.h>
 #include <qt/digibyteunits.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <qt/clientmodel.h>
 #include <qt/optionsmodel.h>
 #include <qt/overviewpage.h>
@@ -35,11 +24,7 @@
 #include <qt/transactiontablemodel.h>
 #include <qt/transactionview.h>
 #include <qt/walletmodel.h>
-<<<<<<< HEAD
-#include <key_io.h>
-=======
 #include <script/solver.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <test/util/setup_common.h>
 #include <validation.h>
 #include <wallet/test/util.h>
@@ -76,11 +61,7 @@ namespace
 //! Press "Yes" or "Cancel" buttons in modal send confirmation dialog.
 void ConfirmSend(QString* text = nullptr, QMessageBox::StandardButton confirm_type = QMessageBox::Yes)
 {
-<<<<<<< HEAD
-    QTimer::singleShot(0, [text, cancel]() {
-=======
     QTimer::singleShot(0, [text, confirm_type]() {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         for (QWidget* widget : QApplication::topLevelWidgets()) {
             if (widget->inherits("SendConfirmationDialog")) {
                 SendConfirmationDialog* dialog = qobject_cast<SendConfirmationDialog*>(widget);
@@ -101,10 +82,7 @@ uint256 SendCoins(CWallet& wallet, SendCoinsDialog& sendCoinsDialog, const CTxDe
     SendCoinsEntry* entry = qobject_cast<SendCoinsEntry*>(entries->itemAt(0)->widget());
     entry->findChild<QValidatedLineEdit*>("payTo")->setText(QString::fromStdString(EncodeDestination(address)));
     entry->findChild<DigiByteAmountField*>("payAmount")->setValue(amount);
-<<<<<<< HEAD
     /* DigiByte: Disabled RBF UI
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     sendCoinsDialog.findChild<QFrame*>("frameFee")
         ->findChild<QFrame*>("frameFeeSelection")
         ->findChild<QCheckBox*>("optInRBF")
@@ -114,11 +92,7 @@ uint256 SendCoins(CWallet& wallet, SendCoinsDialog& sendCoinsDialog, const CTxDe
     boost::signals2::scoped_connection c(wallet.NotifyTransactionChanged.connect([&txid](const uint256& hash, ChangeType status) {
         if (status == CT_NEW) txid = hash;
     }));
-<<<<<<< HEAD
-    ConfirmSend();
-=======
     ConfirmSend(/*text=*/nullptr, confirm_type);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     bool invoked = QMetaObject::invokeMethod(&sendCoinsDialog, "sendButtonClicked", Q_ARG(bool, false));
     assert(invoked);
     return txid;
@@ -299,46 +273,6 @@ public:
 //     QT_QPA_PLATFORM=xcb     src/qt/test/test_digibyte-qt  # Linux
 //     QT_QPA_PLATFORM=windows src/qt/test/test_digibyte-qt  # Windows
 //     QT_QPA_PLATFORM=cocoa   src/qt/test/test_digibyte-qt  # macOS
-<<<<<<< HEAD
-void TestGUI(interfaces::Node& node)
-{
-    // Set up wallet and chain with 105 blocks (5 mature blocks for spending).
-    TestChain100Setup test;
-    for (int i = 0; i < 5; ++i) {
-        test.CreateAndProcessBlock({}, GetScriptForRawPubKey(test.coinbaseKey.GetPubKey()));
-    }
-    node.setContext(&test.m_node);
-    std::shared_ptr<CWallet> wallet = std::make_shared<CWallet>(node.context()->chain.get(), "", CreateMockWalletDatabase());
-    wallet->LoadWallet();
-    {
-        auto spk_man = wallet->GetOrCreateLegacyScriptPubKeyMan();
-        LOCK2(wallet->cs_wallet, spk_man->cs_KeyStore);
-        wallet->SetAddressBook(GetDestinationForKey(test.coinbaseKey.GetPubKey(), wallet->m_default_address_type), "", "receive");
-        spk_man->AddKeyPubKey(test.coinbaseKey, test.coinbaseKey.GetPubKey());
-        wallet->SetLastBlockProcessed(105, node.context()->chainman->ActiveChain().Tip()->GetBlockHash());
-    }
-    {
-        WalletRescanReserver reserver(*wallet);
-        reserver.reserve();
-        CWallet::ScanResult result = wallet->ScanForWalletTransactions(Params().GetConsensus().hashGenesisBlock, 0 /* block height */, {} /* max height */, reserver, true /* fUpdate */);
-        QCOMPARE(result.status, CWallet::ScanResult::SUCCESS);
-        QCOMPARE(result.last_scanned_block, node.context()->chainman->ActiveChain().Tip()->GetBlockHash());
-        QVERIFY(result.last_failed_block.IsNull());
-    }
-    wallet->SetBroadcastTransactions(true);
-
-    // Create widgets for sending coins and listing transactions.
-    std::unique_ptr<const PlatformStyle> platformStyle(PlatformStyle::instantiate("other"));
-    SendCoinsDialog sendCoinsDialog(platformStyle.get());
-    TransactionView transactionView(platformStyle.get());
-    OptionsModel optionsModel;
-    ClientModel clientModel(node, &optionsModel);
-    AddWallet(wallet);
-    WalletModel walletModel(interfaces::MakeWallet(wallet), clientModel, platformStyle.get());
-    RemoveWallet(wallet, std::nullopt);
-    sendCoinsDialog.setModel(&walletModel);
-    transactionView.setModel(&walletModel);
-=======
 void TestGUI(interfaces::Node& node, const std::shared_ptr<CWallet>& wallet)
 {
     // Create widgets for sending coins and listing transactions.
@@ -356,7 +290,6 @@ void TestGUI(interfaces::Node& node, const std::shared_ptr<CWallet>& wallet)
 
     // Check 'UseAvailableBalance' functionality
     VerifyUseAvailableBalance(sendCoinsDialog, walletModel);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     {
         // Check balance in send dialog
@@ -371,47 +304,26 @@ void TestGUI(interfaces::Node& node, const std::shared_ptr<CWallet>& wallet)
     // Send two transactions, and verify they are added to transaction list.
     TransactionTableModel* transactionTableModel = walletModel.getTransactionTableModel();
     QCOMPARE(transactionTableModel->rowCount({}), 105);
-<<<<<<< HEAD
-    uint256 txid1 = SendCoins(*wallet.get(), sendCoinsDialog, PKHash(), 5 * COIN, false /* rbf */);
-    uint256 txid2 = SendCoins(*wallet.get(), sendCoinsDialog, PKHash(), 10 * COIN, true /* rbf */);
-=======
     uint256 txid1 = SendCoins(*wallet.get(), sendCoinsDialog, PKHash(), 5 * COIN, /*rbf=*/false);
     uint256 txid2 = SendCoins(*wallet.get(), sendCoinsDialog, PKHash(), 10 * COIN, /*rbf=*/true);
     // Transaction table model updates on a QueuedConnection, so process events to ensure it's updated.
     qApp->processEvents();
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     QCOMPARE(transactionTableModel->rowCount({}), 107);
     QVERIFY(FindTx(*transactionTableModel, txid1).isValid());
     QVERIFY(FindTx(*transactionTableModel, txid2).isValid());
 
     // Call bumpfee. Test disabled, canceled, enabled, then failing cases.
-<<<<<<< HEAD
-    // Digibyte: Disable BumpFee tests
-    // BumpFee(transactionView, txid1, true /* expect disabled */, "not BIP 125 replaceable" /* expected error */, false /* cancel */);
-    // BumpFee(transactionView, txid2, false /* expect disabled */, {} /* expected error */, true /* cancel */);
-    // BumpFee(transactionView, txid2, false /* expect disabled */, {} /* expected error */, false /* cancel */);
-    // BumpFee(transactionView, txid2, true /* expect disabled */, "already bumped" /* expected error */, false /* cancel */);
-=======
-    BumpFee(transactionView, txid1, /*expectDisabled=*/true, /*expectError=*/"not BIP 125 replaceable", /*cancel=*/false);
-    BumpFee(transactionView, txid2, /*expectDisabled=*/false, /*expectError=*/{}, /*cancel=*/true);
-    BumpFee(transactionView, txid2, /*expectDisabled=*/false, /*expectError=*/{}, /*cancel=*/false);
-    BumpFee(transactionView, txid2, /*expectDisabled=*/true, /*expectError=*/"already bumped", /*cancel=*/false);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+    // DigiByte: Disable BumpFee tests - RBF is disabled in DigiByte
+    // BumpFee(transactionView, txid1, /*expectDisabled=*/true, /*expectError=*/"not BIP 125 replaceable", /*cancel=*/false);
+    // BumpFee(transactionView, txid2, /*expectDisabled=*/false, /*expectError=*/{}, /*cancel=*/true);
+    // BumpFee(transactionView, txid2, /*expectDisabled=*/false, /*expectError=*/{}, /*cancel=*/false);
+    // BumpFee(transactionView, txid2, /*expectDisabled=*/true, /*expectError=*/"already bumped", /*cancel=*/false);
 
     // Check current balance on OverviewPage
     OverviewPage overviewPage(platformStyle.get());
     overviewPage.setWalletModel(&walletModel);
-<<<<<<< HEAD
-    QLabel* balanceLabel = overviewPage.findChild<QLabel*>("labelBalance");
-    QString balanceText = balanceLabel->text().trimmed();
-    int unit = walletModel.getOptionsModel()->getDisplayUnit();
-    CAmount balance = walletModel.wallet().getBalance();
-    QString balanceComparison = DigiByteUnits::formatWithUnit(unit, balance, false, DigiByteUnits::SeparatorStyle::ALWAYS);
-    QCOMPARE(balanceText, balanceComparison);
-=======
     walletModel.pollBalanceChanged(); // Manual balance polling update
     CompareBalance(walletModel, walletModel.wallet().getBalance(), overviewPage.findChild<QLabel*>("labelBalance"));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // Check Request Payment button
     ReceiveCoinsDialog receiveCoinsDialog(platformStyle.get());
@@ -474,11 +386,7 @@ void TestGUI(interfaces::Node& node, const std::shared_ptr<CWallet>& wallet)
     std::vector<std::string> requests = walletModel.wallet().getAddressReceiveRequests();
     QCOMPARE(requests.size(), size_t{1});
     RecentRequestEntry entry;
-<<<<<<< HEAD
-    CDataStream{MakeUCharSpan(requests[0]), SER_DISK, CLIENT_VERSION} >> entry;
-=======
     DataStream{MakeUCharSpan(requests[0])} >> entry;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     QCOMPARE(entry.nVersion, int{1});
     QCOMPARE(entry.id, int64_t{1});
     QVERIFY(entry.date.isValid());
@@ -498,8 +406,6 @@ void TestGUI(interfaces::Node& node, const std::shared_ptr<CWallet>& wallet)
 
     // Check removal from wallet
     QCOMPARE(walletModel.wallet().getAddressReceiveRequests().size(), size_t{0});
-<<<<<<< HEAD
-=======
 }
 
 void TestGUIWatchOnly(interfaces::Node& node, TestChain100Setup& test)
@@ -570,18 +476,13 @@ void TestGUI(interfaces::Node& node)
     // Legacy watch-only wallet test
     // Verify PSBT creation.
     TestGUIWatchOnly(node, test);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 } // namespace
 
 void WalletTests::walletTests()
 {
-<<<<<<< HEAD
-#ifdef Q_OS_MAC
-=======
 #ifdef Q_OS_MACOS
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (QApplication::platformName() == "minimal") {
         // Disable for mac on "minimal" platform to avoid crashes inside the Qt
         // framework when it tries to look up unimplemented cocoa functions,

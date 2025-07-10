@@ -1,9 +1,5 @@
-<<<<<<< HEAD
-// Copyright (c) 2011-2020 The Bitcoin Core developers
-// Copyright (c) 2013-2021 The DigiByte Core developers
-=======
-// Copyright (c) 2011-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// Copyright (c) 2011-2022 The Bitcoin Core developers
+// Copyright (c) 2013-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -22,16 +18,11 @@
 #include <qt/transactiontablemodel.h>
 #include <qt/walletmodel.h>
 
-<<<<<<< HEAD
-#include <node/ui_interface.h>
-
-=======
 #include <node/interface_ui.h>
 
 #include <chrono>
 #include <optional>
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <QApplication>
 #include <QComboBox>
 #include <QDateTimeEdit>
@@ -232,10 +223,7 @@ void TransactionView::setModel(WalletModel *_model)
         {
             // Add third party transaction URLs to context menu
             QStringList listUrls = GUIUtil::SplitSkipEmptyParts(_model->getOptionsModel()->getThirdPartyTxUrls(), "|");
-<<<<<<< HEAD
-=======
             bool actions_created = false;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             for (int i = 0; i < listUrls.size(); ++i)
             {
                 QString url = listUrls[i].trimmed();
@@ -244,17 +232,12 @@ void TransactionView::setModel(WalletModel *_model)
                 {
                     if (!actions_created) {
                         contextMenu->addSeparator();
-<<<<<<< HEAD
-                    contextMenu->addAction(thirdPartyTxUrlAction);
-                    connect(thirdPartyTxUrlAction, &QAction::triggered, [this, url] { openThirdPartyTxUrl(url); });
-=======
                         actions_created = true;
                     }
                     /*: Transactions table context menu action to show the
                         selected transaction in a third-party block explorer.
                         %1 is a stand-in argument for the URL of the explorer. */
                     contextMenu->addAction(tr("Show in %1").arg(host), [this, url] { openThirdPartyTxUrl(url); });
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 }
             }
         }
@@ -296,32 +279,20 @@ void TransactionView::chooseDate(int idx)
     case Today:
         transactionProxyModel->setDateRange(
                 GUIUtil::StartOfDay(current),
-<<<<<<< HEAD
-                TransactionFilterProxy::MAX_DATE);
-=======
                 std::nullopt);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         break;
     case ThisWeek: {
         // Find last Monday
         QDate startOfWeek = current.addDays(-(current.dayOfWeek()-1));
         transactionProxyModel->setDateRange(
                 GUIUtil::StartOfDay(startOfWeek),
-<<<<<<< HEAD
-                TransactionFilterProxy::MAX_DATE);
-=======
                 std::nullopt);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         } break;
     case ThisMonth:
         transactionProxyModel->setDateRange(
                 GUIUtil::StartOfDay(QDate(current.year(), current.month(), 1)),
-<<<<<<< HEAD
-                TransactionFilterProxy::MAX_DATE);
-=======
                 std::nullopt);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         break;
     case LastMonth:
         transactionProxyModel->setDateRange(
@@ -331,11 +302,7 @@ void TransactionView::chooseDate(int idx)
     case ThisYear:
         transactionProxyModel->setDateRange(
                 GUIUtil::StartOfDay(QDate(current.year(), 1, 1)),
-<<<<<<< HEAD
-                TransactionFilterProxy::MAX_DATE);
-=======
                 std::nullopt);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         break;
     case Range:
         dateRangeWidget->setVisible(true);
@@ -391,11 +358,7 @@ void TransactionView::exportClicked()
     QString filename = GUIUtil::getSaveFileName(this,
         tr("Export Transaction History"), QString(),
         /*: Expanded name of the CSV file format.
-<<<<<<< HEAD
-            See https://en.wikipedia.org/wiki/Comma-separated_values */
-=======
             See: https://en.wikipedia.org/wiki/Comma-separated_values. */
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         tr("Comma separated file") + QLatin1String(" (*.csv)"), nullptr);
 
     if (filename.isNull())
@@ -691,9 +654,6 @@ void TransactionView::updateWatchOnlyColumn(bool fHaveWatchOnly)
 {
     watchOnlyWidget->setVisible(fHaveWatchOnly);
     transactionView->setColumnHidden(TransactionTableModel::Watchonly, !fHaveWatchOnly);
-<<<<<<< HEAD
-}
-=======
 }
 
 void TransactionView::closeOpenedDialogs()
@@ -704,4 +664,3 @@ void TransactionView::closeOpenedDialogs()
     }
     m_opened_dialogs.clear();
 }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion

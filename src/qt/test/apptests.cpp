@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-// Copyright (c) 2018-2020 The DigiByte Core developers
-=======
 // Copyright (c) 2018-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -10,20 +6,13 @@
 
 #include <chainparams.h>
 #include <key.h>
-<<<<<<< HEAD
-=======
 #include <logging.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <qt/digibyte.h>
 #include <qt/digibytegui.h>
 #include <qt/networkstyle.h>
 #include <qt/rpcconsole.h>
 #include <shutdown.h>
 #include <test/util/setup_common.h>
-<<<<<<< HEAD
-#include <univalue.h>
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <validation.h>
 
 #if defined(HAVE_CONFIG_H)
@@ -32,15 +21,10 @@
 
 #include <QAction>
 #include <QLineEdit>
-<<<<<<< HEAD
-#include <QScopedPointer>
-#include <QSignalSpy>
-=======
 #include <QRegularExpression>
 #include <QScopedPointer>
 #include <QSignalSpy>
 #include <QString>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <QTest>
 #include <QTextEdit>
 #include <QtGlobal>
@@ -48,8 +32,6 @@
 #include <QtTest/QtTestGui>
 
 namespace {
-<<<<<<< HEAD
-=======
 //! Regex find a string group inside of the console output
 QString FindInConsole(const QString& output, const QString& pattern)
 {
@@ -57,7 +39,7 @@ QString FindInConsole(const QString& output, const QString& pattern)
     return re.match(output).captured(1);
 }
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
 //! Call getblockchaininfo RPC and check first field of JSON output.
 void TestRpcCommand(RPCConsole* console)
 {
@@ -69,27 +51,16 @@ void TestRpcCommand(RPCConsole* console)
     QTest::keyClick(lineEdit, Qt::Key_Return);
     QVERIFY(mw_spy.wait(1000));
     QCOMPARE(mw_spy.count(), 4);
-<<<<<<< HEAD
-    QString output = messagesWidget->toPlainText();
-    UniValue value;
-    value.read(output.right(output.size() - output.lastIndexOf(QChar::ObjectReplacementCharacter) - 1).toStdString());
-    QCOMPARE(value["chain"].get_str(), std::string("regtest"));
-=======
     const QString output = messagesWidget->toPlainText();
     const QString pattern = QStringLiteral("\"chain\": \"(\\w+)\"");
     QCOMPARE(FindInConsole(output, pattern), QString("regtest"));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 } // namespace
 
 //! Entry point for DigiByteApplication tests.
 void AppTests::appTests()
 {
-<<<<<<< HEAD
-#ifdef Q_OS_MAC
-=======
 #ifdef Q_OS_MACOS
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (QApplication::platformName() == "minimal") {
         // Disable for mac on "minimal" platform to avoid crashes inside the Qt
         // framework when it tries to look up unimplemented cocoa functions,
@@ -101,22 +72,10 @@ void AppTests::appTests()
     }
 #endif
 
-<<<<<<< HEAD
-    fs::create_directories([] {
-        BasicTestingSetup test{CBaseChainParams::REGTEST}; // Create a temp data directory to backup the gui settings to
-        return gArgs.GetDataDirNet() / "blocks";
-    }());
-
-    qRegisterMetaType<interfaces::BlockAndHeaderTipInfo>("interfaces::BlockAndHeaderTipInfo");
-    m_app.parameterSetup();
-    m_app.createOptionsModel(true /* reset settings */);
-    QScopedPointer<const NetworkStyle> style(NetworkStyle::instantiate(Params().NetworkIDString()));
-=======
     qRegisterMetaType<interfaces::BlockAndHeaderTipInfo>("interfaces::BlockAndHeaderTipInfo");
     m_app.parameterSetup();
     QVERIFY(m_app.createOptionsModel(/*resetSettings=*/true));
     QScopedPointer<const NetworkStyle> style(NetworkStyle::instantiate(Params().GetChainType()));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     m_app.setupPlatformStyle();
     m_app.createWindow(style.data());
     connect(&m_app, &DigiByteApplication::windowShown, this, &AppTests::guiTests);
@@ -129,10 +88,6 @@ void AppTests::appTests()
 
     // Reset global state to avoid interfering with later tests.
     LogInstance().DisconnectTestLogger();
-<<<<<<< HEAD
-    AbortShutdown();
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 //! Entry point for DigiByteGUI tests.
@@ -160,10 +115,6 @@ AppTests::HandleCallback::~HandleCallback()
     assert(it != callbacks.end());
     callbacks.erase(it);
     if (callbacks.empty()) {
-<<<<<<< HEAD
-        m_app_tests.m_app.quit();
-=======
         m_app_tests.m_app.exit(0);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 }

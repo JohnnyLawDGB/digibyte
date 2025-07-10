@@ -1,9 +1,5 @@
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
-// Copyright (c) 2011-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// Copyright (c) 2009-2022 The Bitcoin Core developers
+// Copyright (c) 2014-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -15,10 +11,7 @@
 #include <qt/forms/ui_optionsdialog.h>
 
 #include <qt/digibyteunits.h>
-<<<<<<< HEAD
-=======
 #include <qt/clientmodel.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <qt/guiconstants.h>
 #include <qt/guiutil.h>
 #include <qt/optionsmodel.h>
@@ -36,24 +29,14 @@
 #include <QIntValidator>
 #include <QLocale>
 #include <QMessageBox>
-<<<<<<< HEAD
-#include <QSettings>
-#include <QSystemTrayIcon>
-#include <QTimer>
-
-OptionsDialog::OptionsDialog(QWidget *parent, bool enableWallet) :
-    QDialog(parent, GUIUtil::dialog_flags),
-    ui(new Ui::OptionsDialog),
-    model(nullptr),
-    mapper(nullptr)
-=======
 #include <QSystemTrayIcon>
 #include <QTimer>
 
 OptionsDialog::OptionsDialog(QWidget* parent, bool enableWallet)
     : QDialog(parent, GUIUtil::dialog_flags),
-      ui(new Ui::OptionsDialog)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+      ui(new Ui::OptionsDialog),
+      model(nullptr),
+      mapper(nullptr)
 {
     ui->setupUi(this);
 
@@ -75,13 +58,6 @@ OptionsDialog::OptionsDialog(QWidget* parent, bool enableWallet)
 #ifndef USE_NATPMP
     ui->mapPortNatpmp->setEnabled(false);
 #endif
-<<<<<<< HEAD
-    connect(this, &QDialog::accepted, [this](){
-        QSettings settings;
-        model->node().mapPort(settings.value("fUseUPnP").toBool(), settings.value("fUseNatpmp").toBool());
-    });
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     ui->proxyIp->setEnabled(false);
     ui->proxyPort->setEnabled(false);
@@ -116,13 +92,9 @@ OptionsDialog::OptionsDialog(QWidget* parent, bool enableWallet)
         ui->thirdPartyTxUrls->setVisible(false);
     }
 
-<<<<<<< HEAD
-#ifndef ENABLE_EXTERNAL_SIGNER
-=======
 #ifdef ENABLE_EXTERNAL_SIGNER
     ui->externalSignerPath->setToolTip(ui->externalSignerPath->toolTip().arg(PACKAGE_NAME));
 #else
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     //: "External signing" means using devices such as hardware wallets.
     ui->externalSignerPath->setToolTip(tr("Compiled without external signing support (required for external signing)"));
     ui->externalSignerPath->setEnabled(false);
@@ -255,10 +227,7 @@ void OptionsDialog::setModel(OptionsModel *_model)
     connect(ui->spendZeroConfChange, &QCheckBox::clicked, this, &OptionsDialog::showRestartWarning);
     /* Network */
     connect(ui->allowIncoming, &QCheckBox::clicked, this, &OptionsDialog::showRestartWarning);
-<<<<<<< HEAD
-=======
     connect(ui->enableServer, &QCheckBox::clicked, this, &OptionsDialog::showRestartWarning);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     connect(ui->connectSocks, &QCheckBox::clicked, this, &OptionsDialog::showRestartWarning);
     connect(ui->connectSocksTor, &QCheckBox::clicked, this, &OptionsDialog::showRestartWarning);
     /* Display */
@@ -288,13 +257,9 @@ void OptionsDialog::setMapper()
     /* Wallet */
     mapper->addMapping(ui->spendZeroConfChange, OptionsModel::SpendZeroConfChange);
     mapper->addMapping(ui->coinControlFeatures, OptionsModel::CoinControlFeatures);
-<<<<<<< HEAD
-    mapper->addMapping(ui->externalSignerPath, OptionsModel::ExternalSignerPath);
-=======
     mapper->addMapping(ui->subFeeFromAmount, OptionsModel::SubFeeFromAmount);
     mapper->addMapping(ui->externalSignerPath, OptionsModel::ExternalSignerPath);
-    mapper->addMapping(ui->m_enable_psbt_controls, OptionsModel::EnablePSDGBontrols);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+    mapper->addMapping(ui->m_enable_psbt_controls, OptionsModel::EnablePSBTControls);
 
     /* Network */
     mapper->addMapping(ui->mapPortUpnp, OptionsModel::MapPortUPnP);
@@ -311,11 +276,7 @@ void OptionsDialog::setMapper()
     mapper->addMapping(ui->proxyPortTor, OptionsModel::ProxyPortTor);
 
     /* Window */
-<<<<<<< HEAD
-#ifndef Q_OS_MAC
-=======
 #ifndef Q_OS_MACOS
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (QSystemTrayIcon::isSystemTrayAvailable()) {
         mapper->addMapping(ui->showTrayIcon, OptionsModel::ShowTrayIcon);
         mapper->addMapping(ui->minimizeToTray, OptionsModel::MinimizeToTray);
@@ -428,11 +389,7 @@ void OptionsDialog::showRestartWarning(bool fPersistent)
         ui->statusLabel->setText(tr("This change would require a client restart."));
         // clear non-persistent status label after 10 seconds
         // Todo: should perhaps be a class attribute, if we extend the use of statusLabel
-<<<<<<< HEAD
-        QTimer::singleShot(10000, this, &OptionsDialog::clearStatusLabel);
-=======
         QTimer::singleShot(10s, this, &OptionsDialog::clearStatusLabel);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 }
 
@@ -489,11 +446,7 @@ QValidator::State ProxyAddressValidator::validate(QString &input, int &pos) cons
     Q_UNUSED(pos);
     // Validate the proxy
     CService serv(LookupNumeric(input.toStdString(), DEFAULT_GUI_PROXY_PORT));
-<<<<<<< HEAD
-    proxyType addrProxy = proxyType(serv, true);
-=======
     Proxy addrProxy = Proxy(serv, true);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (addrProxy.IsValid())
         return QValidator::Acceptable;
 

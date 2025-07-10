@@ -1,28 +1,15 @@
-<<<<<<< HEAD
-// Copyright (c) 2011-2020 The DigiByte Core developers
-// Copyright (c) 2013-2021 The DigiByte Core developers
-=======
 // Copyright (c) 2011-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #ifndef DIGIBYTE_QT_GUIUTIL_H
 #define DIGIBYTE_QT_GUIUTIL_H
 
-<<<<<<< HEAD
-#include <amount.h>
-#include <fs.h>
-#include <net.h>
-#include <netaddress.h>
-#include <util/check.h>
-=======
 #include <consensus/amount.h>
 #include <net.h>
 #include <netaddress.h>
 #include <util/check.h>
 #include <util/fs.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 #include <QApplication>
 #include <QEvent>
@@ -127,20 +114,15 @@ namespace GUIUtil
     void setClipboard(const QString& str);
 
     /**
-<<<<<<< HEAD
-=======
      * Loads the font from the file specified by file_name, aborts if it fails.
      */
     void LoadFont(const QString& file_name);
 
     /**
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
      * Determine default data directory for operating system.
      */
     QString getDefaultDataDirectory();
 
-<<<<<<< HEAD
-=======
     /**
      * Extract first suffix from filter pattern "Description (*.foo)" or "Description (*.foo *.bar ...).
      *
@@ -149,7 +131,6 @@ namespace GUIUtil
      */
     QString ExtractFirstSuffixFromFilter(const QString& filter);
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     /** Get save filename, mimics QFileDialog::getSaveFileName, except that it appends a default suffix
         when no suffix is provided by the user.
 
@@ -236,22 +217,6 @@ namespace GUIUtil
     bool SetStartOnSystemStartup(bool fAutoStart);
 
     /** Convert QString to OS specific boost path through UTF-8 */
-<<<<<<< HEAD
-    fs::path qstringToBoostPath(const QString &path);
-
-    /** Convert OS specific boost path to QString through UTF-8 */
-    QString boostPathToQString(const fs::path &path);
-
-    /** Convert enum Network to QString */
-    QString NetworkToQString(Network net);
-
-    /** Convert enum ConnectionType to QString */
-    QString ConnectionTypeToQString(ConnectionType conn_type, bool prepend_direction);
-
-    /** Convert seconds into a QString with days, hours, mins, secs */
-    QString formatDurationStr(int secs);
-
-=======
     fs::path QStringToPath(const QString &path);
 
     /** Convert OS specific boost path to QString through UTF-8 */
@@ -269,7 +234,6 @@ namespace GUIUtil
     /** Convert peer connection time to a QString denominated in the most relevant unit. */
     QString FormatPeerAge(std::chrono::seconds time_connected);
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     /** Format CNodeStats.nServices bitmask into a user-readable string */
     QString formatServicesStr(quint64 mask);
 
@@ -405,21 +369,6 @@ namespace GUIUtil
     #endif
     }
 
-<<<<<<< HEAD
-    /**
-     * Queue a function to run in an object's event loop. This can be
-     * replaced by a call to the QMetaObject::invokeMethod functor overload after Qt 5.10, but
-     * for now use a QObject::connect for compatibility with older Qt versions, based on
-     * https://stackoverflow.com/questions/21646467/how-to-execute-a-functor-or-a-lambda-in-a-given-thread-in-qt-gcd-style
-     */
-    template <typename Fn>
-    void ObjectInvoke(QObject* object, Fn&& function, Qt::ConnectionType connection = Qt::QueuedConnection)
-    {
-        QObject source;
-        QObject::connect(&source, &QObject::destroyed, object, std::forward<Fn>(function), connection);
-    }
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     /**
      * Replaces a plain text link with an HTML tagged one.
@@ -473,11 +422,6 @@ namespace GUIUtil
             type);
     }
 
-<<<<<<< HEAD
-} // namespace GUIUtil
-
-#endif // DIGIBYTE_QT_GUIUTIL_H
-=======
     /**
      * Shows a QDialog instance asynchronously, and deletes it on close.
      */
@@ -495,4 +439,3 @@ namespace GUIUtil
 } // namespace GUIUtil
 
 #endif // DIGIBYTE_QT_GUIUTIL_H
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion

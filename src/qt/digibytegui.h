@@ -1,9 +1,5 @@
-<<<<<<< HEAD
-// Copyright (c) 2011-2018 The Bitcoin Core developers
-// Copyright (c) 2011-2020 The DigiByte Core developers
-=======
+// Copyright (c) 2011-2022 The Bitcoin Core developers
 // Copyright (c) 2011-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -14,19 +10,12 @@
 #include <config/digibyte-config.h>
 #endif
 
-<<<<<<< HEAD
-#include <qt/guiutil.h>
-#include <qt/optionsdialog.h>
-
-#include <amount.h>
-=======
 #include <qt/digibyteunits.h>
 #include <qt/clientmodel.h>
 #include <qt/guiutil.h>
 #include <qt/optionsdialog.h>
 
 #include <consensus/amount.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 #include <QLabel>
 #include <QMainWindow>
@@ -35,11 +24,7 @@
 #include <QPoint>
 #include <QSystemTrayIcon>
 
-<<<<<<< HEAD
-#ifdef Q_OS_MAC
-=======
 #ifdef Q_OS_MACOS
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <qt/macos_appnap.h>
 #endif
 
@@ -97,11 +82,7 @@ public:
     */
     void setClientModel(ClientModel *clientModel = nullptr, interfaces::BlockAndHeaderTipInfo* tip_info = nullptr);
 #ifdef ENABLE_WALLET
-<<<<<<< HEAD
-    void setWalletController(WalletController* wallet_controller);
-=======
     void setWalletController(WalletController* wallet_controller, bool show_loading_minimized);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     WalletController* getWalletController();
 #endif
 
@@ -177,20 +158,14 @@ private:
     QAction* m_create_wallet_action{nullptr};
     QAction* m_open_wallet_action{nullptr};
     QMenu* m_open_wallet_menu{nullptr};
-<<<<<<< HEAD
-=======
     QAction* m_restore_wallet_action{nullptr};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     QAction* m_close_wallet_action{nullptr};
     QAction* m_close_all_wallets_action{nullptr};
     QAction* m_wallet_selector_label_action = nullptr;
     QAction* m_wallet_selector_action = nullptr;
     QAction* m_mask_values_action{nullptr};
-<<<<<<< HEAD
-=======
     QAction* m_migrate_wallet_action{nullptr};
     QMenu* m_migrate_wallet_menu{nullptr};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     QLabel *m_wallet_selector_label = nullptr;
     QComboBox* m_wallet_selector = nullptr;
@@ -204,11 +179,7 @@ private:
 
     QMenu* m_network_context_menu = new QMenu(this);
 
-<<<<<<< HEAD
-#ifdef Q_OS_MAC
-=======
 #ifdef Q_OS_MACOS
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     CAppNapInhibitor* m_app_nap_inhibitor = nullptr;
 #endif
 
@@ -245,9 +216,6 @@ private:
     /** Open the OptionsDialog on the specified tab index */
     void openOptionsDialogWithTab(OptionsDialog::Tab tab);
 
-    /** Open the OptionsDialog on the specified tab index */
-    void openOptionsDialogWithTab(OptionsDialog::Tab tab);
-
 Q_SIGNALS:
     void quitRequested();
     /** Signal raised when a URI was entered or dragged to the GUI */
@@ -262,13 +230,9 @@ public Q_SLOTS:
     /** Set network state shown in the UI */
     void setNetworkActive(bool network_active);
     /** Set number of blocks and last block date shown in the UI */
-<<<<<<< HEAD
-    void setNumBlocks(int count, const QDateTime& blockDate, double nVerificationProgress, bool headers, SynchronizationState sync_state);
-=======
     void setNumBlocks(int count, const QDateTime& blockDate, double nVerificationProgress, SyncType synctype, SynchronizationState sync_state);
     /** Launch the wallet creation modal (no-op if wallet is not compiled) **/
     void createWallet();
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     /** Notify the user of an event from the core network or transaction handling code.
        @param[in] title             the message box / notification title
@@ -329,11 +293,8 @@ public Q_SLOTS:
     void gotoVerifyMessageTab(QString addr = "");
     /** Load Partially Signed DigiByte Transaction from file or clipboard */
     void gotoLoadPSBT(bool from_clipboard = false);
-<<<<<<< HEAD
-=======
     /** Enable history action when privacy is changed */
     void enableHistoryAction(bool privacy);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     /** Show open dialog */
     void openClicked();
@@ -348,25 +309,18 @@ public Q_SLOTS:
     void showDebugWindowActivateConsole();
     /** Show help message dialog */
     void showHelpMessageClicked();
-<<<<<<< HEAD
-#ifndef Q_OS_MAC
+#ifndef Q_OS_MACOS
     /** Handle tray icon clicked */
     void trayIconActivated(QSystemTrayIcon::ActivationReason reason);
 #else
     /** Handle macOS Dock icon clicked */
     void macosDockIconActivated();
 #endif
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     /** Show window if hidden, unminimize when minimized, rise when obscured or show if hidden and fToggleHidden is true */
     void showNormalIfMinimized() { showNormalIfMinimized(false); }
     void showNormalIfMinimized(bool fToggleHidden);
-<<<<<<< HEAD
-    /** Simply calls showNormalIfMinimized(true) for use in SLOT() macro */
-=======
     /** Simply calls showNormalIfMinimized(true) */
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     void toggleHidden();
 
     /** called by a timer to check if ShutdownRequested() has been set **/
@@ -393,13 +347,8 @@ protected:
     void changeEvent(QEvent* e) override;
 
 private:
-<<<<<<< HEAD
-    OptionsModel *optionsModel;
-    QMenu* menu;
-=======
     OptionsModel* optionsModel{nullptr};
     QMenu* menu{nullptr};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     const PlatformStyle* m_platform_style;
 
     /** Shows context menu with Display Unit options by the mouse coordinates */

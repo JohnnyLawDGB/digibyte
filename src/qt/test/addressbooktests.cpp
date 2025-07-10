@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-// Copyright (c) 2017-2020 The DigiByte Core developers
-=======
 // Copyright (c) 2017-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -12,10 +8,7 @@
 
 #include <interfaces/chain.h>
 #include <interfaces/node.h>
-<<<<<<< HEAD
-=======
 #include <qt/addressbookpage.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <qt/clientmodel.h>
 #include <qt/editaddressdialog.h>
 #include <qt/optionsmodel.h>
@@ -26,12 +19,6 @@
 #include <key.h>
 #include <key_io.h>
 #include <wallet/wallet.h>
-<<<<<<< HEAD
-#include <walletinitinterface.h>
-
-#include <QApplication>
-#include <QTimer>
-=======
 #include <wallet/test/util.h>
 #include <walletinitinterface.h>
 
@@ -39,7 +26,6 @@
 
 #include <QApplication>
 #include <QLineEdit>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <QMessageBox>
 #include <QTableView>
 #include <QTimer>
@@ -87,12 +73,6 @@ void EditAddressAndSubmit(
 void TestAddAddressesToSendBook(interfaces::Node& node)
 {
     TestChain100Setup test;
-<<<<<<< HEAD
-    node.setContext(&test.m_node);
-    std::shared_ptr<CWallet> wallet = std::make_shared<CWallet>(node.context()->chain.get(), "", CreateMockWalletDatabase());
-    wallet->SetupLegacyScriptPubKeyMan();
-    wallet->LoadWallet();
-=======
     auto wallet_loader = interfaces::MakeWalletLoader(*test.m_node.chain, *Assert(test.m_node.args));
     test.m_node.wallet_loader = wallet_loader.get();
     node.setContext(&test.m_node);
@@ -103,7 +83,6 @@ void TestAddAddressesToSendBook(interfaces::Node& node)
         LOCK(wallet->cs_wallet);
         wallet->SetupDescriptorScriptPubKeyMans();
     }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     auto build_address = [&wallet]() {
         CKey key;
@@ -149,13 +128,6 @@ void TestAddAddressesToSendBook(interfaces::Node& node)
 
     // Initialize relevant QT models.
     std::unique_ptr<const PlatformStyle> platformStyle(PlatformStyle::instantiate("other"));
-<<<<<<< HEAD
-    OptionsModel optionsModel;
-    ClientModel clientModel(node, &optionsModel);
-    AddWallet(wallet);
-    WalletModel walletModel(interfaces::MakeWallet(wallet), clientModel, platformStyle.get());
-    RemoveWallet(wallet, std::nullopt);
-=======
     OptionsModel optionsModel(node);
     bilingual_str error;
     QVERIFY(optionsModel.Init(error));
@@ -164,7 +136,6 @@ void TestAddAddressesToSendBook(interfaces::Node& node)
     AddWallet(context, wallet);
     WalletModel walletModel(interfaces::MakeWallet(context, wallet), clientModel, platformStyle.get());
     RemoveWallet(context, wallet, /* load_on_start= */ std::nullopt);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     EditAddressDialog editAddressDialog(EditAddressDialog::NewSendingAddress);
     editAddressDialog.setModel(walletModel.getAddressTableModel());
 
@@ -246,11 +217,7 @@ void TestAddAddressesToSendBook(interfaces::Node& node)
 
 void AddressBookTests::addressBookTests()
 {
-<<<<<<< HEAD
-#ifdef Q_OS_MAC
-=======
 #ifdef Q_OS_MACOS
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (QApplication::platformName() == "minimal") {
         // Disable for mac on "minimal" platform to avoid crashes inside the Qt
         // framework when it tries to look up unimplemented cocoa functions,

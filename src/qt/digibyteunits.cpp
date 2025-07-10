@@ -1,6 +1,5 @@
-<<<<<<< HEAD
-// Copyright (c) 2011-2018 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
+// Copyright (c) 2011-2021 The Bitcoin Core developers
+// Copyright (c) 2014-2021 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -8,16 +7,7 @@
 
 #include <qt/digibyteunits.h>
 
-=======
-// Copyright (c) 2011-2021 The DigiByte Core developers
-// Distributed under the MIT software license, see the accompanying
-// file COPYING or http://www.opensource.org/licenses/mit-license.php.
-
-#include <qt/digibyteunits.h>
-
 #include <consensus/amount.h>
-
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <QStringList>
 
 #include <cassert>
@@ -30,96 +20,6 @@ DigiByteUnits::DigiByteUnits(QObject *parent):
 {
 }
 
-<<<<<<< HEAD
-QList<DigiByteUnits::Unit> DigiByteUnits::availableUnits()
-{
-    QList<DigiByteUnits::Unit> unitlist;
-    unitlist.append(DGB);
-    unitlist.append(mDGB);
-    unitlist.append(uDGB);
-    unitlist.append(SAT);
-    return unitlist;
-}
-
-bool DigiByteUnits::valid(int unit)
-{
-    switch(unit)
-    {
-    case DGB:
-    case mDGB:
-    case uDGB:
-    case SAT:
-        return true;
-    default:
-        return false;
-    }
-}
-
-QString DigiByteUnits::longName(int unit)
-{
-    switch(unit)
-    {
-    case DGB: return QString("DGB");
-    case mDGB: return QString("mDGB");
-    case uDGB: return QString::fromUtf8("µDGB (bits)");
-    case SAT: return QString("DigiSatoshi (sat)");
-    default: return QString("???");
-    }
-}
-
-QString DigiByteUnits::shortName(int unit)
-{
-    switch(unit)
-    {
-    case uDGB: return QString::fromUtf8("bits");
-    case SAT: return QString("sat");
-    default: return longName(unit);
-    }
-}
-
-QString DigiByteUnits::description(int unit)
-{
-    switch(unit)
-    {
-    case DGB: return QString("DigiBytes");
-    case mDGB: return QString("Milli-DigiBytes (1 / 1" THIN_SP_UTF8 "000)");
-    case uDGB: return QString("Micro-DigiBytes (bits) (1 / 1" THIN_SP_UTF8 "000" THIN_SP_UTF8 "000)");
-    case SAT: return QString("DigiSatoshi (sat) (1 / 100" THIN_SP_UTF8 "000" THIN_SP_UTF8 "000)");
-    default: return QString("???");
-    }
-}
-
-qint64 DigiByteUnits::factor(int unit)
-{
-    switch(unit)
-    {
-    case DGB: return 100000000;
-    case mDGB: return 100000;
-    case uDGB: return 100;
-    case SAT: return 1;
-    default: return 100000000;
-    }
-}
-
-int DigiByteUnits::decimals(int unit)
-{
-    switch(unit)
-    {
-    case DGB: return 8;
-    case mDGB: return 5;
-    case uDGB: return 2;
-    case SAT: return 0;
-    default: return 0;
-    }
-}
-
-QString DigiByteUnits::format(int unit, const CAmount& nIn, bool fPlus, SeparatorStyle separators, bool justify)
-{
-    // Note: not using straight sprintf here because we do NOT want
-    // localized number formatting.
-    if(!valid(unit))
-        return QString(); // Refuse to format invalid unit
-=======
 QList<DigiByteUnit> DigiByteUnits::availableUnits()
 {
     QList<DigiByteUnit> unitlist;
@@ -136,7 +36,7 @@ QString DigiByteUnits::longName(Unit unit)
     case Unit::DGB: return QString("DGB");
     case Unit::mDGB: return QString("mDGB");
     case Unit::uDGB: return QString::fromUtf8("µDGB (bits)");
-    case Unit::SAT: return QString("Satoshi (sat)");
+    case Unit::SAT: return QString("DigiSatoshi (sat)");
     } // no default case, so the compiler can warn about missing cases
     assert(false);
 }
@@ -158,7 +58,7 @@ QString DigiByteUnits::description(Unit unit)
     case Unit::DGB: return QString("DigiBytes");
     case Unit::mDGB: return QString("Milli-DigiBytes (1 / 1" THIN_SP_UTF8 "000)");
     case Unit::uDGB: return QString("Micro-DigiBytes (bits) (1 / 1" THIN_SP_UTF8 "000" THIN_SP_UTF8 "000)");
-    case Unit::SAT: return QString("Satoshi (sat) (1 / 100" THIN_SP_UTF8 "000" THIN_SP_UTF8 "000)");
+    case Unit::SAT: return QString("DigiSatoshi (sat) (1 / 100" THIN_SP_UTF8 "000" THIN_SP_UTF8 "000)");
     } // no default case, so the compiler can warn about missing cases
     assert(false);
 }
@@ -189,7 +89,6 @@ QString DigiByteUnits::format(Unit unit, const CAmount& nIn, bool fPlus, Separat
 {
     // Note: not using straight sprintf here because we do NOT want
     // localized number formatting.
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     qint64 n = (qint64)nIn;
     qint64 coin = factor(unit);
     int num_decimals = decimals(unit);
@@ -231,31 +130,19 @@ QString DigiByteUnits::format(Unit unit, const CAmount& nIn, bool fPlus, Separat
 // Please take care to use formatHtmlWithUnit instead, when
 // appropriate.
 
-<<<<<<< HEAD
-QString DigiByteUnits::formatWithUnit(int unit, const CAmount& amount, bool plussign, SeparatorStyle separators)
-=======
 QString DigiByteUnits::formatWithUnit(Unit unit, const CAmount& amount, bool plussign, SeparatorStyle separators)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     return format(unit, amount, plussign, separators) + QString(" ") + shortName(unit);
 }
 
-<<<<<<< HEAD
-QString DigiByteUnits::formatHtmlWithUnit(int unit, const CAmount& amount, bool plussign, SeparatorStyle separators)
-=======
 QString DigiByteUnits::formatHtmlWithUnit(Unit unit, const CAmount& amount, bool plussign, SeparatorStyle separators)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     QString str(formatWithUnit(unit, amount, plussign, separators));
     str.replace(QChar(THIN_SP_CP), QString(THIN_SP_HTML));
     return QString("<span style='white-space: nowrap;'>%1</span>").arg(str);
 }
 
-<<<<<<< HEAD
-QString DigiByteUnits::formatWithPrivacy(int unit, const CAmount& amount, SeparatorStyle separators, bool privacy)
-=======
 QString DigiByteUnits::formatWithPrivacy(Unit unit, const CAmount& amount, SeparatorStyle separators, bool privacy)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     assert(amount >= 0);
     QString value;
@@ -267,18 +154,11 @@ QString DigiByteUnits::formatWithPrivacy(Unit unit, const CAmount& amount, Separ
     return value + QString(" ") + shortName(unit);
 }
 
-<<<<<<< HEAD
-bool DigiByteUnits::parse(int unit, const QString &value, CAmount *val_out)
-{
-    if(!valid(unit) || value.isEmpty())
-        return false; // Refuse to parse invalid unit or empty string
-=======
 bool DigiByteUnits::parse(Unit unit, const QString& value, CAmount* val_out)
 {
     if (value.isEmpty()) {
         return false; // Refuse to parse invalid unit or empty string
     }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     int num_decimals = decimals(unit);
 
     // Ignore spaces and thin spaces when parsing
@@ -314,20 +194,9 @@ bool DigiByteUnits::parse(Unit unit, const QString& value, CAmount* val_out)
     return ok;
 }
 
-<<<<<<< HEAD
-QString DigiByteUnits::getAmountColumnTitle(int unit)
-{
-    QString amountTitle = QObject::tr("Amount");
-    if (DigiByteUnits::valid(unit))
-    {
-        amountTitle += " ("+DigiByteUnits::shortName(unit) + ")";
-    }
-    return amountTitle;
-=======
 QString DigiByteUnits::getAmountColumnTitle(Unit unit)
 {
     return QObject::tr("Amount") + " (" + shortName(unit) + ")";
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 int DigiByteUnits::rowCount(const QModelIndex &parent) const
@@ -350,11 +219,7 @@ QVariant DigiByteUnits::data(const QModelIndex &index, int role) const
         case Qt::ToolTipRole:
             return QVariant(description(unit));
         case UnitRole:
-<<<<<<< HEAD
-            return QVariant(static_cast<int>(unit));
-=======
             return QVariant::fromValue(unit);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
     }
     return QVariant();
@@ -364,8 +229,6 @@ CAmount DigiByteUnits::maxMoney()
 {
     return MAX_MONEY;
 }
-<<<<<<< HEAD
-=======
 
 namespace {
 qint8 ToQint8(DigiByteUnit unit)
@@ -403,4 +266,3 @@ QDataStream& operator>>(QDataStream& in, DigiByteUnit& unit)
     unit = FromQint8(input);
     return in;
 }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion

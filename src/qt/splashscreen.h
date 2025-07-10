@@ -33,6 +33,9 @@ public:
     ~SplashScreen();
     void setNode(interfaces::Node& node);
 
+    /** Hide the splash screen window and schedule the splash screen object for deletion */
+    void finish();
+
 protected:
     void paintEvent(QPaintEvent *event) override;
     void closeEvent(QCloseEvent *event) override;

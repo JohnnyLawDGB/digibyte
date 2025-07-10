@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-// Copyright (c) 2019-2020 The DigiByte Core developers
-=======
 // Copyright (c) 2019-2021 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -37,11 +33,6 @@ class Node;
 class Wallet;
 } // namespace interfaces
 
-<<<<<<< HEAD
-class AskPassphraseDialog;
-class CreateWalletActivity;
-class CreateWalletDialog;
-=======
 namespace fs {
 class path;
 }
@@ -50,7 +41,6 @@ class AskPassphraseDialog;
 class CreateWalletActivity;
 class CreateWalletDialog;
 class MigrateWalletActivity;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 class OpenWalletActivity;
 class WalletControllerActivity;
 
@@ -67,12 +57,10 @@ public:
     WalletController(ClientModel& client_model, const PlatformStyle* platform_style, QObject* parent);
     ~WalletController();
 
-<<<<<<< HEAD
     //! Returns wallet models currently open.
     std::vector<WalletModel*> getOpenWallets() const;
 
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
     WalletModel* getOrCreateWallet(std::unique_ptr<interfaces::Wallet> wallet);
 
     //! Returns all wallet names in the wallet dir mapped to whether the wallet
@@ -82,11 +70,9 @@ public:
     void closeWallet(WalletModel* wallet_model, QWidget* parent = nullptr);
     void closeAllWallets(QWidget* parent = nullptr);
 
-<<<<<<< HEAD
-=======
     void migrateWallet(WalletModel* wallet_model, QWidget* parent = nullptr);
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
 Q_SIGNALS:
     void walletAdded(WalletModel* wallet_model);
     void walletRemoved(WalletModel* wallet_model);
@@ -105,10 +91,7 @@ private:
     std::unique_ptr<interfaces::Handler> m_handler_load_wallet;
 
     friend class WalletControllerActivity;
-<<<<<<< HEAD
-=======
     friend class MigrateWalletActivity;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 };
 
 class WalletControllerActivity : public QObject
@@ -117,11 +100,7 @@ class WalletControllerActivity : public QObject
 
 public:
     WalletControllerActivity(WalletController* wallet_controller, QWidget* parent_widget);
-<<<<<<< HEAD
-    virtual ~WalletControllerActivity();
-=======
     virtual ~WalletControllerActivity() = default;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 Q_SIGNALS:
     void finished();
@@ -130,19 +109,10 @@ protected:
     interfaces::Node& node() const { return m_wallet_controller->m_node; }
     QObject* worker() const { return m_wallet_controller->m_activity_worker; }
 
-<<<<<<< HEAD
-    void showProgressDialog(const QString& label_text);
-    void destroyProgressDialog();
-
-    WalletController* const m_wallet_controller;
-    QWidget* const m_parent_widget;
-    QProgressDialog* m_progress_dialog{nullptr};
-=======
     void showProgressDialog(const QString& title_text, const QString& label_text, bool show_minimized=false);
 
     WalletController* const m_wallet_controller;
     QWidget* const m_parent_widget;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     WalletModel* m_wallet_model{nullptr};
     bilingual_str m_error_message;
     std::vector<bilingual_str> m_warning_message;
@@ -188,8 +158,6 @@ private:
     void finish();
 };
 
-<<<<<<< HEAD
-=======
 class LoadWalletsActivity : public WalletControllerActivity
 {
     Q_OBJECT
@@ -234,5 +202,5 @@ private:
     void finish();
 };
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
 #endif // DIGIBYTE_QT_WALLETCONTROLLER_H

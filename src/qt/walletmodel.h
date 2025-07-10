@@ -1,9 +1,5 @@
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
-// Copyright (c) 2011-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// Copyright (c) 2011-2022 The Bitcoin Core developers
+// Copyright (c) 2014-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -15,10 +11,6 @@
 #endif
 
 #include <key.h>
-<<<<<<< HEAD
-#include <script/standard.h>
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 #include <qt/walletmodeltransaction.h>
 
@@ -74,12 +66,7 @@ public:
         AmountWithFeeExceedsBalance,
         DuplicateAddress,
         TransactionCreationFailed, // Error returned when wallet is still locked
-<<<<<<< HEAD
-        AbsurdFee,
-        PaymentRequestExpired
-=======
         AbsurdFee
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     };
 
     enum EncryptionStatus
@@ -133,20 +120,6 @@ public:
 
         bool isValid() const { return valid; }
 
-<<<<<<< HEAD
-        // Copy constructor is disabled.
-        UnlockContext(const UnlockContext&) = delete;
-        // Move operator and constructor transfer the context
-        UnlockContext(UnlockContext&& obj) { CopyFrom(std::move(obj)); }
-        UnlockContext& operator=(UnlockContext&& rhs) { CopyFrom(std::move(rhs)); return *this; }
-    private:
-        WalletModel *wallet;
-        bool valid;
-        mutable bool relock; // mutable, as it can be set to false by copying
-
-        UnlockContext& operator=(const UnlockContext&) = default;
-        void CopyFrom(UnlockContext&& rhs);
-=======
         // Disable unused copy/move constructors/assignments explicitly.
         UnlockContext(const UnlockContext&) = delete;
         UnlockContext(UnlockContext&&) = delete;
@@ -157,17 +130,12 @@ public:
         WalletModel *wallet;
         const bool valid;
         const bool relock;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     };
 
     UnlockContext requestUnlock();
 
     bool bumpFee(uint256 hash, uint256& new_hash);
-<<<<<<< HEAD
-    bool displayAddress(std::string sAddress);
-=======
     bool displayAddress(std::string sAddress) const;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     static bool isWalletEnabled();
 
@@ -192,15 +160,6 @@ public:
     // Otherwise, uses the wallet's cached available balance.
     CAmount getAvailableBalance(const wallet::CCoinControl* control);
 
-<<<<<<< HEAD
-    AddressTableModel* getAddressTableModel() const { return addressTableModel; }
-
-    void refresh(bool pk_hash_only = false);
-
-    uint256 getLastBlockProcessed() const;
-
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 private:
     std::unique_ptr<interfaces::Wallet> m_wallet;
     std::unique_ptr<interfaces::Handler> m_handler_unload;
@@ -226,11 +185,7 @@ private:
 
     // Cache some values to be able to detect changes
     interfaces::WalletBalances m_cached_balances;
-<<<<<<< HEAD
-    EncryptionStatus cachedEncryptionStatus;
-=======
     EncryptionStatus cachedEncryptionStatus{Unencrypted};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     QTimer* timer;
 
     // Block hash denoting when the last balance update was done.

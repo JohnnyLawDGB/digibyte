@@ -1,38 +1,26 @@
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
-// Copyright (c) 2011-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// Copyright (c) 2011-2022 The Bitcoin Core developers
+// Copyright (c) 2014-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <qt/walletframe.h>
 
-<<<<<<< HEAD
-#include <qt/overviewpage.h>
-=======
 #include <node/interface_ui.h>
 #include <psbt.h>
 #include <qt/guiutil.h>
 #include <qt/overviewpage.h>
 #include <qt/psbtoperationsdialog.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <qt/walletmodel.h>
 #include <qt/walletview.h>
 #include <util/fs.h>
 #include <util/fs_helpers.h>
 
 #include <cassert>
-<<<<<<< HEAD
-
-=======
 #include <fstream>
 #include <string>
 
 #include <QApplication>
 #include <QClipboard>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -79,19 +67,11 @@ void WalletFrame::setClientModel(ClientModel *_clientModel)
     }
 }
 
-<<<<<<< HEAD
-bool WalletFrame::addWallet(WalletModel* walletModel, WalletView* walletView)
-{
-    if (!clientModel || !walletModel) return false;
-
-    if (mapWalletViews.count(walletModel) > 0) return false;
-=======
 bool WalletFrame::addView(WalletView* walletView)
 {
     if (!clientModel) return false;
 
     if (mapWalletViews.count(walletView->getWalletModel()) > 0) return false;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     walletView->setClientModel(clientModel);
     walletView->showOutOfSyncWarning(bOutOfSync);
@@ -104,11 +84,7 @@ bool WalletFrame::addView(WalletView* walletView)
     }
 
     walletStack->addWidget(walletView);
-<<<<<<< HEAD
-    mapWalletViews[walletModel] = walletView;
-=======
     mapWalletViews[walletView->getWalletModel()] = walletView;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     return true;
 }
@@ -135,12 +111,9 @@ void WalletFrame::setCurrentWallet(WalletModel* wallet_model)
     walletView->updateGeometry();
 
     walletStack->setCurrentWidget(walletView);
-<<<<<<< HEAD
     walletView->updateEncryptionStatus();
-=======
 
     Q_EMIT currentWalletSet();
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 void WalletFrame::removeWallet(WalletModel* wallet_model)
@@ -221,12 +194,6 @@ void WalletFrame::gotoVerifyMessageTab(QString addr)
 
 void WalletFrame::gotoLoadPSBT(bool from_clipboard)
 {
-<<<<<<< HEAD
-    WalletView *walletView = currentWalletView();
-    if (walletView) {
-        walletView->gotoLoadPSBT(from_clipboard);
-    }
-=======
     std::vector<unsigned char> data;
 
     if (from_clipboard) {
@@ -268,7 +235,6 @@ void WalletFrame::gotoLoadPSBT(bool from_clipboard)
     auto dlg = new PSBTOperationsDialog(this, currentWalletModel(), clientModel);
     dlg->openWithPSBT(psbtx);
     GUIUtil::ShowModalDialogAsynchronously(dlg);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 void WalletFrame::encryptWallet()

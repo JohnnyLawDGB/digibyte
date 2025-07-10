@@ -1,9 +1,5 @@
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
-// Copyright (c) 2011-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// Copyright (c) 2011-2022 The Bitcoin Core developers
+// Copyright (c) 2014-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -22,16 +18,10 @@
 #include <mapport.h>
 #include <net.h>
 #include <netbase.h>
-<<<<<<< HEAD
-#include <txdb.h>       // for -dbcache defaults
-#include <util/string.h>
-#include <validation.h> // For DEFAULT_SCRIPTCHECK_THREADS
-=======
 #include <txdb.h> // for -dbcache defaults
 #include <util/string.h>
-#include <validation.h>    // For DEFAULT_SCRIPTCHECK_THREADS
+#include <validation.h> // For DEFAULT_SCRIPTCHECK_THREADS
 #include <wallet/wallet.h> // For DEFAULT_SPEND_ZEROCONF_CHANGE
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 #include <QDebug>
 #include <QLatin1Char>

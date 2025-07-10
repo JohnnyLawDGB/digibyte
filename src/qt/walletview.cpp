@@ -1,9 +1,5 @@
-<<<<<<< HEAD
-// Copyright (c) 2011-2020 The Bitcoin Core developers
-// Copyright (c) 2013-2021 The DigiByte Core developers
-=======
-// Copyright (c) 2011-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// Copyright (c) 2011-2022 The Bitcoin Core developers
+// Copyright (c) 2013-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -25,8 +21,7 @@
 #include <qt/walletmodel.h>
 
 #include <interfaces/node.h>
-<<<<<<< HEAD
-#include <node/ui_interface.h>
+#include <node/interface_ui.h>
 #include <psbt.h>
 #include <util/strencodings.h>
 
@@ -34,30 +29,17 @@
 #include <QActionGroup>
 #include <QApplication>
 #include <QClipboard>
-=======
-#include <node/interface_ui.h>
-#include <util/strencodings.h>
-
-#include <QAction>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <QFileDialog>
 #include <QHBoxLayout>
 #include <QProgressDialog>
 #include <QPushButton>
 #include <QVBoxLayout>
 
-<<<<<<< HEAD
-WalletView::WalletView(const PlatformStyle *_platformStyle, QWidget *parent):
-    QStackedWidget(parent),
-    clientModel(nullptr),
-    walletModel(nullptr),
-    platformStyle(_platformStyle)
-=======
 WalletView::WalletView(WalletModel* wallet_model, const PlatformStyle* _platformStyle, QWidget* parent)
     : QStackedWidget(parent),
+      clientModel(nullptr),
       walletModel(wallet_model),
       platformStyle(_platformStyle)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     assert(walletModel);
 
@@ -118,13 +100,6 @@ WalletView::WalletView(WalletModel* wallet_model, const PlatformStyle* _platform
     connect(transactionView, &TransactionView::message, this, &WalletView::message);
 
     connect(this, &WalletView::setPrivacy, overviewPage, &OverviewPage::setPrivacy);
-<<<<<<< HEAD
-}
-
-WalletView::~WalletView()
-{
-}
-=======
     connect(this, &WalletView::setPrivacy, this, &WalletView::disableTransactionView);
 
     // Receive and pass through messages from wallet model
@@ -144,54 +119,12 @@ WalletView::~WalletView()
 }
 
 WalletView::~WalletView() = default;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 void WalletView::setClientModel(ClientModel *_clientModel)
 {
     this->clientModel = _clientModel;
 
-    overviewPage->setClientModel(_clientModel);
-    sendCoinsPage->setClientModel(_clientModel);
-<<<<<<< HEAD
-    if (walletModel) walletModel->setClientModel(_clientModel);
-}
-
-void WalletView::setWalletModel(WalletModel *_walletModel)
-{
-    this->walletModel = _walletModel;
-
-    // Put transaction list in tabs
-    transactionView->setModel(_walletModel);
-    overviewPage->setWalletModel(_walletModel);
-    receiveCoinsPage->setModel(_walletModel);
-    sendCoinsPage->setModel(_walletModel);
-    usedReceivingAddressesPage->setModel(_walletModel ? _walletModel->getAddressTableModel() : nullptr);
-    usedSendingAddressesPage->setModel(_walletModel ? _walletModel->getAddressTableModel() : nullptr);
-
-    if (_walletModel)
-    {
-        // Receive and pass through messages from wallet model
-        connect(_walletModel, &WalletModel::message, this, &WalletView::message);
-
-        // Handle changes in encryption status
-        connect(_walletModel, &WalletModel::encryptionStatusChanged, this, &WalletView::encryptionStatusChanged);
-        updateEncryptionStatus();
-
-        // update HD status
-        Q_EMIT hdEnabledStatusChanged();
-
-        // Balloon pop-up for new transaction
-        connect(_walletModel->getTransactionTableModel(), &TransactionTableModel::rowsInserted, this, &WalletView::processNewTransaction);
-
-        // Ask for passphrase if needed
-        connect(_walletModel, &WalletModel::requireUnlock, this, &WalletView::unlockWallet);
-
-        // Show progress dialog
-        connect(_walletModel, &WalletModel::showProgress, this, &WalletView::showProgress);
-    }
-=======
     walletModel->setClientModel(_clientModel);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 void WalletView::processNewTransaction(const QModelIndex& parent, int start, int /*end*/)
@@ -312,25 +245,10 @@ void WalletView::showOutOfSyncWarning(bool fShow)
 
 void WalletView::encryptWallet()
 {
-<<<<<<< HEAD
-    Q_EMIT encryptionStatusChanged();
-}
-
-void WalletView::encryptWallet()
-{
-    if(!walletModel)
-        return;
-    AskPassphraseDialog dlg(AskPassphraseDialog::Encrypt, this);
-    dlg.setModel(walletModel);
-    dlg.exec();
-
-    updateEncryptionStatus();
-=======
     auto dlg = new AskPassphraseDialog(AskPassphraseDialog::Encrypt, this);
     dlg->setModel(walletModel);
     connect(dlg, &QDialog::finished, this, &WalletView::encryptionStatusChanged);
     GUIUtil::ShowModalDialogAsynchronously(dlg);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 void WalletView::backupWallet()
@@ -374,23 +292,11 @@ void WalletView::unlockWallet()
 
 void WalletView::usedSendingAddresses()
 {
-<<<<<<< HEAD
-    if(!walletModel)
-        return;
-
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     GUIUtil::bringToFront(usedSendingAddressesPage);
 }
 
 void WalletView::usedReceivingAddresses()
 {
-<<<<<<< HEAD
-    if(!walletModel)
-        return;
-
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     GUIUtil::bringToFront(usedReceivingAddressesPage);
 }
 
@@ -415,13 +321,9 @@ void WalletView::showProgress(const QString &title, int nProgress)
             progressDialog->setValue(nProgress);
         }
     }
-<<<<<<< HEAD
-}
-=======
 }
 
 void WalletView::disableTransactionView(bool disable)
 {
     transactionView->setDisabled(disable);
 }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion

@@ -1,9 +1,4 @@
-<<<<<<< HEAD
-// Copyright (c) 2011-2020 The Bitcoin Core developers
-// Copyright (c) 2013-2021 The DigiByte Core developers
-=======
 // Copyright (c) 2011-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -69,10 +64,6 @@ protected:
 AddressBookPage::AddressBookPage(const PlatformStyle *platformStyle, Mode _mode, Tabs _tab, QWidget *parent) :
     QDialog(parent, GUIUtil::dialog_flags),
     ui(new Ui::AddressBookPage),
-<<<<<<< HEAD
-    model(nullptr),
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     mode(_mode),
     tab(_tab)
 {
@@ -287,11 +278,7 @@ void AddressBookPage::on_exportButton_clicked()
     QString filename = GUIUtil::getSaveFileName(this,
         tr("Export Address List"), QString(),
         /*: Expanded name of the CSV file format.
-<<<<<<< HEAD
-            See https://en.wikipedia.org/wiki/Comma-separated_values */
-=======
             See: https://en.wikipedia.org/wiki/Comma-separated_values. */
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         tr("Comma separated file") + QLatin1String(" (*.csv)"), nullptr);
 
     if (filename.isNull())
@@ -331,9 +318,6 @@ void AddressBookPage::selectNewAddress(const QModelIndex &parent, int begin, int
         ui->tableView->selectRow(idx.row());
         newAddressToSelect.clear();
     }
-<<<<<<< HEAD
-}
-=======
 }
 
 void AddressBookPage::updateWindowsTitleWithWalletName()
@@ -348,4 +332,3 @@ void AddressBookPage::updateWindowsTitleWithWalletName()
         }
     }
 }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion

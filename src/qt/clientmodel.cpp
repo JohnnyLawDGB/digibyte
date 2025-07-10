@@ -1,9 +1,4 @@
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
 // Copyright (c) 2011-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -22,23 +17,15 @@
 #include <interfaces/node.h>
 #include <net.h>
 #include <netbase.h>
-<<<<<<< HEAD
-#include <util/system.h>
-#include <util/threadnames.h>
-=======
 #include <util/threadnames.h>
 #include <util/time.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <validation.h>
 
 #include <stdint.h>
 #include <functional>
 
 #include <QDebug>
-<<<<<<< HEAD
-=======
 #include <QMetaObject>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <QThread>
 #include <QTimer>
 
@@ -49,11 +36,6 @@ ClientModel::ClientModel(interfaces::Node& node, OptionsModel *_optionsModel, QO
     QObject(parent),
     m_node(node),
     optionsModel(_optionsModel),
-<<<<<<< HEAD
-    peerTableModel(nullptr),
-    banTableModel(nullptr),
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     m_thread(new QThread(this))
 {
     cachedBestHeaderHeight = -1;
@@ -141,32 +123,6 @@ int ClientModel::getNumBlocks() const
         m_cached_num_blocks = m_node.getNumBlocks();
     }
     return m_cached_num_blocks;
-<<<<<<< HEAD
-}
-
-uint256 ClientModel::getBestBlockHash()
-{
-    uint256 tip{WITH_LOCK(m_cached_tip_mutex, return m_cached_tip_blocks)};
-
-    if (!tip.IsNull()) {
-        return tip;
-    }
-
-    // Lock order must be: first `cs_main`, then `m_cached_tip_mutex`.
-    // The following will lock `cs_main` (and release it), so we must not
-    // own `m_cached_tip_mutex` here.
-    tip = m_node.getBestBlockHash();
-
-    LOCK(m_cached_tip_mutex);
-    // We checked that `m_cached_tip_blocks` is not null above, but then we
-    // released the mutex `m_cached_tip_mutex`, so it could have changed in the
-    // meantime. Thus, check again.
-    if (m_cached_tip_blocks.IsNull()) {
-        m_cached_tip_blocks = tip;
-    }
-    return m_cached_tip_blocks;
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 uint256 ClientModel::getBestBlockHash()
@@ -246,16 +202,7 @@ QString ClientModel::formatClientStartupTime() const
 
 QString ClientModel::dataDir() const
 {
-<<<<<<< HEAD
-    return GUIUtil::boostPathToQString(gArgs.GetDataDirNet());
-}
-
-QString ClientModel::blocksDir() const
-{
-    return GUIUtil::boostPathToQString(gArgs.GetBlocksDirPath());
-=======
     return GUIUtil::PathToQString(gArgs.GetDataDirNet());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 QString ClientModel::blocksDir() const
@@ -265,59 +212,6 @@ QString ClientModel::blocksDir() const
 
 void ClientModel::TipChanged(SynchronizationState sync_state, interfaces::BlockTip tip, double verification_progress, SyncType synctype)
 {
-<<<<<<< HEAD
-    // emits signal "showProgress"
-    bool invoked = QMetaObject::invokeMethod(clientmodel, "showProgress", Qt::QueuedConnection,
-                              Q_ARG(QString, QString::fromStdString(title)),
-                              Q_ARG(int, nProgress));
-    assert(invoked);
-}
-
-static void NotifyNumConnectionsChanged(ClientModel *clientmodel, int newNumConnections)
-{
-    // Too noisy: qDebug() << "NotifyNumConnectionsChanged: " + QString::number(newNumConnections);
-    bool invoked = QMetaObject::invokeMethod(clientmodel, "updateNumConnections", Qt::QueuedConnection,
-                              Q_ARG(int, newNumConnections));
-    assert(invoked);
-}
-
-static void NotifyNetworkActiveChanged(ClientModel *clientmodel, bool networkActive)
-{
-    bool invoked = QMetaObject::invokeMethod(clientmodel, "updateNetworkActive", Qt::QueuedConnection,
-                              Q_ARG(bool, networkActive));
-    assert(invoked);
-}
-
-static void NotifyAlertChanged(ClientModel *clientmodel)
-{
-    qDebug() << "NotifyAlertChanged";
-    bool invoked = QMetaObject::invokeMethod(clientmodel, "updateAlert", Qt::QueuedConnection);
-    assert(invoked);
-}
-
-static void BannedListChanged(ClientModel *clientmodel)
-{
-    qDebug() << QString("%1: Requesting update for peer banlist").arg(__func__);
-    bool invoked = QMetaObject::invokeMethod(clientmodel, "updateBanlist", Qt::QueuedConnection);
-    assert(invoked);
-}
-
-static void BlockTipChanged(ClientModel* clientmodel, SynchronizationState sync_state, interfaces::BlockTip tip, double verificationProgress, bool fHeader)
-{
-    if (fHeader) {
-        // cache best headers time and height to reduce future cs_main locks
-        clientmodel->cachedBestHeaderHeight = tip.block_height;
-        clientmodel->cachedBestHeaderTime = tip.block_time;
-    } else {
-        clientmodel->m_cached_num_blocks = tip.block_height;
-        WITH_LOCK(clientmodel->m_cached_tip_mutex, clientmodel->m_cached_tip_blocks = tip.block_hash;);
-    }
-
-    // Throttle GUI notifications about (a) blocks during initial sync, and (b) both blocks and headers during reindex.
-    const bool throttle = (sync_state != SynchronizationState::POST_INIT && !fHeader) || sync_state == SynchronizationState::INIT_REINDEX;
-    const int64_t now = throttle ? GetTimeMillis() : 0;
-    int64_t& nLastUpdateNotification = fHeader ? nLastHeaderTipUpdateNotification : nLastBlockTipUpdateNotification;
-=======
     if (synctype == SyncType::HEADER_SYNC) {
         // cache best headers time and height to reduce future cs_main locks
         cachedBestHeaderHeight = tip.block_height;
@@ -331,37 +225,16 @@ static void BlockTipChanged(ClientModel* clientmodel, SynchronizationState sync_
     const bool throttle = (sync_state != SynchronizationState::POST_INIT && synctype == SyncType::BLOCK_SYNC) || sync_state == SynchronizationState::INIT_REINDEX;
     const auto now{throttle ? SteadyClock::now() : SteadyClock::time_point{}};
     auto& nLastUpdateNotification = synctype != SyncType::BLOCK_SYNC ? g_last_header_tip_update_notification : g_last_block_tip_update_notification;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (throttle && now < nLastUpdateNotification + MODEL_UPDATE_DELAY) {
         return;
     }
 
-<<<<<<< HEAD
-    bool invoked = QMetaObject::invokeMethod(clientmodel, "numBlocksChanged", Qt::QueuedConnection,
-        Q_ARG(int, tip.block_height),
-        Q_ARG(QDateTime, QDateTime::fromTime_t(tip.block_time)),
-        Q_ARG(double, verificationProgress),
-        Q_ARG(bool, fHeader),
-        Q_ARG(SynchronizationState, sync_state));
-    assert(invoked);
-=======
     Q_EMIT numBlocksChanged(tip.block_height, QDateTime::fromSecsSinceEpoch(tip.block_time), verification_progress, synctype, sync_state);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     nLastUpdateNotification = now;
 }
 
 void ClientModel::subscribeToCoreSignals()
 {
-<<<<<<< HEAD
-    // Connect signals to client
-    m_handler_show_progress = m_node.handleShowProgress(std::bind(ShowProgress, this, std::placeholders::_1, std::placeholders::_2));
-    m_handler_notify_num_connections_changed = m_node.handleNotifyNumConnectionsChanged(std::bind(NotifyNumConnectionsChanged, this, std::placeholders::_1));
-    m_handler_notify_network_active_changed = m_node.handleNotifyNetworkActiveChanged(std::bind(NotifyNetworkActiveChanged, this, std::placeholders::_1));
-    m_handler_notify_alert_changed = m_node.handleNotifyAlertChanged(std::bind(NotifyAlertChanged, this));
-    m_handler_banned_list_changed = m_node.handleBannedListChanged(std::bind(BannedListChanged, this));
-    m_handler_notify_block_tip = m_node.handleNotifyBlockTip(std::bind(BlockTipChanged, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, false));
-    m_handler_notify_header_tip = m_node.handleNotifyHeaderTip(std::bind(BlockTipChanged, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, true));
-=======
     m_handler_show_progress = m_node.handleShowProgress(
         [this](const std::string& title, int progress, [[maybe_unused]] bool resume_possible) {
             Q_EMIT showProgress(QString::fromStdString(title), progress);
@@ -392,7 +265,6 @@ void ClientModel::subscribeToCoreSignals()
         [this](SynchronizationState sync_state, interfaces::BlockTip tip, bool presync) {
             TipChanged(sync_state, tip, /*verification_progress=*/0.0, presync ? SyncType::HEADER_PRESYNC : SyncType::HEADER_SYNC);
         });
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 void ClientModel::unsubscribeFromCoreSignals()

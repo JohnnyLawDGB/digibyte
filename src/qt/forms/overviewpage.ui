@@ -252,11 +252,7 @@
                <string>Your current total balance</string>
               </property>
               <property name="text">
-<<<<<<< HEAD
                <string notr="true">21 000 000 000.00000000 DGB</string>
-=======
-               <string notr="true">21 000 000.00000000 DGB</string>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
               </property>
               <property name="alignment">
                <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
@@ -275,11 +271,7 @@
                <string>Current total balance in watch-only addresses</string>
               </property>
               <property name="text">
-<<<<<<< HEAD
                <string notr="true">21 000 000 000.00000000 DGB</string>
-=======
-               <string notr="true">21 000 000.00000000 DGB</string>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
               </property>
               <property name="alignment">
                <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
@@ -315,11 +307,7 @@
                <string>Your current spendable balance</string>
               </property>
               <property name="text">
-<<<<<<< HEAD
                <string notr="true">21 000 000 000.00000000 DGB</string>
-=======
-               <string notr="true">21 000 000.00000000 DGB</string>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
               </property>
               <property name="alignment">
                <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
@@ -338,11 +326,7 @@
                <string>Your current balance in watch-only addresses</string>
               </property>
               <property name="text">
-<<<<<<< HEAD
                <string notr="true">21 000 000 000.00000000 DGB</string>
-=======
-               <string notr="true">21 000 000.00000000 DGB</string>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
               </property>
               <property name="alignment">
                <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>

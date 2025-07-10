@@ -1,9 +1,4 @@
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
 // Copyright (c) 2011-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -72,11 +67,7 @@ public:
     //! Return number of connections, default is in- and outbound (total)
     int getNumConnections(unsigned int flags = CONNECTIONS_ALL) const;
     int getNumBlocks() const;
-<<<<<<< HEAD
-    uint256 getBestBlockHash();
-=======
     uint256 getBestBlockHash() EXCLUSIVE_LOCKS_REQUIRED(!m_cached_tip_mutex);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     int getHeaderTipHeight() const;
     int64_t getHeaderTipTime() const;
 
@@ -112,15 +103,9 @@ private:
     std::unique_ptr<interfaces::Handler> m_handler_notify_block_tip;
     std::unique_ptr<interfaces::Handler> m_handler_notify_header_tip;
     OptionsModel *optionsModel;
-<<<<<<< HEAD
-    PeerTableModel *peerTableModel;
-    PeerTableSortProxy* m_peer_table_sort_proxy{nullptr};
-    BanTableModel *banTableModel;
-=======
     PeerTableModel* peerTableModel{nullptr};
     PeerTableSortProxy* m_peer_table_sort_proxy{nullptr};
     BanTableModel* banTableModel{nullptr};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     //! A thread to interact with m_node asynchronously
     QThread* const m_thread;
@@ -131,11 +116,7 @@ private:
 
 Q_SIGNALS:
     void numConnectionsChanged(int count);
-<<<<<<< HEAD
-    void numBlocksChanged(int count, const QDateTime& blockDate, double nVerificationProgress, bool header, SynchronizationState sync_state);
-=======
     void numBlocksChanged(int count, const QDateTime& blockDate, double nVerificationProgress, SyncType header, SynchronizationState sync_state);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     void mempoolSizeChanged(long count, size_t mempoolSizeInBytes);
     void networkActiveChanged(bool networkActive);
     void alertsChanged(const QString &warnings);
@@ -146,15 +127,6 @@ Q_SIGNALS:
 
     // Show progress dialog e.g. for verifychain
     void showProgress(const QString &title, int nProgress);
-<<<<<<< HEAD
-
-public Q_SLOTS:
-    void updateNumConnections(int numConnections);
-    void updateNetworkActive(bool networkActive);
-    void updateAlert();
-    void updateBanlist();
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 };
 
 #endif // DIGIBYTE_QT_CLIENTMODEL_H

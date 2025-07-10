@@ -27,8 +27,6 @@
       <widget class="QValidatedLineEdit" name="uriEdit">
        <property name="placeholderText">
         <string notr="true">digibyte:</string>
-<<<<<<< HEAD
-=======
        </property>
       </widget>
      </item>
@@ -50,7 +48,6 @@
          <width>22</width>
          <height>22</height>
         </size>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
        </property>
       </widget>
      </item>

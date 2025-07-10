@@ -1,9 +1,4 @@
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
 // Copyright (c) 2011-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -59,13 +54,9 @@ public:
     }
 
     void setClientModel(ClientModel *model = nullptr, int bestblock_height = 0, int64_t bestblock_date = 0, double verification_progress = 0.0);
-<<<<<<< HEAD
-    void addWallet(WalletModel * const walletModel);
-=======
 
 #ifdef ENABLE_WALLET
     void addWallet(WalletModel* const walletModel);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     void removeWallet(WalletModel* const walletModel);
 #endif // ENABLE_WALLET
 
@@ -145,17 +136,14 @@ public Q_SLOTS:
     void unbanSelectedNode();
     /** set which tab has the focus (is visible) */
     void setTabFocus(enum TabTypes tabType);
-<<<<<<< HEAD
-
-Q_SIGNALS:
-    // For RPC command executor
-    void cmdRequest(const QString &command, const WalletModel* wallet_model);
-=======
 #ifdef ENABLE_WALLET
     /** Set the current (ie - active) wallet */
     void setCurrentWallet(WalletModel* const wallet_model);
 #endif // ENABLE_WALLET
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
+Q_SIGNALS:
+    // For RPC command executor
+    void cmdRequest(const QString &command, const WalletModel* wallet_model);
 
 private:
     struct TranslatedStrings {
@@ -190,10 +178,7 @@ private:
     int consoleFontSize = 0;
     QCompleter *autoCompleter = nullptr;
     QThread thread;
-<<<<<<< HEAD
-=======
     RPCExecutor* m_executor{nullptr};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     WalletModel* m_last_wallet_model{nullptr};
     bool m_is_executing{false};
     QByteArray m_peer_widget_header_state;
@@ -203,14 +188,9 @@ private:
     void updateNetworkState();
 
     /** Helper for the output of a time duration field. Inputs are UNIX epoch times. */
-<<<<<<< HEAD
-    QString TimeDurationField(uint64_t time_now, uint64_t time_at_event) const {
-        return time_at_event ? GUIUtil::formatDurationStr(time_now - time_at_event) : tr("Never");
-=======
     QString TimeDurationField(std::chrono::seconds time_now, std::chrono::seconds time_at_event) const
     {
         return time_at_event.count() ? GUIUtil::formatDurationStr(time_now - time_at_event) : tr("Never");
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
 private Q_SLOTS:

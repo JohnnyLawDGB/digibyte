@@ -1,7 +1,3 @@
-<<<<<<< HEAD
-// Copyright (c) 2014-2019 The Bitcoin Core developers
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Copyright (c) 2014-2021 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
@@ -10,13 +6,8 @@
 
 #include <qt/guiconstants.h>
 
-<<<<<<< HEAD
-#include <chainparamsbase.h>
-#include <tinyformat.h>
-=======
 #include <tinyformat.h>
 #include <util/chaintype.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 #include <QApplication>
 
@@ -26,17 +17,10 @@ static const struct {
     const int iconColorHueShift;
     const int iconColorSaturationReduction;
 } network_styles[] = {
-<<<<<<< HEAD
-    {"main", QAPP_APP_NAME_DEFAULT, 0, 0},
-    {"test", QAPP_APP_NAME_TESTNET, 70, 30},
-    {"signet", QAPP_APP_NAME_SIGNET, 35, 15},
-    {"regtest", QAPP_APP_NAME_REGTEST, 160, 30},
-=======
     {ChainType::MAIN, QAPP_APP_NAME_DEFAULT, 0, 0},
     {ChainType::TESTNET, QAPP_APP_NAME_TESTNET, 70, 30},
     {ChainType::SIGNET, QAPP_APP_NAME_SIGNET, 35, 15},
     {ChainType::REGTEST, QAPP_APP_NAME_REGTEST, 160, 30},
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 };
 
 // titleAddText needs to be const char* for tr()
@@ -93,15 +77,9 @@ NetworkStyle::NetworkStyle(const QString &_appName, const int iconColorHueShift,
     trayAndWindowIcon   = QIcon(pixmap.scaled(QSize(256,256)));
 }
 
-<<<<<<< HEAD
-const NetworkStyle* NetworkStyle::instantiate(const std::string& networkId)
-{
-    std::string titleAddText = networkId == CBaseChainParams::MAIN ? "" : strprintf("[%s]", networkId);
-=======
 const NetworkStyle* NetworkStyle::instantiate(const ChainType networkId)
 {
     std::string titleAddText = networkId == ChainType::MAIN ? "" : strprintf("[%s]", ChainTypeToString(networkId));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     for (const auto& network_style : network_styles) {
         if (networkId == network_style.networkId) {
             return new NetworkStyle(
@@ -112,8 +90,4 @@ const NetworkStyle* NetworkStyle::instantiate(const ChainType networkId)
         }
     }
     return nullptr;
-<<<<<<< HEAD
 }
-=======
-}
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion

@@ -1,9 +1,4 @@
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
 // Copyright (c) 2011-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -23,11 +18,7 @@
 #include <QtDBus>
 #include <stdint.h>
 #endif
-<<<<<<< HEAD
-#ifdef Q_OS_MAC
-=======
 #ifdef Q_OS_MACOS
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <qt/macnotificationhandler.h>
 #endif
 
@@ -42,12 +33,6 @@ Notificator::Notificator(const QString &_programName, QSystemTrayIcon *_trayIcon
     parent(_parent),
     programName(_programName),
     trayIcon(_trayIcon)
-<<<<<<< HEAD
-#ifdef USE_DBUS
-    ,interface(nullptr)
-#endif
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     if(_trayIcon && _trayIcon->supportsMessages())
     {
@@ -221,11 +206,7 @@ void Notificator::notifySystray(Class cls, const QString &title, const QString &
     trayIcon->showMessage(title, text, sicon, millisTimeout);
 }
 
-<<<<<<< HEAD
-#ifdef Q_OS_MAC
-=======
 #ifdef Q_OS_MACOS
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 void Notificator::notifyMacUserNotificationCenter(const QString &title, const QString &text)
 {
     // icon is not supported by the user notification center yet. OSX will use the app icon.

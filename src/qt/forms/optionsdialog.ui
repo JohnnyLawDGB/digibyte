@@ -51,22 +51,6 @@
         </spacer>
        </item>
        <item>
-<<<<<<< HEAD
-       <layout class="QHBoxLayout" name="horizontalLayout_Main_Prune">
-        <item>
-         <widget class="QCheckBox" name="prune">
-          <property name="toolTip">
-           <string>Enabling pruning significantly reduces the disk space required to store transactions. All blocks are still fully validated. Reverting this setting requires re-downloading the entire blockchain.</string>
-          </property>
-          <property name="text">
-           <string>Prune &amp;block storage to</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QSpinBox" name="pruneSize"/>
-        </item>
-=======
         <layout class="QHBoxLayout" name="horizontalLayout_Main_Prune">
          <item>
           <widget class="QCheckBox" name="prune">
@@ -81,7 +65,6 @@
          <item>
           <widget class="QSpinBox" name="pruneSize"/>
          </item>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
          <item>
           <widget class="QLabel" name="pruneSizeUnitLabel">
            <property name="text">
@@ -970,11 +953,7 @@
         <item>
          <widget class="QLabel" name="overriddenByCommandLineInfoLabel">
           <property name="text">
-<<<<<<< HEAD
-           <string>Options set in this dialog are overridden by the command line or in the configuration file:</string>
-=======
            <string>Options set in this dialog are overridden by the command line:</string>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
           </property>
           <property name="textFormat">
            <enum>Qt::PlainText</enum>

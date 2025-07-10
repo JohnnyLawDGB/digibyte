@@ -1,9 +1,4 @@
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
 // Copyright (c) 2011-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -60,17 +55,6 @@ struct AddressTableEntryLessThan
 /* Determine address type from address purpose */
 constexpr AddressTableEntry::Type translateTransactionType(wallet::AddressPurpose purpose, bool isMine)
 {
-<<<<<<< HEAD
-    AddressTableEntry::Type addressType = AddressTableEntry::Hidden;
-    // "refund" addresses aren't shown, and change addresses aren't returned by getAddresses at all.
-    if (strPurpose == "send")
-        addressType = AddressTableEntry::Sending;
-    else if (strPurpose == "receive")
-        addressType = AddressTableEntry::Receiving;
-    else if (strPurpose == "unknown" || strPurpose == "") // if purpose not set, guess
-        addressType = (isMine ? AddressTableEntry::Receiving : AddressTableEntry::Sending);
-    return addressType;
-=======
     // "refund" addresses aren't shown, and change addresses aren't returned by getAddresses at all.
     switch (purpose) {
     case wallet::AddressPurpose::SEND: return AddressTableEntry::Sending;
@@ -78,7 +62,6 @@ constexpr AddressTableEntry::Type translateTransactionType(wallet::AddressPurpos
     case wallet::AddressPurpose::REFUND: return AddressTableEntry::Hidden;
     } // no default case, so the compiler can warn about missing cases
     assert(false);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 // Private implementation
@@ -381,45 +364,26 @@ QString AddressTableModel::addRow(const QString &type, const QString &label, con
         }
 
         // Add entry
-<<<<<<< HEAD
-        walletModel->wallet().setAddressBook(DecodeDestination(strAddress), strLabel, "send");
-=======
         walletModel->wallet().setAddressBook(DecodeDestination(strAddress), strLabel, wallet::AddressPurpose::SEND);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     else if(type == Receive)
     {
         // Generate a new address to associate with given label
-<<<<<<< HEAD
-        CTxDestination dest;
-        if(!walletModel->wallet().getNewDestination(address_type, strLabel, dest))
-        {
-=======
         auto op_dest = walletModel->wallet().getNewDestination(address_type, strLabel);
         if (!op_dest) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             WalletModel::UnlockContext ctx(walletModel->requestUnlock());
             if (!ctx.isValid()) {
                 // Unlock wallet failed or was cancelled
                 editStatus = WALLET_UNLOCK_FAILURE;
                 return QString();
             }
-<<<<<<< HEAD
-            if(!walletModel->wallet().getNewDestination(address_type, strLabel, dest))
-            {
-=======
             op_dest = walletModel->wallet().getNewDestination(address_type, strLabel);
             if (!op_dest) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 editStatus = KEY_GENERATION_FAILURE;
                 return QString();
             }
         }
-<<<<<<< HEAD
-        strAddress = EncodeDestination(dest);
-=======
         strAddress = EncodeDestination(*op_dest);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     else
     {

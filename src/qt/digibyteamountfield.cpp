@@ -1,9 +1,4 @@
-<<<<<<< HEAD
-// Copyright (c) 2011-2018 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
 // Copyright (c) 2011-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -130,11 +125,7 @@ public:
 
             const QFontMetrics fm(fontMetrics());
             int h = lineEdit()->minimumSizeHint().height();
-<<<<<<< HEAD
-            int w = GUIUtil::TextWidth(fm, DigiByteUnits::format(DigiByteUnits::DGB, DigiByteUnits::maxMoney(), false, DigiByteUnits::SeparatorStyle::ALWAYS));
-=======
             int w = GUIUtil::TextWidth(fm, DigiByteUnits::format(DigiByteUnit::DGB, DigiByteUnits::maxMoney(), false, DigiByteUnits::SeparatorStyle::ALWAYS));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             w += 2; // cursor blinking space
 
             QStyleOptionSpinBox opt;
@@ -159,11 +150,7 @@ public:
     }
 
 private:
-<<<<<<< HEAD
-    int currentUnit{DigiByteUnits::DGB};
-=======
     DigiByteUnit currentUnit{DigiByteUnit::DGB};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     CAmount singleStep{CAmount(100000)}; // satoshis
     mutable QSize cachedMinimumSizeHint;
     bool m_allow_empty{true};
@@ -230,14 +217,8 @@ Q_SIGNALS:
 
 #include <qt/digibyteamountfield.moc>
 
-<<<<<<< HEAD
-DigiByteAmountField::DigiByteAmountField(QWidget *parent) :
-    QWidget(parent),
-    amount(nullptr)
-=======
 DigiByteAmountField::DigiByteAmountField(QWidget* parent)
     : QWidget(parent)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     amount = new AmountSpinBox(this);
     amount->setLocale(QLocale::c());
@@ -346,21 +327,12 @@ void DigiByteAmountField::unitChanged(int idx)
     unit->setToolTip(unit->itemData(idx, Qt::ToolTipRole).toString());
 
     // Determine new unit ID
-<<<<<<< HEAD
-    int newUnit = unit->itemData(idx, DigiByteUnits::UnitRole).toInt();
-
-    amount->setDisplayUnit(newUnit);
-}
-
-void DigiByteAmountField::setDisplayUnit(int newUnit)
-=======
     QVariant new_unit = unit->currentData(DigiByteUnits::UnitRole);
     assert(new_unit.isValid());
     amount->setDisplayUnit(new_unit.value<DigiByteUnit>());
 }
 
 void DigiByteAmountField::setDisplayUnit(DigiByteUnit new_unit)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     unit->setValue(QVariant::fromValue(new_unit));
 }

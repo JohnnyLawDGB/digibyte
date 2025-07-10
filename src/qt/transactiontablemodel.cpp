@@ -1,19 +1,11 @@
-<<<<<<< HEAD
-// Copyright (c) 2011-2020 The Bitcoin Core developers
-// Copyright (c) 2013-2021 The DigiByte Core developers
-=======
 // Copyright (c) 2011-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <qt/transactiontablemodel.h>
 
 #include <qt/addresstablemodel.h>
-<<<<<<< HEAD
-=======
 #include <qt/digibyteunits.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <qt/clientmodel.h>
 #include <qt/guiconstants.h>
 #include <qt/guiutil.h>
@@ -25,10 +17,7 @@
 
 #include <core_io.h>
 #include <interfaces/handler.h>
-<<<<<<< HEAD
-=======
 #include <tinyformat.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <uint256.h>
 
 #include <algorithm>
@@ -74,11 +63,7 @@ struct TxLessThan
 struct TransactionNotification
 {
 public:
-<<<<<<< HEAD
-    TransactionNotification() {}
-=======
     TransactionNotification() = default;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     TransactionNotification(uint256 _hash, ChangeType _status, bool _showTransaction):
         hash(_hash), status(_status), showTransaction(_showTransaction) {}
 
@@ -435,11 +420,6 @@ QString TransactionTableModel::formatTxToAddress(const TransactionRecord *wtx, b
         return lookupAddress(wtx->address, tooltip) + watchAddress;
     case TransactionRecord::SendToOther:
         return QString::fromStdString(wtx->address) + watchAddress;
-<<<<<<< HEAD
-    case TransactionRecord::SendToSelf:
-        return lookupAddress(wtx->address, tooltip) + watchAddress;
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     default:
         return tr("(n/a)") + watchAddress;
     }

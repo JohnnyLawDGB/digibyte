@@ -1,21 +1,10 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
-// Copyright (c) 2009-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// Copyright (c) 2009-2022 The Bitcoin Core developers
+// Copyright (c) 2014-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <logging.h>
-<<<<<<< HEAD
-#include <util/threadnames.h>
-#include <util/string.h>
-#include <util/time.h>
-
-#include <mutex>
-=======
 #include <util/fs.h>
 #include <util/string.h>
 #include <util/threadnames.h>
@@ -25,7 +14,6 @@
 #include <array>
 #include <mutex>
 #include <optional>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 const char * const DEFAULT_DEBUGLOGFILE = "debug.log";
 constexpr auto MAX_USER_SETABLE_SEVERITY_LEVEL{BCLog::Level::Info};
@@ -186,11 +174,7 @@ const CLogCategoryDesc LogCategories[] =
     {BCLog::QT, "qt"},
     {BCLog::LEVELDB, "leveldb"},
     {BCLog::VALIDATION, "validation"},
-<<<<<<< HEAD
     {BCLog::DANDELION, "dandelion"},
-    {BCLog::I2P, "i2p"},
-    {BCLog::IPC, "ipc"},
-=======
     {BCLog::I2P, "i2p"},
     {BCLog::IPC, "ipc"},
 #ifdef DEBUG_LOCKCONTENTION
@@ -201,7 +185,6 @@ const CLogCategoryDesc LogCategories[] =
     {BCLog::TXRECONCILIATION, "txreconciliation"},
     {BCLog::SCAN, "scan"},
     {BCLog::TXPACKAGES, "txpackages"},
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     {BCLog::ALL, "1"},
     {BCLog::ALL, "all"},
 };
@@ -221,23 +204,6 @@ bool GetLogCategory(BCLog::LogFlags& flag, const std::string& str)
     return false;
 }
 
-<<<<<<< HEAD
-std::vector<LogCategory> BCLog::Logger::LogCategoriesList() const
-{
-    std::vector<LogCategory> ret;
-    for (const CLogCategoryDesc& category_desc : LogCategories) {
-        // Omit the special cases.
-        if (category_desc.flag != BCLog::NONE && category_desc.flag != BCLog::ALL) {
-            LogCategory catActive;
-            catActive.category = category_desc.category;
-            catActive.active = WillLogCategory(category_desc.flag);
-            ret.push_back(catActive);
-        }
-    }
-    return ret;
-}
-
-=======
 std::string BCLog::Logger::LogLevelToStr(BCLog::Level level) const
 {
     switch (level) {
@@ -307,6 +273,8 @@ std::string LogCategoryToStr(BCLog::LogFlags category)
         return "leveldb";
     case BCLog::LogFlags::VALIDATION:
         return "validation";
+    case BCLog::LogFlags::DANDELION:
+        return "dandelion";
     case BCLog::LogFlags::I2P:
         return "i2p";
     case BCLog::LogFlags::IPC:
@@ -379,8 +347,6 @@ std::string BCLog::Logger::LogLevelsString() const
     const auto& levels = LogLevelsList();
     return Join(std::vector<BCLog::Level>{levels.begin(), levels.end()}, ", ", [this](BCLog::Level level) { return LogLevelToStr(level); });
 }
-
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 std::string BCLog::Logger::LogTimestampStr(const std::string& str)
 {
     std::string strStamped;
@@ -427,21 +393,13 @@ namespace BCLog {
         }
         return ret;
     }
-<<<<<<< HEAD
-}
-
-void BCLog::Logger::LogPrintStr(const std::string& str, const std::string& logging_function, const std::string& source_file, const int source_line)
-=======
 } // namespace BCLog
 
 void BCLog::Logger::LogPrintStr(const std::string& str, const std::string& logging_function, const std::string& source_file, int source_line, BCLog::LogFlags category, BCLog::Level level)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     StdLockGuard scoped_lock(m_cs);
     std::string str_prefixed = LogEscapeMessage(str);
 
-<<<<<<< HEAD
-=======
     if ((category != LogFlags::NONE || level != Level::None) && m_started_new_line) {
         std::string s{"["};
 
@@ -461,19 +419,13 @@ void BCLog::Logger::LogPrintStr(const std::string& str, const std::string& loggi
         s += "] ";
         str_prefixed.insert(0, s);
     }
-
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (m_log_sourcelocations && m_started_new_line) {
         str_prefixed.insert(0, "[" + RemovePrefix(source_file, "./") + ":" + ToString(source_line) + "] [" + logging_function + "] ");
     }
 
     if (m_log_threadnames && m_started_new_line) {
-<<<<<<< HEAD
-        str_prefixed.insert(0, "[" + util::ThreadGetInternalName() + "] ");
-=======
         const auto& threadname = util::ThreadGetInternalName();
         str_prefixed.insert(0, "[" + (threadname.empty() ? "unknown" : threadname) + "] ");
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     str_prefixed = LogTimestampStr(str_prefixed);

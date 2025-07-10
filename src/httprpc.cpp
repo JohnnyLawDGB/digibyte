@@ -1,24 +1,10 @@
-<<<<<<< HEAD
-// Copyright (c) 2015-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
-// Copyright (c) 2015-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// Copyright (c) 2015-2022 The Bitcoin Core developers
+// Copyright (c) 2014-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <httprpc.h>
 
-<<<<<<< HEAD
-#include <chainparams.h>
-#include <crypto/hmac_sha256.h>
-#include <httpserver.h>
-#include <rpc/protocol.h>
-#include <rpc/server.h>
-#include <util/strencodings.h>
-#include <util/system.h>
-#include <util/translation.h>
-=======
 #include <common/args.h>
 #include <crypto/hmac_sha256.h>
 #include <httpserver.h>
@@ -27,24 +13,15 @@
 #include <rpc/server.h>
 #include <util/strencodings.h>
 #include <util/string.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <walletinitinterface.h>
 
 #include <algorithm>
 #include <iterator>
 #include <map>
 #include <memory>
-<<<<<<< HEAD
-#include <stdio.h>
-#include <set>
-#include <string>
-
-#include <boost/algorithm/string.hpp> // boost::trim
-=======
 #include <set>
 #include <string>
 #include <vector>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 /** WWW-Authenticate to present with 401 Unauthorized response */
 static const char* WWW_AUTH_HEADER_DATA = "Basic realm=\"jsonrpc\"";
@@ -185,11 +162,7 @@ static bool HTTPReq_JSONRPC(const std::any& context, HTTPRequest* req)
 
     JSONRPCRequest jreq;
     jreq.context = context;
-<<<<<<< HEAD
-    jreq.peerAddr = req->GetPeer().ToString();
-=======
     jreq.peerAddr = req->GetPeer().ToStringAddrPort();
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (!RPCAuthorized(authHeader.second, jreq.authUser)) {
         LogPrintf("ThreadRPCServer incorrect password attempt from %s\n", jreq.peerAddr);
 
@@ -241,11 +214,7 @@ static bool HTTPReq_JSONRPC(const std::any& context, HTTPRequest* req)
                     } else {
                         const UniValue& request = valRequest[reqIdx].get_obj();
                         // Parse method
-<<<<<<< HEAD
-                        std::string strMethod = find_value(request, "method").get_str();
-=======
                         std::string strMethod = request.find_value("method").get_str();
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                         if (!g_rpc_whitelist[jreq.authUser].count(strMethod)) {
                             LogPrintf("RPC User %s not allowed to call method %s\n", jreq.authUser, strMethod);
                             req->WriteReply(HTTP_FORBIDDEN);
@@ -286,17 +255,11 @@ static bool InitRPCAuthentication()
     if (gArgs.GetArg("-rpcauth", "") != "") {
         LogPrintf("Using rpcauth authentication.\n");
         for (const std::string& rpcauth : gArgs.GetArgs("-rpcauth")) {
-<<<<<<< HEAD
-            std::vector<std::string> fields;
-            boost::split(fields, rpcauth, boost::is_any_of(":$"));
-            if (fields.size() == 3) {
-=======
             std::vector<std::string> fields{SplitString(rpcauth, ':')};
             const std::vector<std::string> salt_hmac{SplitString(fields.back(), '$')};
             if (fields.size() == 2 && salt_hmac.size() == 2) {
                 fields.pop_back();
                 fields.insert(fields.end(), salt_hmac.begin(), salt_hmac.end());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 g_rpcauth.push_back(fields);
             } else {
                 LogPrintf("Invalid -rpcauth argument.\n");
@@ -313,15 +276,10 @@ static bool InitRPCAuthentication()
         std::set<std::string>& whitelist = g_rpc_whitelist[strUser];
         if (pos != std::string::npos) {
             std::string strWhitelist = strRPCWhitelist.substr(pos + 1);
-<<<<<<< HEAD
-            std::set<std::string> new_whitelist;
-            boost::split(new_whitelist, strWhitelist, boost::is_any_of(", "));
-=======
             std::vector<std::string> whitelist_split = SplitString(strWhitelist, ", ");
             std::set<std::string> new_whitelist{
                 std::make_move_iterator(whitelist_split.begin()),
                 std::make_move_iterator(whitelist_split.end())};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             if (intersect) {
                 std::set<std::string> tmp_whitelist;
                 std::set_intersection(new_whitelist.begin(), new_whitelist.end(),

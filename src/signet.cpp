@@ -1,8 +1,5 @@
-<<<<<<< HEAD
-// Copyright (c) 2019-2020 The DigiByte Core developers
-=======
 // Copyright (c) 2019-2021 The Bitcoin Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// Copyright (c) 2019-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -12,26 +9,12 @@
 #include <cstdint>
 #include <vector>
 
-<<<<<<< HEAD
-=======
 #include <common/system.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <consensus/merkle.h>
 #include <consensus/params.h>
 #include <consensus/validation.h>
 #include <core_io.h>
 #include <hash.h>
-<<<<<<< HEAD
-#include <primitives/block.h>
-#include <primitives/transaction.h>
-#include <span.h>
-#include <script/interpreter.h>
-#include <script/standard.h>
-#include <streams.h>
-#include <util/strencodings.h>
-#include <util/system.h>
-#include <uint256.h>
-=======
 #include <logging.h>
 #include <primitives/block.h>
 #include <primitives/transaction.h>
@@ -40,7 +23,6 @@
 #include <streams.h>
 #include <uint256.h>
 #include <util/strencodings.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 static constexpr uint8_t SIGNET_HEADER[4] = {0xec, 0xc7, 0xda, 0xa2};
 
@@ -57,11 +39,7 @@ static bool FetchAndClearCommitmentSection(const Span<const uint8_t> header, CSc
     std::vector<uint8_t> pushdata;
     while (witness_commitment.GetOp(pc, opcode, pushdata)) {
         if (pushdata.size() > 0) {
-<<<<<<< HEAD
-            if (!found_header && pushdata.size() > (size_t) header.size() && Span<const uint8_t>(pushdata.data(), header.size()) == header) {
-=======
             if (!found_header && pushdata.size() > (size_t)header.size() && Span{pushdata}.first(header.size()) == header) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 // pushdata only counts if it has the header _and_ some data
                 result.insert(result.end(), pushdata.begin() + header.size(), pushdata.end());
                 pushdata.erase(pushdata.begin() + header.size(), pushdata.end());
@@ -121,11 +99,7 @@ std::optional<SignetTxs> SignetTxs::Create(const CBlock& block, const CScript& c
         // no signet solution -- allow this to support OP_TRUE as trivial block challenge
     } else {
         try {
-<<<<<<< HEAD
-            VectorReader v(SER_NETWORK, INIT_PROTO_VERSION, signet_solution, 0);
-=======
             SpanReader v{INIT_PROTO_VERSION, signet_solution};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             v >> tx_spending.vin[0].scriptSig;
             v >> tx_spending.vin[0].scriptWitness.stack;
             if (!v.empty()) return std::nullopt; // extraneous data encountered
@@ -136,11 +110,7 @@ std::optional<SignetTxs> SignetTxs::Create(const CBlock& block, const CScript& c
     uint256 signet_merkle = ComputeModifiedMerkleRoot(modified_cb, block);
 
     std::vector<uint8_t> block_data;
-<<<<<<< HEAD
-    CVectorWriter writer(SER_NETWORK, INIT_PROTO_VERSION, block_data, 0);
-=======
     CVectorWriter writer{INIT_PROTO_VERSION, block_data, 0};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     writer << block.nVersion;
     writer << block.hashPrevBlock;
     writer << signet_merkle;
@@ -172,11 +142,7 @@ bool CheckSignetBlockSolution(const CBlock& block, const Consensus::Params& cons
 
     PrecomputedTransactionData txdata;
     txdata.Init(signet_txs->m_to_sign, {signet_txs->m_to_spend.vout[0]});
-<<<<<<< HEAD
-    TransactionSignatureChecker sigcheck(&signet_txs->m_to_sign, /*nIn=*/ 0, /*amount=*/ signet_txs->m_to_spend.vout[0].nValue, txdata, MissingDataBehavior::ASSERT_FAIL);
-=======
     TransactionSignatureChecker sigcheck(&signet_txs->m_to_sign, /* nInIn= */ 0, /* amountIn= */ signet_txs->m_to_spend.vout[0].nValue, txdata, MissingDataBehavior::ASSERT_FAIL);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     if (!VerifyScript(scriptSig, signet_txs->m_to_spend.vout[0].scriptPubKey, &witness, BLOCK_SCRIPT_VERIFY_FLAGS, sigcheck)) {
         LogPrint(BCLog::VALIDATION, "CheckSignetBlockSolution: Errors in block (block solution invalid)\n");

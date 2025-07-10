@@ -1,9 +1,5 @@
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
 // Copyright (c) 2009-2022 The Bitcoin Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// Copyright (c) 2014-2020 The DigiByte Core developers
 // Copyright (c) 2017 The Zcash developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
@@ -16,10 +12,7 @@
 #include <random.h>
 
 #include <secp256k1.h>
-<<<<<<< HEAD
-=======
 #include <secp256k1_ellswift.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <secp256k1_extrakeys.h>
 #include <secp256k1_recovery.h>
 #include <secp256k1_schnorrsig.h>
@@ -176,21 +169,12 @@ void CKey::MakeNewKey(bool fCompressedIn) {
 
 bool CKey::Negate()
 {
-<<<<<<< HEAD
-    assert(fValid);
-    return secp256k1_ec_seckey_negate(secp256k1_context_sign, keydata.data());
-}
-
-CPrivKey CKey::GetPrivKey() const {
-    assert(fValid);
-=======
     assert(keydata);
     return secp256k1_ec_seckey_negate(secp256k1_context_sign, keydata->data());
 }
 
 CPrivKey CKey::GetPrivKey() const {
     assert(keydata);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     CPrivKey seckey;
     int ret;
     size_t seckeylen;
@@ -261,16 +245,9 @@ bool CKey::VerifyPubKey(const CPubKey& pubkey) const {
         return false;
     }
     unsigned char rnd[8];
-<<<<<<< HEAD
     std::string str = "DigiByte key verification\n";
-    GetRandBytes(rnd, sizeof(rnd));
-    uint256 hash;
-    CHash256().Write(MakeUCharSpan(str)).Write(rnd).Finalize(hash);
-=======
-    std::string str = "Bitcoin key verification\n";
     GetRandBytes(rnd);
     uint256 hash{Hash(str, rnd)};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     std::vector<unsigned char> vchSig;
     Sign(hash, vchSig);
     return pubkey.Verify(hash, vchSig);
@@ -284,11 +261,7 @@ bool CKey::SignCompact(const uint256 &hash, std::vector<unsigned char>& vchSig) 
     secp256k1_ecdsa_recoverable_signature rsig;
     int ret = secp256k1_ecdsa_sign_recoverable(secp256k1_context_sign, &rsig, hash.begin(), begin(), secp256k1_nonce_function_rfc6979, nullptr);
     assert(ret);
-<<<<<<< HEAD
-    ret = secp256k1_ecdsa_recoverable_signature_serialize_compact(secp256k1_context_sign, &vchSig[1], &rec, &sig);
-=======
     ret = secp256k1_ecdsa_recoverable_signature_serialize_compact(secp256k1_context_sign, &vchSig[1], &rec, &rsig);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     assert(ret);
     assert(rec != -1);
     vchSig[0] = 27 + rec + (fCompressed ? 4 : 0);
@@ -303,11 +276,7 @@ bool CKey::SignCompact(const uint256 &hash, std::vector<unsigned char>& vchSig) 
     return true;
 }
 
-<<<<<<< HEAD
-bool CKey::SignSchnorr(const uint256& hash, Span<unsigned char> sig, const uint256* merkle_root, const uint256* aux) const
-=======
 bool CKey::SignSchnorr(const uint256& hash, Span<unsigned char> sig, const uint256* merkle_root, const uint256& aux) const
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     assert(sig.size() == 64);
     secp256k1_keypair keypair;
@@ -318,11 +287,6 @@ bool CKey::SignSchnorr(const uint256& hash, Span<unsigned char> sig, const uint2
         unsigned char pubkey_bytes[32];
         if (!secp256k1_xonly_pubkey_serialize(secp256k1_context_sign, pubkey_bytes, &pubkey)) return false;
         uint256 tweak = XOnlyPubKey(pubkey_bytes).ComputeTapTweakHash(merkle_root->IsNull() ? nullptr : merkle_root);
-<<<<<<< HEAD
-        if (!secp256k1_keypair_xonly_tweak_add(GetVerifyContext(), &keypair, tweak.data())) return false;
-    }
-    bool ret = secp256k1_schnorrsig_sign(secp256k1_context_sign, sig.data(), hash.data(), &keypair, secp256k1_nonce_function_bip340, aux ? (void*)aux->data() : nullptr);
-=======
         if (!secp256k1_keypair_xonly_tweak_add(secp256k1_context_static, &keypair, tweak.data())) return false;
     }
     bool ret = secp256k1_schnorrsig_sign32(secp256k1_context_sign, sig.data(), hash.data(), &keypair, aux.data());
@@ -333,19 +297,14 @@ bool CKey::SignSchnorr(const uint256& hash, Span<unsigned char> sig, const uint2
         ret &= secp256k1_schnorrsig_verify(secp256k1_context_static, sig.data(), hash.begin(), 32, &pubkey_verify);
     }
     if (!ret) memory_cleanse(sig.data(), sig.size());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     memory_cleanse(&keypair, sizeof(keypair));
     return ret;
 }
 
 bool CKey::Load(const CPrivKey &seckey, const CPubKey &vchPubKey, bool fSkipCheck=false) {
-<<<<<<< HEAD
-    if (!ec_seckey_import_der(secp256k1_context_sign, (unsigned char*)begin(), seckey.data(), seckey.size()))
-=======
     MakeKeyData();
     if (!ec_seckey_import_der(secp256k1_context_sign, (unsigned char*)begin(), seckey.data(), seckey.size())) {
         ClearKeyData();
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         return false;
     }
     fCompressed = vchPubKey.IsCompressed();
@@ -369,16 +328,9 @@ bool CKey::Derive(CKey& keyChild, ChainCode &ccChild, unsigned int nChild, const
         BIP32Hash(cc, nChild, 0, begin(), vout.data());
     }
     memcpy(ccChild.begin(), vout.data()+32, 32);
-<<<<<<< HEAD
-    memcpy((unsigned char*)keyChild.begin(), begin(), 32);
-    bool ret = secp256k1_ec_seckey_tweak_add(secp256k1_context_sign, (unsigned char*)keyChild.begin(), vout.data());
-    keyChild.fCompressed = true;
-    keyChild.fValid = ret;
-=======
     keyChild.Set(begin(), begin() + 32, true);
     bool ret = secp256k1_ec_seckey_tweak_add(secp256k1_context_sign, (unsigned char*)keyChild.begin(), vout.data());
     if (!ret) keyChild.ClearKeyData();
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     return ret;
 }
 

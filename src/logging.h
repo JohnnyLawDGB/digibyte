@@ -1,10 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The Bitcoin Core developers
+// Copyright (c) 2009-2022 The Bitcoin Core developers
 // Copyright (c) 2014-2020 The DigiByte Core developers
-=======
-// Copyright (c) 2009-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -13,11 +9,7 @@
 
 #include <threadsafety.h>
 #include <tinyformat.h>
-<<<<<<< HEAD
-#include <threadsafety.h>
-=======
 #include <util/fs.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <util/string.h>
 
 #include <atomic>
@@ -70,18 +62,15 @@ namespace BCLog {
         VALIDATION  = (1 << 21),
         I2P         = (1 << 22),
         IPC         = (1 << 23),
-<<<<<<< HEAD
         DANDELION   = (1 << 24),
-=======
 #ifdef DEBUG_LOCKCONTENTION
-        LOCK        = (1 << 24),
+        LOCK        = (1 << 25),
 #endif
-        UTIL        = (1 << 25),
-        BLOCKSTORAGE = (1 << 26),
-        TXRECONCILIATION = (1 << 27),
-        SCAN        = (1 << 28),
-        TXPACKAGES  = (1 << 29),
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+        UTIL        = (1 << 26),
+        BLOCKSTORAGE = (1 << 27),
+        TXRECONCILIATION = (1 << 28),
+        SCAN        = (1 << 29),
+        TXPACKAGES  = (1 << 30),
         ALL         = ~(uint32_t)0,
     };
     enum class Level {
@@ -138,11 +127,7 @@ namespace BCLog {
         std::atomic<bool> m_reopen_file{false};
 
         /** Send a string to the log output */
-<<<<<<< HEAD
-        void LogPrintStr(const std::string& str, const std::string& logging_function, const std::string& source_file, const int source_line);
-=======
         void LogPrintStr(const std::string& str, const std::string& logging_function, const std::string& source_file, int source_line, BCLog::LogFlags category, BCLog::Level level);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         /** Returns whether logs will be written to any output */
         bool Enabled() const
@@ -197,30 +182,21 @@ namespace BCLog {
         bool DisableCategory(const std::string& str);
 
         bool WillLogCategory(LogFlags category) const;
-<<<<<<< HEAD
-        /** Returns a vector of the log categories */
-        std::vector<LogCategory> LogCategoriesList() const;
-        /** Returns a string with the log categories */
-=======
         bool WillLogCategoryLevel(LogFlags category, Level level) const;
 
         /** Returns a vector of the log categories in alphabetical order. */
         std::vector<LogCategory> LogCategoriesList() const;
         /** Returns a string with the log categories in alphabetical order. */
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         std::string LogCategoriesString() const
         {
             return Join(LogCategoriesList(), ", ", [&](const LogCategory& i) { return i.category; });
         };
-<<<<<<< HEAD
-=======
 
         //! Returns a string with all user-selectable log levels.
         std::string LogLevelsString() const;
 
         //! Returns the string representation of a log level.
         std::string LogLevelToStr(BCLog::Level level) const;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         bool DefaultShrinkDebugFile() const;
     };
@@ -232,11 +208,7 @@ BCLog::Logger& LogInstance();
 /** Return true if log accepts specified category, at the specified level. */
 static inline bool LogAcceptCategory(BCLog::LogFlags category, BCLog::Level level)
 {
-<<<<<<< HEAD
-    return LogInstance().WillLogCategory(category);
-=======
     return LogInstance().WillLogCategoryLevel(category, level);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 /** Return true if str parses as a log category and set the flag */
@@ -247,11 +219,7 @@ bool GetLogCategory(BCLog::LogFlags& flag, const std::string& str);
 // peer can fill up a user's disk with debug.log entries.
 
 template <typename... Args>
-<<<<<<< HEAD
-static inline void LogPrintf_(const std::string& logging_function, const std::string& source_file, const int source_line, const char* fmt, const Args&... args)
-=======
 static inline void LogPrintf_(const std::string& logging_function, const std::string& source_file, const int source_line, const BCLog::LogFlags flag, const BCLog::Level level, const char* fmt, const Args&... args)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     if (LogInstance().Enabled()) {
         std::string log_msg;
@@ -261,23 +229,6 @@ static inline void LogPrintf_(const std::string& logging_function, const std::st
             /* Original format string will have newline so don't add one here */
             log_msg = "Error \"" + std::string(fmterr.what()) + "\" while formatting log message: " + fmt;
         }
-<<<<<<< HEAD
-        LogInstance().LogPrintStr(log_msg, logging_function, source_file, source_line);
-    }
-}
-
-#define LogPrintf(...) LogPrintf_(__func__, __FILE__, __LINE__, __VA_ARGS__)
-
-// Use a macro instead of a function for conditional logging to prevent
-// evaluating arguments when logging for the category is not enabled.
-#define LogPrint(category, ...)              \
-    do {                                     \
-        if (LogAcceptCategory((category))) { \
-            LogPrintf(__VA_ARGS__);          \
-        }                                    \
-    } while (0)
-
-=======
         LogInstance().LogPrintStr(log_msg, logging_function, source_file, source_line, flag, level);
     }
 }
@@ -316,5 +267,4 @@ bool error(const char* fmt, const Args&... args)
     return false;
 }
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #endif // DIGIBYTE_LOGGING_H

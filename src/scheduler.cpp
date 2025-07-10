@@ -1,26 +1,9 @@
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
 // Copyright (c) 2015-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <scheduler.h>
 
-<<<<<<< HEAD
-#include <random.h>
-#include <util/time.h>
-
-#include <assert.h>
-#include <functional>
-#include <utility>
-
-CScheduler::CScheduler()
-{
-}
-=======
 #include <sync.h>
 #include <util/time.h>
 
@@ -29,7 +12,6 @@ CScheduler::CScheduler()
 #include <utility>
 
 CScheduler::CScheduler() = default;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 CScheduler::~CScheduler()
 {
@@ -57,11 +39,7 @@ void CScheduler::serviceQueue()
             // the time of the first item on the queue:
 
             while (!shouldStop() && !taskQueue.empty()) {
-<<<<<<< HEAD
-                std::chrono::system_clock::time_point timeToWaitFor = taskQueue.begin()->first;
-=======
                 std::chrono::steady_clock::time_point timeToWaitFor = taskQueue.begin()->first;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 if (newTaskScheduled.wait_until(lock, timeToWaitFor) == std::cv_status::timeout) {
                     break; // Exit loop after timeout, it means we reached the time of the event
                 }
@@ -90,11 +68,7 @@ void CScheduler::serviceQueue()
     newTaskScheduled.notify_one();
 }
 
-<<<<<<< HEAD
-void CScheduler::schedule(CScheduler::Function f, std::chrono::system_clock::time_point t)
-=======
 void CScheduler::schedule(CScheduler::Function f, std::chrono::steady_clock::time_point t)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     {
         LOCK(newTaskMutex);
@@ -111,11 +85,7 @@ void CScheduler::MockForward(std::chrono::seconds delta_seconds)
         LOCK(newTaskMutex);
 
         // use temp_queue to maintain updated schedule
-<<<<<<< HEAD
-        std::multimap<std::chrono::system_clock::time_point, Function> temp_queue;
-=======
         std::multimap<std::chrono::steady_clock::time_point, Function> temp_queue;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         for (const auto& element : taskQueue) {
             temp_queue.emplace_hint(temp_queue.cend(), element.first - delta_seconds, element.second);
@@ -137,19 +107,11 @@ static void Repeat(CScheduler& s, CScheduler::Function f, std::chrono::milliseco
 
 void CScheduler::scheduleEvery(CScheduler::Function f, std::chrono::milliseconds delta)
 {
-<<<<<<< HEAD
-    scheduleFromNow([=] { Repeat(*this, f, delta); }, delta);
-}
-
-size_t CScheduler::getQueueInfo(std::chrono::system_clock::time_point& first,
-                                std::chrono::system_clock::time_point& last) const
-=======
     scheduleFromNow([this, f, delta] { Repeat(*this, f, delta); }, delta);
 }
 
 size_t CScheduler::getQueueInfo(std::chrono::steady_clock::time_point& first,
                                 std::chrono::steady_clock::time_point& last) const
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     LOCK(newTaskMutex);
     size_t result = taskQueue.size();
@@ -177,11 +139,7 @@ void SingleThreadedSchedulerClient::MaybeScheduleProcessQueue()
         if (m_are_callbacks_running) return;
         if (m_callbacks_pending.empty()) return;
     }
-<<<<<<< HEAD
-    m_pscheduler->schedule(std::bind(&SingleThreadedSchedulerClient::ProcessQueue, this), std::chrono::system_clock::now());
-=======
     m_scheduler.schedule([this] { this->ProcessQueue(); }, std::chrono::steady_clock::now());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 void SingleThreadedSchedulerClient::ProcessQueue()
@@ -217,11 +175,6 @@ void SingleThreadedSchedulerClient::ProcessQueue()
 
 void SingleThreadedSchedulerClient::AddToProcessQueue(std::function<void()> func)
 {
-<<<<<<< HEAD
-    assert(m_pscheduler);
-
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     {
         LOCK(m_callbacks_mutex);
         m_callbacks_pending.emplace_back(std::move(func));
@@ -231,11 +184,7 @@ void SingleThreadedSchedulerClient::AddToProcessQueue(std::function<void()> func
 
 void SingleThreadedSchedulerClient::EmptyQueue()
 {
-<<<<<<< HEAD
-    assert(!m_pscheduler->AreThreadsServicingQueue());
-=======
     assert(!m_scheduler.AreThreadsServicingQueue());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     bool should_continue = true;
     while (should_continue) {
         ProcessQueue();
@@ -246,10 +195,6 @@ void SingleThreadedSchedulerClient::EmptyQueue()
 
 size_t SingleThreadedSchedulerClient::CallbacksPending()
 {
-<<<<<<< HEAD
-    LOCK(m_cs_callbacks_pending);
-=======
     LOCK(m_callbacks_mutex);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     return m_callbacks_pending.size();
 }

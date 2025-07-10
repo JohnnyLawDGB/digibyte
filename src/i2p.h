@@ -1,29 +1,17 @@
-<<<<<<< HEAD
-// Copyright (c) 2020-2020 The DigiByte Core developers
-=======
+// Copyright (c) 2020-2022 The Bitcoin Core developers
 // Copyright (c) 2020-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #ifndef DIGIBYTE_I2P_H
 #define DIGIBYTE_I2P_H
 
-<<<<<<< HEAD
-#include <compat.h>
-#include <fs.h>
-#include <netaddress.h>
-#include <sync.h>
-#include <threadinterrupt.h>
-#include <util/sock.h>
-=======
 #include <compat/compat.h>
 #include <netaddress.h>
 #include <sync.h>
 #include <util/fs.h>
 #include <util/sock.h>
 #include <util/threadinterrupt.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 #include <memory>
 #include <optional>
@@ -84,8 +72,6 @@ public:
             CThreadInterrupt* interrupt);
 
     /**
-<<<<<<< HEAD
-=======
      * Construct a transient session which will generate its own I2P private key
      * rather than read the one from disk (it will not be saved on disk either and
      * will be lost once this object is destroyed). This will not initiate any IO,
@@ -99,7 +85,6 @@ public:
     Session(const CService& control_host, CThreadInterrupt* interrupt);
 
     /**
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
      * Destroy the session, closing the internally used sockets. The sockets that have been
      * returned by `Accept()` or `Connect()` will not be closed, but they will be closed by
      * the SAM proxy because the session is destroyed. So they will return an error next time
@@ -113,11 +98,7 @@ public:
      * to the listening socket and address.
      * @return true on success
      */
-<<<<<<< HEAD
-    bool Listen(Connection& conn);
-=======
     bool Listen(Connection& conn) EXCLUSIVE_LOCKS_REQUIRED(!m_mutex);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     /**
      * Wait for and accept a new incoming connection.
@@ -125,11 +106,7 @@ public:
      * completion the `peer` member will be set to the address of the incoming peer.
      * @return true on success
      */
-<<<<<<< HEAD
-    bool Accept(Connection& conn);
-=======
     bool Accept(Connection& conn) EXCLUSIVE_LOCKS_REQUIRED(!m_mutex);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     /**
      * Connect to an I2P peer.
@@ -140,11 +117,7 @@ public:
      * it is set to `false`. Only set if `false` is returned.
      * @return true on success
      */
-<<<<<<< HEAD
-    bool Connect(const CService& to, Connection& conn, bool& proxy_error);
-=======
     bool Connect(const CService& to, Connection& conn, bool& proxy_error) EXCLUSIVE_LOCKS_REQUIRED(!m_mutex);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 private:
     /**
@@ -213,11 +186,7 @@ private:
     /**
      * Check the control socket for errors and possibly disconnect.
      */
-<<<<<<< HEAD
-    void CheckControlSock();
-=======
     void CheckControlSock() EXCLUSIVE_LOCKS_REQUIRED(!m_mutex);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     /**
      * Generate a new destination with the SAM proxy and set `m_private_key` to it.
@@ -293,10 +262,7 @@ private:
      * ("SESSION CREATE"). With the established session id we later open
      * other connections to the SAM service to accept incoming I2P
      * connections and make outgoing ones.
-<<<<<<< HEAD
-=======
      * If not connected then this unique_ptr will be empty.
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
      * See https://geti2p.net/en/docs/api/samv3
      */
     std::unique_ptr<Sock> m_control_sock GUARDED_BY(m_mutex);
@@ -311,22 +277,15 @@ private:
      * SAM session id.
      */
     std::string m_session_id GUARDED_BY(m_mutex);
-<<<<<<< HEAD
-=======
 
     /**
      * Whether this is a transient session (the I2P private key will not be
      * read or written to disk).
      */
     const bool m_transient;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 };
 
 } // namespace sam
 } // namespace i2p
 
-<<<<<<< HEAD
-#endif /* DIGIBYTE_I2P_H */
-=======
 #endif // DIGIBYTE_I2P_H
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion

@@ -1,8 +1,8 @@
-# DigiByte v8.22 to Bitcoin Core v26.2 Merge Specification
+# DigiByte v8.22.2 to Bitcoin Core v26.2 Merge Specification (Target: DigiByte v8.26)
 
 ## Executive Summary
 
-This specification defines the process for upgrading DigiByte from v8.22 to incorporate Bitcoin Core v26.2 improvements while preserving all DigiByte-specific functionality including multi-algorithm mining, Dandelion++, 15-second blocks, and other unique features. The approach uses pre-conversion to minimize conflicts while ensuring all Bitcoin improvements are captured.
+This specification defines the process for upgrading DigiByte from v8.22.2 to v8.26 (aligned with Bitcoin Core v26.2) while preserving all DigiByte-specific functionality including multi-algorithm mining, Dandelion++, 15-second blocks, and other unique features. The approach uses pre-conversion to minimize conflicts while ensuring all Bitcoin improvements are captured.
 
 ## Why Bitcoin Core v26.2
 
@@ -115,14 +115,17 @@ find . -type f \( -name "*.cpp" -o -name "*.h" \) -print0 | xargs -0 sed -i \
 
 # Step 5: Currency and Network
 echo "Step 5: Converting currency codes and network references..."
-find . -type f \( -name "*.cpp" -o -name "*.h" -o -name "*.py" -o -name "*.md" \) -print0 | xargs -0 sed -i \
+find . -type f \( -name "*.cpp" -o -name "*.h" -o -name "*.py" -o -name "*.md" -o -name "*.txt" -o -name "*.rc" -o -name "*.xml" \) -print0 | xargs -0 sed -i \
     -e 's/\bBTC\b/DGB/g' \
     -e 's/\bbtc\b/dgb/g' \
     -e 's/Bitcoin Core/DigiByte Core/g' \
     -e 's/Bitcoin network/DigiByte network/g' \
     -e 's/bitcoin\.org/digibyte\.org/g' \
     -e 's/bitcoin\.conf/digibyte\.conf/g' \
-    -e 's/\.bitcoin/\.digibyte/g'
+    -e 's/\.bitcoin/\.digibyte/g' \
+    -e 's/Bitcoin/DigiByte/g' \
+    -e 's/bitcoin/digibyte/g' \
+    -e 's/BITCOIN/DIGIBYTE/g'
 
 # Step 6: Update Copyright (ADD DigiByte copyright, KEEP Bitcoin copyright)
 echo "Step 6: Adding DigiByte copyright while preserving Bitcoin copyright..."
@@ -167,8 +170,9 @@ Based on Bitcoin Core v26.2 which includes:
 
 ```bash
 cd /path/to/digibyte
-git checkout v8.22.0
-git checkout -b v8.22-to-v26.2-merge
+git checkout develop
+git pull origin develop
+git checkout -b feature/bitcoin-v26.2-merge
 
 # Add Bitcoin remote
 git remote add bitcoin-v26-2-converted /path/to/bitcoin-v26.2-for-digibyte
@@ -220,6 +224,19 @@ unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHead
     // KEEP: Multi-algo difficulty adjustment
     // ADD: Any new Bitcoin PoW validation improvements
 }
+
+// In src/rpc/blockchain.cpp - PRESERVE getblockreward RPC command
+UniValue getblockreward(const JSONRPCRequest& request)
+{
+    // KEEP: This DigiByte-specific RPC command
+    // Returns current block reward based on 6-period schedule
+}
+
+// In src/rpc/mining.cpp - PRESERVE enhanced RPC commands
+// getmininginfo: Include per-algorithm statistics
+// getdifficulty: Return object with all 5 algorithm difficulties
+// getnetworkhashps: Accept algo parameter
+// generatetoaddress: Accept algo parameter
 ```
 
 ### 3.2 Network Processing (MERGE CAREFULLY - Contains Dandelion)
@@ -381,7 +398,7 @@ Bitcoin v26.2 still uses Autotools:
 
 ```bash
 # Update configure.ac for DigiByte
-sed -i 's/AC_INIT.*$/AC_INIT([DigiByte Core], [8.23.0], [https://github.com/digibyte-core/digibyte/issues], [digibyte], [https://digibyte.org/])/g' configure.ac
+sed -i 's/AC_INIT.*$/AC_INIT([DigiByte Core], [8.26.0], [https://github.com/digibyte-core/digibyte/issues], [digibyte], [https://digibyte.org/])/g' configure.ac
 
 # Ensure all DigiByte crypto libs are included
 # In src/Makefile.am, ensure:
@@ -483,6 +500,7 @@ diff baseline_v8.22.txt merged_v26.2.txt
   - [ ] Skein produces valid blocks
   - [ ] Qubit produces valid blocks
   - [ ] Odocrypt activates at height 9,112,320
+  - [ ] Odocrypt shape-change interval (10 days) functioning
   - [ ] Algorithm cycling works correctly
   - [ ] Per-algo difficulty adjustment works
 
@@ -510,8 +528,11 @@ diff baseline_v8.22.txt merged_v26.2.txt
 
 - [ ] **RPC Compatibility**
   - [ ] getmininginfo shows per-algo stats
-  - [ ] getdifficulty accepts algo parameter
+  - [ ] getdifficulty returns object with all 5 algo difficulties
   - [ ] getblocktemplate works with multi-algo
+  - [ ] getblockreward returns current DGB block reward
+  - [ ] getnetworkhashps accepts algo parameter
+  - [ ] generatetoaddress accepts algo parameter
   - [ ] All DigiByte-specific RPCs functioning
 
 - [ ] **Bitcoin v26.2 Features**
@@ -562,15 +583,15 @@ diff baseline_v8.22.txt merged_v26.2.txt
 
 ```bash
 # Tag before release
-git tag v8.22.0-pre-v26.2-merge
+git tag v8.22.2-pre-v26.2-merge
 
-# Create release branch
-git checkout -b release-8.23.0
+# Create release branch (following GitFlow)
+git checkout -b release/8.26.0
 
 # If critical issues arise:
 git revert <merge-commit>
 # OR
-git checkout v8.22.0-pre-v26.2-merge
+git checkout v8.22.2-pre-v26.2-merge
 ```
 
 ## Phase 8: AssumeUTXO Implementation for DigiByte
@@ -704,11 +725,12 @@ git checkout v8.22.0-pre-v26.2-merge
 ### 2. ALWAYS PRESERVE:
 - All multi-algo mining code
 - All Dandelion++ code
-- All DigiByte-specific RPCs
+- All DigiByte-specific RPCs (including getblockreward)
 - Custom difficulty algorithms (V1-V4)
 - 6-period reward schedule
 - Both Bitcoin AND DigiByte copyrights
 - Genesis block ("USA Today: 10/Jan/2014")
+- Taproot deployment dates (Jan 10, 2025 to Jan 10, 2027)
 
 ### 3. CAREFULLY MERGE:
 - Validation logic (has multi-algo)
@@ -739,15 +761,17 @@ git checkout v8.22.0-pre-v26.2-merge
    - Transaction routing decisions
    - Dandelion-specific timers and flags
 
-3. **Version Numbers**: After merge, update to v8.23.0 to indicate the major upgrade
+3. **Version Numbers**: After merge, update to v8.26.0 to indicate alignment with Bitcoin Core v26.2
 
-4. **Release Notes**: Document all changes, emphasizing:
+4. **Protocol Version**: Maintain DigiByte's protocol version (70018) and update only when necessary for new network features
+
+5. **Release Notes**: Document all changes, emphasizing:
    - AssumeUTXO fast sync capability
    - Bitcoin Core v26.2 improvements
    - Maintained DigiByte features
    - Performance improvements
 
-5. **GUIX Builds**: Ensure GUIX reproducible builds work with all DigiByte modifications
+6. **GUIX Builds**: Ensure GUIX reproducible builds work with all DigiByte modifications
 
 ## Estimated Timeline
 

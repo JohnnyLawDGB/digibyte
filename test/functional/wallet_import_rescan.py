@@ -102,16 +102,6 @@ class Variant(collections.namedtuple("Variant", "call data address_type rescan p
             assert_equal(tx["category"], "receive")
             assert_equal(tx["label"], self.label)
             assert_equal(tx["txid"], txid)
-<<<<<<< HEAD
-            assert_equal(tx["confirmations"], 1 + current_height - confirmation_height)
-            assert "trusted" not in tx
-
-            address, = [ad for ad in addresses if txid in ad["txids"]]
-            assert_equal(address["address"], self.address["address"])
-            assert_equal(address["amount"], self.expected_balance)
-            assert_equal(address["confirmations"], 1 + current_height - confirmation_height)
-=======
-
             # If no confirmation height is given, the tx is still in the
             # mempool.
             confirmations = (1 + current_height - confirmation_height) if confirmation_height else 0
@@ -123,7 +113,6 @@ class Variant(collections.namedtuple("Variant", "call data address_type rescan p
             assert_equal(address["address"], self.address["address"])
             assert_equal(address["amount"], self.amount_received)
             assert_equal(address["confirmations"], confirmations)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             # Verify the transaction is correctly marked watchonly depending on
             # whether the transaction pays to an imported public key or
             # imported private key. The test setup ensures that transaction
@@ -152,17 +141,6 @@ IMPORT_NODES = [ImportNode(*fields) for fields in itertools.product((False, True
 TIMESTAMP_WINDOW = 2 * 60 * 60
 
 AMOUNT_DUST = 0.00000546
-<<<<<<< HEAD
-
-
-def get_rand_amount():
-    r = random.uniform(AMOUNT_DUST, 1)
-    return Decimal(str(round(r, 8)))
-
-
-class ImportRescanTest(DigiByteTestFramework):
-=======
-
 
 def get_rand_amount():
     r = random.uniform(AMOUNT_DUST, 1)
@@ -172,8 +150,6 @@ def get_rand_amount():
 class ImportRescanTest(DigiByteTestFramework):
     def add_options(self, parser):
         self.add_wallet_options(parser, descriptors=False)
-
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     def set_test_params(self):
         self.num_nodes = 2 + len(IMPORT_NODES)
         self.supports_cli = False
@@ -187,18 +163,6 @@ class ImportRescanTest(DigiByteTestFramework):
         for i, import_node in enumerate(IMPORT_NODES, 2):
             if import_node.prune:
                 self.extra_args[i] += ["-prune=1"]
-<<<<<<< HEAD
-
-        self.add_nodes(self.num_nodes, extra_args=self.extra_args)
-
-        # Import keys with pruning disabled
-        self.start_nodes(extra_args=[[]] * self.num_nodes)
-        self.import_deterministic_coinbase_privkeys()
-        self.stop_nodes()
-
-        self.start_nodes()
-=======
-
         self.add_nodes(self.num_nodes, extra_args=self.extra_args)
 
         # Import keys with pruning disabled
@@ -207,7 +171,6 @@ class ImportRescanTest(DigiByteTestFramework):
         self.stop_nodes()
 
         self.start_nodes(extra_args=[["-whitelist=noban@127.0.0.1"]] * self.num_nodes)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         for i in range(1, self.num_nodes):
             self.connect_nodes(i, 0)
 
@@ -217,8 +180,6 @@ class ImportRescanTest(DigiByteTestFramework):
         # each possible type of wallet import RPC.
         last_variants = []
         for i, variant in enumerate(IMPORT_VARIANTS):
-<<<<<<< HEAD
-=======
             if i % 10 == 0:
                 blockhash = self.generate(self.nodes[0], 1)[0]
                 conf_height = self.nodes[0].getblockcount()
@@ -227,7 +188,6 @@ class ImportRescanTest(DigiByteTestFramework):
                     var.confirmation_height = conf_height
                     var.timestamp = timestamp
                 last_variants.clear()
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             variant.label = "label {} {}".format(i, variant)
             variant.address = self.nodes[1].getaddressinfo(self.nodes[1].getnewaddress(
                 label=variant.label,
@@ -236,12 +196,6 @@ class ImportRescanTest(DigiByteTestFramework):
             variant.key = self.nodes[1].dumpprivkey(variant.address["address"])
             variant.initial_amount = get_rand_amount()
             variant.initial_txid = self.nodes[0].sendtoaddress(variant.address["address"], variant.initial_amount)
-<<<<<<< HEAD
-            self.generate(self.nodes[0], 1)  # Generate one block for each send
-            variant.confirmation_height = self.nodes[0].getblockcount()
-            variant.timestamp = self.nodes[0].getblockheader(self.nodes[0].getbestblockhash())["time"]
-
-=======
             last_variants.append(variant)
 
         blockhash = self.generate(self.nodes[0], 1)[0]
@@ -251,8 +205,6 @@ class ImportRescanTest(DigiByteTestFramework):
             var.confirmation_height = conf_height
             var.timestamp = timestamp
         last_variants.clear()
-
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         # Generate a block further in the future (past the rescan window).
         assert_equal(self.nodes[0].getrawmempool(), [])
         set_node_times(
@@ -279,12 +231,6 @@ class ImportRescanTest(DigiByteTestFramework):
 
         # Create new transactions sending to each address.
         for i, variant in enumerate(IMPORT_VARIANTS):
-<<<<<<< HEAD
-            variant.sent_amount = get_rand_amount()
-            variant.sent_txid = self.nodes[0].sendtoaddress(variant.address["address"], variant.sent_amount)
-            self.generate(self.nodes[0], 1)  # Generate one block for each send
-            variant.confirmation_height = self.nodes[0].getblockcount()
-=======
             if i % 10 == 0:
                 blockhash = self.generate(self.nodes[0], 1)[0]
                 conf_height = self.nodes[0].getblockcount() + 1
@@ -292,7 +238,6 @@ class ImportRescanTest(DigiByteTestFramework):
             variant.sent_txid = self.nodes[0].sendtoaddress(variant.address["address"], variant.sent_amount)
             variant.confirmation_height = conf_height
         self.generate(self.nodes[0], 1)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         assert_equal(self.nodes[0].getrawmempool(), [])
         self.sync_all()
@@ -300,12 +245,6 @@ class ImportRescanTest(DigiByteTestFramework):
         # Check the latest results from getbalance and listtransactions.
         for variant in IMPORT_VARIANTS:
             self.log.info('Run check for variant {}'.format(variant))
-<<<<<<< HEAD
-            variant.expected_balance += variant.sent_amount
-            variant.expected_txs += 1
-            variant.check(variant.sent_txid, variant.sent_amount, variant.confirmation_height)
-
-=======
             variant.amount_received += variant.sent_amount
             variant.expected_txs += 1
             variant.check(variant.sent_txid, variant.sent_amount, variant.confirmation_height)
@@ -384,7 +323,6 @@ class ImportRescanTest(DigiByteTestFramework):
                 variant.amount_received = 0
                 variant.expected_txs = 0
                 variant.check()
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 
 if __name__ == "__main__":

@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-<<<<<<< HEAD
-# Copyright (c) 2014-2021 The DigiByte Core developers
-=======
 # Copyright (c) 2014-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test mempool re-org scenarios.
@@ -12,15 +8,6 @@ Test re-org scenarios with a mempool that contains transactions
 that spend (directly or indirectly) coinbase transactions.
 """
 
-<<<<<<< HEAD
-from test_framework.test_framework import DigiByteTestFramework
-from test_framework.util import assert_equal, assert_raises_rpc_error
-from test_framework.wallet import MiniWallet
-from test_framework.blocktools import COINBASE_MATURITY
-
-from time import sleep
-
-=======
 import time
 
 from test_framework.messages import (
@@ -36,7 +23,7 @@ from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import assert_equal, assert_raises_rpc_error
 from test_framework.wallet import MiniWallet
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
 class MempoolCoinbaseTest(DigiByteTestFramework):
     def set_test_params(self):
         self.num_nodes = 2
@@ -125,7 +112,6 @@ class MempoolCoinbaseTest(DigiByteTestFramework):
     def run_test(self):
         self.wallet = MiniWallet(self.nodes[0])
         wallet = self.wallet
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # Start with a 200 block chain
         assert_equal(self.nodes[0].getblockcount(), 200)
@@ -133,10 +119,7 @@ class MempoolCoinbaseTest(DigiByteTestFramework):
         self.log.info("Add 4 coinbase utxos to the miniwallet")
         # Block 76 contains the first spendable coinbase txs.
         first_block = 76
-<<<<<<< HEAD
         wallet.scan_blocks(start=first_block, num=4)
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # Three scenarios for re-orging coinbase spends in the memory pool:
         # 1. Direct coinbase spend  :  spend_1
@@ -150,28 +133,15 @@ class MempoolCoinbaseTest(DigiByteTestFramework):
         utxo_2 = wallet.get_utxo(txid=coinbase_txids[2])
         utxo_3 = wallet.get_utxo(txid=coinbase_txids[3])
         self.log.info("Create three transactions spending from coinbase utxos: spend_1, spend_2, spend_3")
-<<<<<<< HEAD
-        spend_1 = wallet.create_self_transfer(from_node=self.nodes[0], utxo_to_spend=utxo_1)
-        spend_2 = wallet.create_self_transfer(from_node=self.nodes[0], utxo_to_spend=utxo_2)
-        spend_3 = wallet.create_self_transfer(from_node=self.nodes[0], utxo_to_spend=utxo_3)
-=======
         spend_1 = wallet.create_self_transfer(utxo_to_spend=utxo_1)
         spend_2 = wallet.create_self_transfer(utxo_to_spend=utxo_2)
         spend_3 = wallet.create_self_transfer(utxo_to_spend=utxo_3)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         self.log.info("Create another transaction which is time-locked to two blocks in the future")
         utxo = wallet.get_utxo(txid=coinbase_txids[0])
         timelock_tx = wallet.create_self_transfer(
-<<<<<<< HEAD
-            from_node=self.nodes[0],
-            utxo_to_spend=utxo,
-            mempool_valid=False,
-            locktime=self.nodes[0].getblockcount() + 2
-=======
             utxo_to_spend=utxo,
             locktime=self.nodes[0].getblockcount() + 2,
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         )['hex']
 
         self.log.info("Check that the time-locked transaction is too immature to spend")
@@ -186,15 +156,8 @@ class MempoolCoinbaseTest(DigiByteTestFramework):
         assert_raises_rpc_error(-26, 'non-final', self.nodes[0].sendrawtransaction, timelock_tx)
 
         self.log.info("Create spend_2_1 and spend_3_1")
-<<<<<<< HEAD
-        spend_2_utxo = wallet.get_utxo(txid=spend_2['txid'])
-        spend_2_1 = wallet.create_self_transfer(from_node=self.nodes[0], utxo_to_spend=spend_2_utxo)
-        spend_3_utxo = wallet.get_utxo(txid=spend_3['txid'])
-        spend_3_1 = wallet.create_self_transfer(from_node=self.nodes[0], utxo_to_spend=spend_3_utxo)
-=======
         spend_2_1 = wallet.create_self_transfer(utxo_to_spend=spend_2["new_utxo"])
         spend_3_1 = wallet.create_self_transfer(utxo_to_spend=spend_3["new_utxo"])
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         self.log.info("Broadcast and mine spend_3_1")
         spend_3_1_id = self.nodes[0].sendrawtransaction(spend_3_1['hex'])
@@ -221,11 +184,7 @@ class MempoolCoinbaseTest(DigiByteTestFramework):
         assert_equal(set(self.nodes[0].getrawmempool()), {spend_1_id, spend_2_1_id, spend_3_1_id})
 
         self.log.info("Use invalidateblock to re-org back and make all those coinbase spends immature/invalid")
-<<<<<<< HEAD
-        b = self.nodes[0].getblockhash(first_block + COINBASE_MATURITY)
-=======
         b = self.nodes[0].getblockhash(first_block + 100)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         for node in self.nodes:
             node.invalidateblock(b)
 
@@ -233,11 +192,7 @@ class MempoolCoinbaseTest(DigiByteTestFramework):
         assert_equal(set(self.nodes[0].getrawmempool()), set())
         self.sync_all()
 
-<<<<<<< HEAD
-=======
         self.test_reorg_relay()
-
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 if __name__ == '__main__':
     MempoolCoinbaseTest().main()

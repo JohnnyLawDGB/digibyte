@@ -60,13 +60,6 @@ class MempoolPersistTest(DigiByteTestFramework):
         self.skip_if_no_wallet()
 
     def run_test(self):
-<<<<<<< HEAD
-        self.log.debug("Send 5 transactions from node2 (to its own address)")
-        tx_creation_time_lower = int(time.time())
-        for _ in range(5):
-            last_txid = self.nodes[2].sendtoaddress(self.nodes[2].getnewaddress(), Decimal("10"))
-        node2_balance = self.nodes[2].getbalance()
-=======
         self.mini_wallet = MiniWallet(self.nodes[2])
         if self.is_sqlite_compiled():
             self.nodes[2].createwallet(
@@ -85,7 +78,6 @@ class MempoolPersistTest(DigiByteTestFramework):
         if self.is_sqlite_compiled():
             self.nodes[2].syncwithvalidationinterfacequeue()  # Flush mempool to wallet
             node2_balance = wallet_watch.getbalance()
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         self.sync_all()
         tx_creation_time_higher = int(time.time())
 
@@ -106,23 +98,13 @@ class MempoolPersistTest(DigiByteTestFramework):
         assert_equal(total_fee_old, self.nodes[0].getmempoolinfo()['total_fee'])
         assert_equal(total_fee_old, sum(v['fees']['base'] for k, v in self.nodes[0].getrawmempool(verbose=True).items()))
 
-<<<<<<< HEAD
-        tx_creation_time = self.nodes[0].getmempoolentry(txid=last_txid)['time']
-=======
         last_entry = self.nodes[0].getmempoolentry(txid=last_txid)
         tx_creation_time = last_entry['time']
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         assert_greater_than_or_equal(tx_creation_time, tx_creation_time_lower)
         assert_greater_than_or_equal(tx_creation_time_higher, tx_creation_time)
 
         # disconnect nodes & make a txn that remains in the unbroadcast set.
         self.disconnect_nodes(0, 1)
-<<<<<<< HEAD
-        assert(len(self.nodes[0].getpeerinfo()) == 0)
-        assert(len(self.nodes[0].p2ps) == 0)
-        self.nodes[0].sendtoaddress(self.nodes[2].getnewaddress(), Decimal("12"))
-        self.connect_nodes(0, 2)
-=======
         assert_equal(len(self.nodes[0].getpeerinfo()), 0)
         assert_equal(len(self.nodes[0].p2ps), 0)
         self.mini_wallet.send_self_transfer(from_node=self.nodes[0])
@@ -131,7 +113,6 @@ class MempoolPersistTest(DigiByteTestFramework):
         # Create a tx and prioritise but don't submit until after the restart.
         tx_prioritised_not_submitted = self.mini_wallet.create_self_transfer()
         self.nodes[0].prioritisetransaction(txid=tx_prioritised_not_submitted['txid'], fee_delta=9999)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         self.log.debug("Stop-start the nodes. Verify that node0 has the transactions in its mempool and node1 does not. Verify that node2 calculates its balance correctly after loading wallet transactions.")
         self.stop_nodes()
@@ -151,16 +132,11 @@ class MempoolPersistTest(DigiByteTestFramework):
         fees = self.nodes[0].getmempoolentry(txid=last_txid)['fees']
         assert_equal(fees['base'] + Decimal('0.00001000'), fees['modified'])
 
-<<<<<<< HEAD
-        self.log.debug('Verify time is loaded correctly')
-        assert_equal(tx_creation_time, self.nodes[0].getmempoolentry(txid=last_txid)['time'])
-=======
         self.log.debug('Verify all fields are loaded correctly')
         assert_equal(last_entry, self.nodes[0].getmempoolentry(txid=last_txid))
         self.nodes[0].sendrawtransaction(tx_prioritised_not_submitted['hex'])
         entry_prioritised_before_restart = self.nodes[0].getmempoolentry(txid=tx_prioritised_not_submitted['txid'])
         assert_equal(entry_prioritised_before_restart['fees']['base'] + Decimal('0.00009999'), entry_prioritised_before_restart['fees']['modified'])
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # Verify accounting of mempool transactions after restart is correct
         if self.is_sqlite_compiled():
@@ -182,11 +158,7 @@ class MempoolPersistTest(DigiByteTestFramework):
         # start node0 with wallet disabled so wallet transactions don't get resubmitted
         self.log.debug("Stop-start node0 with -persistmempool=0. Verify that it doesn't load its mempool.dat file.")
         self.stop_nodes()
-<<<<<<< HEAD
-        self.start_node(0, extra_args=["-persistmempool=0", "-disablewallet"])
-=======
         self.start_node(0, extra_args=["-persistmempool=0"])
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         assert self.nodes[0].getmempoolinfo()["loaded"]
         assert_equal(len(self.nodes[0].getrawmempool()), 0)
 
@@ -204,36 +176,19 @@ class MempoolPersistTest(DigiByteTestFramework):
         self.stop_nodes()
         self.start_node(0)
         assert self.nodes[0].getmempoolinfo()["loaded"]
-<<<<<<< HEAD
-        assert_equal(len(self.nodes[0].getrawmempool()), 6)
-
-        mempooldat0 = os.path.join(self.nodes[0].datadir, self.chain, 'mempool.dat')
-        mempooldat1 = os.path.join(self.nodes[1].datadir, self.chain, 'mempool.dat')
-=======
         assert_equal(len(self.nodes[0].getrawmempool()), 7)
-
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         self.log.debug("Remove the mempool.dat file. Verify that savemempool to disk via RPC re-creates it")
         os.remove(mempooldat0)
         result0 = self.nodes[0].savemempool()
         assert os.path.isfile(mempooldat0)
         assert_equal(result0['filename'], mempooldat0)
 
-<<<<<<< HEAD
-        self.log.debug("Stop nodes, make node1 use mempool.dat from node0. Verify it has 6 transactions")
-        os.rename(mempooldat0, mempooldat1)
-        self.stop_nodes()
-        self.start_node(1, extra_args=["-persistmempool=1"])
-        assert self.nodes[1].getmempoolinfo()["loaded"]
-        assert_equal(len(self.nodes[1].getrawmempool()), 6)
-=======
         self.log.debug("Stop nodes, make node1 use mempool.dat from node0. Verify it has 7 transactions")
         os.rename(mempooldat0, mempooldat1)
         self.stop_nodes()
         self.start_node(1, extra_args=["-persistmempool"])
         assert self.nodes[1].getmempoolinfo()["loaded"]
         assert_equal(len(self.nodes[1].getrawmempool()), 7)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         self.log.debug("Prevent digibyted from writing mempool.dat to disk. Verify that `savemempool` fails")
         # to test the exception we are creating a tmp folder called mempool.dat.new
@@ -243,34 +198,6 @@ class MempoolPersistTest(DigiByteTestFramework):
         assert_raises_rpc_error(-1, "Unable to dump mempool to disk", self.nodes[1].savemempool)
         os.rmdir(mempooldotnew1)
 
-<<<<<<< HEAD
-        self.test_persist_unbroadcast()
-
-    def test_persist_unbroadcast(self):
-        node0 = self.nodes[0]
-        self.start_node(0)
-        
-        # clear out mempool
-        self.generate(node0, 1, sync_fun=self.no_op)
-
-        # ensure node0 doesn't have any connections
-        # make a transaction that will remain in the unbroadcast set
-        assert(len(node0.getpeerinfo()) == 0)
-        assert(len(node0.p2ps) == 0)
-        node0.sendtoaddress(self.nodes[1].getnewaddress(), Decimal("12"))
-
-        # shutdown, then startup with wallet disabled
-        self.stop_nodes()
-        self.start_node(0, extra_args=["-disablewallet"])
-
-        # check that txn gets broadcast due to unbroadcast logic
-        conn = node0.add_p2p_connection(P2PTxInvStore())
-        node0.mockscheduler(16*60) # 15 min + 1 for buffer
-        self.wait_until(lambda: len(conn.get_invs()) == 1)
-
-if __name__ == '__main__':
-    MempoolPersistTest().main()
-=======
         self.test_importmempool_union()
         self.test_persist_unbroadcast()
 
@@ -339,4 +266,3 @@ if __name__ == '__main__':
 
 if __name__ == "__main__":
     MempoolPersistTest().main()
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion

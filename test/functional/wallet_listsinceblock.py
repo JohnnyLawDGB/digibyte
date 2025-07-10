@@ -30,9 +30,6 @@ class ListSinceBlockTest(DigiByteTestFramework):
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()
 
-    def skip_test_if_missing_module(self):
-        self.skip_if_no_wallet()
-
     def run_test(self):
         # All nodes are in IBD from genesis, so they'll need the miner (node2) to be an outbound connection, or have
         # only one connection. (See fPreferredDownload in net_processing)
@@ -203,15 +200,8 @@ class ListSinceBlockTest(DigiByteTestFramework):
         self.sync_all()
 
         # share utxo between nodes[1] and nodes[2]
-<<<<<<< HEAD
-        eckey = ECKey()
-        eckey.generate()
-        privkey = bytes_to_wif(eckey.get_bytes())
-        address = key_to_p2wpkh(eckey.get_pubkey().get_bytes())
-=======
         privkey, pubkey = generate_keypair(wif=True)
         address = key_to_p2wpkh(pubkey)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         self.nodes[2].sendtoaddress(address, 10)
         self.generate(self.nodes[2], 6)
         self.nodes[2].importprivkey(privkey)
@@ -363,17 +353,10 @@ class ListSinceBlockTest(DigiByteTestFramework):
         dest_address = spending_node.getnewaddress()
 
         tx_input = dict(
-<<<<<<< HEAD
-            sequence=BIP125_SEQUENCE_NUMBER, **next(u for u in spending_node.listunspent()))
-        rawtx = spending_node.createrawtransaction(
-            [tx_input], {dest_address: tx_input["amount"] - Decimal("0.0052300"),
-                         spending_node.getrawchangeaddress(): Decimal("0.0050000")})
-=======
             sequence=MAX_BIP125_RBF_SEQUENCE, **next(u for u in spending_node.listunspent()))
         rawtx = spending_node.createrawtransaction(
             [tx_input], {dest_address: tx_input["amount"] - Decimal("0.00051000"),
                          spending_node.getrawchangeaddress(): Decimal("0.00050000")})
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         signedtx = spending_node.signrawtransactionwithwallet(rawtx)
         orig_tx_id = spending_node.sendrawtransaction(signedtx["hex"])
         original_tx = spending_node.gettransaction(orig_tx_id)
@@ -407,8 +390,6 @@ class ListSinceBlockTest(DigiByteTestFramework):
         assert_equal(original_found, False)
         assert_equal(double_found, False)
 
-<<<<<<< HEAD
-=======
     def test_desc(self):
         """Make sure we can track coins by descriptor."""
         self.log.info("Test descriptor lookup by scriptPubKey.")
@@ -496,6 +477,5 @@ class ListSinceBlockTest(DigiByteTestFramework):
                 assert_equal(new_addr_transactions[0]["address"], new_addr)
 
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 if __name__ == '__main__':
     ListSinceBlockTest().main()

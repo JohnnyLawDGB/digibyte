@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-<<<<<<< HEAD
-# Copyright (c) 2014-2019 The Bitcoin Core developers
-# Copyright (c) 2019-2022 The DigiByte Core developers
-=======
 # Copyright (c) 2014-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test the REST API."""
@@ -16,14 +11,10 @@ import json
 import typing
 import urllib.parse
 
-<<<<<<< HEAD
-=======
-
 from test_framework.messages import (
     BLOCK_HEADER_SIZE,
     COIN,
 )
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import (
     assert_equal,
@@ -41,7 +32,6 @@ INVALID_PARAM = "abc"
 UNKNOWN_PARAM = "0000000000000000000000000000000000000000000000000000000000000000"
 
 
-from test_framework.messages import BLOCK_HEADER_SIZE
 
 class ReqType(Enum):
     JSON = 1
@@ -61,19 +51,11 @@ def filter_output_indices_by_value(vouts, value):
 class RESTTest (DigiByteTestFramework):
     def set_test_params(self):
         self.num_nodes = 2
-<<<<<<< HEAD
-        self.extra_args = [["-rest"], []]
-        self.supports_cli = False
-
-    def skip_test_if_missing_module(self):
-        self.skip_if_no_wallet()
-=======
         self.extra_args = [["-rest", "-blockfilterindex=1"], []]
         # whitelist peers to speed up tx relay / mempool sync
         for args in self.extra_args:
             args.append("-whitelist=noban@127.0.0.1")
         self.supports_cli = False
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     def test_rest_request(
             self,
@@ -112,33 +94,6 @@ class RESTTest (DigiByteTestFramework):
 
     def run_test(self):
         self.url = urllib.parse.urlparse(self.nodes[0].url)
-<<<<<<< HEAD
-        self.log.info("Mine blocks and send DigiByte to node 1")
-
-        # Random address so node1's balance doesn't increase
-        not_related_address = "snN9ajB2PWvKU9hMJjvUpEzxA86hmVBmQD"
-
-        self.generate(self.nodes[0], 1)
-        self.sync_all()
-        self.generatetoaddress(self.nodes[1], 100, not_related_address)
-        self.sync_all()
-
-        assert_equal(self.nodes[0].getbalance(), 72000)
-
-        txid = self.nodes[0].sendtoaddress(self.nodes[1].getnewaddress(), 0.1)
-        self.sync_all()
-
-        self.log.info("Test the /tx URI")
-
-        json_obj = self.test_rest_request(f"/tx/{txid}")
-        assert_equal(json_obj['txid'], txid)
-
-        # Check hex format response
-        hex_response = self.test_rest_request(f"/tx/{txid}", req_type=ReqType.HEX, ret_type=RetType.OBJ)
-        assert_greater_than_or_equal(int(hex_response.getheader('content-length')),
-                                     json_obj['size']*2)
-
-=======
         self.wallet = MiniWallet(self.nodes[0])
 
         self.log.info("Broadcast test transaction and sync nodes")
@@ -155,7 +110,7 @@ class RESTTest (DigiByteTestFramework):
         assert_greater_than_or_equal(int(hex_response.getheader('content-length')),
                                      json_obj['size']*2)
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
         spent = (json_obj['vin'][0]['txid'], json_obj['vin'][0]['vout'])  # get the vin to later check for utxo (should be spent by then)
         # get n of 0.1 outpoint
         n, = filter_output_indices_by_value(json_obj['vout'], Decimal('0.1'))
@@ -169,16 +124,8 @@ class RESTTest (DigiByteTestFramework):
 
         self.log.info("Query an unspent TXO using the /getutxos URI")
 
-<<<<<<< HEAD
-        self.generatetoaddress(self.nodes[1], 1, not_related_address)
-        self.sync_all()
-        bb_hash = self.nodes[0].getbestblockhash()
-
-        assert_equal(self.nodes[1].getbalance(), Decimal("0.1"))
-=======
         self.generate(self.wallet, 1)
         bb_hash = self.nodes[0].getbestblockhash()
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # Check chainTip response
         json_obj = self.test_rest_request(f"/getutxos/{spending[0]}-{spending[1]}")
@@ -213,20 +160,11 @@ class RESTTest (DigiByteTestFramework):
         bin_request = b'\x01\x02'
         for txid, n in [spending, spent]:
             bin_request += bytes.fromhex(txid)
-<<<<<<< HEAD
-            bin_request += pack("i", n)
-
-        bin_response = self.test_rest_request("/getutxos", http_method='POST', req_type=ReqType.BIN, body=bin_request, ret_type=RetType.BYTES)
-        output = BytesIO(bin_response)
-        chain_height, = unpack("<i", output.read(4))
-        response_hash = output.read(32)[::-1].hex()
-=======
             bin_request += n.to_bytes(4, 'little')
 
         bin_response = self.test_rest_request("/getutxos", http_method='POST', req_type=ReqType.BIN, body=bin_request, ret_type=RetType.BYTES)
         chain_height = int.from_bytes(bin_response[0:4], 'little')
         response_hash = bin_response[4:36][::-1].hex()
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         assert_equal(bb_hash, response_hash)  # check if getutxo's chaintip during calculation was fine
         assert_equal(chain_height, 201)  # chain height must be 201 (pre-mined chain [200] + generated block [1])
@@ -237,11 +175,7 @@ class RESTTest (DigiByteTestFramework):
         # found with or without /checkmempool.
 
         # do a tx and don't sync
-<<<<<<< HEAD
-        txid = self.nodes[0].sendtoaddress(self.nodes[1].getnewaddress(), 0.1)
-=======
         txid = self.wallet.send_to(from_node=self.nodes[0], scriptPubKey=getnewdestination()[1], amount=int(0.1 * COIN))["txid"]
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         json_obj = self.test_rest_request(f"/tx/{txid}")
         # get the spent output to later check for utxo (should be spent by then)
         spent = (json_obj['vin'][0]['txid'], json_obj['vin'][0]['vout'])
@@ -282,20 +216,6 @@ class RESTTest (DigiByteTestFramework):
         self.test_rest_request(f"/getutxos/checkmempool/{long_uri}", http_method='POST', status=200)
 
         self.generate(self.nodes[0], 1)  # generate block to not affect upcoming tests
-<<<<<<< HEAD
-        self.sync_all()
-
-        self.log.info("Test the /block, /blockhashbyheight and /headers URIs")
-        bb_hash = self.nodes[0].getbestblockhash()
-
-        # Check result if block does not exists
-        assert_equal(self.test_rest_request('/headers/1/0000000000000000000000000000000000000000000000000000000000000000'), [])
-        self.test_rest_request('/block/0000000000000000000000000000000000000000000000000000000000000000', status=404, ret_type=RetType.OBJ)
-
-        # Check result if block is not in the active chain
-        self.nodes[0].invalidateblock(bb_hash)
-        assert_equal(self.test_rest_request(f'/headers/1/{bb_hash}'), [])
-=======
 
         self.log.info("Test the /block, /blockhashbyheight, /headers, and /blockfilterheaders URIs")
         bb_hash = self.nodes[0].getbestblockhash()
@@ -307,7 +227,6 @@ class RESTTest (DigiByteTestFramework):
         # Check result if block is not in the active chain
         self.nodes[0].invalidateblock(bb_hash)
         assert_equal(self.test_rest_request(f'/headers/{bb_hash}', query_params={'count': 1}), [])
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         self.test_rest_request(f'/block/{bb_hash}')
         self.nodes[0].reconsiderblock(bb_hash)
 
@@ -317,11 +236,7 @@ class RESTTest (DigiByteTestFramework):
         response_bytes = response.read()
 
         # Compare with block header
-<<<<<<< HEAD
-        response_header = self.test_rest_request(f"/headers/1/{bb_hash}", req_type=ReqType.BIN, ret_type=RetType.OBJ)
-=======
         response_header = self.test_rest_request(f"/headers/{bb_hash}", req_type=ReqType.BIN, ret_type=RetType.OBJ, query_params={"count": 1})
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         assert_equal(int(response_header.getheader('content-length')), BLOCK_HEADER_SIZE)
         response_header_bytes = response_header.read()
         assert_equal(response_bytes[:BLOCK_HEADER_SIZE], response_header_bytes)
@@ -333,11 +248,7 @@ class RESTTest (DigiByteTestFramework):
         assert_equal(response_bytes.hex().encode(), response_hex_bytes)
 
         # Compare with hex block header
-<<<<<<< HEAD
-        response_header_hex = self.test_rest_request(f"/headers/1/{bb_hash}", req_type=ReqType.HEX, ret_type=RetType.OBJ)
-=======
         response_header_hex = self.test_rest_request(f"/headers/{bb_hash}", req_type=ReqType.HEX, ret_type=RetType.OBJ, query_params={"count": 1})
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         assert_greater_than(int(response_header_hex.getheader('content-length')), BLOCK_HEADER_SIZE*2)
         response_header_hex_bytes = response_header_hex.read(BLOCK_HEADER_SIZE*2)
         assert_equal(response_bytes[:BLOCK_HEADER_SIZE].hex().encode(), response_header_hex_bytes)
@@ -355,13 +266,8 @@ class RESTTest (DigiByteTestFramework):
         assert_equal(blockhash, bb_hash)
 
         # Check invalid blockhashbyheight requests
-<<<<<<< HEAD
-        resp = self.test_rest_request("/blockhashbyheight/abc", ret_type=RetType.OBJ, status=400)
-        assert_equal(resp.read().decode('utf-8').rstrip(), "Invalid height: abc")
-=======
         resp = self.test_rest_request(f"/blockhashbyheight/{INVALID_PARAM}", ret_type=RetType.OBJ, status=400)
         assert_equal(resp.read().decode('utf-8').rstrip(), f"Invalid height: {INVALID_PARAM}")
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         resp = self.test_rest_request("/blockhashbyheight/1000000", ret_type=RetType.OBJ, status=404)
         assert_equal(resp.read().decode('utf-8').rstrip(), "Block height out of range")
         resp = self.test_rest_request("/blockhashbyheight/-1", ret_type=RetType.OBJ, status=400)
@@ -369,11 +275,7 @@ class RESTTest (DigiByteTestFramework):
         self.test_rest_request("/blockhashbyheight/", ret_type=RetType.OBJ, status=400)
 
         # Compare with json block header
-<<<<<<< HEAD
-        json_obj = self.test_rest_request(f"/headers/1/{bb_hash}")
-=======
         json_obj = self.test_rest_request(f"/headers/{bb_hash}", query_params={"count": 1})
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         assert_equal(len(json_obj), 1)  # ensure that there is one header in the json response
         assert_equal(json_obj[0]['hash'], bb_hash)  # request/response hash should be the same
 
@@ -389,24 +291,17 @@ class RESTTest (DigiByteTestFramework):
 
         # See if we can get 5 headers in one response
         self.generate(self.nodes[1], 5)
-<<<<<<< HEAD
-        self.sync_all()
-        json_obj = self.test_rest_request(f"/headers/5/{bb_hash}")
-=======
         expected_filter = {
             'basic block filter index': {'synced': True, 'best_block_height': 208},
         }
         self.wait_until(lambda: self.nodes[0].getindexinfo() == expected_filter)
         json_obj = self.test_rest_request(f"/headers/{bb_hash}", query_params={"count": 5})
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         assert_equal(len(json_obj), 5)  # now we should have 5 header objects
         json_obj = self.test_rest_request(f"/blockfilterheaders/basic/{bb_hash}", query_params={"count": 5})
         first_filter_header = json_obj[0]
         assert_equal(len(json_obj), 5)  # now we should have 5 filter header objects
         json_obj = self.test_rest_request(f"/blockfilter/basic/{bb_hash}")
 
-<<<<<<< HEAD
-=======
         # Compare with normal RPC blockfilter response
         rpc_blockfilter = self.nodes[0].getblockfilter(bb_hash)
         assert_equal(first_filter_header, rpc_blockfilter['header'])
@@ -425,7 +320,7 @@ class RESTTest (DigiByteTestFramework):
                 self.test_rest_request(f"/headers/{bb_hash}", ret_type=RetType.BYTES, status=400, query_params={"count": num}),
             )
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
         self.log.info("Test tx inclusion in the /mempool and /block URIs")
 
         # Make 3 chained txs and mine them on node 1

@@ -45,7 +45,6 @@ class MempoolPackagesTest(DigiByteTestFramework):
         self.wallet.rescan_utxos()
 
         peer_inv_store = self.nodes[0].add_p2p_connection(P2PTxInvStore()) # keep track of invs
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # DEFAULT_ANCESTOR_LIMIT transactions off a confirmed tx should be fine
         chain = self.wallet.create_self_transfer_chain(chain_length=DEFAULT_ANCESTOR_LIMIT)
@@ -70,11 +69,6 @@ class MempoolPackagesTest(DigiByteTestFramework):
         descendant_fees = 0
         descendant_vsize = 0
 
-<<<<<<< HEAD
-        ancestor_vsize = sum([mempool[tx]['vsize'] for tx in mempool])
-        ancestor_count = MAX_ANCESTORS
-        ancestor_fees = sum([mempool[tx]['fee'] for tx in mempool])
-=======
         assert_equal(ancestor_vsize, sum([mempool[tx]['vsize'] for tx in mempool]))
         ancestor_count = DEFAULT_ANCESTOR_LIMIT
         assert_equal(ancestor_fees, sum([mempool[tx]['fees']['base'] for tx in mempool]))
@@ -82,7 +76,6 @@ class MempoolPackagesTest(DigiByteTestFramework):
         # Adding one more transaction on to the chain should fail.
         next_hop = self.wallet.create_self_transfer(utxo_to_spend=chain[-1]["new_utxo"])["hex"]
         assert_raises_rpc_error(-26, "too-long-mempool-chain", lambda: self.nodes[0].sendrawtransaction(next_hop))
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         descendants = []
         ancestors = [t["txid"] for t in chain]
@@ -99,25 +92,6 @@ class MempoolPackagesTest(DigiByteTestFramework):
                 assert_equal(spending_result, [ {'txid' : tx_in["txid"], 'vout' : tx_in["vout"], 'spendingtxid' : x} ])
 
             # Check that the descendant calculations are correct
-<<<<<<< HEAD
-            assert_equal(mempool[x]['descendantcount'], descendant_count)
-            descendant_fees += mempool[x]['fee']
-            assert_equal(mempool[x]['modifiedfee'], mempool[x]['fee'])
-            assert_equal(mempool[x]['fees']['base'], mempool[x]['fee'])
-            assert_equal(mempool[x]['fees']['modified'], mempool[x]['modifiedfee'])
-            assert_equal(mempool[x]['descendantfees'], descendant_fees * COIN)
-            assert_equal(mempool[x]['fees']['descendant'], descendant_fees)
-            descendant_vsize += mempool[x]['vsize']
-            assert_equal(mempool[x]['descendantsize'], descendant_vsize)
-            descendant_count += 1
-
-            # Check that ancestor calculations are correct
-            assert_equal(mempool[x]['ancestorcount'], ancestor_count)
-            assert_equal(mempool[x]['ancestorfees'], ancestor_fees * COIN)
-            assert_equal(mempool[x]['ancestorsize'], ancestor_vsize)
-            ancestor_vsize -= mempool[x]['vsize']
-            ancestor_fees -= mempool[x]['fee']
-=======
             assert_equal(entry['descendantcount'], descendant_count)
             descendant_fees += entry['fees']['base']
             assert_equal(entry['fees']['modified'], entry['fees']['base'])
@@ -132,7 +106,6 @@ class MempoolPackagesTest(DigiByteTestFramework):
             assert_equal(entry['ancestorsize'], ancestor_vsize)
             ancestor_vsize -= entry['vsize']
             ancestor_fees -= entry['fees']['base']
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             ancestor_count -= 1
 
             # Check that parent/child list is correct
@@ -195,26 +168,13 @@ class MempoolPackagesTest(DigiByteTestFramework):
 
         descendant_fees = 0
         for x in reversed(chain):
-<<<<<<< HEAD
-            descendant_fees += mempool[x]['fee']
-            assert_equal(mempool[x]['fees']['descendant'], descendant_fees + Decimal('0.00001'))
-            assert_equal(mempool[x]['descendantfees'], descendant_fees * COIN + 1000)
-
-        # Adding one more transaction on to the chain should fail.
-        assert_raises_rpc_error(-26, "too-long-mempool-chain", chain_transaction, self.nodes[0], [txid], [vout], value, fee, 1)
-=======
             entry = self.nodes[0].getmempoolentry(x)
             descendant_fees += entry['fees']['base']
             assert_equal(entry['fees']['descendant'], descendant_fees + Decimal('0.00001'))
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # Check that prioritising a tx before it's added to the mempool works
         # First clear the mempool by mining a block.
         self.generate(self.nodes[0], 1)
-<<<<<<< HEAD
-        self.sync_blocks()
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         assert_equal(len(self.nodes[0].getrawmempool()), 0)
         # Prioritise a transaction that has been mined, then add it back to the
         # mempool by using invalidateblock.
@@ -235,15 +195,9 @@ class MempoolPackagesTest(DigiByteTestFramework):
         # Check that node1's mempool is as expected (-> custom ancestor limit)
         mempool0 = self.nodes[0].getrawmempool(False)
         mempool1 = self.nodes[1].getrawmempool(False)
-<<<<<<< HEAD
-        assert_equal(len(mempool1), MAX_ANCESTORS_CUSTOM)
-        assert set(mempool1).issubset(set(mempool0))
-        for tx in chain[:MAX_ANCESTORS_CUSTOM]:
-=======
         assert_equal(len(mempool1), CUSTOM_ANCESTOR_LIMIT)
         assert set(mempool1).issubset(set(mempool0))
         for tx in chain[:CUSTOM_ANCESTOR_LIMIT]:
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             assert tx in mempool1
         # TODO: more detailed check of node1's mempool (fees etc.)
         # check transaction unbroadcast info (should be false if in both mempools)
@@ -257,29 +211,16 @@ class MempoolPackagesTest(DigiByteTestFramework):
 
         tx_children = []
         # First create one parent tx with 10 children
-<<<<<<< HEAD
-        (txid, sent_value) = chain_transaction(self.nodes[0], [txid], [vout], value, fee, 10)
-        parent_transaction = txid
-        for i in range(10):
-            transaction_package.append({'txid': txid, 'vout': i, 'amount': sent_value})
-
-        # Sign and send up to MAX_DESCENDANT transactions chained off the parent tx
-        chain = [] # save sent txs for the purpose of checking node1's mempool later (see below)
-        for _ in range(MAX_DESCENDANTS - 1):
-            utxo = transaction_package.pop(0)
-            (txid, sent_value) = chain_transaction(self.nodes[0], [utxo['txid']], [utxo['vout']], utxo['amount'], fee, 10)
-=======
         tx_with_children = self.wallet.send_self_transfer_multi(from_node=self.nodes[0], num_outputs=10)
         parent_transaction = tx_with_children["txid"]
         transaction_package = tx_with_children["new_utxos"]
 
-        # Sign and send up to MAX_DESCENDANT transactions chained off the parent tx
+        # Sign and send up to DEFAULT_DESCENDANT_LIMIT transactions chained off the parent tx
         chain = [] # save sent txs for the purpose of checking node1's mempool later (see below)
         for _ in range(DEFAULT_DESCENDANT_LIMIT - 1):
             utxo = transaction_package.pop(0)
             new_tx = self.wallet.send_self_transfer_multi(from_node=self.nodes[0], num_outputs=10, utxos_to_spend=[utxo])
             txid = new_tx["txid"]
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             chain.append(txid)
             if utxo['txid'] is parent_transaction:
                 tx_children.append(txid)
@@ -293,38 +234,22 @@ class MempoolPackagesTest(DigiByteTestFramework):
             assert_equal(mempool[child]['depends'], [parent_transaction])
 
         # Sending one more chained transaction will fail
-<<<<<<< HEAD
-        utxo = transaction_package.pop(0)
-        assert_raises_rpc_error(-26, "too-long-mempool-chain", chain_transaction, self.nodes[0], [utxo['txid']], [utxo['vout']], utxo['amount'], fee, 10)
-=======
         next_hop = self.wallet.create_self_transfer(utxo_to_spend=transaction_package.pop(0))["hex"]
         assert_raises_rpc_error(-26, "too-long-mempool-chain", lambda: self.nodes[0].sendrawtransaction(next_hop))
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # Check that node1's mempool is as expected, containing:
         # - txs from previous ancestor test (-> custom ancestor limit)
         # - parent tx for descendant test
         # - txs chained off parent tx (-> custom descendant limit)
-<<<<<<< HEAD
-        self.wait_until(lambda: len(self.nodes[1].getrawmempool(False)) ==
-                                MAX_ANCESTORS_CUSTOM + 1 + MAX_DESCENDANTS_CUSTOM, timeout=10)
-=======
         self.wait_until(lambda: len(self.nodes[1].getrawmempool()) ==
                                 CUSTOM_ANCESTOR_LIMIT + 1 + CUSTOM_DESCENDANT_LIMIT, timeout=10)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         mempool0 = self.nodes[0].getrawmempool(False)
         mempool1 = self.nodes[1].getrawmempool(False)
         assert set(mempool1).issubset(set(mempool0))
         assert parent_transaction in mempool1
-<<<<<<< HEAD
-        for tx in chain[:MAX_DESCENDANTS_CUSTOM]:
-            assert tx in mempool1
-        for tx in chain[MAX_DESCENDANTS_CUSTOM:]:
-=======
         for tx in chain[:CUSTOM_DESCENDANT_LIMIT]:
             assert tx in mempool1
         for tx in chain[CUSTOM_DESCENDANT_LIMIT:]:
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             assert tx not in mempool1
         # TODO: more detailed check of node1's mempool (fees etc.)
 
@@ -333,10 +258,6 @@ class MempoolPackagesTest(DigiByteTestFramework):
         # Test reorg handling
         # First, the basics:
         self.generate(self.nodes[0], 1)
-<<<<<<< HEAD
-        self.sync_blocks()
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         self.nodes[1].invalidateblock(self.nodes[0].getbestblockhash())
         self.nodes[1].reconsiderblock(self.nodes[0].getbestblockhash())
 
@@ -354,45 +275,6 @@ class MempoolPackagesTest(DigiByteTestFramework):
         # last block.
 
         # Create tx0 with 2 outputs
-<<<<<<< HEAD
-        utxo = self.nodes[0].listunspent()
-        txid = utxo[0]['txid']
-        value = utxo[0]['amount']
-        vout = utxo[0]['vout']
-
-        send_value = satoshi_round((value - fee)/2)
-        inputs = [ {'txid' : txid, 'vout' : vout} ]
-        outputs = {}
-        for _ in range(2):
-            outputs[self.nodes[0].getnewaddress()] = send_value
-        rawtx = self.nodes[0].createrawtransaction(inputs, outputs)
-        signedtx = self.nodes[0].signrawtransactionwithwallet(rawtx)
-        txid = self.nodes[0].sendrawtransaction(signedtx['hex'])
-        tx0_id = txid
-        value = send_value
-
-        # Create tx1
-        tx1_id, _ = chain_transaction(self.nodes[0], [tx0_id], [0], value, fee, 1)
-
-        # Create tx2-7
-        vout = 1
-        txid = tx0_id
-        for _ in range(6):
-            (txid, sent_value) = chain_transaction(self.nodes[0], [txid], [vout], value, fee, 1)
-            vout = 0
-            value = sent_value
-
-        # Mine these in a block
-        self.generate(self.nodes[0], 1)
-        self.sync_all()
-
-        # Now generate tx8, with a big fee
-        inputs = [ {'txid' : tx1_id, 'vout': 0}, {'txid' : txid, 'vout': 0} ]
-        outputs = { self.nodes[0].getnewaddress() : send_value + value - 4*fee }
-        rawtx = self.nodes[0].createrawtransaction(inputs, outputs)
-        signedtx = self.nodes[0].signrawtransactionwithwallet(rawtx)
-        txid = self.nodes[0].sendrawtransaction(signedtx['hex'])
-=======
         tx0 = self.wallet.send_self_transfer_multi(from_node=self.nodes[0], num_outputs=2)
 
         # Create tx1
@@ -406,7 +288,6 @@ class MempoolPackagesTest(DigiByteTestFramework):
 
         # Now generate tx8, with a big fee
         self.wallet.send_self_transfer_multi(from_node=self.nodes[0], utxos_to_spend=[tx1["new_utxo"], tx7["new_utxo"]], fee_per_output=40000)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         self.sync_mempools()
 
         # Now try to disconnect the tip on each node...

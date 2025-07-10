@@ -40,16 +40,10 @@
             "value": 0.18000000,
             "n": 0,
             "scriptPubKey": {
-<<<<<<< HEAD
                 "asm": "OP_DUP OP_HASH160 40c8bdd15b97de751acfc7cfac89bf305e858aca OP_EQUALVERIFY OP_CHECKSIG",
+                "desc": "addr(DB3eGJECruhgXkb9P9iW25bqZ8Q8z6FBQq)#checksum",
                 "hex": "76a91440c8bdd15b97de751acfc7cfac89bf305e858aca88ac",
                 "address": "DB3eGJECruhgXkb9P9iW25bqZ8Q8z6FBQq",
-=======
-                "asm": "OP_DUP OP_HASH160 1fc11f39be1729bf973a7ab6a615ca4729d64574 OP_EQUALVERIFY OP_CHECKSIG",
-                "desc": "addr(13tuJJDR2RgArmgfv6JScSdreahzgc4T6o)#ztmwxg4c",
-                "hex": "76a9141fc11f39be1729bf973a7ab6a615ca4729d6457488ac",
-                "address": "13tuJJDR2RgArmgfv6JScSdreahzgc4T6o",
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 "type": "pubkeyhash"
             }
         },
@@ -57,16 +51,10 @@
             "value": 4.00000000,
             "n": 1,
             "scriptPubKey": {
-<<<<<<< HEAD
                 "asm": "OP_DUP OP_HASH160 b9b3036866a5f5b67e77688dd1ff7af37d40599a OP_EQUALVERIFY OP_CHECKSIG",
+                "desc": "addr(DN4yzowAzPbtM6Hh4HsNjFH8QjurZ4Nzhz)#checksum",
                 "hex": "76a914b9b3036866a5f5b67e77688dd1ff7af37d40599a88ac",
                 "address": "DN4yzowAzPbtM6Hh4HsNjFH8QjurZ4Nzhz",
-=======
-                "asm": "OP_DUP OP_HASH160 f2d4db28cad6502226ee484ae24505c2885cb12d OP_EQUALVERIFY OP_CHECKSIG",
-                "desc": "addr(1P8yWvZW8jVihP1bzHeqfE4aoXNX8AVa46)#vdmdu766",
-                "hex": "76a914f2d4db28cad6502226ee484ae24505c2885cb12d88ac",
-                "address": "1P8yWvZW8jVihP1bzHeqfE4aoXNX8AVa46",
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 "type": "pubkeyhash"
             }
         }

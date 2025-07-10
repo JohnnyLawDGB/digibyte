@@ -237,26 +237,6 @@ class ProxyTest(DigiByteTestFramework):
             return r
 
         self.log.info("Test RPC getnetworkinfo")
-<<<<<<< HEAD
-        n0 = networks_dict(self.nodes[0].getnetworkinfo())
-        assert_equal(NETWORKS, n0.keys())
-        for net in NETWORKS:
-            if net == NET_I2P:
-                expected_proxy = ''
-                expected_randomize = False
-            else:
-                expected_proxy = '%s:%i' % (self.conf1.addr)
-                expected_randomize = True
-            assert_equal(n0[net]['proxy'], expected_proxy)
-            assert_equal(n0[net]['proxy_randomize_credentials'], expected_randomize)
-        assert_equal(n0['onion']['reachable'], True)
-        assert_equal(n0['i2p']['reachable'], False)
-
-        n1 = networks_dict(self.nodes[1].getnetworkinfo())
-        assert_equal(NETWORKS, n1.keys())
-        for net in ['ipv4', 'ipv6']:
-            assert_equal(n1[net]['proxy'], '%s:%i' % (self.conf1.addr))
-=======
         nodes_network_info = []
 
         self.log.debug("Test that setting -proxy disables local address discovery, i.e. -discover=0")
@@ -284,19 +264,10 @@ class ProxyTest(DigiByteTestFramework):
         assert_equal(NETWORKS, n1.keys())
         for net in ['ipv4', 'ipv6']:
             assert_equal(n1[net]['proxy'], f'{self.conf1.addr[0]}:{self.conf1.addr[1]}')
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             assert_equal(n1[net]['proxy_randomize_credentials'], False)
         assert_equal(n1['onion']['proxy'], f'{self.conf2.addr[0]}:{self.conf2.addr[1]}')
         assert_equal(n1['onion']['proxy_randomize_credentials'], False)
         assert_equal(n1['onion']['reachable'], True)
-<<<<<<< HEAD
-        assert_equal(n1['i2p']['proxy'], '%s:%i' % (self.i2p_sam))
-        assert_equal(n1['i2p']['proxy_randomize_credentials'], False)
-        assert_equal(n1['i2p']['reachable'], True)
-
-        n2 = networks_dict(self.nodes[2].getnetworkinfo())
-        assert_equal(NETWORKS, n2.keys())
-=======
         assert_equal(n1['i2p']['proxy'], f'{self.i2p_sam[0]}:{self.i2p_sam[1]}')
         assert_equal(n1['i2p']['proxy_randomize_credentials'], False)
         assert_equal(n1['i2p']['reachable'], True)
@@ -304,33 +275,17 @@ class ProxyTest(DigiByteTestFramework):
         n2 = networks_dict(nodes_network_info[2])
         assert_equal(NETWORKS, n2.keys())
         proxy = f'{self.conf2.addr[0]}:{self.conf2.addr[1]}'
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         for net in NETWORKS:
             if net == NET_I2P:
                 expected_proxy = ''
                 expected_randomize = False
             else:
-<<<<<<< HEAD
-                expected_proxy = '%s:%i' % (self.conf2.addr)
-=======
                 expected_proxy = proxy
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 expected_randomize = True
             assert_equal(n2[net]['proxy'], expected_proxy)
             assert_equal(n2[net]['proxy_randomize_credentials'], expected_randomize)
         assert_equal(n2['onion']['reachable'], True)
         assert_equal(n2['i2p']['reachable'], False)
-<<<<<<< HEAD
-
-        if self.have_ipv6:
-            n3 = networks_dict(self.nodes[3].getnetworkinfo())
-            assert_equal(NETWORKS, n3.keys())
-            for net in NETWORKS:
-                if net == NET_I2P:
-                    expected_proxy = ''
-                else:
-                    expected_proxy = '[%s]:%i' % (self.conf3.addr)
-=======
         assert_equal(n2['cjdns']['reachable'], False)
 
         if self.have_ipv6:

@@ -10,10 +10,6 @@ Runs automatically during `make check`.
 Can also be run manually."""
 
 import argparse
-<<<<<<<< HEAD:test/util/digibyte-util-test.py
-import binascii
-========
->>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion:test/util/test_runner.py
 import configparser
 import difflib
 import json
@@ -26,12 +22,8 @@ import sys
 def main():
     config = configparser.ConfigParser()
     config.optionxform = str
-<<<<<<<< HEAD:test/util/digibyte-util-test.py
-    config.read_file(open(os.path.join(os.path.dirname(__file__), "../config.ini"), encoding="utf8"))
-========
     with open(os.path.join(os.path.dirname(__file__), "../config.ini"), encoding="utf8") as f:
         config.read_file(f)
->>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion:test/util/test_runner.py
     env_conf = dict(config.items('environment'))
 
     parser = argparse.ArgumentParser(description=__doc__)

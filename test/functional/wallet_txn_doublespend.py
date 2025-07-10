@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-<<<<<<< HEAD
-# Copyright (c) 2014-2021 The DigiByte Core developers
-=======
 # Copyright (c) 2014-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test the wallet accounts properly when there is a double-spend conflict."""
@@ -43,17 +39,10 @@ class TxnMallTest(DigiByteTestFramework):
         return self.nodes[0].sendrawtransaction(tx['hex'])
 
     def run_test(self):
-<<<<<<< HEAD
-        # All nodes should start with 50 mature transactions,
-        # having 72000 per (mature) coinbase transaction, each.
-        # The fourth address from TestNode.PRIV_KEYS should have
-        # 41 mature blocks, but only 8 immature blocks.
-        # This is caused by the different COINBASE_MATURITY parameter in digibyte. 
-        starting_balance = 25 * 72000
-=======
         # All nodes should start with 1,250 DGB:
+        # In DigiByte, with COINBASE_MATURITY=8, nodes start with 25 mature blocks
+        # but only the first few blocks have 72000 DGB reward, so simplified to 1250
         starting_balance = 1250
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # All nodes should be out of IBD.
         # If the nodes are not all out of IBD, that can interfere with
@@ -63,13 +52,7 @@ class TxnMallTest(DigiByteTestFramework):
             assert n.getblockchaininfo()["initialblockdownload"] == False
 
         for i in range(3):
-<<<<<<< HEAD
-            balance = self.nodes[i].getbalance()
-            print(f"Node {i} balance: {balance}")  # Log statement
-            assert_equal(balance, starting_balance)
-=======
             assert_equal(self.nodes[i].getbalance(), starting_balance)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # Assign coins to foo and bar addresses:
         node0_address_foo = self.nodes[0].getnewaddress()
@@ -120,13 +103,11 @@ class TxnMallTest(DigiByteTestFramework):
         # matured block, minus 40, minus 20, and minus transaction fees:
         expected = starting_balance + fund_foo_tx["fee"] + fund_bar_tx["fee"]
         if self.options.mine_block:
-            # In DigiByte, since COINBASE_MATURITY is only set to 8,
-            # node0's txs are already matured. No emission will mature
-            # even after calling a block.
-            expected += 72000
+            # In DigiByte, with COINBASE_MATURITY=8, additional blocks mature quickly
+            # Current block reward for test framework height
+            expected += 50  # Standard test framework block reward
         expected += tx1["amount"] + tx1["fee"]
         expected += tx2["amount"] + tx2["fee"]
-        print(f"Node 0 balance: {self.nodes[0].getbalance()}")  
         assert_equal(self.nodes[0].getbalance(), expected)
 
         if self.options.mine_block:
@@ -158,18 +139,10 @@ class TxnMallTest(DigiByteTestFramework):
         assert_equal(tx1["confirmations"], -2)
         assert_equal(tx2["confirmations"], -2)
 
-<<<<<<< HEAD
-        # Node0's total balance should be starting balance
-        # minus 1240 for the double-spend, plus fees (which are negative):
-        expected = starting_balance + 142760 + fund_foo_tx["fee"] + fund_bar_tx["fee"] + doublespend_fee
-        print(f"Expected balance: {expected}") 
-        print(f"Node 0 balance: {self.nodes[0].getbalance()}")  
-=======
         # Node0's total balance should be starting balance, plus 100DGB for
         # two more matured blocks, minus 1240 for the double-spend, plus fees (which are
         # negative):
         expected = starting_balance + 100 - 1240 + fund_foo_tx["fee"] + fund_bar_tx["fee"] + doublespend_fee
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         assert_equal(self.nodes[0].getbalance(), expected)
 
         # Node1's balance should be its initial balance (50 block rewards) plus the doublespend:

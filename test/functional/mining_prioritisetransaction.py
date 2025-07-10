@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-<<<<<<< HEAD
-# Copyright (c) 2015-2021 The DigiByte Core developers
-=======
 # Copyright (c) 2015-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test the prioritisetransaction mining RPC."""
@@ -11,24 +7,6 @@
 from decimal import Decimal
 import time
 
-<<<<<<< HEAD
-from test_framework.messages import COIN, MAX_BLOCK_WEIGHT
-from test_framework.test_framework import DigiByteTestFramework
-from test_framework.util import assert_equal, assert_raises_rpc_error, create_confirmed_utxos, create_lots_of_big_transactions, gen_return_txouts
-
-class PrioritiseTransactionTest(DigiByteTestFramework):
-    def set_test_params(self):
-        self.setup_clean_chain = True
-        self.num_nodes = 1
-        self.extra_args = [[
-            "-printpriority=1",
-            "-acceptnonstdtxn=1",
-        ]] * self.num_nodes
-        self.supports_cli = False
-
-    def skip_test_if_missing_module(self):
-        self.skip_if_no_wallet()
-=======
 from test_framework.messages import (
     COIN,
     MAX_BLOCK_WEIGHT,
@@ -168,7 +146,6 @@ class PrioritiseTransactionTest(DigiByteTestFramework):
         # Use default extra_args
         self.restart_node(0)
         assert_equal(self.nodes[0].getprioritisedtransactions(), {})
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     def run_test(self):
         self.wallet = MiniWallet(self.nodes[0])
@@ -204,14 +181,9 @@ class PrioritiseTransactionTest(DigiByteTestFramework):
         self.relayfee = self.nodes[0].getnetworkinfo()['relayfee']
 
         utxo_count = 90
-<<<<<<< HEAD
-        utxos = create_confirmed_utxos(self, self.relayfee, self.nodes[0], utxo_count)
-=======
         utxos = self.wallet.send_self_transfer_multi(from_node=self.nodes[0], num_outputs=utxo_count)['new_utxos']
         self.generate(self.wallet, 1)
         assert_equal(len(self.nodes[0].getrawmempool()), 0)
-
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         base_fee = self.relayfee*100 # our transactions are smaller than 100kb
         txids = []
 
@@ -246,16 +218,12 @@ class PrioritiseTransactionTest(DigiByteTestFramework):
         self.nodes[0].prioritisetransaction(txid=txids[0][0], fee_delta=int(3*base_fee*COIN))
         assert_equal(self.nodes[0].getprioritisedtransactions(), {txids[0][0] : { "fee_delta" : 3*base_fee*COIN, "in_mempool" : True}})
 
-<<<<<<< HEAD
-=======
         # Priority disappears when prioritisetransaction is called with an inverse value...
         self.nodes[0].prioritisetransaction(txid=txids[0][0], fee_delta=int(-3*base_fee*COIN))
         assert txids[0][0] not in self.nodes[0].getprioritisedtransactions()
         # ... and reappears when prioritisetransaction is called again.
         self.nodes[0].prioritisetransaction(txid=txids[0][0], fee_delta=int(3*base_fee*COIN))
         assert txids[0][0] in self.nodes[0].getprioritisedtransactions()
-
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         self.generate(self.nodes[0], 1)
 
         mempool = self.nodes[0].getrawmempool()
@@ -294,32 +262,15 @@ class PrioritiseTransactionTest(DigiByteTestFramework):
         mempool = self.nodes[0].getrawmempool()
         self.log.info("Assert that de-prioritised transaction is still in mempool")
         assert high_fee_tx in mempool
-<<<<<<< HEAD
-=======
         assert_equal(self.nodes[0].getprioritisedtransactions()[high_fee_tx], { "fee_delta" : -2*base_fee*COIN, "in_mempool" : True})
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         for x in txids[2]:
             if (x != high_fee_tx):
                 assert x not in mempool
 
         # Create a free transaction.  Should be rejected.
-<<<<<<< HEAD
-        utxo_list = self.nodes[0].listunspent()
-        assert len(utxo_list) > 0
-        utxo = utxo_list[0]
-
-        inputs = []
-        outputs = {}
-        inputs.append({"txid" : utxo["txid"], "vout" : utxo["vout"]})
-        outputs[self.nodes[0].getnewaddress()] = utxo["amount"]
-        raw_tx = self.nodes[0].createrawtransaction(inputs, outputs)
-        tx_hex = self.nodes[0].signrawtransactionwithwallet(raw_tx)["hex"]
-        tx_id = self.nodes[0].decoderawtransaction(tx_hex)["txid"]
-=======
         tx_res = self.wallet.create_self_transfer(fee_rate=0)
         tx_hex = tx_res['hex']
         tx_id = tx_res['txid']
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # This will raise an exception due to min relay fee not being met
         assert_raises_rpc_error(-26, "min relay fee not met", self.nodes[0].sendrawtransaction, tx_hex)
@@ -334,10 +285,7 @@ class PrioritiseTransactionTest(DigiByteTestFramework):
         self.log.info("Assert that prioritised free transaction is accepted to mempool")
         assert_equal(self.nodes[0].sendrawtransaction(tx_hex), tx_id)
         assert tx_id in self.nodes[0].getrawmempool()
-<<<<<<< HEAD
-=======
         assert_equal(self.nodes[0].getprioritisedtransactions()[tx_id], { "fee_delta" : self.relayfee*COIN, "in_mempool" : True})
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # Test that calling prioritisetransaction is sufficient to trigger
         # getblocktemplate to (eventually) return a new block.
@@ -345,19 +293,12 @@ class PrioritiseTransactionTest(DigiByteTestFramework):
         self.nodes[0].setmocktime(mock_time)
         template = self.nodes[0].getblocktemplate({'rules': ['segwit']})
         self.nodes[0].prioritisetransaction(txid=tx_id, fee_delta=-int(self.relayfee*COIN))
-<<<<<<< HEAD
-        self.nodes[0].setmocktime(mock_time+10)
-        new_template = self.nodes[0].getblocktemplate({'rules': ['segwit']})
-
-=======
 
         # Calling prioritisetransaction with the inverse amount should delete its prioritisation entry
         assert tx_id not in self.nodes[0].getprioritisedtransactions()
 
         self.nodes[0].setmocktime(mock_time+10)
         new_template = self.nodes[0].getblocktemplate({'rules': ['segwit']})
-
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         assert template != new_template
 
 if __name__ == '__main__':

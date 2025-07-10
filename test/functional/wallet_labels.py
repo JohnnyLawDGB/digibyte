@@ -65,7 +65,6 @@ class WalletLabelsTest(DigiByteTestFramework):
 
         for rpc_call in rpc_calls:
             assert_raises_rpc_error(-11, "Invalid label name", *rpc_call, "*")
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     def run_test(self):
         # Check that there's no UTXO on the node
@@ -79,19 +78,11 @@ class WalletLabelsTest(DigiByteTestFramework):
         # Note each time we call generate, all generated coins go into
         # the same address, so we call twice to get two addresses w/50 each
         self.generatetoaddress(node, nblocks=1, address=node.getnewaddress(label='coinbase'))
-<<<<<<< HEAD
-        self.generatetoaddress(node, nblocks=COINBASE_MATURITY_2 + 1, address=node.getnewaddress(label='coinbase'))
-        assert_equal(node.getbalance(), 72000 * 2)
-
-        # there should be 2 address groups
-        # each with 1 address with a balance of 72000 DigiBytes
-=======
         self.generatetoaddress(node, nblocks=COINBASE_MATURITY + 1, address=node.getnewaddress(label='coinbase'))
         assert_equal(node.getbalance(), 100)
 
         # there should be 2 address groups
         # each with 1 address with a balance of 50 DigiBytes
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         address_groups = node.listaddressgroupings()
         assert_equal(len(address_groups), 2)
         # the addresses aren't linked now, but will be after we send to the
@@ -100,24 +91,14 @@ class WalletLabelsTest(DigiByteTestFramework):
         for address_group in address_groups:
             assert_equal(len(address_group), 1)
             assert_equal(len(address_group[0]), 3)
-<<<<<<< HEAD
-            assert_equal(address_group[0][1], 72000)
-=======
             assert_equal(address_group[0][1], 50)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             assert_equal(address_group[0][2], 'coinbase')
             linked_addresses.add(address_group[0][0])
 
         # send 50 from each address to a third address not in this wallet
-<<<<<<< HEAD
-        common_address = "smGXzdWyDk9UDriWWFG3PVyLgpw7USPJNh"
-        node.sendmany(
-            amounts={common_address: 72000 * 2},
-=======
         common_address = "msf4WtN1YQKXvNtvdFYt9JBnUD2FB41kjr"
         node.sendmany(
             amounts={common_address: 100},
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             subtractfeefrom=[common_address],
             minconf=1,
         )
@@ -144,11 +125,6 @@ class WalletLabelsTest(DigiByteTestFramework):
             label.add_receive_address(address)
             label.verify(node)
 
-<<<<<<< HEAD
-        # Check all labels are returned by listlabels.
-        assert_equal(node.listlabels(), sorted(['coinbase'] + [label.name for label in labels]))
-
-=======
         # Check listlabels when passing 'purpose'
         node2_addr = self.nodes[1].getnewaddress()
         node.setlabel(node2_addr, "node2_addr")
@@ -158,7 +134,6 @@ class WalletLabelsTest(DigiByteTestFramework):
         # Check all labels are returned by listlabels.
         assert_equal(node.listlabels(), sorted(['coinbase'] + [label.name for label in labels] + ["node2_addr"]))
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         # Send a transaction to each label.
         for label in labels:
             node.sendtoaddress(label.addresses[0], amount_to_send)
@@ -181,11 +156,7 @@ class WalletLabelsTest(DigiByteTestFramework):
             label.verify(node)
             assert_equal(node.getreceivedbylabel(label.name), 2)
             label.verify(node)
-<<<<<<< HEAD
-        self.generate(node, COINBASE_MATURITY_2 + 1)
-=======
         self.generate(node, COINBASE_MATURITY + 1)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # Check that setlabel can assign a label to a new unused address.
         for label in labels:
@@ -205,11 +176,7 @@ class WalletLabelsTest(DigiByteTestFramework):
                 label.add_address(multisig_address)
                 label.purpose[multisig_address] = "send"
                 label.verify(node)
-<<<<<<< HEAD
-            self.generate(node, COINBASE_MATURITY_2 + 1)
-=======
             self.generate(node, COINBASE_MATURITY + 1)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # Check that setlabel can change the label of an address from a
         # different label.
@@ -219,18 +186,14 @@ class WalletLabelsTest(DigiByteTestFramework):
         # in the label. This is a no-op.
         change_label(node, labels[2].addresses[0], labels[2], labels[2])
 
-<<<<<<< HEAD
-=======
         self.invalid_label_name_test()
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         if self.options.descriptors:
             # This is a descriptor wallet test because of segwit v1+ addresses
             self.log.info('Check watchonly labels')
             node.createwallet(wallet_name='watch_only', disable_private_keys=True)
             wallet_watch_only = node.get_wallet_rpc('watch_only')
             BECH32_VALID = {
-<<<<<<< HEAD
                 '✔️_VER15_PROG40': 'dgbrt10qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq4jx8ac',
                 '✔️_VER16_PROG03': 'dgbrt1sqqqqqg80qk9',
                 '✔️_VER16_PROB02': 'dgbrt1sqqqqgczfwf',
@@ -238,15 +201,6 @@ class WalletLabelsTest(DigiByteTestFramework):
             BECH32_INVALID = {
                 '❌_VER15_PROG41': 'dgbrt1sqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqajlxj8',
                 '❌_VER16_PROB01': 'dgbrt1sqq5r4036',
-=======
-                '✔️_VER15_PROG40': 'bcrt10qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqxkg7fn',
-                '✔️_VER16_PROG03': 'bcrt1sqqqqq8uhdgr',
-                '✔️_VER16_PROB02': 'bcrt1sqqqq4wstyw',
-            }
-            BECH32_INVALID = {
-                '❌_VER15_PROG41': 'bcrt1sqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqajlxj8',
-                '❌_VER16_PROB01': 'bcrt1sqq5r4036',
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             }
             for l in BECH32_VALID:
                 ad = BECH32_VALID[l]

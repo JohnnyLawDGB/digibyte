@@ -120,24 +120,10 @@ class WalletGroupTest(DigiByteTestFramework):
         assert_equal(input_addrs[0], input_addrs[1])
         # Node 2 enforces avoidpartialspends so needs no checking here
 
-<<<<<<< HEAD
-        if self.options.descriptors:
-            # Descriptor wallets will use Taproot change by default which has different fees
-            tx4_ungrouped_fee = 1410000
-            tx4_grouped_fee = 2080000
-            tx5_6_ungrouped_fee = 2760000
-            tx5_6_grouped_fee = 4120000
-        else:
-            tx4_ungrouped_fee = 1410000
-            tx4_grouped_fee = 2080000
-            tx5_6_ungrouped_fee = 2760000
-            tx5_6_grouped_fee = 4120000
-=======
         tx4_ungrouped_fee = 2820
         tx4_grouped_fee = 4160
         tx5_6_ungrouped_fee = 5520
         tx5_6_grouped_fee = 8240
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         self.log.info("Test wallet option maxapsfee")
         addr_aps = self.nodes[3].getnewaddress()

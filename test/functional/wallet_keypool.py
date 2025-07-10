@@ -90,13 +90,8 @@ class KeyPoolTest(DigiByteTestFramework):
             nodes[0].keypoolrefill(6)
         wi = nodes[0].getwalletinfo()
         if self.options.descriptors:
-<<<<<<< HEAD
-            assert_equal(wi['keypoolsize_hd_internal'], 18)
-            assert_equal(wi['keypoolsize'], 18)
-=======
             assert_equal(wi['keypoolsize_hd_internal'], 24)
             assert_equal(wi['keypoolsize'], 24)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         else:
             assert_equal(wi['keypoolsize_hd_internal'], 6)
             assert_equal(wi['keypoolsize'], 6)
@@ -119,10 +114,7 @@ class KeyPoolTest(DigiByteTestFramework):
         assert_equal(kp_size_before, kp_size_after)
 
         # drain the external keys
-<<<<<<< HEAD
-=======
         addr = set()
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         addr.add(nodes[0].getnewaddress(address_type="bech32"))
         addr.add(nodes[0].getnewaddress(address_type="bech32"))
         addr.add(nodes[0].getnewaddress(address_type="bech32"))
@@ -130,12 +122,9 @@ class KeyPoolTest(DigiByteTestFramework):
         addr.add(nodes[0].getnewaddress(address_type="bech32"))
         addr.add(nodes[0].getnewaddress(address_type="bech32"))
         assert len(addr) == 6
-<<<<<<< HEAD
-=======
         # remember keypool sizes
         wi = nodes[0].getwalletinfo()
         kp_size_before = [wi['keypoolsize_hd_internal'], wi['keypoolsize']]
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         # the next one should fail
         assert_raises_rpc_error(-12, "Error: Keypool ran out, please call keypoolrefill first", nodes[0].getnewaddress)
         # check that keypool sizes did not change
@@ -156,17 +145,6 @@ class KeyPoolTest(DigiByteTestFramework):
             nodes[0].getnewaddress()
         assert_raises_rpc_error(-12, "Keypool ran out", nodes[0].getnewaddress)
 
-<<<<<<< HEAD
-        nodes[0].walletpassphrase('test', 100)
-        nodes[0].keypoolrefill(100)
-        wi = nodes[0].getwalletinfo()
-        if self.options.descriptors:
-            assert_equal(wi['keypoolsize_hd_internal'], 300)
-            assert_equal(wi['keypoolsize'], 300)
-        else:
-            assert_equal(wi['keypoolsize_hd_internal'], 100)
-            assert_equal(wi['keypoolsize'], 100)
-=======
         with WalletUnlock(nodes[0], 'test'):
             nodes[0].keypoolrefill(100)
             wi = nodes[0].getwalletinfo()
@@ -190,7 +168,6 @@ class KeyPoolTest(DigiByteTestFramework):
                 new_change_index = int(start_change_keypath.rsplit('/',  1)[1][:-1]) + 100
                 assert_equal(end_keypath, "m/0'/0'/" + str(new_index) + "'")
                 assert_equal(end_change_keypath, "m/0'/1'/" + str(new_change_index) + "'")
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # create a blank wallet
         nodes[0].createwallet(wallet_name='w2', blank=True, disable_private_keys=True)
@@ -207,48 +184,14 @@ class KeyPoolTest(DigiByteTestFramework):
         else:
             res = w2.importmulti([{'desc': desc, 'timestamp': 'now'}])
         assert_equal(res[0]['success'], True)
-<<<<<<< HEAD
-        w1.walletpassphrase('test', 100)
-
-        res = w1.sendtoaddress(address=address, amount=0.00010000)
-=======
 
         with WalletUnlock(w1, 'test'):
             res = w1.sendtoaddress(address=address, amount=0.00010000)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         self.generate(nodes[0], 1)
         destination = addr.pop()
 
         # Using a fee rate (10 sat / byte) well above the minimum relay rate
         # creating a 5,000 sat transaction with change should not be possible
-<<<<<<< HEAD
-        assert_raises_rpc_error(-4, "Transaction needs a change address, but we can't generate it.", w2.walletcreatefundedpsbt, inputs=[], outputs=[{addr.pop(): 0.00005000}], options={"subtractFeeFromOutputs": [0], "feeRate": 0.00010})
-
-        # creating a 10,000 sat transaction without change, with a manual input, should still be possible
-        res = w2.walletcreatefundedpsbt(inputs=w2.listunspent(), outputs=[{destination: 0.00010000}], options={"subtractFeeFromOutputs": [0], "feeRate": 0.00010})
-        assert_equal("psbt" in res, True)
-
-        # creating a 10,000 sat transaction without change should still be possible
-        res = w2.walletcreatefundedpsbt(inputs=[], outputs=[{destination: 0.00010000}], options={"subtractFeeFromOutputs": [0], "feeRate": 0.00010})
-        assert_equal("psbt" in res, True)
-        # should work without subtractFeeFromOutputs if the exact fee is subtracted from the amount
-        res = w2.walletcreatefundedpsbt(inputs=[], outputs=[{destination: 0.00008900}], options={"feeRate": 0.00010})
-        assert_equal("psbt" in res, True)
-
-        # dust change should be removed
-        res = w2.walletcreatefundedpsbt(inputs=[], outputs=[{destination: 0.00008800}], options={"feeRate": 0.00010})
-        assert_equal("psbt" in res, True)
-
-        # create a transaction without change at the maximum fee rate, such that the output is still spendable:
-        res = w2.walletcreatefundedpsbt(inputs=[], outputs=[{destination: 0.00010000}], options={"subtractFeeFromOutputs": [0], "feeRate": 0.00001})
-        assert_equal("psbt" in res, True)
-        assert_equal(res["fee"], Decimal("0.00000110"))
-
-        # creating a 10,000 sat transaction with a manual change address should be possible
-        res = w2.walletcreatefundedpsbt(inputs=[], outputs=[{destination: 0.00010000}], options={"subtractFeeFromOutputs": [0], "feeRate": 0.00010, "changeAddress": addr.pop()})
-        assert_equal("psbt" in res, True)
-
-=======
         assert_raises_rpc_error(-4, "Transaction needs a change address, but we can't generate it.", w2.walletcreatefundedpsbt, inputs=[], outputs=[{addr.pop(): 0.00005000}], subtractFeeFromOutputs=[0], feeRate=0.00010)
 
         # creating a 10,000 sat transaction without change, with a manual input, should still be possible
@@ -278,7 +221,6 @@ class KeyPoolTest(DigiByteTestFramework):
         if not self.options.descriptors:
             msg = "Error: Private keys are disabled for this wallet"
             assert_raises_rpc_error(-4, msg, w2.keypoolrefill, 100)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 if __name__ == '__main__':
     KeyPoolTest().main()

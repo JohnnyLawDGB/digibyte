@@ -75,11 +75,7 @@ class WalletHDTest(DigiByteTestFramework):
         change_addr = self.nodes[1].getrawchangeaddress()
         change_addrV = self.nodes[1].getaddressinfo(change_addr)
         if self.options.descriptors:
-<<<<<<< HEAD
-            assert_equal(change_addrV["hdkeypath"], "m/84'/1'/0'/1/1")
-=======
             assert_equal(change_addrV["hdkeypath"], "m/84h/1h/0h/1/1")
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         else:
             assert_equal(change_addrV["hdkeypath"], "m/0'/1'/1'")  #second internal child key
 
@@ -90,19 +86,11 @@ class WalletHDTest(DigiByteTestFramework):
         self.stop_node(1)
         # we need to delete the complete chain directory
         # otherwise node1 would auto-recover all funds in flag the keypool keys as used
-<<<<<<< HEAD
-        shutil.rmtree(os.path.join(self.nodes[1].datadir, self.chain, "blocks"))
-        shutil.rmtree(os.path.join(self.nodes[1].datadir, self.chain, "chainstate"))
-        shutil.copyfile(
-            os.path.join(self.nodes[1].datadir, "hd.bak"),
-            os.path.join(self.nodes[1].datadir, self.chain, 'wallets', self.default_wallet_name, self.wallet_data_filename),
-=======
         shutil.rmtree(self.nodes[1].blocks_path)
         shutil.rmtree(self.nodes[1].chain_path / "chainstate")
         shutil.copyfile(
             self.nodes[1].datadir_path / "hd.bak",
             self.nodes[1].wallets_path / self.default_wallet_name / self.wallet_data_filename
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         )
         self.start_node(1)
 
@@ -112,11 +100,7 @@ class WalletHDTest(DigiByteTestFramework):
             hd_add_2 = self.nodes[1].getnewaddress()
             hd_info_2 = self.nodes[1].getaddressinfo(hd_add_2)
             if self.options.descriptors:
-<<<<<<< HEAD
-                assert_equal(hd_info_2["hdkeypath"], "m/84'/1'/0'/0/" + str(i))
-=======
                 assert_equal(hd_info_2["hdkeypath"], "m/84h/1h/0h/0/" + str(i))
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             else:
                 assert_equal(hd_info_2["hdkeypath"], "m/0'/0'/" + str(i) + "'")
             assert_equal(hd_info_2["hdmasterfingerprint"], hd_fingerprint)
@@ -130,19 +114,11 @@ class WalletHDTest(DigiByteTestFramework):
 
         # Try a RPC based rescan
         self.stop_node(1)
-<<<<<<< HEAD
-        shutil.rmtree(os.path.join(self.nodes[1].datadir, self.chain, "blocks"))
-        shutil.rmtree(os.path.join(self.nodes[1].datadir, self.chain, "chainstate"))
-        shutil.copyfile(
-            os.path.join(self.nodes[1].datadir, "hd.bak"),
-            os.path.join(self.nodes[1].datadir, self.chain, "wallets", self.default_wallet_name, self.wallet_data_filename),
-=======
         shutil.rmtree(self.nodes[1].blocks_path)
         shutil.rmtree(self.nodes[1].chain_path / "chainstate")
         shutil.copyfile(
             self.nodes[1].datadir_path / "hd.bak",
             self.nodes[1].wallets_path / self.default_wallet_name / self.wallet_data_filename
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         )
         self.start_node(1, extra_args=self.extra_args[1])
         self.connect_nodes(0, 1)
@@ -166,11 +142,7 @@ class WalletHDTest(DigiByteTestFramework):
                 keypath = self.nodes[1].getaddressinfo(out['scriptPubKey']['address'])['hdkeypath']
 
         if self.options.descriptors:
-<<<<<<< HEAD
-            assert_equal(keypath[0:14], "m/84'/1'/0'/1/")
-=======
             assert_equal(keypath[0:14], "m/84h/1h/0h/1/")
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         else:
             assert_equal(keypath[0:7], "m/0'/1'")
 
@@ -207,13 +179,8 @@ class WalletHDTest(DigiByteTestFramework):
             # Sethdseed parameter validity
             assert_raises_rpc_error(-1, 'sethdseed', self.nodes[0].sethdseed, False, new_seed, 0)
             assert_raises_rpc_error(-5, "Invalid private key", self.nodes[1].sethdseed, False, "not_wif")
-<<<<<<< HEAD
-            assert_raises_rpc_error(-1, "JSON value is not a boolean as expected", self.nodes[1].sethdseed, "Not_bool")
-            assert_raises_rpc_error(-1, "JSON value is not a string as expected", self.nodes[1].sethdseed, False, True)
-=======
             assert_raises_rpc_error(-3, "JSON value of type string is not of expected type bool", self.nodes[1].sethdseed, "Not_bool")
             assert_raises_rpc_error(-3, "JSON value of type bool is not of expected type string", self.nodes[1].sethdseed, False, True)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             assert_raises_rpc_error(-5, "Already have this key", self.nodes[1].sethdseed, False, new_seed)
             assert_raises_rpc_error(-5, "Already have this key", self.nodes[1].sethdseed, False, self.nodes[1].dumpprivkey(self.nodes[1].getnewaddress()))
 

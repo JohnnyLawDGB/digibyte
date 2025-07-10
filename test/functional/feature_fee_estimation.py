@@ -1,10 +1,6 @@
 #!/usr/bin/env python3
-<<<<<<< HEAD
-# Copyright (c) 2014-2020 The Bitcoin Core developers
-# Copyright (c) 2020-2022 The DigiByte Core developers
-=======
-# Copyright (c) 2014-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+# Copyright (c) 2014-2022 The Bitcoin Core developers
+# Copyright (c) 2014-2025 The DigiByte Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test fee estimation code."""
@@ -16,23 +12,6 @@ import time
 
 from test_framework.messages import (
     COIN,
-<<<<<<< HEAD
-    COutPoint,
-    CTransaction,
-    CTxIn,
-    CTxOut,
-)
-from test_framework.script import (
-    CScript,
-    OP_1,
-    OP_2,
-    OP_DROP,
-    OP_TRUE,
-)
-from test_framework.script_util import (
-    script_to_p2sh_script,
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 )
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import (
@@ -44,18 +23,8 @@ from test_framework.util import (
 )
 from test_framework.wallet import MiniWallet
 
-<<<<<<< HEAD
-# Construct 2 trivial P2SH's and the ScriptSigs that spend them
-# So we can create many transactions without needing to spend
-# time signing.
-REDEEM_SCRIPT_1 = CScript([OP_1, OP_DROP])
-REDEEM_SCRIPT_2 = CScript([OP_2, OP_DROP])
-P2SH_1 = script_to_p2sh_script(REDEEM_SCRIPT_1)
-P2SH_2 = script_to_p2sh_script(REDEEM_SCRIPT_2)
-=======
 MAX_FILE_AGE = 60
 SECONDS_PER_HOUR = 60 * 60
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 def small_txpuzzle_randfee(
     wallet, from_node, conflist, unconflist, amount, min_fee, fee_increment, batch_reqs
@@ -83,27 +52,6 @@ def small_txpuzzle_randfee(
         t = unconflist.pop(0)
         total_in += t["value"]
         utxos_to_spend.append(t)
-    if total_in <= amount + fee:
-<<<<<<< HEAD
-        while total_in <= (amount + fee) and len(unconflist) > 0:
-            t = unconflist.pop(0)
-            total_in += t["amount"]
-            tx.vin.append(CTxIn(COutPoint(int(t["txid"], 16), t["vout"]), b""))
-        if total_in <= amount + fee:
-            raise RuntimeError("Insufficient funds: need %d, have %d" % (amount + fee, total_in))
-    tx.vout.append(CTxOut(int((total_in - amount - fee) * COIN), P2SH_1))
-    tx.vout.append(CTxOut(int(amount * COIN), P2SH_2))
-    # These transactions don't need to be signed, but we still have to insert
-    # the ScriptSig that will satisfy the ScriptPubKey.
-    for inp in tx.vin:
-        inp.scriptSig = SCRIPT_SIG[inp.prevout.n]
-    txid = from_node.sendrawtransaction(hexstring=tx.serialize().hex(), maxfeerate=0)
-    unconflist.append({"txid": txid, "vout": 0, "amount": total_in - amount - fee})
-    unconflist.append({"txid": txid, "vout": 1, "amount": amount})
-
-    return (tx.serialize().hex(), fee)
-
-=======
         raise RuntimeError(f"Insufficient funds: need {amount + fee}, have {total_in}")
     tx = wallet.create_self_transfer_multi(
         utxos_to_spend=utxos_to_spend,
@@ -119,7 +67,6 @@ def small_txpuzzle_randfee(
     batch_reqs.append(from_node.sendrawtransaction.get_request(hexstring=tx_hex, maxfeerate=0))
     unconflist.append({"txid": txid, "vout": 0, "value": total_in - amount - fee})
     unconflist.append({"txid": txid, "vout": 1, "value": amount})
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     return (tx.get_vsize(), fee)
 
@@ -127,36 +74,6 @@ def small_txpuzzle_randfee(
 def check_raw_estimates(node, fees_seen):
     """Call estimaterawfee and verify that the estimates meet certain invariants."""
 
-<<<<<<< HEAD
-    half_change = satoshi_round(prevtxout["amount"] / 2)
-    rem_change = prevtxout["amount"] - half_change - Decimal("0.00100000")
-    tx.vout.append(CTxOut(int(half_change * COIN), P2SH_1))
-    tx.vout.append(CTxOut(int(rem_change * COIN), P2SH_2))
-
-    # If this is the initial split we actually need to sign the transaction
-    # Otherwise we just need to insert the proper ScriptSig
-    if (initial_split):
-        completetx = from_node.signrawtransactionwithwallet(tx.serialize().hex())["hex"]
-    else:
-        tx.vin[0].scriptSig = SCRIPT_SIG[prevtxout["vout"]]
-        completetx = tx.serialize().hex()
-    txid = from_node.sendrawtransaction(hexstring=completetx, maxfeerate=0)
-    txouts.append({"txid": txid, "vout": 0, "amount": half_change})
-    txouts.append({"txid": txid, "vout": 1, "amount": rem_change})
-
-def check_raw_estimates(node, fees_seen):
-    """Call estimaterawfee and verify that the estimates meet certain invariants."""
-
-    delta = 1.0e-6  # account for rounding error
-    for i in range(1, 26):
-        for _, e in node.estimaterawfee(i).items():
-            feerate = float(e["feerate"])
-            assert_greater_than(feerate, 0)
-
-            if feerate + delta < min(fees_seen) or feerate - delta > max(fees_seen):
-                raise AssertionError("Estimated fee (%f) out of range (%f,%f)"
-                                     % (feerate, min(fees_seen), max(fees_seen)))
-=======
     delta = 1.0e-6  # account for rounding error
     for i in range(1, 26):
         for _, e in node.estimaterawfee(i).items():
@@ -168,7 +85,7 @@ def check_raw_estimates(node, fees_seen):
                     f"Estimated fee ({feerate}) out of range ({min(fees_seen)},{max(fees_seen)})"
                 )
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
 
 def check_smart_estimates(node, fees_seen):
     """Call estimatesmartfee and verify that the estimates meet certain invariants."""
@@ -199,29 +116,11 @@ def check_smart_estimates(node, fees_seen):
         else:
             assert_greater_than_or_equal(i + 1, e["blocks"])
 
-<<<<<<< HEAD
-=======
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 def check_estimates(node, fees_seen):
     check_raw_estimates(node, fees_seen)
     check_smart_estimates(node, fees_seen)
 
-<<<<<<< HEAD
-class EstimateFeeTest(DigiByteTestFramework):
-    def set_test_params(self):
-        self.num_nodes = 3
-        # mine non-standard txs (e.g. txs with "dust" outputs)
-        # Force fSendTrickle to true (via whitelist.noban)
-        self.extra_args = [
-            ["-acceptnonstdtxn", "-whitelist=noban@127.0.0.1"],
-            ["-acceptnonstdtxn", "-whitelist=noban@127.0.0.1", "-blockmaxweight=68000"],
-            ["-acceptnonstdtxn", "-whitelist=noban@127.0.0.1", "-blockmaxweight=32000"],
-        ]
-
-    def skip_test_if_missing_module(self):
-        self.skip_if_no_wallet()
-=======
 
 def make_tx(wallet, utxo, feerate):
     """Create a 1in-1out transaction with a specific input and feerate (sat/vb)."""
@@ -240,7 +139,6 @@ class EstimateFeeTest(DigiByteTestFramework):
             ["-whitelist=noban@127.0.0.1", "-blockmaxweight=68000"],
             ["-whitelist=noban@127.0.0.1", "-blockmaxweight=32000"],
         ]
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     def setup_network(self):
         """

@@ -469,7 +469,8 @@ if test "$CXXFLAGS_overridden" = "no"; then
   AX_CHECK_COMPILE_FLAG([-Wimplicit-fallthrough], [WARN_CXXFLAGS="$WARN_CXXFLAGS -Wimplicit-fallthrough"], [], [$CXXFLAG_WERROR])
 
   if test "$suppress_external_warnings" != "no" ; then
-    AX_CHECK_COMPILE_FLAG([-Wdocumentation], [WARN_CXXFLAGS="$WARN_CXXFLAGS -Wdocumentation"], [], [$CXXFLAG_WERROR])  fi
+    AX_CHECK_COMPILE_FLAG([-Wdocumentation], [WARN_CXXFLAGS="$WARN_CXXFLAGS -Wdocumentation"], [], [$CXXFLAG_WERROR])
+  fi
 
   dnl Some compilers (gcc) ignore unknown -Wno-* options, but warn about all
   dnl unknown options if any other warning is produced. Test the -Wfoo case, and
@@ -477,7 +478,8 @@ if test "$CXXFLAGS_overridden" = "no"; then
   AX_CHECK_COMPILE_FLAG([-Wunused-parameter], [NOWARN_CXXFLAGS="$NOWARN_CXXFLAGS -Wno-unused-parameter"], [], [$CXXFLAG_WERROR])
   AX_CHECK_COMPILE_FLAG([-Wself-assign], [NOWARN_CXXFLAGS="$NOWARN_CXXFLAGS -Wno-self-assign"], [], [$CXXFLAG_WERROR])
   if test "$suppress_external_warnings" != "yes" ; then
-    AX_CHECK_COMPILE_FLAG([-Wdeprecated-copy], [NOWARN_CXXFLAGS="$NOWARN_CXXFLAGS -Wno-deprecated-copy"], [], [$CXXFLAG_WERROR])  fi
+    AX_CHECK_COMPILE_FLAG([-Wdeprecated-copy], [NOWARN_CXXFLAGS="$NOWARN_CXXFLAGS -Wno-deprecated-copy"], [], [$CXXFLAG_WERROR])
+  fi
 fi
 
 dnl Don't allow extended (non-ASCII) symbols in identifiers. This is easier for code review.
@@ -769,7 +771,8 @@ case $host in
          fi
 
          if $BREW list --versions qt@5 >/dev/null; then
-           export PKG_CONFIG_PATH="$($BREW --prefix qt@5 2>/dev/null)/lib/pkgconfig:$PKG_CONFIG_PATH"         fi
+           export PKG_CONFIG_PATH="$($BREW --prefix qt@5 2>/dev/null)/lib/pkgconfig:$PKG_CONFIG_PATH"
+        fi
 
          case $host in
            *aarch64*)
@@ -851,7 +854,8 @@ if test "$use_lcov" = "yes"; then
     AC_MSG_ERROR([lcov testing requested but python not found])
   fi
   if test "$GENHTML" = ""; then
-    AC_MSG_ERROR([lcov testing requested but genhtml not found])  fi
+    AC_MSG_ERROR([lcov testing requested but genhtml not found])
+  fi
 
   AC_MSG_CHECKING([whether compiler is Clang])
   AC_PREPROC_IFELSE([AC_LANG_SOURCE([[
@@ -1674,7 +1678,8 @@ if test "$use_ccache" != "no"; then
   AC_MSG_RESULT($use_ccache)
   if test "$use_ccache" = "yes"; then
     AX_CHECK_COMPILE_FLAG([-fdebug-prefix-map=A=B], [DEBUG_CXXFLAGS="$DEBUG_CXXFLAGS -fdebug-prefix-map=\$(abs_top_srcdir)=."], [], [$CXXFLAG_WERROR])
-    AX_CHECK_PREPROC_FLAG([-fmacro-prefix-map=A=B], [DEBUG_CPPFLAGS="$DEBUG_CPPFLAGS -fmacro-prefix-map=\$(abs_top_srcdir)=."], [], [$CXXFLAG_WERROR])  fi
+    AX_CHECK_PREPROC_FLAG([-fmacro-prefix-map=A=B], [DEBUG_CPPFLAGS="$DEBUG_CPPFLAGS -fmacro-prefix-map=\$(abs_top_srcdir)=."], [], [$CXXFLAG_WERROR])
+  fi
 fi
 
 dnl enable wallet

@@ -325,107 +325,6 @@ public:
     }
 };
 
-<<<<<<< HEAD
-template <typename IStream>
-class BitStreamReader
-{
-private:
-    IStream& m_istream;
-
-    /// Buffered byte read in from the input stream. A new byte is read into the
-    /// buffer when m_offset reaches 8.
-    uint8_t m_buffer{0};
-
-    /// Number of high order bits in m_buffer already returned by previous
-    /// Read() calls. The next bit to be returned is at this offset from the
-    /// most significant bit position.
-    int m_offset{8};
-
-public:
-    explicit BitStreamReader(IStream& istream) : m_istream(istream) {}
-
-    /** Read the specified number of bits from the stream. The data is returned
-     * in the nbits least significant bits of a 64-bit uint.
-     */
-    uint64_t Read(int nbits) {
-        if (nbits < 0 || nbits > 64) {
-            throw std::out_of_range("nbits must be between 0 and 64");
-        }
-
-        uint64_t data = 0;
-        while (nbits > 0) {
-            if (m_offset == 8) {
-                m_istream >> m_buffer;
-                m_offset = 0;
-            }
-
-            int bits = std::min(8 - m_offset, nbits);
-            data <<= bits;
-            data |= static_cast<uint8_t>(m_buffer << m_offset) >> (8 - bits);
-            m_offset += bits;
-            nbits -= bits;
-        }
-        return data;
-    }
-};
-
-template <typename OStream>
-class BitStreamWriter
-{
-private:
-    OStream& m_ostream;
-
-    /// Buffered byte waiting to be written to the output stream. The byte is
-    /// written buffer when m_offset reaches 8 or Flush() is called.
-    uint8_t m_buffer{0};
-
-    /// Number of high order bits in m_buffer already written by previous
-    /// Write() calls and not yet flushed to the stream. The next bit to be
-    /// written to is at this offset from the most significant bit position.
-    int m_offset{0};
-
-public:
-    explicit BitStreamWriter(OStream& ostream) : m_ostream(ostream) {}
-
-    ~BitStreamWriter()
-    {
-        Flush();
-    }
-
-    /** Write the nbits least significant bits of a 64-bit int to the output
-     * stream. Data is buffered until it completes an octet.
-     */
-    void Write(uint64_t data, int nbits) {
-        if (nbits < 0 || nbits > 64) {
-            throw std::out_of_range("nbits must be between 0 and 64");
-        }
-
-        while (nbits > 0) {
-            int bits = std::min(8 - m_offset, nbits);
-            m_buffer |= (data << (64 - nbits)) >> (64 - 8 + m_offset);
-            m_offset += bits;
-            nbits -= bits;
-
-            if (m_offset == 8) {
-                Flush();
-            }
-        }
-    }
-
-    /** Flush any unwritten bits to the output stream, padding with 0's to the
-     * next byte boundary.
-     */
-    void Flush() {
-        if (m_offset == 0) {
-            return;
-        }
-
-        m_ostream << m_buffer;
-        m_buffer = 0;
-        m_offset = 0;
-    }
-};
-=======
 class CDataStream : public DataStream
 {
 private:
@@ -467,7 +366,6 @@ class BitStreamReader
 {
 private:
     IStream& m_istream;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     /// Buffered byte read in from the input stream. A new byte is read into the
     /// buffer when m_offset reaches 8.
@@ -677,18 +575,6 @@ private:
     uint64_t nReadLimit;  //!< up to which position we're allowed to read
     uint64_t nRewind;     //!< how many bytes we guarantee to rewind
     std::vector<std::byte> vchBuf; //!< the buffer
-
-<<<<<<< HEAD
-    FILE *src;            //!< source file
-    uint64_t nSrcPos;     //!< how many bytes have been read from source
-    uint64_t nReadPos;    //!< how many bytes have been read from this
-    uint64_t nReadLimit;  //!< up to which position we're allowed to read
-    uint64_t nRewind;     //!< how many bytes we guarantee to rewind
-    std::vector<char> vchBuf; //!< the buffer
-
-protected:
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     //! read data from the source to fill the buffer
     bool Fill() {
         unsigned int pos = nSrcPos % vchBuf.size();
@@ -700,94 +586,6 @@ protected:
             return false;
         size_t nBytes{m_src.detail_fread(Span{vchBuf}.subspan(pos, readNow))};
         if (nBytes == 0) {
-<<<<<<< HEAD
-            throw std::ios_base::failure(feof(src) ? "CBufferedFile::Fill: end of file" : "CBufferedFile::Fill: fread failed");
-        }
-        nSrcPos += nBytes;
-        return true;
-    }
-
-public:
-    CBufferedFile(FILE *fileIn, uint64_t nBufSize, uint64_t nRewindIn, int nTypeIn, int nVersionIn) :
-        nType(nTypeIn), nVersion(nVersionIn), nSrcPos(0), nReadPos(0), nReadLimit(std::numeric_limits<uint64_t>::max()), nRewind(nRewindIn), vchBuf(nBufSize, 0)
-    {
-        if (nRewindIn >= nBufSize)
-            throw std::ios_base::failure("Rewind limit must be less than buffer size");
-        src = fileIn;
-    }
-
-    ~CBufferedFile()
-    {
-        fclose();
-    }
-
-    // Disallow copies
-    CBufferedFile(const CBufferedFile&) = delete;
-    CBufferedFile& operator=(const CBufferedFile&) = delete;
-
-    int GetVersion() const { return nVersion; }
-    int GetType() const { return nType; }
-
-    void fclose()
-    {
-        if (src) {
-            ::fclose(src);
-            src = nullptr;
-        }
-    }
-
-    //! check whether we're at the end of the source file
-    bool eof() const {
-        return nReadPos == nSrcPos && feof(src);
-    }
-
-    //! read a number of bytes
-    void read(char *pch, size_t nSize) {
-        if (nSize + nReadPos > nReadLimit)
-            throw std::ios_base::failure("Read attempted past buffer limit");
-        while (nSize > 0) {
-            if (nReadPos == nSrcPos)
-                Fill();
-            unsigned int pos = nReadPos % vchBuf.size();
-            size_t nNow = nSize;
-            if (nNow + pos > vchBuf.size())
-                nNow = vchBuf.size() - pos;
-            if (nNow + nReadPos > nSrcPos)
-                nNow = nSrcPos - nReadPos;
-            memcpy(pch, &vchBuf[pos], nNow);
-            nReadPos += nNow;
-            pch += nNow;
-            nSize -= nNow;
-        }
-    }
-
-    //! return the current reading position
-    uint64_t GetPos() const {
-        return nReadPos;
-    }
-
-    //! rewind to a given reading position
-    bool SetPos(uint64_t nPos) {
-        size_t bufsize = vchBuf.size();
-        if (nPos + bufsize < nSrcPos) {
-            // rewinding too far, rewind as far as possible
-            nReadPos = nSrcPos - bufsize;
-            return false;
-        }
-        if (nPos > nSrcPos) {
-            // can't go this far forward, go as far as possible
-            nReadPos = nSrcPos;
-            return false;
-        }
-        nReadPos = nPos;
-        return true;
-    }
-
-    //! prevent reading beyond a certain position
-    //! no argument removes the limit
-    bool SetLimit(uint64_t nPos = std::numeric_limits<uint64_t>::max()) {
-        if (nPos < nReadPos)
-=======
             throw std::ios_base::failure{m_src.feof() ? "BufferedFile::Fill: end of file" : "BufferedFile::Fill: fread failed"};
         }
         nSrcPos += nBytes;
@@ -875,7 +673,6 @@ public:
     //! no argument removes the limit
     bool SetLimit(uint64_t nPos = std::numeric_limits<uint64_t>::max()) {
         if (nPos < m_read_pos)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             return false;
         nReadLimit = nPos;
         return true;
@@ -888,14 +685,10 @@ public:
     }
 
     //! search for a given byte in the stream, and remain positioned on it
-<<<<<<< HEAD
-    void FindByte(char ch) {
-=======
     void FindByte(std::byte byte)
     {
         // For best performance, avoid mod operation within the loop.
         size_t buf_offset{size_t(m_read_pos % uint64_t(vchBuf.size()))};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         while (true) {
             if (m_read_pos == nSrcPos) {
                 // No more bytes available; read from the file into the buffer,

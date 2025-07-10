@@ -1,67 +1,32 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
-// Copyright (c) 2009-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// Copyright (c) 2009-2022 The Bitcoin Core developers
+// Copyright (c) 2014-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <txmempool.h>
-<<<<<<< HEAD
-#include <chainparams.h>
-#include <consensus/consensus.h>
-#include <consensus/tx_verify.h>
-#include <consensus/validation.h>
-=======
 
 #include <chain.h>
+#include <chainparams.h>
 #include <coins.h>
 #include <common/system.h>
 #include <consensus/consensus.h>
 #include <consensus/tx_verify.h>
 #include <consensus/validation.h>
 #include <logging.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <policy/fees.h>
 #include <policy/policy.h>
 #include <policy/settings.h>
 #include <reverse_iterator.h>
-<<<<<<< HEAD
-#include <util/moneystr.h>
-#include <util/system.h>
-#include <util/time.h>
-#include <validation.h>
-#include <validationinterface.h>
-
-#include <cmath>
-#include <optional>
-
-CTxMemPoolEntry::CTxMemPoolEntry(const CTransactionRef& _tx, const CAmount& _nFee,
-                                 int64_t _nTime, unsigned int _entryHeight,
-                                 bool _spendsCoinbase, int64_t _sigOpsCost, LockPoints lp)
-    : tx(_tx), nFee(_nFee), nTxWeight(GetTransactionWeight(*tx)), nUsageSize(RecursiveDynamicUsage(tx)), nTime(_nTime), entryHeight(_entryHeight),
-    spendsCoinbase(_spendsCoinbase), sigOpCost(_sigOpsCost), lockPoints(lp)
-{
-    nCountWithDescendants = 1;
-    nSizeWithDescendants = GetTxSize();
-    nModFeesWithDescendants = nFee;
-
-    feeDelta = 0;
-
-    nCountWithAncestors = 1;
-    nSizeWithAncestors = GetTxSize();
-    nModFeesWithAncestors = nFee;
-    nSigOpCostWithAncestors = sigOpCost;
-=======
 #include <util/check.h>
 #include <util/moneystr.h>
 #include <util/overflow.h>
 #include <util/result.h>
+#include <util/system.h>
 #include <util/time.h>
 #include <util/trace.h>
 #include <util/translation.h>
+#include <validation.h>
 #include <validationinterface.h>
 
 #include <cmath>
@@ -85,35 +50,11 @@ bool TestLockPointValidity(CChain& active_chain, const LockPoints& lp)
 
     // LockPoints still valid
     return true;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 void CTxMemPool::UpdateForDescendants(txiter updateIt, cacheMap& cachedDescendants,
                                       const std::set<uint256>& setExclude, std::set<uint256>& descendants_to_remove)
 {
-<<<<<<< HEAD
-    nModFeesWithDescendants += newFeeDelta - feeDelta;
-    nModFeesWithAncestors += newFeeDelta - feeDelta;
-    feeDelta = newFeeDelta;
-}
-
-void CTxMemPoolEntry::UpdateLockPoints(const LockPoints& lp)
-{
-    lockPoints = lp;
-}
-
-size_t CTxMemPoolEntry::GetTxSize() const
-{
-    return GetVirtualTransactionSize(nTxWeight, sigOpCost);
-}
-
-// Update the given tx for any in-mempool descendants.
-// Assumes that CTxMemPool::m_children is correct for the given tx and all
-// descendants.
-void CTxMemPool::UpdateForDescendants(txiter updateIt, cacheMap &cachedDescendants, const std::set<uint256> &setExclude)
-{
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     CTxMemPoolEntry::Children stageEntries, descendants;
     stageEntries = updateIt->GetMemPoolChildrenConst();
 
@@ -148,9 +89,6 @@ void CTxMemPool::UpdateForDescendants(txiter updateIt, cacheMap &cachedDescendan
             modifyCount++;
             cachedDescendants[updateIt].insert(mapTx.iterator_to(descendant));
             // Update ancestor state for each descendant
-<<<<<<< HEAD
-            mapTx.modify(mapTx.iterator_to(descendant), update_ancestor_state(updateIt->GetTxSize(), updateIt->GetModifiedFee(), 1, updateIt->GetSigOpCost()));
-=======
             mapTx.modify(mapTx.iterator_to(descendant), [=](CTxMemPoolEntry& e) {
               e.UpdateAncestorState(updateIt->GetTxSize(), updateIt->GetModifiedFee(), 1, updateIt->GetSigOpCost());
             });
@@ -160,7 +98,6 @@ void CTxMemPool::UpdateForDescendants(txiter updateIt, cacheMap &cachedDescendan
             if (descendant.GetCountWithAncestors() > uint64_t(m_limits.ancestor_count) || descendant.GetSizeWithAncestors() > m_limits.ancestor_size_vbytes) {
                 descendants_to_remove.insert(descendant.GetTx().GetHash());
             }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
     }
     mapTx.modify(updateIt, [=](CTxMemPoolEntry& e) { e.UpdateDescendantState(modifySize, modifyFee, modifyCount); });
@@ -183,11 +120,6 @@ void CTxMemPool::UpdateTransactionsFromBlock(const std::vector<uint256>& vHashes
     // Iterate in reverse, so that whenever we are looking at a transaction
     // we are sure that all in-mempool descendants have already been processed.
     // This maximizes the benefit of the descendant cache and guarantees that
-<<<<<<< HEAD
-    // CTxMemPool::m_children will be updated, an assumption made in
-=======
-    // CTxMemPoolEntry::m_children will be updated, an assumption made in
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     // UpdateForDescendants.
     for (const uint256 &hash : reverse_iterate(vHashesToUpdate)) {
         // calculate children from mapNextTx
@@ -196,11 +128,7 @@ void CTxMemPool::UpdateTransactionsFromBlock(const std::vector<uint256>& vHashes
             continue;
         }
         auto iter = mapNextTx.lower_bound(COutPoint(hash, 0));
-<<<<<<< HEAD
-        // First calculate the children, and update CTxMemPool::m_children to
-=======
         // First calculate the children, and update CTxMemPoolEntry::m_children to
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         // include them, and update their CTxMemPoolEntry::m_parents to include this tx.
         // we cache the in-mempool children to avoid duplicate updates
         {
@@ -217,9 +145,6 @@ void CTxMemPool::UpdateTransactionsFromBlock(const std::vector<uint256>& vHashes
                 }
             }
         } // release epoch guard for UpdateForDescendants
-<<<<<<< HEAD
-        UpdateForDescendants(it, mapMemPoolDescendantsToUpdate, setAlreadyIncluded);
-=======
         UpdateForDescendants(it, mapMemPoolDescendantsToUpdate, setAlreadyIncluded, descendants_to_remove);
     }
 
@@ -229,7 +154,6 @@ void CTxMemPool::UpdateTransactionsFromBlock(const std::vector<uint256>& vHashes
         if (const std::optional<txiter> txiter = GetIter(txid)) {
             removeRecursive((*txiter)->GetTx(), MemPoolRemovalReason::SIZELIMIT);
         }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 }
 
@@ -239,8 +163,6 @@ util::Result<CTxMemPool::setEntries> CTxMemPool::CalculateAncestorsAndCheckLimit
     CTxMemPoolEntry::Parents& staged_ancestors,
     const Limits& limits) const
 {
-<<<<<<< HEAD
-=======
     int64_t totalSizeWithAncestors = entry_size;
     setEntries ancestors;
 
@@ -326,7 +248,6 @@ util::Result<CTxMemPool::setEntries> CTxMemPool::CalculateMemPoolAncestors(
     const Limits& limits,
     bool fSearchForParents /* = true */) const
 {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     CTxMemPoolEntry::Parents staged_ancestors;
     const CTransaction &tx = entry.GetTx();
 
@@ -338,14 +259,8 @@ util::Result<CTxMemPool::setEntries> CTxMemPool::CalculateMemPoolAncestors(
             std::optional<txiter> piter = GetIter(tx.vin[i].prevout.hash);
             if (piter) {
                 staged_ancestors.insert(**piter);
-<<<<<<< HEAD
-                if (staged_ancestors.size() + 1 > limitAncestorCount) {
-                    errString = strprintf("too many unconfirmed parents [limit: %u]", limitAncestorCount);
-                    return false;
-=======
                 if (staged_ancestors.size() + 1 > static_cast<uint64_t>(limits.ancestor_count)) {
                     return util::Error{Untranslated(strprintf("too many unconfirmed parents [limit: %u]", limits.ancestor_count))};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 }
             }
         }
@@ -360,40 +275,6 @@ util::Result<CTxMemPool::setEntries> CTxMemPool::CalculateMemPoolAncestors(
                                             limits);
 }
 
-<<<<<<< HEAD
-    while (!staged_ancestors.empty()) {
-        const CTxMemPoolEntry& stage = staged_ancestors.begin()->get();
-        txiter stageit = mapTx.iterator_to(stage);
-
-        setAncestors.insert(stageit);
-        staged_ancestors.erase(stage);
-        totalSizeWithAncestors += stageit->GetTxSize();
-
-        if (stageit->GetSizeWithDescendants() + entry.GetTxSize() > limitDescendantSize) {
-            errString = strprintf("exceeds descendant size limit for tx %s [limit: %u]", stageit->GetTx().GetHash().ToString(), limitDescendantSize);
-            return false;
-        } else if (stageit->GetCountWithDescendants() + 1 > limitDescendantCount) {
-            errString = strprintf("too many descendants for tx %s [limit: %u]", stageit->GetTx().GetHash().ToString(), limitDescendantCount);
-            return false;
-        } else if (totalSizeWithAncestors > limitAncestorSize) {
-            errString = strprintf("exceeds ancestor size limit [limit: %u]", limitAncestorSize);
-            return false;
-        }
-
-        const CTxMemPoolEntry::Parents& parents = stageit->GetMemPoolParentsConst();
-        for (const CTxMemPoolEntry& parent : parents) {
-            txiter parent_it = mapTx.iterator_to(parent);
-
-            // If this is a new ancestor, add it.
-            if (setAncestors.count(parent_it) == 0) {
-                staged_ancestors.insert(parent);
-            }
-            if (staged_ancestors.size() + setAncestors.size() + 1 > limitAncestorCount) {
-                errString = strprintf("too many unconfirmed ancestors [limit: %u]", limitAncestorCount);
-                return false;
-            }
-        }
-=======
 CTxMemPool::setEntries CTxMemPool::AssumeCalculateMemPoolAncestors(
     std::string_view calling_fn_name,
     const CTxMemPoolEntry &entry,
@@ -404,18 +285,13 @@ CTxMemPool::setEntries CTxMemPool::AssumeCalculateMemPoolAncestors(
     if (!Assume(result)) {
         LogPrintLevel(BCLog::MEMPOOL, BCLog::Level::Error, "%s: CalculateMemPoolAncestors failed unexpectedly, continuing with empty ancestor set (%s)\n",
                       calling_fn_name, util::ErrorString(result).original);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     return std::move(result).value_or(CTxMemPool::setEntries{});
 }
 
 void CTxMemPool::UpdateAncestorsOf(bool add, txiter it, setEntries &setAncestors)
 {
-<<<<<<< HEAD
-    CTxMemPoolEntry::Parents parents = it->GetMemPoolParents();
-=======
     const CTxMemPoolEntry::Parents& parents = it->GetMemPoolParentsConst();
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     // add or remove this tx as a child of each parent
     for (const CTxMemPoolEntry& parent : parents) {
         UpdateChild(mapTx.iterator_to(parent), it, add);
@@ -494,11 +370,7 @@ void CTxMemPool::UpdateForRemoveFromMempool(const setEntries &entriesToRemove, b
         // mempool parents we'd calculate by searching, and it's important that
         // we use the cached notion of ancestor transactions as the set of
         // things to update for removal.
-<<<<<<< HEAD
-        CalculateMemPoolAncestors(entry, setAncestors, nNoLimit, nNoLimit, nNoLimit, nNoLimit, dummy, false);
-=======
         auto ancestors{AssumeCalculateMemPoolAncestors(__func__, entry, Limits::NoLimits(), /*fSearchForParents=*/false)};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         // Note that UpdateAncestorsOf severs the child links that point to
         // removeIt in the entries for the parents of removeIt.
         UpdateAncestorsOf(false, removeIt, ancestors);
@@ -531,12 +403,6 @@ void CTxMemPoolEntry::UpdateAncestorState(int32_t modifySize, CAmount modifyFee,
     assert(int(nSigOpCostWithAncestors) >= 0);
 }
 
-<<<<<<< HEAD
-CTxMemPool::CTxMemPool(CBlockPolicyEstimator* estimator, int check_ratio, bool isStempool)
-    : m_check_ratio(check_ratio), minerPolicyEstimator(estimator), m_is_stempool(isStempool)
-{
-    _clear(); //lock free clear
-=======
 CTxMemPool::CTxMemPool(const Options& opts)
     : m_check_ratio{opts.check_ratio},
       minerPolicyEstimator{opts.estimator},
@@ -551,7 +417,6 @@ CTxMemPool::CTxMemPool(const Options& opts)
       m_full_rbf{opts.full_rbf},
       m_limits{opts.limits}
 {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 bool CTxMemPool::isSpent(const COutPoint& outpoint) const
@@ -578,21 +443,12 @@ void CTxMemPool::addUnchecked(const CTxMemPoolEntry &entry, setEntries &setAnces
     indexed_transaction_set::iterator newit = mapTx.insert(entry).first;
 
     // Update transaction for any feeDelta created by PrioritiseTransaction
-<<<<<<< HEAD
-    // TODO: refactor so that the fee delta is calculated before inserting
-    // into mapTx.
-    CAmount delta{0};
-    ApplyDelta(entry.GetTx().GetHash(), delta);
-    if (delta) {
-            mapTx.modify(newit, update_fee_delta(delta));
-=======
     CAmount delta{0};
     ApplyDelta(entry.GetTx().GetHash(), delta);
     // The following call to UpdateModifiedFee assumes no previous fee modifications
     Assume(entry.GetFee() == entry.GetModifiedFee());
     if (delta) {
         mapTx.modify(newit, [&delta](CTxMemPoolEntry& e) { e.UpdateModifiedFee(delta); });
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     // Update cachedInnerUsage to include contained transaction's usage.
@@ -648,14 +504,6 @@ void CTxMemPool::removeUnchecked(txiter it, MemPoolRemovalReason reason)
         // for any reason except being included in a block. Clients interested
         // in transactions included in blocks can subscribe to the BlockConnected
         // notification.
-<<<<<<< HEAD
-
-        if (!this->isStempool()) {
-            // Do not notify subscribers about stempool removals
-            GetMainSignals().TransactionRemovedFromMempool(it->GetSharedTx(), reason, mempool_sequence);
-        }
-    }
-=======
         GetMainSignals().TransactionRemovedFromMempool(it->GetSharedTx(), reason, mempool_sequence);
     }
     TRACE5(mempool, removed,
@@ -665,7 +513,6 @@ void CTxMemPool::removeUnchecked(txiter it, MemPoolRemovalReason reason)
         it->GetFee(),
         std::chrono::duration_cast<std::chrono::duration<std::uint64_t>>(it->GetTime()).count()
     );
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     const uint256 hash = it->GetTx().GetHash();
     for (const CTxIn& txin : it->GetTx().vin)
@@ -751,47 +598,6 @@ void CTxMemPool::removeRecursive(const CTransaction &origTx, MemPoolRemovalReaso
         RemoveStaged(setAllRemoves, false, reason);
 }
 
-<<<<<<< HEAD
-void CTxMemPool::removeForReorg(CChainState& active_chainstate, int flags)
-{
-    // Remove transactions spending a coinbase which are now immature and no-longer-final transactions
-    AssertLockHeld(cs);
-    setEntries txToRemove;
-    for (indexed_transaction_set::const_iterator it = mapTx.begin(); it != mapTx.end(); it++) {
-        const CTransaction& tx = it->GetTx();
-        LockPoints lp = it->GetLockPoints();
-        bool validLP =  TestLockPointValidity(active_chainstate.m_chain, &lp);
-        CCoinsViewMemPool view_mempool(&active_chainstate.CoinsTip(), *this);
-        if (!CheckFinalTx(active_chainstate.m_chain.Tip(), tx, flags)
-            || !CheckSequenceLocks(active_chainstate.m_chain.Tip(), view_mempool, tx, flags, &lp, validLP)) {
-            // Note if CheckSequenceLocks fails the LockPoints may still be invalid
-            // So it's critical that we remove the tx and not depend on the LockPoints.
-            txToRemove.insert(it);
-        } else if (it->GetSpendsCoinbase()) {
-            for (const CTxIn& txin : tx.vin) {
-                indexed_transaction_set::const_iterator it2 = mapTx.find(txin.prevout.hash);
-                if (it2 != mapTx.end())
-                    continue;
-                const Coin &coin = active_chainstate.CoinsTip().AccessCoin(txin.prevout);
-                if (m_check_ratio != 0) assert(!coin.IsSpent());
-                unsigned int nMemPoolHeight = active_chainstate.m_chain.Tip()->nHeight + 1;
-                if (coin.nHeight < Params().GetConsensus().multiAlgoDiffChangeTarget) {
-                    if (coin.IsSpent() || (coin.IsCoinBase() && ((signed long)nMemPoolHeight) - coin.nHeight < COINBASE_MATURITY)) { 
-                        txToRemove.insert(it); 
-                        break; 
-                    } 
-                } else { 
-                    if (coin.IsSpent() || (coin.IsCoinBase() && ((signed long)nMemPoolHeight) - coin.nHeight < COINBASE_MATURITY_2)) { 
-                        txToRemove.insert(it); 
-                        break; 
-                    }
-                }
-            }
-        }
-        if (!validLP) {
-            mapTx.modify(it, update_lock_points(lp));
-        }
-=======
 void CTxMemPool::removeForReorg(CChain& chain, std::function<bool(txiter)> check_final_and_mature)
 {
     // Remove transactions spending a coinbase which are now immature and no-longer-final transactions
@@ -801,7 +607,6 @@ void CTxMemPool::removeForReorg(CChain& chain, std::function<bool(txiter)> check
     setEntries txToRemove;
     for (indexed_transaction_set::const_iterator it = mapTx.begin(); it != mapTx.end(); it++) {
         if (check_final_and_mature(it)) txToRemove.insert(it);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     setEntries setAllRemoves;
     for (txiter it : txToRemove) {
@@ -864,48 +669,12 @@ void CTxMemPool::removeForBlock(const std::vector<CTransactionRef>& vtx, unsigne
 
 void CTxMemPool::check(const CCoinsViewCache& active_coins_tip, int64_t spendheight) const
 {
-<<<<<<< HEAD
-    mapTx.clear();
-    mapNextTx.clear();
-    totalTxSize = 0;
-    m_total_fee = 0;
-    cachedInnerUsage = 0;
-    lastRollingFeeUpdate = GetTime();
-    blockSinceLastRollingFeeBump = false;
-    rollingMinimumFeeRate = 0;
-    ++nTransactionsUpdated;
-}
-=======
-    if (m_check_ratio == 0) return;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
-
-    if (GetRand(m_check_ratio) >= 1) return;
-
-    AssertLockHeld(::cs_main);
-    LOCK(cs);
-<<<<<<< HEAD
-    _clear();
-}
-
-static void CheckInputsAndUpdateCoins(const CTransaction& tx, CCoinsViewCache& mempoolDuplicate, const int64_t spendheight)
-{
-    TxValidationState dummy_state; // Not used. CheckTxInputs() should always pass
-    CAmount txfee = 0;
-    bool fCheckResult = tx.IsCoinBase() || Consensus::CheckTxInputs(tx, dummy_state, mempoolDuplicate, spendheight, txfee);
-    assert(fCheckResult);
-    UpdateCoins(tx, mempoolDuplicate, std::numeric_limits<int>::max());
-}
-
-void CTxMemPool::check(CChainState& active_chainstate) const
-{
     if (m_check_ratio == 0) return;
 
     if (GetRand(m_check_ratio) >= 1) return;
 
     AssertLockHeld(::cs_main);
     LOCK(cs);
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     LogPrint(BCLog::MEMPOOL, "Checking mempool with %u transactions and %u inputs\n", (unsigned int)mapTx.size(), (unsigned int)mapNextTx.size());
 
     uint64_t checkTotal = 0;
@@ -913,13 +682,7 @@ void CTxMemPool::check(CChainState& active_chainstate) const
     uint64_t innerUsage = 0;
     uint64_t prev_ancestor_count{0};
 
-<<<<<<< HEAD
-    CCoinsViewCache& active_coins_tip = active_chainstate.CoinsTip();
     CCoinsViewCache mempoolDuplicate(const_cast<CCoinsViewCache*>(&active_coins_tip));
-    const int64_t spendheight = active_chainstate.m_chain.Height() + 1;
-=======
-    CCoinsViewCache mempoolDuplicate(const_cast<CCoinsViewCache*>(&active_coins_tip));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     for (const auto& it : GetSortedDepthAndScore()) {
         checkTotal += it->GetTxSize();
@@ -927,10 +690,6 @@ void CTxMemPool::check(CChainState& active_chainstate) const
         innerUsage += it->DynamicMemoryUsage();
         const CTransaction& tx = it->GetTx();
         innerUsage += memusage::DynamicUsage(it->GetMemPoolParentsConst()) + memusage::DynamicUsage(it->GetMemPoolChildrenConst());
-<<<<<<< HEAD
-        bool fDependsWait = false;
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         CTxMemPoolEntry::Parents setParentCheck;
         for (const CTxIn &txin : tx.vin) {
             // Check that every mempool transaction's inputs refer to available coins, or other mempool tx's.
@@ -938,14 +697,7 @@ void CTxMemPool::check(CChainState& active_chainstate) const
             if (it2 != mapTx.end()) {
                 const CTransaction& tx2 = it2->GetTx();
                 assert(tx2.vout.size() > txin.prevout.n && !tx2.vout[txin.prevout.n].IsNull());
-<<<<<<< HEAD
-                fDependsWait = true;
                 setParentCheck.insert(*it2);
-            } else {
-                assert(active_coins_tip.HaveCoin(txin.prevout));
-=======
-                setParentCheck.insert(*it2);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             }
             // We are iterating through the mempool entries sorted in order by ancestor count.
             // All parents must have been checked before their children and their coins added to
@@ -1028,17 +780,10 @@ bool CTxMemPool::CompareDepthAndScore(const uint256& hasha, const uint256& hashb
      *   both are in the mempool and a has a higher score than b
      */
     LOCK(cs);
-<<<<<<< HEAD
-    indexed_transaction_set::const_iterator i = wtxid ? get_iter_from_wtxid(hasha) : mapTx.find(hasha);
-    if (i == mapTx.end()) return false;
-    indexed_transaction_set::const_iterator j = wtxid ? get_iter_from_wtxid(hashb) : mapTx.find(hashb);
-    if (j == mapTx.end()) return true;
-=======
     indexed_transaction_set::const_iterator j = wtxid ? get_iter_from_wtxid(hashb) : mapTx.find(hashb);
     if (j == mapTx.end()) return false;
     indexed_transaction_set::const_iterator i = wtxid ? get_iter_from_wtxid(hasha) : mapTx.find(hasha);
     if (i == mapTx.end()) return true;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     uint64_t counta = i->GetCountWithAncestors();
     uint64_t countb = j->GetCountWithAncestors();
     if (counta == countb) {
@@ -1092,8 +837,6 @@ void CTxMemPool::queryHashes(std::vector<uint256>& vtxid) const
 
 static TxMempoolInfo GetInfo(CTxMemPool::indexed_transaction_set::const_iterator it) {
     return TxMempoolInfo{it->GetSharedTx(), it->GetTime(), it->GetFee(), it->GetTxSize(), it->GetModifiedFee() - it->GetFee()};
-<<<<<<< HEAD
-=======
 }
 
 std::vector<CTxMemPoolEntryRef> CTxMemPool::entryAll() const
@@ -1106,7 +849,6 @@ std::vector<CTxMemPoolEntryRef> CTxMemPool::entryAll() const
         ret.emplace_back(*it);
     }
     return ret;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 std::vector<TxMempoolInfo> CTxMemPool::infoAll() const
@@ -1141,9 +883,6 @@ TxMempoolInfo CTxMemPool::info(const GenTxid& gtxid) const
     return GetInfo(i);
 }
 
-<<<<<<< HEAD
-TxMempoolInfo CTxMemPool::info(const uint256& txid) const { return info(GenTxid{false, txid}); }
-=======
 TxMempoolInfo CTxMemPool::info_for_relay(const GenTxid& gtxid, uint64_t last_sequence) const
 {
     LOCK(cs);
@@ -1154,7 +893,6 @@ TxMempoolInfo CTxMemPool::info_for_relay(const GenTxid& gtxid, uint64_t last_seq
         return TxMempoolInfo();
     }
 }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 void CTxMemPool::PrioritiseTransaction(const uint256& hash, const CAmount& nFeeDelta)
 {
@@ -1208,8 +946,6 @@ void CTxMemPool::ClearPrioritisation(const uint256& hash)
     mapDeltas.erase(hash);
 }
 
-<<<<<<< HEAD
-=======
 std::vector<CTxMemPool::delta_info> CTxMemPool::GetPrioritisedTransactions() const
 {
     AssertLockNotHeld(cs);
@@ -1226,7 +962,6 @@ std::vector<CTxMemPool::delta_info> CTxMemPool::GetPrioritisedTransactions() con
     return result;
 }
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 const CTransaction* CTxMemPool::GetConflictTx(const COutPoint& prevout) const
 {
     const auto it = mapNextTx.find(prevout);
@@ -1250,8 +985,6 @@ CTxMemPool::setEntries CTxMemPool::GetIterSet(const std::set<uint256>& hashes) c
     return ret;
 }
 
-<<<<<<< HEAD
-=======
 std::vector<CTxMemPool::txiter> CTxMemPool::GetIterVec(const std::vector<uint256>& txids) const
 {
     AssertLockHeld(cs);
@@ -1265,7 +998,6 @@ std::vector<CTxMemPool::txiter> CTxMemPool::GetIterVec(const std::vector<uint256
     return ret;
 }
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 bool CTxMemPool::HasNoInputsOf(const CTransaction &tx) const
 {
     for (unsigned int i = 0; i < tx.vin.size(); i++)
@@ -1304,10 +1036,6 @@ void CCoinsViewMemPool::PackageAddTransaction(const CTransactionRef& tx)
 {
     for (unsigned int n = 0; n < tx->vout.size(); ++n) {
         m_temp_added.emplace(COutPoint(tx->GetHash(), n), Coin(tx->vout[n], MEMPOOL_HEIGHT, false));
-<<<<<<< HEAD
-    }
-}
-=======
         m_non_base_coins.emplace(tx->GetHash(), n);
     }
 }
@@ -1316,7 +1044,6 @@ void CCoinsViewMemPool::Reset()
     m_temp_added.clear();
     m_non_base_coins.clear();
 }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 size_t CTxMemPool::DynamicMemoryUsage() const {
     LOCK(cs);
@@ -1360,16 +1087,8 @@ int CTxMemPool::Expire(std::chrono::seconds time)
 
 void CTxMemPool::addUnchecked(const CTxMemPoolEntry &entry, bool validFeeEstimate)
 {
-<<<<<<< HEAD
-    setEntries setAncestors;
-    uint64_t nNoLimit = std::numeric_limits<uint64_t>::max();
-    std::string dummy;
-    CalculateMemPoolAncestors(entry, setAncestors, nNoLimit, nNoLimit, nNoLimit, nNoLimit, dummy);
-    return addUnchecked(entry, setAncestors, validFeeEstimate);
-=======
     auto ancestors{AssumeCalculateMemPoolAncestors(__func__, entry, Limits::NoLimits())};
     return addUnchecked(entry, ancestors, validFeeEstimate);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 void CTxMemPool::UpdateChild(txiter entry, txiter child, bool add)
@@ -1503,18 +1222,6 @@ void CTxMemPool::GetTransactionAncestry(const uint256& txid, size_t& ancestors, 
     }
 }
 
-<<<<<<< HEAD
-bool CTxMemPool::IsLoaded() const
-{
-    LOCK(cs);
-    return m_is_loaded;
-}
-
-void CTxMemPool::SetIsLoaded(bool loaded)
-{
-    LOCK(cs);
-    m_is_loaded = loaded;
-=======
 bool CTxMemPool::GetLoadTried() const
 {
     LOCK(cs);
@@ -1552,5 +1259,4 @@ std::vector<CTxMemPool::txiter> CTxMemPool::GatherClusters(const std::vector<uin
         }
     }
     return clustered_txs;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }

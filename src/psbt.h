@@ -1,32 +1,20 @@
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The DigiByte Core developers
-=======
+// Copyright (c) 2009-2022 The Bitcoin Core developers
 // Copyright (c) 2009-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #ifndef DIGIBYTE_PSBT_H
 #define DIGIBYTE_PSBT_H
 
-<<<<<<< HEAD
-#include <attributes.h>
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <node/transaction.h>
 #include <policy/feerate.h>
 #include <primitives/transaction.h>
 #include <pubkey.h>
-<<<<<<< HEAD
-#include <script/sign.h>
-#include <script/signingprovider.h>
-=======
 #include <script/keyorigin.h>
 #include <script/sign.h>
 #include <script/signingprovider.h>
 #include <span.h>
 #include <streams.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 #include <optional>
 
@@ -35,12 +23,9 @@ static constexpr uint8_t PSBT_MAGIC_BYTES[5] = {'p', 's', 'b', 't', 0xff};
 
 // Global types
 static constexpr uint8_t PSBT_GLOBAL_UNSIGNED_TX = 0x00;
-<<<<<<< HEAD
-=======
 static constexpr uint8_t PSBT_GLOBAL_XPUB = 0x01;
 static constexpr uint8_t PSBT_GLOBAL_VERSION = 0xFB;
 static constexpr uint8_t PSBT_GLOBAL_PROPRIETARY = 0xFC;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 // Input types
 static constexpr uint8_t PSBT_IN_NON_WITNESS_UTXO = 0x00;
@@ -52,8 +37,6 @@ static constexpr uint8_t PSBT_IN_WITNESSSCRIPT = 0x05;
 static constexpr uint8_t PSBT_IN_BIP32_DERIVATION = 0x06;
 static constexpr uint8_t PSBT_IN_SCRIPTSIG = 0x07;
 static constexpr uint8_t PSBT_IN_SCRIPTWITNESS = 0x08;
-<<<<<<< HEAD
-=======
 static constexpr uint8_t PSBT_IN_RIPEMD160 = 0x0A;
 static constexpr uint8_t PSBT_IN_SHA256 = 0x0B;
 static constexpr uint8_t PSBT_IN_HASH160 = 0x0C;
@@ -65,19 +48,15 @@ static constexpr uint8_t PSBT_IN_TAP_BIP32_DERIVATION = 0x16;
 static constexpr uint8_t PSBT_IN_TAP_INTERNAL_KEY = 0x17;
 static constexpr uint8_t PSBT_IN_TAP_MERKLE_ROOT = 0x18;
 static constexpr uint8_t PSBT_IN_PROPRIETARY = 0xFC;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 // Output types
 static constexpr uint8_t PSBT_OUT_REDEEMSCRIPT = 0x00;
 static constexpr uint8_t PSBT_OUT_WITNESSSCRIPT = 0x01;
 static constexpr uint8_t PSBT_OUT_BIP32_DERIVATION = 0x02;
-<<<<<<< HEAD
-=======
 static constexpr uint8_t PSBT_OUT_TAP_INTERNAL_KEY = 0x05;
 static constexpr uint8_t PSBT_OUT_TAP_TREE = 0x06;
 static constexpr uint8_t PSBT_OUT_TAP_BIP32_DERIVATION = 0x07;
 static constexpr uint8_t PSBT_OUT_PROPRIETARY = 0xFC;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 // The separator is 0x00. Reading this in means that the unserializer can interpret it
 // as a 0 length key which indicates that this is the separator. The separator has no value.
@@ -85,9 +64,6 @@ static constexpr uint8_t PSBT_SEPARATOR = 0x00;
 
 // BIP 174 does not specify a maximum file size, but we set a limit anyway
 // to prevent reading a stream indefinitely and running out of memory.
-<<<<<<< HEAD
-const std::streamsize MAX_FILE_SIZE_PSBT = 100000000; // 100 MiB
-=======
 const std::streamsize MAX_FILE_SIZE_PSBT = 100000000; // 100 MB
 
 // PSBT version number
@@ -211,7 +187,6 @@ void SerializeHDKeypaths(Stream& s, const std::map<CPubKey, KeyOriginInfo>& hd_k
         SerializeHDKeypath(s, keypath_pair.second);
     }
 }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 /** A structure for PSBTs which contain per-input information */
 struct PSBTInput
@@ -224,10 +199,6 @@ struct PSBTInput
     CScriptWitness final_script_witness;
     std::map<CPubKey, KeyOriginInfo> hd_keypaths;
     std::map<CKeyID, SigPair> partial_sigs;
-<<<<<<< HEAD
-    std::map<std::vector<unsigned char>, std::vector<unsigned char>> unknown;
-    int sighash_type = 0;
-=======
     std::map<uint160, std::vector<unsigned char>> ripemd160_preimages;
     std::map<uint256, std::vector<unsigned char>> sha256_preimages;
     std::map<uint160, std::vector<unsigned char>> hash160_preimages;
@@ -244,7 +215,6 @@ struct PSBTInput
     std::map<std::vector<unsigned char>, std::vector<unsigned char>> unknown;
     std::set<PSBTProprietary> m_proprietary;
     std::optional<int> sighash_type;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     bool IsNull() const;
     void FillSignatureData(SignatureData& sigdata) const;
@@ -256,71 +226,41 @@ struct PSBTInput
     inline void Serialize(Stream& s) const {
         // Write the utxo
         if (non_witness_utxo) {
-<<<<<<< HEAD
-            SerializeToVector(s, PSBT_IN_NON_WITNESS_UTXO);
-            OverrideStream<Stream> os(&s, s.GetType(), s.GetVersion() | SERIALIZE_TRANSACTION_NO_WITNESS);
-            SerializeToVector(os, non_witness_utxo);
-        }
-        if (!witness_utxo.IsNull()) {
-            SerializeToVector(s, PSBT_IN_WITNESS_UTXO);
-=======
             SerializeToVector(s, CompactSizeWriter(PSBT_IN_NON_WITNESS_UTXO));
             OverrideStream<Stream> os{&s, s.GetVersion() | SERIALIZE_TRANSACTION_NO_WITNESS};
             SerializeToVector(os, non_witness_utxo);
         }
         if (!witness_utxo.IsNull()) {
             SerializeToVector(s, CompactSizeWriter(PSBT_IN_WITNESS_UTXO));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             SerializeToVector(s, witness_utxo);
         }
 
         if (final_script_sig.empty() && final_script_witness.IsNull()) {
             // Write any partial signatures
             for (auto sig_pair : partial_sigs) {
-<<<<<<< HEAD
-                SerializeToVector(s, PSBT_IN_PARTIAL_SIG, MakeSpan(sig_pair.second.first));
-=======
                 SerializeToVector(s, CompactSizeWriter(PSBT_IN_PARTIAL_SIG), Span{sig_pair.second.first});
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 s << sig_pair.second.second;
             }
 
             // Write the sighash type
-<<<<<<< HEAD
-            if (sighash_type > 0) {
-                SerializeToVector(s, PSBT_IN_SIGHASH);
-                SerializeToVector(s, sighash_type);
-=======
             if (sighash_type != std::nullopt) {
                 SerializeToVector(s, CompactSizeWriter(PSBT_IN_SIGHASH));
                 SerializeToVector(s, *sighash_type);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             }
 
             // Write the redeem script
             if (!redeem_script.empty()) {
-<<<<<<< HEAD
-                SerializeToVector(s, PSBT_IN_REDEEMSCRIPT);
-=======
                 SerializeToVector(s, CompactSizeWriter(PSBT_IN_REDEEMSCRIPT));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 s << redeem_script;
             }
 
             // Write the witness script
             if (!witness_script.empty()) {
-<<<<<<< HEAD
-                SerializeToVector(s, PSBT_IN_WITNESSSCRIPT);
-=======
                 SerializeToVector(s, CompactSizeWriter(PSBT_IN_WITNESSSCRIPT));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 s << witness_script;
             }
 
             // Write any hd keypaths
-<<<<<<< HEAD
-            SerializeHDKeypaths(s, hd_keypaths, PSBT_IN_BIP32_DERIVATION);
-=======
             SerializeHDKeypaths(s, hd_keypaths, CompactSizeWriter(PSBT_IN_BIP32_DERIVATION));
 
             // Write any ripemd160 preimage
@@ -393,26 +333,15 @@ struct PSBTInput
                 SerializeToVector(s, PSBT_IN_TAP_MERKLE_ROOT);
                 SerializeToVector(s, m_tap_merkle_root);
             }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
 
         // Write script sig
         if (!final_script_sig.empty()) {
-<<<<<<< HEAD
-            SerializeToVector(s, PSBT_IN_SCRIPTSIG);
-=======
             SerializeToVector(s, CompactSizeWriter(PSBT_IN_SCRIPTSIG));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             s << final_script_sig;
         }
         // write script witness
         if (!final_script_witness.IsNull()) {
-<<<<<<< HEAD
-            SerializeToVector(s, PSBT_IN_SCRIPTWITNESS);
-            SerializeToVector(s, final_script_witness.stack);
-        }
-
-=======
             SerializeToVector(s, CompactSizeWriter(PSBT_IN_SCRIPTWITNESS));
             SerializeToVector(s, final_script_witness.stack);
         }
@@ -422,8 +351,6 @@ struct PSBTInput
             s << entry.key;
             s << entry.value;
         }
-
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         // Write unknown things
         for (auto& entry : unknown) {
             s << entry.first;
@@ -453,14 +380,9 @@ struct PSBTInput
                 break;
             }
 
-<<<<<<< HEAD
-            // First byte of key is the type
-            unsigned char type = key[0];
-=======
             // Type is compact size uint at beginning of key
             SpanReader skey{s.GetVersion(), key};
             uint64_t type = ReadCompactSize(skey);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
             // Do stuff based on type
             switch(type) {
@@ -472,11 +394,7 @@ struct PSBTInput
                         throw std::ios_base::failure("Non-witness utxo key is more than one byte type");
                     }
                     // Set the stream to unserialize with witness since this is always a valid network transaction
-<<<<<<< HEAD
-                    OverrideStream<Stream> os(&s, s.GetType(), s.GetVersion() & ~SERIALIZE_TRANSACTION_NO_WITNESS);
-=======
                     OverrideStream<Stream> os{&s, s.GetVersion() & ~SERIALIZE_TRANSACTION_NO_WITNESS};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                     UnserializeFromVector(os, non_witness_utxo);
                     break;
                 }
@@ -517,13 +435,9 @@ struct PSBTInput
                     } else if (key.size() != 1) {
                         throw std::ios_base::failure("Sighash type key is more than one byte type");
                     }
-<<<<<<< HEAD
-                    UnserializeFromVector(s, sighash_type);
-=======
                     int sighash;
                     UnserializeFromVector(s, sighash);
                     sighash_type = sighash;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                     break;
                 case PSBT_IN_REDEEMSCRIPT:
                 {
@@ -570,8 +484,6 @@ struct PSBTInput
                     UnserializeFromVector(s, final_script_witness.stack);
                     break;
                 }
-<<<<<<< HEAD
-=======
                 case PSBT_IN_RIPEMD160:
                 {
                     // Make sure that the key is the size of a ripemd160 hash + 1
@@ -770,7 +682,6 @@ struct PSBTInput
                     m_proprietary.insert(this_prop);
                     break;
                 }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 // Unknown stuff
                 default:
                     if (unknown.count(key) > 0) {
@@ -801,15 +712,11 @@ struct PSBTOutput
     CScript redeem_script;
     CScript witness_script;
     std::map<CPubKey, KeyOriginInfo> hd_keypaths;
-<<<<<<< HEAD
-    std::map<std::vector<unsigned char>, std::vector<unsigned char>> unknown;
-=======
     XOnlyPubKey m_tap_internal_key;
     std::vector<std::tuple<uint8_t, uint8_t, std::vector<unsigned char>>> m_tap_tree;
     std::map<XOnlyPubKey, std::pair<std::set<uint256>, KeyOriginInfo>> m_tap_bip32_paths;
     std::map<std::vector<unsigned char>, std::vector<unsigned char>> unknown;
     std::set<PSBTProprietary> m_proprietary;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     bool IsNull() const;
     void FillSignatureData(SignatureData& sigdata) const;
@@ -821,28 +728,17 @@ struct PSBTOutput
     inline void Serialize(Stream& s) const {
         // Write the redeem script
         if (!redeem_script.empty()) {
-<<<<<<< HEAD
-            SerializeToVector(s, PSBT_OUT_REDEEMSCRIPT);
-=======
             SerializeToVector(s, CompactSizeWriter(PSBT_OUT_REDEEMSCRIPT));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             s << redeem_script;
         }
 
         // Write the witness script
         if (!witness_script.empty()) {
-<<<<<<< HEAD
-            SerializeToVector(s, PSBT_OUT_WITNESSSCRIPT);
-=======
             SerializeToVector(s, CompactSizeWriter(PSBT_OUT_WITNESSSCRIPT));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             s << witness_script;
         }
 
         // Write any hd keypaths
-<<<<<<< HEAD
-        SerializeHDKeypaths(s, hd_keypaths, PSBT_OUT_BIP32_DERIVATION);
-=======
         SerializeHDKeypaths(s, hd_keypaths, CompactSizeWriter(PSBT_OUT_BIP32_DERIVATION));
 
         // Write proprietary things
@@ -880,7 +776,6 @@ struct PSBTOutput
             SerializeKeyOrigin(s_value, origin);
             s << value;
         }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         // Write unknown things
         for (auto& entry : unknown) {
@@ -911,14 +806,9 @@ struct PSBTOutput
                 break;
             }
 
-<<<<<<< HEAD
-            // First byte of key is the type
-            unsigned char type = key[0];
-=======
             // Type is compact size uint at beginning of key
             SpanReader skey{s.GetVersion(), key};
             uint64_t type = ReadCompactSize(skey);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
             // Do stuff based on type
             switch(type) {
@@ -947,8 +837,6 @@ struct PSBTOutput
                     DeserializeHDKeypaths(s, key, hd_keypaths);
                     break;
                 }
-<<<<<<< HEAD
-=======
                 case PSBT_OUT_TAP_INTERNAL_KEY:
                 {
                     if (!key_lookup.emplace(key).second) {
@@ -1029,7 +917,6 @@ struct PSBTOutput
                     m_proprietary.insert(this_prop);
                     break;
                 }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 // Unknown stuff
                 default: {
                     if (unknown.count(key) > 0) {
@@ -1059,13 +946,6 @@ struct PSBTOutput
 struct PartiallySignedTransaction
 {
     std::optional<CMutableTransaction> tx;
-<<<<<<< HEAD
-    std::vector<PSBTInput> inputs;
-    std::vector<PSBTOutput> outputs;
-    std::map<std::vector<unsigned char>, std::vector<unsigned char>> unknown;
-
-    bool IsNull() const;
-=======
     // We use a vector of CExtPubKey in the event that there happens to be the same KeyOriginInfos for different CExtPubKeys
     // Note that this map swaps the key and values from the serialization
     std::map<KeyOriginInfo, std::set<CExtPubKey>> m_xpubs;
@@ -1077,7 +957,6 @@ struct PartiallySignedTransaction
 
     bool IsNull() const;
     uint32_t GetVersion() const;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     /** Merge psbt into this. The two psbts must have the same underlying CTransaction (i.e. the
       * same actual DigiByte transaction.) Returns true if the merge succeeded, false otherwise. */
@@ -1102,14 +981,6 @@ struct PartiallySignedTransaction
         s << PSBT_MAGIC_BYTES;
 
         // unsigned tx flag
-<<<<<<< HEAD
-        SerializeToVector(s, PSBT_GLOBAL_UNSIGNED_TX);
-
-        // Write serialized tx to a stream
-        OverrideStream<Stream> os(&s, s.GetType(), s.GetVersion() | SERIALIZE_TRANSACTION_NO_WITNESS);
-        SerializeToVector(os, *tx);
-
-=======
         SerializeToVector(s, CompactSizeWriter(PSBT_GLOBAL_UNSIGNED_TX));
 
         // Write serialized tx to a stream
@@ -1140,7 +1011,6 @@ struct PartiallySignedTransaction
             s << entry.value;
         }
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         // Write the unknown things
         for (auto& entry : unknown) {
             s << entry.first;
@@ -1173,12 +1043,9 @@ struct PartiallySignedTransaction
         // Used for duplicate key detection
         std::set<std::vector<unsigned char>> key_lookup;
 
-<<<<<<< HEAD
-=======
         // Track the global xpubs we have already seen. Just for sanity checking
         std::set<CExtPubKey> global_xpubs;
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         // Read global data
         bool found_sep = false;
         while(!s.empty()) {
@@ -1193,14 +1060,9 @@ struct PartiallySignedTransaction
                 break;
             }
 
-<<<<<<< HEAD
-            // First byte of key is the type
-            unsigned char type = key[0];
-=======
             // Type is compact size uint at beginning of key
             SpanReader skey{s.GetVersion(), key};
             uint64_t type = ReadCompactSize(skey);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
             // Do stuff based on type
             switch(type) {
@@ -1213,11 +1075,7 @@ struct PartiallySignedTransaction
                     }
                     CMutableTransaction mtx;
                     // Set the stream to serialize with non-witness since this should always be non-witness
-<<<<<<< HEAD
-                    OverrideStream<Stream> os(&s, s.GetType(), s.GetVersion() | SERIALIZE_TRANSACTION_NO_WITNESS);
-=======
                     OverrideStream<Stream> os{&s, s.GetVersion() | SERIALIZE_TRANSACTION_NO_WITNESS};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                     UnserializeFromVector(os, mtx);
                     tx = std::move(mtx);
                     // Make sure that all scriptSigs and scriptWitnesses are empty
@@ -1228,8 +1086,6 @@ struct PartiallySignedTransaction
                     }
                     break;
                 }
-<<<<<<< HEAD
-=======
                 case PSBT_GLOBAL_XPUB:
                 {
                     if (key.size() != BIP32_EXTKEY_WITH_VERSION_SIZE + 1) {
@@ -1289,7 +1145,6 @@ struct PartiallySignedTransaction
                     m_proprietary.insert(this_prop);
                     break;
                 }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 // Unknown stuff
                 default: {
                     if (unknown.count(key) > 0) {
@@ -1309,11 +1164,7 @@ struct PartiallySignedTransaction
 
         // Make sure that we got an unsigned tx
         if (!tx) {
-<<<<<<< HEAD
-            throw std::ios_base::failure("No unsigned transcation was provided");
-=======
             throw std::ios_base::failure("No unsigned transaction was provided");
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
 
         // Read input data
@@ -1367,31 +1218,21 @@ std::string PSBTRoleName(PSBTRole role);
 /** Compute a PrecomputedTransactionData object from a psbt. */
 PrecomputedTransactionData PrecomputePSBTData(const PartiallySignedTransaction& psbt);
 
-<<<<<<< HEAD
-/** Checks whether a PSBTInput is already signed. */
-bool PSBTInputSigned(const PSBTInput& input);
-
-=======
 /** Checks whether a PSBTInput is already signed by checking for non-null finalized fields. */
 bool PSBTInputSigned(const PSBTInput& input);
 
 /** Checks whether a PSBTInput is already signed by doing script verification using final fields. */
 bool PSBTInputSignedAndVerified(const PartiallySignedTransaction psbt, unsigned int input_index, const PrecomputedTransactionData* txdata);
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 /** Signs a PSBTInput, verifying that all provided data matches what is being signed.
  *
  * txdata should be the output of PrecomputePSBTData (which can be shared across
  * multiple SignPSBTInput calls). If it is nullptr, a dummy signature will be created.
  **/
-<<<<<<< HEAD
-bool SignPSBTInput(const SigningProvider& provider, PartiallySignedTransaction& psbt, int index, const PrecomputedTransactionData* txdata, int sighash = SIGHASH_ALL, SignatureData* out_sigdata = nullptr);
-=======
 bool SignPSBTInput(const SigningProvider& provider, PartiallySignedTransaction& psbt, int index, const PrecomputedTransactionData* txdata, int sighash = SIGHASH_ALL, SignatureData* out_sigdata = nullptr, bool finalize = true);
 
 /**  Reduces the size of the PSBT by dropping unnecessary `non_witness_utxos` (i.e. complete previous transactions) from a psbt when all inputs are segwit v1. */
 void RemoveUnnecessaryTransactions(PartiallySignedTransaction& psbtx, const int& sighash_type);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 /** Counts the unsigned inputs of a PSBT. */
 size_t CountPSBTUnsignedInputs(const PartiallySignedTransaction& psbt);
@@ -1431,10 +1272,6 @@ bool FinalizeAndExtractPSBT(PartiallySignedTransaction& psbtx, CMutableTransacti
 //! Decode a base64ed PSBT into a PartiallySignedTransaction
 [[nodiscard]] bool DecodeBase64PSBT(PartiallySignedTransaction& decoded_psbt, const std::string& base64_psbt, std::string& error);
 //! Decode a raw (binary blob) PSBT into a PartiallySignedTransaction
-<<<<<<< HEAD
-[[nodiscard]] bool DecodeRawPSBT(PartiallySignedTransaction& decoded_psbt, const std::string& raw_psbt, std::string& error);
-=======
 [[nodiscard]] bool DecodeRawPSBT(PartiallySignedTransaction& decoded_psbt, Span<const std::byte> raw_psbt, std::string& error);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 #endif // DIGIBYTE_PSBT_H

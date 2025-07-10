@@ -478,7 +478,6 @@ private:
         m_net = NET_IPV6;
         m_addr.assign(ADDR_IPV6_SIZE, 0x0);
     }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 };
 
 class CSubNet

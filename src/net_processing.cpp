@@ -691,11 +691,7 @@ private:
         EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 
     /** Send a version message to a peer */
-<<<<<<< HEAD
-    void PushNodeVersion(CNode& pnode, int64_t nTime);
-=======
     void PushNodeVersion(CNode& pnode, const Peer& peer);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     /** Send a ping message every PING_INTERVAL or if requested via RPC. May
      *  mark the peer to be disconnected if a ping has timed out.
@@ -704,14 +700,10 @@ private:
     void MaybeSendPing(CNode& node_to, Peer& peer, std::chrono::microseconds now);
 
     /** Send `addr` messages on a regular schedule. */
-<<<<<<< HEAD
-    void MaybeSendAddr(CNode& node, Peer& peer, std::chrono::microseconds current_time);
-=======
     void MaybeSendAddr(CNode& node, Peer& peer, std::chrono::microseconds current_time) EXCLUSIVE_LOCKS_REQUIRED(g_msgproc_mutex);
 
     /** Send a single `sendheaders` message, after we have completed headers sync with a peer. */
     void MaybeSendSendHeaders(CNode& node, Peer& peer) EXCLUSIVE_LOCKS_REQUIRED(g_msgproc_mutex);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     /** Relay (gossip) an address to a few randomly chosen nodes.
      *
@@ -777,7 +769,6 @@ private:
 
     std::atomic<std::chrono::microseconds> m_next_inv_to_inbounds{0us};
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     /** Number of nodes with fSyncStarted. */
     int nSyncStarted GUARDED_BY(cs_main) = 0;
 
@@ -793,18 +784,11 @@ private:
     std::map<uint256, std::pair<NodeId, bool>> mapBlockSource GUARDED_BY(cs_main);
 
     /** Number of peers with wtxid relay. */
-<<<<<<< HEAD
-    int m_wtxid_relay_peers GUARDED_BY(cs_main) = 0;
-=======
     std::atomic<int> m_wtxid_relay_peers{0};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     /** Number of outbound peers with m_chain_sync.m_protect. */
     int m_outbound_peers_with_protect_from_disconnect GUARDED_BY(cs_main) = 0;
 
-<<<<<<< HEAD
-    bool AlreadyHaveTx(const GenTxid& gtxid) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
-=======
     /** Number of preferable block download peers. */
     int m_num_preferred_download_peers GUARDED_BY(cs_main){0};
 
@@ -813,7 +797,6 @@ private:
 
     bool AlreadyHaveTx(const GenTxid& gtxid)
         EXCLUSIVE_LOCKS_REQUIRED(cs_main, !m_recent_confirmed_transactions_mutex);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     /**
      * Filter for transactions that were recently rejected by the mempool.
@@ -856,11 +839,6 @@ private:
      * Filter for transactions that have been recently confirmed.
      * We use this to avoid requesting transactions that have already been
      * confirnmed.
-<<<<<<< HEAD
-     */
-    Mutex m_recent_confirmed_transactions_mutex;
-    std::unique_ptr<CRollingBloomFilter> m_recent_confirmed_transactions GUARDED_BY(m_recent_confirmed_transactions_mutex);
-=======
      *
      * Blocks don't typically have more than 4000 transactions, so this should
      * be at least six blocks (~1 hr) worth of transactions that we can store,
@@ -912,18 +890,10 @@ private:
 
     /** Height of the highest block announced using BIP 152 high-bandwidth mode. */
     int m_highest_fast_announce GUARDED_BY(::cs_main){0};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     /** Have we requested this block from a peer */
     bool IsBlockRequested(const uint256& hash) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
-<<<<<<< HEAD
-    /** Remove this block from our tracked requested blocks. Called if:
-     *  - the block has been received from a peer
-     *  - the request for the block has timed out
-     */
-    void RemoveBlockRequest(const uint256& hash) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
-=======
     /** Have we requested this block from an outbound peer */
     bool IsBlockRequestedFromOutbound(const uint256& hash) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
@@ -935,7 +905,6 @@ private:
      * affecting another's state).
      */
     void RemoveBlockRequest(const uint256& hash, std::optional<NodeId> from_peer) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     /* Mark a block as in flight
      * Returns false, still setting pit, if the block was already in flight from the same peer
@@ -948,11 +917,6 @@ private:
     /** Update pindexLastCommonBlock and add not-in-flight missing successors to vBlocks, until it has
      *  at most count entries.
      */
-<<<<<<< HEAD
-    void FindNextBlocksToDownload(NodeId nodeid, unsigned int count, std::vector<const CBlockIndex*>& vBlocks, NodeId& nodeStaller) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
-
-    std::map<uint256, std::pair<NodeId, std::list<QueuedBlock>::iterator> > mapBlocksInFlight GUARDED_BY(cs_main);
-=======
     void FindNextBlocksToDownload(const Peer& peer, unsigned int count, std::vector<const CBlockIndex*>& vBlocks, NodeId& nodeStaller) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     /** Request blocks for the background chainstate, if one is in use. */
@@ -1248,7 +1212,6 @@ namespace {
         //! Whether this peer is protected from disconnection due to a bad/slow chain
         bool m_protect{false};
     };
-=======
     /**
      * To prevent fingerprinting attacks, only send blocks/headers outside of
      * the active chain if they are no more than a month older (both in time,
@@ -1280,7 +1243,6 @@ namespace {
                                    const uint256& stop_hash, uint32_t max_height_diff,
                                    const CBlockIndex*& stop_index,
                                    BlockFilterIndex*& filter_index);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     /**
      * Handle a cfilters request.
@@ -1293,21 +1255,6 @@ namespace {
      */
     void ProcessGetCFilters(CNode& node, Peer& peer, CDataStream& vRecv);
 
-<<<<<<< HEAD
-    //! Time of last new block announcement
-    int64_t m_last_block_announcement{0};
-
-    //! Whether this peer is an inbound connection
-    const bool m_is_inbound;
-
-    //! A rolling bloom filter of all announced tx CInvs to this peer.
-    CRollingBloomFilter m_recently_announced_invs = CRollingBloomFilter{INVENTORY_MAX_RECENT_RELAY, 0.000001};
-
-    //! Whether this peer relays txs via wtxid
-    bool m_wtxid_relay{false};
-
-    CNodeState(bool is_inbound) : m_is_inbound(is_inbound) {}
-=======
     /**
      * Handle a cfheaders request.
      *
@@ -1340,7 +1287,6 @@ namespace {
 
     void AddAddressKnown(Peer& peer, const CAddress& addr) EXCLUSIVE_LOCKS_REQUIRED(g_msgproc_mutex);
     void PushAddress(Peer& peer, const CAddress& addr) EXCLUSIVE_LOCKS_REQUIRED(g_msgproc_mutex);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 };
 
 const CNodeState* PeerManagerImpl::State(NodeId pnode) const EXCLUSIVE_LOCKS_REQUIRED(cs_main)
@@ -1351,121 +1297,6 @@ const CNodeState* PeerManagerImpl::State(NodeId pnode) const EXCLUSIVE_LOCKS_REQ
     return &it->second;
 }
 
-<<<<<<< HEAD
-static bool RelayAddrsWithPeer(const Peer& peer)
-{
-    return peer.m_addr_known != nullptr;
-}
-
-/**
- * Whether the peer supports the address. For example, a peer that does not
- * implement BIP155 cannot receive Tor v3 addresses because it requires
- * ADDRv2 (BIP155) encoding.
- */
-static bool IsAddrCompatible(const Peer& peer, const CAddress& addr)
-{
-    return peer.m_wants_addrv2 || addr.IsAddrV1Compatible();
-}
-
-static void AddAddressKnown(Peer& peer, const CAddress& addr)
-{
-    assert(peer.m_addr_known);
-    peer.m_addr_known->insert(addr.GetKey());
-}
-
-static void PushAddress(Peer& peer, const CAddress& addr, FastRandomContext& insecure_rand)
-{
-    // Known checking here is only to save space from duplicates.
-    // Before sending, we'll filter it again for known addresses that were
-    // added after addresses were pushed.
-    assert(peer.m_addr_known);
-    if (addr.IsValid() && !peer.m_addr_known->contains(addr.GetKey()) && IsAddrCompatible(peer, addr)) {
-        if (peer.m_addrs_to_send.size() >= MAX_ADDR_TO_SEND) {
-            peer.m_addrs_to_send[insecure_rand.randrange(peer.m_addrs_to_send.size())] = addr;
-        } else {
-            peer.m_addrs_to_send.push_back(addr);
-        }
-    }
-}
-
-static void UpdatePreferredDownload(const CNode& node, CNodeState* state) EXCLUSIVE_LOCKS_REQUIRED(cs_main)
-{
-    nPreferredDownload -= state->fPreferredDownload;
-
-    // Whether this node should be marked as a preferred download node.
-    state->fPreferredDownload = (!node.IsInboundConn() || node.HasPermission(NetPermissionFlags::NoBan)) && !node.IsAddrFetchConn() && !node.fClient;
-
-    nPreferredDownload += state->fPreferredDownload;
-}
-
-bool PeerManagerImpl::IsBlockRequested(const uint256& hash)
-{
-    return mapBlocksInFlight.find(hash) != mapBlocksInFlight.end();
-}
-
-void PeerManagerImpl::RemoveBlockRequest(const uint256& hash)
-{
-    auto it = mapBlocksInFlight.find(hash);
-    if (it == mapBlocksInFlight.end()) {
-        // Block was not requested
-        return;
-    }
-
-    auto [node_id, list_it] = it->second;
-    CNodeState *state = State(node_id);
-    assert(state != nullptr);
-
-    if (state->vBlocksInFlight.begin() == list_it) {
-        // First block on the queue was received, update the start download time for the next one
-        state->m_downloading_since = std::max(state->m_downloading_since, GetTime<std::chrono::microseconds>());
-    }
-    state->vBlocksInFlight.erase(list_it);
-
-    state->nBlocksInFlight--;
-    if (state->nBlocksInFlight == 0) {
-        // Last validated block on the queue was received.
-        m_peers_downloading_from--;
-    }
-    state->m_stalling_since = 0us;
-    mapBlocksInFlight.erase(it);
-}
-
-bool PeerManagerImpl::BlockRequested(NodeId nodeid, const CBlockIndex& block, std::list<QueuedBlock>::iterator** pit)
-{
-    const uint256& hash{block.GetBlockHash()};
-
-    CNodeState *state = State(nodeid);
-    assert(state != nullptr);
-
-    // Short-circuit most stuff in case it is from the same node
-    std::map<uint256, std::pair<NodeId, std::list<QueuedBlock>::iterator> >::iterator itInFlight = mapBlocksInFlight.find(hash);
-    if (itInFlight != mapBlocksInFlight.end() && itInFlight->second.first == nodeid) {
-        if (pit) {
-            *pit = &itInFlight->second.second;
-        }
-        return false;
-    }
-
-    // Make sure it's not listed somewhere already.
-    RemoveBlockRequest(hash);
-
-    std::list<QueuedBlock>::iterator it = state->vBlocksInFlight.insert(state->vBlocksInFlight.end(),
-            {&block, std::unique_ptr<PartiallyDownloadedBlock>(pit ? new PartiallyDownloadedBlock(&m_mempool) : nullptr)});
-    state->nBlocksInFlight++;
-    if (state->nBlocksInFlight == 1) {
-        // We're starting a block download (batch) from this peer.
-        state->m_downloading_since = GetTime<std::chrono::microseconds>();
-        m_peers_downloading_from++;
-    }
-    itInFlight = mapBlocksInFlight.insert(std::make_pair(hash, std::make_pair(nodeid, it))).first;
-    if (pit) {
-        *pit = &itInFlight->second.second;
-    }
-    return true;
-}
-
-void PeerManagerImpl::MaybeSetPeerAsAnnouncingHeaderAndIDs(NodeId nodeid)
-=======
 CNodeState* PeerManagerImpl::State(NodeId pnode) EXCLUSIVE_LOCKS_REQUIRED(cs_main)
 {
     return const_cast<CNodeState*>(std::as_const(*this).State(pnode));
@@ -1477,7 +1308,6 @@ CNodeState* PeerManagerImpl::State(NodeId pnode) EXCLUSIVE_LOCKS_REQUIRED(cs_mai
  * ADDRv2 (BIP155) encoding.
  */
 static bool IsAddrCompatible(const Peer& peer, const CAddress& addr)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     return peer.m_wants_addrv2 || addr.IsAddrV1Compatible();
 }
@@ -1567,67 +1397,6 @@ void PeerManagerImpl::RemoveBlockRequest(const uint256& hash, std::optional<Node
         // Block was not requested from any peer
         return;
     }
-<<<<<<< HEAD
-    if (nodestate->fProvidesHeaderAndIDs) {
-        int num_outbound_hb_peers = 0;
-        for (std::list<NodeId>::iterator it = lNodesAnnouncingHeaderAndIDs.begin(); it != lNodesAnnouncingHeaderAndIDs.end(); it++) {
-            if (*it == nodeid) {
-                lNodesAnnouncingHeaderAndIDs.erase(it);
-                lNodesAnnouncingHeaderAndIDs.push_back(nodeid);
-                return;
-            }
-            CNodeState *state = State(*it);
-            if (state != nullptr && !state->m_is_inbound) ++num_outbound_hb_peers;
-        }
-        if (nodestate->m_is_inbound) {
-            // If we're adding an inbound HB peer, make sure we're not removing
-            // our last outbound HB peer in the process.
-            if (lNodesAnnouncingHeaderAndIDs.size() >= 3 && num_outbound_hb_peers == 1) {
-                CNodeState *remove_node = State(lNodesAnnouncingHeaderAndIDs.front());
-                if (remove_node != nullptr && !remove_node->m_is_inbound) {
-                    // Put the HB outbound peer in the second slot, so that it
-                    // doesn't get removed.
-                    std::swap(lNodesAnnouncingHeaderAndIDs.front(), *std::next(lNodesAnnouncingHeaderAndIDs.begin()));
-                }
-            }
-        }
-        m_connman.ForNode(nodeid, [this](CNode* pfrom) EXCLUSIVE_LOCKS_REQUIRED(::cs_main) {
-            AssertLockHeld(::cs_main);
-            uint64_t nCMPCTBLOCKVersion = (pfrom->GetLocalServices() & NODE_WITNESS) ? 2 : 1;
-            if (lNodesAnnouncingHeaderAndIDs.size() >= 3) {
-                // As per BIP152, we only get 3 of our peers to announce
-                // blocks using compact encodings.
-                m_connman.ForNode(lNodesAnnouncingHeaderAndIDs.front(), [this, nCMPCTBLOCKVersion](CNode* pnodeStop){
-                    m_connman.PushMessage(pnodeStop, CNetMsgMaker(pnodeStop->GetCommonVersion()).Make(NetMsgType::SENDCMPCT, /*fAnnounceUsingCMPCTBLOCK=*/false, nCMPCTBLOCKVersion));
-                    // save BIP152 bandwidth state: we select peer to be low-bandwidth
-                    pnodeStop->m_bip152_highbandwidth_to = false;
-                    return true;
-                });
-                lNodesAnnouncingHeaderAndIDs.pop_front();
-            }
-            m_connman.PushMessage(pfrom, CNetMsgMaker(pfrom->GetCommonVersion()).Make(NetMsgType::SENDCMPCT, /*fAnnounceUsingCMPCTBLOCK=*/true, nCMPCTBLOCKVersion));
-            // save BIP152 bandwidth state: we select peer to be high-bandwidth
-            pfrom->m_bip152_highbandwidth_to = true;
-            lNodesAnnouncingHeaderAndIDs.push_back(pfrom->GetId());
-            return true;
-        });
-    }
-}
-
-bool PeerManagerImpl::TipMayBeStale()
-{
-    AssertLockHeld(cs_main);
-    const Consensus::Params& consensusParams = m_chainparams.GetConsensus();
-    if (m_last_tip_update == 0) {
-        m_last_tip_update = GetTime();
-    }
-    return m_last_tip_update < GetTime() - consensusParams.nPowTargetSpacing * 3 && mapBlocksInFlight.empty();
-}
-
-bool PeerManagerImpl::CanDirectFetch()
-{
-    return m_chainman.ActiveChain().Tip()->GetBlockTime() > GetAdjustedTime() - m_chainparams.GetConsensus().nPowTargetSpacing * 20;
-=======
 
     // We should not have requested too many of this block
     Assume(mapBlocksInFlight.count(hash) <= MAX_CMPCTBLOCKS_INFLIGHT_PER_BLOCK);
@@ -1765,7 +1534,6 @@ bool PeerManagerImpl::TipMayBeStale()
 bool PeerManagerImpl::CanDirectFetch()
 {
     return m_chainman.ActiveChain().Tip()->Time() > GetAdjustedTime() - m_chainparams.GetConsensus().PowTargetSpacing() * 20;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 static bool PeerHasHeader(CNodeState *state, const CBlockIndex *pindex) EXCLUSIVE_LOCKS_REQUIRED(cs_main)
@@ -1810,12 +1578,8 @@ void PeerManagerImpl::UpdateBlockAvailability(NodeId nodeid, const uint256 &hash
     }
 }
 
-<<<<<<< HEAD
-void PeerManagerImpl::FindNextBlocksToDownload(NodeId nodeid, unsigned int count, std::vector<const CBlockIndex*>& vBlocks, NodeId& nodeStaller)
-=======
 // Logic for calculating which blocks to download from a given peer, given our current tip.
 void PeerManagerImpl::FindNextBlocksToDownload(const Peer& peer, unsigned int count, std::vector<const CBlockIndex*>& vBlocks, NodeId& nodeStaller)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     if (count == 0)
         return;
@@ -1827,11 +1591,7 @@ void PeerManagerImpl::FindNextBlocksToDownload(const Peer& peer, unsigned int co
     // Make sure pindexBestKnownBlock is up to date, we'll need it.
     ProcessBlockAvailability(peer.m_id);
 
-<<<<<<< HEAD
-    if (state->pindexBestKnownBlock == nullptr || state->pindexBestKnownBlock->nChainWork < m_chainman.ActiveChain().Tip()->nChainWork || state->pindexBestKnownBlock->nChainWork < nMinimumChainWork) {
-=======
     if (state->pindexBestKnownBlock == nullptr || state->pindexBestKnownBlock->nChainWork < m_chainman.ActiveChain().Tip()->nChainWork || state->pindexBestKnownBlock->nChainWork < m_chainman.MinimumChainWork()) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         // This peer has nothing interesting.
         return;
     }
@@ -1848,11 +1608,6 @@ void PeerManagerImpl::FindNextBlocksToDownload(const Peer& peer, unsigned int co
     if (state->pindexLastCommonBlock == state->pindexBestKnownBlock)
         return;
 
-<<<<<<< HEAD
-    const Consensus::Params& consensusParams = m_chainparams.GetConsensus();
-    std::vector<const CBlockIndex*> vToFetch;
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     const CBlockIndex *pindexWalk = state->pindexLastCommonBlock;
     // Never fetch further than the best block we know the peer has, or more than BLOCK_DOWNLOAD_WINDOW + 1 beyond the last
     // linked block we have in common with this peer. The +1 is so we can detect stalling, namely if we would be able to
@@ -1917,21 +1672,12 @@ void PeerManagerImpl::FindNextBlocks(std::vector<const CBlockIndex*>& vBlocks, c
                 // We consider the chain that this peer is on invalid.
                 return;
             }
-<<<<<<< HEAD
-            if (!State(nodeid)->fHaveWitness && DeploymentActiveAt(*pindex, consensusParams, Consensus::DEPLOYMENT_SEGWIT)) {
-                // We wouldn't download this block or its descendants from this peer.
-                return;
-            }
-            if (pindex->nStatus & BLOCK_HAVE_DATA || m_chainman.ActiveChain().Contains(pindex)) {
-                if (pindex->HaveTxsDownloaded())
-=======
             if (!CanServeWitnesses(peer) && DeploymentActiveAt(*pindex, m_chainman, Consensus::DEPLOYMENT_SEGWIT)) {
                 // We wouldn't download this block or its descendants from this peer.
                 return;
             }
             if (pindex->nStatus & BLOCK_HAVE_DATA || (activeChain && activeChain->Contains(pindex))) {
                 if (activeChain && pindex->HaveNumChainTxs())
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                     state->pindexLastCommonBlock = pindex;
             } else if (!IsBlockRequested(pindex->GetBlockHash())) {
                 // The block is not already downloaded, and not yet in flight.
@@ -1957,39 +1703,15 @@ void PeerManagerImpl::FindNextBlocks(std::vector<const CBlockIndex*>& vBlocks, c
 
 } // namespace
 
-<<<<<<< HEAD
-void PeerManagerImpl::PushNodeVersion(CNode& pnode, int64_t nTime)
-{
-    // Note that pnode->GetLocalServices() is a reflection of the local
-    // services we were offering when the CNode object was created for this
-    // peer.
-    ServiceFlags nLocalNodeServices = pnode.GetLocalServices();
-=======
 void PeerManagerImpl::PushNodeVersion(CNode& pnode, const Peer& peer)
 {
     uint64_t my_services{peer.m_our_services};
     const int64_t nTime{count_seconds(GetTime<std::chrono::seconds>())};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     uint64_t nonce = pnode.GetLocalNonce();
     const int nNodeStartingHeight{m_best_height};
     NodeId nodeid = pnode.GetId();
     CAddress addr = pnode.addr;
 
-<<<<<<< HEAD
-    CAddress addrYou = addr.IsRoutable() && !IsProxy(addr) && addr.IsAddrV1Compatible() ?
-                           addr :
-                           CAddress(CService(), addr.nServices);
-    CAddress addrMe = CAddress(CService(), nLocalNodeServices);
-
-    const bool tx_relay = !m_ignore_incoming_txs && pnode.m_tx_relay != nullptr;
-    m_connman.PushMessage(&pnode, CNetMsgMaker(INIT_PROTO_VERSION).Make(NetMsgType::VERSION, PROTOCOL_VERSION, (uint64_t)nLocalNodeServices, nTime, addrYou, addrMe,
-            nonce, strSubVersion, nNodeStartingHeight, tx_relay));
-
-    if (fLogIPs) {
-        LogPrint(BCLog::NET, "send version message: version %d, blocks=%d, us=%s, them=%s, txrelay=%d, peer=%d\n", PROTOCOL_VERSION, nNodeStartingHeight, addrMe.ToString(), addrYou.ToString(), tx_relay, nodeid);
-    } else {
-        LogPrint(BCLog::NET, "send version message: version %d, blocks=%d, us=%s, txrelay=%d, peer=%d\n", PROTOCOL_VERSION, nNodeStartingHeight, addrMe.ToString(), tx_relay, nodeid);
-=======
     CService addr_you = addr.IsRoutable() && !IsProxy(addr) && addr.IsAddrV1Compatible() ? addr : CService();
     uint64_t your_services{addr.nServices};
 
@@ -2003,7 +1725,6 @@ void PeerManagerImpl::PushNodeVersion(CNode& pnode, const Peer& peer)
         LogPrint(BCLog::NET, "send version message: version %d, blocks=%d, them=%s, txrelay=%d, peer=%d\n", PROTOCOL_VERSION, nNodeStartingHeight, addr_you.ToStringAddrPort(), tx_relay, nodeid);
     } else {
         LogPrint(BCLog::NET, "send version message: version %d, blocks=%d, txrelay=%d, peer=%d\n", PROTOCOL_VERSION, nNodeStartingHeight, tx_relay, nodeid);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 }
 
@@ -2024,11 +1745,7 @@ void PeerManagerImpl::AddTxAnnouncement(const CNode& node, const GenTxid& gtxid,
     //   - TXID_RELAY_DELAY for txid announcements while wtxid peers are available
     //   - OVERLOADED_PEER_TX_DELAY for announcements from peers which have at least
     //     MAX_PEER_TX_REQUEST_IN_FLIGHT requests in flight (and don't have NetPermissionFlags::Relay).
-<<<<<<< HEAD
-    auto delay = std::chrono::microseconds{0};
-=======
     auto delay{0us};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     const bool preferred = state->fPreferredDownload;
     if (!preferred) delay += NONPREF_PEER_TX_DELAY;
     if (!gtxid.IsWtxid() && m_wtxid_relay_peers > 0) delay += TXID_RELAY_DELAY;
@@ -2038,38 +1755,13 @@ void PeerManagerImpl::AddTxAnnouncement(const CNode& node, const GenTxid& gtxid,
     m_txrequest.ReceivedInv(nodeid, gtxid, preferred, current_time + delay);
 }
 
-<<<<<<< HEAD
-// This function is used for testing the stale tip eviction logic, see
-// denialofservice_tests.cpp
-void UpdateLastBlockAnnounceTime(NodeId node, int64_t time_in_seconds)
-=======
 void PeerManagerImpl::UpdateLastBlockAnnounceTime(NodeId node, int64_t time_in_seconds)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     LOCK(cs_main);
     CNodeState *state = State(node);
     if (state) state->m_last_block_announcement = time_in_seconds;
 }
 
-<<<<<<< HEAD
-void PeerManagerImpl::InitializeNode(CNode *pnode)
-{
-    NodeId nodeid = pnode->GetId();
-    {
-        LOCK(cs_main);
-        mapNodeState.emplace_hint(mapNodeState.end(), std::piecewise_construct, std::forward_as_tuple(nodeid), std::forward_as_tuple(pnode->IsInboundConn()));
-        assert(m_txrequest.Count(nodeid) == 0);
-    }
-    {
-        // Addr relay is disabled for outbound block-relay-only peers to
-        // prevent adversaries from inferring these links from addr traffic.
-        PeerRef peer = std::make_shared<Peer>(nodeid, /* addr_relay = */ !pnode->IsBlockOnlyConn());
-        LOCK(m_peer_mutex);
-        m_peer_map.emplace_hint(m_peer_map.end(), nodeid, std::move(peer));
-    }
-    if (!pnode->IsInboundConn()) {
-        PushNodeVersion(*pnode, GetTime());
-=======
 void PeerManagerImpl::InitializeNode(CNode& node, ServiceFlags our_services)
 {
     NodeId nodeid = node.GetId();
@@ -2085,7 +1777,6 @@ void PeerManagerImpl::InitializeNode(CNode& node, ServiceFlags our_services)
     }
     if (!node.IsInboundConn()) {
         PushNodeVersion(node, *peer);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 }
 
@@ -2097,12 +1788,7 @@ void PeerManagerImpl::ReattemptInitialBroadcast(CScheduler& scheduler)
         CTransactionRef tx = m_mempool.get(txid);
 
         if (tx != nullptr) {
-<<<<<<< HEAD
-            LOCK(cs_main);
-            _RelayTransaction(txid, tx->GetWitnessHash());
-=======
             RelayTransaction(txid, tx->GetWitnessHash());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         } else {
             m_mempool.RemoveUnbroadcastTx(txid, true);
         }
@@ -2110,11 +1796,7 @@ void PeerManagerImpl::ReattemptInitialBroadcast(CScheduler& scheduler)
 
     // Schedule next run for 10-15 minutes in the future.
     // We add randomness on every cycle to avoid the possibility of P2P fingerprinting.
-<<<<<<< HEAD
-    const std::chrono::milliseconds delta = std::chrono::minutes{10} + GetRandMillis(std::chrono::minutes{5});
-=======
     const std::chrono::milliseconds delta = 10min + GetRandMillis(5min);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     scheduler.scheduleFromNow([&] { ReattemptInitialBroadcast(scheduler); }, delta);
 }
 
@@ -2133,32 +1815,6 @@ void PeerManagerImpl::FinalizeNode(const CNode& node)
         PeerRef peer = RemovePeer(nodeid);
         assert(peer != nullptr);
         misbehavior = WITH_LOCK(peer->m_misbehavior_mutex, return peer->m_misbehavior_score);
-<<<<<<< HEAD
-=======
-        m_wtxid_relay_peers -= peer->m_wtxid_relay;
-        assert(m_wtxid_relay_peers >= 0);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
-    }
-    CNodeState *state = State(nodeid);
-    assert(state != nullptr);
-
-    if (state->fSyncStarted)
-        nSyncStarted--;
-
-    for (const QueuedBlock& entry : state->vBlocksInFlight) {
-<<<<<<< HEAD
-        mapBlocksInFlight.erase(entry.pindex->GetBlockHash());
-    }
-    WITH_LOCK(g_cs_orphans, m_orphanage.EraseForPeer(nodeid));
-    m_txrequest.DisconnectedPeer(nodeid);
-    nPreferredDownload -= state->fPreferredDownload;
-    m_peers_downloading_from -= (state->nBlocksInFlight != 0);
-    assert(m_peers_downloading_from >= 0);
-    m_outbound_peers_with_protect_from_disconnect -= state->m_chain_sync.m_protect;
-    assert(m_outbound_peers_with_protect_from_disconnect >= 0);
-    m_wtxid_relay_peers -= state->m_wtxid_relay;
-    assert(m_wtxid_relay_peers >= 0);
-=======
         auto range = mapBlocksInFlight.equal_range(entry.pindex->GetBlockHash());
         while (range.first != range.second) {
             auto [node_id, list_it] = range.first->second;
@@ -2177,41 +1833,21 @@ void PeerManagerImpl::FinalizeNode(const CNode& node)
     assert(m_peers_downloading_from >= 0);
     m_outbound_peers_with_protect_from_disconnect -= state->m_chain_sync.m_protect;
     assert(m_outbound_peers_with_protect_from_disconnect >= 0);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     m_node_states.erase(nodeid);
 
     if (m_node_states.empty()) {
         // Do a consistency check after the last peer is removed.
         assert(mapBlocksInFlight.empty());
-<<<<<<< HEAD
-        assert(nPreferredDownload == 0);
-=======
         assert(m_num_preferred_download_peers == 0);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         assert(m_peers_downloading_from == 0);
         assert(m_outbound_peers_with_protect_from_disconnect == 0);
         assert(m_wtxid_relay_peers == 0);
         assert(m_txrequest.Size() == 0);
-<<<<<<< HEAD
-=======
-        assert(m_orphanage.Size() == 0);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
-    }
-    } // cs_main
-    if (node.fSuccessfullyConnected && misbehavior == 0 &&
-        !node.IsBlockOnlyConn() && !node.IsInboundConn()) {
-        // Only change visible addrman state for full outbound peers.  We don't
-        // call Connected() for feeler connections since they don't have
-        // fSuccessfullyConnected set.
-        m_addrman.Connected(node.addr);
-<<<<<<< HEAD
-=======
     }
     {
         LOCK(m_headers_presync_mutex);
         m_headers_presync_stats.erase(nodeid);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     LogPrint(BCLog::NET, "Cleared nodestate for peer=%d\n", nodeid);
 }
@@ -2239,11 +1875,7 @@ bool PeerManagerImpl::GetNodeStateStats(NodeId nodeid, CNodeStateStats& stats) c
 {
     {
         LOCK(cs_main);
-<<<<<<< HEAD
-        CNodeState* state = State(nodeid);
-=======
         const CNodeState* state = State(nodeid);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         if (state == nullptr)
             return false;
         stats.nSyncHeight = state->pindexBestKnownBlock ? state->pindexBestKnownBlock->nHeight : -1;
@@ -2256,31 +1888,11 @@ bool PeerManagerImpl::GetNodeStateStats(NodeId nodeid, CNodeStateStats& stats) c
 
     PeerRef peer = GetPeerRef(nodeid);
     if (peer == nullptr) return false;
-<<<<<<< HEAD
-=======
-    stats.their_services = peer->m_their_services;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
-    stats.m_starting_height = peer->m_starting_height;
-    // It is common for nodes with good ping times to suddenly become lagged,
-    // due to a new block arriving or other large transfer.
-    // Merely reporting pingtime might fool the caller into thinking the node was still responsive,
-    // since pingtime does not update until the ping is complete, which might take a while.
-    // So, if a ping is taking an unusually long time in flight,
-    // the caller can immediately detect that this is happening.
-<<<<<<< HEAD
-    std::chrono::microseconds ping_wait{0};
-=======
     auto ping_wait{0us};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if ((0 != peer->m_ping_nonce_sent) && (0 != peer->m_ping_start.load().count())) {
         ping_wait = GetTime<std::chrono::microseconds>() - peer->m_ping_start.load();
     }
 
-<<<<<<< HEAD
-    stats.m_ping_wait = ping_wait;
-    stats.m_addr_processed = peer->m_addr_processed.load();
-    stats.m_addr_rate_limited = peer->m_addr_rate_limited.load();
-=======
     if (auto tx_relay = peer->GetTxRelay(); tx_relay != nullptr) {
         stats.m_relay_txs = WITH_LOCK(tx_relay->m_bloom_filter_mutex, return tx_relay->m_relay_txs);
         stats.m_fee_filter_received = tx_relay->m_fee_filter_received.load();
@@ -2299,7 +1911,6 @@ bool PeerManagerImpl::GetNodeStateStats(NodeId nodeid, CNodeStateStats& stats) c
             stats.presync_height = peer->m_headers_sync->GetPresyncHeight();
         }
     }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     return true;
 }
@@ -2314,24 +1925,6 @@ void PeerManagerImpl::AddToCompactExtraTransactions(const CTransactionRef& tx)
     vExtraTxnForCompactIt = (vExtraTxnForCompactIt + 1) % m_opts.max_extra_txs;
 }
 
-<<<<<<< HEAD
-void PeerManagerImpl::Misbehaving(const NodeId pnode, const int howmuch, const std::string& message)
-{
-    assert(howmuch > 0);
-
-    PeerRef peer = GetPeerRef(pnode);
-    if (peer == nullptr) return;
-
-    LOCK(peer->m_misbehavior_mutex);
-    peer->m_misbehavior_score += howmuch;
-    const std::string message_prefixed = message.empty() ? "" : (": " + message);
-    if (peer->m_misbehavior_score >= DISCOURAGEMENT_THRESHOLD && peer->m_misbehavior_score - howmuch < DISCOURAGEMENT_THRESHOLD) {
-        LogPrint(BCLog::NET, "Misbehaving: peer=%d (%d -> %d) DISCOURAGE THRESHOLD EXCEEDED%s\n", pnode, peer->m_misbehavior_score - howmuch, peer->m_misbehavior_score, message_prefixed);
-        peer->m_should_discourage = true;
-    } else {
-        LogPrint(BCLog::NET, "Misbehaving: peer=%d (%d -> %d)%s\n", pnode, peer->m_misbehavior_score - howmuch, peer->m_misbehavior_score, message_prefixed);
-    }
-=======
 void PeerManagerImpl::Misbehaving(Peer& peer, int howmuch, const std::string& message)
 {
     assert(howmuch > 0);
@@ -2351,17 +1944,11 @@ void PeerManagerImpl::Misbehaving(Peer& peer, int howmuch, const std::string& me
 
     LogPrint(BCLog::NET, "Misbehaving: peer=%d (%d -> %d)%s%s\n",
              peer.m_id, score_before, score_now, warning, message_prefixed);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 bool PeerManagerImpl::MaybePunishNodeForBlock(NodeId nodeid, const BlockValidationState& state,
                                               bool via_compact_block, const std::string& message)
 {
-<<<<<<< HEAD
-    switch (state.GetResult()) {
-    case BlockValidationResult::BLOCK_RESULT_UNSET:
-        break;
-=======
     PeerRef peer{GetPeerRef(nodeid)};
     switch (state.GetResult()) {
     case BlockValidationResult::BLOCK_RESULT_UNSET:
@@ -2370,16 +1957,11 @@ bool PeerManagerImpl::MaybePunishNodeForBlock(NodeId nodeid, const BlockValidati
         // We didn't try to process the block because the header chain may have
         // too little work.
         break;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     // The node is providing invalid data:
     case BlockValidationResult::BLOCK_CONSENSUS:
     case BlockValidationResult::BLOCK_MUTATED:
         if (!via_compact_block) {
-<<<<<<< HEAD
-            Misbehaving(nodeid, 100, message);
-=======
             if (peer) Misbehaving(*peer, 100, message);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             return true;
         }
         break;
@@ -2394,11 +1976,7 @@ bool PeerManagerImpl::MaybePunishNodeForBlock(NodeId nodeid, const BlockValidati
             // Discourage outbound (but not inbound) peers if on an invalid chain.
             // Exempt HB compact block peers. Manual connections are always protected from discouragement.
             if (!via_compact_block && !node_state->m_is_inbound) {
-<<<<<<< HEAD
-                Misbehaving(nodeid, 100, message);
-=======
                 if (peer) Misbehaving(*peer, 100, message);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 return true;
             }
             break;
@@ -2406,21 +1984,12 @@ bool PeerManagerImpl::MaybePunishNodeForBlock(NodeId nodeid, const BlockValidati
     case BlockValidationResult::BLOCK_INVALID_HEADER:
     case BlockValidationResult::BLOCK_CHECKPOINT:
     case BlockValidationResult::BLOCK_INVALID_PREV:
-<<<<<<< HEAD
-    case BlockValidationResult::BLOCK_INVALID_ALGO:
-        Misbehaving(nodeid, 100, message);
-=======
         if (peer) Misbehaving(*peer, 100, message);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         return true;
     // Conflicting (but not necessarily invalid) data or different policy:
     case BlockValidationResult::BLOCK_MISSING_PREV:
         // TODO: Handle this much more gracefully (10 DoS points is super arbitrary)
-<<<<<<< HEAD
-        Misbehaving(nodeid, 10, message);
-=======
         if (peer) Misbehaving(*peer, 10, message);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         return true;
     case BlockValidationResult::BLOCK_RECENT_CONSENSUS_CHANGE:
     case BlockValidationResult::BLOCK_TIME_FUTURE:
@@ -2432,24 +2001,15 @@ bool PeerManagerImpl::MaybePunishNodeForBlock(NodeId nodeid, const BlockValidati
     return false;
 }
 
-<<<<<<< HEAD
-bool PeerManagerImpl::MaybePunishNodeForTx(NodeId nodeid, const TxValidationState& state, const std::string& message)
-{
-=======
 bool PeerManagerImpl::MaybePunishNodeForTx(NodeId nodeid, const TxValidationState& state)
 {
     PeerRef peer{GetPeerRef(nodeid)};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     switch (state.GetResult()) {
     case TxValidationResult::TX_RESULT_UNSET:
         break;
     // The node is providing invalid data:
     case TxValidationResult::TX_CONSENSUS:
-<<<<<<< HEAD
-        Misbehaving(nodeid, 100, message);
-=======
         if (peer) Misbehaving(*peer, 100, "");
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         return true;
     // Conflicting (but not necessarily invalid) data or different policy:
     case TxValidationResult::TX_RECENT_CONSENSUS_CHANGE:
@@ -2461,17 +2021,9 @@ bool PeerManagerImpl::MaybePunishNodeForTx(NodeId nodeid, const TxValidationStat
     case TxValidationResult::TX_WITNESS_STRIPPED:
     case TxValidationResult::TX_CONFLICT:
     case TxValidationResult::TX_MEMPOOL_POLICY:
-<<<<<<< HEAD
-        break;
-    }
-    if (message != "") {
-        LogPrint(BCLog::NET, "peer=%d: %s\n", nodeid, message);
-    }
-=======
     case TxValidationResult::TX_NO_MEMPOOL:
         break;
     }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     return false;
 }
 
@@ -2479,10 +2031,54 @@ bool PeerManagerImpl::BlockRequestAllowed(const CBlockIndex* pindex)
 {
     AssertLockHeld(cs_main);
     if (m_chainman.ActiveChain().Contains(pindex)) return true;
-<<<<<<< HEAD
-    return pindex->IsValid(BLOCK_VALID_SCRIPTS) && (pindexBestHeader != nullptr) &&
-           (pindexBestHeader->GetBlockTime() - pindex->GetBlockTime() < STALE_RELAY_AGE_LIMIT) &&
-           (GetBlockProofEquivalentTime(*pindexBestHeader, *pindex, *pindexBestHeader, m_chainparams.GetConsensus()) < STALE_RELAY_AGE_LIMIT);
+    return pindex->IsValid(BLOCK_VALID_SCRIPTS) && (m_chainman.m_best_header != nullptr) &&
+           (m_chainman.m_best_header->GetBlockTime() - pindex->GetBlockTime() < STALE_RELAY_AGE_LIMIT) &&
+           (GetBlockProofEquivalentTime(*m_chainman.m_best_header, *pindex, *m_chainman.m_best_header, m_chainparams.GetConsensus()) < STALE_RELAY_AGE_LIMIT);
+}
+
+std::optional<std::string> PeerManagerImpl::FetchBlock(NodeId peer_id, const CBlockIndex& block_index)
+{
+    if (fImporting || fReindex) return "Importing or reindexing";
+
+    LOCK(cs_main);
+
+    // Ensure this peer exists and hasn't been disconnected
+    PeerRef peer = GetPeerRef(peer_id);
+    if (peer == nullptr) return "Peer does not exist";
+
+    // Ignore pre-segwit peers
+    if (!CanServeWitnesses(*peer)) return "Pre-SegWit peer";
+
+    CNodeState& state = *State(peer_id);
+
+    // Ignore outbound peers at height 0 because we never sync with them
+    if (!state.m_is_inbound && block_index.nHeight == 0) return "Outbound peer at height 0";
+
+    // Don't fetch further than MAX_BLOCKS_IN_TRANSIT_PER_PEER away from the last validated block
+    // This also prevents using peers to fetch blocks that are too far in the future relative to our chain
+    const CBlockIndex& validated_block = *Assert(m_chainman.ActiveChain().Tip());
+    if (block_index.nHeight > validated_block.nHeight + MAX_BLOCKS_IN_TRANSIT_PER_PEER) {
+        return "Too far ahead of validated block";
+    }
+
+    // The block must have been announced to this peer recently
+    if (state.m_last_block_announcement == 0 || GetTime() - state.m_last_block_announcement > HISTORICAL_BLOCK_AGE) {
+        return "Block not recently announced";
+    }
+
+    // Don't fetch a block that's already in-flight or that we already have
+    if (IsBlockRequested(block_index.GetBlockHash()) || BlockRequestAllowed(&block_index)) {
+        return "Already requested or already have block";
+    }
+
+    LogPrint(BCLog::NET, "Requesting block %s from peer=%d\n", block_index.GetBlockHash().ToString(), peer_id);
+
+    std::vector<CInv> vGetData;
+    vGetData.emplace_back(MSG_BLOCK | GetFetchFlags(*peer), block_index.GetBlockHash());
+    m_connman.PushMessage(peer->m_conn, CNetMsgMaker(PROTOCOL_VERSION).Make(NetMsgType::GETDATA, vGetData));
+    BlockRequested(peer_id, block_index);
+
+    return std::nullopt;
 }
 
 std::unique_ptr<PeerManager> PeerManager::make(const CChainParams& chainparams, CConnman& connman, CAddrMan& addrman,
@@ -2519,79 +2115,6 @@ PeerManagerImpl::PeerManagerImpl(const CChainParams& chainparams, CConnman& conn
     // same probability that we have in the reject filter).
     m_recent_confirmed_transactions.reset(new CRollingBloomFilter(48000, 0.000001));
 
-=======
-    return pindex->IsValid(BLOCK_VALID_SCRIPTS) && (m_chainman.m_best_header != nullptr) &&
-           (m_chainman.m_best_header->GetBlockTime() - pindex->GetBlockTime() < STALE_RELAY_AGE_LIMIT) &&
-           (GetBlockProofEquivalentTime(*m_chainman.m_best_header, *pindex, *m_chainman.m_best_header, m_chainparams.GetConsensus()) < STALE_RELAY_AGE_LIMIT);
-}
-
-std::optional<std::string> PeerManagerImpl::FetchBlock(NodeId peer_id, const CBlockIndex& block_index)
-{
-    if (m_chainman.m_blockman.LoadingBlocks()) return "Loading blocks ...";
-
-    // Ensure this peer exists and hasn't been disconnected
-    PeerRef peer = GetPeerRef(peer_id);
-    if (peer == nullptr) return "Peer does not exist";
-
-    // Ignore pre-segwit peers
-    if (!CanServeWitnesses(*peer)) return "Pre-SegWit peer";
-
-    LOCK(cs_main);
-
-    // Forget about all prior requests
-    RemoveBlockRequest(block_index.GetBlockHash(), std::nullopt);
-
-    // Mark block as in-flight
-    if (!BlockRequested(peer_id, block_index)) return "Already requested from this peer";
-
-    // Construct message to request the block
-    const uint256& hash{block_index.GetBlockHash()};
-    std::vector<CInv> invs{CInv(MSG_BLOCK | MSG_WITNESS_FLAG, hash)};
-
-    // Send block request message to the peer
-    bool success = m_connman.ForNode(peer_id, [this, &invs](CNode* node) {
-        const CNetMsgMaker msgMaker(node->GetCommonVersion());
-        this->m_connman.PushMessage(node, msgMaker.Make(NetMsgType::GETDATA, invs));
-        return true;
-    });
-
-    if (!success) return "Peer not fully connected";
-
-    LogPrint(BCLog::NET, "Requesting block %s from peer=%d\n",
-                 hash.ToString(), peer_id);
-    return std::nullopt;
-}
-
-std::unique_ptr<PeerManager> PeerManager::make(CConnman& connman, AddrMan& addrman,
-                                               BanMan* banman, ChainstateManager& chainman,
-                                               CTxMemPool& pool, Options opts)
-{
-    return std::make_unique<PeerManagerImpl>(connman, addrman, banman, chainman, pool, opts);
-}
-
-PeerManagerImpl::PeerManagerImpl(CConnman& connman, AddrMan& addrman,
-                                 BanMan* banman, ChainstateManager& chainman,
-                                 CTxMemPool& pool, Options opts)
-    : m_rng{opts.deterministic_rng},
-      m_fee_filter_rounder{CFeeRate{DEFAULT_MIN_RELAY_TX_FEE}, m_rng},
-      m_chainparams(chainman.GetParams()),
-      m_connman(connman),
-      m_addrman(addrman),
-      m_banman(banman),
-      m_chainman(chainman),
-      m_mempool(pool),
-      m_opts{opts}
-{
-    // While Erlay support is incomplete, it must be enabled explicitly via -txreconciliation.
-    // This argument can go away after Erlay support is complete.
-    if (opts.reconcile_txs) {
-        m_txreconciliation = std::make_unique<TxReconciliationTracker>(TXRECONCILIATION_VERSION);
-    }
-}
-
-void PeerManagerImpl::StartScheduledTasks(CScheduler& scheduler)
-{
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     // Stale tip checking and peer eviction are on two different timers, but we
     // don't want them to get out of sync due to drift in the scheduler, so we
     // combine them in one function and schedule at the quicker (peer-eviction)
@@ -2600,32 +2123,13 @@ void PeerManagerImpl::StartScheduledTasks(CScheduler& scheduler)
     scheduler.scheduleEvery([this] { this->CheckForStaleTipAndEvictPeers(); }, std::chrono::seconds{EXTRA_PEER_CHECK_INTERVAL});
 
     // schedule next run for 10-15 minutes in the future
-<<<<<<< HEAD
-    const std::chrono::milliseconds delta = std::chrono::minutes{10} + GetRandMillis(std::chrono::minutes{5});
-=======
     const std::chrono::milliseconds delta = 10min + GetRandMillis(5min);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     scheduler.scheduleFromNow([&] { ReattemptInitialBroadcast(scheduler); }, delta);
 }
 
 /**
  * Evict orphan txn pool entries based on a newly connected
  * block, remember the recently confirmed transactions, and delete tracked
-<<<<<<< HEAD
- * announcements for them. Also save the time of the last tip update.
- */
-void PeerManagerImpl::BlockConnected(const std::shared_ptr<const CBlock>& pblock, const CBlockIndex* pindex)
-{
-    m_orphanage.EraseForBlock(*pblock);
-    m_last_tip_update = GetTime();
-
-    {
-        LOCK(m_recent_confirmed_transactions_mutex);
-        for (const auto& ptx : pblock->vtx) {
-            m_recent_confirmed_transactions->insert(ptx->GetHash());
-            if (ptx->GetHash() != ptx->GetWitnessHash()) {
-                m_recent_confirmed_transactions->insert(ptx->GetWitnessHash());
-=======
  * announcements for them. Also save the time of the last tip update and
  * possibly reduce dynamic block stalling timeout.
  */
@@ -2661,7 +2165,6 @@ void PeerManagerImpl::BlockConnected(
             m_recent_confirmed_transactions.insert(ptx->GetHash());
             if (ptx->GetHash() != ptx->GetWitnessHash()) {
                 m_recent_confirmed_transactions.insert(ptx->GetWitnessHash());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             }
         }
     }
@@ -2672,30 +2175,6 @@ void PeerManagerImpl::BlockConnected(
             m_txrequest.ForgetTxHash(ptx->GetWitnessHash());
         }
     }
-<<<<<<< HEAD
-}
-
-void PeerManagerImpl::BlockDisconnected(const std::shared_ptr<const CBlock> &block, const CBlockIndex* pindex)
-{
-    // To avoid relay problems with transactions that were previously
-    // confirmed, clear our filter of recently confirmed transactions whenever
-    // there's a reorg.
-    // This means that in a 1-block reorg (where 1 block is disconnected and
-    // then another block reconnected), our filter will drop to having only one
-    // block's worth of transactions in it, but that should be fine, since
-    // presumably the most common case of relaying a confirmed transaction
-    // should be just after a new block containing it is found.
-    LOCK(m_recent_confirmed_transactions_mutex);
-    m_recent_confirmed_transactions->reset();
-}
-
-// All of the following cache a recent block, and are protected by cs_most_recent_block
-static RecursiveMutex cs_most_recent_block;
-static std::shared_ptr<const CBlock> most_recent_block GUARDED_BY(cs_most_recent_block);
-static std::shared_ptr<const CBlockHeaderAndShortTxIDs> most_recent_compact_block GUARDED_BY(cs_most_recent_block);
-static uint256 most_recent_block_hash GUARDED_BY(cs_most_recent_block);
-static bool fWitnessesPresentInMostRecentCompactBlock GUARDED_BY(cs_most_recent_block);
-=======
 }
 
 void PeerManagerImpl::BlockDisconnected(const std::shared_ptr<const CBlock> &block, const CBlockIndex* pindex)
@@ -2711,7 +2190,6 @@ void PeerManagerImpl::BlockDisconnected(const std::shared_ptr<const CBlock> &blo
     LOCK(m_recent_confirmed_transactions_mutex);
     m_recent_confirmed_transactions.reset();
 }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 /**
  * Maintain state about the best-seen block and fast-announce a compact block
@@ -2719,11 +2197,7 @@ void PeerManagerImpl::BlockDisconnected(const std::shared_ptr<const CBlock> &blo
  */
 void PeerManagerImpl::NewPoWValidBlock(const CBlockIndex *pindex, const std::shared_ptr<const CBlock>& pblock)
 {
-<<<<<<< HEAD
-    std::shared_ptr<const CBlockHeaderAndShortTxIDs> pcmpctblock = std::make_shared<const CBlockHeaderAndShortTxIDs> (*pblock, true);
-=======
     auto pcmpctblock = std::make_shared<const CBlockHeaderAndShortTxIDs>(*pblock);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     const CNetMsgMaker msgMaker(PROTOCOL_VERSION);
 
     LOCK(cs_main);
@@ -2733,11 +2207,6 @@ void PeerManagerImpl::NewPoWValidBlock(const CBlockIndex *pindex, const std::sha
     m_highest_fast_announce = pindex->nHeight;
 
     if (!DeploymentActiveAt(*pindex, m_chainman, Consensus::DEPLOYMENT_SEGWIT)) return;
-
-<<<<<<< HEAD
-    bool fWitnessEnabled = DeploymentActiveAt(*pindex, m_chainparams.GetConsensus(), Consensus::DEPLOYMENT_SEGWIT);
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     uint256 hashBlock(pblock->GetHash());
     const std::shared_future<CSerializedNetMsg> lazy_ser{
         std::async(std::launch::deferred, [&] { return msgMaker.Make(NetMsgType::CMPCTBLOCK, *pcmpctblock); })};
@@ -2756,16 +2225,9 @@ void PeerManagerImpl::NewPoWValidBlock(const CBlockIndex *pindex, const std::sha
         m_most_recent_block_txs = std::move(most_recent_block_txs);
     }
 
-<<<<<<< HEAD
-    m_connman.ForEachNode([this, &pcmpctblock, pindex, &msgMaker, fWitnessEnabled, &hashBlock](CNode* pnode) EXCLUSIVE_LOCKS_REQUIRED(::cs_main) {
-        AssertLockHeld(::cs_main);
-
-        // TODO: Avoid the repeated-serialization here
-=======
     m_connman.ForEachNode([this, pindex, &lazy_ser, &hashBlock](CNode* pnode) EXCLUSIVE_LOCKS_REQUIRED(::cs_main) {
         AssertLockHeld(::cs_main);
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         if (pnode->GetCommonVersion() < INVALID_CB_NO_BAN_VERSION || pnode->fDisconnect)
             return;
         ProcessBlockAvailability(pnode->GetId());
@@ -2776,13 +2238,9 @@ void PeerManagerImpl::NewPoWValidBlock(const CBlockIndex *pindex, const std::sha
 
             LogPrint(BCLog::NET, "%s sending header-and-ids %s to peer=%d\n", "PeerManager::NewPoWValidBlock",
                     hashBlock.ToString(), pnode->GetId());
-<<<<<<< HEAD
-            m_connman.PushMessage(pnode, msgMaker.Make(NetMsgType::CMPCTBLOCK, *pcmpctblock));
-=======
 
             const CSerializedNetMsg& ser_cmpctblock{lazy_ser.get()};
             m_connman.PushMessage(pnode, ser_cmpctblock.Copy());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             state.pindexBestHeaderSent = pindex;
         }
     });
@@ -2852,11 +2310,7 @@ void PeerManagerImpl::BlockChecked(const CBlock& block, const BlockValidationSta
     //    the tip yet so we have no way to check this directly here. Instead we
     //    just check that there are currently no other blocks in flight.
     else if (state.IsValid() &&
-<<<<<<< HEAD
-             !m_chainman.ActiveChainstate().IsInitialBlockDownload() &&
-=======
              !m_chainman.IsInitialBlockDownload() &&
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
              mapBlocksInFlight.count(hash) == mapBlocksInFlight.size()) {
         if (it != mapBlockSource.end()) {
             MaybeSetPeerAsAnnouncingHeaderAndIDs(it->second.first);
@@ -2874,17 +2328,12 @@ void PeerManagerImpl::BlockChecked(const CBlock& block, const BlockValidationSta
 
 bool PeerManagerImpl::AlreadyHaveTx(const GenTxid& gtxid)
 {
-<<<<<<< HEAD
-    assert(recentRejects);
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (m_chainman.ActiveChain().Tip()->GetBlockHash() != hashRecentRejectsChainTip) {
         // If the chain tip has changed previously rejected transactions
         // might be now valid, e.g. due to a nLockTime'd tx becoming valid,
         // or a double-spend. Reset the rejects filter and give those
         // txs a second chance.
         hashRecentRejectsChainTip = m_chainman.ActiveChain().Tip()->GetBlockHash();
-<<<<<<< HEAD
         recentRejects->reset();
     }
 
@@ -2979,128 +2428,6 @@ void PeerManagerImpl::CheckDandelionEmbargoes()
             iter++;
         }
     }
-=======
-        m_recent_rejects.reset();
-    }
-
-    const uint256& hash = gtxid.GetHash();
-
-    if (m_orphanage.HaveTx(gtxid)) return true;
-
-    {
-        LOCK(m_recent_confirmed_transactions_mutex);
-        if (m_recent_confirmed_transactions.contains(hash)) return true;
-    }
-
-    return m_recent_rejects.contains(hash) || m_mempool.exists(gtxid);
-}
-
-bool PeerManagerImpl::AlreadyHaveBlock(const uint256& block_hash)
-{
-    return m_chainman.m_blockman.LookupBlockIndex(block_hash) != nullptr;
-}
-
-void PeerManagerImpl::SendPings()
-{
-    LOCK(m_peer_mutex);
-    for(auto& it : m_peer_map) it.second->m_ping_queued = true;
-}
-
-void PeerManagerImpl::RelayTransaction(const uint256& txid, const uint256& wtxid)
-{
-    LOCK(m_peer_mutex);
-    for(auto& it : m_peer_map) {
-        Peer& peer = *it.second;
-        auto tx_relay = peer.GetTxRelay();
-        if (!tx_relay) continue;
-
-        LOCK(tx_relay->m_tx_inventory_mutex);
-        // Only queue transactions for announcement once the version handshake
-        // is completed. The time of arrival for these transactions is
-        // otherwise at risk of leaking to a spy, if the spy is able to
-        // distinguish transactions received during the handshake from the rest
-        // in the announcement.
-        if (tx_relay->m_next_inv_send_time == 0s) continue;
-
-        const uint256& hash{peer.m_wtxid_relay ? wtxid : txid};
-        if (!tx_relay->m_tx_inventory_known_filter.contains(hash)) {
-            tx_relay->m_tx_inventory_to_send.insert(hash);
-        }
-    };
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
-}
-
-void PeerManagerImpl::RelayAddress(NodeId originator,
-                                   const CAddress& addr,
-                                   bool fReachable)
-{
-    // We choose the same nodes within a given 24h window (if the list of connected
-    // nodes does not change) and we don't relay to nodes that already know an
-    // address. So within 24h we will likely relay a given address once. This is to
-    // prevent a peer from unjustly giving their address better propagation by sending
-    // it to us repeatedly.
-
-    if (!fReachable && !addr.IsRelayable()) return;
-
-    // Relay to a limited number of other nodes
-    // Use deterministic randomness to send to the same nodes for 24 hours
-    // at a time so the m_addr_knowns of the chosen nodes prevent repeats
-<<<<<<< HEAD
-    uint64_t hashAddr = addr.GetHash();
-    const CSipHasher hasher = m_connman.GetDeterministicRandomizer(RANDOMIZER_ID_ADDRESS_RELAY).Write(hashAddr << 32).Write((GetTime() + hashAddr) / (24 * 60 * 60));
-    FastRandomContext insecure_rand;
-=======
-    const uint64_t hash_addr{CServiceHash(0, 0)(addr)};
-    const auto current_time{GetTime<std::chrono::seconds>()};
-    // Adding address hash makes exact rotation time different per address, while preserving periodicity.
-    const uint64_t time_addr{(static_cast<uint64_t>(count_seconds(current_time)) + hash_addr) / count_seconds(ROTATE_ADDR_RELAY_DEST_INTERVAL)};
-    const CSipHasher hasher{m_connman.GetDeterministicRandomizer(RANDOMIZER_ID_ADDRESS_RELAY)
-                                .Write(hash_addr)
-                                .Write(time_addr)};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
-
-    // Relay reachable addresses to 2 peers. Unreachable addresses are relayed randomly to 1 or 2 peers.
-    unsigned int nRelayNodes = (fReachable || (hasher.Finalize() & 1)) ? 2 : 1;
-
-    std::array<std::pair<uint64_t, Peer*>, 2> best{{{0, nullptr}, {0, nullptr}}};
-    assert(nRelayNodes <= best.size());
-
-    LOCK(m_peer_mutex);
-
-    for (auto& [id, peer] : m_peer_map) {
-<<<<<<< HEAD
-        if (RelayAddrsWithPeer(*peer) && id != originator && IsAddrCompatible(*peer, addr)) {
-=======
-        if (peer->m_addr_relay_enabled && id != originator && IsAddrCompatible(*peer, addr)) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
-            uint64_t hashKey = CSipHasher(hasher).Write(id).Finalize();
-            for (unsigned int i = 0; i < nRelayNodes; i++) {
-                 if (hashKey > best[i].first) {
-                     std::copy(best.begin() + i, best.begin() + nRelayNodes - 1, best.begin() + i + 1);
-                     best[i] = std::make_pair(hashKey, peer.get());
-                     break;
-                 }
-            }
-        }
-    };
-
-    for (unsigned int i = 0; i < nRelayNodes && best[i].first != 0; i++) {
-<<<<<<< HEAD
-        PushAddress(*best[i].second, addr, insecure_rand);
-=======
-        PushAddress(*best[i].second, addr);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
-    }
-}
-
-void PeerManagerImpl::ProcessGetBlockData(CNode& pfrom, Peer& peer, const CInv& inv)
-{
-    std::shared_ptr<const CBlock> a_recent_block;
-    std::shared_ptr<const CBlockHeaderAndShortTxIDs> a_recent_compact_block;
-<<<<<<< HEAD
-    bool fWitnessesPresentInARecentCompactBlock;
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     {
         LOCK(m_most_recent_block_mutex);
         a_recent_block = m_most_recent_block;
@@ -3112,11 +2439,7 @@ void PeerManagerImpl::ProcessGetBlockData(CNode& pfrom, Peer& peer, const CInv& 
         LOCK(cs_main);
         const CBlockIndex* pindex = m_chainman.m_blockman.LookupBlockIndex(inv.hash);
         if (pindex) {
-<<<<<<< HEAD
-            if (pindex->HaveTxsDownloaded() && !pindex->IsValid(BLOCK_VALID_SCRIPTS) &&
-=======
             if (pindex->HaveNumChainTxs() && !pindex->IsValid(BLOCK_VALID_SCRIPTS) &&
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                     pindex->IsValid(BLOCK_VALID_TREE)) {
                 // If we have the block and all of its parents, but have not yet validated it,
                 // we might be in the middle of connecting it (ie in the unlock of cs_main
@@ -3146,11 +2469,7 @@ void PeerManagerImpl::ProcessGetBlockData(CNode& pfrom, Peer& peer, const CInv& 
     const CNetMsgMaker msgMaker(pfrom.GetCommonVersion());
     // disconnect node in case we have reached the outbound limit for serving historical blocks
     if (m_connman.OutboundTargetReached(true) &&
-<<<<<<< HEAD
-        (((pindexBestHeader != nullptr) && (pindexBestHeader->GetBlockTime() - pindex->GetBlockTime() > HISTORICAL_BLOCK_AGE)) || inv.IsMsgFilteredBlk()) &&
-=======
         (((m_chainman.m_best_header != nullptr) && (m_chainman.m_best_header->GetBlockTime() - pindex->GetBlockTime() > HISTORICAL_BLOCK_AGE)) || inv.IsMsgFilteredBlk()) &&
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         !pfrom.HasPermission(NetPermissionFlags::Download) // nodes with the download permission may exceed target
     ) {
         LogPrint(BCLog::NET, "historical block serving limit reached, disconnect peer=%d\n", pfrom.GetId());
@@ -3159,11 +2478,7 @@ void PeerManagerImpl::ProcessGetBlockData(CNode& pfrom, Peer& peer, const CInv& 
     }
     // Avoid leaking prune-height by never sending blocks below the NODE_NETWORK_LIMITED threshold
     if (!pfrom.HasPermission(NetPermissionFlags::NoBan) && (
-<<<<<<< HEAD
-            (((pfrom.GetLocalServices() & NODE_NETWORK_LIMITED) == NODE_NETWORK_LIMITED) && ((pfrom.GetLocalServices() & NODE_NETWORK) != NODE_NETWORK) && (m_chainman.ActiveChain().Tip()->nHeight - pindex->nHeight > (int)NODE_NETWORK_LIMITED_MIN_BLOCKS + 2 /* add two blocks buffer extension for possible races */) )
-=======
             (((peer.m_our_services & NODE_NETWORK_LIMITED) == NODE_NETWORK_LIMITED) && ((peer.m_our_services & NODE_NETWORK) != NODE_NETWORK) && (m_chainman.ActiveChain().Tip()->nHeight - pindex->nHeight > (int)NODE_NETWORK_LIMITED_MIN_BLOCKS + 2 /* add two blocks buffer extension for possible races */) )
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
        )) {
         LogPrint(BCLog::NET, "Ignore block request below NODE_NETWORK_LIMITED threshold, disconnect peer=%d\n", pfrom.GetId());
         //disconnect node and prevent it from stalling (would otherwise wait for the missing block)
@@ -3182,26 +2497,15 @@ void PeerManagerImpl::ProcessGetBlockData(CNode& pfrom, Peer& peer, const CInv& 
         // Fast-path: in this case it is possible to serve the block directly from disk,
         // as the network format matches the format on disk
         std::vector<uint8_t> block_data;
-<<<<<<< HEAD
-        if (!ReadRawBlockFromDisk(block_data, pindex, m_chainparams.MessageStart())) {
-            assert(!"cannot load block from disk");
-        }
-        m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::BLOCK, MakeSpan(block_data)));
-=======
         if (!m_chainman.m_blockman.ReadRawBlockFromDisk(block_data, pindex->GetBlockPos())) {
             assert(!"cannot load block from disk");
         }
         m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::BLOCK, Span{block_data}));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         // Don't set pblock as we've sent the block
     } else {
         // Send block from disk
         std::shared_ptr<CBlock> pblockRead = std::make_shared<CBlock>();
-<<<<<<< HEAD
-        if (!ReadBlockFromDisk(*pblockRead, pindex, m_chainparams.GetConsensus())) {
-=======
         if (!m_chainman.m_blockman.ReadBlockFromDisk(*pblockRead, *pindex)) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             assert(!"cannot load block from disk");
         }
         pblock = pblockRead;
@@ -3214,19 +2518,11 @@ void PeerManagerImpl::ProcessGetBlockData(CNode& pfrom, Peer& peer, const CInv& 
         } else if (inv.IsMsgFilteredBlk()) {
             bool sendMerkleBlock = false;
             CMerkleBlock merkleBlock;
-<<<<<<< HEAD
-            if (pfrom.m_tx_relay != nullptr) {
-                LOCK(pfrom.m_tx_relay->cs_filter);
-                if (pfrom.m_tx_relay->pfilter) {
-                    sendMerkleBlock = true;
-                    merkleBlock = CMerkleBlock(*pblock, *pfrom.m_tx_relay->pfilter);
-=======
             if (auto tx_relay = peer.GetTxRelay(); tx_relay != nullptr) {
                 LOCK(tx_relay->m_bloom_filter_mutex);
                 if (tx_relay->m_bloom_filter) {
                     sendMerkleBlock = true;
                     merkleBlock = CMerkleBlock(*pblock, *tx_relay->m_bloom_filter);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 }
             }
             if (sendMerkleBlock) {
@@ -3248,19 +2544,6 @@ void PeerManagerImpl::ProcessGetBlockData(CNode& pfrom, Peer& peer, const CInv& 
             // they won't have a useful mempool to match against a compact block,
             // and we don't feel like constructing the object for them, so
             // instead we respond with the full, non-compact block.
-<<<<<<< HEAD
-            bool fPeerWantsWitness = State(pfrom.GetId())->fWantsCmpctWitness;
-            int nSendFlags = fPeerWantsWitness ? 0 : SERIALIZE_TRANSACTION_NO_WITNESS;
-            if (CanDirectFetch() && pindex->nHeight >= m_chainman.ActiveChain().Height() - MAX_CMPCTBLOCK_DEPTH) {
-                if ((fPeerWantsWitness || !fWitnessesPresentInARecentCompactBlock) && a_recent_compact_block && a_recent_compact_block->header.GetHash() == pindex->GetBlockHash()) {
-                    m_connman.PushMessage(&pfrom, msgMaker.Make(nSendFlags, NetMsgType::CMPCTBLOCK, *a_recent_compact_block));
-                } else {
-                    CBlockHeaderAndShortTxIDs cmpctblock(*pblock, fPeerWantsWitness);
-                    m_connman.PushMessage(&pfrom, msgMaker.Make(nSendFlags, NetMsgType::CMPCTBLOCK, cmpctblock));
-                }
-            } else {
-                m_connman.PushMessage(&pfrom, msgMaker.Make(nSendFlags, NetMsgType::BLOCK, *pblock));
-=======
             if (CanDirectFetch() && pindex->nHeight >= m_chainman.ActiveChain().Height() - MAX_CMPCTBLOCK_DEPTH) {
                 if (a_recent_compact_block && a_recent_compact_block->header.GetHash() == pindex->GetBlockHash()) {
                     m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::CMPCTBLOCK, *a_recent_compact_block));
@@ -3270,7 +2553,6 @@ void PeerManagerImpl::ProcessGetBlockData(CNode& pfrom, Peer& peer, const CInv& 
                 }
             } else {
                 m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::BLOCK, *pblock));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             }
         }
     }
@@ -3283,40 +2565,13 @@ void PeerManagerImpl::ProcessGetBlockData(CNode& pfrom, Peer& peer, const CInv& 
             // and we want it right after the last block so they don't
             // wait for other stuff first.
             std::vector<CInv> vInv;
-<<<<<<< HEAD
-            vInv.push_back(CInv(MSG_BLOCK, m_chainman.ActiveChain().Tip()->GetBlockHash()));
-=======
             vInv.emplace_back(MSG_BLOCK, m_chainman.ActiveChain().Tip()->GetBlockHash());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::INV, vInv));
             peer.m_continuation_block.SetNull();
         }
     }
 }
 
-<<<<<<< HEAD
-CTransactionRef PeerManagerImpl::FindTxForGetData(const CNode& peer, const GenTxid& gtxid, const std::chrono::seconds mempool_req, const std::chrono::seconds now)
-{
-    auto txinfo = m_mempool.info(gtxid);
-    if (txinfo.tx) {
-        // If a TX could have been INVed in reply to a MEMPOOL request,
-        // or is older than UNCONDITIONAL_RELAY_DELAY, permit the request
-        // unconditionally.
-        if ((mempool_req.count() && txinfo.m_time <= mempool_req) || txinfo.m_time <= now - UNCONDITIONAL_RELAY_DELAY) {
-            return std::move(txinfo.tx);
-        }
-    }
-
-    {
-        LOCK(cs_main);
-        // Otherwise, the transaction must have been announced recently.
-        if (State(peer.GetId())->m_recently_announced_invs.contains(gtxid.GetHash())) {
-            // If it was, it can be relayed from either the mempool...
-            if (txinfo.tx) return std::move(txinfo.tx);
-            // ... or the relay pool.
-            auto mi = mapRelay.find(gtxid.GetHash());
-            if (mi != mapRelay.end()) return mi->second;
-=======
 CTransactionRef PeerManagerImpl::FindTxForGetData(const Peer::TxRelay& tx_relay, const GenTxid& gtxid)
 {
     // If a tx was in the mempool prior to the last INV for this peer, permit the request.
@@ -3331,7 +2586,6 @@ CTransactionRef PeerManagerImpl::FindTxForGetData(const Peer::TxRelay& tx_relay,
         if (m_most_recent_block_txs != nullptr) {
             auto it = m_most_recent_block_txs->find(gtxid.GetHash());
             if (it != m_most_recent_block_txs->end()) return it->second;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
     }
 
@@ -3342,7 +2596,6 @@ void PeerManagerImpl::ProcessGetData(CNode& pfrom, Peer& peer, const std::atomic
 {
     AssertLockNotHeld(cs_main);
 
-<<<<<<< HEAD
     std::deque<CInv>::iterator it = peer.m_getdata_requests.begin();
     std::vector<CInv> vNotFound;
     const CNetMsgMaker msgMaker(pfrom.GetCommonVersion());
@@ -3443,38 +2696,6 @@ void PeerManagerImpl::ProcessGetData(CNode& pfrom, Peer& peer, const std::atomic
         }
 
         if (!push) {
-=======
-    auto tx_relay = peer.GetTxRelay();
-
-    std::deque<CInv>::iterator it = peer.m_getdata_requests.begin();
-    std::vector<CInv> vNotFound;
-    const CNetMsgMaker msgMaker(pfrom.GetCommonVersion());
-
-    // Process as many TX items from the front of the getdata queue as
-    // possible, since they're common and it's efficient to batch process
-    // them.
-    while (it != peer.m_getdata_requests.end() && it->IsGenTxMsg()) {
-        if (interruptMsgProc) return;
-        // The send buffer provides backpressure. If there's no space in
-        // the buffer, pause processing until the next call.
-        if (pfrom.fPauseSend) break;
-
-        const CInv &inv = *it++;
-
-        if (tx_relay == nullptr) {
-            // Ignore GETDATA requests for transactions from block-relay-only
-            // peers and peers that asked us not to announce transactions.
-            continue;
-        }
-
-        CTransactionRef tx = FindTxForGetData(*tx_relay, ToGenTxid(inv));
-        if (tx) {
-            // WTX and WITNESS_TX imply we serialize with witness
-            int nSendFlags = (inv.IsMsgTx() ? SERIALIZE_TRANSACTION_NO_WITNESS : 0);
-            m_connman.PushMessage(&pfrom, msgMaker.Make(nSendFlags, NetMsgType::TX, *tx));
-            m_mempool.RemoveUnbroadcastTx(tx->GetHash());
-        } else {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             vNotFound.push_back(inv);
         }
     }
@@ -3511,52 +2732,25 @@ void PeerManagerImpl::ProcessGetData(CNode& pfrom, Peer& peer, const std::atomic
     }
 }
 
-<<<<<<< HEAD
-static uint32_t GetFetchFlags(const CNode& pfrom) EXCLUSIVE_LOCKS_REQUIRED(cs_main) {
-    uint32_t nFetchFlags = 0;
-    if ((pfrom.GetLocalServices() & NODE_WITNESS) && State(pfrom.GetId())->fHaveWitness) {
-=======
 uint32_t PeerManagerImpl::GetFetchFlags(const Peer& peer) const
 {
     uint32_t nFetchFlags = 0;
     if (CanServeWitnesses(peer)) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         nFetchFlags |= MSG_WITNESS_FLAG;
     }
     return nFetchFlags;
 }
 
-<<<<<<< HEAD
-void PeerManagerImpl::SendBlockTransactions(CNode& pfrom, const CBlock& block, const BlockTransactionsRequest& req)
-=======
 void PeerManagerImpl::SendBlockTransactions(CNode& pfrom, Peer& peer, const CBlock& block, const BlockTransactionsRequest& req)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     BlockTransactions resp(req);
     for (size_t i = 0; i < req.indexes.size(); i++) {
         if (req.indexes[i] >= block.vtx.size()) {
-<<<<<<< HEAD
-            Misbehaving(pfrom.GetId(), 100, "getblocktxn with out-of-bounds tx indices");
-=======
             Misbehaving(peer, 100, "getblocktxn with out-of-bounds tx indices");
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             return;
         }
         resp.txn[i] = block.vtx[req.indexes[i]];
     }
-<<<<<<< HEAD
-    LOCK(cs_main);
-    const CNetMsgMaker msgMaker(pfrom.GetCommonVersion());
-    int nSendFlags = State(pfrom.GetId())->fWantsCmpctWitness ? 0 : SERIALIZE_TRANSACTION_NO_WITNESS;
-    m_connman.PushMessage(&pfrom, msgMaker.Make(nSendFlags, NetMsgType::BLOCKTXN, resp));
-}
-
-void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
-                                            const std::vector<CBlockHeader>& headers,
-                                            bool via_compact_block)
-{
-    const CNetMsgMaker msgMaker(pfrom.GetCommonVersion());
-=======
 
     const CNetMsgMaker msgMaker(pfrom.GetCommonVersion());
     m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::BLOCKTXN, resp));
@@ -3933,260 +3127,10 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, Peer& peer,
                                             std::vector<CBlockHeader>&& headers,
                                             bool via_compact_block)
 {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     size_t nCount = headers.size();
 
     if (nCount == 0) {
         // Nothing interesting. Stop asking this peers for more headers.
-<<<<<<< HEAD
-=======
-        // If we were in the middle of headers sync, receiving an empty headers
-        // message suggests that the peer suddenly has nothing to give us
-        // (perhaps it reorged to our chain). Clear download state for this peer.
-        LOCK(peer.m_headers_sync_mutex);
-        if (peer.m_headers_sync) {
-            peer.m_headers_sync.reset(nullptr);
-            LOCK(m_headers_presync_mutex);
-            m_headers_presync_stats.erase(pfrom.GetId());
-        }
-        return;
-    }
-
-    // Before we do any processing, make sure these pass basic sanity checks.
-    // We'll rely on headers having valid proof-of-work further down, as an
-    // anti-DoS criteria (note: this check is required before passing any
-    // headers into HeadersSyncState).
-    if (!CheckHeadersPoW(headers, m_chainparams.GetConsensus(), peer)) {
-        // Misbehaving() calls are handled within CheckHeadersPoW(), so we can
-        // just return. (Note that even if a header is announced via compact
-        // block, the header itself should be valid, so this type of error can
-        // always be punished.)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
-        return;
-    }
-
-    const CBlockIndex *pindexLast = nullptr;
-
-    // We'll set already_validated_work to true if these headers are
-    // successfully processed as part of a low-work headers sync in progress
-    // (either in PRESYNC or REDOWNLOAD phase).
-    // If true, this will mean that any headers returned to us (ie during
-    // REDOWNLOAD) can be validated without further anti-DoS checks.
-    bool already_validated_work = false;
-
-    // If we're in the middle of headers sync, let it do its magic.
-    bool have_headers_sync = false;
-    {
-        LOCK(peer.m_headers_sync_mutex);
-
-        already_validated_work = IsContinuationOfLowWorkHeadersSync(peer, pfrom, headers);
-
-        // The headers we passed in may have been:
-        // - untouched, perhaps if no headers-sync was in progress, or some
-        //   failure occurred
-        // - erased, such as if the headers were successfully processed and no
-        //   additional headers processing needs to take place (such as if we
-        //   are still in PRESYNC)
-        // - replaced with headers that are now ready for validation, such as
-        //   during the REDOWNLOAD phase of a low-work headers sync.
-        // So just check whether we still have headers that we need to process,
-        // or not.
-        if (headers.empty()) {
-            return;
-        }
-
-        have_headers_sync = !!peer.m_headers_sync;
-    }
-
-    // Do these headers connect to something in our block index?
-    const CBlockIndex *chain_start_header{WITH_LOCK(::cs_main, return m_chainman.m_blockman.LookupBlockIndex(headers[0].hashPrevBlock))};
-    bool headers_connect_blockindex{chain_start_header != nullptr};
-
-    if (!headers_connect_blockindex) {
-        if (nCount <= MAX_BLOCKS_TO_ANNOUNCE) {
-            // If this looks like it could be a BIP 130 block announcement, use
-            // special logic for handling headers that don't connect, as this
-            // could be benign.
-            HandleFewUnconnectingHeaders(pfrom, peer, headers);
-        } else {
-            Misbehaving(peer, 10, "invalid header received");
-        }
-        return;
-    }
-
-    // If the headers we received are already in memory and an ancestor of
-    // m_best_header or our tip, skip anti-DoS checks. These headers will not
-    // use any more memory (and we are not leaking information that could be
-    // used to fingerprint us).
-    const CBlockIndex *last_received_header{nullptr};
-    {
-        LOCK(cs_main);
-<<<<<<< HEAD
-        CNodeState *nodestate = State(pfrom.GetId());
-
-        // If this looks like it could be a block announcement (nCount <
-        // MAX_BLOCKS_TO_ANNOUNCE), use special logic for handling headers that
-        // don't connect:
-        // - Send a getheaders message in response to try to connect the chain.
-        // - The peer can send up to MAX_UNCONNECTING_HEADERS in a row that
-        //   don't connect before giving DoS points
-        // - Once a headers message is received that is valid and does connect,
-        //   nUnconnectingHeaders gets reset back to 0.
-        if (!m_chainman.m_blockman.LookupBlockIndex(headers[0].hashPrevBlock) && nCount < MAX_BLOCKS_TO_ANNOUNCE) {
-            nodestate->nUnconnectingHeaders++;
-            m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETHEADERS, m_chainman.ActiveChain().GetLocator(pindexBestHeader), uint256()));
-            LogPrint(BCLog::NET, "received header %s: missing prev block %s, sending getheaders (%d) to end (peer=%d, nUnconnectingHeaders=%d)\n",
-                    headers[0].GetHash().ToString(),
-                    headers[0].hashPrevBlock.ToString(),
-                    pindexBestHeader->nHeight,
-                    pfrom.GetId(), nodestate->nUnconnectingHeaders);
-            // Set hashLastUnknownBlock for this peer, so that if we
-            // eventually get the headers - even from a different peer -
-            // we can use this peer to download.
-            UpdateBlockAvailability(pfrom.GetId(), headers.back().GetHash());
-
-            if (nodestate->nUnconnectingHeaders % MAX_UNCONNECTING_HEADERS == 0) {
-                Misbehaving(pfrom.GetId(), 20, strprintf("%d non-connecting headers", nodestate->nUnconnectingHeaders));
-            }
-            return;
-        }
-
-        uint256 hashLastBlock;
-        for (const CBlockHeader& header : headers) {
-            if (!hashLastBlock.IsNull() && header.hashPrevBlock != hashLastBlock) {
-                Misbehaving(pfrom.GetId(), 20, "non-continuous headers sequence");
-                return;
-            }
-            hashLastBlock = header.GetHash();
-        }
-
-        // If we don't have the last header, then they'll have given us
-        // something new (if these headers are valid).
-        if (!m_chainman.m_blockman.LookupBlockIndex(hashLastBlock)) {
-            received_new_header = true;
-        }
-    }
-
-    BlockValidationState state;
-    if (!m_chainman.ProcessNewBlockHeaders(headers, state, m_chainparams, &pindexLast)) {
-        if (state.IsInvalid()) {
-            MaybePunishNodeForBlock(pfrom.GetId(), state, via_compact_block, "invalid header received");
-            return;
-        }
-    }
-
-    {
-        LOCK(cs_main);
-        CNodeState *nodestate = State(pfrom.GetId());
-        if (nodestate->nUnconnectingHeaders > 0) {
-            LogPrint(BCLog::NET, "peer=%d: resetting nUnconnectingHeaders (%d -> 0)\n", pfrom.GetId(), nodestate->nUnconnectingHeaders);
-        }
-        nodestate->nUnconnectingHeaders = 0;
-
-        assert(pindexLast);
-        UpdateBlockAvailability(pfrom.GetId(), pindexLast->GetBlockHash());
-
-        // From here, pindexBestKnownBlock should be guaranteed to be non-null,
-        // because it is set in UpdateBlockAvailability. Some nullptr checks
-        // are still present, however, as belt-and-suspenders.
-
-        if (received_new_header && pindexLast->nChainWork > m_chainman.ActiveChain().Tip()->nChainWork) {
-            nodestate->m_last_block_announcement = GetTime();
-        }
-
-        if (nCount == MAX_HEADERS_RESULTS) {
-            // Headers message had its maximum size; the peer may have more headers.
-            // TODO: optimize: if pindexLast is an ancestor of m_chainman.ActiveChain().Tip or pindexBestHeader, continue
-            // from there instead.
-            LogPrint(BCLog::NET, "more getheaders (%d) to end to peer=%d (startheight:%d)\n",
-                                 pindexLast->nHeight, pfrom.GetId(), peer.m_starting_height);
-            m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETHEADERS, m_chainman.ActiveChain().GetLocator(pindexLast), uint256()));
-        }
-
-        // If this set of headers is valid and ends in a block with at least as
-        // much work as our tip, download as much as possible.
-        if (CanDirectFetch() && pindexLast->IsValid(BLOCK_VALID_TREE) && m_chainman.ActiveChain().Tip()->nChainWork <= pindexLast->nChainWork) {
-            std::vector<const CBlockIndex*> vToFetch;
-            const CBlockIndex *pindexWalk = pindexLast;
-            // Calculate all the blocks we'd need to switch to pindexLast, up to a limit.
-            while (pindexWalk && !m_chainman.ActiveChain().Contains(pindexWalk) && vToFetch.size() <= MAX_BLOCKS_IN_TRANSIT_PER_PEER) {
-                if (!(pindexWalk->nStatus & BLOCK_HAVE_DATA) &&
-                        !IsBlockRequested(pindexWalk->GetBlockHash()) &&
-                        (!DeploymentActiveAt(*pindexWalk, m_chainparams.GetConsensus(), Consensus::DEPLOYMENT_SEGWIT) || State(pfrom.GetId())->fHaveWitness)) {
-                    // We don't have this block, and it's not yet in flight.
-                    vToFetch.push_back(pindexWalk);
-                }
-                pindexWalk = pindexWalk->pprev;
-            }
-            // If pindexWalk still isn't on our main chain, we're looking at a
-            // very large reorg at a time we think we're close to caught up to
-            // the main chain -- this shouldn't really happen.  Bail out on the
-            // direct fetch and rely on parallel download instead.
-            if (!m_chainman.ActiveChain().Contains(pindexWalk)) {
-                LogPrint(BCLog::NET, "Large reorg, won't direct fetch to %s (%d)\n",
-                        pindexLast->GetBlockHash().ToString(),
-                        pindexLast->nHeight);
-            } else {
-                std::vector<CInv> vGetData;
-                // Download as much as possible, from earliest to latest.
-                for (const CBlockIndex *pindex : reverse_iterate(vToFetch)) {
-                    if (nodestate->nBlocksInFlight >= MAX_BLOCKS_IN_TRANSIT_PER_PEER) {
-                        // Can't download any more from this peer
-                        break;
-                    }
-                    uint32_t nFetchFlags = GetFetchFlags(pfrom);
-                    vGetData.push_back(CInv(MSG_BLOCK | nFetchFlags, pindex->GetBlockHash()));
-                    BlockRequested(pfrom.GetId(), *pindex);
-                    LogPrint(BCLog::NET, "Requesting block %s from  peer=%d\n",
-                            pindex->GetBlockHash().ToString(), pfrom.GetId());
-                }
-                if (vGetData.size() > 1) {
-                    LogPrint(BCLog::NET, "Downloading blocks toward %s (%d) via headers direct fetch\n",
-                            pindexLast->GetBlockHash().ToString(), pindexLast->nHeight);
-                }
-                if (vGetData.size() > 0) {
-                    if (nodestate->fSupportsDesiredCmpctVersion && vGetData.size() == 1 && mapBlocksInFlight.size() == 1 && pindexLast->pprev->IsValid(BLOCK_VALID_CHAIN)) {
-                        // In any case, we want to download using a compact block, not a regular one
-                        vGetData[0] = CInv(MSG_CMPCT_BLOCK, vGetData[0].hash);
-                    }
-                    m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETDATA, vGetData));
-                }
-            }
-        }
-        // If we're in IBD, we want outbound peers that will serve us a useful
-        // chain. Disconnect peers that are on chains with insufficient work.
-        if (m_chainman.ActiveChainstate().IsInitialBlockDownload() && nCount != MAX_HEADERS_RESULTS) {
-            // When nCount < MAX_HEADERS_RESULTS, we know we have no more
-            // headers to fetch from this peer.
-            if (nodestate->pindexBestKnownBlock && nodestate->pindexBestKnownBlock->nChainWork < nMinimumChainWork) {
-                // This peer has too little work on their headers chain to help
-                // us sync -- disconnect if it is an outbound disconnection
-                // candidate.
-                // Note: We compare their tip to nMinimumChainWork (rather than
-                // m_chainman.ActiveChain().Tip()) because we won't start block download
-                // until we have a headers chain that has at least
-                // nMinimumChainWork, even if a peer has a chain past our tip,
-                // as an anti-DoS measure.
-                if (pfrom.IsOutboundOrBlockRelayConn()) {
-                    LogPrintf("Disconnecting outbound peer %d -- headers chain has insufficient work\n", pfrom.GetId());
-                    pfrom.fDisconnect = true;
-                }
-            }
-        }
-
-        // If this is an outbound full-relay peer, check to see if we should protect
-        // it from the bad/lagging chain logic.
-        // Note that outbound block-relay peers are excluded from this protection, and
-        // thus always subject to eviction under the bad/lagging chain logic.
-        // See ChainSyncTimeoutState.
-        if (!pfrom.fDisconnect && pfrom.IsFullOutboundConn() && nodestate->pindexBestKnownBlock != nullptr) {
-            if (m_outbound_peers_with_protect_from_disconnect < MAX_OUTBOUND_PEERS_TO_PROTECT_FROM_DISCONNECT && nodestate->pindexBestKnownBlock->nChainWork >= m_chainman.ActiveChain().Tip()->nChainWork && !nodestate->m_chain_sync.m_protect) {
-                LogPrint(BCLog::NET, "Protecting outbound peer=%d from eviction\n", pfrom.GetId());
-                nodestate->m_chain_sync.m_protect = true;
-                ++m_outbound_peers_with_protect_from_disconnect;
-            }
-        }
-=======
         last_received_header = m_chainman.m_blockman.LookupBlockIndex(headers.back().GetHash());
         if (IsAncestorOfBestHeaderOrTip(last_received_header)) {
             already_validated_work = true;
@@ -4375,7 +3319,6 @@ bool PeerManagerImpl::PrepareBlockFilterRequest(CNode& node, Peer& peer,
     if (!filter_index) {
         LogPrint(BCLog::NET, "Filter index for supported type %s not found\n", BlockFilterTypeName(filter_type));
         return false;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     return;
@@ -4517,11 +3460,7 @@ bool PeerManagerImpl::PrepareBlockFilterRequest(CNode& peer,
     return true;
 }
 
-<<<<<<< HEAD
-void PeerManagerImpl::ProcessGetCFilters(CNode& peer, CDataStream& vRecv)
-=======
 void PeerManagerImpl::ProcessGetCFilters(CNode& node,Peer& peer, CDataStream& vRecv)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     uint8_t filter_type_ser;
     uint32_t start_height;
@@ -4533,11 +3472,7 @@ void PeerManagerImpl::ProcessGetCFilters(CNode& node,Peer& peer, CDataStream& vR
 
     const CBlockIndex* stop_index;
     BlockFilterIndex* filter_index;
-<<<<<<< HEAD
-    if (!PrepareBlockFilterRequest(peer, filter_type, start_height, stop_hash,
-=======
     if (!PrepareBlockFilterRequest(node, peer, filter_type, start_height, stop_hash,
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                                    MAX_GETCFILTERS_SIZE, stop_index, filter_index)) {
         return;
     }
@@ -4550,15 +3485,6 @@ void PeerManagerImpl::ProcessGetCFilters(CNode& node,Peer& peer, CDataStream& vR
     }
 
     for (const auto& filter : filters) {
-<<<<<<< HEAD
-        CSerializedNetMsg msg = CNetMsgMaker(peer.GetCommonVersion())
-            .Make(NetMsgType::CFILTER, filter);
-        m_connman.PushMessage(&peer, std::move(msg));
-    }
-}
-
-void PeerManagerImpl::ProcessGetCFHeaders(CNode& peer, CDataStream& vRecv)
-=======
         CSerializedNetMsg msg = CNetMsgMaker(node.GetCommonVersion())
             .Make(NetMsgType::CFILTER, filter);
         m_connman.PushMessage(&node, std::move(msg));
@@ -4566,7 +3492,6 @@ void PeerManagerImpl::ProcessGetCFHeaders(CNode& peer, CDataStream& vRecv)
 }
 
 void PeerManagerImpl::ProcessGetCFHeaders(CNode& node, Peer& peer, CDataStream& vRecv)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     uint8_t filter_type_ser;
     uint32_t start_height;
@@ -4578,11 +3503,7 @@ void PeerManagerImpl::ProcessGetCFHeaders(CNode& node, Peer& peer, CDataStream& 
 
     const CBlockIndex* stop_index;
     BlockFilterIndex* filter_index;
-<<<<<<< HEAD
-    if (!PrepareBlockFilterRequest(peer, filter_type, start_height, stop_hash,
-=======
     if (!PrepareBlockFilterRequest(node, peer, filter_type, start_height, stop_hash,
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                                    MAX_GETCFHEADERS_SIZE, stop_index, filter_index)) {
         return;
     }
@@ -4595,251 +3516,6 @@ void PeerManagerImpl::ProcessGetCFHeaders(CNode& node, Peer& peer, CDataStream& 
             LogPrint(BCLog::NET, "Failed to find block filter header in index: filter_type=%s, block_hash=%s\n",
                          BlockFilterTypeName(filter_type), prev_block->GetBlockHash().ToString());
             return;
-<<<<<<< HEAD
-=======
-        }
-    }
-
-    std::vector<uint256> filter_hashes;
-    if (!filter_index->LookupFilterHashRange(start_height, stop_index, filter_hashes)) {
-        LogPrint(BCLog::NET, "Failed to find block filter hashes in index: filter_type=%s, start_height=%d, stop_hash=%s\n",
-                     BlockFilterTypeName(filter_type), start_height, stop_hash.ToString());
-        return;
-    }
-
-    CSerializedNetMsg msg = CNetMsgMaker(node.GetCommonVersion())
-        .Make(NetMsgType::CFHEADERS,
-              filter_type_ser,
-              stop_index->GetBlockHash(),
-              prev_header,
-              filter_hashes);
-    m_connman.PushMessage(&node, std::move(msg));
-}
-
-void PeerManagerImpl::ProcessGetCFCheckPt(CNode& node, Peer& peer, CDataStream& vRecv)
-{
-    uint8_t filter_type_ser;
-    uint256 stop_hash;
-
-    vRecv >> filter_type_ser >> stop_hash;
-
-    const BlockFilterType filter_type = static_cast<BlockFilterType>(filter_type_ser);
-
-    const CBlockIndex* stop_index;
-    BlockFilterIndex* filter_index;
-    if (!PrepareBlockFilterRequest(node, peer, filter_type, /*start_height=*/0, stop_hash,
-                                   /*max_height_diff=*/std::numeric_limits<uint32_t>::max(),
-                                   stop_index, filter_index)) {
-        return;
-    }
-
-    std::vector<uint256> headers(stop_index->nHeight / CFCHECKPT_INTERVAL);
-
-    // Populate headers.
-    const CBlockIndex* block_index = stop_index;
-    for (int i = headers.size() - 1; i >= 0; i--) {
-        int height = (i + 1) * CFCHECKPT_INTERVAL;
-        block_index = block_index->GetAncestor(height);
-
-        if (!filter_index->LookupFilterHeader(block_index, headers[i])) {
-            LogPrint(BCLog::NET, "Failed to find block filter header in index: filter_type=%s, block_hash=%s\n",
-                         BlockFilterTypeName(filter_type), block_index->GetBlockHash().ToString());
-            return;
-        }
-    }
-
-    CSerializedNetMsg msg = CNetMsgMaker(node.GetCommonVersion())
-        .Make(NetMsgType::CFCHECKPT,
-              filter_type_ser,
-              stop_index->GetBlockHash(),
-              headers);
-    m_connman.PushMessage(&node, std::move(msg));
-}
-
-void PeerManagerImpl::ProcessBlock(CNode& node, const std::shared_ptr<const CBlock>& block, bool force_processing, bool min_pow_checked)
-{
-    bool new_block{false};
-    m_chainman.ProcessNewBlock(block, force_processing, min_pow_checked, &new_block);
-    if (new_block) {
-        node.m_last_block_time = GetTime<std::chrono::seconds>();
-        // In case this block came from a different peer than we requested
-        // from, we can erase the block request now anyway (as we just stored
-        // this block to disk).
-        LOCK(cs_main);
-        RemoveBlockRequest(block->GetHash(), std::nullopt);
-    } else {
-        LOCK(cs_main);
-        mapBlockSource.erase(block->GetHash());
-    }
-}
-
-void PeerManagerImpl::ProcessCompactBlockTxns(CNode& pfrom, Peer& peer, const BlockTransactions& block_transactions)
-{
-    std::shared_ptr<CBlock> pblock = std::make_shared<CBlock>();
-    bool fBlockRead{false};
-    const CNetMsgMaker msgMaker(pfrom.GetCommonVersion());
-    {
-        LOCK(cs_main);
-
-        auto range_flight = mapBlocksInFlight.equal_range(block_transactions.blockhash);
-        size_t already_in_flight = std::distance(range_flight.first, range_flight.second);
-        bool requested_block_from_this_peer{false};
-
-        // Multimap ensures ordering of outstanding requests. It's either empty or first in line.
-        bool first_in_flight = already_in_flight == 0 || (range_flight.first->second.first == pfrom.GetId());
-
-        while (range_flight.first != range_flight.second) {
-            auto [node_id, block_it] = range_flight.first->second;
-            if (node_id == pfrom.GetId() && block_it->partialBlock) {
-                requested_block_from_this_peer = true;
-                break;
-            }
-            range_flight.first++;
-        }
-
-        if (!requested_block_from_this_peer) {
-            LogPrint(BCLog::NET, "Peer %d sent us block transactions for block we weren't expecting\n", pfrom.GetId());
-            return;
-        }
-
-        PartiallyDownloadedBlock& partialBlock = *range_flight.first->second.second->partialBlock;
-        ReadStatus status = partialBlock.FillBlock(*pblock, block_transactions.txn);
-        if (status == READ_STATUS_INVALID) {
-            RemoveBlockRequest(block_transactions.blockhash, pfrom.GetId()); // Reset in-flight state in case Misbehaving does not result in a disconnect
-            Misbehaving(peer, 100, "invalid compact block/non-matching block transactions");
-            return;
-        } else if (status == READ_STATUS_FAILED) {
-            if (first_in_flight) {
-                // Might have collided, fall back to getdata now :(
-                std::vector<CInv> invs;
-                invs.emplace_back(MSG_BLOCK | GetFetchFlags(peer), block_transactions.blockhash);
-                m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETDATA, invs));
-            } else {
-                RemoveBlockRequest(block_transactions.blockhash, pfrom.GetId());
-                LogPrint(BCLog::NET, "Peer %d sent us a compact block but it failed to reconstruct, waiting on first download to complete\n", pfrom.GetId());
-                return;
-            }
-        } else {
-            // Block is either okay, or possibly we received
-            // READ_STATUS_CHECKBLOCK_FAILED.
-            // Note that CheckBlock can only fail for one of a few reasons:
-            // 1. bad-proof-of-work (impossible here, because we've already
-            //    accepted the header)
-            // 2. merkleroot doesn't match the transactions given (already
-            //    caught in FillBlock with READ_STATUS_FAILED, so
-            //    impossible here)
-            // 3. the block is otherwise invalid (eg invalid coinbase,
-            //    block is too big, too many legacy sigops, etc).
-            // So if CheckBlock failed, #3 is the only possibility.
-            // Under BIP 152, we don't discourage the peer unless proof of work is
-            // invalid (we don't require all the stateless checks to have
-            // been run).  This is handled below, so just treat this as
-            // though the block was successfully read, and rely on the
-            // handling in ProcessNewBlock to ensure the block index is
-            // updated, etc.
-            RemoveBlockRequest(block_transactions.blockhash, pfrom.GetId()); // it is now an empty pointer
-            fBlockRead = true;
-            // mapBlockSource is used for potentially punishing peers and
-            // updating which peers send us compact blocks, so the race
-            // between here and cs_main in ProcessNewBlock is fine.
-            // BIP 152 permits peers to relay compact blocks after validating
-            // the header only; we should not punish peers if the block turns
-            // out to be invalid.
-            mapBlockSource.emplace(block_transactions.blockhash, std::make_pair(pfrom.GetId(), false));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
-        }
-    } // Don't hold cs_main when we call into ProcessNewBlock
-    if (fBlockRead) {
-        // Since we requested this block (it was in mapBlocksInFlight), force it to be processed,
-        // even if it would not be a candidate for new tip (missing previous block, chain not long enough, etc)
-        // This bypasses some anti-DoS logic in AcceptBlock (eg to prevent
-        // disk-space attacks), but this should be safe due to the
-        // protections in the compact block handler -- see related comment
-        // in compact block optimistic reconstruction handling.
-        ProcessBlock(pfrom, pblock, /*force_processing=*/true, /*min_pow_checked=*/true);
-    }
-    return;
-}
-
-<<<<<<< HEAD
-    std::vector<uint256> filter_hashes;
-    if (!filter_index->LookupFilterHashRange(start_height, stop_index, filter_hashes)) {
-        LogPrint(BCLog::NET, "Failed to find block filter hashes in index: filter_type=%s, start_height=%d, stop_hash=%s\n",
-                     BlockFilterTypeName(filter_type), start_height, stop_hash.ToString());
-        return;
-    }
-
-    CSerializedNetMsg msg = CNetMsgMaker(peer.GetCommonVersion())
-        .Make(NetMsgType::CFHEADERS,
-              filter_type_ser,
-              stop_index->GetBlockHash(),
-              prev_header,
-              filter_hashes);
-    m_connman.PushMessage(&peer, std::move(msg));
-}
-
-void PeerManagerImpl::ProcessGetCFCheckPt(CNode& peer, CDataStream& vRecv)
-{
-    uint8_t filter_type_ser;
-    uint256 stop_hash;
-
-    vRecv >> filter_type_ser >> stop_hash;
-
-    const BlockFilterType filter_type = static_cast<BlockFilterType>(filter_type_ser);
-
-    const CBlockIndex* stop_index;
-    BlockFilterIndex* filter_index;
-    if (!PrepareBlockFilterRequest(peer, filter_type, /*start_height=*/0, stop_hash,
-                                   /*max_height_diff=*/std::numeric_limits<uint32_t>::max(),
-                                   stop_index, filter_index)) {
-        return;
-    }
-
-    std::vector<uint256> headers(stop_index->nHeight / CFCHECKPT_INTERVAL);
-
-    // Populate headers.
-    const CBlockIndex* block_index = stop_index;
-    for (int i = headers.size() - 1; i >= 0; i--) {
-        int height = (i + 1) * CFCHECKPT_INTERVAL;
-        block_index = block_index->GetAncestor(height);
-
-        if (!filter_index->LookupFilterHeader(block_index, headers[i])) {
-            LogPrint(BCLog::NET, "Failed to find block filter header in index: filter_type=%s, block_hash=%s\n",
-                         BlockFilterTypeName(filter_type), block_index->GetBlockHash().ToString());
-            return;
-        }
-    }
-
-    CSerializedNetMsg msg = CNetMsgMaker(peer.GetCommonVersion())
-        .Make(NetMsgType::CFCHECKPT,
-              filter_type_ser,
-              stop_index->GetBlockHash(),
-              headers);
-    m_connman.PushMessage(&peer, std::move(msg));
-}
-
-void PeerManagerImpl::ProcessBlock(CNode& node, const std::shared_ptr<const CBlock>& block, bool force_processing)
-{
-    bool new_block{false};
-    m_chainman.ProcessNewBlock(m_chainparams, block, force_processing, &new_block);
-    if (new_block) {
-        node.nLastBlockTime = GetTime();
-    } else {
-        LOCK(cs_main);
-        mapBlockSource.erase(block->GetHash());
-    }
-}
-
-void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, CDataStream& vRecv,
-                                     const std::chrono::microseconds time_received,
-                                     const std::atomic<bool>& interruptMsgProc)
-{
-    LogPrint(BCLog::NET, "received: %s (%u bytes) peer=%d\n", SanitizeString(msg_type), vRecv.size(), pfrom.GetId());
-
-    PeerRef peer = GetPeerRef(pfrom.GetId());
-    if (peer == nullptr) return;
-
-=======
 void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, CDataStream& vRecv,
                                      const std::chrono::microseconds time_received,
                                      const std::atomic<bool>& interruptMsgProc)
@@ -4851,7 +3527,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
     PeerRef peer = GetPeerRef(pfrom.GetId());
     if (peer == nullptr) return;
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (msg_type == NetMsgType::VERSION) {
         if (pfrom.nVersion != 0) {
             LogPrint(BCLog::NET, "redundant version message from peer=%d\n", pfrom.GetId());
@@ -4867,19 +3542,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         int starting_height = -1;
         bool fRelay = true;
 
-<<<<<<< HEAD
-        vRecv >> nVersion >> nServiceInt >> nTime >> addrMe;
-        if (nTime < 0) {
-            nTime = 0;
-        }
-        nServices = ServiceFlags(nServiceInt);
-        if (!pfrom.IsInboundConn())
-        {
-            m_addrman.SetServices(pfrom.addr, nServices);
-        }
-        if (pfrom.ExpectServicesFromConn() && !HasAllDesirableServiceFlags(nServices))
-        {
-=======
         vRecv >> nVersion >> Using<CustomUintFormatter<8>>(nServices) >> nTime;
         if (nTime < 0) {
             nTime = 0;
@@ -4892,7 +3554,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         }
         if (pfrom.ExpectServicesFromConn() && !HasAllDesirableServiceFlags(nServices))
         {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             LogPrint(BCLog::NET, "peer=%d does not offer the expected services (%08x offered, %08x expected); disconnecting\n", pfrom.GetId(), nServices, GetDesirableServiceFlags(nServices));
             pfrom.fDisconnect = true;
             return;
@@ -4905,11 +3566,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             return;
         }
 
-<<<<<<< HEAD
-        if (!vRecv.empty())
-            vRecv >> addrFrom >> nNonce;
-        if (!vRecv.empty()) {
-=======
         if (!vRecv.empty()) {
             // The version message includes information about the sending node which we don't use:
             //   - 8 bytes (service bits)
@@ -4919,7 +3575,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             vRecv >> nNonce;
         }
         if (!vRecv.empty()) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             std::string strSubVer;
             vRecv >> LIMITED_STRING(strSubVer, MAX_SUBVERSION_LENGTH);
             cleanSubVer = SanitizeString(strSubVer);
@@ -4932,11 +3587,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         // Disconnect if we connected to ourself
         if (pfrom.IsInboundConn() && !m_connman.CheckIncomingNonce(nNonce))
         {
-<<<<<<< HEAD
-            LogPrintf("connected to self at %s, disconnecting\n", pfrom.addr.ToString());
-=======
             LogPrintf("connected to self at %s, disconnecting\n", pfrom.addr.ToStringAddrPort());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             pfrom.fDisconnect = true;
             return;
         }
@@ -4948,67 +3599,19 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
         // Inbound peers send us their version message when they connect.
         // We send our version message in response.
-<<<<<<< HEAD
-        if (pfrom.IsInboundConn()) PushNodeVersion(pfrom, GetAdjustedTime());
-=======
         if (pfrom.IsInboundConn()) {
             PushNodeVersion(pfrom, *peer);
         }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         // Change version
         const int greatest_common_version = std::min(nVersion, PROTOCOL_VERSION);
         pfrom.SetCommonVersion(greatest_common_version);
         pfrom.nVersion = nVersion;
-<<<<<<< HEAD
 
         const CNetMsgMaker msg_maker(greatest_common_version);
 
         if (greatest_common_version >= WTXID_RELAY_VERSION) {
             m_connman.PushMessage(&pfrom, msg_maker.Make(NetMsgType::WTXIDRELAY));
-        }
-
-        // Signal ADDRv2 support (BIP155).
-        if (greatest_common_version >= 70018) {
-            // BIP155 defines addrv2 and sendaddrv2 for all protocol versions, but some
-            // implementations reject messages they don't know. As a courtesy, don't send
-            // it to nodes with a version before 70018, as no software is known to support
-            // BIP155 that doesn't announce at least that protocol version number.
-            m_connman.PushMessage(&pfrom, msg_maker.Make(NetMsgType::SENDADDRV2));
-        }
-
-        m_connman.PushMessage(&pfrom, msg_maker.Make(NetMsgType::VERACK));
-
-        pfrom.nServices = nServices;
-        pfrom.SetAddrLocal(addrMe);
-        {
-            LOCK(pfrom.cs_SubVer);
-            pfrom.cleanSubVer = cleanSubVer;
-        }
-        peer->m_starting_height = starting_height;
-
-        // set nodes not relaying blocks and tx and not serving (parts) of the historical blockchain as "clients"
-        pfrom.fClient = (!(nServices & NODE_NETWORK) && !(nServices & NODE_NETWORK_LIMITED));
-
-        // set nodes not capable of serving the complete blockchain history as "limited nodes"
-        pfrom.m_limited_node = (!(nServices & NODE_NETWORK) && (nServices & NODE_NETWORK_LIMITED));
-
-        if (pfrom.m_tx_relay != nullptr) {
-            LOCK(pfrom.m_tx_relay->cs_filter);
-            pfrom.m_tx_relay->fRelayTxes = fRelay; // set to true after we get the first filter* message
-        }
-
-        if((nServices & NODE_WITNESS))
-        {
-            LOCK(cs_main);
-            State(pfrom.GetId())->fHaveWitness = true;
-=======
-
-        const CNetMsgMaker msg_maker(greatest_common_version);
-
-        if (greatest_common_version >= WTXID_RELAY_VERSION) {
-            m_connman.PushMessage(&pfrom, msg_maker.Make(NetMsgType::WTXIDRELAY));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
 
         // Signal ADDRv2 support (BIP155).
@@ -5066,46 +3669,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
         // Potentially mark this peer as a preferred download peer.
         {
-<<<<<<< HEAD
-        LOCK(cs_main);
-        UpdatePreferredDownload(pfrom, State(pfrom.GetId()));
-        }
-
-        if (!pfrom.IsInboundConn() && !pfrom.IsBlockOnlyConn()) {
-            // For outbound peers, we try to relay our address (so that other
-            // nodes can try to find us more quickly, as we have no guarantee
-            // that an outbound peer is even aware of how to reach us) and do a
-            // one-time address fetch (to help populate/update our addrman). If
-            // we're starting up for the first time, our addrman may be pretty
-            // empty and no one will know who we are, so these mechanisms are
-            // important to help us connect to the network.
-            //
-            // We skip this for block-relay-only peers to avoid potentially leaking
-            // information about our block-relay-only connections via address relay.
-            if (fListen && !m_chainman.ActiveChainstate().IsInitialBlockDownload())
-            {
-                CAddress addr = GetLocalAddress(&pfrom.addr, pfrom.GetLocalServices());
-                FastRandomContext insecure_rand;
-                if (addr.IsRoutable())
-                {
-                    LogPrint(BCLog::NET, "ProcessMessages: advertising address %s\n", addr.ToString());
-                    PushAddress(*peer, addr, insecure_rand);
-                } else if (IsPeerAddrLocalGood(&pfrom)) {
-                    addr.SetIP(addrMe);
-                    LogPrint(BCLog::NET, "ProcessMessages: advertising address %s\n", addr.ToString());
-                    PushAddress(*peer, addr, insecure_rand);
-                }
-            }
-
-            // Get recent addresses
-            m_connman.PushMessage(&pfrom, CNetMsgMaker(greatest_common_version).Make(NetMsgType::GETADDR));
-            peer->m_getaddr_sent = true;
-            // When requesting a getaddr, accept an additional MAX_ADDR_TO_SEND addresses in response
-            // (bypassing the MAX_ADDR_PROCESSING_TOKEN_BUCKET limit).
-            peer->m_addr_token_bucket += MAX_ADDR_TO_SEND;
-        }
-
-=======
             LOCK(cs_main);
             CNodeState* state = State(pfrom.GetId());
             state->fPreferredDownload = (!pfrom.IsInboundConn() || pfrom.HasPermission(NetPermissionFlags::NoBan)) && !pfrom.IsAddrFetchConn() && CanServeBlocks(*peer);
@@ -5133,7 +3696,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             peer->m_addr_token_bucket += MAX_ADDR_TO_SEND;
         }
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         if (!pfrom.IsInboundConn()) {
             // For non-inbound connections, we update the addrman to record
             // connection success so that addrman will have an up-to-date
@@ -5144,11 +3706,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             // table is also potentially detrimental because new-table entries
             // are subject to eviction in the event of addrman collisions.  We
             // mitigate the information-leak by never calling
-<<<<<<< HEAD
-            // CAddrMan::Connected() on block-relay-only peers; see
-=======
             // AddrMan::Connected() on block-relay-only peers; see
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             // FinalizeNode().
             //
             // This moves an address from New to Tried table in Addrman,
@@ -5158,23 +3716,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
         std::string remoteAddr;
         if (fLogIPs)
-<<<<<<< HEAD
-            remoteAddr = ", peeraddr=" + pfrom.addr.ToString();
-
-        LogPrint(BCLog::NET, "receive version message: %s: version %d, blocks=%d, us=%s, txrelay=%d, peer=%d%s\n",
-                  cleanSubVer, pfrom.nVersion,
-                  peer->m_starting_height, addrMe.ToString(), fRelay, pfrom.GetId(),
-                  remoteAddr);
-
-        int64_t nTimeOffset = nTime - GetTime();
-        pfrom.nTimeOffset = nTimeOffset;
-        AddTimeData(pfrom.addr, nTimeOffset);
-
-        // If the peer is old enough to have the old alert system, send it the final alert.
-        if (greatest_common_version <= 70012) {
-            CDataStream finalAlert(ParseHex("60010000000000000000000000ffffff7f00000000ffffff7ffeffff7f01ffffff7f00000000ffffff7f00ffffff7f002f555247454e543a20416c657274206b657920636f6d70726f6d697365642c2075706772616465207265717569726564004630440220653febd6410f470f6bae11cad19c48413becb1ac2c17f908fd0fd53bdc3abd5202206d0e9c96fe88d4a0f01ed9dedae2b6f9e00da94cad0fecaae66ecf689bf71b50"), SER_NETWORK, PROTOCOL_VERSION);
-            m_connman.PushMessage(&pfrom, CNetMsgMaker(greatest_common_version).Make("alert", finalAlert));
-=======
             remoteAddr = ", peeraddr=" + pfrom.addr.ToStringAddrPort();
 
         const auto mapped_as{m_connman.GetMappedAS(pfrom.addr)};
@@ -5195,7 +3736,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         if (greatest_common_version <= 70012) {
             const auto finalAlert{ParseHex("60010000000000000000000000ffffff7f00000000ffffff7ffeffff7f01ffffff7f00000000ffffff7f00ffffff7f002f555247454e543a20416c657274206b657920636f6d70726f6d697365642c2075706772616465207265717569726564004630440220653febd6410f470f6bae11cad19c48413becb1ac2c17f908fd0fd53bdc3abd5202206d0e9c96fe88d4a0f01ed9dedae2b6f9e00da94cad0fecaae66ecf689bf71b50")};
             m_connman.PushMessage(&pfrom, CNetMsgMaker(greatest_common_version).Make("alert", Span{finalAlert}));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
 
         // Feeler connections exist only to verify if address is online.
@@ -5221,24 +3761,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             return;
         }
 
-<<<<<<< HEAD
-        if (!pfrom.IsInboundConn()) {
-            LogPrintf("New outbound peer connected: version: %d, blocks=%d, peer=%d%s (%s)\n",
-                      pfrom.nVersion.load(), peer->m_starting_height,
-                      pfrom.GetId(), (fLogIPs ? strprintf(", peeraddr=%s", pfrom.addr.ToString()) : ""),
-                      pfrom.ConnectionTypeAsString());
-        }
-
-        if (pfrom.GetCommonVersion() >= SENDHEADERS_VERSION) {
-            // Tell our peer we prefer to receive headers rather than inv's
-            // We send this to non-NODE NETWORK peers as well, because even
-            // non-NODE NETWORK peers can announce blocks (such as pruning
-            // nodes)
-            m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::SENDHEADERS));
-        }
-        if (pfrom.GetCommonVersion() >= SHORT_IDS_BLOCKS_VERSION) {
-            // Tell our peer we are willing to provide version 1 or 2 cmpctblocks
-=======
         // Log succesful connections unconditionally for outbound, but not for inbound as those
         // can be triggered by an attacker at high rate.
         if (!pfrom.IsInboundConn() || LogAcceptCategory(BCLog::NET, BCLog::Level::Debug)) {
@@ -5253,20 +3775,10 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
         if (pfrom.GetCommonVersion() >= SHORT_IDS_BLOCKS_VERSION) {
             // Tell our peer we are willing to provide version 2 cmpctblocks.
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             // However, we do not request new block announcements using
             // cmpctblock messages.
             // We send this to non-NODE NETWORK peers as well, because
             // they may wish to request compact blocks from us
-<<<<<<< HEAD
-            bool fAnnounceUsingCMPCTBLOCK = false;
-            uint64_t nCMPCTBLOCKVersion = 2;
-            if (pfrom.GetLocalServices() & NODE_WITNESS)
-                m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::SENDCMPCT, fAnnounceUsingCMPCTBLOCK, nCMPCTBLOCKVersion));
-            nCMPCTBLOCKVersion = 1;
-            m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::SENDCMPCT, fAnnounceUsingCMPCTBLOCK, nCMPCTBLOCKVersion));
-        }
-=======
             m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::SENDCMPCT, /*high_bandwidth=*/false, /*version=*/CMPCTBLOCKS_VERSION));
         }
 
@@ -5293,46 +3805,11 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                        tx_relay->m_next_inv_send_time == 0s));
         }
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         pfrom.fSuccessfullyConnected = true;
         return;
     }
 
     if (msg_type == NetMsgType::SENDHEADERS) {
-<<<<<<< HEAD
-        LOCK(cs_main);
-        State(pfrom.GetId())->fPreferHeaders = true;
-        return;
-    }
-
-    if (msg_type == NetMsgType::SENDCMPCT) {
-        bool fAnnounceUsingCMPCTBLOCK = false;
-        uint64_t nCMPCTBLOCKVersion = 0;
-        vRecv >> fAnnounceUsingCMPCTBLOCK >> nCMPCTBLOCKVersion;
-        if (nCMPCTBLOCKVersion == 1 || ((pfrom.GetLocalServices() & NODE_WITNESS) && nCMPCTBLOCKVersion == 2)) {
-            LOCK(cs_main);
-            // fProvidesHeaderAndIDs is used to "lock in" version of compact blocks we send (fWantsCmpctWitness)
-            if (!State(pfrom.GetId())->fProvidesHeaderAndIDs) {
-                State(pfrom.GetId())->fProvidesHeaderAndIDs = true;
-                State(pfrom.GetId())->fWantsCmpctWitness = nCMPCTBLOCKVersion == 2;
-            }
-            if (State(pfrom.GetId())->fWantsCmpctWitness == (nCMPCTBLOCKVersion == 2)) { // ignore later version announces
-                State(pfrom.GetId())->fPreferHeaderAndIDs = fAnnounceUsingCMPCTBLOCK;
-                // save whether peer selects us as BIP152 high-bandwidth peer
-                // (receiving sendcmpct(1) signals high-bandwidth, sendcmpct(0) low-bandwidth)
-                pfrom.m_bip152_highbandwidth_from = fAnnounceUsingCMPCTBLOCK;
-            }
-            if (!State(pfrom.GetId())->fSupportsDesiredCmpctVersion) {
-                if (pfrom.GetLocalServices() & NODE_WITNESS)
-                    State(pfrom.GetId())->fSupportsDesiredCmpctVersion = (nCMPCTBLOCKVersion == 2);
-                else
-                    State(pfrom.GetId())->fSupportsDesiredCmpctVersion = (nCMPCTBLOCKVersion == 1);
-            }
-        }
-        return;
-    }
-
-=======
         peer->m_prefers_headers = true;
         return;
     }
@@ -5355,7 +3832,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         return;
     }
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     // BIP339 defines feature negotiation of wtxidrelay, which must happen between
     // VERSION and VERACK to avoid relay problems from switching after a connection is up.
     if (msg_type == NetMsgType::WTXIDRELAY) {
@@ -5366,14 +3842,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             return;
         }
         if (pfrom.GetCommonVersion() >= WTXID_RELAY_VERSION) {
-<<<<<<< HEAD
-            LOCK(cs_main);
-            if (!State(pfrom.GetId())->m_wtxid_relay) {
-                State(pfrom.GetId())->m_wtxid_relay = true;
-=======
             if (!peer->m_wtxid_relay) {
                 peer->m_wtxid_relay = true;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 m_wtxid_relay_peers++;
             } else {
                 LogPrint(BCLog::NET, "ignoring duplicate wtxidrelay from peer=%d\n", pfrom.GetId());
@@ -5384,110 +3854,14 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         return;
     }
 
-<<<<<<< HEAD
     CheckDandelionEmbargoes();
 
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
-    // BIP155 defines feature negotiation of addrv2 and sendaddrv2, which must happen
-    // between VERSION and VERACK.
-    if (msg_type == NetMsgType::SENDADDRV2) {
-        if (pfrom.fSuccessfullyConnected) {
-            // Disconnect peers that send a SENDADDRV2 message after VERACK.
-            LogPrint(BCLog::NET, "sendaddrv2 received after verack from peer=%d; disconnecting\n", pfrom.GetId());
-            pfrom.fDisconnect = true;
-            return;
-        }
-        peer->m_wants_addrv2 = true;
-        return;
-    }
-
-<<<<<<< HEAD
-=======
-    // Received from a peer demonstrating readiness to announce transactions via reconciliations.
-    // This feature negotiation must happen between VERSION and VERACK to avoid relay problems
-    // from switching announcement protocols after the connection is up.
-    if (msg_type == NetMsgType::SENDTXRCNCL) {
-        if (!m_txreconciliation) {
-            LogPrintLevel(BCLog::NET, BCLog::Level::Debug, "sendtxrcncl from peer=%d ignored, as our node does not have txreconciliation enabled\n", pfrom.GetId());
-            return;
-        }
-
-        if (pfrom.fSuccessfullyConnected) {
-            LogPrintLevel(BCLog::NET, BCLog::Level::Debug, "sendtxrcncl received after verack from peer=%d; disconnecting\n", pfrom.GetId());
-            pfrom.fDisconnect = true;
-            return;
-        }
-
-        // Peer must not offer us reconciliations if we specified no tx relay support in VERSION.
-        if (RejectIncomingTxs(pfrom)) {
-            LogPrintLevel(BCLog::NET, BCLog::Level::Debug, "sendtxrcncl received from peer=%d to which we indicated no tx relay; disconnecting\n", pfrom.GetId());
-            pfrom.fDisconnect = true;
-            return;
-        }
-
-        // Peer must not offer us reconciliations if they specified no tx relay support in VERSION.
-        // This flag might also be false in other cases, but the RejectIncomingTxs check above
-        // eliminates them, so that this flag fully represents what we are looking for.
-        const auto* tx_relay = peer->GetTxRelay();
-        if (!tx_relay || !WITH_LOCK(tx_relay->m_bloom_filter_mutex, return tx_relay->m_relay_txs)) {
-            LogPrintLevel(BCLog::NET, BCLog::Level::Debug, "sendtxrcncl received from peer=%d which indicated no tx relay to us; disconnecting\n", pfrom.GetId());
-            pfrom.fDisconnect = true;
-            return;
-        }
-
-        uint32_t peer_txreconcl_version;
-        uint64_t remote_salt;
-        vRecv >> peer_txreconcl_version >> remote_salt;
-
-        const ReconciliationRegisterResult result = m_txreconciliation->RegisterPeer(pfrom.GetId(), pfrom.IsInboundConn(),
-                                                                                     peer_txreconcl_version, remote_salt);
-        switch (result) {
-        case ReconciliationRegisterResult::NOT_FOUND:
-            LogPrintLevel(BCLog::NET, BCLog::Level::Debug, "Ignore unexpected txreconciliation signal from peer=%d\n", pfrom.GetId());
-            break;
-        case ReconciliationRegisterResult::SUCCESS:
-            break;
-        case ReconciliationRegisterResult::ALREADY_REGISTERED:
-            LogPrintLevel(BCLog::NET, BCLog::Level::Debug, "txreconciliation protocol violation from peer=%d (sendtxrcncl received from already registered peer); disconnecting\n", pfrom.GetId());
-            pfrom.fDisconnect = true;
-            return;
-        case ReconciliationRegisterResult::PROTOCOL_VIOLATION:
-            LogPrintLevel(BCLog::NET, BCLog::Level::Debug, "txreconciliation protocol violation from peer=%d; disconnecting\n", pfrom.GetId());
-            pfrom.fDisconnect = true;
-            return;
-        }
-        return;
-    }
-
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (!pfrom.fSuccessfullyConnected) {
         LogPrint(BCLog::NET, "Unsupported message \"%s\" prior to verack from peer=%d\n", SanitizeString(msg_type), pfrom.GetId());
         return;
     }
 
     if (msg_type == NetMsgType::ADDR || msg_type == NetMsgType::ADDRV2) {
-<<<<<<< HEAD
-        int stream_version = vRecv.GetVersion();
-        if (msg_type == NetMsgType::ADDRV2) {
-            // Add ADDRV2_FORMAT to the version so that the CNetAddr and CAddress
-            // unserialize methods know that an address in v2 format is coming.
-            stream_version |= ADDRV2_FORMAT;
-        }
-
-        OverrideStream<CDataStream> s(&vRecv, vRecv.GetType(), stream_version);
-        std::vector<CAddress> vAddr;
-
-        s >> vAddr;
-
-        if (!RelayAddrsWithPeer(*peer)) {
-            LogPrint(BCLog::NET, "ignoring %s message from %s peer=%d\n", msg_type, pfrom.ConnectionTypeAsString(), pfrom.GetId());
-            return;
-        }
-        if (vAddr.size() > MAX_ADDR_TO_SEND)
-        {
-            Misbehaving(pfrom.GetId(), 20, strprintf("%s message size = %u", msg_type, vAddr.size()));
-=======
         const auto ser_params{
             msg_type == NetMsgType::ADDRV2 ?
             // Set V2 param so that the CNetAddr and CAddress
@@ -5508,23 +3882,11 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         if (vAddr.size() > MAX_ADDR_TO_SEND)
         {
             Misbehaving(*peer, 20, strprintf("%s message size = %u", msg_type, vAddr.size()));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             return;
         }
 
         // Store the new addresses
         std::vector<CAddress> vAddrOk;
-<<<<<<< HEAD
-        int64_t nNow = GetAdjustedTime();
-        int64_t nSince = nNow - 10 * 60;
-
-        // Update/increment addr rate limiting bucket.
-        const auto current_time = GetTime<std::chrono::microseconds>();
-        if (peer->m_addr_token_bucket < MAX_ADDR_PROCESSING_TOKEN_BUCKET) {
-            // Don't increment bucket if it's already full
-            const auto time_diff = std::max(current_time - peer->m_addr_token_timestamp, 0us);
-            const double increment = CountSecondsDouble(time_diff) * MAX_ADDR_RATE_PER_SECOND;
-=======
         const auto current_a_time{Now<NodeSeconds>()};
 
         // Update/increment addr rate limiting bucket.
@@ -5533,7 +3895,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             // Don't increment bucket if it's already full
             const auto time_diff = std::max(current_time - peer->m_addr_token_timestamp, 0us);
             const double increment = Ticks<SecondsDouble>(time_diff) * MAX_ADDR_RATE_PER_SECOND;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             peer->m_addr_token_bucket = std::min<double>(peer->m_addr_token_bucket + increment, MAX_ADDR_PROCESSING_TOKEN_BUCKET);
         }
         peer->m_addr_token_timestamp = current_time;
@@ -5541,31 +3902,19 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         const bool rate_limited = !pfrom.HasPermission(NetPermissionFlags::Addr);
         uint64_t num_proc = 0;
         uint64_t num_rate_limit = 0;
-<<<<<<< HEAD
-        Shuffle(vAddr.begin(), vAddr.end(), FastRandomContext());
-=======
         Shuffle(vAddr.begin(), vAddr.end(), m_rng);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         for (CAddress& addr : vAddr)
         {
             if (interruptMsgProc)
                 return;
 
             // Apply rate limiting.
-<<<<<<< HEAD
-            if (rate_limited) {
-                if (peer->m_addr_token_bucket < 1.0) {
-                    ++num_rate_limit;
-                    continue;
-                }
-=======
             if (peer->m_addr_token_bucket < 1.0) {
                 if (rate_limited) {
                     ++num_rate_limit;
                     continue;
                 }
             } else {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 peer->m_addr_token_bucket -= 1.0;
             }
             // We only bother storing full nodes, though this may include
@@ -5574,55 +3923,23 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             if (!MayHaveUsefulAddressDB(addr.nServices) && !HasAllDesirableServiceFlags(addr.nServices))
                 continue;
 
-<<<<<<< HEAD
-            if (addr.nTime <= 100000000 || addr.nTime > nNow + 10 * 60)
-                addr.nTime = nNow - 5 * 24 * 60 * 60;
-=======
             if (addr.nTime <= NodeSeconds{100000000s} || addr.nTime > current_a_time + 10min) {
                 addr.nTime = current_a_time - 5 * 24h;
             }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             AddAddressKnown(*peer, addr);
             if (m_banman && (m_banman->IsDiscouraged(addr) || m_banman->IsBanned(addr))) {
                 // Do not process banned/discouraged addresses beyond remembering we received them
                 continue;
             }
             ++num_proc;
-<<<<<<< HEAD
-            bool fReachable = IsReachable(addr);
-            if (addr.nTime > nSince && !peer->m_getaddr_sent && vAddr.size() <= 10 && addr.IsRoutable()) {
-                // Relay to a limited number of other nodes
-                RelayAddress(pfrom.GetId(), addr, fReachable);
-=======
             const bool reachable{g_reachable_nets.Contains(addr)};
             if (addr.nTime > current_a_time - 10min && !peer->m_getaddr_sent && vAddr.size() <= 10 && addr.IsRoutable()) {
                 // Relay to a limited number of other nodes
                 RelayAddress(pfrom.GetId(), addr, reachable);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             }
             // Do not store addresses outside our network
             if (reachable) {
                 vAddrOk.push_back(addr);
-<<<<<<< HEAD
-        }
-        peer->m_addr_processed += num_proc;
-        peer->m_addr_rate_limited += num_rate_limit;
-        LogPrint(BCLog::NET, "Received addr: %u addresses (%u processed, %u rate-limited) from peer=%d%s\n",
-                 vAddr.size(),
-                 num_proc,
-                 num_rate_limit,
-                 pfrom.GetId(),
-                 fLogIPs ? ", peeraddr=" + pfrom.addr.ToString() : "");
-
-        m_addrman.Add(vAddrOk, pfrom.addr, 2 * 60 * 60);
-        if (vAddr.size() < 1000) peer->m_getaddr_sent = false;
-
-        // AddrFetch: Require multiple addresses to avoid disconnecting on self-announcements
-        if (pfrom.IsAddrFetchConn() && vAddr.size() > 1) {
-            LogPrint(BCLog::NET, "addrfetch connection completed peer=%d; disconnecting\n", pfrom.GetId());
-            pfrom.fDisconnect = true;
-        }
-=======
             }
         }
         peer->m_addr_processed += num_proc;
@@ -5638,7 +3955,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             LogPrint(BCLog::NET, "addrfetch connection completed peer=%d; disconnecting\n", pfrom.GetId());
             pfrom.fDisconnect = true;
         }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         return;
     }
 
@@ -5647,24 +3963,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         vRecv >> vInv;
         if (vInv.size() > MAX_INV_SZ)
         {
-<<<<<<< HEAD
-            Misbehaving(pfrom.GetId(), 20, strprintf("inv message size = %u", vInv.size()));
-            return;
-        }
-
-        // We won't accept tx inv's if we're in blocks-only mode, or this is a
-        // block-relay-only peer
-        bool fBlocksOnly = m_ignore_incoming_txs || (pfrom.m_tx_relay == nullptr);
-
-        // Allow peers with relay permission to send data other than blocks in blocks only mode
-        if (pfrom.HasPermission(NetPermissionFlags::Relay)) {
-            fBlocksOnly = false;
-        }
-
-        LOCK(cs_main);
-
-        const auto current_time = GetTime<std::chrono::microseconds>();
-=======
             Misbehaving(*peer, 20, strprintf("inv message size = %u", vInv.size()));
             return;
         }
@@ -5674,7 +3972,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         LOCK(cs_main);
 
         const auto current_time{GetTime<std::chrono::microseconds>()};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         uint256* best_block{nullptr};
 
         for (CInv& inv : vInv) {
@@ -5683,17 +3980,12 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             // Ignore INVs that don't match wtxidrelay setting.
             // Note that orphan parent fetching always uses MSG_TX GETDATAs regardless of the wtxidrelay setting.
             // This is fine as no INV messages are involved in that process.
-<<<<<<< HEAD
-            if (State(pfrom.GetId())->m_wtxid_relay) {
-=======
             if (peer->m_wtxid_relay) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 if (inv.IsMsgTx()) continue;
             } else {
                 if (inv.IsMsgWtx()) continue;
             }
 
-<<<<<<< HEAD
             bool fAlreadyHave = false;
 
             if (inv.IsDandelionMsg()) {
@@ -5733,65 +4025,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                     return;
                 } else if (!fAlreadyHave && !m_chainman.ActiveChainstate().IsInitialBlockDownload()) {
                     AddTxAnnouncement(pfrom, gtxid, current_time);
-=======
-            if (inv.IsMsgBlk()) {
-                const bool fAlreadyHave = AlreadyHaveBlock(inv.hash);
-                LogPrint(BCLog::NET, "got inv: %s  %s peer=%d\n", inv.ToString(), fAlreadyHave ? "have" : "new", pfrom.GetId());
-
-                UpdateBlockAvailability(pfrom.GetId(), inv.hash);
-                if (!fAlreadyHave && !m_chainman.m_blockman.LoadingBlocks() && !IsBlockRequested(inv.hash)) {
-                    // Headers-first is the primary method of announcement on
-                    // the network. If a node fell back to sending blocks by
-                    // inv, it may be for a re-org, or because we haven't
-                    // completed initial headers sync. The final block hash
-                    // provided should be the highest, so send a getheaders and
-                    // then fetch the blocks we need to catch up.
-                    best_block = &inv.hash;
-                }
-            } else if (inv.IsGenTxMsg()) {
-                if (reject_tx_invs) {
-                    LogPrint(BCLog::NET, "transaction (%s) inv sent in violation of protocol, disconnecting peer=%d\n", inv.hash.ToString(), pfrom.GetId());
-                    pfrom.fDisconnect = true;
-                    return;
-                }
-                const GenTxid gtxid = ToGenTxid(inv);
-                const bool fAlreadyHave = AlreadyHaveTx(gtxid);
-                LogPrint(BCLog::NET, "got inv: %s  %s peer=%d\n", inv.ToString(), fAlreadyHave ? "have" : "new", pfrom.GetId());
-
-                AddKnownTx(*peer, inv.hash);
-                if (!fAlreadyHave && !m_chainman.IsInitialBlockDownload()) {
-                    AddTxAnnouncement(pfrom, gtxid, current_time);
-                }
-            } else {
-                LogPrint(BCLog::NET, "Unknown inv type \"%s\" received from peer=%d\n", inv.ToString(), pfrom.GetId());
-            }
-        }
-
-        if (best_block != nullptr) {
-            // If we haven't started initial headers-sync with this peer, then
-            // consider sending a getheaders now. On initial startup, there's a
-            // reliability vs bandwidth tradeoff, where we are only trying to do
-            // initial headers sync with one peer at a time, with a long
-            // timeout (at which point, if the sync hasn't completed, we will
-            // disconnect the peer and then choose another). In the meantime,
-            // as new blocks are found, we are willing to add one new peer per
-            // block to sync with as well, to sync quicker in the case where
-            // our initial peer is unresponsive (but less bandwidth than we'd
-            // use if we turned on sync with all peers).
-            CNodeState& state{*Assert(State(pfrom.GetId()))};
-            if (state.fSyncStarted || (!peer->m_inv_triggered_getheaders_before_sync && *best_block != m_last_block_inv_triggering_headers_sync)) {
-                if (MaybeSendGetHeaders(pfrom, GetLocator(m_chainman.m_best_header), *peer)) {
-                    LogPrint(BCLog::NET, "getheaders (%d) %s to peer=%d\n",
-                            m_chainman.m_best_header->nHeight, best_block->ToString(),
-                            pfrom.GetId());
-                }
-                if (!state.fSyncStarted) {
-                    peer->m_inv_triggered_getheaders_before_sync = true;
-                    // Update the last block hash that triggered a new headers
-                    // sync, so that we don't turn on headers sync with more
-                    // than 1 new peer every new block.
-                    m_last_block_inv_triggering_headers_sync = *best_block;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 }
             } else if (inv.IsDandelionMsg()) {
                 LOCK(pfrom.m_tx_relay->cs_tx_inventory);
@@ -5808,14 +4041,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             }
         }
 
-<<<<<<< HEAD
-        if (best_block != nullptr) {
-            m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETHEADERS, m_chainman.ActiveChain().GetLocator(pindexBestHeader), *best_block));
-            LogPrint(BCLog::NET, "getheaders (%d) %s to peer=%d\n", pindexBestHeader->nHeight, best_block->ToString(), pfrom.GetId());
-        }
-
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         return;
     }
 
@@ -5824,11 +4049,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         vRecv >> vInv;
         if (vInv.size() > MAX_INV_SZ)
         {
-<<<<<<< HEAD
-            Misbehaving(pfrom.GetId(), 20, strprintf("getdata message size = %u", vInv.size()));
-=======
             Misbehaving(*peer, 20, strprintf("getdata message size = %u", vInv.size()));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             return;
         }
 
@@ -5880,11 +4101,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         LOCK(cs_main);
 
         // Find the last block the caller has in the main chain
-<<<<<<< HEAD
-        const CBlockIndex* pindex = m_chainman.m_blockman.FindForkInGlobalIndex(m_chainman.ActiveChain(), locator);
-=======
         const CBlockIndex* pindex = m_chainman.ActiveChainstate().FindForkInGlobalIndex(locator);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         // Send the rest of the chain
         if (pindex)
@@ -5901,12 +4118,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             // If pruning, don't inv blocks unless we have on disk and are likely to still have
             // for some reasonable time window (1 hour) that block relay might require.
             const int nPrunedBlocksLikelyToHave = MIN_BLOCKS_TO_KEEP - 3600 / m_chainparams.GetConsensus().nPowTargetSpacing;
-<<<<<<< HEAD
-            if (fPruneMode && (!(pindex->nStatus & BLOCK_HAVE_DATA) || pindex->nHeight <= m_chainman.ActiveChain().Tip()->nHeight - nPrunedBlocksLikelyToHave))
-            {
-=======
             if (m_chainman.m_blockman.IsPruneMode() && (!(pindex->nStatus & BLOCK_HAVE_DATA) || pindex->nHeight <= m_chainman.ActiveChain().Tip()->nHeight - nPrunedBlocksLikelyToHave)) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 LogPrint(BCLog::NET, " getblocks stopping, pruned or too old block at %d %s\n", pindex->nHeight, pindex->GetBlockHash().ToString());
                 break;
             }
@@ -5934,11 +4146,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             // Unlock m_most_recent_block_mutex to avoid cs_main lock inversion
         }
         if (recent_block) {
-<<<<<<< HEAD
-            SendBlockTransactions(pfrom, *recent_block, req);
-=======
             SendBlockTransactions(pfrom, *peer, *recent_block, req);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             return;
         }
 
@@ -5953,17 +4161,10 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
             if (pindex->nHeight >= m_chainman.ActiveChain().Height() - MAX_BLOCKTXN_DEPTH) {
                 CBlock block;
-<<<<<<< HEAD
-                bool ret = ReadBlockFromDisk(block, pindex, m_chainparams.GetConsensus());
-                assert(ret);
-
-                SendBlockTransactions(pfrom, block, req);
-=======
                 const bool ret{m_chainman.m_blockman.ReadBlockFromDisk(block, *pindex)};
                 assert(ret);
 
                 SendBlockTransactions(pfrom, *peer, block, req);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 return;
             }
         }
@@ -5976,13 +4177,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         // expensive disk reads, because it will require the peer to
         // actually receive all the data read from disk over the network.
         LogPrint(BCLog::NET, "Peer %d sent us a getblocktxn for a block > %i deep\n", pfrom.GetId(), MAX_BLOCKTXN_DEPTH);
-<<<<<<< HEAD
-        CInv inv;
-        WITH_LOCK(cs_main, inv.type = State(pfrom.GetId())->fWantsCmpctWitness ? MSG_WITNESS_BLOCK : MSG_BLOCK);
-        inv.hash = req.blockhash;
-=======
         CInv inv{MSG_WITNESS_BLOCK, req.blockhash};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         WITH_LOCK(peer->m_getdata_requests_mutex, peer->m_getdata_requests.push_back(inv));
         // The message processing loop will go around again (without pausing) and we'll respond then
         return;
@@ -5997,13 +4192,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             LogPrint(BCLog::NET, "getheaders locator size %lld > %d, disconnect peer=%d\n", locator.vHave.size(), MAX_LOCATOR_SZ, pfrom.GetId());
             pfrom.fDisconnect = true;
             return;
-<<<<<<< HEAD
-        }
-
-        LOCK(cs_main);
-        if (m_chainman.ActiveChainstate().IsInitialBlockDownload() && !pfrom.HasPermission(NetPermissionFlags::Download)) {
-            LogPrint(BCLog::NET, "Ignoring getheaders from peer=%d because node is in initial block download\n", pfrom.GetId());
-=======
         }
 
         if (m_chainman.m_blockman.LoadingBlocks()) {
@@ -6026,7 +4214,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             // Just respond with an empty headers message, to tell the peer to
             // go away but not treat us as unresponsive.
             m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::HEADERS, std::vector<CBlock>()));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             return;
         }
 
@@ -6048,11 +4235,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         else
         {
             // Find the last block the caller has in the main chain
-<<<<<<< HEAD
-            pindex = m_chainman.m_blockman.FindForkInGlobalIndex(m_chainman.ActiveChain(), locator);
-=======
             pindex = m_chainman.ActiveChainstate().FindForkInGlobalIndex(locator);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             if (pindex)
                 pindex = m_chainman.ActiveChain().Next(pindex);
         }
@@ -6085,62 +4268,17 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
     }
 
     if (msg_type == NetMsgType::TX) {
-<<<<<<< HEAD
-        // Stop processing the transaction early if
-        // 1) We are in blocks only mode and peer has no relay permission
-        // 2) This peer is a block-relay-only peer
-        if ((m_ignore_incoming_txs && !pfrom.HasPermission(NetPermissionFlags::Relay)) || (pfrom.m_tx_relay == nullptr))
-        {
-=======
         if (RejectIncomingTxs(pfrom)) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             LogPrint(BCLog::NET, "transaction sent in violation of protocol peer=%d\n", pfrom.GetId());
             pfrom.fDisconnect = true;
             return;
         }
 
-<<<<<<< HEAD
-=======
-        // Stop processing the transaction early if we are still in IBD since we don't
-        // have enough information to validate it yet. Sending unsolicited transactions
-        // is not considered a protocol violation, so don't punish the peer.
-        if (m_chainman.IsInitialBlockDownload()) return;
-
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
-        CTransactionRef ptx;
-        vRecv >> ptx;
-        const CTransaction& tx = *ptx;
-
-        const uint256& txid = ptx->GetHash();
-        const uint256& wtxid = ptx->GetWitnessHash();
-
-        const uint256& hash = peer->m_wtxid_relay ? wtxid : txid;
-        AddKnownTx(*peer, hash);
-
-<<<<<<< HEAD
-        CNodeState* nodestate = State(pfrom.GetId());
-
-        const uint256& hash = nodestate->m_wtxid_relay ? wtxid : txid;
-        pfrom.AddKnownTx(hash);
-        if (nodestate->m_wtxid_relay && txid != wtxid) {
-            // Insert txid into filterInventoryKnown, even for
-            // wtxidrelay peers. This prevents re-adding of
-            // unconfirmed parents to the recently_announced
-            // filter, when a child tx is requested. See
-            // ProcessGetData().
-            pfrom.AddKnownTx(txid);
-        }
-
-        m_txrequest.ReceivedResponse(pfrom.GetId(), txid);
-        if (tx.HasWitness()) m_txrequest.ReceivedResponse(pfrom.GetId(), wtxid);
-
-=======
         LOCK(cs_main);
 
         m_txrequest.ReceivedResponse(pfrom.GetId(), txid);
         if (tx.HasWitness()) m_txrequest.ReceivedResponse(pfrom.GetId(), wtxid);
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         // We do the AlreadyHaveTx() check using wtxid, rather than txid - in the
         // absence of witness malleation, this is strictly better, because the
         // recent rejects filter may contain the wtxid but rarely contains
@@ -6153,16 +4291,11 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         // already; and an adversary can already relay us old transactions
         // (older than our recency filter) if trying to DoS us, without any need
         // for witness malleation.
-<<<<<<< HEAD
-        if (AlreadyHaveTx(GenTxid(/* is_wtxid=*/true, wtxid))) {
-=======
         if (AlreadyHaveTx(GenTxid::Wtxid(wtxid))) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             if (pfrom.HasPermission(NetPermissionFlags::ForceRelay)) {
                 // Always relay transactions received from peers with forcerelay
                 // permission, even if they were already in the mempool, allowing
                 // the node to function as a gateway for nodes hidden behind it.
-<<<<<<< HEAD
                 if (!m_mempool.exists(tx.GetHash())) {
                     LogPrintf("Not relaying non-mempool transaction %s from forcerelay peer=%d\n", tx.GetHash().ToString(), pfrom.GetId());
                 } else {
@@ -6186,53 +4319,10 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             }
             m_mempool.check(m_chainman.ActiveChainstate());
             m_stempool.check(m_chainman.ActiveChainstate());
-=======
-                if (!m_mempool.exists(GenTxid::Txid(tx.GetHash()))) {
-                    LogPrintf("Not relaying non-mempool transaction %s (wtxid=%s) from forcerelay peer=%d\n",
-                              tx.GetHash().ToString(), tx.GetWitnessHash().ToString(), pfrom.GetId());
-                } else {
-                    LogPrintf("Force relaying tx %s (wtxid=%s) from peer=%d\n",
-                              tx.GetHash().ToString(), tx.GetWitnessHash().ToString(), pfrom.GetId());
-                    RelayTransaction(tx.GetHash(), tx.GetWitnessHash());
-                }
-            }
-            // If a tx is detected by m_recent_rejects it is ignored. Because we haven't
-            // submitted the tx to our mempool, we won't have computed a DoS
-            // score for it or determined exactly why we consider it invalid.
-            //
-            // This means we won't penalize any peer subsequently relaying a DoSy
-            // tx (even if we penalized the first peer who gave it to us) because
-            // we have to account for m_recent_rejects showing false positives. In
-            // other words, we shouldn't penalize a peer if we aren't *sure* they
-            // submitted a DoSy tx.
-            //
-            // Note that m_recent_rejects doesn't just record DoSy or invalid
-            // transactions, but any tx not accepted by the mempool, which may be
-            // due to node policy (vs. consensus). So we can't blanket penalize a
-            // peer simply for relaying a tx that our m_recent_rejects has caught,
-            // regardless of false positives.
-            return;
-        }
-
-        const MempoolAcceptResult result = m_chainman.ProcessTransaction(ptx);
-        const TxValidationState& state = result.m_state;
-
-        if (result.m_result_type == MempoolAcceptResult::ResultType::VALID) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             // As this version of the transaction was acceptable, we can forget about any
             // requests for it.
             m_txrequest.ForgetTxHash(tx.GetHash());
             m_txrequest.ForgetTxHash(tx.GetWitnessHash());
-<<<<<<< HEAD
-            _RelayTransaction(tx.GetHash(), tx.GetWitnessHash());
-            m_orphanage.AddChildrenToWorkSet(tx, peer->m_orphan_work_set);
-
-            pfrom.nLastTXTime = GetTime();
-
-            LogPrint(BCLog::MEMPOOL, "AcceptToMemoryPool: peer=%d: accepted %s (poolsz %u txn, %u kB)\n",
-                pfrom.GetId(),
-                tx.GetHash().ToString(),
-=======
             RelayTransaction(tx.GetHash(), tx.GetWitnessHash());
             m_orphanage.AddChildrenToWorkSet(tx);
 
@@ -6242,18 +4332,11 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 pfrom.GetId(),
                 tx.GetHash().ToString(),
                 tx.GetWitnessHash().ToString(),
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 m_mempool.size(), m_mempool.DynamicMemoryUsage() / 1000);
 
             for (const CTransactionRef& removedTx : result.m_replaced_transactions.value()) {
                 AddToCompactExtraTransactions(removedTx);
             }
-<<<<<<< HEAD
-
-            // Recursively process any orphan transactions that depended on this one
-            ProcessOrphanTx(peer->m_orphan_work_set);
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
         else if (state.GetResult() == TxValidationResult::TX_MISSING_INPUTS)
         {
@@ -6270,21 +4353,13 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             std::sort(unique_parents.begin(), unique_parents.end());
             unique_parents.erase(std::unique(unique_parents.begin(), unique_parents.end()), unique_parents.end());
             for (const uint256& parent_txid : unique_parents) {
-<<<<<<< HEAD
-                if (recentRejects->contains(parent_txid)) {
-=======
                 if (m_recent_rejects.contains(parent_txid)) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                     fRejectedParents = true;
                     break;
                 }
             }
             if (!fRejectedParents) {
-<<<<<<< HEAD
-                const auto current_time = GetTime<std::chrono::microseconds>();
-=======
                 const auto current_time{GetTime<std::chrono::microseconds>()};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
                 for (const uint256& parent_txid : unique_parents) {
                     // Here, we only have the txid (and not wtxid) of the
@@ -6292,30 +4367,9 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                     // wtxidrelay peers.
                     // Eventually we should replace this with an improved
                     // protocol for getting all unconfirmed parents.
-<<<<<<< HEAD
-                    const GenTxid gtxid{/* is_wtxid=*/false, parent_txid};
-                    pfrom.AddKnownTx(parent_txid);
-                    if (!AlreadyHaveTx(gtxid)) AddTxAnnouncement(pfrom, gtxid, current_time);
-                }
-
-                if (m_orphanage.AddTx(ptx, pfrom.GetId())) {
-                    AddToCompactExtraTransactions(ptx);
-                }
-
-                // Once added to the orphan pool, a tx is considered AlreadyHave, and we shouldn't request it anymore.
-                m_txrequest.ForgetTxHash(tx.GetHash());
-                m_txrequest.ForgetTxHash(tx.GetWitnessHash());
-
-                // DoS prevention: do not allow m_orphanage to grow unbounded (see CVE-2012-3789)
-                unsigned int nMaxOrphanTx = (unsigned int)std::max((int64_t)0, gArgs.GetArg("-maxorphantx", DEFAULT_MAX_ORPHAN_TRANSACTIONS));
-                unsigned int nEvicted = m_orphanage.LimitOrphans(nMaxOrphanTx);
-                if (nEvicted > 0) {
-                    LogPrint(BCLog::MEMPOOL, "orphanage overflow, removed %u tx\n", nEvicted);
-=======
                     const auto gtxid{GenTxid::Txid(parent_txid)};
                     AddKnownTx(*peer, parent_txid);
                     if (!AlreadyHaveTx(gtxid)) AddTxAnnouncement(pfrom, gtxid, current_time);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 }
 
                 if (m_orphanage.AddTx(ptx, pfrom.GetId())) {
@@ -6338,13 +4392,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 // regardless of what witness is provided, we will not accept
                 // this, so we don't need to allow for redownload of this txid
                 // from any of our non-wtxidrelay peers.
-<<<<<<< HEAD
-                recentRejects->insert(tx.GetHash());
-                recentRejects->insert(tx.GetWitnessHash());
-=======
                 m_recent_rejects.insert(tx.GetHash());
                 m_recent_rejects.insert(tx.GetWitnessHash());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 m_txrequest.ForgetTxHash(tx.GetHash());
                 m_txrequest.ForgetTxHash(tx.GetWitnessHash());
             }
@@ -6363,12 +4412,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 // See also comments in https://github.com/digibyte/digibyte/pull/18044#discussion_r443419034
                 // for concerns around weakening security of unupgraded nodes
                 // if we start doing this too early.
-<<<<<<< HEAD
-                assert(recentRejects);
-                recentRejects->insert(tx.GetWitnessHash());
-=======
                 m_recent_rejects.insert(tx.GetWitnessHash());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 m_txrequest.ForgetTxHash(tx.GetWitnessHash());
                 // If the transaction failed for TX_INPUTS_NOT_STANDARD,
                 // then we know that the witness was irrelevant to the policy
@@ -6379,11 +4423,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 // transactions are later received (resulting in
                 // parent-fetching by txid via the orphan-handling logic).
                 if (state.GetResult() == TxValidationResult::TX_INPUTS_NOT_STANDARD && tx.GetWitnessHash() != tx.GetHash()) {
-<<<<<<< HEAD
-                    recentRejects->insert(tx.GetHash());
-=======
                     m_recent_rejects.insert(tx.GetHash());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                     m_txrequest.ForgetTxHash(tx.GetHash());
                 }
                 if (RecursiveDynamicUsage(*ptx) < 100000) {
@@ -6392,32 +4432,10 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             }
         }
 
-<<<<<<< HEAD
-        // If a tx has been detected by recentRejects, we will have reached
-        // this point and the tx will have been ignored. Because we haven't run
-        // the tx through AcceptToMemoryPool, we won't have computed a DoS
-        // score for it or determined exactly why we consider it invalid.
-        //
-        // This means we won't penalize any peer subsequently relaying a DoSy
-        // tx (even if we penalized the first peer who gave it to us) because
-        // we have to account for recentRejects showing false positives. In
-        // other words, we shouldn't penalize a peer if we aren't *sure* they
-        // submitted a DoSy tx.
-        //
-        // Note that recentRejects doesn't just record DoSy or invalid
-        // transactions, but any tx not accepted by the mempool, which may be
-        // due to node policy (vs. consensus). So we can't blanket penalize a
-        // peer simply for relaying a tx that our recentRejects has caught,
-        // regardless of false positives.
-
-        if (state.IsInvalid()) {
-            LogPrint(BCLog::MEMPOOLREJ, "%s from peer=%d was not accepted: %s\n", tx.GetHash().ToString(),
-=======
         if (state.IsInvalid()) {
             LogPrint(BCLog::MEMPOOLREJ, "%s (wtxid=%s) from peer=%d was not accepted: %s\n",
                 tx.GetHash().ToString(),
                 tx.GetWitnessHash().ToString(),
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 pfrom.GetId(),
                 state.ToString());
             MaybePunishNodeForTx(pfrom.GetId(), state);
@@ -6428,11 +4446,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
     if (msg_type == NetMsgType::CMPCTBLOCK)
     {
         // Ignore cmpctblock received while importing
-<<<<<<< HEAD
-        if (fImporting || fReindex) {
-=======
         if (m_chainman.m_blockman.LoadingBlocks()) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             LogPrint(BCLog::NET, "Unexpected cmpctblock message received from peer %d\n", pfrom.GetId());
             return;
         }
@@ -6446,16 +4460,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         {
         LOCK(cs_main);
 
-<<<<<<< HEAD
-        if (!m_chainman.m_blockman.LookupBlockIndex(cmpctblock.header.hashPrevBlock)) {
-            // Doesn't connect (or is genesis), instead of DoSing in AcceptBlockHeader, request deeper headers
-            if (!m_chainman.ActiveChainstate().IsInitialBlockDownload())
-                m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETHEADERS, m_chainman.ActiveChain().GetLocator(pindexBestHeader), uint256()));
-            return;
-        }
-
-        if (!m_chainman.m_blockman.LookupBlockIndex(cmpctblock.header.GetHash())) {
-=======
         const CBlockIndex* prev_block = m_chainman.m_blockman.LookupBlockIndex(cmpctblock.header.hashPrevBlock);
         if (!prev_block) {
             // Doesn't connect (or is genesis), instead of DoSing in AcceptBlockHeader, request deeper headers
@@ -6470,22 +4474,15 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         }
 
         if (!m_chainman.m_blockman.LookupBlockIndex(blockhash)) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             received_new_header = true;
         }
         }
 
         const CBlockIndex *pindex = nullptr;
         BlockValidationState state;
-<<<<<<< HEAD
-        if (!m_chainman.ProcessNewBlockHeaders({cmpctblock.header}, state, m_chainparams, &pindex)) {
-            if (state.IsInvalid()) {
-                MaybePunishNodeForBlock(pfrom.GetId(), state, /*via_compact_block*/ true, "invalid header via cmpctblock");
-=======
         if (!m_chainman.ProcessNewBlockHeaders({cmpctblock.header}, /*min_pow_checked=*/true, state, &pindex)) {
             if (state.IsInvalid()) {
                 MaybePunishNodeForBlock(pfrom.GetId(), state, /*via_compact_block=*/true, "invalid header via cmpctblock");
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 return;
             }
         }
@@ -6523,65 +4520,22 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         if (pindex->nStatus & BLOCK_HAVE_DATA) // Nothing to do here
             return;
 
-<<<<<<< HEAD
-=======
-        auto range_flight = mapBlocksInFlight.equal_range(pindex->GetBlockHash());
-        size_t already_in_flight = std::distance(range_flight.first, range_flight.second);
-        bool requested_block_from_this_peer{false};
-
-        // Multimap ensures ordering of outstanding requests. It's either empty or first in line.
-        bool first_in_flight = already_in_flight == 0 || (range_flight.first->second.first == pfrom.GetId());
-
-        while (range_flight.first != range_flight.second) {
-            if (range_flight.first->second.first == pfrom.GetId()) {
-                requested_block_from_this_peer = true;
-                break;
-            }
-            range_flight.first++;
-        }
-
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
-        if (pindex->nChainWork <= m_chainman.ActiveChain().Tip()->nChainWork || // We know something better
-                pindex->nTx != 0) { // We had this block at some point, but pruned it
-            if (requested_block_from_this_peer) {
-                // We requested this block for some reason, but our mempool will probably be useless
-                // so we just grab the block via normal getdata
-                std::vector<CInv> vInv(1);
-<<<<<<< HEAD
-                vInv[0] = CInv(MSG_BLOCK | GetFetchFlags(pfrom), cmpctblock.header.GetHash());
-=======
                 vInv[0] = CInv(MSG_BLOCK | GetFetchFlags(*peer), blockhash);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETDATA, vInv));
             }
             return;
         }
 
         // If we're not close to tip yet, give up and let parallel block fetch work its magic
-<<<<<<< HEAD
-        if (!fAlreadyInFlight && !CanDirectFetch()) {
-            return;
-        }
-
-        if (DeploymentActiveAt(*pindex, m_chainparams.GetConsensus(), Consensus::DEPLOYMENT_SEGWIT) && !nodestate->fSupportsDesiredCmpctVersion) {
-            // Don't bother trying to process compact blocks from v1 peers
-            // after segwit activates.
-=======
         if (!already_in_flight && !CanDirectFetch()) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             return;
         }
 
         // We want to be a bit conservative just to be extra careful about DoS
         // possibilities in compact block processing...
         if (pindex->nHeight <= m_chainman.ActiveChain().Height() + 2) {
-<<<<<<< HEAD
-            if ((!fAlreadyInFlight && nodestate->nBlocksInFlight < MAX_BLOCKS_IN_TRANSIT_PER_PEER) ||
-                 (fAlreadyInFlight && blockInFlightIt->second.first == pfrom.GetId())) {
-=======
             if ((already_in_flight < MAX_CMPCTBLOCKS_INFLIGHT_PER_BLOCK && nodestate->vBlocksInFlight.size() < MAX_BLOCKS_IN_TRANSIT_PER_PEER) ||
                  requested_block_from_this_peer) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 std::list<QueuedBlock>::iterator* queuedBlockIt = nullptr;
                 if (!BlockRequested(pfrom.GetId(), *pindex, &queuedBlockIt)) {
                     if (!(*queuedBlockIt)->partialBlock)
@@ -6596,16 +4550,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 PartiallyDownloadedBlock& partialBlock = *(*queuedBlockIt)->partialBlock;
                 ReadStatus status = partialBlock.InitData(cmpctblock, vExtraTxnForCompact);
                 if (status == READ_STATUS_INVALID) {
-<<<<<<< HEAD
-                    RemoveBlockRequest(pindex->GetBlockHash()); // Reset in-flight state in case Misbehaving does not result in a disconnect
-                    Misbehaving(pfrom.GetId(), 100, "invalid compact block");
-                    return;
-                } else if (status == READ_STATUS_FAILED) {
-                    // Duplicate txindexes, the block is now in-flight, so just request it
-                    std::vector<CInv> vInv(1);
-                    vInv[0] = CInv(MSG_BLOCK | GetFetchFlags(pfrom), cmpctblock.header.GetHash());
-                    m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETDATA, vInv));
-=======
                     RemoveBlockRequest(pindex->GetBlockHash(), pfrom.GetId()); // Reset in-flight state in case Misbehaving does not result in a disconnect
                     Misbehaving(*peer, 100, "invalid compact block");
                     return;
@@ -6619,7 +4563,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                         // Give up for this peer and wait for other peer(s)
                         RemoveBlockRequest(pindex->GetBlockHash(), pfrom.GetId());
                     }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                     return;
                 }
 
@@ -6635,51 +4578,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                     // as long as it's first...
                     req.blockhash = pindex->GetBlockHash();
                     m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETBLOCKTXN, req));
-<<<<<<< HEAD
-=======
-                } else if (pfrom.m_bip152_highbandwidth_to &&
-                    (!pfrom.IsInboundConn() ||
-                    IsBlockRequestedFromOutbound(blockhash) ||
-                    already_in_flight < MAX_CMPCTBLOCKS_INFLIGHT_PER_BLOCK - 1)) {
-                    // ... or it's a hb relay peer and:
-                    // - peer is outbound, or
-                    // - we already have an outbound attempt in flight(so we'll take what we can get), or
-                    // - it's not the final parallel download slot (which we may reserve for first outbound)
-                    req.blockhash = pindex->GetBlockHash();
-                    m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETBLOCKTXN, req));
-                } else {
-                    // Give up for this peer and wait for other peer(s)
-                    RemoveBlockRequest(pindex->GetBlockHash(), pfrom.GetId());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
-                }
-            } else {
-                // This block is either already in flight from a different
-                // peer, or this peer has too many blocks outstanding to
-                // download from.
-                // Optimistically try to reconstruct anyway since we might be
-                // able to without any round trips.
-                PartiallyDownloadedBlock tempBlock(&m_mempool);
-                ReadStatus status = tempBlock.InitData(cmpctblock, vExtraTxnForCompact);
-                if (status != READ_STATUS_OK) {
-                    // TODO: don't ignore failures
-                    return;
-                }
-                std::vector<CTransactionRef> dummy;
-                status = tempBlock.FillBlock(*pblock, dummy);
-                if (status == READ_STATUS_OK) {
-                    fBlockReconstructed = true;
-                }
-            }
-        } else {
-            if (requested_block_from_this_peer) {
-                // We requested this block, but its far into the future, so our
-                // mempool will probably be useless - request the block normally
-                std::vector<CInv> vInv(1);
-<<<<<<< HEAD
-                vInv[0] = CInv(MSG_BLOCK | GetFetchFlags(pfrom), cmpctblock.header.GetHash());
-=======
                 vInv[0] = CInv(MSG_BLOCK | GetFetchFlags(*peer), blockhash);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETDATA, vInv));
                 return;
             } else {
@@ -6690,13 +4589,9 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         } // cs_main
 
         if (fProcessBLOCKTXN) {
-<<<<<<< HEAD
-            return ProcessMessage(pfrom, NetMsgType::BLOCKTXN, blockTxnMsg, time_received, interruptMsgProc);
-=======
             BlockTransactions txn;
             txn.blockhash = blockhash;
             return ProcessCompactBlockTxns(pfrom, *peer, txn);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
 
         if (fRevertToHeaderProcessing) {
@@ -6724,22 +4619,14 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             // we have a chain with at least the minimum chain work), and we ignore
             // compact blocks with less work than our tip, it is safe to treat
             // reconstructed compact blocks as having been requested.
-<<<<<<< HEAD
-            ProcessBlock(pfrom, pblock, /*force_processing=*/true);
-=======
             ProcessBlock(pfrom, pblock, /*force_processing=*/true, /*min_pow_checked=*/true);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             LOCK(cs_main); // hold cs_main for CBlockIndex::IsValid()
             if (pindex->IsValid(BLOCK_VALID_TRANSACTIONS)) {
                 // Clear download state for this block, which is in
                 // process from some other peer.  We do this after calling
                 // ProcessNewBlock so that a malleated cmpctblock announcement
                 // can't be used to interfere with block relay.
-<<<<<<< HEAD
-                RemoveBlockRequest(pblock->GetHash());
-=======
                 RemoveBlockRequest(pblock->GetHash(), std::nullopt);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             }
         }
         return;
@@ -6748,11 +4635,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
     if (msg_type == NetMsgType::BLOCKTXN)
     {
         // Ignore blocktxn received while importing
-<<<<<<< HEAD
-        if (fImporting || fReindex) {
-=======
         if (m_chainman.m_blockman.LoadingBlocks()) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             LogPrint(BCLog::NET, "Unexpected blocktxn message received from peer %d\n", pfrom.GetId());
             return;
         }
@@ -6760,103 +4643,18 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         BlockTransactions resp;
         vRecv >> resp;
 
-<<<<<<< HEAD
-        std::shared_ptr<CBlock> pblock = std::make_shared<CBlock>();
-        bool fBlockRead = false;
-        {
-            LOCK(cs_main);
-
-            std::map<uint256, std::pair<NodeId, std::list<QueuedBlock>::iterator> >::iterator it = mapBlocksInFlight.find(resp.blockhash);
-            if (it == mapBlocksInFlight.end() || !it->second.second->partialBlock ||
-                    it->second.first != pfrom.GetId()) {
-                LogPrint(BCLog::NET, "Peer %d sent us block transactions for block we weren't expecting\n", pfrom.GetId());
-                return;
-            }
-
-            PartiallyDownloadedBlock& partialBlock = *it->second.second->partialBlock;
-            ReadStatus status = partialBlock.FillBlock(*pblock, resp.txn);
-            if (status == READ_STATUS_INVALID) {
-                RemoveBlockRequest(resp.blockhash); // Reset in-flight state in case Misbehaving does not result in a disconnect
-                Misbehaving(pfrom.GetId(), 100, "invalid compact block/non-matching block transactions");
-                return;
-            } else if (status == READ_STATUS_FAILED) {
-                // Might have collided, fall back to getdata now :(
-                std::vector<CInv> invs;
-                invs.push_back(CInv(MSG_BLOCK | GetFetchFlags(pfrom), resp.blockhash));
-                m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETDATA, invs));
-            } else {
-                // Block is either okay, or possibly we received
-                // READ_STATUS_CHECKBLOCK_FAILED.
-                // Note that CheckBlock can only fail for one of a few reasons:
-                // 1. bad-proof-of-work (impossible here, because we've already
-                //    accepted the header)
-                // 2. merkleroot doesn't match the transactions given (already
-                //    caught in FillBlock with READ_STATUS_FAILED, so
-                //    impossible here)
-                // 3. the block is otherwise invalid (eg invalid coinbase,
-                //    block is too big, too many legacy sigops, etc).
-                // So if CheckBlock failed, #3 is the only possibility.
-                // Under BIP 152, we don't discourage the peer unless proof of work is
-                // invalid (we don't require all the stateless checks to have
-                // been run).  This is handled below, so just treat this as
-                // though the block was successfully read, and rely on the
-                // handling in ProcessNewBlock to ensure the block index is
-                // updated, etc.
-                RemoveBlockRequest(resp.blockhash); // it is now an empty pointer
-                fBlockRead = true;
-                // mapBlockSource is used for potentially punishing peers and
-                // updating which peers send us compact blocks, so the race
-                // between here and cs_main in ProcessNewBlock is fine.
-                // BIP 152 permits peers to relay compact blocks after validating
-                // the header only; we should not punish peers if the block turns
-                // out to be invalid.
-                mapBlockSource.emplace(resp.blockhash, std::make_pair(pfrom.GetId(), false));
-            }
-        } // Don't hold cs_main when we call into ProcessNewBlock
-        if (fBlockRead) {
-            // Since we requested this block (it was in mapBlocksInFlight), force it to be processed,
-            // even if it would not be a candidate for new tip (missing previous block, chain not long enough, etc)
-            // This bypasses some anti-DoS logic in AcceptBlock (eg to prevent
-            // disk-space attacks), but this should be safe due to the
-            // protections in the compact block handler -- see related comment
-            // in compact block optimistic reconstruction handling.
-            ProcessBlock(pfrom, pblock, /*force_processing=*/true);
-        }
-        return;
-=======
         return ProcessCompactBlockTxns(pfrom, *peer, resp);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     if (msg_type == NetMsgType::HEADERS)
     {
         // Ignore headers received while importing
-<<<<<<< HEAD
-        if (fImporting || fReindex) {
-=======
         if (m_chainman.m_blockman.LoadingBlocks()) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             LogPrint(BCLog::NET, "Unexpected headers message received from peer %d\n", pfrom.GetId());
             return;
         }
 
-<<<<<<< HEAD
-=======
-        // Assume that this is in response to any outstanding getheaders
-        // request we may have sent, and clear out the time of our last request
-        peer->m_last_getheaders_timestamp = {};
-
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
-        std::vector<CBlockHeader> headers;
-
-        // Bypass the normal CBlock deserialization, as we don't want to risk deserializing 2000 full blocks.
-        unsigned int nCount = ReadCompactSize(vRecv);
-        if (nCount > MAX_HEADERS_RESULTS) {
-<<<<<<< HEAD
-            Misbehaving(pfrom.GetId(), 20, strprintf("headers message size = %u", nCount));
-=======
             Misbehaving(*peer, 20, strprintf("headers message size = %u", nCount));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             return;
         }
         headers.resize(nCount);
@@ -6865,9 +4663,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             ReadCompactSize(vRecv); // ignore tx count; assume it is 0.
         }
 
-<<<<<<< HEAD
-        return ProcessHeadersMessage(pfrom, *peer, headers, /*via_compact_block=*/false);
-=======
         ProcessHeadersMessage(pfrom, *peer, std::move(headers), /*via_compact_block=*/false);
 
         // Check if the headers presync progress needs to be reported to validation.
@@ -6885,17 +4680,12 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         }
 
         return;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     if (msg_type == NetMsgType::BLOCK)
     {
         // Ignore block received while importing
-<<<<<<< HEAD
-        if (fImporting || fReindex) {
-=======
         if (m_chainman.m_blockman.LoadingBlocks()) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             LogPrint(BCLog::NET, "Unexpected block message received from peer %d\n", pfrom.GetId());
             return;
         }
@@ -6904,42 +4694,11 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         vRecv >> *pblock;
 
         LogPrint(BCLog::NET, "received block %s peer=%d\n", pblock->GetHash().ToString(), pfrom.GetId());
-<<<<<<< HEAD
-=======
-
-        const CBlockIndex* prev_block{WITH_LOCK(m_chainman.GetMutex(), return m_chainman.m_blockman.LookupBlockIndex(pblock->hashPrevBlock))};
-
-        // Check for possible mutation if it connects to something we know so we can check for DEPLOYMENT_SEGWIT being active
-        if (prev_block && IsBlockMutated(/*block=*/*pblock,
-                           /*check_witness_root=*/DeploymentActiveAfter(prev_block, m_chainman, Consensus::DEPLOYMENT_SEGWIT))) {
-            LogPrint(BCLog::NET, "Received mutated block from peer=%d\n", peer->m_id);
-            Misbehaving(*peer, 100, "mutated block");
-            WITH_LOCK(cs_main, RemoveBlockRequest(pblock->GetHash(), peer->m_id));
-            return;
-        }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
-
-        bool forceProcessing = false;
-        const uint256 hash(pblock->GetHash());
-        bool min_pow_checked = false;
-        {
-            LOCK(cs_main);
-            // Always process the block if we requested it, since we may
-            // need it even when it's not a candidate for a new best tip.
-            forceProcessing = IsBlockRequested(hash);
-<<<<<<< HEAD
-            RemoveBlockRequest(hash);
-=======
             RemoveBlockRequest(hash, pfrom.GetId());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             // mapBlockSource is only used for punishing peers and setting
             // which peers send us compact blocks, so the race between here and
             // cs_main in ProcessNewBlock is fine.
             mapBlockSource.emplace(hash, std::make_pair(pfrom.GetId(), true));
-<<<<<<< HEAD
-        }
-        ProcessBlock(pfrom, pblock, forceProcessing);
-=======
 
             // Check work on this block against our anti-dos thresholds.
             if (prev_block && prev_block->nChainWork + CalculateHeadersWork({pblock->GetBlockHeader()}) >= GetAntiDoSWorkThreshold()) {
@@ -6947,7 +4706,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             }
         }
         ProcessBlock(pfrom, pblock, forceProcessing, min_pow_checked);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         return;
     }
 
@@ -6977,34 +4735,20 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         peer->m_addrs_to_send.clear();
         std::vector<CAddress> vAddr;
         if (pfrom.HasPermission(NetPermissionFlags::Addr)) {
-<<<<<<< HEAD
-            vAddr = m_connman.GetAddresses(MAX_ADDR_TO_SEND, MAX_PCT_ADDR_TO_SEND, /* network */ std::nullopt);
-        } else {
-            vAddr = m_connman.GetAddresses(pfrom, MAX_ADDR_TO_SEND, MAX_PCT_ADDR_TO_SEND);
-        }
-        FastRandomContext insecure_rand;
-        for (const CAddress &addr : vAddr) {
-            PushAddress(*peer, addr, insecure_rand);
-=======
             vAddr = m_connman.GetAddresses(MAX_ADDR_TO_SEND, MAX_PCT_ADDR_TO_SEND, /*network=*/std::nullopt);
         } else {
             vAddr = m_connman.GetAddresses(pfrom, MAX_ADDR_TO_SEND, MAX_PCT_ADDR_TO_SEND);
         }
         for (const CAddress &addr : vAddr) {
             PushAddress(*peer, addr);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
         return;
     }
 
     if (msg_type == NetMsgType::MEMPOOL) {
-<<<<<<< HEAD
-        if (!(pfrom.GetLocalServices() & NODE_BLOOM) && !pfrom.HasPermission(NetPermissionFlags::Mempool))
-=======
         // Only process received mempool messages if we advertise NODE_BLOOM
         // or if the peer has mempool permissions.
         if (!(peer->m_our_services & NODE_BLOOM) && !pfrom.HasPermission(NetPermissionFlags::Mempool))
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         {
             if (!pfrom.HasPermission(NetPermissionFlags::NoBan))
             {
@@ -7024,15 +4768,9 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             return;
         }
 
-<<<<<<< HEAD
-        if (pfrom.m_tx_relay != nullptr) {
-            LOCK(pfrom.m_tx_relay->cs_tx_inventory);
-            pfrom.m_tx_relay->fSendMempool = true;
-=======
         if (auto tx_relay = peer->GetTxRelay(); tx_relay != nullptr) {
             LOCK(tx_relay->m_tx_inventory_mutex);
             tx_relay->m_send_mempool = true;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
         return;
     }
@@ -7113,11 +4851,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
     }
 
     if (msg_type == NetMsgType::FILTERLOAD) {
-<<<<<<< HEAD
-        if (!(pfrom.GetLocalServices() & NODE_BLOOM)) {
-=======
         if (!(peer->m_our_services & NODE_BLOOM)) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             LogPrint(BCLog::NET, "filterload received despite not offering bloom services from peer=%d; disconnecting\n", pfrom.GetId());
             pfrom.fDisconnect = true;
             return;
@@ -7128,15 +4862,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         if (!filter.IsWithinSizeConstraints())
         {
             // There is no excuse for sending a too-large filter
-<<<<<<< HEAD
-            Misbehaving(pfrom.GetId(), 100, "too-large bloom filter");
-        }
-        else if (pfrom.m_tx_relay != nullptr)
-        {
-            LOCK(pfrom.m_tx_relay->cs_filter);
-            pfrom.m_tx_relay->pfilter.reset(new CBloomFilter(filter));
-            pfrom.m_tx_relay->fRelayTxes = true;
-=======
             Misbehaving(*peer, 100, "too-large bloom filter");
         } else if (auto tx_relay = peer->GetTxRelay(); tx_relay != nullptr) {
             {
@@ -7146,20 +4871,14 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             }
             pfrom.m_bloom_filter_loaded = true;
             pfrom.m_relays_txs = true;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
         return;
     }
 
-<<<<<<< HEAD
     CheckDandelionEmbargoes();
 
     if (msg_type == NetMsgType::FILTERADD) {
         if (!(pfrom.GetLocalServices() & NODE_BLOOM)) {
-=======
-    if (msg_type == NetMsgType::FILTERADD) {
-        if (!(peer->m_our_services & NODE_BLOOM)) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             LogPrint(BCLog::NET, "filteradd received despite not offering bloom services from peer=%d; disconnecting\n", pfrom.GetId());
             pfrom.fDisconnect = true;
             return;
@@ -7172,49 +4891,26 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         bool bad = false;
         if (vData.size() > MAX_SCRIPT_ELEMENT_SIZE) {
             bad = true;
-<<<<<<< HEAD
-        } else if (pfrom.m_tx_relay != nullptr) {
-            LOCK(pfrom.m_tx_relay->cs_filter);
-            if (pfrom.m_tx_relay->pfilter) {
-                pfrom.m_tx_relay->pfilter->insert(vData);
-=======
         } else if (auto tx_relay = peer->GetTxRelay(); tx_relay != nullptr) {
             LOCK(tx_relay->m_bloom_filter_mutex);
             if (tx_relay->m_bloom_filter) {
                 tx_relay->m_bloom_filter->insert(vData);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             } else {
                 bad = true;
             }
         }
         if (bad) {
-<<<<<<< HEAD
-            Misbehaving(pfrom.GetId(), 100, "bad filteradd message");
-=======
             Misbehaving(*peer, 100, "bad filteradd message");
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
         return;
     }
 
     if (msg_type == NetMsgType::FILTERCLEAR) {
-<<<<<<< HEAD
-        if (!(pfrom.GetLocalServices() & NODE_BLOOM)) {
-=======
         if (!(peer->m_our_services & NODE_BLOOM)) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             LogPrint(BCLog::NET, "filterclear received despite not offering bloom services from peer=%d; disconnecting\n", pfrom.GetId());
             pfrom.fDisconnect = true;
             return;
         }
-<<<<<<< HEAD
-        if (pfrom.m_tx_relay == nullptr) {
-            return;
-        }
-        LOCK(pfrom.m_tx_relay->cs_filter);
-        pfrom.m_tx_relay->pfilter = nullptr;
-        pfrom.m_tx_relay->fRelayTxes = true;
-=======
         auto tx_relay = peer->GetTxRelay();
         if (!tx_relay) return;
 
@@ -7225,7 +4921,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         }
         pfrom.m_bloom_filter_loaded = false;
         pfrom.m_relays_txs = true;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         return;
     }
 
@@ -7233,7 +4928,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         CAmount newFeeFilter = 0;
         vRecv >> newFeeFilter;
         if (MoneyRange(newFeeFilter)) {
-<<<<<<< HEAD
             if (pfrom.m_tx_relay != nullptr) {
                 pfrom.m_tx_relay->minFeeFilter = newFeeFilter;
             }
@@ -7285,71 +4979,10 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             if (m_stempool.exists(inv.hash)) {
                 RelayDandelionTransaction(tx, &pfrom);
             }
-=======
-            if (auto tx_relay = peer->GetTxRelay(); tx_relay != nullptr) {
-                tx_relay->m_fee_filter_received = newFeeFilter;
-            }
-            LogPrint(BCLog::NET, "received: feefilter of %s from peer=%d\n", CFeeRate(newFeeFilter).ToString(), pfrom.GetId());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
         return;
     }
 
-<<<<<<< HEAD
-    if (msg_type == NetMsgType::NOTFOUND) {
-        std::vector<CInv> vInv;
-        vRecv >> vInv;
-        if (vInv.size() <= MAX_PEER_TX_ANNOUNCEMENTS + MAX_BLOCKS_IN_TRANSIT_PER_PEER) {
-            LOCK(::cs_main);
-            for (CInv &inv : vInv) {
-                if (inv.IsGenTxMsg()) {
-                    // If we receive a NOTFOUND message for a tx we requested, mark the announcement for it as
-                    // completed in TxRequestTracker.
-                    m_txrequest.ReceivedResponse(pfrom.GetId(), inv.hash);
-                }
-            }
-        }
-        return;
-    }
-
-    // Ignore unknown commands for extensibility
-    LogPrint(BCLog::NET, "Unknown command \"%s\" from peer=%d\n", SanitizeString(msg_type), pfrom.GetId());
-    return;
-}
-
-bool PeerManagerImpl::MaybeDiscourageAndDisconnect(CNode& pnode, Peer& peer)
-{
-    {
-        LOCK(peer.m_misbehavior_mutex);
-
-        // There's nothing to do if the m_should_discourage flag isn't set
-        if (!peer.m_should_discourage) return false;
-
-        peer.m_should_discourage = false;
-    } // peer.m_misbehavior_mutex
-
-    if (pnode.HasPermission(NetPermissionFlags::NoBan)) {
-        // We never disconnect or discourage peers for bad behavior if they have NetPermissionFlags::NoBan permission
-        LogPrintf("Warning: not punishing noban peer %d!\n", peer.m_id);
-        return false;
-    }
-
-    if (pnode.IsManualConn()) {
-        // We never disconnect or discourage manual peers for bad behavior
-        LogPrintf("Warning: not punishing manually connected peer %d!\n", peer.m_id);
-        return false;
-    }
-
-    if (pnode.addr.IsLocal()) {
-        // We disconnect local peers for bad behavior but don't discourage (since that would discourage
-        // all peers on the same local address)
-        LogPrint(BCLog::NET, "Warning: disconnecting but not discouraging %s peer %d!\n",
-                 pnode.m_inbound_onion ? "inbound onion" : "local", peer.m_id);
-        pnode.fDisconnect = true;
-        return true;
-    }
-
-=======
     if (msg_type == NetMsgType::GETCFILTERS) {
         ProcessGetCFilters(pfrom, *peer, vRecv);
         return;
@@ -7418,7 +5051,6 @@ bool PeerManagerImpl::MaybeDiscourageAndDisconnect(CNode& pnode, Peer& peer)
         return true;
     }
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     // Normal case: Disconnect the peer and discourage all nodes sharing the address
     LogPrint(BCLog::NET, "Disconnecting and discouraging peer %d!\n", peer.m_id);
     if (m_banman) m_banman->Discourage(pnode.addr);
@@ -7428,11 +5060,7 @@ bool PeerManagerImpl::MaybeDiscourageAndDisconnect(CNode& pnode, Peer& peer)
 
 bool PeerManagerImpl::ProcessMessages(CNode* pfrom, std::atomic<bool>& interruptMsgProc)
 {
-<<<<<<< HEAD
-    bool fMoreWork = false;
-=======
     AssertLockHeld(g_msgproc_mutex);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     PeerRef peer = GetPeerRef(pfrom->GetId());
     if (peer == nullptr) return false;
@@ -7444,16 +5072,7 @@ bool PeerManagerImpl::ProcessMessages(CNode* pfrom, std::atomic<bool>& interrupt
         }
     }
 
-<<<<<<< HEAD
-    {
-        LOCK2(cs_main, g_cs_orphans);
-        if (!peer->m_orphan_work_set.empty()) {
-            ProcessOrphanTx(peer->m_orphan_work_set);
-        }
-    }
-=======
     const bool processed_orphan = ProcessOrphanTx(*peer);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     if (pfrom->fDisconnect)
         return false;
@@ -7466,44 +5085,10 @@ bool PeerManagerImpl::ProcessMessages(CNode* pfrom, std::atomic<bool>& interrupt
         LOCK(peer->m_getdata_requests_mutex);
         if (!peer->m_getdata_requests.empty()) return true;
     }
-<<<<<<< HEAD
-
-    {
-        LOCK(g_cs_orphans);
-        if (!peer->m_orphan_work_set.empty()) return true;
-    }
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // Don't bother if send buffer is too full to respond anyway
     if (pfrom->fPauseSend) return false;
 
-<<<<<<< HEAD
-    std::list<CNetMessage> msgs;
-    {
-        LOCK(pfrom->cs_vProcessMsg);
-        if (pfrom->vProcessMsg.empty()) return false;
-        // Just take one message
-        msgs.splice(msgs.begin(), pfrom->vProcessMsg, pfrom->vProcessMsg.begin());
-        pfrom->nProcessQueueSize -= msgs.front().m_raw_message_size;
-        pfrom->fPauseRecv = pfrom->nProcessQueueSize > m_connman.GetReceiveFloodSize();
-        fMoreWork = !pfrom->vProcessMsg.empty();
-    }
-    CNetMessage& msg(msgs.front());
-
-    if (gArgs.GetBoolArg("-capturemessages", false)) {
-        CaptureMessage(pfrom->addr, msg.m_command, MakeUCharSpan(msg.m_recv), /* incoming */ true);
-    }
-
-    msg.SetVersion(pfrom->GetCommonVersion());
-    const std::string& msg_type = msg.m_command;
-
-    // Message size
-    unsigned int nMessageSize = msg.m_message_size;
-
-    try {
-        ProcessMessage(*pfrom, msg_type, msg.m_recv, msg.m_time, interruptMsgProc);
-=======
     auto poll_result{pfrom->PollMessage()};
     if (!poll_result) {
         // No message to process
@@ -7530,18 +5115,11 @@ bool PeerManagerImpl::ProcessMessages(CNode* pfrom, std::atomic<bool>& interrupt
 
     try {
         ProcessMessage(*pfrom, msg.m_type, msg.m_recv, msg.m_time, interruptMsgProc);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         if (interruptMsgProc) return false;
         {
             LOCK(peer->m_getdata_requests_mutex);
             if (!peer->m_getdata_requests.empty()) fMoreWork = true;
         }
-<<<<<<< HEAD
-    } catch (const std::exception& e) {
-        LogPrint(BCLog::NET, "%s(%s, %u bytes): Exception '%s' (%s) caught\n", __func__, SanitizeString(msg_type), nMessageSize, e.what(), typeid(e).name());
-    } catch (...) {
-        LogPrint(BCLog::NET, "%s(%s, %u bytes): Unknown exception caught\n", __func__, SanitizeString(msg_type), nMessageSize);
-=======
         // Does this peer has an orphan ready to reconsider?
         // (Note: we may have provided a parent for an orphan provided
         //  by another peer that was already processed; in that case,
@@ -7552,25 +5130,16 @@ bool PeerManagerImpl::ProcessMessages(CNode* pfrom, std::atomic<bool>& interrupt
         LogPrint(BCLog::NET, "%s(%s, %u bytes): Exception '%s' (%s) caught\n", __func__, SanitizeString(msg.m_type), msg.m_message_size, e.what(), typeid(e).name());
     } catch (...) {
         LogPrint(BCLog::NET, "%s(%s, %u bytes): Unknown exception caught\n", __func__, SanitizeString(msg.m_type), msg.m_message_size);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     return fMoreWork;
 }
 
-<<<<<<< HEAD
-void PeerManagerImpl::ConsiderEviction(CNode& pto, int64_t time_in_seconds)
-=======
 void PeerManagerImpl::ConsiderEviction(CNode& pto, Peer& peer, std::chrono::seconds time_in_seconds)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     AssertLockHeld(cs_main);
 
     CNodeState &state = *State(pto.GetId());
-<<<<<<< HEAD
-    const CNetMsgMaker msgMaker(pto.GetCommonVersion());
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     if (!state.m_chain_sync.m_protect && pto.IsOutboundOrBlockRelayConn() && state.fSyncStarted) {
         // This is an outbound peer subject to disconnection if they don't
@@ -7580,13 +5149,8 @@ void PeerManagerImpl::ConsiderEviction(CNode& pto, Peer& peer, std::chrono::seco
         // unless it's invalid, in which case we should find that out and
         // disconnect from them elsewhere).
         if (state.pindexBestKnownBlock != nullptr && state.pindexBestKnownBlock->nChainWork >= m_chainman.ActiveChain().Tip()->nChainWork) {
-<<<<<<< HEAD
-            if (state.m_chain_sync.m_timeout != 0) {
-                state.m_chain_sync.m_timeout = 0;
-=======
             if (state.m_chain_sync.m_timeout != 0s) {
                 state.m_chain_sync.m_timeout = 0s;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 state.m_chain_sync.m_work_header = nullptr;
                 state.m_chain_sync.m_sent_getheaders = false;
             }
@@ -7608,10 +5172,6 @@ void PeerManagerImpl::ConsiderEviction(CNode& pto, Peer& peer, std::chrono::seco
                 pto.fDisconnect = true;
             } else {
                 assert(state.m_chain_sync.m_work_header);
-<<<<<<< HEAD
-                LogPrint(BCLog::NET, "sending getheaders to outbound peer=%d to verify chain work (current best known block:%s, benchmark blockhash: %s)\n", pto.GetId(), state.pindexBestKnownBlock != nullptr ? state.pindexBestKnownBlock->GetBlockHash().ToString() : "<none>", state.m_chain_sync.m_work_header->GetBlockHash().ToString());
-                m_connman.PushMessage(&pto, msgMaker.Make(NetMsgType::GETHEADERS, m_chainman.ActiveChain().GetLocator(state.m_chain_sync.m_work_header->pprev), uint256()));
-=======
                 // Here, we assume that the getheaders message goes out,
                 // because it'll either go out or be skipped because of a
                 // getheaders in-flight already, in which case the peer should
@@ -7620,7 +5180,6 @@ void PeerManagerImpl::ConsiderEviction(CNode& pto, Peer& peer, std::chrono::seco
                         GetLocator(state.m_chain_sync.m_work_header->pprev),
                         peer);
                 LogPrint(BCLog::NET, "sending getheaders to outbound peer=%d to verify chain work (current best known block:%s, benchmark blockhash: %s)\n", pto.GetId(), state.pindexBestKnownBlock != nullptr ? state.pindexBestKnownBlock->GetBlockHash().ToString() : "<none>", state.m_chain_sync.m_work_header->GetBlockHash().ToString());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 state.m_chain_sync.m_sent_getheaders = true;
                 // Bump the timeout to allow a response, which could clear the timeout
                 // (if the response shows the peer has synced), reset the timeout (if
@@ -7633,11 +5192,7 @@ void PeerManagerImpl::ConsiderEviction(CNode& pto, Peer& peer, std::chrono::seco
     }
 }
 
-<<<<<<< HEAD
-void PeerManagerImpl::EvictExtraOutboundPeers(int64_t time_in_seconds)
-=======
 void PeerManagerImpl::EvictExtraOutboundPeers(std::chrono::seconds now)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     // If we have any extra block-relay-only peers, disconnect the youngest unless
     // it's given us a block -- in which case, compare with the second-youngest, and
@@ -7646,22 +5201,14 @@ void PeerManagerImpl::EvictExtraOutboundPeers(std::chrono::seconds now)
     // to temporarily in order to sync our tip; see net.cpp.
     // Note that we use higher nodeid as a measure for most recent connection.
     if (m_connman.GetExtraBlockRelayCount() > 0) {
-<<<<<<< HEAD
-        std::pair<NodeId, int64_t> youngest_peer{-1, 0}, next_youngest_peer{-1, 0};
-=======
         std::pair<NodeId, std::chrono::seconds> youngest_peer{-1, 0}, next_youngest_peer{-1, 0};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         m_connman.ForEachNode([&](CNode* pnode) {
             if (!pnode->IsBlockOnlyConn() || pnode->fDisconnect) return;
             if (pnode->GetId() > youngest_peer.first) {
                 next_youngest_peer = youngest_peer;
                 youngest_peer.first = pnode->GetId();
-<<<<<<< HEAD
-                youngest_peer.second = pnode->nLastBlockTime;
-=======
                 youngest_peer.second = pnode->m_last_block_time;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             }
         });
         NodeId to_disconnect = youngest_peer.first;
@@ -7679,15 +5226,6 @@ void PeerManagerImpl::EvictExtraOutboundPeers(std::chrono::seconds now)
             // valid headers chain with at least as much work as our tip.
             CNodeState *node_state = State(pnode->GetId());
             if (node_state == nullptr ||
-<<<<<<< HEAD
-                (time_in_seconds - pnode->nTimeConnected >= MINIMUM_CONNECT_TIME && node_state->nBlocksInFlight == 0)) {
-                pnode->fDisconnect = true;
-                LogPrint(BCLog::NET, "disconnecting extra block-relay-only peer=%d (last block received at time %d)\n", pnode->GetId(), pnode->nLastBlockTime);
-                return true;
-            } else {
-                LogPrint(BCLog::NET, "keeping block-relay-only peer=%d chosen for eviction (connect time: %d, blocks_in_flight: %d)\n",
-                    pnode->GetId(), pnode->nTimeConnected, node_state->nBlocksInFlight);
-=======
                 (now - pnode->m_connected >= MINIMUM_CONNECT_TIME && node_state->vBlocksInFlight.empty())) {
                 pnode->fDisconnect = true;
                 LogPrint(BCLog::NET, "disconnecting extra block-relay-only peer=%d (last block received at time %d)\n",
@@ -7696,7 +5234,6 @@ void PeerManagerImpl::EvictExtraOutboundPeers(std::chrono::seconds now)
             } else {
                 LogPrint(BCLog::NET, "keeping block-relay-only peer=%d chosen for eviction (connect time: %d, blocks_in_flight: %d)\n",
                          pnode->GetId(), count_seconds(pnode->m_connected), node_state->vBlocksInFlight.size());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             }
             return false;
         });
@@ -7713,11 +5250,7 @@ void PeerManagerImpl::EvictExtraOutboundPeers(std::chrono::seconds now)
         NodeId worst_peer = -1;
         int64_t oldest_block_announcement = std::numeric_limits<int64_t>::max();
 
-<<<<<<< HEAD
-        m_connman.ForEachNode([&](CNode* pnode) EXCLUSIVE_LOCKS_REQUIRED(::cs_main) {
-=======
         m_connman.ForEachNode([&](CNode* pnode) EXCLUSIVE_LOCKS_REQUIRED(::cs_main, m_connman.GetNodesMutex()) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             AssertLockHeld(::cs_main);
 
             // Only consider outbound-full-relay peers that are not already
@@ -7775,20 +5308,12 @@ void PeerManagerImpl::CheckForStaleTipAndEvictPeers()
 
     EvictExtraOutboundPeers(now);
 
-<<<<<<< HEAD
-    if (time_in_seconds > m_stale_tip_check_time) {
-        // Check whether our tip is stale, and if so, allow using an extra
-        // outbound peer
-        if (!fImporting && !fReindex && m_connman.GetNetworkActive() && m_connman.GetUseAddrmanOutgoing() && TipMayBeStale()) {
-            LogPrintf("Potential stale tip detected, will try using extra outbound peer (last tip update: %d seconds ago)\n", time_in_seconds - m_last_tip_update);
-=======
     if (now > m_stale_tip_check_time) {
         // Check whether our tip is stale, and if so, allow using an extra
         // outbound peer
         if (!m_chainman.m_blockman.LoadingBlocks() && m_connman.GetNetworkActive() && m_connman.GetUseAddrmanOutgoing() && TipMayBeStale()) {
             LogPrintf("Potential stale tip detected, will try using extra outbound peer (last tip update: %d seconds ago)\n",
                       count_seconds(now - m_last_tip_update.load()));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             m_connman.SetTryNewOutboundPeer(true);
         } else if (m_connman.GetTryNewOutboundPeer()) {
             m_connman.SetTryNewOutboundPeer(false);
@@ -8134,11 +5659,7 @@ void PeerManagerImpl::MaybeSendFeefilter(CNode& pto, std::chrono::microseconds c
 namespace {
 class CompareInvMempoolOrder
 {
-<<<<<<< HEAD
-    CTxMemPool *mp;
-=======
     CTxMemPool* mp;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     bool m_wtxid_relay;
 public:
     explicit CompareInvMempoolOrder(CTxMemPool *_mempool, bool use_wtxid)
@@ -8166,10 +5687,6 @@ bool PeerManagerImpl::RejectIncomingTxs(const CNode& peer) const
     return false;
 }
 
-<<<<<<< HEAD
-bool PeerManagerImpl::SendMessages(CNode* pto)
-{
-=======
 bool PeerManagerImpl::SetupAddressRelay(const CNode& node, Peer& peer)
 {
     // We don't participate in addr relay with outbound block-relay-only
@@ -8191,7 +5708,6 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
 {
     AssertLockHeld(g_msgproc_mutex);
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     PeerRef peer = GetPeerRef(pto->GetId());
     if (!peer) return false;
     const Consensus::Params& consensusParams = m_chainparams.GetConsensus();
@@ -8207,15 +5723,9 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
     // If we get here, the outgoing message serialization version is set and can't change.
     const CNetMsgMaker msgMaker(pto->GetCommonVersion());
 
-<<<<<<< HEAD
-    const auto current_time = GetTime<std::chrono::microseconds>();
-
-    if (pto->IsAddrFetchConn() && current_time - std::chrono::seconds(pto->nTimeConnected) > 10 * AVG_ADDRESS_BROADCAST_INTERVAL) {
-=======
     const auto current_time{GetTime<std::chrono::microseconds>()};
 
     if (pto->IsAddrFetchConn() && current_time - pto->m_connected > 10 * AVG_ADDRESS_BROADCAST_INTERVAL) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         LogPrint(BCLog::NET, "addrfetch connection timeout; disconnecting peer=%d\n", pto->GetId());
         pto->fDisconnect = true;
         return true;
@@ -8228,35 +5738,6 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
 
     MaybeSendAddr(*pto, *peer, current_time);
 
-<<<<<<< HEAD
-=======
-    MaybeSendSendHeaders(*pto, *peer);
-
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
-    {
-        LOCK(cs_main);
-
-        CNodeState &state = *State(pto->GetId());
-
-        // Start block sync
-<<<<<<< HEAD
-        if (pindexBestHeader == nullptr)
-            pindexBestHeader = m_chainman.ActiveChain().Tip();
-        bool fFetch = state.fPreferredDownload || (nPreferredDownload == 0 && !pto->fClient && !pto->IsAddrFetchConn()); // Download if this is a nice peer, or we have no nice peers and this one might do.
-        if (!state.fSyncStarted && !pto->fClient && !fImporting && !fReindex) {
-            // Only actively request headers from a single peer, unless we're close to today.
-            if ((nSyncStarted == 0 && fFetch) || pindexBestHeader->GetBlockTime() > GetAdjustedTime() - 24 * 60 * 60) {
-                state.fSyncStarted = true;
-                state.m_headers_sync_timeout = current_time + HEADERS_DOWNLOAD_TIMEOUT_BASE +
-                    (
-                        // Convert HEADERS_DOWNLOAD_TIMEOUT_PER_HEADER to microseconds before scaling
-                        // to maintain precision
-                        std::chrono::microseconds{HEADERS_DOWNLOAD_TIMEOUT_PER_HEADER} *
-                        (GetAdjustedTime() - pindexBestHeader->GetBlockTime()) / consensusParams.nPowTargetSpacing
-                    );
-                nSyncStarted++;
-                const CBlockIndex *pindexStart = pindexBestHeader;
-=======
         if (m_chainman.m_best_header == nullptr) {
             m_chainman.m_best_header = m_chainman.ActiveChain().Tip();
         }
@@ -8286,7 +5767,6 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
             // Only actively request headers from a single peer, unless we're close to today.
             if ((nSyncStarted == 0 && sync_blocks_and_headers_from_peer) || m_chainman.m_best_header->Time() > GetAdjustedTime() - 24h) {
                 const CBlockIndex* pindexStart = m_chainman.m_best_header;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 /* If possible, start at the block preceding the currently
                    best known header.  This ensures that we always get a
                    non-empty list of headers back as long as the peer
@@ -8296,13 +5776,6 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                    got back an empty response.  */
                 if (pindexStart->pprev)
                     pindexStart = pindexStart->pprev;
-<<<<<<< HEAD
-                LogPrint(BCLog::NET, "initial getheaders (%d) to peer=%d (startheight:%d)\n", pindexStart->nHeight, pto->GetId(), peer->m_starting_height);
-                m_connman.PushMessage(pto, msgMaker.Make(NetMsgType::GETHEADERS, m_chainman.ActiveChain().GetLocator(pindexStart), uint256()));
-            }
-        }
-
-=======
                 if (MaybeSendGetHeaders(*pto, GetLocator(pindexStart), *peer)) {
                     LogPrint(BCLog::NET, "initial getheaders (%d) to peer=%d (startheight:%d)\n", pindexStart->nHeight, pto->GetId(), peer->m_starting_height);
 
@@ -8319,7 +5792,6 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
             }
         }
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         //
         // Try sending block announcements via headers
         //
@@ -8333,13 +5805,8 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
             // add all to the inv queue.
             LOCK(peer->m_block_inv_mutex);
             std::vector<CBlock> vHeaders;
-<<<<<<< HEAD
-            bool fRevertToInv = ((!state.fPreferHeaders &&
-                                 (!state.fPreferHeaderAndIDs || peer->m_blocks_for_headers_relay.size() > 1)) ||
-=======
             bool fRevertToInv = ((!peer->m_prefers_headers &&
                                  (!state.m_requested_hb_cmpctblocks || peer->m_blocks_for_headers_relay.size() > 1)) ||
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                                  peer->m_blocks_for_headers_relay.size() > MAX_BLOCKS_TO_ANNOUNCE);
             const CBlockIndex *pBestIndex = nullptr; // last header queued for delivery
             ProcessBlockAvailability(pto->GetId()); // ensure pindexBestKnownBlock is up-to-date
@@ -8400,21 +5867,9 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
 
                     std::optional<CSerializedNetMsg> cached_cmpctblock_msg;
                     {
-<<<<<<< HEAD
-                        LOCK(cs_most_recent_block);
-                        if (most_recent_block_hash == pBestIndex->GetBlockHash()) {
-                            if (state.fWantsCmpctWitness || !fWitnessesPresentInMostRecentCompactBlock)
-                                m_connman.PushMessage(pto, msgMaker.Make(nSendFlags, NetMsgType::CMPCTBLOCK, *most_recent_compact_block));
-                            else {
-                                CBlockHeaderAndShortTxIDs cmpctblock(*most_recent_block, state.fWantsCmpctWitness);
-                                m_connman.PushMessage(pto, msgMaker.Make(nSendFlags, NetMsgType::CMPCTBLOCK, cmpctblock));
-                            }
-                            fGotBlockFromCache = true;
-=======
                         LOCK(m_most_recent_block_mutex);
                         if (m_most_recent_block_hash == pBestIndex->GetBlockHash()) {
                             cached_cmpctblock_msg = msgMaker.Make(NetMsgType::CMPCTBLOCK, *m_most_recent_compact_block);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                         }
                     }
                     if (cached_cmpctblock_msg.has_value()) {
@@ -8423,13 +5878,8 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                         CBlock block;
                         const bool ret{m_chainman.m_blockman.ReadBlockFromDisk(block, *pBestIndex)};
                         assert(ret);
-<<<<<<< HEAD
-                        CBlockHeaderAndShortTxIDs cmpctblock(block, state.fWantsCmpctWitness);
-                        m_connman.PushMessage(pto, msgMaker.Make(nSendFlags, NetMsgType::CMPCTBLOCK, cmpctblock));
-=======
                         CBlockHeaderAndShortTxIDs cmpctblock{block};
                         m_connman.PushMessage(pto, msgMaker.Make(NetMsgType::CMPCTBLOCK, cmpctblock));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                     }
                     state.pindexBestHeaderSent = pBestIndex;
                 } else if (peer->m_prefers_headers) {
@@ -8481,27 +5931,17 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
         std::vector<CInv> vInv;
         {
             LOCK(peer->m_block_inv_mutex);
-<<<<<<< HEAD
-            vInv.reserve(std::max<size_t>(peer->m_blocks_for_inv_relay.size(), INVENTORY_BROADCAST_MAX));
-
-            // Add blocks
-            for (const uint256& hash : peer->m_blocks_for_inv_relay) {
-                vInv.push_back(CInv(MSG_BLOCK, hash));
-=======
             vInv.reserve(std::max<size_t>(peer->m_blocks_for_inv_relay.size(), INVENTORY_BROADCAST_TARGET));
 
             // Add blocks
             for (const uint256& hash : peer->m_blocks_for_inv_relay) {
                 vInv.emplace_back(MSG_BLOCK, hash);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 if (vInv.size() == MAX_INV_SZ) {
                     m_connman.PushMessage(pto, msgMaker.Make(NetMsgType::INV, vInv));
                     vInv.clear();
                 }
             }
             peer->m_blocks_for_inv_relay.clear();
-<<<<<<< HEAD
-=======
         }
 
         if (auto tx_relay = peer->GetTxRelay(); tx_relay != nullptr) {
@@ -8607,7 +6047,6 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                     LOCK(m_mempool.cs);
                     tx_relay->m_last_inv_sequence = m_mempool.GetSequence();
                 }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
 
         //! if we're a relayer..
@@ -8785,12 +6224,7 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
             m_connman.PushMessage(pto, msgMaker.Make(NetMsgType::INV, vInv));
 
         // Detect whether we're stalling
-<<<<<<< HEAD
         if (state.m_stalling_since.count() && state.m_stalling_since < current_time - BLOCK_STALLING_TIMEOUT) {
-=======
-        auto stalling_timeout = m_block_stalling_timeout.load();
-        if (state.m_stalling_since.count() && state.m_stalling_since < current_time - stalling_timeout) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             // Stalling only triggers when the block download window cannot move. During normal steady state,
             // the download window should be much larger than the to-be-downloaded set of blocks, so disconnection
             // should only happen during initial block download.
@@ -8813,46 +6247,27 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
             QueuedBlock &queuedBlock = state.vBlocksInFlight.front();
             int nOtherPeersWithValidatedDownloads = m_peers_downloading_from - 1;
             if (current_time > state.m_downloading_since + std::chrono::seconds{consensusParams.nPowTargetSpacing} * (BLOCK_DOWNLOAD_TIMEOUT_BASE + BLOCK_DOWNLOAD_TIMEOUT_PER_PEER * nOtherPeersWithValidatedDownloads)) {
-<<<<<<< HEAD
-                LogPrintf("Timeout downloading block %s from peer=%d, disconnecting\n", queuedBlock.pindex->GetBlockHash().ToString(), pto->GetId());
-=======
                 LogPrintf("Timeout downloading block %s from peer=%d%s, disconnecting\n", queuedBlock.pindex->GetBlockHash().ToString(), pto->GetId(), fLogIPs ? strprintf(" peeraddr=%s", pto->addr.ToStringAddrPort()) : "");
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 pto->fDisconnect = true;
                 return true;
             }
         }
         // Check for headers sync timeouts
-<<<<<<< HEAD
-        if (state.fSyncStarted && state.m_headers_sync_timeout < std::chrono::microseconds::max()) {
-            // Detect whether this is a stalling initial-headers-sync peer
-            if (pindexBestHeader->GetBlockTime() <= GetAdjustedTime() - 24 * 60 * 60) {
-                if (current_time > state.m_headers_sync_timeout && nSyncStarted == 1 && (nPreferredDownload - state.fPreferredDownload >= 1)) {
-=======
         if (state.fSyncStarted && peer->m_headers_sync_timeout < std::chrono::microseconds::max()) {
             // Detect whether this is a stalling initial-headers-sync peer
             if (m_chainman.m_best_header->Time() <= GetAdjustedTime() - 24h) {
                 if (current_time > peer->m_headers_sync_timeout && nSyncStarted == 1 && (m_num_preferred_download_peers - state.fPreferredDownload >= 1)) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                     // Disconnect a peer (without NetPermissionFlags::NoBan permission) if it is our only sync peer,
                     // and we have others we could be using instead.
                     // Note: If all our peers are inbound, then we won't
                     // disconnect our sync peer for stalling; we have bigger
                     // problems if we can't get any outbound peers.
                     if (!pto->HasPermission(NetPermissionFlags::NoBan)) {
-<<<<<<< HEAD
-                        LogPrintf("Timeout downloading headers from peer=%d, disconnecting\n", pto->GetId());
-                        pto->fDisconnect = true;
-                        return true;
-                    } else {
-                        LogPrintf("Timeout downloading headers from noban peer=%d, not disconnecting\n", pto->GetId());
-=======
                         LogPrintf("Timeout downloading headers from peer=%d%s, disconnecting\n", pto->GetId(), fLogIPs ? strprintf(" peeraddr=%s", pto->addr.ToStringAddrPort()) : "");
                         pto->fDisconnect = true;
                         return true;
                     } else {
                         LogPrintf("Timeout downloading headers from noban peer=%d%s, not disconnecting\n", pto->GetId(), fLogIPs ? strprintf(" peeraddr=%s", pto->addr.ToStringAddrPort()) : "");
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                         // Reset the headers sync state so that we have a
                         // chance to try downloading from a different peer.
                         // Note: this will also result in at least one more
@@ -8860,45 +6275,24 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                         // this peer (eventually).
                         state.fSyncStarted = false;
                         nSyncStarted--;
-<<<<<<< HEAD
-                        state.m_headers_sync_timeout = 0us;
-=======
                         peer->m_headers_sync_timeout = 0us;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                     }
                 }
             } else {
                 // After we've caught up once, reset the timeout so we can't trigger
                 // disconnect later.
-<<<<<<< HEAD
-                state.m_headers_sync_timeout = std::chrono::microseconds::max();
-=======
                 peer->m_headers_sync_timeout = std::chrono::microseconds::max();
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             }
         }
 
         // Check that outbound peers have reasonable chains
         // GetTime() is used by this anti-DoS logic so we can test this using mocktime
-<<<<<<< HEAD
-        ConsiderEviction(*pto, GetTime());
-=======
         ConsiderEviction(*pto, *peer, GetTime<std::chrono::seconds>());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         //
         // Message: getdata (blocks)
         //
         std::vector<CInv> vGetData;
-<<<<<<< HEAD
-        if (!pto->fClient && ((fFetch && !pto->m_limited_node) || !m_chainman.ActiveChainstate().IsInitialBlockDownload()) && state.nBlocksInFlight < MAX_BLOCKS_IN_TRANSIT_PER_PEER) {
-            std::vector<const CBlockIndex*> vToDownload;
-            NodeId staller = -1;
-            FindNextBlocksToDownload(pto->GetId(), MAX_BLOCKS_IN_TRANSIT_PER_PEER - state.nBlocksInFlight, vToDownload, staller);
-            for (const CBlockIndex *pindex : vToDownload) {
-                uint32_t nFetchFlags = GetFetchFlags(*pto);
-                vGetData.push_back(CInv(MSG_BLOCK | nFetchFlags, pindex->GetBlockHash()));
-=======
         if (CanServeBlocks(*peer) && ((sync_blocks_and_headers_from_peer && !IsLimitedPeer(*peer)) || !m_chainman.IsInitialBlockDownload()) && state.vBlocksInFlight.size() < MAX_BLOCKS_IN_TRANSIT_PER_PEER) {
             std::vector<const CBlockIndex*> vToDownload;
             NodeId staller = -1;
@@ -8919,16 +6313,11 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
             for (const CBlockIndex *pindex : vToDownload) {
                 uint32_t nFetchFlags = GetFetchFlags(*peer);
                 vGetData.emplace_back(MSG_BLOCK | nFetchFlags, pindex->GetBlockHash());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 BlockRequested(pto->GetId(), *pindex);
                 LogPrint(BCLog::NET, "Requesting block %s (%d) peer=%d\n", pindex->GetBlockHash().ToString(),
                     pindex->nHeight, pto->GetId());
             }
-<<<<<<< HEAD
-            if (state.nBlocksInFlight == 0 && staller != -1) {
-=======
             if (state.vBlocksInFlight.empty() && staller != -1) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 if (State(staller)->m_stalling_since == 0us) {
                     State(staller)->m_stalling_since = current_time;
                     LogPrint(BCLog::NET, "Stall started peer=%d\n", staller);
@@ -8949,11 +6338,7 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
             if (!AlreadyHaveTx(gtxid)) {
                 LogPrint(BCLog::NET, "Requesting %s %s peer=%d\n", gtxid.IsWtxid() ? "wtx" : "tx",
                     gtxid.GetHash().ToString(), pto->GetId());
-<<<<<<< HEAD
-                vGetData.emplace_back(gtxid.IsWtxid() ? MSG_WTX : (MSG_TX | GetFetchFlags(*pto)), gtxid.GetHash());
-=======
                 vGetData.emplace_back(gtxid.IsWtxid() ? MSG_WTX : (MSG_TX | GetFetchFlags(*peer)), gtxid.GetHash());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 if (vGetData.size() >= MAX_GETDATA_SZ) {
                     m_connman.PushMessage(pto, msgMaker.Make(NetMsgType::GETDATA, vGetData));
                     vGetData.clear();
@@ -8969,13 +6354,7 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
 
         if (!vGetData.empty())
             m_connman.PushMessage(pto, msgMaker.Make(NetMsgType::GETDATA, vGetData));
-<<<<<<< HEAD
-
-        MaybeSendFeefilter(*pto, current_time);
-    } // release cs_main
-=======
     } // release cs_main
     MaybeSendFeefilter(*pto, *peer, current_time);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     return true;
 }

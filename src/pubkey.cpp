@@ -1,9 +1,5 @@
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
-// Copyright (c) 2009-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// Copyright (c) 2009-2022 The Bitcoin Core developers
+// Copyright (c) 2014-2022 The DigiByte Core developers
 // Copyright (c) 2017 The Zcash developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
@@ -12,21 +8,12 @@
 
 #include <hash.h>
 #include <secp256k1.h>
-<<<<<<< HEAD
-=======
 #include <secp256k1_ellswift.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <secp256k1_extrakeys.h>
 #include <secp256k1_recovery.h>
 #include <secp256k1_schnorrsig.h>
 #include <span.h>
 #include <uint256.h>
-<<<<<<< HEAD
-
-#include <algorithm>
-#include <cassert>
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 #include <algorithm>
 #include <cassert>
@@ -53,11 +40,7 @@ struct Secp256k1SelfTester
  *  strict DER before being passed to this module, and we know it supports all
  *  violations present in the blockchain before that point.
  */
-<<<<<<< HEAD
-int ecdsa_signature_parse_der_lax(const secp256k1_context* ctx, secp256k1_ecdsa_signature* sig, const unsigned char *input, size_t inputlen) {
-=======
 int ecdsa_signature_parse_der_lax(secp256k1_ecdsa_signature* sig, const unsigned char *input, size_t inputlen) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     size_t rpos, rlen, spos, slen;
     size_t pos = 0;
     size_t lenbyte;
@@ -205,12 +188,6 @@ XOnlyPubKey::XOnlyPubKey(Span<const unsigned char> bytes)
     std::copy(bytes.begin(), bytes.end(), m_keydata.begin());
 }
 
-<<<<<<< HEAD
-bool XOnlyPubKey::IsFullyValid() const
-{
-    secp256k1_xonly_pubkey pubkey;
-    return secp256k1_xonly_pubkey_parse(secp256k1_context_verify, &pubkey, m_keydata.data());
-=======
 std::vector<CKeyID> XOnlyPubKey::GetKeyIDs() const
 {
     std::vector<CKeyID> out;
@@ -239,72 +216,40 @@ bool XOnlyPubKey::IsFullyValid() const
 {
     secp256k1_xonly_pubkey pubkey;
     return secp256k1_xonly_pubkey_parse(secp256k1_context_static, &pubkey, m_keydata.data());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 bool XOnlyPubKey::VerifySchnorr(const uint256& msg, Span<const unsigned char> sigbytes) const
 {
     assert(sigbytes.size() == 64);
     secp256k1_xonly_pubkey pubkey;
-<<<<<<< HEAD
-    if (!secp256k1_xonly_pubkey_parse(secp256k1_context_verify, &pubkey, m_keydata.data())) return false;
-    return secp256k1_schnorrsig_verify(secp256k1_context_verify, sigbytes.data(), msg.begin(), &pubkey);
-}
-
-static const CHashWriter HASHER_TAPTWEAK = TaggedHash("TapTweak");
-=======
     if (!secp256k1_xonly_pubkey_parse(secp256k1_context_static, &pubkey, m_keydata.data())) return false;
     return secp256k1_schnorrsig_verify(secp256k1_context_static, sigbytes.data(), msg.begin(), 32, &pubkey);
 }
 
 static const HashWriter HASHER_TAPTWEAK{TaggedHash("TapTweak")};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 uint256 XOnlyPubKey::ComputeTapTweakHash(const uint256* merkle_root) const
 {
     if (merkle_root == nullptr) {
         // We have no scripts. The actual tweak does not matter, but follow BIP341 here to
         // allow for reproducible tweaking.
-<<<<<<< HEAD
-        return (CHashWriter(HASHER_TAPTWEAK) << m_keydata).GetSHA256();
-    } else {
-        return (CHashWriter(HASHER_TAPTWEAK) << m_keydata << *merkle_root).GetSHA256();
-=======
         return (HashWriter{HASHER_TAPTWEAK} << m_keydata).GetSHA256();
     } else {
         return (HashWriter{HASHER_TAPTWEAK} << m_keydata << *merkle_root).GetSHA256();
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 }
 
 bool XOnlyPubKey::CheckTapTweak(const XOnlyPubKey& internal, const uint256& merkle_root, bool parity) const
 {
     secp256k1_xonly_pubkey internal_key;
-<<<<<<< HEAD
-    if (!secp256k1_xonly_pubkey_parse(secp256k1_context_verify, &internal_key, internal.data())) return false;
-    uint256 tweak = internal.ComputeTapTweakHash(&merkle_root);
-    return secp256k1_xonly_pubkey_tweak_add_check(secp256k1_context_verify, m_keydata.begin(), parity, &internal_key, tweak.begin());
-=======
     if (!secp256k1_xonly_pubkey_parse(secp256k1_context_static, &internal_key, internal.data())) return false;
     uint256 tweak = internal.ComputeTapTweakHash(&merkle_root);
     return secp256k1_xonly_pubkey_tweak_add_check(secp256k1_context_static, m_keydata.begin(), parity, &internal_key, tweak.begin());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 std::optional<std::pair<XOnlyPubKey, bool>> XOnlyPubKey::CreateTapTweak(const uint256* merkle_root) const
 {
     secp256k1_xonly_pubkey base_point;
-<<<<<<< HEAD
-    if (!secp256k1_xonly_pubkey_parse(secp256k1_context_verify, &base_point, data())) return std::nullopt;
-    secp256k1_pubkey out;
-    uint256 tweak = ComputeTapTweakHash(merkle_root);
-    if (!secp256k1_xonly_pubkey_tweak_add(secp256k1_context_verify, &out, &base_point, tweak.data())) return std::nullopt;
-    int parity = -1;
-    std::pair<XOnlyPubKey, bool> ret;
-    secp256k1_xonly_pubkey out_xonly;
-    if (!secp256k1_xonly_pubkey_from_pubkey(secp256k1_context_verify, &out_xonly, &parity, &out)) return std::nullopt;
-    secp256k1_xonly_pubkey_serialize(secp256k1_context_verify, ret.first.begin(), &out_xonly);
-=======
     if (!secp256k1_xonly_pubkey_parse(secp256k1_context_static, &base_point, data())) return std::nullopt;
     secp256k1_pubkey out;
     uint256 tweak = ComputeTapTweakHash(merkle_root);
@@ -314,7 +259,6 @@ std::optional<std::pair<XOnlyPubKey, bool>> XOnlyPubKey::CreateTapTweak(const ui
     secp256k1_xonly_pubkey out_xonly;
     if (!secp256k1_xonly_pubkey_from_pubkey(secp256k1_context_static, &out_xonly, &parity, &out)) return std::nullopt;
     secp256k1_xonly_pubkey_serialize(secp256k1_context_static, ret.first.begin(), &out_xonly);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     assert(parity == 0 || parity == 1);
     ret.second = parity;
     return ret;
@@ -326,12 +270,7 @@ bool CPubKey::Verify(const uint256 &hash, const std::vector<unsigned char>& vchS
         return false;
     secp256k1_pubkey pubkey;
     secp256k1_ecdsa_signature sig;
-<<<<<<< HEAD
-    assert(secp256k1_context_verify && "secp256k1_context_verify must be initialized to use CPubKey.");
-    if (!secp256k1_ec_pubkey_parse(secp256k1_context_verify, &pubkey, vch, size())) {
-=======
     if (!secp256k1_ec_pubkey_parse(secp256k1_context_static, &pubkey, vch, size())) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         return false;
     }
     if (!ecdsa_signature_parse_der_lax(&sig, vchSig.data(), vchSig.size())) {
@@ -339,13 +278,8 @@ bool CPubKey::Verify(const uint256 &hash, const std::vector<unsigned char>& vchS
     }
     /* libsecp256k1's ECDSA verification requires lower-S signatures, which have
      * not historically been enforced in DigiByte, so normalize them first. */
-<<<<<<< HEAD
-    secp256k1_ecdsa_signature_normalize(secp256k1_context_verify, &sig, &sig);
-    return secp256k1_ecdsa_verify(secp256k1_context_verify, &sig, hash.begin(), &pubkey);
-=======
     secp256k1_ecdsa_signature_normalize(secp256k1_context_static, &sig, &sig);
     return secp256k1_ecdsa_verify(secp256k1_context_static, &sig, hash.begin(), &pubkey);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 bool CPubKey::RecoverCompact(const uint256 &hash, const std::vector<unsigned char>& vchSig) {
@@ -355,12 +289,7 @@ bool CPubKey::RecoverCompact(const uint256 &hash, const std::vector<unsigned cha
     bool fComp = ((vchSig[0] - 27) & 4) != 0;
     secp256k1_pubkey pubkey;
     secp256k1_ecdsa_recoverable_signature sig;
-<<<<<<< HEAD
-    assert(secp256k1_context_verify && "secp256k1_context_verify must be initialized to use CPubKey.");
-    if (!secp256k1_ecdsa_recoverable_signature_parse_compact(secp256k1_context_verify, &sig, &vchSig[1], recid)) {
-=======
     if (!secp256k1_ecdsa_recoverable_signature_parse_compact(secp256k1_context_static, &sig, &vchSig[1], recid)) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         return false;
     }
     if (!secp256k1_ecdsa_recover(secp256k1_context_static, &pubkey, &sig, hash.begin())) {
@@ -368,11 +297,7 @@ bool CPubKey::RecoverCompact(const uint256 &hash, const std::vector<unsigned cha
     }
     unsigned char pub[SIZE];
     size_t publen = SIZE;
-<<<<<<< HEAD
-    secp256k1_ec_pubkey_serialize(secp256k1_context_verify, pub, &publen, &pubkey, fComp ? SECP256K1_EC_COMPRESSED : SECP256K1_EC_UNCOMPRESSED);
-=======
     secp256k1_ec_pubkey_serialize(secp256k1_context_static, pub, &publen, &pubkey, fComp ? SECP256K1_EC_COMPRESSED : SECP256K1_EC_UNCOMPRESSED);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     Set(pub, pub + publen);
     return true;
 }
@@ -381,33 +306,19 @@ bool CPubKey::IsFullyValid() const {
     if (!IsValid())
         return false;
     secp256k1_pubkey pubkey;
-<<<<<<< HEAD
-    assert(secp256k1_context_verify && "secp256k1_context_verify must be initialized to use CPubKey.");
-    return secp256k1_ec_pubkey_parse(secp256k1_context_verify, &pubkey, vch, size());
-=======
     return secp256k1_ec_pubkey_parse(secp256k1_context_static, &pubkey, vch, size());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 bool CPubKey::Decompress() {
     if (!IsValid())
         return false;
     secp256k1_pubkey pubkey;
-<<<<<<< HEAD
-    assert(secp256k1_context_verify && "secp256k1_context_verify must be initialized to use CPubKey.");
-    if (!secp256k1_ec_pubkey_parse(secp256k1_context_verify, &pubkey, vch, size())) {
-=======
     if (!secp256k1_ec_pubkey_parse(secp256k1_context_static, &pubkey, vch, size())) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         return false;
     }
     unsigned char pub[SIZE];
     size_t publen = SIZE;
-<<<<<<< HEAD
-    secp256k1_ec_pubkey_serialize(secp256k1_context_verify, pub, &publen, &pubkey, SECP256K1_EC_UNCOMPRESSED);
-=======
     secp256k1_ec_pubkey_serialize(secp256k1_context_static, pub, &publen, &pubkey, SECP256K1_EC_UNCOMPRESSED);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     Set(pub, pub + publen);
     return true;
 }
@@ -420,12 +331,7 @@ bool CPubKey::Derive(CPubKey& pubkeyChild, ChainCode &ccChild, unsigned int nChi
     BIP32Hash(cc, nChild, *begin(), begin()+1, out);
     memcpy(ccChild.begin(), out+32, 32);
     secp256k1_pubkey pubkey;
-<<<<<<< HEAD
-    assert(secp256k1_context_verify && "secp256k1_context_verify must be initialized to use CPubKey.");
-    if (!secp256k1_ec_pubkey_parse(secp256k1_context_verify, &pubkey, vch, size())) {
-=======
     if (!secp256k1_ec_pubkey_parse(secp256k1_context_static, &pubkey, vch, size())) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         return false;
     }
     if (!secp256k1_ec_pubkey_tweak_add(secp256k1_context_static, &pubkey, out)) {
@@ -433,11 +339,7 @@ bool CPubKey::Derive(CPubKey& pubkeyChild, ChainCode &ccChild, unsigned int nChi
     }
     unsigned char pub[COMPRESSED_SIZE];
     size_t publen = COMPRESSED_SIZE;
-<<<<<<< HEAD
-    secp256k1_ec_pubkey_serialize(secp256k1_context_verify, pub, &publen, &pubkey, SECP256K1_EC_COMPRESSED);
-=======
     secp256k1_ec_pubkey_serialize(secp256k1_context_static, pub, &publen, &pubkey, SECP256K1_EC_COMPRESSED);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     pubkeyChild.Set(pub, pub + publen);
     return true;
 }
@@ -503,17 +405,9 @@ bool CExtPubKey::Derive(CExtPubKey &out, unsigned int _nChild) const {
 
 /* static */ bool CPubKey::CheckLowS(const std::vector<unsigned char>& vchSig) {
     secp256k1_ecdsa_signature sig;
-<<<<<<< HEAD
-    assert(secp256k1_context_verify && "secp256k1_context_verify must be initialized to use CPubKey.");
-    if (!ecdsa_signature_parse_der_lax(secp256k1_context_verify, &sig, vchSig.data(), vchSig.size())) {
-=======
     if (!ecdsa_signature_parse_der_lax(&sig, vchSig.data(), vchSig.size())) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         return false;
     }
     return (!secp256k1_ecdsa_signature_normalize(secp256k1_context_static, nullptr, &sig));
 }
 
-const secp256k1_context* GetVerifyContext() {
-    return secp256k1_context_verify;
-}

@@ -1,10 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
-// Copyright (c) 2009-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// Copyright (c) 2009-2022 The Bitcoin Core developers
+// Copyright (c) 2014-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -19,26 +15,19 @@
 #include <kernel/validation_cache_sizes.h>
 
 #include <addrman.h>
-<<<<<<< HEAD
 #include <amount.h>
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <banman.h>
 #include <blockfilter.h>
 #include <chain.h>
 #include <chainparams.h>
-<<<<<<< HEAD
-#include <compat/sanity.h>
-#include <deploymentstatus.h>
-#include <fs.h>
-=======
 #include <chainparamsbase.h>
 #include <clientversion.h>
 #include <common/args.h>
 #include <common/system.h>
+#include <compat/sanity.h>
 #include <consensus/amount.h>
 #include <deploymentstatus.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+#include <fs.h>
 #include <hash.h>
 #include <httprpc.h>
 #include <httpserver.h>
@@ -47,25 +36,15 @@
 #include <index/txindex.h>
 #include <init/common.h>
 #include <interfaces/chain.h>
-<<<<<<< HEAD
-#include <interfaces/node.h>
-#include <mapport.h>
-#include <miner.h>
-=======
 #include <interfaces/init.h>
 #include <interfaces/node.h>
 #include <logging.h>
 #include <mapport.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+#include <miner.h>
 #include <net.h>
 #include <net_permissions.h>
 #include <net_processing.h>
 #include <netbase.h>
-<<<<<<< HEAD
-#include <node/blockstorage.h>
-#include <node/context.h>
-#include <node/ui_interface.h>
-=======
 #include <netgroup.h>
 #include <node/blockmanager_args.h>
 #include <node/blockstorage.h>
@@ -79,8 +58,8 @@
 #include <node/mempool_persist_args.h>
 #include <node/miner.h>
 #include <node/peerman_args.h>
+#include <node/ui_interface.h>
 #include <node/validation_cache_args.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <policy/feerate.h>
 #include <policy/fees.h>
 #include <policy/fees_args.h>
@@ -93,10 +72,7 @@
 #include <rpc/util.h>
 #include <scheduler.h>
 #include <script/sigcache.h>
-<<<<<<< HEAD
 #include <script/standard.h>
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <shutdown.h>
 #include <sync.h>
 #include <timedata.h>
@@ -126,18 +102,11 @@
 #include <util/thread.h>
 #include <util/threadnames.h>
 #include <util/time.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <util/translation.h>
 #include <validation.h>
 #include <validationinterface.h>
 #include <walletinitinterface.h>
 
-<<<<<<< HEAD
-#include <functional>
-#include <set>
-#include <stdint.h>
-#include <stdio.h>
-=======
 #include <algorithm>
 #include <condition_variable>
 #include <cstdint>
@@ -145,25 +114,20 @@
 #include <fstream>
 #include <functional>
 #include <set>
+#include <stdint.h>
+#include <stdio.h>
 #include <string>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <thread>
 #include <vector>
 
 #ifndef WIN32
-<<<<<<< HEAD
 #include <attributes.h>
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <cerrno>
 #include <signal.h>
 #include <sys/stat.h>
 #endif
 
-<<<<<<< HEAD
 #include <boost/algorithm/string/replace.hpp>
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <boost/signals2/signal.hpp>
 
 #if ENABLE_ZMQ
@@ -172,10 +136,6 @@
 #include <zmq/zmqrpc.h>
 #endif
 
-<<<<<<< HEAD
-static const bool DEFAULT_PROXYRANDOMIZE = true;
-static const bool DEFAULT_REST_ENABLE = false;
-=======
 using kernel::DumpMempool;
 using kernel::LoadMempool;
 using kernel::ValidationCacheSizes;
@@ -200,7 +160,6 @@ static constexpr bool DEFAULT_PROXYRANDOMIZE{true};
 static constexpr bool DEFAULT_REST_ENABLE{false};
 static constexpr bool DEFAULT_I2P_ACCEPT_INCOMING{true};
 static constexpr bool DEFAULT_STOPAFTERBLOCKIMPORT{false};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 #ifdef WIN32
 // Win32 LevelDB doesn't use filedescriptors, and the ones used for
@@ -220,20 +179,12 @@ static const char* DIGIBYTE_PID_FILENAME = "digibyted.pid";
 
 static fs::path GetPidFile(const ArgsManager& args)
 {
-<<<<<<< HEAD
-    return AbsPathForConfigVal(fs::path(args.GetArg("-pid", DIGIBYTE_PID_FILENAME)));
-=======
     return AbsPathForConfigVal(args, args.GetPathArg("-pid", DIGIBYTE_PID_FILENAME));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 [[nodiscard]] static bool CreatePidFile(const ArgsManager& args)
 {
-<<<<<<< HEAD
-    fsbridge::ofstream file{GetPidFile(args)};
-=======
     std::ofstream file{GetPidFile(args)};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (file) {
 #ifdef WIN32
         tfm::format(file, "%d\n", GetCurrentProcessId());
@@ -242,18 +193,12 @@ static fs::path GetPidFile(const ArgsManager& args)
 #endif
         return true;
     } else {
-<<<<<<< HEAD
-        return InitError(strprintf(_("Unable to create the PID file '%s': %s"), GetPidFile(args).string(), std::strerror(errno)));
+        return InitError(strprintf(_("Unable to create the PID file '%s': %s"), fs::PathToString(GetPidFile(args)), SysErrorString(errno)));
     }
 }
 
 /** Set default mining algo to scrypt */
 int miningAlgo = ALGO_SCRYPT;
-=======
-        return InitError(strprintf(_("Unable to create the PID file '%s': %s"), fs::PathToString(GetPidFile(args)), SysErrorString(errno)));
-    }
-}
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 //////////////////////////////////////////////////////////////////////////////
 //
@@ -280,8 +225,6 @@ int miningAlgo = ALGO_SCRYPT;
 // shutdown thing.
 //
 
-<<<<<<< HEAD
-=======
 #if HAVE_SYSTEM
 static void ShutdownNotify(const ArgsManager& args)
 {
@@ -294,8 +237,6 @@ static void ShutdownNotify(const ArgsManager& args)
     }
 }
 #endif
-
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 void Interrupt(NodeContext& node)
 {
 #if HAVE_SYSTEM
@@ -332,10 +273,7 @@ void Shutdown(NodeContext& node)
     /// module was initialized.
     util::ThreadRename("shutoff");
     if (node.mempool) node.mempool->AddTransactionsUpdated(1);
-<<<<<<< HEAD
     if (node.stempool) node.stempool->AddTransactionsUpdated(1);
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     StopHTTPRPC();
     StopREST();
@@ -356,11 +294,7 @@ void Shutdown(NodeContext& node)
     // After everything has been shut down, but before things get flushed, stop the
     // CScheduler/checkqueue, scheduler and load block thread.
     if (node.scheduler) node.scheduler->stop();
-<<<<<<< HEAD
-    if (node.chainman && node.chainman->m_load_block.joinable()) node.chainman->m_load_block.join();
-=======
     if (node.chainman && node.chainman->m_thread_load.joinable()) node.chainman->m_thread_load.join();
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     StopScriptCheckWorkerThreads();
 
     // After the threads that potentially access these pointers have been stopped,
@@ -369,16 +303,10 @@ void Shutdown(NodeContext& node)
     node.connman.reset();
     node.banman.reset();
     node.addrman.reset();
-<<<<<<< HEAD
-
-    if (node.mempool && node.mempool->IsLoaded() && node.args->GetBoolArg("-persistmempool", DEFAULT_PERSIST_MEMPOOL)) {
-        DumpMempool(*node.mempool);
-=======
     node.netgroupman.reset();
 
     if (node.mempool && node.mempool->GetLoadTried() && ShouldPersistMempool(*node.args)) {
         DumpMempool(*node.mempool, MempoolPath(*node.args));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     // Drop transactions we were still watching, and record fee estimations.
@@ -388,7 +316,7 @@ void Shutdown(NodeContext& node)
     if (node.chainman) {
         LOCK(cs_main);
 <<<<<<< HEAD
-        for (CChainState* chainstate : node.chainman->GetAll()) {
+        for (Chainstate* chainstate : node.chainman->GetAll()) {
 =======
         for (Chainstate* chainstate : node.chainman->GetAll()) {
 >>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
@@ -423,7 +351,7 @@ void Shutdown(NodeContext& node)
     if (node.chainman) {
         LOCK(cs_main);
 <<<<<<< HEAD
-        for (CChainState* chainstate : node.chainman->GetAll()) {
+        for (Chainstate* chainstate : node.chainman->GetAll()) {
 =======
         for (Chainstate* chainstate : node.chainman->GetAll()) {
 >>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
@@ -830,18 +758,7 @@ void SetupServerArgs(ArgsManager& argsman)
     argsman.AddArg("-blockmaxweight=<n>", strprintf("Set maximum BIP141 block weight (default: %d)", DEFAULT_BLOCK_MAX_WEIGHT), ArgsManager::ALLOW_ANY, OptionsCategory::BLOCK_CREATION);
     argsman.AddArg("-blockmintxfee=<amt>", strprintf("Set lowest fee rate (in %s/kvB) for transactions to be included in block creation. (default: %s)", CURRENCY_UNIT, FormatMoney(DEFAULT_BLOCK_MIN_TX_FEE)), ArgsManager::ALLOW_ANY, OptionsCategory::BLOCK_CREATION);
     argsman.AddArg("-blockversion=<n>", "Override block version to test forking scenarios", ArgsManager::ALLOW_ANY | ArgsManager::DEBUG_ONLY, OptionsCategory::BLOCK_CREATION);
-<<<<<<< HEAD
     argsman.AddArg("-algo=<algo>", "Mining algorithm: sha256d, scrypt, groestl, skein, qubit, odo", true, OptionsCategory::BLOCK_CREATION);
-
-    argsman.AddArg("-rest", strprintf("Accept public REST requests (default: %u)", DEFAULT_REST_ENABLE), ArgsManager::ALLOW_ANY, OptionsCategory::RPC);
-    argsman.AddArg("-rpcallowip=<ip>", "Allow JSON-RPC connections from specified source. Valid for <ip> are a single IP (e.g. 1.2.3.4), a network/netmask (e.g. 1.2.3.4/255.255.255.0) or a network/CIDR (e.g. 1.2.3.4/24). This option can be specified multiple times", ArgsManager::ALLOW_ANY, OptionsCategory::RPC);
-    argsman.AddArg("-rpcauth=<userpw>", "Username and HMAC-SHA-256 hashed password for JSON-RPC connections. The field <userpw> comes in the format: <USERNAME>:<SALT>$<HASH>. A canonical python script is included in share/rpcauth. The client then connects normally using the rpcuser=<USERNAME>/rpcpassword=<PASSWORD> pair of arguments. This option can be specified multiple times", ArgsManager::ALLOW_ANY | ArgsManager::SENSITIVE, OptionsCategory::RPC);
-    argsman.AddArg("-rpcbind=<addr>[:port]", "Bind to given address to listen for JSON-RPC connections. Do not expose the RPC server to untrusted networks such as the public internet! This option is ignored unless -rpcallowip is also passed. Port is optional and overrides -rpcport. Use [host]:port notation for IPv6. This option can be specified multiple times (default: 127.0.0.1 and ::1 i.e., localhost)", ArgsManager::ALLOW_ANY | ArgsManager::NETWORK_ONLY | ArgsManager::SENSITIVE, OptionsCategory::RPC);
-    argsman.AddArg("-rpccookiefile=<loc>", "Location of the auth cookie. Relative paths will be prefixed by a net-specific datadir location. (default: data dir)", ArgsManager::ALLOW_ANY, OptionsCategory::RPC);
-    argsman.AddArg("-rpcpassword=<pw>", "Password for JSON-RPC connections", ArgsManager::ALLOW_ANY | ArgsManager::SENSITIVE, OptionsCategory::RPC);
-    argsman.AddArg("-rpcport=<port>", strprintf("Listen for JSON-RPC connections on <port> (default: %u, testnet: %u, signet: %u, regtest: %u)", defaultBaseParams->RPCPort(), testnetBaseParams->RPCPort(), signetBaseParams->RPCPort(), regtestBaseParams->RPCPort()), ArgsManager::ALLOW_ANY | ArgsManager::NETWORK_ONLY, OptionsCategory::RPC);
-    argsman.AddArg("-rpcserialversion", strprintf("Sets the serialization of raw transaction or block hex returned in non-verbose mode, non-segwit(0) or segwit(1) (default: %d)", DEFAULT_RPC_SERIALIZE_VERSION), ArgsManager::ALLOW_ANY, OptionsCategory::RPC);
-=======
 
     argsman.AddArg("-rest", strprintf("Accept public REST requests (default: %u)", DEFAULT_REST_ENABLE), ArgsManager::ALLOW_ANY, OptionsCategory::RPC);
     argsman.AddArg("-rpcallowip=<ip>", "Allow JSON-RPC connections from specified source. Valid values for <ip> are a single IP (e.g. 1.2.3.4), a network/netmask (e.g. 1.2.3.4/255.255.255.0), a network/CIDR (e.g. 1.2.3.4/24), all ipv4 (0.0.0.0/0), or all ipv6 (::/0). This option can be specified multiple times", ArgsManager::ALLOW_ANY, OptionsCategory::RPC);
@@ -852,30 +769,21 @@ void SetupServerArgs(ArgsManager& argsman)
     argsman.AddArg("-rpcpassword=<pw>", "Password for JSON-RPC connections", ArgsManager::ALLOW_ANY | ArgsManager::SENSITIVE, OptionsCategory::RPC);
     argsman.AddArg("-rpcport=<port>", strprintf("Listen for JSON-RPC connections on <port> (default: %u, testnet: %u, signet: %u, regtest: %u)", defaultBaseParams->RPCPort(), testnetBaseParams->RPCPort(), signetBaseParams->RPCPort(), regtestBaseParams->RPCPort()), ArgsManager::ALLOW_ANY | ArgsManager::NETWORK_ONLY, OptionsCategory::RPC);
     argsman.AddArg("-rpcserialversion", strprintf("Sets the serialization of raw transaction or block hex returned in non-verbose mode, non-segwit(0) (DEPRECATED) or segwit(1) (default: %d)", DEFAULT_RPC_SERIALIZE_VERSION), ArgsManager::ALLOW_ANY, OptionsCategory::RPC);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     argsman.AddArg("-rpcservertimeout=<n>", strprintf("Timeout during HTTP requests (default: %d)", DEFAULT_HTTP_SERVER_TIMEOUT), ArgsManager::ALLOW_ANY | ArgsManager::DEBUG_ONLY, OptionsCategory::RPC);
     argsman.AddArg("-rpcthreads=<n>", strprintf("Set the number of threads to service RPC calls (default: %d)", DEFAULT_HTTP_THREADS), ArgsManager::ALLOW_ANY, OptionsCategory::RPC);
     argsman.AddArg("-rpcuser=<user>", "Username for JSON-RPC connections", ArgsManager::ALLOW_ANY | ArgsManager::SENSITIVE, OptionsCategory::RPC);
     argsman.AddArg("-rpcwhitelist=<whitelist>", "Set a whitelist to filter incoming RPC calls for a specific user. The field <whitelist> comes in the format: <USERNAME>:<rpc 1>,<rpc 2>,...,<rpc n>. If multiple whitelists are set for a given user, they are set-intersected. See -rpcwhitelistdefault documentation for information on default whitelist behavior.", ArgsManager::ALLOW_ANY, OptionsCategory::RPC);
 <<<<<<< HEAD
     argsman.AddArg("-rpcwhitelistdefault", "Sets default behavior for rpc whitelisting. Unless rpcwhitelistdefault is set to 0, if any -rpcwhitelist is set, the rpc server acts as if all rpc users are subject to empty-unless-otherwise-specified whitelists. If rpcwhitelistdefault is set to 1 and no -rpcwhitelist is set, rpc server acts as if all rpc users are subject to empty whitelists.", ArgsManager::ALLOW_BOOL, OptionsCategory::RPC);
+    argsman.AddArg("-rpcwhitelistdefault", "Sets default behavior for rpc whitelisting. Unless rpcwhitelistdefault is set to 0, if any -rpcwhitelist is set, the rpc server acts as if all rpc users are subject to empty-unless-otherwise-specified whitelists. If rpcwhitelistdefault is set to 1 and no -rpcwhitelist is set, rpc server acts as if all rpc users are subject to empty whitelists.", ArgsManager::ALLOW_ANY, OptionsCategory::RPC);
     argsman.AddArg("-rpcworkqueue=<n>", strprintf("Set the depth of the work queue to service RPC calls (default: %d)", DEFAULT_HTTP_WORKQUEUE), ArgsManager::ALLOW_ANY | ArgsManager::DEBUG_ONLY, OptionsCategory::RPC);
     argsman.AddArg("-server", "Accept command line and JSON-RPC commands", ArgsManager::ALLOW_ANY, OptionsCategory::RPC);
 
     argsman.AddArg("-dandelion", strprintf("Enable Dandelion Transaction Relay Protocol (default: %d)", DEFAULT_DANDELION), ArgsManager::ALLOW_BOOL, OptionsCategory::OPTIONS);
 
 #if HAVE_DECL_FORK
-    argsman.AddArg("-daemon", strprintf("Run in the background as a daemon and accept commands (default: %d)", DEFAULT_DAEMON), ArgsManager::ALLOW_BOOL, OptionsCategory::OPTIONS);
-    argsman.AddArg("-daemonwait", strprintf("Wait for initialization to be finished before exiting. This implies -daemon (default: %d)", DEFAULT_DAEMONWAIT), ArgsManager::ALLOW_BOOL, OptionsCategory::OPTIONS);
-=======
-    argsman.AddArg("-rpcwhitelistdefault", "Sets default behavior for rpc whitelisting. Unless rpcwhitelistdefault is set to 0, if any -rpcwhitelist is set, the rpc server acts as if all rpc users are subject to empty-unless-otherwise-specified whitelists. If rpcwhitelistdefault is set to 1 and no -rpcwhitelist is set, rpc server acts as if all rpc users are subject to empty whitelists.", ArgsManager::ALLOW_ANY, OptionsCategory::RPC);
-    argsman.AddArg("-rpcworkqueue=<n>", strprintf("Set the depth of the work queue to service RPC calls (default: %d)", DEFAULT_HTTP_WORKQUEUE), ArgsManager::ALLOW_ANY | ArgsManager::DEBUG_ONLY, OptionsCategory::RPC);
-    argsman.AddArg("-server", "Accept command line and JSON-RPC commands", ArgsManager::ALLOW_ANY, OptionsCategory::RPC);
-
-#if HAVE_DECL_FORK
     argsman.AddArg("-daemon", strprintf("Run in the background as a daemon and accept commands (default: %d)", DEFAULT_DAEMON), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-daemonwait", strprintf("Wait for initialization to be finished before exiting. This implies -daemon (default: %d)", DEFAULT_DAEMONWAIT), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #else
     hidden_args.emplace_back("-daemon");
     hidden_args.emplace_back("-daemonwait");
@@ -906,11 +814,7 @@ std::string LicenseInfo()
 }
 
 static bool fHaveGenesis = false;
-static Mutex g_genesis_wait_mutex;
-=======
-static bool fHaveGenesis = false;
 static GlobalMutex g_genesis_wait_mutex;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 static std::condition_variable g_genesis_wait_cv;
 
 static void BlockNotifyGenesisWait(const CBlockIndex* pBlockIndex)
@@ -1684,9 +1588,6 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
         RandAddPeriodic();
     }, std::chrono::minutes{1});
 
-<<<<<<< HEAD
-    GetMainSignals().RegisterBackgroundSignalScheduler(*node.scheduler);
-=======
     // Check disk space every 5 minutes to avoid db corruption.
     node.scheduler->scheduleEvery([&args]{
         constexpr uint64_t min_disk_space = 50 << 20; // 50 MB
@@ -1704,7 +1605,6 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
     // when load() and start() interface methods are called below.
     g_wallet_init_interface.Construct(node);
     uiInterface.InitWallet();
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     /* Register RPC commands regardless of -server setting so they will be
      * available in the GUI RPC console even if external calls are disabled.
@@ -1743,16 +1643,6 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
 
     fListen = args.GetBoolArg("-listen", DEFAULT_LISTEN);
     fDiscover = args.GetBoolArg("-discover", true);
-<<<<<<< HEAD
-    const bool ignores_incoming_txs{args.GetBoolArg("-blocksonly", DEFAULT_BLOCKSONLY)};
-
-    assert(!node.addrman);
-    node.addrman = std::make_unique<CAddrMan>();
-    assert(!node.banman);
-    node.banman = std::make_unique<BanMan>(gArgs.GetDataDirNet() / "banlist", &uiInterface, args.GetArg("-bantime", DEFAULT_MISBEHAVING_BANTIME));
-    assert(!node.connman);
-    node.connman = std::make_unique<CConnman>(GetRand(std::numeric_limits<uint64_t>::max()), GetRand(std::numeric_limits<uint64_t>::max()), *node.addrman, args.GetBoolArg("-networkactive", true));
-=======
 
     PeerManager::Options peerman_opts{};
     ApplyArgsManOptions(args, peerman_opts);
@@ -1799,7 +1689,6 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
     node.connman = std::make_unique<CConnman>(GetRand<uint64_t>(),
                                               GetRand<uint64_t>(),
                                               *node.addrman, *node.netgroupman, chainparams, args.GetBoolArg("-networkactive", true));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     assert(!node.fee_estimator);
     // Don't initialize fee estimation with old data if we don't relay transactions,
@@ -1834,6 +1723,15 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
         CBlockPolicyEstimator* fee_estimator = node.fee_estimator.get();
         node.scheduler->scheduleEvery([fee_estimator] { fee_estimator->FlushFeeEstimates(); }, FEE_FLUSH_INTERVAL);
     }
+
+    // Initialize mempool
+    assert(!node.mempool);
+    int check_ratio = std::min<int>(std::max<int>(args.GetIntArg("-checkmempool", chainparams.DefaultConsistencyChecks() ? 1 : 0), 0), 1000000);
+    node.mempool = std::make_unique<CTxMemPool>(node.fee_estimator.get(), check_ratio);
+
+    // Initialize DigiByte stempool for Dandelion++ privacy protocol
+    assert(!node.stempool);
+    node.stempool = std::make_unique<CTxMemPool>(nullptr, 0, true);
 
     // Check port numbers
     for (const std::string port_option : {

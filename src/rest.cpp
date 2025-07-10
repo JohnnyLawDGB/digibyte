@@ -1,10 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
-// Copyright (c) 2009-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// Copyright (c) 2009-2022 The Bitcoin Core developers
+// Copyright (c) 2014-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -15,43 +11,27 @@
 #include <chainparams.h>
 #include <core_io.h>
 #include <httpserver.h>
-<<<<<<< HEAD
-=======
 #include <index/blockfilterindex.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <index/txindex.h>
 #include <node/blockstorage.h>
 #include <node/context.h>
 #include <primitives/block.h>
 #include <primitives/transaction.h>
 #include <rpc/blockchain.h>
-<<<<<<< HEAD
-=======
 #include <rpc/mempool.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <rpc/protocol.h>
 #include <rpc/server.h>
 #include <rpc/server_util.h>
 #include <streams.h>
 #include <sync.h>
 #include <txmempool.h>
-<<<<<<< HEAD
-#include <util/check.h>
-#include <util/system.h>
-=======
 #include <util/any.h>
 #include <util/check.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <validation.h>
 #include <version.h>
 
 #include <any>
-<<<<<<< HEAD
-
-#include <boost/algorithm/string.hpp>
-=======
 #include <string>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 #include <univalue.h>
 
@@ -100,61 +80,6 @@ static bool RESTERR(HTTPRequest* req, enum HTTPStatusCode status, std::string me
  * @returns         Pointer to the node context or nullptr if not found.
  */
 static NodeContext* GetNodeContext(const std::any& context, HTTPRequest* req)
-<<<<<<< HEAD
-{
-    auto node_context = util::AnyPtr<NodeContext>(context);
-    if (!node_context) {
-        RESTERR(req, HTTP_INTERNAL_SERVER_ERROR,
-                strprintf("%s:%d (%s)\n"
-                          "Internal bug detected: Node context not found!\n"
-                          "You may report this issue here: %s\n",
-                          __FILE__, __LINE__, __func__, PACKAGE_BUGREPORT));
-        return nullptr;
-    }
-    return node_context;
-}
-
-/**
- * Get the node context mempool.
- *
- * @param[in]  req The HTTP request, whose status code will be set if node
- *                 context mempool is not found.
- * @returns        Pointer to the mempool or nullptr if no mempool found.
- */
-static CTxMemPool* GetMemPool(const std::any& context, HTTPRequest* req)
-{
-    auto node_context = util::AnyPtr<NodeContext>(context);
-    if (!node_context || !node_context->mempool) {
-        RESTERR(req, HTTP_NOT_FOUND, "Mempool disabled or instance not found");
-        return nullptr;
-    }
-    return node_context->mempool.get();
-}
-
-/**
- * Get the node context chainstatemanager.
- *
- * @param[in]  req The HTTP request, whose status code will be set if node
- *                 context chainstatemanager is not found.
- * @returns        Pointer to the chainstatemanager or nullptr if none found.
- */
-static ChainstateManager* GetChainman(const std::any& context, HTTPRequest* req)
-{
-    auto node_context = util::AnyPtr<NodeContext>(context);
-    if (!node_context || !node_context->chainman) {
-        RESTERR(req, HTTP_INTERNAL_SERVER_ERROR,
-                strprintf("%s:%d (%s)\n"
-                          "Internal bug detected: Chainman disabled or instance not found!\n"
-                          "You may report this issue here: %s\n",
-                          __FILE__, __LINE__, __func__, PACKAGE_BUGREPORT));
-        return nullptr;
-    }
-    return node_context->chainman.get();
-}
-
-static RetFormat ParseDataFormat(std::string& param, const std::string& strReq)
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     auto node_context = util::AnyPtr<NodeContext>(context);
     if (!node_context) {
@@ -227,17 +152,7 @@ RESTResponseFormat ParseDataFormat(std::string& param, const std::string& strReq
         }
     }
 
-<<<<<<< HEAD
-    for (const auto& rf_name : rf_names) {
-        if (suff == rf_name.name)
-            return rf_name.rf;
-    }
-
-    /* If no suffix is found, return original string.  */
-    param = strReq;
-=======
     // If no suffix is found, return RESTResponseFormat::UNDEF and original string without query string
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     return rf_names[0].rf;
 }
 
@@ -304,13 +219,8 @@ static bool rest_headers(const std::any& context,
         return RESTERR(req, HTTP_BAD_REQUEST, "Invalid hash: " + hashStr);
 
     const CBlockIndex* tip = nullptr;
-<<<<<<< HEAD
-    std::vector<const CBlockIndex *> headers;
-    headers.reserve(count);
-=======
     std::vector<const CBlockIndex*> headers;
     headers.reserve(*parsed_count);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     {
         ChainstateManager* maybe_chainman = GetChainman(context, req);
         if (!maybe_chainman) return false;
@@ -323,22 +233,14 @@ static bool rest_headers(const std::any& context,
             headers.push_back(pindex);
             if (headers.size() == *parsed_count) {
                 break;
-<<<<<<< HEAD
-=======
             }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             pindex = active_chain.Next(pindex);
         }
     }
 
     switch (rf) {
-<<<<<<< HEAD
-    case RetFormat::BINARY: {
-        CDataStream ssHeader(SER_NETWORK, PROTOCOL_VERSION);
-=======
     case RESTResponseFormat::BINARY: {
         DataStream ssHeader{};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         for (const CBlockIndex *pindex : headers) {
             ssHeader << pindex->GetBlockHeader();
         }
@@ -349,13 +251,8 @@ static bool rest_headers(const std::any& context,
         return true;
     }
 
-<<<<<<< HEAD
-    case RetFormat::HEX: {
-        CDataStream ssHeader(SER_NETWORK, PROTOCOL_VERSION);
-=======
     case RESTResponseFormat::HEX: {
         DataStream ssHeader{};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         for (const CBlockIndex *pindex : headers) {
             ssHeader << pindex->GetBlockHeader();
         }
@@ -376,11 +273,7 @@ static bool rest_headers(const std::any& context,
         return true;
     }
     default: {
-<<<<<<< HEAD
-        return RESTERR(req, HTTP_NOT_FOUND, "output format not found (available: .bin, .hex, .json)");
-=======
         return RESTERR(req, HTTP_NOT_FOUND, "output format not found (available: " + AvailableDataFormatsString() + ")");
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     }
 }
@@ -400,20 +293,12 @@ static bool rest_block(const std::any& context,
         return RESTERR(req, HTTP_BAD_REQUEST, "Invalid hash: " + hashStr);
 
     CBlock block;
-<<<<<<< HEAD
-    CBlockIndex* pblockindex = nullptr;
-    CBlockIndex* tip = nullptr;
-=======
     const CBlockIndex* pblockindex = nullptr;
     const CBlockIndex* tip = nullptr;
     ChainstateManager* maybe_chainman = GetChainman(context, req);
     if (!maybe_chainman) return false;
     ChainstateManager& chainman = *maybe_chainman;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     {
-        ChainstateManager* maybe_chainman = GetChainman(context, req);
-        if (!maybe_chainman) return false;
-        ChainstateManager& chainman = *maybe_chainman;
         LOCK(cs_main);
         tip = chainman.ActiveChain().Tip();
         pblockindex = chainman.m_blockman.LookupBlockIndex(hash);
@@ -423,20 +308,14 @@ static bool rest_block(const std::any& context,
 
         if (chainman.m_blockman.IsBlockPruned(pblockindex))
             return RESTERR(req, HTTP_NOT_FOUND, hashStr + " not available (pruned data)");
-
     }
 
-<<<<<<< HEAD
-    switch (rf) {
-    case RetFormat::BINARY: {
-=======
     if (!chainman.m_blockman.ReadBlockFromDisk(block, *pblockindex)) {
         return RESTERR(req, HTTP_NOT_FOUND, hashStr + " not found");
     }
 
     switch (rf) {
     case RESTResponseFormat::BINARY: {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         CDataStream ssBlock(SER_NETWORK, PROTOCOL_VERSION | RPCSerializationFlags());
         ssBlock << block;
         std::string binaryBlock = ssBlock.str();
@@ -445,11 +324,7 @@ static bool rest_block(const std::any& context,
         return true;
     }
 
-<<<<<<< HEAD
-    case RetFormat::HEX: {
-=======
     case RESTResponseFormat::HEX: {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         CDataStream ssBlock(SER_NETWORK, PROTOCOL_VERSION | RPCSerializationFlags());
         ssBlock << block;
         std::string strHex = HexStr(ssBlock) + "\n";
@@ -458,13 +333,8 @@ static bool rest_block(const std::any& context,
         return true;
     }
 
-<<<<<<< HEAD
-    case RetFormat::JSON: {
-        UniValue objBlock = blockToJSON(block, tip, pblockindex, showTxDetails);
-=======
     case RESTResponseFormat::JSON: {
         UniValue objBlock = blockToJSON(chainman.m_blockman, block, tip, pblockindex, tx_verbosity);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         std::string strJSON = objBlock.write() + "\n";
         req->WriteHeader("Content-Type", "application/json");
         req->WriteReply(HTTP_OK, strJSON);
@@ -479,18 +349,11 @@ static bool rest_block(const std::any& context,
 
 static bool rest_block_extended(const std::any& context, HTTPRequest* req, const std::string& strURIPart)
 {
-<<<<<<< HEAD
-    return rest_block(context, req, strURIPart, true);
-=======
     return rest_block(context, req, strURIPart, TxVerbosity::SHOW_DETAILS_AND_PREVOUT);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 static bool rest_block_notxdetails(const std::any& context, HTTPRequest* req, const std::string& strURIPart)
 {
-<<<<<<< HEAD
-    return rest_block(context, req, strURIPart, false);
-=======
     return rest_block(context, req, strURIPart, TxVerbosity::SHOW_TXID);
 }
 
@@ -737,15 +600,6 @@ static bool rest_chaininfo(const std::any& context, HTTPRequest* req, const std:
     }
 }
 
-<<<<<<< HEAD
-static bool rest_mempool_info(const std::any& context, HTTPRequest* req, const std::string& strURIPart)
-{
-    if (!CheckWarmup(req))
-        return false;
-    const CTxMemPool* mempool = GetMemPool(context, req);
-    if (!mempool) return false;
-=======
-
 RPCHelpMan getdeploymentinfo();
 
 static bool rest_deploymentinfo(const std::any& context, HTTPRequest* req, const std::string& str_uri_part)
@@ -791,8 +645,6 @@ static bool rest_mempool(const std::any& context, HTTPRequest* req, const std::s
 {
     if (!CheckWarmup(req))
         return false;
-
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     std::string param;
     const RESTResponseFormat rf = ParseDataFormat(param, str_uri_part);
     if (param != "contents" && param != "info") {
@@ -803,10 +655,6 @@ static bool rest_mempool(const std::any& context, HTTPRequest* req, const std::s
     if (!mempool) return false;
 
     switch (rf) {
-<<<<<<< HEAD
-    case RetFormat::JSON: {
-        UniValue mempoolInfoObject = MempoolInfoToJSON(*mempool);
-=======
     case RESTResponseFormat::JSON: {
         std::string str_json;
         if (param == "contents") {
@@ -837,7 +685,6 @@ static bool rest_mempool(const std::any& context, HTTPRequest* req, const std::s
         } else {
             str_json = MempoolInfoToJSON(*mempool).write() + "\n";
         }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         req->WriteHeader("Content-Type", "application/json");
         req->WriteReply(HTTP_OK, str_json);
@@ -848,33 +695,6 @@ static bool rest_mempool(const std::any& context, HTTPRequest* req, const std::s
     }
     }
 }
-
-<<<<<<< HEAD
-static bool rest_mempool_contents(const std::any& context, HTTPRequest* req, const std::string& strURIPart)
-{
-    if (!CheckWarmup(req)) return false;
-    const CTxMemPool* mempool = GetMemPool(context, req);
-    if (!mempool) return false;
-    std::string param;
-    const RetFormat rf = ParseDataFormat(param, strURIPart);
-
-    switch (rf) {
-    case RetFormat::JSON: {
-        UniValue mempoolObject = MempoolToJSON(*mempool, true);
-
-        std::string strJSON = mempoolObject.write() + "\n";
-        req->WriteHeader("Content-Type", "application/json");
-        req->WriteReply(HTTP_OK, strJSON);
-        return true;
-    }
-    default: {
-        return RESTERR(req, HTTP_NOT_FOUND, "output format not found (available: json)");
-    }
-    }
-}
-
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 static bool rest_tx(const std::any& context, HTTPRequest* req, const std::string& strURIPart)
 {
     if (!CheckWarmup(req))
@@ -893,21 +713,13 @@ static bool rest_tx(const std::any& context, HTTPRequest* req, const std::string
     const NodeContext* const node = GetNodeContext(context, req);
     if (!node) return false;
     uint256 hashBlock = uint256();
-<<<<<<< HEAD
-    const CTransactionRef tx = GetTransaction(/* block_index */ nullptr, node->mempool.get(), hash, Params().GetConsensus(), hashBlock);
-=======
     const CTransactionRef tx = GetTransaction(/*block_index=*/nullptr, node->mempool.get(), hash, hashBlock, node->chainman->m_blockman);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (!tx) {
         return RESTERR(req, HTTP_NOT_FOUND, hashStr + " not found");
     }
 
     switch (rf) {
-<<<<<<< HEAD
-    case RetFormat::BINARY: {
-=======
     case RESTResponseFormat::BINARY: {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         CDataStream ssTx(SER_NETWORK, PROTOCOL_VERSION | RPCSerializationFlags());
         ssTx << tx;
 
@@ -917,11 +729,7 @@ static bool rest_tx(const std::any& context, HTTPRequest* req, const std::string
         return true;
     }
 
-<<<<<<< HEAD
-    case RetFormat::HEX: {
-=======
     case RESTResponseFormat::HEX: {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         CDataStream ssTx(SER_NETWORK, PROTOCOL_VERSION | RPCSerializationFlags());
         ssTx << tx;
 
@@ -1048,11 +856,8 @@ static bool rest_getutxos(const std::any& context, HTTPRequest* req, const std::
     ChainstateManager* maybe_chainman = GetChainman(context, req);
     if (!maybe_chainman) return false;
     ChainstateManager& chainman = *maybe_chainman;
-<<<<<<< HEAD
-=======
     decltype(chainman.ActiveHeight()) active_height;
     uint256 active_hash;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     {
         auto process_utxos = [&vOutPoints, &outs, &hits, &active_height, &active_hash, &chainman](const CCoinsView& view, const CTxMemPool* mempool) EXCLUSIVE_LOCKS_REQUIRED(chainman.GetMutex()) {
             for (const COutPoint& vOutPoint : vOutPoints) {
@@ -1072,17 +877,10 @@ static bool rest_getutxos(const std::any& context, HTTPRequest* req, const std::
             LOCK2(cs_main, mempool->cs);
             CCoinsViewCache& viewChain = chainman.ActiveChainstate().CoinsTip();
             CCoinsViewMemPool viewMempool(&viewChain, *mempool);
-<<<<<<< HEAD
-            process_utxos(viewMempool, *mempool);
-        } else {
-            LOCK(cs_main);  // no need to lock mempool!
-            process_utxos(chainman.ActiveChainstate().CoinsTip(), CTxMemPool());
-=======
             process_utxos(viewMempool, mempool);
         } else {
             LOCK(cs_main);
             process_utxos(chainman.ActiveChainstate().CoinsTip(), nullptr);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
 
         for (size_t i = 0; i < hits.size(); ++i) {
@@ -1096,13 +894,8 @@ static bool rest_getutxos(const std::any& context, HTTPRequest* req, const std::
     case RESTResponseFormat::BINARY: {
         // serialize data
         // use exact same output as mentioned in Bip64
-<<<<<<< HEAD
-        CDataStream ssGetUTXOResponse(SER_NETWORK, PROTOCOL_VERSION);
-        ssGetUTXOResponse << chainman.ActiveChain().Height() << chainman.ActiveChain().Tip()->GetBlockHash() << bitmap << outs;
-=======
         DataStream ssGetUTXOResponse{};
         ssGetUTXOResponse << active_height << active_hash << bitmap << outs;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         std::string ssGetUTXOResponseString = ssGetUTXOResponse.str();
 
         req->WriteHeader("Content-Type", "application/octet-stream");
@@ -1110,15 +903,9 @@ static bool rest_getutxos(const std::any& context, HTTPRequest* req, const std::
         return true;
     }
 
-<<<<<<< HEAD
-    case RetFormat::HEX: {
-        CDataStream ssGetUTXOResponse(SER_NETWORK, PROTOCOL_VERSION);
-        ssGetUTXOResponse << chainman.ActiveChain().Height() << chainman.ActiveChain().Tip()->GetBlockHash() << bitmap << outs;
-=======
     case RESTResponseFormat::HEX: {
         DataStream ssGetUTXOResponse{};
         ssGetUTXOResponse << active_height << active_hash << bitmap << outs;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         std::string strHex = HexStr(ssGetUTXOResponse) + "\n";
 
         req->WriteHeader("Content-Type", "text/plain");
@@ -1131,13 +918,8 @@ static bool rest_getutxos(const std::any& context, HTTPRequest* req, const std::
 
         // pack in some essentials
         // use more or less the same output as mentioned in Bip64
-<<<<<<< HEAD
-        objGetUTXOResponse.pushKV("chainHeight", chainman.ActiveChain().Height());
-        objGetUTXOResponse.pushKV("chaintipHash", chainman.ActiveChain().Tip()->GetBlockHash().GetHex());
-=======
         objGetUTXOResponse.pushKV("chainHeight", active_height);
         objGetUTXOResponse.pushKV("chaintipHash", active_hash.GetHex());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         objGetUTXOResponse.pushKV("bitmap", bitmapStringRepresentation);
 
         UniValue utxos(UniValue::VARR);
@@ -1171,11 +953,7 @@ static bool rest_blockhash_by_height(const std::any& context, HTTPRequest* req,
 {
     if (!CheckWarmup(req)) return false;
     std::string height_str;
-<<<<<<< HEAD
-    const RetFormat rf = ParseDataFormat(height_str, str_uri_part);
-=======
     const RESTResponseFormat rf = ParseDataFormat(height_str, str_uri_part);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     int32_t blockheight = -1; // Initialization done only to prevent valgrind false positive, see https://github.com/digibyte/digibyte/pull/18785
     if (!ParseInt32(height_str, &blockheight) || blockheight < 0) {
@@ -1195,32 +973,19 @@ static bool rest_blockhash_by_height(const std::any& context, HTTPRequest* req,
         pblockindex = active_chain[blockheight];
     }
     switch (rf) {
-<<<<<<< HEAD
-    case RetFormat::BINARY: {
-        CDataStream ss_blockhash(SER_NETWORK, PROTOCOL_VERSION);
-=======
     case RESTResponseFormat::BINARY: {
         DataStream ss_blockhash{};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         ss_blockhash << pblockindex->GetBlockHash();
         req->WriteHeader("Content-Type", "application/octet-stream");
         req->WriteReply(HTTP_OK, ss_blockhash.str());
         return true;
     }
-<<<<<<< HEAD
-    case RetFormat::HEX: {
-=======
     case RESTResponseFormat::HEX: {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         req->WriteHeader("Content-Type", "text/plain");
         req->WriteReply(HTTP_OK, pblockindex->GetBlockHash().GetHex() + "\n");
         return true;
     }
-<<<<<<< HEAD
-    case RetFormat::JSON: {
-=======
     case RESTResponseFormat::JSON: {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         req->WriteHeader("Content-Type", "application/json");
         UniValue resp = UniValue(UniValue::VOBJ);
         resp.pushKV("blockhash", pblockindex->GetBlockHash().GetHex());
@@ -1246,11 +1011,8 @@ static const struct {
       {"/rest/mempool/", rest_mempool},
       {"/rest/headers/", rest_headers},
       {"/rest/getutxos", rest_getutxos},
-<<<<<<< HEAD
-=======
       {"/rest/deploymentinfo/", rest_deploymentinfo},
       {"/rest/deploymentinfo", rest_deploymentinfo},
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
       {"/rest/blockhashbyheight/", rest_blockhash_by_height},
 };
 

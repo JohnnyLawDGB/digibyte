@@ -269,11 +269,7 @@ bool CheckSequenceLocksAtTip(CBlockIndex* tip,
 
     CBlockIndex index;
     index.pprev = tip;
-<<<<<<< HEAD
-    // CheckSequenceLocks() uses active_chainstate.m_chain.Height()+1 to evaluate
-=======
     // CheckSequenceLocksAtTip() uses active_chainstate.m_chain.Height()+1 to evaluate
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     // height based locks because when SequenceLocks() is called within
     // ConnectBlock(), the height of the block *being*
     // evaluated is what is used.
@@ -281,78 +277,18 @@ bool CheckSequenceLocksAtTip(CBlockIndex* tip,
     // *next* block, we need to use one more than active_chainstate.m_chain.Height()
     index.nHeight = tip->nHeight + 1;
 
-<<<<<<< HEAD
-    std::pair<int, int64_t> lockPair;
-    if (useExistingLockPoints) {
-        assert(lp);
-        lockPair.first = lp->height;
-        lockPair.second = lp->time;
-    }
-    else {
-        std::vector<int> prevheights;
-        prevheights.resize(tx.vin.size());
-        for (size_t txinIndex = 0; txinIndex < tx.vin.size(); txinIndex++) {
-            const CTxIn& txin = tx.vin[txinIndex];
-            Coin coin;
-            if (!coins_view.GetCoin(txin.prevout, coin)) {
-                return error("%s: Missing input", __func__);
-            }
-            if (coin.nHeight == MEMPOOL_HEIGHT) {
-                // Assume all mempool transaction confirm in the next block
-                prevheights[txinIndex] = tip->nHeight + 1;
-            } else {
-                prevheights[txinIndex] = coin.nHeight;
-            }
-        }
-        lockPair = CalculateSequenceLocks(tx, flags, prevheights, index);
-        if (lp) {
-            lp->height = lockPair.first;
-            lp->time = lockPair.second;
-            // Also store the hash of the block with the highest height of
-            // all the blocks which have sequence locked prevouts.
-            // This hash needs to still be on the chain
-            // for these LockPoint calculations to be valid
-            // Note: It is impossible to correctly calculate a maxInputBlock
-            // if any of the sequence locked inputs depend on unconfirmed txs,
-            // except in the special case where the relative lock time/height
-            // is 0, which is equivalent to no sequence lock. Since we assume
-            // input height of tip+1 for mempool txs and test the resulting
-            // lockPair from CalculateSequenceLocks against tip+1.  We know
-            // EvaluateSequenceLocks will fail if there was a non-zero sequence
-            // lock on a mempool input, so we can use the return value of
-            // CheckSequenceLocks to indicate the LockPoints validity
-            int maxInputHeight = 0;
-            for (const int height : prevheights) {
-                // Can ignore mempool inputs since we'll fail if they had non-zero locks
-                if (height != tip->nHeight+1) {
-                    maxInputHeight = std::max(maxInputHeight, height);
-                }
-            }
-            lp->maxInputBlock = tip->GetAncestor(maxInputHeight);
-        }
-    }
-    return EvaluateSequenceLocks(index, lockPair);
-=======
     return EvaluateSequenceLocks(index, {lock_points.height, lock_points.time});
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 // Returns the script flags which should be checked for a given block
 static unsigned int GetBlockScriptFlags(const CBlockIndex& block_index, const ChainstateManager& chainman);
 
-<<<<<<< HEAD
-static void LimitMempoolSize(CTxMemPool& pool, CCoinsViewCache& coins_cache, size_t limit, std::chrono::seconds age)
-    EXCLUSIVE_LOCKS_REQUIRED(pool.cs, ::cs_main)
-{
-    int expired = pool.Expire(GetTime<std::chrono::seconds>() - age);
-=======
 static void LimitMempoolSize(CTxMemPool& pool, CCoinsViewCache& coins_cache)
     EXCLUSIVE_LOCKS_REQUIRED(::cs_main, pool.cs)
 {
     AssertLockHeld(::cs_main);
     AssertLockHeld(pool.cs);
     int expired = pool.Expire(GetTime<std::chrono::seconds>() - pool.m_expiry);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (expired != 0) {
         LogPrint(BCLog::MEMPOOL, "Expired %i transactions from the memory pool\n", expired);
     }
@@ -363,16 +299,6 @@ static void LimitMempoolSize(CTxMemPool& pool, CCoinsViewCache& coins_cache)
         coins_cache.Uncache(removed);
 }
 
-<<<<<<< HEAD
-static bool IsCurrentForFeeEstimation(CChainState& active_chainstate) EXCLUSIVE_LOCKS_REQUIRED(cs_main)
-{
-    AssertLockHeld(cs_main);
-    if (active_chainstate.IsInitialBlockDownload())
-        return false;
-    if (active_chainstate.m_chain.Tip()->GetBlockTime() < count_seconds(GetTime<std::chrono::seconds>() - MAX_FEE_ESTIMATION_TIP_AGE))
-        return false;
-    if (active_chainstate.m_chain.Height() < pindexBestHeader->nHeight - 1)
-=======
 static bool IsCurrentForFeeEstimation(Chainstate& active_chainstate) EXCLUSIVE_LOCKS_REQUIRED(cs_main)
 {
     AssertLockHeld(cs_main);
@@ -382,17 +308,12 @@ static bool IsCurrentForFeeEstimation(Chainstate& active_chainstate) EXCLUSIVE_L
     if (active_chainstate.m_chain.Tip()->GetBlockTime() < count_seconds(GetTime<std::chrono::seconds>() - MAX_FEE_ESTIMATION_TIP_AGE))
         return false;
     if (active_chainstate.m_chain.Height() < active_chainstate.m_chainman.m_best_header->nHeight - 1) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         return false;
     }
     return true;
 }
 
-<<<<<<< HEAD
-void CChainState::MaybeUpdateMempoolForReorg(
-=======
 void Chainstate::MaybeUpdateMempoolForReorg(
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     DisconnectedBlockTransactions& disconnectpool,
     bool fAddToMempool)
 {
@@ -400,27 +321,7 @@ void Chainstate::MaybeUpdateMempoolForReorg(
 
     AssertLockHeld(cs_main);
     AssertLockHeld(m_mempool->cs);
-<<<<<<< HEAD
-    AssertLockHeld(m_stempool->cs);
-    std::vector<uint256> vHashUpdate;
-    // disconnectpool's insertion_order index sorts the entries from
-    // oldest to newest, but the oldest entry will be the last tx from the
-    // latest mined block that was disconnected.
-    // Iterate disconnectpool in reverse, so that we add transactions
-    // back to the mempool starting with the earliest transaction that had
-    // been previously seen in a block.
-    auto it = disconnectpool.queuedTx.get<insertion_order>().rbegin();
-    while (it != disconnectpool.queuedTx.get<insertion_order>().rend()) {
-        // ignore validation errors in resurrected transactions
-        if (!fAddToMempool || (*it)->IsCoinBase() ||
-            AcceptToMemoryPool(*this, *m_mempool, *it, true /* bypass_limits */).m_result_type != MempoolAcceptResult::ResultType::VALID) {
-            // If the transaction doesn't make it in to the mempool, remove any
-            // transactions that depend on it (which would now be orphans).
-            m_mempool->removeRecursive(**it, MemPoolRemovalReason::REORG);
-            m_stempool->removeRecursive(**it, MemPoolRemovalReason::REORG);
-        } else if (m_mempool->exists((*it)->GetHash())) {
-            vHashUpdate.push_back((*it)->GetHash());
-=======
+    if (m_stempool) AssertLockHeld(m_stempool->cs);
     std::vector<uint256> vHashUpdate;
     {
         // disconnectpool is ordered so that the front is the most recently-confirmed
@@ -439,11 +340,11 @@ void Chainstate::MaybeUpdateMempoolForReorg(
                 // If the transaction doesn't make it in to the mempool, remove any
                 // transactions that depend on it (which would now be orphans).
                 m_mempool->removeRecursive(**it, MemPoolRemovalReason::REORG);
+                if (m_stempool) m_stempool->removeRecursive(**it, MemPoolRemovalReason::REORG);
             } else if (m_mempool->exists(GenTxid::Txid((*it)->GetHash()))) {
                 vHashUpdate.push_back((*it)->GetHash());
             }
             ++it;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
     }
 
@@ -453,25 +354,7 @@ void Chainstate::MaybeUpdateMempoolForReorg(
     // UpdateTransactionsFromBlock finds descendants of any transactions in
     // the disconnectpool that were added back and cleans up the mempool state.
     m_mempool->UpdateTransactionsFromBlock(vHashUpdate);
-<<<<<<< HEAD
-    m_stempool->UpdateTransactionsFromBlock(vHashUpdate);
-
-    // We also need to remove any now-immature transactions
-    m_mempool->removeForReorg(*this, STANDARD_LOCKTIME_VERIFY_FLAGS);
-    m_stempool->removeForReorg(*this, STANDARD_LOCKTIME_VERIFY_FLAGS);
-
-    // Re-limit mempool size, in case we added any transactions
-    LimitMempoolSize(
-        *m_mempool,
-        this->CoinsTip(),
-        gArgs.GetArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000,
-        std::chrono::hours{gArgs.GetArg("-mempoolexpiry", DEFAULT_MEMPOOL_EXPIRY)});
-    LimitMempoolSize(
-        *m_stempool,
-        this->CoinsTip(),
-        gArgs.GetArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000,
-        std::chrono::hours{gArgs.GetArg("-mempoolexpiry", DEFAULT_MEMPOOL_EXPIRY)});
-=======
+    if (m_stempool) m_stempool->UpdateTransactionsFromBlock(vHashUpdate);
 
     // Predicate to use for filtering transactions in removeForReorg.
     // Checks whether the transaction is still final and, if it spends a coinbase output, mature.
@@ -525,9 +408,10 @@ void Chainstate::MaybeUpdateMempoolForReorg(
 
     // We also need to remove any now-immature transactions
     m_mempool->removeForReorg(m_chain, filter_final_and_mature);
+    if (m_stempool) m_stempool->removeForReorg(m_chain, filter_final_and_mature);
     // Re-limit mempool size, in case we added any transactions
     LimitMempoolSize(*m_mempool, this->CoinsTip());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+    if (m_stempool) LimitMempoolSize(*m_stempool, this->CoinsTip());
 }
 
 /**

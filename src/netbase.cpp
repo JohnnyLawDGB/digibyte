@@ -1,30 +1,19 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
-// Copyright (c) 2009-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// Copyright (c) 2009-2022 The Bitcoin Core developers
+// Copyright (c) 2014-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <netbase.h>
 
-<<<<<<< HEAD
-#include <compat.h>
-=======
 #include <compat/compat.h>
 #include <logging.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <sync.h>
 #include <tinyformat.h>
 #include <util/sock.h>
 #include <util/strencodings.h>
 #include <util/string.h>
-<<<<<<< HEAD
-#include <util/system.h>
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
 #include <util/time.h>
 
 #include <atomic>
@@ -33,30 +22,6 @@
 #include <functional>
 #include <limits>
 #include <memory>
-<<<<<<< HEAD
-
-#ifndef WIN32
-#include <fcntl.h>
-#else
-#include <codecvt>
-#endif
-
-#ifdef USE_POLL
-#include <poll.h>
-#endif
-
-// Settings
-static Mutex g_proxyinfo_mutex;
-static proxyType proxyInfo[NET_MAX] GUARDED_BY(g_proxyinfo_mutex);
-static proxyType nameProxy GUARDED_BY(g_proxyinfo_mutex);
-int nConnectTimeout = DEFAULT_CONNECT_TIMEOUT;
-bool fNameLookup = DEFAULT_NAME_LOOKUP;
-
-// Need ample time for negotiation for very slow proxies such as Tor (milliseconds)
-int g_socks5_recv_timeout = 20 * 1000;
-static std::atomic<bool> interruptSocks5Recv(false);
-
-=======
 
 // Settings
 static GlobalMutex g_proxyinfo_mutex;
@@ -71,7 +36,7 @@ static std::atomic<bool> interruptSocks5Recv(false);
 
 ReachableNets g_reachable_nets;
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
 std::vector<CNetAddr> WrappedGetAddrInfo(const std::string& name, bool allow_lookup)
 {
     addrinfo ai_hint{};
@@ -128,12 +93,9 @@ enum Network ParseNetwork(const std::string& net_in) {
     if (net == "i2p") {
         return NET_I2P;
     }
-<<<<<<< HEAD
-=======
     if (net == "cjdns") {
         return NET_CJDNS;
     }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     return NET_UNROUTABLE;
 }
 
@@ -154,23 +116,6 @@ std::string GetNetworkName(enum Network net)
 }
 
 std::vector<std::string> GetNetworkNames(bool append_unroutable)
-<<<<<<< HEAD
-{
-    std::vector<std::string> names;
-    for (int n = 0; n < NET_MAX; ++n) {
-        const enum Network network{static_cast<Network>(n)};
-        if (network == NET_UNROUTABLE || network == NET_CJDNS || network == NET_INTERNAL) continue;
-        names.emplace_back(GetNetworkName(network));
-    }
-    if (append_unroutable) {
-        names.emplace_back(GetNetworkName(NET_UNROUTABLE));
-    }
-    return names;
-}
-
-static bool LookupIntern(const std::string& name, std::vector<CNetAddr>& vIP, unsigned int nMaxSolutions, bool fAllowLookup, DNSLookupFn dns_lookup_function)
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     std::vector<std::string> names;
     for (int n = 0; n < NET_MAX; ++n) {
@@ -184,16 +129,9 @@ static bool LookupIntern(const std::string& name, std::vector<CNetAddr>& vIP, un
     return names;
 }
 
-<<<<<<< HEAD
-    if (!ValidAsCString(name)) {
-        return false;
-    }
-
-=======
 static std::vector<CNetAddr> LookupIntern(const std::string& name, unsigned int nMaxSolutions, bool fAllowLookup, DNSLookupFn dns_lookup_function)
 {
     if (!ContainsNoNUL(name)) return {};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     {
         CNetAddr addr;
         // From our perspective, onion addresses are not hostnames but rather
@@ -202,16 +140,6 @@ static std::vector<CNetAddr> LookupIntern(const std::string& name, unsigned int 
         // getaddrinfo to decode them and it wouldn't make sense to resolve
         // them, we return a network address representing it instead. See
         // CNetAddr::SetSpecial(const std::string&) for more details.
-<<<<<<< HEAD
-        if (addr.SetSpecial(name)) {
-            vIP.push_back(addr);
-            return true;
-        }
-    }
-
-    for (const CNetAddr& resolved : dns_lookup_function(name, fAllowLookup)) {
-        if (nMaxSolutions > 0 && vIP.size() >= nMaxSolutions) {
-=======
         if (addr.SetSpecial(name)) return {addr};
     }
 
@@ -219,7 +147,6 @@ static std::vector<CNetAddr> LookupIntern(const std::string& name, unsigned int 
 
     for (const CNetAddr& resolved : dns_lookup_function(name, fAllowLookup)) {
         if (nMaxSolutions > 0 && addresses.size() >= nMaxSolutions) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             break;
         }
         /* Never allow resolving to an internal address. Consider any such result invalid */
@@ -228,19 +155,6 @@ static std::vector<CNetAddr> LookupIntern(const std::string& name, unsigned int 
         }
     }
 
-<<<<<<< HEAD
-    return (vIP.size() > 0);
-}
-
-bool LookupHost(const std::string& name, std::vector<CNetAddr>& vIP, unsigned int nMaxSolutions, bool fAllowLookup, DNSLookupFn dns_lookup_function)
-{
-    if (!ValidAsCString(name)) {
-        return false;
-    }
-    std::string strHost = name;
-    if (strHost.empty())
-        return false;
-=======
     return addresses;
 }
 
@@ -249,33 +163,10 @@ std::vector<CNetAddr> LookupHost(const std::string& name, unsigned int nMaxSolut
     if (!ContainsNoNUL(name)) return {};
     std::string strHost = name;
     if (strHost.empty()) return {};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (strHost.front() == '[' && strHost.back() == ']') {
         strHost = strHost.substr(1, strHost.size() - 2);
     }
 
-<<<<<<< HEAD
-    return LookupIntern(strHost, vIP, nMaxSolutions, fAllowLookup, dns_lookup_function);
-}
-
-bool LookupHost(const std::string& name, CNetAddr& addr, bool fAllowLookup, DNSLookupFn dns_lookup_function)
-{
-    if (!ValidAsCString(name)) {
-        return false;
-    }
-    std::vector<CNetAddr> vIP;
-    LookupHost(name, vIP, 1, fAllowLookup, dns_lookup_function);
-    if(vIP.empty())
-        return false;
-    addr = vIP.front();
-    return true;
-}
-
-bool Lookup(const std::string& name, std::vector<CService>& vAddr, uint16_t portDefault, bool fAllowLookup, unsigned int nMaxSolutions, DNSLookupFn dns_lookup_function)
-{
-    if (name.empty() || !ValidAsCString(name)) {
-        return false;
-=======
     return LookupIntern(strHost, nMaxSolutions, fAllowLookup, dns_lookup_function);
 }
 
@@ -289,35 +180,11 @@ std::vector<CService> Lookup(const std::string& name, uint16_t portDefault, bool
 {
     if (name.empty() || !ContainsNoNUL(name)) {
         return {};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     uint16_t port{portDefault};
     std::string hostname;
     SplitHostPort(name, port, hostname);
 
-<<<<<<< HEAD
-    std::vector<CNetAddr> vIP;
-    bool fRet = LookupIntern(hostname, vIP, nMaxSolutions, fAllowLookup, dns_lookup_function);
-    if (!fRet)
-        return false;
-    vAddr.resize(vIP.size());
-    for (unsigned int i = 0; i < vIP.size(); i++)
-        vAddr[i] = CService(vIP[i], port);
-    return true;
-}
-
-bool Lookup(const std::string& name, CService& addr, uint16_t portDefault, bool fAllowLookup, DNSLookupFn dns_lookup_function)
-{
-    if (!ValidAsCString(name)) {
-        return false;
-    }
-    std::vector<CService> vService;
-    bool fRet = Lookup(name, vService, portDefault, fAllowLookup, 1, dns_lookup_function);
-    if (!fRet)
-        return false;
-    addr = vService[0];
-    return true;
-=======
     const std::vector<CNetAddr> addresses{LookupIntern(hostname, nMaxSolutions, fAllowLookup, dns_lookup_function)};
     if (addresses.empty()) return {};
     std::vector<CService> services;
@@ -332,29 +199,16 @@ std::optional<CService> Lookup(const std::string& name, uint16_t portDefault, bo
     const std::vector<CService> services{Lookup(name, portDefault, fAllowLookup, 1, dns_lookup_function)};
 
     return services.empty() ? std::nullopt : std::make_optional(services.front());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 CService LookupNumeric(const std::string& name, uint16_t portDefault, DNSLookupFn dns_lookup_function)
 {
-<<<<<<< HEAD
-    if (!ValidAsCString(name)) {
-        return {};
-    }
-    CService addr;
-    // "1.2:345" will fail to resolve the ip, but will still set the port.
-    // If the ip fails to resolve, re-init the result.
-    if(!Lookup(name, addr, portDefault, false, dns_lookup_function))
-        addr = CService();
-    return addr;
-=======
     if (!ContainsNoNUL(name)) {
         return {};
     }
     // "1.2:345" will fail to resolve the ip, but will still set the port.
     // If the ip fails to resolve, re-init the result.
     return Lookup(name, portDefault, /*fAllowLookup=*/false, dns_lookup_function).value_or(CService{});
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 /** SOCKS version */
@@ -413,11 +267,7 @@ enum class IntrRecvError {
  *
  * @param data The buffer where the read bytes should be stored.
  * @param len The number of bytes to read into the specified buffer.
-<<<<<<< HEAD
- * @param timeout The total timeout in milliseconds for this read.
-=======
  * @param timeout The total timeout for this read.
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
  * @param sock The socket (has to be in non-blocking mode) from which to read bytes.
  *
  * @returns An IntrRecvError indicating the resulting status of this read.
@@ -425,22 +275,12 @@ enum class IntrRecvError {
  *          read.
  *
  * @see This function can be interrupted by calling InterruptSocks5(bool).
-<<<<<<< HEAD
- *      Sockets can be made non-blocking with SetSocketNonBlocking(const
- *      SOCKET&, bool).
- */
-static IntrRecvError InterruptibleRecv(uint8_t* data, size_t len, int timeout, const Sock& sock)
-{
-    int64_t curTime = GetTimeMillis();
-    int64_t endTime = curTime + timeout;
-=======
  *      Sockets can be made non-blocking with Sock::SetNonBlocking().
  */
 static IntrRecvError InterruptibleRecv(uint8_t* data, size_t len, std::chrono::milliseconds timeout, const Sock& sock)
 {
     auto curTime{Now<SteadyMilliseconds>()};
     const auto endTime{curTime + timeout};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     while (len > 0 && curTime < endTime) {
         ssize_t ret = sock.Recv(data, len, 0); // Optimistically try the recv first
         if (ret > 0) {
@@ -517,11 +357,7 @@ bool Socks5(const std::string& strDest, uint16_t port, const ProxyCredentials* a
         return error("Error sending to proxy");
     }
     uint8_t pchRet1[2];
-<<<<<<< HEAD
-    if ((recvr = InterruptibleRecv(pchRet1, 2, g_socks5_recv_timeout, sock)) != IntrRecvError::OK) {
-=======
     if (InterruptibleRecv(pchRet1, 2, g_socks5_recv_timeout, sock) != IntrRecvError::OK) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         LogPrintf("Socks5() connect to %s:%d failed: InterruptibleRecv() timeout or other failure\n", strDest, port);
         return false;
     }
@@ -544,11 +380,7 @@ bool Socks5(const std::string& strDest, uint16_t port, const ProxyCredentials* a
         }
         LogPrint(BCLog::PROXY, "SOCKS5 sending proxy authentication %s:%s\n", auth->username, auth->password);
         uint8_t pchRetA[2];
-<<<<<<< HEAD
-        if ((recvr = InterruptibleRecv(pchRetA, 2, g_socks5_recv_timeout, sock)) != IntrRecvError::OK) {
-=======
         if (InterruptibleRecv(pchRetA, 2, g_socks5_recv_timeout, sock) != IntrRecvError::OK) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             return error("Error reading proxy authentication response");
         }
         if (pchRetA[0] != 0x01 || pchRetA[1] != 0x00) {
@@ -614,11 +446,7 @@ bool Socks5(const std::string& strDest, uint16_t port, const ProxyCredentials* a
     if (recvr != IntrRecvError::OK) {
         return error("Error reading from proxy");
     }
-<<<<<<< HEAD
-    if ((recvr = InterruptibleRecv(pchRet3, 2, g_socks5_recv_timeout, sock)) != IntrRecvError::OK) {
-=======
     if (InterruptibleRecv(pchRet3, 2, g_socks5_recv_timeout, sock) != IntrRecvError::OK) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         return error("Error reading from proxy");
     }
     LogPrint(BCLog::NET, "SOCKS5 connected %s\n", strDest);
@@ -631,11 +459,7 @@ std::unique_ptr<Sock> CreateSockTCP(const CService& address_family)
     struct sockaddr_storage sockaddr;
     socklen_t len = sizeof(sockaddr);
     if (!address_family.GetSockAddr((struct sockaddr*)&sockaddr, &len)) {
-<<<<<<< HEAD
-        LogPrintf("Cannot create socket for %s: unsupported network\n", address_family.ToString());
-=======
         LogPrintf("Cannot create socket for %s: unsupported network\n", address_family.ToStringAddrPort());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         return nullptr;
     }
 
@@ -645,18 +469,11 @@ std::unique_ptr<Sock> CreateSockTCP(const CService& address_family)
         return nullptr;
     }
 
-<<<<<<< HEAD
-    // Ensure that waiting for I/O on this socket won't result in undefined
-    // behavior.
-    if (!IsSelectableSocket(hSocket)) {
-        CloseSocket(hSocket);
-=======
     auto sock = std::make_unique<Sock>(hSocket);
 
     // Ensure that waiting for I/O on this socket won't result in undefined
     // behavior.
     if (!sock->IsSelectable()) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         LogPrintf("Cannot create connection: non-selectable socket created (fd >= FD_SETSIZE ?)\n");
         return nullptr;
     }
@@ -665,21 +482,6 @@ std::unique_ptr<Sock> CreateSockTCP(const CService& address_family)
     int set = 1;
     // Set the no-sigpipe option on the socket for BSD systems, other UNIXes
     // should use the MSG_NOSIGNAL flag for every send.
-<<<<<<< HEAD
-    setsockopt(hSocket, SOL_SOCKET, SO_NOSIGPIPE, (void*)&set, sizeof(int));
-#endif
-
-    // Set the no-delay option (disable Nagle's algorithm) on the TCP socket.
-    SetSocketNoDelay(hSocket);
-
-    // Set the non-blocking option on the socket.
-    if (!SetSocketNonBlocking(hSocket, true)) {
-        CloseSocket(hSocket);
-        LogPrintf("Error setting socket to non-blocking: %s\n", NetworkErrorString(WSAGetLastError()));
-        return nullptr;
-    }
-    return std::make_unique<Sock>(hSocket);
-=======
     if (sock->SetSockOpt(SOL_SOCKET, SO_NOSIGPIPE, (void*)&set, sizeof(int)) == SOCKET_ERROR) {
         LogPrintf("Error setting SO_NOSIGPIPE on socket: %s, continuing anyway\n",
                   NetworkErrorString(WSAGetLastError()));
@@ -698,7 +500,6 @@ std::unique_ptr<Sock> CreateSockTCP(const CService& address_family)
         return nullptr;
     }
     return sock;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 std::function<std::unique_ptr<Sock>(const CService&)> CreateSock = CreateSockTCP;
@@ -718,13 +519,6 @@ bool ConnectSocketDirectly(const CService &addrConnect, const Sock& sock, int nT
     // Create a sockaddr from the specified service.
     struct sockaddr_storage sockaddr;
     socklen_t len = sizeof(sockaddr);
-<<<<<<< HEAD
-    if (sock.Get() == INVALID_SOCKET) {
-        LogPrintf("Cannot connect to %s: invalid socket\n", addrConnect.ToString());
-        return false;
-    }
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (!addrConnect.GetSockAddr((struct sockaddr*)&sockaddr, &len)) {
         LogPrintf("Cannot connect to %s: unsupported network\n", addrConnect.ToStringAddrPort());
         return false;
@@ -743,19 +537,11 @@ bool ConnectSocketDirectly(const CService &addrConnect, const Sock& sock, int nT
             Sock::Event occurred;
             if (!sock.Wait(std::chrono::milliseconds{nTimeout}, requested, &occurred)) {
                 LogPrintf("wait for connect to %s failed: %s\n",
-<<<<<<< HEAD
-                          addrConnect.ToString(),
-                          NetworkErrorString(WSAGetLastError()));
-                return false;
-            } else if (occurred == 0) {
-                LogPrint(BCLog::NET, "connection attempt to %s timed out\n", addrConnect.ToString());
-=======
                           addrConnect.ToStringAddrPort(),
                           NetworkErrorString(WSAGetLastError()));
                 return false;
             } else if (occurred == 0) {
                 LogPrint(BCLog::NET, "connection attempt to %s timed out\n", addrConnect.ToStringAddrPort());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 return false;
             }
 
@@ -767,21 +553,13 @@ bool ConnectSocketDirectly(const CService &addrConnect, const Sock& sock, int nT
             socklen_t sockerr_len = sizeof(sockerr);
             if (sock.GetSockOpt(SOL_SOCKET, SO_ERROR, (sockopt_arg_type)&sockerr, &sockerr_len) ==
                 SOCKET_ERROR) {
-<<<<<<< HEAD
-                LogPrintf("getsockopt() for %s failed: %s\n", addrConnect.ToString(), NetworkErrorString(WSAGetLastError()));
-=======
                 LogPrintf("getsockopt() for %s failed: %s\n", addrConnect.ToStringAddrPort(), NetworkErrorString(WSAGetLastError()));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 return false;
             }
             if (sockerr != 0) {
                 LogConnectFailure(manual_connection,
                                   "connect() to %s failed after wait: %s",
-<<<<<<< HEAD
-                                  addrConnect.ToString(),
-=======
                                   addrConnect.ToStringAddrPort(),
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                                   NetworkErrorString(sockerr));
                 return false;
             }
@@ -825,11 +603,7 @@ bool SetNameProxy(const Proxy &addrProxy) {
     return true;
 }
 
-<<<<<<< HEAD
-bool GetNameProxy(proxyType &nameProxyOut) {
-=======
 bool GetNameProxy(Proxy &nameProxyOut) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     LOCK(g_proxyinfo_mutex);
     if(!nameProxy.IsValid())
         return false;
@@ -851,11 +625,7 @@ bool IsProxy(const CNetAddr &addr) {
     return false;
 }
 
-<<<<<<< HEAD
-bool ConnectThroughProxy(const proxyType& proxy, const std::string& strDest, uint16_t port, const Sock& sock, int nTimeout, bool& outProxyConnectionFailed)
-=======
 bool ConnectThroughProxy(const Proxy& proxy, const std::string& strDest, uint16_t port, const Sock& sock, int nTimeout, bool& outProxyConnectionFailed)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     // first connect to proxy server
     if (!ConnectSocketDirectly(proxy.proxy, sock, nTimeout, true)) {
@@ -871,48 +641,13 @@ bool ConnectThroughProxy(const Proxy& proxy, const std::string& strDest, uint16_
             return false;
         }
     } else {
-<<<<<<< HEAD
-        if (!Socks5(strDest, port, 0, sock)) {
-=======
         if (!Socks5(strDest, port, nullptr, sock)) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             return false;
         }
     }
     return true;
 }
 
-<<<<<<< HEAD
-bool LookupSubNet(const std::string& strSubnet, CSubNet& ret, DNSLookupFn dns_lookup_function)
-{
-    if (!ValidAsCString(strSubnet)) {
-        return false;
-    }
-    size_t slash = strSubnet.find_last_of('/');
-    std::vector<CNetAddr> vIP;
-
-    std::string strAddress = strSubnet.substr(0, slash);
-    // TODO: Use LookupHost(const std::string&, CNetAddr&, bool) instead to just get
-    //       one CNetAddr.
-    if (LookupHost(strAddress, vIP, 1, false, dns_lookup_function))
-    {
-        CNetAddr network = vIP[0];
-        if (slash != strSubnet.npos)
-        {
-            std::string strNetmask = strSubnet.substr(slash + 1);
-            uint8_t n;
-            if (ParseUInt8(strNetmask, &n)) {
-                // If valid number, assume CIDR variable-length subnet masking
-                ret = CSubNet(network, n);
-                return ret.IsValid();
-            }
-            else // If not a valid number, try full netmask syntax
-            {
-                // Never allow lookup for netmask
-                if (LookupHost(strNetmask, vIP, 1, false, dns_lookup_function)) {
-                    ret = CSubNet(network, vIP[0]);
-                    return ret.IsValid();
-=======
 bool LookupSubNet(const std::string& subnet_str, CSubNet& subnet_out)
 {
     if (!ContainsNoNUL(subnet_str)) {
@@ -938,7 +673,6 @@ bool LookupSubNet(const std::string& subnet_str, CSubNet& subnet_out)
                 if (full_netmask.has_value()) {
                     subnet_out = CSubNet{addr.value(), full_netmask.value()};
                     return subnet_out.IsValid();
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 }
             }
         } else {
@@ -950,43 +684,6 @@ bool LookupSubNet(const std::string& subnet_str, CSubNet& subnet_out)
     return false;
 }
 
-<<<<<<< HEAD
-bool SetSocketNonBlocking(const SOCKET& hSocket, bool fNonBlocking)
-{
-    if (fNonBlocking) {
-#ifdef WIN32
-        u_long nOne = 1;
-        if (ioctlsocket(hSocket, FIONBIO, &nOne) == SOCKET_ERROR) {
-#else
-        int fFlags = fcntl(hSocket, F_GETFL, 0);
-        if (fcntl(hSocket, F_SETFL, fFlags | O_NONBLOCK) == SOCKET_ERROR) {
-#endif
-            return false;
-        }
-    } else {
-#ifdef WIN32
-        u_long nZero = 0;
-        if (ioctlsocket(hSocket, FIONBIO, &nZero) == SOCKET_ERROR) {
-#else
-        int fFlags = fcntl(hSocket, F_GETFL, 0);
-        if (fcntl(hSocket, F_SETFL, fFlags & ~O_NONBLOCK) == SOCKET_ERROR) {
-#endif
-            return false;
-        }
-    }
-
-    return true;
-}
-
-bool SetSocketNoDelay(const SOCKET& hSocket)
-{
-    int set = 1;
-    int rc = setsockopt(hSocket, IPPROTO_TCP, TCP_NODELAY, (const char*)&set, sizeof(int));
-    return rc == 0;
-}
-
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 void InterruptSocks5(bool interrupt)
 {
     interruptSocks5Recv = interrupt;

@@ -1,395 +1,239 @@
-# DigiByte v8.23 Migration - Initial Work Prompt
+# DigiByte v8.23 Bitcoin Merge Migration Prompt
 
-## Overview
+You are tasked with upgrading DigiByte from v8.22 to v8.23 by merging Bitcoin v23.2 using a pre-conversion approach that eliminates naming conflicts.
 
-You are a DigiByte Core developer tasked with cherry-picking Bitcoin commits to upgrade DigiByte from v8.22 to v8.23. You must preserve ALL DigiByte-specific features while incorporating Bitcoin improvements.
+## Context
 
-## Required Reading
-
-**BEFORE STARTING:** You must read and understand these documents:
-- `DIGIBYTE_V8.23_MIGRATION_SPEC.md` - Complete migration specification
-- Review the current DigiByte codebase structure, particularly the unique features
+DigiByte is a Bitcoin fork with significant unique features that MUST be preserved:
+- Multi-algorithm mining (5 algorithms: SHA256D, Scrypt, Groestl, Skein, Qubit + ODO)
+- 15-second block times (vs Bitcoin's 10 minutes)
+- Dandelion++ privacy protocol
+- Custom difficulty adjustment (DigiShield/MultiShield)
+- Unique block reward schedule (6 periods)
+- 21 billion total supply cap
 
 ## Your Mission
 
-Cherry-pick commits from Bitcoin v22-final to v23.2 (3,031 total commits) into DigiByte, with testing checkpoints every 250 commits.
+Execute a merge-based migration that:
+1. Pre-converts Bitcoin v23.2 to DigiByte naming conventions
+2. Merges the converted Bitcoin into DigiByte v8.22
+3. Resolves only functional conflicts (naming already handled)
+4. Preserves ALL DigiByte functionality
 
-## CRITICAL: DigiByte Features to Preserve
+## Step-by-Step Process
 
-### 1. Multi-Algorithm Mining (5 algorithms)
-- **Algorithms**: SHA256D, Scrypt, Groestl, Skein, Qubit/ODO
-- **Core Files (NEVER MODIFY)**: 
-  - `src/primitives/block.h` - Algorithm definitions and constants
-  - `src/primitives/block.cpp` - Algorithm implementation functions
-  - `src/chain.h` - CBlockIndex with `lastAlgoBlocks[NUM_ALGOS_IMPL]`
-  - `src/chain.cpp` - Algorithm work factor calculations
-- **Key Functions**: `GetAlgoByName()`, `GetAlgoWorkFactor()`, `CBlockHeader::GetAlgo()`
-- **Constants**: `ALGO_*` enums, `BLOCK_VERSION_*` constants
+### Phase 1: Pre-Convert Bitcoin v23.2
 
-### 2. Difficulty Adjustment Algorithms (V1-V4)
-- **Files**: `src/pow.cpp`, `src/pow.h`
-- **Functions**: `GetNextWorkRequiredV1()` through `GetNextWorkRequiredV4()`
-- **Critical Heights**: 145000, 400000, 1430000 (hard fork activation points)
-
-### 3. Dandelion++ Privacy Implementation
-- **Files (PRESERVE COMPLETELY)**: `src/dandelion.cpp`, `src/dandelion.h`
-- **Feature**: Transaction routing privacy protocol
-- **Functions**: All Dandelion-related functions must remain intact
-
-### 4. ODO/Odocrypt Dynamic PoW
-- **Files**: `src/crypto/odocrypt.*`, `src/crypto/hashodo.h`
-- **Activation**: Block 9,112,320
-- **Feature**: Shape-changing PoW algorithm that changes every 10 days
-
-### 5. Network Parameters (NEVER CHANGE)
-- **Ports**: 12024 (mainnet), 14022 (RPC)
-- **Block time**: 15 seconds (vs Bitcoin's 10 minutes)
-- **Address prefixes**: 'D' (P2PKH), 'S' (P2SH)
-- **Bech32**: "dgb"
-- **Genesis block**: Unique DigiByte genesis parameters
-
-### 6. Block Rewards (PRESERVE CUSTOM SCHEDULE)
-- **Schedule**: 72,000 → 16,000 → 8,000 → 2,459 → exponential decay
-- **File**: `src/validation.cpp` (`GetBlockSubsidy()` function)
-
-## File Classification Rules for Conflict Resolution
-
-### 🚨 MASTER RULE - HIGHEST PRIORITY 🚨
-**PRESERVE ALL DIGIBYTE-UNIQUE FEATURES REGARDLESS OF FILE:**
-If ANY code in ANY file contains DigiByte-specific functionality, it must be preserved:
-
+1. **Clone and prepare Bitcoin v23.2:**
 ```bash
-# DigiByte-unique patterns to ALWAYS preserve (in any file):
-- Multi-algorithm code: ALGO_*, GetAlgo*, *Algo*, NUM_ALGOS
-- Difficulty adjustments: *V1*, *V2*, *V3*, *V4*, DigiShield, MultiShield
-- Dandelion: dandelion*, Dandelion*, DANDELION_*
-- ODO/Odocrypt: ODO*, odo*, Odocrypt*, ODOCRYPT_*
-- Network params: 12024, 14022, 0xfa, 0xc3, 0xb6, 0xda, "dgb", "D", "S"
-- Block rewards: 72000, 16000, 8000, 2459, GetBlockSubsidy custom logic
-- Timing: 15 seconds, multiAlgoTargetSpacing, nAveragingInterval
-- Hard fork heights: 145000, 400000, 1430000, 9112320, 9100000
-- DigiByte strings: "DigiByte", "DGB", "digibyted", "digibyte-"
+git clone https://github.com/bitcoin/bitcoin.git bitcoin-v23.2-for-digibyte
+cd bitcoin-v23.2-for-digibyte
+git checkout v23.2
+git checkout -b digibyte-naming-conversion
+git branch backup-original-bitcoin-v23.2
 ```
 
-### NEVER MODIFY (Preserve DigiByte completely):
-```
-src/primitives/block.*
-src/chain.*
-src/crypto/hash*.h
-src/crypto/odocrypt.*
-src/crypto/scrypt.*
-src/dandelion.*
-src/chainparams.*
-```
+2. **Apply naming conversions IN THIS EXACT ORDER:**
 
-### CAREFUL MERGE (Preserve DigiByte logic, adapt Bitcoin improvements):
-```
-src/pow.cpp - Difficulty adjustments
-src/validation.cpp - Block rewards, consensus
-src/consensus/params.h - Consensus parameters
-src/rpc/mining.cpp - Mining-related RPC
-```
-
-### PREFER BITCOIN (Take Bitcoin changes, apply DigiByte naming):
-```
-src/rpc/*.cpp (except mining-related)
-src/wallet/*.cpp
-src/qt/*.cpp
-src/util/*.cpp
-```
-
-**IMPORTANT:** Even in "PREFER BITCOIN" files, if you find DigiByte-unique code patterns, preserve them!
-
-## Setup Commands
-
-Execute these commands to begin the migration:
-
+**File Renaming:**
 ```bash
-# Ensure you're in the DigiByte directory
-cd /Users/jt/Code/digibyte
+# Rename files containing "bitcoin"
+find . -name "*bitcoin*" -o -name "*Bitcoin*" | while read file; do
+    newfile=$(echo "$file" | sed -e 's/bitcoin/digibyte/g' -e 's/Bitcoin/DigiByte/g')
+    if [ "$file" != "$newfile" ]; then
+        git mv "$file" "$newfile"
+    fi
+done
 
-# Add Bitcoin as upstream remote
-git remote add bitcoin-upstream https://github.com/bitcoin/bitcoin.git
-git fetch bitcoin-upstream --tags
-
-# Get complete commit list from Bitcoin v22-final to v23.2
-git log --oneline --reverse bitcoin-upstream/v22-final..bitcoin-upstream/v23.2 > bitcoin_commits_v22_to_v23.2.txt
-
-# Verify commit count (should be 3,031)
-wc -l bitcoin_commits_v22_to_v23.2.txt
-
-# Create migration branch
-git checkout -b digibyte-8.23-migration
-
-# Create comprehensive migration tracking files
-echo "# DigiByte v8.23 Migration Log" > migration_log.md
-echo "Started: $(date)" >> migration_log.md
-echo "Target: 3,031 commits from Bitcoin v22-final to v23.2" >> migration_log.md
-echo "" >> migration_log.md
-
-# Create master tracking file
-echo "# DigiByte v8.23 Migration Master Tracker" > migration_tracker.md
-echo "## Summary Statistics" >> migration_tracker.md
-echo "- **Total Commits**: 3,031" >> migration_tracker.md
-echo "- **Processed**: 0" >> migration_tracker.md
-echo "- **Successful**: 0" >> migration_tracker.md
-echo "- **Conflicts**: 0" >> migration_tracker.md
-echo "- **Failures**: 0" >> migration_tracker.md
-echo "- **Progress**: 0.0%" >> migration_tracker.md
-echo "" >> migration_tracker.md
-echo "## Quick Status" >> migration_tracker.md
-echo "| Commit Range | Status | Conflicts | Duration | Notes |" >> migration_tracker.md
-echo "|--------------|--------|-----------|----------|--------|" >> migration_tracker.md
-echo "" >> migration_tracker.md
-
-# Create conflicts-only log
-echo "# DigiByte v8.23 Migration - Conflicts Log" > conflicts_log.md
-echo "This file tracks all merge conflicts encountered during migration." >> conflicts_log.md
-echo "Started: $(date)" >> conflicts_log.md
-echo "" >> conflicts_log.md
-
-# Create success log
-echo "# DigiByte v8.23 Migration - Success Log" > success_log.md
-echo "This file tracks all successfully merged commits." >> success_log.md
-echo "Started: $(date)" >> success_log.md
-echo "" >> success_log.md
-```
-
-## Process for Each Individual Commit
-
-### 1. Cherry-pick the commit
-```bash
-COMMIT_HASH="<commit-hash>"
-COMMIT_TITLE=$(git log --format=%s -n 1 bitcoin-upstream/$COMMIT_HASH)
-ORIGINAL_AUTHOR=$(git log --format="%an <%ae>" -n 1 bitcoin-upstream/$COMMIT_HASH)
-
-echo "🔄 Processing commit $COMMIT_HASH: $COMMIT_TITLE"
-echo "📝 Logging attempt..." 
-
-# Log the attempt
-echo "## Commit $COMMIT_HASH - $(date) - ATTEMPTED" >> migration_log.md
-echo "**Title:** $COMMIT_TITLE" >> migration_log.md
-echo "**Original Author:** $ORIGINAL_AUTHOR" >> migration_log.md
-
-# Attempt cherry-pick
-if git cherry-pick -n $COMMIT_HASH; then
-    echo "✅ Clean cherry-pick successful"
-    CONFLICTS_RESOLVED=""
-else
-    echo "⚠️  Merge conflicts detected - manual resolution required"
-    
-    # Log conflicts
-    echo "**Status:** CONFLICTS DETECTED" >> migration_log.md
-    echo "**Conflicted Files:**" >> migration_log.md
-    git status --porcelain | grep "^UU\|^AA\|^DD" >> migration_log.md
-    
-    # Set flag for later logging
-    CONFLICTS_RESOLVED="Manual resolution required for: $(git status --porcelain | grep '^UU\|^AA\|^DD' | cut -c4-)"
-    
-    echo "🔧 Resolve conflicts manually following file classification rules"
-    echo "   - NEVER MODIFY: Reject Bitcoin changes for protected files"
-    echo "   - CAREFUL MERGE: Preserve DigiByte logic"
-    echo "   - PREFER BITCOIN: Take Bitcoin changes with naming fixes"
-fi
-```
-
-### 2. Apply conflict resolution based on MASTER RULE + file classification
-
-**🚨 STEP 1: Check for DigiByte-unique patterns (HIGHEST PRIORITY)**
-```bash
-# Scan all changed files for DigiByte-unique patterns
-echo "🔍 Scanning for DigiByte-unique features..."
-CHANGED_FILES=$(git diff --name-only --cached)
-
-for file in $CHANGED_FILES; do
-    if grep -q "ALGO_\|GetAlgo\|DigiShield\|MultiShield\|dandelion\|Dandelion\|ODO\|odo\|Odocrypt\|12024\|14022\|0xfa.*0xc3.*0xb6.*0xda\|72000\|16000\|8000\|2459\|multiAlgoTargetSpacing\|nAveragingInterval\|145000\|400000\|1430000\|9112320\|9100000" "$file"; then
-        echo "⚠️  DIGIBYTE-UNIQUE FEATURES DETECTED in $file"
-        echo "🔒 This file contains DigiByte-specific code - PRESERVE ALL unique features!"
-        
-        # Log this detection
-        echo "**CRITICAL:** DigiByte-unique features detected in $file" >> migration_log.md
+# Rename BTC references
+find . -name "*btc*" -o -name "*BTC*" | while read file; do
+    newfile=$(echo "$file" | sed -e 's/btc/dgb/g' -e 's/BTC/DGB/g')
+    if [ "$file" != "$newfile" ]; then
+        git mv "$file" "$newfile"
     fi
 done
 ```
 
-**STEP 2: Apply file-specific classification**
-- **NEVER MODIFY files**: If Bitcoin changes these files, reject the changes and keep DigiByte version
-- **CAREFUL MERGE files**: Manually review and preserve DigiByte-specific logic  
-- **PREFER BITCOIN files**: Take Bitcoin changes and apply DigiByte naming conventions
-
-**🚨 REMEMBER**: Even in "PREFER BITCOIN" files, preserve any DigiByte-unique patterns found above!
-
-### 3. Apply DigiByte naming conventions
+**Binary Names:**
 ```bash
-# Binary names
-sed -i 's/bitcoind/digibyted/g' <files>
-sed -i 's/bitcoin-cli/digibyte-cli/g' <files>
-sed -i 's/bitcoin-tx/digibyte-tx/g' <files>
-sed -i 's/bitcoin-wallet/digibyte-wallet/g' <files>
-sed -i 's/bitcoin-qt/digibyte-qt/g' <files>
+find . -type f \( -name "*.cpp" -o -name "*.h" -o -name "*.mk" -o -name "*.am" -o -name "*.ac" -o -name "*.py" -o -name "*.sh" \) | xargs sed -i \
+    -e 's/bitcoind/digibyted/g' \
+    -e 's/bitcoin-cli/digibyte-cli/g' \
+    -e 's/bitcoin-tx/digibyte-tx/g' \
+    -e 's/bitcoin-wallet/digibyte-wallet/g' \
+    -e 's/bitcoin-qt/digibyte-qt/g' \
+    -e 's/bitcoin-util/digibyte-util/g' \
+    -e 's/bitcoin-chainstate/digibyte-chainstate/g'
+```
 
-# Library names
-sed -i 's/libbitcoin/libdigibyte/g' <files>
-sed -i 's/bitcoinconsensus/digibyteconsensus/g' <files>
+**Library Names:**
+```bash
+find . -type f \( -name "*.cpp" -o -name "*.h" -o -name "*.mk" -o -name "*.am" -o -name "*.ac" \) | xargs sed -i \
+    -e 's/libbitcoin/libdigibyte/g' \
+    -e 's/LIBBITCOIN/LIBDIGIBYTE/g' \
+    -e 's/bitcoinconsensus/digibyteconsensus/g' \
+    -e 's/BITCOINCONSENSUS/DIGIBYTECONSENSUS/g'
+```
 
+**Code Elements:**
+```bash
 # Header guards
-sed -i 's/BITCOIN_/DIGIBYTE_/g' <files>
+find . -type f -name "*.h" | xargs sed -i \
+    -e 's/BITCOIN_/DIGIBYTE_/g' \
+    -e 's/_BITCOIN_H/_DIGIBYTE_H/g'
 
-# Class names
-sed -i 's/BitcoinGUI/DigiByteGUI/g' <files>
-sed -i 's/BitcoinUnits/DigiByteUnits/g' <files>
+# Classes
+find . -type f \( -name "*.cpp" -o -name "*.h" \) | xargs sed -i \
+    -e 's/BitcoinGUI/DigiByteGUI/g' \
+    -e 's/BitcoinUnits/DigiByteUnits/g' \
+    -e 's/BitcoinApplication/DigiByteApplication/g' \
+    -e 's/BitcoinCore/DigiByteCore/g' \
+    -e 's/BitcoinTestFramework/DigiByteTestFramework/g' \
+    -e 's/BITCOIN_CONF_FILENAME/DIGIBYTE_CONF_FILENAME/g'
 
-# Currency codes
-sed -i 's/BTC/DGB/g' <files>
+# Currency
+find . -type f \( -name "*.cpp" -o -name "*.h" -o -name "*.py" -o -name "*.md" \) | xargs sed -i \
+    -e 's/\bBTC\b/DGB/g' \
+    -e 's/\bbtc\b/dgb/g' \
+    -e 's/\bXBT\b/DGB/g'
 
 # Project names
-sed -i 's/Bitcoin Core/DigiByte Core/g' <files>
+find . -type f \( -name "*.cpp" -o -name "*.h" -o -name "*.py" -o -name "*.md" -o -name "*.txt" \) | xargs sed -i \
+    -e 's/Bitcoin Core/DigiByte Core/g' \
+    -e 's/Bitcoin network/DigiByte network/g' \
+    -e 's/Bitcoin protocol/DigiByte protocol/g' \
+    -e 's/Bitcoin address/DigiByte address/g' \
+    -e 's/bitcoin\.org/digibyte\.org/g' \
+    -e 's/bitcoin\.it/digibyte\.it/g'
+
+# Paths
+find . -type f \( -name "*.cpp" -o -name "*.h" -o -name "*.py" \) | xargs sed -i \
+    -e 's/\.bitcoin/\.digibyte/g' \
+    -e 's/"bitcoin"/"digibyte"/g' \
+    -e 's/bitcoin\.conf/digibyte\.conf/g'
 ```
 
-### 4. Update copyright headers
-```cpp
-// Add DigiByte copyright below Bitcoin copyright
-// Copyright (c) 2009-2024 The Bitcoin Core developers
-// Copyright (c) 2014-2025 The DigiByte Core developers
-// Distributed under the MIT software license, see the accompanying
-// file COPYING or http://www.opensource.org/licenses/mit-license.php.
-```
-
-### 5. MANDATORY: Test and compile BEFORE committing
+**Documentation:**
 ```bash
-# Quick compilation check (incremental build)
-make -j$(nproc)
-
-# If compilation fails, fix issues before proceeding
-if [ $? -ne 0 ]; then
-    echo "❌ Compilation failed for commit $COMMIT_HASH"
-    
-    # Log compilation failure
-    echo "**Status:** COMPILATION FAILED ❌" >> migration_log.md
-    echo "**Error:** Build errors detected" >> migration_log.md
-    echo "**Files Changed:**" >> migration_log.md
-    git diff --cached --name-only >> migration_log.md
-    echo "**Action Required:** Fix compilation errors before proceeding" >> migration_log.md
-    echo "---" >> migration_log.md
-    
-    echo "Fix compilation errors before committing"
-    exit 1
-fi
-
-# Run unit tests for affected modules
-# Identify which test modules are relevant to changed files
-CHANGED_FILES=$(git diff --cached --name-only)
-echo "Changed files: $CHANGED_FILES"
-
-# Run relevant unit tests based on changed files
-if echo "$CHANGED_FILES" | grep -q "src/pow\|src/validation\|src/consensus"; then
-    echo "Running consensus-critical tests..."
-    src/test/test_digibyte --run_test=pow_tests
-    src/test/test_digibyte --run_test=validation_tests
-fi
-
-if echo "$CHANGED_FILES" | grep -q "src/rpc"; then
-    echo "Running RPC tests..."
-    src/test/test_digibyte --run_test=rpc_tests
-fi
-
-if echo "$CHANGED_FILES" | grep -q "src/wallet"; then
-    echo "Running wallet tests..."
-    src/test/test_digibyte --run_test=wallet_tests
-fi
-
-# For high-risk files, run additional DigiByte-specific validation
-if echo "$CHANGED_FILES" | grep -q "src/pow.cpp\|src/primitives/block\|src/chain"; then
-    echo "⚠️  High-risk files changed - running DigiByte multi-algo validation"
-    # Quick algorithm validation test
-    src/test/test_digibyte --run_test=multialgo_tests
-fi
+find . -type f \( -name "*.md" -o -name "*.txt" \) | xargs sed -i \
+    -e 's/Bitcoin/DigiByte/g' \
+    -e 's/bitcoin/digibyte/g' \
+    -e 's/BITCOIN/DIGIBYTE/g'
 ```
 
-### 6. Only commit if ALL tests pass
+**Copyright:**
 ```bash
-# Stage all changes
+find . -type f \( -name "*.cpp" -o -name "*.h" \) | xargs sed -i \
+    '/Copyright.*The Bitcoin Core developers/a\
+// Copyright (c) 2014-2025 The DigiByte Core developers'
+```
+
+3. **Commit the pre-converted Bitcoin:**
+```bash
 git add -A
+git commit -m "Pre-convert Bitcoin v23.2 to DigiByte naming conventions
 
-# Commit with proper attribution only if tests passed
-git commit -m "Merge bitcoin/<hash>: <original message>
+This commit applies DigiByte naming conventions to the entire Bitcoin v23.2
+codebase to simplify the merge process. No functional changes were made.
 
-Cherry-picked from Bitcoin Core commit <hash>
-Original author: <original-author>
-
-[DigiByte: Applied preservation rules and naming conventions]
-Conflicts resolved in: <list of files if any>
-Features preserved: Multi-algo mining, Dandelion++, DigiShield
-Tests: Compilation ✓, Unit tests ✓"
-
-echo "✅ Commit <hash> successfully applied and tested"
+Conversions applied:
+- Binary names: bitcoind -> digibyted, etc.
+- Library names: libbitcoin -> libdigibyte
+- Currency codes: BTC -> DGB
+- Project names: Bitcoin Core -> DigiByte Core
+- Header guards: BITCOIN_ -> DIGIBYTE_
+- Class names: Bitcoin* -> DigiByte*
+- Config paths: .bitcoin -> .digibyte"
 ```
 
-### 7. Document commit progress
+### Phase 2: Execute the Merge
+
+1. **Prepare DigiByte repository:**
 ```bash
-# Log detailed commit information to main log
-echo "## Commit $COMMIT_HASH - $(date)" >> migration_log.md
-echo "**Title:** $COMMIT_TITLE" >> migration_log.md
-echo "**Original Author:** $ORIGINAL_AUTHOR" >> migration_log.md
-echo "**Status:** SUCCESS ✓" >> migration_log.md
-
-# Log conflicts if any occurred
-if [ -n "$CONFLICTS_RESOLVED" ]; then
-    echo "**Conflicts Resolved:**" >> migration_log.md
-    echo "$CONFLICTS_RESOLVED" >> migration_log.md
-    
-    # Also log to conflicts file
-    echo "## $COMMIT_HASH - $(date)" >> conflicts_log.md
-    echo "**Title:** $COMMIT_TITLE" >> conflicts_log.md
-    echo "**Resolution:** $CONFLICTS_RESOLVED" >> conflicts_log.md
-    echo "**Files:**" >> conflicts_log.md
-    git diff --name-only HEAD~1 HEAD >> conflicts_log.md
-    echo "---" >> conflicts_log.md
-fi
-
-# Log which files were changed
-echo "**Files Changed:**" >> migration_log.md
-git diff --name-only HEAD~1 HEAD >> migration_log.md
-
-# Log test results
-echo "**Tests Run:**" >> migration_log.md
-echo "- Compilation: ✓ PASSED" >> migration_log.md
-echo "- Unit Tests: ✓ PASSED" >> migration_log.md
-if [ -n "$DIGIBYTE_TESTS_RUN" ]; then
-    echo "- DigiByte Validation: ✓ PASSED" >> migration_log.md
-fi
-
-echo "**Features Preserved:** Multi-algo mining, Dandelion++, DigiShield" >> migration_log.md
-echo "---" >> migration_log.md
-echo "" >> migration_log.md
-
-# Log to success file
-echo "$COMMIT_HASH | $COMMIT_TITLE | $(date)" >> success_log.md
-
-# Update master tracker statistics
-PROCESSED_COUNT=$(grep -c "SUCCESS ✓" migration_log.md)
-CONFLICTS_COUNT=$(grep -c "CONFLICTS DETECTED" migration_log.md)
-PROGRESS=$(echo "scale=1; $PROCESSED_COUNT * 100 / 3031" | bc)
-
-# Update tracker file (simplified - you may want to make this more sophisticated)
-echo "Updated: $(date) | Processed: $PROCESSED_COUNT/3031 ($PROGRESS%) | Conflicts: $CONFLICTS_COUNT" >> migration_tracker.md
+cd /path/to/digibyte
+git checkout digibyte-8.22
+git checkout -b digibyte-8.23-merge
+git tag pre-merge-backup
+git remote add bitcoin-converted /path/to/bitcoin-v23.2-for-digibyte
+git fetch bitcoin-converted
 ```
 
-## Comprehensive Testing Protocol (Every 250 Commits)
-
-**IN ADDITION to per-commit testing, run comprehensive tests every 250 commits:**
-
-**MANDATORY SEQUENCE - Must be followed in order:**
-
-### 1. C++ Unit Tests (Run First)
+2. **Perform the merge:**
 ```bash
+git merge bitcoin-converted/digibyte-naming-conversion \
+    --strategy=recursive \
+    --strategy-option=ours \
+    --no-commit \
+    --no-ff
+```
+
+3. **Restore DigiByte-specific files:**
+```bash
+# Files that MUST NOT be modified
+git checkout HEAD -- src/primitives/block.h
+git checkout HEAD -- src/primitives/block.cpp
+git checkout HEAD -- src/chain.h
+git checkout HEAD -- src/chain.cpp
+git checkout HEAD -- src/crypto/hashgroestl.h
+git checkout HEAD -- src/crypto/hashqubit.h
+git checkout HEAD -- src/crypto/hashskein.h
+git checkout HEAD -- src/crypto/hashodo.h
+git checkout HEAD -- src/crypto/odocrypt.h
+git checkout HEAD -- src/crypto/odocrypt.cpp
+git checkout HEAD -- src/crypto/scrypt.h
+git checkout HEAD -- src/crypto/scrypt.cpp
+git checkout HEAD -- src/crypto/sph_*
+git checkout HEAD -- src/crypto/KeccakP-800-SnP.h
+git checkout HEAD -- src/dandelion.cpp
+git checkout HEAD -- src/dandelion.h
+git checkout HEAD -- src/chainparams.cpp
+git checkout HEAD -- src/chainparamsbase.cpp
+git checkout HEAD -- src/chainparamsseeds.h
+```
+
+### Phase 3: Resolve Conflicts
+
+For each conflicted file, categorize and resolve:
+
+**Category A - PRESERVE DIGIBYTE:**
+```bash
+# DigiByte-only features (no Bitcoin equivalent)
+git checkout HEAD -- <file>
+```
+
+**Category B - MANUAL MERGE:**
+Files requiring careful line-by-line merge:
+- `src/pow.cpp` - Keep DigiShield V1-V4
+- `src/validation.cpp` - Keep custom rewards
+- `src/consensus/params.h` - Keep DigiByte parameters
+- `src/rpc/mining.cpp` - Keep multi-algo RPCs
+
+**Category C - SMART MERGE:**
+Take Bitcoin structure, restore DigiByte values:
+- Network ports: 12024 (main), 12025 (test)
+- Block time: 15 seconds
+- Address prefixes: D (30), S (63), dgb
+
+**Category D - TAKE BITCOIN:**
+Already pre-converted files can use Bitcoin version
+
+### Phase 4: Validate
+
+1. **Compile:**
+```bash
+make clean
+./autogen.sh
+./configure --enable-debug
+make -j$(nproc)
+```
+
+2. **Run tests:**
+```bash
+# Unit tests
 make check
-```
-**If this fails:** Stop and debug all C++ unit test failures before proceeding.
 
-### 2. Python Functional Tests (Run Second)
-```bash
-test/functional/test_runner.py --extended
+# Functional tests
+./test/functional/test_runner.py --extended
 
 # DigiByte-specific tests
 ./test/functional/digibyte_multialgo.py
@@ -397,134 +241,83 @@ test/functional/test_runner.py --extended
 ./test/functional/digibyte_difficulty.py
 ./test/functional/digibyte_rewards.py
 ```
-**If this fails:** Stop and debug all Python test failures before proceeding.
 
-### 3. Compilation Test (Run Last)
+3. **Feature checklist:**
+- [ ] Multi-algorithm mining (5 algos)
+- [ ] 15-second blocks
+- [ ] Dandelion++ privacy
+- [ ] ODO activates at 9,112,320
+- [ ] Custom rewards (6 periods)
+- [ ] Network ports (12024/12025)
+- [ ] Address formats (D/S/dgb)
+- [ ] Genesis block valid
+- [ ] No RBF enabled
+
+### Phase 5: Finalize
+
 ```bash
-make clean && ./autogen.sh && ./configure && make -j$(nproc)
-```
-**If this fails:** Stop and debug all compilation errors before proceeding.
+git add -A
+git commit -m "Merge Bitcoin v23.2 into DigiByte v8.22
 
-### 4. Checkpoint Success
-Only proceed to the next 250 commits when ALL comprehensive tests pass in sequence.
+This merge brings Bitcoin v23.2 improvements into DigiByte while preserving
+all DigiByte-specific functionality including:
+- Multi-algorithm mining (5 algorithms)
+- Dandelion++ privacy
+- DigiShield/MultiShield difficulty adjustment
+- ODO/Odocrypt dynamic PoW
+- 15-second block timing
+- Custom block reward schedule
 
-## Two-Level Testing Strategy Summary
+The Bitcoin codebase was pre-converted to DigiByte naming conventions
+before merging to minimize conflicts.
 
-### Level 1: Per-Commit Testing (EVERY commit)
-- ✅ Incremental compilation (`make`)
-- ✅ Relevant unit tests for changed modules
-- ✅ DigiByte-specific validation for high-risk files
-- ✅ Only commit if all tests pass
-
-### Level 2: Comprehensive Testing (Every 250 commits)
-- ✅ Full C++ unit test suite (`make check`)
-- ✅ Complete Python functional tests
-- ✅ Clean compilation from scratch
-- ✅ Full DigiByte feature validation
-
-## Progress Tracking
-
-### Document each checkpoint in migration_log.md:
-```markdown
-## Checkpoint <N> (Commits <start>-<end>)
-- Started: <timestamp>
-- Commits processed: 250/250
-- Individual commit tests: All passed ✓
-- Clean merges: <count>
-- Conflicts resolved: <count>
-- Comprehensive C++ tests: PASS/FAIL
-- Comprehensive Python tests: PASS/FAIL
-- Clean compilation: PASS/FAIL
-- Status: COMPLETE/FAILED
-- Duration: <time>
-
-### Per-Commit Test Summary:
-- Compilation failures: <count> (all fixed)
-- Unit test failures: <count> (all fixed)
-- DigiByte validation failures: <count> (all fixed)
-
-### Major Conflicts Resolved:
-- <commit-hash>: <file> - <brief description>
-
-### Features Validated:
-- ✓ Multi-algorithm mining
-- ✓ Dandelion++ privacy
-- ✓ Difficulty adjustments
-- ✓ Block rewards
-- ✓ Network parameters
+All tests passing:
+- Unit tests: ✓
+- Functional tests: ✓
+- DigiByte feature tests: ✓"
 ```
 
-## Conflict Resolution Examples
+## Critical DigiByte Values
 
-### Example 1: pow.cpp conflict
 ```cpp
-// Bitcoin change: modifies GetNextWorkRequired
-// DigiByte resolution: Integrate Bitcoin improvement WITHOUT breaking V1-V4 algorithms
-// Action: Preserve all GetNextWorkRequiredV1-V4 functions, adapt new logic carefully
+// Algorithms
+ALGO_SHA256D = 0, ALGO_SCRYPT = 1, ALGO_GROESTL = 2
+ALGO_SKEIN = 3, ALGO_QUBIT = 4, ALGO_ODO = 7
+
+// Network
+nDefaultPort = 12024 (mainnet), 12025 (testnet)
+pchMessageStart = {0xfa,0xc3,0xb6,0xda}
+
+// Timing
+nPowTargetSpacing = 15 seconds
+multiAlgoTargetSpacing = 150 seconds
+
+// Heights
+multiAlgoDiffChangeTarget = 145000
+alwaysUpdateDiffChangeTarget = 400000
+workComputationChangeTarget = 1430000
+OdoHeight = 9112320
+
+// Addresses
+base58Prefixes[PUBKEY_ADDRESS] = 30 // 'D'
+base58Prefixes[SCRIPT_ADDRESS] = 63 // 'S'
+bech32_hrp = "dgb"
 ```
 
-### Example 2: validation.cpp conflict
-```cpp
-// Bitcoin change: new validation rule
-// DigiByte resolution: Ensure compatibility with 15-second blocks and custom rewards
-// Action: Adapt validation for DigiByte's faster blocks and reward schedule
-```
+## Success Criteria
 
-### Example 3: chainparams.cpp conflict
-```cpp
-// Bitcoin change: updates network parameters
-// DigiByte resolution: REJECT Bitcoin changes completely
-// Action: Keep ALL DigiByte network parameters unchanged
-```
+- All Bitcoin v23.2 improvements integrated
+- Zero regression in DigiByte functionality
+- All tests passing
+- Clean compilation
+- Successful mainnet sync
 
-## Critical Success Factors
+## Common Issues
 
-1. **🚨 MASTER RULE: PRESERVE ALL DIGIBYTE-UNIQUE FEATURES IN ANY FILE**
-2. **NEVER compromise DigiByte's unique features**
-3. **ALWAYS preserve multi-algorithm mining**
-4. **PROTECT Dandelion++ privacy at all costs**
-5. **MAINTAIN all difficulty adjustment algorithms**
-6. **KEEP network parameters unchanged**
-7. **SCAN every file for DigiByte-unique patterns before applying changes**
-8. **DOCUMENT every conflict resolution**
-9. **Test religiously every commit and every 250 commits**
+1. **Multi-algo conflicts:** Always preserve DigiByte's GetAlgo(), SetAlgo(), GetPoWAlgoHash()
+2. **Difficulty adjustment:** Keep V1-V4 functions intact
+3. **Block timing:** Maintain 15-second target
+4. **Rewards:** Preserve 6-period schedule
+5. **Network magic:** Keep DigiByte's unique values
 
-## Emergency Procedures
-
-If you encounter a critical issue:
-1. **Stop immediately**
-2. **Document the issue in migration_log.md**
-3. **Create a checkpoint tag**: `git tag checkpoint-emergency-<timestamp>`
-4. **Analyze the problem thoroughly**
-5. **Seek guidance if needed**
-
-## Expected Migration Statistics
-
-- **Total commits**: 3,031
-- **Expected checkpoints**: ~12 (3031 ÷ 250)
-- **Critical conflicts expected**: High in consensus-related files
-- **Safe merges expected**: Majority in wallet/RPC/UI files
-
-## Files to Monitor Closely
-
-Watch these files for conflicts that require special attention:
-- `src/pow.cpp` - Difficulty adjustment logic
-- `src/validation.cpp` - Block rewards and consensus
-- `src/chainparams.cpp` - Network parameters
-- `src/primitives/block.h` - Algorithm definitions
-- `src/rpc/mining.cpp` - Mining-related RPC calls
-
-## Ready to Begin
-
-Once you have:
-1. ✅ Read `DIGIBYTE_V8.23_MIGRATION_SPEC.md` completely
-2. ✅ Executed the setup commands
-3. ✅ Verified you have 3,031 commits in the list
-4. ✅ Created the migration branch
-5. ✅ Understand the file classification rules
-
-**BEGIN with the first commit from bitcoin_commits_v22_to_v23.2.txt**
-
-Process commits sequentially, document everything, and test rigorously every 250 commits. The success of DigiByte v8.23 depends on preserving every unique feature while gaining Bitcoin's improvements.
-
-Good luck! 🚀
+Remember: When in doubt, preserve DigiByte functionality over Bitcoin improvements.

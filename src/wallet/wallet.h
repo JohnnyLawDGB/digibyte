@@ -1,10 +1,10 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-// Copyright (c) 2009-2022 The Bitcoin Core developers
+// Copyright (c) 2009-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef BITCOIN_WALLET_WALLET_H
-#define BITCOIN_WALLET_WALLET_H
+#ifndef DIGIBYTE_WALLET_WALLET_H
+#define DIGIBYTE_WALLET_WALLET_H
 
 #include <addresstype.h>
 #include <consensus/amount.h>
@@ -1100,4 +1100,4 @@ struct MigrationResult {
 [[nodiscard]] util::Result<MigrationResult> MigrateLegacyToDescriptor(const std::string& wallet_name, const SecureString& passphrase, WalletContext& context);
 } // namespace wallet
 
-#endif // BITCOIN_WALLET_WALLET_H
+#endif // DIGIBYTE_WALLET_WALLET_H

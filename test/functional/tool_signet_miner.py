@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2022 The Bitcoin Core developers
+# Copyright (c) 2022 The DigiByte Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test signet miner tool"""
@@ -54,7 +54,7 @@ class SignetMinerTest(BitcoinTestFramework):
                 f'--cli={node.cli.binary} -datadir={node.cli.datadir}',
                 'generate',
                 f'--address={node.getnewaddress()}',
-                f'--grind-cmd={self.options.bitcoinutil} grind',
+                f'--grind-cmd={self.options.digibyteutil} grind',
                 '--nbits=1d00ffff',
                 f'--set-block-time={int(time.time())}',
             ], check=True, stderr=subprocess.STDOUT)

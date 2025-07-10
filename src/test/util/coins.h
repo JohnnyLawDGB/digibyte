@@ -1,9 +1,9 @@
-// Copyright (c) 2023 The Bitcoin Core developers
+// Copyright (c) 2023 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef BITCOIN_TEST_UTIL_COINS_H
-#define BITCOIN_TEST_UTIL_COINS_H
+#ifndef DIGIBYTE_TEST_UTIL_COINS_H
+#define DIGIBYTE_TEST_UTIL_COINS_H
 
 #include <primitives/transaction.h>
 
@@ -16,4 +16,4 @@ class CCoinsViewCache;
  */
 COutPoint AddTestCoin(CCoinsViewCache& coins_view);
 
-#endif // BITCOIN_TEST_UTIL_COINS_H
+#endif // DIGIBYTE_TEST_UTIL_COINS_H

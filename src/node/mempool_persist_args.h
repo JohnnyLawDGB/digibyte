@@ -1,9 +1,9 @@
-// Copyright (c) 2022 The Bitcoin Core developers
+// Copyright (c) 2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef BITCOIN_NODE_MEMPOOL_PERSIST_ARGS_H
-#define BITCOIN_NODE_MEMPOOL_PERSIST_ARGS_H
+#ifndef DIGIBYTE_NODE_MEMPOOL_PERSIST_ARGS_H
+#define DIGIBYTE_NODE_MEMPOOL_PERSIST_ARGS_H
 
 #include <util/fs.h>
 
@@ -22,4 +22,4 @@ fs::path MempoolPath(const ArgsManager& argsman);
 
 } // namespace node
 
-#endif // BITCOIN_NODE_MEMPOOL_PERSIST_ARGS_H
+#endif // DIGIBYTE_NODE_MEMPOOL_PERSIST_ARGS_H

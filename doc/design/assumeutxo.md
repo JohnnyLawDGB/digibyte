@@ -1,6 +1,6 @@
 # assumeutxo
 
-Assumeutxo is a feature that allows fast bootstrapping of a validating bitcoind
+Assumeutxo is a feature that allows fast bootstrapping of a validating digibyted
 instance.
 
 ## Loading a snapshot
@@ -46,8 +46,8 @@ The utility script
 ## General background
 
 - [assumeutxo proposal](https://github.com/jamesob/assumeutxo-docs/tree/2019-04-proposal/proposal)
-- [Github issue](https://github.com/bitcoin/bitcoin/issues/15605)
-- [draft PR](https://github.com/bitcoin/bitcoin/pull/15606)
+- [Github issue](https://github.com/digibyte/digibyte/issues/15605)
+- [draft PR](https://github.com/digibyte/digibyte/pull/15606)
 
 ## Design notes
 
@@ -86,7 +86,7 @@ data.
 
 `ChainstateManager` manages a single Chainstate object, for which
 `m_snapshot_blockhash` is null. This chainstate is (maybe obviously)
-considered active. This is the "traditional" mode of operation for bitcoind.
+considered active. This is the "traditional" mode of operation for digibyted.
 
 |    |    |
 | ---------- | ----------- |

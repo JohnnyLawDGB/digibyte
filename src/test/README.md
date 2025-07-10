@@ -1,7 +1,7 @@
 # Unit tests
 
 The sources in this directory are unit test cases. Boost includes a
-unit testing framework, and since Bitcoin Core already uses Boost, it makes
+unit testing framework, and since DigiByte Core already uses Boost, it makes
 sense to simply use this framework rather than require developers to
 configure some other framework (we want as few impediments to creating
 unit tests as possible).
@@ -26,7 +26,7 @@ To add more unit tests, add `BOOST_AUTO_TEST_CASE` functions to the existing
 .cpp files in the `test/` directory or add new .cpp files that
 implement new `BOOST_AUTO_TEST_SUITE` sections.
 
-To run the GUI unit tests manually, launch `src/qt/test/test_bitcoin-qt`
+To run the GUI unit tests manually, launch `src/qt/test/test_digibyte-qt`
 
 To add more GUI unit tests, add them to the `src/qt/test/` directory and
 the `src/qt/test/test_main.cpp` file.
@@ -42,7 +42,7 @@ test_bitcoin --log_level=all --run_test=getarg_tests
 
 `log_level` controls the verbosity of the test framework, which logs when a
 test case is entered, for example. `test_bitcoin` also accepts the command
-line arguments accepted by `bitcoind`. Use `--` to separate both types of
+line arguments accepted by `digibyted`. Use `--` to separate both types of
 arguments:
 
 ```bash

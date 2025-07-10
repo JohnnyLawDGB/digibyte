@@ -1,10 +1,10 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-// Copyright (c) 2009-2022 The Bitcoin Core developers
+// Copyright (c) 2009-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef BITCOIN_LOGGING_H
-#define BITCOIN_LOGGING_H
+#ifndef DIGIBYTE_LOGGING_H
+#define DIGIBYTE_LOGGING_H
 
 #include <threadsafety.h>
 #include <tinyformat.h>
@@ -265,4 +265,4 @@ bool error(const char* fmt, const Args&... args)
     return false;
 }
 
-#endif // BITCOIN_LOGGING_H
+#endif // DIGIBYTE_LOGGING_H

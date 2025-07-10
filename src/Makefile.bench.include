@@ -1,4 +1,4 @@
-# Copyright (c) 2015-2016 The Bitcoin Core developers
+# Copyright (c) 2015-2016 The DigiByte Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -57,17 +57,17 @@ bench_bench_bitcoin_SOURCES = \
 
 nodist_bench_bench_bitcoin_SOURCES = $(GENERATED_BENCH_FILES)
 
-bench_bench_bitcoin_CPPFLAGS = $(AM_CPPFLAGS) $(BITCOIN_INCLUDES) $(BOOST_CPPFLAGS) $(EVENT_CFLAGS) $(EVENT_PTHREADS_CFLAGS) -I$(builddir)/bench/
+bench_bench_bitcoin_CPPFLAGS = $(AM_CPPFLAGS) $(DIGIBYTE_INCLUDES) $(BOOST_CPPFLAGS) $(EVENT_CFLAGS) $(EVENT_PTHREADS_CFLAGS) -I$(builddir)/bench/
 bench_bench_bitcoin_CXXFLAGS = $(AM_CXXFLAGS) $(PIE_FLAGS)
 bench_bench_bitcoin_LDFLAGS = $(RELDFLAGS) $(AM_LDFLAGS) $(LIBTOOL_APP_LDFLAGS) $(PTHREAD_FLAGS)
 bench_bench_bitcoin_LDADD = \
   $(LIBTEST_UTIL) \
-  $(LIBBITCOIN_NODE) \
-  $(LIBBITCOIN_WALLET) \
-  $(LIBBITCOIN_COMMON) \
-  $(LIBBITCOIN_UTIL) \
-  $(LIBBITCOIN_CONSENSUS) \
-  $(LIBBITCOIN_CRYPTO) \
+  $(LIBDIGIBYTE_NODE) \
+  $(LIBDIGIBYTE_WALLET) \
+  $(LIBDIGIBYTE_COMMON) \
+  $(LIBDIGIBYTE_UTIL) \
+  $(LIBDIGIBYTE_CONSENSUS) \
+  $(LIBDIGIBYTE_CRYPTO) \
   $(LIBLEVELDB) \
   $(LIBMEMENV) \
   $(LIBSECP256K1) \
@@ -78,7 +78,7 @@ bench_bench_bitcoin_LDADD = \
   $(NATPMP_LIBS)
 
 if ENABLE_ZMQ
-bench_bench_bitcoin_LDADD += $(LIBBITCOIN_ZMQ) $(ZMQ_LIBS)
+bench_bench_bitcoin_LDADD += $(LIBDIGIBYTE_ZMQ) $(ZMQ_LIBS)
 endif
 
 if ENABLE_WALLET
@@ -89,9 +89,9 @@ bench_bench_bitcoin_SOURCES += bench/wallet_create_tx.cpp
 bench_bench_bitcoin_LDADD += $(BDB_LIBS) $(SQLITE_LIBS)
 endif
 
-CLEAN_BITCOIN_BENCH = bench/*.gcda bench/*.gcno $(GENERATED_BENCH_FILES)
+CLEAN_DIGIBYTE_BENCH = bench/*.gcda bench/*.gcno $(GENERATED_BENCH_FILES)
 
-CLEANFILES += $(CLEAN_BITCOIN_BENCH)
+CLEANFILES += $(CLEAN_DIGIBYTE_BENCH)
 
 bench/data.cpp: bench/data/block413567.raw.h
 
@@ -101,4 +101,4 @@ bench: $(BENCH_BINARY) FORCE
 	$(BENCH_BINARY)
 
 bitcoin_bench_clean : FORCE
-	rm -f $(CLEAN_BITCOIN_BENCH) $(bench_bench_bitcoin_OBJECTS) $(BENCH_BINARY)
+	rm -f $(CLEAN_DIGIBYTE_BENCH) $(bench_bench_bitcoin_OBJECTS) $(BENCH_BINARY)

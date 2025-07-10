@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2016-2022 The Bitcoin Core developers
+# Copyright (c) 2016-2022 The DigiByte Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -12,14 +12,14 @@ SOURCE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src'
 DEFAULT_PLATFORM_TOOLSET = R'v143'
 
 libs = [
-    'libbitcoin_cli',
-    'libbitcoin_common',
-    'libbitcoin_crypto',
-    'libbitcoin_node',
-    'libbitcoin_util',
-    'libbitcoin_wallet_tool',
-    'libbitcoin_wallet',
-    'libbitcoin_zmq',
+    'libdigibyte_cli',
+    'libdigibyte_common',
+    'libdigibyte_crypto',
+    'libdigibyte_node',
+    'libdigibyte_util',
+    'libdigibyte_wallet_tool',
+    'libdigibyte_wallet',
+    'libdigibyte_zmq',
     'bench_bitcoin',
     'libtest_util',
 ]
@@ -70,7 +70,7 @@ def parse_config_into_btc_config():
     config_dict = dict(item.split(", ") for item in config_info)
     config_dict["PACKAGE_VERSION"] = f"\"{config_dict['CLIENT_VERSION_MAJOR']}.{config_dict['CLIENT_VERSION_MINOR']}.{config_dict['CLIENT_VERSION_BUILD']}\""
     version = config_dict["PACKAGE_VERSION"].strip('"')
-    config_dict["PACKAGE_STRING"] = f"\"Bitcoin Core {version}\""
+    config_dict["PACKAGE_STRING"] = f"\"DigiByte Core {version}\""
 
     with open(os.path.join(SOURCE_DIR,'../build_msvc/bitcoin_config.h.in'), "r", encoding="utf8") as template_file:
         template = template_file.readlines()
@@ -91,7 +91,7 @@ def set_properties(vcxproj_filename, placeholder, content):
             vcxproj_file.write(vcxproj_in_file.read().replace(placeholder, content))
 
 def main():
-    parser = argparse.ArgumentParser(description='Bitcoin-core msbuild configuration initialiser.')
+    parser = argparse.ArgumentParser(description='DigiByte-core msbuild configuration initialiser.')
     parser.add_argument('-toolset', nargs='?', default=DEFAULT_PLATFORM_TOOLSET,
         help='Optionally sets the msbuild platform toolset, e.g. v143 for Visual Studio 2022.'
          ' default is %s.'%DEFAULT_PLATFORM_TOOLSET)
@@ -110,7 +110,7 @@ def main():
             content += '    </ClCompile>\n'
         set_properties(vcxproj_filename, '@SOURCE_FILES@\n', content)
     parse_config_into_btc_config()
-    copyfile(os.path.join(SOURCE_DIR,'../build_msvc/bitcoin_config.h'), os.path.join(SOURCE_DIR, 'config/bitcoin-config.h'))
+    copyfile(os.path.join(SOURCE_DIR,'../build_msvc/bitcoin_config.h'), os.path.join(SOURCE_DIR, 'config/digibyte-config.h'))
 
 if __name__ == '__main__':
     main()

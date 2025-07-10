@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2014-2022 The Bitcoin Core developers
+# Copyright (c) 2014-2022 The DigiByte Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test the wallet accounts properly when there is a double-spend conflict."""
@@ -39,7 +39,7 @@ class TxnMallTest(BitcoinTestFramework):
         return self.nodes[0].sendrawtransaction(tx['hex'])
 
     def run_test(self):
-        # All nodes should start with 1,250 BTC:
+        # All nodes should start with 1,250 DGB:
         starting_balance = 1250
 
         # All nodes should be out of IBD.
@@ -68,7 +68,7 @@ class TxnMallTest(BitcoinTestFramework):
         # Coins are sent to node1_address
         node1_address = self.nodes[1].getnewaddress()
 
-        # First: use raw transaction API to send 1240 BTC to node1_address,
+        # First: use raw transaction API to send 1240 DGB to node1_address,
         # but don't broadcast:
         doublespend_fee = Decimal('-.02')
         rawtx_input_0 = {}
@@ -86,7 +86,7 @@ class TxnMallTest(BitcoinTestFramework):
         doublespend = self.nodes[0].signrawtransactionwithwallet(rawtx)
         assert_equal(doublespend["complete"], True)
 
-        # Create two spends using 1 50 BTC coin each
+        # Create two spends using 1 50 DGB coin each
         txid1 = self.spend_txid(fund_foo_txid, find_vout_for_address(self.nodes[0], fund_foo_txid, node0_address_foo), {node1_address: 40})
         txid2 = self.spend_txid(fund_bar_txid, find_vout_for_address(self.nodes[0], fund_bar_txid, node0_address_bar), {node1_address: 20})
 

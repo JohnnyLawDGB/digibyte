@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Copyright (c) 2019-present The Bitcoin Core developers
+# Copyright (c) 2019-present The DigiByte Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -20,4 +20,4 @@ export GOAL="deploy"
 
 # False-positive warning is fixed with clang 17, remove this when that version
 # can be used.
-export BITCOIN_CONFIG="--with-gui --enable-reduce-exports LDFLAGS=-Wno-error=unused-command-line-argument"
+export DIGIBYTE_CONFIG="--with-gui --enable-reduce-exports LDFLAGS=-Wno-error=unused-command-line-argument"

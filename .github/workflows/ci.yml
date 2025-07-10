@@ -1,4 +1,4 @@
-# Copyright (c) 2023 The Bitcoin Core developers
+# Copyright (c) 2023 The DigiByte Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -76,7 +76,7 @@ jobs:
     runs-on: macos-13  # Use M1 once available https://github.com/github/roadmap/issues/528
 
     # No need to run on the read-only mirror, unless it is a PR.
-    if: github.repository != 'bitcoin-core/gui' || github.event_name == 'pull_request'
+    if: github.repository != 'digibyte-core/gui' || github.event_name == 'pull_request'
 
     timeout-minutes: 120
 
@@ -130,7 +130,7 @@ jobs:
     runs-on: windows-2022
 
     # No need to run on the read-only mirror, unless it is a PR.
-    if: github.repository != 'bitcoin-core/gui' || github.event_name == 'pull_request'
+    if: github.repository != 'digibyte-core/gui' || github.event_name == 'pull_request'
 
     env:
       CCACHE_MAXSIZE: '200M'
@@ -309,7 +309,7 @@ jobs:
         shell: cmd
         run: |
           ccache --zero-stats
-          msbuild build_msvc\bitcoin.sln -property:CLToolPath=C:\ccache;CLToolExe=cl.exe;UseMultiToolTask=true;Configuration=Release -maxCpuCount -verbosity:minimal -noLogo
+          msbuild build_msvc\digibyte.sln -property:CLToolPath=C:\ccache;CLToolExe=cl.exe;UseMultiToolTask=true;Configuration=Release -maxCpuCount -verbosity:minimal -noLogo
 
       - name: Ccache stats
         run: ccache --show-stats
@@ -339,6 +339,6 @@ jobs:
         # The test suit regularly fails to complete in windows native github
         # actions as a child process stops making progress. The root cause has
         # not yet been determined.
-        # Discussed in https://github.com/bitcoin/bitcoin/pull/28509
+        # Discussed in https://github.com/digibyte/digibyte/pull/28509
         if: github.event_name != 'pull_request'
         run: py -3 test\functional\test_runner.py --jobs $env:NUMBER_OF_PROCESSORS --ci --quiet --tmpdirprefix=$env:RUNNER_TEMP --combinedlogslen=99999999 --timeout-factor=$env:TEST_RUNNER_TIMEOUT_FACTOR --extended

@@ -1,8 +1,8 @@
 blank_issues_enabled: true
 contact_links:
-  - name: Bitcoin Core Security Policy
-    url: https://github.com/bitcoin/bitcoin/blob/master/SECURITY.md
+  - name: DigiByte Core Security Policy
+    url: https://github.com/digibyte/digibyte/blob/master/SECURITY.md
     about: View security policy
-  - name: Bitcoin Core Developers
+  - name: DigiByte Core Developers
     url: https://bitcoincore.org
-    about: Bitcoin Core homepage
+    about: DigiByte Core homepage

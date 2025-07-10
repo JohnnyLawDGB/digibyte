@@ -1,9 +1,9 @@
-// Copyright (c) 2011-2022 The Bitcoin Core developers
+// Copyright (c) 2011-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef BITCOIN_QT_TRANSACTIONDESC_H
-#define BITCOIN_QT_TRANSACTIONDESC_H
+#ifndef DIGIBYTE_QT_TRANSACTIONDESC_H
+#define DIGIBYTE_QT_TRANSACTIONDESC_H
 
 #include <qt/bitcoinunits.h>
 
@@ -34,4 +34,4 @@ private:
     static QString FormatTxStatus(const interfaces::WalletTxStatus& status, bool inMempool);
 };
 
-#endif // BITCOIN_QT_TRANSACTIONDESC_H
+#endif // DIGIBYTE_QT_TRANSACTIONDESC_H

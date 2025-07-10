@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-<<<<<<< HEAD
-# Copyright (c) 2014-2020 The Bitcoin Core developers
-=======
 # Copyright (c) 2014-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test RPCs related to blockchainstate.
@@ -31,19 +27,12 @@ import os
 import subprocess
 import textwrap
 
-<<<<<<< HEAD
 from test_framework.address import ADDRESS_BCRT1_P2WSH_OP_TRUE
-from test_framework.blocktools import (
-    create_block,
-    create_coinbase,
-    TIME_GENESIS_BLOCK,
-=======
 from test_framework.blocktools import (
     MAX_FUTURE_BLOCK_TIME,
     TIME_GENESIS_BLOCK,
     create_block,
     create_coinbase,
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 )
 from test_framework.messages import (
     CBlockHeader,
@@ -51,10 +40,7 @@ from test_framework.messages import (
     msg_block,
 )
 from test_framework.p2p import P2PInterface
-<<<<<<< HEAD
-=======
 from test_framework.script import hash256
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import (
     assert_equal,
@@ -69,8 +55,6 @@ from test_framework.util import (
 from test_framework.wallet import MiniWallet
 
 
-<<<<<<< HEAD
-=======
 HEIGHT = 200  # blocks mined
 TIME_RANGE_STEP = 600  # ten-minute steps
 TIME_RANGE_MTP = TIME_GENESIS_BLOCK + (HEIGHT - 6) * TIME_RANGE_STEP
@@ -78,7 +62,6 @@ TIME_RANGE_TIP = TIME_GENESIS_BLOCK + (HEIGHT - 1) * TIME_RANGE_STEP
 TIME_RANGE_END = TIME_GENESIS_BLOCK + HEIGHT * TIME_RANGE_STEP
 
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 class BlockchainTest(DigiByteTestFramework):
     def set_test_params(self):
         self.setup_clean_chain = True
@@ -87,10 +70,6 @@ class BlockchainTest(DigiByteTestFramework):
 
     def run_test(self):
         self.wallet = MiniWallet(self.nodes[0])
-<<<<<<< HEAD
-        self.mine_chain()
-        self.restart_node(0, extra_args=['-stopatheight=207', '-checkblocks=-1', '-prune=1'])  # Set extra args with pruning after rescan is complete
-=======
         self._test_prune_disk_space()
         self.mine_chain()
         self._test_max_future_block_time()
@@ -102,7 +81,6 @@ class BlockchainTest(DigiByteTestFramework):
                 "-prune=1",  # Set pruning after rescan is complete
             ],
         )
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         self._test_getblockchaininfo()
         self._test_getchaintxstats()
@@ -113,17 +91,15 @@ class BlockchainTest(DigiByteTestFramework):
         self._test_stopatheight()
         self._test_waitforblockheight()
         self._test_getblock()
-<<<<<<< HEAD
         assert self.nodes[0].verifychain(4, 0)
 
     def mine_chain(self):
-        self.log.info('Create some old blocks')
-        for t in range(TIME_GENESIS_BLOCK, TIME_GENESIS_BLOCK + 200 * 600, 600):
+        self.log.info(f"Generate {HEIGHT} blocks after the genesis block in ten-minute steps")
+        for t in range(TIME_GENESIS_BLOCK, TIME_RANGE_END, TIME_RANGE_STEP):
             # ten-minute steps from genesis block time
             self.nodes[0].setmocktime(t)
-            self.generatetoaddress(self.nodes[0], 1, ADDRESS_BCRT1_P2WSH_OP_TRUE)
-        assert_equal(self.nodes[0].getblockchaininfo()['blocks'], 200)
-=======
+            self.generate(self.wallet, 1)
+        assert_equal(self.nodes[0].getblockchaininfo()['blocks'], HEIGHT)
         self._test_getdeploymentinfo()
         self._test_y2106()
         assert self.nodes[0].verifychain(4, 0)
@@ -154,7 +130,6 @@ class BlockchainTest(DigiByteTestFramework):
         )
         self.log.info("A block tip of MAX_FUTURE_BLOCK_TIME in the future is fine")
         self.start_node(0, extra_args=[f"-mocktime={TIME_RANGE_TIP - MAX_FUTURE_BLOCK_TIME}"])
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     def _test_getblockchaininfo(self):
         self.log.info("Test getblockchaininfo")
@@ -357,19 +332,11 @@ class BlockchainTest(DigiByteTestFramework):
         assert_raises_rpc_error(-8, "Invalid block count: should be between 0 and the block's height - 1", self.nodes[0].getchaintxstats, self.nodes[0].getblockcount())
 
         # Test `getchaintxstats` invalid `blockhash`
-<<<<<<< HEAD
-        assert_raises_rpc_error(-1, "JSON value is not a string as expected", self.nodes[0].getchaintxstats, blockhash=0)
-        assert_raises_rpc_error(-8, "blockhash must be of length 64 (not 1, for '0')", self.nodes[0].getchaintxstats, blockhash='0')
-        assert_raises_rpc_error(-8, "blockhash must be hexadecimal string (not 'ZZZ0000000000000000000000000000000000000000000000000000000000000')", self.nodes[0].getchaintxstats, blockhash='ZZZ0000000000000000000000000000000000000000000000000000000000000')
-        assert_raises_rpc_error(-5, "Block not found", self.nodes[0].getchaintxstats, blockhash='0000000000000000000000000000000000000000000000000000000000000000')
-        blockhash = self.nodes[0].getblockhash(200)
-=======
         assert_raises_rpc_error(-3, "JSON value of type number is not of expected type string", self.nodes[0].getchaintxstats, blockhash=0)
         assert_raises_rpc_error(-8, "blockhash must be of length 64 (not 1, for '0')", self.nodes[0].getchaintxstats, blockhash='0')
         assert_raises_rpc_error(-8, "blockhash must be hexadecimal string (not 'ZZZ0000000000000000000000000000000000000000000000000000000000000')", self.nodes[0].getchaintxstats, blockhash='ZZZ0000000000000000000000000000000000000000000000000000000000000')
         assert_raises_rpc_error(-5, "Block not found", self.nodes[0].getchaintxstats, blockhash='0000000000000000000000000000000000000000000000000000000000000000')
         blockhash = self.nodes[0].getblockhash(HEIGHT)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         self.nodes[0].invalidateblock(blockhash)
         assert_raises_rpc_error(-8, "Block is not in main chain", self.nodes[0].getchaintxstats, blockhash=blockhash)
         self.nodes[0].reconsiderblock(blockhash)
@@ -391,15 +358,9 @@ class BlockchainTest(DigiByteTestFramework):
         assert_equal(chaintxstats['time'], b200['time'])
         assert_equal(chaintxstats['txcount'], HEIGHT + 1)
         assert_equal(chaintxstats['window_final_block_hash'], b200_hash)
-<<<<<<< HEAD
-        assert_equal(chaintxstats['window_final_block_height'], 200)
-        assert_equal(chaintxstats['window_block_count'], 199)
-        assert_equal(chaintxstats['window_tx_count'], 199)
-=======
         assert_equal(chaintxstats['window_final_block_height'], HEIGHT )
         assert_equal(chaintxstats['window_block_count'], HEIGHT - 1)
         assert_equal(chaintxstats['window_tx_count'], HEIGHT - 1)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         assert_equal(chaintxstats['window_interval'], time_diff)
         assert_equal(round(chaintxstats['txrate'] * time_diff, 10), Decimal(HEIGHT - 1))
 
@@ -416,14 +377,6 @@ class BlockchainTest(DigiByteTestFramework):
     def _test_gettxoutsetinfo(self):
         node = self.nodes[0]
         res = node.gettxoutsetinfo()
-<<<<<<< HEAD
-        assert_equal(res['total_amount'], Decimal('72000.00000000') * Decimal('200'))
-        assert_equal(res['transactions'], 200)
-        assert_equal(res['height'], 200)
-        assert_equal(res['txouts'], 200)
-        assert_equal(res['bogosize'], 16800),
-        assert_equal(res['bestblock'], node.getblockhash(200))
-=======
 
         assert_equal(res['total_amount'], Decimal('8725.00000000'))
         assert_equal(res['transactions'], HEIGHT)
@@ -431,7 +384,6 @@ class BlockchainTest(DigiByteTestFramework):
         assert_equal(res['txouts'], HEIGHT)
         assert_equal(res['bogosize'], 16800),
         assert_equal(res['bestblock'], node.getblockhash(HEIGHT))
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         size = res['disk_size']
         assert size > 6400
         assert size < 64000
@@ -460,47 +412,28 @@ class BlockchainTest(DigiByteTestFramework):
         del res['disk_size'], res3['disk_size']
         assert_equal(res, res3)
 
-<<<<<<< HEAD
-        self.log.info("Test hash_type option for gettxoutsetinfo()")
-        # Adding hash_type 'hash_serialized_2', which is the default, should
-        # not change the result.
-        res4 = node.gettxoutsetinfo(hash_type='hash_serialized_2')
-=======
         self.log.info("Test gettxoutsetinfo hash_type option")
         # Adding hash_type 'hash_serialized_3', which is the default, should
         # not change the result.
         res4 = node.gettxoutsetinfo(hash_type='hash_serialized_3')
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         del res4['disk_size']
         assert_equal(res, res4)
 
         # hash_type none should not return a UTXO set hash.
         res5 = node.gettxoutsetinfo(hash_type='none')
-<<<<<<< HEAD
-        assert 'hash_serialized_2' not in res5
-=======
         assert 'hash_serialized_3' not in res5
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # hash_type muhash should return a different UTXO set hash.
         res6 = node.gettxoutsetinfo(hash_type='muhash')
         assert 'muhash' in res6
-<<<<<<< HEAD
-        assert(res['hash_serialized_2'] != res6['muhash'])
-=======
         assert res['hash_serialized_3'] != res6['muhash']
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # muhash should not be returned unless requested.
         for r in [res, res2, res3, res4, res5]:
             assert 'muhash' not in r
 
         # Unknown hash_type raises an error
-<<<<<<< HEAD
-        assert_raises_rpc_error(-8, "foohash is not a valid hash_type", node.gettxoutsetinfo, "foohash")
-=======
         assert_raises_rpc_error(-8, "'foo hash' is not a valid hash_type", node.gettxoutsetinfo, "foo hash")
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     def _test_getblockheader(self):
         self.log.info("Test getblockheader")
@@ -511,11 +444,7 @@ class BlockchainTest(DigiByteTestFramework):
         assert_raises_rpc_error(-5, "Block not found", node.getblockheader, "0cf7bb8b1697ea987f3b223ba7819250cae33efacb068d23dc24859824a77844")
 
         besthash = node.getbestblockhash()
-<<<<<<< HEAD
-        secondbesthash = node.getblockhash(199)
-=======
         secondbesthash = node.getblockhash(HEIGHT - 1)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         header = node.getblockheader(blockhash=besthash)
 
         assert_equal(header['hash'], besthash)
@@ -547,13 +476,9 @@ class BlockchainTest(DigiByteTestFramework):
         assert 'nextblockhash' not in node.getblockheader(node.getbestblockhash())
 
     def _test_getdifficulty(self):
-<<<<<<< HEAD
+        self.log.info("Test getdifficulty")
         response = self.nodes[0].getdifficulty()
         difficulties = response['difficulties']
-=======
-        self.log.info("Test getdifficulty")
-        difficulty = self.nodes[0].getdifficulty()
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         # 1 hash in 2 should be valid, so difficulty should be 1/2**31
         # binary => decimal => binary math is why we do this check
         assert abs(difficulties['scrypt'] * 2**31 - 1) < 0.0001
@@ -597,18 +522,6 @@ class BlockchainTest(DigiByteTestFramework):
         assert_equal(hashes_per_second, 0)
 
         # This should be 2 hashes every 10 minutes or 1/300
-<<<<<<< HEAD
-        assert abs(hashes_per_second * 300 - 1) < 0.01
-
-    def _test_stopatheight(self):
-        assert_equal(self.nodes[0].getblockcount(), 200)
-        self.generatetoaddress(self.nodes[0], 6, ADDRESS_BCRT1_P2WSH_OP_TRUE)
-        assert_equal(self.nodes[0].getblockcount(), 206)
-        self.log.debug('Node should not stop at this height')
-        assert_raises(subprocess.TimeoutExpired, lambda: self.nodes[0].process.wait(timeout=3))
-        try:
-            self.generatetoaddress(self.nodes[0], 1, ADDRESS_BCRT1_P2WSH_OP_TRUE)
-=======
         hashes_per_second = self.nodes[0].getnetworkhashps()
         assert abs(hashes_per_second * 300 - 1) < 0.0001
 
@@ -621,7 +534,6 @@ class BlockchainTest(DigiByteTestFramework):
         assert_raises(subprocess.TimeoutExpired, lambda: self.nodes[0].process.wait(timeout=3))
         try:
             self.generatetoaddress(self.nodes[0], 1, self.wallet.get_address(), sync_fun=self.no_op)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         except (ConnectionError, http.client.BadStatusLine):
             pass  # The node already shut down before response
         self.log.debug('Node should stop at this height...')
@@ -669,39 +581,8 @@ class BlockchainTest(DigiByteTestFramework):
         assert_waitforheight(current_height + 1)
 
     def _test_getblock(self):
+        self.log.info("Test getblock")
         node = self.nodes[0]
-<<<<<<< HEAD
-
-        miniwallet = MiniWallet(node)
-        miniwallet.scan_blocks(num=5)
-
-        fee_per_byte = Decimal('0.000010')
-        fee_per_kb = 1000 * fee_per_byte
-
-        miniwallet.send_self_transfer(fee_rate=fee_per_kb, from_node=node)
-        blockhash = self.generate(node, 1)[0]
-
-        self.log.info("Test that getblock with verbosity 1 doesn't include fee")
-        block = node.getblock(blockhash, 1)
-        assert 'fee' not in block['tx'][1]
-
-        self.log.info('Test that getblock with verbosity 2 includes expected fee')
-        block = node.getblock(blockhash, 2)
-        tx = block['tx'][1]
-        assert 'fee' in tx
-        assert_equal(tx['fee'], tx['vsize'] * fee_per_byte)
-
-        self.log.info("Test that getblock with verbosity 2 still works with pruned Undo data")
-        datadir = get_datadir_path(self.options.tmpdir, 0)
-
-        self.log.info("Test that getblock with invalid verbosity type returns proper error message")
-        assert_raises_rpc_error(-1, "JSON value is not an integer as expected", node.getblock, blockhash, "2")
-
-        def move_block_file(old, new):
-            old_path = os.path.join(datadir, self.chain, 'blocks', old)
-            new_path = os.path.join(datadir, self.chain, 'blocks', new)
-            os.rename(old_path, new_path)
-=======
         fee_per_byte = Decimal('0.00000010')
         fee_per_kb = 1000 * fee_per_byte
 
@@ -774,20 +655,14 @@ class BlockchainTest(DigiByteTestFramework):
             old_path = self.nodes[0].blocks_path / old
             new_path = self.nodes[0].blocks_path / new
             old_path.rename(new_path)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # Move instead of deleting so we can restore chain state afterwards
         move_block_file('rev00000.dat', 'rev_wrong')
 
-<<<<<<< HEAD
-        block = node.getblock(blockhash, 2)
-        assert 'fee' not in block['tx'][1]
-=======
         assert_fee_not_in_block(2)
         assert_fee_not_in_block(3)
         assert_vin_does_not_contain_prevout(2)
         assert_vin_does_not_contain_prevout(3)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # Restore chain state
         move_block_file('rev_wrong', 'rev00000.dat')
@@ -795,11 +670,6 @@ class BlockchainTest(DigiByteTestFramework):
         assert 'previousblockhash' not in node.getblock(node.getblockhash(0))
         assert 'nextblockhash' not in node.getblock(node.getbestblockhash())
 
-<<<<<<< HEAD
-
-
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 if __name__ == '__main__':
     BlockchainTest().main()

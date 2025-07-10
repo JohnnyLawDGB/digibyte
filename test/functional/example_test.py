@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-<<<<<<< HEAD
-# Copyright (c) 2017-2021 The DigiByte Core developers
-=======
 # Copyright (c) 2017-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """An example functional test
@@ -18,10 +14,6 @@ is testing and *how* it's being tested
 from collections import defaultdict
 
 # Avoid wildcard * imports
-<<<<<<< HEAD
-from test_framework.blocktools import (create_block, create_coinbase)
-from test_framework.messages import CInv, MSG_BLOCK
-=======
 # Use lexicographically sorted multi-line imports
 from test_framework.blocktools import (
     create_block,
@@ -31,7 +23,6 @@ from test_framework.messages import (
     CInv,
     MSG_BLOCK,
 )
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 from test_framework.p2p import (
     P2PInterface,
     msg_block,

@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-<<<<<<< HEAD
-# Copyright (c) 2021-2022 The DigiByte Core developers
-=======
 # Copyright (c) 2014-2021 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test behavior of headers messages to announce blocks.
@@ -222,10 +218,7 @@ class SendHeadersTest(DigiByteTestFramework):
 
         # make sure all invalidated blocks are node0's
         self.generatetoaddress(self.nodes[0], length, self.nodes[0].get_deterministic_priv_key().address)
-<<<<<<< HEAD
         self.sync_blocks(self.nodes, wait=0.1)
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         for x in self.nodes[0].p2ps:
             x.wait_for_block_announcement(int(self.nodes[0].getbestblockhash(), 16))
             x.clear_block_announcements()
@@ -234,10 +227,7 @@ class SendHeadersTest(DigiByteTestFramework):
         hash_to_invalidate = self.nodes[1].getblockhash(tip_height - (length - 1))
         self.nodes[1].invalidateblock(hash_to_invalidate)
         all_hashes = self.generatetoaddress(self.nodes[1], length + 1, self.nodes[1].get_deterministic_priv_key().address)  # Must be longer than the orig chain
-<<<<<<< HEAD
         self.sync_blocks(self.nodes, wait=0.1)
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         return [int(x, 16) for x in all_hashes]
 
     def run_test(self):
@@ -559,13 +549,8 @@ class SendHeadersTest(DigiByteTestFramework):
         blocks = []
         # Now we test that if we repeatedly don't send connecting headers, we
         # don't go into an infinite loop trying to get them to connect.
-<<<<<<< HEAD
-        MAX_UNCONNECTING_HEADERS = 10
-        for _ in range(MAX_UNCONNECTING_HEADERS + 1):
-=======
         MAX_NUM_UNCONNECTING_HEADERS_MSGS = 10
         for _ in range(MAX_NUM_UNCONNECTING_HEADERS_MSGS + 1):
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             blocks.append(create_block(tip, create_coinbase(height), block_time))
             blocks[-1].solve()
             tip = blocks[-1].sha256

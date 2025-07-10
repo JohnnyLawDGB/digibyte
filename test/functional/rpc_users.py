@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-<<<<<<< HEAD
-# Copyright (c) 2015-2020 The DigiByte Core developers
-=======
 # Copyright (c) 2015-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test multiple RPC users."""
@@ -40,12 +36,7 @@ class HTTPBasicsTest(DigiByteTestFramework):
         self.num_nodes = 2
         self.supports_cli = False
 
-<<<<<<< HEAD
-    def setup_chain(self):
-        super().setup_chain()
-=======
     def conf_setup(self):
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         #Append rpcauth to digibyte.conf before initialization
         self.rtpassword = "cA773lm788buwYe4g4WT+05pKyNruVKjQ25x3n0DQcM="
         rpcauth = "rpcauth=rt:93648e835a54c573682c2eb19f882535$7681e9c5b74bdd85e78166031d2058e1069b3ed7ed967c93fc63abba06f31144"
@@ -59,34 +50,17 @@ class HTTPBasicsTest(DigiByteTestFramework):
 
         # Generate RPCAUTH with specified password
         self.rt2password = "8/F3uMDw4KSEbw96U3CA1C4X05dkHDN2BPFjTgZW4KI="
-<<<<<<< HEAD
-        p = subprocess.Popen([sys.executable, gen_rpcauth, 'rt2', self.rt2password], stdout=subprocess.PIPE, universal_newlines=True)
-=======
         p = subprocess.Popen([sys.executable, gen_rpcauth, 'rt2', self.rt2password], stdout=subprocess.PIPE, text=True)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         lines = p.stdout.read().splitlines()
         rpcauth2 = lines[1]
 
         # Generate RPCAUTH without specifying password
         self.user = ''.join(SystemRandom().choice(string.ascii_letters + string.digits) for _ in range(10))
-<<<<<<< HEAD
-        p = subprocess.Popen([sys.executable, gen_rpcauth, self.user], stdout=subprocess.PIPE, universal_newlines=True)
-=======
         p = subprocess.Popen([sys.executable, gen_rpcauth, self.user], stdout=subprocess.PIPE, text=True)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         lines = p.stdout.read().splitlines()
         rpcauth3 = lines[1]
         self.password = lines[3]
 
-<<<<<<< HEAD
-        with open(os.path.join(get_datadir_path(self.options.tmpdir, 0), "digibyte.conf"), 'a', encoding='utf8') as f:
-            f.write(rpcauth + "\n")
-            f.write(rpcauth2 + "\n")
-            f.write(rpcauth3 + "\n")
-        with open(os.path.join(get_datadir_path(self.options.tmpdir, 1), "digibyte.conf"), 'a', encoding='utf8') as f:
-            f.write("rpcuser={}\n".format(self.rpcuser))
-            f.write("rpcpassword={}\n".format(self.rpcpassword))
-=======
         with open(self.nodes[0].datadir_path / "digibyte.conf", "a", encoding="utf8") as f:
             f.write(rpcauth + "\n")
             f.write(rpcauth2 + "\n")
@@ -96,7 +70,6 @@ class HTTPBasicsTest(DigiByteTestFramework):
             f.write("rpcpassword={}\n".format(self.rpcpassword))
         self.restart_node(0)
         self.restart_node(1)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     def test_auth(self, node, user, password):
         self.log.info('Correct...')
@@ -112,10 +85,7 @@ class HTTPBasicsTest(DigiByteTestFramework):
         assert_equal(401, call_with_auth(node, user + 'wrong', password + 'wrong').status)
 
     def run_test(self):
-<<<<<<< HEAD
-=======
         self.conf_setup()
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         self.log.info('Check correctness of the rpcauth config option')
         url = urllib.parse.urlparse(self.nodes[0].url)
 
@@ -137,19 +107,12 @@ class HTTPBasicsTest(DigiByteTestFramework):
         self.stop_node(0)
         self.nodes[0].assert_start_raises_init_error(expected_msg=init_error, extra_args=['-rpcauth=foo'])
         self.nodes[0].assert_start_raises_init_error(expected_msg=init_error, extra_args=['-rpcauth=foo:bar'])
-<<<<<<< HEAD
-
-        self.log.info('Check that failure to write cookie file will abort the node gracefully')
-        cookie_file = os.path.join(get_datadir_path(self.options.tmpdir, 0), self.chain, '.cookie.tmp')
-        os.mkdir(cookie_file)
-=======
         self.nodes[0].assert_start_raises_init_error(expected_msg=init_error, extra_args=['-rpcauth=foo:bar:baz'])
         self.nodes[0].assert_start_raises_init_error(expected_msg=init_error, extra_args=['-rpcauth=foo$bar:baz'])
         self.nodes[0].assert_start_raises_init_error(expected_msg=init_error, extra_args=['-rpcauth=foo$bar$baz'])
 
         self.log.info('Check that failure to write cookie file will abort the node gracefully')
         (self.nodes[0].chain_path / ".cookie.tmp").mkdir()
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         self.nodes[0].assert_start_raises_init_error(expected_msg=init_error)
 
 

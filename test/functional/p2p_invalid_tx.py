@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-<<<<<<< HEAD
-# Copyright (c) 2015-2021 The DigiByte Core developers
-=======
 # Copyright (c) 2015-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test node responses to invalid transactions.
@@ -64,10 +60,6 @@ class InvalidTxRequestTest(DigiByteTestFramework):
         block.solve()
         # Save the coinbase for later
         block1 = block
-<<<<<<< HEAD
-        tip = block.sha256
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         node.p2ps[0].send_blocks_and_test([block], node, success=True)
 
         self.log.info("Mature the block.")
@@ -164,10 +156,7 @@ class InvalidTxRequestTest(DigiByteTestFramework):
         with node.assert_debug_log(['orphanage overflow, removed 1 tx']):
             node.p2ps[0].send_txs_and_test(orphan_tx_pool, node, success=False)
 
-<<<<<<< HEAD
-=======
         self.log.info('Test orphan with rejected parents')
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         rejected_parent = CTransaction()
         rejected_parent.vin.append(CTxIn(outpoint=COutPoint(tx_orphan_2_invalid.sha256, 0)))
         rejected_parent.vout.append(CTxOut(nValue=11 * COIN, scriptPubKey=SCRIPT_PUB_KEY_OP_TRUE))
@@ -175,8 +164,6 @@ class InvalidTxRequestTest(DigiByteTestFramework):
         with node.assert_debug_log(['not keeping orphan with rejected parents {}'.format(rejected_parent.hash)]):
             node.p2ps[0].send_txs_and_test([rejected_parent], node, success=False)
 
-<<<<<<< HEAD
-=======
         self.log.info('Test that a peer disconnection causes erase its transactions from the orphan pool')
         with node.assert_debug_log(['Erased 100 orphan tx from peer=25']):
             self.reconnect_p2p(num_connections=1)
@@ -235,7 +222,6 @@ class InvalidTxRequestTest(DigiByteTestFramework):
         with node.assert_debug_log(["Erased 1 orphan tx included or conflicted by block"]):
             node.p2ps[0].send_blocks_and_test([block_B], node, success=True)
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 if __name__ == '__main__':
     InvalidTxRequestTest().main()

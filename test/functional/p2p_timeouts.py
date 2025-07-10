@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-<<<<<<< HEAD
-# Copyright (c) 2021-2022 The DigiByte Core developers
-=======
 # Copyright (c) 2016-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test various net timeouts.
@@ -28,11 +24,8 @@ from test_framework.messages import msg_ping
 from test_framework.p2p import P2PInterface
 from test_framework.test_framework import DigiByteTestFramework
 
-<<<<<<< HEAD
-=======
 import time
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 class TestP2PConn(P2PInterface):
     def on_version(self, message):
@@ -46,15 +39,6 @@ class TimeoutsTest(DigiByteTestFramework):
         self.num_nodes = 1
         # set timeout to receive version/verack to 3 seconds
         self.extra_args = [["-peertimeout=3"]]
-<<<<<<< HEAD
-
-    def run_test(self):
-        # Setup the p2p connections
-        no_verack_node = self.nodes[0].add_p2p_connection(TestP2PConn(), wait_for_verack=False)
-        no_version_node = self.nodes[0].add_p2p_connection(TestP2PConn(), send_version=False, wait_for_verack=False)
-        no_send_node = self.nodes[0].add_p2p_connection(TestP2PConn(), send_version=False, wait_for_verack=False)
-
-=======
 
     def mock_forward(self, delta):
         self.mock_time += delta
@@ -72,16 +56,11 @@ class TimeoutsTest(DigiByteTestFramework):
         with self.nodes[0].assert_debug_log(['Added connection peer=2']):
             no_send_node = self.nodes[0].add_p2p_connection(TestP2PConn(), send_version=False, wait_for_verack=False)
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         # Wait until we got the verack in response to the version. Though, don't wait for the other node to receive the
         # verack, since we never sent one
         no_verack_node.wait_for_verack()
 
-<<<<<<< HEAD
-        sleep(1)
-=======
         self.mock_forward(1)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         assert no_verack_node.is_connected
         assert no_version_node.is_connected
@@ -92,11 +71,7 @@ class TimeoutsTest(DigiByteTestFramework):
         with self.nodes[0].assert_debug_log(['non-version message before version handshake. Message "ping" from peer=1']):
             no_version_node.send_message(msg_ping())
 
-<<<<<<< HEAD
-        sleep(1)
-=======
         self.mock_forward(1)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         assert "version" in no_verack_node.last_message
 
@@ -112,19 +87,6 @@ class TimeoutsTest(DigiByteTestFramework):
             "socket no message in first 3 seconds, 1 0 peer=1",
             "socket no message in first 3 seconds, 0 0 peer=2",
         ]
-<<<<<<< HEAD
-
-        with self.nodes[0].assert_debug_log(expected_msgs=expected_timeout_logs):
-            sleep(3)
-            # By now, we waited a total of 5 seconds. Off-by-two for two
-            # reasons:
-            #  * The internal precision is one second
-            #  * Account for network delay
-            assert not no_verack_node.is_connected
-            assert not no_version_node.is_connected
-            assert not no_send_node.is_connected
-
-=======
 
         with self.nodes[0].assert_debug_log(expected_msgs=expected_timeout_logs):
             self.mock_forward(2)
@@ -137,7 +99,6 @@ class TimeoutsTest(DigiByteTestFramework):
             expected_msg='Error: peertimeout must be a positive integer.',
             extra_args=['-peertimeout=0'],
         )
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 if __name__ == '__main__':
     TimeoutsTest().main()

@@ -1,17 +1,9 @@
 #!/usr/bin/env python3
-<<<<<<< HEAD
-# Copyright (c) 2016-2021 The DigiByte Core developers
-=======
 # Copyright (c) 2016-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test the dumpwallet RPC."""
 import datetime
-<<<<<<< HEAD
-import os
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 import time
 
 from test_framework.test_framework import DigiByteTestFramework
@@ -75,7 +67,6 @@ def read_dump(file_name, addrs, script_addrs, hd_master_addr_old):
                 # count key types
                 for addrObj in addrs:
                     if addrObj['address'] == addr.split(",")[0] and addrObj['hdkeypath'] == keypath and keytype == "label=":
-<<<<<<< HEAD
                         if addr.startswith('t') or addr.startswith('s'):
                             # P2PKH address
                             found_legacy_addr += 1
@@ -83,15 +74,6 @@ def read_dump(file_name, addrs, script_addrs, hd_master_addr_old):
                             # P2SH-segwit address
                             found_p2sh_segwit_addr += 1
                         elif addr.startswith('dgbrt1'):
-=======
-                        if addr.startswith('m') or addr.startswith('n'):
-                            # P2PKH address
-                            found_legacy_addr += 1
-                        elif addr.startswith('2'):
-                            # P2SH-segwit address
-                            found_p2sh_segwit_addr += 1
-                        elif addr.startswith('bcrt1'):
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                             found_bech32_addr += 1
                         break
                     elif keytype == "change=1":

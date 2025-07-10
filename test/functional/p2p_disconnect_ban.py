@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-<<<<<<< HEAD
-# Copyright (c) 2014-2020 The DigiByte Core developers
-=======
 # Copyright (c) 2014-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test node disconnect and ban behavior"""
@@ -93,8 +89,6 @@ class DisconnectBanTest(DigiByteTestFramework):
         self.nodes[1].setmocktime(old_time + 3)
         assert_equal(len(self.nodes[1].listbanned()), 4)
 
-<<<<<<< HEAD
-=======
         self.log.info("Test ban_duration and time_remaining")
         for ban in self.nodes[1].listbanned():
             if ban["address"] in ["127.0.0.0/32", "127.0.0.0/24"]:
@@ -107,7 +101,6 @@ class DisconnectBanTest(DigiByteTestFramework):
                 assert_equal(ban["ban_duration"], 120)
                 assert_equal(ban["time_remaining"], 117)
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         self.restart_node(1)
 
         listAfterShutdown = self.nodes[1].listbanned()
@@ -135,11 +128,7 @@ class DisconnectBanTest(DigiByteTestFramework):
         self.log.info("disconnectnode: successfully disconnect node by address")
         address1 = self.nodes[0].getpeerinfo()[0]['addr']
         self.nodes[0].disconnectnode(address=address1)
-<<<<<<< HEAD
-        self.wait_until(lambda: len(self.nodes[0].getpeerinfo()) == 1, timeout=10)
-=======
         self.wait_until(lambda: len(self.nodes[1].getpeerinfo()) == 1, timeout=10)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         assert not [node for node in self.nodes[0].getpeerinfo() if node['addr'] == address1]
 
         self.log.info("disconnectnode: successfully reconnect node")
@@ -150,11 +139,7 @@ class DisconnectBanTest(DigiByteTestFramework):
         self.log.info("disconnectnode: successfully disconnect node by node id")
         id1 = self.nodes[0].getpeerinfo()[0]['id']
         self.nodes[0].disconnectnode(nodeid=id1)
-<<<<<<< HEAD
-        self.wait_until(lambda: len(self.nodes[0].getpeerinfo()) == 1, timeout=10)
-=======
         self.wait_until(lambda: len(self.nodes[1].getpeerinfo()) == 1, timeout=10)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         assert not [node for node in self.nodes[0].getpeerinfo() if node['id'] == id1]
 
 if __name__ == '__main__':

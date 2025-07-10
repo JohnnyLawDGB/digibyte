@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-<<<<<<< HEAD
-# Copyright (c) 2015-2021 The DigiByte Core developers
-=======
 # Copyright (c) 2015-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test block processing."""
@@ -17,13 +13,7 @@ from test_framework.blocktools import (
     create_tx_with_script,
     get_legacy_sigopcount_block,
     MAX_BLOCK_SIGOPS,
-<<<<<<< HEAD
-    VERSIONBITS_LAST_OLD_BLOCK_VERSION,
 )
-from test_framework.key import ECKey
-=======
-)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 from test_framework.messages import (
     CBlock,
     COIN,
@@ -32,10 +22,7 @@ from test_framework.messages import (
     CTxIn,
     CTxOut,
     MAX_BLOCK_WEIGHT,
-<<<<<<< HEAD
-=======
     SEQUENCE_FINAL,
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     uint256_from_compact,
     uint256_from_str,
 )
@@ -56,12 +43,7 @@ from test_framework.script import (
     OP_INVALIDOPCODE,
     OP_RETURN,
     OP_TRUE,
-<<<<<<< HEAD
-    SIGHASH_ALL,
-    LegacySignatureHash,
-=======
     sign_input_legacy,
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 )
 from test_framework.script_util import (
     script_to_p2sh_script,
@@ -178,11 +160,7 @@ class FullBlockTest(DigiByteTestFramework):
 
             self.log.info(f"Reject block with invalid tx: {TxTemplate.__name__}")
             blockname = f"for_invalid.{TxTemplate.__name__}"
-<<<<<<< HEAD
-            badblock = self.next_block(blockname)
-=======
             self.next_block(blockname)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             badtx = template.get_tx()
             if TxTemplate != invalid_txs.InputMissing:
                 self.sign_tx(badtx, attempt_spend_tx)
@@ -327,11 +305,7 @@ class FullBlockTest(DigiByteTestFramework):
         immature_tx = self.tip.vtx[0]
 
         self.move_tip(15)
-<<<<<<< HEAD
-        b20 = self.next_block(20, spend=immature_tx)
-=======
         b20 = self.next_block(20, spend=out[7])
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         self.send_blocks([b20], success=False, reject_reason='bad-txns-premature-spend-of-coinbase', reconnect=True)
 
         # Attempt to spend a coinbase at depth too low (on a fork this time)
@@ -879,11 +853,7 @@ class FullBlockTest(DigiByteTestFramework):
         #            \-> b_spend_dup_cb (b_dup_cb) -> b_dup_2 ()
         #
         self.move_tip(57)
-<<<<<<< HEAD
-        b_spend_dup_cb = self.next_block('spend_dup_cb')
-=======
         self.next_block('spend_dup_cb')
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         tx = CTransaction()
         tx.vin.append(CTxIn(COutPoint(duplicate_tx.sha256, 0)))
         tx.vout.append(CTxOut(0, CScript([OP_TRUE])))
@@ -1233,16 +1203,10 @@ class FullBlockTest(DigiByteTestFramework):
 
         # now check that tx78 and tx79 have been put back into the peer's mempool
         mempool = self.nodes[0].getrawmempool()
-<<<<<<< HEAD
         # Yoshi: Mempool resurrection not working
         #assert_equal(len(mempool), 2)
         #assert tx78.hash in mempool
         #assert tx79.hash in mempool
-=======
-        assert_equal(len(mempool), 2)
-        assert tx78.hash in mempool
-        assert tx79.hash in mempool
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # Test invalid opcodes in dead execution paths.
         #
@@ -1338,11 +1302,7 @@ class FullBlockTest(DigiByteTestFramework):
         blocks2 = []
         for i in range(89, LARGE_REORG_SIZE + 89):
             blocks2.append(self.next_block("alt" + str(i)))
-<<<<<<< HEAD
-        self.send_blocks(blocks2, False, force_send=True)
-=======
         self.send_blocks(blocks2, False, force_send=False)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # extend alt chain to trigger re-org
         block = self.next_block("alt" + str(chain1_tip + 1))
@@ -1385,12 +1345,7 @@ class FullBlockTest(DigiByteTestFramework):
         if (scriptPubKey[0] == OP_TRUE):  # an anyone-can-spend
             tx.vin[0].scriptSig = CScript()
             return
-<<<<<<< HEAD
-        (sighash, err) = LegacySignatureHash(spend_tx.vout[0].scriptPubKey, tx, 0, SIGHASH_ALL)
-        tx.vin[0].scriptSig = CScript([self.coinbase_key.sign_ecdsa(sighash) + bytes(bytearray([SIGHASH_ALL]))])
-=======
         sign_input_legacy(tx, 0, spend_tx.vout[0].scriptPubKey, self.coinbase_key)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     def create_and_sign_transaction(self, spend_tx, value, script=CScript([OP_TRUE])):
         tx = self.create_tx(spend_tx, 0, value, script)
@@ -1398,11 +1353,7 @@ class FullBlockTest(DigiByteTestFramework):
         tx.rehash()
         return tx
 
-<<<<<<< HEAD
-    def next_block(self, number, spend=None, additional_coinbase_value=0, script=CScript([OP_TRUE]), *, version=VERSIONBITS_LAST_OLD_BLOCK_VERSION):
-=======
     def next_block(self, number, spend=None, additional_coinbase_value=0, script=CScript([OP_TRUE]), *, version=4):
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         if self.tip is None:
             base_block_hash = self.genesis_hash
             block_time = int(time.time()) + 1

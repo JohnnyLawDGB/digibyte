@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-<<<<<<< HEAD
-# Copyright (c) 2014-2021 The DigiByte Core developers
-=======
 # Copyright (c) 2014-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test the pruning code.
@@ -14,16 +10,11 @@ This test takes 30 mins or more (up to 2 hours)
 """
 import os
 
-<<<<<<< HEAD
-from test_framework.blocktools import create_coinbase
-from test_framework.messages import CBlock
-=======
 from test_framework.blocktools import (
     MIN_BLOCKS_TO_KEEP,
     create_block,
     create_coinbase,
 )
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 from test_framework.script import (
     CScript,
     OP_NOP,
@@ -60,25 +51,7 @@ def mine_large_blocks(node, n):
     previousblockhash = int(best_block["hash"], 16)
 
     for _ in range(n):
-<<<<<<< HEAD
-        # Build the coinbase transaction (with large scriptPubKey)
-        coinbase_tx = create_coinbase(height)
-        coinbase_tx.vin[0].nSequence = 2 ** 32 - 1
-        coinbase_tx.vout[0].scriptPubKey = big_script
-        coinbase_tx.rehash()
-
-        # Build the block
-        block = CBlock()
-        block.nVersion = best_block["version"]
-        block.hashPrevBlock = previousblockhash
-        block.nTime = mine_large_blocks.nTime
-        block.nBits = int('207fffff', 16)
-        block.nNonce = 0
-        block.vtx = [coinbase_tx]
-        block.hashMerkleRoot = block.calc_merkle_root()
-=======
         block = create_block(hashprev=previousblockhash, ntime=mine_large_blocks.nTime, coinbase=create_coinbase(height, script_pubkey=big_script))
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         block.solve()
 
         # Submit to the node
@@ -90,16 +63,11 @@ def mine_large_blocks(node, n):
 
 def calc_usage(blockdir):
     return sum(os.path.getsize(blockdir + f) for f in os.listdir(blockdir) if os.path.isfile(os.path.join(blockdir, f))) / (1024. * 1024.)
-<<<<<<< HEAD
-
-class PruneTest(DigiByteTestFramework):
-=======
 
 class PruneTest(DigiByteTestFramework):
     def add_options(self, parser):
         self.add_wallet_options(parser)
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     def set_test_params(self):
         self.setup_clean_chain = True
         self.num_nodes = 6
@@ -116,27 +84,14 @@ class PruneTest(DigiByteTestFramework):
             ["-maxreceivebuffer=20000", "-prune=550"],
             ["-maxreceivebuffer=20000"],
             ["-maxreceivebuffer=20000"],
-<<<<<<< HEAD
-            ["-prune=550"],
-        ]
-        self.rpc_timeout = 120
-
-    def skip_test_if_missing_module(self):
-        self.skip_if_no_wallet()
-=======
             ["-prune=550", "-blockfilterindex=1"],
         ]
         self.rpc_timeout = 120
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     def setup_network(self):
         self.setup_nodes()
 
-<<<<<<< HEAD
-        self.prunedir = os.path.join(self.nodes[2].datadir, self.chain, 'blocks', '')
-=======
         self.prunedir = os.path.join(self.nodes[2].blocks_path, '')
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         self.connect_nodes(0, 1)
         self.connect_nodes(1, 2)
@@ -148,12 +103,8 @@ class PruneTest(DigiByteTestFramework):
     def setup_nodes(self):
         self.add_nodes(self.num_nodes, self.extra_args)
         self.start_nodes()
-<<<<<<< HEAD
-        self.import_deterministic_coinbase_privkeys()
-=======
         if self.is_wallet_compiled():
             self.import_deterministic_coinbase_privkeys()
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     def create_big_chain(self):
         # Start by creating some coinbases we can spend later
@@ -166,10 +117,7 @@ class PruneTest(DigiByteTestFramework):
         self.sync_blocks(self.nodes[0:5])
 
     def test_invalid_command_line_options(self):
-<<<<<<< HEAD
-=======
         self.stop_node(0)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         self.nodes[0].assert_start_raises_init_error(
             expected_msg='Error: Prune cannot be configured with a negative value.',
             extra_args=['-prune=-1'],
@@ -183,11 +131,10 @@ class PruneTest(DigiByteTestFramework):
             extra_args=['-prune=550', '-txindex'],
         )
         self.nodes[0].assert_start_raises_init_error(
-<<<<<<< HEAD
             expected_msg='Error: Prune mode is incompatible with -coinstatsindex.',
             extra_args=['-prune=550', '-coinstatsindex'],
         )
-=======
+        self.nodes[0].assert_start_raises_init_error(
             expected_msg='Error: Prune mode is incompatible with -reindex-chainstate. Use full -reindex instead.',
             extra_args=['-prune=550', '-reindex-chainstate'],
         )
@@ -195,7 +142,6 @@ class PruneTest(DigiByteTestFramework):
     def test_rescan_blockchain(self):
         self.restart_node(0, ["-prune=550"])
         assert_raises_rpc_error(-1, "Can't rescan beyond pruned data. Use RPC call getblockchaininfo to determine your pruned height.", self.nodes[0].rescanblockchain)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     def test_height_min(self):
         assert os.path.isfile(os.path.join(self.prunedir, "blk00000.dat")), "blk00000.dat is missing, pruning too early"
@@ -285,13 +231,8 @@ class PruneTest(DigiByteTestFramework):
     def reorg_back(self):
         # Verify that a block on the old main chain fork has been pruned away
         assert_raises_rpc_error(-1, "Block not available (pruned data)", self.nodes[2].getblock, self.forkhash)
-<<<<<<< HEAD
-        with self.nodes[2].assert_debug_log(expected_msgs=['block verification stopping at height', '(pruning, no data)']):
-            self.nodes[2].verifychain(checklevel=4, nblocks=0)
-=======
         with self.nodes[2].assert_debug_log(expected_msgs=['block verification stopping at height', '(no data)']):
             assert not self.nodes[2].verifychain(checklevel=4, nblocks=0)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         self.log.info(f"Will need to redownload block {self.forkheight}")
 
         # Verify that we have enough history to reorg back to the fork point
@@ -350,17 +291,10 @@ class PruneTest(DigiByteTestFramework):
 
         def prune(index):
             ret = node.pruneblockchain(height=height(index))
-<<<<<<< HEAD
-            assert_equal(ret, node.getblockchaininfo()['pruneheight'])
-
-        def has_block(index):
-            return os.path.isfile(os.path.join(self.nodes[node_number].datadir, self.chain, "blocks", f"blk{index:05}.dat"))
-=======
             assert_equal(ret + 1, node.getblockchaininfo()['pruneheight'])
 
         def has_block(index):
             return os.path.isfile(os.path.join(self.nodes[node_number].blocks_path, f"blk{index:05}.dat"))
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # should not prune because chain tip of node 3 (995) < PruneAfterHeight (1000)
         assert_raises_rpc_error(-1, "Blockchain is too short for pruning", node.pruneblockchain, height(500))
@@ -408,11 +342,7 @@ class PruneTest(DigiByteTestFramework):
         assert has_block(2), "blk00002.dat is still there, should be pruned by now"
 
         # advance the tip so blk00002.dat and blk00003.dat can be pruned (the last 288 blocks should now be in blk00004.dat)
-<<<<<<< HEAD
-        self.generate(node, 288, sync_fun=self.no_op)
-=======
         self.generate(node, MIN_BLOCKS_TO_KEEP, sync_fun=self.no_op)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         prune(1000)
         assert not has_block(2), "blk00002.dat is still there, should be pruned by now"
         assert not has_block(3), "blk00003.dat is still there, should be pruned by now"
@@ -438,7 +368,6 @@ class PruneTest(DigiByteTestFramework):
         self.restart_node(5, extra_args=["-prune=550"]) # restart to trigger rescan
 =======
         self.restart_node(5, extra_args=["-prune=550", "-blockfilterindex=1"]) # restart to trigger rescan
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         self.log.info("Success")
 
     def run_test(self):

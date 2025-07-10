@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-<<<<<<< HEAD
-# Copyright (c) 2017-2021 The DigiByte Core developers
-=======
 # Copyright (c) 2017-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test recovery from a crash during chainstate writing.
@@ -34,30 +30,17 @@ import http.client
 import random
 import time
 
-<<<<<<< HEAD
-from test_framework.messages import (
-    COIN,
-    COutPoint,
-    CTransaction,
-    CTxIn,
-    CTxOut,
-=======
 from test_framework.blocktools import COINBASE_MATURITY
 from test_framework.messages import (
     COIN,
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 )
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import (
     assert_equal,
-<<<<<<< HEAD
-    create_confirmed_utxos,
-=======
 )
 from test_framework.wallet import (
     MiniWallet,
     getnewdestination,
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 )
 
 
@@ -81,13 +64,8 @@ class ChainstateWriteCrashTest(DigiByteTestFramework):
         self.node2_args = ["-dbcrashratio=24", "-dbcache=16"] + self.base_args
 
         # Node3 is a normal node with default args, except will mine full blocks
-<<<<<<< HEAD
-        # and non-standard txs (e.g. txs with "dust" outputs)
-        self.node3_args = ["-blockmaxweight=4000000", "-acceptnonstdtxn"]
-=======
         # and txs with "dust" outputs
         self.node3_args = ["-blockmaxweight=4000000", "-dustrelayfee=0"]
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         self.extra_args = [self.node0_args, self.node1_args, self.node2_args, self.node3_args]
 
     def skip_test_if_missing_module(self):
@@ -214,26 +192,6 @@ class ChainstateWriteCrashTest(DigiByteTestFramework):
         num_transactions = 0
         random.shuffle(utxo_list)
         while len(utxo_list) >= 2 and num_transactions < count:
-<<<<<<< HEAD
-            tx = CTransaction()
-            input_amount = 0
-            for _ in range(2):
-                utxo = utxo_list.pop()
-                tx.vin.append(CTxIn(COutPoint(int(utxo['txid'], 16), utxo['vout'])))
-                input_amount += int(utxo['amount'] * COIN)
-            output_amount = (input_amount - FEE) // 3
-
-            if output_amount <= 0:
-                # Sanity check -- if we chose inputs that are too small, skip
-                continue
-
-            for _ in range(3):
-                tx.vout.append(CTxOut(output_amount, bytes.fromhex(utxo['scriptPubKey'])))
-
-            # Sign and send the transaction to get into the mempool
-            tx_signed_hex = node.signrawtransactionwithwallet(tx.serialize().hex())['hex']
-            node.sendrawtransaction(tx_signed_hex)
-=======
             utxos_to_spend = [utxo_list.pop() for _ in range(2)]
             input_amount = int(sum([utxo['value'] for utxo in utxos_to_spend]) * COIN)
             if input_amount < FEE:
@@ -246,7 +204,6 @@ class ChainstateWriteCrashTest(DigiByteTestFramework):
                 num_outputs=3,
                 fee_per_output=FEE // 3,
             )
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             num_transactions += 1
 
     def run_test(self):
@@ -259,16 +216,12 @@ class ChainstateWriteCrashTest(DigiByteTestFramework):
         self.crashed_on_restart = 0      # Track count of crashes during recovery
 
         # Start by creating a lot of utxos on node3
-<<<<<<< HEAD
         initial_height = self.nodes[3].getblockcount()
-        utxo_list = create_confirmed_utxos(self, self.nodes[3].getnetworkinfo()['relayfee'], self.nodes[3], 5000, sync_fun=self.no_op)
-=======
         utxo_list = []
         for _ in range(5):
             utxo_list.extend(self.wallet.send_self_transfer_multi(from_node=self.nodes[3], num_outputs=1000)['new_utxos'])
         self.generate(self.nodes[3], 1, sync_fun=self.no_op)
         assert_equal(len(self.nodes[3].getrawmempool()), 0)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         self.log.info(f"Prepped {len(utxo_list)} utxo entries")
 
         # Sync these blocks with the other nodes
@@ -308,23 +261,14 @@ class ChainstateWriteCrashTest(DigiByteTestFramework):
                     self.nodes[3],
                     nblocks=min(10, current_height + 1 - self.nodes[3].getblockcount()),
                     # new address to avoid mining a block that has just been invalidated
-<<<<<<< HEAD
-                    address=self.nodes[3].getnewaddress(),
-=======
                     address=getnewdestination()[2],
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                     sync_fun=self.no_op,
                 ))
             self.log.debug(f"Syncing {len(block_hashes)} new blocks...")
             self.sync_node3blocks(block_hashes)
-<<<<<<< HEAD
-            utxo_list = self.nodes[3].listunspent()
-            self.log.debug(f"Node3 utxo count: {len(utxo_list)}")
-=======
             self.wallet.rescan_utxos()
             utxo_list = self.wallet.get_utxos()
             self.log.debug(f"MiniWallet utxo count: {len(utxo_list)}")
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # Check that the utxo hashes agree with node3
         # Useful side effect: each utxo cache gets flushed here, so that we

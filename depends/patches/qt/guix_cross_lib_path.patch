@@ -1,10 +1,6 @@
 Facilitate guix building with CROSS_LIBRARY_PATH
 
-<<<<<<< HEAD
 See discussion in https://github.com/bitcoin/bitcoin/pull/15277.
-=======
-See discussion in https://github.com/digibyte/digibyte/pull/15277.
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 --- a/qtbase/mkspecs/features/toolchain.prf
 +++ b/qtbase/mkspecs/features/toolchain.prf

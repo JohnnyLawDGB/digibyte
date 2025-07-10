@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-<<<<<<< HEAD
-# Copyright (c) 2016-2021 The DigiByte Core developers
-=======
 # Copyright (c) 2016-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test NULLDUMMY softfork.
@@ -18,26 +14,17 @@ Generate COINBASE_MATURITY (CB) more blocks to ensure the coinbases are mature.
 """
 import time
 
-<<<<<<< HEAD
-=======
 from test_framework.address import address_to_scriptpubkey
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 from test_framework.blocktools import (
     COINBASE_MATURITY,
     NORMAL_GBT_REQUEST_PARAMS,
     add_witness_commitment,
     create_block,
-<<<<<<< HEAD
-    create_transaction,
-)
-from test_framework.messages import CTransaction
-=======
 )
 from test_framework.messages import (
     CTransaction,
     tx_from_hex,
 )
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 from test_framework.script import (
     OP_0,
     OP_TRUE,
@@ -47,15 +34,10 @@ from test_framework.util import (
     assert_equal,
     assert_raises_rpc_error,
 )
-<<<<<<< HEAD
-
-NULLDUMMY_ERROR = "non-mandatory-script-verify-flag (Dummy CHECKMULTISIG argument must be zero)"
-=======
 from test_framework.wallet import getnewdestination
 from test_framework.wallet_util import generate_keypair
 
 NULLDUMMY_ERROR = "mandatory-script-verify-flag-failed (Dummy CHECKMULTISIG argument must be zero)"
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 
 def invalidate_nulldummy_tx(tx):
@@ -78,24 +60,6 @@ class NULLDUMMYTest(DigiByteTestFramework):
             '-par=1',  # Use only one script thread to get the exact reject reason for testing
         ]]
 
-<<<<<<< HEAD
-    def skip_test_if_missing_module(self):
-        self.skip_if_no_wallet()
-
-    def run_test(self):
-        self.nodes[0].createwallet(wallet_name='wmulti', disable_private_keys=True)
-        wmulti = self.nodes[0].get_wallet_rpc('wmulti')
-        w0 = self.nodes[0].get_wallet_rpc(self.default_wallet_name)
-        self.address = w0.getnewaddress()
-        self.pubkey = w0.getaddressinfo(self.address)['pubkey']
-        self.ms_address = wmulti.addmultisigaddress(1, [self.pubkey])['address']
-        self.wit_address = w0.getnewaddress(address_type='p2sh-segwit')
-        self.wit_ms_address = wmulti.addmultisigaddress(1, [self.pubkey], '', 'p2sh-segwit')['address']
-        if not self.options.descriptors:
-            # Legacy wallets need to import these so that they are watched by the wallet. This is unnecessary (and does not need to be tested) for descriptor wallets
-            wmulti.importaddress(self.ms_address)
-            wmulti.importaddress(self.wit_ms_address)
-=======
     def create_transaction(self, *, txid, input_details=None, addr, amount, privkey):
         input = {"txid": txid, "vout": 0}
         output = {addr: amount}
@@ -113,7 +77,6 @@ class NULLDUMMYTest(DigiByteTestFramework):
         ms_unlock_details = {"scriptPubKey": address_to_scriptpubkey(self.ms_address).hex(),
                              "redeemScript": cms["redeemScript"]}
         self.wit_ms_address = wms['address']
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         self.coinbase_blocks = self.generate(self.nodes[0], 2)  # block height = 2
         coinbase_txid = []
@@ -125,13 +88,6 @@ class NULLDUMMYTest(DigiByteTestFramework):
         self.lastblocktime = int(time.time()) + self.lastblockheight
 
         self.log.info(f"Test 1: NULLDUMMY compliant base transactions should be accepted to mempool and mined before activation [{COINBASE_MATURITY + 3}]")
-<<<<<<< HEAD
-        test1txs = [create_transaction(self.nodes[0], coinbase_txid[0], self.ms_address, amount=49)]
-        txid1 = self.nodes[0].sendrawtransaction(test1txs[0].serialize_with_witness().hex(), 0)
-        test1txs.append(create_transaction(self.nodes[0], txid1, self.ms_address, amount=48))
-        txid2 = self.nodes[0].sendrawtransaction(test1txs[1].serialize_with_witness().hex(), 0)
-        test1txs.append(create_transaction(self.nodes[0], coinbase_txid[1], self.wit_ms_address, amount=49))
-=======
         test1txs = [self.create_transaction(txid=coinbase_txid[0], addr=self.ms_address, amount=49,
                                             privkey=self.nodes[0].get_deterministic_priv_key().key)]
         txid1 = self.nodes[0].sendrawtransaction(test1txs[0].serialize_with_witness().hex(), 0)
@@ -142,18 +98,13 @@ class NULLDUMMYTest(DigiByteTestFramework):
         test1txs.append(self.create_transaction(txid=coinbase_txid[1],
                                                 addr=self.wit_ms_address, amount=49,
                                                 privkey=self.nodes[0].get_deterministic_priv_key().key))
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         txid3 = self.nodes[0].sendrawtransaction(test1txs[2].serialize_with_witness().hex(), 0)
         self.block_submit(self.nodes[0], test1txs, accept=True)
 
         self.log.info("Test 2: Non-NULLDUMMY base multisig transaction should not be accepted to mempool before activation")
-<<<<<<< HEAD
-        test2tx = create_transaction(self.nodes[0], txid2, self.ms_address, amount=47)
-=======
         test2tx = self.create_transaction(txid=txid2, input_details=ms_unlock_details,
                                           addr=self.ms_address, amount=47,
                                           privkey=self.privkey)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         invalidate_nulldummy_tx(test2tx)
         assert_raises_rpc_error(-26, NULLDUMMY_ERROR, self.nodes[0].sendrawtransaction, test2tx.serialize_with_witness().hex(), 0)
 
@@ -161,13 +112,9 @@ class NULLDUMMYTest(DigiByteTestFramework):
         self.block_submit(self.nodes[0], [test2tx], accept=True)
 
         self.log.info("Test 4: Non-NULLDUMMY base multisig transaction is invalid after activation")
-<<<<<<< HEAD
-        test4tx = create_transaction(self.nodes[0], test2tx.hash, self.address, amount=46)
-=======
         test4tx = self.create_transaction(txid=test2tx.hash, input_details=ms_unlock_details,
                                           addr=getnewdestination()[2], amount=46,
                                           privkey=self.privkey)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         test6txs = [CTransaction(test4tx)]
         invalidate_nulldummy_tx(test4tx)
         assert_raises_rpc_error(-26, NULLDUMMY_ERROR, self.nodes[0].sendrawtransaction, test4tx.serialize_with_witness().hex(), 0)

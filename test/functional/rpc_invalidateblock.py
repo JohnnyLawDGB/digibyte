@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-<<<<<<< HEAD
-# Copyright (c) 2014-2021 The DigiByte Core developers
-=======
 # Copyright (c) 2014-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test the invalidateblock RPC."""
@@ -12,10 +8,7 @@ from test_framework.test_framework import DigiByteTestFramework
 from test_framework.address import ADDRESS_BCRT1_UNSPENDABLE_DESCRIPTOR
 from test_framework.util import (
     assert_equal,
-<<<<<<< HEAD
-=======
     assert_raises_rpc_error,
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 )
 
 
@@ -91,13 +84,10 @@ class InvalidateTest(DigiByteTestFramework):
         # Should be back at the tip by now
         assert_equal(self.nodes[1].getbestblockhash(), blocks[-1])
 
-<<<<<<< HEAD
-=======
         self.log.info("Verify that invalidating an unknown block throws an error")
         assert_raises_rpc_error(-5, "Block not found", self.nodes[1].invalidateblock, "00" * 32)
         assert_equal(self.nodes[1].getbestblockhash(), blocks[-1])
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 if __name__ == '__main__':
     InvalidateTest().main()

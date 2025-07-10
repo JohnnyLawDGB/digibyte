@@ -1,18 +1,4 @@
 #!/usr/bin/env python3
-<<<<<<< HEAD
-# Copyright (c) 2021-2022 The DigiByte Core developers
-# Distributed under the MIT software license, see the accompanying
-# file COPYING or http://www.opensource.org/licenses/mit-license.php.
-"""Test compact blocks (BIP 152).
-
-Version 1 compact blocks are pre-segwit (txids)
-Version 2 compact blocks are post-segwit (wtxids)
-"""
-import random
-
-from test_framework.blocktools import (
-    COINBASE_MATURITY_2,
-=======
 # Copyright (c) 2016-2022 The DigiByte Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
@@ -21,7 +7,6 @@ import random
 
 from test_framework.blocktools import (
     COINBASE_MATURITY,
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     NORMAL_GBT_REQUEST_PARAMS,
     add_witness_commitment,
     create_block,
@@ -42,10 +27,6 @@ from test_framework.messages import (
     MSG_BLOCK,
     MSG_CMPCT_BLOCK,
     MSG_WITNESS_FLAG,
-<<<<<<< HEAD
-    NODE_NETWORK,
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     P2PHeaderAndShortIDs,
     PrefilledTransaction,
     calculate_shortid,
@@ -79,15 +60,12 @@ from test_framework.util import (
     assert_equal,
     softfork_active,
 )
-<<<<<<< HEAD
-=======
 from test_framework.wallet import MiniWallet
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 
 # TestP2PConn: A peer we use to send messages to digibyted, and store responses.
 class TestP2PConn(P2PInterface):
-    def __init__(self, cmpct_version):
+    def __init__(self):
         super().__init__()
         self.last_sendcmpct = []
         self.block_announced = False
@@ -95,7 +73,6 @@ class TestP2PConn(P2PInterface):
         # This is for synchronizing the p2p message traffic,
         # so we can eg wait until a particular block is announced.
         self.announced_blockhashes = set()
-        self.cmpct_version = cmpct_version
 
     def on_sendcmpct(self, message):
         self.last_sendcmpct.append(message)
@@ -173,18 +150,8 @@ class CompactBlocksTest(DigiByteTestFramework):
         ]]
         self.utxos = []
 
-<<<<<<< HEAD
-    def skip_test_if_missing_module(self):
-        self.skip_if_no_wallet()
-
-    def build_block_on_tip(self, node, segwit=False):
-        block = create_block(tmpl=node.getblocktemplate(NORMAL_GBT_REQUEST_PARAMS))
-        if segwit:
-            add_witness_commitment(block)
-=======
     def build_block_on_tip(self, node):
         block = create_block(tmpl=node.getblocktemplate(NORMAL_GBT_REQUEST_PARAMS))
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         block.solve()
         return block
 
@@ -193,11 +160,7 @@ class CompactBlocksTest(DigiByteTestFramework):
         block = self.build_block_on_tip(self.nodes[0])
         self.segwit_node.send_and_ping(msg_no_witness_block(block))
         assert int(self.nodes[0].getbestblockhash(), 16) == block.sha256
-<<<<<<< HEAD
-        self.generatetoaddress(self.nodes[0], COINBASE_MATURITY_2, self.nodes[0].getnewaddress(address_type="bech32"))
-=======
         self.generate(self.wallet, COINBASE_MATURITY)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         total_value = block.vtx[0].vout[0].nValue
         out_value = total_value // 10
@@ -224,14 +187,7 @@ class CompactBlocksTest(DigiByteTestFramework):
     #   made with compact blocks.
     # - If sendcmpct is then sent with boolean 1, then new block announcements
     #   are made with compact blocks.
-<<<<<<< HEAD
-    # If old_node is passed in, request compact blocks with version=preferred-1
-    # and verify that it receives block announcements via compact block.
-    def test_sendcmpct(self, test_node, old_node=None):
-        preferred_version = test_node.cmpct_version
-=======
     def test_sendcmpct(self, test_node):
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         node = self.nodes[0]
 
         # Make sure we get a SENDCMPCT message from our peer
@@ -239,15 +195,8 @@ class CompactBlocksTest(DigiByteTestFramework):
             return (len(test_node.last_sendcmpct) > 0)
         test_node.wait_until(received_sendcmpct, timeout=30)
         with p2p_lock:
-<<<<<<< HEAD
-            # Check that the first version received is the preferred one
-            assert_equal(test_node.last_sendcmpct[0].version, preferred_version)
-            # And that we receive versions down to 1.
-            assert_equal(test_node.last_sendcmpct[-1].version, 1)
-=======
             # Check that version 2 is received.
             assert_equal(test_node.last_sendcmpct[0].version, 2)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             test_node.last_sendcmpct = []
 
         tip = int(node.getbestblockhash(), 16)
@@ -283,33 +232,21 @@ class CompactBlocksTest(DigiByteTestFramework):
         test_node.request_headers_and_sync(locator=[tip])
 
         # Now try a SENDCMPCT message with too-high version
-<<<<<<< HEAD
-        test_node.send_and_ping(msg_sendcmpct(announce=True, version=preferred_version+1))
-=======
         test_node.send_and_ping(msg_sendcmpct(announce=True, version=3))
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         check_announcement_of_new_block(node, test_node, lambda p: "cmpctblock" not in p.last_message)
 
         # Headers sync before next test.
         test_node.request_headers_and_sync(locator=[tip])
 
         # Now try a SENDCMPCT message with valid version, but announce=False
-<<<<<<< HEAD
-        test_node.send_and_ping(msg_sendcmpct(announce=False, version=preferred_version))
-=======
         test_node.send_and_ping(msg_sendcmpct(announce=False, version=2))
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         check_announcement_of_new_block(node, test_node, lambda p: "cmpctblock" not in p.last_message)
 
         # Headers sync before next test.
         test_node.request_headers_and_sync(locator=[tip])
 
         # Finally, try a SENDCMPCT message with announce=True
-<<<<<<< HEAD
-        test_node.send_and_ping(msg_sendcmpct(announce=True, version=preferred_version))
-=======
         test_node.send_and_ping(msg_sendcmpct(announce=True, version=2))
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         check_announcement_of_new_block(node, test_node, lambda p: "cmpctblock" in p.last_message)
 
         # Try one more time (no headers sync should be needed!)
@@ -319,27 +256,6 @@ class CompactBlocksTest(DigiByteTestFramework):
         test_node.send_and_ping(msg_sendheaders())
         check_announcement_of_new_block(node, test_node, lambda p: "cmpctblock" in p.last_message)
 
-<<<<<<< HEAD
-        # Try one more time, after sending a version-1, announce=false message.
-        test_node.send_and_ping(msg_sendcmpct(announce=False, version=preferred_version-1))
-        check_announcement_of_new_block(node, test_node, lambda p: "cmpctblock" in p.last_message)
-
-        # Now turn off announcements
-        test_node.send_and_ping(msg_sendcmpct(announce=False, version=preferred_version))
-        check_announcement_of_new_block(node, test_node, lambda p: "cmpctblock" not in p.last_message and "headers" in p.last_message)
-
-        if old_node is not None:
-            # Verify that a peer using an older protocol version can receive
-            # announcements from this node.
-            old_node.send_and_ping(msg_sendcmpct(announce=True, version=preferred_version-1))
-            # Header sync
-            old_node.request_headers_and_sync(locator=[tip])
-            check_announcement_of_new_block(node, old_node, lambda p: "cmpctblock" in p.last_message)
-
-    # This test actually causes bitcoind to (reasonably!) disconnect us, so do this last.
-    def test_invalid_cmpctblock_message(self):
-        self.generate(self.nodes[0], COINBASE_MATURITY_2 + 1)
-=======
         # Try one more time, after sending a version=1, announce=false message.
         test_node.send_and_ping(msg_sendcmpct(announce=False, version=1))
         check_announcement_of_new_block(node, test_node, lambda p: "cmpctblock" in p.last_message)
@@ -351,7 +267,6 @@ class CompactBlocksTest(DigiByteTestFramework):
     # This test actually causes digibyted to (reasonably!) disconnect us, so do this last.
     def test_invalid_cmpctblock_message(self):
         self.generate(self.nodes[0], COINBASE_MATURITY + 1)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         block = self.build_block_on_tip(self.nodes[0])
 
         cmpct_block = P2PHeaderAndShortIDs()
@@ -364,21 +279,6 @@ class CompactBlocksTest(DigiByteTestFramework):
         assert_equal(int(self.nodes[0].getbestblockhash(), 16), block.hashPrevBlock)
 
     # Compare the generated shortids to what we expect based on BIP 152, given
-<<<<<<< HEAD
-    # bitcoind's choice of nonce.
-    def test_compactblock_construction(self, test_node, use_witness_address=True):
-        version = test_node.cmpct_version
-        node = self.nodes[0]
-        # Generate a bunch of transactions.
-        self.generate(node, COINBASE_MATURITY_2 + 1)
-        num_transactions = 25
-        address = node.getnewaddress()
-
-        segwit_tx_generated = False
-        for _ in range(num_transactions):
-            txid = node.sendtoaddress(address, 0.1)
-            hex_tx = node.gettransaction(txid)["hex"]
-=======
     # digibyted's choice of nonce.
     def test_compactblock_construction(self, test_node):
         node = self.nodes[0]
@@ -389,17 +289,11 @@ class CompactBlocksTest(DigiByteTestFramework):
         segwit_tx_generated = False
         for _ in range(num_transactions):
             hex_tx = self.wallet.send_self_transfer(from_node=self.nodes[0])['hex']
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             tx = tx_from_hex(hex_tx)
             if not tx.wit.is_null():
                 segwit_tx_generated = True
 
-<<<<<<< HEAD
-        if use_witness_address:
-            assert segwit_tx_generated  # check that our test is not broken
-=======
         assert segwit_tx_generated  # check that our test is not broken
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # Wait until we've seen the block announcement for the resulting tip
         tip = int(node.getbestblockhash(), 16)
@@ -459,15 +353,7 @@ class CompactBlocksTest(DigiByteTestFramework):
 
             # And this checks the witness
             wtxid = entry.tx.calc_sha256(True)
-<<<<<<< HEAD
-            if version == 2:
-                assert_equal(wtxid, block.vtx[entry.index].calc_sha256(True))
-            else:
-                # Shouldn't have received a witness
-                assert entry.tx.wit.is_null()
-=======
             assert_equal(wtxid, block.vtx[entry.index].calc_sha256(True))
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # Check that the cmpctblock message announced all the transactions.
         assert_equal(len(header_and_shortids.prefilled_txn) + len(header_and_shortids.shortids), len(block.vtx))
@@ -492,24 +378,12 @@ class CompactBlocksTest(DigiByteTestFramework):
     # Test that digibyted requests compact blocks when we announce new blocks
     # via header or inv, and that responding to getblocktxn causes the block
     # to be successfully reconstructed.
-<<<<<<< HEAD
-    # Post-segwit: upgraded nodes would only make this request of cb-version-2,
-    # NODE_WITNESS peers.  Unupgraded nodes would still make this request of
-    # any cb-version-1-supporting peer.
-    def test_compactblock_requests(self, test_node, segwit=True):
-        version = test_node.cmpct_version
-=======
     def test_compactblock_requests(self, test_node):
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         node = self.nodes[0]
         # Try announcing a block with an inv or header, expect a compactblock
         # request
         for announce in ["inv", "header"]:
-<<<<<<< HEAD
-            block = self.build_block_on_tip(node, segwit=segwit)
-=======
             block = self.build_block_on_tip(node)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
             if announce == "inv":
                 test_node.send_message(msg_inv([CInv(MSG_BLOCK, block.sha256)]))
@@ -525,13 +399,7 @@ class CompactBlocksTest(DigiByteTestFramework):
             comp_block.header = CBlockHeader(block)
             comp_block.nonce = 0
             [k0, k1] = comp_block.get_siphash_keys()
-<<<<<<< HEAD
-            coinbase_hash = block.vtx[0].sha256
-            if version == 2:
-                coinbase_hash = block.vtx[0].calc_sha256(True)
-=======
             coinbase_hash = block.vtx[0].calc_sha256(True)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             comp_block.shortids = [calculate_shortid(k0, k1, coinbase_hash)]
             test_node.send_and_ping(msg_cmpctblock(comp_block.to_p2p()))
             assert_equal(int(node.getbestblockhash(), 16), block.hashPrevBlock)
@@ -542,14 +410,7 @@ class CompactBlocksTest(DigiByteTestFramework):
             assert_equal(absolute_indexes, [0])  # should be a coinbase request
 
             # Send the coinbase, and verify that the tip advances.
-<<<<<<< HEAD
-            if version == 2:
-                msg = msg_blocktxn()
-            else:
-                msg = msg_no_witness_blocktxn()
-=======
             msg = msg_blocktxn()
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             msg.block_transactions.blockhash = block.sha256
             msg.block_transactions.transactions = [block.vtx[0]]
             test_node.send_and_ping(msg)
@@ -575,13 +436,7 @@ class CompactBlocksTest(DigiByteTestFramework):
     # node needs, and that responding to them causes the block to be
     # reconstructed.
     def test_getblocktxn_requests(self, test_node):
-<<<<<<< HEAD
-        version = test_node.cmpct_version
         node = self.nodes[0]
-        with_witness = (version == 2)
-=======
-        node = self.nodes[0]
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         def test_getblocktxn_response(compact_block, peer, expected_result):
             msg = msg_cmpctblock(compact_block.to_p2p())
@@ -607,12 +462,7 @@ class CompactBlocksTest(DigiByteTestFramework):
         test_getblocktxn_response(comp_block, test_node, [1, 2, 3, 4, 5])
 
         msg_bt = msg_no_witness_blocktxn()
-<<<<<<< HEAD
-        if with_witness:
-            msg_bt = msg_blocktxn()  # serialize with witnesses
-=======
         msg_bt = msg_blocktxn()  # serialize with witnesses
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         msg_bt.block_transactions = BlockTransactions(block.sha256, block.vtx[1:])
         test_tip_after_message(node, test_node, msg_bt, block.sha256)
 
@@ -668,10 +518,6 @@ class CompactBlocksTest(DigiByteTestFramework):
     # Incorrectly responding to a getblocktxn shouldn't cause the block to be
     # permanently failed.
     def test_incorrect_blocktxn_response(self, test_node):
-<<<<<<< HEAD
-        version = test_node.cmpct_version
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         node = self.nodes[0]
         utxo = self.utxos.pop(0)
 
@@ -704,13 +550,7 @@ class CompactBlocksTest(DigiByteTestFramework):
         # different peer provide the block further down, so that we're still
         # verifying that the block isn't marked bad permanently. This is good
         # enough for now.
-<<<<<<< HEAD
-        msg = msg_no_witness_blocktxn()
-        if version == 2:
-            msg = msg_blocktxn()
-=======
         msg = msg_blocktxn()
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         msg.block_transactions = BlockTransactions(block.sha256, [block.vtx[5]] + block.vtx[7:])
         test_node.send_and_ping(msg)
 
@@ -723,25 +563,12 @@ class CompactBlocksTest(DigiByteTestFramework):
                test_node.last_message["getdata"].inv[0].type == MSG_BLOCK | MSG_WITNESS_FLAG
 
         # Deliver the block
-<<<<<<< HEAD
-        if version == 2:
-            test_node.send_and_ping(msg_block(block))
-        else:
-            test_node.send_and_ping(msg_no_witness_block(block))
-        assert_equal(int(node.getbestblockhash(), 16), block.sha256)
-
-    def test_getblocktxn_handler(self, test_node):
-        version = test_node.cmpct_version
-        node = self.nodes[0]
-        # bitcoind will not send blocktxn responses for blocks whose height is
-=======
         test_node.send_and_ping(msg_block(block))
         assert_equal(int(node.getbestblockhash(), 16), block.sha256)
 
     def test_getblocktxn_handler(self, test_node):
         node = self.nodes[0]
         # digibyted will not send blocktxn responses for blocks whose height is
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         # more than 10 blocks deep.
         MAX_GETBLOCKTXN_DEPTH = 10
         chain_height = node.getblockcount()
@@ -765,17 +592,8 @@ class CompactBlocksTest(DigiByteTestFramework):
                     tx = test_node.last_message["blocktxn"].block_transactions.transactions.pop(0)
                     tx.calc_sha256()
                     assert_equal(tx.sha256, block.vtx[index].sha256)
-<<<<<<< HEAD
-                    if version == 1:
-                        # Witnesses should have been stripped
-                        assert tx.wit.is_null()
-                    else:
-                        # Check that the witness matches
-                        assert_equal(tx.calc_sha256(True), block.vtx[index].calc_sha256(True))
-=======
                     # Check that the witness matches
                     assert_equal(tx.calc_sha256(True), block.vtx[index].calc_sha256(True))
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 test_node.last_message.pop("blocktxn", None)
             current_height -= 1
 
@@ -792,8 +610,6 @@ class CompactBlocksTest(DigiByteTestFramework):
             assert_equal(test_node.last_message["block"].block.sha256, int(block_hash, 16))
             assert "blocktxn" not in test_node.last_message
 
-<<<<<<< HEAD
-=======
         # Request with out-of-bounds tx index results in disconnect
         bad_peer = self.nodes[0].add_p2p_connection(TestP2PConn())
         block_hash = node.getblockhash(chain_height)
@@ -824,7 +640,6 @@ class CompactBlocksTest(DigiByteTestFramework):
                 break
         assert not found
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     def test_compactblocks_not_at_tip(self, test_node):
         node = self.nodes[0]
         # Test that requesting old compactblocks doesn't work.
@@ -902,11 +717,7 @@ class CompactBlocksTest(DigiByteTestFramework):
 
     # Test that we don't get disconnected if we relay a compact block with valid header,
     # but invalid transactions.
-<<<<<<< HEAD
-    def test_invalid_tx_in_compactblock(self, test_node, use_segwit=True):
-=======
     def test_invalid_tx_in_compactblock(self, test_node):
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         node = self.nodes[0]
         assert len(self.utxos)
         utxo = self.utxos[0]
@@ -936,15 +747,9 @@ class CompactBlocksTest(DigiByteTestFramework):
         node = self.nodes[0]
         tip = node.getbestblockhash()
         peer.get_headers(locator=[int(tip, 16)], hashstop=0)
-<<<<<<< HEAD
-        peer.send_and_ping(msg_sendcmpct(announce=True, version=peer.cmpct_version))
-
-    def test_compactblock_reconstruction_multiple_peers(self, stalling_peer, delivery_peer):
-=======
         peer.send_and_ping(msg_sendcmpct(announce=True, version=2))
 
     def test_compactblock_reconstruction_stalling_peer(self, stalling_peer, delivery_peer):
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         node = self.nodes[0]
         assert len(self.utxos)
 
@@ -996,11 +801,7 @@ class CompactBlocksTest(DigiByteTestFramework):
 
     def test_highbandwidth_mode_states_via_getpeerinfo(self):
         # create new p2p connection for a fresh state w/o any prior sendcmpct messages sent
-<<<<<<< HEAD
-        hb_test_node = self.nodes[0].add_p2p_connection(TestP2PConn(cmpct_version=2))
-=======
         hb_test_node = self.nodes[0].add_p2p_connection(TestP2PConn())
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # assert the RPC getpeerinfo boolean fields `bip152_hb_{to, from}`
         # match the given parameters for the last peer of a given node
@@ -1026,16 +827,6 @@ class CompactBlocksTest(DigiByteTestFramework):
         hb_test_node.send_and_ping(msg_sendcmpct(announce=False, version=2))
         assert_highbandwidth_states(self.nodes[0], hb_to=True, hb_from=False)
 
-<<<<<<< HEAD
-    def run_test(self):
-        # Get the nodes out of IBD
-        self.generate(self.nodes[0], 1)
-
-        # Setup the p2p connections
-        self.segwit_node = self.nodes[0].add_p2p_connection(TestP2PConn(cmpct_version=2))
-        self.old_node = self.nodes[0].add_p2p_connection(TestP2PConn(cmpct_version=1), services=NODE_NETWORK)
-        self.additional_segwit_node = self.nodes[0].add_p2p_connection(TestP2PConn(cmpct_version=2))
-=======
     def test_compactblock_reconstruction_parallel_reconstruction(self, stalling_peer, delivery_peer, inbound_peer, outbound_peer):
         """ All p2p connections are inbound except outbound_peer. We test that ultimate parallel slot
             can only be taken by an outbound node unless prior attempts were done by an outbound
@@ -1115,7 +906,6 @@ class CompactBlocksTest(DigiByteTestFramework):
         self.additional_segwit_node = self.nodes[0].add_p2p_connection(TestP2PConn())
         self.onemore_inbound_node = self.nodes[0].add_p2p_connection(TestP2PConn())
         self.outbound_node = self.nodes[0].add_outbound_p2p_connection(TestP2PConn(), p2p_idx=3, connection_type="outbound-full-relay")
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # We will need UTXOs to construct transactions in later tests.
         self.make_utxos()
@@ -1123,20 +913,12 @@ class CompactBlocksTest(DigiByteTestFramework):
         assert softfork_active(self.nodes[0], "segwit")
 
         self.log.info("Testing SENDCMPCT p2p message... ")
-<<<<<<< HEAD
-        self.test_sendcmpct(self.segwit_node, old_node=self.old_node)
-        self.test_sendcmpct(self.additional_segwit_node)
-
-        self.log.info("Testing compactblock construction...")
-        self.test_compactblock_construction(self.old_node)
-=======
         self.test_sendcmpct(self.segwit_node)
         self.test_sendcmpct(self.additional_segwit_node)
         self.test_sendcmpct(self.onemore_inbound_node)
         self.test_sendcmpct(self.outbound_node)
 
         self.log.info("Testing compactblock construction...")
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         self.test_compactblock_construction(self.segwit_node)
 
         self.log.info("Testing compactblock requests (segwit node)... ")
@@ -1147,56 +929,33 @@ class CompactBlocksTest(DigiByteTestFramework):
 
         self.log.info("Testing getblocktxn handler (segwit node should return witnesses)...")
         self.test_getblocktxn_handler(self.segwit_node)
-<<<<<<< HEAD
-        self.test_getblocktxn_handler(self.old_node)
-
-        self.log.info("Testing compactblock requests/announcements not at chain tip...")
-        self.test_compactblocks_not_at_tip(self.segwit_node)
-        self.test_compactblocks_not_at_tip(self.old_node)
-=======
 
         self.log.info("Testing compactblock requests/announcements not at chain tip...")
         self.test_compactblocks_not_at_tip(self.segwit_node)
 
         self.log.info("Testing handling of low-work compact blocks...")
         self.test_low_work_compactblocks(self.segwit_node)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         self.log.info("Testing handling of incorrect blocktxn responses...")
         self.test_incorrect_blocktxn_response(self.segwit_node)
 
-<<<<<<< HEAD
-        self.log.info("Testing reconstructing compact blocks from all peers...")
-        self.test_compactblock_reconstruction_multiple_peers(self.segwit_node, self.additional_segwit_node)
-=======
         self.log.info("Testing reconstructing compact blocks with a stalling peer...")
         self.test_compactblock_reconstruction_stalling_peer(self.segwit_node, self.additional_segwit_node)
 
         self.log.info("Testing reconstructing compact blocks from multiple peers...")
         self.test_compactblock_reconstruction_parallel_reconstruction(stalling_peer=self.segwit_node, inbound_peer=self.onemore_inbound_node, delivery_peer=self.additional_segwit_node, outbound_peer=self.outbound_node)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # Test that if we submitblock to node1, we'll get a compact block
         # announcement to all peers.
         # (Post-segwit activation, blocks won't propagate from node0 to node1
         # automatically, so don't bother testing a block announced to node0.)
         self.log.info("Testing end-to-end block relay...")
-<<<<<<< HEAD
-        self.request_cb_announcements(self.old_node)
-        self.request_cb_announcements(self.segwit_node)
-        self.test_end_to_end_block_relay([self.segwit_node, self.old_node])
-
-        self.log.info("Testing handling of invalid compact blocks...")
-        self.test_invalid_tx_in_compactblock(self.segwit_node)
-        self.test_invalid_tx_in_compactblock(self.old_node)
-=======
         self.request_cb_announcements(self.segwit_node)
         self.request_cb_announcements(self.additional_segwit_node)
         self.test_end_to_end_block_relay([self.segwit_node, self.additional_segwit_node])
 
         self.log.info("Testing handling of invalid compact blocks...")
         self.test_invalid_tx_in_compactblock(self.segwit_node)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         self.log.info("Testing invalid index in cmpctblock message...")
         self.test_invalid_cmpctblock_message()

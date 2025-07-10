@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-<<<<<<< HEAD
-# Copyright (c) 2015-2020 The Bitcoin Core developers
-=======
 # Copyright (c) 2015-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test digibyted with different proxy configuration.
@@ -31,10 +27,6 @@ addnode connect to IPv4
 addnode connect to IPv6
 addnode connect to onion
 addnode connect to generic DNS name
-<<<<<<< HEAD
-
-- Test getnetworkinfo for each node
-=======
 addnode connect to a CJDNS address
 
 - Test getnetworkinfo for each node
@@ -45,7 +37,6 @@ addnode connect to a CJDNS address
 - Test passing -onlynet=onion without -proxy or -onion
 - Test passing -onlynet=onion with -onion=0 and with -noonion
 - Test passing unknown -onlynet
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 """
 
 import socket
@@ -66,29 +57,13 @@ NET_ONION = "onion"
 NET_I2P = "i2p"
 NET_CJDNS = "cjdns"
 
-<<<<<<< HEAD
-# Networks returned by RPC getpeerinfo.
-NET_UNROUTABLE = "not_publicly_routable"
-NET_IPV4 = "ipv4"
-NET_IPV6 = "ipv6"
-NET_ONION = "onion"
-NET_I2P = "i2p"
-
-# Networks returned by RPC getnetworkinfo, defined in src/rpc/net.cpp::GetNetworksInfo()
-NETWORKS = frozenset({NET_IPV4, NET_IPV6, NET_ONION, NET_I2P})
-=======
 # Networks returned by RPC getnetworkinfo, defined in src/rpc/net.cpp::GetNetworksInfo()
 NETWORKS = frozenset({NET_IPV4, NET_IPV6, NET_ONION, NET_I2P, NET_CJDNS})
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 
 class ProxyTest(DigiByteTestFramework):
     def set_test_params(self):
-<<<<<<< HEAD
-        self.num_nodes = 4
-=======
         self.num_nodes = 5
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         self.setup_clean_chain = True
 
     def setup_nodes(self):
@@ -128,13 +103,6 @@ class ProxyTest(DigiByteTestFramework):
         # Note: proxies are not used to connect to local nodes. This is because the proxy to
         # use is based on CService.GetNetwork(), which returns NET_UNROUTABLE for localhost.
         args = [
-<<<<<<< HEAD
-            ['-listen', '-proxy=%s:%i' % (self.conf1.addr),'-proxyrandomize=1'],
-            ['-listen', '-proxy=%s:%i' % (self.conf1.addr),'-onion=%s:%i' % (self.conf2.addr),
-                '-i2psam=%s:%i' % (self.i2p_sam), '-i2pacceptincoming=0', '-proxyrandomize=0'],
-            ['-listen', '-proxy=%s:%i' % (self.conf2.addr),'-proxyrandomize=1'],
-            []
-=======
             ['-listen', f'-proxy={self.conf1.addr[0]}:{self.conf1.addr[1]}','-proxyrandomize=1'],
             ['-listen', f'-proxy={self.conf1.addr[0]}:{self.conf1.addr[1]}',f'-onion={self.conf2.addr[0]}:{self.conf2.addr[1]}',
                 f'-i2psam={self.i2p_sam[0]}:{self.i2p_sam[1]}', '-i2pacceptincoming=0', '-proxyrandomize=0'],
@@ -142,7 +110,6 @@ class ProxyTest(DigiByteTestFramework):
             [],
             ['-listen', f'-proxy={self.conf1.addr[0]}:{self.conf1.addr[1]}','-proxyrandomize=1',
                 '-cjdnsreachable']
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         ]
         if self.have_ipv6:
             args[3] = ['-listen', f'-proxy=[{self.conf3.addr[0]}]:{self.conf3.addr[1]}','-proxyrandomize=0', '-noonion']
@@ -154,16 +121,6 @@ class ProxyTest(DigiByteTestFramework):
             if peer["addr"] == addr:
                 assert_equal(peer["network"], network)
 
-<<<<<<< HEAD
-    def node_test(self, node, proxies, auth, test_onion=True):
-        rv = []
-        addr = "15.61.23.23:1234"
-        self.log.debug("Test: outgoing IPv4 connection through node for address {}".format(addr))
-        node.addnode(addr, "onetry")
-        cmd = proxies[0].queue.get()
-        assert isinstance(cmd, Socks5Command)
-        # Note: bitcoind's SOCKS5 implementation only sends atyp DOMAINNAME, even if connecting directly to IPv4/IPv6
-=======
     def node_test(self, node, *, proxies, auth, test_onion, test_cjdns):
         rv = []
         addr = "15.61.23.23:1234"
@@ -172,7 +129,6 @@ class ProxyTest(DigiByteTestFramework):
         cmd = proxies[0].queue.get()
         assert isinstance(cmd, Socks5Command)
         # Note: digibyted's SOCKS5 implementation only sends atyp DOMAINNAME, even if connecting directly to IPv4/IPv6
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         assert_equal(cmd.atyp, AddressType.DOMAINNAME)
         assert_equal(cmd.addr, b"15.61.23.23")
         assert_equal(cmd.port, 1234)
@@ -184,19 +140,11 @@ class ProxyTest(DigiByteTestFramework):
 
         if self.have_ipv6:
             addr = "[1233:3432:2434:2343:3234:2345:6546:4534]:5443"
-<<<<<<< HEAD
-            self.log.debug("Test: outgoing IPv6 connection through node for address {}".format(addr))
-            node.addnode(addr, "onetry")
-            cmd = proxies[1].queue.get()
-            assert isinstance(cmd, Socks5Command)
-            # Note: bitcoind's SOCKS5 implementation only sends atyp DOMAINNAME, even if connecting directly to IPv4/IPv6
-=======
             self.log.debug(f"Test: outgoing IPv6 connection through node for address {addr}")
             node.addnode(addr, "onetry")
             cmd = proxies[1].queue.get()
             assert isinstance(cmd, Socks5Command)
             # Note: digibyted's SOCKS5 implementation only sends atyp DOMAINNAME, even if connecting directly to IPv4/IPv6
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             assert_equal(cmd.atyp, AddressType.DOMAINNAME)
             assert_equal(cmd.addr, b"1233:3432:2434:2343:3234:2345:6546:4534")
             assert_equal(cmd.port, 5443)
@@ -208,11 +156,7 @@ class ProxyTest(DigiByteTestFramework):
 
         if test_onion:
             addr = "pg6mmjiyjmcrsslvykfwnntlaru7p5svn6y2ymmju6nubxndf4pscryd.onion:8333"
-<<<<<<< HEAD
-            self.log.debug("Test: outgoing onion connection through node for address {}".format(addr))
-=======
             self.log.debug(f"Test: outgoing onion connection through node for address {addr}")
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             node.addnode(addr, "onetry")
             cmd = proxies[2].queue.get()
             assert isinstance(cmd, Socks5Command)
@@ -225,10 +169,6 @@ class ProxyTest(DigiByteTestFramework):
             rv.append(cmd)
             self.network_test(node, addr, network=NET_ONION)
 
-<<<<<<< HEAD
-        addr = "node.noumenon:8333"
-        self.log.debug("Test: outgoing DNS name connection through node for address {}".format(addr))
-=======
         if test_cjdns:
             addr = "[fc00:1:2:3:4:5:6:7]:8888"
             self.log.debug(f"Test: outgoing CJDNS connection through node for address {addr}")
@@ -246,7 +186,6 @@ class ProxyTest(DigiByteTestFramework):
 
         addr = "node.noumenon:8333"
         self.log.debug(f"Test: outgoing DNS name connection through node for address {addr}")
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         node.addnode(addr, "onetry")
         cmd = proxies[3].queue.get()
         assert isinstance(cmd, Socks5Command)
@@ -400,17 +339,10 @@ class ProxyTest(DigiByteTestFramework):
             proxy = f'[{self.conf3.addr[0]}]:{self.conf3.addr[1]}'
             for net in NETWORKS:
                 expected_proxy = '' if net == NET_I2P or net == NET_ONION else proxy
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 assert_equal(n3[net]['proxy'], expected_proxy)
                 assert_equal(n3[net]['proxy_randomize_credentials'], False)
             assert_equal(n3['onion']['reachable'], False)
             assert_equal(n3['i2p']['reachable'], False)
-<<<<<<< HEAD
-
-
-if __name__ == '__main__':
-    ProxyTest().main()
-=======
             assert_equal(n3['cjdns']['reachable'], False)
 
         n4 = networks_dict(nodes_network_info[4])

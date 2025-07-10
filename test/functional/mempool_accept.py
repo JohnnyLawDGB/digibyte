@@ -1,35 +1,18 @@
 #!/usr/bin/env python3
-<<<<<<< HEAD
-# Copyright (c) 2017-2020 The Bitcoin Core developers
-=======
 # Copyright (c) 2017-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test mempool acceptance of raw transactions."""
 
-<<<<<<< HEAD
-=======
 from copy import deepcopy
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 from decimal import Decimal
 import math
 
 from test_framework.test_framework import DigiByteTestFramework
-<<<<<<< HEAD
-from test_framework.key import ECKey
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 from test_framework.messages import (
     MAX_BIP125_RBF_SEQUENCE,
     COIN,
     COutPoint,
-<<<<<<< HEAD
-    CTxIn,
-    CTxOut,
-    MAX_BLOCK_BASE_SIZE,
-    MAX_MONEY,
-=======
     CTransaction,
     CTxIn,
     CTxInWitness,
@@ -37,18 +20,11 @@ from test_framework.messages import (
     MAX_BLOCK_WEIGHT,
     MAX_MONEY,
     SEQUENCE_FINAL,
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     tx_from_hex,
 )
 from test_framework.script import (
     CScript,
     OP_0,
-<<<<<<< HEAD
-    OP_2,
-    OP_3,
-    OP_CHECKMULTISIG,
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     OP_HASH160,
     OP_RETURN,
     OP_TRUE,
@@ -80,26 +56,16 @@ class MempoolAcceptanceTest(DigiByteTestFramework):
             '-txindex','-permitbaremultisig=0',
         ]] * self.num_nodes
         self.supports_cli = False
-<<<<<<< HEAD
-
-    def skip_test_if_missing_module(self):
-        self.skip_if_no_wallet()
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     def check_mempool_result(self, result_expected, *args, **kwargs):
         """Wrapper to check result of testmempoolaccept on node_0's mempool"""
         result_test = self.nodes[0].testmempoolaccept(*args, **kwargs)
         for r in result_test:
-<<<<<<< HEAD
-            r.pop('wtxid')  # Skip check for now
-=======
             # Skip these checks for now
             r.pop('wtxid')
             if "fees" in r:
                 r["fees"].pop("effective-feerate")
                 r["fees"].pop("effective-includes")
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         assert_equal(result_expected, result_test)
         assert_equal(self.nodes[0].getmempoolinfo()['size'], self.mempool_size)  # Must not change mempool state
 
@@ -114,31 +80,18 @@ class MempoolAcceptanceTest(DigiByteTestFramework):
         coins = node.listunspent()
 
         self.log.info('Should not accept garbage to testmempoolaccept')
-<<<<<<< HEAD
-        assert_raises_rpc_error(-3, 'Expected type array, got string', lambda: node.testmempoolaccept(rawtxs='ff00baar'))
-=======
         assert_raises_rpc_error(-3, 'JSON value of type string is not of expected type array', lambda: node.testmempoolaccept(rawtxs='ff00baar'))
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         assert_raises_rpc_error(-8, 'Array must contain between 1 and 25 transactions.', lambda: node.testmempoolaccept(rawtxs=['ff22']*26))
         assert_raises_rpc_error(-8, 'Array must contain between 1 and 25 transactions.', lambda: node.testmempoolaccept(rawtxs=[]))
         assert_raises_rpc_error(-22, 'TX decode failed', lambda: node.testmempoolaccept(rawtxs=['ff00baar']))
 
         self.log.info('A transaction already in the blockchain')
-<<<<<<< HEAD
-        coin = coins.pop()  # Pick a random coin(base) to spend
-        raw_tx_in_block = node.signrawtransactionwithwallet(node.createrawtransaction(
-            inputs=[{'txid': coin['txid'], 'vout': coin['vout']}],
-            outputs=[{node.getnewaddress(): 0.3}, {node.getnewaddress(): 71999}],
-        ))['hex']
-        txid_in_block = node.sendrawtransaction(hexstring=raw_tx_in_block, maxfeerate=0)
-=======
         tx = self.wallet.create_self_transfer()['tx']  # Pick a random coin(base) to spend
         tx.vout.append(deepcopy(tx.vout[0]))
         tx.vout[0].nValue = int(0.3 * COIN)
         tx.vout[1].nValue = int(49 * COIN)
         raw_tx_in_block = tx.serialize().hex()
         txid_in_block = self.wallet.sendrawtransaction(from_node=node, tx_hex=raw_tx_in_block)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         self.generate(node, 1)
         self.mempool_size = 0
         self.check_mempool_result(
@@ -147,20 +100,11 @@ class MempoolAcceptanceTest(DigiByteTestFramework):
         )
 
         self.log.info('A transaction not in the mempool')
-<<<<<<< HEAD
-        fee = Decimal('0.0007')
-        raw_tx_0 = node.signrawtransactionwithwallet(node.createrawtransaction(
-            inputs=[{"txid": txid_in_block, "vout": 0, "sequence": BIP125_SEQUENCE_NUMBER}],  # RBF is used later
-            outputs=[{node.getnewaddress(): Decimal('0.3') - fee}],
-        ))['hex']
-        tx = tx_from_hex(raw_tx_0)
-=======
         fee = Decimal('0.000007')
         utxo_to_spend = self.wallet.get_utxo(txid=txid_in_block)  # use 0.3 DGB UTXO
         tx = self.wallet.create_self_transfer(utxo_to_spend=utxo_to_spend, sequence=MAX_BIP125_RBF_SEQUENCE)['tx']
         tx.vout[0].nValue = int((Decimal('0.3') - fee) * COIN)
         raw_tx_0 = tx.serialize().hex()
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         txid_0 = tx.rehash()
         self.check_mempool_result(
             result_expected=[{'txid': txid_0, 'allowed': True, 'vsize': tx.get_vsize(), 'fees': {'base': fee}}],
@@ -168,17 +112,6 @@ class MempoolAcceptanceTest(DigiByteTestFramework):
         )
 
         self.log.info('A final transaction not in the mempool')
-<<<<<<< HEAD
-        coin = coins.pop()  # Pick a random coin(base) to spend
-        output_amount = Decimal('0.025')
-        raw_tx_final = node.signrawtransactionwithwallet(node.createrawtransaction(
-            inputs=[{'txid': coin['txid'], 'vout': coin['vout'], "sequence": 0xffffffff}],  # SEQUENCE_FINAL
-            outputs=[{node.getnewaddress(): output_amount}],
-            locktime=node.getblockcount() + 2000,  # Can be anything
-        ))['hex']
-        tx = tx_from_hex(raw_tx_final)
-        fee_expected = coin['amount'] - output_amount
-=======
         output_amount = Decimal('0.025')
         tx = self.wallet.create_self_transfer(
             sequence=SEQUENCE_FINAL,
@@ -188,7 +121,6 @@ class MempoolAcceptanceTest(DigiByteTestFramework):
         raw_tx_final = tx.serialize().hex()
         tx = tx_from_hex(raw_tx_final)
         fee_expected = Decimal('50.0') - output_amount
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         self.check_mempool_result(
             result_expected=[{'txid': tx.rehash(), 'allowed': True, 'vsize': tx.get_vsize(), 'fees': {'base': fee_expected}}],
             rawtxs=[tx.serialize().hex()],
@@ -208,14 +140,8 @@ class MempoolAcceptanceTest(DigiByteTestFramework):
         self.log.info('A transaction that replaces a mempool transaction')
         tx = tx_from_hex(raw_tx_0)
         tx.vout[0].nValue -= int(fee * COIN)  # Double the fee
-<<<<<<< HEAD
-        tx.vin[0].nSequence = BIP125_SEQUENCE_NUMBER + 1  # Now, opt out of RBF
-        raw_tx_0 = node.signrawtransactionwithwallet(tx.serialize().hex())['hex']
-        tx = tx_from_hex(raw_tx_0)
-=======
         tx.vin[0].nSequence = MAX_BIP125_RBF_SEQUENCE + 1  # Now, opt out of RBF
         raw_tx_0 = tx.serialize().hex()
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         txid_0 = tx.rehash()
         self.check_mempool_result(
             result_expected=[{'txid': txid_0, 'allowed': True, 'vsize': tx.get_vsize(), 'fees': {'base': (2 * fee)}}],
@@ -244,20 +170,6 @@ class MempoolAcceptanceTest(DigiByteTestFramework):
 
         self.log.info('A transaction with missing inputs, that existed once in the past')
         tx = tx_from_hex(raw_tx_0)
-<<<<<<< HEAD
-        tx.vin[0].prevout.n = 1  # Set vout to 1, to spend the other outpoint (71999 coins) of the in-chain-tx we want to double spend
-        raw_tx_1 = node.signrawtransactionwithwallet(tx.serialize().hex())['hex']
-        txid_1 = node.sendrawtransaction(hexstring=raw_tx_1, maxfeerate=0)
-        # Now spend both to "clearly hide" the outputs, ie. remove the coins from the utxo set by spending them
-        raw_tx_spend_both = node.signrawtransactionwithwallet(node.createrawtransaction(
-            inputs=[
-                {'txid': txid_0, 'vout': 0},
-                {'txid': txid_1, 'vout': 0},
-            ],
-            outputs=[{node.getnewaddress(): 0.1}]
-        ))['hex']
-        txid_spend_both = node.sendrawtransaction(hexstring=raw_tx_spend_both, maxfeerate=0)
-=======
         tx.vin[0].prevout.n = 1  # Set vout to 1, to spend the other outpoint (49 coins) of the in-chain-tx we want to double spend
         raw_tx_1 = tx.serialize().hex()
         txid_1 = node.sendrawtransaction(hexstring=raw_tx_1, maxfeerate=0)
@@ -270,7 +182,6 @@ class MempoolAcceptanceTest(DigiByteTestFramework):
         tx.vout[0].nValue = int(0.1 * COIN)
         raw_tx_spend_both = tx.serialize().hex()
         txid_spend_both = self.wallet.sendrawtransaction(from_node=node, tx_hex=raw_tx_spend_both)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         self.generate(node, 1)
         self.mempool_size = 0
         # Now see if we can add the coins back to the utxo set by sending the exact txs again
@@ -283,20 +194,11 @@ class MempoolAcceptanceTest(DigiByteTestFramework):
             rawtxs=[raw_tx_1],
         )
 
-<<<<<<< HEAD
-        self.log.info('Create a signed "reference" tx for later use')
-        raw_tx_reference = node.signrawtransactionwithwallet(node.createrawtransaction(
-            inputs=[{'txid': txid_spend_both, 'vout': 0}],
-            outputs=[{node.getnewaddress(): 0.05}],
-        ))['hex']
-        tx = tx_from_hex(raw_tx_reference)
-=======
         self.log.info('Create a "reference" tx for later use')
         utxo_to_spend = self.wallet.get_utxo(txid=txid_spend_both)
         tx = self.wallet.create_self_transfer(utxo_to_spend=utxo_to_spend, sequence=SEQUENCE_FINAL)['tx']
         tx.vout[0].nValue = int(0.05 * COIN)
         raw_tx_reference = tx.serialize().hex()
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         # Reference tx should be valid on itself
         self.check_mempool_result(
             result_expected=[{'txid': tx.rehash(), 'allowed': True, 'vsize': tx.get_vsize(), 'fees': { 'base': Decimal('0.1') - Decimal('0.05')}}],
@@ -307,11 +209,6 @@ class MempoolAcceptanceTest(DigiByteTestFramework):
         self.log.info('A transaction with no outputs')
         tx = tx_from_hex(raw_tx_reference)
         tx.vout = []
-<<<<<<< HEAD
-        # Skip re-signing the transaction for context independent checks from now on
-        # tx = tx_from_hex(node.signrawtransactionwithwallet(tx.serialize().hex())['hex'])
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         self.check_mempool_result(
             result_expected=[{'txid': tx.rehash(), 'allowed': False, 'reject-reason': 'bad-txns-vout-empty'}],
             rawtxs=[tx.serialize().hex()],
@@ -319,11 +216,7 @@ class MempoolAcceptanceTest(DigiByteTestFramework):
 
         self.log.info('A really large transaction')
         tx = tx_from_hex(raw_tx_reference)
-<<<<<<< HEAD
-        tx.vin = [tx.vin[0]] * math.ceil(MAX_BLOCK_BASE_SIZE / len(tx.vin[0].serialize()))
-=======
         tx.vin = [tx.vin[0]] * math.ceil(MAX_BLOCK_WEIGHT // 4 / len(tx.vin[0].serialize()))
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         self.check_mempool_result(
             result_expected=[{'txid': tx.rehash(), 'allowed': False, 'reject-reason': 'bad-txns-oversize'}],
             rawtxs=[tx.serialize().hex()],
@@ -394,15 +287,8 @@ class MempoolAcceptanceTest(DigiByteTestFramework):
             rawtxs=[tx.serialize().hex()],
         )
         tx = tx_from_hex(raw_tx_reference)
-<<<<<<< HEAD
-        key = ECKey()
-        key.generate()
-        pubkey = key.get_pubkey().get_bytes()
-        tx.vout[0].scriptPubKey = CScript([OP_2, pubkey, pubkey, pubkey, OP_3, OP_CHECKMULTISIG])  # Some bare multisig script (2-of-3)
-=======
         _, pubkey = generate_keypair()
         tx.vout[0].scriptPubKey = keys_to_multisig_script([pubkey] * 3, k=2)  # Some bare multisig script (2-of-3)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         self.check_mempool_result(
             result_expected=[{'txid': tx.rehash(), 'allowed': False, 'reject-reason': 'bare-multisig'}],
             rawtxs=[tx.serialize().hex()],

@@ -262,10 +262,6 @@ class RESTTest (DigiByteTestFramework):
         assert_equal(len(json_obj['utxos']), 0)
 
         self.generate(self.nodes[0], 1)
-<<<<<<< HEAD
-        self.sync_all()
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         json_obj = self.test_rest_request(f"/getutxos/{spending[0]}-{spending[1]}")
         assert_equal(len(json_obj['utxos']), 1)
@@ -491,10 +487,6 @@ class RESTTest (DigiByteTestFramework):
 
         # Now mine the transactions
         newblockhash = self.generate(self.nodes[1], 1)
-<<<<<<< HEAD
-        self.sync_all()
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # Check if the 3 tx show up in the new block
         json_obj = self.test_rest_request(f"/block/{newblockhash[0]}")

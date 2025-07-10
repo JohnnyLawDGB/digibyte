@@ -1,9 +1,5 @@
 Could be dropped after a migration to C++20.
-<<<<<<< HEAD
 See: https://github.com/bitcoin/bitcoin/issues/26916.
-=======
-See: https://github.com/digibyte/digibyte/issues/26916.
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 diff --git a/includes/sys/sdt.h b/includes/sys/sdt.h
 index 4075a5f..7c6138c 100644
@@ -12,11 +8,6 @@ index 4075a5f..7c6138c 100644
 @@ -276,7 +276,7 @@ __extension__ extern unsigned long long __sdt_unsp;
    _SDT_ASM_1(.purgem _SDT_TYPE_)					      \
    _SDT_ASM_1(.purgem _SDT_TYPE)
-<<<<<<< HEAD
- 
-=======
-
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 -#define _SDT_ASM_BODY(provider, name, pack_args, args, ...)		      \
 +#define _SDT_ASM_BODY(provider, name, pack_args, args)		            \
    _SDT_DEF_MACROS							      \

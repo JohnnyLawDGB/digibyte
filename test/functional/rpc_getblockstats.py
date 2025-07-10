@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-<<<<<<< HEAD
-# Copyright (c) 2017-2019 The Bitcoin Core developers
-# Copyright (c) 2021-2022 The DigiByte Core developers
-=======
 # Copyright (c) 2017-2021 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -12,14 +7,7 @@
 # Test getblockstats rpc call
 #
 
-<<<<<<< HEAD
-from test_framework.blocktools import (
-    COINBASE_MATURITY,
-    COINBASE_MATURITY_2,
-)
-=======
 from test_framework.blocktools import COINBASE_MATURITY
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import (
     assert_equal,
@@ -54,19 +42,6 @@ class GetblockstatsTest(DigiByteTestFramework):
 
     def generate_test_data(self, filename):
         mocktime = 1525107225
-<<<<<<< HEAD
-        self.nodes[0].createwallet('w1')
-        self.nodes[0].setmocktime(mocktime)
-
-        address = self.nodes[0].get_wallet_rpc('w1').getnewaddress()
-
-        self.generatetoaddress(self.nodes[0], COINBASE_MATURITY_2 + 1, address)
-
-        self.nodes[0].sendtoaddress(address=address, amount=10, subtractfeefromamount=True)
-        self.generate(self.nodes[0], 1)
-        self.sync_all()
-
-=======
         self.nodes[0].setmocktime(mocktime)
         self.nodes[0].createwallet(wallet_name='test')
         privkey = self.nodes[0].get_deterministic_priv_key().key
@@ -78,16 +53,12 @@ class GetblockstatsTest(DigiByteTestFramework):
         self.nodes[0].sendtoaddress(address=address, amount=10, subtractfeefromamount=True)
         self.generate(self.nodes[0], 1)
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         self.nodes[0].sendtoaddress(address=address, amount=10, subtractfeefromamount=True)
         self.nodes[0].sendtoaddress(address=address, amount=10, subtractfeefromamount=False)
         self.nodes[0].settxfee(amount=0.003)
         self.nodes[0].sendtoaddress(address=address, amount=1, subtractfeefromamount=True)
-<<<<<<< HEAD
-=======
         # Send to OP_RETURN output to test its exclusion from statistics
         self.nodes[0].send(outputs={"data": "21"})
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         self.sync_all()
         self.generate(self.nodes[0], 1)
 
@@ -186,13 +157,8 @@ class GetblockstatsTest(DigiByteTestFramework):
                                     self.nodes[0].getblockstats, hash_or_height=1, stats=inv_stat)
 
         # Make sure we aren't always returning inv_sel_stat as the culprit stat
-<<<<<<< HEAD
-        assert_raises_rpc_error(-8, 'Invalid selected statistic aaa%s' % inv_sel_stat,
-                                self.nodes[0].getblockstats, hash_or_height=1, stats=['minfee' , 'aaa%s' % inv_sel_stat])
-=======
         assert_raises_rpc_error(-8, f"Invalid selected statistic 'aaa{inv_sel_stat}'",
                                 self.nodes[0].getblockstats, hash_or_height=1, stats=['minfee', f'aaa{inv_sel_stat}'])
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         # Mainchain's genesis block shouldn't be found on regtest
         assert_raises_rpc_error(-5, 'Block not found', self.nodes[0].getblockstats,
                                 hash_or_height='000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f')
@@ -201,8 +167,6 @@ class GetblockstatsTest(DigiByteTestFramework):
         assert_raises_rpc_error(-1, 'getblockstats hash_or_height ( stats )', self.nodes[0].getblockstats, '00', 1, 2)
         assert_raises_rpc_error(-1, 'getblockstats hash_or_height ( stats )', self.nodes[0].getblockstats)
 
-<<<<<<< HEAD
-=======
         self.log.info('Test block height 0')
         genesis_stats = self.nodes[0].getblockstats(0)
         assert_equal(genesis_stats["blockhash"], "0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206")
@@ -217,7 +181,6 @@ class GetblockstatsTest(DigiByteTestFramework):
         assert_equal(tip_stats["utxo_size_inc"], 441)
         assert_equal(tip_stats["utxo_increase_actual"], 4)
         assert_equal(tip_stats["utxo_size_inc_actual"], 300)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 if __name__ == '__main__':
     GetblockstatsTest().main()

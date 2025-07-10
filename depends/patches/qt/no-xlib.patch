@@ -4,16 +4,7 @@ Date: Thu, 18 Jul 2019 17:22:05 -0400
 Subject: [PATCH] Wrap xlib related code blocks in #if's
 
 They are not necessary to compile QT.
-<<<<<<< HEAD
----
- qtbase/src/plugins/platforms/xcb/qxcbcursor.cpp | 8 ++++++++
- 1 file changed, 8 insertions(+)
 
-diff --git a/qtbase/src/plugins/platforms/xcb/qxcbcursor.cpp b/qtbase/src/plugins/platforms/xcb/qxcbcursor.cpp
-index 7c62c2e2b3..c05c6c0a07 100644
-=======
-
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 --- a/qtbase/src/plugins/platforms/xcb/qxcbcursor.cpp
 +++ b/qtbase/src/plugins/platforms/xcb/qxcbcursor.cpp
 @@ -49,7 +49,9 @@
@@ -26,11 +17,7 @@ index 7c62c2e2b3..c05c6c0a07 100644
  #include <xcb/xfixes.h>
  #include <xcb/xcb_image.h>
  
-<<<<<<< HEAD
-@@ -391,6 +391,7 @@ void QXcbCursor::changeCursor(QCursor *cursor, QWindow *window)
-=======
 @@ -391,6 +393,7 @@ void QXcbCursor::changeCursor(QCursor *cursor, QWindow *window)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
      xcb_flush(xcb_connection());
  }
  
@@ -38,11 +25,7 @@ index 7c62c2e2b3..c05c6c0a07 100644
  static int cursorIdForShape(int cshape)
  {
      int cursorId = 0;
-<<<<<<< HEAD
-@@ -444,6 +445,7 @@ static int cursorIdForShape(int cshape)
-=======
 @@ -444,6 +447,7 @@ static int cursorIdForShape(int cshape)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
      }
      return cursorId;
  }
@@ -50,11 +33,7 @@ index 7c62c2e2b3..c05c6c0a07 100644
  
  xcb_cursor_t QXcbCursor::createNonStandardCursor(int cshape)
  {
-<<<<<<< HEAD
-@@ -556,7 +558,9 @@ static xcb_cursor_t loadCursor(void *dpy, int cshape)
-=======
 @@ -558,7 +562,9 @@ static xcb_cursor_t loadCursor(void *dpy, int cshape)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
  xcb_cursor_t QXcbCursor::createFontCursor(int cshape)
  {
      xcb_connection_t *conn = xcb_connection();
@@ -63,13 +42,8 @@ index 7c62c2e2b3..c05c6c0a07 100644
 +#endif
      xcb_cursor_t cursor = XCB_NONE;
  
-<<<<<<< HEAD
-     // Try Xcursor first
-@@ -586,6 +590,7 @@ xcb_cursor_t QXcbCursor::createFontCursor(int cshape)
-=======
  #if QT_CONFIG(xcb_xlib) && QT_CONFIG(library)
 @@ -590,6 +596,7 @@ xcb_cursor_t QXcbCursor::createFontCursor(int cshape)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
      // Non-standard X11 cursors are created from bitmaps
      cursor = createNonStandardCursor(cshape);
  
@@ -77,11 +51,7 @@ index 7c62c2e2b3..c05c6c0a07 100644
      // Create a glpyh cursor if everything else failed
      if (!cursor && cursorId) {
          cursor = xcb_generate_id(conn);
-<<<<<<< HEAD
-@@ -593,6 +598,7 @@ xcb_cursor_t QXcbCursor::createFontCursor(int cshape)
-=======
 @@ -597,6 +604,7 @@ xcb_cursor_t QXcbCursor::createFontCursor(int cshape)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                                  cursorId, cursorId + 1,
                                  0xFFFF, 0xFFFF, 0xFFFF, 0, 0, 0);
      }
@@ -89,9 +59,3 @@ index 7c62c2e2b3..c05c6c0a07 100644
  
      if (cursor && cshape >= 0 && cshape < Qt::LastCursor && connection()->hasXFixes()) {
          const char *name = cursorNames[cshape].front();
-<<<<<<< HEAD
--- 
-2.22.0
-
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion

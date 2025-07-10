@@ -1,8 +1,5 @@
 #!/usr/bin/env python3
-<<<<<<< HEAD
-# Copyright (c) 2018-2020 The Bitcoin Core developers
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+# Copyright (c) 2018-2020 The DigiByte Core developers
 # Copyright (c) 2018-2022 The DigiByte Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
@@ -11,11 +8,6 @@
 from decimal import Decimal
 from itertools import product
 
-<<<<<<< HEAD
-from decimal import Decimal
-from itertools import product
-
-=======
 from test_framework.descriptors import descsum_create
 from test_framework.key import H_POINT
 from test_framework.messages import (
@@ -40,16 +32,11 @@ from test_framework.psbt import (
     PSBT_OUT_TAP_TREE,
 )
 from test_framework.script import CScript, OP_TRUE
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import (
     assert_approx,
     assert_equal,
     assert_greater_than,
-<<<<<<< HEAD
-    assert_raises_rpc_error,
-    find_output,
-=======
     assert_greater_than_or_equal,
     assert_raises_rpc_error,
     find_output,
@@ -59,33 +46,19 @@ from test_framework.util import (
 from test_framework.wallet_util import (
     generate_keypair,
     get_generate_key,
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 )
 
 import json
 import os
 
-<<<<<<< HEAD
-MAX_BIP125_RBF_SEQUENCE = 0xfffffffd
-
-# Create one-input, one-output, no-fee transaction:
-class PSBTTest(DigiByteTestFramework):
-=======
 
 class PSBTTest(DigiByteTestFramework):
     def add_options(self, parser):
         self.add_wallet_options(parser)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     def set_test_params(self):
         self.num_nodes = 3
         self.extra_args = [
-<<<<<<< HEAD
-            ["-walletrbf=1"],
-            ["-walletrbf=0", "-changetype=legacy"],
-            []
-        ]
-=======
             ["-walletrbf=1", "-addresstype=bech32", "-changetype=bech32"], #TODO: Remove address type restrictions once taproot has psbt extensions
             ["-walletrbf=0", "-changetype=legacy"],
             []
@@ -93,19 +66,13 @@ class PSBTTest(DigiByteTestFramework):
         # whitelist peers to speed up tx relay / mempool sync
         for args in self.extra_args:
             args.append("-whitelist=noban@127.0.0.1")
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         self.supports_cli = False
 
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()
 
-<<<<<<< HEAD
-    # TODO: Re-enable this test with segwit v1
-    def test_utxo_conversion(self):
-=======
     def test_utxo_conversion(self):
         self.log.info("Check that non-witness UTXOs are removed for segwit v1+ inputs")
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         mining_node = self.nodes[2]
         offline_node = self.nodes[0]
         online_node = self.nodes[1]
@@ -117,32 +84,6 @@ class PSBTTest(DigiByteTestFramework):
         # Create watchonly on online_node
         online_node.createwallet(wallet_name='wonline', disable_private_keys=True)
         wonline = online_node.get_wallet_rpc('wonline')
-<<<<<<< HEAD
-        w2 = online_node.get_wallet_rpc('')
-
-        # Mine a transaction that credits the offline address
-        offline_addr = offline_node.getnewaddress(address_type="p2sh-segwit")
-        online_addr = w2.getnewaddress(address_type="p2sh-segwit")
-        wonline.importaddress(offline_addr, "", False)
-        mining_node.sendtoaddress(address=offline_addr, amount=1.0)
-        self.generate(mining_node, 1)
-        self.sync_blocks([mining_node, online_node])
-
-        # Construct an unsigned PSBT on the online node (who doesn't know the output is Segwit, so will include a non-witness UTXO)
-        utxos = wonline.listunspent(addresses=[offline_addr])
-        raw = wonline.createrawtransaction([{"txid":utxos[0]["txid"], "vout":utxos[0]["vout"]}],[{online_addr:0.9999}])
-        psbt = wonline.walletprocesspsbt(online_node.converttopsbt(raw))["psbt"]
-        assert "non_witness_utxo" in mining_node.decodepsbt(psbt)["inputs"][0]
-
-        # Have the offline node sign the PSBT (which will update the UTXO to segwit)
-        signed_psbt = offline_node.walletprocesspsbt(psbt)["psbt"]
-        assert "witness_utxo" in mining_node.decodepsbt(signed_psbt)["inputs"][0]
-
-        # Make sure we can mine the resulting transaction
-        txid = mining_node.sendrawtransaction(mining_node.finalizepsbt(signed_psbt)["hex"])
-        self.generate(mining_node, 1)
-        self.sync_blocks([mining_node, online_node])
-=======
         w2 = online_node.get_wallet_rpc(self.default_wallet_name)
 
         # Mine a transaction that credits the offline address
@@ -172,17 +113,11 @@ class PSBTTest(DigiByteTestFramework):
         # Make sure we can mine the resulting transaction
         txid = mining_node.sendrawtransaction(signed_psbt["hex"])
         self.generate(mining_node, nblocks=1, sync_fun=lambda: self.sync_all([online_node, mining_node]))
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         assert_equal(online_node.gettxout(txid,0)["confirmations"], 1)
 
         wonline.unloadwallet()
 
         # Reconnect
-<<<<<<< HEAD
-        self.connect_nodes(0, 1)
-        self.connect_nodes(0, 2)
-
-=======
         self.connect_nodes(1, 0)
         self.connect_nodes(0, 2)
 
@@ -242,7 +177,6 @@ class PSBTTest(DigiByteTestFramework):
 
         wallet.unloadwallet()
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     def assert_change_type(self, psbtx, expected_type):
         """Assert that the given PSBT has a change output with the given type."""
 
@@ -257,17 +191,11 @@ class PSBTTest(DigiByteTestFramework):
 
         # If inputs are specified, do not automatically add more:
         utxo1 = self.nodes[0].listunspent()[0]
-<<<<<<< HEAD
-        assert_raises_rpc_error(-4, "Insufficient funds", self.nodes[0].walletcreatefundedpsbt, [{"txid": utxo1['txid'], "vout": utxo1['vout']}], {self.nodes[2].getnewaddress():73000})
-
-        psbtx1 = self.nodes[0].walletcreatefundedpsbt([{"txid": utxo1['txid'], "vout": utxo1['vout']}], {self.nodes[2].getnewaddress():73000}, 0, {"add_inputs": True})['psbt']
-=======
         assert_raises_rpc_error(-4, "The preselected coins total amount does not cover the transaction target. "
                                     "Please allow other inputs to be automatically selected or include more coins manually",
                                 self.nodes[0].walletcreatefundedpsbt, [{"txid": utxo1['txid'], "vout": utxo1['vout']}], {self.nodes[2].getnewaddress():90})
 
         psbtx1 = self.nodes[0].walletcreatefundedpsbt([{"txid": utxo1['txid'], "vout": utxo1['vout']}], {self.nodes[2].getnewaddress():90}, 0, {"add_inputs": True})['psbt']
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         assert_equal(len(self.nodes[0].decodepsbt(psbtx1)['tx']['vin']), 2)
 
         # Inputs argument can be null
@@ -348,10 +276,7 @@ class PSBTTest(DigiByteTestFramework):
         signed_tx = self.nodes[0].signrawtransactionwithwallet(rawtx['hex'])['hex']
         txid = self.nodes[0].sendrawtransaction(signed_tx)
         self.generate(self.nodes[0], 6)
-<<<<<<< HEAD
         self.sync_all()
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # Find the output pos
         p2sh_pos = -1
@@ -376,27 +301,6 @@ class PSBTTest(DigiByteTestFramework):
                 p2pkh_pos = out['n']
 
         inputs = [{"txid": txid, "vout": p2wpkh_pos}, {"txid": txid, "vout": p2sh_p2wpkh_pos}, {"txid": txid, "vout": p2pkh_pos}]
-<<<<<<< HEAD
-        outputs = [{self.nodes[1].getnewaddress(): 29.9}]
-
-        # spend single key from node 1
-        created_psbt = self.nodes[1].walletcreatefundedpsbt(inputs, outputs)
-        walletprocesspsbt_out = self.nodes[1].walletprocesspsbt(created_psbt['psbt'])
-        # Make sure it has both types of UTXOs
-        decoded = self.nodes[1].decodepsbt(walletprocesspsbt_out['psbt'])
-        assert 'non_witness_utxo' in decoded['inputs'][0]
-        assert 'witness_utxo' in decoded['inputs'][0]
-        # Check decodepsbt fee calculation (input values shall only be counted once per UTXO)
-        assert_equal(decoded['fee'], created_psbt['fee'])
-        assert_equal(walletprocesspsbt_out['complete'], True)
-        self.nodes[1].sendrawtransaction(self.nodes[1].finalizepsbt(walletprocesspsbt_out['psbt'])['hex'])
-
-        self.log.info("Test walletcreatefundedpsbt fee rate of 10000 sat/vB and 0.1 DGB/kvB produces a total fee at or slightly below -maxtxfee (~0.05290000)")
-        res1 = self.nodes[1].walletcreatefundedpsbt(inputs, outputs, 0, {"fee_rate": 100000, "add_inputs": True})
-        assert_approx(res1["fee"], 0.0055, 0.5)
-        res2 = self.nodes[1].walletcreatefundedpsbt(inputs, outputs, 0, {"feeRate": "0.1", "add_inputs": True})
-        assert_approx(res2["fee"], 0.0055, 0.5)
-=======
         outputs = [{self.nodes[1].getnewaddress(): 29.99}]
 
         # spend single key from node 1
@@ -416,7 +320,6 @@ class PSBTTest(DigiByteTestFramework):
         assert_approx(res1["fee"], 0.055, 0.005)
         res2 = self.nodes[1].walletcreatefundedpsbt(inputs, outputs, 0, {"feeRate": "0.1", "add_inputs": True})
         assert_approx(res2["fee"], 0.055, 0.005)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         self.log.info("Test min fee rate checks with walletcreatefundedpsbt are bypassed, e.g. a fee_rate under 1 sat/vB is allowed")
         res3 = self.nodes[1].walletcreatefundedpsbt(inputs, outputs, 0, {"fee_rate": "0.999", "add_inputs": True})
@@ -429,11 +332,7 @@ class PSBTTest(DigiByteTestFramework):
             assert_equal(0, self.nodes[1].walletcreatefundedpsbt(inputs, outputs, 0, {param: zero_value, "add_inputs": True})["fee"])
 
         self.log.info("Test invalid fee rate settings")
-<<<<<<< HEAD
-        for param, value in {("fee_rate", 100000000), ("feeRate", 1000)}:
-=======
         for param, value in {("fee_rate", 100000), ("feeRate", 1)}:
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             assert_raises_rpc_error(-4, "Fee exceeds maximum configured by user (e.g. -maxtxfee, maxfeerate)",
                 self.nodes[1].walletcreatefundedpsbt, inputs, outputs, 0, {param: value, "add_inputs": True})
             assert_raises_rpc_error(-3, "Amount out of range",
@@ -445,11 +344,7 @@ class PSBTTest(DigiByteTestFramework):
                 assert_raises_rpc_error(-3, "Invalid amount",
                     self.nodes[1].walletcreatefundedpsbt, inputs, outputs, 0, {param: invalid_value, "add_inputs": True})
         # Test fee_rate values that cannot be represented in sat/vB.
-<<<<<<< HEAD
-        for invalid_value in [0.0001, 0.00000001, 0.00099999, 31.99999999, "0.0001", "0.00000001", "0.00099999", "31.99999999"]:
-=======
         for invalid_value in [0.0001, 0.00000001, 0.00099999, 31.99999999]:
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             assert_raises_rpc_error(-3, "Invalid amount",
                 self.nodes[1].walletcreatefundedpsbt, inputs, outputs, 0, {"fee_rate": invalid_value, "add_inputs": True})
 
@@ -473,11 +368,7 @@ class PSBTTest(DigiByteTestFramework):
 
         self.log.info("- raises RPC error with invalid estimate_mode settings")
         for k, v in {"number": 42, "object": {"foo": "bar"}}.items():
-<<<<<<< HEAD
-            assert_raises_rpc_error(-3, "Expected type string for estimate_mode, got {}".format(k),
-=======
             assert_raises_rpc_error(-3, f"JSON value of type {k} for field estimate_mode is not of expected type string",
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 self.nodes[1].walletcreatefundedpsbt, inputs, outputs, 0, {"estimate_mode": v, "conf_target": 0.1, "add_inputs": True})
         for mode in ["", "foo", Decimal("3.141592")]:
             assert_raises_rpc_error(-8, 'Invalid estimate_mode parameter, must be one of: "unset", "economical", "conservative"',
@@ -487,46 +378,13 @@ class PSBTTest(DigiByteTestFramework):
         for mode in ["unset", "economical", "conservative"]:
             self.log.debug("{}".format(mode))
             for k, v in {"string": "", "object": {"foo": "bar"}}.items():
-<<<<<<< HEAD
-                assert_raises_rpc_error(-3, "Expected type number for conf_target, got {}".format(k),
-=======
                 assert_raises_rpc_error(-3, f"JSON value of type {k} for field conf_target is not of expected type number",
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                     self.nodes[1].walletcreatefundedpsbt, inputs, outputs, 0, {"estimate_mode": mode, "conf_target": v, "add_inputs": True})
             for n in [-1, 0, 1009]:
                 assert_raises_rpc_error(-8, "Invalid conf_target, must be between 1 and 1008",  # max value of 1008 per src/policy/fees.h
                     self.nodes[1].walletcreatefundedpsbt, inputs, outputs, 0, {"estimate_mode": mode, "conf_target": n, "add_inputs": True})
 
         self.log.info("Test walletcreatefundedpsbt with too-high fee rate produces total fee well above -maxtxfee and raises RPC error")
-<<<<<<< HEAD
-
-        # Log the balances before generating blocks and sending funds
-        node0_balance_before = self.nodes[0].getbalance()
-        node1_balance_before = self.nodes[1].getbalance()
-        self.log.info(f"Node 0 balance before: {node0_balance_before} DGB")
-        self.log.info(f"Node 1 balance before: {node1_balance_before} DGB")
-
-        self.generate(self.nodes[1], 200)
-        self.sync_all()
-
-        # Log the balances after generating blocks and sending funds
-        node0_balance_after = self.nodes[0].getbalance()
-        node1_balance_after = self.nodes[1].getbalance()
-        self.log.info(f"Node 0 balance after: {node0_balance_after} DGB")
-        self.log.info(f"Node 1 balance after: {node1_balance_after} DGB")
-
-        outputs2 = [{self.nodes[1].getnewaddress(): 400}]
-
-        # previously this was silently capped at -maxtxfee
-        for bool_add, outputs_array in {True: outputs2, False: [{self.nodes[1].getnewaddress(): 400}]}.items():
-            msg = "Fee exceeds maximum configured by user (e.g. -maxtxfee, maxfeerate)"
-            assert_raises_rpc_error(-4, msg, self.nodes[1].walletcreatefundedpsbt, inputs, outputs_array, 0, {"fee_rate": 200000000, "add_inputs": bool_add})
-            assert_raises_rpc_error(-4, msg, self.nodes[1].walletcreatefundedpsbt, inputs, outputs_array, 0, {"feeRate": 300, "add_inputs": bool_add})
-
-        self.log.info("Test various PSBT operations")
-        # partially sign multisig things with node 1
-        psbtx = wmulti.walletcreatefundedpsbt(inputs=[{"txid":txid,"vout":p2wsh_pos},{"txid":txid,"vout":p2sh_pos},{"txid":txid,"vout":p2sh_p2wsh_pos}], outputs={self.nodes[1].getnewaddress():29.9}, options={'changeAddress': self.nodes[1].getrawchangeaddress()})['psbt']
-=======
         # previously this was silently capped at -maxtxfee
         for bool_add, outputs_array in {True: outputs, False: [{self.nodes[1].getnewaddress(): 1}]}.items():
             msg = "Fee exceeds maximum configured by user (e.g. -maxtxfee, maxfeerate)"
@@ -536,7 +394,6 @@ class PSBTTest(DigiByteTestFramework):
         self.log.info("Test various PSBT operations")
         # partially sign multisig things with node 1
         psbtx = wmulti.walletcreatefundedpsbt(inputs=[{"txid":txid,"vout":p2wsh_pos},{"txid":txid,"vout":p2sh_pos},{"txid":txid,"vout":p2sh_p2wsh_pos}], outputs={self.nodes[1].getnewaddress():29.99}, changeAddress=self.nodes[1].getrawchangeaddress())['psbt']
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         walletprocesspsbt_out = self.nodes[1].walletprocesspsbt(psbtx)
         psbtx = walletprocesspsbt_out['psbt']
         assert_equal(walletprocesspsbt_out['complete'], False)
@@ -560,19 +417,6 @@ class PSBTTest(DigiByteTestFramework):
         self.nodes[0].decodepsbt(new_psbt)
 
         # Make sure that a non-psbt with signatures cannot be converted
-<<<<<<< HEAD
-        # Error could be either "TX decode failed" (segwit inputs causes parsing to fail) or "Inputs must not have scriptSigs and scriptWitnesses"
-        # We must set iswitness=True because the serialized transaction has inputs and is therefore a witness transaction
-        signedtx = self.nodes[0].signrawtransactionwithwallet(rawtx['hex'])
-        assert_raises_rpc_error(-22, "", self.nodes[0].converttopsbt, hexstring=signedtx['hex'], iswitness=True)
-        assert_raises_rpc_error(-22, "", self.nodes[0].converttopsbt, hexstring=signedtx['hex'], permitsigdata=False, iswitness=True)
-        # Unless we allow it to convert and strip signatures
-        self.nodes[0].converttopsbt(signedtx['hex'], True)
-
-        # Explicitly allow converting non-empty txs
-        new_psbt = self.nodes[0].converttopsbt(rawtx['hex'])
-        self.nodes[0].decodepsbt(new_psbt)
-=======
         signedtx = self.nodes[0].signrawtransactionwithwallet(rawtx['hex'])
         assert_raises_rpc_error(-22, "Inputs must not have scriptSigs and scriptWitnesses",
                                 self.nodes[0].converttopsbt, hexstring=signedtx['hex'])  # permitsigdata=False by default
@@ -582,7 +426,6 @@ class PSBTTest(DigiByteTestFramework):
                                 self.nodes[0].converttopsbt, hexstring=signedtx['hex'], permitsigdata=False, iswitness=True)
         # Unless we allow it to convert and strip signatures
         self.nodes[0].converttopsbt(hexstring=signedtx['hex'], permitsigdata=True)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # Create outputs to nodes 1 and 2
         node1_addr = self.nodes[1].getnewaddress()
@@ -590,10 +433,7 @@ class PSBTTest(DigiByteTestFramework):
         txid1 = self.nodes[0].sendtoaddress(node1_addr, 13)
         txid2 = self.nodes[0].sendtoaddress(node2_addr, 13)
         blockhash = self.generate(self.nodes[0], 6)[0]
-<<<<<<< HEAD
         self.sync_all()
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         vout1 = find_output(self.nodes[1], txid1, 13, blockhash=blockhash)
         vout2 = find_output(self.nodes[2], txid2, 13, blockhash=blockhash)
 
@@ -621,9 +461,6 @@ class PSBTTest(DigiByteTestFramework):
         finalized = self.nodes[0].finalizepsbt(combined)['hex']
         self.nodes[0].sendrawtransaction(finalized)
         self.generate(self.nodes[0], 6)
-<<<<<<< HEAD
-        self.sync_all()
-=======
 
         # Test additional args in walletcreatepsbt
         # Make sure both pre-included and funded inputs
@@ -696,7 +533,6 @@ class PSBTTest(DigiByteTestFramework):
         self.sync_mempools()
         assert_raises_rpc_error(-4, "Insufficient funds", wunsafe.walletcreatefundedpsbt, [], [{self.nodes[0].getnewaddress(): 1}])
         wunsafe.walletcreatefundedpsbt([], [{self.nodes[0].getnewaddress(): 1}], 0, {"include_unsafe": True})
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # Test additional args in walletcreatepsbt
         # Make sure both pre-included and funded inputs
@@ -811,11 +647,7 @@ class PSBTTest(DigiByteTestFramework):
             wrpc = self.nodes[2].get_wallet_rpc("wallet{}".format(i))
             for key in signer['privkeys']:
                 wrpc.importprivkey(key)
-<<<<<<< HEAD
-            signed_tx = wrpc.walletprocesspsbt(signer['psbt'])['psbt']
-=======
             signed_tx = wrpc.walletprocesspsbt(signer['psbt'], True, "ALL")['psbt']
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             assert_equal(signed_tx, signer['result'])
 
         # Combiner test
@@ -840,15 +672,10 @@ class PSBTTest(DigiByteTestFramework):
         for i, signer in enumerate(signers):
             self.nodes[2].unloadwallet("wallet{}".format(i))
 
-<<<<<<< HEAD
-        # TODO: Re-enable this for segwit v1
-        # self.test_utxo_conversion()
-=======
         if self.options.descriptors:
             self.test_utxo_conversion()
 
         self.test_input_confs_control()
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # Test that psbts with p2pkh outputs are created properly
         p2pkh = self.nodes[0].getnewaddress(address_type='legacy')
@@ -885,29 +712,17 @@ class PSBTTest(DigiByteTestFramework):
         # Bech32 inputs should be filled with witness UTXO. Other inputs should not be filled because they are non-witness
         updated = self.nodes[1].utxoupdatepsbt(psbt)
         decoded = self.nodes[1].decodepsbt(updated)
-<<<<<<< HEAD
-        test_psbt_input_keys(decoded['inputs'][0], ['witness_utxo'])
-        test_psbt_input_keys(decoded['inputs'][1], [])
-        test_psbt_input_keys(decoded['inputs'][2], [])
-=======
         test_psbt_input_keys(decoded['inputs'][0], ['witness_utxo', 'non_witness_utxo'])
         test_psbt_input_keys(decoded['inputs'][1], ['non_witness_utxo'])
         test_psbt_input_keys(decoded['inputs'][2], ['non_witness_utxo'])
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # Try again, now while providing descriptors, making P2SH-segwit work, and causing bip32_derivs and redeem_script to be filled in
         descs = [self.nodes[1].getaddressinfo(addr)['desc'] for addr in [addr1,addr2,addr3]]
         updated = self.nodes[1].utxoupdatepsbt(psbt=psbt, descriptors=descs)
         decoded = self.nodes[1].decodepsbt(updated)
-<<<<<<< HEAD
-        test_psbt_input_keys(decoded['inputs'][0], ['witness_utxo', 'bip32_derivs'])
-        test_psbt_input_keys(decoded['inputs'][1], [])
-        test_psbt_input_keys(decoded['inputs'][2], ['witness_utxo', 'bip32_derivs', 'redeem_script'])
-=======
         test_psbt_input_keys(decoded['inputs'][0], ['witness_utxo', 'non_witness_utxo', 'bip32_derivs'])
         test_psbt_input_keys(decoded['inputs'][1], ['non_witness_utxo', 'bip32_derivs'])
         test_psbt_input_keys(decoded['inputs'][2], ['non_witness_utxo','witness_utxo', 'bip32_derivs', 'redeem_script'])
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # Two PSBTs with a common input should not be joinable
         psbt1 = self.nodes[1].createpsbt([{"txid":txid1, "vout":vout1}], {self.nodes[0].getnewaddress():Decimal('10.999')})
@@ -918,10 +733,7 @@ class PSBTTest(DigiByteTestFramework):
         txid4 = self.nodes[0].sendtoaddress(addr4, 5)
         vout4 = find_output(self.nodes[0], txid4, 5)
         self.generate(self.nodes[0], 6)
-<<<<<<< HEAD
         self.sync_all()
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         psbt2 = self.nodes[1].createpsbt([{"txid":txid4, "vout":vout4}], {self.nodes[0].getnewaddress():Decimal('4.999')})
         psbt2 = self.nodes[1].walletprocesspsbt(psbt2)['psbt']
         psbt2_decoded = self.nodes[0].decodepsbt(psbt2)
@@ -945,10 +757,7 @@ class PSBTTest(DigiByteTestFramework):
         txid = self.nodes[0].sendtoaddress(addr, 7)
         addrinfo = self.nodes[1].getaddressinfo(addr)
         blockhash = self.generate(self.nodes[0], 6)[0]
-<<<<<<< HEAD
         self.sync_all()
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         vout = find_output(self.nodes[0], txid, 7, blockhash=blockhash)
         psbt = self.nodes[1].createpsbt([{"txid":txid, "vout":vout}], {self.nodes[0].getnewaddress("", "p2sh-segwit"):Decimal('6.999')})
         analyzed = self.nodes[0].analyzepsbt(psbt)
@@ -973,11 +782,7 @@ class PSBTTest(DigiByteTestFramework):
         assert_equal(analysis['error'], 'PSBT is not valid. Input 0 spends unspendable output')
 
         self.log.info("PSBT with invalid values should have error message and Creator as next")
-<<<<<<< HEAD
-        analysis = self.nodes[0].analyzepsbt('cHNidP8BAHECAAAAAfA00BFgAm6tp86RowwH6BMImQNL5zXUcTT97XoLGz0BAAAAAAD/////AgD5ApUAAAAAFgAUKNw0x8HRctAgmvoevm4u1SbN7XL87QKVAAAAABYAFPck4gF7iL4NL4wtfRAKgQbghiTUAAAAAAABAR8AANwJWPiHHhYAFJUDtxf2PHo641HEOBOAIvFMNTr2AAAA')
-=======
         analysis = self.nodes[0].analyzepsbt('cHNidP8BAHECAAAAAfA00BFgAm6tp86RowwH6BMImQNL5zXUcTT97XoLGz0BAAAAAAD/////AgD5ApUAAAAAFgAUKNw0x8HRctAgmvoevm4u1SbN7XL87QKVAAAAABYAFPck4gF7iL4NL4wtfRAKgQbghiTUAAAAAAABAR8AgIFq49AHABYAFJUDtxf2PHo641HEOBOAIvFMNTr2AAAA')
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         assert_equal(analysis['next'], 'creator')
         assert_equal(analysis['error'], 'PSBT is not valid. Input 0 has invalid value')
 
@@ -985,11 +790,7 @@ class PSBTTest(DigiByteTestFramework):
         analysis = self.nodes[0].analyzepsbt('cHNidP8BAHECAAAAAZYezcxdnbXoQCmrD79t/LzDgtUo9ERqixk8wgioAobrAAAAAAD9////AlDDAAAAAAAAFgAUy/UxxZuzZswcmFnN/E9DGSiHLUsuGPUFAAAAABYAFLsH5o0R38wXx+X2cCosTMCZnQ4baAAAAAABAR8A4fUFAAAAABYAFOBI2h5thf3+Lflb2LGCsVSZwsltIgIC/i4dtVARCRWtROG0HHoGcaVklzJUcwo5homgGkSNAnJHMEQCIGx7zKcMIGr7cEES9BR4Kdt/pzPTK3fKWcGyCJXb7MVnAiALOBgqlMH4GbC1HDh/HmylmO54fyEy4lKde7/BT/PWxwEBAwQBAAAAIgYC/i4dtVARCRWtROG0HHoGcaVklzJUcwo5homgGkSNAnIYDwVpQ1QAAIABAACAAAAAgAAAAAAAAAAAAAAiAgL+CIiB59NSCssOJRGiMYQK1chahgAaaJpIXE41Cyir+xgPBWlDVAAAgAEAAIAAAACAAQAAAAAAAAAA')
         assert_equal(analysis['next'], 'finalizer')
 
-<<<<<<< HEAD
-        analysis = self.nodes[0].analyzepsbt('cHNidP8BAHECAAAAAfA00BFgAm6tp86RowwH6BMImQNL5zXUcTT97XoLGz0BAAAAAAD/////AgAA3AlY+IceFgAUKNw0x8HRctAgmvoevm4u1SbN7XL87QKVAAAAABYAFPck4gF7iL4NL4wtfRAKgQbghiTUAAAAAAABAR8A8gUqAQAAABYAFJUDtxf2PHo641HEOBOAIvFMNTr2AAAA')
-=======
         analysis = self.nodes[0].analyzepsbt('cHNidP8BAHECAAAAAfA00BFgAm6tp86RowwH6BMImQNL5zXUcTT97XoLGz0BAAAAAAD/////AgCAgWrj0AcAFgAUKNw0x8HRctAgmvoevm4u1SbN7XL87QKVAAAAABYAFPck4gF7iL4NL4wtfRAKgQbghiTUAAAAAAABAR8A8gUqAQAAABYAFJUDtxf2PHo641HEOBOAIvFMNTr2AAAA')
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         assert_equal(analysis['next'], 'creator')
         assert_equal(analysis['error'], 'PSBT is not valid. Output amount invalid')
 
@@ -998,8 +799,6 @@ class PSBTTest(DigiByteTestFramework):
         assert_equal(analysis['error'], 'PSBT is not valid. Input 0 specifies invalid prevout')
 
         assert_raises_rpc_error(-25, 'Inputs missing or spent', self.nodes[0].walletprocesspsbt, 'cHNidP8BAJoCAAAAAkvEW8NnDtdNtDpsmze+Ht2LH35IJcKv00jKAlUs21RrAwAAAAD/////S8Rbw2cO1020OmybN74e3Ysffkglwq/TSMoCVSzbVGsBAAAAAP7///8CwLYClQAAAAAWABSNJKzjaUb3uOxixsvh1GGE3fW7zQD5ApUAAAAAFgAUKNw0x8HRctAgmvoevm4u1SbN7XIAAAAAAAEAnQIAAAACczMa321tVHuN4GKWKRncycI22aX3uXgwSFUKM2orjRsBAAAAAP7///9zMxrfbW1Ue43gYpYpGdzJwjbZpfe5eDBIVQozaiuNGwAAAAAA/v///wIA+QKVAAAAABl2qRT9zXUVA8Ls5iVqynLHe5/vSe1XyYisQM0ClQAAAAAWABRmWQUcjSjghQ8/uH4Bn/zkakwLtAAAAAAAAQEfQM0ClQAAAAAWABRmWQUcjSjghQ8/uH4Bn/zkakwLtAAAAA==')
-<<<<<<< HEAD
-=======
 
         self.log.info("Test that we can fund psbts with external inputs specified")
 
@@ -1285,7 +1084,6 @@ class PSBTTest(DigiByteTestFramework):
         self.log.info("Test descriptorprocesspsbt raises if an invalid sighashtype is passed")
         assert_raises_rpc_error(-8, "'all' is not a valid sighash parameter.", self.nodes[2].descriptorprocesspsbt, psbt, [descriptor], sighashtype="all")
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 if __name__ == '__main__':
     PSBTTest().main()

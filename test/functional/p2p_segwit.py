@@ -1,29 +1,16 @@
 #!/usr/bin/env python3
-<<<<<<< HEAD
-# Copyright (c) 2016-2020 The Bitcoin Core developers
+# Copyright (c) 2016-2020 The DigiByte Core developers
 # Copyright (c) 2021-2022 The DigiByte Core developers
-=======
 # Copyright (c) 2016-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test segwit transactions and blocks on P2P network."""
 from decimal import Decimal
-<<<<<<< HEAD
 import math
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 import random
 import struct
 import time
 
-<<<<<<< HEAD
-from test_framework.blocktools import create_block, create_coinbase, add_witness_commitment, WITNESS_COMMITMENT_HEADER, VERSIONBITS_TOP_BITS
-from test_framework.key import ECKey
-from test_framework.messages import (
-    BIP125_SEQUENCE_NUMBER,
-
-=======
 from test_framework.blocktools import (
     WITNESS_COMMITMENT_HEADER,
     add_witness_commitment,
@@ -32,7 +19,6 @@ from test_framework.blocktools import (
 )
 from test_framework.messages import (
     MAX_BIP125_RBF_SEQUENCE,
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     CBlockHeader,
     CInv,
     COutPoint,
@@ -41,11 +27,7 @@ from test_framework.messages import (
     CTxInWitness,
     CTxOut,
     CTxWitness,
-<<<<<<< HEAD
-    MAX_BLOCK_BASE_SIZE,
-=======
     MAX_BLOCK_WEIGHT,
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     MSG_BLOCK,
     MSG_TX,
     MSG_WITNESS_FLAG,
@@ -63,19 +45,13 @@ from test_framework.messages import (
     ser_uint256,
     ser_vector,
     sha256,
-<<<<<<< HEAD
     tx_from_hex,
     uint256_from_str,
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 )
 from test_framework.p2p import (
     P2PInterface,
     p2p_lock,
-<<<<<<< HEAD
-=======
     P2P_SERVICES,
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 )
 from test_framework.script import (
     CScript,
@@ -99,17 +75,12 @@ from test_framework.script import (
     SIGHASH_ANYONECANPAY,
     SIGHASH_NONE,
     SIGHASH_SINGLE,
-<<<<<<< HEAD
     SegwitV0SignatureHash,
     LegacySignatureHash,
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     hash160,
     sign_input_legacy,
     sign_input_segwitv0,
 )
-<<<<<<< HEAD
-=======
 from test_framework.script_util import (
     key_to_p2pk_script,
     key_to_p2wpkh_script,
@@ -117,26 +88,19 @@ from test_framework.script_util import (
     script_to_p2sh_script,
     script_to_p2wsh_script,
 )
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import (
     assert_equal,
     softfork_active,
-<<<<<<< HEAD
     hex_str_to_bytes,
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     assert_raises_rpc_error,
 )
 from test_framework.wallet import MiniWallet
 from test_framework.wallet_util import generate_keypair
 
-<<<<<<< HEAD
 # The versionbit bit used to signal activation of SegWit
 VB_WITNESS_BIT = 1
 VB_TOP_BITS = 0x20000000
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 MAX_SIGOP_COST = 80000
 
@@ -167,29 +131,10 @@ def subtest(func):
 
 
 def sign_p2pk_witness_input(script, tx_to, in_idx, hashtype, value, key):
-<<<<<<< HEAD
-    """Add signature for a P2PK witness program."""
-    tx_hash = SegwitV0SignatureHash(script, tx_to, in_idx, hashtype, value)
-    signature = key.sign_ecdsa(tx_hash) + chr(hashtype).encode('latin-1')
-    tx_to.wit.vtxinwit[in_idx].scriptWitness.stack = [signature, script]
-    tx_to.rehash()
-
-def get_virtual_size(witness_block):
-    """Calculate the virtual size of a witness block.
-
-    Virtual size is base + witness/4."""
-    base_size = len(witness_block.serialize(with_witness=False))
-    total_size = len(witness_block.serialize())
-    # the "+3" is so we round up
-    vsize = int((3 * base_size + total_size + 3) / 4)
-    return vsize
-
-=======
     """Add signature for a P2PK witness script."""
     tx_to.wit.vtxinwit[in_idx].scriptWitness.stack = [script]
     sign_input_segwitv0(tx_to, in_idx, script, value, key, hashtype)
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 def test_transaction_acceptance(node, p2p, tx, with_witness, accepted, reason=None):
     """Send a transaction to the node and check that it's accepted to the mempool
 
@@ -281,19 +226,6 @@ class SegWitTest(DigiByteTestFramework):
         self.num_nodes = 2
         # This test tests SegWit both pre and post-activation, so use the normal BIP9 activation.
         self.extra_args = [
-<<<<<<< HEAD
-            ["-acceptnonstdtxn=1", "-testactivationheight=segwit@{}".format(SEGWIT_HEIGHT), "-whitelist=noban@127.0.0.1"],
-            ["-acceptnonstdtxn=0", "-testactivationheight=segwit@{}".format(SEGWIT_HEIGHT)],
-        ]
-        self.supports_cli = False
-
-    def skip_test_if_missing_module(self):
-        self.skip_if_no_wallet()
-
-    # Helper functions
-
-    def build_next_block(self, version=4 | VERSIONBITS_TOP_BITS):
-=======
             ["-acceptnonstdtxn=1", f"-testactivationheight=segwit@{SEGWIT_HEIGHT}", "-whitelist=noban@127.0.0.1", "-par=1"],
             ["-acceptnonstdtxn=0", f"-testactivationheight=segwit@{SEGWIT_HEIGHT}"],
         ]
@@ -302,16 +234,12 @@ class SegWitTest(DigiByteTestFramework):
     # Helper functions
 
     def build_next_block(self):
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         """Build a block on top of node0's tip."""
         tip = self.nodes[0].getbestblockhash()
         height = self.nodes[0].getblockcount() + 1
         block_time = self.nodes[0].getblockheader(tip)["mediantime"] + 1
         block = create_block(int(tip, 16), create_coinbase(height), block_time)
-<<<<<<< HEAD
         block.nVersion = version
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         block.rehash()
         return block
 
@@ -327,17 +255,10 @@ class SegWitTest(DigiByteTestFramework):
         self.test_node = self.nodes[0].add_p2p_connection(TestP2PConn(), services=P2P_SERVICES)
         # self.old_node sets only NODE_NETWORK
         self.old_node = self.nodes[0].add_p2p_connection(TestP2PConn(), services=NODE_NETWORK)
-<<<<<<< HEAD
-        # self.std_node is for testing node1 (fRequireStandard=true)
-        self.std_node = self.nodes[1].add_p2p_connection(TestP2PConn(), services=NODE_NETWORK | NODE_WITNESS)
-        # self.std_wtx_node is for testing node1 with wtxid relay
-        self.std_wtx_node = self.nodes[1].add_p2p_connection(TestP2PConn(wtxidrelay=True), services=NODE_NETWORK | NODE_WITNESS)
-=======
         # self.std_node is for testing node1 (requires standard txs)
         self.std_node = self.nodes[1].add_p2p_connection(TestP2PConn(), services=P2P_SERVICES)
         # self.std_wtx_node is for testing node1 with wtxid relay
         self.std_wtx_node = self.nodes[1].add_p2p_connection(TestP2PConn(wtxidrelay=True), services=P2P_SERVICES)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         assert self.test_node.nServices & NODE_WITNESS != 0
 
@@ -346,10 +267,7 @@ class SegWitTest(DigiByteTestFramework):
 
         self.log.info("Starting tests before segwit activation")
         self.segwit_active = False
-<<<<<<< HEAD
-=======
         self.wallet = MiniWallet(self.nodes[0])
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         self.test_non_witness_transaction()
         self.test_v0_outputs_arent_spendable()
@@ -387,26 +305,7 @@ class SegWitTest(DigiByteTestFramework):
 
     # Individual tests
 
-<<<<<<< HEAD
-    def subtest(func):  # noqa: N805
-        """Wraps the subtests for logging and state assertions."""
-        def func_wrapper(self, *args, **kwargs):
-            self.log.info("Subtest: {} (Segwit active = {})".format(func.__name__, self.segwit_active))
-            # Assert segwit status is as expected
-            assert_equal(softfork_active(self.nodes[0], 'segwit'), self.segwit_active)
-            func(self, *args, **kwargs)
-            # Each subtest should leave some utxos for the next subtest
-            assert self.utxo
-            self.sync_blocks()
-            # Assert segwit status is as expected at end of subtest
-            assert_equal(softfork_active(self.nodes[0], 'segwit'), self.segwit_active)
-
-        return func_wrapper
-
-    @subtest  # type: ignore
-=======
     @subtest
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     def test_non_witness_transaction(self):
         """See if sending a regular transaction works, and create a utxo to use in later tests."""
         # Mine a block with an anyone-can-spend coinbase,
@@ -417,11 +316,7 @@ class SegWitTest(DigiByteTestFramework):
         self.test_node.send_and_ping(msg_no_witness_block(block))  # make sure the block was processed
         txid = block.vtx[0].sha256
 
-<<<<<<< HEAD
-        self.generate(self.nodes[0], 99)  # let the block mature
-=======
         self.generate(self.wallet, 99)  # let the block mature
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # Create a transaction that spends the coinbase
         tx = CTransaction()
@@ -486,13 +381,6 @@ class SegWitTest(DigiByteTestFramework):
         block1 = self.build_next_block()
         block1.solve()
 
-<<<<<<< HEAD
-        self.test_node.announce_block_and_wait_for_getdata(block1, use_header=False)
-        assert self.test_node.last_message["getdata"].inv[0].type == blocktype
-        test_witness_block(self.nodes[0], self.test_node, block1, True)
-
-        block2 = self.build_next_block(version=4|VERSIONBITS_TOP_BITS)
-=======
         # Send an empty headers message, to clear out any prior getheaders
         # messages that our peer may be waiting for us on.
         self.test_node.send_message(msg_headers())
@@ -502,21 +390,17 @@ class SegWitTest(DigiByteTestFramework):
         test_witness_block(self.nodes[0], self.test_node, block1, True)
 
         block2 = self.build_next_block()
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         block2.solve()
 
         self.test_node.announce_block_and_wait_for_getdata(block2, use_header=True)
         assert self.test_node.last_message["getdata"].inv[0].type == blocktype
         test_witness_block(self.nodes[0], self.test_node, block2, True)
-<<<<<<< HEAD
 
         block3 = self.build_next_block(version=(VB_TOP_BITS | (1 << 15) | VERSIONBITS_TOP_BITS))
         block3.solve()
         self.test_node.announce_block_and_wait_for_getdata(block3, use_header=True)
         assert self.test_node.last_message["getdata"].inv[0].type == blocktype
         test_witness_block(self.nodes[0], self.test_node, block3, True)
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # Check that we can getdata for witness blocks or regular blocks,
         # and the right thing happens.
@@ -536,11 +420,7 @@ class SegWitTest(DigiByteTestFramework):
                 block = self.test_node.request_block(block_hash, 2)
                 wit_block = self.test_node.request_block(block_hash, 2 | MSG_WITNESS_FLAG)
                 assert_equal(block.serialize(), wit_block.serialize())
-<<<<<<< HEAD
-                assert_equal(block.serialize(), hex_str_to_bytes(rpc_block))
-=======
                 assert_equal(block.serialize(), bytes.fromhex(rpc_block))
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         else:
             # After activation, witness blocks and non-witness blocks should
             # be different.  Verify rpc getblock() returns witness blocks, while
@@ -555,11 +435,7 @@ class SegWitTest(DigiByteTestFramework):
             rpc_block = self.nodes[0].getblock(block.hash, False)
             non_wit_block = self.test_node.request_block(block.sha256, 2)
             wit_block = self.test_node.request_block(block.sha256, 2 | MSG_WITNESS_FLAG)
-<<<<<<< HEAD
-            assert_equal(wit_block.serialize(), hex_str_to_bytes(rpc_block))
-=======
             assert_equal(wit_block.serialize(), bytes.fromhex(rpc_block))
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             assert_equal(wit_block.serialize(False), non_wit_block.serialize())
             assert_equal(wit_block.serialize(), block.serialize())
 
@@ -567,12 +443,7 @@ class SegWitTest(DigiByteTestFramework):
             rpc_details = self.nodes[0].getblock(block.hash, True)
             assert_equal(rpc_details["size"], len(block.serialize()))
             assert_equal(rpc_details["strippedsize"], len(block.serialize(False)))
-<<<<<<< HEAD
-            weight = 3 * len(block.serialize(False)) + len(block.serialize())
-            assert_equal(rpc_details["weight"], weight)
-=======
             assert_equal(rpc_details["weight"], block.get_weight())
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
             # Upgraded node should not ask for blocks from unupgraded
             block4 = self.build_next_block()
@@ -659,22 +530,13 @@ class SegWitTest(DigiByteTestFramework):
             # 'block-validation-failed' (if script check threads > 1) or
             # 'mandatory-script-verify-flag-failed (Witness program was passed an
             # empty witness)' (otherwise).
-<<<<<<< HEAD
-            # TODO: support multiple acceptable reject reasons.
-            test_witness_block(self.nodes[0], self.test_node, block, accepted=False, with_witness=False)
-=======
             test_witness_block(self.nodes[0], self.test_node, block, accepted=False, with_witness=False,
                                reason='mandatory-script-verify-flag-failed (Witness program was passed an empty witness)')
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         self.utxo.pop(0)
         self.utxo.append(UTXO(txid, 2, value))
 
-<<<<<<< HEAD
-    @subtest  # type: ignore
-=======
     @subtest
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     def test_witness_tx_relay_before_segwit_activation(self):
 
         # Generate a transaction that doesn't require a witness, but send it
@@ -736,25 +598,15 @@ class SegWitTest(DigiByteTestFramework):
         # Mine it on test_node to create the confirmed output.
         test_transaction_acceptance(self.nodes[0], self.test_node, p2sh_tx, with_witness=True, accepted=True)
         self.generate(self.nodes[0], 1)
-<<<<<<< HEAD
         self.sync_blocks()
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # Now test standardness of v0 P2WSH outputs.
         # Start by creating a transaction with two outputs.
         tx = CTransaction()
-<<<<<<< HEAD
-        tx.vin = [CTxIn(COutPoint(p2sh_tx.sha256, 0), CScript([witness_program]))]
-        tx.vout = [CTxOut(p2sh_tx.vout[0].nValue - 100000, script_pubkey)]
-        tx.vout.append(CTxOut(80000, script_pubkey))  # Might burn this later
-        tx.vin[0].nSequence = BIP125_SEQUENCE_NUMBER  # Just to have the option to bump this tx from the mempool
-=======
         tx.vin = [CTxIn(COutPoint(p2sh_tx.sha256, 0), CScript([witness_script]))]
         tx.vout = [CTxOut(p2sh_tx.vout[0].nValue - 10000, script_pubkey)]
         tx.vout.append(CTxOut(8000, script_pubkey))  # Might burn this later
         tx.vin[0].nSequence = MAX_BIP125_RBF_SEQUENCE  # Just to have the option to bump this tx from the mempool
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         tx.rehash()
 
         # This is always accepted, since the mempool policy is to consider segwit as always active
@@ -787,26 +639,17 @@ class SegWitTest(DigiByteTestFramework):
         if not self.segwit_active:
             # Just check mempool acceptance, but don't add the transaction to the mempool, since witness is disallowed
             # in blocks and the tx is impossible to mine right now.
-<<<<<<< HEAD
-            assert_equal(
-                self.nodes[0].testmempoolaccept([tx3.serialize_with_witness().hex()]),
-=======
             testres3 = self.nodes[0].testmempoolaccept([tx3.serialize_with_witness().hex()])
             testres3[0]["fees"].pop("effective-feerate")
             testres3[0]["fees"].pop("effective-includes")
             assert_equal(testres3,
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 [{
                     'txid': tx3.hash,
                     'wtxid': tx3.getwtxid(),
                     'allowed': True,
                     'vsize': tx3.get_vsize(),
                     'fees': {
-<<<<<<< HEAD
-                        'base': Decimal('0.001000'),
-=======
                         'base': Decimal('0.00001000'),
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                     },
                 }],
             )
@@ -815,36 +658,24 @@ class SegWitTest(DigiByteTestFramework):
             tx3 = tx
             tx3.vout = [tx3_out]
             tx3.rehash()
-<<<<<<< HEAD
-            assert_equal(
-                self.nodes[0].testmempoolaccept([tx3.serialize_with_witness().hex()]),
-=======
             testres3_replaced = self.nodes[0].testmempoolaccept([tx3.serialize_with_witness().hex()])
             testres3_replaced[0]["fees"].pop("effective-feerate")
             testres3_replaced[0]["fees"].pop("effective-includes")
             assert_equal(testres3_replaced,
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 [{
                     'txid': tx3.hash,
                     'wtxid': tx3.getwtxid(),
                     'allowed': True,
                     'vsize': tx3.get_vsize(),
                     'fees': {
-<<<<<<< HEAD
-                        'base': Decimal('0.00200000'),
-=======
                         'base': Decimal('0.00011000'),
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                     },
                 }],
             )
         test_transaction_acceptance(self.nodes[0], self.test_node, tx3, with_witness=True, accepted=True)
 
         self.generate(self.nodes[0], 1)
-<<<<<<< HEAD
         self.sync_blocks()
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         self.utxo.pop(0)
         self.utxo.append(UTXO(tx3.sha256, 0, tx3.vout[0].nValue))
         assert_equal(len(self.nodes[1].getrawmempool()), 0)
@@ -895,22 +726,14 @@ class SegWitTest(DigiByteTestFramework):
         # segwit activation.  Note that older digibyted's that are not
         # segwit-aware would also reject this for failing CLEANSTACK.
         with self.nodes[0].assert_debug_log(
-<<<<<<< HEAD
-                expected_msgs=(spend_tx.hash, 'was not accepted: non-mandatory-script-verify-flag (Witness program was passed an empty witness)')):
-=======
                 expected_msgs=[spend_tx.hash, 'was not accepted: mandatory-script-verify-flag-failed (Witness program was passed an empty witness)']):
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             test_transaction_acceptance(self.nodes[0], self.test_node, spend_tx, with_witness=False, accepted=False)
 
         # Try to put the witness script in the scriptSig, should also fail.
         spend_tx.vin[0].scriptSig = CScript([p2wsh_pubkey, b'a'])
         spend_tx.rehash()
         with self.nodes[0].assert_debug_log(
-<<<<<<< HEAD
-                expected_msgs=(spend_tx.hash, 'was not accepted: mandatory-script-verify-flag-failed (Script evaluated without error but finished with a false/empty top stack element)')):
-=======
                 expected_msgs=[spend_tx.hash, 'was not accepted: mandatory-script-verify-flag-failed (Script evaluated without error but finished with a false/empty top stack element)']):
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             test_transaction_acceptance(self.nodes[0], self.test_node, spend_tx, with_witness=False, accepted=False)
 
         # Now put the witness script in the witness, should succeed after
@@ -967,28 +790,16 @@ class SegWitTest(DigiByteTestFramework):
         tx = CTransaction()
         tx.vin.append(CTxIn(COutPoint(self.utxo[0].sha256, self.utxo[0].n), b""))
 
-<<<<<<< HEAD
-        # Let's construct a witness program
-        witness_program = CScript([OP_TRUE])
-        witness_hash = sha256(witness_program)
-        script_pubkey = CScript([OP_0, witness_hash])
-        tx.vout.append(CTxOut(self.utxo[0].nValue - 100000, script_pubkey))
-=======
         # Let's construct a witness script
         witness_script = CScript([OP_TRUE])
         script_pubkey = script_to_p2wsh_script(witness_script)
         tx.vout.append(CTxOut(self.utxo[0].nValue - 1000, script_pubkey))
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         tx.rehash()
 
         # tx2 will spend tx1, and send back to a regular anyone-can-spend address
         tx2 = CTransaction()
         tx2.vin.append(CTxIn(COutPoint(tx.sha256, 0), b""))
-<<<<<<< HEAD
-        tx2.vout.append(CTxOut(tx.vout[0].nValue - 100000, witness_program))
-=======
         tx2.vout.append(CTxOut(tx.vout[0].nValue - 1000, witness_script))
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         tx2.wit.vtxinwit.append(CTxInWitness())
         tx2.wit.vtxinwit[0].scriptWitness.stack = [witness_script]
         tx2.rehash()
@@ -1003,11 +814,7 @@ class SegWitTest(DigiByteTestFramework):
         block_3.hashMerkleRoot = block_3.calc_merkle_root()
         block_3.solve()
 
-<<<<<<< HEAD
-        test_witness_block(self.nodes[0], self.test_node, block_3, accepted=False)
-=======
         test_witness_block(self.nodes[0], self.test_node, block_3, accepted=False, reason='bad-witness-merkle-match')
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # Add a different commitment with different nonce, but in the
         # right location, and with some funds burned(!).
@@ -1018,10 +825,7 @@ class SegWitTest(DigiByteTestFramework):
         block_3.vtx[0].vout[-1].nValue += 1
         block_3.vtx[0].rehash()
         block_3.hashMerkleRoot = block_3.calc_merkle_root()
-<<<<<<< HEAD
         block_3.rehash()
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         assert len(block_3.vtx[0].vout) == 4  # 3 OP_returns
         block_3.solve()
         test_witness_block(self.nodes[0], self.test_node, block_3, accepted=True)
@@ -1031,11 +835,7 @@ class SegWitTest(DigiByteTestFramework):
         block_4 = self.build_next_block()
         tx3 = CTransaction()
         tx3.vin.append(CTxIn(COutPoint(tx2.sha256, 0), b""))
-<<<<<<< HEAD
-        tx3.vout.append(CTxOut(tx.vout[0].nValue - 100000, witness_program))
-=======
         tx3.vout.append(CTxOut(tx.vout[0].nValue - 1000, witness_script))
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         tx3.rehash()
         block_4.vtx.append(tx3)
         block_4.hashMerkleRoot = block_4.calc_merkle_root()
@@ -1057,11 +857,7 @@ class SegWitTest(DigiByteTestFramework):
         block.solve()
 
         block.vtx[0].wit.vtxinwit[0].scriptWitness.stack.append(b'a' * 5000000)
-<<<<<<< HEAD
-        assert get_virtual_size(block) > MAX_BLOCK_BASE_SIZE
-=======
         assert block.get_weight() > MAX_BLOCK_WEIGHT
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # We can't send over the p2p network, because this is too big to relay
         # TODO: repeat this test with a block that can be relayed
@@ -1070,11 +866,7 @@ class SegWitTest(DigiByteTestFramework):
         assert self.nodes[0].getbestblockhash() != block.hash
 
         block.vtx[0].wit.vtxinwit[0].scriptWitness.stack.pop()
-<<<<<<< HEAD
-        assert get_virtual_size(block) < MAX_BLOCK_BASE_SIZE
-=======
         assert block.get_weight() < MAX_BLOCK_WEIGHT
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         assert_equal(None, self.nodes[0].submitblock(block.serialize().hex()))
 
         assert self.nodes[0].getbestblockhash() == block.hash
@@ -1088,11 +880,7 @@ class SegWitTest(DigiByteTestFramework):
         # Change the nonce -- should not cause the block to be permanently
         # failed
         block.vtx[0].wit.vtxinwit[0].scriptWitness.stack = [ser_uint256(1)]
-<<<<<<< HEAD
-        test_witness_block(self.nodes[0], self.test_node, block, accepted=False)
-=======
         test_witness_block(self.nodes[0], self.test_node, block, accepted=False, reason='bad-witness-merkle-match')
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # Changing the witness reserved value doesn't change the block hash
         block.vtx[0].wit.vtxinwit[0].scriptWitness.stack = [ser_uint256(0)]
@@ -1157,11 +945,7 @@ class SegWitTest(DigiByteTestFramework):
         # limit
         assert len(block.serialize()) > 2 * 1024 * 1024
 
-<<<<<<< HEAD
-        test_witness_block(self.nodes[0], self.test_node, block, accepted=False)
-=======
         test_witness_block(self.nodes[0], self.test_node, block, accepted=False, reason='bad-blk-weight')
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # Now resize the second transaction to make the block fit.
         cur_length = len(block.vtx[-1].wit.vtxinwit[0].scriptWitness.stack[0])
@@ -1169,11 +953,7 @@ class SegWitTest(DigiByteTestFramework):
         block.vtx[0].vout.pop()
         add_witness_commitment(block)
         block.solve()
-<<<<<<< HEAD
-        assert get_virtual_size(block) == MAX_BLOCK_BASE_SIZE
-=======
         assert block.get_weight() == MAX_BLOCK_WEIGHT
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         test_witness_block(self.nodes[0], self.test_node, block, accepted=True)
 
@@ -1237,12 +1017,8 @@ class SegWitTest(DigiByteTestFramework):
         self.update_witness_block_with_transactions(block, [tx])
 
         # Extra witness data should not be allowed.
-<<<<<<< HEAD
-        test_witness_block(self.nodes[0], self.test_node, block, accepted=False)
-=======
         test_witness_block(self.nodes[0], self.test_node, block, accepted=False,
                            reason='mandatory-script-verify-flag-failed (Witness provided for non-witness script)')
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # Try extra signature data.  Ok if we're not spending a witness output.
         block.vtx[1].wit.vtxinwit = []
@@ -1267,12 +1043,8 @@ class SegWitTest(DigiByteTestFramework):
         self.update_witness_block_with_transactions(block, [tx2])
 
         # This has extra witness data, so it should fail.
-<<<<<<< HEAD
-        test_witness_block(self.nodes[0], self.test_node, block, accepted=False)
-=======
         test_witness_block(self.nodes[0], self.test_node, block, accepted=False,
                            reason='mandatory-script-verify-flag-failed (Stack size must be exactly one after execution)')
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # Now get rid of the extra witness, but add extra scriptSig data
         tx2.vin[0].scriptSig = CScript([OP_TRUE])
@@ -1284,12 +1056,8 @@ class SegWitTest(DigiByteTestFramework):
         block.solve()
 
         # This has extra signature data for a witness input, so it should fail.
-<<<<<<< HEAD
-        test_witness_block(self.nodes[0], self.test_node, block, accepted=False)
-=======
         test_witness_block(self.nodes[0], self.test_node, block, accepted=False,
                            reason='mandatory-script-verify-flag-failed (Witness requires empty scriptSig)')
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # Now get rid of the extra scriptsig on the witness input, and verify
         # success (even with extra scriptsig data in the non-witness input)
@@ -1327,12 +1095,8 @@ class SegWitTest(DigiByteTestFramework):
         tx2.rehash()
 
         self.update_witness_block_with_transactions(block, [tx, tx2])
-<<<<<<< HEAD
-        test_witness_block(self.nodes[0], self.test_node, block, accepted=False)
-=======
         test_witness_block(self.nodes[0], self.test_node, block, accepted=False,
                            reason='mandatory-script-verify-flag-failed (Push value size limit exceeded)')
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # Now reduce the length of the stack element
         tx2.wit.vtxinwit[0].scriptWitness.stack[0] = b'a' * (MAX_SCRIPT_ELEMENT_SIZE)
@@ -1345,29 +1109,16 @@ class SegWitTest(DigiByteTestFramework):
         self.utxo.pop()
         self.utxo.append(UTXO(tx2.sha256, 0, tx2.vout[0].nValue))
 
-<<<<<<< HEAD
-    @subtest  # type: ignore
-    def test_max_witness_program_length(self):
-=======
     @subtest
     def test_max_witness_script_length(self):
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         """Test that witness outputs greater than 10kB can't be spent."""
 
         MAX_WITNESS_SCRIPT_LENGTH = 10000
 
-<<<<<<< HEAD
-        # This program is 19 max pushes (9937 bytes), then 64 more opcode-bytes.
-        long_witness_program = CScript([b'a' * MAX_SCRIPT_ELEMENT_SIZE] * 19 + [OP_DROP] * 63 + [OP_TRUE])
-        assert len(long_witness_program) == MAX_PROGRAM_LENGTH + 1
-        long_witness_hash = sha256(long_witness_program)
-        long_script_pubkey = CScript([OP_0, long_witness_hash])
-=======
         # This script is 19 max pushes (9937 bytes), then 64 more opcode-bytes.
         long_witness_script = CScript([b'a' * MAX_SCRIPT_ELEMENT_SIZE] * 19 + [OP_DROP] * 63 + [OP_TRUE])
         assert len(long_witness_script) == MAX_WITNESS_SCRIPT_LENGTH + 1
         long_script_pubkey = script_to_p2wsh_script(long_witness_script)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         block = self.build_next_block()
 
@@ -1385,15 +1136,6 @@ class SegWitTest(DigiByteTestFramework):
 
         self.update_witness_block_with_transactions(block, [tx, tx2])
 
-<<<<<<< HEAD
-        test_witness_block(self.nodes[0], self.test_node, block, accepted=False)
-
-        # Try again with one less byte in the witness program
-        witness_program = CScript([b'a' * MAX_SCRIPT_ELEMENT_SIZE] * 19 + [OP_DROP] * 62 + [OP_TRUE])
-        assert len(witness_program) == MAX_PROGRAM_LENGTH
-        witness_hash = sha256(witness_program)
-        script_pubkey = CScript([OP_0, witness_hash])
-=======
         test_witness_block(self.nodes[0], self.test_node, block, accepted=False,
                            reason='mandatory-script-verify-flag-failed (Script is too big)')
 
@@ -1401,7 +1143,6 @@ class SegWitTest(DigiByteTestFramework):
         witness_script = CScript([b'a' * MAX_SCRIPT_ELEMENT_SIZE] * 19 + [OP_DROP] * 62 + [OP_TRUE])
         assert len(witness_script) == MAX_WITNESS_SCRIPT_LENGTH
         script_pubkey = script_to_p2wsh_script(witness_script)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         tx.vout[0] = CTxOut(tx.vout[0].nValue, script_pubkey)
         tx.rehash()
@@ -1468,11 +1209,7 @@ class SegWitTest(DigiByteTestFramework):
 
         block = self.build_next_block()
         self.update_witness_block_with_transactions(block, [tx2])
-<<<<<<< HEAD
-        test_witness_block(self.nodes[0], self.test_node, block, accepted=False)
-=======
         test_witness_block(self.nodes[0], self.test_node, block, accepted=False, reason='bad-txnmrklroot')
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # Now try using a too short vtxinwit
         tx2.wit.vtxinwit.pop()
@@ -1480,11 +1217,8 @@ class SegWitTest(DigiByteTestFramework):
 
         block.vtx = [block.vtx[0]]
         self.update_witness_block_with_transactions(block, [tx2])
-<<<<<<< HEAD
-=======
         # This block doesn't result in a specific reject reason, but an iostream exception:
         # "Exception 'CDataStream::read(): end of data: unspecified iostream_category error' (...) caught"
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         test_witness_block(self.nodes[0], self.test_node, block, accepted=False)
 
         # Now make one of the intermediate witnesses be incorrect
@@ -1494,12 +1228,8 @@ class SegWitTest(DigiByteTestFramework):
 
         block.vtx = [block.vtx[0]]
         self.update_witness_block_with_transactions(block, [tx2])
-<<<<<<< HEAD
-        test_witness_block(self.nodes[0], self.test_node, block, accepted=False)
-=======
         test_witness_block(self.nodes[0], self.test_node, block, accepted=False,
                            reason='mandatory-script-verify-flag-failed (Operation not valid with the current stack size)')
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # Fix the broken witness and the block should be accepted.
         tx2.wit.vtxinwit[5].scriptWitness.stack = [b'a', witness_script]
@@ -1552,18 +1282,10 @@ class SegWitTest(DigiByteTestFramework):
         tx3.wit.vtxinwit.append(CTxInWitness())
 
         # Add too-large for IsStandard witness and check that it does not enter reject filter
-<<<<<<< HEAD
-        p2sh_program = CScript([OP_TRUE])
-        p2sh_pubkey = hash160(p2sh_program)
-        witness_program2 = CScript([b'a' * 400000])
-        tx3.vout.append(CTxOut(tx2.vout[0].nValue - 100000, CScript([OP_HASH160, p2sh_pubkey, OP_EQUAL])))
-        tx3.wit.vtxinwit[0].scriptWitness.stack = [witness_program2]
-=======
         p2sh_script = CScript([OP_TRUE])
         witness_script2 = CScript([b'a' * 400000])
         tx3.vout.append(CTxOut(tx2.vout[0].nValue - 1000, script_to_p2sh_script(p2sh_script)))
         tx3.wit.vtxinwit[0].scriptWitness.stack = [witness_script2]
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         tx3.rehash()
 
         # Node will not be blinded to the transaction, requesting it any number of times
@@ -1576,13 +1298,8 @@ class SegWitTest(DigiByteTestFramework):
         self.std_wtx_node.announce_tx_and_wait_for_getdata(tx3, use_wtxid=True, success=False)
 
         # Remove witness stuffing, instead add extra witness push on stack
-<<<<<<< HEAD
-        tx3.vout[0] = CTxOut(tx2.vout[0].nValue - 100000, CScript([OP_TRUE, OP_DROP] * 15 + [OP_TRUE]))
-        tx3.wit.vtxinwit[0].scriptWitness.stack = [CScript([CScriptNum(1)]), witness_program]
-=======
         tx3.vout[0] = CTxOut(tx2.vout[0].nValue - 1000, CScript([OP_TRUE, OP_DROP] * 15 + [OP_TRUE]))
         tx3.wit.vtxinwit[0].scriptWitness.stack = [CScript([CScriptNum(1)]), witness_script]
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         tx3.rehash()
 
         test_transaction_acceptance(self.nodes[0], self.test_node, tx2, with_witness=True, accepted=True)
@@ -1605,11 +1322,7 @@ class SegWitTest(DigiByteTestFramework):
         assert_equal(raw_tx["vsize"], vsize)
         assert_equal(raw_tx["weight"], tx3.get_weight())
         assert_equal(len(raw_tx["vin"][0]["txinwitness"]), 1)
-<<<<<<< HEAD
-        assert_equal(raw_tx["vin"][0]["txinwitness"][0], witness_program.hex())
-=======
         assert_equal(raw_tx["vin"][0]["txinwitness"][0], witness_script.hex())
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         assert vsize != raw_tx["size"]
 
         # Cleanup: mine the transactions and update utxo for next test
@@ -1664,10 +1377,7 @@ class SegWitTest(DigiByteTestFramework):
             temp_utxo.append(UTXO(tx.sha256, 0, tx.vout[0].nValue))
 
         self.generate(self.nodes[0], 1)  # Mine all the transactions
-<<<<<<< HEAD
         self.sync_blocks()
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         assert len(self.nodes[0].getrawmempool()) == 0
 
         # Finally, verify that version 0 -> version 2 transactions
@@ -1692,19 +1402,11 @@ class SegWitTest(DigiByteTestFramework):
             tx3.vin.append(CTxIn(COutPoint(i.sha256, i.n), b""))
             tx3.wit.vtxinwit.append(CTxInWitness())
             total_value += i.nValue
-<<<<<<< HEAD
-        tx3.wit.vtxinwit[-1].scriptWitness.stack = [witness_program]
-        tx3.vout.append(CTxOut(total_value - 100000, script_pubkey))
-        tx3.rehash()
-
-        # First we test this transaction against fRequireStandard=true node
-=======
         tx3.wit.vtxinwit[-1].scriptWitness.stack = [witness_script]
         tx3.vout.append(CTxOut(total_value - 1000, script_pubkey))
         tx3.rehash()
 
         # First we test this transaction against std_node
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         # making sure the txid is added to the reject filter
         self.std_node.announce_tx_and_wait_for_getdata(tx3)
         test_transaction_acceptance(self.nodes[1], self.std_node, tx3, with_witness=True, accepted=False, reason="bad-txns-nonstandard-inputs")
@@ -1712,11 +1414,7 @@ class SegWitTest(DigiByteTestFramework):
         self.std_node.announce_tx_and_wait_for_getdata(tx3, success=False)
 
         # Spending a higher version witness output is not allowed by policy,
-<<<<<<< HEAD
-        # even with fRequireStandard=false.
-=======
         # even with the node that accepts non-standard txs.
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         test_transaction_acceptance(self.nodes[0], self.test_node, tx3, with_witness=True, accepted=False, reason="reserved for soft-fork upgrades")
 
         # Building a block with the transaction must be valid, however.
@@ -1749,18 +1447,10 @@ class SegWitTest(DigiByteTestFramework):
         spend_tx.rehash()
 
         # Now test a premature spend.
-<<<<<<< HEAD
-        self.generate(self.nodes[0], 6)
-        self.sync_blocks()
-        block2 = self.build_next_block()
-        self.update_witness_block_with_transactions(block2, [spend_tx])
-        test_witness_block(self.nodes[0], self.test_node, block2, accepted=False)
-=======
         self.generate(self.nodes[0], 98)
         block2 = self.build_next_block()
         self.update_witness_block_with_transactions(block2, [spend_tx])
         test_witness_block(self.nodes[0], self.test_node, block2, accepted=False, reason='bad-txns-premature-spend-of-coinbase')
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # Advancing one more block should allow the spend.
         self.generate(self.nodes[0], 1)
@@ -1778,13 +1468,7 @@ class SegWitTest(DigiByteTestFramework):
 
         # Segwit transactions using uncompressed pubkeys are not accepted
         # under default policy, but should still pass consensus.
-<<<<<<< HEAD
-        key = ECKey()
-        key.generate(False)
-        pubkey = key.get_pubkey().get_bytes()
-=======
         key, pubkey = generate_keypair(compressed=False)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         assert_equal(len(pubkey), 65)  # This should be an uncompressed pubkey
 
         utxo = self.utxo.pop(0)
@@ -1810,15 +1494,8 @@ class SegWitTest(DigiByteTestFramework):
 
         tx2 = CTransaction()
         tx2.vin.append(CTxIn(COutPoint(tx.sha256, 0), b""))
-<<<<<<< HEAD
-        tx2.vout.append(CTxOut(tx.vout[0].nValue - 100000, script_wsh))
-        script = get_p2pkh_script(pubkeyhash)
-        sig_hash = SegwitV0SignatureHash(script, tx2, 0, SIGHASH_ALL, tx.vout[0].nValue)
-        signature = key.sign_ecdsa(sig_hash) + b'\x01'  # 0x1 is SIGHASH_ALL
-=======
         tx2.vout.append(CTxOut(tx.vout[0].nValue - 1000, script_wsh))
         script = keyhash_to_p2pkh_script(pubkeyhash)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         tx2.wit.vtxinwit.append(CTxInWitness())
         tx2.wit.vtxinwit[0].scriptWitness.stack = [pubkey]
         sign_input_segwitv0(tx2, 0, script, tx.vout[0].nValue, key)
@@ -1869,17 +1546,9 @@ class SegWitTest(DigiByteTestFramework):
         # transactions.
         tx5 = CTransaction()
         tx5.vin.append(CTxIn(COutPoint(tx4.sha256, 0), b""))
-<<<<<<< HEAD
-        tx5.vout.append(CTxOut(tx4.vout[0].nValue - 100000, CScript([OP_TRUE])))
-        (sig_hash, err) = LegacySignatureHash(script_pubkey, tx5, 0, SIGHASH_ALL)
-        signature = key.sign_ecdsa(sig_hash) + b'\x01'  # 0x1 is SIGHASH_ALL
-        tx5.vin[0].scriptSig = CScript([signature, pubkey])
-        tx5.rehash()
-=======
         tx5.vout.append(CTxOut(tx4.vout[0].nValue - 1000, CScript([OP_TRUE])))
         tx5.vin[0].scriptSig = CScript([pubkey])
         sign_input_legacy(tx5, 0, script_pubkey, key)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         # Should pass policy and consensus.
         test_transaction_acceptance(self.nodes[0], self.test_node, tx5, True, True)
         block = self.build_next_block()
@@ -1889,20 +1558,9 @@ class SegWitTest(DigiByteTestFramework):
 
     @subtest  # type: ignore
     def test_signature_version_1(self):
-<<<<<<< HEAD
-
-        key = ECKey()
-        key.generate()
-        pubkey = key.get_pubkey().get_bytes()
-
-        witness_program = CScript([pubkey, CScriptOp(OP_CHECKSIG)])
-        witness_hash = sha256(witness_program)
-        script_pubkey = CScript([OP_0, witness_hash])
-=======
         key, pubkey = generate_keypair()
         witness_script = key_to_p2pk_script(pubkey)
         script_pubkey = script_to_p2wsh_script(witness_script)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # First create a witness output for use in the tests.
         tx = CTransaction()
@@ -1931,25 +1589,17 @@ class SegWitTest(DigiByteTestFramework):
                 # Too-large input value
                 sign_p2pk_witness_input(witness_script, tx, 0, hashtype, prev_utxo.nValue + 1, key)
                 self.update_witness_block_with_transactions(block, [tx])
-<<<<<<< HEAD
-                test_witness_block(self.nodes[0], self.test_node, block, accepted=False)
-=======
                 test_witness_block(self.nodes[0], self.test_node, block, accepted=False,
                                    reason='mandatory-script-verify-flag-failed (Script evaluated without error '
                                           'but finished with a false/empty top stack element')
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
                 # Too-small input value
                 sign_p2pk_witness_input(witness_script, tx, 0, hashtype, prev_utxo.nValue - 1, key)
                 block.vtx.pop()  # remove last tx
                 self.update_witness_block_with_transactions(block, [tx])
-<<<<<<< HEAD
-                test_witness_block(self.nodes[0], self.test_node, block, accepted=False)
-=======
                 test_witness_block(self.nodes[0], self.test_node, block, accepted=False,
                                    reason='mandatory-script-verify-flag-failed (Script evaluated without error '
                                           'but finished with a false/empty top stack element')
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
                 # Now try correct value
                 sign_p2pk_witness_input(witness_script, tx, 0, hashtype, prev_utxo.nValue, key)
@@ -2043,28 +1693,18 @@ class SegWitTest(DigiByteTestFramework):
         tx2.vin.append(CTxIn(COutPoint(tx.sha256, 0), b""))
         tx2.vout.append(CTxOut(tx.vout[0].nValue, CScript([OP_TRUE])))
 
-<<<<<<< HEAD
-        script = get_p2pkh_script(pubkeyhash)
-        sig_hash = SegwitV0SignatureHash(script, tx2, 0, SIGHASH_ALL, tx.vout[0].nValue)
-        signature = key.sign_ecdsa(sig_hash) + b'\x01'  # 0x1 is SIGHASH_ALL
-=======
         script = keyhash_to_p2pkh_script(pubkeyhash)
         tx2.wit.vtxinwit.append(CTxInWitness())
         sign_input_segwitv0(tx2, 0, script, tx.vout[0].nValue, key)
         signature = tx2.wit.vtxinwit[0].scriptWitness.stack.pop()
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # Check that we can't have a scriptSig
         tx2.vin[0].scriptSig = CScript([signature, pubkey])
         tx2.rehash()
         block = self.build_next_block()
         self.update_witness_block_with_transactions(block, [tx, tx2])
-<<<<<<< HEAD
-        test_witness_block(self.nodes[0], self.test_node, block, accepted=False)
-=======
         test_witness_block(self.nodes[0], self.test_node, block, accepted=False,
                            reason='mandatory-script-verify-flag-failed (Witness requires empty scriptSig)')
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # Move the signature to the witness.
         block.vtx.pop()
@@ -2118,10 +1758,7 @@ class SegWitTest(DigiByteTestFramework):
         tx.rehash()
         test_transaction_acceptance(self.nodes[0], self.test_node, tx, False, True)
         self.generate(self.nodes[0], 1)
-<<<<<<< HEAD
         self.sync_blocks()
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # We'll add an unnecessary witness to this transaction that would cause
         # it to be non-standard, to test that violating policy with a witness
@@ -2150,10 +1787,7 @@ class SegWitTest(DigiByteTestFramework):
         test_transaction_acceptance(self.nodes[0], self.test_node, tx3, False, True)
 
         self.generate(self.nodes[0], 1)
-<<<<<<< HEAD
         self.sync_blocks()
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # Update our utxo list; we spent the first entry.
         self.utxo.pop(0)
@@ -2188,10 +1822,7 @@ class SegWitTest(DigiByteTestFramework):
         test_transaction_acceptance(self.nodes[0], self.test_node, tx, with_witness=False, accepted=True)
 
         self.generate(self.nodes[0], 1)
-<<<<<<< HEAD
         self.sync_blocks()
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # Creating transactions for tests
         p2wsh_txs = []
@@ -2199,21 +1830,13 @@ class SegWitTest(DigiByteTestFramework):
         for i in range(len(scripts)):
             p2wsh_tx = CTransaction()
             p2wsh_tx.vin.append(CTxIn(COutPoint(txid, i * 2)))
-<<<<<<< HEAD
-            p2wsh_tx.vout.append(CTxOut(outputvalue - 300000, CScript([OP_0, hash160(hex_str_to_bytes(""))])))
-=======
             p2wsh_tx.vout.append(CTxOut(outputvalue - 5000, CScript([OP_0, hash160(b"")])))
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             p2wsh_tx.wit.vtxinwit.append(CTxInWitness())
             p2wsh_tx.rehash()
             p2wsh_txs.append(p2wsh_tx)
             p2sh_tx = CTransaction()
             p2sh_tx.vin.append(CTxIn(COutPoint(txid, i * 2 + 1), CScript([p2wsh_scripts[i]])))
-<<<<<<< HEAD
-            p2sh_tx.vout.append(CTxOut(outputvalue - 300000, CScript([OP_0, hash160(hex_str_to_bytes(""))])))
-=======
             p2sh_tx.vout.append(CTxOut(outputvalue - 5000, CScript([OP_0, hash160(b"")])))
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             p2sh_tx.wit.vtxinwit.append(CTxInWitness())
             p2sh_tx.rehash()
             p2sh_txs.append(p2sh_tx)
@@ -2269,11 +1892,7 @@ class SegWitTest(DigiByteTestFramework):
 
         self.utxo.pop(0)
 
-<<<<<<< HEAD
-    @subtest  # type: ignore
-=======
     @subtest
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     def test_witness_sigops(self):
         """Test sigop counting is correct inside witnesses."""
 
@@ -2331,11 +1950,7 @@ class SegWitTest(DigiByteTestFramework):
 
         block_2 = self.build_next_block()
         self.update_witness_block_with_transactions(block_2, [tx2])
-<<<<<<< HEAD
-        test_witness_block(self.nodes[0], self.test_node, block_2, accepted=False)
-=======
         test_witness_block(self.nodes[0], self.test_node, block_2, accepted=False, reason='bad-blk-sigops')
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # Try dropping the last input in tx2, and add an output that has
         # too many sigops (contributing to legacy sigop count).
@@ -2348,11 +1963,7 @@ class SegWitTest(DigiByteTestFramework):
         tx2.rehash()
         block_3 = self.build_next_block()
         self.update_witness_block_with_transactions(block_3, [tx2])
-<<<<<<< HEAD
-        test_witness_block(self.nodes[0], self.test_node, block_3, accepted=False)
-=======
         test_witness_block(self.nodes[0], self.test_node, block_3, accepted=False, reason='bad-blk-sigops')
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # If we drop the last checksig in this output, the tx should succeed.
         block_4 = self.build_next_block()
@@ -2383,11 +1994,7 @@ class SegWitTest(DigiByteTestFramework):
         self.utxo.pop(0)
         self.utxo.append(UTXO(tx2.sha256, 0, tx2.vout[0].nValue))
 
-<<<<<<< HEAD
-    @subtest  # type: ignore
-=======
     @subtest
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     def test_superfluous_witness(self):
         # Serialization of tx that puts witness flag to 3 always
         def serialize_with_bogus_witness(tx):
@@ -2414,30 +2021,6 @@ class SegWitTest(DigiByteTestFramework):
             def serialize(self):
                 return serialize_with_bogus_witness(self.tx)
 
-<<<<<<< HEAD
-        self.nodes[0].sendtoaddress(self.nodes[0].getnewaddress(address_type='bech32'), 5)
-        self.generate(self.nodes[0], 1)
-        unspent = next(u for u in self.nodes[0].listunspent() if u['spendable'] and u['address'].startswith('dgbrt'))
-
-        raw = self.nodes[0].createrawtransaction([{"txid": unspent['txid'], "vout": unspent['vout']}], {self.nodes[0].getnewaddress(): 1})
-        tx = tx_from_hex(raw)
-        assert_raises_rpc_error(-22, "TX decode failed", self.nodes[0].decoderawtransaction, hexstring=serialize_with_bogus_witness(tx).hex(), iswitness=True)
-        with self.nodes[0].assert_debug_log(['Superfluous witness record']):
-            self.test_node.send_and_ping(msg_bogus_tx(tx))
-        raw = self.nodes[0].signrawtransactionwithwallet(raw)
-        assert raw['complete']
-        raw = raw['hex']
-        tx = tx_from_hex(raw)
-        assert_raises_rpc_error(-22, "TX decode failed", self.nodes[0].decoderawtransaction, hexstring=serialize_with_bogus_witness(tx).hex(), iswitness=True)
-        with self.nodes[0].assert_debug_log(['Unknown transaction optional data']):
-            self.test_node.send_and_ping(msg_bogus_tx(tx))
-
-    @subtest  # type: ignore
-    def test_wtxid_relay(self):
-        # Use brand new nodes to avoid contamination from earlier tests
-        self.wtx_node = self.nodes[0].add_p2p_connection(TestP2PConn(wtxidrelay=True), services=NODE_NETWORK | NODE_WITNESS)
-        self.tx_node = self.nodes[0].add_p2p_connection(TestP2PConn(wtxidrelay=False), services=NODE_NETWORK | NODE_WITNESS)
-=======
         tx = self.wallet.create_self_transfer()['tx']
         assert_raises_rpc_error(-22, "TX decode failed", self.nodes[0].decoderawtransaction, hexstring=serialize_with_bogus_witness(tx).hex(), iswitness=True)
         with self.nodes[0].assert_debug_log(['Unknown transaction optional data']):
@@ -2452,7 +2035,6 @@ class SegWitTest(DigiByteTestFramework):
         # Use brand new nodes to avoid contamination from earlier tests
         self.wtx_node = self.nodes[0].add_p2p_connection(TestP2PConn(wtxidrelay=True), services=P2P_SERVICES)
         self.tx_node = self.nodes[0].add_p2p_connection(TestP2PConn(wtxidrelay=False), services=P2P_SERVICES)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # Check wtxidrelay feature negotiation message through connecting a new peer
         def received_wtxidrelay():
@@ -2461,36 +2043,20 @@ class SegWitTest(DigiByteTestFramework):
 
         # Create a Segwit output from the latest UTXO
         # and announce it to the network
-<<<<<<< HEAD
-        witness_program = CScript([OP_TRUE])
-        witness_hash = sha256(witness_program)
-        script_pubkey = CScript([OP_0, witness_hash])
-
-        tx = CTransaction()
-        tx.vin.append(CTxIn(COutPoint(self.utxo[0].sha256, self.utxo[0].n), b""))
-        tx.vout.append(CTxOut(self.utxo[0].nValue - 10000, script_pubkey))
-=======
         witness_script = CScript([OP_TRUE])
         script_pubkey = script_to_p2wsh_script(witness_script)
 
         tx = CTransaction()
         tx.vin.append(CTxIn(COutPoint(self.utxo[0].sha256, self.utxo[0].n), b""))
         tx.vout.append(CTxOut(self.utxo[0].nValue - 1000, script_pubkey))
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         tx.rehash()
 
         # Create a Segwit transaction
         tx2 = CTransaction()
         tx2.vin.append(CTxIn(COutPoint(tx.sha256, 0), b""))
-<<<<<<< HEAD
-        tx2.vout.append(CTxOut(tx.vout[0].nValue - 10000, script_pubkey))
-        tx2.wit.vtxinwit.append(CTxInWitness())
-        tx2.wit.vtxinwit[0].scriptWitness.stack = [witness_program]
-=======
         tx2.vout.append(CTxOut(tx.vout[0].nValue - 1000, script_pubkey))
         tx2.wit.vtxinwit.append(CTxInWitness())
         tx2.wit.vtxinwit[0].scriptWitness.stack = [witness_script]
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         tx2.rehash()
 
         # Announce Segwit transaction with wtxid

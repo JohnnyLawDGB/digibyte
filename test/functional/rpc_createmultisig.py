@@ -1,25 +1,15 @@
 #!/usr/bin/env python3
-<<<<<<< HEAD
-# Copyright (c) 2015-2020 The Bitcoin Core developers
-# Distributed under the MIT software license, see the accompanying
-# file COPYING or http://www.opensource.org/licenses/mit-license.php.
-"""Test multisig RPCs"""
-import binascii
-=======
 # Copyright (c) 2015-2022 The DigiByte Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test multisig RPCs"""
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 import decimal
 import itertools
 import json
 import os
-<<<<<<< HEAD
 
-from test_framework.blocktools import (
-    COINBASE_MATURITY_2,
-)
+from test_framework.address import address_to_scriptpubkey
+from test_framework.blocktools import COINBASE_MATURITY
 from test_framework.authproxy import JSONRPCException
 from test_framework.descriptors import descsum_create, drop_origins
 from test_framework.key import ECPubKey, ECKey
@@ -28,22 +18,7 @@ from test_framework.util import (
     assert_raises_rpc_error,
     assert_equal,
 )
-from test_framework.wallet_util import bytes_to_wif
-
-class RpcCreateMultiSigTest(DigiByteTestFramework):
-=======
-
-from test_framework.address import address_to_scriptpubkey
-from test_framework.blocktools import COINBASE_MATURITY
-from test_framework.authproxy import JSONRPCException
-from test_framework.descriptors import descsum_create, drop_origins
-from test_framework.key import ECPubKey
-from test_framework.test_framework import DigiByteTestFramework
-from test_framework.util import (
-    assert_raises_rpc_error,
-    assert_equal,
-)
-from test_framework.wallet_util import generate_keypair
+from test_framework.wallet_util import bytes_to_wif, generate_keypair
 from test_framework.wallet import (
     MiniWallet,
     getnewdestination,
@@ -53,29 +28,29 @@ class RpcCreateMultiSigTest(DigiByteTestFramework):
     def add_options(self, parser):
         self.add_wallet_options(parser)
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     def set_test_params(self):
         self.setup_clean_chain = True
         self.num_nodes = 3
         self.supports_cli = False
-<<<<<<< HEAD
-
-    def skip_test_if_missing_module(self):
-        self.skip_if_no_wallet()
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     def get_keys(self):
         self.pub = []
         self.priv = []
         node0, node1, node2 = self.nodes
         for _ in range(self.nkeys):
-<<<<<<< HEAD
-            k = ECKey()
-            k.generate()
-            self.pub.append(k.get_pubkey().get_bytes().hex())
-            self.priv.append(bytes_to_wif(k.get_bytes(), k.is_compressed))
-        self.final = node2.getnewaddress()
+            if self.is_wallet_compiled():
+                k = ECKey()
+                k.generate()
+                self.pub.append(k.get_pubkey().get_bytes().hex())
+                self.priv.append(bytes_to_wif(k.get_bytes(), k.is_compressed))
+            else:
+                privkey, pubkey = generate_keypair(wif=True)
+                self.pub.append(pubkey.hex())
+                self.priv.append(privkey)
+        if self.is_wallet_compiled():
+            self.final = node2.getnewaddress()
+        else:
+            self.final = getnewdestination()[2]
 
     def run_test(self):
         node0, node1, node2 = self.nodes
@@ -85,9 +60,6 @@ class RpcCreateMultiSigTest(DigiByteTestFramework):
         self.log.info('Generating blocks ...')
         self.generate(node0, 149)
         self.sync_all()
-=======
-            privkey, pubkey = generate_keypair(wif=True)
-            self.pub.append(pubkey.hex())
             self.priv.append(privkey)
         if self.is_bdb_compiled():
             self.final = node2.getnewaddress()
@@ -104,7 +76,6 @@ class RpcCreateMultiSigTest(DigiByteTestFramework):
 
         self.log.info('Generating blocks ...')
         self.generate(self.wallet, 149)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         self.moved = 0
         for self.nkeys in [3, 5]:
@@ -239,13 +210,13 @@ class RpcCreateMultiSigTest(DigiByteTestFramework):
         pubs = [self.nodes[1].getaddressinfo(addr)["pubkey"] for addr in addresses]
         assert_raises_rpc_error(-5, "Bech32m multisig addresses cannot be created with legacy wallets", self.nodes[0].addmultisigaddress, 2, pubs, "", "bech32m")
 
+    def _approx(self, x):
+        """Utility function to allow for floating point comparison"""
+        return round(x, 8)
+    
     def checkbalances(self):
         node0, node1, node2 = self.nodes
-<<<<<<< HEAD
-        self.generate(node0, COINBASE_MATURITY_2)
-=======
         self.generate(node0, COINBASE_MATURITY)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         bal0 = node0.getbalance()
         bal1 = node1.getbalance()
@@ -254,11 +225,10 @@ class RpcCreateMultiSigTest(DigiByteTestFramework):
 
         height = node0.getblockchaininfo()["blocks"]
         assert 150 < height < 350
-<<<<<<< HEAD
-        total = (height - COINBASE_MATURITY_2) * 72000
+        total = (height - COINBASE_MATURITY) * 8725 / 2
         assert bal1 == 0
         assert bal2 == self.moved
-        assert bal0 + bal1 + bal2 == total
+        assert bal0 + bal1 + bal2 + balw == self._approx(total)
 
     def do_multisig(self):
         node0, node1, node2 = self.nodes
@@ -272,9 +242,6 @@ class RpcCreateMultiSigTest(DigiByteTestFramework):
                 else:
                     raise
         wmulti = node1.get_wallet_rpc('wmulti')
-=======
-        total = 149 * 50 + (height - 149 - 100) * 25
-        assert bal1 == 0
         assert bal2 == self.moved
         assert_equal(bal0 + bal1 + bal2 + balw, total)
 
@@ -292,7 +259,6 @@ class RpcCreateMultiSigTest(DigiByteTestFramework):
                     else:
                         raise
             wmulti = node1.get_wallet_rpc('wmulti')
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # Construct the expected descriptor
         desc = 'multi({},{})'.format(self.nsigs, ','.join(self.pub))
@@ -312,20 +278,18 @@ class RpcCreateMultiSigTest(DigiByteTestFramework):
         if self.output_type == 'bech32':
             assert madd[0:5] == "dgbrt"  # actually a bech32 address
 
-<<<<<<< HEAD
-        # compare against addmultisigaddress
-        msigw = wmulti.addmultisigaddress(self.nsigs, self.pub, None, self.output_type)
-        maddw = msigw["address"]
-        mredeemw = msigw["redeemScript"]
-        assert_equal(desc, drop_origins(msigw['descriptor']))
+        if self.is_wallet_compiled():
+            # compare against addmultisigaddress
+            msigw = wmulti.addmultisigaddress(self.nsigs, self.pub, None, self.output_type)
+            maddw = msigw["address"]
+            mredeemw = msigw["redeemScript"]
+            assert_equal(desc, drop_origins(msigw['descriptor']))
         # addmultisigiaddress and createmultisig work the same
         assert maddw == madd
         assert mredeemw == mredeem
 
-        txid = node0.sendtoaddress(madd, 40)
-=======
-        if self.is_bdb_compiled():
-            # compare against addmultisigaddress
+        spk = address_to_scriptpubkey(madd)
+        txid = self.wallet.send_to(from_node=self.nodes[0], scriptPubKey=spk, amount=1300)["txid"]
             msigw = wmulti.addmultisigaddress(self.nsigs, self.pub, None, self.output_type)
             maddw = msigw["address"]
             mredeemw = msigw["redeemScript"]
@@ -334,7 +298,6 @@ class RpcCreateMultiSigTest(DigiByteTestFramework):
             assert maddw == madd
             assert mredeemw == mredeem
             wmulti.unloadwallet()
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         spk = address_to_scriptpubkey(madd)
         txid = self.wallet.send_to(from_node=self.nodes[0], scriptPubKey=spk, amount=1300)["txid"]
@@ -388,11 +351,8 @@ class RpcCreateMultiSigTest(DigiByteTestFramework):
         txinfo = node0.getrawtransaction(tx, True, blk)
         self.log.info("n/m=%d/%d %s size=%d vsize=%d weight=%d" % (self.nsigs, self.nkeys, self.output_type, txinfo["size"], txinfo["vsize"], txinfo["weight"]))
 
-<<<<<<< HEAD
-        wmulti.unloadwallet()
-
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+        if self.is_wallet_compiled():
+            wmulti.unloadwallet()
 
 if __name__ == '__main__':
     RpcCreateMultiSigTest().main()

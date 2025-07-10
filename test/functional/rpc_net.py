@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-<<<<<<< HEAD
-# Copyright (c) 2017-2020 The Bitcoin Core developers
-# Copyright (c) 2017-2022 The DigiByte Core developers
-=======
 # Copyright (c) 2017-present The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test RPC calls related to net.
@@ -16,20 +11,11 @@ from decimal import Decimal
 from itertools import product
 import time
 
-<<<<<<< HEAD
-from test_framework.blocktools import COINBASE_MATURITY
-from test_framework.p2p import P2PInterface
-import test_framework.messages
-from test_framework.messages import (
-    NODE_NETWORK,
-    NODE_WITNESS,
-=======
 import test_framework.messages
 from test_framework.netutil import ADDRMAN_NEW_BUCKET_COUNT, ADDRMAN_TRIED_BUCKET_COUNT, ADDRMAN_BUCKET_SIZE
 from test_framework.p2p import (
     P2PInterface,
     P2P_SERVICES,
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 )
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import (
@@ -58,22 +44,15 @@ def assert_net_servicesnames(servicesflag, servicenames):
 class NetTest(DigiByteTestFramework):
     def set_test_params(self):
         self.num_nodes = 2
-<<<<<<< HEAD
-        self.extra_args = [["-minrelaytxfee=0.00010000"], ["-minrelaytxfee=0.00010000"]]
-=======
         self.extra_args = [["-minrelaytxfee=0.00001000"], ["-minrelaytxfee=0.00000500"]]
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         self.supports_cli = False
 
     def run_test(self):
         # We need miniwallet to make a transaction
         self.wallet = MiniWallet(self.nodes[0])
-<<<<<<< HEAD
         self.generate(self.wallet, 1)
         # Get out of IBD for the minfeefilter and getpeerinfo tests.
         self.generate(self.nodes[0], COINBASE_MATURITY + 1)
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # By default, the test framework sets up an addnode connection from
         # node 1 --> node0. By connecting node0 --> node 1, we're left with
@@ -86,12 +65,6 @@ class NetTest(DigiByteTestFramework):
         self.test_getpeerinfo()
         self.test_getnettotals()
         self.test_getnetworkinfo()
-<<<<<<< HEAD
-        self.test_getaddednodeinfo()
-        self.test_service_flags()
-        self.test_getnodeaddresses()
-        self.test_addpeeraddress()
-=======
         self.test_addnode_getaddednodeinfo()
         self.test_service_flags()
         self.test_getnodeaddresses()
@@ -99,7 +72,6 @@ class NetTest(DigiByteTestFramework):
         self.test_sendmsgtopeer()
         self.test_getaddrmaninfo()
         self.test_getrawaddrman()
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     def test_connection_count(self):
         self.log.info("Test getconnectioncount")
@@ -111,10 +83,7 @@ class NetTest(DigiByteTestFramework):
         # Create a few getpeerinfo last_block/last_transaction values.
         self.wallet.send_self_transfer(from_node=self.nodes[0]) # Make a transaction so we can see it in the getpeerinfo results
         self.generate(self.nodes[1], 1)
-<<<<<<< HEAD
         self.sync_all()
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         time_now = int(time.time())
         peer_info = [x.getpeerinfo() for x in self.nodes]
         # Verify last_block and last_transaction keys/values.
@@ -126,13 +95,8 @@ class NetTest(DigiByteTestFramework):
         # the address bound to on one side will be the source address for the other node
         assert_equal(peer_info[0][0]['addrbind'], peer_info[1][0]['addr'])
         assert_equal(peer_info[1][0]['addrbind'], peer_info[0][0]['addr'])
-<<<<<<< HEAD
-        assert_equal(peer_info[0][0]['minfeefilter'], Decimal("0.00010000"))
-        assert_equal(peer_info[1][0]['minfeefilter'], Decimal("0.00010000"))
-=======
         assert_equal(peer_info[0][0]['minfeefilter'], Decimal("0.00000500"))
         assert_equal(peer_info[1][0]['minfeefilter'], Decimal("0.00001000"))
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         # check the `servicesnames` field
         for info in peer_info:
             assert_net_servicesnames(int(info[0]["services"], 0x10), info[0]["servicesnames"])
@@ -144,9 +108,6 @@ class NetTest(DigiByteTestFramework):
         assert_equal(peer_info[1][1]['connection_type'], 'inbound')
 
         # Check dynamically generated networks list in getpeerinfo help output.
-<<<<<<< HEAD
-        assert "(ipv4, ipv6, onion, i2p, not_publicly_routable)" in self.nodes[0].help("getpeerinfo")
-=======
         assert "(ipv4, ipv6, onion, i2p, cjdns, not_publicly_routable)" in self.nodes[0].help("getpeerinfo")
 
         self.log.info("Check getpeerinfo output before a version message was sent")
@@ -199,7 +160,6 @@ class NetTest(DigiByteTestFramework):
         )
         no_version_peer.peer_disconnect()
         self.wait_until(lambda: len(self.nodes[0].getpeerinfo()) == 2)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     def test_getnettotals(self):
         self.log.info("Test getnettotals")
@@ -230,12 +190,8 @@ class NetTest(DigiByteTestFramework):
             self.nodes[0].setnetworkactive(state=False)
         assert_equal(self.nodes[0].getnetworkinfo()['networkactive'], False)
         # Wait a bit for all sockets to close
-<<<<<<< HEAD
-        self.wait_until(lambda: self.nodes[0].getnetworkinfo()['connections'] == 0, timeout=3)
-=======
         for n in self.nodes:
             self.wait_until(lambda: n.getnetworkinfo()['connections'] == 0, timeout=3)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         with self.nodes[0].assert_debug_log(expected_msgs=['SetNetworkActive: true\n']):
             self.nodes[0].setnetworkactive(state=True)
@@ -255,17 +211,10 @@ class NetTest(DigiByteTestFramework):
             assert_net_servicesnames(int(info["localservices"], 0x10), info["localservicesnames"])
 
         # Check dynamically generated networks list in getnetworkinfo help output.
-<<<<<<< HEAD
-        assert "(ipv4, ipv6, onion, i2p)" in self.nodes[0].help("getnetworkinfo")
-
-    def test_getaddednodeinfo(self):
-        self.log.info("Test getaddednodeinfo")
-=======
         assert "(ipv4, ipv6, onion, i2p, cjdns)" in self.nodes[0].help("getnetworkinfo")
 
     def test_addnode_getaddednodeinfo(self):
         self.log.info("Test addnode and getaddednodeinfo")
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         assert_equal(self.nodes[0].getaddednodeinfo(), [])
         # add a node (node2) to node0
         ip_port = "127.0.0.1:{}".format(p2p_port(2))
@@ -279,11 +228,8 @@ class NetTest(DigiByteTestFramework):
         # check that node can be removed
         self.nodes[0].addnode(node=ip_port, command='remove')
         assert_equal(self.nodes[0].getaddednodeinfo(), [])
-<<<<<<< HEAD
-=======
         # check that an invalid command returns an error
         assert_raises_rpc_error(-1, 'addnode "node" "command"', self.nodes[0].addnode, node=ip_port, command='abc')
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         # check that trying to remove the node again returns an error
         assert_raises_rpc_error(-24, "Node could not be removed", self.nodes[0].addnode, node=ip_port, command='remove')
         # check that a non-existent node returns an error
@@ -298,10 +244,7 @@ class NetTest(DigiByteTestFramework):
     def test_getnodeaddresses(self):
         self.log.info("Test getnodeaddresses")
         self.nodes[0].add_p2p_connection(P2PInterface())
-<<<<<<< HEAD
         services = NODE_NETWORK | NODE_WITNESS
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         # Add an IPv6 address to the address manager.
         ipv6_addr = "1233:3432:2434:2343:3234:2345:6546:4534"
@@ -329,11 +272,7 @@ class NetTest(DigiByteTestFramework):
         assert_greater_than(10000, len(node_addresses))
         for a in node_addresses:
             assert_greater_than(a["time"], 1527811200)  # 1st June 2018
-<<<<<<< HEAD
-            assert_equal(a["services"], services)
-=======
             assert_equal(a["services"], P2P_SERVICES)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             assert a["address"] in imported_addrs
             assert_equal(a["port"], 8333)
             assert_equal(a["network"], "ipv4")
@@ -344,17 +283,10 @@ class NetTest(DigiByteTestFramework):
         assert_equal(res[0]["address"], ipv6_addr)
         assert_equal(res[0]["network"], "ipv6")
         assert_equal(res[0]["port"], 8333)
-<<<<<<< HEAD
-        assert_equal(res[0]["services"], services)
-
-        # Test for the absence of onion and I2P addresses.
-        for network in ["onion", "i2p"]:
-=======
         assert_equal(res[0]["services"], P2P_SERVICES)
 
         # Test for the absence of onion, I2P and CJDNS addresses.
         for network in ["onion", "i2p", "cjdns"]:
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             assert_equal(self.nodes[0].getnodeaddresses(0, network), [])
 
         # Test invalid arguments.
@@ -362,9 +294,6 @@ class NetTest(DigiByteTestFramework):
         assert_raises_rpc_error(-8, "Network not recognized: Foo", self.nodes[0].getnodeaddresses, 1, "Foo")
 
     def test_addpeeraddress(self):
-<<<<<<< HEAD
-        self.log.info("Test addpeeraddress")
-=======
         """RPC addpeeraddress sets the source address equal to the destination address.
         If an address with the same /16 as an existing new entry is passed, it will be
         placed in the same new bucket and have a 1/64 chance of the bucket positions
@@ -375,7 +304,6 @@ class NetTest(DigiByteTestFramework):
         """
         self.log.info("Test addpeeraddress")
         self.restart_node(1, ["-checkaddrman=1"])
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         node = self.nodes[1]
 
         self.log.debug("Test that addpeerinfo is a hidden RPC")
@@ -387,19 +315,6 @@ class NetTest(DigiByteTestFramework):
         assert_equal(node.addpeeraddress(address="", port=8333), {"success": False})
         assert_equal(node.getnodeaddresses(count=0), [])
 
-<<<<<<< HEAD
-        self.log.debug("Test that adding a valid address succeeds")
-        assert_equal(node.addpeeraddress(address="1.2.3.4", port=8333), {"success": True})
-        addrs = node.getnodeaddresses(count=0)
-        assert_equal(len(addrs), 1)
-        assert_equal(addrs[0]["address"], "1.2.3.4")
-        assert_equal(addrs[0]["port"], 8333)
-
-        self.log.debug("Test that adding the same address again when already present fails")
-        assert_equal(node.addpeeraddress(address="1.2.3.4", port=8333), {"success": False})
-        assert_equal(len(node.getnodeaddresses(count=0)), 1)
-
-=======
         self.log.debug("Test that non-bool tried fails")
         assert_raises_rpc_error(-3, "JSON value of type string is not of expected type bool", self.nodes[0].addpeeraddress, address="1.2.3.4", tried="True", port=1234)
 
@@ -585,7 +500,6 @@ class NetTest(DigiByteTestFramework):
         self.log.debug("Test that the newly added addresses appear in getrawaddrman")
         check_getrawaddrman_entries(expected)
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 if __name__ == '__main__':
     NetTest().main()

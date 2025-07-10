@@ -1,14 +1,4 @@
 package=sqlite
-<<<<<<< HEAD
-$(package)_version=3450200
-$(package)_download_path=https://sqlite.org/2024/
-$(package)_file_name=sqlite-autoconf-$($(package)_version).tar.gz
-$(package)_sha256_hash=bc9067442eedf3dd39989b5c5cfbfff37ae66cc9c99274e0c3052dc4d4a8f6ae
-
-define $(package)_set_vars
-$(package)_config_opts=--disable-shared --disable-readline --disable-dynamic-extensions --enable-option-checking
-$(package)_config_opts_linux=--with-pic
-=======
 $(package)_version=3380500
 $(package)_download_path=https://sqlite.org/2022/
 $(package)_file_name=sqlite-autoconf-$($(package)_version).tar.gz
@@ -25,7 +15,6 @@ $(package)_config_opts_debug=--enable-debug
 $(package)_cflags+=-DSQLITE_DQS=0 -DSQLITE_DEFAULT_MEMSTATUS=0 -DSQLITE_OMIT_DEPRECATED
 $(package)_cflags+=-DSQLITE_OMIT_SHARED_CACHE -DSQLITE_OMIT_JSON -DSQLITE_LIKE_DOESNT_MATCH_BLOBS
 $(package)_cflags+=-DSQLITE_OMIT_DECLTYPE -DSQLITE_OMIT_PROGRESS_CALLBACK -DSQLITE_OMIT_AUTOINIT
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 endef
 
 define $(package)_preprocess_cmds

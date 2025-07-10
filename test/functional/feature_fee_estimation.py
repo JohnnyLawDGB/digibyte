@@ -62,15 +62,6 @@ def small_txpuzzle_randfee(
 ):
     """Create and send a transaction with a random fee using MiniWallet.
 
-<<<<<<< HEAD
-
-def small_txpuzzle_randfee(from_node, conflist, unconflist, amount, min_fee, fee_increment):
-    """Create and send a transaction with a random fee.
-
-    The transaction pays to a trivial P2SH script, and assumes that its inputs
-    are of the same form.
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     The function takes a list of confirmed outputs and unconfirmed outputs
     and attempts to use the confirmed list first for its inputs.
     It adds the newly created outputs to the unconfirmed list.
@@ -276,17 +267,6 @@ class EstimateFeeTest(DigiByteTestFramework):
         # resorting to tx's that depend on the mempool when those run out
         for _ in range(numblocks):
             random.shuffle(self.confutxo)
-<<<<<<< HEAD
-            for _ in range(random.randrange(100 - 50, 100 + 50)):
-                from_index = random.randint(1, 2)
-                (txhex, fee) = small_txpuzzle_randfee(self.nodes[from_index], self.confutxo,
-                                                      self.memutxo, Decimal("0.007"), min_fee, min_fee)
-                tx_kbytes = (len(txhex) // 2) / 1000.0
-                self.fees_per_kb.append(float(fee) / tx_kbytes)
-            self.sync_mempools(wait=.1)
-            mined = mining_node.getblock(self.generate(mining_node, 1)[0], True)["tx"]
-            self.sync_blocks(wait=.1)
-=======
             batch_sendtx_reqs = []
             for _ in range(random.randrange(100 - 50, 100 + 50)):
                 from_index = random.randint(1, 2)
@@ -306,7 +286,6 @@ class EstimateFeeTest(DigiByteTestFramework):
                 node.batch(batch_sendtx_reqs)
             self.sync_mempools(wait=0.1)
             mined = mining_node.getblock(self.generate(mining_node, 1)[0], True)["tx"]
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             # update which txouts are confirmed
             newmem = []
             for utx in self.memutxo:
@@ -316,49 +295,6 @@ class EstimateFeeTest(DigiByteTestFramework):
                     newmem.append(utx)
             self.memutxo = newmem
 
-<<<<<<< HEAD
-    def run_test(self):
-        self.log.info("This test is time consuming, please be patient")
-        self.log.info("Splitting inputs so we can generate tx's")
-
-        # Start node0
-        self.start_node(0)
-        self.txouts = []
-        self.txouts2 = []
-        # Split a coinbase into two transaction puzzle outputs
-        split_inputs(self.nodes[0], self.nodes[0].listunspent(0), self.txouts, True)
-
-        # Mine
-        while len(self.nodes[0].getrawmempool()) > 0:
-            self.generate(self.nodes[0], 1, sync_fun=self.no_op)
-
-        # Repeatedly split those 2 outputs, doubling twice for each rep
-        # Use txouts to monitor the available utxo, since these won't be tracked in wallet
-        reps = 0
-        while reps < 5:
-            # Double txouts to txouts2
-            while len(self.txouts) > 0:
-                split_inputs(self.nodes[0], self.txouts, self.txouts2)
-            while len(self.nodes[0].getrawmempool()) > 0:
-                self.generate(self.nodes[0], 1, sync_fun=self.no_op)
-            # Double txouts2 to txouts
-            while len(self.txouts2) > 0:
-                split_inputs(self.nodes[0], self.txouts2, self.txouts)
-            while len(self.nodes[0].getrawmempool()) > 0:
-                self.generate(self.nodes[0], 1, sync_fun=self.no_op)
-            reps += 1
-        self.log.info("Finished splitting")
-
-        # Now we can connect the other nodes, didn't want to connect them earlier
-        # so the estimates would not be affected by the splitting transactions
-        self.start_node(1)
-        self.start_node(2)
-        self.connect_nodes(1, 0)
-        self.connect_nodes(0, 2)
-        self.connect_nodes(2, 1)
-
-        self.sync_all()
-=======
     def initial_split(self, node):
         """Split two coinbase UTxOs into many small coins"""
         self.confutxo = self.wallet.send_self_transfer_multi(
@@ -367,7 +303,6 @@ class EstimateFeeTest(DigiByteTestFramework):
             num_outputs=2048)['new_utxos']
         while len(node.getrawmempool()) > 0:
             self.generate(node, 1, sync_fun=self.no_op)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     def sanity_check_estimates_range(self):
         """Populate estimation buckets, assert estimates are in a sane range and
@@ -377,13 +312,9 @@ class EstimateFeeTest(DigiByteTestFramework):
         self.log.info("Will output estimates for 1/2/3/6/15/25 blocks")
 
         for _ in range(2):
-<<<<<<< HEAD
-            self.log.info("Creating transactions and mining them with a block size that can't keep up")
-=======
             self.log.info(
                 "Creating transactions and mining them with a block size that can't keep up"
             )
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             # Create transactions and mine 10 small blocks with node 2, but create txs faster than we can mine
             self.transact_and_mine(10, self.nodes[2])
             check_estimates(self.nodes[1], self.fees_per_kb)
@@ -400,20 +331,6 @@ class EstimateFeeTest(DigiByteTestFramework):
         while len(self.nodes[1].getrawmempool()) > 0:
             self.generate(self.nodes[1], 1)
 
-<<<<<<< HEAD
-        self.sync_blocks(self.nodes[0:3], wait=.1)
-        self.log.info("Final estimates after emptying mempools")
-        check_estimates(self.nodes[1], self.fees_per_kb)
-
-        self.log.info("Testing that fee estimation is disabled in blocksonly.")
-        self.restart_node(0, ["-blocksonly"])
-        assert_raises_rpc_error(-32603, "Fee estimation disabled",
-                                self.nodes[0].estimatesmartfee, 2)
-
-
-if __name__ == '__main__':
-    EstimateFeeTest().main()
-=======
         self.log.info("Final estimates after emptying mempools")
         check_estimates(self.nodes[1], self.fees_per_kb)
 
@@ -628,4 +545,3 @@ if __name__ == '__main__':
 
 if __name__ == "__main__":
     EstimateFeeTest().main()
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion

@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-<<<<<<< HEAD
-# Copyright (c) 2016-2020 The Bitcoin Core developers
-# Copyright (c) 2021-2022 The DigiByte Core developers
-=======
 # Copyright (c) 2016-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test the bumpfee RPC.
@@ -21,31 +16,14 @@ make assumptions about execution order.
 from decimal import Decimal
 
 from test_framework.blocktools import (
-<<<<<<< HEAD
-    COINBASE_MATURITY_2,
-    add_witness_commitment,
-    create_block,
-    create_coinbase,
-    send_to_witness,
-)
-from test_framework.messages import (
-    BIP125_SEQUENCE_NUMBER,
-    tx_from_hex,
-=======
     COINBASE_MATURITY,
 )
 from test_framework.messages import (
     MAX_BIP125_RBF_SEQUENCE,
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 )
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import (
     assert_equal,
-<<<<<<< HEAD
-    assert_greater_than,
-    assert_raises_rpc_error,
-)
-=======
     assert_fee_amount,
     assert_greater_than,
     assert_raises_rpc_error,
@@ -54,27 +32,15 @@ from test_framework.util import (
 )
 from test_framework.wallet import MiniWallet
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
-
 WALLET_PASSPHRASE = "test"
 WALLET_PASSPHRASE_TIMEOUT = 3600
 
 # Fee rates (sat/vB)
-<<<<<<< HEAD
 INSUFFICIENT =       1
 ECONOMICAL   =    1500000
 NORMAL       =    6500000
 HIGH         =    7000000
 TOO_HIGH     = 100000000
-
-
-class BumpFeeTest(DigiByteTestFramework):
-=======
-INSUFFICIENT =      1
-ECONOMICAL   =     50
-NORMAL       =    100
-HIGH         =    500
-TOO_HIGH     = 100000
 
 def get_change_address(tx, node):
     tx_details = node.getrawtransaction(tx, 1)
@@ -84,22 +50,15 @@ def get_change_address(tx, node):
 class BumpFeeTest(DigiByteTestFramework):
     def add_options(self, parser):
         self.add_wallet_options(parser)
-
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     def set_test_params(self):
         self.num_nodes = 2
         self.setup_clean_chain = True
         self.extra_args = [[
             "-walletrbf={}".format(i),
-<<<<<<< HEAD
             "-mintxfee=0.0002",
             "-minrelaytxfee=0.000015",
             "-addresstype=bech32",
-=======
-            "-mintxfee=0.00002",
-            "-addresstype=bech32",
             "-whitelist=noban@127.0.0.1",
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         ] for i in range(self.num_nodes)]
 
     def skip_test_if_missing_module(self):
@@ -108,30 +67,17 @@ class BumpFeeTest(DigiByteTestFramework):
     def clear_mempool(self):
         # Clear mempool between subtests. The subtests may only depend on chainstate (utxos)
         self.generate(self.nodes[1], 1)
-<<<<<<< HEAD
-        self.sync_all()
-
-    def run_test(self):
-
-        # Encrypt wallet for test_locked_wallet_fails test
-        self.nodes[1].encryptwallet(WALLET_PASSPHRASE)
-        self.nodes[1].walletpassphrase(WALLET_PASSPHRASE, WALLET_PASSPHRASE_TIMEOUT)
-
-=======
 
     def run_test(self):
         # Encrypt wallet for test_locked_wallet_fails test
         self.nodes[1].encryptwallet(WALLET_PASSPHRASE)
         self.nodes[1].walletpassphrase(WALLET_PASSPHRASE, WALLET_PASSPHRASE_TIMEOUT)
-
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         peer_node, rbf_node = self.nodes
         rbf_node_address = rbf_node.getnewaddress()
 
         # fund rbf node with 10 coins of 0.001 dgb (100,000 satoshis)
         self.log.info("Mining blocks...")
-<<<<<<< HEAD
-        self.generate(peer_node, COINBASE_MATURITY_2 + 10)
+        self.generate(peer_node, COINBASE_MATURITY + 10)
         self.sync_all()
         for _ in range(30):
             peer_node.sendtoaddress(rbf_node_address, 9)
@@ -142,61 +88,34 @@ class BumpFeeTest(DigiByteTestFramework):
 
         self.log.info("Running tests")
         dest_address = peer_node.getnewaddress()
-        for mode in ["default", "fee_rate"]:
-=======
-        self.generate(peer_node, 110)
-        for _ in range(25):
-            peer_node.sendtoaddress(rbf_node_address, 0.001)
-        self.sync_all()
-        self.generate(peer_node, 1)
-        assert_equal(rbf_node.getbalance(), Decimal("0.025"))
-
-        self.log.info("Running tests")
-        dest_address = peer_node.getnewaddress()
         for mode in ["default", "fee_rate", "new_outputs"]:
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             test_simple_bumpfee_succeeds(self, mode, rbf_node, peer_node, dest_address)
         self.test_invalid_parameters(rbf_node, peer_node, dest_address)
         test_segwit_bumpfee_succeeds(self, rbf_node, dest_address)
         test_nonrbf_bumpfee_fails(self, peer_node, dest_address)
-<<<<<<< HEAD
-        test_notmine_bumpfee_fails(self, rbf_node, peer_node, dest_address)
-        test_bumpfee_with_descendant_fails(self, rbf_node, rbf_node_address, dest_address)
-=======
         test_notmine_bumpfee(self, rbf_node, peer_node, dest_address)
         test_bumpfee_with_descendant_fails(self, rbf_node, rbf_node_address, dest_address)
         test_bumpfee_with_abandoned_descendant_succeeds(self, rbf_node, rbf_node_address, dest_address)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         test_dust_to_fee(self, rbf_node, dest_address)
         test_watchonly_psbt(self, peer_node, rbf_node, dest_address)
         test_rebumping(self, rbf_node, dest_address)
         test_rebumping_not_replaceable(self, rbf_node, dest_address)
-<<<<<<< HEAD
-        test_unconfirmed_not_spendable(self, rbf_node, rbf_node_address)
-        test_bumpfee_metadata(self, rbf_node, dest_address)
-        test_locked_wallet_fails(self, rbf_node, dest_address)
-        # test_change_script_match(self, rbf_node, dest_address)
-=======
         test_bumpfee_already_spent(self, rbf_node, dest_address)
         test_unconfirmed_not_spendable(self, rbf_node, rbf_node_address)
         test_bumpfee_metadata(self, rbf_node, dest_address)
         test_locked_wallet_fails(self, rbf_node, dest_address)
         test_change_script_match(self, rbf_node, dest_address)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         test_settxfee(self, rbf_node, dest_address)
         test_maxtxfee_fails(self, rbf_node, dest_address)
         # These tests wipe out a number of utxos that are expected in other tests
         test_small_output_with_feerate_succeeds(self, rbf_node, dest_address)
         test_no_more_inputs_fails(self, rbf_node, dest_address)
-<<<<<<< HEAD
-=======
         self.test_bump_back_to_yourself()
         self.test_provided_change_pos(rbf_node)
         self.test_single_output()
 
         # Context independent tests
         test_feerate_checks_replaced_outputs(self, rbf_node, peer_node)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     def test_invalid_parameters(self, rbf_node, peer_node, dest_address):
         self.log.info('Test invalid parameters')

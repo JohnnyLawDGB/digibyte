@@ -38,6 +38,8 @@ MAX_MONEY = 21000000000 * COIN;           // 21 billion DGB
 
 ## Phase 1: Bitcoin v26.2 Preparation
 
+**CRITICAL IMPORTANCE**: The pre-conversion step (1.2) is absolutely essential to prevent merge conflicts. Without proper renaming, you will encounter approximately 30,000 unnecessary conflicts that make the merge nearly impossible. The conversion script MUST be run on the Bitcoin v26.2 codebase BEFORE attempting any merge with DigiByte.
+
 ### 1.1 Clone and Prepare Bitcoin v26.2
 
 ```bash
@@ -55,19 +57,47 @@ git branch backup-original-bitcoin-v26.2
 
 ### 1.2 Pre-conversion Script
 
+**CRITICAL**: This script MUST be run on Bitcoin v26.2 BEFORE attempting any merge to avoid thousands of unnecessary conflicts.
+
 Create `convert-bitcoin-to-digibyte.sh`:
 
 ```bash
 #!/bin/bash
-# Bitcoin to DigiByte naming conversion script for v26.2
+# Comprehensive Bitcoin to DigiByte naming conversion script for v26.2
+# IMPORTANT: This script ensures ALL Bitcoin references are converted to DigiByte
+# to prevent merge conflicts. Only Bitcoin copyright notices are preserved.
 
-echo "Starting Bitcoin v26.2 to DigiByte naming conversion..."
+set -e  # Exit on error
 
-# Step 1: File Renaming
-echo "Step 1: Renaming files..."
-find . -name "*bitcoin*" -o -name "*Bitcoin*" | while read file; do
+echo "Starting comprehensive Bitcoin v26.2 to DigiByte naming conversion..."
+echo "This will rename ALL Bitcoin references to DigiByte throughout the codebase."
+echo ""
+
+# Step 1: File and Directory Renaming (must be done first)
+echo "Step 1: Renaming all files and directories..."
+
+# First rename directories (deepest first to avoid issues)
+find . -type d -name "*bitcoin*" -o -type d -name "*Bitcoin*" | grep -v ".git" | sort -r | while read dir; do
+    newdir=$(echo "$dir" | sed -e 's/bitcoin/digibyte/g' -e 's/Bitcoin/DigiByte/g')
+    if [ "$dir" != "$newdir" ] && [ -e "$dir" ]; then
+        echo "  Renaming directory: $dir -> $newdir"
+        git mv "$dir" "$newdir" 2>/dev/null || mv "$dir" "$newdir"
+    fi
+done
+
+find . -type d -name "*btc*" -o -type d -name "*BTC*" | grep -v ".git" | sort -r | while read dir; do
+    newdir=$(echo "$dir" | sed -e 's/btc/dgb/g' -e 's/BTC/DGB/g')
+    if [ "$dir" != "$newdir" ] && [ -e "$dir" ]; then
+        echo "  Renaming directory: $dir -> $newdir"
+        git mv "$dir" "$newdir" 2>/dev/null || mv "$dir" "$newdir"
+    fi
+done
+
+# Then rename files
+find . -name "*bitcoin*" -o -name "*Bitcoin*" | grep -v ".git" | while read file; do
     newfile=$(echo "$file" | sed -e 's/bitcoin/digibyte/g' -e 's/Bitcoin/DigiByte/g')
     if [ "$file" != "$newfile" ] && [ -e "$file" ]; then
+        echo "  Renaming file: $file -> $newfile"
         git mv "$file" "$newfile" 2>/dev/null || mv "$file" "$newfile"
     fi
 done
@@ -75,71 +105,245 @@ done
 find . -name "*btc*" -o -name "*BTC*" | grep -v ".git" | while read file; do
     newfile=$(echo "$file" | sed -e 's/btc/dgb/g' -e 's/BTC/DGB/g')
     if [ "$file" != "$newfile" ] && [ -e "$file" ]; then
+        echo "  Renaming file: $file -> $newfile"
         git mv "$file" "$newfile" 2>/dev/null || mv "$file" "$newfile"
     fi
 done
 
-# Step 2: Binary Names
-echo "Step 2: Converting binary names..."
-find . -type f \( -name "*.cpp" -o -name "*.h" -o -name "*.mk" -o -name "*.am" -o -name "*.ac" -o -name "*.py" -o -name "*.sh" -o -name "*.md" \) -print0 | xargs -0 sed -i \
-    -e 's/bitcoind/digibyted/g' \
-    -e 's/bitcoin-cli/digibyte-cli/g' \
-    -e 's/bitcoin-tx/digibyte-tx/g' \
-    -e 's/bitcoin-wallet/digibyte-wallet/g' \
-    -e 's/bitcoin-qt/digibyte-qt/g' \
-    -e 's/bitcoin-util/digibyte-util/g' \
-    -e 's/bitcoin-chainstate/digibyte-chainstate/g'
+# Step 2: Update ALL file contents
+echo ""
+echo "Step 2: Updating all file contents..."
 
-# Step 3: Library Names
-echo "Step 3: Converting library names..."
-find . -type f \( -name "*.cpp" -o -name "*.h" -o -name "*.mk" -o -name "*.am" -o -name "*.ac" \) -print0 | xargs -0 sed -i \
-    -e 's/libbitcoin/libdigibyte/g' \
-    -e 's/LIBBITCOIN/LIBDIGIBYTE/g' \
-    -e 's/bitcoinconsensus/digibyteconsensus/g' \
-    -e 's/BITCOINCONSENSUS/DIGIBYTECONSENSUS/g'
+# Process all text files (including build files, configs, docs, etc.)
+find . -type f \( \
+    -name "*.cpp" -o -name "*.h" -o -name "*.c" -o \
+    -name "*.mk" -o -name "*.am" -o -name "*.ac" -o \
+    -name "*.py" -o -name "*.sh" -o -name "*.bash" -o \
+    -name "*.md" -o -name "*.txt" -o -name "*.rc" -o \
+    -name "*.xml" -o -name "*.json" -o -name "*.yml" -o -name "*.yaml" -o \
+    -name "*.conf" -o -name "*.ini" -o -name "*.cfg" -o \
+    -name "*.pro" -o -name "*.pri" -o -name "*.qrc" -o \
+    -name "*.ts" -o -name "*.ui" -o -name "*.forms" -o \
+    -name "*.cmake" -o -name "CMakeLists.txt" -o \
+    -name "*.in" -o -name "*.include" -o \
+    -name "*.vcxproj" -o -name "*.vcxproj.filters" -o \
+    -name "*.sln" -o -name "*.props" -o \
+    -name "Makefile" -o -name "makefile" -o \
+    -name "*.plist" -o -name "*.strings" -o \
+    -name "*.desktop" -o -name "*.service" -o \
+    -name "*.policy" -o -name "*.rules" -o \
+    -name "*.nsi" -o -name "*.wxs" -o \
+    -name "*.spec" -o -name "*.control" -o \
+    -name ".gitignore" -o -name ".gitattributes" -o \
+    -name "README*" -o -name "LICENSE*" -o -name "COPYING*" -o \
+    -name "AUTHORS*" -o -name "INSTALL*" -o -name "NEWS*" -o \
+    -name "CONTRIBUTING*" -o -name "*.1" -o -name "*.5" \
+    \) | grep -v ".git/" | while read file; do
+    
+    echo "  Processing: $file"
+    
+    # Create temporary file for sed operations
+    cp "$file" "$file.tmp"
+    
+    # Binary names (order matters - do specific before general)
+    sed -i \
+        -e 's/bitcoind/digibyted/g' \
+        -e 's/bitcoin-cli/digibyte-cli/g' \
+        -e 's/bitcoin-tx/digibyte-tx/g' \
+        -e 's/bitcoin-wallet/digibyte-wallet/g' \
+        -e 's/bitcoin-qt/digibyte-qt/g' \
+        -e 's/bitcoin-util/digibyte-util/g' \
+        -e 's/bitcoin-chainstate/digibyte-chainstate/g' \
+        -e 's/bitcoin-node/digibyte-node/g' \
+        "$file.tmp"
+    
+    # Library names
+    sed -i \
+        -e 's/libbitcoinconsensus/libdigibyteconsensus/g' \
+        -e 's/libbitcoin_/libdigibyte_/g' \
+        -e 's/libbitcoin/libdigibyte/g' \
+        -e 's/LIBBITCOINCONSENSUS/LIBDIGIBYTECONSENSUS/g' \
+        -e 's/LIBBITCOIN_/LIBDIGIBYTE_/g' \
+        -e 's/LIBBITCOIN/LIBDIGIBYTE/g' \
+        -e 's/bitcoinconsensus/digibyteconsensus/g' \
+        -e 's/BITCOINCONSENSUS/DIGIBYTECONSENSUS/g' \
+        "$file.tmp"
+    
+    # Header guards and macros
+    sed -i \
+        -e 's/BITCOIN_/DIGIBYTE_/g' \
+        -e 's/_BITCOIN_H/_DIGIBYTE_H/g' \
+        -e 's/ENABLE_BITCOIN/ENABLE_DIGIBYTE/g' \
+        -e 's/HAVE_BITCOIN/HAVE_DIGIBYTE/g' \
+        -e 's/USE_BITCOIN/USE_DIGIBYTE/g' \
+        "$file.tmp"
+    
+    # Class and namespace names
+    sed -i \
+        -e 's/BitcoinGUI/DigiByteGUI/g' \
+        -e 's/BitcoinUnits/DigiByteUnits/g' \
+        -e 's/BitcoinApplication/DigiByteApplication/g' \
+        -e 's/BitcoinCore/DigiByteCore/g' \
+        -e 's/BitcoinConsensus/DigiByteConsensus/g' \
+        -e 's/Bitcoin(/DigiByte(/g' \
+        -e 's/::Bitcoin/::DigiByte/g' \
+        -e 's/namespace bitcoin/namespace digibyte/g' \
+        "$file.tmp"
+    
+    # Configuration and data files
+    sed -i \
+        -e 's/bitcoin\.conf/digibyte.conf/g' \
+        -e 's/bitcoin\.pid/digibyte.pid/g' \
+        -e 's/\.bitcoin/\.digibyte/g' \
+        -e 's/BITCOIN_CONF_FILENAME/DIGIBYTE_CONF_FILENAME/g' \
+        -e 's/BITCOIN_PID_FILENAME/DIGIBYTE_PID_FILENAME/g' \
+        "$file.tmp"
+    
+    # Network and protocol
+    sed -i \
+        -e 's/bitcoin:/digibyte:/g' \
+        -e 's/bitcoin\.org/digibyte.org/g' \
+        -e 's/bitcoin\.it/digibyte.org/g' \
+        -e 's/bitcointalk/digibytetalk/g' \
+        -e 's/bitcoin-dev/digibyte-dev/g' \
+        "$file.tmp"
+    
+    # Currency codes (word boundaries to avoid partial matches)
+    sed -i \
+        -e 's/\bBTC\b/DGB/g' \
+        -e 's/\bbtc\b/dgb/g' \
+        -e 's/\bXBT\b/DGB/g' \
+        -e 's/\bxbt\b/dgb/g' \
+        -e 's/\bmBTC\b/mDGB/g' \
+        -e 's/\bmbtc\b/mdgb/g' \
+        -e 's/\buBTC\b/uDGB/g' \
+        -e 's/\bubtc\b/udgb/g' \
+        -e 's/\bsBTC\b/sDGB/g' \
+        -e 's/\bsbtc\b/sdgb/g' \
+        "$file.tmp"
+    
+    # Package and project names
+    sed -i \
+        -e 's/org\.bitcoin/org.digibyte/g' \
+        -e 's/bitcoin-core/digibyte-core/g' \
+        -e 's/bitcoin_core/digibyte_core/g' \
+        -e 's/bitcoin-project/digibyte-project/g' \
+        -e 's/bitcoin_project/digibyte_project/g' \
+        "$file.tmp"
+    
+    # General replacements (do these last to avoid double-replacements)
+    sed -i \
+        -e 's/Bitcoin Core/DigiByte Core/g' \
+        -e 's/Bitcoin network/DigiByte network/g' \
+        -e 's/Bitcoin protocol/DigiByte protocol/g' \
+        -e 's/Bitcoin address/DigiByte address/g' \
+        -e 's/Bitcoin transaction/DigiByte transaction/g' \
+        -e 's/Bitcoin blockchain/DigiByte blockchain/g' \
+        -e 's/Bitcoin wallet/DigiByte wallet/g' \
+        -e 's/Bitcoin node/DigiByte node/g' \
+        -e 's/Bitcoin mining/DigiByte mining/g' \
+        -e 's/Bitcoin developers/DigiByte developers/g' \
+        -e 's/The Bitcoin/The DigiByte/g' \
+        -e 's/\bBitcoin\b/DigiByte/g' \
+        -e 's/\bbitcoin\b/digibyte/g' \
+        -e 's/BITCOIN/DIGIBYTE/g' \
+        "$file.tmp"
+    
+    # Move temporary file back
+    mv "$file.tmp" "$file"
+done
 
-# Step 4: Code Elements
-echo "Step 4: Converting code elements..."
-# Header guards
-find . -type f -name "*.h" -print0 | xargs -0 sed -i \
-    -e 's/BITCOIN_/DIGIBYTE_/g' \
-    -e 's/_BITCOIN_H/_DIGIBYTE_H/g'
+# Step 3: Update Copyright (ADD DigiByte copyright, KEEP Bitcoin copyright)
+echo ""
+echo "Step 3: Adding DigiByte copyright while preserving Bitcoin copyright..."
+find . -type f \( -name "*.cpp" -o -name "*.h" -o -name "*.c" \) | grep -v ".git/" | while read file; do
+    # Check if file has Bitcoin copyright but not DigiByte copyright
+    if grep -q "Copyright.*The Bitcoin Core developers" "$file" && ! grep -q "Copyright.*The DigiByte Core developers" "$file"; then
+        echo "  Adding DigiByte copyright to: $file"
+        # Add DigiByte copyright after Bitcoin copyright
+        sed -i '/Copyright.*The Bitcoin Core developers/a\// Copyright (c) 2014-2025 The DigiByte Core developers' "$file"
+    fi
+done
 
-# Class names
-find . -type f \( -name "*.cpp" -o -name "*.h" \) -print0 | xargs -0 sed -i \
-    -e 's/BitcoinGUI/DigiByteGUI/g' \
-    -e 's/BitcoinUnits/DigiByteUnits/g' \
-    -e 's/BitcoinApplication/DigiByteApplication/g' \
-    -e 's/BitcoinCore/DigiByteCore/g' \
-    -e 's/BITCOIN_CONF_FILENAME/DIGIBYTE_CONF_FILENAME/g'
+# Step 4: Restore Bitcoin references where they should be preserved
+echo ""
+echo "Step 4: Restoring Bitcoin references in copyright notices only..."
+find . -type f | grep -v ".git/" | while read file; do
+    # Restore "Bitcoin Core developers" in copyright lines only
+    sed -i '/Copyright.*The DigiByte Core developers/! s/The DigiByte Core developers/The Bitcoin Core developers/g' "$file"
+done
 
-# Step 5: Currency and Network
-echo "Step 5: Converting currency codes and network references..."
-find . -type f \( -name "*.cpp" -o -name "*.h" -o -name "*.py" -o -name "*.md" -o -name "*.txt" -o -name "*.rc" -o -name "*.xml" \) -print0 | xargs -0 sed -i \
-    -e 's/\bBTC\b/DGB/g' \
-    -e 's/\bbtc\b/dgb/g' \
-    -e 's/Bitcoin Core/DigiByte Core/g' \
-    -e 's/Bitcoin network/DigiByte network/g' \
-    -e 's/bitcoin\.org/digibyte\.org/g' \
-    -e 's/bitcoin\.conf/digibyte\.conf/g' \
-    -e 's/\.bitcoin/\.digibyte/g' \
-    -e 's/Bitcoin/DigiByte/g' \
-    -e 's/bitcoin/digibyte/g' \
-    -e 's/BITCOIN/DIGIBYTE/g'
+# Step 5: Handle special build and config files
+echo ""
+echo "Step 5: Updating build system files..."
 
-# Step 6: Update Copyright (ADD DigiByte copyright, KEEP Bitcoin copyright)
-echo "Step 6: Adding DigiByte copyright while preserving Bitcoin copyright..."
-find . -type f \( -name "*.cpp" -o -name "*.h" \) -print0 | xargs -0 sed -i \
-    '/Copyright.*The Bitcoin Core developers/a\// Copyright (c) 2014-2025 The DigiByte Core developers'
+# Update autoconf files
+if [ -f "configure.ac" ]; then
+    echo "  Updating configure.ac..."
+    sed -i 's/AC_INIT(\[Bitcoin Core\]/AC_INIT([DigiByte Core]/g' configure.ac
+    sed -i 's/PACKAGE_NAME="Bitcoin Core"/PACKAGE_NAME="DigiByte Core"/g' configure.ac
+fi
 
-# Step 7: Handle special cases
-echo "Step 7: Handling special cases..."
-# Don't change Bitcoin in historical references or documentation about Bitcoin-specific features
-find . -type f -name "*.md" -print0 | xargs -0 sed -i \
-    -e 's/DigiByte Core 26\.2/Bitcoin Core 26.2/g' \
-    -e 's/DigiByte Core v26\.2/Bitcoin Core v26.2/g'
+# Update Qt project files
+find . -name "*.pro" -o -name "*.pri" | while read file; do
+    echo "  Updating Qt project file: $file"
+    sed -i 's/TARGET = bitcoin/TARGET = digibyte/g' "$file"
+done
 
+# Update pkg-config files
+find . -name "*.pc.in" | while read file; do
+    echo "  Updating pkg-config file: $file"
+    sed -i 's/Name: Bitcoin/Name: DigiByte/g' "$file"
+done
+
+# Step 6: Verify critical files were updated
+echo ""
+echo "Step 6: Verifying critical files..."
+
+critical_files=(
+    "configure.ac"
+    "Makefile.am"
+    "src/Makefile.am"
+    "src/qt/Makefile.am"
+    "src/init.cpp"
+    "src/chainparams.cpp"
+    "src/net.cpp"
+    "src/rpc/server.cpp"
+)
+
+for file in "${critical_files[@]}"; do
+    if [ -f "$file" ]; then
+        if grep -q "bitcoin" "$file" || grep -q "Bitcoin" "$file" || grep -q "BTC" "$file"; then
+            echo "  WARNING: $file still contains Bitcoin references!"
+            grep -n -E "(bitcoin|Bitcoin|BTC)" "$file" | head -5
+        else
+            echo "  ✓ $file appears clean"
+        fi
+    fi
+done
+
+# Step 7: Final report
+echo ""
+echo "Step 7: Generating conversion report..."
+
+# Count remaining Bitcoin references (excluding copyright lines)
+echo ""
+echo "Remaining Bitcoin references (excluding copyright):"
+grep -r -E "(bitcoin|Bitcoin|BTC)" . --exclude-dir=.git | grep -v "Copyright.*Bitcoin Core developers" | wc -l
+
+echo ""
 echo "Conversion complete!"
+echo ""
+echo "IMPORTANT NOTES:"
+echo "1. Bitcoin copyright notices have been preserved alongside DigiByte copyrights"
+echo "2. Please review any warnings above for files that may need manual attention"
+echo "3. Run 'git status' to see all changes"
+echo "4. This script should prevent ~30,000 merge conflicts when merging with DigiByte"
+echo ""
+echo "Next steps:"
+echo "1. Review the changes: git diff"
+echo "2. Commit the changes: git add -A && git commit -m 'Pre-convert Bitcoin v26.2 to DigiByte naming'"
+echo "3. Proceed with the merge into DigiByte repository"
 ```
 
 ### 1.3 Execute Pre-conversion
@@ -147,6 +351,11 @@ echo "Conversion complete!"
 ```bash
 chmod +x convert-bitcoin-to-digibyte.sh
 ./convert-bitcoin-to-digibyte.sh
+
+# Verify the conversion was successful
+echo "Checking for remaining Bitcoin references..."
+grep -r "bitcoin\|Bitcoin\|BTC" . --exclude-dir=.git | grep -v "Copyright.*Bitcoin Core developers" | wc -l
+# This should return a very low number (< 100)
 
 # Commit the pre-converted code
 git add -A
@@ -163,6 +372,29 @@ Based on Bitcoin Core v26.2 which includes:
 - Performance improvements
 - Security enhancements"
 ```
+
+### 1.4 Common Pre-conversion Pitfalls to Avoid
+
+**WARNING**: The following mistakes will result in thousands of merge conflicts:
+
+1. **Skipping the pre-conversion step entirely** - This is the #1 cause of merge failures
+2. **Running an incomplete conversion script** - Missing file types or patterns
+3. **Not converting directory names** - Leads to path conflicts
+4. **Missing build system files** - configure.ac, Makefile.am, etc.
+5. **Forgetting about test files** - Test directories need conversion too
+6. **Not handling all file extensions** - .json, .yml, .xml, .rc files matter
+7. **Partial conversions** - Converting only some occurrences creates inconsistencies
+
+**Verification Checklist**:
+- [ ] All directories renamed (bitcoin→digibyte, btc→dgb)
+- [ ] All files renamed (bitcoin→digibyte, btc→dgb)
+- [ ] Binary names converted (bitcoind→digibyted, etc.)
+- [ ] Library names converted (libbitcoin→libdigibyte)
+- [ ] Header guards converted (BITCOIN_→DIGIBYTE_)
+- [ ] Currency codes converted (BTC→DGB)
+- [ ] Configuration files converted (bitcoin.conf→digibyte.conf)
+- [ ] Build system fully updated
+- [ ] Less than 100 remaining Bitcoin references (excluding copyright)
 
 ## Phase 2: Merge Strategy
 

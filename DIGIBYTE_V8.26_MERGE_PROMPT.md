@@ -1,5 +1,8 @@
 # DigiByte v8.26 Bitcoin Core v26.2 Merge Prompt
 
+## ⚠️ CRITICAL WARNING ⚠️
+**The pre-conversion step is MANDATORY**. Skipping or incompletely executing the Bitcoin→DigiByte naming conversion will result in ~30,000 merge conflicts, making the merge practically impossible. The comprehensive conversion script in the specification MUST be run on Bitcoin v26.2 BEFORE any merge attempt.
+
 ## Overview
 You are tasked with merging Bitcoin Core v26.2 into DigiByte v8.22.2 to create DigiByte v8.26. This merge must preserve all DigiByte-specific features while incorporating Bitcoin's improvements and bug fixes.
 
@@ -45,10 +48,21 @@ You are tasked with merging Bitcoin Core v26.2 into DigiByte v8.22.2 to create D
 
 ## Merge Process
 
-### Phase 1: Pre-conversion
+### Phase 1: Pre-conversion (ABSOLUTELY CRITICAL)
 1. Clone Bitcoin v26.2 into `bitcoin-v26.2-for-digibyte/`
-2. Run `convert-bitcoin-to-digibyte.sh` to rename Bitcoin→DigiByte
-3. Commit pre-converted code
+2. Run the COMPREHENSIVE `convert-bitcoin-to-digibyte.sh` script that:
+   - Renames ALL directories (bitcoin→digibyte, btc→dgb)
+   - Renames ALL files with bitcoin/btc in the name
+   - Updates ALL file contents including:
+     * Binary names (bitcoind→digibyted)
+     * Library names (libbitcoin→libdigibyte)
+     * Header guards (BITCOIN_→DIGIBYTE_)
+     * Currency codes (BTC→DGB)
+     * Configuration files (bitcoin.conf→digibyte.conf)
+     * Build system files (configure.ac, Makefile.am, etc.)
+     * All code references throughout the entire codebase
+3. Verify conversion: Less than 100 Bitcoin references should remain (excluding copyright)
+4. Commit pre-converted code
 
 ### Phase 2: Strategic Merge
 1. Create feature branch following GitFlow: `feature/bitcoin-v26.2-merge`
@@ -89,7 +103,9 @@ You are tasked with merging Bitcoin Core v26.2 into DigiByte v8.22.2 to create D
 - CLAUDE.md for AI-assisted merge guidance
 
 ## Important Notes
+- **PRE-CONVERSION IS CRITICAL**: Without proper Bitcoin→DigiByte renaming, expect 30,000+ conflicts
 - NEVER change core DigiByte parameters (block time, supply, etc.)
-- ALWAYS preserve both Bitcoin and DigiByte copyrights
+- ALWAYS preserve both Bitcoin and DigiByte copyrights (only Bitcoin copyright in headers should remain)
 - Test thoroughly on testnet before mainnet deployment
 - Document all decisions and changes made during merge
+- Use the comprehensive conversion script from the specification - partial conversions will fail

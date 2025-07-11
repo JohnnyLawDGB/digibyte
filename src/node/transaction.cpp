@@ -81,12 +81,18 @@ TransactionError BroadcastTransaction(NodeContext& node, const CTransactionRef t
                     return TransactionError::MAX_FEE_EXCEEDED;
                 } else {
                     // This doesnt really matter, as its just a test; but may as well be consistent
-                    AcceptToMemoryPool(node.chainman->ActiveChainstate(), *node.stempool, tx, false, true);
+                    // TODO: Dandelion++: Need to implement AcceptToStempool for v26.2
+                    // AcceptToMemoryPool(node.chainman->ActiveChainstate(), *node.stempool, tx, false, true);
                 }
             }
             // Try to submit the transaction to the stempool only (if dandelion is enabled);
             if (node.args->GetBoolArg("-dandelion", DEFAULT_DANDELION)) {
-                const MempoolAcceptResult result = AcceptToMemoryPool(node.chainman->ActiveChainstate(), *node.stempool, tx, false, false);
+                // TODO: Dandelion++: Need to implement AcceptToStempool for v26.2
+                // const MempoolAcceptResult result = AcceptToMemoryPool(node.chainman->ActiveChainstate(), *node.stempool, tx, false, false);
+                // if (result.m_result_type != MempoolAcceptResult::ResultType::VALID) {
+                //     return HandleATMPError(result.m_state, err_string);
+                // }
+                const MempoolAcceptResult result = node.chainman->ProcessTransaction(tx, /*test_accept=*/ false);
                 if (result.m_result_type != MempoolAcceptResult::ResultType::VALID) {
                     return HandleATMPError(result.m_state, err_string);
                 }

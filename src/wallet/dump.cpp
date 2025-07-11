@@ -1,25 +1,10 @@
-<<<<<<< HEAD
-// Copyright (c) 2020 The DigiByte Core developers
-=======
-// Copyright (c) 2020-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// Copyright (c) 2020-2022 The Bitcoin Core developers
+// Copyright (c) 2020-2025 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <wallet/dump.h>
 
-<<<<<<< HEAD
-#include <util/translation.h>
-#include <wallet/wallet.h>
-
-static const std::string DUMP_MAGIC = "DIGIBYTE_CORE_WALLET_DUMP";
-uint32_t DUMP_VERSION = 1;
-
-bool DumpWallet(CWallet& wallet, bilingual_str& error)
-{
-    // Get the dumpfile
-    std::string dump_filename = gArgs.GetArg("-dumpfile", "");
-=======
 #include <common/args.h>
 #include <util/fs.h>
 #include <util/translation.h>
@@ -40,28 +25,11 @@ bool DumpWallet(const ArgsManager& args, CWallet& wallet, bilingual_str& error)
 {
     // Get the dumpfile
     std::string dump_filename = args.GetArg("-dumpfile", "");
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (dump_filename.empty()) {
         error = _("No dump file provided. To use dump, -dumpfile=<filename> must be provided.");
         return false;
     }
 
-<<<<<<< HEAD
-    fs::path path = dump_filename;
-    path = fs::absolute(path);
-    if (fs::exists(path)) {
-        error = strprintf(_("File %s already exists. If you are sure this is what you want, move it out of the way first."), path.string());
-        return false;
-    }
-    fsbridge::ofstream dump_file;
-    dump_file.open(path);
-    if (dump_file.fail()) {
-        error = strprintf(_("Unable to open %s for writing"), path.string());
-        return false;
-    }
-
-    CHashWriter hasher(0, 0);
-=======
     fs::path path = fs::PathFromString(dump_filename);
     path = fs::absolute(path);
     if (fs::exists(path)) {
@@ -76,18 +44,13 @@ bool DumpWallet(const ArgsManager& args, CWallet& wallet, bilingual_str& error)
     }
 
     HashWriter hasher{};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     WalletDatabase& db = wallet.GetDatabase();
     std::unique_ptr<DatabaseBatch> batch = db.MakeBatch();
 
     bool ret = true;
-<<<<<<< HEAD
-    if (!batch->StartCursor()) {
-=======
     std::unique_ptr<DatabaseCursor> cursor = batch->GetNewCursor();
     if (!cursor) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         error = _("Error: Couldn't create cursor into database");
         ret = false;
     }
@@ -95,36 +58,17 @@ bool DumpWallet(const ArgsManager& args, CWallet& wallet, bilingual_str& error)
     // Write out a magic string with version
     std::string line = strprintf("%s,%u\n", DUMP_MAGIC, DUMP_VERSION);
     dump_file.write(line.data(), line.size());
-<<<<<<< HEAD
-    hasher.write(line.data(), line.size());
-=======
     hasher << Span{line};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // Write out the file format
     line = strprintf("%s,%s\n", "format", db.Format());
     dump_file.write(line.data(), line.size());
-<<<<<<< HEAD
-    hasher.write(line.data(), line.size());
-=======
     hasher << Span{line};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     if (ret) {
 
         // Read the records
         while (true) {
-<<<<<<< HEAD
-            CDataStream ss_key(SER_DISK, CLIENT_VERSION);
-            CDataStream ss_value(SER_DISK, CLIENT_VERSION);
-            bool complete;
-            ret = batch->ReadAtCursor(ss_key, ss_value, complete);
-            if (complete) {
-                ret = true;
-                break;
-            } else if (!ret) {
-                error = _("Error reading next record from wallet database");
-=======
             DataStream ss_key{};
             DataStream ss_value{};
             DatabaseCursor::Status status = cursor->Next(ss_key, ss_value);
@@ -134,26 +78,17 @@ bool DumpWallet(const ArgsManager& args, CWallet& wallet, bilingual_str& error)
             } else if (status == DatabaseCursor::Status::FAIL) {
                 error = _("Error reading next record from wallet database");
                 ret = false;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 break;
             }
             std::string key_str = HexStr(ss_key);
             std::string value_str = HexStr(ss_value);
             line = strprintf("%s,%s\n", key_str, value_str);
             dump_file.write(line.data(), line.size());
-<<<<<<< HEAD
-            hasher.write(line.data(), line.size());
-        }
-    }
-
-    batch->CloseCursor();
-=======
             hasher << Span{line};
         }
     }
 
     cursor.reset();
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     batch.reset();
 
     // Close the wallet after we're done with it. The caller won't be doing this
@@ -182,34 +117,15 @@ static void WalletToolReleaseWallet(CWallet* wallet)
     delete wallet;
 }
 
-<<<<<<< HEAD
-bool CreateFromDump(const std::string& name, const fs::path& wallet_path, bilingual_str& error, std::vector<bilingual_str>& warnings)
-{
-    // Get the dumpfile
-    std::string dump_filename = gArgs.GetArg("-dumpfile", "");
-=======
 bool CreateFromDump(const ArgsManager& args, const std::string& name, const fs::path& wallet_path, bilingual_str& error, std::vector<bilingual_str>& warnings)
 {
     // Get the dumpfile
     std::string dump_filename = args.GetArg("-dumpfile", "");
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (dump_filename.empty()) {
         error = _("No dump file provided. To use createfromdump, -dumpfile=<filename> must be provided.");
         return false;
     }
 
-<<<<<<< HEAD
-    fs::path dump_path = dump_filename;
-    dump_path = fs::absolute(dump_path);
-    if (!fs::exists(dump_path)) {
-        error = strprintf(_("Dump file %s does not exist."), dump_path.string());
-        return false;
-    }
-    fsbridge::ifstream dump_file(dump_path);
-
-    // Compute the checksum
-    CHashWriter hasher(0, 0);
-=======
     fs::path dump_path = fs::PathFromString(dump_filename);
     dump_path = fs::absolute(dump_path);
     if (!fs::exists(dump_path)) {
@@ -220,7 +136,6 @@ bool CreateFromDump(const ArgsManager& args, const std::string& name, const fs::
 
     // Compute the checksum
     HashWriter hasher{};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     uint256 checksum;
 
     // Check the magic and version
@@ -246,11 +161,7 @@ bool CreateFromDump(const ArgsManager& args, const std::string& name, const fs::
         return false;
     }
     std::string magic_hasher_line = strprintf("%s,%s\n", magic_key, version_value);
-<<<<<<< HEAD
-    hasher.write(magic_hasher_line.data(), magic_hasher_line.size());
-=======
     hasher << Span{magic_hasher_line};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // Get the stored file format
     std::string format_key;
@@ -263,11 +174,7 @@ bool CreateFromDump(const ArgsManager& args, const std::string& name, const fs::
         return false;
     }
     // Get the data file format with format_value as the default
-<<<<<<< HEAD
-    std::string file_format = gArgs.GetArg("-format", format_value);
-=======
     std::string file_format = args.GetArg("-format", format_value);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (file_format.empty()) {
         error = _("No wallet file format provided. To use createfromdump, -format=<format> must be provided.");
         return false;
@@ -285,18 +192,11 @@ bool CreateFromDump(const ArgsManager& args, const std::string& name, const fs::
         warnings.push_back(strprintf(_("Warning: Dumpfile wallet format \"%s\" does not match command line specified format \"%s\"."), format_value, file_format));
     }
     std::string format_hasher_line = strprintf("%s,%s\n", format_key, format_value);
-<<<<<<< HEAD
-    hasher.write(format_hasher_line.data(), format_hasher_line.size());
-
-    DatabaseOptions options;
-    DatabaseStatus status;
-=======
     hasher << Span{format_hasher_line};
 
     DatabaseOptions options;
     DatabaseStatus status;
     ReadDatabaseArgs(args, options);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     options.require_create = true;
     options.require_format = data_format;
     std::unique_ptr<WalletDatabase> database = MakeDatabase(wallet_path, options, status, error);
@@ -304,11 +204,7 @@ bool CreateFromDump(const ArgsManager& args, const std::string& name, const fs::
 
     // dummy chain interface
     bool ret = true;
-<<<<<<< HEAD
-    std::shared_ptr<CWallet> wallet(new CWallet(nullptr /* chain */, name, std::move(database)), WalletToolReleaseWallet);
-=======
     std::shared_ptr<CWallet> wallet(new CWallet(/*chain=*/nullptr, name, std::move(database)), WalletToolReleaseWallet);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     {
         LOCK(wallet->cs_wallet);
         DBErrors load_wallet_ret = wallet->LoadWallet();
@@ -331,24 +227,17 @@ bool CreateFromDump(const ArgsManager& args, const std::string& name, const fs::
 
             if (key == "checksum") {
                 std::vector<unsigned char> parsed_checksum = ParseHex(value);
-<<<<<<< HEAD
-=======
                 if (parsed_checksum.size() != checksum.size()) {
                     error = Untranslated("Error: Checksum is not the correct size");
                     ret = false;
                     break;
                 }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 std::copy(parsed_checksum.begin(), parsed_checksum.end(), checksum.begin());
                 break;
             }
 
             std::string line = strprintf("%s,%s\n", key, value);
-<<<<<<< HEAD
-            hasher.write(line.data(), line.size());
-=======
             hasher << Span{line};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
             if (key.empty() || value.empty()) {
                 continue;
@@ -367,15 +256,7 @@ bool CreateFromDump(const ArgsManager& args, const std::string& name, const fs::
 
             std::vector<unsigned char> k = ParseHex(key);
             std::vector<unsigned char> v = ParseHex(value);
-<<<<<<< HEAD
-
-            CDataStream ss_key(k, SER_DISK, CLIENT_VERSION);
-            CDataStream ss_value(v, SER_DISK, CLIENT_VERSION);
-
-            if (!batch->Write(ss_key, ss_value)) {
-=======
             if (!batch->Write(Span{k}, Span{v})) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 error = strprintf(_("Error: Unable to write record to new wallet"));
                 ret = false;
                 break;
@@ -412,7 +293,4 @@ bool CreateFromDump(const ArgsManager& args, const std::string& name, const fs::
 
     return ret;
 }
-<<<<<<< HEAD
-=======
 } // namespace wallet
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion

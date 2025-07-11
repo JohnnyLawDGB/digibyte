@@ -1,22 +1,13 @@
-<<<<<<< HEAD
-// Copyright (c) 2017-2020 The Bitcoin Core developers
-// Copyright (c) 2017-2020 The DigiByte Core developers
-=======
 // Copyright (c) 2017-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #ifndef DIGIBYTE_WALLET_COINSELECTION_H
 #define DIGIBYTE_WALLET_COINSELECTION_H
 
-<<<<<<< HEAD
-#include <amount.h>
-=======
 #include <consensus/amount.h>
 #include <consensus/consensus.h>
 #include <outputtype.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <policy/feerate.h>
 #include <primitives/transaction.h>
 #include <random.h>
@@ -24,15 +15,6 @@
 #include <util/insert.h>
 #include <util/result.h>
 
-<<<<<<< HEAD
-//! target minimum change amount
-static constexpr CAmount MIN_CHANGE{COIN / 100};
-//! final minimum change amount after paying for fees
-static const CAmount MIN_FINAL_CHANGE = MIN_CHANGE/2;
-
-/** A UTXO under consideration for use in funding a new transaction. */
-class CInputCoin {
-=======
 #include <optional>
 
 
@@ -50,19 +32,12 @@ private:
 
     /** The fee required to spend this output at the transaction's target feerate and to bump its unconfirmed ancestors to the target feerate. */
     std::optional<CAmount> fee;
-
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 public:
     /** The outpoint identifying this UTXO */
     COutPoint outpoint;
 
     /** The output itself */
     CTxOut txout;
-<<<<<<< HEAD
-    CAmount effective_value;
-    CAmount m_fee{0};
-    CAmount m_long_term_fee{0};
-=======
 
     /**
      * Depth in block chain.
@@ -70,7 +45,6 @@ public:
      * If = 0: the tx is waiting confirmation.
      * If < 0: a conflicting tx is on chain and has this many confirmations. */
     int depth;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     /** Pre-computed estimated size of this output as a fully-signed input in a transaction. Can be -1 if it could not be calculated */
     int input_bytes;
@@ -160,20 +134,13 @@ public:
 };
 
 /** Parameters for one iteration of Coin Selection. */
-<<<<<<< HEAD
-struct CoinSelectionParams
-{
-=======
 struct CoinSelectionParams {
     /** Randomness to use in the context of coin selection. */
     FastRandomContext& rng_fast;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     /** Size of a change output in bytes, determined by the output type. */
     size_t change_output_size = 0;
     /** Size of the input to spend a change output in virtual bytes. */
     size_t change_spend_size = 0;
-<<<<<<< HEAD
-=======
     /** Mininmum change to target in Knapsack solver: select coins to cover the payment and
      * at least this value of change. */
     CAmount m_min_change_target{0};
@@ -181,7 +148,6 @@ struct CoinSelectionParams {
      * If change budget is smaller than min_change then we forgo creation of change output.
      */
     CAmount min_viable_change{0};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     /** Cost of creating the change output. */
     CAmount m_change_fee{0};
     /** Cost of creating the change output + cost of spending the change output in the future. */
@@ -202,20 +168,6 @@ struct CoinSelectionParams {
      * associated with the same address. This helps reduce privacy leaks resulting from address
      * reuse. Dust outputs are not eligible to be added to output groups and thus not considered. */
     bool m_avoid_partial_spends = false;
-<<<<<<< HEAD
-
-    CoinSelectionParams(size_t change_output_size, size_t change_spend_size, CFeeRate effective_feerate,
-                        CFeeRate long_term_feerate, CFeeRate discard_feerate, size_t tx_noinputs_size, bool avoid_partial) :
-        change_output_size(change_output_size),
-        change_spend_size(change_spend_size),
-        m_effective_feerate(effective_feerate),
-        m_long_term_feerate(long_term_feerate),
-        m_discard_feerate(discard_feerate),
-        tx_noinputs_size(tx_noinputs_size),
-        m_avoid_partial_spends(avoid_partial)
-    {}
-    CoinSelectionParams() {}
-=======
     /**
      * When true, allow unsafe coins to be selected during Coin Selection. This may spend unconfirmed outputs:
      * 1) Received from other wallets, 2) replacing other txs, 3) that have been replaced.
@@ -238,7 +190,6 @@ struct CoinSelectionParams {
     }
     CoinSelectionParams(FastRandomContext& rng_fast)
         : rng_fast{rng_fast} {}
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 };
 
 /** Parameters for filtering which OutputGroups we may use in coin selection.
@@ -262,25 +213,18 @@ struct CoinEligibilityFilter
     CoinEligibilityFilter(int conf_mine, int conf_theirs, uint64_t max_ancestors) : conf_mine(conf_mine), conf_theirs(conf_theirs), max_ancestors(max_ancestors), max_descendants(max_ancestors) {}
     CoinEligibilityFilter(int conf_mine, int conf_theirs, uint64_t max_ancestors, uint64_t max_descendants) : conf_mine(conf_mine), conf_theirs(conf_theirs), max_ancestors(max_ancestors), max_descendants(max_descendants) {}
     CoinEligibilityFilter(int conf_mine, int conf_theirs, uint64_t max_ancestors, uint64_t max_descendants, bool include_partial) : conf_mine(conf_mine), conf_theirs(conf_theirs), max_ancestors(max_ancestors), max_descendants(max_descendants), m_include_partial_groups(include_partial) {}
-<<<<<<< HEAD
-=======
 
     bool operator<(const CoinEligibilityFilter& other) const {
         return std::tie(conf_mine, conf_theirs, max_ancestors, max_descendants, m_include_partial_groups)
                < std::tie(other.conf_mine, other.conf_theirs, other.max_ancestors, other.max_descendants, other.m_include_partial_groups);
     }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 };
 
 /** A group of UTXOs paid to the same output script. */
 struct OutputGroup
 {
     /** The list of UTXOs contained in this output group. */
-<<<<<<< HEAD
-    std::vector<CInputCoin> m_outputs;
-=======
     std::vector<std::shared_ptr<COutput>> m_outputs;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     /** Whether the UTXOs were sent by the wallet to itself. This is relevant because we may want at
      * least a certain number of confirmations on UTXOs received from outside wallets while trusting
      * our own UTXOs more. */
@@ -298,11 +242,6 @@ struct OutputGroup
     CAmount effective_value{0};
     /** The fee to spend these UTXOs at the effective feerate. */
     CAmount fee{0};
-<<<<<<< HEAD
-    /** The target feerate of the transaction we're trying to build. */
-    CFeeRate m_effective_feerate{0};
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     /** The fee to spend these UTXOs at the long term feerate. */
     CAmount long_term_fee{0};
     /** The feerate for spending a created change output eventually (i.e. not urgently, and thus at
@@ -312,34 +251,20 @@ struct OutputGroup
     /** Indicate that we are subtracting the fee from outputs.
      * When true, the value that is used for coin selection is the UTXO's real value rather than effective value */
     bool m_subtract_fee_outputs{false};
-<<<<<<< HEAD
-
-    OutputGroup() {}
-    OutputGroup(const CoinSelectionParams& params) :
-        m_effective_feerate(params.m_effective_feerate),
-=======
     /** Total weight of the UTXOs in this group. */
     int m_weight{0};
 
     OutputGroup() {}
     OutputGroup(const CoinSelectionParams& params) :
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         m_long_term_feerate(params.m_long_term_feerate),
         m_subtract_fee_outputs(params.m_subtract_fee_outputs)
     {}
 
-<<<<<<< HEAD
-    void Insert(const CInputCoin& output, int depth, bool from_me, size_t ancestors, size_t descendants, bool positive_only);
-=======
     void Insert(const std::shared_ptr<COutput>& output, size_t ancestors, size_t descendants);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     bool EligibleForSpending(const CoinEligibilityFilter& eligibility_filter) const;
     CAmount GetSelectionAmount() const;
 };
 
-<<<<<<< HEAD
-bool SelectCoinsBnB(std::vector<OutputGroup>& utxo_pool, const CAmount& selection_target, const CAmount& cost_of_change, std::set<CInputCoin>& out_set, CAmount& value_ret);
-=======
 struct Groups {
     // Stores 'OutputGroup' containing only positive UTXOs (value > 0).
     std::vector<OutputGroup> positive_group;
@@ -515,7 +440,6 @@ util::Result<SelectionResult> SelectCoinsBnB(std::vector<OutputGroup>& utxo_pool
  */
 util::Result<SelectionResult> SelectCoinsSRD(const std::vector<OutputGroup>& utxo_pool, CAmount target_value, CAmount change_fee, FastRandomContext& rng,
                                              int max_weight);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 // Original coin selection algorithm as a fallback
 util::Result<SelectionResult> KnapsackSolver(std::vector<OutputGroup>& groups, const CAmount& nTargetValue,

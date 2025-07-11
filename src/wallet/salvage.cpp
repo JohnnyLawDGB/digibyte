@@ -1,48 +1,25 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The DigiByte Core developers
-// Distributed under the MIT software license, see the accompanying
-// file COPYING or http://www.opensource.org/licenses/mit-license.php.
-
-#include <fs.h>
-#include <streams.h>
-=======
 // Copyright (c) 2009-2021 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <streams.h>
 #include <util/fs.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <util/translation.h>
 #include <wallet/bdb.h>
 #include <wallet/salvage.h>
 #include <wallet/wallet.h>
 #include <wallet/walletdb.h>
 
-<<<<<<< HEAD
-=======
 #include <db_cxx.h>
 
 namespace wallet {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 /* End of headers, beginning of key/value data */
 static const char *HEADER_END = "HEADER=END";
 /* End of key/value data */
 static const char *DATA_END = "DATA=END";
 typedef std::pair<std::vector<unsigned char>, std::vector<unsigned char> > KeyValPair;
 
-<<<<<<< HEAD
-static bool KeyFilter(const std::string& type)
-{
-    return WalletBatch::IsKeyType(type) || type == DBKeys::HDCHAIN;
-}
-
-bool RecoverDatabaseFile(const fs::path& file_path, bilingual_str& error, std::vector<bilingual_str>& warnings)
-{
-    DatabaseOptions options;
-    DatabaseStatus status;
-=======
 class DummyCursor : public DatabaseCursor
 {
     Status Next(DataStream& key, DataStream& value) override { return Status::FAIL; }
@@ -94,7 +71,6 @@ bool RecoverDatabaseFile(const ArgsManager& args, const fs::path& file_path, bil
     DatabaseOptions options;
     DatabaseStatus status;
     ReadDatabaseArgs(args, options);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     options.require_existing = true;
     options.verify = false;
     options.require_format = DatabaseFormat::BERKELEY;
@@ -114,11 +90,7 @@ bool RecoverDatabaseFile(const ArgsManager& args, const fs::path& file_path, bil
     // Call Salvage with fAggressive=true to
     // get as much data as possible.
     // Rewrite salvaged data to fresh wallet file
-<<<<<<< HEAD
-    // Set -rescan so any missing transactions will be
-=======
     // Rescan so any missing transactions will be
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     // found.
     int64_t now = GetTime();
     std::string newFilename = strprintf("%s.%d.bak", filename, now);
@@ -174,11 +146,7 @@ bool RecoverDatabaseFile(const ArgsManager& args, const fs::path& file_path, bil
                 warnings.push_back(Untranslated("Salvage: WARNING: Number of keys in data does not match number of values."));
                 break;
             }
-<<<<<<< HEAD
-            salvagedData.push_back(make_pair(ParseHex(keyHex), ParseHex(valueHex)));
-=======
             salvagedData.emplace_back(ParseHex(keyHex), ParseHex(valueHex));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
     }
 
@@ -209,25 +177,6 @@ bool RecoverDatabaseFile(const ArgsManager& args, const fs::path& file_path, bil
         return false;
     }
 
-<<<<<<< HEAD
-    DbTxn* ptxn = env->TxnBegin();
-    CWallet dummyWallet(nullptr, "", CreateDummyWalletDatabase());
-    for (KeyValPair& row : salvagedData)
-    {
-        /* Filter for only private key type KV pairs to be added to the salvaged wallet */
-        CDataStream ssKey(row.first, SER_DISK, CLIENT_VERSION);
-        CDataStream ssValue(row.second, SER_DISK, CLIENT_VERSION);
-        std::string strType, strErr;
-        bool fReadOK;
-        {
-            // Required in LoadKeyMetadata():
-            LOCK(dummyWallet.cs_wallet);
-            fReadOK = ReadKeyValue(&dummyWallet, ssKey, ssValue, strType, strErr, KeyFilter);
-        }
-        if (!KeyFilter(strType)) {
-            continue;
-        }
-=======
     DbTxn* ptxn = env->TxnBegin(DB_TXN_WRITE_NOSYNC);
     CWallet dummyWallet(nullptr, "", std::make_unique<DummyDatabase>());
     for (KeyValPair& row : salvagedData)
@@ -252,7 +201,6 @@ bool RecoverDatabaseFile(const ArgsManager& args, const fs::path& file_path, bil
             continue;
         }
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         if (!fReadOK)
         {
             warnings.push_back(strprintf(Untranslated("WARNING: WalletBatch::Recover skipping %s: %s"), strType, strErr));
@@ -269,7 +217,4 @@ bool RecoverDatabaseFile(const ArgsManager& args, const fs::path& file_path, bil
 
     return fSuccess;
 }
-<<<<<<< HEAD
-=======
 } // namespace wallet
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion

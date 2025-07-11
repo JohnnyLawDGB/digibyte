@@ -1,9 +1,5 @@
-<<<<<<< HEAD
-// Copyright (c) 2017-2020 The Bitcoin Core developers
-// Copyright (c) 2017-2020 The DigiByte Core developers
-=======
+// Copyright (c) 2017-2021 The Bitcoin Core developers
 // Copyright (c) 2017-2021 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -22,13 +18,6 @@ namespace wallet {
 class CCoinControl;
 class CWallet;
 class CWalletTx;
-<<<<<<< HEAD
-class uint256;
-class CCoinControl;
-enum class FeeEstimateMode;
-struct bilingual_str;
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 namespace feebumper {
 
@@ -45,9 +34,6 @@ enum class Result
 //! Return whether transaction can be bumped.
 bool TransactionCanBeBumped(const CWallet& wallet, const uint256& txid);
 
-<<<<<<< HEAD
-//! Create bumpfee transaction based on feerate estimates.
-=======
 /** Create bumpfee transaction based on feerate estimates.
  *
  * @param[in] wallet The wallet to use for this bumping
@@ -61,21 +47,16 @@ bool TransactionCanBeBumped(const CWallet& wallet, const uint256& txid);
  * @param[in] outputs Vector of new outputs to replace the bumped transaction's outputs
  * @param[in] original_change_index The position of the change output to deduct the fee from in the transaction being bumped
  */
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 Result CreateRateBumpTransaction(CWallet& wallet,
     const uint256& txid,
     const CCoinControl& coin_control,
     std::vector<bilingual_str>& errors,
     CAmount& old_fee,
     CAmount& new_fee,
-<<<<<<< HEAD
-    CMutableTransaction& mtx);
-=======
     CMutableTransaction& mtx,
     bool require_mine,
     const std::vector<CTxOut>& outputs,
     std::optional<uint32_t> original_change_index = std::nullopt);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 //! Sign the new transaction,
 //! @return false if the tx couldn't be found or if it was
@@ -91,8 +72,6 @@ Result CommitTransaction(CWallet& wallet,
     CMutableTransaction&& mtx,
     std::vector<bilingual_str>& errors,
     uint256& bumped_txid);
-<<<<<<< HEAD
-=======
 
 struct SignatureWeights
 {
@@ -142,7 +121,6 @@ public:
         return false;
     }
 };
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 } // namespace feebumper
 } // namespace wallet

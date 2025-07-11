@@ -1,9 +1,5 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The DigiByte Core developers
-=======
 // Copyright (c) 2009-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -11,15 +7,6 @@
 #define DIGIBYTE_WALLET_BDB_H
 
 #include <clientversion.h>
-<<<<<<< HEAD
-#include <fs.h>
-#include <serialize.h>
-#include <streams.h>
-#include <util/system.h>
-#include <wallet/db.h>
-
-#include <atomic>
-=======
 #include <common/system.h>
 #include <serialize.h>
 #include <streams.h>
@@ -28,31 +15,12 @@
 
 #include <atomic>
 #include <condition_variable>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <map>
 #include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
-<<<<<<< HEAD
-#if defined(__GNUC__) && !defined(__clang__)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wsuggest-override"
-#endif
-#include <db_cxx.h>
-#if defined(__GNUC__) && !defined(__clang__)
-#pragma GCC diagnostic pop
-#endif
-
-struct bilingual_str;
-
-static const unsigned int DEFAULT_WALLET_DBLOGSIZE = 100;
-static const bool DEFAULT_WALLET_PRIVDB = true;
-
-struct WalletDatabaseFileId {
-    u_int8_t value[DB_FILE_ID_LEN];
-=======
 struct bilingual_str;
 
 class DbEnv;
@@ -68,7 +36,6 @@ namespace wallet {
 
 struct WalletDatabaseFileId {
     uint8_t value[BDB_DB_FILE_ID_LEN];
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     bool operator==(const WalletDatabaseFileId& rhs) const;
 };
 
@@ -85,54 +52,25 @@ private:
 
 public:
     std::unique_ptr<DbEnv> dbenv;
-<<<<<<< HEAD
-    std::map<std::string, std::reference_wrapper<BerkeleyDatabase>> m_databases;
-    std::unordered_map<std::string, WalletDatabaseFileId> m_fileids;
-    std::condition_variable_any m_db_in_use;
-
-    explicit BerkeleyEnvironment(const fs::path& env_directory);
-=======
     std::map<fs::path, std::reference_wrapper<BerkeleyDatabase>> m_databases;
     std::unordered_map<std::string, WalletDatabaseFileId> m_fileids;
     std::condition_variable_any m_db_in_use;
     bool m_use_shared_memory;
 
     explicit BerkeleyEnvironment(const fs::path& env_directory, bool use_shared_memory);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     BerkeleyEnvironment();
     ~BerkeleyEnvironment();
     void Reset();
 
     bool IsMock() const { return fMockDb; }
     bool IsInitialized() const { return fDbEnvInit; }
-<<<<<<< HEAD
-    fs::path Directory() const { return strPath; }
-=======
     fs::path Directory() const { return fs::PathFromString(strPath); }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     bool Open(bilingual_str& error);
     void Close();
     void Flush(bool fShutdown);
     void CheckpointLSN(const std::string& strFile);
 
-<<<<<<< HEAD
-    void CloseDb(const std::string& strFile);
-    void ReloadDbEnv();
-
-    DbTxn* TxnBegin(int flags = DB_TXN_WRITE_NOSYNC)
-    {
-        DbTxn* ptxn = nullptr;
-        int ret = dbenv->txn_begin(nullptr, &ptxn, flags);
-        if (!ptxn || ret != 0)
-            return nullptr;
-        return ptxn;
-    }
-};
-
-/** Get BerkeleyEnvironment given a directory path. */
-std::shared_ptr<BerkeleyEnvironment> GetBerkeleyEnv(const fs::path& env_directory);
-=======
     void CloseDb(const fs::path& filename);
     void ReloadDbEnv();
 
@@ -141,7 +79,6 @@ std::shared_ptr<BerkeleyEnvironment> GetBerkeleyEnv(const fs::path& env_director
 
 /** Get BerkeleyEnvironment given a directory path. */
 std::shared_ptr<BerkeleyEnvironment> GetBerkeleyEnv(const fs::path& env_directory, bool use_shared_memory);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 class BerkeleyBatch;
 
@@ -154,16 +91,7 @@ public:
     BerkeleyDatabase() = delete;
 
     /** Create DB handle to real database */
-<<<<<<< HEAD
-    BerkeleyDatabase(std::shared_ptr<BerkeleyEnvironment> env, std::string filename) :
-        WalletDatabase(), env(std::move(env)), strFile(std::move(filename))
-    {
-        auto inserted = this->env->m_databases.emplace(strFile, std::ref(*this));
-        assert(inserted.second);
-    }
-=======
     BerkeleyDatabase(std::shared_ptr<BerkeleyEnvironment> env, fs::path filename, const DatabaseOptions& options);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     ~BerkeleyDatabase() override;
 
@@ -174,11 +102,7 @@ public:
      */
     bool Rewrite(const char* pszSkip=nullptr) override;
 
-<<<<<<< HEAD
-    /** Indicate the a new database user has began using the database. */
-=======
     /** Indicate that a new database user has begun using the database. */
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     void AddRef() override;
     /** Indicate that database user has stopped using the database and that it could be flushed or closed. */
     void RemoveRef() override;
@@ -206,11 +130,7 @@ public:
     bool Verify(bilingual_str& error);
 
     /** Return path to main database filename */
-<<<<<<< HEAD
-    std::string Filename() override { return (env->Directory() / strFile).string(); }
-=======
     std::string Filename() override { return fs::PathToString(env->Directory() / m_filename); }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     std::string Format() override { return "bdb"; }
     /**
@@ -227,53 +147,13 @@ public:
     /** Database pointer. This is initialized lazily and reset during flushes, so it can be null. */
     std::unique_ptr<Db> m_db;
 
-<<<<<<< HEAD
-    std::string strFile;
-=======
     fs::path m_filename;
     int64_t m_max_log_mb;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     /** Make a BerkeleyBatch connected to this database */
     std::unique_ptr<DatabaseBatch> MakeBatch(bool flush_on_close = true) override;
 };
 
-<<<<<<< HEAD
-/** RAII class that provides access to a Berkeley database */
-class BerkeleyBatch : public DatabaseBatch
-{
-    /** RAII class that automatically cleanses its data on destruction */
-    class SafeDbt final
-    {
-        Dbt m_dbt;
-
-    public:
-        // construct Dbt with internally-managed data
-        SafeDbt();
-        // construct Dbt with provided data
-        SafeDbt(void* data, size_t size);
-        ~SafeDbt();
-
-        // delegate to Dbt
-        const void* get_data() const;
-        u_int32_t get_size() const;
-
-        // conversion operator to access the underlying Dbt
-        operator Dbt*();
-    };
-
-private:
-    bool ReadKey(CDataStream&& key, CDataStream& value) override;
-    bool WriteKey(CDataStream&& key, CDataStream&& value, bool overwrite = true) override;
-    bool EraseKey(CDataStream&& key) override;
-    bool HasKey(CDataStream&& key) override;
-
-protected:
-    Db* pdb;
-    std::string strFile;
-    DbTxn* activeTxn;
-    Dbc* m_cursor;
-=======
 class BerkeleyCursor : public DatabaseCursor
 {
 private:
@@ -305,7 +185,6 @@ protected:
     Db* pdb{nullptr};
     std::string strFile;
     DbTxn* activeTxn{nullptr};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     bool fReadOnly;
     bool fFlushOnClose;
     BerkeleyEnvironment *env;
@@ -321,21 +200,12 @@ public:
     void Flush() override;
     void Close() override;
 
-<<<<<<< HEAD
-    bool StartCursor() override;
-    bool ReadAtCursor(CDataStream& ssKey, CDataStream& ssValue, bool& complete) override;
-    void CloseCursor() override;
-    bool TxnBegin() override;
-    bool TxnCommit() override;
-    bool TxnAbort() override;
-=======
     std::unique_ptr<DatabaseCursor> GetNewCursor() override;
     std::unique_ptr<DatabaseCursor> GetNewPrefixCursor(Span<const std::byte> prefix) override;
     bool TxnBegin() override;
     bool TxnCommit() override;
     bool TxnAbort() override;
     DbTxn* txn() const { return activeTxn; }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 };
 
 std::string BerkeleyDatabaseVersion();
@@ -346,9 +216,6 @@ bool BerkeleyDatabaseSanityCheck();
 
 //! Return object giving access to Berkeley database at specified path.
 std::unique_ptr<BerkeleyDatabase> MakeBerkeleyDatabase(const fs::path& path, const DatabaseOptions& options, DatabaseStatus& status, bilingual_str& error);
-<<<<<<< HEAD
-=======
 } // namespace wallet
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 #endif // DIGIBYTE_WALLET_BDB_H

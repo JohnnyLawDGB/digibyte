@@ -1,8 +1,5 @@
-<<<<<<< HEAD
-// Copyright (c) 2020 The DigiByte Core developers
-=======
-// Copyright (c) 2020-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// Copyright (c) 2020-2022 The Bitcoin Core developers
+// Copyright (c) 2020-2025 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -12,14 +9,9 @@
 #include <crypto/common.h>
 #include <logging.h>
 #include <sync.h>
-<<<<<<< HEAD
-#include <util/strencodings.h>
-#include <util/system.h>
-=======
 #include <util/fs_helpers.h>
 #include <util/check.h>
 #include <util/strencodings.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <util/translation.h>
 #include <wallet/db.h>
 
@@ -30,12 +22,6 @@
 #include <utility>
 #include <vector>
 
-<<<<<<< HEAD
-static constexpr int32_t WALLET_SCHEMA_VERSION = 0;
-
-static Mutex g_sqlite_mutex;
-static int g_sqlite_count GUARDED_BY(g_sqlite_mutex) = 0;
-=======
 namespace wallet {
 static constexpr int32_t WALLET_SCHEMA_VERSION = 0;
 
@@ -44,7 +30,6 @@ static Span<const std::byte> SpanFromBlob(sqlite3_stmt* stmt, int col)
     return {reinterpret_cast<const std::byte*>(sqlite3_column_blob(stmt, col)),
             static_cast<size_t>(sqlite3_column_bytes(stmt, col))};
 }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 static void ErrorLogCallback(void* arg, int code, const char* msg)
 {
@@ -57,8 +42,6 @@ static void ErrorLogCallback(void* arg, int code, const char* msg)
     LogPrintf("SQLite Error. Code: %d. Message: %s\n", code, msg);
 }
 
-<<<<<<< HEAD
-=======
 static int TraceSqlCallback(unsigned code, void* context, void* param1, void* param2)
 {
     auto* db = static_cast<SQLiteDatabase*>(context);
@@ -94,7 +77,6 @@ static bool BindBlobToStatement(sqlite3_stmt* stmt,
     return true;
 }
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 static std::optional<int> ReadPragmaInteger(sqlite3* db, const std::string& key, const std::string& description, bilingual_str& error)
 {
     std::string stmt_text = strprintf("PRAGMA %s", key);
@@ -125,16 +107,6 @@ static void SetPragma(sqlite3* db, const std::string& key, const std::string& va
     }
 }
 
-<<<<<<< HEAD
-SQLiteDatabase::SQLiteDatabase(const fs::path& dir_path, const fs::path& file_path, bool mock)
-    : WalletDatabase(), m_mock(mock), m_dir_path(dir_path.string()), m_file_path(file_path.string())
-=======
-Mutex SQLiteDatabase::g_sqlite_mutex;
-int SQLiteDatabase::g_sqlite_count = 0;
-
-SQLiteDatabase::SQLiteDatabase(const fs::path& dir_path, const fs::path& file_path, const DatabaseOptions& options, bool mock)
-    : WalletDatabase(), m_mock(mock), m_dir_path(fs::PathToString(dir_path)), m_file_path(fs::PathToString(file_path)), m_use_unsafe_sync(options.use_unsafe_sync)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     {
         LOCK(g_sqlite_mutex);
@@ -175,11 +147,6 @@ void SQLiteBatch::SetupSQLStatements()
         {&m_insert_stmt, "INSERT INTO main VALUES(?, ?)"},
         {&m_overwrite_stmt, "INSERT or REPLACE into main values(?, ?)"},
         {&m_delete_stmt, "DELETE FROM main WHERE key = ?"},
-<<<<<<< HEAD
-        {&m_cursor_stmt, "SELECT key, value FROM main"},
-=======
-        {&m_delete_prefix_stmt, "DELETE FROM main WHERE instr(key, ?) = 1"},
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     };
 
     for (const auto& [stmt_prepared, stmt_text] : statements) {
@@ -286,18 +253,12 @@ void SQLiteDatabase::Open()
 
     if (m_db == nullptr) {
         if (!m_mock) {
-<<<<<<< HEAD
-            TryCreateDirectories(m_dir_path);
-=======
             TryCreateDirectories(fs::PathFromString(m_dir_path));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
         int ret = sqlite3_open_v2(m_file_path.c_str(), &m_db, flags, nullptr);
         if (ret != SQLITE_OK) {
             throw std::runtime_error(strprintf("SQLiteDatabase: Failed to open database: %s\n", sqlite3_errstr(ret)));
         }
-<<<<<<< HEAD
-=======
         ret = sqlite3_extended_result_codes(m_db, 1);
         if (ret != SQLITE_OK) {
             throw std::runtime_error(strprintf("SQLiteDatabase: Failed to enable extended result codes: %s\n", sqlite3_errstr(ret)));
@@ -309,7 +270,6 @@ void SQLiteDatabase::Open()
                LogPrintf("Failed to enable SQL tracing for %s\n", Filename());
            }
         }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     if (sqlite3_db_readonly(m_db, "main") != 0) {
@@ -322,11 +282,7 @@ void SQLiteDatabase::Open()
     // Now begin a transaction to acquire the exclusive lock. This lock won't be released until we close because of the exclusive locking mode.
     int ret = sqlite3_exec(m_db, "BEGIN EXCLUSIVE TRANSACTION", nullptr, nullptr, nullptr);
     if (ret != SQLITE_OK) {
-<<<<<<< HEAD
         throw std::runtime_error("SQLiteDatabase: Unable to obtain an exclusive lock on the database, is it being used by another instance of DigiByte Core?\n");
-=======
-        throw std::runtime_error("SQLiteDatabase: Unable to obtain an exclusive lock on the database, is it being used by another instance of " PACKAGE_NAME "?\n");
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     ret = sqlite3_exec(m_db, "COMMIT", nullptr, nullptr, nullptr);
     if (ret != SQLITE_OK) {
@@ -374,11 +330,7 @@ void SQLiteDatabase::Open()
         }
 
         // Set the application id
-<<<<<<< HEAD
-        uint32_t app_id = ReadBE32(Params().MessageStart());
-=======
         uint32_t app_id = ReadBE32(Params().MessageStart().data());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         SetPragma(m_db, "application_id", strprintf("%d", static_cast<int32_t>(app_id)),
                   "Failed to set the application id");
 
@@ -490,19 +442,8 @@ bool SQLiteBatch::ReadKey(DataStream&& key, DataStream& value)
     assert(m_read_stmt);
 
     // Bind: leftmost parameter in statement is index 1
-<<<<<<< HEAD
-    int res = sqlite3_bind_blob(m_read_stmt, 1, key.data(), key.size(), SQLITE_STATIC);
-    if (res != SQLITE_OK) {
-        LogPrintf("%s: Unable to bind statement: %s\n", __func__, sqlite3_errstr(res));
-        sqlite3_clear_bindings(m_read_stmt);
-        sqlite3_reset(m_read_stmt);
-        return false;
-    }
-    res = sqlite3_step(m_read_stmt);
-=======
     if (!BindBlobToStatement(m_read_stmt, 1, key, "key")) return false;
     int res = sqlite3_step(m_read_stmt);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (res != SQLITE_ROW) {
         if (res != SQLITE_DONE) {
             // SQLITE_DONE means "not found", don't log an error in that case.
@@ -513,25 +454,15 @@ bool SQLiteBatch::ReadKey(DataStream&& key, DataStream& value)
         return false;
     }
     // Leftmost column in result is index 0
-<<<<<<< HEAD
-    const char* data = reinterpret_cast<const char*>(sqlite3_column_blob(m_read_stmt, 0));
-    int data_size = sqlite3_column_bytes(m_read_stmt, 0);
-    value.write(data, data_size);
-=======
     value.clear();
     value.write(SpanFromBlob(m_read_stmt, 0));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     sqlite3_clear_bindings(m_read_stmt);
     sqlite3_reset(m_read_stmt);
     return true;
 }
 
-<<<<<<< HEAD
-bool SQLiteBatch::WriteKey(CDataStream&& key, CDataStream&& value, bool overwrite)
-=======
 bool SQLiteBatch::WriteKey(DataStream&& key, DataStream&& value, bool overwrite)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     if (!m_database.m_db) return false;
     assert(m_insert_stmt && m_overwrite_stmt);
@@ -545,31 +476,11 @@ bool SQLiteBatch::WriteKey(DataStream&& key, DataStream&& value, bool overwrite)
 
     // Bind: leftmost parameter in statement is index 1
     // Insert index 1 is key, 2 is value
-<<<<<<< HEAD
-    int res = sqlite3_bind_blob(stmt, 1, key.data(), key.size(), SQLITE_STATIC);
-    if (res != SQLITE_OK) {
-        LogPrintf("%s: Unable to bind key to statement: %s\n", __func__, sqlite3_errstr(res));
-        sqlite3_clear_bindings(stmt);
-        sqlite3_reset(stmt);
-        return false;
-    }
-    res = sqlite3_bind_blob(stmt, 2, value.data(), value.size(), SQLITE_STATIC);
-    if (res != SQLITE_OK) {
-        LogPrintf("%s: Unable to bind value to statement: %s\n", __func__, sqlite3_errstr(res));
-        sqlite3_clear_bindings(stmt);
-        sqlite3_reset(stmt);
-        return false;
-    }
-
-    // Execute
-    res = sqlite3_step(stmt);
-=======
     if (!BindBlobToStatement(stmt, 1, key, "key")) return false;
     if (!BindBlobToStatement(stmt, 2, value, "value")) return false;
 
     // Execute
     int res = sqlite3_step(stmt);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     sqlite3_clear_bindings(stmt);
     sqlite3_reset(stmt);
     if (res != SQLITE_DONE) {
@@ -578,26 +489,6 @@ bool SQLiteBatch::WriteKey(DataStream&& key, DataStream&& value, bool overwrite)
     return res == SQLITE_DONE;
 }
 
-<<<<<<< HEAD
-bool SQLiteBatch::EraseKey(CDataStream&& key)
-{
-    if (!m_database.m_db) return false;
-    assert(m_delete_stmt);
-
-    // Bind: leftmost parameter in statement is index 1
-    int res = sqlite3_bind_blob(m_delete_stmt, 1, key.data(), key.size(), SQLITE_STATIC);
-    if (res != SQLITE_OK) {
-        LogPrintf("%s: Unable to bind statement: %s\n", __func__, sqlite3_errstr(res));
-        sqlite3_clear_bindings(m_delete_stmt);
-        sqlite3_reset(m_delete_stmt);
-        return false;
-    }
-
-    // Execute
-    res = sqlite3_step(m_delete_stmt);
-    sqlite3_clear_bindings(m_delete_stmt);
-    sqlite3_reset(m_delete_stmt);
-=======
 bool SQLiteBatch::ExecStatement(sqlite3_stmt* stmt, Span<const std::byte> blob)
 {
     if (!m_database.m_db) return false;
@@ -609,17 +500,13 @@ bool SQLiteBatch::ExecStatement(sqlite3_stmt* stmt, Span<const std::byte> blob)
     // Execute
     int res = sqlite3_step(stmt);
     sqlite3_clear_bindings(stmt);
-    sqlite3_reset(stmt);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+    sqlite3_reset(stmt)
     if (res != SQLITE_DONE) {
         LogPrintf("%s: Unable to execute statement: %s\n", __func__, sqlite3_errstr(res));
     }
     return res == SQLITE_DONE;
 }
 
-<<<<<<< HEAD
-bool SQLiteBatch::HasKey(CDataStream&& key)
-=======
 bool SQLiteBatch::EraseKey(DataStream&& key)
 {
     return ExecStatement(m_delete_stmt, key);
@@ -631,67 +518,13 @@ bool SQLiteBatch::ErasePrefix(Span<const std::byte> prefix)
 }
 
 bool SQLiteBatch::HasKey(DataStream&& key)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     if (!m_database.m_db) return false;
     assert(m_read_stmt);
 
     // Bind: leftmost parameter in statement is index 1
-<<<<<<< HEAD
-    bool ret = false;
-    int res = sqlite3_bind_blob(m_read_stmt, 1, key.data(), key.size(), SQLITE_STATIC);
-    if (res == SQLITE_OK) {
-        res = sqlite3_step(m_read_stmt);
-        if (res == SQLITE_ROW) {
-            ret = true;
-        }
-    }
-
-    sqlite3_clear_bindings(m_read_stmt);
-    sqlite3_reset(m_read_stmt);
-    return ret;
-}
-
-bool SQLiteBatch::StartCursor()
-{
-    assert(!m_cursor_init);
-    if (!m_database.m_db) return false;
-    m_cursor_init = true;
-    return true;
-}
-
-bool SQLiteBatch::ReadAtCursor(CDataStream& key, CDataStream& value, bool& complete)
-{
-    complete = false;
-
-    if (!m_cursor_init) return false;
-
-    int res = sqlite3_step(m_cursor_stmt);
-    if (res == SQLITE_DONE) {
-        complete = true;
-        return true;
-    }
-    if (res != SQLITE_ROW) {
-        LogPrintf("SQLiteBatch::ReadAtCursor: Unable to execute cursor step: %s\n", sqlite3_errstr(res));
-        return false;
-    }
-
-    // Leftmost column in result is index 0
-    const char* key_data = reinterpret_cast<const char*>(sqlite3_column_blob(m_cursor_stmt, 0));
-    int key_data_size = sqlite3_column_bytes(m_cursor_stmt, 0);
-    key.write(key_data, key_data_size);
-    const char* value_data = reinterpret_cast<const char*>(sqlite3_column_blob(m_cursor_stmt, 1));
-    int value_data_size = sqlite3_column_bytes(m_cursor_stmt, 1);
-    value.write(value_data, value_data_size);
-    return true;
-}
-
-void SQLiteBatch::CloseCursor()
-{
-    sqlite3_reset(m_cursor_stmt);
-    m_cursor_init = false;
-=======
     if (!BindBlobToStatement(m_read_stmt, 1, key, "key")) return false;
+
     int res = sqlite3_step(m_read_stmt);
     sqlite3_clear_bindings(m_read_stmt);
     sqlite3_reset(m_read_stmt);
@@ -784,7 +617,6 @@ std::unique_ptr<DatabaseCursor> SQLiteBatch::GetNewPrefixCursor(Span<const std::
     }
 
     return cursor;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 bool SQLiteBatch::TxnBegin()
@@ -821,11 +653,7 @@ std::unique_ptr<SQLiteDatabase> MakeSQLiteDatabase(const fs::path& path, const D
 {
     try {
         fs::path data_file = SQLiteDataFile(path);
-<<<<<<< HEAD
-        auto db = std::make_unique<SQLiteDatabase>(data_file.parent_path(), data_file);
-=======
         auto db = std::make_unique<SQLiteDatabase>(data_file.parent_path(), data_file, options);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         if (options.verify && !db->Verify(error)) {
             status = DatabaseStatus::FAILED_VERIFY;
             return nullptr;
@@ -843,7 +671,4 @@ std::string SQLiteDatabaseVersion()
 {
     return std::string(sqlite3_libversion());
 }
-<<<<<<< HEAD
-=======
 } // namespace wallet
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion

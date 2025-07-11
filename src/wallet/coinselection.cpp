@@ -1,21 +1,9 @@
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
 // Copyright (c) 2017-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <wallet/coinselection.h>
 
-<<<<<<< HEAD
-#include <policy/feerate.h>
-#include <util/system.h>
-#include <util/moneystr.h>
-
-#include <optional>
-=======
 #include <common/system.h>
 #include <consensus/amount.h>
 #include <consensus/consensus.h>
@@ -36,7 +24,6 @@ static util::Result<SelectionResult> ErrorMaxWeightExceeded()
     return util::Error{_("The inputs size exceeds the maximum weight. "
                          "Please try sending a smaller amount or manually consolidating your wallet's UTXOs")};
 }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 // Descending order comparator
 struct {
@@ -81,54 +68,29 @@ struct {
  *        bound of the range.
  * @param const CAmount& cost_of_change This is the cost of creating and spending a change output.
  *        This plus selection_target is the upper bound of the range.
-<<<<<<< HEAD
- * @param std::set<CInputCoin>& out_set -> This is an output parameter for the set of CInputCoins
- *        that have been selected.
- * @param CAmount& value_ret -> This is an output parameter for the total value of the CInputCoins
- *        that were selected.
-=======
  * @returns The result of this coin selection algorithm, or std::nullopt
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
  */
 
 static const size_t TOTAL_TRIES = 100000;
 
-<<<<<<< HEAD
-bool SelectCoinsBnB(std::vector<OutputGroup>& utxo_pool, const CAmount& selection_target, const CAmount& cost_of_change, std::set<CInputCoin>& out_set, CAmount& value_ret)
-=======
 util::Result<SelectionResult> SelectCoinsBnB(std::vector<OutputGroup>& utxo_pool, const CAmount& selection_target, const CAmount& cost_of_change,
                                              int max_weight)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     SelectionResult result(selection_target, SelectionAlgorithm::BNB);
     CAmount curr_value = 0;
-<<<<<<< HEAD
-
-    std::vector<bool> curr_selection; // select the utxo at this index
-    curr_selection.reserve(utxo_pool.size());
-=======
     std::vector<size_t> curr_selection; // selected utxo indexes
     int curr_selection_weight = 0; // sum of selected utxo weight
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // Calculate curr_available_value
     CAmount curr_available_value = 0;
     for (const OutputGroup& utxo : utxo_pool) {
-<<<<<<< HEAD
-        // Assert that this utxo is not negative. It should never be negative, effective value calculation should have removed it
-=======
         // Assert that this utxo is not negative. It should never be negative,
         // effective value calculation should have removed it
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         assert(utxo.GetSelectionAmount() > 0);
         curr_available_value += utxo.GetSelectionAmount();
     }
     if (curr_available_value < selection_target) {
-<<<<<<< HEAD
-        return false;
-=======
         return util::Error();
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     // Sort the utxo_pool
@@ -145,12 +107,6 @@ util::Result<SelectionResult> SelectCoinsBnB(std::vector<OutputGroup>& utxo_pool
     for (size_t curr_try = 0, utxo_pool_index = 0; curr_try < TOTAL_TRIES; ++curr_try, ++utxo_pool_index) {
         // Conditions for starting a backtrack
         bool backtrack = false;
-<<<<<<< HEAD
-        if (curr_value + curr_available_value < selection_target ||                // Cannot possibly reach target with the amount remaining in the curr_available_value.
-            curr_value > selection_target + cost_of_change ||    // Selected value is out of range, go back and try other branch
-            (curr_waste > best_waste && (utxo_pool.at(0).fee - utxo_pool.at(0).long_term_fee) > 0)) { // Don't select things which we know will be more wasteful if the waste is increasing
-            backtrack = true;
-=======
         if (curr_value + curr_available_value < selection_target || // Cannot possibly reach target with the amount remaining in the curr_available_value.
             curr_value > selection_target + cost_of_change || // Selected value is out of range, go back and try other branch
             (curr_waste > best_waste && is_feerate_high)) { // Don't select things which we know will be more wasteful if the waste is increasing
@@ -158,7 +114,6 @@ util::Result<SelectionResult> SelectCoinsBnB(std::vector<OutputGroup>& utxo_pool
         } else if (curr_selection_weight > max_weight) { // Exceeding weight for standard tx, cannot find more solutions by adding more inputs
             max_tx_weight_exceeded = true; // at least one selection attempt exceeded the max weight
             backtrack = true;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         } else if (curr_value >= selection_target) {       // Selected value is within range
             curr_waste += (curr_value - selection_target); // This is the excess value which is added to the waste for the below comparison
             // Adding another UTXO after this check could bring the waste down if the long term fee is higher than the current fee.
@@ -176,18 +131,7 @@ util::Result<SelectionResult> SelectCoinsBnB(std::vector<OutputGroup>& utxo_pool
             backtrack = true;
         }
 
-<<<<<<< HEAD
-        // Backtracking, moving backwards
-        if (backtrack) {
-            // Walk backwards to find the last included UTXO that still needs to have its omission branch traversed.
-            while (!curr_selection.empty() && !curr_selection.back()) {
-                curr_selection.pop_back();
-                curr_available_value += utxo_pool.at(curr_selection.size()).GetSelectionAmount();
-            }
-
-=======
         if (backtrack) { // Backtracking, moving backwards
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             if (curr_selection.empty()) { // We have walked back to the first utxo and no branch is untraversed. All solutions searched
                 break;
             }
@@ -198,13 +142,8 @@ util::Result<SelectionResult> SelectCoinsBnB(std::vector<OutputGroup>& utxo_pool
             }
 
             // Output was included on previous iterations, try excluding now.
-<<<<<<< HEAD
-            curr_selection.back() = false;
-            OutputGroup& utxo = utxo_pool.at(curr_selection.size() - 1);
-=======
             assert(utxo_pool_index == curr_selection.back());
             OutputGroup& utxo = utxo_pool.at(utxo_pool_index);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             curr_value -= utxo.GetSelectionAmount();
             curr_waste -= utxo.fee - utxo.long_term_fee;
             curr_selection_weight -= utxo.m_weight;
@@ -215,17 +154,6 @@ util::Result<SelectionResult> SelectCoinsBnB(std::vector<OutputGroup>& utxo_pool
             // Remove this utxo from the curr_available_value utxo amount
             curr_available_value -= utxo.GetSelectionAmount();
 
-<<<<<<< HEAD
-            // Avoid searching a branch if the previous UTXO has the same value and same waste and was excluded. Since the ratio of fee to
-            // long term fee is the same, we only need to check if one of those values match in order to know that the waste is the same.
-            if (!curr_selection.empty() && !curr_selection.back() &&
-                utxo.GetSelectionAmount() == utxo_pool.at(curr_selection.size() - 1).GetSelectionAmount() &&
-                utxo.fee == utxo_pool.at(curr_selection.size() - 1).fee) {
-                curr_selection.push_back(false);
-            } else {
-                // Inclusion branch first (Largest First Exploration)
-                curr_selection.push_back(true);
-=======
             if (curr_selection.empty() ||
                 // The previous index is included and therefore not relevant for exclusion shortcut
                 (utxo_pool_index - 1) == curr_selection.back() ||
@@ -236,7 +164,6 @@ util::Result<SelectionResult> SelectCoinsBnB(std::vector<OutputGroup>& utxo_pool
             {
                 // Inclusion branch first (Largest First Exploration)
                 curr_selection.push_back(utxo_pool_index);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 curr_value += utxo.GetSelectionAmount();
                 curr_waste += utxo.fee - utxo.long_term_fee;
                 curr_selection_weight += utxo.m_weight;
@@ -388,19 +315,6 @@ util::Result<SelectionResult> KnapsackSolver(std::vector<OutputGroup>& groups, c
 
     // List of values less than target
     std::optional<OutputGroup> lowest_larger;
-<<<<<<< HEAD
-    std::vector<OutputGroup> applicable_groups;
-    CAmount nTotalLower = 0;
-
-    Shuffle(groups.begin(), groups.end(), FastRandomContext());
-
-    for (const OutputGroup& group : groups) {
-        if (group.GetSelectionAmount() == nTargetValue) {
-            util::insert(setCoinsRet, group.m_outputs);
-            nValueRet += group.m_value;
-            return true;
-        } else if (group.GetSelectionAmount() < nTargetValue + MIN_CHANGE) {
-=======
     // Groups with selection amount smaller than the target and any change we might produce.
     // Don't include groups larger than this, because they will only cause us to overshoot.
     std::vector<OutputGroup> applicable_groups;
@@ -413,7 +327,6 @@ util::Result<SelectionResult> KnapsackSolver(std::vector<OutputGroup>& groups, c
             result.AddInput(group);
             return result;
         } else if (group.GetSelectionAmount() < nTargetValue + change_target) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             applicable_groups.push_back(group);
             nTotalLower += group.GetSelectionAmount();
         } else if (!lowest_larger || group.GetSelectionAmount() < lowest_larger->GetSelectionAmount()) {
@@ -447,14 +360,8 @@ util::Result<SelectionResult> KnapsackSolver(std::vector<OutputGroup>& groups, c
     // If we have a bigger coin and (either the stochastic approximation didn't find a good solution,
     //                                   or the next bigger coin is closer), return the bigger coin
     if (lowest_larger &&
-<<<<<<< HEAD
-        ((nBest != nTargetValue && nBest < nTargetValue + MIN_CHANGE) || lowest_larger->GetSelectionAmount() <= nBest)) {
-        util::insert(setCoinsRet, lowest_larger->m_outputs);
-        nValueRet += lowest_larger->m_value;
-=======
         ((nBest != nTargetValue && nBest < nTargetValue + change_target) || lowest_larger->GetSelectionAmount() <= nBest)) {
         result.AddInput(*lowest_larger);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     } else {
         for (unsigned int i = 0; i < applicable_groups.size(); i++) {
             if (vfBest[i]) {
@@ -492,31 +399,6 @@ util::Result<SelectionResult> KnapsackSolver(std::vector<OutputGroup>& groups, c
 
  ******************************************************************************/
 
-<<<<<<< HEAD
-void OutputGroup::Insert(const CInputCoin& output, int depth, bool from_me, size_t ancestors, size_t descendants, bool positive_only) {
-    // Compute the effective value first
-    const CAmount coin_fee = output.m_input_bytes < 0 ? 0 : m_effective_feerate.GetFee(output.m_input_bytes);
-    const CAmount ev = output.txout.nValue - coin_fee;
-
-    // Filter for positive only here before adding the coin
-    if (positive_only && ev <= 0) return;
-
-    m_outputs.push_back(output);
-    CInputCoin& coin = m_outputs.back();
-
-    coin.m_fee = coin_fee;
-    fee += coin.m_fee;
-
-    coin.m_long_term_fee = coin.m_input_bytes < 0 ? 0 : m_long_term_feerate.GetFee(coin.m_input_bytes);
-    long_term_fee += coin.m_long_term_fee;
-
-    coin.effective_value = ev;
-    effective_value += coin.effective_value;
-
-    m_from_me &= from_me;
-    m_value += output.txout.nValue;
-    m_depth = std::min(m_depth, depth);
-=======
 void OutputGroup::Insert(const std::shared_ptr<COutput>& output, size_t ancestors, size_t descendants) {
     m_outputs.push_back(output);
     auto& coin = *m_outputs.back();
@@ -531,7 +413,6 @@ void OutputGroup::Insert(const std::shared_ptr<COutput>& output, size_t ancestor
     m_from_me &= coin.from_me;
     m_value += coin.txout.nValue;
     m_depth = std::min(m_depth, coin.depth);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     // ancestors here express the number of ancestors the new coin will end up having, which is
     // the sum, rather than the max; this will overestimate in the cases where multiple inputs
     // have common ancestors
@@ -539,13 +420,10 @@ void OutputGroup::Insert(const std::shared_ptr<COutput>& output, size_t ancestor
     // descendants is the count as seen from the top ancestor, not the descendants as seen from the
     // coin itself; thus, this value is counted as the max, not the sum
     m_descendants = std::max(m_descendants, descendants);
-<<<<<<< HEAD
-=======
 
     if (output->input_bytes > 0) {
         m_weight += output->input_bytes * WITNESS_SCALE_FACTOR;
     }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 bool OutputGroup::EligibleForSpending(const CoinEligibilityFilter& eligibility_filter) const
@@ -559,8 +437,6 @@ CAmount OutputGroup::GetSelectionAmount() const
 {
     return m_subtract_fee_outputs ? m_value : effective_value;
 }
-<<<<<<< HEAD
-=======
 
 void OutputGroupTypeMap::Push(const OutputGroup& group, OutputType type, bool insert_positive, bool insert_mixed)
 {
@@ -755,4 +631,3 @@ CAmount SelectionResult::GetChange(const CAmount min_viable_change, const CAmoun
 }
 
 } // namespace wallet
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion

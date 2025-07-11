@@ -365,7 +365,7 @@ public:
     CBlockIndex* GetAncestor(int height);
     const CBlockIndex* GetAncestor(int height) const;
 
-    CBlockIndex() = default;
+    CBlockIndex();
     ~CBlockIndex() = default;
 
 protected:

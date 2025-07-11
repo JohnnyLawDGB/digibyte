@@ -8,6 +8,7 @@
 #include <chainparams.h>
 #include <validation.h>
 #include <tinyformat.h>
+#include <util/chaintype.h>
 #include <util/time.h>
 #include <logging.h>
 
@@ -58,11 +59,8 @@ std::string CBlockIndex::ToString() const
                      pprev, nHeight, hashMerkleRoot.ToString(), GetBlockHash().ToString());
 }
 
-void CChain::SetTip(CBlockIndex* pindex) {
-    if (pindex == nullptr) {
-        vChain.clear();
-        return;
-    }
+void CChain::SetTip(CBlockIndex& block) {
+    CBlockIndex* pindex = &block;
     vChain.resize(pindex->nHeight + 1);
     while (pindex && vChain[pindex->nHeight] != pindex) {
         vChain[pindex->nHeight] = pindex;
@@ -125,7 +123,7 @@ CBlockIndex* CChain::FindEarliestAtLeast(int64_t nTime, int height) const
 int CBlockIndex::GetAlgo() const
 {
     // If we’re on mainnet, for historical reasons we force blocks below 145k to scrypt:
-    if (!Params().NetworkIDString().compare("main")) {
+    if (Params().GetChainType() == ChainType::MAIN) {
         if (nHeight < 145000) {
             return ALGO_SCRYPT;
         }

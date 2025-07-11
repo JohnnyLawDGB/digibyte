@@ -26,8 +26,8 @@
 #include <util/translation.h>
 
 CBanEntry::CBanEntry(const UniValue& json)
-    : nVersion(json["version"].get_int()), nCreateTime(json["ban_created"].get_int64()),
-      nBanUntil(json["banned_until"].get_int64())
+    : nVersion(json["version"].getInt<int>()), nCreateTime(json["ban_created"].getInt<int64_t>()),
+      nBanUntil(json["banned_until"].getInt<int64_t>())
 {
 }
 
@@ -109,13 +109,13 @@ bool SerializeFileDB(const std::string& prefix, const fs::path& path, const Data
 {
     // Generate random temporary filename
     uint16_t randv = 0;
-    GetRandBytes((unsigned char*)&randv, sizeof(randv));
+    GetRandBytes({(unsigned char*)&randv, sizeof(randv)});
     std::string tmpfn = strprintf("%s.%04x", prefix, randv);
 
     // open temp output file, and associate with CAutoFile
-    fs::path pathTmp = gArgs.GetDataDirNet() / tmpfn;
+    fs::path pathTmp = gArgs.GetDataDirNet() / fs::u8path(tmpfn);
     FILE *file = fsbridge::fopen(pathTmp, "wb");
-    CAutoFile fileout(file, SER_DISK, version);
+    CAutoFile fileout(file, version);
     if (fileout.IsNull()) {
         fileout.fclose();
         remove(pathTmp);
@@ -148,7 +148,7 @@ template <typename Stream, typename Data>
 bool DeserializeDB(Stream& stream, Data& data, bool fCheckSum = true)
 {
     try {
-        CHashVerifier<Stream> verifier(&stream);
+        HashVerifier<Stream> verifier(stream);
         // de-serialize file header (network specific magic number) and ..
         unsigned char pchMsgTmp[4];
         verifier >> pchMsgTmp;
@@ -180,7 +180,7 @@ bool DeserializeFileDB(const fs::path& path, Data& data, int version)
 {
     // open input file, and associate with CAutoFile
     FILE* file = fsbridge::fopen(path, "rb");
-    CAutoFile filein(file, SER_DISK, version);
+    CAutoFile filein(file, version);
     if (filein.IsNull()) {
         LogPrintf("Missing or invalid file %s\n", path.string());
         return false;

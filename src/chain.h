@@ -212,10 +212,6 @@ public:
     //! DigiByte: Track last block per algorithm for multi-algo mining
     CBlockIndex *lastAlgoBlocks[NUM_ALGOS_IMPL];
 
-    /**
-     * Default constructor (no header):
-     */
-    CBlockIndex();
 
     /**
      * Full constructor that copies fields from a block header.

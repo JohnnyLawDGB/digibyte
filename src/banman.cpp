@@ -34,7 +34,8 @@ void BanMan::LoadBanlist()
     if (m_client_interface) m_client_interface->InitMessage(_("Loading banlist…").translated);
 
     const auto start{SteadyClock::now()};
-    if (m_ban_db.Read(m_banned)) {
+    bool dirty = false;
+    if (m_ban_db.Read(m_banned, dirty)) {
         SweepBanned(); // sweep out unused entries
 
         LogPrint(BCLog::NET, "Loaded %d banned node addresses/subnets  %dms\n", m_banned.size(),

@@ -1,7 +1,7 @@
 
 // Copyright (c) 2012-2019 The Bitcoin Core developers
 // Copyright (c) 2014-2019 The Bitcoin Core developers
-Copyright (c) 2014-2019 The DigiByte Core developers
+// Copyright (c) 2014-2019 The DigiByte Core developers
 
 // Copyright (c) 2012-2022 The Bitcoin Core developers
 
@@ -158,9 +158,6 @@ static leveldb::Options GetOptions(size_t nCacheSize)
 }
 
 
-CDBWrapper::CDBWrapper(const fs::path& path, size_t nCacheSize, bool fMemory, bool fWipe, bool obfuscate)
-    : m_name{path.stem().string()}
-
 struct CDBBatch::WriteBatchImpl {
     leveldb::WriteBatch batch;
 };
@@ -172,7 +169,6 @@ CDBBatch::CDBBatch(const CDBWrapper& _parent)
 CDBBatch::~CDBBatch() = default;
 
 void CDBBatch::Clear()
-
 {
     m_impl_batch->batch.Clear();
     size_estimate = 0;
@@ -342,10 +338,6 @@ const unsigned int CDBWrapper::OBFUSCATE_KEY_NUM_BYTES = 8;
 std::vector<unsigned char> CDBWrapper::CreateObfuscateKey() const
 {
     std::vector<uint8_t> ret(OBFUSCATE_KEY_NUM_BYTES);
-
-    GetRandBytes(ret.data(), OBFUSCATE_KEY_NUM_BYTES);
-    return ret;
-
     GetRandBytes(ret);
     return ret;
 }

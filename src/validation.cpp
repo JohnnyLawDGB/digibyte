@@ -779,7 +779,6 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
         }
     }
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     m_view.SetBackend(m_viewmempool);
 
     const CCoinsViewCache& coins_cache = m_active_chainstate.CoinsTip();
@@ -832,17 +831,7 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
     // Check for non-standard pay-to-script-hash in inputs
     const bool taproot_active = DeploymentActiveAfter(m_active_chainstate.m_chain.Tip(), args.m_chainparams.GetConsensus(), Consensus::DEPLOYMENT_TAPROOT);
     if (fRequireStandard && !AreInputsStandard(tx, m_view, taproot_active)) {
-=======
-    assert(m_active_chainstate.m_blockman.LookupBlockIndex(m_view.GetBestBlock()) == m_active_chainstate.m_chain.Tip());
-
-    // Only accept BIP68 sequence locked transactions that can be mined in the next
-    // block; we don't want our mempool filled up with transactions that can't
-    // be mined yet.
-    // Pass in m_view which has all of the relevant inputs cached. Note that, since m_view's
-    // backend was removed, it no longer pulls coins from the mempool.
-    const std::optional<LockPoints> lock_points{CalculateLockPointsAtTip(m_active_chainstate.m_chain.Tip(), m_view, tx)};
-    if (!lock_points.has_value() || !CheckSequenceLocksAtTip(m_active_chainstate.m_chain.Tip(), *lock_points)) {
-        return state.Invalid(TxValidationResult::TX_PREMATURE_SPEND, "non-BIP68-final");
+        return state.Invalid(TxValidationResult::TX_INPUTS_NOT_STANDARD, "bad-txns-nonstandard-inputs");
     }
 
     // The mempool holds txs for the next block, so pass height+1 to CheckTxInputs
@@ -1243,15 +1232,7 @@ PackageMempoolAcceptResult MemPoolAccept::AcceptMultipleTransactions(const std::
 
 } // anon namespace
 
-/** (try to) add transaction to memory pool with a specified acceptance time **/
-static MempoolAcceptResult AcceptToMemoryPoolWithTime(const CChainParams& chainparams, CTxMemPool& pool,
-                                                      CChainState& active_chainstate,
-                                                      const CTransactionRef &tx, int64_t nAcceptTime,
-                                                      bool bypass_limits, bool test_accept)
-                                                      EXCLUSIVE_LOCKS_REQUIRED(cs_main)
-=======
 bool MemPoolAccept::ConsensusScriptChecks(const ATMPArgs& args, Workspace& ws)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     AssertLockHeld(cs_main);
     AssertLockHeld(m_pool.cs);
@@ -1962,21 +1943,9 @@ public:
 
 static ThresholdConditionCache warningcache[VERSIONBITS_NUM_BITS] GUARDED_BY(cs_main);
 
-static unsigned int GetBlockScriptFlags(const CBlockIndex* pindex, const Consensus::Params& consensusparams)
-{
-    unsigned int flags = SCRIPT_VERIFY_NONE;
-=======
-        return pindex->nHeight >= params.MinBIP9WarningHeight &&
-               ((pindex->nVersion & VERSIONBITS_TOP_MASK) == VERSIONBITS_TOP_BITS) &&
-               ((pindex->nVersion >> m_bit) & 1) != 0 &&
-               ((m_chainman.m_versionbitscache.ComputeBlockVersion(pindex->pprev, params) >> m_bit) & 1) == 0;
-    }
-};
-
 static unsigned int GetBlockScriptFlags(const CBlockIndex& block_index, const ChainstateManager& chainman)
 {
     const Consensus::Params& consensusparams = chainman.GetConsensus();
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // BIP16 didn't become active until Apr 1 2012 (on mainnet, and
     // retroactively applied to testnet)
@@ -2406,7 +2375,6 @@ bool Chainstate::FlushStateToDisk(
 {
     LOCK(cs_main);
     assert(this->CanFlushToDisk());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     std::set<int> setFilesToPrune;
     bool full_flush_completed = false;
 
@@ -2669,6 +2637,7 @@ void Chainstate::UpdateTip(const CBlockIndex* pindexNew)
         }
     }
 
+    }
     LogPrintf("%s: new best=%s height=%d version=0x%08x algo=%d (%s) log2_work=%.8g tx=%lu date='%s' progress=%f cache=%.1fMiB(%utxo)%s\n", __func__, /* Continued */
       pindexNew->GetBlockHash().ToString(), pindexNew->nHeight, pindexNew->nVersion,
       pindexNew->GetAlgo(), GetAlgoName(pindexNew->GetAlgo()),
@@ -2676,10 +2645,6 @@ void Chainstate::UpdateTip(const CBlockIndex* pindexNew)
       FormatISO8601DateTime(pindexNew->GetBlockTime()),
       GuessVerificationProgress(m_params.TxData(), pindexNew), this->CoinsTip().DynamicMemoryUsage() * (1.0 / (1<<20)), this->CoinsTip().GetCacheSize(),
       !warning_messages.empty() ? strprintf(" warning='%s'", warning_messages.original) : "");
-=======
-    }
-    UpdateTipLog(coins_tip, pindexNew, params, __func__, "", warning_messages.original);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 /** Disconnect m_chain's tip.
@@ -2984,7 +2949,6 @@ bool Chainstate::ActivateBestChainStep(BlockValidationState& state, CBlockIndex*
     AssertLockHeld(cs_main);
     if (m_mempool) AssertLockHeld(m_mempool->cs);
     if (m_stempool) AssertLockHeld(m_stempool->cs);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     const CBlockIndex* pindexOldTip = m_chain.Tip();
     const CBlockIndex* pindexFork = m_chain.FindFork(pindexMostWork);
@@ -3553,7 +3517,6 @@ void ChainstateManager::ReceivedBlockTransactions(const CBlock& block, CBlockInd
             for (Chainstate *c : GetAll()) {
                 c->TryAddBlockIndexCandidate(pindex);
             }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             std::pair<std::multimap<CBlockIndex*, CBlockIndex*>::iterator, std::multimap<CBlockIndex*, CBlockIndex*>::iterator> range = m_blockman.m_blocks_unlinked.equal_range(pindex);
             while (range.first != range.second) {
                 std::multimap<CBlockIndex*, CBlockIndex*>::iterator it = range.first;
@@ -4611,7 +4574,6 @@ bool ChainstateManager::ActivateSnapshot(
     uint64_t coins_left = metadata.m_coins_count;
 
     LogPrintf("[snapshot] loading coins from snapshot %s\n", base_blockhash.ToString());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     int64_t coins_processed{0};
 
     while (coins_left > 0) {

@@ -1,24 +1,14 @@
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-// Distributed under the MIT/X11 software license, see the accompanying
-// Copyright (c) 2015-2020 The DigiByte Core developers
-=======
+// Copyright (c) 2009-2022 The Bitcoin Core developers
 // Copyright (c) 2015-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <chain.h>
 #include <chainparams.h>
 #include <pow.h>
-<<<<<<< HEAD
-#include <test/util/setup_common.h>
-=======
 #include <test/util/random.h>
 #include <test/util/setup_common.h>
 #include <util/chaintype.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 #include <boost/test/unit_test.hpp>
 
@@ -27,11 +17,7 @@ BOOST_FIXTURE_TEST_SUITE(pow_tests, BasicTestingSetup)
 /* Test calculation of next difficulty target with no constraints applying */
 BOOST_AUTO_TEST_CASE(get_next_work)
 {
-<<<<<<< HEAD
-    const auto chainParams = CreateChainParams(*m_node.args, CBaseChainParams::MAIN);
-=======
     const auto chainParams = CreateChainParams(*m_node.args, ChainType::MAIN);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     int64_t nLastRetargetTime = 1261130161; // Block #30240
     CBlockIndex pindexLast;
     pindexLast.nHeight = 32255;
@@ -50,33 +36,21 @@ BOOST_AUTO_TEST_CASE(get_next_work)
 /* Test the constraint on the upper bound for next work */
 BOOST_AUTO_TEST_CASE(get_next_work_pow_limit)
 {
-<<<<<<< HEAD
-    const auto chainParams = CreateChainParams(*m_node.args, CBaseChainParams::MAIN);
-=======
     const auto chainParams = CreateChainParams(*m_node.args, ChainType::MAIN);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     int64_t nLastRetargetTime = 1231006505; // Block #0
     CBlockIndex pindexLast;
     pindexLast.nHeight = 2015;
     pindexLast.nTime = 1233061996;  // Block #2015
     pindexLast.nBits = 0x1d00ffff;
-<<<<<<< HEAD
-    BOOST_CHECK_EQUAL(CalculateNextWorkRequired(&pindexLast, nLastRetargetTime, chainParams->GetConsensus()), 0x1D01B304U);
-=======
-    unsigned int expected_nbits = 0x1d00ffffU;
+    unsigned int expected_nbits = 0x1D01B304U;
     BOOST_CHECK_EQUAL(CalculateNextWorkRequired(&pindexLast, nLastRetargetTime, chainParams->GetConsensus()), expected_nbits);
     BOOST_CHECK(PermittedDifficultyTransition(chainParams->GetConsensus(), pindexLast.nHeight+1, pindexLast.nBits, expected_nbits));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 /* Test the constraint on the lower bound for actual time taken */
 BOOST_AUTO_TEST_CASE(get_next_work_lower_limit_actual)
 {
-<<<<<<< HEAD
-    const auto chainParams = CreateChainParams(*m_node.args, CBaseChainParams::MAIN);
-=======
     const auto chainParams = CreateChainParams(*m_node.args, ChainType::MAIN);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     int64_t nLastRetargetTime = 1279008237; // Block #66528
     CBlockIndex pindexLast;
     pindexLast.nHeight = 68543;
@@ -93,11 +67,7 @@ BOOST_AUTO_TEST_CASE(get_next_work_lower_limit_actual)
 /* Test the constraint on the upper bound for actual time taken */
 BOOST_AUTO_TEST_CASE(get_next_work_upper_limit_actual)
 {
-<<<<<<< HEAD
-    const auto chainParams = CreateChainParams(*m_node.args, CBaseChainParams::MAIN);
-=======
     const auto chainParams = CreateChainParams(*m_node.args, ChainType::MAIN);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     int64_t nLastRetargetTime = 1263163443; // NOTE: Not an actual block time
     CBlockIndex pindexLast;
     pindexLast.nHeight = 46367;
@@ -165,67 +135,10 @@ BOOST_AUTO_TEST_CASE(CheckProofOfWork_test_zero_target)
     BOOST_CHECK(!CheckProofOfWork(hash, nBits, consensus));
 }
 
-BOOST_AUTO_TEST_CASE(CheckProofOfWork_test_negative_target)
-{
-    const auto consensus = CreateChainParams(*m_node.args, CBaseChainParams::MAIN)->GetConsensus();
-    uint256 hash;
-    unsigned int nBits;
-    nBits = UintToArith256(consensus.powLimit).GetCompact(true);
-    hash.SetHex("0x1");
-    BOOST_CHECK(!CheckProofOfWork(hash, nBits, consensus));
-}
-
-BOOST_AUTO_TEST_CASE(CheckProofOfWork_test_overflow_target)
-{
-    const auto consensus = CreateChainParams(*m_node.args, CBaseChainParams::MAIN)->GetConsensus();
-    uint256 hash;
-    unsigned int nBits = ~0x00800000;
-    hash.SetHex("0x1");
-    BOOST_CHECK(!CheckProofOfWork(hash, nBits, consensus));
-}
-
-BOOST_AUTO_TEST_CASE(CheckProofOfWork_test_too_easy_target)
-{
-    const auto consensus = CreateChainParams(*m_node.args, CBaseChainParams::MAIN)->GetConsensus();
-    uint256 hash;
-    unsigned int nBits;
-    arith_uint256 nBits_arith = UintToArith256(consensus.powLimit);
-    nBits_arith *= 2;
-    nBits = nBits_arith.GetCompact();
-    hash.SetHex("0x1");
-    BOOST_CHECK(!CheckProofOfWork(hash, nBits, consensus));
-}
-
-BOOST_AUTO_TEST_CASE(CheckProofOfWork_test_biger_hash_than_target)
-{
-    const auto consensus = CreateChainParams(*m_node.args, CBaseChainParams::MAIN)->GetConsensus();
-    uint256 hash;
-    unsigned int nBits;
-    arith_uint256 hash_arith = UintToArith256(consensus.powLimit);
-    nBits = hash_arith.GetCompact();
-    hash_arith *= 2; // hash > nBits
-    hash = ArithToUint256(hash_arith);
-    BOOST_CHECK(!CheckProofOfWork(hash, nBits, consensus));
-}
-
-BOOST_AUTO_TEST_CASE(CheckProofOfWork_test_zero_target)
-{
-    const auto consensus = CreateChainParams(*m_node.args, CBaseChainParams::MAIN)->GetConsensus();
-    uint256 hash;
-    unsigned int nBits;
-    arith_uint256 hash_arith{0};
-    nBits = hash_arith.GetCompact();
-    hash = ArithToUint256(hash_arith);
-    BOOST_CHECK(!CheckProofOfWork(hash, nBits, consensus));
-}
 
 BOOST_AUTO_TEST_CASE(GetBlockProofEquivalentTime_test)
 {
-<<<<<<< HEAD
-    const auto chainParams = CreateChainParams(*m_node.args, CBaseChainParams::MAIN);
-=======
     const auto chainParams = CreateChainParams(*m_node.args, ChainType::MAIN);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     std::vector<CBlockIndex> blocks(10000);
 
     for (int i = 0; i < 10000; i++) {
@@ -258,53 +171,6 @@ BOOST_AUTO_TEST_CASE(GetBlockProofEquivalentTime_test)
     }
 }
 
-void sanity_check_chainparams(const ArgsManager& args, std::string chainName)
-{
-    const auto chainParams = CreateChainParams(args, chainName);
-    const auto consensus = chainParams->GetConsensus();
-
-    // hash genesis is correct
-    BOOST_CHECK_EQUAL(consensus.hashGenesisBlock, chainParams->GenesisBlock().GetHash());
-
-    // target timespan is an even multiple of spacing
-    BOOST_CHECK_EQUAL(consensus.nPowTargetTimespan % consensus.nPowTargetSpacing, 0);
-
-    // genesis nBits is positive, doesn't overflow and is lower than powLimit
-    arith_uint256 pow_compact;
-    bool neg, over;
-    pow_compact.SetCompact(chainParams->GenesisBlock().nBits, &neg, &over);
-    BOOST_CHECK(!neg && pow_compact != 0);
-    BOOST_CHECK(!over);
-    BOOST_CHECK(UintToArith256(consensus.powLimit) >= pow_compact);
-
-    // check max target * 4*nPowTargetTimespan doesn't overflow -- see pow.cpp:CalculateNextWorkRequired()
-    if (!consensus.fPowNoRetargeting) {
-        arith_uint256 targ_max("0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF");
-        targ_max /= 15 * 4; // Current difficulty adjustment time is 15 seconds (per algo)
-
-        BOOST_CHECK(UintToArith256(consensus.powLimit) < targ_max);
-    }
-}
-
-BOOST_AUTO_TEST_CASE(ChainParams_MAIN_sanity)
-{
-    sanity_check_chainparams(*m_node.args, CBaseChainParams::MAIN);
-}
-
-BOOST_AUTO_TEST_CASE(ChainParams_REGTEST_sanity)
-{
-    sanity_check_chainparams(*m_node.args, CBaseChainParams::REGTEST);
-}
-
-BOOST_AUTO_TEST_CASE(ChainParams_TESTNET_sanity)
-{
-    sanity_check_chainparams(*m_node.args, CBaseChainParams::TESTNET);
-}
-
-BOOST_AUTO_TEST_CASE(ChainParams_SIGNET_sanity)
-{
-    sanity_check_chainparams(*m_node.args, CBaseChainParams::SIGNET);
-}
 
 void sanity_check_chainparams(const ArgsManager& args, ChainType chain_type)
 {
@@ -328,7 +194,7 @@ void sanity_check_chainparams(const ArgsManager& args, ChainType chain_type)
     // check max target * 4*nPowTargetTimespan doesn't overflow -- see pow.cpp:CalculateNextWorkRequired()
     if (!consensus.fPowNoRetargeting) {
         arith_uint256 targ_max("0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF");
-        targ_max /= consensus.nPowTargetTimespan*4;
+        targ_max /= consensus.nPowTargetTimespan*4; // DigiByte: Preserves multi-algo difficulty adjustment
         BOOST_CHECK(UintToArith256(consensus.powLimit) < targ_max);
     }
 }

@@ -1,20 +1,12 @@
-<<<<<<< HEAD
-// Copyright (c) 2014-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
-// Copyright (c) 2014-2021 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// Copyright (c) 2014-2022 The Bitcoin Core developers
+// Copyright (c) 2014-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <crypto/aes.h>
 #include <crypto/chacha20.h>
-<<<<<<< HEAD
 #include <crypto/odocrypt.h>
-#include <crypto/chacha_poly_aead.h>
-=======
 #include <crypto/chacha20poly1305.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <crypto/hkdf_sha256_32.h>
 #include <crypto/hmac_sha256.h>
 #include <crypto/hmac_sha512.h>
@@ -27,10 +19,7 @@
 #include <crypto/muhash.h>
 #include <random.h>
 #include <streams.h>
-<<<<<<< HEAD
-=======
 #include <test/util/random.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <test/util/setup_common.h>
 #include <util/strencodings.h>
 
@@ -143,76 +132,6 @@ static void TestAES256CBC(const std::string &hexkey, const std::string &hexiv, b
     }
 }
 
-<<<<<<< HEAD
-static void TestChaCha20(const std::string &hex_message, const std::string &hexkey, uint64_t nonce, uint64_t seek, const std::string& hexout)
-{
-    std::vector<unsigned char> key = ParseHex(hexkey);
-    std::vector<unsigned char> m = ParseHex(hex_message);
-    ChaCha20 rng(key.data(), key.size());
-    rng.SetIV(nonce);
-    rng.Seek(seek);
-    std::vector<unsigned char> out = ParseHex(hexout);
-    std::vector<unsigned char> outres;
-    outres.resize(out.size());
-    assert(hex_message.empty() || m.size() == out.size());
-
-    // perform the ChaCha20 round(s), if message is provided it will output the encrypted ciphertext otherwise the keystream
-    if (!hex_message.empty()) {
-        rng.Crypt(m.data(), outres.data(), outres.size());
-    } else {
-        rng.Keystream(outres.data(), outres.size());
-    }
-    BOOST_CHECK(out == outres);
-    if (!hex_message.empty()) {
-        // Manually XOR with the keystream and compare the output
-        rng.SetIV(nonce);
-        rng.Seek(seek);
-        std::vector<unsigned char> only_keystream(outres.size());
-        rng.Keystream(only_keystream.data(), only_keystream.size());
-        for (size_t i = 0; i != m.size(); i++) {
-            outres[i] = m[i] ^ only_keystream[i];
-        }
-        BOOST_CHECK(out == outres);
-    }
-}
-
-static void TestPoly1305(const std::string &hexmessage, const std::string &hexkey, const std::string& hextag)
-{
-    std::vector<unsigned char> key = ParseHex(hexkey);
-    std::vector<unsigned char> m = ParseHex(hexmessage);
-    std::vector<unsigned char> tag = ParseHex(hextag);
-    std::vector<unsigned char> tagres;
-    tagres.resize(POLY1305_TAGLEN);
-    poly1305_auth(tagres.data(), m.data(), m.size(), key.data());
-    BOOST_CHECK(tag == tagres);
-}
-
-static void TestHKDF_SHA256_32(const std::string &ikm_hex, const std::string &salt_hex, const std::string &info_hex, const std::string &okm_check_hex) {
-    std::vector<unsigned char> initial_key_material = ParseHex(ikm_hex);
-    std::vector<unsigned char> salt = ParseHex(salt_hex);
-    std::vector<unsigned char> info = ParseHex(info_hex);
-
-
-    // our implementation only supports strings for the "info" and "salt", stringify them
-    std::string salt_stringified(reinterpret_cast<char*>(salt.data()), salt.size());
-    std::string info_stringified(reinterpret_cast<char*>(info.data()), info.size());
-
-    CHKDF_HMAC_SHA256_L32 hkdf32(initial_key_material.data(), initial_key_material.size(), salt_stringified);
-    unsigned char out[32];
-    hkdf32.Expand32(info_stringified, out);
-    BOOST_CHECK(HexStr(out) == okm_check_hex);
-}
-
-static void TestOdo(uint32_t key, const std::string &in, const std::string &hexout)
-{
-    assert(in.length() == OdoCrypt::DIGEST_SIZE);
-    std::vector<unsigned char> out = ParseHex(hexout);
-    std::vector<unsigned char> outres(OdoCrypt::DIGEST_SIZE);
-    OdoCrypt(key).Encrypt(reinterpret_cast<char*>(outres.data()), in.c_str());
-    BOOST_CHECK(out == outres);
-}
-
-=======
 static void TestChaCha20(const std::string &hex_message, const std::string &hexkey, ChaCha20::Nonce96 nonce, uint32_t seek, const std::string& hexout)
 {
     auto key = ParseHex<std::byte>(hexkey);
@@ -432,7 +351,15 @@ static void TestHKDF_SHA256_32(const std::string &ikm_hex, const std::string &sa
     BOOST_CHECK(HexStr(out) == okm_check_hex);
 }
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// DigiByte specific test function for Odocrypt
+static void TestOdo(uint32_t key, const std::string &in, const std::string &hexout)
+{
+    assert(in.length() == OdoCrypt::DIGEST_SIZE);
+    std::vector<unsigned char> out = ParseHex(hexout);
+    std::vector<unsigned char> outres(OdoCrypt::DIGEST_SIZE);
+    OdoCrypt(key).Encrypt(reinterpret_cast<char*>(outres.data()), in.c_str());
+    BOOST_CHECK(out == outres);
+}
 static std::string LongTestString()
 {
     std::string ret;
@@ -704,9 +631,6 @@ BOOST_AUTO_TEST_CASE(aes_cbc_testvectors) {
 
 BOOST_AUTO_TEST_CASE(chacha20_testvector)
 {
-<<<<<<< HEAD
-    // Test vector from RFC 7539
-=======
     /* Example from RFC8439 section 2.3.2. */
     TestChaCha20("",
                  "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
@@ -826,54 +750,24 @@ BOOST_AUTO_TEST_CASE(chacha20_testvector)
                  "1c9240a5eb55d38af333888604f6b5f0473917c1402b80099dca5cbc207075c0",
                  {0, 0x200000000000000}, 0,
                  "965e3bc6f9ec7ed9560808f4d229f94b137ff275ca9b3fcbdd59deaad23310ae");
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // test encryption
     TestChaCha20("4c616469657320616e642047656e746c656d656e206f662074686520636c617373206f66202739393a204966204920636f756"
                  "c64206f6666657220796f75206f6e6c79206f6e652074697020666f7220746865206675747572652c2073756e73637265656e"
                  "20776f756c642062652069742e",
-<<<<<<< HEAD
-                 "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f", 0x4a000000UL, 1,
-=======
                  "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f", {0, 0x4a000000UL}, 1,
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                  "6e2e359a2568f98041ba0728dd0d6981e97e7aec1d4360c20a27afccfd9fae0bf91b65c5524733ab8f593dabcd62b3571639d"
                  "624e65152ab8f530c359f0861d807ca0dbf500d6a6156a38e088a22b65e52bc514d16ccf806818ce91ab77937365af90bbf74"
                  "a35be6b40b8eedf2785e42874d"
                  );
 
     // test keystream output
-<<<<<<< HEAD
-    TestChaCha20("", "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f", 0x4a000000UL, 1,
-=======
     TestChaCha20("", "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f", {0, 0x4a000000UL}, 1,
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                  "224f51f3401bd9e12fde276fb8631ded8c131f823d2c06e27e4fcaec9ef3cf788a3b0aa372600a92b57974cded2b9334794cb"
                  "a40c63e34cdea212c4cf07d41b769a6749f3f630f4122cafe28ec4dc47e26d4346d70b98c73f3e9c53ac40c5945398b6eda1a"
                  "832c89c167eacd901d7e2bf363");
 
     // Test vectors from https://tools.ietf.org/html/draft-agl-tls-chacha20poly1305-04#section-7
-<<<<<<< HEAD
-    TestChaCha20("", "0000000000000000000000000000000000000000000000000000000000000000", 0, 0,
-                 "76b8e0ada0f13d90405d6ae55386bd28bdd219b8a08ded1aa836efcc8b770dc7da41597c5157488d7724e03fb8d84a376a43b"
-                 "8f41518a11cc387b669b2ee6586");
-    TestChaCha20("", "0000000000000000000000000000000000000000000000000000000000000001", 0, 0,
-                 "4540f05a9f1fb296d7736e7b208e3c96eb4fe1834688d2604f450952ed432d41bbe2a0b6ea7566d2a5d1e7e20d42af2c53d79"
-                 "2b1c43fea817e9ad275ae546963");
-    TestChaCha20("", "0000000000000000000000000000000000000000000000000000000000000000", 0x0100000000000000ULL, 0,
-                 "de9cba7bf3d69ef5e786dc63973f653a0b49e015adbff7134fcb7df137821031e85a050278a7084527214f73efc7fa5b52770"
-                 "62eb7a0433e445f41e3");
-    TestChaCha20("", "0000000000000000000000000000000000000000000000000000000000000000", 1, 0,
-                 "ef3fdfd6c61578fbf5cf35bd3dd33b8009631634d21e42ac33960bd138e50d32111e4caf237ee53ca8ad6426194a88545ddc4"
-                 "97a0b466e7d6bbdb0041b2f586b");
-    TestChaCha20("", "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f", 0x0706050403020100ULL, 0,
-                 "f798a189f195e66982105ffb640bb7757f579da31602fc93ec01ac56f85ac3c134a4547b733b46413042c9440049176905d3b"
-                 "e59ea1c53f15916155c2be8241a38008b9a26bc35941e2444177c8ade6689de95264986d95889fb60e84629c9bd9a5acb1cc1"
-                 "18be563eb9b3a4a472f82e09a7e778492b562ef7130e88dfe031c79db9d4f7c7a899151b9a475032b63fc385245fe054e3dd5"
-                 "a97a5f576fe064025d3ce042c566ab2c507b138db853e3d6959660996546cc9c4a6eafdc777c040d70eaf46f76dad3979e5c5"
-                 "360c3317166a1c894c94a371876a94df7628fe4eaaf2ccb27d5aaae0ad7ad0f9d4b6ad3b54098746d4524d38407a6deb3ab78"
-                 "fab78c9");
-=======
     // The first one is identical to the above one from the RFC8439 A.1 vectors, but repeated here
     // for completeness.
     TestChaCha20("",
@@ -1422,11 +1316,7 @@ BOOST_AUTO_TEST_CASE(countbits_tests)
             // Check handling of zero.
             BOOST_CHECK_EQUAL(CountBits(0), 0U);
         } else if (i < 10) {
-<<<<<<< HEAD
-            for (uint64_t j = (uint64_t)1 << (i - 1); (j >> i) == 0; ++j) {
-=======
             for (uint64_t j = uint64_t{1} << (i - 1); (j >> i) == 0; ++j) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 // Exhaustively test up to 10 bits
                 BOOST_CHECK_EQUAL(CountBits(j), i);
             }
@@ -1456,7 +1346,7 @@ BOOST_AUTO_TEST_CASE(sha256d64)
     }
 }
 
-<<<<<<< HEAD
+// DigiByte specific test for Odocrypt permutation
 BOOST_AUTO_TEST_CASE(odo_permutation)
 {
     char buf[OdoCrypt::DIGEST_SIZE];
@@ -1470,8 +1360,6 @@ BOOST_AUTO_TEST_CASE(odo_permutation)
         BOOST_CHECK(buf[i] == i);
 }
 
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 static void TestSHA3_256(const std::string& input, const std::string& output)
 {
     const auto in_bytes = ParseHex(input);
@@ -1489,13 +1377,8 @@ static void TestSHA3_256(const std::string& input, const std::string& output)
     int s1 = InsecureRandRange(in_bytes.size() + 1);
     int s2 = InsecureRandRange(in_bytes.size() + 1 - s1);
     int s3 = in_bytes.size() - s1 - s2;
-<<<<<<< HEAD
-    sha.Write(MakeSpan(in_bytes).first(s1)).Write(MakeSpan(in_bytes).subspan(s1, s2));
-    sha.Write(MakeSpan(in_bytes).last(s3)).Finalize(out);
-=======
     sha.Write(Span{in_bytes}.first(s1)).Write(Span{in_bytes}.subspan(s1, s2));
     sha.Write(Span{in_bytes}.last(s3)).Finalize(out);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     BOOST_CHECK(std::equal(std::begin(out_bytes), std::end(out_bytes), out));
 }
 

@@ -1,14 +1,5 @@
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-// Distributed under the MIT software license, see the accompanying
-// file COPYING or http://www.opensource.org/licenses/mit-license.php.
-
-#include <test/util/setup_common.h>
-#include <util/strencodings.h>
-#include <util/system.h>
-=======
-// Copyright (c) 2012-2022 The DigiByte Core developers
+// Copyright (c) 2012-2022 The Bitcoin Core developers
+// Copyright (c) 2014-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -18,7 +9,6 @@
 #include <test/util/setup_common.h>
 #include <univalue.h>
 #include <util/strencodings.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 #include <limits>
 #include <string>
@@ -27,55 +17,25 @@
 
 #include <boost/test/unit_test.hpp>
 
-namespace getarg_tests{
-    class LocalTestingSetup : BasicTestingSetup {
-        protected:
-        void SetupArgs(const std::vector<std::pair<std::string, unsigned int>>& args);
-        void ResetArgs(const std::string& strArg);
-        ArgsManager m_local_args;
-    };
-}
+BOOST_FIXTURE_TEST_SUITE(getarg_tests, BasicTestingSetup)
 
-<<<<<<< HEAD
-BOOST_FIXTURE_TEST_SUITE(getarg_tests, LocalTestingSetup)
-
-void LocalTestingSetup :: ResetArgs(const std::string& strArg)
-{
-    std::vector<std::string> vecArg;
-    if (strArg.size())
-      boost::split(vecArg, strArg, IsSpace, boost::token_compress_on);
-=======
 void ResetArgs(ArgsManager& local_args, const std::string& strArg)
 {
     std::vector<std::string> vecArg;
     if (strArg.size()) {
         vecArg = SplitString(strArg, ' ');
     }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // Insert dummy executable name:
     vecArg.insert(vecArg.begin(), "testdigibyte");
 
     // Convert to char*:
     std::vector<const char*> vecChar;
-<<<<<<< HEAD
-=======
     vecChar.reserve(vecArg.size());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     for (const std::string& s : vecArg)
         vecChar.push_back(s.c_str());
 
     std::string error;
-<<<<<<< HEAD
-    BOOST_CHECK(m_local_args.ParseParameters(vecChar.size(), vecChar.data(), error));
-}
-
-void LocalTestingSetup :: SetupArgs(const std::vector<std::pair<std::string, unsigned int>>& args)
-{
-    m_local_args.ClearArgs();
-    for (const auto& arg : args) {
-        m_local_args.AddArg(arg.first, "", arg.second, OptionsCategory::OPTIONS);
-=======
     BOOST_CHECK(local_args.ParseParameters(vecChar.size(), vecChar.data(), error));
 }
 
@@ -83,7 +43,6 @@ void SetupArgs(ArgsManager& local_args, const std::vector<std::pair<std::string,
 {
     for (const auto& arg : args) {
         local_args.AddArg(arg.first, "", arg.second, OptionsCategory::OPTIONS);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 }
 
@@ -107,149 +66,98 @@ BOOST_AUTO_TEST_CASE(setting_args)
 
     set_foo("str");
     BOOST_CHECK_EQUAL(args.GetSetting("foo").write(), "\"str\"");
-    BOOST_CHECK_EQUAL(args.GetArg("foo", "default"), "str");
-    BOOST_CHECK_EQUAL(args.GetIntArg("foo", 100), 0);
-    BOOST_CHECK_EQUAL(args.GetBoolArg("foo", true), false);
-    BOOST_CHECK_EQUAL(args.GetBoolArg("foo", false), false);
+    BOOST_CHECK_EQUAL(args.GetArg("-foo", "default"), "str");
+    BOOST_CHECK_EQUAL(args.GetIntArg("-foo", 100), 0);
+    BOOST_CHECK_EQUAL(args.GetBoolArg("-foo", true), false);
+    BOOST_CHECK_EQUAL(args.GetBoolArg("-foo", false), false);
 
     set_foo("99");
     BOOST_CHECK_EQUAL(args.GetSetting("foo").write(), "\"99\"");
-    BOOST_CHECK_EQUAL(args.GetArg("foo", "default"), "99");
-    BOOST_CHECK_EQUAL(args.GetIntArg("foo", 100), 99);
-    BOOST_CHECK_EQUAL(args.GetBoolArg("foo", true), true);
-    BOOST_CHECK_EQUAL(args.GetBoolArg("foo", false), true);
+    BOOST_CHECK_EQUAL(args.GetArg("-foo", "default"), "99");
+    BOOST_CHECK_EQUAL(args.GetIntArg("-foo", 100), 99);
+    BOOST_CHECK_EQUAL(args.GetBoolArg("-foo", true), true);
+    BOOST_CHECK_EQUAL(args.GetBoolArg("-foo", false), true);
 
     set_foo("3.25");
     BOOST_CHECK_EQUAL(args.GetSetting("foo").write(), "\"3.25\"");
-    BOOST_CHECK_EQUAL(args.GetArg("foo", "default"), "3.25");
-    BOOST_CHECK_EQUAL(args.GetIntArg("foo", 100), 3);
-    BOOST_CHECK_EQUAL(args.GetBoolArg("foo", true), true);
-    BOOST_CHECK_EQUAL(args.GetBoolArg("foo", false), true);
+    BOOST_CHECK_EQUAL(args.GetArg("-foo", "default"), "3.25");
+    BOOST_CHECK_EQUAL(args.GetIntArg("-foo", 100), 3);
+    BOOST_CHECK_EQUAL(args.GetBoolArg("-foo", true), true);
+    BOOST_CHECK_EQUAL(args.GetBoolArg("-foo", false), true);
 
     set_foo("0");
     BOOST_CHECK_EQUAL(args.GetSetting("foo").write(), "\"0\"");
-    BOOST_CHECK_EQUAL(args.GetArg("foo", "default"), "0");
-    BOOST_CHECK_EQUAL(args.GetIntArg("foo", 100), 0);
-    BOOST_CHECK_EQUAL(args.GetBoolArg("foo", true), false);
-    BOOST_CHECK_EQUAL(args.GetBoolArg("foo", false), false);
+    BOOST_CHECK_EQUAL(args.GetArg("-foo", "default"), "0");
+    BOOST_CHECK_EQUAL(args.GetIntArg("-foo", 100), 0);
+    BOOST_CHECK_EQUAL(args.GetBoolArg("-foo", true), false);
+    BOOST_CHECK_EQUAL(args.GetBoolArg("-foo", false), false);
 
     set_foo("");
     BOOST_CHECK_EQUAL(args.GetSetting("foo").write(), "\"\"");
-    BOOST_CHECK_EQUAL(args.GetArg("foo", "default"), "");
-    BOOST_CHECK_EQUAL(args.GetIntArg("foo", 100), 0);
-    BOOST_CHECK_EQUAL(args.GetBoolArg("foo", true), true);
-    BOOST_CHECK_EQUAL(args.GetBoolArg("foo", false), true);
+    BOOST_CHECK_EQUAL(args.GetArg("-foo", "default"), "");
+    BOOST_CHECK_EQUAL(args.GetIntArg("-foo", 100), 0);
+    BOOST_CHECK_EQUAL(args.GetBoolArg("-foo", true), true);
+    BOOST_CHECK_EQUAL(args.GetBoolArg("-foo", false), true);
 
     set_foo(99);
     BOOST_CHECK_EQUAL(args.GetSetting("foo").write(), "99");
-    BOOST_CHECK_EQUAL(args.GetArg("foo", "default"), "99");
-    BOOST_CHECK_EQUAL(args.GetIntArg("foo", 100), 99);
-    BOOST_CHECK_THROW(args.GetBoolArg("foo", true), std::runtime_error);
-    BOOST_CHECK_THROW(args.GetBoolArg("foo", false), std::runtime_error);
+    BOOST_CHECK_EQUAL(args.GetArg("-foo", "default"), "99");
+    BOOST_CHECK_EQUAL(args.GetIntArg("-foo", 100), 99);
+    BOOST_CHECK_THROW(args.GetBoolArg("-foo", true), std::runtime_error);
+    BOOST_CHECK_THROW(args.GetBoolArg("-foo", false), std::runtime_error);
 
     set_foo(3.25);
     BOOST_CHECK_EQUAL(args.GetSetting("foo").write(), "3.25");
-    BOOST_CHECK_EQUAL(args.GetArg("foo", "default"), "3.25");
-    BOOST_CHECK_THROW(args.GetIntArg("foo", 100), std::runtime_error);
-    BOOST_CHECK_THROW(args.GetBoolArg("foo", true), std::runtime_error);
-    BOOST_CHECK_THROW(args.GetBoolArg("foo", false), std::runtime_error);
+    BOOST_CHECK_EQUAL(args.GetArg("-foo", "default"), "3.25");
+    BOOST_CHECK_THROW(args.GetIntArg("-foo", 100), std::runtime_error);
+    BOOST_CHECK_THROW(args.GetBoolArg("-foo", true), std::runtime_error);
+    BOOST_CHECK_THROW(args.GetBoolArg("-foo", false), std::runtime_error);
 
     set_foo(0);
     BOOST_CHECK_EQUAL(args.GetSetting("foo").write(), "0");
-    BOOST_CHECK_EQUAL(args.GetArg("foo", "default"), "0");
-    BOOST_CHECK_EQUAL(args.GetIntArg("foo", 100), 0);
-    BOOST_CHECK_THROW(args.GetBoolArg("foo", true), std::runtime_error);
-    BOOST_CHECK_THROW(args.GetBoolArg("foo", false), std::runtime_error);
+    BOOST_CHECK_EQUAL(args.GetArg("-foo", "default"), "0");
+    BOOST_CHECK_EQUAL(args.GetIntArg("-foo", 100), 0);
+    BOOST_CHECK_THROW(args.GetBoolArg("-foo", true), std::runtime_error);
+    BOOST_CHECK_THROW(args.GetBoolArg("-foo", false), std::runtime_error);
 
     set_foo(true);
     BOOST_CHECK_EQUAL(args.GetSetting("foo").write(), "true");
-    BOOST_CHECK_EQUAL(args.GetArg("foo", "default"), "1");
-    BOOST_CHECK_EQUAL(args.GetIntArg("foo", 100), 1);
-    BOOST_CHECK_EQUAL(args.GetBoolArg("foo", true), true);
-    BOOST_CHECK_EQUAL(args.GetBoolArg("foo", false), true);
+    BOOST_CHECK_EQUAL(args.GetArg("-foo", "default"), "1");
+    BOOST_CHECK_EQUAL(args.GetIntArg("-foo", 100), 1);
+    BOOST_CHECK_EQUAL(args.GetBoolArg("-foo", true), true);
+    BOOST_CHECK_EQUAL(args.GetBoolArg("-foo", false), true);
 
     set_foo(false);
     BOOST_CHECK_EQUAL(args.GetSetting("foo").write(), "false");
-    BOOST_CHECK_EQUAL(args.GetArg("foo", "default"), "0");
-    BOOST_CHECK_EQUAL(args.GetIntArg("foo", 100), 0);
-    BOOST_CHECK_EQUAL(args.GetBoolArg("foo", true), false);
-    BOOST_CHECK_EQUAL(args.GetBoolArg("foo", false), false);
+    BOOST_CHECK_EQUAL(args.GetArg("-foo", "default"), "0");
+    BOOST_CHECK_EQUAL(args.GetIntArg("-foo", 100), 0);
+    BOOST_CHECK_EQUAL(args.GetBoolArg("-foo", true), false);
+    BOOST_CHECK_EQUAL(args.GetBoolArg("-foo", false), false);
 
     set_foo(UniValue::VOBJ);
     BOOST_CHECK_EQUAL(args.GetSetting("foo").write(), "{}");
-    BOOST_CHECK_THROW(args.GetArg("foo", "default"), std::runtime_error);
-    BOOST_CHECK_THROW(args.GetIntArg("foo", 100), std::runtime_error);
-    BOOST_CHECK_THROW(args.GetBoolArg("foo", true), std::runtime_error);
-    BOOST_CHECK_THROW(args.GetBoolArg("foo", false), std::runtime_error);
+    BOOST_CHECK_THROW(args.GetArg("-foo", "default"), std::runtime_error);
+    BOOST_CHECK_THROW(args.GetIntArg("-foo", 100), std::runtime_error);
+    BOOST_CHECK_THROW(args.GetBoolArg("-foo", true), std::runtime_error);
+    BOOST_CHECK_THROW(args.GetBoolArg("-foo", false), std::runtime_error);
 
     set_foo(UniValue::VARR);
     BOOST_CHECK_EQUAL(args.GetSetting("foo").write(), "[]");
-    BOOST_CHECK_THROW(args.GetArg("foo", "default"), std::runtime_error);
-    BOOST_CHECK_THROW(args.GetIntArg("foo", 100), std::runtime_error);
-    BOOST_CHECK_THROW(args.GetBoolArg("foo", true), std::runtime_error);
-    BOOST_CHECK_THROW(args.GetBoolArg("foo", false), std::runtime_error);
+    BOOST_CHECK_THROW(args.GetArg("-foo", "default"), std::runtime_error);
+    BOOST_CHECK_THROW(args.GetIntArg("-foo", 100), std::runtime_error);
+    BOOST_CHECK_THROW(args.GetBoolArg("-foo", true), std::runtime_error);
+    BOOST_CHECK_THROW(args.GetBoolArg("-foo", false), std::runtime_error);
 
     set_foo(UniValue::VNULL);
     BOOST_CHECK_EQUAL(args.GetSetting("foo").write(), "null");
-    BOOST_CHECK_EQUAL(args.GetArg("foo", "default"), "default");
-    BOOST_CHECK_EQUAL(args.GetIntArg("foo", 100), 100);
-    BOOST_CHECK_EQUAL(args.GetBoolArg("foo", true), true);
-    BOOST_CHECK_EQUAL(args.GetBoolArg("foo", false), false);
+    BOOST_CHECK_EQUAL(args.GetArg("-foo", "default"), "default");
+    BOOST_CHECK_EQUAL(args.GetIntArg("-foo", 100), 100);
+    BOOST_CHECK_EQUAL(args.GetBoolArg("-foo", true), true);
+    BOOST_CHECK_EQUAL(args.GetBoolArg("-foo", false), false);
 }
 
 BOOST_AUTO_TEST_CASE(boolarg)
 {
-<<<<<<< HEAD
-    const auto foo = std::make_pair("-foo", ArgsManager::ALLOW_ANY);
-    SetupArgs({foo});
-    ResetArgs("-foo");
-    BOOST_CHECK(m_local_args.GetBoolArg("-foo", false));
-    BOOST_CHECK(m_local_args.GetBoolArg("-foo", true));
-
-    BOOST_CHECK(!m_local_args.GetBoolArg("-fo", false));
-    BOOST_CHECK(m_local_args.GetBoolArg("-fo", true));
-
-    BOOST_CHECK(!m_local_args.GetBoolArg("-fooo", false));
-    BOOST_CHECK(m_local_args.GetBoolArg("-fooo", true));
-
-    ResetArgs("-foo=0");
-    BOOST_CHECK(!m_local_args.GetBoolArg("-foo", false));
-    BOOST_CHECK(!m_local_args.GetBoolArg("-foo", true));
-
-    ResetArgs("-foo=1");
-    BOOST_CHECK(m_local_args.GetBoolArg("-foo", false));
-    BOOST_CHECK(m_local_args.GetBoolArg("-foo", true));
-
-    // New 0.6 feature: auto-map -nosomething to !-something:
-    ResetArgs("-nofoo");
-    BOOST_CHECK(!m_local_args.GetBoolArg("-foo", false));
-    BOOST_CHECK(!m_local_args.GetBoolArg("-foo", true));
-
-    ResetArgs("-nofoo=1");
-    BOOST_CHECK(!m_local_args.GetBoolArg("-foo", false));
-    BOOST_CHECK(!m_local_args.GetBoolArg("-foo", true));
-
-    ResetArgs("-foo -nofoo");  // -nofoo should win
-    BOOST_CHECK(!m_local_args.GetBoolArg("-foo", false));
-    BOOST_CHECK(!m_local_args.GetBoolArg("-foo", true));
-
-    ResetArgs("-foo=1 -nofoo=1");  // -nofoo should win
-    BOOST_CHECK(!m_local_args.GetBoolArg("-foo", false));
-    BOOST_CHECK(!m_local_args.GetBoolArg("-foo", true));
-
-    ResetArgs("-foo=0 -nofoo=0");  // -nofoo=0 should win
-    BOOST_CHECK(m_local_args.GetBoolArg("-foo", false));
-    BOOST_CHECK(m_local_args.GetBoolArg("-foo", true));
-
-    // New 0.6 feature: treat -- same as -:
-    ResetArgs("--foo=1");
-    BOOST_CHECK(m_local_args.GetBoolArg("-foo", false));
-    BOOST_CHECK(m_local_args.GetBoolArg("-foo", true));
-
-    ResetArgs("--nofoo=1");
-    BOOST_CHECK(!m_local_args.GetBoolArg("-foo", false));
-    BOOST_CHECK(!m_local_args.GetBoolArg("-foo", true));
-=======
     ArgsManager local_args;
 
     const auto foo = std::make_pair("-foo", ArgsManager::ALLOW_ANY);
@@ -297,7 +205,6 @@ BOOST_AUTO_TEST_CASE(boolarg)
     ResetArgs(local_args, "--foo=1");
     BOOST_CHECK(local_args.GetBoolArg("-foo", false));
     BOOST_CHECK(local_args.GetBoolArg("-foo", true));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     ResetArgs(local_args, "--nofoo=1");
     BOOST_CHECK(!local_args.GetBoolArg("-foo", false));
@@ -306,30 +213,6 @@ BOOST_AUTO_TEST_CASE(boolarg)
 
 BOOST_AUTO_TEST_CASE(stringarg)
 {
-<<<<<<< HEAD
-    const auto foo = std::make_pair("-foo", ArgsManager::ALLOW_ANY);
-    const auto bar = std::make_pair("-bar", ArgsManager::ALLOW_ANY);
-    SetupArgs({foo, bar});
-    ResetArgs("");
-    BOOST_CHECK_EQUAL(m_local_args.GetArg("-foo", ""), "");
-    BOOST_CHECK_EQUAL(m_local_args.GetArg("-foo", "eleven"), "eleven");
-
-    ResetArgs("-foo -bar");
-    BOOST_CHECK_EQUAL(m_local_args.GetArg("-foo", ""), "");
-    BOOST_CHECK_EQUAL(m_local_args.GetArg("-foo", "eleven"), "");
-
-    ResetArgs("-foo=");
-    BOOST_CHECK_EQUAL(m_local_args.GetArg("-foo", ""), "");
-    BOOST_CHECK_EQUAL(m_local_args.GetArg("-foo", "eleven"), "");
-
-    ResetArgs("-foo=11");
-    BOOST_CHECK_EQUAL(m_local_args.GetArg("-foo", ""), "11");
-    BOOST_CHECK_EQUAL(m_local_args.GetArg("-foo", "eleven"), "11");
-
-    ResetArgs("-foo=eleven");
-    BOOST_CHECK_EQUAL(m_local_args.GetArg("-foo", ""), "eleven");
-    BOOST_CHECK_EQUAL(m_local_args.GetArg("-foo", "eleven"), "eleven");
-=======
     ArgsManager local_args;
 
     const auto foo = std::make_pair("-foo", ArgsManager::ALLOW_ANY);
@@ -350,7 +233,6 @@ BOOST_AUTO_TEST_CASE(stringarg)
     ResetArgs(local_args, "-foo=11");
     BOOST_CHECK_EQUAL(local_args.GetArg("-foo", ""), "11");
     BOOST_CHECK_EQUAL(local_args.GetArg("-foo", "eleven"), "11");
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     ResetArgs(local_args, "-foo=eleven");
     BOOST_CHECK_EQUAL(local_args.GetArg("-foo", ""), "eleven");
@@ -359,26 +241,6 @@ BOOST_AUTO_TEST_CASE(stringarg)
 
 BOOST_AUTO_TEST_CASE(intarg)
 {
-<<<<<<< HEAD
-    const auto foo = std::make_pair("-foo", ArgsManager::ALLOW_ANY);
-    const auto bar = std::make_pair("-bar", ArgsManager::ALLOW_ANY);
-    SetupArgs({foo, bar});
-    ResetArgs("");
-    BOOST_CHECK_EQUAL(m_local_args.GetArg("-foo", 11), 11);
-    BOOST_CHECK_EQUAL(m_local_args.GetArg("-foo", 0), 0);
-
-    ResetArgs("-foo -bar");
-    BOOST_CHECK_EQUAL(m_local_args.GetArg("-foo", 11), 0);
-    BOOST_CHECK_EQUAL(m_local_args.GetArg("-bar", 11), 0);
-
-    ResetArgs("-foo=11 -bar=12");
-    BOOST_CHECK_EQUAL(m_local_args.GetArg("-foo", 0), 11);
-    BOOST_CHECK_EQUAL(m_local_args.GetArg("-bar", 11), 12);
-
-    ResetArgs("-foo=NaN -bar=NotANumber");
-    BOOST_CHECK_EQUAL(m_local_args.GetArg("-foo", 1), 0);
-    BOOST_CHECK_EQUAL(m_local_args.GetArg("-bar", 11), 0);
-=======
     ArgsManager local_args;
 
     const auto foo = std::make_pair("-foo", ArgsManager::ALLOW_ANY);
@@ -516,22 +378,10 @@ BOOST_AUTO_TEST_CASE(patharg)
     BOOST_CHECK_EQUAL(local_args.GetPathArg("-dir", "default"), fs::path{"default"});
     ResetArgs(local_args, "-nodir");
     BOOST_CHECK_EQUAL(local_args.GetPathArg("-dir", "default"), fs::path{""});
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 BOOST_AUTO_TEST_CASE(doubledash)
 {
-<<<<<<< HEAD
-    const auto foo = std::make_pair("-foo", ArgsManager::ALLOW_ANY);
-    const auto bar = std::make_pair("-bar", ArgsManager::ALLOW_ANY);
-    SetupArgs({foo, bar});
-    ResetArgs("--foo");
-    BOOST_CHECK_EQUAL(m_local_args.GetBoolArg("-foo", false), true);
-
-    ResetArgs("--foo=verbose --bar=1");
-    BOOST_CHECK_EQUAL(m_local_args.GetArg("-foo", ""), "verbose");
-    BOOST_CHECK_EQUAL(m_local_args.GetArg("-bar", 0), 1);
-=======
     ArgsManager local_args;
 
     const auto foo = std::make_pair("-foo", ArgsManager::ALLOW_ANY);
@@ -543,35 +393,10 @@ BOOST_AUTO_TEST_CASE(doubledash)
     ResetArgs(local_args, "--foo=verbose --bar=1");
     BOOST_CHECK_EQUAL(local_args.GetArg("-foo", ""), "verbose");
     BOOST_CHECK_EQUAL(local_args.GetIntArg("-bar", 0), 1);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 BOOST_AUTO_TEST_CASE(boolargno)
 {
-<<<<<<< HEAD
-    const auto foo = std::make_pair("-foo", ArgsManager::ALLOW_ANY);
-    const auto bar = std::make_pair("-bar", ArgsManager::ALLOW_ANY);
-    SetupArgs({foo, bar});
-    ResetArgs("-nofoo");
-    BOOST_CHECK(!m_local_args.GetBoolArg("-foo", true));
-    BOOST_CHECK(!m_local_args.GetBoolArg("-foo", false));
-
-    ResetArgs("-nofoo=1");
-    BOOST_CHECK(!m_local_args.GetBoolArg("-foo", true));
-    BOOST_CHECK(!m_local_args.GetBoolArg("-foo", false));
-
-    ResetArgs("-nofoo=0");
-    BOOST_CHECK(m_local_args.GetBoolArg("-foo", true));
-    BOOST_CHECK(m_local_args.GetBoolArg("-foo", false));
-
-    ResetArgs("-foo --nofoo"); // --nofoo should win
-    BOOST_CHECK(!m_local_args.GetBoolArg("-foo", true));
-    BOOST_CHECK(!m_local_args.GetBoolArg("-foo", false));
-
-    ResetArgs("-nofoo -foo"); // foo always wins:
-    BOOST_CHECK(m_local_args.GetBoolArg("-foo", true));
-    BOOST_CHECK(m_local_args.GetBoolArg("-foo", false));
-=======
     ArgsManager local_args;
 
     const auto foo = std::make_pair("-foo", ArgsManager::ALLOW_ANY);
@@ -596,19 +421,10 @@ BOOST_AUTO_TEST_CASE(boolargno)
     ResetArgs(local_args, "-nofoo -foo"); // foo always wins:
     BOOST_CHECK(local_args.GetBoolArg("-foo", true));
     BOOST_CHECK(local_args.GetBoolArg("-foo", false));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 BOOST_AUTO_TEST_CASE(logargs)
 {
-<<<<<<< HEAD
-    const auto okaylog_bool = std::make_pair("-okaylog-bool", ArgsManager::ALLOW_BOOL);
-    const auto okaylog_negbool = std::make_pair("-okaylog-negbool", ArgsManager::ALLOW_BOOL);
-    const auto okaylog = std::make_pair("-okaylog", ArgsManager::ALLOW_ANY);
-    const auto dontlog = std::make_pair("-dontlog", ArgsManager::ALLOW_ANY | ArgsManager::SENSITIVE);
-    SetupArgs({okaylog_bool, okaylog_negbool, okaylog, dontlog});
-    ResetArgs("-okaylog-bool -nookaylog-negbool -okaylog=public -dontlog=private");
-=======
     ArgsManager local_args;
 
     const auto okaylog_bool = std::make_pair("-okaylog-bool", ArgsManager::ALLOW_ANY);
@@ -617,7 +433,6 @@ BOOST_AUTO_TEST_CASE(logargs)
     const auto dontlog = std::make_pair("-dontlog", ArgsManager::ALLOW_ANY | ArgsManager::SENSITIVE);
     SetupArgs(local_args, {okaylog_bool, okaylog_negbool, okaylog, dontlog});
     ResetArgs(local_args, "-okaylog-bool -nookaylog-negbool -okaylog=public -dontlog=private42");
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // Everything logged to debug.log will also append to str
     std::string str;
@@ -627,11 +442,7 @@ BOOST_AUTO_TEST_CASE(logargs)
         });
 
     // Log the arguments
-<<<<<<< HEAD
-    m_local_args.LogArgs();
-=======
     local_args.LogArgs();
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     LogInstance().DeleteCallback(print_connection);
     // Check that what should appear does, and what shouldn't doesn't.
@@ -639,11 +450,7 @@ BOOST_AUTO_TEST_CASE(logargs)
     BOOST_CHECK(str.find("Command-line arg: okaylog-negbool=false") != std::string::npos);
     BOOST_CHECK(str.find("Command-line arg: okaylog=\"public\"") != std::string::npos);
     BOOST_CHECK(str.find("dontlog=****") != std::string::npos);
-<<<<<<< HEAD
-    BOOST_CHECK(str.find("private") == std::string::npos);
-=======
     BOOST_CHECK(str.find("private42") == std::string::npos);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 BOOST_AUTO_TEST_SUITE_END()

@@ -1,9 +1,5 @@
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
-// Copyright (c) 2017-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// Copyright (c) 2009-2022 The Bitcoin Core developers
+// Copyright (c) 2014-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -13,11 +9,7 @@
 #include <key_io.h>
 #include <script/script.h>
 #include <script/signingprovider.h>
-<<<<<<< HEAD
-#include <script/standard.h>
-=======
 #include <script/solver.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <test/util/setup_common.h>
 #include <util/strencodings.h>
 
@@ -212,13 +204,8 @@ BOOST_AUTO_TEST_CASE(script_standard_ExtractDestination)
     // TxoutType::PUBKEY
     s.clear();
     s << ToByteVector(pubkey) << OP_CHECKSIG;
-<<<<<<< HEAD
-    BOOST_CHECK(ExtractDestination(s, address));
-    BOOST_CHECK(std::get<PKHash>(address) == PKHash(pubkey));
-=======
     BOOST_CHECK(!ExtractDestination(s, address));
     BOOST_CHECK(std::get<PubKeyDestination>(address) == PubKeyDestination(pubkey));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // TxoutType::PUBKEYHASH
     s.clear();
@@ -263,77 +250,8 @@ BOOST_AUTO_TEST_CASE(script_standard_ExtractDestination)
     s.clear();
     s << OP_1 << ToByteVector(pubkey);
     BOOST_CHECK(ExtractDestination(s, address));
-<<<<<<< HEAD
-    WitnessUnknown unk;
-    unk.length = 33;
-    unk.version = 1;
-    std::copy(pubkey.begin(), pubkey.end(), unk.program);
-    BOOST_CHECK(std::get<WitnessUnknown>(address) == unk);
-}
-
-BOOST_AUTO_TEST_CASE(script_standard_ExtractDestinations)
-{
-    CKey keys[3];
-    CPubKey pubkeys[3];
-    for (int i = 0; i < 3; i++) {
-        keys[i].MakeNewKey(true);
-        pubkeys[i] = keys[i].GetPubKey();
-    }
-
-    CScript s;
-    TxoutType whichType;
-    std::vector<CTxDestination> addresses;
-    int nRequired;
-
-    // TxoutType::PUBKEY
-    s.clear();
-    s << ToByteVector(pubkeys[0]) << OP_CHECKSIG;
-    BOOST_CHECK(ExtractDestinations(s, whichType, addresses, nRequired));
-    BOOST_CHECK_EQUAL(whichType, TxoutType::PUBKEY);
-    BOOST_CHECK_EQUAL(addresses.size(), 1U);
-    BOOST_CHECK_EQUAL(nRequired, 1);
-    BOOST_CHECK(std::get<PKHash>(addresses[0]) == PKHash(pubkeys[0]));
-
-    // TxoutType::PUBKEYHASH
-    s.clear();
-    s << OP_DUP << OP_HASH160 << ToByteVector(pubkeys[0].GetID()) << OP_EQUALVERIFY << OP_CHECKSIG;
-    BOOST_CHECK(ExtractDestinations(s, whichType, addresses, nRequired));
-    BOOST_CHECK_EQUAL(whichType, TxoutType::PUBKEYHASH);
-    BOOST_CHECK_EQUAL(addresses.size(), 1U);
-    BOOST_CHECK_EQUAL(nRequired, 1);
-    BOOST_CHECK(std::get<PKHash>(addresses[0]) == PKHash(pubkeys[0]));
-
-    // TxoutType::SCRIPTHASH
-    CScript redeemScript(s); // initialize with leftover P2PKH script
-    s.clear();
-    s << OP_HASH160 << ToByteVector(CScriptID(redeemScript)) << OP_EQUAL;
-    BOOST_CHECK(ExtractDestinations(s, whichType, addresses, nRequired));
-    BOOST_CHECK_EQUAL(whichType, TxoutType::SCRIPTHASH);
-    BOOST_CHECK_EQUAL(addresses.size(), 1U);
-    BOOST_CHECK_EQUAL(nRequired, 1);
-    BOOST_CHECK(std::get<ScriptHash>(addresses[0]) == ScriptHash(redeemScript));
-
-    // TxoutType::MULTISIG
-    s.clear();
-    s << OP_2 <<
-        ToByteVector(pubkeys[0]) <<
-        ToByteVector(pubkeys[1]) <<
-        OP_2 << OP_CHECKMULTISIG;
-    BOOST_CHECK(ExtractDestinations(s, whichType, addresses, nRequired));
-    BOOST_CHECK_EQUAL(whichType, TxoutType::MULTISIG);
-    BOOST_CHECK_EQUAL(addresses.size(), 2U);
-    BOOST_CHECK_EQUAL(nRequired, 2);
-    BOOST_CHECK(std::get<PKHash>(addresses[0]) == PKHash(pubkeys[0]));
-    BOOST_CHECK(std::get<PKHash>(addresses[1]) == PKHash(pubkeys[1]));
-
-    // TxoutType::NULL_DATA
-    s.clear();
-    s << OP_RETURN << std::vector<unsigned char>({75});
-    BOOST_CHECK(!ExtractDestinations(s, whichType, addresses, nRequired));
-=======
     WitnessUnknown unk{1, ToByteVector(pubkey)};
     BOOST_CHECK(std::get<WitnessUnknown>(address) == unk);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 BOOST_AUTO_TEST_CASE(script_standard_GetScriptFor_)
@@ -466,10 +384,7 @@ BOOST_AUTO_TEST_CASE(script_standard_taproot_builder)
     BOOST_CHECK(builder.IsValid() && builder.IsComplete());
     builder.Finalize(key_inner);
     BOOST_CHECK(builder.IsValid() && builder.IsComplete());
-<<<<<<< HEAD
     BOOST_CHECK_EQUAL(EncodeDestination(builder.GetOutput()), "dgb1pj6gaw944fy0xpmzzu45ugqde4rz7mqj5kj0tg8kmr5f0pjq8vnaq4wh3hx");
-=======
-    BOOST_CHECK_EQUAL(EncodeDestination(builder.GetOutput()), "bc1pj6gaw944fy0xpmzzu45ugqde4rz7mqj5kj0tg8kmr5f0pjq8vnaqgynnge");
 }
 
 BOOST_AUTO_TEST_CASE(bip341_spk_test_vectors)
@@ -511,7 +426,6 @@ BOOST_AUTO_TEST_CASE(bip341_spk_test_vectors)
             BOOST_CHECK(spend_data.scripts[scriptpos.first] == control_set{ParseHex(vec["expected"]["scriptPathControlBlocks"][scriptpos.second].get_str())});
         }
     }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 BOOST_AUTO_TEST_SUITE_END()

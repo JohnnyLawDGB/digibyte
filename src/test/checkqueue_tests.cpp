@@ -1,17 +1,5 @@
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-// Distributed under the MIT software license, see the accompanying
-// file COPYING or http://www.opensource.org/licenses/mit-license.php.
-
-#include <validation.h>
-
-#include <checkqueue.h>
-#include <sync.h>
-#include <test/util/setup_common.h>
-#include <util/system.h>
-=======
-// Copyright (c) 2012-2022 The DigiByte Core developers
+// Copyright (c) 2012-2022 The Bitcoin Core developers
+// Copyright (c) 2014-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -21,7 +9,6 @@
 #include <test/util/random.h>
 #include <test/util/setup_common.h>
 #include <util/chaintype.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <util/time.h>
 
 #include <boost/test/unit_test.hpp>
@@ -34,9 +21,6 @@
 #include <utility>
 #include <vector>
 
-<<<<<<< HEAD
-BOOST_FIXTURE_TEST_SUITE(checkqueue_tests, TestingSetup)
-=======
 /**
  * Identical to TestingSetup but excludes lock contention logging if
  * `DEBUG_LOCKCONTENTION` is defined, as some of these tests are designed to be
@@ -52,7 +36,6 @@ struct NoLockLoggingTestingSetup : public TestingSetup {
 };
 
 BOOST_FIXTURE_TEST_SUITE(checkqueue_tests, NoLockLoggingTestingSetup)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 static const unsigned int QUEUE_BATCH_SIZE = 128;
 static const int SCRIPT_CHECK_THREADS = 3;
@@ -76,10 +59,6 @@ struct FakeCheckCheckCompletion {
 struct FailingCheck {
     bool fails;
     FailingCheck(bool _fails) : fails(_fails){};
-<<<<<<< HEAD
-    FailingCheck() : fails(true){};
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     bool operator()() const
     {
         return !fails;
@@ -129,13 +108,7 @@ struct FrozenCleanupCheck {
     static std::atomic<uint64_t> nFrozen;
     static std::condition_variable cv;
     static std::mutex m;
-<<<<<<< HEAD
-    // Freezing can't be the default initialized behavior given how the queue
-    // swaps in default initialized Checks.
-    bool should_freeze {false};
-=======
     bool should_freeze{true};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     bool operator()() const
     {
         return true;
@@ -190,10 +163,7 @@ static void Correct_Queue_range(std::vector<size_t> range)
     small_queue->StartWorkerThreads(SCRIPT_CHECK_THREADS);
     // Make vChecks here to save on malloc (this test can be slow...)
     std::vector<FakeCheckCheckCompletion> vChecks;
-<<<<<<< HEAD
-=======
     vChecks.reserve(9);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     for (const size_t i : range) {
         size_t total = i;
         FakeCheckCheckCompletion::n_calls = 0;
@@ -205,13 +175,7 @@ static void Correct_Queue_range(std::vector<size_t> range)
             control.Add(std::move(vChecks));
         }
         BOOST_REQUIRE(control.Wait());
-<<<<<<< HEAD
-        if (FakeCheckCheckCompletion::n_calls != i) {
-            BOOST_REQUIRE_EQUAL(FakeCheckCheckCompletion::n_calls, i);
-        }
-=======
         BOOST_REQUIRE_EQUAL(FakeCheckCheckCompletion::n_calls, i);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     small_queue->StopWorkerThreads();
 }
@@ -375,15 +339,7 @@ BOOST_AUTO_TEST_CASE(test_CheckQueue_FrozenCleanup)
     std::thread t0([&]() {
         CCheckQueueControl<FrozenCleanupCheck> control(queue.get());
         std::vector<FrozenCleanupCheck> vChecks(1);
-<<<<<<< HEAD
-        // Freezing can't be the default initialized behavior given how the queue
-        // swaps in default initialized Checks (otherwise freezing destructor
-        // would get called twice).
-        vChecks[0].should_freeze = true;
-        control.Add(vChecks);
-=======
         control.Add(std::move(vChecks));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         bool waitResult = control.Wait(); // Hangs here
         assert(waitResult);
     });

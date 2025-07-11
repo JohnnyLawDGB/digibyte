@@ -1,9 +1,5 @@
-<<<<<<< HEAD
-// Copyright (c) 2011-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
-// Copyright (c) 2011-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// Copyright (c) 2011-2022 The Bitcoin Core developers
+// Copyright (c) 2014-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -13,35 +9,21 @@
 #include <key.h>
 #include <key_io.h>
 #include <script/script.h>
-<<<<<<< HEAD
-#include <test/util/setup_common.h>
-=======
 #include <test/util/json.h>
 #include <test/util/setup_common.h>
 #include <util/chaintype.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <util/strencodings.h>
 
 #include <boost/test/unit_test.hpp>
 
 #include <univalue.h>
 
-<<<<<<< HEAD
-UniValue read_json(const std::string& jsondata);
-
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 BOOST_FIXTURE_TEST_SUITE(key_io_tests, BasicTestingSetup)
 
 // Goal: check that parsed keys match test payload
 BOOST_AUTO_TEST_CASE(key_io_valid_parse)
 {
-<<<<<<< HEAD
-    std::string input = std::string(json_tests::key_io_valid, json_tests::key_io_valid + sizeof(json_tests::key_io_valid));
-    UniValue tests = read_json(input);
-=======
     UniValue tests = read_json(json_tests::key_io_valid);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     CKey privkey;
     CTxDestination destination;
     SelectParams(ChainType::MAIN);
@@ -155,11 +137,7 @@ BOOST_AUTO_TEST_CASE(key_io_invalid)
         std::string exp_base58string = test[0].get_str();
 
         // must be invalid as public and as private key
-<<<<<<< HEAD
-        for (const auto& chain : { CBaseChainParams::MAIN, CBaseChainParams::TESTNET, CBaseChainParams::SIGNET, CBaseChainParams::REGTEST }) {
-=======
         for (const auto& chain : {ChainType::MAIN, ChainType::TESTNET, ChainType::SIGNET, ChainType::REGTEST}) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             SelectParams(chain);
             destination = DecodeDestination(exp_base58string);
             BOOST_CHECK_MESSAGE(!IsValidDestination(destination), "IsValid pubkey in mainnet:" + strTest);

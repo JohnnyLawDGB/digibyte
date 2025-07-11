@@ -1,19 +1,5 @@
-<<<<<<< HEAD
-// Copyright (c) 2012-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-// Distributed under the MIT software license, see the accompanying
-// file COPYING or http://www.opensource.org/licenses/mit-license.php.
-
-#include <rpc/client.h>
-#include <rpc/server.h>
-#include <rpc/util.h>
-
-#include <core_io.h>
-#include <interfaces/chain.h>
-#include <node/context.h>
-#include <test/util/setup_common.h>
-=======
-// Copyright (c) 2012-2022 The DigiByte Core developers
+// Copyright (c) 2012-2022 The Bitcoin Core developers
+// Copyright (c) 2014-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -26,28 +12,13 @@
 #include <rpc/util.h>
 #include <test/util/setup_common.h>
 #include <univalue.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <util/time.h>
 
 #include <any>
 
 #include <boost/test/unit_test.hpp>
 
-<<<<<<< HEAD
-#include <univalue.h>
-
-#include <rpc/blockchain.h>
-
-class RPCTestingSetup : public TestingSetup
-{
-public:
-    UniValue CallRPC(std::string args);
-};
-
-UniValue RPCTestingSetup::CallRPC(std::string args)
-=======
 static UniValue JSON(std::string_view json)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     UniValue value;
     BOOST_CHECK(value.read(json));
@@ -111,8 +82,7 @@ UniValue RPCTestingSetup::CallRPC(std::string args)
 
 
 BOOST_FIXTURE_TEST_SUITE(rpc_tests, RPCTestingSetup)
-<<<<<<< HEAD
-=======
+
 
 BOOST_AUTO_TEST_CASE(rpc_namedparams)
 {
@@ -162,7 +132,6 @@ BOOST_AUTO_TEST_CASE(rpc_namedonlyparams)
     BOOST_CHECK_EXCEPTION(TransformParams(JSON(R"({"args": [1, 2, {"opt1": 10}], "opt2": 20})"), arg_names), UniValue,
                           HasJSON(R"({"code":-8,"message":"Parameter options specified twice both as positional and named argument"})"));
 }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 BOOST_AUTO_TEST_CASE(rpc_rawparams)
 {
@@ -341,7 +310,6 @@ BOOST_AUTO_TEST_CASE(rpc_parse_monetary_values)
     BOOST_CHECK_THROW(AmountFromValue(ValueFromString("93e+9")), UniValue); //overflow error
 }
 
-<<<<<<< HEAD
 BOOST_AUTO_TEST_CASE(json_parse_errors)
 {
     // Valid
@@ -363,8 +331,7 @@ BOOST_AUTO_TEST_CASE(json_parse_errors)
     BOOST_CHECK_THROW(ParseNonRFCJSONValue("3J98t1WpEZ73CNmQviecrnyiWrnqRhWNL"), std::runtime_error);
 }
 
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
 BOOST_AUTO_TEST_CASE(rpc_ban)
 {
     BOOST_CHECK_NO_THROW(CallRPC(std::string("clearbanned")));
@@ -386,13 +353,8 @@ BOOST_AUTO_TEST_CASE(rpc_ban)
     BOOST_CHECK_NO_THROW(r = CallRPC(std::string("listbanned")));
     ar = r.get_array();
     o1 = ar[0].get_obj();
-<<<<<<< HEAD
-    adr = find_value(o1, "address");
-    int64_t banned_until{find_value(o1, "banned_until").get_int64()};
-=======
     adr = o1.find_value("address");
     int64_t banned_until{o1.find_value("banned_until").getInt<int64_t>()};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     BOOST_CHECK_EQUAL(adr.get_str(), "127.0.0.0/24");
     BOOST_CHECK_EQUAL(banned_until, 9907731200); // absolute time check
 
@@ -406,19 +368,11 @@ BOOST_AUTO_TEST_CASE(rpc_ban)
     BOOST_CHECK_NO_THROW(r = CallRPC(std::string("listbanned")));
     ar = r.get_array();
     o1 = ar[0].get_obj();
-<<<<<<< HEAD
-    adr = find_value(o1, "address");
-    banned_until = find_value(o1, "banned_until").get_int64();
-    const int64_t ban_created{find_value(o1, "ban_created").get_int64()};
-    const int64_t ban_duration{find_value(o1, "ban_duration").get_int64()};
-    const int64_t time_remaining{find_value(o1, "time_remaining").get_int64()};
-=======
     adr = o1.find_value("address");
     banned_until = o1.find_value("banned_until").getInt<int64_t>();
     const int64_t ban_created{o1.find_value("ban_created").getInt<int64_t>()};
     const int64_t ban_duration{o1.find_value("ban_duration").getInt<int64_t>()};
     const int64_t time_remaining{o1.find_value("time_remaining").getInt<int64_t>()};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     BOOST_CHECK_EQUAL(adr.get_str(), "127.0.0.0/24");
     BOOST_CHECK_EQUAL(banned_until, time_remaining_expected + now.count());
     BOOST_CHECK_EQUAL(ban_duration, banned_until - ban_created);
@@ -569,8 +523,6 @@ BOOST_AUTO_TEST_CASE(rpc_getblockstats_calculate_percentiles_by_weight)
     }
 }
 
-<<<<<<< HEAD
-=======
 // Make sure errors are triggered appropriately if parameters have the same names.
 BOOST_AUTO_TEST_CASE(check_dup_param_names)
 {
@@ -618,7 +570,7 @@ BOOST_AUTO_TEST_CASE(check_dup_param_names)
     BOOST_CHECK_THROW(make_rpc({{"p1", POSITIONAL}, {"p2|p1", NAMED_ONLY}}), NonFatalCheckError);
 }
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
 BOOST_AUTO_TEST_CASE(help_example)
 {
     // test different argument types

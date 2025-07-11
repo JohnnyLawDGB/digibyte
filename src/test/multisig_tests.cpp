@@ -1,9 +1,5 @@
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
-// Copyright (c) 2011-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// Copyright (c) 2011-2022 The Bitcoin Core developers
+// Copyright (c) 2014-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -17,10 +13,7 @@
 #include <test/util/setup_common.h>
 #include <tinyformat.h>
 #include <uint256.h>
-<<<<<<< HEAD
-=======
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 #include <boost/test/unit_test.hpp>
 
@@ -149,9 +142,6 @@ BOOST_AUTO_TEST_CASE(multisig_IsStandard)
     for (int i = 0; i < 4; i++)
         key[i].MakeNewKey(true);
 
-<<<<<<< HEAD
-    TxoutType whichType;
-=======
     const auto is_standard{[](const CScript& spk) {
         TxoutType type;
         bool res{::IsStandard(spk, std::nullopt, type)};
@@ -160,7 +150,6 @@ BOOST_AUTO_TEST_CASE(multisig_IsStandard)
         }
         return res;
     }};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     CScript a_and_b;
     a_and_b << OP_2 << ToByteVector(key[0].GetPubKey()) << ToByteVector(key[1].GetPubKey()) << OP_2 << OP_CHECKMULTISIG;
@@ -229,12 +218,8 @@ BOOST_AUTO_TEST_CASE(multisig_Sign)
 
     for (int i = 0; i < 3; i++)
     {
-<<<<<<< HEAD
-        BOOST_CHECK_MESSAGE(SignSignature(keystore, CTransaction(txFrom), txTo[i], 0, SIGHASH_ALL), strprintf("SignSignature %d", i));
-=======
         SignatureData empty;
         BOOST_CHECK_MESSAGE(SignSignature(keystore, CTransaction(txFrom), txTo[i], 0, SIGHASH_ALL, empty), strprintf("SignSignature %d", i));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 }
 

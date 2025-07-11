@@ -1,9 +1,5 @@
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
-// Copyright (c) 2012-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// Copyright (c) 2012-2022 The Bitcoin Core developers
+// Copyright (c) 2014-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -20,21 +16,13 @@
 
 BOOST_AUTO_TEST_SUITE(scheduler_tests)
 
-<<<<<<< HEAD
-static void microTask(CScheduler& s, std::mutex& mutex, int& counter, int delta, std::chrono::system_clock::time_point rescheduleTime)
-=======
 static void microTask(CScheduler& s, std::mutex& mutex, int& counter, int delta, std::chrono::steady_clock::time_point rescheduleTime)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     {
         std::lock_guard<std::mutex> lock(mutex);
         counter += delta;
     }
-<<<<<<< HEAD
-    std::chrono::system_clock::time_point noTime = std::chrono::system_clock::time_point::min();
-=======
     auto noTime = std::chrono::steady_clock::time_point::min();
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (rescheduleTime != noTime) {
         CScheduler::Function f = std::bind(&microTask, std::ref(s), std::ref(mutex), std::ref(counter), -delta + 1, noTime);
         s.schedule(f, rescheduleTime);
@@ -57,35 +45,20 @@ BOOST_AUTO_TEST_CASE(manythreads)
 
     std::mutex counterMutex[10];
     int counter[10] = { 0 };
-<<<<<<< HEAD
-    FastRandomContext rng{/* fDeterministic */ true};
-=======
     FastRandomContext rng{/*fDeterministic=*/true};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     auto zeroToNine = [](FastRandomContext& rc) -> int { return rc.randrange(10); }; // [0, 9]
     auto randomMsec = [](FastRandomContext& rc) -> int { return -11 + (int)rc.randrange(1012); }; // [-11, 1000]
     auto randomDelta = [](FastRandomContext& rc) -> int { return -1000 + (int)rc.randrange(2001); }; // [-1000, 1000]
 
-<<<<<<< HEAD
-    std::chrono::system_clock::time_point start = std::chrono::system_clock::now();
-    std::chrono::system_clock::time_point now = start;
-    std::chrono::system_clock::time_point first, last;
-=======
     auto start = std::chrono::steady_clock::now();
     auto now = start;
     std::chrono::steady_clock::time_point first, last;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     size_t nTasks = microTasks.getQueueInfo(first, last);
     BOOST_CHECK(nTasks == 0);
 
     for (int i = 0; i < 100; ++i) {
-<<<<<<< HEAD
-        std::chrono::system_clock::time_point t = now + std::chrono::microseconds(randomMsec(rng));
-        std::chrono::system_clock::time_point tReschedule = now + std::chrono::microseconds(500 + randomMsec(rng));
-=======
         auto t = now + std::chrono::microseconds(randomMsec(rng));
         auto tReschedule = now + std::chrono::microseconds(500 + randomMsec(rng));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         int whichCounter = zeroToNine(rng);
         CScheduler::Function f = std::bind(&microTask, std::ref(microTasks),
                                              std::ref(counterMutex[whichCounter]), std::ref(counter[whichCounter]),
@@ -99,31 +72,19 @@ BOOST_AUTO_TEST_CASE(manythreads)
 
     // As soon as these are created they will start running and servicing the queue
     std::vector<std::thread> microThreads;
-<<<<<<< HEAD
-=======
     microThreads.reserve(10);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     for (int i = 0; i < 5; i++)
         microThreads.emplace_back(std::bind(&CScheduler::serviceQueue, &microTasks));
 
     UninterruptibleSleep(std::chrono::microseconds{600});
-<<<<<<< HEAD
-    now = std::chrono::system_clock::now();
-=======
     now = std::chrono::steady_clock::now();
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // More threads and more tasks:
     for (int i = 0; i < 5; i++)
         microThreads.emplace_back(std::bind(&CScheduler::serviceQueue, &microTasks));
     for (int i = 0; i < 100; i++) {
-<<<<<<< HEAD
-        std::chrono::system_clock::time_point t = now + std::chrono::microseconds(randomMsec(rng));
-        std::chrono::system_clock::time_point tReschedule = now + std::chrono::microseconds(500 + randomMsec(rng));
-=======
         auto t = now + std::chrono::microseconds(randomMsec(rng));
         auto tReschedule = now + std::chrono::microseconds(500 + randomMsec(rng));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         int whichCounter = zeroToNine(rng);
         CScheduler::Function f = std::bind(&microTask, std::ref(microTasks),
                                              std::ref(counterMutex[whichCounter]), std::ref(counter[whichCounter]),
@@ -152,13 +113,8 @@ BOOST_AUTO_TEST_CASE(wait_until_past)
     Mutex mtx;
     WAIT_LOCK(mtx, lock);
 
-<<<<<<< HEAD
-    const auto no_wait= [&](const std::chrono::seconds& d) {
-        return condvar.wait_until(lock, std::chrono::system_clock::now() - d);
-=======
     const auto no_wait = [&](const std::chrono::seconds& d) {
         return condvar.wait_until(lock, std::chrono::steady_clock::now() - d);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     };
 
     BOOST_CHECK(std::cv_status::timeout == no_wait(std::chrono::seconds{1}));
@@ -182,14 +138,9 @@ BOOST_AUTO_TEST_CASE(singlethreadedscheduler_ordered)
     // the extra threads should effectively be doing nothing
     // if they don't we'll get out of order behaviour
     std::vector<std::thread> threads;
-<<<<<<< HEAD
-    for (int i = 0; i < 5; ++i) {
-        threads.emplace_back(std::bind(&CScheduler::serviceQueue, &scheduler));
-=======
     threads.reserve(5);
     for (int i = 0; i < 5; ++i) {
         threads.emplace_back([&] { scheduler.serviceQueue(); });
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     // these are not atomic, if SinglethreadedSchedulerClient prevents
@@ -235,11 +186,7 @@ BOOST_AUTO_TEST_CASE(mockforward)
     scheduler.scheduleFromNow(dummy, std::chrono::minutes{8});
 
     // check taskQueue
-<<<<<<< HEAD
-    std::chrono::system_clock::time_point first, last;
-=======
     std::chrono::steady_clock::time_point first, last;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     size_t num_tasks = scheduler.getQueueInfo(first, last);
     BOOST_CHECK_EQUAL(num_tasks, 3ul);
 
@@ -260,11 +207,7 @@ BOOST_AUTO_TEST_CASE(mockforward)
     BOOST_CHECK_EQUAL(counter, 2);
 
     // check that the time of the remaining job has been updated
-<<<<<<< HEAD
-    std::chrono::system_clock::time_point now = std::chrono::system_clock::now();
-=======
     auto now = std::chrono::steady_clock::now();
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     int delta = std::chrono::duration_cast<std::chrono::seconds>(first - now).count();
     // should be between 2 & 3 minutes from now
     BOOST_CHECK(delta > 2*60 && delta < 3*60);

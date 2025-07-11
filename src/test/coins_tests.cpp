@@ -1,15 +1,4 @@
-<<<<<<< HEAD
-// Copyright (c) 2014-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-// Distributed under the MIT software license, see the accompanying
-// file COPYING or http://www.opensource.org/licenses/mit-license.php.
-
-#include <attributes.h>
-#include <clientversion.h>
-#include <coins.h>
-#include <script/standard.h>
-#include <streams.h>
-=======
+// Copyright (c) 2014-2022 The Bitcoin Core developers
 // Copyright (c) 2014-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
@@ -20,7 +9,6 @@
 #include <streams.h>
 #include <test/util/poolresourcetester.h>
 #include <test/util/random.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <test/util/setup_common.h>
 #include <txdb.h>
 #include <uint256.h>
@@ -146,13 +134,8 @@ void SimulationTest(CCoinsView* base, bool fake_best_block)
     std::map<COutPoint, Coin> result;
 
     // The cache stack.
-<<<<<<< HEAD
-    std::vector<CCoinsViewCacheTest*> stack; // A stack of CCoinsViewCaches on top.
-    stack.push_back(new CCoinsViewCacheTest(base)); // Start with one cache.
-=======
     std::vector<std::unique_ptr<CCoinsViewCacheTest>> stack; // A stack of CCoinsViewCaches on top.
     stack.push_back(std::make_unique<CCoinsViewCacheTest>(base)); // Start with one cache.
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // Use a limited set of random transaction ids, so we do test overwriting entries.
     std::vector<uint256> txids;
@@ -248,13 +231,9 @@ void SimulationTest(CCoinsView* base, bool fake_best_block)
             if (stack.size() > 1 && InsecureRandBool() == 0) {
                 unsigned int flushIndex = InsecureRandRange(stack.size() - 1);
                 if (fake_best_block) stack[flushIndex]->SetBestBlock(InsecureRand256());
-<<<<<<< HEAD
-                BOOST_CHECK(stack[flushIndex]->Flush());
-=======
                 bool should_erase = InsecureRandRange(4) < 3;
                 BOOST_CHECK(should_erase ? stack[flushIndex]->Flush() : stack[flushIndex]->Sync());
                 flushed_without_erase |= !should_erase;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             }
         }
         if (InsecureRandRange(100) == 0) {
@@ -262,14 +241,9 @@ void SimulationTest(CCoinsView* base, bool fake_best_block)
             if (stack.size() > 0 && InsecureRandBool() == 0) {
                 //Remove the top cache
                 if (fake_best_block) stack.back()->SetBestBlock(InsecureRand256());
-<<<<<<< HEAD
-                BOOST_CHECK(stack.back()->Flush());
-                delete stack.back();
-=======
                 bool should_erase = InsecureRandRange(4) < 3;
                 BOOST_CHECK(should_erase ? stack.back()->Flush() : stack.back()->Sync());
                 flushed_without_erase |= !should_erase;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 stack.pop_back();
             }
             if (stack.size() == 0 || (stack.size() < 4 && InsecureRandBool())) {
@@ -308,16 +282,6 @@ BOOST_AUTO_TEST_CASE(coins_cache_simulation_test)
     SimulationTest(&base, false);
 
     CCoinsViewDB db_base{{.path = "test", .cache_bytes = 1 << 23, .memory_only = true}, {}};
-    SimulationTest(&db_base, true);
-}
-
-// Run the above simulation for multiple base types.
-BOOST_AUTO_TEST_CASE(coins_cache_simulation_test)
-{
-    CCoinsViewTest base;
-    SimulationTest(&base, false);
-
-    CCoinsViewDB db_base{"test", /*nCacheSize*/ 1 << 23, /*fMemory*/ true, /*fWipe*/ false};
     SimulationTest(&db_base, true);
 }
 
@@ -445,11 +409,7 @@ BOOST_AUTO_TEST_CASE(updatecoins_simulation_test)
 
             // Call UpdateCoins on the top cache
             CTxUndo undo;
-<<<<<<< HEAD
-            UpdateCoins(CTransaction(tx), *(stack.back()), undo, height);
-=======
             UpdateCoins(CTransaction{tx}, *(stack.back()), undo, height);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
             // Update the utxo set for future spends
             utxoset.insert(outpoint);
@@ -523,10 +483,6 @@ BOOST_AUTO_TEST_CASE(updatecoins_simulation_test)
             // Every 100 iterations, change the cache stack.
             if (stack.size() > 0 && InsecureRandBool() == 0) {
                 BOOST_CHECK(stack.back()->Flush());
-<<<<<<< HEAD
-                delete stack.back();
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 stack.pop_back();
             }
             if (stack.size() == 0 || (stack.size() < 4 && InsecureRandBool())) {
@@ -588,11 +544,7 @@ BOOST_AUTO_TEST_CASE(ccoins_serialization)
     uint64_t x = 3000000000ULL;
     tmp << VARINT(x);
     BOOST_CHECK_EQUAL(HexStr(tmp), "8a95c0bb00");
-<<<<<<< HEAD
-    CDataStream ss5(ParseHex("00008a95c0bb00"), SER_DISK, CLIENT_VERSION);
-=======
     DataStream ss5{ParseHex("00008a95c0bb00")};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     try {
         Coin cc5;
         ss5 >> cc5;

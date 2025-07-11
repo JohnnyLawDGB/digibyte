@@ -1,21 +1,13 @@
-<<<<<<< HEAD
-// Copyright (c) 2017-2020 The Bitcoin Core developers
-// Copyright (c) 2017-2020 The DigiByte Core developers
-=======
+// Copyright (c) 2017-2022 The Bitcoin Core developers
 // Copyright (c) 2017-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <random.h>
 
-<<<<<<< HEAD
-#include <test/util/setup_common.h>
-=======
 #include <test/util/random.h>
 #include <test/util/setup_common.h>
 #include <util/time.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 #include <boost/test/unit_test.hpp>
 
@@ -37,13 +29,6 @@ BOOST_AUTO_TEST_CASE(fastrandom_tests)
     FastRandomContext ctx2(true);
 
     for (int i = 10; i > 0; --i) {
-<<<<<<< HEAD
-        BOOST_CHECK_EQUAL(GetRand(std::numeric_limits<uint64_t>::max()), uint64_t{10393729187455219830U});
-        BOOST_CHECK_EQUAL(GetRandInt(std::numeric_limits<int>::max()), int{769702006});
-        BOOST_CHECK_EQUAL(GetRandMicros(std::chrono::hours{1}).count(), 2917185654);
-        BOOST_CHECK_EQUAL(GetRandMillis(std::chrono::hours{1}).count(), 2144374);
-    }
-=======
         BOOST_CHECK_EQUAL(GetRand<uint64_t>(), uint64_t{10393729187455219830U});
         BOOST_CHECK_EQUAL(GetRand<int>(), int{769702006});
         BOOST_CHECK_EQUAL(GetRandMicros(std::chrono::hours{1}).count(), 2917185654);
@@ -59,7 +44,6 @@ BOOST_AUTO_TEST_CASE(fastrandom_tests)
         BOOST_CHECK_EQUAL(-970181367944767837, ctx.rand_uniform_delay(time_point, -9223372036854775807s).time_since_epoch().count());
         BOOST_CHECK_EQUAL(24761, ctx.rand_uniform_delay(time_point, 9h).time_since_epoch().count());
     }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     BOOST_CHECK_EQUAL(ctx1.rand32(), ctx2.rand32());
     BOOST_CHECK_EQUAL(ctx1.rand32(), ctx2.rand32());
     BOOST_CHECK_EQUAL(ctx1.rand64(), ctx2.rand64());
@@ -86,13 +70,8 @@ BOOST_AUTO_TEST_CASE(fastrandom_tests)
     // Check that a nondeterministic ones are not
     g_mock_deterministic_tests = false;
     for (int i = 10; i > 0; --i) {
-<<<<<<< HEAD
-        BOOST_CHECK(GetRand(std::numeric_limits<uint64_t>::max()) != uint64_t{10393729187455219830U});
-        BOOST_CHECK(GetRandInt(std::numeric_limits<int>::max()) != int{769702006});
-=======
         BOOST_CHECK(GetRand<uint64_t>() != uint64_t{10393729187455219830U});
         BOOST_CHECK(GetRand<int>() != int{769702006});
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         BOOST_CHECK(GetRandMicros(std::chrono::hours{1}) != std::chrono::microseconds{2917185654});
         BOOST_CHECK(GetRandMillis(std::chrono::hours{1}) != std::chrono::milliseconds{2144374});
     }

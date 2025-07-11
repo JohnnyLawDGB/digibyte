@@ -1,22 +1,13 @@
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
-// Copyright (c) 2012-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// Copyright (c) 2012-2022 The Bitcoin Core developers
+// Copyright (c) 2014-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <dbwrapper.h>
-<<<<<<< HEAD
-#include <test/util/setup_common.h>
-#include <uint256.h>
-=======
 #include <test/util/random.h>
 #include <test/util/setup_common.h>
 #include <uint256.h>
 #include <util/string.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 #include <memory>
 
@@ -39,11 +30,7 @@ BOOST_AUTO_TEST_CASE(dbwrapper)
     // Perform tests both obfuscated and non-obfuscated.
     for (const bool obfuscate : {false, true}) {
         fs::path ph = m_args.GetDataDirBase() / (obfuscate ? "dbwrapper_obfuscate_true" : "dbwrapper_obfuscate_false");
-<<<<<<< HEAD
-        CDBWrapper dbw(ph, (1 << 20), true, false, obfuscate);
-=======
         CDBWrapper dbw({.path = ph, .cache_bytes = 1 << 20, .memory_only = true, .wipe_data = false, .obfuscate = obfuscate});
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         uint8_t key{'k'};
         uint256 in = InsecureRand256();
         uint256 res;
@@ -62,11 +49,7 @@ BOOST_AUTO_TEST_CASE(dbwrapper_basic_data)
     // Perform tests both obfuscated and non-obfuscated.
     for (bool obfuscate : {false, true}) {
         fs::path ph = m_args.GetDataDirBase() / (obfuscate ? "dbwrapper_1_obfuscate_true" : "dbwrapper_1_obfuscate_false");
-<<<<<<< HEAD
-        CDBWrapper dbw(ph, (1 << 20), false, true, obfuscate);
-=======
         CDBWrapper dbw({.path = ph, .cache_bytes = 1 << 20, .memory_only = false, .wipe_data = true, .obfuscate = obfuscate});
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         uint256 res;
         uint32_t res_uint_32;
@@ -147,11 +130,7 @@ BOOST_AUTO_TEST_CASE(dbwrapper_batch)
     // Perform tests both obfuscated and non-obfuscated.
     for (const bool obfuscate : {false, true}) {
         fs::path ph = m_args.GetDataDirBase() / (obfuscate ? "dbwrapper_batch_obfuscate_true" : "dbwrapper_batch_obfuscate_false");
-<<<<<<< HEAD
-        CDBWrapper dbw(ph, (1 << 20), true, false, obfuscate);
-=======
         CDBWrapper dbw({.path = ph, .cache_bytes = 1 << 20, .memory_only = true, .wipe_data = false, .obfuscate = obfuscate});
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         uint8_t key{'i'};
         uint256 in = InsecureRand256();
@@ -187,11 +166,7 @@ BOOST_AUTO_TEST_CASE(dbwrapper_iterator)
     // Perform tests both obfuscated and non-obfuscated.
     for (const bool obfuscate : {false, true}) {
         fs::path ph = m_args.GetDataDirBase() / (obfuscate ? "dbwrapper_iterator_obfuscate_true" : "dbwrapper_iterator_obfuscate_false");
-<<<<<<< HEAD
-        CDBWrapper dbw(ph, (1 << 20), true, false, obfuscate);
-=======
         CDBWrapper dbw({.path = ph, .cache_bytes = 1 << 20, .memory_only = true, .wipe_data = false, .obfuscate = obfuscate});
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         // The two keys are intentionally chosen for ordering
         uint8_t key{'j'};
@@ -231,17 +206,10 @@ BOOST_AUTO_TEST_CASE(existing_data_no_obfuscate)
 {
     // We're going to share this fs::path between two wrappers
     fs::path ph = m_args.GetDataDirBase() / "existing_data_no_obfuscate";
-<<<<<<< HEAD
-    create_directories(ph);
-
-    // Set up a non-obfuscated wrapper to write some initial data.
-    std::unique_ptr<CDBWrapper> dbw = std::make_unique<CDBWrapper>(ph, (1 << 10), false, false, false);
-=======
     fs::create_directories(ph);
 
     // Set up a non-obfuscated wrapper to write some initial data.
     std::unique_ptr<CDBWrapper> dbw = std::make_unique<CDBWrapper>(DBParams{.path = ph, .cache_bytes = 1 << 10, .memory_only = false, .wipe_data = false, .obfuscate = false});
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     uint8_t key{'k'};
     uint256 in = InsecureRand256();
     uint256 res;
@@ -279,17 +247,10 @@ BOOST_AUTO_TEST_CASE(existing_data_reindex)
 {
     // We're going to share this fs::path between two wrappers
     fs::path ph = m_args.GetDataDirBase() / "existing_data_reindex";
-<<<<<<< HEAD
-    create_directories(ph);
-
-    // Set up a non-obfuscated wrapper to write some initial data.
-    std::unique_ptr<CDBWrapper> dbw = std::make_unique<CDBWrapper>(ph, (1 << 10), false, false, false);
-=======
     fs::create_directories(ph);
 
     // Set up a non-obfuscated wrapper to write some initial data.
     std::unique_ptr<CDBWrapper> dbw = std::make_unique<CDBWrapper>(DBParams{.path = ph, .cache_bytes = 1 << 10, .memory_only = false, .wipe_data = false, .obfuscate = false});
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     uint8_t key{'k'};
     uint256 in = InsecureRand256();
     uint256 res;
@@ -321,11 +282,7 @@ BOOST_AUTO_TEST_CASE(existing_data_reindex)
 BOOST_AUTO_TEST_CASE(iterator_ordering)
 {
     fs::path ph = m_args.GetDataDirBase() / "iterator_ordering";
-<<<<<<< HEAD
-    CDBWrapper dbw(ph, (1 << 20), true, false, false);
-=======
     CDBWrapper dbw({.path = ph, .cache_bytes = 1 << 20, .memory_only = true, .wipe_data = false, .obfuscate = false});
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     for (int x=0x00; x<256; ++x) {
         uint8_t key = x;
         uint32_t value = x*x;
@@ -379,58 +336,25 @@ struct StringContentsSerializer {
     }
 
     template<typename Stream>
-<<<<<<< HEAD
-    void Serialize(Stream& s) const
-    {
-        for (size_t i = 0; i < str.size(); i++) {
-            s << uint8_t(str[i]);
-        }
-    }
-
-    template<typename Stream>
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     void Unserialize(Stream& s)
     {
         str.clear();
         uint8_t c{0};
-<<<<<<< HEAD
-        while (true) {
-            try {
-                s >> c;
-                str.push_back(c);
-            } catch (const std::ios_base::failure&) {
-                break;
-            }
-=======
         while (!s.eof()) {
             s >> c;
             str.push_back(c);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
     }
 };
 
 BOOST_AUTO_TEST_CASE(iterator_string_ordering)
 {
-<<<<<<< HEAD
-    char buf[10];
-
-    fs::path ph = m_args.GetDataDirBase() / "iterator_string_ordering";
-    CDBWrapper dbw(ph, (1 << 20), true, false, false);
-    for (int x=0x00; x<10; ++x) {
-        for (int y = 0; y < 10; y++) {
-            snprintf(buf, sizeof(buf), "%d", x);
-            StringContentsSerializer key(buf);
-            for (int z = 0; z < y; z++)
-=======
     fs::path ph = m_args.GetDataDirBase() / "iterator_string_ordering";
     CDBWrapper dbw({.path = ph, .cache_bytes = 1 << 20, .memory_only = true, .wipe_data = false, .obfuscate = false});
     for (int x = 0; x < 10; ++x) {
         for (int y = 0; y < 10; ++y) {
             std::string key{ToString(x)};
             for (int z = 0; z < y; ++z)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 key += key;
             uint32_t value = x*x;
             BOOST_CHECK(dbw.Write(StringContentsSerializer{key}, value));
@@ -439,22 +363,11 @@ BOOST_AUTO_TEST_CASE(iterator_string_ordering)
 
     std::unique_ptr<CDBIterator> it(const_cast<CDBWrapper&>(dbw).NewIterator());
     for (const int seek_start : {0, 5}) {
-<<<<<<< HEAD
-        snprintf(buf, sizeof(buf), "%d", seek_start);
-        StringContentsSerializer seek_key(buf);
-        it->Seek(seek_key);
-        for (unsigned int x=seek_start; x<10; ++x) {
-            for (int y = 0; y < 10; y++) {
-                snprintf(buf, sizeof(buf), "%d", x);
-                std::string exp_key(buf);
-                for (int z = 0; z < y; z++)
-=======
         it->Seek(StringContentsSerializer{ToString(seek_start)});
         for (unsigned int x = seek_start; x < 10; ++x) {
             for (int y = 0; y < 10; ++y) {
                 std::string exp_key{ToString(x)};
                 for (int z = 0; z < y; ++z)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                     exp_key += exp_key;
                 StringContentsSerializer key;
                 uint32_t value;
@@ -479,11 +392,7 @@ BOOST_AUTO_TEST_CASE(unicodepath)
     // the ANSI CreateDirectoryA call and the code page isn't UTF8.
     // It will succeed if created with CreateDirectoryW.
     fs::path ph = m_args.GetDataDirBase() / "test_runner_₿_🏃_20191128_104644";
-<<<<<<< HEAD
-    CDBWrapper dbw(ph, (1 << 20));
-=======
     CDBWrapper dbw({.path = ph, .cache_bytes = 1 << 20});
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     fs::path lockPath = ph / "LOCK";
     BOOST_CHECK(fs::exists(lockPath));

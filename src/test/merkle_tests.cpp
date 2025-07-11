@@ -1,17 +1,10 @@
-<<<<<<< HEAD
 // Copyright (c) 2009-2020 The Bitcoin Core developers
 // Copyright (c) 2014-2020 The DigiByte Core developers
-=======
-// Copyright (c) 2015-2020 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <consensus/merkle.h>
-<<<<<<< HEAD
-=======
 #include <test/util/random.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <test/util/setup_common.h>
 
 #include <boost/test/unit_test.hpp>
@@ -69,11 +62,7 @@ static void MerkleComputation(const std::vector<uint256>& leaves, uint256* proot
                 }
             }
             mutated |= (inner[level] == h);
-<<<<<<< HEAD
-            CHash256().Write(inner[level]).Write(h).Finalize(h);
-=======
             h = Hash(inner[level], h);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
         // Store the resulting hash at inner position level.
         inner[level] = h;
@@ -99,11 +88,7 @@ static void MerkleComputation(const std::vector<uint256>& leaves, uint256* proot
         if (pbranch && matchh) {
             pbranch->push_back(h);
         }
-<<<<<<< HEAD
-        CHash256().Write(h).Write(h).Finalize(h);
-=======
         h = Hash(h, h);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         // Increment count to the value it would have if two entries at this
         // level had existed.
         count += ((uint32_t{1}) << level);
@@ -118,11 +103,7 @@ static void MerkleComputation(const std::vector<uint256>& leaves, uint256* proot
                     matchh = true;
                 }
             }
-<<<<<<< HEAD
-            CHash256().Write(inner[level]).Write(h).Finalize(h);
-=======
             h = Hash(inner[level], h);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             level++;
         }
     }

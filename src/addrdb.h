@@ -20,7 +20,6 @@
 class ArgsManager;
 class AddrMan;
 class CAddress;
-class CAddrMan;
 class CDataStream;
 class DataStream;
 class NetGroupManager;
@@ -37,9 +36,9 @@ private:
     fs::path pathAddr;
 public:
     CAddrDB();
-    bool Write(const CAddrMan& addr);
-    bool Read(CAddrMan& addr);
-    static bool Read(CAddrMan& addr, CDataStream& ssPeers);
+    bool Write(const AddrMan& addr);
+    bool Read(AddrMan& addr);
+    static bool Read(AddrMan& addr, CDataStream& ssPeers);
 };
 
 /** Access to the banlist databases (banlist.json and banlist.dat) */

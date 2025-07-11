@@ -160,19 +160,15 @@ bool CBanDB::Write(const banmap_t& banSet)
 
 bool CBanDB::Read(banmap_t& banSet, bool& dirty)
 {
-    // If the JSON banlist does not exist, then try to read the non-upgraded banlist.dat.
-    if (!fs::exists(m_banlist_json)) {
-        // If this succeeds then we need to flush to disk in order to create the JSON banlist.
-        dirty = true;
-        try {
-            DeserializeFileDB(m_banlist_dat, banSet);
-            return true;
-        } catch (const std::exception&) {
-            return false;
-        }
-    }
-
     dirty = false;
+    
+    if (fs::exists(m_banlist_dat)) {
+        LogPrintf("banlist.dat ignored because it can only be read by " PACKAGE_NAME " version 22.x. Remove %s to silence this warning.\n", fs::quoted(PathToString(m_banlist_dat)));
+    }
+    // If the JSON banlist does not exist, then recreate it
+    if (!fs::exists(m_banlist_json)) {
+        return false;
+    }
 
     std::map<std::string, common::SettingsValue> settings;
     std::vector<std::string> errors;
@@ -199,12 +195,12 @@ CAddrDB::CAddrDB()
     pathAddr = gArgs.GetDataDirNet() / "peers.dat";
 }
 
-bool CAddrDB::Write(const CAddrMan& addr)
+bool CAddrDB::Write(const AddrMan& addr)
 {
     return SerializeFileDB("peers", pathAddr, addr);
 }
 
-bool CAddrDB::Read(CAddrMan& addr)
+bool CAddrDB::Read(AddrMan& addr)
 {
     try {
         DeserializeFileDB(pathAddr, addr);
@@ -214,7 +210,7 @@ bool CAddrDB::Read(CAddrMan& addr)
     }
 }
 
-bool CAddrDB::Read(CAddrMan& addr, CDataStream& ssPeers)
+bool CAddrDB::Read(AddrMan& addr, CDataStream& ssPeers)
 {
     try {
         DeserializeDB(ssPeers, addr, false);

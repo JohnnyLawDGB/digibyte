@@ -1,5 +1,4 @@
-// Copyright (c) 2017-2022 The Bitcoin Core developers
-// Copyright (c) 2014-2025 The DigiByte Core developers
+// Copyright (c) 2017-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -34,31 +33,6 @@ std::string GetAllOutputTypes()
         ret.emplace_back(GetTxnOutputType(static_cast<TxoutType>(i)));
     }
     return Join(ret, ", ");
-}
-}
-
-void RPCTypeCheck(const UniValue& params,
-                  const std::list<UniValueType>& typesExpected,
-                  bool fAllowNull)
-{
-    unsigned int i = 0;
-    for (const UniValueType& t : typesExpected) {
-        if (params.size() <= i)
-            break;
-
-        const UniValue& v = params[i];
-        if (!(fAllowNull && v.isNull())) {
-            RPCTypeCheckArgument(v, t);
-        }
-        i++;
-    }
-}
-
-void RPCTypeCheckArgument(const UniValue& value, const UniValueType& typeExpected)
-{
-    if (!typeExpected.typeAny && value.type() != typeExpected.type) {
-        throw JSONRPCError(RPC_TYPE_ERROR, strprintf("Expected type %s, got %s", uvTypeName(typeExpected.type), uvTypeName(value.type())));
-    }
 }
 
 void RPCTypeCheckObj(const UniValue& o,
@@ -283,6 +257,7 @@ public:
     {
         return UniValue(UniValue::VOBJ);
     }
+
     UniValue operator()(const PKHash& keyID) const
     {
         UniValue obj(UniValue::VOBJ);
@@ -563,7 +538,6 @@ RPCHelpMan::RPCHelpMan(std::string name, std::string description, std::vector<RP
                     param_type |= inner.m_opts.also_positional ? NAMED : NAMED_ONLY;
                 }
             }
-        }
         }
         // Default value type should match argument type only when defined
         if (arg.m_fallback.index() == 2) {
@@ -931,6 +905,24 @@ std::string RPCArg::ToDescriptionString(bool is_named_arg) const
             break;
         }
         case Type::OBJ:
+        case Type::OBJ_NAMED_PARAMS:
+        case Type::OBJ_USER_KEYS: {
+            ret += "json object";
+            break;
+        }
+        case Type::ARR: {
+            ret += "json array";
+            break;
+        }
+        } // no default case, so the compiler can warn about missing cases
+    }
+    if (m_fallback.index() == 1) {
+        ret += ", optional, default=" + std::get<RPCArg::DefaultHint>(m_fallback);
+    } else if (m_fallback.index() == 2) {
+        ret += ", optional, default=" + std::get<RPCArg::Default>(m_fallback).write();
+    } else {
+        switch (std::get<RPCArg::Optional>(m_fallback)) {
+        case RPCArg::Optional::OMITTED: {
             if (is_named_arg) ret += ", optional"; // Default value is "null" in dicts. Otherwise,
             // nothing to do. Element is treated as if not present and has no default value
             break;
@@ -942,6 +934,20 @@ std::string RPCArg::ToDescriptionString(bool is_named_arg) const
         } // no default case, so the compiler can warn about missing cases
     }
     ret += ")";
+    if (m_type == Type::OBJ_NAMED_PARAMS) ret += " Options object that can be used to pass named arguments, listed below.";
+    ret += m_description.empty() ? "" : " " + m_description;
+    return ret;
+}
+
+void RPCResult::ToSections(Sections& sections, const OuterType outer_type, const int current_indent) const
+{
+    // Indentation
+    const std::string indent(current_indent, ' ');
+    const std::string indent_next(current_indent + 2, ' ');
+
+    // Elements in a JSON structure (dictionary or array) are separated by a comma
+    const std::string maybe_separator{outer_type != OuterType::NONE ? "," : ""};
+
     // The key name if recursed into a dictionary
     const std::string maybe_key{
         outer_type == OuterType::OBJ ?
@@ -1009,6 +1015,14 @@ std::string RPCArg::ToDescriptionString(bool is_named_arg) const
     }
     case Type::OBJ_DYN:
     case Type::OBJ: {
+        if (m_inner.empty()) {
+            sections.PushSection({indent + maybe_key + "{}", Description("empty JSON object")});
+            return;
+        }
+        sections.PushSection({indent + maybe_key + "{", Description("json object")});
+        for (const auto& i : m_inner) {
+            i.ToSections(sections, OuterType::OBJ, current_indent + 2);
+        }
         if (m_type == Type::OBJ_DYN && m_inner.back().m_type != Type::ELISION) {
             // If the dictionary keys are dynamic, use three dots for continuation
             sections.PushSection({indent_next + "...", ""});
@@ -1198,6 +1212,23 @@ std::string RPCArg::ToString(const bool oneline) const
         return GetFirstName();
     }
     case Type::OBJ:
+    case Type::OBJ_NAMED_PARAMS:
+    case Type::OBJ_USER_KEYS: {
+        const std::string res = Join(m_inner, ",", [&](const RPCArg& i) { return i.ToStringObj(oneline); });
+        if (m_type == Type::OBJ) {
+            return "{" + res + "}";
+        } else {
+            return "{" + res + ",...}";
+        }
+    }
+    case Type::ARR: {
+        std::string res;
+        for (const auto& i : m_inner) {
+            res += i.ToString(oneline) + ",";
+        }
+        return "[" + res + "...]";
+    }
+    } // no default case, so the compiler can warn about missing cases
     NONFATAL_UNREACHABLE();
 }
 
@@ -1264,6 +1295,23 @@ std::vector<CScript> EvalDescriptorStringOrObject(const UniValue& scanobject, Fl
         if (!desc->Expand(i, provider, scripts, provider)) {
             throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, strprintf("Cannot derive script without private keys: '%s'", desc_str));
         }
+        if (expand_priv) {
+            desc->ExpandPrivate(/*pos=*/i, provider, /*out=*/provider);
+        }
+        std::move(scripts.begin(), scripts.end(), std::back_inserter(ret));
+    }
+    return ret;
+}
+
+UniValue GetServicesNames(ServiceFlags services)
+{
+    UniValue servicesNames(UniValue::VARR);
+
+    for (const auto& flag : serviceFlagsToStr(services)) {
+        servicesNames.push_back(flag);
+    }
+
+    return servicesNames;
 }
 
 /** Convert a vector of bilingual strings to a UniValue::VARR containing their original untranslated values. */

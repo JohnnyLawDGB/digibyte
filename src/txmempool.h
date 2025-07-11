@@ -682,7 +682,7 @@ public:
         return (mapTx.count(gtxid.GetHash()) != 0);
     }
 
-    bool exists(const uint256& txid) const { return exists(GenTxid{false, txid}); }
+    bool exists(const uint256& txid) const { return exists(GenTxid::Txid(txid)); }
 
     CTransactionRef get(const uint256& hash) const;
     txiter get_iter_from_wtxid(const uint256& wtxid) const EXCLUSIVE_LOCKS_REQUIRED(cs)

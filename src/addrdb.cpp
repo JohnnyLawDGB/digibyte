@@ -53,10 +53,9 @@ bool SerializeDB(Stream& stream, const Data& data)
 {
     // Write and commit header, data
     try {
-        CHashWriter hasher(stream.GetType(), stream.GetVersion());
-        stream << Params().MessageStart() << data;
-        hasher << Params().MessageStart() << data;
-        stream << hasher.GetHash();
+        HashedSourceWriter hashwriter{stream};
+        hashwriter << Params().MessageStart() << data;
+        stream << hashwriter.GetHash();
     } catch (const std::exception& e) {
         return error("%s: Serialize or I/O error - %s", __func__, e.what());
     }
@@ -65,17 +64,16 @@ bool SerializeDB(Stream& stream, const Data& data)
 }
 
 template <typename Data>
-bool SerializeFileDB(const std::string& prefix, const fs::path& path, const Data& data, int version)
+bool SerializeFileDB(const std::string& prefix, const fs::path& path, const Data& data)
 {
     // Generate random temporary filename
-    uint16_t randv = 0;
-    GetRandBytes({(unsigned char*)&randv, sizeof(randv)});
+    const uint16_t randv{GetRand<uint16_t>()};
     std::string tmpfn = strprintf("%s.%04x", prefix, randv);
 
     // open temp output file, and associate with CAutoFile
     fs::path pathTmp = gArgs.GetDataDirNet() / fs::u8path(tmpfn);
     FILE *file = fsbridge::fopen(pathTmp, "wb");
-    CAutoFile fileout(file, version);
+    AutoFile fileout{file};
     if (fileout.IsNull()) {
         fileout.fclose();
         remove(pathTmp);
@@ -105,47 +103,39 @@ bool SerializeFileDB(const std::string& prefix, const fs::path& path, const Data
 }
 
 template <typename Stream, typename Data>
-bool DeserializeDB(Stream& stream, Data& data, bool fCheckSum = true)
+void DeserializeDB(Stream& stream, Data&& data, bool fCheckSum = true)
 {
-    try {
-        HashVerifier<Stream> verifier(stream);
-        // de-serialize file header (network specific magic number) and ..
-        unsigned char pchMsgTmp[4];
-        verifier >> pchMsgTmp;
-        // ... verify the network matches ours
-        if (memcmp(pchMsgTmp, Params().MessageStart().data(), sizeof(pchMsgTmp)))
-            return error("%s: Invalid network magic number", __func__);
+    HashVerifier verifier{stream};
+    // de-serialize file header (network specific magic number) and ..
+    MessageStartChars pchMsgTmp;
+    verifier >> pchMsgTmp;
+    // ... verify the network matches ours
+    if (pchMsgTmp != Params().MessageStart()) {
+        throw std::runtime_error{"Invalid network magic number"};
+    }
 
-        // de-serialize data
-        verifier >> data;
+    // de-serialize data
+    verifier >> data;
 
-        // verify checksum
-        if (fCheckSum) {
-            uint256 hashTmp;
-            stream >> hashTmp;
-            if (hashTmp != verifier.GetHash()) {
-                return error("%s: Checksum mismatch, data corrupted", __func__);
-            }
+    // verify checksum
+    if (fCheckSum) {
+        uint256 hashTmp;
+        stream >> hashTmp;
+        if (hashTmp != verifier.GetHash()) {
+            throw std::runtime_error{"Checksum mismatch, data corrupted"};
         }
     }
-    catch (const std::exception& e) {
-        return error("%s: Deserialize or I/O error - %s", __func__, e.what());
-    }
-
-    return true;
 }
 
 template <typename Data>
-bool DeserializeFileDB(const fs::path& path, Data& data, int version)
+void DeserializeFileDB(const fs::path& path, Data&& data)
 {
-    // open input file, and associate with CAutoFile
     FILE* file = fsbridge::fopen(path, "rb");
-    CAutoFile filein(file, version);
+    AutoFile filein{file};
     if (filein.IsNull()) {
-        LogPrintf("Missing or invalid file %s\n", PathToString(path));
-        return false;
+        throw DbNotFoundError{};
     }
-    return DeserializeDB(filein, data);
+    DeserializeDB(filein, data);
 }
 } // namespace
 
@@ -174,7 +164,12 @@ bool CBanDB::Read(banmap_t& banSet, bool& dirty)
     if (!fs::exists(m_banlist_json)) {
         // If this succeeds then we need to flush to disk in order to create the JSON banlist.
         dirty = true;
-        return DeserializeFileDB(m_banlist_dat, banSet, CLIENT_VERSION);
+        try {
+            DeserializeFileDB(m_banlist_dat, banSet);
+            return true;
+        } catch (const std::exception&) {
+            return false;
+        }
     }
 
     dirty = false;
@@ -206,17 +201,27 @@ CAddrDB::CAddrDB()
 
 bool CAddrDB::Write(const CAddrMan& addr)
 {
-    return SerializeFileDB("peers", pathAddr, addr, CLIENT_VERSION);
+    return SerializeFileDB("peers", pathAddr, addr);
 }
 
 bool CAddrDB::Read(CAddrMan& addr)
 {
-    return DeserializeFileDB(pathAddr, addr, CLIENT_VERSION);
+    try {
+        DeserializeFileDB(pathAddr, addr);
+        return true;
+    } catch (const std::exception&) {
+        return false;
+    }
 }
 
 bool CAddrDB::Read(CAddrMan& addr, CDataStream& ssPeers)
 {
-    return DeserializeDB(ssPeers, addr, false);
+    try {
+        DeserializeDB(ssPeers, addr, false);
+        return true;
+    } catch (const std::exception&) {
+        return false;
+    }
 }
 
 void DumpAnchors(const fs::path& anchors_db_path, const std::vector<CAddress>& anchors)

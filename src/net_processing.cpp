@@ -1255,6 +1255,7 @@ namespace {
 
     void AddAddressKnown(Peer& peer, const CAddress& addr) EXCLUSIVE_LOCKS_REQUIRED(NetEventsInterface::g_msgproc_mutex);
     void PushAddress(Peer& peer, const CAddress& addr) EXCLUSIVE_LOCKS_REQUIRED(NetEventsInterface::g_msgproc_mutex);
+};
 
 const CNodeState* PeerManagerImpl::State(NodeId pnode) const EXCLUSIVE_LOCKS_REQUIRED(cs_main)
 {
@@ -1963,6 +1964,10 @@ bool PeerManagerImpl::MaybePunishNodeForBlock(NodeId nodeid, const BlockValidati
     case BlockValidationResult::BLOCK_RECENT_CONSENSUS_CHANGE:
     case BlockValidationResult::BLOCK_TIME_FUTURE:
         break;
+    // DigiByte-specific: block mined with wrong algorithm
+    case BlockValidationResult::BLOCK_INVALID_ALGO:
+        if (peer) Misbehaving(*peer, 100, message);
+        return true;
     }
     if (message != "") {
         LogPrint(BCLog::NET, "peer=%d: %s\n", nodeid, message);
@@ -2007,7 +2012,7 @@ bool PeerManagerImpl::BlockRequestAllowed(const CBlockIndex* pindex)
 
 std::optional<std::string> PeerManagerImpl::FetchBlock(NodeId peer_id, const CBlockIndex& block_index)
 {
-    if (fImporting || fReindex) return "Importing or reindexing";
+    if (m_chainman.m_blockman.LoadingBlocks()) return "Loading blocks ...";
 
     LOCK(cs_main);
 

@@ -119,7 +119,7 @@ bool SerializeFileDB(const std::string& prefix, const fs::path& path, const Data
     if (fileout.IsNull()) {
         fileout.fclose();
         remove(pathTmp);
-        return error("%s: Failed to open file %s", __func__, pathTmp.string());
+        return error("%s: Failed to open file %s", __func__, PathToString(pathTmp));
     }
 
     // Serialize
@@ -131,7 +131,7 @@ bool SerializeFileDB(const std::string& prefix, const fs::path& path, const Data
     if (!FileCommit(fileout.Get())) {
         fileout.fclose();
         remove(pathTmp);
-        return error("%s: Failed to flush file %s", __func__, pathTmp.string());
+        return error("%s: Failed to flush file %s", __func__, PathToString(pathTmp));
     }
     fileout.fclose();
 
@@ -182,7 +182,7 @@ bool DeserializeFileDB(const fs::path& path, Data& data, int version)
     FILE* file = fsbridge::fopen(path, "rb");
     CAutoFile filein(file, version);
     if (filein.IsNull()) {
-        LogPrintf("Missing or invalid file %s\n", path.string());
+        LogPrintf("Missing or invalid file %s\n", PathToString(path));
         return false;
     }
     return DeserializeDB(filein, data);
@@ -190,8 +190,8 @@ bool DeserializeFileDB(const fs::path& path, Data& data, int version)
 } // namespace
 
 CBanDB::CBanDB(fs::path ban_list_path)
-    : m_banlist_dat(ban_list_path.string() + ".dat"),
-      m_banlist_json(ban_list_path.string() + ".json")
+    : m_banlist_dat(PathToString(ban_list_path) + ".dat"),
+      m_banlist_json(PathToString(ban_list_path) + ".json")
 {
 }
 
@@ -224,7 +224,7 @@ bool CBanDB::Read(banmap_t& banSet, bool& dirty)
 
     if (!common::ReadSettings(m_banlist_json, settings, errors)) {
         for (const auto& err : errors) {
-            LogPrintf("Cannot load banlist %s: %s\n", m_banlist_json.string(), err);
+            LogPrintf("Cannot load banlist %s: %s\n", PathToString(m_banlist_json), err);
         }
         return false;
     }

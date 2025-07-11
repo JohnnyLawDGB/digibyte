@@ -18,11 +18,7 @@
  * so we will follow PHP's lead, which should be more than sufficient
  * (further stackexchange comments indicate depth > 32 rarely occurs).
  */
-<<<<<<< HEAD
-static const size_t MAX_JSON_DEPTH = 512;
-=======
 static constexpr size_t MAX_JSON_DEPTH = 512;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 static bool json_isdigit(int ch)
 {

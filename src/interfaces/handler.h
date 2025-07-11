@@ -1,9 +1,5 @@
-<<<<<<< HEAD
-// Copyright (c) 2018-2020 The Bitcoin Core developers
-// Copyright (c) 2018-2020 The DigiByte Core developers
-=======
 // Copyright (c) 2018-2022 The Bitcoin Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// Copyright (c) 2018-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -38,9 +34,6 @@ std::unique_ptr<Handler> MakeSignalHandler(boost::signals2::connection connectio
 
 //! Return handler wrapping a cleanup function.
 std::unique_ptr<Handler> MakeCleanupHandler(std::function<void()> cleanup);
-
-//! Return handler wrapping a cleanup function.
-std::unique_ptr<Handler> MakeHandler(std::function<void()> cleanup);
 
 } // namespace interfaces
 

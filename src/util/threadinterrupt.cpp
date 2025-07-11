@@ -1,16 +1,10 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-<<<<<<< HEAD:src/threadinterrupt.cpp
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
-// Copyright (c) 2009-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion:src/util/threadinterrupt.cpp
+// Copyright (c) 2009-2022 The Bitcoin Core developers
+// Copyright (c) 2014-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <util/threadinterrupt.h>
-
-#include <sync.h>
 
 #include <sync.h>
 

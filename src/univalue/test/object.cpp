@@ -1,9 +1,5 @@
 // Copyright (c) 2014 BitPay Inc.
-<<<<<<< HEAD
-// Copyright (c) 2014-2016 The DigiByte Core developers
-=======
 // Copyright (c) 2014-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or https://opensource.org/licenses/mit-license.php.
 
@@ -233,19 +229,11 @@ void univalue_array()
 
     arr.push_backV(vec);
 
-<<<<<<< HEAD
-    BOOST_CHECK(arr.push_back((uint64_t) 400ULL));
-    BOOST_CHECK(arr.push_back((int64_t) -400LL));
-    BOOST_CHECK(arr.push_back((int) -401));
-    BOOST_CHECK(arr.push_back(-40.1));
-    BOOST_CHECK(arr.push_back(true));
-=======
     arr.push_back(uint64_t{400ULL});
     arr.push_back(int64_t{-400LL});
     arr.push_back(int{-401});
     arr.push_back(-40.1);
     arr.push_back(true);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     BOOST_CHECK_EQUAL(arr.empty(), false);
     BOOST_CHECK_EQUAL(arr.size(), 10);

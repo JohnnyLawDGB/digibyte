@@ -7,10 +7,7 @@
 #include <stdint.h>
 #include <immintrin.h>
 
-<<<<<<< HEAD
-=======
 #include <attributes.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <crypto/common.h>
 
 namespace sha256d64_sse41 {

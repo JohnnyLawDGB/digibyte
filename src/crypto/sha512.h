@@ -15,11 +15,7 @@ class CSHA512
 private:
     uint64_t s[8];
     unsigned char buf[128];
-<<<<<<< HEAD
-    size_t bytes;
-=======
     uint64_t bytes{0};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 public:
     static constexpr size_t OUTPUT_SIZE = 64;

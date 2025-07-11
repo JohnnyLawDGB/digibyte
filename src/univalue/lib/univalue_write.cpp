@@ -5,13 +5,9 @@
 #include <univalue.h>
 #include <univalue_escapes.h>
 
-<<<<<<< HEAD
-=======
 #include <memory>
 #include <string>
 #include <vector>
-
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 static std::string json_escape(const std::string& inS)
 {
     std::string outS;

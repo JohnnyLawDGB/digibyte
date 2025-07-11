@@ -72,14 +72,6 @@ SECP256K1_API int secp256k1_ecdsa_recoverable_signature_serialize_compact(
  *
  *  Returns: 1: signature created
  *           0: the nonce generation function failed, or the secret key was invalid.
-<<<<<<< HEAD
- *  Args:    ctx:       pointer to a context object, initialized for signing (cannot be NULL)
- *  Out:     sig:       pointer to an array where the signature will be placed (cannot be NULL)
- *  In:      msghash32: the 32-byte message hash being signed (cannot be NULL)
- *           seckey:    pointer to a 32-byte secret key (cannot be NULL)
- *           noncefp:   pointer to a nonce generation function. If NULL, secp256k1_nonce_function_default is used
- *           ndata:     pointer to arbitrary data used by the nonce generation function (can be NULL)
-=======
  *  Args:    ctx:       pointer to a context object (not secp256k1_context_static).
  *  Out:     sig:       pointer to an array where the signature will be placed.
  *  In:      msghash32: the 32-byte message hash being signed.
@@ -88,7 +80,6 @@ SECP256K1_API int secp256k1_ecdsa_recoverable_signature_serialize_compact(
  *                      secp256k1_nonce_function_default is used.
  *           ndata:     pointer to arbitrary data used by the nonce generation function
  *                      (can be NULL for secp256k1_nonce_function_default).
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
  */
 SECP256K1_API int secp256k1_ecdsa_sign_recoverable(
     const secp256k1_context *ctx,
@@ -103,17 +94,10 @@ SECP256K1_API int secp256k1_ecdsa_sign_recoverable(
  *
  *  Returns: 1: public key successfully recovered (which guarantees a correct signature).
  *           0: otherwise.
-<<<<<<< HEAD
- *  Args:    ctx:       pointer to a context object, initialized for verification (cannot be NULL)
- *  Out:     pubkey:    pointer to the recovered public key (cannot be NULL)
- *  In:      sig:       pointer to initialized signature that supports pubkey recovery (cannot be NULL)
- *           msghash32: the 32-byte message hash assumed to be signed (cannot be NULL)
-=======
  *  Args:    ctx:       pointer to a context object.
  *  Out:     pubkey:    pointer to the recovered public key.
  *  In:      sig:       pointer to initialized signature that supports pubkey recovery.
  *           msghash32: the 32-byte message hash assumed to be signed.
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
  */
 SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_ecdsa_recover(
     const secp256k1_context *ctx,

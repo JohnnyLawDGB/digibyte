@@ -161,37 +161,16 @@ static void test_ecdsa_recovery_end_to_end(void) {
     CHECK(secp256k1_ecdsa_sign_recoverable(CTX, &rsignature[2], message, privkey, NULL, extra) == 1);
     extra[31] = 0;
     extra[0] = 1;
-<<<<<<< HEAD
-    CHECK(secp256k1_ecdsa_sign_recoverable(ctx, &rsignature[3], message, privkey, NULL, extra) == 1);
-    CHECK(secp256k1_ecdsa_recoverable_signature_serialize_compact(ctx, sig, &recid, &rsignature[4]) == 1);
-    CHECK(secp256k1_ecdsa_recoverable_signature_convert(ctx, &signature[4], &rsignature[4]) == 1);
-    CHECK(secp256k1_memcmp_var(&signature[4], &signature[0], 64) == 0);
-    CHECK(secp256k1_ecdsa_verify(ctx, &signature[4], message, &pubkey) == 1);
-=======
     CHECK(secp256k1_ecdsa_sign_recoverable(CTX, &rsignature[3], message, privkey, NULL, extra) == 1);
     CHECK(secp256k1_ecdsa_recoverable_signature_serialize_compact(CTX, sig, &recid, &rsignature[4]) == 1);
     CHECK(secp256k1_ecdsa_recoverable_signature_convert(CTX, &signature[4], &rsignature[4]) == 1);
     CHECK(secp256k1_memcmp_var(&signature[4], &signature[0], 64) == 0);
     CHECK(secp256k1_ecdsa_verify(CTX, &signature[4], message, &pubkey) == 1);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     memset(&rsignature[4], 0, sizeof(rsignature[4]));
     CHECK(secp256k1_ecdsa_recoverable_signature_parse_compact(CTX, &rsignature[4], sig, recid) == 1);
     CHECK(secp256k1_ecdsa_recoverable_signature_convert(CTX, &signature[4], &rsignature[4]) == 1);
     CHECK(secp256k1_ecdsa_verify(CTX, &signature[4], message, &pubkey) == 1);
     /* Parse compact (with recovery id) and recover. */
-<<<<<<< HEAD
-    CHECK(secp256k1_ecdsa_recoverable_signature_parse_compact(ctx, &rsignature[4], sig, recid) == 1);
-    CHECK(secp256k1_ecdsa_recover(ctx, &recpubkey, &rsignature[4], message) == 1);
-    CHECK(secp256k1_memcmp_var(&pubkey, &recpubkey, sizeof(pubkey)) == 0);
-    /* Serialize/destroy/parse signature and verify again. */
-    CHECK(secp256k1_ecdsa_recoverable_signature_serialize_compact(ctx, sig, &recid, &rsignature[4]) == 1);
-    sig[secp256k1_testrand_bits(6)] += 1 + secp256k1_testrand_int(255);
-    CHECK(secp256k1_ecdsa_recoverable_signature_parse_compact(ctx, &rsignature[4], sig, recid) == 1);
-    CHECK(secp256k1_ecdsa_recoverable_signature_convert(ctx, &signature[4], &rsignature[4]) == 1);
-    CHECK(secp256k1_ecdsa_verify(ctx, &signature[4], message, &pubkey) == 0);
-    /* Recover again */
-    CHECK(secp256k1_ecdsa_recover(ctx, &recpubkey, &rsignature[4], message) == 0 ||
-=======
     CHECK(secp256k1_ecdsa_recoverable_signature_parse_compact(CTX, &rsignature[4], sig, recid) == 1);
     CHECK(secp256k1_ecdsa_recover(CTX, &recpubkey, &rsignature[4], message) == 1);
     CHECK(secp256k1_memcmp_var(&pubkey, &recpubkey, sizeof(pubkey)) == 0);
@@ -203,7 +182,6 @@ static void test_ecdsa_recovery_end_to_end(void) {
     CHECK(secp256k1_ecdsa_verify(CTX, &signature[4], message, &pubkey) == 0);
     /* Recover again */
     CHECK(secp256k1_ecdsa_recover(CTX, &recpubkey, &rsignature[4], message) == 0 ||
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
           secp256k1_memcmp_var(&pubkey, &recpubkey, sizeof(pubkey)) != 0);
 }
 

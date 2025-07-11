@@ -12,19 +12,7 @@
 #error JSON_TEST_SRC must point to test source directory
 #endif
 
-<<<<<<< HEAD
-#ifndef ARRAY_SIZE
-#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
-#endif
-
 std::string srcdir(JSON_TEST_SRC);
-static bool test_failed = false;
-
-#define d_assert(expr) { if (!(expr)) { test_failed = true; fprintf(stderr, "%s failed\n", filename.c_str()); } }
-#define f_assert(expr) { if (!(expr)) { test_failed = true; fprintf(stderr, "%s failed\n", __func__); } }
-=======
-std::string srcdir(JSON_TEST_SRC);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 static std::string rtrim(std::string s)
 {

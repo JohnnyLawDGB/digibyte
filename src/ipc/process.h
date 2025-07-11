@@ -5,11 +5,8 @@
 #ifndef DIGIBYTE_IPC_PROCESS_H
 #define DIGIBYTE_IPC_PROCESS_H
 
-<<<<<<< HEAD
-=======
 #include <util/fs.h>
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <memory>
 #include <string>
 

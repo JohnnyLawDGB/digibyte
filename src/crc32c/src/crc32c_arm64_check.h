@@ -40,9 +40,6 @@ inline bool CanUseArm64Crc32() {
   // From 'arch/arm64/include/uapi/asm/hwcap.h' in Linux kernel source code.
   constexpr unsigned long kHWCAP_PMULL = 1 << 4;
   constexpr unsigned long kHWCAP_CRC32 = 1 << 7;
-<<<<<<< HEAD
-  unsigned long hwcap = (&getauxval != nullptr) ? getauxval(AT_HWCAP) : 0;
-=======
   unsigned long hwcap =
 #if HAVE_STRONG_GETAUXVAL
       // Some compilers warn on (&getauxval != nullptr) in the block below.
@@ -52,7 +49,6 @@ inline bool CanUseArm64Crc32() {
 #else
 #error This is supposed to be nested inside a check for HAVE_*_GETAUXVAL.
 #endif  // HAVE_STRONG_GETAUXVAL
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
   return (hwcap & (kHWCAP_PMULL | kHWCAP_CRC32)) ==
          (kHWCAP_PMULL | kHWCAP_CRC32);
 #elif defined(__APPLE__)

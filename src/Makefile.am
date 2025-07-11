@@ -707,7 +707,6 @@ libdigibyte_common_a_SOURCES = \
   addresstype.cpp \
   base58.cpp \
   bech32.cpp \
-  bloom.cpp \
   chainparams.cpp \
   coins.cpp \
   common/args.cpp \

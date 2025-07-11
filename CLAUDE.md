@@ -15,6 +15,7 @@ You are a DigiByte engineer tasked with fixing build errors and getting DGB v8.2
 
 **Required docs:**
 - Read `claude.md` for AI assistant guidelines
+- Read `digibyte-btc-v26-2-merge-spec.md` for merge rules
 
 **IMPORTANT:**
 - The `bitcoin-v26.2-for-digibyte` folder contains Bitcoin v26.2 code that has already been converted to DigiByte naming conventions. Always reference this folder for v26.2 code patterns.
@@ -103,15 +104,22 @@ git commit -m "Fix build: $ERROR_FILE
 
 **Many errors in one file (KISS approach):**
 - Copy entire file from `bitcoin-v26.2-for-digibyte`
-- Port ONLY DigiByte-specific features back:
-  - Multi-algo mining functions
-  - Dandelion++ code
-  - Network settings (ports, magic bytes)
-  - Custom RPCs
+- **CRITICAL: Port back ALL DigiByte-specific features or chain will break:**
+  - Multi-algo mining (SHA256D, Scrypt, Groestl, Skein, Qubit, Odocrypt)
+  - Dandelion++ privacy features
+  - 21 billion max supply (not 21 million)
+  - 15-second block time
+  - Network ports (12024/12025)
+  - Chain parameters (magic bytes, prefixes)
+  - Custom RPCs (getblockreward, etc.)
+  - DigiShield difficulty adjustment
 ```bash
 # If file has many errors, start fresh:
 cp bitcoin-v26.2-for-digibyte/$ERROR_FILE digibyte-v8.26/$ERROR_FILE
-# Then add back DGB features from digibyte-v8.22.2/$ERROR_FILE
+
+# MANDATORY: Check what DGB features need porting:
+diff digibyte-v8.22.2/$ERROR_FILE bitcoin-v26.2-for-digibyte/$ERROR_FILE
+# Port back EVERY DigiByte-specific difference found
 ```
 
 **File-level fixes (saves time):**

@@ -510,7 +510,7 @@ public:
             }
         };
 
-        m_assumeutxo_data = MapAssumeutxo{
+        m_assumeutxo_data = {
             // TODO to be specified in a future patch.
         };
 
@@ -571,11 +571,10 @@ public:
             vSeeds = args.GetArgs("-signetseednode");
         }
 
-        strNetworkID = CBaseChainParams::SIGNET;
+        m_chain_type = ChainType::SIGNET;
         consensus.signet_blocks = true;
         consensus.signet_challenge.assign(bin.begin(), bin.end());
         consensus.nSubsidyHalvingInterval = 210000;
-        consensus.BIP16Exception = uint256{};
         consensus.BIP34Height = 1;
         consensus.BIP34Hash = uint256{};
         consensus.BIP65Height = 1;
@@ -608,10 +607,10 @@ public:
         consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].min_activation_height = 0; // No activation delay
 
         // message start is defined as the first 4 bytes of the sha256d of the block script
-        CHashWriter h(SER_DISK, 0);
+        CHashWriter h(PROTOCOL_VERSION);
         h << consensus.signet_challenge;
         uint256 hash = h.GetHash();
-        memcpy(pchMessageStart, hash.begin(), 4);
+        memcpy(pchMessageStart.data(), hash.begin(), 4);
 
         nDefaultPort = 38443;
         nPruneAfterHeight = 1000;
@@ -633,8 +632,6 @@ public:
         bech32_hrp = "dgbt";
 
         fDefaultConsistencyChecks = false;
-        fRequireStandard = true;
-        m_is_test_chain = true;
         m_is_mockable_chain = false;
     }
 };
@@ -646,7 +643,7 @@ public:
 class CRegTestParams : public CChainParams {
 public:
     explicit CRegTestParams(const ArgsManager& args) {
-        strNetworkID =  CBaseChainParams::REGTEST;
+        m_chain_type = ChainType::REGTEST;
         consensus.signet_blocks = false;
         consensus.signet_challenge.clear();
         consensus.nSubsidyHalvingInterval = 300;
@@ -789,8 +786,6 @@ public:
         vSeeds.clear();      //!< Regtest mode doesn't have any DNS seeds.
 
         fDefaultConsistencyChecks = true;
-        fRequireStandard = true;
-        m_is_test_chain = true;
         m_is_mockable_chain = true;
 
         checkpointData = {
@@ -799,14 +794,18 @@ public:
             }
         };
 
-        m_assumeutxo_data = MapAssumeutxo{
+        m_assumeutxo_data = {
             {
-                110,
-                {AssumeutxoHash{uint256S("0x58c8c65a67deee7f6cca0d5a08254b73198f13201485cb6a39dba03e5f41ee65")}, 110},
+                .height = 110,
+                .hash_serialized = AssumeutxoHash{uint256S("0x58c8c65a67deee7f6cca0d5a08254b73198f13201485cb6a39dba03e5f41ee65")},
+                .nChainTx = 110,
+                .blockhash = uint256{}
             },
             {
-                200,
-                {AssumeutxoHash{uint256S("0x51c8d11d8b5c1de51543c579736e786aa2736206d1e11e627568029ce092cf62")}, 200},
+                .height = 200,
+                .hash_serialized = AssumeutxoHash{uint256S("0x51c8d11d8b5c1de51543c579736e786aa2736206d1e11e627568029ce092cf62")},
+                .nChainTx = 200,
+                .blockhash = uint256{}
             },
         };
 

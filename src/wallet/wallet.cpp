@@ -142,46 +142,27 @@ bool AddWallet(WalletContext& context, const std::shared_ptr<CWallet>& wallet)
 {
     LOCK(context.wallets_mutex);
     assert(wallet);
-<<<<<<< HEAD
-    std::vector<std::shared_ptr<CWallet>>::const_iterator i = std::find(vpwallets.begin(), vpwallets.end(), wallet);
-    if (i != vpwallets.end()) return false;
-    vpwallets.push_back(wallet);
-=======
     std::vector<std::shared_ptr<CWallet>>::const_iterator i = std::find(context.wallets.begin(), context.wallets.end(), wallet);
     if (i != context.wallets.end()) return false;
     context.wallets.push_back(wallet);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     wallet->ConnectScriptPubKeyManNotifiers();
     wallet->NotifyCanGetAddressesChanged();
     return true;
 }
 
-<<<<<<< HEAD
-bool RemoveWallet(const std::shared_ptr<CWallet>& wallet, std::optional<bool> load_on_start, std::vector<bilingual_str>& warnings)
-=======
 bool RemoveWallet(WalletContext& context, const std::shared_ptr<CWallet>& wallet, std::optional<bool> load_on_start, std::vector<bilingual_str>& warnings)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     assert(wallet);
 
     interfaces::Chain& chain = wallet->chain();
     std::string name = wallet->GetName();
 
-<<<<<<< HEAD
-    // Unregister with the validation interface which also drops shared ponters.
-    wallet->m_chain_notifications_handler.reset();
-    LOCK(cs_wallets);
-    std::vector<std::shared_ptr<CWallet>>::iterator i = std::find(vpwallets.begin(), vpwallets.end(), wallet);
-    if (i == vpwallets.end()) return false;
-    vpwallets.erase(i);
-=======
     // Unregister with the validation interface which also drops shared pointers.
     wallet->m_chain_notifications_handler.reset();
     LOCK(context.wallets_mutex);
     std::vector<std::shared_ptr<CWallet>>::iterator i = std::find(context.wallets.begin(), context.wallets.end(), wallet);
     if (i == context.wallets.end()) return false;
     context.wallets.erase(i);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // Write the wallet setting
     UpdateWalletSetting(chain, name, load_on_start, warnings);
@@ -189,17 +170,10 @@ bool RemoveWallet(WalletContext& context, const std::shared_ptr<CWallet>& wallet
     return true;
 }
 
-<<<<<<< HEAD
-bool RemoveWallet(const std::shared_ptr<CWallet>& wallet, std::optional<bool> load_on_start)
-{
-    std::vector<bilingual_str> warnings;
-    return RemoveWallet(wallet, load_on_start, warnings);
-=======
 bool RemoveWallet(WalletContext& context, const std::shared_ptr<CWallet>& wallet, std::optional<bool> load_on_start)
 {
     std::vector<bilingual_str> warnings;
     return RemoveWallet(context, wallet, load_on_start, warnings);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 std::vector<std::shared_ptr<CWallet>> GetWallets(WalletContext& context)
@@ -224,17 +198,6 @@ std::shared_ptr<CWallet> GetWallet(WalletContext& context, const std::string& na
     return nullptr;
 }
 
-<<<<<<< HEAD
-std::unique_ptr<interfaces::Handler> HandleLoadWallet(LoadWalletFn load_wallet)
-{
-    LOCK(cs_wallets);
-    auto it = g_load_wallet_fns.emplace(g_load_wallet_fns.end(), std::move(load_wallet));
-    return interfaces::MakeHandler([it] { LOCK(cs_wallets); g_load_wallet_fns.erase(it); });
-}
-
-static Mutex g_loading_wallet_mutex;
-static Mutex g_wallet_release_mutex;
-=======
 std::unique_ptr<interfaces::Handler> HandleLoadWallet(WalletContext& context, LoadWalletFn load_wallet)
 {
     LOCK(context.wallets_mutex);
@@ -252,7 +215,6 @@ void NotifyWalletLoaded(WalletContext& context, const std::shared_ptr<CWallet>& 
 
 static GlobalMutex g_loading_wallet_mutex;
 static GlobalMutex g_wallet_release_mutex;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 static std::condition_variable g_wallet_release_cv;
 static std::set<std::string> g_loading_wallet_set GUARDED_BY(g_loading_wallet_mutex);
 static std::set<std::string> g_unloading_wallet_set GUARDED_BY(g_wallet_release_mutex);
@@ -300,11 +262,7 @@ void UnloadWallet(std::shared_ptr<CWallet>&& wallet)
 }
 
 namespace {
-<<<<<<< HEAD
-std::shared_ptr<CWallet> LoadWalletInternal(interfaces::Chain& chain, const std::string& name, std::optional<bool> load_on_start, const DatabaseOptions& options, DatabaseStatus& status, bilingual_str& error, std::vector<bilingual_str>& warnings)
-=======
 std::shared_ptr<CWallet> LoadWalletInternal(WalletContext& context, const std::string& name, std::optional<bool> load_on_start, const DatabaseOptions& options, DatabaseStatus& status, bilingual_str& error, std::vector<bilingual_str>& warnings)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     try {
         std::unique_ptr<WalletDatabase> database = MakeWalletDatabase(name, options, status, error);
@@ -313,13 +271,8 @@ std::shared_ptr<CWallet> LoadWalletInternal(WalletContext& context, const std::s
             return nullptr;
         }
 
-<<<<<<< HEAD
-        chain.initMessage(_("Loading wallet…").translated);
-        std::shared_ptr<CWallet> wallet = CWallet::Create(&chain, name, std::move(database), options.create_flags, error, warnings);
-=======
         context.chain->initMessage(_("Loading wallet…").translated);
         std::shared_ptr<CWallet> wallet = CWallet::Create(context, name, std::move(database), options.create_flags, error, warnings);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         if (!wallet) {
             error = Untranslated("Wallet loading failed.") + Untranslated(" ") + error;
             status = DatabaseStatus::FAILED_LOAD;
@@ -328,16 +281,6 @@ std::shared_ptr<CWallet> LoadWalletInternal(WalletContext& context, const std::s
 
         // Legacy wallets are being deprecated, warn if the loaded wallet is legacy
         if (!wallet->IsWalletFlagSet(WALLET_FLAG_DESCRIPTORS)) {
-<<<<<<< HEAD
-            warnings.push_back(_("The legacy wallet type is being deprecated and support for opening legacy wallets will be removed in the future."));
-        }
-        
-        AddWallet(wallet);
-        wallet->postInitProcess();
-
-        // Write the wallet setting
-        UpdateWalletSetting(chain, name, load_on_start, warnings);
-=======
             warnings.push_back(_("Wallet loaded successfully. The legacy wallet type is being deprecated and support for creating and opening legacy wallets will be removed in the future. Legacy wallets can be migrated to a descriptor wallet with migratewallet."));
         }
 
@@ -347,7 +290,6 @@ std::shared_ptr<CWallet> LoadWalletInternal(WalletContext& context, const std::s
 
         // Write the wallet setting
         UpdateWalletSetting(*context.chain, name, load_on_start, warnings);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         return wallet;
     } catch (const std::runtime_error& e) {
@@ -356,11 +298,6 @@ std::shared_ptr<CWallet> LoadWalletInternal(WalletContext& context, const std::s
         return nullptr;
     }
 }
-<<<<<<< HEAD
-} // namespace
-
-std::shared_ptr<CWallet> LoadWallet(interfaces::Chain& chain, const std::string& name, std::optional<bool> load_on_start, const DatabaseOptions& options, DatabaseStatus& status, bilingual_str& error, std::vector<bilingual_str>& warnings)
-=======
 
 class FastWalletRescanFilter
 {
@@ -422,7 +359,6 @@ private:
 } // namespace
 
 std::shared_ptr<CWallet> LoadWallet(WalletContext& context, const std::string& name, std::optional<bool> load_on_start, const DatabaseOptions& options, DatabaseStatus& status, bilingual_str& error, std::vector<bilingual_str>& warnings)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     auto result = WITH_LOCK(g_loading_wallet_mutex, return g_loading_wallet_set.insert(name));
     if (!result.second) {
@@ -430,20 +366,12 @@ std::shared_ptr<CWallet> LoadWallet(WalletContext& context, const std::string& n
         status = DatabaseStatus::FAILED_LOAD;
         return nullptr;
     }
-<<<<<<< HEAD
-    auto wallet = LoadWalletInternal(chain, name, load_on_start, options, status, error, warnings);
-=======
     auto wallet = LoadWalletInternal(context, name, load_on_start, options, status, error, warnings);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     WITH_LOCK(g_loading_wallet_mutex, g_loading_wallet_set.erase(result.first));
     return wallet;
 }
 
-<<<<<<< HEAD
-std::shared_ptr<CWallet> CreateWallet(interfaces::Chain& chain, const std::string& name, std::optional<bool> load_on_start, DatabaseOptions& options, DatabaseStatus& status, bilingual_str& error, std::vector<bilingual_str>& warnings)
-=======
 std::shared_ptr<CWallet> CreateWallet(WalletContext& context, const std::string& name, std::optional<bool> load_on_start, DatabaseOptions& options, DatabaseStatus& status, bilingual_str& error, std::vector<bilingual_str>& warnings)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     uint64_t wallet_creation_flags = options.create_flags;
     const SecureString& passphrase = options.create_passphrase;
@@ -472,40 +400,9 @@ std::shared_ptr<CWallet> CreateWallet(WalletContext& context, const std::string&
         return nullptr;
     }
 
-<<<<<<< HEAD
-=======
-    // Do not allow a passphrase when private keys are disabled
-    if (!passphrase.empty() && (wallet_creation_flags & WALLET_FLAG_DISABLE_PRIVATE_KEYS)) {
-        error = Untranslated("Passphrase provided but private keys are disabled. A passphrase is only used to encrypt private keys, so cannot be used for wallets with private keys disabled.");
-        status = DatabaseStatus::FAILED_CREATE;
-        return nullptr;
-    }
-
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
-    // Wallet::Verify will check if we're trying to create a wallet with a duplicate name.
-    std::unique_ptr<WalletDatabase> database = MakeWalletDatabase(name, options, status, error);
-    if (!database) {
-        error = Untranslated("Wallet file verification failed.") + Untranslated(" ") + error;
-        status = DatabaseStatus::FAILED_VERIFY;
-        return nullptr;
-    }
-
-<<<<<<< HEAD
-    // Do not allow a passphrase when private keys are disabled
-    if (!passphrase.empty() && (wallet_creation_flags & WALLET_FLAG_DISABLE_PRIVATE_KEYS)) {
-        error = Untranslated("Passphrase provided but private keys are disabled. A passphrase is only used to encrypt private keys, so cannot be used for wallets with private keys disabled.");
-        status = DatabaseStatus::FAILED_CREATE;
-        return nullptr;
-    }
-
-    // Make the wallet
-    chain.initMessage(_("Loading wallet…").translated);
-    std::shared_ptr<CWallet> wallet = CWallet::Create(&chain, name, std::move(database), wallet_creation_flags, error, warnings);
-=======
     // Make the wallet
     context.chain->initMessage(_("Loading wallet…").translated);
     std::shared_ptr<CWallet> wallet = CWallet::Create(context, name, std::move(database), wallet_creation_flags, error, warnings);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (!wallet) {
         error = Untranslated("Wallet creation failed.") + Untranslated(" ") + error;
         status = DatabaseStatus::FAILED_CREATE;
@@ -547,13 +444,6 @@ std::shared_ptr<CWallet> CreateWallet(WalletContext& context, const std::string&
             wallet->Lock();
         }
     }
-<<<<<<< HEAD
-    AddWallet(wallet);
-    wallet->postInitProcess();
-
-    // Write the wallet settings
-    UpdateWalletSetting(chain, name, load_on_start, warnings);
-=======
 
     NotifyWalletLoaded(context, wallet);
     AddWallet(context, wallet);
@@ -566,66 +456,11 @@ std::shared_ptr<CWallet> CreateWallet(WalletContext& context, const std::string&
     if (!(wallet_creation_flags & WALLET_FLAG_DESCRIPTORS)) {
         warnings.push_back(_("Wallet created successfully. The legacy wallet type is being deprecated and support for creating and opening legacy wallets will be removed in the future."));
     }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     status = DatabaseStatus::SUCCESS;
     return wallet;
 }
-<<<<<<< HEAD
-=======
-
-std::shared_ptr<CWallet> RestoreWallet(WalletContext& context, const fs::path& backup_file, const std::string& wallet_name, std::optional<bool> load_on_start, DatabaseStatus& status, bilingual_str& error, std::vector<bilingual_str>& warnings)
-{
-    DatabaseOptions options;
-    ReadDatabaseArgs(*context.args, options);
-    options.require_existing = true;
-
-    const fs::path wallet_path = fsbridge::AbsPathJoin(GetWalletDir(), fs::u8path(wallet_name));
-    auto wallet_file = wallet_path / "wallet.dat";
-    std::shared_ptr<CWallet> wallet;
-
-    try {
-        if (!fs::exists(backup_file)) {
-            error = Untranslated("Backup file does not exist");
-            status = DatabaseStatus::FAILED_INVALID_BACKUP_FILE;
-            return nullptr;
-        }
-
-        if (fs::exists(wallet_path) || !TryCreateDirectories(wallet_path)) {
-            error = Untranslated(strprintf("Failed to create database path '%s'. Database already exists.", fs::PathToString(wallet_path)));
-            status = DatabaseStatus::FAILED_ALREADY_EXISTS;
-            return nullptr;
-        }
-
-        fs::copy_file(backup_file, wallet_file, fs::copy_options::none);
-
-        wallet = LoadWallet(context, wallet_name, load_on_start, options, status, error, warnings);
-    } catch (const std::exception& e) {
-        assert(!wallet);
-        if (!error.empty()) error += Untranslated("\n");
-        error += strprintf(Untranslated("Unexpected exception: %s"), e.what());
-    }
-    if (!wallet) {
-        fs::remove_all(wallet_path);
-    }
-
-    return wallet;
-}
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
-
-/** @defgroup mapWallet
- *
- * @{
- */
-
-const CWalletTx* CWallet::GetWalletTx(const uint256& hash) const
-{
-    AssertLockHeld(cs_wallet);
-<<<<<<< HEAD
-    std::map<uint256, CWalletTx>::const_iterator it = mapWallet.find(hash);
-=======
     const auto it = mapWallet.find(hash);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (it == mapWallet.end())
         return nullptr;
     return &(it->second);
@@ -731,10 +566,6 @@ bool CWallet::ChangeWalletPassphrase(const SecureString& strOldWalletPassphrase,
     return false;
 }
 
-<<<<<<< HEAD
-void CWallet::chainStateFlushed(const CBlockLocator& loc)
-{
-=======
 void CWallet::chainStateFlushed(ChainstateRole role, const CBlockLocator& loc)
 {
     // Don't update the best block until the chain is attached so that in case of a shutdown,
@@ -742,7 +573,6 @@ void CWallet::chainStateFlushed(ChainstateRole role, const CBlockLocator& loc)
     if (m_attaching_chain || role == ChainstateRole::BACKGROUND) {
         return;
     }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     WalletBatch batch(GetDatabase());
     batch.WriteBestBlock(loc);
 }
@@ -752,153 +582,7 @@ void CWallet::SetMinVersion(enum WalletFeature nVersion, WalletBatch* batch_in)
     LOCK(cs_wallet);
     if (nWalletVersion >= nVersion)
         return;
-<<<<<<< HEAD
-=======
-    WalletLogPrintf("Setting minversion to %d\n", nVersion);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
-    nWalletVersion = nVersion;
-
-    {
-        WalletBatch* batch = batch_in ? batch_in : new WalletBatch(GetDatabase());
-        if (nWalletVersion > 40000)
-            batch->WriteMinVersion(nWalletVersion);
-        if (!batch_in)
-            delete batch;
-    }
-}
-
-std::set<uint256> CWallet::GetConflicts(const uint256& txid) const
-{
-    std::set<uint256> result;
-    AssertLockHeld(cs_wallet);
-
-    const auto it = mapWallet.find(txid);
-    if (it == mapWallet.end())
-        return result;
-    const CWalletTx& wtx = it->second;
-
-    std::pair<TxSpends::const_iterator, TxSpends::const_iterator> range;
-
-    for (const CTxIn& txin : wtx.tx->vin)
-    {
-        if (mapTxSpends.count(txin.prevout) <= 1)
-            continue;  // No conflict if zero or one spends
-        range = mapTxSpends.equal_range(txin.prevout);
-        for (TxSpends::const_iterator _it = range.first; _it != range.second; ++_it)
-            result.insert(_it->second);
-    }
-    return result;
-}
-
-bool CWallet::HasWalletSpend(const CTransactionRef& tx) const
-{
-    AssertLockHeld(cs_wallet);
-    const uint256& txid = tx->GetHash();
-    for (unsigned int i = 0; i < tx->vout.size(); ++i) {
-        if (IsSpent(COutPoint(txid, i))) {
-            return true;
-        }
-    }
-    return false;
-}
-
-void CWallet::Flush()
-{
-    GetDatabase().Flush();
-}
-
-void CWallet::Close()
-{
-    GetDatabase().Close();
-}
-
-void CWallet::SyncMetaData(std::pair<TxSpends::iterator, TxSpends::iterator> range)
-{
-    // We want all the wallet transactions in range to have the same metadata as
-    // the oldest (smallest nOrderPos).
-    // So: find smallest nOrderPos:
-
-    int nMinOrderPos = std::numeric_limits<int>::max();
-    const CWalletTx* copyFrom = nullptr;
-    for (TxSpends::iterator it = range.first; it != range.second; ++it) {
-        const CWalletTx* wtx = &mapWallet.at(it->second);
-        if (wtx->nOrderPos < nMinOrderPos) {
-            nMinOrderPos = wtx->nOrderPos;
-            copyFrom = wtx;
-        }
-    }
-
-    if (!copyFrom) {
-        return;
-    }
-
-    // Now copy data from copyFrom to rest:
-    for (TxSpends::iterator it = range.first; it != range.second; ++it)
-    {
-        const uint256& hash = it->second;
-        CWalletTx* copyTo = &mapWallet.at(hash);
-        if (copyFrom == copyTo) continue;
-        assert(copyFrom && "Oldest wallet transaction in range assumed to have been found.");
-        if (!copyFrom->IsEquivalentTo(*copyTo)) continue;
-        copyTo->mapValue = copyFrom->mapValue;
-        copyTo->vOrderForm = copyFrom->vOrderForm;
-        // fTimeReceivedIsTxTime not copied on purpose
-        // nTimeReceived not copied on purpose
-        copyTo->nTimeSmart = copyFrom->nTimeSmart;
-        copyTo->fFromMe = copyFrom->fFromMe;
-        // nOrderPos not copied on purpose
-        // cached members not copied on purpose
-    }
-}
-
-/**
- * Outpoint is spent if any non-conflicted transaction
- * spends it:
- */
-bool CWallet::IsSpent(const COutPoint& outpoint) const
-{
-    std::pair<TxSpends::const_iterator, TxSpends::const_iterator> range;
-    range = mapTxSpends.equal_range(outpoint);
-
-    for (TxSpends::const_iterator it = range.first; it != range.second; ++it) {
-        const uint256& wtxid = it->second;
-        const auto mit = mapWallet.find(wtxid);
-        if (mit != mapWallet.end()) {
-            int depth = GetTxDepthInMainChain(mit->second);
-            if (depth > 0  || (depth == 0 && !mit->second.isAbandoned()))
-                return true; // Spent
-        }
-    }
-    return false;
-}
-
-void CWallet::AddToSpends(const COutPoint& outpoint, const uint256& wtxid, WalletBatch* batch)
-{
-    mapTxSpends.insert(std::make_pair(outpoint, wtxid));
-
-    if (batch) {
-        UnlockCoin(outpoint, batch);
-    } else {
-        WalletBatch temp_batch(GetDatabase());
-        UnlockCoin(outpoint, &temp_batch);
-    }
-
-    std::pair<TxSpends::iterator, TxSpends::iterator> range;
-    range = mapTxSpends.equal_range(outpoint);
-    SyncMetaData(range);
-}
-
-
-void CWallet::AddToSpends(const CWalletTx& wtx, WalletBatch* batch)
-{
-<<<<<<< HEAD
-    auto it = mapWallet.find(wtxid);
-    assert(it != mapWallet.end());
-    const CWalletTx& thisTx = it->second;
-    if (thisTx.IsCoinBase()) // Coinbases don't spend anything!
-=======
     if (wtx.IsCoinBase()) // Coinbases don't spend anything!
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         return;
 
     for (const CTxIn& txin : wtx.tx->vin)
@@ -913,20 +597,12 @@ bool CWallet::EncryptWallet(const SecureString& strWalletPassphrase)
     CKeyingMaterial _vMasterKey;
 
     _vMasterKey.resize(WALLET_CRYPTO_KEY_SIZE);
-<<<<<<< HEAD
-    GetStrongRandBytes(_vMasterKey.data(), WALLET_CRYPTO_KEY_SIZE);
-=======
     GetStrongRandBytes(_vMasterKey);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     CMasterKey kMasterKey;
 
     kMasterKey.vchSalt.resize(WALLET_CRYPTO_SALT_SIZE);
-<<<<<<< HEAD
-    GetStrongRandBytes(kMasterKey.vchSalt.data(), WALLET_CRYPTO_SALT_SIZE);
-=======
     GetStrongRandBytes(kMasterKey.vchSalt);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     CCrypter crypter;
     constexpr MillisecondsDouble target{100};
@@ -1110,16 +786,8 @@ bool CWallet::MarkReplaced(const uint256& originalHash, const uint256& newHash)
 
     wtx.mapValue["replaced_by_txid"] = newHash.ToString();
 
-<<<<<<< HEAD
-    // Refresh mempool status without waiting for transactionRemovedFromMempool
-    // notification so the wallet is in an internally consistent state and
-    // immediately knows the old transaction should not be considered trusted
-    // and is eligible to be abandoned
-    wtx.fInMempool = chain().isInMempool(originalHash);
-=======
     // Refresh mempool status without waiting for transactionRemovedFromMempool or transactionAddedToMempool
     RefreshMempoolStatus(wtx, chain());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     WalletBatch batch(GetDatabase());
 
@@ -1143,55 +811,16 @@ void CWallet::SetSpentKeyState(WalletBatch& batch, const uint256& hash, unsigned
     CTxDestination dst;
     if (ExtractDestination(srctx->tx->vout[n].scriptPubKey, dst)) {
         if (IsMine(dst)) {
-<<<<<<< HEAD
-            if (used != IsAddressUsed(dst)) {
-                if (used) {
-                    tx_destinations.insert(dst);
-                }
-                SetAddressUsed(batch, dst, used);
-=======
             if (used != IsAddressPreviouslySpent(dst)) {
                 if (used) {
                     tx_destinations.insert(dst);
                 }
                 SetAddressPreviouslySpent(batch, dst, used);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             }
         }
     }
 }
 
-<<<<<<< HEAD
-bool CWallet::IsSpentKey(const uint256& hash, unsigned int n) const
-{
-    AssertLockHeld(cs_wallet);
-    const CWalletTx* srctx = GetWalletTx(hash);
-    if (srctx) {
-        assert(srctx->tx->vout.size() > n);
-        CTxDestination dest;
-        if (!ExtractDestination(srctx->tx->vout[n].scriptPubKey, dest)) {
-            return false;
-        }
-        if (IsAddressUsed(dest)) {
-            return true;
-        }
-        if (IsLegacy()) {
-            LegacyScriptPubKeyMan* spk_man = GetLegacyScriptPubKeyMan();
-            assert(spk_man != nullptr);
-            for (const auto& keyid : GetAffectedKeys(srctx->tx->vout[n].scriptPubKey, *spk_man)) {
-                WitnessV0KeyHash wpkh_dest(keyid);
-                if (IsAddressUsed(wpkh_dest)) {
-                    return true;
-                }
-                ScriptHash sh_wpkh_dest(GetScriptForDestination(wpkh_dest));
-                if (IsAddressUsed(sh_wpkh_dest)) {
-                    return true;
-                }
-                PKHash pkh_dest(keyid);
-                if (IsAddressUsed(pkh_dest)) {
-                    return true;
-                }
-=======
 bool CWallet::IsSpentKey(const CScript& scriptPubKey) const
 {
     AssertLockHeld(cs_wallet);
@@ -1217,41 +846,19 @@ bool CWallet::IsSpentKey(const CScript& scriptPubKey) const
             PKHash pkh_dest(keyid);
             if (IsAddressPreviouslySpent(pkh_dest)) {
                 return true;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             }
         }
     }
     return false;
 }
 
-<<<<<<< HEAD
-CWalletTx* CWallet::AddToWallet(CTransactionRef tx, const CWalletTx::Confirmation& confirm, const UpdateWalletTxFn& update_wtx, bool fFlushOnClose)
-=======
 CWalletTx* CWallet::AddToWallet(CTransactionRef tx, const TxState& state, const UpdateWalletTxFn& update_wtx, bool fFlushOnClose, bool rescanning_old_block)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     LOCK(cs_wallet);
 
     WalletBatch batch(GetDatabase(), fFlushOnClose);
 
     uint256 hash = tx->GetHash();
-<<<<<<< HEAD
-
-    if (IsWalletFlagSet(WALLET_FLAG_AVOID_REUSE)) {
-        // Mark used destinations
-        std::set<CTxDestination> tx_destinations;
-
-        for (const CTxIn& txin : tx->vin) {
-            const COutPoint& op = txin.prevout;
-            SetSpentKeyState(batch, op.hash, op.n, true, tx_destinations);
-        }
-
-        MarkDestinationsDirty(tx_destinations);
-    }
-
-    // Inserts only if not already there, returns tx inserted or tx found
-    auto ret = mapWallet.emplace(std::piecewise_construct, std::forward_as_tuple(hash), std::forward_as_tuple(this, tx));
-=======
 
     if (IsWalletFlagSet(WALLET_FLAG_AVOID_REUSE)) {
         // Mark used destinations
@@ -1267,19 +874,10 @@ CWalletTx* CWallet::AddToWallet(CTransactionRef tx, const TxState& state, const 
 
     // Inserts only if not already there, returns tx inserted or tx found
     auto ret = mapWallet.emplace(std::piecewise_construct, std::forward_as_tuple(hash), std::forward_as_tuple(tx, state));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     CWalletTx& wtx = (*ret.first).second;
     bool fInsertedNew = ret.second;
     bool fUpdated = update_wtx && update_wtx(wtx, fInsertedNew);
     if (fInsertedNew) {
-<<<<<<< HEAD
-        wtx.m_confirm = confirm;
-        wtx.nTimeReceived = chain().getAdjustedTime();
-        wtx.nOrderPos = IncOrderPosNext(&batch);
-        wtx.m_it_wtxOrdered = wtxOrdered.insert(std::make_pair(wtx.nOrderPos, &wtx));
-        wtx.nTimeSmart = ComputeTimeSmart(wtx);
-        AddToSpends(hash);
-=======
         wtx.nTimeReceived = GetTime();
         wtx.nOrderPos = IncOrderPosNext(&batch);
         wtx.m_it_wtxOrdered = wtxOrdered.insert(std::make_pair(wtx.nOrderPos, &wtx));
@@ -1288,30 +886,16 @@ CWalletTx* CWallet::AddToWallet(CTransactionRef tx, const TxState& state, const 
 
         // Update birth time when tx time is older than it.
         MaybeUpdateBirthTime(wtx.GetTxTime());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     if (!fInsertedNew)
     {
-<<<<<<< HEAD
-        if (confirm.status != wtx.m_confirm.status) {
-            wtx.m_confirm.status = confirm.status;
-            wtx.m_confirm.nIndex = confirm.nIndex;
-            wtx.m_confirm.hashBlock = confirm.hashBlock;
-            wtx.m_confirm.block_height = confirm.block_height;
-            fUpdated = true;
-        } else {
-            assert(wtx.m_confirm.nIndex == confirm.nIndex);
-            assert(wtx.m_confirm.hashBlock == confirm.hashBlock);
-            assert(wtx.m_confirm.block_height == confirm.block_height);
-=======
         if (state.index() != wtx.m_state.index()) {
             wtx.m_state = state;
             fUpdated = true;
         } else {
             assert(TxStateSerializedIndex(wtx.m_state) == TxStateSerializedIndex(state));
             assert(TxStateSerializedBlockHash(wtx.m_state) == TxStateSerializedBlockHash(state));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
         // If we have a witness-stripped version of this transaction, and we
         // see a new version with a witness, then we must be upgrading a pre-segwit
@@ -1352,11 +936,7 @@ CWalletTx* CWallet::AddToWallet(CTransactionRef tx, const TxState& state, const 
     }
 
     //// debug print
-<<<<<<< HEAD
-    WalletLogPrintf("AddToWallet %s  %s%s\n", hash.ToString(), (fInsertedNew ? "new" : ""), (fUpdated ? "update" : ""));
-=======
     WalletLogPrintf("AddToWallet %s  %s%s %s\n", hash.ToString(), (fInsertedNew ? "new" : ""), (fUpdated ? "update" : ""), TxStateString(state));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // Write to disk
     if (fInsertedNew || fUpdated)
@@ -1375,16 +955,6 @@ CWalletTx* CWallet::AddToWallet(CTransactionRef tx, const TxState& state, const 
 
     if (!strCmd.empty())
     {
-<<<<<<< HEAD
-        boost::replace_all(strCmd, "%s", hash.GetHex());
-        if (confirm.status == CWalletTx::Status::CONFIRMED)
-        {
-            boost::replace_all(strCmd, "%b", confirm.hashBlock.GetHex());
-            boost::replace_all(strCmd, "%h", ToString(confirm.block_height));
-        } else {
-            boost::replace_all(strCmd, "%b", "unconfirmed");
-            boost::replace_all(strCmd, "%h", "-1");
-=======
         ReplaceAll(strCmd, "%s", hash.GetHex());
         if (auto* conf = wtx.state<TxStateConfirmed>())
         {
@@ -1393,7 +963,6 @@ CWalletTx* CWallet::AddToWallet(CTransactionRef tx, const TxState& state, const 
         } else {
             ReplaceAll(strCmd, "%b", "unconfirmed");
             ReplaceAll(strCmd, "%h", "-1");
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
 #ifndef WIN32
         // Substituting the wallet name isn't currently supported on windows
@@ -1401,11 +970,7 @@ CWalletTx* CWallet::AddToWallet(CTransactionRef tx, const TxState& state, const 
         // https://github.com/digibyte/digibyte/pull/13339#issuecomment-537384875
         // A few ways it could be implemented in the future are described in:
         // https://github.com/digibyte/digibyte/pull/13339#issuecomment-461288094
-<<<<<<< HEAD
-        boost::replace_all(strCmd, "%w", ShellEscape(GetName()));
-=======
         ReplaceAll(strCmd, "%w", ShellEscape(GetName()));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #endif
         std::thread t(runCommand, strCmd);
         t.detach(); // thread runs free
@@ -1417,41 +982,10 @@ CWalletTx* CWallet::AddToWallet(CTransactionRef tx, const TxState& state, const 
 
 bool CWallet::LoadToWallet(const uint256& hash, const UpdateWalletTxFn& fill_wtx)
 {
-<<<<<<< HEAD
-    const auto& ins = mapWallet.emplace(std::piecewise_construct, std::forward_as_tuple(hash), std::forward_as_tuple(this, nullptr));
-    CWalletTx& wtx = ins.first->second;
-    if (!fill_wtx(wtx, ins.second)) {
-        return false;
-    }
-    // If wallet doesn't have a chain (e.g wallet-tool), don't bother to update txn.
-    if (HaveChain()) {
-        bool active;
-        int height;
-        if (chain().findBlock(wtx.m_confirm.hashBlock, FoundBlock().inActiveChain(active).height(height)) && active) {
-            // Update cached block height variable since it not stored in the
-            // serialized transaction.
-            wtx.m_confirm.block_height = height;
-        } else if (wtx.isConflicted() || wtx.isConfirmed()) {
-            // If tx block (or conflicting block) was reorged out of chain
-            // while the wallet was shutdown, change tx status to UNCONFIRMED
-            // and reset block height, hash, and index. ABANDONED tx don't have
-            // associated blocks and don't need to be updated. The case where a
-            // transaction was reorged out while online and then reconfirmed
-            // while offline is covered by the rescan logic.
-            wtx.setUnconfirmed();
-            wtx.m_confirm.hashBlock = uint256();
-            wtx.m_confirm.block_height = 0;
-            wtx.m_confirm.nIndex = 0;
-        }
-    }
-    if (/* insertion took place */ ins.second) {
-        wtx.m_it_wtxOrdered = wtxOrdered.insert(std::make_pair(wtx.nOrderPos, &wtx));
-=======
     const auto& ins = mapWallet.emplace(std::piecewise_construct, std::forward_as_tuple(hash), std::forward_as_tuple(nullptr, TxStateInactive{}));
     CWalletTx& wtx = ins.first->second;
     if (!fill_wtx(wtx, ins.second)) {
         return false;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     // If wallet doesn't have a chain (e.g when using digibyte-wallet tool),
     // don't bother to update txn.
@@ -1482,17 +1016,6 @@ bool CWallet::LoadToWallet(const uint256& hash, const UpdateWalletTxFn& fill_wtx
         auto it = mapWallet.find(txin.prevout.hash);
         if (it != mapWallet.end()) {
             CWalletTx& prevtx = it->second;
-<<<<<<< HEAD
-            if (prevtx.isConflicted()) {
-                MarkConflicted(prevtx.m_confirm.hashBlock, prevtx.m_confirm.block_height, wtx.GetHash());
-            }
-        }
-    }
-    return true;
-}
-
-bool CWallet::AddToWalletIfInvolvingMe(const CTransactionRef& ptx, CWalletTx::Confirmation confirm, bool fUpdate)
-=======
             if (auto* prev = prevtx.state<TxStateConflicted>()) {
                 MarkConflicted(prev->conflicting_block_hash, prev->conflicting_block_height, wtx.GetHash());
             }
@@ -1506,28 +1029,18 @@ bool CWallet::AddToWalletIfInvolvingMe(const CTransactionRef& ptx, CWalletTx::Co
 }
 
 bool CWallet::AddToWalletIfInvolvingMe(const CTransactionRef& ptx, const SyncTxState& state, bool fUpdate, bool rescanning_old_block)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     const CTransaction& tx = *ptx;
     {
         AssertLockHeld(cs_wallet);
 
-<<<<<<< HEAD
-        if (!confirm.hashBlock.IsNull()) {
-=======
         if (auto* conf = std::get_if<TxStateConfirmed>(&state)) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             for (const CTxIn& txin : tx.vin) {
                 std::pair<TxSpends::const_iterator, TxSpends::const_iterator> range = mapTxSpends.equal_range(txin.prevout);
                 while (range.first != range.second) {
                     if (range.first->second != tx.GetHash()) {
-<<<<<<< HEAD
-                        WalletLogPrintf("Transaction %s (in block %s) conflicts with wallet transaction %s (both spend %s:%i)\n", tx.GetHash().ToString(), confirm.hashBlock.ToString(), range.first->second.ToString(), range.first->first.hash.ToString(), range.first->first.n);
-                        MarkConflicted(confirm.hashBlock, confirm.block_height, range.first->second);
-=======
                         WalletLogPrintf("Transaction %s (in block %s) conflicts with wallet transaction %s (both spend %s:%i)\n", tx.GetHash().ToString(), conf->confirmed_block_hash.ToString(), range.first->second.ToString(), range.first->first.hash.ToString(), range.first->first.n);
                         MarkConflicted(conf->confirmed_block_hash, conf->confirmed_block_height, range.first->second);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                     }
                     range.first++;
                 }
@@ -1546,10 +1059,6 @@ bool CWallet::AddToWalletIfInvolvingMe(const CTransactionRef& ptx, const SyncTxS
 
             // loop though all outputs
             for (const CTxOut& txout: tx.vout) {
-<<<<<<< HEAD
-                for (const auto& spk_man_pair : m_spk_managers) {
-                    spk_man_pair.second->MarkUnusedAddresses(txout.scriptPubKey);
-=======
                 for (const auto& spk_man : GetScriptPubKeyMans(txout.scriptPubKey)) {
                     for (auto &dest : spk_man->MarkUnusedAddresses(txout.scriptPubKey)) {
                         // If internal flag is not defined try to infer it from the ScriptPubKeyMan
@@ -1567,15 +1076,11 @@ bool CWallet::AddToWalletIfInvolvingMe(const CTransactionRef& ptx, const SyncTxS
                             SetAddressBook(dest.dest, "", AddressPurpose::RECEIVE);
                         }
                     }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 }
             }
 
             // Block disconnection override an abandoned tx as unconfirmed
             // which means user may have to call abandontransaction again
-<<<<<<< HEAD
-            return AddToWallet(MakeTransactionRef(tx), confirm, /* update_wtx= */ nullptr, /* fFlushOnClose= */ false);
-=======
             TxState tx_state = std::visit([](auto&& s) -> TxState { return s; }, state);
             CWalletTx* wtx = AddToWallet(MakeTransactionRef(tx), tx_state, /*update_wtx=*/nullptr, /*fFlushOnClose=*/false, rescanning_old_block);
             if (!wtx) {
@@ -1584,7 +1089,6 @@ bool CWallet::AddToWalletIfInvolvingMe(const CTransactionRef& ptx, const SyncTxS
                 throw std::runtime_error("DB error adding transaction to wallet, write failed");
             }
             return true;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
     }
     return false;
@@ -1610,20 +1114,13 @@ void CWallet::MarkInputsDirty(const CTransactionRef& tx)
 bool CWallet::AbandonTransaction(const uint256& hashTx)
 {
     LOCK(cs_wallet);
-<<<<<<< HEAD
 
     WalletBatch batch(GetDatabase());
-
-    std::set<uint256> todo;
-    std::set<uint256> done;
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // Can't mark abandoned if confirmed or in mempool
     auto it = mapWallet.find(hashTx);
     assert(it != mapWallet.end());
     const CWalletTx& origtx = it->second;
-<<<<<<< HEAD
     if (origtx.GetDepthInMainChain() != 0 || origtx.InMempool()) {
         return false;
     }
@@ -1659,7 +1156,6 @@ bool CWallet::AbandonTransaction(const uint256& hashTx)
             // If a transaction changes 'conflicted' state, that changes the balance
             // available of the outputs it spends. So force those to be recomputed
             MarkInputsDirty(wtx.tx);
-=======
     if (GetTxDepthInMainChain(origtx) != 0 || origtx.InMempool()) {
         return false;
     }
@@ -1672,7 +1168,6 @@ bool CWallet::AbandonTransaction(const uint256& hashTx)
         if (!wtx.isConflicted() && !wtx.isAbandoned()) {
             wtx.m_state = TxStateInactive{/*abandoned=*/true};
             return TxUpdate::NOTIFY_CHANGED;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
         return TxUpdate::UNCHANGED;
     };
@@ -1692,10 +1187,6 @@ void CWallet::MarkConflicted(const uint256& hashBlock, int conflicting_height, c
 {
     LOCK(cs_wallet);
 
-<<<<<<< HEAD
-    int conflictconfirms = (m_last_block_processed_height - conflicting_height + 1) * -1;
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     // If number of conflict confirms cannot be determined, this means
     // that the block is still unknown or not yet part of the main chain,
     // for example when loading the wallet during a reindex. Do nothing in that
@@ -1738,20 +1229,9 @@ void CWallet::RecursiveUpdateTxState(const uint256& tx_hash, const TryUpdatingSt
         auto it = mapWallet.find(now);
         assert(it != mapWallet.end());
         CWalletTx& wtx = it->second;
-<<<<<<< HEAD
-        int currentconfirm = wtx.GetDepthInMainChain();
-        if (conflictconfirms < currentconfirm) {
-            // Block is 'more conflicted' than current confirm; update.
-            // Mark transaction as conflicted with this block.
-            wtx.m_confirm.nIndex = 0;
-            wtx.m_confirm.hashBlock = hashBlock;
-            wtx.m_confirm.block_height = conflicting_height;
-            wtx.setConflicted();
-=======
 
         TxUpdate update_state = try_updating_state(wtx);
         if (update_state != TxUpdate::UNCHANGED) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             wtx.MarkDirty();
             batch.WriteTx(wtx);
             // Iterate over all its outputs, and update those tx states as well (if applicable)
@@ -1775,15 +1255,9 @@ void CWallet::RecursiveUpdateTxState(const uint256& tx_hash, const TryUpdatingSt
     }
 }
 
-<<<<<<< HEAD
-void CWallet::SyncTransaction(const CTransactionRef& ptx, CWalletTx::Confirmation confirm, bool update_tx)
-{
-    if (!AddToWalletIfInvolvingMe(ptx, confirm, update_tx))
-=======
 void CWallet::SyncTransaction(const CTransactionRef& ptx, const SyncTxState& state, bool update_tx, bool rescanning_old_block)
 {
     if (!AddToWalletIfInvolvingMe(ptx, state, update_tx, rescanning_old_block))
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         return; // Not one of ours
 
     // If a transaction changes 'conflicted' state, that changes the balance
@@ -1792,105 +1266,14 @@ void CWallet::SyncTransaction(const CTransactionRef& ptx, const SyncTxState& sta
     MarkInputsDirty(ptx);
 }
 
-<<<<<<< HEAD
-void CWallet::transactionAddedToMempool(const CTransactionRef& tx, uint64_t mempool_sequence) {
-    LOCK(cs_wallet);
-    SyncTransaction(tx, {CWalletTx::Status::UNCONFIRMED, /* block height */ 0, /* block hash */ {}, /* index */ 0});
-
-    auto it = mapWallet.find(tx->GetHash());
-    if (it != mapWallet.end()) {
-        it->second.fInMempool = true;
-    }
-}
-
-void CWallet::transactionRemovedFromMempool(const CTransactionRef& tx, MemPoolRemovalReason reason, uint64_t mempool_sequence) {
-    LOCK(cs_wallet);
-=======
 void CWallet::transactionAddedToMempool(const CTransactionRef& tx) {
     LOCK(cs_wallet);
     SyncTransaction(tx, TxStateInMempool{});
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     auto it = mapWallet.find(tx->GetHash());
     if (it != mapWallet.end()) {
         RefreshMempoolStatus(it->second, chain());
     }
-<<<<<<< HEAD
-=======
-}
-
-void CWallet::transactionRemovedFromMempool(const CTransactionRef& tx, MemPoolRemovalReason reason) {
-    LOCK(cs_wallet);
-    auto it = mapWallet.find(tx->GetHash());
-    if (it != mapWallet.end()) {
-        RefreshMempoolStatus(it->second, chain());
-    }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
-    // Handle transactions that were removed from the mempool because they
-    // conflict with transactions in a newly connected block.
-    if (reason == MemPoolRemovalReason::CONFLICT) {
-        // Trigger external -walletnotify notifications for these transactions.
-        // Set Status::UNCONFIRMED instead of Status::CONFLICTED for a few reasons:
-        //
-        // 1. The transactionRemovedFromMempool callback does not currently
-        //    provide the conflicting block's hash and height, and for backwards
-        //    compatibility reasons it may not be not safe to store conflicted
-        //    wallet transactions with a null block hash. See
-        //    https://github.com/digibyte/digibyte/pull/18600#discussion_r420195993.
-        // 2. For most of these transactions, the wallet's internal conflict
-        //    detection in the blockConnected handler will subsequently call
-        //    MarkConflicted and update them with CONFLICTED status anyway. This
-        //    applies to any wallet transaction that has inputs spent in the
-        //    block, or that has ancestors in the wallet with inputs spent by
-        //    the block.
-        // 3. Longstanding behavior since the sync implementation in
-        //    https://github.com/digibyte/digibyte/pull/9371 and the prior sync
-        //    implementation before that was to mark these transactions
-        //    unconfirmed rather than conflicted.
-        //
-        // Nothing described above should be seen as an unchangeable requirement
-        // when improving this code in the future. The wallet's heuristics for
-        // distinguishing between conflicted and unconfirmed transactions are
-        // imperfect, and could be improved in general, see
-        // https://github.com/digibyte-core/digibyte-devwiki/wiki/Wallet-Transaction-Conflict-Tracking
-<<<<<<< HEAD
-        SyncTransaction(tx, {CWalletTx::Status::UNCONFIRMED, /* block height */ 0, /* block hash */ {}, /* index */ 0});
-    }
-}
-
-void CWallet::blockConnected(const CBlock& block, int height)
-{
-    const uint256& block_hash = block.GetHash();
-    LOCK(cs_wallet);
-
-    m_last_block_processed_height = height;
-    m_last_block_processed = block_hash;
-    for (size_t index = 0; index < block.vtx.size(); index++) {
-        SyncTransaction(block.vtx[index], {CWalletTx::Status::CONFIRMED, height, block_hash, (int)index});
-        transactionRemovedFromMempool(block.vtx[index], MemPoolRemovalReason::BLOCK, 0 /* mempool_sequence */);
-    }
-}
-
-void CWallet::blockDisconnected(const CBlock& block, int height)
-{
-    LOCK(cs_wallet);
-
-    // At block disconnection, this will change an abandoned transaction to
-    // be unconfirmed, whether or not the transaction is added back to the mempool.
-    // User may have to call abandontransaction again. It may be addressed in the
-    // future with a stickier abandoned state or even removing abandontransaction call.
-    m_last_block_processed_height = height - 1;
-    m_last_block_processed = block.hashPrevBlock;
-    for (const CTransactionRef& ptx : block.vtx) {
-        SyncTransaction(ptx, {CWalletTx::Status::UNCONFIRMED, /* block height */ 0, /* block hash */ {}, /* index */ 0});
-    }
-}
-
-void CWallet::updatedBlockTip()
-{
-    m_best_block_time = GetTime();
-}
-=======
         SyncTransaction(tx, TxStateInactive{});
     }
 }
@@ -1902,17 +1285,10 @@ void CWallet::blockConnected(ChainstateRole role, const interfaces::BlockInfo& b
     }
     assert(block.data);
     LOCK(cs_wallet);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     m_last_block_processed_height = block.height;
     m_last_block_processed = block.hash;
 
-<<<<<<< HEAD
-void CWallet::BlockUntilSyncedToCurrentChain() const {
-    AssertLockNotHeld(cs_wallet);
-    // Skip the queue-draining stuff if we know we're caught up with
-    // ::ChainActive().Tip(), otherwise put a callback in the validation interface queue and wait
-=======
     // No need to scan block if it was created before the wallet birthday.
     // Uses chain max time and twice the grace period to adjust time for block time variability.
     if (block.chain_time_max < m_birth_time.load() - (TIMESTAMP_WINDOW * 2)) return;
@@ -1977,7 +1353,6 @@ void CWallet::BlockUntilSyncedToCurrentChain() const {
     AssertLockNotHeld(cs_wallet);
     // Skip the queue-draining stuff if we know we're caught up with
     // chain().Tip(), otherwise put a callback in the validation interface queue and wait
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     // for the queue to drain enough to execute it (indicating we are caught up
     // at least with the time we entered this function).
     uint256 last_block_hash = WITH_LOCK(cs_wallet, return m_last_block_processed);
@@ -2127,63 +1502,10 @@ bool CWallet::LoadWalletFlags(uint64_t flags)
         return false;
     }
     m_wallet_flags = flags;
-<<<<<<< HEAD
-=======
-
-    return true;
-}
-
-void CWallet::InitWalletFlags(uint64_t flags)
-{
-    LOCK(cs_wallet);
-
-    // We should never be writing unknown non-tolerable wallet flags
-    assert(((flags & KNOWN_WALLET_FLAGS) >> 32) == (flags >> 32));
-    // This should only be used once, when creating a new wallet - so current flags are expected to be blank
-    assert(m_wallet_flags == 0);
-
-    if (!WalletBatch(GetDatabase()).WriteWalletFlags(flags)) {
-        throw std::runtime_error(std::string(__func__) + ": writing wallet flags failed");
-    }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
-
-    if (!LoadWalletFlags(flags)) assert(false);
-}
-
-<<<<<<< HEAD
-bool CWallet::AddWalletFlags(uint64_t flags)
-{
-    LOCK(cs_wallet);
-    // We should never be writing unknown non-tolerable wallet flags
-    assert(((flags & KNOWN_WALLET_FLAGS) >> 32) == (flags >> 32));
-    if (!WalletBatch(GetDatabase()).WriteWalletFlags(flags)) {
-        throw std::runtime_error(std::string(__func__) + ": writing wallet flags failed");
-    }
-
-    return LoadWalletFlags(flags);
-}
-
-// Helper for producing a max-sized low-S low-R signature (eg 71 bytes)
-// or a max-sized low-S signature (e.g. 72 bytes) if use_max_sig is true
-bool CWallet::DummySignInput(CTxIn &tx_in, const CTxOut &txout, bool use_max_sig) const
-{
-    // Fill in dummy signatures for fee calculation.
-    const CScript& scriptPubKey = txout.scriptPubKey;
-    SignatureData sigdata;
-
-    std::unique_ptr<SigningProvider> provider = GetSolvingProvider(scriptPubKey);
-    if (!provider) {
-        // We don't know about this scriptpbuKey;
-        return false;
-    }
-
-    if (!ProduceSignature(*provider, use_max_sig ? DUMMY_MAXIMUM_SIGNATURE_CREATOR : DUMMY_SIGNATURE_CREATOR, scriptPubKey, sigdata)) {
-=======
 bool CWallet::ImportScripts(const std::set<CScript> scripts, int64_t timestamp)
 {
     auto spk_man = GetLegacyScriptPubKeyMan();
     if (!spk_man) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         return false;
     }
     LOCK(spk_man->cs_KeyStore);
@@ -2233,66 +1555,12 @@ bool CWallet::ImportScriptPubKeys(const std::string& label, const std::set<CScri
     return true;
 }
 
-<<<<<<< HEAD
-bool CWallet::ImportScripts(const std::set<CScript> scripts, int64_t timestamp)
-{
-    auto spk_man = GetLegacyScriptPubKeyMan();
-    if (!spk_man) {
-        return false;
-    }
-    LOCK(spk_man->cs_KeyStore);
-    return spk_man->ImportScripts(scripts, timestamp);
-}
-
-bool CWallet::ImportPrivKeys(const std::map<CKeyID, CKey>& privkey_map, const int64_t timestamp)
-{
-    auto spk_man = GetLegacyScriptPubKeyMan();
-    if (!spk_man) {
-        return false;
-    }
-    LOCK(spk_man->cs_KeyStore);
-    return spk_man->ImportPrivKeys(privkey_map, timestamp);
-}
-
-bool CWallet::ImportPubKeys(const std::vector<CKeyID>& ordered_pubkeys, const std::map<CKeyID, CPubKey>& pubkey_map, const std::map<CKeyID, std::pair<CPubKey, KeyOriginInfo>>& key_origins, const bool add_keypool, const bool internal, const int64_t timestamp)
-{
-    auto spk_man = GetLegacyScriptPubKeyMan();
-    if (!spk_man) {
-        return false;
-    }
-    LOCK(spk_man->cs_KeyStore);
-    return spk_man->ImportPubKeys(ordered_pubkeys, pubkey_map, key_origins, add_keypool, internal, timestamp);
-}
-
-bool CWallet::ImportScriptPubKeys(const std::string& label, const std::set<CScript>& script_pub_keys, const bool have_solving_data, const bool apply_label, const int64_t timestamp)
-{
-    auto spk_man = GetLegacyScriptPubKeyMan();
-    if (!spk_man) {
-        return false;
-    }
-    LOCK(spk_man->cs_KeyStore);
-    if (!spk_man->ImportScriptPubKeys(script_pub_keys, have_solving_data, timestamp)) {
-        return false;
-    }
-    if (apply_label) {
-        WalletBatch batch(GetDatabase());
-        for (const CScript& script : script_pub_keys) {
-            CTxDestination dest;
-            ExtractDestination(script, dest);
-            if (IsValidDestination(dest)) {
-                SetAddressBookWithDB(batch, dest, label, "receive");
-            }
-        }
-    }
-    return true;
-=======
 void CWallet::MaybeUpdateBirthTime(int64_t time)
 {
     int64_t birthtime = m_birth_time.load();
     if (time < birthtime) {
         m_birth_time = time;
     }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 /**
@@ -2315,11 +1583,7 @@ int64_t CWallet::RescanFromTime(int64_t startTime, const WalletRescanReserver& r
 
     if (start) {
         // TODO: this should take into account failure by ScanResult::USER_ABORT
-<<<<<<< HEAD
-        ScanResult result = ScanForWalletTransactions(start_block, start_height, {} /* max_height */, reserver, update);
-=======
         ScanResult result = ScanForWalletTransactions(start_block, start_height, /*max_height=*/{}, reserver, /*fUpdate=*/update, /*save_progress=*/false);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         if (result.status == ScanResult::FAILURE) {
             int64_t time_max;
             CHECK_NONFATAL(chain().findBlock(result.last_failed_block, FoundBlock().maxTime(time_max)));
@@ -2351,30 +1615,17 @@ int64_t CWallet::RescanFromTime(int64_t startTime, const WalletRescanReserver& r
  * the main chain after to the addition of any new keys you want to detect
  * transactions for.
  */
-<<<<<<< HEAD
-CWallet::ScanResult CWallet::ScanForWalletTransactions(const uint256& start_block, int start_height, std::optional<int> max_height, const WalletRescanReserver& reserver, bool fUpdate)
-{
-    int64_t nNow = GetTime();
-    int64_t start_time = GetTimeMillis();
-=======
 CWallet::ScanResult CWallet::ScanForWalletTransactions(const uint256& start_block, int start_height, std::optional<int> max_height, const WalletRescanReserver& reserver, bool fUpdate, const bool save_progress)
 {
     constexpr auto INTERVAL_TIME{60s};
     auto current_time{reserver.now()};
     auto start_time{reserver.now()};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     assert(reserver.isReserved());
 
     uint256 block_hash = start_block;
     ScanResult result;
 
-<<<<<<< HEAD
-    WalletLogPrintf("Rescan started from block %s...\n", start_block.ToString());
-
-    fAbortRescan = false;
-    ShowProgress(strprintf("%s " + _("Rescanning…").translated, GetDisplayName()), 0); // show rescan progress in GUI as dialog or on splashscreen, if -rescan on startup
-=======
     std::unique_ptr<FastWalletRescanFilter> fast_rescan_filter;
     if (!IsLegacy() && chain().hasBlockFilterIndex(BlockFilterType::BASIC)) fast_rescan_filter = std::make_unique<FastWalletRescanFilter>(*this);
 
@@ -2383,7 +1634,6 @@ CWallet::ScanResult CWallet::ScanForWalletTransactions(const uint256& start_bloc
 
     fAbortRescan = false;
     ShowProgress(strprintf("%s " + _("Rescanning…").translated, GetDisplayName()), 0); // show rescan progress in GUI as dialog or on splashscreen, if rescan required on startup (e.g. due to corruption)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     uint256 tip_hash = WITH_LOCK(cs_wallet, return GetLastBlockHash());
     uint256 end_hash = tip_hash;
     if (max_height) chain().findAncestorByHeight(tip_hash, *max_height, FoundBlock().hash(end_hash));
@@ -2400,17 +1650,6 @@ CWallet::ScanResult CWallet::ScanForWalletTransactions(const uint256& start_bloc
         if (block_height % 100 == 0 && progress_end - progress_begin > 0.0) {
             ShowProgress(strprintf("%s " + _("Rescanning…").translated, GetDisplayName()), std::max(1, std::min(99, (int)(m_scanning_progress * 100))));
         }
-<<<<<<< HEAD
-        if (GetTime() >= nNow + 60) {
-            nNow = GetTime();
-            WalletLogPrintf("Still rescanning. At block %d. Progress=%f\n", block_height, progress_current);
-        }
-
-        // Read block data
-        CBlock block;
-        chain().findBlock(block_hash, FoundBlock().data(block));
-
-=======
 
         bool next_interval = reserver.now() >= current_time + INTERVAL_TIME;
         if (next_interval) {
@@ -2435,7 +1674,6 @@ CWallet::ScanResult CWallet::ScanForWalletTransactions(const uint256& start_bloc
             }
         }
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         // Find next block separately from reading data above, because reading
         // is slow and there might be a reorg while it is read.
         bool block_still_active = false;
@@ -2443,37 +1681,6 @@ CWallet::ScanResult CWallet::ScanForWalletTransactions(const uint256& start_bloc
         uint256 next_block_hash;
         chain().findBlock(block_hash, FoundBlock().inActiveChain(block_still_active).nextBlock(FoundBlock().inActiveChain(next_block).hash(next_block_hash)));
 
-<<<<<<< HEAD
-        if (!block.IsNull()) {
-            LOCK(cs_wallet);
-            if (!block_still_active) {
-                // Abort scan if current block is no longer active, to prevent
-                // marking transactions as coming from the wrong block.
-                result.last_failed_block = block_hash;
-                result.status = ScanResult::FAILURE;
-                break;
-            }
-            for (size_t posInBlock = 0; posInBlock < block.vtx.size(); ++posInBlock) {
-                SyncTransaction(block.vtx[posInBlock], {CWalletTx::Status::CONFIRMED, block_height, block_hash, (int)posInBlock}, fUpdate);
-            }
-            // scan succeeded, record block as most recent successfully scanned
-            result.last_scanned_block = block_hash;
-            result.last_scanned_height = block_height;
-        } else {
-            // could not scan block, keep scanning but record this block as the most recent failure
-            result.last_failed_block = block_hash;
-            result.status = ScanResult::FAILURE;
-        }
-        if (max_height && block_height >= *max_height) {
-            break;
-        }
-        {
-            if (!next_block) {
-                // break successfully when rescan has reached the tip, or
-                // previous block is no longer on the chain due to a reorg
-                break;
-            }
-=======
         if (fetch_block) {
             // Read block data
             CBlock block;
@@ -2519,7 +1726,6 @@ CWallet::ScanResult CWallet::ScanForWalletTransactions(const uint256& start_bloc
                 // previous block is no longer on the chain due to a reorg
                 break;
             }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
             // increment block and verification progress
             block_hash = next_block_hash;
@@ -2535,26 +1741,6 @@ CWallet::ScanResult CWallet::ScanForWalletTransactions(const uint256& start_bloc
             }
         }
     }
-<<<<<<< HEAD
-=======
-    if (!max_height) {
-        WalletLogPrintf("Scanning current mempool transactions.\n");
-        WITH_LOCK(cs_wallet, chain().requestMempoolTransactions(*this));
-    }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
-    ShowProgress(strprintf("%s " + _("Rescanning…").translated, GetDisplayName()), 100); // hide progress dialog in GUI
-    if (block_height && fAbortRescan) {
-        WalletLogPrintf("Rescan aborted at block %d. Progress=%f\n", block_height, progress_current);
-        result.status = ScanResult::USER_ABORT;
-    } else if (block_height && chain().shutdownRequested()) {
-        WalletLogPrintf("Rescan interrupted by shutdown request at block %d. Progress=%f\n", block_height, progress_current);
-        result.status = ScanResult::USER_ABORT;
-    } else {
-<<<<<<< HEAD
-        WalletLogPrintf("Rescan completed in %15dms\n", GetTimeMillis() - start_time);
-    }
-    return result;
-=======
         WalletLogPrintf("Rescan completed in %15dms\n", Ticks<std::chrono::milliseconds>(reserver.now() - start_time));
     }
     return result;
@@ -2588,101 +1774,10 @@ bool CWallet::SubmitTxMemoryPoolAndRelay(CWalletTx& wtx, std::string& err_string
     bool ret = chain().broadcastTransaction(wtx.tx, m_default_max_tx_fee, relay, err_string);
     if (ret) wtx.m_state = TxStateInMempool{};
     return ret;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 std::set<uint256> CWallet::GetTxConflicts(const CWalletTx& wtx) const
 {
-<<<<<<< HEAD
-    // If transactions aren't being broadcasted, don't let them into local mempool either
-    if (!fBroadcastTransactions)
-        return;
-    std::map<int64_t, CWalletTx*> mapSorted;
-
-    // Sort pending wallet transactions based on their initial wallet insertion order
-    for (std::pair<const uint256, CWalletTx>& item : mapWallet) {
-        const uint256& wtxid = item.first;
-        CWalletTx& wtx = item.second;
-        assert(wtx.GetHash() == wtxid);
-
-        int nDepth = wtx.GetDepthInMainChain();
-
-        if (!wtx.IsCoinBase() && (nDepth == 0 && !wtx.isAbandoned())) {
-            mapSorted.insert(std::make_pair(wtx.nOrderPos, &wtx));
-        }
-    }
-
-    // Try to add wallet transactions to memory pool
-    for (const std::pair<const int64_t, CWalletTx*>& item : mapSorted) {
-        CWalletTx& wtx = *(item.second);
-        std::string unused_err_string;
-        wtx.SubmitMemoryPoolAndRelay(unused_err_string, false);
-    }
-}
-
-bool CWalletTx::SubmitMemoryPoolAndRelay(std::string& err_string, bool relay)
-{
-    // Can't relay if wallet is not broadcasting
-    if (!pwallet->GetBroadcastTransactions()) return false;
-    // Don't relay abandoned transactions
-    if (isAbandoned()) return false;
-    // Don't try to submit coinbase transactions. These would fail anyway but would
-    // cause log spam.
-    if (IsCoinBase()) return false;
-    // Don't try to submit conflicted or confirmed transactions.
-    if (GetDepthInMainChain() != 0) return false;
-
-    // Submit transaction to mempool for relay
-    pwallet->WalletLogPrintf("Submitting wtx %s to mempool for relay\n", GetHash().ToString());
-    // We must set fInMempool here - while it will be re-set to true by the
-    // entered-mempool callback, if we did not there would be a race where a
-    // user could call sendmoney in a loop and hit spurious out of funds errors
-    // because we think that this newly generated transaction's change is
-    // unavailable as we're not yet aware that it is in the mempool.
-    //
-    // Irrespective of the failure reason, un-marking fInMempool
-    // out-of-order is incorrect - it should be unmarked when
-    // TransactionRemovedFromMempool fires.
-    bool ret = pwallet->chain().broadcastTransaction(tx, pwallet->m_default_max_tx_fee, relay, err_string);
-    fInMempool |= ret;
-    return ret;
-}
-
-std::set<uint256> CWalletTx::GetConflicts() const
-{
-    std::set<uint256> result;
-    if (pwallet != nullptr)
-    {
-        uint256 myHash = GetHash();
-        result = pwallet->GetConflicts(myHash);
-        result.erase(myHash);
-    }
-    return result;
-}
-
-// Rebroadcast transactions from the wallet. We do this on a random timer
-// to slightly obfuscate which transactions come from our wallet.
-//
-// Ideally, we'd only resend transactions that we think should have been
-// mined in the most recent block. Any transaction that wasn't in the top
-// blockweight of transactions in the mempool shouldn't have been mined,
-// and so is probably just sitting in the mempool waiting to be confirmed.
-// Rebroadcasting does nothing to speed up confirmation and only damages
-// privacy.
-void CWallet::ResendWalletTransactions()
-{
-    // During reindex, importing and IBD, old wallet transactions become
-    // unconfirmed. Don't resend them as that would spam other nodes.
-    if (!chain().isReadyToBroadcast()) return;
-
-    // Do this infrequently and randomly to avoid giving away
-    // that these are our transactions.
-    if (GetTime() < nNextResend || !fBroadcastTransactions) return;
-    bool fFirst = (nNextResend == 0);
-    // resend 12-36 hours from now, ~1 day on average.
-    nNextResend = GetTime() + (12 * 60 * 60) + GetRand(24 * 60 * 60);
-    if (fFirst) return;
-=======
     AssertLockHeld(cs_wallet);
 
     const uint256 myHash{wtx.GetHash()};
@@ -2739,24 +1834,12 @@ void CWallet::ResubmitWalletTransactions(bool relay, bool force)
     // Don't attempt to resubmit if the wallet is configured to not broadcast,
     // even if forcing.
     if (!fBroadcastTransactions) return;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     int submitted_tx_count = 0;
 
     { // cs_wallet scope
         LOCK(cs_wallet);
 
-<<<<<<< HEAD
-        // Relay transactions
-        for (std::pair<const uint256, CWalletTx>& item : mapWallet) {
-            CWalletTx& wtx = item.second;
-            // Attempt to rebroadcast all txes more than 5 minutes older than
-            // the last block. SubmitMemoryPoolAndRelay() will not rebroadcast
-            // any confirmed or conflicting txs.
-            if (wtx.nTimeReceived > m_best_block_time - 5 * 60) continue;
-            std::string unused_err_string;
-            if (wtx.SubmitMemoryPoolAndRelay(unused_err_string, true)) ++submitted_tx_count;
-=======
         // First filter for the transactions we want to rebroadcast.
         // We use a set with WalletTxOrderComparator so that rebroadcasting occurs in insertion order
         std::set<CWalletTx*, WalletTxOrderComparator> to_submit;
@@ -2773,7 +1856,6 @@ void CWallet::ResubmitWalletTransactions(bool relay, bool force)
         for (auto wtx : to_submit) {
             std::string unused_err_string;
             if (SubmitTxMemoryPoolAndRelay(*wtx, unused_err_string, relay)) ++submitted_tx_count;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
     } // cs_wallet
 
@@ -2784,19 +1866,12 @@ void CWallet::ResubmitWalletTransactions(bool relay, bool force)
 
 /** @} */ // end of mapWallet
 
-<<<<<<< HEAD
-void MaybeResendWalletTxs()
-{
-    for (const std::shared_ptr<CWallet>& pwallet : GetWallets()) {
-        pwallet->ResendWalletTransactions();
-=======
 void MaybeResendWalletTxs(WalletContext& context)
 {
     for (const std::shared_ptr<CWallet>& pwallet : GetWallets(context)) {
         if (!pwallet->ShouldResend()) continue;
         pwallet->ResubmitWalletTransactions(/*relay=*/true, /*force=*/false);
         pwallet->SetNextResend();
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 }
 
@@ -2818,15 +1893,6 @@ bool CWallet::SignTransaction(CMutableTransaction& tx) const
             return false;
         }
         const CWalletTx& wtx = mi->second;
-<<<<<<< HEAD
-        coins[input.prevout] = Coin(wtx.tx->vout[input.prevout.n], wtx.m_confirm.block_height, wtx.IsCoinBase());
-    }
-    std::map<int, std::string> input_errors;
-    return SignTransaction(tx, coins, SIGHASH_DEFAULT, input_errors);
-}
-
-bool CWallet::SignTransaction(CMutableTransaction& tx, const std::map<COutPoint, Coin>& coins, int sighash, std::map<int, std::string>& input_errors) const
-=======
         int prev_height = wtx.state<TxStateConfirmed>() ? wtx.state<TxStateConfirmed>()->confirmed_block_height : 0;
         coins[input.prevout] = Coin(wtx.tx->vout[input.prevout.n], prev_height, wtx.IsCoinBase());
     }
@@ -2835,7 +1901,6 @@ bool CWallet::SignTransaction(CMutableTransaction& tx, const std::map<COutPoint,
 }
 
 bool CWallet::SignTransaction(CMutableTransaction& tx, const std::map<COutPoint, Coin>& coins, int sighash, std::map<int, bilingual_str>& input_errors) const
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     // Try to sign with all ScriptPubKeyMans
     for (ScriptPubKeyMan* spk_man : GetAllScriptPubKeyMans()) {
@@ -2850,19 +1915,11 @@ bool CWallet::SignTransaction(CMutableTransaction& tx, const std::map<COutPoint,
     return false;
 }
 
-<<<<<<< HEAD
-TransactionError CWallet::FillPSBT(PartiallySignedTransaction& psbtx, bool& complete, int sighash_type, bool sign, bool bip32derivs, size_t * n_signed) const
-=======
 TransactionError CWallet::FillPSBT(PartiallySignedTransaction& psbtx, bool& complete, int sighash_type, bool sign, bool bip32derivs, size_t * n_signed, bool finalize) const
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     if (n_signed) {
         *n_signed = 0;
     }
-<<<<<<< HEAD
-    const PrecomputedTransactionData txdata = PrecomputePSBTData(psbtx);
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     LOCK(cs_wallet);
     // Get all of the previous transactions
     for (unsigned int i = 0; i < psbtx.tx->vin.size(); ++i) {
@@ -2886,47 +1943,6 @@ TransactionError CWallet::FillPSBT(PartiallySignedTransaction& psbtx, bool& comp
         }
     }
 
-<<<<<<< HEAD
-    // Fill in information from ScriptPubKeyMans
-    for (ScriptPubKeyMan* spk_man : GetAllScriptPubKeyMans()) {
-        int n_signed_this_spkm = 0;
-        TransactionError res = spk_man->FillPSBT(psbtx, txdata, sighash_type, sign, bip32derivs, &n_signed_this_spkm);
-        if (res != TransactionError::OK) {
-            return res;
-        }
-
-        if (n_signed) {
-            (*n_signed) += n_signed_this_spkm;
-        }
-    }
-
-    // Complete if every input is now signed
-    complete = true;
-    for (const auto& input : psbtx.inputs) {
-        complete &= PSBTInputSigned(input);
-    }
-
-    return TransactionError::OK;
-}
-
-SigningResult CWallet::SignMessage(const std::string& message, const PKHash& pkhash, std::string& str_sig) const
-{
-    SignatureData sigdata;
-    CScript script_pub_key = GetScriptForDestination(pkhash);
-    for (const auto& spk_man_pair : m_spk_managers) {
-        if (spk_man_pair.second->CanProvide(script_pub_key, sigdata)) {
-            return spk_man_pair.second->SignMessage(message, pkhash, str_sig);
-        }
-    }
-    return SigningResult::PRIVATE_KEY_NOT_AVAILABLE;
-}
-
-OutputType CWallet::TransactionChangeType(const std::optional<OutputType>& change_type, const std::vector<CRecipient>& vecSend) const
-{
-    // If -changetype is specified, always use that change type.
-    if (change_type) {
-        return *change_type;
-=======
     const PrecomputedTransactionData txdata = PrecomputePSBTData(psbtx);
 
     // Fill in information from ScriptPubKeyMans
@@ -2940,7 +1956,6 @@ OutputType CWallet::TransactionChangeType(const std::optional<OutputType>& chang
         if (n_signed) {
             (*n_signed) += n_signed_this_spkm;
         }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     RemoveUnnecessaryTransactions(psbtx, sighash_type);
@@ -2985,19 +2000,6 @@ OutputType CWallet::TransactionChangeType(const std::optional<OutputType>& chang
     bool any_pkh{false};
 
     for (const auto& recipient : vecSend) {
-<<<<<<< HEAD
-        // Check if any destination contains a witness program:
-        int witnessversion = 0;
-        std::vector<unsigned char> witnessprogram;
-        if (recipient.scriptPubKey.IsWitnessProgram(witnessversion, witnessprogram)) {
-            if (GetScriptPubKeyMan(OutputType::BECH32M, true)) {
-                return OutputType::BECH32M;
-            } else if (GetScriptPubKeyMan(OutputType::BECH32, true)) {
-                return OutputType::BECH32;
-            } else {
-                return m_default_address_type;
-            }
-=======
         if (std::get_if<WitnessV1Taproot>(&recipient.dest)) {
             any_tr = true;
         } else if (std::get_if<WitnessV0KeyHash>(&recipient.dest)) {
@@ -3006,7 +2008,6 @@ OutputType CWallet::TransactionChangeType(const std::optional<OutputType>& chang
             any_sh = true;
         } else if (std::get_if<PKHash>(&recipient.dest)) {
             any_pkh = true;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
     }
 
@@ -3045,19 +2046,11 @@ OutputType CWallet::TransactionChangeType(const std::optional<OutputType>& chang
 void CWallet::CommitTransaction(CTransactionRef tx, mapValue_t mapValue, std::vector<std::pair<std::string, std::string>> orderForm)
 {
     LOCK(cs_wallet);
-<<<<<<< HEAD
-    WalletLogPrintf("CommitTransaction:\n%s", tx->ToString()); /* Continued */
-
-    // Add tx to wallet, because if it has change it's also ours,
-    // otherwise just for transaction history.
-    AddToWallet(tx, {}, [&](CWalletTx& wtx, bool new_tx) {
-=======
     WalletLogPrintf("CommitTransaction:\n%s", tx->ToString()); // NOLINT(digibyte-unterminated-logprintf)
 
     // Add tx to wallet, because if it has change it's also ours,
     // otherwise just for transaction history.
     CWalletTx* wtx = AddToWallet(tx, TxStateInactive{}, [&](CWalletTx& wtx, bool new_tx) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         CHECK_NONFATAL(wtx.mapValue.empty());
         CHECK_NONFATAL(wtx.vOrderForm.empty());
         wtx.mapValue = std::move(mapValue);
@@ -3067,29 +2060,6 @@ void CWallet::CommitTransaction(CTransactionRef tx, mapValue_t mapValue, std::ve
         return true;
     });
 
-<<<<<<< HEAD
-    // Notify that old coins are spent
-    for (const CTxIn& txin : tx->vin) {
-        CWalletTx &coin = mapWallet.at(txin.prevout.hash);
-        coin.MarkDirty();
-        NotifyTransactionChanged(coin.GetHash(), CT_UPDATED);
-    }
-
-    // Get the inserted-CWalletTx from mapWallet so that the
-    // fInMempool flag is cached properly
-    CWalletTx& wtx = mapWallet.at(tx->GetHash());
-
-    if (!fBroadcastTransactions) {
-        // Don't submit tx to the mempool
-        return;
-    }
-
-    std::string err_string;
-    if (!wtx.SubmitMemoryPoolAndRelay(err_string, true)) {
-        WalletLogPrintf("CommitTransaction(): Transaction cannot be broadcast immediately, %s\n", err_string);
-        // TODO: if we expect the failure to be long term or permanent, instead delete wtx from the wallet and return failure.
-    }
-=======
     // wtx can only be null if the db write failed.
     if (!wtx) {
         throw std::runtime_error(std::string(__func__) + ": Wallet db error, transaction commit failed");
@@ -3112,7 +2082,6 @@ void CWallet::CommitTransaction(CTransactionRef tx, mapValue_t mapValue, std::ve
         WalletLogPrintf("CommitTransaction(): Transaction cannot be broadcast immediately, %s\n", err_string);
         // TODO: if we expect the failure to be long term or permanent, instead delete wtx from the wallet and return failure.
     }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 DBErrors CWallet::LoadWallet()
@@ -3169,32 +2138,6 @@ DBErrors CWallet::ZapSelectTx(std::vector<uint256>& vHashIn, std::vector<uint256
     return DBErrors::LOAD_OK;
 }
 
-<<<<<<< HEAD
-bool CWallet::SetAddressBookWithDB(WalletBatch& batch, const CTxDestination& address, const std::string& strName, const std::string& strPurpose)
-{
-    bool fUpdated = false;
-    bool is_mine;
-    {
-        LOCK(cs_wallet);
-        std::map<CTxDestination, CAddressBookData>::iterator mi = m_address_book.find(address);
-        fUpdated = (mi != m_address_book.end() && !mi->second.IsChange());
-        m_address_book[address].SetLabel(strName);
-        if (!strPurpose.empty()) /* update purpose only if requested */
-            m_address_book[address].purpose = strPurpose;
-        is_mine = IsMine(address) != ISMINE_NO;
-    }
-    NotifyAddressBookChanged(address, strName, is_mine,
-                             strPurpose, (fUpdated ? CT_UPDATED : CT_NEW));
-    if (!strPurpose.empty() && !batch.WritePurpose(EncodeDestination(address), strPurpose))
-        return false;
-    return batch.WriteName(EncodeDestination(address), strName);
-}
-
-bool CWallet::SetAddressBook(const CTxDestination& address, const std::string& strName, const std::string& strPurpose)
-{
-    WalletBatch batch(GetDatabase());
-    return SetAddressBookWithDB(batch, address, strName, strPurpose);
-=======
 bool CWallet::SetAddressBookWithDB(WalletBatch& batch, const CTxDestination& address, const std::string& strName, const std::optional<AddressPurpose>& new_purpose)
 {
     bool fUpdated = false;
@@ -3225,51 +2168,26 @@ bool CWallet::SetAddressBook(const CTxDestination& address, const std::string& s
 {
     WalletBatch batch(GetDatabase());
     return SetAddressBookWithDB(batch, address, strName, purpose);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 bool CWallet::DelAddressBook(const CTxDestination& address)
 {
-<<<<<<< HEAD
-    bool is_mine;
-    WalletBatch batch(GetDatabase());
-    {
-        LOCK(cs_wallet);
-        // If we want to delete receiving addresses, we need to take care that DestData "used" (and possibly newer DestData) gets preserved (and the "deleted" address transformed into a change entry instead of actually being deleted)
-        // NOTE: This isn't a problem for sending addresses because they never have any DestData yet!
-        // When adding new DestData, it should be considered here whether to retain or delete it (or move it?).
-=======
     WalletBatch batch(GetDatabase());
     {
         LOCK(cs_wallet);
         // If we want to delete receiving addresses, we should avoid calling EraseAddressData because it will delete the previously_spent value. Could instead just erase the label so it becomes a change address, and keep the data.
         // NOTE: This isn't a problem for sending addresses because they don't have any data that needs to be kept.
         // When adding new address data, it should be considered here whether to retain or delete it.
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         if (IsMine(address)) {
             WalletLogPrintf("%s called with IsMine address, NOT SUPPORTED. Please report this bug! %s\n", __func__, PACKAGE_BUGREPORT);
             return false;
         }
-<<<<<<< HEAD
-        // Delete destdata tuples associated with address
-        std::string strAddress = EncodeDestination(address);
-        for (const std::pair<const std::string, std::string> &item : m_address_book[address].destdata)
-        {
-            batch.EraseDestData(strAddress, item.first);
-        }
-        m_address_book.erase(address);
-        is_mine = IsMine(address) != ISMINE_NO;
-    }
-
-    NotifyAddressBookChanged(address, "", is_mine, "", CT_DELETED);
-=======
         // Delete data rows associated with this address
         batch.EraseAddressData(address);
         m_address_book.erase(address);
     }
 
     NotifyAddressBookChanged(address, "", /*is_mine=*/false, AddressPurpose::SEND, CT_DELETED);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     batch.ErasePurpose(EncodeDestination(address));
     return batch.EraseName(EncodeDestination(address));
@@ -3313,76 +2231,6 @@ bool CWallet::TopUpKeyPool(unsigned int kpSize)
     return res;
 }
 
-<<<<<<< HEAD
-bool CWallet::GetNewDestination(const OutputType type, const std::string label, CTxDestination& dest, std::string& error)
-{
-    LOCK(cs_wallet);
-    error.clear();
-    bool result = false;
-    auto spk_man = GetScriptPubKeyMan(type, false /* internal */);
-    if (spk_man) {
-        spk_man->TopUp();
-        result = spk_man->GetNewDestination(type, dest, error);
-    } else {
-        error = strprintf(_("Error: No %s addresses available."), FormatOutputType(type)).translated;
-    }
-    if (result) {
-        SetAddressBook(dest, label, "receive");
-    }
-
-    return result;
-}
-
-bool CWallet::GetNewChangeDestination(const OutputType type, CTxDestination& dest, std::string& error)
-{
-    LOCK(cs_wallet);
-    error.clear();
-
-    ReserveDestination reservedest(this, type);
-    if (!reservedest.GetReservedDestination(dest, true, error)) {
-        return false;
-    }
-
-    reservedest.KeepDestination();
-    return true;
-}
-
-int64_t CWallet::GetOldestKeyPoolTime() const
-{
-    LOCK(cs_wallet);
-    int64_t oldestKey = std::numeric_limits<int64_t>::max();
-    for (const auto& spk_man_pair : m_spk_managers) {
-        oldestKey = std::min(oldestKey, spk_man_pair.second->GetOldestKeyPoolTime());
-    }
-    return oldestKey;
-}
-
-void CWallet::MarkDestinationsDirty(const std::set<CTxDestination>& destinations) {
-    for (auto& entry : mapWallet) {
-        CWalletTx& wtx = entry.second;
-        if (wtx.m_is_cache_empty) continue;
-        for (unsigned int i = 0; i < wtx.tx->vout.size(); i++) {
-            CTxDestination dst;
-            if (ExtractDestination(wtx.tx->vout[i].scriptPubKey, dst) && destinations.count(dst)) {
-                wtx.MarkDirty();
-                break;
-            }
-        }
-    }
-}
-
-std::set<CTxDestination> CWallet::GetLabelAddresses(const std::string& label) const
-{
-    LOCK(cs_wallet);
-    std::set<CTxDestination> result;
-    for (const std::pair<const CTxDestination, CAddressBookData>& item : m_address_book)
-    {
-        if (item.second.IsChange()) continue;
-        const CTxDestination& address = item.first;
-        const std::string& strName = item.second.GetLabel();
-        if (strName == label)
-            result.insert(address);
-=======
 util::Result<CTxDestination> CWallet::GetNewDestination(const OutputType type, const std::string label)
 {
     LOCK(cs_wallet);
@@ -3415,7 +2263,6 @@ std::optional<int64_t> CWallet::GetOldestKeyPoolTime() const
     LOCK(cs_wallet);
     if (m_spk_managers.empty()) {
         return std::nullopt;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     std::optional<int64_t> oldest_key{std::numeric_limits<int64_t>::max()};
@@ -3464,79 +2311,6 @@ std::vector<CTxDestination> CWallet::ListAddrBookAddresses(const std::optional<A
     return result;
 }
 
-<<<<<<< HEAD
-bool ReserveDestination::GetReservedDestination(CTxDestination& dest, bool internal, std::string& error)
-{
-    m_spk_man = pwallet->GetScriptPubKeyMan(type, internal);
-    if (!m_spk_man) {
-        error = strprintf(_("Error: No %s addresses available."), FormatOutputType(type)).translated;
-        return false;
-    }
-
-
-    if (nIndex == -1)
-    {
-        m_spk_man->TopUp();
-
-        CKeyPool keypool;
-        if (!m_spk_man->GetReservedDestination(type, internal, address, nIndex, keypool, error)) {
-            return false;
-        }
-        fInternal = keypool.fInternal;
-    }
-    dest = address;
-    return true;
-}
-
-void ReserveDestination::KeepDestination()
-{
-    if (nIndex != -1) {
-        m_spk_man->KeepDestination(nIndex, type);
-    }
-    nIndex = -1;
-    address = CNoDestination();
-}
-
-void ReserveDestination::ReturnDestination()
-{
-    if (nIndex != -1) {
-        m_spk_man->ReturnDestination(nIndex, fInternal, address);
-    }
-    nIndex = -1;
-    address = CNoDestination();
-}
-
-bool CWallet::DisplayAddress(const CTxDestination& dest)
-{
-    CScript scriptPubKey = GetScriptForDestination(dest);
-    const auto spk_man = GetScriptPubKeyMan(scriptPubKey);
-    if (spk_man == nullptr) {
-        return false;
-    }
-    auto signer_spk_man = dynamic_cast<ExternalSignerScriptPubKeyMan*>(spk_man);
-    if (signer_spk_man == nullptr) {
-        return false;
-    }
-    ExternalSigner signer = ExternalSignerScriptPubKeyMan::GetExternalSigner();
-    return signer_spk_man->DisplayAddress(scriptPubKey, signer);
-}
-
-void CWallet::LockCoin(const COutPoint& output)
-{
-    AssertLockHeld(cs_wallet);
-    setLockedCoins.insert(output);
-}
-
-void CWallet::UnlockCoin(const COutPoint& output)
-{
-    AssertLockHeld(cs_wallet);
-    setLockedCoins.erase(output);
-}
-
-void CWallet::UnlockAllCoins()
-{
-    AssertLockHeld(cs_wallet);
-=======
 std::set<std::string> CWallet::ListAddrBookLabels(const std::optional<AddressPurpose> purpose) const
 {
     AssertLockHeld(cs_wallet);
@@ -3630,7 +2404,6 @@ bool CWallet::UnlockAllCoins()
     for (auto it = setLockedCoins.begin(); it != setLockedCoins.end(); ++it) {
         success &= batch.EraseLockedUTXO(*it);
     }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     setLockedCoins.clear();
     return success;
 }
@@ -3638,13 +2411,7 @@ bool CWallet::UnlockAllCoins()
 bool CWallet::IsLockedCoin(const COutPoint& output) const
 {
     AssertLockHeld(cs_wallet);
-<<<<<<< HEAD
-    COutPoint outpt(hash, n);
-
-    return (setLockedCoins.count(outpt) > 0);
-=======
     return setLockedCoins.count(output) > 0;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 void CWallet::ListLockedCoins(std::vector<COutPoint>& vOutpts) const
@@ -3664,17 +2431,10 @@ void CWallet::GetKeyBirthTimes(std::map<CKeyID, int64_t>& mapKeyBirth) const {
     mapKeyBirth.clear();
 
     // map in which we'll infer heights of other keys
-<<<<<<< HEAD
-    std::map<CKeyID, const CWalletTx::Confirmation*> mapKeyFirstBlock;
-    CWalletTx::Confirmation max_confirm;
-    max_confirm.block_height = GetLastBlockHeight() > 144 ? GetLastBlockHeight() - 144 : 0; // the tip can be reorganized; use a 144-block safety margin
-    CHECK_NONFATAL(chain().findAncestorByHeight(GetLastBlockHash(), max_confirm.block_height, FoundBlock().hash(max_confirm.hashBlock)));
-=======
     std::map<CKeyID, const TxStateConfirmed*> mapKeyFirstBlock;
     TxStateConfirmed max_confirm{uint256{}, /*height=*/-1, /*index=*/-1};
     max_confirm.confirmed_block_height = GetLastBlockHeight() > 144 ? GetLastBlockHeight() - 144 : 0; // the tip can be reorganized; use a 144-block safety margin
     CHECK_NONFATAL(chain().findAncestorByHeight(GetLastBlockHash(), max_confirm.confirmed_block_height, FoundBlock().hash(max_confirm.confirmed_block_hash)));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     {
         LegacyScriptPubKeyMan* spk_man = GetLegacyScriptPubKeyMan();
@@ -3702,24 +2462,15 @@ void CWallet::GetKeyBirthTimes(std::map<CKeyID, int64_t>& mapKeyBirth) const {
         for (const auto& entry : mapWallet) {
             // iterate over all wallet transactions...
             const CWalletTx &wtx = entry.second;
-<<<<<<< HEAD
-            if (wtx.m_confirm.status == CWalletTx::CONFIRMED) {
-=======
             if (auto* conf = wtx.state<TxStateConfirmed>()) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 // ... which are already in a block
                 for (const CTxOut &txout : wtx.tx->vout) {
                     // iterate over all their outputs
                     for (const auto &keyid : GetAffectedKeys(txout.scriptPubKey, *spk_man)) {
                         // ... and all their affected keys
                         auto rit = mapKeyFirstBlock.find(keyid);
-<<<<<<< HEAD
-                        if (rit != mapKeyFirstBlock.end() && wtx.m_confirm.block_height < rit->second->block_height) {
-                            rit->second = &wtx.m_confirm;
-=======
                         if (rit != mapKeyFirstBlock.end() && conf->confirmed_block_height < rit->second->confirmed_block_height) {
                             rit->second = conf;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                         }
                     }
                 }
@@ -3730,11 +2481,7 @@ void CWallet::GetKeyBirthTimes(std::map<CKeyID, int64_t>& mapKeyBirth) const {
     // Extract block timestamps for those keys
     for (const auto& entry : mapKeyFirstBlock) {
         int64_t block_time;
-<<<<<<< HEAD
-        CHECK_NONFATAL(chain().findBlock(entry.second->hashBlock, FoundBlock().time(block_time)));
-=======
         CHECK_NONFATAL(chain().findBlock(entry.second->confirmed_block_hash, FoundBlock().time(block_time)));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         mapKeyBirth[entry.first] = block_time - TIMESTAMP_WINDOW; // block times can be 2h off
     }
 }
@@ -3764,32 +2511,6 @@ void CWallet::GetKeyBirthTimes(std::map<CKeyID, int64_t>& mapKeyBirth) const {
  */
 unsigned int CWallet::ComputeTimeSmart(const CWalletTx& wtx, bool rescanning_old_block) const
 {
-<<<<<<< HEAD
-    unsigned int nTimeSmart = wtx.nTimeReceived;
-    if (!wtx.isUnconfirmed() && !wtx.isAbandoned()) {
-        int64_t blocktime;
-        if (chain().findBlock(wtx.m_confirm.hashBlock, FoundBlock().time(blocktime))) {
-            int64_t latestNow = wtx.nTimeReceived;
-            int64_t latestEntry = 0;
-
-            // Tolerate times up to the last timestamp in the wallet not more than 5 minutes into the future
-            int64_t latestTolerated = latestNow + 300;
-            const TxItems& txOrdered = wtxOrdered;
-            for (auto it = txOrdered.rbegin(); it != txOrdered.rend(); ++it) {
-                CWalletTx* const pwtx = it->second;
-                if (pwtx == &wtx) {
-                    continue;
-                }
-                int64_t nSmartTime;
-                nSmartTime = pwtx->nTimeSmart;
-                if (!nSmartTime) {
-                    nSmartTime = pwtx->nTimeReceived;
-                }
-                if (nSmartTime <= latestTolerated) {
-                    latestEntry = nSmartTime;
-                    if (nSmartTime > latestNow) {
-                        latestNow = nSmartTime;
-=======
     std::optional<uint256> block_hash;
     if (auto* conf = wtx.state<TxStateConfirmed>()) {
         block_hash = conf->confirmed_block_hash;
@@ -3827,67 +2548,26 @@ unsigned int CWallet::ComputeTimeSmart(const CWalletTx& wtx, bool rescanning_old
                             latestNow = nSmartTime;
                         }
                         break;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                     }
                 }
 
-<<<<<<< HEAD
-            nTimeSmart = std::max(latestEntry, std::min(blocktime, latestNow));
-        } else {
-            WalletLogPrintf("%s: found %s in block %s not in index\n", __func__, wtx.GetHash().ToString(), wtx.m_confirm.hashBlock.ToString());
-=======
                 nTimeSmart = std::max(latestEntry, std::min(blocktime, latestNow));
             }
         } else {
             WalletLogPrintf("%s: found %s in block %s not in index\n", __func__, wtx.GetHash().ToString(), block_hash->ToString());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
     }
     return nTimeSmart;
 }
 
-<<<<<<< HEAD
-bool CWallet::SetAddressUsed(WalletBatch& batch, const CTxDestination& dest, bool used)
-{
-    const std::string key{"used"};
-=======
 bool CWallet::SetAddressPreviouslySpent(WalletBatch& batch, const CTxDestination& dest, bool used)
 {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (std::get_if<CNoDestination>(&dest))
         return false;
 
     if (!used) {
-<<<<<<< HEAD
-        if (auto* data = util::FindKey(m_address_book, dest)) data->destdata.erase(key);
-        return batch.EraseDestData(EncodeDestination(dest), key);
-    }
-
-    const std::string value{"1"};
-    m_address_book[dest].destdata.insert(std::make_pair(key, value));
-    return batch.WriteDestData(EncodeDestination(dest), key, value);
-}
-
-void CWallet::LoadDestData(const CTxDestination &dest, const std::string &key, const std::string &value)
-{
-    m_address_book[dest].destdata.insert(std::make_pair(key, value));
-}
-
-bool CWallet::IsAddressUsed(const CTxDestination& dest) const
-{
-    const std::string key{"used"};
-    std::map<CTxDestination, CAddressBookData>::const_iterator i = m_address_book.find(dest);
-    if(i != m_address_book.end())
-    {
-        CAddressBookData::StringMap::const_iterator j = i->second.destdata.find(key);
-        if(j != i->second.destdata.end())
-        {
-            return true;
-        }
-=======
         if (auto* data{common::FindKey(m_address_book, dest)}) data->previously_spent = false;
         return batch.WriteAddressPreviouslySpent(dest, false);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     LoadAddressPreviouslySpent(dest);
@@ -3912,20 +2592,10 @@ bool CWallet::IsAddressPreviouslySpent(const CTxDestination& dest) const
 
 std::vector<std::string> CWallet::GetAddressReceiveRequests() const
 {
-<<<<<<< HEAD
-    const std::string prefix{"rr"};
-    std::vector<std::string> values;
-    for (const auto& address : m_address_book) {
-        for (const auto& data : address.second.destdata) {
-            if (!data.first.compare(0, prefix.size(), prefix)) {
-                values.emplace_back(data.second);
-            }
-=======
     std::vector<std::string> values;
     for (const auto& [dest, entry] : m_address_book) {
         for (const auto& [id, request] : entry.receive_requests) {
             values.emplace_back(request);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
     }
     return values;
@@ -3933,20 +2603,6 @@ std::vector<std::string> CWallet::GetAddressReceiveRequests() const
 
 bool CWallet::SetAddressReceiveRequest(WalletBatch& batch, const CTxDestination& dest, const std::string& id, const std::string& value)
 {
-<<<<<<< HEAD
-    const std::string key{"rr" + id}; // "rr" prefix = "receive request" in destdata
-    CAddressBookData& data = m_address_book.at(dest);
-    if (value.empty()) {
-        if (!batch.EraseDestData(EncodeDestination(dest), key)) return false;
-        data.destdata.erase(key);
-    } else {
-        if (!batch.WriteDestData(EncodeDestination(dest), key, value)) return false;
-        data.destdata[key] = value;
-    }
-    return true;
-}
-
-=======
     if (!batch.WriteAddressReceiveRequest(dest, id, value)) return false;
     m_address_book[dest].receive_requests[id] = value;
     return true;
@@ -3959,7 +2615,6 @@ bool CWallet::EraseAddressReceiveRequest(WalletBatch& batch, const CTxDestinatio
     return true;
 }
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 std::unique_ptr<WalletDatabase> MakeWalletDatabase(const std::string& name, const DatabaseOptions& options, DatabaseStatus& status, bilingual_str& error_string)
 {
     // Do some checking on wallet path. It should be either a:
@@ -3968,44 +2623,22 @@ std::unique_ptr<WalletDatabase> MakeWalletDatabase(const std::string& name, cons
     // 2. Path to an existing directory.
     // 3. Path to a symlink to a directory.
     // 4. For backwards compatibility, the name of a data file in -walletdir.
-<<<<<<< HEAD
-    const fs::path wallet_path = fsbridge::AbsPathJoin(GetWalletDir(), name);
-    fs::file_type path_type = fs::symlink_status(wallet_path).type();
-    if (!(path_type == fs::file_not_found || path_type == fs::directory_file ||
-          (path_type == fs::symlink_file && fs::is_directory(wallet_path)) ||
-          (path_type == fs::regular_file && fs::path(name).filename() == name))) {
-=======
     const fs::path wallet_path = fsbridge::AbsPathJoin(GetWalletDir(), fs::PathFromString(name));
     fs::file_type path_type = fs::symlink_status(wallet_path).type();
     if (!(path_type == fs::file_type::not_found || path_type == fs::file_type::directory ||
           (path_type == fs::file_type::symlink && fs::is_directory(wallet_path)) ||
           (path_type == fs::file_type::regular && fs::PathFromString(name).filename() == fs::PathFromString(name)))) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         error_string = Untranslated(strprintf(
               "Invalid -wallet path '%s'. -wallet path should point to a directory where wallet.dat and "
               "database/log.?????????? files can be stored, a location where such a directory could be created, "
               "or (for backwards compatibility) the name of an existing data file in -walletdir (%s)",
-<<<<<<< HEAD
-              name, GetWalletDir()));
-=======
               name, fs::quoted(fs::PathToString(GetWalletDir()))));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         status = DatabaseStatus::FAILED_BAD_PATH;
         return nullptr;
     }
     return MakeDatabase(wallet_path, options, status, error_string);
 }
 
-<<<<<<< HEAD
-std::shared_ptr<CWallet> CWallet::Create(interfaces::Chain* chain, const std::string& name, std::unique_ptr<WalletDatabase> database, uint64_t wallet_creation_flags, bilingual_str& error, std::vector<bilingual_str>& warnings)
-{
-    const std::string& walletFile = database->Filename();
-
-    int64_t nStart = GetTimeMillis();
-    // TODO: Can't use std::make_shared because we need a custom deleter but
-    // should be possible to use std::allocate_shared.
-    std::shared_ptr<CWallet> walletInstance(new CWallet(chain, name, std::move(database)), ReleaseWallet);
-=======
 std::shared_ptr<CWallet> CWallet::Create(WalletContext& context, const std::string& name, std::unique_ptr<WalletDatabase> database, uint64_t wallet_creation_flags, bilingual_str& error, std::vector<bilingual_str>& warnings)
 {
     interfaces::Chain* chain = context.chain;
@@ -4021,7 +2654,6 @@ std::shared_ptr<CWallet> CWallet::Create(WalletContext& context, const std::stri
 
     // Load wallet
     bool rescan_required = false;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     DBErrors nLoadWalletRet = walletInstance->LoadWallet();
     if (nLoadWalletRet != DBErrors::LOAD_OK) {
         if (nLoadWalletRet == DBErrors::CORRUPT) {
@@ -4031,32 +2663,11 @@ std::shared_ptr<CWallet> CWallet::Create(WalletContext& context, const std::stri
         else if (nLoadWalletRet == DBErrors::NONCRITICAL_ERROR)
         {
             warnings.push_back(strprintf(_("Error reading %s! All keys read correctly, but transaction data"
-<<<<<<< HEAD
-                                           " or address book entries might be missing or incorrect."),
-=======
                                            " or address metadata may be missing or incorrect."),
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 walletFile));
         }
         else if (nLoadWalletRet == DBErrors::TOO_NEW) {
             error = strprintf(_("Error loading %s: Wallet requires newer version of %s"), walletFile, PACKAGE_NAME);
-<<<<<<< HEAD
-=======
-            return nullptr;
-        }
-        else if (nLoadWalletRet == DBErrors::EXTERNAL_SIGNER_SUPPORT_REQUIRED) {
-            error = strprintf(_("Error loading %s: External signer wallet being loaded without external signer support compiled"), walletFile);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
-            return nullptr;
-        }
-        else if (nLoadWalletRet == DBErrors::NEED_REWRITE)
-        {
-            error = strprintf(_("Wallet needed to be rewritten: restart %s to complete"), PACKAGE_NAME);
-            return nullptr;
-<<<<<<< HEAD
-        }
-        else {
-=======
         } else if (nLoadWalletRet == DBErrors::NEED_RESCAN) {
             warnings.push_back(strprintf(_("Error reading %s! Transaction data may be missing or incorrect."
                                            " Rescanning wallet."), walletFile));
@@ -4071,7 +2682,6 @@ std::shared_ptr<CWallet> CWallet::Create(WalletContext& context, const std::stri
                                 "The wallet might have been tampered with or created with malicious intent.\n"), walletFile);
             return nullptr;
         } else {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             error = strprintf(_("Error loading %s"), walletFile);
             return nullptr;
         }
@@ -4086,11 +2696,7 @@ std::shared_ptr<CWallet> CWallet::Create(WalletContext& context, const std::stri
         // ensure this wallet.dat can only be opened by clients supporting HD with chain split and expects no default key
         walletInstance->SetMinVersion(FEATURE_LATEST);
 
-<<<<<<< HEAD
-        walletInstance->AddWalletFlags(wallet_creation_flags);
-=======
         walletInstance->InitWalletFlags(wallet_creation_flags);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         // Only create LegacyScriptPubKeyMan when not descriptor wallet
         if (!walletInstance->IsWalletFlagSet(WALLET_FLAG_DESCRIPTORS)) {
@@ -4114,20 +2720,12 @@ std::shared_ptr<CWallet> CWallet::Create(WalletContext& context, const std::stri
         }
 
         if (chain) {
-<<<<<<< HEAD
-            walletInstance->chainStateFlushed(chain->getTipLocator());
-=======
             walletInstance->chainStateFlushed(ChainstateRole::NORMAL, chain->getTipLocator());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
     } else if (wallet_creation_flags & WALLET_FLAG_DISABLE_PRIVATE_KEYS) {
         // Make it impossible to disable private keys after creation
         error = strprintf(_("Error loading %s: Private keys can only be disabled during creation"), walletFile);
-<<<<<<< HEAD
-        return NULL;
-=======
         return nullptr;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     } else if (walletInstance->IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS)) {
         for (auto spk_man : walletInstance->GetActiveScriptPubKeyMans()) {
             if (spk_man->HavePrivateKeys()) {
@@ -4137,11 +2735,6 @@ std::shared_ptr<CWallet> CWallet::Create(WalletContext& context, const std::stri
         }
     }
 
-<<<<<<< HEAD
-    if (!gArgs.GetArg("-addresstype", "").empty()) {
-        if (!ParseOutputType(gArgs.GetArg("-addresstype", ""), walletInstance->m_default_address_type)) {
-            error = strprintf(_("Unknown address type '%s'"), gArgs.GetArg("-addresstype", ""));
-=======
     if (!args.GetArg("-addresstype", "").empty()) {
         std::optional<OutputType> parsed = ParseOutputType(args.GetArg("-addresstype", ""));
         if (!parsed) {
@@ -4185,55 +2778,10 @@ std::shared_ptr<CWallet> CWallet::Create(WalletContext& context, const std::stri
             walletInstance->m_max_aps_fee = max_fee.value();
         } else {
             error = AmountErrMsg("maxapsfee", max_aps_fee);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             return nullptr;
         }
     }
 
-<<<<<<< HEAD
-    if (!gArgs.GetArg("-changetype", "").empty()) {
-        OutputType out_type;
-        if (!ParseOutputType(gArgs.GetArg("-changetype", ""), out_type)) {
-            error = strprintf(_("Unknown change type '%s'"), gArgs.GetArg("-changetype", ""));
-            return nullptr;
-        }
-        walletInstance->m_default_change_type = out_type;
-    }
-
-    if (gArgs.IsArgSet("-mintxfee")) {
-        CAmount n = 0;
-        if (!ParseMoney(gArgs.GetArg("-mintxfee", ""), n) || 0 == n) {
-            error = AmountErrMsg("mintxfee", gArgs.GetArg("-mintxfee", ""));
-            return nullptr;
-        }
-        if (n > HIGH_TX_FEE_PER_KB) {
-            warnings.push_back(AmountHighWarn("-mintxfee") + Untranslated(" ") +
-                               _("This is the minimum transaction fee you pay on every transaction."));
-        }
-        walletInstance->m_min_fee = CFeeRate(n);
-    }
-
-    if (gArgs.IsArgSet("-maxapsfee")) {
-        const std::string max_aps_fee{gArgs.GetArg("-maxapsfee", "")};
-        CAmount n = 0;
-        if (max_aps_fee == "-1") {
-            n = -1;
-        } else if (!ParseMoney(max_aps_fee, n)) {
-            error = AmountErrMsg("maxapsfee", max_aps_fee);
-            return nullptr;
-        }
-        if (n > HIGH_APS_FEE) {
-            warnings.push_back(AmountHighWarn("-maxapsfee") + Untranslated(" ") +
-                              _("This is the maximum transaction fee you pay (in addition to the normal fee) to prioritize partial spend avoidance over regular coin selection."));
-        }
-        walletInstance->m_max_aps_fee = n;
-    }
-
-    if (gArgs.IsArgSet("-fallbackfee")) {
-        CAmount nFeePerK = 0;
-        if (!ParseMoney(gArgs.GetArg("-fallbackfee", ""), nFeePerK)) {
-            error = strprintf(_("Invalid amount for -fallbackfee=<amount>: '%s'"), gArgs.GetArg("-fallbackfee", ""));
-=======
     if (args.IsArgSet("-fallbackfee")) {
         std::optional<CAmount> fallback_fee = ParseMoney(args.GetArg("-fallbackfee", ""));
         if (!fallback_fee) {
@@ -4284,78 +2832,10 @@ std::shared_ptr<CWallet> CWallet::Create(WalletContext& context, const std::stri
         std::optional<CAmount> max_fee = ParseMoney(args.GetArg("-maxtxfee", ""));
         if (!max_fee) {
             error = AmountErrMsg("maxtxfee", args.GetArg("-maxtxfee", ""));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             return nullptr;
         } else if (max_fee.value() > HIGH_MAX_TX_FEE) {
             warnings.push_back(strprintf(_("%s is set very high! Fees this large could be paid on a single transaction."), "-maxtxfee"));
         }
-<<<<<<< HEAD
-        if (nFeePerK > HIGH_TX_FEE_PER_KB) {
-            warnings.push_back(AmountHighWarn("-fallbackfee") + Untranslated(" ") +
-                               _("This is the transaction fee you may pay when fee estimates are not available."));
-        }
-        walletInstance->m_fallback_fee = CFeeRate(nFeePerK);
-    }
-    // Disable fallback fee in case value was set to 0, enable if non-null value
-    walletInstance->m_allow_fallback_fee = walletInstance->m_fallback_fee.GetFeePerK() != 0;
-
-    if (gArgs.IsArgSet("-discardfee")) {
-        CAmount nFeePerK = 0;
-        if (!ParseMoney(gArgs.GetArg("-discardfee", ""), nFeePerK)) {
-            error = strprintf(_("Invalid amount for -discardfee=<amount>: '%s'"), gArgs.GetArg("-discardfee", ""));
-            return nullptr;
-        }
-        if (nFeePerK > HIGH_TX_FEE_PER_KB) {
-            warnings.push_back(AmountHighWarn("-discardfee") + Untranslated(" ") +
-                               _("This is the transaction fee you may discard if change is smaller than dust at this level"));
-        }
-        walletInstance->m_discard_rate = CFeeRate(nFeePerK);
-    }
-    if (gArgs.IsArgSet("-paytxfee")) {
-        CAmount nFeePerK = 0;
-        if (!ParseMoney(gArgs.GetArg("-paytxfee", ""), nFeePerK)) {
-            error = AmountErrMsg("paytxfee", gArgs.GetArg("-paytxfee", ""));
-            return nullptr;
-        }
-        if (nFeePerK > HIGH_TX_FEE_PER_KB) {
-            warnings.push_back(AmountHighWarn("-paytxfee") + Untranslated(" ") +
-                               _("This is the transaction fee you will pay if you send a transaction."));
-        }
-        walletInstance->m_pay_tx_fee = CFeeRate(nFeePerK, 1000);
-        if (chain && walletInstance->m_pay_tx_fee < chain->relayMinFee()) {
-            error = strprintf(_("Invalid amount for -paytxfee=<amount>: '%s' (must be at least %s)"),
-                gArgs.GetArg("-paytxfee", ""), chain->relayMinFee().ToString());
-            return nullptr;
-        }
-    }
-
-    if (gArgs.IsArgSet("-maxtxfee")) {
-        CAmount nMaxFee = 0;
-        if (!ParseMoney(gArgs.GetArg("-maxtxfee", ""), nMaxFee)) {
-            error = AmountErrMsg("maxtxfee", gArgs.GetArg("-maxtxfee", ""));
-            return nullptr;
-        }
-        if (nMaxFee > HIGH_MAX_TX_FEE) {
-            warnings.push_back(_("-maxtxfee is set very high! Fees this large could be paid on a single transaction."));
-        }
-        if (chain && CFeeRate(nMaxFee, 1000) < chain->relayMinFee()) {
-            error = strprintf(_("Invalid amount for -maxtxfee=<amount>: '%s' (must be at least the minrelay fee of %s to prevent stuck transactions)"),
-                gArgs.GetArg("-maxtxfee", ""), chain->relayMinFee().ToString());
-            return nullptr;
-        }
-        walletInstance->m_default_max_tx_fee = nMaxFee;
-    }
-
-    if (chain && chain->relayMinFee().GetFeePerK() > HIGH_TX_FEE_PER_KB) {
-        warnings.push_back(AmountHighWarn("-minrelaytxfee") + Untranslated(" ") +
-                           _("The wallet will avoid paying less than the minimum relay fee."));
-    }
-
-    walletInstance->m_confirm_target = gArgs.GetArg("-txconfirmtarget", DEFAULT_TX_CONFIRM_TARGET);
-    walletInstance->m_spend_zero_conf_change = gArgs.GetBoolArg("-spendzeroconfchange", DEFAULT_SPEND_ZEROCONF_CHANGE);
-    walletInstance->m_signal_rbf = gArgs.GetBoolArg("-walletrbf", DEFAULT_WALLET_RBF);
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         if (chain && CFeeRate{max_fee.value(), 1000} < chain->relayMinFee()) {
             error = strprintf(_("Invalid amount for %s=<amount>: '%s' (must be at least the minrelay fee of %s to prevent stuck transactions)"),
@@ -4389,33 +2869,14 @@ std::shared_ptr<CWallet> CWallet::Create(WalletContext& context, const std::stri
     // Try to top up keypool. No-op if the wallet is locked.
     walletInstance->TopUpKeyPool();
 
-<<<<<<< HEAD
-    LOCK(walletInstance->cs_wallet);
-
-    if (chain && !AttachChain(walletInstance, *chain, error, warnings)) {
-        return nullptr;
-=======
     // Cache the first key time
     std::optional<int64_t> time_first_key;
     for (auto spk_man : walletInstance->GetAllScriptPubKeyMans()) {
         int64_t time = spk_man->GetTimeFirstKey();
         if (!time_first_key || time < *time_first_key) time_first_key = time;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     if (time_first_key) walletInstance->MaybeUpdateBirthTime(*time_first_key);
 
-<<<<<<< HEAD
-    {
-        LOCK(cs_wallets);
-        for (auto& load_wallet : g_load_wallet_fns) {
-            load_wallet(interfaces::MakeWallet(walletInstance));
-        }
-    }
-
-    walletInstance->SetBroadcastTransactions(gArgs.GetBoolArg("-walletbroadcast", DEFAULT_WALLETBROADCAST));
-
-    {
-=======
     if (chain && !AttachChain(walletInstance, *chain, rescan_required, error, warnings)) {
         return nullptr;
     }
@@ -4423,7 +2884,6 @@ std::shared_ptr<CWallet> CWallet::Create(WalletContext& context, const std::stri
     {
         LOCK(walletInstance->cs_wallet);
         walletInstance->SetBroadcastTransactions(args.GetBoolArg("-walletbroadcast", DEFAULT_WALLETBROADCAST));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         walletInstance->WalletLogPrintf("setKeyPool.size() = %u\n",      walletInstance->GetKeyPoolSize());
         walletInstance->WalletLogPrintf("mapWallet.size() = %u\n",       walletInstance->mapWallet.size());
         walletInstance->WalletLogPrintf("m_address_book.size() = %u\n",  walletInstance->m_address_book.size());
@@ -4432,48 +2892,13 @@ std::shared_ptr<CWallet> CWallet::Create(WalletContext& context, const std::stri
     return walletInstance;
 }
 
-<<<<<<< HEAD
-bool CWallet::AttachChain(const std::shared_ptr<CWallet>& walletInstance, interfaces::Chain& chain, bilingual_str& error, std::vector<bilingual_str>& warnings)
-=======
 bool CWallet::AttachChain(const std::shared_ptr<CWallet>& walletInstance, interfaces::Chain& chain, const bool rescan_required, bilingual_str& error, std::vector<bilingual_str>& warnings)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     LOCK(walletInstance->cs_wallet);
     // allow setting the chain if it hasn't been set already but prevent changing it
     assert(!walletInstance->m_chain || walletInstance->m_chain == &chain);
     walletInstance->m_chain = &chain;
 
-<<<<<<< HEAD
-=======
-    // Unless allowed, ensure wallet files are not reused across chains:
-    if (!gArgs.GetBoolArg("-walletcrosschain", DEFAULT_WALLETCROSSCHAIN)) {
-        WalletBatch batch(walletInstance->GetDatabase());
-        CBlockLocator locator;
-        if (batch.ReadBestBlock(locator) && locator.vHave.size() > 0 && chain.getHeight()) {
-            // Wallet is assumed to be from another chain, if genesis block in the active
-            // chain differs from the genesis block known to the wallet.
-            if (chain.getBlockHash(0) != locator.vHave.back()) {
-                error = Untranslated("Wallet files should not be reused across chains. Restart digibyted with -walletcrosschain to override.");
-                return false;
-            }
-        }
-    }
-
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
-    // Register wallet with validationinterface. It's done before rescan to avoid
-    // missing block connections between end of rescan and validation subscribing.
-    // Because of wallet lock being hold, block connection notifications are going to
-    // be pending on the validation-side until lock release. It's likely to have
-    // block processing duplicata (if rescan block range overlaps with notification one)
-    // but we guarantee at least than wallet state is correct after notifications delivery.
-<<<<<<< HEAD
-    // This is temporary until rescan and notifications delivery are unified under same
-    // interface.
-    walletInstance->m_chain_notifications_handler = walletInstance->chain().handleNotifications(walletInstance);
-
-    int rescan_height = 0;
-    if (!gArgs.GetBoolArg("-rescan", false))
-=======
     // However, chainStateFlushed notifications are ignored until the rescan is finished
     // so that in case of a shutdown event, the rescan will be repeated at the next start.
     // This is temporary until rescan and notifications delivery are unified under same
@@ -4484,7 +2909,6 @@ bool CWallet::AttachChain(const std::shared_ptr<CWallet>& walletInstance, interf
     // If rescan_required = true, rescan_height remains equal to 0
     int rescan_height = 0;
     if (!rescan_required)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     {
         WalletBatch batch(walletInstance->GetDatabase());
         CBlockLocator locator;
@@ -4506,9 +2930,6 @@ bool CWallet::AttachChain(const std::shared_ptr<CWallet>& walletInstance, interf
 
     if (tip_height && *tip_height != rescan_height)
     {
-<<<<<<< HEAD
-        if (chain.havePruned()) {
-=======
         // No need to read and scan block if block was created before
         // our wallet birthday (as adjusted for block time variability)
         std::optional<int64_t> time_first_key = walletInstance->m_birth_time.load();
@@ -4527,22 +2948,12 @@ bool CWallet::AttachChain(const std::shared_ptr<CWallet>& walletInstance, interf
         // `while` loop below can make startup very slow, so only check blocks on disk
         // if necessary.
         if (chain.havePruned() || chain.hasAssumedValidChain()) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             int block_height = *tip_height;
             while (block_height > 0 && chain.haveBlockOnDisk(block_height - 1) && rescan_height != block_height) {
                 --block_height;
             }
 
             if (rescan_height != block_height) {
-<<<<<<< HEAD
-                // We can't rescan beyond non-pruned blocks, stop and throw an error.
-                // This might happen if a user uses an old wallet within a pruned node
-                // or if they ran -disablewallet for a longer time, then decided to re-enable
-                // Exit early and print an error.
-                // If a block is pruned after this check, we will load the wallet,
-                // but fail the rescan with a generic error.
-                error = _("Prune: last wallet synchronisation goes beyond pruned data. You need to -reindex (download the whole blockchain again in case of pruned node)");
-=======
                 // We can't rescan beyond blocks we don't have data for, stop and throw an error.
                 // This might happen if a user uses an old wallet within a pruned node
                 // or if they ran -disablewallet for a longer time, then decided to re-enable
@@ -4560,7 +2971,6 @@ bool CWallet::AttachChain(const std::shared_ptr<CWallet>& walletInstance, interf
                         "blocks are being downloaded out of order when using assumeutxo "
                         "snapshots. Wallet should be able to load successfully after "
                         "node sync reaches height %s"), block_height);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 return false;
             }
         }
@@ -4568,41 +2978,18 @@ bool CWallet::AttachChain(const std::shared_ptr<CWallet>& walletInstance, interf
         chain.initMessage(_("Rescanning…").translated);
         walletInstance->WalletLogPrintf("Rescanning last %i blocks (from block %i)...\n", *tip_height - rescan_height, rescan_height);
 
-<<<<<<< HEAD
-        // No need to read and scan block if block was created before
-        // our wallet birthday (as adjusted for block time variability)
-        std::optional<int64_t> time_first_key;
-        for (auto spk_man : walletInstance->GetAllScriptPubKeyMans()) {
-            int64_t time = spk_man->GetTimeFirstKey();
-            if (!time_first_key || time < *time_first_key) time_first_key = time;
-        }
-        if (time_first_key) {
-            chain.findFirstBlockWithTimeAndHeight(*time_first_key - TIMESTAMP_WINDOW, rescan_height, FoundBlock().height(rescan_height));
-        }
-
-        {
-            WalletRescanReserver reserver(*walletInstance);
-            if (!reserver.reserve() || (ScanResult::SUCCESS != walletInstance->ScanForWalletTransactions(chain.getBlockHash(rescan_height), rescan_height, {} /* max height */, reserver, true /* update */).status)) {
-=======
         {
             WalletRescanReserver reserver(*walletInstance);
             if (!reserver.reserve() || (ScanResult::SUCCESS != walletInstance->ScanForWalletTransactions(chain.getBlockHash(rescan_height), rescan_height, /*max_height=*/{}, reserver, /*fUpdate=*/true, /*save_progress=*/true).status)) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 error = _("Failed to rescan the wallet during initialization");
                 return false;
             }
         }
-<<<<<<< HEAD
-        walletInstance->chainStateFlushed(chain.getTipLocator());
-        walletInstance->GetDatabase().IncrementUpdateCounter();
-    }
-=======
         walletInstance->m_attaching_chain = false;
         walletInstance->chainStateFlushed(ChainstateRole::NORMAL, chain.getTipLocator());
         walletInstance->GetDatabase().IncrementUpdateCounter();
     }
     walletInstance->m_attaching_chain = false;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     return true;
 }
@@ -4656,17 +3043,10 @@ void CWallet::postInitProcess()
 
     // Add wallet transactions that aren't already in a block to mempool
     // Do this here as mempool requires genesis block to be loaded
-<<<<<<< HEAD
-    ReacceptWalletTransactions();
-
-    // Update wallet transactions with current mempool transactions.
-    chain().requestMempoolTransactions(*this);
-=======
     ResubmitWalletTransactions(/*relay=*/false, /*force=*/true);
 
     // Update wallet transactions with current mempool transactions.
     WITH_LOCK(cs_wallet, chain().requestMempoolTransactions(*this));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 bool CWallet::BackupWallet(const std::string& strDest) const
@@ -4689,22 +3069,6 @@ CKeyPool::CKeyPool(const CPubKey& vchPubKeyIn, bool internalIn)
     m_pre_split = false;
 }
 
-<<<<<<< HEAD
-int CWalletTx::GetDepthInMainChain() const
-{
-    assert(pwallet != nullptr);
-    AssertLockHeld(pwallet->cs_wallet);
-    if (isUnconfirmed() || isAbandoned()) return 0;
-
-    return (pwallet->GetLastBlockHeight() - m_confirm.block_height + 1) * (isConflicted() ? -1 : 1);
-}
-
-int CWalletTx::GetBlocksToMaturity() const
-{
-    if (!IsCoinBase())
-        return 0;
-    int chain_depth = GetDepthInMainChain();
-=======
 int CWallet::GetTxDepthInMainChain(const CWalletTx& wtx) const
 {
     AssertLockHeld(cs_wallet);
@@ -4725,24 +3089,16 @@ int CWallet::GetTxBlocksToMaturity(const CWalletTx& wtx) const
         return 0;
     }
     int chain_depth = GetTxDepthInMainChain(wtx);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     assert(chain_depth >= 0); // coinbase tx should not be conflicted
     return std::max(0, (COINBASE_MATURITY_2+1) - chain_depth);
 }
 
-<<<<<<< HEAD
-bool CWalletTx::IsImmatureCoinBase() const
-{
-    // note GetBlocksToMaturity is 0 for non-coinbase tx
-    return GetBlocksToMaturity() > 0;
-=======
 bool CWallet::IsTxImmatureCoinBase(const CWalletTx& wtx) const
 {
     AssertLockHeld(cs_wallet);
 
     // note GetBlocksToMaturity is 0 for non-coinbase tx
     return GetTxBlocksToMaturity(wtx) > 0;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 bool CWallet::IsCrypted() const
@@ -4765,16 +3121,11 @@ bool CWallet::Lock()
         return false;
 
     {
-<<<<<<< HEAD
-        LOCK(cs_wallet);
-        vMasterKey.clear();
-=======
         LOCK2(m_relock_mutex, cs_wallet);
         if (!vMasterKey.empty()) {
             memory_cleanse(vMasterKey.data(), vMasterKey.size() * sizeof(decltype(vMasterKey)::value_type));
             vMasterKey.clear();
         }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     NotifyStatusChanged(this);
@@ -4808,323 +3159,6 @@ std::set<ScriptPubKeyMan*> CWallet::GetActiveScriptPubKeyMans() const
         }
     }
     return spk_mans;
-<<<<<<< HEAD
-}
-
-std::set<ScriptPubKeyMan*> CWallet::GetAllScriptPubKeyMans() const
-{
-    std::set<ScriptPubKeyMan*> spk_mans;
-    for (const auto& spk_man_pair : m_spk_managers) {
-        spk_mans.insert(spk_man_pair.second.get());
-    }
-    return spk_mans;
-}
-
-ScriptPubKeyMan* CWallet::GetScriptPubKeyMan(const OutputType& type, bool internal) const
-{
-    const std::map<OutputType, ScriptPubKeyMan*>& spk_managers = internal ? m_internal_spk_managers : m_external_spk_managers;
-    std::map<OutputType, ScriptPubKeyMan*>::const_iterator it = spk_managers.find(type);
-    if (it == spk_managers.end()) {
-        return nullptr;
-    }
-    return it->second;
-}
-
-std::set<ScriptPubKeyMan*> CWallet::GetScriptPubKeyMans(const CScript& script, SignatureData& sigdata) const
-{
-    std::set<ScriptPubKeyMan*> spk_mans;
-    for (const auto& spk_man_pair : m_spk_managers) {
-        if (spk_man_pair.second->CanProvide(script, sigdata)) {
-            spk_mans.insert(spk_man_pair.second.get());
-        }
-    }
-    return spk_mans;
-}
-
-ScriptPubKeyMan* CWallet::GetScriptPubKeyMan(const CScript& script) const
-{
-    SignatureData sigdata;
-    for (const auto& spk_man_pair : m_spk_managers) {
-        if (spk_man_pair.second->CanProvide(script, sigdata)) {
-            return spk_man_pair.second.get();
-        }
-    }
-    return nullptr;
-}
-
-ScriptPubKeyMan* CWallet::GetScriptPubKeyMan(const uint256& id) const
-{
-    if (m_spk_managers.count(id) > 0) {
-        return m_spk_managers.at(id).get();
-    }
-    return nullptr;
-}
-
-std::unique_ptr<SigningProvider> CWallet::GetSolvingProvider(const CScript& script) const
-{
-    SignatureData sigdata;
-    return GetSolvingProvider(script, sigdata);
-}
-
-std::unique_ptr<SigningProvider> CWallet::GetSolvingProvider(const CScript& script, SignatureData& sigdata) const
-{
-    for (const auto& spk_man_pair : m_spk_managers) {
-        if (spk_man_pair.second->CanProvide(script, sigdata)) {
-            return spk_man_pair.second->GetSolvingProvider(script);
-        }
-    }
-    return nullptr;
-}
-
-LegacyScriptPubKeyMan* CWallet::GetLegacyScriptPubKeyMan() const
-{
-    if (IsWalletFlagSet(WALLET_FLAG_DESCRIPTORS)) {
-        return nullptr;
-    }
-    // Legacy wallets only have one ScriptPubKeyMan which is a LegacyScriptPubKeyMan.
-    // Everything in m_internal_spk_managers and m_external_spk_managers point to the same legacyScriptPubKeyMan.
-    auto it = m_internal_spk_managers.find(OutputType::LEGACY);
-    if (it == m_internal_spk_managers.end()) return nullptr;
-    return dynamic_cast<LegacyScriptPubKeyMan*>(it->second);
-}
-
-LegacyScriptPubKeyMan* CWallet::GetOrCreateLegacyScriptPubKeyMan()
-{
-    SetupLegacyScriptPubKeyMan();
-    return GetLegacyScriptPubKeyMan();
-}
-
-void CWallet::SetupLegacyScriptPubKeyMan()
-{
-    if (!m_internal_spk_managers.empty() || !m_external_spk_managers.empty() || !m_spk_managers.empty() || IsWalletFlagSet(WALLET_FLAG_DESCRIPTORS)) {
-        return;
-    }
-
-    auto spk_manager = std::unique_ptr<ScriptPubKeyMan>(new LegacyScriptPubKeyMan(*this));
-    for (const auto& type : LEGACY_OUTPUT_TYPES) {
-        m_internal_spk_managers[type] = spk_manager.get();
-        m_external_spk_managers[type] = spk_manager.get();
-    }
-    m_spk_managers[spk_manager->GetID()] = std::move(spk_manager);
-}
-
-const CKeyingMaterial& CWallet::GetEncryptionKey() const
-{
-    return vMasterKey;
-}
-
-bool CWallet::HasEncryptionKeys() const
-{
-    return !mapMasterKeys.empty();
-}
-
-void CWallet::ConnectScriptPubKeyManNotifiers()
-{
-    for (const auto& spk_man : GetActiveScriptPubKeyMans()) {
-        spk_man->NotifyWatchonlyChanged.connect(NotifyWatchonlyChanged);
-        spk_man->NotifyCanGetAddressesChanged.connect(NotifyCanGetAddressesChanged);
-    }
-}
-
-void CWallet::LoadDescriptorScriptPubKeyMan(uint256 id, WalletDescriptor& desc)
-{
-    if (IsWalletFlagSet(WALLET_FLAG_EXTERNAL_SIGNER)) {
-        auto spk_manager = std::unique_ptr<ScriptPubKeyMan>(new ExternalSignerScriptPubKeyMan(*this, desc));
-        m_spk_managers[id] = std::move(spk_manager);
-    } else {
-        auto spk_manager = std::unique_ptr<ScriptPubKeyMan>(new DescriptorScriptPubKeyMan(*this, desc));
-        m_spk_managers[id] = std::move(spk_manager);
-    }
-}
-
-void CWallet::SetupDescriptorScriptPubKeyMans()
-{
-    AssertLockHeld(cs_wallet);
-
-    if (!IsWalletFlagSet(WALLET_FLAG_EXTERNAL_SIGNER)) {
-        // Make a seed
-        CKey seed_key;
-        seed_key.MakeNewKey(true);
-        CPubKey seed = seed_key.GetPubKey();
-        assert(seed_key.VerifyPubKey(seed));
-
-        // Get the extended key
-        CExtKey master_key;
-        master_key.SetSeed(seed_key.begin(), seed_key.size());
-
-        for (bool internal : {false, true}) {
-            for (OutputType t : OUTPUT_TYPES) {
-                if (t == OutputType::BECH32M) {
-                    // Skip taproot (bech32m) for now
-                    // TODO: Setup taproot (bech32m) descriptors by default
-                    continue;
-                }
-                auto spk_manager = std::unique_ptr<DescriptorScriptPubKeyMan>(new DescriptorScriptPubKeyMan(*this));
-                if (IsCrypted()) {
-                    if (IsLocked()) {
-                        throw std::runtime_error(std::string(__func__) + ": Wallet is locked, cannot setup new descriptors");
-                    }
-                    if (!spk_manager->CheckDecryptionKey(vMasterKey) && !spk_manager->Encrypt(vMasterKey, nullptr)) {
-                        throw std::runtime_error(std::string(__func__) + ": Could not encrypt new descriptors");
-                    }
-                }
-                spk_manager->SetupDescriptorGeneration(master_key, t, internal);
-                uint256 id = spk_manager->GetID();
-                m_spk_managers[id] = std::move(spk_manager);
-                AddActiveScriptPubKeyMan(id, t, internal);
-            }
-        }
-    } else {
-        ExternalSigner signer = ExternalSignerScriptPubKeyMan::GetExternalSigner();
-
-        // TODO: add account parameter
-        int account = 0;
-        UniValue signer_res = signer.GetDescriptors(account);
-
-        if (!signer_res.isObject()) throw std::runtime_error(std::string(__func__) + ": Unexpected result");
-        for (bool internal : {false, true}) {
-            const UniValue& descriptor_vals = find_value(signer_res, internal ? "internal" : "receive");
-            if (!descriptor_vals.isArray()) throw std::runtime_error(std::string(__func__) + ": Unexpected result");
-            for (const UniValue& desc_val : descriptor_vals.get_array().getValues()) {
-                std::string desc_str = desc_val.getValStr();
-                FlatSigningProvider keys;
-                std::string dummy_error;
-                std::unique_ptr<Descriptor> desc = Parse(desc_str, keys, dummy_error, false);
-                if (!desc->GetOutputType()) {
-                    continue;
-                }
-                OutputType t =  *desc->GetOutputType();
-                auto spk_manager = std::unique_ptr<ExternalSignerScriptPubKeyMan>(new ExternalSignerScriptPubKeyMan(*this));
-                spk_manager->SetupDescriptor(std::move(desc));
-                uint256 id = spk_manager->GetID();
-                m_spk_managers[id] = std::move(spk_manager);
-                AddActiveScriptPubKeyMan(id, t, internal);
-            }
-        }
-    }
-}
-
-void CWallet::AddActiveScriptPubKeyMan(uint256 id, OutputType type, bool internal)
-{
-    WalletBatch batch(GetDatabase());
-    if (!batch.WriteActiveScriptPubKeyMan(static_cast<uint8_t>(type), id, internal)) {
-        throw std::runtime_error(std::string(__func__) + ": writing active ScriptPubKeyMan id failed");
-    }
-    LoadActiveScriptPubKeyMan(id, type, internal);
-}
-
-void CWallet::LoadActiveScriptPubKeyMan(uint256 id, OutputType type, bool internal)
-{
-    // Activating ScriptPubKeyManager for a given output and change type is incompatible with legacy wallets.
-    // Legacy wallets have only one ScriptPubKeyManager and it's active for all output and change types.
-    Assert(IsWalletFlagSet(WALLET_FLAG_DESCRIPTORS));
-
-    WalletLogPrintf("Setting spkMan to active: id = %s, type = %d, internal = %d\n", id.ToString(), static_cast<int>(type), static_cast<int>(internal));
-    auto& spk_mans = internal ? m_internal_spk_managers : m_external_spk_managers;
-    auto& spk_mans_other = internal ? m_external_spk_managers : m_internal_spk_managers;
-    auto spk_man = m_spk_managers.at(id).get();
-    spk_mans[type] = spk_man;
-
-    const auto it = spk_mans_other.find(type);
-    if (it != spk_mans_other.end() && it->second == spk_man) {
-        spk_mans_other.erase(type);
-    }
-
-    NotifyCanGetAddressesChanged();
-}
-
-void CWallet::DeactivateScriptPubKeyMan(uint256 id, OutputType type, bool internal)
-{
-    auto spk_man = GetScriptPubKeyMan(type, internal);
-    if (spk_man != nullptr && spk_man->GetID() == id) {
-        WalletLogPrintf("Deactivate spkMan: id = %s, type = %d, internal = %d\n", id.ToString(), static_cast<int>(type), static_cast<int>(internal));
-        WalletBatch batch(GetDatabase());
-        if (!batch.EraseActiveScriptPubKeyMan(static_cast<uint8_t>(type), internal)) {
-            throw std::runtime_error(std::string(__func__) + ": erasing active ScriptPubKeyMan id failed");
-        }
-
-        auto& spk_mans = internal ? m_internal_spk_managers : m_external_spk_managers;
-        spk_mans.erase(type);
-    }
-
-    NotifyCanGetAddressesChanged();
-}
-
-bool CWallet::IsLegacy() const
-{
-    if (m_internal_spk_managers.count(OutputType::LEGACY) == 0) {
-        return false;
-    }
-    auto spk_man = dynamic_cast<LegacyScriptPubKeyMan*>(m_internal_spk_managers.at(OutputType::LEGACY));
-    return spk_man != nullptr;
-}
-
-DescriptorScriptPubKeyMan* CWallet::GetDescriptorScriptPubKeyMan(const WalletDescriptor& desc) const
-{
-    for (auto& spk_man_pair : m_spk_managers) {
-        // Try to downcast to DescriptorScriptPubKeyMan then check if the descriptors match
-        DescriptorScriptPubKeyMan* spk_manager = dynamic_cast<DescriptorScriptPubKeyMan*>(spk_man_pair.second.get());
-        if (spk_manager != nullptr && spk_manager->HasWalletDescriptor(desc)) {
-            return spk_manager;
-        }
-    }
-
-    return nullptr;
-}
-
-ScriptPubKeyMan* CWallet::AddWalletDescriptor(WalletDescriptor& desc, const FlatSigningProvider& signing_provider, const std::string& label, bool internal)
-{
-    if (!IsWalletFlagSet(WALLET_FLAG_DESCRIPTORS)) {
-        WalletLogPrintf("Cannot add WalletDescriptor to a non-descriptor wallet\n");
-        return nullptr;
-    }
-
-    LOCK(cs_wallet);
-    auto spk_man = GetDescriptorScriptPubKeyMan(desc);
-    if (spk_man) {
-        WalletLogPrintf("Update existing descriptor: %s\n", desc.descriptor->ToString());
-        spk_man->UpdateWalletDescriptor(desc);
-    } else {
-        auto new_spk_man = std::unique_ptr<DescriptorScriptPubKeyMan>(new DescriptorScriptPubKeyMan(*this, desc));
-        spk_man = new_spk_man.get();
-
-        // Save the descriptor to memory
-        m_spk_managers[new_spk_man->GetID()] = std::move(new_spk_man);
-    }
-
-    // Add the private keys to the descriptor
-    for (const auto& entry : signing_provider.keys) {
-        const CKey& key = entry.second;
-        spk_man->AddDescriptorKey(key, key.GetPubKey());
-    }
-
-    // Top up key pool, the manager will generate new scriptPubKeys internally
-    if (!spk_man->TopUp()) {
-        WalletLogPrintf("Could not top up scriptPubKeys\n");
-        return nullptr;
-    }
-
-    // Apply the label if necessary
-    // Note: we disable labels for ranged descriptors
-    if (!desc.descriptor->IsRange()) {
-        auto script_pub_keys = spk_man->GetScriptPubKeys();
-        if (script_pub_keys.empty()) {
-            WalletLogPrintf("Could not generate scriptPubKeys (cache is empty)\n");
-            return nullptr;
-        }
-
-        CTxDestination dest;
-        if (!internal && ExtractDestination(script_pub_keys.at(0), dest)) {
-            SetAddressBook(dest, label, "receive");
-        }
-    }
-
-    // Save the descriptor to DB
-    spk_man->WriteDescriptor();
-
-    return spk_man;
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 std::set<ScriptPubKeyMan*> CWallet::GetAllScriptPubKeyMans() const

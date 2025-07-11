@@ -256,15 +256,16 @@ public:
 };
 
 SafeDbt::SafeDbt()
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     m_dbt.set_flags(DB_DBT_MALLOC);
 }
 
+SafeDbt::SafeDbt(void* data, size_t size)
     : m_dbt(data, size)
 {
 }
 
+SafeDbt::~SafeDbt()
 {
     if (m_dbt.get_data() != nullptr) {
         // Clear memory, e.g. in case it was a private key
@@ -278,27 +279,19 @@ SafeDbt::SafeDbt()
     }
 }
 
+const void* SafeDbt::get_data() const
 {
     return m_dbt.get_data();
 }
 
+uint32_t SafeDbt::get_size() const
 {
     return m_dbt.get_size();
 }
 
+SafeDbt::operator Dbt*()
 {
     return &m_dbt;
-}
-
-<<<<<<< HEAD
-bool BerkeleyDatabase::Verify(bilingual_str& errorStr)
-{
-    fs::path walletDir = env->Directory();
-    fs::path file_path = walletDir / strFile;
-
-    LogPrintf("Using BerkeleyDB version %s\n", BerkeleyDatabaseVersion());
-    LogPrintf("Using wallet %s\n", fs::PathToString(file_path));
-    return {reinterpret_cast<const std::byte*>(dbt.get_data()), dbt.get_size()};
 }
 
 BerkeleyDatabase::BerkeleyDatabase(std::shared_ptr<BerkeleyEnvironment> env, fs::path filename, const DatabaseOptions& options) :
@@ -315,7 +308,6 @@ bool BerkeleyDatabase::Verify(bilingual_str& errorStr)
 
     LogPrintf("Using BerkeleyDB version %s\n", BerkeleyDatabaseVersion());
     LogPrintf("Using wallet %s\n", fs::PathToString(file_path));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     if (!env->Open(errorStr)) {
         return false;
@@ -345,20 +337,15 @@ void BerkeleyEnvironment::CheckpointLSN(const std::string& strFile)
     dbenv->lsn_reset(strFile.c_str(), 0);
 }
 
+Span<const std::byte> SpanFromDbt(const Dbt& dbt)
+{
+    return {reinterpret_cast<const std::byte*>(dbt.get_data()), dbt.get_size()};
+}
+
 BerkeleyDatabase::~BerkeleyDatabase()
 {
     if (env) {
         LOCK(cs_db);
-<<<<<<< HEAD
-        env->CloseDb(strFile);
-        assert(!m_db);
-        size_t erased = env->m_databases.erase(strFile);
-        assert(erased == 1);
-        env->m_fileids.erase(strFile);
-    }
-}
-
-BerkeleyBatch::BerkeleyBatch(BerkeleyDatabase& database, const bool read_only, bool fFlushOnCloseIn) : pdb(nullptr), activeTxn(nullptr), m_cursor(nullptr), m_database(database)
         size_t erased = env->m_databases.erase(m_filename);
         assert(erased == 1);
         env->m_fileids.erase(fs::PathToString(m_filename));
@@ -366,7 +353,6 @@ BerkeleyBatch::BerkeleyBatch(BerkeleyDatabase& database, const bool read_only, b
 }
 
 BerkeleyBatch::BerkeleyBatch(BerkeleyDatabase& database, const bool read_only, bool fFlushOnCloseIn) : m_database(database)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     database.AddRef();
     database.Open();
@@ -462,16 +448,11 @@ void BerkeleyBatch::Close()
         Flush();
 }
 
-<<<<<<< HEAD
-void BerkeleyEnvironment::CloseDb(const std::string& strFile)
+void BerkeleyEnvironment::CloseDb(const fs::path& filename)
 {
     {
         LOCK(cs_db);
         auto it = m_databases.find(filename);
-    {
-        LOCK(cs_db);
-        auto it = m_databases.find(filename);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         assert(it != m_databases.end());
         BerkeleyDatabase& database = it->second.get();
         if (database.m_db) {
@@ -494,19 +475,12 @@ void BerkeleyEnvironment::ReloadDbEnv()
         return true;
     });
 
-<<<<<<< HEAD
-    std::vector<std::string> filenames;
-    for (auto it : m_databases) {
-        filenames.push_back(it.first);
-    }
-    // Close the individual Db's
-    for (const fs::path& filename : filenames) {
+    std::vector<fs::path> filenames;
     for (const auto& it : m_databases) {
         filenames.push_back(it.first);
     }
     // Close the individual Db's
     for (const fs::path& filename : filenames) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         CloseDb(filename);
     }
     // Reset the environment
@@ -525,7 +499,6 @@ DbTxn* BerkeleyEnvironment::TxnBegin(int flags)
     return ptxn;
 }
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 bool BerkeleyDatabase::Rewrite(const char* pszSkip)
 {
     while (true) {
@@ -744,7 +717,7 @@ BerkeleyCursor::BerkeleyCursor(BerkeleyDatabase& database, const BerkeleyBatch& 
     }
     // Transaction argument to cursor is only needed when using the cursor to
     // write to the database. Read-only cursors do not need a txn pointer.
-    int ret = database.m_db->cursor(batch.txn(), &m_cursor, 0);
+    int ret = database.m_db->cursor(batch.activeTxn, &m_cursor, 0);
     if (ret != 0) {
         throw std::runtime_error(STR_INTERNAL_BUG(strprintf("BDB Cursor could not be created. Returned %d", ret)));
     }
@@ -927,7 +900,6 @@ bool BerkeleyBatch::ErasePrefix(Span<const std::byte> prefix)
     return TxnCommit() && (ret == 0 || ret == DB_NOTFOUND);
 }
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 void BerkeleyDatabase::AddRef()
 {
     LOCK(cs_db);

@@ -5356,8 +5356,6 @@ void PeerManagerImpl::MaybeSendFeefilter(CNode& pto, Peer& peer, std::chrono::mi
     }
 }
 
-} // namespace
-
 std::unique_ptr<PeerManager> PeerManager::make(CConnman& connman, AddrMan& addrman,
                                                BanMan* banman, ChainstateManager& chainman,
                                                CTxMemPool& pool, CTxMemPool& stempool, Options opts)
@@ -6052,3 +6050,5 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
     MaybeSendFeefilter(*pto, *peer, current_time);
     return true;
 }
+
+} // namespace

@@ -261,9 +261,6 @@ public:
     /** Calculates the age of the file, since last modified */
     std::chrono::hours GetFeeEstimatorFileAge();
 
-    /** Drop still unconfirmed transactions and record current estimations, if the fee estimation file is present. */
-    void Flush();
-
 private:
     mutable Mutex m_cs_fee_estimator;
 

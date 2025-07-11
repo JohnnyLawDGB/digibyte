@@ -7,7 +7,6 @@
 #include <validation.h>
 
 #include <kernel/chain.h>
-#include <kernel/coinstats.h>
 #include <kernel/mempool_persist.h>
 
 #include <arith_uint256.h>
@@ -85,9 +84,9 @@
 
 #include <boost/algorithm/string/replace.hpp>
 
-using kernel::CCoinsStats;
-using kernel::CoinStatsHashType;
-using kernel::ComputeUTXOStats;
+using node::CCoinsStats;
+using node::CoinStatsHashType;
+using node::ComputeUTXOStats;
 using kernel::Notifications;
 
 using fsbridge::FopenFn;
@@ -101,14 +100,6 @@ using node::SnapshotMetadata;
 #define MICRO 0.000001
 #define MILLI 0.001
 
-/**
- * An extra transaction can be added to a package, as long as it only has one
- * ancestor and is no larger than this. Not really any reason to make this
- * configurable as it doesn't materially change DoS parameters.
- */
-static const unsigned int EXTRA_DESCENDANT_TX_SIZE_LIMIT = 10000;
-/** Maximum kilobytes for transactions to store for processing during reorg */
-static const unsigned int MAX_DISCONNECTED_TX_POOL_SIZE = 20000;
 /** Time to wait between writing blocks/block index to disk. */
 static constexpr std::chrono::hours DATABASE_WRITE_INTERVAL{1};
 /** Time to wait between flushing chainstate to disk. */
@@ -575,7 +566,6 @@ public:
               m_package_feerates{package_feerates}
         {
         }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     };
 
     // Single transaction acceptance

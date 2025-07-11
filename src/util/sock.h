@@ -105,28 +105,6 @@ public:
      * `getsockopt(m_socket, level, opt_name, opt_val, opt_len)`. Code that uses this
      * wrapper can be unit tested if this method is overridden by a mock Sock implementation.
      */
-    template <typename Opt>
-    [[nodiscard]] virtual int GetSockOpt(int level, int opt_name, Opt* opt_val, socklen_t* opt_len) const;
-
-    /**
-     * listen(2) wrapper. Equivalent to `listen(m_socket, backlog)`. Code that uses this
-     * wrapper can be unit tested if this method is overridden by a mock Sock implementation.
-     */
-    [[nodiscard]] virtual int Listen(int backlog) const;
-
-    /**
-     * accept(2) wrapper. Equivalent to `std::make_unique<Sock>(accept(m_socket, addr, addr_len))`.
-     * Code that uses this wrapper can be unit tested if this method is overridden by a mock Sock
-     * implementation.
-     * The returned unique_ptr is empty if `accept()` failed in which case errno will be set.
-     */
-    [[nodiscard]] virtual std::unique_ptr<Sock> Accept(sockaddr* addr, socklen_t* addr_len) const;
-
-    /**
-     * getsockopt(2) wrapper. Equivalent to
-     * `getsockopt(m_socket, level, opt_name, opt_val, opt_len)`. Code that uses this
-     * wrapper can be unit tested if this method is overridden by a mock Sock implementation.
-     */
     [[nodiscard]] virtual int GetSockOpt(int level,
                                          int opt_name,
                                          void* opt_val,
@@ -141,6 +119,20 @@ public:
                                          int opt_name,
                                          const void* opt_val,
                                          socklen_t opt_len) const;
+
+    /**
+     * listen(2) wrapper. Equivalent to `listen(m_socket, backlog)`. Code that uses this
+     * wrapper can be unit tested if this method is overridden by a mock Sock implementation.
+     */
+    [[nodiscard]] virtual int Listen(int backlog) const;
+
+    /**
+     * accept(2) wrapper. Equivalent to `std::make_unique<Sock>(accept(m_socket, addr, addr_len))`.
+     * Code that uses this wrapper can be unit tested if this method is overridden by a mock Sock
+     * implementation.
+     * The returned unique_ptr is empty if `accept()` failed in which case errno will be set.
+     */
+    [[nodiscard]] virtual std::unique_ptr<Sock> Accept(sockaddr* addr, socklen_t* addr_len) const;
 
     /**
      * getsockname(2) wrapper. Equivalent to

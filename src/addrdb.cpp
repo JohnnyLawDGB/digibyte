@@ -150,8 +150,8 @@ bool DeserializeFileDB(const fs::path& path, Data& data, int version)
 } // namespace
 
 CBanDB::CBanDB(fs::path ban_list_path)
-    : m_banlist_dat(PathToString(ban_list_path) + ".dat"),
-      m_banlist_json(PathToString(ban_list_path) + ".json")
+    : m_banlist_dat(ban_list_path + ".dat"),
+      m_banlist_json(ban_list_path + ".json")
 {
 }
 
@@ -192,7 +192,7 @@ bool CBanDB::Read(banmap_t& banSet, bool& dirty)
     try {
         BanMapFromJson(settings[JSON_KEY], banSet);
     } catch (const std::runtime_error& e) {
-        LogPrintf("Cannot parse banlist %s: %s\n", m_banlist_json.string(), e.what());
+        LogPrintf("Cannot parse banlist %s: %s\n", PathToString(m_banlist_json), e.what());
         return false;
     }
 

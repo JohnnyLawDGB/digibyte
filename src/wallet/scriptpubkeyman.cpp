@@ -2660,8 +2660,14 @@ bool DescriptorScriptPubKeyMan::GetDescriptorString(std::string& out, const bool
     FlatSigningProvider provider;
     provider.keys = GetKeys();
 
+    if (priv) {
+        // For the private version, always return the master key to avoid
+        // exposing child private keys. The risk implications of exposing child
+        // private keys together with the parent xpub may be non-obvious for users.
+        return m_wallet_descriptor.descriptor->ToPrivateString(provider, out);
+    }
 
-    NotifyFirstKeyTimeChanged(this, m_wallet_descriptor.creation_time);
+    return m_wallet_descriptor.descriptor->ToNormalizedString(provider, out, &m_wallet_descriptor.cache);
 }
 
 bool DescriptorScriptPubKeyMan::CanUpdateToWalletDescriptor(const WalletDescriptor& descriptor, std::string& error)

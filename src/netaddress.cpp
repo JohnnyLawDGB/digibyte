@@ -3,6 +3,7 @@
 // Copyright (c) 2014-2025 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
 #include <netaddress.h>
 
 #include <crypto/common.h>
@@ -396,22 +397,6 @@ bool CNetAddr::IsHeNet() const
     return IsIPv6() && HasPrefix(m_addr, std::array<uint8_t, 4>{0x20, 0x01, 0x04, 0x70});
 }
 
-/**
- * Check whether this object represents a TOR address.
- * @see CNetAddr::SetSpecial(const std::string &)
- */
-bool CNetAddr::IsTor() const { return m_net == NET_ONION; }
-
-/**
- * Check whether this object represents an I2P address.
- */
-bool CNetAddr::IsI2P() const { return m_net == NET_I2P; }
-
-/**
- * Check whether this object represents a CJDNS address.
- */
-bool CNetAddr::IsCJDNS() const { return m_net == NET_CJDNS; }
-
 bool CNetAddr::IsLocal() const
 {
     // IPv4 loopback (127.0.0.0/8 or 0.0.0.0/8)
@@ -770,6 +755,142 @@ int CNetAddr::GetReachabilityFrom(const CNetAddr& paddrPartner) const
         case NET_I2P: return REACH_PRIVATE;
         default: return REACH_DEFAULT;
         }
+    case NET_CJDNS:
+        switch (ourNet) {
+        case NET_CJDNS: return REACH_PRIVATE;
+        default: return REACH_DEFAULT;
+        }
+    case NET_TEREDO:
+        switch(ourNet) {
+        default:          return REACH_DEFAULT;
+        case NET_TEREDO:  return REACH_TEREDO;
+        case NET_IPV6:    return REACH_IPV6_WEAK;
+        case NET_IPV4:    return REACH_IPV4;
+        }
+    case NET_UNROUTABLE:
+    default:
+        switch(ourNet) {
+        default:          return REACH_DEFAULT;
+        case NET_TEREDO:  return REACH_TEREDO;
+        case NET_IPV6:    return REACH_IPV6_WEAK;
+        case NET_IPV4:    return REACH_IPV4;
+        case NET_ONION:     return REACH_PRIVATE; // either from Tor, or don't care about our address
+        }
+    }
+}
+
+CService::CService() : port(0)
+{
+}
+
+CService::CService(const CNetAddr& cip, uint16_t portIn) : CNetAddr(cip), port(portIn)
+{
+}
+
+CService::CService(const struct in_addr& ipv4Addr, uint16_t portIn) : CNetAddr(ipv4Addr), port(portIn)
+{
+}
+
+CService::CService(const struct in6_addr& ipv6Addr, uint16_t portIn) : CNetAddr(ipv6Addr), port(portIn)
+{
+}
+
+CService::CService(const struct sockaddr_in& addr) : CNetAddr(addr.sin_addr), port(ntohs(addr.sin_port))
+{
+    assert(addr.sin_family == AF_INET);
+}
+
+CService::CService(const struct sockaddr_in6 &addr) : CNetAddr(addr.sin6_addr, addr.sin6_scope_id), port(ntohs(addr.sin6_port))
+{
+   assert(addr.sin6_family == AF_INET6);
+}
+
+bool CService::SetSockAddr(const struct sockaddr *paddr)
+{
+    switch (paddr->sa_family) {
+    case AF_INET:
+        *this = CService(*(const struct sockaddr_in*)paddr);
+        return true;
+    case AF_INET6:
+        *this = CService(*(const struct sockaddr_in6*)paddr);
+        return true;
+    default:
+        return false;
+    }
+}
+
+uint16_t CService::GetPort() const
+{
+    return port;
+}
+
+bool operator==(const CService& a, const CService& b)
+{
+    return static_cast<CNetAddr>(a) == static_cast<CNetAddr>(b) && a.port == b.port;
+}
+
+bool operator<(const CService& a, const CService& b)
+{
+    return static_cast<CNetAddr>(a) < static_cast<CNetAddr>(b) || (static_cast<CNetAddr>(a) == static_cast<CNetAddr>(b) && a.port < b.port);
+}
+
+/**
+ * Obtain the IPv4/6 socket address this represents.
+ *
+ * @param[out] paddr The obtained socket address.
+ * @param[in,out] addrlen The size, in bytes, of the address structure pointed
+ *                        to by paddr. The value that's pointed to by this
+ *                        parameter might change after calling this function if
+ *                        the size of the corresponding address structure
+ *                        changed.
+ *
+ * @returns Whether or not the operation was successful.
+ */
+bool CService::GetSockAddr(struct sockaddr* paddr, socklen_t *addrlen) const
+{
+    if (IsIPv4()) {
+        if (*addrlen < (socklen_t)sizeof(struct sockaddr_in))
+            return false;
+        *addrlen = sizeof(struct sockaddr_in);
+        struct sockaddr_in *paddrin = (struct sockaddr_in*)paddr;
+        memset(paddrin, 0, *addrlen);
+        if (!GetInAddr(&paddrin->sin_addr))
+            return false;
+        paddrin->sin_family = AF_INET;
+        paddrin->sin_port = htons(port);
+        return true;
+    }
+    if (IsIPv6() || IsCJDNS()) {
+        if (*addrlen < (socklen_t)sizeof(struct sockaddr_in6))
+            return false;
+        *addrlen = sizeof(struct sockaddr_in6);
+        struct sockaddr_in6 *paddrin6 = (struct sockaddr_in6*)paddr;
+        memset(paddrin6, 0, *addrlen);
+        if (!GetIn6Addr(&paddrin6->sin6_addr))
+            return false;
+        paddrin6->sin6_scope_id = m_scope_id;
+        paddrin6->sin6_family = AF_INET6;
+        paddrin6->sin6_port = htons(port);
+        return true;
+    }
+    return false;
+}
+
+/**
+ * @returns An identifier unique to this service's address and port number.
+ */
+std::vector<unsigned char> CService::GetKey() const
+{
+    auto key = GetAddrBytes();
+    key.push_back(port / 0x100); // most significant byte of our port
+    key.push_back(port & 0x0FF); // least significant byte of our port
+    return key;
+}
+
+std::string CService::ToStringAddrPort() const
+{
+    const auto port_str = strprintf("%u", port);
+
     if (IsIPv4() || IsTor() || IsI2P() || IsInternal()) {
         return ToStringAddr() + ":" + port_str;
     } else {
@@ -948,29 +1069,6 @@ bool CSubNet::IsValid() const
     return valid;
 }
 
-bool CSubNet::SanityCheck() const
-{
-    switch (network.m_net) {
-    case NET_IPV4:
-    case NET_IPV6:
-        break;
-    case NET_ONION:
-    case NET_I2P:
-    case NET_CJDNS:
-        return true;
-    case NET_INTERNAL:
-    case NET_UNROUTABLE:
-    case NET_MAX:
-        return false;
-    }
-
-    for (size_t x = 0; x < network.m_addr.size(); ++x) {
-        if (network.m_addr[x] & ~netmask[x]) return false;
-    }
-
-    return true;
-}
-
 bool operator==(const CSubNet& a, const CSubNet& b)
 {
     return a.valid == b.valid && a.network == b.network && !memcmp(a.netmask, b.netmask, 16);
@@ -979,9 +1077,4 @@ bool operator==(const CSubNet& a, const CSubNet& b)
 bool operator<(const CSubNet& a, const CSubNet& b)
 {
     return (a.network < b.network || (a.network == b.network && memcmp(a.netmask, b.netmask, 16) < 0));
-}
-
-bool SanityCheckASMap(const std::vector<bool>& asmap)
-{
-    return SanityCheckASMap(asmap, 128); // For IP address lookups, the input is 128 bits
 }

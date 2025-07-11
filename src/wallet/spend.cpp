@@ -1,6 +1,7 @@
 // Copyright (c) 2014-2025 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
 #include <algorithm>
 #include <common/args.h>
 #include <common/system.h>
@@ -948,32 +949,46 @@ static void DiscourageFeeSniping(CMutableTransaction& tx, FastRandomContext& rng
         // unique "nLockTime fingerprint", set nLockTime to a constant.
         tx.nLockTime = 0;
     }
-    assert(tx.nLockTime < LOCKTIME_THRESHOLD);
+    // Sanity check all values
+    assert(tx.nLockTime < LOCKTIME_THRESHOLD); // Type must be block height
+    assert(tx.nLockTime <= uint64_t(block_height));
+    for (const auto& in : tx.vin) {
+        // Can not be FINAL for locktime to work
+        assert(in.nSequence != CTxIn::SEQUENCE_FINAL);
+        // May be MAX NONFINAL to disable both BIP68 and BIP125
+        if (in.nSequence == CTxIn::MAX_SEQUENCE_NONFINAL) continue;
+        // May be MAX BIP125 to disable BIP68 and enable BIP125
+        if (in.nSequence == MAX_BIP125_RBF_SEQUENCE) continue;
+        // The wallet does not support any other sequence-use right now.
+        assert(false);
+    }
 }
 
-bool CWallet::CreateTransactionInternal(
+static util::Result<CreatedTransactionResult> CreateTransactionInternal(
+        CWallet& wallet,
         const std::vector<CRecipient>& vecSend,
-        CTransactionRef& tx,
-        CAmount& nFeeRet,
-        int& nChangePosInOut,
-        bilingual_str& error,
+        int change_pos,
         const CCoinControl& coin_control,
-        FeeCalculation& fee_calc_out,
-        bool sign)
+        bool sign) EXCLUSIVE_LOCKS_REQUIRED(wallet.cs_wallet)
 {
-    AssertLockHeld(cs_wallet);
+    AssertLockHeld(wallet.cs_wallet);
 
+    // out variables, to be packed into returned result structure
+    int nChangePosInOut = change_pos;
+
+    FastRandomContext rng_fast;
     CMutableTransaction txNew; // The resulting transaction that we make
-    
-    // Set locktime to the current height to discourage fee sniping
-    txNew.nLockTime = 0;  // Will be set by DiscourageFeeSniping if conditions are met
 
-    CoinSelectionParams coin_selection_params; // Parameters for coin selection, init with dummy
+    CoinSelectionParams coin_selection_params{rng_fast}; // Parameters for coin selection, init with dummy
     coin_selection_params.m_avoid_partial_spends = coin_control.m_avoid_partial_spends;
+    coin_selection_params.m_include_unsafe_inputs = coin_control.m_include_unsafe_inputs;
+
+    // Set the long term feerate estimate to the wallet's consolidate feerate
+    coin_selection_params.m_long_term_feerate = wallet.m_consolidate_feerate;
 
     CAmount recipients_sum = 0;
-    const OutputType change_type = TransactionChangeType(coin_control.m_change_type ? *coin_control.m_change_type : m_default_change_type, vecSend);
-    ReserveDestination reservedest(this, change_type);
+    const OutputType change_type = wallet.TransactionChangeType(coin_control.m_change_type ? *coin_control.m_change_type : wallet.m_default_change_type, vecSend);
+    ReserveDestination reservedest(&wallet, change_type);
     unsigned int outputs_to_subtract_fee_from = 0; // The number of outputs which we are subtracting the fee from
     for (const auto& recipient : vecSend) {
         recipients_sum += recipient.nAmount;
@@ -1137,54 +1152,36 @@ bool CWallet::CreateTransactionInternal(
     // to avoid conflicting with other possible uses of nSequence,
     // and in the spirit of "smallest possible change from prior
     // behavior."
-    const uint32_t nSequence = coin_control.m_signal_bip125_rbf.value_or(m_signal_rbf) ? MAX_BIP125_RBF_SEQUENCE : (CTxIn::SEQUENCE_FINAL - 1);
+    const uint32_t nSequence{coin_control.m_signal_bip125_rbf.value_or(wallet.m_signal_rbf) ? MAX_BIP125_RBF_SEQUENCE : CTxIn::MAX_SEQUENCE_NONFINAL};
     for (const auto& coin : selected_coins) {
-        txNew.vin.push_back(CTxIn(coin.outpoint, CScript(), nSequence));
+        txNew.vin.emplace_back(coin->outpoint, CScript(), nSequence);
     }
-    
-    // Apply anti-fee-sniping locktime if requested and possible
-    if (!coin_control.m_locktime) {
-        DiscourageFeeSniping(txNew, rng_fast, chain(), GetLastBlockHash(), GetLastBlockHeight());
-    }
+    DiscourageFeeSniping(txNew, rng_fast, wallet.chain(), wallet.GetLastBlockHash(), wallet.GetLastBlockHeight());
 
     // Calculate the transaction fee
-    TxSize tx_sizes = CalculateMaximumSignedTxSize(CTransaction(txNew), this, coin_control.fAllowWatchOnly);
+    TxSize tx_sizes = CalculateMaximumSignedTxSize(CTransaction(txNew), &wallet, &coin_control);
     int nBytes = tx_sizes.vsize;
-    if (nBytes < 0) {
-        error = _("Signing transaction failed");
-        return false;
+    if (nBytes == -1) {
+        return util::Error{_("Missing solving data for estimating transaction size")};
     }
-    nFeeRet = coin_selection_params.m_effective_feerate.GetFee(nBytes);
+    CAmount fee_needed = coin_selection_params.m_effective_feerate.GetFee(nBytes) + result.GetTotalBumpFees();
+    const CAmount output_value = CalculateOutputValue(txNew);
+    Assume(recipients_sum + change_amount == output_value);
+    CAmount current_fee = result.GetSelectedValue() - output_value;
 
-    // Subtract fee from the change output if not subtracting it from recipient outputs
-    CAmount fee_needed = nFeeRet;
-    if (!coin_selection_params.m_subtract_fee_outputs) {
-        change_position->nValue -= fee_needed;
-    }
-
-    // We want to drop the change to fees if:
-    // 1. The change output would be dust
-    // 2. The change is within the (almost) exact match window, i.e. it is less than or equal to the cost of the change output (cost_of_change)
-    CAmount change_amount = change_position->nValue;
-    if (IsDust(*change_position, coin_selection_params.m_discard_feerate) || change_amount <= coin_selection_params.m_cost_of_change)
-    {
-        nChangePosInOut = -1;
-        change_amount = 0;
-        txNew.vout.erase(change_position);
-
-        // Because we have dropped this change, the tx size and required fee will be different, so let's recalculate those
-        tx_sizes = CalculateMaximumSignedTxSize(CTransaction(txNew), this, coin_control.fAllowWatchOnly);
-        nBytes = tx_sizes.vsize;
-        fee_needed = coin_selection_params.m_effective_feerate.GetFee(nBytes);
+    // Sanity check that the fee cannot be negative as that means we have more output value than input value
+    if (current_fee < 0) {
+        return util::Error{Untranslated(STR_INTERNAL_BUG("Fee paid < 0"))};
     }
 
-    // The only time that fee_needed should be less than the amount available for fees (in change_and_fee - change_amount) is when
-    // we are subtracting the fee from the outputs. If this occurs at any other time, it is a bug.
-    assert(coin_selection_params.m_subtract_fee_outputs || fee_needed <= change_and_fee - change_amount);
-
-    // Update nFeeRet in case fee_needed changed due to dropping the change output
-    if (fee_needed <= change_and_fee - change_amount) {
-        nFeeRet = change_and_fee - change_amount;
+    // If there is a change output and we overpay the fees then increase the change to match the fee needed
+    if (nChangePosInOut != -1 && fee_needed < current_fee) {
+        auto& change = txNew.vout.at(nChangePosInOut);
+        change.nValue += current_fee - fee_needed;
+        current_fee = result.GetSelectedValue() - CalculateOutputValue(txNew);
+        if (fee_needed != current_fee) {
+            return util::Error{Untranslated(STR_INTERNAL_BUG("Change adjustment: Fee needed != fee paid"))};
+        }
     }
 
     // Reduce output values for subtractFeeFromAmount

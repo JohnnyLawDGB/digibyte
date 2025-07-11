@@ -20,6 +20,7 @@
 #include <deploymentstatus.h>
 #include <hash.h>
 #include <index/blockfilterindex.h>
+#include <init.h>
 #include <index/coinstatsindex.h>
 #include <kernel/coinstats.h>
 #include <logging/timer.h>
@@ -63,7 +64,6 @@
 using kernel::CCoinsStats;
 using kernel::CoinStatsHashType;
 
-using node::BlockManager;
 using node::NodeContext;
 using node::SnapshotMetadata;
 
@@ -195,7 +195,7 @@ UniValue blockheaderToJSON(const CBlockIndex* tip, const CBlockIndex* blockindex
     return result;
 }
 
-UniValue blockToJSON(BlockManager& blockman, const CBlock& block, const CBlockIndex* tip, const CBlockIndex* blockindex, TxVerbosity verbosity)
+UniValue blockToJSON(node::BlockManager& blockman, const CBlock& block, const CBlockIndex* tip, const CBlockIndex* blockindex, TxVerbosity verbosity)
 {
     UniValue result = blockheaderToJSON(tip, blockindex);
 
@@ -459,7 +459,7 @@ static RPCHelpMan getdifficulty()
 {
     ChainstateManager& chainman = EnsureAnyChainman(request.context);
     LOCK(cs_main);
-    CChainState& active_chainstate = chainman.ActiveChainstate();
+    Chainstate& active_chainstate = chainman.ActiveChainstate();
 
     const CBlockIndex* tip = active_chainstate.m_chain.Tip();
     CHECK_NONFATAL(tip);
@@ -586,7 +586,7 @@ UniValue MempoolToJSON(const CTxMemPool& pool, bool verbose, bool include_mempoo
             // Mempool has unique entries so there is no advantage in using
             // UniValue::pushKV, which checks if the key already exists in O(N).
             // UniValue::__pushKV is used instead which currently is O(1).
-            o.__pushKV(hash.ToString(), info);
+            o.pushKV(hash.ToString(), info);
         }
         return o;
     } else {
@@ -755,9 +755,12 @@ static RPCHelpMan getmempoolancestors()
     }
 
     CTxMemPool::setEntries setAncestors;
-    uint64_t noLimit = std::numeric_limits<uint64_t>::max();
-    std::string dummy;
-    mempool.CalculateMemPoolAncestors(*it, setAncestors, noLimit, noLimit, noLimit, noLimit, dummy, false);
+    CTxMemPool::Limits noLimits{std::numeric_limits<uint64_t>::max(), std::numeric_limits<uint64_t>::max()};
+    auto ancestors = mempool.CalculateMemPoolAncestors(*it, noLimits);
+    if (!ancestors) {
+        throw JSONRPCError(RPC_MISC_ERROR, "Failed to calculate ancestors");
+    }
+    setAncestors = *ancestors;
 
     if (!fVerbose) {
         UniValue o(UniValue::VARR);
@@ -977,7 +980,7 @@ static RPCHelpMan getblockheader()
     };
 }
 
-static CBlock GetBlockChecked(BlockManager& blockman, const CBlockIndex* pblockindex)
+static CBlock GetBlockChecked(node::BlockManager& blockman, const CBlockIndex* pblockindex)
 {
     CBlock block;
     {
@@ -1327,7 +1330,7 @@ static RPCHelpMan gettxoutsetinfo()
     active_chainstate.ForceFlushStateToDisk();
 
     CCoinsView* coins_view;
-    BlockManager* blockman;
+    node::BlockManager* blockman;
     {
         LOCK(::cs_main);
         coins_view = &active_chainstate.CoinsDB();
@@ -1664,7 +1667,7 @@ RPCHelpMan getblockchaininfo()
     CHECK_NONFATAL(tip);
     const int height = tip->nHeight;
     UniValue obj(UniValue::VOBJ);
-    obj.pushKV("chain", chainman.GetParams().NetworkIDString());
+    obj.pushKV("chain", chainman.GetParams().GetChainName());
     obj.pushKV("blocks", height);
     obj.pushKV("headers", chainman.m_best_header ? chainman.m_best_header->nHeight : -1);
     obj.pushKV("bestblockhash", tip->GetBlockHash().GetHex());
@@ -1680,9 +1683,9 @@ RPCHelpMan getblockchaininfo()
     obj.pushKV("time", tip->GetBlockTime());
     obj.pushKV("mediantime", tip->GetMedianTimePast());
     obj.pushKV("verificationprogress", GuessVerificationProgress(chainman.GetParams().TxData(), tip));
-    obj.pushKV("initialblockdownload", active_chainstate.IsInitialBlockDownload());
+    obj.pushKV("initialblockdownload", chainman.IsInitialBlockDownload());
     obj.pushKV("chainwork", tip->nChainWork.GetHex());
-    obj.pushKV("size_on_disk", CalculateCurrentUsage());
+    obj.pushKV("size_on_disk", chainman.m_blockman.CalculateCurrentUsage());
     obj.pushKV("pruned", chainman.m_blockman.IsPruneMode());
     if (chainman.m_blockman.IsPruneMode()) {
         const CBlockIndex* block = tip;
@@ -1691,8 +1694,8 @@ RPCHelpMan getblockchaininfo()
             block = block->pprev;
         }
         obj.pushKV("pruneheight", block->nHeight + 1);
-        obj.pushKV("automatic_pruning", chainman.m_blockman.GetPruneTarget() != BlockManager::PRUNE_TARGET_MANUAL);
-        if (chainman.m_blockman.GetPruneTarget() != BlockManager::PRUNE_TARGET_MANUAL) {
+        obj.pushKV("automatic_pruning", chainman.m_blockman.GetPruneTarget() != node::BlockManager::PRUNE_TARGET_MANUAL);
+        if (chainman.m_blockman.GetPruneTarget() != node::BlockManager::PRUNE_TARGET_MANUAL) {
             obj.pushKV("prune_target_size", chainman.m_blockman.GetPruneTarget());
         }
     }

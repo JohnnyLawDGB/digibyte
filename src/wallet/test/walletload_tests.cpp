@@ -1,7 +1,6 @@
-// Copyright (c) 2022 The DigiByte Core developers
+// Copyright (c) 2014-2025 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or https://www.opensource.org/licenses/mit-license.php.
-
 #include <wallet/test/util.h>
 #include <wallet/wallet.h>
 #include <test/util/logging.h>

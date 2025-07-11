@@ -1,7 +1,7 @@
 // Copyright (c) 2016-present The Bitcoin Core developers
+// Copyright (c) 2014-2025-present The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or https://opensource.org/license/mit/.
-
 #include <kernel/mempool_removal_reason.h>
 
 #include <cassert>

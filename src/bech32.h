@@ -1,9 +1,8 @@
-// Copyright (c) 2017, 2021 Pieter Wuille
 // Copyright (c) 2021 The Bitcoin Core developers
-// Copyright (c) 2021-2025 The DigiByte Core developers
+// Copyright (c) 2014-2025 The DigiByte Core developers
+// Copyright (c) 2017, 2021 Pieter Wuille
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
-
 // Bech32 and Bech32m are string encoding formats used in newer
 // address types. The outputs consist of a human-readable part
 // (alphanumeric), a separator character (1), and a base32 data

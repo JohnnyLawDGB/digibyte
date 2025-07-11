@@ -852,7 +852,7 @@ private:
      * same probability that we have in the reject filter).
      */
     Mutex m_recent_confirmed_transactions_mutex;
-    CRollingBloomFilter m_recent_confirmed_transactions GUARDED_BY(m_recent_confirmed_transactions_mutex){48'000, 0.000'001};
+    std::unique_ptr<CRollingBloomFilter> m_recent_confirmed_transactions GUARDED_BY(m_recent_confirmed_transactions_mutex);
 
     /**
      * For sending `inv`s to inbound peers, we use a single (exponentially
@@ -2051,9 +2051,9 @@ void PeerManagerImpl::BlockConnected(
     {
         LOCK(m_recent_confirmed_transactions_mutex);
         for (const auto& ptx : pblock->vtx) {
-            m_recent_confirmed_transactions.insert(ptx->GetHash());
+            m_recent_confirmed_transactions->insert(ptx->GetHash());
             if (ptx->GetHash() != ptx->GetWitnessHash()) {
-                m_recent_confirmed_transactions.insert(ptx->GetWitnessHash());
+                m_recent_confirmed_transactions->insert(ptx->GetWitnessHash());
             }
         }
     }
@@ -2077,7 +2077,7 @@ void PeerManagerImpl::BlockDisconnected(const std::shared_ptr<const CBlock> &blo
     // presumably the most common case of relaying a confirmed transaction
     // should be just after a new block containing it is found.
     LOCK(m_recent_confirmed_transactions_mutex);
-    m_recent_confirmed_transactions.reset();
+    m_recent_confirmed_transactions->reset();
 }
 
 /**
@@ -2263,10 +2263,11 @@ void PeerManagerImpl::_RelayTransaction(const uint256& txid, const uint256& wtxi
         if (!peer) return;
 
         const uint256& hash = peer->m_wtxid_relay ? wtxid : txid;
-        if (peer->m_tx_relay == nullptr) return;
-        LOCK(peer->m_tx_relay->m_tx_inventory_mutex);
-        if (!peer->m_tx_relay->m_tx_inventory_known_filter.contains(hash)) {
-            peer->m_tx_relay->m_tx_inventory_to_send.insert(hash);
+        auto tx_relay = peer->GetTxRelay();
+        if (!tx_relay) return;
+        LOCK(tx_relay->m_tx_inventory_mutex);
+        if (!tx_relay->m_tx_inventory_known_filter.contains(hash)) {
+            tx_relay->m_tx_inventory_to_send.insert(hash);
         }
     });
 }
@@ -2317,148 +2318,6 @@ void PeerManagerImpl::CheckDandelionEmbargoes()
             iter = m_connman.mDandelionEmbargo.erase(iter);
         } else {
             iter++;
-        }
-    }
-    {
-        LOCK(m_most_recent_block_mutex);
-        // m_most_recent_block is already protected by m_most_recent_block_mutex
-        // m_most_recent_compact_block is already protected by m_most_recent_block_mutex
-    }
-
-    bool need_activate_chain = false;
-    {
-        LOCK(cs_main);
-        const CBlockIndex* pindex = m_chainman.m_blockman.LookupBlockIndex(inv.hash);
-        if (pindex) {
-            if (pindex->HaveNumChainTxs() && !pindex->IsValid(BLOCK_VALID_SCRIPTS) &&
-                    pindex->IsValid(BLOCK_VALID_TREE)) {
-                // If we have the block and all of its parents, but have not yet validated it,
-                // we might be in the middle of connecting it (ie in the unlock of cs_main
-                // before ActivateBestChain but after AcceptBlock).
-                // In this case, we need to run ActivateBestChain prior to checking the relay
-                // conditions below.
-                need_activate_chain = true;
-            }
-        }
-    } // release cs_main before calling ActivateBestChain
-    if (need_activate_chain) {
-        BlockValidationState state;
-        if (!m_chainman.ActiveChainstate().ActivateBestChain(state, a_recent_block)) {
-            LogPrint(BCLog::NET, "failed to activate chain (%s)\n", state.ToString());
-        }
-    }
-
-    LOCK(cs_main);
-    const CBlockIndex* pindex = m_chainman.m_blockman.LookupBlockIndex(inv.hash);
-    if (!pindex) {
-        return;
-    }
-    if (!BlockRequestAllowed(pindex)) {
-        LogPrint(BCLog::NET, "%s: ignoring request from peer=%i for old block that isn't in the main chain\n", __func__, pfrom.GetId());
-        return;
-    }
-    const CNetMsgMaker msgMaker(pfrom.GetCommonVersion());
-    // disconnect node in case we have reached the outbound limit for serving historical blocks
-    if (m_connman.OutboundTargetReached(true) &&
-        (((m_chainman.m_best_header != nullptr) && (m_chainman.m_best_header->GetBlockTime() - pindex->GetBlockTime() > HISTORICAL_BLOCK_AGE)) || inv.IsMsgFilteredBlk()) &&
-        !pfrom.HasPermission(NetPermissionFlags::Download) // nodes with the download permission may exceed target
-    ) {
-        LogPrint(BCLog::NET, "historical block serving limit reached, disconnect peer=%d\n", pfrom.GetId());
-        pfrom.fDisconnect = true;
-        return;
-    }
-    // Avoid leaking prune-height by never sending blocks below the NODE_NETWORK_LIMITED threshold
-    if (!pfrom.HasPermission(NetPermissionFlags::NoBan) && (
-            (((peer.m_our_services & NODE_NETWORK_LIMITED) == NODE_NETWORK_LIMITED) && ((peer.m_our_services & NODE_NETWORK) != NODE_NETWORK) && (m_chainman.ActiveChain().Tip()->nHeight - pindex->nHeight > (int)NODE_NETWORK_LIMITED_MIN_BLOCKS + 2 /* add two blocks buffer extension for possible races */) )
-       )) {
-        LogPrint(BCLog::NET, "Ignore block request below NODE_NETWORK_LIMITED threshold, disconnect peer=%d\n", pfrom.GetId());
-        //disconnect node and prevent it from stalling (would otherwise wait for the missing block)
-        pfrom.fDisconnect = true;
-        return;
-    }
-    // Pruned nodes may have deleted the block, so check whether
-    // it's available before trying to send.
-    if (!(pindex->nStatus & BLOCK_HAVE_DATA)) {
-        return;
-    }
-    std::shared_ptr<const CBlock> pblock;
-    if (a_recent_block && a_recent_block->GetHash() == pindex->GetBlockHash()) {
-        pblock = a_recent_block;
-    } else if (inv.IsMsgWitnessBlk()) {
-        // Fast-path: in this case it is possible to serve the block directly from disk,
-        // as the network format matches the format on disk
-        std::vector<uint8_t> block_data;
-        if (!m_chainman.m_blockman.ReadRawBlockFromDisk(block_data, pindex->GetBlockPos())) {
-            assert(!"cannot load block from disk");
-        }
-        m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::BLOCK, Span{block_data}));
-        // Don't set pblock as we've sent the block
-    } else {
-        // Send block from disk
-        std::shared_ptr<CBlock> pblockRead = std::make_shared<CBlock>();
-        if (!m_chainman.m_blockman.ReadBlockFromDisk(*pblockRead, *pindex)) {
-            assert(!"cannot load block from disk");
-        }
-        pblock = pblockRead;
-    }
-    if (pblock) {
-        if (inv.IsMsgBlk()) {
-            m_connman.PushMessage(&pfrom, msgMaker.Make(SERIALIZE_TRANSACTION_NO_WITNESS, NetMsgType::BLOCK, *pblock));
-        } else if (inv.IsMsgWitnessBlk()) {
-            m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::BLOCK, *pblock));
-        } else if (inv.IsMsgFilteredBlk()) {
-            bool sendMerkleBlock = false;
-            CMerkleBlock merkleBlock;
-            if (auto tx_relay = peer.GetTxRelay(); tx_relay != nullptr) {
-                LOCK(tx_relay->m_bloom_filter_mutex);
-                if (tx_relay->m_bloom_filter) {
-                    sendMerkleBlock = true;
-                    merkleBlock = CMerkleBlock(*pblock, *tx_relay->m_bloom_filter);
-                }
-            }
-            if (sendMerkleBlock) {
-                m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::MERKLEBLOCK, merkleBlock));
-                // CMerkleBlock just contains hashes, so also push any transactions in the block the client did not see
-                // This avoids hurting performance by pointlessly requiring a round-trip
-                // Note that there is currently no way for a node to request any single transactions we didn't send here -
-                // they must either disconnect and retry or request the full block.
-                // Thus, the protocol spec specified allows for us to provide duplicate txn here,
-                // however we MUST always provide at least what the remote peer needs
-                typedef std::pair<unsigned int, uint256> PairType;
-                for (PairType& pair : merkleBlock.vMatchedTxn)
-                    m_connman.PushMessage(&pfrom, msgMaker.Make(SERIALIZE_TRANSACTION_NO_WITNESS, NetMsgType::TX, *pblock->vtx[pair.first]));
-            }
-            // else
-            // no response
-        } else if (inv.IsMsgCmpctBlk()) {
-            // If a peer is asking for old blocks, we're almost guaranteed
-            // they won't have a useful mempool to match against a compact block,
-            // and we don't feel like constructing the object for them, so
-            // instead we respond with the full, non-compact block.
-            if (CanDirectFetch() && pindex->nHeight >= m_chainman.ActiveChain().Height() - MAX_CMPCTBLOCK_DEPTH) {
-                if (a_recent_compact_block && a_recent_compact_block->header.GetHash() == pindex->GetBlockHash()) {
-                    m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::CMPCTBLOCK, *a_recent_compact_block));
-                } else {
-                    CBlockHeaderAndShortTxIDs cmpctblock{*pblock};
-                    m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::CMPCTBLOCK, cmpctblock));
-                }
-            } else {
-                m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::BLOCK, *pblock));
-            }
-        }
-    }
-
-    {
-        LOCK(peer.m_block_inv_mutex);
-        // Trigger the peer node to send a getblocks request for the next batch of inventory
-        if (inv.hash == peer.m_continuation_block) {
-            // Send immediately. This must send even if redundant,
-            // and we want it right after the last block so they don't
-            // wait for other stuff first.
-            std::vector<CInv> vInv;
-            vInv.emplace_back(MSG_BLOCK, m_chainman.ActiveChain().Tip()->GetBlockHash());
-            m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::INV, vInv));
-            peer.m_continuation_block.SetNull();
         }
     }
 }

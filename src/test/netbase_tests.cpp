@@ -1,19 +1,12 @@
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
-// Copyright (c) 2012-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// Copyright (c) 2012-2022 The Bitcoin Core developers
+// Copyright (c) 2014-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <net_permissions.h>
 #include <netaddress.h>
 #include <netbase.h>
-<<<<<<< HEAD
-=======
 #include <netgroup.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <protocol.h>
 #include <serialize.h>
 #include <streams.h>
@@ -90,26 +83,16 @@ BOOST_AUTO_TEST_CASE(netbase_properties)
 
 }
 
-<<<<<<< HEAD
-bool static TestSplitHost(const std::string& test, const std::string& host, uint16_t port)
-{
-    std::string hostOut;
-    uint16_t portOut{0};
-    SplitHostPort(test, portOut, hostOut);
-    return hostOut == host && port == portOut;
-=======
 bool static TestSplitHost(const std::string& test, const std::string& host, uint16_t port, bool validPort=true)
 {
     std::string hostOut;
     uint16_t portOut{0};
     bool validPortOut = SplitHostPort(test, portOut, hostOut);
     return hostOut == host && portOut == port && validPortOut == validPort;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 BOOST_AUTO_TEST_CASE(netbase_splithost)
 {
-<<<<<<< HEAD
     BOOST_CHECK(TestSplitHost("www.digibyte.org", "www.digibyte.org", 0));
     BOOST_CHECK(TestSplitHost("[www.digibyte.org]", "www.digibyte.org", 0));
     BOOST_CHECK(TestSplitHost("www.digibyte.org:80", "www.digibyte.org", 80));
@@ -125,22 +108,6 @@ BOOST_AUTO_TEST_CASE(netbase_splithost)
     BOOST_CHECK(TestSplitHost(":12024", "", 12024));
     BOOST_CHECK(TestSplitHost("[]:12024", "", 12024));
     BOOST_CHECK(TestSplitHost("", "", 0));
-=======
-    BOOST_CHECK(TestSplitHost("www.digibytecore.org", "www.digibytecore.org", 0));
-    BOOST_CHECK(TestSplitHost("[www.digibytecore.org]", "www.digibytecore.org", 0));
-    BOOST_CHECK(TestSplitHost("www.digibytecore.org:80", "www.digibytecore.org", 80));
-    BOOST_CHECK(TestSplitHost("[www.digibytecore.org]:80", "www.digibytecore.org", 80));
-    BOOST_CHECK(TestSplitHost("127.0.0.1", "127.0.0.1", 0));
-    BOOST_CHECK(TestSplitHost("127.0.0.1:8333", "127.0.0.1", 8333));
-    BOOST_CHECK(TestSplitHost("[127.0.0.1]", "127.0.0.1", 0));
-    BOOST_CHECK(TestSplitHost("[127.0.0.1]:8333", "127.0.0.1", 8333));
-    BOOST_CHECK(TestSplitHost("::ffff:127.0.0.1", "::ffff:127.0.0.1", 0));
-    BOOST_CHECK(TestSplitHost("[::ffff:127.0.0.1]:8333", "::ffff:127.0.0.1", 8333));
-    BOOST_CHECK(TestSplitHost("[::]:8333", "::", 8333));
-    BOOST_CHECK(TestSplitHost("::8333", "::8333", 0));
-    BOOST_CHECK(TestSplitHost(":8333", "", 8333));
-    BOOST_CHECK(TestSplitHost("[]:8333", "", 8333));
-    BOOST_CHECK(TestSplitHost("", "", 0));
     BOOST_CHECK(TestSplitHost(":65535", "", 65535));
     BOOST_CHECK(TestSplitHost(":65536", ":65536", 0, false));
     BOOST_CHECK(TestSplitHost(":-1", ":-1", 0, false));
@@ -155,20 +122,15 @@ BOOST_AUTO_TEST_CASE(netbase_splithost)
     BOOST_CHECK(TestSplitHost("127.0.0.1:", "127.0.0.1:", 0, false));
     BOOST_CHECK(TestSplitHost("127.0.0.1:1/2", "127.0.0.1:1/2", 0, false));
     BOOST_CHECK(TestSplitHost("127.0.0.1:1E2", "127.0.0.1:1E2", 0, false));
-    BOOST_CHECK(TestSplitHost("www.digibytecore.org:65536", "www.digibytecore.org:65536", 0, false));
-    BOOST_CHECK(TestSplitHost("www.digibytecore.org:0", "www.digibytecore.org", 0, false));
-    BOOST_CHECK(TestSplitHost("www.digibytecore.org:", "www.digibytecore.org:", 0, false));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+    BOOST_CHECK(TestSplitHost("www.digibyte.org:65536", "www.digibyte.org:65536", 0, false));
+    BOOST_CHECK(TestSplitHost("www.digibyte.org:0", "www.digibyte.org", 0, false));
+    BOOST_CHECK(TestSplitHost("www.digibyte.org:", "www.digibyte.org:", 0, false));
 }
 
 bool static TestParse(std::string src, std::string canon)
 {
     CService addr(LookupNumeric(src, 65535));
-<<<<<<< HEAD
-    return canon == addr.ToString();
-=======
     return canon == addr.ToStringAddrPort();
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 BOOST_AUTO_TEST_CASE(netbase_lookupnumeric)
@@ -192,11 +154,7 @@ BOOST_AUTO_TEST_CASE(embedded_test)
     CNetAddr addr1(ResolveIP("1.2.3.4"));
     CNetAddr addr2(ResolveIP("::FFFF:0102:0304"));
     BOOST_CHECK(addr2.IsIPv4());
-<<<<<<< HEAD
-    BOOST_CHECK_EQUAL(addr1.ToString(), addr2.ToString());
-=======
     BOOST_CHECK_EQUAL(addr1.ToStringAddr(), addr2.ToStringAddr());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 BOOST_AUTO_TEST_CASE(subnet_test)
@@ -281,11 +239,7 @@ BOOST_AUTO_TEST_CASE(subnet_test)
 
     subnet = CSubNet(tor_addr);
     BOOST_CHECK(subnet.IsValid());
-<<<<<<< HEAD
-    BOOST_CHECK_EQUAL(subnet.ToString(), tor_addr.ToString());
-=======
     BOOST_CHECK_EQUAL(subnet.ToString(), tor_addr.ToStringAddr());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     BOOST_CHECK(subnet.Match(tor_addr));
     BOOST_CHECK(
         !subnet.Match(ResolveIP("kpgvmscirrdqpekbqjsvw5teanhatztpp2gl6eee4zkowvwfxwenqaid.onion")));
@@ -378,24 +332,6 @@ BOOST_AUTO_TEST_CASE(subnet_test)
 
 BOOST_AUTO_TEST_CASE(netbase_getgroup)
 {
-<<<<<<< HEAD
-    std::vector<bool> asmap; // use /16
-    BOOST_CHECK(ResolveIP("127.0.0.1").GetGroup(asmap) == std::vector<unsigned char>({0})); // Local -> !Routable()
-    BOOST_CHECK(ResolveIP("257.0.0.1").GetGroup(asmap) == std::vector<unsigned char>({0})); // !Valid -> !Routable()
-    BOOST_CHECK(ResolveIP("10.0.0.1").GetGroup(asmap) == std::vector<unsigned char>({0})); // RFC1918 -> !Routable()
-    BOOST_CHECK(ResolveIP("169.254.1.1").GetGroup(asmap) == std::vector<unsigned char>({0})); // RFC3927 -> !Routable()
-    BOOST_CHECK(ResolveIP("1.2.3.4").GetGroup(asmap) == std::vector<unsigned char>({(unsigned char)NET_IPV4, 1, 2})); // IPv4
-    BOOST_CHECK(ResolveIP("::FFFF:0:102:304").GetGroup(asmap) == std::vector<unsigned char>({(unsigned char)NET_IPV4, 1, 2})); // RFC6145
-    BOOST_CHECK(ResolveIP("64:FF9B::102:304").GetGroup(asmap) == std::vector<unsigned char>({(unsigned char)NET_IPV4, 1, 2})); // RFC6052
-    BOOST_CHECK(ResolveIP("2002:102:304:9999:9999:9999:9999:9999").GetGroup(asmap) == std::vector<unsigned char>({(unsigned char)NET_IPV4, 1, 2})); // RFC3964
-    BOOST_CHECK(ResolveIP("2001:0:9999:9999:9999:9999:FEFD:FCFB").GetGroup(asmap) == std::vector<unsigned char>({(unsigned char)NET_IPV4, 1, 2})); // RFC4380
-    BOOST_CHECK(ResolveIP("2001:470:abcd:9999:9999:9999:9999:9999").GetGroup(asmap) == std::vector<unsigned char>({(unsigned char)NET_IPV6, 32, 1, 4, 112, 175})); //he.net
-    BOOST_CHECK(ResolveIP("2001:2001:9999:9999:9999:9999:9999:9999").GetGroup(asmap) == std::vector<unsigned char>({(unsigned char)NET_IPV6, 32, 1, 32, 1})); //IPv6
-
-    // baz.net sha256 hash: 12929400eb4607c4ac075f087167e75286b179c693eb059a01774b864e8fe505
-    std::vector<unsigned char> internal_group = {NET_INTERNAL, 0x12, 0x92, 0x94, 0x00, 0xeb, 0x46, 0x07, 0xc4, 0xac, 0x07};
-    BOOST_CHECK(CreateInternal("baz.net").GetGroup(asmap) == internal_group);
-=======
     NetGroupManager netgroupman{std::vector<bool>()}; // use /16
     BOOST_CHECK(netgroupman.GetGroup(ResolveIP("127.0.0.1")) == std::vector<unsigned char>({0})); // Local -> !Routable()
     BOOST_CHECK(netgroupman.GetGroup(ResolveIP("257.0.0.1")) == std::vector<unsigned char>({0})); // !Valid -> !Routable()
@@ -412,7 +348,6 @@ BOOST_AUTO_TEST_CASE(netbase_getgroup)
     // baz.net sha256 hash: 12929400eb4607c4ac075f087167e75286b179c693eb059a01774b864e8fe505
     std::vector<unsigned char> internal_group = {NET_INTERNAL, 0x12, 0x92, 0x94, 0x00, 0xeb, 0x46, 0x07, 0xc4, 0xac, 0x07};
     BOOST_CHECK(netgroupman.GetGroup(CreateInternal("baz.net")) == internal_group);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 BOOST_AUTO_TEST_CASE(netbase_parsenetwork)
@@ -421,19 +356,13 @@ BOOST_AUTO_TEST_CASE(netbase_parsenetwork)
     BOOST_CHECK_EQUAL(ParseNetwork("ipv6"), NET_IPV6);
     BOOST_CHECK_EQUAL(ParseNetwork("onion"), NET_ONION);
     BOOST_CHECK_EQUAL(ParseNetwork("tor"), NET_ONION);
-<<<<<<< HEAD
-=======
     BOOST_CHECK_EQUAL(ParseNetwork("cjdns"), NET_CJDNS);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     BOOST_CHECK_EQUAL(ParseNetwork("IPv4"), NET_IPV4);
     BOOST_CHECK_EQUAL(ParseNetwork("IPv6"), NET_IPV6);
     BOOST_CHECK_EQUAL(ParseNetwork("ONION"), NET_ONION);
     BOOST_CHECK_EQUAL(ParseNetwork("TOR"), NET_ONION);
-<<<<<<< HEAD
-=======
     BOOST_CHECK_EQUAL(ParseNetwork("CJDNS"), NET_CJDNS);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     BOOST_CHECK_EQUAL(ParseNetwork(":)"), NET_UNROUTABLE);
     BOOST_CHECK_EQUAL(ParseNetwork("tÖr"), NET_UNROUTABLE);
@@ -547,18 +476,10 @@ BOOST_AUTO_TEST_CASE(netpermissions_test)
 
 BOOST_AUTO_TEST_CASE(netbase_dont_resolve_strings_with_embedded_nul_characters)
 {
-<<<<<<< HEAD
-    CNetAddr addr;
-    BOOST_CHECK(LookupHost("127.0.0.1"s, addr, false));
-    BOOST_CHECK(!LookupHost("127.0.0.1\0"s, addr, false));
-    BOOST_CHECK(!LookupHost("127.0.0.1\0example.com"s, addr, false));
-    BOOST_CHECK(!LookupHost("127.0.0.1\0example.com\0"s, addr, false));
-=======
     BOOST_CHECK(LookupHost("127.0.0.1"s, false).has_value());
     BOOST_CHECK(!LookupHost("127.0.0.1\0"s, false).has_value());
     BOOST_CHECK(!LookupHost("127.0.0.1\0example.com"s, false).has_value());
     BOOST_CHECK(!LookupHost("127.0.0.1\0example.com\0"s, false).has_value());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     CSubNet ret;
     BOOST_CHECK(LookupSubNet("1.2.3.0/24"s, ret));
     BOOST_CHECK(!LookupSubNet("1.2.3.0/24\0"s, ret));
@@ -574,23 +495,6 @@ BOOST_AUTO_TEST_CASE(netbase_dont_resolve_strings_with_embedded_nul_characters)
 // try a few edge cases for port, service flags and time.
 
 static const std::vector<CAddress> fixture_addresses({
-<<<<<<< HEAD
-    CAddress(
-        CService(CNetAddr(in6_addr(IN6ADDR_LOOPBACK_INIT)), 0 /* port */),
-        NODE_NONE,
-        0x4966bc61U /* Fri Jan  9 02:54:25 UTC 2009 */
-    ),
-    CAddress(
-        CService(CNetAddr(in6_addr(IN6ADDR_LOOPBACK_INIT)), 0x00f1 /* port */),
-        NODE_NETWORK,
-        0x83766279U /* Tue Nov 22 11:22:33 UTC 2039 */
-    ),
-    CAddress(
-        CService(CNetAddr(in6_addr(IN6ADDR_LOOPBACK_INIT)), 0xf1f2 /* port */),
-        static_cast<ServiceFlags>(NODE_WITNESS | NODE_COMPACT_FILTERS | NODE_NETWORK_LIMITED),
-        0xffffffffU /* Sun Feb  7 06:28:15 UTC 2106 */
-    )
-=======
     CAddress{
         CService(CNetAddr(in6_addr(IN6ADDR_LOOPBACK_INIT)), 0 /* port */),
         NODE_NONE,
@@ -606,7 +510,6 @@ static const std::vector<CAddress> fixture_addresses({
         static_cast<ServiceFlags>(NODE_WITNESS | NODE_COMPACT_FILTERS | NODE_NETWORK_LIMITED),
         NodeSeconds{0xffffffffs}, /* Sun Feb  7 06:28:15 UTC 2106 */
     },
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 });
 
 // fixture_addresses should equal to this when serialized in V1 format.
@@ -657,57 +560,31 @@ static constexpr const char* stream_addrv2_hex =
 
 BOOST_AUTO_TEST_CASE(caddress_serialize_v1)
 {
-<<<<<<< HEAD
-    CDataStream s(SER_NETWORK, PROTOCOL_VERSION);
-
-    s << fixture_addresses;
-=======
     DataStream s{};
 
     s << CAddress::V1_NETWORK(fixture_addresses);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     BOOST_CHECK_EQUAL(HexStr(s), stream_addrv1_hex);
 }
 
 BOOST_AUTO_TEST_CASE(caddress_unserialize_v1)
 {
-<<<<<<< HEAD
-    CDataStream s(ParseHex(stream_addrv1_hex), SER_NETWORK, PROTOCOL_VERSION);
-    std::vector<CAddress> addresses_unserialized;
-
-    s >> addresses_unserialized;
-=======
     DataStream s{ParseHex(stream_addrv1_hex)};
     std::vector<CAddress> addresses_unserialized;
 
     s >> CAddress::V1_NETWORK(addresses_unserialized);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     BOOST_CHECK(fixture_addresses == addresses_unserialized);
 }
 
 BOOST_AUTO_TEST_CASE(caddress_serialize_v2)
 {
-<<<<<<< HEAD
-    CDataStream s(SER_NETWORK, PROTOCOL_VERSION | ADDRV2_FORMAT);
-
-    s << fixture_addresses;
-=======
     DataStream s{};
 
     s << CAddress::V2_NETWORK(fixture_addresses);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     BOOST_CHECK_EQUAL(HexStr(s), stream_addrv2_hex);
 }
 
 BOOST_AUTO_TEST_CASE(caddress_unserialize_v2)
 {
-<<<<<<< HEAD
-    CDataStream s(ParseHex(stream_addrv2_hex), SER_NETWORK, PROTOCOL_VERSION | ADDRV2_FORMAT);
-    std::vector<CAddress> addresses_unserialized;
-
-    s >> addresses_unserialized;
-    BOOST_CHECK(fixture_addresses == addresses_unserialized);
-=======
     DataStream s{ParseHex(stream_addrv2_hex)};
     std::vector<CAddress> addresses_unserialized;
 
@@ -723,7 +600,7 @@ BOOST_AUTO_TEST_CASE(isbadport)
 
     BOOST_CHECK(!IsBadPort(80));
     BOOST_CHECK(!IsBadPort(443));
-    BOOST_CHECK(!IsBadPort(8333));
+    BOOST_CHECK(!IsBadPort(12024)); // DigiByte mainnet port
 
     // Check all ports, there must be 80 bad ports in total.
     size_t total_bad_ports{0};
@@ -733,7 +610,6 @@ BOOST_AUTO_TEST_CASE(isbadport)
         }
     }
     BOOST_CHECK_EQUAL(total_bad_ports, 80);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 BOOST_AUTO_TEST_SUITE_END()

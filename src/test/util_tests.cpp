@@ -1,32 +1,15 @@
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
+// Copyright (c) 2011-2022 The Bitcoin Core developers
+// Copyright (c) 2014-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
-
-#include <util/system.h>
-
-=======
-// Copyright (c) 2011-2022 The DigiByte Core developers
-// Distributed under the MIT software license, see the accompanying
-// file COPYING or http://www.opensource.org/licenses/mit-license.php.
-
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <clientversion.h>
 #include <hash.h> // For Hash()
 #include <key.h>  // For CKey
 #include <sync.h>
-<<<<<<< HEAD
 #include <test/util/logging.h>
-#include <test/util/setup_common.h>
-#include <test/util/str.h>
-#include <uint256.h>
-#include <util/getuniquepath.h>
-#include <util/message.h> // For MessageSign(), MessageVerify(), MESSAGE_MAGIC
-#include <util/moneystr.h>
-=======
 #include <test/util/random.h>
 #include <test/util/setup_common.h>
+#include <test/util/str.h>
 #include <uint256.h>
 #include <util/bitdeque.h>
 #include <util/fs.h>
@@ -36,7 +19,7 @@
 #include <util/moneystr.h>
 #include <util/overflow.h>
 #include <util/readwritefile.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+#include <util/system.h>
 #include <util/spanparsing.h>
 #include <util/strencodings.h>
 #include <util/string.h>
@@ -44,13 +27,10 @@
 #include <util/vector.h>
 
 #include <array>
-<<<<<<< HEAD
-=======
 #include <cmath>
 #include <fstream>
 #include <limits>
 #include <map>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <optional>
 #include <stdint.h>
 #include <string.h>
@@ -78,32 +58,6 @@ namespace BCLog {
 
 BOOST_FIXTURE_TEST_SUITE(util_tests, BasicTestingSetup)
 
-<<<<<<< HEAD
-BOOST_AUTO_TEST_CASE(util_datadir)
-{
-    // Use local args variable instead of m_args to avoid making assumptions about test setup
-    ArgsManager args;
-    args.ForceSetArg("-datadir", m_path_root.string());
-
-    const fs::path dd_norm = args.GetDataDirBase();
-
-    args.ForceSetArg("-datadir", dd_norm.string() + "/");
-    args.ClearPathCache();
-    BOOST_CHECK_EQUAL(dd_norm, args.GetDataDirBase());
-
-    args.ForceSetArg("-datadir", dd_norm.string() + "/.");
-    args.ClearPathCache();
-    BOOST_CHECK_EQUAL(dd_norm, args.GetDataDirBase());
-
-    args.ForceSetArg("-datadir", dd_norm.string() + "/./");
-    args.ClearPathCache();
-    BOOST_CHECK_EQUAL(dd_norm, args.GetDataDirBase());
-
-    args.ForceSetArg("-datadir", dd_norm.string() + "/.//");
-    args.ClearPathCache();
-    BOOST_CHECK_EQUAL(dd_norm, args.GetDataDirBase());
-}
-=======
 namespace {
 class NoCopyOrMove
 {
@@ -128,7 +82,31 @@ public:
     }
 };
 } // namespace
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
+BOOST_AUTO_TEST_CASE(util_datadir)
+{
+    // Use local args variable instead of m_args to avoid making assumptions about test setup
+    ArgsManager args;
+    args.ForceSetArg("-datadir", m_path_root.string());
+
+    const fs::path dd_norm = args.GetDataDirBase();
+
+    args.ForceSetArg("-datadir", dd_norm.string() + "/");
+    args.ClearPathCache();
+    BOOST_CHECK_EQUAL(dd_norm, args.GetDataDirBase());
+
+    args.ForceSetArg("-datadir", dd_norm.string() + "/.");
+    args.ClearPathCache();
+    BOOST_CHECK_EQUAL(dd_norm, args.GetDataDirBase());
+
+    args.ForceSetArg("-datadir", dd_norm.string() + "/./");
+    args.ClearPathCache();
+    BOOST_CHECK_EQUAL(dd_norm, args.GetDataDirBase());
+
+    args.ForceSetArg("-datadir", dd_norm.string() + "/.//");
+    args.ClearPathCache();
+    BOOST_CHECK_EQUAL(dd_norm, args.GetDataDirBase());
+}
 
 BOOST_AUTO_TEST_CASE(util_check)
 {
@@ -141,8 +119,6 @@ BOOST_AUTO_TEST_CASE(util_check)
     // Check that Assume can be used as unary expression
     const bool result{Assume(two == 2)};
     Assert(result);
-<<<<<<< HEAD
-=======
 
     // Check that Assert doesn't require copy/move
     NoCopyOrMove x{9};
@@ -156,7 +132,6 @@ BOOST_AUTO_TEST_CASE(util_check)
     // trigger on "const int&")
     const int nine{*Assert(std::optional<int>{9})};
     BOOST_CHECK_EQUAL(9, nine);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 BOOST_AUTO_TEST_CASE(util_criticalsection)
@@ -250,7 +225,15 @@ BOOST_AUTO_TEST_CASE(util_HexStr)
         "04678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38c4f35504e51ec112de5c384df7ba0b8d578a4c702b6bf11d5f");
 
     BOOST_CHECK_EQUAL(
-<<<<<<< HEAD
+        HexStr(Span{ParseHex_expected}.last(0)),
+        "");
+
+    BOOST_CHECK_EQUAL(
+        HexStr(Span{ParseHex_expected}.first(0)),
+        "");
+
+    // Test with legacy Span constructors for backward compatibility
+    BOOST_CHECK_EQUAL(
         HexStr(Span<const unsigned char>(
                ParseHex_expected + sizeof(ParseHex_expected),
                ParseHex_expected + sizeof(ParseHex_expected))),
@@ -258,13 +241,6 @@ BOOST_AUTO_TEST_CASE(util_HexStr)
 
     BOOST_CHECK_EQUAL(
         HexStr(Span<const unsigned char>(ParseHex_expected, ParseHex_expected)),
-        "");
-=======
-        HexStr(Span{ParseHex_expected}.last(0)),
-        "");
-
-    BOOST_CHECK_EQUAL(
-        HexStr(Span{ParseHex_expected}.first(0)),
         "");
 
     {
@@ -277,7 +253,6 @@ BOOST_AUTO_TEST_CASE(util_HexStr)
         BOOST_CHECK_EQUAL(HexStr(in_s), out_exp);
         BOOST_CHECK_EQUAL(HexStr(in_b), out_exp);
     }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     {
         auto input = std::string();
@@ -285,20 +260,6 @@ BOOST_AUTO_TEST_CASE(util_HexStr)
             input.push_back(static_cast<char>(i));
         }
 
-<<<<<<< HEAD
-    BOOST_CHECK_EQUAL(
-        HexStr(ParseHex_vec),
-        "04678afdb0"
-    );
-}
-
-BOOST_AUTO_TEST_CASE(util_Join)
-{
-    // Normal version
-    BOOST_CHECK_EQUAL(Join({}, ", "), "");
-    BOOST_CHECK_EQUAL(Join({"foo"}, ", "), "foo");
-    BOOST_CHECK_EQUAL(Join({"foo", "bar"}, ", "), "foo, bar");
-=======
         auto hex = HexStr(input);
         BOOST_TEST_REQUIRE(hex.size() == 512);
         static constexpr auto hexmap = std::string_view("0123456789abcdef");
@@ -310,6 +271,13 @@ BOOST_AUTO_TEST_CASE(util_Join)
             BOOST_TEST_REQUIRE(i == upper*16 + lower);
         }
     }
+
+    // Legacy test with ParseHex_vec
+    auto ParseHex_vec = ParseHex("04678afdb0");
+    BOOST_CHECK_EQUAL(
+        HexStr(ParseHex_vec),
+        "04678afdb0"
+    );
 }
 
 BOOST_AUTO_TEST_CASE(span_write_bytes)
@@ -327,6 +295,10 @@ BOOST_AUTO_TEST_CASE(util_Join)
     BOOST_CHECK_EQUAL(Join(std::vector<std::string>{}, ", "), "");
     BOOST_CHECK_EQUAL(Join(std::vector<std::string>{"foo"}, ", "), "foo");
     BOOST_CHECK_EQUAL(Join(std::vector<std::string>{"foo", "bar"}, ", "), "foo, bar");
+    // Legacy syntax tests
+    BOOST_CHECK_EQUAL(Join({}, ", "), "");
+    BOOST_CHECK_EQUAL(Join({"foo"}, ", "), "foo");
+    BOOST_CHECK_EQUAL(Join({"foo", "bar"}, ", "), "foo, bar");
 
     // Version with unary operator
     const auto op_upper = [](const std::string& s) { return ToUpper(s); };
@@ -366,7 +338,6 @@ BOOST_AUTO_TEST_CASE(util_TrimString)
     BOOST_CHECK_EQUAL(TrimString(std::string("\x05\x04\x03\x02\x01\x00", 6), std::string("\x05\x04\x03\x02\x01", 5)), std::string("\0", 1));
     BOOST_CHECK_EQUAL(TrimStringView(std::string("\x05\x04\x03\x02\x01\x00", 6), std::string("\x05\x04\x03\x02\x01\x00", 6)), "");
 }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // Version with unary operator
     const auto op_upper = [](const std::string& s) { return ToUpper(s); };
@@ -379,7 +350,6 @@ BOOST_AUTO_TEST_CASE(util_FormatParseISO8601DateTime)
 {
     BOOST_CHECK_EQUAL(FormatISO8601DateTime(1317425777), "2011-09-30T23:36:17Z");
     BOOST_CHECK_EQUAL(FormatISO8601DateTime(0), "1970-01-01T00:00:00Z");
-<<<<<<< HEAD
 
     BOOST_CHECK_EQUAL(ParseISO8601DateTime("1970-01-01T00:00:00Z"), 0);
     BOOST_CHECK_EQUAL(ParseISO8601DateTime("1960-01-01T00:00:00Z"), 0);
@@ -387,8 +357,6 @@ BOOST_AUTO_TEST_CASE(util_FormatParseISO8601DateTime)
 
     auto time = GetTimeSeconds();
     BOOST_CHECK_EQUAL(ParseISO8601DateTime(FormatISO8601DateTime(time)), time);
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 BOOST_AUTO_TEST_CASE(util_FormatISO8601Date)
@@ -396,7 +364,6 @@ BOOST_AUTO_TEST_CASE(util_FormatISO8601Date)
     BOOST_CHECK_EQUAL(FormatISO8601Date(1317425777), "2011-09-30");
 }
 
-<<<<<<< HEAD
 struct TestArgsManager : public ArgsManager
 {
     TestArgsManager() { m_network_only_args.clear(); }
@@ -1390,9 +1357,6 @@ BOOST_AUTO_TEST_CASE(util_ReadWriteSettings)
         fs::remove(args1.GetDataDirBase() / "settings.json");
     }
 }
-
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 BOOST_AUTO_TEST_CASE(util_FormatMoney)
 {
     BOOST_CHECK_EQUAL(FormatMoney(0), "0.00");
@@ -1439,7 +1403,7 @@ BOOST_AUTO_TEST_CASE(util_ParseMoney)
 
     BOOST_CHECK_EQUAL(ParseMoney("12345.6789").value(), (COIN/10000)*123456789);
 
-<<<<<<< HEAD
+    // Test legacy API with return parameter (DigiByte compatibility)
     BOOST_CHECK(ParseMoney("100000000.00", ret));
     BOOST_CHECK_EQUAL(ret, COIN*100000000);
     BOOST_CHECK(ParseMoney("10000000.00", ret));
@@ -1502,7 +1466,8 @@ BOOST_AUTO_TEST_CASE(util_ParseMoney)
     BOOST_CHECK(!ParseMoney(" 1 2 ", ret));
     BOOST_CHECK(!ParseMoney(" 1.2 3 ", ret));
     BOOST_CHECK(!ParseMoney(" 1 2.3 ", ret));
-=======
+
+    // Test new optional-based API (from Bitcoin v26.2)
     BOOST_CHECK_EQUAL(ParseMoney("10000000.00").value(), COIN*10000000);
     BOOST_CHECK_EQUAL(ParseMoney("1000000.00").value(), COIN*1000000);
     BOOST_CHECK_EQUAL(ParseMoney("100000.00").value(), COIN*100000);
@@ -1548,27 +1513,23 @@ BOOST_AUTO_TEST_CASE(util_ParseMoney)
     BOOST_CHECK(!ParseMoney(" -1 .2  "));
     BOOST_CHECK(!ParseMoney("  1 .2  "));
     BOOST_CHECK(!ParseMoney(" +1 .2  "));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // Attempted 63 bit overflow should fail
     BOOST_CHECK(!ParseMoney("92233720368.54775808"));
 
-    // Parsing negative amounts must fail
-<<<<<<< HEAD
+    // Parsing negative amounts must fail (legacy API)
     BOOST_CHECK(!ParseMoney("-1", ret));
+    // Parsing negative amounts must fail (new API)
+    BOOST_CHECK(!ParseMoney("-1"));
 
-    // Parsing strings with embedded NUL characters should fail
+    // Parsing strings with embedded NUL characters should fail (legacy API)
     BOOST_CHECK(!ParseMoney("\0-1"s, ret));
     BOOST_CHECK(!ParseMoney(STRING_WITH_EMBEDDED_NULL_CHAR, ret));
     BOOST_CHECK(!ParseMoney("1\0"s, ret));
-=======
-    BOOST_CHECK(!ParseMoney("-1"));
-
-    // Parsing strings with embedded NUL characters should fail
+    // Parsing strings with embedded NUL characters should fail (new API)
     BOOST_CHECK(!ParseMoney("\0-1"s));
     BOOST_CHECK(!ParseMoney(STRING_WITH_EMBEDDED_NULL_CHAR));
     BOOST_CHECK(!ParseMoney("1\0"s));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 BOOST_AUTO_TEST_CASE(util_IsHex)
@@ -1686,13 +1647,6 @@ BOOST_AUTO_TEST_CASE(util_time_GetTime)
 {
     SetMockTime(111);
     // Check that mock time does not change after a sleep
-<<<<<<< HEAD
-    for (const auto& num_sleep : {0, 1}) {
-        UninterruptibleSleep(std::chrono::milliseconds{num_sleep});
-        BOOST_CHECK_EQUAL(111, GetTime()); // Deprecated time getter
-        BOOST_CHECK_EQUAL(111, GetTime<std::chrono::seconds>().count());
-        BOOST_CHECK_EQUAL(111000, GetTime<std::chrono::milliseconds>().count());
-=======
     for (const auto& num_sleep : {0ms, 1ms}) {
         UninterruptibleSleep(num_sleep);
         BOOST_CHECK_EQUAL(111, GetTime()); // Deprecated time getter
@@ -1702,17 +1656,10 @@ BOOST_AUTO_TEST_CASE(util_time_GetTime)
         BOOST_CHECK_EQUAL(111, GetTime<std::chrono::seconds>().count());
         BOOST_CHECK_EQUAL(111000, GetTime<std::chrono::milliseconds>().count());
         BOOST_CHECK_EQUAL(111000, TicksSinceEpoch<std::chrono::milliseconds>(NodeClock::now()));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         BOOST_CHECK_EQUAL(111000000, GetTime<std::chrono::microseconds>().count());
     }
 
     SetMockTime(0);
-<<<<<<< HEAD
-    // Check that system time changes after a sleep
-    const auto ms_0 = GetTime<std::chrono::milliseconds>();
-    const auto us_0 = GetTime<std::chrono::microseconds>();
-    UninterruptibleSleep(std::chrono::milliseconds{1});
-=======
     // Check that steady time and system time changes after a sleep
     const auto steady_ms_0 = Now<SteadyMilliseconds>();
     const auto steady_0 = std::chrono::steady_clock::now();
@@ -1721,7 +1668,6 @@ BOOST_AUTO_TEST_CASE(util_time_GetTime)
     UninterruptibleSleep(1ms);
     BOOST_CHECK(steady_ms_0 < Now<SteadyMilliseconds>());
     BOOST_CHECK(steady_0 + 1ms <= std::chrono::steady_clock::now());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     BOOST_CHECK(ms_0 < GetTime<std::chrono::milliseconds>());
     BOOST_CHECK(us_0 < GetTime<std::chrono::microseconds>());
 }
@@ -2117,13 +2063,8 @@ BOOST_AUTO_TEST_CASE(test_ParseUInt32)
     BOOST_CHECK(ParseUInt32("1234", &n) && n == 1234);
     BOOST_CHECK(ParseUInt32("01234", &n) && n == 1234); // no octal
     BOOST_CHECK(ParseUInt32("2147483647", &n) && n == 2147483647);
-<<<<<<< HEAD
-    BOOST_CHECK(ParseUInt32("2147483648", &n) && n == (uint32_t)2147483648);
-    BOOST_CHECK(ParseUInt32("4294967295", &n) && n == (uint32_t)4294967295);
-=======
     BOOST_CHECK(ParseUInt32("2147483648", &n) && n == uint32_t{2147483648});
     BOOST_CHECK(ParseUInt32("4294967295", &n) && n == uint32_t{4294967295});
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     BOOST_CHECK(ParseUInt32("+1234", &n) && n == 1234);
     BOOST_CHECK(ParseUInt32("00000000000000001234", &n) && n == 1234);
     BOOST_CHECK(ParseUInt32("00000000000000000000", &n) && n == 0);
@@ -2180,7 +2121,6 @@ BOOST_AUTO_TEST_CASE(test_ParseUInt64)
     BOOST_CHECK(!ParseUInt64("-1234", &n));
 }
 
-<<<<<<< HEAD
 BOOST_AUTO_TEST_CASE(test_ParseDouble)
 {
     double n;
@@ -2206,9 +2146,6 @@ BOOST_AUTO_TEST_CASE(test_ParseDouble)
     BOOST_CHECK(!ParseDouble("-1e10000", nullptr));
     BOOST_CHECK(!ParseDouble("1e10000", nullptr));
 }
-
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 BOOST_AUTO_TEST_CASE(test_FormatParagraph)
 {
     BOOST_CHECK_EQUAL(FormatParagraph("", 79, 0), "");
@@ -2332,11 +2269,7 @@ static constexpr char LockCommand = 'L';
 static constexpr char UnlockCommand = 'U';
 static constexpr char ExitCommand = 'X';
 
-<<<<<<< HEAD
-[[noreturn]] static void TestOtherProcess(fs::path dirname, std::string lockname, int fd)
-=======
 [[noreturn]] static void TestOtherProcess(fs::path dirname, fs::path lockname, int fd)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     char ch;
     while (true) {
@@ -2367,11 +2300,7 @@ static constexpr char ExitCommand = 'X';
 BOOST_AUTO_TEST_CASE(test_LockDirectory)
 {
     fs::path dirname = m_args.GetDataDirBase() / "lock_dir";
-<<<<<<< HEAD
-    const std::string lockname = ".lock";
-=======
     const fs::path lockname = ".lock";
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #ifndef WIN32
     // Revert SIGCHLD to default, otherwise boost.test will catch and fail on
     // it: there is BOOST_TEST_IGNORE_SIGCHLD but that only works when defined
@@ -2503,11 +2432,7 @@ BOOST_AUTO_TEST_CASE(test_ToUpper)
 BOOST_AUTO_TEST_CASE(test_Capitalize)
 {
     BOOST_CHECK_EQUAL(Capitalize(""), "");
-<<<<<<< HEAD
-    BOOST_CHECK_EQUAL(Capitalize("digibyte"), "Digibyte");
-=======
     BOOST_CHECK_EQUAL(Capitalize("digibyte"), "DigiByte");
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     BOOST_CHECK_EQUAL(Capitalize("\x00\xfe\xff"), "\x00\xfe\xff");
 }
 
@@ -2634,8 +2559,6 @@ BOOST_AUTO_TEST_CASE(test_spanparsing)
     BOOST_CHECK_EQUAL(SpanToStr(results[3]), "");
 }
 
-<<<<<<< HEAD
-=======
 BOOST_AUTO_TEST_CASE(test_SplitString)
 {
     // Empty string.
@@ -2698,7 +2621,6 @@ BOOST_AUTO_TEST_CASE(test_SplitString)
     }
 }
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 BOOST_AUTO_TEST_CASE(test_LogEscapeMessage)
 {
     // ASCII and UTF-8 must pass through unaltered.
@@ -2719,15 +2641,9 @@ struct Tracker
     //! Points to the original object (possibly itself) we moved/copied from
     const Tracker* origin;
     //! How many copies where involved between the original object and this one (moves are not counted)
-<<<<<<< HEAD
-    int copies;
-
-    Tracker() noexcept : origin(this), copies(0) {}
-=======
     int copies{0};
 
     Tracker() noexcept : origin(this) {}
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     Tracker(const Tracker& t) noexcept : origin(t.origin), copies(t.copies + 1) {}
     Tracker(Tracker&& t) noexcept : origin(t.origin), copies(t.copies) {}
     Tracker& operator=(const Tracker& t) noexcept
@@ -2757,21 +2673,13 @@ BOOST_AUTO_TEST_CASE(test_tracked_vector)
 
     auto v2 = Vector(std::move(t2));
     BOOST_CHECK_EQUAL(v2.size(), 1U);
-<<<<<<< HEAD
-    BOOST_CHECK(v2[0].origin == &t2);
-=======
     BOOST_CHECK(v2[0].origin == &t2); // NOLINT(*-use-after-move)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     BOOST_CHECK_EQUAL(v2[0].copies, 0);
 
     auto v3 = Vector(t1, std::move(t2));
     BOOST_CHECK_EQUAL(v3.size(), 2U);
     BOOST_CHECK(v3[0].origin == &t1);
-<<<<<<< HEAD
-    BOOST_CHECK(v3[1].origin == &t2);
-=======
     BOOST_CHECK(v3[1].origin == &t2); // NOLINT(*-use-after-move)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     BOOST_CHECK_EQUAL(v3[0].copies, 1);
     BOOST_CHECK_EQUAL(v3[1].copies, 0);
 
@@ -2779,11 +2687,7 @@ BOOST_AUTO_TEST_CASE(test_tracked_vector)
     BOOST_CHECK_EQUAL(v4.size(), 3U);
     BOOST_CHECK(v4[0].origin == &t1);
     BOOST_CHECK(v4[1].origin == &t2);
-<<<<<<< HEAD
-    BOOST_CHECK(v4[2].origin == &t3);
-=======
     BOOST_CHECK(v4[2].origin == &t3); // NOLINT(*-use-after-move)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     BOOST_CHECK_EQUAL(v4[0].copies, 1);
     BOOST_CHECK_EQUAL(v4[1].copies, 1);
     BOOST_CHECK_EQUAL(v4[2].copies, 0);
@@ -2843,11 +2747,7 @@ BOOST_AUTO_TEST_CASE(message_sign)
     const std::string message = "Trust no one";
 
     const std::string expected_signature =
-<<<<<<< HEAD
         "H2++9X+gWKY4+AYjQXaE+p4IcVasyC+pqIyEW5domYL+R2HOBGWdwkV1aQRGGTG9lkXflqKBezRa7PKPW8Sf3V0=";
-=======
-        "IPojfrX2dfPnH26UegfbGQQLrdK844DlHq5157/P6h57WyuS/Qsl+h/WSVGDF4MUi4rWSswW38oimDYfNNUBUOk=";
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     CKey privkey;
     std::string generated_signature;
@@ -2880,69 +2780,43 @@ BOOST_AUTO_TEST_CASE(message_verify)
 
     BOOST_CHECK_EQUAL(
         MessageVerify(
-<<<<<<< HEAD
             "SWgeXAXER3MxMEZ554s6FoMx2RhghyJaDT",
-=======
-            "3B5fQsEXEaV8v6U3ejYc8XaKXAkyQj2MjV",
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             "signature should be irrelevant",
             "message too"),
         MessageVerificationResult::ERR_ADDRESS_NO_KEY);
 
     BOOST_CHECK_EQUAL(
         MessageVerify(
-<<<<<<< HEAD
             "DPygj5HcNf4iJTZoo5ZLkyz9ctDE7BFjZB",
-=======
-            "1KqbBpLy5FARmTPD4VZnDDpYjkUvkr82Pm",
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             "invalid signature, not in base64 encoding",
             "message should be irrelevant"),
         MessageVerificationResult::ERR_MALFORMED_SIGNATURE);
 
     BOOST_CHECK_EQUAL(
         MessageVerify(
-<<<<<<< HEAD
             "DPygj5HcNf4iJTZoo5ZLkyz9ctDE7BFjZB",
-=======
-            "1KqbBpLy5FARmTPD4VZnDDpYjkUvkr82Pm",
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
             "message should be irrelevant"),
         MessageVerificationResult::ERR_PUBKEY_NOT_RECOVERED);
 
     BOOST_CHECK_EQUAL(
         MessageVerify(
-<<<<<<< HEAD
             "D9LXVWacjEAqsWLXrsmrUFoWc8MdPuYuMP",
-=======
-            "15CRxFdyRpGZLW9w8HnHvVduizdL5jKNbs",
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             "IPojfrX2dfPnH26UegfbGQQLrdK844DlHq5157/P6h57WyuS/Qsl+h/WSVGDF4MUi4rWSswW38oimDYfNNUBUOk=",
             "I never signed this"),
         MessageVerificationResult::ERR_NOT_SIGNED);
 
     BOOST_CHECK_EQUAL(
         MessageVerify(
-<<<<<<< HEAD
             "DFANhx2TvW3nkiDfjym2g5U7TQWWCWbocC",
             "H+8g0dtGse1u82ZgdGcbAKIjovTrn+IMzfxbMHqad8V4Rl5R9xmEOfD3gZtUoBJ5dMqN5X6dp2MBNBabOED9qXY=",
-=======
-            "15CRxFdyRpGZLW9w8HnHvVduizdL5jKNbs",
-            "IPojfrX2dfPnH26UegfbGQQLrdK844DlHq5157/P6h57WyuS/Qsl+h/WSVGDF4MUi4rWSswW38oimDYfNNUBUOk=",
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             "Trust no one"),
         MessageVerificationResult::OK);
 
     BOOST_CHECK_EQUAL(
         MessageVerify(
-<<<<<<< HEAD
             "DGitJhjGcpGj6ZtJoMSjhFjuQ8SSisNDJc",
             "H8wiW3nLemw4ea3PEgpYoyK5fHuGLHTIFJG4S6JtCXpDFq3tVOaLCua0AMqbg71KYjP1vRDPzMcJCQZ7iDVOSHY=",
-=======
-            "11canuhp9X2NocwCq7xNrQYTmUgZAnLK3",
-            "IIcaIENoYW5jZWxsb3Igb24gYnJpbmsgb2Ygc2Vjb25kIGJhaWxvdXQgZm9yIGJhbmtzIAaHRtbCeDZINyavx14=",
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             "Trust me"),
         MessageVerificationResult::OK);
 }
@@ -2966,8 +2840,9 @@ BOOST_AUTO_TEST_CASE(message_hash)
 
 BOOST_AUTO_TEST_CASE(remove_prefix)
 {
-<<<<<<< HEAD
+    // Test RemovePrefix function
     BOOST_CHECK_EQUAL(RemovePrefix("./util/system.h", "./"), "util/system.h");
+    BOOST_CHECK_EQUAL(RemovePrefix("./common/system.h", "./"), "common/system.h");
     BOOST_CHECK_EQUAL(RemovePrefix("foo", "foo"), "");
     BOOST_CHECK_EQUAL(RemovePrefix("foo", "fo"), "o");
     BOOST_CHECK_EQUAL(RemovePrefix("foo", "f"), "oo");
@@ -2976,16 +2851,11 @@ BOOST_AUTO_TEST_CASE(remove_prefix)
     BOOST_CHECK_EQUAL(RemovePrefix("f", "foo"), "f");
     BOOST_CHECK_EQUAL(RemovePrefix("", "foo"), "");
     BOOST_CHECK_EQUAL(RemovePrefix("", ""), "");
-}
-
-=======
-    BOOST_CHECK_EQUAL(RemovePrefix("./common/system.h", "./"), "common/system.h");
+    
+    // Test RemovePrefixView function (from Bitcoin v26.2)
     BOOST_CHECK_EQUAL(RemovePrefixView("foo", "foo"), "");
-    BOOST_CHECK_EQUAL(RemovePrefix("foo", "fo"), "o");
     BOOST_CHECK_EQUAL(RemovePrefixView("foo", "f"), "oo");
-    BOOST_CHECK_EQUAL(RemovePrefix("foo", ""), "foo");
     BOOST_CHECK_EQUAL(RemovePrefixView("fo", "foo"), "fo");
-    BOOST_CHECK_EQUAL(RemovePrefix("f", "foo"), "f");
     BOOST_CHECK_EQUAL(RemovePrefixView("", "foo"), "");
     BOOST_CHECK_EQUAL(RemovePrefix("", ""), "");
 }
@@ -3108,5 +2978,4 @@ BOOST_AUTO_TEST_CASE(clearshrink_test)
     }
 }
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 BOOST_AUTO_TEST_SUITE_END()

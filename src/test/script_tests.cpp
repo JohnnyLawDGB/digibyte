@@ -1,9 +1,5 @@
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
-// Copyright (c) 2011-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// Copyright (c) 2011-2022 The Bitcoin Core developers
+// Copyright (c) 2014-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -20,13 +16,6 @@
 #include <script/sigcache.h>
 #include <script/sign.h>
 #include <script/signingprovider.h>
-<<<<<<< HEAD
-#include <streams.h>
-#include <test/util/setup_common.h>
-#include <test/util/transaction_utils.h>
-#include <util/strencodings.h>
-#include <util/system.h>
-=======
 #include <script/solver.h>
 #include <streams.h>
 #include <test/util/json.h>
@@ -35,18 +24,14 @@
 #include <test/util/transaction_utils.h>
 #include <util/fs.h>
 #include <util/strencodings.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+#include <util/system.h>
 
 #if defined(HAVE_CONSENSUS_LIB)
 #include <script/digibyteconsensus.h>
 #endif
 
-<<<<<<< HEAD
-#include <stdint.h>
-=======
 #include <cstdint>
 #include <fstream>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <string>
 #include <vector>
 
@@ -62,7 +47,6 @@ static const unsigned int gFlags = SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_STRICTENC;
 unsigned int ParseScriptFlags(std::string strFlags);
 std::string FormatScriptFlags(unsigned int flags);
 
-<<<<<<< HEAD
 UniValue read_json(const std::string& jsondata)
 {
     UniValue v;
@@ -75,8 +59,6 @@ UniValue read_json(const std::string& jsondata)
     return v.get_array();
 }
 
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 struct ScriptErrorDesc
 {
     ScriptError_t err;
@@ -149,11 +131,7 @@ static ScriptError_t ParseScriptError(const std::string& name)
 
 BOOST_FIXTURE_TEST_SUITE(script_tests, BasicTestingSetup)
 
-<<<<<<< HEAD
-void DoTest(const CScript& scriptPubKey, const CScript& scriptSig, const CScriptWitness& scriptWitness, int flags, const std::string& message, int scriptError, CAmount nValue = 0)
-=======
 void DoTest(const CScript& scriptPubKey, const CScript& scriptSig, const CScriptWitness& scriptWitness, uint32_t flags, const std::string& message, int scriptError, CAmount nValue = 0)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     bool expect = (scriptError == SCRIPT_ERR_OK);
     if (flags & SCRIPT_VERIFY_CLEANSTACK) {
@@ -180,16 +158,6 @@ void DoTest(const CScript& scriptPubKey, const CScript& scriptSig, const CScript
 #if defined(HAVE_CONSENSUS_LIB)
     CDataStream stream(SER_NETWORK, PROTOCOL_VERSION);
     stream << tx2;
-<<<<<<< HEAD
-    int libconsensus_flags = flags & digibyteconsensus_SCRIPT_FLAGS_VERIFY_ALL;
-    if (libconsensus_flags == flags) {
-        int expectedSuccessCode = expect ? 1 : 0;
-        if (flags & digibyteconsensus_SCRIPT_FLAGS_VERIFY_WITNESS) {
-            BOOST_CHECK_MESSAGE(digibyteconsensus_verify_script_with_amount(scriptPubKey.data(), scriptPubKey.size(), txCredit.vout[0].nValue, stream.data(), stream.size(), 0, libconsensus_flags, nullptr) == expectedSuccessCode, message);
-        } else {
-            BOOST_CHECK_MESSAGE(digibyteconsensus_verify_script_with_amount(scriptPubKey.data(), scriptPubKey.size(), 0, stream.data(), stream.size(), 0, libconsensus_flags, nullptr) == expectedSuccessCode, message);
-            BOOST_CHECK_MESSAGE(digibyteconsensus_verify_script(scriptPubKey.data(), scriptPubKey.size(), stream.data(), stream.size(), 0, libconsensus_flags, nullptr) == expectedSuccessCode, message);
-=======
     uint32_t libconsensus_flags{flags & digibyteconsensus_SCRIPT_FLAGS_VERIFY_ALL};
     if (libconsensus_flags == flags) {
         int expectedSuccessCode = expect ? 1 : 0;
@@ -198,7 +166,6 @@ void DoTest(const CScript& scriptPubKey, const CScript& scriptSig, const CScript
         } else {
             BOOST_CHECK_MESSAGE(digibyteconsensus_verify_script_with_amount(scriptPubKey.data(), scriptPubKey.size(), 0, UCharCast(stream.data()), stream.size(), 0, libconsensus_flags, nullptr) == expectedSuccessCode, message);
             BOOST_CHECK_MESSAGE(digibyteconsensus_verify_script(scriptPubKey.data(), scriptPubKey.size(), UCharCast(stream.data()), stream.size(), 0, libconsensus_flags, nullptr) == expectedSuccessCode, message);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
     }
 #endif
@@ -324,11 +291,7 @@ public:
         CScript scriptPubKey = script;
         if (wm == WitnessMode::PKH) {
             uint160 hash;
-<<<<<<< HEAD
-            CHash160().Write(MakeSpan(script).subspan(1)).Finalize(hash);
-=======
             CHash160().Write(Span{script}.subspan(1)).Finalize(hash);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             script = CScript() << OP_DUP << OP_HASH160 << ToByteVector(hash) << OP_EQUALVERIFY << OP_CHECKSIG;
             scriptPubKey = CScript() << witnessversion << ToByteVector(hash);
         } else if (wm == WitnessMode::SH) {
@@ -1234,12 +1197,8 @@ BOOST_AUTO_TEST_CASE(script_combineSigs)
     BOOST_CHECK(combined.scriptSig.empty());
 
     // Single signature case:
-<<<<<<< HEAD
-    BOOST_CHECK(SignSignature(keystore, CTransaction(txFrom), txTo, 0, SIGHASH_ALL)); // changes scriptSig
-=======
     SignatureData dummy;
     BOOST_CHECK(SignSignature(keystore, CTransaction(txFrom), txTo, 0, SIGHASH_ALL, dummy)); // changes scriptSig
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     scriptSig = DataFromTransaction(txTo, 0, txFrom.vout[0]);
     combined = CombineSignatures(txFrom.vout[0], txTo, scriptSig, empty);
     BOOST_CHECK(combined.scriptSig == scriptSig.scriptSig);
@@ -1247,12 +1206,8 @@ BOOST_AUTO_TEST_CASE(script_combineSigs)
     BOOST_CHECK(combined.scriptSig == scriptSig.scriptSig);
     SignatureData scriptSigCopy = scriptSig;
     // Signing again will give a different, valid signature:
-<<<<<<< HEAD
-    BOOST_CHECK(SignSignature(keystore, CTransaction(txFrom), txTo, 0, SIGHASH_ALL));
-=======
     SignatureData dummy_b;
     BOOST_CHECK(SignSignature(keystore, CTransaction(txFrom), txTo, 0, SIGHASH_ALL, dummy_b));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     scriptSig = DataFromTransaction(txTo, 0, txFrom.vout[0]);
     combined = CombineSignatures(txFrom.vout[0], txTo, scriptSigCopy, scriptSig);
     BOOST_CHECK(combined.scriptSig == scriptSigCopy.scriptSig || combined.scriptSig == scriptSig.scriptSig);
@@ -1261,24 +1216,16 @@ BOOST_AUTO_TEST_CASE(script_combineSigs)
     CScript pkSingle; pkSingle << ToByteVector(keys[0].GetPubKey()) << OP_CHECKSIG;
     BOOST_CHECK(keystore.AddCScript(pkSingle));
     scriptPubKey = GetScriptForDestination(ScriptHash(pkSingle));
-<<<<<<< HEAD
-    BOOST_CHECK(SignSignature(keystore, CTransaction(txFrom), txTo, 0, SIGHASH_ALL));
-=======
     SignatureData dummy_c;
     BOOST_CHECK(SignSignature(keystore, CTransaction(txFrom), txTo, 0, SIGHASH_ALL, dummy_c));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     scriptSig = DataFromTransaction(txTo, 0, txFrom.vout[0]);
     combined = CombineSignatures(txFrom.vout[0], txTo, scriptSig, empty);
     BOOST_CHECK(combined.scriptSig == scriptSig.scriptSig);
     combined = CombineSignatures(txFrom.vout[0], txTo, empty, scriptSig);
     BOOST_CHECK(combined.scriptSig == scriptSig.scriptSig);
     scriptSigCopy = scriptSig;
-<<<<<<< HEAD
-    BOOST_CHECK(SignSignature(keystore, CTransaction(txFrom), txTo, 0, SIGHASH_ALL));
-=======
     SignatureData dummy_d;
     BOOST_CHECK(SignSignature(keystore, CTransaction(txFrom), txTo, 0, SIGHASH_ALL, dummy_d));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     scriptSig = DataFromTransaction(txTo, 0, txFrom.vout[0]);
     combined = CombineSignatures(txFrom.vout[0], txTo, scriptSigCopy, scriptSig);
     BOOST_CHECK(combined.scriptSig == scriptSigCopy.scriptSig || combined.scriptSig == scriptSig.scriptSig);
@@ -1286,12 +1233,8 @@ BOOST_AUTO_TEST_CASE(script_combineSigs)
     // Hardest case:  Multisig 2-of-3
     scriptPubKey = GetScriptForMultisig(2, pubkeys);
     BOOST_CHECK(keystore.AddCScript(scriptPubKey));
-<<<<<<< HEAD
-    BOOST_CHECK(SignSignature(keystore, CTransaction(txFrom), txTo, 0, SIGHASH_ALL));
-=======
     SignatureData dummy_e;
     BOOST_CHECK(SignSignature(keystore, CTransaction(txFrom), txTo, 0, SIGHASH_ALL, dummy_e));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     scriptSig = DataFromTransaction(txTo, 0, txFrom.vout[0]);
     combined = CombineSignatures(txFrom.vout[0], txTo, scriptSig, empty);
     BOOST_CHECK(combined.scriptSig == scriptSig.scriptSig);
@@ -1566,11 +1509,7 @@ BOOST_AUTO_TEST_CASE(script_HasValidOps)
 static CMutableTransaction TxFromHex(const std::string& str)
 {
     CMutableTransaction tx;
-<<<<<<< HEAD
-    VectorReader(SER_DISK, SERIALIZE_TRANSACTION_NO_WITNESS, ParseHex(str), 0) >> tx;
-=======
     SpanReader{SERIALIZE_TRANSACTION_NO_WITNESS, ParseHex(str)} >> tx;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     return tx;
 }
 
@@ -1580,11 +1519,7 @@ static std::vector<CTxOut> TxOutsFromJSON(const UniValue& univalue)
     std::vector<CTxOut> prevouts;
     for (size_t i = 0; i < univalue.size(); ++i) {
         CTxOut txout;
-<<<<<<< HEAD
-        VectorReader(SER_DISK, 0, ParseHex(univalue[i].get_str()), 0) >> txout;
-=======
         SpanReader{0, ParseHex(univalue[i].get_str())} >> txout;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         prevouts.push_back(std::move(txout));
     }
     return prevouts;
@@ -1621,11 +1556,7 @@ BOOST_AUTO_TEST_CASE(digibyteconsensus_verify_script_returns_true)
     stream << spendTx;
 
     digibyteconsensus_error err;
-<<<<<<< HEAD
-    int result = digibyteconsensus_verify_script(scriptPubKey.data(), scriptPubKey.size(), stream.data(), stream.size(), nIn, libconsensus_flags, &err);
-=======
     int result = digibyteconsensus_verify_script(scriptPubKey.data(), scriptPubKey.size(), UCharCast(stream.data()), stream.size(), nIn, libconsensus_flags, &err);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     BOOST_CHECK_EQUAL(result, 1);
     BOOST_CHECK_EQUAL(err, digibyteconsensus_ERR_OK);
 }
@@ -1648,11 +1579,7 @@ BOOST_AUTO_TEST_CASE(digibyteconsensus_verify_script_tx_index_err)
     stream << spendTx;
 
     digibyteconsensus_error err;
-<<<<<<< HEAD
-    int result = digibyteconsensus_verify_script(scriptPubKey.data(), scriptPubKey.size(), stream.data(), stream.size(), nIn, libconsensus_flags, &err);
-=======
     int result = digibyteconsensus_verify_script(scriptPubKey.data(), scriptPubKey.size(), UCharCast(stream.data()), stream.size(), nIn, libconsensus_flags, &err);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     BOOST_CHECK_EQUAL(result, 0);
     BOOST_CHECK_EQUAL(err, digibyteconsensus_ERR_TX_INDEX);
 }
@@ -1675,11 +1602,7 @@ BOOST_AUTO_TEST_CASE(digibyteconsensus_verify_script_tx_size)
     stream << spendTx;
 
     digibyteconsensus_error err;
-<<<<<<< HEAD
-    int result = digibyteconsensus_verify_script(scriptPubKey.data(), scriptPubKey.size(), stream.data(), stream.size() * 2, nIn, libconsensus_flags, &err);
-=======
     int result = digibyteconsensus_verify_script(scriptPubKey.data(), scriptPubKey.size(), UCharCast(stream.data()), stream.size() * 2, nIn, libconsensus_flags, &err);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     BOOST_CHECK_EQUAL(result, 0);
     BOOST_CHECK_EQUAL(err, digibyteconsensus_ERR_TX_SIZE_MISMATCH);
 }
@@ -1702,11 +1625,7 @@ BOOST_AUTO_TEST_CASE(digibyteconsensus_verify_script_tx_serialization)
     stream << 0xffffffff;
 
     digibyteconsensus_error err;
-<<<<<<< HEAD
-    int result = digibyteconsensus_verify_script(scriptPubKey.data(), scriptPubKey.size(), stream.data(), stream.size(), nIn, libconsensus_flags, &err);
-=======
     int result = digibyteconsensus_verify_script(scriptPubKey.data(), scriptPubKey.size(), UCharCast(stream.data()), stream.size(), nIn, libconsensus_flags, &err);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     BOOST_CHECK_EQUAL(result, 0);
     BOOST_CHECK_EQUAL(err, digibyteconsensus_ERR_TX_DESERIALIZE);
 }
@@ -1729,11 +1648,7 @@ BOOST_AUTO_TEST_CASE(digibyteconsensus_verify_script_amount_required_err)
     stream << spendTx;
 
     digibyteconsensus_error err;
-<<<<<<< HEAD
-    int result = digibyteconsensus_verify_script(scriptPubKey.data(), scriptPubKey.size(), stream.data(), stream.size(), nIn, libconsensus_flags, &err);
-=======
     int result = digibyteconsensus_verify_script(scriptPubKey.data(), scriptPubKey.size(), UCharCast(stream.data()), stream.size(), nIn, libconsensus_flags, &err);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     BOOST_CHECK_EQUAL(result, 0);
     BOOST_CHECK_EQUAL(err, digibyteconsensus_ERR_AMOUNT_REQUIRED);
 }
@@ -1756,10 +1671,40 @@ BOOST_AUTO_TEST_CASE(digibyteconsensus_verify_script_invalid_flags)
     stream << spendTx;
 
     digibyteconsensus_error err;
-<<<<<<< HEAD
-    int result = digibyteconsensus_verify_script(scriptPubKey.data(), scriptPubKey.size(), stream.data(), stream.size(), nIn, libconsensus_flags, &err);
+    int result = digibyteconsensus_verify_script(scriptPubKey.data(), scriptPubKey.size(), UCharCast(stream.data()), stream.size(), nIn, libconsensus_flags, &err);
     BOOST_CHECK_EQUAL(result, 0);
     BOOST_CHECK_EQUAL(err, digibyteconsensus_ERR_INVALID_FLAGS);
+}
+
+/* Test digibyteconsensus_verify_script returns spent outputs required err */
+BOOST_AUTO_TEST_CASE(digibyteconsensus_verify_script_spent_outputs_required_err)
+{
+    unsigned int libconsensus_flags{digibyteconsensus_SCRIPT_FLAGS_VERIFY_TAPROOT};
+    const int nIn{0};
+
+    CScript scriptPubKey;
+    CScript scriptSig;
+    CScriptWitness wit;
+
+    scriptPubKey << OP_EQUAL;
+    CTransaction creditTx{BuildCreditingTransaction(scriptPubKey, 1)};
+    CTransaction spendTx{BuildSpendingTransaction(scriptSig, wit, creditTx)};
+
+    CDataStream stream(SER_NETWORK, PROTOCOL_VERSION);
+    stream << spendTx;
+
+    digibyteconsensus_error err;
+    int result{digibyteconsensus_verify_script_with_spent_outputs(scriptPubKey.data(), scriptPubKey.size(), creditTx.vout[0].nValue, UCharCast(stream.data()), stream.size(), nullptr, 0, nIn, libconsensus_flags, &err)};
+    BOOST_CHECK_EQUAL(result, 0);
+    BOOST_CHECK_EQUAL(err, digibyteconsensus_ERR_SPENT_OUTPUTS_REQUIRED);
+
+    result = digibyteconsensus_verify_script_with_amount(scriptPubKey.data(), scriptPubKey.size(), creditTx.vout[0].nValue, UCharCast(stream.data()), stream.size(), nIn, libconsensus_flags, &err);
+    BOOST_CHECK_EQUAL(result, 0);
+    BOOST_CHECK_EQUAL(err, digibyteconsensus_ERR_SPENT_OUTPUTS_REQUIRED);
+
+    result = digibyteconsensus_verify_script(scriptPubKey.data(), scriptPubKey.size(), UCharCast(stream.data()), stream.size(), nIn, libconsensus_flags, &err);
+    BOOST_CHECK_EQUAL(result, 0);
+    BOOST_CHECK_EQUAL(err, digibyteconsensus_ERR_SPENT_OUTPUTS_REQUIRED);
 }
 
 #endif // defined(HAVE_CONSENSUS_LIB)
@@ -1799,8 +1744,8 @@ static void AssetTest(const UniValue& test)
     CMutableTransaction mtx = TxFromHex(test["tx"].get_str());
     const std::vector<CTxOut> prevouts = TxOutsFromJSON(test["prevouts"]);
     BOOST_CHECK(prevouts.size() == mtx.vin.size());
-    size_t idx = test["index"].get_int64();
-    unsigned int test_flags = ParseScriptFlags(test["flags"].get_str());
+    size_t idx = test["index"].getInt<int64_t>();
+    uint32_t test_flags{ParseScriptFlags(test["flags"].get_str())};
     bool fin = test.exists("final") && test["final"].get_bool();
 
     if (test.exists("success")) {
@@ -1810,12 +1755,29 @@ static void AssetTest(const UniValue& test)
         PrecomputedTransactionData txdata;
         txdata.Init(tx, std::vector<CTxOut>(prevouts));
         CachingTransactionSignatureChecker txcheck(&tx, idx, prevouts[idx].nValue, true, txdata);
+
+#if defined(HAVE_CONSENSUS_LIB)
+        CDataStream stream(SER_NETWORK, PROTOCOL_VERSION);
+        stream << tx;
+        std::vector<UTXO> utxos;
+        utxos.resize(prevouts.size());
+        for (size_t i = 0; i < prevouts.size(); i++) {
+            utxos[i].scriptPubKey = prevouts[i].scriptPubKey.data();
+            utxos[i].scriptPubKeySize = prevouts[i].scriptPubKey.size();
+            utxos[i].value = prevouts[i].nValue;
+        }
+#endif
+
         for (const auto flags : ALL_CONSENSUS_FLAGS) {
             // "final": true tests are valid for all flags. Others are only valid with flags that are
             // a subset of test_flags.
             if (fin || ((flags & test_flags) == flags)) {
                 bool ret = VerifyScript(tx.vin[idx].scriptSig, prevouts[idx].scriptPubKey, &tx.vin[idx].scriptWitness, flags, txcheck, nullptr);
                 BOOST_CHECK(ret);
+#if defined(HAVE_CONSENSUS_LIB)
+                int lib_ret = digibyteconsensus_verify_script_with_spent_outputs(prevouts[idx].scriptPubKey.data(), prevouts[idx].scriptPubKey.size(), prevouts[idx].nValue, UCharCast(stream.data()), stream.size(), utxos.data(), utxos.size(), idx, flags, nullptr);
+                BOOST_CHECK(lib_ret == 1);
+#endif
             }
         }
     }
@@ -1827,11 +1789,28 @@ static void AssetTest(const UniValue& test)
         PrecomputedTransactionData txdata;
         txdata.Init(tx, std::vector<CTxOut>(prevouts));
         CachingTransactionSignatureChecker txcheck(&tx, idx, prevouts[idx].nValue, true, txdata);
+
+#if defined(HAVE_CONSENSUS_LIB)
+        CDataStream stream(SER_NETWORK, PROTOCOL_VERSION);
+        stream << tx;
+        std::vector<UTXO> utxos;
+        utxos.resize(prevouts.size());
+        for (size_t i = 0; i < prevouts.size(); i++) {
+            utxos[i].scriptPubKey = prevouts[i].scriptPubKey.data();
+            utxos[i].scriptPubKeySize = prevouts[i].scriptPubKey.size();
+            utxos[i].value = prevouts[i].nValue;
+        }
+#endif
+
         for (const auto flags : ALL_CONSENSUS_FLAGS) {
             // If a test is supposed to fail with test_flags, it should also fail with any superset thereof.
             if ((flags & test_flags) == test_flags) {
                 bool ret = VerifyScript(tx.vin[idx].scriptSig, prevouts[idx].scriptPubKey, &tx.vin[idx].scriptWitness, flags, txcheck, nullptr);
                 BOOST_CHECK(!ret);
+#if defined(HAVE_CONSENSUS_LIB)
+                int lib_ret = digibyteconsensus_verify_script_with_spent_outputs(prevouts[idx].scriptPubKey.data(), prevouts[idx].scriptPubKey.size(), prevouts[idx].nValue, UCharCast(stream.data()), stream.size(), utxos.data(), utxos.size(), idx, flags, nullptr);
+                BOOST_CHECK(lib_ret == 0);
+#endif
             }
         }
     }
@@ -1849,7 +1828,7 @@ BOOST_AUTO_TEST_CASE(script_assets_test)
     bool exists = fs::exists(path);
     BOOST_WARN_MESSAGE(exists, "File $DIR_UNIT_TEST_DATA/script_assets_test.json not found, skipping script_assets_test");
     if (!exists) return;
-    fs::ifstream file(path);
+    std::ifstream file{path};
     BOOST_CHECK(file.is_open());
     file.seekg(0, std::ios::end);
     size_t length = file.tellg();
@@ -1866,7 +1845,12 @@ BOOST_AUTO_TEST_CASE(script_assets_test)
     file.close();
 }
 
-=======
+BOOST_AUTO_TEST_CASE(bip341_keypath_test_vectors)
+{
+    UniValue tests;
+    tests.read(json_tests::bip341_wallet_vectors);
+
+    const auto& vectors = tests["keyPathSpending"];
     int result = digibyteconsensus_verify_script(scriptPubKey.data(), scriptPubKey.size(), UCharCast(stream.data()), stream.size(), nIn, libconsensus_flags, &err);
     BOOST_CHECK_EQUAL(result, 0);
     BOOST_CHECK_EQUAL(err, digibyteconsensus_ERR_INVALID_FLAGS);
@@ -2133,5 +2117,4 @@ BOOST_AUTO_TEST_CASE(compute_tapleaf)
     BOOST_CHECK_EQUAL(ComputeTapleafHash(0xc2, Span(script)), tlc2);
 }
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 BOOST_AUTO_TEST_SUITE_END()

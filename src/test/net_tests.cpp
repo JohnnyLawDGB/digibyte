@@ -1,31 +1,10 @@
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
+// Copyright (c) 2012-2022 The Bitcoin Core developers
+// Copyright (c) 2014-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <addrdb.h>
 #include <addrman.h>
-#include <chainparams.h>
-#include <clientversion.h>
-#include <cstdint>
-#include <net.h>
-#include <netaddress.h>
-#include <netbase.h>
-#include <serialize.h>
-#include <span.h>
-#include <streams.h>
-#include <test/util/setup_common.h>
-#include <util/strencodings.h>
-#include <util/string.h>
-#include <util/system.h>
-#include <version.h>
-
-=======
-// Copyright (c) 2012-2022 The DigiByte Core developers
-// Distributed under the MIT software license, see the accompanying
-// file COPYING or http://www.opensource.org/licenses/mit-license.php.
-
 #include <chainparams.h>
 #include <clientversion.h>
 #include <common/args.h>
@@ -45,10 +24,9 @@
 #include <timedata.h>
 #include <util/strencodings.h>
 #include <util/string.h>
+#include <util/system.h>
 #include <validation.h>
 #include <version.h>
-
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <boost/test/unit_test.hpp>
 
 #include <algorithm>
@@ -56,15 +34,12 @@
 #include <memory>
 #include <optional>
 #include <string>
-<<<<<<< HEAD
-
-using namespace std::literals;
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 using namespace std::literals;
 
-<<<<<<< HEAD
+class CAddrManSerializationMock : public CAddrMan
+{
+public:
     //! Ensure that bucket placement is always the same for testing purposes.
     void MakeDeterministic()
     {
@@ -118,10 +93,7 @@ static CDataStream AddrmanToStream(const CAddrManSerializationMock& _addrman)
     return CDataStream(vchData, SER_DISK, CLIENT_VERSION);
 }
 
-BOOST_FIXTURE_TEST_SUITE(net_tests, BasicTestingSetup)
-=======
 BOOST_FIXTURE_TEST_SUITE(net_tests, RegTestingSetup)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 BOOST_AUTO_TEST_CASE(cnode_listen_port)
 {
@@ -135,7 +107,6 @@ BOOST_AUTO_TEST_CASE(cnode_listen_port)
     BOOST_CHECK(port == altPort);
 }
 
-<<<<<<< HEAD
 BOOST_AUTO_TEST_CASE(caddrdb_read)
 {
     CAddrManUncorrupted addrmanUncorrupted;
@@ -212,8 +183,7 @@ BOOST_AUTO_TEST_CASE(caddrdb_read_corrupted)
     BOOST_CHECK(addrman2.size() == 0);
 }
 
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
 BOOST_AUTO_TEST_CASE(cnode_simple_test)
 {
     NodeId id = 0;
@@ -224,14 +194,6 @@ BOOST_AUTO_TEST_CASE(cnode_simple_test)
     CAddress addr = CAddress(CService(ipv4Addr, 7777), NODE_NETWORK);
     std::string pszDest;
 
-<<<<<<< HEAD
-    std::unique_ptr<CNode> pnode1 = std::make_unique<CNode>(
-        id++, NODE_NETWORK, hSocket, addr,
-        /* nKeyedNetGroupIn = */ 0,
-        /* nLocalHostNonceIn = */ 0,
-        CAddress(), pszDest, ConnectionType::OUTBOUND_FULL_RELAY,
-        /* inbound_onion = */ false);
-=======
     std::unique_ptr<CNode> pnode1 = std::make_unique<CNode>(id++,
                                                             /*sock=*/nullptr,
                                                             addr,
@@ -241,7 +203,6 @@ BOOST_AUTO_TEST_CASE(cnode_simple_test)
                                                             pszDest,
                                                             ConnectionType::OUTBOUND_FULL_RELAY,
                                                             /*inbound_onion=*/false);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     BOOST_CHECK(pnode1->IsFullOutboundConn() == true);
     BOOST_CHECK(pnode1->IsManualConn() == false);
     BOOST_CHECK(pnode1->IsBlockOnlyConn() == false);
@@ -251,14 +212,6 @@ BOOST_AUTO_TEST_CASE(cnode_simple_test)
     BOOST_CHECK(pnode1->m_inbound_onion == false);
     BOOST_CHECK_EQUAL(pnode1->ConnectedThroughNetwork(), Network::NET_IPV4);
 
-<<<<<<< HEAD
-    std::unique_ptr<CNode> pnode2 = std::make_unique<CNode>(
-        id++, NODE_NETWORK, hSocket, addr,
-        /* nKeyedNetGroupIn = */ 1,
-        /* nLocalHostNonceIn = */ 1,
-        CAddress(), pszDest, ConnectionType::INBOUND,
-        /* inbound_onion = */ false);
-=======
     std::unique_ptr<CNode> pnode2 = std::make_unique<CNode>(id++,
                                                             /*sock=*/nullptr,
                                                             addr,
@@ -268,7 +221,6 @@ BOOST_AUTO_TEST_CASE(cnode_simple_test)
                                                             pszDest,
                                                             ConnectionType::INBOUND,
                                                             /*inbound_onion=*/false);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     BOOST_CHECK(pnode2->IsFullOutboundConn() == false);
     BOOST_CHECK(pnode2->IsManualConn() == false);
     BOOST_CHECK(pnode2->IsBlockOnlyConn() == false);
@@ -278,14 +230,6 @@ BOOST_AUTO_TEST_CASE(cnode_simple_test)
     BOOST_CHECK(pnode2->m_inbound_onion == false);
     BOOST_CHECK_EQUAL(pnode2->ConnectedThroughNetwork(), Network::NET_IPV4);
 
-<<<<<<< HEAD
-    std::unique_ptr<CNode> pnode3 = std::make_unique<CNode>(
-        id++, NODE_NETWORK, hSocket, addr,
-        /* nKeyedNetGroupIn = */ 0,
-        /* nLocalHostNonceIn = */ 0,
-        CAddress(), pszDest, ConnectionType::OUTBOUND_FULL_RELAY,
-        /* inbound_onion = */ false);
-=======
     std::unique_ptr<CNode> pnode3 = std::make_unique<CNode>(id++,
                                                             /*sock=*/nullptr,
                                                             addr,
@@ -295,7 +239,6 @@ BOOST_AUTO_TEST_CASE(cnode_simple_test)
                                                             pszDest,
                                                             ConnectionType::OUTBOUND_FULL_RELAY,
                                                             /*inbound_onion=*/false);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     BOOST_CHECK(pnode3->IsFullOutboundConn() == true);
     BOOST_CHECK(pnode3->IsManualConn() == false);
     BOOST_CHECK(pnode3->IsBlockOnlyConn() == false);
@@ -305,14 +248,6 @@ BOOST_AUTO_TEST_CASE(cnode_simple_test)
     BOOST_CHECK(pnode3->m_inbound_onion == false);
     BOOST_CHECK_EQUAL(pnode3->ConnectedThroughNetwork(), Network::NET_IPV4);
 
-<<<<<<< HEAD
-    std::unique_ptr<CNode> pnode4 = std::make_unique<CNode>(
-        id++, NODE_NETWORK, hSocket, addr,
-        /* nKeyedNetGroupIn = */ 1,
-        /* nLocalHostNonceIn = */ 1,
-        CAddress(), pszDest, ConnectionType::INBOUND,
-        /* inbound_onion = */ true);
-=======
     std::unique_ptr<CNode> pnode4 = std::make_unique<CNode>(id++,
                                                             /*sock=*/nullptr,
                                                             addr,
@@ -322,7 +257,6 @@ BOOST_AUTO_TEST_CASE(cnode_simple_test)
                                                             pszDest,
                                                             ConnectionType::INBOUND,
                                                             /*inbound_onion=*/true);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     BOOST_CHECK(pnode4->IsFullOutboundConn() == false);
     BOOST_CHECK(pnode4->IsManualConn() == false);
     BOOST_CHECK(pnode4->IsBlockOnlyConn() == false);
@@ -338,85 +272,49 @@ BOOST_AUTO_TEST_CASE(cnetaddr_basic)
     CNetAddr addr;
 
     // IPv4, INADDR_ANY
-<<<<<<< HEAD
-    BOOST_REQUIRE(LookupHost("0.0.0.0", addr, false));
-=======
     addr = LookupHost("0.0.0.0", false).value();
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     BOOST_REQUIRE(!addr.IsValid());
     BOOST_REQUIRE(addr.IsIPv4());
 
     BOOST_CHECK(addr.IsBindAny());
     BOOST_CHECK(addr.IsAddrV1Compatible());
-<<<<<<< HEAD
-    BOOST_CHECK_EQUAL(addr.ToString(), "0.0.0.0");
-
-    // IPv4, INADDR_NONE
-    BOOST_REQUIRE(LookupHost("255.255.255.255", addr, false));
-=======
     BOOST_CHECK_EQUAL(addr.ToStringAddr(), "0.0.0.0");
 
     // IPv4, INADDR_NONE
     addr = LookupHost("255.255.255.255", false).value();
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     BOOST_REQUIRE(!addr.IsValid());
     BOOST_REQUIRE(addr.IsIPv4());
 
     BOOST_CHECK(!addr.IsBindAny());
     BOOST_CHECK(addr.IsAddrV1Compatible());
-<<<<<<< HEAD
-    BOOST_CHECK_EQUAL(addr.ToString(), "255.255.255.255");
-
-    // IPv4, casual
-    BOOST_REQUIRE(LookupHost("12.34.56.78", addr, false));
-=======
     BOOST_CHECK_EQUAL(addr.ToStringAddr(), "255.255.255.255");
 
     // IPv4, casual
     addr = LookupHost("12.34.56.78", false).value();
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     BOOST_REQUIRE(addr.IsValid());
     BOOST_REQUIRE(addr.IsIPv4());
 
     BOOST_CHECK(!addr.IsBindAny());
     BOOST_CHECK(addr.IsAddrV1Compatible());
-<<<<<<< HEAD
-    BOOST_CHECK_EQUAL(addr.ToString(), "12.34.56.78");
-
-    // IPv6, in6addr_any
-    BOOST_REQUIRE(LookupHost("::", addr, false));
-=======
     BOOST_CHECK_EQUAL(addr.ToStringAddr(), "12.34.56.78");
 
     // IPv6, in6addr_any
     addr = LookupHost("::", false).value();
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     BOOST_REQUIRE(!addr.IsValid());
     BOOST_REQUIRE(addr.IsIPv6());
 
     BOOST_CHECK(addr.IsBindAny());
     BOOST_CHECK(addr.IsAddrV1Compatible());
-<<<<<<< HEAD
-    BOOST_CHECK_EQUAL(addr.ToString(), "::");
-
-    // IPv6, casual
-    BOOST_REQUIRE(LookupHost("1122:3344:5566:7788:9900:aabb:ccdd:eeff", addr, false));
-=======
     BOOST_CHECK_EQUAL(addr.ToStringAddr(), "::");
 
     // IPv6, casual
     addr = LookupHost("1122:3344:5566:7788:9900:aabb:ccdd:eeff", false).value();
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     BOOST_REQUIRE(addr.IsValid());
     BOOST_REQUIRE(addr.IsIPv6());
 
     BOOST_CHECK(!addr.IsBindAny());
     BOOST_CHECK(addr.IsAddrV1Compatible());
-<<<<<<< HEAD
-    BOOST_CHECK_EQUAL(addr.ToString(), "1122:3344:5566:7788:9900:aabb:ccdd:eeff");
-=======
     BOOST_CHECK_EQUAL(addr.ToStringAddr(), "1122:3344:5566:7788:9900:aabb:ccdd:eeff");
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // IPv6, scoped/link-local. See https://tools.ietf.org/html/rfc4007
     // We support non-negative decimal integers (uint32_t) as zone id indices.
@@ -425,20 +323,6 @@ BOOST_AUTO_TEST_CASE(cnetaddr_basic)
     // id of "32", return the address as "fe80::1%32".
     const std::string link_local{"fe80::1"};
     const std::string scoped_addr{link_local + "%32"};
-<<<<<<< HEAD
-    BOOST_REQUIRE(LookupHost(scoped_addr, addr, false));
-    BOOST_REQUIRE(addr.IsValid());
-    BOOST_REQUIRE(addr.IsIPv6());
-    BOOST_CHECK(!addr.IsBindAny());
-    BOOST_CHECK_EQUAL(addr.ToString(), scoped_addr);
-
-    // Test that the delimiter "%" and default zone id of 0 can be omitted for the default scope.
-    BOOST_REQUIRE(LookupHost(link_local + "%0", addr, false));
-    BOOST_REQUIRE(addr.IsValid());
-    BOOST_REQUIRE(addr.IsIPv6());
-    BOOST_CHECK(!addr.IsBindAny());
-    BOOST_CHECK_EQUAL(addr.ToString(), link_local);
-=======
     addr = LookupHost(scoped_addr, false).value();
     BOOST_REQUIRE(addr.IsValid());
     BOOST_REQUIRE(addr.IsIPv6());
@@ -451,7 +335,6 @@ BOOST_AUTO_TEST_CASE(cnetaddr_basic)
     BOOST_REQUIRE(addr.IsIPv6());
     BOOST_CHECK(!addr.IsBindAny());
     BOOST_CHECK_EQUAL(addr.ToStringAddr(), link_local);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // TORv2, no longer supported
     BOOST_CHECK(!addr.SetSpecial("6hzph5hv6337r6p2.onion"));
@@ -465,11 +348,7 @@ BOOST_AUTO_TEST_CASE(cnetaddr_basic)
     BOOST_CHECK(!addr.IsI2P());
     BOOST_CHECK(!addr.IsBindAny());
     BOOST_CHECK(!addr.IsAddrV1Compatible());
-<<<<<<< HEAD
-    BOOST_CHECK_EQUAL(addr.ToString(), torv3_addr);
-=======
     BOOST_CHECK_EQUAL(addr.ToStringAddr(), torv3_addr);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // TORv3, broken, with wrong checksum
     BOOST_CHECK(!addr.SetSpecial("pg6mmjiyjmcrsslvykfwnntlaru7p5svn6y2ymmju6nubxndf4pscsad.onion"));
@@ -496,11 +375,7 @@ BOOST_AUTO_TEST_CASE(cnetaddr_basic)
     BOOST_CHECK(!addr.IsTor());
     BOOST_CHECK(!addr.IsBindAny());
     BOOST_CHECK(!addr.IsAddrV1Compatible());
-<<<<<<< HEAD
-    BOOST_CHECK_EQUAL(addr.ToString(), ToLower(i2p_addr));
-=======
     BOOST_CHECK_EQUAL(addr.ToStringAddr(), ToLower(i2p_addr));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // I2P, correct length, but decodes to less than the expected number of bytes.
     BOOST_CHECK(!addr.SetSpecial("udhdrtrcetjm5sxzskjyr5ztpeszydbh4dpl3pl4utgqqw2v4jn=.b32.i2p"));
@@ -527,11 +402,7 @@ BOOST_AUTO_TEST_CASE(cnetaddr_basic)
 
     BOOST_CHECK(!addr.IsBindAny());
     BOOST_CHECK(addr.IsAddrV1Compatible());
-<<<<<<< HEAD
-    BOOST_CHECK_EQUAL(addr.ToString(), "esffpvrt3wpeaygy.internal");
-=======
     BOOST_CHECK_EQUAL(addr.ToStringAddr(), "esffpvrt3wpeaygy.internal");
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // Totally bogus
     BOOST_CHECK(!addr.SetSpecial("totally bogus"));
@@ -584,37 +455,15 @@ BOOST_AUTO_TEST_CASE(cnetaddr_tostring_canonical_ipv6)
         {"2001:db8:aaaa:bbbb:cccc:dddd:eeee:AaAa", "2001:db8:aaaa:bbbb:cccc:dddd:eeee:aaaa"},
     };
     for (const auto& [input_address, expected_canonical_representation_output] : canonical_representations_ipv6) {
-<<<<<<< HEAD
-        CNetAddr net_addr;
-        BOOST_REQUIRE(LookupHost(input_address, net_addr, false));
-        BOOST_REQUIRE(net_addr.IsIPv6());
-        BOOST_CHECK_EQUAL(net_addr.ToString(), expected_canonical_representation_output);
-=======
         const std::optional<CNetAddr> net_addr{LookupHost(input_address, false)};
         BOOST_REQUIRE(net_addr.value().IsIPv6());
         BOOST_CHECK_EQUAL(net_addr.value().ToStringAddr(), expected_canonical_representation_output);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 }
 
 BOOST_AUTO_TEST_CASE(cnetaddr_serialize_v1)
 {
     CNetAddr addr;
-<<<<<<< HEAD
-    CDataStream s(SER_NETWORK, PROTOCOL_VERSION);
-
-    s << addr;
-    BOOST_CHECK_EQUAL(HexStr(s), "00000000000000000000000000000000");
-    s.clear();
-
-    BOOST_REQUIRE(LookupHost("1.2.3.4", addr, false));
-    s << addr;
-    BOOST_CHECK_EQUAL(HexStr(s), "00000000000000000000ffff01020304");
-    s.clear();
-
-    BOOST_REQUIRE(LookupHost("1a1b:2a2b:3a3b:4a4b:5a5b:6a6b:7a7b:8a8b", addr, false));
-    s << addr;
-=======
     DataStream s{};
     const auto ser_params{CAddress::V1_NETWORK};
 
@@ -629,7 +478,6 @@ BOOST_AUTO_TEST_CASE(cnetaddr_serialize_v1)
 
     addr = LookupHost("1a1b:2a2b:3a3b:4a4b:5a5b:6a6b:7a7b:8a8b", false).value();
     s << WithParams(ser_params, addr);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     BOOST_CHECK_EQUAL(HexStr(s), "1a1b2a2b3a3b4a4b5a5b6a6b7a7b8a8b");
     s.clear();
 
@@ -637,20 +485,12 @@ BOOST_AUTO_TEST_CASE(cnetaddr_serialize_v1)
     BOOST_CHECK(!addr.SetSpecial("6hzph5hv6337r6p2.onion"));
 
     BOOST_REQUIRE(addr.SetSpecial("pg6mmjiyjmcrsslvykfwnntlaru7p5svn6y2ymmju6nubxndf4pscryd.onion"));
-<<<<<<< HEAD
-    s << addr;
-=======
     s << WithParams(ser_params, addr);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     BOOST_CHECK_EQUAL(HexStr(s), "00000000000000000000000000000000");
     s.clear();
 
     addr.SetInternal("a");
-<<<<<<< HEAD
-    s << addr;
-=======
     s << WithParams(ser_params, addr);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     BOOST_CHECK_EQUAL(HexStr(s), "fd6b88c08724ca978112ca1bbdcafac2");
     s.clear();
 }
@@ -658,24 +498,6 @@ BOOST_AUTO_TEST_CASE(cnetaddr_serialize_v1)
 BOOST_AUTO_TEST_CASE(cnetaddr_serialize_v2)
 {
     CNetAddr addr;
-<<<<<<< HEAD
-    CDataStream s(SER_NETWORK, PROTOCOL_VERSION);
-    // Add ADDRV2_FORMAT to the version so that the CNetAddr
-    // serialize method produces an address in v2 format.
-    s.SetVersion(s.GetVersion() | ADDRV2_FORMAT);
-
-    s << addr;
-    BOOST_CHECK_EQUAL(HexStr(s), "021000000000000000000000000000000000");
-    s.clear();
-
-    BOOST_REQUIRE(LookupHost("1.2.3.4", addr, false));
-    s << addr;
-    BOOST_CHECK_EQUAL(HexStr(s), "010401020304");
-    s.clear();
-
-    BOOST_REQUIRE(LookupHost("1a1b:2a2b:3a3b:4a4b:5a5b:6a6b:7a7b:8a8b", addr, false));
-    s << addr;
-=======
     DataStream s{};
     const auto ser_params{CAddress::V2_NETWORK};
 
@@ -690,7 +512,6 @@ BOOST_AUTO_TEST_CASE(cnetaddr_serialize_v2)
 
     addr = LookupHost("1a1b:2a2b:3a3b:4a4b:5a5b:6a6b:7a7b:8a8b", false).value();
     s << WithParams(ser_params, addr);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     BOOST_CHECK_EQUAL(HexStr(s), "02101a1b2a2b3a3b4a4b5a5b6a6b7a7b8a8b");
     s.clear();
 
@@ -698,20 +519,12 @@ BOOST_AUTO_TEST_CASE(cnetaddr_serialize_v2)
     BOOST_CHECK(!addr.SetSpecial("6hzph5hv6337r6p2.onion"));
 
     BOOST_REQUIRE(addr.SetSpecial("kpgvmscirrdqpekbqjsvw5teanhatztpp2gl6eee4zkowvwfxwenqaid.onion"));
-<<<<<<< HEAD
-    s << addr;
-=======
     s << WithParams(ser_params, addr);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     BOOST_CHECK_EQUAL(HexStr(s), "042053cd5648488c4707914182655b7664034e09e66f7e8cbf1084e654eb56c5bd88");
     s.clear();
 
     BOOST_REQUIRE(addr.SetInternal("a"));
-<<<<<<< HEAD
-    s << addr;
-=======
     s << WithParams(ser_params, addr);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     BOOST_CHECK_EQUAL(HexStr(s), "0210fd6b88c08724ca978112ca1bbdcafac2");
     s.clear();
 }
@@ -719,29 +532,6 @@ BOOST_AUTO_TEST_CASE(cnetaddr_serialize_v2)
 BOOST_AUTO_TEST_CASE(cnetaddr_unserialize_v2)
 {
     CNetAddr addr;
-<<<<<<< HEAD
-    CDataStream s(SER_NETWORK, PROTOCOL_VERSION);
-    // Add ADDRV2_FORMAT to the version so that the CNetAddr
-    // unserialize method expects an address in v2 format.
-    s.SetVersion(s.GetVersion() | ADDRV2_FORMAT);
-
-    // Valid IPv4.
-    s << MakeSpan(ParseHex("01"          // network type (IPv4)
-                           "04"          // address length
-                           "01020304")); // address
-    s >> addr;
-    BOOST_CHECK(addr.IsValid());
-    BOOST_CHECK(addr.IsIPv4());
-    BOOST_CHECK(addr.IsAddrV1Compatible());
-    BOOST_CHECK_EQUAL(addr.ToString(), "1.2.3.4");
-    BOOST_REQUIRE(s.empty());
-
-    // Invalid IPv4, valid length but address itself is shorter.
-    s << MakeSpan(ParseHex("01"      // network type (IPv4)
-                           "04"      // address length
-                           "0102")); // address
-    BOOST_CHECK_EXCEPTION(s >> addr, std::ios_base::failure, HasReason("end of data"));
-=======
     DataStream s{};
     const auto ser_params{CAddress::V2_NETWORK};
 
@@ -761,72 +551,28 @@ BOOST_AUTO_TEST_CASE(cnetaddr_unserialize_v2)
                        "04"      // address length
                        "0102")}; // address
     BOOST_CHECK_EXCEPTION(s >> WithParams(ser_params, addr), std::ios_base::failure, HasReason("end of data"));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     BOOST_REQUIRE(!s.empty()); // The stream is not consumed on invalid input.
     s.clear();
 
     // Invalid IPv4, with bogus length.
-<<<<<<< HEAD
-    s << MakeSpan(ParseHex("01"          // network type (IPv4)
-                           "05"          // address length
-                           "01020304")); // address
-    BOOST_CHECK_EXCEPTION(s >> addr, std::ios_base::failure,
-=======
     s << Span{ParseHex("01"          // network type (IPv4)
                        "05"          // address length
                        "01020304")}; // address
     BOOST_CHECK_EXCEPTION(s >> WithParams(ser_params, addr), std::ios_base::failure,
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                           HasReason("BIP155 IPv4 address with length 5 (should be 4)"));
     BOOST_REQUIRE(!s.empty()); // The stream is not consumed on invalid input.
     s.clear();
 
     // Invalid IPv4, with extreme length.
-<<<<<<< HEAD
-    s << MakeSpan(ParseHex("01"          // network type (IPv4)
-                           "fd0102"      // address length (513 as CompactSize)
-                           "01020304")); // address
-    BOOST_CHECK_EXCEPTION(s >> addr, std::ios_base::failure,
-=======
     s << Span{ParseHex("01"          // network type (IPv4)
                        "fd0102"      // address length (513 as CompactSize)
                        "01020304")}; // address
     BOOST_CHECK_EXCEPTION(s >> WithParams(ser_params, addr), std::ios_base::failure,
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                           HasReason("Address too long: 513 > 512"));
     BOOST_REQUIRE(!s.empty()); // The stream is not consumed on invalid input.
     s.clear();
 
     // Valid IPv6.
-<<<<<<< HEAD
-    s << MakeSpan(ParseHex("02"                                  // network type (IPv6)
-                           "10"                                  // address length
-                           "0102030405060708090a0b0c0d0e0f10")); // address
-    s >> addr;
-    BOOST_CHECK(addr.IsValid());
-    BOOST_CHECK(addr.IsIPv6());
-    BOOST_CHECK(addr.IsAddrV1Compatible());
-    BOOST_CHECK_EQUAL(addr.ToString(), "102:304:506:708:90a:b0c:d0e:f10");
-    BOOST_REQUIRE(s.empty());
-
-    // Valid IPv6, contains embedded "internal".
-    s << MakeSpan(ParseHex(
-        "02"                                  // network type (IPv6)
-        "10"                                  // address length
-        "fd6b88c08724ca978112ca1bbdcafac2")); // address: 0xfd + sha256("digibyte")[0:5] +
-                                              // sha256(name)[0:10]
-    s >> addr;
-    BOOST_CHECK(addr.IsInternal());
-    BOOST_CHECK(addr.IsAddrV1Compatible());
-    BOOST_CHECK_EQUAL(addr.ToString(), "zklycewkdo64v6wc.internal");
-    BOOST_REQUIRE(s.empty());
-
-    // Invalid IPv6, with bogus length.
-    s << MakeSpan(ParseHex("02"    // network type (IPv6)
-                           "04"    // address length
-                           "00")); // address
-    BOOST_CHECK_EXCEPTION(s >> addr, std::ios_base::failure,
-=======
     s << Span{ParseHex("02"                                  // network type (IPv6)
                        "10"                                  // address length
                        "0102030405060708090a0b0c0d0e0f10")}; // address
@@ -854,164 +600,104 @@ BOOST_AUTO_TEST_CASE(cnetaddr_unserialize_v2)
                        "04"    // address length
                        "00")}; // address
     BOOST_CHECK_EXCEPTION(s >> WithParams(ser_params, addr), std::ios_base::failure,
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                           HasReason("BIP155 IPv6 address with length 4 (should be 16)"));
     BOOST_REQUIRE(!s.empty()); // The stream is not consumed on invalid input.
     s.clear();
 
     // Invalid IPv6, contains embedded IPv4.
-<<<<<<< HEAD
-    s << MakeSpan(ParseHex("02"                                  // network type (IPv6)
-                           "10"                                  // address length
-                           "00000000000000000000ffff01020304")); // address
-    s >> addr;
-=======
     s << Span{ParseHex("02"                                  // network type (IPv6)
                        "10"                                  // address length
                        "00000000000000000000ffff01020304")}; // address
     s >> WithParams(ser_params, addr);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     BOOST_CHECK(!addr.IsValid());
     BOOST_REQUIRE(s.empty());
 
     // Invalid IPv6, contains embedded TORv2.
-<<<<<<< HEAD
-    s << MakeSpan(ParseHex("02"                                  // network type (IPv6)
-                           "10"                                  // address length
-                           "fd87d87eeb430102030405060708090a")); // address
-    s >> addr;
-=======
     s << Span{ParseHex("02"                                  // network type (IPv6)
                        "10"                                  // address length
                        "fd87d87eeb430102030405060708090a")}; // address
     s >> WithParams(ser_params, addr);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     BOOST_CHECK(!addr.IsValid());
     BOOST_REQUIRE(s.empty());
 
     // TORv2, no longer supported.
-<<<<<<< HEAD
-    s << MakeSpan(ParseHex("03"                      // network type (TORv2)
-                           "0a"                      // address length
-                           "f1f2f3f4f5f6f7f8f9fa")); // address
-    s >> addr;
-=======
     s << Span{ParseHex("03"                      // network type (TORv2)
                        "0a"                      // address length
                        "f1f2f3f4f5f6f7f8f9fa")}; // address
     s >> WithParams(ser_params, addr);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     BOOST_CHECK(!addr.IsValid());
     BOOST_REQUIRE(s.empty());
 
     // Valid TORv3.
-<<<<<<< HEAD
-    s << MakeSpan(ParseHex("04"                               // network type (TORv3)
+    s << Span{ParseHex("04"                               // network type (TORv3)
                            "20"                               // address length
                            "79bcc625184b05194975c28b66b66b04" // address
                            "69f7f6556fb1ac3189a79b40dda32f1f"
-                           ));
-    s >> addr;
-    BOOST_CHECK(addr.IsValid());
-    BOOST_CHECK(addr.IsTor());
-    BOOST_CHECK(!addr.IsAddrV1Compatible());
-    BOOST_CHECK_EQUAL(addr.ToString(),
-=======
-    s << Span{ParseHex("04"                               // network type (TORv3)
-                       "20"                               // address length
-                       "79bcc625184b05194975c28b66b66b04" // address
-                       "69f7f6556fb1ac3189a79b40dda32f1f"
-                       )};
+                           )};
     s >> WithParams(ser_params, addr);
     BOOST_CHECK(addr.IsValid());
     BOOST_CHECK(addr.IsTor());
     BOOST_CHECK(!addr.IsAddrV1Compatible());
     BOOST_CHECK_EQUAL(addr.ToStringAddr(),
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                       "pg6mmjiyjmcrsslvykfwnntlaru7p5svn6y2ymmju6nubxndf4pscryd.onion");
     BOOST_REQUIRE(s.empty());
 
     // Invalid TORv3, with bogus length.
-<<<<<<< HEAD
-    s << MakeSpan(ParseHex("04" // network type (TORv3)
+    s << Span{ParseHex("04" // network type (TORv3)
                            "00" // address length
                            "00" // address
-                           ));
-    BOOST_CHECK_EXCEPTION(s >> addr, std::ios_base::failure,
-=======
-    s << Span{ParseHex("04" // network type (TORv3)
-                       "00" // address length
-                       "00" // address
                        )};
     BOOST_CHECK_EXCEPTION(s >> WithParams(ser_params, addr), std::ios_base::failure,
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                           HasReason("BIP155 TORv3 address with length 0 (should be 32)"));
     BOOST_REQUIRE(!s.empty()); // The stream is not consumed on invalid input.
     s.clear();
 
     // Valid I2P.
-<<<<<<< HEAD
-    s << MakeSpan(ParseHex("05"                               // network type (I2P)
+    s << Span{ParseHex("05"                               // network type (I2P)
                            "20"                               // address length
                            "a2894dabaec08c0051a481a6dac88b64" // address
-                           "f98232ae42d4b6fd2fa81952dfe36a87"));
-    s >> addr;
-    BOOST_CHECK(addr.IsValid());
-    BOOST_CHECK(addr.IsI2P());
-    BOOST_CHECK(!addr.IsAddrV1Compatible());
-    BOOST_CHECK_EQUAL(addr.ToString(),
-=======
-    s << Span{ParseHex("05"                               // network type (I2P)
-                       "20"                               // address length
-                       "a2894dabaec08c0051a481a6dac88b64" // address
-                       "f98232ae42d4b6fd2fa81952dfe36a87")};
+                           "f98232ae42d4b6fd2fa81952dfe36a87")};
     s >> WithParams(ser_params, addr);
     BOOST_CHECK(addr.IsValid());
     BOOST_CHECK(addr.IsI2P());
     BOOST_CHECK(!addr.IsAddrV1Compatible());
     BOOST_CHECK_EQUAL(addr.ToStringAddr(),
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                       "ukeu3k5oycgaauneqgtnvselmt4yemvoilkln7jpvamvfx7dnkdq.b32.i2p");
     BOOST_REQUIRE(s.empty());
 
     // Invalid I2P, with bogus length.
-<<<<<<< HEAD
-    s << MakeSpan(ParseHex("05" // network type (I2P)
+    s << Span{ParseHex("05" // network type (I2P)
                            "03" // address length
                            "00" // address
                            ));
-    BOOST_CHECK_EXCEPTION(s >> addr, std::ios_base::failure,
-=======
+    BOOST_CHECK_EXCEPTION(s >> WithParams(ser_params, addr), std::ios_base::failure,
     s << Span{ParseHex("05" // network type (I2P)
                        "03" // address length
                        "00" // address
                        )};
     BOOST_CHECK_EXCEPTION(s >> WithParams(ser_params, addr), std::ios_base::failure,
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                           HasReason("BIP155 I2P address with length 3 (should be 32)"));
     BOOST_REQUIRE(!s.empty()); // The stream is not consumed on invalid input.
     s.clear();
 
     // Valid CJDNS.
-<<<<<<< HEAD
-    s << MakeSpan(ParseHex("06"                               // network type (CJDNS)
+    s << Span{ParseHex("06"                               // network type (CJDNS)
                            "10"                               // address length
                            "fc000001000200030004000500060007" // address
-                           ));
-    s >> addr;
+                           )};
+    s >> WithParams(ser_params, addr);
     BOOST_CHECK(addr.IsValid());
     BOOST_CHECK(addr.IsCJDNS());
     BOOST_CHECK(!addr.IsAddrV1Compatible());
-    BOOST_CHECK_EQUAL(addr.ToString(), "fc00:1:2:3:4:5:6:7");
+    BOOST_CHECK_EQUAL(addr.ToStringAddr(), "fc00:1:2:3:4:5:6:7");
     BOOST_REQUIRE(s.empty());
 
     // Invalid CJDNS, wrong prefix.
-    s << MakeSpan(ParseHex("06"                               // network type (CJDNS)
+    s << Span{ParseHex("06"                               // network type (CJDNS)
                            "10"                               // address length
                            "aa000001000200030004000500060007" // address
-                           ));
-    s >> addr;
-=======
+                           )};
+    s >> WithParams(ser_params, addr);
     s << Span{ParseHex("06"                               // network type (CJDNS)
                        "10"                               // address length
                        "fc000001000200030004000500060007" // address
@@ -1029,78 +715,50 @@ BOOST_AUTO_TEST_CASE(cnetaddr_unserialize_v2)
                        "aa000001000200030004000500060007" // address
                        )};
     s >> WithParams(ser_params, addr);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     BOOST_CHECK(addr.IsCJDNS());
     BOOST_CHECK(!addr.IsValid());
     BOOST_REQUIRE(s.empty());
 
     // Invalid CJDNS, with bogus length.
-<<<<<<< HEAD
-    s << MakeSpan(ParseHex("06" // network type (CJDNS)
+    s << Span{ParseHex("06" // network type (CJDNS)
                            "01" // address length
                            "00" // address
-                           ));
-    BOOST_CHECK_EXCEPTION(s >> addr, std::ios_base::failure,
-=======
-    s << Span{ParseHex("06" // network type (CJDNS)
-                       "01" // address length
-                       "00" // address
                        )};
     BOOST_CHECK_EXCEPTION(s >> WithParams(ser_params, addr), std::ios_base::failure,
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                           HasReason("BIP155 CJDNS address with length 1 (should be 16)"));
     BOOST_REQUIRE(!s.empty()); // The stream is not consumed on invalid input.
     s.clear();
 
     // Unknown, with extreme length.
-<<<<<<< HEAD
-    s << MakeSpan(ParseHex("aa"             // network type (unknown)
+    s << Span{ParseHex("aa"             // network type (unknown)
                            "fe00000002"     // address length (CompactSize's MAX_SIZE)
                            "01020304050607" // address
-                           ));
-    BOOST_CHECK_EXCEPTION(s >> addr, std::ios_base::failure,
-=======
-    s << Span{ParseHex("aa"             // network type (unknown)
-                       "fe00000002"     // address length (CompactSize's MAX_SIZE)
-                       "01020304050607" // address
                        )};
     BOOST_CHECK_EXCEPTION(s >> WithParams(ser_params, addr), std::ios_base::failure,
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                           HasReason("Address too long: 33554432 > 512"));
     BOOST_REQUIRE(!s.empty()); // The stream is not consumed on invalid input.
     s.clear();
 
     // Unknown, with reasonable length.
-<<<<<<< HEAD
-    s << MakeSpan(ParseHex("aa"       // network type (unknown)
+    s << Span{ParseHex("aa"       // network type (unknown)
                            "04"       // address length
                            "01020304" // address
-                           ));
-    s >> addr;
-=======
+                           )};
+    s >> WithParams(ser_params, addr);
     s << Span{ParseHex("aa"       // network type (unknown)
                        "04"       // address length
                        "01020304" // address
                        )};
     s >> WithParams(ser_params, addr);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     BOOST_CHECK(!addr.IsValid());
     BOOST_REQUIRE(s.empty());
 
     // Unknown, with zero length.
-<<<<<<< HEAD
-    s << MakeSpan(ParseHex("aa" // network type (unknown)
-                           "00" // address length
-                           ""   // address
-                           ));
-    s >> addr;
-=======
     s << Span{ParseHex("aa" // network type (unknown)
                        "00" // address length
                        ""   // address
                        )};
     s >> WithParams(ser_params, addr);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     BOOST_CHECK(!addr.IsValid());
     BOOST_REQUIRE(s.empty());
 }
@@ -1111,17 +769,6 @@ BOOST_AUTO_TEST_CASE(ipv4_peer_with_ipv6_addrMe_test)
     // set up local addresses; all that's necessary to reproduce the bug is
     // that a normal IPv4 address is among the entries, but if this address is
     // !IsRoutable the undefined behavior is easier to trigger deterministically
-<<<<<<< HEAD
-    {
-        LOCK(cs_mapLocalHost);
-        in_addr ipv4AddrLocal;
-        ipv4AddrLocal.s_addr = 0x0100007f;
-        CNetAddr addr = CNetAddr(ipv4AddrLocal);
-        LocalServiceInfo lsi;
-        lsi.nScore = 23;
-        lsi.nPort = 42;
-        mapLocalHost[addr] = lsi;
-=======
     in_addr raw_addr;
     raw_addr.s_addr = htonl(0x7f000001);
     const CNetAddr mapLocalHost_entry = CNetAddr(raw_addr);
@@ -1131,16 +778,12 @@ BOOST_AUTO_TEST_CASE(ipv4_peer_with_ipv6_addrMe_test)
         lsi.nScore = 23;
         lsi.nPort = 42;
         mapLocalHost[mapLocalHost_entry] = lsi;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     // create a peer with an IPv4 address
     in_addr ipv4AddrPeer;
     ipv4AddrPeer.s_addr = 0xa0b0c001;
     CAddress addr = CAddress(CService(ipv4AddrPeer, 7777), NODE_NETWORK);
-<<<<<<< HEAD
-    std::unique_ptr<CNode> pnode = std::make_unique<CNode>(0, NODE_NETWORK, INVALID_SOCKET, addr, /* nKeyedNetGroupIn */ 0, /* nLocalHostNonceIn */ 0, CAddress{}, /* pszDest */ std::string{}, ConnectionType::OUTBOUND_FULL_RELAY, /* inbound_onion */ false);
-=======
     std::unique_ptr<CNode> pnode = std::make_unique<CNode>(/*id=*/0,
                                                            /*sock=*/nullptr,
                                                            addr,
@@ -1150,7 +793,6 @@ BOOST_AUTO_TEST_CASE(ipv4_peer_with_ipv6_addrMe_test)
                                                            /*pszDest=*/std::string{},
                                                            ConnectionType::OUTBOUND_FULL_RELAY,
                                                            /*inbound_onion=*/false);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     pnode->fSuccessfullyConnected.store(true);
 
     // the peer claims to be reaching us via IPv6
@@ -1161,7 +803,6 @@ BOOST_AUTO_TEST_CASE(ipv4_peer_with_ipv6_addrMe_test)
     pnode->SetAddrLocal(addrLocal);
 
     // before patch, this causes undefined behavior detectable with clang's -fsanitize=memory
-<<<<<<< HEAD
     GetLocalAddrForPeer(&*pnode);
 
     // suppress no-checks-run warning; if this test fails, it's by triggering a sanitizer
@@ -1190,7 +831,6 @@ BOOST_AUTO_TEST_CASE(LimitedAndReachable_Network)
     BOOST_CHECK_EQUAL(IsReachable(NET_IPV4), true);
     BOOST_CHECK_EQUAL(IsReachable(NET_IPV6), true);
     BOOST_CHECK_EQUAL(IsReachable(NET_ONION), true);
-=======
     GetLocalAddrForPeer(*pnode);
 
     // suppress no-checks-run warning; if this test fails, it's by triggering a sanitizer
@@ -1298,12 +938,10 @@ BOOST_AUTO_TEST_CASE(LimitedAndReachable_Network)
     BOOST_CHECK(g_reachable_nets.Contains(NET_ONION));
     BOOST_CHECK(g_reachable_nets.Contains(NET_I2P));
     BOOST_CHECK(g_reachable_nets.Contains(NET_CJDNS));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 BOOST_AUTO_TEST_CASE(LimitedAndReachable_NetworkCaseUnroutableAndInternal)
 {
-<<<<<<< HEAD
     BOOST_CHECK_EQUAL(IsReachable(NET_UNROUTABLE), true);
     BOOST_CHECK_EQUAL(IsReachable(NET_INTERNAL), true);
 
@@ -1312,7 +950,6 @@ BOOST_AUTO_TEST_CASE(LimitedAndReachable_NetworkCaseUnroutableAndInternal)
 
     BOOST_CHECK_EQUAL(IsReachable(NET_UNROUTABLE), true); // Ignored for both networks
     BOOST_CHECK_EQUAL(IsReachable(NET_INTERNAL), true);
-=======
     // Should be reachable by default.
     BOOST_CHECK(g_reachable_nets.Contains(NET_UNROUTABLE));
     BOOST_CHECK(g_reachable_nets.Contains(NET_INTERNAL));
@@ -1329,7 +966,6 @@ BOOST_AUTO_TEST_CASE(LimitedAndReachable_NetworkCaseUnroutableAndInternal)
     g_reachable_nets.Add(NET_CJDNS);
     g_reachable_nets.Add(NET_UNROUTABLE);
     g_reachable_nets.Add(NET_INTERNAL);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 CNetAddr UtilBuildAddress(unsigned char p1, unsigned char p2, unsigned char p3, unsigned char p4)
@@ -1347,7 +983,6 @@ BOOST_AUTO_TEST_CASE(LimitedAndReachable_CNetAddr)
 {
     CNetAddr addr = UtilBuildAddress(0x001, 0x001, 0x001, 0x001); // 1.1.1.1
 
-<<<<<<< HEAD
     SetReachable(NET_IPV4, true);
     BOOST_CHECK_EQUAL(IsReachable(addr), true);
 
@@ -1355,7 +990,6 @@ BOOST_AUTO_TEST_CASE(LimitedAndReachable_CNetAddr)
     BOOST_CHECK_EQUAL(IsReachable(addr), false);
 
     SetReachable(NET_IPV4, true); // have to reset this, because this is stateful.
-=======
     g_reachable_nets.Add(NET_IPV4);
     BOOST_CHECK(g_reachable_nets.Contains(addr));
 
@@ -1363,7 +997,6 @@ BOOST_AUTO_TEST_CASE(LimitedAndReachable_CNetAddr)
     BOOST_CHECK(!g_reachable_nets.Contains(addr));
 
     g_reachable_nets.Add(NET_IPV4); // have to reset this, because this is stateful.
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 
@@ -1371,7 +1004,6 @@ BOOST_AUTO_TEST_CASE(LocalAddress_BasicLifecycle)
 {
     CService addr = CService(UtilBuildAddress(0x002, 0x001, 0x001, 0x001), 1000); // 2.1.1.1:1000
 
-<<<<<<< HEAD
     SetReachable(NET_IPV4, true);
 
     BOOST_CHECK_EQUAL(IsLocal(addr), false);
@@ -1380,7 +1012,6 @@ BOOST_AUTO_TEST_CASE(LocalAddress_BasicLifecycle)
 
     RemoveLocal(addr);
     BOOST_CHECK_EQUAL(IsLocal(addr), false);
-=======
     g_reachable_nets.Add(NET_IPV4);
 
     BOOST_CHECK(!IsLocal(addr));
@@ -2146,7 +1777,6 @@ BOOST_AUTO_TEST_CASE(v2transport_test)
         auto ret = tester.Interact();
         BOOST_CHECK(!ret);
     }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 BOOST_AUTO_TEST_SUITE_END()

@@ -533,6 +533,41 @@ public:
     }
 };
 
+class CoinsViews {
+
+public:
+    //! The lowest level of the CoinsViews cache hierarchy sits in a leveldb database on disk.
+    //! All unspent coins reside in this store.
+    CCoinsViewDB m_dbview GUARDED_BY(cs_main);
+
+    //! This view wraps access to the leveldb instance and handles read errors gracefully.
+    CCoinsViewErrorCatcher m_catcherview GUARDED_BY(cs_main);
+
+    //! This is the top layer of the cache hierarchy - it keeps as many coins in memory as
+    //! can fit per the dbcache setting.
+    std::unique_ptr<CCoinsViewCache> m_cacheview GUARDED_BY(cs_main);
+
+    //! This constructor initializes CCoinsViewDB and CCoinsViewErrorCatcher instances, but it
+    //! *does not* create a CCoinsViewCache instance by default. This is done separately because the
+    //! presence of the cache has implications on whether or not we're allowed to flush the cache's
+    //! state to disk, which should not be done until the health of the database is verified.
+    //!
+    //! All arguments forwarded onto CCoinsViewDB.
+    CoinsViews(DBParams db_params, CoinsViewOptions options);
+
+    //! Initialize the CCoinsViewCache member.
+    void InitCache() EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+};
+
+enum class CoinsCacheSizeState
+{
+    //! The coins cache is in immediate need of a flush.
+    CRITICAL = 2,
+    //! The cache is at >= 90% capacity.
+    LARGE = 1,
+    OK = 0
+};
+
 
 /**
  * CChainState stores and provides an API to update our local knowledge of the

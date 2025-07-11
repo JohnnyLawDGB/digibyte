@@ -1972,17 +1972,11 @@ std::optional<std::string> PeerManagerImpl::FetchBlock(NodeId peer_id, const CBl
     return std::nullopt;
 }
 
-std::unique_ptr<PeerManager> PeerManager::make(CConnman& connman, AddrMan& addrman,
-                                               BanMan* banman, ChainstateManager& chainman,
-                                               CTxMemPool& pool, CTxMemPool& stempool, Options opts)
-{
-    return std::make_unique<PeerManagerImpl>(connman, addrman, banman, chainman, pool, stempool, opts);
-}
-
 PeerManagerImpl::PeerManagerImpl(CConnman& connman, AddrMan& addrman,
                                  BanMan* banman, ChainstateManager& chainman,
                                  CTxMemPool& pool, CTxMemPool& stempool, Options opts)
     : m_rng{GetRandHash()},
+      m_fee_filter_rounder{CFeeRate{DEFAULT_MIN_RELAY_TX_FEE}, m_rng},
       m_chainparams(chainman.GetParams()),
       m_connman(connman),
       m_addrman(addrman),
@@ -2005,8 +1999,11 @@ PeerManagerImpl::PeerManagerImpl(CConnman& connman, AddrMan& addrman,
     // The false positive rate of 1/1M should come out to less than 1
     // transaction per day that would be inadvertently ignored (which is the
     // same probability that we have in the reject filter).
-    m_recent_confirmed_transactions.reset(new CRollingBloomFilter(48000, 0.000001));
+    m_recent_confirmed_transactions = std::make_unique<CRollingBloomFilter>(48000, 0.000001);
+}
 
+void PeerManagerImpl::StartScheduledTasks(CScheduler& scheduler)
+{
     // Stale tip checking and peer eviction are on two different timers, but we
     // don't want them to get out of sync due to drift in the scheduler, so we
     // combine them in one function and schedule at the quicker (peer-eviction)
@@ -2226,7 +2223,7 @@ bool PeerManagerImpl::AlreadyHaveTx(const GenTxid& gtxid)
         // or a double-spend. Reset the rejects filter and give those
         // txs a second chance.
         hashRecentRejectsChainTip = m_chainman.ActiveChain().Tip()->GetBlockHash();
-        recentRejects->reset();
+        m_recent_rejects.reset();
     }
 
     const uint256& hash = gtxid.GetHash();
@@ -2235,10 +2232,10 @@ bool PeerManagerImpl::AlreadyHaveTx(const GenTxid& gtxid)
 
     {
         LOCK(m_recent_confirmed_transactions_mutex);
-        if (m_recent_confirmed_transactions->contains(hash)) return true;
+        if (m_recent_confirmed_transactions && m_recent_confirmed_transactions->contains(hash)) return true;
     }
 
-    return recentRejects->contains(hash) || m_mempool.exists(gtxid);
+    return m_recent_rejects.contains(hash) || m_mempool.exists(gtxid);
 }
 
 bool PeerManagerImpl::AlreadyHaveBlock(const uint256& block_hash)
@@ -2259,15 +2256,17 @@ void PeerManagerImpl::RelayTransaction(const uint256& txid, const uint256& wtxid
 
 void PeerManagerImpl::_RelayTransaction(const uint256& txid, const uint256& wtxid)
 {
-    m_connman.ForEachNode([&txid, &wtxid](CNode* pnode) EXCLUSIVE_LOCKS_REQUIRED(::cs_main) {
+    m_connman.ForEachNode([this, &txid, &wtxid](CNode* pnode) EXCLUSIVE_LOCKS_REQUIRED(::cs_main) {
         AssertLockHeld(::cs_main);
 
-        CNodeState* state = State(pnode->GetId());
-        if (state == nullptr) return;
-        if (state->m_wtxid_relay) {
-            pnode->PushTxInventory(wtxid);
-        } else {
-            pnode->PushTxInventory(txid);
+        PeerRef peer = GetPeerRef(pnode->GetId());
+        if (!peer) return;
+
+        const uint256& hash = peer->m_wtxid_relay ? wtxid : txid;
+        if (peer->m_tx_relay == nullptr) return;
+        LOCK(peer->m_tx_relay->m_tx_inventory_mutex);
+        if (!peer->m_tx_relay->m_tx_inventory_known_filter.contains(hash)) {
+            peer->m_tx_relay->m_tx_inventory_to_send.insert(hash);
         }
     });
 }
@@ -2281,7 +2280,7 @@ void PeerManagerImpl::RelayDandelionTransaction(const CTransaction& tx, CNode* p
         CTransactionRef ptx = m_stempool.get(tx.GetHash());
         {
             LOCK(cs_main);
-            AcceptToMemoryPool(m_chainman.ActiveChainstate(), m_mempool, ptx, false);
+            m_chainman.ProcessTransaction(ptx);
         }
         LogPrint(BCLog::MEMPOOL, "AcceptToMemoryPool: accepted %s (poolsz %u txn, %u kB)\n",
                                  tx.GetHash().ToString(), m_mempool.size(), m_mempool.DynamicMemoryUsage() / 1000);
@@ -2292,7 +2291,7 @@ void PeerManagerImpl::RelayDandelionTransaction(const CTransaction& tx, CNode* p
     CInv inv(MSG_DANDELION_TX, tx.GetHash());
     CNode* destination = m_connman.getDandelionDestination(pfrom);
     if (destination) {
-        destination->PushOtherInventory(inv);
+        m_connman.localDandelionDestinationPushInventory(inv);
     }
 }
 
@@ -2309,7 +2308,7 @@ void PeerManagerImpl::CheckDandelionEmbargoes()
             if (ptx) {
                 {
                     LOCK(cs_main);
-                    AcceptToMemoryPool(m_chainman.ActiveChainstate(), m_mempool, ptx, false);
+                    m_chainman.ProcessTransaction(ptx);
                 }
                 LogPrint(BCLog::MEMPOOL, "AcceptToMemoryPool: accepted %s (poolsz %u txn, %u kB)\n",
                                          iter->first.ToString(), m_mempool.size(), m_mempool.DynamicMemoryUsage() / 1000);
@@ -2322,8 +2321,8 @@ void PeerManagerImpl::CheckDandelionEmbargoes()
     }
     {
         LOCK(m_most_recent_block_mutex);
-        a_recent_block = m_most_recent_block;
-        a_recent_compact_block = m_most_recent_compact_block;
+        // m_most_recent_block is already protected by m_most_recent_block_mutex
+        // m_most_recent_compact_block is already protected by m_most_recent_block_mutex
     }
 
     bool need_activate_chain = false;
@@ -5568,6 +5567,13 @@ public:
     }
 };
 } // namespace
+
+std::unique_ptr<PeerManager> PeerManager::make(CConnman& connman, AddrMan& addrman,
+                                               BanMan* banman, ChainstateManager& chainman,
+                                               CTxMemPool& pool, CTxMemPool& stempool, Options opts)
+{
+    return std::make_unique<PeerManagerImpl>(connman, addrman, banman, chainman, pool, stempool, opts);
+}
 
 bool PeerManagerImpl::RejectIncomingTxs(const CNode& peer) const
 {

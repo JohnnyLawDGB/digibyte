@@ -15,6 +15,7 @@
 #include <node/transaction.h>
 #include <random.h>
 #include <logging.h>
+#include <common/args.h>
 
 #include <future>
 

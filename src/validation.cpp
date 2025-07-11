@@ -84,16 +84,16 @@
 
 #include <boost/algorithm/string/replace.hpp>
 
-using node::CCoinsStats;
-using node::CoinStatsHashType;
-using node::ComputeUTXOStats;
+// using node::CCoinsStats;  // Conflicts with ::CCoinsStats
+// using node::CoinStatsHashType;  // Conflicts with ::CoinStatsHashType
+// using node::ComputeUTXOStats;
 using kernel::Notifications;
 
 using fsbridge::FopenFn;
-using node::BlockManager;
+// using node::BlockManager;  // Conflicts with existing declaration
 using node::BlockMap;
 using node::CBlockIndexHeightOnlyComparator;
-using node::CBlockIndexWorkComparator;
+// using node::CBlockIndexWorkComparator;  // Conflicts with existing declaration
 using node::fReindex;
 using node::SnapshotMetadata;
 
@@ -312,7 +312,8 @@ void Chainstate::MaybeUpdateMempoolForReorg(
 
     AssertLockHeld(cs_main);
     AssertLockHeld(m_mempool->cs);
-    if (m_stempool) AssertLockHeld(m_stempool->cs);
+    // TODO: DigiByte Dandelion++ stem pool
+    // if (m_stempool) AssertLockHeld(m_stempool->cs);
     std::vector<uint256> vHashUpdate;
     {
         // disconnectpool is ordered so that the front is the most recently-confirmed
@@ -331,7 +332,8 @@ void Chainstate::MaybeUpdateMempoolForReorg(
                 // If the transaction doesn't make it in to the mempool, remove any
                 // transactions that depend on it (which would now be orphans).
                 m_mempool->removeRecursive(**it, MemPoolRemovalReason::REORG);
-                if (m_stempool) m_stempool->removeRecursive(**it, MemPoolRemovalReason::REORG);
+                // TODO: DigiByte Dandelion++ stem pool
+                // if (m_stempool) m_stempool->removeRecursive(**it, MemPoolRemovalReason::REORG);
             } else if (m_mempool->exists(GenTxid::Txid((*it)->GetHash()))) {
                 vHashUpdate.push_back((*it)->GetHash());
             }
@@ -345,7 +347,8 @@ void Chainstate::MaybeUpdateMempoolForReorg(
     // UpdateTransactionsFromBlock finds descendants of any transactions in
     // the disconnectpool that were added back and cleans up the mempool state.
     m_mempool->UpdateTransactionsFromBlock(vHashUpdate);
-    if (m_stempool) m_stempool->UpdateTransactionsFromBlock(vHashUpdate);
+    // TODO: DigiByte Dandelion++ stem pool
+    // if (m_stempool) m_stempool->UpdateTransactionsFromBlock(vHashUpdate);
 
     // Predicate to use for filtering transactions in removeForReorg.
     // Checks whether the transaction is still final and, if it spends a coinbase output, mature.
@@ -399,10 +402,12 @@ void Chainstate::MaybeUpdateMempoolForReorg(
 
     // We also need to remove any now-immature transactions
     m_mempool->removeForReorg(m_chain, filter_final_and_mature);
-    if (m_stempool) m_stempool->removeForReorg(m_chain, filter_final_and_mature);
+    // TODO: DigiByte Dandelion++ stem pool
+    // if (m_stempool) m_stempool->removeForReorg(m_chain, filter_final_and_mature);
     // Re-limit mempool size, in case we added any transactions
     LimitMempoolSize(*m_mempool, this->CoinsTip());
-    if (m_stempool) LimitMempoolSize(*m_stempool, this->CoinsTip());
+    // TODO: DigiByte Dandelion++ stem pool
+    // if (m_stempool) LimitMempoolSize(*m_stempool, this->CoinsTip());
 }
 
 /**
@@ -714,6 +719,8 @@ private:
 bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
 {
     std::unique_ptr<CTxMemPoolEntry>& entry = ws.m_entry;
+    const CTransaction& tx = *ws.m_ptx;
+    TxValidationState& state = ws.m_state;
 
     if (!CheckTransaction(tx, state)) {
         return false; // state filled in by CheckTransaction
@@ -2948,7 +2955,8 @@ bool Chainstate::ActivateBestChainStep(BlockValidationState& state, CBlockIndex*
 {
     AssertLockHeld(cs_main);
     if (m_mempool) AssertLockHeld(m_mempool->cs);
-    if (m_stempool) AssertLockHeld(m_stempool->cs);
+    // TODO: DigiByte Dandelion++ stem pool
+    // if (m_stempool) AssertLockHeld(m_stempool->cs);
 
     const CBlockIndex* pindexOldTip = m_chain.Tip();
     const CBlockIndex* pindexFork = m_chain.FindFork(pindexMostWork);

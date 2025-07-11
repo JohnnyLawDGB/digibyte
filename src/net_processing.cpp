@@ -1077,31 +1077,7 @@ private:
      */
     void ProcessGetCFCheckPt(CNode& peer, CDataStream& vRecv);
 
-    /** Mutex protecting recent_confirmed_transactions */
-    mutable Mutex m_recent_confirmed_transactions_mutex;
-    /** Cache for them to announce new transactions */
-    Txid m_recent_confirmed_transactions GUARDED_BY(m_recent_confirmed_transactions_mutex)[MAX_PEER_TX_ANNOUNCEMENTS];
-    /** Next position in m_recent_confirmed_transactions to overwrite */
-    std::atomic<uint64_t> m_recent_confirmed_transactions_next{0};
-
-    /** Mutex protecting m_most_recent_block */
-    mutable Mutex m_most_recent_block_mutex ACQUIRED_BEFORE(NetEventsInterface::g_msgproc_mutex);
-    std::shared_ptr<const CBlock> m_most_recent_block GUARDED_BY(m_most_recent_block_mutex);
-    std::shared_ptr<const CBlockHeaderAndShortTxIDs> m_most_recent_compact_block GUARDED_BY(m_most_recent_block_mutex);
-    uint256 m_most_recent_block_hash GUARDED_BY(m_most_recent_block_mutex);
-
-    /** Headers download timeout.  */
-    std::chrono::microseconds m_headers_presync_timeout GUARDED_BY(m_headers_presync_mutex){0us};
-    /** Headers download mutex. */
-    mutable Mutex m_headers_presync_mutex;
-    /** Pointer to a header in m_headers_presync with the most work. */
-    std::unique_ptr<HeadersSyncState> m_headers_presync GUARDED_BY(m_headers_presync_mutex) PT_GUARDED_BY(m_headers_presync_mutex);
-
-    /** Height of the highest block announced using BIP 152 high-bandwidth mode. */
-    int m_highest_fast_announce GUARDED_BY(::cs_main){0};
-
-    /** Have we requested this block from a peer */
-    bool IsBlockRequested(const uint256& hash) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    // Duplicate declarations removed - already declared above
 
     /** Remove this block from our tracked requested blocks. Called if:
      *  - the block has been received from a peer
@@ -1116,7 +1092,7 @@ private:
     bool MarkBlockAsInFlight(NodeId nodeid, const uint256& hash, const CBlockIndex* pindex = nullptr,
                             std::list<QueuedBlock>::iterator* pit = nullptr) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
-    bool TipMayBeStale() EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    // TipMayBeStale() already declared above
 
     /** Update pindexLastCommonBlock and add not-in-flight missing successors to vBlocks, until it has
      *  at most count entries.

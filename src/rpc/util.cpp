@@ -37,6 +37,30 @@ std::string GetAllOutputTypes()
 }
 }
 
+void RPCTypeCheck(const UniValue& params,
+                  const std::list<UniValueType>& typesExpected,
+                  bool fAllowNull)
+{
+    unsigned int i = 0;
+    for (const UniValueType& t : typesExpected) {
+        if (params.size() <= i)
+            break;
+
+        const UniValue& v = params[i];
+        if (!(fAllowNull && v.isNull())) {
+            RPCTypeCheckArgument(v, t);
+        }
+        i++;
+    }
+}
+
+void RPCTypeCheckArgument(const UniValue& value, const UniValueType& typeExpected)
+{
+    if (!typeExpected.typeAny && value.type() != typeExpected.type) {
+        throw JSONRPCError(RPC_TYPE_ERROR, strprintf("Expected type %s, got %s", uvTypeName(typeExpected.type), uvTypeName(value.type())));
+    }
+}
+
 void RPCTypeCheckObj(const UniValue& o,
     const std::map<std::string, UniValueType>& typesExpected,
     bool fAllowNull,

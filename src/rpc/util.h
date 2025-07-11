@@ -20,6 +20,8 @@
 #include <univalue.h>
 #include <util/check.h>
 
+#include <list>
+
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -83,6 +85,14 @@ struct UniValueType {
 /*
   Check for expected keys/value types in an Object.
 */
+void RPCTypeCheck(const UniValue& params,
+                  const std::list<UniValueType>& typesExpected, bool fAllowNull=false);
+
+/**
+ * Type-check one argument; throws JSONRPCError if wrong type given.
+ */
+void RPCTypeCheckArgument(const UniValue& value, const UniValueType& typeExpected);
+
 void RPCTypeCheckObj(const UniValue& o,
     const std::map<std::string, UniValueType>& typesExpected,
     bool fAllowNull = false,

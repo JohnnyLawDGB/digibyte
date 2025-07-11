@@ -283,7 +283,7 @@ static RPCHelpMan getrawtransaction()
                      },
                      RPCResult{"if verbosity is set to 1",
                          RPCResult::Type::OBJ, "", "",
-                         Cat<std::vector<RPCResult>>(
+                         Cat(Cat<std::vector<RPCResult>>(
                          {
                              {RPCResult::Type::BOOL, "in_active_chain", /*optional=*/true, "Whether specified block is in the active chain or not (only present with explicit \"blockhash\" argument)"},
                              {RPCResult::Type::STR_HEX, "blockhash", /*optional=*/true, "the block hash"},
@@ -292,7 +292,7 @@ static RPCHelpMan getrawtransaction()
                              {RPCResult::Type::NUM, "time", /*optional=*/true, "Same as \"blocktime\""},
                              {RPCResult::Type::STR_HEX, "hex", "The serialized, hex-encoded data for 'txid'"},
                         },
-                        DecodeTxDoc(/*txid_field_doc=*/"The transaction id"),
+                        DecodeTxDoc(/*txid_field_doc=*/"The transaction id")),
                         {
                                     {RPCResult::Type::STR_AMOUNT, "fee", /*optional=*/true, "transaction fee in " + CURRENCY_UNIT + " (only for verbosity >= 1)"}
                                 }
@@ -300,7 +300,7 @@ static RPCHelpMan getrawtransaction()
                      },
                      RPCResult{"if verbosity is set to 2",
                          RPCResult::Type::OBJ, "", "",
-                         Cat<std::vector<RPCResult>>(
+                         Cat(Cat<std::vector<RPCResult>>(
                          {
                              {RPCResult::Type::BOOL, "in_active_chain", /*optional=*/true, "Whether specified block is in the active chain or not (only present with explicit \"blockhash\" argument)"},
                              {RPCResult::Type::STR_HEX, "blockhash", /*optional=*/true, "the block hash"},
@@ -309,7 +309,7 @@ static RPCHelpMan getrawtransaction()
                              {RPCResult::Type::NUM, "time", /*optional=*/true, "Same as \"blocktime\""},
                              {RPCResult::Type::STR_HEX, "hex", "The serialized, hex-encoded data for 'txid'"},
                         },
-                        DecodeTxDoc(/*txid_field_doc=*/"The transaction id"),
+                        DecodeTxDoc(/*txid_field_doc=*/"The transaction id")),
                         {
                             {RPCResult::Type::STR_AMOUNT, "fee", /*optional=*/true, "transaction fee in " + CURRENCY_UNIT + " (only for verbosity >= 1)"},
                             {RPCResult::Type::ARR, "prevout", /*optional=*/true, "The previous output(s) transaction details",
@@ -322,8 +322,8 @@ static RPCHelpMan getrawtransaction()
                                         {RPCResult::Type::OBJ, "scriptPubKey", "", ScriptPubKeyDoc()},
                                     }},
                                 }},
-                            }},
-                        }},
+                            }}
+                        ),
                 },
                 RPCExamples{
                     HelpExampleCli("getrawtransaction", "\"mytxid\"")
@@ -2391,7 +2391,7 @@ static RPCHelpMan utxoupdatepsbt()
             "\nUpdates all segwit inputs and outputs in a PSBT with data from output descriptors, the UTXO set or the mempool.\n",
             {
                 {"psbt", RPCArg::Type::STR, RPCArg::Optional::NO, "A base64 string of a PSBT"},
-                {"descriptors", RPCArg::Type::ARR, RPCArg::Optional::OMITTED_NAMED_ARG, "An array of either strings or objects", {
+                {"descriptors", RPCArg::Type::ARR, RPCArg::Optional::OMITTED, "An array of either strings or objects", {
                     {"", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "An output descriptor"},
                     {"", RPCArg::Type::OBJ, RPCArg::Optional::OMITTED, "An object with an output descriptor and extra information", {
                          {"desc", RPCArg::Type::STR, RPCArg::Optional::NO, "An output descriptor"},
@@ -2407,7 +2407,7 @@ static RPCHelpMan utxoupdatepsbt()
             },
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
 {
-    RPCTypeCheck(request.params, {UniValue::VSTR, UniValue::VARR}, true);
+    RPCTypeCheck(request.params, {UniValueType(UniValue::VSTR), UniValueType(UniValue::VARR)}, true);
 
     // Unserialize the transactions
     PartiallySignedTransaction psbtx;
@@ -2498,7 +2498,7 @@ static RPCHelpMan joinpsbts()
             },
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
 {
-    RPCTypeCheck(request.params, {UniValue::VARR}, true);
+    RPCTypeCheck(request.params, {UniValueType(UniValue::VARR)}, true);
 
     // Unserialize the transactions
     std::vector<PartiallySignedTransaction> psbtxs;
@@ -2619,7 +2619,7 @@ static RPCHelpMan analyzepsbt()
             },
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
 {
-    RPCTypeCheck(request.params, {UniValue::VSTR});
+    RPCTypeCheck(request.params, {UniValueType(UniValue::VSTR)});
 
     // Unserialize the transaction
     PartiallySignedTransaction psbtx;

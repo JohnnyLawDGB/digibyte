@@ -411,7 +411,6 @@ libdigibyte_node_a_SOURCES = \
   kernel/mempool_persist.cpp \
   kernel/mempool_removal_reason.cpp \
   mapport.cpp \
-  miner.cpp \
   net.cpp \
   net_processing.cpp \
   netgroup.cpp \

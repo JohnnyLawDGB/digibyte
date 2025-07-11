@@ -40,6 +40,8 @@ make -j6 2>&1 | tee build_errors.log
 
 ## Fix Process (ONE ERROR AT A TIME)
 
+**IMPORTANT: Take your time. Be diligent. Fix one bug completely before moving to the next. No rushing.**
+
 ### 1. Identify Error
 ```bash
 grep -A5 "error:" build_errors.log | head -20
@@ -87,6 +89,8 @@ git commit -m "Fix build: $ERROR_FILE
 
 # Return to step 1 for next error
 ```
+
+**Remember: Quality over speed. Each fix should be complete and tested.**
 
 ## Common Fixes
 

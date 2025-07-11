@@ -136,9 +136,6 @@ static int secp256k1_fe_sqrt(secp256k1_fe * SECP256K1_RESTRICT r, const secp256k
     secp256k1_fe_sqr(&t1, r);
     ret = secp256k1_fe_equal(&t1, a);
 
-<<<<<<< HEAD
-static const secp256k1_fe secp256k1_fe_one = SECP256K1_FE_CONST(0, 0, 0, 0, 0, 0, 0, 1);
-=======
 #ifdef VERIFY
     if (!ret) {
         secp256k1_fe_negate(&t1, &t1, 1);
@@ -164,7 +161,6 @@ static void secp256k1_fe_verify(const secp256k1_fe *a) {
     /* Invoke implementation-specific checks. */
     secp256k1_fe_impl_verify(a);
 }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 static void secp256k1_fe_verify_magnitude(const secp256k1_fe *a, int m) {
     VERIFY_CHECK(m >= 0);

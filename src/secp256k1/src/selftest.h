@@ -25,11 +25,7 @@ static int secp256k1_selftest_sha256(void) {
     return secp256k1_memcmp_var(out, output32, 32) == 0;
 }
 
-<<<<<<< HEAD
-static int secp256k1_selftest(void) {
-=======
 static int secp256k1_selftest_passes(void) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     return secp256k1_selftest_sha256();
 }
 

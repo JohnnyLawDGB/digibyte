@@ -7,7 +7,7 @@
 print-%: FORCE
 	@echo '$*'='$($*)'
 
-ACLOCAL_AMFLAGS = -I build-aux/m4
+# ACLOCAL_AMFLAGS = -I build-aux/m4
 SUBDIRS = src
 if ENABLE_MAN
 SUBDIRS += doc/man

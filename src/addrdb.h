@@ -83,8 +83,6 @@ void DumpAnchors(const fs::path& anchors_db_path, const std::vector<CAddress>& a
  */
 std::vector<CAddress> ReadAnchors(const fs::path& anchors_db_path);
 
-/** Dump addrman to disk */
-bool DumpPeerAddresses(const ArgsManager& args, const AddrMan& addr);
 
 /** Load addrman from disk */
 util::Result<std::unique_ptr<AddrMan>> LoadAddrman(const NetGroupManager& netgroupman, const ArgsManager& args);

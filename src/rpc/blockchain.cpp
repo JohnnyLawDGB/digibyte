@@ -755,8 +755,7 @@ static RPCHelpMan getmempoolancestors()
     }
 
     CTxMemPool::setEntries setAncestors;
-    CTxMemPool::Limits noLimits{std::numeric_limits<uint64_t>::max(), std::numeric_limits<uint64_t>::max()};
-    auto ancestors = mempool.CalculateMemPoolAncestors(*it, noLimits);
+    auto ancestors = mempool.CalculateMemPoolAncestors(*it, CTxMemPool::Limits::NoLimits());
     if (!ancestors) {
         throw JSONRPCError(RPC_MISC_ERROR, "Failed to calculate ancestors");
     }

@@ -1840,7 +1840,6 @@ RPCHelpMan getdeploymentinfo()
             return deploymentinfo;
         },
     };
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 /** Comparison function for sorting the getchaintips heads.  */

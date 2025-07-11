@@ -3,6 +3,11 @@
 ## Overview
 This file provides context and guidance for AI assistants working on the DigiByte codebase, particularly for the Bitcoin Core v26.2 merge creating DigiByte v8.26.
 
+## Reference Directories
+- **Current merged code**: `/Users/jt/Code/digibyte` (DigiByte v8.26 work in progress)
+- **Original DigiByte**: `/Users/jt/Code/digibyte/digibyte-v8.22.2` (v8.22.2 for comparison)
+- **Bitcoin v26.2**: `/Users/jt/Code/bitcoin` (Bitcoin Core v26.2 reference)
+
 ## DigiByte Unique Features
 
 ### Multi-Algorithm Mining

@@ -53,10 +53,6 @@ std::string DeploymentName(Consensus::BuriedDeployment dep)
     return "";
 }
 
-    } // no default case, so the compiler can warn about missing cases
-    return "";
-}
-
 std::optional<Consensus::BuriedDeployment> GetBuriedDeployment(const std::string_view name)
 {
     if (name == "segwit") {

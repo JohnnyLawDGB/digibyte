@@ -214,35 +214,20 @@ BOOST_AUTO_TEST_CASE(addrman_select)
     CService addr3 = ResolveService("250.3.2.2", 9999);
     CService addr4 = ResolveService("250.3.3.3", 9999);
 
-<<<<<<< HEAD
-    BOOST_CHECK(addrman->Add(CAddress(addr2, NODE_NONE), ResolveService("250.3.1.1", 8333)));
-    BOOST_CHECK(addrman->Add(CAddress(addr3, NODE_NONE), ResolveService("250.3.1.1", 8333)));
-    BOOST_CHECK(addrman->Add(CAddress(addr4, NODE_NONE), ResolveService("250.4.1.1", 8333)));
-=======
     BOOST_CHECK(addrman->Add({CAddress(addr3, NODE_NONE)}, addr2));
     BOOST_CHECK(addrman->Add({CAddress(addr4, NODE_NONE)}, ResolveService("250.4.1.1", 8333)));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // Add three addresses to tried table.
     CService addr5 = ResolveService("250.4.4.4", 8333);
     CService addr6 = ResolveService("250.4.5.5", 7777);
     CService addr7 = ResolveService("250.4.6.6", 8333);
 
-<<<<<<< HEAD
-    BOOST_CHECK(addrman->Add(CAddress(addr5, NODE_NONE), ResolveService("250.3.1.1", 8333)));
-    addrman->Good(CAddress(addr5, NODE_NONE));
-    BOOST_CHECK(addrman->Add(CAddress(addr6, NODE_NONE), ResolveService("250.3.1.1", 8333)));
-    addrman->Good(CAddress(addr6, NODE_NONE));
-    BOOST_CHECK(addrman->Add(CAddress(addr7, NODE_NONE), ResolveService("250.1.1.3", 8333)));
-    addrman->Good(CAddress(addr7, NODE_NONE));
-=======
     BOOST_CHECK(addrman->Add({CAddress(addr5, NODE_NONE)}, addr3));
     BOOST_CHECK(addrman->Good(CAddress(addr5, NODE_NONE)));
     BOOST_CHECK(addrman->Add({CAddress(addr6, NODE_NONE)}, addr3));
     BOOST_CHECK(addrman->Good(CAddress(addr6, NODE_NONE)));
     BOOST_CHECK(addrman->Add({CAddress(addr7, NODE_NONE)}, ResolveService("250.1.1.3", 8333)));
     BOOST_CHECK(addrman->Good(CAddress(addr7, NODE_NONE)));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // 6 addrs + 1 addr from last test = 7.
     BOOST_CHECK_EQUAL(addrman->Size(), 7U);
@@ -354,22 +339,12 @@ BOOST_AUTO_TEST_CASE(addrman_new_collisions)
 
     while (num_addrs < 22) { // Magic number! 250.1.1.1 - 250.1.1.22 do not collide with deterministic key = 1
         CService addr = ResolveService("250.1.1." + ToString(++num_addrs));
-        BOOST_CHECK(addrman->Add({CAddress(addr, NODE_NONE)}, source));
+        BOOST_CHECK(addrman->Add({addr}, source));
 
         // Test: No collision in new table yet.
         BOOST_CHECK_EQUAL(addrman->Size(), num_addrs);
     }
 
-<<<<<<< HEAD
-    //Test: new table collision!
-    CService addr1 = ResolveService("250.1.1.18");
-    BOOST_CHECK(addrman->Add(CAddress(addr1, NODE_NONE), source));
-    BOOST_CHECK_EQUAL(addrman->Size(), 17U);
-
-    CService addr2 = ResolveService("250.1.1.19");
-    BOOST_CHECK(addrman->Add(CAddress(addr2, NODE_NONE), source));
-    BOOST_CHECK_EQUAL(addrman->Size(), 18U);
-=======
     // Test: new table collision!
     CService addr1 = ResolveService("250.1.1." + ToString(++num_addrs));
     uint32_t collisions{1};
@@ -411,7 +386,6 @@ BOOST_AUTO_TEST_CASE(addrman_new_multiplicity)
     BOOST_CHECK_EQUAL(addr_pos_multi.multiplicity, 8U);
     // multiplicity doesn't affect size
     BOOST_CHECK_EQUAL(addrman->Size(), 1U);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 BOOST_AUTO_TEST_CASE(addrman_tried_collisions)
@@ -422,108 +396,16 @@ BOOST_AUTO_TEST_CASE(addrman_tried_collisions)
 
     uint32_t num_addrs{0};
 
-<<<<<<< HEAD
-    for (unsigned int i = 1; i < 80; i++) {
-        CService addr = ResolveService("250.1.1." + ToString(i));
-        BOOST_CHECK(addrman->Add(CAddress(addr, NODE_NONE), source));
-        addrman->Good(CAddress(addr, NODE_NONE));
-=======
     BOOST_CHECK_EQUAL(addrman->Size(), num_addrs);
 
     while (num_addrs < 35) { // Magic number! 250.1.1.1 - 250.1.1.35 do not collide in tried with deterministic key = 1
         CService addr = ResolveService("250.1.1." + ToString(++num_addrs));
-        BOOST_CHECK(addrman->Add({CAddress(addr, NODE_NONE)}, source));
+        BOOST_CHECK(addrman->Add({addr}, source));
 
         // Test: Add to tried without collision
         BOOST_CHECK(addrman->Good(CAddress(addr, NODE_NONE)));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
-
     }
 
-<<<<<<< HEAD
-    //Test: tried table collision!
-    CService addr1 = ResolveService("250.1.1.80");
-    BOOST_CHECK(addrman->Add(CAddress(addr1, NODE_NONE), source));
-    BOOST_CHECK_EQUAL(addrman->Size(), 79U);
-
-    CService addr2 = ResolveService("250.1.1.81");
-    BOOST_CHECK(addrman->Add(CAddress(addr2, NODE_NONE), source));
-    BOOST_CHECK_EQUAL(addrman->Size(), 80U);
-}
-
-BOOST_AUTO_TEST_CASE(addrman_find)
-{
-    CAddrManTest addrman;
-
-    BOOST_CHECK_EQUAL(addrman->Size(), 0U);
-
-    CAddress addr1 = CAddress(ResolveService("250.1.2.1", 8333), NODE_NONE);
-    CAddress addr2 = CAddress(ResolveService("250.1.2.1", 9999), NODE_NONE);
-    CAddress addr3 = CAddress(ResolveService("251.255.2.1", 8333), NODE_NONE);
-
-    CNetAddr source1 = ResolveIP("250.1.2.1");
-    CNetAddr source2 = ResolveIP("250.1.2.2");
-
-    BOOST_CHECK(addrman->Add(addr1, source1));
-    BOOST_CHECK(!addrman->Add(addr2, source2));
-    BOOST_CHECK(addrman->Add(addr3, source1));
-
-    // Test: ensure Find returns an IP matching what we searched on.
-    CAddrInfo* info1 = addrman.Find(addr1);
-    BOOST_REQUIRE(info1);
-    BOOST_CHECK_EQUAL(info1->ToString(), "250.1.2.1:8333");
-
-    // Test 18; Find does not discriminate by port number.
-    CAddrInfo* info2 = addrman.Find(addr2);
-    BOOST_REQUIRE(info2);
-    BOOST_CHECK_EQUAL(info2->ToString(), info1->ToString());
-
-    // Test: Find returns another IP matching what we searched on.
-    CAddrInfo* info3 = addrman.Find(addr3);
-    BOOST_REQUIRE(info3);
-    BOOST_CHECK_EQUAL(info3->ToString(), "251.255.2.1:8333");
-}
-
-BOOST_AUTO_TEST_CASE(addrman_create)
-{
-    CAddrManTest addrman;
-
-    BOOST_CHECK_EQUAL(addrman->Size(), 0U);
-
-    CAddress addr1 = CAddress(ResolveService("250.1.2.1", 8333), NODE_NONE);
-    CNetAddr source1 = ResolveIP("250.1.2.1");
-
-    int nId;
-    CAddrInfo* pinfo = addrman.Create(addr1, source1, &nId);
-
-    // Test: The result should be the same as the input addr.
-    BOOST_CHECK_EQUAL(pinfo->ToString(), "250.1.2.1:8333");
-
-    CAddrInfo* info2 = addrman.Find(addr1);
-    BOOST_CHECK_EQUAL(info2->ToString(), "250.1.2.1:8333");
-}
-
-
-BOOST_AUTO_TEST_CASE(addrman_delete)
-{
-    CAddrManTest addrman;
-
-    BOOST_CHECK_EQUAL(addrman->Size(), 0U);
-
-    CAddress addr1 = CAddress(ResolveService("250.1.2.1", 8333), NODE_NONE);
-    CNetAddr source1 = ResolveIP("250.1.2.1");
-
-    int nId;
-    addrman.Create(addr1, source1, &nId);
-
-    // Test: Delete should actually delete the addr.
-    BOOST_CHECK_EQUAL(addrman->Size(), 1U);
-    addrman.Delete(nId);
-    BOOST_CHECK_EQUAL(addrman->Size(), 0U);
-    CAddrInfo* info2 = addrman.Find(addr1);
-    BOOST_CHECK(info2 == nullptr);
-}
-=======
     // Test: Unable to add to tried table due to collision!
     CService addr1 = ResolveService("250.1.1." + ToString(++num_addrs));
     BOOST_CHECK(addrman->Add({CAddress(addr1, NODE_NONE)}, source));
@@ -535,21 +417,14 @@ BOOST_AUTO_TEST_CASE(addrman_delete)
     BOOST_CHECK(addrman->Good(CAddress(addr2, NODE_NONE)));
 }
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
-
 BOOST_AUTO_TEST_CASE(addrman_getaddr)
 {
     auto addrman = std::make_unique<AddrMan>(EMPTY_NETGROUPMAN, DETERMINISTIC, GetCheckRatio(m_node));
 
     // Test: Sanity check, GetAddr should never return anything if addrman
     //  is empty.
-<<<<<<< HEAD
-    BOOST_CHECK_EQUAL(addrman->Size(), 0U);
-    std::vector<CAddress> vAddr1 = addrman.GetAddr(/* max_addresses */ 0, /* max_pct */ 0, /* network */ std::nullopt);
-=======
     BOOST_CHECK_EQUAL(addrman->Size(), 0U);
     std::vector<CAddress> vAddr1 = addrman->GetAddr(/*max_addresses=*/0, /*max_pct=*/0, /*network=*/std::nullopt);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     BOOST_CHECK_EQUAL(vAddr1.size(), 0U);
 
     CAddress addr1 = CAddress(ResolveService("250.250.2.1", 8333), NODE_NONE);
@@ -566,23 +441,6 @@ BOOST_AUTO_TEST_CASE(addrman_getaddr)
     CNetAddr source2 = ResolveIP("250.2.3.3");
 
     // Test: Ensure GetAddr works with new addresses.
-<<<<<<< HEAD
-    BOOST_CHECK(addrman->Add(addr1, source1));
-    BOOST_CHECK(addrman->Add(addr2, source2));
-    BOOST_CHECK(addrman->Add(addr3, source1));
-    BOOST_CHECK(addrman->Add(addr4, source2));
-    BOOST_CHECK(addrman->Add(addr5, source1));
-
-    BOOST_CHECK_EQUAL(addrman.GetAddr(/* max_addresses */ 0, /* max_pct */ 0, /* network */ std::nullopt).size(), 5U);
-    // Net processing asks for 23% of addresses. 23% of 5 is 1 rounded down.
-    BOOST_CHECK_EQUAL(addrman.GetAddr(/* max_addresses */ 2500, /* max_pct */ 23, /* network */ std::nullopt).size(), 1U);
-
-    // Test: Ensure GetAddr works with new and tried addresses.
-    addrman->Good(CAddress(addr1, NODE_NONE));
-    addrman->Good(CAddress(addr2, NODE_NONE));
-    BOOST_CHECK_EQUAL(addrman.GetAddr(/* max_addresses */ 0, /* max_pct */ 0, /* network */ std::nullopt).size(), 5U);
-    BOOST_CHECK_EQUAL(addrman.GetAddr(/* max_addresses */ 2500, /* max_pct */ 23, /* network */ std::nullopt).size(), 1U);
-=======
     BOOST_CHECK(addrman->Add({addr1, addr3, addr5}, source1));
     BOOST_CHECK(addrman->Add({addr2, addr4}, source2));
 
@@ -591,11 +449,9 @@ BOOST_AUTO_TEST_CASE(addrman_getaddr)
     BOOST_CHECK_EQUAL(addrman->GetAddr(/*max_addresses=*/2500, /*max_pct=*/23, /*network=*/std::nullopt).size(), 1U);
 
     // Test: Ensure GetAddr works with new and tried addresses.
-    BOOST_CHECK(addrman->Good(CAddress(addr1, NODE_NONE)));
     BOOST_CHECK(addrman->Good(CAddress(addr2, NODE_NONE)));
     BOOST_CHECK_EQUAL(addrman->GetAddr(/*max_addresses=*/0, /*max_pct=*/0, /*network=*/std::nullopt).size(), 5U);
     BOOST_CHECK_EQUAL(addrman->GetAddr(/*max_addresses=*/2500, /*max_pct=*/23, /*network=*/std::nullopt).size(), 1U);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // Test: Ensure GetAddr still returns 23% when addrman has many addrs.
     for (unsigned int i = 1; i < (8 * 256); i++) {
@@ -610,11 +466,7 @@ BOOST_AUTO_TEST_CASE(addrman_getaddr)
         if (i % 8 == 0)
             addrman->Good(addr);
     }
-<<<<<<< HEAD
-    std::vector<CAddress> vAddr = addrman.GetAddr(/* max_addresses */ 2500, /* max_pct */ 23, /* network */ std::nullopt);
-=======
     std::vector<CAddress> vAddr = addrman->GetAddr(/*max_addresses=*/2500, /*max_pct=*/23, /*network=*/std::nullopt);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     size_t percent23 = (addrman->Size() * 23) / 100;
     BOOST_CHECK_EQUAL(vAddr.size(), percent23);
@@ -625,142 +477,6 @@ BOOST_AUTO_TEST_CASE(addrman_getaddr)
 
 
 BOOST_AUTO_TEST_CASE(caddrinfo_get_tried_bucket_legacy)
-<<<<<<< HEAD
-{
-    CAddrManTest addrman;
-
-    CAddress addr1 = CAddress(ResolveService("250.1.1.1", 8333), NODE_NONE);
-    CAddress addr2 = CAddress(ResolveService("250.1.1.1", 9999), NODE_NONE);
-
-    CNetAddr source1 = ResolveIP("250.1.1.1");
-
-
-    CAddrInfo info1 = CAddrInfo(addr1, source1);
-
-    uint256 nKey1 = (uint256)(CHashWriter(SER_GETHASH, 0) << 1).GetHash();
-    uint256 nKey2 = (uint256)(CHashWriter(SER_GETHASH, 0) << 2).GetHash();
-
-    std::vector<bool> asmap; // use /16
-
-    BOOST_CHECK_EQUAL(info1.GetTriedBucket(nKey1, asmap), 40);
-
-    // Test: Make sure key actually randomizes bucket placement. A fail on
-    //  this test could be a security issue.
-    BOOST_CHECK(info1.GetTriedBucket(nKey1, asmap) != info1.GetTriedBucket(nKey2, asmap));
-
-    // Test: Two addresses with same IP but different ports can map to
-    //  different buckets because they have different keys.
-    CAddrInfo info2 = CAddrInfo(addr2, source1);
-
-    BOOST_CHECK(info1.GetKey() != info2.GetKey());
-    BOOST_CHECK(info1.GetTriedBucket(nKey1, asmap) != info2.GetTriedBucket(nKey1, asmap));
-
-    std::set<int> buckets;
-    for (int i = 0; i < 255; i++) {
-        CAddrInfo infoi = CAddrInfo(
-            CAddress(ResolveService("250.1.1." + ToString(i)), NODE_NONE),
-            ResolveIP("250.1.1." + ToString(i)));
-        int bucket = infoi.GetTriedBucket(nKey1, asmap);
-        buckets.insert(bucket);
-    }
-    // Test: IP addresses in the same /16 prefix should
-    // never get more than 8 buckets with legacy grouping
-    BOOST_CHECK_EQUAL(buckets.size(), 8U);
-
-    buckets.clear();
-    for (int j = 0; j < 255; j++) {
-        CAddrInfo infoj = CAddrInfo(
-            CAddress(ResolveService("250." + ToString(j) + ".1.1"), NODE_NONE),
-            ResolveIP("250." + ToString(j) + ".1.1"));
-        int bucket = infoj.GetTriedBucket(nKey1, asmap);
-        buckets.insert(bucket);
-    }
-    // Test: IP addresses in the different /16 prefix should map to more than
-    // 8 buckets with legacy grouping
-    BOOST_CHECK_EQUAL(buckets.size(), 160U);
-}
-
-BOOST_AUTO_TEST_CASE(caddrinfo_get_new_bucket_legacy)
-{
-    CAddrManTest addrman;
-
-    CAddress addr1 = CAddress(ResolveService("250.1.2.1", 8333), NODE_NONE);
-    CAddress addr2 = CAddress(ResolveService("250.1.2.1", 9999), NODE_NONE);
-
-    CNetAddr source1 = ResolveIP("250.1.2.1");
-
-    CAddrInfo info1 = CAddrInfo(addr1, source1);
-
-    uint256 nKey1 = (uint256)(CHashWriter(SER_GETHASH, 0) << 1).GetHash();
-    uint256 nKey2 = (uint256)(CHashWriter(SER_GETHASH, 0) << 2).GetHash();
-
-    std::vector<bool> asmap; // use /16
-
-    // Test: Make sure the buckets are what we expect
-    BOOST_CHECK_EQUAL(info1.GetNewBucket(nKey1, asmap), 786);
-    BOOST_CHECK_EQUAL(info1.GetNewBucket(nKey1, source1, asmap), 786);
-
-    // Test: Make sure key actually randomizes bucket placement. A fail on
-    //  this test could be a security issue.
-    BOOST_CHECK(info1.GetNewBucket(nKey1, asmap) != info1.GetNewBucket(nKey2, asmap));
-
-    // Test: Ports should not affect bucket placement in the addr
-    CAddrInfo info2 = CAddrInfo(addr2, source1);
-    BOOST_CHECK(info1.GetKey() != info2.GetKey());
-    BOOST_CHECK_EQUAL(info1.GetNewBucket(nKey1, asmap), info2.GetNewBucket(nKey1, asmap));
-
-    std::set<int> buckets;
-    for (int i = 0; i < 255; i++) {
-        CAddrInfo infoi = CAddrInfo(
-            CAddress(ResolveService("250.1.1." + ToString(i)), NODE_NONE),
-            ResolveIP("250.1.1." + ToString(i)));
-        int bucket = infoi.GetNewBucket(nKey1, asmap);
-        buckets.insert(bucket);
-    }
-    // Test: IP addresses in the same group (\16 prefix for IPv4) should
-    //  always map to the same bucket.
-    BOOST_CHECK_EQUAL(buckets.size(), 1U);
-
-    buckets.clear();
-    for (int j = 0; j < 4 * 255; j++) {
-        CAddrInfo infoj = CAddrInfo(CAddress(
-                                        ResolveService(
-                                            ToString(250 + (j / 255)) + "." + ToString(j % 256) + ".1.1"), NODE_NONE),
-            ResolveIP("251.4.1.1"));
-        int bucket = infoj.GetNewBucket(nKey1, asmap);
-        buckets.insert(bucket);
-    }
-    // Test: IP addresses in the same source groups should map to NO MORE
-    //  than 64 buckets.
-    BOOST_CHECK(buckets.size() <= 64);
-
-    buckets.clear();
-    for (int p = 0; p < 255; p++) {
-        CAddrInfo infoj = CAddrInfo(
-            CAddress(ResolveService("250.1.1.1"), NODE_NONE),
-            ResolveIP("250." + ToString(p) + ".1.1"));
-        int bucket = infoj.GetNewBucket(nKey1, asmap);
-        buckets.insert(bucket);
-    }
-    // Test: IP addresses in the different source groups should map to MORE
-    //  than 64 buckets.
-    BOOST_CHECK(buckets.size() > 64);
-}
-
-// The following three test cases use asmap.raw
-// We use an artificial minimal mock mapping
-// 250.0.0.0/8 AS1000
-// 101.1.0.0/16 AS1
-// 101.2.0.0/16 AS2
-// 101.3.0.0/16 AS3
-// 101.4.0.0/16 AS4
-// 101.5.0.0/16 AS5
-// 101.6.0.0/16 AS6
-// 101.7.0.0/16 AS7
-// 101.8.0.0/16 AS8
-BOOST_AUTO_TEST_CASE(caddrinfo_get_tried_bucket)
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     CAddress addr1 = CAddress(ResolveService("250.1.1.1", 8333), NODE_NONE);
     CAddress addr2 = CAddress(ResolveService("250.1.1.1", 9999), NODE_NONE);
@@ -773,54 +489,17 @@ BOOST_AUTO_TEST_CASE(caddrinfo_get_tried_bucket)
     uint256 nKey1 = (HashWriter{} << 1).GetHash();
     uint256 nKey2 = (HashWriter{} << 2).GetHash();
 
-<<<<<<< HEAD
-    std::vector<bool> asmap = FromBytes(asmap_raw, sizeof(asmap_raw) * 8);
-
-    BOOST_CHECK_EQUAL(info1.GetTriedBucket(nKey1, asmap), 236);
-
-    // Test: Make sure key actually randomizes bucket placement. A fail on
-    //  this test could be a security issue.
-    BOOST_CHECK(info1.GetTriedBucket(nKey1, asmap) != info1.GetTriedBucket(nKey2, asmap));
-=======
     BOOST_CHECK_EQUAL(info1.GetTriedBucket(nKey1, EMPTY_NETGROUPMAN), 40);
 
     // Test: Make sure key actually randomizes bucket placement. A fail on
     //  this test could be a security issue.
     BOOST_CHECK(info1.GetTriedBucket(nKey1, EMPTY_NETGROUPMAN) != info1.GetTriedBucket(nKey2, EMPTY_NETGROUPMAN));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // Test: Two addresses with same IP but different ports can map to
     //  different buckets because they have different keys.
     AddrInfo info2 = AddrInfo(addr2, source1);
 
     BOOST_CHECK(info1.GetKey() != info2.GetKey());
-<<<<<<< HEAD
-    BOOST_CHECK(info1.GetTriedBucket(nKey1, asmap) != info2.GetTriedBucket(nKey1, asmap));
-
-    std::set<int> buckets;
-    for (int j = 0; j < 255; j++) {
-        CAddrInfo infoj = CAddrInfo(
-            CAddress(ResolveService("101." + ToString(j) + ".1.1"), NODE_NONE),
-            ResolveIP("101." + ToString(j) + ".1.1"));
-        int bucket = infoj.GetTriedBucket(nKey1, asmap);
-        buckets.insert(bucket);
-    }
-    // Test: IP addresses in the different /16 prefix MAY map to more than
-    // 8 buckets.
-    BOOST_CHECK(buckets.size() > 8);
-
-    buckets.clear();
-    for (int j = 0; j < 255; j++) {
-        CAddrInfo infoj = CAddrInfo(
-            CAddress(ResolveService("250." + ToString(j) + ".1.1"), NODE_NONE),
-            ResolveIP("250." + ToString(j) + ".1.1"));
-        int bucket = infoj.GetTriedBucket(nKey1, asmap);
-        buckets.insert(bucket);
-    }
-    // Test: IP addresses in the different /16 prefix MAY NOT map to more than
-    // 8 buckets.
-    BOOST_CHECK(buckets.size() == 8);
-=======
     BOOST_CHECK(info1.GetTriedBucket(nKey1, EMPTY_NETGROUPMAN) != info2.GetTriedBucket(nKey1, EMPTY_NETGROUPMAN));
 
     std::set<int> buckets;
@@ -846,7 +525,6 @@ BOOST_AUTO_TEST_CASE(caddrinfo_get_tried_bucket)
     // Test: IP addresses in the different /16 prefix should map to more than
     // 8 buckets with legacy grouping
     BOOST_CHECK_EQUAL(buckets.size(), 160U);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 BOOST_AUTO_TEST_CASE(caddrinfo_get_new_bucket_legacy)
@@ -864,35 +542,16 @@ BOOST_AUTO_TEST_CASE(caddrinfo_get_new_bucket_legacy)
     std::vector<bool> asmap = FromBytes(asmap_raw, sizeof(asmap_raw) * 8);
 
     // Test: Make sure the buckets are what we expect
-<<<<<<< HEAD
-    BOOST_CHECK_EQUAL(info1.GetNewBucket(nKey1, asmap), 795);
-    BOOST_CHECK_EQUAL(info1.GetNewBucket(nKey1, source1, asmap), 795);
-
-    // Test: Make sure key actually randomizes bucket placement. A fail on
-    //  this test could be a security issue.
-    BOOST_CHECK(info1.GetNewBucket(nKey1, asmap) != info1.GetNewBucket(nKey2, asmap));
-=======
     BOOST_CHECK_EQUAL(info1.GetNewBucket(nKey1, EMPTY_NETGROUPMAN), 786);
     BOOST_CHECK_EQUAL(info1.GetNewBucket(nKey1, source1, EMPTY_NETGROUPMAN), 786);
 
     // Test: Make sure key actually randomizes bucket placement. A fail on
     //  this test could be a security issue.
     BOOST_CHECK(info1.GetNewBucket(nKey1, EMPTY_NETGROUPMAN) != info1.GetNewBucket(nKey2, EMPTY_NETGROUPMAN));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // Test: Ports should not affect bucket placement in the addr
     AddrInfo info2 = AddrInfo(addr2, source1);
     BOOST_CHECK(info1.GetKey() != info2.GetKey());
-<<<<<<< HEAD
-    BOOST_CHECK_EQUAL(info1.GetNewBucket(nKey1, asmap), info2.GetNewBucket(nKey1, asmap));
-
-    std::set<int> buckets;
-    for (int i = 0; i < 255; i++) {
-        CAddrInfo infoi = CAddrInfo(
-            CAddress(ResolveService("250.1.1." + ToString(i)), NODE_NONE),
-            ResolveIP("250.1.1." + ToString(i)));
-        int bucket = infoi.GetNewBucket(nKey1, asmap);
-=======
     BOOST_CHECK_EQUAL(info1.GetNewBucket(nKey1, EMPTY_NETGROUPMAN), info2.GetNewBucket(nKey1, EMPTY_NETGROUPMAN));
 
     std::set<int> buckets;
@@ -901,7 +560,6 @@ BOOST_AUTO_TEST_CASE(caddrinfo_get_new_bucket_legacy)
             CAddress(ResolveService("250.1.1." + ToString(i)), NODE_NONE),
             ResolveIP("250.1.1." + ToString(i)));
         int bucket = infoi.GetNewBucket(nKey1, EMPTY_NETGROUPMAN);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         buckets.insert(bucket);
     }
     // Test: IP addresses in the same /16 prefix
@@ -914,57 +572,17 @@ BOOST_AUTO_TEST_CASE(caddrinfo_get_new_bucket_legacy)
                                         ResolveService(
                                             ToString(250 + (j / 255)) + "." + ToString(j % 256) + ".1.1"), NODE_NONE),
             ResolveIP("251.4.1.1"));
-<<<<<<< HEAD
-        int bucket = infoj.GetNewBucket(nKey1, asmap);
-        buckets.insert(bucket);
-    }
-    // Test: IP addresses in the same source /16 prefix should not map to more
-    // than 64 buckets.
-=======
         int bucket = infoj.GetNewBucket(nKey1, EMPTY_NETGROUPMAN);
         buckets.insert(bucket);
     }
     // Test: IP addresses in the same source groups should map to NO MORE
     //  than 64 buckets.
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     BOOST_CHECK(buckets.size() <= 64);
 
     buckets.clear();
     for (int p = 0; p < 255; p++) {
         AddrInfo infoj = AddrInfo(
             CAddress(ResolveService("250.1.1.1"), NODE_NONE),
-<<<<<<< HEAD
-            ResolveIP("101." + ToString(p) + ".1.1"));
-        int bucket = infoj.GetNewBucket(nKey1, asmap);
-        buckets.insert(bucket);
-    }
-    // Test: IP addresses in the different source /16 prefixes usually map to MORE
-    // than 1 bucket.
-    BOOST_CHECK(buckets.size() > 1);
-
-    buckets.clear();
-    for (int p = 0; p < 255; p++) {
-        CAddrInfo infoj = CAddrInfo(
-            CAddress(ResolveService("250.1.1.1"), NODE_NONE),
-            ResolveIP("250." + ToString(p) + ".1.1"));
-        int bucket = infoj.GetNewBucket(nKey1, asmap);
-        buckets.insert(bucket);
-    }
-    // Test: IP addresses in the different source /16 prefixes sometimes map to NO MORE
-    // than 1 bucket.
-    BOOST_CHECK(buckets.size() == 1);
-
-}
-
-BOOST_AUTO_TEST_CASE(addrman_serialization)
-{
-    std::vector<bool> asmap1 = FromBytes(asmap_raw, sizeof(asmap_raw) * 8);
-
-    CAddrManTest addrman_asmap1(true, asmap1);
-    CAddrManTest addrman_asmap1_dup(true, asmap1);
-    CAddrManTest addrman_noasmap;
-    CDataStream stream(SER_NETWORK, PROTOCOL_VERSION);
-=======
             ResolveIP("250." + ToString(p) + ".1.1"));
         int bucket = infoj.GetNewBucket(nKey1, EMPTY_NETGROUPMAN);
         buckets.insert(bucket);
@@ -972,6 +590,7 @@ BOOST_AUTO_TEST_CASE(addrman_serialization)
     // Test: IP addresses in the different source groups should map to MORE
     //  than 64 buckets.
     BOOST_CHECK(buckets.size() > 64);
+}
 }
 
 // The following three test cases use asmap.raw
@@ -1128,65 +747,10 @@ BOOST_AUTO_TEST_CASE(addrman_serialization)
     auto addrman_noasmap = std::make_unique<AddrMan>(EMPTY_NETGROUPMAN, DETERMINISTIC, ratio);
 
     DataStream stream{};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     CAddress addr = CAddress(ResolveService("250.1.1.1"), NODE_NONE);
     CNetAddr default_source;
 
-<<<<<<< HEAD
-
-    addrman_asmap1.Add(addr, default_source);
-
-    stream << addrman_asmap1;
-    // serizalizing/deserializing addrman with the same asmap
-    stream >> addrman_asmap1_dup;
-
-    std::pair<int, int> bucketAndEntry_asmap1 = addrman_asmap1.GetBucketAndEntry(addr);
-    std::pair<int, int> bucketAndEntry_asmap1_dup = addrman_asmap1_dup.GetBucketAndEntry(addr);
-    BOOST_CHECK(bucketAndEntry_asmap1.second != -1);
-    BOOST_CHECK(bucketAndEntry_asmap1_dup.second != -1);
-
-    BOOST_CHECK(bucketAndEntry_asmap1.first == bucketAndEntry_asmap1_dup.first);
-    BOOST_CHECK(bucketAndEntry_asmap1.second == bucketAndEntry_asmap1_dup.second);
-
-    // deserializing asmaped peers.dat to non-asmaped addrman
-    stream << addrman_asmap1;
-    stream >> addrman_noasmap;
-    std::pair<int, int> bucketAndEntry_noasmap = addrman_noasmap.GetBucketAndEntry(addr);
-    BOOST_CHECK(bucketAndEntry_noasmap.second != -1);
-    BOOST_CHECK(bucketAndEntry_asmap1.first != bucketAndEntry_noasmap.first);
-    BOOST_CHECK(bucketAndEntry_asmap1.second != bucketAndEntry_noasmap.second);
-
-    // deserializing non-asmaped peers.dat to asmaped addrman
-    addrman_asmap1.Clear();
-    addrman_noasmap.Clear();
-    addrman_noasmap.Add(addr, default_source);
-    stream << addrman_noasmap;
-    stream >> addrman_asmap1;
-    std::pair<int, int> bucketAndEntry_asmap1_deser = addrman_asmap1.GetBucketAndEntry(addr);
-    BOOST_CHECK(bucketAndEntry_asmap1_deser.second != -1);
-    BOOST_CHECK(bucketAndEntry_asmap1_deser.first != bucketAndEntry_noasmap.first);
-    BOOST_CHECK(bucketAndEntry_asmap1_deser.first == bucketAndEntry_asmap1_dup.first);
-    BOOST_CHECK(bucketAndEntry_asmap1_deser.second == bucketAndEntry_asmap1_dup.second);
-
-    // used to map to different buckets, now maps to the same bucket.
-    addrman_asmap1.Clear();
-    addrman_noasmap.Clear();
-    CAddress addr1 = CAddress(ResolveService("250.1.1.1"), NODE_NONE);
-    CAddress addr2 = CAddress(ResolveService("250.2.1.1"), NODE_NONE);
-    addrman_noasmap.Add(addr, default_source);
-    addrman_noasmap.Add(addr2, default_source);
-    std::pair<int, int> bucketAndEntry_noasmap_addr1 = addrman_noasmap.GetBucketAndEntry(addr1);
-    std::pair<int, int> bucketAndEntry_noasmap_addr2 = addrman_noasmap.GetBucketAndEntry(addr2);
-    BOOST_CHECK(bucketAndEntry_noasmap_addr1.first != bucketAndEntry_noasmap_addr2.first);
-    BOOST_CHECK(bucketAndEntry_noasmap_addr1.second != bucketAndEntry_noasmap_addr2.second);
-    stream << addrman_noasmap;
-    stream >> addrman_asmap1;
-    std::pair<int, int> bucketAndEntry_asmap1_deser_addr1 = addrman_asmap1.GetBucketAndEntry(addr1);
-    std::pair<int, int> bucketAndEntry_asmap1_deser_addr2 = addrman_asmap1.GetBucketAndEntry(addr2);
-    BOOST_CHECK(bucketAndEntry_asmap1_deser_addr1.first == bucketAndEntry_asmap1_deser_addr2.first);
-    BOOST_CHECK(bucketAndEntry_asmap1_deser_addr1.second != bucketAndEntry_asmap1_deser_addr2.second);
-=======
     addrman_asmap1->Add({addr}, default_source);
 
     stream << *addrman_asmap1;
@@ -1235,41 +799,26 @@ BOOST_AUTO_TEST_CASE(addrman_serialization)
     AddressPosition addr_pos8 = addrman_asmap1->FindAddressEntry(addr2).value();
     BOOST_CHECK(addr_pos7.bucket == addr_pos8.bucket);
     BOOST_CHECK(addr_pos7.position != addr_pos8.position);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 BOOST_AUTO_TEST_CASE(remove_invalid)
 {
     // Confirm that invalid addresses are ignored in unserialization.
 
-<<<<<<< HEAD
-    CAddrManTest addrman;
-    CDataStream stream(SER_NETWORK, PROTOCOL_VERSION);
-=======
     auto addrman = std::make_unique<AddrMan>(EMPTY_NETGROUPMAN, DETERMINISTIC, GetCheckRatio(m_node));
     DataStream stream{};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     const CAddress new1{ResolveService("5.5.5.5"), NODE_NONE};
     const CAddress new2{ResolveService("6.6.6.6"), NODE_NONE};
     const CAddress tried1{ResolveService("7.7.7.7"), NODE_NONE};
     const CAddress tried2{ResolveService("8.8.8.8"), NODE_NONE};
 
-<<<<<<< HEAD
-    addrman->Add({new1, tried1, new2, tried2}, CNetAddr{});
-    addrman->Good(tried1);
-    addrman->Good(tried2);
-    BOOST_REQUIRE_EQUAL(addrman->Size(), 4);
-
-    stream << addrman;
-=======
     addrman->Add({new1, tried1, new2, tried2}, CNetAddr{});
     addrman->Good(tried1);
     addrman->Good(tried2);
     BOOST_REQUIRE_EQUAL(addrman->Size(), 4);
 
     stream << *addrman;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     const std::string str{stream.str()};
     size_t pos;
@@ -1288,26 +837,16 @@ BOOST_AUTO_TEST_CASE(remove_invalid)
     BOOST_REQUIRE(pos + sizeof(tried2_raw_replacement) <= stream.size());
     memcpy(stream.data() + pos, tried2_raw_replacement, sizeof(tried2_raw_replacement));
 
-<<<<<<< HEAD
-    addrman.Clear();
-    stream >> addrman;
-    BOOST_CHECK_EQUAL(addrman->Size(), 2);
-=======
     addrman = std::make_unique<AddrMan>(EMPTY_NETGROUPMAN, DETERMINISTIC, GetCheckRatio(m_node));
     stream >> *addrman;
     BOOST_CHECK_EQUAL(addrman->Size(), 2);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 BOOST_AUTO_TEST_CASE(addrman_selecttriedcollision)
 {
     auto addrman = std::make_unique<AddrMan>(EMPTY_NETGROUPMAN, DETERMINISTIC, GetCheckRatio(m_node));
 
-<<<<<<< HEAD
     BOOST_CHECK(addrman->Size() == 0);
-=======
-    BOOST_CHECK(addrman->Size() == 0);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // Empty addrman should return blank addrman info.
     BOOST_CHECK(addrman->SelectTriedCollision().first.ToStringAddrPort() == "[::]:0");
@@ -1315,14 +854,8 @@ BOOST_AUTO_TEST_CASE(addrman_selecttriedcollision)
     // Add twenty two addresses.
     CNetAddr source = ResolveIP("252.2.2.2");
     for (unsigned int i = 1; i < 23; i++) {
-<<<<<<< HEAD
-        CService addr = ResolveService("250.1.1."+ToString(i));
-        BOOST_CHECK(addrman->Add(CAddress(addr, NODE_NONE), source));
-        addrman->Good(addr);
-=======
         CService addr = ResolveService("250.1.1." + ToString(i));
-        BOOST_CHECK(addrman->Add({CAddress(addr, NODE_NONE)}, source));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+        BOOST_CHECK(addrman->Add({addr}, source));
 
         // No collisions in tried.
         BOOST_CHECK(addrman->Good(addr));
@@ -1332,12 +865,7 @@ BOOST_AUTO_TEST_CASE(addrman_selecttriedcollision)
     // Ensure Good handles duplicates well.
     // If an address is a duplicate, Good will return false but will not count it as a collision.
     for (unsigned int i = 1; i < 23; i++) {
-<<<<<<< HEAD
-        CService addr = ResolveService("250.1.1."+ToString(i));
-        addrman->Good(addr);
-=======
         CService addr = ResolveService("250.1.1." + ToString(i));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         // Unable to add duplicate address to tried table.
         BOOST_CHECK(!addrman->Good(addr));
@@ -1351,37 +879,21 @@ BOOST_AUTO_TEST_CASE(addrman_noevict)
 {
     auto addrman = std::make_unique<AddrMan>(EMPTY_NETGROUPMAN, DETERMINISTIC, GetCheckRatio(m_node));
 
-<<<<<<< HEAD
-    // Add twenty two addresses.
-    CNetAddr source = ResolveIP("252.2.2.2");
-    for (unsigned int i = 1; i < 23; i++) {
-        CService addr = ResolveService("250.1.1."+ToString(i));
-        BOOST_CHECK(addrman->Add(CAddress(addr, NODE_NONE), source));
-        addrman->Good(addr);
-=======
     // Add 35 addresses.
     CNetAddr source = ResolveIP("252.2.2.2");
     for (unsigned int i = 1; i < 36; i++) {
         CService addr = ResolveService("250.1.1." + ToString(i));
-        BOOST_CHECK(addrman->Add({CAddress(addr, NODE_NONE)}, source));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+        BOOST_CHECK(addrman->Add({addr}, source));
 
         // No collision yet.
         BOOST_CHECK(addrman->Good(addr));
     }
 
-<<<<<<< HEAD
-    // Collision between 23 and 19.
-    CService addr23 = ResolveService("250.1.1.23");
-    BOOST_CHECK(addrman->Add(CAddress(addr23, NODE_NONE), source));
-    addrman->Good(addr23);
-=======
     // Collision in tried table between 36 and 19.
     CService addr36 = ResolveService("250.1.1.36");
     BOOST_CHECK(addrman->Add({CAddress(addr36, NODE_NONE)}, source));
     BOOST_CHECK(!addrman->Good(addr36));
     BOOST_CHECK_EQUAL(addrman->SelectTriedCollision().first.ToStringAddrPort(), "250.1.1.19:0");
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // 36 should be discarded and 19 not evicted.
     // This means we keep 19 in the tried table and
@@ -1390,25 +902,9 @@ BOOST_AUTO_TEST_CASE(addrman_noevict)
     BOOST_CHECK(addrman->SelectTriedCollision().first.ToStringAddrPort() == "[::]:0");
 
     // Lets create two collisions.
-<<<<<<< HEAD
-    for (unsigned int i = 24; i < 33; i++) {
-        CService addr = ResolveService("250.1.1."+ToString(i));
-        BOOST_CHECK(addrman->Add(CAddress(addr, NODE_NONE), source));
-        addrman->Good(addr);
-
-        BOOST_CHECK(addrman->Size() == i);
-        BOOST_CHECK(addrman->SelectTriedCollision().ToString() == "[::]:0");
-    }
-
-    // Cause a collision.
-    CService addr33 = ResolveService("250.1.1.33");
-    BOOST_CHECK(addrman->Add(CAddress(addr33, NODE_NONE), source));
-    addrman->Good(addr33);
-    BOOST_CHECK(addrman->Size() == 33);
-=======
     for (unsigned int i = 37; i < 59; i++) {
         CService addr = ResolveService("250.1.1." + ToString(i));
-        BOOST_CHECK(addrman->Add({CAddress(addr, NODE_NONE)}, source));
+        BOOST_CHECK(addrman->Add({addr}, source));
         BOOST_CHECK(addrman->Good(addr));
     }
 
@@ -1416,19 +912,11 @@ BOOST_AUTO_TEST_CASE(addrman_noevict)
     CService addr59 = ResolveService("250.1.1.59");
     BOOST_CHECK(addrman->Add({CAddress(addr59, NODE_NONE)}, source));
     BOOST_CHECK(!addrman->Good(addr59));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     BOOST_CHECK_EQUAL(addrman->SelectTriedCollision().first.ToStringAddrPort(), "250.1.1.10:0");
 
-<<<<<<< HEAD
-    // Cause a second collision.
-    BOOST_CHECK(!addrman->Add(CAddress(addr23, NODE_NONE), source));
-    addrman->Good(addr23);
-    BOOST_CHECK(addrman->Size() == 33);
-=======
     // Cause a second collision in the new table.
     BOOST_CHECK(!addrman->Add({CAddress(addr36, NODE_NONE)}, source));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // 36 still cannot be moved from new to tried due to colliding with 19
     BOOST_CHECK(!addrman->Good(addr36));
@@ -1443,43 +931,25 @@ BOOST_AUTO_TEST_CASE(addrman_evictionworks)
 {
     auto addrman = std::make_unique<AddrMan>(EMPTY_NETGROUPMAN, DETERMINISTIC, GetCheckRatio(m_node));
 
-<<<<<<< HEAD
     BOOST_CHECK(addrman->Size() == 0);
-=======
-    BOOST_CHECK(addrman->Size() == 0);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // Empty addrman should return blank addrman info.
     BOOST_CHECK(addrman->SelectTriedCollision().first.ToStringAddrPort() == "[::]:0");
 
     // Add 35 addresses
     CNetAddr source = ResolveIP("252.2.2.2");
-<<<<<<< HEAD
-    for (unsigned int i = 1; i < 23; i++) {
-        CService addr = ResolveService("250.1.1."+ToString(i));
-        BOOST_CHECK(addrman->Add(CAddress(addr, NODE_NONE), source));
-        addrman->Good(addr);
-=======
     for (unsigned int i = 1; i < 36; i++) {
         CService addr = ResolveService("250.1.1." + ToString(i));
-        BOOST_CHECK(addrman->Add({CAddress(addr, NODE_NONE)}, source));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+        BOOST_CHECK(addrman->Add({addr}, source));
 
         // No collision yet.
         BOOST_CHECK(addrman->Good(addr));
     }
 
-<<<<<<< HEAD
-    // Collision between 23 and 19.
-    CService addr = ResolveService("250.1.1.23");
-    BOOST_CHECK(addrman->Add(CAddress(addr, NODE_NONE), source));
-    addrman->Good(addr);
-=======
     // Collision between 36 and 19.
     CService addr = ResolveService("250.1.1.36");
-    BOOST_CHECK(addrman->Add({CAddress(addr, NODE_NONE)}, source));
+    BOOST_CHECK(addrman->Add({addr}, source));
     BOOST_CHECK(!addrman->Good(addr));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     auto info = addrman->SelectTriedCollision().first;
     BOOST_CHECK_EQUAL(info.ToStringAddrPort(), "250.1.1.19:0");
@@ -1495,29 +965,18 @@ BOOST_AUTO_TEST_CASE(addrman_evictionworks)
     AddressPosition addr_pos{addrman->FindAddressEntry(CAddress(addr, NODE_NONE)).value()};
     BOOST_CHECK(addr_pos.tried);
 
-<<<<<<< HEAD
-    // If 23 was swapped for 19, then this should cause no collisions.
-    BOOST_CHECK(!addrman->Add(CAddress(addr, NODE_NONE), source));
-    addrman->Good(addr);
-=======
     // If 36 was swapped for 19, then adding 36 to tried should fail because we
     // are attempting to add a duplicate.
     // We check this by verifying Good() returns false and also verifying that
     // we have no collisions.
     BOOST_CHECK(!addrman->Good(addr));
     BOOST_CHECK(addrman->SelectTriedCollision().first.ToStringAddrPort() == "[::]:0");
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // 19 should fail as a collision (not a duplicate) if we now attempt to move
     // it to the tried table.
     CService addr19 = ResolveService("250.1.1.19");
-<<<<<<< HEAD
-    BOOST_CHECK(!addrman->Add(CAddress(addr19, NODE_NONE), source));
-    addrman->Good(addr19);
-=======
     BOOST_CHECK(!addrman->Good(addr19));
     BOOST_CHECK_EQUAL(addrman->SelectTriedCollision().first.ToStringAddrPort(), "250.1.1.36:0");
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // Eviction is also successful if too much time has passed since last try
     SetMockTime(GetTime() + 4 * 60 *60);

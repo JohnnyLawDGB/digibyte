@@ -1958,34 +1958,43 @@ std::optional<std::string> PeerManagerImpl::FetchBlock(NodeId peer_id, const CBl
 
     std::vector<CInv> vGetData;
     vGetData.emplace_back(MSG_BLOCK | GetFetchFlags(*peer), block_index.GetBlockHash());
-    m_connman.PushMessage(peer->m_conn, CNetMsgMaker(PROTOCOL_VERSION).Make(NetMsgType::GETDATA, vGetData));
-    BlockRequested(peer_id, block_index);
+    
+    // Send block request message to the peer
+    bool success = m_connman.ForNode(peer_id, [this, &vGetData](CNode* node) {
+        const CNetMsgMaker msgMaker(node->GetCommonVersion());
+        this->m_connman.PushMessage(node, msgMaker.Make(NetMsgType::GETDATA, vGetData));
+        return true;
+    });
 
+    if (!success) return "Peer not fully connected";
+    
+    BlockRequested(peer_id, block_index);
     return std::nullopt;
 }
 
-std::unique_ptr<PeerManager> PeerManager::make(const CChainParams& chainparams, CConnman& connman, AddrMan& addrman,
-                                               BanMan* banman, CScheduler& scheduler, ChainstateManager& chainman,
-                                               CTxMemPool& pool, CTxMemPool& s_pool, bool ignore_incoming_txs)
+std::unique_ptr<PeerManager> PeerManager::make(CConnman& connman, AddrMan& addrman,
+                                               BanMan* banman, ChainstateManager& chainman,
+                                               CTxMemPool& pool, CTxMemPool& stempool, Options opts)
 {
-    return std::make_unique<PeerManagerImpl>(chainparams, connman, addrman, banman, scheduler, chainman, pool, s_pool, ignore_incoming_txs);
+    return std::make_unique<PeerManagerImpl>(connman, addrman, banman, chainman, pool, stempool, opts);
 }
 
-PeerManagerImpl::PeerManagerImpl(const CChainParams& chainparams, CConnman& connman, AddrMan& addrman,
-                                 BanMan* banman, CScheduler& scheduler, ChainstateManager& chainman,
-                                 CTxMemPool& pool, CTxMemPool& s_pool, bool ignore_incoming_txs)
-    : m_chainparams(chainparams),
+PeerManagerImpl::PeerManagerImpl(CConnman& connman, AddrMan& addrman,
+                                 BanMan* banman, ChainstateManager& chainman,
+                                 CTxMemPool& pool, CTxMemPool& stempool, Options opts)
+    : m_rng{GetRandHash()},
+      m_chainparams(chainman.GetParams()),
       m_connman(connman),
       m_addrman(addrman),
       m_banman(banman),
       m_chainman(chainman),
       m_mempool(pool),
-      m_stempool(s_pool),
+      m_stempool(stempool),
       m_stale_tip_check_time(0),
-      m_ignore_incoming_txs(ignore_incoming_txs)
+      m_opts(opts)
 {
     // Initialize global variables that cannot be constructed at startup.
-    recentRejects.reset(new CRollingBloomFilter(120000, 0.000001));
+    // m_recent_rejects is initialized inline in the class definition
 
     // Blocks don't typically have more than 4000 transactions, so this should
     // be at least six blocks (~1 hr) worth of transactions that we can store,

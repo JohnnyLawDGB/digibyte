@@ -17,21 +17,14 @@
 #include <common/args.h>
 #include <span.h>
 #include <util/bip32.h>
-<<<<<<< HEAD
-#include <util/spanparsing.h>
-#include <util/system.h>
-=======
 #include <util/check.h>
 #include <util/spanparsing.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+#include <util/system.h>
 #include <util/strencodings.h>
 #include <util/vector.h>
 
 #include <memory>
-<<<<<<< HEAD
-=======
 #include <numeric>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <optional>
 #include <string>
 #include <vector>
@@ -176,8 +169,6 @@ public:
 
     virtual ~PubkeyProvider() = default;
 
-<<<<<<< HEAD
-=======
     /** Compare two public keys represented by this provider.
      * Used by the Miniscript descriptors to check for duplicate keys in the script.
      */
@@ -192,7 +183,6 @@ public:
         return a < b;
     }
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     /** Derive a public key.
      *  read_cache is the cache to read keys from (if not nullptr)
      *  write_cache is the cache to write keys to (if not nullptr)
@@ -217,13 +207,9 @@ public:
     /** Get the descriptor string form including private data (if available in arg). */
     virtual bool ToPrivateString(const SigningProvider& arg, std::string& out) const = 0;
 
-<<<<<<< HEAD
-    /** Get the descriptor string form with the xpub at the last hardened derivation */
-=======
     /** Get the descriptor string form with the xpub at the last hardened derivation,
      *  and always use h for hardened derivation.
      */
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     virtual bool ToNormalizedString(const SigningProvider& arg, std::string& out, const DescriptorCache* cache = nullptr) const = 0;
 
     /** Derive a private key, if private data is available in arg. */
@@ -234,16 +220,6 @@ class OriginPubkeyProvider final : public PubkeyProvider
 {
     KeyOriginInfo m_origin;
     std::unique_ptr<PubkeyProvider> m_provider;
-<<<<<<< HEAD
-
-    std::string OriginString() const
-    {
-        return HexStr(m_origin.fingerprint) + FormatHDKeypath(m_origin.path);
-    }
-
-public:
-    OriginPubkeyProvider(uint32_t exp_index, KeyOriginInfo info, std::unique_ptr<PubkeyProvider> provider) : PubkeyProvider(exp_index), m_origin(std::move(info)), m_provider(std::move(provider)) {}
-=======
     bool m_apostrophe;
 
     std::string OriginString(StringType type, bool normalized=false) const
@@ -255,7 +231,6 @@ public:
 
 public:
     OriginPubkeyProvider(uint32_t exp_index, KeyOriginInfo info, std::unique_ptr<PubkeyProvider> provider, bool apostrophe) : PubkeyProvider(exp_index), m_origin(std::move(info)), m_provider(std::move(provider)), m_apostrophe(apostrophe) {}
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     bool GetPubKey(int pos, const SigningProvider& arg, CPubKey& key, KeyOriginInfo& info, const DescriptorCache* read_cache = nullptr, DescriptorCache* write_cache = nullptr) const override
     {
         if (!m_provider->GetPubKey(pos, arg, key, info, read_cache, write_cache)) return false;
@@ -265,20 +240,12 @@ public:
     }
     bool IsRange() const override { return m_provider->IsRange(); }
     size_t GetSize() const override { return m_provider->GetSize(); }
-<<<<<<< HEAD
-    std::string ToString() const override { return "[" + OriginString() + "]" + m_provider->ToString(); }
-=======
-    std::string ToString(StringType type) const override { return "[" + OriginString(type) + "]" + m_provider->ToString(type); }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+    std::string ToString(StringType type=StringType::PUBLIC) const override { return "[" + OriginString(type) + "]" + m_provider->ToString(type); }
     bool ToPrivateString(const SigningProvider& arg, std::string& ret) const override
     {
         std::string sub;
         if (!m_provider->ToPrivateString(arg, sub)) return false;
-<<<<<<< HEAD
-        ret = "[" + OriginString() + "]" + std::move(sub);
-=======
         ret = "[" + OriginString(StringType::PUBLIC) + "]" + std::move(sub);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         return true;
     }
     bool ToNormalizedString(const SigningProvider& arg, std::string& ret, const DescriptorCache* cache) const override
@@ -326,11 +293,7 @@ public:
     }
     bool IsRange() const override { return false; }
     size_t GetSize() const override { return m_pubkey.size(); }
-<<<<<<< HEAD
-    std::string ToString() const override { return m_xonly ? HexStr(m_pubkey).substr(2) : HexStr(m_pubkey); }
-=======
-    std::string ToString(StringType type) const override { return m_xonly ? HexStr(m_pubkey).substr(2) : HexStr(m_pubkey); }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+    std::string ToString(StringType type=StringType::PUBLIC) const override { return m_xonly ? HexStr(m_pubkey).substr(2) : HexStr(m_pubkey); }
     bool ToPrivateString(const SigningProvider& arg, std::string& ret) const override
     {
         CKey key;
@@ -348,11 +311,7 @@ public:
     }
     bool ToNormalizedString(const SigningProvider& arg, std::string& ret, const DescriptorCache* cache) const override
     {
-<<<<<<< HEAD
-        ret = ToString();
-=======
         ret = ToString(StringType::PUBLIC);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         return true;
     }
     bool GetPrivKey(int pos, const SigningProvider& arg, CKey& key) const override
@@ -394,11 +353,7 @@ class BIP32PubkeyProvider final : public PubkeyProvider
     {
         if (!GetExtKey(arg, xprv)) return false;
         for (auto entry : m_path) {
-<<<<<<< HEAD
-            xprv.Derive(xprv, entry);
-=======
             if (!xprv.Derive(xprv, entry)) return false;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             if (entry >> 31) {
                 last_hardened = xprv;
             }
@@ -416,11 +371,7 @@ class BIP32PubkeyProvider final : public PubkeyProvider
     }
 
 public:
-<<<<<<< HEAD
-    BIP32PubkeyProvider(uint32_t exp_index, const CExtPubKey& extkey, KeyPath path, DeriveType derive) : PubkeyProvider(exp_index), m_root_extkey(extkey), m_path(std::move(path)), m_derive(derive) {}
-=======
     BIP32PubkeyProvider(uint32_t exp_index, const CExtPubKey& extkey, KeyPath path, DeriveType derive, bool apostrophe) : PubkeyProvider(exp_index), m_root_extkey(extkey), m_path(std::move(path)), m_derive(derive), m_apostrophe(apostrophe) {}
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     bool IsRange() const override { return m_derive != DeriveType::NO; }
     size_t GetSize() const override { return 33; }
     bool GetPubKey(int pos, const SigningProvider& arg, CPubKey& key_out, KeyOriginInfo& final_info_out, const DescriptorCache* read_cache = nullptr, DescriptorCache* write_cache = nullptr) const override
@@ -462,10 +413,6 @@ public:
             }
         } else {
             for (auto entry : m_path) {
-<<<<<<< HEAD
-                der = parent_extkey.Derive(parent_extkey, entry);
-                assert(der);
-=======
                 if (!parent_extkey.Derive(parent_extkey, entry)) return false;
 >>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             }
@@ -474,10 +421,7 @@ public:
             assert(m_derive != DeriveType::HARDENED);
         }
 <<<<<<< HEAD
-        assert(der);
-=======
         if (!der) return false;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         final_info_out = final_info_out_tmp;
         key_out = final_extkey.pubkey;
@@ -499,13 +443,9 @@ public:
     }
     std::string ToString(StringType type, bool normalized) const
     {
-<<<<<<< HEAD
-        std::string ret = EncodeExtPubKey(m_root_extkey) + FormatHDKeypath(m_path);
-=======
         // If StringType==COMPAT, always use the apostrophe to stay compatible with previous versions
         const bool use_apostrophe = (!normalized && m_apostrophe) || type == StringType::COMPAT;
         std::string ret = EncodeExtPubKey(m_root_extkey) + FormatHDKeypath(m_path, /*apostrophe=*/use_apostrophe);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         if (IsRange()) {
             ret += "/*";
             if (m_derive == DeriveType::HARDENED) ret += use_apostrophe ? '\'' : 'h';
@@ -520,9 +460,6 @@ public:
     {
         CExtKey key;
         if (!GetExtKey(arg, key)) return false;
-<<<<<<< HEAD
-        out = EncodeExtKey(key) + FormatHDKeypath(m_path);
-=======
         out = EncodeExtKey(key) + FormatHDKeypath(m_path, /*apostrophe=*/m_apostrophe);
 >>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         if (IsRange()) {
@@ -533,15 +470,8 @@ public:
     }
     bool ToNormalizedString(const SigningProvider& arg, std::string& out, const DescriptorCache* cache) const override
     {
-<<<<<<< HEAD
-        // For hardened derivation type, just return the typical string, nothing to normalize
-        if (m_derive == DeriveType::HARDENED) {
-            out = ToString();
-=======
         if (m_derive == DeriveType::HARDENED) {
             out = ToString(StringType::PUBLIC, /*normalized=*/true);
-
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             return true;
         }
         // Step backwards to find the last hardened step in the path
@@ -600,13 +530,8 @@ public:
         CExtKey extkey;
         CExtKey dummy;
         if (!GetDerivedExtKey(arg, extkey, dummy)) return false;
-<<<<<<< HEAD
-        if (m_derive == DeriveType::UNHARDENED) extkey.Derive(extkey, pos);
-        if (m_derive == DeriveType::HARDENED) extkey.Derive(extkey, pos | 0x80000000UL);
-=======
         if (m_derive == DeriveType::UNHARDENED && !extkey.Derive(extkey, pos)) return false;
         if (m_derive == DeriveType::HARDENED && !extkey.Derive(extkey, pos | 0x80000000UL)) return false;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         key = extkey.key;
         return true;
     }
@@ -615,20 +540,12 @@ public:
 /** Base class for all Descriptor implementations. */
 class DescriptorImpl : public Descriptor
 {
-<<<<<<< HEAD
-    //! Public key arguments for this descriptor (size 1 for PK, PKH, WPKH; any size for Multisig).
-=======
 protected:
     //! Public key arguments for this descriptor (size 1 for PK, PKH, WPKH; any size for WSH and Multisig).
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     const std::vector<std::unique_ptr<PubkeyProvider>> m_pubkey_args;
     //! The string name of the descriptor function.
     const std::string m_name;
 
-<<<<<<< HEAD
-protected:
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     //! The sub-descriptor arguments (empty for everything but SH and WSH).
     //! In doc/descriptors.m this is referred to as SCRIPT expressions sh(SCRIPT)
     //! and wsh(SCRIPT), and distinct from KEY expressions and ADDR expressions.

@@ -1,15 +1,7 @@
 /.gradle
 /build
-<<<<<<< HEAD
-/gradle/wrapper
-/gradlew*
-/libs
-/res/layout
-/res/values*
-=======
 /gradle
 /gradlew*
 /libs
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 /src/org/kde
 /src/org/qtproject

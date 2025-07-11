@@ -821,60 +821,6 @@ void DigiByteGUI::createTrayIcon()
 
 void DigiByteGUI::createTrayIconMenu()
 {
-<<<<<<< HEAD
-#ifndef Q_OS_MAC
-    // return if trayIcon is unset (only on non-macOSes)
-    if (!trayIcon)
-        return;
-
-    trayIcon->setContextMenu(trayIconMenu.get());
-    connect(trayIcon, &QSystemTrayIcon::activated, this, &DigiByteGUI::trayIconActivated);
-#else
-    // Note: On macOS, the Dock icon is used to provide the tray's functionality.
-    MacDockIconHandler *dockIconHandler = MacDockIconHandler::instance();
-    connect(dockIconHandler, &MacDockIconHandler::dockIconClicked, this, &DigiByteGUI::macosDockIconActivated);
-    trayIconMenu->setAsDockMenu();
-#endif
-
-    // Configuration of the tray icon (or Dock icon) menu
-#ifndef Q_OS_MAC
-    // Note: On macOS, the Dock icon's menu already has Show / Hide action.
-    trayIconMenu->addAction(toggleHideAction);
-    trayIconMenu->addSeparator();
-#endif
-    if (enableWallet) {
-        trayIconMenu->addAction(sendCoinsMenuAction);
-        trayIconMenu->addAction(receiveCoinsMenuAction);
-        trayIconMenu->addSeparator();
-        trayIconMenu->addAction(signMessageAction);
-        trayIconMenu->addAction(verifyMessageAction);
-        trayIconMenu->addSeparator();
-    }
-    trayIconMenu->addAction(optionsAction);
-    trayIconMenu->addAction(openRPCConsoleAction);
-#ifndef Q_OS_MAC // This is built-in on macOS
-    trayIconMenu->addSeparator();
-    trayIconMenu->addAction(quitAction);
-#endif
-}
-
-#ifndef Q_OS_MAC
-void DigiByteGUI::trayIconActivated(QSystemTrayIcon::ActivationReason reason)
-{
-    if(reason == QSystemTrayIcon::Trigger)
-    {
-        // Click on system tray icon triggers show/hide of the main window
-        toggleHidden();
-    }
-}
-#else
-void DigiByteGUI::macosDockIconActivated()
-{
-    show();
-    activateWindow();
-}
-#endif
-=======
 #ifndef Q_OS_MACOS
     if (!trayIcon) return;
 #endif // Q_OS_MACOS
@@ -955,7 +901,6 @@ void DigiByteGUI::macosDockIconActivated()
             }
         });
 }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 void DigiByteGUI::optionsClicked()
 {
@@ -967,13 +912,8 @@ void DigiByteGUI::aboutClicked()
     if(!clientModel)
         return;
 
-<<<<<<< HEAD
-    HelpMessageDialog dlg(this, true);
-    dlg.exec();
-=======
     auto dlg = new HelpMessageDialog(this, /*about=*/true);
     GUIUtil::ShowModalDialogAsynchronously(dlg);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 void DigiByteGUI::showDebugWindow()
@@ -996,11 +936,7 @@ void DigiByteGUI::showHelpMessageClicked()
 #ifdef ENABLE_WALLET
 void DigiByteGUI::openClicked()
 {
-<<<<<<< HEAD
-    OpenURIDialog dlg(this);
-=======
     OpenURIDialog dlg(platformStyle, this);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if(dlg.exec())
     {
         Q_EMIT receivedURI(dlg.getURI());
@@ -1113,8 +1049,6 @@ void DigiByteGUI::updateHeadersSyncProgressLabel()
         progressBarLabel->setText(tr("Syncing Headers (%1%)…").arg(QString::number(100.0 / (headersTipHeight+estHeadersLeft)*headersTipHeight, 'f', 1)));
 }
 
-<<<<<<< HEAD
-=======
 void DigiByteGUI::updateHeadersPresyncProgressLabel(int64_t height, const QDateTime& blockDate)
 {
     int estHeadersLeft = blockDate.secsTo(QDateTime::currentDateTime()) / Params().GetConsensus().nPowTargetSpacing;
@@ -1122,24 +1056,11 @@ void DigiByteGUI::updateHeadersPresyncProgressLabel(int64_t height, const QDateT
         progressBarLabel->setText(tr("Pre-syncing Headers (%1%)…").arg(QString::number(100.0 / (height+estHeadersLeft)*height, 'f', 1)));
 }
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 void DigiByteGUI::openOptionsDialogWithTab(OptionsDialog::Tab tab)
 {
     if (!clientModel || !clientModel->getOptionsModel())
         return;
 
-<<<<<<< HEAD
-    OptionsDialog dlg(this, enableWallet);
-    dlg.setCurrentTab(tab);
-    dlg.setModel(clientModel->getOptionsModel());
-    dlg.exec();
-}
-
-void DigiByteGUI::setNumBlocks(int count, const QDateTime& blockDate, double nVerificationProgress, bool header, SynchronizationState sync_state)
-{
-// Disabling macOS App Nap on initial sync, disk and reindex operations.
-#ifdef Q_OS_MAC
-=======
     auto dlg = new OptionsDialog(this, enableWallet);
     connect(dlg, &OptionsDialog::quitOnReset, this, &DigiByteGUI::quitRequested);
     dlg->setCurrentTab(tab);
@@ -1152,7 +1073,6 @@ void DigiByteGUI::setNumBlocks(int count, const QDateTime& blockDate, double nVe
 {
 // Disabling macOS App Nap on initial sync, disk and reindex operations.
 #ifdef Q_OS_MACOS
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (sync_state == SynchronizationState::POST_INIT) {
         m_app_nap_inhibitor->enableAppNap();
     } else {
@@ -1162,13 +1082,8 @@ void DigiByteGUI::setNumBlocks(int count, const QDateTime& blockDate, double nVe
 
     if (modalOverlay)
     {
-<<<<<<< HEAD
-        if (header)
-            modalOverlay->setKnownBestHeight(count, blockDate);
-=======
         if (synctype != SyncType::BLOCK_SYNC)
             modalOverlay->setKnownBestHeight(count, blockDate, synctype == SyncType::HEADER_PRESYNC);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         else
             modalOverlay->tipUpdate(count, blockDate, nVerificationProgress);
     }
@@ -1179,12 +1094,6 @@ void DigiByteGUI::setNumBlocks(int count, const QDateTime& blockDate, double nVe
     statusBar()->clearMessage();
 
     // Acquire current block source
-<<<<<<< HEAD
-    enum BlockSource blockSource = clientModel->getBlockSource();
-    switch (blockSource) {
-        case BlockSource::NETWORK:
-            if (header) {
-=======
     BlockSource blockSource{clientModel->getBlockSource()};
     switch (blockSource) {
         case BlockSource::NETWORK:
@@ -1192,7 +1101,6 @@ void DigiByteGUI::setNumBlocks(int count, const QDateTime& blockDate, double nVe
                 updateHeadersPresyncProgressLabel(count, blockDate);
                 return;
             } else if (synctype == SyncType::HEADER_SYNC) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 updateHeadersSyncProgressLabel();
                 return;
             }
@@ -1200,26 +1108,14 @@ void DigiByteGUI::setNumBlocks(int count, const QDateTime& blockDate, double nVe
             updateHeadersSyncProgressLabel();
             break;
         case BlockSource::DISK:
-<<<<<<< HEAD
-            if (header) {
-=======
             if (synctype != SyncType::BLOCK_SYNC) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 progressBarLabel->setText(tr("Indexing blocks on disk…"));
             } else {
                 progressBarLabel->setText(tr("Processing blocks on disk…"));
             }
             break;
-<<<<<<< HEAD
-        case BlockSource::REINDEX:
-            progressBarLabel->setText(tr("Reindexing blocks on disk…"));
-            break;
-        case BlockSource::NONE:
-            if (header) {
-=======
         case BlockSource::NONE:
             if (synctype != SyncType::BLOCK_SYNC) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 return;
             }
             progressBarLabel->setText(tr("Connecting to peers…"));
@@ -1291,8 +1187,6 @@ void DigiByteGUI::setNumBlocks(int count, const QDateTime& blockDate, double nVe
     progressBar->setToolTip(tooltip);
 }
 
-<<<<<<< HEAD
-=======
 void DigiByteGUI::createWallet()
 {
 #ifdef ENABLE_WALLET
@@ -1308,7 +1202,6 @@ void DigiByteGUI::createWallet()
 #endif // ENABLE_WALLET
 }
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 void DigiByteGUI::message(const QString& title, QString message, unsigned int style, bool* ret, const QString& detailed_message)
 {
     // Default title. On macOS, the window title is ignored (as required by the macOS Guidelines).
@@ -1380,11 +1273,7 @@ void DigiByteGUI::changeEvent(QEvent *e)
 
     QMainWindow::changeEvent(e);
 
-<<<<<<< HEAD
-#ifndef Q_OS_MAC // Ignored on Mac
-=======
 #ifndef Q_OS_MACOS // Ignored on Mac
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if(e->type() == QEvent::WindowStateChange)
     {
         if(clientModel && clientModel->getOptionsModel() && clientModel->getOptionsModel()->getMinimizeToTray())
@@ -1407,11 +1296,7 @@ void DigiByteGUI::changeEvent(QEvent *e)
 
 void DigiByteGUI::closeEvent(QCloseEvent *event)
 {
-<<<<<<< HEAD
-#ifndef Q_OS_MAC // Ignored on Mac
-=======
 #ifndef Q_OS_MACOS // Ignored on Mac
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if(clientModel && clientModel->getOptionsModel())
     {
         if(!clientModel->getOptionsModel()->getMinimizeOnClose())
@@ -1419,11 +1304,7 @@ void DigiByteGUI::closeEvent(QCloseEvent *event)
             // close rpcConsole in case it was open to make some space for the shutdown window
             rpcConsole->close();
 
-<<<<<<< HEAD
-            QApplication::quit();
-=======
             Q_EMIT quitRequested();
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
         else
         {
@@ -1445,20 +1326,12 @@ void DigiByteGUI::showEvent(QShowEvent *event)
 }
 
 #ifdef ENABLE_WALLET
-<<<<<<< HEAD
-void DigiByteGUI::incomingTransaction(const QString& date, int unit, const CAmount& amount, const QString& type, const QString& address, const QString& label, const QString& walletName)
-=======
 void DigiByteGUI::incomingTransaction(const QString& date, DigiByteUnit unit, const CAmount& amount, const QString& type, const QString& address, const QString& label, const QString& walletName)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     // On new transaction, make an info balloon
     QString msg = tr("Date: %1\n").arg(date) +
                   tr("Amount: %1\n").arg(DigiByteUnits::formatWithUnit(unit, amount, true));
-<<<<<<< HEAD
-    if (m_node.walletClient().getWallets().size() > 1 && !walletName.isEmpty()) {
-=======
     if (m_node.walletLoader().getWallets().size() > 1 && !walletName.isEmpty()) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         msg += tr("Wallet: %1\n").arg(walletName);
     }
     msg += tr("Type: %1\n").arg(type);
@@ -1520,26 +1393,18 @@ void DigiByteGUI::setHDStatus(bool privkeyDisabled, int hdEnabled)
     labelWalletHDStatusIcon->setThemedPixmap(privkeyDisabled ? QStringLiteral(":/icons/eye") : hdEnabled ? QStringLiteral(":/icons/hd_enabled") : QStringLiteral(":/icons/hd_disabled"), STATUSBAR_ICONSIZE, STATUSBAR_ICONSIZE);
     labelWalletHDStatusIcon->setToolTip(privkeyDisabled ? tr("Private key <b>disabled</b>") : hdEnabled ? tr("HD key generation is <b>enabled</b>") : tr("HD key generation is <b>disabled</b>"));
     labelWalletHDStatusIcon->show();
-<<<<<<< HEAD
-    // eventually disable the QLabel to set its opacity to 50%
-    labelWalletHDStatusIcon->setEnabled(hdEnabled);
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 void DigiByteGUI::setEncryptionStatus(int status)
 {
     switch(status)
     {
-<<<<<<< HEAD
-=======
     case WalletModel::NoKeys:
         labelWalletEncryptionIcon->hide();
         encryptWalletAction->setChecked(false);
         changePassphraseAction->setEnabled(false);
         encryptWalletAction->setEnabled(false);
         break;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     case WalletModel::Unencrypted:
         labelWalletEncryptionIcon->hide();
         encryptWalletAction->setChecked(false);
@@ -1567,14 +1432,7 @@ void DigiByteGUI::setEncryptionStatus(int status)
 
 void DigiByteGUI::updateWalletStatus()
 {
-<<<<<<< HEAD
-    if (!walletFrame) {
-        return;
-    }
-=======
     assert(walletFrame);
-
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     WalletView * const walletView = walletFrame->currentWalletView();
     if (!walletView) {
         return;
@@ -1643,11 +1501,7 @@ void DigiByteGUI::detectShutdown()
     {
         if(rpcConsole)
             rpcConsole->hide();
-<<<<<<< HEAD
-        qApp->quit();
-=======
         Q_EMIT quitRequested();
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 }
 
@@ -1721,20 +1575,6 @@ bool DigiByteGUI::isPrivacyModeActivated() const
     return m_mask_values_action->isChecked();
 }
 
-<<<<<<< HEAD
-UnitDisplayStatusBarControl::UnitDisplayStatusBarControl(const PlatformStyle *platformStyle)
-    : optionsModel(nullptr),
-      menu(nullptr),
-      m_platform_style{platformStyle}
-{
-    createContextMenu();
-    setToolTip(tr("Unit to show amounts in. Click to select another unit."));
-    QList<DigiByteUnits::Unit> units = DigiByteUnits::availableUnits();
-    int max_width = 0;
-    const QFontMetrics fm(font());
-    for (const DigiByteUnits::Unit unit : units)
-    {
-=======
 UnitDisplayStatusBarControl::UnitDisplayStatusBarControl(const PlatformStyle* platformStyle)
     : m_platform_style{platformStyle}
 {
@@ -1744,7 +1584,6 @@ UnitDisplayStatusBarControl::UnitDisplayStatusBarControl(const PlatformStyle* pl
     int max_width = 0;
     const QFontMetrics fm(font());
     for (const DigiByteUnit unit : units) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         max_width = qMax(max_width, GUIUtil::TextWidth(fm, DigiByteUnits::longName(unit)));
     }
     setMinimumSize(max_width, 0);
@@ -1774,13 +1613,8 @@ void UnitDisplayStatusBarControl::changeEvent(QEvent* e)
 void UnitDisplayStatusBarControl::createContextMenu()
 {
     menu = new QMenu(this);
-<<<<<<< HEAD
-    for (const DigiByteUnits::Unit u : DigiByteUnits::availableUnits()) {
-        menu->addAction(DigiByteUnits::longName(u))->setData(QVariant(u));
-=======
     for (const DigiByteUnit u : DigiByteUnits::availableUnits()) {
         menu->addAction(DigiByteUnits::longName(u))->setData(QVariant::fromValue(u));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     connect(menu, &QMenu::triggered, this, &UnitDisplayStatusBarControl::onMenuSelection);
 }
@@ -1801,11 +1635,7 @@ void UnitDisplayStatusBarControl::setOptionsModel(OptionsModel *_optionsModel)
 }
 
 /** When Display Units are changed on OptionsModel it will refresh the display text of the control on the status bar */
-<<<<<<< HEAD
-void UnitDisplayStatusBarControl::updateDisplayUnit(int newUnits)
-=======
 void UnitDisplayStatusBarControl::updateDisplayUnit(DigiByteUnit newUnits)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     setText(DigiByteUnits::longName(newUnits));
 }
@@ -1824,8 +1654,4 @@ void UnitDisplayStatusBarControl::onMenuSelection(QAction* action)
     {
         optionsModel->setDisplayUnit(action->data());
     }
-<<<<<<< HEAD
 }
-=======
-}
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion

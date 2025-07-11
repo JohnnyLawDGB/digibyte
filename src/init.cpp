@@ -1368,23 +1368,7 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
         node.scheduler->scheduleEvery([fee_estimator] { fee_estimator->FlushFeeEstimates(); }, FEE_FLUSH_INTERVAL);
     }
 
-    // Initialize mempool
-    assert(!node.mempool);
-    int check_ratio = std::min<int>(std::max<int>(args.GetIntArg("-checkmempool", chainparams.DefaultConsistencyChecks() ? 1 : 0), 0), 1000000);
-    
-    CTxMemPool::Options mempool_opts{
-        .estimator = node.fee_estimator.get(),
-        .check_ratio = check_ratio,
-    };
-    node.mempool = std::make_unique<CTxMemPool>(mempool_opts);
-
-    // Initialize DigiByte stempool for Dandelion++ privacy protocol
-    assert(!node.stempool);
-    CTxMemPool::Options stempool_opts{
-        .estimator = nullptr,
-        .check_ratio = 0,
-    };
-    node.stempool = std::make_unique<CTxMemPool>(stempool_opts);
+    // Mempool initialization moved to later in the function (v26.2 style)
 
     // Check port numbers
     for (const std::string port_option : {
@@ -1556,12 +1540,12 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
             asmap_path = gArgs.GetDataDirNet() / asmap_path;
         }
         if (!fs::exists(asmap_path)) {
-            InitError(strprintf(_("Could not find asmap file %s"), asmap_path));
+            InitError(strprintf(_("Could not find asmap file %s"), fs::PathToString(asmap_path)));
             return false;
         }
         std::vector<bool> asmap = DecodeAsmap(asmap_path);
         if (asmap.size() == 0) {
-            InitError(strprintf(_("Could not parse asmap file %s"), asmap_path));
+            InitError(strprintf(_("Could not parse asmap file %s"), fs::PathToString(asmap_path)));
             return false;
         }
         const uint256 asmap_version = (HashWriter{} << asmap).GetHash();
@@ -1589,6 +1573,14 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
     ReadNotificationArgs(args, *node.notifications);
     fReindex = args.GetBoolArg("-reindex", false);
     bool fReindexChainState = args.GetBoolArg("-reindex-chainstate", false);
+    
+    // Calculate pruning settings
+    int64_t nPruneArg = args.GetIntArg("-prune", 0);
+    uint64_t nPruneTarget = (nPruneArg < 0) ? 0 : (uint64_t) nPruneArg * 1024 * 1024;
+    if (nPruneArg == 1) {  // manual pruning: -prune=1
+        nPruneTarget = std::numeric_limits<uint64_t>::max();
+    }
+    
     ChainstateManager::Options chainman_opts{
         .chainparams = chainparams,
         .datadir = args.GetDataDirNet(),
@@ -1640,6 +1632,13 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
 
     for (bool fLoaded = false; !fLoaded && !ShutdownRequested();) {
         node.mempool = std::make_unique<CTxMemPool>(mempool_opts);
+        
+        // Initialize DigiByte stempool for Dandelion++ privacy protocol
+        CTxMemPool::Options stempool_opts{
+            .estimator = nullptr,
+            .check_ratio = 0,
+        };
+        node.stempool = std::make_unique<CTxMemPool>(stempool_opts);
 
         node.chainman = std::make_unique<ChainstateManager>(node.kernel->interrupt, chainman_opts, blockman_opts);
         ChainstateManager& chainman = *node.chainman;

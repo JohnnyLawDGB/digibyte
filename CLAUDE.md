@@ -20,35 +20,42 @@ When fixing build errors after v26.2 merge:
 
 **IMPORTANT:** The `bitcoin-v26.2-for-digibyte` folder contains Bitcoin v26.2 code that has already been converted to DigiByte naming conventions. Always reference this folder for v26.2 code patterns.
 
-### Build Process
+## Build Process
+
 ```bash
 # Bootstrap
 ./autogen.sh
-./configure
+
+# START WITH MINIMAL BUILD (no GUI, no tests)
+./configure --without-gui --disable-tests --disable-bench
 
 # Capture errors
 make -j$(nproc) 2>&1 | tee build_errors.log
+
+# Once minimal build works, add components:
+# Step 2: ./configure --with-gui=no --enable-tests
+# Step 3: ./configure --with-gui=qt5 --enable-tests --enable-bench
 ```
 
-### Fix Process (ONE ERROR AT A TIME)
+## Fix Process (ONE ERROR AT A TIME)
 
-#### 1. Identify Error
+### 1. Identify Error
 ```bash
 grep -A5 "error:" build_errors.log | head -20
 ```
 
-#### 2. Compare Three Versions
+### 2. Compare Three Versions
 ```bash
 # Set error file
 export ERROR_FILE="src/path/to/error.cpp"
 
 # Visual diff (bitcoin-v26.2-for-digibyte folder contains v26.2 code)
-vimdiff digibyte/$ERROR_FILE \
+vimdiff digibyte-v8.26/$ERROR_FILE \
         digibyte-v8.22.2/$ERROR_FILE \
         bitcoin-v26.2-for-digibyte/$ERROR_FILE
 ```
 
-#### 3. Fix Using v26.2 Standards
+### 3. Fix Using v26.2 Standards
 **Rule: Use Bitcoin v26.2 code as base, adapt DigiByte features to it**
 
 ```cpp
@@ -61,8 +68,11 @@ std::unique_ptr<CBlockTemplate> CreateNewBlock(
     int algo = ALGO_SHA256D);  // Modern optional parameter
 ```
 
-#### 4. Verify & Commit
+### 4. Verify & Commit
 ```bash
+# Clean previous build artifacts
+make clean
+
 # Test fix
 make -j$(nproc) 2>&1 | tee test.log
 
@@ -77,7 +87,7 @@ git commit -m "Fix build: $ERROR_FILE
 # Return to step 1 for next error
 ```
 
-### Common Fixes
+## Common Fixes
 
 **Missing DigiByte function:**
 - Find where it belongs in v26.2 structure
@@ -99,23 +109,28 @@ git commit -m "Fix build: $ERROR_FILE
 # Quick check for DigiByte-specific code
 grep -i "algo\|dandelion\|digishield\|odocrypt" $ERROR_FILE
 # If empty and file exists in v26.2, safe to copy:
-cp bitcoin-v26.2-for-digibyte/$ERROR_FILE digibyte/$ERROR_FILE
+cp bitcoin-v26.2-for-digibyte/$ERROR_FILE digibyte-v8.26/$ERROR_FILE
 ```
 
 **Code removal:**
 - If code was removed in Bitcoin v26.2 and is NOT DigiByte-specific, DELETE it
 - Don't comment out - remove entirely to match v26.2 cleanliness
 - Example: Old deprecated functions, unused utilities, legacy code
+```bash
+# Check if function/code exists in v26.2
+grep -n "function_name" bitcoin-v26.2-for-digibyte/$ERROR_FILE
+# If not found and not DGB-specific, delete it
+```
 
-### Critical Checks
+## Critical Checks
 Every fix must preserve:
-- Multi-algorithm mining (5 algos + Odocrypt)
+- Multi-algo mining (5 algos + Odocrypt)
 - 15-second blocks
 - Dandelion++
 - 21 billion supply
 - Custom RPCs (getblockreward, etc.)
 
-### Rollback Bad Fix
+## Rollback Bad Fix
 ```bash
 git reset --hard HEAD~1
 # Re-analyze and try again

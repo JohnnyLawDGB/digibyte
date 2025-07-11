@@ -30,7 +30,7 @@ When fixing build errors after v26.2 merge:
 ./configure --without-gui --disable-tests --disable-bench
 
 # Capture errors
-make -j$(nproc) 2>&1 | tee build_errors.log
+make -j6 2>&1 | tee build_errors.log
 
 # Once minimal build works, add components:
 # Step 2: ./configure --with-gui=no --enable-tests
@@ -74,7 +74,7 @@ std::unique_ptr<CBlockTemplate> CreateNewBlock(
 make clean
 
 # Test fix
-make -j$(nproc) 2>&1 | tee test.log
+make -j6 2>&1 | tee build_errors.log
 
 # If error is fixed, commit immediately
 git add $ERROR_FILE
@@ -196,7 +196,7 @@ DigiByte uses custom difficulty algorithms:
 ```bash
 ./autogen.sh
 ./configure --enable-debug
-make -j$(nproc)
+make -j6 2>&1 | tee build_errors.log
 ```
 
 ### Testing

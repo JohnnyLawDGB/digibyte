@@ -1,20 +1,9 @@
-<<<<<<< HEAD
-// Copyright (c) 2017-2020 The DigiByte Core developers
-=======
-// Copyright (c) 2017-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// Copyright (c) 2017-2022 The Bitcoin Core developers
+// Copyright (c) 2017-2024 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <key.h>
-<<<<<<< HEAD
-#include <node/context.h>
-#include <script/script.h>
-#include <script/standard.h>
-#include <test/util/setup_common.h>
-#include <wallet/ismine.h>
-#include <wallet/wallet.h>
-=======
 #include <key_io.h>
 #include <node/context.h>
 #include <script/script.h>
@@ -24,15 +13,10 @@
 #include <wallet/types.h>
 #include <wallet/wallet.h>
 #include <wallet/test/util.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 #include <boost/test/unit_test.hpp>
 
 
-<<<<<<< HEAD
-BOOST_FIXTURE_TEST_SUITE(ismine_tests, BasicTestingSetup)
-
-=======
 namespace wallet {
 BOOST_FIXTURE_TEST_SUITE(ismine_tests, BasicTestingSetup)
 
@@ -55,7 +39,6 @@ wallet::ScriptPubKeyMan* CreateDescriptor(CWallet& keystore, const std::string& 
     return Assert(keystore.AddWalletDescriptor(w_desc, keys,/*label=*/"", /*internal=*/false));
 };
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 BOOST_AUTO_TEST_CASE(ismine_standard)
 {
     CKey keys[2];
@@ -73,15 +56,9 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
     CScript scriptPubKey;
     isminetype result;
 
-<<<<<<< HEAD
-    // P2PK compressed
-    {
-        CWallet keystore(chain.get(), "", CreateDummyWalletDatabase());
-=======
     // P2PK compressed - Legacy
     {
         CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         keystore.SetupLegacyScriptPubKeyMan();
         LOCK(keystore.GetLegacyScriptPubKeyMan()->cs_KeyStore);
         scriptPubKey = GetScriptForRawPubKey(pubkeys[0]);
@@ -89,22 +66,12 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
         // Keystore does not have key
         result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
         BOOST_CHECK_EQUAL(result, ISMINE_NO);
-<<<<<<< HEAD
-=======
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->GetScriptPubKeys().count(scriptPubKey) == 0);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         // Keystore has key
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddKey(keys[0]));
         result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
         BOOST_CHECK_EQUAL(result, ISMINE_SPENDABLE);
-<<<<<<< HEAD
-    }
-
-    // P2PK uncompressed
-    {
-        CWallet keystore(chain.get(), "", CreateDummyWalletDatabase());
-=======
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->GetScriptPubKeys().count(scriptPubKey) == 1);
     }
 
@@ -123,7 +90,6 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
     // P2PK uncompressed - Legacy
     {
         CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         keystore.SetupLegacyScriptPubKeyMan();
         LOCK(keystore.GetLegacyScriptPubKeyMan()->cs_KeyStore);
         scriptPubKey = GetScriptForRawPubKey(uncompressedPubkey);
@@ -131,22 +97,12 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
         // Keystore does not have key
         result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
         BOOST_CHECK_EQUAL(result, ISMINE_NO);
-<<<<<<< HEAD
-=======
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->GetScriptPubKeys().count(scriptPubKey) == 0);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         // Keystore has key
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddKey(uncompressedKey));
         result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
         BOOST_CHECK_EQUAL(result, ISMINE_SPENDABLE);
-<<<<<<< HEAD
-    }
-
-    // P2PKH compressed
-    {
-        CWallet keystore(chain.get(), "", CreateDummyWalletDatabase());
-=======
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->GetScriptPubKeys().count(scriptPubKey) == 1);
     }
 
@@ -165,7 +121,6 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
     // P2PKH compressed - Legacy
     {
         CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         keystore.SetupLegacyScriptPubKeyMan();
         LOCK(keystore.GetLegacyScriptPubKeyMan()->cs_KeyStore);
         scriptPubKey = GetScriptForDestination(PKHash(pubkeys[0]));
@@ -173,22 +128,12 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
         // Keystore does not have key
         result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
         BOOST_CHECK_EQUAL(result, ISMINE_NO);
-<<<<<<< HEAD
-=======
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->GetScriptPubKeys().count(scriptPubKey) == 0);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         // Keystore has key
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddKey(keys[0]));
         result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
         BOOST_CHECK_EQUAL(result, ISMINE_SPENDABLE);
-<<<<<<< HEAD
-    }
-
-    // P2PKH uncompressed
-    {
-        CWallet keystore(chain.get(), "", CreateDummyWalletDatabase());
-=======
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->GetScriptPubKeys().count(scriptPubKey) == 1);
     }
 
@@ -207,7 +152,6 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
     // P2PKH uncompressed - Legacy
     {
         CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         keystore.SetupLegacyScriptPubKeyMan();
         LOCK(keystore.GetLegacyScriptPubKeyMan()->cs_KeyStore);
         scriptPubKey = GetScriptForDestination(PKHash(uncompressedPubkey));
@@ -215,22 +159,12 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
         // Keystore does not have key
         result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
         BOOST_CHECK_EQUAL(result, ISMINE_NO);
-<<<<<<< HEAD
-=======
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->GetScriptPubKeys().count(scriptPubKey) == 0);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         // Keystore has key
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddKey(uncompressedKey));
         result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
         BOOST_CHECK_EQUAL(result, ISMINE_SPENDABLE);
-<<<<<<< HEAD
-    }
-
-    // P2SH
-    {
-        CWallet keystore(chain.get(), "", CreateDummyWalletDatabase());
-=======
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->GetScriptPubKeys().count(scriptPubKey) == 1);
     }
 
@@ -249,7 +183,6 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
     // P2SH - Legacy
     {
         CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         keystore.SetupLegacyScriptPubKeyMan();
         LOCK(keystore.GetLegacyScriptPubKeyMan()->cs_KeyStore);
 
@@ -259,31 +192,18 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
         // Keystore does not have redeemScript or key
         result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
         BOOST_CHECK_EQUAL(result, ISMINE_NO);
-<<<<<<< HEAD
-=======
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->GetScriptPubKeys().count(scriptPubKey) == 0);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         // Keystore has redeemScript but no key
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddCScript(redeemScript));
         result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
         BOOST_CHECK_EQUAL(result, ISMINE_NO);
-<<<<<<< HEAD
-=======
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->GetScriptPubKeys().count(scriptPubKey) == 0);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         // Keystore has redeemScript and key
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddKey(keys[0]));
         result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
         BOOST_CHECK_EQUAL(result, ISMINE_SPENDABLE);
-<<<<<<< HEAD
-    }
-
-    // (P2PKH inside) P2SH inside P2SH (invalid)
-    {
-        CWallet keystore(chain.get(), "", CreateDummyWalletDatabase());
-=======
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->GetScriptPubKeys().count(scriptPubKey) == 1);
     }
 
@@ -303,7 +223,6 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
     // (P2PKH inside) P2SH inside P2SH (invalid) - Legacy
     {
         CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         keystore.SetupLegacyScriptPubKeyMan();
         LOCK(keystore.GetLegacyScriptPubKeyMan()->cs_KeyStore);
 
@@ -317,13 +236,6 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddKey(keys[0]));
         result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
         BOOST_CHECK_EQUAL(result, ISMINE_NO);
-<<<<<<< HEAD
-    }
-
-    // (P2PKH inside) P2SH inside P2WSH (invalid)
-    {
-        CWallet keystore(chain.get(), "", CreateDummyWalletDatabase());
-=======
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->GetScriptPubKeys().count(scriptPubKey) == 0);
     }
 
@@ -339,7 +251,6 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
     // (P2PKH inside) P2SH inside P2WSH (invalid) - Legacy
     {
         CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         keystore.SetupLegacyScriptPubKeyMan();
         LOCK(keystore.GetLegacyScriptPubKeyMan()->cs_KeyStore);
 
@@ -353,13 +264,6 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddKey(keys[0]));
         result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
         BOOST_CHECK_EQUAL(result, ISMINE_NO);
-<<<<<<< HEAD
-    }
-
-    // P2WPKH inside P2WSH (invalid)
-    {
-        CWallet keystore(chain.get(), "", CreateDummyWalletDatabase());
-=======
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->GetScriptPubKeys().count(scriptPubKey) == 0);
     }
 
@@ -375,7 +279,6 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
     // P2WPKH inside P2WSH (invalid) - Legacy
     {
         CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         keystore.SetupLegacyScriptPubKeyMan();
         LOCK(keystore.GetLegacyScriptPubKeyMan()->cs_KeyStore);
 
@@ -387,13 +290,6 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddKey(keys[0]));
         result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
         BOOST_CHECK_EQUAL(result, ISMINE_NO);
-<<<<<<< HEAD
-    }
-
-    // (P2PKH inside) P2WSH inside P2WSH (invalid)
-    {
-        CWallet keystore(chain.get(), "", CreateDummyWalletDatabase());
-=======
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->GetScriptPubKeys().count(scriptPubKey) == 0);
     }
 
@@ -409,7 +305,6 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
     // (P2PKH inside) P2WSH inside P2WSH (invalid) - Legacy
     {
         CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         keystore.SetupLegacyScriptPubKeyMan();
         LOCK(keystore.GetLegacyScriptPubKeyMan()->cs_KeyStore);
 
@@ -423,13 +318,6 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddKey(keys[0]));
         result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
         BOOST_CHECK_EQUAL(result, ISMINE_NO);
-<<<<<<< HEAD
-    }
-
-    // P2WPKH compressed
-    {
-        CWallet keystore(chain.get(), "", CreateDummyWalletDatabase());
-=======
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->GetScriptPubKeys().count(scriptPubKey) == 0);
     }
 
@@ -445,7 +333,6 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
     // P2WPKH compressed - Legacy
     {
         CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         keystore.SetupLegacyScriptPubKeyMan();
         LOCK(keystore.GetLegacyScriptPubKeyMan()->cs_KeyStore);
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddKey(keys[0]));
@@ -456,13 +343,6 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddCScript(scriptPubKey));
         result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
         BOOST_CHECK_EQUAL(result, ISMINE_SPENDABLE);
-<<<<<<< HEAD
-    }
-
-    // P2WPKH uncompressed
-    {
-        CWallet keystore(chain.get(), "", CreateDummyWalletDatabase());
-=======
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->GetScriptPubKeys().count(scriptPubKey) == 1);
     }
 
@@ -481,7 +361,6 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
     // P2WPKH uncompressed - Legacy
     {
         CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         keystore.SetupLegacyScriptPubKeyMan();
         LOCK(keystore.GetLegacyScriptPubKeyMan()->cs_KeyStore);
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddKey(uncompressedKey));
@@ -491,22 +370,12 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
         // Keystore has key, but no P2SH redeemScript
         result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
         BOOST_CHECK_EQUAL(result, ISMINE_NO);
-<<<<<<< HEAD
-=======
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->GetScriptPubKeys().count(scriptPubKey) == 0);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         // Keystore has key and P2SH redeemScript
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddCScript(scriptPubKey));
         result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
         BOOST_CHECK_EQUAL(result, ISMINE_NO);
-<<<<<<< HEAD
-    }
-
-    // scriptPubKey multisig
-    {
-        CWallet keystore(chain.get(), "", CreateDummyWalletDatabase());
-=======
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->GetScriptPubKeys().count(scriptPubKey) == 0);
     }
 
@@ -522,7 +391,6 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
     // scriptPubKey multisig - Legacy
     {
         CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         keystore.SetupLegacyScriptPubKeyMan();
         LOCK(keystore.GetLegacyScriptPubKeyMan()->cs_KeyStore);
 
@@ -531,43 +399,27 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
         // Keystore does not have any keys
         result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
         BOOST_CHECK_EQUAL(result, ISMINE_NO);
-<<<<<<< HEAD
-=======
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->GetScriptPubKeys().count(scriptPubKey) == 0);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         // Keystore has 1/2 keys
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddKey(uncompressedKey));
 
         result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
         BOOST_CHECK_EQUAL(result, ISMINE_NO);
-<<<<<<< HEAD
-=======
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->GetScriptPubKeys().count(scriptPubKey) == 0);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         // Keystore has 2/2 keys
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddKey(keys[1]));
 
         result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
         BOOST_CHECK_EQUAL(result, ISMINE_NO);
-<<<<<<< HEAD
-=======
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->GetScriptPubKeys().count(scriptPubKey) == 0);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         // Keystore has 2/2 keys and the script
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddCScript(scriptPubKey));
 
         result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
         BOOST_CHECK_EQUAL(result, ISMINE_NO);
-<<<<<<< HEAD
-    }
-
-    // P2SH multisig
-    {
-        CWallet keystore(chain.get(), "", CreateDummyWalletDatabase());
-=======
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->GetScriptPubKeys().count(scriptPubKey) == 0);
     }
 
@@ -586,7 +438,6 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
     // P2SH multisig - Legacy
     {
         CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         keystore.SetupLegacyScriptPubKeyMan();
         LOCK(keystore.GetLegacyScriptPubKeyMan()->cs_KeyStore);
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddKey(uncompressedKey));
@@ -598,22 +449,12 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
         // Keystore has no redeemScript
         result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
         BOOST_CHECK_EQUAL(result, ISMINE_NO);
-<<<<<<< HEAD
-=======
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->GetScriptPubKeys().count(scriptPubKey) == 0);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         // Keystore has redeemScript
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddCScript(redeemScript));
         result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
         BOOST_CHECK_EQUAL(result, ISMINE_SPENDABLE);
-<<<<<<< HEAD
-    }
-
-    // P2WSH multisig with compressed keys
-    {
-        CWallet keystore(chain.get(), "", CreateDummyWalletDatabase());
-=======
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->GetScriptPubKeys().count(scriptPubKey) == 1);
     }
 
@@ -634,7 +475,6 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
     // P2WSH multisig with compressed keys - Legacy
     {
         CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         keystore.SetupLegacyScriptPubKeyMan();
         LOCK(keystore.GetLegacyScriptPubKeyMan()->cs_KeyStore);
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddKey(keys[0]));
@@ -646,31 +486,18 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
         // Keystore has keys, but no witnessScript or P2SH redeemScript
         result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
         BOOST_CHECK_EQUAL(result, ISMINE_NO);
-<<<<<<< HEAD
-=======
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->GetScriptPubKeys().count(scriptPubKey) == 0);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         // Keystore has keys and witnessScript, but no P2SH redeemScript
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddCScript(witnessScript));
         result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
         BOOST_CHECK_EQUAL(result, ISMINE_NO);
-<<<<<<< HEAD
-=======
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->GetScriptPubKeys().count(scriptPubKey) == 0);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         // Keystore has keys, witnessScript, P2SH redeemScript
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddCScript(scriptPubKey));
         result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
         BOOST_CHECK_EQUAL(result, ISMINE_SPENDABLE);
-<<<<<<< HEAD
-    }
-
-    // P2WSH multisig with uncompressed key
-    {
-        CWallet keystore(chain.get(), "", CreateDummyWalletDatabase());
-=======
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->GetScriptPubKeys().count(scriptPubKey) == 1);
     }
 
@@ -691,7 +518,6 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
     // P2WSH multisig with uncompressed key - Legacy
     {
         CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         keystore.SetupLegacyScriptPubKeyMan();
         LOCK(keystore.GetLegacyScriptPubKeyMan()->cs_KeyStore);
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddKey(uncompressedKey));
@@ -703,31 +529,18 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
         // Keystore has keys, but no witnessScript or P2SH redeemScript
         result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
         BOOST_CHECK_EQUAL(result, ISMINE_NO);
-<<<<<<< HEAD
-=======
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->GetScriptPubKeys().count(scriptPubKey) == 0);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         // Keystore has keys and witnessScript, but no P2SH redeemScript
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddCScript(witnessScript));
         result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
         BOOST_CHECK_EQUAL(result, ISMINE_NO);
-<<<<<<< HEAD
-=======
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->GetScriptPubKeys().count(scriptPubKey) == 0);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         // Keystore has keys, witnessScript, P2SH redeemScript
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddCScript(scriptPubKey));
         result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
         BOOST_CHECK_EQUAL(result, ISMINE_NO);
-<<<<<<< HEAD
-    }
-
-    // P2WSH multisig wrapped in P2SH
-    {
-        CWallet keystore(chain.get(), "", CreateDummyWalletDatabase());
-=======
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->GetScriptPubKeys().count(scriptPubKey) == 0);
     }
 
@@ -744,7 +557,6 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
     // P2WSH multisig wrapped in P2SH - Legacy
     {
         CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         keystore.SetupLegacyScriptPubKeyMan();
         LOCK(keystore.GetLegacyScriptPubKeyMan()->cs_KeyStore);
 
@@ -755,28 +567,20 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
         // Keystore has no witnessScript, P2SH redeemScript, or keys
         result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
         BOOST_CHECK_EQUAL(result, ISMINE_NO);
-<<<<<<< HEAD
-=======
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->GetScriptPubKeys().count(scriptPubKey) == 0);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         // Keystore has witnessScript and P2SH redeemScript, but no keys
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddCScript(redeemScript));
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddCScript(witnessScript));
         result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
         BOOST_CHECK_EQUAL(result, ISMINE_NO);
-<<<<<<< HEAD
-=======
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->GetScriptPubKeys().count(scriptPubKey) == 0);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         // Keystore has keys, witnessScript, P2SH redeemScript
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddKey(keys[0]));
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddKey(keys[1]));
         result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
         BOOST_CHECK_EQUAL(result, ISMINE_SPENDABLE);
-<<<<<<< HEAD
-=======
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->GetScriptPubKeys().count(scriptPubKey) == 1);
     }
 
@@ -855,16 +659,11 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
         scriptPubKey = GetScriptForDestination(output);
         result = spk_manager->IsMine(scriptPubKey);
         BOOST_CHECK_EQUAL(result, ISMINE_SPENDABLE);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     // OP_RETURN
     {
-<<<<<<< HEAD
-        CWallet keystore(chain.get(), "", CreateDummyWalletDatabase());
-=======
         CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         keystore.SetupLegacyScriptPubKeyMan();
         LOCK(keystore.GetLegacyScriptPubKeyMan()->cs_KeyStore);
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddKey(keys[0]));
@@ -874,19 +673,12 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
 
         result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
         BOOST_CHECK_EQUAL(result, ISMINE_NO);
-<<<<<<< HEAD
-=======
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->GetScriptPubKeys().count(scriptPubKey) == 0);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     // witness unspendable
     {
-<<<<<<< HEAD
-        CWallet keystore(chain.get(), "", CreateDummyWalletDatabase());
-=======
         CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         keystore.SetupLegacyScriptPubKeyMan();
         LOCK(keystore.GetLegacyScriptPubKeyMan()->cs_KeyStore);
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddKey(keys[0]));
@@ -896,19 +688,12 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
 
         result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
         BOOST_CHECK_EQUAL(result, ISMINE_NO);
-<<<<<<< HEAD
-=======
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->GetScriptPubKeys().count(scriptPubKey) == 0);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     // witness unknown
     {
-<<<<<<< HEAD
-        CWallet keystore(chain.get(), "", CreateDummyWalletDatabase());
-=======
         CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         keystore.SetupLegacyScriptPubKeyMan();
         LOCK(keystore.GetLegacyScriptPubKeyMan()->cs_KeyStore);
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddKey(keys[0]));
@@ -918,19 +703,12 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
 
         result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
         BOOST_CHECK_EQUAL(result, ISMINE_NO);
-<<<<<<< HEAD
-=======
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->GetScriptPubKeys().count(scriptPubKey) == 0);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     // Nonstandard
     {
-<<<<<<< HEAD
-        CWallet keystore(chain.get(), "", CreateDummyWalletDatabase());
-=======
         CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         keystore.SetupLegacyScriptPubKeyMan();
         LOCK(keystore.GetLegacyScriptPubKeyMan()->cs_KeyStore);
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddKey(keys[0]));
@@ -940,15 +718,9 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
 
         result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
         BOOST_CHECK_EQUAL(result, ISMINE_NO);
-<<<<<<< HEAD
-=======
         BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->GetScriptPubKeys().count(scriptPubKey) == 0);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 }
 
 BOOST_AUTO_TEST_SUITE_END()
-<<<<<<< HEAD
-=======
 } // namespace wallet
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion

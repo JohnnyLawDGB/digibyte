@@ -1,32 +1,15 @@
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
-// Copyright (c) 2012-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// Copyright (c) 2012-2022 The Bitcoin Core developers
+// Copyright (c) 2014-2025 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <wallet/wallet.h>
 
-<<<<<<< HEAD
-#include <any>
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <future>
 #include <memory>
 #include <stdint.h>
 #include <vector>
 
-<<<<<<< HEAD
-#include <chainparams.h>
-#include <interfaces/chain.h>
-#include <node/blockstorage.h>
-#include <node/context.h>
-#include <policy/policy.h>
-#include <rpc/server.h>
-#include <test/util/logging.h>
-=======
 #include <addresstype.h>
 #include <interfaces/chain.h>
 #include <key_io.h>
@@ -36,7 +19,6 @@
 #include <script/solver.h>
 #include <test/util/logging.h>
 #include <test/util/random.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <test/util/setup_common.h>
 #include <util/translation.h>
 #include <validation.h>
@@ -52,21 +34,13 @@
 #include <boost/test/unit_test.hpp>
 #include <univalue.h>
 
-<<<<<<< HEAD
-=======
 using node::MAX_BLOCKFILE_SIZE;
 
 namespace wallet {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 RPCHelpMan importmulti();
 RPCHelpMan dumpwallet();
 RPCHelpMan importwallet();
 
-<<<<<<< HEAD
-extern RecursiveMutex cs_wallets;
-
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Ensure that fee levels defined in the wallet are at least as high
 // as the default levels for node policy.
 static_assert(DEFAULT_TRANSACTION_MINFEE >= DEFAULT_MIN_RELAY_TX_FEE, "wallet minimum fee is smaller than default relay fee");
@@ -74,63 +48,6 @@ static_assert(WALLET_INCREMENTAL_RELAY_FEE >= DEFAULT_INCREMENTAL_RELAY_FEE, "wa
 
 BOOST_FIXTURE_TEST_SUITE(wallet_tests, WalletTestingSetup)
 
-<<<<<<< HEAD
-static std::shared_ptr<CWallet> TestLoadWallet(interfaces::Chain* chain)
-{
-    DatabaseOptions options;
-    DatabaseStatus status;
-    bilingual_str error;
-    std::vector<bilingual_str> warnings;
-    auto database = MakeWalletDatabase("", options, status, error);
-    auto wallet = CWallet::Create(chain, "", std::move(database), options.create_flags, error, warnings);
-    if (chain) {
-        wallet->postInitProcess();
-    }
-    return wallet;
-}
-
-static void TestUnloadWallet(std::shared_ptr<CWallet>&& wallet)
-{
-    SyncWithValidationInterfaceQueue();
-    wallet->m_chain_notifications_handler.reset();
-    UnloadWallet(std::move(wallet));
-}
-
-static CMutableTransaction TestSimpleSpend(const CTransaction& from, uint32_t index, const CKey& key, const CScript& pubkey)
-{
-    CMutableTransaction mtx;
-    mtx.vout.push_back({from.vout[index].nValue - DEFAULT_TRANSACTION_MAXFEE, pubkey});
-    mtx.vin.push_back({CTxIn{from.GetHash(), index}});
-    FillableSigningProvider keystore;
-    keystore.AddKey(key);
-    std::map<COutPoint, Coin> coins;
-    coins[mtx.vin[0].prevout].out = from.vout[index];
-    std::map<int, std::string> input_errors;
-    BOOST_CHECK(SignTransaction(mtx, &keystore, coins, SIGHASH_ALL, input_errors));
-    return mtx;
-}
-
-static void AddKey(CWallet& wallet, const CKey& key)
-{
-    auto spk_man = wallet.GetOrCreateLegacyScriptPubKeyMan();
-    LOCK2(wallet.cs_wallet, spk_man->cs_KeyStore);
-    spk_man->AddKeyPubKey(key, key.GetPubKey());
-}
-
-BOOST_FIXTURE_TEST_CASE(scan_for_wallet_transactions, TestChain100Setup)
-{
-    // Cap last block file size, and mine new block in a new block file.
-    CBlockIndex* oldTip = m_node.chainman->ActiveChain().Tip();
-    GetBlockFileInfo(oldTip->GetBlockPos().nFile)->nSize = MAX_BLOCKFILE_SIZE;
-    CreateAndProcessBlock({}, GetScriptForRawPubKey(coinbaseKey.GetPubKey()));
-    CBlockIndex* newTip = m_node.chainman->ActiveChain().Tip();
-
-    // Verify ScanForWalletTransactions fails to read an unknown start block.
-    {
-        CWallet wallet(m_node.chain.get(), "", CreateDummyWalletDatabase());
-        {
-            LOCK(wallet.cs_wallet);
-=======
 static CMutableTransaction TestSimpleSpend(const CTransaction& from, uint32_t index, const CKey& key, const CScript& pubkey)
 {
     CMutableTransaction mtx;
@@ -171,50 +88,31 @@ BOOST_FIXTURE_TEST_CASE(scan_for_wallet_transactions, TestChain100Setup)
             LOCK(wallet.cs_wallet);
             LOCK(Assert(m_node.chainman)->GetMutex());
             wallet.SetWalletFlag(WALLET_FLAG_DESCRIPTORS);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             wallet.SetLastBlockProcessed(m_node.chainman->ActiveChain().Height(), m_node.chainman->ActiveChain().Tip()->GetBlockHash());
         }
         AddKey(wallet, coinbaseKey);
         WalletRescanReserver reserver(wallet);
         reserver.reserve();
-<<<<<<< HEAD
-        CWallet::ScanResult result = wallet.ScanForWalletTransactions({} /* start_block */, 0 /* start_height */, {} /* max_height */, reserver, false /* update */);
-=======
         CWallet::ScanResult result = wallet.ScanForWalletTransactions(/*start_block=*/{}, /*start_height=*/0, /*max_height=*/{}, reserver, /*fUpdate=*/false, /*save_progress=*/false);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         BOOST_CHECK_EQUAL(result.status, CWallet::ScanResult::FAILURE);
         BOOST_CHECK(result.last_failed_block.IsNull());
         BOOST_CHECK(result.last_scanned_block.IsNull());
         BOOST_CHECK(!result.last_scanned_height);
-<<<<<<< HEAD
-        BOOST_CHECK_EQUAL(wallet.GetBalance().m_mine_immature, 0);
-=======
         BOOST_CHECK_EQUAL(GetBalance(wallet).m_mine_immature, 0);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     // Verify ScanForWalletTransactions picks up transactions in both the old
     // and new block files.
     {
-<<<<<<< HEAD
-        CWallet wallet(m_node.chain.get(), "", CreateDummyWalletDatabase());
-        {
-            LOCK(wallet.cs_wallet);
-=======
         CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase());
         {
             LOCK(wallet.cs_wallet);
             LOCK(Assert(m_node.chainman)->GetMutex());
             wallet.SetWalletFlag(WALLET_FLAG_DESCRIPTORS);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             wallet.SetLastBlockProcessed(m_node.chainman->ActiveChain().Height(), m_node.chainman->ActiveChain().Tip()->GetBlockHash());
         }
         AddKey(wallet, coinbaseKey);
         WalletRescanReserver reserver(wallet);
-<<<<<<< HEAD
-        reserver.reserve();
-        CWallet::ScanResult result = wallet.ScanForWalletTransactions(oldTip->GetBlockHash(), oldTip->nHeight, {} /* max_height */, reserver, false /* update */);
-=======
         std::chrono::steady_clock::time_point fake_time;
         reserver.setNow([&] { fake_time += 60s; return fake_time; });
         reserver.reserve();
@@ -226,23 +124,11 @@ BOOST_FIXTURE_TEST_CASE(scan_for_wallet_transactions, TestChain100Setup)
         }
 
         CWallet::ScanResult result = wallet.ScanForWalletTransactions(/*start_block=*/oldTip->GetBlockHash(), /*start_height=*/oldTip->nHeight, /*max_height=*/{}, reserver, /*fUpdate=*/false, /*save_progress=*/true);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         BOOST_CHECK_EQUAL(result.status, CWallet::ScanResult::SUCCESS);
         BOOST_CHECK(result.last_failed_block.IsNull());
         BOOST_CHECK_EQUAL(result.last_scanned_block, newTip->GetBlockHash());
         BOOST_CHECK_EQUAL(*result.last_scanned_height, newTip->nHeight);
-<<<<<<< HEAD
-        BOOST_CHECK_EQUAL(wallet.GetBalance().m_mine_immature, 2 * 72000 * COIN);
-    }
-
-    // Prune the older block file.
-    {
-        LOCK(cs_main);
-        Assert(m_node.chainman)->m_blockman.PruneOneBlockFile(oldTip->GetBlockPos().nFile);
-    }
-    UnlinkPrunedFiles({oldTip->GetBlockPos().nFile});
-=======
-        BOOST_CHECK_EQUAL(GetBalance(wallet).m_mine_immature, 100 * COIN);
+        BOOST_CHECK_EQUAL(GetBalance(wallet).m_mine_immature, 2 * 72000 * COIN);
 
         {
             CBlockLocator locator;
@@ -259,57 +145,31 @@ BOOST_FIXTURE_TEST_CASE(scan_for_wallet_transactions, TestChain100Setup)
         Assert(m_node.chainman)->m_blockman.PruneOneBlockFile(file_number);
     }
     m_node.chainman->m_blockman.UnlinkPrunedFiles({file_number});
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // Verify ScanForWalletTransactions only picks transactions in the new block
     // file.
     {
-<<<<<<< HEAD
-        CWallet wallet(m_node.chain.get(), "", CreateDummyWalletDatabase());
-        {
-            LOCK(wallet.cs_wallet);
-=======
         CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase());
         {
             LOCK(wallet.cs_wallet);
             LOCK(Assert(m_node.chainman)->GetMutex());
             wallet.SetWalletFlag(WALLET_FLAG_DESCRIPTORS);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             wallet.SetLastBlockProcessed(m_node.chainman->ActiveChain().Height(), m_node.chainman->ActiveChain().Tip()->GetBlockHash());
         }
         AddKey(wallet, coinbaseKey);
         WalletRescanReserver reserver(wallet);
         reserver.reserve();
-<<<<<<< HEAD
-        CWallet::ScanResult result = wallet.ScanForWalletTransactions(oldTip->GetBlockHash(), oldTip->nHeight, {} /* max_height */, reserver, false /* update */);
-=======
         CWallet::ScanResult result = wallet.ScanForWalletTransactions(/*start_block=*/oldTip->GetBlockHash(), /*start_height=*/oldTip->nHeight, /*max_height=*/{}, reserver, /*fUpdate=*/false, /*save_progress=*/false);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         BOOST_CHECK_EQUAL(result.status, CWallet::ScanResult::FAILURE);
         BOOST_CHECK_EQUAL(result.last_failed_block, oldTip->GetBlockHash());
         BOOST_CHECK_EQUAL(result.last_scanned_block, newTip->GetBlockHash());
         BOOST_CHECK_EQUAL(*result.last_scanned_height, newTip->nHeight);
-<<<<<<< HEAD
-        BOOST_CHECK_EQUAL(wallet.GetBalance().m_mine_immature, 72000 * COIN);
-=======
-        BOOST_CHECK_EQUAL(GetBalance(wallet).m_mine_immature, 50 * COIN);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+        BOOST_CHECK_EQUAL(GetBalance(wallet).m_mine_immature, 72000 * COIN);
     }
 
     // Prune the remaining block file.
     {
         LOCK(cs_main);
-<<<<<<< HEAD
-        Assert(m_node.chainman)->m_blockman.PruneOneBlockFile(newTip->GetBlockPos().nFile);
-    }
-    UnlinkPrunedFiles({newTip->GetBlockPos().nFile});
-
-    // Verify ScanForWalletTransactions scans no blocks.
-    {
-        CWallet wallet(m_node.chain.get(), "", CreateDummyWalletDatabase());
-        {
-            LOCK(wallet.cs_wallet);
-=======
         file_number = newTip->GetBlockPos().nFile;
         Assert(m_node.chainman)->m_blockman.PruneOneBlockFile(file_number);
     }
@@ -322,45 +182,23 @@ BOOST_FIXTURE_TEST_CASE(scan_for_wallet_transactions, TestChain100Setup)
             LOCK(wallet.cs_wallet);
             LOCK(Assert(m_node.chainman)->GetMutex());
             wallet.SetWalletFlag(WALLET_FLAG_DESCRIPTORS);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             wallet.SetLastBlockProcessed(m_node.chainman->ActiveChain().Height(), m_node.chainman->ActiveChain().Tip()->GetBlockHash());
         }
         AddKey(wallet, coinbaseKey);
         WalletRescanReserver reserver(wallet);
         reserver.reserve();
-<<<<<<< HEAD
-        CWallet::ScanResult result = wallet.ScanForWalletTransactions(oldTip->GetBlockHash(), oldTip->nHeight, {} /* max_height */, reserver, false /* update */);
-=======
         CWallet::ScanResult result = wallet.ScanForWalletTransactions(/*start_block=*/oldTip->GetBlockHash(), /*start_height=*/oldTip->nHeight, /*max_height=*/{}, reserver, /*fUpdate=*/false, /*save_progress=*/false);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         BOOST_CHECK_EQUAL(result.status, CWallet::ScanResult::FAILURE);
         BOOST_CHECK_EQUAL(result.last_failed_block, newTip->GetBlockHash());
         BOOST_CHECK(result.last_scanned_block.IsNull());
         BOOST_CHECK(!result.last_scanned_height);
-<<<<<<< HEAD
-        BOOST_CHECK_EQUAL(wallet.GetBalance().m_mine_immature, 0);
-=======
         BOOST_CHECK_EQUAL(GetBalance(wallet).m_mine_immature, 0);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 }
 
 BOOST_FIXTURE_TEST_CASE(importmulti_rescan, TestChain100Setup)
 {
     // Cap last block file size, and mine new block in a new block file.
-<<<<<<< HEAD
-    CBlockIndex* oldTip = m_node.chainman->ActiveChain().Tip();
-    GetBlockFileInfo(oldTip->GetBlockPos().nFile)->nSize = MAX_BLOCKFILE_SIZE;
-    CreateAndProcessBlock({}, GetScriptForRawPubKey(coinbaseKey.GetPubKey()));
-    CBlockIndex* newTip = m_node.chainman->ActiveChain().Tip();
-
-    // Prune the older block file.
-    {
-        LOCK(cs_main);
-        Assert(m_node.chainman)->m_blockman.PruneOneBlockFile(oldTip->GetBlockPos().nFile);
-    }
-    UnlinkPrunedFiles({oldTip->GetBlockPos().nFile});
-=======
     CBlockIndex* oldTip = WITH_LOCK(Assert(m_node.chainman)->GetMutex(), return m_node.chainman->ActiveChain().Tip());
     WITH_LOCK(::cs_main, m_node.chainman->m_blockman.GetBlockFileInfo(oldTip->GetBlockPos().nFile)->nSize = MAX_BLOCKFILE_SIZE);
     CreateAndProcessBlock({}, GetScriptForRawPubKey(coinbaseKey.GetPubKey()));
@@ -374,25 +212,17 @@ BOOST_FIXTURE_TEST_CASE(importmulti_rescan, TestChain100Setup)
         Assert(m_node.chainman)->m_blockman.PruneOneBlockFile(file_number);
     }
     m_node.chainman->m_blockman.UnlinkPrunedFiles({file_number});
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // Verify importmulti RPC returns failure for a key whose creation time is
     // before the missing block, and success for a key whose creation time is
     // after.
     {
-<<<<<<< HEAD
-        std::shared_ptr<CWallet> wallet = std::make_shared<CWallet>(m_node.chain.get(), "", CreateDummyWalletDatabase());
-        wallet->SetupLegacyScriptPubKeyMan();
-        WITH_LOCK(wallet->cs_wallet, wallet->SetLastBlockProcessed(newTip->nHeight, newTip->GetBlockHash()));
-        AddWallet(wallet);
-=======
         const std::shared_ptr<CWallet> wallet = std::make_shared<CWallet>(m_node.chain.get(), "", CreateMockableWalletDatabase());
         wallet->SetupLegacyScriptPubKeyMan();
         WITH_LOCK(wallet->cs_wallet, wallet->SetLastBlockProcessed(newTip->nHeight, newTip->GetBlockHash()));
         WalletContext context;
         context.args = &m_args;
         AddWallet(context, wallet);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         UniValue keys;
         keys.setArray();
         UniValue key;
@@ -421,17 +251,10 @@ BOOST_FIXTURE_TEST_CASE(importmulti_rescan, TestChain100Setup)
                       "seconds of key creation, and could contain transactions pertaining to the key. As a result, "
                       "transactions and coins using this key may not appear in the wallet. This error could be caused "
                       "by pruning or data corruption (see digibyted log for details) and could be dealt with by "
-<<<<<<< HEAD
-                      "downloading and rescanning the relevant blocks (see -reindex and -rescan "
-                      "options).\"}},{\"success\":true}]",
-                              0, oldTip->GetBlockTimeMax(), TIMESTAMP_WINDOW));
-        RemoveWallet(wallet, std::nullopt);
-=======
                       "downloading and rescanning the relevant blocks (see -reindex option and rescanblockchain "
                       "RPC).\"}},{\"success\":true}]",
                               0, oldTip->GetBlockTimeMax(), TIMESTAMP_WINDOW));
         RemoveWallet(context, wallet, /* load_on_start= */ std::nullopt);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 }
 
@@ -443,11 +266,7 @@ BOOST_FIXTURE_TEST_CASE(importwallet_rescan, TestChain100Setup)
 {
     // Create two blocks with same timestamp to verify that importwallet rescan
     // will pick up both blocks, not just the first.
-<<<<<<< HEAD
-    const int64_t BLOCK_TIME = m_node.chainman->ActiveChain().Tip()->GetBlockTimeMax() + 5;
-=======
     const int64_t BLOCK_TIME = WITH_LOCK(Assert(m_node.chainman)->GetMutex(), return m_node.chainman->ActiveChain().Tip()->GetBlockTimeMax() + 5);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     SetMockTime(BLOCK_TIME);
     m_coinbase_txns.emplace_back(CreateAndProcessBlock({}, GetScriptForRawPubKey(coinbaseKey.GetPubKey())).vtx[0]);
     m_coinbase_txns.emplace_back(CreateAndProcessBlock({}, GetScriptForRawPubKey(coinbaseKey.GetPubKey())).vtx[0]);
@@ -458,13 +277,6 @@ BOOST_FIXTURE_TEST_CASE(importwallet_rescan, TestChain100Setup)
     SetMockTime(KEY_TIME);
     m_coinbase_txns.emplace_back(CreateAndProcessBlock({}, GetScriptForRawPubKey(coinbaseKey.GetPubKey())).vtx[0]);
 
-<<<<<<< HEAD
-    std::string backup_file = (gArgs.GetDataDirNet() / "wallet.backup").string();
-
-    // Import key into wallet and call dumpwallet to create backup file.
-    {
-        std::shared_ptr<CWallet> wallet = std::make_shared<CWallet>(m_node.chain.get(), "", CreateDummyWalletDatabase());
-=======
     std::string backup_file = fs::PathToString(m_args.GetDataDirNet() / "wallet.backup");
 
     // Import key into wallet and call dumpwallet to create backup file.
@@ -472,19 +284,14 @@ BOOST_FIXTURE_TEST_CASE(importwallet_rescan, TestChain100Setup)
         WalletContext context;
         context.args = &m_args;
         const std::shared_ptr<CWallet> wallet = std::make_shared<CWallet>(m_node.chain.get(), "", CreateMockableWalletDatabase());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         {
             auto spk_man = wallet->GetOrCreateLegacyScriptPubKeyMan();
             LOCK2(wallet->cs_wallet, spk_man->cs_KeyStore);
             spk_man->mapKeyMetadata[coinbaseKey.GetPubKey().GetID()].nCreateTime = KEY_TIME;
             spk_man->AddKeyPubKey(coinbaseKey, coinbaseKey.GetPubKey());
 
-<<<<<<< HEAD
-            AddWallet(wallet);
-=======
             AddWallet(context, wallet);
             LOCK(Assert(m_node.chainman)->GetMutex());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             wallet->SetLastBlockProcessed(m_node.chainman->ActiveChain().Height(), m_node.chainman->ActiveChain().Tip()->GetBlockHash());
         }
         JSONRPCRequest request;
@@ -492,23 +299,14 @@ BOOST_FIXTURE_TEST_CASE(importwallet_rescan, TestChain100Setup)
         request.params.setArray();
         request.params.push_back(backup_file);
 
-<<<<<<< HEAD
-        ::dumpwallet().HandleRequest(request);
-        RemoveWallet(wallet, std::nullopt);
-=======
         wallet::dumpwallet().HandleRequest(request);
         RemoveWallet(context, wallet, /* load_on_start= */ std::nullopt);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     // Call importwallet RPC and verify all blocks with timestamps >= BLOCK_TIME
     // were scanned, and no prior blocks were scanned.
     {
-<<<<<<< HEAD
-        std::shared_ptr<CWallet> wallet = std::make_shared<CWallet>(m_node.chain.get(), "", CreateDummyWalletDatabase());
-=======
         const std::shared_ptr<CWallet> wallet = std::make_shared<CWallet>(m_node.chain.get(), "", CreateMockableWalletDatabase());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         LOCK(wallet->cs_wallet);
         wallet->SetupLegacyScriptPubKeyMan();
 
@@ -518,18 +316,11 @@ BOOST_FIXTURE_TEST_CASE(importwallet_rescan, TestChain100Setup)
         request.context = &context;
         request.params.setArray();
         request.params.push_back(backup_file);
-<<<<<<< HEAD
-        AddWallet(wallet);
-        wallet->SetLastBlockProcessed(m_node.chainman->ActiveChain().Height(), m_node.chainman->ActiveChain().Tip()->GetBlockHash());
-        ::importwallet().HandleRequest(request);
-        RemoveWallet(wallet, std::nullopt);
-=======
         AddWallet(context, wallet);
         LOCK(Assert(m_node.chainman)->GetMutex());
         wallet->SetLastBlockProcessed(m_node.chainman->ActiveChain().Height(), m_node.chainman->ActiveChain().Tip()->GetBlockHash());
         wallet::importwallet().HandleRequest(request);
         RemoveWallet(context, wallet, /* load_on_start= */ std::nullopt);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         BOOST_CHECK_EQUAL(wallet->mapWallet.size(), 3U);
         BOOST_CHECK_EQUAL(m_coinbase_txns.size(), 103U);
@@ -549,17 +340,6 @@ BOOST_FIXTURE_TEST_CASE(importwallet_rescan, TestChain100Setup)
 // debit functions.
 BOOST_FIXTURE_TEST_CASE(coin_mark_dirty_immature_credit, TestChain100Setup)
 {
-<<<<<<< HEAD
-    CWallet wallet(m_node.chain.get(), "", CreateDummyWalletDatabase());
-    auto spk_man = wallet.GetOrCreateLegacyScriptPubKeyMan();
-    CWalletTx wtx(&wallet, m_coinbase_txns.back());
-
-    LOCK2(wallet.cs_wallet, spk_man->cs_KeyStore);
-    wallet.SetLastBlockProcessed(m_node.chainman->ActiveChain().Height(), m_node.chainman->ActiveChain().Tip()->GetBlockHash());
-
-    CWalletTx::Confirmation confirm(CWalletTx::Status::CONFIRMED, m_node.chainman->ActiveChain().Height(), m_node.chainman->ActiveChain().Tip()->GetBlockHash(), 0);
-    wtx.m_confirm = confirm;
-=======
     CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase());
 
     LOCK(wallet.cs_wallet);
@@ -569,7 +349,6 @@ BOOST_FIXTURE_TEST_CASE(coin_mark_dirty_immature_credit, TestChain100Setup)
     wallet.SetupDescriptorScriptPubKeyMans();
 
     wallet.SetLastBlockProcessed(m_node.chainman->ActiveChain().Height(), m_node.chainman->ActiveChain().Tip()->GetBlockHash());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // Call GetImmatureCredit() once before adding the key to the wallet to
     // cache the current immature credit amount, which is 0.
@@ -578,47 +357,25 @@ BOOST_FIXTURE_TEST_CASE(coin_mark_dirty_immature_credit, TestChain100Setup)
     // Invalidate the cached value, add the key, and make sure a new immature
     // credit amount is calculated.
     wtx.MarkDirty();
-<<<<<<< HEAD
-    BOOST_CHECK(spk_man->AddKeyPubKey(coinbaseKey, coinbaseKey.GetPubKey()));
-    BOOST_CHECK_EQUAL(wtx.GetImmatureCredit(), 72000*COIN);
-=======
     AddKey(wallet, coinbaseKey);
-    BOOST_CHECK_EQUAL(CachedTxGetImmatureCredit(wallet, wtx, ISMINE_SPENDABLE), 50*COIN);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+    BOOST_CHECK_EQUAL(CachedTxGetImmatureCredit(wallet, wtx, ISMINE_SPENDABLE), 72000*COIN);
 }
 
 static int64_t AddTx(ChainstateManager& chainman, CWallet& wallet, uint32_t lockTime, int64_t mockTime, int64_t blockTime)
 {
     CMutableTransaction tx;
-<<<<<<< HEAD
-    CWalletTx::Confirmation confirm;
-=======
     TxState state = TxStateInactive{};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     tx.nLockTime = lockTime;
     SetMockTime(mockTime);
     CBlockIndex* block = nullptr;
     if (blockTime > 0) {
         LOCK(cs_main);
-<<<<<<< HEAD
-        auto inserted = chainman.BlockIndex().emplace(GetRandHash(), new CBlockIndex);
-=======
         auto inserted = chainman.BlockIndex().emplace(std::piecewise_construct, std::make_tuple(GetRandHash()), std::make_tuple());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         assert(inserted.second);
         const uint256& hash = inserted.first->first;
         block = &inserted.first->second;
         block->nTime = blockTime;
         block->phashBlock = &hash;
-<<<<<<< HEAD
-        confirm = {CWalletTx::Status::CONFIRMED, block->nHeight, hash, 0};
-    }
-
-    // If transaction is already in map, to avoid inconsistencies, unconfirmation
-    // is needed before confirm again with different block.
-    return wallet.AddToWallet(MakeTransactionRef(tx), confirm, [&](CWalletTx& wtx, bool /* new_tx */) {
-        wtx.setUnconfirmed();
-=======
         state = TxStateConfirmed{hash, block->nHeight, /*index=*/0};
     }
     return wallet.AddToWallet(MakeTransactionRef(tx), state, [&](CWalletTx& wtx, bool /* new_tx */) {
@@ -626,7 +383,6 @@ static int64_t AddTx(ChainstateManager& chainman, CWallet& wallet, uint32_t lock
         // reorg events. Without this, AddToWallet asserts false when the same
         // transaction is confirmed in different blocks.
         wtx.m_state = state;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         return true;
     })->nTimeSmart;
 }
@@ -658,19 +414,6 @@ BOOST_AUTO_TEST_CASE(ComputeTimeSmart)
 
 void TestLoadWallet(const std::string& name, DatabaseFormat format, std::function<void(std::shared_ptr<CWallet>)> f)
 {
-<<<<<<< HEAD
-    CTxDestination dest = PKHash();
-    LOCK(m_wallet.cs_wallet);
-    WalletBatch batch{m_wallet.GetDatabase()};
-    m_wallet.SetAddressUsed(batch, dest, true);
-    m_wallet.SetAddressReceiveRequest(batch, dest, "0", "val_rr0");
-    m_wallet.SetAddressReceiveRequest(batch, dest, "1", "val_rr1");
-
-    auto values = m_wallet.GetAddressReceiveRequests();
-    BOOST_CHECK_EQUAL(values.size(), 2U);
-    BOOST_CHECK_EQUAL(values[0], "val_rr0");
-    BOOST_CHECK_EQUAL(values[1], "val_rr1");
-=======
     node::NodeContext node;
     auto chain{interfaces::MakeChain(node)};
     DatabaseOptions options;
@@ -796,7 +539,6 @@ BOOST_AUTO_TEST_CASE(WatchOnlyPubKeys)
     // invalid empty PubKey
     pubkey = CPubKey();
     TestWatchOnlyPubKey(spk_man, pubkey);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 // Test some watch-only LegacyScriptPubKeyMan methods by the procedure of loading (LoadWatchOnly),
@@ -884,24 +626,7 @@ public:
     ListCoinsTestingSetup()
     {
         CreateAndProcessBlock({}, GetScriptForRawPubKey(coinbaseKey.GetPubKey()));
-<<<<<<< HEAD
-        wallet = std::make_unique<CWallet>(m_node.chain.get(), "", CreateMockWalletDatabase());
-        {
-            LOCK2(wallet->cs_wallet, ::cs_main);
-            wallet->SetLastBlockProcessed(m_node.chainman->ActiveChain().Height(), m_node.chainman->ActiveChain().Tip()->GetBlockHash());
-        }
-        wallet->LoadWallet();
-        AddKey(*wallet, coinbaseKey);
-        WalletRescanReserver reserver(*wallet);
-        reserver.reserve();
-        CWallet::ScanResult result = wallet->ScanForWalletTransactions(m_node.chainman->ActiveChain().Genesis()->GetBlockHash(), 0 /* start_height */, {} /* max_height */, reserver, false /* update */);
-        BOOST_CHECK_EQUAL(result.status, CWallet::ScanResult::SUCCESS);
-        BOOST_CHECK_EQUAL(result.last_scanned_block, m_node.chainman->ActiveChain().Tip()->GetBlockHash());
-        BOOST_CHECK_EQUAL(*result.last_scanned_height, m_node.chainman->ActiveChain().Height());
-        BOOST_CHECK(result.last_failed_block.IsNull());
-=======
         wallet = CreateSyncedWallet(*m_node.chain, WITH_LOCK(Assert(m_node.chainman)->GetMutex(), return m_node.chainman->ActiveChain()), coinbaseKey);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     ~ListCoinsTestingSetup()
@@ -912,22 +637,12 @@ public:
     CWalletTx& AddTx(CRecipient recipient)
     {
         CTransactionRef tx;
-<<<<<<< HEAD
-        CAmount fee;
-        int changePos = -1;
-        bilingual_str error;
-        CCoinControl dummy;
-        FeeCalculation fee_calc_out;
-        {
-            BOOST_CHECK(wallet->CreateTransaction({recipient}, tx, fee, changePos, error, dummy, fee_calc_out));
-=======
         CCoinControl dummy;
         {
             constexpr int RANDOM_CHANGE_POSITION = -1;
             auto res = CreateTransaction(*wallet, {recipient}, RANDOM_CHANGE_POSITION, dummy);
             BOOST_CHECK(res);
             tx = res->tx;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
         wallet->CommitTransaction(tx, {}, {});
         CMutableTransaction blocktx;
@@ -938,19 +653,11 @@ public:
         CreateAndProcessBlock({CMutableTransaction(blocktx)}, GetScriptForRawPubKey(coinbaseKey.GetPubKey()));
 
         LOCK(wallet->cs_wallet);
-<<<<<<< HEAD
-        wallet->SetLastBlockProcessed(wallet->GetLastBlockHeight() + 1, m_node.chainman->ActiveChain().Tip()->GetBlockHash());
-        auto it = wallet->mapWallet.find(tx->GetHash());
-        BOOST_CHECK(it != wallet->mapWallet.end());
-        CWalletTx::Confirmation confirm(CWalletTx::Status::CONFIRMED, m_node.chainman->ActiveChain().Height(), m_node.chainman->ActiveChain().Tip()->GetBlockHash(), 1);
-        it->second.m_confirm = confirm;
-=======
         LOCK(Assert(m_node.chainman)->GetMutex());
         wallet->SetLastBlockProcessed(wallet->GetLastBlockHeight() + 1, m_node.chainman->ActiveChain().Tip()->GetBlockHash());
         auto it = wallet->mapWallet.find(tx->GetHash());
         BOOST_CHECK(it != wallet->mapWallet.end());
         it->second.m_state = TxStateConfirmed{m_node.chainman->ActiveChain().Tip()->GetBlockHash(), m_node.chainman->ActiveChain().Height(), /*index=*/1};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         return it->second;
     }
 
@@ -966,38 +673,23 @@ BOOST_FIXTURE_TEST_CASE(ListCoinsTest, ListCoinsTestingSetup)
     std::map<CTxDestination, std::vector<COutput>> list;
     {
         LOCK(wallet->cs_wallet);
-<<<<<<< HEAD
-        list = wallet->ListCoins();
-=======
         list = ListCoins(*wallet);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     BOOST_CHECK_EQUAL(list.size(), 1U);
     BOOST_CHECK_EQUAL(std::get<PKHash>(list.begin()->first).ToString(), coinbaseAddress);
     BOOST_CHECK_EQUAL(list.begin()->second.size(), 1U);
 
     // Check initial balance from one mature coinbase transaction.
-<<<<<<< HEAD
-    BOOST_CHECK_EQUAL(72000 * COIN, wallet->GetAvailableBalance());
-=======
-    BOOST_CHECK_EQUAL(50 * COIN, WITH_LOCK(wallet->cs_wallet, return AvailableCoins(*wallet).GetTotalAmount()));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+    BOOST_CHECK_EQUAL(72000 * COIN, WITH_LOCK(wallet->cs_wallet, return AvailableCoins(*wallet).GetTotalAmount()));
 
     // Add a transaction creating a change address, and confirm ListCoins still
     // returns the coin associated with the change address underneath the
     // coinbaseKey pubkey, even though the change address has a different
     // pubkey.
-<<<<<<< HEAD
-    AddTx(CRecipient{GetScriptForRawPubKey({}), 1 * COIN, false /* subtract fee */});
-    {
-        LOCK(wallet->cs_wallet);
-        list = wallet->ListCoins();
-=======
     AddTx(CRecipient{PubKeyDestination{{}}, 1 * COIN, /*subtract_fee=*/false});
     {
         LOCK(wallet->cs_wallet);
         list = ListCoins(*wallet);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     BOOST_CHECK_EQUAL(list.size(), 1U);
     BOOST_CHECK_EQUAL(std::get<PKHash>(list.begin()->first).ToString(), coinbaseAddress);
@@ -1006,13 +698,7 @@ BOOST_FIXTURE_TEST_CASE(ListCoinsTest, ListCoinsTestingSetup)
     // Lock both coins. Confirm number of available coins drops to 0.
     {
         LOCK(wallet->cs_wallet);
-<<<<<<< HEAD
-        std::vector<COutput> available;
-        wallet->AvailableCoins(available);
-        BOOST_CHECK_EQUAL(available.size(), 2U);
-=======
         BOOST_CHECK_EQUAL(AvailableCoinsListUnspent(*wallet).Size(), 2U);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     for (const auto& group : list) {
         for (const auto& coin : group.second) {
@@ -1022,23 +708,13 @@ BOOST_FIXTURE_TEST_CASE(ListCoinsTest, ListCoinsTestingSetup)
     }
     {
         LOCK(wallet->cs_wallet);
-<<<<<<< HEAD
-        std::vector<COutput> available;
-        wallet->AvailableCoins(available);
-        BOOST_CHECK_EQUAL(available.size(), 0U);
-=======
         BOOST_CHECK_EQUAL(AvailableCoinsListUnspent(*wallet).Size(), 0U);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     // Confirm ListCoins still returns same result as before, despite coins
     // being locked.
     {
         LOCK(wallet->cs_wallet);
-<<<<<<< HEAD
-        list = wallet->ListCoins();
-=======
         list = ListCoins(*wallet);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     BOOST_CHECK_EQUAL(list.size(), 1U);
     BOOST_CHECK_EQUAL(std::get<PKHash>(list.begin()->first).ToString(), coinbaseAddress);
@@ -1087,16 +763,6 @@ BOOST_FIXTURE_TEST_CASE(BasicOutputTypesTest, ListCoinsTest)
 
 BOOST_FIXTURE_TEST_CASE(wallet_disableprivkeys, TestChain100Setup)
 {
-<<<<<<< HEAD
-    std::shared_ptr<CWallet> wallet = std::make_shared<CWallet>(m_node.chain.get(), "", CreateDummyWalletDatabase());
-    wallet->SetupLegacyScriptPubKeyMan();
-    wallet->SetMinVersion(FEATURE_LATEST);
-    wallet->SetWalletFlag(WALLET_FLAG_DISABLE_PRIVATE_KEYS);
-    BOOST_CHECK(!wallet->TopUpKeyPool(1000));
-    CTxDestination dest;
-    std::string error;
-    BOOST_CHECK(!wallet->GetNewDestination(OutputType::BECH32, "", dest, error));
-=======
     {
         const std::shared_ptr<CWallet> wallet = std::make_shared<CWallet>(m_node.chain.get(), "", CreateMockableWalletDatabase());
         wallet->SetupLegacyScriptPubKeyMan();
@@ -1113,7 +779,6 @@ BOOST_FIXTURE_TEST_CASE(wallet_disableprivkeys, TestChain100Setup)
         wallet->SetWalletFlag(WALLET_FLAG_DISABLE_PRIVATE_KEYS);
         BOOST_CHECK(!wallet->GetNewDestination(OutputType::BECH32, ""));
     }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 // Explicit calculation which is used to test the wallet constant
@@ -1168,16 +833,6 @@ bool malformed_descriptor(std::ios_base::failure e)
 BOOST_FIXTURE_TEST_CASE(wallet_descriptor_test, BasicTestingSetup)
 {
     std::vector<unsigned char> malformed_record;
-<<<<<<< HEAD
-    CVectorWriter vw(0, 0, malformed_record, 0);
-    vw << std::string("notadescriptor");
-    vw << (uint64_t)0;
-    vw << (int32_t)0;
-    vw << (int32_t)0;
-    vw << (int32_t)1;
-
-    VectorReader vr(0, 0, malformed_record, 0);
-=======
     CVectorWriter vw{0, malformed_record, 0};
     vw << std::string("notadescriptor");
     vw << uint64_t{0};
@@ -1186,7 +841,6 @@ BOOST_FIXTURE_TEST_CASE(wallet_descriptor_test, BasicTestingSetup)
     vw << int32_t{1};
 
     SpanReader vr{0, malformed_record};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     WalletDescriptor w_desc;
     BOOST_CHECK_EXCEPTION(vr >> w_desc, std::ios_base::failure, malformed_descriptor);
 }
@@ -1211,19 +865,12 @@ BOOST_FIXTURE_TEST_CASE(wallet_descriptor_test, BasicTestingSetup)
 //! rescanning where new transactions in new blocks could be lost.
 BOOST_FIXTURE_TEST_CASE(CreateWallet, TestChain100Setup)
 {
-<<<<<<< HEAD
-    gArgs.ForceSetArg("-unsafesqlitesync", "1");
-    gArgs.ForceSetArg("-dandelion", "0");
-    // Create new wallet with known key and unload it.
-    auto wallet = TestLoadWallet(m_node.chain.get());
-=======
     m_args.ForceSetArg("-unsafesqlitesync", "1");
     // Create new wallet with known key and unload it.
     WalletContext context;
     context.args = &m_args;
     context.chain = m_node.chain.get();
     auto wallet = TestLoadWallet(context);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     CKey key;
     key.MakeNewKey(true);
     AddKey(*wallet, key);
@@ -1263,17 +910,11 @@ BOOST_FIXTURE_TEST_CASE(CreateWallet, TestChain100Setup)
 
     // Reload wallet and make sure new transactions are detected despite events
     // being blocked
-<<<<<<< HEAD
-    wallet = TestLoadWallet(m_node.chain.get());
-    BOOST_CHECK(rescan_completed);
-    BOOST_CHECK_EQUAL(addtx_count, 2);
-=======
     // Loading will also ask for current mempool transactions
     wallet = TestLoadWallet(context);
     BOOST_CHECK(rescan_completed);
     // AddToWallet events for block_tx and mempool_tx (x2)
     BOOST_CHECK_EQUAL(addtx_count, 3);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     {
         LOCK(wallet->cs_wallet);
         BOOST_CHECK_EQUAL(wallet->mapWallet.count(block_tx.GetHash()), 1U);
@@ -1285,13 +926,9 @@ BOOST_FIXTURE_TEST_CASE(CreateWallet, TestChain100Setup)
     // transactionAddedToMempool events are processed
     promise.set_value();
     SyncWithValidationInterfaceQueue();
-<<<<<<< HEAD
-    BOOST_CHECK_EQUAL(addtx_count, 4);
-=======
     // AddToWallet events for block_tx and mempool_tx events are counted a
     // second time as the notification queue is processed
     BOOST_CHECK_EQUAL(addtx_count, 5);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 
     TestUnloadWallet(std::move(wallet));
@@ -1304,34 +941,19 @@ BOOST_FIXTURE_TEST_CASE(CreateWallet, TestChain100Setup)
     // deadlock during the sync and simulates a new block notification happening
     // as soon as possible.
     addtx_count = 0;
-<<<<<<< HEAD
-    auto handler = HandleLoadWallet([&](std::unique_ptr<interfaces::Wallet> wallet) EXCLUSIVE_LOCKS_REQUIRED(wallet->wallet()->cs_wallet, cs_wallets) {
-=======
     auto handler = HandleLoadWallet(context, [&](std::unique_ptr<interfaces::Wallet> wallet) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             BOOST_CHECK(rescan_completed);
             m_coinbase_txns.push_back(CreateAndProcessBlock({}, GetScriptForRawPubKey(coinbaseKey.GetPubKey())).vtx[0]);
             block_tx = TestSimpleSpend(*m_coinbase_txns[2], 0, coinbaseKey, GetScriptForRawPubKey(key.GetPubKey()));
             m_coinbase_txns.push_back(CreateAndProcessBlock({block_tx}, GetScriptForRawPubKey(coinbaseKey.GetPubKey())).vtx[0]);
             mempool_tx = TestSimpleSpend(*m_coinbase_txns[3], 0, coinbaseKey, GetScriptForRawPubKey(key.GetPubKey()));
             BOOST_CHECK(m_node.chain->broadcastTransaction(MakeTransactionRef(mempool_tx), DEFAULT_TRANSACTION_MAXFEE, false, error));
-<<<<<<< HEAD
-            LEAVE_CRITICAL_SECTION(cs_wallets);
-            LEAVE_CRITICAL_SECTION(wallet->wallet()->cs_wallet);
-            SyncWithValidationInterfaceQueue();
-            ENTER_CRITICAL_SECTION(wallet->wallet()->cs_wallet);
-            ENTER_CRITICAL_SECTION(cs_wallets);
-        });
-    wallet = TestLoadWallet(m_node.chain.get());
-    BOOST_CHECK_EQUAL(addtx_count, 4);
-=======
             SyncWithValidationInterfaceQueue();
         });
     wallet = TestLoadWallet(context);
     // Since mempool transactions are requested at the end of loading, there will
     // be 2 additional AddToWallet calls, one from the previous test, and a duplicate for mempool_tx
     BOOST_CHECK_EQUAL(addtx_count, 2 + 2);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     {
         LOCK(wallet->cs_wallet);
         BOOST_CHECK_EQUAL(wallet->mapWallet.count(block_tx.GetHash()), 1U);
@@ -1344,29 +966,20 @@ BOOST_FIXTURE_TEST_CASE(CreateWallet, TestChain100Setup)
 
 BOOST_FIXTURE_TEST_CASE(CreateWalletWithoutChain, BasicTestingSetup)
 {
-<<<<<<< HEAD
-    auto wallet = TestLoadWallet(nullptr);
-=======
     WalletContext context;
     context.args = &m_args;
     auto wallet = TestLoadWallet(context);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     BOOST_CHECK(wallet);
     UnloadWallet(std::move(wallet));
 }
 
 BOOST_FIXTURE_TEST_CASE(ZapSelectTx, TestChain100Setup)
 {
-<<<<<<< HEAD
-    gArgs.ForceSetArg("-unsafesqlitesync", "1");
-    auto wallet = TestLoadWallet(m_node.chain.get());
-=======
     m_args.ForceSetArg("-unsafesqlitesync", "1");
     WalletContext context;
     context.args = &m_args;
     context.chain = m_node.chain.get();
     auto wallet = TestLoadWallet(context);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     CKey key;
     key.MakeNewKey(true);
     AddKey(*wallet, key);
@@ -1380,33 +993,20 @@ BOOST_FIXTURE_TEST_CASE(ZapSelectTx, TestChain100Setup)
 
     {
         auto block_hash = block_tx.GetHash();
-<<<<<<< HEAD
-        auto prev_hash = m_coinbase_txns[0]->GetHash();
-
-        LOCK(wallet->cs_wallet);
-        BOOST_CHECK(wallet->HasWalletSpend(prev_hash));
-=======
         auto prev_tx = m_coinbase_txns[0];
 
         LOCK(wallet->cs_wallet);
         BOOST_CHECK(wallet->HasWalletSpend(prev_tx));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         BOOST_CHECK_EQUAL(wallet->mapWallet.count(block_hash), 1u);
 
         std::vector<uint256> vHashIn{ block_hash }, vHashOut;
         BOOST_CHECK_EQUAL(wallet->ZapSelectTx(vHashIn, vHashOut), DBErrors::LOAD_OK);
 
-<<<<<<< HEAD
-        BOOST_CHECK(!wallet->HasWalletSpend(prev_hash));
-=======
         BOOST_CHECK(!wallet->HasWalletSpend(prev_tx));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         BOOST_CHECK_EQUAL(wallet->mapWallet.count(block_hash), 0u);
     }
 
     TestUnloadWallet(std::move(wallet));
-<<<<<<< HEAD
-=======
 }
 
 /**
@@ -1467,7 +1067,6 @@ BOOST_FIXTURE_TEST_CASE(wallet_sync_tx_invalid_state_test, TestingSetup)
     BOOST_CHECK_EXCEPTION(wallet.transactionAddedToMempool(MakeTransactionRef(mtx)),
                           std::runtime_error,
                           HasReason("DB error adding transaction to wallet, write failed"));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 BOOST_AUTO_TEST_SUITE_END()

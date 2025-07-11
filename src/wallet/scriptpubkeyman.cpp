@@ -1,54 +1,25 @@
-<<<<<<< HEAD
-// Copyright (c) 2019-2020 The DigiByte Core developers
-// Distributed under the MIT software license, see the accompanying
-// file COPYING or http://www.opensource.org/licenses/mit-license.php.
-
-=======
-// Copyright (c) 2019-2022 The DigiByte Core developers
+// Copyright (c) 2019-2022 The Bitcoin Core developers
+// Copyright (c) 2019-2025 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <hash.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <key_io.h>
 #include <logging.h>
 #include <outputtype.h>
 #include <script/descriptor.h>
-<<<<<<< HEAD
-#include <script/sign.h>
-#include <util/bip32.h>
-#include <util/strencodings.h>
-#include <util/string.h>
-#include <util/system.h>
-=======
 #include <script/script.h>
 #include <script/sign.h>
 #include <script/solver.h>
 #include <util/bip32.h>
 #include <util/strencodings.h>
 #include <util/string.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <util/time.h>
 #include <util/translation.h>
 #include <wallet/scriptpubkeyman.h>
 
 #include <optional>
 
-<<<<<<< HEAD
-//! Value for the first BIP 32 hardened derivation. Can be used as a bit mask and as a value. See BIP 32 for more details.
-const uint32_t BIP32_HARDENED_KEY_LIMIT = 0x80000000;
-
-bool LegacyScriptPubKeyMan::GetNewDestination(const OutputType type, CTxDestination& dest, std::string& error)
-{
-    if (LEGACY_OUTPUT_TYPES.count(type) == 0) {
-        error = _("Error: Legacy wallets only support the \"legacy\", \"p2sh-segwit\", and \"bech32\" address types").translated;
-        return false;
-    }
-    assert(type != OutputType::BECH32M);
-
-    LOCK(cs_KeyStore);
-    error.clear();
-=======
 namespace wallet {
 //! Value for the first BIP 32 hardened derivation. Can be used as a bit mask and as a value. See BIP 32 for more details.
 const uint32_t BIP32_HARDENED_KEY_LIMIT = 0x80000000;
@@ -64,24 +35,14 @@ util::Result<CTxDestination> LegacyScriptPubKeyMan::GetNewDestination(const Outp
     TopUp();
 
     LOCK(cs_KeyStore);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // Generate a new key that is added to wallet
     CPubKey new_key;
     if (!GetKeyFromPool(new_key, type)) {
-<<<<<<< HEAD
-        error = _("Error: Keypool ran out, please call keypoolrefill first").translated;
-        return false;
-    }
-    LearnRelatedScripts(new_key, type);
-    dest = GetDestinationForKey(new_key, type);
-    return true;
-=======
         return util::Error{_("Error: Keypool ran out, please call keypoolrefill first")};
     }
     LearnRelatedScripts(new_key, type);
     return GetDestinationForKey(new_key, type);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 typedef std::vector<unsigned char> valtype;
@@ -208,13 +169,7 @@ IsMineResult IsMineInner(const LegacyScriptPubKeyMan& keystore, const CScript& s
         if (sigversion == IsMineSigVersion::TOP && !keystore.HaveCScript(CScriptID(CScript() << OP_0 << vSolutions[0]))) {
             break;
         }
-<<<<<<< HEAD
-        uint160 hash;
-        CRIPEMD160().Write(vSolutions[0].data(), vSolutions[0].size()).Finalize(hash.begin());
-        CScriptID scriptID = CScriptID(hash);
-=======
         CScriptID scriptID{RIPEMD160(vSolutions[0])};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         CScript subscript;
         if (keystore.GetCScript(scriptID, subscript)) {
             ret = std::max(ret, recurse_scripthash ? IsMineInner(keystore, subscript, IsMineSigVersion::WITNESS_V0) : IsMineResult::SPENDABLE);
@@ -341,35 +296,15 @@ bool LegacyScriptPubKeyMan::Encrypt(const CKeyingMaterial& master_key, WalletBat
     return true;
 }
 
-<<<<<<< HEAD
-bool LegacyScriptPubKeyMan::GetReservedDestination(const OutputType type, bool internal, CTxDestination& address, int64_t& index, CKeyPool& keypool, std::string& error)
-{
-    if (LEGACY_OUTPUT_TYPES.count(type) == 0) {
-        error = _("Error: Legacy wallets only support the \"legacy\", \"p2sh-segwit\", and \"bech32\" address types").translated;
-        return false;
-=======
 util::Result<CTxDestination> LegacyScriptPubKeyMan::GetReservedDestination(const OutputType type, bool internal, int64_t& index, CKeyPool& keypool)
 {
     if (LEGACY_OUTPUT_TYPES.count(type) == 0) {
         return util::Error{_("Error: Legacy wallets only support the \"legacy\", \"p2sh-segwit\", and \"bech32\" address types")};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     assert(type != OutputType::BECH32M);
 
     LOCK(cs_KeyStore);
     if (!CanGetAddresses(internal)) {
-<<<<<<< HEAD
-        error = _("Error: Keypool ran out, please call keypoolrefill first").translated;
-        return false;
-    }
-
-    if (!ReserveKeyFromKeyPool(index, keypool, internal)) {
-        error = _("Error: Keypool ran out, please call keypoolrefill first").translated;
-        return false;
-    }
-    address = GetDestinationForKey(keypool.vchPubKey, type);
-    return true;
-=======
         return util::Error{_("Error: Keypool ran out, please call keypoolrefill first")};
     }
 
@@ -380,18 +315,12 @@ util::Result<CTxDestination> LegacyScriptPubKeyMan::GetReservedDestination(const
         return util::Error{_("Error: Keypool ran out, please call keypoolrefill first")};
     }
     return GetDestinationForKey(keypool.vchPubKey, type);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 bool LegacyScriptPubKeyMan::TopUpInactiveHDChain(const CKeyID seed_id, int64_t index, bool internal)
 {
     LOCK(cs_KeyStore);
 
-<<<<<<< HEAD
-    if (m_storage.IsLocked()) return false;
-
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     auto it = m_inactive_hd_chains.find(seed_id);
     if (it == m_inactive_hd_chains.end()) {
         return false;
@@ -399,35 +328,6 @@ bool LegacyScriptPubKeyMan::TopUpInactiveHDChain(const CKeyID seed_id, int64_t i
 
     CHDChain& chain = it->second;
 
-<<<<<<< HEAD
-    // Top up key pool
-    int64_t target_size = std::max(gArgs.GetArg("-keypool", DEFAULT_KEYPOOL_SIZE), (int64_t) 1);
-
-    // "size" of the keypools. Not really the size, actually the difference between index and the chain counter
-    // Since chain counter is 1 based and index is 0 based, one of them needs to be offset by 1.
-    int64_t kp_size = (internal ? chain.nInternalChainCounter : chain.nExternalChainCounter) - (index + 1);
-
-    // make sure the keypool fits the user-selected target (-keypool)
-    int64_t missing = std::max(target_size - kp_size, (int64_t) 0);
-
-    if (missing > 0) {
-        WalletBatch batch(m_storage.GetDatabase());
-        for (int64_t i = missing; i > 0; --i) {
-            GenerateNewKey(batch, chain, internal);
-        }
-        if (internal) {
-            WalletLogPrintf("inactive seed with id %s added %d internal keys\n", HexStr(seed_id), missing);
-        } else {
-            WalletLogPrintf("inactive seed with id %s added %d keys\n", HexStr(seed_id), missing);
-        }
-    }
-    return true;
-}
-
-void LegacyScriptPubKeyMan::MarkUnusedAddresses(const CScript& script)
-{
-    LOCK(cs_KeyStore);
-=======
     if (internal) {
         chain.m_next_internal_index = std::max(chain.m_next_internal_index, index + 1);
     } else {
@@ -443,15 +343,11 @@ std::vector<WalletDestination> LegacyScriptPubKeyMan::MarkUnusedAddresses(const 
 {
     LOCK(cs_KeyStore);
     std::vector<WalletDestination> result;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     // extract addresses and check if they match with an unused keypool key
     for (const auto& keyid : GetAffectedKeys(script, *this)) {
         std::map<CKeyID, int64_t>::const_iterator mi = m_pool_key_to_index.find(keyid);
         if (mi != m_pool_key_to_index.end()) {
             WalletLogPrintf("%s: Detected a used keypool key, mark all keypool keys up to this key as used\n", __func__);
-<<<<<<< HEAD
-            MarkReserveKeysAsUsed(mi->second);
-=======
             for (const auto& keypool : MarkReserveKeysAsUsed(mi->second)) {
                 // derive all possible destinations as any of them could have been used
                 for (const auto& type : LEGACY_OUTPUT_TYPES) {
@@ -459,7 +355,6 @@ std::vector<WalletDestination> LegacyScriptPubKeyMan::MarkUnusedAddresses(const 
                     result.push_back({dest, keypool.fInternal});
                 }
             }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
             if (!TopUp()) {
                 WalletLogPrintf("%s: Topping up keypool failed (locked wallet)\n", __func__);

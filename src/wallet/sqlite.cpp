@@ -107,6 +107,8 @@ static void SetPragma(sqlite3* db, const std::string& key, const std::string& va
     }
 }
 
+SQLiteDatabase::SQLiteDatabase(const fs::path& dir_path, const fs::path& file_path, const DatabaseOptions& options, bool mock)
+    : WalletDatabase(), m_mock(mock), m_dir_path(fs::PathToString(dir_path)), m_file_path(fs::PathToString(file_path)), m_use_unsafe_sync(options.use_unsafe_sync)
 {
     {
         LOCK(g_sqlite_mutex);
@@ -147,6 +149,7 @@ void SQLiteBatch::SetupSQLStatements()
         {&m_insert_stmt, "INSERT INTO main VALUES(?, ?)"},
         {&m_overwrite_stmt, "INSERT or REPLACE into main values(?, ?)"},
         {&m_delete_stmt, "DELETE FROM main WHERE key = ?"},
+        {&m_delete_prefix_stmt, "DELETE FROM main WHERE key >= ? AND key < ?"},
     };
 
     for (const auto& [stmt_prepared, stmt_text] : statements) {
@@ -167,11 +170,8 @@ SQLiteDatabase::~SQLiteDatabase()
 
 void SQLiteDatabase::Cleanup() noexcept
 {
-<<<<<<< HEAD
-=======
     AssertLockNotHeld(g_sqlite_mutex);
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     Close();
 
     LOCK(g_sqlite_mutex);
@@ -191,11 +191,7 @@ bool SQLiteDatabase::Verify(bilingual_str& error)
     auto read_result = ReadPragmaInteger(m_db, "application_id", "the application id", error);
     if (!read_result.has_value()) return false;
     uint32_t app_id = static_cast<uint32_t>(read_result.value());
-<<<<<<< HEAD
-    uint32_t net_magic = ReadBE32(Params().MessageStart());
-=======
     uint32_t net_magic = ReadBE32(Params().MessageStart().data());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (app_id != net_magic) {
         error = strprintf(_("SQLiteDatabase: Unexpected application id. Expected %u, got %u"), net_magic, app_id);
         return false;
@@ -292,11 +288,7 @@ void SQLiteDatabase::Open()
     // Enable fullfsync for the platforms that use it
     SetPragma(m_db, "fullfsync", "true", "Failed to enable fullfsync");
 
-<<<<<<< HEAD
-    if (gArgs.GetBoolArg("-unsafesqlitesync", false)) {
-=======
     if (m_use_unsafe_sync) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         // Use normal synchronous mode for the journal
         LogPrintf("WARNING SQLite is configured to not wait for data to be flushed to disk. Data loss and corruption may occur.\n");
         SetPragma(m_db, "synchronous", "OFF", "Failed to set synchronous mode to OFF");
@@ -415,11 +407,7 @@ void SQLiteBatch::Close()
         {&m_insert_stmt, "insert"},
         {&m_overwrite_stmt, "overwrite"},
         {&m_delete_stmt, "delete"},
-<<<<<<< HEAD
-        {&m_cursor_stmt, "cursor"},
-=======
         {&m_delete_prefix_stmt, "delete prefix"},
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     };
 
     for (const auto& [stmt_prepared, stmt_description] : statements) {
@@ -432,11 +420,7 @@ void SQLiteBatch::Close()
     }
 }
 
-<<<<<<< HEAD
-bool SQLiteBatch::ReadKey(CDataStream&& key, CDataStream& value)
-=======
 bool SQLiteBatch::ReadKey(DataStream&& key, DataStream& value)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     if (!m_database.m_db) return false;
     assert(m_read_stmt);
@@ -500,7 +484,7 @@ bool SQLiteBatch::ExecStatement(sqlite3_stmt* stmt, Span<const std::byte> blob)
     // Execute
     int res = sqlite3_step(stmt);
     sqlite3_clear_bindings(stmt);
-    sqlite3_reset(stmt)
+    sqlite3_reset(stmt);
     if (res != SQLITE_DONE) {
         LogPrintf("%s: Unable to execute statement: %s\n", __func__, sqlite3_errstr(res));
     }

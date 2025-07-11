@@ -1,38 +1,12 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
-// Copyright (c) 2009-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// Copyright (c) 2009-2022 The Bitcoin Core developers
+// Copyright (c) 2014-2025 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #ifndef DIGIBYTE_WALLET_WALLET_H
 #define DIGIBYTE_WALLET_WALLET_H
 
-<<<<<<< HEAD
-#include <amount.h>
-#include <interfaces/chain.h>
-#include <interfaces/handler.h>
-#include <outputtype.h>
-#include <policy/feerate.h>
-#include <psbt.h>
-#include <tinyformat.h>
-#include <util/message.h>
-#include <util/strencodings.h>
-#include <util/string.h>
-#include <util/system.h>
-#include <util/ui_change_type.h>
-#include <validationinterface.h>
-#include <wallet/coinselection.h>
-#include <wallet/crypter.h>
-#include <wallet/receive.h>
-#include <wallet/scriptpubkeyman.h>
-#include <wallet/spend.h>
-#include <wallet/transaction.h>
-#include <wallet/walletdb.h>
-=======
 #include <addresstype.h>
 #include <consensus/amount.h>
 #include <interfaces/chain.h>
@@ -42,6 +16,7 @@
 #include <outputtype.h>
 #include <policy/feerate.h>
 #include <primitives/transaction.h>
+#include <psbt.h>
 #include <script/interpreter.h>
 #include <script/script.h>
 #include <support/allocators/secure.h>
@@ -50,16 +25,23 @@
 #include <uint256.h>
 #include <util/fs.h>
 #include <util/hasher.h>
+#include <util/message.h>
 #include <util/result.h>
+#include <util/strencodings.h>
 #include <util/string.h>
+#include <util/system.h>
 #include <util/time.h>
 #include <util/ui_change_type.h>
+#include <validationinterface.h>
+#include <wallet/coinselection.h>
 #include <wallet/crypter.h>
 #include <wallet/db.h>
+#include <wallet/receive.h>
 #include <wallet/scriptpubkeyman.h>
+#include <wallet/spend.h>
 #include <wallet/transaction.h>
 #include <wallet/types.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+#include <wallet/walletdb.h>
 #include <wallet/walletutil.h>
 
 #include <atomic>
@@ -79,8 +61,6 @@
 
 #include <boost/signals2/signal.hpp>
 
-<<<<<<< HEAD
-=======
 class CKey;
 class CKeyID;
 class CPubKey;
@@ -103,38 +83,20 @@ struct FlatSigningProvider;
 struct KeyOriginInfo;
 struct PartiallySignedTransaction;
 struct SignatureData;
-
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 using LoadWalletFn = std::function<void(std::unique_ptr<interfaces::Wallet> wallet)>;
 
 struct bilingual_str;
 
-<<<<<<< HEAD
-//! Explicitly unload and delete the wallet.
-//! Blocks the current thread after signaling the unload intent so that all
-//! wallet clients release the wallet.
-=======
 namespace wallet {
 struct WalletContext;
 
 //! Explicitly unload and delete the wallet.
 //! Blocks the current thread after signaling the unload intent so that all
 //! wallet pointer owners release the wallet.
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 //! Note that, when blocking is not required, the wallet is implicitly unloaded
 //! by the shared pointer deleter.
 void UnloadWallet(std::shared_ptr<CWallet>&& wallet);
 
-<<<<<<< HEAD
-bool AddWallet(const std::shared_ptr<CWallet>& wallet);
-bool RemoveWallet(const std::shared_ptr<CWallet>& wallet, std::optional<bool> load_on_start, std::vector<bilingual_str>& warnings);
-bool RemoveWallet(const std::shared_ptr<CWallet>& wallet, std::optional<bool> load_on_start);
-std::vector<std::shared_ptr<CWallet>> GetWallets();
-std::shared_ptr<CWallet> GetWallet(const std::string& name);
-std::shared_ptr<CWallet> LoadWallet(interfaces::Chain& chain, const std::string& name, std::optional<bool> load_on_start, const DatabaseOptions& options, DatabaseStatus& status, bilingual_str& error, std::vector<bilingual_str>& warnings);
-std::shared_ptr<CWallet> CreateWallet(interfaces::Chain& chain, const std::string& name, std::optional<bool> load_on_start, DatabaseOptions& options, DatabaseStatus& status, bilingual_str& error, std::vector<bilingual_str>& warnings);
-std::unique_ptr<interfaces::Handler> HandleLoadWallet(LoadWalletFn load_wallet);
-=======
 bool AddWallet(WalletContext& context, const std::shared_ptr<CWallet>& wallet);
 bool RemoveWallet(WalletContext& context, const std::shared_ptr<CWallet>& wallet, std::optional<bool> load_on_start, std::vector<bilingual_str>& warnings);
 bool RemoveWallet(WalletContext& context, const std::shared_ptr<CWallet>& wallet, std::optional<bool> load_on_start);
@@ -146,27 +108,18 @@ std::shared_ptr<CWallet> CreateWallet(WalletContext& context, const std::string&
 std::shared_ptr<CWallet> RestoreWallet(WalletContext& context, const fs::path& backup_file, const std::string& wallet_name, std::optional<bool> load_on_start, DatabaseStatus& status, bilingual_str& error, std::vector<bilingual_str>& warnings);
 std::unique_ptr<interfaces::Handler> HandleLoadWallet(WalletContext& context, LoadWalletFn load_wallet);
 void NotifyWalletLoaded(WalletContext& context, const std::shared_ptr<CWallet>& wallet);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 std::unique_ptr<WalletDatabase> MakeWalletDatabase(const std::string& name, const DatabaseOptions& options, DatabaseStatus& status, bilingual_str& error);
 
 //! -paytxfee default
 constexpr CAmount DEFAULT_PAY_TX_FEE = 0;
 //! -fallbackfee default
-<<<<<<< HEAD
 static const CAmount DEFAULT_FALLBACK_FEE = 1000000; // 0.01 DGB/kb, moderate value between v7's 0.001 and v8's 0.1
 //! -discardfee default
 static const CAmount DEFAULT_DISCARD_FEE = 10000;
 //! -mintxfee default
 static const CAmount DEFAULT_TRANSACTION_MINFEE = 10000000;
-=======
-static const CAmount DEFAULT_FALLBACK_FEE = 0;
-//! -discardfee default
-static const CAmount DEFAULT_DISCARD_FEE = 10000;
-//! -mintxfee default
-static const CAmount DEFAULT_TRANSACTION_MINFEE = 1000;
 //! -consolidatefeerate default
 static const CAmount DEFAULT_CONSOLIDATE_FEERATE{10000}; // 10 sat/vbyte
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 /**
  * maximum fee increase allowed to do partial spend avoidance, even for nodes with this feature disabled by default
  *
@@ -176,60 +129,32 @@ static const CAmount DEFAULT_CONSOLIDATE_FEERATE{10000}; // 10 sat/vbyte
  */
 static const CAmount DEFAULT_MAX_AVOIDPARTIALSPEND_FEE = 0;
 //! discourage APS fee higher than this amount
-<<<<<<< HEAD
 constexpr CAmount HIGH_APS_FEE{COIN / 100000000};
-//! minimum recommended increment for BIP 125 replacement txs
+//! minimum recommended increment for replacement txs
 static const CAmount WALLET_INCREMENTAL_RELAY_FEE = 1000000;
 //! Default for -spendzeroconfchange
 static const bool DEFAULT_SPEND_ZEROCONF_CHANGE = true;
 //! Default for -walletrejectlongchains
 static const bool DEFAULT_WALLET_REJECT_LONG_CHAINS = false;
-=======
-constexpr CAmount HIGH_APS_FEE{COIN / 10000};
-//! minimum recommended increment for replacement txs
-static const CAmount WALLET_INCREMENTAL_RELAY_FEE = 5000;
-//! Default for -spendzeroconfchange
-static const bool DEFAULT_SPEND_ZEROCONF_CHANGE = true;
-//! Default for -walletrejectlongchains
-static const bool DEFAULT_WALLET_REJECT_LONG_CHAINS{true};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 //! -txconfirmtarget default
 static const unsigned int DEFAULT_TX_CONFIRM_TARGET = 6;
 //! -walletrbf default
 static const bool DEFAULT_WALLET_RBF = true;
 static const bool DEFAULT_WALLETBROADCAST = true;
 static const bool DEFAULT_DISABLE_WALLET = false;
-<<<<<<< HEAD
 static const bool DEFAULT_DISABLE_DANDELION = false;
-
+static const bool DEFAULT_WALLETCROSSCHAIN = false;
 //! -maxtxfee default
 constexpr CAmount DEFAULT_TRANSACTION_MAXFEE{COIN * 100};
 //! Discourage users to set fees higher than this amount (in satoshis) per kB
 constexpr CAmount HIGH_TX_FEE_PER_KB{COIN};
 //! -maxtxfee will warn if called with a higher fee than this amount (in satoshis)
 constexpr CAmount HIGH_MAX_TX_FEE{1000 * HIGH_TX_FEE_PER_KB};
-=======
-static const bool DEFAULT_WALLETCROSSCHAIN = false;
-//! -maxtxfee default
-constexpr CAmount DEFAULT_TRANSACTION_MAXFEE{COIN / 10};
-//! Discourage users to set fees higher than this amount (in satoshis) per kB
-constexpr CAmount HIGH_TX_FEE_PER_KB{COIN / 100};
-//! -maxtxfee will warn if called with a higher fee than this amount (in satoshis)
-constexpr CAmount HIGH_MAX_TX_FEE{100 * HIGH_TX_FEE_PER_KB};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 //! Pre-calculated constants for input size estimation in *virtual size*
 static constexpr size_t DUMMY_NESTED_P2WPKH_INPUT_SIZE = 91;
 
 class CCoinControl;
-<<<<<<< HEAD
-class COutput;
-class CScript;
-class CWalletTx;
-struct FeeCalculation;
-enum class FeeEstimateMode;
-class ReserveDestination;
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+class CCoinControl;
 
 //! Default for -addresstype
 constexpr OutputType DEFAULT_ADDRESS_TYPE{OutputType::BECH32};
@@ -256,11 +181,8 @@ static const std::map<std::string,WalletFlags> WALLET_FLAG_MAP{
     {"external_signer", WALLET_FLAG_EXTERNAL_SIGNER}
 };
 
-<<<<<<< HEAD
 extern const std::map<uint64_t,std::string> WALLET_FLAG_CAVEATS;
 
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 /** A wrapper to reserve an address from a wallet
  *
  * ReserveDestination is used to reserve an address.
@@ -307,17 +229,10 @@ public:
     }
 
     //! Reserve an address
-<<<<<<< HEAD
-    bool GetReservedDestination(CTxDestination& pubkey, bool internal, std::string& error);
-    //! Return reserved address
-    void ReturnDestination();
-    //! Keep the address. Do not return it's key to the keypool when this object goes out of scope
-=======
     util::Result<CTxDestination> GetReservedDestination(bool internal);
     //! Return reserved address
     void ReturnDestination();
     //! Keep the address. Do not return its key to the keypool when this object goes out of scope
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     void KeepDestination();
 };
 
@@ -326,13 +241,6 @@ public:
  */
 struct CAddressBookData
 {
-<<<<<<< HEAD
-private:
-    bool m_change{true};
-    std::string m_label;
-public:
-    std::string purpose;
-=======
     /**
      * Address label which is always nullopt for change addresses. For sending
      * and receiving addresses, it will be set to an arbitrary label string
@@ -341,7 +249,6 @@ public:
      * non-change addresses by wallet transaction listing and fee bumping code.
      */
     std::optional<std::string> label;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     /**
      * Address purpose which was originally recorded for payment protocol
@@ -350,17 +257,6 @@ public:
      */
     std::optional<AddressPurpose> purpose;
 
-<<<<<<< HEAD
-    typedef std::map<std::string, std::string> StringMap;
-    StringMap destdata;
-
-    bool IsChange() const { return m_change; }
-    const std::string& GetLabel() const { return m_label; }
-    void SetLabel(const std::string& label) {
-        m_change = false;
-        m_label = label;
-    }
-=======
     /**
      * Whether coins with this address have previously been spent. Set when the
      * the wallet avoid_reuse option is enabled and this is an IsMine address
@@ -383,7 +279,6 @@ public:
     bool IsChange() const { return !label.has_value(); }
     std::string GetLabel() const { return label ? *label : std::string{}; }
     void SetLabel(std::string name) { label = std::move(name); }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 };
 
 inline std::string PurposeToString(AddressPurpose p)

@@ -1,60 +1,10 @@
-<<<<<<< HEAD
-// Copyright (c) 2011-2021 The DigiByte Core developers
-=======
 // Copyright (c) 2011-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <node/blockstorage.h>
 
 #include <chain.h>
-<<<<<<< HEAD
-#include <chainparams.h>
-#include <clientversion.h>
-#include <consensus/validation.h>
-#include <flatfile.h>
-#include <fs.h>
-#include <hash.h>
-#include <pow.h>
-#include <shutdown.h>
-#include <signet.h>
-#include <streams.h>
-#include <undo.h>
-#include <util/system.h>
-#include <validation.h>
-
-std::atomic_bool fImporting(false);
-std::atomic_bool fReindex(false);
-bool fHavePruned = false;
-bool fPruneMode = false;
-uint64_t nPruneTarget = 0;
-
-// TODO make namespace {
-RecursiveMutex cs_LastBlockFile;
-std::vector<CBlockFileInfo> vinfoBlockFile;
-int nLastBlockFile = 0;
-/** Global flag to indicate we should check to see if there are
-*  block/undo files that should be deleted.  Set on startup
-*  or if we allocate more file space when we're in prune mode
-*/
-bool fCheckForPruning = false;
-
-/** Dirty block index entries. */
-std::set<CBlockIndex*> setDirtyBlockIndex;
-
-/** Dirty block file entries. */
-std::set<int> setDirtyFileInfo;
-// } // namespace
-
-static FILE* OpenUndoFile(const FlatFilePos& pos, bool fReadOnly = false);
-static FlatFileSeq BlockFileSeq();
-static FlatFileSeq UndoFileSeq();
-
-bool IsBlockPruned(const CBlockIndex* pblockindex)
-{
-    return (fHavePruned && !(pblockindex->nStatus & BLOCK_HAVE_DATA) && pblockindex->nTx > 0);
-=======
 #include <clientversion.h>
 #include <consensus/validation.h>
 #include <dbwrapper.h>
@@ -652,23 +602,15 @@ bool BlockManager::CheckBlockDataAvailability(const CBlockIndex& upper_block, co
 {
     if (!(upper_block.nStatus & BLOCK_HAVE_DATA)) return false;
     return GetFirstStoredBlock(upper_block, &lower_block) == &lower_block;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 // If we're using -prune with -reindex, then delete block files that will be ignored by the
 // reindex.  Since reindexing works by starting at block file 0 and looping until a blockfile
 // is missing, do the same here to delete any later block files after a gap.  Also delete all
-<<<<<<< HEAD
-// rev files since they'll be rewritten by the reindex anyway.  This ensures that vinfoBlockFile
-// is in sync with what's actually on disk by the time we start downloading, so that pruning
-// works correctly.
-void CleanupBlockRevFiles()
-=======
 // rev files since they'll be rewritten by the reindex anyway.  This ensures that m_blockfile_info
 // is in sync with what's actually on disk by the time we start downloading, so that pruning
 // works correctly.
 void BlockManager::CleanupBlockRevFiles() const
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     std::map<std::string, fs::path> mapBlockFiles;
 
@@ -676,17 +618,6 @@ void BlockManager::CleanupBlockRevFiles() const
     // Remove the rev files immediately and insert the blk file paths into an
     // ordered map keyed by block file index.
     LogPrintf("Removing unusable blk?????.dat and rev?????.dat files for -reindex with -prune\n");
-<<<<<<< HEAD
-    fs::path blocksdir = gArgs.GetBlocksDirPath();
-    for (fs::directory_iterator it(blocksdir); it != fs::directory_iterator(); it++) {
-        if (fs::is_regular_file(*it) &&
-            it->path().filename().string().length() == 12 &&
-            it->path().filename().string().substr(8,4) == ".dat")
-        {
-            if (it->path().filename().string().substr(0, 3) == "blk") {
-                mapBlockFiles[it->path().filename().string().substr(3, 5)] = it->path();
-            } else if (it->path().filename().string().substr(0, 3) == "rev") {
-=======
     for (fs::directory_iterator it(m_opts.blocks_dir); it != fs::directory_iterator(); it++) {
         const std::string path = fs::PathToString(it->path().filename());
         if (fs::is_regular_file(*it) &&
@@ -696,7 +627,6 @@ void BlockManager::CleanupBlockRevFiles() const
             if (path.substr(0, 3) == "blk") {
                 mapBlockFiles[path.substr(3, 5)] = it->path();
             } else if (path.substr(0, 3) == "rev") {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 remove(it->path());
             }
         }
@@ -708,11 +638,7 @@ void BlockManager::CleanupBlockRevFiles() const
     // start removing block files.
     int nContigCounter = 0;
     for (const std::pair<const std::string, fs::path>& item : mapBlockFiles) {
-<<<<<<< HEAD
-        if (atoi(item.first) == nContigCounter) {
-=======
         if (LocaleIndependentAtoi<int>(item.first) == nContigCounter) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             nContigCounter++;
             continue;
         }
@@ -720,24 +646,6 @@ void BlockManager::CleanupBlockRevFiles() const
     }
 }
 
-<<<<<<< HEAD
-std::string CBlockFileInfo::ToString() const
-{
-    return strprintf("CBlockFileInfo(blocks=%u, size=%u, heights=%u...%u, time=%s...%s)", nBlocks, nSize, nHeightFirst, nHeightLast, FormatISO8601Date(nTimeFirst), FormatISO8601Date(nTimeLast));
-}
-
-CBlockFileInfo* GetBlockFileInfo(size_t n)
-{
-    LOCK(cs_LastBlockFile);
-
-    return &vinfoBlockFile.at(n);
-}
-
-static bool UndoWriteToDisk(const CBlockUndo& blockundo, FlatFilePos& pos, const uint256& hashBlock, const CMessageHeader::MessageStartChars& messageStart)
-{
-    // Open history file to append
-    CAutoFile fileout(OpenUndoFile(pos), SER_DISK, CLIENT_VERSION);
-=======
 CBlockFileInfo* BlockManager::GetBlockFileInfo(size_t n)
 {
     LOCK(cs_LastBlockFile);
@@ -749,19 +657,13 @@ bool BlockManager::UndoWriteToDisk(const CBlockUndo& blockundo, FlatFilePos& pos
 {
     // Open history file to append
     CAutoFile fileout{OpenUndoFile(pos)};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (fileout.IsNull()) {
         return error("%s: OpenUndoFile failed", __func__);
     }
 
     // Write index header
-<<<<<<< HEAD
-    unsigned int nSize = GetSerializeSize(blockundo, fileout.GetVersion());
-    fileout << messageStart << nSize;
-=======
     unsigned int nSize = GetSerializeSize(blockundo, CLIENT_VERSION);
     fileout << GetParams().MessageStart() << nSize;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // Write undo data
     long fileOutPos = ftell(fileout.Get());
@@ -772,11 +674,7 @@ bool BlockManager::UndoWriteToDisk(const CBlockUndo& blockundo, FlatFilePos& pos
     fileout << blockundo;
 
     // calculate & write checksum
-<<<<<<< HEAD
-    CHashWriter hasher(SER_GETHASH, PROTOCOL_VERSION);
-=======
     HashWriter hasher{};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     hasher << hashBlock;
     hasher << blockundo;
     fileout << hasher.GetHash();
@@ -784,41 +682,25 @@ bool BlockManager::UndoWriteToDisk(const CBlockUndo& blockundo, FlatFilePos& pos
     return true;
 }
 
-<<<<<<< HEAD
-bool UndoReadFromDisk(CBlockUndo& blockundo, const CBlockIndex* pindex)
-{
-    FlatFilePos pos = pindex->GetUndoPos();
-=======
 bool BlockManager::UndoReadFromDisk(CBlockUndo& blockundo, const CBlockIndex& index) const
 {
     const FlatFilePos pos{WITH_LOCK(::cs_main, return index.GetUndoPos())};
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (pos.IsNull()) {
         return error("%s: no undo data available", __func__);
     }
 
     // Open history file to read
-<<<<<<< HEAD
-    CAutoFile filein(OpenUndoFile(pos, true), SER_DISK, CLIENT_VERSION);
-=======
     CAutoFile filein{OpenUndoFile(pos, true)};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (filein.IsNull()) {
         return error("%s: OpenUndoFile failed", __func__);
     }
 
     // Read block
     uint256 hashChecksum;
-<<<<<<< HEAD
-    CHashVerifier<CAutoFile> verifier(&filein); // We need a CHashVerifier as reserializing may lose data
-    try {
-        verifier << pindex->pprev->GetBlockHash();
-=======
     HashVerifier verifier{filein}; // Use HashVerifier as reserializing may lose data, c.f. commit d342424301013ec47dc146a4beb49d5c9319d80a
     try {
         verifier << index.pprev->GetBlockHash();
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         verifier >> blockundo;
         filein >> hashChecksum;
     } catch (const std::exception& e) {
@@ -833,29 +715,6 @@ bool BlockManager::UndoReadFromDisk(CBlockUndo& blockundo, const CBlockIndex& in
     return true;
 }
 
-<<<<<<< HEAD
-static void FlushUndoFile(int block_file, bool finalize = false)
-{
-    FlatFilePos undo_pos_old(block_file, vinfoBlockFile[block_file].nUndoSize);
-    if (!UndoFileSeq().Flush(undo_pos_old, finalize)) {
-        AbortNode("Flushing undo file to disk failed. This is likely the result of an I/O error.");
-    }
-}
-
-void FlushBlockFile(bool fFinalize = false, bool finalize_undo = false)
-{
-    LOCK(cs_LastBlockFile);
-    FlatFilePos block_pos_old(nLastBlockFile, vinfoBlockFile[nLastBlockFile].nSize);
-    if (!BlockFileSeq().Flush(block_pos_old, fFinalize)) {
-        AbortNode("Flushing block file to disk failed. This is likely the result of an I/O error.");
-    }
-    // we do not always flush the undo file, as the chain tip may be lagging behind the incoming blocks,
-    // e.g. during IBD or a sync after a node going offline
-    if (!fFinalize || finalize_undo) FlushUndoFile(nLastBlockFile, finalize_undo);
-}
-
-uint64_t CalculateCurrentUsage()
-=======
 bool BlockManager::FlushUndoFile(int block_file, bool finalize)
 {
     FlatFilePos undo_pos_old(block_file, m_blockfile_info[block_file].nUndoSize);
@@ -918,55 +777,16 @@ bool BlockManager::FlushChainstateBlockFile(int tip_height)
 }
 
 uint64_t BlockManager::CalculateCurrentUsage()
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     LOCK(cs_LastBlockFile);
 
     uint64_t retval = 0;
-<<<<<<< HEAD
-    for (const CBlockFileInfo& file : vinfoBlockFile) {
-=======
     for (const CBlockFileInfo& file : m_blockfile_info) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         retval += file.nSize + file.nUndoSize;
     }
     return retval;
 }
 
-<<<<<<< HEAD
-void UnlinkPrunedFiles(const std::set<int>& setFilesToPrune)
-{
-    for (std::set<int>::iterator it = setFilesToPrune.begin(); it != setFilesToPrune.end(); ++it) {
-        FlatFilePos pos(*it, 0);
-        fs::remove(BlockFileSeq().FileName(pos));
-        fs::remove(UndoFileSeq().FileName(pos));
-        LogPrintf("Prune: %s deleted blk/rev (%05u)\n", __func__, *it);
-    }
-}
-
-static FlatFileSeq BlockFileSeq()
-{
-    return FlatFileSeq(gArgs.GetBlocksDirPath(), "blk", gArgs.GetBoolArg("-fastprune", false) ? 0x4000 /* 16kb */ : BLOCKFILE_CHUNK_SIZE);
-}
-
-static FlatFileSeq UndoFileSeq()
-{
-    return FlatFileSeq(gArgs.GetBlocksDirPath(), "rev", UNDOFILE_CHUNK_SIZE);
-}
-
-FILE* OpenBlockFile(const FlatFilePos& pos, bool fReadOnly)
-{
-    return BlockFileSeq().Open(pos, fReadOnly);
-}
-
-/** Open an undo file (rev?????.dat) */
-static FILE* OpenUndoFile(const FlatFilePos& pos, bool fReadOnly)
-{
-    return UndoFileSeq().Open(pos, fReadOnly);
-}
-
-fs::path GetBlockPosFilename(const FlatFilePos& pos)
-=======
 void BlockManager::UnlinkPrunedFiles(const std::set<int>& setFilesToPrune) const
 {
     std::error_code ec;
@@ -1002,20 +822,10 @@ CAutoFile BlockManager::OpenUndoFile(const FlatFilePos& pos, bool fReadOnly) con
 }
 
 fs::path BlockManager::GetBlockPosFilename(const FlatFilePos& pos) const
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     return BlockFileSeq().FileName(pos);
 }
 
-<<<<<<< HEAD
-bool FindBlockPos(FlatFilePos& pos, unsigned int nAddSize, unsigned int nHeight, CChain& active_chain, uint64_t nTime, bool fKnown = false)
-{
-    LOCK(cs_LastBlockFile);
-
-    unsigned int nFile = fKnown ? pos.nFile : nLastBlockFile;
-    if (vinfoBlockFile.size() <= nFile) {
-        vinfoBlockFile.resize(nFile + 1);
-=======
 bool BlockManager::FindBlockPos(FlatFilePos& pos, unsigned int nAddSize, unsigned int nHeight, uint64_t nTime, bool fKnown)
 {
     LOCK(cs_LastBlockFile);
@@ -1034,40 +844,10 @@ bool BlockManager::FindBlockPos(FlatFilePos& pos, unsigned int nAddSize, unsigne
     int nFile = fKnown ? pos.nFile : last_blockfile;
     if (static_cast<int>(m_blockfile_info.size()) <= nFile) {
         m_blockfile_info.resize(nFile + 1);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     bool finalize_undo = false;
     if (!fKnown) {
-<<<<<<< HEAD
-        while (vinfoBlockFile[nFile].nSize + nAddSize >= (gArgs.GetBoolArg("-fastprune", false) ? 0x10000 /* 64kb */ : MAX_BLOCKFILE_SIZE)) {
-            // when the undo file is keeping up with the block file, we want to flush it explicitly
-            // when it is lagging behind (more blocks arrive than are being connected), we let the
-            // undo block write case handle it
-            finalize_undo = (vinfoBlockFile[nFile].nHeightLast == (unsigned int)active_chain.Tip()->nHeight);
-            nFile++;
-            if (vinfoBlockFile.size() <= nFile) {
-                vinfoBlockFile.resize(nFile + 1);
-            }
-        }
-        pos.nFile = nFile;
-        pos.nPos = vinfoBlockFile[nFile].nSize;
-    }
-
-    if ((int)nFile != nLastBlockFile) {
-        if (!fKnown) {
-            LogPrint(BCLog::VALIDATION, "Leaving block file %i: %s\n", nLastBlockFile, vinfoBlockFile[nLastBlockFile].ToString());
-        }
-        FlushBlockFile(!fKnown, finalize_undo);
-        nLastBlockFile = nFile;
-    }
-
-    vinfoBlockFile[nFile].AddBlock(nHeight, nTime);
-    if (fKnown) {
-        vinfoBlockFile[nFile].nSize = std::max(pos.nPos + nAddSize, vinfoBlockFile[nFile].nSize);
-    } else {
-        vinfoBlockFile[nFile].nSize += nAddSize;
-=======
         unsigned int max_blockfile_size{MAX_BLOCKFILE_SIZE};
         // Use smaller blockfiles in test-only -fastprune mode - but avoid
         // the possibility of having a block not fit into the block file.
@@ -1127,27 +907,12 @@ bool BlockManager::FindBlockPos(FlatFilePos& pos, unsigned int nAddSize, unsigne
         m_blockfile_info[nFile].nSize = std::max(pos.nPos + nAddSize, m_blockfile_info[nFile].nSize);
     } else {
         m_blockfile_info[nFile].nSize += nAddSize;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     if (!fKnown) {
         bool out_of_space;
         size_t bytes_allocated = BlockFileSeq().Allocate(pos, nAddSize, out_of_space);
         if (out_of_space) {
-<<<<<<< HEAD
-            return AbortNode("Disk space is too low!", _("Disk space is too low!"));
-        }
-        if (bytes_allocated != 0 && fPruneMode) {
-            fCheckForPruning = true;
-        }
-    }
-
-    setDirtyFileInfo.insert(nFile);
-    return true;
-}
-
-static bool FindUndoPos(BlockValidationState& state, int nFile, FlatFilePos& pos, unsigned int nAddSize)
-=======
             m_opts.notifications.fatalError("Disk space is too low!", _("Disk space is too low!"));
             return false;
         }
@@ -1161,63 +926,38 @@ static bool FindUndoPos(BlockValidationState& state, int nFile, FlatFilePos& pos
 }
 
 bool BlockManager::FindUndoPos(BlockValidationState& state, int nFile, FlatFilePos& pos, unsigned int nAddSize)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     pos.nFile = nFile;
 
     LOCK(cs_LastBlockFile);
 
-<<<<<<< HEAD
-    pos.nPos = vinfoBlockFile[nFile].nUndoSize;
-    vinfoBlockFile[nFile].nUndoSize += nAddSize;
-    setDirtyFileInfo.insert(nFile);
-=======
     pos.nPos = m_blockfile_info[nFile].nUndoSize;
     m_blockfile_info[nFile].nUndoSize += nAddSize;
     m_dirty_fileinfo.insert(nFile);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     bool out_of_space;
     size_t bytes_allocated = UndoFileSeq().Allocate(pos, nAddSize, out_of_space);
     if (out_of_space) {
-<<<<<<< HEAD
-        return AbortNode(state, "Disk space is too low!", _("Disk space is too low!"));
-    }
-    if (bytes_allocated != 0 && fPruneMode) {
-        fCheckForPruning = true;
-=======
         return FatalError(m_opts.notifications, state, "Disk space is too low!", _("Disk space is too low!"));
     }
     if (bytes_allocated != 0 && IsPruneMode()) {
         m_check_for_pruning = true;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     return true;
 }
 
-<<<<<<< HEAD
-static bool WriteBlockToDisk(const CBlock& block, FlatFilePos& pos, const CMessageHeader::MessageStartChars& messageStart)
-{
-    // Open history file to append
-    CAutoFile fileout(OpenBlockFile(pos), SER_DISK, CLIENT_VERSION);
-=======
 bool BlockManager::WriteBlockToDisk(const CBlock& block, FlatFilePos& pos) const
 {
     // Open history file to append
     CAutoFile fileout{OpenBlockFile(pos)};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (fileout.IsNull()) {
         return error("WriteBlockToDisk: OpenBlockFile failed");
     }
 
     // Write index header
     unsigned int nSize = GetSerializeSize(block, fileout.GetVersion());
-<<<<<<< HEAD
-    fileout << messageStart << nSize;
-=======
     fileout << GetParams().MessageStart() << nSize;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // Write block
     long fileOutPos = ftell(fileout.Get());
@@ -1230,18 +970,6 @@ bool BlockManager::WriteBlockToDisk(const CBlock& block, FlatFilePos& pos) const
     return true;
 }
 
-<<<<<<< HEAD
-bool WriteUndoDataForBlock(const CBlockUndo& blockundo, BlockValidationState& state, CBlockIndex* pindex, const CChainParams& chainparams)
-{
-    // Write undo information to disk
-    if (pindex->GetUndoPos().IsNull()) {
-        FlatFilePos _pos;
-        if (!FindUndoPos(state, pindex->nFile, _pos, ::GetSerializeSize(blockundo, CLIENT_VERSION) + 40)) {
-            return error("ConnectBlock(): FindUndoPos failed");
-        }
-        if (!UndoWriteToDisk(blockundo, _pos, pindex->pprev->GetBlockHash(), chainparams.MessageStart())) {
-            return AbortNode(state, "Failed to write undo data");
-=======
 bool BlockManager::WriteUndoDataForBlock(const CBlockUndo& blockundo, BlockValidationState& state, CBlockIndex& block)
 {
     AssertLockHeld(::cs_main);
@@ -1256,23 +984,12 @@ bool BlockManager::WriteUndoDataForBlock(const CBlockUndo& blockundo, BlockValid
         }
         if (!UndoWriteToDisk(blockundo, _pos, block.pprev->GetBlockHash())) {
             return FatalError(m_opts.notifications, state, "Failed to write undo data");
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
         // rev files are written in block height order, whereas blk files are written as blocks come in (often out of order)
         // we want to flush the rev (undo) file once we've written the last block, which is indicated by the last height
         // in the block file info as below; note that this does not catch the case where the undo writes are keeping up
         // with the block writes (usually when a synced up node is getting newly mined blocks) -- this case is caught in
         // the FindBlockPos function
-<<<<<<< HEAD
-        if (_pos.nFile < nLastBlockFile && static_cast<uint32_t>(pindex->nHeight) == vinfoBlockFile[_pos.nFile].nHeightLast) {
-            FlushUndoFile(_pos.nFile, true);
-        }
-
-        // update nUndoPos in block index
-        pindex->nUndoPos = _pos.nPos;
-        pindex->nStatus |= BLOCK_HAVE_UNDO;
-        setDirtyBlockIndex.insert(pindex);
-=======
         if (_pos.nFile < cursor.file_num && static_cast<uint32_t>(block.nHeight) == m_blockfile_info[_pos.nFile].nHeightLast) {
             // Do not propagate the return code, a failed flush here should not
             // be an indication for a failed write. If it were propagated here,
@@ -1289,26 +1006,17 @@ bool BlockManager::WriteUndoDataForBlock(const CBlockUndo& blockundo, BlockValid
         block.nUndoPos = _pos.nPos;
         block.nStatus |= BLOCK_HAVE_UNDO;
         m_dirty_blockindex.insert(&block);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     return true;
 }
 
-<<<<<<< HEAD
-bool ReadBlockFromDisk(CBlock& block, const FlatFilePos& pos, const Consensus::Params& consensusParams)
-=======
 bool BlockManager::ReadBlockFromDisk(CBlock& block, const FlatFilePos& pos) const
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     block.SetNull();
 
     // Open history file to read
-<<<<<<< HEAD
-    CAutoFile filein(OpenBlockFile(pos, true), SER_DISK, CLIENT_VERSION);
-=======
     CAutoFile filein{OpenBlockFile(pos, true)};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (filein.IsNull()) {
         return error("ReadBlockFromDisk: OpenBlockFile failed for %s", pos.ToString());
     }
@@ -1321,38 +1029,18 @@ bool BlockManager::ReadBlockFromDisk(CBlock& block, const FlatFilePos& pos) cons
     }
 
     // Check the header
-<<<<<<< HEAD
-    if (!CheckProofOfWork(GetPoWAlgoHash(block), block.nBits, consensusParams)) {
-=======
     if (!CheckProofOfWork(block.GetHash(), block.nBits, GetConsensus())) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         return error("ReadBlockFromDisk: Errors in block header at %s", pos.ToString());
     }
 
     // Signet only: check block solution
-<<<<<<< HEAD
-    if (consensusParams.signet_blocks && !CheckSignetBlockSolution(block, consensusParams)) {
-=======
     if (GetConsensus().signet_blocks && !CheckSignetBlockSolution(block, GetConsensus())) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         return error("ReadBlockFromDisk: Errors in block solution at %s", pos.ToString());
     }
 
     return true;
 }
 
-<<<<<<< HEAD
-bool ReadBlockFromDisk(CBlock& block, const CBlockIndex* pindex, const Consensus::Params& consensusParams)
-{
-    const FlatFilePos block_pos{WITH_LOCK(cs_main, return pindex->GetBlockPos())};
-
-    if (!ReadBlockFromDisk(block, block_pos, consensusParams)) {
-        return false;
-    }
-    if (block.GetHash() != pindex->GetBlockHash()) {
-        return error("ReadBlockFromDisk(CBlock&, CBlockIndex*): GetHash() doesn't match index for %s at %s",
-                     pindex->ToString(), block_pos.ToString());
-=======
 bool BlockManager::ReadBlockFromDisk(CBlock& block, const CBlockIndex& index) const
 {
     const FlatFilePos block_pos{WITH_LOCK(cs_main, return index.GetBlockPos())};
@@ -1363,49 +1051,29 @@ bool BlockManager::ReadBlockFromDisk(CBlock& block, const CBlockIndex& index) co
     if (block.GetHash() != index.GetBlockHash()) {
         return error("ReadBlockFromDisk(CBlock&, CBlockIndex*): GetHash() doesn't match index for %s at %s",
                      index.ToString(), block_pos.ToString());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     return true;
 }
 
-<<<<<<< HEAD
-bool ReadRawBlockFromDisk(std::vector<uint8_t>& block, const FlatFilePos& pos, const CMessageHeader::MessageStartChars& message_start)
-{
-    FlatFilePos hpos = pos;
-    hpos.nPos -= 8; // Seek back 8 bytes for meta header
-    CAutoFile filein(OpenBlockFile(hpos, true), SER_DISK, CLIENT_VERSION);
-=======
 bool BlockManager::ReadRawBlockFromDisk(std::vector<uint8_t>& block, const FlatFilePos& pos) const
 {
     FlatFilePos hpos = pos;
     hpos.nPos -= 8; // Seek back 8 bytes for meta header
     CAutoFile filein{OpenBlockFile(hpos, true)};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (filein.IsNull()) {
         return error("%s: OpenBlockFile failed for %s", __func__, pos.ToString());
     }
 
     try {
-<<<<<<< HEAD
-        CMessageHeader::MessageStartChars blk_start;
-=======
         MessageStartChars blk_start;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         unsigned int blk_size;
 
         filein >> blk_start >> blk_size;
 
-<<<<<<< HEAD
-        if (memcmp(blk_start, message_start, CMessageHeader::MESSAGE_START_SIZE)) {
-            return error("%s: Block magic mismatch for %s: %s versus expected %s", __func__, pos.ToString(),
-                         HexStr(blk_start),
-                         HexStr(message_start));
-=======
         if (blk_start != GetParams().MessageStart()) {
             return error("%s: Block magic mismatch for %s: %s versus expected %s", __func__, pos.ToString(),
                          HexStr(blk_start),
                          HexStr(GetParams().MessageStart()));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
 
         if (blk_size > MAX_SIZE) {
@@ -1414,11 +1082,7 @@ bool BlockManager::ReadRawBlockFromDisk(std::vector<uint8_t>& block, const FlatF
         }
 
         block.resize(blk_size); // Zeroing of memory is intentional here
-<<<<<<< HEAD
-        filein.read((char*)block.data(), blk_size);
-=======
         filein.read(MakeWritableByteSpan(block));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     } catch (const std::exception& e) {
         return error("%s: Read from block file failed: %s for %s", __func__, e.what(), pos.ToString());
     }
@@ -1426,34 +1090,6 @@ bool BlockManager::ReadRawBlockFromDisk(std::vector<uint8_t>& block, const FlatF
     return true;
 }
 
-<<<<<<< HEAD
-bool ReadRawBlockFromDisk(std::vector<uint8_t>& block, const CBlockIndex* pindex, const CMessageHeader::MessageStartChars& message_start)
-{
-    FlatFilePos block_pos;
-    {
-        LOCK(cs_main);
-        block_pos = pindex->GetBlockPos();
-    }
-
-    return ReadRawBlockFromDisk(block, block_pos, message_start);
-}
-
-/** Store block on disk. If dbp is non-nullptr, the file is known to already reside on disk */
-FlatFilePos SaveBlockToDisk(const CBlock& block, int nHeight, CChain& active_chain, const CChainParams& chainparams, const FlatFilePos* dbp)
-{
-    unsigned int nBlockSize = ::GetSerializeSize(block, CLIENT_VERSION);
-    FlatFilePos blockPos;
-    if (dbp != nullptr) {
-        blockPos = *dbp;
-    }
-    if (!FindBlockPos(blockPos, nBlockSize + 8, nHeight, active_chain, block.GetBlockTime(), dbp != nullptr)) {
-        error("%s: FindBlockPos failed", __func__);
-        return FlatFilePos();
-    }
-    if (dbp == nullptr) {
-        if (!WriteBlockToDisk(block, blockPos, chainparams.MessageStart())) {
-            AbortNode("Failed to write block");
-=======
 FlatFilePos BlockManager::SaveBlockToDisk(const CBlock& block, int nHeight, const FlatFilePos* dbp)
 {
     unsigned int nBlockSize = ::GetSerializeSize(block, CLIENT_VERSION);
@@ -1474,30 +1110,12 @@ FlatFilePos BlockManager::SaveBlockToDisk(const CBlock& block, int nHeight, cons
     if (!position_known) {
         if (!WriteBlockToDisk(block, blockPos)) {
             m_opts.notifications.fatalError("Failed to write block");
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             return FlatFilePos();
         }
     }
     return blockPos;
 }
 
-<<<<<<< HEAD
-struct CImportingNow {
-    CImportingNow()
-    {
-        assert(fImporting == false);
-        fImporting = true;
-    }
-
-    ~CImportingNow()
-    {
-        assert(fImporting == true);
-        fImporting = false;
-    }
-};
-
-void ThreadImport(ChainstateManager& chainman, std::vector<fs::path> vImportFiles, const ArgsManager& args)
-=======
 class ImportingNow
 {
     std::atomic<bool>& m_importing;
@@ -1516,35 +1134,15 @@ public:
 };
 
 void ImportBlocks(ChainstateManager& chainman, std::vector<fs::path> vImportFiles)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     ScheduleBatchPriority();
 
     {
-<<<<<<< HEAD
-        CImportingNow imp;
-=======
         ImportingNow imp{chainman.m_blockman.m_importing};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         // -reindex
         if (fReindex) {
             int nFile = 0;
-<<<<<<< HEAD
-            while (true) {
-                FlatFilePos pos(nFile, 0);
-                if (!fs::exists(GetBlockPosFilename(pos))) {
-                    break; // No block files left to reindex
-                }
-                FILE* file = OpenBlockFile(pos, true);
-                if (!file) {
-                    break; // This error is logged in OpenBlockFile
-                }
-                LogPrintf("Reindexing block file blk%05u.dat...\n", (unsigned int)nFile);
-                chainman.ActiveChainstate().LoadExternalBlockFile(file, &pos);
-                if (ShutdownRequested()) {
-                    LogPrintf("Shutdown requested. Exit %s\n", __func__);
-=======
             // Map of disk positions for blocks with unknown parent (only used for reindex);
             // parent hash -> child disk position, multiple children can have the same parent.
             std::multimap<uint256, FlatFilePos> blocks_with_unknown_parent;
@@ -1561,16 +1159,11 @@ void ImportBlocks(ChainstateManager& chainman, std::vector<fs::path> vImportFile
                 chainman.LoadExternalBlockFile(file, &pos, &blocks_with_unknown_parent);
                 if (chainman.m_interrupt) {
                     LogPrintf("Interrupt requested. Exit %s\n", __func__);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                     return;
                 }
                 nFile++;
             }
-<<<<<<< HEAD
-            pblocktree->WriteReindexing(false);
-=======
             WITH_LOCK(::cs_main, chainman.m_blockman.m_block_tree_db->WriteReindexing(false));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             fReindex = false;
             LogPrintf("Reindexing finished\n");
             // To avoid ending up in a situation without genesis block, re-try initializing (no-op if reindexing worked):
@@ -1579,18 +1172,6 @@ void ImportBlocks(ChainstateManager& chainman, std::vector<fs::path> vImportFile
 
         // -loadblock=
         for (const fs::path& path : vImportFiles) {
-<<<<<<< HEAD
-            FILE* file = fsbridge::fopen(path, "rb");
-            if (file) {
-                LogPrintf("Importing blocks file %s...\n", path.string());
-                chainman.ActiveChainstate().LoadExternalBlockFile(file);
-                if (ShutdownRequested()) {
-                    LogPrintf("Shutdown requested. Exit %s\n", __func__);
-                    return;
-                }
-            } else {
-                LogPrintf("Warning: Could not open blocks file %s\n", path.string());
-=======
             CAutoFile file{fsbridge::fopen(path, "rb"), CLIENT_VERSION};
             if (!file.IsNull()) {
                 LogPrintf("Importing blocks file %s...\n", fs::PathToString(path));
@@ -1601,7 +1182,6 @@ void ImportBlocks(ChainstateManager& chainman, std::vector<fs::path> vImportFile
                 }
             } else {
                 LogPrintf("Warning: Could not open blocks file %s\n", fs::PathToString(path));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             }
         }
 
@@ -1610,25 +1190,6 @@ void ImportBlocks(ChainstateManager& chainman, std::vector<fs::path> vImportFile
         // We can't hold cs_main during ActivateBestChain even though we're accessing
         // the chainman unique_ptrs since ABC requires us not to be holding cs_main, so retrieve
         // the relevant pointers before the ABC call.
-<<<<<<< HEAD
-        for (CChainState* chainstate : WITH_LOCK(::cs_main, return chainman.GetAll())) {
-            BlockValidationState state;
-            if (!chainstate->ActivateBestChain(state, nullptr)) {
-                LogPrintf("Failed to connect best block (%s)\n", state.ToString());
-                StartShutdown();
-                return;
-            }
-        }
-
-        if (args.GetBoolArg("-stopafterblockimport", DEFAULT_STOPAFTERBLOCKIMPORT)) {
-            LogPrintf("Stopping after block import\n");
-            StartShutdown();
-            return;
-        }
-    } // End scope of CImportingNow
-    chainman.ActiveChainstate().LoadMempool(args);
-}
-=======
         for (Chainstate* chainstate : WITH_LOCK(::cs_main, return chainman.GetAll())) {
             BlockValidationState state;
             if (!chainstate->ActivateBestChain(state, nullptr)) {
@@ -1653,4 +1214,3 @@ std::ostream& operator<<(std::ostream& os, const BlockfileCursor& cursor) {
     return os;
 }
 } // namespace node
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion

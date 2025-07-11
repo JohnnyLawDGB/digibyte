@@ -257,15 +257,9 @@ public:
         // and append that to our own origin string.
         if (sub[0] == '[') {
             sub = sub.substr(9);
-<<<<<<< HEAD
-            ret = "[" + OriginString() + std::move(sub);
-        } else {
-            ret = "[" + OriginString() + "]" + std::move(sub);
-=======
             ret = "[" + OriginString(StringType::PUBLIC, /*normalized=*/true) + std::move(sub);
         } else {
             ret = "[" + OriginString(StringType::PUBLIC, /*normalized=*/true) + "]" + std::move(sub);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
         return true;
     }
@@ -414,13 +408,11 @@ public:
         } else {
             for (auto entry : m_path) {
                 if (!parent_extkey.Derive(parent_extkey, entry)) return false;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             }
             final_extkey = parent_extkey;
             if (m_derive == DeriveType::UNHARDENED) der = parent_extkey.Derive(final_extkey, pos);
             assert(m_derive != DeriveType::HARDENED);
         }
-<<<<<<< HEAD
         if (!der) return false;
 
         final_info_out = final_info_out_tmp;
@@ -461,7 +453,6 @@ public:
         CExtKey key;
         if (!GetExtKey(arg, key)) return false;
         out = EncodeExtKey(key) + FormatHDKeypath(m_path, /*apostrophe=*/m_apostrophe);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         if (IsRange()) {
             out += "/*";
             if (m_derive == DeriveType::HARDENED) out += m_apostrophe ? '\'' : 'h';
@@ -577,10 +568,7 @@ public:
         PUBLIC,
         PRIVATE,
         NORMALIZED,
-<<<<<<< HEAD
-=======
         COMPAT, // string calculation that mustn't change over time to stay compatible with previous software versions
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     };
 
     bool IsSolvable() const override
@@ -609,20 +597,12 @@ public:
             if (pos++) ret += ",";
             std::string tmp;
             if (!scriptarg->ToStringHelper(arg, tmp, type, cache)) return false;
-<<<<<<< HEAD
-            ret += std::move(tmp);
-=======
             ret += tmp;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
         return true;
     }
 
-<<<<<<< HEAD
-    bool ToStringHelper(const SigningProvider* arg, std::string& out, const StringType type, const DescriptorCache* cache = nullptr) const
-=======
     virtual bool ToStringHelper(const SigningProvider* arg, std::string& out, const StringType type, const DescriptorCache* cache = nullptr) const
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     {
         std::string extra = ToStringExtra();
         size_t pos = extra.size() > 0 ? 1 : 0;
@@ -640,16 +620,11 @@ public:
                 case StringType::PUBLIC:
                     tmp = pubkey->ToString();
                     break;
-<<<<<<< HEAD
-            }
-            ret += std::move(tmp);
-=======
                 case StringType::COMPAT:
                     tmp = pubkey->ToString(PubkeyProvider::StringType::COMPAT);
                     break;
             }
             ret += tmp;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
         std::string subscript;
         if (!ToStringSubScriptHelper(arg, subscript, type, cache)) return false;
@@ -658,16 +633,6 @@ public:
         return true;
     }
 
-<<<<<<< HEAD
-    std::string ToString() const final
-    {
-        std::string ret;
-        ToStringHelper(nullptr, ret, StringType::PUBLIC);
-        return AddChecksum(ret);
-    }
-
-    bool ToPrivateString(const SigningProvider& arg, std::string& out) const final
-=======
     std::string ToString(bool compat_format) const final
     {
         std::string ret;
@@ -676,7 +641,6 @@ public:
     }
 
     bool ToPrivateString(const SigningProvider& arg, std::string& out) const override
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     {
         bool ret = ToStringHelper(&arg, out, StringType::PRIVATE);
         out = AddChecksum(out);
@@ -708,11 +672,7 @@ public:
             assert(outscripts.size() == 1);
             subscripts.emplace_back(std::move(outscripts[0]));
         }
-<<<<<<< HEAD
-        out = Merge(std::move(out), std::move(subprovider));
-=======
         out.Merge(std::move(subprovider));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         std::vector<CPubKey> pubkeys;
         pubkeys.reserve(entries.size());
@@ -721,11 +681,7 @@ public:
             out.origins.emplace(entry.first.GetID(), std::make_pair<CPubKey, KeyOriginInfo>(CPubKey(entry.first), std::move(entry.second)));
         }
 
-<<<<<<< HEAD
-        output_scripts = MakeScripts(pubkeys, MakeSpan(subscripts), out);
-=======
         output_scripts = MakeScripts(pubkeys, Span{subscripts}, out);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         return true;
     }
 
@@ -752,8 +708,6 @@ public:
     }
 
     std::optional<OutputType> GetOutputType() const override { return std::nullopt; }
-<<<<<<< HEAD
-=======
 
     std::optional<int64_t> ScriptSize() const override { return {}; }
 
@@ -767,7 +721,6 @@ public:
     std::optional<int64_t> MaxSatisfactionWeight(bool) const override { return {}; }
 
     std::optional<int64_t> MaxSatisfactionElems() const override { return {}; }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 };
 
 /** A parsed addr(A) descriptor. */
@@ -786,12 +739,9 @@ public:
         return OutputTypeFromDestination(m_destination);
     }
     bool IsSingleType() const final { return true; }
-<<<<<<< HEAD
-=======
     bool ToPrivateString(const SigningProvider& arg, std::string& out) const final { return false; }
 
     std::optional<int64_t> ScriptSize() const override { return GetScriptForDestination(m_destination).size(); }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 };
 
 /** A parsed raw(H) descriptor. */
@@ -812,12 +762,9 @@ public:
         return OutputTypeFromDestination(dest);
     }
     bool IsSingleType() const final { return true; }
-<<<<<<< HEAD
-=======
     bool ToPrivateString(const SigningProvider& arg, std::string& out) const final { return false; }
 
     std::optional<int64_t> ScriptSize() const override { return m_script.size(); }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 };
 
 /** A parsed pk(P) descriptor. */
@@ -838,8 +785,6 @@ protected:
 public:
     PKDescriptor(std::unique_ptr<PubkeyProvider> prov, bool xonly = false) : DescriptorImpl(Vector(std::move(prov)), "pk"), m_xonly(xonly) {}
     bool IsSingleType() const final { return true; }
-<<<<<<< HEAD
-=======
 
     std::optional<int64_t> ScriptSize() const override {
         return 1 + (m_xonly ? 32 : m_pubkey_args[0]->GetSize()) + 1;
@@ -855,7 +800,6 @@ public:
     }
 
     std::optional<int64_t> MaxSatisfactionElems() const override { return 1; }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 };
 
 /** A parsed pkh(P) descriptor. */
@@ -872,8 +816,6 @@ public:
     PKHDescriptor(std::unique_ptr<PubkeyProvider> prov) : DescriptorImpl(Vector(std::move(prov)), "pkh") {}
     std::optional<OutputType> GetOutputType() const override { return OutputType::LEGACY; }
     bool IsSingleType() const final { return true; }
-<<<<<<< HEAD
-=======
 
     std::optional<int64_t> ScriptSize() const override { return 1 + 1 + 1 + 20 + 1 + 1; }
 
@@ -887,7 +829,6 @@ public:
     }
 
     std::optional<int64_t> MaxSatisfactionElems() const override { return 2; }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 };
 
 /** A parsed wpkh(P) descriptor. */
@@ -904,8 +845,6 @@ public:
     WPKHDescriptor(std::unique_ptr<PubkeyProvider> prov) : DescriptorImpl(Vector(std::move(prov)), "wpkh") {}
     std::optional<OutputType> GetOutputType() const override { return OutputType::BECH32; }
     bool IsSingleType() const final { return true; }
-<<<<<<< HEAD
-=======
 
     std::optional<int64_t> ScriptSize() const override { return 1 + 1 + 20; }
 
@@ -919,7 +858,6 @@ public:
     }
 
     std::optional<int64_t> MaxSatisfactionElems() const override { return 2; }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 };
 
 /** A parsed combo(P) descriptor. */
@@ -941,7 +879,6 @@ protected:
         }
         return ret;
     }
-<<<<<<< HEAD
 public:
     ComboDescriptor(std::unique_ptr<PubkeyProvider> prov) : DescriptorImpl(Vector(std::move(prov)), "combo") {}
     bool IsSingleType() const final { return false; }
@@ -1044,207 +981,6 @@ protected:
                 path.pop_back();
             }
             if (!path.empty()) path.back() = true;
-=======
-public:
-    ComboDescriptor(std::unique_ptr<PubkeyProvider> prov) : DescriptorImpl(Vector(std::move(prov)), "combo") {}
-    bool IsSingleType() const final { return false; }
-};
-
-/** A parsed multi(...) or sortedmulti(...) descriptor */
-class MultisigDescriptor final : public DescriptorImpl
-{
-    const int m_threshold;
-    const bool m_sorted;
-protected:
-    std::string ToStringExtra() const override { return strprintf("%i", m_threshold); }
-    std::vector<CScript> MakeScripts(const std::vector<CPubKey>& keys, Span<const CScript>, FlatSigningProvider&) const override {
-        if (m_sorted) {
-            std::vector<CPubKey> sorted_keys(keys);
-            std::sort(sorted_keys.begin(), sorted_keys.end());
-            return Vector(GetScriptForMultisig(m_threshold, sorted_keys));
-        }
-        return Vector(GetScriptForMultisig(m_threshold, keys));
-    }
-public:
-    MultisigDescriptor(int threshold, std::vector<std::unique_ptr<PubkeyProvider>> providers, bool sorted = false) : DescriptorImpl(std::move(providers), sorted ? "sortedmulti" : "multi"), m_threshold(threshold), m_sorted(sorted) {}
-    bool IsSingleType() const final { return true; }
-
-    std::optional<int64_t> ScriptSize() const override {
-        const auto n_keys = m_pubkey_args.size();
-        auto op = [](int64_t acc, const std::unique_ptr<PubkeyProvider>& pk) { return acc + 1 + pk->GetSize();};
-        const auto pubkeys_size{std::accumulate(m_pubkey_args.begin(), m_pubkey_args.end(), int64_t{0}, op)};
-        return 1 + BuildScript(n_keys).size() + BuildScript(m_threshold).size() + pubkeys_size;
-    }
-
-    std::optional<int64_t> MaxSatSize(bool use_max_sig) const override {
-        const auto sig_size = use_max_sig ? 72 : 71;
-        return (1 + (1 + sig_size) * m_threshold);
-    }
-
-    std::optional<int64_t> MaxSatisfactionWeight(bool use_max_sig) const override {
-        return *MaxSatSize(use_max_sig) * WITNESS_SCALE_FACTOR;
-    }
-
-    std::optional<int64_t> MaxSatisfactionElems() const override { return 1 + m_threshold; }
-};
-
-/** A parsed (sorted)multi_a(...) descriptor. Always uses x-only pubkeys. */
-class MultiADescriptor final : public DescriptorImpl
-{
-    const int m_threshold;
-    const bool m_sorted;
-protected:
-    std::string ToStringExtra() const override { return strprintf("%i", m_threshold); }
-    std::vector<CScript> MakeScripts(const std::vector<CPubKey>& keys, Span<const CScript>, FlatSigningProvider&) const override {
-        CScript ret;
-        std::vector<XOnlyPubKey> xkeys;
-        xkeys.reserve(keys.size());
-        for (const auto& key : keys) xkeys.emplace_back(key);
-        if (m_sorted) std::sort(xkeys.begin(), xkeys.end());
-        ret << ToByteVector(xkeys[0]) << OP_CHECKSIG;
-        for (size_t i = 1; i < keys.size(); ++i) {
-            ret << ToByteVector(xkeys[i]) << OP_CHECKSIGADD;
-        }
-        ret << m_threshold << OP_NUMEQUAL;
-        return Vector(std::move(ret));
-    }
-public:
-    MultiADescriptor(int threshold, std::vector<std::unique_ptr<PubkeyProvider>> providers, bool sorted = false) : DescriptorImpl(std::move(providers), sorted ? "sortedmulti_a" : "multi_a"), m_threshold(threshold), m_sorted(sorted) {}
-    bool IsSingleType() const final { return true; }
-
-    std::optional<int64_t> ScriptSize() const override {
-        const auto n_keys = m_pubkey_args.size();
-        return (1 + 32 + 1) * n_keys + BuildScript(m_threshold).size() + 1;
-    }
-
-    std::optional<int64_t> MaxSatSize(bool use_max_sig) const override {
-        return (1 + 65) * m_threshold + (m_pubkey_args.size() - m_threshold);
-    }
-
-    std::optional<int64_t> MaxSatisfactionElems() const override { return m_pubkey_args.size(); }
-};
-
-/** A parsed sh(...) descriptor. */
-class SHDescriptor final : public DescriptorImpl
-{
-protected:
-    std::vector<CScript> MakeScripts(const std::vector<CPubKey>&, Span<const CScript> scripts, FlatSigningProvider& out) const override
-    {
-        auto ret = Vector(GetScriptForDestination(ScriptHash(scripts[0])));
-        if (ret.size()) out.scripts.emplace(CScriptID(scripts[0]), scripts[0]);
-        return ret;
-    }
-
-    bool IsSegwit() const { return m_subdescriptor_args[0]->GetOutputType() == OutputType::BECH32; }
-
-public:
-    SHDescriptor(std::unique_ptr<DescriptorImpl> desc) : DescriptorImpl({}, std::move(desc), "sh") {}
-
-    std::optional<OutputType> GetOutputType() const override
-    {
-        assert(m_subdescriptor_args.size() == 1);
-        if (IsSegwit()) return OutputType::P2SH_SEGWIT;
-        return OutputType::LEGACY;
-    }
-    bool IsSingleType() const final { return true; }
-
-    std::optional<int64_t> ScriptSize() const override { return 1 + 1 + 20 + 1; }
-
-    std::optional<int64_t> MaxSatisfactionWeight(bool use_max_sig) const override {
-        if (const auto sat_size = m_subdescriptor_args[0]->MaxSatSize(use_max_sig)) {
-            if (const auto subscript_size = m_subdescriptor_args[0]->ScriptSize()) {
-                // The subscript is never witness data.
-                const auto subscript_weight = (1 + *subscript_size) * WITNESS_SCALE_FACTOR;
-                // The weight depends on whether the inner descriptor is satisfied using the witness stack.
-                if (IsSegwit()) return subscript_weight + *sat_size;
-                return subscript_weight + *sat_size * WITNESS_SCALE_FACTOR;
-            }
-        }
-        return {};
-    }
-
-    std::optional<int64_t> MaxSatisfactionElems() const override {
-        if (const auto sub_elems = m_subdescriptor_args[0]->MaxSatisfactionElems()) return 1 + *sub_elems;
-        return {};
-    }
-};
-
-/** A parsed wsh(...) descriptor. */
-class WSHDescriptor final : public DescriptorImpl
-{
-protected:
-    std::vector<CScript> MakeScripts(const std::vector<CPubKey>&, Span<const CScript> scripts, FlatSigningProvider& out) const override
-    {
-        auto ret = Vector(GetScriptForDestination(WitnessV0ScriptHash(scripts[0])));
-        if (ret.size()) out.scripts.emplace(CScriptID(scripts[0]), scripts[0]);
-        return ret;
-    }
-public:
-    WSHDescriptor(std::unique_ptr<DescriptorImpl> desc) : DescriptorImpl({}, std::move(desc), "wsh") {}
-    std::optional<OutputType> GetOutputType() const override { return OutputType::BECH32; }
-    bool IsSingleType() const final { return true; }
-
-    std::optional<int64_t> ScriptSize() const override { return 1 + 1 + 32; }
-
-    std::optional<int64_t> MaxSatSize(bool use_max_sig) const override {
-        if (const auto sat_size = m_subdescriptor_args[0]->MaxSatSize(use_max_sig)) {
-            if (const auto subscript_size = m_subdescriptor_args[0]->ScriptSize()) {
-                return GetSizeOfCompactSize(*subscript_size) + *subscript_size + *sat_size;
-            }
-        }
-        return {};
-    }
-
-    std::optional<int64_t> MaxSatisfactionWeight(bool use_max_sig) const override {
-        return MaxSatSize(use_max_sig);
-    }
-
-    std::optional<int64_t> MaxSatisfactionElems() const override {
-        if (const auto sub_elems = m_subdescriptor_args[0]->MaxSatisfactionElems()) return 1 + *sub_elems;
-        return {};
-    }
-};
-
-/** A parsed tr(...) descriptor. */
-class TRDescriptor final : public DescriptorImpl
-{
-    std::vector<int> m_depths;
-protected:
-    std::vector<CScript> MakeScripts(const std::vector<CPubKey>& keys, Span<const CScript> scripts, FlatSigningProvider& out) const override
-    {
-        TaprootBuilder builder;
-        assert(m_depths.size() == scripts.size());
-        for (size_t pos = 0; pos < m_depths.size(); ++pos) {
-            builder.Add(m_depths[pos], scripts[pos], TAPROOT_LEAF_TAPSCRIPT);
-        }
-        if (!builder.IsComplete()) return {};
-        assert(keys.size() == 1);
-        XOnlyPubKey xpk(keys[0]);
-        if (!xpk.IsFullyValid()) return {};
-        builder.Finalize(xpk);
-        WitnessV1Taproot output = builder.GetOutput();
-        out.tr_trees[output] = builder;
-        out.pubkeys.emplace(keys[0].GetID(), keys[0]);
-        return Vector(GetScriptForDestination(output));
-    }
-    bool ToStringSubScriptHelper(const SigningProvider* arg, std::string& ret, const StringType type, const DescriptorCache* cache = nullptr) const override
-    {
-        if (m_depths.empty()) return true;
-        std::vector<bool> path;
-        for (size_t pos = 0; pos < m_depths.size(); ++pos) {
-            if (pos) ret += ',';
-            while ((int)path.size() <= m_depths[pos]) {
-                if (path.size()) ret += '{';
-                path.push_back(false);
-            }
-            std::string tmp;
-            if (!m_subdescriptor_args[pos]->ToStringHelper(arg, tmp, type, cache)) return false;
-            ret += tmp;
-            while (!path.empty() && path.back()) {
-                if (path.size() > 1) ret += '}';
-                path.pop_back();
-            }
-            if (!path.empty()) path.back() = true;
         }
         return true;
     }
@@ -1256,62 +992,75 @@ public:
     }
     std::optional<OutputType> GetOutputType() const override { return OutputType::BECH32M; }
     bool IsSingleType() const final { return true; }
-
-    std::optional<int64_t> ScriptSize() const override { return 1 + 1 + 32; }
-
-    std::optional<int64_t> MaxSatisfactionWeight(bool) const override {
-        // FIXME: We assume keypath spend, which can lead to very large underestimations.
-        return 1 + 65;
-    }
-
-    std::optional<int64_t> MaxSatisfactionElems() const override {
-        // FIXME: See above, we assume keypath spend.
-        return 1;
-    }
 };
 
-/* We instantiate Miniscript here with a simple integer as key type.
- * The value of these key integers are an index in the
- * DescriptorImpl::m_pubkey_args vector.
- */
+/** A parsed rawtr(...) descriptor. */
+class RawTRDescriptor final : public DescriptorImpl
+{
+protected:
+    std::vector<CScript> MakeScripts(const std::vector<CPubKey>& keys, Span<const CScript> scripts, FlatSigningProvider& out) const override
+    {
+        assert(keys.size() == 1);
+        XOnlyPubKey xpk(keys[0]);
+        if (!xpk.IsFullyValid()) return {};
+        WitnessV1Taproot output{xpk};
+        return Vector(GetScriptForDestination(output));
+    }
+public:
+    RawTRDescriptor(std::unique_ptr<PubkeyProvider> output_key) : DescriptorImpl(Vector(std::move(output_key)), "rawtr") {}
+    std::optional<OutputType> GetOutputType() const override { return OutputType::BECH32M; }
+    bool IsSingleType() const final { return true; }
+};
+
+////////////////////////////////////////////////////////////////////////////
+// Parser                                                                 //
+////////////////////////////////////////////////////////////////////////////
+
+enum class ParseScriptContext {
+    TOP,     //!< Top-level context (script goes directly in scriptPubKey)
+    P2SH,    //!< Inside sh() (script becomes P2SH redeemScript)
+    P2WPKH,  //!< Inside wpkh() (no script, pubkey only)
+    P2WSH,   //!< Inside wsh() (script becomes v0 witness script)
+    P2TR,    //!< Inside tr() (either internal key, or BIP342 script leaf)
+};
 
 /**
- * The context for converting a Miniscript descriptor into a Script.
- */
-class ScriptMaker {
-    //! Keys contained in the Miniscript (the evaluation of DescriptorImpl::m_pubkey_args).
-    const std::vector<CPubKey>& m_keys;
-    //! The script context we're operating within (Tapscript or P2WSH).
-    const miniscript::MiniscriptContext m_script_ctx;
-
-    //! Get the ripemd160(sha256()) hash of this key.
-    //! Any key that is valid in a descriptor serializes as 32 bytes within a Tapscript context. So we
-    //! must not hash the sign-bit byte in this case.
-    uint160 GetHash160(uint32_t key) const {
-        if (miniscript::IsTapscript(m_script_ctx)) {
-            return Hash160(XOnlyPubKey{m_keys[key]});
+ * Parse a key path, being passed a split list of elements (the first element is ignored).
+ * @param[in] split BIP32 path string, using either ' or h for hardened derivation
+ * @param[out] out Vector of parsed key paths
+ * @param[out] apostrophe only updated if hardened derivation is found
+ * @param[out] error parsing error message
+ * @returns false if parsing failed
+ **/
+[[nodiscard]] bool ParseKeyPath(const std::vector<Span<const char>>& split, KeyPath& out, bool& apostrophe, std::string& error)
+{
+    for (size_t i = 1; i < split.size(); ++i) {
+        Span<const char> elem = split[i];
+        bool hardened = false;
+        if (elem.size() > 0) {
+            const char last = elem[elem.size() - 1];
+            if (last == '\'' || last == 'h') {
+                elem = elem.first(elem.size() - 1);
+                hardened = true;
+                apostrophe = last == '\'';
+            }
         }
-        return m_keys[key].GetID();
-    }
-
-public:
-    ScriptMaker(const std::vector<CPubKey>& keys LIFETIMEBOUND, const miniscript::MiniscriptContext script_ctx) : m_keys(keys), m_script_ctx{script_ctx} {}
-
-    std::vector<unsigned char> ToPKBytes(uint32_t key) const {
-        // In Tapscript keys always serialize as x-only, whether an x-only key was used in the descriptor or not.
-        if (!miniscript::IsTapscript(m_script_ctx)) {
-            return {m_keys[key].begin(), m_keys[key].end()};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+        uint32_t p;
+        if (!ParseUInt32(std::string(elem.begin(), elem.end()), &p)) {
+            error = strprintf("Key path value '%s' is not a valid uint32", std::string(elem.begin(), elem.end()));
+            return false;
+        } else if (p > 0x7FFFFFFFUL) {
+            error = strprintf("Key path value %u is out of range", p);
+            return false;
         }
-        const XOnlyPubKey xonly_pubkey{m_keys[key]};
-        return {xonly_pubkey.begin(), xonly_pubkey.end()};
+        out.push_back(p | (((uint32_t)hardened) << 31));
     }
+    return true;
+}
 
-    std::vector<unsigned char> ToPKHBytes(uint32_t key) const {
-        auto id = GetHash160(key);
-        return {id.begin(), id.end()};
-    }
-};
+/** Parse a public key that excludes origin information. */
+std::unique_ptr<PubkeyProvider> ParsePubkeyInner(uint32_t key_exp_index, const Span<const char>& sp, ParseScriptContext ctx, FlatSigningProvider& out, bool& apostrophe, std::string& error)
+{
 
 /**
  * The context for converting a Miniscript descriptor to its textual form.
@@ -1439,52 +1188,10 @@ enum class ParseScriptContext {
     P2TR,    //!< Inside tr() (either internal key, or BIP342 script leaf)
 };
 
-<<<<<<< HEAD
-/** Parse a key path, being passed a split list of elements (the first element is ignored). */
-[[nodiscard]] bool ParseKeyPath(const std::vector<Span<const char>>& split, KeyPath& out, std::string& error)
-=======
-/**
- * Parse a key path, being passed a split list of elements (the first element is ignored).
- *
- * @param[in] split BIP32 path string, using either ' or h for hardened derivation
- * @param[out] out the key path
- * @param[out] apostrophe only updated if hardened derivation is found
- * @param[out] error parsing error message
- * @returns false if parsing failed
- **/
-[[nodiscard]] bool ParseKeyPath(const std::vector<Span<const char>>& split, KeyPath& out, bool& apostrophe, std::string& error)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
-{
-    for (size_t i = 1; i < split.size(); ++i) {
-        Span<const char> elem = split[i];
-        bool hardened = false;
-        if (elem.size() > 0) {
-            const char last = elem[elem.size() - 1];
-            if (last == '\'' || last == 'h') {
-                elem = elem.first(elem.size() - 1);
-                hardened = true;
-                apostrophe = last == '\'';
-            }
-        }
-        uint32_t p;
-        if (!ParseUInt32(std::string(elem.begin(), elem.end()), &p)) {
-            error = strprintf("Key path value '%s' is not a valid uint32", std::string(elem.begin(), elem.end()));
-            return false;
-        } else if (p > 0x7FFFFFFFUL) {
-            error = strprintf("Key path value %u is out of range", p);
-            return false;
-        }
-        out.push_back(p | (((uint32_t)hardened) << 31));
-    }
-    return true;
-}
+
 
 /** Parse a public key that excludes origin information. */
-<<<<<<< HEAD
-std::unique_ptr<PubkeyProvider> ParsePubkeyInner(uint32_t key_exp_index, const Span<const char>& sp, ParseScriptContext ctx, FlatSigningProvider& out, std::string& error)
-=======
 std::unique_ptr<PubkeyProvider> ParsePubkeyInner(uint32_t key_exp_index, const Span<const char>& sp, ParseScriptContext ctx, FlatSigningProvider& out, bool& apostrophe, std::string& error)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     using namespace spanparsing;
 
@@ -1499,13 +1206,12 @@ std::unique_ptr<PubkeyProvider> ParsePubkeyInner(uint32_t key_exp_index, const S
         if (IsHex(str)) {
             std::vector<unsigned char> data = ParseHex(str);
             CPubKey pubkey(data);
-<<<<<<< HEAD
-=======
+
             if (pubkey.IsValid() && !pubkey.IsValidNonHybrid()) {
                 error = "Hybrid public keys are not allowed";
                 return nullptr;
             }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
             if (pubkey.IsFullyValid()) {
                 if (permit_uncompressed || pubkey.IsCompressed()) {
                     return std::make_unique<ConstPubkeyProvider>(key_exp_index, pubkey, false);
@@ -1552,62 +1258,14 @@ std::unique_ptr<PubkeyProvider> ParsePubkeyInner(uint32_t key_exp_index, const S
         split.pop_back();
         type = DeriveType::HARDENED;
     }
-<<<<<<< HEAD
-    if (!ParseKeyPath(split, path, error)) return nullptr;
-=======
+
     if (!ParseKeyPath(split, path, apostrophe, error)) return nullptr;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
     if (extkey.key.IsValid()) {
         extpubkey = extkey.Neuter();
         out.keys.emplace(extpubkey.pubkey.GetID(), extkey.key);
     }
-<<<<<<< HEAD
-    return std::make_unique<BIP32PubkeyProvider>(key_exp_index, extpubkey, std::move(path), type);
-}
 
-/** Parse a public key including origin information (if enabled). */
-std::unique_ptr<PubkeyProvider> ParsePubkey(uint32_t key_exp_index, const Span<const char>& sp, ParseScriptContext ctx, FlatSigningProvider& out, std::string& error)
-{
-    using namespace spanparsing;
-
-    auto origin_split = Split(sp, ']');
-    if (origin_split.size() > 2) {
-        error = "Multiple ']' characters found for a single pubkey";
-        return nullptr;
-    }
-    if (origin_split.size() == 1) return ParsePubkeyInner(key_exp_index, origin_split[0], ctx, out, error);
-    if (origin_split[0].empty() || origin_split[0][0] != '[') {
-        error = strprintf("Key origin start '[ character expected but not found, got '%c' instead",
-                          origin_split[0].empty() ? /** empty, implies split char */ ']' : origin_split[0][0]);
-        return nullptr;
-    }
-    auto slash_split = Split(origin_split[0].subspan(1), '/');
-    if (slash_split[0].size() != 8) {
-        error = strprintf("Fingerprint is not 4 bytes (%u characters instead of 8 characters)", slash_split[0].size());
-        return nullptr;
-    }
-    std::string fpr_hex = std::string(slash_split[0].begin(), slash_split[0].end());
-    if (!IsHex(fpr_hex)) {
-        error = strprintf("Fingerprint '%s' is not hex", fpr_hex);
-        return nullptr;
-    }
-    auto fpr_bytes = ParseHex(fpr_hex);
-    KeyOriginInfo info;
-    static_assert(sizeof(info.fingerprint) == 4, "Fingerprint must be 4 bytes");
-    assert(fpr_bytes.size() == 4);
-    std::copy(fpr_bytes.begin(), fpr_bytes.end(), info.fingerprint);
-    if (!ParseKeyPath(slash_split, info.path, error)) return nullptr;
-    auto provider = ParsePubkeyInner(key_exp_index, origin_split[1], ctx, out, error);
-    if (!provider) return nullptr;
-    return std::make_unique<OriginPubkeyProvider>(key_exp_index, std::move(info), std::move(provider));
-}
-
-/** Parse a script in a particular context. */
-std::unique_ptr<DescriptorImpl> ParseScript(uint32_t& key_exp_index, Span<const char>& sp, ParseScriptContext ctx, FlatSigningProvider& out, std::string& error)
-{
-    using namespace spanparsing;
-
-=======
     return std::make_unique<BIP32PubkeyProvider>(key_exp_index, extpubkey, std::move(path), type, apostrophe);
 }
 
@@ -1780,31 +1438,23 @@ std::unique_ptr<DescriptorImpl> ParseScript(uint32_t& key_exp_index, Span<const 
 {
     using namespace spanparsing;
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
     auto expr = Expr(sp);
     bool sorted_multi = false;
     if (Func("pk", expr)) {
         auto pubkey = ParsePubkey(key_exp_index, expr, ctx, out, error);
-<<<<<<< HEAD
-        if (!pubkey) return nullptr;
-=======
+
         if (!pubkey) {
             error = strprintf("pk(): %s", error);
             return nullptr;
         }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
         ++key_exp_index;
         return std::make_unique<PKDescriptor>(std::move(pubkey), ctx == ParseScriptContext::P2TR);
     }
     if ((ctx == ParseScriptContext::TOP || ctx == ParseScriptContext::P2SH || ctx == ParseScriptContext::P2WSH) && Func("pkh", expr)) {
         auto pubkey = ParsePubkey(key_exp_index, expr, ctx, out, error);
-<<<<<<< HEAD
-        if (!pubkey) return nullptr;
-        ++key_exp_index;
-        return std::make_unique<PKHDescriptor>(std::move(pubkey));
-    } else if (Func("pkh", expr)) {
-        error = "Can only have pkh at top level, in sh(), or in wsh()";
-=======
+
         if (!pubkey) {
             error = strprintf("pkh(): %s", error);
             return nullptr;
@@ -1814,35 +1464,31 @@ std::unique_ptr<DescriptorImpl> ParseScript(uint32_t& key_exp_index, Span<const 
     } else if (ctx != ParseScriptContext::P2TR && Func("pkh", expr)) {
         // Under Taproot, always the Miniscript parser deal with it.
         error = "Can only have pkh at top level, in sh(), wsh(), or in tr()";
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
         return nullptr;
     }
     if (ctx == ParseScriptContext::TOP && Func("combo", expr)) {
         auto pubkey = ParsePubkey(key_exp_index, expr, ctx, out, error);
-<<<<<<< HEAD
-        if (!pubkey) return nullptr;
-=======
+
         if (!pubkey) {
             error = strprintf("combo(): %s", error);
             return nullptr;
         }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
         ++key_exp_index;
         return std::make_unique<ComboDescriptor>(std::move(pubkey));
     } else if (Func("combo", expr)) {
         error = "Can only have combo() at top level";
         return nullptr;
     }
-<<<<<<< HEAD
-    if ((ctx == ParseScriptContext::TOP || ctx == ParseScriptContext::P2SH || ctx == ParseScriptContext::P2WSH) && ((sorted_multi = Func("sortedmulti", expr)) || Func("multi", expr))) {
-=======
+
     const bool multi = Func("multi", expr);
     const bool sortedmulti = !multi && Func("sortedmulti", expr);
     const bool multi_a = !(multi || sortedmulti) && Func("multi_a", expr);
     const bool sortedmulti_a = !(multi || sortedmulti || multi_a) && Func("sortedmulti_a", expr);
     if (((ctx == ParseScriptContext::TOP || ctx == ParseScriptContext::P2SH || ctx == ParseScriptContext::P2WSH) && (multi || sortedmulti)) ||
         (ctx == ParseScriptContext::P2TR && (multi_a || sortedmulti_a))) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
         auto threshold = Expr(expr);
         uint32_t thres;
         std::vector<std::unique_ptr<PubkeyProvider>> providers;
@@ -1858,30 +1504,24 @@ std::unique_ptr<DescriptorImpl> ParseScript(uint32_t& key_exp_index, Span<const 
             }
             auto arg = Expr(expr);
             auto pk = ParsePubkey(key_exp_index, arg, ctx, out, error);
-<<<<<<< HEAD
-            if (!pk) return nullptr;
-=======
+
             if (!pk) {
                 error = strprintf("Multi: %s", error);
                 return nullptr;
             }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
             script_size += pk->GetSize() + 1;
             providers.emplace_back(std::move(pk));
             key_exp_index++;
         }
-<<<<<<< HEAD
-        if (providers.empty() || providers.size() > MAX_PUBKEYS_PER_MULTISIG) {
-            error = strprintf("Cannot have %u keys in multisig; must have between 1 and %d keys, inclusive", providers.size(), MAX_PUBKEYS_PER_MULTISIG);
-            return nullptr;
-=======
+
         if ((multi || sortedmulti) && (providers.empty() || providers.size() > MAX_PUBKEYS_PER_MULTISIG)) {
             error = strprintf("Cannot have %u keys in multisig; must have between 1 and %d keys, inclusive", providers.size(), MAX_PUBKEYS_PER_MULTISIG);
             return nullptr;
         } else if ((multi_a || sortedmulti_a) && (providers.empty() || providers.size() > MAX_PUBKEYS_PER_MULTI_A)) {
             error = strprintf("Cannot have %u keys in multi_a; must have between 1 and %d keys, inclusive", providers.size(), MAX_PUBKEYS_PER_MULTI_A);
             return nullptr;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
         } else if (thres < 1) {
             error = strprintf("Multisig threshold cannot be %d, must be at least 1", thres);
             return nullptr;
@@ -1902,16 +1542,7 @@ std::unique_ptr<DescriptorImpl> ParseScript(uint32_t& key_exp_index, Span<const 
                 return nullptr;
             }
         }
-<<<<<<< HEAD
-        return std::make_unique<MultisigDescriptor>(thres, std::move(providers), sorted_multi);
-    } else if (Func("sortedmulti", expr) || Func("multi", expr)) {
-        error = "Can only have multi/sortedmulti at top level, in sh(), or in wsh()";
-        return nullptr;
-    }
-    if ((ctx == ParseScriptContext::TOP || ctx == ParseScriptContext::P2SH) && Func("wpkh", expr)) {
-        auto pubkey = ParsePubkey(key_exp_index, expr, ParseScriptContext::P2WPKH, out, error);
-        if (!pubkey) return nullptr;
-=======
+
         if (multi || sortedmulti) {
             return std::make_unique<MultisigDescriptor>(thres, std::move(providers), sortedmulti);
         } else {
@@ -1930,7 +1561,7 @@ std::unique_ptr<DescriptorImpl> ParseScript(uint32_t& key_exp_index, Span<const 
             error = strprintf("wpkh(): %s", error);
             return nullptr;
         }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
         key_exp_index++;
         return std::make_unique<WPKHDescriptor>(std::move(pubkey));
     } else if (Func("wpkh", expr)) {
@@ -1967,14 +1598,12 @@ std::unique_ptr<DescriptorImpl> ParseScript(uint32_t& key_exp_index, Span<const 
     if (ctx == ParseScriptContext::TOP && Func("tr", expr)) {
         auto arg = Expr(expr);
         auto internal_key = ParsePubkey(key_exp_index, arg, ParseScriptContext::P2TR, out, error);
-<<<<<<< HEAD
-        if (!internal_key) return nullptr;
-=======
+
         if (!internal_key) {
             error = strprintf("tr(): %s", error);
             return nullptr;
         }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
         ++key_exp_index;
         std::vector<std::unique_ptr<DescriptorImpl>> subscripts; //!< list of script subexpressions
         std::vector<int> depths; //!< depth in the tree of each subexpression (same length subscripts)
@@ -2031,8 +1660,7 @@ std::unique_ptr<DescriptorImpl> ParseScript(uint32_t& key_exp_index, Span<const 
     } else if (Func("tr", expr)) {
         error = "Can only have tr at top level";
         return nullptr;
-<<<<<<< HEAD
-=======
+
     }
     if (ctx == ParseScriptContext::TOP && Func("rawtr", expr)) {
         auto arg = Expr(expr);
@@ -2047,7 +1675,7 @@ std::unique_ptr<DescriptorImpl> ParseScript(uint32_t& key_exp_index, Span<const 
     } else if (Func("rawtr", expr)) {
         error = "Can only have rawtr at top level";
         return nullptr;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
     }
     if (ctx == ParseScriptContext::TOP && Func("raw", expr)) {
         std::string str(expr.begin(), expr.end());
@@ -2061,8 +1689,7 @@ std::unique_ptr<DescriptorImpl> ParseScript(uint32_t& key_exp_index, Span<const 
         error = "Can only have raw() at top level";
         return nullptr;
     }
-<<<<<<< HEAD
-=======
+
     // Process miniscript expressions.
     {
         const auto script_ctx{ctx == ParseScriptContext::P2WSH ? miniscript::MiniscriptContext::P2WSH : miniscript::MiniscriptContext::TAPSCRIPT};
@@ -2109,7 +1736,7 @@ std::unique_ptr<DescriptorImpl> ParseScript(uint32_t& key_exp_index, Span<const 
             return std::make_unique<MiniscriptDescriptor>(std::move(parser.m_keys), std::move(node));
         }
     }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
     if (ctx == ParseScriptContext::P2SH) {
         error = "A function is needed within P2SH";
         return nullptr;
@@ -2117,39 +1744,7 @@ std::unique_ptr<DescriptorImpl> ParseScript(uint32_t& key_exp_index, Span<const 
         error = "A function is needed within P2WSH";
         return nullptr;
     }
-<<<<<<< HEAD
-    error = strprintf("%s is not a valid descriptor function", std::string(expr.begin(), expr.end()));
-    return nullptr;
-}
 
-std::unique_ptr<PubkeyProvider> InferPubkey(const CPubKey& pubkey, ParseScriptContext, const SigningProvider& provider)
-{
-    std::unique_ptr<PubkeyProvider> key_provider = std::make_unique<ConstPubkeyProvider>(0, pubkey, false);
-    KeyOriginInfo info;
-    if (provider.GetKeyOrigin(pubkey.GetID(), info)) {
-        return std::make_unique<OriginPubkeyProvider>(0, std::move(info), std::move(key_provider));
-    }
-    return key_provider;
-}
-
-std::unique_ptr<PubkeyProvider> InferXOnlyPubkey(const XOnlyPubKey& xkey, ParseScriptContext ctx, const SigningProvider& provider)
-{
-    unsigned char full_key[CPubKey::COMPRESSED_SIZE] = {0x02};
-    std::copy(xkey.begin(), xkey.end(), full_key + 1);
-    CPubKey pubkey(full_key);
-    std::unique_ptr<PubkeyProvider> key_provider = std::make_unique<ConstPubkeyProvider>(0, pubkey, true);
-    KeyOriginInfo info;
-    if (provider.GetKeyOrigin(pubkey.GetID(), info)) {
-        return std::make_unique<OriginPubkeyProvider>(0, std::move(info), std::move(key_provider));
-    } else {
-        full_key[0] = 0x03;
-        pubkey = CPubKey(full_key);
-        if (provider.GetKeyOrigin(pubkey.GetID(), info)) {
-            return std::make_unique<OriginPubkeyProvider>(0, std::move(info), std::move(key_provider));
-        }
-    }
-    return key_provider;
-=======
     error = strprintf("'%s' is not a valid descriptor function", std::string(expr.begin(), expr.end()));
     return nullptr;
 }
@@ -2167,16 +1762,13 @@ std::unique_ptr<DescriptorImpl> InferMultiA(const CScript& script, ParseScriptCo
         keys.push_back(std::move(key));
     }
     return std::make_unique<MultiADescriptor>(match->first, std::move(keys));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
 }
 
 std::unique_ptr<DescriptorImpl> InferScript(const CScript& script, ParseScriptContext ctx, const SigningProvider& provider)
 {
     if (ctx == ParseScriptContext::P2TR && script.size() == 34 && script[0] == 32 && script[33] == OP_CHECKSIG) {
-<<<<<<< HEAD
-        XOnlyPubKey key{Span<const unsigned char>{script.data() + 1, script.data() + 33}};
-        return std::make_unique<PKDescriptor>(InferXOnlyPubkey(key, ctx, provider));
-=======
+
         XOnlyPubKey key{Span{script}.subspan(1, 32)};
         return std::make_unique<PKDescriptor>(InferXOnlyPubkey(key, ctx, provider), true);
     }
@@ -2184,7 +1776,7 @@ std::unique_ptr<DescriptorImpl> InferScript(const CScript& script, ParseScriptCo
     if (ctx == ParseScriptContext::P2TR) {
         auto ret = InferMultiA(script, ctx, provider);
         if (ret) return ret;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
     }
 
     std::vector<std::vector<unsigned char>> data;
@@ -2192,13 +1784,10 @@ std::unique_ptr<DescriptorImpl> InferScript(const CScript& script, ParseScriptCo
 
     if (txntype == TxoutType::PUBKEY && (ctx == ParseScriptContext::TOP || ctx == ParseScriptContext::P2SH || ctx == ParseScriptContext::P2WSH)) {
         CPubKey pubkey(data[0]);
-<<<<<<< HEAD
-        if (pubkey.IsValid()) {
-            return std::make_unique<PKDescriptor>(InferPubkey(pubkey, ctx, provider));
-=======
+
         if (auto pubkey_provider = InferPubkey(pubkey, ctx, provider)) {
             return std::make_unique<PKDescriptor>(std::move(pubkey_provider));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
         }
     }
     if (txntype == TxoutType::PUBKEYHASH && (ctx == ParseScriptContext::TOP || ctx == ParseScriptContext::P2SH || ctx == ParseScriptContext::P2WSH)) {
@@ -2206,13 +1795,11 @@ std::unique_ptr<DescriptorImpl> InferScript(const CScript& script, ParseScriptCo
         CKeyID keyid(hash);
         CPubKey pubkey;
         if (provider.GetPubKey(keyid, pubkey)) {
-<<<<<<< HEAD
-            return std::make_unique<PKHDescriptor>(InferPubkey(pubkey, ctx, provider));
-=======
+
             if (auto pubkey_provider = InferPubkey(pubkey, ctx, provider)) {
                 return std::make_unique<PKHDescriptor>(std::move(pubkey_provider));
             }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
         }
     }
     if (txntype == TxoutType::WITNESS_V0_KEYHASH && (ctx == ParseScriptContext::TOP || ctx == ParseScriptContext::P2SH)) {
@@ -2220,18 +1807,7 @@ std::unique_ptr<DescriptorImpl> InferScript(const CScript& script, ParseScriptCo
         CKeyID keyid(hash);
         CPubKey pubkey;
         if (provider.GetPubKey(keyid, pubkey)) {
-<<<<<<< HEAD
-            return std::make_unique<WPKHDescriptor>(InferPubkey(pubkey, ctx, provider));
-        }
-    }
-    if (txntype == TxoutType::MULTISIG && (ctx == ParseScriptContext::TOP || ctx == ParseScriptContext::P2SH || ctx == ParseScriptContext::P2WSH)) {
-        std::vector<std::unique_ptr<PubkeyProvider>> providers;
-        for (size_t i = 1; i + 1 < data.size(); ++i) {
-            CPubKey pubkey(data[i]);
-            providers.push_back(InferPubkey(pubkey, ctx, provider));
-        }
-        return std::make_unique<MultisigDescriptor>((int)data[0][0], std::move(providers));
-=======
+
             if (auto pubkey_provider = InferPubkey(pubkey, ParseScriptContext::P2WPKH, provider)) {
                 return std::make_unique<WPKHDescriptor>(std::move(pubkey_provider));
             }
@@ -2250,7 +1826,7 @@ std::unique_ptr<DescriptorImpl> InferScript(const CScript& script, ParseScriptCo
             }
         }
         if (ok) return std::make_unique<MultisigDescriptor>((int)data[0][0], std::move(providers));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
     }
     if (txntype == TxoutType::SCRIPTHASH && ctx == ParseScriptContext::TOP) {
         uint160 hash(data[0]);
@@ -2262,12 +1838,9 @@ std::unique_ptr<DescriptorImpl> InferScript(const CScript& script, ParseScriptCo
         }
     }
     if (txntype == TxoutType::WITNESS_V0_SCRIPTHASH && (ctx == ParseScriptContext::TOP || ctx == ParseScriptContext::P2SH)) {
-<<<<<<< HEAD
-        CScriptID scriptid;
-        CRIPEMD160().Write(data[0].data(), data[0].size()).Finalize(scriptid.begin());
-=======
+
         CScriptID scriptid{RIPEMD160(data[0])};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
         CScript subscript;
         if (provider.GetCScript(scriptid, subscript)) {
             auto sub = InferScript(subscript, ParseScriptContext::P2WSH, provider);
@@ -2291,11 +1864,9 @@ std::unique_ptr<DescriptorImpl> InferScript(const CScript& script, ParseScriptCo
                 for (const auto& [depth, script, leaf_ver] : *tree) {
                     std::unique_ptr<DescriptorImpl> subdesc;
                     if (leaf_ver == TAPROOT_LEAF_TAPSCRIPT) {
-<<<<<<< HEAD
-                        subdesc = InferScript(script, ParseScriptContext::P2TR, provider);
-=======
+
                         subdesc = InferScript(CScript(script.begin(), script.end()), ParseScriptContext::P2TR, provider);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
                     }
                     if (!subdesc) {
                         ok = false;
@@ -2311,10 +1882,7 @@ std::unique_ptr<DescriptorImpl> InferScript(const CScript& script, ParseScriptCo
                 }
             }
         }
-<<<<<<< HEAD
-    }
 
-=======
         // If the above doesn't work, construct a rawtr() descriptor with just the encoded x-only pubkey.
         if (pubkey.IsFullyValid()) {
             auto key = InferXOnlyPubkey(pubkey, ParseScriptContext::P2TR, provider);
@@ -2337,7 +1905,7 @@ std::unique_ptr<DescriptorImpl> InferScript(const CScript& script, ParseScriptCo
     // So if we are not at the top level, return early.
     if (ctx != ParseScriptContext::TOP) return nullptr;
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
     CTxDestination dest;
     if (ExtractDestination(script, dest)) {
         if (GetScriptForDestination(dest) == script) {
@@ -2411,8 +1979,7 @@ std::unique_ptr<Descriptor> InferDescriptor(const CScript& script, const Signing
     return InferScript(script, ParseScriptContext::TOP, provider);
 }
 
-<<<<<<< HEAD
-=======
+
 uint256 DescriptorID(const Descriptor& desc)
 {
     std::string desc_str = desc.ToString(/*compat_format=*/true);
@@ -2421,7 +1988,7 @@ uint256 DescriptorID(const Descriptor& desc)
     return id;
 }
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
 void DescriptorCache::CacheParentExtPubKey(uint32_t key_exp_pos, const CExtPubKey& xpub)
 {
     m_parent_xpubs[key_exp_pos] = xpub;
@@ -2505,29 +2072,23 @@ DescriptorCache DescriptorCache::MergeAndDiff(const DescriptorCache& other)
     return diff;
 }
 
-<<<<<<< HEAD
-const ExtPubKeyMap DescriptorCache::GetCachedParentExtPubKeys() const
-=======
+
 ExtPubKeyMap DescriptorCache::GetCachedParentExtPubKeys() const
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
 {
     return m_parent_xpubs;
 }
 
-<<<<<<< HEAD
-const std::unordered_map<uint32_t, ExtPubKeyMap> DescriptorCache::GetCachedDerivedExtPubKeys() const
-=======
+
 std::unordered_map<uint32_t, ExtPubKeyMap> DescriptorCache::GetCachedDerivedExtPubKeys() const
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
 {
     return m_derived_xpubs;
 }
 
-<<<<<<< HEAD
-const ExtPubKeyMap DescriptorCache::GetCachedLastHardenedExtPubKeys() const
-=======
+
 ExtPubKeyMap DescriptorCache::GetCachedLastHardenedExtPubKeys() const
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
 {
     return m_last_hardened_xpubs;
 }

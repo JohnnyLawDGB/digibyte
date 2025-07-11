@@ -8,6 +8,8 @@
 
 #include <net.h>
 #include <shutdown.h>
+#include <logging.h>
+#include <random.h>
 
 extern bool g_ibd_complete;
 
@@ -48,11 +50,13 @@ CNode* CConnman::getDandelionDestination(CNode* pfrom)
 bool CConnman::localDandelionDestinationPushInventory(const CInv& inv)
 {
     if (isLocalDandelionDestinationSet()) {
-        localDandelionDestination->PushOtherInventory(inv);
-        return true;
+        // TODO: Fix for Bitcoin v26.2 - PushOtherInventory replaced with m_tx_inventory_to_send
+        // localDandelionDestination->PushOtherInventory(inv);
+        return false; // Temporarily disabled
     } else if (setLocalDandelionDestination()) {
-        localDandelionDestination->PushOtherInventory(inv);
-        return true;
+        // TODO: Fix for Bitcoin v26.2 - PushOtherInventory replaced with m_tx_inventory_to_send
+        // localDandelionDestination->PushOtherInventory(inv);
+        return false; // Temporarily disabled
     } else {
         return false;
     }
@@ -245,7 +249,7 @@ void CConnman::DandelionShuffle()
     LogPrint(BCLog::DANDELION, "Before Dandelion shuffle:\n%s", GetDandelionRoutingDataDebugString());
     {
         // Lock node pointers
-        LOCK(cs_vNodes);
+        LOCK(m_nodes_mutex);
         // Iterate through mDandelionRoutes to facilitate bookkeeping
         for (auto iter = mDandelionRoutes.begin(); iter != mDandelionRoutes.end();) {
             iter = mDandelionRoutes.erase(iter);
@@ -313,13 +317,13 @@ void CConnman::ThreadDandelionShuffle()
     }
 
     auto now = GetTime<std::chrono::microseconds>();
-    auto nNextDandelionShuffle = PoissonNextSend(now, DANDELION_SHUFFLE_INTERVAL);
+    auto nNextDandelionShuffle = GetExponentialRand(now, DANDELION_SHUFFLE_INTERVAL);
 
     while (!ShutdownRequested()) {
         now = GetTime<std::chrono::milliseconds>();
         if (now > nNextDandelionShuffle) {
             DandelionShuffle();
-            nNextDandelionShuffle = PoissonNextSend(now, DANDELION_SHUFFLE_INTERVAL);
+            nNextDandelionShuffle = GetExponentialRand(now, DANDELION_SHUFFLE_INTERVAL);
         }
         if (ShutdownRequested()) {
             return;

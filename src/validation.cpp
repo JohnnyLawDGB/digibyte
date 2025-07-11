@@ -312,8 +312,7 @@ void Chainstate::MaybeUpdateMempoolForReorg(
 
     AssertLockHeld(cs_main);
     AssertLockHeld(m_mempool->cs);
-    // TODO: DigiByte Dandelion++ stem pool
-    // if (m_stempool) AssertLockHeld(m_stempool->cs);
+    if (m_stempool) AssertLockHeld(m_stempool->cs);
     std::vector<uint256> vHashUpdate;
     {
         // disconnectpool is ordered so that the front is the most recently-confirmed
@@ -332,8 +331,7 @@ void Chainstate::MaybeUpdateMempoolForReorg(
                 // If the transaction doesn't make it in to the mempool, remove any
                 // transactions that depend on it (which would now be orphans).
                 m_mempool->removeRecursive(**it, MemPoolRemovalReason::REORG);
-                // TODO: DigiByte Dandelion++ stem pool
-                // if (m_stempool) m_stempool->removeRecursive(**it, MemPoolRemovalReason::REORG);
+                if (m_stempool) m_stempool->removeRecursive(**it, MemPoolRemovalReason::REORG);
             } else if (m_mempool->exists(GenTxid::Txid((*it)->GetHash()))) {
                 vHashUpdate.push_back((*it)->GetHash());
             }
@@ -347,8 +345,7 @@ void Chainstate::MaybeUpdateMempoolForReorg(
     // UpdateTransactionsFromBlock finds descendants of any transactions in
     // the disconnectpool that were added back and cleans up the mempool state.
     m_mempool->UpdateTransactionsFromBlock(vHashUpdate);
-    // TODO: DigiByte Dandelion++ stem pool
-    // if (m_stempool) m_stempool->UpdateTransactionsFromBlock(vHashUpdate);
+    if (m_stempool) m_stempool->UpdateTransactionsFromBlock(vHashUpdate);
 
     // Predicate to use for filtering transactions in removeForReorg.
     // Checks whether the transaction is still final and, if it spends a coinbase output, mature.
@@ -402,12 +399,10 @@ void Chainstate::MaybeUpdateMempoolForReorg(
 
     // We also need to remove any now-immature transactions
     m_mempool->removeForReorg(m_chain, filter_final_and_mature);
-    // TODO: DigiByte Dandelion++ stem pool
-    // if (m_stempool) m_stempool->removeForReorg(m_chain, filter_final_and_mature);
+    if (m_stempool) m_stempool->removeForReorg(m_chain, filter_final_and_mature);
     // Re-limit mempool size, in case we added any transactions
     LimitMempoolSize(*m_mempool, this->CoinsTip());
-    // TODO: DigiByte Dandelion++ stem pool
-    // if (m_stempool) LimitMempoolSize(*m_stempool, this->CoinsTip());
+    if (m_stempool) LimitMempoolSize(*m_stempool, this->CoinsTip());
 }
 
 /**
@@ -2955,8 +2950,7 @@ bool Chainstate::ActivateBestChainStep(BlockValidationState& state, CBlockIndex*
 {
     AssertLockHeld(cs_main);
     if (m_mempool) AssertLockHeld(m_mempool->cs);
-    // TODO: DigiByte Dandelion++ stem pool
-    // if (m_stempool) AssertLockHeld(m_stempool->cs);
+    if (m_stempool) AssertLockHeld(m_stempool->cs);
 
     const CBlockIndex* pindexOldTip = m_chain.Tip();
     const CBlockIndex* pindexFork = m_chain.FindFork(pindexMostWork);

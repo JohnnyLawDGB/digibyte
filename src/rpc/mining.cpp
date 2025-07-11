@@ -38,6 +38,9 @@
 #include <validationinterface.h>
 #include <warnings.h>
 
+// DigiByte: Include algo-related headers
+#include <primitives/block.h>
+
 #include <memory>
 #include <stdint.h>
 
@@ -47,24 +50,20 @@ using node::NodeContext;
 using node::RegenerateCommitments;
 using node::UpdateTime;
 
+// DigiByte: Default mining algorithm
+extern int miningAlgo;
+
 /**
  * Return average network hashes per second based on the last 'lookup' blocks,
  * or from the last difficulty change if 'lookup' is -1.
  * If 'height' is -1, compute the estimate from current chain tip.
  * If 'height' is a valid block height, compute the estimate at the time when a given block was found.
+ * DigiByte: Multi-algo version - computes hashrate for specific algorithm
  */
-static UniValue GetNetworkHashPS(int lookup, int height, const CChain& active_chain) {
-    if (lookup < -1 || lookup == 0) {
-        throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid nblocks. Must be a positive number or -1.");
-    }
-
-    if (height < -1 || height > active_chain.Height()) {
-        throw JSONRPCError(RPC_INVALID_PARAMETER, "Block does not exist at specified height");
-    }
-
+static UniValue GetNetworkHashPS(int lookup, int height, const CChain& active_chain, int algo) {
     const CBlockIndex* pb = active_chain.Tip();
 
-    if (height >= 0) {
+    if (height >= 0 && height < active_chain.Height()) {
         pb = active_chain[height];
     }
 
@@ -72,28 +71,39 @@ static UniValue GetNetworkHashPS(int lookup, int height, const CChain& active_ch
         return 0;
 
     // If lookup is -1, then use blocks since last difficulty change.
-    if (lookup == -1)
+    if (lookup <= 0)
         lookup = pb->nHeight % Params().GetConsensus().DifficultyAdjustmentInterval() + 1;
 
     // If lookup is larger than chain, then set it to chain length.
     if (lookup > pb->nHeight)
         lookup = pb->nHeight;
 
-    const CBlockIndex* pb0 = pb;
+    // DigiByte: Find the most recent block with the specified algo
+    while(pb->GetAlgo() != algo) {
+        assert (pb->pprev);
+        pb = pb->pprev;
+    }
+
+    const CBlockIndex *pb0 = pb;
     int64_t minTime = pb0->GetBlockTime();
     int64_t maxTime = minTime;
+    arith_uint256 workDiff = GetBlockProof(*pb0, algo); 
+
     for (int i = 0; i < lookup; i++) {
         pb0 = pb0->pprev;
-        int64_t time = pb0->GetBlockTime();
-        minTime = std::min(time, minTime);
-        maxTime = std::max(time, maxTime);
+        // DigiByte: Only count blocks with matching algo
+        if(pb0->GetAlgo() == algo) {
+            int64_t time = pb0->GetBlockTime();
+            minTime = std::min(time, minTime);
+            maxTime = std::max(time, maxTime);
+            workDiff += GetBlockProof(*pb0, algo); 
+        }
     }
 
     // In case there's a situation where minTime == maxTime, we don't want a divide by zero exception.
     if (minTime == maxTime)
         return 0;
 
-    arith_uint256 workDiff = pb->nChainWork - pb0->nChainWork;
     int64_t timeDiff = maxTime - minTime;
 
     return workDiff.getdouble() / timeDiff;
@@ -104,10 +114,12 @@ static RPCHelpMan getnetworkhashps()
     return RPCHelpMan{"getnetworkhashps",
                 "\nReturns the estimated network hashes per second based on the last n blocks.\n"
                 "Pass in [blocks] to override # of blocks, -1 specifies since last difficulty change.\n"
-                "Pass in [height] to estimate the network speed at the time when a certain block was found.\n",
+                "Pass in [height] to estimate the network speed at the time when a certain block was found.\n"
+                "DigiByte: Pass in [algo] to get hashrate for specific mining algorithm.\n",
                 {
                     {"nblocks", RPCArg::Type::NUM, RPCArg::Default{120}, "The number of previous blocks to calculate estimate from, or -1 for blocks since last difficulty change."},
                     {"height", RPCArg::Type::NUM, RPCArg::Default{-1}, "To estimate at the time of the given height."},
+                    {"algo", RPCArg::Type::STR, RPCArg::Default{GetAlgoName(miningAlgo)}, "Which mining algorithm to use."},
                 },
                 RPCResult{
                     RPCResult::Type::NUM, "", "Hashes per second estimated"},
@@ -119,7 +131,13 @@ static RPCHelpMan getnetworkhashps()
 {
     ChainstateManager& chainman = EnsureAnyChainman(request.context);
     LOCK(cs_main);
-    return GetNetworkHashPS(self.Arg<int>(0), self.Arg<int>(1), chainman.ActiveChain());
+    int algo = miningAlgo;
+    if (!request.params[2].isNull()) {
+        algo = GetAlgoByName(request.params[2].get_str(), algo);
+    }    
+    return GetNetworkHashPS(!request.params[0].isNull() ? request.params[0].getInt<int>() : 120, 
+                           !request.params[1].isNull() ? request.params[1].getInt<int>() : -1, 
+                           chainman.ActiveChain(), algo);
 },
     };
 }
@@ -151,11 +169,11 @@ static bool GenerateBlock(ChainstateManager& chainman, CBlock& block, uint64_t& 
     return true;
 }
 
-static UniValue generateBlocks(ChainstateManager& chainman, const CTxMemPool& mempool, const CScript& coinbase_script, int nGenerate, uint64_t nMaxTries)
+static UniValue generateBlocks(ChainstateManager& chainman, const CTxMemPool& mempool, const CScript& coinbase_script, int nGenerate, uint64_t nMaxTries, int algo)
 {
     UniValue blockHashes(UniValue::VARR);
     while (nGenerate > 0 && !ShutdownRequested()) {
-        std::unique_ptr<CBlockTemplate> pblocktemplate(BlockAssembler{chainman.ActiveChainstate(), &mempool}.CreateNewBlock(coinbase_script, ALGO_SHA256D));
+        std::unique_ptr<CBlockTemplate> pblocktemplate(BlockAssembler{chainman.ActiveChainstate(), &mempool}.CreateNewBlock(coinbase_script, algo));
         if (!pblocktemplate.get())
             throw JSONRPCError(RPC_INTERNAL_ERROR, "Couldn't create new block");
 
@@ -239,7 +257,8 @@ static RPCHelpMan generatetodescriptor()
     const CTxMemPool& mempool = EnsureMemPool(node);
     ChainstateManager& chainman = EnsureChainman(node);
 
-    return generateBlocks(chainman, mempool, coinbase_script, num_blocks, max_tries);
+    // DigiByte: Use default mining algorithm
+    return generateBlocks(chainman, mempool, coinbase_script, num_blocks, max_tries, miningAlgo);
 },
     };
 }
@@ -259,6 +278,7 @@ static RPCHelpMan generatetoaddress()
              {"nblocks", RPCArg::Type::NUM, RPCArg::Optional::NO, "How many blocks are generated."},
              {"address", RPCArg::Type::STR, RPCArg::Optional::NO, "The address to send the newly generated digibyte to."},
              {"maxtries", RPCArg::Type::NUM, RPCArg::Default{DEFAULT_MAX_TRIES}, "How many iterations to try."},
+             {"algo", RPCArg::Type::STR, RPCArg::Default{GetAlgoName(ALGO_SCRYPT)}, "Which mining algorithm to use."},
          },
          RPCResult{
              RPCResult::Type::ARR, "", "hashes of blocks generated",
@@ -275,6 +295,7 @@ static RPCHelpMan generatetoaddress()
 {
     const int num_blocks{request.params[0].getInt<int>()};
     const uint64_t max_tries{request.params[2].isNull() ? DEFAULT_MAX_TRIES : request.params[2].getInt<int>()};
+    const int algo{request.params[3].isNull() ? miningAlgo : GetAlgoByName(request.params[3].get_str(), miningAlgo)};
 
     CTxDestination destination = DecodeDestination(request.params[1].get_str());
     if (!IsValidDestination(destination)) {
@@ -287,7 +308,7 @@ static RPCHelpMan generatetoaddress()
 
     CScript coinbase_script = GetScriptForDestination(destination);
 
-    return generateBlocks(chainman, mempool, coinbase_script, num_blocks, max_tries);
+    return generateBlocks(chainman, mempool, coinbase_script, num_blocks, max_tries, algo);
 },
     };
 }

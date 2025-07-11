@@ -5,7 +5,7 @@
 #ifndef DIGIBYTE_UTIL_SETTINGS_H
 #define DIGIBYTE_UTIL_SETTINGS_H
 
-#include <fs.h>
+#include <util/fs.h>
 
 #include <map>
 #include <string>

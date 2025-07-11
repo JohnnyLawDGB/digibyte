@@ -102,6 +102,11 @@ grep -i "algo\|dandelion\|digishield\|odocrypt" $ERROR_FILE
 cp bitcoin-v26.2-for-digibyte/$ERROR_FILE digibyte/$ERROR_FILE
 ```
 
+**Code removal:**
+- If code was removed in Bitcoin v26.2 and is NOT DigiByte-specific, DELETE it
+- Don't comment out - remove entirely to match v26.2 cleanliness
+- Example: Old deprecated functions, unused utilities, legacy code
+
 ### Critical Checks
 Every fix must preserve:
 - Multi-algorithm mining (5 algos + Odocrypt)

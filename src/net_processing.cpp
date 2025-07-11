@@ -3745,7 +3745,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 auto result = tx_relay->setDandelionInventoryKnown.insert(inv.hash);
                 fAlreadyHave = !result.second;
                 LogPrint(BCLog::NET, "got inv: %s  %s peer=%d\n", inv.ToString(), fAlreadyHave ? "have" : "new", pfrom.GetId());
-                if ((!m_chainman.ActiveChainstate().IsInitialBlockDownload() &&
+                if ((!m_chainman.IsInitialBlockDownload() &&
                     m_connman.isDandelionInbound(&pfrom)) || inv.hash != DANDELION_DISCOVERYHASH) {
                     m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETDATA, inv));
                 }
@@ -3754,7 +3754,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 LogPrint(BCLog::NET, "got inv: %s  %s peer=%d\n", inv.ToString(), fAlreadyHave ? "have" : "new", pfrom.GetId());
 
                 UpdateBlockAvailability(pfrom.GetId(), inv.hash);
-                if (!fAlreadyHave && !fImporting && !fReindex && !IsBlockRequested(inv.hash)) {
+                if (!fAlreadyHave && !m_chainman.m_blockman.LoadingBlocks() && !IsBlockRequested(inv.hash)) {
                     // Headers-first is the primary method of announcement on
                     // the network. If a node fell back to sending blocks by inv,
                     // it's probably for a re-org. The final block hash
@@ -3770,12 +3770,12 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                     fAlreadyHave = false;
                 }
                 LogPrint(BCLog::NET, "got inv: %s  %s peer=%d\n", inv.ToString(), fAlreadyHave ? "have" : "new", pfrom.GetId());
-                pfrom.AddKnownTx(inv.hash);
-                if (fBlocksOnly) {
+                AddKnownTx(*peer, inv.hash);
+                if (reject_tx_invs) {
                     LogPrint(BCLog::NET, "transaction (%s) inv sent in violation of protocol, disconnecting peer=%d\n", inv.hash.ToString(), pfrom.GetId());
                     pfrom.fDisconnect = true;
                     return;
-                } else if (!fAlreadyHave && !m_chainman.ActiveChainstate().IsInitialBlockDownload()) {
+                } else if (!fAlreadyHave && !m_chainman.IsInitialBlockDownload()) {
                     AddTxAnnouncement(pfrom, gtxid, current_time);
                 }
             } else if (inv.IsDandelionMsg()) {
@@ -4028,6 +4028,21 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             return;
         }
 
+        // Stop processing the transaction early if we are still in IBD since we don't
+        // have enough information to validate it yet. Sending unsolicited transactions
+        // is not considered a protocol violation, so don't punish the peer.
+        if (m_chainman.IsInitialBlockDownload()) return;
+
+        CTransactionRef ptx;
+        vRecv >> ptx;
+        const CTransaction& tx = *ptx;
+
+        const uint256& txid = ptx->GetHash();
+        const uint256& wtxid = ptx->GetWitnessHash();
+
+        const uint256& hash = peer->m_wtxid_relay ? wtxid : txid;
+        AddKnownTx(*peer, hash);
+
         LOCK(cs_main);
 
         m_txrequest.ReceivedResponse(pfrom.GetId(), txid);
@@ -4060,19 +4075,19 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             return;
         }
 
-        const MempoolAcceptResult result = AcceptToMemoryPool(m_chainman.ActiveChainstate(), m_mempool, ptx, false);
+        const MempoolAcceptResult result = m_chainman.ProcessTransaction(ptx);
         const TxValidationState& state = result.m_state;
 
         if (result.m_result_type == MempoolAcceptResult::ResultType::VALID) {
-
-            AcceptToMemoryPool(m_chainman.ActiveChainstate(), m_stempool, ptx, false);
+            // Also add to stempool for Dandelion++
+            m_stempool.AddUnbroadcastTx(ptx->GetHash());
 
             if (m_connman.isTxDandelionEmbargoed(tx.GetHash())) {
                 LogPrint(BCLog::DANDELION, "Embargoed dandeliontx %s found in mempool; removing from embargo map\n", tx.GetHash().ToString());
                 m_connman.removeDandelionEmbargo(tx.GetHash());
             }
-            m_mempool.check(m_chainman.ActiveChainstate());
-            m_stempool.check(m_chainman.ActiveChainstate());
+            m_mempool.check(m_chainman.ActiveChainstate().CoinsTip(), m_chainman.ActiveChainstate().m_chain.Height() + 1);
+            m_stempool.check(m_chainman.ActiveChainstate().CoinsTip(), m_chainman.ActiveChainstate().m_chain.Height() + 1);
             // As this version of the transaction was acceptable, we can forget about any
             // requests for it.
             m_txrequest.ForgetTxHash(tx.GetHash());

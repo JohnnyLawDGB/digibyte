@@ -15,6 +15,7 @@
 #include <core_io.h>
 #include <deploymentinfo.h>
 #include <deploymentstatus.h>
+#include <init.h>
 #include <key_io.h>
 #include <net.h>
 #include <node/context.h>
@@ -136,7 +137,7 @@ static RPCHelpMan getnetworkhashps()
     if (!request.params[2].isNull()) {
         algo = GetAlgoByName(request.params[2].get_str(), algo);
     }    
-    return GetNetworkHashPS(!request.params[0].isNull() ? request.params[0].get_int() : 120, !request.params[1].isNull() ? request.params[1].get_int() : -1, chainman.ActiveChain(), algo);
+    return GetNetworkHashPS(!request.params[0].isNull() ? request.params[0].getInt<int>() : 120, !request.params[1].isNull() ? request.params[1].getInt<int>() : -1, chainman.ActiveChain(), algo);
 },
     };
 }
@@ -261,7 +262,7 @@ static RPCHelpMan generatetodescriptor()
         algo = GetAlgoByName(request.params[3].get_str(), algo);
     }
 
-    NodeContext& node = EnsureAnyNodeContext(request.context);
+    node::NodeContext& node = EnsureAnyNodeContext(request.context);
     const CTxMemPool& mempool = EnsureMemPool(node);
     ChainstateManager& chainman = EnsureChainman(node);
 
@@ -309,7 +310,7 @@ static RPCHelpMan generatetoaddress()
         throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Error: Invalid address");
     }
 
-    NodeContext& node = EnsureAnyNodeContext(request.context);
+    node::NodeContext& node = EnsureAnyNodeContext(request.context);
     const CTxMemPool& mempool = EnsureMemPool(node);
     ChainstateManager& chainman = EnsureChainman(node);
 
@@ -361,7 +362,7 @@ static RPCHelpMan generateblock()
         coinbase_script = GetScriptForDestination(destination);
     }
 
-    NodeContext& node = EnsureAnyNodeContext(request.context);
+    node::NodeContext& node = EnsureAnyNodeContext(request.context);
     const CTxMemPool& mempool = EnsureMemPool(node);
 
     std::vector<CTransactionRef> txs;
@@ -428,7 +429,9 @@ static RPCHelpMan generateblock()
     UniValue obj(UniValue::VOBJ);
     obj.pushKV("hash", block_out->GetHash().GetHex());
     if (!process_new_block) {
-        obj.pushKV("hex", EncodeHexBlock(*block_out));
+        CDataStream ssBlock(SER_NETWORK, PROTOCOL_VERSION);
+        ssBlock << *block_out;
+        obj.pushKV("hex", HexStr(ssBlock));
     }
     return obj;
 },
@@ -460,7 +463,7 @@ static RPCHelpMan getmininginfo()
                 },
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
 {
-    NodeContext& node = EnsureAnyNodeContext(request.context);
+    node::NodeContext& node = EnsureAnyNodeContext(request.context);
     const CTxMemPool& mempool = EnsureMemPool(node);
     ChainstateManager& chainman = EnsureChainman(node);
     LOCK(cs_main);
@@ -566,7 +569,7 @@ static RPCHelpMan getprioritisedtransactions()
         },
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
         {
-            NodeContext& node = EnsureAnyNodeContext(request.context);
+            node::NodeContext& node = EnsureAnyNodeContext(request.context);
             CTxMemPool& mempool = EnsureMemPool(node);
             UniValue rpc_result{UniValue::VOBJ};
             for (const auto& delta_info : mempool.GetPrioritisedTransactions()) {
@@ -703,7 +706,7 @@ static RPCHelpMan getblocktemplate()
                 },
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
 {
-    NodeContext& node = EnsureAnyNodeContext(request.context);
+    node::NodeContext& node = EnsureAnyNodeContext(request.context);
     ChainstateManager& chainman = EnsureChainman(node);
     LOCK(cs_main);
 

@@ -6,7 +6,7 @@ This file provides context and guidance for AI assistants working on the DigiByt
 ## Reference Directories
 - **Current merged code**: `/Users/jt/Code/digibyte` (DigiByte v8.26 work in progress)
 - **Original DigiByte**: `/Users/jt/Code/digibyte/digibyte-v8.22.2` (v8.22.2 for comparison)
-- **Bitcoin v26.2**: `/Users/jt/Code/bitcoin` (Bitcoin Core v26.2 reference)
+- **Bitcoin v26.2**: `/Users/jt/Code/digibyte/bitcoin-v26.2-for-digibyte` (Bitcoin Core v26.2 reference)
 
 ## DigiByte Unique Features
 

@@ -150,7 +150,7 @@ bool BerkeleyEnvironment::Open(bilingual_str& err)
     fs::path pathIn = fs::PathFromString(strPath);
     TryCreateDirectories(pathIn);
     if (!LockDirectory(pathIn, ".walletlock")) {
-        LogPrintf("Cannot obtain a lock on wallet directory %s. Another instance of digibyte may be using it.\n", strPath);
+        LogPrintf("Cannot obtain a lock on wallet directory %s. Another instance may be using it.\n", strPath);
         err = strprintf(_("Error initializing wallet database environment %s!"), fs::quoted(fs::PathToString(Directory())));
         return false;
     }
@@ -294,6 +294,11 @@ SafeDbt::operator Dbt*()
     return &m_dbt;
 }
 
+static Span<const std::byte> SpanFromDbt(const SafeDbt& dbt)
+{
+    return {reinterpret_cast<const std::byte*>(dbt.get_data()), dbt.get_size()};
+}
+
 BerkeleyDatabase::BerkeleyDatabase(std::shared_ptr<BerkeleyEnvironment> env, fs::path filename, const DatabaseOptions& options) :
     WalletDatabase(), env(std::move(env)), m_filename(std::move(filename)), m_max_log_mb(options.max_log_mb)
 {
@@ -337,15 +342,12 @@ void BerkeleyEnvironment::CheckpointLSN(const std::string& strFile)
     dbenv->lsn_reset(strFile.c_str(), 0);
 }
 
-Span<const std::byte> SpanFromDbt(const Dbt& dbt)
-{
-    return {reinterpret_cast<const std::byte*>(dbt.get_data()), dbt.get_size()};
-}
-
 BerkeleyDatabase::~BerkeleyDatabase()
 {
     if (env) {
         LOCK(cs_db);
+        env->CloseDb(m_filename);
+        assert(!m_db);
         size_t erased = env->m_databases.erase(m_filename);
         assert(erased == 1);
         env->m_fileids.erase(fs::PathToString(m_filename));
@@ -476,6 +478,7 @@ void BerkeleyEnvironment::ReloadDbEnv()
     });
 
     std::vector<fs::path> filenames;
+    filenames.reserve(m_databases.size());
     for (const auto& it : m_databases) {
         filenames.push_back(it.first);
     }
@@ -717,7 +720,7 @@ BerkeleyCursor::BerkeleyCursor(BerkeleyDatabase& database, const BerkeleyBatch& 
     }
     // Transaction argument to cursor is only needed when using the cursor to
     // write to the database. Read-only cursors do not need a txn pointer.
-    int ret = database.m_db->cursor(batch.activeTxn, &m_cursor, 0);
+    int ret = database.m_db->cursor(batch.txn(), &m_cursor, 0);
     if (ret != 0) {
         throw std::runtime_error(STR_INTERNAL_BUG(strprintf("BDB Cursor could not be created. Returned %d", ret)));
     }
@@ -774,6 +777,7 @@ std::unique_ptr<DatabaseCursor> BerkeleyBatch::GetNewPrefixCursor(Span<const std
     if (!pdb) return nullptr;
     return std::make_unique<BerkeleyCursor>(m_database, *this, prefix);
 }
+
 bool BerkeleyBatch::TxnBegin()
 {
     if (!pdb || activeTxn)

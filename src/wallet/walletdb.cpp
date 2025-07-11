@@ -1,6 +1,5 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-// Copyright (c) 2009-2022 The Bitcoin Core developers
-// Copyright (c) 2014-2025 The DigiByte Core developers
+// Copyright (c) 2009-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -12,7 +11,6 @@
 #include <script/script.h>
 #include <serialize.h>
 #include <sync.h>
-#include <streams.h>
 #include <util/bip32.h>
 #include <util/check.h>
 #include <util/fs.h>
@@ -25,7 +23,6 @@
 #include <wallet/sqlite.h>
 #endif
 #include <wallet/wallet.h>
-#include <wallet/scriptpubkeyman.h>
 
 #include <atomic>
 #include <optional>
@@ -346,7 +343,7 @@ bool LoadKey(CWallet* pwallet, DataStream& ssKey, DataStream& ssValue, std::stri
                 return false;
             }
 
-fSkipCheck = true;
+            fSkipCheck = true;
         }
 
         if (!key.Load(pkey, vchPubKey, fSkipCheck))
@@ -363,7 +360,6 @@ fSkipCheck = true;
         if (strErr.empty()) {
             strErr = e.what();
         }
-
         return false;
     }
     return true;
@@ -1200,7 +1196,6 @@ DBErrors WalletBatch::LoadWallet(CWallet* pwallet)
         // Any uncaught exceptions will be caught here and treated as critical.
         result = DBErrors::CORRUPT;
     }
-    m_batch->CloseCursor();
 
     // Any wallet corruption at all: skip any rewriting or
     // upgrading, we don't want to make it worse.
@@ -1230,7 +1225,6 @@ DBErrors WalletBatch::LoadWallet(CWallet* pwallet)
         pwallet->UpgradeDescriptorCache();
     } catch (...) {
         result = DBErrors::CORRUPT;
-
     }
 
     return result;
@@ -1247,7 +1241,7 @@ DBErrors WalletBatch::FindWalletTxHashes(std::vector<uint256>& tx_hashes)
                 return DBErrors::TOO_NEW;
         }
 
-            // Get cursor
+        // Get cursor
         std::unique_ptr<DatabaseCursor> cursor = m_batch->GetNewCursor();
         if (!cursor)
         {
@@ -1279,7 +1273,6 @@ DBErrors WalletBatch::FindWalletTxHashes(std::vector<uint256>& tx_hashes)
     } catch (...) {
         result = DBErrors::CORRUPT;
     }
-    m_batch->CloseCursor();
 
     return result;
 }
@@ -1445,7 +1438,7 @@ std::unique_ptr<WalletDatabase> MakeDatabase(const fs::path& path, const Databas
 {
     bool exists;
     try {
-exists = fs::symlink_status(path).type() != fs::file_type::not_found;
+        exists = fs::symlink_status(path).type() != fs::file_type::not_found;
     } catch (const fs::filesystem_error& e) {
         error = Untranslated(strprintf("Failed to access database path '%s': %s", fs::PathToString(path), fsbridge::get_filesystem_error_message(e)));
         status = DatabaseStatus::FAILED_BAD_PATH;

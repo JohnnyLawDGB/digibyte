@@ -15,7 +15,6 @@ You are a DigiByte engineer tasked with fixing build errors and getting DGB v8.2
 
 **Required docs:**
 - Read `claude.md` for AI assistant guidelines
-- Read `digibyte-btc-v26-2-merge-spec.md` for merge rules
 
 **IMPORTANT:**
 - The `bitcoin-v26.2-for-digibyte` folder contains Bitcoin v26.2 code that has already been converted to DigiByte naming conventions. Always reference this folder for v26.2 code patterns.

@@ -1,8 +1,7 @@
 // Copyright (c) 2011-2021 The Bitcoin Core developers
-// Copyright (c) 2014-2021 The DigiByte Core developers
+// Copyright (c) 2014-2025 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
-
 // Source: https://dgbwiki.com/index.php?title=DigiByte#Subunits
 
 #include <qt/digibyteunits.h>

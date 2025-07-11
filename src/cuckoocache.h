@@ -1,7 +1,6 @@
 // Copyright (c) 2016 Jeremy Rubin
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
-
 #ifndef DIGIBYTE_CUCKOOCACHE_H
 #define DIGIBYTE_CUCKOOCACHE_H
 

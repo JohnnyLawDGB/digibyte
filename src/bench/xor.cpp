@@ -1,7 +1,6 @@
 // Copyright (c) The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or https://opensource.org/license/mit/.
-
 #include <bench/bench.h>
 
 #include <random.h>

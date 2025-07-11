@@ -1,3 +1,8 @@
+// Copyright (c) 2019-2023 Martin Leitner-Ankerl <martin.ankerl@gmail.com>
+// The above copyright notice and this permission notice shall be included in all
+// Licensed under the MIT License <http://opensource.org/licenses/MIT>.
+// SPDX-License-Identifier: MIT
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 //  __   _ _______ __   _  _____  ______  _______ __   _ _______ _     _
 //  | \  | |_____| | \  | |     | |_____] |______ | \  | |       |_____|
 //  |  \_| |     | |  \_| |_____| |_____] |______ |  \_| |_____  |     |
@@ -5,18 +10,13 @@
 // Microbenchmark framework for C++11/14/17/20
 // https://github.com/martinus/nanobench
 //
-// Licensed under the MIT License <http://opensource.org/licenses/MIT>.
-// SPDX-License-Identifier: MIT
-// Copyright (c) 2019-2023 Martin Leitner-Ankerl <martin.ankerl@gmail.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 // copies of the Software, and to permit persons to whom the Software is
 // furnished to do so, subject to the following conditions:
 //
-// The above copyright notice and this permission notice shall be included in all
 // copies or substantial portions of the Software.
 //
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR

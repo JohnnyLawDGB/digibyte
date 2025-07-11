@@ -2,7 +2,6 @@
 // Copyright 2015 DigiByte Core Developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or https://opensource.org/licenses/mit-license.php.
-
 #ifndef DIGIBYTE_UNIVALUE_INCLUDE_UNIVALUE_H
 #define DIGIBYTE_UNIVALUE_INCLUDE_UNIVALUE_H
 

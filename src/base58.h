@@ -3,7 +3,6 @@
 // Copyright (c) 2014-2025 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
-
 /**
  * Why base-58 instead of standard base-64 encoding?
  * - Don't want 0OIl characters that look the same in some fonts and

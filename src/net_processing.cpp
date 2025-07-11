@@ -1629,8 +1629,6 @@ public:
     }
 };
 
-} // namespace
-
 void PeerManagerImpl::PushNodeVersion(CNode& pnode, const Peer& peer)
 {
     uint64_t my_services{peer.m_our_services};

@@ -63,7 +63,7 @@ vimdiff digibyte-v8.26/$ERROR_FILE \
 
 ```bash
 # Comprehensive scan for ALL major DigiByte features in the error file
-grep -i "algo\|dandelion\|digishield\|odocrypt\|odo\|21000000000\|12024\|12025\|multiAlgo\|multishield\|15.*second\|getblockreward\|0xfa.*0xc3.*0xb6.*0xda\|dgb\|digibyte\|groestl\|skein\|qubit\|scrypt.*pow\|ALGO_\|stem.*pool\|fluff" digibyte-v8.26/$ERROR_FILE
+grep -i "algo\|dandelion\|digishield\|odocrypt\|odo\|21000000000\|12024\|12025\|multiAlgo\|multishield\|15.*second\|getblockreward\|0xfa.*0xc3.*0xb6.*0xda\|dgb\|digibyte\|groestl\|skein\|qubit\|scrypt.*pow\|ALGO_\|stem.*pool\|fluff\|COINBASE_MATURITY_2" digibyte-v8.26/$ERROR_FILE
 
 # If NO major DGB features found, copy v26.2 file BUT preserve copyright:
 if [ $? -ne 0 ]; then
@@ -137,6 +137,7 @@ git commit -m "Fix build: $ERROR_FILE
   - Chain parameters (magic bytes, prefixes)
   - Custom RPCs (getblockreward, etc.)
   - DigiShield difficulty adjustment
+  - **BOTH COINBASE_MATURITY constants** (DigiByte uses COINBASE_MATURITY and COINBASE_MATURITY_2)
 ```bash
 # If file has many errors, start fresh:
 cp bitcoin-v26.2-for-digibyte/$ERROR_FILE digibyte-v8.26/$ERROR_FILE

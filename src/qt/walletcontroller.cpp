@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-// Copyright (c) 2019-2020 The DigiByte Core developers
-=======
 // Copyright (c) 2019-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -24,30 +20,21 @@
 #include <wallet/wallet.h>
 
 #include <algorithm>
-<<<<<<< HEAD
-
-#include <QApplication>
-#include <QMessageBox>
-=======
 #include <chrono>
 
 #include <QApplication>
 #include <QMessageBox>
 #include <QMetaObject>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <QMutexLocker>
 #include <QThread>
 #include <QTimer>
 #include <QWindow>
 
-<<<<<<< HEAD
-=======
 using wallet::WALLET_FLAG_BLANK_WALLET;
 using wallet::WALLET_FLAG_DESCRIPTORS;
 using wallet::WALLET_FLAG_DISABLE_PRIVATE_KEYS;
 using wallet::WALLET_FLAG_EXTERNAL_SIGNER;
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 WalletController::WalletController(ClientModel& client_model, const PlatformStyle* platform_style, QObject* parent)
     : QObject(parent)
     , m_activity_thread(new QThread(this))
@@ -57,21 +44,9 @@ WalletController::WalletController(ClientModel& client_model, const PlatformStyl
     , m_platform_style(platform_style)
     , m_options_model(client_model.getOptionsModel())
 {
-<<<<<<< HEAD
-    m_handler_load_wallet = m_node.walletClient().handleLoadWallet([this](std::unique_ptr<interfaces::Wallet> wallet) {
-        getOrCreateWallet(std::move(wallet));
-    });
-
-    for (std::unique_ptr<interfaces::Wallet>& wallet : m_node.walletClient().getWallets()) {
-        getOrCreateWallet(std::move(wallet));
-    }
-
-=======
     m_handler_load_wallet = m_node.walletLoader().handleLoadWallet([this](std::unique_ptr<interfaces::Wallet> wallet) {
         getOrCreateWallet(std::move(wallet));
     });
-
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     m_activity_worker->moveToThread(m_activity_thread);
     m_activity_thread->start();
     QTimer::singleShot(0, m_activity_worker, []() {
@@ -88,24 +63,16 @@ WalletController::~WalletController()
     delete m_activity_worker;
 }
 
-<<<<<<< HEAD
 std::vector<WalletModel*> WalletController::getOpenWallets() const
 {
     QMutexLocker locker(&m_mutex);
     return m_wallets;
 }
-
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 std::map<std::string, bool> WalletController::listWalletDir() const
 {
     QMutexLocker locker(&m_mutex);
     std::map<std::string, bool> wallets;
-<<<<<<< HEAD
-    for (const std::string& name : m_node.walletClient().listWalletDir()) {
-=======
     for (const std::string& name : m_node.walletLoader().listWalletDir()) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         wallets[name] = false;
     }
     for (WalletModel* wallet_model : m_wallets) {
@@ -173,11 +140,7 @@ WalletModel* WalletController::getOrCreateWallet(std::unique_ptr<interfaces::Wal
     // handled on the GUI event loop.
     wallet_model->moveToThread(thread());
     // setParent(parent) must be called in the thread which created the parent object. More details in #18948.
-<<<<<<< HEAD
-    GUIUtil::ObjectInvoke(this, [wallet_model, this] {
-=======
     QMetaObject::invokeMethod(this, [wallet_model, this] {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         wallet_model->setParent(this);
     }, GUIUtil::blockingGUIThreadConnection());
 
@@ -229,35 +192,6 @@ WalletControllerActivity::WalletControllerActivity(WalletController* wallet_cont
     , m_wallet_controller(wallet_controller)
     , m_parent_widget(parent_widget)
 {
-<<<<<<< HEAD
-}
-
-WalletControllerActivity::~WalletControllerActivity()
-{
-    delete m_progress_dialog;
-}
-
-void WalletControllerActivity::showProgressDialog(const QString& label_text)
-{
-    assert(!m_progress_dialog);
-    m_progress_dialog = new QProgressDialog(m_parent_widget);
-
-    m_progress_dialog->setLabelText(label_text);
-    m_progress_dialog->setRange(0, 0);
-    m_progress_dialog->setCancelButton(nullptr);
-    m_progress_dialog->setWindowModality(Qt::ApplicationModal);
-    GUIUtil::PolishProgressDialog(m_progress_dialog);
-    // The setValue call forces QProgressDialog to start the internal duration estimation.
-    // See details in https://bugreports.qt.io/browse/QTBUG-47042.
-    m_progress_dialog->setValue(0);
-}
-
-void WalletControllerActivity::destroyProgressDialog()
-{
-    assert(m_progress_dialog);
-    delete m_progress_dialog;
-    m_progress_dialog = nullptr;
-=======
     connect(this, &WalletControllerActivity::finished, this, &QObject::deleteLater);
 }
 
@@ -278,7 +212,6 @@ void WalletControllerActivity::showProgressDialog(const QString& title_text, con
     progress_dialog->setValue(0);
     // When requested, launch dialog minimized
     if (show_minimized) progress_dialog->showMinimized();
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 CreateWalletActivity::CreateWalletActivity(WalletController* wallet_controller, QWidget* parent_widget)
@@ -312,12 +245,6 @@ void CreateWalletActivity::askPassphrase()
 
 void CreateWalletActivity::createWallet()
 {
-<<<<<<< HEAD
-    showProgressDialog(tr("Creating Wallet <b>%1</b>…").arg(m_create_wallet_dialog->walletName().toHtmlEscaped()));
-
-    std::string name = m_create_wallet_dialog->walletName().toStdString();
-    uint64_t flags = 0;
-=======
     showProgressDialog(
         //: Title of window indicating the progress of creation of a new wallet.
         tr("Create Wallet"),
@@ -328,7 +255,6 @@ void CreateWalletActivity::createWallet()
     std::string name = m_create_wallet_dialog->walletName().toStdString();
     uint64_t flags = 0;
     // Enable descriptors by default.
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     flags |= WALLET_FLAG_DESCRIPTORS;
     if (m_create_wallet_dialog->isDisablePrivateKeysChecked()) {
         flags |= WALLET_FLAG_DISABLE_PRIVATE_KEYS;
@@ -340,14 +266,6 @@ void CreateWalletActivity::createWallet()
         flags |= WALLET_FLAG_EXTERNAL_SIGNER;
     }
 
-<<<<<<< HEAD
-    QTimer::singleShot(500, worker(), [this, name, flags] {
-        std::unique_ptr<interfaces::Wallet> wallet = node().walletClient().createWallet(name, m_passphrase, flags, m_error_message, m_warning_message);
-
-        if (wallet) m_wallet_model = m_wallet_controller->getOrCreateWallet(std::move(wallet));
-
-        QTimer::singleShot(500, this, &CreateWalletActivity::finish);
-=======
     QTimer::singleShot(500ms, worker(), [this, name, flags] {
         auto wallet{node().walletLoader().createWallet(name, m_passphrase, flags, m_warning_message)};
 
@@ -358,17 +276,11 @@ void CreateWalletActivity::createWallet()
         }
 
         QTimer::singleShot(500ms, this, &CreateWalletActivity::finish);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     });
 }
 
 void CreateWalletActivity::finish()
 {
-<<<<<<< HEAD
-    destroyProgressDialog();
-
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (!m_error_message.empty()) {
         QMessageBox::critical(m_parent_widget, tr("Create wallet failed"), QString::fromStdString(m_error_message.translated));
     } else if (!m_warning_message.empty()) {
@@ -384,14 +296,6 @@ void CreateWalletActivity::create()
 {
     m_create_wallet_dialog = new CreateWalletDialog(m_parent_widget);
 
-<<<<<<< HEAD
-    std::vector<ExternalSigner> signers;
-    try {
-        signers = node().externalSigners();
-    } catch (const std::runtime_error& e) {
-        QMessageBox::critical(nullptr, tr("Can't list signers"), e.what());
-    }
-=======
     std::vector<std::unique_ptr<interfaces::ExternalSigner>> signers;
     try {
         signers = node().listExternalSigners();
@@ -402,7 +306,6 @@ void CreateWalletActivity::create()
         QMessageBox::critical(nullptr, tr("Too many external signers found"), QString::fromStdString("More than one external signer found. Please connect only one at a time."));
         signers.clear();
     }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     m_create_wallet_dialog->setSigners(signers);
 
     m_create_wallet_dialog->setWindowModality(Qt::ApplicationModal);
@@ -430,11 +333,6 @@ OpenWalletActivity::OpenWalletActivity(WalletController* wallet_controller, QWid
 
 void OpenWalletActivity::finish()
 {
-<<<<<<< HEAD
-    destroyProgressDialog();
-
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (!m_error_message.empty()) {
         QMessageBox::critical(m_parent_widget, tr("Open wallet failed"), QString::fromStdString(m_error_message.translated));
     } else if (!m_warning_message.empty()) {
@@ -450,14 +348,6 @@ void OpenWalletActivity::open(const std::string& path)
 {
     QString name = path.empty() ? QString("["+tr("default wallet")+"]") : QString::fromStdString(path);
 
-<<<<<<< HEAD
-    showProgressDialog(tr("Opening Wallet <b>%1</b>…").arg(name.toHtmlEscaped()));
-
-    QTimer::singleShot(0, worker(), [this, path] {
-        std::unique_ptr<interfaces::Wallet> wallet = node().walletClient().loadWallet(path, m_error_message, m_warning_message);
-
-        if (wallet) m_wallet_model = m_wallet_controller->getOrCreateWallet(std::move(wallet));
-=======
     showProgressDialog(
         //: Title of window indicating the progress of opening of a wallet.
         tr("Open Wallet"),
@@ -473,14 +363,10 @@ void OpenWalletActivity::open(const std::string& path)
         } else {
             m_error_message = util::ErrorString(wallet);
         }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         QTimer::singleShot(0, this, &OpenWalletActivity::finish);
     });
 }
-<<<<<<< HEAD
-=======
-
 LoadWalletsActivity::LoadWalletsActivity(WalletController* wallet_controller, QWidget* parent_widget)
     : WalletControllerActivity(wallet_controller, parent_widget)
 {
@@ -615,4 +501,3 @@ void MigrateWalletActivity::finish()
 
     Q_EMIT finished();
 }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion

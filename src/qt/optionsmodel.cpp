@@ -35,10 +35,6 @@ const char *DEFAULT_GUI_PROXY_HOST = "127.0.0.1";
 
 static QString GetDefaultProxyAddress();
 
-<<<<<<< HEAD
-OptionsModel::OptionsModel(QObject *parent, bool resetSettings) :
-    QAbstractListModel(parent)
-=======
 /** Map GUI option ID to node setting name. */
 static const char* SettingName(OptionsModel::OptionID option)
 {
@@ -125,7 +121,6 @@ static std::string ProxyString(bool is_set, QString ip, QString port);
 
 OptionsModel::OptionsModel(interfaces::Node& node, QObject *parent) :
     QAbstractListModel(parent), m_node{node}
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
 }
 
@@ -165,11 +160,6 @@ bool OptionsModel::Init(bilingual_str& error)
     fMinimizeOnClose = settings.value("fMinimizeOnClose").toBool();
 
     // Display
-<<<<<<< HEAD
-    if (!settings.contains("nDisplayUnit"))
-        settings.setValue("nDisplayUnit", DigiByteUnits::DGB);
-    nDisplayUnit = settings.value("nDisplayUnit").toInt();
-=======
     if (!settings.contains("DisplayDigiByteUnit")) {
         settings.setValue("DisplayDigiByteUnit", QVariant::fromValue(DigiByteUnit::DGB));
     }
@@ -180,7 +170,6 @@ bool OptionsModel::Init(bilingual_str& error)
         m_display_digibyte_unit = DigiByteUnit::DGB;
         settings.setValue("DisplayDigiByteUnit", QVariant::fromValue(m_display_digibyte_unit));
     }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     if (!settings.contains("strThirdPartyTxUrls"))
         settings.setValue("strThirdPartyTxUrls", "");
@@ -190,35 +179,6 @@ bool OptionsModel::Init(bilingual_str& error)
         settings.setValue("fCoinControlFeatures", false);
     fCoinControlFeatures = settings.value("fCoinControlFeatures", false).toBool();
 
-<<<<<<< HEAD
-    if (!settings.contains("theme"))
-    settings.setValue("theme", "");
-
-    // These are shared with the core or have a command-line parameter
-    // and we want command-line parameters to overwrite the GUI settings.
-    //
-    // If setting doesn't exist create it with defaults.
-    //
-    // If gArgs.SoftSetArg() or gArgs.SoftSetBoolArg() return false we were overridden
-    // by command-line and show this in the UI.
-
-    // Main
-    if (!settings.contains("bPrune"))
-        settings.setValue("bPrune", false);
-    if (!settings.contains("nPruneSize"))
-        settings.setValue("nPruneSize", DEFAULT_PRUNE_TARGET_GB);
-    SetPruneEnabled(settings.value("bPrune").toBool());
-
-    if (!settings.contains("nDatabaseCache"))
-        settings.setValue("nDatabaseCache", (qint64)nDefaultDbCache);
-    if (!gArgs.SoftSetArg("-dbcache", settings.value("nDatabaseCache").toString().toStdString()))
-        addOverriddenOption("-dbcache");
-
-    if (!settings.contains("nThreadsScriptVerif"))
-        settings.setValue("nThreadsScriptVerif", DEFAULT_SCRIPTCHECK_THREADS);
-    if (!gArgs.SoftSetArg("-par", settings.value("nThreadsScriptVerif").toString().toStdString()))
-        addOverriddenOption("-par");
-=======
     if (!settings.contains("enable_psbt_controls")) {
         settings.setValue("enable_psbt_controls", false);
     }
@@ -242,7 +202,6 @@ bool OptionsModel::Init(bilingual_str& error)
     }
 
     // If setting doesn't exist create it with defaults.
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // Main
     if (!settings.contains("strDataDir"))
@@ -250,72 +209,6 @@ bool OptionsModel::Init(bilingual_str& error)
 
     // Wallet
 #ifdef ENABLE_WALLET
-<<<<<<< HEAD
-    if (!settings.contains("bSpendZeroConfChange"))
-        settings.setValue("bSpendZeroConfChange", true);
-    if (!gArgs.SoftSetBoolArg("-spendzeroconfchange", settings.value("bSpendZeroConfChange").toBool()))
-        addOverriddenOption("-spendzeroconfchange");
-
-    if (!settings.contains("external_signer_path"))
-        settings.setValue("external_signer_path", "");
-
-    if (!gArgs.SoftSetArg("-signer", settings.value("external_signer_path").toString().toStdString())) {
-        addOverriddenOption("-signer");
-    }
-#endif
-
-    // Network
-    if (!settings.contains("fUseUPnP"))
-        settings.setValue("fUseUPnP", DEFAULT_UPNP);
-    if (!gArgs.SoftSetBoolArg("-upnp", settings.value("fUseUPnP").toBool()))
-        addOverriddenOption("-upnp");
-
-    if (!settings.contains("fUseNatpmp")) {
-        settings.setValue("fUseNatpmp", DEFAULT_NATPMP);
-    }
-    if (!gArgs.SoftSetBoolArg("-natpmp", settings.value("fUseNatpmp").toBool())) {
-        addOverriddenOption("-natpmp");
-    }
-
-    if (!settings.contains("fListen"))
-        settings.setValue("fListen", DEFAULT_LISTEN);
-    if (!gArgs.SoftSetBoolArg("-listen", settings.value("fListen").toBool()))
-        addOverriddenOption("-listen");
-
-    if (!settings.contains("fUseProxy"))
-        settings.setValue("fUseProxy", false);
-    if (!settings.contains("addrProxy"))
-        settings.setValue("addrProxy", GetDefaultProxyAddress());
-    // Only try to set -proxy, if user has enabled fUseProxy
-    if ((settings.value("fUseProxy").toBool() && !gArgs.SoftSetArg("-proxy", settings.value("addrProxy").toString().toStdString())))
-        addOverriddenOption("-proxy");
-    else if(!settings.value("fUseProxy").toBool() && !gArgs.GetArg("-proxy", "").empty())
-        addOverriddenOption("-proxy");
-
-    if (!settings.contains("fUseSeparateProxyTor"))
-        settings.setValue("fUseSeparateProxyTor", false);
-    if (!settings.contains("addrSeparateProxyTor"))
-        settings.setValue("addrSeparateProxyTor", GetDefaultProxyAddress());
-    // Only try to set -onion, if user has enabled fUseSeparateProxyTor
-    if ((settings.value("fUseSeparateProxyTor").toBool() && !gArgs.SoftSetArg("-onion", settings.value("addrSeparateProxyTor").toString().toStdString())))
-        addOverriddenOption("-onion");
-    else if(!settings.value("fUseSeparateProxyTor").toBool() && !gArgs.GetArg("-onion", "").empty())
-        addOverriddenOption("-onion");
-
-    // Display
-    if (!settings.contains("language"))
-        settings.setValue("language", "");
-    if (!gArgs.SoftSetArg("-lang", settings.value("language").toString().toStdString()))
-        addOverriddenOption("-lang");
-
-    language = settings.value("language").toString();
-
-    if (!settings.contains("UseEmbeddedMonospacedFont")) {
-        settings.setValue("UseEmbeddedMonospacedFont", "true");
-    }
-    m_use_embedded_monospaced_font = settings.value("UseEmbeddedMonospacedFont").toBool();
-    Q_EMIT useEmbeddedMonospacedFontChanged(m_use_embedded_monospaced_font);
-=======
     if (!settings.contains("SubFeeFromAmount")) {
         settings.setValue("SubFeeFromAmount", false);
     }
@@ -332,7 +225,6 @@ bool OptionsModel::Init(bilingual_str& error)
     m_mask_values = settings.value("mask_values", false).toBool();
 
     return true;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 /** Helper function to copy contents from one QSettings to another.
@@ -348,13 +240,8 @@ static void CopySettings(QSettings& dst, const QSettings& src)
 /** Back up a QSettings to an ini-formatted file. */
 static void BackupSettings(const fs::path& filename, const QSettings& src)
 {
-<<<<<<< HEAD
-    qInfo() << "Backing up GUI settings to" << GUIUtil::boostPathToQString(filename);
-    QSettings dst(GUIUtil::boostPathToQString(filename), QSettings::IniFormat);
-=======
     qInfo() << "Backing up GUI settings to" << GUIUtil::PathToQString(filename);
     QSettings dst(GUIUtil::PathToQString(filename), QSettings::IniFormat);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     dst.clear();
     CopySettings(dst, src);
 }
@@ -400,11 +287,7 @@ static ProxySetting ParseProxyString(const QString& proxy)
         return default_val;
     }
     // contains IP at index 0 and port at index 1
-<<<<<<< HEAD
-    QStringList ip_port = GUIUtil::SplitSkipEmptyParts(settings.value(name).toString(), ":");
-=======
     QStringList ip_port = GUIUtil::SplitSkipEmptyParts(proxy, ":");
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (ip_port.size() == 2) {
         return {true, ip_port.at(0), ip_port.at(1)};
     } else { // Invalid: return default
@@ -414,11 +297,7 @@ static ProxySetting ParseProxyString(const QString& proxy)
 
 static ProxySetting ParseProxyString(const std::string& proxy)
 {
-<<<<<<< HEAD
-    settings.setValue(name, QString{ip_port.ip + QLatin1Char(':') + ip_port.port});
-=======
     return ParseProxyString(QString::fromStdString(proxy));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 static std::string ProxyString(bool is_set, QString ip, QString port)
@@ -431,33 +310,7 @@ static QString GetDefaultProxyAddress()
     return QString("%1:%2").arg(DEFAULT_GUI_PROXY_HOST).arg(DEFAULT_GUI_PROXY_PORT);
 }
 
-<<<<<<< HEAD
-void OptionsModel::SetPruneEnabled(bool prune, bool force)
-{
-    QSettings settings;
-    settings.setValue("bPrune", prune);
-    const int64_t prune_target_mib = PruneGBtoMiB(settings.value("nPruneSize").toInt());
-    std::string prune_val = prune ? ToString(prune_target_mib) : "0";
-    if (force) {
-        gArgs.ForceSetArg("-prune", prune_val);
-        return;
-    }
-    if (!gArgs.SoftSetArg("-prune", prune_val)) {
-        addOverriddenOption("-prune");
-    }
-}
 
-void OptionsModel::SetPruneTargetGB(int prune_target_gb, bool force)
-{
-    const bool prune = prune_target_gb > 0;
-    if (prune) {
-        QSettings settings;
-        settings.setValue("nPruneSize", prune_target_gb);
-    }
-    SetPruneEnabled(prune, force);
-}
-
-=======
 void OptionsModel::SetPruneTargetGB(int prune_target_gb)
 {
     const common::SettingsValue cur_value = node().getPersistentSetting("prune");
@@ -484,87 +337,12 @@ void OptionsModel::SetPruneTargetGB(int prune_target_gb)
     }
 }
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // read QSettings values and return them
 QVariant OptionsModel::data(const QModelIndex & index, int role) const
 {
     if(role == Qt::EditRole)
     {
-<<<<<<< HEAD
-        QSettings settings;
-        switch(index.row())
-        {
-        case StartAtStartup:
-            return GUIUtil::GetStartOnSystemStartup();
-        case ShowTrayIcon:
-            return m_show_tray_icon;
-        case MinimizeToTray:
-            return fMinimizeToTray;
-        case MapPortUPnP:
-#ifdef USE_UPNP
-            return settings.value("fUseUPnP");
-#else
-            return false;
-#endif // USE_UPNP
-        case MapPortNatpmp:
-#ifdef USE_NATPMP
-            return settings.value("fUseNatpmp");
-#else
-            return false;
-#endif // USE_NATPMP
-        case MinimizeOnClose:
-            return fMinimizeOnClose;
-
-        // default proxy
-        case ProxyUse:
-            return settings.value("fUseProxy", false);
-        case ProxyIP:
-            return GetProxySetting(settings, "addrProxy").ip;
-        case ProxyPort:
-            return GetProxySetting(settings, "addrProxy").port;
-
-        // separate Tor proxy
-        case ProxyUseTor:
-            return settings.value("fUseSeparateProxyTor", false);
-        case ProxyIPTor:
-            return GetProxySetting(settings, "addrSeparateProxyTor").ip;
-        case ProxyPortTor:
-            return GetProxySetting(settings, "addrSeparateProxyTor").port;
-
-#ifdef ENABLE_WALLET
-        case SpendZeroConfChange:
-            return settings.value("bSpendZeroConfChange");
-        case ExternalSignerPath:
-            return settings.value("external_signer_path");
-#endif
-        case DisplayUnit:
-            return nDisplayUnit;
-        case ThirdPartyTxUrls:
-            return strThirdPartyTxUrls;
-        case Theme:
-            return settings.value("theme");
-        case Language:
-            return settings.value("language");
-        case UseEmbeddedMonospacedFont:
-            return m_use_embedded_monospaced_font;
-        case CoinControlFeatures:
-            return fCoinControlFeatures;
-        case Prune:
-            return settings.value("bPrune");
-        case PruneSize:
-            return settings.value("nPruneSize");
-        case DatabaseCache:
-            return settings.value("nDatabaseCache");
-        case ThreadsScriptVerif:
-            return settings.value("nThreadsScriptVerif");
-        case Listen:
-            return settings.value("fListen");
-        default:
-            return QVariant();
-        }
-=======
         return getOption(OptionID(index.row()));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     return QVariant();
 }
@@ -575,167 +353,7 @@ bool OptionsModel::setData(const QModelIndex & index, const QVariant & value, in
     bool successful = true; /* set to false on parse error */
     if(role == Qt::EditRole)
     {
-<<<<<<< HEAD
-        QSettings settings;
-        switch(index.row())
-        {
-        case StartAtStartup:
-            successful = GUIUtil::SetStartOnSystemStartup(value.toBool());
-            break;
-        case ShowTrayIcon:
-            m_show_tray_icon = value.toBool();
-            settings.setValue("fHideTrayIcon", !m_show_tray_icon);
-            Q_EMIT showTrayIconChanged(m_show_tray_icon);
-            break;
-        case MinimizeToTray:
-            fMinimizeToTray = value.toBool();
-            settings.setValue("fMinimizeToTray", fMinimizeToTray);
-            break;
-        case MapPortUPnP: // core option - can be changed on-the-fly
-            settings.setValue("fUseUPnP", value.toBool());
-            break;
-        case MapPortNatpmp: // core option - can be changed on-the-fly
-            settings.setValue("fUseNatpmp", value.toBool());
-            break;
-        case MinimizeOnClose:
-            fMinimizeOnClose = value.toBool();
-            settings.setValue("fMinimizeOnClose", fMinimizeOnClose);
-            break;
-
-        // default proxy
-        case ProxyUse:
-            if (settings.value("fUseProxy") != value) {
-                settings.setValue("fUseProxy", value.toBool());
-                setRestartRequired(true);
-            }
-            break;
-        case ProxyIP: {
-            auto ip_port = GetProxySetting(settings, "addrProxy");
-            if (!ip_port.is_set || ip_port.ip != value.toString()) {
-                ip_port.ip = value.toString();
-                SetProxySetting(settings, "addrProxy", ip_port);
-                setRestartRequired(true);
-            }
-        }
-        break;
-        case ProxyPort: {
-            auto ip_port = GetProxySetting(settings, "addrProxy");
-            if (!ip_port.is_set || ip_port.port != value.toString()) {
-                ip_port.port = value.toString();
-                SetProxySetting(settings, "addrProxy", ip_port);
-                setRestartRequired(true);
-            }
-        }
-        break;
-
-        // separate Tor proxy
-        case ProxyUseTor:
-            if (settings.value("fUseSeparateProxyTor") != value) {
-                settings.setValue("fUseSeparateProxyTor", value.toBool());
-                setRestartRequired(true);
-            }
-            break;
-        case ProxyIPTor: {
-            auto ip_port = GetProxySetting(settings, "addrSeparateProxyTor");
-            if (!ip_port.is_set || ip_port.ip != value.toString()) {
-                ip_port.ip = value.toString();
-                SetProxySetting(settings, "addrSeparateProxyTor", ip_port);
-                setRestartRequired(true);
-            }
-        }
-        break;
-        case ProxyPortTor: {
-            auto ip_port = GetProxySetting(settings, "addrSeparateProxyTor");
-            if (!ip_port.is_set || ip_port.port != value.toString()) {
-                ip_port.port = value.toString();
-                SetProxySetting(settings, "addrSeparateProxyTor", ip_port);
-                setRestartRequired(true);
-            }
-        }
-        break;
-
-#ifdef ENABLE_WALLET
-        case SpendZeroConfChange:
-            if (settings.value("bSpendZeroConfChange") != value) {
-                settings.setValue("bSpendZeroConfChange", value);
-                setRestartRequired(true);
-            }
-            break;
-        case ExternalSignerPath:
-            if (settings.value("external_signer_path") != value.toString()) {
-                settings.setValue("external_signer_path", value.toString());
-                setRestartRequired(true);
-            }
-            break;
-#endif
-        case DisplayUnit:
-            setDisplayUnit(value);
-            break;
-        case ThirdPartyTxUrls:
-            if (strThirdPartyTxUrls != value.toString()) {
-                strThirdPartyTxUrls = value.toString();
-                settings.setValue("strThirdPartyTxUrls", strThirdPartyTxUrls);
-                setRestartRequired(true);
-            }
-            break;
-        case Theme:
-            if (settings.value("theme") != value) {
-                settings.setValue("theme", value);
-                setRestartRequired(true);
-            }
-            break; 
-        case Language:
-            if (settings.value("language") != value) {
-                settings.setValue("language", value);
-                setRestartRequired(true);
-            }
-            break;
-        case UseEmbeddedMonospacedFont:
-            m_use_embedded_monospaced_font = value.toBool();
-            settings.setValue("UseEmbeddedMonospacedFont", m_use_embedded_monospaced_font);
-            Q_EMIT useEmbeddedMonospacedFontChanged(m_use_embedded_monospaced_font);
-            break;
-        case CoinControlFeatures:
-            fCoinControlFeatures = value.toBool();
-            settings.setValue("fCoinControlFeatures", fCoinControlFeatures);
-            Q_EMIT coinControlFeaturesChanged(fCoinControlFeatures);
-            break;
-        case Prune:
-            if (settings.value("bPrune") != value) {
-                settings.setValue("bPrune", value);
-                setRestartRequired(true);
-            }
-            break;
-        case PruneSize:
-            if (settings.value("nPruneSize") != value) {
-                settings.setValue("nPruneSize", value);
-                setRestartRequired(true);
-            }
-            break;
-        case DatabaseCache:
-            if (settings.value("nDatabaseCache") != value) {
-                settings.setValue("nDatabaseCache", value);
-                setRestartRequired(true);
-            }
-            break;
-        case ThreadsScriptVerif:
-            if (settings.value("nThreadsScriptVerif") != value) {
-                settings.setValue("nThreadsScriptVerif", value);
-                setRestartRequired(true);
-            }
-            break;
-        case Listen:
-            if (settings.value("fListen") != value) {
-                settings.setValue("fListen", value);
-                setRestartRequired(true);
-            }
-            break;
-        default:
-            break;
-        }
-=======
         successful = setOption(OptionID(index.row()), value);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     Q_EMIT dataChanged(index, index);
@@ -815,7 +433,7 @@ QVariant OptionsModel::getOption(OptionID option, const std::string& suffix) con
         return m_use_embedded_monospaced_font;
     case CoinControlFeatures:
         return fCoinControlFeatures;
-    case EnablePSDGBontrols:
+    case EnablePSBTControls:
         return settings.value("enable_psbt_controls");
     case Prune:
         return PruneEnabled(setting());
@@ -838,8 +456,6 @@ QVariant OptionsModel::getOption(OptionID option, const std::string& suffix) con
     }
 }
 
-<<<<<<< HEAD
-=======
 bool OptionsModel::setOption(OptionID option, const QVariant& value, const std::string& suffix)
 {
     auto changed = [&] { return value.isValid() && value != getOption(option, suffix); };
@@ -982,7 +598,7 @@ bool OptionsModel::setOption(OptionID option, const QVariant& value, const std::
         settings.setValue("fCoinControlFeatures", fCoinControlFeatures);
         Q_EMIT coinControlFeaturesChanged(fCoinControlFeatures);
         break;
-    case EnablePSDGBontrols:
+    case EnablePSBTControls:
         m_enable_psbt_controls = value.toBool();
         settings.setValue("enable_psbt_controls", m_enable_psbt_controls);
         break;
@@ -1043,7 +659,6 @@ void OptionsModel::setDisplayUnit(const QVariant& new_unit)
     Q_EMIT displayUnitChanged(m_display_digibyte_unit);
 }
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 void OptionsModel::setRestartRequired(bool fRequired)
 {
     QSettings settings;

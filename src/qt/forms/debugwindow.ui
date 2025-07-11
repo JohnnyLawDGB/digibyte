@@ -1085,30 +1085,17 @@
                 </widget>
                </item>
                <item row="2" column="0">
-<<<<<<< HEAD
-                <widget class="QLabel" name="peerNetworkLabel">
-                 <property name="toolTip">
-                  <string>The network protocol this peer is connected through: IPv4, IPv6, Onion, I2P, or CJDNS.</string>
-                 </property>
-                 <property name="text">
-                  <string>Network</string>
-=======
                 <widget class="QLabel" name="peerTransportTypeLabel">
                  <property name="toolTip">
                   <string>The transport layer version: %1</string>
                  </property>
                  <property name="text">
                   <string>Transport</string>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                  </property>
                 </widget>
                </item>
                <item row="2" column="1">
-<<<<<<< HEAD
-                <widget class="QLabel" name="peerNetwork">
-=======
                 <widget class="QLabel" name="peerTransportType">
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                  <property name="cursor">
                   <cursorShape>IBeamCursor</cursorShape>
                  </property>
@@ -1124,27 +1111,17 @@
                 </widget>
                </item>
                <item row="3" column="0">
-<<<<<<< HEAD
-                <widget class="QLabel" name="label_21">
-                 <property name="text">
-                  <string>Version</string>
-=======
                 <widget class="QLabel" name="peerSessionIdLabel">
                  <property name="toolTip">
                   <string>The BIP324 session ID string in hex, if any.</string>
                  </property>
                  <property name="text">
                   <string>Session ID</string>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                  </property>
                 </widget>
                </item>
                <item row="3" column="1">
-<<<<<<< HEAD
-                <widget class="QLabel" name="peerVersion">
-=======
                 <widget class="QLabel" name="peerSessionId">
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                  <property name="cursor">
                   <cursorShape>IBeamCursor</cursorShape>
                  </property>
@@ -1160,27 +1137,17 @@
                 </widget>
                </item>
                <item row="4" column="0">
-<<<<<<< HEAD
-                <widget class="QLabel" name="label_28">
-                 <property name="text">
-                  <string>User Agent</string>
-=======
                 <widget class="QLabel" name="peerNetworkLabel">
                  <property name="toolTip">
                   <string>The network protocol this peer is connected through: IPv4, IPv6, Onion, I2P, or CJDNS.</string>
                  </property>
                  <property name="text">
                   <string>Network</string>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                  </property>
                 </widget>
                </item>
                <item row="4" column="1">
-<<<<<<< HEAD
-                <widget class="QLabel" name="peerSubversion">
-=======
                 <widget class="QLabel" name="peerNetwork">
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                  <property name="cursor">
                   <cursorShape>IBeamCursor</cursorShape>
                  </property>
@@ -1196,8 +1163,6 @@
                 </widget>
                </item>
                <item row="5" column="0">
-<<<<<<< HEAD
-=======
                 <widget class="QLabel" name="label_21">
                  <property name="text">
                   <string>Version</string>
@@ -1244,18 +1209,13 @@
                 </widget>
                </item>
                <item row="7" column="0">
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 <widget class="QLabel" name="label_4">
                  <property name="text">
                   <string>Services</string>
                  </property>
                 </widget>
                </item>
-<<<<<<< HEAD
-               <item row="5" column="1">
-=======
                <item row="7" column="1">
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 <widget class="QLabel" name="peerServices">
                  <property name="cursor">
                   <cursorShape>IBeamCursor</cursorShape>
@@ -1274,19 +1234,6 @@
                  </property>
                 </widget>
                </item>
-<<<<<<< HEAD
-               <item row="6" column="0">
-                <widget class="QLabel" name="peerRelayTxesLabel">
-                 <property name="toolTip">
-                  <string>Whether the peer requested us to relay transactions.</string>
-                 </property>
-                 <property name="text">
-                  <string>Wants Tx Relay</string>
-                 </property>
-                </widget>
-               </item>
-               <item row="6" column="1">
-=======
                <item row="8" column="0">
                 <widget class="QLabel" name="peerRelayTxesLabel">
                  <property name="toolTip">
@@ -1298,7 +1245,6 @@
                 </widget>
                </item>
                <item row="8" column="1">
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 <widget class="QLabel" name="peerRelayTxes">
                  <property name="cursor">
                   <cursorShape>IBeamCursor</cursorShape>
@@ -1314,11 +1260,7 @@
                  </property>
                 </widget>
                </item>
-<<<<<<< HEAD
-               <item row="7" column="0">
-=======
                <item row="9" column="0">
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 <widget class="QLabel" name="peerHighBandwidthLabel">
                  <property name="toolTip">
                   <string>High bandwidth BIP152 compact block relay: %1</string>
@@ -1328,11 +1270,7 @@
                  </property>
                 </widget>
                </item>
-<<<<<<< HEAD
-               <item row="7" column="1">
-=======
                <item row="9" column="1">
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 <widget class="QLabel" name="peerHighBandwidth">
                  <property name="cursor">
                   <cursorShape>IBeamCursor</cursorShape>
@@ -1348,22 +1286,14 @@
                  </property>
                 </widget>
                </item>
-<<<<<<< HEAD
-               <item row="8" column="0">
-=======
                <item row="10" column="0">
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 <widget class="QLabel" name="label_29">
                  <property name="text">
                   <string>Starting Block</string>
                  </property>
                 </widget>
                </item>
-<<<<<<< HEAD
-               <item row="8" column="1">
-=======
                <item row="10" column="1">
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 <widget class="QLabel" name="peerHeight">
                  <property name="cursor">
                   <cursorShape>IBeamCursor</cursorShape>
@@ -1379,22 +1309,14 @@
                  </property>
                 </widget>
                </item>
-<<<<<<< HEAD
-               <item row="9" column="0">
-=======
                <item row="11" column="0">
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 <widget class="QLabel" name="label_27">
                  <property name="text">
                   <string>Synced Headers</string>
                  </property>
                 </widget>
                </item>
-<<<<<<< HEAD
-               <item row="9" column="1">
-=======
                <item row="11" column="1">
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 <widget class="QLabel" name="peerSyncHeight">
                  <property name="cursor">
                   <cursorShape>IBeamCursor</cursorShape>
@@ -1410,22 +1332,14 @@
                  </property>
                 </widget>
                </item>
-<<<<<<< HEAD
-               <item row="10" column="0">
-=======
                <item row="12" column="0">
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 <widget class="QLabel" name="label_25">
                  <property name="text">
                   <string>Synced Blocks</string>
                  </property>
                 </widget>
                </item>
-<<<<<<< HEAD
-               <item row="10" column="1">
-=======
                <item row="12" column="1">
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 <widget class="QLabel" name="peerCommonHeight">
                  <property name="cursor">
                   <cursorShape>IBeamCursor</cursorShape>
@@ -1441,22 +1355,14 @@
                  </property>
                 </widget>
                </item>
-<<<<<<< HEAD
-               <item row="11" column="0">
-=======
                <item row="13" column="0">
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 <widget class="QLabel" name="label_22">
                  <property name="text">
                   <string>Connection Time</string>
                  </property>
                 </widget>
                </item>
-<<<<<<< HEAD
-               <item row="11" column="1">
-=======
                <item row="13" column="1">
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 <widget class="QLabel" name="peerConnTime">
                  <property name="cursor">
                   <cursorShape>IBeamCursor</cursorShape>
@@ -1472,11 +1378,7 @@
                  </property>
                 </widget>
                </item>
-<<<<<<< HEAD
-               <item row="12" column="0">
-=======
                <item row="14" column="0">
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 <widget class="QLabel" name="peerLastBlockLabel">
                  <property name="toolTip">
                   <string>Elapsed time since a novel block passing initial validity checks was received from this peer.</string>
@@ -1486,11 +1388,7 @@
                  </property>
                 </widget>
                </item>
-<<<<<<< HEAD
-               <item row="12" column="1">
-=======
                <item row="14" column="1">
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 <widget class="QLabel" name="peerLastBlock">
                  <property name="cursor">
                   <cursorShape>IBeamCursor</cursorShape>
@@ -1506,19 +1404,6 @@
                  </property>
                 </widget>
                </item>
-<<<<<<< HEAD
-               <item row="13" column="0">
-                <widget class="QLabel" name="peerLastTxLabel">
-                 <property name="toolTip">
-                  <string>Elapsed time since a novel transaction accepted into our mempool was received from this peer.</string>
-                 </property>
-                 <property name="text">
-                  <string>Last Tx</string>
-                 </property>
-                </widget>
-               </item>
-               <item row="13" column="1">
-=======
                <item row="15" column="0">
                 <widget class="QLabel" name="peerLastTxLabel">
                  <property name="toolTip">
@@ -1530,7 +1415,6 @@
                 </widget>
                </item>
                <item row="15" column="1">
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 <widget class="QLabel" name="peerLastTx">
                  <property name="cursor">
                   <cursorShape>IBeamCursor</cursorShape>
@@ -1546,22 +1430,14 @@
                  </property>
                 </widget>
                </item>
-<<<<<<< HEAD
-               <item row="14" column="0">
-=======
                <item row="16" column="0">
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 <widget class="QLabel" name="label_15">
                  <property name="text">
                   <string>Last Send</string>
                  </property>
                 </widget>
                </item>
-<<<<<<< HEAD
-               <item row="14" column="1">
-=======
                <item row="16" column="1">
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 <widget class="QLabel" name="peerLastSend">
                  <property name="cursor">
                   <cursorShape>IBeamCursor</cursorShape>
@@ -1577,22 +1453,14 @@
                  </property>
                 </widget>
                </item>
-<<<<<<< HEAD
-               <item row="15" column="0">
-=======
                <item row="17" column="0">
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 <widget class="QLabel" name="label_19">
                  <property name="text">
                   <string>Last Receive</string>
                  </property>
                 </widget>
                </item>
-<<<<<<< HEAD
-               <item row="15" column="1">
-=======
                <item row="17" column="1">
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 <widget class="QLabel" name="peerLastRecv">
                  <property name="cursor">
                   <cursorShape>IBeamCursor</cursorShape>
@@ -1608,22 +1476,14 @@
                  </property>
                 </widget>
                </item>
-<<<<<<< HEAD
-               <item row="16" column="0">
-=======
                <item row="18" column="0">
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 <widget class="QLabel" name="label_18">
                  <property name="text">
                   <string>Sent</string>
                  </property>
                 </widget>
                </item>
-<<<<<<< HEAD
-               <item row="16" column="1">
-=======
                <item row="18" column="1">
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 <widget class="QLabel" name="peerBytesSent">
                  <property name="cursor">
                   <cursorShape>IBeamCursor</cursorShape>
@@ -1639,22 +1499,14 @@
                  </property>
                 </widget>
                </item>
-<<<<<<< HEAD
-               <item row="17" column="0">
-=======
                <item row="19" column="0">
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 <widget class="QLabel" name="label_20">
                  <property name="text">
                   <string>Received</string>
                  </property>
                 </widget>
                </item>
-<<<<<<< HEAD
-               <item row="17" column="1">
-=======
                <item row="19" column="1">
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 <widget class="QLabel" name="peerBytesRecv">
                  <property name="cursor">
                   <cursorShape>IBeamCursor</cursorShape>
@@ -1670,22 +1522,14 @@
                  </property>
                 </widget>
                </item>
-<<<<<<< HEAD
-               <item row="18" column="0">
-=======
                <item row="20" column="0">
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 <widget class="QLabel" name="label_26">
                  <property name="text">
                   <string>Ping Time</string>
                  </property>
                 </widget>
                </item>
-<<<<<<< HEAD
-               <item row="18" column="1">
-=======
                <item row="20" column="1">
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 <widget class="QLabel" name="peerPingTime">
                  <property name="cursor">
                   <cursorShape>IBeamCursor</cursorShape>
@@ -1701,11 +1545,7 @@
                  </property>
                 </widget>
                </item>
-<<<<<<< HEAD
-               <item row="19" column="0">
-=======
                <item row="21" column="0">
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 <widget class="QLabel" name="peerPingWaitLabel">
                  <property name="toolTip">
                   <string>The duration of a currently outstanding ping.</string>
@@ -1715,11 +1555,7 @@
                  </property>
                 </widget>
                </item>
-<<<<<<< HEAD
-               <item row="19" column="1">
-=======
                <item row="21" column="1">
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 <widget class="QLabel" name="peerPingWait">
                  <property name="cursor">
                   <cursorShape>IBeamCursor</cursorShape>
@@ -1735,22 +1571,14 @@
                  </property>
                 </widget>
                </item>
-<<<<<<< HEAD
-               <item row="20" column="0">
-=======
                <item row="22" column="0">
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 <widget class="QLabel" name="peerMinPingLabel">
                  <property name="text">
                   <string>Min Ping</string>
                  </property>
                 </widget>
                </item>
-<<<<<<< HEAD
-               <item row="20" column="1">
-=======
                <item row="22" column="1">
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 <widget class="QLabel" name="peerMinPing">
                  <property name="cursor">
                   <cursorShape>IBeamCursor</cursorShape>
@@ -1766,22 +1594,14 @@
                  </property>
                 </widget>
                </item>
-<<<<<<< HEAD
-               <item row="21" column="0">
-=======
                <item row="23" column="0">
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 <widget class="QLabel" name="label_timeoffset">
                  <property name="text">
                   <string>Time Offset</string>
                  </property>
                 </widget>
                </item>
-<<<<<<< HEAD
-               <item row="21" column="1">
-=======
                <item row="23" column="1">
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 <widget class="QLabel" name="timeoffset">
                  <property name="cursor">
                   <cursorShape>IBeamCursor</cursorShape>
@@ -1797,11 +1617,7 @@
                  </property>
                 </widget>
                </item>
-<<<<<<< HEAD
-               <item row="22" column="0">
-=======
                <item row="24" column="0">
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 <widget class="QLabel" name="peerMappedASLabel">
                  <property name="toolTip">
                   <string>The mapped Autonomous System used for diversifying peer selection.</string>
@@ -1811,11 +1627,7 @@
                  </property>
                 </widget>
                </item>
-<<<<<<< HEAD
-               <item row="22" column="1">
-=======
                <item row="24" column="1">
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 <widget class="QLabel" name="peerMappedAS">
                  <property name="cursor">
                   <cursorShape>IBeamCursor</cursorShape>
@@ -1831,9 +1643,6 @@
                  </property>
                 </widget>
                </item>
-<<<<<<< HEAD
-               <item row="23" column="0">
-=======
                <item row="25" column="0">
                 <widget class="QLabel" name="peerAddrRelayEnabledLabel">
                  <property name="toolTip">
@@ -1913,7 +1722,6 @@
                 </widget>
                </item>
                <item row="28" column="0">
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 <spacer name="verticalSpacer_3">
                  <property name="orientation">
                   <enum>Qt::Vertical</enum>

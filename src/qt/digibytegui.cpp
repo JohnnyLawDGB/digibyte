@@ -1,9 +1,5 @@
-<<<<<<< HEAD
-// Copyright (c) 2011-2020 The Bitcoin Core developers
-// Copyright (c) 2013-2021 The DigiByte Core developers
-=======
-// Copyright (c) 2011-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// Copyright (c) 2011-2022 The Bitcoin Core developers
+// Copyright (c) 2013-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -31,23 +27,6 @@
 #include <qt/walletview.h>
 #endif // ENABLE_WALLET
 
-<<<<<<< HEAD
-#ifdef Q_OS_MAC
-#include <qt/macdockiconhandler.h>
-#endif
-
-#include <functional>
-#include <chain.h>
-#include <chainparams.h>
-#include <interfaces/handler.h>
-#include <interfaces/node.h>
-#include <node/ui_interface.h>
-#include <util/system.h>
-#include <util/translation.h>
-#include <validation.h>
-
-#include <QAction>
-=======
 #ifdef Q_OS_MACOS
 #include <qt/macdockiconhandler.h>
 #endif
@@ -65,17 +44,13 @@
 
 #include <QAction>
 #include <QActionGroup>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <QApplication>
 #include <QComboBox>
 #include <QCursor>
 #include <QDateTime>
 #include <QDragEnterEvent>
-<<<<<<< HEAD
-=======
 #include <QInputDialog>
 #include <QKeySequence>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <QListWidget>
 #include <QMenu>
 #include <QMenuBar>
@@ -97,11 +72,7 @@
 
 
 const std::string DigiByteGUI::DEFAULT_UIPLATFORM =
-<<<<<<< HEAD
-#if defined(Q_OS_MAC)
-=======
 #if defined(Q_OS_MACOS)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         "macosx"
 #elif defined(Q_OS_WIN)
         "windows"
@@ -139,19 +110,11 @@ DigiByteGUI::DigiByteGUI(interfaces::Node& node, const PlatformStyle *_platformS
     {
         /** Create wallet frame and make it the central widget */
         walletFrame = new WalletFrame(_platformStyle, this);
-<<<<<<< HEAD
-        connect(walletFrame, &WalletFrame::createWalletButtonClicked, [this] {
-            auto activity = new CreateWalletActivity(getWalletController(), this);
-            connect(activity, &CreateWalletActivity::finished, activity, &QObject::deleteLater);
-            activity->create();
-        });
-=======
         connect(walletFrame, &WalletFrame::createWalletButtonClicked, this, &DigiByteGUI::createWallet);
         connect(walletFrame, &WalletFrame::message, [this](const QString& title, const QString& message, unsigned int style) {
             this->message(title, message, style);
         });
         connect(walletFrame, &WalletFrame::currentWalletSet, [this] { updateWalletStatus(); });
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         setCentralWidget(walletFrame);
     } else
 #endif // ENABLE_WALLET
@@ -209,13 +172,9 @@ DigiByteGUI::DigiByteGUI(interfaces::Node& node, const PlatformStyle *_platformS
         frameBlocksLayout->addWidget(unitDisplayControl);
         frameBlocksLayout->addStretch();
         frameBlocksLayout->addWidget(labelWalletEncryptionIcon);
-<<<<<<< HEAD
-        frameBlocksLayout->addWidget(labelWalletHDStatusIcon);
-=======
         labelWalletEncryptionIcon->hide();
         frameBlocksLayout->addWidget(labelWalletHDStatusIcon);
         labelWalletHDStatusIcon->hide();
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     frameBlocksLayout->addWidget(labelProxyIcon);
     frameBlocksLayout->addStretch();
@@ -260,11 +219,7 @@ DigiByteGUI::DigiByteGUI(interfaces::Node& node, const PlatformStyle *_platformS
     connect(labelBlocksIcon, &GUIUtil::ClickableLabel::clicked, this, &DigiByteGUI::showModalOverlay);
     connect(progressBar, &GUIUtil::ClickableProgressBar::clicked, this, &DigiByteGUI::showModalOverlay);
 
-<<<<<<< HEAD
-#ifdef Q_OS_MAC
-=======
 #ifdef Q_OS_MACOS
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     m_app_nap_inhibitor = new CAppNapInhibitor;
 #endif
 
@@ -280,14 +235,8 @@ DigiByteGUI::~DigiByteGUI()
     settings.setValue("MainWindowGeometry", saveGeometry());
     if(trayIcon) // Hide tray icon, as deleting will let it linger until quit (on Ubuntu)
         trayIcon->hide();
-<<<<<<< HEAD
-#ifdef Q_OS_MAC
-    delete m_app_nap_inhibitor;
-    delete appMenuBar;
-=======
 #ifdef Q_OS_MACOS
     delete m_app_nap_inhibitor;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     MacDockIconHandler::cleanup();
 #endif
 
@@ -303,56 +252,28 @@ void DigiByteGUI::createActions()
     overviewAction->setStatusTip(tr("Show general overview of wallet"));
     overviewAction->setToolTip(overviewAction->statusTip());
     overviewAction->setCheckable(true);
-<<<<<<< HEAD
-    overviewAction->setShortcut(QKeySequence(Qt::ALT + Qt::Key_1));
-=======
     overviewAction->setShortcut(QKeySequence(QStringLiteral("Alt+1")));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     tabGroup->addAction(overviewAction);
 
     sendCoinsAction = new QAction(platformStyle->SingleColorIcon(":/icons/send"), tr("&Send"), this);
     sendCoinsAction->setStatusTip(tr("Send coins to a DigiByte address"));
     sendCoinsAction->setToolTip(sendCoinsAction->statusTip());
     sendCoinsAction->setCheckable(true);
-<<<<<<< HEAD
-    sendCoinsAction->setShortcut(QKeySequence(Qt::ALT + Qt::Key_2));
-    tabGroup->addAction(sendCoinsAction);
-
-    sendCoinsMenuAction = new QAction(sendCoinsAction->text(), this);
-    sendCoinsMenuAction->setStatusTip(sendCoinsAction->statusTip());
-    sendCoinsMenuAction->setToolTip(sendCoinsMenuAction->statusTip());
-
-=======
     sendCoinsAction->setShortcut(QKeySequence(QStringLiteral("Alt+2")));
     tabGroup->addAction(sendCoinsAction);
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     receiveCoinsAction = new QAction(platformStyle->SingleColorIcon(":/icons/receiving_addresses"), tr("&Receive"), this);
     receiveCoinsAction->setStatusTip(tr("Request payments (generates QR codes and digibyte: URIs)"));
     receiveCoinsAction->setToolTip(receiveCoinsAction->statusTip());
     receiveCoinsAction->setCheckable(true);
-<<<<<<< HEAD
-    receiveCoinsAction->setShortcut(QKeySequence(Qt::ALT + Qt::Key_3));
-    tabGroup->addAction(receiveCoinsAction);
-
-    receiveCoinsMenuAction = new QAction(receiveCoinsAction->text(), this);
-    receiveCoinsMenuAction->setStatusTip(receiveCoinsAction->statusTip());
-    receiveCoinsMenuAction->setToolTip(receiveCoinsMenuAction->statusTip());
-
-=======
     receiveCoinsAction->setShortcut(QKeySequence(QStringLiteral("Alt+3")));
     tabGroup->addAction(receiveCoinsAction);
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     historyAction = new QAction(platformStyle->SingleColorIcon(":/icons/history"), tr("&Transactions"), this);
     historyAction->setStatusTip(tr("Browse transaction history"));
     historyAction->setToolTip(historyAction->statusTip());
     historyAction->setCheckable(true);
-<<<<<<< HEAD
-    historyAction->setShortcut(QKeySequence(Qt::ALT + Qt::Key_4));
-=======
     historyAction->setShortcut(QKeySequence(QStringLiteral("Alt+4")));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     tabGroup->addAction(historyAction);
 
 #ifdef ENABLE_WALLET
@@ -362,28 +283,15 @@ void DigiByteGUI::createActions()
     connect(overviewAction, &QAction::triggered, this, &DigiByteGUI::gotoOverviewPage);
     connect(sendCoinsAction, &QAction::triggered, [this]{ showNormalIfMinimized(); });
     connect(sendCoinsAction, &QAction::triggered, [this]{ gotoSendCoinsPage(); });
-<<<<<<< HEAD
-    connect(sendCoinsMenuAction, &QAction::triggered, [this]{ showNormalIfMinimized(); });
-    connect(sendCoinsMenuAction, &QAction::triggered, [this]{ gotoSendCoinsPage(); });
     connect(receiveCoinsAction, &QAction::triggered, [this]{ showNormalIfMinimized(); });
     connect(receiveCoinsAction, &QAction::triggered, this, &DigiByteGUI::gotoReceiveCoinsPage);
-    connect(receiveCoinsMenuAction, &QAction::triggered, [this]{ showNormalIfMinimized(); });
-    connect(receiveCoinsMenuAction, &QAction::triggered, this, &DigiByteGUI::gotoReceiveCoinsPage);
-=======
-    connect(receiveCoinsAction, &QAction::triggered, [this]{ showNormalIfMinimized(); });
-    connect(receiveCoinsAction, &QAction::triggered, this, &DigiByteGUI::gotoReceiveCoinsPage);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     connect(historyAction, &QAction::triggered, [this]{ showNormalIfMinimized(); });
     connect(historyAction, &QAction::triggered, this, &DigiByteGUI::gotoHistoryPage);
 #endif // ENABLE_WALLET
 
     quitAction = new QAction(tr("E&xit"), this);
     quitAction->setStatusTip(tr("Quit application"));
-<<<<<<< HEAD
-    quitAction->setShortcut(QKeySequence(Qt::CTRL + Qt::Key_Q));
-=======
     quitAction->setShortcut(QKeySequence(tr("Ctrl+Q")));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     quitAction->setMenuRole(QAction::QuitRole);
     aboutAction = new QAction(tr("&About %1").arg(PACKAGE_NAME), this);
     aboutAction->setStatusTip(tr("Show information about %1").arg(PACKAGE_NAME));
@@ -396,11 +304,6 @@ void DigiByteGUI::createActions()
     optionsAction->setStatusTip(tr("Modify configuration options for %1").arg(PACKAGE_NAME));
     optionsAction->setMenuRole(QAction::PreferencesRole);
     optionsAction->setEnabled(false);
-<<<<<<< HEAD
-    toggleHideAction = new QAction(tr("&Show / Hide"), this);
-    toggleHideAction->setStatusTip(tr("Show or hide the main Window"));
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     encryptWalletAction = new QAction(tr("&Encrypt Wallet…"), this);
     encryptWalletAction->setStatusTip(tr("Encrypt the private keys that belong to your wallet"));
@@ -415,11 +318,7 @@ void DigiByteGUI::createActions()
     verifyMessageAction->setStatusTip(tr("Verify messages to ensure they were signed with specified DigiByte addresses"));
     m_load_psbt_action = new QAction(tr("&Load PSBT from file…"), this);
     m_load_psbt_action->setStatusTip(tr("Load Partially Signed DigiByte Transaction"));
-<<<<<<< HEAD
-    m_load_psbt_clipboard_action = new QAction(tr("Load PSBT from clipboard…"), this);
-=======
     m_load_psbt_clipboard_action = new QAction(tr("Load PSBT from &clipboard…"), this);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     m_load_psbt_clipboard_action->setStatusTip(tr("Load Partially Signed DigiByte Transaction from clipboard"));
 
     openRPCConsoleAction = new QAction(tr("Node window"), this);
@@ -448,11 +347,6 @@ void DigiByteGUI::createActions()
     m_create_wallet_action->setEnabled(false);
     m_create_wallet_action->setStatusTip(tr("Create a new wallet"));
 
-<<<<<<< HEAD
-    m_close_all_wallets_action = new QAction(tr("Close All Wallets…"), this);
-    m_close_all_wallets_action->setStatusTip(tr("Close all wallets"));
-
-=======
     //: Name of the menu item that restores wallet from a backup file.
     m_restore_wallet_action = new QAction(tr("Restore Wallet…"), this);
     m_restore_wallet_action->setEnabled(false);
@@ -466,23 +360,11 @@ void DigiByteGUI::createActions()
     m_migrate_wallet_action->setEnabled(false);
     m_migrate_wallet_action->setStatusTip(tr("Migrate a wallet"));
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     showHelpMessageAction = new QAction(tr("&Command-line options"), this);
     showHelpMessageAction->setMenuRole(QAction::NoRole);
     showHelpMessageAction->setStatusTip(tr("Show the %1 help message to get a list with possible DigiByte command-line options").arg(PACKAGE_NAME));
 
     m_mask_values_action = new QAction(tr("&Mask values"), this);
-<<<<<<< HEAD
-    m_mask_values_action->setShortcut(QKeySequence(Qt::CTRL + Qt::SHIFT + Qt::Key_M));
-    m_mask_values_action->setStatusTip(tr("Mask the values in the Overview tab"));
-    m_mask_values_action->setCheckable(true);
-
-    connect(quitAction, &QAction::triggered, qApp, QApplication::quit);
-    connect(aboutAction, &QAction::triggered, this, &DigiByteGUI::aboutClicked);
-    connect(aboutQtAction, &QAction::triggered, qApp, QApplication::aboutQt);
-    connect(optionsAction, &QAction::triggered, this, &DigiByteGUI::optionsClicked);
-    connect(toggleHideAction, &QAction::triggered, this, &DigiByteGUI::toggleHidden);
-=======
     m_mask_values_action->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_M));
     m_mask_values_action->setStatusTip(tr("Mask the values in the Overview tab"));
     m_mask_values_action->setCheckable(true);
@@ -491,7 +373,6 @@ void DigiByteGUI::createActions()
     connect(aboutAction, &QAction::triggered, this, &DigiByteGUI::aboutClicked);
     connect(aboutQtAction, &QAction::triggered, qApp, QApplication::aboutQt);
     connect(optionsAction, &QAction::triggered, this, &DigiByteGUI::optionsClicked);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     connect(showHelpMessageAction, &QAction::triggered, this, &DigiByteGUI::showHelpMessageClicked);
     connect(openRPCConsoleAction, &QAction::triggered, this, &DigiByteGUI::showDebugWindow);
     // prevents an open debug window from becoming stuck/unusable on client shutdown
@@ -531,13 +412,8 @@ void DigiByteGUI::createActions()
 
                 connect(action, &QAction::triggered, [this, path] {
                     auto activity = new OpenWalletActivity(m_wallet_controller, this);
-<<<<<<< HEAD
-                    connect(activity, &OpenWalletActivity::opened, this, &DigiByteGUI::setCurrentWallet);
-                    connect(activity, &OpenWalletActivity::finished, activity, &QObject::deleteLater);
-=======
                     connect(activity, &OpenWalletActivity::opened, this, &DigiByteGUI::setCurrentWallet, Qt::QueuedConnection);
                     connect(activity, &OpenWalletActivity::opened, rpcConsole, &RPCConsole::setCurrentWallet, Qt::QueuedConnection);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                     activity->open(path);
                 });
             }
@@ -546,26 +422,6 @@ void DigiByteGUI::createActions()
                 action->setEnabled(false);
             }
         });
-<<<<<<< HEAD
-        connect(m_close_wallet_action, &QAction::triggered, [this] {
-            m_wallet_controller->closeWallet(walletFrame->currentWalletModel(), this);
-        });
-        connect(m_create_wallet_action, &QAction::triggered, [this] {
-            auto activity = new CreateWalletActivity(m_wallet_controller, this);
-            connect(activity, &CreateWalletActivity::created, this, &DigiByteGUI::setCurrentWallet);
-            connect(activity, &CreateWalletActivity::finished, activity, &QObject::deleteLater);
-            activity->create();
-        });
-        connect(m_close_all_wallets_action, &QAction::triggered, [this] {
-            m_wallet_controller->closeAllWallets(this);
-        });
-        connect(m_mask_values_action, &QAction::toggled, this, &DigiByteGUI::setPrivacy);
-    }
-#endif // ENABLE_WALLET
-
-    connect(new QShortcut(QKeySequence(Qt::CTRL + Qt::SHIFT + Qt::Key_C), this), &QShortcut::activated, this, &DigiByteGUI::showDebugWindowActivateConsole);
-    connect(new QShortcut(QKeySequence(Qt::CTRL + Qt::SHIFT + Qt::Key_D), this), &QShortcut::activated, this, &DigiByteGUI::showDebugWindow);
-=======
         connect(m_restore_wallet_action, &QAction::triggered, [this] {
             //: Name of the wallet data file format.
             QString name_data_file = tr("Wallet Data");
@@ -611,22 +467,11 @@ void DigiByteGUI::createActions()
 
     connect(new QShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_C), this), &QShortcut::activated, this, &DigiByteGUI::showDebugWindowActivateConsole);
     connect(new QShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_D), this), &QShortcut::activated, this, &DigiByteGUI::showDebugWindow);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 void DigiByteGUI::createMenuBar()
 {
-<<<<<<< HEAD
-#ifdef Q_OS_MAC
-    // Create a decoupled menu bar on Mac which stays even if the window is closed
-    appMenuBar = new QMenuBar();
-#else
-    // Get the main window's menu bar on other platforms
     appMenuBar = menuBar();
-#endif
-=======
-    appMenuBar = menuBar();
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // Configure the menus
     QMenu *file = appMenuBar->addMenu(tr("&File"));
@@ -636,18 +481,12 @@ void DigiByteGUI::createMenuBar()
         file->addAction(m_open_wallet_action);
         file->addAction(m_close_wallet_action);
         file->addAction(m_close_all_wallets_action);
-<<<<<<< HEAD
-        file->addSeparator();
-        file->addAction(openAction);
-        file->addAction(backupWalletAction);
-=======
         file->addAction(m_migrate_wallet_action);
         file->addSeparator();
         file->addAction(backupWalletAction);
         file->addAction(m_restore_wallet_action);
         file->addSeparator();
         file->addAction(openAction);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         file->addAction(signMessageAction);
         file->addAction(verifyMessageAction);
         file->addAction(m_load_psbt_action);
@@ -669,18 +508,6 @@ void DigiByteGUI::createMenuBar()
 
     QMenu* window_menu = appMenuBar->addMenu(tr("&Window"));
 
-<<<<<<< HEAD
-    QAction* minimize_action = window_menu->addAction(tr("Minimize"));
-    minimize_action->setShortcut(QKeySequence(Qt::CTRL + Qt::Key_M));
-    connect(minimize_action, &QAction::triggered, [] {
-        QApplication::activeWindow()->showMinimized();
-    });
-    connect(qApp, &QApplication::focusWindowChanged, [minimize_action] (QWindow* window) {
-        minimize_action->setEnabled(window != nullptr && (window->flags() & Qt::Dialog) != Qt::Dialog && window->windowState() != Qt::WindowMinimized);
-    });
-
-#ifdef Q_OS_MAC
-=======
     QAction* minimize_action = window_menu->addAction(tr("&Minimize"));
     minimize_action->setShortcut(QKeySequence(tr("Ctrl+M")));
     connect(minimize_action, &QAction::triggered, [] {
@@ -691,7 +518,6 @@ void DigiByteGUI::createMenuBar()
     });
 
 #ifdef Q_OS_MACOS
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     QAction* zoom_action = window_menu->addAction(tr("Zoom"));
     connect(zoom_action, &QAction::triggered, [] {
         QWindow* window = qApp->focusWindow();
@@ -702,21 +528,13 @@ void DigiByteGUI::createMenuBar()
         }
     });
 
-<<<<<<< HEAD
-    connect(qApp, &QApplication::focusWindowChanged, [zoom_action] (QWindow* window) {
-=======
     connect(qApp, &QApplication::focusWindowChanged, this, [zoom_action] (QWindow* window) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         zoom_action->setEnabled(window != nullptr);
     });
 #endif
 
     if (walletFrame) {
-<<<<<<< HEAD
-#ifdef Q_OS_MAC
-=======
 #ifdef Q_OS_MACOS
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         window_menu->addSeparator();
         QAction* main_window_action = window_menu->addAction(tr("Main Window"));
         connect(main_window_action, &QAction::triggered, [this] {
@@ -798,13 +616,8 @@ void DigiByteGUI::setClientModel(ClientModel *_clientModel, interfaces::BlockAnd
         connect(_clientModel, &ClientModel::numConnectionsChanged, this, &DigiByteGUI::setNumConnections);
         connect(_clientModel, &ClientModel::networkActiveChanged, this, &DigiByteGUI::setNetworkActive);
 
-<<<<<<< HEAD
-        modalOverlay->setKnownBestHeight(tip_info->header_height, QDateTime::fromTime_t(tip_info->header_time));
-        setNumBlocks(tip_info->block_height, QDateTime::fromTime_t(tip_info->block_time), tip_info->verification_progress, false, SynchronizationState::INIT_DOWNLOAD);
-=======
         modalOverlay->setKnownBestHeight(tip_info->header_height, QDateTime::fromSecsSinceEpoch(tip_info->header_time), /*presync=*/false);
         setNumBlocks(tip_info->block_height, QDateTime::fromSecsSinceEpoch(tip_info->block_time), tip_info->verification_progress, SyncType::BLOCK_SYNC, SynchronizationState::INIT_DOWNLOAD);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         connect(_clientModel, &ClientModel::numBlocksChanged, this, &DigiByteGUI::setNumBlocks);
 
         // Receive and report messages from client model
@@ -835,18 +648,11 @@ void DigiByteGUI::setClientModel(ClientModel *_clientModel, interfaces::BlockAnd
             // initialize the disable state of the tray icon with the current value in the model.
             trayIcon->setVisible(optionsModel->getShowTrayIcon());
         }
-<<<<<<< HEAD
-    } else {
-        // Disable possibility to show main window via action
-        toggleHideAction->setEnabled(false);
-        if(trayIconMenu)
-=======
 
         m_mask_values_action->setChecked(_clientModel->getOptionsModel()->getOption(OptionsModel::OptionID::MaskValues).toBool());
     } else {
         // Shutdown requested, disable menus
         if (trayIconMenu)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         {
             // Disable context menu on tray icon
             trayIconMenu->clear();
@@ -860,18 +666,12 @@ void DigiByteGUI::setClientModel(ClientModel *_clientModel, interfaces::BlockAnd
         }
 #endif // ENABLE_WALLET
         unitDisplayControl->setOptionsModel(nullptr);
-<<<<<<< HEAD
-=======
         // Disable top bar menu actions
         appMenuBar->clear();
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 }
 
 #ifdef ENABLE_WALLET
-<<<<<<< HEAD
-void DigiByteGUI::setWalletController(WalletController* wallet_controller)
-=======
 void DigiByteGUI::enableHistoryAction(bool privacy)
 {
     historyAction->setEnabled(!privacy);
@@ -879,7 +679,6 @@ void DigiByteGUI::enableHistoryAction(bool privacy)
 }
 
 void DigiByteGUI::setWalletController(WalletController* wallet_controller, bool show_loading_minimized)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     assert(!m_wallet_controller);
     assert(wallet_controller);
@@ -889,15 +688,6 @@ void DigiByteGUI::setWalletController(WalletController* wallet_controller, bool 
     m_create_wallet_action->setEnabled(true);
     m_open_wallet_action->setEnabled(true);
     m_open_wallet_action->setMenu(m_open_wallet_menu);
-<<<<<<< HEAD
-
-    GUIUtil::ExceptionSafeConnect(wallet_controller, &WalletController::walletAdded, this, &DigiByteGUI::addWallet);
-    connect(wallet_controller, &WalletController::walletRemoved, this, &DigiByteGUI::removeWallet);
-
-    for (WalletModel* wallet_model : m_wallet_controller->getOpenWallets()) {
-        addWallet(wallet_model);
-    }
-=======
     m_restore_wallet_action->setEnabled(true);
 
     GUIUtil::ExceptionSafeConnect(wallet_controller, &WalletController::walletAdded, this, &DigiByteGUI::addWallet);
@@ -909,7 +699,6 @@ void DigiByteGUI::setWalletController(WalletController* wallet_controller, bool 
 
     auto activity = new LoadWalletsActivity(m_wallet_controller, this);
     activity->load(show_loading_minimized);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 WalletController* DigiByteGUI::getWalletController()
@@ -919,17 +708,10 @@ WalletController* DigiByteGUI::getWalletController()
 
 void DigiByteGUI::addWallet(WalletModel* walletModel)
 {
-<<<<<<< HEAD
-    if (!walletFrame) return;
-
-    WalletView* wallet_view = new WalletView(platformStyle, walletFrame);
-    if (!walletFrame->addWallet(walletModel, wallet_view)) return;
-=======
     if (!walletFrame || !m_wallet_controller) return;
 
     WalletView* wallet_view = new WalletView(walletModel, platformStyle, walletFrame);
     if (!walletFrame->addView(wallet_view)) return;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     rpcConsole->addWallet(walletModel);
     if (m_wallet_selector->count() == 0) {
@@ -938,11 +720,6 @@ void DigiByteGUI::addWallet(WalletModel* walletModel)
         m_wallet_selector_label_action->setVisible(true);
         m_wallet_selector_action->setVisible(true);
     }
-<<<<<<< HEAD
-    const QString display_name = walletModel->getDisplayName();
-    m_wallet_selector->addItem(display_name, QVariant::fromValue(walletModel));
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     connect(wallet_view, &WalletView::outOfSyncWarningClicked, this, &DigiByteGUI::showModalOverlay);
     connect(wallet_view, &WalletView::transactionClicked, this, &DigiByteGUI::gotoHistoryPage);
@@ -952,18 +729,12 @@ void DigiByteGUI::addWallet(WalletModel* walletModel)
     });
     connect(wallet_view, &WalletView::encryptionStatusChanged, this, &DigiByteGUI::updateWalletStatus);
     connect(wallet_view, &WalletView::incomingTransaction, this, &DigiByteGUI::incomingTransaction);
-<<<<<<< HEAD
-    connect(wallet_view, &WalletView::hdEnabledStatusChanged, this, &DigiByteGUI::updateWalletStatus);
-    connect(this, &DigiByteGUI::setPrivacy, wallet_view, &WalletView::setPrivacy);
-    wallet_view->setPrivacy(isPrivacyModeActivated());
-=======
     connect(this, &DigiByteGUI::setPrivacy, wallet_view, &WalletView::setPrivacy);
     const bool privacy = isPrivacyModeActivated();
     wallet_view->setPrivacy(privacy);
     enableHistoryAction(privacy);
     const QString display_name = walletModel->getDisplayName();
     m_wallet_selector->addItem(display_name, QVariant::fromValue(walletModel));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 void DigiByteGUI::removeWallet(WalletModel* walletModel)
@@ -989,11 +760,7 @@ void DigiByteGUI::removeWallet(WalletModel* walletModel)
 
 void DigiByteGUI::setCurrentWallet(WalletModel* wallet_model)
 {
-<<<<<<< HEAD
-    if (!walletFrame) return;
-=======
     if (!walletFrame || !m_wallet_controller) return;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     walletFrame->setCurrentWallet(wallet_model);
     for (int index = 0; index < m_wallet_selector->count(); ++index) {
         if (m_wallet_selector->itemData(index).value<WalletModel*>() == wallet_model) {
@@ -1002,10 +769,7 @@ void DigiByteGUI::setCurrentWallet(WalletModel* wallet_model)
         }
     }
     updateWindowTitle();
-<<<<<<< HEAD
-=======
     m_migrate_wallet_action->setEnabled(wallet_model->wallet().isLegacy());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 void DigiByteGUI::setCurrentWalletBySelectorIndex(int index)
@@ -1027,13 +791,7 @@ void DigiByteGUI::setWalletActionsEnabled(bool enabled)
 {
     overviewAction->setEnabled(enabled);
     sendCoinsAction->setEnabled(enabled);
-<<<<<<< HEAD
-    sendCoinsMenuAction->setEnabled(enabled);
     receiveCoinsAction->setEnabled(enabled);
-    receiveCoinsMenuAction->setEnabled(enabled);
-=======
-    receiveCoinsAction->setEnabled(enabled);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     historyAction->setEnabled(enabled);
     encryptWalletAction->setEnabled(enabled);
     backupWalletAction->setEnabled(enabled);
@@ -1045,21 +803,14 @@ void DigiByteGUI::setWalletActionsEnabled(bool enabled)
     openAction->setEnabled(enabled);
     m_close_wallet_action->setEnabled(enabled);
     m_close_all_wallets_action->setEnabled(enabled);
-<<<<<<< HEAD
-=======
     m_migrate_wallet_action->setEnabled(enabled);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 void DigiByteGUI::createTrayIcon()
 {
     assert(QSystemTrayIcon::isSystemTrayAvailable());
 
-<<<<<<< HEAD
-#ifndef Q_OS_MAC
-=======
 #ifndef Q_OS_MACOS
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (QSystemTrayIcon::isSystemTrayAvailable()) {
         trayIcon = new QSystemTrayIcon(m_network_style->getTrayAndWindowIcon(), this);
         QString toolTip = tr("%1 client").arg(PACKAGE_NAME) + " " + m_network_style->getTitleAddText();

@@ -60,6 +60,7 @@
 #define DAYS_PER_YEAR 365
 #define SECONDS_PER_MONTH (SECONDS * MINUTES * HOURS * DAYS_PER_YEAR / MONTHS_PER_YEAR);
 
+class ArgsManager;
 class Chainstate;
 class BlockValidationState;
 class CBlockIndex;

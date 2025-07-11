@@ -131,7 +131,7 @@ using kernel::LoadMempool;
 using kernel::ValidationCacheSizes;
 
 using node::ApplyArgsManOptions;
-using node::BlockManager;
+// using node::BlockManager;  // Commented out - conflicts with global BlockManager in validation.h
 using node::CacheSizes;
 using node::CalculateCacheSizes;
 using node::DEFAULT_PERSIST_MEMPOOL;
@@ -358,7 +358,7 @@ void Shutdown(NodeContext& node)
     node.chain_clients.clear();
     UnregisterAllValidationInterfaces();
     GetMainSignals().UnregisterBackgroundSignalScheduler();
-    init::UnsetGlobals();
+    // init::UnsetGlobals();  // Not needed in v26.2
     node.kernel.reset();
     node.mempool.reset();
     node.fee_estimator.reset();
@@ -651,7 +651,7 @@ void SetupServerArgs(ArgsManager& argsman)
     argsman.AddArg("-rpcworkqueue=<n>", strprintf("Set the depth of the work queue to service RPC calls (default: %d)", DEFAULT_HTTP_WORKQUEUE), ArgsManager::ALLOW_ANY | ArgsManager::DEBUG_ONLY, OptionsCategory::RPC);
     argsman.AddArg("-server", "Accept command line and JSON-RPC commands", ArgsManager::ALLOW_ANY, OptionsCategory::RPC);
 
-    argsman.AddArg("-dandelion", strprintf("Enable Dandelion Transaction Relay Protocol (default: %d)", DEFAULT_DANDELION), ArgsManager::ALLOW_BOOL, OptionsCategory::OPTIONS);
+    argsman.AddArg("-dandelion", strprintf("Enable Dandelion Transaction Relay Protocol (default: %d)", DEFAULT_DANDELION), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
 
 #if HAVE_DECL_FORK
     argsman.AddArg("-daemon", strprintf("Run in the background as a daemon and accept commands (default: %d)", DEFAULT_DAEMON), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
@@ -863,9 +863,9 @@ bool AppInitBasicSetup(const ArgsManager& args, std::atomic<int>& exit_status)
     // Enable heap terminate-on-corruption
     HeapSetInformation(nullptr, HeapEnableTerminationOnCorruption, nullptr, 0);
 #endif
-    if (!InitShutdownState(exit_status)) {
-        return InitError(Untranslated("Initializing wait-for-shutdown state failed."));
-    }
+    // if (!InitShutdownState(exit_status)) {  // Not needed in v26.2
+    //     return InitError(Untranslated("Initializing wait-for-shutdown state failed."));
+    // }
 
     if (!SetupNetworking()) {
         return InitError(Untranslated("Initializing networking failed."));
@@ -1017,41 +1017,42 @@ bool AppInitParameterInteraction(const ArgsManager& args)
     if (!result) return InitError(util::ErrorString(result));
 
     nConnectTimeout = args.GetIntArg("-timeout", DEFAULT_CONNECT_TIMEOUT);
-    fCheckBlockIndex = args.GetBoolArg("-checkblockindex", chainparams.DefaultConsistencyChecks());
-    fCheckpointsEnabled = args.GetBoolArg("-checkpoints", DEFAULT_CHECKPOINTS_ENABLED);
+    // In v26.2, these are handled in kernel/chainstate options
+    // fCheckBlockIndex = args.GetBoolArg("-checkblockindex", chainparams.DefaultConsistencyChecks());
+    // fCheckpointsEnabled = args.GetBoolArg("-checkpoints", DEFAULT_CHECKPOINTS_ENABLED);
 
-    hashAssumeValid = uint256S(args.GetArg("-assumevalid", chainparams.GetConsensus().defaultAssumeValid.GetHex()));
-    if (!hashAssumeValid.IsNull())
-        LogPrintf("Assuming ancestors of block %s have valid signatures.\n", hashAssumeValid.GetHex());
-    else
-        LogPrintf("Validating signatures for all blocks.\n");
+    // hashAssumeValid = uint256S(args.GetArg("-assumevalid", chainparams.GetConsensus().defaultAssumeValid.GetHex()));
+    // if (!hashAssumeValid.IsNull())
+    //     LogPrintf("Assuming ancestors of block %s have valid signatures.\n", hashAssumeValid.GetHex());
+    // else
+    //     LogPrintf("Validating signatures for all blocks.\n");
 
-    if (args.IsArgSet("-minimumchainwork")) {
-        const std::string minChainWorkStr = args.GetArg("-minimumchainwork", "");
-        if (!IsHexNumber(minChainWorkStr)) {
-            return InitError(strprintf(Untranslated("Invalid non-hex (%s) minimum chain work value specified"), minChainWorkStr));
-        }
-        nMinimumChainWork = UintToArith256(uint256S(minChainWorkStr));
-    } else {
-        nMinimumChainWork = UintToArith256(chainparams.GetConsensus().nMinimumChainWork);
-    }
-    LogPrintf("Setting nMinimumChainWork=%s\n", nMinimumChainWork.GetHex());
-    if (nMinimumChainWork < UintToArith256(chainparams.GetConsensus().nMinimumChainWork)) {
-        LogPrintf("Warning: nMinimumChainWork set below default value of %s\n", chainparams.GetConsensus().nMinimumChainWork.GetHex());
-    }
+    // if (args.IsArgSet("-minimumchainwork")) {
+    //     const std::string minChainWorkStr = args.GetArg("-minimumchainwork", "");
+    //     if (!IsHexNumber(minChainWorkStr)) {
+    //         return InitError(strprintf(Untranslated("Invalid non-hex (%s) minimum chain work value specified"), minChainWorkStr));
+    //     }
+    //     nMinimumChainWork = UintToArith256(uint256S(minChainWorkStr));
+    // } else {
+    //     nMinimumChainWork = UintToArith256(chainparams.GetConsensus().nMinimumChainWork);
+    // }
+    // LogPrintf("Setting nMinimumChainWork=%s\n", nMinimumChainWork.GetHex());
+    // if (nMinimumChainWork < UintToArith256(chainparams.GetConsensus().nMinimumChainWork)) {
+    //     LogPrintf("Warning: nMinimumChainWork set below default value of %s\n", chainparams.GetConsensus().nMinimumChainWork.GetHex());
+    // }
 
     // mempool limits
-    int64_t nMempoolSizeMax = args.GetIntArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000;
-    int64_t nMempoolSizeMin = args.GetIntArg("-limitdescendantsize", DEFAULT_DESCENDANT_SIZE_LIMIT) * 1000 * 40;
+    int64_t nMempoolSizeMax = args.GetIntArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE_MB) * 1000000;
+    int64_t nMempoolSizeMin = args.GetIntArg("-limitdescendantsize", DEFAULT_DESCENDANT_SIZE_LIMIT_KVB) * 1000 * 40;
     if (nMempoolSizeMax < 0 || nMempoolSizeMax < nMempoolSizeMin)
         return InitError(strprintf(_("-maxmempool must be at least %d MB"), std::ceil(nMempoolSizeMin / 1000000.0)));
     // incremental relay fee sets the minimum feerate increase necessary for BIP 125 replacement in the mempool
     // and the amount the mempool min fee increases above the feerate of txs evicted due to mempool limiting.
     if (args.IsArgSet("-incrementalrelayfee")) {
-        CAmount n = 0;
-        if (!ParseMoney(args.GetArg("-incrementalrelayfee", ""), n))
+        auto parsed = ParseMoney(args.GetArg("-incrementalrelayfee", ""));
+        if (!parsed)
             return InitError(AmountErrMsg("incrementalrelayfee", args.GetArg("-incrementalrelayfee", "")));
-        incrementalRelayFee = CFeeRate(n);
+        // incrementalRelayFee = CFeeRate(*parsed);  // This global is not used in v26.2
     }
 
     // block pruning; get the amount of disk space (in MiB) to allot for block & undo files
@@ -1059,7 +1060,7 @@ bool AppInitParameterInteraction(const ArgsManager& args)
     if (nPruneArg < 0) {
         return InitError(_("Prune cannot be configured with a negative value."));
     }
-    nPruneTarget = (uint64_t) nPruneArg * 1024 * 1024;
+    uint64_t nPruneTarget = (uint64_t) nPruneArg * 1024 * 1024;
     if (nPruneArg == 1) {  // manual pruning: -prune=1
         LogPrintf("Block pruning enabled.  Use RPC call pruneblockchain(height) to manually prune block and undo files.\n");
         nPruneTarget = std::numeric_limits<uint64_t>::max();

@@ -13,6 +13,9 @@
 #include <validation.h>
 #include <validationinterface.h>
 #include <node/transaction.h>
+#include <dandelion.h>
+#include <random.h>
+#include <logging.h>
 
 #include <future>
 
@@ -82,7 +85,7 @@ TransactionError BroadcastTransaction(NodeContext& node, const CTransactionRef t
                 }
             }
             // Try to submit the transaction to the stempool only (if dandelion is enabled);
-            if (gArgs.GetBoolArg("-dandelion", DEFAULT_DANDELION)) {
+            if (node.args->GetBoolArg("-dandelion", DEFAULT_DANDELION)) {
                 const MempoolAcceptResult result = AcceptToMemoryPool(node.chainman->ActiveChainstate(), *node.stempool, tx, false, false);
                 if (result.m_result_type != MempoolAcceptResult::ResultType::VALID) {
                     return HandleATMPError(result.m_state, err_string);
@@ -126,7 +129,7 @@ TransactionError BroadcastTransaction(NodeContext& node, const CTransactionRef t
     }
 
     if (relay) {
-        if (gArgs.GetBoolArg("-dandelion", DEFAULT_DANDELION)) {
+        if (node.args->GetBoolArg("-dandelion", DEFAULT_DANDELION)) {
             auto current_time = GetTime<std::chrono::milliseconds>();
             std::chrono::microseconds nEmbargo = DANDELION_EMBARGO_MINIMUM + PoissonNextSend(current_time, DANDELION_EMBARGO_AVG_ADD);
             node.connman->insertDandelionEmbargo(txid, nEmbargo);

@@ -274,6 +274,22 @@ MempoolAcceptResult AcceptToMemoryPool(Chainstate& active_chainstate, const CTra
     EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
 /**
+* DigiByte: (try to) add transaction to a specific memory pool (for Dandelion++ stempool support)
+* This is a DigiByte-specific overload that allows specifying which mempool to use.
+*
+* @param[in]  active_chainstate  Reference to the active chainstate
+* @param[in]  pool               The memory pool to add the transaction to (can be mempool or stempool)
+* @param[in]  tx                 The transaction to submit for mempool acceptance.
+* @param[in]  bypass_limits      When true, don't enforce mempool fee and capacity limits.
+* @param[in]  test_accept        When true, run validation checks but don't submit to mempool.
+*
+* @returns a MempoolAcceptResult indicating whether the transaction was accepted/rejected with reason.
+*/
+MempoolAcceptResult AcceptToMemoryPool(Chainstate& active_chainstate, CTxMemPool& pool, 
+                                       const CTransactionRef& tx, bool bypass_limits, bool test_accept)
+    EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+
+/**
 * Validate (and maybe submit) a package to the mempool. See doc/policy/packages.md for full details
 * on package validation rules.
 * @param[in]    test_accept     When true, run validation checks but don't submit to mempool.

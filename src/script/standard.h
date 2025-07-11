@@ -222,7 +222,7 @@ public:
     /** Add a new script at a certain depth in the tree. Add() operations must be called
      *  in depth-first traversal order of binary tree. If track is true, it will be included in
      *  the GetSpendData() output. */
-    TaprootBuilder& Add(int depth, const CScript& script, int leaf_version, bool track = true);
+    TaprootBuilder& Add(int depth, Span<const unsigned char> script, int leaf_version, bool track = true);
     /** Like Add(), but for a Merkle node with a given hash to the tree. */
     TaprootBuilder& AddOmitted(int depth, const uint256& hash);
     /** Finalize the construction. Can only be called when IsComplete() is true.
@@ -233,6 +233,8 @@ public:
     bool IsValid() const { return m_valid; }
     /** Return whether there were either no leaves, or the leaves form a Huffman tree. */
     bool IsComplete() const { return m_valid && (m_branch.size() == 0 || (m_branch.size() == 1 && m_branch[0].has_value())); }
+    /** Return whether any scripts have been added. */
+    bool HasScripts() const { return !m_branch.empty(); }
     /** Compute scriptPubKey (after Finalize()). */
     WitnessV1Taproot GetOutput();
     /** Check if a list of depths is legal (will lead to IsComplete()). */
@@ -240,7 +242,7 @@ public:
     /** Compute spending data (after Finalize()). */
     TaprootSpendData GetSpendData() const;
     /** Get the control blocks and scripts as a tuple (depth, leaf_ver, script). */
-    std::vector<std::tuple<uint8_t, uint8_t, CScript>> GetTreeTuples() const;
+    std::vector<std::tuple<uint8_t, uint8_t, std::vector<unsigned char>>> GetTreeTuples() const;
 };
 
 /** Given a TaprootSpendData and the output key, reconstruct its script tree.
@@ -249,6 +251,6 @@ public:
  * std::nullopt is returned. Otherwise, a vector of (depth, script, leaf_ver) tuples is
  * returned, corresponding to a depth-first traversal of the script tree.
  */
-std::optional<std::vector<std::tuple<int, CScript, int>>> InferTaprootTree(const TaprootSpendData& spenddata, const XOnlyPubKey& output);
+std::optional<std::vector<std::tuple<int, std::vector<unsigned char>, int>>> InferTaprootTree(const TaprootSpendData& spenddata, const XOnlyPubKey& output);
 
 #endif // DIGIBYTE_SCRIPT_STANDARD_H

@@ -1,11 +1,4 @@
-<<<<<<< HEAD
-// Copyright (c) 2016-2020 The DigiByte Core developers
-// Distributed under the MIT software license, see the accompanying
-// file COPYING or http://www.opensource.org/licenses/mit-license.php.
-
-#include <fs.h>
-#include <util/system.h>
-=======
+// Copyright (c) 2016-2022 The Bitcoin Core developers
 // Copyright (c) 2016-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
@@ -18,17 +11,13 @@
 
 #include <common/args.h>
 #include <util/fs.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <util/translation.h>
 #include <wallet/dump.h>
 #include <wallet/salvage.h>
 #include <wallet/wallet.h>
 #include <wallet/walletutil.h>
 
-<<<<<<< HEAD
-=======
 namespace wallet {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 namespace WalletTool {
 
 // The standard wallet deleter function blocks on the validation interface
@@ -45,13 +34,8 @@ static void WalletCreate(CWallet* wallet_instance, uint64_t wallet_creation_flag
 {
     LOCK(wallet_instance->cs_wallet);
 
-<<<<<<< HEAD
-    wallet_instance->SetMinVersion(FEATURE_HD_SPLIT);
-    wallet_instance->AddWalletFlags(wallet_creation_flags);
-=======
     wallet_instance->SetMinVersion(FEATURE_LATEST);
     wallet_instance->InitWalletFlags(wallet_creation_flags);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     if (!wallet_instance->IsWalletFlagSet(WALLET_FLAG_DESCRIPTORS)) {
         auto spk_man = wallet_instance->GetOrCreateLegacyScriptPubKeyMan();
@@ -75,11 +59,7 @@ static std::shared_ptr<CWallet> MakeWallet(const std::string& name, const fs::pa
     }
 
     // dummy chain interface
-<<<<<<< HEAD
-    std::shared_ptr<CWallet> wallet_instance{new CWallet(nullptr /* chain */, name, std::move(database)), WalletToolReleaseWallet};
-=======
     std::shared_ptr<CWallet> wallet_instance{new CWallet(/*chain=*/nullptr, name, std::move(database)), WalletToolReleaseWallet};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     DBErrors load_wallet_ret;
     try {
         load_wallet_ret = wallet_instance->LoadWallet();
@@ -104,13 +84,10 @@ static std::shared_ptr<CWallet> MakeWallet(const std::string& name, const fs::pa
         } else if (load_wallet_ret == DBErrors::NEED_REWRITE) {
             tfm::format(std::cerr, "Wallet needed to be rewritten: restart %s to complete", PACKAGE_NAME);
             return nullptr;
-<<<<<<< HEAD
-=======
         } else if (load_wallet_ret == DBErrors::NEED_RESCAN) {
             tfm::format(std::cerr, "Error reading %s! Some transaction data might be missing or"
                            " incorrect. Wallet requires a rescan.",
                 name);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         } else {
             tfm::format(std::cerr, "Error loading %s", name);
             return nullptr;
@@ -160,18 +137,11 @@ bool ExecuteWalletToolFunc(const ArgsManager& args, const std::string& command)
         return false;
     }
     const std::string name = args.GetArg("-wallet", "");
-<<<<<<< HEAD
-    const fs::path path = fsbridge::AbsPathJoin(GetWalletDir(), name);
-
-    if (command == "create") {
-        DatabaseOptions options;
-=======
     const fs::path path = fsbridge::AbsPathJoin(GetWalletDir(), fs::PathFromString(name));
 
     if (command == "create") {
         DatabaseOptions options;
         ReadDatabaseArgs(args, options);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         options.require_create = true;
         // If -legacy is set, use it. Otherwise default to false.
         bool make_legacy = args.GetBoolArg("-legacy", false);
@@ -190,25 +160,16 @@ bool ExecuteWalletToolFunc(const ArgsManager& args, const std::string& command)
             options.require_format = DatabaseFormat::SQLITE;
         }
 
-<<<<<<< HEAD
-        std::shared_ptr<CWallet> wallet_instance = MakeWallet(name, path, options);
-=======
         const std::shared_ptr<CWallet> wallet_instance = MakeWallet(name, path, options);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         if (wallet_instance) {
             WalletShowInfo(wallet_instance.get());
             wallet_instance->Close();
         }
     } else if (command == "info") {
         DatabaseOptions options;
-<<<<<<< HEAD
-        options.require_existing = true;
-        std::shared_ptr<CWallet> wallet_instance = MakeWallet(name, path, options);
-=======
         ReadDatabaseArgs(args, options);
         options.require_existing = true;
         const std::shared_ptr<CWallet> wallet_instance = MakeWallet(name, path, options);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         if (!wallet_instance) return false;
         WalletShowInfo(wallet_instance.get());
         wallet_instance->Close();
@@ -216,11 +177,7 @@ bool ExecuteWalletToolFunc(const ArgsManager& args, const std::string& command)
 #ifdef USE_BDB
         bilingual_str error;
         std::vector<bilingual_str> warnings;
-<<<<<<< HEAD
-        bool ret = RecoverDatabaseFile(path, error, warnings);
-=======
         bool ret = RecoverDatabaseFile(args, path, error, warnings);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         if (!ret) {
             for (const auto& warning : warnings) {
                 tfm::format(std::cerr, "%s\n", warning.original);
@@ -236,20 +193,12 @@ bool ExecuteWalletToolFunc(const ArgsManager& args, const std::string& command)
 #endif
     } else if (command == "dump") {
         DatabaseOptions options;
-<<<<<<< HEAD
-        options.require_existing = true;
-        std::shared_ptr<CWallet> wallet_instance = MakeWallet(name, path, options);
-        if (!wallet_instance) return false;
-        bilingual_str error;
-        bool ret = DumpWallet(*wallet_instance, error);
-=======
         ReadDatabaseArgs(args, options);
         options.require_existing = true;
         const std::shared_ptr<CWallet> wallet_instance = MakeWallet(name, path, options);
         if (!wallet_instance) return false;
         bilingual_str error;
         bool ret = DumpWallet(args, *wallet_instance, error);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         if (!ret && !error.empty()) {
             tfm::format(std::cerr, "%s\n", error.original);
             return ret;
@@ -259,11 +208,7 @@ bool ExecuteWalletToolFunc(const ArgsManager& args, const std::string& command)
     } else if (command == "createfromdump") {
         bilingual_str error;
         std::vector<bilingual_str> warnings;
-<<<<<<< HEAD
-        bool ret = CreateFromDump(name, path, error, warnings);
-=======
         bool ret = CreateFromDump(args, name, path, error, warnings);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         for (const auto& warning : warnings) {
             tfm::format(std::cout, "%s\n", warning.original);
         }
@@ -279,7 +224,4 @@ bool ExecuteWalletToolFunc(const ArgsManager& args, const std::string& command)
     return true;
 }
 } // namespace WalletTool
-<<<<<<< HEAD
-=======
 } // namespace wallet
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion

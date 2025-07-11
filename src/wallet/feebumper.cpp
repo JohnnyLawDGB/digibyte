@@ -1,26 +1,15 @@
-<<<<<<< HEAD
-// Copyright (c) 2017-2020 The Bitcoin Core developers
-// Copyright (c) 2017-2020 The DigiByte Core developers
-// Distributed under the MIT software license, see the accompanying
-// file COPYING or http://www.opensource.org/licenses/mit-license.php.
-
-=======
-// Copyright (c) 2017-2022 The DigiByte Core developers
+// Copyright (c) 2017-2022 The Bitcoin Core developers
+// Copyright (c) 2017-2025 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <common/system.h>
 #include <consensus/validation.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <interfaces/chain.h>
 #include <policy/fees.h>
 #include <policy/policy.h>
 #include <util/moneystr.h>
 #include <util/rbf.h>
-<<<<<<< HEAD
-#include <util/system.h>
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <util/translation.h>
 #include <wallet/coincontrol.h>
 #include <wallet/feebumper.h>
@@ -32,15 +21,9 @@
 namespace wallet {
 //! Check whether transaction has descendant in wallet or mempool, or has been
 //! mined, or conflicts with a mined transaction. Return a feebumper::Result.
-<<<<<<< HEAD
-static feebumper::Result PreconditionChecks(const CWallet& wallet, const CWalletTx& wtx, std::vector<bilingual_str>& errors) EXCLUSIVE_LOCKS_REQUIRED(wallet.cs_wallet)
-{
-    if (wallet.HasWalletSpend(wtx.GetHash())) {
-=======
 static feebumper::Result PreconditionChecks(const CWallet& wallet, const CWalletTx& wtx, bool require_mine, std::vector<bilingual_str>& errors) EXCLUSIVE_LOCKS_REQUIRED(wallet.cs_wallet)
 {
     if (wallet.HasWalletSpend(wtx.tx)) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         errors.push_back(Untranslated("Transaction has descendants in the wallet"));
         return feebumper::Result::INVALID_PARAMETER;
     }
@@ -52,11 +35,7 @@ static feebumper::Result PreconditionChecks(const CWallet& wallet, const CWallet
         }
     }
 
-<<<<<<< HEAD
-    if (wtx.GetDepthInMainChain() != 0) {
-=======
     if (wallet.GetTxDepthInMainChain(wtx) != 0) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         errors.push_back(Untranslated("Transaction has been mined, or is conflicted with a mined transaction"));
         return feebumper::Result::WALLET_ERROR;
     }
@@ -71,14 +50,6 @@ static feebumper::Result PreconditionChecks(const CWallet& wallet, const CWallet
         return feebumper::Result::WALLET_ERROR;
     }
 
-<<<<<<< HEAD
-    // check that original tx consists entirely of our inputs
-    // if not, we can't bump the fee, because the wallet has no way of knowing the value of the other inputs (thus the fee)
-    isminefilter filter = wallet.GetLegacyScriptPubKeyMan() && wallet.IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS) ? ISMINE_WATCH_ONLY : ISMINE_SPENDABLE;
-    if (!wallet.IsAllFromMe(*wtx.tx, filter)) {
-        errors.push_back(Untranslated("Transaction contains inputs that don't belong to this wallet"));
-        return feebumper::Result::WALLET_ERROR;
-=======
     if (require_mine) {
         // check that original tx consists entirely of our inputs
         // if not, we can't bump the fee, because the wallet has no way of knowing the value of the other inputs (thus the fee)
@@ -87,18 +58,13 @@ static feebumper::Result PreconditionChecks(const CWallet& wallet, const CWallet
             errors.push_back(Untranslated("Transaction contains inputs that don't belong to this wallet"));
             return feebumper::Result::WALLET_ERROR;
         }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     return feebumper::Result::OK;
 }
 
 //! Check if the user provided a valid feeRate
-<<<<<<< HEAD
-static feebumper::Result CheckFeeRate(const CWallet& wallet, const CWalletTx& wtx, const CFeeRate& newFeerate, const int64_t maxTxSize, std::vector<bilingual_str>& errors)
-=======
 static feebumper::Result CheckFeeRate(const CWallet& wallet, const CMutableTransaction& mtx, const CFeeRate& newFeerate, const int64_t maxTxSize, CAmount old_fee, std::vector<bilingual_str>& errors)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     // check that fee rate is higher than mempool's minimum fee
     // (no point in bumping fee if we know that the new tx won't be accepted to the mempool)
@@ -115,23 +81,6 @@ static feebumper::Result CheckFeeRate(const CWallet& wallet, const CMutableTrans
         return feebumper::Result::WALLET_ERROR;
     }
 
-<<<<<<< HEAD
-    CAmount new_total_fee = newFeerate.GetFee(maxTxSize);
-
-    CFeeRate incrementalRelayFee = std::max(wallet.chain().relayIncrementalFee(), CFeeRate(WALLET_INCREMENTAL_RELAY_FEE));
-
-    // Given old total fee and transaction size, calculate the old feeRate
-    isminefilter filter = wallet.GetLegacyScriptPubKeyMan() && wallet.IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS) ? ISMINE_WATCH_ONLY : ISMINE_SPENDABLE;
-    CAmount old_fee = wtx.GetDebit(filter) - wtx.tx->GetValueOut();
-    const int64_t txSize = GetVirtualTransactionSize(*(wtx.tx));
-    CFeeRate nOldFeeRate(old_fee, txSize);
-    // Min total fee is old fee + relay fee
-    CAmount minTotalFee = nOldFeeRate.GetFee(maxTxSize) + incrementalRelayFee.GetFee(maxTxSize);
-
-    if (new_total_fee < minTotalFee) {
-        errors.push_back(strprintf(Untranslated("Insufficient total fee %s, must be at least %s (oldFee %s + incrementalFee %s)"),
-            FormatMoney(new_total_fee), FormatMoney(minTotalFee), FormatMoney(nOldFeeRate.GetFee(maxTxSize)), FormatMoney(incrementalRelayFee.GetFee(maxTxSize))));
-=======
     std::vector<COutPoint> reused_inputs;
     reused_inputs.reserve(mtx.vin.size());
     for (const CTxIn& txin : mtx.vin) {
@@ -152,7 +101,6 @@ static feebumper::Result CheckFeeRate(const CWallet& wallet, const CMutableTrans
     if (new_total_fee < minTotalFee) {
         errors.push_back(strprintf(Untranslated("Insufficient total fee %s, must be at least %s (oldFee %s + incrementalFee %s)"),
             FormatMoney(new_total_fee), FormatMoney(minTotalFee), FormatMoney(old_fee), FormatMoney(incrementalRelayFee.GetFee(maxTxSize))));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         return feebumper::Result::INVALID_PARAMETER;
     }
 
@@ -188,23 +136,14 @@ static CFeeRate EstimateFeeRate(const CWallet& wallet, const CWalletTx& wtx, con
     // WALLET_INCREMENTAL_RELAY_FEE value to future proof against changes to
     // network wide policy for incremental relay fee that our node may not be
     // aware of. This ensures we're over the required relay fee rate
-<<<<<<< HEAD
-    // (BIP 125 rule 4).  The replacement tx will be at least as large as the
-    // original tx, so the total fee will be greater (BIP 125 rule 3)
-=======
     // (Rule 4).  The replacement tx will be at least as large as the
     // original tx, so the total fee will be greater (Rule 3)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     CFeeRate node_incremental_relay_fee = wallet.chain().relayIncrementalFee();
     CFeeRate wallet_incremental_relay_fee = CFeeRate(WALLET_INCREMENTAL_RELAY_FEE);
     feerate += std::max(node_incremental_relay_fee, wallet_incremental_relay_fee);
 
     // Fee rate must also be at least the wallet's GetMinimumFeeRate
-<<<<<<< HEAD
-    CFeeRate min_feerate(GetMinimumFeeRate(wallet, coin_control, /* feeCalc */ nullptr));
-=======
     CFeeRate min_feerate(GetMinimumFeeRate(wallet, coin_control, /*feeCalc=*/nullptr));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // Set the required fee rate for the replacement transaction in coin control.
     return std::max(feerate, min_feerate);
@@ -219,19 +158,11 @@ bool TransactionCanBeBumped(const CWallet& wallet, const uint256& txid)
     if (wtx == nullptr) return false;
 
     std::vector<bilingual_str> errors_dummy;
-<<<<<<< HEAD
-    feebumper::Result res = PreconditionChecks(wallet, *wtx, errors_dummy);
-=======
     feebumper::Result res = PreconditionChecks(wallet, *wtx, /* require_mine=*/ true, errors_dummy);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     return res == feebumper::Result::OK;
 }
 
 Result CreateRateBumpTransaction(CWallet& wallet, const uint256& txid, const CCoinControl& coin_control, std::vector<bilingual_str>& errors,
-<<<<<<< HEAD
-                                 CAmount& old_fee, CAmount& new_fee, CMutableTransaction& mtx)
-{
-=======
                                  CAmount& old_fee, CAmount& new_fee, CMutableTransaction& mtx, bool require_mine, const std::vector<CTxOut>& outputs, std::optional<uint32_t> original_change_index)
 {
     // For now, cannot specify both new outputs to use and an output index to send change
@@ -240,7 +171,6 @@ Result CreateRateBumpTransaction(CWallet& wallet, const uint256& txid, const CCo
         return Result::INVALID_PARAMETER;
     }
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     // We are going to modify coin control later, copy to re-use
     CCoinControl new_coin_control(coin_control);
 
@@ -312,32 +242,6 @@ Result CreateRateBumpTransaction(CWallet& wallet, const uint256& txid, const CCo
         return result;
     }
 
-<<<<<<< HEAD
-    // Fill in recipients(and preserve a single change key if there is one)
-    std::vector<CRecipient> recipients;
-    for (const auto& output : wtx.tx->vout) {
-        if (!wallet.IsChange(output)) {
-            CRecipient recipient = {output.scriptPubKey, output.nValue, false};
-            recipients.push_back(recipient);
-        } else {
-            CTxDestination change_dest;
-            ExtractDestination(output.scriptPubKey, change_dest);
-            new_coin_control.destChange = change_dest;
-        }
-    }
-
-    isminefilter filter = wallet.GetLegacyScriptPubKeyMan() && wallet.IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS) ? ISMINE_WATCH_ONLY : ISMINE_SPENDABLE;
-    old_fee = wtx.GetDebit(filter) - wtx.tx->GetValueOut();
-
-    if (coin_control.m_feerate) {
-        // The user provided a feeRate argument.
-        // We calculate this here to avoid compiler warning on the cs_wallet lock
-        const int64_t maxTxSize{CalculateMaximumSignedTxSize(*wtx.tx, &wallet).vsize};
-        Result res = CheckFeeRate(wallet, wtx, *new_coin_control.m_feerate, maxTxSize, errors);
-        if (res != Result::OK) {
-            return res;
-        }
-=======
     // Calculate the old output amount.
     CAmount output_value = 0;
     for (const auto& old_output : wtx.tx->vout) {
@@ -394,7 +298,6 @@ Result CreateRateBumpTransaction(CWallet& wallet, const uint256& txid, const CCo
         if (res != Result::OK) {
             return res;
         }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     } else {
         // The user did not provide a feeRate argument
         new_coin_control.m_feerate = EstimateFeeRate(wallet, wtx, old_fee, new_coin_control);
@@ -410,39 +313,11 @@ Result CreateRateBumpTransaction(CWallet& wallet, const uint256& txid, const CCo
     for (const auto& inputs : wtx.tx->vin) {
         new_coin_control.Select(COutPoint(inputs.prevout));
     }
-<<<<<<< HEAD
-    new_coin_control.fAllowOtherInputs = true;
-=======
     new_coin_control.m_allow_other_inputs = true;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // We cannot source new unconfirmed inputs(bip125 rule 2)
     new_coin_control.m_min_depth = 1;
 
-<<<<<<< HEAD
-    CTransactionRef tx_new;
-    CAmount fee_ret;
-    int change_pos_in_out = -1; // No requested location for change
-    bilingual_str fail_reason;
-    FeeCalculation fee_calc_out;
-    if (!wallet.CreateTransaction(recipients, tx_new, fee_ret, change_pos_in_out, fail_reason, new_coin_control, fee_calc_out, false)) {
-        errors.push_back(Untranslated("Unable to create transaction.") + Untranslated(" ") + fail_reason);
-        return Result::WALLET_ERROR;
-    }
-
-    // Write back new fee if successful
-    new_fee = fee_ret;
-
-    // Write back transaction
-    mtx = CMutableTransaction(*tx_new);
-    // Mark new tx not replaceable, if requested.
-    if (!coin_control.m_signal_bip125_rbf.value_or(wallet.m_signal_rbf)) {
-        for (auto& input : mtx.vin) {
-            if (input.nSequence < 0xfffffffe) input.nSequence = 0xfffffffe;
-        }
-    }
-
-=======
     constexpr int RANDOM_CHANGE_POSITION = -1;
     auto res = CreateTransaction(wallet, recipients, RANDOM_CHANGE_POSITION, new_coin_control, false);
     if (!res) {
@@ -456,16 +331,11 @@ Result CreateRateBumpTransaction(CWallet& wallet, const uint256& txid, const CCo
 
     // Write back transaction
     mtx = CMutableTransaction(*txr.tx);
-
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     return Result::OK;
 }
 
 bool SignTransaction(CWallet& wallet, CMutableTransaction& mtx) {
     LOCK(wallet.cs_wallet);
-<<<<<<< HEAD
-    return wallet.SignTransaction(mtx);
-=======
 
     if (wallet.IsWalletFlagSet(WALLET_FLAG_EXTERNAL_SIGNER)) {
         // Make a blank psbt
@@ -482,7 +352,6 @@ bool SignTransaction(CWallet& wallet, CMutableTransaction& mtx) {
     } else {
         return wallet.SignTransaction(mtx);
     }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 Result CommitTransaction(CWallet& wallet, const uint256& txid, CMutableTransaction&& mtx, std::vector<bilingual_str>& errors, uint256& bumped_txid)
@@ -514,13 +383,6 @@ Result CommitTransaction(CWallet& wallet, const uint256& txid, CMutableTransacti
     // mark the original tx as bumped
     bumped_txid = tx->GetHash();
     if (!wallet.MarkReplaced(oldWtx.GetHash(), bumped_txid)) {
-<<<<<<< HEAD
-        // TODO: see if JSON-RPC has a standard way of returning a response
-        // along with an exception. It would be good to return information about
-        // wtxBumped to the caller even if marking the original transaction
-        // replaced does not succeed for some reason.
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         errors.push_back(Untranslated("Created new bumpfee transaction but could not mark the original transaction as replaced"));
     }
     return Result::OK;

@@ -7,7 +7,7 @@
 #ifndef DIGIBYTE_RPC_SERVER_H
 #define DIGIBYTE_RPC_SERVER_H
 
-#include <amount.h>
+#include <consensus/amount.h>
 #include <rpc/request.h>
 #include <rpc/util.h>
 

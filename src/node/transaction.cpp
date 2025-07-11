@@ -13,7 +13,6 @@
 #include <validation.h>
 #include <validationinterface.h>
 #include <node/transaction.h>
-#include <dandelion.h>
 #include <random.h>
 #include <logging.h>
 

@@ -3,22 +3,23 @@
 ## Overview
 This file provides context and guidance for AI assistants working on the DigiByte codebase, particularly for the Bitcoin Core v26.2 merge creating DigiByte v8.26.
 
-## Reference Directories
-- **Current merged code**: `/Users/jt/Code/digibyte` (DigiByte v8.26 work in progress)
-- **Original DigiByte**: `/Users/jt/Code/digibyte/digibyte-v8.22.2` (v8.22.2 for comparison)
-- **Bitcoin v26.2**: `/Users/jt/Code/digibyte/bitcoin-v26.2-for-digibyte` (Bitcoin Core v26.2 reference)
+# DigiByte v8.26 Build Error Resolution
 
-## Build Error Resolution Process
+You are a DigiByte engineer tasked with fixing build errors and getting DGB v8.26 to compile.
 
-When fixing build errors after v26.2 merge:
-
-### Setup
+## Setup
 **Required repositories:**
-- `digibyte` (merged code, current directory)
+- `digibyte-v8.26` (merged code - BUILD ONLY HERE)
 - `bitcoin-v26.2-for-digibyte` folder in root (contains pre-converted Bitcoin v26.2 with DigiByte naming)
 - `digibyte-v8.22.2` folder in root (original DigiByte v8.22.2 code for comparison)
 
-**IMPORTANT:** The `bitcoin-v26.2-for-digibyte` folder contains Bitcoin v26.2 code that has already been converted to DigiByte naming conventions. Always reference this folder for v26.2 code patterns.
+**Required docs:**
+- Read `claude.md` for AI assistant guidelines
+- Read `digibyte-btc-v26-2-merge-spec.md` for merge rules
+
+**IMPORTANT:**
+- The `bitcoin-v26.2-for-digibyte` folder contains Bitcoin v26.2 code that has already been converted to DigiByte naming conventions. Always reference this folder for v26.2 code patterns.
+- **ONLY build in the main digibyte-v8.26 directory. NEVER build in reference folders.**
 
 ## Build Process
 
@@ -74,7 +75,7 @@ std::unique_ptr<CBlockTemplate> CreateNewBlock(
 make clean
 
 # Test fix
-make -j6 2>&1 | tee build_errors.log
+make -j6 2>&1 | tee test.log
 
 # If error is fixed, commit immediately
 git add $ERROR_FILE
@@ -100,6 +101,19 @@ git commit -m "Fix build: $ERROR_FILE
 **Build system:**
 - Add DigiByte files to Makefile.am
 - Use v26.2 naming conventions
+
+**Many errors in one file (KISS approach):**
+- Copy entire file from `bitcoin-v26.2-for-digibyte`
+- Port ONLY DigiByte-specific features back:
+  - Multi-algo mining functions
+  - Dandelion++ code
+  - Network settings (ports, magic bytes)
+  - Custom RPCs
+```bash
+# If file has many errors, start fresh:
+cp bitcoin-v26.2-for-digibyte/$ERROR_FILE digibyte-v8.26/$ERROR_FILE
+# Then add back DGB features from digibyte-v8.22.2/$ERROR_FILE
+```
 
 **File-level fixes (saves time):**
 - If a file has no DigiByte-specific features, copy entire file from `bitcoin-v26.2-for-digibyte`
@@ -137,6 +151,7 @@ git reset --hard HEAD~1
 ```
 
 **Remember:** Always use v26.2 code style. Never copy old v8.22.2 code directly.
+
 
 ## Important Reminders
 - Both Bitcoin and DigiByte copyrights must be preserved
@@ -192,13 +207,6 @@ DigiByte uses custom difficulty algorithms:
 
 ## Development Commands
 
-### Building
-```bash
-./autogen.sh
-./configure --enable-debug
-make -j6 2>&1 | tee build_errors.log
-```
-
 ### Testing
 ```bash
 # Run all tests
@@ -213,19 +221,3 @@ make -j6 2>&1 | tee build_errors.log
 # Check for linting issues
 ./test/lint/all-lint.sh
 ```
-
-## Testing Checklist
-
-After any significant changes:
-- [ ] All 5 algorithms produce valid blocks
-- [ ] 15-second average block time maintained
-- [ ] getblockreward returns correct values
-- [ ] Dandelion++ routing works
-- [ ] Network sync successful
-- [ ] All unit tests pass
-- [ ] All functional tests pass
-
-## Version Naming
-- Current: v8.22.2
-- Target: v8.26 (aligned with Bitcoin Core v26.2)
-- Format: v8.XX where XX approximates Bitcoin Core version

@@ -26,7 +26,6 @@
 #include <compat/sanity.h>
 #include <consensus/amount.h>
 #include <deploymentstatus.h>
-#include <fs.h>
 #include <hash.h>
 #include <httprpc.h>
 #include <httpserver.h>
@@ -39,7 +38,7 @@
 #include <interfaces/node.h>
 #include <logging.h>
 #include <mapport.h>
-#include <miner.h>
+#include <node/miner.h>
 #include <net.h>
 #include <net_permissions.h>
 #include <net_processing.h>

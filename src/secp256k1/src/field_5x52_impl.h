@@ -138,11 +138,7 @@ static void secp256k1_fe_impl_normalize_var(secp256k1_fe *r) {
     r->n[0] = t0; r->n[1] = t1; r->n[2] = t2; r->n[3] = t3; r->n[4] = t4;
 }
 
-<<<<<<< HEAD
-static int secp256k1_fe_normalizes_to_zero(const secp256k1_fe *r) {
-=======
 static int secp256k1_fe_impl_normalizes_to_zero(const secp256k1_fe *r) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     uint64_t t0 = r->n[0], t1 = r->n[1], t2 = r->n[2], t3 = r->n[3], t4 = r->n[4];
 
     /* z0 tracks a possible raw value of 0, z1 tracks a possible raw value of P */
@@ -165,11 +161,7 @@ static int secp256k1_fe_impl_normalizes_to_zero(const secp256k1_fe *r) {
     return (z0 == 0) | (z1 == 0xFFFFFFFFFFFFFULL);
 }
 
-<<<<<<< HEAD
-static int secp256k1_fe_normalizes_to_zero_var(const secp256k1_fe *r) {
-=======
 static int secp256k1_fe_impl_normalizes_to_zero_var(const secp256k1_fe *r) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     uint64_t t0, t1, t2, t3, t4;
     uint64_t z0, z1;
     uint64_t x;
@@ -244,12 +236,7 @@ static int secp256k1_fe_impl_cmp_var(const secp256k1_fe *a, const secp256k1_fe *
     return 0;
 }
 
-<<<<<<< HEAD
-static int secp256k1_fe_set_b32(secp256k1_fe *r, const unsigned char *a) {
-    int ret;
-=======
 static void secp256k1_fe_impl_set_b32_mod(secp256k1_fe *r, const unsigned char *a) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     r->n[0] = (uint64_t)a[31]
             | ((uint64_t)a[30] << 8)
             | ((uint64_t)a[29] << 16)
@@ -284,25 +271,11 @@ static void secp256k1_fe_impl_set_b32_mod(secp256k1_fe *r, const unsigned char *
             | ((uint64_t)a[2] << 24)
             | ((uint64_t)a[1] << 32)
             | ((uint64_t)a[0] << 40);
-<<<<<<< HEAD
-    ret = !((r->n[4] == 0x0FFFFFFFFFFFFULL) & ((r->n[3] & r->n[2] & r->n[1]) == 0xFFFFFFFFFFFFFULL) & (r->n[0] >= 0xFFFFEFFFFFC2FULL));
-#ifdef VERIFY
-    r->magnitude = 1;
-    if (ret) {
-        r->normalized = 1;
-        secp256k1_fe_verify(r);
-    } else {
-        r->normalized = 0;
-    }
-#endif
-    return ret;
-=======
 }
 
 static int secp256k1_fe_impl_set_b32_limit(secp256k1_fe *r, const unsigned char *a) {
     secp256k1_fe_impl_set_b32_mod(r, a);
     return !((r->n[4] == 0x0FFFFFFFFFFFFULL) & ((r->n[3] & r->n[2] & r->n[1]) == 0xFFFFFFFFFFFFFULL) & (r->n[0] >= 0xFFFFEFFFFFC2FULL));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 /** Convert a field element to a 32-byte big endian value. Requires the input to be normalized */
@@ -376,19 +349,7 @@ SECP256K1_INLINE static void secp256k1_fe_impl_add(secp256k1_fe *r, const secp25
     r->n[4] += a->n[4];
 }
 
-<<<<<<< HEAD
-static void secp256k1_fe_mul(secp256k1_fe *r, const secp256k1_fe *a, const secp256k1_fe * SECP256K1_RESTRICT b) {
-#ifdef VERIFY
-    VERIFY_CHECK(a->magnitude <= 8);
-    VERIFY_CHECK(b->magnitude <= 8);
-    secp256k1_fe_verify(a);
-    secp256k1_fe_verify(b);
-    VERIFY_CHECK(r != b);
-    VERIFY_CHECK(a != b);
-#endif
-=======
 SECP256K1_INLINE static void secp256k1_fe_impl_mul(secp256k1_fe *r, const secp256k1_fe *a, const secp256k1_fe * SECP256K1_RESTRICT b) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     secp256k1_fe_mul_inner(r->n, a->n, b->n);
 }
 
@@ -398,28 +359,15 @@ SECP256K1_INLINE static void secp256k1_fe_impl_sqr(secp256k1_fe *r, const secp25
 
 SECP256K1_INLINE static void secp256k1_fe_impl_cmov(secp256k1_fe *r, const secp256k1_fe *a, int flag) {
     uint64_t mask0, mask1;
-<<<<<<< HEAD
-    VG_CHECK_VERIFY(r->n, sizeof(r->n));
-    mask0 = flag + ~((uint64_t)0);
-=======
     volatile int vflag = flag;
     SECP256K1_CHECKMEM_CHECK_VERIFY(r->n, sizeof(r->n));
     mask0 = vflag + ~((uint64_t)0);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     mask1 = ~mask0;
     r->n[0] = (r->n[0] & mask0) | (a->n[0] & mask1);
     r->n[1] = (r->n[1] & mask0) | (a->n[1] & mask1);
     r->n[2] = (r->n[2] & mask0) | (a->n[2] & mask1);
     r->n[3] = (r->n[3] & mask0) | (a->n[3] & mask1);
     r->n[4] = (r->n[4] & mask0) | (a->n[4] & mask1);
-<<<<<<< HEAD
-#ifdef VERIFY
-    if (flag) {
-        r->magnitude = a->magnitude;
-        r->normalized = a->normalized;
-    }
-#endif
-=======
 }
 
 static SECP256K1_INLINE void secp256k1_fe_impl_half(secp256k1_fe *r) {
@@ -474,19 +422,13 @@ static SECP256K1_INLINE void secp256k1_fe_impl_half(secp256k1_fe *r) {
      * and since we want the smallest such integer value for M:
      *     M == floor(m/2) + 1
      */
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 static SECP256K1_INLINE void secp256k1_fe_storage_cmov(secp256k1_fe_storage *r, const secp256k1_fe_storage *a, int flag) {
     uint64_t mask0, mask1;
-<<<<<<< HEAD
-    VG_CHECK_VERIFY(r->n, sizeof(r->n));
-    mask0 = flag + ~((uint64_t)0);
-=======
     volatile int vflag = flag;
     SECP256K1_CHECKMEM_CHECK_VERIFY(r->n, sizeof(r->n));
     mask0 = vflag + ~((uint64_t)0);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     mask1 = ~mask0;
     r->n[0] = (r->n[0] & mask0) | (a->n[0] & mask1);
     r->n[1] = (r->n[1] & mask0) | (a->n[1] & mask1);

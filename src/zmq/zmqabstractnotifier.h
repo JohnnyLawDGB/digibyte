@@ -1,21 +1,13 @@
-<<<<<<< HEAD
-// Copyright (c) 2009-2019 The Bitcoin Core developers
-// Copyright (c) 2014-2019 The DigiByte Core developers
-=======
 // Copyright (c) 2015-2022 The Bitcoin Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// Copyright (c) 2014-2019 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #ifndef DIGIBYTE_ZMQ_ZMQABSTRACTNOTIFIER_H
 #define DIGIBYTE_ZMQ_ZMQABSTRACTNOTIFIER_H
 
-<<<<<<< HEAD
-
-=======
 #include <cstdint>
 #include <functional>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <memory>
 #include <string>
 
@@ -23,22 +15,14 @@ class CBlockIndex;
 class CTransaction;
 class CZMQAbstractNotifier;
 
-<<<<<<< HEAD
-using CZMQNotifierFactory = std::unique_ptr<CZMQAbstractNotifier> (*)();
-=======
 using CZMQNotifierFactory = std::function<std::unique_ptr<CZMQAbstractNotifier>()>;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 class CZMQAbstractNotifier
 {
 public:
     static const int DEFAULT_ZMQ_SNDHWM {1000};
 
-<<<<<<< HEAD
-    CZMQAbstractNotifier() : psocket(nullptr), outbound_message_high_water_mark(DEFAULT_ZMQ_SNDHWM) { }
-=======
     CZMQAbstractNotifier() : outbound_message_high_water_mark(DEFAULT_ZMQ_SNDHWM) {}
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     virtual ~CZMQAbstractNotifier();
 
     template <typename T>

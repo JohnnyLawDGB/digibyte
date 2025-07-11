@@ -1,19 +1,9 @@
-<<<<<<< HEAD:src/bloom.h
-// Copyright (c) 2012-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-// Distributed under the MIT software license, see the accompanying
-// file COPYING or http://www.opensource.org/licenses/mit-license.php.
-
-#ifndef DIGIBYTE_BLOOM_H
-#define DIGIBYTE_BLOOM_H
-=======
 // Copyright (c) 2012-2021 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #ifndef DIGIBYTE_COMMON_BLOOM_H
 #define DIGIBYTE_COMMON_BLOOM_H
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion:src/common/bloom.h
 
 #include <serialize.h>
 #include <span.h>
@@ -59,11 +49,7 @@ private:
     unsigned int nTweak;
     unsigned char nFlags;
 
-<<<<<<< HEAD:src/bloom.h
-    unsigned int Hash(unsigned int nHashNum, const std::vector<unsigned char>& vDataToHash) const;
-=======
     unsigned int Hash(unsigned int nHashNum, Span<const unsigned char> vDataToHash) const;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion:src/common/bloom.h
 
 public:
     /**
@@ -80,19 +66,11 @@ public:
 
     SERIALIZE_METHODS(CBloomFilter, obj) { READWRITE(obj.vData, obj.nHashFuncs, obj.nTweak, obj.nFlags); }
 
-<<<<<<< HEAD:src/bloom.h
-    void insert(const std::vector<unsigned char>& vKey);
-=======
     void insert(Span<const unsigned char> vKey);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion:src/common/bloom.h
     void insert(const COutPoint& outpoint);
 
     bool contains(Span<const unsigned char> vKey) const;
     bool contains(const COutPoint& outpoint) const;
-<<<<<<< HEAD:src/bloom.h
-    bool contains(const uint256& hash) const;
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion:src/common/bloom.h
 
     //! True if the size is <= MAX_BLOOM_FILTER_SIZE and the number of hash functions is <= MAX_HASH_FUNCS
     //! (catch a filter which was just deserialized which was too big)
@@ -146,8 +124,4 @@ private:
     int nHashFuncs;
 };
 
-<<<<<<< HEAD:src/bloom.h
-#endif // DIGIBYTE_BLOOM_H
-=======
 #endif // DIGIBYTE_COMMON_BLOOM_H
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion:src/common/bloom.h

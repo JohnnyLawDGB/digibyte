@@ -1,10 +1,5 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
 // Copyright (c) 2009-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -61,17 +56,10 @@ static const uint32_t LOCKTIME_MAX = 0xFFFFFFFFU;
 static constexpr unsigned int ANNEX_TAG = 0x50;
 
 // Validation weight per passing signature (Tapscript only, see BIP 342).
-<<<<<<< HEAD
-static constexpr uint64_t VALIDATION_WEIGHT_PER_SIGOP_PASSED = 50;
-
-// How much weight budget is added to the witness size (Tapscript only, see BIP 342).
-static constexpr uint64_t VALIDATION_WEIGHT_OFFSET = 50;
-=======
 static constexpr int64_t VALIDATION_WEIGHT_PER_SIGOP_PASSED{50};
 
 // How much weight budget is added to the witness size (Tapscript only, see BIP 342).
 static constexpr int64_t VALIDATION_WEIGHT_OFFSET{50};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 template <typename T>
 std::vector<unsigned char> ToByteVector(const T& in)
@@ -446,11 +434,7 @@ public:
     CScript(std::vector<unsigned char>::const_iterator pbegin, std::vector<unsigned char>::const_iterator pend) : CScriptBase(pbegin, pend) { }
     CScript(const unsigned char* pbegin, const unsigned char* pend) : CScriptBase(pbegin, pend) { }
 
-<<<<<<< HEAD
-    SERIALIZE_METHODS(CScript, obj) { READWRITEAS(CScriptBase, obj); }
-=======
     SERIALIZE_METHODS(CScript, obj) { READWRITE(AsBase<CScriptBase>(obj)); }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     explicit CScript(int64_t b) { operator<<(b); }
     explicit CScript(opcodetype b)     { operator<<(b); }
@@ -593,11 +577,6 @@ struct CScriptWitness
     std::string ToString() const;
 };
 
-<<<<<<< HEAD
-/** Test for OP_SUCCESSx opcodes as defined by BIP342. */
-bool IsOpSuccess(const opcodetype& opcode);
-
-=======
 /** A reference to a CScript: the Hash160 of its serialization */
 class CScriptID : public BaseHash<uint160>
 {
@@ -636,6 +615,4 @@ CScript BuildScript(Ts&&... inputs)
 
     return ret;
 }
-
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #endif // DIGIBYTE_SCRIPT_SCRIPT_H

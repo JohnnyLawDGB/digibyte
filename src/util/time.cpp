@@ -1,9 +1,5 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The DigiByte Core developers
-=======
 // Copyright (c) 2009-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -11,19 +7,6 @@
 #include <config/digibyte-config.h>
 #endif
 
-<<<<<<< HEAD
-#include <compat.h>
-#include <util/time.h>
-
-#include <util/check.h>
-
-#include <atomic>
-#include <boost/date_time/posix_time/posix_time.hpp>
-#include <ctime>
-#include <thread>
-
-#include <tinyformat.h>
-=======
 #include <compat/compat.h>
 #include <tinyformat.h>
 #include <util/time.h>
@@ -36,25 +19,11 @@
 #include <thread>
 #include <sstream>
 #include <string>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 void UninterruptibleSleep(const std::chrono::microseconds& n) { std::this_thread::sleep_for(n); }
 
 static std::atomic<int64_t> nMockTime(0); //!< For testing
 
-<<<<<<< HEAD
-int64_t GetTime()
-{
-    int64_t mocktime = nMockTime.load(std::memory_order_relaxed);
-    if (mocktime) return mocktime;
-
-    time_t now = time(nullptr);
-    assert(now > 0);
-    return now;
-}
-
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 bool ChronoSanityCheck()
 {
     // std::chrono::system_clock.time_since_epoch and time_t(0) are not guaranteed
@@ -98,29 +67,21 @@ bool ChronoSanityCheck()
     return true;
 }
 
-<<<<<<< HEAD
 template <typename T>
 T GetTime()
 {
     const std::chrono::seconds mocktime{nMockTime.load(std::memory_order_relaxed)};
-
-    return std::chrono::duration_cast<T>(
+    const auto ret{
         mocktime.count() ?
             mocktime :
-            std::chrono::microseconds{GetTimeMicros()});
+            std::chrono::system_clock::now().time_since_epoch()};
+    assert(ret > T{0});
+    return std::chrono::duration_cast<T>(ret);
 }
 template std::chrono::seconds GetTime();
 template std::chrono::milliseconds GetTime();
 template std::chrono::microseconds GetTime();
 
-template <typename T>
-static T GetSystemTime()
-{
-    const auto now = std::chrono::duration_cast<T>(std::chrono::system_clock::now().time_since_epoch());
-    assert(now.count() > 0);
-    return now;
-}
-=======
 NodeClock::time_point NodeClock::now() noexcept
 {
     const std::chrono::seconds mocktime{nMockTime.load(std::memory_order_relaxed)};
@@ -131,7 +92,6 @@ NodeClock::time_point NodeClock::now() noexcept
     assert(ret > 0s);
     return time_point{ret};
 };
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 void SetMockTime(int64_t nMockTimeIn)
 {
@@ -149,24 +109,13 @@ std::chrono::seconds GetMockTime()
     return std::chrono::seconds(nMockTime.load(std::memory_order_relaxed));
 }
 
-<<<<<<< HEAD
-int64_t GetTimeMillis()
-{
-    return int64_t{GetSystemTime<std::chrono::milliseconds>().count()};
-}
-
-int64_t GetTimeMicros()
-{
-    return int64_t{GetSystemTime<std::chrono::microseconds>().count()};
-}
-
-int64_t GetTimeSeconds()
-{
-    return int64_t{GetSystemTime<std::chrono::seconds>().count()};
-}
-=======
 int64_t GetTime() { return GetTime<std::chrono::seconds>().count(); }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
+int64_t GetTimeMillis() { return GetTime<std::chrono::milliseconds>().count(); }
+
+int64_t GetTimeMicros() { return GetTime<std::chrono::microseconds>().count(); }
+
+int64_t GetTimeSeconds() { return GetTime<std::chrono::seconds>().count(); }
 
 std::string FormatISO8601DateTime(int64_t nTime) {
     struct tm ts;
@@ -194,23 +143,6 @@ std::string FormatISO8601Date(int64_t nTime) {
     return strprintf("%04i-%02i-%02i", ts.tm_year + 1900, ts.tm_mon + 1, ts.tm_mday);
 }
 
-<<<<<<< HEAD
-int64_t ParseISO8601DateTime(const std::string& str)
-{
-    static const boost::posix_time::ptime epoch = boost::posix_time::from_time_t(0);
-    static const std::locale loc(std::locale::classic(),
-        new boost::posix_time::time_input_facet("%Y-%m-%dT%H:%M:%SZ"));
-    std::istringstream iss(str);
-    iss.imbue(loc);
-    boost::posix_time::ptime ptime(boost::date_time::not_a_date_time);
-    iss >> ptime;
-    if (ptime.is_not_a_date_time() || epoch > ptime)
-        return 0;
-    return (ptime - epoch).total_seconds();
-}
-
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 struct timeval MillisToTimeval(int64_t nTimeout)
 {
     struct timeval timeout;

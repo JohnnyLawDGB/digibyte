@@ -59,19 +59,12 @@ static void secp256k1_scalar_cadd_bit(secp256k1_scalar *r, unsigned int bit, int
 
     if (flag && bit < 32)
         *r += ((uint32_t)1 << bit);
-<<<<<<< HEAD
-=======
 
     secp256k1_scalar_verify(r);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #ifdef VERIFY
     VERIFY_CHECK(bit < 32);
     /* Verify that adding (1 << bit) will not overflow any in-range scalar *r by overflowing the underlying uint32_t. */
     VERIFY_CHECK(((uint32_t)1 << bit) - 1 <= UINT32_MAX - EXHAUSTIVE_TEST_ORDER);
-<<<<<<< HEAD
-    VERIFY_CHECK(secp256k1_scalar_check_overflow(r) == 0);
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #endif
 }
 
@@ -87,11 +80,8 @@ static void secp256k1_scalar_set_b32(secp256k1_scalar *r, const unsigned char *b
         }
     }
     if (overflow) *overflow = over;
-<<<<<<< HEAD
-=======
 
     secp256k1_scalar_verify(r);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 static void secp256k1_scalar_get_b32(unsigned char *bin, const secp256k1_scalar* a) {
@@ -181,12 +171,6 @@ SECP256K1_INLINE static int secp256k1_scalar_eq(const secp256k1_scalar *a, const
 
 static SECP256K1_INLINE void secp256k1_scalar_cmov(secp256k1_scalar *r, const secp256k1_scalar *a, int flag) {
     uint32_t mask0, mask1;
-<<<<<<< HEAD
-    VG_CHECK_VERIFY(r, sizeof(*r));
-    mask0 = flag + ~((uint32_t)0);
-    mask1 = ~mask0;
-    *r = (*r & mask0) | (*a & mask1);
-=======
     volatile int vflag = flag;
     secp256k1_scalar_verify(a);
     SECP256K1_CHECKMEM_CHECK_VERIFY(r, sizeof(*r));
@@ -196,17 +180,11 @@ static SECP256K1_INLINE void secp256k1_scalar_cmov(secp256k1_scalar *r, const se
     *r = (*r & mask0) | (*a & mask1);
 
     secp256k1_scalar_verify(r);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 static void secp256k1_scalar_inverse(secp256k1_scalar *r, const secp256k1_scalar *x) {
     int i;
     *r = 0;
-<<<<<<< HEAD
-    for (i = 0; i < EXHAUSTIVE_TEST_ORDER; i++)
-        if ((i * *x) % EXHAUSTIVE_TEST_ORDER == 1)
-            *r = i;
-=======
     secp256k1_scalar_verify(x);
 
     for (i = 0; i < EXHAUSTIVE_TEST_ORDER; i++)
@@ -214,22 +192,17 @@ static void secp256k1_scalar_inverse(secp256k1_scalar *r, const secp256k1_scalar
             *r = i;
 
     secp256k1_scalar_verify(r);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     /* If this VERIFY_CHECK triggers we were given a noninvertible scalar (and thus
      * have a composite group order; fix it in exhaustive_tests.c). */
     VERIFY_CHECK(*r != 0);
 }
 
 static void secp256k1_scalar_inverse_var(secp256k1_scalar *r, const secp256k1_scalar *x) {
-<<<<<<< HEAD
-    secp256k1_scalar_inverse(r, x);
-=======
     secp256k1_scalar_verify(x);
 
     secp256k1_scalar_inverse(r, x);
 
     secp256k1_scalar_verify(r);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 #endif /* SECP256K1_SCALAR_REPR_IMPL_H */

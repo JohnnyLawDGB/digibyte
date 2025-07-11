@@ -1,19 +1,9 @@
-<<<<<<< HEAD
-// Copyright (c) 2018-2020 The DigiByte Core developers
-=======
 // Copyright (c) 2018-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <addrdb.h>
 #include <banman.h>
-<<<<<<< HEAD
-#include <chain.h>
-#include <chainparams.h>
-#include <deploymentstatus.h>
-#include <external_signer.h>
-=======
 #include <blockfilter.h>
 #include <chain.h>
 #include <chainparams.h>
@@ -21,18 +11,14 @@
 #include <deploymentstatus.h>
 #include <external_signer.h>
 #include <index/blockfilterindex.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <init.h>
 #include <interfaces/chain.h>
 #include <interfaces/handler.h>
 #include <interfaces/node.h>
 #include <interfaces/wallet.h>
-<<<<<<< HEAD
-=======
 #include <kernel/chain.h>
 #include <kernel/mempool_entry.h>
 #include <logging.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <mapport.h>
 #include <net.h>
 #include <net_processing.h>
@@ -41,14 +27,9 @@
 #include <node/blockstorage.h>
 #include <node/coin.h>
 #include <node/context.h>
-<<<<<<< HEAD
-#include <node/transaction.h>
-#include <node/ui_interface.h>
-=======
 #include <node/interface_ui.h>
 #include <node/mini_miner.h>
 #include <node/transaction.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <policy/feerate.h>
 #include <policy/fees.h>
 #include <policy/policy.h>
@@ -61,18 +42,10 @@
 #include <shutdown.h>
 #include <support/allocators/secure.h>
 #include <sync.h>
-<<<<<<< HEAD
-#include <timedata.h>
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <txmempool.h>
 #include <uint256.h>
 #include <univalue.h>
 #include <util/check.h>
-<<<<<<< HEAD
-#include <util/system.h>
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <util/translation.h>
 #include <validation.h>
 #include <validationinterface.h>
@@ -93,32 +66,6 @@ using interfaces::BlockTip;
 using interfaces::Chain;
 using interfaces::FoundBlock;
 using interfaces::Handler;
-<<<<<<< HEAD
-using interfaces::MakeHandler;
-using interfaces::Node;
-using interfaces::WalletClient;
-
-namespace node {
-namespace {
-class NodeImpl : public Node
-{
-private:
-    ChainstateManager& chainman() { return *Assert(m_context->chainman); }
-public:
-    explicit NodeImpl(NodeContext* context) { setContext(context); }
-    void initLogging() override { InitLogging(*Assert(m_context->args)); }
-    void initParameterInteraction() override { InitParameterInteraction(*Assert(m_context->args)); }
-    bilingual_str getWarnings() override { return GetWarnings(true); }
-    uint32_t getLogCategories() override { return LogInstance().GetCategoryMask(); }
-    bool baseInitialize() override
-    {
-        return AppInitBasicSetup(gArgs) && AppInitParameterInteraction(gArgs) && AppInitSanityChecks() &&
-               AppInitLockDataDirectory() && AppInitInterfaces(*m_context);
-    }
-    bool appInitMain(interfaces::BlockAndHeaderTipInfo* tip_info) override
-    {
-        return AppInitMain(*m_context, tip_info);
-=======
 using interfaces::MakeSignalHandler;
 using interfaces::Node;
 using interfaces::WalletLoader;
@@ -165,7 +112,6 @@ public:
         // Error during initialization, set exit status before continue
         m_context->exit_status.store(EXIT_FAILURE);
         return false;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     void appShutdown() override
     {
@@ -176,11 +122,7 @@ public:
     {
         StartShutdown();
         // Stop RPC for clean shutdown if any of waitfor* commands is executed.
-<<<<<<< HEAD
-        if (gArgs.GetBoolArg("-server", false)) {
-=======
         if (args().GetBoolArg("-server", false)) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             InterruptRPC();
             StopRPC();
         }

@@ -3,13 +3,6 @@
  * Distributed under the MIT software license, see the accompanying    *
  * file COPYING or https://www.opensource.org/licenses/mit-license.php.*
  ***********************************************************************/
-<<<<<<< HEAD
-
-#if defined HAVE_CONFIG_H
-#include "libsecp256k1-config.h"
-#endif
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -25,21 +18,6 @@
     #pragma message("Defining VERIFY for tests being built for coverage analysis support is meaningless.")
 #endif
 #include "secp256k1.c"
-<<<<<<< HEAD
-#include "include/secp256k1.h"
-#include "include/secp256k1_preallocated.h"
-#include "testrand_impl.h"
-#include "util.h"
-
-#ifdef ENABLE_OPENSSL_TESTS
-#include <openssl/bn.h>
-#include <openssl/ec.h>
-#include <openssl/ecdsa.h>
-#include <openssl/obj_mac.h>
-# if OPENSSL_VERSION_NUMBER < 0x10100000L
-void ECDSA_SIG_get0(const ECDSA_SIG *sig, const BIGNUM **pr, const BIGNUM **ps) {*pr = sig->r; *ps = sig->s;}
-# endif
-=======
 
 #include "../include/secp256k1.h"
 #include "../include/secp256k1_preallocated.h"
@@ -54,21 +32,13 @@ void ECDSA_SIG_get0(const ECDSA_SIG *sig, const BIGNUM **pr, const BIGNUM **ps) 
 #ifdef SECP256K1_WIDEMUL_INT128
 #include "modinv64_impl.h"
 #include "int128_impl.h"
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #endif
 
 #define CONDITIONAL_TEST(cnt, nam) if (COUNT < (cnt)) { printf("Skipping %s (iteration count too low)\n", nam); } else
 
-<<<<<<< HEAD
-#include "modinv32_impl.h"
-#ifdef SECP256K1_WIDEMUL_INT128
-#include "modinv64_impl.h"
-#endif
-=======
 static int COUNT = 64;
 static secp256k1_context *CTX = NULL;
 static secp256k1_context *STATIC_CTX = NULL;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 static int all_bytes_equal(const void* s, unsigned char value, size_t n) {
     const unsigned char *p = s;
@@ -119,25 +89,9 @@ static void uncounting_illegal_callback_fn(const char* str, void* data) {
     (*p)--;
 }
 
-<<<<<<< HEAD
-void random_field_element_test(secp256k1_fe *fe) {
-    do {
-        unsigned char b32[32];
-        secp256k1_testrand256_test(b32);
-        if (secp256k1_fe_set_b32(fe, b32)) {
-            break;
-        }
-    } while(1);
-}
-
-void random_field_element_magnitude(secp256k1_fe *fe) {
-    secp256k1_fe zero;
-    int n = secp256k1_testrand_int(9);
-=======
 static void random_field_element_magnitude(secp256k1_fe *fe, int m) {
     secp256k1_fe zero;
     int n = secp256k1_testrand_int(m + 1);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     secp256k1_fe_normalize(fe);
     if (n == 0) {
         return;
@@ -194,11 +148,7 @@ static void random_gej_z_magnitude(secp256k1_gej *gej) {
 static void random_group_element_test(secp256k1_ge *ge) {
     secp256k1_fe fe;
     do {
-<<<<<<< HEAD
-        random_field_element_test(&fe);
-=======
         random_fe_test(&fe);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         if (secp256k1_ge_set_xo_var(ge, &fe, secp256k1_testrand_bits(1))) {
             secp256k1_fe_normalize(&ge->y);
             break;
@@ -249,19 +199,12 @@ static void random_scalar_order(secp256k1_scalar *num) {
     } while(1);
 }
 
-<<<<<<< HEAD
-void random_scalar_order_b32(unsigned char *b32) {
-=======
 static void random_scalar_order_b32(unsigned char *b32) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     secp256k1_scalar num;
     random_scalar_order(&num);
     secp256k1_scalar_get_b32(b32, &num);
 }
 
-<<<<<<< HEAD
-void run_context_tests(int use_prealloc) {
-=======
 static void run_xoshiro256pp_tests(void) {
     {
         size_t i;
@@ -332,23 +275,10 @@ static void run_deprecated_context_flags_test(void) {
 static void run_ec_illegal_argument_tests(void) {
     int ecount = 0;
     int ecount2 = 10;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     secp256k1_pubkey pubkey;
     secp256k1_pubkey zero_pubkey;
     secp256k1_ecdsa_signature sig;
     unsigned char ctmp[32];
-<<<<<<< HEAD
-    int32_t ecount;
-    int32_t ecount2;
-    secp256k1_context *none;
-    secp256k1_context *sign;
-    secp256k1_context *vrfy;
-    secp256k1_context *both;
-    void *none_prealloc = NULL;
-    void *sign_prealloc = NULL;
-    void *vrfy_prealloc = NULL;
-    void *both_prealloc = NULL;
-=======
 
     /* Setup */
     secp256k1_context_set_illegal_callback(STATIC_CTX, counting_illegal_callback_fn, &ecount);
@@ -440,51 +370,12 @@ static void run_proper_context_tests(int use_prealloc) {
     secp256k1_context *my_ctx, *my_ctx_fresh;
     void *my_ctx_prealloc = NULL;
     unsigned char seed[32] = {0x17};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     secp256k1_gej pubj;
     secp256k1_ge pub;
     secp256k1_scalar msg, key, nonce;
     secp256k1_scalar sigr, sigs;
 
-<<<<<<< HEAD
-    if (use_prealloc) {
-        none_prealloc = malloc(secp256k1_context_preallocated_size(SECP256K1_CONTEXT_NONE));
-        sign_prealloc = malloc(secp256k1_context_preallocated_size(SECP256K1_CONTEXT_SIGN));
-        vrfy_prealloc = malloc(secp256k1_context_preallocated_size(SECP256K1_CONTEXT_VERIFY));
-        both_prealloc = malloc(secp256k1_context_preallocated_size(SECP256K1_CONTEXT_SIGN | SECP256K1_CONTEXT_VERIFY));
-        CHECK(none_prealloc != NULL);
-        CHECK(sign_prealloc != NULL);
-        CHECK(vrfy_prealloc != NULL);
-        CHECK(both_prealloc != NULL);
-        none = secp256k1_context_preallocated_create(none_prealloc, SECP256K1_CONTEXT_NONE);
-        sign = secp256k1_context_preallocated_create(sign_prealloc, SECP256K1_CONTEXT_SIGN);
-        vrfy = secp256k1_context_preallocated_create(vrfy_prealloc, SECP256K1_CONTEXT_VERIFY);
-        both = secp256k1_context_preallocated_create(both_prealloc, SECP256K1_CONTEXT_SIGN | SECP256K1_CONTEXT_VERIFY);
-    } else {
-        none = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
-        sign = secp256k1_context_create(SECP256K1_CONTEXT_SIGN);
-        vrfy = secp256k1_context_create(SECP256K1_CONTEXT_VERIFY);
-        both = secp256k1_context_create(SECP256K1_CONTEXT_SIGN | SECP256K1_CONTEXT_VERIFY);
-    }
-
-    memset(&zero_pubkey, 0, sizeof(zero_pubkey));
-
-    ecount = 0;
-    ecount2 = 10;
-    secp256k1_context_set_illegal_callback(vrfy, counting_illegal_callback_fn, &ecount);
-    secp256k1_context_set_illegal_callback(sign, counting_illegal_callback_fn, &ecount2);
-    /* set error callback (to a function that still aborts in case malloc() fails in secp256k1_context_clone() below) */
-    secp256k1_context_set_error_callback(sign, secp256k1_default_illegal_callback_fn, NULL);
-    CHECK(sign->error_callback.fn != vrfy->error_callback.fn);
-    CHECK(sign->error_callback.fn == secp256k1_default_illegal_callback_fn);
-
-    /* check if sizes for cloning are consistent */
-    CHECK(secp256k1_context_preallocated_clone_size(none) == secp256k1_context_preallocated_size(SECP256K1_CONTEXT_NONE));
-    CHECK(secp256k1_context_preallocated_clone_size(sign) == secp256k1_context_preallocated_size(SECP256K1_CONTEXT_SIGN));
-    CHECK(secp256k1_context_preallocated_clone_size(vrfy) == secp256k1_context_preallocated_size(SECP256K1_CONTEXT_VERIFY));
-    CHECK(secp256k1_context_preallocated_clone_size(both) == secp256k1_context_preallocated_size(SECP256K1_CONTEXT_SIGN | SECP256K1_CONTEXT_VERIFY));
-=======
     /* Fresh reference context for comparison */
     my_ctx_fresh = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
 
@@ -510,7 +401,6 @@ static void run_proper_context_tests(int use_prealloc) {
 
     /* check if sizes for cloning are consistent */
     CHECK(secp256k1_context_preallocated_clone_size(my_ctx) == secp256k1_context_preallocated_size(SECP256K1_CONTEXT_NONE));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     /*** clone and destroy all of them to make sure cloning was complete ***/
     {
@@ -518,23 +408,6 @@ static void run_proper_context_tests(int use_prealloc) {
 
         if (use_prealloc) {
             /* clone into a non-preallocated context and then again into a new preallocated one. */
-<<<<<<< HEAD
-            ctx_tmp = none; none = secp256k1_context_clone(none); secp256k1_context_preallocated_destroy(ctx_tmp);
-            free(none_prealloc); none_prealloc = malloc(secp256k1_context_preallocated_size(SECP256K1_CONTEXT_NONE)); CHECK(none_prealloc != NULL);
-            ctx_tmp = none; none = secp256k1_context_preallocated_clone(none, none_prealloc); secp256k1_context_destroy(ctx_tmp);
-
-            ctx_tmp = sign; sign = secp256k1_context_clone(sign); secp256k1_context_preallocated_destroy(ctx_tmp);
-            free(sign_prealloc); sign_prealloc = malloc(secp256k1_context_preallocated_size(SECP256K1_CONTEXT_SIGN)); CHECK(sign_prealloc != NULL);
-            ctx_tmp = sign; sign = secp256k1_context_preallocated_clone(sign, sign_prealloc); secp256k1_context_destroy(ctx_tmp);
-
-            ctx_tmp = vrfy; vrfy = secp256k1_context_clone(vrfy); secp256k1_context_preallocated_destroy(ctx_tmp);
-            free(vrfy_prealloc); vrfy_prealloc = malloc(secp256k1_context_preallocated_size(SECP256K1_CONTEXT_VERIFY)); CHECK(vrfy_prealloc != NULL);
-            ctx_tmp = vrfy; vrfy = secp256k1_context_preallocated_clone(vrfy, vrfy_prealloc); secp256k1_context_destroy(ctx_tmp);
-
-            ctx_tmp = both; both = secp256k1_context_clone(both); secp256k1_context_preallocated_destroy(ctx_tmp);
-            free(both_prealloc); both_prealloc = malloc(secp256k1_context_preallocated_size(SECP256K1_CONTEXT_SIGN | SECP256K1_CONTEXT_VERIFY)); CHECK(both_prealloc != NULL);
-            ctx_tmp = both; both = secp256k1_context_preallocated_clone(both, both_prealloc); secp256k1_context_destroy(ctx_tmp);
-=======
             ctx_tmp = my_ctx;
             my_ctx = secp256k1_context_clone(my_ctx);
             CHECK(context_eq(ctx_tmp, my_ctx));
@@ -547,31 +420,10 @@ static void run_proper_context_tests(int use_prealloc) {
             my_ctx = secp256k1_context_preallocated_clone(my_ctx, my_ctx_prealloc);
             CHECK(context_eq(ctx_tmp, my_ctx));
             secp256k1_context_destroy(ctx_tmp);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         } else {
             /* clone into a preallocated context and then again into a new non-preallocated one. */
             void *prealloc_tmp;
 
-<<<<<<< HEAD
-            prealloc_tmp = malloc(secp256k1_context_preallocated_size(SECP256K1_CONTEXT_NONE)); CHECK(prealloc_tmp != NULL);
-            ctx_tmp = none; none = secp256k1_context_preallocated_clone(none, prealloc_tmp); secp256k1_context_destroy(ctx_tmp);
-            ctx_tmp = none; none = secp256k1_context_clone(none); secp256k1_context_preallocated_destroy(ctx_tmp);
-            free(prealloc_tmp);
-
-            prealloc_tmp = malloc(secp256k1_context_preallocated_size(SECP256K1_CONTEXT_SIGN)); CHECK(prealloc_tmp != NULL);
-            ctx_tmp = sign; sign = secp256k1_context_preallocated_clone(sign, prealloc_tmp); secp256k1_context_destroy(ctx_tmp);
-            ctx_tmp = sign; sign = secp256k1_context_clone(sign); secp256k1_context_preallocated_destroy(ctx_tmp);
-            free(prealloc_tmp);
-
-            prealloc_tmp = malloc(secp256k1_context_preallocated_size(SECP256K1_CONTEXT_VERIFY)); CHECK(prealloc_tmp != NULL);
-            ctx_tmp = vrfy; vrfy = secp256k1_context_preallocated_clone(vrfy, prealloc_tmp); secp256k1_context_destroy(ctx_tmp);
-            ctx_tmp = vrfy; vrfy = secp256k1_context_clone(vrfy); secp256k1_context_preallocated_destroy(ctx_tmp);
-            free(prealloc_tmp);
-
-            prealloc_tmp = malloc(secp256k1_context_preallocated_size(SECP256K1_CONTEXT_SIGN | SECP256K1_CONTEXT_VERIFY)); CHECK(prealloc_tmp != NULL);
-            ctx_tmp = both; both = secp256k1_context_preallocated_clone(both, prealloc_tmp); secp256k1_context_destroy(ctx_tmp);
-            ctx_tmp = both; both = secp256k1_context_clone(both); secp256k1_context_preallocated_destroy(ctx_tmp);
-=======
             prealloc_tmp = malloc(secp256k1_context_preallocated_size(SECP256K1_CONTEXT_NONE));
             CHECK(prealloc_tmp != NULL);
             ctx_tmp = my_ctx;
@@ -583,19 +435,13 @@ static void run_proper_context_tests(int use_prealloc) {
             my_ctx = secp256k1_context_clone(my_ctx);
             CHECK(context_eq(ctx_tmp, my_ctx));
             secp256k1_context_preallocated_destroy(ctx_tmp);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             free(prealloc_tmp);
         }
     }
 
     /* Verify that the error callback makes it across the clone. */
-<<<<<<< HEAD
-    CHECK(sign->error_callback.fn != vrfy->error_callback.fn);
-    CHECK(sign->error_callback.fn == secp256k1_default_illegal_callback_fn);
-=======
     CHECK(my_ctx->error_callback.fn != secp256k1_default_error_callback_fn);
     CHECK(my_ctx->error_callback.fn == secp256k1_default_illegal_callback_fn);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     /* And that it resets back to default. */
     secp256k1_context_set_error_callback(my_ctx, NULL, NULL);
     CHECK(my_ctx->error_callback.fn == secp256k1_default_error_callback_fn);
@@ -616,53 +462,6 @@ static void run_proper_context_tests(int use_prealloc) {
     secp256k1_ecmult_gen(&my_ctx->ecmult_gen_ctx, &pubj, &key);
     secp256k1_ge_set_gej(&pub, &pubj);
 
-<<<<<<< HEAD
-    /* Verify context-type checking illegal-argument errors. */
-    memset(ctmp, 1, 32);
-    CHECK(secp256k1_ec_pubkey_create(vrfy, &pubkey, ctmp) == 0);
-    CHECK(ecount == 1);
-    VG_UNDEF(&pubkey, sizeof(pubkey));
-    CHECK(secp256k1_ec_pubkey_create(sign, &pubkey, ctmp) == 1);
-    VG_CHECK(&pubkey, sizeof(pubkey));
-    CHECK(secp256k1_ecdsa_sign(vrfy, &sig, ctmp, ctmp, NULL, NULL) == 0);
-    CHECK(ecount == 2);
-    VG_UNDEF(&sig, sizeof(sig));
-    CHECK(secp256k1_ecdsa_sign(sign, &sig, ctmp, ctmp, NULL, NULL) == 1);
-    VG_CHECK(&sig, sizeof(sig));
-    CHECK(ecount2 == 10);
-    CHECK(secp256k1_ecdsa_verify(sign, &sig, ctmp, &pubkey) == 0);
-    CHECK(ecount2 == 11);
-    CHECK(secp256k1_ecdsa_verify(vrfy, &sig, ctmp, &pubkey) == 1);
-    CHECK(ecount == 2);
-    CHECK(secp256k1_ec_pubkey_tweak_add(sign, &pubkey, ctmp) == 0);
-    CHECK(ecount2 == 12);
-    CHECK(secp256k1_ec_pubkey_tweak_add(vrfy, &pubkey, ctmp) == 1);
-    CHECK(ecount == 2);
-    CHECK(secp256k1_ec_pubkey_tweak_mul(sign, &pubkey, ctmp) == 0);
-    CHECK(ecount2 == 13);
-    CHECK(secp256k1_ec_pubkey_negate(vrfy, &pubkey) == 1);
-    CHECK(ecount == 2);
-    CHECK(secp256k1_ec_pubkey_negate(sign, &pubkey) == 1);
-    CHECK(ecount == 2);
-    CHECK(secp256k1_ec_pubkey_negate(sign, NULL) == 0);
-    CHECK(ecount2 == 14);
-    CHECK(secp256k1_ec_pubkey_negate(vrfy, &zero_pubkey) == 0);
-    CHECK(ecount == 3);
-    CHECK(secp256k1_ec_pubkey_tweak_mul(vrfy, &pubkey, ctmp) == 1);
-    CHECK(ecount == 3);
-    CHECK(secp256k1_context_randomize(vrfy, ctmp) == 1);
-    CHECK(ecount == 3);
-    CHECK(secp256k1_context_randomize(vrfy, NULL) == 1);
-    CHECK(ecount == 3);
-    CHECK(secp256k1_context_randomize(sign, ctmp) == 1);
-    CHECK(ecount2 == 14);
-    CHECK(secp256k1_context_randomize(sign, NULL) == 1);
-    CHECK(ecount2 == 14);
-    secp256k1_context_set_illegal_callback(vrfy, NULL, NULL);
-    secp256k1_context_set_illegal_callback(sign, NULL, NULL);
-
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     /* obtain a working nonce */
     do {
         random_scalar_order_test(&nonce);
@@ -676,29 +475,6 @@ static void run_proper_context_tests(int use_prealloc) {
 
     /* cleanup */
     if (use_prealloc) {
-<<<<<<< HEAD
-        secp256k1_context_preallocated_destroy(none);
-        secp256k1_context_preallocated_destroy(sign);
-        secp256k1_context_preallocated_destroy(vrfy);
-        secp256k1_context_preallocated_destroy(both);
-        free(none_prealloc);
-        free(sign_prealloc);
-        free(vrfy_prealloc);
-        free(both_prealloc);
-    } else {
-        secp256k1_context_destroy(none);
-        secp256k1_context_destroy(sign);
-        secp256k1_context_destroy(vrfy);
-        secp256k1_context_destroy(both);
-    }
-    /* Defined as no-op. */
-    secp256k1_context_destroy(NULL);
-    secp256k1_context_preallocated_destroy(NULL);
-
-}
-
-void run_scratch_tests(void) {
-=======
         secp256k1_context_preallocated_destroy(my_ctx);
         free(my_ctx_prealloc);
     } else {
@@ -712,23 +488,11 @@ void run_scratch_tests(void) {
 }
 
 static void run_scratch_tests(void) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     const size_t adj_alloc = ((500 + ALIGNMENT - 1) / ALIGNMENT) * ALIGNMENT;
 
     int32_t ecount = 0;
     size_t checkpoint;
     size_t checkpoint_2;
-<<<<<<< HEAD
-    secp256k1_context *none = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
-    secp256k1_scratch_space *scratch;
-    secp256k1_scratch_space local_scratch;
-
-    /* Test public API */
-    secp256k1_context_set_illegal_callback(none, counting_illegal_callback_fn, &ecount);
-    secp256k1_context_set_error_callback(none, counting_illegal_callback_fn, &ecount);
-
-    scratch = secp256k1_scratch_space_create(none, 1000);
-=======
     secp256k1_scratch_space *scratch;
     secp256k1_scratch_space local_scratch;
 
@@ -737,96 +501,31 @@ static void run_scratch_tests(void) {
 
     /* Test public API */
     scratch = secp256k1_scratch_space_create(CTX, 1000);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     CHECK(scratch != NULL);
     CHECK(ecount == 0);
 
     /* Test internal API */
-<<<<<<< HEAD
-    CHECK(secp256k1_scratch_max_allocation(&none->error_callback, scratch, 0) == 1000);
-    CHECK(secp256k1_scratch_max_allocation(&none->error_callback, scratch, 1) == 1000 - (ALIGNMENT - 1));
-=======
     CHECK(secp256k1_scratch_max_allocation(&CTX->error_callback, scratch, 0) == 1000);
     CHECK(secp256k1_scratch_max_allocation(&CTX->error_callback, scratch, 1) == 1000 - (ALIGNMENT - 1));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     CHECK(scratch->alloc_size == 0);
     CHECK(scratch->alloc_size % ALIGNMENT == 0);
 
     /* Allocating 500 bytes succeeds */
-<<<<<<< HEAD
-    checkpoint = secp256k1_scratch_checkpoint(&none->error_callback, scratch);
-    CHECK(secp256k1_scratch_alloc(&none->error_callback, scratch, 500) != NULL);
-    CHECK(secp256k1_scratch_max_allocation(&none->error_callback, scratch, 0) == 1000 - adj_alloc);
-    CHECK(secp256k1_scratch_max_allocation(&none->error_callback, scratch, 1) == 1000 - adj_alloc - (ALIGNMENT - 1));
-=======
     checkpoint = secp256k1_scratch_checkpoint(&CTX->error_callback, scratch);
     CHECK(secp256k1_scratch_alloc(&CTX->error_callback, scratch, 500) != NULL);
     CHECK(secp256k1_scratch_max_allocation(&CTX->error_callback, scratch, 0) == 1000 - adj_alloc);
     CHECK(secp256k1_scratch_max_allocation(&CTX->error_callback, scratch, 1) == 1000 - adj_alloc - (ALIGNMENT - 1));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     CHECK(scratch->alloc_size != 0);
     CHECK(scratch->alloc_size % ALIGNMENT == 0);
 
     /* Allocating another 501 bytes fails */
-<<<<<<< HEAD
-    CHECK(secp256k1_scratch_alloc(&none->error_callback, scratch, 501) == NULL);
-    CHECK(secp256k1_scratch_max_allocation(&none->error_callback, scratch, 0) == 1000 - adj_alloc);
-    CHECK(secp256k1_scratch_max_allocation(&none->error_callback, scratch, 1) == 1000 - adj_alloc - (ALIGNMENT - 1));
-=======
     CHECK(secp256k1_scratch_alloc(&CTX->error_callback, scratch, 501) == NULL);
     CHECK(secp256k1_scratch_max_allocation(&CTX->error_callback, scratch, 0) == 1000 - adj_alloc);
     CHECK(secp256k1_scratch_max_allocation(&CTX->error_callback, scratch, 1) == 1000 - adj_alloc - (ALIGNMENT - 1));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     CHECK(scratch->alloc_size != 0);
     CHECK(scratch->alloc_size % ALIGNMENT == 0);
 
     /* ...but it succeeds once we apply the checkpoint to undo it */
-<<<<<<< HEAD
-    secp256k1_scratch_apply_checkpoint(&none->error_callback, scratch, checkpoint);
-    CHECK(scratch->alloc_size == 0);
-    CHECK(secp256k1_scratch_max_allocation(&none->error_callback, scratch, 0) == 1000);
-    CHECK(secp256k1_scratch_alloc(&none->error_callback, scratch, 500) != NULL);
-    CHECK(scratch->alloc_size != 0);
-
-    /* try to apply a bad checkpoint */
-    checkpoint_2 = secp256k1_scratch_checkpoint(&none->error_callback, scratch);
-    secp256k1_scratch_apply_checkpoint(&none->error_callback, scratch, checkpoint);
-    CHECK(ecount == 0);
-    secp256k1_scratch_apply_checkpoint(&none->error_callback, scratch, checkpoint_2); /* checkpoint_2 is after checkpoint */
-    CHECK(ecount == 1);
-    secp256k1_scratch_apply_checkpoint(&none->error_callback, scratch, (size_t) -1); /* this is just wildly invalid */
-    CHECK(ecount == 2);
-
-    /* try to use badly initialized scratch space */
-    secp256k1_scratch_space_destroy(none, scratch);
-    memset(&local_scratch, 0, sizeof(local_scratch));
-    scratch = &local_scratch;
-    CHECK(!secp256k1_scratch_max_allocation(&none->error_callback, scratch, 0));
-    CHECK(ecount == 3);
-    CHECK(secp256k1_scratch_alloc(&none->error_callback, scratch, 500) == NULL);
-    CHECK(ecount == 4);
-    secp256k1_scratch_space_destroy(none, scratch);
-    CHECK(ecount == 5);
-
-    /* Test that large integers do not wrap around in a bad way */
-    scratch = secp256k1_scratch_space_create(none, 1000);
-    /* Try max allocation with a large number of objects. Only makes sense if
-     * ALIGNMENT is greater than 1 because otherwise the objects take no extra
-     * space. */
-    CHECK(ALIGNMENT <= 1 || !secp256k1_scratch_max_allocation(&none->error_callback, scratch, (SIZE_MAX / (ALIGNMENT - 1)) + 1));
-    /* Try allocating SIZE_MAX to test wrap around which only happens if
-     * ALIGNMENT > 1, otherwise it returns NULL anyway because the scratch
-     * space is too small. */
-    CHECK(secp256k1_scratch_alloc(&none->error_callback, scratch, SIZE_MAX) == NULL);
-    secp256k1_scratch_space_destroy(none, scratch);
-
-    /* cleanup */
-    secp256k1_scratch_space_destroy(none, NULL); /* no-op */
-    secp256k1_context_destroy(none);
-}
-
-void run_ctz_tests(void) {
-=======
     secp256k1_scratch_apply_checkpoint(&CTX->error_callback, scratch, checkpoint);
     CHECK(scratch->alloc_size == 0);
     CHECK(secp256k1_scratch_max_allocation(&CTX->error_callback, scratch, 0) == 1000);
@@ -873,7 +572,6 @@ void run_ctz_tests(void) {
 }
 
 static void run_ctz_tests(void) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     static const uint32_t b32[] = {1, 0xffffffff, 0x5e56968f, 0xe0d63129};
     static const uint64_t b64[] = {1, 0xffffffffffffffff, 0xbcd02462139b3fc3, 0x98b5f80c769693ef};
     int shift;
@@ -925,12 +623,9 @@ static void run_sha256_known_output_tests(void) {
     for (i = 0; i < ninputs; i++) {
         unsigned char out[32];
         secp256k1_sha256 hasher;
-<<<<<<< HEAD
-=======
         unsigned int j;
         /* 1. Run: simply write the input bytestrings */
         j = repeat[i];
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         secp256k1_sha256_initialize(&hasher);
         while (j > 0) {
             secp256k1_sha256_write(&hasher, (const unsigned char*)(inputs[i]), strlen(inputs[i]));
@@ -938,10 +633,7 @@ static void run_sha256_known_output_tests(void) {
         }
         secp256k1_sha256_finalize(&hasher, out);
         CHECK(secp256k1_memcmp_var(out, outputs[i], 32) == 0);
-<<<<<<< HEAD
-=======
         /* 2. Run: split the input bytestrings randomly before writing */
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         if (strlen(inputs[i]) > 0) {
             int split = secp256k1_testrand_int(strlen(inputs[i]));
             secp256k1_sha256_initialize(&hasher);
@@ -1167,31 +859,6 @@ static void run_tagged_sha256_tests(void) {
         0xE2, 0x76, 0x55, 0x9A, 0x3B, 0xDE, 0x55, 0xB3
     };
 
-<<<<<<< HEAD
-void test_rand_bits(int rand32, int bits) {
-    /* (1-1/2^B)^rounds[B] < 1/10^9, so rounds is the number of iterations to
-     * get a false negative chance below once in a billion */
-    static const unsigned int rounds[7] = {1, 30, 73, 156, 322, 653, 1316};
-    /* We try multiplying the results with various odd numbers, which shouldn't
-     * influence the uniform distribution modulo a power of 2. */
-    static const uint32_t mults[6] = {1, 3, 21, 289, 0x9999, 0x80402011};
-    /* We only select up to 6 bits from the output to analyse */
-    unsigned int usebits = bits > 6 ? 6 : bits;
-    unsigned int maxshift = bits - usebits;
-    /* For each of the maxshift+1 usebits-bit sequences inside a bits-bit
-       number, track all observed outcomes, one per bit in a uint64_t. */
-    uint64_t x[6][27] = {{0}};
-    unsigned int i, shift, m;
-    /* Multiply the output of all rand calls with the odd number m, which
-       should not change the uniformity of its distribution. */
-    for (i = 0; i < rounds[usebits]; i++) {
-        uint32_t r = (rand32 ? secp256k1_testrand32() : secp256k1_testrand_bits(bits));
-        CHECK((((uint64_t)r) >> bits) == 0);
-        for (m = 0; m < sizeof(mults) / sizeof(mults[0]); m++) {
-            uint32_t rm = r * mults[m];
-            for (shift = 0; shift <= maxshift; shift++) {
-                x[m][shift] |= (((uint64_t)1) << ((rm >> shift) & ((1 << usebits) - 1)));
-=======
     secp256k1_context_set_illegal_callback(CTX, counting_illegal_callback_fn, &ecount);
 
     /* API test */
@@ -1264,7 +931,6 @@ static void mulmod256(uint16_t* out, const uint16_t* a, const uint16_t* b, const
             if ((mul[i >> 4] >> (i & 15)) & 1) {
                 mul_bitlen = i;
                 break;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             }
         }
     }
@@ -1408,234 +1074,6 @@ static void test_modinv32_uint16(uint16_t* out, const uint16_t* in, const uint16
 /* Convert a 256-bit number represented as 16 uint16_t's to signed62 notation. */
 static void uint16_to_signed62(secp256k1_modinv64_signed62* out, const uint16_t* in) {
     int i;
-<<<<<<< HEAD
-    uint64_t x = 0;
-    CHECK((range % subrange) == 0);
-    for (i = 0; i < rounds; i++) {
-        uint32_t r = secp256k1_testrand_int(range);
-        CHECK(r < range);
-        r = r % subrange;
-        x |= (((uint64_t)1) << r);
-    }
-    /* Test that the lower subrange bits of x are 1. */
-    CHECK(((~x) << (64 - subrange)) == 0);
-}
-
-void run_rand_bits(void) {
-    size_t b;
-    test_rand_bits(1, 32);
-    for (b = 1; b <= 32; b++) {
-        test_rand_bits(0, b);
-    }
-}
-
-void run_rand_int(void) {
-    static const uint32_t ms[] = {1, 3, 17, 1000, 13771, 999999, 33554432};
-    static const uint32_t ss[] = {1, 3, 6, 9, 13, 31, 64};
-    unsigned int m, s;
-    for (m = 0; m < sizeof(ms) / sizeof(ms[0]); m++) {
-        for (s = 0; s < sizeof(ss) / sizeof(ss[0]); s++) {
-            test_rand_int(ms[m] * ss[s], ss[s]);
-        }
-    }
-}
-
-/***** MODINV TESTS *****/
-
-/* Compute the modular inverse of (odd) x mod 2^64. */
-uint64_t modinv2p64(uint64_t x) {
-    /* If w = 1/x mod 2^(2^L), then w*(2 - w*x) = 1/x mod 2^(2^(L+1)). See
-     * Hacker's Delight second edition, Henry S. Warren, Jr., pages 245-247 for
-     * why. Start with L=0, for which it is true for every odd x that
-     * 1/x=1 mod 2. Iterating 6 times gives us 1/x mod 2^64. */
-    int l;
-    uint64_t w = 1;
-    CHECK(x & 1);
-    for (l = 0; l < 6; ++l) w *= (2 - w*x);
-    return w;
-}
-
-/* compute out = (a*b) mod m; if b=NULL, treat b=1.
- *
- * Out is a 512-bit number (represented as 32 uint16_t's in LE order). The other
- * arguments are 256-bit numbers (represented as 16 uint16_t's in LE order). */
-void mulmod256(uint16_t* out, const uint16_t* a, const uint16_t* b, const uint16_t* m) {
-    uint16_t mul[32];
-    uint64_t c = 0;
-    int i, j;
-    int m_bitlen = 0;
-    int mul_bitlen = 0;
-
-    if (b != NULL) {
-        /* Compute the product of a and b, and put it in mul. */
-        for (i = 0; i < 32; ++i) {
-            for (j = i <= 15 ? 0 : i - 15; j <= i && j <= 15; j++) {
-                c += (uint64_t)a[j] * b[i - j];
-            }
-            mul[i] = c & 0xFFFF;
-            c >>= 16;
-        }
-        CHECK(c == 0);
-
-        /* compute the highest set bit in mul */
-        for (i = 511; i >= 0; --i) {
-            if ((mul[i >> 4] >> (i & 15)) & 1) {
-                mul_bitlen = i;
-                break;
-            }
-        }
-    } else {
-        /* if b==NULL, set mul=a. */
-        memcpy(mul, a, 32);
-        memset(mul + 16, 0, 32);
-        /* compute the highest set bit in mul */
-        for (i = 255; i >= 0; --i) {
-            if ((mul[i >> 4] >> (i & 15)) & 1) {
-                mul_bitlen = i;
-                break;
-            }
-        }
-    }
-
-    /* Compute the highest set bit in m. */
-    for (i = 255; i >= 0; --i) {
-        if ((m[i >> 4] >> (i & 15)) & 1) {
-            m_bitlen = i;
-            break;
-        }
-    }
-
-    /* Try do mul -= m<<i, for i going down to 0, whenever the result is not negative */
-    for (i = mul_bitlen - m_bitlen; i >= 0; --i) {
-        uint16_t mul2[32];
-        int64_t cs;
-
-        /* Compute mul2 = mul - m<<i. */
-        cs = 0; /* accumulator */
-        for (j = 0; j < 32; ++j) { /* j loops over the output limbs in mul2. */
-            /* Compute sub: the 16 bits in m that will be subtracted from mul2[j]. */
-            uint16_t sub = 0;
-            int p;
-            for (p = 0; p < 16; ++p) { /* p loops over the bit positions in mul2[j]. */
-                int bitpos = j * 16 - i + p; /* bitpos is the correspond bit position in m. */
-                if (bitpos >= 0 && bitpos < 256) {
-                    sub |= ((m[bitpos >> 4] >> (bitpos & 15)) & 1) << p;
-                }
-            }
-            /* Add mul[j]-sub to accumulator, and shift bottom 16 bits out to mul2[j]. */
-            cs += mul[j];
-            cs -= sub;
-            mul2[j] = (cs & 0xFFFF);
-            cs >>= 16;
-        }
-        /* If remainder of subtraction is 0, set mul = mul2. */
-        if (cs == 0) {
-            memcpy(mul, mul2, sizeof(mul));
-        }
-    }
-    /* Sanity check: test that all limbs higher than m's highest are zero */
-    for (i = (m_bitlen >> 4) + 1; i < 32; ++i) {
-        CHECK(mul[i] == 0);
-    }
-    memcpy(out, mul, 32);
-}
-
-/* Convert a 256-bit number represented as 16 uint16_t's to signed30 notation. */
-void uint16_to_signed30(secp256k1_modinv32_signed30* out, const uint16_t* in) {
-    int i;
-    memset(out->v, 0, sizeof(out->v));
-    for (i = 0; i < 256; ++i) {
-        out->v[i / 30] |= (int32_t)(((in[i >> 4]) >> (i & 15)) & 1) << (i % 30);
-    }
-}
-
-/* Convert a 256-bit number in signed30 notation to a representation as 16 uint16_t's. */
-void signed30_to_uint16(uint16_t* out, const secp256k1_modinv32_signed30* in) {
-    int i;
-    memset(out, 0, 32);
-    for (i = 0; i < 256; ++i) {
-        out[i >> 4] |= (((in->v[i / 30]) >> (i % 30)) & 1) << (i & 15);
-    }
-}
-
-/* Randomly mutate the sign of limbs in signed30 representation, without changing the value. */
-void mutate_sign_signed30(secp256k1_modinv32_signed30* x) {
-    int i;
-    for (i = 0; i < 16; ++i) {
-        int pos = secp256k1_testrand_int(8);
-        if (x->v[pos] > 0 && x->v[pos + 1] <= 0x3fffffff) {
-            x->v[pos] -= 0x40000000;
-            x->v[pos + 1] += 1;
-        } else if (x->v[pos] < 0 && x->v[pos + 1] >= 0x3fffffff) {
-            x->v[pos] += 0x40000000;
-            x->v[pos + 1] -= 1;
-        }
-    }
-}
-
-/* Test secp256k1_modinv32{_var}, using inputs in 16-bit limb format, and returning inverse. */
-void test_modinv32_uint16(uint16_t* out, const uint16_t* in, const uint16_t* mod) {
-    uint16_t tmp[16];
-    secp256k1_modinv32_signed30 x;
-    secp256k1_modinv32_modinfo m;
-    int i, vartime, nonzero;
-
-    uint16_to_signed30(&x, in);
-    nonzero = (x.v[0] | x.v[1] | x.v[2] | x.v[3] | x.v[4] | x.v[5] | x.v[6] | x.v[7] | x.v[8]) != 0;
-    uint16_to_signed30(&m.modulus, mod);
-    mutate_sign_signed30(&m.modulus);
-
-    /* compute 1/modulus mod 2^30 */
-    m.modulus_inv30 = modinv2p64(m.modulus.v[0]) & 0x3fffffff;
-    CHECK(((m.modulus_inv30 * m.modulus.v[0]) & 0x3fffffff) == 1);
-
-    for (vartime = 0; vartime < 2; ++vartime) {
-        /* compute inverse */
-        (vartime ? secp256k1_modinv32_var : secp256k1_modinv32)(&x, &m);
-
-        /* produce output */
-        signed30_to_uint16(out, &x);
-
-        /* check if the inverse times the input is 1 (mod m), unless x is 0. */
-        mulmod256(tmp, out, in, mod);
-        CHECK(tmp[0] == nonzero);
-        for (i = 1; i < 16; ++i) CHECK(tmp[i] == 0);
-
-        /* invert again */
-        (vartime ? secp256k1_modinv32_var : secp256k1_modinv32)(&x, &m);
-
-        /* check if the result is equal to the input */
-        signed30_to_uint16(tmp, &x);
-        for (i = 0; i < 16; ++i) CHECK(tmp[i] == in[i]);
-    }
-}
-
-#ifdef SECP256K1_WIDEMUL_INT128
-/* Convert a 256-bit number represented as 16 uint16_t's to signed62 notation. */
-void uint16_to_signed62(secp256k1_modinv64_signed62* out, const uint16_t* in) {
-    int i;
-    memset(out->v, 0, sizeof(out->v));
-    for (i = 0; i < 256; ++i) {
-        out->v[i / 62] |= (int64_t)(((in[i >> 4]) >> (i & 15)) & 1) << (i % 62);
-    }
-}
-
-/* Convert a 256-bit number in signed62 notation to a representation as 16 uint16_t's. */
-void signed62_to_uint16(uint16_t* out, const secp256k1_modinv64_signed62* in) {
-    int i;
-    memset(out, 0, 32);
-    for (i = 0; i < 256; ++i) {
-        out[i >> 4] |= (((in->v[i / 62]) >> (i % 62)) & 1) << (i & 15);
-    }
-}
-
-/* Randomly mutate the sign of limbs in signed62 representation, without changing the value. */
-void mutate_sign_signed62(secp256k1_modinv64_signed62* x) {
-    static const int64_t M62 = (int64_t)(UINT64_MAX >> 2);
-    int i;
-    for (i = 0; i < 8; ++i) {
-        int pos = secp256k1_testrand_int(4);
-=======
     memset(out->v, 0, sizeof(out->v));
     for (i = 0; i < 256; ++i) {
         out->v[i / 62] |= (int64_t)(((in[i >> 4]) >> (i & 15)) & 1) << (i % 62);
@@ -1657,7 +1095,6 @@ static void mutate_sign_signed62(secp256k1_modinv64_signed62* x) {
     int i;
     for (i = 0; i < 8; ++i) {
         int pos = secp256k1_testrand_bits(2);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         if (x->v[pos] > 0 && x->v[pos + 1] <= M62) {
             x->v[pos] -= (M62 + 1);
             x->v[pos + 1] += 1;
@@ -1669,46 +1106,12 @@ static void mutate_sign_signed62(secp256k1_modinv64_signed62* x) {
 }
 
 /* Test secp256k1_modinv64{_var}, using inputs in 16-bit limb format, and returning inverse. */
-<<<<<<< HEAD
-void test_modinv64_uint16(uint16_t* out, const uint16_t* in, const uint16_t* mod) {
-=======
 static void test_modinv64_uint16(uint16_t* out, const uint16_t* in, const uint16_t* mod) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     static const int64_t M62 = (int64_t)(UINT64_MAX >> 2);
     uint16_t tmp[16];
     secp256k1_modinv64_signed62 x;
     secp256k1_modinv64_modinfo m;
     int i, vartime, nonzero;
-<<<<<<< HEAD
-
-    uint16_to_signed62(&x, in);
-    nonzero = (x.v[0] | x.v[1] | x.v[2] | x.v[3] | x.v[4]) != 0;
-    uint16_to_signed62(&m.modulus, mod);
-    mutate_sign_signed62(&m.modulus);
-
-    /* compute 1/modulus mod 2^62 */
-    m.modulus_inv62 = modinv2p64(m.modulus.v[0]) & M62;
-    CHECK(((m.modulus_inv62 * m.modulus.v[0]) & M62) == 1);
-
-    for (vartime = 0; vartime < 2; ++vartime) {
-        /* compute inverse */
-        (vartime ? secp256k1_modinv64_var : secp256k1_modinv64)(&x, &m);
-
-        /* produce output */
-        signed62_to_uint16(out, &x);
-
-        /* check if the inverse times the input is 1 (mod m), unless x is 0. */
-        mulmod256(tmp, out, in, mod);
-        CHECK(tmp[0] == nonzero);
-        for (i = 1; i < 16; ++i) CHECK(tmp[i] == 0);
-
-        /* invert again */
-        (vartime ? secp256k1_modinv64_var : secp256k1_modinv64)(&x, &m);
-
-        /* check if the result is equal to the input */
-        signed62_to_uint16(tmp, &x);
-        for (i = 0; i < 16; ++i) CHECK(tmp[i] == in[i]);
-=======
 
     uint16_to_signed62(&x, in);
     nonzero = (x.v[0] | x.v[1] | x.v[2] | x.v[3] | x.v[4]) != 0;
@@ -2750,7 +2153,6 @@ static void run_int128_tests(void) {
         /* Randomized tests. */
         int i;
         for (i = 0; i < 256 * COUNT; ++i) run_int128_test_case();
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 }
 #endif
@@ -3424,12 +2826,7 @@ void run_modinv_tests(void) {
 
 /***** SCALAR TESTS *****/
 
-<<<<<<< HEAD
-
-void scalar_test(void) {
-=======
 static void scalar_test(void) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     secp256k1_scalar s;
     secp256k1_scalar s1;
     secp256k1_scalar s2;
@@ -3492,11 +2889,7 @@ static void scalar_test(void) {
         for (i = 0; i < 100; ++i) {
             int low;
             int shift = 1 + secp256k1_testrand_int(15);
-<<<<<<< HEAD
-            int expected = r.d[0] % (1 << shift);
-=======
             int expected = r.d[0] % (1ULL << shift);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             low = secp256k1_scalar_shr_int(&r, shift);
             CHECK(expected == low);
         }
@@ -3595,11 +2988,7 @@ static void scalar_test(void) {
 
 }
 
-<<<<<<< HEAD
-void run_scalar_set_b32_seckey_tests(void) {
-=======
 static void run_scalar_set_b32_seckey_tests(void) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     unsigned char b32[32];
     secp256k1_scalar s1;
     secp256k1_scalar s2;
@@ -3616,20 +3005,11 @@ static void run_scalar_set_b32_seckey_tests(void) {
     CHECK(secp256k1_scalar_set_b32_seckey(&s2, b32) == 0);
 }
 
-<<<<<<< HEAD
-void run_scalar_tests(void) {
-=======
 static void run_scalar_tests(void) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     int i;
     for (i = 0; i < 128 * COUNT; i++) {
         scalar_test();
     }
-<<<<<<< HEAD
-    for (i = 0; i < count; i++) {
-        run_scalar_set_b32_seckey_tests();
-    }
-=======
     for (i = 0; i < COUNT; i++) {
         run_scalar_set_b32_seckey_tests();
     }
@@ -3647,7 +3027,6 @@ static void run_scalar_tests(void) {
         secp256k1_scalar_set_int(&one, 1);
         CHECK(secp256k1_scalar_eq(&one, &secp256k1_scalar_one));
     }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     {
         /* (-1)+1 should be zero. */
@@ -4248,31 +3627,13 @@ static void random_fe(secp256k1_fe *x) {
     unsigned char bin[32];
     do {
         secp256k1_testrand256(bin);
-<<<<<<< HEAD
-        if (secp256k1_fe_set_b32(x, bin)) {
-=======
         if (secp256k1_fe_set_b32_limit(x, bin)) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             return;
         }
     } while(1);
 }
 
-<<<<<<< HEAD
-void random_fe_test(secp256k1_fe *x) {
-    unsigned char bin[32];
-    do {
-        secp256k1_testrand256_test(bin);
-        if (secp256k1_fe_set_b32(x, bin)) {
-            return;
-        }
-    } while(1);
-}
-
-void random_fe_non_zero(secp256k1_fe *nz) {
-=======
 static void random_fe_non_zero(secp256k1_fe *nz) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     int tries = 10;
     while (--tries >= 0) {
         random_fe(nz);
@@ -4300,11 +3661,7 @@ static int check_fe_equal(const secp256k1_fe *a, const secp256k1_fe *b) {
     return secp256k1_fe_equal(&an, &bn);
 }
 
-<<<<<<< HEAD
-void run_field_convert(void) {
-=======
 static void run_field_convert(void) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     static const unsigned char b32[32] = {
         0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
         0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18,
@@ -4334,10 +3691,6 @@ static void run_field_convert(void) {
     CHECK(secp256k1_memcmp_var(&fes2, &fes, sizeof(fes)) == 0);
 }
 
-<<<<<<< HEAD
-int fe_secp256k1_memcmp_var(const secp256k1_fe *a, const secp256k1_fe *b) {
-    secp256k1_fe t = *b;
-=======
 static void run_field_be32_overflow(void) {
     {
         static const unsigned char zero_overflow[32] = {
@@ -4419,14 +3772,10 @@ static void run_field_half(void) {
     /* Check magnitude 0 input */
     secp256k1_fe_get_bounds(&t, 0);
     secp256k1_fe_half(&t);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #ifdef VERIFY
     CHECK(t.magnitude == 1);
     CHECK(t.normalized == 0);
 #endif
-<<<<<<< HEAD
-    return secp256k1_memcmp_var(a, &t, sizeof(secp256k1_fe));
-=======
     CHECK(secp256k1_fe_normalizes_to_zero(&t));
 
     /* Check non-zero magnitudes in the supported range */
@@ -4463,7 +3812,6 @@ static void run_field_half(void) {
         secp256k1_fe_add(&u, &u);
         CHECK(check_fe_equal(&t, &u));
     }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 static void run_field_misc(void) {
@@ -4499,18 +3847,6 @@ static void run_field_misc(void) {
         q = x;
         secp256k1_fe_cmov(&x, &z, 0);
 #ifdef VERIFY
-<<<<<<< HEAD
-        CHECK(x.normalized && x.magnitude == 1);
-#endif
-        secp256k1_fe_cmov(&x, &x, 1);
-        CHECK(fe_secp256k1_memcmp_var(&x, &z) != 0);
-        CHECK(fe_secp256k1_memcmp_var(&x, &q) == 0);
-        secp256k1_fe_cmov(&q, &z, 1);
-#ifdef VERIFY
-        CHECK(!q.normalized && q.magnitude == z.magnitude);
-#endif
-        CHECK(fe_secp256k1_memcmp_var(&q, &z) == 0);
-=======
         CHECK(!x.normalized);
         CHECK((x.magnitude == q.magnitude) || (x.magnitude == z.magnitude));
         CHECK((x.magnitude >= q.magnitude) && (x.magnitude >= z.magnitude));
@@ -4527,7 +3863,6 @@ static void run_field_misc(void) {
 #endif
         CHECK(fe_identical(&q, &z));
         q = z;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         secp256k1_fe_normalize_var(&x);
         secp256k1_fe_normalize_var(&z);
         CHECK(!secp256k1_fe_equal(&x, &z));
@@ -4541,11 +3876,7 @@ static void run_field_misc(void) {
             secp256k1_fe_normalize_var(&q);
             secp256k1_fe_cmov(&q, &z, (j&1));
 #ifdef VERIFY
-<<<<<<< HEAD
-            CHECK((q.normalized != (j&1)) && q.magnitude == ((j&1) ? z.magnitude : 1));
-=======
             CHECK(!q.normalized && q.magnitude == z.magnitude);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #endif
         }
         secp256k1_fe_normalize_var(&z);
@@ -4590,9 +3921,6 @@ static void run_field_misc(void) {
     }
 }
 
-<<<<<<< HEAD
-void run_sqr(void) {
-=======
 static void test_fe_mul(const secp256k1_fe* a, const secp256k1_fe* b, int use_sqr)
 {
     secp256k1_fe c, an, bn;
@@ -4658,7 +3986,6 @@ static void run_fe_mul(void) {
 }
 
 static void run_sqr(void) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     secp256k1_fe x, s;
 
     {
@@ -4743,19 +4070,11 @@ static const secp256k1_fe fe_minus_one = SECP256K1_FE_CONST(
  * for x!=0 and x!=1: 1/(1/x - 1) + 1 == -1/(x-1)
  */
 
-<<<<<<< HEAD
-void test_inverse_scalar(secp256k1_scalar* out, const secp256k1_scalar* x, int var)
-{
-    secp256k1_scalar l, r, t;
-
-    (var ? secp256k1_scalar_inverse_var : secp256k1_scalar_inverse_var)(&l, x);  /* l = 1/x */
-=======
 static void test_inverse_scalar(secp256k1_scalar* out, const secp256k1_scalar* x, int var)
 {
     secp256k1_scalar l, r, t;
 
     (var ? secp256k1_scalar_inverse_var : secp256k1_scalar_inverse)(&l, x);  /* l = 1/x */
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (out) *out = l;
     if (secp256k1_scalar_is_zero(x)) {
         CHECK(secp256k1_scalar_is_zero(&l));
@@ -4765,25 +4084,15 @@ static void test_inverse_scalar(secp256k1_scalar* out, const secp256k1_scalar* x
     CHECK(secp256k1_scalar_is_one(&t));                                          /* x*(1/x) == 1 */
     secp256k1_scalar_add(&r, x, &scalar_minus_one);                              /* r = x-1 */
     if (secp256k1_scalar_is_zero(&r)) return;
-<<<<<<< HEAD
-    (var ? secp256k1_scalar_inverse_var : secp256k1_scalar_inverse_var)(&r, &r); /* r = 1/(x-1) */
-    secp256k1_scalar_add(&l, &scalar_minus_one, &l);                             /* l = 1/x-1 */
-    (var ? secp256k1_scalar_inverse_var : secp256k1_scalar_inverse_var)(&l, &l); /* l = 1/(1/x-1) */
-=======
     (var ? secp256k1_scalar_inverse_var : secp256k1_scalar_inverse)(&r, &r); /* r = 1/(x-1) */
     secp256k1_scalar_add(&l, &scalar_minus_one, &l);                             /* l = 1/x-1 */
     (var ? secp256k1_scalar_inverse_var : secp256k1_scalar_inverse)(&l, &l); /* l = 1/(1/x-1) */
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     secp256k1_scalar_add(&l, &l, &secp256k1_scalar_one);                         /* l = 1/(1/x-1)+1 */
     secp256k1_scalar_add(&l, &r, &l);                                            /* l = 1/(1/x-1)+1 + 1/(x-1) */
     CHECK(secp256k1_scalar_is_zero(&l));                                         /* l == 0 */
 }
 
-<<<<<<< HEAD
-void test_inverse_field(secp256k1_fe* out, const secp256k1_fe* x, int var)
-=======
 static void test_inverse_field(secp256k1_fe* out, const secp256k1_fe* x, int var)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     secp256k1_fe l, r, t;
 
@@ -4803,20 +4112,12 @@ static void test_inverse_field(secp256k1_fe* out, const secp256k1_fe* x, int var
     (var ? secp256k1_fe_inv_var : secp256k1_fe_inv)(&r, &r);   /* r = 1/(x-1) */
     secp256k1_fe_add(&l, &fe_minus_one);                       /* l = 1/x-1 */
     (var ? secp256k1_fe_inv_var : secp256k1_fe_inv)(&l, &l);   /* l = 1/(1/x-1) */
-<<<<<<< HEAD
-    secp256k1_fe_add(&l, &secp256k1_fe_one);                   /* l = 1/(1/x-1)+1 */
-=======
     secp256k1_fe_add_int(&l, 1);                               /* l = 1/(1/x-1)+1 */
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     secp256k1_fe_add(&l, &r);                                  /* l = 1/(1/x-1)+1 + 1/(x-1) */
     CHECK(secp256k1_fe_normalizes_to_zero_var(&l));            /* l == 0 */
 }
 
-<<<<<<< HEAD
-void run_inverse_tests(void)
-=======
 static void run_inverse_tests(void)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     /* Fixed test cases for field inverses: pairs of (x, 1/x) mod p. */
     static const secp256k1_fe fe_cases[][2] = {
@@ -5036,11 +4337,7 @@ static void run_inverse_tests(void)
         b32[31] = i & 0xff;
         b32[30] = (i >> 8) & 0xff;
         secp256k1_scalar_set_b32(&x_scalar, b32, NULL);
-<<<<<<< HEAD
-        secp256k1_fe_set_b32(&x_fe, b32);
-=======
         secp256k1_fe_set_b32_mod(&x_fe, b32);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         for (var = 0; var <= 1; ++var) {
             test_inverse_scalar(NULL, &x_scalar, var);
             test_inverse_field(NULL, &x_fe, var);
@@ -5054,17 +4351,10 @@ static void run_inverse_tests(void)
     }
     /* test 128*count random inputs; half with testrand256_test, half with testrand256 */
     for (testrand = 0; testrand <= 1; ++testrand) {
-<<<<<<< HEAD
-        for (i = 0; i < 64 * count; ++i) {
-            (testrand ? secp256k1_testrand256_test : secp256k1_testrand256)(b32);
-            secp256k1_scalar_set_b32(&x_scalar, b32, NULL);
-            secp256k1_fe_set_b32(&x_fe, b32);
-=======
         for (i = 0; i < 64 * COUNT; ++i) {
             (testrand ? secp256k1_testrand256_test : secp256k1_testrand256)(b32);
             secp256k1_scalar_set_b32(&x_scalar, b32, NULL);
             secp256k1_fe_set_b32_mod(&x_fe, b32);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             for (var = 0; var <= 1; ++var) {
                 test_inverse_scalar(NULL, &x_scalar, var);
                 test_inverse_field(NULL, &x_fe, var);
@@ -5132,15 +4422,9 @@ static void test_ge(void) {
      *   negation, and then those two again but with randomized Z coordinate.
      * - The same is then done for lambda*p1 and lambda^2*p1.
      */
-<<<<<<< HEAD
-    secp256k1_ge *ge = (secp256k1_ge *)checked_malloc(&ctx->error_callback, sizeof(secp256k1_ge) * (1 + 4 * runs));
-    secp256k1_gej *gej = (secp256k1_gej *)checked_malloc(&ctx->error_callback, sizeof(secp256k1_gej) * (1 + 4 * runs));
-    secp256k1_fe zf;
-=======
     secp256k1_ge *ge = (secp256k1_ge *)checked_malloc(&CTX->error_callback, sizeof(secp256k1_ge) * (1 + 4 * runs));
     secp256k1_gej *gej = (secp256k1_gej *)checked_malloc(&CTX->error_callback, sizeof(secp256k1_gej) * (1 + 4 * runs));
     secp256k1_fe zf, r;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     secp256k1_fe zfi2, zfi3;
 
     secp256k1_gej_set_infinity(&gej[0]);
@@ -5284,11 +4568,7 @@ static void test_ge(void) {
 
     /* Test batch gej -> ge conversion without known z ratios. */
     {
-<<<<<<< HEAD
-        secp256k1_ge *ge_set_all = (secp256k1_ge *)checked_malloc(&ctx->error_callback, (4 * runs + 1) * sizeof(secp256k1_ge));
-=======
         secp256k1_ge *ge_set_all = (secp256k1_ge *)checked_malloc(&CTX->error_callback, (4 * runs + 1) * sizeof(secp256k1_ge));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         secp256k1_ge_set_all_gej_var(ge_set_all, gej, 4 * runs + 1);
         for (i = 0; i < 4 * runs + 1; i++) {
             secp256k1_fe s;
@@ -5299,13 +4579,6 @@ static void test_ge(void) {
         free(ge_set_all);
     }
 
-<<<<<<< HEAD
-    /* Test batch gej -> ge conversion with many infinities. */
-    for (i = 0; i < 4 * runs + 1; i++) {
-        random_group_element_test(&ge[i]);
-        /* randomly set half the points to infinity */
-        if(secp256k1_fe_is_odd(&ge[i].x)) {
-=======
     /* Test that all elements have X coordinates on the curve. */
     for (i = 1; i < 4 * runs + 1; i++) {
         secp256k1_fe n;
@@ -5337,22 +4610,15 @@ static void test_ge(void) {
         CHECK(odd == 0 || odd == 1);
         /* randomly set half the points to infinity */
         if (odd == i % 2) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             secp256k1_ge_set_infinity(&ge[i]);
         }
         secp256k1_gej_set_ge(&gej[i], &ge[i]);
     }
-<<<<<<< HEAD
-    /* batch invert */
-=======
     /* batch convert */
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     secp256k1_ge_set_all_gej_var(ge, gej, 4 * runs + 1);
     /* check result */
     for (i = 0; i < 4 * runs + 1; i++) {
         ge_equals_gej(&ge[i], &gej[i]);
-<<<<<<< HEAD
-=======
     }
 
     /* Test batch gej -> ge conversion with all infinities. */
@@ -5364,47 +4630,10 @@ static void test_ge(void) {
     /* check result */
     for (i = 0; i < 4 * runs + 1; i++) {
         CHECK(secp256k1_ge_is_infinity(&ge[i]));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     free(ge);
     free(gej);
-<<<<<<< HEAD
-}
-
-
-void test_intialized_inf(void) {
-    secp256k1_ge p;
-    secp256k1_gej pj, npj, infj1, infj2, infj3;
-    secp256k1_fe zinv;
-
-    /* Test that adding P+(-P) results in a fully initalized infinity*/
-    random_group_element_test(&p);
-    secp256k1_gej_set_ge(&pj, &p);
-    secp256k1_gej_neg(&npj, &pj);
-
-    secp256k1_gej_add_var(&infj1, &pj, &npj, NULL);
-    CHECK(secp256k1_gej_is_infinity(&infj1));
-    CHECK(secp256k1_fe_is_zero(&infj1.x));
-    CHECK(secp256k1_fe_is_zero(&infj1.y));
-    CHECK(secp256k1_fe_is_zero(&infj1.z));
-
-    secp256k1_gej_add_ge_var(&infj2, &npj, &p, NULL);
-    CHECK(secp256k1_gej_is_infinity(&infj2));
-    CHECK(secp256k1_fe_is_zero(&infj2.x));
-    CHECK(secp256k1_fe_is_zero(&infj2.y));
-    CHECK(secp256k1_fe_is_zero(&infj2.z));
-
-    secp256k1_fe_set_int(&zinv, 1);
-    secp256k1_gej_add_zinv_var(&infj3, &npj, &p, &zinv);
-    CHECK(secp256k1_gej_is_infinity(&infj3));
-    CHECK(secp256k1_fe_is_zero(&infj3.x));
-    CHECK(secp256k1_fe_is_zero(&infj3.y));
-    CHECK(secp256k1_fe_is_zero(&infj3.z));
-
-
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 static void test_intialized_inf(void) {
@@ -5572,11 +4801,7 @@ static void test_ec_combine(void) {
         secp256k1_ecmult_gen(&CTX->ecmult_gen_ctx, &Qj, &sum);
         secp256k1_ge_set_gej(&Q, &Qj);
         secp256k1_pubkey_save(&sd, &Q);
-<<<<<<< HEAD
-        CHECK(secp256k1_ec_pubkey_combine(ctx, &sd2, d, i) == 1);
-=======
         CHECK(secp256k1_ec_pubkey_combine(CTX, &sd2, d, i) == 1);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         CHECK(secp256k1_memcmp_var(&sd, &sd2, sizeof(sd)) == 0);
     }
 }
@@ -5614,13 +4839,8 @@ static void test_group_decompress(const secp256k1_fe* x) {
         CHECK(!ge_odd.infinity);
 
         /* Check that the x coordinates check out. */
-<<<<<<< HEAD
-        CHECK(secp256k1_fe_equal_var(&ge_even.x, x));
-        CHECK(secp256k1_fe_equal_var(&ge_odd.x, x));
-=======
         CHECK(secp256k1_fe_equal(&ge_even.x, x));
         CHECK(secp256k1_fe_equal(&ge_odd.x, x));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         /* Check odd/even Y in ge_odd, ge_even. */
         CHECK(secp256k1_fe_is_odd(&ge_odd.y));
@@ -5834,19 +5054,11 @@ static const secp256k1_scalar scalars_near_split_bounds[20] = {
     SECP256K1_SCALAR_CONST(0x26c75a99, 0x80b861c1, 0x4a4c3805, 0x1024c8b4, 0x704d760e, 0xe95e7cd3, 0xde1bfdb1, 0xce2c5a45)
 };
 
-<<<<<<< HEAD
-void test_ecmult_target(const secp256k1_scalar* target, int mode) {
-=======
 static void test_ecmult_target(const secp256k1_scalar* target, int mode) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     /* Mode: 0=ecmult_gen, 1=ecmult, 2=ecmult_const */
     secp256k1_scalar n1, n2;
     secp256k1_ge p;
     secp256k1_gej pj, p1j, p2j, ptj;
-<<<<<<< HEAD
-    static const secp256k1_scalar zero = SECP256K1_SCALAR_CONST(0, 0, 0, 0, 0, 0, 0, 0);
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     /* Generate random n1,n2 such that n1+n2 = -target. */
     random_scalar_order_test(&n1);
@@ -5861,19 +5073,6 @@ static void test_ecmult_target(const secp256k1_scalar* target, int mode) {
 
     /* EC multiplications */
     if (mode == 0) {
-<<<<<<< HEAD
-        secp256k1_ecmult_gen(&ctx->ecmult_gen_ctx, &p1j, &n1);
-        secp256k1_ecmult_gen(&ctx->ecmult_gen_ctx, &p2j, &n2);
-        secp256k1_ecmult_gen(&ctx->ecmult_gen_ctx, &ptj, target);
-    } else if (mode == 1) {
-        secp256k1_ecmult(&ctx->ecmult_ctx, &p1j, &pj, &n1, &zero);
-        secp256k1_ecmult(&ctx->ecmult_ctx, &p2j, &pj, &n2, &zero);
-        secp256k1_ecmult(&ctx->ecmult_ctx, &ptj, &pj, target, &zero);
-    } else {
-        secp256k1_ecmult_const(&p1j, &p, &n1, 256);
-        secp256k1_ecmult_const(&p2j, &p, &n2, 256);
-        secp256k1_ecmult_const(&ptj, &p, target, 256);
-=======
         secp256k1_ecmult_gen(&CTX->ecmult_gen_ctx, &p1j, &n1);
         secp256k1_ecmult_gen(&CTX->ecmult_gen_ctx, &p2j, &n2);
         secp256k1_ecmult_gen(&CTX->ecmult_gen_ctx, &ptj, target);
@@ -5885,7 +5084,6 @@ static void test_ecmult_target(const secp256k1_scalar* target, int mode) {
         secp256k1_ecmult_const(&p1j, &p, &n1);
         secp256k1_ecmult_const(&p2j, &p, &n2);
         secp256k1_ecmult_const(&ptj, &p, target);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     /* Add them all up: n1*P + n2*P + target*P = (n1+n2+target)*P = (n1+n1-n1-n2)*P = 0. */
@@ -5894,17 +5092,10 @@ static void test_ecmult_target(const secp256k1_scalar* target, int mode) {
     CHECK(secp256k1_gej_is_infinity(&ptj));
 }
 
-<<<<<<< HEAD
-void run_ecmult_near_split_bound(void) {
-    int i;
-    unsigned j;
-    for (i = 0; i < 4*count; ++i) {
-=======
 static void run_ecmult_near_split_bound(void) {
     int i;
     unsigned j;
     for (i = 0; i < 4*COUNT; ++i) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         for (j = 0; j < sizeof(scalars_near_split_bounds) / sizeof(scalars_near_split_bounds[0]); ++j) {
             test_ecmult_target(&scalars_near_split_bounds[j], 0);
             test_ecmult_target(&scalars_near_split_bounds[j], 1);
@@ -5913,11 +5104,7 @@ static void run_ecmult_near_split_bound(void) {
     }
 }
 
-<<<<<<< HEAD
-void run_point_times_order(void) {
-=======
 static void run_point_times_order(void) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     int i;
     secp256k1_fe x = SECP256K1_FE_CONST(0, 0, 0, 0, 0, 0, 0, 2);
     static const secp256k1_fe xr = SECP256K1_FE_CONST(
@@ -5994,17 +5181,10 @@ static void ecmult_const_mult_zero_one(void) {
     secp256k1_scalar_negate(&negone, &secp256k1_scalar_one);
 
     random_group_element_test(&point);
-<<<<<<< HEAD
-    secp256k1_ecmult_const(&res1, &point, &zero, 3);
-    secp256k1_ge_set_gej(&res2, &res1);
-    CHECK(secp256k1_ge_is_infinity(&res2));
-    secp256k1_ecmult_const(&res1, &point, &one, 2);
-=======
     secp256k1_ecmult_const(&res1, &point, &secp256k1_scalar_zero);
     secp256k1_ge_set_gej(&res2, &res1);
     CHECK(secp256k1_ge_is_infinity(&res2));
     secp256k1_ecmult_const(&res1, &point, &secp256k1_scalar_one);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     secp256k1_ge_set_gej(&res2, &res1);
     ge_equals_ge(&res2, &point);
     secp256k1_ecmult_const(&res1, &point, &negone, 256);
@@ -6122,14 +5302,8 @@ static int ecmult_multi_false_callback(secp256k1_scalar *sc, secp256k1_ge *pt, s
     return 0;
 }
 
-<<<<<<< HEAD
-void test_ecmult_multi(secp256k1_scratch *scratch, secp256k1_ecmult_multi_func ecmult_multi) {
-    int ncount;
-    secp256k1_scalar szero;
-=======
 static void test_ecmult_multi(secp256k1_scratch *scratch, secp256k1_ecmult_multi_func ecmult_multi) {
     int ncount;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     secp256k1_scalar sc[32];
     secp256k1_ge pt[32];
     secp256k1_gej r;
@@ -6138,22 +5312,12 @@ static void test_ecmult_multi(secp256k1_scratch *scratch, secp256k1_ecmult_multi
 
     data.sc = sc;
     data.pt = pt;
-<<<<<<< HEAD
-    secp256k1_scalar_set_int(&szero, 0);
-
-    /* No points to multiply */
-    CHECK(ecmult_multi(&ctx->error_callback, &ctx->ecmult_ctx, scratch, &r, NULL, ecmult_multi_callback, &data, 0));
-
-    /* Check 1- and 2-point multiplies against ecmult */
-    for (ncount = 0; ncount < count; ncount++) {
-=======
 
     /* No points to multiply */
     CHECK(ecmult_multi(&CTX->error_callback, scratch, &r, NULL, ecmult_multi_callback, &data, 0));
 
     /* Check 1- and 2-point multiplies against ecmult */
     for (ncount = 0; ncount < COUNT; ncount++) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         secp256k1_ge ptg;
         secp256k1_gej ptgj;
         random_scalar_order(&sc[0]);
@@ -6165,41 +5329,6 @@ static void test_ecmult_multi(secp256k1_scratch *scratch, secp256k1_ecmult_multi
         pt[1] = secp256k1_ge_const_g;
 
         /* only G scalar */
-<<<<<<< HEAD
-        secp256k1_ecmult(&ctx->ecmult_ctx, &r2, &ptgj, &szero, &sc[0]);
-        CHECK(ecmult_multi(&ctx->error_callback, &ctx->ecmult_ctx, scratch, &r, &sc[0], ecmult_multi_callback, &data, 0));
-        secp256k1_gej_neg(&r2, &r2);
-        secp256k1_gej_add_var(&r, &r, &r2, NULL);
-        CHECK(secp256k1_gej_is_infinity(&r));
-
-        /* 1-point */
-        secp256k1_ecmult(&ctx->ecmult_ctx, &r2, &ptgj, &sc[0], &szero);
-        CHECK(ecmult_multi(&ctx->error_callback, &ctx->ecmult_ctx, scratch, &r, &szero, ecmult_multi_callback, &data, 1));
-        secp256k1_gej_neg(&r2, &r2);
-        secp256k1_gej_add_var(&r, &r, &r2, NULL);
-        CHECK(secp256k1_gej_is_infinity(&r));
-
-        /* Try to multiply 1 point, but callback returns false */
-        CHECK(!ecmult_multi(&ctx->error_callback, &ctx->ecmult_ctx, scratch, &r, &szero, ecmult_multi_false_callback, &data, 1));
-
-        /* 2-point */
-        secp256k1_ecmult(&ctx->ecmult_ctx, &r2, &ptgj, &sc[0], &sc[1]);
-        CHECK(ecmult_multi(&ctx->error_callback, &ctx->ecmult_ctx, scratch, &r, &szero, ecmult_multi_callback, &data, 2));
-        secp256k1_gej_neg(&r2, &r2);
-        secp256k1_gej_add_var(&r, &r, &r2, NULL);
-        CHECK(secp256k1_gej_is_infinity(&r));
-
-        /* 2-point with G scalar */
-        secp256k1_ecmult(&ctx->ecmult_ctx, &r2, &ptgj, &sc[0], &sc[1]);
-        CHECK(ecmult_multi(&ctx->error_callback, &ctx->ecmult_ctx, scratch, &r, &sc[1], ecmult_multi_callback, &data, 1));
-        secp256k1_gej_neg(&r2, &r2);
-        secp256k1_gej_add_var(&r, &r, &r2, NULL);
-        CHECK(secp256k1_gej_is_infinity(&r));
-    }
-
-    /* Check infinite outputs of various forms */
-    for (ncount = 0; ncount < count; ncount++) {
-=======
         secp256k1_ecmult(&r2, &ptgj, &secp256k1_scalar_zero, &sc[0]);
         CHECK(ecmult_multi(&CTX->error_callback, scratch, &r, &sc[0], ecmult_multi_callback, &data, 0));
         CHECK(secp256k1_gej_eq_var(&r, &r2));
@@ -6225,7 +5354,6 @@ static void test_ecmult_multi(secp256k1_scratch *scratch, secp256k1_ecmult_multi
 
     /* Check infinite outputs of various forms */
     for (ncount = 0; ncount < COUNT; ncount++) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         secp256k1_ge ptg;
         size_t i, j;
         size_t sizes[] = { 2, 10, 32 };
@@ -6235,11 +5363,7 @@ static void test_ecmult_multi(secp256k1_scratch *scratch, secp256k1_ecmult_multi
                 random_scalar_order(&sc[i]);
                 secp256k1_ge_set_infinity(&pt[i]);
             }
-<<<<<<< HEAD
-            CHECK(ecmult_multi(&ctx->error_callback, &ctx->ecmult_ctx, scratch, &r, &szero, ecmult_multi_callback, &data, sizes[j]));
-=======
             CHECK(ecmult_multi(&CTX->error_callback, scratch, &r, &secp256k1_scalar_zero, ecmult_multi_callback, &data, sizes[j]));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             CHECK(secp256k1_gej_is_infinity(&r));
         }
 
@@ -6249,11 +5373,7 @@ static void test_ecmult_multi(secp256k1_scratch *scratch, secp256k1_ecmult_multi
                 pt[i] = ptg;
                 secp256k1_scalar_set_int(&sc[i], 0);
             }
-<<<<<<< HEAD
-            CHECK(ecmult_multi(&ctx->error_callback, &ctx->ecmult_ctx, scratch, &r, &szero, ecmult_multi_callback, &data, sizes[j]));
-=======
             CHECK(ecmult_multi(&CTX->error_callback, scratch, &r, &secp256k1_scalar_zero, ecmult_multi_callback, &data, sizes[j]));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             CHECK(secp256k1_gej_is_infinity(&r));
         }
 
@@ -6266,11 +5386,7 @@ static void test_ecmult_multi(secp256k1_scratch *scratch, secp256k1_ecmult_multi
                 pt[2 * i + 1] = ptg;
             }
 
-<<<<<<< HEAD
-            CHECK(ecmult_multi(&ctx->error_callback, &ctx->ecmult_ctx, scratch, &r, &szero, ecmult_multi_callback, &data, sizes[j]));
-=======
             CHECK(ecmult_multi(&CTX->error_callback, scratch, &r, &secp256k1_scalar_zero, ecmult_multi_callback, &data, sizes[j]));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             CHECK(secp256k1_gej_is_infinity(&r));
 
             random_scalar_order(&sc[0]);
@@ -6283,11 +5399,7 @@ static void test_ecmult_multi(secp256k1_scratch *scratch, secp256k1_ecmult_multi
                 secp256k1_ge_neg(&pt[2*i+1], &pt[2*i]);
             }
 
-<<<<<<< HEAD
-            CHECK(ecmult_multi(&ctx->error_callback, &ctx->ecmult_ctx, scratch, &r, &szero, ecmult_multi_callback, &data, sizes[j]));
-=======
             CHECK(ecmult_multi(&CTX->error_callback, scratch, &r, &secp256k1_scalar_zero, ecmult_multi_callback, &data, sizes[j]));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             CHECK(secp256k1_gej_is_infinity(&r));
         }
 
@@ -6302,20 +5414,12 @@ static void test_ecmult_multi(secp256k1_scratch *scratch, secp256k1_ecmult_multi
             secp256k1_scalar_negate(&sc[i], &sc[i]);
         }
 
-<<<<<<< HEAD
-        CHECK(ecmult_multi(&ctx->error_callback, &ctx->ecmult_ctx, scratch, &r, &szero, ecmult_multi_callback, &data, 32));
-=======
         CHECK(ecmult_multi(&CTX->error_callback, scratch, &r, &secp256k1_scalar_zero, ecmult_multi_callback, &data, 32));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         CHECK(secp256k1_gej_is_infinity(&r));
     }
 
     /* Check random points, constant scalar */
-<<<<<<< HEAD
-    for (ncount = 0; ncount < count; ncount++) {
-=======
     for (ncount = 0; ncount < COUNT; ncount++) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         size_t i;
         secp256k1_gej_set_infinity(&r);
 
@@ -6328,17 +5432,6 @@ static void test_ecmult_multi(secp256k1_scratch *scratch, secp256k1_ecmult_multi
             secp256k1_gej_add_ge_var(&r, &r, &pt[i], NULL);
         }
 
-<<<<<<< HEAD
-        secp256k1_ecmult(&ctx->ecmult_ctx, &r2, &r, &sc[0], &szero);
-        CHECK(ecmult_multi(&ctx->error_callback, &ctx->ecmult_ctx, scratch, &r, &szero, ecmult_multi_callback, &data, 20));
-        secp256k1_gej_neg(&r2, &r2);
-        secp256k1_gej_add_var(&r, &r, &r2, NULL);
-        CHECK(secp256k1_gej_is_infinity(&r));
-    }
-
-    /* Check random scalars, constant point */
-    for (ncount = 0; ncount < count; ncount++) {
-=======
         secp256k1_ecmult(&r2, &r, &sc[0], &secp256k1_scalar_zero);
         CHECK(ecmult_multi(&CTX->error_callback, scratch, &r, &secp256k1_scalar_zero, ecmult_multi_callback, &data, 20));
         CHECK(secp256k1_gej_eq_var(&r, &r2));
@@ -6346,7 +5439,6 @@ static void test_ecmult_multi(secp256k1_scratch *scratch, secp256k1_ecmult_multi
 
     /* Check random scalars, constant point */
     for (ncount = 0; ncount < COUNT; ncount++) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         size_t i;
         secp256k1_ge ptg;
         secp256k1_gej p0j;
@@ -6361,17 +5453,9 @@ static void test_ecmult_multi(secp256k1_scratch *scratch, secp256k1_ecmult_multi
         }
 
         secp256k1_gej_set_ge(&p0j, &pt[0]);
-<<<<<<< HEAD
-        secp256k1_ecmult(&ctx->ecmult_ctx, &r2, &p0j, &rs, &szero);
-        CHECK(ecmult_multi(&ctx->error_callback, &ctx->ecmult_ctx, scratch, &r, &szero, ecmult_multi_callback, &data, 20));
-        secp256k1_gej_neg(&r2, &r2);
-        secp256k1_gej_add_var(&r, &r, &r2, NULL);
-        CHECK(secp256k1_gej_is_infinity(&r));
-=======
         secp256k1_ecmult(&r2, &p0j, &rs, &secp256k1_scalar_zero);
         CHECK(ecmult_multi(&CTX->error_callback, scratch, &r, &secp256k1_scalar_zero, ecmult_multi_callback, &data, 20));
         CHECK(secp256k1_gej_eq_var(&r, &r2));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     /* Sanity check that zero scalars don't cause problems */
@@ -6381,22 +5465,13 @@ static void test_ecmult_multi(secp256k1_scratch *scratch, secp256k1_ecmult_multi
     }
 
     secp256k1_scalar_clear(&sc[0]);
-<<<<<<< HEAD
-    CHECK(ecmult_multi(&ctx->error_callback, &ctx->ecmult_ctx, scratch, &r, &szero, ecmult_multi_callback, &data, 20));
-=======
     CHECK(ecmult_multi(&CTX->error_callback, scratch, &r, &secp256k1_scalar_zero, ecmult_multi_callback, &data, 20));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     secp256k1_scalar_clear(&sc[1]);
     secp256k1_scalar_clear(&sc[2]);
     secp256k1_scalar_clear(&sc[3]);
     secp256k1_scalar_clear(&sc[4]);
-<<<<<<< HEAD
-    CHECK(ecmult_multi(&ctx->error_callback, &ctx->ecmult_ctx, scratch, &r, &szero, ecmult_multi_callback, &data, 6));
-    CHECK(ecmult_multi(&ctx->error_callback, &ctx->ecmult_ctx, scratch, &r, &szero, ecmult_multi_callback, &data, 5));
-=======
     CHECK(ecmult_multi(&CTX->error_callback, scratch, &r, &secp256k1_scalar_zero, ecmult_multi_callback, &data, 6));
     CHECK(ecmult_multi(&CTX->error_callback, scratch, &r, &secp256k1_scalar_zero, ecmult_multi_callback, &data, 5));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     CHECK(secp256k1_gej_is_infinity(&r));
 
     /* Run through s0*(t0*P) + s1*(t1*P) exhaustively for many small values of s0, s1, t0, t1 */
@@ -6420,13 +5495,8 @@ static void test_ecmult_multi(secp256k1_scratch *scratch, secp256k1_ecmult_multi
                 secp256k1_scalar_set_int(&t1, (t1i + 1) / 2);
                 secp256k1_scalar_cond_negate(&t1, t1i & 1);
 
-<<<<<<< HEAD
-                secp256k1_ecmult(&ctx->ecmult_ctx, &t0p, &ptgj, &t0, &szero);
-                secp256k1_ecmult(&ctx->ecmult_ctx, &t1p, &ptgj, &t1, &szero);
-=======
                 secp256k1_ecmult(&t0p, &ptgj, &t0, &secp256k1_scalar_zero);
                 secp256k1_ecmult(&t1p, &ptgj, &t1, &secp256k1_scalar_zero);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
                 for(s0i = 0; s0i < TOP; s0i++) {
                     for(s1i = 0; s1i < TOP; s1i++) {
@@ -6445,17 +5515,9 @@ static void test_ecmult_multi(secp256k1_scratch *scratch, secp256k1_ecmult_multi
                         secp256k1_scalar_mul(&tmp2, &t1, &sc[1]);
                         secp256k1_scalar_add(&tmp1, &tmp1, &tmp2);
 
-<<<<<<< HEAD
-                        secp256k1_ecmult(&ctx->ecmult_ctx, &expected, &ptgj, &tmp1, &szero);
-                        CHECK(ecmult_multi(&ctx->error_callback, &ctx->ecmult_ctx, scratch, &actual, &szero, ecmult_multi_callback, &data, 2));
-                        secp256k1_gej_neg(&expected, &expected);
-                        secp256k1_gej_add_var(&actual, &actual, &expected, NULL);
-                        CHECK(secp256k1_gej_is_infinity(&actual));
-=======
                         secp256k1_ecmult(&expected, &ptgj, &tmp1, &secp256k1_scalar_zero);
                         CHECK(ecmult_multi(&CTX->error_callback, scratch, &actual, &secp256k1_scalar_zero, ecmult_multi_callback, &data, 2));
                         CHECK(secp256k1_gej_eq_var(&actual, &expected));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                     }
                 }
             }
@@ -6463,10 +5525,6 @@ static void test_ecmult_multi(secp256k1_scratch *scratch, secp256k1_ecmult_multi
     }
 }
 
-<<<<<<< HEAD
-void test_ecmult_multi_batch_single(secp256k1_ecmult_multi_func ecmult_multi) {
-    secp256k1_scalar szero;
-=======
 static int test_ecmult_multi_random(secp256k1_scratch *scratch) {
     /* Large random test for ecmult_multi_* functions which exercises:
      * - Few or many inputs (0 up to 128, roughly exponentially distributed).
@@ -6634,7 +5692,6 @@ static int test_ecmult_multi_random(secp256k1_scratch *scratch) {
 }
 
 static void test_ecmult_multi_batch_single(secp256k1_ecmult_multi_func ecmult_multi) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     secp256k1_scalar sc;
     secp256k1_ge pt;
     secp256k1_gej r;
@@ -6645,17 +5702,6 @@ static void test_ecmult_multi_batch_single(secp256k1_ecmult_multi_func ecmult_mu
     random_scalar_order(&sc);
     data.sc = &sc;
     data.pt = &pt;
-<<<<<<< HEAD
-    secp256k1_scalar_set_int(&szero, 0);
-
-    /* Try to multiply 1 point, but scratch space is empty.*/
-    scratch_empty = secp256k1_scratch_create(&ctx->error_callback, 0);
-    CHECK(!ecmult_multi(&ctx->error_callback, &ctx->ecmult_ctx, scratch_empty, &r, &szero, ecmult_multi_callback, &data, 1));
-    secp256k1_scratch_destroy(&ctx->error_callback, scratch_empty);
-}
-
-void test_secp256k1_pippenger_bucket_window_inv(void) {
-=======
 
     /* Try to multiply 1 point, but scratch space is empty.*/
     scratch_empty = secp256k1_scratch_create(&CTX->error_callback, 0);
@@ -6664,7 +5710,6 @@ void test_secp256k1_pippenger_bucket_window_inv(void) {
 }
 
 static void test_secp256k1_pippenger_bucket_window_inv(void) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     int i;
 
     CHECK(secp256k1_pippenger_bucket_window_inv(0) == 0);
@@ -6684,13 +5729,8 @@ static void test_secp256k1_pippenger_bucket_window_inv(void) {
  * Probabilistically test the function returning the maximum number of possible points
  * for a given scratch space.
  */
-<<<<<<< HEAD
-void test_ecmult_multi_pippenger_max_points(void) {
-    size_t scratch_size = secp256k1_testrand_int(256);
-=======
 static void test_ecmult_multi_pippenger_max_points(void) {
     size_t scratch_size = secp256k1_testrand_bits(8);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     size_t max_size = secp256k1_pippenger_scratch_size(secp256k1_pippenger_bucket_window_inv(PIPPENGER_MAX_BUCKET_WINDOW-1)+512, 12);
     secp256k1_scratch *scratch;
     size_t n_points_supported;
@@ -6700,51 +5740,29 @@ static void test_ecmult_multi_pippenger_max_points(void) {
         size_t i;
         size_t total_alloc;
         size_t checkpoint;
-<<<<<<< HEAD
-        scratch = secp256k1_scratch_create(&ctx->error_callback, scratch_size);
-        CHECK(scratch != NULL);
-        checkpoint = secp256k1_scratch_checkpoint(&ctx->error_callback, scratch);
-        n_points_supported = secp256k1_pippenger_max_points(&ctx->error_callback, scratch);
-        if (n_points_supported == 0) {
-            secp256k1_scratch_destroy(&ctx->error_callback, scratch);
-=======
         scratch = secp256k1_scratch_create(&CTX->error_callback, scratch_size);
         CHECK(scratch != NULL);
         checkpoint = secp256k1_scratch_checkpoint(&CTX->error_callback, scratch);
         n_points_supported = secp256k1_pippenger_max_points(&CTX->error_callback, scratch);
         if (n_points_supported == 0) {
             secp256k1_scratch_destroy(&CTX->error_callback, scratch);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             continue;
         }
         bucket_window = secp256k1_pippenger_bucket_window(n_points_supported);
         /* allocate `total_alloc` bytes over `PIPPENGER_SCRATCH_OBJECTS` many allocations */
         total_alloc = secp256k1_pippenger_scratch_size(n_points_supported, bucket_window);
         for (i = 0; i < PIPPENGER_SCRATCH_OBJECTS - 1; i++) {
-<<<<<<< HEAD
-            CHECK(secp256k1_scratch_alloc(&ctx->error_callback, scratch, 1));
-            total_alloc--;
-        }
-        CHECK(secp256k1_scratch_alloc(&ctx->error_callback, scratch, total_alloc));
-        secp256k1_scratch_apply_checkpoint(&ctx->error_callback, scratch, checkpoint);
-        secp256k1_scratch_destroy(&ctx->error_callback, scratch);
-=======
             CHECK(secp256k1_scratch_alloc(&CTX->error_callback, scratch, 1));
             total_alloc--;
         }
         CHECK(secp256k1_scratch_alloc(&CTX->error_callback, scratch, total_alloc));
         secp256k1_scratch_apply_checkpoint(&CTX->error_callback, scratch, checkpoint);
         secp256k1_scratch_destroy(&CTX->error_callback, scratch);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     CHECK(bucket_window == PIPPENGER_MAX_BUCKET_WINDOW);
 }
 
-<<<<<<< HEAD
-void test_ecmult_multi_batch_size_helper(void) {
-=======
 static void test_ecmult_multi_batch_size_helper(void) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     size_t n_batches, n_batch_points, max_n_batch_points, n;
 
     max_n_batch_points = 0;
@@ -6792,20 +5810,11 @@ static void test_ecmult_multi_batch_size_helper(void) {
  * Run secp256k1_ecmult_multi_var with num points and a scratch space restricted to
  * 1 <= i <= num points.
  */
-<<<<<<< HEAD
-void test_ecmult_multi_batching(void) {
-    static const int n_points = 2*ECMULT_PIPPENGER_THRESHOLD;
-    secp256k1_scalar scG;
-    secp256k1_scalar szero;
-    secp256k1_scalar *sc = (secp256k1_scalar *)checked_malloc(&ctx->error_callback, sizeof(secp256k1_scalar) * n_points);
-    secp256k1_ge *pt = (secp256k1_ge *)checked_malloc(&ctx->error_callback, sizeof(secp256k1_ge) * n_points);
-=======
 static void test_ecmult_multi_batching(void) {
     static const int n_points = 2*ECMULT_PIPPENGER_THRESHOLD;
     secp256k1_scalar scG;
     secp256k1_scalar *sc = (secp256k1_scalar *)checked_malloc(&CTX->error_callback, sizeof(secp256k1_scalar) * n_points);
     secp256k1_ge *pt = (secp256k1_ge *)checked_malloc(&CTX->error_callback, sizeof(secp256k1_ge) * n_points);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     secp256k1_gej r;
     secp256k1_gej r2;
     ecmult_multi_data data;
@@ -6813,18 +5822,10 @@ static void test_ecmult_multi_batching(void) {
     secp256k1_scratch *scratch;
 
     secp256k1_gej_set_infinity(&r2);
-<<<<<<< HEAD
-    secp256k1_scalar_set_int(&szero, 0);
-
-    /* Get random scalars and group elements and compute result */
-    random_scalar_order(&scG);
-    secp256k1_ecmult(&ctx->ecmult_ctx, &r2, &r2, &szero, &scG);
-=======
 
     /* Get random scalars and group elements and compute result */
     random_scalar_order(&scG);
     secp256k1_ecmult(&r2, &r2, &secp256k1_scalar_zero, &scG);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     for(i = 0; i < n_points; i++) {
         secp256k1_ge ptg;
         secp256k1_gej ptgj;
@@ -6832,11 +5833,7 @@ static void test_ecmult_multi_batching(void) {
         secp256k1_gej_set_ge(&ptgj, &ptg);
         pt[i] = ptg;
         random_scalar_order(&sc[i]);
-<<<<<<< HEAD
-        secp256k1_ecmult(&ctx->ecmult_ctx, &ptgj, &ptgj, &sc[i], NULL);
-=======
         secp256k1_ecmult(&ptgj, &ptgj, &sc[i], NULL);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         secp256k1_gej_add_var(&r2, &r2, &ptgj, NULL);
     }
     data.sc = sc;
@@ -6845,52 +5842,25 @@ static void test_ecmult_multi_batching(void) {
 
     /* Test with empty scratch space. It should compute the correct result using
      * ecmult_mult_simple algorithm which doesn't require a scratch space. */
-<<<<<<< HEAD
-    scratch = secp256k1_scratch_create(&ctx->error_callback, 0);
-    CHECK(secp256k1_ecmult_multi_var(&ctx->error_callback, &ctx->ecmult_ctx, scratch, &r, &scG, ecmult_multi_callback, &data, n_points));
-    secp256k1_gej_add_var(&r, &r, &r2, NULL);
-    CHECK(secp256k1_gej_is_infinity(&r));
-    secp256k1_scratch_destroy(&ctx->error_callback, scratch);
-=======
     scratch = secp256k1_scratch_create(&CTX->error_callback, 0);
     CHECK(secp256k1_ecmult_multi_var(&CTX->error_callback, scratch, &r, &scG, ecmult_multi_callback, &data, n_points));
     secp256k1_gej_add_var(&r, &r, &r2, NULL);
     CHECK(secp256k1_gej_is_infinity(&r));
     secp256k1_scratch_destroy(&CTX->error_callback, scratch);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     /* Test with space for 1 point in pippenger. That's not enough because
      * ecmult_multi selects strauss which requires more memory. It should
      * therefore select the simple algorithm. */
-<<<<<<< HEAD
-    scratch = secp256k1_scratch_create(&ctx->error_callback, secp256k1_pippenger_scratch_size(1, 1) + PIPPENGER_SCRATCH_OBJECTS*ALIGNMENT);
-    CHECK(secp256k1_ecmult_multi_var(&ctx->error_callback, &ctx->ecmult_ctx, scratch, &r, &scG, ecmult_multi_callback, &data, n_points));
-    secp256k1_gej_add_var(&r, &r, &r2, NULL);
-    CHECK(secp256k1_gej_is_infinity(&r));
-    secp256k1_scratch_destroy(&ctx->error_callback, scratch);
-=======
     scratch = secp256k1_scratch_create(&CTX->error_callback, secp256k1_pippenger_scratch_size(1, 1) + PIPPENGER_SCRATCH_OBJECTS*ALIGNMENT);
     CHECK(secp256k1_ecmult_multi_var(&CTX->error_callback, scratch, &r, &scG, ecmult_multi_callback, &data, n_points));
     secp256k1_gej_add_var(&r, &r, &r2, NULL);
     CHECK(secp256k1_gej_is_infinity(&r));
     secp256k1_scratch_destroy(&CTX->error_callback, scratch);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     for(i = 1; i <= n_points; i++) {
         if (i > ECMULT_PIPPENGER_THRESHOLD) {
             int bucket_window = secp256k1_pippenger_bucket_window(i);
             size_t scratch_size = secp256k1_pippenger_scratch_size(i, bucket_window);
-<<<<<<< HEAD
-            scratch = secp256k1_scratch_create(&ctx->error_callback, scratch_size + PIPPENGER_SCRATCH_OBJECTS*ALIGNMENT);
-        } else {
-            size_t scratch_size = secp256k1_strauss_scratch_size(i);
-            scratch = secp256k1_scratch_create(&ctx->error_callback, scratch_size + STRAUSS_SCRATCH_OBJECTS*ALIGNMENT);
-        }
-        CHECK(secp256k1_ecmult_multi_var(&ctx->error_callback, &ctx->ecmult_ctx, scratch, &r, &scG, ecmult_multi_callback, &data, n_points));
-        secp256k1_gej_add_var(&r, &r, &r2, NULL);
-        CHECK(secp256k1_gej_is_infinity(&r));
-        secp256k1_scratch_destroy(&ctx->error_callback, scratch);
-=======
             scratch = secp256k1_scratch_create(&CTX->error_callback, scratch_size + PIPPENGER_SCRATCH_OBJECTS*ALIGNMENT);
         } else {
             size_t scratch_size = secp256k1_strauss_scratch_size(i);
@@ -6900,20 +5870,11 @@ static void test_ecmult_multi_batching(void) {
         secp256k1_gej_add_var(&r, &r, &r2, NULL);
         CHECK(secp256k1_gej_is_infinity(&r));
         secp256k1_scratch_destroy(&CTX->error_callback, scratch);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     free(sc);
     free(pt);
 }
 
-<<<<<<< HEAD
-void run_ecmult_multi_tests(void) {
-    secp256k1_scratch *scratch;
-
-    test_secp256k1_pippenger_bucket_window_inv();
-    test_ecmult_multi_pippenger_max_points();
-    scratch = secp256k1_scratch_create(&ctx->error_callback, 819200);
-=======
 static void run_ecmult_multi_tests(void) {
     secp256k1_scratch *scratch;
     int64_t todo = (int64_t)320 * COUNT;
@@ -6921,21 +5882,12 @@ static void run_ecmult_multi_tests(void) {
     test_secp256k1_pippenger_bucket_window_inv();
     test_ecmult_multi_pippenger_max_points();
     scratch = secp256k1_scratch_create(&CTX->error_callback, 819200);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     test_ecmult_multi(scratch, secp256k1_ecmult_multi_var);
     test_ecmult_multi(NULL, secp256k1_ecmult_multi_var);
     test_ecmult_multi(scratch, secp256k1_ecmult_pippenger_batch_single);
     test_ecmult_multi_batch_single(secp256k1_ecmult_pippenger_batch_single);
     test_ecmult_multi(scratch, secp256k1_ecmult_strauss_batch_single);
     test_ecmult_multi_batch_single(secp256k1_ecmult_strauss_batch_single);
-<<<<<<< HEAD
-    secp256k1_scratch_destroy(&ctx->error_callback, scratch);
-
-    /* Run test_ecmult_multi with space for exactly one point */
-    scratch = secp256k1_scratch_create(&ctx->error_callback, secp256k1_strauss_scratch_size(1) + STRAUSS_SCRATCH_OBJECTS*ALIGNMENT);
-    test_ecmult_multi(scratch, secp256k1_ecmult_multi_var);
-    secp256k1_scratch_destroy(&ctx->error_callback, scratch);
-=======
     while (todo > 0) {
         todo -= test_ecmult_multi_random(scratch);
     }
@@ -6945,17 +5897,12 @@ static void run_ecmult_multi_tests(void) {
     scratch = secp256k1_scratch_create(&CTX->error_callback, secp256k1_strauss_scratch_size(1) + STRAUSS_SCRATCH_OBJECTS*ALIGNMENT);
     test_ecmult_multi(scratch, secp256k1_ecmult_multi_var);
     secp256k1_scratch_destroy(&CTX->error_callback, scratch);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     test_ecmult_multi_batch_size_helper();
     test_ecmult_multi_batching();
 }
 
-<<<<<<< HEAD
-void test_wnaf(const secp256k1_scalar *number, int w) {
-=======
 static void test_wnaf(const secp256k1_scalar *number, int w) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     secp256k1_scalar x, two, t;
     int wnaf[256];
     int zeroes = -1;
@@ -7039,20 +5986,12 @@ static void test_constant_wnaf(const secp256k1_scalar *number, int w) {
         secp256k1_scalar_add(&x, &x, &t);
     }
     /* Skew num because when encoding numbers as odd we use an offset */
-<<<<<<< HEAD
-    secp256k1_scalar_set_int(&scalar_skew, 1 << (skew == 2));
-=======
     secp256k1_scalar_set_int(&scalar_skew, skew);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     secp256k1_scalar_add(&num, &num, &scalar_skew);
     CHECK(secp256k1_scalar_eq(&x, &num));
 }
 
-<<<<<<< HEAD
-void test_fixed_wnaf(const secp256k1_scalar *number, int w) {
-=======
 static void test_fixed_wnaf(const secp256k1_scalar *number, int w) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     secp256k1_scalar x, shift;
     int wnaf[256] = {0};
     int i;
@@ -7089,11 +6028,7 @@ static void test_fixed_wnaf(const secp256k1_scalar *number, int w) {
 
 /* Checks that the first 8 elements of wnaf are equal to wnaf_expected and the
  * rest is 0.*/
-<<<<<<< HEAD
-void test_fixed_wnaf_small_helper(int *wnaf, int *wnaf_expected, int w) {
-=======
 static void test_fixed_wnaf_small_helper(int *wnaf, int *wnaf_expected, int w) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     int i;
     for (i = WNAF_SIZE(w)-1; i >= 8; --i) {
         CHECK(wnaf[i] == 0);
@@ -7103,11 +6038,7 @@ static void test_fixed_wnaf_small_helper(int *wnaf, int *wnaf_expected, int w) {
     }
 }
 
-<<<<<<< HEAD
-void test_fixed_wnaf_small(void) {
-=======
 static void test_fixed_wnaf_small(void) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     int w = 4;
     int wnaf[256] = {0};
     int i;
@@ -7161,11 +6092,7 @@ static void test_fixed_wnaf_small(void) {
     }
 }
 
-<<<<<<< HEAD
-void run_wnaf(void) {
-=======
 static void run_wnaf(void) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     int i;
     secp256k1_scalar n = {{0}};
 
@@ -7382,15 +6309,6 @@ static void test_ecmult_gen_blind(void) {
     secp256k1_gej i;
     secp256k1_ge pge;
     random_scalar_order_test(&key);
-<<<<<<< HEAD
-    secp256k1_ecmult_gen(&ctx->ecmult_gen_ctx, &pgej, &key);
-    secp256k1_testrand256(seed32);
-    b = ctx->ecmult_gen_ctx.blind;
-    i = ctx->ecmult_gen_ctx.initial;
-    secp256k1_ecmult_gen_blind(&ctx->ecmult_gen_ctx, seed32);
-    CHECK(!secp256k1_scalar_eq(&b, &ctx->ecmult_gen_ctx.blind));
-    secp256k1_ecmult_gen(&ctx->ecmult_gen_ctx, &pgej2, &key);
-=======
     secp256k1_ecmult_gen(&CTX->ecmult_gen_ctx, &pgej, &key);
     secp256k1_testrand256(seed32);
     b = CTX->ecmult_gen_ctx.blind;
@@ -7398,7 +6316,6 @@ static void test_ecmult_gen_blind(void) {
     secp256k1_ecmult_gen_blind(&CTX->ecmult_gen_ctx, seed32);
     CHECK(!secp256k1_scalar_eq(&b, &CTX->ecmult_gen_ctx.blind));
     secp256k1_ecmult_gen(&CTX->ecmult_gen_ctx, &pgej2, &key);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     CHECK(!gej_xyz_equals_gej(&pgej, &pgej2));
     CHECK(!gej_xyz_equals_gej(&i, &CTX->ecmult_gen_ctx.initial));
     secp256k1_ge_set_gej(&pge, &pgej);
@@ -7426,11 +6343,7 @@ static void run_ecmult_gen_blind(void) {
 }
 
 /***** ENDOMORPHISH TESTS *****/
-<<<<<<< HEAD
-void test_scalar_split(const secp256k1_scalar* full) {
-=======
 static void test_scalar_split(const secp256k1_scalar* full) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     secp256k1_scalar s, s1, slam;
     const unsigned char zero[32] = {0};
     unsigned char tmp[32];
@@ -7456,30 +6369,6 @@ static void test_scalar_split(const secp256k1_scalar* full) {
     CHECK(secp256k1_memcmp_var(zero, tmp, 16) == 0);
 }
 
-<<<<<<< HEAD
-
-void run_endomorphism_tests(void) {
-    unsigned i;
-    static secp256k1_scalar s;
-    test_scalar_split(&secp256k1_scalar_zero);
-    test_scalar_split(&secp256k1_scalar_one);
-    secp256k1_scalar_negate(&s,&secp256k1_scalar_one);
-    test_scalar_split(&s);
-    test_scalar_split(&secp256k1_const_lambda);
-    secp256k1_scalar_add(&s, &secp256k1_const_lambda, &secp256k1_scalar_one);
-    test_scalar_split(&s);
-
-    for (i = 0; i < 100U * count; ++i) {
-        secp256k1_scalar full;
-        random_scalar_order_test(&full);
-        test_scalar_split(&full);
-    }
-    for (i = 0; i < sizeof(scalars_near_split_bounds) / sizeof(scalars_near_split_bounds[0]); ++i) {
-        test_scalar_split(&scalars_near_split_bounds[i]);
-    }
-}
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 static void run_endomorphism_tests(void) {
     unsigned i;
@@ -7846,17 +6735,10 @@ static void run_ec_pubkey_parse_test(void) {
     /* Valid parse. */
     memset(&pubkey, 0, sizeof(pubkey));
     ecount = 0;
-<<<<<<< HEAD
-    VG_UNDEF(&pubkey, sizeof(pubkey));
-    CHECK(secp256k1_ec_pubkey_parse(ctx, &pubkey, pubkeyc, 65) == 1);
-    CHECK(secp256k1_ec_pubkey_parse(secp256k1_context_no_precomp, &pubkey, pubkeyc, 65) == 1);
-    VG_CHECK(&pubkey, sizeof(pubkey));
-=======
     SECP256K1_CHECKMEM_UNDEFINE(&pubkey, sizeof(pubkey));
     CHECK(secp256k1_ec_pubkey_parse(CTX, &pubkey, pubkeyc, 65) == 1);
     CHECK(secp256k1_ec_pubkey_parse(secp256k1_context_static, &pubkey, pubkeyc, 65) == 1);
     SECP256K1_CHECKMEM_CHECK(&pubkey, sizeof(pubkey));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     CHECK(ecount == 0);
     SECP256K1_CHECKMEM_UNDEFINE(&ge, sizeof(ge));
     CHECK(secp256k1_pubkey_load(CTX, &ge, &pubkey) == 1);
@@ -7930,59 +6812,34 @@ static void run_eckey_edge_case_test(void) {
     size_t len;
     int32_t ecount;
     /* Group order is too large, reject. */
-<<<<<<< HEAD
-    CHECK(secp256k1_ec_seckey_verify(ctx, orderc) == 0);
-    VG_UNDEF(&pubkey, sizeof(pubkey));
-    CHECK(secp256k1_ec_pubkey_create(ctx, &pubkey, orderc) == 0);
-    VG_CHECK(&pubkey, sizeof(pubkey));
-=======
     CHECK(secp256k1_ec_seckey_verify(CTX, orderc) == 0);
     SECP256K1_CHECKMEM_UNDEFINE(&pubkey, sizeof(pubkey));
     CHECK(secp256k1_ec_pubkey_create(CTX, &pubkey, orderc) == 0);
     SECP256K1_CHECKMEM_CHECK(&pubkey, sizeof(pubkey));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     CHECK(secp256k1_memcmp_var(&pubkey, zeros, sizeof(secp256k1_pubkey)) == 0);
     /* Maximum value is too large, reject. */
     memset(ctmp, 255, 32);
     CHECK(secp256k1_ec_seckey_verify(CTX, ctmp) == 0);
     memset(&pubkey, 1, sizeof(pubkey));
-<<<<<<< HEAD
-    VG_UNDEF(&pubkey, sizeof(pubkey));
-    CHECK(secp256k1_ec_pubkey_create(ctx, &pubkey, ctmp) == 0);
-    VG_CHECK(&pubkey, sizeof(pubkey));
-=======
     SECP256K1_CHECKMEM_UNDEFINE(&pubkey, sizeof(pubkey));
     CHECK(secp256k1_ec_pubkey_create(CTX, &pubkey, ctmp) == 0);
     SECP256K1_CHECKMEM_CHECK(&pubkey, sizeof(pubkey));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     CHECK(secp256k1_memcmp_var(&pubkey, zeros, sizeof(secp256k1_pubkey)) == 0);
     /* Zero is too small, reject. */
     memset(ctmp, 0, 32);
     CHECK(secp256k1_ec_seckey_verify(CTX, ctmp) == 0);
     memset(&pubkey, 1, sizeof(pubkey));
-<<<<<<< HEAD
-    VG_UNDEF(&pubkey, sizeof(pubkey));
-    CHECK(secp256k1_ec_pubkey_create(ctx, &pubkey, ctmp) == 0);
-    VG_CHECK(&pubkey, sizeof(pubkey));
-=======
     SECP256K1_CHECKMEM_UNDEFINE(&pubkey, sizeof(pubkey));
     CHECK(secp256k1_ec_pubkey_create(CTX, &pubkey, ctmp) == 0);
     SECP256K1_CHECKMEM_CHECK(&pubkey, sizeof(pubkey));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     CHECK(secp256k1_memcmp_var(&pubkey, zeros, sizeof(secp256k1_pubkey)) == 0);
     /* One must be accepted. */
     ctmp[31] = 0x01;
     CHECK(secp256k1_ec_seckey_verify(CTX, ctmp) == 1);
     memset(&pubkey, 0, sizeof(pubkey));
-<<<<<<< HEAD
-    VG_UNDEF(&pubkey, sizeof(pubkey));
-    CHECK(secp256k1_ec_pubkey_create(ctx, &pubkey, ctmp) == 1);
-    VG_CHECK(&pubkey, sizeof(pubkey));
-=======
     SECP256K1_CHECKMEM_UNDEFINE(&pubkey, sizeof(pubkey));
     CHECK(secp256k1_ec_pubkey_create(CTX, &pubkey, ctmp) == 1);
     SECP256K1_CHECKMEM_CHECK(&pubkey, sizeof(pubkey));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     CHECK(secp256k1_memcmp_var(&pubkey, zeros, sizeof(secp256k1_pubkey)) > 0);
     pubkey_one = pubkey;
     /* Group order + 1 is too large, reject. */
@@ -7990,44 +6847,21 @@ static void run_eckey_edge_case_test(void) {
     ctmp[31] = 0x42;
     CHECK(secp256k1_ec_seckey_verify(CTX, ctmp) == 0);
     memset(&pubkey, 1, sizeof(pubkey));
-<<<<<<< HEAD
-    VG_UNDEF(&pubkey, sizeof(pubkey));
-    CHECK(secp256k1_ec_pubkey_create(ctx, &pubkey, ctmp) == 0);
-    VG_CHECK(&pubkey, sizeof(pubkey));
-=======
     SECP256K1_CHECKMEM_UNDEFINE(&pubkey, sizeof(pubkey));
     CHECK(secp256k1_ec_pubkey_create(CTX, &pubkey, ctmp) == 0);
     SECP256K1_CHECKMEM_CHECK(&pubkey, sizeof(pubkey));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     CHECK(secp256k1_memcmp_var(&pubkey, zeros, sizeof(secp256k1_pubkey)) == 0);
     /* -1 must be accepted. */
     ctmp[31] = 0x40;
     CHECK(secp256k1_ec_seckey_verify(CTX, ctmp) == 1);
     memset(&pubkey, 0, sizeof(pubkey));
-<<<<<<< HEAD
-    VG_UNDEF(&pubkey, sizeof(pubkey));
-    CHECK(secp256k1_ec_pubkey_create(ctx, &pubkey, ctmp) == 1);
-    VG_CHECK(&pubkey, sizeof(pubkey));
-=======
     SECP256K1_CHECKMEM_UNDEFINE(&pubkey, sizeof(pubkey));
     CHECK(secp256k1_ec_pubkey_create(CTX, &pubkey, ctmp) == 1);
     SECP256K1_CHECKMEM_CHECK(&pubkey, sizeof(pubkey));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     CHECK(secp256k1_memcmp_var(&pubkey, zeros, sizeof(secp256k1_pubkey)) > 0);
     pubkey_negone = pubkey;
     /* Tweak of zero leaves the value unchanged. */
     memset(ctmp2, 0, 32);
-<<<<<<< HEAD
-    CHECK(secp256k1_ec_seckey_tweak_add(ctx, ctmp, ctmp2) == 1);
-    CHECK(secp256k1_memcmp_var(orderc, ctmp, 31) == 0 && ctmp[31] == 0x40);
-    memcpy(&pubkey2, &pubkey, sizeof(pubkey));
-    CHECK(secp256k1_ec_pubkey_tweak_add(ctx, &pubkey, ctmp2) == 1);
-    CHECK(secp256k1_memcmp_var(&pubkey, &pubkey2, sizeof(pubkey)) == 0);
-    /* Multiply tweak of zero zeroizes the output. */
-    CHECK(secp256k1_ec_seckey_tweak_mul(ctx, ctmp, ctmp2) == 0);
-    CHECK(secp256k1_memcmp_var(zeros, ctmp, 32) == 0);
-    CHECK(secp256k1_ec_pubkey_tweak_mul(ctx, &pubkey, ctmp2) == 0);
-=======
     CHECK(secp256k1_ec_seckey_tweak_add(CTX, ctmp, ctmp2) == 1);
     CHECK(secp256k1_memcmp_var(orderc, ctmp, 31) == 0 && ctmp[31] == 0x40);
     memcpy(&pubkey2, &pubkey, sizeof(pubkey));
@@ -8037,7 +6871,6 @@ static void run_eckey_edge_case_test(void) {
     CHECK(secp256k1_ec_seckey_tweak_mul(CTX, ctmp, ctmp2) == 0);
     CHECK(secp256k1_memcmp_var(zeros, ctmp, 32) == 0);
     CHECK(secp256k1_ec_pubkey_tweak_mul(CTX, &pubkey, ctmp2) == 0);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     CHECK(secp256k1_memcmp_var(&pubkey, zeros, sizeof(pubkey)) == 0);
     memcpy(&pubkey, &pubkey2, sizeof(pubkey));
     /* If seckey_tweak_add or seckey_tweak_mul are called with an overflowing
@@ -8045,55 +6878,31 @@ static void run_eckey_edge_case_test(void) {
     memcpy(ctmp, orderc, 32);
     memset(ctmp2, 0, 32);
     ctmp2[31] = 0x01;
-<<<<<<< HEAD
-    CHECK(secp256k1_ec_seckey_verify(ctx, ctmp2) == 1);
-    CHECK(secp256k1_ec_seckey_verify(ctx, ctmp) == 0);
-    CHECK(secp256k1_ec_seckey_tweak_add(ctx, ctmp, ctmp2) == 0);
-    CHECK(secp256k1_memcmp_var(zeros, ctmp, 32) == 0);
-    memcpy(ctmp, orderc, 32);
-    CHECK(secp256k1_ec_seckey_tweak_mul(ctx, ctmp, ctmp2) == 0);
-=======
     CHECK(secp256k1_ec_seckey_verify(CTX, ctmp2) == 1);
     CHECK(secp256k1_ec_seckey_verify(CTX, ctmp) == 0);
     CHECK(secp256k1_ec_seckey_tweak_add(CTX, ctmp, ctmp2) == 0);
     CHECK(secp256k1_memcmp_var(zeros, ctmp, 32) == 0);
     memcpy(ctmp, orderc, 32);
     CHECK(secp256k1_ec_seckey_tweak_mul(CTX, ctmp, ctmp2) == 0);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     CHECK(secp256k1_memcmp_var(zeros, ctmp, 32) == 0);
     /* If seckey_tweak_add or seckey_tweak_mul are called with an overflowing
     tweak, the seckey is zeroized. */
     memcpy(ctmp, orderc, 32);
     ctmp[31] = 0x40;
-<<<<<<< HEAD
-    CHECK(secp256k1_ec_seckey_tweak_add(ctx, ctmp, orderc) == 0);
-    CHECK(secp256k1_memcmp_var(zeros, ctmp, 32) == 0);
-    memcpy(ctmp, orderc, 32);
-    ctmp[31] = 0x40;
-    CHECK(secp256k1_ec_seckey_tweak_mul(ctx, ctmp, orderc) == 0);
-=======
     CHECK(secp256k1_ec_seckey_tweak_add(CTX, ctmp, orderc) == 0);
     CHECK(secp256k1_memcmp_var(zeros, ctmp, 32) == 0);
     memcpy(ctmp, orderc, 32);
     ctmp[31] = 0x40;
     CHECK(secp256k1_ec_seckey_tweak_mul(CTX, ctmp, orderc) == 0);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     CHECK(secp256k1_memcmp_var(zeros, ctmp, 32) == 0);
     memcpy(ctmp, orderc, 32);
     ctmp[31] = 0x40;
     /* If pubkey_tweak_add or pubkey_tweak_mul are called with an overflowing
     tweak, the pubkey is zeroized. */
-<<<<<<< HEAD
-    CHECK(secp256k1_ec_pubkey_tweak_add(ctx, &pubkey, orderc) == 0);
-    CHECK(secp256k1_memcmp_var(&pubkey, zeros, sizeof(pubkey)) == 0);
-    memcpy(&pubkey, &pubkey2, sizeof(pubkey));
-    CHECK(secp256k1_ec_pubkey_tweak_mul(ctx, &pubkey, orderc) == 0);
-=======
     CHECK(secp256k1_ec_pubkey_tweak_add(CTX, &pubkey, orderc) == 0);
     CHECK(secp256k1_memcmp_var(&pubkey, zeros, sizeof(pubkey)) == 0);
     memcpy(&pubkey, &pubkey2, sizeof(pubkey));
     CHECK(secp256k1_ec_pubkey_tweak_mul(CTX, &pubkey, orderc) == 0);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     CHECK(secp256k1_memcmp_var(&pubkey, zeros, sizeof(pubkey)) == 0);
     memcpy(&pubkey, &pubkey2, sizeof(pubkey));
     /* If the resulting key in secp256k1_ec_seckey_tweak_add and
@@ -8103,44 +6912,25 @@ static void run_eckey_edge_case_test(void) {
     ctmp[31] = 0x40;
     memset(ctmp2, 0, 32);
     ctmp2[31] = 1;
-<<<<<<< HEAD
-    CHECK(secp256k1_ec_seckey_tweak_add(ctx, ctmp2, ctmp) == 0);
-    CHECK(secp256k1_memcmp_var(zeros, ctmp2, 32) == 0);
-    ctmp2[31] = 1;
-    CHECK(secp256k1_ec_pubkey_tweak_add(ctx, &pubkey, ctmp2) == 0);
-=======
     CHECK(secp256k1_ec_seckey_tweak_add(CTX, ctmp2, ctmp) == 0);
     CHECK(secp256k1_memcmp_var(zeros, ctmp2, 32) == 0);
     ctmp2[31] = 1;
     CHECK(secp256k1_ec_pubkey_tweak_add(CTX, &pubkey, ctmp2) == 0);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     CHECK(secp256k1_memcmp_var(&pubkey, zeros, sizeof(pubkey)) == 0);
     memcpy(&pubkey, &pubkey2, sizeof(pubkey));
     /* Tweak computation wraps and results in a key of 1. */
     ctmp2[31] = 2;
-<<<<<<< HEAD
-    CHECK(secp256k1_ec_seckey_tweak_add(ctx, ctmp2, ctmp) == 1);
-=======
     CHECK(secp256k1_ec_seckey_tweak_add(CTX, ctmp2, ctmp) == 1);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     CHECK(secp256k1_memcmp_var(ctmp2, zeros, 31) == 0 && ctmp2[31] == 1);
     ctmp2[31] = 2;
     CHECK(secp256k1_ec_pubkey_tweak_add(CTX, &pubkey, ctmp2) == 1);
     ctmp2[31] = 1;
-<<<<<<< HEAD
-    CHECK(secp256k1_ec_pubkey_create(ctx, &pubkey2, ctmp2) == 1);
-=======
     CHECK(secp256k1_ec_pubkey_create(CTX, &pubkey2, ctmp2) == 1);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     CHECK(secp256k1_memcmp_var(&pubkey, &pubkey2, sizeof(pubkey)) == 0);
     /* Tweak mul * 2 = 1+1. */
     CHECK(secp256k1_ec_pubkey_tweak_add(CTX, &pubkey, ctmp2) == 1);
     ctmp2[31] = 2;
-<<<<<<< HEAD
-    CHECK(secp256k1_ec_pubkey_tweak_mul(ctx, &pubkey2, ctmp2) == 1);
-=======
     CHECK(secp256k1_ec_pubkey_tweak_mul(CTX, &pubkey2, ctmp2) == 1);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     CHECK(secp256k1_memcmp_var(&pubkey, &pubkey2, sizeof(pubkey)) == 0);
     /* Test argument errors. */
     ecount = 0;
@@ -8178,28 +6968,16 @@ static void run_eckey_edge_case_test(void) {
     CHECK(ecount == 2);
     ecount = 0;
     memset(ctmp2, 0, 32);
-<<<<<<< HEAD
-    CHECK(secp256k1_ec_seckey_tweak_add(ctx, NULL, ctmp2) == 0);
-    CHECK(ecount == 1);
-    CHECK(secp256k1_ec_seckey_tweak_add(ctx, ctmp, NULL) == 0);
-=======
     CHECK(secp256k1_ec_seckey_tweak_add(CTX, NULL, ctmp2) == 0);
     CHECK(ecount == 1);
     CHECK(secp256k1_ec_seckey_tweak_add(CTX, ctmp, NULL) == 0);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     CHECK(ecount == 2);
     ecount = 0;
     memset(ctmp2, 0, 32);
     ctmp2[31] = 1;
-<<<<<<< HEAD
-    CHECK(secp256k1_ec_seckey_tweak_mul(ctx, NULL, ctmp2) == 0);
-    CHECK(ecount == 1);
-    CHECK(secp256k1_ec_seckey_tweak_mul(ctx, ctmp, NULL) == 0);
-=======
     CHECK(secp256k1_ec_seckey_tweak_mul(CTX, NULL, ctmp2) == 0);
     CHECK(ecount == 1);
     CHECK(secp256k1_ec_seckey_tweak_mul(CTX, ctmp, NULL) == 0);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     CHECK(ecount == 2);
     ecount = 0;
     CHECK(secp256k1_ec_pubkey_create(CTX, NULL, ctmp) == 0);
@@ -8215,20 +6993,6 @@ static void run_eckey_edge_case_test(void) {
     SECP256K1_CHECKMEM_UNDEFINE(&pubkeys[1], sizeof(secp256k1_pubkey *));
     SECP256K1_CHECKMEM_UNDEFINE(&pubkeys[2], sizeof(secp256k1_pubkey *));
     memset(&pubkey, 255, sizeof(secp256k1_pubkey));
-<<<<<<< HEAD
-    VG_UNDEF(&pubkey, sizeof(secp256k1_pubkey));
-    CHECK(secp256k1_ec_pubkey_combine(ctx, &pubkey, pubkeys, 0) == 0);
-    VG_CHECK(&pubkey, sizeof(secp256k1_pubkey));
-    CHECK(secp256k1_memcmp_var(&pubkey, zeros, sizeof(secp256k1_pubkey)) == 0);
-    CHECK(ecount == 1);
-    CHECK(secp256k1_ec_pubkey_combine(ctx, NULL, pubkeys, 1) == 0);
-    CHECK(secp256k1_memcmp_var(&pubkey, zeros, sizeof(secp256k1_pubkey)) == 0);
-    CHECK(ecount == 2);
-    memset(&pubkey, 255, sizeof(secp256k1_pubkey));
-    VG_UNDEF(&pubkey, sizeof(secp256k1_pubkey));
-    CHECK(secp256k1_ec_pubkey_combine(ctx, &pubkey, NULL, 1) == 0);
-    VG_CHECK(&pubkey, sizeof(secp256k1_pubkey));
-=======
     SECP256K1_CHECKMEM_UNDEFINE(&pubkey, sizeof(secp256k1_pubkey));
     CHECK(secp256k1_ec_pubkey_combine(CTX, &pubkey, pubkeys, 0) == 0);
     SECP256K1_CHECKMEM_CHECK(&pubkey, sizeof(secp256k1_pubkey));
@@ -8241,21 +7005,10 @@ static void run_eckey_edge_case_test(void) {
     SECP256K1_CHECKMEM_UNDEFINE(&pubkey, sizeof(secp256k1_pubkey));
     CHECK(secp256k1_ec_pubkey_combine(CTX, &pubkey, NULL, 1) == 0);
     SECP256K1_CHECKMEM_CHECK(&pubkey, sizeof(secp256k1_pubkey));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     CHECK(secp256k1_memcmp_var(&pubkey, zeros, sizeof(secp256k1_pubkey)) == 0);
     CHECK(ecount == 3);
     pubkeys[0] = &pubkey_negone;
     memset(&pubkey, 255, sizeof(secp256k1_pubkey));
-<<<<<<< HEAD
-    VG_UNDEF(&pubkey, sizeof(secp256k1_pubkey));
-    CHECK(secp256k1_ec_pubkey_combine(ctx, &pubkey, pubkeys, 1) == 1);
-    VG_CHECK(&pubkey, sizeof(secp256k1_pubkey));
-    CHECK(secp256k1_memcmp_var(&pubkey, zeros, sizeof(secp256k1_pubkey)) > 0);
-    CHECK(ecount == 3);
-    len = 33;
-    CHECK(secp256k1_ec_pubkey_serialize(ctx, ctmp, &len, &pubkey, SECP256K1_EC_COMPRESSED) == 1);
-    CHECK(secp256k1_ec_pubkey_serialize(ctx, ctmp2, &len, &pubkey_negone, SECP256K1_EC_COMPRESSED) == 1);
-=======
     SECP256K1_CHECKMEM_UNDEFINE(&pubkey, sizeof(secp256k1_pubkey));
     CHECK(secp256k1_ec_pubkey_combine(CTX, &pubkey, pubkeys, 1) == 1);
     SECP256K1_CHECKMEM_CHECK(&pubkey, sizeof(secp256k1_pubkey));
@@ -8264,36 +7017,19 @@ static void run_eckey_edge_case_test(void) {
     len = 33;
     CHECK(secp256k1_ec_pubkey_serialize(CTX, ctmp, &len, &pubkey, SECP256K1_EC_COMPRESSED) == 1);
     CHECK(secp256k1_ec_pubkey_serialize(CTX, ctmp2, &len, &pubkey_negone, SECP256K1_EC_COMPRESSED) == 1);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     CHECK(secp256k1_memcmp_var(ctmp, ctmp2, 33) == 0);
     /* Result is infinity. */
     pubkeys[0] = &pubkey_one;
     pubkeys[1] = &pubkey_negone;
     memset(&pubkey, 255, sizeof(secp256k1_pubkey));
-<<<<<<< HEAD
-    VG_UNDEF(&pubkey, sizeof(secp256k1_pubkey));
-    CHECK(secp256k1_ec_pubkey_combine(ctx, &pubkey, pubkeys, 2) == 0);
-    VG_CHECK(&pubkey, sizeof(secp256k1_pubkey));
-=======
     SECP256K1_CHECKMEM_UNDEFINE(&pubkey, sizeof(secp256k1_pubkey));
     CHECK(secp256k1_ec_pubkey_combine(CTX, &pubkey, pubkeys, 2) == 0);
     SECP256K1_CHECKMEM_CHECK(&pubkey, sizeof(secp256k1_pubkey));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     CHECK(secp256k1_memcmp_var(&pubkey, zeros, sizeof(secp256k1_pubkey)) == 0);
     CHECK(ecount == 3);
     /* Passes through infinity but comes out one. */
     pubkeys[2] = &pubkey_one;
     memset(&pubkey, 255, sizeof(secp256k1_pubkey));
-<<<<<<< HEAD
-    VG_UNDEF(&pubkey, sizeof(secp256k1_pubkey));
-    CHECK(secp256k1_ec_pubkey_combine(ctx, &pubkey, pubkeys, 3) == 1);
-    VG_CHECK(&pubkey, sizeof(secp256k1_pubkey));
-    CHECK(secp256k1_memcmp_var(&pubkey, zeros, sizeof(secp256k1_pubkey)) > 0);
-    CHECK(ecount == 3);
-    len = 33;
-    CHECK(secp256k1_ec_pubkey_serialize(ctx, ctmp, &len, &pubkey, SECP256K1_EC_COMPRESSED) == 1);
-    CHECK(secp256k1_ec_pubkey_serialize(ctx, ctmp2, &len, &pubkey_one, SECP256K1_EC_COMPRESSED) == 1);
-=======
     SECP256K1_CHECKMEM_UNDEFINE(&pubkey, sizeof(secp256k1_pubkey));
     CHECK(secp256k1_ec_pubkey_combine(CTX, &pubkey, pubkeys, 3) == 1);
     SECP256K1_CHECKMEM_CHECK(&pubkey, sizeof(secp256k1_pubkey));
@@ -8302,30 +7038,19 @@ static void run_eckey_edge_case_test(void) {
     len = 33;
     CHECK(secp256k1_ec_pubkey_serialize(CTX, ctmp, &len, &pubkey, SECP256K1_EC_COMPRESSED) == 1);
     CHECK(secp256k1_ec_pubkey_serialize(CTX, ctmp2, &len, &pubkey_one, SECP256K1_EC_COMPRESSED) == 1);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     CHECK(secp256k1_memcmp_var(ctmp, ctmp2, 33) == 0);
     /* Adds to two. */
     pubkeys[1] = &pubkey_one;
     memset(&pubkey, 255, sizeof(secp256k1_pubkey));
-<<<<<<< HEAD
-    VG_UNDEF(&pubkey, sizeof(secp256k1_pubkey));
-    CHECK(secp256k1_ec_pubkey_combine(ctx, &pubkey, pubkeys, 2) == 1);
-    VG_CHECK(&pubkey, sizeof(secp256k1_pubkey));
-=======
     SECP256K1_CHECKMEM_UNDEFINE(&pubkey, sizeof(secp256k1_pubkey));
     CHECK(secp256k1_ec_pubkey_combine(CTX, &pubkey, pubkeys, 2) == 1);
     SECP256K1_CHECKMEM_CHECK(&pubkey, sizeof(secp256k1_pubkey));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     CHECK(secp256k1_memcmp_var(&pubkey, zeros, sizeof(secp256k1_pubkey)) > 0);
     CHECK(ecount == 3);
     secp256k1_context_set_illegal_callback(CTX, NULL, NULL);
 }
 
-<<<<<<< HEAD
-void run_eckey_negate_test(void) {
-=======
 static void run_eckey_negate_test(void) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     unsigned char seckey[32];
     unsigned char seckey_tmp[32];
 
@@ -8333,16 +7058,6 @@ static void run_eckey_negate_test(void) {
     memcpy(seckey_tmp, seckey, 32);
 
     /* Verify negation changes the key and changes it back */
-<<<<<<< HEAD
-    CHECK(secp256k1_ec_seckey_negate(ctx, seckey) == 1);
-    CHECK(secp256k1_memcmp_var(seckey, seckey_tmp, 32) != 0);
-    CHECK(secp256k1_ec_seckey_negate(ctx, seckey) == 1);
-    CHECK(secp256k1_memcmp_var(seckey, seckey_tmp, 32) == 0);
-
-    /* Check that privkey alias gives same result */
-    CHECK(secp256k1_ec_seckey_negate(ctx, seckey) == 1);
-    CHECK(secp256k1_ec_privkey_negate(ctx, seckey_tmp) == 1);
-=======
     CHECK(secp256k1_ec_seckey_negate(CTX, seckey) == 1);
     CHECK(secp256k1_memcmp_var(seckey, seckey_tmp, 32) != 0);
     CHECK(secp256k1_ec_seckey_negate(CTX, seckey) == 1);
@@ -8351,17 +7066,12 @@ static void run_eckey_negate_test(void) {
     /* Check that privkey alias gives same result */
     CHECK(secp256k1_ec_seckey_negate(CTX, seckey) == 1);
     CHECK(secp256k1_ec_privkey_negate(CTX, seckey_tmp) == 1);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     CHECK(secp256k1_memcmp_var(seckey, seckey_tmp, 32) == 0);
 
     /* Negating all 0s fails */
     memset(seckey, 0, 32);
     memset(seckey_tmp, 0, 32);
-<<<<<<< HEAD
-    CHECK(secp256k1_ec_seckey_negate(ctx, seckey) == 0);
-=======
     CHECK(secp256k1_ec_seckey_negate(CTX, seckey) == 0);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     /* Check that seckey is not modified */
     CHECK(secp256k1_memcmp_var(seckey, seckey_tmp, 32) == 0);
 
@@ -8371,19 +7081,11 @@ static void run_eckey_negate_test(void) {
     random_scalar_order_b32(seckey);
     memset(seckey, 0xFF, 16);
     memset(seckey_tmp, 0, 32);
-<<<<<<< HEAD
-    CHECK(secp256k1_ec_seckey_negate(ctx, seckey) == 0);
-    CHECK(secp256k1_memcmp_var(seckey, seckey_tmp, 32) == 0);
-}
-
-void random_sign(secp256k1_scalar *sigr, secp256k1_scalar *sigs, const secp256k1_scalar *key, const secp256k1_scalar *msg, int *recid) {
-=======
     CHECK(secp256k1_ec_seckey_negate(CTX, seckey) == 0);
     CHECK(secp256k1_memcmp_var(seckey, seckey_tmp, 32) == 0);
 }
 
 static void random_sign(secp256k1_scalar *sigr, secp256k1_scalar *sigs, const secp256k1_scalar *key, const secp256k1_scalar *msg, int *recid) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     secp256k1_scalar nonce;
     do {
         random_scalar_order_test(&nonce);
@@ -8397,24 +7099,14 @@ static void test_ecdsa_sign_verify(void) {
     secp256k1_scalar msg, key;
     secp256k1_scalar sigr, sigs;
     int getrec;
-<<<<<<< HEAD
-    /* Initialize recid to suppress a false positive -Wconditional-uninitialized in clang.
-       VG_UNDEF ensures that valgrind will still treat the variable as uninitialized. */
-    int recid = -1; VG_UNDEF(&recid, sizeof(recid));
-=======
     int recid;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     random_scalar_order_test(&msg);
     random_scalar_order_test(&key);
     secp256k1_ecmult_gen(&CTX->ecmult_gen_ctx, &pubj, &key);
     secp256k1_ge_set_gej(&pub, &pubj);
     getrec = secp256k1_testrand_bits(1);
-<<<<<<< HEAD
-    random_sign(&sigr, &sigs, &key, &msg, getrec?&recid:NULL);
-=======
     /* The specific way in which this conditional is written sidesteps a potential bug in clang.
        See the commit messages of the commit that introduced this comment for details. */
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (getrec) {
         random_sign(&sigr, &sigs, &key, &msg, &recid);
         CHECK(recid >= 0 && recid < 4);
@@ -8516,26 +7208,12 @@ static void test_ecdsa_end_to_end(void) {
     CHECK(secp256k1_ec_pubkey_create(CTX, &pubkey, privkey) == 1);
 
     /* Verify exporting and importing public key. */
-<<<<<<< HEAD
-    CHECK(secp256k1_ec_pubkey_serialize(ctx, pubkeyc, &pubkeyclen, &pubkey, secp256k1_testrand_bits(1) == 1 ? SECP256K1_EC_COMPRESSED : SECP256K1_EC_UNCOMPRESSED));
-=======
     CHECK(secp256k1_ec_pubkey_serialize(CTX, pubkeyc, &pubkeyclen, &pubkey, secp256k1_testrand_bits(1) == 1 ? SECP256K1_EC_COMPRESSED : SECP256K1_EC_UNCOMPRESSED));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     memset(&pubkey, 0, sizeof(pubkey));
     CHECK(secp256k1_ec_pubkey_parse(CTX, &pubkey, pubkeyc, pubkeyclen) == 1);
 
     /* Verify negation changes the key and changes it back */
     memcpy(&pubkey_tmp, &pubkey, sizeof(pubkey));
-<<<<<<< HEAD
-    CHECK(secp256k1_ec_pubkey_negate(ctx, &pubkey_tmp) == 1);
-    CHECK(secp256k1_memcmp_var(&pubkey_tmp, &pubkey, sizeof(pubkey)) != 0);
-    CHECK(secp256k1_ec_pubkey_negate(ctx, &pubkey_tmp) == 1);
-    CHECK(secp256k1_memcmp_var(&pubkey_tmp, &pubkey, sizeof(pubkey)) == 0);
-
-    /* Verify private key import and export. */
-    CHECK(ec_privkey_export_der(ctx, seckey, &seckeylen, privkey, secp256k1_testrand_bits(1) == 1));
-    CHECK(ec_privkey_import_der(ctx, privkey2, seckey, seckeylen) == 1);
-=======
     CHECK(secp256k1_ec_pubkey_negate(CTX, &pubkey_tmp) == 1);
     CHECK(secp256k1_memcmp_var(&pubkey_tmp, &pubkey, sizeof(pubkey)) != 0);
     CHECK(secp256k1_ec_pubkey_negate(CTX, &pubkey_tmp) == 1);
@@ -8544,7 +7222,6 @@ static void test_ecdsa_end_to_end(void) {
     /* Verify private key import and export. */
     CHECK(ec_privkey_export_der(CTX, seckey, &seckeylen, privkey, secp256k1_testrand_bits(1) == 1));
     CHECK(ec_privkey_import_der(CTX, privkey2, seckey, seckeylen) == 1);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     CHECK(secp256k1_memcmp_var(privkey, privkey2, 32) == 0);
 
     /* Optionally tweak the keys using addition. */
@@ -8557,28 +7234,17 @@ static void test_ecdsa_end_to_end(void) {
         secp256k1_pubkey pubkey2;
         secp256k1_testrand256_test(rnd);
         memcpy(privkey_tmp, privkey, 32);
-<<<<<<< HEAD
-        ret1 = secp256k1_ec_seckey_tweak_add(ctx, privkey, rnd);
-        ret2 = secp256k1_ec_pubkey_tweak_add(ctx, &pubkey, rnd);
-        /* Check that privkey alias gives same result */
-        ret3 = secp256k1_ec_privkey_tweak_add(ctx, privkey_tmp, rnd);
-=======
         ret1 = secp256k1_ec_seckey_tweak_add(CTX, privkey, rnd);
         ret2 = secp256k1_ec_pubkey_tweak_add(CTX, &pubkey, rnd);
         /* Check that privkey alias gives same result */
         ret3 = secp256k1_ec_privkey_tweak_add(CTX, privkey_tmp, rnd);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         CHECK(ret1 == ret2);
         CHECK(ret2 == ret3);
         if (ret1 == 0) {
             return;
         }
         CHECK(secp256k1_memcmp_var(privkey, privkey_tmp, 32) == 0);
-<<<<<<< HEAD
-        CHECK(secp256k1_ec_pubkey_create(ctx, &pubkey2, privkey) == 1);
-=======
         CHECK(secp256k1_ec_pubkey_create(CTX, &pubkey2, privkey) == 1);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         CHECK(secp256k1_memcmp_var(&pubkey, &pubkey2, sizeof(pubkey)) == 0);
     }
 
@@ -8592,28 +7258,17 @@ static void test_ecdsa_end_to_end(void) {
         secp256k1_pubkey pubkey2;
         secp256k1_testrand256_test(rnd);
         memcpy(privkey_tmp, privkey, 32);
-<<<<<<< HEAD
-        ret1 = secp256k1_ec_seckey_tweak_mul(ctx, privkey, rnd);
-        ret2 = secp256k1_ec_pubkey_tweak_mul(ctx, &pubkey, rnd);
-        /* Check that privkey alias gives same result */
-        ret3 = secp256k1_ec_privkey_tweak_mul(ctx, privkey_tmp, rnd);
-=======
         ret1 = secp256k1_ec_seckey_tweak_mul(CTX, privkey, rnd);
         ret2 = secp256k1_ec_pubkey_tweak_mul(CTX, &pubkey, rnd);
         /* Check that privkey alias gives same result */
         ret3 = secp256k1_ec_privkey_tweak_mul(CTX, privkey_tmp, rnd);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         CHECK(ret1 == ret2);
         CHECK(ret2 == ret3);
         if (ret1 == 0) {
             return;
         }
         CHECK(secp256k1_memcmp_var(privkey, privkey_tmp, 32) == 0);
-<<<<<<< HEAD
-        CHECK(secp256k1_ec_pubkey_create(ctx, &pubkey2, privkey) == 1);
-=======
         CHECK(secp256k1_ec_pubkey_create(CTX, &pubkey2, privkey) == 1);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         CHECK(secp256k1_memcmp_var(&pubkey, &pubkey2, sizeof(pubkey)) == 0);
     }
 
@@ -8625,11 +7280,7 @@ static void test_ecdsa_end_to_end(void) {
     CHECK(secp256k1_ecdsa_sign(CTX, &signature[2], message, privkey, NULL, extra) == 1);
     extra[31] = 0;
     extra[0] = 1;
-<<<<<<< HEAD
-    CHECK(secp256k1_ecdsa_sign(ctx, &signature[3], message, privkey, NULL, extra) == 1);
-=======
     CHECK(secp256k1_ecdsa_sign(CTX, &signature[3], message, privkey, NULL, extra) == 1);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     CHECK(secp256k1_memcmp_var(&signature[0], &signature[4], sizeof(signature[0])) == 0);
     CHECK(secp256k1_memcmp_var(&signature[0], &signature[1], sizeof(signature[0])) != 0);
     CHECK(secp256k1_memcmp_var(&signature[0], &signature[2], sizeof(signature[0])) != 0);
@@ -8655,13 +7306,8 @@ static void test_ecdsa_end_to_end(void) {
     CHECK(secp256k1_ecdsa_verify(CTX, &signature[5], message, &pubkey) == 1);
     secp256k1_scalar_negate(&s, &s);
     secp256k1_ecdsa_signature_save(&signature[5], &r, &s);
-<<<<<<< HEAD
-    CHECK(!secp256k1_ecdsa_signature_normalize(ctx, NULL, &signature[5]));
-    CHECK(secp256k1_ecdsa_verify(ctx, &signature[5], message, &pubkey) == 1);
-=======
     CHECK(!secp256k1_ecdsa_signature_normalize(CTX, NULL, &signature[5]));
     CHECK(secp256k1_ecdsa_verify(CTX, &signature[5], message, &pubkey) == 1);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     CHECK(secp256k1_memcmp_var(&signature[5], &signature[0], 64) == 0);
 
     /* Serialize/parse DER and verify again */
@@ -8671,17 +7317,10 @@ static void test_ecdsa_end_to_end(void) {
     CHECK(secp256k1_ecdsa_verify(CTX, &signature[0], message, &pubkey) == 1);
     /* Serialize/destroy/parse DER and verify again. */
     siglen = 74;
-<<<<<<< HEAD
-    CHECK(secp256k1_ecdsa_signature_serialize_der(ctx, sig, &siglen, &signature[0]) == 1);
-    sig[secp256k1_testrand_int(siglen)] += 1 + secp256k1_testrand_int(255);
-    CHECK(secp256k1_ecdsa_signature_parse_der(ctx, &signature[0], sig, siglen) == 0 ||
-          secp256k1_ecdsa_verify(ctx, &signature[0], message, &pubkey) == 0);
-=======
     CHECK(secp256k1_ecdsa_signature_serialize_der(CTX, sig, &siglen, &signature[0]) == 1);
     sig[secp256k1_testrand_int(siglen)] += 1 + secp256k1_testrand_int(255);
     CHECK(secp256k1_ecdsa_signature_parse_der(CTX, &signature[0], sig, siglen) == 0 ||
           secp256k1_ecdsa_verify(CTX, &signature[0], message, &pubkey) == 0);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 static void test_random_pubkeys(void) {
@@ -8824,24 +7463,6 @@ static int test_ecdsa_der_parse(const unsigned char *sig, size_t siglen, int cer
     size_t len_der_lax = 2048;
     int parsed_der_lax = 0, valid_der_lax = 0, roundtrips_der_lax = 0;
 
-<<<<<<< HEAD
-#ifdef ENABLE_OPENSSL_TESTS
-    ECDSA_SIG *sig_openssl;
-    const BIGNUM *r = NULL, *s = NULL;
-    const unsigned char *sigptr;
-    unsigned char roundtrip_openssl[2048];
-    int len_openssl = 2048;
-    int parsed_openssl, valid_openssl = 0, roundtrips_openssl = 0;
-#endif
-
-    parsed_der = secp256k1_ecdsa_signature_parse_der(ctx, &sig_der, sig, siglen);
-    if (parsed_der) {
-        ret |= (!secp256k1_ecdsa_signature_serialize_compact(ctx, compact_der, &sig_der)) << 0;
-        valid_der = (secp256k1_memcmp_var(compact_der, zeroes, 32) != 0) && (secp256k1_memcmp_var(compact_der + 32, zeroes, 32) != 0);
-    }
-    if (valid_der) {
-        ret |= (!secp256k1_ecdsa_signature_serialize_der(ctx, roundtrip_der, &len_der, &sig_der)) << 1;
-=======
     parsed_der = secp256k1_ecdsa_signature_parse_der(CTX, &sig_der, sig, siglen);
     if (parsed_der) {
         ret |= (!secp256k1_ecdsa_signature_serialize_compact(CTX, compact_der, &sig_der)) << 0;
@@ -8849,25 +7470,16 @@ static int test_ecdsa_der_parse(const unsigned char *sig, size_t siglen, int cer
     }
     if (valid_der) {
         ret |= (!secp256k1_ecdsa_signature_serialize_der(CTX, roundtrip_der, &len_der, &sig_der)) << 1;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         roundtrips_der = (len_der == siglen) && secp256k1_memcmp_var(roundtrip_der, sig, siglen) == 0;
     }
 
     parsed_der_lax = ecdsa_signature_parse_der_lax(CTX, &sig_der_lax, sig, siglen);
     if (parsed_der_lax) {
-<<<<<<< HEAD
-        ret |= (!secp256k1_ecdsa_signature_serialize_compact(ctx, compact_der_lax, &sig_der_lax)) << 10;
-        valid_der_lax = (secp256k1_memcmp_var(compact_der_lax, zeroes, 32) != 0) && (secp256k1_memcmp_var(compact_der_lax + 32, zeroes, 32) != 0);
-    }
-    if (valid_der_lax) {
-        ret |= (!secp256k1_ecdsa_signature_serialize_der(ctx, roundtrip_der_lax, &len_der_lax, &sig_der_lax)) << 11;
-=======
         ret |= (!secp256k1_ecdsa_signature_serialize_compact(CTX, compact_der_lax, &sig_der_lax)) << 10;
         valid_der_lax = (secp256k1_memcmp_var(compact_der_lax, zeroes, 32) != 0) && (secp256k1_memcmp_var(compact_der_lax + 32, zeroes, 32) != 0);
     }
     if (valid_der_lax) {
         ret |= (!secp256k1_ecdsa_signature_serialize_der(CTX, roundtrip_der_lax, &len_der_lax, &sig_der_lax)) << 11;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         roundtrips_der_lax = (len_der_lax == siglen) && secp256k1_memcmp_var(roundtrip_der_lax, sig, siglen) == 0;
     }
 
@@ -8891,46 +7503,6 @@ static int test_ecdsa_der_parse(const unsigned char *sig, size_t siglen, int cer
         ret |= (!parsed_der_lax) << 16;
     }
 
-<<<<<<< HEAD
-#ifdef ENABLE_OPENSSL_TESTS
-    sig_openssl = ECDSA_SIG_new();
-    sigptr = sig;
-    parsed_openssl = (d2i_ECDSA_SIG(&sig_openssl, &sigptr, siglen) != NULL);
-    if (parsed_openssl) {
-        ECDSA_SIG_get0(sig_openssl, &r, &s);
-        valid_openssl = !BN_is_negative(r) && !BN_is_negative(s) && BN_num_bits(r) > 0 && BN_num_bits(r) <= 256 && BN_num_bits(s) > 0 && BN_num_bits(s) <= 256;
-        if (valid_openssl) {
-            unsigned char tmp[32] = {0};
-            BN_bn2bin(r, tmp + 32 - BN_num_bytes(r));
-            valid_openssl = secp256k1_memcmp_var(tmp, max_scalar, 32) < 0;
-        }
-        if (valid_openssl) {
-            unsigned char tmp[32] = {0};
-            BN_bn2bin(s, tmp + 32 - BN_num_bytes(s));
-            valid_openssl = secp256k1_memcmp_var(tmp, max_scalar, 32) < 0;
-        }
-    }
-    len_openssl = i2d_ECDSA_SIG(sig_openssl, NULL);
-    if (len_openssl <= 2048) {
-        unsigned char *ptr = roundtrip_openssl;
-        CHECK(i2d_ECDSA_SIG(sig_openssl, &ptr) == len_openssl);
-        roundtrips_openssl = valid_openssl && ((size_t)len_openssl == siglen) && (secp256k1_memcmp_var(roundtrip_openssl, sig, siglen) == 0);
-    } else {
-        len_openssl = 0;
-    }
-    ECDSA_SIG_free(sig_openssl);
-
-    ret |= (parsed_der && !parsed_openssl) << 4;
-    ret |= (valid_der && !valid_openssl) << 5;
-    ret |= (roundtrips_openssl && !parsed_der) << 6;
-    ret |= (roundtrips_der != roundtrips_openssl) << 7;
-    if (roundtrips_openssl) {
-        ret |= (len_der != (size_t)len_openssl) << 8;
-        ret |= ((len_der != (size_t)len_openssl) || (secp256k1_memcmp_var(roundtrip_der, roundtrip_openssl, len_der) != 0)) << 9;
-    }
-#endif
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     return ret;
 }
 
@@ -8990,22 +7562,14 @@ static void random_ber_signature(unsigned char *sig, size_t *len, int* certainly
         /* We generate two classes of numbers: nlow==1 "low" ones (up to 32 bytes), nlow==0 "high" ones (32 bytes with 129 top bits set, or larger than 32 bytes) */
         nlow[n] = der ? 1 : (secp256k1_testrand_bits(3) != 0);
         /* The length of the number in bytes (the first byte of which will always be nonzero) */
-<<<<<<< HEAD
-        nlen[n] = nlow[n] ? secp256k1_testrand_int(33) : 32 + secp256k1_testrand_int(200) * secp256k1_testrand_int(8) / 8;
-=======
         nlen[n] = nlow[n] ? secp256k1_testrand_int(33) : 32 + secp256k1_testrand_int(200) * secp256k1_testrand_bits(3) / 8;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         CHECK(nlen[n] <= 232);
         /* The top bit of the number. */
         nhbit[n] = (nlow[n] == 0 && nlen[n] == 32) ? 1 : (nlen[n] == 0 ? 0 : secp256k1_testrand_bits(1));
         /* The top byte of the number (after the potential hardcoded 16 0xFF characters for "high" 32 bytes numbers) */
         nhbyte[n] = nlen[n] == 0 ? 0 : (nhbit[n] ? 128 + secp256k1_testrand_bits(7) : 1 + secp256k1_testrand_int(127));
         /* The number of zero bytes in front of the number (which is 0 or 1 in case of DER, otherwise we extend up to 300 bytes) */
-<<<<<<< HEAD
-        nzlen[n] = der ? ((nlen[n] == 0 || nhbit[n]) ? 1 : 0) : (nlow[n] ? secp256k1_testrand_int(3) : secp256k1_testrand_int(300 - nlen[n]) * secp256k1_testrand_int(8) / 8);
-=======
         nzlen[n] = der ? ((nlen[n] == 0 || nhbit[n]) ? 1 : 0) : (nlow[n] ? secp256k1_testrand_int(3) : secp256k1_testrand_int(300 - nlen[n]) * secp256k1_testrand_bits(3) / 8);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         if (nzlen[n] > ((nlen[n] == 0 || nhbit[n]) ? 1 : 0)) {
             *certainly_not_der = 1;
         }
@@ -9014,11 +7578,7 @@ static void random_ber_signature(unsigned char *sig, size_t *len, int* certainly
         nlenlen[n] = nlen[n] + nzlen[n] < 128 ? 0 : (nlen[n] + nzlen[n] < 256 ? 1 : 2);
         if (!der) {
             /* nlenlen[n] max 127 bytes */
-<<<<<<< HEAD
-            int add = secp256k1_testrand_int(127 - nlenlen[n]) * secp256k1_testrand_int(16) * secp256k1_testrand_int(16) / 256;
-=======
             int add = secp256k1_testrand_int(127 - nlenlen[n]) * secp256k1_testrand_bits(4) * secp256k1_testrand_bits(4) / 256;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             nlenlen[n] += add;
             if (add != 0) {
                 *certainly_not_der = 1;
@@ -9032,11 +7592,7 @@ static void random_ber_signature(unsigned char *sig, size_t *len, int* certainly
     CHECK(tlen <= 856);
 
     /* The length of the garbage inside the tuple. */
-<<<<<<< HEAD
-    elen = (der || indet) ? 0 : secp256k1_testrand_int(980 - tlen) * secp256k1_testrand_int(8) / 8;
-=======
     elen = (der || indet) ? 0 : secp256k1_testrand_int(980 - tlen) * secp256k1_testrand_bits(3) / 8;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (elen != 0) {
         *certainly_not_der = 1;
     }
@@ -9044,11 +7600,7 @@ static void random_ber_signature(unsigned char *sig, size_t *len, int* certainly
     CHECK(tlen <= 980);
 
     /* The length of the garbage after the end of the tuple. */
-<<<<<<< HEAD
-    glen = der ? 0 : secp256k1_testrand_int(990 - tlen) * secp256k1_testrand_int(8) / 8;
-=======
     glen = der ? 0 : secp256k1_testrand_int(990 - tlen) * secp256k1_testrand_bits(3) / 8;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (glen != 0) {
         *certainly_not_der = 1;
     }
@@ -9063,11 +7615,7 @@ static void random_ber_signature(unsigned char *sig, size_t *len, int* certainly
     } else {
         int tlenlen = tlen < 128 ? 0 : (tlen < 256 ? 1 : 2);
         if (!der) {
-<<<<<<< HEAD
-            int add = secp256k1_testrand_int(127 - tlenlen) * secp256k1_testrand_int(16) * secp256k1_testrand_int(16) / 256;
-=======
             int add = secp256k1_testrand_int(127 - tlenlen) * secp256k1_testrand_bits(4) * secp256k1_testrand_bits(4) / 256;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             tlenlen += add;
             if (add != 0) {
                 *certainly_not_der = 1;
@@ -9518,11 +8066,7 @@ static void test_ecdsa_edge_cases(void) {
         CHECK(nonce_function_rfc6979(nonce3, zeros, zeros, NULL, (void *)zeros, 0) == 1);
         SECP256K1_CHECKMEM_CHECK(nonce3,32);
         CHECK(nonce_function_rfc6979(nonce4, zeros, zeros, zeros, (void *)zeros, 0) == 1);
-<<<<<<< HEAD
-        VG_CHECK(nonce4,32);
-=======
         SECP256K1_CHECKMEM_CHECK(nonce4,32);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         CHECK(secp256k1_memcmp_var(nonce, nonce2, 32) != 0);
         CHECK(secp256k1_memcmp_var(nonce, nonce3, 32) != 0);
         CHECK(secp256k1_memcmp_var(nonce, nonce4, 32) != 0);
@@ -9552,55 +8096,12 @@ static void run_ecdsa_edge_cases(void) {
     test_ecdsa_edge_cases();
 }
 
-<<<<<<< HEAD
-#ifdef ENABLE_OPENSSL_TESTS
-EC_KEY *get_openssl_key(const unsigned char *key32) {
-    unsigned char privkey[300];
-    size_t privkeylen;
-    const unsigned char* pbegin = privkey;
-    int compr = secp256k1_testrand_bits(1);
-    EC_KEY *ec_key = EC_KEY_new_by_curve_name(NID_secp256k1);
-    CHECK(ec_privkey_export_der(ctx, privkey, &privkeylen, key32, compr));
-    CHECK(d2i_ECPrivateKey(&ec_key, &pbegin, privkeylen));
-    CHECK(EC_KEY_check_key(ec_key));
-    return ec_key;
-}
-
-void test_ecdsa_openssl(void) {
-    secp256k1_gej qj;
-    secp256k1_ge q;
-    secp256k1_scalar sigr, sigs;
-    secp256k1_scalar one;
-    secp256k1_scalar msg2;
-    secp256k1_scalar key, msg;
-    EC_KEY *ec_key;
-    unsigned int sigsize = 80;
-    size_t secp_sigsize = 80;
-    unsigned char message[32];
-    unsigned char signature[80];
-    unsigned char key32[32];
-    secp256k1_testrand256_test(message);
-    secp256k1_scalar_set_b32(&msg, message, NULL);
-    random_scalar_order_test(&key);
-    secp256k1_scalar_get_b32(key32, &key);
-    secp256k1_ecmult_gen(&ctx->ecmult_gen_ctx, &qj, &key);
-    secp256k1_ge_set_gej(&q, &qj);
-    ec_key = get_openssl_key(key32);
-    CHECK(ec_key != NULL);
-    CHECK(ECDSA_sign(0, message, sizeof(message), signature, &sigsize, ec_key));
-    CHECK(secp256k1_ecdsa_sig_parse(&sigr, &sigs, signature, sigsize));
-    CHECK(secp256k1_ecdsa_sig_verify(&ctx->ecmult_ctx, &sigr, &sigs, &q, &msg));
-    secp256k1_scalar_set_int(&one, 1);
-    secp256k1_scalar_add(&msg2, &msg, &one);
-    CHECK(!secp256k1_ecdsa_sig_verify(&ctx->ecmult_ctx, &sigr, &sigs, &q, &msg2));
-=======
 /** Wycheproof tests
 
 The tests check for known attacks (range checks in (r,s), arithmetic errors, malleability).
 */
 static void test_ecdsa_wycheproof(void) {
     #include "wycheproof/ecdsa_secp256k1_sha256_digibyte_test.h"
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     int t;
     for (t = 0; t < SECP256K1_ECDSA_WYCHEPROOF_NUMBER_TESTVECTORS; t++) {
@@ -9649,15 +8150,11 @@ static void run_ecdsa_wycheproof(void) {
 # include "modules/schnorrsig/tests_impl.h"
 #endif
 
-<<<<<<< HEAD
-void run_secp256k1_memczero_test(void) {
-=======
 #ifdef ENABLE_MODULE_ELLSWIFT
 # include "modules/ellswift/tests_impl.h"
 #endif
 
 static void run_secp256k1_memczero_test(void) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     unsigned char buf1[6] = {1, 2, 3, 4, 5, 6};
     unsigned char buf2[sizeof(buf1)];
 
@@ -9672,9 +8169,6 @@ static void run_secp256k1_memczero_test(void) {
     CHECK(secp256k1_memcmp_var(buf1, buf2, sizeof(buf1)) == 0);
 }
 
-<<<<<<< HEAD
-void int_cmov_test(void) {
-=======
 static void run_secp256k1_byteorder_tests(void) {
     {
         const uint32_t x = 0xFF03AB45;
@@ -9704,7 +8198,6 @@ static void run_secp256k1_byteorder_tests(void) {
 }
 
 static void int_cmov_test(void) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     int r = INT_MAX;
     int a = 0;
 
@@ -9729,11 +8222,7 @@ static void int_cmov_test(void) {
 
 }
 
-<<<<<<< HEAD
-void fe_cmov_test(void) {
-=======
 static void fe_cmov_test(void) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     static const secp256k1_fe zero = SECP256K1_FE_CONST(0, 0, 0, 0, 0, 0, 0, 0);
     static const secp256k1_fe one = SECP256K1_FE_CONST(0, 0, 0, 0, 0, 0, 0, 1);
     static const secp256k1_fe max = SECP256K1_FE_CONST(
@@ -9744,28 +8233,6 @@ static void fe_cmov_test(void) {
     secp256k1_fe a = zero;
 
     secp256k1_fe_cmov(&r, &a, 0);
-<<<<<<< HEAD
-    CHECK(secp256k1_memcmp_var(&r, &max, sizeof(r)) == 0);
-
-    r = zero; a = max;
-    secp256k1_fe_cmov(&r, &a, 1);
-    CHECK(secp256k1_memcmp_var(&r, &max, sizeof(r)) == 0);
-
-    a = zero;
-    secp256k1_fe_cmov(&r, &a, 1);
-    CHECK(secp256k1_memcmp_var(&r, &zero, sizeof(r)) == 0);
-
-    a = one;
-    secp256k1_fe_cmov(&r, &a, 1);
-    CHECK(secp256k1_memcmp_var(&r, &one, sizeof(r)) == 0);
-
-    r = one; a = zero;
-    secp256k1_fe_cmov(&r, &a, 0);
-    CHECK(secp256k1_memcmp_var(&r, &one, sizeof(r)) == 0);
-}
-
-void fe_storage_cmov_test(void) {
-=======
     CHECK(fe_identical(&r, &max));
 
     r = zero; a = max;
@@ -9786,7 +8253,6 @@ void fe_storage_cmov_test(void) {
 }
 
 static void fe_storage_cmov_test(void) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     static const secp256k1_fe_storage zero = SECP256K1_FE_STORAGE_CONST(0, 0, 0, 0, 0, 0, 0, 0);
     static const secp256k1_fe_storage one = SECP256K1_FE_STORAGE_CONST(0, 0, 0, 0, 0, 0, 0, 1);
     static const secp256k1_fe_storage max = SECP256K1_FE_STORAGE_CONST(
@@ -9816,17 +8282,6 @@ static void fe_storage_cmov_test(void) {
     CHECK(secp256k1_memcmp_var(&r, &one, sizeof(r)) == 0);
 }
 
-<<<<<<< HEAD
-void scalar_cmov_test(void) {
-    static const secp256k1_scalar zero = SECP256K1_SCALAR_CONST(0, 0, 0, 0, 0, 0, 0, 0);
-    static const secp256k1_scalar one = SECP256K1_SCALAR_CONST(0, 0, 0, 0, 0, 0, 0, 1);
-    static const secp256k1_scalar max = SECP256K1_SCALAR_CONST(
-        0xFFFFFFFFUL, 0xFFFFFFFFUL, 0xFFFFFFFFUL, 0xFFFFFFFFUL,
-        0xFFFFFFFFUL, 0xFFFFFFFFUL, 0xFFFFFFFFUL, 0xFFFFFFFFUL
-    );
-    secp256k1_scalar r = max;
-    secp256k1_scalar a = zero;
-=======
 static void scalar_cmov_test(void) {
     static const secp256k1_scalar max = SECP256K1_SCALAR_CONST(
         0xFFFFFFFFUL, 0xFFFFFFFFUL, 0xFFFFFFFFUL, 0xFFFFFFFEUL,
@@ -9834,31 +8289,10 @@ static void scalar_cmov_test(void) {
     );
     secp256k1_scalar r = max;
     secp256k1_scalar a = secp256k1_scalar_zero;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     secp256k1_scalar_cmov(&r, &a, 0);
     CHECK(secp256k1_memcmp_var(&r, &max, sizeof(r)) == 0);
 
-<<<<<<< HEAD
-    r = zero; a = max;
-    secp256k1_scalar_cmov(&r, &a, 1);
-    CHECK(secp256k1_memcmp_var(&r, &max, sizeof(r)) == 0);
-
-    a = zero;
-    secp256k1_scalar_cmov(&r, &a, 1);
-    CHECK(secp256k1_memcmp_var(&r, &zero, sizeof(r)) == 0);
-
-    a = one;
-    secp256k1_scalar_cmov(&r, &a, 1);
-    CHECK(secp256k1_memcmp_var(&r, &one, sizeof(r)) == 0);
-
-    r = one; a = zero;
-    secp256k1_scalar_cmov(&r, &a, 0);
-    CHECK(secp256k1_memcmp_var(&r, &one, sizeof(r)) == 0);
-}
-
-void ge_storage_cmov_test(void) {
-=======
     r = secp256k1_scalar_zero; a = max;
     secp256k1_scalar_cmov(&r, &a, 1);
     CHECK(secp256k1_memcmp_var(&r, &max, sizeof(r)) == 0);
@@ -9877,7 +8311,6 @@ void ge_storage_cmov_test(void) {
 }
 
 static void ge_storage_cmov_test(void) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     static const secp256k1_ge_storage zero = SECP256K1_GE_STORAGE_CONST(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
     static const secp256k1_ge_storage one = SECP256K1_GE_STORAGE_CONST(0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1);
     static const secp256k1_ge_storage max = SECP256K1_GE_STORAGE_CONST(
@@ -9909,11 +8342,7 @@ static void ge_storage_cmov_test(void) {
     CHECK(secp256k1_memcmp_var(&r, &one, sizeof(r)) == 0);
 }
 
-<<<<<<< HEAD
-void run_cmov_tests(void) {
-=======
 static void run_cmov_tests(void) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     int_cmov_test();
     fe_cmov_test();
     fe_storage_cmov_test();
@@ -9932,34 +8361,6 @@ int main(int argc, char **argv) {
 
     /* find iteration count */
     if (argc > 1) {
-<<<<<<< HEAD
-        count = strtol(argv[1], NULL, 0);
-    } else {
-        const char* env = getenv("SECP256K1_TEST_ITERS");
-        if (env) {
-            count = strtol(env, NULL, 0);
-        }
-    }
-    if (count <= 0) {
-        fputs("An iteration count of 0 or less is not allowed.\n", stderr);
-        return EXIT_FAILURE;
-    }
-    printf("test count = %i\n", count);
-
-    /* find random seed */
-    secp256k1_testrand_init(argc > 2 ? argv[2] : NULL);
-
-    /* initialize */
-    run_context_tests(0);
-    run_context_tests(1);
-    run_scratch_tests();
-    ctx = secp256k1_context_create(SECP256K1_CONTEXT_SIGN | SECP256K1_CONTEXT_VERIFY);
-    if (secp256k1_testrand_bits(1)) {
-        unsigned char rand32[32];
-        secp256k1_testrand256(rand32);
-        CHECK(secp256k1_context_randomize(ctx, secp256k1_testrand_bits(1) ? rand32 : NULL));
-    }
-=======
         COUNT = strtol(argv[1], NULL, 0);
     } else {
         const char* env = getenv("SECP256K1_TEST_ITERS");
@@ -10004,15 +8405,12 @@ int main(int argc, char **argv) {
 
     /* selftest tests */
     run_selftest_tests();
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     /* context tests */
     run_proper_context_tests(0); run_proper_context_tests(1);
     run_static_context_tests(0); run_static_context_tests(1);
     run_deprecated_context_flags_test();
 
-<<<<<<< HEAD
-=======
     /* scratch tests */
     run_scratch_tests();
 
@@ -10020,32 +8418,22 @@ int main(int argc, char **argv) {
 #ifdef SECP256K1_WIDEMUL_INT128
     run_int128_tests();
 #endif
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     run_ctz_tests();
     run_modinv_tests();
     run_inverse_tests();
 
-<<<<<<< HEAD
-    run_sha256_tests();
-    run_hmac_sha256_tests();
-    run_rfc6979_hmac_sha256_tests();
-=======
     /* hash tests */
     run_sha256_known_output_tests();
     run_sha256_counter_tests();
     run_hmac_sha256_tests();
     run_rfc6979_hmac_sha256_tests();
     run_tagged_sha256_tests();
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     /* scalar tests */
     run_scalar_tests();
 
     /* field tests */
-<<<<<<< HEAD
-=======
     run_field_half();
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     run_field_misc();
     run_field_convert();
     run_field_be32_overflow();
@@ -10105,20 +8493,6 @@ int main(int argc, char **argv) {
 #ifdef ENABLE_MODULE_EXTRAKEYS
     run_extrakeys_tests();
 #endif
-<<<<<<< HEAD
-
-#ifdef ENABLE_MODULE_SCHNORRSIG
-    run_schnorrsig_tests();
-#endif
-
-    /* util tests */
-    run_secp256k1_memczero_test();
-
-    run_cmov_tests();
-
-    secp256k1_testrand_finish();
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 #ifdef ENABLE_MODULE_SCHNORRSIG
     run_schnorrsig_tests();

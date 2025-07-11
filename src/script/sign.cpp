@@ -1,10 +1,5 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
 // Copyright (c) 2009-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -14,11 +9,6 @@
 #include <key.h>
 #include <policy/policy.h>
 #include <primitives/transaction.h>
-<<<<<<< HEAD
-#include <script/signingprovider.h>
-#include <script/standard.h>
-#include <uint256.h>
-=======
 #include <script/keyorigin.h>
 #include <script/miniscript.h>
 #include <script/script.h>
@@ -26,33 +16,20 @@
 #include <script/solver.h>
 #include <uint256.h>
 #include <util/translation.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <util/vector.h>
 
 typedef std::vector<unsigned char> valtype;
 
-<<<<<<< HEAD
-MutableTransactionSignatureCreator::MutableTransactionSignatureCreator(const CMutableTransaction* txToIn, unsigned int nInIn, const CAmount& amountIn, int nHashTypeIn)
-    : txTo(txToIn), nIn(nInIn), nHashType(nHashTypeIn), amount(amountIn), checker(txTo, nIn, amountIn, MissingDataBehavior::FAIL),
-=======
 MutableTransactionSignatureCreator::MutableTransactionSignatureCreator(const CMutableTransaction& tx, unsigned int input_idx, const CAmount& amount, int hash_type)
     : m_txto{tx}, nIn{input_idx}, nHashType{hash_type}, amount{amount}, checker{&m_txto, nIn, amount, MissingDataBehavior::FAIL},
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
       m_txdata(nullptr)
 {
 }
 
-<<<<<<< HEAD
-MutableTransactionSignatureCreator::MutableTransactionSignatureCreator(const CMutableTransaction* txToIn, unsigned int nInIn, const CAmount& amountIn, const PrecomputedTransactionData* txdata, int nHashTypeIn)
-    : txTo(txToIn), nIn(nInIn), nHashType(nHashTypeIn), amount(amountIn),
-      checker(txdata ? MutableTransactionSignatureChecker(txTo, nIn, amount, *txdata, MissingDataBehavior::FAIL) :
-          MutableTransactionSignatureChecker(txTo, nIn, amount, MissingDataBehavior::FAIL)),
-=======
 MutableTransactionSignatureCreator::MutableTransactionSignatureCreator(const CMutableTransaction& tx, unsigned int input_idx, const CAmount& amount, const PrecomputedTransactionData* txdata, int hash_type)
     : m_txto{tx}, nIn{input_idx}, nHashType{hash_type}, amount{amount},
       checker{txdata ? MutableTransactionSignatureChecker{&m_txto, nIn, amount, *txdata, MissingDataBehavior::FAIL} :
                        MutableTransactionSignatureChecker{&m_txto, nIn, amount, MissingDataBehavior::FAIL}},
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
       m_txdata(txdata)
 {
 }
@@ -75,11 +52,7 @@ bool MutableTransactionSignatureCreator::CreateSig(const SigningProvider& provid
     // BASE/WITNESS_V0 signatures don't support explicit SIGHASH_DEFAULT, use SIGHASH_ALL instead.
     const int hashtype = nHashType == SIGHASH_DEFAULT ? SIGHASH_ALL : nHashType;
 
-<<<<<<< HEAD
-    uint256 hash = SignatureHash(scriptCode, *txTo, nIn, hashtype, amount, sigversion, m_txdata);
-=======
     uint256 hash = SignatureHash(scriptCode, m_txto, nIn, hashtype, amount, sigversion, m_txdata);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (!key.Sign(hash, vchSig))
         return false;
     vchSig.push_back((unsigned char)hashtype);
@@ -91,26 +64,7 @@ bool MutableTransactionSignatureCreator::CreateSchnorrSig(const SigningProvider&
     assert(sigversion == SigVersion::TAPROOT || sigversion == SigVersion::TAPSCRIPT);
 
     CKey key;
-<<<<<<< HEAD
-    {
-        // For now, use the old full pubkey-based key derivation logic. As it indexed by
-        // Hash160(full pubkey), we need to try both a version prefixed with 0x02, and one
-        // with 0x03.
-        unsigned char b[33] = {0x02};
-        std::copy(pubkey.begin(), pubkey.end(), b + 1);
-        CPubKey fullpubkey;
-        fullpubkey.Set(b, b + 33);
-        CKeyID keyid = fullpubkey.GetID();
-        if (!provider.GetKey(keyid, key)) {
-            b[0] = 0x03;
-            fullpubkey.Set(b, b + 33);
-            CKeyID keyid = fullpubkey.GetID();
-            if (!provider.GetKey(keyid, key)) return false;
-        }
-    }
-=======
     if (!provider.GetKeyByXOnly(pubkey, key)) return false;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // BIP341/BIP342 signing needs lots of precomputed transaction data. While some
     // (non-SIGHASH_DEFAULT) sighash modes exist that can work with just some subset
@@ -128,16 +82,10 @@ bool MutableTransactionSignatureCreator::CreateSchnorrSig(const SigningProvider&
         execdata.m_tapleaf_hash = *leaf_hash;
     }
     uint256 hash;
-<<<<<<< HEAD
-    if (!SignatureHashSchnorr(hash, execdata, *txTo, nIn, nHashType, sigversion, *m_txdata, MissingDataBehavior::FAIL)) return false;
-    sig.resize(64);
-    if (!key.SignSchnorr(hash, sig, merkle_root, nullptr)) return false;
-=======
     if (!SignatureHashSchnorr(hash, execdata, m_txto, nIn, nHashType, sigversion, *m_txdata, MissingDataBehavior::FAIL)) return false;
     sig.resize(64);
     // Use uint256{} as aux_rnd for now.
     if (!key.SignSchnorr(hash, sig, merkle_root, {})) return false;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (nHashType) sig.push_back(nHashType);
     return true;
 }
@@ -172,14 +120,11 @@ static bool GetPubKey(const SigningProvider& provider, const SignatureData& sigd
         pubkey = pk_it->second.first;
         return true;
     }
-<<<<<<< HEAD
-=======
     const auto& tap_pk_it = sigdata.tap_pubkeys.find(address);
     if (tap_pk_it != sigdata.tap_pubkeys.end()) {
         pubkey = tap_pk_it->second.GetEvenCorrespondingCPubKey();
         return true;
     }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     // Query the underlying provider
     return provider.GetPubKey(address, pubkey);
 }
@@ -208,8 +153,6 @@ static bool CreateSig(const BaseSignatureCreator& creator, SignatureData& sigdat
 
 static bool CreateTaprootScriptSig(const BaseSignatureCreator& creator, SignatureData& sigdata, const SigningProvider& provider, std::vector<unsigned char>& sig_out, const XOnlyPubKey& pubkey, const uint256& leaf_hash, SigVersion sigversion)
 {
-<<<<<<< HEAD
-=======
     KeyOriginInfo info;
     if (provider.GetKeyOriginByXOnly(pubkey, info)) {
         auto it = sigdata.taproot_misc_pubkeys.find(pubkey);
@@ -219,16 +162,11 @@ static bool CreateTaprootScriptSig(const BaseSignatureCreator& creator, Signatur
             it->second.first.insert(leaf_hash);
         }
     }
-
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     auto lookup_key = std::make_pair(pubkey, leaf_hash);
     auto it = sigdata.taproot_script_sigs.find(lookup_key);
     if (it != sigdata.taproot_script_sigs.end()) {
         sig_out = it->second;
-<<<<<<< HEAD
-=======
         return true;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     if (creator.CreateSchnorrSig(provider, sig_out, pubkey, &leaf_hash, nullptr, sigversion)) {
         sigdata.taproot_script_sigs[lookup_key] = sig_out;
@@ -237,27 +175,6 @@ static bool CreateTaprootScriptSig(const BaseSignatureCreator& creator, Signatur
     return false;
 }
 
-<<<<<<< HEAD
-static bool SignTaprootScript(const SigningProvider& provider, const BaseSignatureCreator& creator, SignatureData& sigdata, int leaf_version, const CScript& script, std::vector<valtype>& result)
-{
-    // Only BIP342 tapscript signing is supported for now.
-    if (leaf_version != TAPROOT_LEAF_TAPSCRIPT) return false;
-    SigVersion sigversion = SigVersion::TAPSCRIPT;
-
-    uint256 leaf_hash = (CHashWriter(HASHER_TAPLEAF) << uint8_t(leaf_version) << script).GetSHA256();
-
-    // <xonly pubkey> OP_CHECKSIG
-    if (script.size() == 34 && script[33] == OP_CHECKSIG && script[0] == 0x20) {
-        XOnlyPubKey pubkey(MakeSpan(script).subspan(1, 32));
-        std::vector<unsigned char> sig;
-        if (CreateTaprootScriptSig(creator, sigdata, provider, sig, pubkey, leaf_hash, sigversion)) {
-            result = Vector(std::move(sig));
-            return true;
-        }
-    }
-
-    return false;
-=======
 template<typename M, typename K, typename V>
 miniscript::Availability MsLookupHelper(const M& map, const K& key, V& value)
 {
@@ -410,7 +327,6 @@ static bool SignTaprootScript(const SigningProvider& provider, const BaseSignatu
     TapSatisfier ms_satisfier{provider, sigdata, creator, script, leaf_hash};
     const auto ms = miniscript::FromScript(script, ms_satisfier);
     return ms && ms->Satisfy(ms_satisfier, result) == miniscript::Availability::YES;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 static bool SignTaproot(const SigningProvider& provider, const BaseSignatureCreator& creator, const WitnessV1Taproot& output, SignatureData& sigdata, std::vector<valtype>& result)
@@ -425,14 +341,6 @@ static bool SignTaproot(const SigningProvider& provider, const BaseSignatureCrea
     if (provider.GetTaprootSpendData(output, spenddata)) {
         sigdata.tr_spenddata.Merge(spenddata);
     }
-<<<<<<< HEAD
-
-    // Try key path spending.
-    {
-        std::vector<unsigned char> sig;
-        if (sigdata.taproot_key_path_sig.size() == 0) {
-            if (creator.CreateSchnorrSig(provider, sig, spenddata.internal_key, nullptr, &spenddata.merkle_root, SigVersion::TAPROOT)) {
-=======
     if (provider.GetTaprootBuilder(output, builder)) {
         sigdata.tr_builder = builder;
     }
@@ -455,7 +363,6 @@ static bool SignTaproot(const SigningProvider& provider, const BaseSignatureCrea
         }
         if (sigdata.taproot_key_path_sig.size() == 0) {
             if (creator.CreateSchnorrSig(provider, sig, output, nullptr, nullptr, SigVersion::TAPROOT)) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 sigdata.taproot_key_path_sig = sig;
             }
         }

@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-// Copyright (c) 2018-2019 The DigiByte Core developers
-=======
 // Copyright (c) 2018-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -12,10 +8,7 @@
 #include <span.h>
 
 #include <string>
-<<<<<<< HEAD
-=======
 #include <string_view>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <vector>
 
 namespace spanparsing {
@@ -44,8 +37,6 @@ bool Func(const std::string& str, Span<const char>& sp);
  */
 Span<const char> Expr(Span<const char>& sp);
 
-<<<<<<< HEAD
-=======
 /** Split a string on any char found in separators, returning a vector.
  *
  * If sep does not occur in sp, a singleton with the entirety of sp is returned.
@@ -70,7 +61,6 @@ std::vector<T> Split(const Span<const char>& sp, std::string_view separators)
     return ret;
 }
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 /** Split a string on every instance of sep, returning a vector.
  *
  * If sep does not occur in sp, a singleton with the entirety of sp is returned.
@@ -78,15 +68,11 @@ std::vector<T> Split(const Span<const char>& sp, std::string_view separators)
  * Note that this function does not care about braces, so splitting
  * "foo(bar(1),2),3) on ',' will return {"foo(bar(1)", "2)", "3)"}.
  */
-<<<<<<< HEAD
-std::vector<Span<const char>> Split(const Span<const char>& sp, char sep);
-=======
 template <typename T = Span<const char>>
 std::vector<T> Split(const Span<const char>& sp, char sep)
 {
     return Split<T>(sp, std::string_view{&sep, 1});
 }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 } // namespace spanparsing
 

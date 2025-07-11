@@ -1,18 +1,4 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-<<<<<<< HEAD
-// Copyright (c) 2009-2019 The Bitcoin Core developers
-// Copyright (c) 2014-2019 The DigiByte Core developers
-// Distributed under the MIT software license, see the accompanying
-// file COPYING or http://www.opensource.org/licenses/mit-license.php.
-
-#include <util/strencodings.h>
-#include <util/string.h>
-
-#include <tinyformat.h>
-
-#include <algorithm>
-#include <cstdlib>
-=======
 // Copyright (c) 2009-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
@@ -22,7 +8,6 @@
 
 #include <array>
 #include <cassert>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <cstring>
 #include <limits>
 #include <optional>
@@ -84,16 +69,8 @@ bool IsHex(std::string_view str)
 
 bool IsHexNumber(std::string_view str)
 {
-<<<<<<< HEAD
-    size_t starting_location = 0;
-    if (str.size() > 2 && *str.begin() == '0' && *(str.begin()+1) == 'x') {
-        starting_location = 2;
-    }
-    for (const char c : str.substr(starting_location)) {
-=======
     if (str.substr(0, 2) == "0x") str.remove_prefix(2);
     for (char c : str) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         if (HexDigit(c) < 0) return false;
     }
     // Return false for empty string or "0x".
@@ -103,23 +80,6 @@ bool IsHexNumber(std::string_view str)
 template <typename Byte>
 std::optional<std::vector<Byte>> TryParseHex(std::string_view str)
 {
-<<<<<<< HEAD
-    // convert hex dump to vector
-    std::vector<unsigned char> vch;
-    while (true)
-    {
-        while (IsSpace(*psz))
-            psz++;
-        signed char c = HexDigit(*psz++);
-        if (c == (signed char)-1)
-            break;
-        unsigned char n = (c << 4);
-        c = HexDigit(*psz++);
-        if (c == (signed char)-1)
-            break;
-        n |= c;
-        vch.push_back(n);
-=======
     std::vector<Byte> vch;
     auto it = str.begin();
     while (it != str.end()) {
@@ -132,7 +92,6 @@ std::optional<std::vector<Byte>> TryParseHex(std::string_view str)
         auto c2 = HexDigit(*(it++));
         if (c1 < 0 || c2 < 0) return std::nullopt;
         vch.push_back(Byte(c1 << 4) | Byte(c2));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     return vch;
 }
@@ -141,24 +100,12 @@ template std::optional<std::vector<uint8_t>> TryParseHex(std::string_view);
 
 bool SplitHostPort(std::string_view in, uint16_t& portOut, std::string& hostOut)
 {
-<<<<<<< HEAD
-    return ParseHex(str.c_str());
-}
-
-void SplitHostPort(std::string in, uint16_t& portOut, std::string& hostOut)
-{
-=======
     bool valid = false;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     size_t colon = in.find_last_of(':');
     // if a : is found, and it either follows a [...], or no other : is in the string, treat it as port separator
     bool fHaveColon = colon != in.npos;
     bool fBracketed = fHaveColon && (in[0] == '[' && in[colon - 1] == ']'); // if there is a colon, and in[0]=='[', colon is not 0, so in[colon-1] is safe
-<<<<<<< HEAD
-    bool fMultiColon = fHaveColon && (in.find_last_of(':', colon - 1) != in.npos);
-=======
     bool fMultiColon{fHaveColon && colon != 0 && (in.find_last_of(':', colon - 1) != in.npos)};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (fHaveColon && (colon == 0 || fBracketed || !fMultiColon)) {
         uint16_t n;
         if (ParseUInt16(in.substr(colon + 1), &n)) {
@@ -174,11 +121,8 @@ void SplitHostPort(std::string in, uint16_t& portOut, std::string& hostOut)
     } else {
         hostOut = in;
     }
-<<<<<<< HEAD
-=======
 
     return valid;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 std::string EncodeBase64(Span<const unsigned char> input)
@@ -194,17 +138,7 @@ std::string EncodeBase64(Span<const unsigned char> input)
 
 std::optional<std::vector<unsigned char>> DecodeBase64(std::string_view str)
 {
-<<<<<<< HEAD
-    return EncodeBase64(MakeUCharSpan(str));
-}
-
-std::vector<unsigned char> DecodeBase64(const char* p, bool* pf_invalid)
-{
-    static const int decode64_table[256] =
-    {
-=======
     static const int8_t decode64_table[256]{
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
         -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
         -1, -1, -1, 62, -1, -1, -1, 63, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, -1, -1,
@@ -226,21 +160,6 @@ std::vector<unsigned char> DecodeBase64(const char* p, bool* pf_invalid)
     if (str.size() >= 1 && str.back() == '=') str.remove_suffix(1);
 
     std::vector<unsigned char> ret;
-<<<<<<< HEAD
-    ret.reserve((val.size() * 3) / 4);
-    bool valid = ConvertBits<6, 8, false>([&](unsigned char c) { ret.push_back(c); }, val.begin(), val.end());
-
-    const char* q = p;
-    while (valid && *p != 0) {
-        if (*p != '=') {
-            valid = false;
-            break;
-        }
-        ++p;
-    }
-    valid = valid && (p - e) % 4 == 0 && p - q < 4;
-    if (pf_invalid) *pf_invalid = !valid;
-=======
     ret.reserve((str.size() * 3) / 4);
     bool valid = ConvertBits<6, 8, false>(
         [&](unsigned char c) { ret.push_back(c); },
@@ -248,26 +167,10 @@ std::vector<unsigned char> DecodeBase64(const char* p, bool* pf_invalid)
         [](char c) { return decode64_table[uint8_t(c)]; }
     );
     if (!valid) return {};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     return ret;
 }
 
-<<<<<<< HEAD
-std::string DecodeBase64(const std::string& str, bool* pf_invalid)
-{
-    if (!ValidAsCString(str)) {
-        if (pf_invalid) {
-            *pf_invalid = true;
-        }
-        return {};
-    }
-    std::vector<unsigned char> vchRet = DecodeBase64(str.c_str(), pf_invalid);
-    return std::string((const char*)vchRet.data(), vchRet.size());
-}
-
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 std::string EncodeBase32(Span<const unsigned char> input, bool pad)
 {
     static const char *pbase32 = "abcdefghijklmnopqrstuvwxyz234567";
@@ -283,20 +186,12 @@ std::string EncodeBase32(Span<const unsigned char> input, bool pad)
     return str;
 }
 
-<<<<<<< HEAD
-std::string EncodeBase32(const std::string& str, bool pad)
-=======
 std::string EncodeBase32(std::string_view str, bool pad)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     return EncodeBase32(MakeUCharSpan(str), pad);
 }
 
-<<<<<<< HEAD
-std::vector<unsigned char> DecodeBase32(const char* p, bool* pf_invalid)
-=======
 std::optional<std::vector<unsigned char>> DecodeBase32(std::string_view str)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     static const int8_t decode32_table[256]{
         -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
@@ -329,45 +224,11 @@ std::optional<std::vector<unsigned char>> DecodeBase32(std::string_view str)
         [](char c) { return decode32_table[uint8_t(c)]; }
     );
 
-<<<<<<< HEAD
-    const char* q = p;
-    while (valid && *p != 0) {
-        if (*p != '=') {
-            valid = false;
-            break;
-        }
-        ++p;
-    }
-    valid = valid && (p - e) % 8 == 0 && p - q < 8;
-    if (pf_invalid) *pf_invalid = !valid;
-=======
     if (!valid) return {};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     return ret;
 }
 
-<<<<<<< HEAD
-std::string DecodeBase32(const std::string& str, bool* pf_invalid)
-{
-    if (!ValidAsCString(str)) {
-        if (pf_invalid) {
-            *pf_invalid = true;
-        }
-        return {};
-    }
-    std::vector<unsigned char> vchRet = DecodeBase32(str.c_str(), pf_invalid);
-    return std::string((const char*)vchRet.data(), vchRet.size());
-}
-
-[[nodiscard]] static bool ParsePrechecks(const std::string& str)
-{
-    if (str.empty()) // No empty string allowed
-        return false;
-    if (str.size() >= 1 && (IsSpace(str[0]) || IsSpace(str[str.size()-1]))) // No padding allowed
-        return false;
-    if (!ValidAsCString(str)) // No embedded NUL characters allowed
-=======
 namespace {
 template <typename T>
 bool ParseIntegral(std::string_view str, T* out)
@@ -380,7 +241,6 @@ bool ParseIntegral(std::string_view str, T* out)
     }
     const std::optional<T> opt_int = ToIntegral<T>((!str.empty() && str[0] == '+') ? str.substr(1) : str);
     if (!opt_int) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         return false;
     }
     if (out != nullptr) {
@@ -626,19 +486,6 @@ bool ParseFixedPoint(std::string_view val, int decimals, int64_t *amount_out)
     return true;
 }
 
-<<<<<<< HEAD
-std::string ToLower(const std::string& str)
-{
-    std::string r;
-    for (auto ch : str) r += ToLower((unsigned char)ch);
-    return r;
-}
-
-std::string ToUpper(const std::string& str)
-{
-    std::string r;
-    for (auto ch : str) r += ToUpper((unsigned char)ch);
-=======
 std::string ToLower(std::string_view str)
 {
     std::string r;
@@ -650,7 +497,6 @@ std::string ToUpper(std::string_view str)
 {
     std::string r;
     for (auto ch : str) r += ToUpper(ch);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     return r;
 }
 
@@ -661,21 +507,6 @@ std::string Capitalize(std::string str)
     return str;
 }
 
-<<<<<<< HEAD
-std::string HexStr(const Span<const uint8_t> s)
-{
-    std::string rv(s.size() * 2, '\0');
-    static constexpr char hexmap[16] = { '0', '1', '2', '3', '4', '5', '6', '7',
-                                         '8', '9', 'a', 'b', 'c', 'd', 'e', 'f' };
-    auto it = rv.begin();
-    for (uint8_t v : s) {
-        *it++ = hexmap[v >> 4];
-        *it++ = hexmap[v & 15];
-    }
-    assert(it == rv.end());
-    return rv;
-}
-=======
 namespace {
 
 using ByteAsHex = std::array<char, 2>;
@@ -754,4 +585,3 @@ std::optional<uint64_t> ParseByteUnits(std::string_view str, ByteUnit default_mu
     }
     return *parsed_num * unit_amount;
 }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion

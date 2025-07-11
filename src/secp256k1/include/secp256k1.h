@@ -49,11 +49,7 @@ extern "C" {
  */
 typedef struct secp256k1_context_struct secp256k1_context;
 
-<<<<<<< HEAD
-/** Opaque data structure that holds rewriteable "scratch space"
-=======
 /** Opaque data structure that holds rewritable "scratch space"
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
  *
  *  The purpose of this structure is to replace dynamic memory allocations,
  *  because we target architectures where this may not be available. It is
@@ -152,10 +148,6 @@ typedef int (*secp256k1_nonce_function)(
      * 2. In other cases, SECP256K1_DLL_EXPORT must be defined. */
 #   define SECP256K1_API extern __declspec (dllexport)
 #  endif
-<<<<<<< HEAD
-# elif defined(__GNUC__) && (__GNUC__ >= 4) && defined(SECP256K1_BUILD)
-#  define SECP256K1_API __attribute__ ((visibility ("default")))
-=======
   /* The user must define SECP256K1_STATIC when consuming libsecp256k1 as a static
    * library on Windows. */
 # elif !defined(SECP256K1_STATIC)
@@ -167,7 +159,6 @@ typedef int (*secp256k1_nonce_function)(
 # if defined(__GNUC__) && (__GNUC__ >= 4) && defined(SECP256K1_BUILD)
    /* Building libsecp256k1 on non-Windows using GCC or compatible. */
 #  define SECP256K1_API extern __attribute__ ((visibility ("default")))
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 # else
    /* All cases not captured above. */
 #  define SECP256K1_API extern
@@ -209,15 +200,6 @@ typedef int (*secp256k1_nonce_function)(
 #define SECP256K1_FLAGS_BIT_CONTEXT_DECLASSIFY (1 << 10)
 #define SECP256K1_FLAGS_BIT_COMPRESSION (1 << 8)
 
-<<<<<<< HEAD
-/** Flags to pass to secp256k1_context_create, secp256k1_context_preallocated_size, and
- *  secp256k1_context_preallocated_create. */
-#define SECP256K1_CONTEXT_VERIFY (SECP256K1_FLAGS_TYPE_CONTEXT | SECP256K1_FLAGS_BIT_CONTEXT_VERIFY)
-#define SECP256K1_CONTEXT_SIGN (SECP256K1_FLAGS_TYPE_CONTEXT | SECP256K1_FLAGS_BIT_CONTEXT_SIGN)
-#define SECP256K1_CONTEXT_DECLASSIFY (SECP256K1_FLAGS_TYPE_CONTEXT | SECP256K1_FLAGS_BIT_CONTEXT_DECLASSIFY)
-#define SECP256K1_CONTEXT_NONE (SECP256K1_FLAGS_TYPE_CONTEXT)
-
-=======
 /** Context flags to pass to secp256k1_context_create, secp256k1_context_preallocated_size, and
  *  secp256k1_context_preallocated_create. */
 #define SECP256K1_CONTEXT_NONE (SECP256K1_FLAGS_TYPE_CONTEXT)
@@ -229,7 +211,6 @@ typedef int (*secp256k1_nonce_function)(
 /* Testing flag. Do not use. */
 #define SECP256K1_CONTEXT_DECLASSIFY (SECP256K1_FLAGS_TYPE_CONTEXT | SECP256K1_FLAGS_BIT_CONTEXT_DECLASSIFY)
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 /** Flag to pass to secp256k1_ec_pubkey_serialize. */
 #define SECP256K1_EC_COMPRESSED (SECP256K1_FLAGS_TYPE_COMPRESSION | SECP256K1_FLAGS_BIT_COMPRESSION)
 #define SECP256K1_EC_UNCOMPRESSED (SECP256K1_FLAGS_TYPE_COMPRESSION)
@@ -241,14 +222,6 @@ typedef int (*secp256k1_nonce_function)(
 #define SECP256K1_TAG_PUBKEY_HYBRID_EVEN 0x06
 #define SECP256K1_TAG_PUBKEY_HYBRID_ODD 0x07
 
-<<<<<<< HEAD
-/** A simple secp256k1 context object with no precomputed tables. These are useful for
- *  type serialization/parsing functions which require a context object to maintain
- *  API consistency, but currently do not require expensive precomputations or dynamic
- *  allocations.
- */
-SECP256K1_API extern const secp256k1_context *secp256k1_context_no_precomp;
-=======
 /** A built-in constant secp256k1 context object with static storage duration, to be
  *  used in conjunction with secp256k1_selftest.
  *
@@ -284,18 +257,13 @@ SECP256K1_DEPRECATED("Use secp256k1_context_static instead");
  */
 SECP256K1_API void secp256k1_selftest(void);
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 /** Create a secp256k1 context object (in dynamically allocated memory).
  *
  *  This function uses malloc to allocate memory. It is guaranteed that malloc is
  *  called at most once for every call of this function. If you need to avoid dynamic
-<<<<<<< HEAD
- *  memory allocation entirely, see the functions in secp256k1_preallocated.h.
-=======
  *  memory allocation entirely, see secp256k1_context_static and the functions in
  *  secp256k1_preallocated.h.
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
  *
  *  Returns: a newly created context object.
  *  In:      flags: Always set to SECP256K1_CONTEXT_NONE (see below).
@@ -324,12 +292,9 @@ SECP256K1_API secp256k1_context *secp256k1_context_create(
  *  This function uses malloc to allocate memory. It is guaranteed that malloc is
  *  called at most once for every call of this function. If you need to avoid dynamic
  *  memory allocation entirely, see the functions in secp256k1_preallocated.h.
-<<<<<<< HEAD
-=======
  *
  *  Cloning secp256k1_context_static is not possible, and should not be emulated by
  *  the caller (e.g., using memcpy). Create a new context instead.
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
  *
  *  Returns: a newly created context object.
  *  Args:    ctx: an existing context to copy (not secp256k1_context_static)
@@ -350,10 +315,7 @@ SECP256K1_API secp256k1_context *secp256k1_context_clone(
  *
  *  Args:   ctx: an existing context to destroy, constructed using
  *               secp256k1_context_create or secp256k1_context_clone
-<<<<<<< HEAD
-=======
  *               (i.e., not secp256k1_context_static).
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
  */
 SECP256K1_API void secp256k1_context_destroy(
     secp256k1_context *ctx
@@ -374,42 +336,25 @@ SECP256K1_API void secp256k1_context_destroy(
  *  undefined.
  *
  *  When this function has not been called (or called with fn==NULL), then the
-<<<<<<< HEAD
- *  default handler will be used. The library provides a default handler which
-=======
  *  default handler will be used. The library provides a default handler which
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
  *  writes the message to stderr and calls abort. This default handler can be
  *  replaced at link time if the preprocessor macro
  *  USE_EXTERNAL_DEFAULT_CALLBACKS is defined, which is the case if the build
  *  has been configured with --enable-external-default-callbacks. Then the
  *  following two symbols must be provided to link against:
-<<<<<<< HEAD
- *   - void secp256k1_default_illegal_callback_fn(const char* message, void* data);
- *   - void secp256k1_default_error_callback_fn(const char* message, void* data);
-=======
  *   - void secp256k1_default_illegal_callback_fn(const char *message, void *data);
  *   - void secp256k1_default_error_callback_fn(const char *message, void *data);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
  *  The library can call these default handlers even before a proper callback data
  *  pointer could have been set using secp256k1_context_set_illegal_callback or
  *  secp256k1_context_set_error_callback, e.g., when the creation of a context
  *  fails. In this case, the corresponding default handler will be called with
  *  the data pointer argument set to NULL.
  *
-<<<<<<< HEAD
- *  Args: ctx:  an existing context object (cannot be NULL)
- *  In:   fun:  a pointer to a function to call when an illegal argument is
- *              passed to the API, taking a message and an opaque pointer.
- *              (NULL restores the default handler.)
- *        data: the opaque pointer to pass to fun above.
-=======
  *  Args: ctx:  an existing context object.
  *  In:   fun:  a pointer to a function to call when an illegal argument is
  *              passed to the API, taking a message and an opaque pointer.
  *              (NULL restores the default handler.)
  *        data: the opaque pointer to pass to fun above, must be NULL for the default handler.
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
  *
  *  See also secp256k1_context_set_error_callback.
  */
@@ -437,11 +382,7 @@ SECP256K1_API void secp256k1_context_set_illegal_callback(
  *              taking a message and an opaque pointer (NULL restores the
  *              default handler, see secp256k1_context_set_illegal_callback
  *              for details).
-<<<<<<< HEAD
- *        data: the opaque pointer to pass to fun above.
-=======
  *        data: the opaque pointer to pass to fun above, must be NULL for the default handler.
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
  *
  *  See also secp256k1_context_set_illegal_callback.
  */
@@ -636,15 +577,9 @@ SECP256K1_API int secp256k1_ecdsa_signature_serialize_compact(
  *
  *  Returns: 1: correct signature
  *           0: incorrect or unparseable signature
-<<<<<<< HEAD
- *  Args:    ctx:       a secp256k1 context object, initialized for verification.
- *  In:      sig:       the signature being verified (cannot be NULL)
- *           msghash32: the 32-byte message hash being verified (cannot be NULL).
-=======
  *  Args:    ctx:       a secp256k1 context object.
  *  In:      sig:       the signature being verified.
  *           msghash32: the 32-byte message hash being verified.
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
  *                      The verifier must make sure to apply a cryptographic
  *                      hash function to the message by itself and not accept an
  *                      msghash32 value directly. Otherwise, it would be easy to
@@ -652,11 +587,7 @@ SECP256K1_API int secp256k1_ecdsa_signature_serialize_compact(
  *                      secret key. See also
  *                      https://digibyte.stackexchange.com/a/81116/35586 for more
  *                      background on this topic.
-<<<<<<< HEAD
- *           pubkey:    pointer to an initialized public key to verify with (cannot be NULL)
-=======
  *           pubkey:    pointer to an initialized public key to verify with.
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
  *
  * To avoid accepting malleable signatures, only ECDSA signatures in lower-S
  * form are accepted.
@@ -734,14 +665,6 @@ SECP256K1_API const secp256k1_nonce_function secp256k1_nonce_function_default;
  *
  *  Returns: 1: signature created
  *           0: the nonce generation function failed, or the secret key was invalid.
-<<<<<<< HEAD
- *  Args:    ctx:       pointer to a context object, initialized for signing (cannot be NULL)
- *  Out:     sig:       pointer to an array where the signature will be placed (cannot be NULL)
- *  In:      msghash32: the 32-byte message hash being signed (cannot be NULL)
- *           seckey:    pointer to a 32-byte secret key (cannot be NULL)
- *           noncefp:   pointer to a nonce generation function. If NULL, secp256k1_nonce_function_default is used
- *           ndata:     pointer to arbitrary data used by the nonce generation function (can be NULL)
-=======
  *  Args:    ctx:       pointer to a context object (not secp256k1_context_static).
  *  Out:     sig:       pointer to an array where the signature will be placed.
  *  In:      msghash32: the 32-byte message hash being signed.
@@ -752,7 +675,6 @@ SECP256K1_API const secp256k1_nonce_function secp256k1_nonce_function_default;
  *                      (can be NULL). If it is non-NULL and
  *                      secp256k1_nonce_function_default is used, then ndata must be a
  *                      pointer to 32-bytes of additional data.
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
  *
  * The created signature is always in lower-S form. See
  * secp256k1_ecdsa_signature_normalize for more details.
@@ -785,19 +707,11 @@ SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_ec_seckey_verify(
 
 /** Compute the public key for a secret key.
  *
-<<<<<<< HEAD
- *  Returns: 1: secret was valid, public key stores
- *           0: secret was invalid, try again
- *  Args:   ctx:        pointer to a context object, initialized for signing (cannot be NULL)
- *  Out:    pubkey:     pointer to the created public key (cannot be NULL)
- *  In:     seckey:     pointer to a 32-byte secret key (cannot be NULL)
-=======
  *  Returns: 1: secret was valid, public key stores.
  *           0: secret was invalid, try again.
  *  Args:    ctx:    pointer to a context object (not secp256k1_context_static).
  *  Out:     pubkey: pointer to the created public key.
  *  In:      seckey: pointer to a 32-byte secret key.
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
  */
 SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_ec_pubkey_create(
     const secp256k1_context *ctx,
@@ -813,25 +727,10 @@ SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_ec_pubkey_create(
  *  In/Out: seckey: pointer to the 32-byte secret key to be negated. If the
  *                  secret key is invalid according to
  *                  secp256k1_ec_seckey_verify, this function returns 0 and
-<<<<<<< HEAD
- *                  seckey will be set to some unspecified value. (cannot be
- *                  NULL)
- */
-SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_ec_seckey_negate(
-    const secp256k1_context* ctx,
-    unsigned char *seckey
-) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2);
-
-/** Same as secp256k1_ec_seckey_negate, but DEPRECATED. Will be removed in
- *  future versions. */
-SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_ec_privkey_negate(
-    const secp256k1_context* ctx,
-=======
  *                  seckey will be set to some unspecified value.
  */
 SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_ec_seckey_negate(
     const secp256k1_context *ctx,
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     unsigned char *seckey
 ) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2);
 
@@ -859,28 +758,6 @@ SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_ec_pubkey_negate(
  *  Returns: 0 if the arguments are invalid or the resulting secret key would be
  *           invalid (only when the tweak is the negation of the secret key). 1
  *           otherwise.
-<<<<<<< HEAD
- *  Args:    ctx:   pointer to a context object (cannot be NULL).
- *  In/Out: seckey: pointer to a 32-byte secret key. If the secret key is
- *                  invalid according to secp256k1_ec_seckey_verify, this
- *                  function returns 0. seckey will be set to some unspecified
- *                  value if this function returns 0. (cannot be NULL)
- *  In:    tweak32: pointer to a 32-byte tweak. If the tweak is invalid according to
- *                  secp256k1_ec_seckey_verify, this function returns 0. For
- *                  uniformly random 32-byte arrays the chance of being invalid
- *                  is negligible (around 1 in 2^128) (cannot be NULL).
- */
-SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_ec_seckey_tweak_add(
-    const secp256k1_context* ctx,
-    unsigned char *seckey,
-    const unsigned char *tweak32
-) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(3);
-
-/** Same as secp256k1_ec_seckey_tweak_add, but DEPRECATED. Will be removed in
- *  future versions. */
-SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_ec_privkey_tweak_add(
-    const secp256k1_context* ctx,
-=======
  *  Args:    ctx:   pointer to a context object.
  *  In/Out: seckey: pointer to a 32-byte secret key. If the secret key is
  *                  invalid according to secp256k1_ec_seckey_verify, this
@@ -893,7 +770,6 @@ SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_ec_privkey_tweak_add(
  */
 SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_ec_seckey_tweak_add(
     const secp256k1_context *ctx,
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     unsigned char *seckey,
     const unsigned char *tweak32
 ) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(3);
@@ -912,16 +788,6 @@ SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_ec_privkey_tweak_add(
  *  Returns: 0 if the arguments are invalid or the resulting public key would be
  *           invalid (only when the tweak is the negation of the corresponding
  *           secret key). 1 otherwise.
-<<<<<<< HEAD
- *  Args:    ctx:   pointer to a context object initialized for validation
- *                  (cannot be NULL).
- *  In/Out: pubkey: pointer to a public key object. pubkey will be set to an
- *                  invalid value if this function returns 0 (cannot be NULL).
- *  In:    tweak32: pointer to a 32-byte tweak. If the tweak is invalid according to
- *                  secp256k1_ec_seckey_verify, this function returns 0. For
- *                  uniformly random 32-byte arrays the chance of being invalid
- *                  is negligible (around 1 in 2^128) (cannot be NULL).
-=======
  *  Args:    ctx:   pointer to a context object.
  *  In/Out: pubkey: pointer to a public key object. pubkey will be set to an
  *                  invalid value if this function returns 0.
@@ -929,7 +795,6 @@ SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_ec_privkey_tweak_add(
  *                  secp256k1_ec_seckey_verify or 32 zero bytes. For uniformly
  *                  random 32-byte tweaks, the chance of being invalid is
  *                  negligible (around 1 in 2^128).
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
  */
 SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_ec_pubkey_tweak_add(
     const secp256k1_context *ctx,
@@ -940,28 +805,6 @@ SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_ec_pubkey_tweak_add(
 /** Tweak a secret key by multiplying it by a tweak.
  *
  *  Returns: 0 if the arguments are invalid. 1 otherwise.
-<<<<<<< HEAD
- *  Args:   ctx:    pointer to a context object (cannot be NULL).
- *  In/Out: seckey: pointer to a 32-byte secret key. If the secret key is
- *                  invalid according to secp256k1_ec_seckey_verify, this
- *                  function returns 0. seckey will be set to some unspecified
- *                  value if this function returns 0. (cannot be NULL)
- *  In:    tweak32: pointer to a 32-byte tweak. If the tweak is invalid according to
- *                  secp256k1_ec_seckey_verify, this function returns 0. For
- *                  uniformly random 32-byte arrays the chance of being invalid
- *                  is negligible (around 1 in 2^128) (cannot be NULL).
- */
-SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_ec_seckey_tweak_mul(
-    const secp256k1_context* ctx,
-    unsigned char *seckey,
-    const unsigned char *tweak32
-) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(3);
-
-/** Same as secp256k1_ec_seckey_tweak_mul, but DEPRECATED. Will be removed in
- *  future versions. */
-SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_ec_privkey_tweak_mul(
-    const secp256k1_context* ctx,
-=======
  *  Args:   ctx:    pointer to a context object.
  *  In/Out: seckey: pointer to a 32-byte secret key. If the secret key is
  *                  invalid according to secp256k1_ec_seckey_verify, this
@@ -974,7 +817,6 @@ SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_ec_privkey_tweak_mul(
  */
 SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_ec_seckey_tweak_mul(
     const secp256k1_context *ctx,
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     unsigned char *seckey,
     const unsigned char *tweak32
 ) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(3);
@@ -991,16 +833,6 @@ SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_ec_privkey_tweak_mul(
 /** Tweak a public key by multiplying it by a tweak value.
  *
  *  Returns: 0 if the arguments are invalid. 1 otherwise.
-<<<<<<< HEAD
- *  Args:    ctx:   pointer to a context object initialized for validation
- *                  (cannot be NULL).
- *  In/Out: pubkey: pointer to a public key object. pubkey will be set to an
- *                  invalid value if this function returns 0 (cannot be NULL).
- *  In:    tweak32: pointer to a 32-byte tweak. If the tweak is invalid according to
- *                  secp256k1_ec_seckey_verify, this function returns 0. For
- *                  uniformly random 32-byte arrays the chance of being invalid
- *                  is negligible (around 1 in 2^128) (cannot be NULL).
-=======
  *  Args:    ctx:   pointer to a context object.
  *  In/Out: pubkey: pointer to a public key object. pubkey will be set to an
  *                  invalid value if this function returns 0.
@@ -1008,7 +840,6 @@ SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_ec_privkey_tweak_mul(
  *                  secp256k1_ec_seckey_verify, this function returns 0. For
  *                  uniformly random 32-byte arrays the chance of being invalid
  *                  is negligible (around 1 in 2^128).
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
  */
 SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_ec_pubkey_tweak_mul(
     const secp256k1_context *ctx,
@@ -1016,14 +847,9 @@ SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_ec_pubkey_tweak_mul(
     const unsigned char *tweak32
 ) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(3);
 
-<<<<<<< HEAD
-/** Updates the context randomization to protect against side-channel leakage.
- *  Returns: 1: randomization successfully updated or nothing to randomize
-=======
 /** Randomizes the context to provide enhanced protection against side-channel leakage.
  *
  *  Returns: 1: randomization successful
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
  *           0: error
  *  Args:    ctx:       pointer to a context object (not secp256k1_context_static).
  *  In:      seed32:    pointer to a 32-byte random seed (NULL resets to initial state).
@@ -1044,16 +870,6 @@ SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_ec_pubkey_tweak_mul(
  * keys is recommended as a defense-in-depth measure. Randomization of the static
  * context secp256k1_context_static is not supported.
  *
-<<<<<<< HEAD
- * This function has currently an effect only on contexts initialized for signing
- * because randomization is currently used only for signing. However, this is not
- * guaranteed and may change in the future. It is safe to call this function on
- * contexts not initialized for signing; then it will have no effect and return 1.
- *
- * You should call this after secp256k1_context_create or
- * secp256k1_context_clone (and secp256k1_context_preallocated_create or
- * secp256k1_context_clone, resp.), and you may call this repeatedly afterwards.
-=======
  * Currently, the random seed is mainly used for blinding multiplications of a
  * secret scalar with the elliptic curve base point. Multiplications of this
  * kind are performed by exactly those API functions which are documented to
@@ -1062,7 +878,6 @@ SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_ec_pubkey_tweak_mul(
  * A notable exception to that rule is the ECDH module, which relies on a different
  * kind of elliptic curve point multiplication and thus does not benefit from
  * enhanced protection against side-channel leakage currently.
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
  */
 SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_context_randomize(
     secp256k1_context *ctx,

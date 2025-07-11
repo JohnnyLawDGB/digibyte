@@ -1,9 +1,4 @@
-<<<<<<< HEAD
-// Copyright (c) 2016-2020 The Bitcoin Core developers
-// Copyright (c) 2016-2020 The DigiByte Core developers
-=======
 // Copyright (c) 2016-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -15,12 +10,6 @@
 #endif
 
 #ifdef WIN32
-<<<<<<< HEAD
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <windows.h>
 #else
 #include <sys/mman.h> // for mmap
@@ -30,13 +19,9 @@
 #endif
 
 #include <algorithm>
-<<<<<<< HEAD
-#include <stdexcept>
-=======
 #include <limits>
 #include <stdexcept>
 #include <utility>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #ifdef ARENA_DEBUG
 #include <iomanip>
 #include <iostream>
@@ -88,14 +73,9 @@ void* Arena::alloc(size_t size)
 
     // Create the used-chunk, taking its space from the end of the free-chunk
     const size_t size_remaining = size_ptr_it->first - size;
-<<<<<<< HEAD
-    auto allocated = chunks_used.emplace(size_ptr_it->second + size_remaining, size).first;
-    chunks_free_end.erase(size_ptr_it->second + size_ptr_it->first);
-=======
     char* const free_chunk = static_cast<char*>(size_ptr_it->second);
     auto allocated = chunks_used.emplace(free_chunk + size_remaining, size).first;
     chunks_free_end.erase(free_chunk + size_ptr_it->first);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (size_ptr_it->first == size) {
         // whole chunk is used up
         chunks_free.erase(size_ptr_it->second);
@@ -107,11 +87,7 @@ void* Arena::alloc(size_t size)
     }
     size_to_free_chunk.erase(size_ptr_it);
 
-<<<<<<< HEAD
-    return reinterpret_cast<void*>(allocated->first);
-=======
     return allocated->first;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 void Arena::free(void *ptr)

@@ -10,11 +10,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <map>
-<<<<<<< HEAD
-#include <cassert>
-
-#include <sstream>        // .get_int64()
-=======
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -22,7 +17,6 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 class UniValue {
 public:
@@ -55,31 +49,6 @@ public:
             setStr(std::string{std::forward<Ref>(val)});
         }
     }
-<<<<<<< HEAD
-    UniValue(uint64_t val_) {
-        setInt(val_);
-    }
-    UniValue(int64_t val_) {
-        setInt(val_);
-    }
-    UniValue(bool val_) {
-        setBool(val_);
-    }
-    UniValue(int val_) {
-        setInt(val_);
-    }
-    UniValue(double val_) {
-        setFloat(val_);
-    }
-    UniValue(const std::string& val_) {
-        setStr(val_);
-    }
-    UniValue(const char *val_) {
-        std::string s(val_);
-        setStr(s);
-    }
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     void clear();
 
@@ -115,70 +84,6 @@ public:
     bool isArray() const { return (typ == VARR); }
     bool isObject() const { return (typ == VOBJ); }
 
-<<<<<<< HEAD
-    bool push_back(const UniValue& val);
-    bool push_back(const std::string& val_) {
-        UniValue tmpVal(VSTR, val_);
-        return push_back(tmpVal);
-    }
-    bool push_back(const char *val_) {
-        std::string s(val_);
-        return push_back(s);
-    }
-    bool push_back(uint64_t val_) {
-        UniValue tmpVal(val_);
-        return push_back(tmpVal);
-    }
-    bool push_back(int64_t val_) {
-        UniValue tmpVal(val_);
-        return push_back(tmpVal);
-    }
-    bool push_back(bool val_) {
-        UniValue tmpVal(val_);
-        return push_back(tmpVal);
-    }
-    bool push_back(int val_) {
-        UniValue tmpVal(val_);
-        return push_back(tmpVal);
-    }
-    bool push_back(double val_) {
-        UniValue tmpVal(val_);
-        return push_back(tmpVal);
-    }
-    bool push_backV(const std::vector<UniValue>& vec);
-
-    void __pushKV(const std::string& key, const UniValue& val);
-    bool pushKV(const std::string& key, const UniValue& val);
-    bool pushKV(const std::string& key, const std::string& val_) {
-        UniValue tmpVal(VSTR, val_);
-        return pushKV(key, tmpVal);
-    }
-    bool pushKV(const std::string& key, const char *val_) {
-        std::string _val(val_);
-        return pushKV(key, _val);
-    }
-    bool pushKV(const std::string& key, int64_t val_) {
-        UniValue tmpVal(val_);
-        return pushKV(key, tmpVal);
-    }
-    bool pushKV(const std::string& key, uint64_t val_) {
-        UniValue tmpVal(val_);
-        return pushKV(key, tmpVal);
-    }
-    bool pushKV(const std::string& key, bool val_) {
-        UniValue tmpVal(val_);
-        return pushKV(key, tmpVal);
-    }
-    bool pushKV(const std::string& key, int val_) {
-        UniValue tmpVal((int64_t)val_);
-        return pushKV(key, tmpVal);
-    }
-    bool pushKV(const std::string& key, double val_) {
-        UniValue tmpVal(val_);
-        return pushKV(key, tmpVal);
-    }
-    bool pushKVs(const UniValue& obj);
-=======
     void push_back(UniValue val);
     void push_backV(const std::vector<UniValue>& vec);
     template <class It>
@@ -187,7 +92,6 @@ public:
     void pushKVEnd(std::string key, UniValue val);
     void pushKV(std::string key, UniValue val);
     void pushKVs(UniValue obj);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     std::string write(unsigned int prettyIndent = 0,
                       unsigned int indentLevel = 0) const;
@@ -219,11 +123,6 @@ public:
     const UniValue& get_array() const;
 
     enum VType type() const { return getType(); }
-<<<<<<< HEAD
-    friend const UniValue& find_value( const UniValue& obj, const std::string& name);
-};
-
-=======
     const UniValue& find_value(std::string_view key) const;
 };
 
@@ -247,7 +146,6 @@ Int UniValue::getInt() const
     return result;
 }
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 enum jtokentype {
     JTOK_ERR        = -1,
     JTOK_NONE       = 0,                           // eof

@@ -1,9 +1,5 @@
-<<<<<<< HEAD
 // Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
 // Copyright (c) 2014-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -14,8 +10,6 @@
 #include <string.h>
 
 #include <compat/cpuid.h>
-<<<<<<< HEAD
-=======
 
 #if defined(__linux__) && defined(ENABLE_ARM_SHANI) && !defined(BUILD_DIGIBYTE_INTERNAL)
 #include <sys/auxv.h>
@@ -26,7 +20,6 @@
 #include <sys/types.h>
 #include <sys/sysctl.h>
 #endif
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 #if defined(__x86_64__) || defined(__amd64__) || defined(__i386__)
 #if defined(USE_ASM)
@@ -590,15 +583,11 @@ bool AVXEnabled()
 std::string SHA256AutoDetect(sha256_implementation::UseImplementation use_implementation)
 {
     std::string ret = "standard";
-<<<<<<< HEAD
-=======
     Transform = sha256::Transform;
     TransformD64 = sha256::TransformD64;
     TransformD64_2way = nullptr;
     TransformD64_4way = nullptr;
     TransformD64_8way = nullptr;
-
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #if defined(USE_ASM) && defined(HAVE_GETCPUID)
     bool have_sse4 = false;
     bool have_xsave = false;
@@ -609,13 +598,9 @@ std::string SHA256AutoDetect(sha256_implementation::UseImplementation use_implem
 
     uint32_t eax, ebx, ecx, edx;
     GetCPUID(1, 0, eax, ebx, ecx, edx);
-<<<<<<< HEAD
-    have_sse4 = (ecx >> 19) & 1;
-=======
     if (use_implementation & sha256_implementation::USE_SSE4) {
         have_sse4 = (ecx >> 19) & 1;
     }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     have_xsave = (ecx >> 27) & 1;
     have_avx = (ecx >> 28) & 1;
     if (have_xsave && have_avx) {
@@ -623,18 +608,6 @@ std::string SHA256AutoDetect(sha256_implementation::UseImplementation use_implem
     }
     if (have_sse4) {
         GetCPUID(7, 0, eax, ebx, ecx, edx);
-<<<<<<< HEAD
-        have_avx2 = (ebx >> 5) & 1;
-        have_shani = (ebx >> 29) & 1;
-    }
-
-#if defined(ENABLE_SHANI) && !defined(BUILD_DIGIBYTE_INTERNAL)
-    if (have_shani) {
-        Transform = sha256_shani::Transform;
-        TransformD64 = TransformD64Wrapper<sha256_shani::Transform>;
-        TransformD64_2way = sha256d64_shani::Transform_2way;
-        ret = "shani(1way,2way)";
-=======
         if (use_implementation & sha256_implementation::USE_AVX2) {
             have_avx2 = (ebx >> 5) & 1;
         }
@@ -649,7 +622,6 @@ std::string SHA256AutoDetect(sha256_implementation::UseImplementation use_implem
         TransformD64 = TransformD64Wrapper<sha256_x86_shani::Transform>;
         TransformD64_2way = sha256d64_x86_shani::Transform_2way;
         ret = "x86_shani(1way,2way)";
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         have_sse4 = false; // Disable SSE4/AVX2;
         have_avx2 = false;
     }

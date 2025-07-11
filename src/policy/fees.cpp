@@ -1,26 +1,12 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
 // Copyright (c) 2009-2022 The Bitcoin Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// Copyright (c) 2014-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <policy/fees.h>
 
 #include <clientversion.h>
-<<<<<<< HEAD
-#include <fs.h>
-#include <logging.h>
-#include <streams.h>
-#include <txmempool.h>
-#include <util/serfloat.h>
-#include <util/system.h>
-
-static const char* FEE_ESTIMATES_FILENAME = "fee_estimates.dat";
-=======
 #include <common/system.h>
 #include <consensus/amount.h>
 #include <kernel/mempool_entry.h>
@@ -46,7 +32,6 @@ static const char* FEE_ESTIMATES_FILENAME = "fee_estimates.dat";
 #include <exception>
 #include <stdexcept>
 #include <utility>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 static constexpr double INF_FEERATE = 1e99;
 
@@ -526,15 +511,12 @@ void TxConfirmStats::removeTx(unsigned int entryHeight, unsigned int nBestSeenHe
 bool CBlockPolicyEstimator::removeTx(uint256 hash, bool inBlock)
 {
     LOCK(m_cs_fee_estimator);
-<<<<<<< HEAD
-=======
     return _removeTx(hash, inBlock);
 }
 
 bool CBlockPolicyEstimator::_removeTx(const uint256& hash, bool inBlock)
 {
     AssertLockHeld(m_cs_fee_estimator);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     std::map<uint256, TxStatsInfo>::iterator pos = mapMemPoolTxs.find(hash);
     if (pos != mapMemPoolTxs.end()) {
         feeStats->removeTx(pos->second.blockHeight, nBestSeenHeight, pos->second.bucketIndex, inBlock);
@@ -565,13 +547,6 @@ CBlockPolicyEstimator::CBlockPolicyEstimator(const fs::path& estimation_filepath
     shortStats = std::unique_ptr<TxConfirmStats>(new TxConfirmStats(buckets, bucketMap, SHORT_BLOCK_PERIODS, SHORT_DECAY, SHORT_SCALE));
     longStats = std::unique_ptr<TxConfirmStats>(new TxConfirmStats(buckets, bucketMap, LONG_BLOCK_PERIODS, LONG_DECAY, LONG_SCALE));
 
-<<<<<<< HEAD
-    // If the fee estimation file is present, read recorded estimations
-    fs::path est_filepath = gArgs.GetDataDirNet() / FEE_ESTIMATES_FILENAME;
-    CAutoFile est_file(fsbridge::fopen(est_filepath, "rb"), SER_DISK, CLIENT_VERSION);
-    if (est_file.IsNull() || !Read(est_file)) {
-        LogPrintf("Failed to read fee estimates from %s. Continue anyway.\n", est_filepath.string());
-=======
     AutoFile est_file{fsbridge::fopen(m_estimation_filepath, "rb")};
 
     if (est_file.IsNull()) {
@@ -587,7 +562,6 @@ CBlockPolicyEstimator::CBlockPolicyEstimator(const fs::path& estimation_filepath
 
     if (!Read(est_file)) {
         LogPrintf("Failed to read fee estimates from %s. Continue anyway.\n", fs::PathToString(m_estimation_filepath));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 }
 
@@ -607,11 +581,7 @@ void CBlockPolicyEstimator::processTransaction(const CTxMemPoolEntry& entry, boo
     if (txHeight != nBestSeenHeight) {
         // Ignore side chains and re-orgs; assuming they are random they don't
         // affect the estimate.  We'll potentially double count transactions in 1-block reorgs.
-<<<<<<< HEAD
-        // Ignore txs if BlockPolicyEstimator is not in sync with ::ChainActive().Tip().
-=======
         // Ignore txs if BlockPolicyEstimator is not in sync with ActiveChain().Tip().
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         // It will be synced next time a block is processed.
         return;
     }
@@ -946,16 +916,7 @@ CFeeRate CBlockPolicyEstimator::estimateSmartFee(int confTarget, FeeCalculation 
 
 void CBlockPolicyEstimator::Flush() {
     FlushUnconfirmed();
-<<<<<<< HEAD
-
-    fs::path est_filepath = gArgs.GetDataDirNet() / FEE_ESTIMATES_FILENAME;
-    CAutoFile est_file(fsbridge::fopen(est_filepath, "wb"), SER_DISK, CLIENT_VERSION);
-    if (est_file.IsNull() || !Write(est_file)) {
-        LogPrintf("Failed to write fee estimates to %s. Continue anyway.\n", est_filepath.string());
-    }
-=======
     FlushFeeEstimates();
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 void CBlockPolicyEstimator::FlushFeeEstimates()
@@ -1055,14 +1016,9 @@ bool CBlockPolicyEstimator::Read(AutoFile& filein)
     return true;
 }
 
-<<<<<<< HEAD
-void CBlockPolicyEstimator::FlushUnconfirmed() {
-    int64_t startclear = GetTimeMicros();
-=======
 void CBlockPolicyEstimator::FlushUnconfirmed()
 {
     const auto startclear{SteadyClock::now()};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     LOCK(m_cs_fee_estimator);
     size_t num_entries = mapMemPoolTxs.size();
     // Remove every entry in mapMemPoolTxs

@@ -1,9 +1,4 @@
-<<<<<<< HEAD:src/bloom.cpp
-// Copyright (c) 2012-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
 // Copyright (c) 2012-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion:src/common/bloom.cpp
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -24,15 +19,8 @@
 #include <limits>
 #include <vector>
 
-<<<<<<< HEAD:src/bloom.cpp
-#include <algorithm>
-
-#define LN2SQUARED 0.4804530139182014246671025263266649717305529515945455
-#define LN2 0.6931471805599453094172321214581765680755001343602552
-=======
 static constexpr double LN2SQUARED = 0.4804530139182014246671025263266649717305529515945455;
 static constexpr double LN2 = 0.6931471805599453094172321214581765680755001343602552;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion:src/common/bloom.cpp
 
 CBloomFilter::CBloomFilter(const unsigned int nElements, const double nFPRate, const unsigned int nTweakIn, unsigned char nFlagsIn) :
     /**
@@ -52,11 +40,7 @@ CBloomFilter::CBloomFilter(const unsigned int nElements, const double nFPRate, c
 {
 }
 
-<<<<<<< HEAD:src/bloom.cpp
-inline unsigned int CBloomFilter::Hash(unsigned int nHashNum, const std::vector<unsigned char>& vDataToHash) const
-=======
 inline unsigned int CBloomFilter::Hash(unsigned int nHashNum, Span<const unsigned char> vDataToHash) const
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion:src/common/bloom.cpp
 {
     // 0xFBA4C795 chosen as it guarantees a reasonable bit difference between nHashNum values.
     return MurmurHash3(nHashNum * 0xFBA4C795 + nTweak, vDataToHash) % (vData.size() * 8);
@@ -83,15 +67,6 @@ void CBloomFilter::insert(const COutPoint& outpoint)
 
 bool CBloomFilter::contains(Span<const unsigned char> vKey) const
 {
-<<<<<<< HEAD:src/bloom.cpp
-    std::vector<unsigned char> data(hash.begin(), hash.end());
-    insert(data);
-}
-
-bool CBloomFilter::contains(const std::vector<unsigned char>& vKey) const
-{
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion:src/common/bloom.cpp
     if (vData.empty()) // Avoid divide-by-zero (CVE-2013-5700)
         return true;
     for (unsigned int i = 0; i < nHashFuncs; i++)
@@ -108,18 +83,7 @@ bool CBloomFilter::contains(const COutPoint& outpoint) const
 {
     DataStream stream{};
     stream << outpoint;
-<<<<<<< HEAD:src/bloom.cpp
-    std::vector<unsigned char> data(stream.begin(), stream.end());
-    return contains(data);
-}
-
-bool CBloomFilter::contains(const uint256& hash) const
-{
-    std::vector<unsigned char> data(hash.begin(), hash.end());
-    return contains(data);
-=======
     return contains(MakeUCharSpan(stream));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion:src/common/bloom.cpp
 }
 
 bool CBloomFilter::IsWithinSizeConstraints() const

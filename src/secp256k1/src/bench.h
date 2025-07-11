@@ -7,17 +7,6 @@
 #ifndef SECP256K1_BENCH_H
 #define SECP256K1_BENCH_H
 
-<<<<<<< HEAD
-#include <stdint.h>
-#include <stdio.h>
-#include <string.h>
-#include "sys/time.h"
-
-static int64_t gettime_i64(void) {
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    return (int64_t)tv.tv_usec + (int64_t)tv.tv_sec * 1000000LL;
-=======
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -43,22 +32,15 @@ static int64_t gettime_i64(void) {
     gettimeofday(&tv, NULL);
     return (int64_t)tv.tv_usec + (int64_t)tv.tv_sec * 1000000LL;
 #endif
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 #define FP_EXP (6)
 #define FP_MULT (1000000LL)
 
 /* Format fixed point number. */
-<<<<<<< HEAD
-void print_number(const int64_t x) {
-    int64_t x_abs, y;
-    int c, i, rounding;
-=======
 static void print_number(const int64_t x) {
     int64_t x_abs, y;
     int c, i, rounding, g; /* g = integer part size, c = fractional part size */
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     size_t ptr;
     char buffer[30];
 
@@ -90,31 +72,12 @@ static void print_number(const int64_t x) {
     /* Format and print the number. */
     ptr = sizeof(buffer) - 1;
     buffer[ptr] = 0;
-<<<<<<< HEAD
-    if (c != 0) {
-=======
     g = 0;
     if (c != 0) { /* non zero fractional part */
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         for (i = 0; i < c; ++i) {
             buffer[--ptr] = '0' + (y % 10);
             y /= 10;
         }
-<<<<<<< HEAD
-        buffer[--ptr] = '.';
-    }
-    do {
-        buffer[--ptr] = '0' + (y % 10);
-        y /= 10;
-    } while (y != 0);
-    if (x < 0) {
-        buffer[--ptr] = '-';
-    }
-    printf("%s", &buffer[ptr]);
-}
-
-void run_benchmark(char *name, void (*benchmark)(void*, int), void (*setup)(void*), void (*teardown)(void*, int), void* data, int count, int iter) {
-=======
     } else if (c == 0) { /* fractional part is 0 */
         buffer[--ptr] = '0'; 
     }
@@ -133,7 +96,6 @@ void run_benchmark(char *name, void (*benchmark)(void*, int), void (*setup)(void
 }
 
 static void run_benchmark(char *name, void (*benchmark)(void*, int), void (*setup)(void*), void (*teardown)(void*, int), void* data, int count, int iter) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     int i;
     int64_t min = INT64_MAX;
     int64_t sum = 0;
@@ -157,15 +119,6 @@ static void run_benchmark(char *name, void (*benchmark)(void*, int), void (*setu
         }
         sum += total;
     }
-<<<<<<< HEAD
-    printf("%s: min ", name);
-    print_number(min * FP_MULT / iter);
-    printf("us / avg ");
-    print_number(((sum * FP_MULT) / count) / iter);
-    printf("us / max ");
-    print_number(max * FP_MULT / iter);
-    printf("us\n");
-=======
     /* ',' is used as a column delimiter */
     printf("%-30s, ", name);
     print_number(min * FP_MULT / iter);
@@ -230,7 +183,6 @@ static void print_output_table_header_row(void) {
     char* max_str = "    Max(us)    ";
     printf("%-30s,%-15s,%-15s,%-15s\n", bench_str, min_str, avg_str, max_str);
     printf("\n");
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 int have_flag(int argc, char** argv, char *flag) {

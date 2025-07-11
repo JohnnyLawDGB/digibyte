@@ -1,22 +1,11 @@
-<<<<<<< HEAD
-// Copyright (c) 2019-2020 The DigiByte Core developers
-// Distributed under the MIT software license, see the accompanying
-// file COPYING or http://www.opensource.org/licenses/mit-license.php.
-
-#include <sstream>
-#include <stdio.h>
-=======
 // Copyright (c) 2019-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <tinyformat.h>
 #include <util/bip32.h>
 #include <util/strencodings.h>
 
-<<<<<<< HEAD
-=======
 #include <cstdint>
 #include <cstdio>
 #include <sstream>
@@ -37,11 +26,7 @@ bool ParseHDKeypath(const std::string& keypath_str, std::vector<uint32_t>& keypa
         }
         // Finds whether it is hardened
         uint32_t path = 0;
-<<<<<<< HEAD
-        size_t pos = item.find("'");
-=======
         size_t pos = item.find('\'');
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         if (pos != std::string::npos) {
             // The hardened tick can only be in the last index of the string
             if (pos != item.size() - 1) {
@@ -67,31 +52,17 @@ bool ParseHDKeypath(const std::string& keypath_str, std::vector<uint32_t>& keypa
     return true;
 }
 
-<<<<<<< HEAD
-std::string FormatHDKeypath(const std::vector<uint32_t>& path)
-=======
 std::string FormatHDKeypath(const std::vector<uint32_t>& path, bool apostrophe)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     std::string ret;
     for (auto i : path) {
         ret += strprintf("/%i", (i << 1) >> 1);
-<<<<<<< HEAD
-        if (i >> 31) ret += '\'';
-=======
         if (i >> 31) ret += apostrophe ? '\'' : 'h';
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     return ret;
 }
 
-<<<<<<< HEAD
-std::string WriteHDKeypath(const std::vector<uint32_t>& keypath)
-{
-    return "m" + FormatHDKeypath(keypath);
-=======
 std::string WriteHDKeypath(const std::vector<uint32_t>& keypath, bool apostrophe)
 {
     return "m" + FormatHDKeypath(keypath, apostrophe);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }

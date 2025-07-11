@@ -1,22 +1,14 @@
-<<<<<<< HEAD
-// Copyright (c) 2018-2020 The DigiByte Core developers
-=======
 // Copyright (c) 2018-2022 The Bitcoin Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// Copyright (c) 2018-2020 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #ifndef DIGIBYTE_INTERFACES_CHAIN_H
 #define DIGIBYTE_INTERFACES_CHAIN_H
 
-<<<<<<< HEAD
-#include <primitives/transaction.h> // For CTransactionRef
-#include <util/settings.h>          // For util::SettingsValue
-=======
 #include <blockfilter.h>
 #include <common/settings.h>
 #include <primitives/transaction.h> // For CTransactionRef
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 #include <functional>
 #include <memory>
@@ -28,10 +20,7 @@
 
 class ArgsManager;
 class CBlock;
-<<<<<<< HEAD
-=======
 class CBlockUndo;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 class CFeeRate;
 class CRPCCommand;
 class CScheduler;
@@ -39,12 +28,6 @@ class Coin;
 class uint256;
 enum class MemPoolRemovalReason;
 enum class RBFTransactionState;
-<<<<<<< HEAD
-struct bilingual_str;
-struct CBlockLocator;
-struct FeeCalculation;
-struct NodeContext;
-=======
 enum class ChainstateRole;
 struct bilingual_str;
 struct CBlockLocator;
@@ -52,16 +35,12 @@ struct FeeCalculation;
 namespace node {
 struct NodeContext;
 } // namespace node
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 namespace interfaces {
 
 class Handler;
 class Wallet;
 
-<<<<<<< HEAD
-//! Helper for findBlock to selectively return pieces of block data.
-=======
 //! Hash/height pair to help track and identify blocks.
 struct BlockKey {
     uint256 hash;
@@ -71,7 +50,6 @@ struct BlockKey {
 //! Helper for findBlock to selectively return pieces of block data. If block is
 //! found, data will be returned by setting specified output variables. If block
 //! is not found, output variables will keep their previous values.
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 class FoundBlock
 {
 public:
@@ -82,11 +60,8 @@ public:
     FoundBlock& mtpTime(int64_t& mtp_time) { m_mtp_time = &mtp_time; return *this; }
     //! Return whether block is in the active (most-work) chain.
     FoundBlock& inActiveChain(bool& in_active_chain) { m_in_active_chain = &in_active_chain; return *this; }
-<<<<<<< HEAD
-=======
     //! Return locator if block is in the active chain.
     FoundBlock& locator(CBlockLocator& locator) { m_locator = &locator; return *this; }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     //! Return next block in the active chain if current block is in the active chain.
     FoundBlock& nextBlock(const FoundBlock& next_block) { m_next_block = &next_block; return *this; }
     //! Read block data from disk. If the block exists but doesn't have data
@@ -99,10 +74,6 @@ public:
     int64_t* m_max_time = nullptr;
     int64_t* m_mtp_time = nullptr;
     bool* m_in_active_chain = nullptr;
-<<<<<<< HEAD
-    const FoundBlock* m_next_block = nullptr;
-    CBlock* m_data = nullptr;
-=======
     CBlockLocator* m_locator = nullptr;
     const FoundBlock* m_next_block = nullptr;
     CBlock* m_data = nullptr;
@@ -123,7 +94,7 @@ struct BlockInfo {
     unsigned int chain_time_max{0};
 
     BlockInfo(const uint256& hash LIFETIMEBOUND) : hash(hash) {}
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+};
 };
 
 //! Interface giving clients (wallet processes, maybe other analysis tools in
@@ -170,29 +141,21 @@ public:
     //! Get locator for the current chain tip.
     virtual CBlockLocator getTipLocator() = 0;
 
-<<<<<<< HEAD
-=======
     //! Return a locator that refers to a block in the active chain.
     //! If specified block is not in the active chain, return locator for the latest ancestor that is in the chain.
     virtual CBlockLocator getActiveChainLocator(const uint256& block_hash) = 0;
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     //! Return height of the highest block on chain in common with the locator,
     //! which will either be the original block used to create the locator,
     //! or one of its ancestors.
     virtual std::optional<int> findLocatorFork(const CBlockLocator& locator) = 0;
 
-<<<<<<< HEAD
-    //! Check if transaction will be final given chain height current time.
-    virtual bool checkFinalTx(const CTransaction& tx) = 0;
-=======
     //! Returns whether a block filter index is available.
     virtual bool hasBlockFilterIndex(BlockFilterType filter_type) = 0;
 
     //! Returns whether any of the elements match the block via a BIP 157 block filter
     //! or std::nullopt if the block filter for this block couldn't be found.
     virtual std::optional<bool> blockFilterMatchesAny(BlockFilterType filter_type, const uint256& block_hash, const GCSFilter::ElementSet& filter_set) = 0;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     //! Return whether node has the block and optionally return block metadata
     //! or contents.
@@ -254,9 +217,6 @@ public:
         std::string& err_string) = 0;
 
     //! Calculate mempool ancestor and descendant counts for the given transaction.
-<<<<<<< HEAD
-    virtual void getTransactionAncestry(const uint256& txid, size_t& ancestors, size_t& descendants) = 0;
-=======
     virtual void getTransactionAncestry(const uint256& txid, size_t& ancestors, size_t& descendants, size_t* ancestorsize = nullptr, CAmount* ancestorfees = nullptr) = 0;
 
     //! For each outpoint, calculate the fee-bumping cost to spend this outpoint at the specified
@@ -295,7 +255,6 @@ public:
     //  The combined bump fee may be used to correct overestimation due to
     //  shared ancestry by multiple UTXOs after coin selection.
     virtual std::optional<CAmount> CalculateCombinedBumpFee(const std::vector<COutPoint>& outpoints, const CFeeRate& target_feerate) = 0;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     //! Get the node's package limits.
     //! Currently only returns the ancestor and descendant count limits, but could be enhanced to
@@ -335,12 +294,6 @@ public:
     //! Check if shutdown requested.
     virtual bool shutdownRequested() = 0;
 
-<<<<<<< HEAD
-    //! Get adjusted time.
-    virtual int64_t getAdjustedTime() = 0;
-
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     //! Send init message.
     virtual void initMessage(const std::string& message) = 0;
 
@@ -358,21 +311,12 @@ public:
     {
     public:
         virtual ~Notifications() {}
-<<<<<<< HEAD
-        virtual void transactionAddedToMempool(const CTransactionRef& tx, uint64_t mempool_sequence) {}
-        virtual void transactionRemovedFromMempool(const CTransactionRef& tx, MemPoolRemovalReason reason, uint64_t mempool_sequence) {}
-        virtual void blockConnected(const CBlock& block, int height) {}
-        virtual void blockDisconnected(const CBlock& block, int height) {}
-        virtual void updatedBlockTip() {}
-        virtual void chainStateFlushed(const CBlockLocator& locator) {}
-=======
         virtual void transactionAddedToMempool(const CTransactionRef& tx) {}
         virtual void transactionRemovedFromMempool(const CTransactionRef& tx, MemPoolRemovalReason reason) {}
         virtual void blockConnected(ChainstateRole role, const BlockInfo& block) {}
         virtual void blockDisconnected(const BlockInfo& block) {}
         virtual void updatedBlockTip() {}
         virtual void chainStateFlushed(ChainstateRole role, const CBlockLocator& locator) {}
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     };
 
     //! Register handler for notifications.
@@ -395,13 +339,6 @@ public:
     //! Current RPC serialization flags.
     virtual int rpcSerializationFlags() = 0;
 
-<<<<<<< HEAD
-    //! Return <datadir>/settings.json setting value.
-    virtual util::SettingsValue getRwSetting(const std::string& name) = 0;
-
-    //! Write a setting to <datadir>/settings.json.
-    virtual bool updateRwSetting(const std::string& name, const util::SettingsValue& value) = 0;
-=======
     //! Get settings value.
     virtual common::SettingsValue getSetting(const std::string& arg) = 0;
 
@@ -414,7 +351,6 @@ public:
     //! Write a setting to <datadir>/settings.json. Optionally just update the
     //! setting in memory and do not write the file.
     virtual bool updateRwSetting(const std::string& name, const common::SettingsValue& value, bool write=true) = 0;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     //! Synchronously send transactionAddedToMempool notifications about all
     //! current mempool transactions to the specified handler and return after
@@ -426,17 +362,12 @@ public:
     //! removed transactions and already added new transactions.
     virtual void requestMempoolTransactions(Notifications& notifications) = 0;
 
-<<<<<<< HEAD
-    //! Check if Taproot has activated
-    virtual bool isTaprootActive() const = 0;
-=======
     //! Return true if an assumed-valid chain is in use.
     virtual bool hasAssumedValidChain() = 0;
 
     //! Get internal node context. Useful for testing, but not
     //! accessible across processes.
     virtual node::NodeContext* context() { return nullptr; }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 };
 
 //! Interface to let node manage chain clients (wallets, or maybe tools for
@@ -469,11 +400,7 @@ public:
 };
 
 //! Return implementation of Chain interface.
-<<<<<<< HEAD
-std::unique_ptr<Chain> MakeChain(NodeContext& node);
-=======
 std::unique_ptr<Chain> MakeChain(node::NodeContext& node);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 } // namespace interfaces
 

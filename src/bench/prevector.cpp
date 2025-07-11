@@ -1,9 +1,5 @@
-<<<<<<< HEAD
 // Copyright (c) 2015-2020 The Bitcoin Core developers
-// Copyright (c) 2015-2020 The DigiByte Core developers
-=======
 // Copyright (c) 2015-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -15,13 +11,8 @@
 #include <bench/bench.h>
 
 struct nontrivial_t {
-<<<<<<< HEAD
-    int x;
-    nontrivial_t() :x(-1) {}
-=======
     int x{-1};
     nontrivial_t() = default;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     SERIALIZE_METHODS(nontrivial_t, obj) { READWRITE(obj.x); }
 };
 static_assert(!std::is_trivially_default_constructible<nontrivial_t>::value,
@@ -44,35 +35,6 @@ static void PrevectorDestructor(benchmark::Bench& bench)
 
 template <typename T>
 static void PrevectorClear(benchmark::Bench& bench)
-<<<<<<< HEAD
-{
-    prevector<28, T> t0;
-    prevector<28, T> t1;
-    bench.batch(2).run([&] {
-        t0.resize(28);
-        t0.clear();
-        t1.resize(29);
-        t1.clear();
-    });
-}
-
-template <typename T>
-static void PrevectorResize(benchmark::Bench& bench)
-{
-    prevector<28, T> t0;
-    prevector<28, T> t1;
-    bench.batch(4).run([&] {
-        t0.resize(28);
-        t0.resize(0);
-        t1.resize(29);
-        t1.resize(0);
-    });
-}
-
-template <typename T>
-static void PrevectorDeserialize(benchmark::Bench& bench)
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     prevector<28, T> t0;
     prevector<28, T> t1;
@@ -119,20 +81,6 @@ static void PrevectorDeserialize(benchmark::Bench& bench)
     });
 }
 
-<<<<<<< HEAD
-#define PREVECTOR_TEST(name)                                         \
-    static void Prevector##name##Nontrivial(benchmark::Bench& bench) \
-    {                                                                \
-        Prevector##name<nontrivial_t>(bench);                        \
-    }                                                                \
-    BENCHMARK(Prevector##name##Nontrivial);                          \
-    static void Prevector##name##Trivial(benchmark::Bench& bench)    \
-    {                                                                \
-        Prevector##name<trivial_t>(bench);                           \
-    }                                                                \
-    BENCHMARK(Prevector##name##Trivial);
-
-=======
 template <typename T>
 static void PrevectorFillVectorDirect(benchmark::Bench& bench)
 {
@@ -168,14 +116,9 @@ static void PrevectorFillVectorIndirect(benchmark::Bench& bench)
         Prevector##name<trivial_t>(bench);                           \
     }                                                                \
     BENCHMARK(Prevector##name##Trivial, benchmark::PriorityLevel::HIGH);
-
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 PREVECTOR_TEST(Clear)
 PREVECTOR_TEST(Destructor)
 PREVECTOR_TEST(Resize)
 PREVECTOR_TEST(Deserialize)
-<<<<<<< HEAD
-=======
 PREVECTOR_TEST(FillVectorDirect)
 PREVECTOR_TEST(FillVectorIndirect)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion

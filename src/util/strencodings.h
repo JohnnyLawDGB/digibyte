@@ -1,9 +1,5 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The DigiByte Core developers
-=======
 // Copyright (c) 2009-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -13,22 +9,6 @@
 #ifndef DIGIBYTE_UTIL_STRENCODINGS_H
 #define DIGIBYTE_UTIL_STRENCODINGS_H
 
-<<<<<<< HEAD
-#include <attributes.h>
-#include <span.h>
-
-#include <cstdint>
-#include <iterator>
-#include <string>
-#include <vector>
-
-#define BEGIN(a)            ((char*)&(a))
-#define END(a)              ((char*)&((&(a))[1]))
-#define UBEGIN(a)           ((unsigned char*)&(a))
-#define UEND(a)             ((unsigned char*)&((&(a))[1]))
-#define ARRAYLEN(array)     (sizeof(array)/sizeof((array)[0]))
-
-=======
 #include <span.h>
 #include <util/string.h>
 
@@ -42,8 +22,6 @@
 #include <system_error>
 #include <type_traits>
 #include <vector>
-
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 /** Used by SanitizeString() */
 enum SafeChars
 {
@@ -73,32 +51,12 @@ enum class ByteUnit : uint64_t {
 };
 
 /**
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 * Remove unsafe chars. Safe chars chosen to allow simple messages/URLs/email
 * addresses, but avoid anything even possibly remotely dangerous like & or >
 * @param[in] str    The string to sanitize
 * @param[in] rule   The set of safe chars to choose (default: least restrictive)
 * @return           A new string without unsafe chars
 */
-<<<<<<< HEAD
-std::string SanitizeString(const std::string& str, int rule = SAFE_CHARS_DEFAULT);
-std::vector<unsigned char> ParseHex(const char* psz);
-std::vector<unsigned char> ParseHex(const std::string& str);
-signed char HexDigit(char c);
-/* Returns true if each character in str is a hex character, and has an even
- * number of hex digits.*/
-bool IsHex(const std::string& str);
-/**
-* Return true if the string is a hex number, optionally prefixed with "0x"
-*/
-bool IsHexNumber(const std::string& str);
-std::vector<unsigned char> DecodeBase64(const char* p, bool* pf_invalid = nullptr);
-std::string DecodeBase64(const std::string& str, bool* pf_invalid = nullptr);
-std::string EncodeBase64(Span<const unsigned char> input);
-std::string EncodeBase64(const std::string& str);
-std::vector<unsigned char> DecodeBase32(const char* p, bool* pf_invalid = nullptr);
-std::string DecodeBase32(const std::string& str, bool* pf_invalid = nullptr);
-=======
 std::string SanitizeString(std::string_view str, int rule = SAFE_CHARS_DEFAULT);
 /** Parse the hex string into bytes (uint8_t or std::byte). Ignores whitespace. Returns nullopt on invalid input. */
 template <typename Byte = std::byte>
@@ -122,7 +80,6 @@ std::string EncodeBase64(Span<const unsigned char> input);
 inline std::string EncodeBase64(Span<const std::byte> input) { return EncodeBase64(MakeUCharSpan(input)); }
 inline std::string EncodeBase64(std::string_view str) { return EncodeBase64(MakeUCharSpan(str)); }
 std::optional<std::vector<unsigned char>> DecodeBase32(std::string_view str);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 /**
  * Base32 encode.
@@ -136,13 +93,6 @@ std::string EncodeBase32(Span<const unsigned char> input, bool pad = true);
  * If `pad` is true, then the output will be padded with '=' so that its length
  * is a multiple of 8.
  */
-<<<<<<< HEAD
-std::string EncodeBase32(const std::string& str, bool pad = true);
-
-void SplitHostPort(std::string in, uint16_t& portOut, std::string& hostOut);
-int64_t atoi64(const std::string& str);
-int atoi(const std::string& str);
-=======
 std::string EncodeBase32(std::string_view str, bool pad = true);
 
 /**
@@ -194,7 +144,6 @@ T LocaleIndependentAtoi(std::string_view str)
     }
     return result;
 }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 /**
  * Tests if the given character is a decimal digit.
@@ -222,8 +171,6 @@ constexpr inline bool IsSpace(char c) noexcept {
 }
 
 /**
-<<<<<<< HEAD
-=======
  * Convert string to integral type T. Leading whitespace, a leading +, or any
  * trailing character fail the parsing. The required format expressed as regex
  * is `-?[0-9]+`. The minus sign is only permitted for signed integer types.
@@ -244,98 +191,59 @@ std::optional<T> ToIntegral(std::string_view str)
 }
 
 /**
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
  * Convert string to signed 32-bit integer with strict parse error feedback.
  * @returns true if the entire string could be parsed as valid integer,
  *   false if not the entire string could be parsed or when overflow or underflow occurred.
  */
-<<<<<<< HEAD
-[[nodiscard]] bool ParseInt32(const std::string& str, int32_t *out);
-=======
 [[nodiscard]] bool ParseInt32(std::string_view str, int32_t *out);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 /**
  * Convert string to signed 64-bit integer with strict parse error feedback.
  * @returns true if the entire string could be parsed as valid integer,
  *   false if not the entire string could be parsed or when overflow or underflow occurred.
  */
-<<<<<<< HEAD
-[[nodiscard]] bool ParseInt64(const std::string& str, int64_t *out);
-=======
 [[nodiscard]] bool ParseInt64(std::string_view str, int64_t *out);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 /**
  * Convert decimal string to unsigned 8-bit integer with strict parse error feedback.
  * @returns true if the entire string could be parsed as valid integer,
  *   false if not the entire string could be parsed or when overflow or underflow occurred.
  */
-<<<<<<< HEAD
-[[nodiscard]] bool ParseUInt8(const std::string& str, uint8_t *out);
-=======
 [[nodiscard]] bool ParseUInt8(std::string_view str, uint8_t *out);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 /**
  * Convert decimal string to unsigned 16-bit integer with strict parse error feedback.
  * @returns true if the entire string could be parsed as valid integer,
  *   false if the entire string could not be parsed or if overflow or underflow occurred.
  */
-<<<<<<< HEAD
-[[nodiscard]] bool ParseUInt16(const std::string& str, uint16_t* out);
-=======
 [[nodiscard]] bool ParseUInt16(std::string_view str, uint16_t* out);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 /**
  * Convert decimal string to unsigned 32-bit integer with strict parse error feedback.
  * @returns true if the entire string could be parsed as valid integer,
  *   false if not the entire string could be parsed or when overflow or underflow occurred.
  */
-<<<<<<< HEAD
-[[nodiscard]] bool ParseUInt32(const std::string& str, uint32_t *out);
-=======
 [[nodiscard]] bool ParseUInt32(std::string_view str, uint32_t *out);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 /**
  * Convert decimal string to unsigned 64-bit integer with strict parse error feedback.
  * @returns true if the entire string could be parsed as valid integer,
  *   false if not the entire string could be parsed or when overflow or underflow occurred.
  */
-<<<<<<< HEAD
-[[nodiscard]] bool ParseUInt64(const std::string& str, uint64_t *out);
-
-/**
- * Convert string to double with strict parse error feedback.
- * @returns true if the entire string could be parsed as valid double,
- *   false if not the entire string could be parsed or when overflow or underflow occurred.
- */
-[[nodiscard]] bool ParseDouble(const std::string& str, double *out);
-=======
 [[nodiscard]] bool ParseUInt64(std::string_view str, uint64_t *out);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 /**
  * Convert a span of bytes to a lower-case hexadecimal string.
  */
 std::string HexStr(const Span<const uint8_t> s);
 inline std::string HexStr(const Span<const char> s) { return HexStr(MakeUCharSpan(s)); }
-<<<<<<< HEAD
-=======
 inline std::string HexStr(const Span<const std::byte> s) { return HexStr(MakeUCharSpan(s)); }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 /**
  * Format a paragraph of text to a fixed width, adding spaces for
  * indentation to any added line.
  */
-<<<<<<< HEAD
-std::string FormatParagraph(const std::string& in, size_t width = 79, size_t indent = 0);
-=======
 std::string FormatParagraph(std::string_view in, size_t width = 79, size_t indent = 0);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 /**
  * Timing-attack-resistant comparison.
@@ -348,11 +256,7 @@ bool TimingResistantEqual(const T& a, const T& b)
     if (b.size() == 0) return a.size() == 0;
     size_t accumulator = a.size() ^ b.size();
     for (size_t i = 0; i < a.size(); i++)
-<<<<<<< HEAD
-        accumulator |= a[i] ^ b[i%b.size()];
-=======
         accumulator |= size_t(a[i] ^ b[i%b.size()]);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     return accumulator == 0;
 }
 
@@ -361,13 +265,6 @@ bool TimingResistantEqual(const T& a, const T& b)
  * @returns true on success, false on error.
  * @note The result must be in the range (-10^18,10^18), otherwise an overflow error will trigger.
  */
-<<<<<<< HEAD
-[[nodiscard]] bool ParseFixedPoint(const std::string &val, int decimals, int64_t *amount_out);
-
-/** Convert from one power-of-2 number base to another. */
-template<int frombits, int tobits, bool pad, typename O, typename I>
-bool ConvertBits(const O& outfn, I it, I end) {
-=======
 [[nodiscard]] bool ParseFixedPoint(std::string_view, int decimals, int64_t *amount_out);
 
 namespace {
@@ -382,19 +279,14 @@ struct IntIdentity
 /** Convert from one power-of-2 number base to another. */
 template<int frombits, int tobits, bool pad, typename O, typename It, typename I = IntIdentity>
 bool ConvertBits(O outfn, It it, It end, I infn = {}) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     size_t acc = 0;
     size_t bits = 0;
     constexpr size_t maxv = (1 << tobits) - 1;
     constexpr size_t max_acc = (1 << (frombits + tobits - 1)) - 1;
     while (it != end) {
-<<<<<<< HEAD
-        acc = ((acc << frombits) | *it) & max_acc;
-=======
         int v = infn(*it);
         if (v < 0) return false;
         acc = ((acc << frombits) | v) & max_acc;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         bits += frombits;
         while (bits >= tobits) {
             bits -= tobits;
@@ -434,11 +326,7 @@ constexpr char ToLower(char c)
  * @param[in] str   the string to convert to lowercase.
  * @returns         lowercased equivalent of str
  */
-<<<<<<< HEAD
-std::string ToLower(const std::string& str);
-=======
 std::string ToLower(std::string_view str);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 /**
  * Converts the given character to its uppercase equivalent.
@@ -464,11 +352,7 @@ constexpr char ToUpper(char c)
  * @param[in] str   the string to convert to uppercase.
  * @returns         UPPERCASED EQUIVALENT OF str
  */
-<<<<<<< HEAD
-std::string ToUpper(const std::string& str);
-=======
 std::string ToUpper(std::string_view str);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 /**
  * Capitalizes the first character of the given string.
@@ -481,8 +365,7 @@ std::string ToUpper(std::string_view str);
  */
 std::string Capitalize(std::string str);
 
-<<<<<<< HEAD
-=======
+
 /**
  * Parse a string with suffix unit [k|K|m|M|g|G|t|T].
  * Must be a whole integer, fractions not allowed (0.5t), no whitespace or +-
@@ -496,5 +379,4 @@ std::string Capitalize(std::string str);
  */
 std::optional<uint64_t> ParseByteUnits(std::string_view str, ByteUnit default_multiplier);
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #endif // DIGIBYTE_UTIL_STRENCODINGS_H

@@ -7,25 +7,6 @@
 #ifndef SECP256K1_FIELD_H
 #define SECP256K1_FIELD_H
 
-<<<<<<< HEAD
-/** Field element module.
- *
- *  Field elements can be represented in several ways, but code accessing
- *  it (and implementations) need to take certain properties into account:
- *  - Each field element can be normalized or not.
- *  - Each field element has a magnitude, which represents how far away
- *    its representation is away from normalization. Normalized elements
- *    always have a magnitude of 1, but a magnitude of 1 doesn't imply
- *    normality.
- */
-
-#if defined HAVE_CONFIG_H
-#include "libsecp256k1-config.h"
-#endif
-
-#include "util.h"
-
-=======
 #include "util.h"
 
 /* This file defines the generic interface for working with secp256k1_fe
@@ -56,7 +37,6 @@
 #  define SECP256K1_FE_VERIFY_FIELDS
 #endif
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #if defined(SECP256K1_WIDEMUL_INT128)
 #include "field_5x52.h"
 #elif defined(SECP256K1_WIDEMUL_INT64)
@@ -65,14 +45,6 @@
 #error "Please select wide multiplication implementation"
 #endif
 
-<<<<<<< HEAD
-/** Normalize a field element. This brings the field element to a canonical representation, reduces
- *  its magnitude to 1, and reduces it modulo field size `p`.
- */
-static void secp256k1_fe_normalize(secp256k1_fe *r);
-
-/** Weakly normalize a field element: reduce its magnitude to 1, but don't fully normalize. */
-=======
 #ifdef VERIFY
 /* Magnitude and normalized value for constants. */
 #define SECP256K1_FE_VERIFY_CONST(d7, d6, d5, d4, d3, d2, d1, d0) \
@@ -144,7 +116,6 @@ static void secp256k1_fe_normalize(secp256k1_fe *r);
  * On input, r must be a valid field element.
  * On output, r represents the same value but has magnitude=1. Normalized is unchanged.
  */
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 static void secp256k1_fe_normalize_weak(secp256k1_fe *r);
 
 /** Normalize a field element, without constant-time guarantee.
@@ -153,13 +124,6 @@ static void secp256k1_fe_normalize_weak(secp256k1_fe *r);
  */
 static void secp256k1_fe_normalize_var(secp256k1_fe *r);
 
-<<<<<<< HEAD
-/** Verify whether a field element represents zero i.e. would normalize to a zero value. */
-static int secp256k1_fe_normalizes_to_zero(const secp256k1_fe *r);
-
-/** Verify whether a field element represents zero i.e. would normalize to a zero value,
- *  without constant-time guarantee. */
-=======
 /** Determine whether r represents field element 0.
  *
  * On input, r must be a valid field element.
@@ -171,7 +135,6 @@ static int secp256k1_fe_normalizes_to_zero(const secp256k1_fe *r);
  *
  * Identical in behavior to secp256k1_normalizes_to_zero, but not constant time in r.
  */
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 static int secp256k1_fe_normalizes_to_zero_var(const secp256k1_fe *r);
 
 /** Set a field element to an integer in range [0,0x7FFF].
@@ -318,10 +281,6 @@ static void secp256k1_fe_sqr(secp256k1_fe *r, const secp256k1_fe *a);
  */
 static int secp256k1_fe_sqrt(secp256k1_fe * SECP256K1_RESTRICT r, const secp256k1_fe * SECP256K1_RESTRICT a);
 
-<<<<<<< HEAD
-/** Sets a field element to be the (modular) inverse of another. Requires the input's magnitude to be
- *  at most 8. The output magnitude is 1 (but not guaranteed to be normalized). */
-=======
 /** Compute the modular inverse of a field element.
  *
  * On input, a must be a valid field element; r need not be initialized.
@@ -329,7 +288,6 @@ static int secp256k1_fe_sqrt(secp256k1_fe * SECP256K1_RESTRICT r, const secp256k
  * inverse).
  * On output, r will have magnitude (a.magnitude != 0) and be normalized.
  */
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 static void secp256k1_fe_inv(secp256k1_fe *r, const secp256k1_fe *a);
 
 /** Compute the modular inverse of a field element, without constant-time guarantee.
@@ -338,15 +296,11 @@ static void secp256k1_fe_inv(secp256k1_fe *r, const secp256k1_fe *a);
  */
 static void secp256k1_fe_inv_var(secp256k1_fe *r, const secp256k1_fe *a);
 
-<<<<<<< HEAD
-/** Convert a field element to the storage type. */
-=======
 /** Convert a field element to secp256k1_fe_storage.
  *
  * On input, a must be a valid normalized field element.
  * Performs {r = a}.
  */
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 static void secp256k1_fe_to_storage(secp256k1_fe_storage *r, const secp256k1_fe *a);
 
 /** Convert a field element back from secp256k1_fe_storage.
@@ -360,9 +314,6 @@ static void secp256k1_fe_from_storage(secp256k1_fe *r, const secp256k1_fe_storag
 /** If flag is true, set *r equal to *a; otherwise leave it. Constant-time.  Both *r and *a must be initialized.*/
 static void secp256k1_fe_storage_cmov(secp256k1_fe_storage *r, const secp256k1_fe_storage *a, int flag);
 
-<<<<<<< HEAD
-/** If flag is true, set *r equal to *a; otherwise leave it. Constant-time.  Both *r and *a must be initialized.*/
-=======
 /** Conditionally move a field element in constant time.
  *
  * On input, both r and a must be valid field elements. Flag must be 0 or 1.
@@ -371,7 +322,6 @@ static void secp256k1_fe_storage_cmov(secp256k1_fe_storage *r, const secp256k1_f
  * On output, r's magnitude will be the maximum of both input magnitudes.
  * It will be normalized if and only if both inputs were normalized.
  */
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 static void secp256k1_fe_cmov(secp256k1_fe *r, const secp256k1_fe *a, int flag);
 
 /** Halve the value of a field element modulo the field prime in constant-time.

@@ -1,9 +1,5 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The DigiByte Core developers
-=======
 // Copyright (c) 2009-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -11,10 +7,7 @@
 #define DIGIBYTE_UTIL_EPOCHGUARD_H
 
 #include <threadsafety.h>
-<<<<<<< HEAD
-=======
 #include <util/macros.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 #include <cassert>
 
@@ -48,12 +41,9 @@ public:
     Epoch() = default;
     Epoch(const Epoch&) = delete;
     Epoch& operator=(const Epoch&) = delete;
-<<<<<<< HEAD
-=======
     Epoch(Epoch&&) = delete;
     Epoch& operator=(Epoch&&) = delete;
     ~Epoch() = default;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     bool guarded() const { return m_guarded; }
 
@@ -65,8 +55,6 @@ public:
         // only allow modification via Epoch member functions
         friend class Epoch;
         Marker& operator=(const Marker&) = delete;
-<<<<<<< HEAD
-=======
 
     public:
         Marker() = default;
@@ -74,7 +62,6 @@ public:
         Marker(Marker&&) = delete;
         Marker& operator=(Marker&&) = delete;
         ~Marker() = default;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     };
 
     class SCOPED_LOCKABLE Guard
@@ -110,10 +97,6 @@ public:
     }
 };
 
-<<<<<<< HEAD
-#define WITH_FRESH_EPOCH(epoch) const Epoch::Guard PASTE2(epoch_guard_, __COUNTER__)(epoch)
-=======
 #define WITH_FRESH_EPOCH(epoch) const Epoch::Guard UNIQUE_NAME(epoch_guard_)(epoch)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 #endif // DIGIBYTE_UTIL_EPOCHGUARD_H

@@ -1,9 +1,5 @@
-<<<<<<< HEAD
-// Copyright (c) 2015-2018 The Bitcoin Core developers
-// Copyright (c) 2015-2020 The DigiByte Core developers
-=======
 // Copyright (c) 2015-2022 The Bitcoin Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// Copyright (c) 2015-2020 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -18,13 +14,6 @@
 #include <zmq/zmqabstractnotifier.h>
 #include <zmq/zmqpublishnotifier.h>
 #include <zmq/zmqutil.h>
-<<<<<<< HEAD
-
-#include <zmq.h>
-
-#include <validation.h>
-#include <util/system.h>
-=======
 
 #include <zmq.h>
 
@@ -33,7 +22,6 @@
 #include <string>
 #include <utility>
 #include <vector>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 CZMQNotificationInterface::CZMQNotificationInterface()
 {
@@ -73,11 +61,7 @@ std::unique_ptr<CZMQNotificationInterface> CZMQNotificationInterface::Create(std
             std::unique_ptr<CZMQAbstractNotifier> notifier = factory();
             notifier->SetType(entry.first);
             notifier->SetAddress(address);
-<<<<<<< HEAD
-            notifier->SetOutboundMessageHighWaterMark(static_cast<int>(gArgs.GetArg(arg + "hwm", CZMQAbstractNotifier::DEFAULT_ZMQ_SNDHWM)));
-=======
             notifier->SetOutboundMessageHighWaterMark(static_cast<int>(gArgs.GetIntArg(arg + "hwm", CZMQAbstractNotifier::DEFAULT_ZMQ_SNDHWM)));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             notifiers.push_back(std::move(notifier));
         }
     }
@@ -88,11 +72,7 @@ std::unique_ptr<CZMQNotificationInterface> CZMQNotificationInterface::Create(std
         notificationInterface->notifiers = std::move(notifiers);
 
         if (notificationInterface->Initialize()) {
-<<<<<<< HEAD
-            return notificationInterface.release();
-=======
             return notificationInterface;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
     }
 
@@ -104,15 +84,9 @@ bool CZMQNotificationInterface::Initialize()
 {
     int major = 0, minor = 0, patch = 0;
     zmq_version(&major, &minor, &patch);
-<<<<<<< HEAD
-    LogPrint(BCLog::ZMQ, "zmq: version %d.%d.%d\n", major, minor, patch);
-
-    LogPrint(BCLog::ZMQ, "zmq: Initialize notification interface\n");
-=======
     LogPrint(BCLog::ZMQ, "version %d.%d.%d\n", major, minor, patch);
 
     LogPrint(BCLog::ZMQ, "Initialize notification interface\n");
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     assert(!pcontext);
 
     pcontext = zmq_ctx_new();
@@ -125,15 +99,9 @@ bool CZMQNotificationInterface::Initialize()
 
     for (auto& notifier : notifiers) {
         if (notifier->Initialize(pcontext)) {
-<<<<<<< HEAD
-            LogPrint(BCLog::ZMQ, "zmq: Notifier %s ready (address = %s)\n", notifier->GetType(), notifier->GetAddress());
-        } else {
-            LogPrint(BCLog::ZMQ, "zmq: Notifier %s failed (address = %s)\n", notifier->GetType(), notifier->GetAddress());
-=======
             LogPrint(BCLog::ZMQ, "Notifier %s ready (address = %s)\n", notifier->GetType(), notifier->GetAddress());
         } else {
             LogPrint(BCLog::ZMQ, "Notifier %s failed (address = %s)\n", notifier->GetType(), notifier->GetAddress());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             return false;
         }
     }
@@ -148,11 +116,7 @@ void CZMQNotificationInterface::Shutdown()
     if (pcontext)
     {
         for (auto& notifier : notifiers) {
-<<<<<<< HEAD
-            LogPrint(BCLog::ZMQ, "zmq: Shutdown notifier %s at %s\n", notifier->GetType(), notifier->GetAddress());
-=======
             LogPrint(BCLog::ZMQ, "Shutdown notifier %s at %s\n", notifier->GetType(), notifier->GetAddress());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             notifier->Shutdown();
         }
         zmq_ctx_term(pcontext);
@@ -199,48 +163,6 @@ void CZMQNotificationInterface::TransactionAddedToMempool(const CTransactionRef&
 }
 
 void CZMQNotificationInterface::TransactionRemovedFromMempool(const CTransactionRef& ptx, MemPoolRemovalReason reason, uint64_t mempool_sequence)
-<<<<<<< HEAD
-{
-    // Called for all non-block inclusion reasons
-    const CTransaction& tx = *ptx;
-
-    TryForEachAndRemoveFailed(notifiers, [&tx, mempool_sequence](CZMQAbstractNotifier* notifier) {
-        return notifier->NotifyTransactionRemoval(tx, mempool_sequence);
-    });
-}
-
-void CZMQNotificationInterface::BlockConnected(const std::shared_ptr<const CBlock>& pblock, const CBlockIndex* pindexConnected)
-{
-    for (const CTransactionRef& ptx : pblock->vtx) {
-        const CTransaction& tx = *ptx;
-        TryForEachAndRemoveFailed(notifiers, [&tx](CZMQAbstractNotifier* notifier) {
-            return notifier->NotifyTransaction(tx);
-        });
-    }
-
-    // Next we notify BlockConnect listeners for *all* blocks
-    TryForEachAndRemoveFailed(notifiers, [pindexConnected](CZMQAbstractNotifier* notifier) {
-        return notifier->NotifyBlockConnect(pindexConnected);
-    });
-}
-
-void CZMQNotificationInterface::BlockDisconnected(const std::shared_ptr<const CBlock>& pblock, const CBlockIndex* pindexDisconnected)
-{
-    for (const CTransactionRef& ptx : pblock->vtx) {
-        const CTransaction& tx = *ptx;
-        TryForEachAndRemoveFailed(notifiers, [&tx](CZMQAbstractNotifier* notifier) {
-            return notifier->NotifyTransaction(tx);
-        });
-    }
-
-    // Next we notify BlockDisconnect listeners for *all* blocks
-    TryForEachAndRemoveFailed(notifiers, [pindexDisconnected](CZMQAbstractNotifier* notifier) {
-        return notifier->NotifyBlockDisconnect(pindexDisconnected);
-    });
-}
-
-CZMQNotificationInterface* g_zmq_notification_interface = nullptr;
-=======
 {
     // Called for all non-block inclusion reasons
     const CTransaction& tx = *ptx;
@@ -284,4 +206,3 @@ void CZMQNotificationInterface::BlockDisconnected(const std::shared_ptr<const CB
 }
 
 std::unique_ptr<CZMQNotificationInterface> g_zmq_notification_interface;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion

@@ -64,11 +64,7 @@ static void secp256k1_modinv32_normalize_30(secp256k1_modinv32_signed30 *r, int3
     const int32_t M30 = (int32_t)(UINT32_MAX >> 2);
     int32_t r0 = r->v[0], r1 = r->v[1], r2 = r->v[2], r3 = r->v[3], r4 = r->v[4],
             r5 = r->v[5], r6 = r->v[6], r7 = r->v[7], r8 = r->v[8];
-<<<<<<< HEAD
-    int32_t cond_add, cond_negate;
-=======
     volatile int32_t cond_add, cond_negate;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 #ifdef VERIFY
     /* Verify that all limbs are in range (-2^30,2^30). */
@@ -190,12 +186,8 @@ static int32_t secp256k1_modinv32_divsteps_30(int32_t zeta, uint32_t f0, uint32_
      * being inside [-2^31,2^31) means that casting to signed works correctly.
      */
     uint32_t u = 1, v = 0, q = 0, r = 1;
-<<<<<<< HEAD
-    uint32_t c1, c2, f = f0, g = g0, x, y, z;
-=======
     volatile uint32_t c1, c2;
     uint32_t mask1, mask2, f = f0, g = g0, x, y, z;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     int i;
 
     for (i = 0; i < 30; ++i) {
@@ -204,25 +196,6 @@ static int32_t secp256k1_modinv32_divsteps_30(int32_t zeta, uint32_t f0, uint32_
         VERIFY_CHECK((q * f0 + r * g0) == g << i);
         /* Compute conditional masks for (zeta < 0) and for (g & 1). */
         c1 = zeta >> 31;
-<<<<<<< HEAD
-        c2 = -(g & 1);
-        /* Compute x,y,z, conditionally negated versions of f,u,v. */
-        x = (f ^ c1) - c1;
-        y = (u ^ c1) - c1;
-        z = (v ^ c1) - c1;
-        /* Conditionally add x,y,z to g,q,r. */
-        g += x & c2;
-        q += y & c2;
-        r += z & c2;
-        /* In what follows, c1 is a condition mask for (zeta < 0) and (g & 1). */
-        c1 &= c2;
-        /* Conditionally change zeta into -zeta-2 or zeta-1. */
-        zeta = (zeta ^ c1) - 1;
-        /* Conditionally add g,q,r to f,u,v. */
-        f += g & c1;
-        u += q & c1;
-        v += r & c1;
-=======
         mask1 = c1;
         c2 = g & 1;
         mask2 = -c2;
@@ -242,7 +215,6 @@ static int32_t secp256k1_modinv32_divsteps_30(int32_t zeta, uint32_t f0, uint32_
         f += g & mask1;
         u += q & mask1;
         v += r & mask1;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         /* Shifts */
         g >>= 1;
         u <<= 1;
@@ -263,8 +235,6 @@ static int32_t secp256k1_modinv32_divsteps_30(int32_t zeta, uint32_t f0, uint32_
     return zeta;
 }
 
-<<<<<<< HEAD
-=======
 /* secp256k1_modinv32_inv256[i] = -(2*i+1)^-1 (mod 256) */
 static const uint8_t secp256k1_modinv32_inv256[128] = {
     0xFF, 0x55, 0x33, 0x49, 0xC7, 0x5D, 0x3B, 0x11, 0x0F, 0xE5, 0xC3, 0x59,
@@ -280,7 +250,6 @@ static const uint8_t secp256k1_modinv32_inv256[128] = {
     0xEF, 0xC5, 0xA3, 0x39, 0xB7, 0xCD, 0xAB, 0x01
 };
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 /* Compute the transition matrix and eta for 30 divsteps (variable time).
  *
  * Input:  eta: initial eta
@@ -292,24 +261,6 @@ static const uint8_t secp256k1_modinv32_inv256[128] = {
  * Implements the divsteps_n_matrix_var function from the explanation.
  */
 static int32_t secp256k1_modinv32_divsteps_30_var(int32_t eta, uint32_t f0, uint32_t g0, secp256k1_modinv32_trans2x2 *t) {
-<<<<<<< HEAD
-    /* inv256[i] = -(2*i+1)^-1 (mod 256) */
-    static const uint8_t inv256[128] = {
-        0xFF, 0x55, 0x33, 0x49, 0xC7, 0x5D, 0x3B, 0x11, 0x0F, 0xE5, 0xC3, 0x59,
-        0xD7, 0xED, 0xCB, 0x21, 0x1F, 0x75, 0x53, 0x69, 0xE7, 0x7D, 0x5B, 0x31,
-        0x2F, 0x05, 0xE3, 0x79, 0xF7, 0x0D, 0xEB, 0x41, 0x3F, 0x95, 0x73, 0x89,
-        0x07, 0x9D, 0x7B, 0x51, 0x4F, 0x25, 0x03, 0x99, 0x17, 0x2D, 0x0B, 0x61,
-        0x5F, 0xB5, 0x93, 0xA9, 0x27, 0xBD, 0x9B, 0x71, 0x6F, 0x45, 0x23, 0xB9,
-        0x37, 0x4D, 0x2B, 0x81, 0x7F, 0xD5, 0xB3, 0xC9, 0x47, 0xDD, 0xBB, 0x91,
-        0x8F, 0x65, 0x43, 0xD9, 0x57, 0x6D, 0x4B, 0xA1, 0x9F, 0xF5, 0xD3, 0xE9,
-        0x67, 0xFD, 0xDB, 0xB1, 0xAF, 0x85, 0x63, 0xF9, 0x77, 0x8D, 0x6B, 0xC1,
-        0xBF, 0x15, 0xF3, 0x09, 0x87, 0x1D, 0xFB, 0xD1, 0xCF, 0xA5, 0x83, 0x19,
-        0x97, 0xAD, 0x8B, 0xE1, 0xDF, 0x35, 0x13, 0x29, 0xA7, 0x3D, 0x1B, 0xF1,
-        0xEF, 0xC5, 0xA3, 0x39, 0xB7, 0xCD, 0xAB, 0x01
-    };
-
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     /* Transformation matrix; see comments in secp256k1_modinv32_divsteps_30. */
     uint32_t u = 1, v = 0, q = 0, r = 1;
     uint32_t f = f0, g = g0, m;
@@ -349,11 +300,7 @@ static int32_t secp256k1_modinv32_divsteps_30_var(int32_t eta, uint32_t f0, uint
         VERIFY_CHECK(limit > 0 && limit <= 30);
         m = (UINT32_MAX >> (32 - limit)) & 255U;
         /* Find what multiple of f must be added to g to cancel its bottom min(limit, 8) bits. */
-<<<<<<< HEAD
-        w = (g * inv256[(f >> 1) & 127]) & m;
-=======
         w = (g * secp256k1_modinv32_inv256[(f >> 1) & 127]) & m;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         /* Do so. */
         g += f * w;
         q += u * w;
@@ -373,8 +320,6 @@ static int32_t secp256k1_modinv32_divsteps_30_var(int32_t eta, uint32_t f0, uint
     return eta;
 }
 
-<<<<<<< HEAD
-=======
 /* Compute the transition matrix and eta for 30 posdivsteps (variable time, eta=-delta), and keeps track
  * of the Jacobi symbol along the way. f0 and g0 must be f and g mod 2^32 rather than 2^30, because
  * Jacobi tracking requires knowing (f mod 8) rather than just (f mod 2).
@@ -455,7 +400,6 @@ static int32_t secp256k1_modinv32_posdivsteps_30_var(int32_t eta, uint32_t f0, u
     return eta;
 }
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 /* Compute (t/2^30) * [d, e] mod modulus, where t is a transition matrix for 30 divsteps.
  *
  * On input and output, d and e are in range (-2*modulus,modulus). All output limbs will be in range
@@ -474,15 +418,8 @@ static void secp256k1_modinv32_update_de_30(secp256k1_modinv32_signed30 *d, secp
     VERIFY_CHECK(secp256k1_modinv32_mul_cmp_30(d, 9, &modinfo->modulus, 1) < 0);  /* d <    modulus */
     VERIFY_CHECK(secp256k1_modinv32_mul_cmp_30(e, 9, &modinfo->modulus, -2) > 0); /* e > -2*modulus */
     VERIFY_CHECK(secp256k1_modinv32_mul_cmp_30(e, 9, &modinfo->modulus, 1) < 0);  /* e <    modulus */
-<<<<<<< HEAD
-    VERIFY_CHECK((labs(u) + labs(v)) >= 0); /* |u|+|v| doesn't overflow */
-    VERIFY_CHECK((labs(q) + labs(r)) >= 0); /* |q|+|r| doesn't overflow */
-    VERIFY_CHECK((labs(u) + labs(v)) <= M30 + 1); /* |u|+|v| <= 2^30 */
-    VERIFY_CHECK((labs(q) + labs(r)) <= M30 + 1); /* |q|+|r| <= 2^30 */
-=======
     VERIFY_CHECK(labs(u) <= (M30 + 1 - labs(v))); /* |u|+|v| <= 2^30 */
     VERIFY_CHECK(labs(q) <= (M30 + 1 - labs(r))); /* |q|+|r| <= 2^30 */
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #endif
     /* [md,me] start as zero; plus [u,q] if d is negative; plus [v,r] if e is negative. */
     sd = d->v[8] >> 31;
@@ -728,8 +665,6 @@ static void secp256k1_modinv32_var(secp256k1_modinv32_signed30 *x, const secp256
     *x = d;
 }
 
-<<<<<<< HEAD
-=======
 /* Do up to 50 iterations of 30 posdivsteps (up to 1500 steps; more is extremely rare) each until f=1.
  * In VERIFY mode use a lower number of iterations (750, close to the median 756), so failure actually occurs. */
 #ifdef VERIFY
@@ -800,5 +735,4 @@ static int secp256k1_jacobi32_maybe_var(const secp256k1_modinv32_signed30 *x, co
     return 0;
 }
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #endif /* SECP256K1_MODINV32_IMPL_H */

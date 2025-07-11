@@ -1,10 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
 // Copyright (c) 2009-2022 The Bitcoin Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// Copyright (c) 2014-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #ifndef DIGIBYTE_POLICY_FEES_H
@@ -19,10 +15,7 @@
 #include <util/fs.h>
 
 #include <array>
-<<<<<<< HEAD
-=======
 #include <chrono>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <map>
 #include <memory>
 #include <set>
@@ -272,21 +265,12 @@ public:
     void Flush();
 
 private:
-<<<<<<< HEAD
-    mutable RecursiveMutex m_cs_fee_estimator;
-
-    unsigned int nBestSeenHeight GUARDED_BY(m_cs_fee_estimator);
-    unsigned int firstRecordedHeight GUARDED_BY(m_cs_fee_estimator);
-    unsigned int historicalFirst GUARDED_BY(m_cs_fee_estimator);
-    unsigned int historicalBest GUARDED_BY(m_cs_fee_estimator);
-=======
     mutable Mutex m_cs_fee_estimator;
 
     unsigned int nBestSeenHeight GUARDED_BY(m_cs_fee_estimator){0};
     unsigned int firstRecordedHeight GUARDED_BY(m_cs_fee_estimator){0};
     unsigned int historicalFirst GUARDED_BY(m_cs_fee_estimator){0};
     unsigned int historicalBest GUARDED_BY(m_cs_fee_estimator){0};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     struct TxStatsInfo
     {
@@ -303,13 +287,8 @@ private:
     std::unique_ptr<TxConfirmStats> shortStats PT_GUARDED_BY(m_cs_fee_estimator);
     std::unique_ptr<TxConfirmStats> longStats PT_GUARDED_BY(m_cs_fee_estimator);
 
-<<<<<<< HEAD
-    unsigned int trackedTxs GUARDED_BY(m_cs_fee_estimator);
-    unsigned int untrackedTxs GUARDED_BY(m_cs_fee_estimator);
-=======
     unsigned int trackedTxs GUARDED_BY(m_cs_fee_estimator){0};
     unsigned int untrackedTxs GUARDED_BY(m_cs_fee_estimator){0};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     std::vector<double> buckets GUARDED_BY(m_cs_fee_estimator); // The upper-bound of the range for the bucket (inclusive)
     std::map<double, unsigned int> bucketMap GUARDED_BY(m_cs_fee_estimator); // Map of bucket upper-bound to index into all vectors by bucket
@@ -327,13 +306,10 @@ private:
     unsigned int HistoricalBlockSpan() const EXCLUSIVE_LOCKS_REQUIRED(m_cs_fee_estimator);
     /** Calculation of highest target that reasonable estimate can be provided for */
     unsigned int MaxUsableEstimate() const EXCLUSIVE_LOCKS_REQUIRED(m_cs_fee_estimator);
-<<<<<<< HEAD
-=======
 
     /** A non-thread-safe helper for the removeTx function */
     bool _removeTx(const uint256& hash, bool inBlock)
         EXCLUSIVE_LOCKS_REQUIRED(m_cs_fee_estimator);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 };
 
 class FeeFilterRounder
@@ -350,13 +326,8 @@ public:
     /** Create new FeeFilterRounder */
     explicit FeeFilterRounder(const CFeeRate& min_incremental_fee, FastRandomContext& rng);
 
-<<<<<<< HEAD
-    /** Quantize a minimum fee for privacy purpose before broadcast. Not thread-safe due to use of FastRandomContext */
-    CAmount round(CAmount currentMinFee);
-=======
     /** Quantize a minimum fee for privacy purpose before broadcast. */
     CAmount round(CAmount currentMinFee) EXCLUSIVE_LOCKS_REQUIRED(!m_insecure_rand_mutex);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 private:
     const std::set<double> m_fee_set;

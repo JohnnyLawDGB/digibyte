@@ -1,22 +1,11 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The DigiByte Core developers
-=======
 // Copyright (c) 2009-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #ifndef DIGIBYTE_NODE_UTXO_SNAPSHOT_H
 #define DIGIBYTE_NODE_UTXO_SNAPSHOT_H
 
-<<<<<<< HEAD
-#include <uint256.h>
-#include <serialize.h>
-
-//! Metadata describing a serialized version of a UTXO set from which an
-//! assumeutxo CChainState can be constructed.
-=======
 #include <kernel/cs_main.h>
 #include <serialize.h>
 #include <sync.h>
@@ -32,7 +21,6 @@ class Chainstate;
 namespace node {
 //! Metadata describing a serialized version of a UTXO set from which an
 //! assumeutxo Chainstate can be constructed.
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 class SnapshotMetadata
 {
 public:
@@ -47,20 +35,13 @@ public:
     SnapshotMetadata() { }
     SnapshotMetadata(
         const uint256& base_blockhash,
-<<<<<<< HEAD
-        uint64_t coins_count,
-        unsigned int nchaintx) :
-=======
         uint64_t coins_count) :
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             m_base_blockhash(base_blockhash),
             m_coins_count(coins_count) { }
 
     SERIALIZE_METHODS(SnapshotMetadata, obj) { READWRITE(obj.m_base_blockhash, obj.m_coins_count); }
 };
 
-<<<<<<< HEAD
-=======
 //! The file in the snapshot chainstate dir which stores the base blockhash. This is
 //! needed to reconstruct snapshot chainstates on init.
 //!
@@ -88,6 +69,4 @@ constexpr std::string_view SNAPSHOT_CHAINSTATE_SUFFIX = "_snapshot";
 std::optional<fs::path> FindSnapshotChainstateDir(const fs::path& data_dir);
 
 } // namespace node
-
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #endif // DIGIBYTE_NODE_UTXO_SNAPSHOT_H

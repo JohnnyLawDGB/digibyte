@@ -1,24 +1,12 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The DigiByte Core developers
-=======
 // Copyright (c) 2009-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include <script/keyorigin.h>
-<<<<<<< HEAD
-#include <script/signingprovider.h>
-#include <script/standard.h>
-
-#include <util/system.h>
-=======
 #include <script/interpreter.h>
 #include <script/signingprovider.h>
 
 #include <logging.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 const SigningProvider& DUMMY_SIGNING_PROVIDER = SigningProvider();
 
@@ -59,13 +47,10 @@ bool HidingSigningProvider::GetTaprootSpendData(const XOnlyPubKey& output_key, T
 {
     return m_provider->GetTaprootSpendData(output_key, spenddata);
 }
-<<<<<<< HEAD
-=======
 bool HidingSigningProvider::GetTaprootBuilder(const XOnlyPubKey& output_key, TaprootBuilder& builder) const
 {
     return m_provider->GetTaprootBuilder(output_key, builder);
 }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 bool FlatSigningProvider::GetCScript(const CScriptID& scriptid, CScript& script) const { return LookupHelper(scripts, scriptid, script); }
 bool FlatSigningProvider::GetPubKey(const CKeyID& keyid, CPubKey& pubkey) const { return LookupHelper(pubkeys, keyid, pubkey); }
@@ -79,27 +64,6 @@ bool FlatSigningProvider::GetKeyOrigin(const CKeyID& keyid, KeyOriginInfo& info)
 bool FlatSigningProvider::GetKey(const CKeyID& keyid, CKey& key) const { return LookupHelper(keys, keyid, key); }
 bool FlatSigningProvider::GetTaprootSpendData(const XOnlyPubKey& output_key, TaprootSpendData& spenddata) const
 {
-<<<<<<< HEAD
-    return LookupHelper(tr_spenddata, output_key, spenddata);
-}
-
-FlatSigningProvider Merge(const FlatSigningProvider& a, const FlatSigningProvider& b)
-{
-    FlatSigningProvider ret;
-    ret.scripts = a.scripts;
-    ret.scripts.insert(b.scripts.begin(), b.scripts.end());
-    ret.pubkeys = a.pubkeys;
-    ret.pubkeys.insert(b.pubkeys.begin(), b.pubkeys.end());
-    ret.keys = a.keys;
-    ret.keys.insert(b.keys.begin(), b.keys.end());
-    ret.origins = a.origins;
-    ret.origins.insert(b.origins.begin(), b.origins.end());
-    ret.tr_spenddata = a.tr_spenddata;
-    for (const auto& [output_key, spenddata] : b.tr_spenddata) {
-        ret.tr_spenddata[output_key].Merge(spenddata);
-    }
-    return ret;
-=======
     TaprootBuilder builder;
     if (LookupHelper(tr_trees, output_key, builder)) {
         spenddata = builder.GetSpendData();
@@ -120,7 +84,6 @@ FlatSigningProvider& FlatSigningProvider::Merge(FlatSigningProvider&& b)
     origins.merge(b.origins);
     tr_trees.merge(b.tr_trees);
     return *this;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 void FillableSigningProvider::ImplicitlyLearnRelatedKeyScripts(const CPubKey& pubkey)
@@ -231,13 +194,8 @@ bool FillableSigningProvider::GetCScript(const CScriptID &hash, CScript& redeemS
 
 CKeyID GetKeyForDestination(const SigningProvider& store, const CTxDestination& dest)
 {
-<<<<<<< HEAD
-    // Only supports destinations which map to single public keys, i.e. P2PKH,
-    // P2WPKH, and P2SH-P2WPKH.
-=======
     // Only supports destinations which map to single public keys:
     // P2PKH, P2WPKH, P2SH-P2WPKH, P2TR
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (auto id = std::get_if<PKHash>(&dest)) {
         return ToKeyID(*id);
     }
@@ -246,11 +204,7 @@ CKeyID GetKeyForDestination(const SigningProvider& store, const CTxDestination& 
     }
     if (auto script_hash = std::get_if<ScriptHash>(&dest)) {
         CScript script;
-<<<<<<< HEAD
-        CScriptID script_id(*script_hash);
-=======
         CScriptID script_id = ToScriptID(*script_hash);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         CTxDestination inner_dest;
         if (store.GetCScript(script_id, script) && ExtractDestination(script, inner_dest)) {
             if (auto inner_witness_id = std::get_if<WitnessV0KeyHash>(&inner_dest)) {
@@ -258,10 +212,6 @@ CKeyID GetKeyForDestination(const SigningProvider& store, const CTxDestination& 
             }
         }
     }
-<<<<<<< HEAD
-    return CKeyID();
-}
-=======
     if (auto output_key = std::get_if<WitnessV1Taproot>(&dest)) {
         TaprootSpendData spenddata;
         CPubKey pub;
@@ -625,4 +575,3 @@ std::vector<std::tuple<uint8_t, uint8_t, std::vector<unsigned char>>> TaprootBui
     }
     return tuples;
 }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion

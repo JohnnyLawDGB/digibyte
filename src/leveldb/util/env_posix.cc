@@ -49,15 +49,11 @@ constexpr const int kDefaultMmapLimit = (sizeof(void*) >= 8) ? 4096 : 0;
 int g_mmap_limit = kDefaultMmapLimit;
 
 // Common flags defined for all posix open operations
-<<<<<<< HEAD
-#if defined(HAVE_O_CLOEXEC)
-=======
 #if HAVE_O_CLOEXEC
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 constexpr const int kOpenBaseFlags = O_CLOEXEC;
 #else
 constexpr const int kOpenBaseFlags = 0;
-#endif  // defined(HAVE_O_CLOEXEC)
+#endif  // HAVE_O_CLOEXEC
 
 constexpr const size_t kWritableFileBufferSize = 65536;
 
@@ -854,11 +850,7 @@ class SingletonEnv {
  public:
   SingletonEnv() {
 #if !defined(NDEBUG)
-<<<<<<< HEAD
-    env_initialized_.store(true, std::memory_order::memory_order_relaxed);
-=======
     env_initialized_.store(true, std::memory_order_relaxed);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #endif  // !defined(NDEBUG)
     static_assert(sizeof(env_storage_) >= sizeof(EnvType),
                   "env_storage_ will not fit the Env");
@@ -875,11 +867,7 @@ class SingletonEnv {
 
   static void AssertEnvNotInitialized() {
 #if !defined(NDEBUG)
-<<<<<<< HEAD
-    assert(!env_initialized_.load(std::memory_order::memory_order_relaxed));
-=======
     assert(!env_initialized_.load(std::memory_order_relaxed));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #endif  // !defined(NDEBUG)
   }
 

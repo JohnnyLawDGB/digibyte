@@ -1,30 +1,15 @@
-<<<<<<< HEAD
-bench_inv
-bench_ecdh
-bench_ecmult
-bench_schnorrsig
-bench_sign
-bench_verify
-bench_recover
-=======
 bench
 bench_ecmult
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 bench_internal
 noverify_tests
 tests
 exhaustive_tests
-<<<<<<< HEAD
-gen_context
-valgrind_ctime_test
-=======
 precompute_ecmult_gen
 precompute_ecmult
 ctime_tests
 ecdh_example
 ecdsa_example
 schnorr_example
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 *.exe
 *.so
 *.a
@@ -50,13 +35,6 @@ libtool
 *.lo
 *.o
 *~
-<<<<<<< HEAD
-*.log
-*.trs
-src/libsecp256k1-config.h
-src/libsecp256k1-config.h.in
-src/ecmult_static_context.h
-=======
 
 coverage/
 coverage.html
@@ -66,7 +44,6 @@ coverage.*.html
 *.gcov
 
 build-aux/ar-lib
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 build-aux/config.guess
 build-aux/config.sub
 build-aux/depcomp

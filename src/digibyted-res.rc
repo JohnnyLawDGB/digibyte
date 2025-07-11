@@ -2,13 +2,8 @@
 #include "clientversion.h"       // holds the needed client version information
 
 #define VER_PRODUCTVERSION     CLIENT_VERSION_MAJOR,CLIENT_VERSION_MINOR,CLIENT_VERSION_BUILD
-<<<<<<< HEAD
 #define VER_PRODUCTVERSION_STR STRINGIZE(CLIENT_VERSION_MAJOR) "." STRINGIZE(CLIENT_VERSION_MINOR) "." STRINGIZE(CLIENT_VERSION_BUILD)
 #define VER_FILEVERSION        VER_PRODUCTVERSION
-#define VER_FILEVERSION_STR    VER_PRODUCTVERSION_STR
-=======
-#define VER_FILEVERSION        VER_PRODUCTVERSION
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 VS_VERSION_INFO VERSIONINFO
 FILEVERSION     VER_FILEVERSION
@@ -22,21 +17,13 @@ BEGIN
         BEGIN
             VALUE "CompanyName",        "DigiByte"
             VALUE "FileDescription",    "digibyted (DigiByte node with a JSON-RPC server)"
-<<<<<<< HEAD
             VALUE "FileVersion",        VER_FILEVERSION_STR
-=======
-            VALUE "FileVersion",        PACKAGE_VERSION
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             VALUE "InternalName",       "digibyted"
             VALUE "LegalCopyright",     COPYRIGHT_STR
             VALUE "LegalTrademarks1",   "Distributed under the MIT software license, see the accompanying file COPYING or http://www.opensource.org/licenses/mit-license.php."
             VALUE "OriginalFilename",   "digibyted.exe"
             VALUE "ProductName",        "digibyted"
-<<<<<<< HEAD
             VALUE "ProductVersion",     VER_PRODUCTVERSION_STR
-=======
-            VALUE "ProductVersion",     PACKAGE_VERSION
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         END
     END
 

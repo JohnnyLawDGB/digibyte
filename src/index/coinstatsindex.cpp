@@ -1,37 +1,25 @@
-<<<<<<< HEAD
-// Copyright (c) 2020-2021 The DigiByte Core developers
-=======
 // Copyright (c) 2020-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <chainparams.h>
 #include <coins.h>
-<<<<<<< HEAD
-#include <crypto/muhash.h>
-#include <index/coinstatsindex.h>
-=======
 #include <common/args.h>
 #include <crypto/muhash.h>
 #include <index/coinstatsindex.h>
 #include <kernel/coinstats.h>
 #include <logging.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <node/blockstorage.h>
 #include <serialize.h>
 #include <txdb.h>
 #include <undo.h>
 #include <validation.h>
 
-<<<<<<< HEAD
-=======
 using kernel::ApplyCoinHash;
 using kernel::CCoinsStats;
 using kernel::GetBogoSize;
 using kernel::RemoveCoinHash;
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 static constexpr uint8_t DB_BLOCK_HASH{'s'};
 static constexpr uint8_t DB_BLOCK_HEIGHT{'t'};
 static constexpr uint8_t DB_MUHASH{'M'};
@@ -44,16 +32,6 @@ struct DBVal {
     uint64_t bogo_size;
     CAmount total_amount;
     CAmount total_subsidy;
-<<<<<<< HEAD
-    CAmount block_unspendable_amount;
-    CAmount block_prevout_spent_amount;
-    CAmount block_new_outputs_ex_coinbase_amount;
-    CAmount block_coinbase_amount;
-    CAmount unspendables_genesis_block;
-    CAmount unspendables_bip30;
-    CAmount unspendables_scripts;
-    CAmount unspendables_unclaimed_rewards;
-=======
     CAmount total_unspendable_amount;
     CAmount total_prevout_spent_amount;
     CAmount total_new_outputs_ex_coinbase_amount;
@@ -62,7 +40,6 @@ struct DBVal {
     CAmount total_unspendables_bip30;
     CAmount total_unspendables_scripts;
     CAmount total_unspendables_unclaimed_rewards;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     SERIALIZE_METHODS(DBVal, obj)
     {
@@ -71,16 +48,6 @@ struct DBVal {
         READWRITE(obj.bogo_size);
         READWRITE(obj.total_amount);
         READWRITE(obj.total_subsidy);
-<<<<<<< HEAD
-        READWRITE(obj.block_unspendable_amount);
-        READWRITE(obj.block_prevout_spent_amount);
-        READWRITE(obj.block_new_outputs_ex_coinbase_amount);
-        READWRITE(obj.block_coinbase_amount);
-        READWRITE(obj.unspendables_genesis_block);
-        READWRITE(obj.unspendables_bip30);
-        READWRITE(obj.unspendables_scripts);
-        READWRITE(obj.unspendables_unclaimed_rewards);
-=======
         READWRITE(obj.total_unspendable_amount);
         READWRITE(obj.total_prevout_spent_amount);
         READWRITE(obj.total_new_outputs_ex_coinbase_amount);
@@ -89,7 +56,6 @@ struct DBVal {
         READWRITE(obj.total_unspendables_bip30);
         READWRITE(obj.total_unspendables_scripts);
         READWRITE(obj.total_unspendables_unclaimed_rewards);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 };
 
@@ -137,12 +103,8 @@ struct DBHashKey {
 
 std::unique_ptr<CoinStatsIndex> g_coin_stats_index;
 
-<<<<<<< HEAD
-CoinStatsIndex::CoinStatsIndex(size_t n_cache_size, bool f_memory, bool f_wipe)
-=======
 CoinStatsIndex::CoinStatsIndex(std::unique_ptr<interfaces::Chain> chain, size_t n_cache_size, bool f_memory, bool f_wipe)
     : BaseIndex(std::move(chain), "coinstatsindex")
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     fs::path path{gArgs.GetDataDirNet() / "indexes" / "coinstats"};
     fs::create_directories(path);
@@ -150,17 +112,6 @@ CoinStatsIndex::CoinStatsIndex(std::unique_ptr<interfaces::Chain> chain, size_t 
     m_db = std::make_unique<CoinStatsIndex::DB>(path / "db", n_cache_size, f_memory, f_wipe);
 }
 
-<<<<<<< HEAD
-bool CoinStatsIndex::WriteBlock(const CBlock& block, const CBlockIndex* pindex)
-{
-    CBlockUndo block_undo;
-    const CAmount block_subsidy{GetBlockSubsidy(pindex->nHeight, Params().GetConsensus())};
-    m_total_subsidy += block_subsidy;
-
-    // Ignore genesis block
-    if (pindex->nHeight > 0) {
-        if (!UndoReadFromDisk(block_undo, pindex)) {
-=======
 bool CoinStatsIndex::CustomAppend(const interfaces::BlockInfo& block)
 {
     CBlockUndo block_undo;
@@ -173,7 +124,6 @@ bool CoinStatsIndex::CustomAppend(const interfaces::BlockInfo& block)
         // will be removed in upcoming commit
         const CBlockIndex* pindex = WITH_LOCK(cs_main, return m_chainstate->m_blockman.LookupBlockIndex(block.hash));
         if (!m_chainstate->m_blockman.UndoReadFromDisk(block_undo, *pindex)) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             return false;
         }
 
@@ -270,7 +220,6 @@ bool CoinStatsIndex::CustomAppend(const interfaces::BlockInfo& block)
                     m_total_coinbase_amount += coin.out.nValue;
                 } else {
                     m_total_new_outputs_ex_coinbase_amount += coin.out.nValue;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 }
 
                 ++m_transaction_output_count;
@@ -286,15 +235,9 @@ bool CoinStatsIndex::CustomAppend(const interfaces::BlockInfo& block)
                     Coin coin{tx_undo.vprevout[j]};
                     COutPoint outpoint{tx->vin[j].prevout.hash, tx->vin[j].prevout.n};
 
-<<<<<<< HEAD
-                    m_muhash.Remove(MakeUCharSpan(TxOutSer(outpoint, coin)));
-
-                    m_block_prevout_spent_amount += coin.out.nValue;
-=======
                     RemoveCoinHash(m_muhash, outpoint, coin);
 
                     m_total_prevout_spent_amount += coin.out.nValue;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
                     --m_transaction_output_count;
                     m_total_amount -= coin.out.nValue;
@@ -304,48 +247,24 @@ bool CoinStatsIndex::CustomAppend(const interfaces::BlockInfo& block)
         }
     } else {
         // genesis block
-<<<<<<< HEAD
-        m_block_unspendable_amount += block_subsidy;
-        m_unspendables_genesis_block += block_subsidy;
-=======
         m_total_unspendable_amount += block_subsidy;
         m_total_unspendables_genesis_block += block_subsidy;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     // If spent prevouts + block subsidy are still a higher amount than
     // new outputs + coinbase + current unspendable amount this means
     // the miner did not claim the full block reward. Unclaimed block
     // rewards are also unspendable.
-<<<<<<< HEAD
-    const CAmount unclaimed_rewards{(m_block_prevout_spent_amount + m_total_subsidy) - (m_block_new_outputs_ex_coinbase_amount + m_block_coinbase_amount + m_block_unspendable_amount)};
-    m_block_unspendable_amount += unclaimed_rewards;
-    m_unspendables_unclaimed_rewards += unclaimed_rewards;
-
-    std::pair<uint256, DBVal> value;
-    value.first = pindex->GetBlockHash();
-=======
     const CAmount unclaimed_rewards{(m_total_prevout_spent_amount + m_total_subsidy) - (m_total_new_outputs_ex_coinbase_amount + m_total_coinbase_amount + m_total_unspendable_amount)};
     m_total_unspendable_amount += unclaimed_rewards;
     m_total_unspendables_unclaimed_rewards += unclaimed_rewards;
 
     std::pair<uint256, DBVal> value;
     value.first = block.hash;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     value.second.transaction_output_count = m_transaction_output_count;
     value.second.bogo_size = m_bogo_size;
     value.second.total_amount = m_total_amount;
     value.second.total_subsidy = m_total_subsidy;
-<<<<<<< HEAD
-    value.second.block_unspendable_amount = m_block_unspendable_amount;
-    value.second.block_prevout_spent_amount = m_block_prevout_spent_amount;
-    value.second.block_new_outputs_ex_coinbase_amount = m_block_new_outputs_ex_coinbase_amount;
-    value.second.block_coinbase_amount = m_block_coinbase_amount;
-    value.second.unspendables_genesis_block = m_unspendables_genesis_block;
-    value.second.unspendables_bip30 = m_unspendables_bip30;
-    value.second.unspendables_scripts = m_unspendables_scripts;
-    value.second.unspendables_unclaimed_rewards = m_unspendables_unclaimed_rewards;
-=======
     value.second.total_unspendable_amount = m_total_unspendable_amount;
     value.second.total_prevout_spent_amount = m_total_prevout_spent_amount;
     value.second.total_new_outputs_ex_coinbase_amount = m_total_new_outputs_ex_coinbase_amount;
@@ -354,25 +273,17 @@ bool CoinStatsIndex::CustomAppend(const interfaces::BlockInfo& block)
     value.second.total_unspendables_bip30 = m_total_unspendables_bip30;
     value.second.total_unspendables_scripts = m_total_unspendables_scripts;
     value.second.total_unspendables_unclaimed_rewards = m_total_unspendables_unclaimed_rewards;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     uint256 out;
     m_muhash.Finalize(out);
     value.second.muhash = out;
 
-<<<<<<< HEAD
-    return m_db->Write(DBHeightKey(pindex->nHeight), value) && m_db->Write(DB_MUHASH, m_muhash);
-}
-
-static bool CopyHeightIndexToHashIndex(CDBIterator& db_it, CDBBatch& batch,
-=======
     // Intentionally do not update DB_MUHASH here so it stays in sync with
     // DB_BEST_BLOCK, and the index is not corrupted if there is an unclean shutdown.
     return m_db->Write(DBHeightKey(block.height), value);
 }
 
 [[nodiscard]] static bool CopyHeightIndexToHashIndex(CDBIterator& db_it, CDBBatch& batch,
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                                        const std::string& index_name,
                                        int start_height, int stop_height)
 {
@@ -398,26 +309,15 @@ static bool CopyHeightIndexToHashIndex(CDBIterator& db_it, CDBBatch& batch,
     return true;
 }
 
-<<<<<<< HEAD
-bool CoinStatsIndex::Rewind(const CBlockIndex* current_tip, const CBlockIndex* new_tip)
-{
-    assert(current_tip->GetAncestor(new_tip->nHeight) == new_tip);
-
-=======
 bool CoinStatsIndex::CustomRewind(const interfaces::BlockKey& current_tip, const interfaces::BlockKey& new_tip)
 {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     CDBBatch batch(*m_db);
     std::unique_ptr<CDBIterator> db_it(m_db->NewIterator());
 
     // During a reorg, we need to copy all hash digests for blocks that are
     // getting disconnected from the height index to the hash index so we can
     // still find them when the height index entries are overwritten.
-<<<<<<< HEAD
-    if (!CopyHeightIndexToHashIndex(*db_it, batch, m_name, new_tip->nHeight, current_tip->nHeight)) {
-=======
     if (!CopyHeightIndexToHashIndex(*db_it, batch, m_name, new_tip.height, current_tip.height)) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         return false;
     }
 
@@ -425,38 +325,17 @@ bool CoinStatsIndex::CustomRewind(const interfaces::BlockKey& current_tip, const
 
     {
         LOCK(cs_main);
-<<<<<<< HEAD
-        CBlockIndex* iter_tip{m_chainstate->m_blockman.LookupBlockIndex(current_tip->GetBlockHash())};
-        const auto& consensus_params{Params().GetConsensus()};
-=======
         const CBlockIndex* iter_tip{m_chainstate->m_blockman.LookupBlockIndex(current_tip.hash)};
         const CBlockIndex* new_tip_index{m_chainstate->m_blockman.LookupBlockIndex(new_tip.hash)};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
         do {
             CBlock block;
 
-<<<<<<< HEAD
-            if (!ReadBlockFromDisk(block, iter_tip, consensus_params)) {
-=======
             if (!m_chainstate->m_blockman.ReadBlockFromDisk(block, *iter_tip)) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 return error("%s: Failed to read block %s from disk",
                              __func__, iter_tip->GetBlockHash().ToString());
             }
 
-<<<<<<< HEAD
-            ReverseBlock(block, iter_tip);
-
-            iter_tip = iter_tip->GetAncestor(iter_tip->nHeight - 1);
-        } while (new_tip != iter_tip);
-    }
-
-    return BaseIndex::Rewind(current_tip, new_tip);
-}
-
-static bool LookUpOne(const CDBWrapper& db, const CBlockIndex* block_index, DBVal& result)
-=======
             if (!ReverseBlock(block, iter_tip)) {
                 return false; // failure cause logged internally
             }
@@ -469,59 +348,21 @@ static bool LookUpOne(const CDBWrapper& db, const CBlockIndex* block_index, DBVa
 }
 
 static bool LookUpOne(const CDBWrapper& db, const interfaces::BlockKey& block, DBVal& result)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     // First check if the result is stored under the height index and the value
     // there matches the block hash. This should be the case if the block is on
     // the active chain.
     std::pair<uint256, DBVal> read_out;
-<<<<<<< HEAD
-    if (!db.Read(DBHeightKey(block_index->nHeight), read_out)) {
-        return false;
-    }
-    if (read_out.first == block_index->GetBlockHash()) {
-=======
     if (!db.Read(DBHeightKey(block.height), read_out)) {
         return false;
     }
     if (read_out.first == block.hash) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         result = std::move(read_out.second);
         return true;
     }
 
     // If value at the height index corresponds to an different block, the
     // result will be stored in the hash index.
-<<<<<<< HEAD
-    return db.Read(DBHashKey(block_index->GetBlockHash()), result);
-}
-
-bool CoinStatsIndex::LookUpStats(const CBlockIndex* block_index, CCoinsStats& coins_stats) const
-{
-    DBVal entry;
-    if (!LookUpOne(*m_db, block_index, entry)) {
-        return false;
-    }
-
-    coins_stats.hashSerialized = entry.muhash;
-    coins_stats.nTransactionOutputs = entry.transaction_output_count;
-    coins_stats.nBogoSize = entry.bogo_size;
-    coins_stats.nTotalAmount = entry.total_amount;
-    coins_stats.total_subsidy = entry.total_subsidy;
-    coins_stats.block_unspendable_amount = entry.block_unspendable_amount;
-    coins_stats.block_prevout_spent_amount = entry.block_prevout_spent_amount;
-    coins_stats.block_new_outputs_ex_coinbase_amount = entry.block_new_outputs_ex_coinbase_amount;
-    coins_stats.block_coinbase_amount = entry.block_coinbase_amount;
-    coins_stats.unspendables_genesis_block = entry.unspendables_genesis_block;
-    coins_stats.unspendables_bip30 = entry.unspendables_bip30;
-    coins_stats.unspendables_scripts = entry.unspendables_scripts;
-    coins_stats.unspendables_unclaimed_rewards = entry.unspendables_unclaimed_rewards;
-
-    return true;
-}
-
-bool CoinStatsIndex::Init()
-=======
     return db.Read(DBHashKey(block.hash), result);
 }
 
@@ -553,7 +394,6 @@ std::optional<CCoinsStats> CoinStatsIndex::LookUpStats(const CBlockIndex& block_
 }
 
 bool CoinStatsIndex::CustomInit(const std::optional<interfaces::BlockKey>& block)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     if (!m_db->Read(DB_MUHASH, m_muhash)) {
         // Check that the cause of the read failure is that the key does not
@@ -565,35 +405,6 @@ bool CoinStatsIndex::CustomInit(const std::optional<interfaces::BlockKey>& block
         }
     }
 
-<<<<<<< HEAD
-    if (BaseIndex::Init()) {
-        const CBlockIndex* pindex{CurrentIndex()};
-
-        if (pindex) {
-            DBVal entry;
-            if (!LookUpOne(*m_db, pindex, entry)) {
-                return false;
-            }
-
-            m_transaction_output_count = entry.transaction_output_count;
-            m_bogo_size = entry.bogo_size;
-            m_total_amount = entry.total_amount;
-            m_total_subsidy = entry.total_subsidy;
-            m_block_unspendable_amount = entry.block_unspendable_amount;
-            m_block_prevout_spent_amount = entry.block_prevout_spent_amount;
-            m_block_new_outputs_ex_coinbase_amount = entry.block_new_outputs_ex_coinbase_amount;
-            m_block_coinbase_amount = entry.block_coinbase_amount;
-            m_unspendables_genesis_block = entry.unspendables_genesis_block;
-            m_unspendables_bip30 = entry.unspendables_bip30;
-            m_unspendables_scripts = entry.unspendables_scripts;
-            m_unspendables_unclaimed_rewards = entry.unspendables_unclaimed_rewards;
-        }
-
-        return true;
-    }
-
-    return false;
-=======
     if (block) {
         DBVal entry;
         if (!LookUpOne(*m_db, *block, entry)) {
@@ -631,7 +442,6 @@ bool CoinStatsIndex::CustomCommit(CDBBatch& batch)
     // to prevent an inconsistent state of the DB.
     batch.Write(DB_MUHASH, m_muhash);
     return true;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 // Reverse a single block as part of a reorg
@@ -645,11 +455,7 @@ bool CoinStatsIndex::ReverseBlock(const CBlock& block, const CBlockIndex* pindex
 
     // Ignore genesis block
     if (pindex->nHeight > 0) {
-<<<<<<< HEAD
-        if (!UndoReadFromDisk(block_undo, pindex)) {
-=======
         if (!m_chainstate->m_blockman.UndoReadFromDisk(block_undo, *pindex)) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             return false;
         }
 
@@ -659,18 +465,12 @@ bool CoinStatsIndex::ReverseBlock(const CBlock& block, const CBlockIndex* pindex
 
         uint256 expected_block_hash{pindex->pprev->GetBlockHash()};
         if (read_out.first != expected_block_hash) {
-<<<<<<< HEAD
-            if (!m_db->Read(DBHashKey(expected_block_hash), read_out)) {
-                return error("%s: previous block header belongs to unexpected block %s; expected %s",
-                             __func__, read_out.first.ToString(), expected_block_hash.ToString());
-=======
             LogPrintf("WARNING: previous block header belongs to unexpected block %s; expected %s\n",
                       read_out.first.ToString(), expected_block_hash.ToString());
 
             if (!m_db->Read(DBHashKey(expected_block_hash), read_out)) {
                 return error("%s: previous block header not found; expected %s",
                              __func__, expected_block_hash.ToString());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             }
         }
     }
@@ -679,32 +479,13 @@ bool CoinStatsIndex::ReverseBlock(const CBlock& block, const CBlockIndex* pindex
     for (size_t i = 0; i < block.vtx.size(); ++i) {
         const auto& tx{block.vtx.at(i)};
 
-<<<<<<< HEAD
-        for (size_t j = 0; j < tx->vout.size(); ++j) {
-            const CTxOut& out{tx->vout[j]};
-            COutPoint outpoint{tx->GetHash(), static_cast<uint32_t>(j)};
-=======
         for (uint32_t j = 0; j < tx->vout.size(); ++j) {
             const CTxOut& out{tx->vout[j]};
             COutPoint outpoint{tx->GetHash(), j};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             Coin coin{out, pindex->nHeight, tx->IsCoinBase()};
 
             // Skip unspendable coins
             if (coin.out.scriptPubKey.IsUnspendable()) {
-<<<<<<< HEAD
-                m_block_unspendable_amount -= coin.out.nValue;
-                m_unspendables_scripts -= coin.out.nValue;
-                continue;
-            }
-
-            m_muhash.Remove(MakeUCharSpan(TxOutSer(outpoint, coin)));
-
-            if (tx->IsCoinBase()) {
-                m_block_coinbase_amount -= coin.out.nValue;
-            } else {
-                m_block_new_outputs_ex_coinbase_amount -= coin.out.nValue;
-=======
                 m_total_unspendable_amount -= coin.out.nValue;
                 m_total_unspendables_scripts -= coin.out.nValue;
                 continue;
@@ -716,7 +497,6 @@ bool CoinStatsIndex::ReverseBlock(const CBlock& block, const CBlockIndex* pindex
                 m_total_coinbase_amount -= coin.out.nValue;
             } else {
                 m_total_new_outputs_ex_coinbase_amount -= coin.out.nValue;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             }
 
             --m_transaction_output_count;
@@ -732,15 +512,9 @@ bool CoinStatsIndex::ReverseBlock(const CBlock& block, const CBlockIndex* pindex
                 Coin coin{tx_undo.vprevout[j]};
                 COutPoint outpoint{tx->vin[j].prevout.hash, tx->vin[j].prevout.n};
 
-<<<<<<< HEAD
-                m_muhash.Insert(MakeUCharSpan(TxOutSer(outpoint, coin)));
-
-                m_block_prevout_spent_amount -= coin.out.nValue;
-=======
                 ApplyCoinHash(m_muhash, outpoint, coin);
 
                 m_total_prevout_spent_amount -= coin.out.nValue;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
                 m_transaction_output_count++;
                 m_total_amount += coin.out.nValue;
@@ -749,15 +523,9 @@ bool CoinStatsIndex::ReverseBlock(const CBlock& block, const CBlockIndex* pindex
         }
     }
 
-<<<<<<< HEAD
-    const CAmount unclaimed_rewards{(m_block_new_outputs_ex_coinbase_amount + m_block_coinbase_amount + m_block_unspendable_amount) - (m_block_prevout_spent_amount + m_total_subsidy)};
-    m_block_unspendable_amount -= unclaimed_rewards;
-    m_unspendables_unclaimed_rewards -= unclaimed_rewards;
-=======
     const CAmount unclaimed_rewards{(m_total_new_outputs_ex_coinbase_amount + m_total_coinbase_amount + m_total_unspendable_amount) - (m_total_prevout_spent_amount + m_total_subsidy)};
     m_total_unspendable_amount -= unclaimed_rewards;
     m_total_unspendables_unclaimed_rewards -= unclaimed_rewards;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // Check that the rolled back internal values are consistent with the DB read out
     uint256 out;
@@ -768,18 +536,6 @@ bool CoinStatsIndex::ReverseBlock(const CBlock& block, const CBlockIndex* pindex
     Assert(m_total_amount == read_out.second.total_amount);
     Assert(m_bogo_size == read_out.second.bogo_size);
     Assert(m_total_subsidy == read_out.second.total_subsidy);
-<<<<<<< HEAD
-    Assert(m_block_unspendable_amount == read_out.second.block_unspendable_amount);
-    Assert(m_block_prevout_spent_amount == read_out.second.block_prevout_spent_amount);
-    Assert(m_block_new_outputs_ex_coinbase_amount == read_out.second.block_new_outputs_ex_coinbase_amount);
-    Assert(m_block_coinbase_amount == read_out.second.block_coinbase_amount);
-    Assert(m_unspendables_genesis_block == read_out.second.unspendables_genesis_block);
-    Assert(m_unspendables_bip30 == read_out.second.unspendables_bip30);
-    Assert(m_unspendables_scripts == read_out.second.unspendables_scripts);
-    Assert(m_unspendables_unclaimed_rewards == read_out.second.unspendables_unclaimed_rewards);
-
-    return m_db->Write(DB_MUHASH, m_muhash);
-=======
     Assert(m_total_unspendable_amount == read_out.second.total_unspendable_amount);
     Assert(m_total_prevout_spent_amount == read_out.second.total_prevout_spent_amount);
     Assert(m_total_new_outputs_ex_coinbase_amount == read_out.second.total_new_outputs_ex_coinbase_amount);
@@ -790,5 +546,4 @@ bool CoinStatsIndex::ReverseBlock(const CBlock& block, const CBlockIndex* pindex
     Assert(m_total_unspendables_unclaimed_rewards == read_out.second.total_unspendables_unclaimed_rewards);
 
     return true;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }

@@ -1,24 +1,11 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The DigiByte Core developers
-=======
 // Copyright (c) 2009-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #ifndef DIGIBYTE_SCRIPT_SIGNINGPROVIDER_H
 #define DIGIBYTE_SCRIPT_SIGNINGPROVIDER_H
 
-<<<<<<< HEAD
-#include <key.h>
-#include <pubkey.h>
-#include <script/script.h>
-#include <script/standard.h>
-#include <sync.h>
-
-struct KeyOriginInfo;
-=======
 #include <addresstype.h>
 #include <attributes.h>
 #include <key.h>
@@ -158,7 +145,6 @@ public:
  * returned, corresponding to a depth-first traversal of the script tree.
  */
 std::optional<std::vector<std::tuple<int, std::vector<unsigned char>, int>>> InferTaprootTree(const TaprootSpendData& spenddata, const XOnlyPubKey& output);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 /** An interface to be implemented by keystores that support signing. */
 class SigningProvider
@@ -172,8 +158,6 @@ public:
     virtual bool HaveKey(const CKeyID &address) const { return false; }
     virtual bool GetKeyOrigin(const CKeyID& keyid, KeyOriginInfo& info) const { return false; }
     virtual bool GetTaprootSpendData(const XOnlyPubKey& output_key, TaprootSpendData& spenddata) const { return false; }
-<<<<<<< HEAD
-=======
     virtual bool GetTaprootBuilder(const XOnlyPubKey& output_key, TaprootBuilder& builder) const { return false; }
 
     bool GetKeyByXOnly(const XOnlyPubKey& pubkey, CKey& key) const
@@ -199,7 +183,6 @@ public:
         }
         return false;
     }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 };
 
 extern const SigningProvider& DUMMY_SIGNING_PROVIDER;
@@ -218,10 +201,7 @@ public:
     bool GetKey(const CKeyID& keyid, CKey& key) const override;
     bool GetKeyOrigin(const CKeyID& keyid, KeyOriginInfo& info) const override;
     bool GetTaprootSpendData(const XOnlyPubKey& output_key, TaprootSpendData& spenddata) const override;
-<<<<<<< HEAD
-=======
     bool GetTaprootBuilder(const XOnlyPubKey& output_key, TaprootBuilder& builder) const override;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 };
 
 struct FlatSigningProvider final : public SigningProvider
@@ -230,27 +210,17 @@ struct FlatSigningProvider final : public SigningProvider
     std::map<CKeyID, CPubKey> pubkeys;
     std::map<CKeyID, std::pair<CPubKey, KeyOriginInfo>> origins;
     std::map<CKeyID, CKey> keys;
-<<<<<<< HEAD
-    std::map<XOnlyPubKey, TaprootSpendData> tr_spenddata; /** Map from output key to spend data. */
-=======
     std::map<XOnlyPubKey, TaprootBuilder> tr_trees; /** Map from output key to Taproot tree (which can then make the TaprootSpendData */
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     bool GetCScript(const CScriptID& scriptid, CScript& script) const override;
     bool GetPubKey(const CKeyID& keyid, CPubKey& pubkey) const override;
     bool GetKeyOrigin(const CKeyID& keyid, KeyOriginInfo& info) const override;
     bool GetKey(const CKeyID& keyid, CKey& key) const override;
     bool GetTaprootSpendData(const XOnlyPubKey& output_key, TaprootSpendData& spenddata) const override;
-<<<<<<< HEAD
-};
-
-FlatSigningProvider Merge(const FlatSigningProvider& a, const FlatSigningProvider& b);
-=======
     bool GetTaprootBuilder(const XOnlyPubKey& output_key, TaprootBuilder& builder) const override;
 
     FlatSigningProvider& Merge(FlatSigningProvider&& b) LIFETIMEBOUND;
 };
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 /** Fillable signing provider that keeps keys in an address->secret map */
 class FillableSigningProvider : public SigningProvider
@@ -328,8 +298,6 @@ public:
 /** Return the CKeyID of the key involved in a script (if there is a unique one). */
 CKeyID GetKeyForDestination(const SigningProvider& store, const CTxDestination& dest);
 
-<<<<<<< HEAD
-=======
 /** A signing provider to be used to interface with multiple signing providers at once. */
 class MultiSigningProvider: public SigningProvider {
     std::vector<std::unique_ptr<SigningProvider>> m_providers;
@@ -344,6 +312,4 @@ public:
     bool GetTaprootSpendData(const XOnlyPubKey& output_key, TaprootSpendData& spenddata) const override;
     bool GetTaprootBuilder(const XOnlyPubKey& output_key, TaprootBuilder& builder) const override;
 };
-
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #endif // DIGIBYTE_SCRIPT_SIGNINGPROVIDER_H

@@ -1,10 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The Bitcoin Core developers
+// Copyright (c) 2009-2022 The Bitcoin Core developers
 // Copyright (c) 2014-2020 The DigiByte Core developers
-=======
-// Copyright (c) 2009-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -17,9 +13,6 @@
 #include <serialize.h>
 #include <uint256.h>
 
-<<<<<<< HEAD
-#include <tuple>
-=======
 #include <cstddef>
 #include <cstdint>
 #include <ios>
@@ -30,7 +23,6 @@
 #include <tuple>
 #include <utility>
 #include <vector>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 /**
  * A flag that is ORed into the protocol version to designate that a transaction
@@ -103,11 +95,6 @@ public:
      */
     static const uint32_t MAX_SEQUENCE_NONFINAL{SEQUENCE_FINAL - 1};
 
-<<<<<<< HEAD
-    /* Below flags apply in the context of BIP 68*/
-    /* If this flag set, CTxIn::nSequence is NOT interpreted as a
-     * relative lock-time. */
-=======
     // Below flags apply in the context of BIP 68. BIP 68 requires the tx
     // version to be set to 2, or higher.
     /**
@@ -117,7 +104,6 @@ public:
      * It fails OP_CHECKSEQUENCEVERIFY/CheckSequence() for any input that has
      * it set (BIP 112).
      */
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     static const uint32_t SEQUENCE_LOCKTIME_DISABLE_FLAG = (1U << 31);
 
     /**
@@ -333,11 +319,7 @@ private:
 public:
     /** Convert a CMutableTransaction into a CTransaction. */
     explicit CTransaction(const CMutableTransaction& tx);
-<<<<<<< HEAD
-    CTransaction(CMutableTransaction&& tx);
-=======
     explicit CTransaction(CMutableTransaction&& tx);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     template <typename Stream>
     inline void Serialize(Stream& s) const {
@@ -445,16 +427,11 @@ class GenTxid
 {
     bool m_is_wtxid;
     uint256 m_hash;
-<<<<<<< HEAD
-public:
-    GenTxid(bool is_wtxid, const uint256& hash) : m_is_wtxid(is_wtxid), m_hash(hash) {}
-=======
     GenTxid(bool is_wtxid, const uint256& hash) : m_is_wtxid(is_wtxid), m_hash(hash) {}
 
 public:
     static GenTxid Txid(const uint256& hash) { return GenTxid{false, hash}; }
     static GenTxid Wtxid(const uint256& hash) { return GenTxid{true, hash}; }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     bool IsWtxid() const { return m_is_wtxid; }
     const uint256& GetHash() const { return m_hash; }
     friend bool operator==(const GenTxid& a, const GenTxid& b) { return a.m_is_wtxid == b.m_is_wtxid && a.m_hash == b.m_hash; }

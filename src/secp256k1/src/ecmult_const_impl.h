@@ -12,8 +12,6 @@
 #include "ecmult_const.h"
 #include "ecmult_impl.h"
 
-<<<<<<< HEAD
-=======
 /** Fill a table 'pre' with precomputed odd multiples of a.
  *
  *  The resulting point set is brought to a single constant Z denominator, stores the X and Y
@@ -27,16 +25,11 @@ static void secp256k1_ecmult_odd_multiples_table_globalz_windowa(secp256k1_ge *p
     secp256k1_ge_table_set_globalz(ECMULT_TABLE_SIZE(WINDOW_A), pre, zr);
 }
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 /* This is like `ECMULT_TABLE_GET_GE` but is constant time */
 #define ECMULT_CONST_TABLE_GET_GE(r,pre,n,w) do { \
     int m = 0; \
     /* Extract the sign-bit for a constant time absolute-value. */ \
-<<<<<<< HEAD
-    int mask = (n) >> (sizeof(n) * CHAR_BIT - 1); \
-=======
     int volatile mask = (n) >> (sizeof(n) * CHAR_BIT - 1); \
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     int abs_n = ((n) + mask) ^ mask; \
     int idx_n = abs_n >> 1; \
     secp256k1_fe neg_y; \
@@ -83,13 +76,7 @@ static int secp256k1_wnaf_const(int *wnaf, const secp256k1_scalar *scalar, int w
     int u;
 
     int flip;
-<<<<<<< HEAD
-    int bit;
-    secp256k1_scalar s;
-    int not_neg_one;
-=======
     secp256k1_scalar s = *scalar;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     VERIFY_CHECK(w > 0);
     VERIFY_CHECK(size > 0);
@@ -97,44 +84,18 @@ static int secp256k1_wnaf_const(int *wnaf, const secp256k1_scalar *scalar, int w
     /* Note that we cannot handle even numbers by negating them to be odd, as is
      * done in other implementations, since if our scalars were specified to have
      * width < 256 for performance reasons, their negations would have width 256
-<<<<<<< HEAD
-     * and we'd lose any performance benefit. Instead, we use a technique from
-     * Section 4.2 of the Okeya/Tagaki paper, which is to add either 1 (for even)
-     * or 2 (for odd) to the number we are encoding, returning a skew value indicating
-=======
      * and we'd lose any performance benefit. Instead, we use a variation of a
      * technique from Section 4.2 of the Okeya/Tagaki paper, which is to add 1 to the
      * number we are encoding when it is even, returning a skew value indicating
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
      * this, and having the caller compensate after doing the multiplication.
      *
      * In fact, we _do_ want to negate numbers to minimize their bit-lengths (and in
      * particular, to ensure that the outputs from the endomorphism-split fit into
-<<<<<<< HEAD
-     * 128 bits). If we negate, the parity of our number flips, inverting which of
-     * {1, 2} we want to add to the scalar when ensuring that it's odd. Further
-     * complicating things, -1 interacts badly with `secp256k1_scalar_cadd_bit` and
-     * we need to special-case it in this logic. */
-    flip = secp256k1_scalar_is_high(scalar);
-    /* We add 1 to even numbers, 2 to odd ones, noting that negation flips parity */
-    bit = flip ^ !secp256k1_scalar_is_even(scalar);
-    /* We check for negative one, since adding 2 to it will cause an overflow */
-    secp256k1_scalar_negate(&s, scalar);
-    not_neg_one = !secp256k1_scalar_is_one(&s);
-    s = *scalar;
-    secp256k1_scalar_cadd_bit(&s, bit, not_neg_one);
-    /* If we had negative one, flip == 1, s.d[0] == 0, bit == 1, so caller expects
-     * that we added two to it and flipped it. In fact for -1 these operations are
-     * identical. We only flipped, but since skewing is required (in the sense that
-     * the skew must be 1 or 2, never zero) and flipping is not, we need to change
-     * our flags to claim that we only skewed. */
-=======
      * 128 bits). If we negate, the parity of our number flips, affecting whether
      * we want to add to the scalar to ensure that it's odd. */
     flip = secp256k1_scalar_is_high(&s);
     skew = flip ^ secp256k1_scalar_is_even(&s);
     secp256k1_scalar_cadd_bit(&s, 0, skew);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     global_sign = secp256k1_scalar_cond_negate(&s, flip);
 
     /* 4 */
@@ -169,11 +130,7 @@ static int secp256k1_wnaf_const(int *wnaf, const secp256k1_scalar *scalar, int w
     return skew;
 }
 
-<<<<<<< HEAD
-static void secp256k1_ecmult_const(secp256k1_gej *r, const secp256k1_ge *a, const secp256k1_scalar *scalar, int size) {
-=======
 static void secp256k1_ecmult_const(secp256k1_gej *r, const secp256k1_ge *a, const secp256k1_scalar *scalar) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     secp256k1_ge pre_a[ECMULT_TABLE_SIZE(WINDOW_A)];
     secp256k1_ge tmpa;
     secp256k1_fe Z;
@@ -186,22 +143,6 @@ static void secp256k1_ecmult_const(secp256k1_gej *r, const secp256k1_ge *a, cons
     int wnaf_1[1 + WNAF_SIZE(WINDOW_A - 1)];
 
     int i;
-<<<<<<< HEAD
-
-    /* build wnaf representation for q. */
-    int rsize = size;
-    if (size > 128) {
-        rsize = 128;
-        /* split q into q_1 and q_lam (where q = q_1 + q_lam*lambda, and q_1 and q_lam are ~128 bit) */
-        secp256k1_scalar_split_lambda(&q_1, &q_lam, scalar);
-        skew_1   = secp256k1_wnaf_const(wnaf_1,   &q_1,   WINDOW_A - 1, 128);
-        skew_lam = secp256k1_wnaf_const(wnaf_lam, &q_lam, WINDOW_A - 1, 128);
-    } else
-    {
-        skew_1   = secp256k1_wnaf_const(wnaf_1, scalar, WINDOW_A - 1, size);
-        skew_lam = 0;
-    }
-=======
 
     if (secp256k1_ge_is_infinity(a)) {
         secp256k1_gej_set_infinity(r);
@@ -213,7 +154,6 @@ static void secp256k1_ecmult_const(secp256k1_gej *r, const secp256k1_ge *a, cons
     secp256k1_scalar_split_lambda(&q_1, &q_lam, scalar);
     skew_1   = secp256k1_wnaf_const(wnaf_1,   &q_1,   WINDOW_A - 1, 128);
     skew_lam = secp256k1_wnaf_const(wnaf_lam, &q_lam, WINDOW_A - 1, 128);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     /* Calculate odd multiples of a.
      * All multiples are brought to the same Z 'denominator', which is stored
@@ -227,35 +167,13 @@ static void secp256k1_ecmult_const(secp256k1_gej *r, const secp256k1_ge *a, cons
     for (i = 0; i < ECMULT_TABLE_SIZE(WINDOW_A); i++) {
         secp256k1_fe_normalize_weak(&pre_a[i].y);
     }
-<<<<<<< HEAD
-    if (size > 128) {
-        for (i = 0; i < ECMULT_TABLE_SIZE(WINDOW_A); i++) {
-            secp256k1_ge_mul_lambda(&pre_a_lam[i], &pre_a[i]);
-        }
-
-=======
     for (i = 0; i < ECMULT_TABLE_SIZE(WINDOW_A); i++) {
         secp256k1_ge_mul_lambda(&pre_a_lam[i], &pre_a[i]);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     /* first loop iteration (separated out so we can directly set r, rather
      * than having it start at infinity, get doubled several times, then have
      * its new value added to it) */
-<<<<<<< HEAD
-    i = wnaf_1[WNAF_SIZE_BITS(rsize, WINDOW_A - 1)];
-    VERIFY_CHECK(i != 0);
-    ECMULT_CONST_TABLE_GET_GE(&tmpa, pre_a, i, WINDOW_A);
-    secp256k1_gej_set_ge(r, &tmpa);
-    if (size > 128) {
-        i = wnaf_lam[WNAF_SIZE_BITS(rsize, WINDOW_A - 1)];
-        VERIFY_CHECK(i != 0);
-        ECMULT_CONST_TABLE_GET_GE(&tmpa, pre_a_lam, i, WINDOW_A);
-        secp256k1_gej_add_ge(r, r, &tmpa);
-    }
-    /* remaining loop iterations */
-    for (i = WNAF_SIZE_BITS(rsize, WINDOW_A - 1) - 1; i >= 0; i--) {
-=======
     i = wnaf_1[WNAF_SIZE_BITS(128, WINDOW_A - 1)];
     VERIFY_CHECK(i != 0);
     ECMULT_CONST_TABLE_GET_GE(&tmpa, pre_a, i, WINDOW_A);
@@ -266,7 +184,6 @@ static void secp256k1_ecmult_const(secp256k1_gej *r, const secp256k1_ge *a, cons
     secp256k1_gej_add_ge(r, r, &tmpa);
     /* remaining loop iterations */
     for (i = WNAF_SIZE_BITS(128, WINDOW_A - 1) - 1; i >= 0; i--) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         int n;
         int j;
         for (j = 0; j < WINDOW_A - 1; ++j) {
@@ -277,56 +194,14 @@ static void secp256k1_ecmult_const(secp256k1_gej *r, const secp256k1_ge *a, cons
         ECMULT_CONST_TABLE_GET_GE(&tmpa, pre_a, n, WINDOW_A);
         VERIFY_CHECK(n != 0);
         secp256k1_gej_add_ge(r, r, &tmpa);
-<<<<<<< HEAD
-        if (size > 128) {
-            n = wnaf_lam[i];
-            ECMULT_CONST_TABLE_GET_GE(&tmpa, pre_a_lam, n, WINDOW_A);
-            VERIFY_CHECK(n != 0);
-            secp256k1_gej_add_ge(r, r, &tmpa);
-        }
-=======
         n = wnaf_lam[i];
         ECMULT_CONST_TABLE_GET_GE(&tmpa, pre_a_lam, n, WINDOW_A);
         VERIFY_CHECK(n != 0);
         secp256k1_gej_add_ge(r, r, &tmpa);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     {
         /* Correct for wNAF skew */
-<<<<<<< HEAD
-        secp256k1_ge correction = *a;
-        secp256k1_ge_storage correction_1_stor;
-        secp256k1_ge_storage correction_lam_stor;
-        secp256k1_ge_storage a2_stor;
-        secp256k1_gej tmpj;
-        secp256k1_gej_set_ge(&tmpj, &correction);
-        secp256k1_gej_double_var(&tmpj, &tmpj, NULL);
-        secp256k1_ge_set_gej(&correction, &tmpj);
-        secp256k1_ge_to_storage(&correction_1_stor, a);
-        if (size > 128) {
-            secp256k1_ge_to_storage(&correction_lam_stor, a);
-        }
-        secp256k1_ge_to_storage(&a2_stor, &correction);
-
-        /* For odd numbers this is 2a (so replace it), for even ones a (so no-op) */
-        secp256k1_ge_storage_cmov(&correction_1_stor, &a2_stor, skew_1 == 2);
-        if (size > 128) {
-            secp256k1_ge_storage_cmov(&correction_lam_stor, &a2_stor, skew_lam == 2);
-        }
-
-        /* Apply the correction */
-        secp256k1_ge_from_storage(&correction, &correction_1_stor);
-        secp256k1_ge_neg(&correction, &correction);
-        secp256k1_gej_add_ge(r, r, &correction);
-
-        if (size > 128) {
-            secp256k1_ge_from_storage(&correction, &correction_lam_stor);
-            secp256k1_ge_neg(&correction, &correction);
-            secp256k1_ge_mul_lambda(&correction, &correction);
-            secp256k1_gej_add_ge(r, r, &correction);
-        }
-=======
         secp256k1_gej tmpj;
 
         secp256k1_ge_neg(&tmpa, &pre_a[0]);
@@ -336,7 +211,6 @@ static void secp256k1_ecmult_const(secp256k1_gej *r, const secp256k1_ge *a, cons
         secp256k1_ge_neg(&tmpa, &pre_a_lam[0]);
         secp256k1_gej_add_ge(&tmpj, r, &tmpa);
         secp256k1_gej_cmov(r, &tmpj, skew_lam);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     secp256k1_fe_mul(&r->z, &r->z, &Z);

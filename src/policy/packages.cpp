@@ -1,29 +1,19 @@
-<<<<<<< HEAD
-// Copyright (c) 2021 The DigiByte Core developers
-// Distributed under the MIT software license, see the accompanying
-// file COPYING or http://www.opensource.org/licenses/mit-license.php.
-
-#include <consensus/validation.h>
-#include <policy/packages.h>
-=======
 // Copyright (c) 2021-2022 The Bitcoin Core developers
+// Copyright (c) 2021-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <policy/packages.h>
 #include <policy/policy.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+#include <consensus/validation.h>
 #include <primitives/transaction.h>
 #include <uint256.h>
 #include <util/hasher.h>
 
-<<<<<<< HEAD
-=======
 #include <algorithm>
 #include <cassert>
 #include <iterator>
 #include <memory>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <numeric>
 #include <unordered_set>
 
@@ -35,17 +25,10 @@ bool CheckPackage(const Package& txns, PackageValidationState& state)
         return state.Invalid(PackageValidationResult::PCKG_POLICY, "package-too-many-transactions");
     }
 
-<<<<<<< HEAD
-    const int64_t total_size = std::accumulate(txns.cbegin(), txns.cend(), 0,
-                               [](int64_t sum, const auto& tx) { return sum + GetVirtualTransactionSize(*tx); });
-    // If the package only contains 1 tx, it's better to report the policy violation on individual tx size.
-    if (package_count > 1 && total_size > MAX_PACKAGE_SIZE * 1000) {
-=======
     const int64_t total_weight = std::accumulate(txns.cbegin(), txns.cend(), 0,
                                [](int64_t sum, const auto& tx) { return sum + GetTransactionWeight(*tx); });
     // If the package only contains 1 tx, it's better to report the policy violation on individual tx weight.
     if (package_count > 1 && total_weight > MAX_PACKAGE_WEIGHT) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         return state.Invalid(PackageValidationResult::PCKG_POLICY, "package-too-large");
     }
 
@@ -56,8 +39,6 @@ bool CheckPackage(const Package& txns, PackageValidationState& state)
     std::unordered_set<uint256, SaltedTxidHasher> later_txids;
     std::transform(txns.cbegin(), txns.cend(), std::inserter(later_txids, later_txids.end()),
                    [](const auto& tx) { return tx->GetHash(); });
-<<<<<<< HEAD
-=======
 
     // Package must not contain any duplicate transactions, which is checked by txid. This also
     // includes transactions with duplicate wtxids and same-txid-different-witness transactions.
@@ -65,7 +46,6 @@ bool CheckPackage(const Package& txns, PackageValidationState& state)
         return state.Invalid(PackageValidationResult::PCKG_POLICY, "package-contains-duplicates");
     }
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     for (const auto& tx : txns) {
         for (const auto& input : tx->vin) {
             if (later_txids.find(input.prevout.hash) != later_txids.end()) {
@@ -93,8 +73,6 @@ bool CheckPackage(const Package& txns, PackageValidationState& state)
     }
     return true;
 }
-<<<<<<< HEAD
-=======
 
 bool IsChildWithParents(const Package& package)
 {
@@ -127,4 +105,3 @@ bool IsChildWithParentsTree(const Package& package)
         return true;
     });
 }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion

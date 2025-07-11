@@ -13,8 +13,6 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <limits.h>
-<<<<<<< HEAD
-=======
 
 #define STR_(x) #x
 #define STR(x) STR_(x)
@@ -65,7 +63,6 @@ static void print_buf_plain(const unsigned char *buf, size_t len) {
     } \
     stmt; \
 } while(0)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 typedef struct {
     void (*fn)(const char *text, void* data);
@@ -174,17 +171,6 @@ static SECP256K1_INLINE void *checked_malloc(const secp256k1_callback* cb, size_
     return ret;
 }
 
-<<<<<<< HEAD
-static SECP256K1_INLINE void *checked_realloc(const secp256k1_callback* cb, void *ptr, size_t size) {
-    void *ret = realloc(ptr, size);
-    if (ret == NULL) {
-        secp256k1_callback_call(cb, "Out of memory");
-    }
-    return ret;
-}
-
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #if defined(__BIGGEST_ALIGNMENT__)
 #define ALIGNMENT __BIGGEST_ALIGNMENT__
 #else
@@ -196,39 +182,6 @@ static SECP256K1_INLINE void *checked_realloc(const secp256k1_callback* cb, void
 
 #define ROUND_TO_ALIGN(size) ((((size) + ALIGNMENT - 1) / ALIGNMENT) * ALIGNMENT)
 
-<<<<<<< HEAD
-/* Assume there is a contiguous memory object with bounds [base, base + max_size)
- * of which the memory range [base, *prealloc_ptr) is already allocated for usage,
- * where *prealloc_ptr is an aligned pointer. In that setting, this functions
- * reserves the subobject [*prealloc_ptr, *prealloc_ptr + alloc_size) of
- * alloc_size bytes by increasing *prealloc_ptr accordingly, taking into account
- * alignment requirements.
- *
- * The function returns an aligned pointer to the newly allocated subobject.
- *
- * This is useful for manual memory management: if we're simply given a block
- * [base, base + max_size), the caller can use this function to allocate memory
- * in this block and keep track of the current allocation state with *prealloc_ptr.
- *
- * It is VERIFY_CHECKed that there is enough space left in the memory object and
- * *prealloc_ptr is aligned relative to base.
- */
-static SECP256K1_INLINE void *manual_alloc(void** prealloc_ptr, size_t alloc_size, void* base, size_t max_size) {
-    size_t aligned_alloc_size = ROUND_TO_ALIGN(alloc_size);
-    void* ret;
-    VERIFY_CHECK(prealloc_ptr != NULL);
-    VERIFY_CHECK(*prealloc_ptr != NULL);
-    VERIFY_CHECK(base != NULL);
-    VERIFY_CHECK((unsigned char*)*prealloc_ptr >= (unsigned char*)base);
-    VERIFY_CHECK(((unsigned char*)*prealloc_ptr - (unsigned char*)base) % ALIGNMENT == 0);
-    VERIFY_CHECK((unsigned char*)*prealloc_ptr - (unsigned char*)base + aligned_alloc_size <= max_size);
-    ret = *prealloc_ptr;
-    *prealloc_ptr = (unsigned char*)*prealloc_ptr + aligned_alloc_size;
-    return ret;
-}
-
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 /* Macro for restrict, when available and not in a VERIFY build. */
 #if defined(SECP256K1_BUILD) && defined(VERIFY)
 # define SECP256K1_RESTRICT
@@ -260,34 +213,6 @@ static SECP256K1_INLINE void *manual_alloc(void** prealloc_ptr, size_t alloc_siz
 # define SECP256K1_GNUC_EXT
 #endif
 
-<<<<<<< HEAD
-/* If SECP256K1_{LITTLE,BIG}_ENDIAN is not explicitly provided, infer from various other system macros. */
-#if !defined(SECP256K1_LITTLE_ENDIAN) && !defined(SECP256K1_BIG_ENDIAN)
-/* Inspired by https://github.com/rofl0r/endianness.h/blob/9853923246b065a3b52d2c43835f3819a62c7199/endianness.h#L52L73 */
-# if (defined(__BYTE_ORDER__) && defined(__ORDER_LITTLE_ENDIAN__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__) || \
-     defined(_X86_) || defined(__x86_64__) || defined(__i386__) || \
-     defined(__i486__) || defined(__i586__) || defined(__i686__) || \
-     defined(__MIPSEL) || defined(_MIPSEL) || defined(MIPSEL) || \
-     defined(__ARMEL__) || defined(__AARCH64EL__) || \
-     (defined(__LITTLE_ENDIAN__) && __LITTLE_ENDIAN__ == 1) || \
-     (defined(_LITTLE_ENDIAN) && _LITTLE_ENDIAN == 1) || \
-     defined(_M_IX86) || defined(_M_AMD64) || defined(_M_ARM) /* MSVC */
-#  define SECP256K1_LITTLE_ENDIAN
-# endif
-# if (defined(__BYTE_ORDER__) && defined(__ORDER_BIG_ENDIAN__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__) || \
-     defined(__MIPSEB) || defined(_MIPSEB) || defined(MIPSEB) || \
-     defined(__MICROBLAZEEB__) || defined(__ARMEB__) || defined(__AARCH64EB__) || \
-     (defined(__BIG_ENDIAN__) && __BIG_ENDIAN__ == 1) || \
-     (defined(_BIG_ENDIAN) && _BIG_ENDIAN == 1)
-#  define SECP256K1_BIG_ENDIAN
-# endif
-#endif
-#if defined(SECP256K1_LITTLE_ENDIAN) == defined(SECP256K1_BIG_ENDIAN)
-# error Please make sure that either SECP256K1_LITTLE_ENDIAN or SECP256K1_BIG_ENDIAN is set, see src/util.h.
-#endif
-
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 /* Zero memory if flag == 1. Flag must be 0 or 1. Constant time. */
 static SECP256K1_INLINE void secp256k1_memczero(void *s, size_t len, int flag) {
     unsigned char *p = (unsigned char *)s;
@@ -340,30 +265,6 @@ static SECP256K1_INLINE void secp256k1_int_cmov(int *r, const int *a, int flag) 
     *r = (int)(r_masked | a_masked);
 }
 
-<<<<<<< HEAD
-/* If USE_FORCE_WIDEMUL_{INT128,INT64} is set, use that wide multiplication implementation.
- * Otherwise use the presence of __SIZEOF_INT128__ to decide.
- */
-#if defined(USE_FORCE_WIDEMUL_INT128)
-# define SECP256K1_WIDEMUL_INT128 1
-#elif defined(USE_FORCE_WIDEMUL_INT64)
-# define SECP256K1_WIDEMUL_INT64 1
-#elif defined(UINT128_MAX) || defined(__SIZEOF_INT128__)
-# define SECP256K1_WIDEMUL_INT128 1
-#else
-# define SECP256K1_WIDEMUL_INT64 1
-#endif
-#if defined(SECP256K1_WIDEMUL_INT128)
-# if !defined(UINT128_MAX) && defined(__SIZEOF_INT128__)
-SECP256K1_GNUC_EXT typedef unsigned __int128 uint128_t;
-SECP256K1_GNUC_EXT typedef __int128 int128_t;
-#define UINT128_MAX ((uint128_t)(-1))
-#define INT128_MAX ((int128_t)(UINT128_MAX >> 1))
-#define INT128_MIN (-INT128_MAX - 1)
-/* No (U)INT128_C macros because compilers providing __int128 do not support 128-bit literals.  */
-# endif
-#endif
-=======
 #if defined(USE_FORCE_WIDEMUL_INT128_STRUCT)
 /* If USE_FORCE_WIDEMUL_INT128_STRUCT is set, use int128_struct. */
 # define SECP256K1_WIDEMUL_INT128 1
@@ -394,7 +295,6 @@ SECP256K1_GNUC_EXT typedef __int128 int128_t;
 /* Lastly, fall back to int64 based arithmetic. */
 # define SECP256K1_WIDEMUL_INT64 1
 #endif
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 #ifndef __has_builtin
 #define __has_builtin(x) 0
@@ -409,11 +309,7 @@ static SECP256K1_INLINE int secp256k1_ctz32_var_debruijn(uint32_t x) {
         0x10, 0x07, 0x0C, 0x1A, 0x1F, 0x17, 0x12, 0x05, 0x15, 0x09, 0x0F, 0x0B,
         0x1E, 0x11, 0x08, 0x0E, 0x1D, 0x0D, 0x1C, 0x1B
     };
-<<<<<<< HEAD
-    return debruijn[((x & -x) * 0x04D7651F) >> 27];
-=======
     return debruijn[(uint32_t)((x & -x) * 0x04D7651FU) >> 27];
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 /* Determine the number of trailing zero bits in a (non-zero) 64-bit x.
@@ -426,11 +322,7 @@ static SECP256K1_INLINE int secp256k1_ctz64_var_debruijn(uint64_t x) {
         63, 52, 6, 26, 37, 40, 33, 47, 61, 45, 43, 21, 23, 58, 17, 10,
         51, 25, 36, 32, 60, 20, 57, 16, 50, 31, 19, 15, 30, 14, 13, 12
     };
-<<<<<<< HEAD
-    return debruijn[((x & -x) * 0x022FDD63CC95386D) >> 58];
-=======
     return debruijn[(uint64_t)((x & -x) * 0x022FDD63CC95386DU) >> 58];
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 /* Determine the number of trailing zero bits in a (non-zero) 32-bit x. */
@@ -469,8 +361,6 @@ static SECP256K1_INLINE int secp256k1_ctz64_var(uint64_t x) {
 #endif
 }
 
-<<<<<<< HEAD
-=======
 /* Read a uint32_t in big endian */
 SECP256K1_INLINE static uint32_t secp256k1_read_be32(const unsigned char* p) {
     return (uint32_t)p[0] << 24 |
@@ -511,5 +401,4 @@ SECP256K1_INLINE static void secp256k1_write_be64(unsigned char* p, uint64_t x) 
     p[0] = x >> 56;
 }
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #endif /* SECP256K1_UTIL_H */

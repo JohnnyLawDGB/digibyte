@@ -184,10 +184,7 @@ def check_exhaustive_jacobian_weierstrass(name, A, B, branches, formula, p):
       if r:
         points.append(point)
 
-<<<<<<< HEAD
-=======
   ret = True
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
   for za in range(1, p):
     for zb in range(1, p):
       for pa in points:
@@ -215,16 +212,11 @@ def check_exhaustive_jacobian_weierstrass(name, A, B, branches, formula, p):
                         match = True
                       r, e = concrete_verify(require)
                       if not r:
-<<<<<<< HEAD
-                        print("  failure in branch %i for (%s,%s,%s,%s) + (%s,%s,%s,%s) = (%s,%s,%s,%s): %s" % (branch, pA.X, pA.Y, pA.Z, pA.Infinity, pB.X, pB.Y, pB.Z, pB.Infinity, pC.X, pC.Y, pC.Z, pC.Infinity, e))
-  print()
-=======
                         ret = False
                         print("  failure in branch %i for (%s,%s,%s,%s) + (%s,%s,%s,%s) = (%s,%s,%s,%s): %s" % (branch, pA.X, pA.Y, pA.Z, pA.Infinity, pB.X, pB.Y, pB.Z, pB.Infinity, pC.X, pC.Y, pC.Z, pC.Infinity, e))
 
   print()
   return ret
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 
 def check_symbolic_function(R, assumeAssert, assumeBranch, f, A, B, pa, pb, pA, pB, pC):
@@ -256,10 +248,7 @@ def check_symbolic_jacobian_weierstrass(name, A, B, branches, formula):
 
   print("Formula " + name + ":")
   count = 0
-<<<<<<< HEAD
-=======
   ret = True
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
   for branch in range(branches):
     assumeFormula, assumeBranch, pC = formula(branch, pA, pB)
     assumeBranch = assumeBranch.map(lift)
@@ -283,7 +272,4 @@ def check_symbolic_jacobian_weierstrass(name, A, B, branches, formula):
         print("    branch %i: %s" % (x[1], x[0]))
 
   print()
-<<<<<<< HEAD
-=======
   return ret
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion

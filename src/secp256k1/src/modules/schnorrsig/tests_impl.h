@@ -7,44 +7,11 @@
 #ifndef SECP256K1_MODULE_SCHNORRSIG_TESTS_H
 #define SECP256K1_MODULE_SCHNORRSIG_TESTS_H
 
-<<<<<<< HEAD
-#include "secp256k1_schnorrsig.h"
-=======
 #include "../../../include/secp256k1_schnorrsig.h"
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 /* Checks that a bit flip in the n_flip-th argument (that has n_bytes many
  * bytes) changes the hash function
  */
-<<<<<<< HEAD
-void nonce_function_bip340_bitflip(unsigned char **args, size_t n_flip, size_t n_bytes) {
-    unsigned char nonces[2][32];
-    CHECK(nonce_function_bip340(nonces[0], args[0], args[1], args[2], args[3], args[4]) == 1);
-    secp256k1_testrand_flip(args[n_flip], n_bytes);
-    CHECK(nonce_function_bip340(nonces[1], args[0], args[1], args[2], args[3], args[4]) == 1);
-    CHECK(secp256k1_memcmp_var(nonces[0], nonces[1], 32) != 0);
-}
-
-/* Tests for the equality of two sha256 structs. This function only produces a
- * correct result if an integer multiple of 64 many bytes have been written
- * into the hash functions. */
-void test_sha256_eq(const secp256k1_sha256 *sha1, const secp256k1_sha256 *sha2) {
-    /* Is buffer fully consumed? */
-    CHECK((sha1->bytes & 0x3F) == 0);
-
-    CHECK(sha1->bytes == sha2->bytes);
-    CHECK(secp256k1_memcmp_var(sha1->s, sha2->s, sizeof(sha1->s)) == 0);
-}
-
-void run_nonce_function_bip340_tests(void) {
-    unsigned char tag[13] = "BIP0340/nonce";
-    unsigned char aux_tag[11] = "BIP0340/aux";
-    unsigned char algo16[16] = "BIP0340/nonce\0\0\0";
-    secp256k1_sha256 sha;
-    secp256k1_sha256 sha_optimized;
-    unsigned char nonce[32];
-    unsigned char msg[32];
-=======
 static void nonce_function_bip340_bitflip(unsigned char **args, size_t n_flip, size_t n_bytes, size_t msglen, size_t algolen) {
     unsigned char nonces[2][32];
     CHECK(nonce_function_bip340(nonces[0], args[0], msglen, args[1], args[2], args[3], algolen, args[4]) == 1);
@@ -63,7 +30,6 @@ static void run_nonce_function_bip340_tests(void) {
     unsigned char nonce[32], nonce_z[32];
     unsigned char msg[32];
     size_t msglen = sizeof(msg);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     unsigned char key[32];
     unsigned char pk[32];
     unsigned char aux_rand[32];
@@ -93,38 +59,6 @@ static void run_nonce_function_bip340_tests(void) {
     args[0] = msg;
     args[1] = key;
     args[2] = pk;
-<<<<<<< HEAD
-    args[3] = algo16;
-    args[4] = aux_rand;
-    for (i = 0; i < count; i++) {
-        nonce_function_bip340_bitflip(args, 0, 32);
-        nonce_function_bip340_bitflip(args, 1, 32);
-        nonce_function_bip340_bitflip(args, 2, 32);
-        /* Flip algo16 special case "BIP0340/nonce" */
-        nonce_function_bip340_bitflip(args, 3, 16);
-        /* Flip algo16 again */
-        nonce_function_bip340_bitflip(args, 3, 16);
-        nonce_function_bip340_bitflip(args, 4, 32);
-    }
-
-    /* NULL algo16 is disallowed */
-    CHECK(nonce_function_bip340(nonce, msg, key, pk, NULL, NULL) == 0);
-    /* Empty algo16 is fine */
-    memset(algo16, 0x00, 16);
-    CHECK(nonce_function_bip340(nonce, msg, key, pk, algo16, NULL) == 1);
-    /* algo16 with terminating null bytes is fine */
-    algo16[1] = 65;
-    CHECK(nonce_function_bip340(nonce, msg, key, pk, algo16, NULL) == 1);
-    /* Other algo16 is fine */
-    memset(algo16, 0xFF, 16);
-    CHECK(nonce_function_bip340(nonce, msg, key, pk, algo16, NULL) == 1);
-
-    /* NULL aux_rand argument is allowed. */
-    CHECK(nonce_function_bip340(nonce, msg, key, pk, algo16, NULL) == 1);
-}
-
-void test_schnorrsig_api(void) {
-=======
     args[3] = algo;
     args[4] = aux_rand;
     for (i = 0; i < COUNT; i++) {
@@ -170,34 +104,11 @@ void test_schnorrsig_api(void) {
 }
 
 static void test_schnorrsig_api(void) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     unsigned char sk1[32];
     unsigned char sk2[32];
     unsigned char sk3[32];
     unsigned char msg[32];
     secp256k1_keypair keypairs[3];
-<<<<<<< HEAD
-    secp256k1_keypair invalid_keypair = { 0 };
-    secp256k1_xonly_pubkey pk[3];
-    secp256k1_xonly_pubkey zero_pk;
-    unsigned char sig[64];
-
-    /** setup **/
-    secp256k1_context *none = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
-    secp256k1_context *sign = secp256k1_context_create(SECP256K1_CONTEXT_SIGN);
-    secp256k1_context *vrfy = secp256k1_context_create(SECP256K1_CONTEXT_VERIFY);
-    secp256k1_context *both = secp256k1_context_create(SECP256K1_CONTEXT_SIGN | SECP256K1_CONTEXT_VERIFY);
-    int ecount;
-
-    secp256k1_context_set_error_callback(none, counting_illegal_callback_fn, &ecount);
-    secp256k1_context_set_error_callback(sign, counting_illegal_callback_fn, &ecount);
-    secp256k1_context_set_error_callback(vrfy, counting_illegal_callback_fn, &ecount);
-    secp256k1_context_set_error_callback(both, counting_illegal_callback_fn, &ecount);
-    secp256k1_context_set_illegal_callback(none, counting_illegal_callback_fn, &ecount);
-    secp256k1_context_set_illegal_callback(sign, counting_illegal_callback_fn, &ecount);
-    secp256k1_context_set_illegal_callback(vrfy, counting_illegal_callback_fn, &ecount);
-    secp256k1_context_set_illegal_callback(both, counting_illegal_callback_fn, &ecount);
-=======
     secp256k1_keypair invalid_keypair = {{ 0 }};
     secp256k1_xonly_pubkey pk[3];
     secp256k1_xonly_pubkey zero_pk;
@@ -212,69 +123,21 @@ static void test_schnorrsig_api(void) {
     secp256k1_context_set_illegal_callback(CTX, counting_illegal_callback_fn, &ecount);
     secp256k1_context_set_error_callback(STATIC_CTX, counting_illegal_callback_fn, &ecount);
     secp256k1_context_set_illegal_callback(STATIC_CTX, counting_illegal_callback_fn, &ecount);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     secp256k1_testrand256(sk1);
     secp256k1_testrand256(sk2);
     secp256k1_testrand256(sk3);
     secp256k1_testrand256(msg);
-<<<<<<< HEAD
-    CHECK(secp256k1_keypair_create(ctx, &keypairs[0], sk1) == 1);
-    CHECK(secp256k1_keypair_create(ctx, &keypairs[1], sk2) == 1);
-    CHECK(secp256k1_keypair_create(ctx, &keypairs[2], sk3) == 1);
-    CHECK(secp256k1_keypair_xonly_pub(ctx, &pk[0], NULL, &keypairs[0]) == 1);
-    CHECK(secp256k1_keypair_xonly_pub(ctx, &pk[1], NULL, &keypairs[1]) == 1);
-    CHECK(secp256k1_keypair_xonly_pub(ctx, &pk[2], NULL, &keypairs[2]) == 1);
-=======
     CHECK(secp256k1_keypair_create(CTX, &keypairs[0], sk1) == 1);
     CHECK(secp256k1_keypair_create(CTX, &keypairs[1], sk2) == 1);
     CHECK(secp256k1_keypair_create(CTX, &keypairs[2], sk3) == 1);
     CHECK(secp256k1_keypair_xonly_pub(CTX, &pk[0], NULL, &keypairs[0]) == 1);
     CHECK(secp256k1_keypair_xonly_pub(CTX, &pk[1], NULL, &keypairs[1]) == 1);
     CHECK(secp256k1_keypair_xonly_pub(CTX, &pk[2], NULL, &keypairs[2]) == 1);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     memset(&zero_pk, 0, sizeof(zero_pk));
 
     /** main test body **/
     ecount = 0;
-<<<<<<< HEAD
-    CHECK(secp256k1_schnorrsig_sign(none, sig, msg, &keypairs[0], NULL, NULL) == 0);
-    CHECK(ecount == 1);
-    CHECK(secp256k1_schnorrsig_sign(vrfy, sig, msg, &keypairs[0], NULL, NULL) == 0);
-    CHECK(ecount == 2);
-    CHECK(secp256k1_schnorrsig_sign(sign, sig, msg, &keypairs[0], NULL, NULL) == 1);
-    CHECK(ecount == 2);
-    CHECK(secp256k1_schnorrsig_sign(sign, NULL, msg, &keypairs[0], NULL, NULL) == 0);
-    CHECK(ecount == 3);
-    CHECK(secp256k1_schnorrsig_sign(sign, sig, NULL, &keypairs[0], NULL, NULL) == 0);
-    CHECK(ecount == 4);
-    CHECK(secp256k1_schnorrsig_sign(sign, sig, msg, NULL, NULL, NULL) == 0);
-    CHECK(ecount == 5);
-    CHECK(secp256k1_schnorrsig_sign(sign, sig, msg, &invalid_keypair, NULL, NULL) == 0);
-    CHECK(ecount == 6);
-
-    ecount = 0;
-    CHECK(secp256k1_schnorrsig_sign(sign, sig, msg, &keypairs[0], NULL, NULL) == 1);
-    CHECK(secp256k1_schnorrsig_verify(none, sig, msg, &pk[0]) == 0);
-    CHECK(ecount == 1);
-    CHECK(secp256k1_schnorrsig_verify(sign, sig, msg, &pk[0]) == 0);
-    CHECK(ecount == 2);
-    CHECK(secp256k1_schnorrsig_verify(vrfy, sig, msg, &pk[0]) == 1);
-    CHECK(ecount == 2);
-    CHECK(secp256k1_schnorrsig_verify(vrfy, NULL, msg, &pk[0]) == 0);
-    CHECK(ecount == 3);
-    CHECK(secp256k1_schnorrsig_verify(vrfy, sig, NULL, &pk[0]) == 0);
-    CHECK(ecount == 4);
-    CHECK(secp256k1_schnorrsig_verify(vrfy, sig, msg, NULL) == 0);
-    CHECK(ecount == 5);
-    CHECK(secp256k1_schnorrsig_verify(vrfy, sig, msg, &zero_pk) == 0);
-    CHECK(ecount == 6);
-
-    secp256k1_context_destroy(none);
-    secp256k1_context_destroy(sign);
-    secp256k1_context_destroy(vrfy);
-    secp256k1_context_destroy(both);
-=======
     CHECK(secp256k1_schnorrsig_sign32(CTX, sig, msg, &keypairs[0], NULL) == 1);
     CHECK(ecount == 0);
     CHECK(secp256k1_schnorrsig_sign32(CTX, NULL, msg, &keypairs[0], NULL) == 0);
@@ -325,18 +188,12 @@ static void test_schnorrsig_api(void) {
 
     secp256k1_context_set_error_callback(STATIC_CTX, NULL, NULL);
     secp256k1_context_set_illegal_callback(STATIC_CTX, NULL, NULL);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 /* Checks that hash initialized by secp256k1_schnorrsig_sha256_tagged has the
  * expected state. */
-<<<<<<< HEAD
-void test_schnorrsig_sha256_tagged(void) {
-    char tag[17] = "BIP0340/challenge";
-=======
 static void test_schnorrsig_sha256_tagged(void) {
     unsigned char tag[17] = "BIP0340/challenge";
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     secp256k1_sha256 sha;
     secp256k1_sha256 sha_optimized;
 
@@ -347,25 +204,11 @@ static void test_schnorrsig_sha256_tagged(void) {
 
 /* Helper function for schnorrsig_bip_vectors
  * Signs the message and checks that it's the same as expected_sig. */
-<<<<<<< HEAD
-void test_schnorrsig_bip_vectors_check_signing(const unsigned char *sk, const unsigned char *pk_serialized, unsigned char *aux_rand, const unsigned char *msg, const unsigned char *expected_sig) {
-=======
 static void test_schnorrsig_bip_vectors_check_signing(const unsigned char *sk, const unsigned char *pk_serialized, const unsigned char *aux_rand, const unsigned char *msg, size_t msglen, const unsigned char *expected_sig) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     unsigned char sig[64];
     secp256k1_keypair keypair;
     secp256k1_xonly_pubkey pk, pk_expected;
 
-<<<<<<< HEAD
-    CHECK(secp256k1_keypair_create(ctx, &keypair, sk));
-    CHECK(secp256k1_schnorrsig_sign(ctx, sig, msg, &keypair, NULL, aux_rand));
-    CHECK(secp256k1_memcmp_var(sig, expected_sig, 64) == 0);
-
-    CHECK(secp256k1_xonly_pubkey_parse(ctx, &pk_expected, pk_serialized));
-    CHECK(secp256k1_keypair_xonly_pub(ctx, &pk, NULL, &keypair));
-    CHECK(secp256k1_memcmp_var(&pk, &pk_expected, sizeof(pk)) == 0);
-    CHECK(secp256k1_schnorrsig_verify(ctx, sig, msg, &pk));
-=======
     secp256k1_schnorrsig_extraparams extraparams = SECP256K1_SCHNORRSIG_EXTRAPARAMS_INIT;
     extraparams.ndata = (unsigned char*)aux_rand;
 
@@ -382,33 +225,20 @@ static void test_schnorrsig_bip_vectors_check_signing(const unsigned char *sk, c
     CHECK(secp256k1_keypair_xonly_pub(CTX, &pk, NULL, &keypair));
     CHECK(secp256k1_memcmp_var(&pk, &pk_expected, sizeof(pk)) == 0);
     CHECK(secp256k1_schnorrsig_verify(CTX, sig, msg, msglen, &pk));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 /* Helper function for schnorrsig_bip_vectors
  * Checks that both verify and verify_batch (TODO) return the same value as expected. */
-<<<<<<< HEAD
-void test_schnorrsig_bip_vectors_check_verify(const unsigned char *pk_serialized, const unsigned char *msg32, const unsigned char *sig, int expected) {
-    secp256k1_xonly_pubkey pk;
-
-    CHECK(secp256k1_xonly_pubkey_parse(ctx, &pk, pk_serialized));
-    CHECK(expected == secp256k1_schnorrsig_verify(ctx, sig, msg32, &pk));
-=======
 static void test_schnorrsig_bip_vectors_check_verify(const unsigned char *pk_serialized, const unsigned char *msg, size_t msglen, const unsigned char *sig, int expected) {
     secp256k1_xonly_pubkey pk;
 
     CHECK(secp256k1_xonly_pubkey_parse(CTX, &pk, pk_serialized));
     CHECK(expected == secp256k1_schnorrsig_verify(CTX, sig, msg, msglen, &pk));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 /* Test vectors according to BIP-340 ("Schnorr Signatures for secp256k1"). See
  * https://github.com/digibyte/bips/blob/master/bip-0340/test-vectors.csv. */
-<<<<<<< HEAD
-void test_schnorrsig_bip_vectors(void) {
-=======
 static void test_schnorrsig_bip_vectors(void) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     {
         /* Test vector 0 */
         const unsigned char sk[32] = {
@@ -423,11 +253,7 @@ static void test_schnorrsig_bip_vectors(void) {
             0xB5, 0x31, 0xC8, 0x45, 0x83, 0x6F, 0x99, 0xB0,
             0x86, 0x01, 0xF1, 0x13, 0xBC, 0xE0, 0x36, 0xF9
         };
-<<<<<<< HEAD
-        unsigned char aux_rand[32] = {
-=======
         const unsigned char aux_rand[32] = {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -449,13 +275,8 @@ static void test_schnorrsig_bip_vectors(void) {
             0xEB, 0xEE, 0xE8, 0xFD, 0xB2, 0x17, 0x2F, 0x47,
             0x7D, 0xF4, 0x90, 0x0D, 0x31, 0x05, 0x36, 0xC0
         };
-<<<<<<< HEAD
-        test_schnorrsig_bip_vectors_check_signing(sk, pk, aux_rand, msg, sig);
-        test_schnorrsig_bip_vectors_check_verify(pk, msg, sig, 1);
-=======
         test_schnorrsig_bip_vectors_check_signing(sk, pk, aux_rand, msg, sizeof(msg), sig);
         test_schnorrsig_bip_vectors_check_verify(pk, msg, sizeof(msg), sig, 1);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     {
         /* Test vector 1 */
@@ -471,11 +292,7 @@ static void test_schnorrsig_bip_vectors(void) {
             0x58, 0xFE, 0xAE, 0x1D, 0xA2, 0xDE, 0xCE, 0xD8,
             0x43, 0x24, 0x0F, 0x7B, 0x50, 0x2B, 0xA6, 0x59
         };
-<<<<<<< HEAD
-        unsigned char aux_rand[32] = {
-=======
         const unsigned char aux_rand[32] = {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -497,13 +314,8 @@ static void test_schnorrsig_bip_vectors(void) {
             0x89, 0x7E, 0xFC, 0xB6, 0x39, 0xEA, 0x87, 0x1C,
             0xFA, 0x95, 0xF6, 0xDE, 0x33, 0x9E, 0x4B, 0x0A
         };
-<<<<<<< HEAD
-        test_schnorrsig_bip_vectors_check_signing(sk, pk, aux_rand, msg, sig);
-        test_schnorrsig_bip_vectors_check_verify(pk, msg, sig, 1);
-=======
         test_schnorrsig_bip_vectors_check_signing(sk, pk, aux_rand, msg, sizeof(msg), sig);
         test_schnorrsig_bip_vectors_check_verify(pk, msg, sizeof(msg), sig, 1);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     {
         /* Test vector 2 */
@@ -519,11 +331,7 @@ static void test_schnorrsig_bip_vectors(void) {
             0x01, 0x39, 0x71, 0x53, 0x09, 0xB0, 0x86, 0xC9,
             0x60, 0xE1, 0x8F, 0xD9, 0x69, 0x77, 0x4E, 0xB8
         };
-<<<<<<< HEAD
-        unsigned char aux_rand[32] = {
-=======
         const unsigned char aux_rand[32] = {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             0xC8, 0x7A, 0xA5, 0x38, 0x24, 0xB4, 0xD7, 0xAE,
             0x2E, 0xB0, 0x35, 0xA2, 0xB5, 0xBB, 0xBC, 0xCC,
             0x08, 0x0E, 0x76, 0xCD, 0xC6, 0xD1, 0x69, 0x2C,
@@ -545,13 +353,8 @@ static void test_schnorrsig_bip_vectors(void) {
             0x7A, 0xDE, 0xA9, 0x8D, 0x82, 0xF8, 0x48, 0x1E,
             0x0E, 0x1E, 0x03, 0x67, 0x4A, 0x6F, 0x3F, 0xB7
         };
-<<<<<<< HEAD
-        test_schnorrsig_bip_vectors_check_signing(sk, pk, aux_rand, msg, sig);
-        test_schnorrsig_bip_vectors_check_verify(pk, msg, sig, 1);
-=======
         test_schnorrsig_bip_vectors_check_signing(sk, pk, aux_rand, msg, sizeof(msg), sig);
         test_schnorrsig_bip_vectors_check_verify(pk, msg, sizeof(msg), sig, 1);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     {
         /* Test vector 3 */
@@ -567,11 +370,7 @@ static void test_schnorrsig_bip_vectors(void) {
             0x3A, 0x0D, 0x95, 0xFB, 0xF2, 0x1D, 0x46, 0x8A,
             0x1B, 0x33, 0xF8, 0xC1, 0x60, 0xD8, 0xF5, 0x17
         };
-<<<<<<< HEAD
-        unsigned char aux_rand[32] = {
-=======
         const unsigned char aux_rand[32] = {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
             0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
             0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
@@ -593,13 +392,8 @@ static void test_schnorrsig_bip_vectors(void) {
             0xF2, 0x5F, 0xD7, 0x88, 0x81, 0xEB, 0xB3, 0x27,
             0x71, 0xFC, 0x59, 0x22, 0xEF, 0xC6, 0x6E, 0xA3
         };
-<<<<<<< HEAD
-        test_schnorrsig_bip_vectors_check_signing(sk, pk, aux_rand, msg, sig);
-        test_schnorrsig_bip_vectors_check_verify(pk, msg, sig, 1);
-=======
         test_schnorrsig_bip_vectors_check_signing(sk, pk, aux_rand, msg, sizeof(msg), sig);
         test_schnorrsig_bip_vectors_check_verify(pk, msg, sizeof(msg), sig, 1);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     {
         /* Test vector 4 */
@@ -625,11 +419,7 @@ static void test_schnorrsig_bip_vectors(void) {
             0x60, 0xCB, 0x71, 0xC0, 0x4E, 0x80, 0xF5, 0x93,
             0x06, 0x0B, 0x07, 0xD2, 0x83, 0x08, 0xD7, 0xF4
         };
-<<<<<<< HEAD
-        test_schnorrsig_bip_vectors_check_verify(pk, msg, sig, 1);
-=======
         test_schnorrsig_bip_vectors_check_verify(pk, msg, sizeof(msg), sig, 1);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     {
         /* Test vector 5 */
@@ -641,11 +431,7 @@ static void test_schnorrsig_bip_vectors(void) {
         };
         secp256k1_xonly_pubkey pk_parsed;
         /* No need to check the signature of the test vector as parsing the pubkey already fails */
-<<<<<<< HEAD
-        CHECK(!secp256k1_xonly_pubkey_parse(ctx, &pk_parsed, pk));
-=======
         CHECK(!secp256k1_xonly_pubkey_parse(CTX, &pk_parsed, pk));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     {
         /* Test vector 6 */
@@ -671,11 +457,7 @@ static void test_schnorrsig_bip_vectors(void) {
             0x7A, 0x73, 0xC6, 0x43, 0xE1, 0x66, 0xBE, 0x5E,
             0xBE, 0xAF, 0xA3, 0x4B, 0x1A, 0xC5, 0x53, 0xE2
         };
-<<<<<<< HEAD
-        test_schnorrsig_bip_vectors_check_verify(pk, msg, sig, 0);
-=======
         test_schnorrsig_bip_vectors_check_verify(pk, msg, sizeof(msg), sig, 0);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     {
         /* Test vector 7 */
@@ -701,11 +483,7 @@ static void test_schnorrsig_bip_vectors(void) {
             0x62, 0x2A, 0x95, 0x4C, 0xFE, 0x54, 0x57, 0x35,
             0xAA, 0xEA, 0x51, 0x34, 0xFC, 0xCD, 0xB2, 0xBD
         };
-<<<<<<< HEAD
-        test_schnorrsig_bip_vectors_check_verify(pk, msg, sig, 0);
-=======
         test_schnorrsig_bip_vectors_check_verify(pk, msg, sizeof(msg), sig, 0);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     {
         /* Test vector 8 */
@@ -731,11 +509,7 @@ static void test_schnorrsig_bip_vectors(void) {
             0xE8, 0xD7, 0xC9, 0x3E, 0x00, 0xC5, 0xED, 0x0C,
             0x18, 0x34, 0xFF, 0x0D, 0x0C, 0x2E, 0x6D, 0xA6
         };
-<<<<<<< HEAD
-        test_schnorrsig_bip_vectors_check_verify(pk, msg, sig, 0);
-=======
         test_schnorrsig_bip_vectors_check_verify(pk, msg, sizeof(msg), sig, 0);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     {
         /* Test vector 9 */
@@ -761,11 +535,7 @@ static void test_schnorrsig_bip_vectors(void) {
             0x4F, 0xB7, 0x34, 0x76, 0xF0, 0xD5, 0x94, 0xDC,
             0xB6, 0x5C, 0x64, 0x25, 0xBD, 0x18, 0x60, 0x51
         };
-<<<<<<< HEAD
-        test_schnorrsig_bip_vectors_check_verify(pk, msg, sig, 0);
-=======
         test_schnorrsig_bip_vectors_check_verify(pk, msg, sizeof(msg), sig, 0);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     {
         /* Test vector 10 */
@@ -791,11 +561,7 @@ static void test_schnorrsig_bip_vectors(void) {
             0xDB, 0xA8, 0x7F, 0x11, 0xAC, 0x67, 0x54, 0xF9,
             0x37, 0x80, 0xD5, 0xA1, 0x83, 0x7C, 0xF1, 0x97
         };
-<<<<<<< HEAD
-        test_schnorrsig_bip_vectors_check_verify(pk, msg, sig, 0);
-=======
         test_schnorrsig_bip_vectors_check_verify(pk, msg, sizeof(msg), sig, 0);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     {
         /* Test vector 11 */
@@ -821,11 +587,7 @@ static void test_schnorrsig_bip_vectors(void) {
             0xD1, 0xD7, 0x13, 0xA8, 0xAE, 0x82, 0xB3, 0x2F,
             0xA7, 0x9D, 0x5F, 0x7F, 0xC4, 0x07, 0xD3, 0x9B
         };
-<<<<<<< HEAD
-        test_schnorrsig_bip_vectors_check_verify(pk, msg, sig, 0);
-=======
         test_schnorrsig_bip_vectors_check_verify(pk, msg, sizeof(msg), sig, 0);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     {
         /* Test vector 12 */
@@ -851,11 +613,7 @@ static void test_schnorrsig_bip_vectors(void) {
             0xD1, 0xD7, 0x13, 0xA8, 0xAE, 0x82, 0xB3, 0x2F,
             0xA7, 0x9D, 0x5F, 0x7F, 0xC4, 0x07, 0xD3, 0x9B
         };
-<<<<<<< HEAD
-        test_schnorrsig_bip_vectors_check_verify(pk, msg, sig, 0);
-=======
         test_schnorrsig_bip_vectors_check_verify(pk, msg, sizeof(msg), sig, 0);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     {
         /* Test vector 13 */
@@ -881,11 +639,7 @@ static void test_schnorrsig_bip_vectors(void) {
             0xBA, 0xAE, 0xDC, 0xE6, 0xAF, 0x48, 0xA0, 0x3B,
             0xBF, 0xD2, 0x5E, 0x8C, 0xD0, 0x36, 0x41, 0x41
         };
-<<<<<<< HEAD
-        test_schnorrsig_bip_vectors_check_verify(pk, msg, sig, 0);
-=======
         test_schnorrsig_bip_vectors_check_verify(pk, msg, sizeof(msg), sig, 0);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     {
         /* Test vector 14 */
@@ -897,9 +651,6 @@ static void test_schnorrsig_bip_vectors(void) {
         };
         secp256k1_xonly_pubkey pk_parsed;
         /* No need to check the signature of the test vector as parsing the pubkey already fails */
-<<<<<<< HEAD
-        CHECK(!secp256k1_xonly_pubkey_parse(ctx, &pk_parsed, pk));
-=======
         CHECK(!secp256k1_xonly_pubkey_parse(CTX, &pk_parsed, pk));
     }
     {
@@ -1042,18 +793,10 @@ static void test_schnorrsig_bip_vectors(void) {
         memset(msg, 0x99, sizeof(msg));
         test_schnorrsig_bip_vectors_check_signing(sk, pk, aux_rand, msg, sizeof(msg), sig);
         test_schnorrsig_bip_vectors_check_verify(pk, msg, sizeof(msg), sig, 1);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 }
 
 /* Nonce function that returns constant 0 */
-<<<<<<< HEAD
-static int nonce_function_failing(unsigned char *nonce32, const unsigned char *msg32, const unsigned char *key32, const unsigned char *xonly_pk32, const unsigned char *algo16, void *data) {
-    (void) msg32;
-    (void) key32;
-    (void) xonly_pk32;
-    (void) algo16;
-=======
 static int nonce_function_failing(unsigned char *nonce32, const unsigned char *msg, size_t msglen, const unsigned char *key32, const unsigned char *xonly_pk32, const unsigned char *algo, size_t algolen, void *data) {
     (void) msg;
     (void) msglen;
@@ -1061,20 +804,12 @@ static int nonce_function_failing(unsigned char *nonce32, const unsigned char *m
     (void) xonly_pk32;
     (void) algo;
     (void) algolen;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     (void) data;
     (void) nonce32;
     return 0;
 }
 
 /* Nonce function that sets nonce to 0 */
-<<<<<<< HEAD
-static int nonce_function_0(unsigned char *nonce32, const unsigned char *msg32, const unsigned char *key32, const unsigned char *xonly_pk32, const unsigned char *algo16, void *data) {
-    (void) msg32;
-    (void) key32;
-    (void) xonly_pk32;
-    (void) algo16;
-=======
 static int nonce_function_0(unsigned char *nonce32, const unsigned char *msg, size_t msglen, const unsigned char *key32, const unsigned char *xonly_pk32, const unsigned char *algo, size_t algolen, void *data) {
     (void) msg;
     (void) msglen;
@@ -1082,7 +817,6 @@ static int nonce_function_0(unsigned char *nonce32, const unsigned char *msg, si
     (void) xonly_pk32;
     (void) algo;
     (void) algolen;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     (void) data;
 
     memset(nonce32, 0, 32);
@@ -1090,13 +824,6 @@ static int nonce_function_0(unsigned char *nonce32, const unsigned char *msg, si
 }
 
 /* Nonce function that sets nonce to 0xFF...0xFF */
-<<<<<<< HEAD
-static int nonce_function_overflowing(unsigned char *nonce32, const unsigned char *msg32, const unsigned char *key32, const unsigned char *xonly_pk32, const unsigned char *algo16, void *data) {
-    (void) msg32;
-    (void) key32;
-    (void) xonly_pk32;
-    (void) algo16;
-=======
 static int nonce_function_overflowing(unsigned char *nonce32, const unsigned char *msg, size_t msglen, const unsigned char *key32, const unsigned char *xonly_pk32, const unsigned char *algo, size_t algolen, void *data) {
     (void) msg;
     (void) msglen;
@@ -1104,35 +831,12 @@ static int nonce_function_overflowing(unsigned char *nonce32, const unsigned cha
     (void) xonly_pk32;
     (void) algo;
     (void) algolen;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     (void) data;
 
     memset(nonce32, 0xFF, 32);
     return 1;
 }
 
-<<<<<<< HEAD
-void test_schnorrsig_sign(void) {
-    unsigned char sk[32];
-    secp256k1_keypair keypair;
-    const unsigned char msg[32] = "this is a msg for a schnorrsig..";
-    unsigned char sig[64];
-    unsigned char zeros64[64] = { 0 };
-
-    secp256k1_testrand256(sk);
-    CHECK(secp256k1_keypair_create(ctx, &keypair, sk));
-    CHECK(secp256k1_schnorrsig_sign(ctx, sig, msg, &keypair, NULL, NULL) == 1);
-
-    /* Test different nonce functions */
-    memset(sig, 1, sizeof(sig));
-    CHECK(secp256k1_schnorrsig_sign(ctx, sig, msg, &keypair, nonce_function_failing, NULL) == 0);
-    CHECK(secp256k1_memcmp_var(sig, zeros64, sizeof(sig)) == 0);
-    memset(&sig, 1, sizeof(sig));
-    CHECK(secp256k1_schnorrsig_sign(ctx, sig, msg, &keypair, nonce_function_0, NULL) == 0);
-    CHECK(secp256k1_memcmp_var(sig, zeros64, sizeof(sig)) == 0);
-    CHECK(secp256k1_schnorrsig_sign(ctx, sig, msg, &keypair, nonce_function_overflowing, NULL) == 1);
-    CHECK(secp256k1_memcmp_var(sig, zeros64, sizeof(sig)) != 0);
-=======
 static void test_schnorrsig_sign(void) {
     unsigned char sk[32];
     secp256k1_xonly_pubkey pk;
@@ -1177,18 +881,13 @@ static void test_schnorrsig_sign(void) {
     CHECK(secp256k1_schnorrsig_sign_custom(CTX, sig, msg, sizeof(msg), &keypair, &extraparams) == 1);
     CHECK(secp256k1_schnorrsig_sign32(CTX, sig2, msg, &keypair, extraparams.ndata) == 1);
     CHECK(secp256k1_memcmp_var(sig, sig2, sizeof(sig)) == 0);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 #define N_SIGS 3
 /* Creates N_SIGS valid signatures and verifies them with verify and
  * verify_batch (TODO). Then flips some bits and checks that verification now
  * fails. */
-<<<<<<< HEAD
-void test_schnorrsig_sign_verify(void) {
-=======
 static void test_schnorrsig_sign_verify(void) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     unsigned char sk[32];
     unsigned char msg[N_SIGS][32];
     unsigned char sig[N_SIGS][64];
@@ -1198,15 +897,6 @@ static void test_schnorrsig_sign_verify(void) {
     secp256k1_scalar s;
 
     secp256k1_testrand256(sk);
-<<<<<<< HEAD
-    CHECK(secp256k1_keypair_create(ctx, &keypair, sk));
-    CHECK(secp256k1_keypair_xonly_pub(ctx, &pk, NULL, &keypair));
-
-    for (i = 0; i < N_SIGS; i++) {
-        secp256k1_testrand256(msg[i]);
-        CHECK(secp256k1_schnorrsig_sign(ctx, sig[i], msg[i], &keypair, NULL, NULL));
-        CHECK(secp256k1_schnorrsig_verify(ctx, sig[i], msg[i], &pk));
-=======
     CHECK(secp256k1_keypair_create(CTX, &keypair, sk));
     CHECK(secp256k1_keypair_xonly_pub(CTX, &pk, NULL, &keypair));
 
@@ -1214,52 +904,12 @@ static void test_schnorrsig_sign_verify(void) {
         secp256k1_testrand256(msg[i]);
         CHECK(secp256k1_schnorrsig_sign32(CTX, sig[i], msg[i], &keypair, NULL));
         CHECK(secp256k1_schnorrsig_verify(CTX, sig[i], msg[i], sizeof(msg[i]), &pk));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     {
         /* Flip a few bits in the signature and in the message and check that
          * verify and verify_batch (TODO) fail */
         size_t sig_idx = secp256k1_testrand_int(N_SIGS);
-<<<<<<< HEAD
-        size_t byte_idx = secp256k1_testrand_int(32);
-        unsigned char xorbyte = secp256k1_testrand_int(254)+1;
-        sig[sig_idx][byte_idx] ^= xorbyte;
-        CHECK(!secp256k1_schnorrsig_verify(ctx, sig[sig_idx], msg[sig_idx], &pk));
-        sig[sig_idx][byte_idx] ^= xorbyte;
-
-        byte_idx = secp256k1_testrand_int(32);
-        sig[sig_idx][32+byte_idx] ^= xorbyte;
-        CHECK(!secp256k1_schnorrsig_verify(ctx, sig[sig_idx], msg[sig_idx], &pk));
-        sig[sig_idx][32+byte_idx] ^= xorbyte;
-
-        byte_idx = secp256k1_testrand_int(32);
-        msg[sig_idx][byte_idx] ^= xorbyte;
-        CHECK(!secp256k1_schnorrsig_verify(ctx, sig[sig_idx], msg[sig_idx], &pk));
-        msg[sig_idx][byte_idx] ^= xorbyte;
-
-        /* Check that above bitflips have been reversed correctly */
-        CHECK(secp256k1_schnorrsig_verify(ctx, sig[sig_idx], msg[sig_idx], &pk));
-    }
-
-    /* Test overflowing s */
-    CHECK(secp256k1_schnorrsig_sign(ctx, sig[0], msg[0], &keypair, NULL, NULL));
-    CHECK(secp256k1_schnorrsig_verify(ctx, sig[0], msg[0], &pk));
-    memset(&sig[0][32], 0xFF, 32);
-    CHECK(!secp256k1_schnorrsig_verify(ctx, sig[0], msg[0], &pk));
-
-    /* Test negative s */
-    CHECK(secp256k1_schnorrsig_sign(ctx, sig[0], msg[0], &keypair, NULL, NULL));
-    CHECK(secp256k1_schnorrsig_verify(ctx, sig[0], msg[0], &pk));
-    secp256k1_scalar_set_b32(&s, &sig[0][32], NULL);
-    secp256k1_scalar_negate(&s, &s);
-    secp256k1_scalar_get_b32(&sig[0][32], &s);
-    CHECK(!secp256k1_schnorrsig_verify(ctx, sig[0], msg[0], &pk));
-}
-#undef N_SIGS
-
-void test_schnorrsig_taproot(void) {
-=======
         size_t byte_idx = secp256k1_testrand_bits(5);
         unsigned char xorbyte = secp256k1_testrand_int(254)+1;
         sig[sig_idx][byte_idx] ^= xorbyte;
@@ -1315,7 +965,6 @@ void test_schnorrsig_taproot(void) {
 #undef N_SIGS
 
 static void test_schnorrsig_taproot(void) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     unsigned char sk[32];
     secp256k1_keypair keypair;
     secp256k1_xonly_pubkey internal_pk;
@@ -1329,31 +978,6 @@ static void test_schnorrsig_taproot(void) {
 
     /* Create output key */
     secp256k1_testrand256(sk);
-<<<<<<< HEAD
-    CHECK(secp256k1_keypair_create(ctx, &keypair, sk) == 1);
-    CHECK(secp256k1_keypair_xonly_pub(ctx, &internal_pk, NULL, &keypair) == 1);
-    /* In actual taproot the tweak would be hash of internal_pk */
-    CHECK(secp256k1_xonly_pubkey_serialize(ctx, tweak, &internal_pk) == 1);
-    CHECK(secp256k1_keypair_xonly_tweak_add(ctx, &keypair, tweak) == 1);
-    CHECK(secp256k1_keypair_xonly_pub(ctx, &output_pk, &pk_parity, &keypair) == 1);
-    CHECK(secp256k1_xonly_pubkey_serialize(ctx, output_pk_bytes, &output_pk) == 1);
-
-    /* Key spend */
-    secp256k1_testrand256(msg);
-    CHECK(secp256k1_schnorrsig_sign(ctx, sig, msg, &keypair, NULL, NULL) == 1);
-    /* Verify key spend */
-    CHECK(secp256k1_xonly_pubkey_parse(ctx, &output_pk, output_pk_bytes) == 1);
-    CHECK(secp256k1_schnorrsig_verify(ctx, sig, msg, &output_pk) == 1);
-
-    /* Script spend */
-    CHECK(secp256k1_xonly_pubkey_serialize(ctx, internal_pk_bytes, &internal_pk) == 1);
-    /* Verify script spend */
-    CHECK(secp256k1_xonly_pubkey_parse(ctx, &internal_pk, internal_pk_bytes) == 1);
-    CHECK(secp256k1_xonly_pubkey_tweak_add_check(ctx, output_pk_bytes, pk_parity, &internal_pk, tweak) == 1);
-}
-
-void run_schnorrsig_tests(void) {
-=======
     CHECK(secp256k1_keypair_create(CTX, &keypair, sk) == 1);
     CHECK(secp256k1_keypair_xonly_pub(CTX, &internal_pk, NULL, &keypair) == 1);
     /* In actual taproot the tweak would be hash of internal_pk */
@@ -1377,18 +1001,13 @@ void run_schnorrsig_tests(void) {
 }
 
 static void run_schnorrsig_tests(void) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     int i;
     run_nonce_function_bip340_tests();
 
     test_schnorrsig_api();
     test_schnorrsig_sha256_tagged();
     test_schnorrsig_bip_vectors();
-<<<<<<< HEAD
-    for (i = 0; i < count; i++) {
-=======
     for (i = 0; i < COUNT; i++) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         test_schnorrsig_sign();
         test_schnorrsig_sign_verify();
     }

@@ -8,6 +8,123 @@ This file provides context and guidance for AI assistants working on the DigiByt
 - **Original DigiByte**: `/Users/jt/Code/digibyte/digibyte-v8.22.2` (v8.22.2 for comparison)
 - **Bitcoin v26.2**: `/Users/jt/Code/digibyte/bitcoin-v26.2-for-digibyte` (Bitcoin Core v26.2 reference)
 
+## Build Error Resolution Process
+
+When fixing build errors during the v26.2 merge:
+
+### Setup
+**Required repositories:**
+- `digibyte` (merged code, current directory)
+- `bitcoin-v26.2-for-digibyte` folder in root (contains pre-converted Bitcoin v26.2 with DigiByte naming)
+- `digibyte-v8.22.2` folder in root (original DigiByte v8.22.2 code for comparison)
+
+**IMPORTANT:** The `bitcoin-v26.2-for-digibyte` folder contains Bitcoin v26.2 code that has already been converted to DigiByte naming conventions. Always reference this folder for v26.2 code patterns.
+
+### Build Process
+```bash
+# Bootstrap
+./autogen.sh
+./configure
+
+# Capture errors
+make -j$(nproc) 2>&1 | tee build_errors.log
+```
+
+### Fix Process (ONE ERROR AT A TIME)
+
+#### 1. Identify Error
+```bash
+grep -A5 "error:" build_errors.log | head -20
+```
+
+#### 2. Compare Three Versions
+```bash
+# Set error file
+export ERROR_FILE="src/path/to/error.cpp"
+
+# Visual diff (bitcoin-v26.2-for-digibyte folder contains v26.2 code)
+vimdiff digibyte/$ERROR_FILE \
+        digibyte-v8.22.2/$ERROR_FILE \
+        bitcoin-v26.2-for-digibyte/$ERROR_FILE
+```
+
+#### 3. Fix Using v26.2 Standards
+**Rule: Use Bitcoin v26.2 code as base, adapt DigiByte features to it**
+
+```cpp
+// DON'T: Copy old DigiByte code
+// DO: Adapt DigiByte features to v26.2 patterns
+
+// Example - Add algo parameter the v26.2 way:
+std::unique_ptr<CBlockTemplate> CreateNewBlock(
+    const CScript& scriptPubKeyIn,
+    int algo = ALGO_SHA256D);  // Modern optional parameter
+```
+
+#### 4. Verify & Commit
+```bash
+# Test fix
+make -j$(nproc) 2>&1 | tee test.log
+
+# If error is fixed, commit immediately
+git add $ERROR_FILE
+git commit -m "Fix build: $ERROR_FILE
+
+- Error: [exact error message]
+- Fix: [what changed]
+- Preserves: [DigiByte feature]"
+
+# Return to step 1 for next error
+```
+
+### Common Fixes
+
+**Missing DigiByte function:**
+- Find where it belongs in v26.2 structure
+- Re-implement using v26.2 patterns (not old code)
+
+**API mismatch:**
+- Keep v26.2 base signature
+- Add DigiByte params as optional/overloaded
+
+**Build system:**
+- Add DigiByte files to Makefile.am
+- Use v26.2 naming conventions
+
+**File-level fixes (saves time):**
+- If a file has no DigiByte-specific features, copy entire file from `bitcoin-v26.2-for-digibyte`
+- Delete duplicate/obsolete files created by merge process
+- Example: Pure utility files, test helpers, or build scripts without DGB customizations
+```bash
+# Quick check for DigiByte-specific code
+grep -i "algo\|dandelion\|digishield\|odocrypt" $ERROR_FILE
+# If empty and file exists in v26.2, safe to copy:
+cp bitcoin-v26.2-for-digibyte/$ERROR_FILE digibyte/$ERROR_FILE
+```
+
+### Critical Checks
+Every fix must preserve:
+- Multi-algorithm mining (5 algos + Odocrypt)
+- 15-second blocks
+- Dandelion++
+- 21 billion supply
+- Custom RPCs (getblockreward, etc.)
+
+### Rollback Bad Fix
+```bash
+git reset --hard HEAD~1
+# Re-analyze and try again
+```
+
+**Remember:** Always use v26.2 code style. Never copy old v8.22.2 code directly.
+
+## Important Reminders
+- Both Bitcoin and DigiByte copyrights must be preserved
+- Test on testnet before mainnet
+- Document all merge decisions
+- Run linting and formatting checks
+- Ensure reproducible builds work
+
 ## DigiByte Unique Features
 
 ### Multi-Algorithm Mining
@@ -80,53 +197,6 @@ make -j$(nproc)
 ./test/lint/all-lint.sh
 ```
 
-### Common Tasks
-
-#### Check Multi-Algorithm Mining
-```bash
-./src/digibyte-cli getmininginfo
-# Should show difficulties for all 5 algorithms
-```
-
-#### Get Current Block Reward
-```bash
-./src/digibyte-cli getblockreward
-# Returns current DGB block reward based on 6-period schedule
-```
-
-#### Generate Blocks (Regtest)
-```bash
-# Generate with specific algorithm
-./src/digibyte-cli -regtest generatetoaddress 1 <address> SHA256D
-./src/digibyte-cli -regtest generatetoaddress 1 <address> SCRYPT
-```
-
-## Merge Guidelines
-
-When merging Bitcoin Core updates:
-
-1. **ALWAYS PRESERVE**:
-   - Multi-algorithm mining code
-   - 15-second block time
-   - 21 billion max supply
-   - Custom RPC commands
-   - Dandelion++ implementation
-   - DigiShield difficulty algorithms
-   - Network ports and magic bytes
-
-2. **NEVER CHANGE**:
-   - Core consensus parameters
-   - Block reward schedule
-   - Algorithm identifiers
-   - Network protocol version (unless required)
-
-3. **CAREFUL MERGE AREAS**:
-   - src/miner.cpp (multi-algo block creation)
-   - src/pow.cpp (difficulty algorithms)
-   - src/validation.cpp (consensus rules)
-   - src/net_processing.cpp (Dandelion++ hooks)
-   - src/rpc/mining.cpp (custom commands)
-
 ## Testing Checklist
 
 After any significant changes:
@@ -143,24 +213,8 @@ After any significant changes:
 - Target: v8.26 (aligned with Bitcoin Core v26.2)
 - Format: v8.XX where XX approximates Bitcoin Core version
 
-## Branch Naming (GitFlow)
-DigiByte follows GitFlow branching model:
-- Feature branches: `feature/description`
-- Release branches: `release/X.Y.Z`
-- Hotfix branches: `hotfix/description`
-- Main branches: `master` (stable) and `develop` (integration)
-
-For this merge: `feature/bitcoin-v26.2-merge`
 
 ## Support Resources
 - Specification: digibyte-btc-v26-2-merge-spec.md
 - Merge Prompt: DIGIBYTE_V8.26_MERGE_PROMPT.md
-- GitHub: https://github.com/digibyte-core/digibyte
-- Website: https://digibyte.org/
 
-## Important Reminders
-- Both Bitcoin and DigiByte copyrights must be preserved
-- Test on testnet before mainnet
-- Document all merge decisions
-- Run linting and formatting checks
-- Ensure reproducible builds work

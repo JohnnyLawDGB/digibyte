@@ -1,9 +1,4 @@
-<<<<<<< HEAD
-// Copyright (c) 2017-2020 The Bitcoin Core developers
-// Copyright (c) 2017-2020 The DigiByte Core developers
-=======
 // Copyright (c) 2017-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -11,38 +6,26 @@
 #define DIGIBYTE_INDEX_BASE_H
 
 #include <dbwrapper.h>
-<<<<<<< HEAD
-#include <primitives/block.h>
-#include <primitives/transaction.h>
-#include <threadinterrupt.h>
-=======
 #include <interfaces/chain.h>
 #include <util/threadinterrupt.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
 #include <validationinterface.h>
 
 #include <string>
 
 class CBlock;
 class CBlockIndex;
-<<<<<<< HEAD
-class CChainState;
-=======
 class Chainstate;
 class ChainstateManager;
 namespace interfaces {
 class Chain;
 } // namespace interfaces
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 struct IndexSummary {
     std::string name;
     bool synced{false};
     int best_block_height{0};
-<<<<<<< HEAD
-=======
     uint256 best_block_hash;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 };
 
 /**
@@ -74,11 +57,7 @@ protected:
         /// Read block locator of the chain that the index is in sync with.
         bool ReadBestBlock(CBlockLocator& locator) const;
 
-<<<<<<< HEAD
-        /// Write block locator of the chain that the txindex is in sync with.
-=======
         /// Write block locator of the chain that the index is in sync with.
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         void WriteBestBlock(CDBBatch& batch, const CBlockLocator& locator);
     };
 
@@ -116,12 +95,6 @@ private:
     /// to a chain reorganization), the index must halt until Commit succeeds or else it could end up
     /// getting corrupted.
     bool Commit();
-<<<<<<< HEAD
-protected:
-    CChainState* m_chainstate{nullptr};
-
-    void BlockConnected(const std::shared_ptr<const CBlock>& block, const CBlockIndex* pindex) override;
-=======
 
     /// Loop over disconnected blocks and call CustomRewind.
     bool Rewind(const CBlockIndex* current_tip, const CBlockIndex* new_tip);
@@ -135,7 +108,6 @@ protected:
     std::unique_ptr<interfaces::Chain> m_chain;
     Chainstate* m_chainstate{nullptr};
     const std::string m_name;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     void BlockConnected(ChainstateRole role, const std::shared_ptr<const CBlock>& block, const CBlockIndex* pindex) override;
 
@@ -144,11 +116,7 @@ protected:
     const CBlockIndex* CurrentIndex() { return m_best_block_index.load(); };
 
     /// Initialize internal state from the database and block index.
-<<<<<<< HEAD
-    [[nodiscard]] virtual bool Init();
-=======
     [[nodiscard]] virtual bool CustomInit(const std::optional<interfaces::BlockKey>& block) { return true; }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     /// Write update index entries for a newly connected block.
     [[nodiscard]] virtual bool CustomAppend(const interfaces::BlockInfo& block) { return true; }
@@ -160,14 +128,6 @@ protected:
     /// Rewind index to an earlier chain tip during a chain reorg. The tip must
     /// be an ancestor of the current best block.
     [[nodiscard]] virtual bool CustomRewind(const interfaces::BlockKey& current_tip, const interfaces::BlockKey& new_tip) { return true; }
-
-    /// Virtual method called internally by Commit that can be overridden to atomically
-    /// commit more index state.
-    virtual bool CommitInternal(CDBBatch& batch);
-
-    /// Rewind index to an earlier chain tip during a chain reorg. The tip must
-    /// be an ancestor of the current best block.
-    virtual bool Rewind(const CBlockIndex* current_tip, const CBlockIndex* new_tip);
 
     virtual DB& GetDB() const = 0;
 
@@ -191,18 +151,12 @@ public:
 
     void Interrupt();
 
-<<<<<<< HEAD
-    /// Start initializes the sync state and registers the instance as a
-    /// ValidationInterface so that it stays in sync with blockchain updates.
-    [[nodiscard]] bool Start(CChainState& active_chainstate);
-=======
     /// Initializes the sync state and registers the instance to the
     /// validation interface so that it stays in sync with blockchain updates.
     [[nodiscard]] bool Init();
 
     /// Starts the initial sync process.
     [[nodiscard]] bool StartBackgroundSync();
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     /// Stops the instance from staying in sync with blockchain updates.
     void Stop();

@@ -1,30 +1,16 @@
-<<<<<<< HEAD
-// Copyright (c) 2018-2020 The Bitcoin Core developers
-// Copyright (c) 2018-2020 The DigiByte Core developers
-=======
 // Copyright (c) 2018-2022 The Bitcoin Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #ifndef DIGIBYTE_INTERFACES_NODE_H
 #define DIGIBYTE_INTERFACES_NODE_H
 
-<<<<<<< HEAD
-#include <amount.h>     // For CAmount
-#include <external_signer.h>
-#include <net.h>        // For NodeId
-#include <net_types.h>  // For banmap_t
-#include <netaddress.h> // For Network
-#include <netbase.h>    // For ConnectionDirection
-=======
 #include <common/settings.h>
 #include <consensus/amount.h>          // For CAmount
 #include <net.h>                       // For NodeId
 #include <net_types.h>                 // For banmap_t
 #include <netaddress.h>                // For Network
 #include <netbase.h>                   // For ConnectionDirection
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <support/allocators/secure.h> // For SecureString
 #include <util/translation.h>
 
@@ -37,26 +23,11 @@
 #include <vector>
 
 class BanMan;
-<<<<<<< HEAD
-class CCoinControl;
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 class CFeeRate;
 class CNodeStats;
 class Coin;
 class RPCTimerInterface;
 class UniValue;
-<<<<<<< HEAD
-class proxyType;
-enum class SynchronizationState;
-struct CNodeStateStats;
-struct NodeContext;
-struct bilingual_str;
-
-namespace interfaces {
-class Handler;
-class WalletClient;
-=======
 class Proxy;
 enum class SynchronizationState;
 enum class TransactionError;
@@ -72,7 +43,7 @@ class CCoinControl;
 namespace interfaces {
 class Handler;
 class WalletLoader;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
 struct BlockTip;
 
 //! Block and header tip information
@@ -85,8 +56,6 @@ struct BlockAndHeaderTipInfo
     double verification_progress;
 };
 
-<<<<<<< HEAD
-=======
 //! External signer interface used by the GUI.
 class ExternalSigner
 {
@@ -97,7 +66,7 @@ public:
     virtual std::string getName() = 0;
 };
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
 //! Top-level interface for a digibyte node (digibyted process).
 class Node
 {
@@ -112,12 +81,9 @@ public:
 
     //! Get warnings.
     virtual bilingual_str getWarnings() = 0;
-<<<<<<< HEAD
-=======
 
     //! Get exit status.
     virtual int getExitStatus() = 0;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     // Get log flags.
     virtual uint32_t getLogCategories() = 0;
@@ -137,8 +103,6 @@ public:
     //! Return whether shutdown was requested.
     virtual bool shutdownRequested() = 0;
 
-<<<<<<< HEAD
-=======
     //! Return whether a particular setting in <datadir>/settings.json is or
     //! would be ignored because it is also specified in the command line.
     virtual bool isSettingIgnored(const std::string& name) = 0;
@@ -157,7 +121,7 @@ public:
     //! previous settings in <datadir>/settings.json.bak.
     virtual void resetSettings() = 0;
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
     //! Map port.
     virtual void mapPort(bool use_upnp, bool use_natpmp) = 0;
 
@@ -186,13 +150,9 @@ public:
     //! Disconnect node by id.
     virtual bool disconnectById(NodeId id) = 0;
 
-<<<<<<< HEAD
-    //! List external signers
-    virtual std::vector<ExternalSigner> externalSigners() = 0;
-=======
     //! Return list of external signers (attached devices which can sign transactions).
     virtual std::vector<std::unique_ptr<ExternalSigner>> listExternalSigners() = 0;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
 
     //! Get total bytes recv.
     virtual int64_t getTotalBytesRecv() = 0;
@@ -251,16 +211,12 @@ public:
     //! Get unspent outputs associated with a transaction.
     virtual bool getUnspentOutput(const COutPoint& output, Coin& coin) = 0;
 
-<<<<<<< HEAD
-    //! Get wallet client.
-    virtual WalletClient& walletClient() = 0;
-=======
     //! Broadcast transaction.
     virtual TransactionError broadcastTransaction(CTransactionRef tx, CAmount max_tx_fee, std::string& err_string) = 0;
 
     //! Get wallet loader.
     virtual WalletLoader& walletLoader() = 0;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
 
     //! Register handler for init messages.
     using InitMessageFn = std::function<void(const std::string& message)>;
@@ -282,13 +238,11 @@ public:
     using ShowProgressFn = std::function<void(const std::string& title, int progress, bool resume_possible)>;
     virtual std::unique_ptr<Handler> handleShowProgress(ShowProgressFn fn) = 0;
 
-<<<<<<< HEAD
-=======
     //! Register handler for wallet loader constructed messages.
     using InitWalletFn = std::function<void()>;
     virtual std::unique_ptr<Handler> handleInitWallet(InitWalletFn fn) = 0;
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
     //! Register handler for number of connections changed messages.
     using NotifyNumConnectionsChangedFn = std::function<void(int new_num_connections)>;
     virtual std::unique_ptr<Handler> handleNotifyNumConnectionsChanged(NotifyNumConnectionsChangedFn fn) = 0;
@@ -312,30 +266,19 @@ public:
 
     //! Register handler for header tip messages.
     using NotifyHeaderTipFn =
-<<<<<<< HEAD
-        std::function<void(SynchronizationState, interfaces::BlockTip tip, double verification_progress)>;
-=======
         std::function<void(SynchronizationState, interfaces::BlockTip tip, bool presync)>;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
     virtual std::unique_ptr<Handler> handleNotifyHeaderTip(NotifyHeaderTipFn fn) = 0;
 
     //! Get and set internal node context. Useful for testing, but not
     //! accessible across processes.
-<<<<<<< HEAD
-    virtual NodeContext* context() { return nullptr; }
-    virtual void setContext(NodeContext* context) { }
-};
-
-//! Return implementation of Node interface.
-std::unique_ptr<Node> MakeNode(NodeContext* context = nullptr);
-=======
     virtual node::NodeContext* context() { return nullptr; }
     virtual void setContext(node::NodeContext* context) { }
 };
 
 //! Return implementation of Node interface.
 std::unique_ptr<Node> MakeNode(node::NodeContext& context);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
 
 //! Block tip (could be a header or not, depends on the subscribed signal).
 struct BlockTip {

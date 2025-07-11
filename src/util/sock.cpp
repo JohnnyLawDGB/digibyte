@@ -235,7 +235,6 @@ bool Sock::WaitMany(std::chrono::milliseconds timeout, EventsPerSock& events_per
         }
         if (FD_ISSET(s, &err)) {
             events.occurred |= ERR;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
     }
 

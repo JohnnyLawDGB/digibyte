@@ -260,35 +260,7 @@ bool ParseInt64(std::string_view str, int64_t* out)
     return ParseIntegral<int64_t>(str, out);
 }
 
-<<<<<<< HEAD
-bool ParseUInt8(const std::string& str, uint8_t *out)
-{
-    uint32_t u32;
-    if (!ParseUInt32(str, &u32) || u32 > std::numeric_limits<uint8_t>::max()) {
-        return false;
-    }
-    if (out != nullptr) {
-        *out = static_cast<uint8_t>(u32);
-    }
-    return true;
-}
-
-bool ParseUInt16(const std::string& str, uint16_t* out)
-{
-    uint32_t u32;
-    if (!ParseUInt32(str, &u32) || u32 > std::numeric_limits<uint16_t>::max()) {
-        return false;
-    }
-    if (out != nullptr) {
-        *out = static_cast<uint16_t>(u32);
-    }
-    return true;
-}
-
-bool ParseUInt32(const std::string& str, uint32_t *out)
-=======
 bool ParseUInt8(std::string_view str, uint8_t* out)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     return ParseIntegral<uint8_t>(str, out);
 }
@@ -349,24 +321,6 @@ std::string FormatParagraph(std::string_view in, size_t width, size_t indent)
     }
     return out.str();
 }
-
-<<<<<<< HEAD
-int64_t atoi64(const std::string& str)
-{
-#ifdef _MSC_VER
-    return _atoi64(str.c_str());
-#else
-    return strtoll(str.c_str(), nullptr, 10);
-#endif
-}
-
-int atoi(const std::string& str)
-{
-    return atoi(str.c_str());
-}
-
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 /** Upper bound for mantissa.
  * 10^18-1 is the largest arbitrary decimal that will fit in a signed 64-bit integer.
  * Larger integers cannot consist of arbitrary combinations of 0-9:

@@ -32,8 +32,6 @@ enum SafeChars
 };
 
 /**
-<<<<<<< HEAD
-=======
  * Used by ParseByteUnits()
  * Lowercase base 1000
  * Uppercase base 1024

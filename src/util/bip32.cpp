@@ -9,7 +9,6 @@
 #include <cstdint>
 #include <cstdio>
 #include <sstream>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 bool ParseHDKeypath(const std::string& keypath_str, std::vector<uint32_t>& keypath)
 {

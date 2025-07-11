@@ -1,19 +1,10 @@
-<<<<<<< HEAD
-// Copyright (c) 2017-2020 The Bitcoin Core developers
-// Copyright (c) 2017-2020 The DigiByte Core developers
-=======
 // Copyright (c) 2017-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <chainparams.h>
 #include <common/args.h>
 #include <index/base.h>
-<<<<<<< HEAD
-#include <node/blockstorage.h>
-#include <node/ui_interface.h>
-=======
 #include <interfaces/chain.h>
 #include <kernel/chain.h>
 #include <logging.h>
@@ -22,7 +13,6 @@
 #include <node/context.h>
 #include <node/database_args.h>
 #include <node/interface_ui.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <shutdown.h>
 #include <tinyformat.h>
 #include <util/thread.h>
@@ -30,25 +20,11 @@
 #include <validation.h> // For g_chainman
 #include <warnings.h>
 
-<<<<<<< HEAD
-constexpr uint8_t DB_BEST_BLOCK{'B'};
-=======
 #include <string>
 #include <utility>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 constexpr uint8_t DB_BEST_BLOCK{'B'};
 
-<<<<<<< HEAD
-template <typename... Args>
-static void FatalError(const char* fmt, const Args&... args)
-{
-    std::string strMessage = tfm::format(fmt, args...);
-    SetMiscWarning(Untranslated(strMessage));
-    LogPrintf("*** %s\n", strMessage);
-    AbortError(_("A fatal internal error occurred, see debug.log for details"));
-    StartShutdown();
-=======
 constexpr auto SYNC_LOG_INTERVAL{30s};
 constexpr auto SYNC_LOCATOR_WRITE_INTERVAL{30s};
 
@@ -66,7 +42,6 @@ CBlockLocator GetLocator(interfaces::Chain& chain, const uint256& block_hash)
     assert(found);
     assert(!locator.IsNull());
     return locator;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 BaseIndex::DB::DB(const fs::path& path, size_t n_cache_size, bool f_memory, bool f_wipe, bool f_obfuscate) :
@@ -123,50 +98,6 @@ bool BaseIndex::Init()
     }
 
     LOCK(cs_main);
-<<<<<<< HEAD
-    CChain& active_chain = m_chainstate->m_chain;
-    if (locator.IsNull()) {
-        m_best_block_index = nullptr;
-    } else {
-        m_best_block_index = m_chainstate->m_blockman.FindForkInGlobalIndex(active_chain, locator);
-    }
-    m_synced = m_best_block_index.load() == active_chain.Tip();
-    if (!m_synced) {
-        bool prune_violation = false;
-        if (!m_best_block_index) {
-            // index is not built yet
-            // make sure we have all block data back to the genesis
-            const CBlockIndex* block = active_chain.Tip();
-            while (block->pprev && (block->pprev->nStatus & BLOCK_HAVE_DATA)) {
-                block = block->pprev;
-            }
-            prune_violation = block != active_chain.Genesis();
-        }
-        // in case the index has a best block set and is not fully synced
-        // check if we have the required blocks to continue building the index
-        else {
-            const CBlockIndex* block_to_test = m_best_block_index.load();
-            if (!active_chain.Contains(block_to_test)) {
-                // if the bestblock is not part of the mainchain, find the fork
-                // and make sure we have all data down to the fork
-                block_to_test = active_chain.FindFork(block_to_test);
-            }
-            const CBlockIndex* block = active_chain.Tip();
-            prune_violation = true;
-            // check backwards from the tip if we have all block data until we reach the indexes bestblock
-            while (block_to_test && block->pprev && (block->pprev->nStatus & BLOCK_HAVE_DATA)) {
-                if (block_to_test == block) {
-                    prune_violation = false;
-                    break;
-                }
-                block = block->pprev;
-            }
-        }
-        if (prune_violation) {
-            return InitError(strprintf(Untranslated("%s best block of the index goes beyond pruned data. Please disable the index or reindex (which will download the whole blockchain again)"), GetName()));
-        }
-    }
-=======
     CChain& index_chain = m_chainstate->m_chain;
 
     if (locator.IsNull()) {
@@ -192,7 +123,7 @@ bool BaseIndex::Init()
     // via `BlockConnected` signals until, possibly, the next restart.
     m_synced = start_block == index_chain.Tip();
     m_init = true;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
     return true;
 }
 
@@ -220,13 +151,10 @@ void BaseIndex::ThreadSync()
         std::chrono::steady_clock::time_point last_locator_write_time{0s};
         while (true) {
             if (m_interrupt) {
-<<<<<<< HEAD
-                m_best_block_index = pindex;
-=======
                 LogPrintf("%s: m_interrupt set; exiting ThreadSync\n", GetName());
 
                 SetBestBlockIndex(pindex);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
                 // No need to handle errors in Commit. If it fails, the error will be already be
                 // logged. The best way to recover is to continue, as index cannot be corrupted by
                 // a missed commit to disk for an advanced index state.
@@ -238,24 +166,17 @@ void BaseIndex::ThreadSync()
                 LOCK(cs_main);
                 const CBlockIndex* pindex_next = NextSyncBlock(pindex, m_chainstate->m_chain);
                 if (!pindex_next) {
-<<<<<<< HEAD
-                    m_best_block_index = pindex;
-=======
                     SetBestBlockIndex(pindex);
                     // No need to handle errors in Commit. See rationale above.
                     Commit();
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
                     m_synced = true;
                     // No need to handle errors in Commit. See rationale above.
                     Commit();
                     break;
                 }
                 if (pindex_next->pprev != pindex && !Rewind(pindex, pindex_next->pprev)) {
-<<<<<<< HEAD
-                    FatalError("%s: Failed to rewind index %s to a previous chain tip",
-=======
                     FatalErrorf("%s: Failed to rewind index %s to a previous chain tip",
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                                __func__, GetName());
                     return;
                 }
@@ -270,11 +191,8 @@ void BaseIndex::ThreadSync()
             }
 
             if (last_locator_write_time + SYNC_LOCATOR_WRITE_INTERVAL < current_time) {
-<<<<<<< HEAD
-                m_best_block_index = pindex;
-=======
                 SetBestBlockIndex(pindex->pprev);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
                 last_locator_write_time = current_time;
                 // No need to handle errors in Commit. See rationale above.
                 Commit();
@@ -306,10 +224,6 @@ void BaseIndex::ThreadSync()
 
 bool BaseIndex::Commit()
 {
-<<<<<<< HEAD
-    CDBBatch batch(GetDB());
-    if (!CommitInternal(batch) || !GetDB().WriteBatch(batch)) {
-=======
     // Don't commit anything if we haven't indexed any block yet
     // (this could happen if init is interrupted).
     bool ok = m_best_block_index != nullptr;
@@ -322,44 +236,12 @@ bool BaseIndex::Commit()
         }
     }
     if (!ok) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         return error("%s: Failed to commit latest %s state", __func__, GetName());
     }
     return true;
 }
 
-<<<<<<< HEAD
-bool BaseIndex::CommitInternal(CDBBatch& batch)
-{
-    LOCK(cs_main);
-    GetDB().WriteBestBlock(batch, m_chainstate->m_chain.GetLocator(m_best_block_index));
-    return true;
-}
-
 bool BaseIndex::Rewind(const CBlockIndex* current_tip, const CBlockIndex* new_tip)
-{
-    assert(current_tip == m_best_block_index);
-    assert(current_tip->GetAncestor(new_tip->nHeight) == new_tip);
-
-    // In the case of a reorg, ensure persisted block locator is not stale.
-    // Pruning has a minimum of 288 blocks-to-keep and getting the index
-    // out of sync may be possible but a users fault.
-    // In case we reorg beyond the pruned depth, ReadBlockFromDisk would
-    // throw and lead to a graceful shutdown
-    m_best_block_index = new_tip;
-    if (!Commit()) {
-        // If commit fails, revert the best block index to avoid corruption.
-        m_best_block_index = current_tip;
-        return false;
-    }
-
-    return true;
-}
-
-void BaseIndex::BlockConnected(const std::shared_ptr<const CBlock>& block, const CBlockIndex* pindex)
-=======
-bool BaseIndex::Rewind(const CBlockIndex* current_tip, const CBlockIndex* new_tip)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 {
     assert(current_tip == m_best_block_index);
     assert(current_tip->GetAncestor(new_tip->nHeight) == new_tip);
@@ -421,11 +303,7 @@ void BaseIndex::BlockConnected(ChainstateRole role, const std::shared_ptr<const 
             return;
         }
         if (best_block_index != pindex->pprev && !Rewind(best_block_index, pindex->pprev)) {
-<<<<<<< HEAD
-            FatalError("%s: Failed to rewind index %s to a previous chain tip",
-=======
             FatalErrorf("%s: Failed to rewind index %s to a previous chain tip",
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                        __func__, GetName());
             return;
         }
@@ -499,11 +377,7 @@ bool BaseIndex::BlockUntilSyncedToCurrentChain() const
 
     {
         // Skip the queue-draining stuff if we know we're caught up with
-<<<<<<< HEAD
-        // ::ChainActive().Tip().
-=======
         // m_chain.Tip().
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         LOCK(cs_main);
         const CBlockIndex* chain_tip = m_chainstate->m_chain.Tip();
         const CBlockIndex* best_block_index = m_best_block_index.load();
@@ -522,21 +396,9 @@ void BaseIndex::Interrupt()
     m_interrupt();
 }
 
-<<<<<<< HEAD
-bool BaseIndex::Start(CChainState& active_chainstate)
-{
-    m_chainstate = &active_chainstate;
-    // Need to register this ValidationInterface before running Init(), so that
-    // callbacks are not missed if Init sets m_synced to true.
-    RegisterValidationInterface(this);
-    if (!Init()) {
-        return false;
-    }
-=======
 bool BaseIndex::StartBackgroundSync()
 {
     if (!m_init) throw std::logic_error("Error: Cannot start a non-initialized index");
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     m_thread_sync = std::thread(&util::TraceThread, GetName(), [this] { ThreadSync(); });
     return true;
@@ -556,11 +418,6 @@ IndexSummary BaseIndex::GetSummary() const
     IndexSummary summary{};
     summary.name = GetName();
     summary.synced = m_synced;
-<<<<<<< HEAD
-    summary.best_block_height = m_best_block_index ? m_best_block_index.load()->nHeight : 0;
-    return summary;
-}
-=======
     if (const auto& pindex = m_best_block_index.load()) {
         summary.best_block_height = pindex->nHeight;
         summary.best_block_hash = pindex->GetBlockHash();
@@ -589,4 +446,4 @@ void BaseIndex::SetBestBlockIndex(const CBlockIndex* block)
     // updated and that the index object is safe to delete.
     m_best_block_index = block;
 }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+

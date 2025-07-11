@@ -332,10 +332,8 @@ static bool SignTaprootScript(const SigningProvider& provider, const BaseSignatu
 static bool SignTaproot(const SigningProvider& provider, const BaseSignatureCreator& creator, const WitnessV1Taproot& output, SignatureData& sigdata, std::vector<valtype>& result)
 {
     TaprootSpendData spenddata;
-<<<<<<< HEAD
-=======
     TaprootBuilder builder;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
 
     // Gather information about this output.
     if (provider.GetTaprootSpendData(output, spenddata)) {
@@ -432,27 +430,18 @@ static bool SignStep(const SigningProvider& provider, const BaseSignatureCreator
         ret.push_back(ToByteVector(pubkey));
         return true;
     }
-<<<<<<< HEAD
-    case TxoutType::SCRIPTHASH:
-        h160 = uint160(vSolutions[0]);
-        if (GetCScript(provider, sigdata, CScriptID{h160}, scriptRet)) {
-            ret.push_back(std::vector<unsigned char>(scriptRet.begin(), scriptRet.end()));
-=======
     case TxoutType::SCRIPTHASH: {
         uint160 h160{vSolutions[0]};
         if (GetCScript(provider, sigdata, CScriptID{h160}, scriptRet)) {
             ret.emplace_back(scriptRet.begin(), scriptRet.end());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
             return true;
         }
         // Could not find redeemScript, add to missing
         sigdata.missing_redeem_script = h160;
         return false;
-<<<<<<< HEAD
-
-=======
     }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
     case TxoutType::MULTISIG: {
         size_t required = vSolutions.front()[0];
         ret.emplace_back(); // workaround CHECKMULTISIG bug
@@ -478,14 +467,9 @@ static bool SignStep(const SigningProvider& provider, const BaseSignatureCreator
         return true;
 
     case TxoutType::WITNESS_V0_SCRIPTHASH:
-<<<<<<< HEAD
-        CRIPEMD160().Write(vSolutions[0].data(), vSolutions[0].size()).Finalize(h160.begin());
-        if (GetCScript(provider, sigdata, CScriptID{h160}, scriptRet)) {
-            ret.push_back(std::vector<unsigned char>(scriptRet.begin(), scriptRet.end()));
-=======
         if (GetCScript(provider, sigdata, CScriptID{RIPEMD160(vSolutions[0])}, scriptRet)) {
             ret.emplace_back(scriptRet.begin(), scriptRet.end());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
             return true;
         }
         // Could not find witnessScript, add to missing
@@ -550,11 +534,6 @@ bool ProduceSignature(const SigningProvider& provider, const BaseSignatureCreato
     {
         CScript witnessscript(result[0].begin(), result[0].end());
         sigdata.witness_script = witnessscript;
-<<<<<<< HEAD
-        TxoutType subType;
-        solved = solved && SignStep(provider, creator, witnessscript, result, subType, SigVersion::WITNESS_V0, sigdata) && subType != TxoutType::SCRIPTHASH && subType != TxoutType::WITNESS_V0_SCRIPTHASH && subType != TxoutType::WITNESS_V0_KEYHASH;
-        result.push_back(std::vector<unsigned char>(witnessscript.begin(), witnessscript.end()));
-=======
 
         TxoutType subType{TxoutType::NONSTANDARD};
         solved = solved && SignStep(provider, creator, witnessscript, result, subType, SigVersion::WITNESS_V0, sigdata) && subType != TxoutType::SCRIPTHASH && subType != TxoutType::WITNESS_V0_SCRIPTHASH && subType != TxoutType::WITNESS_V0_KEYHASH;
@@ -570,7 +549,7 @@ bool ProduceSignature(const SigningProvider& provider, const BaseSignatureCreato
         }
         result.emplace_back(witnessscript.begin(), witnessscript.end());
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
         sigdata.scriptWitness.stack = result;
         sigdata.witness = true;
         result.clear();
@@ -742,17 +721,12 @@ namespace {
 class DummySignatureChecker final : public BaseSignatureChecker
 {
 public:
-<<<<<<< HEAD
-    DummySignatureChecker() {}
-    bool CheckECDSASignature(const std::vector<unsigned char>& scriptSig, const std::vector<unsigned char>& vchPubKey, const CScript& scriptCode, SigVersion sigversion) const override { return true; }
-    bool CheckSchnorrSignature(Span<const unsigned char> sig, Span<const unsigned char> pubkey, SigVersion sigversion, const ScriptExecutionData& execdata, ScriptError* serror) const override { return true; }
-=======
     DummySignatureChecker() = default;
     bool CheckECDSASignature(const std::vector<unsigned char>& sig, const std::vector<unsigned char>& vchPubKey, const CScript& scriptCode, SigVersion sigversion) const override { return sig.size() != 0; }
     bool CheckSchnorrSignature(Span<const unsigned char> sig, Span<const unsigned char> pubkey, SigVersion sigversion, ScriptExecutionData& execdata, ScriptError* serror) const override { return sig.size() != 0; }
     bool CheckLockTime(const CScriptNum& nLockTime) const override { return true; }
     bool CheckSequence(const CScriptNum& nSequence) const override { return true; }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
 };
 }
 
@@ -795,21 +769,6 @@ const BaseSignatureCreator& DUMMY_MAXIMUM_SIGNATURE_CREATOR = DummySignatureCrea
 
 bool IsSegWitOutput(const SigningProvider& provider, const CScript& script)
 {
-<<<<<<< HEAD
-    // This check is to make sure that the script we created can actually be solved for and signed by us
-    // if we were to have the private keys. This is just to make sure that the script is valid and that,
-    // if found in a transaction, we would still accept and relay that transaction. In particular,
-    // it will reject witness outputs that require signing with an uncompressed public key.
-    SignatureData sigs;
-    // Make sure that STANDARD_SCRIPT_VERIFY_FLAGS includes SCRIPT_VERIFY_WITNESS_PUBKEYTYPE, the most
-    // important property this function is designed to test for.
-    static_assert(STANDARD_SCRIPT_VERIFY_FLAGS & SCRIPT_VERIFY_WITNESS_PUBKEYTYPE, "IsSolvable requires standard script flags to include WITNESS_PUBKEYTYPE");
-    if (ProduceSignature(provider, DUMMY_SIGNATURE_CREATOR, script, sigs)) {
-        // VerifyScript check is just defensive, and should never fail.
-        bool verified = VerifyScript(sigs.scriptSig, script, &sigs.scriptWitness, STANDARD_SCRIPT_VERIFY_FLAGS, DUMMY_CHECKER);
-        assert(verified);
-        return true;
-=======
     int version;
     valtype program;
     if (script.IsWitnessProgram(version, program)) return true;
@@ -823,99 +782,11 @@ bool IsSegWitOutput(const SigningProvider& provider, const CScript& script)
                 if (subscript.IsWitnessProgram(version, program)) return true;
             }
         }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
     }
     return false;
 }
 
-<<<<<<< HEAD
-bool IsSegWitOutput(const SigningProvider& provider, const CScript& script)
-{
-    int version;
-    valtype program;
-    if (script.IsWitnessProgram(version, program)) return true;
-    if (script.IsPayToScriptHash()) {
-        std::vector<valtype> solutions;
-        auto whichtype = Solver(script, solutions);
-        if (whichtype == TxoutType::SCRIPTHASH) {
-            auto h160 = uint160(solutions[0]);
-            CScript subscript;
-            if (provider.GetCScript(CScriptID{h160}, subscript)) {
-                if (subscript.IsWitnessProgram(version, program)) return true;
-            }
-        }
-    }
-    return false;
-}
-
-bool SignTransaction(CMutableTransaction& mtx, const SigningProvider* keystore, const std::map<COutPoint, Coin>& coins, int nHashType, std::map<int, std::string>& input_errors)
-{
-    bool fHashSingle = ((nHashType & ~SIGHASH_ANYONECANPAY) == SIGHASH_SINGLE);
-
-    // Use CTransaction for the constant parts of the
-    // transaction to avoid rehashing.
-    const CTransaction txConst(mtx);
-
-    PrecomputedTransactionData txdata;
-    std::vector<CTxOut> spent_outputs;
-    spent_outputs.resize(mtx.vin.size());
-    bool have_all_spent_outputs = true;
-    for (unsigned int i = 0; i < mtx.vin.size(); i++) {
-        CTxIn& txin = mtx.vin[i];
-        auto coin = coins.find(txin.prevout);
-        if (coin == coins.end() || coin->second.IsSpent()) {
-            have_all_spent_outputs = false;
-        } else {
-            spent_outputs[i] = CTxOut(coin->second.out.nValue, coin->second.out.scriptPubKey);
-        }
-    }
-    if (have_all_spent_outputs) {
-        txdata.Init(txConst, std::move(spent_outputs), true);
-    } else {
-        txdata.Init(txConst, {}, true);
-    }
-
-    // Sign what we can:
-    for (unsigned int i = 0; i < mtx.vin.size(); i++) {
-        CTxIn& txin = mtx.vin[i];
-        auto coin = coins.find(txin.prevout);
-        if (coin == coins.end() || coin->second.IsSpent()) {
-            input_errors[i] = "Input not found or already spent";
-            continue;
-        }
-        const CScript& prevPubKey = coin->second.out.scriptPubKey;
-        const CAmount& amount = coin->second.out.nValue;
-
-        SignatureData sigdata = DataFromTransaction(mtx, i, coin->second.out);
-        // Only sign SIGHASH_SINGLE if there's a corresponding output:
-        if (!fHashSingle || (i < mtx.vout.size())) {
-            ProduceSignature(*keystore, MutableTransactionSignatureCreator(&mtx, i, amount, &txdata, nHashType), prevPubKey, sigdata);
-        }
-
-        UpdateInput(txin, sigdata);
-
-        // amount must be specified for valid segwit signature
-        if (amount == MAX_MONEY && !txin.scriptWitness.IsNull()) {
-            input_errors[i] = "Missing amount";
-            continue;
-        }
-
-        ScriptError serror = SCRIPT_ERR_OK;
-        if (!VerifyScript(txin.scriptSig, prevPubKey, &txin.scriptWitness, STANDARD_SCRIPT_VERIFY_FLAGS, TransactionSignatureChecker(&txConst, i, amount, txdata, MissingDataBehavior::FAIL), &serror)) {
-            if (serror == SCRIPT_ERR_INVALID_STACK_OPERATION) {
-                // Unable to sign input and verification failed (possible attempt to partially sign).
-                input_errors[i] = "Unable to sign input, invalid stack size (possibly missing key)";
-            } else if (serror == SCRIPT_ERR_SIG_NULLFAIL) {
-                // Verification failed (possibly due to insufficient signatures).
-                input_errors[i] = "CHECK(MULTI)SIG failing with non-zero signature (possibly need more signatures)";
-            } else {
-                input_errors[i] = ScriptErrorString(serror);
-            }
-        } else {
-            // If this input succeeds, make sure there is no error set for it
-            input_errors.erase(i);
-        }
-=======
 bool SignTransaction(CMutableTransaction& mtx, const SigningProvider* keystore, const std::map<COutPoint, Coin>& coins, int nHashType, std::map<int, bilingual_str>& input_errors)
 {
     bool fHashSingle = ((nHashType & ~SIGHASH_ANYONECANPAY) == SIGHASH_SINGLE);
@@ -980,7 +851,7 @@ bool SignTransaction(CMutableTransaction& mtx, const SigningProvider* keystore, 
             // If this input succeeds, make sure there is no error set for it
             input_errors.erase(i);
         }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
     }
     return input_errors.empty();
 }

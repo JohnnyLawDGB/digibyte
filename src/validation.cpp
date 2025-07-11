@@ -792,7 +792,7 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
     // do all inputs exist?
     for (const CTxIn& txin : tx.vin) {
         if (!coins_cache.HaveCoinInCache(txin.prevout)) {
-            coins_to_uncache.push_back(txin.prevout);
+            args.m_coins_to_uncache.push_back(txin.prevout);
         }
 
         // Note: this call may add txin.prevout to the coins cache
@@ -802,7 +802,7 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
             // Are inputs missing because we already have the tx?
             for (size_t out = 0; out < tx.vout.size(); out++) {
                 // Optimistically just do efficient check of cache for outputs
-                if (coins_cache.HaveCoinInCache(COutPoint(hash, out))) {
+                if (coins_cache.HaveCoinInCache(COutPoint(ws.m_hash, out))) {
                     return state.Invalid(TxValidationResult::TX_CONFLICT, "txn-already-known");
                 }
             }
@@ -859,7 +859,7 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
 
     // ws.m_modified_fees includes any fee deltas from PrioritiseTransaction
     ws.m_modified_fees = ws.m_base_fees;
-    m_pool.ApplyDelta(hash, ws.m_modified_fees);
+    m_pool.ApplyDelta(ws.m_hash, ws.m_modified_fees);
 
     // Keep track of transactions that spend a coinbase, which we re-scan
     // during reorgs to ensure COINBASE_MATURITY is still met.
@@ -874,8 +874,8 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
 
     // Set entry_sequence to 0 when bypass_limits is used; this allows txs from a block
     // reorg to be marked earlier than any child txs that were already in the mempool.
-    const uint64_t entry_sequence = bypass_limits ? 0 : m_pool.GetSequence();
-    entry.reset(new CTxMemPoolEntry(ptx, ws.m_base_fees, nAcceptTime, m_active_chainstate.m_chain.Height(), entry_sequence,
+    const uint64_t entry_sequence = args.m_bypass_limits ? 0 : m_pool.GetSequence();
+    entry.reset(new CTxMemPoolEntry(ws.m_ptx, ws.m_base_fees, args.m_accept_time, m_active_chainstate.m_chain.Height(), entry_sequence,
                                     fSpendsCoinbase, nSigOpsCost, lock_points.value()));
     ws.m_vsize = entry->GetTxSize();
 
@@ -888,14 +888,14 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
     // while a tx could be package CPFP'd when entering the mempool, we do not have a DoS-resistant
     // method of ensuring the tx remains bumped. For example, the fee-bumping child could disappear
     // due to a replacement.
-    if (!bypass_limits && ws.m_modified_fees < m_pool.m_min_relay_feerate.GetFee(ws.m_vsize)) {
+    if (!args.m_bypass_limits && ws.m_modified_fees < m_pool.m_min_relay_feerate.GetFee(ws.m_vsize)) {
         return state.Invalid(TxValidationResult::TX_MEMPOOL_POLICY, "min relay fee not met",
                              strprintf("%d < %d", ws.m_modified_fees, m_pool.m_min_relay_feerate.GetFee(ws.m_vsize)));
     }
     // No individual transactions are allowed below the mempool min feerate except from disconnected
     // blocks and transactions in a package. Package transactions will be checked using package
     // feerate later.
-    if (!bypass_limits && !args.m_package_feerates && !CheckFeeRate(ws.m_vsize, ws.m_modified_fees, state)) return false;
+    if (!args.m_bypass_limits && !args.m_package_feerates && !CheckFeeRate(ws.m_vsize, ws.m_modified_fees, state)) return false;
 
     ws.m_iters_conflicting = m_pool.GetIterSet(ws.m_conflicts);
 
@@ -973,7 +973,7 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
     // that we have the set of all ancestors we can detect this
     // pathological case by making sure ws.m_conflicts and ws.m_ancestors don't
     // intersect.
-    if (const auto err_string{EntriesAndTxidsDisjoint(ws.m_ancestors, ws.m_conflicts, hash)}) {
+    if (const auto err_string{EntriesAndTxidsDisjoint(ws.m_ancestors, ws.m_conflicts, ws.m_hash)}) {
         // We classify this as a consensus error because a transaction depending on something it
         // conflicts with would be inconsistent.
         return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-spends-conflicting-tx", *err_string);

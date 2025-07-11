@@ -875,7 +875,7 @@ struct PSBTOutput
                             throw std::ios_base::failure("Output Taproot tree has a leaf with an invalid leaf version");
                         }
                         m_tap_tree.emplace_back(depth, leaf_ver, script);
-                        builder.Add((int)depth, script, (int)leaf_ver, /*track=*/true);
+                        builder.Add((int)depth, CScript(script.begin(), script.end()), (int)leaf_ver, /*track=*/true);
                     }
                     if (!builder.IsComplete()) {
                         throw std::ios_base::failure("Output Taproot tree is malformed");

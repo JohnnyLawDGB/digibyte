@@ -679,20 +679,6 @@ FastRandomContext& FastRandomContext::operator=(FastRandomContext&& from) noexce
     return *this;
 }
 
-FastRandomContext& FastRandomContext::operator=(FastRandomContext&& from) noexcept
-{
-    requires_seed = from.requires_seed;
-    rng = from.rng;
-    std::copy(std::begin(from.bytebuf), std::end(from.bytebuf), std::begin(bytebuf));
-    bytebuf_size = from.bytebuf_size;
-    bitbuf = from.bitbuf;
-    bitbuf_size = from.bitbuf_size;
-    from.requires_seed = true;
-    from.bytebuf_size = 0;
-    from.bitbuf_size = 0;
-    return *this;
-}
-
 void RandomInit()
 {
     // Invoke RNG code to trigger initialization (if not already performed)

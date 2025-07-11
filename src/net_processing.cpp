@@ -2392,7 +2392,7 @@ void PeerManagerImpl::ProcessGetData(CNode& pfrom, Peer& peer, const std::atomic
         if (inv.IsDandelionMsg()) {
             int nSendFlags = (inv.type == MSG_DANDELION_TX ? SERIALIZE_TRANSACTION_NO_WITNESS : 0);
             // Possibly find the tx in the stempool
-            auto txinfo = m_stempool.info(inv.hash);
+            auto txinfo = m_stempool.info(ToGenTxid(inv));
 
             // Before deciding to send the transaction, check the embargo:
             if (m_connman.isTxDandelionEmbargoed(inv.hash)) {
@@ -3016,88 +3016,6 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, Peer& peer,
     return;
 }
 
-bool PeerManagerImpl::ProcessOrphanTx(Peer& peer)
-{
-    AssertLockHeld(g_msgproc_mutex);
-    LOCK(cs_main);
-
-    CTransactionRef porphanTx = nullptr;
-
-    while (CTransactionRef porphanTx = m_orphanage.GetTxToReconsider(peer.m_id)) {
-        const MempoolAcceptResult result = m_chainman.ProcessTransaction(porphanTx);
-        const TxValidationState& state = result.m_state;
-        const uint256& orphanHash = porphanTx->GetHash();
-        const uint256& orphan_wtxid = porphanTx->GetWitnessHash();
-
-        if (result.m_result_type == MempoolAcceptResult::ResultType::VALID) {
-            LogPrint(BCLog::TXPACKAGES, "   accepted orphan tx %s (wtxid=%s)\n", orphanHash.ToString(), orphan_wtxid.ToString());
-            LogPrint(BCLog::MEMPOOL, "AcceptToMemoryPool: peer=%d: accepted %s (wtxid=%s) (poolsz %u txn, %u kB)\n",
-                peer.m_id,
-                orphanHash.ToString(),
-                orphan_wtxid.ToString(),
-                m_mempool.size(), m_mempool.DynamicMemoryUsage() / 1000);
-            RelayTransaction(orphanHash, porphanTx->GetWitnessHash());
-            m_orphanage.AddChildrenToWorkSet(*porphanTx);
-            m_orphanage.EraseTx(orphanHash);
-            for (const CTransactionRef& removedTx : result.m_replaced_transactions.value()) {
-                AddToCompactExtraTransactions(removedTx);
-            }
-            return true;
-        } else if (state.GetResult() != TxValidationResult::TX_MISSING_INPUTS) {
-            if (state.IsInvalid()) {
-                LogPrint(BCLog::TXPACKAGES, "   invalid orphan tx %s (wtxid=%s) from peer=%d. %s\n",
-                    orphanHash.ToString(),
-                    orphan_wtxid.ToString(),
-                    peer.m_id,
-                    state.ToString());
-                LogPrint(BCLog::MEMPOOLREJ, "%s (wtxid=%s) from peer=%d was not accepted: %s\n",
-                    orphanHash.ToString(),
-                    orphan_wtxid.ToString(),
-                    peer.m_id,
-                    state.ToString());
-                // Maybe punish peer that gave us an invalid orphan tx
-                MaybePunishNodeForTx(peer.m_id, state);
-            }
-            // Has inputs but not accepted to mempool
-            // Probably non-standard or insufficient fee
-            LogPrint(BCLog::TXPACKAGES, "   removed orphan tx %s (wtxid=%s)\n", orphanHash.ToString(), orphan_wtxid.ToString());
-            if (state.GetResult() != TxValidationResult::TX_WITNESS_STRIPPED) {
-                // We can add the wtxid of this transaction to our reject filter.
-                // Do not add txids of witness transactions or witness-stripped
-                // transactions to the filter, as they can have been malleated;
-                // adding such txids to the reject filter would potentially
-                // interfere with relay of valid transactions from peers that
-                // do not support wtxid-based relay. See
-                // https://github.com/digibyte/digibyte/issues/8279 for details.
-                // We can remove this restriction (and always add wtxids to
-                // the filter even for witness stripped transactions) once
-                // wtxid-based relay is broadly deployed.
-                // See also comments in https://github.com/digibyte/digibyte/pull/18044#discussion_r443419034
-                // for concerns around weakening security of unupgraded nodes
-                // if we start doing this too early.
-                m_recent_rejects.insert(porphanTx->GetWitnessHash());
-                // If the transaction failed for TX_INPUTS_NOT_STANDARD,
-                // then we know that the witness was irrelevant to the policy
-                // failure, since this check depends only on the txid
-                // (the scriptPubKey being spent is covered by the txid).
-                // Add the txid to the reject filter to prevent repeated
-                // processing of this transaction in the event that child
-                // transactions are later received (resulting in
-                // parent-fetching by txid via the orphan-handling logic).
-                if (state.GetResult() == TxValidationResult::TX_INPUTS_NOT_STANDARD && porphanTx->GetWitnessHash() != porphanTx->GetHash()) {
-                    // We only add the txid if it differs from the wtxid, to
-                    // avoid wasting entries in the rolling bloom filter.
-                    m_recent_rejects.insert(porphanTx->GetHash());
-                }
-            }
-            m_orphanage.EraseTx(orphanHash);
-            return true;
-        }
-    }
-
-    return false;
-}
-
 bool PeerManagerImpl::PrepareBlockFilterRequest(CNode& node, Peer& peer,
                                                 BlockFilterType filter_type, uint32_t start_height,
                                                 const uint256& stop_hash, uint32_t max_height_diff,
@@ -3148,7 +3066,7 @@ bool PeerManagerImpl::PrepareBlockFilterRequest(CNode& node, Peer& peer,
         return false;
     }
 
-    return;
+    return true;
 }
 
 bool PeerManagerImpl::ProcessOrphanTx(Peer& peer)
@@ -3177,6 +3095,7 @@ bool PeerManagerImpl::ProcessOrphanTx(Peer& peer)
             for (const CTransactionRef& removedTx : result.m_replaced_transactions.value()) {
                 AddToCompactExtraTransactions(removedTx);
             }
+            return true;
         } else if (state.GetResult() != TxValidationResult::TX_MISSING_INPUTS) {
             if (state.IsInvalid()) {
                 LogPrint(BCLog::TXPACKAGES, "   invalid orphan tx %s (wtxid=%s) from peer=%d. %s\n",

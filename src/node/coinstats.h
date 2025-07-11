@@ -6,7 +6,7 @@
 #ifndef DIGIBYTE_NODE_COINSTATS_H
 #define DIGIBYTE_NODE_COINSTATS_H
 
-#include <amount.h>
+#include <consensus/amount.h>
 #include <chain.h>
 #include <coins.h>
 #include <streams.h>

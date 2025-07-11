@@ -26,7 +26,8 @@
     "cinttypes": "cpp",
     "typeindex": "cpp",
     "ios": "cpp",
-    "map": "cpp"
+    "map": "cpp",
+    "vector": "cpp"
   },
   "cmake.ignoreCMakeListsMissing": true
 }

@@ -451,7 +451,7 @@ private:
     void FindFilesToPrune(std::set<int>& setFilesToPrune, uint64_t nPruneAfterHeight, int chain_tip_height, int prune_height, bool is_ibd);
 
 public:
-    BlockMap m_block_index GUARDED_BY(cs_main);
+    node::BlockMap m_block_index GUARDED_BY(cs_main);
 
     /** In order to efficiently track invalidity of headers, we keep the set of
       * blocks which we tried to connect and found to be invalid here (ie which
@@ -958,7 +958,7 @@ private:
     [[nodiscard]] bool PopulateAndValidateSnapshot(
         CChainState& snapshot_chainstate,
         CAutoFile& coins_file,
-        const SnapshotMetadata& metadata);
+        const node::SnapshotMetadata& metadata);
 
 public:
     std::thread m_load_block;
@@ -1004,7 +1004,7 @@ public:
     //! - Move the new chainstate to `m_snapshot_chainstate` and make it our
     //!   ChainstateActive().
     [[nodiscard]] bool ActivateSnapshot(
-        CAutoFile& coins_file, const SnapshotMetadata& metadata, bool in_memory);
+        CAutoFile& coins_file, const node::SnapshotMetadata& metadata, bool in_memory);
 
     //! The most-work chain.
     CChainState& ActiveChainstate() const;
@@ -1012,7 +1012,7 @@ public:
     int ActiveHeight() const { return ActiveChain().Height(); }
     CBlockIndex* ActiveTip() const { return ActiveChain().Tip(); }
 
-    BlockMap& BlockIndex() EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
+    node::BlockMap& BlockIndex() EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
     {
         return m_blockman.m_block_index;
     }
@@ -1086,11 +1086,7 @@ public:
     //! ResizeCoinsCaches() as needed.
     void MaybeRebalanceCaches() EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 
-    ~ChainstateManager() {
-        LOCK(::cs_main);
-        UnloadBlockIndex(/* mempool */ nullptr, *this);
-        Reset();
-    }
+    ~ChainstateManager();
 };
 
 /** Global variable that points to the active block tree (protected by cs_main) */

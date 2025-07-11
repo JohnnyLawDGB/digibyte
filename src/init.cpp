@@ -14,6 +14,7 @@
 #include <kernel/mempool_persist.h>
 #include <kernel/validation_cache_sizes.h>
 
+#include <addrdb.h>
 #include <addrman.h>
 #include <banman.h>
 #include <blockfilter.h>
@@ -342,7 +343,7 @@ void Shutdown(NodeContext& node)
                 chainstate->ResetCoinsViews();
             }
         }
-        pblocktree.reset();
+        // pblocktree removed in v26.2 - now managed by BlockManager
     }
     for (const auto& client : node.chain_clients) {
         client->stop();
@@ -875,8 +876,6 @@ bool AppInitBasicSetup(const ArgsManager& args, std::atomic<int>& exit_status)
     if (!args.GetBoolArg("-sysperms", false)) {
         umask(077);
     }
-
-#ifndef WIN32
     // Clean shutdown on SIGTERM
     registerSignalHandler(SIGTERM, HandleSIGTERM);
     registerSignalHandler(SIGINT, HandleSIGTERM);
@@ -1064,13 +1063,13 @@ bool AppInitParameterInteraction(const ArgsManager& args)
     if (nPruneArg == 1) {  // manual pruning: -prune=1
         LogPrintf("Block pruning enabled.  Use RPC call pruneblockchain(height) to manually prune block and undo files.\n");
         nPruneTarget = std::numeric_limits<uint64_t>::max();
-        fPruneMode = true;
+        // fPruneMode is set via BlockManager options in v26.2
     } else if (nPruneTarget) {
         if (nPruneTarget < MIN_DISK_SPACE_FOR_BLOCK_FILES) {
             return InitError(strprintf(_("Prune configured below the minimum of %d MiB.  Please use a higher number."), MIN_DISK_SPACE_FOR_BLOCK_FILES / 1024 / 1024));
         }
         LogPrintf("Prune configured to target %u MiB on disk for block and undo files.\n", nPruneTarget / 1024 / 1024);
-        fPruneMode = true;
+        // fPruneMode is set via BlockManager options in v26.2
     }
 
     nConnectTimeout = args.GetIntArg("-timeout", DEFAULT_CONNECT_TIMEOUT);
@@ -1123,8 +1122,9 @@ bool AppInitParameterInteraction(const ArgsManager& args)
         if (!chainman_result) {
             return InitError(util::ErrorString(chainman_result));
         }
-        BlockManager::Options blockman_opts_dummy{
+        node::BlockManager::Options blockman_opts_dummy{
             .chainparams = chainman_opts_dummy.chainparams,
+            .prune_target = nPruneTarget,
             .blocks_dir = args.GetBlocksDirPath(),
             .notifications = chainman_opts_dummy.notifications,
         };
@@ -1371,11 +1371,20 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
     // Initialize mempool
     assert(!node.mempool);
     int check_ratio = std::min<int>(std::max<int>(args.GetIntArg("-checkmempool", chainparams.DefaultConsistencyChecks() ? 1 : 0), 0), 1000000);
-    node.mempool = std::make_unique<CTxMemPool>(node.fee_estimator.get(), check_ratio);
+    
+    CTxMemPool::Options mempool_opts{
+        .estimator = node.fee_estimator.get(),
+        .check_ratio = check_ratio,
+    };
+    node.mempool = std::make_unique<CTxMemPool>(mempool_opts);
 
     // Initialize DigiByte stempool for Dandelion++ privacy protocol
     assert(!node.stempool);
-    node.stempool = std::make_unique<CTxMemPool>(nullptr, 0, true);
+    CTxMemPool::Options stempool_opts{
+        .estimator = nullptr,
+        .check_ratio = 0,
+    };
+    node.stempool = std::make_unique<CTxMemPool>(stempool_opts);
 
     // Check port numbers
     for (const std::string port_option : {
@@ -1539,7 +1548,7 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
 
     // Read asmap file if configured
     if (args.IsArgSet("-asmap")) {
-        fs::path asmap_path = fs::path(args.GetArg("-asmap", ""));
+        fs::path asmap_path = fs::PathFromString(args.GetArg("-asmap", ""));
         if (asmap_path.empty()) {
             asmap_path = DEFAULT_ASMAP_FILENAME;
         }
@@ -1550,13 +1559,13 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
             InitError(strprintf(_("Could not find asmap file %s"), asmap_path));
             return false;
         }
-        std::vector<bool> asmap = CAddrMan::DecodeAsmap(asmap_path);
+        std::vector<bool> asmap = DecodeAsmap(asmap_path);
         if (asmap.size() == 0) {
             InitError(strprintf(_("Could not parse asmap file %s"), asmap_path));
             return false;
         }
-        const uint256 asmap_version = SerializeHash(asmap);
-        node.connman->SetAsmap(std::move(asmap));
+        const uint256 asmap_version = (HashWriter{} << asmap).GetHash();
+        // asmap is now passed via netgroupman in v26.2
         LogPrintf("Using asmap version %s for IP bucketing\n", asmap_version.ToString());
     } else {
         LogPrintf("Using /16 prefix for IP bucketing\n");
@@ -1588,8 +1597,9 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
     };
     Assert(ApplyArgsManOptions(args, chainman_opts)); // no error can happen, already checked in AppInitParameterInteraction
 
-    BlockManager::Options blockman_opts{
+    node::BlockManager::Options blockman_opts{
         .chainparams = chainman_opts.chainparams,
+        .prune_target = nPruneTarget,
         .blocks_dir = args.GetBlocksDirPath(),
         .notifications = chainman_opts.notifications,
     };
@@ -1729,7 +1739,7 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
     assert(!node.peerman);
     node.peerman = PeerManager::make(*node.connman, *node.addrman,
                                      node.banman.get(), chainman,
-                                     *node.mempool, peerman_opts);
+                                     *node.mempool, *node.stempool, peerman_opts);
     RegisterValidationInterface(node.peerman.get());
 
     // ********************************************************* Step 8: start indexers

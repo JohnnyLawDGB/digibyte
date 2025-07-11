@@ -1271,6 +1271,9 @@ public:
     /** Get a unique deterministic randomizer. */
     CSipHasher GetDeterministicRandomizer(uint64_t id) const;
 
+    /** Return a timestamp in the future (in microseconds) for exponentially distributed events. */
+    std::chrono::microseconds PoissonNextSendInbound(std::chrono::microseconds now, std::chrono::seconds average_interval);
+
     void WakeMessageHandler() EXCLUSIVE_LOCKS_REQUIRED(!mutexMsgProc);
 
     /** Return true if we should disconnect the peer for failing an inactivity check. */
@@ -1563,6 +1566,8 @@ private:
      */
     std::atomic_bool m_start_extra_block_relay_peers{false};
 
+    std::atomic<std::chrono::microseconds> m_next_send_inv_to_incoming{0us};
+
     /**
      * A vector of -bind=<address>:<port>=onion arguments each of which is
      * an address and port that are designated for incoming Tor connections.
@@ -1683,6 +1688,9 @@ private:
 
     friend struct ConnmanTestMsg;
 };
+
+/** Return a timestamp in the future (in microseconds) for exponentially distributed events. */
+std::chrono::microseconds PoissonNextSend(std::chrono::microseconds now, std::chrono::seconds average_interval);
 
 /** Defaults to `CaptureMessageToFile()`, but can be overridden by unit tests. */
 extern std::function<void(const CAddress& addr,

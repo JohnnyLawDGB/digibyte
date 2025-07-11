@@ -1,6 +1,6 @@
 
 // Copyright (c) 2021 The Bitcoin Core developers
-Copyright (c) 2021 The DigiByte Core developers
+// Copyright (c) 2021 The DigiByte Core developers
 
 // Copyright (c) 2021 The Bitcoin Core developers
 

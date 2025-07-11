@@ -240,6 +240,8 @@ public:
     static bool ValidDepths(const std::vector<int>& depths);
     /** Compute spending data (after Finalize()). */
     TaprootSpendData GetSpendData() const;
+    /** Get the control blocks and scripts as a tuple (depth, leaf_ver, script). */
+    std::vector<std::tuple<uint8_t, uint8_t, CScript>> GetTreeTuples() const;
 };
 
 /** Given a TaprootSpendData and the output key, reconstruct its script tree.

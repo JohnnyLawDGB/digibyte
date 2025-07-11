@@ -3,6 +3,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <script/keyorigin.h>
 #include <script/interpreter.h>
 #include <script/signingprovider.h>
 
@@ -360,7 +361,7 @@ void TaprootBuilder::Insert(TaprootBuilder::NodeInfo&& node, int depth)
     return branch.size() == 0 || (branch.size() == 1 && branch[0]);
 }
 
-TaprootBuilder& TaprootBuilder::Add(int depth, Span<const unsigned char> script, int leaf_version, bool track)
+TaprootBuilder& TaprootBuilder::Add(int depth, const CScript& script, int leaf_version, bool track)
 {
     assert((leaf_version & ~TAPROOT_LEAF_MASK) == 0);
     if (!IsValid()) return *this;
@@ -369,7 +370,7 @@ TaprootBuilder& TaprootBuilder::Add(int depth, Span<const unsigned char> script,
     node.hash = ComputeTapleafHash(leaf_version, script);
     // due to bug in clang-tidy-17:
     // NOLINTNEXTLINE(modernize-use-emplace)
-    if (track) node.leaves.emplace_back(LeafInfo{std::vector<unsigned char>(script.begin(), script.end()), leaf_version, {}});
+    if (track) node.leaves.emplace_back(LeafInfo{script, leaf_version, {}});
     /* Insert into the branch. */
     Insert(std::move(node), depth);
     return *this;
@@ -425,13 +426,13 @@ TaprootSpendData TaprootBuilder::GetSpendData() const
     return spd;
 }
 
-std::optional<std::vector<std::tuple<int, std::vector<unsigned char>, int>>> InferTaprootTree(const TaprootSpendData& spenddata, const XOnlyPubKey& output)
+std::optional<std::vector<std::tuple<int, CScript, int>>> InferTaprootTree(const TaprootSpendData& spenddata, const XOnlyPubKey& output)
 {
     // Verify that the output matches the assumed Merkle root and internal key.
     auto tweak = spenddata.internal_key.CreateTapTweak(spenddata.merkle_root.IsNull() ? nullptr : &spenddata.merkle_root);
     if (!tweak || tweak->first != output) return std::nullopt;
     // If the Merkle root is 0, the tree is empty, and we're done.
-    std::vector<std::tuple<int, std::vector<unsigned char>, int>> ret;
+    std::vector<std::tuple<int, CScript, int>> ret;
     if (spenddata.merkle_root.IsNull()) return ret;
 
     /** Data structure to represent the nodes of the tree we're going to build. */
@@ -442,7 +443,7 @@ std::optional<std::vector<std::tuple<int, std::vector<unsigned char>, int>>> Inf
         std::unique_ptr<TreeNode> sub[2];
         /** If this is known to be a leaf node, a pointer to the (script, leaf_ver) pair.
          *  nullptr otherwise. */
-        const std::pair<std::vector<unsigned char>, int>* leaf = nullptr;
+        const std::pair<CScript, int>* leaf = nullptr;
         /** Whether or not this node has been explored (is known to be a leaf, or known to have children). */
         bool explored = false;
         /** Whether or not this node is an inner node (unknown until explored = true). */
@@ -560,10 +561,10 @@ std::optional<std::vector<std::tuple<int, std::vector<unsigned char>, int>>> Inf
     return ret;
 }
 
-std::vector<std::tuple<uint8_t, uint8_t, std::vector<unsigned char>>> TaprootBuilder::GetTreeTuples() const
+std::vector<std::tuple<uint8_t, uint8_t, CScript>> TaprootBuilder::GetTreeTuples() const
 {
     assert(IsComplete());
-    std::vector<std::tuple<uint8_t, uint8_t, std::vector<unsigned char>>> tuples;
+    std::vector<std::tuple<uint8_t, uint8_t, CScript>> tuples;
     if (m_branch.size()) {
         const auto& leaves = m_branch[0]->leaves;
         for (const auto& leaf : leaves) {

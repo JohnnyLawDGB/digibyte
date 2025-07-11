@@ -67,21 +67,6 @@ bool ChronoSanityCheck()
     return true;
 }
 
-template <typename T>
-T GetTime()
-{
-    const std::chrono::seconds mocktime{nMockTime.load(std::memory_order_relaxed)};
-    const auto ret{
-        mocktime.count() ?
-            mocktime :
-            std::chrono::system_clock::now().time_since_epoch()};
-    assert(ret > T{0});
-    return std::chrono::duration_cast<T>(ret);
-}
-template std::chrono::seconds GetTime();
-template std::chrono::milliseconds GetTime();
-template std::chrono::microseconds GetTime();
-
 NodeClock::time_point NodeClock::now() noexcept
 {
     const std::chrono::seconds mocktime{nMockTime.load(std::memory_order_relaxed)};
@@ -110,12 +95,6 @@ std::chrono::seconds GetMockTime()
 }
 
 int64_t GetTime() { return GetTime<std::chrono::seconds>().count(); }
-
-int64_t GetTimeMillis() { return GetTime<std::chrono::milliseconds>().count(); }
-
-int64_t GetTimeMicros() { return GetTime<std::chrono::microseconds>().count(); }
-
-int64_t GetTimeSeconds() { return GetTime<std::chrono::seconds>().count(); }
 
 std::string FormatISO8601DateTime(int64_t nTime) {
     struct tm ts;

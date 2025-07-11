@@ -2221,6 +2221,11 @@ std::vector<WalletDestination> DescriptorScriptPubKeyMan::MarkUnusedAddresses(co
             WalletLogPrintf("%s: Topping up keypool failed (locked wallet)\n", __func__);
         }
     }
+    return result;
+}
+
+bool DescriptorScriptPubKeyMan::SetupDescriptorGeneration(const CExtKey& master_key, OutputType addr_type, bool internal)
+{
     LOCK(cs_desc_man);
     assert(m_storage.IsWalletFlagSet(WALLET_FLAG_DESCRIPTORS));
 
@@ -2238,11 +2243,6 @@ std::vector<WalletDestination> DescriptorScriptPubKeyMan::MarkUnusedAddresses(co
     std::string desc_suffix = "/*)";
     switch (addr_type) {
     case OutputType::LEGACY: {
-        desc_prefix = "pkh(" + xpub + "/44'";
-        break;
-    }
-    case OutputType::P2SH_SEGWIT: {
-        desc_prefix = "sh(wpkh(" + xpub + "/49'";
         desc_prefix = "pkh(" + xpub + "/44h";
         break;
     }

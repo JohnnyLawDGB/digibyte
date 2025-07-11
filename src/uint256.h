@@ -133,4 +133,20 @@ inline uint256 uint256S(const std::string& str)
     return rv;
 }
 
+/** 512-bit opaque blob.
+ * @note This type is a 512-bit extension following the same pattern as uint256.
+ */
+class uint512 : public base_blob<512> {
+public:
+    constexpr uint512() = default;
+    constexpr explicit uint512(uint8_t v) : base_blob<512>(v) {}
+    constexpr explicit uint512(Span<const unsigned char> vch) : base_blob<512>(vch) {}
+    
+    uint256 trim256() const {
+        uint256 result;
+        memcpy(result.data(), data(), 32);
+        return result;
+    }
+};
+
 #endif // DIGIBYTE_UINT256_H

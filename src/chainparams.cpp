@@ -142,10 +142,9 @@ void ReadRegTestArgs(const ArgsManager& args, CChainParams::RegTestOptions& opti
 class CMainParams : public CChainParams {
 public:
     CMainParams() {
-        strNetworkID = CBaseChainParams::MAIN;
+        m_chain_type = ChainType::MAIN;
         consensus.signet_blocks = false;
         consensus.signet_challenge.clear();
-        consensus.BIP16Exception = uint256S("0x0");
 
         // BIP34, BIP65 and BIP66, CSV and Segwit were activated simultaneously
         // DEPLOYMENT_NVERSIONBIPS, DEPLOYMENT_CSV, DEPLOYMENT_SEGWIT        
@@ -253,8 +252,6 @@ public:
         vFixedSeeds = std::vector<uint8_t>(std::begin(chainparams_seed_main), std::end(chainparams_seed_main));
 
         fDefaultConsistencyChecks = false;
-        fRequireStandard = true;
-        m_is_test_chain = false;
         m_is_mockable_chain = false;
 
         checkpointData = (CCheckpointData) {
@@ -357,14 +354,13 @@ public:
 class CTestNetParams : public CChainParams {
 public:
     CTestNetParams() {
-        strNetworkID = "test";
+        m_chain_type = ChainType::TESTNET;
         consensus.powLimit = ArithToUint256(~arith_uint256(0) >> 20);
         consensus.initialTarget[ALGO_ODO] = ArithToUint256(~arith_uint256(0) >> 36); // 16 difficulty
         consensus.nSubsidyHalvingInterval = 300;
         consensus.nPowTargetTimespan = 14 * 24 * 60 * 60; // two weeks
         consensus.nPowTargetSpacing = 60 / 4;
 
-        consensus.BIP16Exception = uint256();
         consensus.BIP34Height = 500; // BIP34 activated on regtest (Used in functional tests)
         consensus.BIP34Hash = uint256();
         consensus.BIP65Height = 1351; // BIP65 activated on regtest (Used in functional tests)
@@ -507,8 +503,6 @@ public:
         vFixedSeeds = std::vector<uint8_t>(std::begin(chainparams_seed_test), std::end(chainparams_seed_test));
 
         fDefaultConsistencyChecks = false;
-        fRequireStandard = false;
-        m_is_test_chain = true;
         m_is_mockable_chain = false;
 
         checkpointData = {
@@ -657,7 +651,6 @@ public:
         consensus.signet_blocks = false;
         consensus.signet_challenge.clear();
         consensus.nSubsidyHalvingInterval = 300;
-        consensus.BIP16Exception = uint256();
         consensus.BIP34Height = 500; // BIP34 activated on regtest (Used in functional tests)
         consensus.BIP34Hash = uint256();
         consensus.BIP65Height = 1351; // BIP65 activated on regtest (Used in functional tests)

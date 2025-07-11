@@ -70,7 +70,7 @@
 #include <rpc/util.h>
 #include <scheduler.h>
 #include <script/sigcache.h>
-#include <script/standard.h>
+#include <policy/policy.h>
 #include <shutdown.h>
 #include <sync.h>
 #include <timedata.h>

@@ -570,7 +570,6 @@ static bool rest_block_filter(const std::any& context, HTTPRequest* req, const s
         return RESTERR(req, HTTP_NOT_FOUND, "output format not found (available: " + AvailableDataFormatsString() + ")");
     }
     }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 // A bit of a hack - dependency on a function defined in rpc/blockchain.cpp

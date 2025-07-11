@@ -7,8 +7,12 @@
 #ifndef DIGIBYTE_SCRIPT_STANDARD_H
 #define DIGIBYTE_SCRIPT_STANDARD_H
 
+#include <addresstype.h>
+#include <policy/policy.h>
 #include <pubkey.h>
 #include <script/interpreter.h>
+#include <script/script.h>
+#include <script/solver.h>
 #include <uint256.h>
 #include <util/hash_type.h>
 
@@ -16,27 +20,19 @@
 #include <string>
 #include <variant>
 
-static const bool DEFAULT_ACCEPT_DATACARRIER = true;
+// DEFAULT_ACCEPT_DATACARRIER moved to policy/policy.h
 
 class CKeyID;
 class CScript;
 struct ScriptHash;
 
-/** A reference to a CScript: the Hash160 of its serialization (see script.h) */
-class CScriptID : public BaseHash<uint160>
-{
-public:
-    CScriptID() : BaseHash() {}
-    explicit CScriptID(const CScript& in);
-    explicit CScriptID(const uint160& in) : BaseHash(in) {}
-    explicit CScriptID(const ScriptHash& in);
-};
+// CScriptID moved to script/script.h
 
 /**
  * Default setting for nMaxDatacarrierBytes. 80 bytes of data, +1 for OP_RETURN,
  * +2 for the pushdata opcodes.
  */
-static const unsigned int MAX_OP_RETURN_RELAY = 83;
+// MAX_OP_RETURN_RELAY moved to policy/policy.h
 
 /**
  * A data carrying output is an unspendable output containing data. The script
@@ -55,27 +51,11 @@ extern unsigned nMaxDatacarrierBytes;
  * Failing one of these tests may trigger a DoS ban - see CheckInputScripts() for
  * details.
  */
-static const unsigned int MANDATORY_SCRIPT_VERIFY_FLAGS = SCRIPT_VERIFY_P2SH;
+// MANDATORY_SCRIPT_VERIFY_FLAGS moved to policy/policy.h
 
-enum class TxoutType {
-    NONSTANDARD,
-    // 'standard' transaction types:
-    PUBKEY,
-    PUBKEYHASH,
-    SCRIPTHASH,
-    MULTISIG,
-    NULL_DATA, //!< unspendable OP_RETURN script that carries data
-    WITNESS_V0_SCRIPTHASH,
-    WITNESS_V0_KEYHASH,
-    WITNESS_V1_TAPROOT,
-    WITNESS_UNKNOWN, //!< Only for Witness versions not already defined above
-};
+// TxoutType moved to script/solver.h
 
-class CNoDestination {
-public:
-    friend bool operator==(const CNoDestination &a, const CNoDestination &b) { return true; }
-    friend bool operator<(const CNoDestination &a, const CNoDestination &b) { return true; }
-};
+// CNoDestination moved to addresstype.h
 
 struct PKHash : public BaseHash<uint160>
 {

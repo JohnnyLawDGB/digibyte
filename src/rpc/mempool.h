@@ -12,6 +12,6 @@ class UniValue;
 UniValue MempoolInfoToJSON(const CTxMemPool& pool);
 
 /** Mempool to JSON */
-UniValue MempoolToJSON(const CTxMemPool& pool, bool verbose = false, bool include_mempool_sequence = false);
+UniValue MempoolToJSON(const CTxMemPool& pool, bool verbose, bool include_mempool_sequence);
 
 #endif // DIGIBYTE_RPC_MEMPOOL_H

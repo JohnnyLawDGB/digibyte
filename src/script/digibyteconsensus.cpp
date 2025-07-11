@@ -9,6 +9,7 @@
 #include <primitives/transaction.h>
 #include <pubkey.h>
 #include <script/interpreter.h>
+#include <span.h>
 #include <version.h>
 
 namespace {
@@ -23,22 +24,6 @@ public:
     m_remaining(txToLen)
     {}
 
-<<<<<<< HEAD
-    void read(char* pch, size_t nSize)
-    {
-        if (nSize > m_remaining)
-            throw std::ios_base::failure(std::string(__func__) + ": end of data");
-
-        if (pch == nullptr)
-            throw std::ios_base::failure(std::string(__func__) + ": bad destination buffer");
-
-        if (m_data == nullptr)
-            throw std::ios_base::failure(std::string(__func__) + ": bad source buffer");
-
-        memcpy(pch, m_data, nSize);
-        m_remaining -= nSize;
-        m_data += nSize;
-=======
     void read(Span<std::byte> dst)
     {
         if (dst.size() > m_remaining) {
@@ -56,7 +41,6 @@ public:
         memcpy(dst.data(), m_data, dst.size());
         m_remaining -= dst.size();
         m_data += dst.size();
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     template<typename T>
@@ -80,15 +64,6 @@ inline int set_error(digibyteconsensus_error* ret, digibyteconsensus_error serro
     return 0;
 }
 
-<<<<<<< HEAD
-struct ECCryptoClosure
-{
-    ECCVerifyHandle handle;
-};
-
-ECCryptoClosure instance_of_eccryptoclosure;
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 } // namespace
 
 /** Check that all specified flags are part of the libconsensus interface. */
@@ -99,20 +74,12 @@ static bool verify_flags(unsigned int flags)
 
 static int verify_script(const unsigned char *scriptPubKey, unsigned int scriptPubKeyLen, CAmount amount,
                                     const unsigned char *txTo        , unsigned int txToLen,
-<<<<<<< HEAD
-=======
                                     const UTXO *spentOutputs, unsigned int spentOutputsLen,
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                                     unsigned int nIn, unsigned int flags, digibyteconsensus_error* err)
 {
     if (!verify_flags(flags)) {
         return set_error(err, digibyteconsensus_ERR_INVALID_FLAGS);
     }
-<<<<<<< HEAD
-    try {
-        TxInputStream stream(PROTOCOL_VERSION, txTo, txToLen);
-        CTransaction tx(deserialize, stream);
-=======
 
     if (flags & digibyteconsensus_SCRIPT_FLAGS_VERIFY_TAPROOT && spentOutputs == nullptr) {
         return set_error(err, digibyteconsensus_ERR_SPENT_OUTPUTS_REQUIRED);
@@ -135,7 +102,6 @@ static int verify_script(const unsigned char *scriptPubKey, unsigned int scriptP
             }
         }
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         if (nIn >= tx.vin.size())
             return set_error(err, digibyteconsensus_ERR_TX_INDEX);
         if (GetSerializeSize(tx, PROTOCOL_VERSION) != txToLen)
@@ -145,22 +111,17 @@ static int verify_script(const unsigned char *scriptPubKey, unsigned int scriptP
         set_error(err, digibyteconsensus_ERR_OK);
 
         PrecomputedTransactionData txdata(tx);
-<<<<<<< HEAD
-=======
 
         if (spentOutputs != nullptr && flags & digibyteconsensus_SCRIPT_FLAGS_VERIFY_TAPROOT) {
             txdata.Init(tx, std::move(spent_outputs));
         }
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         return VerifyScript(tx.vin[nIn].scriptSig, CScript(scriptPubKey, scriptPubKey + scriptPubKeyLen), &tx.vin[nIn].scriptWitness, flags, TransactionSignatureChecker(&tx, nIn, amount, txdata, MissingDataBehavior::FAIL), nullptr);
     } catch (const std::exception&) {
         return set_error(err, digibyteconsensus_ERR_TX_DESERIALIZE); // Error deserializing
     }
 }
 
-<<<<<<< HEAD
-=======
 int digibyteconsensus_verify_script_with_spent_outputs(const unsigned char *scriptPubKey, unsigned int scriptPubKeyLen, int64_t amount,
                                     const unsigned char *txTo        , unsigned int txToLen,
                                     const UTXO *spentOutputs, unsigned int spentOutputsLen,
@@ -170,19 +131,14 @@ int digibyteconsensus_verify_script_with_spent_outputs(const unsigned char *scri
     return ::verify_script(scriptPubKey, scriptPubKeyLen, am, txTo, txToLen, spentOutputs, spentOutputsLen, nIn, flags, err);
 }
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 int digibyteconsensus_verify_script_with_amount(const unsigned char *scriptPubKey, unsigned int scriptPubKeyLen, int64_t amount,
                                     const unsigned char *txTo        , unsigned int txToLen,
                                     unsigned int nIn, unsigned int flags, digibyteconsensus_error* err)
 {
     CAmount am(amount);
-<<<<<<< HEAD
-    return ::verify_script(scriptPubKey, scriptPubKeyLen, am, txTo, txToLen, nIn, flags, err);
-=======
     UTXO *spentOutputs = nullptr;
     unsigned int spentOutputsLen = 0;
     return ::verify_script(scriptPubKey, scriptPubKeyLen, am, txTo, txToLen, spentOutputs, spentOutputsLen, nIn, flags, err);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 
@@ -195,13 +151,9 @@ int digibyteconsensus_verify_script(const unsigned char *scriptPubKey, unsigned 
     }
 
     CAmount am(0);
-<<<<<<< HEAD
-    return ::verify_script(scriptPubKey, scriptPubKeyLen, am, txTo, txToLen, nIn, flags, err);
-=======
     UTXO *spentOutputs = nullptr;
     unsigned int spentOutputsLen = 0;
     return ::verify_script(scriptPubKey, scriptPubKeyLen, am, txTo, txToLen, spentOutputs, spentOutputsLen, nIn, flags, err);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 }
 
 unsigned int digibyteconsensus_version()

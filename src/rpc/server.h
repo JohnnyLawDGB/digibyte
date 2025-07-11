@@ -1,20 +1,13 @@
 // Copyright (c) 2010 Satoshi Nakamoto
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
-// Copyright (c) 2009-2021 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// Copyright (c) 2009-2021 The Bitcoin Core developers
+// Copyright (c) 2014-2025 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #ifndef DIGIBYTE_RPC_SERVER_H
 #define DIGIBYTE_RPC_SERVER_H
 
-<<<<<<< HEAD
 #include <amount.h>
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <rpc/request.h>
 #include <rpc/util.h>
 
@@ -104,11 +97,7 @@ public:
     using Actor = std::function<bool(const JSONRPCRequest& request, UniValue& result, bool last_handler)>;
 
     //! Constructor taking Actor callback supporting multiple handlers.
-<<<<<<< HEAD
-    CRPCCommand(std::string category, std::string name, Actor actor, std::vector<std::string> args, intptr_t unique_id)
-=======
     CRPCCommand(std::string category, std::string name, Actor actor, std::vector<std::pair<std::string, bool>> args, intptr_t unique_id)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         : category(std::move(category)), name(std::move(name)), actor(std::move(actor)), argNames(std::move(args)),
           unique_id(unique_id)
     {
@@ -128,9 +117,6 @@ public:
     std::string category;
     std::string name;
     Actor actor;
-<<<<<<< HEAD
-    std::vector<std::string> argNames;
-=======
     //! List of method arguments and whether they are named-only. Incoming RPC
     //! requests contain a "params" field that can either be an array containing
     //! unnamed arguments or an object containing named arguments. The
@@ -141,7 +127,6 @@ public:
     //! true. Named-only arguments are combined into a JSON object that is
     //! appended after other arguments, see transformNamedArguments for details.
     std::vector<std::pair<std::string, bool>> argNames;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     intptr_t unique_id;
 };
 

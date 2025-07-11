@@ -1,20 +1,12 @@
 // Copyright (c) 2010 Satoshi Nakamoto
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
-// Copyright (c) 2009-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// Copyright (c) 2009-2022 The Bitcoin Core developers
+// Copyright (c) 2014-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <common/args.h>
 #include <rpc/client.h>
-<<<<<<< HEAD
-#include <util/system.h>
-=======
 #include <tinyformat.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 #include <set>
 #include <stdint.h>
@@ -46,10 +38,7 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "generatetodescriptor", 0, "num_blocks" },
     { "generatetodescriptor", 2, "maxtries" },
     { "generateblock", 1, "transactions" },
-<<<<<<< HEAD
-=======
     { "generateblock", 2, "submit" },
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     { "getnetworkhashps", 0, "nblocks" },
     { "getnetworkhashps", 1, "height" },
     { "sendtoaddress", 1, "amount" },
@@ -62,19 +51,13 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "settxfee", 0, "amount" },
     { "sethdseed", 0, "newkeypool" },
     { "getreceivedbyaddress", 1, "minconf" },
-<<<<<<< HEAD
-=======
     { "getreceivedbyaddress", 2, "include_immature_coinbase" },
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     { "getreceivedbylabel", 1, "minconf" },
     { "getreceivedbylabel", 2, "include_immature_coinbase" },
     { "listreceivedbyaddress", 0, "minconf" },
     { "listreceivedbyaddress", 1, "include_empty" },
     { "listreceivedbyaddress", 2, "include_watchonly" },
-<<<<<<< HEAD
-=======
     { "listreceivedbyaddress", 4, "include_immature_coinbase" },
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     { "listreceivedbylabel", 0, "minconf" },
     { "listreceivedbylabel", 1, "include_empty" },
     { "listreceivedbylabel", 2, "include_watchonly" },
@@ -82,10 +65,7 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "getbalance", 1, "minconf" },
     { "getbalance", 2, "include_watchonly" },
     { "getbalance", 3, "avoid_reuse" },
-<<<<<<< HEAD
-=======
     { "getblockfrompeer", 1, "peer_id" },
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     { "getblockhash", 0, "height" },
     { "waitforblockheight", 0, "height" },
     { "waitforblockheight", 1, "timeout" },
@@ -108,13 +88,10 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "sendmany", 8, "fee_rate"},
     { "sendmany", 9, "verbose" },
     { "deriveaddresses", 1, "range" },
-<<<<<<< HEAD
-=======
     { "scanblocks", 1, "scanobjects" },
     { "scanblocks", 2, "start_height" },
     { "scanblocks", 3, "stop_height" },
     { "scanblocks", 5, "options" },
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     { "scantxoutset", 1, "scanobjects" },
     { "addmultisigaddress", 0, "nrequired" },
     { "addmultisigaddress", 1, "keys" },
@@ -136,10 +113,7 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "getchaintxstats", 0, "nblocks" },
     { "gettransaction", 1, "include_watchonly" },
     { "gettransaction", 2, "verbose" },
-<<<<<<< HEAD
-=======
     { "getrawtransaction", 1, "verbosity" },
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     { "getrawtransaction", 1, "verbose" },
     { "createrawtransaction", 0, "inputs" },
     { "createrawtransaction", 1, "outputs" },
@@ -150,15 +124,10 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "signrawtransactionwithkey", 2, "prevtxs" },
     { "signrawtransactionwithwallet", 1, "prevtxs" },
     { "sendrawtransaction", 1, "maxfeerate" },
-<<<<<<< HEAD
-    { "testmempoolaccept", 0, "rawtxs" },
-    { "testmempoolaccept", 1, "maxfeerate" },
-=======
     { "sendrawtransaction", 2, "maxburnamount" },
     { "testmempoolaccept", 0, "rawtxs" },
     { "testmempoolaccept", 1, "maxfeerate" },
     { "submitpackage", 0, "package" },
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     { "combinerawtransaction", 0, "txs" },
     { "fundrawtransaction", 1, "options" },
     { "fundrawtransaction", 1, "add_inputs"},
@@ -180,8 +149,6 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "walletcreatefundedpsbt", 1, "outputs" },
     { "walletcreatefundedpsbt", 2, "locktime" },
     { "walletcreatefundedpsbt", 3, "options" },
-<<<<<<< HEAD
-=======
     { "walletcreatefundedpsbt", 3, "add_inputs"},
     { "walletcreatefundedpsbt", 3, "include_unsafe"},
     { "walletcreatefundedpsbt", 3, "minconf"},
@@ -195,7 +162,6 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "walletcreatefundedpsbt", 3, "conf_target"},
     { "walletcreatefundedpsbt", 3, "replaceable"},
     { "walletcreatefundedpsbt", 3, "solving_data"},
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     { "walletcreatefundedpsbt", 4, "bip32derivs" },
     { "walletprocesspsbt", 1, "sign" },
     { "walletprocesspsbt", 3, "bip32derivs" },
@@ -219,16 +185,11 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "gettxoutsetinfo", 2, "use_index"},
     { "lockunspent", 0, "unlock" },
     { "lockunspent", 1, "transactions" },
-<<<<<<< HEAD
-=======
     { "lockunspent", 2, "persistent" },
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     { "send", 0, "outputs" },
     { "send", 1, "conf_target" },
     { "send", 3, "fee_rate"},
     { "send", 4, "options" },
-<<<<<<< HEAD
-=======
     { "send", 4, "add_inputs"},
     { "send", 4, "include_unsafe"},
     { "send", 4, "minconf"},
@@ -265,7 +226,6 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "simulaterawtransaction", 0, "rawtxs" },
     { "simulaterawtransaction", 1, "options" },
     { "simulaterawtransaction", 1, "include_watchonly"},
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     { "importprivkey", 2, "rescan" },
     { "importaddress", 2, "rescan" },
     { "importaddress", 3, "p2sh" },
@@ -276,13 +236,9 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "importmempool", 1, "apply_unbroadcast_set" },
     { "importmulti", 0, "requests" },
     { "importmulti", 1, "options" },
-<<<<<<< HEAD
-    { "importdescriptors", 0, "requests" },
-=======
     { "importmulti", 1, "rescan" },
     { "importdescriptors", 0, "requests" },
     { "listdescriptors", 0, "private" },
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     { "verifychain", 0, "checklevel" },
     { "verifychain", 1, "nblocks" },
     { "getblockstats", 0, "hash_or_height" },
@@ -304,9 +260,6 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "getmempooldescendants", 1, "verbose" },
     { "gettxspendingprevout", 0, "outputs" },
     { "bumpfee", 1, "options" },
-<<<<<<< HEAD
-    { "psbtbumpfee", 1, "options" },
-=======
     { "bumpfee", 1, "conf_target"},
     { "bumpfee", 1, "fee_rate"},
     { "bumpfee", 1, "replaceable"},
@@ -318,7 +271,6 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "psbtbumpfee", 1, "replaceable"},
     { "psbtbumpfee", 1, "outputs"},
     { "psbtbumpfee", 1, "original_change_index"},
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     { "logging", 0, "include" },
     { "logging", 1, "exclude" },
     { "disconnectnode", 1, "nodeid" },
@@ -342,19 +294,11 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "createwallet", 5, "descriptors"},
     { "createwallet", 6, "load_on_startup"},
     { "createwallet", 7, "external_signer"},
-<<<<<<< HEAD
-=======
     { "restorewallet", 2, "load_on_startup"},
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     { "loadwallet", 1, "load_on_startup"},
     { "unloadwallet", 1, "load_on_startup"},
     { "getnodeaddresses", 0, "count"},
     { "addpeeraddress", 1, "port"},
-<<<<<<< HEAD
-    { "stop", 0, "wait" },
-};
-// clang-format on
-=======
     { "addpeeraddress", 2, "tried"},
     { "sendmsgtopeer", 0, "peer_id" },
     { "stop", 0, "wait" },
@@ -369,7 +313,6 @@ static UniValue Parse(std::string_view raw)
     if (!parsed.read(raw)) throw std::runtime_error(tfm::format("Error parsing JSON: %s", raw));
     return parsed;
 }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 class CRPCConvertTable
 {
@@ -403,21 +346,6 @@ CRPCConvertTable::CRPCConvertTable()
 
 static CRPCConvertTable rpcCvtTable;
 
-<<<<<<< HEAD
-/** Non-RFC4627 JSON parser, accepts internal values (such as numbers, true, false, null)
- * as well as objects and arrays.
- */
-UniValue ParseNonRFCJSONValue(const std::string& strVal)
-{
-    UniValue jVal;
-    if (!jVal.read(std::string("[")+strVal+std::string("]")) ||
-        !jVal.isArray() || jVal.size()!=1)
-        throw std::runtime_error(std::string("Error parsing JSON: ") + strVal);
-    return jVal[0];
-}
-
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 UniValue RPCConvertValues(const std::string &strMethod, const std::vector<std::string> &strParams)
 {
     UniValue params(UniValue::VARR);

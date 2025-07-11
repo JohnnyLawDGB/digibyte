@@ -203,34 +203,12 @@ UniValue blockToJSON(BlockManager& blockman, const CBlock& block, const CBlockIn
     result.pushKV("size", (int)::GetSerializeSize(block, PROTOCOL_VERSION));
     result.pushKV("weight", (int)::GetBlockWeight(block));
     UniValue txs(UniValue::VARR);
-<<<<<<< HEAD
-    result.pushKV("height", blockindex->nHeight);
-    result.pushKV("version", block.nVersion);
-    result.pushKV("versionHex", strprintf("%08x", block.nVersion));
+
+    // DigiByte: Add algorithm-specific information
     int algo = block.GetAlgo();
     result.pushKV("pow_algo_id", algo);
     result.pushKV("pow_algo", GetAlgoName(algo));
     result.pushKV("pow_hash", GetPoWAlgoHash(block).GetHex());
-    result.pushKV("merkleroot", block.hashMerkleRoot.GetHex());
-    if (txDetails) {
-        CBlockUndo blockUndo;
-        const bool have_undo = !IsBlockPruned(blockindex) && UndoReadFromDisk(blockUndo, blockindex);
-        for (size_t i = 0; i < block.vtx.size(); ++i) {
-            const CTransactionRef& tx = block.vtx.at(i);
-            // coinbase transaction (i == 0) doesn't have undo data
-            const CTxUndo* txundo = (have_undo && i) ? &blockUndo.vtxundo.at(i - 1) : nullptr;
-            UniValue objTx(UniValue::VOBJ);
-            TxToUniv(*tx, uint256(), objTx, true, RPCSerializationFlags(), txundo);
-            txs.push_back(objTx);
-        }
-    } else {
-        for (const CTransactionRef& tx : block.vtx) {
-            txs.push_back(tx->GetHash().GetHex());
-        }
-    }
-    result.pushKV("tx", txs);
-
-=======
 
     switch (verbosity) {
         case TxVerbosity::SHOW_TXID:
@@ -257,8 +235,6 @@ UniValue blockToJSON(BlockManager& blockman, const CBlock& block, const CBlockIn
     }
 
     result.pushKV("tx", std::move(txs));
-
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     return result;
 }
 
@@ -460,11 +436,7 @@ static RPCHelpMan syncwithvalidationinterfacequeue()
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
 {
     SyncWithValidationInterfaceQueue();
-<<<<<<< HEAD
-    return NullUniValue;
-=======
     return UniValue::VNULL;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 },
     };
 }
@@ -472,20 +444,13 @@ static RPCHelpMan syncwithvalidationinterfacequeue()
 static RPCHelpMan getdifficulty()
 {
     return RPCHelpMan{"getdifficulty",
-<<<<<<< HEAD
                 "\nReturns the proof-of-work difficulty for all 5 DGB mining algos as a multiple of the minimum difficulty.\n",
                 {},
                 RPCResult{
                     RPCResult::Type::OBJ, "", "",
                     {
-                        {RPCResult::Type::NUM, "difficulties", "The current difficulty for all 5 DGB algos."},
+                        {RPCResult::Type::OBJ, "difficulties", "The current difficulty for all 5 DGB algos."},
                     }},
-=======
-                "\nReturns the proof-of-work difficulty as a multiple of the minimum difficulty.\n",
-                {},
-                RPCResult{
-                    RPCResult::Type::NUM, "", "the proof-of-work difficulty as a multiple of the minimum difficulty."},
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 RPCExamples{
                     HelpExampleCli("getdifficulty", "")
             + HelpExampleRpc("getdifficulty", "")
@@ -494,7 +459,6 @@ static RPCHelpMan getdifficulty()
 {
     ChainstateManager& chainman = EnsureAnyChainman(request.context);
     LOCK(cs_main);
-<<<<<<< HEAD
     CChainState& active_chainstate = chainman.ActiveChainstate();
 
     const CBlockIndex* tip = active_chainstate.m_chain.Tip();
@@ -512,14 +476,10 @@ static RPCHelpMan getdifficulty()
     }
     obj.pushKV("difficulties", difficulties);
     return obj;
-=======
-    return GetDifficulty(chainman.ActiveChain().Tip());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 },
     };
 }
 
-<<<<<<< HEAD
 static std::vector<RPCResult> MempoolEntryDescription() { return {
     RPCResult{RPCResult::Type::NUM, "vsize", "virtual transaction size as defined in BIP 141. This is different from actual serialized size for witness transactions as witness data is discounted."},
     RPCResult{RPCResult::Type::NUM, "weight", "transaction weight as defined in BIP 141."},
@@ -649,7 +609,9 @@ UniValue MempoolToJSON(const CTxMemPool& pool, bool verbose, bool include_mempoo
             o.pushKV("mempool_sequence", mempool_sequence);
             return o;
         }
-=======
+    }
+}
+
 static RPCHelpMan getblockfrompeer()
 {
     return RPCHelpMan{
@@ -683,7 +645,6 @@ static RPCHelpMan getblockfrompeer()
 
     if (!index) {
         throw JSONRPCError(RPC_MISC_ERROR, "Block header missing");
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     // Fetching blocks before the node has syncing past their height can prevent block files from
@@ -705,7 +666,6 @@ static RPCHelpMan getblockfrompeer()
     };
 }
 
-<<<<<<< HEAD
 static RPCHelpMan getrawmempool()
 {
     return RPCHelpMan{"getrawmempool",
@@ -920,10 +880,6 @@ static RPCHelpMan getmempoolentry()
 
 static RPCHelpMan getblockhash()
 {
-=======
-static RPCHelpMan getblockhash()
-{
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     return RPCHelpMan{"getblockhash",
                 "\nReturns hash of block in best-block-chain at height provided.\n",
                 {
@@ -941,19 +897,11 @@ static RPCHelpMan getblockhash()
     LOCK(cs_main);
     const CChain& active_chain = chainman.ActiveChain();
 
-<<<<<<< HEAD
-    int nHeight = request.params[0].get_int();
-    if (nHeight < 0 || nHeight > active_chain.Height())
-        throw JSONRPCError(RPC_INVALID_PARAMETER, "Block height out of range");
-
-    CBlockIndex* pblockindex = active_chain[nHeight];
-=======
     int nHeight = request.params[0].getInt<int>();
     if (nHeight < 0 || nHeight > active_chain.Height())
         throw JSONRPCError(RPC_INVALID_PARAMETER, "Block height out of range");
 
     const CBlockIndex* pblockindex = active_chain[nHeight];
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     return pblockindex->GetBlockHash().GetHex();
 },
     };
@@ -985,13 +933,8 @@ static RPCHelpMan getblockheader()
                             {RPCResult::Type::NUM, "difficulty", "The difficulty"},
                             {RPCResult::Type::STR_HEX, "chainwork", "Expected number of hashes required to produce the current chain"},
                             {RPCResult::Type::NUM, "nTx", "The number of transactions in the block"},
-<<<<<<< HEAD
-                            {RPCResult::Type::STR_HEX, "previousblockhash", /* optional */ true, "The hash of the previous block (if available)"},
-                            {RPCResult::Type::STR_HEX, "nextblockhash", /* optional */ true, "The hash of the next block (if available)"},
-=======
                             {RPCResult::Type::STR_HEX, "previousblockhash", /*optional=*/true, "The hash of the previous block (if available)"},
                             {RPCResult::Type::STR_HEX, "nextblockhash", /*optional=*/true, "The hash of the next block (if available)"},
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                         }},
                     RPCResult{"for verbose=false",
                         RPCResult::Type::STR_HEX, "", "A string that is serialized, hex-encoded data for block 'hash'"},
@@ -1047,27 +990,13 @@ static CBlock GetBlockChecked(BlockManager& blockman, const CBlockIndex* pblocki
     if (!blockman.ReadBlockFromDisk(block, *pblockindex)) {
         // Block not found on disk. This could be because we have the block
         // header in our index but not yet have the block or did not accept the
-<<<<<<< HEAD
-        // block.
-=======
         // block. Or if the block was pruned right after we released the lock above.
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         throw JSONRPCError(RPC_MISC_ERROR, "Block not found on disk");
     }
 
     return block;
 }
 
-<<<<<<< HEAD
-static CBlockUndo GetUndoChecked(const CBlockIndex* pblockindex)
-{
-    CBlockUndo blockUndo;
-    if (IsBlockPruned(pblockindex)) {
-        throw JSONRPCError(RPC_MISC_ERROR, "Undo data not available (pruned data)");
-    }
-
-    if (!UndoReadFromDisk(blockUndo, pblockindex)) {
-=======
 static CBlockUndo GetUndoChecked(BlockManager& blockman, const CBlockIndex* pblockindex)
 {
     CBlockUndo blockUndo;
@@ -1083,15 +1012,12 @@ static CBlockUndo GetUndoChecked(BlockManager& blockman, const CBlockIndex* pblo
     }
 
     if (!blockman.UndoReadFromDisk(blockUndo, *pblockindex)) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         throw JSONRPCError(RPC_MISC_ERROR, "Can't read undo data from disk");
     }
 
     return blockUndo;
 }
 
-<<<<<<< HEAD
-=======
 const RPCResult getblock_vin{
     RPCResult::Type::ARR, "vin", "",
     {
@@ -1116,25 +1042,17 @@ const RPCResult getblock_vin{
     }
 };
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 static RPCHelpMan getblock()
 {
     return RPCHelpMan{"getblock",
                 "\nIf verbosity is 0, returns a string that is serialized, hex-encoded data for block 'hash'.\n"
                 "If verbosity is 1, returns an Object with information about block <hash>.\n"
-<<<<<<< HEAD
-                "If verbosity is 2, returns an Object with information about block <hash> and information about each transaction. \n",
-                {
-                    {"blockhash", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "The block hash"},
-                    {"verbosity|verbose", RPCArg::Type::NUM, RPCArg::Default{1}, "0 for hex-encoded data, 1 for a json object, and 2 for json object with transaction data"},
-=======
                 "If verbosity is 2, returns an Object with information about block <hash> and information about each transaction.\n"
                 "If verbosity is 3, returns an Object with information about block <hash> and information about each transaction, including prevout information for inputs (only for unpruned blocks in the current best chain).\n",
                 {
                     {"blockhash", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "The block hash"},
                     {"verbosity|verbose", RPCArg::Type::NUM, RPCArg::Default{1}, "0 for hex-encoded data, 1 for a JSON object, 2 for JSON object with transaction data, and 3 for JSON object with transaction data including prevout information for inputs",
                      RPCArgOptions{.skip_type_check = true}},
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 },
                 {
                     RPCResult{"for verbosity = 0",
@@ -1160,13 +1078,8 @@ static RPCHelpMan getblock()
                     {RPCResult::Type::NUM, "difficulty", "The difficulty"},
                     {RPCResult::Type::STR_HEX, "chainwork", "Expected number of hashes required to produce the chain up to this block (in hex)"},
                     {RPCResult::Type::NUM, "nTx", "The number of transactions in the block"},
-<<<<<<< HEAD
-                    {RPCResult::Type::STR_HEX, "previousblockhash", /* optional */ true, "The hash of the previous block (if available)"},
-                    {RPCResult::Type::STR_HEX, "nextblockhash", /* optional */ true, "The hash of the next block (if available)"},
-=======
                     {RPCResult::Type::STR_HEX, "previousblockhash", /*optional=*/true, "The hash of the previous block (if available)"},
                     {RPCResult::Type::STR_HEX, "nextblockhash", /*optional=*/true, "The hash of the next block (if available)"},
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 }},
                     RPCResult{"for verbosity = 2",
                 RPCResult::Type::OBJ, "", "",
@@ -1181,8 +1094,6 @@ static RPCHelpMan getblock()
                         }},
                     }},
                 }},
-<<<<<<< HEAD
-=======
                     RPCResult{"for verbosity = 3",
                 RPCResult::Type::OBJ, "", "",
                 {
@@ -1195,7 +1106,6 @@ static RPCHelpMan getblock()
                         }},
                     }},
                 }},
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         },
                 RPCExamples{
                     HelpExampleCli("getblock", "\"00000000c937983704a73af28acdec37b049d214adbda81d7e2a3dd146f6ed09\"")
@@ -1210,27 +1120,6 @@ static RPCHelpMan getblock()
         if (request.params[1].isBool()) {
             verbosity = request.params[1].get_bool() ? 1 : 0;
         } else {
-<<<<<<< HEAD
-            verbosity = request.params[1].get_int();
-        }
-    }
-
-    CBlock block;
-    const CBlockIndex* pblockindex;
-    const CBlockIndex* tip;
-    {
-        ChainstateManager& chainman = EnsureAnyChainman(request.context);
-        LOCK(cs_main);
-        pblockindex = chainman.m_blockman.LookupBlockIndex(hash);
-        tip = chainman.ActiveChain().Tip();
-
-        if (!pblockindex) {
-            throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Block not found");
-        }
-
-        block = GetBlockChecked(pblockindex);
-    }
-=======
             verbosity = request.params[1].getInt<int>();
         }
     }
@@ -1249,7 +1138,6 @@ static RPCHelpMan getblock()
     }
 
     const CBlock block{GetBlockChecked(chainman.m_blockman, pblockindex)};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     if (verbosity <= 0)
     {
@@ -1259,9 +1147,6 @@ static RPCHelpMan getblock()
         return strHex;
     }
 
-<<<<<<< HEAD
-    return blockToJSON(block, tip, pblockindex, verbosity >= 2);
-=======
     TxVerbosity tx_verbosity;
     if (verbosity == 1) {
         tx_verbosity = TxVerbosity::SHOW_TXID;
@@ -1272,7 +1157,6 @@ static RPCHelpMan getblock()
     }
 
     return blockToJSON(chainman.m_blockman, block, tip, pblockindex, tx_verbosity);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 },
     };
 }
@@ -1292,22 +1176,12 @@ static RPCHelpMan pruneblockchain()
                 },
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
 {
-<<<<<<< HEAD
-    if (!fPruneMode)
-=======
     ChainstateManager& chainman = EnsureAnyChainman(request.context);
     if (!chainman.m_blockman.IsPruneMode()) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         throw JSONRPCError(RPC_MISC_ERROR, "Cannot prune blocks because node is not in prune mode.");
     }
-
-    ChainstateManager& chainman = EnsureAnyChainman(request.context);
     LOCK(cs_main);
-<<<<<<< HEAD
-    CChainState& active_chainstate = chainman.ActiveChainstate();
-=======
     Chainstate& active_chainstate = chainman.ActiveChainstate();
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     CChain& active_chain = active_chainstate.m_chain;
 
     int heightParam = request.params[0].getInt<int>();
@@ -1319,11 +1193,7 @@ static RPCHelpMan pruneblockchain()
     // too low to be a block time (corresponds to timestamp from Sep 2001).
     if (heightParam > 1000000000) {
         // Add a 2 hour buffer to include blocks which might have had old timestamps
-<<<<<<< HEAD
-        CBlockIndex* pindex = active_chain.FindEarliestAtLeast(heightParam - TIMESTAMP_WINDOW, 0);
-=======
         const CBlockIndex* pindex = active_chain.FindEarliestAtLeast(heightParam - TIMESTAMP_WINDOW, 0);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         if (!pindex) {
             throw JSONRPCError(RPC_INVALID_PARAMETER, "Could not find block with at least the specified timestamp.");
         }
@@ -1332,11 +1202,7 @@ static RPCHelpMan pruneblockchain()
 
     unsigned int height = (unsigned int) heightParam;
     unsigned int chainHeight = (unsigned int) active_chain.Height();
-<<<<<<< HEAD
-    if (chainHeight < Params().PruneAfterHeight())
-=======
     if (chainHeight < chainman.GetParams().PruneAfterHeight()) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         throw JSONRPCError(RPC_MISC_ERROR, "Blockchain is too short for pruning.");
     } else if (height > chainHeight) {
         throw JSONRPCError(RPC_INVALID_PARAMETER, "Blockchain is shorter than the attempted prune height.");
@@ -1346,40 +1212,21 @@ static RPCHelpMan pruneblockchain()
     }
 
     PruneBlockFilesManual(active_chainstate, height);
-<<<<<<< HEAD
-    const CBlockIndex* block = active_chain.Tip();
-    CHECK_NONFATAL(block);
-    while (block->pprev && (block->pprev->nStatus & BLOCK_HAVE_DATA)) {
-        block = block->pprev;
-    }
-    return uint64_t(block->nHeight);
-=======
     const CBlockIndex& block{*CHECK_NONFATAL(active_chain.Tip())};
     return block.nStatus & BLOCK_HAVE_DATA ? active_chainstate.m_blockman.GetFirstStoredBlock(block)->nHeight - 1 : block.nHeight;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 },
     };
 }
 
 CoinStatsHashType ParseHashType(const std::string& hash_type_input)
 {
-<<<<<<< HEAD
-    if (hash_type_input == "hash_serialized_2") {
-=======
     if (hash_type_input == "hash_serialized_3") {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         return CoinStatsHashType::HASH_SERIALIZED;
     } else if (hash_type_input == "muhash") {
         return CoinStatsHashType::MUHASH;
     } else if (hash_type_input == "none") {
         return CoinStatsHashType::NONE;
     } else {
-<<<<<<< HEAD
-        throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("%s is not a valid hash_type", hash_type_input));
-    }
-}
-
-=======
         throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("'%s' is not a valid hash_type", hash_type_input));
     }
 }
@@ -1413,25 +1260,18 @@ static std::optional<kernel::CCoinsStats> GetUTXOStats(CCoinsView* view, node::B
 
     return kernel::ComputeUTXOStats(hash_type, view, blockman, interruption_point);
 }
-
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 static RPCHelpMan gettxoutsetinfo()
 {
     return RPCHelpMan{"gettxoutsetinfo",
                 "\nReturns statistics about the unspent transaction output set.\n"
                 "Note this call may take some time if you are not using coinstatsindex.\n",
                 {
-<<<<<<< HEAD
-                    {"hash_type", RPCArg::Type::STR, RPCArg::Default{"hash_serialized_2"}, "Which UTXO set hash should be calculated. Options: 'hash_serialized_2' (the legacy algorithm), 'muhash', 'none'."},
-                    {"hash_or_height", RPCArg::Type::NUM, RPCArg::Optional::OMITTED_NAMED_ARG, "The block hash or height of the target height (only available with coinstatsindex).", "", {"", "string or numeric"}},
-=======
                     {"hash_type", RPCArg::Type::STR, RPCArg::Default{"hash_serialized_3"}, "Which UTXO set hash should be calculated. Options: 'hash_serialized_3' (the legacy algorithm), 'muhash', 'none'."},
                     {"hash_or_height", RPCArg::Type::NUM, RPCArg::DefaultHint{"the current best block"}, "The block hash or height of the target height (only available with coinstatsindex).",
                      RPCArgOptions{
                          .skip_type_check = true,
                          .type_str = {"", "string or numeric"},
                      }},
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                     {"use_index", RPCArg::Type::BOOL, RPCArg::Default{true}, "Use coinstatsindex, if available."},
                 },
                 RPCResult{
@@ -1441,23 +1281,6 @@ static RPCHelpMan gettxoutsetinfo()
                         {RPCResult::Type::STR_HEX, "bestblock", "The hash of the block at which these statistics are calculated"},
                         {RPCResult::Type::NUM, "txouts", "The number of unspent transaction outputs"},
                         {RPCResult::Type::NUM, "bogosize", "Database-independent, meaningless metric indicating the UTXO set size"},
-<<<<<<< HEAD
-                        {RPCResult::Type::STR_HEX, "hash_serialized_2", /* optional */ true, "The serialized hash (only present if 'hash_serialized_2' hash_type is chosen)"},
-                        {RPCResult::Type::STR_HEX, "muhash", /* optional */ true, "The serialized hash (only present if 'muhash' hash_type is chosen)"},
-                        {RPCResult::Type::NUM, "transactions", "The number of transactions with unspent outputs (not available when coinstatsindex is used)"},
-                        {RPCResult::Type::NUM, "disk_size", "The estimated size of the chainstate on disk (not available when coinstatsindex is used)"},
-                        {RPCResult::Type::STR_AMOUNT, "total_amount", "The total amount of coins in the UTXO set"},
-                        {RPCResult::Type::STR_AMOUNT, "total_unspendable_amount", "The total amount of coins permanently excluded from the UTXO set (only available if coinstatsindex is used)"},
-                        {RPCResult::Type::OBJ, "block_info", "Info on amounts in the block at this block height (only available if coinstatsindex is used)",
-                        {
-                            {RPCResult::Type::STR_AMOUNT, "prevout_spent", ""},
-                            {RPCResult::Type::STR_AMOUNT, "coinbase", ""},
-                            {RPCResult::Type::STR_AMOUNT, "new_outputs_ex_coinbase", ""},
-                            {RPCResult::Type::STR_AMOUNT, "unspendable", ""},
-                            {RPCResult::Type::OBJ, "unspendables", "Detailed view of the unspendable categories",
-                            {
-                                {RPCResult::Type::STR_AMOUNT, "genesis_block", ""},
-=======
                         {RPCResult::Type::STR_HEX, "hash_serialized_3", /*optional=*/true, "The serialized hash (only present if 'hash_serialized_3' hash_type is chosen)"},
                         {RPCResult::Type::STR_HEX, "muhash", /*optional=*/true, "The serialized hash (only present if 'muhash' hash_type is chosen)"},
                         {RPCResult::Type::NUM, "transactions", /*optional=*/true, "The number of transactions with unspent outputs (not available when coinstatsindex is used)"},
@@ -1473,7 +1296,6 @@ static RPCHelpMan gettxoutsetinfo()
                             {RPCResult::Type::OBJ, "unspendables", "Detailed view of the unspendable categories",
                             {
                                 {RPCResult::Type::STR_AMOUNT, "genesis_block", "The unspendable amount of the Genesis block subsidy"},
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                                 {RPCResult::Type::STR_AMOUNT, "bip30", "Transactions overridden by duplicates (no longer possible with BIP30)"},
                                 {RPCResult::Type::STR_AMOUNT, "scripts", "Amounts sent to scripts that are unspendable (for example OP_RETURN outputs)"},
                                 {RPCResult::Type::STR_AMOUNT, "unclaimed_rewards", "Fee rewards that miners did not claim in their coinbase transaction"},
@@ -1485,10 +1307,7 @@ static RPCHelpMan gettxoutsetinfo()
                     HelpExampleCli("gettxoutsetinfo", R"("none")") +
                     HelpExampleCli("gettxoutsetinfo", R"("none" 1000)") +
                     HelpExampleCli("gettxoutsetinfo", R"("none" '"00000000c937983704a73af28acdec37b049d214adbda81d7e2a3dd146f6ed09"')") +
-<<<<<<< HEAD
-=======
                     HelpExampleCli("-named gettxoutsetinfo", R"(hash_type='muhash' use_index='false')") +
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                     HelpExampleRpc("gettxoutsetinfo", "") +
                     HelpExampleRpc("gettxoutsetinfo", R"("none")") +
                     HelpExampleRpc("gettxoutsetinfo", R"("none", 1000)") +
@@ -1498,16 +1317,6 @@ static RPCHelpMan gettxoutsetinfo()
 {
     UniValue ret(UniValue::VOBJ);
 
-<<<<<<< HEAD
-    CBlockIndex* pindex{nullptr};
-    const CoinStatsHashType hash_type{request.params[0].isNull() ? CoinStatsHashType::HASH_SERIALIZED : ParseHashType(request.params[0].get_str())};
-    CCoinsStats stats{hash_type};
-    stats.index_requested = request.params[2].isNull() || request.params[2].get_bool();
-
-    NodeContext& node = EnsureAnyNodeContext(request.context);
-    ChainstateManager& chainman = EnsureChainman(node);
-    CChainState& active_chainstate = chainman.ActiveChainstate();
-=======
     const CBlockIndex* pindex{nullptr};
     const CoinStatsHashType hash_type{request.params[0].isNull() ? CoinStatsHashType::HASH_SERIALIZED : ParseHashType(request.params[0].get_str())};
     bool index_requested = request.params[2].isNull() || request.params[2].get_bool();
@@ -1515,7 +1324,6 @@ static RPCHelpMan gettxoutsetinfo()
     NodeContext& node = EnsureAnyNodeContext(request.context);
     ChainstateManager& chainman = EnsureChainman(node);
     Chainstate& active_chainstate = chainman.ActiveChainstate();
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     active_chainstate.ForceFlushStateToDisk();
 
     CCoinsView* coins_view;
@@ -1532,16 +1340,6 @@ static RPCHelpMan gettxoutsetinfo()
             throw JSONRPCError(RPC_INVALID_PARAMETER, "Querying specific block heights requires coinstatsindex");
         }
 
-<<<<<<< HEAD
-        if (stats.m_hash_type == CoinStatsHashType::HASH_SERIALIZED) {
-            throw JSONRPCError(RPC_INVALID_PARAMETER, "hash_serialized_2 hash type cannot be queried for a specific block");
-        }
-
-        pindex = ParseHashOrHeight(request.params[1], chainman);
-    }
-
-    if (GetUTXOStats(coins_view, *blockman, stats, node.rpc_interruption_point, pindex)) {
-=======
         if (hash_type == CoinStatsHashType::HASH_SERIALIZED) {
             throw JSONRPCError(RPC_INVALID_PARAMETER, "hash_serialized_3 hash type cannot be queried for a specific block");
         }
@@ -1567,20 +1365,11 @@ static RPCHelpMan gettxoutsetinfo()
     const std::optional<CCoinsStats> maybe_stats = GetUTXOStats(coins_view, *blockman, hash_type, node.rpc_interruption_point, pindex, index_requested);
     if (maybe_stats.has_value()) {
         const CCoinsStats& stats = maybe_stats.value();
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         ret.pushKV("height", (int64_t)stats.nHeight);
         ret.pushKV("bestblock", stats.hashBlock.GetHex());
         ret.pushKV("txouts", (int64_t)stats.nTransactionOutputs);
         ret.pushKV("bogosize", (int64_t)stats.nBogoSize);
         if (hash_type == CoinStatsHashType::HASH_SERIALIZED) {
-<<<<<<< HEAD
-            ret.pushKV("hash_serialized_2", stats.hashSerialized.GetHex());
-        }
-        if (hash_type == CoinStatsHashType::MUHASH) {
-              ret.pushKV("muhash", stats.hashSerialized.GetHex());
-        }
-        ret.pushKV("total_amount", ValueFromAmount(stats.nTotalAmount));
-=======
             ret.pushKV("hash_serialized_3", stats.hashSerialized.GetHex());
         }
         if (hash_type == CoinStatsHashType::MUHASH) {
@@ -1588,32 +1377,10 @@ static RPCHelpMan gettxoutsetinfo()
         }
         CHECK_NONFATAL(stats.total_amount.has_value());
         ret.pushKV("total_amount", ValueFromAmount(stats.total_amount.value()));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         if (!stats.index_used) {
             ret.pushKV("transactions", static_cast<int64_t>(stats.nTransactions));
             ret.pushKV("disk_size", stats.nDiskSize);
         } else {
-<<<<<<< HEAD
-            ret.pushKV("total_unspendable_amount", ValueFromAmount(stats.block_unspendable_amount));
-
-            CCoinsStats prev_stats{hash_type};
-
-            if (pindex->nHeight > 0) {
-                GetUTXOStats(coins_view, *blockman, prev_stats, node.rpc_interruption_point, pindex->pprev);
-            }
-
-            UniValue block_info(UniValue::VOBJ);
-            block_info.pushKV("prevout_spent", ValueFromAmount(stats.block_prevout_spent_amount - prev_stats.block_prevout_spent_amount));
-            block_info.pushKV("coinbase", ValueFromAmount(stats.block_coinbase_amount - prev_stats.block_coinbase_amount));
-            block_info.pushKV("new_outputs_ex_coinbase", ValueFromAmount(stats.block_new_outputs_ex_coinbase_amount - prev_stats.block_new_outputs_ex_coinbase_amount));
-            block_info.pushKV("unspendable", ValueFromAmount(stats.block_unspendable_amount - prev_stats.block_unspendable_amount));
-
-            UniValue unspendables(UniValue::VOBJ);
-            unspendables.pushKV("genesis_block", ValueFromAmount(stats.unspendables_genesis_block - prev_stats.unspendables_genesis_block));
-            unspendables.pushKV("bip30", ValueFromAmount(stats.unspendables_bip30 - prev_stats.unspendables_bip30));
-            unspendables.pushKV("scripts", ValueFromAmount(stats.unspendables_scripts - prev_stats.unspendables_scripts));
-            unspendables.pushKV("unclaimed_rewards", ValueFromAmount(stats.unspendables_unclaimed_rewards - prev_stats.unspendables_unclaimed_rewards));
-=======
             ret.pushKV("total_unspendable_amount", ValueFromAmount(stats.total_unspendable_amount));
 
             CCoinsStats prev_stats{};
@@ -1636,7 +1403,6 @@ static RPCHelpMan gettxoutsetinfo()
             unspendables.pushKV("bip30", ValueFromAmount(stats.total_unspendables_bip30 - prev_stats.total_unspendables_bip30));
             unspendables.pushKV("scripts", ValueFromAmount(stats.total_unspendables_scripts - prev_stats.total_unspendables_scripts));
             unspendables.pushKV("unclaimed_rewards", ValueFromAmount(stats.total_unspendables_unclaimed_rewards - prev_stats.total_unspendables_unclaimed_rewards));
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             block_info.pushKV("unspendables", unspendables);
 
             ret.pushKV("block_info", block_info);
@@ -1672,21 +1438,14 @@ static RPCHelpMan gettxout()
                 {RPCResult::Type::NUM, "confirmations", "The number of confirmations"},
                 {RPCResult::Type::STR_AMOUNT, "value", "The transaction value in " + CURRENCY_UNIT},
                 {RPCResult::Type::OBJ, "scriptPubKey", "", {
-<<<<<<< HEAD
-                    {RPCResult::Type::STR, "asm", ""},
-                    {RPCResult::Type::STR_HEX, "hex", ""},
-                    {RPCResult::Type::NUM, "reqSigs", /* optional */ true, "(DEPRECATED, returned only if config option -deprecatedrpc=addresses is passed) Number of required signatures"},
-                    {RPCResult::Type::STR, "type", "The type, eg pubkeyhash"},
-                    {RPCResult::Type::STR, "address", /* optional */ true, "digibyte address (only if a well-defined address exists)"},
-                    {RPCResult::Type::ARR, "addresses", /* optional */ true, "(DEPRECATED, returned only if config option -deprecatedrpc=addresses is passed) Array of digibyte addresses",
-                        {{RPCResult::Type::STR, "address", "digibyte address"}}},
-=======
                     {RPCResult::Type::STR, "asm", "Disassembly of the public key script"},
                     {RPCResult::Type::STR, "desc", "Inferred descriptor for the output"},
                     {RPCResult::Type::STR_HEX, "hex", "The raw public key script bytes, hex-encoded"},
+                    {RPCResult::Type::NUM, "reqSigs", /* optional */ true, "(DEPRECATED, returned only if config option -deprecatedrpc=addresses is passed) Number of required signatures"},
                     {RPCResult::Type::STR, "type", "The type, eg pubkeyhash"},
                     {RPCResult::Type::STR, "address", /*optional=*/true, "The DigiByte address (only if a well-defined address exists)"},
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+                    {RPCResult::Type::ARR, "addresses", /* optional */ true, "(DEPRECATED, returned only if config option -deprecatedrpc=addresses is passed) Array of DigiByte addresses",
+                        {{RPCResult::Type::STR, "address", "DigiByte address"}}},
                 }},
                 {RPCResult::Type::BOOL, "coinbase", "Coinbase or not"},
             }},
@@ -1708,22 +1467,13 @@ static RPCHelpMan gettxout()
     UniValue ret(UniValue::VOBJ);
 
     uint256 hash(ParseHashV(request.params[0], "txid"));
-<<<<<<< HEAD
-    int n = request.params[1].get_int();
-    COutPoint out(hash, n);
-=======
     COutPoint out{hash, request.params[1].getInt<uint32_t>()};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     bool fMempool = true;
     if (!request.params[2].isNull())
         fMempool = request.params[2].get_bool();
 
     Coin coin;
-<<<<<<< HEAD
-    CChainState& active_chainstate = chainman.ActiveChainstate();
-=======
     Chainstate& active_chainstate = chainman.ActiveChainstate();
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     CCoinsViewCache* coins_view = &active_chainstate.CoinsTip();
 
     if (fMempool) {
@@ -1735,11 +1485,7 @@ static RPCHelpMan gettxout()
         }
     } else {
         if (!coins_view->GetCoin(out, coin)) {
-<<<<<<< HEAD
-            return NullUniValue;
-=======
             return UniValue::VNULL;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
     }
 
@@ -1767,93 +1513,30 @@ static RPCHelpMan verifychain()
                 "\nVerifies blockchain database.\n",
                 {
                     {"checklevel", RPCArg::Type::NUM, RPCArg::DefaultHint{strprintf("%d, range=0-4", DEFAULT_CHECKLEVEL)},
-<<<<<<< HEAD
-                        strprintf("How thorough the block verification is:\n - %s", Join(CHECKLEVEL_DOC, "\n- "))},
-                    {"nblocks", RPCArg::Type::NUM, RPCArg::DefaultHint{strprintf("%d, 0=all", DEFAULT_CHECKBLOCKS)}, "The number of blocks to check."},
-                },
-                RPCResult{
-                    RPCResult::Type::BOOL, "", "Verified or not"},
-=======
                         strprintf("How thorough the block verification is:\n%s", MakeUnorderedList(CHECKLEVEL_DOC))},
                     {"nblocks", RPCArg::Type::NUM, RPCArg::DefaultHint{strprintf("%d, 0=all", DEFAULT_CHECKBLOCKS)}, "The number of blocks to check."},
                 },
                 RPCResult{
                     RPCResult::Type::BOOL, "", "Verification finished successfully. If false, check debug.log for reason."},
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 RPCExamples{
                     HelpExampleCli("verifychain", "")
             + HelpExampleRpc("verifychain", "")
                 },
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
 {
-<<<<<<< HEAD
-    const int check_level(request.params[0].isNull() ? DEFAULT_CHECKLEVEL : request.params[0].get_int());
-    const int check_depth{request.params[1].isNull() ? DEFAULT_CHECKBLOCKS : request.params[1].get_int()};
-=======
     const int check_level{request.params[0].isNull() ? DEFAULT_CHECKLEVEL : request.params[0].getInt<int>()};
     const int check_depth{request.params[1].isNull() ? DEFAULT_CHECKBLOCKS : request.params[1].getInt<int>()};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     ChainstateManager& chainman = EnsureAnyChainman(request.context);
     LOCK(cs_main);
 
-<<<<<<< HEAD
-    CChainState& active_chainstate = chainman.ActiveChainstate();
-    return CVerifyDB().VerifyDB(
-        active_chainstate, Params(), active_chainstate.CoinsTip(), check_level, check_depth);
-=======
     Chainstate& active_chainstate = chainman.ActiveChainstate();
     return CVerifyDB(chainman.GetNotifications()).VerifyDB(
                active_chainstate, chainman.GetParams().GetConsensus(), active_chainstate.CoinsTip(), check_level, check_depth) == VerifyDBResult::SUCCESS;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 },
     };
 }
 
-<<<<<<< HEAD
-static void SoftForkDescPushBack(const CBlockIndex* active_chain_tip, UniValue& softforks, const Consensus::Params& params, Consensus::BuriedDeployment dep)
-{
-    // For buried deployments.
-
-    if (!DeploymentEnabled(params, dep)) return;
-
-    UniValue rv(UniValue::VOBJ);
-    rv.pushKV("type", "buried");
-    // getblockchaininfo reports the softfork as active from when the chain height is
-    // one below the activation height
-    rv.pushKV("active", DeploymentActiveAfter(active_chain_tip, params, dep));
-    rv.pushKV("height", params.DeploymentHeight(dep));
-    softforks.pushKV(DeploymentName(dep), rv);
-}
-
-static void SoftForkDescPushBack(const CBlockIndex* active_chain_tip, UniValue& softforks, const Consensus::Params& consensusParams, Consensus::DeploymentPos id)
-{
-    // For BIP9 deployments.
-
-    if (!DeploymentEnabled(consensusParams, id)) return;
-
-    UniValue bip9(UniValue::VOBJ);
-    const ThresholdState thresholdState = g_versionbitscache.State(active_chain_tip, consensusParams, id);
-    switch (thresholdState) {
-    case ThresholdState::DEFINED: bip9.pushKV("status", "defined"); break;
-    case ThresholdState::STARTED: bip9.pushKV("status", "started"); break;
-    case ThresholdState::LOCKED_IN: bip9.pushKV("status", "locked_in"); break;
-    case ThresholdState::ACTIVE: bip9.pushKV("status", "active"); break;
-    case ThresholdState::FAILED: bip9.pushKV("status", "failed"); break;
-    }
-    if (ThresholdState::STARTED == thresholdState)
-    {
-        bip9.pushKV("bit", consensusParams.vDeployments[id].bit);
-    }
-    bip9.pushKV("start_time", consensusParams.vDeployments[id].nStartTime);
-    bip9.pushKV("timeout", consensusParams.vDeployments[id].nTimeout);
-    int64_t since_height = g_versionbitscache.StateSinceHeight(active_chain_tip, consensusParams, id);
-    bip9.pushKV("since", since_height);
-    if (ThresholdState::STARTED == thresholdState)
-    {
-        UniValue statsUV(UniValue::VOBJ);
-        BIP9Stats statsStruct = g_versionbitscache.Statistics(active_chain_tip, consensusParams, id);
-=======
 static void SoftForkDescPushBack(const CBlockIndex* blockindex, UniValue& softforks, const ChainstateManager& chainman, Consensus::BuriedDeployment dep)
 {
     // For buried deployments.
@@ -1912,112 +1595,13 @@ static void SoftForkDescPushBack(const CBlockIndex* blockindex, UniValue& softfo
         UniValue statsUV(UniValue::VOBJ);
         std::vector<bool> signals;
         BIP9Stats statsStruct = chainman.m_versionbitscache.Statistics(blockindex, chainman.GetConsensus(), id, &signals);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         statsUV.pushKV("period", statsStruct.period);
         statsUV.pushKV("elapsed", statsStruct.elapsed);
         statsUV.pushKV("count", statsStruct.count);
-<<<<<<< HEAD
-        statsUV.pushKV("possible", statsStruct.possible);
-        bip9.pushKV("statistics", statsUV);
-    }
-    bip9.pushKV("min_activation_height", consensusParams.vDeployments[id].min_activation_height);
-
-    UniValue rv(UniValue::VOBJ);
-    rv.pushKV("type", "bip9");
-    rv.pushKV("bip9", bip9);
-    if (ThresholdState::ACTIVE == thresholdState) {
-        rv.pushKV("height", since_height);
-    }
-    rv.pushKV("active", ThresholdState::ACTIVE == thresholdState);
-
-    softforks.pushKV(DeploymentName(id), rv);
-}
-
-RPCHelpMan getblockchaininfo()
-{
-    return RPCHelpMan{"getblockchaininfo",
-                "Returns an object containing various state info regarding blockchain processing.\n",
-                {},
-                RPCResult{
-                    RPCResult::Type::OBJ, "", "",
-                    {
-                        {RPCResult::Type::STR, "chain", "current network name (main, test, signet, regtest)"},
-                        {RPCResult::Type::NUM, "blocks", "the height of the most-work fully-validated chain. The genesis block has height 0"},
-                        {RPCResult::Type::NUM, "headers", "the current number of headers we have validated"},
-                        {RPCResult::Type::STR, "bestblockhash", "the hash of the currently best block"},
-                        {RPCResult::Type::NUM, "mediantime", "median time for the current best block"},
-                        {RPCResult::Type::NUM, "verificationprogress", "estimate of verification progress [0..1]"},
-                        {RPCResult::Type::BOOL, "initialblockdownload", "(debug information) estimate of whether this node is in Initial Block Download mode"},
-                        {RPCResult::Type::STR_HEX, "chainwork", "total amount of work in active chain, in hexadecimal"},
-                        {RPCResult::Type::NUM, "size_on_disk", "the estimated size of the block and undo files on disk"},
-                        {RPCResult::Type::BOOL, "pruned", "if the blocks are subject to pruning"},
-                        {RPCResult::Type::NUM, "pruneheight", "lowest-height complete block stored (only present if pruning is enabled)"},
-                        {RPCResult::Type::BOOL, "automatic_pruning", "whether automatic pruning is enabled (only present if pruning is enabled)"},
-                        {RPCResult::Type::NUM, "prune_target_size", "the target size used by pruning (only present if automatic pruning is enabled)"},
-                        {RPCResult::Type::NUM, "difficulties", "The current difficulty for all 5 DGB algos."},
-                        {RPCResult::Type::OBJ_DYN, "softforks", "status of softforks",
-                        {
-                            {RPCResult::Type::OBJ, "xxxx", "name of the softfork",
-                            {
-                                {RPCResult::Type::STR, "type", "one of \"buried\", \"bip9\""},
-                                {RPCResult::Type::OBJ, "bip9", "status of bip9 softforks (only for \"bip9\" type)",
-                                {
-                                    {RPCResult::Type::STR, "status", "one of \"defined\", \"started\", \"locked_in\", \"active\", \"failed\""},
-                                    {RPCResult::Type::NUM, "bit", "the bit (0-28) in the block version field used to signal this softfork (only for \"started\" status)"},
-                                    {RPCResult::Type::NUM_TIME, "start_time", "the minimum median time past of a block at which the bit gains its meaning"},
-                                    {RPCResult::Type::NUM_TIME, "timeout", "the median time past of a block at which the deployment is considered failed if not yet locked in"},
-                                    {RPCResult::Type::NUM, "since", "height of the first block to which the status applies"},
-                                    {RPCResult::Type::NUM, "min_activation_height", "minimum height of blocks for which the rules may be enforced"},
-                                    {RPCResult::Type::OBJ, "statistics", "numeric statistics about BIP9 signalling for a softfork (only for \"started\" status)",
-                                    {
-                                        {RPCResult::Type::NUM, "period", "the length in blocks of the BIP9 signalling period"},
-                                        {RPCResult::Type::NUM, "threshold", "the number of blocks with the version bit set required to activate the feature"},
-                                        {RPCResult::Type::NUM, "elapsed", "the number of blocks elapsed since the beginning of the current period"},
-                                        {RPCResult::Type::NUM, "count", "the number of blocks with the version bit set in the current period"},
-                                        {RPCResult::Type::BOOL, "possible", "returns false if there are not enough blocks left in this period to pass activation threshold"},
-                                    }},
-                                }},
-                                {RPCResult::Type::NUM, "height", "height of the first block which the rules are or will be enforced (only for \"buried\" type, or \"bip9\" type with \"active\" status)"},
-                                {RPCResult::Type::BOOL, "active", "true if the rules are enforced for the mempool and the next block"},
-                            }},
-                        }},
-                        {RPCResult::Type::STR, "warnings", "any network and blockchain warnings"},
-                    }},
-                RPCExamples{
-                    HelpExampleCli("getblockchaininfo", "")
-            + HelpExampleRpc("getblockchaininfo", "")
-                },
-        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
-{
-    ChainstateManager& chainman = EnsureAnyChainman(request.context);
-    LOCK(cs_main);
-    CChainState& active_chainstate = chainman.ActiveChainstate();
-
-    const CBlockIndex* tip = active_chainstate.m_chain.Tip();
-    CHECK_NONFATAL(tip);
-    const int height = tip->nHeight;
-    UniValue obj(UniValue::VOBJ);
-    obj.pushKV("chain",                 Params().NetworkIDString());
-    obj.pushKV("blocks",                height);
-    obj.pushKV("headers",               pindexBestHeader ? pindexBestHeader->nHeight : -1);
-    obj.pushKV("bestblockhash",         tip->GetBlockHash().GetHex());
-    obj.pushKV("mediantime",            (int64_t)tip->GetMedianTimePast());
-    obj.pushKV("verificationprogress",  GuessVerificationProgress(Params().TxData(), tip));
-    obj.pushKV("initialblockdownload",  active_chainstate.IsInitialBlockDownload());
-    obj.pushKV("chainwork",             tip->nChainWork.GetHex());
-    obj.pushKV("size_on_disk",          CalculateCurrentUsage());
-    obj.pushKV("pruned",                fPruneMode);
-    if (fPruneMode) {
-        const CBlockIndex* block = tip;
-        CHECK_NONFATAL(block);
-        while (block->pprev && (block->pprev->nStatus & BLOCK_HAVE_DATA)) {
-            block = block->pprev;
-=======
         if (ThresholdState::LOCKED_IN != current_state) {
             statsUV.pushKV("threshold", statsStruct.threshold);
-            statsUV.pushKV("possible", statsStruct.possible);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
+        statsUV.pushKV("possible", statsStruct.possible);
         bip9.pushKV("statistics", statsUV);
 
         std::string sig;
@@ -2053,6 +1637,7 @@ RPCHelpMan getblockchaininfo()
                 {RPCResult::Type::NUM, "headers", "the current number of headers we have validated"},
                 {RPCResult::Type::STR, "bestblockhash", "the hash of the currently best block"},
                 {RPCResult::Type::NUM, "difficulty", "the current difficulty"},
+                {RPCResult::Type::NUM, "difficulties", "The current difficulty for all 5 DGB algos."},
                 {RPCResult::Type::NUM_TIME, "time", "The block time expressed in " + UNIX_EPOCH_TIME},
                 {RPCResult::Type::NUM_TIME, "mediantime", "The median block time expressed in " + UNIX_EPOCH_TIME},
                 {RPCResult::Type::NUM, "verificationprogress", "estimate of verification progress [0..1]"},
@@ -2075,15 +1660,59 @@ RPCHelpMan getblockchaininfo()
     LOCK(cs_main);
     Chainstate& active_chainstate = chainman.ActiveChainstate();
 
-    const CBlockIndex& tip{*CHECK_NONFATAL(active_chainstate.m_chain.Tip())};
-    const int height{tip.nHeight};
+    const CBlockIndex* tip = active_chainstate.m_chain.Tip();
+    CHECK_NONFATAL(tip);
+    const int height = tip->nHeight;
     UniValue obj(UniValue::VOBJ);
-    obj.pushKV("chain", chainman.GetParams().GetChainTypeString());
+    obj.pushKV("chain", chainman.GetParams().NetworkIDString());
     obj.pushKV("blocks", height);
     obj.pushKV("headers", chainman.m_best_header ? chainman.m_best_header->nHeight : -1);
-    obj.pushKV("bestblockhash", tip.GetBlockHash().GetHex());
-    obj.pushKV("difficulty", GetDifficulty(&tip));
-    obj.pushKV("time", tip.GetBlockTime());
+    obj.pushKV("bestblockhash", tip->GetBlockHash().GetHex());
+    obj.pushKV("difficulty", GetDifficulty(tip));
+    
+    // DigiByte-specific: Add multi-algorithm difficulties
+    UniValue difficulties(UniValue::VOBJ);
+    for (int algo = 0; algo < NUM_ALGOS_IMPL; algo++) {
+        difficulties.pushKV(GetAlgoName(algo), GetDifficulty(tip, algo));
+    }
+    obj.pushKV("difficulties", difficulties);
+    
+    obj.pushKV("time", tip->GetBlockTime());
+    obj.pushKV("mediantime", tip->GetMedianTimePast());
+    obj.pushKV("verificationprogress", GuessVerificationProgress(chainman.GetParams().TxData(), tip));
+    obj.pushKV("initialblockdownload", active_chainstate.IsInitialBlockDownload());
+    obj.pushKV("chainwork", tip->nChainWork.GetHex());
+    obj.pushKV("size_on_disk", CalculateCurrentUsage());
+    obj.pushKV("pruned", chainman.m_blockman.IsPruneMode());
+    if (chainman.m_blockman.IsPruneMode()) {
+        const CBlockIndex* block = tip;
+        CHECK_NONFATAL(block);
+        while (block->pprev && (block->pprev->nStatus & BLOCK_HAVE_DATA)) {
+            block = block->pprev;
+        }
+        obj.pushKV("pruneheight", block->nHeight + 1);
+        obj.pushKV("automatic_pruning", chainman.m_blockman.GetPruneTarget() != BlockManager::PRUNE_TARGET_MANUAL);
+        if (chainman.m_blockman.GetPruneTarget() != BlockManager::PRUNE_TARGET_MANUAL) {
+            obj.pushKV("prune_target_size", chainman.m_blockman.GetPruneTarget());
+        }
+    }
+
+    const Consensus::Params& consensusParams = chainman.GetConsensus();
+    UniValue softforks(UniValue::VOBJ);
+    SoftForkDescPushBack(tip, softforks, chainman, Consensus::DEPLOYMENT_HEIGHTINCB);
+    SoftForkDescPushBack(tip, softforks, chainman, Consensus::DEPLOYMENT_DERSIG);
+    SoftForkDescPushBack(tip, softforks, chainman, Consensus::DEPLOYMENT_CLTV);
+    SoftForkDescPushBack(tip, softforks, chainman, Consensus::DEPLOYMENT_CSV);
+    SoftForkDescPushBack(tip, softforks, chainman, Consensus::DEPLOYMENT_SEGWIT);
+    SoftForkDescPushBack(tip, softforks, chainman, Consensus::DEPLOYMENT_TESTDUMMY);
+    SoftForkDescPushBack(tip, softforks, chainman, Consensus::DEPLOYMENT_TAPROOT);
+    obj.pushKV("softforks", softforks);
+
+    obj.pushKV("warnings", GetWarnings(false).original);
+    return obj;
+},
+    };
+}
     obj.pushKV("mediantime", tip.GetMedianTimePast());
     obj.pushKV("verificationprogress", GuessVerificationProgress(chainman.GetParams().TxData(), &tip));
     obj.pushKV("initialblockdownload", chainman.IsInitialBlockDownload());
@@ -2100,7 +1729,7 @@ RPCHelpMan getblockchaininfo()
             obj.pushKV("prune_target_size", chainman.m_blockman.GetPruneTarget());
         }
     }
-<<<<<<< HEAD
+
     const Consensus::Params& consensusParams = Params().GetConsensus();
     UniValue difficulties(UniValue::VOBJ);
     for (int algo = 0; algo < NUM_ALGOS_IMPL; algo++)
@@ -2122,15 +1751,10 @@ RPCHelpMan getblockchaininfo()
     SoftForkDescPushBack(tip, softforks, consensusParams, Consensus::DEPLOYMENT_ODO);
     SoftForkDescPushBack(tip, softforks, consensusParams, Consensus::DEPLOYMENT_TAPROOT);
     obj.pushKV("softforks", softforks);
-=======
-
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     obj.pushKV("warnings", GetWarnings(false).original);
     return obj;
 },
     };
-<<<<<<< HEAD
-=======
 }
 
 namespace {
@@ -2274,17 +1898,10 @@ static RPCHelpMan getchaintips()
     std::set<const CBlockIndex*> setOrphans;
     std::set<const CBlockIndex*> setPrevs;
 
-<<<<<<< HEAD
-    for (const std::pair<const uint256, CBlockIndex*>& item : chainman.BlockIndex()) {
-        if (!active_chain.Contains(item.second)) {
-            setOrphans.insert(item.second);
-            setPrevs.insert(item.second->pprev);
-=======
     for (const auto& [_, block_index] : chainman.BlockIndex()) {
         if (!active_chain.Contains(&block_index)) {
             setOrphans.insert(&block_index);
             setPrevs.insert(block_index.pprev);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
     }
 
@@ -2314,11 +1931,7 @@ static RPCHelpMan getchaintips()
         } else if (block->nStatus & BLOCK_FAILED_MASK) {
             // This block or one of its ancestors is invalid.
             status = "invalid";
-<<<<<<< HEAD
-        } else if (!block->HaveTxsDownloaded()) {
-=======
         } else if (!block->HaveNumChainTxs()) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             // This block cannot be connected because full block data for it or one of its parents is missing.
             status = "headers-only";
         } else if (block->IsValid(BLOCK_VALID_SCRIPTS)) {
@@ -2341,7 +1954,6 @@ static RPCHelpMan getchaintips()
     };
 }
 
-<<<<<<< HEAD
 UniValue MempoolInfoToJSON(const CTxMemPool& pool)
 {
     // Make sure this call is atomic in the pool.
@@ -2391,10 +2003,6 @@ static RPCHelpMan getmempoolinfo()
 
 static RPCHelpMan preciousblock()
 {
-=======
-static RPCHelpMan preciousblock()
-{
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     return RPCHelpMan{"preciousblock",
                 "\nTreats a block as if it were received before others with the same work.\n"
                 "\nA later preciousblock call can override the effect of an earlier one.\n"
@@ -2428,11 +2036,7 @@ static RPCHelpMan preciousblock()
         throw JSONRPCError(RPC_DATABASE_ERROR, state.ToString());
     }
 
-<<<<<<< HEAD
-    return NullUniValue;
-=======
     return UniValue::VNULL;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 },
     };
 }
@@ -2473,11 +2077,7 @@ static RPCHelpMan invalidateblock()
         throw JSONRPCError(RPC_DATABASE_ERROR, state.ToString());
     }
 
-<<<<<<< HEAD
-    return NullUniValue;
-=======
     return UniValue::VNULL;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 },
     };
 }
@@ -2517,11 +2117,7 @@ static RPCHelpMan reconsiderblock()
         throw JSONRPCError(RPC_DATABASE_ERROR, state.ToString());
     }
 
-<<<<<<< HEAD
-    return NullUniValue;
-=======
     return UniValue::VNULL;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 },
     };
 }
@@ -2542,15 +2138,9 @@ static RPCHelpMan getchaintxstats()
                         {RPCResult::Type::STR_HEX, "window_final_block_hash", "The hash of the final block in the window"},
                         {RPCResult::Type::NUM, "window_final_block_height", "The height of the final block in the window."},
                         {RPCResult::Type::NUM, "window_block_count", "Size of the window in number of blocks"},
-<<<<<<< HEAD
-                        {RPCResult::Type::NUM, "window_tx_count", /* optional */ true, "The number of transactions in the window. Only returned if \"window_block_count\" is > 0"},
-                        {RPCResult::Type::NUM, "window_interval", /* optional */ true, "The elapsed time in the window in seconds. Only returned if \"window_block_count\" is > 0"},
-                        {RPCResult::Type::NUM, "txrate", /* optional */ true, "The average rate of transactions per second in the window. Only returned if \"window_interval\" is > 0"},
-=======
                         {RPCResult::Type::NUM, "window_tx_count", /*optional=*/true, "The number of transactions in the window. Only returned if \"window_block_count\" is > 0"},
                         {RPCResult::Type::NUM, "window_interval", /*optional=*/true, "The elapsed time in the window in seconds. Only returned if \"window_block_count\" is > 0"},
                         {RPCResult::Type::NUM, "txrate", /*optional=*/true, "The average rate of transactions per second in the window. Only returned if \"window_interval\" is > 0"},
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                     }},
                 RPCExamples{
                     HelpExampleCli("getchaintxstats", "")
@@ -2698,28 +2288,16 @@ static RPCHelpMan getblockstats()
                             {"height", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "Selected statistic"},
                             {"time", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "Selected statistic"},
                         },
-<<<<<<< HEAD
-                        "stats"},
-=======
                         RPCArgOptions{.oneline_description="stats"}},
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 },
                 RPCResult{
             RPCResult::Type::OBJ, "", "",
             {
-<<<<<<< HEAD
-                {RPCResult::Type::NUM, "avgfee", "Average fee in the block"},
-                {RPCResult::Type::NUM, "avgfeerate", "Average feerate (in satoshis per virtual byte)"},
-                {RPCResult::Type::NUM, "avgtxsize", "Average transaction size"},
-                {RPCResult::Type::STR_HEX, "blockhash", "The block hash (to check for potential reorgs)"},
-                {RPCResult::Type::ARR_FIXED, "feerate_percentiles", "Feerates at the 10th, 25th, 50th, 75th, and 90th percentile weight unit (in satoshis per virtual byte)",
-=======
                 {RPCResult::Type::NUM, "avgfee", /*optional=*/true, "Average fee in the block"},
                 {RPCResult::Type::NUM, "avgfeerate", /*optional=*/true, "Average feerate (in satoshis per virtual byte)"},
                 {RPCResult::Type::NUM, "avgtxsize", /*optional=*/true, "Average transaction size"},
                 {RPCResult::Type::STR_HEX, "blockhash", /*optional=*/true, "The block hash (to check for potential reorgs)"},
                 {RPCResult::Type::ARR_FIXED, "feerate_percentiles", /*optional=*/true, "Feerates at the 10th, 25th, 50th, 75th, and 90th percentile weight unit (in satoshis per virtual byte)",
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 {
                     {RPCResult::Type::NUM, "10th_percentile_feerate", "The 10th percentile feerate"},
                     {RPCResult::Type::NUM, "25th_percentile_feerate", "The 25th percentile feerate"},
@@ -3591,10 +3169,6 @@ static RPCHelpMan getblockreward()
     }};
 }
 
-
-=======
-}
-
 /** RAII object to prevent concurrency issue when scanning blockfilters */
 static std::atomic<int> g_scanfilter_progress;
 static std::atomic<int> g_scanfilter_progress_height;
@@ -4160,52 +3734,55 @@ const std::vector<RPCResult> RPCHelpForChainstate{
     {RPCResult::Type::NUM, "coins_tip_cache_bytes", "size of the coinstip cache"},
     {RPCResult::Type::BOOL, "validated", "whether the chainstate is fully validated. True if all blocks in the chainstate were validated, false if the chain is based on a snapshot and the snapshot has not yet been validated."},
 };
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+
+void RegisterBlockchainRPCCommands(CRPCTable& t)
+{
+    static const CRPCCommand commands[]{
+        {"blockchain", &getbestblockhash},
+        {"blockchain", &getblock},
+        {"blockchain", &getblockchaininfo},
+        {"blockchain", &getblockcount},
+        {"blockchain", &getblockfilter},
+        {"blockchain", &getblockhash},
+        {"blockchain", &getblockheader},
+        {"blockchain", &getblockstats},
+        {"blockchain", &getchaintips},
+        {"blockchain", &getchaintxstats},
+        {"blockchain", &getchainstates},
+        {"blockchain", &getdeploymentinfo},
+        {"blockchain", &getdifficulty},
+        {"blockchain", &getmempoolancestors},
+        {"blockchain", &getmempooldescendants},
+        {"blockchain", &getmempoolentry},
+        {"blockchain", &getmempoolinfo},
+        {"blockchain", &getrawmempool},
+        {"blockchain", &gettxout},
+        {"blockchain", &gettxoutproof},
+        {"blockchain", &gettxoutsetinfo},
+        {"blockchain", &preciousblock},
+        {"blockchain", &pruneblockchain},
+        {"blockchain", &savemempool},
+        {"blockchain", &scantxoutset},
+        {"blockchain", &verifychain},
+        {"blockchain", &verifytxoutproof},
+        {"blockchain", &getblockreward}, // DigiByte-specific
+
+        {"hidden", &dumptxoutset},
+        {"hidden", &invalidateblock},
+        {"hidden", &reconsiderblock},
+        {"hidden", &syncwithvalidationinterfacequeue},
+        {"hidden", &waitforblock},
+        {"hidden", &waitforblockheight},
+        {"hidden", &waitfornewblock},
+    };
+    for (const auto& c : commands) {
+        t.appendCommand(c.name, &c);
+    }
+}
 
 static RPCHelpMan getchainstates()
 {
-<<<<<<< HEAD
-// clang-format off
-static const CRPCCommand commands[] =
-{ //  category              actor (function)
-  //  --------------------- ------------------------
-    { "blockchain",         &getblockchaininfo,                  },
-    { "blockchain",         &getchaintxstats,                    },
-    { "blockchain",         &getblockstats,                      },
-    { "blockchain",         &getbestblockhash,                   },
-    { "blockchain",         &getblockcount,                      },
-    { "blockchain",         &getblock,                           },
-    { "blockchain",         &getblockhash,                       },
-    { "blockchain",         &getblockheader,                     },
-    { "blockchain",         &getchaintips,                       },
-    { "blockchain",         &getdifficulty,                      },
-    { "blockchain",         &getmempoolancestors,                },
-    { "blockchain",         &getmempooldescendants,              },
-    { "blockchain",         &getmempoolentry,                    },
-    { "blockchain",         &getmempoolinfo,                     },
-    { "blockchain",         &getrawmempool,                      },
-    { "blockchain",         &gettxout,                           },
-    { "blockchain",         &gettxoutsetinfo,                    },
-    { "blockchain",         &pruneblockchain,                    },
-    { "blockchain",         &savemempool,                        },
-    { "blockchain",         &verifychain,                        },
-    { "blockchain",         &preciousblock,                      },
-    { "blockchain",         &scantxoutset,                       },
-    { "blockchain",         &getblockfilter,                     },
-    { "blockchain",         &getblockreward,                     },\
-
-    /* Not shown in help */
-    { "hidden",              &invalidateblock,                   },
-    { "hidden",              &reconsiderblock,                   },
-    { "hidden",              &waitfornewblock,                   },
-    { "hidden",              &waitforblock,                      },
-    { "hidden",              &waitforblockheight,                },
-    { "hidden",              &syncwithvalidationinterfacequeue,  },
-    { "hidden",              &dumptxoutset,                      },
-};
-// clang-format on
-=======
-return RPCHelpMan{
+    return RPCHelpMan{
         "getchainstates",
         "\nReturn information about chainstates.\n",
         {},
@@ -4261,7 +3838,6 @@ return RPCHelpMan{
     };
 }
 
-
 void RegisterBlockchainRPCCommands(CRPCTable& t)
 {
     static const CRPCCommand commands[]{
@@ -4288,6 +3864,7 @@ void RegisterBlockchainRPCCommands(CRPCTable& t)
         {"blockchain", &dumptxoutset},
         {"blockchain", &loadtxoutset},
         {"blockchain", &getchainstates},
+        {"blockchain", &getblockreward},
         {"hidden", &invalidateblock},
         {"hidden", &reconsiderblock},
         {"hidden", &waitfornewblock},
@@ -4295,7 +3872,6 @@ void RegisterBlockchainRPCCommands(CRPCTable& t)
         {"hidden", &waitforblockheight},
         {"hidden", &syncwithvalidationinterfacequeue},
     };
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     for (const auto& c : commands) {
         t.appendCommand(c.name, &c);
     }

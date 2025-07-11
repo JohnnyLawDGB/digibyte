@@ -1,19 +1,10 @@
 // Copyright (c) 2010 Satoshi Nakamoto
-<<<<<<< HEAD
-// Copyright (c) 2009-2019 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
-// Copyright (c) 2009-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// Copyright (c) 2009-2022 The Bitcoin Core developers
+// Copyright (c) 2014-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <rpc/request.h>
-<<<<<<< HEAD
-
-#include <fs.h>
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 #include <util/fs.h>
 
@@ -21,10 +12,6 @@
 #include <logging.h>
 #include <random.h>
 #include <rpc/protocol.h>
-<<<<<<< HEAD
-#include <util/system.h>
-#include <util/strencodings.h>
-=======
 #include <util/fs_helpers.h>
 #include <util/strencodings.h>
 
@@ -32,7 +19,6 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 /**
  * JSON-RPC protocol.  DigiByte speaks version 1.0 for maximum compatibility,
@@ -101,11 +87,7 @@ bool GenerateAuthCookie(std::string *cookie_out)
 {
     const size_t COOKIE_SIZE = 32;
     unsigned char rand_pwd[COOKIE_SIZE];
-<<<<<<< HEAD
-    GetRandBytes(rand_pwd, COOKIE_SIZE);
-=======
     GetRandBytes(rand_pwd);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     std::string cookie = COOKIEAUTH_USER + ":" + HexStr(rand_pwd);
 
     /** the umask determines what permissions are used to create this file -
@@ -190,17 +172,10 @@ void JSONRPCRequest::parse(const UniValue& valRequest)
     const UniValue& request = valRequest.get_obj();
 
     // Parse id now so errors from here on will have the id
-<<<<<<< HEAD
-    id = find_value(request, "id");
-
-    // Parse method
-    UniValue valMethod = find_value(request, "method");
-=======
     id = request.find_value("id");
 
     // Parse method
     const UniValue& valMethod{request.find_value("method")};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (valMethod.isNull())
         throw JSONRPCError(RPC_INVALID_REQUEST, "Missing method");
     if (!valMethod.isStr())
@@ -213,11 +188,7 @@ void JSONRPCRequest::parse(const UniValue& valRequest)
         LogPrint(BCLog::RPC, "ThreadRPCServer method=%s user=%s\n", SanitizeString(strMethod), this->authUser);
 
     // Parse params
-<<<<<<< HEAD
-    UniValue valParams = find_value(request, "params");
-=======
     const UniValue& valParams{request.find_value("params")};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     if (valParams.isArray() || valParams.isObject())
         params = valParams;
     else if (valParams.isNull())

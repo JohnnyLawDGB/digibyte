@@ -172,11 +172,7 @@ static RPCHelpMan stop()
     // to the client (intended for testing)
                 "\nRequest a graceful shutdown of " PACKAGE_NAME ".",
                 {
-<<<<<<< HEAD
-                    {"wait", RPCArg::Type::NUM, RPCArg::Optional::OMITTED_NAMED_ARG, "how long to wait in ms", "", {}, /* hidden */ true},
-=======
                     {"wait", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "how long to wait in ms", RPCArgOptions{.hidden=true}},
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 },
                 RPCResult{RPCResult::Type::STR, "", "A string with the content '" + RESULT + "'"},
                 RPCExamples{""},
@@ -186,11 +182,7 @@ static RPCHelpMan stop()
     // this reply will get back to the client.
     StartShutdown();
     if (jsonRequest.params[0].isNum()) {
-<<<<<<< HEAD
-        UninterruptibleSleep(std::chrono::milliseconds{jsonRequest.params[0].get_int()});
-=======
         UninterruptibleSleep(std::chrono::milliseconds{jsonRequest.params[0].getInt<int>()});
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
     return RESULT;
 },
@@ -245,22 +237,14 @@ static RPCHelpMan getrpcinfo()
     for (const RPCCommandExecutionInfo& info : g_rpc_server_info.active_commands) {
         UniValue entry(UniValue::VOBJ);
         entry.pushKV("method", info.method);
-<<<<<<< HEAD
-        entry.pushKV("duration", GetTimeMicros() - info.start);
-=======
         entry.pushKV("duration", int64_t{Ticks<std::chrono::microseconds>(SteadyClock::now() - info.start)});
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         active_commands.push_back(entry);
     }
 
     UniValue result(UniValue::VOBJ);
     result.pushKV("active_commands", active_commands);
 
-<<<<<<< HEAD
-    const std::string path = LogInstance().m_file_path.string();
-=======
     const std::string path = LogInstance().m_file_path.u8string();
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     UniValue log_path(UniValue::VSTR, path);
     result.pushKV("logpath", log_path);
 
@@ -269,24 +253,12 @@ static RPCHelpMan getrpcinfo()
     };
 }
 
-<<<<<<< HEAD
-// clang-format off
-static const CRPCCommand vRPCCommands[] =
-{ //  category               actor (function)
-  //  ---------------------  -----------------------
-    /* Overall control/query calls */
-    { "control",             &getrpcinfo,             },
-    { "control",             &help,                   },
-    { "control",             &stop,                   },
-    { "control",             &uptime,                 },
-=======
 static const CRPCCommand vRPCCommands[]{
     /* Overall control/query calls */
     {"control", &getrpcinfo},
     {"control", &help},
     {"control", &stop},
     {"control", &uptime},
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 };
 // clang-format on
 
@@ -551,24 +523,6 @@ UniValue CRPCTable::execute(const JSONRPCRequest &request) const
         UniValue result;
         if (ExecuteCommands(it->second, request, result)) {
             return result;
-<<<<<<< HEAD
-        }
-    }
-    throw JSONRPCError(RPC_METHOD_NOT_FOUND, "Method not found");
-}
-
-static bool ExecuteCommand(const CRPCCommand& command, const JSONRPCRequest& request, UniValue& result, bool last_handler)
-{
-    try
-    {
-        RPCCommandExecution execution(request.strMethod);
-        // Execute, convert arguments to array if necessary
-        if (request.params.isObject()) {
-            return command.actor(transformNamedArguments(request, command.argNames), result, last_handler);
-        } else {
-            return command.actor(request, result, last_handler);
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
     }
     throw JSONRPCError(RPC_METHOD_NOT_FOUND, "Method not found");
@@ -594,10 +548,7 @@ static bool ExecuteCommand(const CRPCCommand& command, const JSONRPCRequest& req
 std::vector<std::string> CRPCTable::listCommands() const
 {
     std::vector<std::string> commandList;
-<<<<<<< HEAD
-=======
     commandList.reserve(mapCommands.size());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     for (const auto& i : mapCommands) commandList.emplace_back(i.first);
     return commandList;
 }

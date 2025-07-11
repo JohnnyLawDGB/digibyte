@@ -1,21 +1,13 @@
-<<<<<<< HEAD
-// Copyright (c) 2009-2020 The Bitcoin Core developers
-// Copyright (c) 2014-2020 The DigiByte Core developers
-=======
-// Copyright (c) 2017-2022 The DigiByte Core developers
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
+// Copyright (c) 2017-2022 The Bitcoin Core developers
+// Copyright (c) 2014-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #ifndef DIGIBYTE_RPC_UTIL_H
 #define DIGIBYTE_RPC_UTIL_H
 
-<<<<<<< HEAD
-#include <node/coinstats.h>
-=======
 #include <addresstype.h>
 #include <consensus/amount.h>
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #include <node/transaction.h>
 #include <outputtype.h>
 #include <protocol.h>
@@ -24,16 +16,7 @@
 #include <rpc/request.h>
 #include <script/script.h>
 #include <script/sign.h>
-<<<<<<< HEAD
 #include <script/standard.h>
-#include <univalue.h>
-#include <util/check.h>
-
-#include <string>
-#include <variant>
-#include <vector>
-
-=======
 #include <uint256.h>
 #include <univalue.h>
 #include <util/check.h>
@@ -65,7 +48,6 @@ static constexpr bool DEFAULT_RPC_DOC_CHECK{
 #endif
 };
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 /**
  * String used to describe UNIX epoch time in documentation, factored out to a
  * constant for consistency.
@@ -83,8 +65,6 @@ class CPubKey;
 class CScript;
 struct Sections;
 
-<<<<<<< HEAD
-=======
 /**
  * Gets all existing output types formatted for RPC help sections.
  *
@@ -92,7 +72,6 @@ struct Sections;
  */
 std::string GetAllOutputTypes();
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 /** Wrapper for UniValue::VType, which includes typeAny:
  * Used to denote don't care type. */
 struct UniValueType {
@@ -102,21 +81,6 @@ struct UniValueType {
     UniValue::VType type;
 };
 
-<<<<<<< HEAD
-/**
- * Type-check arguments; throws JSONRPCError if wrong type given. Does not check that
- * the right number of arguments are passed, just that any passed are the correct type.
- */
-void RPCTypeCheck(const UniValue& params,
-                  const std::list<UniValueType>& typesExpected, bool fAllowNull=false);
-
-/**
- * Type-check one argument; throws JSONRPCError if wrong type given.
- */
-void RPCTypeCheckArgument(const UniValue& value, const UniValueType& typeExpected);
-
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 /*
   Check for expected keys/value types in an Object.
 */
@@ -155,12 +119,9 @@ CTxDestination AddAndGetMultisigDestination(const int required, const std::vecto
 
 UniValue DescribeAddress(const CTxDestination& dest);
 
-<<<<<<< HEAD
-=======
 /** Parse a sighash string representation and raise an RPC error if it is invalid. */
 int ParseSighashString(const UniValue& sighash);
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 //! Parse a confirm target option and raise an RPC error if it is invalid.
 unsigned int ParseConfirmTarget(const UniValue& value, unsigned int max_target);
 
@@ -171,11 +132,7 @@ UniValue JSONRPCTransactionError(TransactionError terr, const std::string& err_s
 std::pair<int64_t, int64_t> ParseDescriptorRange(const UniValue& value);
 
 /** Evaluate a descriptor given as a string, or as a {"desc":...,"range":...} object, with default range of 1000. */
-<<<<<<< HEAD
-std::vector<CScript> EvalDescriptorStringOrObject(const UniValue& scanobject, FlatSigningProvider& provider);
-=======
 std::vector<CScript> EvalDescriptorStringOrObject(const UniValue& scanobject, FlatSigningProvider& provider, const bool expand_priv = false);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
 /** Returns, given services flags, a list of humanly readable (known) network services */
 UniValue GetServicesNames(ServiceFlags services);
@@ -190,8 +147,6 @@ enum class OuterType {
     NONE, // Only set on first recursion
 };
 
-<<<<<<< HEAD
-=======
 struct RPCArgOptions {
     bool skip_type_check{false};
     std::string oneline_description{};   //!< Should be empty unless it is supposed to override the auto-generated summary line
@@ -208,7 +163,6 @@ struct RPCArgOptions {
                                          //!< methods set the also_positional flag and read values from both positions.
 };
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 struct RPCArg {
     enum class Type {
         OBJ,
@@ -216,8 +170,6 @@ struct RPCArg {
         STR,
         NUM,
         BOOL,
-<<<<<<< HEAD
-=======
         OBJ_NAMED_PARAMS, //!< Special type that behaves almost exactly like
                           //!< OBJ, defining an options object with a list of
                           //!< pre-defined keys. The only difference between OBJ
@@ -225,7 +177,6 @@ struct RPCArg {
                           //!< also allows the keys to be passed as top-level
                           //!< named parameters, as a more convenient way to pass
                           //!< options to the RPC method without nesting them.
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         OBJ_USER_KEYS, //!< Special type where the user must set the keys e.g. to define multiple addresses; as opposed to e.g. an options object where the keys are predefined
         AMOUNT,        //!< Special type representing a floating point amount (can be either NUM or STR)
         STR_HEX,       //!< Special type that is a STR with only hex chars
@@ -236,77 +187,15 @@ struct RPCArg {
         /** Required arg */
         NO,
         /**
-<<<<<<< HEAD
-         * Optional arg that is a named argument and has a default value of
-         * `null`. When possible, the default value should be specified.
-         */
-        OMITTED_NAMED_ARG,
-        /**
-         * Optional argument with default value omitted because they are
-         * implicitly clear. That is, elements in an array or object may not
-         * exist by default.
-=======
          * Optional argument for which the default value is omitted from
          * help text for one of two reasons:
          * - It's a named argument and has a default value of `null`.
          * - Its default value is implicitly clear. That is, elements in an
          *    array may not exist by default.
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
          * When possible, the default value should be specified.
          */
         OMITTED,
     };
-<<<<<<< HEAD
-    using DefaultHint = std::string;
-    using Default = UniValue;
-    using Fallback = std::variant<Optional, /* hint for default value */ DefaultHint, /* default constant value */ Default>;
-    const std::string m_names; //!< The name of the arg (can be empty for inner args, can contain multiple aliases separated by | for named request arguments)
-    const Type m_type;
-    const bool m_hidden;
-    const std::vector<RPCArg> m_inner; //!< Only used for arrays or dicts
-    const Fallback m_fallback;
-    const std::string m_description;
-    const std::string m_oneline_description; //!< Should be empty unless it is supposed to override the auto-generated summary line
-    const std::vector<std::string> m_type_str; //!< Should be empty unless it is supposed to override the auto-generated type strings. Vector length is either 0 or 2, m_type_str.at(0) will override the type of the value in a key-value pair, m_type_str.at(1) will override the type in the argument description.
-
-    RPCArg(
-        const std::string name,
-        const Type type,
-        const Fallback fallback,
-        const std::string description,
-        const std::string oneline_description = "",
-        const std::vector<std::string> type_str = {},
-        const bool hidden = false)
-        : m_names{std::move(name)},
-          m_type{std::move(type)},
-          m_hidden{hidden},
-          m_fallback{std::move(fallback)},
-          m_description{std::move(description)},
-          m_oneline_description{std::move(oneline_description)},
-          m_type_str{std::move(type_str)}
-    {
-        CHECK_NONFATAL(type != Type::ARR && type != Type::OBJ && type != Type::OBJ_USER_KEYS);
-    }
-
-    RPCArg(
-        const std::string name,
-        const Type type,
-        const Fallback fallback,
-        const std::string description,
-        const std::vector<RPCArg> inner,
-        const std::string oneline_description = "",
-        const std::vector<std::string> type_str = {})
-        : m_names{std::move(name)},
-          m_type{std::move(type)},
-          m_hidden{false},
-          m_inner{std::move(inner)},
-          m_fallback{std::move(fallback)},
-          m_description{std::move(description)},
-          m_oneline_description{std::move(oneline_description)},
-          m_type_str{std::move(type_str)}
-    {
-        CHECK_NONFATAL(type == Type::ARR || type == Type::OBJ || type == Type::OBJ_USER_KEYS);
-=======
     /** Hint for default value */
     using DefaultHint = std::string;
     /** Default constant value */
@@ -350,20 +239,16 @@ struct RPCArg {
           m_opts{std::move(opts)}
     {
         CHECK_NONFATAL(type == Type::ARR || type == Type::OBJ || type == Type::OBJ_NAMED_PARAMS || type == Type::OBJ_USER_KEYS);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     }
 
     bool IsOptional() const;
 
-<<<<<<< HEAD
-=======
     /**
      * Check whether the request JSON type matches.
      * Returns true if type matches, or object describing error(s) if not.
      */
     UniValue MatchesType(const UniValue& request) const;
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     /** Return the first of all aliases */
     std::string GetFirstName() const;
 
@@ -372,11 +257,7 @@ struct RPCArg {
 
     /**
      * Return the type string of the argument.
-<<<<<<< HEAD
-     * Set oneline to allow it to be overridden by a custom oneline type string (m_oneline_description).
-=======
      * Set oneline to allow it to be overridden by a custom oneline type string (m_opts.oneline_description).
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
      */
     std::string ToString(bool oneline) const;
     /**
@@ -388,11 +269,7 @@ struct RPCArg {
      * Return the description string, including the argument type and whether
      * the argument is required.
      */
-<<<<<<< HEAD
-    std::string ToDescriptionString() const;
-=======
     std::string ToDescriptionString(bool is_named_arg) const;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 };
 
 struct RPCResult {
@@ -416,61 +293,26 @@ struct RPCResult {
     const std::string m_key_name;         //!< Only used for dicts
     const std::vector<RPCResult> m_inner; //!< Only used for arrays or dicts
     const bool m_optional;
-<<<<<<< HEAD
-=======
     const bool m_skip_type_check;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     const std::string m_description;
     const std::string m_cond;
 
     RPCResult(
-<<<<<<< HEAD
-        const std::string cond,
-        const Type type,
-        const std::string m_key_name,
-        const bool optional,
-        const std::string description,
-        const std::vector<RPCResult> inner = {})
-=======
         std::string cond,
         Type type,
         std::string m_key_name,
         bool optional,
         std::string description,
         std::vector<RPCResult> inner = {})
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         : m_type{std::move(type)},
           m_key_name{std::move(m_key_name)},
           m_inner{std::move(inner)},
           m_optional{optional},
-<<<<<<< HEAD
-=======
           m_skip_type_check{false},
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
           m_description{std::move(description)},
           m_cond{std::move(cond)}
     {
         CHECK_NONFATAL(!m_cond.empty());
-<<<<<<< HEAD
-        const bool inner_needed{type == Type::ARR || type == Type::ARR_FIXED || type == Type::OBJ || type == Type::OBJ_DYN};
-        CHECK_NONFATAL(inner_needed != inner.empty());
-    }
-
-    RPCResult(
-        const std::string cond,
-        const Type type,
-        const std::string m_key_name,
-        const std::string description,
-        const std::vector<RPCResult> inner = {})
-        : RPCResult{cond, type, m_key_name, false, description, inner} {}
-
-    RPCResult(
-        const Type type,
-        const std::string m_key_name,
-        const bool optional,
-        const std::string description,
-        const std::vector<RPCResult> inner = {})
-=======
         CheckInnerDoc();
     }
 
@@ -489,26 +331,10 @@ struct RPCResult {
         std::string description,
         std::vector<RPCResult> inner = {},
         bool skip_type_check = false)
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         : m_type{std::move(type)},
           m_key_name{std::move(m_key_name)},
           m_inner{std::move(inner)},
           m_optional{optional},
-<<<<<<< HEAD
-          m_description{std::move(description)},
-          m_cond{}
-    {
-        const bool inner_needed{type == Type::ARR || type == Type::ARR_FIXED || type == Type::OBJ || type == Type::OBJ_DYN};
-        CHECK_NONFATAL(inner_needed != inner.empty());
-    }
-
-    RPCResult(
-        const Type type,
-        const std::string m_key_name,
-        const std::string description,
-        const std::vector<RPCResult> inner = {})
-        : RPCResult{type, m_key_name, false, description, inner} {}
-=======
           m_skip_type_check{skip_type_check},
           m_description{std::move(description)},
           m_cond{}
@@ -523,7 +349,6 @@ struct RPCResult {
         std::vector<RPCResult> inner = {},
         bool skip_type_check = false)
         : RPCResult{type, std::move(m_key_name), /*optional=*/false, std::move(description), std::move(inner), skip_type_check} {}
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     /** Append the sections of the result. */
     void ToSections(Sections& sections, OuterType outer_type = OuterType::NONE, const int current_indent = 0) const;
@@ -531,10 +356,6 @@ struct RPCResult {
     std::string ToStringObj() const;
     /** Return the description string, including the result type. */
     std::string ToDescriptionString() const;
-<<<<<<< HEAD
-    /** Check whether the result JSON type matches. */
-    bool MatchesType(const UniValue& result) const;
-=======
     /** Check whether the result JSON type matches.
      * Returns true if type matches, or object describing error(s) if not.
      */
@@ -542,7 +363,6 @@ struct RPCResult {
 
 private:
     void CheckInnerDoc() const;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 };
 
 struct RPCResults {
@@ -582,8 +402,6 @@ public:
     RPCHelpMan(std::string name, std::string description, std::vector<RPCArg> args, RPCResults results, RPCExamples examples, RPCMethodImpl fun);
 
     UniValue HandleRequest(const JSONRPCRequest& request) const;
-<<<<<<< HEAD
-=======
     /**
      * Helper to get a request argument.
      * This function only works during m_fun(), i.e. it should only be used in
@@ -622,18 +440,13 @@ public:
             return ArgValue<const R*>(i);
         }
     }
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
     std::string ToString() const;
     /** Return the named args that need to be converted from string to another JSON type */
     UniValue GetArgMap() const;
     /** If the supplied number of args is neither too small nor too high */
     bool IsValidNumArgs(size_t num_args) const;
-<<<<<<< HEAD
-    std::vector<std::string> GetArgNames() const;
-=======
     //! Return list of arguments and whether they are named-only.
     std::vector<std::pair<std::string, bool>> GetArgNames() const;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     const std::string m_name;
 
@@ -643,10 +456,6 @@ private:
     const std::vector<RPCArg> m_args;
     const RPCResults m_results;
     const RPCExamples m_examples;
-<<<<<<< HEAD
-};
-
-=======
     mutable const JSONRPCRequest* m_req{nullptr}; // A pointer to the request for the duration of m_fun()
     template <typename R>
     R ArgValue(size_t i) const;
@@ -661,5 +470,4 @@ private:
 void PushWarnings(const UniValue& warnings, UniValue& obj);
 void PushWarnings(const std::vector<bilingual_str>& warnings, UniValue& obj);
 
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 #endif // DIGIBYTE_RPC_UTIL_H

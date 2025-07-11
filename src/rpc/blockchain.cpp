@@ -2274,15 +2274,11 @@ static RPCHelpMan getblockstats()
                 "\nCompute per block statistics for a given window. All amounts are in satoshis.\n"
                 "It won't work for some heights with pruning.\n",
                 {
-<<<<<<< HEAD
-                    {"hash_or_height", RPCArg::Type::NUM, RPCArg::Optional::NO, "The block hash or height of the target block", "", {"", "string or numeric"}},
-=======
                     {"hash_or_height", RPCArg::Type::NUM, RPCArg::Optional::NO, "The block hash or height of the target block",
                      RPCArgOptions{
                          .skip_type_check = true,
                          .type_str = {"", "string or numeric"},
                      }},
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                     {"stats", RPCArg::Type::ARR, RPCArg::DefaultHint{"all values"}, "Values to plot (see result below)",
                         {
                             {"height", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "Selected statistic"},
@@ -2305,32 +2301,6 @@ static RPCHelpMan getblockstats()
                     {RPCResult::Type::NUM, "75th_percentile_feerate", "The 75th percentile feerate"},
                     {RPCResult::Type::NUM, "90th_percentile_feerate", "The 90th percentile feerate"},
                 }},
-<<<<<<< HEAD
-                {RPCResult::Type::NUM, "height", "The height of the block"},
-                {RPCResult::Type::NUM, "ins", "The number of inputs (excluding coinbase)"},
-                {RPCResult::Type::NUM, "maxfee", "Maximum fee in the block"},
-                {RPCResult::Type::NUM, "maxfeerate", "Maximum feerate (in satoshis per virtual byte)"},
-                {RPCResult::Type::NUM, "maxtxsize", "Maximum transaction size"},
-                {RPCResult::Type::NUM, "medianfee", "Truncated median fee in the block"},
-                {RPCResult::Type::NUM, "mediantime", "The block median time past"},
-                {RPCResult::Type::NUM, "mediantxsize", "Truncated median transaction size"},
-                {RPCResult::Type::NUM, "minfee", "Minimum fee in the block"},
-                {RPCResult::Type::NUM, "minfeerate", "Minimum feerate (in satoshis per virtual byte)"},
-                {RPCResult::Type::NUM, "mintxsize", "Minimum transaction size"},
-                {RPCResult::Type::NUM, "outs", "The number of outputs"},
-                {RPCResult::Type::NUM, "subsidy", "The block subsidy"},
-                {RPCResult::Type::NUM, "swtotal_size", "Total size of all segwit transactions"},
-                {RPCResult::Type::NUM, "swtotal_weight", "Total weight of all segwit transactions"},
-                {RPCResult::Type::NUM, "swtxs", "The number of segwit transactions"},
-                {RPCResult::Type::NUM, "time", "The block time"},
-                {RPCResult::Type::NUM, "total_out", "Total amount in all outputs (excluding coinbase and thus reward [ie subsidy + totalfee])"},
-                {RPCResult::Type::NUM, "total_size", "Total size of all non-coinbase transactions"},
-                {RPCResult::Type::NUM, "total_weight", "Total weight of all non-coinbase transactions"},
-                {RPCResult::Type::NUM, "totalfee", "The fee total"},
-                {RPCResult::Type::NUM, "txs", "The number of transactions (including coinbase)"},
-                {RPCResult::Type::NUM, "utxo_increase", "The increase/decrease in the number of unspent outputs"},
-                {RPCResult::Type::NUM, "utxo_size_inc", "The increase/decrease in size for the utxo index (not discounting op_return and similar)"},
-=======
                 {RPCResult::Type::NUM, "height", /*optional=*/true, "The height of the block"},
                 {RPCResult::Type::NUM, "ins", /*optional=*/true, "The number of inputs (excluding coinbase)"},
                 {RPCResult::Type::NUM, "maxfee", /*optional=*/true, "Maximum fee in the block"},
@@ -2357,7 +2327,6 @@ static RPCHelpMan getblockstats()
                 {RPCResult::Type::NUM, "utxo_size_inc", /*optional=*/true, "The increase/decrease in size for the utxo index (not discounting op_return and similar)"},
                 {RPCResult::Type::NUM, "utxo_increase_actual", /*optional=*/true, "The increase/decrease in the number of unspent outputs, not counting unspendables"},
                 {RPCResult::Type::NUM, "utxo_size_inc_actual", /*optional=*/true, "The increase/decrease in size for the utxo index, not counting unspendables"},
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             }},
                 RPCExamples{
                     HelpExampleCli("getblockstats", R"('"00000000c937983704a73af28acdec37b049d214adbda81d7e2a3dd146f6ed09"' '["minfeerate","avgfeerate"]')") +
@@ -2368,13 +2337,8 @@ static RPCHelpMan getblockstats()
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
 {
     ChainstateManager& chainman = EnsureAnyChainman(request.context);
-<<<<<<< HEAD
     LOCK(cs_main);
-    CBlockIndex* pindex{ParseHashOrHeight(request.params[0], chainman)};
-    CHECK_NONFATAL(pindex != nullptr);
-=======
     const CBlockIndex& pindex{*CHECK_NONFATAL(ParseHashOrHeight(request.params[0], chainman))};
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     std::set<std::string> stats;
     if (!request.params[1].isNull()) {
@@ -2385,13 +2349,8 @@ static RPCHelpMan getblockstats()
         }
     }
 
-<<<<<<< HEAD
-    const CBlock block = GetBlockChecked(pindex);
-    const CBlockUndo blockUndo = GetUndoChecked(pindex);
-=======
     const CBlock& block = GetBlockChecked(chainman.m_blockman, &pindex);
     const CBlockUndo& blockUndo = GetUndoChecked(chainman.m_blockman, &pindex);
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 
     const bool do_all = stats.size() == 0; // Calculate everything if nothing selected (default)
     const bool do_mediantxsize = do_all || stats.count("mediantxsize") != 0;
@@ -2435,9 +2394,6 @@ static RPCHelpMan getblockstats()
         if (loop_outputs) {
             for (const CTxOut& out : tx->vout) {
                 tx_total_out += out.nValue;
-<<<<<<< HEAD
-                utxo_size_inc += GetSerializeSize(out, PROTOCOL_VERSION) + PER_UTXO_OVERHEAD;
-=======
 
                 size_t out_size = GetSerializeSize(out, PROTOCOL_VERSION) + PER_UTXO_OVERHEAD;
                 utxo_size_inc += out_size;
@@ -2450,7 +2406,6 @@ static RPCHelpMan getblockstats()
 
                 ++utxos;
                 utxo_size_inc_actual += out_size;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             }
         }
 
@@ -2492,13 +2447,9 @@ static RPCHelpMan getblockstats()
                 const CTxOut& prevoutput = coin.out;
 
                 tx_total_in += prevoutput.nValue;
-<<<<<<< HEAD
-                utxo_size_inc -= GetSerializeSize(prevoutput, PROTOCOL_VERSION) + PER_UTXO_OVERHEAD;
-=======
                 size_t prevout_size = GetSerializeSize(prevoutput, PROTOCOL_VERSION) + PER_UTXO_OVERHEAD;
                 utxo_size_inc -= prevout_size;
                 utxo_size_inc_actual -= prevout_size;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
             }
 
             CAmount txfee = tx_total_in - tx_total_out;
@@ -2578,7 +2529,6 @@ static RPCHelpMan getblockstats()
     };
 }
 
-<<<<<<< HEAD
 static RPCHelpMan savemempool()
 {
     return RPCHelpMan{"savemempool",
@@ -2606,8 +2556,6 @@ static RPCHelpMan savemempool()
     };
 }
 
-=======
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
 namespace {
 //! Search for a given set of pubkey scripts
 bool FindScriptPubKey(std::atomic<int>& scan_progress, const std::atomic<bool>& should_abort, int64_t& count, CCoinsViewCursor* cursor, const std::set<CScript>& needles, std::map<COutPoint, Coin>& out_results, std::function<void()>& interruption_point)
@@ -2866,11 +2814,7 @@ static RPCHelpMan scantxoutset()
         for (const UniValue& scanobject : request.params[1].get_array().getValues()) {
             FlatSigningProvider provider;
             auto scripts = EvalDescriptorStringOrObject(scanobject, provider);
-<<<<<<< HEAD
-            for (const auto& script : scripts) {
-=======
             for (CScript& script : scripts) {
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
                 std::string inferred = InferDescriptor(script, provider)->ToString();
                 needles.emplace(script);
                 descriptors.emplace(std::move(script), std::move(inferred));
@@ -2884,28 +2828,15 @@ static RPCHelpMan scantxoutset()
         g_should_abort_scan = false;
         int64_t count = 0;
         std::unique_ptr<CCoinsViewCursor> pcursor;
-<<<<<<< HEAD
-        CBlockIndex* tip;
-=======
         const CBlockIndex* tip;
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         NodeContext& node = EnsureAnyNodeContext(request.context);
         {
             ChainstateManager& chainman = EnsureChainman(node);
             LOCK(cs_main);
-<<<<<<< HEAD
-            CChainState& active_chainstate = chainman.ActiveChainstate();
-            active_chainstate.ForceFlushStateToDisk();
-            pcursor = active_chainstate.CoinsDB().Cursor();
-            CHECK_NONFATAL(pcursor);
-            tip = active_chainstate.m_chain.Tip();
-            CHECK_NONFATAL(tip);
-=======
             Chainstate& active_chainstate = chainman.ActiveChainstate();
             active_chainstate.ForceFlushStateToDisk();
             pcursor = CHECK_NONFATAL(active_chainstate.CoinsDB().Cursor());
             tip = CHECK_NONFATAL(active_chainstate.m_chain.Tip());
->>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion
         }
         bool res = FindScriptPubKey(g_scan_progress, g_should_abort_scan, count, pcursor.get(), needles, coins, node.rpc_interruption_point);
         result.pushKV("success", res);

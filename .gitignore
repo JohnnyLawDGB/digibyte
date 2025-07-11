@@ -157,3 +157,4 @@ dist/
 /guix-build-*
 
 /ci/scratch/
+.vscode/settings.json

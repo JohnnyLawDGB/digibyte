@@ -95,7 +95,6 @@ struct BlockInfo {
 
     BlockInfo(const uint256& hash LIFETIMEBOUND) : hash(hash) {}
 };
-};
 
 //! Interface giving clients (wallet processes, maybe other analysis tools in
 //! the future) ability to access to the chain state, receive notifications,

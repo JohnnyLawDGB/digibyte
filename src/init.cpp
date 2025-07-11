@@ -1664,6 +1664,7 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
 
         node::ChainstateLoadOptions options;
         options.mempool = Assert(node.mempool.get());
+        options.stempool = Assert(node.stempool.get());
         options.reindex = node::fReindex;
         options.reindex_chainstate = fReindexChainState;
         options.prune = chainman.m_blockman.IsPruneMode();

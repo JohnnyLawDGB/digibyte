@@ -213,6 +213,7 @@ void ChainTestingSetup::LoadVerifyActivateChainstate()
     auto& chainman{*Assert(m_node.chainman)};
     node::ChainstateLoadOptions options;
     options.mempool = Assert(m_node.mempool.get());
+    options.stempool = Assert(m_node.stempool.get());
     options.block_tree_db_in_memory = m_block_tree_db_in_memory;
     options.coins_db_in_memory = m_coins_db_in_memory;
     options.reindex = node::fReindex;

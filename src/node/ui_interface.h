@@ -1,20 +1,10 @@
 // Copyright (c) 2010 Satoshi Nakamoto
-<<<<<<<< HEAD:src/node/ui_interface.h
-// Copyright (c) 2009-2019 The Bitcoin Core developers
-// Copyright (c) 2014-2019 The DigiByte Core developers
-// Distributed under the MIT software license, see the accompanying
-// file COPYING or http://www.opensource.org/licenses/mit-license.php.
-
-#ifndef DIGIBYTE_NODE_UI_INTERFACE_H
-#define DIGIBYTE_NODE_UI_INTERFACE_H
-========
 // Copyright (c) 2012-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #ifndef DIGIBYTE_NODE_INTERFACE_UI_H
 #define DIGIBYTE_NODE_INTERFACE_UI_H
->>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion:src/node/interface_ui.h
 
 #include <functional>
 #include <memory>
@@ -90,12 +80,9 @@ public:
 
     /** Progress message during initialization. */
     ADD_SIGNALS_DECL_WRAPPER(InitMessage, void, const std::string& message);
-<<<<<<<< HEAD:src/node/ui_interface.h
-========
 
     /** Wallet loader created. */
     ADD_SIGNALS_DECL_WRAPPER(InitWallet, void, );
->>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion:src/node/interface_ui.h
 
     /** Number of network connections changed. */
     ADD_SIGNALS_DECL_WRAPPER(NotifyNumConnectionsChanged, void, int newNumConnections);
@@ -118,11 +105,7 @@ public:
     ADD_SIGNALS_DECL_WRAPPER(NotifyBlockTip, void, SynchronizationState, const CBlockIndex*);
 
     /** Best header has changed */
-<<<<<<<< HEAD:src/node/ui_interface.h
-    ADD_SIGNALS_DECL_WRAPPER(NotifyHeaderTip, void, SynchronizationState, const CBlockIndex*);
-========
     ADD_SIGNALS_DECL_WRAPPER(NotifyHeaderTip, void, SynchronizationState, int64_t height, int64_t timestamp, bool presync);
->>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion:src/node/interface_ui.h
 
     /** Banlist did change. */
     ADD_SIGNALS_DECL_WRAPPER(BannedListChanged, void, void);
@@ -133,16 +116,8 @@ void InitWarning(const bilingual_str& str);
 
 /** Show error message **/
 bool InitError(const bilingual_str& str);
-<<<<<<<< HEAD:src/node/ui_interface.h
-constexpr auto AbortError = InitError;
-
-extern CClientUIInterface uiInterface;
-
-#endif // DIGIBYTE_NODE_UI_INTERFACE_H
-========
 bool InitError(const bilingual_str& str, const std::vector<std::string>& details);
 
 extern CClientUIInterface uiInterface;
 
 #endif // DIGIBYTE_NODE_INTERFACE_UI_H
->>>>>>>> bitcoin-v26-2-converted/digibyte-v26.2-naming-conversion:src/node/interface_ui.h

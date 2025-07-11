@@ -15,7 +15,6 @@
 #include <kernel/validation_cache_sizes.h>
 
 #include <addrman.h>
-#include <amount.h>
 #include <banman.h>
 #include <blockfilter.h>
 #include <chain.h>

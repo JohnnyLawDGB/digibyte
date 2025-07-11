@@ -59,7 +59,27 @@ vimdiff digibyte-v8.26/$ERROR_FILE \
 ```
 
 ### 3. Fix Using v26.2 Standards
-**Rule: Use Bitcoin v26.2 code as base, adapt DigiByte features to it**
+**FIRST: Check if you can simply copy the entire file from v26.2**
+
+```bash
+# Comprehensive scan for ALL major DigiByte features in the error file
+grep -i "algo\|dandelion\|digishield\|odocrypt\|odo\|21000000000\|12024\|12025\|multiAlgo\|multishield\|15.*second\|getblockreward\|0xfa.*0xc3.*0xb6.*0xda\|dgb\|digibyte\|groestl\|skein\|qubit\|scrypt.*pow\|ALGO_\|stem.*pool\|fluff" digibyte-v8.26/$ERROR_FILE
+
+# If NO major DGB features found, copy v26.2 file BUT preserve copyright:
+if [ $? -ne 0 ]; then
+    cp bitcoin-v26.2-for-digibyte/$ERROR_FILE digibyte-v8.26/$ERROR_FILE
+
+    # Add DigiByte copyright if missing (preserve Bitcoin copyright)
+    if grep -q "Copyright.*The Bitcoin Core developers" digibyte-v8.26/$ERROR_FILE && \
+       ! grep -q "Copyright.*The DigiByte Core developers" digibyte-v8.26/$ERROR_FILE; then
+        sed -i '/Copyright.*The Bitcoin Core developers/a\// Copyright (c) 2014-2025 The DigiByte Core developers' digibyte-v8.26/$ERROR_FILE
+    fi
+
+    make clean && make -j6  # Test if this solves all errors in that file
+fi
+```
+
+**If major DGB features ARE present, then manually fix:**
 
 ```cpp
 // DON'T: Copy old DigiByte code

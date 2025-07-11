@@ -10,7 +10,7 @@ This file provides context and guidance for AI assistants working on the DigiByt
 
 ## Build Error Resolution Process
 
-When fixing build errors during the v26.2 merge:
+When fixing build errors after v26.2 merge:
 
 ### Setup
 **Required repositories:**
@@ -125,10 +125,7 @@ git reset --hard HEAD~1
 
 ## Important Reminders
 - Both Bitcoin and DigiByte copyrights must be preserved
-- Test on testnet before mainnet
-- Document all merge decisions
-- Run linting and formatting checks
-- Ensure reproducible builds work
+
 
 ## DigiByte Unique Features
 
@@ -217,9 +214,3 @@ After any significant changes:
 - Current: v8.22.2
 - Target: v8.26 (aligned with Bitcoin Core v26.2)
 - Format: v8.XX where XX approximates Bitcoin Core version
-
-
-## Support Resources
-- Specification: digibyte-btc-v26-2-merge-spec.md
-- Merge Prompt: DIGIBYTE_V8.26_MERGE_PROMPT.md
-

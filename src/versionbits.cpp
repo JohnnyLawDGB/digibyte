@@ -222,6 +222,12 @@ uint32_t VersionBitsCache::Mask(const Consensus::Params& params, Consensus::Depl
     return VersionBitsConditionChecker(pos).Mask(params);
 }
 
+int32_t VersionBitsCache::ComputeBlockVersion(const CBlockIndex* pindexPrev, const Consensus::Params& params)
+{
+    // Default to SHA256D algo for backward compatibility
+    return ComputeBlockVersion(pindexPrev, params, ALGO_SHA256D);
+}
+
 int32_t VersionBitsCache::ComputeBlockVersion(const CBlockIndex* pindexPrev, const Consensus::Params& params, int algo)
 {
     LOCK(m_mutex);

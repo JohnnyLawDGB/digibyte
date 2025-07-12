@@ -211,6 +211,13 @@ bool AreInputsStandard(const CTransaction& tx, const CCoinsViewCache& mapInputs,
     return true;
 }
 
+// Overload without taproot_active parameter for backward compatibility
+bool AreInputsStandard(const CTransaction& tx, const CCoinsViewCache& mapInputs)
+{
+    // Default to true for taproot_active to match Bitcoin v26.2 behavior
+    return AreInputsStandard(tx, mapInputs, true);
+}
+
 bool IsWitnessStandard(const CTransaction& tx, const CCoinsViewCache& mapInputs)
 {
     if (tx.IsCoinBase())

@@ -41,6 +41,23 @@ Sock& Sock::operator=(Sock&& other)
     return *this;
 }
 
+SOCKET Sock::Get() const
+{
+    return m_socket;
+}
+
+SOCKET Sock::Release()
+{
+    SOCKET s = m_socket;
+    m_socket = INVALID_SOCKET;
+    return s;
+}
+
+void Sock::Reset()
+{
+    Close();
+}
+
 ssize_t Sock::Send(const void* data, size_t len, int flags) const
 {
     return send(m_socket, static_cast<const char*>(data), len, flags);

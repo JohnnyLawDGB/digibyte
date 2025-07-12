@@ -2689,4 +2689,85 @@ bool DescriptorScriptPubKeyMan::CanUpdateToWalletDescriptor(const WalletDescript
 
     return true;
 }
+
+void DescriptorScriptPubKeyMan::AddDescriptorKey(const CKey& key, const CPubKey &pubkey)
+{
+    LOCK(cs_desc_man);
+    WalletBatch batch(m_storage.GetDatabase());
+    if (!AddDescriptorKeyWithDB(batch, key, pubkey)) {
+        throw std::runtime_error(std::string(__func__) + ": writing descriptor private key failed");
+    }
+}
+
+bool DescriptorScriptPubKeyMan::AddDescriptorKeyWithDB(WalletBatch& batch, const CKey& key, const CPubKey &pubkey)
+{
+    AssertLockHeld(cs_desc_man);
+    assert(!m_storage.IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS));
+
+    // Check if provided key already exists
+    if (m_map_keys.find(pubkey.GetID()) != m_map_keys.end() ||
+        m_map_crypted_keys.find(pubkey.GetID()) != m_map_crypted_keys.end()) {
+        return true;
+    }
+
+    if (m_storage.HasEncryptionKeys()) {
+        if (m_storage.IsLocked()) {
+            return false;
+        }
+
+        std::vector<unsigned char> crypted_secret;
+        CKeyingMaterial secret(key.begin(), key.end());
+        if (!EncryptSecret(m_storage.GetEncryptionKey(), secret, pubkey.GetHash(), crypted_secret)) {
+            return false;
+        }
+
+        m_map_crypted_keys[pubkey.GetID()] = make_pair(pubkey, crypted_secret);
+        return batch.WriteCryptedDescriptorKey(GetID(), pubkey, crypted_secret);
+    } else {
+        m_map_keys[pubkey.GetID()] = key;
+        return batch.WriteDescriptorKey(GetID(), pubkey, key.GetPrivKey());
+    }
+}
+
+void DescriptorScriptPubKeyMan::UpdateWalletDescriptor(WalletDescriptor& descriptor)
+{
+    LOCK(cs_desc_man);
+    std::string error;
+    if (!CanUpdateToWalletDescriptor(descriptor, error)) {
+        throw std::runtime_error(std::string(__func__) + ": " + error);
+    }
+
+    m_wallet_descriptor = descriptor;
+    NotifyCanGetAddressesChanged();
+}
+
+void DescriptorScriptPubKeyMan::UpgradeDescriptorCache()
+{
+    LOCK(cs_desc_man);
+    if (m_storage.IsLocked() || m_storage.IsWalletFlagSet(WALLET_FLAG_LAST_HARDENED_XPUB_CACHED)) {
+        return;
+    }
+
+    // Skip if we have the last hardened xpub cache
+    if (m_wallet_descriptor.cache.GetCachedLastHardenedExtPubKeys().size() > 0) {
+        return;
+    }
+
+    // Expand the descriptor
+    FlatSigningProvider provider;
+    provider.keys = GetKeys();
+    FlatSigningProvider out_keys;
+    std::vector<CScript> scripts_temp;
+    DescriptorCache temp_cache;
+    if (!m_wallet_descriptor.descriptor->Expand(0, provider, scripts_temp, out_keys, &temp_cache)){
+        throw std::runtime_error("Unable to expand descriptor");
+    }
+
+    // Cache the last hardened xpubs
+    DescriptorCache diff = m_wallet_descriptor.cache.MergeAndDiff(temp_cache);
+    if (!WalletBatch(m_storage.GetDatabase()).WriteDescriptorCacheItems(GetID(), diff)) {
+        throw std::runtime_error(std::string(__func__) + ": writing cache items failed");
+    }
+}
+
 } // namespace wallet

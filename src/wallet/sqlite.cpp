@@ -22,6 +22,11 @@
 #include <vector>
 
 namespace wallet {
+
+// Define static members
+Mutex SQLiteDatabase::g_sqlite_mutex;
+int SQLiteDatabase::g_sqlite_count = 0;
+
 static constexpr int32_t WALLET_SCHEMA_VERSION = 0;
 
 static Span<const std::byte> SpanFromBlob(sqlite3_stmt* stmt, int col)

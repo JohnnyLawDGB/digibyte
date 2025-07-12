@@ -121,11 +121,9 @@ int main(int argc, char** argv)
         benchmark::Args args;
         args.asymptote = parseAsymptote(argsman.GetArg("-asymptote", ""));
         args.is_list_only = argsman.GetBoolArg("-list", false);
-        args.min_time = std::chrono::milliseconds(argsman.GetIntArg("-min-time", DEFAULT_MIN_TIME_MS));
-        args.output_csv = argsman.GetPathArg("-output-csv");
-        args.output_json = argsman.GetPathArg("-output-json");
+        args.output_csv = argsman.GetArg("-output-csv", "");
+        args.output_json = argsman.GetArg("-output-json", "");
         args.regex_filter = argsman.GetArg("-filter", DEFAULT_BENCH_FILTER);
-        args.sanity_check = argsman.GetBoolArg("-sanity-check", false);
         args.priority = parsePriorityLevel(argsman.GetArg("-priority-level", DEFAULT_PRIORITY));
 
         benchmark::BenchRunner::RunAll(args);

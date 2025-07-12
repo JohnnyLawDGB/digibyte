@@ -25,7 +25,7 @@ const std::function<std::vector<const char*>()> G_TEST_COMMAND_LINE_ARGUMENTS{};
 
 namespace {
 
-void GenerateTemplateResults(const std::vector<ankerl::nanobench::Result>& benchmarkResults, const fs::path& file, const char* tpl)
+void GenerateTemplateResults(const std::vector<ankerl::nanobench::Result>& benchmarkResults, const std::string& file, const char* tpl)
 {
     if (benchmarkResults.empty() || file.empty()) {
         // nothing to write, bail out

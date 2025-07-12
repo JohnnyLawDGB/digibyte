@@ -43,7 +43,9 @@ int CBlockHeader::GetAlgo() const
         case BLOCK_VERSION_ODO:
             return ALGO_ODO;
     }
-    return ALGO_UNKNOWN;
+    // Legacy blocks before multi-algo (height < 145000) used Scrypt
+    // This includes the genesis block and all early blocks
+    return ALGO_SCRYPT;
 }
 
 uint32_t OdoKey(const Consensus::Params& params, uint32_t nTime)

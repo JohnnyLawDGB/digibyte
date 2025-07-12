@@ -27,7 +27,8 @@
     "typeindex": "cpp",
     "ios": "cpp",
     "map": "cpp",
-    "vector": "cpp"
+    "vector": "cpp",
+    "limits": "cpp"
   },
   "cmake.ignoreCMakeListsMissing": true
 }

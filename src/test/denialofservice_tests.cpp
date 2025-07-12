@@ -454,6 +454,8 @@ public:
             it = m_orphans.begin();
         return it->second.tx;
     }
+    
+    Mutex& GetMutex() { return m_mutex; }
 };
 
 static void MakeNewKeyWithFastRandomContext(CKey& key)
@@ -480,7 +482,7 @@ BOOST_AUTO_TEST_CASE(DoS_mapOrphans)
     FillableSigningProvider keystore;
     BOOST_CHECK(keystore.AddKey(key));
 
-    LOCK(orphanage.m_mutex);
+    LOCK(orphanage.GetMutex());
 
     // 50 orphan transactions:
     for (int i = 0; i < 50; i++)

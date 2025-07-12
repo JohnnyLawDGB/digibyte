@@ -316,13 +316,15 @@ bool PermittedDifficultyTransition(const Consensus::Params& params, int64_t heig
     if (params.fPowAllowMinDifficultyBlocks) return true;
 
     // DigiByte v8.22.2 worked perfectly without this Bitcoin Core v26.2 difficulty validation.
-    // DigiByte uses real-time MultiShield difficulty adjustment on every block, which is
-    // fundamentally incompatible with Bitcoin's 2016-block difficulty validation model.
-    // Disable this validation entirely for DigiByte networks and rely on the proper
-    // difficulty validation that occurs in the block validation pipeline.
+    // DigiByte uses real-time MultiShield difficulty adjustment on every single block across
+    // all 4 difficulty eras (V1, V2, V3, V4), which is fundamentally incompatible with 
+    // Bitcoin's 2016-block difficulty validation model.
+    // Disable this validation entirely for ALL DigiByte networks and rely on the proper
+    // DigiByte difficulty validation that occurs in the block validation pipeline.
     if (params.nPowTargetSpacing == 15) {
-        // This is DigiByte (15-second blocks) - completely bypass Bitcoin's validation
-        // since it's incompatible with DigiByte's real-time difficulty system
+        // This is DigiByte (ALL networks use 15-second blocks)
+        // Completely bypass Bitcoin's validation since DigiByte adjusts
+        // difficulty in real-time on every block in all 4 eras
         return true;
     }
 

@@ -288,10 +288,11 @@ TestChain100Setup::TestChain100Setup(
     {
         LOCK(::cs_main);
         // Bitcoin-specific hash check disabled for DigiByte
-        // TODO: Update with DigiByte's deterministic hash after 100 blocks
-        // assert(
-        //     m_node.chainman->ActiveChain().Tip()->GetBlockHash().ToString() ==
-        //     "06fd4e749f2ffac23803654f4471b7c9174f50b050657d705d48f00f799efeef");
+        // DigiByte has different chain parameters, resulting in different block hashes
+        auto tip_hash = m_node.chainman->ActiveChain().Tip()->GetBlockHash().ToString();
+        LogPrintf("TestChain100Setup: Chain tip hash after 100 blocks: %s\n", tip_hash);
+        // For now, just verify we have 100 blocks
+        assert(m_node.chainman->ActiveChain().Height() == 100);
     }
 }
 

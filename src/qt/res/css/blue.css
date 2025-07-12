@@ -690,11 +690,19 @@ background-color:#e0e0e0;
     /* Options Dialog */
     QDialog#OptionsDialog {
     background-color: #003366;
+    color: #333333;
+    }
+    
+    QDialog#OptionsDialog QLabel {
+    color: #333333 !important;
     }
     
     QDialog#OptionsDialog QValueComboBox, QDialog#OptionsDialog QSpinBox {
     margin-top:5px;
     margin-bottom:5px;
+    background-color: #ffffff;
+    color: #333333;
+    border: 1px solid #cccccc;
     }
     
     QDialog#OptionsDialog QValidatedLineEdit, QDialog#OptionsDialog QValidatedLineEdit:disabled, QDialog#OptionsDialog QLineEdit, QDialog#OptionsDialog QLineEdit:disabled {
@@ -704,11 +712,15 @@ background-color:#e0e0e0;
     margin-bottom:0px;
     padding-top:1px;
     padding-bottom:1px;
+    background-color: #ffffff;
+    color: #333333;
+    border: 1px solid #cccccc;
     }
     
     QDialog#OptionsDialog > QLabel {
     qproperty-alignment: 'AlignVCenter';
     min-height:20px;
+    color: #333333 !important;
     }
     
     QDialog#OptionsDialog QWidget#tabDisplay QValueComboBox {
@@ -724,11 +736,27 @@ background-color:#e0e0e0;
     
     QDialog#OptionsDialog QCheckBox {
     min-height:20px;
+    color: #333333 !important;
     }
     
     QDialog#OptionsDialog QCheckBox#displayAddresses {
     min-height:33px;
+    color: #333333 !important;
+    }
     
+    QDialog#OptionsDialog QGroupBox {
+    background-color: #ffffff;
+    color: #333333;
+    border: 1px solid #cccccc;
+    padding-top: 10px;
+    margin-top: 5px;
+    }
+    
+    QDialog#OptionsDialog QGroupBox::title {
+    color: #333333;
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    padding: 0 5px;
     }
     
     /* TOOLS MENU */

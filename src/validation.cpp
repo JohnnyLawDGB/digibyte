@@ -1641,14 +1641,77 @@ PackageMempoolAcceptResult ProcessNewPackage(Chainstate& active_chainstate, CTxM
 
 CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams)
 {
-    int halvings = nHeight / consensusParams.nSubsidyHalvingInterval;
-    // Force block reward to zero when right shift is undefined.
-    if (halvings >= 64)
-        return 0;
+    CAmount nSubsidy = COIN;
 
-    CAmount nSubsidy = 50 * COIN;
-    // Subsidy is cut in half every 210,000 blocks which will occur approximately every 4 years.
-    nSubsidy >>= halvings;
+    if (nHeight < consensusParams.nDiffChangeTarget) { // < 67200
+        if (nHeight < 1440)
+        {
+            // (Period I)
+            nSubsidy = 72000 * COIN;
+        }
+        else if (nHeight < 5760)
+        {
+            // (Period II)
+            nSubsidy = 16000 * COIN;
+        }
+        else
+        {
+            // (Period III)
+            // This is pre-patch, reward is 8000.
+            nSubsidy = 8000 * COIN;
+        }
+    }
+    else if (nHeight < consensusParams.alwaysUpdateDiffChangeTarget) // < 400000
+    {
+        // (Period IV)
+        nSubsidy = 8000 * COIN;
+        int blocks = nHeight - consensusParams.nDiffChangeTarget;
+        int weeks = (blocks / consensusParams.patchBlockRewardDuration) + 1;
+
+        // Decrease reward by 0.5% every 10080 blocks
+        for (int i = 0; i < weeks; i++)
+        {
+            nSubsidy -= (nSubsidy / 200);
+        }
+    }
+    else if (nHeight < consensusParams.workComputationChangeTarget) // < 1430000
+    {
+        // (Period V)
+        nSubsidy = 2459 * COIN;
+        int blocks = nHeight - consensusParams.alwaysUpdateDiffChangeTarget;
+        int weeks = (blocks / consensusParams.patchBlockRewardDuration2) + 1;
+        // decrease reward by 1% every month
+        for(int i = 0; i < weeks; i++)
+        {
+            nSubsidy -= (nSubsidy / 100);
+        }
+    }
+    else // < ∞
+    {
+        // (Period VI)
+        // Hard Fork Point: 1.43M
+        // Subsidy at Hard Fork: 2157
+        // Monthly Decay Factor: 98884/100000
+        // Last Block Number: 41668798
+        // Expected years after Hard Fork: 19.1395
+        nSubsidy = 2157 * COIN / 2;
+        int64_t blocks = nHeight - consensusParams.workComputationChangeTarget;
+        int64_t months = blocks * BLOCK_TIME_SECONDS / SECONDS_PER_MONTH;
+
+        for (int64_t i = 0; i < months; i++)
+        {
+            nSubsidy *= 98884;
+            nSubsidy /= 100000;
+        }
+    }
+
+    // Make sure the reward is at least 1 DGB
+    // ToDo: Remove this statement in a future release, along
+    // with a fixed supply curve.
+    if (nSubsidy < COIN) {
+        nSubsidy = 0;
+    }
+
     return nSubsidy;
 }
 

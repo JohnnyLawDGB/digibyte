@@ -178,7 +178,7 @@ public:
 
         genesis = CreateGenesisBlock(1389388394, 2447652, 0x1e0ffff0, 1, 8000 * COIN);
         consensus.hashGenesisBlock = genesis.GetHash();
-        assert(consensus.hashGenesisBlock == uint256S("0x7497ea1b465eb39f1c8f507bc877078fe016d6fcb6dfad3a64c98dcc6e1e8496"));
+        assert(consensus.hashGenesisBlock == uint256S("0x7497ea1b465eb39f1c8f507bc877078fe016d6fcb6dfad3a64c98dcc6e1e8680"));
         assert(genesis.hashMerkleRoot == uint256S("0x72ddd9496b004221ed0557358846d9248ecd4c440ebd28ed901efc18757d0fad"));
 
         // The current status of the DigiByte DNS Seed Servers can be checked here: http://digibyteseed.com/

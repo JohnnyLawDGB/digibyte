@@ -282,18 +282,18 @@ TestChain100Setup::TestChain100Setup(
     coinbaseKey.Set(vchKey.begin(), vchKey.end(), true);
 
     // Generate a 100-block chain:
-    this->mineBlocks(COINBASE_MATURITY);
+    this->mineBlocks(100);
 
     {
         LOCK(::cs_main);
         // DigiByte uses different test chain parameters than Bitcoin:
         // 1. Mining algorithm: ALGO_SCRYPT (vs Bitcoin's SHA256D)
-        // 2. COINBASE_MATURITY: 8 blocks (vs Bitcoin's 100)
+        // 2. COINBASE_MATURITY: 8 blocks for height < 145000, 100 blocks for height >= 145000
         // 3. Different genesis block and chain parameters
         // Therefore, the test chain hash will be different from Bitcoin's expected hash
         // TODO: Calculate and verify the correct hash for DigiByte's test chain
         // For now, we verify that we have the expected number of blocks
-        assert(m_node.chainman->ActiveChain().Height() == COINBASE_MATURITY);
+        assert(m_node.chainman->ActiveChain().Height() == 100);
     }
 }
 

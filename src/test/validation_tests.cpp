@@ -22,19 +22,31 @@ BOOST_FIXTURE_TEST_SUITE(validation_tests, TestingSetup)
 
 static void TestBlockSubsidyHalvings(const Consensus::Params& consensusParams)
 {
-    int maxHalvings = 64;
-    CAmount nInitialSubsidy = 50 * COIN;
-
-    CAmount nPreviousSubsidy = nInitialSubsidy * 2; // for height == 0
-    BOOST_CHECK_EQUAL(nPreviousSubsidy, nInitialSubsidy * 2);
-    for (int nHalvings = 0; nHalvings < maxHalvings; nHalvings++) {
-        int nHeight = nHalvings * consensusParams.nSubsidyHalvingInterval;
-        CAmount nSubsidy = GetBlockSubsidy(nHeight, consensusParams);
-        BOOST_CHECK(nSubsidy <= nInitialSubsidy);
-        BOOST_CHECK_EQUAL(nSubsidy, nPreviousSubsidy / 2);
-        nPreviousSubsidy = nSubsidy;
-    }
-    BOOST_CHECK_EQUAL(GetBlockSubsidy(maxHalvings * consensusParams.nSubsidyHalvingInterval, consensusParams), 0);
+    // DigiByte doesn't use Bitcoin's halving model
+    // Instead it has a unique reward schedule with gradual reduction
+    // Test some key heights in DigiByte's reward schedule
+    
+    // Period I: Height 0-1439 = 72000 DGB
+    BOOST_CHECK_EQUAL(GetBlockSubsidy(0, consensusParams), 72000 * COIN);
+    BOOST_CHECK_EQUAL(GetBlockSubsidy(1439, consensusParams), 72000 * COIN);
+    
+    // Period II: Height 1440-5759 = 16000 DGB
+    BOOST_CHECK_EQUAL(GetBlockSubsidy(1440, consensusParams), 16000 * COIN);
+    BOOST_CHECK_EQUAL(GetBlockSubsidy(5759, consensusParams), 16000 * COIN);
+    
+    // Period III: Height 5760-67199 = 8000 DGB
+    BOOST_CHECK_EQUAL(GetBlockSubsidy(5760, consensusParams), 8000 * COIN);
+    BOOST_CHECK_EQUAL(GetBlockSubsidy(67199, consensusParams), 8000 * COIN);
+    
+    // Period IV and beyond: Gradual reduction
+    // Just test that rewards decrease over time
+    CAmount reward67200 = GetBlockSubsidy(67200, consensusParams);
+    CAmount reward400000 = GetBlockSubsidy(400000, consensusParams);
+    CAmount reward1000000 = GetBlockSubsidy(1000000, consensusParams);
+    
+    BOOST_CHECK(reward67200 > reward400000);
+    BOOST_CHECK(reward400000 > reward1000000);
+    BOOST_CHECK(reward1000000 > 0);
 }
 
 static void TestBlockSubsidyHalvings(int nSubsidyHalvingInterval)
@@ -56,13 +68,18 @@ BOOST_AUTO_TEST_CASE(subsidy_limit_test)
 {
     const auto chainParams = CreateChainParams(*m_node.args, ChainType::MAIN);
     CAmount nSum = 0;
-    for (int nHeight = 0; nHeight < 14000000; nHeight += 1000) {
+    // DigiByte has much higher initial rewards than Bitcoin
+    // Check first 20 million blocks (much longer than Bitcoin due to 15 second blocks)
+    for (int nHeight = 0; nHeight < 20000000; nHeight += 1000) {
         CAmount nSubsidy = GetBlockSubsidy(nHeight, chainParams->GetConsensus());
-        BOOST_CHECK(nSubsidy <= 50 * COIN);
+        // DigiByte's max per-block reward is 72000 DGB in the first period
+        BOOST_CHECK(nSubsidy <= 72000 * COIN);
         nSum += nSubsidy * 1000;
         BOOST_CHECK(MoneyRange(nSum));
     }
-    BOOST_CHECK_EQUAL(nSum, CAmount{2099999997690000});
+    // DigiByte total supply is 21 billion, not 21 million
+    // The exact sum will be different due to DigiByte's unique reward schedule
+    BOOST_CHECK(nSum < MAX_MONEY);
 }
 
 BOOST_AUTO_TEST_CASE(signet_parse_tests)

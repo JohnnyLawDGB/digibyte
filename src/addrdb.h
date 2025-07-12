@@ -19,7 +19,6 @@
 class ArgsManager;
 class AddrMan;
 class CAddress;
-class CDataStream;
 class DataStream;
 class NetGroupManager;
 
@@ -29,16 +28,6 @@ void ReadFromStream(AddrMan& addr, DataStream& ssPeers);
 
 bool DumpPeerAddresses(const ArgsManager& args, const AddrMan& addr);
 
-class CAddrDB
-{
-private:
-    fs::path pathAddr;
-public:
-    CAddrDB();
-    bool Write(const AddrMan& addr);
-    bool Read(AddrMan& addr);
-    static bool Read(AddrMan& addr, CDataStream& ssPeers);
-};
 
 /** Access to the banlist databases (banlist.json and banlist.dat) */
 class CBanDB
@@ -59,11 +48,9 @@ public:
      * Read the banlist from disk.
      * @param[out] banSet The loaded list. Set if `true` is returned, otherwise it is left
      * in an undefined state.
-     * @param[out] dirty Indicates whether the loaded list needs flushing to disk. Set if
-     * `true` is returned, otherwise it is left in an undefined state.
      * @return true on success
      */
-    bool Read(banmap_t& banSet, bool& dirty);
+    bool Read(banmap_t& banSet);
 };
 
 /**

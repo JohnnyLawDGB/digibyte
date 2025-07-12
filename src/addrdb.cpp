@@ -25,20 +25,6 @@
 #include <util/time.h>
 #include <util/translation.h>
 
-CBanEntry::CBanEntry(const UniValue& json)
-    : nVersion(json["version"].getInt<int>()), nCreateTime(json["ban_created"].getInt<int64_t>()),
-      nBanUntil(json["banned_until"].getInt<int64_t>())
-{
-}
-
-UniValue CBanEntry::ToJson() const
-{
-    UniValue json(UniValue::VOBJ);
-    json.pushKV("version", nVersion);
-    json.pushKV("ban_created", nCreateTime);
-    json.pushKV("banned_until", nBanUntil);
-    return json;
-}
 
 namespace {
 
@@ -158,10 +144,8 @@ bool CBanDB::Write(const banmap_t& banSet)
     return false;
 }
 
-bool CBanDB::Read(banmap_t& banSet, bool& dirty)
+bool CBanDB::Read(banmap_t& banSet)
 {
-    dirty = false;
-    
     if (fs::exists(m_banlist_dat)) {
         LogPrintf("banlist.dat ignored because it can only be read by " PACKAGE_NAME " version 22.x. Remove %s to silence this warning.\n", fs::quoted(PathToString(m_banlist_dat)));
     }
@@ -190,35 +174,6 @@ bool CBanDB::Read(banmap_t& banSet, bool& dirty)
     return true;
 }
 
-CAddrDB::CAddrDB()
-{
-    pathAddr = gArgs.GetDataDirNet() / "peers.dat";
-}
-
-bool CAddrDB::Write(const AddrMan& addr)
-{
-    return SerializeFileDB("peers", pathAddr, addr);
-}
-
-bool CAddrDB::Read(AddrMan& addr)
-{
-    try {
-        DeserializeFileDB(pathAddr, addr);
-        return true;
-    } catch (const std::exception&) {
-        return false;
-    }
-}
-
-bool CAddrDB::Read(AddrMan& addr, CDataStream& ssPeers)
-{
-    try {
-        DeserializeDB(ssPeers, addr, false);
-        return true;
-    } catch (const std::exception&) {
-        return false;
-    }
-}
 
 void DumpAnchors(const fs::path& anchors_db_path, const std::vector<CAddress>& anchors)
 {

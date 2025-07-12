@@ -33,6 +33,10 @@
 #include <qt/utilitydialog.h>
 #include <qt/winshutdownmonitor.h>
 #include <uint256.h>
+
+#include <QDir>
+#include <QFileInfo>
+#include <QFileSystemWatcher>
 #include <util/exception.h>
 #include <util/string.h>
 #include <util/threadnames.h>
@@ -297,6 +301,33 @@ void DigiByteApplication::applyTheme()
         theme = "dark";
     }
     
+    // Check if we should use external CSS for live reloading (development mode)
+    QString externalCssDir = QDir::homePath() + "/.digibyte-dev/css/";
+    QString externalCssPath = externalCssDir + theme + ".css";
+    
+    QFileInfo externalFile(externalCssPath);
+    if (externalFile.exists() && externalFile.isReadable()) {
+        // Use external CSS file for live reloading
+        m_externalCssPath = externalCssPath;
+        qDebug() << "Using external CSS for live reloading:" << m_externalCssPath;
+        qDebug() << "Press F5 to reload CSS manually";
+        loadExternalStyleSheet();
+        
+        // Set up file watcher
+        if (!m_cssWatcher) {
+            m_cssWatcher = new QFileSystemWatcher(this);
+            connect(m_cssWatcher, &QFileSystemWatcher::fileChanged, this, &DigiByteApplication::reloadStyleSheet);
+        }
+        // Remove old paths and add new one
+        if (!m_cssWatcher->files().isEmpty()) {
+            m_cssWatcher->removePaths(m_cssWatcher->files());
+        }
+        m_cssWatcher->addPath(m_externalCssPath);
+        
+        return;
+    }
+    
+    // Fall back to internal resource CSS
     QString cssPath = QString(":/css/%1").arg(theme);
     QFile file(cssPath);
     if (file.open(QFile::ReadOnly)) {
@@ -314,6 +345,40 @@ void DigiByteApplication::applyTheme()
         qDebug() << "Applied theme:" << theme << "from" << cssPath;
     } else {
         qWarning() << "Failed to load theme:" << theme << "from" << cssPath;
+    }
+}
+
+void DigiByteApplication::loadExternalStyleSheet()
+{
+    if (m_externalCssPath.isEmpty()) return;
+    
+    QFile file(m_externalCssPath);
+    if (file.open(QFile::ReadOnly)) {
+        QString styleSheet = QLatin1String(file.readAll());
+        
+        // On macOS, we need to ensure the stylesheet is applied after the native style
+        #ifdef Q_OS_MACOS
+        // Force style refresh on macOS
+        setStyle(QStyleFactory::create("Fusion"));
+        #endif
+        
+        setStyleSheet(styleSheet);
+        file.close();
+        
+        qDebug() << "Loaded external CSS from:" << m_externalCssPath;
+    } else {
+        qWarning() << "Failed to load external CSS from:" << m_externalCssPath;
+    }
+}
+
+void DigiByteApplication::reloadStyleSheet()
+{
+    qDebug() << "CSS file changed, reloading stylesheet...";
+    loadExternalStyleSheet();
+    
+    // Re-add the file to the watcher (sometimes needed after file changes)
+    if (m_cssWatcher && !m_cssWatcher->files().contains(m_externalCssPath)) {
+        m_cssWatcher->addPath(m_externalCssPath);
     }
 }
 
@@ -515,6 +580,16 @@ bool DigiByteApplication::event(QEvent* e)
     if (e->type() == QEvent::Quit) {
         requestShutdown();
         return true;
+    }
+    
+    // Handle F5 key for CSS reload when using external stylesheets
+    if (e->type() == QEvent::KeyPress && !m_externalCssPath.isEmpty()) {
+        QKeyEvent* keyEvent = static_cast<QKeyEvent*>(e);
+        if (keyEvent->key() == Qt::Key_F5) {
+            qDebug() << "F5 pressed - reloading CSS...";
+            reloadStyleSheet();
+            return true;
+        }
     }
 
     return QApplication::event(e);

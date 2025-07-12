@@ -16,6 +16,8 @@
 #include <optional>
 
 #include <QApplication>
+#include <QFileSystemWatcher>
+#include <QKeyEvent>
 
 class DigiByteGUI;
 class ClientModel;
@@ -68,11 +70,15 @@ public:
     void setupPlatformStyle();
     /// Apply theme from settings
     void applyTheme();
+    /// Load external CSS file for live reloading
+    void loadExternalStyleSheet();
 
     interfaces::Node& node() const { assert(m_node); return *m_node; }
 
 public Q_SLOTS:
     void initializeResult(bool success, interfaces::BlockAndHeaderTipInfo tip_info);
+    /// Reload stylesheet from external file
+    void reloadStyleSheet();
     /// Request core shutdown
     void requestShutdown();
     /// Handle runaway exceptions. Shows a message box with the problem and quits the program.
@@ -106,6 +112,10 @@ private:
     std::unique_ptr<QWidget> shutdownWindow;
     SplashScreen* m_splash = nullptr;
     std::unique_ptr<interfaces::Node> m_node;
+    
+    // Live CSS reloading
+    QFileSystemWatcher* m_cssWatcher{nullptr};
+    QString m_externalCssPath;
 
     void startThread();
 };

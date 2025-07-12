@@ -119,6 +119,10 @@ public:
         consensus.nInterval = consensus.nTargetTimespan / consensus.nTargetSpacing;
         consensus.nDiffChangeTarget = 67200; // DigiShield Hard Fork Block BIP34Height 67,200
 
+        // Old 1% monthly DGB Reward before 15 second block change
+        consensus.patchBlockRewardDuration = 10080; //10080; - No longer used
+        //4 blocks per min, x60 minutes x 24hours x 14 days = 80,160 blocks for 0.5% reduction in DGB reward supply - No longer used
+        consensus.patchBlockRewardDuration2 = 80160; //80160;
         consensus.nTargetTimespanRe = 1*60; // 60 Seconds
         consensus.nTargetSpacingRe = 1*60; // 60 seconds
         consensus.nIntervalRe = consensus.nTargetTimespanRe / consensus.nTargetSpacingRe; // 1 block
@@ -176,9 +180,9 @@ public:
         m_assumed_blockchain_size = 32;
         m_assumed_chain_state_size = 1;
 
-        genesis = CreateGenesisBlock(1389388394, 2447652, 0x1e0ffff0, 1, 8000 * COIN);
+        genesis = CreateGenesisBlock(1389388394, 2447652, 0x1e0ffff0, 1, 8000);
         consensus.hashGenesisBlock = genesis.GetHash();
-        assert(consensus.hashGenesisBlock == uint256S("0x7497ea1b465eb39f1c8f507bc877078fe016d6fcb6dfad3a64c98dcc6e1e8680"));
+        assert(consensus.hashGenesisBlock == uint256S("0x7497ea1b465eb39f1c8f507bc877078fe016d6fcb6dfad3a64c98dcc6e1e8496"));
         assert(genesis.hashMerkleRoot == uint256S("0x72ddd9496b004221ed0557358846d9248ecd4c440ebd28ed901efc18757d0fad"));
 
         // The current status of the DigiByte DNS Seed Servers can be checked here: http://digibyteseed.com/

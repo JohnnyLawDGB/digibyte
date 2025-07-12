@@ -71,7 +71,78 @@ WalletFrame {
     
     QMessageBox {
     background-color:#F8F6F6;
+    color:#333333;
     }
+
+/* Options Dialog and other dialog content */
+QDialog {
+background-color:#ffffff;
+color:#333333;
+}
+
+QDialog QLabel {
+color:#333333 !important;
+}
+
+QDialog QGroupBox {
+background-color:#ffffff;
+color:#333333;
+border: 1px solid #cccccc;
+padding-top: 10px;
+margin-top: 5px;
+}
+
+QDialog QGroupBox::title {
+color:#333333;
+subcontrol-origin: margin;
+subcontrol-position: top left;
+padding: 0 5px;
+}
+
+QDialog QTextEdit {
+background-color:#ffffff;
+color:#333333;
+border: 1px solid #cccccc;
+}
+
+QDialog QSpinBox {
+background-color:#ffffff;
+color:#333333;
+border: 1px solid #cccccc;
+}
+
+QDialog QComboBox {
+background-color:#ffffff;
+color:#333333;
+border: 1px solid #cccccc;
+}
+
+QDialog QTabWidget::pane {
+background-color:#ffffff;
+border: 1px solid #cccccc;
+}
+
+QDialog QTabWidget::tab-bar {
+alignment: center;
+}
+
+QDialog QTabBar::tab {
+background-color:#f0f0f0;
+color:#333333 !important;
+border: 1px solid #cccccc;
+padding: 8px 16px;
+margin-right: 2px;
+}
+
+QDialog QTabBar::tab:selected {
+background-color:#ffffff;
+color:#333333 !important;
+border-bottom: 1px solid #ffffff;
+}
+
+QDialog QTabBar::tab:hover {
+background-color:#e0e0e0;
+}
     
     /*******************************************************/
     
@@ -662,7 +733,31 @@ WalletFrame {
     /* TOOLS MENU */
     
     QDialog#RPCConsole { /* RPC Console Dialog Box */
-    background-color:#F8F6F6;
+    background-color:#ffffff;
+    color:#333333;
+    }
+    
+    QDialog#RPCConsole QLabel {
+    color:#333333 !important;
+    }
+    
+    QDialog#RPCConsole QTabWidget::pane {
+    background-color:#ffffff;
+    border: 1px solid #cccccc;
+    }
+    
+    QDialog#RPCConsole QTabBar::tab {
+    background-color:#f0f0f0;
+    color:#333333 !important;
+    border: 1px solid #cccccc;
+    padding: 8px 16px;
+    margin-right: 2px;
+    }
+    
+    QDialog#RPCConsole QTabBar::tab:selected {
+    background-color:#ffffff;
+    color:#333333 !important;
+    border-bottom: 1px solid #ffffff;
     }
     
     QDialog#RPCConsole QWidget#tab_info QLabel#label_11, QDialog#RPCConsole QWidget#tab_info QLabel#label_10 { /* Margin between Network and Block Chain headers */
@@ -718,15 +813,18 @@ WalletFrame {
     
     /* About DigiByte Dialog */
     QDialog#AboutDialog {
-    background-color:#000;
+    background-color:#ffffff;
+    color:#333333;
     }
     
     QDialog#AboutDialog QLabel#label, QDialog#AboutDialog QLabel#copyrightLabel, QDialog#AboutDialog QLabel#label_2 { /* About DigiByte Contents */
     margin-left:10px;
+    color:#333333 !important;
     }
     
     QDialog#AboutDialog QLabel#label_2 { /* Margin for About DigiByte text */
     margin-right:10px;
+    color:#333333 !important;
     }
     
     /* Edit Address Dialog */

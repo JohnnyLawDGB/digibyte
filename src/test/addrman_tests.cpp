@@ -82,9 +82,9 @@ public:
     
     size_t size() const { return m_addrman->Size(); }
     
-    CAddrInfo Select() { return m_addrman->Select().first; }
+    CAddress Select() { return m_addrman->Select().first; }
     
-    bool Good(const CAddress& addr) { return m_addrman->Good(addr); }
+    bool Good(const CService& addr) { return m_addrman->Good(addr); }
     
     void Attempt(const CService& addr, bool fCountFailure, NodeSeconds nTime) {
         m_addrman->Attempt(addr, fCountFailure, nTime);
@@ -110,7 +110,7 @@ BOOST_FIXTURE_TEST_SUITE(addrman_tests, BasicTestingSetup)
 
 BOOST_AUTO_TEST_CASE(addrman_simple)
 {
-    auto addrman = std::make_unique<AddrMan>(EMPTY_NETGROUPMAN, DETERMINISTIC, GetCheckRatio(m_node));
+    auto addrman = std::make_unique<AddrMan>(EMPTY_NETGROUPMAN, DETERMINISTIC, 0);
 
     CNetAddr source = ResolveIP("252.2.2.2");
 
@@ -144,7 +144,7 @@ BOOST_AUTO_TEST_CASE(addrman_simple)
     BOOST_CHECK(addrman->Size() >= 1);
 
     // Test: reset addrman and test AddrMan::Add multiple addresses works as expected
-    addrman = std::make_unique<AddrMan>(EMPTY_NETGROUPMAN, DETERMINISTIC, GetCheckRatio(m_node));
+    addrman = std::make_unique<AddrMan>(EMPTY_NETGROUPMAN, DETERMINISTIC, 0);
     std::vector<CAddress> vAddr;
     vAddr.emplace_back(ResolveService("250.1.1.3", 8333), NODE_NONE);
     vAddr.emplace_back(ResolveService("250.1.1.4", 8333), NODE_NONE);
@@ -154,7 +154,7 @@ BOOST_AUTO_TEST_CASE(addrman_simple)
 
 BOOST_AUTO_TEST_CASE(addrman_ports)
 {
-    auto addrman = std::make_unique<AddrMan>(EMPTY_NETGROUPMAN, DETERMINISTIC, GetCheckRatio(m_node));
+    auto addrman = std::make_unique<AddrMan>(EMPTY_NETGROUPMAN, DETERMINISTIC, 0);
 
     CNetAddr source = ResolveIP("252.2.2.2");
 
@@ -182,7 +182,7 @@ BOOST_AUTO_TEST_CASE(addrman_ports)
 
 BOOST_AUTO_TEST_CASE(addrman_select)
 {
-    auto addrman = std::make_unique<AddrMan>(EMPTY_NETGROUPMAN, DETERMINISTIC, GetCheckRatio(m_node));
+    auto addrman = std::make_unique<AddrMan>(EMPTY_NETGROUPMAN, DETERMINISTIC, 0);
     BOOST_CHECK(!addrman->Select(false).first.IsValid());
     BOOST_CHECK(!addrman->Select(true).first.IsValid());
 
@@ -241,7 +241,7 @@ BOOST_AUTO_TEST_CASE(addrman_select)
 
 BOOST_AUTO_TEST_CASE(addrman_select_by_network)
 {
-    auto addrman = std::make_unique<AddrMan>(EMPTY_NETGROUPMAN, DETERMINISTIC, GetCheckRatio(m_node));
+    auto addrman = std::make_unique<AddrMan>(EMPTY_NETGROUPMAN, DETERMINISTIC, 0);
     BOOST_CHECK(!addrman->Select(/*new_only=*/true, NET_IPV4).first.IsValid());
     BOOST_CHECK(!addrman->Select(/*new_only=*/false, NET_IPV4).first.IsValid());
 
@@ -328,7 +328,7 @@ BOOST_AUTO_TEST_CASE(addrman_select_special)
 
 BOOST_AUTO_TEST_CASE(addrman_new_collisions)
 {
-    auto addrman = std::make_unique<AddrMan>(EMPTY_NETGROUPMAN, DETERMINISTIC, GetCheckRatio(m_node));
+    auto addrman = std::make_unique<AddrMan>(EMPTY_NETGROUPMAN, DETERMINISTIC, 0);
 
     CNetAddr source = ResolveIP("252.2.2.2");
 
@@ -338,7 +338,7 @@ BOOST_AUTO_TEST_CASE(addrman_new_collisions)
 
     while (num_addrs < 22) { // Magic number! 250.1.1.1 - 250.1.1.22 do not collide with deterministic key = 1
         CService addr = ResolveService("250.1.1." + ToString(++num_addrs));
-        BOOST_CHECK(addrman->Add({addr}, source));
+        BOOST_CHECK(addrman->Add({CAddress(addr, NODE_NONE)}, source));
 
         // Test: No collision in new table yet.
         BOOST_CHECK_EQUAL(addrman->Size(), num_addrs);
@@ -357,7 +357,7 @@ BOOST_AUTO_TEST_CASE(addrman_new_collisions)
 
 BOOST_AUTO_TEST_CASE(addrman_new_multiplicity)
 {
-    auto addrman = std::make_unique<AddrMan>(EMPTY_NETGROUPMAN, DETERMINISTIC, GetCheckRatio(m_node));
+    auto addrman = std::make_unique<AddrMan>(EMPTY_NETGROUPMAN, DETERMINISTIC, 0);
     CAddress addr{CAddress(ResolveService("253.3.3.3", 8333), NODE_NONE)};
     const auto start_time{Now<NodeSeconds>()};
     addr.nTime = start_time;
@@ -389,7 +389,7 @@ BOOST_AUTO_TEST_CASE(addrman_new_multiplicity)
 
 BOOST_AUTO_TEST_CASE(addrman_tried_collisions)
 {
-    auto addrman = std::make_unique<AddrMan>(EMPTY_NETGROUPMAN, DETERMINISTIC, GetCheckRatio(m_node));
+    auto addrman = std::make_unique<AddrMan>(EMPTY_NETGROUPMAN, DETERMINISTIC, 0);
 
     CNetAddr source = ResolveIP("252.2.2.2");
 
@@ -399,7 +399,7 @@ BOOST_AUTO_TEST_CASE(addrman_tried_collisions)
 
     while (num_addrs < 35) { // Magic number! 250.1.1.1 - 250.1.1.35 do not collide in tried with deterministic key = 1
         CService addr = ResolveService("250.1.1." + ToString(++num_addrs));
-        BOOST_CHECK(addrman->Add({addr}, source));
+        BOOST_CHECK(addrman->Add({CAddress(addr, NODE_NONE)}, source));
 
         // Test: Add to tried without collision
         BOOST_CHECK(addrman->Good(CAddress(addr, NODE_NONE)));
@@ -418,7 +418,7 @@ BOOST_AUTO_TEST_CASE(addrman_tried_collisions)
 
 BOOST_AUTO_TEST_CASE(addrman_getaddr)
 {
-    auto addrman = std::make_unique<AddrMan>(EMPTY_NETGROUPMAN, DETERMINISTIC, GetCheckRatio(m_node));
+    auto addrman = std::make_unique<AddrMan>(EMPTY_NETGROUPMAN, DETERMINISTIC, 0);
 
     // Test: Sanity check, GetAddr should never return anything if addrman
     //  is empty.
@@ -740,7 +740,7 @@ BOOST_AUTO_TEST_CASE(addrman_serialization)
     std::vector<bool> asmap1 = FromBytes(asmap_raw, sizeof(asmap_raw) * 8);
     NetGroupManager netgroupman{asmap1};
 
-    const auto ratio = GetCheckRatio(m_node);
+    const auto ratio = 0;
     auto addrman_asmap1 = std::make_unique<AddrMan>(netgroupman, DETERMINISTIC, ratio);
     auto addrman_asmap1_dup = std::make_unique<AddrMan>(netgroupman, DETERMINISTIC, ratio);
     auto addrman_noasmap = std::make_unique<AddrMan>(EMPTY_NETGROUPMAN, DETERMINISTIC, ratio);
@@ -804,7 +804,7 @@ BOOST_AUTO_TEST_CASE(remove_invalid)
 {
     // Confirm that invalid addresses are ignored in unserialization.
 
-    auto addrman = std::make_unique<AddrMan>(EMPTY_NETGROUPMAN, DETERMINISTIC, GetCheckRatio(m_node));
+    auto addrman = std::make_unique<AddrMan>(EMPTY_NETGROUPMAN, DETERMINISTIC, 0);
     DataStream stream{};
 
     const CAddress new1{ResolveService("5.5.5.5"), NODE_NONE};
@@ -836,14 +836,14 @@ BOOST_AUTO_TEST_CASE(remove_invalid)
     BOOST_REQUIRE(pos + sizeof(tried2_raw_replacement) <= stream.size());
     memcpy(stream.data() + pos, tried2_raw_replacement, sizeof(tried2_raw_replacement));
 
-    addrman = std::make_unique<AddrMan>(EMPTY_NETGROUPMAN, DETERMINISTIC, GetCheckRatio(m_node));
+    addrman = std::make_unique<AddrMan>(EMPTY_NETGROUPMAN, DETERMINISTIC, 0);
     stream >> *addrman;
     BOOST_CHECK_EQUAL(addrman->Size(), 2);
 }
 
 BOOST_AUTO_TEST_CASE(addrman_selecttriedcollision)
 {
-    auto addrman = std::make_unique<AddrMan>(EMPTY_NETGROUPMAN, DETERMINISTIC, GetCheckRatio(m_node));
+    auto addrman = std::make_unique<AddrMan>(EMPTY_NETGROUPMAN, DETERMINISTIC, 0);
 
     BOOST_CHECK(addrman->Size() == 0);
 
@@ -854,7 +854,7 @@ BOOST_AUTO_TEST_CASE(addrman_selecttriedcollision)
     CNetAddr source = ResolveIP("252.2.2.2");
     for (unsigned int i = 1; i < 23; i++) {
         CService addr = ResolveService("250.1.1." + ToString(i));
-        BOOST_CHECK(addrman->Add({addr}, source));
+        BOOST_CHECK(addrman->Add({CAddress(addr, NODE_NONE)}, source));
 
         // No collisions in tried.
         BOOST_CHECK(addrman->Good(addr));
@@ -876,13 +876,13 @@ BOOST_AUTO_TEST_CASE(addrman_selecttriedcollision)
 
 BOOST_AUTO_TEST_CASE(addrman_noevict)
 {
-    auto addrman = std::make_unique<AddrMan>(EMPTY_NETGROUPMAN, DETERMINISTIC, GetCheckRatio(m_node));
+    auto addrman = std::make_unique<AddrMan>(EMPTY_NETGROUPMAN, DETERMINISTIC, 0);
 
     // Add 35 addresses.
     CNetAddr source = ResolveIP("252.2.2.2");
     for (unsigned int i = 1; i < 36; i++) {
         CService addr = ResolveService("250.1.1." + ToString(i));
-        BOOST_CHECK(addrman->Add({addr}, source));
+        BOOST_CHECK(addrman->Add({CAddress(addr, NODE_NONE)}, source));
 
         // No collision yet.
         BOOST_CHECK(addrman->Good(addr));
@@ -903,7 +903,7 @@ BOOST_AUTO_TEST_CASE(addrman_noevict)
     // Lets create two collisions.
     for (unsigned int i = 37; i < 59; i++) {
         CService addr = ResolveService("250.1.1." + ToString(i));
-        BOOST_CHECK(addrman->Add({addr}, source));
+        BOOST_CHECK(addrman->Add({CAddress(addr, NODE_NONE)}, source));
         BOOST_CHECK(addrman->Good(addr));
     }
 
@@ -928,7 +928,7 @@ BOOST_AUTO_TEST_CASE(addrman_noevict)
 
 BOOST_AUTO_TEST_CASE(addrman_evictionworks)
 {
-    auto addrman = std::make_unique<AddrMan>(EMPTY_NETGROUPMAN, DETERMINISTIC, GetCheckRatio(m_node));
+    auto addrman = std::make_unique<AddrMan>(EMPTY_NETGROUPMAN, DETERMINISTIC, 0);
 
     BOOST_CHECK(addrman->Size() == 0);
 
@@ -939,7 +939,7 @@ BOOST_AUTO_TEST_CASE(addrman_evictionworks)
     CNetAddr source = ResolveIP("252.2.2.2");
     for (unsigned int i = 1; i < 36; i++) {
         CService addr = ResolveService("250.1.1." + ToString(i));
-        BOOST_CHECK(addrman->Add({addr}, source));
+        BOOST_CHECK(addrman->Add({CAddress(addr, NODE_NONE)}, source));
 
         // No collision yet.
         BOOST_CHECK(addrman->Good(addr));
@@ -947,7 +947,7 @@ BOOST_AUTO_TEST_CASE(addrman_evictionworks)
 
     // Collision between 36 and 19.
     CService addr = ResolveService("250.1.1.36");
-    BOOST_CHECK(addrman->Add({addr}, source));
+    BOOST_CHECK(addrman->Add({CAddress(addr, NODE_NONE)}, source));
     BOOST_CHECK(!addrman->Good(addr));
 
     auto info = addrman->SelectTriedCollision().first;
@@ -1016,7 +1016,7 @@ BOOST_AUTO_TEST_CASE(load_addrman)
     const std::optional<CService> source{Lookup("252.5.1.1", 8333, false)};
     BOOST_CHECK(source.has_value());
     std::vector<CAddress> addresses{CAddress(addr1.value(), NODE_NONE), CAddress(addr2.value(), NODE_NONE), CAddress(addr3.value(), NODE_NONE)};
-    BOOST_CHECK(addrman->Add(addresses, source.value()));
+    BOOST_CHECK(addrman.Add(addresses, source.value()));
     BOOST_CHECK(addrman.Size() == 3);
 
     // Test that the de-serialization does not throw an exception.
@@ -1099,7 +1099,7 @@ BOOST_AUTO_TEST_CASE(load_addrman_corrupted)
 BOOST_AUTO_TEST_CASE(addrman_update_address)
 {
     // Tests updating nTime via Connected() and nServices via SetServices()
-    auto addrman = std::make_unique<AddrMan>(EMPTY_NETGROUPMAN, DETERMINISTIC, GetCheckRatio(m_node));
+    auto addrman = std::make_unique<AddrMan>(EMPTY_NETGROUPMAN, DETERMINISTIC, 0);
     CNetAddr source{ResolveIP("252.2.2.2")};
     CAddress addr{CAddress(ResolveService("250.1.1.1", 8333), NODE_NONE)};
 
@@ -1129,7 +1129,7 @@ BOOST_AUTO_TEST_CASE(addrman_update_address)
 
 BOOST_AUTO_TEST_CASE(addrman_size)
 {
-    auto addrman = std::make_unique<AddrMan>(EMPTY_NETGROUPMAN, DETERMINISTIC, GetCheckRatio(m_node));
+    auto addrman = std::make_unique<AddrMan>(EMPTY_NETGROUPMAN, DETERMINISTIC, 0);
     const CNetAddr source = ResolveIP("252.2.2.2");
 
     // empty addrman

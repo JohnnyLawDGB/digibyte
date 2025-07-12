@@ -1591,4 +1591,203 @@ WalletFrame {
     }
     
     
-    
+    /******************************************************
+   MISSING WIDGET STYLES - WHITE THEME
+*******************************************************/
+
+/* Text Editors */
+QTextEdit {
+    color: #000000;
+    background-color: #ffffff;
+    border: 1px solid #ccc;
+}
+
+QPlainTextEdit {
+    color: #000000;
+    background-color: #ffffff;
+    border: 1px solid #ccc;
+}
+
+/* Radio Buttons */
+QRadioButton {
+    color: #003366;
+}
+
+QRadioButton::indicator {
+    width: 13px;
+    height: 13px;
+}
+
+/* Tree Views */
+QTreeView {
+    color: #003366;
+    background-color: transparent;
+    selection-background-color: #1c97ea;
+    selection-color: #ffffff;
+}
+
+QTreeView::item:hover {
+    background-color: #e6f2ff;
+}
+
+/* Tooltips */
+QToolTip {
+    color: #000000;
+    background-color: #ffffdc;
+    border: 1px solid #000000;
+    padding: 2px;
+}
+
+/* Group Boxes */
+QGroupBox {
+    color: #003366;
+    font-weight: bold;
+    border: 1px solid #cccccc;
+    border-radius: 5px;
+    margin-top: 10px;
+    padding-top: 10px;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 10px;
+    padding: 0 5px 0 5px;
+}
+
+/* Sliders */
+QSlider::groove:horizontal {
+    height: 6px;
+    background: #cccccc;
+    border-radius: 3px;
+}
+
+QSlider::handle:horizontal {
+    background: #003366;
+    border: 1px solid #5c5c5c;
+    width: 14px;
+    margin: -4px 0;
+    border-radius: 7px;
+}
+
+QSlider::handle:horizontal:hover {
+    background: #0066cc;
+}
+
+/* Disabled Button State */
+QPushButton:disabled {
+    color: #999999;
+    background: #cccccc;
+}
+
+/* Dialog Button Boxes */
+QDialogButtonBox QPushButton {
+    min-width: 80px;
+}
+
+/* Dock Widgets */
+QDockWidget {
+    color: #003366;
+}
+
+QDockWidget::title {
+    background: #f0f0f0;
+    padding: 5px;
+}
+
+/* Splitters */
+QSplitter::handle {
+    background-color: #cccccc;
+}
+
+QSplitter::handle:hover {
+    background-color: #999999;
+}
+
+/* Table Improvements */
+QTableView::item:alternate {
+    background-color: #f5f5f5;
+}
+
+QTableView::item:selected {
+    background-color: #1c97ea;
+    color: #ffffff;
+}
+
+/* List View Improvements */
+QListView::item:alternate {
+    background-color: #f5f5f5;
+}
+
+QListView::item:selected {
+    background-color: #1c97ea;
+    color: #ffffff;
+}
+
+/* Menu Improvements */
+QMenu {
+    color: #000000;
+    background-color: #ffffff;
+    border: 1px solid #cccccc;
+}
+
+QMenu::item:selected {
+    background-color: #1c97ea;
+    color: #ffffff;
+}
+
+QMenu::separator {
+    height: 1px;
+    background-color: #cccccc;
+    margin: 5px 0;
+}
+
+/* Context Menu */
+QMenu::item:disabled {
+    color: #999999;
+}
+
+/* Progress Bar Generic Style */
+QProgressBar {
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    text-align: center;
+}
+
+QProgressBar::chunk {
+    background-color: #1c97ea;
+    border-radius: 3px;
+}
+
+/* Spin Box Improvements */
+QSpinBox, QDoubleSpinBox {
+    color: #000000;
+    background-color: #ffffff;
+}
+
+/* Tab Widget Improvements */
+QTabBar::tab:!selected {
+    color: #666666;
+}
+
+/* Status Bar */
+QStatusBar {
+    color: #003366;
+}
+
+/* Header View */
+QHeaderView::section {
+    color: #003366;
+    background-color: #f0f0f0;
+    padding: 4px;
+    border: 1px solid #ccc;
+}
+
+/* Scroll Area */
+QScrollArea {
+    background-color: transparent;
+}
+
+/* Focus Indicator */
+*:focus {
+    outline: 1px solid #1c97ea;
+}

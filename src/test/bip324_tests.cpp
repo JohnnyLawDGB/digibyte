@@ -165,12 +165,6 @@ BOOST_AUTO_TEST_CASE(packet_test_vectors) {
     // as that is what the test vectors are written for.
     SelectParams(ChainType::MAIN);
 
-    // TODO: BIP324 test vectors are Bitcoin-specific and use "bitcoin_v2_shared_secret" salt.
-    // DigiByte uses "digibyte_v2_shared_secret" which causes all cryptographic outputs to differ.
-    // These tests should be re-enabled with DigiByte-specific test vectors.
-    BOOST_TEST_MESSAGE("Skipping BIP324 test vectors - they are Bitcoin-specific and incompatible with DigiByte parameters");
-    return;
-
     // The test vectors are converted using the following Python code in the BIP bip-0324/ directory:
     //
     // import sys
@@ -301,51 +295,6 @@ BOOST_AUTO_TEST_CASE(packet_test_vectors) {
         "889f339285564fd868401fac8380bb9887925122ec8f31c8ae51ce067def103b",
         "",
         "7c4b9e1e6c1ce69da7b01513cdc4588fd93b04dafefaf87f31561763d906c672bac3dfceb751ebd126728ac017d4d580e931b8e5c7d5dfe0123be4dc9b2d2238b655c8a7fadaf8082c31e310909b5b731efc12f0a56e849eae6bfeedcc86dd27ef9b91d159256aa8e8d2b71a311f73350863d70f18d0d7302cf551e4303c7733");
-}
-
-BOOST_AUTO_TEST_CASE(bip324_cipher_smoke_test) {
-    // Basic smoke test to ensure BIP324 cipher works with DigiByte parameters
-    // This doesn't use hardcoded test vectors but validates the implementation works
-    
-    // Generate two key pairs
-    CKey key1, key2;
-    key1.MakeNewKey(true);
-    key2.MakeNewKey(true);
-    
-    // Create ciphers
-    std::array<std::byte, 32> ent1, ent2;
-    GetRandBytes(Span{reinterpret_cast<unsigned char*>(ent1.data()), ent1.size()});
-    GetRandBytes(Span{reinterpret_cast<unsigned char*>(ent2.data()), ent2.size()});
-    
-    BIP324Cipher cipher1(key1, ent1);
-    BIP324Cipher cipher2(key2, ent2);
-    
-    // Exchange public keys and initialize
-    cipher1.Initialize(cipher2.GetOurPubKey(), true, false);
-    cipher2.Initialize(cipher1.GetOurPubKey(), false, false);
-    
-    // Test that session IDs match
-    BOOST_CHECK(cipher1.GetSessionID() == cipher2.GetSessionID());
-    
-    // Test encryption/decryption
-    std::vector<std::byte> plaintext = {std::byte{0x01}, std::byte{0x02}, std::byte{0x03}};
-    std::vector<std::byte> aad = {std::byte{0x04}, std::byte{0x05}};
-    std::vector<std::byte> ciphertext(plaintext.size() + BIP324Cipher::EXPANSION);
-    
-    // Encrypt with cipher1
-    cipher1.Encrypt(plaintext, aad, false, ciphertext);
-    
-    // Decrypt with cipher2
-    uint32_t dec_len = cipher2.DecryptLength(Span{ciphertext}.first(BIP324Cipher::LENGTH_LEN));
-    BOOST_CHECK_EQUAL(dec_len, plaintext.size());
-    
-    std::vector<std::byte> decrypted(dec_len);
-    bool ignore;
-    bool dec_ok = cipher2.Decrypt(Span{ciphertext}.subspan(BIP324Cipher::LENGTH_LEN), aad, ignore, decrypted);
-    
-    BOOST_CHECK(dec_ok);
-    BOOST_CHECK(!ignore);
-    BOOST_CHECK(decrypted == plaintext);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

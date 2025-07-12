@@ -1,12 +1,11 @@
-// Copyright (c) 2014-2022 The Bitcoin Core developers
-// Copyright (c) 2014-2025 The DigiByte Core developers
+// Copyright (c) 2014-2021 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <crypto/aes.h>
 #include <crypto/chacha20.h>
-#include <crypto/odocrypt.h>
 #include <crypto/chacha20poly1305.h>
+#include <crypto/odocrypt.h>
 #include <crypto/hkdf_sha256_32.h>
 #include <crypto/hmac_sha256.h>
 #include <crypto/hmac_sha512.h>

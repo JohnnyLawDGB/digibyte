@@ -27,19 +27,16 @@ You are a DigiByte engineer tasked with fixing build errors and getting DGB v8.2
 # Bootstrap
 ./autogen.sh
 
-# START WITH MINIMAL BUILD (no GUI, no tests)
-./configure --without-gui --disable-tests --disable-bench
+# Default configure (includes GUI and everything)
+./configure
 
 # Capture errors
 make -j6 2>&1 | tee build_errors.log
 
-# Once minimal build works (digibyted compiles), add GUI:
-make clean
-./configure --with-gui=qt5 --disable-tests --disable-bench
-make -j6 2>&1 | tee build_errors_gui.log
-
-# Step 3: Once GUI works, add tests:
-# ./configure --with-gui=qt5 --enable-tests --enable-bench
+# Previous incremental approach for reference:
+# Step 1: ./configure --without-gui --disable-tests --disable-bench (digibyted only) ✓
+# Step 2: ./configure --with-gui=qt5 --disable-tests --disable-bench (add GUI)
+# Step 3: ./configure (full build with everything)
 ```
 
 ## Fix Process (ONE ERROR AT A TIME)

@@ -517,7 +517,7 @@ background-color:#e0e0e0;
     
     /* Dialog: Open URI */
     QDialog#OpenURIDialog {
-    background-color:#003366;
+    background-color:#ffffff;
     }
     
     QDialog#OpenURIDialog QLabel#label { /* URI Label */
@@ -543,7 +543,7 @@ background-color:#e0e0e0;
     
     /* Dialog: Sign / Verify Message */
     QDialog#SignVerifyMessageDialog {
-    background-color:#003366;
+    background-color:#ffffff;
     }
     
     QDialog#SignVerifyMessageDialog QPushButton#addressBookButton_SM { /* Address Book Button */
@@ -683,7 +683,7 @@ background-color:#e0e0e0;
     
     /* Encrypt Wallet and Change Passphrase Dialog */
     QDialog#AskPassphraseDialog {
-    background-color:#003366;
+    background-color:#ffffff;
     }
     
     QDialog#AskPassphraseDialog QLabel#passLabel1, QDialog#AskPassphraseDialog QLabel#passLabel2, QDialog#AskPassphraseDialog QLabel#passLabel3 {
@@ -694,7 +694,7 @@ background-color:#e0e0e0;
     
     /* Options Dialog */
     QDialog#OptionsDialog {
-    background-color: #003366;
+    background-color: #ffffff;
     color: #333333;
     }
     
@@ -2000,15 +2000,15 @@ QComboBox QAbstractItemView {
 
 /* Create Wallet Dialog */
 QDialog#CreateWalletDialog {
-background-color: #003366;
+background-color: #ffffff;
 }
 
 QDialog#CreateWalletDialog QLabel {
-color: #ffffff;
+color: #333333;
 }
 
 QDialog#CreateWalletDialog QCheckBox {
-color: #ffffff;
+color: #333333;
 }
 
 QDialog#CreateWalletDialog QLineEdit {

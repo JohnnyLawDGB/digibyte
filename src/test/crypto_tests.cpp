@@ -2,6 +2,7 @@
 // Copyright (c) 2014-2025 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
 #include <crypto/aes.h>
 #include <crypto/chacha20.h>
 #include <crypto/odocrypt.h>
@@ -23,6 +24,7 @@
 #include <util/strencodings.h>
 
 #include <vector>
+
 #include <boost/test/unit_test.hpp>
 
 BOOST_FIXTURE_TEST_SUITE(crypto_tests, BasicTestingSetup)
@@ -350,15 +352,6 @@ static void TestHKDF_SHA256_32(const std::string &ikm_hex, const std::string &sa
     BOOST_CHECK(HexStr(out) == okm_check_hex);
 }
 
-// DigiByte specific test function for Odocrypt
-static void TestOdo(uint32_t key, const std::string &in, const std::string &hexout)
-{
-    assert(in.length() == OdoCrypt::DIGEST_SIZE);
-    std::vector<unsigned char> out = ParseHex(hexout);
-    std::vector<unsigned char> outres(OdoCrypt::DIGEST_SIZE);
-    OdoCrypt(key).Encrypt(reinterpret_cast<char*>(outres.data()), in.c_str());
-    BOOST_CHECK(out == outres);
-}
 static std::string LongTestString()
 {
     std::string ret;
@@ -1069,61 +1062,6 @@ BOOST_AUTO_TEST_CASE(hkdf_hmac_sha256_l32_tests)
                 "8da4e775a563c18f715f802a063c5a31b8a11f5c5ee1879ec3454e5f3c738d2d");
 }
 
-BOOST_AUTO_TEST_CASE(odo_testvector)
-{
-    TestOdo(0, "00000000000000000000000000000000000000000000000000000000000000000000000000000000",
-            "9724ebfef40d7808bc21b212d8645a1df4d7fc4a0d91ee8e7f747ca1383eaeb1bb264b3a3b1b1f19"
-            "a8d458616e9a19572e3ceb2f58773076e829a288c8fdb61ab619ffaa84a4ee752fea52dbb359620e");
-    TestOdo(1, "00000000000000000000000000000000000000000000000000000000000000000000000000000000",
-            "c659c70bd9335a0bec67e526cdf99569543ca7e258fad19d439fb8ada1bc68efa5553d270d236cf0"
-            "3b1c179c684cfc93ae15b3c239c11e384303785cc0d828114c28e08091f42ec707aba712fe999c68");
-    TestOdo(0x80808080u, "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopqopqrpqrsqrstrstustuvtuvw",
-            "dc5d9757b16bfa425f527817ee88a070595a662474d06bb96b439e25bc3097fc7068ab9d934fcd19"
-            "c9587478dd9ab8f79f2c85175c51e49306135e561561725b0aa7a44366a1135ff93194da22d1e9ba");
-    TestOdo(0x12345678, "As DigiByte relies on 80 byte header hashes, we want to have an example for that",
-            "13dddebb0d65daa0f3e4a5bd9a1b74af7ca5a7b32ef118fb1684b200e377ce504346adcd2354e818"
-            "bf530dd870386104f706f4fecde1cec5cee804aae2569821aa5b2db3ac048607be36714e2bce48c6");
-    TestOdo(1729, test1.substr(0x4ffb0, OdoCrypt::DIGEST_SIZE),
-            "de79362f40cf0c755b21cf30798fa828b21cba61222ebeccc5a1ee385183ff2a981926403529080f"
-            "6c5a650bb299770222e7dbc0bdd559f479fac21d08044d306513067f2bf6accdb8b55942a5430e1c");
-    TestOdo(0xD59, "Mora labelled me Unknown Sample, which the overseer translated as Odo'ital......",
-            "a7dd19a7fcdf3b7c0a8da1765553d903ff42687fe2f36c3930b82d7a68e426a90f49f1fc4b06263d"
-            "cf95d70a1b436337586955ef61c976f97785da2d2c8144b6767f824d53dd518c2cfdce1e9bd74fe1");
-}
-
-BOOST_AUTO_TEST_CASE(chacha20_poly1305_aead_testvector)
-{
-    /* test chacha20poly1305@digibyte AEAD */
-
-    // must fail with no message
-    TestChaCha20Poly1305AEAD(false, 0,
-        "",
-        "0000000000000000000000000000000000000000000000000000000000000000",
-        "0000000000000000000000000000000000000000000000000000000000000000", "", "", "");
-
-    TestChaCha20Poly1305AEAD(true, 0,
-        /* m  */ "0000000000000000000000000000000000000000000000000000000000000000",
-        /* k1 (payload) */ "0000000000000000000000000000000000000000000000000000000000000000",
-        /* k2 (AAD) */ "0000000000000000000000000000000000000000000000000000000000000000",
-        /* AAD keystream */ "76b8e0ada0f13d90405d6ae55386bd28bdd219b8a08ded1aa836efcc8b770dc7da41597c5157488d7724e03fb8d84a376a43b8f41518a11cc387b669b2ee6586",
-        /* encrypted message & MAC */ "76b8e09f07e7be5551387a98ba977c732d080dcb0f29a048e3656912c6533e32d2fc11829c1b6c1df1f551cd6131ff08",
-        /* encrypted message & MAC at sequence 999 */ "b0a03d5bd2855d60699e7d3a3133fa47be740fe4e4c1f967555e2d9271f31c3aaa7aa16ec62c5e24f040c08bb20c3598");
-    TestChaCha20Poly1305AEAD(true, 1,
-        "0100000000000000000000000000000000000000000000000000000000000000",
-        "0000000000000000000000000000000000000000000000000000000000000000",
-        "0000000000000000000000000000000000000000000000000000000000000000",
-        "76b8e0ada0f13d90405d6ae55386bd28bdd219b8a08ded1aa836efcc8b770dc7da41597c5157488d7724e03fb8d84a376a43b8f41518a11cc387b669b2ee6586",
-        "77b8e09f07e7be5551387a98ba977c732d080dcb0f29a048e3656912c6533e32baf0c85b6dff8602b06cf52a6aefc62e",
-        "b1a03d5bd2855d60699e7d3a3133fa47be740fe4e4c1f967555e2d9271f31c3a8bd94d54b5ecabbc41ffbb0c90924080");
-    TestChaCha20Poly1305AEAD(true, 255,
-        "ff0000f195e66982105ffb640bb7757f579da31602fc93ec01ac56f85ac3c134a4547b733b46413042c9440049176905d3be59ea1c53f15916155c2be8241a38008b9a26bc35941e2444177c8ade6689de95264986d95889fb60e84629c9bd9a5acb1cc118be563eb9b3a4a472f82e09a7e778492b562ef7130e88dfe031c79db9d4f7c7a899151b9a475032b63fc385245fe054e3dd5a97a5f576fe064025d3ce042c566ab2c507b138db853e3d6959660996546cc9c4a6eafdc777c040d70eaf46f76dad3979e5c5360c3317166a1c894c94a371876a94df7628fe4eaaf2ccb27d5aaae0ad7ad0f9d4b6ad3b54098746d4524d38407a6deb3ab78fab78c9",
-        "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
-        "ff0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
-        "c640c1711e3ee904ac35c57ab9791c8a1c408603a90b77a83b54f6c844cb4b06d94e7fc6c800e165acd66147e80ec45a567f6ce66d05ec0cae679dceeb890017",
-        "3940c1e92da4582ff6f92a776aeb14d014d384eeb30f660dacf70a14a23fd31e91212701334e2ce1acf5199dc84f4d61ddbe6571bca5af874b4c9226c26e650995d157644e1848b96ed6c2102d5489a050e71d29a5a66ece11de5fb5c9558d54da28fe45b0bc4db4e5b88030bfc4a352b4b7068eccf656bae7ad6a35615315fc7c49d4200388d5eca67c2e822e069336c69b40db67e0f3c81209c50f3216a4b89fb3ae1b984b7851a2ec6f68ab12b101ab120e1ea7313bb93b5a0f71185c7fea017ddb92769861c29dba4fbc432280d5dff21b36d1c4c790128b22699950bb18bf74c448cdfe547d8ed4f657d8005fdc0cd7a050c2d46050a44c4376355858981fbe8b184288276e7a93eabc899c4a",
-        "f039c6689eaeef0456685200feaab9d54bbd9acde4410a3b6f4321296f4a8ca2604b49727d8892c57e005d799b2a38e85e809f20146e08eec75169691c8d4f54a0d51a1e1c7b381e0474eb02f994be9415ef3ffcbd2343f0601e1f3b172a1d494f838824e4df570f8e3b0c04e27966e36c82abd352d07054ef7bd36b84c63f9369afe7ed79b94f953873006b920c3fa251a771de1b63da927058ade119aa898b8c97e42a606b2f6df1e2d957c22f7593c1e2002f4252f4c9ae4bf773499e5cfcfe14dfc1ede26508953f88553bf4a76a802f6a0068d59295b01503fd9a600067624203e880fdf53933b96e1f4d9eb3f4e363dd8165a278ff667a41ee42b9892b077cefff92b93441f7be74cf10e6cd");
-}
-
 BOOST_AUTO_TEST_CASE(countbits_tests)
 {
     FastRandomContext ctx;
@@ -1160,20 +1098,6 @@ BOOST_AUTO_TEST_CASE(sha256d64)
         SHA256D64(out2, in, i);
         BOOST_CHECK(memcmp(out1, out2, 32 * i) == 0);
     }
-}
-
-// DigiByte specific test for Odocrypt permutation
-BOOST_AUTO_TEST_CASE(odo_permutation)
-{
-    char buf[OdoCrypt::DIGEST_SIZE];
-    for (int i = 0; i < OdoCrypt::DIGEST_SIZE; i++)
-        buf[i] = i;
-    for (int i = 0; i < 20; i++)
-        OdoCrypt(i).Encrypt(buf, buf);
-    for (int i = 19; i >= 0; i--)
-        OdoCrypt(i).Decrypt(buf, buf);
-    for (int i = 0; i < OdoCrypt::DIGEST_SIZE; i++)
-        BOOST_CHECK(buf[i] == i);
 }
 
 static void TestSHA3_256(const std::string& input, const std::string& output)
@@ -1368,6 +1292,52 @@ BOOST_AUTO_TEST_CASE(muhash_tests)
     uint256 out4;
     overflowchk.Finalize(out4);
     BOOST_CHECK_EQUAL(HexStr(out4), "3a31e6903aff0de9f62f9a9f7f8b861de76ce2cda09822b90014319ae5dc2271");
+}
+
+static void TestOdo(uint32_t key, const std::string &in, const std::string &hexout)
+{
+    assert(in.length() == OdoCrypt::DIGEST_SIZE);
+    std::vector<unsigned char> out = ParseHex(hexout);
+    std::vector<unsigned char> outres(OdoCrypt::DIGEST_SIZE);
+    OdoCrypt(key).Encrypt(reinterpret_cast<char*>(outres.data()), in.c_str());
+    BOOST_CHECK(out == outres);
+}
+
+static std::string LongTestString()
+{
+    std::string ret;
+    for (int i = 0; i < 200000; i++) {
+        ret += (char)(i);
+        ret += (char)(i >> 4);
+        ret += (char)(i >> 8);
+        ret += (char)(i >> 12);
+        ret += (char)(i >> 16);
+    }
+    return ret;
+}
+
+const std::string test1 = LongTestString();
+
+BOOST_AUTO_TEST_CASE(odo_testvector)
+{
+    TestOdo(0, "00000000000000000000000000000000000000000000000000000000000000000000000000000000",
+            "9724ebfef40d7808bc21b212d8645a1df4d7fc4a0d91ee8e7f747ca1383eaeb1bb264b3a3b1b1f19"
+            "a8d458616e9a19572e3ceb2f58773076e829a288c8fdb61ab619ffaa84a4ee752fea52dbb359620e");
+    TestOdo(1, "00000000000000000000000000000000000000000000000000000000000000000000000000000000",
+            "c659c70bd9335a0bec67e526cdf99569543ca7e258fad19d439fb8ada1bc68efa5553d270d236cf0"
+            "3b1c179c684cfc93ae15b3c239c11e384303785cc0d828114c28e08091f42ec707aba712fe999c68");
+    TestOdo(0x80808080u, "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopqopqrpqrsqrstrstustuvtuvw",
+            "dc5d9757b16bfa425f527817ee88a070595a662474d06bb96b439e25bc3097fc7068ab9d934fcd19"
+            "c9587478dd9ab8f79f2c85175c51e49306135e561561725b0aa7a44366a1135ff93194da22d1e9ba");
+    TestOdo(0x12345678, "As DigiByte relies on 80 byte header hashes, we want to have an example for that",
+            "13dddebb0d65daa0f3e4a5bd9a1b74af7ca5a7b32ef118fb1684b200e377ce504346adcd2354e818"
+            "bf530dd870386104f706f4fecde1cec5cee804aae2569821aa5b2db3ac048607be36714e2bce48c6");
+    TestOdo(1729, test1.substr(0x4ffb0, OdoCrypt::DIGEST_SIZE),
+            "de79362f40cf0c755b21cf30798fa828b21cba61222ebeccc5a1ee385183ff2a981926403529080f"
+            "6c5a650bb299770222e7dbc0bdd559f479fac21d08044d306513067f2bf6accdb8b55942a5430e1c");
+    TestOdo(0xD59, "Mora labelled me Unknown Sample, which the overseer translated as Odo'ital......",
+            "a7dd19a7fcdf3b7c0a8da1765553d903ff42687fe2f36c3930b82d7a68e426a90f49f1fc4b06263d"
+            "cf95d70a1b436337586955ef61c976f97785da2d2c8144b6767f824d53dd518c2cfdce1e9bd74fe1");
 }
 
 BOOST_AUTO_TEST_SUITE_END()

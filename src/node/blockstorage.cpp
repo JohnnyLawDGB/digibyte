@@ -13,6 +13,7 @@
 #include <kernel/chainparams.h>
 #include <kernel/messagestartchars.h>
 #include <logging.h>
+#include <node/interface_ui.h>
 #include <pow.h>
 #include <primitives/block.h>
 #include <reverse_iterator.h>
@@ -99,9 +100,39 @@ bool BlockTreeDB::LoadBlockIndexGuts(const Consensus::Params& consensusParams, s
     std::unique_ptr<CDBIterator> pcursor(NewIterator());
     pcursor->Seek(std::make_pair(DB_BLOCK_INDEX, uint256()));
 
+    // Count total entries first for progress calculation
+    // This is a quick count-only pass
+    int nTotal = 0;
+    {
+        std::unique_ptr<CDBIterator> pcounter(NewIterator());
+        pcounter->Seek(std::make_pair(DB_BLOCK_INDEX, uint256()));
+        while (pcounter->Valid()) {
+            std::pair<uint8_t, uint256> key;
+            if (pcounter->GetKey(key) && key.first == DB_BLOCK_INDEX) {
+                nTotal++;
+                pcounter->Next();
+            } else {
+                break;
+            }
+        }
+    }
+
+    int nCount = 0;
+    int nLastPercent = -1;
+
     // Load m_block_index
     while (pcursor->Valid()) {
         if (interrupt) return false;
+        
+        // Calculate and display percentage progress
+        if (nTotal > 0) {
+            int nPercent = 100 * nCount / nTotal;
+            if (nPercent > nLastPercent && nPercent % 10 == 0) {
+                uiInterface.InitMessage(strprintf(_("Loading blocks... %d%%").translated, nPercent));
+                nLastPercent = nPercent;
+            }
+        }
+        nCount++;
         std::pair<uint8_t, uint256> key;
         if (pcursor->GetKey(key) && key.first == DB_BLOCK_INDEX) {
             CDiskBlockIndex diskindex;

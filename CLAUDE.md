@@ -7,6 +7,8 @@ This file provides context and guidance for AI assistants working on the DigiByt
 
 You are a DigiByte engineer tasked with fixing build errors, test failures, and ensuring DGB v8.26 works perfectly with all tests passing.
 
+**PRIMARY GOAL: Get `make check` passing - this will reveal and fix real DigiByte application bugs**
+
 ## Setup
 **Required repositories:**
 - `digibyte-v8.26` (merged code - BUILD ONLY HERE)
@@ -150,7 +152,7 @@ diff digibyte-v8.22.2/$ERROR_FILE bitcoin-v26.2-for-digibyte/$ERROR_FILE
 - Example: Pure utility files, test helpers, or build scripts without DGB customizations
 ```bash
 # Quick check for DigiByte-specific code
-grep -i "algo\|dandelion\|digishield\|odocrypt" $ERROR_FILE
+grep -i "algo\|dandelion\|digishield\|odocrypt\|odo\|21000000000\|12024\|12025\|multiAlgo\|multishield\|15.*second\|getblockreward\|0xfa.*0xc3.*0xb6.*0xda\|dgb\|digibyte\|groestl\|skein\|qubit\|scrypt.*pow\|ALGO_\|stem.*pool\|fluff\|COINBASE_MATURITY_2\|GetNextWorkRequired.*V[1-4]\|nVersions\[4\]" $ERROR_FILE
 # If empty and file exists in v26.2, safe to copy:
 cp bitcoin-v26.2-for-digibyte/$ERROR_FILE digibyte-v8.26/$ERROR_FILE
 ```
@@ -180,7 +182,6 @@ git reset --hard HEAD~1
 ```
 
 **Remember:** Always use v26.2 code style. Never copy old v8.22.2 code directly.
-
 
 ## Important Reminders
 - Both Bitcoin and DigiByte copyrights must be preserved

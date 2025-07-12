@@ -3969,7 +3969,16 @@ static bool ContextualCheckBlockHeader(const CBlockHeader& block, BlockValidatio
 
     // Check proof of work
     const Consensus::Params& consensusParams = chainman.GetConsensus();
-    if (block.nBits != GetNextWorkRequired(pindexPrev, &block, consensusParams, block.GetAlgo()))
+    int algo = block.GetAlgo();
+    unsigned int nBitsExpected = GetNextWorkRequired(pindexPrev, &block, consensusParams, algo);
+    
+    // Debug logging for early blocks
+    if (nHeight < 145000) {
+        LogPrintf("Block %d: version=0x%08x, algo=%d, nBits=%08x, expected=%08x\n", 
+                  nHeight, block.nVersion, algo, block.nBits, nBitsExpected);
+    }
+    
+    if (block.nBits != nBitsExpected)
         return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "bad-diffbits", "incorrect proof of work");
 
     // Check against checkpoints

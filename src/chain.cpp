@@ -121,14 +121,13 @@ CBlockIndex* CChain::FindEarliestAtLeast(int64_t nTime, int height) const
  */
 int CBlockIndex::GetAlgo() const
 {
-    // If we’re on mainnet, for historical reasons we force blocks below 145k to scrypt:
-    if (Params().GetChainType() == ChainType::MAIN) {
-        if (nHeight < 145000) {
-            return ALGO_SCRYPT;
-        }
+    // For blocks below height 145000, always return ALGO_SCRYPT
+    // This handles early blocks before multi-algo was implemented
+    if (nHeight < 145000) {
+        return ALGO_SCRYPT;
     }
 
-    // Otherwise, parse from version bits (same as before):
+    // Otherwise, parse from version bits:
     switch (nVersion & BLOCK_VERSION_ALGO) {
         case BLOCK_VERSION_SCRYPT:   return ALGO_SCRYPT;
         case BLOCK_VERSION_SHA256D:  return ALGO_SHA256D;

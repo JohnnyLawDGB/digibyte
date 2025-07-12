@@ -31,7 +31,12 @@
     "limits": "cpp",
     "type_traits": "cpp",
     "stdexcept": "cpp",
-    "cassert": "cpp"
+    "cassert": "cpp",
+    "functional": "cpp",
+    "cerrno": "cpp",
+    "set": "cpp",
+    "fstream": "cpp",
+    "string": "cpp"
   },
   "cmake.ignoreCMakeListsMissing": true
 }

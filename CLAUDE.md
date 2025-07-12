@@ -3,9 +3,9 @@
 ## Overview
 This file provides context and guidance for AI assistants working on the DigiByte codebase, particularly for the Bitcoin Core v26.2 merge creating DigiByte v8.26.
 
-# DigiByte v8.26 Build Error Resolution
+# DigiByte v8.26 Build Error Resolution & Test Suite Fix
 
-You are a DigiByte engineer tasked with fixing build errors and getting DGB v8.26 to compile.
+You are a DigiByte engineer tasked with fixing build errors, test failures, and ensuring DGB v8.26 works perfectly with all tests passing.
 
 ## Setup
 **Required repositories:**
@@ -21,22 +21,23 @@ You are a DigiByte engineer tasked with fixing build errors and getting DGB v8.2
 - The `bitcoin-v26.2-for-digibyte` folder contains Bitcoin v26.2 code that has already been converted to DigiByte naming conventions. Always reference this folder for v26.2 code patterns.
 - **ONLY build in the main digibyte-v8.26 directory. NEVER build in reference folders.**
 
-## Build Process
+## Build Process - Test & Debug Phase
 
 ```bash
 # Bootstrap
 ./autogen.sh
 
-# Default configure (includes GUI and everything)
-./configure
+# Configure with tests and debug enabled
+./configure --enable-tests --enable-bench --enable-debug CXXFLAGS="-O0 -g"
 
-# Capture errors
+# Build
 make -j6 2>&1 | tee build_errors.log
 
-# Previous incremental approach for reference:
-# Step 1: ./configure --without-gui --disable-tests --disable-bench (digibyted only) ✓
-# Step 2: ./configure --with-gui=qt5 --disable-tests --disable-bench (add GUI)
-# Step 3: ./configure (full build with everything)
+# Run C++ unit tests
+make check 2>&1 | tee test_results.log
+
+# Status: Core wallet compiles ✓
+# Goal: All C++ unit tests must pass
 ```
 
 ## Fix Process (ONE ERROR AT A TIME)
@@ -64,18 +65,11 @@ vimdiff digibyte-v8.26/$ERROR_FILE \
 
 ```bash
 # Comprehensive scan for ALL major DigiByte features in the error file
-grep -i "algo\|dandelion\|digishield\|odocrypt\|odo\|21000000000\|12024\|12025\|multiAlgo\|multishield\|15.*second\|getblockreward\|0xfa.*0xc3.*0xb6.*0xda\|dgb\|digibyte\|groestl\|skein\|qubit\|scrypt.*pow\|ALGO_\|stem.*pool\|fluff\|COINBASE_MATURITY_2" digibyte-v8.26/$ERROR_FILE
+grep -i "algo\|dandelion\|digishield\|odocrypt\|odo\|21000000000\|12024\|12025\|multiAlgo\|multishield\|15.*second\|getblockreward\|0xfa.*0xc3.*0xb6.*0xda\|dgb\|digibyte\|groestl\|skein\|qubit\|scrypt.*pow\|ALGO_\|stem.*pool\|fluff\|COINBASE_MATURITY_2\|GetNextWorkRequired.*V[1-4]\|nVersions\[4\]" digibyte-v8.26/$ERROR_FILE
 
-# If NO major DGB features found, copy v26.2 file BUT preserve copyright:
+# If NO major DGB features found, copy v26.2 file:
 if [ $? -ne 0 ]; then
     cp bitcoin-v26.2-for-digibyte/$ERROR_FILE digibyte-v8.26/$ERROR_FILE
-
-    # Add DigiByte copyright if missing (preserve Bitcoin copyright)
-    if grep -q "Copyright.*The Bitcoin Core developers" digibyte-v8.26/$ERROR_FILE && \
-       ! grep -q "Copyright.*The DigiByte Core developers" digibyte-v8.26/$ERROR_FILE; then
-        sed -i '/Copyright.*The Bitcoin Core developers/a\// Copyright (c) 2014-2025 The DigiByte Core developers' digibyte-v8.26/$ERROR_FILE
-    fi
-
     make clean && make -j6  # Test if this solves all errors in that file
 fi
 ```
@@ -139,6 +133,8 @@ git commit -m "Fix build: $ERROR_FILE
   - Custom RPCs (getblockreward, etc.)
   - DigiShield difficulty adjustment
   - **BOTH COINBASE_MATURITY constants** (DigiByte uses COINBASE_MATURITY and COINBASE_MATURITY_2)
+  - **4 versions of GetNextWorkRequired** (V1, V2, V3, V4 for different hard forks)
+  - **Block version arrays** (nVersions[4] for version voting)
 ```bash
 # If file has many errors, start fresh:
 cp bitcoin-v26.2-for-digibyte/$ERROR_FILE digibyte-v8.26/$ERROR_FILE

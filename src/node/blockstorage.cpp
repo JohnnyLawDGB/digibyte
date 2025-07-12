@@ -14,6 +14,7 @@
 #include <kernel/messagestartchars.h>
 #include <logging.h>
 #include <pow.h>
+#include <primitives/block.h>
 #include <reverse_iterator.h>
 #include <signet.h>
 #include <streams.h>
@@ -120,7 +121,7 @@ bool BlockTreeDB::LoadBlockIndexGuts(const Consensus::Params& consensusParams, s
                 pindexNew->nStatus        = diskindex.nStatus;
                 pindexNew->nTx            = diskindex.nTx;
 
-                if (!CheckProofOfWork(pindexNew->GetBlockHash(), pindexNew->nBits, consensusParams)) {
+                if (!CheckProofOfWork(pindexNew->GetBlockPoWHash(), pindexNew->nBits, consensusParams)) {
                     return error("%s: CheckProofOfWork failed: %s", __func__, pindexNew->ToString());
                 }
 

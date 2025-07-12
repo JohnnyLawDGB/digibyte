@@ -33,9 +33,13 @@ You are a DigiByte engineer tasked with fixing build errors and getting DGB v8.2
 # Capture errors
 make -j6 2>&1 | tee build_errors.log
 
-# Once minimal build works, add components:
-# Step 2: ./configure --with-gui=no --enable-tests
-# Step 3: ./configure --with-gui=qt5 --enable-tests --enable-bench
+# Once minimal build works (digibyted compiles), add GUI:
+make clean
+./configure --with-gui=qt5 --disable-tests --disable-bench
+make -j6 2>&1 | tee build_errors_gui.log
+
+# Step 3: Once GUI works, add tests:
+# ./configure --with-gui=qt5 --enable-tests --enable-bench
 ```
 
 ## Fix Process (ONE ERROR AT A TIME)

@@ -782,7 +782,8 @@ BOOST_AUTO_TEST_CASE(test_IsStandard)
 
     // Check dust with default relay fee:
     CAmount nDustThreshold = 182 * g_dust.GetFeePerK() / 1000;
-    BOOST_CHECK_EQUAL(nDustThreshold, 546);
+    // DigiByte: Dust threshold is 10x higher due to different fee structure
+    BOOST_CHECK_EQUAL(nDustThreshold, 5460);
     // dust:
     t.vout[0].nValue = nDustThreshold - 1;
     CheckIsNotStandard(t, "dust");

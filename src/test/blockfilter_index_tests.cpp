@@ -1,3 +1,4 @@
+// Copyright (c) 2017-2022 The Bitcoin Core developers
 // Copyright (c) 2014-2025 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
@@ -10,6 +11,7 @@
 #include <interfaces/chain.h>
 #include <node/miner.h>
 #include <pow.h>
+#include <primitives/block.h>
 #include <test/util/blockfilter.h>
 #include <test/util/index.h>
 #include <test/util/setup_common.h>
@@ -66,7 +68,7 @@ CBlock BuildChainTestingSetup::CreateBlock(const CBlockIndex* prev,
     const std::vector<CMutableTransaction>& txns,
     const CScript& scriptPubKey)
 {
-    std::unique_ptr<CBlockTemplate> pblocktemplate = BlockAssembler{m_node.chainman->ActiveChainstate(), m_node.mempool.get()}.CreateNewBlock(scriptPubKey);
+    std::unique_ptr<CBlockTemplate> pblocktemplate = BlockAssembler{m_node.chainman->ActiveChainstate(), m_node.mempool.get()}.CreateNewBlock(scriptPubKey, ALGO_SCRYPT);
     CBlock& block = pblocktemplate->block;
     block.hashPrevBlock = prev->GetBlockHash();
     block.nTime = prev->nTime + 1;

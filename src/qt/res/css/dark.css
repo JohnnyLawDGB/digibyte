@@ -6,19 +6,30 @@ WalletFrame {
     padding-bottom: 20px;
     }
     
+/* Main window background */
+QMainWindow {
+    background-color:#002352;
+}
+
+/* Central widget background */
+QWidget#centralWidget {
+    background-color:#002352;
+}
+    
     QStatusBar {
     background-color:#002352;
     color:#ffffff;
     }
     
     QStatusBar QLabel {
+    color:#ffffff !important;
+    }
+    
+    QStatusBar * {
     color:#ffffff;
     }
     
-    .QFrame {
-    background-color:transparent;
-    border:0px solid #fff;
-    }
+    /* Removed generic .QFrame rule that was making everything transparent */
     
     QMenuBar {
         background-color:#002352;
@@ -51,80 +62,104 @@ WalletFrame {
         }
     
     QToolBar {
-    background-color:#fff;
+    background-color:#0066CC;
     border:0px solid #000;
     padding:0;
     margin:0;
+    spacing:0;
     }
     
     QToolBar > QToolButton {
-    background-color:#fff;
-    color:#003366;
-    border:0px solid #333;
+    background-color:#FFFFFF;
+    color:#002352;
+    border:0px solid #FFFFFF;
+    border-right:1px solid #0066CC;
     min-height:2.5em;
     min-width: 5em;
     padding: 0em 1em;
-    /*font-weight:bold;*/
-    color:#003366;
+    font-weight:bold;
+    font-size: 13px;
+    margin:0;
+    text-align:center;
+    }
+    
+    QToolBar > QToolButton:hover {
+    background-color:#F8F9FA;
+    color:#002352;
     }
     
     QToolBar > QToolButton:checked {
-    background-color:#003366;
-    color:#fff;
+    background-color:#002352;
+    color:#FFFFFF;
     font-weight:bold;
+    border:0px;
+    border-right:1px solid #002352;
+    }
+    
+    QToolBar > QToolButton:first-child {
+    border-left:0px;
+    }
+    
+    QToolBar > QToolButton:last-child {
+    border-right:0px;
+    background-color:#FFFFFF;
+    }
+    
+    QToolBar > QToolButton:checked:last-child {
+    border-right:0px;
     }
     
     QMessageBox {
-    background-color:#F8F6F6;
-    color:#333333;
+    background-color:#002352;
+    color:#ffffff;
     }
 
 /* Options Dialog and other dialog content */
 QDialog {
-background-color:#ffffff;
-color:#333333;
+background-color:#002352;
+color:#ffffff;
 }
 
 QDialog QLabel {
-color:#333333 !important;
+color:#ffffff !important;
 }
 
 QDialog QGroupBox {
-background-color:#ffffff;
-color:#333333;
-border: 1px solid #cccccc;
+background-color:rgba(255, 255, 255, 0.08);
+color:#ffffff;
+border: 1px solid rgba(255, 255, 255, 0.2);
 padding-top: 10px;
 margin-top: 5px;
 }
 
 QDialog QGroupBox::title {
-color:#333333;
+color:#ffffff;
 subcontrol-origin: margin;
 subcontrol-position: top left;
 padding: 0 5px;
 }
 
 QDialog QTextEdit {
-background-color:#ffffff;
-color:#333333;
-border: 1px solid #cccccc;
+background-color:rgba(255, 255, 255, 0.08);
+color:#ffffff;
+border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 QDialog QSpinBox {
-background-color:#ffffff;
-color:#333333;
-border: 1px solid #cccccc;
+background-color:rgba(255, 255, 255, 0.08);
+color:#ffffff;
+border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 QDialog QComboBox {
-background-color:#ffffff;
-color:#333333;
-border: 1px solid #cccccc;
+background-color:rgba(255, 255, 255, 0.08);
+color:#ffffff;
+border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 QDialog QTabWidget::pane {
-background-color:#ffffff;
-border: 1px solid #cccccc;
+background-color:rgba(255, 255, 255, 0.05);
+border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 QDialog QTabWidget::tab-bar {
@@ -132,21 +167,21 @@ alignment: center;
 }
 
 QDialog QTabBar::tab {
-background-color:#f0f0f0;
-color:#333333 !important;
-border: 1px solid #cccccc;
+background-color:rgba(255, 255, 255, 0.1);
+color:#ffffff !important;
+border: 1px solid rgba(255, 255, 255, 0.2);
 padding: 8px 16px;
 margin-right: 2px;
 }
 
 QDialog QTabBar::tab:selected {
-background-color:#ffffff;
-color:#333333 !important;
-border-bottom: 1px solid #ffffff;
+background-color:#0066CC;
+color:#ffffff !important;
+border-bottom: 1px solid #0066CC;
 }
 
 QDialog QTabBar::tab:hover {
-background-color:#e0e0e0;
+background-color:rgba(255, 255, 255, 0.15);
 }
     
     /*******************************************************/
@@ -154,6 +189,7 @@ background-color:#e0e0e0;
     QLabel { /* Base Text Size & Color */
     font-size:11pt;
     color:#ffffff;
+    font-weight:bold;
     }
     
     .QCheckBox { /* Checkbox Labels */
@@ -190,7 +226,7 @@ background-color:#e0e0e0;
     border-radius:3px;
     color:#ffffff;
     font-size:9pt;
-    font-weight:normal;
+    font-weight:bold;
     height: 26px;
     padding-left:25px;
     padding-right:25px;
@@ -199,7 +235,7 @@ background-color:#e0e0e0;
     }
     
     QPushButton:hover {
-    background-color:#0066cc;
+    background-color:#0088ff;
     }
     
     QPushButton:focus {
@@ -237,13 +273,27 @@ background-color:#e0e0e0;
    
     
     QComboBox QListView {
-    background:#fff;
-    border:1px solid #333;
+    background:rgba(255, 255, 255, 0.1);
+    border:1px solid rgba(255, 255, 255, 0.2);
     padding-right:1px;
     padding-left:1px;
+    color:#ffffff;
     }
     
-    QComboBox QAbstractItemView::item { margin:4px; }
+    QComboBox QAbstractItemView::item { 
+    margin:4px; 
+    color:#ffffff;
+    }
+    
+    QComboBox QAbstractItemView::item:hover { 
+    background-color:#0066CC;
+    color:#ffffff;
+    }
+    
+    QComboBox QAbstractItemView::item:selected { 
+    background-color:#0066CC;
+    color:#ffffff;
+    }
     
     QComboBox::item {
     color:#818181;
@@ -694,20 +744,20 @@ background-color:#e0e0e0;
     
     /* Options Dialog */
     QDialog#OptionsDialog {
-    background-color: #ffffff;
-    color: #333333;
+    background-color: #002352;
+    color: #ffffff;
     }
     
     QDialog#OptionsDialog QLabel {
-    color: #333333 !important;
+    color: #ffffff !important;
     }
     
     QDialog#OptionsDialog QValueComboBox, QDialog#OptionsDialog QSpinBox {
     margin-top:5px;
     margin-bottom:5px;
-    background-color: #ffffff;
-    color: #333333;
-    border: 1px solid #cccccc;
+    background-color: rgba(255, 255, 255, 0.08);
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.2);
     }
     
     QDialog#OptionsDialog QValidatedLineEdit, QDialog#OptionsDialog QValidatedLineEdit:disabled, QDialog#OptionsDialog QLineEdit, QDialog#OptionsDialog QLineEdit:disabled {
@@ -717,15 +767,15 @@ background-color:#e0e0e0;
     margin-bottom:0px;
     padding-top:1px;
     padding-bottom:1px;
-    background-color: #ffffff;
-    color: #333333;
-    border: 1px solid #cccccc;
+    background-color: rgba(255, 255, 255, 0.08);
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.2);
     }
     
     QDialog#OptionsDialog > QLabel {
     qproperty-alignment: 'AlignVCenter';
     min-height:20px;
-    color: #333333 !important;
+    color: #ffffff !important;
     }
     
     QDialog#OptionsDialog QWidget#tabDisplay QValueComboBox {
@@ -735,30 +785,30 @@ background-color:#e0e0e0;
     
     QDialog#OptionsDialog QLabel#label_3 { /* Translations Missing? Label */
     qproperty-alignment: 'AlignVCenter | AlignCenter';
-    color:#818181;
+    color:rgba(255, 255, 255, 0.6);
     padding-bottom:8px;
     }
     
     QDialog#OptionsDialog QCheckBox {
     min-height:20px;
-    color: #333333 !important;
+    color: #ffffff !important;
     }
     
     QDialog#OptionsDialog QCheckBox#displayAddresses {
     min-height:33px;
-    color: #333333 !important;
+    color: #ffffff !important;
     }
     
     QDialog#OptionsDialog QGroupBox {
-    background-color: #ffffff;
-    color: #333333;
-    border: 1px solid #cccccc;
+    background-color: rgba(255, 255, 255, 0.08);
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.2);
     padding-top: 10px;
     margin-top: 5px;
     }
     
     QDialog#OptionsDialog QGroupBox::title {
-    color: #333333;
+    color: #ffffff;
     subcontrol-origin: margin;
     subcontrol-position: top left;
     padding: 0 5px;
@@ -767,7 +817,7 @@ background-color:#e0e0e0;
     /* TOOLS MENU */
     
     QDialog#RPCConsole { /* RPC Console Dialog Box */
-    background-color:#ffffff;
+    background-color:#002352;
     color:#333333;
     }
     
@@ -776,22 +826,22 @@ background-color:#e0e0e0;
     }
     
     QDialog#RPCConsole QTabWidget::pane {
-    background-color:#ffffff;
-    border: 1px solid #cccccc;
+    background-color:rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.2);
     }
     
     QDialog#RPCConsole QTabBar::tab {
-    background-color:#f0f0f0;
-    color:#333333 !important;
-    border: 1px solid #cccccc;
+    background-color:rgba(255, 255, 255, 0.1);
+    color:#ffffff !important;
+    border: 1px solid rgba(255, 255, 255, 0.2);
     padding: 8px 16px;
     margin-right: 2px;
     }
     
     QDialog#RPCConsole QTabBar::tab:selected {
-    background-color:#ffffff;
-    color:#333333 !important;
-    border-bottom: 1px solid #ffffff;
+    background-color:#0066CC;
+    color:#ffffff !important;
+    border-bottom: 1px solid #0066CC;
     }
     
     QDialog#RPCConsole QWidget#tab_info QLabel#label_11, QDialog#RPCConsole QWidget#tab_info QLabel#label_10 { /* Margin between Network and Block Chain headers */
@@ -863,7 +913,7 @@ background-color:#e0e0e0;
     
     /* Edit Address Dialog */
     QDialog#EditAddressDialog {
-    background-color:#F8F6F6;
+    background-color:#002352;
     }
     
     QDialog#EditAddressDialog QLabel {
@@ -877,6 +927,9 @@ background-color:#e0e0e0;
     
     QWidget .QFrame#frame { /* Wallet Balance */
     min-width:490px;
+    background-color: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
     }
     
     QWidget .QFrame#frame > .QLabel {
@@ -886,12 +939,16 @@ background-color:#e0e0e0;
     }
     
     QWidget .QFrame#frame .QLabel#label_5 { /* Wallet Label */
-    qproperty-alignment: 'AlignVCenter | AlignRight';
+    qproperty-alignment: 'AlignVCenter | AlignLeft';
     min-width:160px;
     background-color:transparent;
     color:#fff;
+    margin-left:20px;
+    margin-top:10px;
     margin-right:5px;
     padding-right:5px;
+    font-weight:bold;
+    font-size:14pt;
     }
     
     QWidget .QFrame#frame .QLabel#labelWalletStatus { /* Wallet Sync Status */
@@ -1221,18 +1278,21 @@ background-color:#e0e0e0;
     margin-right:20px;
     margin-left:0;
     margin-top:15px;
+    background-color: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
     background-repeat:none;
     }
     
     QWidget .QFrame#frame_2 .QLabel#label_4 { /* Recent Transactions Label */
     min-width:180px;
     color:#fff;
-    margin-left:67px;
-    margin-top:83px;
+    margin-left:20px;
+    margin-top:10px;
     margin-right:5px;
     padding-right:5px;
-    font-weight:normal;
-    font-size:15pt;
+    font-weight:bold;
+    font-size:14pt;
     min-height:24px;
     }
     
@@ -1748,6 +1808,34 @@ background-color:#e0e0e0;
     QDialog#TransactionDescDialog QTextEdit { /* Contents of Receive Coin Dialog */
     border:1px solid #d7d7d7;
     }
+
+    /* ENHANCED FOOTER BRANDING */
+    
+    /* Custom footer widget for DigiByte branding */
+    QWidget#digibyteFooter {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin: 20px;
+    }
+    
+    QWidget#digibyteFooter QLabel#brandName {
+    color: #FFFFFF;
+    font-size: 16px;
+    font-weight: bold;
+    }
+    
+    QWidget#digibyteFooter QLabel#brandSubtitle {
+    color: #0066CC;
+    font-size: 12px;
+    font-weight: bold;
+    }
+    
+    QWidget#digibyteFooter QLabel#brandVersion {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 10px;
+    }
     
     
     /******************************************************
@@ -1870,6 +1958,20 @@ QPushButton:disabled {
 /* Dialog Button Boxes */
 QDialogButtonBox QPushButton {
     min-width: 80px;
+    background-color: #0066CC;
+    color: #ffffff;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-weight: bold;
+}
+
+QDialogButtonBox QPushButton:hover {
+    background-color: #0052A3;
+}
+
+QDialogButtonBox QPushButton:pressed {
+    background-color: #004080;
 }
 
 /* Dock Widgets */
@@ -1998,32 +2100,186 @@ QComboBox QAbstractItemView {
     selection-color: #ffffff;
 }
 
+/******************************************************
+  DARK THEME - SEND PAGE STYLING
+*******************************************************/
+
+/* Send Page Main Container */
+QWidget#SendCoinsDialog {
+    background-color: #002352;
+}
+
+/* Send Page Entry Fields */
+QWidget#SendCoinsEntry {
+    background-color: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
+    margin: 5px;
+    padding: 10px;
+}
+
+/* Send Page Labels */
+QWidget#SendCoinsEntry QLabel {
+    color: #ffffff;
+    font-weight: bold;
+}
+
+/* Coin Control Features Section */
+QWidget#SendCoinsDialog QLabel#labelCoinControlFeatures {
+    color: #ffffff;
+    font-weight: bold;
+    font-size: 11pt;
+}
+
+/* Send Page Balance Label */
+QWidget#SendCoinsDialog QLabel#labelBalance {
+    color: #87ceeb;
+    font-weight: bold;
+}
+
+/******************************************************
+  DARK THEME - RECEIVE PAGE STYLING
+*******************************************************/
+
+/* Receive Page Main Container */
+QWidget#ReceiveCoinsDialog {
+    background-color: #002352;
+}
+
+/* Receive Page Form */
+QWidget#ReceiveCoinsDialog .QFrame {
+    background-color: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
+    padding: 10px;
+}
+
+/* Receive Page Labels */
+QWidget#ReceiveCoinsDialog QLabel {
+    color: #ffffff;
+    font-weight: bold;
+}
+
+/* Requested Payments History Table */
+QWidget#ReceiveCoinsDialog QTableView {
+    background-color: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+}
+
+QWidget#ReceiveCoinsDialog QTableView::item {
+    color: #ffffff;
+}
+
+QWidget#ReceiveCoinsDialog QTableView::item:selected {
+    background-color: #0066cc;
+    color: #ffffff;
+}
+
+QWidget#ReceiveCoinsDialog QHeaderView::section {
+    background-color: #0066cc;
+    color: #ffffff;
+    font-weight: bold;
+    border: 1px solid #0055aa;
+}
+
+/******************************************************
+  DARK THEME - TRANSACTIONS PAGE STYLING
+*******************************************************/
+
+/* Transactions Page Main Container */
+TransactionView {
+    background-color: #002352;
+}
+
+/* Transaction List Table */
+TransactionView QTableView {
+    background-color: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+}
+
+TransactionView QTableView::item {
+    color: #ffffff;
+    background-color: transparent;
+}
+
+TransactionView QTableView::item:selected {
+    background-color: #0066cc;
+    color: #ffffff;
+}
+
+TransactionView QTableView::item:alternate {
+    background-color: rgba(255, 255, 255, 0.02);
+}
+
+/* Transaction Table Headers */
+TransactionView QHeaderView::section {
+    background-color: #0066cc;
+    color: #ffffff;
+    font-weight: bold;
+    border: 1px solid #0055aa;
+    padding: 5px;
+}
+
+/* Transaction Filters */
+TransactionView QComboBox {
+    background-color: #ffffff;
+    color: #002352;
+    border: 1px solid #0066cc;
+    font-weight: bold;
+}
+
+TransactionView QLineEdit {
+    background-color: #ffffff;
+    color: #002352;
+    border: 1px solid #0066cc;
+}
+
+/* Transaction Summary Labels */
+QLabel#transactionSumLabel {
+    color: #ffffff;
+    font-weight: bold;
+}
+
+QLabel#transactionSum {
+    color: #87ceeb;
+    font-weight: bold;
+}
+
 /* Create Wallet Dialog */
 QDialog#CreateWalletDialog {
-background-color: #ffffff;
+background-color: #002352;
 }
 
 QDialog#CreateWalletDialog QLabel {
-color: #333333;
+color: #ffffff;
 }
 
 QDialog#CreateWalletDialog QCheckBox {
-color: #333333;
+color: #ffffff;
 }
 
 QDialog#CreateWalletDialog QLineEdit {
-color: #000000;
-background-color: #ffffff;
+color: #ffffff;
+background-color: rgba(255, 255, 255, 0.08);
+border: 1px solid rgba(255, 255, 255, 0.2);
+padding: 5px;
 }
 
 /* Fix Options Dialog Tab Text */
 QDialog#OptionsDialog .QTabWidget QTabBar::tab {
-background-color: #f2f0f0;
-color: #333333 \!important;
+background-color: rgba(255, 255, 255, 0.1);
+color: #ffffff !important;
+border: 1px solid rgba(255, 255, 255, 0.2);
+padding: 5px 10px;
+margin-right: 2px;
 }
 
 QDialog#OptionsDialog .QTabWidget QTabBar::tab:selected {
-background-color: #ffffff;
+background-color: #0066CC;
+color: #ffffff !important;
+border: 1px solid #0066CC;
 color: #333333 \!important;
 }
 

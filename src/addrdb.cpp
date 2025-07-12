@@ -246,6 +246,11 @@ bool DumpPeerAddresses(const ArgsManager& args, const AddrMan& addr)
     return SerializeFileDB("peers", path_addr, addr);
 }
 
+void ReadFromStream(AddrMan& addr, DataStream& ssPeers)
+{
+    DeserializeDB(ssPeers, addr, false);
+}
+
 util::Result<std::unique_ptr<AddrMan>> LoadAddrman(const NetGroupManager& netgroupman, const ArgsManager& args)
 {
     auto check_addrman = std::clamp<int32_t>(args.GetIntArg("-checkaddrman", DEFAULT_ADDRMAN_CONSISTENCY_CHECKS), 0, 1000000);

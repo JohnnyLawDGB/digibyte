@@ -71,8 +71,16 @@ WalletFrame {
     /*******************************************************/
     
     QLabel { /* Base Text Size & Color */
-    font-size:11pt;
+    font-size:12pt;
     color:#003366;
+    }
+    
+    QPushButton {
+    font-size: 11pt;
+    }
+    
+    QComboBox {
+    font-size: 11pt;
     }
     
     .QCheckBox { /* Checkbox Labels */
@@ -86,7 +94,7 @@ WalletFrame {
     
     .QValidatedLineEdit, .QLineEdit { /* Text Entry Fields */
     border: 1px solid #0066cc;
-    font-size:8pt;
+    font-size:10pt;
     min-height:25px;
     outline:0;
     padding:3px;
@@ -95,7 +103,7 @@ WalletFrame {
     }
     
     .QLineEdit:!focus {
-    font-size:9pt;
+    font-size:10pt;
     }
     
     .QValidatedLineEdit:disabled, .QLineEdit:disabled {
@@ -270,7 +278,7 @@ WalletFrame {
     
     QTableView::item { /* Table Item */
     background-color:#fcfcfc;
-    font-size:9pt;
+    font-size:11pt;
     }
     
     QTableView::item:selected { /* Table Item Selected */
@@ -664,6 +672,19 @@ WalletFrame {
     
     QDialog#RPCConsole { /* RPC Console Dialog Box */
     background-color:#F8F6F6;
+    color: #333333;
+    font-size: 11pt;
+    }
+    
+    QDialog#RPCConsole QLabel {
+    color: #333333 !important;
+    font-size: 11pt;
+    }
+    
+    QDialog#RPCConsole QTextEdit {
+    color: #333333;
+    font-size: 11pt;
+    background-color: #ffffff;
     }
     
     QDialog#RPCConsole QWidget#tab_info QLabel#label_11, QDialog#RPCConsole QWidget#tab_info QLabel#label_10 { /* Margin between Network and Block Chain headers */
@@ -682,10 +703,33 @@ WalletFrame {
     
     QDialog#RPCConsole QTextEdit#messagesWidget { /* Console Messages Window */
     border:0;
+    color: #333333;
+    font-size: 11pt;
+    background-color: #ffffff;
     }
     
     QDialog#RPCConsole QLineEdit#lineEdit { /* Console Input */
     margin-right:5px;
+    color: #333333;
+    font-size: 11pt;
+    }
+    
+    QDialog#RPCConsole QTabWidget::pane {
+    background-color: #ffffff;
+    color: #333333;
+    }
+    
+    QDialog#RPCConsole QTabBar::tab {
+    background-color: #f0f0f0;
+    color: #333333 !important;
+    font-size: 11pt;
+    padding: 8px 16px;
+    border: 1px solid #cccccc;
+    }
+    
+    QDialog#RPCConsole QTabBar::tab:selected {
+    background-color: #ffffff;
+    color: #333333 !important;
     }
     
     QDialog#RPCConsole QPushButton#clearButton { /* Console Clear Button */
@@ -1629,6 +1673,18 @@ QTextEdit {
     color: #000000;
     background-color: #ffffff;
     border: 1px solid #ccc;
+    font-size: 11pt;
+}
+
+/* Tables and Lists */
+QTableView, QListView, QTreeView {
+    font-size: 11pt;
+    color: #333333;
+}
+
+QTableView::item, QListView::item, QTreeView::item {
+    font-size: 11pt;
+    color: #333333;
 }
 
 QPlainTextEdit {

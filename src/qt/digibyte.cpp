@@ -293,8 +293,8 @@ void DigiByteApplication::applyTheme()
     
     QString theme = optionsModel->getOption(OptionsModel::Theme).toString();
     if (theme.isEmpty()) {
-        // Default to white theme if no theme is selected
-        theme = "white";
+        // Default to DGB Dark theme if no theme is selected
+        theme = "blue";
     }
     
     QString cssPath = QString(":/css/%1").arg(theme);

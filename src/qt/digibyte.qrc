@@ -88,7 +88,6 @@
         <file alias="monospace">res/fonts/RobotoMono-Bold.ttf</file>
     </qresource>
     <qresource prefix="/css">
-        <file alias="black">res/css/black.css</file>
         <file alias="white">res/css/white.css</file>
         <file alias="blue">res/css/blue.css</file>
     </qresource>

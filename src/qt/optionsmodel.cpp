@@ -451,7 +451,7 @@ QVariant OptionsModel::getOption(OptionID option, const std::string& suffix) con
     case MaskValues:
         return m_mask_values;
     case Theme:
-        return settings.value("theme", "white");
+        return settings.value("theme", "blue");
     default:
         return QVariant();
     }

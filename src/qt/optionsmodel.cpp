@@ -450,6 +450,8 @@ QVariant OptionsModel::getOption(OptionID option, const std::string& suffix) con
         return SettingToBool(setting(), false);
     case MaskValues:
         return m_mask_values;
+    case Theme:
+        return settings.value("theme", "white");
     default:
         return QVariant();
     }
@@ -641,6 +643,12 @@ bool OptionsModel::setOption(OptionID option, const QVariant& value, const std::
     case MaskValues:
         m_mask_values = value.toBool();
         settings.setValue("mask_values", m_mask_values);
+        break;
+    case Theme:
+        if (settings.value("theme") != value) {
+            settings.setValue("theme", value);
+            setRestartRequired(true);
+        }
         break;
     default:
         break;

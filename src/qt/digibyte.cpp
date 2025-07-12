@@ -52,11 +52,13 @@
 
 #include <QApplication>
 #include <QDebug>
+#include <QFile>
 #include <QLatin1String>
 #include <QLibraryInfo>
 #include <QLocale>
 #include <QMessageBox>
 #include <QSettings>
+#include <QStyleFactory>
 #include <QThread>
 #include <QTimer>
 #include <QTranslator>
@@ -278,7 +280,41 @@ bool DigiByteApplication::createOptionsModel(bool resetSettings)
         QMessageBox::critical(nullptr, PACKAGE_NAME, QString::fromStdString(error.translated));
         return false;
     }
+    
+    // Apply theme if one is selected
+    applyTheme();
+    
     return true;
+}
+
+void DigiByteApplication::applyTheme()
+{
+    if (!optionsModel) return;
+    
+    QString theme = optionsModel->getOption(OptionsModel::Theme).toString();
+    if (theme.isEmpty()) {
+        // Default to white theme if no theme is selected
+        theme = "white";
+    }
+    
+    QString cssPath = QString(":/css/%1").arg(theme);
+    QFile file(cssPath);
+    if (file.open(QFile::ReadOnly)) {
+        QString styleSheet = QLatin1String(file.readAll());
+        
+        // On macOS, we need to ensure the stylesheet is applied after the native style
+        #ifdef Q_OS_MACOS
+        // Force style refresh on macOS
+        setStyle(QStyleFactory::create("Fusion"));
+        #endif
+        
+        setStyleSheet(styleSheet);
+        file.close();
+        
+        qDebug() << "Applied theme:" << theme << "from" << cssPath;
+    } else {
+        qWarning() << "Failed to load theme:" << theme << "from" << cssPath;
+    }
 }
 
 void DigiByteApplication::createWindow(const NetworkStyle *networkStyle)
@@ -658,6 +694,8 @@ int GuiMain(int argc, char* argv[])
     try
     {
         app.createWindow(networkStyle.data());
+        // Apply theme after window creation
+        app.applyTheme();
         // Perform base initialization before spinning up initialization/shutdown thread
         // This is acceptable because this function only contains steps that are quick to execute,
         // so the GUI thread won't be held up.

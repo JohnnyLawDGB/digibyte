@@ -164,6 +164,7 @@ ChainTestingSetup::ChainTestingSetup(const ChainType chainType, const std::vecto
 
     m_node.fee_estimator = std::make_unique<CBlockPolicyEstimator>(FeeestPath(*m_node.args), DEFAULT_ACCEPT_STALE_FEE_ESTIMATES);
     m_node.mempool = std::make_unique<CTxMemPool>(MemPoolOptionsForTest(m_node));
+    m_node.stempool = std::make_unique<CTxMemPool>(MemPoolOptionsForTest(m_node));
 
     m_cache_sizes = CalculateCacheSizes(m_args);
 
@@ -287,7 +288,7 @@ TestChain100Setup::TestChain100Setup(
         LOCK(::cs_main);
         assert(
             m_node.chainman->ActiveChain().Tip()->GetBlockHash().ToString() ==
-            "571d80a9967ae599cec0448b0b0ba1cfb606f584d8069bd7166b86854ba7a191");
+            "06fd4e749f2ffac23803654f4471b7c9174f50b050657d705d48f00f799efeef");
     }
 }
 
@@ -307,7 +308,7 @@ CBlock TestChain100Setup::CreateBlock(
     const CScript& scriptPubKey,
     Chainstate& chainstate)
 {
-    CBlock block = BlockAssembler{chainstate, nullptr}.CreateNewBlock(scriptPubKey, ALGO_SHA256D)->block;
+    CBlock block = BlockAssembler{chainstate, nullptr}.CreateNewBlock(scriptPubKey, ALGO_SCRYPT)->block;
 
     Assert(block.vtx.size() == 1);
     for (const CMutableTransaction& tx : txns) {

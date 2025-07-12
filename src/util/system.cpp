@@ -80,8 +80,6 @@ const int64_t nStartupTime = GetTime();
 const char * const DIGIBYTE_CONF_FILENAME = "digibyte.conf";
 const char * const DIGIBYTE_SETTINGS_FILENAME = "settings.json";
 
-ArgsManager gArgs;
-
 /** Mutex to protect dir_locks. */
 static Mutex cs_dir_locks;
 /** A map that contains all the currently held directory locks. After

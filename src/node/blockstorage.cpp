@@ -1029,31 +1029,9 @@ bool BlockManager::ReadBlockFromDisk(CBlock& block, const FlatFilePos& pos) cons
     }
 
     // Check the header
-    LogPrintf("ReadBlockFromDisk: Starting block validation\n");
-    
-    uint256 blockHash = block.GetHash();
-    LogPrintf("ReadBlockFromDisk: Got blockHash=%s\n", blockHash.ToString());
-    
-    uint256 powHash = GetPoWAlgoHash(block);
-    LogPrintf("ReadBlockFromDisk: Got powHash=%s\n", powHash.ToString());
-    
-    LogPrintf("ReadBlockFromDisk: Block version=0x%08x, algo=%d\n", block.nVersion, block.GetAlgo());
-    
-    // Special handling for genesis block: it should use blockHash for validation, not powHash
-    // Because chainparams sets consensus.hashGenesisBlock = genesis.GetHash() (SHA256D)
-    // but GetPoWAlgoHash() returns Scrypt hash for genesis block
-    bool isGenesis = (blockHash == GetConsensus().hashGenesisBlock);
-    uint256 hashToCheck = isGenesis ? blockHash : powHash;
-    
-    LogPrintf("ReadBlockFromDisk: isGenesis=%s, hashToCheck=%s\n", 
-              isGenesis ? "true" : "false", hashToCheck.ToString());
-    
-    if (!CheckProofOfWork(hashToCheck, block.nBits, GetConsensus())) {
-        LogPrintf("ReadBlockFromDisk: CheckProofOfWork FAILED\n");
+    if (!CheckProofOfWork(GetPoWAlgoHash(block), block.nBits, GetConsensus())) {
         return error("ReadBlockFromDisk: Errors in block header at %s", pos.ToString());
     }
-    
-    LogPrintf("ReadBlockFromDisk: CheckProofOfWork PASSED\n");
 
     // Signet only: check block solution
     if (GetConsensus().signet_blocks && !CheckSignetBlockSolution(block, GetConsensus())) {

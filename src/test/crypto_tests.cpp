@@ -1303,21 +1303,6 @@ static void TestOdo(uint32_t key, const std::string &in, const std::string &hexo
     BOOST_CHECK(out == outres);
 }
 
-static std::string LongTestString()
-{
-    std::string ret;
-    for (int i = 0; i < 200000; i++) {
-        ret += (char)(i);
-        ret += (char)(i >> 4);
-        ret += (char)(i >> 8);
-        ret += (char)(i >> 12);
-        ret += (char)(i >> 16);
-    }
-    return ret;
-}
-
-const std::string test1 = LongTestString();
-
 BOOST_AUTO_TEST_CASE(odo_testvector)
 {
     TestOdo(0, "00000000000000000000000000000000000000000000000000000000000000000000000000000000",

@@ -6,6 +6,7 @@
 #include <consensus/merkle.h>
 #include <consensus/validation.h>
 #include <pow.h>
+#include <primitives/block.h>
 #include <random.h>
 #include <test/util/setup_common.h>
 #include <txmempool.h>
@@ -27,7 +28,7 @@ static void DuplicateInputs(benchmark::Bench& bench)
     LOCK(cs_main);
     CBlockIndex* pindexPrev = testing_setup->m_node.chainman->ActiveChain().Tip();
     assert(pindexPrev != nullptr);
-    block.nBits = GetNextWorkRequired(pindexPrev, &block, chainparams.GetConsensus());
+    block.nBits = GetNextWorkRequired(pindexPrev, &block, chainparams.GetConsensus(), ALGO_SHA256D);
     block.nNonce = 0;
     auto nHeight = pindexPrev->nHeight + 1;
 

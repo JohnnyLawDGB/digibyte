@@ -1,6 +1,7 @@
-// Copyright (c) 2014-2025 The DigiByte Core developers
+// Copyright (c) 2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or https://www.opensource.org/licenses/mit-license.php.
+
 #include <bench/bench.h>
 #include <chainparams.h>
 #include <wallet/coincontrol.h>
@@ -13,7 +14,6 @@
 #include <wallet/test/util.h>
 #include <wallet/wallet.h>
 
-using wallet::CWallet;
 using wallet::CreateMockableWalletDatabase;
 using wallet::DBErrors;
 using wallet::WALLET_FLAG_DESCRIPTORS;
@@ -34,7 +34,7 @@ TipBlock getTip(const CChainParams& params, const node::NodeContext& context)
 
 void generateFakeBlock(const CChainParams& params,
                        const node::NodeContext& context,
-                       CWallet& wallet,
+                       wallet::CWallet& wallet,
                        const CScript& coinbase_out_script)
 {
     TipBlock tip{getTip(params, context)};
@@ -84,7 +84,7 @@ static void WalletCreateTx(benchmark::Bench& bench, const OutputType output_type
 
     // Set clock to genesis block, so the descriptors/keys creation time don't interfere with the blocks scanning process.
     SetMockTime(test_setup->m_node.chainman->GetParams().GenesisBlock().nTime);
-    CWallet wallet{test_setup->m_node.chain.get(), "", CreateMockableWalletDatabase()};
+    wallet::CWallet wallet{test_setup->m_node.chain.get(), "", CreateMockableWalletDatabase()};
     {
         LOCK(wallet.cs_wallet);
         wallet.SetWalletFlag(WALLET_FLAG_DESCRIPTORS);
@@ -140,7 +140,7 @@ static void AvailableCoins(benchmark::Bench& bench, const std::vector<OutputType
     const auto test_setup = MakeNoLogFileContext<const TestingSetup>();
     // Set clock to genesis block, so the descriptors/keys creation time don't interfere with the blocks scanning process.
     SetMockTime(test_setup->m_node.chainman->GetParams().GenesisBlock().nTime);
-    CWallet wallet{test_setup->m_node.chain.get(), "", CreateMockableWalletDatabase()};
+    wallet::CWallet wallet{test_setup->m_node.chain.get(), "", CreateMockableWalletDatabase()};
     {
         LOCK(wallet.cs_wallet);
         wallet.SetWalletFlag(WALLET_FLAG_DESCRIPTORS);

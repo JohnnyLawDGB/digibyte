@@ -37,7 +37,7 @@ static void RpcMempool(benchmark::Bench& bench)
     }
 
     bench.run([&] {
-        (void)MempoolToJSON(pool, /*verbose=*/true);
+        (void)MempoolToJSON(pool, /*verbose=*/true, /*include_mempool_sequence=*/false);
     });
 }
 

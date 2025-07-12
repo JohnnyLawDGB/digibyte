@@ -72,7 +72,7 @@ public:
         SpendZeroConfChange,    // bool
         Listen,                 // bool
         Server,                 // bool
-        EnablePSDGBontrols,     // bool
+        EnablePSBTControls,     // bool
         MaskValues,             // bool
         OptionIDRowCount,
     };
@@ -97,7 +97,7 @@ public:
     bool getUseEmbeddedMonospacedFont() const { return m_use_embedded_monospaced_font; }
     bool getCoinControlFeatures() const { return fCoinControlFeatures; }
     bool getSubFeeFromAmount() const { return m_sub_fee_from_amount; }
-    bool getEnablePSDGBontrols() const { return m_enable_psbt_controls; }
+    bool getEnablePSBTControls() const { return m_enable_psbt_controls; }
     const QString& getOverriddenByCommandLine() { return strOverriddenByCommandLine; }
 
     /** Whether -signer was set or not */

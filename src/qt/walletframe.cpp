@@ -110,7 +110,6 @@ void WalletFrame::setCurrentWallet(WalletModel* wallet_model)
     walletView->updateGeometry();
 
     walletStack->setCurrentWidget(walletView);
-    walletView->updateEncryptionStatus();
 
     Q_EMIT currentWalletSet();
 }

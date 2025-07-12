@@ -35,7 +35,7 @@ class TxViewDelegate : public QAbstractItemDelegate
     Q_OBJECT
 public:
     explicit TxViewDelegate(const PlatformStyle* _platformStyle, QObject* parent = nullptr)
-        : QAbstractItemDelegate(parent), unit(DigiByteUnits::DGB),
+        : QAbstractItemDelegate(parent), unit(DigiByteUnits::Unit::DGB),
         platformStyle(_platformStyle)
     {
         connect(this, &TxViewDelegate::width_changed, this, &TxViewDelegate::sizeHintChanged);

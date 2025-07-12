@@ -308,13 +308,6 @@ public Q_SLOTS:
     void showDebugWindowActivateConsole();
     /** Show help message dialog */
     void showHelpMessageClicked();
-#ifndef Q_OS_MACOS
-    /** Handle tray icon clicked */
-    void trayIconActivated(QSystemTrayIcon::ActivationReason reason);
-#else
-    /** Handle macOS Dock icon clicked */
-    void macosDockIconActivated();
-#endif
 
     /** Show window if hidden, unminimize when minimized, rise when obscured or show if hidden and fToggleHidden is true */
     void showNormalIfMinimized() { showNormalIfMinimized(false); }

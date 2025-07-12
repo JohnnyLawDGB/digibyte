@@ -13,6 +13,7 @@
 #include <qt/optionsmodel.h>
 
 #include <chainparams.h>
+#include <util/chaintype.h>
 #include <common/args.h>
 #include <interfaces/node.h>
 #include <key_io.h>
@@ -92,14 +93,14 @@ void PaymentServer::ipcParseCommandLine(int argc, char* argv[])
             SendCoinsRecipient r;
             if (GUIUtil::parseDigiByteURI(arg, &r) && !r.address.isEmpty())
             {
-                auto tempChainParams = CreateChainParams(gArgs, CBaseChainParams::MAIN);
+                auto tempChainParams = CreateChainParams(gArgs, ChainType::MAIN);
 
                 if (IsValidDestinationString(r.address.toStdString(), *tempChainParams)) {
-                    SelectParams(CBaseChainParams::MAIN);
+                    SelectParams(ChainType::MAIN);
                 } else {
-                    tempChainParams = CreateChainParams(gArgs, CBaseChainParams::TESTNET);
+                    tempChainParams = CreateChainParams(gArgs, ChainType::TESTNET);
                     if (IsValidDestinationString(r.address.toStdString(), *tempChainParams)) {
-                        SelectParams(CBaseChainParams::TESTNET);
+                        SelectParams(ChainType::TESTNET);
                     }
                 }
             }

@@ -20,6 +20,7 @@
         <file alias="de_CH">locale/digibyte_de_CH.qm</file>
         <file alias="el">locale/digibyte_el.qm</file>
         <file alias="en">locale/digibyte_en.qm</file>
+        <file alias="en_GB">locale/digibyte_en_GB.qm</file>
         <file alias="eo">locale/digibyte_eo.qm</file>
         <file alias="es">locale/digibyte_es.qm</file>
         <file alias="es_CL">locale/digibyte_es_CL.qm</file>

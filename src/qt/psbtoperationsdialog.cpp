@@ -179,7 +179,7 @@ std::string PSBTOperationsDialog::renderTransaction(const PartiallySignedTransac
         ExtractDestination(out.scriptPubKey, address);
         totalAmount += out.nValue;
         tx_description.append(tr(" * Sends %1 to %2")
-            .arg(DigiByteUnits::formatWithUnit(DigiByteUnits::DGB, out.nValue))
+            .arg(DigiByteUnits::formatWithUnit(DigiByteUnits::Unit::DGB, out.nValue))
             .arg(QString::fromStdString(EncodeDestination(address))));
         // Check if the address is one of ours
         if (m_wallet_model != nullptr && m_wallet_model->wallet().txoutIsMine(out)) tx_description.append(" (" + tr("own address") + ")");
@@ -193,7 +193,7 @@ std::string PSBTOperationsDialog::renderTransaction(const PartiallySignedTransac
         tx_description.append(tr("Unable to calculate transaction fee or total transaction amount."));
     } else {
         tx_description.append(tr("Pays transaction fee: "));
-        tx_description.append(DigiByteUnits::formatWithUnit(DigiByteUnits::DGB, *analysis.fee));
+        tx_description.append(DigiByteUnits::formatWithUnit(DigiByteUnits::Unit::DGB, *analysis.fee));
 
         // add total amount in all subdivision units
         tx_description.append("<hr />");

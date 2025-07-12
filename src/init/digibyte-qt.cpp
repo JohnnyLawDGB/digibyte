@@ -14,10 +14,10 @@
 
 namespace init {
 namespace {
-class BitcoinQtInit : public interfaces::Init
+class DigiByteQtInit : public interfaces::Init
 {
 public:
-    BitcoinQtInit()
+    DigiByteQtInit()
     {
         m_node.args = &gArgs;
         m_node.init = this;

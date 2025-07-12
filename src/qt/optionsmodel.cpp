@@ -119,7 +119,7 @@ static ProxySetting ParseProxyString(const std::string& proxy);
 static std::string ProxyString(bool is_set, QString ip, QString port);
 
 OptionsModel::OptionsModel(interfaces::Node& node, QObject *parent) :
-    QAbstractListModel(parent), m_node{node}
+    QAbstractListModel(parent), m_node{&node}
 {
 }
 

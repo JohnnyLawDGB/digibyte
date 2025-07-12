@@ -1,7 +1,7 @@
-// Copyright (c) 2009-2022 The Bitcoin Core developers
-// Copyright (c) 2014-2025 The DigiByte Core developers
+// Copyright (c) 2017-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
 #include <test/data/bip341_wallet_vectors.json.h>
 
 #include <key.h>
@@ -397,14 +397,14 @@ BOOST_AUTO_TEST_CASE(bip341_spk_test_vectors)
 
     for (const auto& vec : vectors.getValues()) {
         TaprootBuilder spktest;
-        std::map<std::pair<std::vector<unsigned char>, int>, int> scriptposes;
+        std::map<std::pair<CScript, int>, int> scriptposes;
         std::function<void (const UniValue&, int)> parse_tree = [&](const UniValue& node, int depth) {
             if (node.isNull()) return;
             if (node.isObject()) {
                 auto script = ParseHex(node["script"].get_str());
                 int idx = node["id"].getInt<int>();
                 int leaf_version = node["leafVersion"].getInt<int>();
-                scriptposes[{script, leaf_version}] = idx;
+                scriptposes[{CScript(script.begin(), script.end()), leaf_version}] = idx;
                 spktest.Add(depth, script, leaf_version);
             } else {
                 parse_tree(node[0], depth + 1);

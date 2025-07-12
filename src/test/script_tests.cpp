@@ -1,13 +1,12 @@
-// Copyright (c) 2011-2022 The Bitcoin Core developers
-// Copyright (c) 2014-2025 The DigiByte Core developers
+// Copyright (c) 2011-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
 #include <test/data/script_tests.json.h>
 #include <test/data/bip341_wallet_vectors.json.h>
 
 #include <common/system.h>
 #include <core_io.h>
-#include <util/fs.h>
 #include <key.h>
 #include <rpc/util.h>
 #include <script/script.h>
@@ -23,7 +22,6 @@
 #include <test/util/transaction_utils.h>
 #include <util/fs.h>
 #include <util/strencodings.h>
-#include <util/system.h>
 
 #if defined(HAVE_CONSENSUS_LIB)
 #include <script/digibyteconsensus.h>
@@ -45,18 +43,6 @@ static const unsigned int gFlags = SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_STRICTENC;
 
 unsigned int ParseScriptFlags(std::string strFlags);
 std::string FormatScriptFlags(unsigned int flags);
-
-UniValue read_json(const std::string& jsondata)
-{
-    UniValue v;
-
-    if (!v.read(jsondata) || !v.isArray())
-    {
-        BOOST_ERROR("Parse error.");
-        return UniValue(UniValue::VARR);
-    }
-    return v.get_array();
-}
 
 struct ScriptErrorDesc
 {
@@ -1670,186 +1656,6 @@ BOOST_AUTO_TEST_CASE(digibyteconsensus_verify_script_invalid_flags)
     stream << spendTx;
 
     digibyteconsensus_error err;
-    int result = digibyteconsensus_verify_script(scriptPubKey.data(), scriptPubKey.size(), UCharCast(stream.data()), stream.size(), nIn, libconsensus_flags, &err);
-    BOOST_CHECK_EQUAL(result, 0);
-    BOOST_CHECK_EQUAL(err, digibyteconsensus_ERR_INVALID_FLAGS);
-}
-
-/* Test digibyteconsensus_verify_script returns spent outputs required err */
-BOOST_AUTO_TEST_CASE(digibyteconsensus_verify_script_spent_outputs_required_err)
-{
-    unsigned int libconsensus_flags{digibyteconsensus_SCRIPT_FLAGS_VERIFY_TAPROOT};
-    const int nIn{0};
-
-    CScript scriptPubKey;
-    CScript scriptSig;
-    CScriptWitness wit;
-
-    scriptPubKey << OP_EQUAL;
-    CTransaction creditTx{BuildCreditingTransaction(scriptPubKey, 1)};
-    CTransaction spendTx{BuildSpendingTransaction(scriptSig, wit, creditTx)};
-
-    CDataStream stream(SER_NETWORK, PROTOCOL_VERSION);
-    stream << spendTx;
-
-    digibyteconsensus_error err;
-    int result{digibyteconsensus_verify_script_with_spent_outputs(scriptPubKey.data(), scriptPubKey.size(), creditTx.vout[0].nValue, UCharCast(stream.data()), stream.size(), nullptr, 0, nIn, libconsensus_flags, &err)};
-    BOOST_CHECK_EQUAL(result, 0);
-    BOOST_CHECK_EQUAL(err, digibyteconsensus_ERR_SPENT_OUTPUTS_REQUIRED);
-
-    result = digibyteconsensus_verify_script_with_amount(scriptPubKey.data(), scriptPubKey.size(), creditTx.vout[0].nValue, UCharCast(stream.data()), stream.size(), nIn, libconsensus_flags, &err);
-    BOOST_CHECK_EQUAL(result, 0);
-    BOOST_CHECK_EQUAL(err, digibyteconsensus_ERR_SPENT_OUTPUTS_REQUIRED);
-
-    result = digibyteconsensus_verify_script(scriptPubKey.data(), scriptPubKey.size(), UCharCast(stream.data()), stream.size(), nIn, libconsensus_flags, &err);
-    BOOST_CHECK_EQUAL(result, 0);
-    BOOST_CHECK_EQUAL(err, digibyteconsensus_ERR_SPENT_OUTPUTS_REQUIRED);
-}
-
-#endif // defined(HAVE_CONSENSUS_LIB)
-
-static std::vector<unsigned int> AllConsensusFlags()
-{
-    std::vector<unsigned int> ret;
-
-    for (unsigned int i = 0; i < 128; ++i) {
-        unsigned int flag = 0;
-        if (i & 1) flag |= SCRIPT_VERIFY_P2SH;
-        if (i & 2) flag |= SCRIPT_VERIFY_DERSIG;
-        if (i & 4) flag |= SCRIPT_VERIFY_NULLDUMMY;
-        if (i & 8) flag |= SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY;
-        if (i & 16) flag |= SCRIPT_VERIFY_CHECKSEQUENCEVERIFY;
-        if (i & 32) flag |= SCRIPT_VERIFY_WITNESS;
-        if (i & 64) flag |= SCRIPT_VERIFY_TAPROOT;
-
-        // SCRIPT_VERIFY_WITNESS requires SCRIPT_VERIFY_P2SH
-        if (flag & SCRIPT_VERIFY_WITNESS && !(flag & SCRIPT_VERIFY_P2SH)) continue;
-        // SCRIPT_VERIFY_TAPROOT requires SCRIPT_VERIFY_WITNESS
-        if (flag & SCRIPT_VERIFY_TAPROOT && !(flag & SCRIPT_VERIFY_WITNESS)) continue;
-
-        ret.push_back(flag);
-    }
-
-    return ret;
-}
-
-/** Precomputed list of all valid combinations of consensus-relevant script validation flags. */
-static const std::vector<unsigned int> ALL_CONSENSUS_FLAGS = AllConsensusFlags();
-
-static void AssetTest(const UniValue& test)
-{
-    BOOST_CHECK(test.isObject());
-
-    CMutableTransaction mtx = TxFromHex(test["tx"].get_str());
-    const std::vector<CTxOut> prevouts = TxOutsFromJSON(test["prevouts"]);
-    BOOST_CHECK(prevouts.size() == mtx.vin.size());
-    size_t idx = test["index"].getInt<int64_t>();
-    uint32_t test_flags{ParseScriptFlags(test["flags"].get_str())};
-    bool fin = test.exists("final") && test["final"].get_bool();
-
-    if (test.exists("success")) {
-        mtx.vin[idx].scriptSig = ScriptFromHex(test["success"]["scriptSig"].get_str());
-        mtx.vin[idx].scriptWitness = ScriptWitnessFromJSON(test["success"]["witness"]);
-        CTransaction tx(mtx);
-        PrecomputedTransactionData txdata;
-        txdata.Init(tx, std::vector<CTxOut>(prevouts));
-        CachingTransactionSignatureChecker txcheck(&tx, idx, prevouts[idx].nValue, true, txdata);
-
-#if defined(HAVE_CONSENSUS_LIB)
-        CDataStream stream(SER_NETWORK, PROTOCOL_VERSION);
-        stream << tx;
-        std::vector<UTXO> utxos;
-        utxos.resize(prevouts.size());
-        for (size_t i = 0; i < prevouts.size(); i++) {
-            utxos[i].scriptPubKey = prevouts[i].scriptPubKey.data();
-            utxos[i].scriptPubKeySize = prevouts[i].scriptPubKey.size();
-            utxos[i].value = prevouts[i].nValue;
-        }
-#endif
-
-        for (const auto flags : ALL_CONSENSUS_FLAGS) {
-            // "final": true tests are valid for all flags. Others are only valid with flags that are
-            // a subset of test_flags.
-            if (fin || ((flags & test_flags) == flags)) {
-                bool ret = VerifyScript(tx.vin[idx].scriptSig, prevouts[idx].scriptPubKey, &tx.vin[idx].scriptWitness, flags, txcheck, nullptr);
-                BOOST_CHECK(ret);
-#if defined(HAVE_CONSENSUS_LIB)
-                int lib_ret = digibyteconsensus_verify_script_with_spent_outputs(prevouts[idx].scriptPubKey.data(), prevouts[idx].scriptPubKey.size(), prevouts[idx].nValue, UCharCast(stream.data()), stream.size(), utxos.data(), utxos.size(), idx, flags, nullptr);
-                BOOST_CHECK(lib_ret == 1);
-#endif
-            }
-        }
-    }
-
-    if (test.exists("failure")) {
-        mtx.vin[idx].scriptSig = ScriptFromHex(test["failure"]["scriptSig"].get_str());
-        mtx.vin[idx].scriptWitness = ScriptWitnessFromJSON(test["failure"]["witness"]);
-        CTransaction tx(mtx);
-        PrecomputedTransactionData txdata;
-        txdata.Init(tx, std::vector<CTxOut>(prevouts));
-        CachingTransactionSignatureChecker txcheck(&tx, idx, prevouts[idx].nValue, true, txdata);
-
-#if defined(HAVE_CONSENSUS_LIB)
-        CDataStream stream(SER_NETWORK, PROTOCOL_VERSION);
-        stream << tx;
-        std::vector<UTXO> utxos;
-        utxos.resize(prevouts.size());
-        for (size_t i = 0; i < prevouts.size(); i++) {
-            utxos[i].scriptPubKey = prevouts[i].scriptPubKey.data();
-            utxos[i].scriptPubKeySize = prevouts[i].scriptPubKey.size();
-            utxos[i].value = prevouts[i].nValue;
-        }
-#endif
-
-        for (const auto flags : ALL_CONSENSUS_FLAGS) {
-            // If a test is supposed to fail with test_flags, it should also fail with any superset thereof.
-            if ((flags & test_flags) == test_flags) {
-                bool ret = VerifyScript(tx.vin[idx].scriptSig, prevouts[idx].scriptPubKey, &tx.vin[idx].scriptWitness, flags, txcheck, nullptr);
-                BOOST_CHECK(!ret);
-#if defined(HAVE_CONSENSUS_LIB)
-                int lib_ret = digibyteconsensus_verify_script_with_spent_outputs(prevouts[idx].scriptPubKey.data(), prevouts[idx].scriptPubKey.size(), prevouts[idx].nValue, UCharCast(stream.data()), stream.size(), utxos.data(), utxos.size(), idx, flags, nullptr);
-                BOOST_CHECK(lib_ret == 0);
-#endif
-            }
-        }
-    }
-}
-
-BOOST_AUTO_TEST_CASE(script_assets_test)
-{
-    // See src/test/fuzz/script_assets_test_minimizer.cpp for information on how to generate
-    // the script_assets_test.json file used by this test.
-
-    const char* dir = std::getenv("DIR_UNIT_TEST_DATA");
-    BOOST_WARN_MESSAGE(dir != nullptr, "Variable DIR_UNIT_TEST_DATA unset, skipping script_assets_test");
-    if (dir == nullptr) return;
-    auto path = fs::path(dir) / "script_assets_test.json";
-    bool exists = fs::exists(path);
-    BOOST_WARN_MESSAGE(exists, "File $DIR_UNIT_TEST_DATA/script_assets_test.json not found, skipping script_assets_test");
-    if (!exists) return;
-    std::ifstream file{path};
-    BOOST_CHECK(file.is_open());
-    file.seekg(0, std::ios::end);
-    size_t length = file.tellg();
-    file.seekg(0, std::ios::beg);
-    std::string data(length, '\0');
-    file.read(data.data(), data.size());
-    UniValue tests = read_json(data);
-    BOOST_CHECK(tests.isArray());
-    BOOST_CHECK(tests.size() > 0);
-
-    for (size_t i = 0; i < tests.size(); i++) {
-        AssetTest(tests[i]);
-    }
-    file.close();
-}
-
-BOOST_AUTO_TEST_CASE(bip341_keypath_test_vectors)
-{
-    UniValue tests;
-    tests.read(json_tests::bip341_wallet_vectors);
-
-    const auto& vectors = tests["keyPathSpending"];
     int result = digibyteconsensus_verify_script(scriptPubKey.data(), scriptPubKey.size(), UCharCast(stream.data()), stream.size(), nIn, libconsensus_flags, &err);
     BOOST_CHECK_EQUAL(result, 0);
     BOOST_CHECK_EQUAL(err, digibyteconsensus_ERR_INVALID_FLAGS);

@@ -8,6 +8,11 @@ WalletFrame {
     
     QStatusBar {
     background-color:#ffffff;
+    color:#333333;
+    }
+    
+    QStatusBar QLabel {
+    color:#333333;
     }
     
     .QFrame {
@@ -72,11 +77,11 @@ WalletFrame {
     
     QLabel { /* Base Text Size & Color */
     font-size:11pt;
-    color:#666;
+    color:#ffffff;
     }
     
     .QCheckBox { /* Checkbox Labels */
-    color:#666;
+    color:#ffffff;
     background-color:transparent;
     }
     
@@ -231,6 +236,24 @@ WalletFrame {
     QCheckBox::indicator {
     width: 16px;
     height: 16px;
+    background-color: #ffffff;
+    border: 2px solid #0066cc;
+    border-radius: 3px;
+    }
+    
+    QCheckBox::indicator:checked {
+    background-color: #0066cc;
+    border-color: #0066cc;
+    }
+    
+    QCheckBox::indicator:unchecked:hover {
+    background-color: #e6f2ff;
+    border-color: #0088ff;
+    }
+    
+    QCheckBox::indicator:disabled {
+    background-color: #cccccc;
+    border-color: #999999;
     }
     
 
@@ -595,7 +618,7 @@ WalletFrame {
     
     /* Options Dialog */
     QDialog#OptionsDialog {
-    background: color #003366;
+    background-color: #003366;
     }
     
     QDialog#OptionsDialog QValueComboBox, QDialog#OptionsDialog QSpinBox {
@@ -772,7 +795,7 @@ WalletFrame {
     QWidget .QFrame#frame .QLabel#labelBalance { /* Available Balance */
     qproperty-alignment: 'AlignVCenter | AlignLeft';
     font-size:12pt;
-    color:#0066cc;
+    color:#87ceeb;
     margin-left:0px;
         font-weight: bold;
     }
@@ -1596,4 +1619,292 @@ WalletFrame {
     }
     
     
-    
+    /******************************************************
+   MISSING WIDGET STYLES - BLUE THEME
+*******************************************************/
+
+/* Text Editors */
+QTextEdit {
+    color: #000000;
+    background-color: #ffffff;
+    border: 1px solid #0066cc;
+}
+
+QPlainTextEdit {
+    color: #000000;
+    background-color: #ffffff;
+    border: 1px solid #0066cc;
+}
+
+/* Radio Buttons */
+QRadioButton {
+    color: #ffffff;
+}
+
+QRadioButton::indicator {
+    width: 16px;
+    height: 16px;
+    background-color: #ffffff;
+    border: 2px solid #0066cc;
+    border-radius: 8px;
+}
+
+QRadioButton::indicator:checked {
+    background-color: #0066cc;
+    border-color: #0066cc;
+}
+
+QRadioButton::indicator:checked::after {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 3px;
+    background-color: #ffffff;
+    position: absolute;
+    top: 5px;
+    left: 5px;
+}
+
+QRadioButton::indicator:unchecked:hover {
+    background-color: #e6f2ff;
+    border-color: #0088ff;
+}
+
+QRadioButton::indicator:disabled {
+    background-color: #cccccc;
+    border-color: #999999;
+}
+
+/* Tree Views */
+QTreeView {
+    color: #ffffff;
+    background-color: transparent;
+    selection-background-color: #0066cc;
+    selection-color: #ffffff;
+}
+
+QTreeView::item:hover {
+    background-color: #004488;
+}
+
+/* Tooltips */
+QToolTip {
+    color: #000000;
+    background-color: #ffffdc;
+    border: 1px solid #000000;
+    padding: 2px;
+}
+
+/* Group Boxes */
+QGroupBox {
+    color: #ffffff;
+    font-weight: bold;
+    border: 1px solid #0066cc;
+    border-radius: 5px;
+    margin-top: 10px;
+    padding-top: 10px;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 10px;
+    padding: 0 5px 0 5px;
+}
+
+/* Sliders */
+QSlider::groove:horizontal {
+    height: 6px;
+    background: #002244;
+    border-radius: 3px;
+}
+
+QSlider::handle:horizontal {
+    background: #0066cc;
+    border: 1px solid #004488;
+    width: 14px;
+    margin: -4px 0;
+    border-radius: 7px;
+}
+
+QSlider::handle:horizontal:hover {
+    background: #0088ff;
+}
+
+/* Disabled Button State */
+QPushButton:disabled {
+    color: #666666;
+    background: #002244;
+}
+
+/* Dialog Button Boxes */
+QDialogButtonBox QPushButton {
+    min-width: 80px;
+}
+
+/* Dock Widgets */
+QDockWidget {
+    color: #ffffff;
+}
+
+QDockWidget::title {
+    background: #002244;
+    padding: 5px;
+}
+
+/* Splitters */
+QSplitter::handle {
+    background-color: #004488;
+}
+
+QSplitter::handle:hover {
+    background-color: #0066cc;
+}
+
+/* Table Improvements */
+QTableView::item:alternate {
+    background-color: #002244;
+}
+
+QTableView::item:selected {
+    background-color: #0066cc;
+    color: #ffffff;
+}
+
+/* List View Improvements */
+QListView::item:alternate {
+    background-color: #002244;
+}
+
+QListView::item:selected {
+    background-color: #0066cc;
+    color: #ffffff;
+}
+
+/* Menu Improvements */
+QMenu {
+    color: #ffffff;
+    background-color: #002244;
+    border: 1px solid #0066cc;
+}
+
+QMenu::item:selected {
+    background-color: #0066cc;
+    color: #ffffff;
+}
+
+QMenu::separator {
+    height: 1px;
+    background-color: #004488;
+    margin: 5px 0;
+}
+
+/* Context Menu */
+QMenu::item:disabled {
+    color: #666666;
+}
+
+/* Progress Bar Generic Style */
+QProgressBar {
+    border: 1px solid #0066cc;
+    border-radius: 3px;
+    text-align: center;
+    color: #ffffff;
+}
+
+QProgressBar::chunk {
+    background-color: #0066cc;
+    border-radius: 3px;
+}
+
+/* Spin Box Improvements */
+QSpinBox, QDoubleSpinBox {
+    color: #000000;
+    background-color: #ffffff;
+}
+
+/* Tab Widget Improvements */
+QTabBar::tab:!selected {
+    color: #aaaaaa;
+}
+
+/* Status Bar */
+QStatusBar {
+    color: #ffffff;
+}
+
+/* Header View */
+QHeaderView::section {
+    color: #ffffff;
+    background-color: #002244;
+    padding: 4px;
+    border: 1px solid #004488;
+}
+
+/* Scroll Area */
+QScrollArea {
+    background-color: transparent;
+}
+
+/* Focus Indicator */
+*:focus {
+    outline: 1px solid #0088ff;
+}
+
+/* Input fields text color fix */
+QLineEdit {
+    color: #000000;
+}
+
+/* Combo box text color */
+QComboBox {
+    color: #000000;
+}
+
+QComboBox QAbstractItemView {
+    color: #000000;
+    background-color: #ffffff;
+    selection-background-color: #0066cc;
+    selection-color: #ffffff;
+}
+
+/* Create Wallet Dialog */
+QDialog#CreateWalletDialog {
+background-color: #003366;
+}
+
+QDialog#CreateWalletDialog QLabel {
+color: #ffffff;
+}
+
+QDialog#CreateWalletDialog QCheckBox {
+color: #ffffff;
+}
+
+QDialog#CreateWalletDialog QLineEdit {
+color: #000000;
+background-color: #ffffff;
+}
+
+/* Fix Options Dialog Tab Text */
+QDialog#OptionsDialog .QTabWidget QTabBar::tab {
+background-color: #f2f0f0;
+color: #333333 \!important;
+}
+
+QDialog#OptionsDialog .QTabWidget QTabBar::tab:selected {
+background-color: #ffffff;
+color: #333333 \!important;
+}
+
+/* Modal Overlay Progress */
+QWidget#bgWidget QProgressBar {
+color: #ffffff;
+text-align: center;
+font-weight: bold;
+}
+
+/* Progress Bar Label in Status Bar */
+QProgressBar {
+color: #333333;
+text-align: center;
+}

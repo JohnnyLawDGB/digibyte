@@ -1,7 +1,8 @@
 // Copyright (c) 2015-2022 The Bitcoin Core developers
-// Copyright (c) 2014-2025 The DigiByte Core developers
+// Copyright (c) 2015-2025 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
 #ifndef DIGIBYTE_BENCH_BENCH_H
 #define DIGIBYTE_BENCH_BENCH_H
 
@@ -49,30 +50,27 @@ enum PriorityLevel : uint8_t
 
 // List priority labels, comma-separated and sorted by increasing priority
 std::string ListPriorities();
-
 uint8_t StringToPriority(const std::string& str);
 
 struct Args {
-    bool list_priority_levels{false};
-    std::string priority{ListPriorities()};
-    std::string regex_filter;
     bool is_list_only;
+    bool sanity_check;
+    std::chrono::milliseconds min_time;
     std::vector<double> asymptote;
-    std::string output_csv;
-    std::string output_json;
+    fs::path output_csv;
+    fs::path output_json;
+    std::string regex_filter;
+    uint8_t priority;
 };
 
 class BenchRunner
 {
-    struct Bench {
-        BenchFunction func;
-        uint8_t priority_level;
-    };
-    typedef std::map<std::string, Bench> BenchmarkMap;
+    // maps from "name" -> (function, priority_level)
+    typedef std::map<std::string, std::pair<BenchFunction, PriorityLevel>> BenchmarkMap;
     static BenchmarkMap& benchmarks();
 
 public:
-    BenchRunner(std::string name, BenchFunction func, uint8_t priority_level);
+    BenchRunner(std::string name, BenchFunction func, PriorityLevel level);
 
     static void RunAll(const Args& args);
 };

@@ -10,7 +10,8 @@
 #include <QWidget>
 
 //! The required delta of headers to the estimated number of available headers until we show the IBD progress
-static constexpr int HEADER_HEIGHT_DELTA_SYNC = 24;
+//! DigiByte: Increased from 24 to 960 (24 * 40) to account for 40x faster blocks (15s vs 10min)
+static constexpr int HEADER_HEIGHT_DELTA_SYNC = 960;
 
 namespace Ui {
     class ModalOverlay;

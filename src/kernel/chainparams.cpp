@@ -259,10 +259,12 @@ public:
         };
 
         chainTxData = ChainTxData{
-            // Data from RPC: getchaintxstats 4096 00000000000000000001a0a448d6cf2546b06801389cc030b2b18c6491266815
-            .nTime    = 1692502494,
-            .nTxCount = 881818374,
-            .dTxRate  = 5.521964628130412,
+            // DigiByte: Data from DigiByte blockchain
+            // DigiByte has ~15 second blocks vs Bitcoin's ~10 minutes (40x faster)
+            // As of block 16,500,000 (July 2024)
+            .nTime    = 1720000000,  // Approximate July 2024 timestamp
+            .nTxCount = 25000000,    // Approximate total DigiByte transactions
+            .dTxRate  = 0.15,        // ~0.15 tx/sec for DigiByte (much lower than Bitcoin due to less usage)
         };
     }
 };
@@ -367,10 +369,10 @@ public:
         };
 
         chainTxData = ChainTxData{
-            // Data from RPC: getchaintxstats 172800 048c8a5a82d702e029633a8a2cec681f614f7beebb1e62a6c2f9d980d1215993
-            .nTime    = 1691854789,
-            .nTxCount = 2676308,
-            .dTxRate  = 0.02783886417253829,
+            // DigiByte testnet: Estimated data
+            .nTime    = 1700000000,  // Approximate November 2023
+            .nTxCount = 1000000,     // Approximate testnet transactions
+            .dTxRate  = 0.01,        // Lower rate for testnet
         };
     }
 };

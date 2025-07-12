@@ -46,7 +46,6 @@
 #include <QDialogButtonBox>
 
 using wallet::AddWallet;
-using wallet::CWallet;
 using wallet::CreateMockableWalletDatabase;
 using wallet::RemoveWallet;
 using wallet::WALLET_FLAG_DESCRIPTORS;
@@ -74,7 +73,7 @@ void ConfirmSend(QString* text = nullptr, QMessageBox::StandardButton confirm_ty
 }
 
 //! Send coins to address and return txid.
-uint256 SendCoins(CWallet& wallet, SendCoinsDialog& sendCoinsDialog, const CTxDestination& address, CAmount amount, bool rbf,
+uint256 SendCoins(wallet::CWallet& wallet, SendCoinsDialog& sendCoinsDialog, const CTxDestination& address, CAmount amount, bool rbf,
                   QMessageBox::StandardButton confirm_type = QMessageBox::Yes)
 {
     QVBoxLayout* entries = sendCoinsDialog.findChild<QVBoxLayout*>("entries");
@@ -182,19 +181,19 @@ void VerifyUseAvailableBalance(SendCoinsDialog& sendCoinsDialog, const WalletMod
     QVERIFY(send_entry->getValue().amount == sum_selected_coins);
 }
 
-void SyncUpWallet(const std::shared_ptr<CWallet>& wallet, interfaces::Node& node)
+void SyncUpWallet(const std::shared_ptr<wallet::CWallet>& wallet, interfaces::Node& node)
 {
     WalletRescanReserver reserver(*wallet);
     reserver.reserve();
-    CWallet::ScanResult result = wallet->ScanForWalletTransactions(Params().GetConsensus().hashGenesisBlock, /*start_height=*/0, /*max_height=*/{}, reserver, /*fUpdate=*/true, /*save_progress=*/false);
-    QCOMPARE(result.status, CWallet::ScanResult::SUCCESS);
+    wallet::CWallet::ScanResult result = wallet->ScanForWalletTransactions(Params().GetConsensus().hashGenesisBlock, /*start_height=*/0, /*max_height=*/{}, reserver, /*fUpdate=*/true, /*save_progress=*/false);
+    QCOMPARE(result.status, wallet::CWallet::ScanResult::SUCCESS);
     QCOMPARE(result.last_scanned_block, WITH_LOCK(node.context()->chainman->GetMutex(), return node.context()->chainman->ActiveChain().Tip()->GetBlockHash()));
     QVERIFY(result.last_failed_block.IsNull());
 }
 
-std::shared_ptr<CWallet> SetupLegacyWatchOnlyWallet(interfaces::Node& node, TestChain100Setup& test)
+std::shared_ptr<wallet::CWallet> SetupLegacyWatchOnlyWallet(interfaces::Node& node, TestChain100Setup& test)
 {
-    std::shared_ptr<CWallet> wallet = std::make_shared<CWallet>(node.context()->chain.get(), "", CreateMockableWalletDatabase());
+    std::shared_ptr<wallet::CWallet> wallet = std::make_shared<wallet::CWallet>(node.context()->chain.get(), "", CreateMockableWalletDatabase());
     wallet->LoadWallet();
     {
         LOCK(wallet->cs_wallet);
@@ -210,9 +209,9 @@ std::shared_ptr<CWallet> SetupLegacyWatchOnlyWallet(interfaces::Node& node, Test
     return wallet;
 }
 
-std::shared_ptr<CWallet> SetupDescriptorsWallet(interfaces::Node& node, TestChain100Setup& test)
+std::shared_ptr<wallet::CWallet> SetupDescriptorsWallet(interfaces::Node& node, TestChain100Setup& test)
 {
-    std::shared_ptr<CWallet> wallet = std::make_shared<CWallet>(node.context()->chain.get(), "", CreateMockableWalletDatabase());
+    std::shared_ptr<wallet::CWallet> wallet = std::make_shared<wallet::CWallet>(node.context()->chain.get(), "", CreateMockableWalletDatabase());
     wallet->LoadWallet();
     LOCK(wallet->cs_wallet);
     wallet->SetWalletFlag(WALLET_FLAG_DESCRIPTORS);
@@ -247,7 +246,7 @@ public:
         clientModel = std::make_unique<ClientModel>(node, &optionsModel);
     }
 
-    void initModelForWallet(interfaces::Node& node, const std::shared_ptr<CWallet>& wallet, const PlatformStyle* platformStyle)
+    void initModelForWallet(interfaces::Node& node, const std::shared_ptr<wallet::CWallet>& wallet, const PlatformStyle* platformStyle)
     {
         WalletContext& context = *node.walletLoader().context();
         AddWallet(context, wallet);
@@ -272,7 +271,7 @@ public:
 //     QT_QPA_PLATFORM=xcb     src/qt/test/test_digibyte-qt  # Linux
 //     QT_QPA_PLATFORM=windows src/qt/test/test_digibyte-qt  # Windows
 //     QT_QPA_PLATFORM=cocoa   src/qt/test/test_digibyte-qt  # macOS
-void TestGUI(interfaces::Node& node, const std::shared_ptr<CWallet>& wallet)
+void TestGUI(interfaces::Node& node, const std::shared_ptr<wallet::CWallet>& wallet)
 {
     // Create widgets for sending coins and listing transactions.
     std::unique_ptr<const PlatformStyle> platformStyle(PlatformStyle::instantiate("other"));
@@ -294,7 +293,7 @@ void TestGUI(interfaces::Node& node, const std::shared_ptr<CWallet>& wallet)
         // Check balance in send dialog
         QLabel* balanceLabel = sendCoinsDialog.findChild<QLabel*>("labelBalance");
         QString balanceText = balanceLabel->text();
-        int unit = walletModel.getOptionsModel()->getDisplayUnit();
+        DigiByteUnits::Unit unit = walletModel.getOptionsModel()->getDisplayUnit();
         CAmount balance = walletModel.wallet().getBalance();
         QString balanceComparison = DigiByteUnits::formatWithUnit(unit, balance, false, DigiByteUnits::SeparatorStyle::ALWAYS);
         QCOMPARE(balanceText, balanceComparison);
@@ -409,7 +408,7 @@ void TestGUI(interfaces::Node& node, const std::shared_ptr<CWallet>& wallet)
 
 void TestGUIWatchOnly(interfaces::Node& node, TestChain100Setup& test)
 {
-    const std::shared_ptr<CWallet>& wallet = SetupLegacyWatchOnlyWallet(node, test);
+    const std::shared_ptr<wallet::CWallet>& wallet = SetupLegacyWatchOnlyWallet(node, test);
 
     // Create widgets and init models
     std::unique_ptr<const PlatformStyle> platformStyle(PlatformStyle::instantiate("other"));
@@ -469,7 +468,7 @@ void TestGUI(interfaces::Node& node)
     node.setContext(&test.m_node);
 
     // "Full" GUI tests, use descriptor wallet
-    const std::shared_ptr<CWallet>& desc_wallet = SetupDescriptorsWallet(node, test);
+    const std::shared_ptr<wallet::CWallet>& desc_wallet = SetupDescriptorsWallet(node, test);
     TestGUI(node, desc_wallet);
 
     // Legacy watch-only wallet test

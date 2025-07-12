@@ -3,185 +3,159 @@
 ## Overview
 This file provides context and guidance for AI assistants working on the DigiByte codebase, particularly for the Bitcoin Core v26.2 merge creating DigiByte v8.26.
 
-# DigiByte v8.26 Build Error Resolution & Test Suite Fix
+# DigiByte v8.26 C++ Unit Test Fix Guide
 
-You are a DigiByte engineer tasked with fixing build errors, test failures, and ensuring DGB v8.26 works perfectly with all tests passing.
-
-**PRIMARY GOAL: Get `make check` passing - this will reveal and fix real DigiByte application bugs**
+You are a DigiByte engineer fixing C++ unit tests. **TOP PRIORITY: Get `make check` passing with REAL fixes - NO commenting out code.**
 
 ## Setup
 **Required repositories:**
-- `digibyte-v8.26` (merged code - BUILD ONLY HERE)
-- `bitcoin-v26.2-for-digibyte` folder in root (contains pre-converted Bitcoin v26.2 with DigiByte naming)
-- `digibyte-v8.22.2` folder in root (original DigiByte v8.22.2 code for comparison)
+- `digibyte-v8.26` (merged code - BUILD/TEST ONLY HERE)
+- `bitcoin-v26.2-for-digibyte` (Bitcoin v26.2 reference)
+- `digibyte-v8.22.2` (DigiByte v8.22.2 - SOURCE OF TRUTH for hashes, addresses, prefixes)
 
-**Required docs:**
-- Read `claude.md` for AI assistant guidelines
-- Read `digibyte-btc-v26-2-merge-spec.md` for merge rules
-
-**IMPORTANT:**
-- The `bitcoin-v26.2-for-digibyte` folder contains Bitcoin v26.2 code that has already been converted to DigiByte naming conventions. Always reference this folder for v26.2 code patterns.
-- **ONLY build in the main digibyte-v8.26 directory. NEVER build in reference folders.**
-
-## Build Process - Test & Debug Phase
+## Test Fix Process
 
 ```bash
-# Bootstrap
+# Build with tests
 ./autogen.sh
-
-# Configure with tests and debug enabled
 ./configure --enable-tests --enable-bench --enable-debug CXXFLAGS="-O0 -g"
+make -j6
 
-# Build
-make -j6 2>&1 | tee build_errors.log
-
-# Run C++ unit tests
+# Run tests and capture failures
 make check 2>&1 | tee test_results.log
-
-# Status: Core wallet compiles ✓
-# Goal: All C++ unit tests must pass
 ```
 
-## Fix Process (ONE ERROR AT A TIME)
+## Fixing Test Failures - Step by Step
 
-**IMPORTANT: Take your time. Be diligent. Fix one bug completely before moving to the next. No rushing.**
-
-### 1. Identify Error
+### 1. Identify Failing Test
 ```bash
-grep -A5 "error:" build_errors.log | head -20
+# Find first failure
+grep -A10 "FAILED" test_results.log
+
+# Run single test with debug output
+./src/test/test_digibyte --log_level=all --run_test=TESTNAME
 ```
 
-### 2. Compare Three Versions
+### 2. Compare with v8.22.2 Tests (SOURCE OF TRUTH)
 ```bash
-# Set error file
-export ERROR_FILE="src/path/to/error.cpp"
-
-# Visual diff (bitcoin-v26.2-for-digibyte folder contains v26.2 code)
-vimdiff digibyte-v8.26/$ERROR_FILE \
-        digibyte-v8.22.2/$ERROR_FILE \
-        bitcoin-v26.2-for-digibyte/$ERROR_FILE
+# ALWAYS check v8.22.2 for correct DigiByte values
+export TEST_FILE="src/test/failing_test.cpp"
+vimdiff digibyte-v8.26/$TEST_FILE digibyte-v8.22.2/$TEST_FILE
 ```
 
-### 3. Fix Using v26.2 Standards
-**FIRST: Check if you can simply copy the entire file from v26.2**
+**Common values to copy from v8.22.2:**
+- Genesis block hashes
+- Address prefixes (D=30, S=63)
+- Example addresses
+- Block hashes
+- Transaction IDs
+- Merkle roots
+- Network magic bytes
 
-```bash
-# Comprehensive scan for ALL major DigiByte features in the error file
-grep -i "algo\|dandelion\|digishield\|odocrypt\|odo\|21000000000\|12024\|12025\|multiAlgo\|multishield\|15.*second\|getblockreward\|0xfa.*0xc3.*0xb6.*0xda\|dgb\|digibyte\|groestl\|skein\|qubit\|scrypt.*pow\|ALGO_\|stem.*pool\|fluff\|COINBASE_MATURITY_2\|GetNextWorkRequired.*V[1-4]\|nVersions\[4\]" digibyte-v8.26/$ERROR_FILE
+### 3. Fix Categories
 
-# If NO major DGB features found, copy v26.2 file:
-if [ $? -ne 0 ]; then
-    cp bitcoin-v26.2-for-digibyte/$ERROR_FILE digibyte-v8.26/$ERROR_FILE
-    make clean && make -j6  # Test if this solves all errors in that file
-fi
+#### Supply & Constants
+```cpp
+// WRONG (Bitcoin value)
+BOOST_CHECK_EQUAL(MAX_MONEY, 21000000 * COIN);
+
+// CORRECT (from v8.22.2)
+BOOST_CHECK_EQUAL(MAX_MONEY, 21000000000 * COIN);
 ```
 
-**If major DGB features ARE present, then manually fix:**
+#### Address Tests
+```cpp
+// WRONG (Bitcoin addresses)
+BOOST_CHECK(IsValidDestinationString("1AGNa15ZQXAZUgFiqJ2i7Z2DPU2J6hW62i"));
+
+// CORRECT (DigiByte addresses from v8.22.2)
+BOOST_CHECK(IsValidDestinationString("DGSbdXzKqPNLBpPDWK7MXgXN45LxYvPqFD"));
+```
+
+#### Block/Transaction Hashes
+```cpp
+// ALWAYS use hashes from v8.22.2 tests
+// Genesis hash: 7497ea1b465eb39f1c8f507bc877078fe016d6fcb6dfad3a64c98dcc6e1e8680
+// Example: Check v8.22.2's test/data/tx_valid.json for valid transactions
+```
+
+#### Mining Tests
+```cpp
+// Must test all algorithms
+for (int algo = ALGO_SHA256D; algo <= ALGO_QUBIT; algo++) {
+    // Test each algorithm
+}
+// Don't forget ALGO_ODO = 7 for Odocrypt
+```
+
+#### Timing Tests
+```cpp
+// Bitcoin: 600 seconds (10 min)
+// DigiByte: 15 seconds
+consensus.nPowTargetSpacing = 15;
+```
+
+#### Difficulty Tests
+```cpp
+// DigiByte has 4 versions - test each at correct heights
+if (height < 145000) GetNextWorkRequiredV1(...);
+else if (height < 400000) GetNextWorkRequiredV2(...);
+// etc.
+```
+
+### 4. NEVER DO THIS
+```cpp
+// NEVER comment out failing tests
+// BOOST_AUTO_TEST_CASE(some_test) {  // <-- DON'T DO THIS
+
+// NEVER skip tests
+return; // <-- DON'T ADD THIS
+
+// NEVER change test logic to make it pass without understanding why
+```
+
+### 5. Document Every Fix
+```markdown
+## Test: [test_name]
+**File**: src/test/[filename].cpp
+**Failure**: [exact error message]
+**Root cause**: [Bitcoin assumption vs DigiByte reality]
+**Fix**: [what was changed]
+**v8.22.2 reference**: [file:line where correct value found]
+```
+
+## Quick Reference from v8.22.2
 
 ```cpp
-// DON'T: Copy old DigiByte code
-// DO: Adapt DigiByte features to v26.2 patterns
+// Critical DigiByte values (from v8.22.2)
+MAX_MONEY = 21000000000 * COIN
+P2PKH_PREFIX = 30  // 'D' addresses
+P2SH_PREFIX = 63   // 'S' addresses
+POW_TARGET_SPACING = 15
+COINBASE_MATURITY = 100
+COINBASE_MATURITY_2 = 8640
+NUM_ALGOS = 5
+ALGO_ODO = 7
 
-// Example - Add algo parameter the v26.2 way:
-std::unique_ptr<CBlockTemplate> CreateNewBlock(
-    const CScript& scriptPubKeyIn,
-    int algo = ALGO_SHA256D);  // Modern optional parameter
+// Example valid DigiByte addresses (from v8.22.2 tests)
+"DGSbdXzKqPNLBpPDWK7MXgXN45LxYvPqFD"  // P2PKH
+"SfBbrV3yCGjKW52dac8Tgkvqd6zMgvPZFG"  // P2SH
 ```
 
-### 4. Verify & Commit
+## Verification
+
 ```bash
-# Clean previous build artifacts
-make clean
+# After each fix
+make -j6 && ./src/test/test_digibyte --run_test=FIXED_TEST_NAME
 
-# Test fix
-make -j6 2>&1 | tee test.log
+# Final check - must be 100%
+make check
 
-# If error is fixed, commit immediately
-git add $ERROR_FILE
-git commit -m "Fix build: $ERROR_FILE
-
-- Error: [exact error message]
-- Fix: [what changed]
-- Preserves: [DigiByte feature]"
-
-# Return to step 1 for next error
+# No disabled tests allowed
+grep -r "DISABLED\|SKIP\|commented.*TEST" src/test/
 ```
 
-**Remember: Quality over speed. Each fix should be complete and tested.**
-
-## Common Fixes
-
-**Missing DigiByte function:**
-- Find where it belongs in v26.2 structure
-- Re-implement using v26.2 patterns (not old code)
-
-**API mismatch:**
-- Keep v26.2 base signature
-- Add DigiByte params as optional/overloaded
-
-**Build system:**
-- Add DigiByte files to Makefile.am
-- Use v26.2 naming conventions
-
-**Many errors in one file (KISS approach):**
-- Copy entire file from `bitcoin-v26.2-for-digibyte`
-- **CRITICAL: Port back ALL DigiByte-specific features or chain will break:**
-  - Multi-algo mining (SHA256D, Scrypt, Groestl, Skein, Qubit, Odocrypt)
-  - Dandelion++ privacy features
-  - 21 billion max supply (not 21 million)
-  - 15-second block time
-  - Network ports (12024/12025)
-  - Chain parameters (magic bytes, prefixes)
-  - Custom RPCs (getblockreward, etc.)
-  - DigiShield difficulty adjustment
-  - **BOTH COINBASE_MATURITY constants** (DigiByte uses COINBASE_MATURITY and COINBASE_MATURITY_2)
-  - **4 versions of GetNextWorkRequired** (V1, V2, V3, V4 for different hard forks)
-  - **Block version arrays** (nVersions[4] for version voting)
-```bash
-# If file has many errors, start fresh:
-cp bitcoin-v26.2-for-digibyte/$ERROR_FILE digibyte-v8.26/$ERROR_FILE
-
-# MANDATORY: Check what DGB features need porting:
-diff digibyte-v8.22.2/$ERROR_FILE bitcoin-v26.2-for-digibyte/$ERROR_FILE
-# Port back EVERY DigiByte-specific difference found
-```
-
-**File-level fixes (saves time):**
-- If a file has no DigiByte-specific features, copy entire file from `bitcoin-v26.2-for-digibyte`
-- Delete duplicate/obsolete files created by merge process
-- Example: Pure utility files, test helpers, or build scripts without DGB customizations
-```bash
-# Quick check for DigiByte-specific code
-grep -i "algo\|dandelion\|digishield\|odocrypt\|odo\|21000000000\|12024\|12025\|multiAlgo\|multishield\|15.*second\|getblockreward\|0xfa.*0xc3.*0xb6.*0xda\|dgb\|digibyte\|groestl\|skein\|qubit\|scrypt.*pow\|ALGO_\|stem.*pool\|fluff\|COINBASE_MATURITY_2\|GetNextWorkRequired.*V[1-4]\|nVersions\[4\]" $ERROR_FILE
-# If empty and file exists in v26.2, safe to copy:
-cp bitcoin-v26.2-for-digibyte/$ERROR_FILE digibyte-v8.26/$ERROR_FILE
-```
-
-**Code removal:**
-- If code was removed in Bitcoin v26.2 and is NOT DigiByte-specific, DELETE it
-- Don't comment out - remove entirely to match v26.2 cleanliness
-- Example: Old deprecated functions, unused utilities, legacy code
-```bash
-# Check if function/code exists in v26.2
-grep -n "function_name" bitcoin-v26.2-for-digibyte/$ERROR_FILE
-# If not found and not DGB-specific, delete it
-```
-
-## Critical Checks
-Every fix must preserve:
-- Multi-algo mining (5 algos + Odocrypt)
-- 15-second blocks
-- Dandelion++
-- 21 billion supply
-- Custom RPCs (getblockreward, etc.)
-
-## Rollback Bad Fix
-```bash
-git reset --hard HEAD~1
-# Re-analyze and try again
-```
-
-**Remember:** Always use v26.2 code style. Never copy old v8.22.2 code directly.
+**Remember: v8.22.2 tests are your source of truth for all DigiByte-specific values!**
 
 ## Important Reminders
 - Both Bitcoin and DigiByte copyrights must be preserved

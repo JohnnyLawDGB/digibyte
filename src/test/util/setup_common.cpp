@@ -113,7 +113,6 @@ BasicTestingSetup::BasicTestingSetup(const ChainType chainType, const std::vecto
     gArgs.ForceSetArg("-datadir", fs::PathToString(m_path_root));
     gArgs.ClearPathCache();
     {
-        m_node.args->ClearArgs();
         SetupServerArgs(*m_node.args);
         std::string error;
         if (!m_node.args->ParseParameters(arguments.size(), arguments.data(), error)) {
@@ -283,15 +282,13 @@ TestChain100Setup::TestChain100Setup(
     coinbaseKey.Set(vchKey.begin(), vchKey.end(), true);
 
     // Generate a 100-block chain:
-    this->mineBlocks(100);
+    this->mineBlocks(COINBASE_MATURITY);
 
     {
         LOCK(::cs_main);
-        // Bitcoin-specific hash check disabled for DigiByte
-        // TODO: Update with DigiByte's deterministic hash after 100 blocks
-        // assert(
-        //     m_node.chainman->ActiveChain().Tip()->GetBlockHash().ToString() ==
-        //     "06fd4e749f2ffac23803654f4471b7c9174f50b050657d705d48f00f799efeef");
+        assert(
+            m_node.chainman->ActiveChain().Tip()->GetBlockHash().ToString() ==
+            "06fd4e749f2ffac23803654f4471b7c9174f50b050657d705d48f00f799efeef");
     }
 }
 

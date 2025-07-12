@@ -28,7 +28,10 @@
     "ios": "cpp",
     "map": "cpp",
     "vector": "cpp",
-    "limits": "cpp"
+    "limits": "cpp",
+    "type_traits": "cpp",
+    "stdexcept": "cpp",
+    "cassert": "cpp"
   },
   "cmake.ignoreCMakeListsMissing": true
 }

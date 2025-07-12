@@ -1,6 +1,7 @@
- * Copyright 2009 Colin Percival, 2011 ArtForz, 2012-2013 pooler
+/* Copyright 2009 Colin Percival, 2011 ArtForz, 2012-2013 pooler
  * 1. Redistributions of source code must retain the above copyright
  * 2. Redistributions in binary form must reproduce the above copyright
+ */
 /*
  * All rights reserved.
  *

@@ -1,6 +1,7 @@
-// Copyright (c) 2014-2025 The DigiByte Core developers
+// Copyright (c) 2016-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
 #if defined(HAVE_CONFIG_H)
 #include <config/digibyte-config.h>
 #endif
@@ -55,6 +56,8 @@ static std::optional<int> WalletAppInit(ArgsManager& args, int argc, char* argv[
 {
     SetupWalletToolArgs(args);
     std::string error_message;
+    if (!args.ParseParameters(argc, argv, error_message)) {
+        tfm::format(std::cerr, "Error parsing command line arguments: %s\n", error_message);
         return EXIT_FAILURE;
     }
     const bool missing_args{argc < 2};

@@ -1,6 +1,7 @@
- * Copyright (c) 2007-2010  Projet RNRT SAPHIR
+/* Copyright (c) 2007-2010  Projet RNRT SAPHIR
  * The above copyright notice and this permission notice shall be
-/* $Id: echo.c 227 2010-06-16 17:28:38Z tp $ */
+ * $Id: echo.c 227 2010-06-16 17:28:38Z tp $ 
+ */
 /*
  * ECHO implementation.
  *
@@ -71,7 +72,7 @@ extern "C"{
 #endif
 
 #define AES_BIG_ENDIAN   0
-#include "aes_helper.cpp"
+#include "aes_helper.h"
 
 #if SPH_ECHO_64
 

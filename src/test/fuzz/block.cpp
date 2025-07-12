@@ -54,7 +54,7 @@ FUZZ_TARGET(block, .init = initialize_block)
         assert(valid_incl_none);
     }
     (void)block.GetHash();
-    (void)block.ToString();
+    (void)block.ToString(Params().GetConsensus());
     (void)BlockMerkleRoot(block);
     if (!block.vtx.empty()) {
         (void)BlockWitnessMerkleRoot(block);

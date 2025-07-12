@@ -1,9 +1,9 @@
+/*
+ ---------------------------------------------------------------------------
  Copyright (c) 1998-2008, Brian Gladman, Worcester, UK. All rights reserved.
   1. source code distributions include the above copyright notice, this
   2. binary distributions include the above copyright notice, this list
   3. the name of the copyright holder is not used to endorse products
-/*
- ---------------------------------------------------------------------------
 
  LICENSE TERMS
 

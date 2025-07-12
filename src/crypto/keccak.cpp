@@ -1,4 +1,4 @@
- * Copyright (c) 2007-2010  Projet RNRT SAPHIR
+/* Copyright (c) 2007-2010  Projet RNRT SAPHIR
  * The above copyright notice and this permission notice shall be
 /* $Id: keccak.c 259 2011-07-19 22:11:27Z tp $ */
 /*

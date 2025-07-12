@@ -1,4 +1,4 @@
- * Copyright (c) 2007-2010  Projet RNRT SAPHIR
+/* Copyright (c) 2007-2010  Projet RNRT SAPHIR
  * The above copyright notice and this permission notice shall be
 /* $Id: sph_skein.h 253 2011-06-07 18:33:10Z tp $ */
 /**

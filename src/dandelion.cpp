@@ -10,7 +10,7 @@
 #include <logging.h>
 #include <random.h>
 
-extern bool g_ibd_complete;
+bool g_ibd_complete = false;
 
 bool CConnman::isDandelionInbound(const CNode* const pnode) const
 {

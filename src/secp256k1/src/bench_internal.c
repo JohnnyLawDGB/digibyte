@@ -275,8 +275,6 @@ static void bench_group_add_zinv_var(void* arg, int iters) {
     for (i = 0; i < iters; i++) {
         secp256k1_gej_add_zinv_var(&data->gej[0], &data->gej[0], &data->ge[1], &data->gej[0].y);
     }
-    CHECK(overflow >= 0);
-    CHECK(bits <= 256*iters);
 }
 
 static void bench_group_to_affine_var(void* arg, int iters) {

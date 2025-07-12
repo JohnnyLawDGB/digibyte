@@ -557,10 +557,9 @@ crypto_libdigibyte_crypto_base_la_LDFLAGS = $(AM_LDFLAGS) -static
 
 crypto_libdigibyte_crypto_base_la_SOURCES = \
   crypto/aes.cpp \
-  crypto/aes_helper.cpp \
   crypto/aes.h \
+  crypto/aes_helper.h \
   crypto/chacha_poly_aead.h \
-  crypto/chacha_poly_aead.cpp \
   crypto/chacha20.h \
   crypto/chacha20.cpp \
   crypto/chacha20poly1305.h \
@@ -659,6 +658,7 @@ libdigibyte_consensus_a_SOURCES = \
   crypto/hashskein.h \
   crypto/odocrypt.cpp \
   crypto/odocrypt.h \
+  crypto/KeccakP-800-reference.cpp \
   crypto/scrypt.cpp \
   crypto/scrypt-sse2.cpp \
   crypto/sph_blake.h \

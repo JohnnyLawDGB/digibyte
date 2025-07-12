@@ -1,4 +1,4 @@
- * Copyright (c) 2007-2010  Projet RNRT SAPHIR
+/* Copyright (c) 2007-2010  Projet RNRT SAPHIR
  * The above copyright notice and this permission notice shall be
 /* $Id: sph_cubehash.h 180 2010-05-08 02:29:25Z tp $ */
 /**

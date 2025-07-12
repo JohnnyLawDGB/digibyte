@@ -1,5 +1,5 @@
- * Copyright (c) 2013, 2014 Pieter Wuille                              *
 /***********************************************************************
+ * Copyright (c) 2013, 2014 Pieter Wuille                              *
  * Distributed under the MIT software license, see the accompanying    *
  * file COPYING or https://www.opensource.org/licenses/mit-license.php.*
  ***********************************************************************/
@@ -101,9 +101,6 @@ static void secp256k1_ge_set_all_gej_var(secp256k1_ge *r, const secp256k1_gej *a
  *  The coordinates of the final element a[len-1] are not changed.
  */
 static void secp256k1_ge_table_set_globalz(size_t len, secp256k1_ge *a, const secp256k1_fe *zr);
-
-/** Set a group element (affine) equal to the point at infinity. */
-static void secp256k1_ge_set_infinity(secp256k1_ge *r);
 
 /** Set a group element (affine) equal to the point at infinity. */
 static void secp256k1_ge_set_infinity(secp256k1_ge *r);

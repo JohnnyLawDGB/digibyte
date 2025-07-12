@@ -1,4 +1,4 @@
- * Copyright (c) 2007-2010  Projet RNRT SAPHIR
+/* Copyright (c) 2007-2010  Projet RNRT SAPHIR
  * The above copyright notice and this permission notice shall be
 /* $Id: sph_jh.h 216 2010-06-08 09:46:57Z tp $ */
 /**

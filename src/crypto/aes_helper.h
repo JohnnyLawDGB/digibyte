@@ -1,6 +1,7 @@
- * Copyright (c) 2007-2010  Projet RNRT SAPHIR
+/* Copyright (c) 2007-2010  Projet RNRT SAPHIR
  * The above copyright notice and this permission notice shall be
-/* $Id: aes_helper.c 220 2010-06-09 09:21:50Z tp $ */
+ * $Id: aes_helper.c 220 2010-06-09 09:21:50Z tp $ 
+ */
 /*
  * AES tables. This file is not meant to be compiled by itself; it
  * is included by some hash function implementations. It contains

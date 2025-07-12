@@ -199,9 +199,12 @@ CTxDestination DecodeDestination(const std::string& str, const CChainParams& par
     }
 
     // Perform Bech32 error location
-    auto res = bech32::LocateErrors(str);
-    error_str = res.first;
-    if (error_locations) *error_locations = std::move(res.second);
+    // TODO: Implement bech32::LocateErrors for DigiByte
+    // auto res = bech32::LocateErrors(str);
+    // error_str = res.first;
+    // if (error_locations) *error_locations = std::move(res.second);
+    error_str = "Invalid address format";
+    if (error_locations) error_locations->clear();
     return CNoDestination();
 }
 } // namespace

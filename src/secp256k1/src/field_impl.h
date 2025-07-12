@@ -1,5 +1,5 @@
- * Copyright (c) 2013, 2014 Pieter Wuille                              *
 /***********************************************************************
+ * Copyright (c) 2013, 2014 Pieter Wuille                              *
  * Distributed under the MIT software license, see the accompanying    *
  * file COPYING or https://www.opensource.org/licenses/mit-license.php.*
  ***********************************************************************/
@@ -49,8 +49,6 @@ static int secp256k1_fe_sqrt(secp256k1_fe * SECP256K1_RESTRICT r, const secp256k
     secp256k1_fe_verify(a);
     secp256k1_fe_verify_magnitude(a, 8);
 #endif
-
-    VERIFY_CHECK(r != a);
 
     /** The binary representation of (p + 1)/4 has 3 blocks of 1s, with lengths in
      *  { 2, 22, 223 }. Use an addition chain to calculate 2^n - 1 for each block:

@@ -128,8 +128,8 @@ void PSBTInput::FillSignatureData(SignatureData& sigdata) const
     if (!m_tap_merkle_root.IsNull()) {
         sigdata.tr_spenddata.merkle_root = m_tap_merkle_root;
     }
-    for (const auto& [leaf_script, control_block] : m_tap_scripts) {
-        sigdata.tr_spenddata.scripts.emplace(leaf_script, control_block);
+    for (const auto& [leaf_script, control_blocks] : m_tap_scripts) {
+        sigdata.tr_spenddata.scripts.emplace(std::make_pair(CScript(leaf_script.first.begin(), leaf_script.first.end()), leaf_script.second), control_blocks);
     }
     for (const auto& [pubkey, leaf_origin] : m_tap_bip32_paths) {
         sigdata.taproot_misc_pubkeys.emplace(pubkey, leaf_origin);
@@ -188,8 +188,8 @@ void PSBTInput::FromSignatureData(const SignatureData& sigdata)
     if (!sigdata.tr_spenddata.merkle_root.IsNull()) {
         m_tap_merkle_root = sigdata.tr_spenddata.merkle_root;
     }
-    for (const auto& [leaf_script, control_block] : sigdata.tr_spenddata.scripts) {
-        m_tap_scripts.emplace(leaf_script, control_block);
+    for (const auto& [leaf_script, control_blocks] : sigdata.tr_spenddata.scripts) {
+        m_tap_scripts.emplace(std::make_pair(std::vector<unsigned char>(leaf_script.first.begin(), leaf_script.first.end()), leaf_script.second), control_blocks);
     }
     for (const auto& [pubkey, leaf_origin] : sigdata.taproot_misc_pubkeys) {
         m_tap_bip32_paths.emplace(pubkey, leaf_origin);

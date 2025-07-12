@@ -1,5 +1,6 @@
-To the extent possible under law, the implementer has waived all copyright
 /*
+To the extent possible under law, the implementer has waived all copyright
+
 Implementation by the Keccak Team, namely, Guido Bertoni, Joan Daemen,
 Michaël Peeters, Gilles Van Assche and Ronny Van Keer,
 hereby denoted as "the implementer".

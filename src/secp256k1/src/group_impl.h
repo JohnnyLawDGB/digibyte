@@ -1,5 +1,5 @@
- * Copyright (c) 2013, 2014 Pieter Wuille                              *
 /***********************************************************************
+ * Copyright (c) 2013, 2014 Pieter Wuille                              *
  * Distributed under the MIT software license, see the accompanying    *
  * file COPYING or https://www.opensource.org/licenses/mit-license.php.*
  ***********************************************************************/
@@ -242,10 +242,6 @@ static void secp256k1_ge_set_all_gej_var(secp256k1_ge *r, const secp256k1_gej *a
             secp256k1_ge_set_gej_zinv(&r[i], &a[i], &r[i].x);
         }
     }
-    if (last_i == SIZE_MAX) {
-        return;
-    }
-    secp256k1_fe_inv_var(&u, &r[last_i].x);
 
 #ifdef VERIFY
     for (i = 0; i < len; i++) {
@@ -302,12 +298,6 @@ static void secp256k1_ge_set_infinity(secp256k1_ge *r) {
     secp256k1_fe_clear(&r->y);
 
     secp256k1_ge_verify(r);
-}
-
-static void secp256k1_ge_set_infinity(secp256k1_ge *r) {
-    r->infinity = 1;
-    secp256k1_fe_clear(&r->x);
-    secp256k1_fe_clear(&r->y);
 }
 
 static void secp256k1_gej_clear(secp256k1_gej *r) {

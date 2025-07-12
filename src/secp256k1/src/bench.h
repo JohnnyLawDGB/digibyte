@@ -1,5 +1,5 @@
- * Copyright (c) 2014 Pieter Wuille                                    *
 /***********************************************************************
+ * Copyright (c) 2014 Pieter Wuille                                    *
  * Distributed under the MIT software license, see the accompanying    *
  * file COPYING or https://www.opensource.org/licenses/mit-license.php.*
  ***********************************************************************/
@@ -183,30 +183,6 @@ static void print_output_table_header_row(void) {
     char* max_str = "    Max(us)    ";
     printf("%-30s,%-15s,%-15s,%-15s\n", bench_str, min_str, avg_str, max_str);
     printf("\n");
-}
-
-int have_flag(int argc, char** argv, char *flag) {
-    char** argm = argv + argc;
-    argv++;
-    if (argv == argm) {
-        return 1;
-    }
-    while (argv != NULL && argv != argm) {
-        if (strcmp(*argv, flag) == 0) {
-            return 1;
-        }
-        argv++;
-    }
-    return 0;
-}
-
-int get_iters(int default_iters) {
-    char* env = getenv("SECP256K1_BENCH_ITERS");
-    if (env) {
-        return strtol(env, NULL, 0);
-    } else {
-        return default_iters;
-    }
 }
 
 #endif /* SECP256K1_BENCH_H */

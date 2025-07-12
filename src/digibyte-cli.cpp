@@ -1,8 +1,8 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-// Copyright (c) 2009-2022 The Bitcoin Core developers
-// Copyright (c) 2014-2025 The DigiByte Core developers
+// Copyright (c) 2009-2022 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
 #if defined(HAVE_CONFIG_H)
 #include <config/digibyte-config.h>
 #endif
@@ -26,7 +26,6 @@
 #include <util/strencodings.h>
 #include <util/time.h>
 #include <util/translation.h>
-#include <primitives/block.h>
 
 #include <algorithm>
 #include <chrono>
@@ -355,7 +354,6 @@ public:
         connections.pushKV("total", batch[ID_NETWORKINFO]["result"]["connections"]);
         result.pushKV("connections", connections);
 
-        result.pushKV("difficulties", batch[ID_BLOCKCHAININFO]["result"]["difficulties"]);
         result.pushKV("networks", batch[ID_NETWORKINFO]["result"]["networks"]);
         result.pushKV("difficulty", batch[ID_BLOCKCHAININFO]["result"]["difficulty"]);
         result.pushKV("chain", UniValue(batch[ID_BLOCKCHAININFO]["result"]["chain"]));
@@ -572,6 +570,38 @@ public:
                     IsAddressSelected() ? peer.addr : "",
                     IsVersionSelected() && version != "0" ? version : "");
             }
+            result += strprintf("                     ms     ms  sec  sec  min  min                %*s\n\n", m_max_age_length, "min");
+        }
+
+        // Report peer connection totals by type.
+        result += "     ";
+        std::vector<int8_t> reachable_networks;
+        for (const UniValue& network : networkinfo["networks"].getValues()) {
+            if (network["reachable"].get_bool()) {
+                const std::string& network_name{network["name"].get_str()};
+                const int8_t network_id{NetworkStringToId(network_name)};
+                if (network_id == UNKNOWN_NETWORK) continue;
+                result += strprintf("%8s", network_name); // column header
+                reachable_networks.push_back(network_id);
+            }
+        };
+
+        for (const size_t network_id : UNREACHABLE_NETWORK_IDS) {
+            if (m_counts.at(2).at(network_id) == 0) continue;
+            result += strprintf("%8s", NETWORK_SHORT_NAMES.at(network_id)); // column header
+            reachable_networks.push_back(network_id);
+        }
+
+        result += "   total   block";
+        if (m_manual_peers_count) result += "  manual";
+
+        const std::array rows{"in", "out", "total"};
+        for (size_t i = 0; i < rows.size(); ++i) {
+            result += strprintf("\n%-5s", rows[i]); // row header
+            for (int8_t n : reachable_networks) {
+                result += strprintf("%8i", m_counts.at(i).at(n)); // network peers count
+            }
+            result += strprintf("   %5i", m_counts.at(i).at(NETWORKS.size())); // total peers count
             if (i == 1) { // the outbound row has two extra columns for block relay and manual peer counts
                 result += strprintf("   %5i", m_block_relay_peers_count);
                 if (m_manual_peers_count) result += strprintf("   %5i", m_manual_peers_count);
@@ -986,19 +1016,8 @@ static void ParseGetInfoResult(UniValue& result)
     }
 
     result_string += strprintf("Verification progress: %s%.4f%%\n", ibd_progress_bar, ibd_progress * 100);
-    
-    // Display DigiByte multi-algorithm difficulties if available
-    if (result["difficulties"].isObject()) {
-        for (int algo = 0; algo < NUM_ALGOS_IMPL; ++algo) {
-            std::string algoName = GetAlgoName(algo);
-            if (result["difficulties"].exists(algoName)) {
-                result_string += strprintf("Difficulty (%s): %s\n", algoName, result["difficulties"][algoName].getValStr());
-            }
-        }
-        result_string += "\n";
-    } else {
-        result_string += strprintf("Difficulty: %s\n\n", result["difficulty"].getValStr());
-    }
+    result_string += strprintf("Difficulty: %s\n\n", result["difficulty"].getValStr());
+
     result_string += strprintf(
         "%sNetwork: in %s, out %s, total %s%s\n",
         GREEN,
@@ -1028,6 +1047,7 @@ static void ParseGetInfoResult(UniValue& result)
         formatted_proxies.emplace_back(strprintf("%s (%s)", proxy, Join(proxy_networks.find(proxy)->second, ", ")));
     }
     result_string += strprintf("Proxies: %s\n", formatted_proxies.empty() ? "n/a" : Join(formatted_proxies, ", "));
+
     result_string += strprintf("Min tx relay fee rate (%s/kvB): %s\n\n", CURRENCY_UNIT, result["relayfee"].getValStr());
 
     if (!result["has_wallet"].isNull()) {
@@ -1064,6 +1084,7 @@ static void ParseGetInfoResult(UniValue& result)
 
     const std::string warnings{result["warnings"].getValStr()};
     result_string += strprintf("%sWarnings:%s %s", YELLOW, RESET, warnings.empty() ? "(none)" : warnings);
+
     result.setStr(result_string);
 }
 

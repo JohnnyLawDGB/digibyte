@@ -2,6 +2,7 @@
 // Copyright (c) 2014-2025 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
 #ifndef DIGIBYTE_PSBT_H
 #define DIGIBYTE_PSBT_H
 
@@ -350,6 +351,7 @@ struct PSBTInput
             s << entry.key;
             s << entry.value;
         }
+
         // Write unknown things
         for (auto& entry : unknown) {
             s << entry.first;
@@ -874,7 +876,7 @@ struct PSBTOutput
                             throw std::ios_base::failure("Output Taproot tree has a leaf with an invalid leaf version");
                         }
                         m_tap_tree.emplace_back(depth, leaf_ver, script);
-                        builder.Add((int)depth, CScript(script.begin(), script.end()), (int)leaf_ver, /*track=*/true);
+                        builder.Add((int)depth, script, (int)leaf_ver, /*track=*/true);
                     }
                     if (!builder.IsComplete()) {
                         throw std::ios_base::failure("Output Taproot tree is malformed");

@@ -361,7 +361,7 @@ void TaprootBuilder::Insert(TaprootBuilder::NodeInfo&& node, int depth)
     return branch.size() == 0 || (branch.size() == 1 && branch[0]);
 }
 
-TaprootBuilder& TaprootBuilder::Add(int depth, const CScript& script, int leaf_version, bool track)
+TaprootBuilder& TaprootBuilder::Add(int depth, Span<const unsigned char> script, int leaf_version, bool track)
 {
     assert((leaf_version & ~TAPROOT_LEAF_MASK) == 0);
     if (!IsValid()) return *this;
@@ -370,7 +370,7 @@ TaprootBuilder& TaprootBuilder::Add(int depth, const CScript& script, int leaf_v
     node.hash = ComputeTapleafHash(leaf_version, script);
     // due to bug in clang-tidy-17:
     // NOLINTNEXTLINE(modernize-use-emplace)
-    if (track) node.leaves.emplace_back(LeafInfo{script, leaf_version, {}});
+    if (track) node.leaves.emplace_back(LeafInfo{CScript(script.begin(), script.end()), leaf_version, {}});
     /* Insert into the branch. */
     Insert(std::move(node), depth);
     return *this;
@@ -426,13 +426,13 @@ TaprootSpendData TaprootBuilder::GetSpendData() const
     return spd;
 }
 
-std::optional<std::vector<std::tuple<int, CScript, int>>> InferTaprootTree(const TaprootSpendData& spenddata, const XOnlyPubKey& output)
+std::optional<std::vector<std::tuple<int, std::vector<unsigned char>, int>>> InferTaprootTree(const TaprootSpendData& spenddata, const XOnlyPubKey& output)
 {
     // Verify that the output matches the assumed Merkle root and internal key.
     auto tweak = spenddata.internal_key.CreateTapTweak(spenddata.merkle_root.IsNull() ? nullptr : &spenddata.merkle_root);
     if (!tweak || tweak->first != output) return std::nullopt;
     // If the Merkle root is 0, the tree is empty, and we're done.
-    std::vector<std::tuple<int, CScript, int>> ret;
+    std::vector<std::tuple<int, std::vector<unsigned char>, int>> ret;
     if (spenddata.merkle_root.IsNull()) return ret;
 
     /** Data structure to represent the nodes of the tree we're going to build. */
@@ -523,7 +523,7 @@ std::optional<std::vector<std::tuple<int, CScript, int>>> InferTaprootTree(const
             return std::nullopt;
         } else if (!node.inner) {
             // Leaf node; produce output.
-            ret.emplace_back(stack.size() - 1, node.leaf->first, node.leaf->second);
+            ret.emplace_back(stack.size() - 1, std::vector<unsigned char>(node.leaf->first.begin(), node.leaf->first.end()), node.leaf->second);
             node.done = true;
             stack.pop_back();
         } else if (node.sub[0]->done && !node.sub[1]->done && !node.sub[1]->explored && !node.sub[1]->hash.IsNull() &&
@@ -561,17 +561,17 @@ std::optional<std::vector<std::tuple<int, CScript, int>>> InferTaprootTree(const
     return ret;
 }
 
-std::vector<std::tuple<uint8_t, uint8_t, CScript>> TaprootBuilder::GetTreeTuples() const
+std::vector<std::tuple<uint8_t, uint8_t, std::vector<unsigned char>>> TaprootBuilder::GetTreeTuples() const
 {
     assert(IsComplete());
-    std::vector<std::tuple<uint8_t, uint8_t, CScript>> tuples;
+    std::vector<std::tuple<uint8_t, uint8_t, std::vector<unsigned char>>> tuples;
     if (m_branch.size()) {
         const auto& leaves = m_branch[0]->leaves;
         for (const auto& leaf : leaves) {
             assert(leaf.merkle_branch.size() <= TAPROOT_CONTROL_MAX_NODE_COUNT);
             uint8_t depth = (uint8_t)leaf.merkle_branch.size();
             uint8_t leaf_ver = (uint8_t)leaf.leaf_version;
-            tuples.emplace_back(depth, leaf_ver, leaf.script);
+            tuples.emplace_back(depth, leaf_ver, std::vector<unsigned char>(leaf.script.begin(), leaf.script.end()));
         }
     }
     return tuples;

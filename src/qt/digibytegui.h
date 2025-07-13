@@ -136,6 +136,9 @@ private:
     QToolBar* appToolBar = nullptr;
     QAction* overviewAction = nullptr;
     QAction* historyAction = nullptr;
+    QAction* digiDollarAction = nullptr;
+    QAction* mintAction = nullptr;
+    QAction* redeemAction = nullptr;
     QAction* quitAction = nullptr;
     QAction* sendCoinsAction = nullptr;
     QAction* usedSendingAddressesAction = nullptr;

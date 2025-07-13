@@ -275,6 +275,24 @@ void DigiByteGUI::createActions()
     historyAction->setShortcut(QKeySequence(QStringLiteral("Alt+4")));
     tabGroup->addAction(historyAction);
 
+    digiDollarAction = new QAction(tr("DigiDollar"), this);
+    digiDollarAction->setStatusTip(tr("DigiDollar - Coming Soon"));
+    digiDollarAction->setToolTip(digiDollarAction->statusTip());
+    digiDollarAction->setCheckable(true);
+    tabGroup->addAction(digiDollarAction);
+
+    mintAction = new QAction(tr("Mint"), this);
+    mintAction->setStatusTip(tr("Mint - Coming Soon"));
+    mintAction->setToolTip(mintAction->statusTip());
+    mintAction->setCheckable(true);
+    tabGroup->addAction(mintAction);
+
+    redeemAction = new QAction(tr("Redeem"), this);
+    redeemAction->setStatusTip(tr("Redeem - Coming Soon"));
+    redeemAction->setToolTip(redeemAction->statusTip());
+    redeemAction->setCheckable(true);
+    tabGroup->addAction(redeemAction);
+
 #ifdef ENABLE_WALLET
     // These showNormalIfMinimized are needed because Send Coins and Receive Coins
     // can be triggered from the tray menu, and need to show the GUI to be useful.
@@ -286,6 +304,35 @@ void DigiByteGUI::createActions()
     connect(receiveCoinsAction, &QAction::triggered, this, &DigiByteGUI::gotoReceiveCoinsPage);
     connect(historyAction, &QAction::triggered, [this]{ showNormalIfMinimized(); });
     connect(historyAction, &QAction::triggered, this, &DigiByteGUI::gotoHistoryPage);
+    
+    // Coming Soon actions
+    connect(digiDollarAction, &QAction::triggered, [this]{ 
+        showNormalIfMinimized(); 
+        QMessageBox msgBox(this);
+        msgBox.setWindowTitle(tr("Coming Soon"));
+        msgBox.setTextFormat(Qt::RichText);
+        msgBox.setText(tr("DigiDollar functionality will be available in a future release.<br><br>Learn more at <a href='https://digibyte.io/digidollar'>DigiByte.io/DigiDollar</a>"));
+        msgBox.exec();
+        overviewAction->setChecked(true);
+    });
+    connect(mintAction, &QAction::triggered, [this]{ 
+        showNormalIfMinimized(); 
+        QMessageBox msgBox(this);
+        msgBox.setWindowTitle(tr("Coming Soon"));
+        msgBox.setTextFormat(Qt::RichText);
+        msgBox.setText(tr("DigiDollar mint functionality will be available in a future release.<br><br>Learn more at <a href='https://digibyte.io/digidollar'>DigiByte.io/DigiDollar</a>"));
+        msgBox.exec();
+        overviewAction->setChecked(true);
+    });
+    connect(redeemAction, &QAction::triggered, [this]{ 
+        showNormalIfMinimized(); 
+        QMessageBox msgBox(this);
+        msgBox.setWindowTitle(tr("Coming Soon"));
+        msgBox.setTextFormat(Qt::RichText);
+        msgBox.setText(tr("DigiDollar redeem functionality will be available in a future release.<br><br>Learn more at <a href='https://digibyte.io/digidollar'>DigiByte.io/DigiDollar</a>"));
+        msgBox.exec();
+        overviewAction->setChecked(true);
+    });
 #endif // ENABLE_WALLET
 
     quitAction = new QAction(tr("E&xit"), this);
@@ -574,12 +621,35 @@ void DigiByteGUI::createToolBars()
         toolbar->addAction(sendCoinsAction);
         toolbar->addAction(receiveCoinsAction);
         toolbar->addAction(historyAction);
+        
+        // Add separator after Transactions to section off DigiDollar group
+        toolbar->addSeparator();
+        
+        toolbar->addAction(digiDollarAction);
+        toolbar->addAction(mintAction);
+        toolbar->addAction(redeemAction);
+        
         overviewAction->setChecked(true);
 
 #ifdef ENABLE_WALLET
         QWidget *spacer = new QWidget();
         spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
         toolbar->addWidget(spacer);
+        
+        // Add separator before Console to close off DigiDollar group
+        toolbar->addSeparator();
+        
+        // Add Console button on the right
+        QAction* consoleAction = new QAction(tr("Console"), this);
+        consoleAction->setStatusTip(tr("Open the DigiByte debug console"));
+        connect(consoleAction, &QAction::triggered, [this]{ showDebugWindow(); });
+        toolbar->addAction(consoleAction);
+        
+        // Add Settings button on the right
+        QAction* settingsAction = new QAction(tr("Settings"), this);
+        settingsAction->setStatusTip(tr("Modify configuration options for DigiByte"));
+        connect(settingsAction, &QAction::triggered, [this]{ optionsClicked(); });
+        toolbar->addAction(settingsAction);
 
         m_wallet_selector = new QComboBox();
         m_wallet_selector->setSizeAdjustPolicy(QComboBox::AdjustToContents);
@@ -792,6 +862,9 @@ void DigiByteGUI::setWalletActionsEnabled(bool enabled)
     sendCoinsAction->setEnabled(enabled);
     receiveCoinsAction->setEnabled(enabled);
     historyAction->setEnabled(enabled);
+    digiDollarAction->setEnabled(enabled);
+    mintAction->setEnabled(enabled);
+    redeemAction->setEnabled(enabled);
     encryptWalletAction->setEnabled(enabled);
     backupWalletAction->setEnabled(enabled);
     changePassphraseAction->setEnabled(enabled);

@@ -1673,8 +1673,8 @@ background-color:rgba(255, 255, 255, 0.15);
     /* MODAL OVERLAY */
     
     QWidget#bgWidget { /* The 'frame' overlaying the overview-page */
-        background:#0066cc;
-        color:#fff;
+        background: rgba(0, 0, 0, 0.85) !important;
+        color:#333333;
         padding-left:10px;
         padding-right:10px;
     }
@@ -1688,7 +1688,8 @@ background-color:rgba(255, 255, 255, 0.15);
     
     /* Modal overlay specific content widget */
     QWidget#bgWidget QWidget#contentWidget { /* The actual content with the text/buttons/etc... */
-    background: #0066CC !important;
+    background: #ffffff !important;
+    border: 1px solid #cccccc !important;
     border-top:0px solid #000;
     margin:0;
     padding-top:20px;
@@ -1698,43 +1699,56 @@ background-color:rgba(255, 255, 255, 0.15);
     
     /* Sync Modal Content Box */
     QWidget[objectName="contentWidget"] {
-    background: #0066CC !important;
+    background: #ffffff !important;
     border-radius: 6px !important;
     }
     
     QWidget#contentWidget {
-    background: #0066CC !important;
+    background: #ffffff !important;
     border-radius: 6px !important;
     }
     
     #contentWidget {
-    background: #0066CC !important;
+    background: #ffffff !important;
     border-radius: 6px !important;
     }
     
     #contentWidget QLabel {
-    color: #ffffff !important;
+    color: #333333 !important;
     font-size: 14pt !important;
     font-weight: normal;
     }
     
     #contentWidget QPushButton {
-    background-color: #ffffff !important;
-    color: #003366 !important;
-    border: 1px solid #ffffff !important;
+    background-color: #0066CC !important;
+    color: #ffffff !important;
+    border: 1px solid #0066CC !important;
     padding: 8px 16px !important;
     font-weight: bold !important;
     border-radius: 4px !important;
     }
     
     #contentWidget QPushButton:hover {
-    background-color: #f0f0f0 !important;
-    color: #002352 !important;
+    background-color: #003366 !important;
+    color: #ffffff !important;
     }
     
     /* Force modal overlay styles */
     ModalOverlay QWidget#contentWidget {
-    background: #0066CC !important;
+    background: #ffffff !important;
+    }
+    
+    /* Ensure text readability in modal overlay */
+    ModalOverlay QLabel {
+    color: #333333 !important;
+    }
+    
+    ModalOverlay QWidget#bgWidget {
+    background: rgba(0, 0, 0, 0.85) !important;
+    }
+    
+    ModalOverlay QWidget#contentWidget QLabel {
+    color: #333333 !important;
     }
     
     QWidget#bgWidget .QPushButton#closeButton {
@@ -2979,6 +2993,12 @@ QWidget#bgWidget QProgressBar {
 color: #003366;
 text-align: center;
 font-weight: bold;
+}
+
+/* Bold labels in modal overlay */
+#contentWidget QLabel[font-weight="bold"] {
+    font-weight: bold !important;
+    color: #333333 !important;
 }
 
 /* Progress Bar Label in Status Bar */

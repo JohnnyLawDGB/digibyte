@@ -119,7 +119,7 @@ void ModalOverlay::tipUpdate(int count, const QDateTime& blockDate, double nVeri
         if(remainingMSecs >= 0) {
             ui->expectedTimeLeft->setText(GUIUtil::formatNiceTimeOffset(remainingMSecs / 1000.0));
         } else {
-            ui->expectedTimeLeft->setText(QObject::tr("unknown"));
+            ui->expectedTimeLeft->setText(QObject::tr("Calculating..."));
         }
 
         static const int MAX_SAMPLES = 5000;
@@ -148,7 +148,7 @@ void ModalOverlay::tipUpdate(int count, const QDateTime& blockDate, double nVeri
         ui->numberOfBlocksLeft->setText(QString::number(bestHeaderHeight - count));
     } else {
         UpdateHeaderSyncLabel();
-        ui->expectedTimeLeft->setText(tr("Unknown…"));
+        ui->expectedTimeLeft->setText(tr("Calculating… (Syncing Headers)"));
     }
 }
 

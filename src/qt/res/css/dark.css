@@ -1612,8 +1612,8 @@ background-color:rgba(255, 255, 255, 0.15);
     /* MODAL OVERLAY */
     
     QWidget#bgWidget { /* The 'frame' overlaying the overview-page */
-        background:#0066cc;
-        color:#fff;
+        background: rgba(0, 0, 0, 0.90) !important;
+        color:#ffffff;
         padding-left:10px;
         padding-right:10px;
     }
@@ -1627,7 +1627,8 @@ background-color:rgba(255, 255, 255, 0.15);
     
     /* Modal overlay specific content widget */
     QWidget#bgWidget QWidget#contentWidget { /* The actual content with the text/buttons/etc... */
-    background: #0066CC !important;
+    background: #003366 !important;
+    border: 1px solid #0066CC !important;
     border-top:0px solid #000;
     margin:0;
     padding-top:20px;
@@ -1641,17 +1642,17 @@ background-color:rgba(255, 255, 255, 0.15);
     
     /* Sync Modal Content Box */
     QWidget[objectName="contentWidget"] {
-    background: #0066CC !important;
+    background: #003366 !important;
     border-radius: 6px !important;
     }
     
     QWidget#contentWidget {
-    background: #0066CC !important;
+    background: #003366 !important;
     border-radius: 6px !important;
     }
     
     #contentWidget {
-    background: #0066CC !important;
+    background: #003366 !important;
     border-radius: 6px !important;
     }
     
@@ -1661,23 +1662,43 @@ background-color:rgba(255, 255, 255, 0.15);
     font-weight: normal;
     }
     
+    /* Bold labels in modal overlay */
+    #contentWidget QLabel[font-weight="bold"] {
+    font-weight: bold !important;
+    color: #ffffff !important;
+    }
+    
     #contentWidget QPushButton {
-    background-color: #ffffff !important;
-    color: #003366 !important;
-    border: 1px solid #ffffff !important;
+    background-color: #0066CC !important;
+    color: #ffffff !important;
+    border: 1px solid #0066CC !important;
     padding: 8px 16px !important;
     font-weight: bold !important;
     border-radius: 4px !important;
     }
     
     #contentWidget QPushButton:hover {
-    background-color: #f0f0f0 !important;
-    color: #002352 !important;
+    background-color: #1a75ff !important;
+    color: #ffffff !important;
+    border: 1px solid #1a75ff !important;
     }
     
     /* Force modal overlay styles */
     ModalOverlay QWidget#contentWidget {
-    background: #0066CC !important;
+    background: #003366 !important;
+    }
+    
+    /* Ensure text readability in modal overlay */
+    ModalOverlay QLabel {
+    color: #ffffff !important;
+    }
+    
+    ModalOverlay QWidget#bgWidget {
+    background: rgba(0, 0, 0, 0.90) !important;
+    }
+    
+    ModalOverlay QWidget#contentWidget QLabel {
+    color: #ffffff !important;
     }
     
     
@@ -3836,11 +3857,22 @@ RPCConsole QTableView, QDialog#RPCConsole QTableView {
     gridline-color: rgba(255, 255, 255, 0.1);
     selection-background-color: #0066CC;
     selection-color: #ffffff;
+    border: none;
 }
 
-RPCConsole QTableView::item, QDialog#RPCConsole QTableView::item {
+RPCConsole QTableView::item, QDialog#RPCConsole QTableView::item, #RPCConsole QTableView::item {
+    background-color: rgba(255, 255, 255, 0.05) !important;
     color: #ffffff !important;
     padding: 4px;
+}
+
+RPCConsole QTableView::item:alternate, QDialog#RPCConsole QTableView::item:alternate, #RPCConsole QTableView::item:alternate {
+    background-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+RPCConsole QTableView::item:selected, QDialog#RPCConsole QTableView::item:selected, #RPCConsole QTableView::item:selected {
+    background-color: #0066cc !important;
+    color: #ffffff !important;
 }
 
 RPCConsole QHeaderView::section, QDialog#RPCConsole QHeaderView::section {
@@ -3849,6 +3881,11 @@ RPCConsole QHeaderView::section, QDialog#RPCConsole QHeaderView::section {
     padding: 6px;
     border: none;
     font-weight: bold;
+}
+
+/* Fix for peers table column widths */
+#peerWidget {
+    border: none;
 }
 
 /* Buttons in RPC Console */

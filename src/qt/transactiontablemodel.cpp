@@ -439,7 +439,7 @@ QVariant TransactionTableModel::addressColor(const TransactionRecord *wtx) const
         {
         QString label = walletModel->getAddressTableModel()->labelForAddress(QString::fromStdString(wtx->address));
         if(label.isEmpty())
-            return isDarkTheme ? QColor(255, 255, 255) : COLOR_BAREADDRESS;
+            return isDarkTheme ? QColor(255, 255, 255) : QColor(0, 51, 102);
         } break;
     default:
         break;
@@ -587,16 +587,22 @@ QVariant TransactionTableModel::data(const QModelIndex &index, int role) const
             // Non-confirmed (but not immature) as transactions are grey
             if(!rec->status.countsForBalance && rec->status.status != TransactionStatus::Immature)
             {
-                return isDarkTheme ? QColor(255, 255, 255) : COLOR_UNCONFIRMED;
+                return isDarkTheme ? QColor(255, 255, 255) : QColor(0, 51, 102);
             }
             if(index.column() == Amount && (rec->credit+rec->debit) < 0)
             {
                 return COLOR_NEGATIVE;
             }
+            if(index.column() == Amount)
+            {
+                return isDarkTheme ? QColor(255, 255, 255) : QColor(0, 51, 102);
+            }
             if(index.column() == ToAddress)
             {
                 return addressColor(rec);
             }
+            // Default color for all other columns (Date, Type, etc.)
+            return isDarkTheme ? QColor(255, 255, 255) : QColor(0, 51, 102);
         }
         break;
     case TypeRole:

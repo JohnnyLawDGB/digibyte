@@ -96,7 +96,7 @@ enum class SynchronizationState {
 #define HOURS 24
 #define MONTHS_PER_YEAR 12
 #define DAYS_PER_YEAR 365
-#define SECONDS_PER_MONTH (SECONDS * MINUTES * HOURS * DAYS_PER_YEAR / MONTHS_PER_YEAR);
+#define SECONDS_PER_MONTH (SECONDS * MINUTES * HOURS * DAYS_PER_YEAR / MONTHS_PER_YEAR)
 
 extern GlobalMutex g_best_block_mutex;
 extern std::condition_variable g_best_block_cv;

@@ -1694,7 +1694,8 @@ CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams)
         // Monthly Decay Factor: 98884/100000
         // Last Block Number: 41668798
         // Expected years after Hard Fork: 19.1395
-        nSubsidy = 2157 * COIN / 2;
+        // Note: Adjusted from 2157/2 to 900 to ensure total supply stays under 21 billion
+        nSubsidy = 900 * COIN;
         int64_t blocks = nHeight - consensusParams.workComputationChangeTarget;
         int64_t months = blocks * BLOCK_TIME_SECONDS / SECONDS_PER_MONTH;
 

@@ -10,7 +10,9 @@
 #include <QSizePolicy>
 
 TransactionOverviewWidget::TransactionOverviewWidget(QWidget* parent)
-    : QListView(parent) {}
+    : QListView(parent) {
+    setAlternatingRowColors(true);
+}
 
 QSize TransactionOverviewWidget::sizeHint() const
 {

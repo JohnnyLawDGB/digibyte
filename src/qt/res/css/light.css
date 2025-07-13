@@ -1545,11 +1545,55 @@ background-color:rgba(255, 255, 255, 0.15);
     background-color:transparent;
     }
     
-    QWidget#contentWidget { /* The actual content with the text/buttons/etc... */
+    /* Modal overlay specific content widget */
+    QWidget#bgWidget QWidget#contentWidget { /* The actual content with the text/buttons/etc... */
+    background: #0066CC !important;
     border-top:0px solid #000;
     margin:0;
     padding-top:20px;
     padding-bottom: 20px;
+    border-radius: 6px !important;
+    }
+    
+    /* Sync Modal Content Box */
+    QWidget[objectName="contentWidget"] {
+    background: #0066CC !important;
+    border-radius: 6px !important;
+    }
+    
+    QWidget#contentWidget {
+    background: #0066CC !important;
+    border-radius: 6px !important;
+    }
+    
+    #contentWidget {
+    background: #0066CC !important;
+    border-radius: 6px !important;
+    }
+    
+    #contentWidget QLabel {
+    color: #ffffff !important;
+    font-size: 14pt !important;
+    font-weight: normal;
+    }
+    
+    #contentWidget QPushButton {
+    background-color: #ffffff !important;
+    color: #003366 !important;
+    border: 1px solid #ffffff !important;
+    padding: 8px 16px !important;
+    font-weight: bold !important;
+    border-radius: 4px !important;
+    }
+    
+    #contentWidget QPushButton:hover {
+    background-color: #f0f0f0 !important;
+    color: #002352 !important;
+    }
+    
+    /* Force modal overlay styles */
+    ModalOverlay QWidget#contentWidget {
+    background: #0066CC !important;
     }
     
     QWidget#bgWidget .QPushButton#closeButton {
@@ -2019,18 +2063,21 @@ background-color:rgba(255, 255, 255, 0.15);
     min-height: 35px;
     }
     
-    /* Force amount field to be dark blue and large */
+    /* Force amount field to be dark blue and consistent with Send page */
     QWidget#ReceiveCoinsDialog .QFrame DigiByteAmountField QLineEdit,
     QWidget#ReceiveCoinsDialog DigiByteAmountField QWidget QLineEdit,
     QWidget#ReceiveCoinsDialog QWidget[objectName="DigiByteAmountField"] QLineEdit,
     QWidget#ReceiveCoinsDialog DigiByteAmountField QAbstractSpinBox,
     QWidget#ReceiveCoinsDialog DigiByteAmountField AmountSpinBox,
     QWidget#ReceiveCoinsDialog DigiByteAmountField > QAbstractSpinBox {
-    font-size: 20pt !important;
+    font-size: 14pt !important;
     font-weight: 900 !important;
     color: #002352 !important;
-    background-color: transparent !important;
-    border: none !important;
+    background-color: #ffffff !important;
+    border: 2px solid #003366 !important;
+    border-radius: 4px !important;
+    padding-left: 8px;
+    min-height: 30px !important;
     }
     
     QWidget#ReceiveCoinsDialog QLineEdit:focus,
@@ -2847,21 +2894,67 @@ SendCoinsEntry QValidatedLineEdit:focus {
     background-color: #ffffff;
 }
 
-/* Amount field specific */
-SendCoinsEntry DigiByteAmountField QLineEdit {
-    font-size: 14pt;
-    font-weight: 900;
-    color: #000000 !important;
-    background-color: #003366 !important;
+/* Amount field container for Send page - try multiple selectors */
+QDialog#SendCoinsDialog SendCoinsEntry DigiByteAmountField,
+QWidget#SendCoinsDialog SendCoinsEntry DigiByteAmountField,
+SendCoinsEntry QWidget[class="DigiByteAmountField"],
+SendCoinsEntry DigiByteAmountField,
+QScrollArea SendCoinsEntry DigiByteAmountField,
+SendCoinsEntry > DigiByteAmountField,
+QWidget[objectName="SendCoinsDialog"] SendCoinsEntry DigiByteAmountField {
+    background-color: #ffffff !important;
+    border: 2px solid #003366 !important;
+    border-radius: 4px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    min-height: 35px !important;
+}
+
+/* Also try targeting all DigiByteAmountField widgets in Send context */
+QWidget[class*="SendCoins"] DigiByteAmountField,
+*[class*="SendCoins"] DigiByteAmountField {
+    background-color: #ffffff !important;
+    border: 2px solid #003366 !important;
+    border-radius: 4px !important;
+}
+
+/* Amount field specific - target both QLineEdit and QAbstractSpinBox */
+#SendCoinsDialog SendCoinsEntry DigiByteAmountField QLineEdit,
+SendCoinsEntry DigiByteAmountField QLineEdit,
+#SendCoinsDialog DigiByteAmountField QLineEdit,
+#SendCoinsDialog SendCoinsEntry DigiByteAmountField QAbstractSpinBox,
+SendCoinsEntry DigiByteAmountField QAbstractSpinBox,
+#SendCoinsDialog DigiByteAmountField QAbstractSpinBox {
+    font-size: 14pt !important;
+    font-weight: 900 !important;
+    color: #002352 !important;
+    background-color: #ffffff !important;
+    border: 2px solid #003366 !important;
+    border-radius: 4px !important;
+    padding-left: 8px;
+    min-height: 30px !important;
+}
+
+/* Hide spinbox buttons for amount field to avoid partial borders */
+#SendCoinsDialog SendCoinsEntry DigiByteAmountField QAbstractSpinBox::up-button,
+SendCoinsEntry DigiByteAmountField QAbstractSpinBox::up-button,
+#SendCoinsDialog DigiByteAmountField QAbstractSpinBox::up-button,
+#SendCoinsDialog SendCoinsEntry DigiByteAmountField QAbstractSpinBox::down-button,
+SendCoinsEntry DigiByteAmountField QAbstractSpinBox::down-button,
+#SendCoinsDialog DigiByteAmountField QAbstractSpinBox::down-button {
+    border: none !important;
+    background: transparent !important;
+    width: 0px !important;
 }
 
 /* DGB dropdown - match Receive page */
-#SendCoinsDialog QComboBox,
+#SendCoinsDialog SendCoinsEntry DigiByteAmountField QComboBox,
 SendCoinsEntry DigiByteAmountField QComboBox {
-    background-color: #0066CC;
+    background-color: #0066CC !important;
     color: #ffffff !important;
-    border: 2px solid #ffffff;
-    border-radius: 4px;
+    border: none !important;
+    border-left: 2px solid #003366 !important;
+    border-radius: 0 4px 4px 0 !important;
     padding: 6px 10px;
     font-weight: bold;
     font-size: 11pt;
@@ -3098,11 +3191,12 @@ SendCoinsEntry QPushButton#useAvailableBalanceButton:hover {
     border-radius: 4px;
     padding: 0;
     margin: 0;
+    min-height: 35px;
 }
 
 /* Amount field specific styling */
 #ReceiveCoinsDialog DigiByteAmountField QLineEdit {
-    font-size: 18pt;
+    font-size: 14pt;
     font-weight: 900;
     color: #002352 !important;
     background-color: #ffffff !important;
@@ -3117,20 +3211,47 @@ DigiByteAmountField QLineEdit,
 QLineEdit[parent="DigiByteAmountField"],
 DigiByteAmountField QAbstractSpinBox,
 QAbstractSpinBox[parent="DigiByteAmountField"],
-#ReceiveCoinsDialog AmountSpinBox {
-    font-size: 20pt !important;
+#ReceiveCoinsDialog AmountSpinBox,
+QWidget#ReceiveCoinsDialog DigiByteAmountField QAbstractSpinBox,
+#ReceiveCoinsDialog DigiByteAmountField QAbstractSpinBox {
+    font-size: 14pt !important;
     font-weight: 900 !important;
     color: #002352 !important;
-    background-color: transparent !important;
-    border: none !important;
+    background-color: #ffffff !important;
+    border: 2px solid #003366 !important;
+    border-radius: 4px !important;
+    padding-left: 8px;
+    min-height: 30px !important;
 }
 
-/* DGB unit dropdown and Bech32 dropdown */
-#ReceiveCoinsDialog QComboBox,
+/* Hide spinbox buttons for receive amount field to avoid partial borders */
+QWidget#ReceiveCoinsDialog DigiByteAmountField QAbstractSpinBox::up-button,
+#ReceiveCoinsDialog DigiByteAmountField QAbstractSpinBox::up-button,
+QWidget#ReceiveCoinsDialog DigiByteAmountField QAbstractSpinBox::down-button,
+#ReceiveCoinsDialog DigiByteAmountField QAbstractSpinBox::down-button {
+    border: none !important;
+    background: transparent !important;
+    width: 0px !important;
+}
+
+/* DGB unit dropdown */
 #ReceiveCoinsDialog DigiByteAmountField QComboBox {
     background-color: #0066CC;
     color: #ffffff !important;
-    border: 2px solid #ffffff;
+    border: none;
+    border-left: 2px solid #003366;
+    border-radius: 0 4px 4px 0;
+    padding: 6px 10px;
+    font-weight: bold;
+    font-size: 11pt;
+    min-height: 35px;
+}
+
+/* Bech32 dropdown */
+#ReceiveCoinsDialog QComboBox {
+    background-color: #0066CC;
+    color: #ffffff !important;
+    border: 2px solid #0066CC;
     border-radius: 4px;
     padding: 6px 10px;
     font-weight: bold;

@@ -311,27 +311,31 @@ background-color:rgba(255, 255, 255, 0.15);
     border: 2px solid rgba(255, 255, 255, 0.3);
     padding-right:1px;
     padding-left:1px;
-    color:#ffffff;
-    selection-background-color: #0066CC;
+    color:#ffffff !important;
+    selection-background-color: #0066CC !important;
+    selection-color: #ffffff !important;
     }
     
     QComboBox QAbstractItemView::item { 
     margin:4px; 
-    color:#ffffff;
+    color:#ffffff !important;
+    background-color: transparent;
+    padding: 8px;
     }
     
     QComboBox QAbstractItemView::item:hover { 
-    background-color:#0066CC;
-    color:#ffffff;
+    background-color:#0066CC !important;
+    color:#ffffff !important;
     }
     
     QComboBox QAbstractItemView::item:selected { 
-    background-color:#0066CC;
-    color:#ffffff;
+    background-color:#0066CC !important;
+    color:#ffffff !important;
     }
     
     QComboBox::item {
-    color:#818181;
+    color:#ffffff !important;
+    background-color: transparent !important;
     }
     
     QComboBox::item:alternate {
@@ -339,8 +343,13 @@ background-color:rgba(255, 255, 255, 0.15);
     }
     
     QComboBox::item:selected {
-    border:0px solid transparent;
-    background:#f2f2f2;
+    background-color: #0066cc !important;
+    color: #ffffff !important;
+    }
+
+    QComboBox::item:hover {
+    background-color: #0066cc !important;
+    color: #ffffff !important;
     }
     
     QComboBox::indicator {
@@ -2239,14 +2248,43 @@ background-color:rgba(255, 255, 255, 0.15);
     color:#333333;
     }
     
-    /* TRANSACTION DETAIL DIALOG */
+    /* TRANSACTION DETAIL DIALOG - DARK MODE */
     
     QDialog#TransactionDescDialog {
-    background-color:#F8F6F6;
+    background-color: #002352;
+    color: #ffffff;
     }
     
-    QDialog#TransactionDescDialog QTextEdit { /* Contents of Receive Coin Dialog */
-    border:1px solid #d7d7d7;
+    QDialog#TransactionDescDialog QTextEdit { /* Contents of Transaction Details Dialog */
+    background-color: rgba(255, 255, 255, 0.08);
+    color: #ffffff;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+    padding: 8px;
+    font-size: 11pt;
+    }
+    
+    QDialog#TransactionDescDialog QLabel {
+    color: #ffffff;
+    }
+    
+    QDialog#TransactionDescDialog QPushButton {
+    background-color: #0066CC;
+    color: #ffffff;
+    border: 2px solid #0066CC;
+    border-radius: 4px;
+    padding: 8px 16px;
+    font-weight: bold;
+    }
+    
+    QDialog#TransactionDescDialog QPushButton:hover {
+    background-color: #0088ff;
+    border-color: #0088ff;
+    }
+    
+    QDialog#TransactionDescDialog QPushButton:pressed {
+    background-color: #0055aa;
+    border-color: #0055aa;
     }
 
     /* ENHANCED FOOTER BRANDING */
@@ -2935,26 +2973,90 @@ SendCoinsEntry QLineEdit:focus {
     background-color: rgba(255, 255, 255, 0.15);
 }
 
-/* Amount field specific */
-SendCoinsEntry DigiByteAmountField QLineEdit {
-    font-size: 16pt;
-    font-weight: 900;
-    color: #000000 !important;
-    background-color: #ffffff !important;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+/* Amount field container for Send page - dark mode */
+QDialog#SendCoinsDialog SendCoinsEntry DigiByteAmountField,
+QWidget#SendCoinsDialog SendCoinsEntry DigiByteAmountField,
+SendCoinsEntry QWidget[class="DigiByteAmountField"],
+SendCoinsEntry DigiByteAmountField,
+QScrollArea SendCoinsEntry DigiByteAmountField,
+SendCoinsEntry > DigiByteAmountField,
+QWidget[objectName="SendCoinsDialog"] SendCoinsEntry DigiByteAmountField {
+    background-color: rgba(255, 255, 255, 0.08) !important;
+    border: 2px solid rgba(255, 255, 255, 0.3) !important;
+    border-radius: 4px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    min-height: 35px !important;
+}
+
+/* Also try targeting all DigiByteAmountField widgets in Send context - dark mode */
+QWidget[class*="SendCoins"] DigiByteAmountField,
+*[class*="SendCoins"] DigiByteAmountField {
+    background-color: rgba(255, 255, 255, 0.08) !important;
+    border: 2px solid rgba(255, 255, 255, 0.3) !important;
+    border-radius: 4px !important;
+}
+
+/* Amount field specific - target both QLineEdit and QAbstractSpinBox - dark mode */
+#SendCoinsDialog SendCoinsEntry DigiByteAmountField QLineEdit,
+SendCoinsEntry DigiByteAmountField QLineEdit,
+#SendCoinsDialog DigiByteAmountField QLineEdit,
+#SendCoinsDialog SendCoinsEntry DigiByteAmountField QAbstractSpinBox,
+SendCoinsEntry DigiByteAmountField QAbstractSpinBox,
+#SendCoinsDialog DigiByteAmountField QAbstractSpinBox {
+    font-size: 14pt !important;
+    font-weight: 900 !important;
+    color: #ffffff !important;
+    background-color: rgba(255, 255, 255, 0.08) !important;
+    border: 2px solid rgba(255, 255, 255, 0.3) !important;
+    border-radius: 4px !important;
+    padding-left: 8px;
+    min-height: 30px !important;
+}
+
+/* Hide spinbox buttons for amount field to avoid partial borders - dark mode */
+#SendCoinsDialog SendCoinsEntry DigiByteAmountField QAbstractSpinBox::up-button,
+SendCoinsEntry DigiByteAmountField QAbstractSpinBox::up-button,
+#SendCoinsDialog DigiByteAmountField QAbstractSpinBox::up-button,
+#SendCoinsDialog SendCoinsEntry DigiByteAmountField QAbstractSpinBox::down-button,
+SendCoinsEntry DigiByteAmountField QAbstractSpinBox::down-button,
+#SendCoinsDialog DigiByteAmountField QAbstractSpinBox::down-button {
+    border: none !important;
+    background: transparent !important;
+    width: 0px !important;
 }
 
 /* DGB dropdown - match Receive page */
 #SendCoinsDialog QComboBox,
 SendCoinsEntry DigiByteAmountField QComboBox {
     background-color: #0066CC;
-    color: #ffffff;
+    color: #ffffff !important;
     border: 2px solid #ffffff;
     border-radius: 4px;
     padding: 6px 10px;
     font-weight: bold;
     font-size: 11pt;
     min-height: 35px;
+}
+
+/* Force dropdown text to be white in Send dialog */
+#SendCoinsDialog QComboBox::item,
+SendCoinsEntry DigiByteAmountField QComboBox::item {
+    color: #ffffff !important;
+    background-color: transparent !important;
+}
+
+/* Fix dropdown item selection colors for Send dialog */
+#SendCoinsDialog QComboBox::item:selected,
+SendCoinsEntry DigiByteAmountField QComboBox::item:selected {
+    background-color: #0066cc !important;
+    color: #ffffff !important;
+}
+
+#SendCoinsDialog QComboBox::item:hover,
+SendCoinsEntry DigiByteAmountField QComboBox::item:hover {
+    background-color: #0066cc !important;
+    color: #ffffff !important;
 }
 
 #SendCoinsDialog QComboBox:hover,
@@ -2976,10 +3078,30 @@ SendCoinsEntry DigiByteAmountField QComboBox::down-arrow {
 #SendCoinsDialog QComboBox QAbstractItemView,
 SendCoinsEntry DigiByteAmountField QComboBox QAbstractItemView {
     background-color: #002352;
-    color: #ffffff;
-    selection-background-color: #0066CC;
-    selection-color: #ffffff;
+    color: #ffffff !important;
+    selection-background-color: #0066CC !important;
+    selection-color: #ffffff !important;
     border: 2px solid #ffffff;
+}
+
+/* Dropdown list items for Send dialog */
+#SendCoinsDialog QComboBox QAbstractItemView::item,
+SendCoinsEntry DigiByteAmountField QComboBox QAbstractItemView::item {
+    color: #ffffff !important;
+    background-color: transparent;
+    padding: 8px;
+}
+
+#SendCoinsDialog QComboBox QAbstractItemView::item:selected,
+SendCoinsEntry DigiByteAmountField QComboBox QAbstractItemView::item:selected {
+    background-color: #0066CC !important;
+    color: #ffffff !important;
+}
+
+#SendCoinsDialog QComboBox QAbstractItemView::item:hover,
+SendCoinsEntry DigiByteAmountField QComboBox QAbstractItemView::item:hover {
+    background-color: #0066CC !important;
+    color: #ffffff !important;
 }
 
 /* Transaction Fee Group Box */
@@ -3197,31 +3319,104 @@ SendCoinsEntry QPushButton#useAvailableBalanceButton:hover {
     font-weight: 500;
 }
 
-/* Amount field container */
+/* Amount field container - dark mode */
 #ReceiveCoinsDialog DigiByteAmountField {
-    background-color: transparent;
+    background-color: rgba(255, 255, 255, 0.08);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+    padding: 0;
+    margin: 0;
+    min-height: 35px;
 }
 
-/* Amount field specific styling */
+/* Amount field specific styling - dark mode */
 #ReceiveCoinsDialog DigiByteAmountField QLineEdit {
-    font-size: 16pt;
+    font-size: 14pt;
     font-weight: 900;
-    color: #000000 !important;
-    background-color: #ffffff !important;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #ffffff !important;
+    background-color: rgba(255, 255, 255, 0.08) !important;
+    border: none !important;
+    padding-left: 8px;
+}
+
+/* Force amount field to be consistent with Send page - dark mode */
+QWidget#ReceiveCoinsDialog .QFrame DigiByteAmountField QLineEdit,
+QWidget#ReceiveCoinsDialog DigiByteAmountField QWidget QLineEdit,
+QWidget#ReceiveCoinsDialog QWidget[objectName="DigiByteAmountField"] QLineEdit,
+QWidget#ReceiveCoinsDialog DigiByteAmountField QAbstractSpinBox,
+QWidget#ReceiveCoinsDialog DigiByteAmountField AmountSpinBox,
+QWidget#ReceiveCoinsDialog DigiByteAmountField > QAbstractSpinBox {
+    font-size: 14pt !important;
+    font-weight: 900 !important;
+    color: #ffffff !important;
+    background-color: rgba(255, 255, 255, 0.08) !important;
+    border: 2px solid rgba(255, 255, 255, 0.3) !important;
+    border-radius: 4px !important;
+    padding-left: 8px;
+    min-height: 30px !important;
+}
+
+/* Also target the amount field more specifically - dark mode */
+QWidget#ReceiveCoinsDialog DigiByteAmountField QLineEdit,
+QWidget#ReceiveCoinsDialog QLineEdit#amount,
+DigiByteAmountField QLineEdit,
+QLineEdit[parent="DigiByteAmountField"],
+DigiByteAmountField QAbstractSpinBox,
+QAbstractSpinBox[parent="DigiByteAmountField"],
+#ReceiveCoinsDialog AmountSpinBox,
+QWidget#ReceiveCoinsDialog DigiByteAmountField QAbstractSpinBox,
+#ReceiveCoinsDialog DigiByteAmountField QAbstractSpinBox {
+    font-size: 14pt !important;
+    font-weight: 900 !important;
+    color: #ffffff !important;
+    background-color: rgba(255, 255, 255, 0.08) !important;
+    border: 2px solid rgba(255, 255, 255, 0.3) !important;
+    border-radius: 4px !important;
+    padding-left: 8px;
+    min-height: 30px !important;
+}
+
+/* Hide spinbox buttons for receive amount field to avoid partial borders - dark mode */
+QWidget#ReceiveCoinsDialog DigiByteAmountField QAbstractSpinBox::up-button,
+#ReceiveCoinsDialog DigiByteAmountField QAbstractSpinBox::up-button,
+QWidget#ReceiveCoinsDialog DigiByteAmountField QAbstractSpinBox::down-button,
+#ReceiveCoinsDialog DigiByteAmountField QAbstractSpinBox::down-button {
+    border: none !important;
+    background: transparent !important;
+    width: 0px !important;
 }
 
 /* DGB unit dropdown and Bech32 dropdown */
 #ReceiveCoinsDialog QComboBox,
 #ReceiveCoinsDialog DigiByteAmountField QComboBox {
     background-color: #0066CC;
-    color: #ffffff;
+    color: #ffffff !important;
     border: 2px solid #ffffff;
     border-radius: 4px;
     padding: 6px 10px;
     font-weight: bold;
     font-size: 11pt;
     min-height: 35px;
+}
+
+/* Force dropdown text to be white in Receive dialog */
+#ReceiveCoinsDialog QComboBox::item,
+#ReceiveCoinsDialog DigiByteAmountField QComboBox::item {
+    color: #ffffff !important;
+    background-color: transparent !important;
+}
+
+/* Fix dropdown item selection colors for Receive dialog */
+#ReceiveCoinsDialog QComboBox::item:selected,
+#ReceiveCoinsDialog DigiByteAmountField QComboBox::item:selected {
+    background-color: #0066cc !important;
+    color: #ffffff !important;
+}
+
+#ReceiveCoinsDialog QComboBox::item:hover,
+#ReceiveCoinsDialog DigiByteAmountField QComboBox::item:hover {
+    background-color: #0066cc !important;
+    color: #ffffff !important;
 }
 
 #ReceiveCoinsDialog QComboBox:hover,
@@ -3246,10 +3441,30 @@ SendCoinsEntry QPushButton#useAvailableBalanceButton:hover {
 #ReceiveCoinsDialog QComboBox QAbstractItemView,
 #ReceiveCoinsDialog DigiByteAmountField QComboBox QAbstractItemView {
     background-color: #002352;
-    color: #ffffff;
-    selection-background-color: #0066CC;
-    selection-color: #ffffff;
+    color: #ffffff !important;
+    selection-background-color: #0066CC !important;
+    selection-color: #ffffff !important;
     border: 2px solid #ffffff;
+}
+
+/* Dropdown list items for Receive dialog */
+#ReceiveCoinsDialog QComboBox QAbstractItemView::item,
+#ReceiveCoinsDialog DigiByteAmountField QComboBox QAbstractItemView::item {
+    color: #ffffff !important;
+    background-color: transparent;
+    padding: 8px;
+}
+
+#ReceiveCoinsDialog QComboBox QAbstractItemView::item:selected,
+#ReceiveCoinsDialog DigiByteAmountField QComboBox QAbstractItemView::item:selected {
+    background-color: #0066CC !important;
+    color: #ffffff !important;
+}
+
+#ReceiveCoinsDialog QComboBox QAbstractItemView::item:hover,
+#ReceiveCoinsDialog DigiByteAmountField QComboBox QAbstractItemView::item:hover {
+    background-color: #0066CC !important;
+    color: #ffffff !important;
 }
 
 /* Requested payments history section */
@@ -3494,8 +3709,49 @@ QDialog#OptionsDialog QLineEdit,
 QDialog#OptionsDialog QComboBox,
 QDialog#OptionsDialog QSpinBox {
     background-color: rgba(255, 255, 255, 0.08);
-    color: #ffffff;
+    color: #ffffff !important;
     border: 2px solid rgba(255, 255, 255, 0.3);
+}
+
+/* Options Dialog Dropdown Items */
+QDialog#OptionsDialog QComboBox::item {
+    color: #ffffff !important;
+    background-color: transparent !important;
+}
+
+QDialog#OptionsDialog QComboBox::item:selected {
+    background-color: #0066cc !important;
+    color: #ffffff !important;
+}
+
+QDialog#OptionsDialog QComboBox::item:hover {
+    background-color: #0066cc !important;
+    color: #ffffff !important;
+}
+
+/* Options Dialog Dropdown Lists */
+QDialog#OptionsDialog QComboBox QAbstractItemView {
+    background-color: #002352;
+    color: #ffffff !important;
+    selection-background-color: #0066CC !important;
+    selection-color: #ffffff !important;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+}
+
+QDialog#OptionsDialog QComboBox QAbstractItemView::item {
+    color: #ffffff !important;
+    background-color: transparent;
+    padding: 8px;
+}
+
+QDialog#OptionsDialog QComboBox QAbstractItemView::item:selected {
+    background-color: #0066CC !important;
+    color: #ffffff !important;
+}
+
+QDialog#OptionsDialog QComboBox QAbstractItemView::item:hover {
+    background-color: #0066CC !important;
+    color: #ffffff !important;
 }
 
 /* Fix all text in dialogs to be white */

@@ -301,6 +301,9 @@ void DigiByteApplication::applyTheme()
         theme = "dark";
     }
     
+    // NOTE: CSS hot-loading functionality disabled for production
+    // Uncomment the following block to enable live CSS reloading from ~/.digibyte-dev/css/ for rapid development
+    /*
     // Check if we should use external CSS for live reloading (development mode)
     QString externalCssDir = QDir::homePath() + "/.digibyte-dev/css/";
     QString externalCssPath = externalCssDir + theme + ".css";
@@ -326,6 +329,7 @@ void DigiByteApplication::applyTheme()
         
         return;
     }
+    */
     
     // Fall back to internal resource CSS
     QString cssPath = QString(":/css/%1").arg(theme);
@@ -582,6 +586,9 @@ bool DigiByteApplication::event(QEvent* e)
         return true;
     }
     
+    // NOTE: F5 CSS reload functionality disabled for production
+    // Uncomment to enable F5 key CSS reloading when using external stylesheets
+    /*
     // Handle F5 key for CSS reload when using external stylesheets
     if (e->type() == QEvent::KeyPress && !m_externalCssPath.isEmpty()) {
         QKeyEvent* keyEvent = static_cast<QKeyEvent*>(e);
@@ -591,6 +598,7 @@ bool DigiByteApplication::event(QEvent* e)
             return true;
         }
     }
+    */
 
     return QApplication::event(e);
 }

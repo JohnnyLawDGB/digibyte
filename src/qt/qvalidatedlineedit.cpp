@@ -7,6 +7,8 @@
 #include <qt/digibyteaddressvalidator.h>
 #include <qt/guiconstants.h>
 
+#include <QStyle>
+
 QValidatedLineEdit::QValidatedLineEdit(QWidget* parent)
     : QLineEdit(parent)
 {
@@ -29,12 +31,18 @@ void QValidatedLineEdit::setValid(bool _valid)
     if(_valid)
     {
         setStyleSheet("");
+        setProperty("invalid", false);
     }
     else
     {
-        setStyleSheet("QValidatedLineEdit { " STYLE_INVALID "}");
+        // Don't use inline styles - let CSS handle the styling
+        setProperty("invalid", true);
     }
     this->valid = _valid;
+    
+    // Force style update
+    style()->unpolish(this);
+    style()->polish(this);
 }
 
 void QValidatedLineEdit::focusInEvent(QFocusEvent *evt)

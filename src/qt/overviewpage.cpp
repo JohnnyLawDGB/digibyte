@@ -36,7 +36,7 @@ class TxViewDelegate : public QAbstractItemDelegate
 public:
     explicit TxViewDelegate(const PlatformStyle* _platformStyle, QObject* parent = nullptr)
         : QAbstractItemDelegate(parent), unit(DigiByteUnits::Unit::DGB),
-        platformStyle(_platformStyle)
+        platformStyle(_platformStyle), isDarkTheme(false)
     {
         connect(this, &TxViewDelegate::width_changed, this, &TxViewDelegate::sizeHintChanged);
     }
@@ -83,15 +83,13 @@ public:
 
         if(amount < 0)
         {
-            foreground = COLOR_NEGATIVE;
-        }
-        else if(!confirmed)
-        {
-            foreground = COLOR_UNCONFIRMED;
+            // Red for negative amounts
+            foreground = isDarkTheme ? QColor(255, 70, 70) : QColor(200, 0, 0);
         }
         else
         {
-            foreground = option.palette.color(QPalette::Text);
+            // Green for positive amounts
+            foreground = isDarkTheme ? QColor(100, 255, 100) : QColor(0, 150, 0);
         }
         painter->setPen(foreground);
         QString amountText = DigiByteUnits::formatWithUnit(unit, amount, true, DigiByteUnits::SeparatorStyle::ALWAYS);
@@ -103,7 +101,9 @@ public:
         QRect amount_bounding_rect;
         painter->drawText(amountRect, Qt::AlignRight | Qt::AlignVCenter, amountText, &amount_bounding_rect);
 
-        painter->setPen(option.palette.color(QPalette::Text));
+        // Use theme-aware color for date text
+        QColor dateColor = isDarkTheme ? QColor(255, 255, 255) : QColor(0, 51, 102);
+        painter->setPen(dateColor);
         QRect date_bounding_rect;
         painter->drawText(amountRect, Qt::AlignLeft | Qt::AlignVCenter, GUIUtil::dateTimeStr(date), &date_bounding_rect);
 
@@ -126,6 +126,7 @@ public:
     }
 
     DigiByteUnit unit{DigiByteUnit::DGB};
+    bool isDarkTheme;
 
 Q_SIGNALS:
     //! An intermediate signal for emitting from the `paint() const` member function.
@@ -263,6 +264,10 @@ void OverviewPage::setWalletModel(WalletModel *model)
     this->walletModel = model;
     if(model && model->getOptionsModel())
     {
+        // Check current theme and update delegate
+        QString currentTheme = model->getOptionsModel()->data(model->getOptionsModel()->index(OptionsModel::Theme), Qt::EditRole).toString();
+        txdelegate->isDarkTheme = (currentTheme == "dark");
+        
         // Set up transaction list
         filter.reset(new TransactionFilterProxy());
         filter->setSourceModel(model->getTransactionTableModel());
@@ -326,6 +331,10 @@ void OverviewPage::updateDisplayUnit()
 
         // Update txdelegate->unit with the current unit
         txdelegate->unit = walletModel->getOptionsModel()->getDisplayUnit();
+        
+        // Update theme too
+        QString currentTheme = walletModel->getOptionsModel()->data(walletModel->getOptionsModel()->index(OptionsModel::Theme), Qt::EditRole).toString();
+        txdelegate->isDarkTheme = (currentTheme == "dark");
 
         ui->listTransactions->update();
     }

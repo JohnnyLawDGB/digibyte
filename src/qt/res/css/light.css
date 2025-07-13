@@ -613,8 +613,8 @@ background-color:rgba(255, 255, 255, 0.15);
     }
     
     QDialog#AddressBookPage QTableView {
-        background-color: #ffffff;
-        alternate-background-color: #f8f9fa;
+        background-color: #A7C6ED;
+        alternate-background-color: #9BB8E8;
         color: #003366;
         selection-background-color: #0066CC;
         selection-color: #ffffff;
@@ -625,13 +625,13 @@ background-color:rgba(255, 255, 255, 0.15);
     
     QDialog#AddressBookPage QTableView::item {
         color: #003366 !important;
-        background-color: #ffffff !important;
+        background-color: #A7C6ED !important;
         padding: 8px;
         border: none;
     }
     
     QDialog#AddressBookPage QTableView::item:alternate {
-        background-color: #f8f9fa !important;
+        background-color: #9BB8E8 !important;
         color: #003366 !important;
     }
     
@@ -820,8 +820,8 @@ background-color:rgba(255, 255, 255, 0.15);
     }
     
     QWidget#AddressBookPage QTableView {
-        background-color: #ffffff;
-        alternate-background-color: #f8f9fa;
+        background-color: #A7C6ED;
+        alternate-background-color: #9BB8E8;
         color: #003366;
         selection-background-color: #0066CC;
         selection-color: #ffffff;
@@ -832,14 +832,14 @@ background-color:rgba(255, 255, 255, 0.15);
     
     QWidget#AddressBookPage QTableView::item {
         color: #003366 !important;
-        background-color: #ffffff !important;
+        background-color: #A7C6ED !important;
         padding: 8px;
         border: none;
         font-size: 11pt;
     }
     
     QWidget#AddressBookPage QTableView::item:alternate {
-        background-color: #f8f9fa !important;
+        background-color: #9BB8E8 !important;
         color: #003366 !important;
     }
     
@@ -2036,8 +2036,8 @@ background-color:rgba(255, 255, 255, 0.15);
     
     QDialog#CoinControlDialog .CoinControlTreeWidget#treeWidget { /* Coin Control Widget Container */
     outline: 0;
-    background-color: #ffffff !important;
-    alternate-background-color: #f8f9fa !important;
+    background-color: #A7C6ED !important;
+    alternate-background-color: #9BB8E8 !important;
     border: 2px solid #e0e0e0;
     color: #003366 !important;
     selection-background-color: #0066CC !important;
@@ -2047,14 +2047,14 @@ background-color:rgba(255, 255, 255, 0.15);
     }
     
     QDialog#CoinControlDialog .CoinControlTreeWidget#treeWidget::item {
-    background-color: #ffffff !important;
+    background-color: #A7C6ED !important;
     color: #003366 !important;
     padding: 8px;
     border: none;
     }
     
     QDialog#CoinControlDialog .CoinControlTreeWidget#treeWidget::item:alternate {
-    background-color: #f8f9fa !important;
+    background-color: #9BB8E8 !important;
     color: #003366 !important;
     }
     
@@ -2794,15 +2794,15 @@ TransactionView {
 
 /* Transaction List Table */
 TransactionView QTableView {
-    background-color: #ffffff;
+    background-color: #A7C6ED;
     border: 1px solid #8FB1E3;
     color: #003366;
-    alternate-background-color: #E8F0FF;
+    alternate-background-color: #9BB8E8;
 }
 
 TransactionView QTableView::item {
     /* Don't override color here - let the model set red/green for amounts */
-    background-color: transparent;
+    background-color: #A7C6ED;
     padding: 8px;
 }
 
@@ -2812,7 +2812,7 @@ TransactionView QTableView::item:selected {
 }
 
 TransactionView QTableView::item:alternate {
-    background-color: #E8F0FF;
+    background-color: #9BB8E8;
 }
 
 /* Transaction Table Headers */
@@ -3764,8 +3764,8 @@ QDialog#CoinControlDialog QLabel {
 /* Style Coin Control Tree Widget like Requested Payments History */
 QDialog#CoinControlDialog CoinControlTreeWidget,
 QDialog#CoinControlDialog QTreeWidget {
-    background-color: #ffffff;
-    alternate-background-color: #f8f9fa;
+    background-color: #A7C6ED;
+    alternate-background-color: #9BB8E8;
     color: #003366;
     selection-background-color: #0066CC;
     selection-color: #ffffff;
@@ -3775,7 +3775,7 @@ QDialog#CoinControlDialog QTreeWidget {
 }
 
 QDialog#CoinControlDialog QTreeWidget::item {
-    background-color: #ffffff !important;
+    background-color: #A7C6ED !important;
     color: #003366 !important;
     padding: 10px;
     font-size: 11pt;
@@ -3783,7 +3783,7 @@ QDialog#CoinControlDialog QTreeWidget::item {
 }
 
 QDialog#CoinControlDialog QTreeWidget::item:alternate {
-    background-color: #f8f9fa !important;
+    background-color: #9BB8E8 !important;
     color: #003366 !important;
 }
 
@@ -4032,8 +4032,8 @@ RPCConsole QLineEdit, QDialog#RPCConsole QLineEdit {
 
 /* Tables in Network Traffic and Peers tabs */
 RPCConsole QTableView, QDialog#RPCConsole QTableView {
-    background-color: #ffffff;
-    alternate-background-color: #E8F0FF;
+    background-color: #A7C6ED;
+    alternate-background-color: #9BB8E8;
     color: #003366;
     gridline-color: #8FB1E3;
     selection-background-color: #0066CC;
@@ -4044,6 +4044,22 @@ RPCConsole QTableView, QDialog#RPCConsole QTableView {
 RPCConsole QTableView::item, QDialog#RPCConsole QTableView::item {
     color: #003366;
     padding: 4px;
+    background-color: #A7C6ED;
+}
+
+RPCConsole QTableView::item:alternate, QDialog#RPCConsole QTableView::item:alternate {
+    background-color: #9BB8E8;
+    color: #003366;
+}
+
+RPCConsole QTableView::item:selected, QDialog#RPCConsole QTableView::item:selected {
+    background-color: #0066CC;
+    color: #ffffff;
+}
+
+RPCConsole QTableView::item:hover, QDialog#RPCConsole QTableView::item:hover {
+    background-color: rgba(0, 102, 204, 0.3);
+    color: #003366;
 }
 
 RPCConsole QHeaderView::section, QDialog#RPCConsole QHeaderView::section {

@@ -584,14 +584,16 @@ QVariant TransactionTableModel::data(const QModelIndex &index, int role) const
             {
                 return COLOR_TX_STATUS_DANGER;
             }
-            // Non-confirmed (but not immature) as transactions are grey
+            // Non-confirmed (but not immature) transactions - only change opacity, not color
             if(!rec->status.countsForBalance && rec->status.status != TransactionStatus::Immature)
             {
-                return isDarkTheme ? QColor(255, 255, 255) : QColor(0, 51, 102);
+                // Let the specific column logic below handle the actual colors
+                // This used to return gray, but we want theme-aware colors
             }
             if(index.column() == Amount && (rec->credit+rec->debit) < 0)
             {
-                return COLOR_NEGATIVE;
+                // Return theme-aware red for negative amounts
+                return isDarkTheme ? QColor(255, 100, 100) : QColor(200, 0, 0);
             }
             if(index.column() == Amount)
             {
@@ -601,7 +603,11 @@ QVariant TransactionTableModel::data(const QModelIndex &index, int role) const
             {
                 return addressColor(rec);
             }
-            // Default color for all other columns (Date, Type, etc.)
+            if(index.column() == Date)
+            {
+                return isDarkTheme ? QColor(255, 255, 255) : QColor(0, 51, 102);
+            }
+            // Default color for all other columns (Type, etc.)
             return isDarkTheme ? QColor(255, 255, 255) : QColor(0, 51, 102);
         }
         break;

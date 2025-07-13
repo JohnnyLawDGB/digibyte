@@ -102,7 +102,7 @@ static constexpr auto GETDATA_TX_INTERVAL{60s};
 /** Limit to avoid sending big packets. Not used in processing incoming GETDATA for compatibility */
 static const unsigned int MAX_GETDATA_SZ = 1000;
 /** Number of blocks that can be requested at any given time from a single peer. */
-static const int MAX_BLOCKS_IN_TRANSIT_PER_PEER = 32;
+static const int MAX_BLOCKS_IN_TRANSIT_PER_PEER = 128;
 /** Default time during which a peer must stall block download progress before being disconnected.
  * the actual timeout is increased temporarily if peers are disconnected for hitting the timeout */
 static constexpr auto BLOCK_STALLING_TIMEOUT_DEFAULT{2s};
@@ -110,7 +110,7 @@ static constexpr auto BLOCK_STALLING_TIMEOUT_DEFAULT{2s};
 static constexpr auto BLOCK_STALLING_TIMEOUT_MAX{64s};
 /** Number of headers sent in one getheaders result. We rely on the assumption that if a peer sends
  *  less than this number, we reached its tip. Changing this value is a protocol upgrade. */
-static const unsigned int MAX_HEADERS_RESULTS = 10000;
+static const unsigned int MAX_HEADERS_RESULTS = 20000;
 /** Maximum depth of blocks we're willing to serve as compact blocks to peers
  *  when requested. For older blocks, a regular BLOCK response will be sent. */
 static const int MAX_CMPCTBLOCK_DEPTH = 5;
@@ -120,7 +120,7 @@ static const int MAX_BLOCKTXN_DEPTH = 10;
  *  Larger windows tolerate larger download speed differences between peer, but increase the potential
  *  degree of disordering of blocks on disk (which make reindexing and pruning harder). We'll probably
  *  want to make this a per-peer adaptive value at some point. */
-static const unsigned int BLOCK_DOWNLOAD_WINDOW = 1024;
+static const unsigned int BLOCK_DOWNLOAD_WINDOW = 4096;
 /** Block download timeout base, expressed in multiples of the block interval (i.e. 10 min) */
 static constexpr double BLOCK_DOWNLOAD_TIMEOUT_BASE = 1;
 /** Additional block download timeout per parallel downloading peer (i.e. 5 min) */

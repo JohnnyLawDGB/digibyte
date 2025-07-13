@@ -593,7 +593,7 @@ QVariant TransactionTableModel::data(const QModelIndex &index, int role) const
             if(index.column() == Amount && (rec->credit+rec->debit) < 0)
             {
                 // Red for negative amounts
-                return isDarkTheme ? QColor(255, 100, 100) : QColor(200, 0, 0);
+                return isDarkTheme ? QColor(255, 70, 70) : QColor(200, 0, 0);
             }
             if(index.column() == Amount)
             {

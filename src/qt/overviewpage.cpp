@@ -84,7 +84,7 @@ public:
         if(amount < 0)
         {
             // Red for negative amounts
-            foreground = isDarkTheme ? QColor(255, 100, 100) : QColor(200, 0, 0);
+            foreground = isDarkTheme ? QColor(255, 70, 70) : QColor(200, 0, 0);
         }
         else
         {

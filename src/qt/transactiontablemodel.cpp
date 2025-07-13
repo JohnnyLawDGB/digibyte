@@ -426,6 +426,10 @@ QString TransactionTableModel::formatTxToAddress(const TransactionRecord *wtx, b
 
 QVariant TransactionTableModel::addressColor(const TransactionRecord *wtx) const
 {
+    // Check if we're using dark theme
+    QString currentTheme = walletModel->getOptionsModel()->data(walletModel->getOptionsModel()->index(OptionsModel::Theme), Qt::EditRole).toString();
+    bool isDarkTheme = (currentTheme == "dark");
+    
     // Show addresses without label in a less visible color
     switch(wtx->type)
     {
@@ -435,7 +439,7 @@ QVariant TransactionTableModel::addressColor(const TransactionRecord *wtx) const
         {
         QString label = walletModel->getAddressTableModel()->labelForAddress(QString::fromStdString(wtx->address));
         if(label.isEmpty())
-            return COLOR_BAREADDRESS;
+            return isDarkTheme ? QColor(255, 255, 255) : COLOR_BAREADDRESS;
         } break;
     default:
         break;
@@ -570,23 +574,29 @@ QVariant TransactionTableModel::data(const QModelIndex &index, int role) const
     case Qt::TextAlignmentRole:
         return column_alignments[index.column()];
     case Qt::ForegroundRole:
-        // Use the "danger" color for abandoned transactions
-        if(rec->status.status == TransactionStatus::Abandoned)
         {
-            return COLOR_TX_STATUS_DANGER;
-        }
-        // Non-confirmed (but not immature) as transactions are grey
-        if(!rec->status.countsForBalance && rec->status.status != TransactionStatus::Immature)
-        {
-            return COLOR_UNCONFIRMED;
-        }
-        if(index.column() == Amount && (rec->credit+rec->debit) < 0)
-        {
-            return COLOR_NEGATIVE;
-        }
-        if(index.column() == ToAddress)
-        {
-            return addressColor(rec);
+            // Check if we're using dark theme
+            QString currentTheme = walletModel->getOptionsModel()->data(walletModel->getOptionsModel()->index(OptionsModel::Theme), Qt::EditRole).toString();
+            bool isDarkTheme = (currentTheme == "dark");
+            
+            // Use the "danger" color for abandoned transactions
+            if(rec->status.status == TransactionStatus::Abandoned)
+            {
+                return COLOR_TX_STATUS_DANGER;
+            }
+            // Non-confirmed (but not immature) as transactions are grey
+            if(!rec->status.countsForBalance && rec->status.status != TransactionStatus::Immature)
+            {
+                return isDarkTheme ? QColor(255, 255, 255) : COLOR_UNCONFIRMED;
+            }
+            if(index.column() == Amount && (rec->credit+rec->debit) < 0)
+            {
+                return COLOR_NEGATIVE;
+            }
+            if(index.column() == ToAddress)
+            {
+                return addressColor(rec);
+            }
         }
         break;
     case TypeRole:

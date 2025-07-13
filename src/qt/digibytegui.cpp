@@ -94,6 +94,9 @@ DigiByteGUI::DigiByteGUI(interfaces::Node& node, const PlatformStyle *_platformS
     }
 
     setContextMenuPolicy(Qt::PreventContextMenu);
+    
+    // Set minimum window width to prevent toolbar text truncation
+    setMinimumWidth(900);
 
 #ifdef ENABLE_WALLET
     enableWallet = WalletModel::isWalletEnabled();
@@ -617,6 +620,7 @@ void DigiByteGUI::createToolBars()
         appToolBar = toolbar;
         toolbar->setMovable(false);
         toolbar->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+        toolbar->setMinimumHeight(40);
         toolbar->addAction(overviewAction);
         toolbar->addAction(sendCoinsAction);
         toolbar->addAction(receiveCoinsAction);

@@ -10,6 +10,7 @@
 #include <util/chaintype.h>
 
 #include <boost/test/unit_test.hpp>
+#include <primitives/block.h> // For GetVersionForAlgo
 
 BOOST_FIXTURE_TEST_SUITE(pow_tests, BasicTestingSetup)
 
@@ -17,66 +18,48 @@ BOOST_FIXTURE_TEST_SUITE(pow_tests, BasicTestingSetup)
 BOOST_AUTO_TEST_CASE(get_next_work)
 {
     const auto chainParams = CreateChainParams(*m_node.args, ChainType::MAIN);
-    // DigiByte: Test with regtest to avoid complex multi-algo difficulty
-    const auto regtestParams = CreateChainParams(*m_node.args, ChainType::REGTEST);
-    
-    int64_t nLastRetargetTime = 1231006505; // Genesis block time
+    int64_t nLastRetargetTime = 1261130161; // Block #30240
     CBlockIndex pindexLast;
-    pindexLast.nHeight = 1999;
-    pindexLast.nTime = 1231006505 + (2000 * 15);  // Genesis + 2000 blocks * 15 seconds
-    pindexLast.nBits = UintToArith256(regtestParams->GetConsensus().powLimit).GetCompact();
-    
-    // For regtest, difficulty doesn't change
-    unsigned int expected_nbits = pindexLast.nBits;
-    BOOST_CHECK(PermittedDifficultyTransition(regtestParams->GetConsensus(), pindexLast.nHeight+1, pindexLast.nBits, expected_nbits));
+    pindexLast.nHeight = 32255;
+    pindexLast.nTime = 1262152739;  // Block #32255
+    pindexLast.nBits = 0x1d00ffff;
+    BOOST_CHECK_EQUAL(CalculateNextWorkRequired(&pindexLast, nLastRetargetTime, chainParams->GetConsensus()), 0x1d00d86aU);
 }
 
 /* Test the constraint on the upper bound for next work */
 BOOST_AUTO_TEST_CASE(get_next_work_pow_limit)
 {
-    const auto regtestParams = CreateChainParams(*m_node.args, ChainType::REGTEST);
-    
-    int64_t nLastRetargetTime = 1231006505; // Genesis block time
+    const auto chainParams = CreateChainParams(*m_node.args, ChainType::MAIN);
+    int64_t nLastRetargetTime = 1231006505; // Block #0
     CBlockIndex pindexLast;
     pindexLast.nHeight = 2015;
-    pindexLast.nTime = 1231006505 + (2016 * 600);  // Much slower than expected
-    pindexLast.nBits = 0x207fffff; // Difficulty 1
-    
-    // For regtest with fPowAllowMinDifficultyBlocks, should return powLimit
-    unsigned int expected_nbits = UintToArith256(regtestParams->GetConsensus().powLimit).GetCompact();
-    BOOST_CHECK(PermittedDifficultyTransition(regtestParams->GetConsensus(), pindexLast.nHeight+1, pindexLast.nBits, expected_nbits));
+    pindexLast.nTime = 1233061996;  // Block #2015
+    pindexLast.nBits = 0x1d00ffff;
+    BOOST_CHECK_EQUAL(CalculateNextWorkRequired(&pindexLast, nLastRetargetTime, chainParams->GetConsensus()), 0x1D01B304U);
 }
 
 /* Test the constraint on the lower bound for actual time taken */
 BOOST_AUTO_TEST_CASE(get_next_work_lower_limit_actual)
 {
-    const auto regtestParams = CreateChainParams(*m_node.args, ChainType::REGTEST);
-    
-    int64_t nLastRetargetTime = 1231006505; // Genesis block time
+    const auto chainParams = CreateChainParams(*m_node.args, ChainType::MAIN);
+    int64_t nLastRetargetTime = 1279008237; // Block #66528
     CBlockIndex pindexLast;
-    pindexLast.nHeight = 2015;
-    pindexLast.nTime = 1231006505 + (2016 * 15);  // Expected time for 15 second blocks
-    pindexLast.nBits = 0x207fffff; // Difficulty 1
-    
-    // For regtest, difficulty stays the same
-    unsigned int expected_nbits = pindexLast.nBits;
-    BOOST_CHECK(PermittedDifficultyTransition(regtestParams->GetConsensus(), pindexLast.nHeight+1, pindexLast.nBits, expected_nbits));
+    pindexLast.nHeight = 68543;
+    pindexLast.nTime = 1279297671;  // Block #68543
+    pindexLast.nBits = 0x1c05a3f4;
+    BOOST_CHECK_EQUAL(CalculateNextWorkRequired(&pindexLast, nLastRetargetTime, chainParams->GetConsensus()), 0x1c0168fdU);
 }
 
 /* Test the constraint on the upper bound for actual time taken */
 BOOST_AUTO_TEST_CASE(get_next_work_upper_limit_actual)
 {
-    const auto regtestParams = CreateChainParams(*m_node.args, ChainType::REGTEST);
-    
-    int64_t nLastRetargetTime = 1231006505; // Genesis block time
+    const auto chainParams = CreateChainParams(*m_node.args, ChainType::MAIN);
+    int64_t nLastRetargetTime = 1263163443; // NOTE: Not an actual block time
     CBlockIndex pindexLast;
-    pindexLast.nHeight = 2015;
-    pindexLast.nTime = 1231006505 + (2016 * 600);  // Very slow blocks
-    pindexLast.nBits = 0x1f07ffff; // Higher difficulty
-    
-    // For regtest with min difficulty blocks allowed, should get pow limit
-    unsigned int expected_nbits = UintToArith256(regtestParams->GetConsensus().powLimit).GetCompact();
-    BOOST_CHECK(PermittedDifficultyTransition(regtestParams->GetConsensus(), pindexLast.nHeight+1, pindexLast.nBits, expected_nbits));
+    pindexLast.nHeight = 46367;
+    pindexLast.nTime = 1269211443;  // Block #46367
+    pindexLast.nBits = 0x1c387f6f;
+    BOOST_CHECK_EQUAL(CalculateNextWorkRequired(&pindexLast, nLastRetargetTime, chainParams->GetConsensus()), 0x1d00e1fdU);
 }
 
 BOOST_AUTO_TEST_CASE(CheckProofOfWork_test_negative_target)
@@ -142,10 +125,26 @@ BOOST_AUTO_TEST_CASE(GetBlockProofEquivalentTime_test)
     for (int i = 0; i < 10000; i++) {
         blocks[i].pprev = i ? &blocks[i - 1] : nullptr;
         blocks[i].nHeight = i;
-        blocks[i].nVersion = 1;
+        // DigiByte: Set appropriate version for multi-algo
+        if (i < 145000) {
+            blocks[i].nVersion = 1; // Pre-multi-algo
+        } else {
+            // Cycle through algorithms for testing
+            int algo = (i / 5) % NUM_ALGOS;
+            blocks[i].nVersion = GetVersionForAlgo(algo);
+        }
         blocks[i].nTime = 1269211443 + i * chainParams->GetConsensus().nPowTargetSpacing;
         blocks[i].nBits = 0x207fffff; /* target 0x7fffff000... */
-        blocks[i].nChainWork = i ? blocks[i - 1].nChainWork + GetBlockProof(blocks[i - 1]) : arith_uint256(0);
+        
+        // For chain work calculation, use the base proof calculation to avoid
+        // issues with Params() in test context
+        arith_uint256 bnTarget;
+        bool fNegative;
+        bool fOverflow;
+        bnTarget.SetCompact(blocks[i].nBits, &fNegative, &fOverflow);
+        arith_uint256 blockProof = (fNegative || fOverflow || bnTarget == 0) ? 0 : ((~bnTarget / (bnTarget + 1)) + 1);
+        
+        blocks[i].nChainWork = i ? blocks[i - 1].nChainWork + blockProof : arith_uint256(0);
 
         // Create random block hash
         const uint256 randomhash = GetRandHash();
@@ -192,7 +191,7 @@ void sanity_check_chainparams(const ArgsManager& args, ChainType chain_type)
     // check max target * 4*nPowTargetTimespan doesn't overflow -- see pow.cpp:CalculateNextWorkRequired()
     if (!consensus.fPowNoRetargeting) {
         // DigiByte: Skip this check for mainnet as DigiByte's powLimit is much larger (>> 20 vs Bitcoin's >> 32)
-        // This check is designed for Bitcoin's difficulty adjustment and doesn't apply to DigiByte's multi-algo system
+        // and uses a different difficulty adjustment mechanism
         if (chain_type != ChainType::MAIN) {
             arith_uint256 targ_max("0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF");
             targ_max /= consensus.nPowTargetTimespan * 4;
@@ -219,6 +218,80 @@ BOOST_AUTO_TEST_CASE(ChainParams_TESTNET_sanity)
 BOOST_AUTO_TEST_CASE(ChainParams_SIGNET_sanity)
 {
     sanity_check_chainparams(*m_node.args, ChainType::SIGNET);
+}
+
+BOOST_AUTO_TEST_CASE(digibyte_multialgo_test)
+{
+    // Test DigiByte's multi-algorithm mining system
+    const auto chainParams = CreateChainParams(*m_node.args, ChainType::REGTEST);
+    const auto& params = chainParams->GetConsensus();
+    
+    // Test each algorithm
+    for (int algo = ALGO_SHA256D; algo <= ALGO_QUBIT; algo++) {
+        // Create a mock block header for this algo
+        CBlockHeader blockHeader;
+        blockHeader.nVersion = GetVersionForAlgo(algo);
+        blockHeader.nTime = 1500000000;
+        
+        // Create a chain of previous blocks for algorithm history
+        std::vector<CBlockIndex> blocks(10);
+        for (int i = 0; i < 10; i++) {
+            blocks[i].pprev = (i > 0) ? &blocks[i-1] : nullptr;
+            blocks[i].nHeight = 200000 + i;
+            blocks[i].nTime = 1499999000 + (i * 15);
+            blocks[i].nBits = 0x207fffff; // regtest difficulty
+            blocks[i].nVersion = GetVersionForAlgo(algo);
+        }
+        
+        // Test that GetNextWorkRequired handles the algorithm properly
+        unsigned int nBits = GetNextWorkRequired(&blocks[9], &blockHeader, params, algo);
+        
+        // Verify the result is within valid range
+        arith_uint256 bnNew;
+        bnNew.SetCompact(nBits);
+        BOOST_CHECK(bnNew > 0);
+        BOOST_CHECK(bnNew <= UintToArith256(params.powLimit));
+    }
+}
+
+BOOST_AUTO_TEST_CASE(digibyte_difficulty_versions_test)
+{
+    // Test DigiByte's different difficulty algorithm versions at various heights
+    const auto chainParams = CreateChainParams(*m_node.args, ChainType::REGTEST);
+    const auto& params = chainParams->GetConsensus();
+    
+    // Heights to test each difficulty version
+    const int test_heights[] = {
+        100,      // V1 (< 145000)
+        200000,   // V2 (< 400000)
+        500000,   // V3 (< 1430000)
+        1500000   // V4 (>= 1430000)
+    };
+    
+    for (int height : test_heights) {
+        CBlockHeader blockHeader;
+        blockHeader.nVersion = GetVersionForAlgo(ALGO_SCRYPT);
+        blockHeader.nTime = 1500000000 + (height * 15);
+        
+        // Create a proper chain of blocks
+        int chain_length = std::min(height, 2016);
+        std::vector<CBlockIndex> blocks(chain_length);
+        for (int i = 0; i < chain_length; i++) {
+            blocks[i].pprev = (i > 0) ? &blocks[i-1] : nullptr;
+            blocks[i].nHeight = height - chain_length + i + 1;
+            blocks[i].nTime = blockHeader.nTime - ((chain_length - i) * 15);
+            blocks[i].nBits = 0x207fffff; // regtest difficulty
+            blocks[i].nVersion = GetVersionForAlgo(ALGO_SCRYPT);
+        }
+        
+        // This should not crash and should return valid difficulty
+        unsigned int nBits = GetNextWorkRequired(&blocks[chain_length-1], &blockHeader, params, ALGO_SCRYPT);
+        
+        arith_uint256 bnNew;
+        bnNew.SetCompact(nBits);
+        BOOST_CHECK(bnNew > 0);
+        BOOST_CHECK(bnNew <= UintToArith256(params.powLimit));
+    }
 }
 
 BOOST_AUTO_TEST_SUITE_END()

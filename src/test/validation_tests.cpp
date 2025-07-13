@@ -53,6 +53,13 @@ static void TestBlockSubsidyHalvings(int nSubsidyHalvingInterval)
 {
     Consensus::Params consensusParams;
     consensusParams.nSubsidyHalvingInterval = nSubsidyHalvingInterval;
+    // For DigiByte, we need to set the proper reward schedule parameters
+    // Otherwise GetBlockSubsidy won't work correctly
+    consensusParams.nDiffChangeTarget = 67200;
+    consensusParams.alwaysUpdateDiffChangeTarget = 400000;
+    consensusParams.workComputationChangeTarget = 1430000;
+    consensusParams.patchBlockRewardDuration = 10080;
+    consensusParams.patchBlockRewardDuration2 = 80160;
     TestBlockSubsidyHalvings(consensusParams);
 }
 

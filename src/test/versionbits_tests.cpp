@@ -344,7 +344,7 @@ static void check_computeblockversion(VersionBitsCache& versionbitscache, const 
     BOOST_CHECK_EQUAL(versionbitscache.ComputeBlockVersion(lastBlock, params, ALGO_SCRYPT) & VERSIONBITS_TOP_MASK, VERSIONBITS_TOP_BITS);
 
     // Check that ComputeBlockVersion will set the bit until nTimeout
-    nTime += 600;
+    nTime += 15;
     uint32_t blocksToMine = params.nMinerConfirmationWindow * 2; // test blocks for up to 2 time periods
     uint32_t nHeight = params.nMinerConfirmationWindow * 3;
     // These blocks are all before nTimeout is reached.
@@ -353,7 +353,7 @@ static void check_computeblockversion(VersionBitsCache& versionbitscache, const 
         BOOST_CHECK((versionbitscache.ComputeBlockVersion(lastBlock, params, ALGO_SCRYPT) & (1 << bit)) != 0);
         BOOST_CHECK_EQUAL(versionbitscache.ComputeBlockVersion(lastBlock, params, ALGO_SCRYPT) & VERSIONBITS_TOP_MASK, VERSIONBITS_TOP_BITS);
         blocksToMine--;
-        nTime += 600;
+        nTime += 15;
         nHeight += 1;
     }
 

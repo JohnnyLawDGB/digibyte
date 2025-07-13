@@ -7,6 +7,8 @@
 #include <qt/digibyteaddressvalidator.h>
 #include <qt/guiconstants.h>
 
+#include <QStyle>
+
 QValidatedLineEdit::QValidatedLineEdit(QWidget* parent)
     : QLineEdit(parent)
 {

@@ -28,6 +28,7 @@
 #include <util/translation.h>
 #include <validation.h>
 
+#include <cstring>
 #include <map>
 #include <unordered_map>
 
@@ -243,6 +244,11 @@ CBlockIndex* BlockManager::AddToBlockIndex(const CBlockHeader& block, CBlockInde
         pindexNew->nHeight = pindexNew->pprev->nHeight + 1;
         pindexNew->BuildSkip();
     }
+    // Use memcpy to copy the entire array at once.
+    if (pindexNew->pprev) {
+        memcpy(pindexNew->lastAlgoBlocks, pindexNew->pprev->lastAlgoBlocks, sizeof(pindexNew->lastAlgoBlocks));
+        pindexNew->lastAlgoBlocks[pindexNew->GetAlgo()] = pindexNew;
+    }
     pindexNew->nTimeMax = (pindexNew->pprev ? std::max(pindexNew->pprev->nTimeMax, pindexNew->nTime) : pindexNew->nTime);
     pindexNew->nChainWork = (pindexNew->pprev ? pindexNew->pprev->nChainWork : 0) + GetBlockProof(*pindexNew);
     pindexNew->RaiseValidity(BLOCK_VALID_TREE);
@@ -453,6 +459,11 @@ bool BlockManager::LoadBlockIndex(const std::optional<uint256>& snapshot_blockha
             return error("%s: block index is non-contiguous, index of height %d missing", __func__, previous_index->nHeight + 1);
         }
         previous_index = pindex;
+        // Use memcpy to copy the entire array at once.
+        if (pindex->pprev) {
+            memcpy(pindex->lastAlgoBlocks, pindex->pprev->lastAlgoBlocks, sizeof(pindex->lastAlgoBlocks));
+            pindex->lastAlgoBlocks[pindex->GetAlgo()] = pindex;
+        }
         pindex->nChainWork = (pindex->pprev ? pindex->pprev->nChainWork : 0) + GetBlockProof(*pindex);
         pindex->nTimeMax = (pindex->pprev ? std::max(pindex->pprev->nTimeMax, pindex->nTime) : pindex->nTime);
 

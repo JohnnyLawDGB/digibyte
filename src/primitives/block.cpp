@@ -24,12 +24,6 @@ uint256 CBlockHeader::GetHash() const
 
 int CBlockHeader::GetAlgo() const
 {
-    // Check version to determine algorithm
-    // For early blocks (version 1 or 2), always return ALGO_SCRYPT
-    if (nVersion <= 2) {
-        return ALGO_SCRYPT;
-    }
-    
     switch (nVersion & BLOCK_VERSION_ALGO)
     {
         case BLOCK_VERSION_SCRYPT:
@@ -49,8 +43,7 @@ int CBlockHeader::GetAlgo() const
         case BLOCK_VERSION_ODO:
             return ALGO_ODO;
     }
-    // Default to Scrypt for unrecognized versions
-    return ALGO_SCRYPT;
+    return ALGO_UNKNOWN;
 }
 
 uint32_t OdoKey(const Consensus::Params& params, uint32_t nTime)

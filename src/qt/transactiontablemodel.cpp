@@ -592,12 +592,13 @@ QVariant TransactionTableModel::data(const QModelIndex &index, int role) const
             }
             if(index.column() == Amount && (rec->credit+rec->debit) < 0)
             {
-                // Return theme-aware red for negative amounts
+                // Red for negative amounts
                 return isDarkTheme ? QColor(255, 100, 100) : QColor(200, 0, 0);
             }
             if(index.column() == Amount)
             {
-                return isDarkTheme ? QColor(255, 255, 255) : QColor(0, 51, 102);
+                // Green for positive amounts
+                return isDarkTheme ? QColor(100, 255, 100) : QColor(0, 150, 0);
             }
             if(index.column() == ToAddress)
             {

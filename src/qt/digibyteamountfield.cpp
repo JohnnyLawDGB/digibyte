@@ -267,10 +267,16 @@ bool DigiByteAmountField::validate()
 
 void DigiByteAmountField::setValid(bool valid)
 {
-    if (valid)
+    if (valid) {
         amount->setStyleSheet("");
-    else
-        amount->setStyleSheet(STYLE_INVALID);
+        amount->setProperty("invalid", false);
+    } else {
+        // Don't use inline styles - let CSS handle the styling
+        amount->setProperty("invalid", true);
+    }
+    // Force style update
+    amount->style()->unpolish(amount);
+    amount->style()->polish(amount);
 }
 
 bool DigiByteAmountField::eventFilter(QObject *object, QEvent *event)

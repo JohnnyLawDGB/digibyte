@@ -290,8 +290,9 @@ background-color:rgba(255, 255, 255, 0.15);
     border: 2px solid rgba(255, 255, 255, 0.3);
     padding-right:1px;
     padding-left:1px;
-    color:#003366;
-    selection-background-color: #0066CC;
+    color:#003366 !important;
+    selection-background-color: #0066CC !important;
+    selection-color: #ffffff !important;
     }
     
     QComboBox QAbstractItemView::item { 
@@ -300,26 +301,32 @@ background-color:rgba(255, 255, 255, 0.15);
     }
     
     QComboBox QAbstractItemView::item:hover { 
-    background-color:#0066CC;
-    color:#003366;
+    background-color:#0066CC !important;
+    color:#ffffff !important;
     }
     
     QComboBox QAbstractItemView::item:selected { 
-    background-color:#0066CC;
-    color:#003366;
+    background-color:#0066CC !important;
+    color:#ffffff !important;
     }
     
     QComboBox::item {
-    color:#818181;
+    color:#003366 !important;
+    background-color: transparent !important;
     }
     
     QComboBox::item:alternate {
-    background:#fff;
+    background: transparent;
     }
     
     QComboBox::item:selected {
-    border:0px solid transparent;
-    background:#f2f2f2;
+    background-color: #0066CC !important;
+    color: #ffffff !important;
+    }
+    
+    QComboBox::item:hover {
+    background-color: #0066CC !important;
+    color: #ffffff !important;
     }
     
     QComboBox::indicator {
@@ -599,27 +606,91 @@ background-color:rgba(255, 255, 255, 0.15);
     /*******************************************************/
     /* FILE MENU */
     
-    /* Dialog: Address Book */
+    /* Dialog: Address Book - Light Mode */
     QDialog#AddressBookPage {
         background-color: #ffffff;
+        color: #003366;
     }
     
     QDialog#AddressBookPage QTableView {
-        background-color: #A7C6ED;
-        alternate-background-color: rgba(255, 255, 255, 0.05);
+        background-color: #ffffff;
+        alternate-background-color: #f8f9fa;
         color: #003366;
         selection-background-color: #0066CC;
-        selection-color: #003366;
-        border: 1px solid rgba(255, 255, 255, 0.2);
+        selection-color: #ffffff;
+        border: 2px solid #e0e0e0;
+        gridline-color: #e0e0e0;
+        font-size: 11pt;
+    }
+    
+    QDialog#AddressBookPage QTableView::item {
+        color: #003366 !important;
+        background-color: #ffffff !important;
+        padding: 8px;
+        border: none;
+    }
+    
+    QDialog#AddressBookPage QTableView::item:alternate {
+        background-color: #f8f9fa !important;
+        color: #003366 !important;
+    }
+    
+    QDialog#AddressBookPage QTableView::item:selected {
+        background-color: #0066CC !important;
+        color: #ffffff !important;
+    }
+    
+    QDialog#AddressBookPage QTableView::item:hover {
+        background-color: rgba(0, 102, 204, 0.3) !important;
+        color: #003366 !important;
     }
     
     QDialog#AddressBookPage QHeaderView::section {
-    background-color: #f8f9fa;
-    color: #003366;
         background-color: #0066CC;
-        color: #003366;
-        padding: 5px;
+        color: #ffffff;
+        padding: 10px;
         border: none;
+        font-weight: bold;
+        font-size: 11pt;
+    }
+    
+    QDialog#AddressBookPage QLabel {
+        color: #003366;
+        font-weight: bold;
+    }
+    
+    QDialog#AddressBookPage QPushButton {
+        background-color: #0066CC;
+        color: #ffffff;
+        border: 2px solid #0066CC;
+        border-radius: 4px;
+        padding: 8px 16px;
+        font-weight: bold;
+        min-height: 30px;
+    }
+    
+    QDialog#AddressBookPage QPushButton:hover {
+        background-color: #0088ff;
+        border-color: #0088ff;
+    }
+    
+    QDialog#AddressBookPage QPushButton:pressed {
+        background-color: #0055aa;
+        border-color: #0055aa;
+    }
+    
+    QDialog#AddressBookPage QLineEdit {
+        background-color: #ffffff;
+        color: #003366;
+        border: 2px solid #003366;
+        border-radius: 4px;
+        padding: 8px;
+        font-size: 11pt;
+    }
+    
+    QDialog#AddressBookPage QLineEdit:focus {
+        border-color: #0066CC;
+        background-color: #f8f9fa;
     }
     
     /* Dialog: Open URI */
@@ -722,70 +793,117 @@ background-color:rgba(255, 255, 255, 0.15);
     border:1px solid #9e9e9e;
     }
     
-    /* Dialog: Send and Receive */
+    /* Widget: Address Book Page - Light Mode */
     QWidget#AddressBookPage {
-    background-color: #A7C6ED;
+        background-color: #ffffff;
+        color: #003366;
     }
     
-    QWidget#AddressBookPage QPushButton#newAddress { /* New Address Button */
-    background-color:#0066cc;
-    border:1px solid #d2d2d2;
-    color:#fff;
-    padding-left:10px;
-    padding-right:10px;
+    QWidget#AddressBookPage QPushButton {
+        background-color: #0066CC;
+        color: #ffffff;
+        border: 2px solid #0066CC;
+        border-radius: 4px;
+        padding: 8px 16px;
+        font-weight: bold;
+        min-height: 30px;
     }
     
-    QWidget#AddressBookPage QPushButton#newAddress:hover {
-    background-color:#0066cc;
-    color:#333;
+    QWidget#AddressBookPage QPushButton:hover {
+        background-color: #0088ff;
+        border-color: #0088ff;
     }
     
-    QWidget#AddressBookPage QPushButton#newAddress:pressed {
-    border:1px solid #9e9e9e;
+    QWidget#AddressBookPage QPushButton:pressed {
+        background-color: #0055aa;
+        border-color: #0055aa;
     }
     
-    QWidget#AddressBookPage QPushButton#copyAddress { /* Copy Address Button */
-    background-color:#0066cc;
-    border:1px solid #d2d2d2;
-    color:#fff;
-    padding-left:10px;
-    padding-right:10px;
+    QWidget#AddressBookPage QTableView {
+        background-color: #ffffff;
+        alternate-background-color: #f8f9fa;
+        color: #003366;
+        selection-background-color: #0066CC;
+        selection-color: #ffffff;
+        border: 2px solid #e0e0e0;
+        gridline-color: #e0e0e0;
+        font-size: 11pt;
     }
     
-    QWidget#AddressBookPage QPushButton#copyAddress:hover {
-    background-color:#0066cc;
-    color:#333;
+    QWidget#AddressBookPage QTableView::item {
+        color: #003366 !important;
+        background-color: #ffffff !important;
+        padding: 8px;
+        border: none;
+        font-size: 11pt;
     }
     
-    QWidget#AddressBookPage QPushButton#copyAddress:pressed {
-    border:1px solid #9e9e9e;
+    QWidget#AddressBookPage QTableView::item:alternate {
+        background-color: #f8f9fa !important;
+        color: #003366 !important;
     }
     
-    QWidget#AddressBookPage QPushButton#deleteAddress { /* Delete Address Button */
-    background-color:#0066cc;
-    border:1px solid #d2d2d2;
-    color:#fff;
-    padding-left:10px;
-    padding-right:10px;
+    QWidget#AddressBookPage QTableView::item:selected {
+        background-color: #0066CC !important;
+        color: #ffffff !important;
     }
     
-    QWidget#AddressBookPage QPushButton#deleteAddress:hover {
-    background-color:#0066cc;
-    color:#333;
-    }
-    
-    QWidget#AddressBookPage QPushButton#deleteAddress:pressed {
-    border:1px solid #9e9e9e;
-    }
-    
-    QWidget#AddressBookPage QTableView { /* Address Listing */
-    font-size:9pt;
+    QWidget#AddressBookPage QTableView::item:hover {
+        background-color: rgba(0, 102, 204, 0.3) !important;
+        color: #003366 !important;
     }
     
     QWidget#AddressBookPage QHeaderView::section {
-    background-color: #f8f9fa;
-    color: #003366; /* Min width for Windows fix */
-    min-width:260px;
+        background-color: #0066CC;
+        color: #ffffff;
+        padding: 10px;
+        border: none;
+        font-weight: bold;
+        font-size: 11pt;
+        min-width: 260px;
+    }
+    
+    QWidget#AddressBookPage QLabel {
+        color: #003366;
+        font-weight: bold;
+    }
+    
+    QWidget#AddressBookPage QLineEdit {
+        background-color: #ffffff;
+        color: #003366;
+        border: 2px solid #003366;
+        border-radius: 4px;
+        padding: 8px;
+        font-size: 11pt;
+    }
+    
+    QWidget#AddressBookPage QLineEdit:focus {
+        border-color: #0066CC;
+        background-color: #f8f9fa;
+    }
+    
+    /* Force all text in address book to be dark blue - Light Mode */
+    QDialog#AddressBookPage *,
+    QWidget#AddressBookPage * {
+        color: #003366 !important;
+    }
+    
+    /* Override for selected items */
+    QDialog#AddressBookPage QTableView::item:selected *,
+    QWidget#AddressBookPage QTableView::item:selected * {
+        color: #ffffff !important;
+    }
+    
+    /* Override for header text */
+    QDialog#AddressBookPage QHeaderView::section *,
+    QWidget#AddressBookPage QHeaderView::section * {
+        color: #ffffff !important;
+    }
+    
+    /* Override for button text */
+    QDialog#AddressBookPage QPushButton *,
+    QWidget#AddressBookPage QPushButton * {
+        color: #ffffff !important;
     }
     
     /* SETTINGS MENU */
@@ -918,40 +1036,63 @@ background-color:rgba(255, 255, 255, 0.15);
     }
     
     QDialog#RPCConsole QTabBar::tab {
-    background-color:#E8F0FF;
-    color:#003366 !important;
-    border: 1px solid #8FB1E3;
+    background-color: #ffffff !important;
+    color: #003366 !important;
+    border: 1px solid #d0d0d0;
     border-bottom: none;
-    padding: 8px 20px;
+    padding: 10px 24px;
     margin-right: 4px;
     font-weight: bold;
     border-top-left-radius: 4px;
     border-top-right-radius: 4px;
-    min-width: 80px;
+    min-width: 120px;
+    min-height: 32px;
+    }
+    
+    /* Force all inactive tabs to have dark blue text */
+    QDialog#RPCConsole QTabBar::tab:!selected {
+    color: #003366 !important;
     }
     
     QDialog#RPCConsole QTabBar::tab:hover {
-    background-color: #D0E5FF;
+    background-color: #f0f0f0;
+    color: #003366 !important;
     }
     
     QDialog#RPCConsole QTabBar::tab:selected {
-    background-color:#0066CC;
-    color:#ffffff !important;
+    background-color: #0066CC;
+    color: #ffffff !important;
     border-color: #0066CC;
     }
     
     /* Also try with different selectors for better compatibility */
     RPCConsole QTabBar::tab {
-    background-color:#E8F0FF !important;
-    color:#003366 !important;
-    border: 1px solid #8FB1E3 !important;
-    padding: 8px 20px !important;
+    background-color: #ffffff !important;
+    color: #003366 !important;
+    border: 1px solid #d0d0d0 !important;
+    padding: 10px 24px !important;
     font-weight: bold !important;
+    border-bottom: none !important;
+    border-top-left-radius: 4px !important;
+    border-top-right-radius: 4px !important;
+    min-width: 120px !important;
+    min-height: 32px !important;
+    }
+    
+    /* Force all inactive tabs to have dark blue text */
+    RPCConsole QTabBar::tab:!selected {
+    color: #003366 !important;
+    }
+    
+    RPCConsole QTabBar::tab:hover {
+    background-color: #f0f0f0 !important;
+    color: #003366 !important;
     }
     
     RPCConsole QTabBar::tab:selected {
-    background-color:#0066CC !important;
-    color:#ffffff !important;
+    background-color: #0066CC !important;
+    color: #ffffff !important;
+    border-color: #0066CC !important;
     }
     
     QDialog#RPCConsole QWidget#tab_info QLabel#label_11, QDialog#RPCConsole QWidget#tab_info QLabel#label_10 { /* Margin between Network and Block Chain headers */
@@ -969,7 +1110,7 @@ background-color:rgba(255, 255, 255, 0.15);
     }
     
     QDialog#RPCConsole QTextEdit#messagesWidget { /* Console Messages Window */
-    background-color: #ffffff;
+    background-color: #A7C6ED;
     color: #003366;
     border: 1px solid #8FB1E3;
     font-family: monospace;
@@ -1792,10 +1933,11 @@ background-color:rgba(255, 255, 255, 0.15);
     QStackedWidget#SendCoinsEntry .QLineEdit#addAsLabel { /* Pay To Input Field */
     }
     
-    /* COIN CONTROL POPUP */
+    /* COIN CONTROL POPUP - LIGHT MODE */
     
     QDialog#CoinControlDialog { /* Coin Control Dialog Window */
-    background-color: #A7C6ED;
+    background-color: #ffffff;
+    color: #003366;
     }
     
     QDialog#CoinControlDialog .QLabel#labelCoinControlQuantityText { /* Coin Control Quantity Label */
@@ -1893,36 +2035,56 @@ background-color:rgba(255, 255, 255, 0.15);
     }
     
     QDialog#CoinControlDialog .CoinControlTreeWidget#treeWidget { /* Coin Control Widget Container */
-    outline:0;
-    background-color:#ffffff;
-    border:0px solid #818181;
+    outline: 0;
+    background-color: #ffffff !important;
+    alternate-background-color: #f8f9fa !important;
+    border: 2px solid #e0e0e0;
+    color: #003366 !important;
+    selection-background-color: #0066CC !important;
+    selection-color: #ffffff !important;
+    gridline-color: #e0e0e0;
+    font-size: 11pt;
     }
     
     QDialog#CoinControlDialog .CoinControlTreeWidget#treeWidget::item {
+    background-color: #ffffff !important;
+    color: #003366 !important;
+    padding: 8px;
+    border: none;
+    }
+    
+    QDialog#CoinControlDialog .CoinControlTreeWidget#treeWidget::item:alternate {
+    background-color: #f8f9fa !important;
+    color: #003366 !important;
     }
     
     QDialog#CoinControlDialog .CoinControlTreeWidget#treeWidget::item:selected { /* Coin Control Item (selected) */
-    background-color:#f7f7f7;
-    color:#333;
+    background-color: #0066CC !important;
+    color: #ffffff !important;
     }
     
     QDialog#CoinControlDialog .CoinControlTreeWidget#treeWidget::item:checked { /* Coin Control Item (checked) */
-    background-color:#f7f7f7;
-    color:#333;
+    background-color: #0066CC !important;
+    color: #ffffff !important;
+    }
+    
+    QDialog#CoinControlDialog .CoinControlTreeWidget#treeWidget::item:hover {
+    background-color: rgba(0, 102, 204, 0.3) !important;
+    color: #003366 !important;
     }
     
     QDialog#CoinControlDialog .CoinControlTreeWidget#treeWidget::branch:selected { /* Coin Control Branch Icon */
-    background-repeat:no-repeat;
-    background-position:center;
-    background-color:#f7f7f7;
-    color:#333;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-color: #0066CC !important;
+    color: #ffffff !important;
     }
     
     QDialog#CoinControlDialog .CoinControlTreeWidget#treeWidget::branch:checked { /* Coin Control Branch Icon */
-    background-repeat:no-repeat;
-    background-position:center;
-    background-color:#f7f7f7;
-    color:#333;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-color: #0066CC !important;
+    color: #ffffff !important;
     }
     
     QDialog#CoinControlDialog .CoinControlTreeWidget#treeWidget::seperator {
@@ -2201,14 +2363,44 @@ background-color:rgba(255, 255, 255, 0.15);
     font-weight:bold;
     }
     
-    /* TRANSACTION DETAIL DIALOG */
+    /* TRANSACTION DETAIL DIALOG - LIGHT MODE */
     
     QDialog#TransactionDescDialog {
-    background-color: #A7C6ED;
+    background-color: #ffffff;
+    color: #003366;
     }
     
-    QDialog#TransactionDescDialog QTextEdit { /* Contents of Receive Coin Dialog */
-    border:1px solid #d7d7d7;
+    QDialog#TransactionDescDialog QTextEdit { /* Contents of Transaction Details Dialog */
+    background-color: #ffffff;
+    color: #003366;
+    border: 2px solid #003366;
+    border-radius: 4px;
+    padding: 8px;
+    font-size: 11pt;
+    }
+    
+    QDialog#TransactionDescDialog QLabel {
+    color: #003366;
+    font-weight: bold;
+    }
+    
+    QDialog#TransactionDescDialog QPushButton {
+    background-color: #0066CC;
+    color: #ffffff;
+    border: 2px solid #0066CC;
+    border-radius: 4px;
+    padding: 8px 16px;
+    font-weight: bold;
+    }
+    
+    QDialog#TransactionDescDialog QPushButton:hover {
+    background-color: #0088ff;
+    border-color: #0088ff;
+    }
+    
+    QDialog#TransactionDescDialog QPushButton:pressed {
+    background-color: #0055aa;
+    border-color: #0055aa;
     }
 
     /* ENHANCED FOOTER BRANDING */
@@ -2539,6 +2731,7 @@ QWidget#SendCoinsDialog QLabel#labelCoinControlFeatures {
 QWidget#SendCoinsDialog QLabel#labelBalance {
     color: #003366;
     font-weight: bold;
+    font-size: 14pt;
 }
 
 /******************************************************
@@ -2665,24 +2858,104 @@ TransactionView QTableView {
     qproperty-sentColor: #DC143C;
 }
 
-/* Create Wallet Dialog */
+/* Transaction table icon colors */
+QTableView {
+    qproperty-iconColorNormal: #003366;
+    qproperty-iconColorHover: #ffffff;  
+    qproperty-iconColorSelected: #ffffff;
+}
+
+/* Specific to transaction view */
+TransactionView QTableView {
+    qproperty-iconColorNormal: #003366;
+    qproperty-iconColorHover: #ffffff;
+    qproperty-iconColorSelected: #ffffff;
+    selection-color: #ffffff;
+}
+
+/* Create Wallet Dialog - Light Mode */
 QDialog#CreateWalletDialog {
-background-color: #ffffff;
+    background-color: #ffffff;
+    color: #003366;
 }
 
 QDialog#CreateWalletDialog QLabel {
-color: #003366;
+    color: #003366 !important;
+    font-weight: bold;
 }
 
 QDialog#CreateWalletDialog QCheckBox {
-color: #003366;
+    color: #003366 !important;
+    font-size: 11pt;
+}
+
+QDialog#CreateWalletDialog QCheckBox::indicator {
+    width: 16px;
+    height: 16px;
+    background-color: #ffffff;
+    border: 2px solid #0066cc;
+    border-radius: 3px;
+}
+
+QDialog#CreateWalletDialog QCheckBox::indicator:checked {
+    background-color: #0066cc;
+    border: 2px solid #0066cc;
+}
+
+QDialog#CreateWalletDialog QCheckBox::indicator:unchecked:hover {
+    background-color: #e6f2ff;
+    border-color: #0088ff;
 }
 
 QDialog#CreateWalletDialog QLineEdit {
-color: #003366;
-background-color: #A7C6ED;
-border: 1px solid rgba(255, 255, 255, 0.2);
-padding: 5px;
+    color: #003366 !important;
+    background-color: #ffffff;
+    border: 2px solid #003366;
+    border-radius: 4px;
+    padding: 8px;
+    font-size: 11pt;
+    min-height: 25px;
+}
+
+QDialog#CreateWalletDialog QLineEdit:focus {
+    border-color: #0066CC;
+    background-color: #f8f9fa;
+}
+
+QDialog#CreateWalletDialog QPushButton {
+    background-color: #0066CC;
+    color: #ffffff;
+    border: 2px solid #0066CC;
+    border-radius: 4px;
+    padding: 8px 16px;
+    font-weight: bold;
+    min-height: 30px;
+}
+
+QDialog#CreateWalletDialog QPushButton:hover {
+    background-color: #0088ff;
+    border-color: #0088ff;
+}
+
+QDialog#CreateWalletDialog QPushButton:pressed {
+    background-color: #0055aa;
+    border-color: #0055aa;
+}
+
+QDialog#CreateWalletDialog QTextEdit,
+QDialog#CreateWalletDialog QPlainTextEdit {
+    background-color: #ffffff;
+    color: #003366;
+    border: 2px solid #003366;
+    border-radius: 4px;
+    padding: 8px;
+    font-size: 11pt;
+}
+
+QDialog#CreateWalletDialog QTextEdit:focus,
+QDialog#CreateWalletDialog QPlainTextEdit:focus {
+    border-color: #0066CC;
+    background-color: #f8f9fa;
 }
 
 /* Fix Options Dialog Tab Text */
@@ -2964,6 +3237,54 @@ SendCoinsEntry DigiByteAmountField QComboBox {
 #SendCoinsDialog QComboBox:hover,
 SendCoinsEntry DigiByteAmountField QComboBox:hover {
     background-color: #0088ff;
+    color: #ffffff !important;
+}
+
+/* Send Dialog Dropdown Items - Light Mode */
+#SendCoinsDialog QComboBox::item,
+SendCoinsEntry DigiByteAmountField QComboBox::item {
+    color: #003366 !important;
+    background-color: transparent !important;
+}
+
+#SendCoinsDialog QComboBox::item:selected,
+SendCoinsEntry DigiByteAmountField QComboBox::item:selected {
+    background-color: #0066CC !important;
+    color: #ffffff !important;
+}
+
+#SendCoinsDialog QComboBox::item:hover,
+SendCoinsEntry DigiByteAmountField QComboBox::item:hover {
+    background-color: #0066CC !important;
+    color: #ffffff !important;
+}
+
+/* Send Dialog Dropdown Lists - Light Mode */
+#SendCoinsDialog QComboBox QAbstractItemView,
+SendCoinsEntry DigiByteAmountField QComboBox QAbstractItemView {
+    background-color: #ffffff;
+    color: #003366 !important;
+    selection-background-color: #0066CC !important;
+    selection-color: #ffffff !important;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+}
+
+#SendCoinsDialog QComboBox QAbstractItemView::item,
+SendCoinsEntry DigiByteAmountField QComboBox QAbstractItemView::item {
+    color: #003366 !important;
+    background-color: transparent;
+    padding: 8px;
+}
+
+#SendCoinsDialog QComboBox QAbstractItemView::item:selected,
+SendCoinsEntry DigiByteAmountField QComboBox QAbstractItemView::item:selected {
+    background-color: #0066CC !important;
+    color: #ffffff !important;
+}
+
+#SendCoinsDialog QComboBox QAbstractItemView::item:hover,
+SendCoinsEntry DigiByteAmountField QComboBox QAbstractItemView::item:hover {
+    background-color: #0066CC !important;
     color: #ffffff !important;
 }
 
@@ -3265,6 +3586,25 @@ QWidget#ReceiveCoinsDialog DigiByteAmountField QAbstractSpinBox::down-button,
     color: #ffffff !important;
 }
 
+/* Receive Dialog Dropdown Items - Light Mode */
+#ReceiveCoinsDialog QComboBox::item,
+#ReceiveCoinsDialog DigiByteAmountField QComboBox::item {
+    color: #003366 !important;
+    background-color: transparent !important;
+}
+
+#ReceiveCoinsDialog QComboBox::item:selected,
+#ReceiveCoinsDialog DigiByteAmountField QComboBox::item:selected {
+    background-color: #0066CC !important;
+    color: #ffffff !important;
+}
+
+#ReceiveCoinsDialog QComboBox::item:hover,
+#ReceiveCoinsDialog DigiByteAmountField QComboBox::item:hover {
+    background-color: #0066CC !important;
+    color: #ffffff !important;
+}
+
 #ReceiveCoinsDialog QComboBox::drop-down,
 #ReceiveCoinsDialog DigiByteAmountField QComboBox::drop-down {
     border: none;
@@ -3435,25 +3775,49 @@ QDialog#CoinControlDialog QTreeWidget {
 }
 
 QDialog#CoinControlDialog QTreeWidget::item {
-    background-color: transparent;
-    color: #003366;
+    background-color: #ffffff !important;
+    color: #003366 !important;
     padding: 10px;
     font-size: 11pt;
+    border: none;
+}
+
+QDialog#CoinControlDialog QTreeWidget::item:alternate {
+    background-color: #f8f9fa !important;
+    color: #003366 !important;
 }
 
 QDialog#CoinControlDialog QTreeWidget::item:selected {
-    background-color: #0066CC;
-    color: #003366;
+    background-color: #0066CC !important;
+    color: #ffffff !important;
 }
 
 QDialog#CoinControlDialog QTreeWidget::item:hover {
-    background-color: rgba(0, 102, 204, 0.3);
-    color: #003366;
+    background-color: rgba(0, 102, 204, 0.3) !important;
+    color: #003366 !important;
 }
 
-/* Ensure alternating row colors are visible */
-QDialog#CoinControlDialog QTreeWidget::item:alternate {
-    background-color: rgba(255, 255, 255, 0.03);
+/* Force all text in coin control dialog to be dark blue - Light Mode */
+QDialog#CoinControlDialog * {
+    color: #003366 !important;
+}
+
+/* Override for selected items */
+QDialog#CoinControlDialog QTreeWidget::item:selected *,
+QDialog#CoinControlDialog QTreeWidget::item:selected {
+    color: #ffffff !important;
+}
+
+/* Override for header text */
+QDialog#CoinControlDialog QHeaderView::section *,
+QDialog#CoinControlDialog QHeaderView::section {
+    color: #ffffff !important;
+}
+
+/* Override for button text */
+QDialog#CoinControlDialog QPushButton *,
+QDialog#CoinControlDialog QPushButton {
+    color: #ffffff !important;
 }
 
 /* Tree Widget Headers - Match Receive page style */
@@ -3495,7 +3859,7 @@ QDialog#CoinControlDialog QCheckBox::indicator:checked {
 QDialog#CoinControlDialog QPushButton#pushButtonSelectAll,
 QDialog#CoinControlDialog QPushButton {
     background-color: #0066CC;
-    color: #003366;
+    color: #ffffff;
     border: none;
     border-radius: 4px;
     padding: 6px 16px;
@@ -3540,8 +3904,49 @@ QDialog#OptionsDialog QLineEdit,
 QDialog#OptionsDialog QComboBox,
 QDialog#OptionsDialog QSpinBox {
     background-color: #A7C6ED;
-    color: #003366;
+    color: #003366 !important;
     border: 2px solid rgba(255, 255, 255, 0.3);
+}
+
+/* Options Dialog Dropdown Items - Light Mode */
+QDialog#OptionsDialog QComboBox::item {
+    color: #003366 !important;
+    background-color: transparent !important;
+}
+
+QDialog#OptionsDialog QComboBox::item:selected {
+    background-color: #0066CC !important;
+    color: #ffffff !important;
+}
+
+QDialog#OptionsDialog QComboBox::item:hover {
+    background-color: #0066CC !important;
+    color: #ffffff !important;
+}
+
+/* Options Dialog Dropdown Lists - Light Mode */
+QDialog#OptionsDialog QComboBox QAbstractItemView {
+    background-color: #ffffff;
+    color: #003366 !important;
+    selection-background-color: #0066CC !important;
+    selection-color: #ffffff !important;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+}
+
+QDialog#OptionsDialog QComboBox QAbstractItemView::item {
+    color: #003366 !important;
+    background-color: transparent;
+    padding: 8px;
+}
+
+QDialog#OptionsDialog QComboBox QAbstractItemView::item:selected {
+    background-color: #0066CC !important;
+    color: #ffffff !important;
+}
+
+QDialog#OptionsDialog QComboBox QAbstractItemView::item:hover {
+    background-color: #0066CC !important;
+    color: #ffffff !important;
 }
 
 /* Fix all text in dialogs to be white */
@@ -3576,27 +3981,39 @@ RPCConsole QTabWidget::pane, QDialog#RPCConsole QTabWidget::pane {
 }
 
 RPCConsole QTabBar::tab, QDialog#RPCConsole QTabBar::tab {
-    background-color: #E8F0FF;
-    color: #003366;
-    padding: 8px 16px;
+    background-color: #ffffff !important;
+    color: #003366 !important;
+    padding: 10px 24px;
     margin-right: 2px;
     border-top-left-radius: 4px;
     border-top-right-radius: 4px;
     font-weight: bold;
+    border: 1px solid #d0d0d0;
+    border-bottom: none;
+    min-width: 120px;
+    min-height: 32px;
+}
+
+/* Force all inactive tabs to have dark blue text - comprehensive selector */
+RPCConsole QTabBar::tab:!selected, 
+QDialog#RPCConsole QTabBar::tab:!selected {
+    color: #003366 !important;
 }
 
 RPCConsole QTabBar::tab:selected, QDialog#RPCConsole QTabBar::tab:selected {
     background-color: #0066CC;
     color: #ffffff !important;
+    border-color: #0066CC;
 }
 
 RPCConsole QTabBar::tab:hover, QDialog#RPCConsole QTabBar::tab:hover {
-    background-color: rgba(0, 102, 204, 0.5);
+    background-color: #f0f0f0;
+    color: #003366 !important;
 }
 
 /* Console tab */
 RPCConsole QTextEdit, QDialog#RPCConsole QTextEdit {
-    background-color: #ffffff;
+    background-color: #A7C6ED;
     color: #003366;
     border: 1px solid #8FB1E3;
     font-family: monospace;

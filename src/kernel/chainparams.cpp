@@ -304,6 +304,36 @@ public:
         consensus.nRuleChangeActivationThreshold = 4032; // 4032 - 70% of 5760
         consensus.nMinerConfirmationWindow = 5760; // 1 day of blocks on testnet
         consensus.fRbfEnabled = false;
+        
+        // DigiByte Specific Consensus Code from v8.22.2
+        consensus.nTargetTimespan =  0.10 * 24 * 60 * 60; // 2.4 hours
+        consensus.nTargetSpacing = 60; // 60 seconds
+        consensus.nInterval = consensus.nTargetTimespan / consensus.nTargetSpacing;
+        consensus.nDiffChangeTarget = 67; // DigiShield Hard Fork Block BIP34Height 67,200
+        consensus.patchBlockRewardDuration = 10; // Old 1% monthly DGB Reward
+        consensus.patchBlockRewardDuration2 = 80; // 4 blocks per min
+        consensus.nTargetTimespanRe = 1*60; // 60 Seconds
+        consensus.nTargetSpacingRe = 1*60; // 60 seconds
+        consensus.nIntervalRe = consensus.nTargetTimespanRe / consensus.nTargetSpacingRe; // 1 block
+        consensus.nAveragingInterval = 10; // 10 blocks
+        consensus.multiAlgoTargetSpacing = 30*5; // NUM_ALGOS * 30 seconds
+        consensus.multiAlgoTargetSpacingV4 = 15*5; // NUM_ALGOS * 15 seconds
+        consensus.nAveragingTargetTimespan = consensus.nAveragingInterval * consensus.multiAlgoTargetSpacing;
+        consensus.nAveragingTargetTimespanV4 = consensus.nAveragingInterval * consensus.multiAlgoTargetSpacingV4;
+        consensus.nMaxAdjustDown = 40; // 40% adjustment down
+        consensus.nMaxAdjustUp = 20; // 20% adjustment up
+        consensus.nMaxAdjustDownV3 = 16; // 16% adjustment down
+        consensus.nMaxAdjustUpV3 = 8; // 8% adjustment up
+        consensus.nMaxAdjustDownV4 = 16;
+        consensus.nMaxAdjustUpV4 = 8;
+        consensus.nMinActualTimespan = consensus.nAveragingTargetTimespan * (100 - consensus.nMaxAdjustUp) / 100;
+        consensus.nMaxActualTimespan = consensus.nAveragingTargetTimespan * (100 + consensus.nMaxAdjustDown) / 100;
+        consensus.nMinActualTimespanV3 = consensus.nAveragingTargetTimespan * (100 - consensus.nMaxAdjustUpV3) / 100;
+        consensus.nMaxActualTimespanV3 = consensus.nAveragingTargetTimespan * (100 + consensus.nMaxAdjustUpV3) / 100;
+        consensus.nMinActualTimespanV4 = consensus.nAveragingTargetTimespanV4 * (100 - consensus.nMaxAdjustUpV4) / 100;
+        consensus.nMaxActualTimespanV4 = consensus.nAveragingTargetTimespanV4 * (100 + consensus.nMaxAdjustUpV4) / 100;
+        consensus.nLocalTargetAdjustment = 4; // target adjustment per algo
+        consensus.nLocalDifficultyAdjustment = 4; // difficulty adjustment per algo
 
         // DigiByte Hard Fork Block Heights for testnet
         consensus.multiAlgoDiffChangeTarget = 100; // Block 145,000 MultiAlgo Hard Fork
@@ -432,7 +462,7 @@ public:
         m_chain_type = ChainType::SIGNET;
         consensus.signet_blocks = true;
         consensus.signet_challenge.assign(bin.begin(), bin.end());
-        consensus.nSubsidyHalvingInterval = 210000;
+        consensus.nSubsidyHalvingInterval = 300; // DigiByte halving interval for signet (same as testnet)
         consensus.BIP34Height = 1;
         consensus.BIP34Hash = uint256{};
         consensus.BIP65Height = 1;
@@ -440,9 +470,52 @@ public:
         consensus.CSVHeight = 1;
         consensus.SegwitHeight = 1;
         consensus.nPowTargetTimespan = 14 * 24 * 60 * 60; // two weeks
-        consensus.nPowTargetSpacing = 10 * 60;
-        consensus.fPowAllowMinDifficultyBlocks = false;
+        consensus.nPowTargetSpacing = 60 / 4; // 15 seconds (DigiByte)
+        consensus.fPowAllowMinDifficultyBlocks = true; // DigiByte allows min difficulty blocks
+        consensus.fEasyPow = false; // DigiByte setting
         consensus.fPowNoRetargeting = false;
+        consensus.fRbfEnabled = false; // DigiByte RBF disabled
+        
+        // DigiByte Specific Consensus Code for signet (same as testnet)
+        consensus.nOdoShapechangeInterval = 1*24*60*60; // 1 day
+        consensus.nTargetTimespan =  0.10 * 24 * 60 * 60; // 2.4 hours
+        consensus.nTargetSpacing = 60; // 60 seconds
+        consensus.nInterval = consensus.nTargetTimespan / consensus.nTargetSpacing;
+        consensus.nDiffChangeTarget = 67; // DigiShield Hard Fork Block
+        consensus.patchBlockRewardDuration = 10; 
+        consensus.patchBlockRewardDuration2 = 80;
+        consensus.nTargetTimespanRe = 1*60; // 60 Seconds
+        consensus.nTargetSpacingRe = 1*60; // 60 seconds
+        consensus.nIntervalRe = consensus.nTargetTimespanRe / consensus.nTargetSpacingRe; // 1 block
+        consensus.nAveragingInterval = 10; // 10 blocks
+        consensus.multiAlgoTargetSpacing = 30*5; // NUM_ALGOS * 30 seconds
+        consensus.multiAlgoTargetSpacingV4 = 15*5; // NUM_ALGOS * 15 seconds
+        consensus.nAveragingTargetTimespan = consensus.nAveragingInterval * consensus.multiAlgoTargetSpacing;
+        consensus.nAveragingTargetTimespanV4 = consensus.nAveragingInterval * consensus.multiAlgoTargetSpacingV4;
+        consensus.nMaxAdjustDown = 40; // 40% adjustment down
+        consensus.nMaxAdjustUp = 20; // 20% adjustment up
+        consensus.nMaxAdjustDownV3 = 16; // 16% adjustment down
+        consensus.nMaxAdjustUpV3 = 8; // 8% adjustment up
+        consensus.nMaxAdjustDownV4 = 16;
+        consensus.nMaxAdjustUpV4 = 8;
+        consensus.nMinActualTimespan = consensus.nAveragingTargetTimespan * (100 - consensus.nMaxAdjustUp) / 100;
+        consensus.nMaxActualTimespan = consensus.nAveragingTargetTimespan * (100 + consensus.nMaxAdjustDown) / 100;
+        consensus.nMinActualTimespanV3 = consensus.nAveragingTargetTimespan * (100 - consensus.nMaxAdjustUpV3) / 100;
+        consensus.nMaxActualTimespanV3 = consensus.nAveragingTargetTimespan * (100 + consensus.nMaxAdjustUpV3) / 100;
+        consensus.nMinActualTimespanV4 = consensus.nAveragingTargetTimespanV4 * (100 - consensus.nMaxAdjustUpV4) / 100;
+        consensus.nMaxActualTimespanV4 = consensus.nAveragingTargetTimespanV4 * (100 + consensus.nMaxAdjustUpV4) / 100;
+        consensus.nLocalTargetAdjustment = 4; // target adjustment per algo
+        consensus.nLocalDifficultyAdjustment = 4; // difficulty adjustment per algo
+        
+        // DigiByte Hard Fork Block Heights for signet (same as testnet)
+        consensus.multiAlgoDiffChangeTarget = 100; // Block 100 MultiAlgo Hard Fork
+        consensus.alwaysUpdateDiffChangeTarget = 400; // Block 400 MultiShield Hard Fork
+        consensus.workComputationChangeTarget = 1430; // Block 1,430 DigiSpeed Hard Fork
+        consensus.algoSwapChangeTarget = 20000; // Block 20,000 Odo PoW Hard Fork
+        consensus.OdoHeight = 600;
+        consensus.ReserveAlgoBitsHeight = 0;
+        consensus.initialTarget[ALGO_ODO] = ArithToUint256(~arith_uint256(0) >> 36); // 16 difficulty
+        
         consensus.nRuleChangeActivationThreshold = 1815; // 90% of 2016
         consensus.nMinerConfirmationWindow = 2016; // nPowTargetTimespan / nPowTargetSpacing
         consensus.MinBIP9WarningHeight = 0;
@@ -483,13 +556,14 @@ public:
             }
         };
 
-        base58Prefixes[PUBKEY_ADDRESS] = std::vector<unsigned char>(1,111);
-        base58Prefixes[SCRIPT_ADDRESS] = std::vector<unsigned char>(1,196);
-        base58Prefixes[SECRET_KEY] =     std::vector<unsigned char>(1,239);
+        // DigiByte: Use same prefixes as testnet for signet
+        base58Prefixes[PUBKEY_ADDRESS] = std::vector<unsigned char>(1,126);
+        base58Prefixes[SCRIPT_ADDRESS] = std::vector<unsigned char>(1,140);
+        base58Prefixes[SECRET_KEY] =     std::vector<unsigned char>(1,254);
         base58Prefixes[EXT_PUBLIC_KEY] = {0x04, 0x35, 0x87, 0xCF};
         base58Prefixes[EXT_SECRET_KEY] = {0x04, 0x35, 0x83, 0x94};
 
-        bech32_hrp = "tb";
+        bech32_hrp = "dgbt";
 
         fDefaultConsistencyChecks = false;
         m_is_mockable_chain = false;
@@ -508,19 +582,61 @@ public:
         m_chain_type = ChainType::REGTEST;
         consensus.signet_blocks = false;
         consensus.signet_challenge.clear();
-        consensus.nSubsidyHalvingInterval = 150;
+        consensus.nSubsidyHalvingInterval = 300; // DigiByte halving interval for regtest
         consensus.BIP34Height = 1; // Always active unless overridden
         consensus.BIP34Hash = uint256();
         consensus.BIP65Height = 1;  // Always active unless overridden
         consensus.BIP66Height = 1;  // Always active unless overridden
         consensus.CSVHeight = 1;    // Always active unless overridden
         consensus.SegwitHeight = 0; // Always active unless overridden
+        consensus.ReserveAlgoBitsHeight = 0; // DigiByte ReserveAlgoBits
+        consensus.OdoHeight = 600; // DigiByte Odocrypt height
         consensus.MinBIP9WarningHeight = 0;
         consensus.powLimit = uint256S("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+        consensus.initialTarget[ALGO_ODO] = ArithToUint256(~arith_uint256(0) >> 20); // Odocrypt initial target
         consensus.nPowTargetTimespan = 14 * 24 * 60 * 60; // two weeks
-        consensus.nPowTargetSpacing = 10 * 60;
+        consensus.nPowTargetSpacing = 60 / 4; // 15 seconds (DigiByte)
         consensus.fPowAllowMinDifficultyBlocks = true;
+        consensus.fEasyPow = false; // DigiByte setting
         consensus.fPowNoRetargeting = true;
+        consensus.fRbfEnabled = false; // DigiByte RBF disabled
+        
+        // DigiByte Specific Consensus Code
+        consensus.nOdoShapechangeInterval = 10*24*60*60; // 10 days
+        consensus.nTargetTimespan = 0.10 * 48 * 60 * 60; // 4.8 hours
+        consensus.nTargetSpacing = 60; // 60 seconds
+        consensus.nInterval = consensus.nTargetTimespan / consensus.nTargetSpacing;
+        consensus.nDiffChangeTarget = 334; // DigiShield Hard Fork Block
+        consensus.patchBlockRewardDuration = 10; // DigiByte reward duration
+        consensus.patchBlockRewardDuration2 = 80; // DigiByte reward duration 2
+        consensus.nTargetTimespanRe = 1*60; // 60 Seconds
+        consensus.nTargetSpacingRe = 1*60; // 60 seconds
+        consensus.nIntervalRe = consensus.nTargetTimespanRe / consensus.nTargetSpacingRe; // 1 block
+        consensus.nAveragingInterval = 10; // 10 blocks
+        consensus.multiAlgoTargetSpacing = 30*5; // NUM_ALGOS * 30 seconds
+        consensus.multiAlgoTargetSpacingV4 = 15*5; // NUM_ALGOS * 15 seconds
+        consensus.nAveragingTargetTimespan = consensus.nAveragingInterval * consensus.multiAlgoTargetSpacing; // 10* NUM_ALGOS * 30
+        consensus.nAveragingTargetTimespanV4 = consensus.nAveragingInterval * consensus.multiAlgoTargetSpacingV4; // 10 * NUM_ALGOS * 15
+        consensus.nMaxAdjustDown = 40; // 40% adjustment down
+        consensus.nMaxAdjustUp = 20; // 20% adjustment up
+        consensus.nMaxAdjustDownV3 = 16; // 16% adjustment down
+        consensus.nMaxAdjustUpV3 = 8; // 8% adjustment up
+        consensus.nMaxAdjustDownV4 = 16;
+        consensus.nMaxAdjustUpV4 = 8;
+        consensus.nMinActualTimespan = consensus.nAveragingTargetTimespan * (100 - consensus.nMaxAdjustUp) / 100;
+        consensus.nMaxActualTimespan = consensus.nAveragingTargetTimespan * (100 + consensus.nMaxAdjustDown) / 100;
+        consensus.nMinActualTimespanV3 = consensus.nAveragingTargetTimespan * (100 - consensus.nMaxAdjustUpV3) / 100;
+        consensus.nMaxActualTimespanV3 = consensus.nAveragingTargetTimespan * (100 + consensus.nMaxAdjustUpV3) / 100;
+        consensus.nMinActualTimespanV4 = consensus.nAveragingTargetTimespanV4 * (100 - consensus.nMaxAdjustUpV4) / 100;
+        consensus.nMaxActualTimespanV4 = consensus.nAveragingTargetTimespanV4 * (100 + consensus.nMaxAdjustUpV4) / 100;
+        consensus.nLocalTargetAdjustment = 4; // target adjustment per algo
+        consensus.nLocalDifficultyAdjustment = 4; // difficulty adjustment per algo
+        
+        // DigiByte Hard Fork Block Heights for regtest
+        consensus.multiAlgoDiffChangeTarget = 100; // Block 100 MultiAlgo Hard Fork
+        consensus.alwaysUpdateDiffChangeTarget = 200; // Block 200 MultiShield Hard Fork
+        consensus.workComputationChangeTarget = 400; // Block 400 DigiSpeed Hard Fork
+        consensus.algoSwapChangeTarget = 600; // Block 600 Odo PoW Hard Fork
         consensus.nRuleChangeActivationThreshold = 108; // 75% for testchains
         consensus.nMinerConfirmationWindow = 144; // Faster than normal for regtest (144 instead of 2016)
 

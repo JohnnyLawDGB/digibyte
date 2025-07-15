@@ -59,14 +59,32 @@ BOOST_AUTO_TEST_CASE(key_io_valid_parse)
             BOOST_CHECK_EQUAL(HexStr(script), HexStr(exp_payload));
 
             // Try flipped case version
-            for (char& c : exp_base58string) {
-                if (c >= 'a' && c <= 'z') {
-                    c = (c - 'a') + 'A';
-                } else if (c >= 'A' && c <= 'Z') {
-                    c = (c - 'A') + 'a';
+            std::string flipped_string = exp_base58string;
+            
+            // Check if this is a bech32 address
+            bool is_bech32 = (flipped_string.find("dgb1") == 0 || flipped_string.find("dgbt1") == 0 || 
+                              flipped_string.find("dgbrt1") == 0 || flipped_string.find("bc1") == 0 || 
+                              flipped_string.find("tb1") == 0 || flipped_string.find("bcrt1") == 0);
+            
+            if (is_bech32 && try_case_flip) {
+                // For bech32 addresses with tryCaseFlip, convert to all uppercase (valid bech32)
+                for (char& c : flipped_string) {
+                    if (c >= 'a' && c <= 'z') {
+                        c = (c - 'a') + 'A';
+                    }
+                }
+            } else {
+                // For base58 addresses, flip each character individually
+                for (char& c : flipped_string) {
+                    if (c >= 'a' && c <= 'z') {
+                        c = (c - 'a') + 'A';
+                    } else if (c >= 'A' && c <= 'Z') {
+                        c = (c - 'A') + 'a';
+                    }
                 }
             }
-            destination = DecodeDestination(exp_base58string);
+            
+            destination = DecodeDestination(flipped_string);
             BOOST_CHECK_MESSAGE(IsValidDestination(destination) == try_case_flip, "!IsValid case flipped:" + strTest);
             if (IsValidDestination(destination)) {
                 script = GetScriptForDestination(destination);

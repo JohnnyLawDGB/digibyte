@@ -972,13 +972,115 @@ background-color:rgba(255, 255, 255, 0.15);
 
     /* Encrypt Wallet and Change Passphrase Dialog */
     QDialog#AskPassphraseDialog {
-    background-color:#ffffff;
+        background-color: #ffffff;
+        color: #003366;
     }
-
-    QDialog#AskPassphraseDialog QLabel#passLabel1, QDialog#AskPassphraseDialog QLabel#passLabel2, QDialog#AskPassphraseDialog QLabel#passLabel3 {
-    qproperty-alignment: 'AlignVCenter | AlignRight';
-    min-width:170px;
-    min-height:33px; /* base width of 25px for QLineEdit, plus padding and border */
+    
+    /* All labels in the dialog */
+    QDialog#AskPassphraseDialog QLabel {
+        color: #003366 !important;
+        font-weight: normal;
+    }
+    
+    /* Specific password labels */
+    QDialog#AskPassphraseDialog QLabel#passLabel1, 
+    QDialog#AskPassphraseDialog QLabel#passLabel2, 
+    QDialog#AskPassphraseDialog QLabel#passLabel3 {
+        qproperty-alignment: 'AlignVCenter | AlignRight';
+        min-width: 170px;
+        min-height: 33px;
+        color: #003366 !important;
+        padding-right: 10px;
+    }
+    
+    /* Password input fields */
+    QDialog#AskPassphraseDialog QLineEdit {
+        background-color: #f8f9fa;
+        color: #003366;
+        border: 1px solid #d2d2d2;
+        border-radius: 4px;
+        padding: 6px;
+        min-height: 25px;
+        font-size: 11pt;
+    }
+    
+    QDialog#AskPassphraseDialog QLineEdit:focus {
+        background-color: #ffffff;
+        border: 2px solid #0066CC;
+        outline: none;
+    }
+    
+    /* Dialog buttons */
+    QDialog#AskPassphraseDialog QPushButton {
+        background-color: #0066CC;
+        color: #ffffff;
+        border: none;
+        border-radius: 4px;
+        padding: 8px 16px;
+        font-weight: bold;
+        min-width: 80px;
+        min-height: 32px;
+    }
+    
+    QDialog#AskPassphraseDialog QPushButton:hover {
+        background-color: #0088ff;
+    }
+    
+    QDialog#AskPassphraseDialog QPushButton:pressed {
+        background-color: #0044aa;
+    }
+    
+    QDialog#AskPassphraseDialog QPushButton:disabled {
+        background-color: #e0e0e0;
+        color: #999999;
+    }
+    
+    /* Warning/Info labels */
+    QDialog#AskPassphraseDialog QLabel#capsLabel {
+        color: #ff6600 !important;
+        font-weight: bold;
+        padding: 5px;
+    }
+    
+    /* Checkbox styling */
+    QDialog#AskPassphraseDialog QCheckBox {
+        color: #003366 !important;
+        spacing: 8px;
+    }
+    
+    /* Warning label at the top */
+    QDialog#AskPassphraseDialog QLabel#warningLabel {
+        color: #003366 !important;
+        background-color: #f0f8ff;
+        border: 1px solid #0066CC;
+        border-radius: 4px;
+        padding: 10px;
+        margin-bottom: 10px;
+        font-size: 10pt;
+    }
+    
+    /* Dialog button box styling */
+    QDialog#AskPassphraseDialog QDialogButtonBox {
+        dialogbuttonbox-buttons-have-icons: 0;
+        spacing: 10px;
+    }
+    
+    QDialog#AskPassphraseDialog QCheckBox::indicator {
+        width: 18px;
+        height: 18px;
+        background-color: #f8f9fa;
+        border: 1px solid #d2d2d2;
+        border-radius: 3px;
+    }
+    
+    QDialog#AskPassphraseDialog QCheckBox::indicator:checked {
+        background-color: #0066CC;
+        border-color: #0066CC;
+    }
+    
+    QDialog#AskPassphraseDialog QCheckBox::indicator:hover {
+        background-color: #e6f2ff;
+        border-color: #0066CC;
     }
 
     /* Options Dialog */

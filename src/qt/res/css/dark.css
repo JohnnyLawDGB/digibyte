@@ -140,6 +140,67 @@ QWidget#centralWidget {
     margin: 5px 10px;
     }
 
+    /* Wallet Selector Dropdown Styling */
+    QToolBar QComboBox#m_wallet_selector {
+    background-color: #0066CC;
+    color: #ffffff !important;
+    border: 2px solid #ffffff;
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-weight: bold;
+    font-size: 11pt;
+    min-height: 25px;
+    min-width: 100px;
+    }
+
+    QToolBar QComboBox#m_wallet_selector:hover {
+    background-color: #0088ff;
+    }
+
+    QToolBar QComboBox#m_wallet_selector::drop-down {
+    border: none;
+    width: 20px;
+    }
+
+    QToolBar QComboBox#m_wallet_selector::down-arrow {
+    image: url(:/icons/chevron-down);
+    width: 12px;
+    height: 12px;
+    }
+
+    /* Wallet Selector Dropdown List */
+    QToolBar QComboBox#m_wallet_selector QAbstractItemView {
+    background-color: #002352;
+    color: #ffffff !important;
+    selection-background-color: #0066CC !important;
+    selection-color: #ffffff !important;
+    border: 2px solid #ffffff;
+    }
+
+    QToolBar QComboBox#m_wallet_selector QAbstractItemView::item {
+    color: #ffffff !important;
+    background-color: transparent;
+    padding: 8px;
+    min-height: 25px;
+    }
+
+    QToolBar QComboBox#m_wallet_selector QAbstractItemView::item:selected {
+    background-color: #0066CC !important;
+    color: #ffffff !important;
+    }
+
+    QToolBar QComboBox#m_wallet_selector QAbstractItemView::item:hover {
+    background-color: #0066CC !important;
+    color: #ffffff !important;
+    }
+
+    /* Wallet Selector Label */
+    QToolBar QLabel#m_wallet_selector_label {
+    color: #ffffff;
+    font-weight: bold;
+    padding-right: 5px;
+    }
+
     QMessageBox {
     background-color:#002352;
     color:#ffffff;

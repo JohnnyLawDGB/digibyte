@@ -656,10 +656,12 @@ void DigiByteGUI::createToolBars()
         toolbar->addAction(settingsAction);
 
         m_wallet_selector = new QComboBox();
+        m_wallet_selector->setObjectName("m_wallet_selector");
         m_wallet_selector->setSizeAdjustPolicy(QComboBox::AdjustToContents);
         connect(m_wallet_selector, qOverload<int>(&QComboBox::currentIndexChanged), this, &DigiByteGUI::setCurrentWalletBySelectorIndex);
 
         m_wallet_selector_label = new QLabel();
+        m_wallet_selector_label->setObjectName("m_wallet_selector_label");
         m_wallet_selector_label->setText(tr("Wallet:") + " ");
         m_wallet_selector_label->setBuddy(m_wallet_selector);
 

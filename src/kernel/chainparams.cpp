@@ -251,11 +251,17 @@ public:
                 {18500000, uint256S("0x000000000000002598b50e8ac096a4b7b3ef02a6c0c18f0bb3d18aa5c45e08b2")},
                 {20000000, uint256S("0x000000000000002bf6b64dccf73c166fce6cbc27a9ddcd63f7ad54a6ad08a99e")},
                 {21000000, uint256S("0x00000000000000280dbf69b38ecdcf1a2b4b39b1e95bd85f1fafb0fc47f83b88")},
+                {21500000, uint256S("0x00000000000000007cbe22612937832c2e6341ec867e881979e2246df44fa727")},
             }
         };
 
         m_assumeutxo_data = {
-            // TODO to be specified in a future patch.
+            {
+                .height = 21'500'000,
+                .hash_serialized = AssumeutxoHash{uint256S("0x0000000000000000000000000000000000000000000000000000000000000000")}, // TODO: Calculate actual UTXO set hash
+                .nChainTx = 0, // TODO: Calculate actual total transaction count
+                .blockhash = uint256S("0x00000000000000007cbe22612937832c2e6341ec867e881979e2246df44fa727")
+            },
         };
 
         chainTxData = ChainTxData{

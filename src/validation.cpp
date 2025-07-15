@@ -1641,6 +1641,7 @@ PackageMempoolAcceptResult ProcessNewPackage(Chainstate& active_chainstate, CTxM
 
 CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams)
 {
+    
     CAmount nSubsidy = COIN;
 
     if (nHeight < consensusParams.nDiffChangeTarget) { // < 67200
@@ -1694,10 +1695,10 @@ CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams)
         // Monthly Decay Factor: 98884/100000
         // Last Block Number: 41668798
         // Expected years after Hard Fork: 19.1395
-        // Note: Adjusted from 2157/2 to 900 to ensure total supply stays under 21 billion
-        nSubsidy = 900 * COIN;
+        nSubsidy = 2157 * COIN / 2;
         int64_t blocks = nHeight - consensusParams.workComputationChangeTarget;
         int64_t months = blocks * BLOCK_TIME_SECONDS / SECONDS_PER_MONTH;
+
 
         for (int64_t i = 0; i < months; i++)
         {
@@ -2525,7 +2526,8 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
              Ticks<SecondsDouble>(time_connect),
              Ticks<MillisecondsDouble>(time_connect) / num_blocks_total);
 
-    CAmount blockReward = nFees + GetBlockSubsidy(pindex->nHeight, params.GetConsensus());
+    CAmount subsidy = GetBlockSubsidy(pindex->nHeight, params.GetConsensus());
+    CAmount blockReward = nFees + subsidy;
     if (block.vtx[0]->GetValueOut() > blockReward) {
         LogPrintf("ERROR: ConnectBlock(): coinbase pays too much (actual=%d vs limit=%d)\n", block.vtx[0]->GetValueOut(), blockReward);
         return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-cb-amount");

@@ -47,6 +47,17 @@ static void TestBlockSubsidyHalvings(const Consensus::Params& consensusParams)
     BOOST_CHECK(reward67200 > reward400000);
     BOOST_CHECK(reward400000 > reward1000000);
     BOOST_CHECK(reward1000000 > 0);
+    
+    // Test block 1,430,000 specifically (DigiSpeed fork)
+    CAmount reward1429999 = GetBlockSubsidy(1429999, consensusParams);
+    CAmount reward1430000 = GetBlockSubsidy(1430000, consensusParams);
+    
+    // Log the values for debugging
+    std::cout << "Block 1,429,999 reward: " << reward1429999 << " (" << reward1429999 / COIN << " DGB)" << std::endl;
+    std::cout << "Block 1,430,000 reward: " << reward1430000 << " (" << reward1430000 / COIN << " DGB)" << std::endl;
+    
+    // Block 1,430,000 should have reward of 2157/2 = 1078.5 DGB
+    BOOST_CHECK_EQUAL(reward1430000, 107850000000);
 }
 
 static void TestBlockSubsidyHalvings(int nSubsidyHalvingInterval)

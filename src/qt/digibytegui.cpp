@@ -284,6 +284,8 @@ void DigiByteGUI::createActions()
     digiDollarAction->setCheckable(true);
     tabGroup->addAction(digiDollarAction);
 
+    // Commenting out Mint and Redeem tabs as they are not functional yet
+    /*
     mintAction = new QAction(tr("Mint"), this);
     mintAction->setStatusTip(tr("Mint - Coming Soon"));
     mintAction->setToolTip(mintAction->statusTip());
@@ -295,6 +297,7 @@ void DigiByteGUI::createActions()
     redeemAction->setToolTip(redeemAction->statusTip());
     redeemAction->setCheckable(true);
     tabGroup->addAction(redeemAction);
+    */
 
 #ifdef ENABLE_WALLET
     // These showNormalIfMinimized are needed because Send Coins and Receive Coins
@@ -318,6 +321,8 @@ void DigiByteGUI::createActions()
         msgBox.exec();
         overviewAction->setChecked(true);
     });
+    // Commenting out Mint and Redeem connect statements
+    /*
     connect(mintAction, &QAction::triggered, [this]{ 
         showNormalIfMinimized(); 
         QMessageBox msgBox(this);
@@ -336,6 +341,7 @@ void DigiByteGUI::createActions()
         msgBox.exec();
         overviewAction->setChecked(true);
     });
+    */
 #endif // ENABLE_WALLET
 
     quitAction = new QAction(tr("E&xit"), this);
@@ -630,8 +636,9 @@ void DigiByteGUI::createToolBars()
         toolbar->addSeparator();
         
         toolbar->addAction(digiDollarAction);
-        toolbar->addAction(mintAction);
-        toolbar->addAction(redeemAction);
+        // Commenting out Mint and Redeem tabs from toolbar
+        // toolbar->addAction(mintAction);
+        // toolbar->addAction(redeemAction);
         
         overviewAction->setChecked(true);
 
@@ -869,8 +876,8 @@ void DigiByteGUI::setWalletActionsEnabled(bool enabled)
     receiveCoinsAction->setEnabled(enabled);
     historyAction->setEnabled(enabled);
     digiDollarAction->setEnabled(enabled);
-    mintAction->setEnabled(enabled);
-    redeemAction->setEnabled(enabled);
+    // mintAction->setEnabled(enabled);
+    // redeemAction->setEnabled(enabled);
     encryptWalletAction->setEnabled(enabled);
     backupWalletAction->setEnabled(enabled);
     changePassphraseAction->setEnabled(enabled);

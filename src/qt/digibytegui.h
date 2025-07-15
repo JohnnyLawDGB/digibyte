@@ -137,8 +137,9 @@ private:
     QAction* overviewAction = nullptr;
     QAction* historyAction = nullptr;
     QAction* digiDollarAction = nullptr;
-    QAction* mintAction = nullptr;
-    QAction* redeemAction = nullptr;
+    // Commenting out Mint and Redeem actions as they are not functional yet
+    // QAction* mintAction = nullptr;
+    // QAction* redeemAction = nullptr;
     QAction* quitAction = nullptr;
     QAction* sendCoinsAction = nullptr;
     QAction* usedSendingAddressesAction = nullptr;

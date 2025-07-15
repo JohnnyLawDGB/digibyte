@@ -223,6 +223,11 @@ bool OptionsModel::Init(bilingual_str& error)
 
     m_mask_values = settings.value("mask_values", false).toBool();
 
+    // Initialize theme setting with default if not present
+    if (!settings.contains("theme")) {
+        settings.setValue("theme", "dark");
+    }
+
     return true;
 }
 

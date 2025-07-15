@@ -153,8 +153,94 @@ bool BlockTreeDB::LoadBlockIndexGuts(const Consensus::Params& consensusParams, s
                 pindexNew->nStatus        = diskindex.nStatus;
                 pindexNew->nTx            = diskindex.nTx;
 
-                if (!CheckProofOfWork(pindexNew->GetBlockPoWHash(), pindexNew->nBits, consensusParams)) {
-                    return error("%s: CheckProofOfWork failed: %s", __func__, pindexNew->ToString());
+                // Only apply PoW optimization for mainnet
+                // Check if this is mainnet by comparing genesis block hash
+                const bool isMainnet = (consensusParams.hashGenesisBlock == uint256S("0x7497ea1b465eb39f1c8f507bc877078fe016d6fcb6dfad3a64c98dcc6e1e8496"));
+
+                if (isMainnet) {
+                    // Only check proof of work for genesis block and checkpoints to speed up loading
+                    // This dramatically improves wallet startup time by skipping PoW checks for ~21M blocks
+                    // while still validating critical blocks (genesis + checkpoints)
+                    bool shouldCheckPoW = false;
+
+                    // Always check genesis block (height 0)
+                    if (pindexNew->nHeight == 0) {
+                        shouldCheckPoW = true;
+                        LogPrint(BCLog::BLOCKSTORAGE, "LoadBlockIndex: Checking PoW for genesis block at height %d\n", pindexNew->nHeight);
+                    }
+
+                    // Hardcoded critical checkpoints for DigiByte mainnet
+                    // These must match exactly with checkpoints in chainparams.cpp
+                    static const std::map<int, uint256> criticalCheckpoints = {
+                        {0, uint256S("0x7497ea1b465eb39f1c8f507bc877078fe016d6fcb6dfad3a64c98dcc6e1e8496")}, // Genesis
+                        {5000, uint256S("0x95753d284404118788a799ac754a3fdb5d817f5bd73a78697dfe40985c085596")},
+                        {10000, uint256S("0x12f90b8744f3b965e107ad9fd8b33ba6d95a91882fbc4b5f8588d70d494bed88")},
+                        {12000, uint256S("0xa1266acba91dc3d5737d9e8c6e21b7a91901f7f4c48082ce3d84dd394a13e415")},
+                        {14300, uint256S("0x24f665d71b0c6c88f6f72a863e9f1ba8e835cc52d13ad895dc5426021c7d2c48")},
+                        {30000, uint256S("0x17c69ef6b403571b1bd333c91fbe116e451ba8281be12aa6bafb0486764bb315")},
+                        {60000, uint256S("0x57b2c612b60462a3d6c388c8b30a68cb6f7e2034eea962b12b7ef506454fa2c1")},
+                        {110000, uint256S("0xab2da24656493015f2fd288994661e1cc657d90aa34c755514af044aaaf1569d")},
+                        {141100, uint256S("0x145c2cb5239a4e019c730ce8468d927a3955529c2bae077850783da97ddbca05")},
+                        {141656, uint256S("0x683d27720429f28bcfa22d8385b7a06f307c8fd918d49215148fbd41a0dda595")},
+                        {245000, uint256S("0x852c475c605e1f20bbe60219c811abaeef08bf0d4ff87eef59200fd7a7567fa7")},
+                        {302000, uint256S("0xfb6d14ac5e0208f00d941db1fcbfe050f093cfd0c05ed151c809e4428bc14286")},
+                        {331000, uint256S("0xbd1a1d002750e1648746eb29c78d30fa1043c8b6f89d82924c4488be06fa3d19")},
+                        {360000, uint256S("0x8fee7e3f6c38dccd3047a3e4667c63406f835c2890024030a2ab2dc6dba7c912")},
+                        {400100, uint256S("0x82325a97cd97ac14b0a57408f881b1a9fc40174f8430a4580429499ac5d153c8")},
+                        {521000, uint256S("0xd23fd1e1f994c0586d761b71bb3530e9ab45bd0fabda3a5a2e394f3dc4d9bb04")},
+                        {1380000, uint256S("0x00000000000001969b1e5836dd8bf6a001d96f4a16d336e09405b62b29feead6")},
+                        {2000000, uint256S("0x10f522ec60d8af2e2cbd9e2268260c33fb8bbf9cd9f176b4fddcae7493c6791d")},
+                        {3500000, uint256S("0xbece76f2a3f53637e2ea84837a45a6ffdc0c86372ab4701c3146094f65832c80")},
+                        {5000000, uint256S("0x1dd2fdf6416343688eed463a7bc70b298a4f872e941e36f85cda0915d6488e25")},
+                        {6500000, uint256S("0xb168b7f70cbfd2e5fea07da55d9fa90dc7c65599ceb2700efe04ee6c45692e52")},
+                        {8000000, uint256S("0x1af919cb004bb05c369a862cb5ded70aaa123d0eac2432ceec859f6f42880660")},
+                        {9500000, uint256S("0x5b0351361414e520e9132ba6c5c4926d6f9ee55c41b77fffce3a16ea15d4a1be")},
+                        {11000000, uint256S("0x0f4ad10ae49b504246c0175f6cbab9b0f91b6568a88931e6341a83a731701054")},
+                        {12500000, uint256S("0x697a015b62140c9549fbc8d8b3c1d027626b2f94d337db32115e429fbf233ed7")},
+                        {14000000, uint256S("0xa33861c857eed46191cf6cdaf81693e0dfcd00b3a11133821b0c73fe1d7769d9")},
+                        {15500000, uint256S("0x000000000000000439d5c66b2fb3ec50f50a68b65f5790d338150b63488de645")},
+                        {17000000, uint256S("0xf167688cc0102743b135499ed9f9eff9c5bad096203150e438be0a6e783d5587")},
+                        {18500000, uint256S("0x745dc7b89208de482071a3a8d13eb5596d55bedc4f5ba2fa74cbea9ecf91169e")},
+                        {20000000, uint256S("0xf530a66ba6fe93e647f7d88a9b3f22bfe8c2c2ab1ec1b0286286f86b82d6a10f")},
+                        {21000000, uint256S("0x0000000000000001cb40d3be76bf601d98555a069669d963060d633ea3a140e8")},
+                        {21700000, uint256S("0x457f6864b52e5076a433afe3c28e3ae0bbeeaba9036a782ddb691242326fcb80")}
+                    };
+
+                    // Check if this height is a critical checkpoint
+                    auto checkpointIt = criticalCheckpoints.find(pindexNew->nHeight);
+                    if (checkpointIt != criticalCheckpoints.end()) {
+                        uint256 blockHash = diskindex.ConstructBlockHash();
+                        if (checkpointIt->second == blockHash) {
+                            shouldCheckPoW = true;
+                            LogPrint(BCLog::BLOCKSTORAGE, "LoadBlockIndex: Checking PoW for checkpoint at height %d\n", pindexNew->nHeight);
+                        } else {
+                            // Hash mismatch at checkpoint - log details to help debug
+                            LogPrintf("LoadBlockIndex: ERROR - Block hash mismatch at checkpoint height %d\n", pindexNew->nHeight);
+                            LogPrintf("  Expected hash: %s\n", checkpointIt->second.ToString());
+                            LogPrintf("  Actual hash:   %s\n", blockHash.ToString());
+                            LogPrintf("  Block details: version=%d, time=%d, bits=%08x, nonce=%u\n",
+                                     pindexNew->nVersion, pindexNew->nTime, pindexNew->nBits, pindexNew->nNonce);
+
+                            // This is a critical error - checkpoint hashes must match
+                            return error("%s: Block hash mismatch at checkpoint height %d: expected %s, got %s",
+                                       __func__, pindexNew->nHeight,
+                                       checkpointIt->second.ToString(),
+                                       blockHash.ToString());
+                        }
+                    }
+
+                    // Only perform expensive proof of work check for genesis and checkpoints
+                    if (shouldCheckPoW) {
+                        if (!CheckProofOfWork(pindexNew->GetBlockPoWHash(), pindexNew->nBits, consensusParams)) {
+                            return error("%s: CheckProofOfWork failed for checkpoint/genesis block at height %d: %s",
+                                       __func__, pindexNew->nHeight, pindexNew->ToString());
+                        }
+                    }
+                } else {
+                    // For testnet and regtest, always check proof of work (original behavior)
+                    if (!CheckProofOfWork(pindexNew->GetBlockPoWHash(), pindexNew->nBits, consensusParams)) {
+                        return error("%s: CheckProofOfWork failed: %s", __func__, pindexNew->ToString());
+                    }
                 }
 
                 pcursor->Next();

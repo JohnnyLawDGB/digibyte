@@ -83,7 +83,7 @@ public:
             uint256S("0x0000000000000000000f14c35b2d841e986ab5441de8c585d5ffe55ea1e395ad"), SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_WITNESS);
 
         // BIP34, BIP65 and BIP66, CSV and Segwit were activated simultaneously
-        // DEPLOYMENT_NVERSIONBIPS, DEPLOYMENT_CSV, DEPLOYMENT_SEGWIT        
+        // DEPLOYMENT_NVERSIONBIPS, DEPLOYMENT_CSV, DEPLOYMENT_SEGWIT
         consensus.BIP34Hash = uint256S("0xadd8ca420f557f62377ec2be6e6f47b96cf2e68160d58aeb7b73433de834cca0");
         consensus.BIP34Height = consensus.BIP65Height = consensus.BIP66Height = 4394880; // add8ca420f557f62377ec2be6e6f47b96cf2e68160d58aeb7b73433de834cca0
         consensus.CSVHeight = consensus.SegwitHeight = 4394880;
@@ -163,8 +163,8 @@ public:
         // The best chain should have at least this much work.
         consensus.nMinimumChainWork = uint256S("0x00");
 
-        // By default assume that the signatures in ancestors of this block are valid.
-        consensus.defaultAssumeValid = uint256S("0xf530a66ba6fe93e647f7d88a9b3f22bfe8c2c2ab1ec1b0286286f86b82d6a10f"); // Block 20,000,000
+        // By default assume that the signatures in ancestors of this block are valid block 21,700,000.
+        consensus.defaultAssumeValid = uint256S("0x457f6864b52e5076a433afe3c28e3ae0bbeeaba9036a782ddb691242326fcb80"); // Block 21,700,000
 
         /**
          * The message start string is designed to be unlikely to occur in normal data.
@@ -186,7 +186,7 @@ public:
         assert(genesis.hashMerkleRoot == uint256S("0x72ddd9496b004221ed0557358846d9248ecd4c440ebd28ed901efc18757d0fad"));
 
         // The current status of the DigiByte DNS Seed Servers can be checked here: http://digibyteseed.com/
-        // If you notice a problem with an exiting Seed Server, please contact the DigiByte Critical Infrastructure team (DGBCIT) 
+        // If you notice a problem with an exiting Seed Server, please contact the DigiByte Critical Infrastructure team (DGBCIT)
         // via the #DGBCIT channel on the DigiByte Discord server: https://discord.com/channels/878200503815782400/1133815334013509764
         // Alternatively, create an issue ticket here: https://github.com/DigiByte-Core/digibyte/issues
 
@@ -237,30 +237,30 @@ public:
                 {400100, uint256S("0x82325a97cd97ac14b0a57408f881b1a9fc40174f8430a4580429499ac5d153c8")},
                 {521000, uint256S("0xd23fd1e1f994c0586d761b71bb3530e9ab45bd0fabda3a5a2e394f3dc4d9bb04")},
                 {1380000, uint256S("0x00000000000001969b1e5836dd8bf6a001d96f4a16d336e09405b62b29feead6")},
-                {2000000, uint256S("0x000000000000012fb1b3e85298ffa735ad135eb5bcc1a5b4fb9b02b91de60b34")},
-                {3500000, uint256S("0x0000000000000077b28c5fa33c19331bd6ecd8b2b5e8a867bcbbebdc2e99e37f")},
-                {5000000, uint256S("0x000000000000007a49a21ab5e1e43993e2cac99051f6a998a2f3d97f1b7b23e0")},
-                {6500000, uint256S("0x0000000000000028e3e97cee7a0e037b65e7b3a6c5b68d0cbacdb09b0c1c71e4")},
-                {8000000, uint256S("0x00000000000000a95bee3ffd6dda13ea7f09a414c5f5dfa0ec8f90acc96d23b8")},
-                {9500000, uint256S("0x000000000000007a09c9b3b40c05cd60b1ae3a1dc56da80e8f11983a10c4caf1")},
-                {11000000, uint256S("0x000000000000002d7db4f30866b1ec98d69e59c14a0c4d37b70ebb9bf3e15b4c")},
-                {12500000, uint256S("0x0000000000000041f0afe4cb2ae994b2e3c77bbcdbf64c53bb1b1b53b08a24aa")},
-                {14000000, uint256S("0x000000000000003b10dd1df95c52da7bb2d85b9aa5092bcb1dc5b37c1a6421f3")},
-                {15500000, uint256S("0x000000000000003c59c1feac1885da8b7f31f49d6e2fa8ccc6d8fb1d8a7c3d73")},
-                {17000000, uint256S("0x0000000000000028a6efaed37e2c14c46ba3b4bc38fbfbdaef8f8aaa3a3f7b65")},
-                {18500000, uint256S("0x000000000000002598b50e8ac096a4b7b3ef02a6c0c18f0bb3d18aa5c45e08b2")},
-                {20000000, uint256S("0x000000000000002bf6b64dccf73c166fce6cbc27a9ddcd63f7ad54a6ad08a99e")},
-                {21000000, uint256S("0x00000000000000280dbf69b38ecdcf1a2b4b39b1e95bd85f1fafb0fc47f83b88")},
-                {21500000, uint256S("0x00000000000000007cbe22612937832c2e6341ec867e881979e2246df44fa727")},
+                {2000000, uint256S("0x10f522ec60d8af2e2cbd9e2268260c33fb8bbf9cd9f176b4fddcae7493c6791d")},
+                {3500000, uint256S("0xbece76f2a3f53637e2ea84837a45a6ffdc0c86372ab4701c3146094f65832c80")},
+                {5000000, uint256S("0x1dd2fdf6416343688eed463a7bc70b298a4f872e941e36f85cda0915d6488e25")},
+                {6500000, uint256S("0xb168b7f70cbfd2e5fea07da55d9fa90dc7c65599ceb2700efe04ee6c45692e52")},
+                {8000000, uint256S("0x1af919cb004bb05c369a862cb5ded70aaa123d0eac2432ceec859f6f42880660")},
+                {9500000, uint256S("0x5b0351361414e520e9132ba6c5c4926d6f9ee55c41b77fffce3a16ea15d4a1be")},
+                {11000000, uint256S("0x0f4ad10ae49b504246c0175f6cbab9b0f91b6568a88931e6341a83a731701054")},
+                {12500000, uint256S("0x697a015b62140c9549fbc8d8b3c1d027626b2f94d337db32115e429fbf233ed7")},
+                {14000000, uint256S("0xa33861c857eed46191cf6cdaf81693e0dfcd00b3a11133821b0c73fe1d7769d9")},
+                {15500000, uint256S("0x000000000000000439d5c66b2fb3ec50f50a68b65f5790d338150b63488de645")},
+                {17000000, uint256S("0xf167688cc0102743b135499ed9f9eff9c5bad096203150e438be0a6e783d5587")},
+                {18500000, uint256S("0x745dc7b89208de482071a3a8d13eb5596d55bedc4f5ba2fa74cbea9ecf91169e")},
+                {20000000, uint256S("0xf530a66ba6fe93e647f7d88a9b3f22bfe8c2c2ab1ec1b0286286f86b82d6a10f")},
+                {21000000, uint256S("0x0000000000000001cb40d3be76bf601d98555a069669d963060d633ea3a140e8")},
+                {21700000, uint256S("0x457f6864b52e5076a433afe3c28e3ae0bbeeaba9036a782ddb691242326fcb80")},
             }
         };
 
         m_assumeutxo_data = {
             {
-                .height = 21'500'000,
+                .height = 21'700'000,
                 .hash_serialized = AssumeutxoHash{uint256S("0x0000000000000000000000000000000000000000000000000000000000000000")}, // TODO: Calculate actual UTXO set hash
                 .nChainTx = 0, // TODO: Calculate actual total transaction count
-                .blockhash = uint256S("0x00000000000000007cbe22612937832c2e6341ec867e881979e2246df44fa727")
+                .blockhash = uint256S("0x457f6864b52e5076a433afe3c28e3ae0bbeeaba9036a782ddb691242326fcb80")
             },
         };
 

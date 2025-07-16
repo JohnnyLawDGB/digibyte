@@ -9,8 +9,7 @@
 #include <shutdown.h>
 #include <logging.h>
 #include <random.h>
-
-bool g_ibd_complete = false;
+#include <validation.h>
 
 bool CConnman::isDandelionInbound(const CNode* const pnode) const
 {
@@ -309,17 +308,13 @@ bool CConnman::usingDandelion() const
 
 void CConnman::ThreadDandelionShuffle()
 {
-    while (!ShutdownRequested()) {
-        UninterruptibleSleep(std::chrono::milliseconds{1000});
-        if (g_ibd_complete) {
-           break;
-        }
-        if(ShutdownRequested()) {
-           return;
-        }
+    // Start Dandelion shuffling immediately - no need to wait for IBD
+    // Give the node a few seconds to establish some connections first
+    if (!interruptNet.sleep_for(std::chrono::seconds(5))) {
+        return;
     }
 
-    auto now = GetTime<std::chrono::microseconds>();
+    auto now = GetTime<std::chrono::milliseconds>();
     auto nNextDandelionShuffle = GetExponentialRand(now, DANDELION_SHUFFLE_INTERVAL);
 
     while (!ShutdownRequested()) {

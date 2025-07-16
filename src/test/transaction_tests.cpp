@@ -809,8 +809,7 @@ BOOST_AUTO_TEST_CASE(test_IsStandard)
     CheckIsStandard(t);
 
     // Check dust with odd relay fee to verify rounding:
-    // nDustThreshold = 182 * 3702 / 1000 = 673.764 = 674 (rounded up)
-    // This tests the rounding behavior in GetDustThreshold
+    // nDustThreshold = 182 * 3702 / 1000
     g_dust = CFeeRate(3702);
     // dust:
     t.vout[0].nValue = 674 - 1;
@@ -942,70 +941,61 @@ BOOST_AUTO_TEST_CASE(test_IsStandard)
     g_bare_multi = DEFAULT_PERMIT_BAREMULTISIG;
 
     // Check compressed P2PK outputs dust threshold (must have leading 02 or 03)
-    // DigiByte uses DUST_RELAY_TX_FEE = 30000 (10x Bitcoin's 3000)
-    // So dust threshold = 576 * 10 = 5760
     t.vout[0].scriptPubKey = CScript() << std::vector<unsigned char>(33, 0x02) << OP_CHECKSIG;
-    t.vout[0].nValue = 5760;
+    t.vout[0].nValue = 576;
     CheckIsStandard(t);
-    t.vout[0].nValue = 5759;
+    t.vout[0].nValue = 575;
     CheckIsNotStandard(t, "dust");
 
     // Check uncompressed P2PK outputs dust threshold (must have leading 04/06/07)
-    // DigiByte dust threshold = 672 * 10 = 6720
     t.vout[0].scriptPubKey = CScript() << std::vector<unsigned char>(65, 0x04) << OP_CHECKSIG;
-    t.vout[0].nValue = 6720;
+    t.vout[0].nValue = 672;
     CheckIsStandard(t);
-    t.vout[0].nValue = 6719;
+    t.vout[0].nValue = 671;
     CheckIsNotStandard(t, "dust");
 
     // Check P2PKH outputs dust threshold
-    // DigiByte dust threshold = 546 * 10 = 5460
     t.vout[0].scriptPubKey = CScript() << OP_DUP << OP_HASH160 << std::vector<unsigned char>(20, 0) << OP_EQUALVERIFY << OP_CHECKSIG;
-    t.vout[0].nValue = 5460;
+    t.vout[0].nValue = 546;
     CheckIsStandard(t);
-    t.vout[0].nValue = 5459;
+    t.vout[0].nValue = 545;
     CheckIsNotStandard(t, "dust");
 
     // Check P2SH outputs dust threshold
-    // DigiByte dust threshold = 540 * 10 = 5400
     t.vout[0].scriptPubKey = CScript() << OP_HASH160 << std::vector<unsigned char>(20, 0) << OP_EQUAL;
-    t.vout[0].nValue = 5400;
+    t.vout[0].nValue = 540;
     CheckIsStandard(t);
-    t.vout[0].nValue = 5399;
+    t.vout[0].nValue = 539;
     CheckIsNotStandard(t, "dust");
 
     // Check P2WPKH outputs dust threshold
-    // DigiByte dust threshold = 294 * 10 = 2940
     t.vout[0].scriptPubKey = CScript() << OP_0 << std::vector<unsigned char>(20, 0);
-    t.vout[0].nValue = 2940;
+    t.vout[0].nValue = 294;
     CheckIsStandard(t);
-    t.vout[0].nValue = 2939;
+    t.vout[0].nValue = 293;
     CheckIsNotStandard(t, "dust");
 
     // Check P2WSH outputs dust threshold
-    // DigiByte dust threshold = 330 * 10 = 3300
     t.vout[0].scriptPubKey = CScript() << OP_0 << std::vector<unsigned char>(32, 0);
-    t.vout[0].nValue = 3300;
+    t.vout[0].nValue = 330;
     CheckIsStandard(t);
-    t.vout[0].nValue = 3299;
+    t.vout[0].nValue = 329;
     CheckIsNotStandard(t, "dust");
 
     // Check P2TR outputs dust threshold (Invalid xonly key ok!)
-    // DigiByte dust threshold = 330 * 10 = 3300
     t.vout[0].scriptPubKey = CScript() << OP_1 << std::vector<unsigned char>(32, 0);
-    t.vout[0].nValue = 3300;
+    t.vout[0].nValue = 330;
     CheckIsStandard(t);
-    t.vout[0].nValue = 3299;
+    t.vout[0].nValue = 329;
     CheckIsNotStandard(t, "dust");
 
     // Check future Witness Program versions dust threshold (non-32-byte pushes are undefined for version 1)
     for (int op = OP_1; op <= OP_16; op += 1) {
         t.vout[0].scriptPubKey = CScript() << (opcodetype)op << std::vector<unsigned char>(2, 0);
-        // DigiByte dust threshold = 240 * 10 = 2400
-        t.vout[0].nValue = 2400;
+        t.vout[0].nValue = 240;
         CheckIsStandard(t);
 
-        t.vout[0].nValue = 2399;
+        t.vout[0].nValue = 239;
         CheckIsNotStandard(t, "dust");
     }
 }

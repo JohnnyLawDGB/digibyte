@@ -1607,46 +1607,6 @@ MempoolAcceptResult AcceptToMemoryPool(Chainstate& active_chainstate, const CTra
     return result;
 }
 
-MempoolAcceptResult AcceptToStempool(Chainstate& active_chainstate, const CTransactionRef& tx,
-                                    int64_t accept_time, bool bypass_limits, bool test_accept)
-    EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
-{
-    AssertLockHeld(::cs_main);
-    const CChainParams& chainparams{active_chainstate.m_chainman.GetParams()};
-    
-    // Get the stempool from the active chainstate
-    CTxMemPool* stempool = active_chainstate.GetStempool();
-    if (!stempool) {
-        TxValidationState state;
-        state.Invalid(TxValidationResult::TX_NO_MEMPOOL, "no-stempool");
-        return MempoolAcceptResult::Failure(state);
-    }
-    
-    CTxMemPool& pool{*stempool};
-
-    std::vector<COutPoint> coins_to_uncache;
-    auto args = MemPoolAccept::ATMPArgs::SingleAccept(chainparams, accept_time, bypass_limits, coins_to_uncache, test_accept);
-    MempoolAcceptResult result = MemPoolAccept(pool, active_chainstate).AcceptSingleTransaction(tx, args);
-    if (result.m_result_type != MempoolAcceptResult::ResultType::VALID) {
-        // Remove coins that were not present in the coins cache before calling
-        // AcceptSingleTransaction(); this is to prevent memory DoS in case we receive a large
-        // number of invalid transactions that attempt to overrun the in-memory coins cache
-        // (`CCoinsViewCache::cacheCoins`).
-
-        for (const COutPoint& hashTx : coins_to_uncache)
-            active_chainstate.CoinsTip().Uncache(hashTx);
-
-        TRACE2(mempool, rejected,
-                tx->GetHash().data(),
-                result.m_state.GetRejectReason().c_str()
-        );
-    }
-    // After we've (potentially) uncached entries, ensure our coins cache is still within its size limits
-    BlockValidationState state_dummy;
-    active_chainstate.FlushStateToDisk(state_dummy, FlushStateMode::PERIODIC);
-    return result;
-}
-
 PackageMempoolAcceptResult ProcessNewPackage(Chainstate& active_chainstate, CTxMemPool& pool,
                                                    const Package& package, bool test_accept)
 {

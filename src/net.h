@@ -1657,8 +1657,7 @@ private:
 
 public:
     // Dandelion++ functions
-    mutable RecursiveMutex cs_dandelion;
-    std::map<uint256, std::chrono::microseconds> mDandelionEmbargo GUARDED_BY(cs_dandelion);
+    std::map<uint256, std::chrono::microseconds> mDandelionEmbargo;
     bool insertDandelionEmbargo(const uint256& hash, std::chrono::microseconds& embargo);
     bool isDandelionInbound(const CNode* const pnode) const;
     bool isLocalDandelionDestinationSet() const;
@@ -1668,7 +1667,6 @@ public:
     bool setLocalDandelionDestination();
     bool usingDandelion() const;
     CNode* getDandelionDestination(CNode* pfrom);
-    std::vector<uint256> GetExpiredDandelionEmbargoes() const;
 
 private:
     void ThreadDandelionShuffle();

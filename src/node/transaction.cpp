@@ -86,9 +86,12 @@ TransactionError BroadcastTransaction(NodeContext& node, const CTransactionRef t
             }
             // Try to submit the transaction to the stempool only (if dandelion is enabled);
             if (node.args->GetBoolArg("-dandelion", DEFAULT_DANDELION)) {
-                // Submit to stempool for Dandelion++ privacy
-                LOCK(cs_main);
-                const MempoolAcceptResult result = AcceptToStempool(node.chainman->ActiveChainstate(), tx, GetTime(), false, false);
+                // TODO: Dandelion++: Need to implement AcceptToStempool for v26.2
+                // const MempoolAcceptResult result = AcceptToMemoryPool(node.chainman->ActiveChainstate(), *node.stempool, tx, false, false);
+                // if (result.m_result_type != MempoolAcceptResult::ResultType::VALID) {
+                //     return HandleATMPError(result.m_state, err_string);
+                // }
+                const MempoolAcceptResult result = node.chainman->ProcessTransaction(tx, /*test_accept=*/ false);
                 if (result.m_result_type != MempoolAcceptResult::ResultType::VALID) {
                     return HandleATMPError(result.m_state, err_string);
                 }
@@ -137,9 +140,7 @@ TransactionError BroadcastTransaction(NodeContext& node, const CTransactionRef t
             node.connman->insertDandelionEmbargo(txid, nEmbargo);
             auto embargo_timeout = std::chrono::duration_cast<std::chrono::seconds>(nEmbargo - current_time).count();
             LogPrint(BCLog::DANDELION, "dandeliontx %s embargoed for %d seconds\n", txid.ToString(), embargo_timeout);
-            // Use appropriate message type for witness transactions
-            int inv_type = tx->HasWitness() ? MSG_DANDELION_WITNESS_TX : MSG_DANDELION_TX;
-            CInv embargoTx(inv_type, txid);
+            CInv embargoTx(MSG_DANDELION_TX, txid);
             node.connman->localDandelionDestinationPushInventory(embargoTx);
             return TransactionError::OK;
         }

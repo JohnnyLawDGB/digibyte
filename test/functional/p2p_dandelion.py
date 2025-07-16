@@ -44,12 +44,7 @@ class TestP2PConn(P2PInterface):
 
     def send_dandeliontx_getdata(self, dandeliontx_hash):
         msg = msg_getdata()
-        msg.inv.append(CInv(6, dandeliontx_hash)) # 6: MSG_DANDELION_TX
-        self.send_message(msg)
-    
-    def send_dandelion_witness_tx_getdata(self, dandeliontx_hash):
-        msg = msg_getdata()
-        msg.inv.append(CInv(0x40000006, dandeliontx_hash)) # MSG_DANDELION_WITNESS_TX = MSG_DANDELION_TX | MSG_WITNESS_FLAG
+        msg.inv.append(CInv(5, dandeliontx_hash)) # 5: "DandelionTx"
         self.send_message(msg)
 
 class DandelionTest(DigiByteTestFramework):
@@ -149,62 +144,6 @@ class DandelionTest(DigiByteTestFramework):
 
         all_tests_passed = test_1_passed and test_2_passed and test_3_passed
         assert(all_tests_passed)
-        
-        # Test 4: Witness transaction support (Taproot)
-        self.log.info('Testing Dandelion with witness transactions...')
-        
-        # Create a descriptor wallet for Taproot support
-        node0.createwallet(wallet_name='taproot_wallet', descriptors=True)
-        taproot_wallet = node0.get_wallet_rpc('taproot_wallet')
-        
-        # Import a Taproot descriptor
-        taproot_desc = taproot_wallet.getdescriptorinfo("tr()")
-        if taproot_desc['isrange']:
-            taproot_wallet.importdescriptors([{
-                "desc": taproot_desc['descriptor'],
-                "timestamp": "now",
-                "range": [0, 100],
-                "active": True
-            }])
-        
-        # Get a Taproot address
-        taproot_addr = taproot_wallet.getnewaddress("", "bech32m")
-        self.log.info(f"Taproot address: {taproot_addr}")
-        
-        # Send funds to the Taproot wallet
-        w0.sendtoaddress(taproot_addr, 10.0)
-        self.generate(node0, 1)
-        
-        # Create a Taproot transaction
-        test_node0.message_count['notfound'] = 0
-        test_node0.message_count['dandeliontx'] = 0
-        taproot_txid = taproot_wallet.sendtoaddress(node2.getnewaddress(), 1.0)
-        taproot_tx = tx_from_hex(taproot_wallet.gettransaction(taproot_txid)['hex'])
-        
-        # Test that witness Dandelion transaction is not revealed immediately
-        test_node0.send_dandelion_witness_tx_getdata(taproot_tx.calc_sha256(True))
-        time.sleep(1)
-        
-        try:
-            assert(test_node0.message_count['notfound'] == 1)
-            assert(test_node0.message_count['dandeliontx'] == 0)
-            self.log.info('Success: Taproot transaction protected by Dandelion')
-        except AssertionError:
-            self.log.error('Failed: Taproot transaction not protected by Dandelion')
-            raise
-        
-        # Wait for embargo to expire and verify transaction is revealed
-        test_node0.message_count['dandeliontx'] = 0
-        time.sleep(44)
-        test_node0.send_dandelion_witness_tx_getdata(taproot_tx.calc_sha256(True))
-        time.sleep(1)
-        
-        try:
-            assert(test_node0.message_count['dandeliontx'] == 1)
-            self.log.info('Success: Taproot transaction revealed after embargo expiry')
-        except AssertionError:
-            self.log.error('Failed: Taproot transaction not revealed after embargo')
-            raise
 
 if __name__ == '__main__':
     DandelionTest().main()

@@ -478,8 +478,7 @@ BOOST_AUTO_TEST_CASE(MempoolSizeLimitTest)
     BOOST_CHECK(!pool.exists(GenTxid::Txid(tx3.GetHash())));
 
     CFeeRate maxFeeRateRemoved(25000, GetVirtualTransactionSize(CTransaction(tx3)) + GetVirtualTransactionSize(CTransaction(tx2)));
-    // DigiByte: Uses DEFAULT_INCREMENTAL_RELAY_FEE = 10000 instead of Bitcoin's 1000
-    BOOST_CHECK_EQUAL(pool.GetMinFee(1).GetFeePerK(), maxFeeRateRemoved.GetFeePerK() + 10000);
+    BOOST_CHECK_EQUAL(pool.GetMinFee(1).GetFeePerK(), maxFeeRateRemoved.GetFeePerK() + 1000);
 
     CMutableTransaction tx4 = CMutableTransaction();
     tx4.vin.resize(2);

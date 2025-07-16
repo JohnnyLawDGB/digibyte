@@ -509,7 +509,7 @@ public:
     std::string ToString() const;
 
     // Single-message helper methods
-    bool IsMsgTx() const { return type == MSG_TX || type == MSG_DANDELION_TX; }
+    bool IsMsgTx() const { return type == MSG_TX; }
     bool IsMsgBlk() const { return type == MSG_BLOCK; }
     bool IsMsgWtx() const { return type == MSG_WTX; }
     bool IsMsgFilteredBlk() const { return type == MSG_FILTERED_BLOCK; }
@@ -519,8 +519,7 @@ public:
     // Combined-message helper methods
     bool IsGenTxMsg() const
     {
-        return type == MSG_TX || type == MSG_WTX || type == MSG_WITNESS_TX || 
-               type == MSG_DANDELION_TX || type == MSG_DANDELION_WITNESS_TX;
+        return type == MSG_TX || type == MSG_WTX || type == MSG_WITNESS_TX;
     }
     bool IsGenBlkMsg() const
     {

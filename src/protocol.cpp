@@ -229,9 +229,5 @@ std::vector<std::string> serviceFlagsToStr(uint64_t flags)
 GenTxid ToGenTxid(const CInv& inv)
 {
     assert(inv.IsGenTxMsg());
-    // Handle witness transactions (including Dandelion witness transactions)
-    if (inv.IsMsgWtx() || inv.type == MSG_DANDELION_WITNESS_TX) {
-        return GenTxid::Wtxid(inv.hash);
-    }
-    return GenTxid::Txid(inv.hash);
+    return inv.IsMsgWtx() ? GenTxid::Wtxid(inv.hash) : GenTxid::Txid(inv.hash);
 }

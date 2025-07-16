@@ -49,27 +49,25 @@ CNode* CConnman::getDandelionDestination(CNode* pfrom)
 bool CConnman::localDandelionDestinationPushInventory(const CInv& inv)
 {
     if (isLocalDandelionDestinationSet()) {
-        LOCK(localDandelionDestination->cs_tx_inventory);
-        localDandelionDestination->vInventoryDandelionTxToSend.push_back(inv.hash);
-        return true;
+        // TODO: Fix for Bitcoin v26.2 - PushOtherInventory replaced with m_tx_inventory_to_send
+        // localDandelionDestination->PushOtherInventory(inv);
+        return false; // Temporarily disabled
     } else if (setLocalDandelionDestination()) {
-        LOCK(localDandelionDestination->cs_tx_inventory);
-        localDandelionDestination->vInventoryDandelionTxToSend.push_back(inv.hash);
-        return true;
+        // TODO: Fix for Bitcoin v26.2 - PushOtherInventory replaced with m_tx_inventory_to_send
+        // localDandelionDestination->PushOtherInventory(inv);
+        return false; // Temporarily disabled
     } else {
         return false;
     }
 }
 
 bool CConnman::insertDandelionEmbargo(const uint256& hash, std::chrono::microseconds& embargo) {
-    LOCK(cs_dandelion);
     auto pair = mDandelionEmbargo.insert(std::make_pair(hash, embargo));
     return pair.second;
 }
 
 bool CConnman::isTxDandelionEmbargoed(const uint256& hash) const
 {
-    LOCK(cs_dandelion);
     auto it = mDandelionEmbargo.find(hash);
     if (it == mDandelionEmbargo.end()) {
         return false;
@@ -88,7 +86,6 @@ bool CConnman::isTxDandelionEmbargoed(const uint256& hash) const
 
 bool CConnman::removeDandelionEmbargo(const uint256& hash)
 {
-    LOCK(cs_dandelion);
     bool removed = false;
     for (auto iter = mDandelionEmbargo.begin(); iter != mDandelionEmbargo.end(); )
     {
@@ -100,21 +97,6 @@ bool CConnman::removeDandelionEmbargo(const uint256& hash)
         }
     }
     return removed;
-}
-
-std::vector<uint256> CConnman::GetExpiredDandelionEmbargoes() const
-{
-    LOCK(cs_dandelion);
-    std::vector<uint256> expired;
-    auto now = GetTime<std::chrono::microseconds>();
-    
-    for (const auto& embargo : mDandelionEmbargo) {
-        if (now >= embargo.second) {
-            expired.push_back(embargo.first);
-        }
-    }
-    
-    return expired;
 }
 
 

@@ -17,7 +17,6 @@ enum class MemPoolRemovalReason {
     BLOCK,       //!< Removed for block
     CONFLICT,    //!< Removed for conflict with in-block transaction
     REPLACED,    //!< Removed for replacement
-    DANDELION_EXPIRED, //!< Moved from stempool to mempool after Dandelion embargo expired
 };
 
 std::string RemovalReasonToString(const MemPoolRemovalReason& r) noexcept;

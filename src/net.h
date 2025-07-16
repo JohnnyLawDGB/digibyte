@@ -761,6 +761,9 @@ public:
     const uint64_t nKeyedNetGroup;
     std::atomic_bool fPauseRecv{false};
     std::atomic_bool fPauseSend{false};
+    
+    /** Whether this peer needs to be sent a Dandelion discovery message */
+    std::atomic_bool m_send_dandelion_discovery{false};
 
     const ConnectionType m_conn_type;
 

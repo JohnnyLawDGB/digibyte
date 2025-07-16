@@ -2009,6 +2009,9 @@ void PeerManagerImpl::StartScheduledTasks(CScheduler& scheduler)
     static_assert(EXTRA_PEER_CHECK_INTERVAL < STALE_CHECK_INTERVAL, "peer eviction timer should be less than stale tip check timer");
     scheduler.scheduleEvery([this] { this->CheckForStaleTipAndEvictPeers(); }, std::chrono::seconds{EXTRA_PEER_CHECK_INTERVAL});
 
+    // Check Dandelion embargoes every second
+    scheduler.scheduleEvery([this] { this->CheckDandelionEmbargoes(); }, std::chrono::seconds{1});
+
     // schedule next run for 10-15 minutes in the future
     const std::chrono::milliseconds delta = 10min + GetRandMillis(5min);
     scheduler.scheduleFromNow([&] { ReattemptInitialBroadcast(scheduler); }, delta);
@@ -5711,6 +5714,13 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
 
     // If we get here, the outgoing message serialization version is set and can't change.
     const CNetMsgMaker msgMaker(pto->GetCommonVersion());
+
+    // Send Dandelion discovery message if needed
+    if (pto->m_send_dandelion_discovery.exchange(false)) {
+        CInv dummyInv(MSG_DANDELION_TX, DANDELION_DISCOVERYHASH);
+        PushDandelionInventory(pto, dummyInv);
+        LogPrint(BCLog::DANDELION, "Sent Dandelion discovery message to peer=%d\n", pto->GetId());
+    }
 
     const auto current_time{GetTime<std::chrono::microseconds>()};
 

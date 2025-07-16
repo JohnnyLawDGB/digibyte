@@ -1593,6 +1593,7 @@ void PeerManagerImpl::RelayDandelionTransaction(const CTransaction& tx, CNode* p
 void PeerManagerImpl::CheckDandelionEmbargoes()
 {
     auto current_time = GetTime<std::chrono::milliseconds>();
+    LOCK(m_connman.m_dandelion_embargo_mutex);
     for (auto iter = m_connman.mDandelionEmbargo.begin(); iter != m_connman.mDandelionEmbargo.end();) {
         if (m_mempool.exists(iter->first)) {
             LogPrint(BCLog::DANDELION, "Embargoed dandeliontx %s found in mempool; removing from embargo map\n", iter->first.ToString());
@@ -1618,16 +1619,28 @@ void PeerManagerImpl::CheckDandelionEmbargoes()
 
 bool PeerManagerImpl::PushDandelionInventory(CNode* pnode, const CInv& inv)
 {
+    if (!pnode) {
+        LogPrint(BCLog::DANDELION, "PushDandelionInventory: null node pointer\n");
+        return false;
+    }
+    
     LOCK(m_peer_mutex);
     auto peer_ptr = GetPeerRef(pnode->GetId());
-    if (!peer_ptr) return false;
+    if (!peer_ptr) {
+        LogPrint(BCLog::DANDELION, "PushDandelionInventory: peer %d not found\n", pnode->GetId());
+        return false;
+    }
     
     auto tx_relay = peer_ptr->GetTxRelay();
-    if (!tx_relay) return false;
+    if (!tx_relay) {
+        LogPrint(BCLog::DANDELION, "PushDandelionInventory: peer %d has no tx_relay\n", pnode->GetId());
+        return false;
+    }
     
     LOCK(tx_relay->m_tx_inventory_mutex);
     if (!tx_relay->m_tx_inventory_known_filter.contains(inv.hash)) {
         tx_relay->setInventoryTxToSendOther.insert(inv);
+        LogPrint(BCLog::DANDELION, "Queued Dandelion inventory for peer %d: %s\n", pnode->GetId(), inv.ToString());
         return true;
     }
     return false;

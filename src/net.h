@@ -1662,7 +1662,8 @@ private:
 
 public:
     // Dandelion++ functions
-    std::map<uint256, std::chrono::microseconds> mDandelionEmbargo;
+    mutable Mutex m_dandelion_embargo_mutex;
+    std::map<uint256, std::chrono::microseconds> mDandelionEmbargo GUARDED_BY(m_dandelion_embargo_mutex);
     bool insertDandelionEmbargo(const uint256& hash, std::chrono::microseconds& embargo);
     bool isDandelionInbound(const CNode* const pnode) const;
     bool isLocalDandelionDestinationSet() const;
@@ -1677,14 +1678,14 @@ private:
     void ThreadDandelionShuffle();
 
     // Dandelion++ member variables
-    CNode* localDandelionDestination = nullptr;
-    CNode* SelectFromDandelionDestinations() const;
-    std::map<CNode*, CNode*> mDandelionRoutes;
-    std::string GetDandelionRoutingDataDebugString() const;
-    std::vector<CNode*> vDandelionDestination;
-    std::vector<CNode*> vDandelionInbound;
-    std::vector<CNode*> vDandelionOutbound;
-    void CloseDandelionConnections(const CNode* const pnode);
+    CNode* localDandelionDestination GUARDED_BY(m_nodes_mutex) = nullptr;
+    CNode* SelectFromDandelionDestinations() const EXCLUSIVE_LOCKS_REQUIRED(m_nodes_mutex);
+    std::map<CNode*, CNode*> mDandelionRoutes GUARDED_BY(m_nodes_mutex);
+    std::string GetDandelionRoutingDataDebugString() const EXCLUSIVE_LOCKS_REQUIRED(m_nodes_mutex);
+    std::vector<CNode*> vDandelionDestination GUARDED_BY(m_nodes_mutex);
+    std::vector<CNode*> vDandelionInbound GUARDED_BY(m_nodes_mutex);
+    std::vector<CNode*> vDandelionOutbound GUARDED_BY(m_nodes_mutex);
+    void CloseDandelionConnections(const CNode* const pnode) EXCLUSIVE_LOCKS_REQUIRED(m_nodes_mutex);
     void DandelionShuffle();
 
     // Dandelion++ thread

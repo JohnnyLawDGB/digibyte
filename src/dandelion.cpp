@@ -13,16 +13,19 @@
 
 bool CConnman::isDandelionInbound(const CNode* const pnode) const
 {
+    LOCK(m_nodes_mutex);
     return (std::find(vDandelionInbound.begin(), vDandelionInbound.end(), pnode) != vDandelionInbound.end());
 }
 
 bool CConnman::isLocalDandelionDestinationSet() const
 {
+    LOCK(m_nodes_mutex);
     return (localDandelionDestination != nullptr);
 }
 
 bool CConnman::setLocalDandelionDestination()
 {
+    LOCK(m_nodes_mutex);
     if (!isLocalDandelionDestinationSet()) {
         localDandelionDestination = SelectFromDandelionDestinations();
         LogPrint(BCLog::DANDELION, "Set local Dandelion destination:\n%s", GetDandelionRoutingDataDebugString());
@@ -32,6 +35,7 @@ bool CConnman::setLocalDandelionDestination()
 
 CNode* CConnman::getDandelionDestination(CNode* pfrom)
 {
+    LOCK(m_nodes_mutex);
     for (auto const& e : mDandelionRoutes) {
         if (pfrom == e.first) {
             return e.second;
@@ -47,30 +51,39 @@ CNode* CConnman::getDandelionDestination(CNode* pfrom)
 
 bool CConnman::localDandelionDestinationPushInventory(const CInv& inv)
 {
-    if (isLocalDandelionDestinationSet()) {
-        // Use the PeerManager to push Dandelion inventory
-        if (m_msgproc) {
-            return m_msgproc->PushDandelionInventory(localDandelionDestination, inv);
+    CNode* destination = nullptr;
+    {
+        LOCK(m_nodes_mutex);
+        if (localDandelionDestination) {
+            destination = localDandelionDestination;
+        } else {
+            // Try to set local destination
+            localDandelionDestination = SelectFromDandelionDestinations();
+            if (localDandelionDestination) {
+                LogPrint(BCLog::DANDELION, "Set local Dandelion destination: peer=%d\n", localDandelionDestination->GetId());
+                destination = localDandelionDestination;
+            } else {
+                // No Dandelion destinations available yet
+                LogPrint(BCLog::DANDELION, "No Dandelion destinations available for %s\n", inv.ToString());
+            }
         }
-        return false;
-    } else if (setLocalDandelionDestination()) {
-        // Use the PeerManager to push Dandelion inventory  
-        if (m_msgproc) {
-            return m_msgproc->PushDandelionInventory(localDandelionDestination, inv);
-        }
-        return false;
-    } else {
-        return false;
     }
+    
+    if (destination && m_msgproc) {
+        return m_msgproc->PushDandelionInventory(destination, inv);
+    }
+    return false;
 }
 
 bool CConnman::insertDandelionEmbargo(const uint256& hash, std::chrono::microseconds& embargo) {
+    LOCK(m_dandelion_embargo_mutex);
     auto pair = mDandelionEmbargo.insert(std::make_pair(hash, embargo));
     return pair.second;
 }
 
 bool CConnman::isTxDandelionEmbargoed(const uint256& hash) const
 {
+    LOCK(m_dandelion_embargo_mutex);
     auto it = mDandelionEmbargo.find(hash);
     if (it == mDandelionEmbargo.end()) {
         return false;
@@ -89,6 +102,7 @@ bool CConnman::isTxDandelionEmbargoed(const uint256& hash) const
 
 bool CConnman::removeDandelionEmbargo(const uint256& hash)
 {
+    LOCK(m_dandelion_embargo_mutex);
     bool removed = false;
     for (auto iter = mDandelionEmbargo.begin(); iter != mDandelionEmbargo.end(); )
     {
@@ -138,6 +152,7 @@ CNode* CConnman::SelectFromDandelionDestinations() const
 
 void CConnman::CloseDandelionConnections(const CNode* const pnode)
 {
+    AssertLockHeld(m_nodes_mutex);
     // Remove pnode from vDandelionInbound, if present
     for (auto iter = vDandelionInbound.begin(); iter != vDandelionInbound.end();) {
         if (*iter == pnode) {
@@ -303,6 +318,7 @@ void CConnman::DandelionShuffle()
 
 bool CConnman::usingDandelion() const
 {
+    LOCK(m_nodes_mutex);
     return vDandelionDestination.size() > 0;
 }
 

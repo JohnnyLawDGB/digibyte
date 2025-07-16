@@ -1833,7 +1833,7 @@ void CConnman::CreateNodeFromAcceptedSocket(std::unique_ptr<Sock>&& sock,
         if (pto) {
             mDandelionRoutes.insert(std::make_pair(pnode, pto));
         }
-        LogPrint(BCLog::DANDELION, "Added inbound Dandelion connection:\n%s", GetDandelionRoutingDataDebugString());
+        LogPrint(BCLog::DANDELION, "Added inbound Dandelion connection: peer=%d\n", pnode->GetId());
     }
 
     // We received a new connection, harvest entropy from the time (and our peer count)
@@ -1944,8 +1944,11 @@ void CConnman::DisconnectNodes()
             // Destroy the object only after other threads have stopped using it.
             if (pnode->GetRefCount() <= 0) {
                 // Dandelion: close connection
-                CloseDandelionConnections(pnode);
-                LogPrint(BCLog::DANDELION, "Removed Dandelion connection:\n%s", GetDandelionRoutingDataDebugString());
+                {
+                    LOCK(m_nodes_mutex);
+                    CloseDandelionConnections(pnode);
+                    LogPrint(BCLog::DANDELION, "Removed Dandelion connection: peer=%d\n", pnode->GetId());
+                }
                 m_nodes_disconnected.remove(pnode);
                 DeleteNode(pnode);
             }
@@ -2900,7 +2903,7 @@ void CConnman::OpenNetworkConnection(const CAddress& addrConnect, bool fCountFai
         if (vDandelionDestination.size() < DANDELION_MAX_DESTINATIONS) {
             vDandelionDestination.push_back(pnode);
         }
-        LogPrint(BCLog::DANDELION, "Added outbound Dandelion connection:\n%s", GetDandelionRoutingDataDebugString());
+        LogPrint(BCLog::DANDELION, "Added outbound Dandelion connection: peer=%d, destinations=%d\n", pnode->GetId(), vDandelionDestination.size());
 
         // Mark that we should send discovery message after releasing the lock
         should_send_dandelion_discovery = true;
@@ -2914,6 +2917,7 @@ void CConnman::OpenNetworkConnection(const CAddress& addrConnect, bool fCountFai
     if (should_send_dandelion_discovery && m_msgproc) {
         // Mark the node to send discovery message on first SendMessages call
         pnode->m_send_dandelion_discovery = true;
+        LogPrint(BCLog::DANDELION, "Queued Dandelion discovery for peer=%d\n", pnode->GetId());
     }
 }
 

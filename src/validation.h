@@ -262,6 +262,19 @@ MempoolAcceptResult AcceptToMemoryPool(Chainstate& active_chainstate, const CTra
     EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
 /**
+* Accept transaction to the stempool for Dandelion++ privacy.
+* This is similar to AcceptToMemoryPool but for the stempool during the stem phase.
+* @param[in]    active_chainstate    Reference to the active chainstate
+* @param[in]    tx                   The transaction to submit
+* @param[in]    accept_time          The time to use for entry (used for expiry)
+* @param[in]    bypass_limits        Whether to bypass mempool size limits
+* @param[in]    test_accept          When true, run validation checks but don't submit to stempool
+*/
+MempoolAcceptResult AcceptToStempool(Chainstate& active_chainstate, const CTransactionRef& tx,
+                                    int64_t accept_time, bool bypass_limits, bool test_accept)
+    EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+
+/**
 * Validate (and maybe submit) a package to the mempool. See doc/policy/packages.md for full details
 * on package validation rules.
 * @param[in]    test_accept     When true, run validation checks but don't submit to mempool.

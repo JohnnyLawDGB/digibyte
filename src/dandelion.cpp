@@ -49,13 +49,17 @@ CNode* CConnman::getDandelionDestination(CNode* pfrom)
 bool CConnman::localDandelionDestinationPushInventory(const CInv& inv)
 {
     if (isLocalDandelionDestinationSet()) {
-        // TODO: Fix for Bitcoin v26.2 - PushOtherInventory replaced with m_tx_inventory_to_send
-        // localDandelionDestination->PushOtherInventory(inv);
-        return false; // Temporarily disabled
+        // Use the PeerManager to push Dandelion inventory
+        if (m_msgproc) {
+            return m_msgproc->PushDandelionInventory(localDandelionDestination, inv);
+        }
+        return false;
     } else if (setLocalDandelionDestination()) {
-        // TODO: Fix for Bitcoin v26.2 - PushOtherInventory replaced with m_tx_inventory_to_send
-        // localDandelionDestination->PushOtherInventory(inv);
-        return false; // Temporarily disabled
+        // Use the PeerManager to push Dandelion inventory  
+        if (m_msgproc) {
+            return m_msgproc->PushDandelionInventory(localDandelionDestination, inv);
+        }
+        return false;
     } else {
         return false;
     }

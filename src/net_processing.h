@@ -122,6 +122,7 @@ public:
     // DigiByte-specific Dandelion++ methods
     virtual void RelayDandelionTransaction(const CTransaction& tx, CNode* pfrom) = 0;
     virtual void CheckDandelionEmbargoes() = 0;
+    virtual bool PushDandelionInventory(CNode* pnode, const CInv& inv) = 0;
 };
 
 #endif // DIGIBYTE_NET_PROCESSING_H

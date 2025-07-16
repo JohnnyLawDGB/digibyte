@@ -1621,6 +1621,7 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
         CTxMemPool::Options stempool_opts{
             .estimator = nullptr,
             .check_ratio = 0,
+            .is_stempool = true,
         };
         node.stempool = std::make_unique<CTxMemPool>(stempool_opts);
 

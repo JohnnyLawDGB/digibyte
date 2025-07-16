@@ -322,6 +322,7 @@ protected:
     void trackPackageRemoved(const CFeeRate& rate) EXCLUSIVE_LOCKS_REQUIRED(cs);
 
     bool m_load_tried GUARDED_BY(cs){false};
+    const bool m_is_stempool;
 
     CFeeRate GetMinFee(size_t sizelimit) const;
 
@@ -732,6 +733,10 @@ public:
 
     uint64_t GetSequence() const EXCLUSIVE_LOCKS_REQUIRED(cs) {
         return m_sequence_number;
+    }
+
+    bool isStempool() const {
+        return this->m_is_stempool;
     }
 
 private:

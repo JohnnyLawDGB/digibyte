@@ -2902,9 +2902,10 @@ void CConnman::OpenNetworkConnection(const CAddress& addrConnect, bool fCountFai
         LogPrint(BCLog::DANDELION, "Added outbound Dandelion connection:\n%s", GetDandelionRoutingDataDebugString());
 
         // Dandelion service discovery
-        // TODO: Implement proper Dandelion service discovery
-        // CInv dummyInv(MSG_DANDELION_TX, DANDELION_DISCOVERYHASH);
-        // pnode->PushOtherInventory(dummyInv);
+        CInv dummyInv(MSG_DANDELION_TX, DANDELION_DISCOVERYHASH);
+        if (m_msgproc) {
+            m_msgproc->PushDandelionInventory(pnode, dummyInv);
+        }
 
         // update connection count by network
         if (pnode->IsManualOrFullOutboundConn()) ++m_network_conn_counts[pnode->addr.GetNetwork()];

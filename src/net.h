@@ -1057,6 +1057,8 @@ public:
     */
     virtual bool SendMessages(CNode* pnode) EXCLUSIVE_LOCKS_REQUIRED(g_msgproc_mutex) = 0;
 
+    /** DigiByte-specific: Push Dandelion inventory to a specific peer */
+    virtual bool PushDandelionInventory(CNode* pnode, const CInv& inv) = 0;
 
 protected:
     /**

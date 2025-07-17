@@ -534,12 +534,27 @@ bool BlockManager::LoadBlockIndex(const std::optional<uint256>& snapshot_blockha
     Assert(m_snapshot_height.has_value() == snapshot_blockhash.has_value());
 
     // Calculate nChainWork
+    LogPrintf("LoadBlockIndex: Getting all block indices...");
     std::vector<CBlockIndex*> vSortedByHeight{GetAllBlockIndices()};
+    LogPrintf("LoadBlockIndex: Sorting %d block indices by height...", vSortedByHeight.size());
     std::sort(vSortedByHeight.begin(), vSortedByHeight.end(),
               CBlockIndexHeightOnlyComparator());
+    LogPrintf("LoadBlockIndex: Sort complete, processing blocks...");
 
     CBlockIndex* previous_index{nullptr};
+    int nProcessed = 0;
+    int nLastPercent = -1;
+    int nTotal = vSortedByHeight.size();
     for (CBlockIndex* pindex : vSortedByHeight) {
+        // Show progress
+        if (nTotal > 0) {
+            int nPercent = 100 * nProcessed / nTotal;
+            if (nPercent > nLastPercent && nPercent % 10 == 0) {
+                LogPrintf("LoadBlockIndex: Processing blocks... %d%%\n", nPercent);
+                nLastPercent = nPercent;
+            }
+        }
+        nProcessed++;
         if (m_interrupt) return false;
         if (previous_index && pindex->nHeight > previous_index->nHeight + 1) {
             return error("%s: block index is non-contiguous, index of height %d missing", __func__, previous_index->nHeight + 1);

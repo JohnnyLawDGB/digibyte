@@ -2546,12 +2546,13 @@ void PeerManagerImpl::ProcessGetData(CNode& pfrom, Peer& peer, const std::atomic
         if (inv.IsDandelionMsg()) {
             int nSendFlags = (inv.type == MSG_DANDELION_TX ? SERIALIZE_TRANSACTION_NO_WITNESS : 0);
             // Possibly find the tx in the stempool
-            auto txinfo = m_stempool.info(ToGenTxid(inv));
+            // For Dandelion messages, create GenTxid directly (not witness-aware)
+            auto txinfo = m_stempool.info(GenTxid::Txid(inv.hash));
 
             // Check for Dandelion service discovery
             if (inv.hash == DANDELION_DISCOVERYHASH) {
                 // Peer is requesting the discovery hash, they support Dandelion
-                peer.fSupportsDandelion = true;
+                peer.fSupportsDandelion.store(true);
                 LogPrint(BCLog::DANDELION, "Peer %d supports Dandelion (service discovery)\n", pfrom.GetId());
                 // Don't send anything, just mark support and continue
                 continue;
@@ -2578,8 +2579,9 @@ void PeerManagerImpl::ProcessGetData(CNode& pfrom, Peer& peer, const std::atomic
         bool push = false;
         
         // Check if we should serve from stempool for non-Dandelion peers
-        if (!peer.fSupportsDandelion && !m_connman.isDandelionInbound(&pfrom) && tx_relay->setDandelionInventoryKnown.count(inv.hash)) {
-            auto txinfo = m_stempool.info(ToGenTxid(inv));
+        if (!peer.fSupportsDandelion.load() && !m_connman.isDandelionInbound(&pfrom) && tx_relay->setDandelionInventoryKnown.count(inv.hash)) {
+            // For regular TX messages from stempool, create GenTxid based on witness flag
+            auto txinfo = m_stempool.info(inv.IsMsgWtx() ? GenTxid::Wtxid(inv.hash) : GenTxid::Txid(inv.hash));
             if (txinfo.tx) {
                 tx = txinfo.tx;
                 push = true;
@@ -6048,7 +6050,7 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                     LOCK(tx_relay->m_tx_inventory_mutex);
                     for (const uint256& hash : tx_relay->vInventoryDandelionTxToSend) {
                         tx_relay->setDandelionInventoryKnown.insert(hash);
-                        if (!peer->fSupportsDandelion && hash != DANDELION_DISCOVERYHASH) {
+                        if (!peer->fSupportsDandelion.load() && hash != DANDELION_DISCOVERYHASH) {
                             vInv.push_back(CInv(MSG_TX, hash));
                         } else {
                             vInv.push_back(CInv(MSG_DANDELION_TX, hash));

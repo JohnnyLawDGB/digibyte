@@ -1824,6 +1824,9 @@ void Chainstate::InitCoinsDB(
             .obfuscate = true,
             .options = m_chainman.m_options.coins_db},
         m_chainman.m_options.coins_view);
+    
+    // Store the cache size so ResizeCoinsCaches can detect if it changes
+    m_coinsdb_cache_size_bytes = cache_size_bytes;
 }
 
 void Chainstate::InitCoinsCache(size_t cache_size_bytes)
@@ -3401,6 +3404,7 @@ bool Chainstate::ActivateBestChain(BlockValidationState& state, std::shared_ptr<
             if (was_in_ibd && !still_in_ibd) {
                 // Active chainstate has exited IBD.
                 exited_ibd = true;
+                LogPrintf("Exited Initial Block Download at height=%d\n", m_chain.Tip()->nHeight);
             }
 
             // Notify external listeners about the new tip.
@@ -5283,9 +5287,17 @@ std::string Chainstate::ToString()
 bool Chainstate::ResizeCoinsCaches(size_t coinstip_size, size_t coinsdb_size)
 {
     AssertLockHeld(::cs_main);
+    LogPrintf("[%s] ResizeCoinsCaches called: new coinstip=%.1f MiB (current=%.1f MiB), new coinsdb=%.1f MiB (current=%.1f MiB)\n",
+        this->ToString(), 
+        coinstip_size * (1.0 / 1024 / 1024),
+        m_coinstip_cache_size_bytes * (1.0 / 1024 / 1024),
+        coinsdb_size * (1.0 / 1024 / 1024),
+        m_coinsdb_cache_size_bytes * (1.0 / 1024 / 1024));
+    
     if (coinstip_size == m_coinstip_cache_size_bytes &&
             coinsdb_size == m_coinsdb_cache_size_bytes) {
         // Cache sizes are unchanged, no need to continue.
+        LogPrintf("[%s] Cache sizes unchanged, skipping resize\n", this->ToString());
         return true;
     }
     size_t old_coinstip_size = m_coinstip_cache_size_bytes;
@@ -5931,6 +5943,7 @@ bool ChainstateManager::IsSnapshotActive() const
 void ChainstateManager::MaybeRebalanceCaches()
 {
     AssertLockHeld(::cs_main);
+    LogPrintf("MaybeRebalanceCaches called, IsInitialBlockDownload=%s\n", IsInitialBlockDownload() ? "true" : "false");
     bool ibd_usable = this->IsUsable(m_ibd_chainstate.get());
     bool snapshot_usable = this->IsUsable(m_snapshot_chainstate.get());
     assert(ibd_usable || snapshot_usable);

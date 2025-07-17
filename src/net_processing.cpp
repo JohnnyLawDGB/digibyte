@@ -1593,27 +1593,38 @@ void PeerManagerImpl::RelayDandelionTransaction(const CTransaction& tx, CNode* p
 void PeerManagerImpl::CheckDandelionEmbargoes()
 {
     auto current_time = GetTime<std::chrono::milliseconds>();
-    LOCK(m_connman.m_dandelion_embargo_mutex);
-    for (auto iter = m_connman.mDandelionEmbargo.begin(); iter != m_connman.mDandelionEmbargo.end();) {
-        if (m_mempool.exists(iter->first)) {
-            LogPrint(BCLog::DANDELION, "Embargoed dandeliontx %s found in mempool; removing from embargo map\n", iter->first.ToString());
-            iter = m_connman.mDandelionEmbargo.erase(iter);
-        } else if (iter->second < current_time) {
-            LogPrint(BCLog::DANDELION, "dandeliontx %s embargo expired\n", iter->first.ToString());
-            CTransactionRef ptx = m_stempool.get(iter->first);
-            if (ptx) {
-                {
-                    LOCK(cs_main);
-                    AcceptToMemoryPool(m_chainman.ActiveChainstate(), m_mempool, ptx, false);
+    std::vector<std::pair<uint256, CTransactionRef>> expired_txs;
+    
+    {
+        LOCK(m_connman.m_dandelion_embargo_mutex);
+        for (auto iter = m_connman.mDandelionEmbargo.begin(); iter != m_connman.mDandelionEmbargo.end();) {
+            if (m_mempool.exists(iter->first)) {
+                LogPrint(BCLog::DANDELION, "Embargoed dandeliontx %s found in mempool; removing from embargo map\n", iter->first.ToString());
+                iter = m_connman.mDandelionEmbargo.erase(iter);
+            } else if (iter->second < current_time) {
+                LogPrint(BCLog::DANDELION, "dandeliontx %s embargo expired\n", iter->first.ToString());
+                CTransactionRef ptx = m_stempool.get(iter->first);
+                if (ptx) {
+                    expired_txs.push_back(std::make_pair(iter->first, ptx));
                 }
-                LogPrint(BCLog::MEMPOOL, "AcceptToMemoryPool: accepted %s (poolsz %u txn, %u kB)\n",
-                                         iter->first.ToString(), m_mempool.size(), m_mempool.DynamicMemoryUsage() / 1000);
-                RelayTransaction(ptx->GetHash(), ptx->GetWitnessHash());
+                iter = m_connman.mDandelionEmbargo.erase(iter);
+            } else {
+                iter++;
             }
-            iter = m_connman.mDandelionEmbargo.erase(iter);
-        } else {
-            iter++;
         }
+    } // Release m_dandelion_embargo_mutex
+    
+    // Process expired transactions without holding the embargo mutex
+    for (const auto& tx_pair : expired_txs) {
+        const uint256& hash = tx_pair.first;
+        const CTransactionRef& ptx = tx_pair.second;
+        {
+            LOCK(cs_main);
+            AcceptToMemoryPool(m_chainman.ActiveChainstate(), m_mempool, ptx, false);
+        }
+        LogPrint(BCLog::MEMPOOL, "AcceptToMemoryPool: accepted %s (poolsz %u txn, %u kB)\n",
+                                 hash.ToString(), m_mempool.size(), m_mempool.DynamicMemoryUsage() / 1000);
+        RelayTransaction(ptx->GetHash(), ptx->GetWitnessHash());
     }
 }
 
@@ -3765,6 +3776,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                       pfrom.nVersion.load(), peer->m_starting_height,
                       pfrom.GetId(), (fLogIPs ? strprintf(", peeraddr=%s", pfrom.addr.ToStringAddrPort()) : ""),
                       (mapped_as ? strprintf(", mapped_as=%d", mapped_as) : ""));
+            LogPrintf("DEBUG: VERACK processing started for peer=%d\n", pfrom.GetId());
         }
 
         if (pfrom.GetCommonVersion() >= SHORT_IDS_BLOCKS_VERSION) {
@@ -3800,6 +3812,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         }
 
         pfrom.fSuccessfullyConnected = true;
+        LogPrintf("DEBUG: VERACK processing completed successfully for peer=%d\n", pfrom.GetId());
         return;
     }
 
@@ -5729,7 +5742,9 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
     const CNetMsgMaker msgMaker(pto->GetCommonVersion());
 
     // Send Dandelion discovery message if needed
+    LogPrintf("DEBUG: SendMessages called for peer=%d, send_dandelion_discovery=%d\n", pto->GetId(), pto->m_send_dandelion_discovery.load());
     if (pto->m_send_dandelion_discovery.exchange(false)) {
+        LogPrintf("DEBUG: Sending Dandelion discovery to peer=%d\n", pto->GetId());
         CInv dummyInv(MSG_DANDELION_TX, DANDELION_DISCOVERYHASH);
         PushDandelionInventory(pto, dummyInv);
         LogPrint(BCLog::DANDELION, "Sent Dandelion discovery message to peer=%d\n", pto->GetId());

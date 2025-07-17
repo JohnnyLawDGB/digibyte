@@ -262,11 +262,11 @@ std::string CConnman::GetDandelionRoutingDataDebugString() const
 
 void CConnman::DandelionShuffle()
 {
-    // Dandelion debug message
-    LogPrint(BCLog::DANDELION, "Before Dandelion shuffle:\n%s", GetDandelionRoutingDataDebugString());
     {
         // Lock node pointers
         LOCK(m_nodes_mutex);
+        // Dandelion debug message
+        LogPrint(BCLog::DANDELION, "Before Dandelion shuffle:\n%s", GetDandelionRoutingDataDebugString());
         // Iterate through mDandelionRoutes to facilitate bookkeeping
         for (auto iter = mDandelionRoutes.begin(); iter != mDandelionRoutes.end();) {
             iter = mDandelionRoutes.erase(iter);
@@ -311,9 +311,9 @@ void CConnman::DandelionShuffle()
             }
         }
         localDandelionDestination = SelectFromDandelionDestinations();
+        // Dandelion debug message
+        LogPrint(BCLog::DANDELION, "After Dandelion shuffle:\n%s", GetDandelionRoutingDataDebugString());
     }
-    // Dandelion debug message
-    LogPrint(BCLog::DANDELION, "After Dandelion shuffle:\n%s", GetDandelionRoutingDataDebugString());
 }
 
 bool CConnman::usingDandelion() const

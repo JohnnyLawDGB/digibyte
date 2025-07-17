@@ -4088,6 +4088,17 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 if (!fAlreadyHave && !m_chainman.IsInitialBlockDownload()) {
                     AddTxAnnouncement(pfrom, gtxid, current_time);
                 }
+            } else if (inv.IsDandelionMsg()) {
+                if (auto tx_relay = peer->GetTxRelay(); tx_relay != nullptr) {
+                    LOCK(tx_relay->m_tx_inventory_mutex);
+                    auto result = tx_relay->setDandelionInventoryKnown.insert(inv.hash);
+                    const bool fAlreadyHave = !result.second;
+                    LogPrint(BCLog::NET, "got dandelion inv: %s  %s peer=%d\n", inv.ToString(), fAlreadyHave ? "have" : "new", pfrom.GetId());
+                    if ((!fAlreadyHave && !m_chainman.IsInitialBlockDownload() &&
+                        m_connman.isDandelionInbound(&pfrom)) || (inv.hash == DANDELION_DISCOVERYHASH)) {
+                        m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETDATA, inv));
+                    }
+                }
             } else {
                 LogPrint(BCLog::NET, "Unknown inv type \"%s\" received from peer=%d\n", inv.ToString(), pfrom.GetId());
             }
@@ -5742,12 +5753,14 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
     const CNetMsgMaker msgMaker(pto->GetCommonVersion());
 
     // Send Dandelion discovery message if needed
-    LogPrintf("DEBUG: SendMessages called for peer=%d, send_dandelion_discovery=%d\n", pto->GetId(), pto->m_send_dandelion_discovery.load());
     if (pto->m_send_dandelion_discovery.exchange(false)) {
-        LogPrintf("DEBUG: Sending Dandelion discovery to peer=%d\n", pto->GetId());
-        CInv dummyInv(MSG_DANDELION_TX, DANDELION_DISCOVERYHASH);
-        PushDandelionInventory(pto, dummyInv);
-        LogPrint(BCLog::DANDELION, "Sent Dandelion discovery message to peer=%d\n", pto->GetId());
+        // Queue Dandelion discovery directly to avoid lock ordering issues
+        if (auto tx_relay = peer->GetTxRelay(); tx_relay != nullptr) {
+            LOCK(tx_relay->m_tx_inventory_mutex);
+            CInv dummyInv(MSG_DANDELION_TX, DANDELION_DISCOVERYHASH);
+            tx_relay->setInventoryTxToSendOther.insert(dummyInv);
+            LogPrint(BCLog::DANDELION, "Queued Dandelion discovery message for peer=%d\n", pto->GetId());
+        }
     }
 
     const auto current_time{GetTime<std::chrono::microseconds>()};
@@ -6104,9 +6117,33 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                     LOCK(m_mempool.cs);
                     tx_relay->m_last_inv_sequence = m_mempool.GetSequence();
                 }
+                
+                // Send non-tx/non-block inventory items (e.g., Dandelion discovery)
+                {
+                    LOCK(tx_relay->m_tx_inventory_mutex);
+                    while (!tx_relay->setInventoryTxToSendOther.empty()) {
+                        // Get inv from other set to send
+                        auto it = tx_relay->setInventoryTxToSendOther.begin();
+                        CInv inv = *it;
+                        // Remove it from the to-be-sent set
+                        tx_relay->setInventoryTxToSendOther.erase(it);
+                        // Check if not in the filter already
+                        if (tx_relay->m_tx_inventory_known_filter.contains(inv.hash)) {
+                            continue;
+                        }
+                        // Send
+                        vInv.push_back(inv);
+                        if (vInv.size() == MAX_INV_SZ) {
+                            m_connman.PushMessage(pto, msgMaker.Make(NetMsgType::INV, vInv));
+                            vInv.clear();
+                        }
+                        tx_relay->m_tx_inventory_known_filter.insert(inv.hash);
+                    }
+                }
         }
-        if (!vInv.empty())
+        if (!vInv.empty()) {
             m_connman.PushMessage(pto, msgMaker.Make(NetMsgType::INV, vInv));
+        }
 
         // Detect whether we're stalling
         auto stalling_timeout = m_block_stalling_timeout.load();

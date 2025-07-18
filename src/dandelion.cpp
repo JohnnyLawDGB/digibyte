@@ -10,6 +10,7 @@
 #include <logging.h>
 #include <random.h>
 #include <validation.h>
+#include <common/args.h>
 
 bool CConnman::isDandelionInbound(const CNode* const pnode) const
 {
@@ -51,6 +52,11 @@ CNode* CConnman::getDandelionDestination(CNode* pfrom)
 
 bool CConnman::localDandelionDestinationPushInventory(const CInv& inv)
 {
+    // Check if Dandelion is enabled
+    if (!gArgs.GetBoolArg("-dandelion", DEFAULT_DANDELION)) {
+        return false;
+    }
+    
     CNode* destination = nullptr;
     {
         LOCK(m_nodes_mutex);
@@ -320,6 +326,59 @@ bool CConnman::usingDandelion() const
 {
     LOCK(m_nodes_mutex);
     return vDandelionDestination.size() > 0;
+}
+
+void CConnman::AddDandelionDestination(CNode* pnode)
+{
+    // Only process if Dandelion is enabled
+    if (!gArgs.GetBoolArg("-dandelion", DEFAULT_DANDELION)) {
+        LogPrint(BCLog::DANDELION, "AddDandelionDestination: Dandelion disabled, not adding peer %d\n", pnode->GetId());
+        return;
+    }
+    
+    LOCK(m_nodes_mutex);
+    
+    // Check if already in vDandelionDestination
+    if (std::find(vDandelionDestination.begin(), vDandelionDestination.end(), pnode) != vDandelionDestination.end()) {
+        LogPrint(BCLog::DANDELION, "AddDandelionDestination: Peer %d already in destinations\n", pnode->GetId());
+        return; // Already added
+    }
+    
+    // Check if peer is in inbound or outbound list
+    bool isInbound = std::find(vDandelionInbound.begin(), vDandelionInbound.end(), pnode) != vDandelionInbound.end();
+    bool isOutbound = std::find(vDandelionOutbound.begin(), vDandelionOutbound.end(), pnode) != vDandelionOutbound.end();
+    
+    // If not in either list, add to the appropriate list based on connection type
+    if (!isInbound && !isOutbound) {
+        if (pnode->IsInboundConn()) {
+            vDandelionInbound.push_back(pnode);
+            isInbound = true;
+            LogPrint(BCLog::DANDELION, "Added peer %d to vDandelionInbound during discovery\n", pnode->GetId());
+        } else {
+            vDandelionOutbound.push_back(pnode);
+            isOutbound = true;
+            LogPrint(BCLog::DANDELION, "Added peer %d to vDandelionOutbound during discovery\n", pnode->GetId());
+        }
+    }
+    
+    LogPrint(BCLog::DANDELION, "AddDandelionDestination: Peer %d - inbound=%d, outbound=%d, current destinations=%d\n", 
+             pnode->GetId(), isInbound, isOutbound, vDandelionDestination.size());
+    
+    // Only add if we haven't reached the maximum destinations
+    if (vDandelionDestination.size() < DANDELION_MAX_DESTINATIONS) {
+        vDandelionDestination.push_back(pnode);
+        LogPrint(BCLog::DANDELION, "Added peer %d to Dandelion destinations (total: %d)\n", 
+                 pnode->GetId(), vDandelionDestination.size());
+        
+        // If this is the first destination and we don't have a local destination set, set it
+        if (!localDandelionDestination) {
+            localDandelionDestination = pnode;
+            LogPrint(BCLog::DANDELION, "Set peer %d as local Dandelion destination\n", pnode->GetId());
+        }
+    } else {
+        LogPrint(BCLog::DANDELION, "AddDandelionDestination: Max destinations reached (%d), not adding peer %d\n", 
+                 DANDELION_MAX_DESTINATIONS, pnode->GetId());
+    }
 }
 
 void CConnman::ThreadDandelionShuffle()

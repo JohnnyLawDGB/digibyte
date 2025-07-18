@@ -2905,20 +2905,13 @@ void CConnman::OpenNetworkConnection(const CAddress& addrConnect, bool fCountFai
         }
         LogPrint(BCLog::DANDELION, "Added outbound Dandelion connection: peer=%d, destinations=%d\n", pnode->GetId(), vDandelionDestination.size());
 
-        // Mark that we should send discovery message after releasing the lock
-        should_send_dandelion_discovery = true;
 
         // update connection count by network
         if (pnode->IsManualOrFullOutboundConn()) ++m_network_conn_counts[pnode->addr.GetNetwork()];
     }
-
-    // Queue Dandelion service discovery message to be sent in SendMessages
-    // This avoids potential race conditions with peer initialization
-    if (should_send_dandelion_discovery && m_msgproc) {
-        // Mark the node to send discovery message on first SendMessages call
-        pnode->m_send_dandelion_discovery = true;
-        LogPrint(BCLog::DANDELION, "Queued Dandelion discovery for peer=%d\n", pnode->GetId());
-    }
+    
+    // Send Dandelion discovery message to new outbound connections
+    pnode->m_send_dandelion_discovery = true;
 }
 
 Mutex NetEventsInterface::g_msgproc_mutex;

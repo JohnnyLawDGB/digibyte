@@ -2552,9 +2552,20 @@ void PeerManagerImpl::ProcessGetData(CNode& pfrom, Peer& peer, const std::atomic
             // Check for Dandelion service discovery
             if (inv.hash == DANDELION_DISCOVERYHASH) {
                 // Peer is requesting the discovery hash, they support Dandelion
-                peer.fSupportsDandelion.store(true);
+                bool wasAlreadySupporting = peer.fSupportsDandelion.exchange(true);
                 LogPrint(BCLog::DANDELION, "Peer %d supports Dandelion (service discovery)\n", pfrom.GetId());
-                // Don't send anything, just mark support and continue
+                // Add this peer as a potential Dandelion destination
+                m_connman.AddDandelionDestination(&pfrom);
+                
+                // If this is the first time we discovered this peer supports Dandelion,
+                // send a discovery message back to them
+                if (!wasAlreadySupporting && tx_relay != nullptr) {
+                    CInv discoveryInv(MSG_DANDELION_TX, DANDELION_DISCOVERYHASH);
+                    tx_relay->setInventoryTxToSendOther.insert(discoveryInv);
+                    LogPrint(BCLog::DANDELION, "Sending Dandelion discovery message back to peer %d\n", pfrom.GetId());
+                }
+                
+                // Don't send the actual discovery hash, just continue
                 continue;
             }
 

@@ -1592,39 +1592,28 @@ void PeerManagerImpl::RelayDandelionTransaction(const CTransaction& tx, CNode* p
 
 void PeerManagerImpl::CheckDandelionEmbargoes()
 {
+    LOCK(m_connman.m_dandelion_embargo_mutex);
     auto current_time = GetTime<std::chrono::milliseconds>();
-    std::vector<std::pair<uint256, CTransactionRef>> expired_txs;
-    
-    {
-        LOCK(m_connman.m_dandelion_embargo_mutex);
-        for (auto iter = m_connman.mDandelionEmbargo.begin(); iter != m_connman.mDandelionEmbargo.end();) {
-            if (m_mempool.exists(iter->first)) {
-                LogPrint(BCLog::DANDELION, "Embargoed dandeliontx %s found in mempool; removing from embargo map\n", iter->first.ToString());
-                iter = m_connman.mDandelionEmbargo.erase(iter);
-            } else if (iter->second < current_time) {
-                LogPrint(BCLog::DANDELION, "dandeliontx %s embargo expired\n", iter->first.ToString());
-                CTransactionRef ptx = m_stempool.get(iter->first);
-                if (ptx) {
-                    expired_txs.push_back(std::make_pair(iter->first, ptx));
+    for (auto iter = m_connman.mDandelionEmbargo.begin(); iter != m_connman.mDandelionEmbargo.end();) {
+        if (m_mempool.exists(iter->first)) {
+            LogPrint(BCLog::DANDELION, "Embargoed dandeliontx %s found in mempool; removing from embargo map\n", iter->first.ToString());
+            iter = m_connman.mDandelionEmbargo.erase(iter);
+        } else if (iter->second < current_time) {
+            LogPrint(BCLog::DANDELION, "dandeliontx %s embargo expired\n", iter->first.ToString());
+            CTransactionRef ptx = m_stempool.get(iter->first);
+            if (ptx) {
+                {
+                    LOCK(cs_main);
+                    AcceptToMemoryPool(m_chainman.ActiveChainstate(), m_mempool, ptx, false);
                 }
-                iter = m_connman.mDandelionEmbargo.erase(iter);
-            } else {
-                iter++;
+                LogPrint(BCLog::MEMPOOL, "AcceptToMemoryPool: accepted %s (poolsz %u txn, %u kB)\n",
+                                         iter->first.ToString(), m_mempool.size(), m_mempool.DynamicMemoryUsage() / 1000);
+                RelayTransaction(ptx->GetHash(), ptx->GetWitnessHash());
             }
+            iter = m_connman.mDandelionEmbargo.erase(iter);
+        } else {
+            iter++;
         }
-    } // Release m_dandelion_embargo_mutex
-    
-    // Process expired transactions without holding the embargo mutex
-    for (const auto& tx_pair : expired_txs) {
-        const uint256& hash = tx_pair.first;
-        const CTransactionRef& ptx = tx_pair.second;
-        {
-            LOCK(cs_main);
-            AcceptToMemoryPool(m_chainman.ActiveChainstate(), m_mempool, ptx, false);
-        }
-        LogPrint(BCLog::MEMPOOL, "AcceptToMemoryPool: accepted %s (poolsz %u txn, %u kB)\n",
-                                 hash.ToString(), m_mempool.size(), m_mempool.DynamicMemoryUsage() / 1000);
-        RelayTransaction(ptx->GetHash(), ptx->GetWitnessHash());
     }
 }
 
@@ -4109,7 +4098,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                     LogPrint(BCLog::NET, "got dandelion inv: %s  %s peer=%d\n", inv.ToString(), fAlreadyHave ? "have" : "new", pfrom.GetId());
                     if ((!fAlreadyHave && !m_chainman.IsInitialBlockDownload() &&
                         m_connman.isDandelionInbound(&pfrom)) || (inv.hash == DANDELION_DISCOVERYHASH)) {
-                        m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETDATA, inv));
+                        std::vector<CInv> vInv{inv};
+                        m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETDATA, vInv));
                     }
                 }
             } else {

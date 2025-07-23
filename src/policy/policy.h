@@ -142,8 +142,10 @@ bool IsStandardTx(const CTransaction& tx, const std::optional<unsigned>& max_dat
 /**
 * Check for standard transaction types
 * @param[in] mapInputs       Map of previous transactions that have outputs we're spending
+* @param[in] taproot_active  Whether Taproot rules are active
 * @return True if all inputs (scriptSigs) use only standard transaction forms
 */
+bool AreInputsStandard(const CTransaction& tx, const CCoinsViewCache& mapInputs, bool taproot_active);
 bool AreInputsStandard(const CTransaction& tx, const CCoinsViewCache& mapInputs);
 /**
 * Check if the transaction is over standard P2WSH resources limit:

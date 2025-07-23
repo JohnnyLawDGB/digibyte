@@ -827,7 +827,9 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
         return false; // state filled in by CheckTxInputs
     }
 
-    if (m_pool.m_require_standard && !AreInputsStandard(tx, m_view)) {
+    // Check for non-standard pay-to-script-hash in inputs
+    const bool taproot_active = DeploymentActiveAfter(m_active_chainstate.m_chain.Tip(), m_active_chainstate.m_chainman, Consensus::DEPLOYMENT_TAPROOT);
+    if (m_pool.m_require_standard && !AreInputsStandard(tx, m_view, taproot_active)) {
         return state.Invalid(TxValidationResult::TX_INPUTS_NOT_STANDARD, "bad-txns-nonstandard-inputs");
     }
 

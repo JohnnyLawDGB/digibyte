@@ -3,382 +3,253 @@
 ## Overview
 This file provides context and guidance for AI assistants working on the DigiByte codebase, particularly for the Bitcoin Core v26.2 merge creating DigiByte v8.26.
 
-# DigiByte v8.26 C++ Unit Test Fix Guide
-
-You are a DigiByte engineer fixing C++ unit tests. **CURRENT FOCUS: Category 1 - Address & Key Format Tests**
-
-**TOP PRIORITY: Fix all failing tests in `src/test/key_io_tests.cpp` to properly validate DigiByte addresses and keys.**
-
-## IMMEDIATE TASK: Category 1 - Address & Key Format Tests
-
-### Current Test Failures
-The `key_io_tests` are failing because they expect Bitcoin address formats. You need to update them for DigiByte.
-
-### Key DigiByte Address Information
-```cpp
-// Mainnet
-base58Prefixes[PUBKEY_ADDRESS] = std::vector<unsigned char>(1,30);  // 'D' addresses
-base58Prefixes[SCRIPT_ADDRESS] = std::vector<unsigned char>(1,63);  // 'S' addresses
-bech32_hrp = "dgb";
-
-// Testnet
-base58Prefixes[PUBKEY_ADDRESS] = std::vector<unsigned char>(1,126);
-base58Prefixes[SCRIPT_ADDRESS] = std::vector<unsigned char>(1,140);
-bech32_hrp = "dgbt";
-
-// Regtest
-bech32_hrp = "dgbrt";
-```
-
-### Required Changes
-
-1. **Update test data files**:
-   - `src/test/data/key_io_valid.json` - Replace Bitcoin addresses with DigiByte
-   - `src/test/data/key_io_invalid.json` - Update for DigiByte validation rules
-   - Change all "bc1" → "dgb1", "tb1" → "dgbt1", "bcrt1" → "dgbrt1"
-
-2. **Fix test expectations**:
-   - Bitcoin P2PKH addresses (starting with '1') → DigiByte 'D' addresses
-   - Bitcoin P2SH addresses (starting with '3') → DigiByte 'S' addresses
-   - Update WIF private key prefixes if needed
-
-3. **Verify chainparams.cpp** has correct DigiByte values for all networks
-
-### Example Valid DigiByte Addresses
-```
-// From v8.22.2
-P2PKH: "DGSbdXzKqPNLBpPDWK7MXgXN45LxYvPqFD"
-P2SH: "SfBbrV3yCGjKW52dac8Tgkvqd6zMgvPZFG"
-Bech32 mainnet: "dgb1..." (not "bc1...")
-Bech32 testnet: "dgbt1..." (not "tb1...")
-```
-
-### Test Command
-```bash
-# After making changes
-make -j6
-./src/test/test_digibyte --log_level=message --run_test=key_io_tests
-```
-
-### Success Criteria
-- All 3 test cases in key_io_tests pass (key_io_valid_parse, key_io_valid_gen, key_io_invalid)
-- No Bitcoin addresses remain in test data
-- DigiByte address validation works correctly
-
-## Setup
+## Repository Structure
 **Required repositories:**
-- `digibyte-v8.26` (merged code - BUILD/TEST ONLY HERE)
-- `bitcoin-v26.2-for-digibyte` (Bitcoin v26.2 reference)
-- `digibyte-v8.22.2` (DigiByte v8.22.2 - SOURCE OF TRUTH for hashes, addresses, prefixes)
+- `/mnt/c/Users/Jared/code/digibyte` (v8.26 merged code - BUILD/TEST HERE)
+- `/mnt/c/Users/Jared/code/bitcoin-v26.2-for-digibyte` (Bitcoin v26.2 reference)
+- `/mnt/c/Users/Jared/code/digibyte-v8.22.2` (DigiByte v8.22.2 - SOURCE OF TRUTH)
 
-## Test Fix Process
+## C++ Unit Test Fix Strategy
 
+### Overview
+We have 107 C++ unit test files that need fixing after the Bitcoin v26.2 merge. Tests are categorized into 10 groups for parallel AI assignment to avoid conflicts.
+
+### Build Process
 ```bash
-# Build with tests
 ./autogen.sh
 ./configure --enable-tests --enable-bench --enable-debug CXXFLAGS="-O0 -g"
 make -j6
-
-# Run tests and capture failures
-make check 2>&1 | tee test_results.log
 ```
 
-## Fixing Test Failures - Step by Step
-
-### 1. Identify Failing Test
+### Test Execution
 ```bash
-# Find first failure
-grep -A10 "FAILED" test_results.log
+# Run individual test
+./src/test/test_digibyte --log_level=all --run_test=TEST_NAME
 
-# Run single test with debug output
-./src/test/test_digibyte --log_level=all --run_test=TESTNAME
+# Run all tests in a file
+./src/test/test_digibyte --log_level=all --run_test=TEST_FILE_WITHOUT_CPP
 ```
 
-### 2. Compare with v8.22.2 Tests (SOURCE OF TRUTH)
-```bash
-# ALWAYS check v8.22.2 for correct DigiByte values
-export TEST_FILE="src/test/failing_test.cpp"
-vimdiff digibyte-v8.26/$TEST_FILE digibyte-v8.22.2/$TEST_FILE
-```
+### Fix Methodology
 
-**Common values to copy from v8.22.2:**
-- Genesis block hashes
-- Address prefixes (D=30, S=63)
-- Example addresses
-- Block hashes
-- Transaction IDs
-- Merkle roots
-- Network magic bytes
+1. **Always Compare Three Codebases:**
+   - v8.26 (current - what we're fixing)
+   - v8.22.2 (SOURCE OF TRUTH for DigiByte values)
+   - Bitcoin v26.2 (to understand what changed)
 
-### 3. Fix Categories
+2. **Common DigiByte Replacements:**
+   - MAX_MONEY: 21000000 → 21000000000 (21 billion)
+   - Block time: 600 → 15 seconds
+   - Addresses: 1.../3... → D.../S...
+   - Bech32: bc1/tb1/bcrt1 → dgb1/dgbt1/dgbrt1
+   - Single algo → 5 algorithms + Odocrypt
 
-#### Supply & Constants
+3. **Application Bug Protocol:**
+   - Fix bugs in application code when discovered
+   - Document thoroughly
+   - Report using standardized format
+
+### Critical DigiByte Constants
 ```cpp
-// WRONG (Bitcoin value)
-BOOST_CHECK_EQUAL(MAX_MONEY, 21000000 * COIN);
+// Network
+MAINNET_DEFAULT_PORT = 12024
+MAINNET_MESSAGE_START = {0xfa, 0xc3, 0xb6, 0xda}
 
-// CORRECT (from v8.22.2)
-BOOST_CHECK_EQUAL(MAX_MONEY, 21000000000 * COIN);
-```
-
-#### Address Tests
-```cpp
-// WRONG (Bitcoin addresses)
-BOOST_CHECK(IsValidDestinationString("1AGNa15ZQXAZUgFiqJ2i7Z2DPU2J6hW62i"));
-
-// CORRECT (DigiByte addresses from v8.22.2)
-BOOST_CHECK(IsValidDestinationString("DGSbdXzKqPNLBpPDWK7MXgXN45LxYvPqFD"));
-```
-
-#### Block/Transaction Hashes
-```cpp
-// ALWAYS use hashes from v8.22.2 tests
-// Genesis hash: 7497ea1b465eb39f1c8f507bc877078fe016d6fcb6dfad3a64c98dcc6e1e8680
-// Example: Check v8.22.2's test/data/tx_valid.json for valid transactions
-```
-
-#### Mining Tests
-```cpp
-// Must test all algorithms
-for (int algo = ALGO_SHA256D; algo <= ALGO_QUBIT; algo++) {
-    // Test each algorithm
-}
-// Don't forget ALGO_ODO = 7 for Odocrypt
-```
-
-#### Timing Tests
-```cpp
-// Bitcoin: 600 seconds (10 min)
-// DigiByte: 15 seconds
-consensus.nPowTargetSpacing = 15;
-```
-
-#### Difficulty Tests
-```cpp
-// DigiByte has 4 versions - test each at correct heights
-if (height < 145000) GetNextWorkRequiredV1(...);
-else if (height < 400000) GetNextWorkRequiredV2(...);
-// etc.
-```
-
-### 4. NEVER DO THIS
-```cpp
-// NEVER comment out failing tests
-// BOOST_AUTO_TEST_CASE(some_test) {  // <-- DON'T DO THIS
-
-// NEVER skip tests
-return; // <-- DON'T ADD THIS
-
-// NEVER change test logic to make it pass without understanding why
-```
-
-### 5. Document Every Fix
-```markdown
-## Test: [test_name]
-**File**: src/test/[filename].cpp
-**Failure**: [exact error message]
-**Root cause**: [Bitcoin assumption vs DigiByte reality]
-**Fix**: [what was changed]
-**v8.22.2 reference**: [file:line where correct value found]
-```
-
-## Quick Reference from v8.22.2
-
-```cpp
-// Critical DigiByte values (from v8.22.2)
+// Consensus  
 MAX_MONEY = 21000000000 * COIN
-P2PKH_PREFIX = 30  // 'D' addresses
-P2SH_PREFIX = 63   // 'S' addresses
 POW_TARGET_SPACING = 15
-COINBASE_MATURITY = 100
-COINBASE_MATURITY_2 = 8640
-NUM_ALGOS = 5
-ALGO_ODO = 7
 
-// Example valid DigiByte addresses (from v8.22.2 tests)
-"DGSbdXzKqPNLBpPDWK7MXgXN45LxYvPqFD"  // P2PKH
-"SfBbrV3yCGjKW52dac8Tgkvqd6zMgvPZFG"  // P2SH
+// Address Prefixes
+PUBKEY_ADDRESS = 30  // 'D'
+SCRIPT_ADDRESS = 63  // 'S'
+bech32_hrp = "dgb"
+
+// Mining Algorithms
+ALGO_SHA256D = 0
+ALGO_SCRYPT = 1
+ALGO_GROESTL = 2
+ALGO_SKEIN = 3
+ALGO_QUBIT = 4
+ALGO_ODO = 7  // Odocrypt
 ```
 
-## Verification
-
-```bash
-# After each fix
-make -j6 && ./src/test/test_digibyte --run_test=FIXED_TEST_NAME
-
-# Final check - must be 100%
-make check
-
-# No disabled tests allowed
-grep -r "DISABLED\|SKIP\|commented.*TEST" src/test/
+### Application Bug Reporting Format
+```markdown
+## APPLICATION BUG FIXED
+**File**: src/[filename].cpp:XXX
+**Test**: [test_file.cpp]::[test_name]
+**Issue**: [description]
+**Root Cause**: [Bitcoin v26.2 merge impact]
+**Fix Applied**: 
+```cpp
+// Code fix here
+```
+**Impact**: [consequence if unfixed]
+**Testing**: [how verified]
 ```
 
-**Remember: v8.22.2 tests are your source of truth for all DigiByte-specific values!**
+## C++ Unit Test Categorization for Parallel AI Assignment
 
-## C++ Unit Test Fix Plan - Systematic Approach
+**Total Test Files**: 107 C++ unit test files
+**Assignment Strategy**: Each AI agent gets a specific category to avoid conflicts
 
-### Test Status Overview
-After running `make check`, we have identified the following failing C++ unit tests:
+### Category 1: Address, Keys & Encoding Tests (9 files)
+**AI Agent 1 Assignment - Critical Foundation**
+- `key_io_tests.cpp` - DigiByte address/key validation
+- `key_tests.cpp` - Key generation and signing
+- `base58_tests.cpp` - Base58 encoding (addresses)
+- `base32_tests.cpp` - Base32 encoding
+- `base64_tests.cpp` - Base64 encoding
+- `bech32_tests.cpp` - Bech32 addresses (dgb1 prefix)
+- `bip32_tests.cpp` - HD wallet key derivation
+- `descriptor_tests.cpp` - Output descriptors
+- `compress_tests.cpp` - Amount compression (21B supply)
 
-**Total Failing Test Files**: 6 confirmed
-**Total Test Failures**: ~2,227 individual test assertions
+### Category 2: Transaction & Script Tests (15 files)
+**AI Agent 2 Assignment - Transaction Processing**
+- `transaction_tests.cpp` - Transaction validation
+- `txvalidation_tests.cpp` - Transaction acceptance rules
+- `txvalidationcache_tests.cpp` - Validation caching
+- `script_tests.cpp` - Script interpreter
+- `script_p2sh_tests.cpp` - P2SH scripts
+- `script_segwit_tests.cpp` - SegWit scripts
+- `script_standard_tests.cpp` - Standard scripts
+- `script_parse_tests.cpp` - Script parsing
+- `scriptnum_tests.cpp` - Script number handling
+- `sighash_tests.cpp` - Signature hash computation
+- `sigopcount_tests.cpp` - Signature operation counting
+- `multisig_tests.cpp` - Multisignature scripts
+- `psbt_tests.cpp` - PSBT handling (if exists)
+- `txpackage_tests.cpp` - Package relay
+- `rbf_tests.cpp` - Replace-by-fee
 
-**Breakdown by Test File**:
-1. `coins_tests.cpp` - 1,651 failures (coins_cache_simulation_test)
-2. `bip324_tests.cpp` - 280 failures (packet_test_vectors)
-3. `key_io_tests.cpp` - 228 failures (address/key validation)
-4. `transaction_tests.cpp` - 46 failures (test_IsStandard)
-5. `compress_tests.cpp` - 1 failure (21 billion supply compression)
-6. `miner_tests.cpp` - 1 failure (multi-algo initialization)
-7. `blockfilter_index_tests.cpp` - 1 failure (genesis block sync)
+### Category 3: Mining & Consensus Tests (10 files)
+**AI Agent 3 Assignment - DigiByte Multi-Algo Mining**
+- `miner_tests.cpp` - Multi-algorithm mining
+- `pow_tests.cpp` - Proof of work (5 algorithms)
+- `blockchain_tests.cpp` - Blockchain utilities
+- `versionbits_tests.cpp` - Soft fork deployment
+- `validation_tests.cpp` - Consensus validation
+- `validation_block_tests.cpp` - Block validation
+- `validation_chainstate_tests.cpp` - Chainstate management
+- `validation_chainstatemanager_tests.cpp` - Chainstate manager
+- `validation_flush_tests.cpp` - Flush operations
+- `validationinterface_tests.cpp` - Validation callbacks
 
-These must be fixed systematically without commenting out tests or changing test logic without understanding.
+### Category 4: Network & P2P Tests (12 files)
+**AI Agent 4 Assignment - Network Protocol**
+- `net_tests.cpp` - Network layer
+- `netbase_tests.cpp` - Network utilities
+- `net_peer_eviction_tests.cpp` - Peer management
+- `bip324_tests.cpp` - V2 transport protocol
+- `i2p_tests.cpp` - I2P integration
+- `torcontrol_tests.cpp` - Tor integration
+- `sock_tests.cpp` - Socket handling
+- `httpserver_tests.cpp` - HTTP server
+- `rest_tests.cpp` - REST interface
+- `rpc_tests.cpp` - RPC interface
+- `denialofservice_tests.cpp` - DoS protection
+- `banman_tests.cpp` - Ban management
 
-### Failing Test Categories (Priority Order)
+### Category 5: Database & Storage Tests (11 files)
+**AI Agent 5 Assignment - Data Storage**
+- `coins_tests.cpp` - UTXO set management
+- `dbwrapper_tests.cpp` - Database wrapper
+- `flatfile_tests.cpp` - Flat file storage
+- `blockfilter_tests.cpp` - Compact block filters
+- `blockfilter_index_tests.cpp` - Block filter indexing
+- `txindex_tests.cpp` - Transaction indexing
+- `coinstatsindex_tests.cpp` - Coin statistics index
+- `blockencodings_tests.cpp` - Compact blocks
+- `blockmanager_tests.cpp` - Block storage management
+- `fs_tests.cpp` - Filesystem operations
+- `streams_tests.cpp` - Data streams
 
-Based on comprehensive testing with `make check`, here are ALL failing C++ unit test files:
+### Category 6: Memory Pool Tests (8 files)
+**AI Agent 6 Assignment - Mempool Management**
+- `mempool_tests.cpp` - Memory pool logic
+- `miniminer_tests.cpp` - Mini miner for mempool
+- `policy_fee_tests.cpp` - Fee policies
+- `policyestimator_tests.cpp` - Fee estimation
+- `txrequest_tests.cpp` - Transaction requests
+- `txreconciliation_tests.cpp` - Transaction reconciliation
+- `orphanage_tests.cpp` - Orphan transactions
+- `pool_tests.cpp` - Memory pool utilities
 
-#### Category 1: Address & Key Format Tests (HIGH PRIORITY)
-**Files**: 
-- `src/test/key_io_tests.cpp` (228 failures)
+### Category 7: Crypto & Hash Tests (8 files)
+**AI Agent 7 Assignment - Cryptography**
+- `crypto_tests.cpp` - Cryptographic functions
+- `hash_tests.cpp` - Hash functions (including DigiByte algos)
+- `bloom_tests.cpp` - Bloom filters
+- `merkle_tests.cpp` - Merkle trees
+- `merkleblock_tests.cpp` - Merkle blocks
+- `pmt_tests.cpp` - Partial merkle trees
+- `muhash_tests.cpp` - MuHash for UTXO set (if exists)
+- `siphash_tests.cpp` - SipHash (if exists)
 
-**Issues**:
-- Bitcoin address prefixes vs DigiByte prefixes (D=30, S=63)
-- Bech32 prefix differences (dgb1/dgbt1/dgbrt1 vs bc1/tb1/bcrt1)
-- Private key WIF format differences
-- Test/Regtest/Signet address formats need DigiByte equivalents
+### Category 8: Utility & System Tests (15 files)
+**AI Agent 8 Assignment - Core Utilities**
+- `util_tests.cpp` - General utilities
+- `util_threadnames_tests.cpp` - Thread naming
+- `system_tests.cpp` - System utilities
+- `argsman_tests.cpp` - Argument parsing
+- `getarg_tests.cpp` - Command line arguments
+- `settings_tests.cpp` - Settings management
+- `logging_tests.cpp` - Logging system
+- `random_tests.cpp` - Random number generation
+- `sync_tests.cpp` - Synchronization primitives
+- `scheduler_tests.cpp` - Task scheduling
+- `reverselock_tests.cpp` - Lock utilities
+- `translation_tests.cpp` - Translation system
+- `interfaces_tests.cpp` - Interface boundaries
+- `result_tests.cpp` - Result type handling
+- `timedata_tests.cpp` - Time adjustment
 
-**Fix Approach**:
-1. Update all address prefixes in chainparams.cpp for all networks
-2. Update bech32 HRP (Human Readable Part) strings
-3. Verify against v8.22.2 test vectors
-4. Update test data files (key_io_valid.json, key_io_invalid.json)
+### Category 9: Data Structure Tests (12 files)
+**AI Agent 9 Assignment - Core Data Structures**
+- `uint256_tests.cpp` - 256-bit integers
+- `arith_uint256_tests.cpp` - Arithmetic on uint256
+- `amount_tests.cpp` - CAmount handling (21B supply)
+- `prevector_tests.cpp` - Optimized vector
+- `skiplist_tests.cpp` - Skip list implementation
+- `limitedmap_tests.cpp` - Size-limited map
+- `cuckoocache_tests.cpp` - Cuckoo cache
+- `allocator_tests.cpp` - Memory allocation
+- `serialize_tests.cpp` - Serialization
+- `serfloat_tests.cpp` - Float serialization
+- `bswap_tests.cpp` - Byte swapping
+- `compilerbug_tests.cpp` - Compiler workarounds
 
-#### Category 2: Supply & Amount Tests (HIGH PRIORITY)
-**Files**: 
-- `src/test/compress_tests.cpp` (1 failure - TestPair(21000000000*COIN))
+### Category 10: Specialized Tests (remaining files)
+**AI Agent 10 Assignment - Miscellaneous**
+- `checkqueue_tests.cpp` - Parallel validation queue
+- `headers_sync_chainwork_tests.cpp` - Headers sync
+- `raii_event_tests.cpp` - RAII event handling
+- `miniscript_tests.cpp` - Miniscript
+- `minisketch_tests.cpp` - Set reconciliation
+- `xoroshiro128plusplus_tests.cpp` - PRNG
+- `sanity_tests.cpp` - Sanity checks
 
-**Issues**:
-- MAX_MONEY compression (21 billion DGB vs 21 million BTC)
-- Amount compression algorithm assumptions
+### Critical DigiByte-Specific Considerations
 
-**Fix Approach**:
-1. Update compression algorithm to handle larger MAX_MONEY
-2. Verify all amount-related constants match DigiByte
-3. Test edge cases around 21 billion supply limit
+Each AI agent must check for:
+1. **Address formats**: D/S prefixes, dgb1/dgbt1/dgbrt1 bech32
+2. **Supply**: 21 billion (not 21 million)
+3. **Block time**: 15 seconds (not 600)
+4. **Algorithms**: 5 mining algorithms + Odocrypt
+5. **Network magic**: DigiByte-specific values
+6. **Genesis block**: DigiByte genesis hash
+7. **Difficulty**: DigiSpeed adjustment
+8. **Dandelion++**: Privacy protocol integration
 
-#### Category 3: Transaction Validation Tests (HIGH PRIORITY)
-**Files**: 
-- `src/test/transaction_tests.cpp` (46 failures in test_IsStandard)
-
-**Issues**:
-- Dust limit differences (need DigiByte's dust threshold)
-- Standard transaction policy differences
-- OP_RETURN size limits
-- Witness transaction differences
-
-**Fix Approach**:
-1. Update dust threshold to DigiByte values
-2. Verify transaction standardness rules
-3. Check OP_RETURN relay limits
-4. Update test vectors with DigiByte transactions
-
-#### Category 4: Mining & Algorithm Tests (HIGH PRIORITY)
-**Files**: 
-- `src/test/miner_tests.cpp` (1 failure - "Algorithm 'sha256d' is not currently active")
-
-**Issues**:
-- Multi-algorithm mining not properly initialized
-- Algorithm activation heights
-- Block reward calculations
-- Algorithm-specific difficulty adjustments
-
-**Fix Approach**:
-1. Initialize all 5 mining algorithms in test setup
-2. Set correct algorithm activation heights
-3. Implement proper block reward schedule
-4. Test each algorithm's difficulty adjustment
-
-#### Category 5: UTXO & Coin Cache Tests (MEDIUM PRIORITY)
-**Files**: 
-- `src/test/coins_tests.cpp` (1651 failures in coins_cache_simulation_test)
-
-**Issues**:
-- Coin serialization format differences
-- Cache simulation with DigiByte parameters
-- UTXO database assumptions
-
-**Fix Approach**:
-1. Update coin serialization to match DigiByte format
-2. Adjust cache parameters for DigiByte's UTXO set
-3. Verify database format compatibility
-
-#### Category 6: Network Protocol Tests (MEDIUM PRIORITY)
-**Files**: 
-- `src/test/bip324_tests.cpp` (280 failures in packet_test_vectors)
-
-**Issues**:
-- Network magic bytes incorrect
-- Protocol version differences
-- Packet encryption test vectors
-
-**Fix Approach**:
-1. Update network magic bytes for all networks
-2. Set correct protocol versions
-3. Generate new test vectors with DigiByte parameters
-
-#### Category 7: Block Index Tests (MEDIUM PRIORITY)
-**Files**: 
-- `src/test/blockfilter_index_tests.cpp` (1 failure in blockfilter_index_initial_sync)
-
-**Issues**:
-- Genesis block hash differences
-- Checkpoint validation
-- Block height assumptions
-
-**Fix Approach**:
-1. Update genesis block parameters
-2. Verify checkpoint hashes
-3. Adjust height-based test assumptions
-
-#### Category 8: Other Failing Tests (LOW PRIORITY)
-**Files**: 
-- Additional test files may fail as we discover them during the fix process
-
-**Common Issues Across Tests**:
-- Block time (15s vs 600s)
-- Difficulty adjustment algorithms
-- Fork activation heights
-- Coinbase maturity differences
-
-**Fix Approach**:
-1. Systematically update all consensus parameters
-2. Verify against mainnet behavior
-3. Test edge cases around forks
-
-### Application Bug Discovery Protocol
-
-**IMPORTANT**: When fixing tests, we may discover bugs in the main application code. Follow this protocol:
-
-1. **Document the Bug**: Create a detailed report including:
-   - File and line number
-   - Expected behavior (from v8.22.2)
-   - Actual behavior in v8.26
-   - Impact assessment
-
-2. **Ask Permission**: Before fixing any application code:
-   ```
-   DISCOVERED APPLICATION BUG:
-   File: src/[filename].cpp:XXX
-   Issue: [description]
-   v8.22.2 behavior: [expected]
-   v8.26 behavior: [actual]
-   Proposed fix: [solution]
-   
-   May I proceed with fixing this application bug?
-   ```
-
-3. **Only Fix Tests**: Unless explicitly approved, only modify test files
+### Execution Rules for Each AI Agent
+1. Run only your assigned test files
+2. Fix one file completely before moving to next
+3. Always compare with v8.22.2 for DigiByte values
+4. Document all changes in detail
+5. Report any discovered application bugs (don't fix)
+6. Test each file: `./src/test/test_digibyte --run_test=TEST_NAME`
+7. Verify fix: File should pass 100% of its tests
 
 ### Missing v8.22.2 Features Checklist
 
@@ -391,11 +262,19 @@ While fixing tests, actively look for missing DigiByte features:
 - [ ] Custom checkpoint logic
 - [ ] DigiByte-specific wallet features
 
+## Test Assignment Instructions
+
+1. Use `TEST_FIX_PROMPT_TEMPLATE.md` to create category-specific prompts
+2. Assign each AI agent ONE category from the list below
+3. Agents work independently on their assigned test files
+4. All fixes must preserve test logic - no disabling tests
+
 ## Important Reminders
 - Both Bitcoin and DigiByte copyrights must be preserved
 - NEVER comment out failing tests
 - ALWAYS verify fixes against v8.22.2 behavior
 - Document every change thoroughly
+- Fix application bugs when discovered
 
 
 ## DigiByte Unique Features

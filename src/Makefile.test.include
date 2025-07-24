@@ -74,7 +74,6 @@ DIGIBYTE_TESTS =\
   test/base64_tests.cpp \
   test/bech32_tests.cpp \
   test/bip32_tests.cpp \
-  test/bip324_tests.cpp \
   test/blockchain_tests.cpp \
   test/blockencodings_tests.cpp \
   test/blockfilter_index_tests.cpp \
@@ -123,7 +122,6 @@ DIGIBYTE_TESTS =\
   test/prevector_tests.cpp \
   test/raii_event_tests.cpp \
   test/random_tests.cpp \
-  test/rbf_tests.cpp \
   test/rest_tests.cpp \
   test/result_tests.cpp \
   test/reverselock_tests.cpp \
@@ -247,7 +245,6 @@ test_fuzz_fuzz_SOURCES = \
  test/fuzz/banman.cpp \
  test/fuzz/base_encode_decode.cpp \
  test/fuzz/bech32.cpp \
- test/fuzz/bip324.cpp \
  test/fuzz/bitdeque.cpp \
  test/fuzz/block.cpp \
  test/fuzz/block_header.cpp \
@@ -316,7 +313,6 @@ test_fuzz_fuzz_SOURCES = \
  test/fuzz/protocol.cpp \
  test/fuzz/psbt.cpp \
  test/fuzz/random.cpp \
- test/fuzz/rbf.cpp \
  test/fuzz/rolling_bloom_filter.cpp \
  test/fuzz/rpc.cpp \
  test/fuzz/script.cpp \

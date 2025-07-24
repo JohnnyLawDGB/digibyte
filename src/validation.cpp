@@ -433,45 +433,6 @@ static bool CheckInputsFromMempoolAndCache(const CTransaction& tx, TxValidationS
 
 namespace {
 
-// Custom CCoinsView that checks both mempool and stempool for Dandelion++
-class CCoinsViewBothPools : public CCoinsViewBacked
-{
-private:
-    const CTxMemPool& m_mempool;
-    const CTxMemPool& m_stempool;
-    
-public:
-    CCoinsViewBothPools(CCoinsView* baseIn, const CTxMemPool& mempoolIn, const CTxMemPool& stempoolIn) : 
-        CCoinsViewBacked(baseIn), m_mempool(mempoolIn), m_stempool(stempoolIn) {}
-    
-    bool GetCoin(const COutPoint &outpoint, Coin &coin) const override {
-        // First check the mempool
-        CTransactionRef ptx = m_mempool.get(outpoint.hash);
-        if (ptx) {
-            if (outpoint.n < ptx->vout.size()) {
-                coin = Coin(ptx->vout[outpoint.n], MEMPOOL_HEIGHT, false);
-                return true;
-            } else {
-                return false;
-            }
-        }
-        
-        // Then check the stempool
-        ptx = m_stempool.get(outpoint.hash);
-        if (ptx) {
-            if (outpoint.n < ptx->vout.size()) {
-                coin = Coin(ptx->vout[outpoint.n], MEMPOOL_HEIGHT, false);
-                return true;
-            } else {
-                return false;
-            }
-        }
-        
-        // Finally check the base
-        return base->GetCoin(outpoint, coin);
-    }
-};
-
 class MemPoolAccept
 {
 public:
@@ -479,19 +440,7 @@ public:
         m_pool(mempool),
         m_view(&m_dummy),
         m_viewmempool(&active_chainstate.CoinsTip(), m_pool),
-        m_active_chainstate(active_chainstate),
-        m_stempool(nullptr),
-        m_for_stempool(false)
-    {
-    }
-    
-    explicit MemPoolAccept(CTxMemPool& mempool, CTxMemPool& stempool, Chainstate& active_chainstate, bool for_stempool) :
-        m_pool(mempool),
-        m_view(&m_dummy),
-        m_viewmempool(&active_chainstate.CoinsTip(), m_pool),
-        m_active_chainstate(active_chainstate),
-        m_stempool(&stempool),
-        m_for_stempool(for_stempool)
+        m_active_chainstate(active_chainstate)
     {
     }
 
@@ -741,10 +690,6 @@ private:
     CCoinsView m_dummy;
 
     Chainstate& m_active_chainstate;
-    
-    // For Dandelion++ support
-    CTxMemPool* m_stempool;
-    bool m_for_stempool;
 
     /** Whether the transaction(s) would replace any mempool transactions. If so, RBF rules apply. */
     bool m_rbf{false};
@@ -831,14 +776,7 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
         }
     }
 
-    // For stempool validation with Dandelion, we need to check both pools
-    std::unique_ptr<CCoinsViewBothPools> bothPoolsView;
-    if (m_for_stempool && m_stempool) {
-        bothPoolsView = std::make_unique<CCoinsViewBothPools>(&m_active_chainstate.CoinsTip(), m_pool, *m_stempool);
-        m_view.SetBackend(*bothPoolsView);
-    } else {
-        m_view.SetBackend(m_viewmempool);
-    }
+    m_view.SetBackend(m_viewmempool);
 
     const CCoinsViewCache& coins_cache = m_active_chainstate.CoinsTip();
     // do all inputs exist?
@@ -1680,15 +1618,7 @@ MempoolAcceptResult AcceptToMemoryPool(Chainstate& active_chainstate, CTxMemPool
 
     std::vector<COutPoint> coins_to_uncache;
     auto args = MemPoolAccept::ATMPArgs::SingleAccept(chainparams, GetTime(), bypass_limits, coins_to_uncache, test_accept);
-    
-    // Check if this is for stempool and we need to consider both pools
-    CTxMemPool* mainpool = active_chainstate.GetMempool();
-    bool is_stempool = mainpool && (&pool != mainpool);
-    
-    MempoolAcceptResult result = is_stempool && mainpool ?
-        // For stempool, we need to check inputs from both pools
-        MemPoolAccept(*mainpool, pool, active_chainstate, true).AcceptSingleTransaction(tx, args) :
-        MemPoolAccept(pool, active_chainstate).AcceptSingleTransaction(tx, args);
+    MempoolAcceptResult result = MemPoolAccept(pool, active_chainstate).AcceptSingleTransaction(tx, args);
     if (result.m_result_type != MempoolAcceptResult::ResultType::VALID) {
         // Remove coins that were not present in the coins cache before calling
         // AcceptSingleTransaction(); this is to prevent memory DoS in case we receive a large

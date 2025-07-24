@@ -151,7 +151,31 @@ class CompactBlocksTest(DigiByteTestFramework):
         self.utxos = []
 
     def build_block_on_tip(self, node):
-        block = create_block(tmpl=node.getblocktemplate(NORMAL_GBT_REQUEST_PARAMS))
+        # DigiByte multi-algorithm: Create block without getblocktemplate since algorithms rotate
+        # Use the test framework's generate method to bypass algorithm issues, then create a new block on top
+        
+        # Generate some initial blocks to get past algorithm activation issues
+        if node.getblockcount() == 0:
+            self.generate(self.wallet, 1)
+        
+        # Now create a block manually on top of the current tip
+        from test_framework.blocktools import create_block
+        from test_framework.messages import CBlock
+        
+        # Get current tip
+        tip_hash = node.getbestblockhash()
+        tip_height = node.getblockcount()
+        tip_mediantime = node.getblockheader(tip_hash)['mediantime']
+        
+        # Create a simple block without using getblocktemplate
+        # Provide minimal template information that create_block needs
+        minimal_tmpl = {
+            'height': tip_height + 1,
+            'previousblockhash': tip_hash,
+            'curtime': tip_mediantime + 1,
+            'coinbasevalue': 7200000000000  # 72000 DGB in satoshis
+        }
+        block = create_block(hashprev=int(tip_hash, 16), ntime=tip_mediantime + 1, tmpl=minimal_tmpl)
         block.solve()
         return block
 

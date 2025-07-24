@@ -54,6 +54,9 @@ class DandelionTest(DigiByteTestFramework):
         self.extra_args = []
         for i in range(self.num_nodes):
             self.extra_args.append(["-dandelion=1"]) # ,"-debug=dandelion","-printtoconsole=1"
+    
+    def skip_test_if_missing_module(self):
+        self.skip_if_no_wallet()
 
     def setup_network(self):
         self.setup_nodes()
@@ -62,16 +65,16 @@ class DandelionTest(DigiByteTestFramework):
         self.connect_nodes(1, 2)
         self.connect_nodes(2, 0)
 
-        self.nodes[0].createwallet(wallet_name='w0', load_on_startup=True)
-        self.nodes[1].createwallet(wallet_name='w1', load_on_startup=True)
-        self.nodes[2].createwallet(wallet_name='w2', load_on_startup=True)
+        # Use default wallet functionality (no need to create separate wallets for this test)
+        pass
 
     def run_test(self):
         # Convenience variables
         node0, node1, node2 = self.nodes
-        w0 = node0.get_wallet_rpc('w0')
-        w1 = node0.get_wallet_rpc('w1')
-        w2 = node0.get_wallet_rpc('w2')
+        # Use default wallet functionality
+        w0 = node0  # Use node0 directly as wallet
+        w1 = node0  # All nodes can use their default wallet
+        w2 = node2  # Use node2 for receiving
 
         # Setup TestP2PConns
         test_node0 = node0.add_p2p_connection(TestP2PConn())

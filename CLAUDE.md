@@ -136,12 +136,12 @@ ALGO_ODO = 7  // Odocrypt
 - `validation_flush_tests.cpp` - Flush operations
 - `validationinterface_tests.cpp` - Validation callbacks
 
-### Category 4: Network & P2P Tests (12 files)
+### Category 4: Network & P2P Tests (12 files) - DONE
 **AI Agent 4 Assignment - Network Protocol**
 - `net_tests.cpp` - Network layer
 - `netbase_tests.cpp` - Network utilities
 - `net_peer_eviction_tests.cpp` - Peer management
-- `bip324_tests.cpp` - V2 transport protocol
+- `bip324_tests.cpp` - V2 transport protocol -SKIPPED
 - `i2p_tests.cpp` - I2P integration
 - `torcontrol_tests.cpp` - Tor integration
 - `sock_tests.cpp` - Socket handling

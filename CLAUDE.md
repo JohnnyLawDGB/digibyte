@@ -9,271 +9,486 @@ This file provides context and guidance for AI assistants working on the DigiByt
 - `/mnt/c/Users/Jared/code/bitcoin-v26.2-for-digibyte` (Bitcoin v26.2 reference)
 - `/mnt/c/Users/Jared/code/digibyte-v8.22.2` (DigiByte v8.22.2 - SOURCE OF TRUTH)
 
-## C++ Unit Test Fix Strategy
+## Python Functional Test Fix Strategy
 
 ### Overview
-We have 107 C++ unit test files that need fixing after the Bitcoin v26.2 merge. Tests are categorized into 10 groups for parallel AI assignment to avoid conflicts.
+We have 320 Python functional tests (243 unique test files) that need fixing after the Bitcoin v26.2 merge. Tests are failing due to DigiByte-specific differences in constants, RPC methods, and features. Currently only 1 test passes (rpc_bind.py --ipv4).
 
-### Build Process
+### Prerequisites
 ```bash
-./autogen.sh
-./configure --enable-tests --enable-bench --enable-debug CXXFLAGS="-O0 -g"
-make -j6
+# Install required Python module
+pip install --break-system-packages digibyte-scrypt
 ```
 
 ### Test Execution
 ```bash
 # Run individual test
-./src/test/test_digibyte --log_level=all --run_test=TEST_NAME
+./test/functional/test_name.py
 
-# Run all tests in a file
-./src/test/test_digibyte --log_level=all --run_test=TEST_FILE_WITHOUT_CPP
+# Run test with specific wallet type
+./test/functional/test_name.py --legacy-wallet
+./test/functional/test_name.py --descriptors
 ```
 
 ### Fix Methodology
 
 1. **Always Compare Three Codebases:**
    - v8.26 (current - what we're fixing)
-   - v8.22.2 (SOURCE OF TRUTH for DigiByte values)
+   - v8.22.2 (SOURCE OF TRUTH for DigiByte values if exists)
    - Bitcoin v26.2 (to understand what changed)
 
-2. **Common DigiByte Replacements:**
-   - MAX_MONEY: 21000000 → 21000000000 (21 billion)
-   - Block time: 600 → 15 seconds
-   - Addresses: 1.../3... → D.../S...
-   - Bech32: bc1/tb1/bcrt1 → dgb1/dgbt1/dgbrt1
-   - Single algo → 5 algorithms + Odocrypt
+2. **Common Failure Patterns:**
+   - RPC Method Not Found (-32601): Missing DigiByte-specific methods
+   - Assertion Failures: Wrong constants (fees, rewards, timing)
+   - Address Format Issues: Need DigiByte prefixes
+   - Import Errors: Missing test framework functions
 
 3. **Application Bug Protocol:**
    - Fix bugs in application code when discovered
    - Document thoroughly
    - Report using standardized format
 
-### Critical DigiByte Constants
-```cpp
-// Network
-MAINNET_DEFAULT_PORT = 12024
-MAINNET_MESSAGE_START = {0xfa, 0xc3, 0xb6, 0xda}
+### Critical DigiByte Test Constants
+```python
+# Network
+P2P_PORT = 12024  # Mainnet
+P2P_PORT_TESTNET = 12025
 
-// Consensus
-MAX_MONEY = 21000000000 * COIN
-POW_TARGET_SPACING = 15
+# Timing
+BLOCK_TIME = 15  # seconds
+COINBASE_MATURITY = 100
 
-// Address Prefixes
-PUBKEY_ADDRESS = 30  // 'D'
-SCRIPT_ADDRESS = 63  // 'S'
-bech32_hrp = "dgb"
+# Fees
+MIN_RELAY_FEE = Decimal('0.00001000')  # DGB/kB
 
-// Mining Algorithms
-ALGO_SHA256D = 0
-ALGO_SCRYPT = 1
-ALGO_GROESTL = 2
-ALGO_SKEIN = 3
-ALGO_QUBIT = 4
-ALGO_ODO = 7  // Odocrypt
+# Supply
+MAX_MONEY = 21000000000  # 21 billion DGB
+
+# Current block reward
+SUBSIDY = 72000  # DGB
+
+# Address prefixes (testnet)
+ADDRESS_BCTEST_UNSPENDABLE = 'swzkfmbaZb4KARFXeNvtECxhggYJnho4ud'
 ```
 
 ### Application Bug Reporting Format
 ```markdown
 ## APPLICATION BUG FIXED
 **File**: src/[filename].cpp:XXX
-**Test**: [test_file.cpp]::[test_name]
+**Test**: [test_name.py]::[function_name]
 **Issue**: [description]
 **Root Cause**: [Bitcoin v26.2 merge impact]
 **Fix Applied**:
-```cpp
-// Code fix here
+```python
+# Code fix here
 ```
 **Impact**: [consequence if unfixed]
 **Testing**: [how verified]
 ```
 
-## C++ Unit Test Categorization for Parallel AI Assignment
+## Python Functional Test Categorization for Parallel AI Assignment
 
-**Total Test Files**: 107 C++ unit test files
+**Total Test Files**: 320 tests (with variants) across 243 unique files
 **Assignment Strategy**: Each AI agent gets a specific category to avoid conflicts
 
-### Category 1: Address, Keys & Encoding Tests (9 files) -DONE
-**AI Agent 1 Assignment - Critical Foundation**
-- `key_io_tests.cpp` - DigiByte address/key validation
-- `key_tests.cpp` - Key generation and signing
-- `base58_tests.cpp` - Base58 encoding (addresses)
-- `base32_tests.cpp` - Base32 encoding
-- `base64_tests.cpp` - Base64 encoding
-- `bech32_tests.cpp` - Bech32 addresses (dgb1 prefix)
-- `bip32_tests.cpp` - HD wallet key derivation
-- `descriptor_tests.cpp` - Output descriptors
-- `compress_tests.cpp` - Amount compression (21B supply)
+### Category 1: P2P Network Tests (55 failing tests)
+**AI Agent 1 Assignment - Network Protocol & Dandelion++**
+- `p2p_dandelion.py` - Dandelion++ privacy (RPC method missing)
+- `p2p_segwit.py` - SegWit P2P (import error)
+- `p2p_compactblocks.py` - Compact blocks protocol
+- `p2p_timeouts.py` - Network timeouts
+- `p2p_tx_download.py` - Transaction download
+- `p2p_add_connections.py` - Connection management
+- `p2p_addr_relay.py` - Address relay
+- `p2p_addrfetch.py` - Address fetching
+- `p2p_addrv2_relay.py` - AddrV2 protocol
+- `p2p_block_sync.py` - Block synchronization
+- `p2p_block_sync.py --v2transport` - V2 transport
+- `p2p_blockfilters.py` - BIP157 filters
+- `p2p_blocksonly.py` - Blocks-only mode
+- `p2p_compactblocks_hb.py` - High bandwidth mode
+- `p2p_compactblocks_hb.py --v2transport` - V2 transport
+- `p2p_disconnect_ban.py` - Disconnect/ban behavior
+- `p2p_disconnect_ban.py --v2transport` - V2 transport
+- `p2p_dns_seeds.py` - DNS seed behavior
+- `p2p_dos_header_tree.py` - DoS protection
+- `p2p_eviction.py` - Peer eviction
+- `p2p_feefilter.py` - Fee filter
+- `p2p_filter.py` - Bloom filters
+- `p2p_fingerprint.py` - Node fingerprinting
+- `p2p_getaddr_caching.py` - GetAddr caching
+- `p2p_getdata.py` - GetData handling
+- `p2p_headers_sync_with_minchainwork.py` - Headers sync
+- `p2p_i2p_ports.py` - I2P port handling
+- `p2p_i2p_sessions.py` - I2P sessions
+- `p2p_ibd_stalling.py` - IBD stalling
+- `p2p_ibd_stalling.py --v2transport` - V2 transport
+- `p2p_ibd_txrelay.py` - IBD tx relay
+- `p2p_initial_headers_sync.py` - Initial headers
+- `p2p_invalid_block.py` - Invalid block handling
+- `p2p_invalid_block.py --v2transport` - V2 transport
+- `p2p_invalid_locator.py` - Invalid locators
+- `p2p_invalid_messages.py` - Invalid messages
+- `p2p_invalid_tx.py` - Invalid transactions
+- `p2p_invalid_tx.py --v2transport` - V2 transport
+- `p2p_leak.py` - Memory leaks
+- `p2p_leak_tx.py` - Transaction leaks
+- `p2p_leak_tx.py --v2transport` - V2 transport
+- `p2p_message_capture.py` - Message capture
+- `p2p_mutated_blocks.py` - Mutated blocks
+- `p2p_net_deadlock.py` - Network deadlocks
+- `p2p_net_deadlock.py --v2transport` - V2 transport
+- `p2p_nobloomfilter_messages.py` - No bloom filter
+- `p2p_node_network_limited.py` - Limited nodes
+- `p2p_orphan_handling.py` - Orphan handling
+- `p2p_permissions.py` - P2P permissions
+- `p2p_ping.py` - Ping/pong
+- `p2p_sendheaders.py` - SendHeaders
+- `p2p_sendtxrcncl.py` - TX reconciliation
+- `p2p_tx_privacy.py` - Transaction privacy
+- `p2p_unrequested_blocks.py` - Unrequested blocks
+- `p2p_v2_transport.py` - V2 transport protocol
 
-### Category 2: Transaction & Script Tests (15 files) -DONE
-**AI Agent 2 Assignment - Transaction Processing**
-- `transaction_tests.cpp` - Transaction validation
-- `txvalidation_tests.cpp` - Transaction acceptance rules
-- `txvalidationcache_tests.cpp` - Validation caching
-- `script_tests.cpp` - Script interpreter
-- `script_p2sh_tests.cpp` - P2SH scripts
-- `script_segwit_tests.cpp` - SegWit scripts
-- `script_standard_tests.cpp` - Standard scripts
-- `script_parse_tests.cpp` - Script parsing
-- `scriptnum_tests.cpp` - Script number handling
-- `sighash_tests.cpp` - Signature hash computation
-- `sigopcount_tests.cpp` - Signature operation counting
-- `multisig_tests.cpp` - Multisignature scripts
-- `psbt_tests.cpp` - PSBT handling (if exists)
-- `txpackage_tests.cpp` - Package relay
-- `rbf_tests.cpp` - Replace-by-fee -- SKIPPED
+### Category 2: Wallet Tests (114 failing tests) - LARGEST
+**AI Agent 2 Assignment - Wallet Functionality**
+Split into 2A and 2B due to size:
 
-### Category 3: Mining & Consensus Tests (10 files)
-**AI Agent 3 Assignment - DigiByte Multi-Algo Mining**
-- `miner_tests.cpp` - Multi-algorithm mining
-- `pow_tests.cpp` - Proof of work (5 algorithms)
-- `blockchain_tests.cpp` - Blockchain utilities
-- `versionbits_tests.cpp` - Soft fork deployment
-- `validation_tests.cpp` - Consensus validation
-- `validation_block_tests.cpp` - Block validation
-- `validation_chainstate_tests.cpp` - Chainstate management
-- `validation_chainstatemanager_tests.cpp` - Chainstate manager
-- `validation_flush_tests.cpp` - Flush operations
-- `validationinterface_tests.cpp` - Validation callbacks
+#### Subcategory 2A: Basic Wallet Tests (57 tests)
+- `wallet_miniscript.py --descriptors` - Miniscript support
+- `wallet_hd.py --descriptors` - HD derivation paths
+- `wallet_backup.py --descriptors` - Backup/restore
+- `wallet_basic.py --legacy-wallet` - Basic operations
+- `wallet_basic.py --descriptors` - Basic operations
+- `wallet_abandonconflict.py --legacy-wallet` - Abandon conflicts
+- `wallet_abandonconflict.py --descriptors` - Abandon conflicts
+- `wallet_address_types.py --legacy-wallet` - Address types
+- `wallet_address_types.py --descriptors` - Address types
+- `wallet_avoid_mixing_output_types.py --descriptors` - Output mixing
+- `wallet_avoidreuse.py --legacy-wallet` - Avoid reuse
+- `wallet_avoidreuse.py --descriptors` - Avoid reuse
+- `wallet_backup.py --legacy-wallet` - Backup/restore
+- `wallet_backwards_compatibility.py --legacy-wallet` - Compatibility
+- `wallet_backwards_compatibility.py --descriptors` - Compatibility
+- `wallet_balance.py --legacy-wallet` - Balance calculation
+- `wallet_balance.py --descriptors` - Balance calculation
+- `wallet_blank.py --legacy-wallet` - Blank wallet
+- `wallet_blank.py --descriptors` - Blank wallet
+- `wallet_bumpfee.py --legacy-wallet` - Fee bumping (x2 entries)
+- `wallet_bumpfee.py --descriptors` - Fee bumping (x2 entries)
+- `wallet_change_address.py --legacy-wallet` - Change addresses
+- `wallet_change_address.py --descriptors` - Change addresses
+- `wallet_coinbase_category.py --legacy-wallet` - Coinbase category
+- `wallet_coinbase_category.py --descriptors` - Coinbase category
+- `wallet_conflicts.py --legacy-wallet` - Conflict handling
+- `wallet_conflicts.py --descriptors` - Conflict handling
+- `wallet_create_tx.py --legacy-wallet` - Transaction creation
+- `wallet_create_tx.py --descriptors` - Transaction creation
+- `wallet_createwallet.py --legacy-wallet` - Wallet creation
+- `wallet_createwallet.py --descriptors` - Wallet creation
+- `wallet_createwallet.py --usecli` - CLI wallet creation
+- `wallet_crosschain.py` - Cross-chain detection
+- `wallet_descriptor.py --descriptors` - Descriptor wallets
+- `wallet_disable.py` - Disable wallet
+- `wallet_disable.py --legacy-wallet` - Disable wallet
+- `wallet_disable.py --descriptors` - Disable wallet
+- `wallet_dump.py --legacy-wallet` - Wallet dump
+- `wallet_encryption.py --legacy-wallet` - Encryption
+- `wallet_encryption.py --descriptors` - Encryption
+- `wallet_fallbackfee.py --legacy-wallet` - Fallback fee
+- `wallet_fallbackfee.py --descriptors` - Fallback fee
+- `wallet_fast_rescan.py --descriptors` - Fast rescan
+- `wallet_fee_estimation_test.py` - Fee estimation
+- `wallet_fundrawtransaction.py --legacy-wallet` - Fund raw tx
+- `wallet_fundrawtransaction.py --descriptors` - Fund raw tx
+- `wallet_groups.py --legacy-wallet` - Coin groups
+- `wallet_groups.py --descriptors` - Coin groups
+- `wallet_hd.py --legacy-wallet` - HD wallets
+- `wallet_implicitsegwit.py --legacy-wallet` - Implicit segwit
+- `wallet_import_rescan.py --legacy-wallet` - Import rescan (x2)
+- `wallet_import_with_label.py --legacy-wallet` - Import labels
+- `wallet_importdescriptors.py --descriptors` - Import descriptors
+- `wallet_importmulti.py --legacy-wallet` - Import multi
+- `wallet_importprunedfunds.py --legacy-wallet` - Import pruned
+- `wallet_importprunedfunds.py --descriptors` - Import pruned
 
-### Category 4: Network & P2P Tests (12 files) - DONE
-**AI Agent 4 Assignment - Network Protocol**
-- `net_tests.cpp` - Network layer
-- `netbase_tests.cpp` - Network utilities
-- `net_peer_eviction_tests.cpp` - Peer management
-- `bip324_tests.cpp` - V2 transport protocol -SKIPPED
-- `i2p_tests.cpp` - I2P integration
-- `torcontrol_tests.cpp` - Tor integration
-- `sock_tests.cpp` - Socket handling
-- `httpserver_tests.cpp` - HTTP server
-- `rest_tests.cpp` - REST interface
-- `rpc_tests.cpp` - RPC interface
-- `denialofservice_tests.cpp` - DoS protection
-- `banman_tests.cpp` - Ban management
+#### Subcategory 2B: Advanced Wallet Tests (57 tests)
+- `wallet_inactive_hdchains.py --legacy-wallet` - Inactive HD chains
+- `wallet_keypool.py --legacy-wallet` - Key pool
+- `wallet_keypool.py --descriptors` - Key pool
+- `wallet_keypool_topup.py --legacy-wallet` - Keypool topup
+- `wallet_keypool_topup.py --descriptors` - Keypool topup
+- `wallet_labels.py --legacy-wallet` - Label management
+- `wallet_labels.py --descriptors` - Label management
+- `wallet_listdescriptors.py --descriptors` - List descriptors
+- `wallet_listreceivedby.py --legacy-wallet` - List received
+- `wallet_listreceivedby.py --descriptors` - List received
+- `wallet_listsinceblock.py --legacy-wallet` - List since block
+- `wallet_listsinceblock.py --descriptors` - List since block
+- `wallet_listtransactions.py --legacy-wallet` - List transactions
+- `wallet_listtransactions.py --descriptors` - List transactions
+- `wallet_migration.py` - Wallet migration
+- `wallet_multisig_descriptor_psbt.py --descriptors` - Multisig PSBT
+- `wallet_multiwallet.py --legacy-wallet` - Multi-wallet
+- `wallet_multiwallet.py --descriptors` - Multi-wallet
+- `wallet_multiwallet.py --usecli` - Multi-wallet CLI
+- `wallet_orphanedreward.py` - Orphaned rewards
+- `wallet_pruning.py --legacy-wallet` - Wallet pruning
+- `wallet_reindex.py --legacy-wallet` - Reindex
+- `wallet_reindex.py --descriptors` - Reindex
+- `wallet_reorgsrestore.py` - Reorg restore
+- `wallet_rescan_unconfirmed.py --descriptors` - Rescan unconfirmed
+- `wallet_resendwallettransactions.py --legacy-wallet` - Resend txs
+- `wallet_resendwallettransactions.py --descriptors` - Resend txs
+- `wallet_send.py --legacy-wallet` - Send command
+- `wallet_send.py --descriptors` - Send command
+- `wallet_sendall.py --legacy-wallet` - Send all
+- `wallet_sendall.py --descriptors` - Send all
+- `wallet_sendmany_chain.py --legacy-wallet` - Send many
+- `wallet_sendmany_chain.py --descriptors` - Send many
+- `wallet_signer.py --descriptors` - External signer
+- `wallet_signmessagewithaddress.py` - Sign messages
+- `wallet_signrawtransactionwithwallet.py --legacy-wallet` - Sign raw tx
+- `wallet_signrawtransactionwithwallet.py --descriptors` - Sign raw tx
+- `wallet_simulaterawtx.py --legacy-wallet` - Simulate raw tx
+- `wallet_simulaterawtx.py --descriptors` - Simulate raw tx
+- `wallet_spend_unconfirmed.py` - Spend unconfirmed
+- `wallet_startup.py` - Wallet startup
+- `wallet_taproot.py` - Taproot wallet
+- `wallet_taproot.py --descriptors` - Taproot descriptors
+- `wallet_timelock.py` - Time locks
+- `wallet_transactiontime_rescan.py --legacy-wallet` - Tx time rescan
+- `wallet_transactiontime_rescan.py --descriptors` - Tx time rescan
+- `wallet_txn_clone.py` - Transaction cloning
+- `wallet_txn_clone.py --segwit` - SegWit cloning
+- `wallet_txn_clone.py --mineblock` - Clone with mining
+- `wallet_txn_doublespend.py --legacy-wallet` - Double spend
+- `wallet_txn_doublespend.py --descriptors` - Double spend
+- `wallet_txn_doublespend.py --mineblock` - Double spend mining
+- `wallet_upgradewallet.py --legacy-wallet` - Upgrade wallet
+- `wallet_watchonly.py --legacy-wallet` - Watch-only
+- `wallet_watchonly.py --usecli --legacy-wallet` - Watch-only CLI
 
-### Category 5: Database & Storage Tests (11 files)
-**AI Agent 5 Assignment - Data Storage**
-- `coins_tests.cpp` - UTXO set management
-- `dbwrapper_tests.cpp` - Database wrapper
-- `flatfile_tests.cpp` - Flat file storage
-- `blockfilter_tests.cpp` - Compact block filters
-- `blockfilter_index_tests.cpp` - Block filter indexing
-- `txindex_tests.cpp` - Transaction indexing
-- `coinstatsindex_tests.cpp` - Coin statistics index
-- `blockencodings_tests.cpp` - Compact blocks
-- `blockmanager_tests.cpp` - Block storage management
-- `fs_tests.cpp` - Filesystem operations
-- `streams_tests.cpp` - Data streams
+### Category 3: RPC Interface Tests (51 failing tests)
+**AI Agent 3 Assignment - RPC Commands**
+- `rpc_signer.py` - External signer RPC
+- `rpc_psbt.py --descriptors` - PSBT handling (x2 entries)
+- `rpc_psbt.py --legacy-wallet` - PSBT handling (x2 entries)
+- `rpc_packages.py` - Package RPC
+- `rpc_getblockreward.py` - DigiByte-specific RPC
+- `rpc_addresses_deprecation.py` - Address deprecation
+- `rpc_bind.py --ipv6` - IPv6 binding
+- `rpc_bind.py --nonloopback` - Non-loopback binding
+- `rpc_blockchain.py` - Blockchain RPCs
+- `rpc_blockchain.py --v2transport` - V2 transport
+- `rpc_createmultisig.py --legacy-wallet` - Create multisig
+- `rpc_createmultisig.py --descriptors` - Create multisig
+- `rpc_decodescript.py` - Decode script
+- `rpc_deprecated.py` - Deprecated RPCs
+- `rpc_deriveaddresses.py` - Derive addresses
+- `rpc_deriveaddresses.py --usecli` - CLI derive addresses
+- `rpc_dumptxoutset.py` - Dump UTXO set
+- `rpc_estimatefee.py` - Fee estimation
+- `rpc_generate.py` - Generate blocks
+- `rpc_generateblock.py` - Generate block
+- `rpc_getblockfilter.py` - Block filters
+- `rpc_getblockfrompeer.py` - Get block from peer
+- `rpc_getblockstats.py` - Block statistics
+- `rpc_getchaintips.py` - Chain tips
+- `rpc_getdescriptorinfo.py` - Descriptor info
+- `rpc_help.py` - Help system
+- `rpc_invalid_address_message.py` - Invalid addresses
+- `rpc_invalidateblock.py` - Invalidate block
+- `rpc_mempool_info.py` - Mempool info
+- `rpc_misc.py` - Miscellaneous RPCs
+- `rpc_named_arguments.py` - Named arguments
+- `rpc_net.py` - Network RPCs
+- `rpc_preciousblock.py` - Precious block
+- `rpc_rawtransaction.py --legacy-wallet` - Raw transactions
+- `rpc_rawtransaction.py --descriptors` - Raw transactions
+- `rpc_scanblocks.py` - Scan blocks
+- `rpc_scantxoutset.py` - Scan UTXO set
+- `rpc_setban.py` - Set ban
+- `rpc_signmessage.py` - Sign message
+- `rpc_signmessagewithprivkey.py` - Sign with privkey
+- `rpc_signrawtransaction.py --legacy-wallet` - Sign raw tx
+- `rpc_signrawtransaction.py --descriptors` - Sign raw tx
+- `rpc_signrawtransactionwithkey.py` - Sign with key
+- `rpc_txoutproof.py` - Transaction proofs
+- `rpc_uptime.py` - Uptime RPC
+- `rpc_users.py` - RPC users
+- `rpc_validateaddress.py` - Validate address
+- `rpc_whitelist.py` - RPC whitelist
+- NOTE: `rpc_bind.py --ipv4` PASSES (only passing test)
 
-### Category 6: Memory Pool Tests (8 files)
-**AI Agent 6 Assignment - Mempool Management**
-- `mempool_tests.cpp` - Memory pool logic
-- `miniminer_tests.cpp` - Mini miner for mempool
-- `policy_fee_tests.cpp` - Fee policies
-- `policyestimator_tests.cpp` - Fee estimation
-- `txrequest_tests.cpp` - Transaction requests
-- `txreconciliation_tests.cpp` - Transaction reconciliation
-- `orphanage_tests.cpp` - Orphan transactions
-- `pool_tests.cpp` - Memory pool utilities
+### Category 4: Mining Tests (3 failing tests)
+**AI Agent 4 Assignment - Multi-Algorithm Mining**
+- `mining_basic.py` - Basic mining (timeout - multi-algo issue)
+- `mining_getblocktemplate_longpoll.py` - Block template
+- `mining_prioritisetransaction.py` - Priority transactions
 
-### Category 7: Crypto & Hash Tests (8 files)
-**AI Agent 7 Assignment - Cryptography**
-- `crypto_tests.cpp` - Cryptographic functions
-- `hash_tests.cpp` - Hash functions (including DigiByte algos)
-- `bloom_tests.cpp` - Bloom filters
-- `merkle_tests.cpp` - Merkle trees
-- `merkleblock_tests.cpp` - Merkle blocks
-- `pmt_tests.cpp` - Partial merkle trees
-- `muhash_tests.cpp` - MuHash for UTXO set (if exists)
-- `siphash_tests.cpp` - SipHash (if exists)
+### Category 5: Mempool Tests (18 failing tests)
+**AI Agent 5 Assignment - Memory Pool Management**
+- `mempool_updatefromblock.py` - Update from block
+- `mempool_persist.py --descriptors` - Persistence
+- `mempool_limit.py` - Size limits (fee issue)
+- `mempool_resurrect.py` - Resurrect transactions
+- `mempool_spend_coinbase.py` - Spend coinbase
+- `mempool_accept.py` - Accept transactions
+- `mempool_accept_wtxid.py` - Accept by wtxid
+- `mempool_compatibility.py` - Compatibility
+- `mempool_datacarrier.py` - Data carrier
+- `mempool_dust.py` - Dust threshold
+- `mempool_expiry.py` - Expiration
+- `mempool_package_limits.py` - Package limits
+- `mempool_package_onemore.py` - Package onemore
+- `mempool_packages.py` - Package handling
+- `mempool_persist.py` - Persistence
+- `mempool_reorg.py` - Reorg handling
+- `mempool_sigoplimit.py` - Sigop limits
+- `mempool_unbroadcast.py` - Unbroadcast txs
 
-### Category 8: Utility & System Tests (15 files)
-**AI Agent 8 Assignment - Core Utilities**
-- `util_tests.cpp` - General utilities
-- `util_threadnames_tests.cpp` - Thread naming
-- `system_tests.cpp` - System utilities
-- `argsman_tests.cpp` - Argument parsing
-- `getarg_tests.cpp` - Command line arguments
-- `settings_tests.cpp` - Settings management
-- `logging_tests.cpp` - Logging system
-- `random_tests.cpp` - Random number generation
-- `sync_tests.cpp` - Synchronization primitives
-- `scheduler_tests.cpp` - Task scheduling
-- `reverselock_tests.cpp` - Lock utilities
-- `translation_tests.cpp` - Translation system
-- `interfaces_tests.cpp` - Interface boundaries
-- `result_tests.cpp` - Result type handling
-- `timedata_tests.cpp` - Time adjustment
+### Category 6: Feature Tests (62 failing tests) - LARGE
+**AI Agent 6 Assignment - Core Features & Consensus**
+Split into 6A and 6B due to size:
 
-### Category 9: Data Structure Tests (12 files)
-**AI Agent 9 Assignment - Core Data Structures**
-- `uint256_tests.cpp` - 256-bit integers
-- `arith_uint256_tests.cpp` - Arithmetic on uint256
-- `amount_tests.cpp` - CAmount handling (21B supply)
-- `prevector_tests.cpp` - Optimized vector
-- `skiplist_tests.cpp` - Skip list implementation
-- `limitedmap_tests.cpp` - Size-limited map
-- `cuckoocache_tests.cpp` - Cuckoo cache
-- `allocator_tests.cpp` - Memory allocation
-- `serialize_tests.cpp` - Serialization
-- `serfloat_tests.cpp` - Float serialization
-- `bswap_tests.cpp` - Byte swapping
-- `compilerbug_tests.cpp` - Compiler workarounds
+#### Subcategory 6A: Basic Feature Tests (31 tests)
+- `feature_fee_estimation.py` - Fee estimation (RPC missing)
+- `feature_taproot.py` - Taproot activation
+- `feature_block.py` - Block validation
+- `feature_segwit.py --legacy-wallet` - SegWit
+- `feature_segwit.py --descriptors` - SegWit
+- `feature_segwit.py --descriptors --v2transport` - SegWit V2
+- `feature_abortnode.py` - Abort node
+- `feature_addrman.py` - Address manager
+- `feature_anchors.py` - Anchor connections
+- `feature_asmap.py` - AS mapping
+- `feature_assumeutxo.py` - Assume UTXO
+- `feature_assumevalid.py` - Assume valid
+- `feature_backwards_compatibility.py --legacy-wallet` - Compatibility
+- `feature_backwards_compatibility.py --descriptors` - Compatibility
+- `feature_bind_extra.py` - Extra bind
+- `feature_bind_port_discover.py` - Port discovery
+- `feature_bind_port_externalip.py` - External IP
+- `feature_bip68_sequence.py` - BIP68 sequences
+- `feature_blockfilterindex_prune.py` - Filter index
+- `feature_blocksdir.py` - Blocks directory
+- `feature_cltv.py` - Check lock time
+- `feature_coinstatsindex.py` - Coin stats index
+- `feature_config_args.py` - Config arguments
+- `feature_csv_activation.py` - CSV activation
+- `feature_dbcrash.py` - Database crash
+- `feature_dersig.py` - DER signatures
+- `feature_dirsymlinks.py` - Directory symlinks
+- `feature_discover.py` - Peer discovery
+- `feature_fastprune.py` - Fast pruning
+- `feature_fee_estimator.py` - Fee estimator
+- `feature_filelock.py` - File locking
 
-### Category 10: Specialized Tests (remaining files)
-**AI Agent 10 Assignment - Miscellaneous**
-- `checkqueue_tests.cpp` - Parallel validation queue
-- `headers_sync_chainwork_tests.cpp` - Headers sync
-- `raii_event_tests.cpp` - RAII event handling
-- `miniscript_tests.cpp` - Miniscript
-- `minisketch_tests.cpp` - Set reconciliation
-- `xoroshiro128plusplus_tests.cpp` - PRNG
-- `sanity_tests.cpp` - Sanity checks
+#### Subcategory 6B: Advanced Feature Tests (31 tests)
+- `feature_help.py` - Help system
+- `feature_includeconf.py` - Include config
+- `feature_index_prune.py` - Index pruning
+- `feature_init.py` - Initialization
+- `feature_loadblock.py` - Load blocks
+- `feature_logging.py` - Logging system
+- `feature_maxtipage.py` - Max tip age
+- `feature_maxuploadtarget.py` - Upload target
+- `feature_minchainwork.py` - Min chain work
+- `feature_notifications.py` - Notifications
+- `feature_nulldummy.py` - Null dummy
+- `feature_nulldummy.py --legacy-wallet` - Null dummy
+- `feature_nulldummy.py --descriptors` - Null dummy
+- `feature_posix_fs_permissions.py` - FS permissions
+- `feature_presegwit_node_upgrade.py` - Pre-SegWit upgrade
+- `feature_proxy.py` - Proxy support
+- `feature_pruning.py` - Pruning
+- `feature_rbf.py` - Replace by fee
+- `feature_reindex.py` - Reindex
+- `feature_reindex_readonly.py` - Read-only reindex
+- `feature_remove_pruned_files_on_startup.py` - Remove pruned
+- `feature_settings.py` - Settings
+- `feature_shutdown.py` - Shutdown
+- `feature_signet.py` - Signet
+- `feature_startupnotify.py` - Startup notify
+- `feature_taproot.py --previous_release` - Taproot compat
+- `feature_txindex_compatibility.py` - Txindex compat
+- `feature_uacomment.py` - UA comment
+- `feature_unsupported_utxo_db.py` - UTXO DB
+- `feature_utxo_set_hash.py` - UTXO set hash
+- `feature_versionbits_warning.py` - Version bits
+
+### Category 7: Interface Tests (12 failing tests)
+**AI Agent 7 Assignment - External Interfaces**
+- `interface_digibyte_cli.py` - CLI interface (syntax error)
+- `interface_digibyte_cli.py --legacy-wallet` - CLI with wallet
+- `interface_digibyte_cli.py --descriptors` - CLI descriptors
+- `interface_rest.py` - REST API
+- `interface_http.py` - HTTP server
+- `interface_rpc.py` - RPC interface
+- `interface_usdt_coinselection.py` - USDT coin selection
+- `interface_usdt_mempool.py` - USDT mempool
+- `interface_usdt_net.py` - USDT network
+- `interface_usdt_utxocache.py` - USDT UTXO cache
+- `interface_usdt_validation.py` - USDT validation
+- `interface_zmq.py` - ZMQ interface (skipped - no module)
+
+### Category 8: Tool & Misc Tests (5 failing tests)
+**AI Agent 8 Assignment - Tools and Examples**
+- `tool_wallet.py --descriptors` - Wallet tool
+- `tool_signet_miner.py --descriptors` - Signet miner
+- `tool_wallet.py --legacy-wallet` - Wallet tool legacy
+- `tool_signet_miner.py --legacy-wallet` - Signet miner legacy
+- `example_test.py` - Test framework example
 
 ### Critical DigiByte-Specific Considerations
 
 Each AI agent must check for:
-1. **Address formats**: D/S prefixes, dgb1/dgbt1/dgbrt1 bech32
+1. **Address formats**: s... testnet prefixes, dgbt1... bech32
 2. **Supply**: 21 billion (not 21 million)
 3. **Block time**: 15 seconds (not 600)
-4. **Algorithms**: 5 mining algorithms + Odocrypt
-5. **Network magic**: DigiByte-specific values
-6. **Genesis block**: DigiByte genesis hash
-7. **Difficulty**: DigiSpeed adjustment
-8. **Dandelion++**: Privacy protocol integration
+4. **Fees**: 0.00001 DGB/kB (not 0.0001)
+5. **Block rewards**: 72000 DGB current reward
+6. **Algorithms**: 5 mining algorithms + Odocrypt
+7. **Dandelion++**: Privacy protocol implementation
+8. **Custom RPC**: getblockreward and enhanced commands
 
 ### Execution Rules for Each AI Agent
-1. Run only your assigned test files
-2. Fix one file completely before moving to next
-3. Always compare with v8.22.2 for DigiByte values
-4. Document all changes in detail
-5. Report any discovered application bugs (don't fix)
-6. Test each file: `./src/test/test_digibyte --run_test=TEST_NAME`
-7. Verify fix: File should pass 100% of its tests
+1. Use `PYTHON_TEST_FIX_PROMPT_TEMPLATE.md` for detailed instructions
+2. Run only your assigned test files
+3. Fix one test completely before moving to next
+4. Always compare with v8.22.2 for DigiByte behavior
+5. Document all application bugs found and fixed
+6. Test each file: `./test/functional/TEST_NAME.py`
+7. Verify fix: Test should pass completely
 
-### Missing v8.22.2 Features Checklist
+### Test Framework Fixes Already Applied
+1. Updated private keys to DigiByte testnet format
+2. Fixed address generation for dgbrt1 addresses
+3. Added digibyte_scrypt module requirement
+
+### Missing DigiByte Features Checklist
 
 While fixing tests, actively look for missing DigiByte features:
-- [ ] Dandelion++ implementation
-- [ ] Multi-algorithm mining setup
+- [ ] Dandelion++ RPC methods
+- [ ] Multi-algorithm mining in tests
 - [ ] Custom RPC commands (getblockreward, etc.)
 - [ ] DigiSpeed difficulty adjustment
 - [ ] Odocrypt algorithm activation
-- [ ] Custom checkpoint logic
-- [ ] DigiByte-specific wallet features
+- [ ] DigiByte-specific fee calculations
+- [ ] Enhanced getmininginfo/getdifficulty
 
 ## Test Assignment Instructions
 
-1. Use `TEST_FIX_PROMPT_TEMPLATE.md` to create category-specific prompts
-2. Assign each AI agent ONE category from the list below
+1. Use `PYTHON_TEST_FIX_PROMPT_TEMPLATE.md` to create category-specific prompts
+2. Assign each AI agent ONE category (split large categories)
 3. Agents work independently on their assigned test files
 4. All fixes must preserve test logic - no disabling tests
 
 ## Important Reminders
 - Both Bitcoin and DigiByte copyrights must be preserved
-- NEVER comment out failing tests
-- ALWAYS verify fixes against v8.22.2 behavior
-- Document every change thoroughly
+- NEVER skip failing tests without valid reason
+- ALWAYS verify fixes against expected DigiByte behavior
+- Document every change and bug fix thoroughly
 - Fix application bugs when discovered
 
 
@@ -341,3 +556,169 @@ DigiByte uses custom difficulty algorithms:
 # Check for linting issues
 ./test/lint/all-lint.sh
 ```
+
+## Python Functional Test Fix Strategy
+
+### Overview
+We have 320 Python functional tests (243 unique test files) that need fixing after the Bitcoin v26.2 merge. Tests are failing due to DigiByte-specific differences in constants, RPC methods, and features.
+
+### Prerequisites
+```bash
+# Install required Python module
+pip install --break-system-packages digibyte-scrypt
+```
+
+### Test Execution
+```bash
+# Run individual test
+./test/functional/test_name.py
+
+# Run test with specific wallet type
+./test/functional/test_name.py --legacy-wallet
+./test/functional/test_name.py --descriptors
+```
+
+### Common Failure Patterns
+
+1. **RPC Method Not Found (-32601)**
+   - Missing DigiByte-specific RPC methods (getblockreward, etc.)
+   - Dandelion++ related methods
+
+2. **Assertion Failures**
+   - Block reward: 72000 DGB (not Bitcoin's values)
+   - Fee rates: 0.00001 DGB/kB (not 0.0001)
+   - Block time: 15 seconds (not 600)
+   - Supply: 21 billion (not 21 million)
+
+3. **Address Format Issues**
+   - Testnet: s... prefixes (not m/n)
+   - Bech32: dgbt1... (not tb1)
+   - Mainnet: D.../S.../dgb1...
+
+4. **Import Errors**
+   - Missing or renamed test framework functions
+
+### Python Functional Test Categorization
+
+**Total Test Files**: 243 unique files (320 total with variants)
+**Assignment Strategy**: Each AI agent gets specific test categories
+
+#### Category 1: P2P Network Tests (55 tests)
+**AI Agent 1 Assignment - Network Protocol & Dandelion++**
+- Key tests: `p2p_dandelion.py` (DigiByte-specific)
+- Common issues: Network magic, Dandelion++ implementation
+- Sample failing tests:
+  - `p2p_dandelion.py` - Method not found
+  - `p2p_segwit.py` - Import error
+  - `p2p_compactblocks.py` - Protocol differences
+  - `p2p_timeouts.py` - Timing adjustments needed
+  - `p2p_tx_download.py` - Transaction handling
+
+#### Category 2: Wallet Tests (114 tests)
+**AI Agent 2 Assignment - Wallet Functionality**
+- Largest category with both legacy and descriptor wallets
+- Common issues: Address formats, HD paths, fees
+- Sample failing tests:
+  - `wallet_miniscript.py` - Descriptor issues
+  - `wallet_hd.py` - Derivation path differences
+  - `wallet_backup.py` - Balance assertions
+  - `wallet_basic.py` - Fee calculations
+  - `wallet_address_types.py` - DigiByte addresses
+
+#### Category 3: RPC Interface Tests (51 tests)
+**AI Agent 3 Assignment - RPC Commands**
+- Tests RPC interface and command responses
+- Common issues: Custom DigiByte RPC methods
+- Sample failing tests:
+  - `rpc_blockchain.py` - Multi-algo support needed
+  - `rpc_getblockreward.py` - DigiByte-specific
+  - `rpc_packages.py` - Transaction validation
+  - `rpc_psbt.py` - PSBT handling
+  - `rpc_signer.py` - Signing differences
+
+#### Category 4: Mining Tests (3 tests)
+**AI Agent 4 Assignment - Multi-Algorithm Mining**
+- Critical for DigiByte's 5 algorithms
+- Common issues: Multi-algo, block rewards, timing
+- All mining tests:
+  - `mining_basic.py` - Multi-algo support
+  - `mining_getblocktemplate_longpoll.py` - Template differences
+  - `mining_prioritisetransaction.py` - Priority handling
+
+#### Category 5: Mempool Tests (18 tests)
+**AI Agent 5 Assignment - Memory Pool Management**
+- Tests transaction pool behavior
+- Common issues: Fee rates, Dandelion++ effects
+- Sample failing tests:
+  - `mempool_updatefromblock.py` - Block handling
+  - `mempool_persist.py` - Persistence issues
+  - `mempool_limit.py` - Fee rate differences
+  - `mempool_resurrect.py` - Reorg handling
+  - `mempool_spend_coinbase.py` - Maturity rules
+
+#### Category 6: Feature Tests (62 tests)
+**AI Agent 6 Assignment - Core Features & Consensus**
+- Tests core functionality and features
+- Common issues: Consensus rules, activation heights
+- Sample failing tests:
+  - `feature_fee_estimation.py` - Fee algorithm
+  - `feature_taproot.py` - Activation differences
+  - `feature_block.py` - Block validation
+  - `feature_segwit.py` - SegWit rules
+  - `feature_rbf.py` - RBF implementation
+
+#### Category 7: Interface Tests (12 tests)
+**AI Agent 7 Assignment - External Interfaces**
+- Tests CLI, REST, ZMQ interfaces
+- Common issues: Output format, custom commands
+- Sample failing tests:
+  - `interface_digibyte_cli.py` - CLI syntax
+  - `interface_rest.py` - REST endpoints
+  - `interface_zmq.py` - ZMQ notifications
+  - `interface_rpc.py` - RPC interface
+  - `interface_http.py` - HTTP server
+
+#### Category 8: Tool & Misc Tests (5 tests)
+**AI Agent 8 Assignment - Tools and Examples**
+- Utility tools and example tests
+- All tests in category:
+  - `tool_wallet.py` - Wallet tool
+  - `tool_signet_miner.py` - Signet mining
+  - `example_test.py` - Test framework example
+  - Other miscellaneous tests
+
+### Critical DigiByte Test Constants
+```python
+# Network
+P2P_PORT = 12024  # Mainnet
+P2P_PORT_TESTNET = 12025
+
+# Timing
+BLOCK_TIME = 15  # seconds
+COINBASE_MATURITY = 100
+
+# Fees
+MIN_RELAY_FEE = Decimal('0.00001000')  # DGB/kB
+
+# Supply
+MAX_MONEY = 21000000000  # 21 billion DGB
+
+# Current block reward
+SUBSIDY = 72000  # DGB
+
+# Address prefixes (testnet)
+ADDRESS_BCTEST_UNSPENDABLE = 'swzkfmbaZb4KARFXeNvtECxhggYJnho4ud'
+```
+
+### Test Framework Fixes Applied
+1. Updated private keys to DigiByte testnet format
+2. Fixed address generation for dgbrt1 addresses
+3. Added digibyte_scrypt module requirement
+
+### Execution Rules for Each AI Agent
+1. Use `PYTHON_TEST_FIX_PROMPT_TEMPLATE.md` for detailed instructions
+2. Run only assigned test categories
+3. Fix tests systematically, not just assertions
+4. Compare with v8.22.2 behavior when available
+5. Document all application bugs found
+6. Preserve test logic and coverage

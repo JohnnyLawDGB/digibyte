@@ -73,7 +73,7 @@ TransactionError BroadcastTransaction(NodeContext& node, const CTransactionRef t
             if (max_tx_fee > 0) {
                 // First, call ATMP with test_accept and check the fee. If ATMP
                 // fails here, return error immediately.
-                const MempoolAcceptResult result = node.chainman->ProcessTransaction(tx, /*test_accept=*/ true);
+                const MempoolAcceptResult result = AcceptToMemoryPool(node.chainman->ActiveChainstate(), *node.mempool, tx, /*bypass_limits=*/false, /*test_accept=*/true);
                 if (result.m_result_type != MempoolAcceptResult::ResultType::VALID) {
                     return HandleATMPError(result.m_state, err_string);
                 } else if (result.m_base_fees.value() > max_tx_fee) {
@@ -81,7 +81,7 @@ TransactionError BroadcastTransaction(NodeContext& node, const CTransactionRef t
                 } else {
                     // Test acceptance to stempool for consistency with Dandelion routing
                     if (gArgs.GetBoolArg("-dandelion", DEFAULT_DANDELION)) {
-                        AcceptToMemoryPool(node.chainman->ActiveChainstate(), *node.stempool, tx, /*bypass_limits=*/true);
+                        AcceptToMemoryPool(node.chainman->ActiveChainstate(), *node.stempool, tx, /*bypass_limits=*/false, /*test_accept=*/true);
                     }
                 }
             }
@@ -97,10 +97,7 @@ TransactionError BroadcastTransaction(NodeContext& node, const CTransactionRef t
                 }
                 LogPrint(BCLog::DANDELION, "BroadcastTransaction: Successfully accepted transaction %s to stempool (poolsz %u txn, %u kB)\n",
                          txid.ToString(), node.stempool->size(), node.stempool->DynamicMemoryUsage() / 1000);
-                // Notify wallet about the transaction (similar to what ProcessTransaction does for mempool)
-                // This ensures the wallet knows the transaction was accepted
-                GetMainSignals().TransactionAddedToMempool(tx, 0);
-                LogPrint(BCLog::DANDELION, "BroadcastTransaction: Notified wallet about stempool transaction %s\n", txid.ToString());
+                // Don't notify wallet here - stempool transactions should remain separate until fluffed
             } else {
                 const MempoolAcceptResult result = node.chainman->ProcessTransaction(tx, /*test_accept=*/ false);
                 if (result.m_result_type != MempoolAcceptResult::ResultType::VALID) {
@@ -141,7 +138,7 @@ TransactionError BroadcastTransaction(NodeContext& node, const CTransactionRef t
     }
 
     if (relay) {
-        if (node.args->GetBoolArg("-dandelion", DEFAULT_DANDELION)) {
+        if (gArgs.GetBoolArg("-dandelion", DEFAULT_DANDELION)) {
             auto current_time = GetTime<std::chrono::milliseconds>();
             std::chrono::microseconds nEmbargo = DANDELION_EMBARGO_MINIMUM + PoissonNextSend(current_time, DANDELION_EMBARGO_AVG_ADD);
             node.connman->insertDandelionEmbargo(txid, nEmbargo);

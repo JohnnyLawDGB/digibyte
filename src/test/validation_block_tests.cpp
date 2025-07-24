@@ -69,9 +69,27 @@ std::shared_ptr<CBlock> MinerTestingSetup::Block(const uint256& prev_hash)
     static int i = 0;
     static uint64_t time = Params().GenesisBlock().nTime;
 
-    // Rotate through all algorithms
-    static const int algos[] = {ALGO_SHA256D, ALGO_SCRYPT, ALGO_GROESTL, ALGO_SKEIN, ALGO_QUBIT};
-    auto ptemplate = BlockAssembler{m_node.chainman->ActiveChainstate(), m_node.mempool.get()}.CreateNewBlock(CScript{} << i++ << OP_TRUE, algos[i % 5]);
+    // Determine which algorithm to use based on the current chain height
+    int algo = ALGO_SCRYPT; // Default to SCRYPT for early blocks
+    int nHeight = 0;
+    
+    {
+        LOCK(cs_main);
+        const CBlockIndex* pindexPrev = m_node.chainman->m_blockman.LookupBlockIndex(prev_hash);
+        if (pindexPrev) {
+            nHeight = pindexPrev->nHeight;
+            const auto& consensus = Params().GetConsensus();
+            
+            // Only use multi-algo after the activation height
+            if (nHeight >= consensus.multiAlgoDiffChangeTarget) {
+                // Rotate through all algorithms
+                static const int algos[] = {ALGO_SHA256D, ALGO_SCRYPT, ALGO_GROESTL, ALGO_SKEIN, ALGO_QUBIT};
+                algo = algos[i % 5];
+            }
+        }
+    }
+    
+    auto ptemplate = BlockAssembler{m_node.chainman->ActiveChainstate(), m_node.mempool.get()}.CreateNewBlock(CScript{} << i++ << OP_TRUE, algo);
     auto pblock = std::make_shared<CBlock>(ptemplate->block);
     pblock->hashPrevBlock = prev_hash;
     pblock->nTime = ++time;
@@ -86,7 +104,7 @@ std::shared_ptr<CBlock> MinerTestingSetup::Block(const uint256& prev_hash)
     txCoinbase.vout[0].nValue = 0;
     txCoinbase.vin[0].scriptWitness.SetNull();
     // Always pad with OP_0 at the end to avoid bad-cb-length error
-    txCoinbase.vin[0].scriptSig = CScript{} << WITH_LOCK(::cs_main, return m_node.chainman->m_blockman.LookupBlockIndex(prev_hash)->nHeight + 1) << OP_0;
+    txCoinbase.vin[0].scriptSig = CScript{} << (nHeight + 1) << OP_0;
     pblock->vtx[0] = MakeTransactionRef(std::move(txCoinbase));
 
     return pblock;
@@ -94,17 +112,19 @@ std::shared_ptr<CBlock> MinerTestingSetup::Block(const uint256& prev_hash)
 
 std::shared_ptr<CBlock> MinerTestingSetup::FinalizeBlock(std::shared_ptr<CBlock> pblock)
 {
-    LOCK(cs_main); // For m_node.chainman->m_blockman.LookupBlockIndex
     auto consensus = Params().GetConsensus();
     
     ADVANCE();
     pblock->nTime = GetTime();
 
-    const CBlockIndex* prev_block = m_node.chainman->m_blockman.LookupBlockIndex(pblock->hashPrevBlock);
-    m_node.chainman->GenerateCoinbaseCommitment(*pblock, prev_block);
+    {
+        LOCK(cs_main); // For m_node.chainman->m_blockman.LookupBlockIndex
+        const CBlockIndex* prev_block = m_node.chainman->m_blockman.LookupBlockIndex(pblock->hashPrevBlock);
+        m_node.chainman->GenerateCoinbaseCommitment(*pblock, prev_block);
 
-    CBlockHeader header = pblock->GetBlockHeader();
-    pblock->nBits = GetNextWorkRequired(prev_block, &header, consensus, pblock->GetAlgo());
+        CBlockHeader header = pblock->GetBlockHeader();
+        pblock->nBits = GetNextWorkRequired(prev_block, &header, consensus, pblock->GetAlgo());
+    }
 
     pblock->hashMerkleRoot = BlockMerkleRoot(*pblock);
 
@@ -352,6 +372,8 @@ BOOST_AUTO_TEST_CASE(witness_commitment_index)
     LOCK(Assert(m_node.chainman)->GetMutex());
     CScript pubKey;
     pubKey << 1 << OP_TRUE;
+    
+    // Use SCRYPT since this test runs on genesis (height 0) where only SCRYPT is active
     auto ptemplate = BlockAssembler{m_node.chainman->ActiveChainstate(), m_node.mempool.get()}.CreateNewBlock(pubKey, ALGO_SCRYPT);
     CBlock pblock = ptemplate->block;
 

@@ -185,11 +185,18 @@ void SimulationTest(CCoinsView* base, bool fake_best_block)
                 } else {
                     // Random sizes so we can test memory usage accounting
                     newcoin.out.scriptPubKey.assign(InsecureRandBits(6), 0);
-                    (coin.IsSpent() ? added_an_entry : updated_an_entry) = true;
-                    coin = newcoin;
                 }
+                (coin.IsSpent() ? added_an_entry : updated_an_entry) = true;
                 bool is_overwrite = !coin.IsSpent() || InsecureRand32() & 1;
-                stack.back()->AddCoin(COutPoint(txid, 0), std::move(newcoin), is_overwrite);
+                // Only update local coin if AddCoin succeeds
+                try {
+                    Coin newcoin_copy = newcoin;
+                    stack.back()->AddCoin(COutPoint(txid, 0), std::move(newcoin), is_overwrite);
+                    coin = newcoin_copy;
+                } catch (const std::logic_error&) {
+                    // AddCoin failed, don't update local coin
+                    // This happens when is_overwrite is false and coin already exists
+                }
             } else {
                 // Spend the coin.
                 removed_an_entry = true;

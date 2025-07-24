@@ -131,7 +131,7 @@ static void UpdateWalletSetting(interfaces::Chain& chain,
  */
 static void RefreshMempoolStatus(CWalletTx& tx, interfaces::Chain& chain)
 {
-    if (chain.isInMempool(tx.GetHash())) {
+    if (chain.isInMempool(tx.GetHash()) || chain.isInStempool(tx.GetHash())) {
         tx.m_state = TxStateInMempool();
     } else if (tx.state<TxStateInMempool>()) {
         tx.m_state = TxStateInactive();
@@ -2000,7 +2000,16 @@ bool CWallet::SubmitTxMemoryPoolAndRelay(CWalletTx& wtx, std::string& err_string
     // If transaction was previously in the mempool, it should be updated when
     // TransactionRemovedFromMempool fires.
     bool ret = chain().broadcastTransaction(wtx.tx, m_default_max_tx_fee, relay, err_string);
-    if (ret) wtx.m_state = TxStateInMempool{};
+    if (ret) {
+        wtx.m_state = TxStateInMempool{};
+        // Refresh status to ensure we have the correct state (mempool vs stempool)
+        RefreshMempoolStatus(wtx, chain());
+        if (gArgs.GetBoolArg("-dandelion", true)) {
+            WalletLogPrintf("SubmitTxMemoryPoolAndRelay: Transaction %s submitted for Dandelion routing, state=%s\n", 
+                           wtx.GetHash().ToString(), 
+                           wtx.state<TxStateInMempool>() ? "InMempool" : "NotInMempool");
+        }
+    }
     return ret;
 }
 

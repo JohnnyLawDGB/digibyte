@@ -15,7 +15,6 @@
 #include <random.h>
 #include <logging.h>
 #include <common/args.h>
-#include <primitives/transaction.h>
 
 #include <future>
 
@@ -69,12 +68,6 @@ TransactionError BroadcastTransaction(NodeContext& node, const CTransactionRef t
             // The mempool transaction may have the same or different witness (and
             // wtxid) as this transaction. Use the mempool's wtxid for reannouncement.
             wtxid = mempool_tx->GetWitnessHash();
-        } else if (gArgs.GetBoolArg("-dandelion", DEFAULT_DANDELION) && node.stempool && node.stempool->exists(GenTxid::Txid(txid))) {
-            // Transaction is already in stempool for Dandelion routing
-            LogPrint(BCLog::DANDELION, "BroadcastTransaction: Transaction %s already in stempool, skipping resubmit\n", txid.ToString());
-            // For Dandelion transactions already in stempool, we don't need to do anything else
-            // The embargo and routing are already set up from the first submission
-            return TransactionError::OK;
         } else {
             // Transaction is not already in the mempool.
             if (max_tx_fee > 0) {

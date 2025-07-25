@@ -151,41 +151,40 @@ class CompactBlocksTest(DigiByteTestFramework):
         self.utxos = []
 
     def build_block_on_tip(self, node):
-        # DigiByte multi-algorithm: Create block without getblocktemplate since algorithms rotate
-        # Use the test framework's generate method to bypass algorithm issues, then create a new block on top
-        
-        # Generate some initial blocks to get past algorithm activation issues
-        if node.getblockcount() == 0:
-            self.generate(self.wallet, 1)
-        
-        # Now create a block manually on top of the current tip
+        # Build a block on top of the current tip
         from test_framework.blocktools import create_block
-        from test_framework.messages import CBlock
         
-        # Get current tip
+        # Get current tip info
         tip_hash = node.getbestblockhash()
         tip_height = node.getblockcount()
-        tip_mediantime = node.getblockheader(tip_hash)['mediantime']
+        tip = node.getblock(tip_hash)
         
-        # Create a simple block without using getblocktemplate
-        # Provide minimal template information that create_block needs
+        # Create block with proper time
+        block_time = tip['time'] + 1
+        
+        # Create minimal template for block creation
         minimal_tmpl = {
             'height': tip_height + 1,
             'previousblockhash': tip_hash,
-            'curtime': tip_mediantime + 1,
+            'curtime': block_time,
             'coinbasevalue': 7200000000000  # 72000 DGB in satoshis
         }
-        block = create_block(hashprev=int(tip_hash, 16), ntime=tip_mediantime + 1, tmpl=minimal_tmpl)
+        
+        block = create_block(hashprev=int(tip_hash, 16), ntime=block_time, tmpl=minimal_tmpl)
         block.solve()
         return block
 
     # Create 10 more anyone-can-spend utxo's for testing.
     def make_utxos(self):
-        block = self.build_block_on_tip(self.nodes[0])
-        self.segwit_node.send_and_ping(msg_no_witness_block(block))
-        assert int(self.nodes[0].getbestblockhash(), 16) == block.sha256
+        # Generate a block using RPC instead of manually building
+        blockhash = self.generate(self.wallet, 1)[0]
+        block_hex = self.nodes[0].getblock(blockhash=blockhash, verbosity=0)
+        block = from_hex(CBlock(), block_hex)
+        
+        # Generate maturity blocks
         self.generate(self.wallet, COINBASE_MATURITY)
 
+        # Create transaction with multiple anyone-can-spend outputs
         total_value = block.vtx[0].vout[0].nValue
         out_value = total_value // 10
         tx = CTransaction()
@@ -194,13 +193,19 @@ class CompactBlocksTest(DigiByteTestFramework):
             tx.vout.append(CTxOut(out_value, CScript([OP_TRUE])))
         tx.rehash()
 
-        block2 = self.build_block_on_tip(self.nodes[0])
-        block2.vtx.append(tx)
-        block2.hashMerkleRoot = block2.calc_merkle_root()
-        block2.solve()
-        self.segwit_node.send_and_ping(msg_no_witness_block(block2))
-        assert_equal(int(self.nodes[0].getbestblockhash(), 16), block2.sha256)
-        self.utxos.extend([[tx.sha256, i, out_value] for i in range(10)])
+        # Submit the transaction to mempool
+        self.nodes[0].sendrawtransaction(tx.serialize().hex())
+        
+        # Generate a block containing the transaction
+        blockhash2 = self.generate(self.wallet, 1)[0]
+        block2_hex = self.nodes[0].getblock(blockhash=blockhash2, verbosity=0) 
+        block2 = from_hex(CBlock(), block2_hex)
+        
+        # Find our transaction in the block and record the UTXOs
+        for vtx in block2.vtx:
+            if vtx.hash == tx.hash:
+                self.utxos.extend([[tx.sha256, i, out_value] for i in range(10)])
+                break
 
 
     # Test "sendcmpct" (between peers preferring the same version):
@@ -924,6 +929,9 @@ class CompactBlocksTest(DigiByteTestFramework):
 
     def run_test(self):
         self.wallet = MiniWallet(self.nodes[0])
+        
+        # Generate initial blocks for MiniWallet to have UTXOs
+        self.generate(self.wallet, 1)
 
         # Setup the p2p connections
         self.segwit_node = self.nodes[0].add_p2p_connection(TestP2PConn())

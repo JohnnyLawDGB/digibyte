@@ -30,8 +30,7 @@ class P2PCompactBlocksBlocksOnly(DigiByteTestFramework):
 
     def setup_network(self):
         self.setup_nodes()
-        # Start network with everyone disconnected
-        self.sync_all()
+        # Don't connect nodes yet
 
     def build_block_on_tip(self):
         blockhash = self.generate(self.nodes[2], 1, sync_fun=self.no_op)[0]
@@ -41,6 +40,24 @@ class P2PCompactBlocksBlocksOnly(DigiByteTestFramework):
         return block
 
     def run_test(self):
+        # Generate enough blocks to get out of IBD and sync all nodes
+        from test_framework.wallet import MiniWallet
+        self.miniwallet = MiniWallet(self.nodes[2])
+        
+        # Temporarily connect nodes to sync initial blocks
+        self.connect_nodes(0, 1)
+        self.connect_nodes(1, 2)
+        self.connect_nodes(2, 3)
+        
+        # Generate blocks and sync
+        self.generate(self.miniwallet, 10)
+        self.sync_all()
+        
+        # Now disconnect all nodes as the test expects
+        self.disconnect_nodes(0, 1)
+        self.disconnect_nodes(1, 2) 
+        self.disconnect_nodes(2, 3)
+        
         # Nodes will only request hb compact blocks mode when they're out of IBD
         for node in self.nodes:
             assert not node.getblockchaininfo()['initialblockdownload']

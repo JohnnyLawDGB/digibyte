@@ -209,6 +209,7 @@ class WalletMiniscriptTest(DigiByteTestFramework):
 
     def set_test_params(self):
         self.num_nodes = 1
+        self.setup_clean_chain = True
 
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()
@@ -325,6 +326,11 @@ class WalletMiniscriptTest(DigiByteTestFramework):
     def run_test(self):
         self.log.info("Making a descriptor wallet")
         self.funder = self.nodes[0].get_wallet_rpc(self.default_wallet_name)
+        
+        # Generate some blocks to have funds available
+        self.log.info("Generating initial blocks for funding")
+        self.generatetoaddress(self.nodes[0], 101, self.funder.getnewaddress())
+        
         self.nodes[0].createwallet(
             wallet_name="ms_wo", descriptors=True, disable_private_keys=True
         )

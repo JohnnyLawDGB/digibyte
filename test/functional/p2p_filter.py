@@ -215,6 +215,9 @@ class FilterTest(DigiByteTestFramework):
 
     def run_test(self):
         self.wallet = MiniWallet(self.nodes[0])
+        
+        # Generate initial blocks for MiniWallet to have UTXOs
+        self.generate(self.wallet, 101)
 
         filter_peer = self.nodes[0].add_p2p_connection(P2PBloomFilter())
         self.log.info('Test filter size limits')

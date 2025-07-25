@@ -80,6 +80,10 @@ class FeeFilterTest(DigiByteTestFramework):
         node1 = self.nodes[1]
         node0 = self.nodes[0]
         miniwallet = MiniWallet(node1)
+        
+        # Generate initial blocks for MiniWallet to have UTXOs
+        self.generate(miniwallet, 101)
+        self.sync_all()
 
         conn = self.nodes[0].add_p2p_connection(TestP2PConn())
 

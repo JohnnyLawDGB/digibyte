@@ -239,8 +239,12 @@ class InvalidMessagesTest(DigiByteTestFramework):
     def test_oversized_msg(self, msg, size):
         msg_type = msg.msgtype.decode('ascii')
         self.log.info("Test {} message of size {} is logged as misbehaving".format(msg_type, size))
+        conn = self.nodes[0].add_p2p_connection(P2PInterface())
         with self.nodes[0].assert_debug_log(['Misbehaving', '{} message size = {}'.format(msg_type, size)]):
-            self.nodes[0].add_p2p_connection(P2PInterface()).send_and_ping(msg)
+            conn.send_message(msg)
+            # For oversized messages, DigiByte may disconnect immediately
+            # Don't use send_and_ping as it expects connection to remain
+            conn.wait_for_disconnect(timeout=5)
         self.nodes[0].disconnect_p2ps()
 
     def test_oversized_inv_msg(self):

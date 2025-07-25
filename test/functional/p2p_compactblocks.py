@@ -202,9 +202,14 @@ class CompactBlocksTest(DigiByteTestFramework):
         block2 = from_hex(CBlock(), block2_hex)
         
         # Find our transaction in the block and record the UTXOs
+        tx_hash = tx.sha256
+        if tx_hash is None:
+            tx.rehash()
+            tx_hash = tx.sha256
+        
         for vtx in block2.vtx:
-            if vtx.hash == tx.hash:
-                self.utxos.extend([[tx.sha256, i, out_value] for i in range(10)])
+            if vtx.sha256 == tx_hash:
+                self.utxos.extend([[tx_hash, i, out_value] for i in range(10)])
                 break
 
 

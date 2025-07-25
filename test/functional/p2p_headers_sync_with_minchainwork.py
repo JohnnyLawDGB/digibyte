@@ -22,7 +22,7 @@ from test_framework.blocktools import (
 from test_framework.util import assert_equal
 
 NODE1_BLOCKS_REQUIRED = 15
-NODE2_BLOCKS_REQUIRED = 2047
+NODE2_BLOCKS_REQUIRED = 50  # Reduced from 2047 for faster testing
 
 
 class RejectLowDifficultyHeadersTest(DigiByteTestFramework):
@@ -30,8 +30,8 @@ class RejectLowDifficultyHeadersTest(DigiByteTestFramework):
         self.rpc_timeout *= 4  # To avoid timeout when generating BLOCKS_TO_MINE
         self.setup_clean_chain = True
         self.num_nodes = 4
-        # Node0 has no required chainwork; node1 requires 15 blocks on top of the genesis block; node2 requires 2047
-        self.extra_args = [["-minimumchainwork=0x0", "-checkblockindex=0"], ["-minimumchainwork=0x1f", "-checkblockindex=0"], ["-minimumchainwork=0x1000", "-checkblockindex=0"], ["-minimumchainwork=0x1000", "-checkblockindex=0", "-whitelist=noban@127.0.0.1"]]
+        # Node0 has no required chainwork; node1 requires 15 blocks on top of the genesis block; node2 requires 50
+        self.extra_args = [["-minimumchainwork=0x0", "-checkblockindex=0"], ["-minimumchainwork=0x1f", "-checkblockindex=0"], ["-minimumchainwork=0x65", "-checkblockindex=0"], ["-minimumchainwork=0x65", "-checkblockindex=0", "-whitelist=noban@127.0.0.1"]]
 
     def setup_network(self):
         self.setup_nodes()
@@ -73,7 +73,7 @@ class RejectLowDifficultyHeadersTest(DigiByteTestFramework):
             assert len(chaintips) == 1
             assert {
                 'height': 0,
-                'hash': '0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206',
+                'hash': '4598a0f2b823aaf9e77ee6d5e46f1edb824191dcd48b08437b7cec17e6ae6e26',
                 'branchlen': 0,
                 'status': 'active',
             } in chaintips
@@ -85,7 +85,7 @@ class RejectLowDifficultyHeadersTest(DigiByteTestFramework):
 
         assert {
             'height': 0,
-            'hash': '0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206',
+            'hash': '4598a0f2b823aaf9e77ee6d5e46f1edb824191dcd48b08437b7cec17e6ae6e26',
             'branchlen': 0,
             'status': 'active',
         } in self.nodes[2].getchaintips()

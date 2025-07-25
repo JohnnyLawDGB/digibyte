@@ -228,7 +228,6 @@ class SegWitTest(DigiByteTestFramework):
             ["-acceptnonstdtxn=1", f"-testactivationheight=segwit@{SEGWIT_HEIGHT}", "-whitelist=noban@127.0.0.1", "-par=1", "-dandelion=0"],
             ["-acceptnonstdtxn=0", f"-testactivationheight=segwit@{SEGWIT_HEIGHT}", "-dandelion=0"],
         ]
-        self.supports_cli = False
     
     def add_options(self, parser):
         self.add_wallet_options(parser)

@@ -92,6 +92,7 @@ class P2PBloomFilter(P2PInterface):
 
 class FilterTest(DigiByteTestFramework):
     def set_test_params(self):
+        self.setup_clean_chain = True
         self.num_nodes = 1
         self.extra_args = [[
             '-peerbloomfilters',

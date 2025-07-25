@@ -24,6 +24,7 @@ from test_framework.util import assert_equal
 
 class P2PCompactBlocksBlocksOnly(DigiByteTestFramework):
     def set_test_params(self):
+        self.setup_clean_chain = True
         self.extra_args = [["-blocksonly"], [], [], []]
         self.num_nodes = 4
 

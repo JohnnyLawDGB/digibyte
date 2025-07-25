@@ -20,12 +20,14 @@ class P2PNode(P2PDataStore):
 
 class P2PLeakTxTest(DigiByteTestFramework):
     def set_test_params(self):
+        self.setup_clean_chain = True
         self.num_nodes = 1
 
     def run_test(self):
         self.gen_node = self.nodes[0]  # The block and tx generating node
         self.miniwallet = MiniWallet(self.gen_node)
-
+        # Generate initial blocks for the miniwallet
+        self.generate(self.miniwallet, 10)
         self.test_tx_in_block()
         self.test_notfound_on_replaced_tx()
         self.test_notfound_on_unannounced_tx()

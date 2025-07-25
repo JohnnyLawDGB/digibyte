@@ -45,6 +45,7 @@ class TestP2PConn(P2PInterface):
 
 class FeeFilterTest(DigiByteTestFramework):
     def set_test_params(self):
+        self.setup_clean_chain = True
         self.num_nodes = 2
         # We lower the various required feerates for this test
         # to catch a corner-case where feefilter used to slightly undercut

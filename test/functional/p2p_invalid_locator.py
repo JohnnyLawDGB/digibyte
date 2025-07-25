@@ -12,6 +12,7 @@ from test_framework.test_framework import DigiByteTestFramework
 
 class InvalidLocatorTest(DigiByteTestFramework):
     def set_test_params(self):
+        self.setup_clean_chain = True
         self.num_nodes = 1
 
     def run_test(self):

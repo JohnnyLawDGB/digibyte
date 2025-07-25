@@ -22,10 +22,13 @@ from test_framework.wallet import MiniWallet
 
 class P2PPermissionsTests(DigiByteTestFramework):
     def set_test_params(self):
+        self.setup_clean_chain = True
         self.num_nodes = 2
 
     def run_test(self):
         self.wallet = MiniWallet(self.nodes[0])
+        # Generate initial blocks for the miniwallet
+        self.generate(self.wallet, 10)
 
         self.check_tx_relay()
 

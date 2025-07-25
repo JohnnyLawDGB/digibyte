@@ -42,6 +42,7 @@ class AddrReceiver(P2PInterface):
 
 class AddrTest(DigiByteTestFramework):
     def set_test_params(self):
+        self.setup_clean_chain = True
         self.num_nodes = 1
         # Use some of the remaining p2p ports for the onion binds.
         self.onion_port1 = p2p_port(self.num_nodes)

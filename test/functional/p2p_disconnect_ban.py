@@ -14,6 +14,7 @@ from test_framework.util import (
 
 class DisconnectBanTest(DigiByteTestFramework):
     def set_test_params(self):
+        self.setup_clean_chain = True
         self.num_nodes = 2
         self.supports_cli = False
 

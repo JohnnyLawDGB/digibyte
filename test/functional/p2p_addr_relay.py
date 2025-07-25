@@ -88,6 +88,7 @@ class AddrTest(DigiByteTestFramework):
     mocktime = int(time.time())
 
     def set_test_params(self):
+        self.setup_clean_chain = True
         self.num_nodes = 1
         self.extra_args = [["-whitelist=addr@127.0.0.1"]]
 

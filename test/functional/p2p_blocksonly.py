@@ -15,11 +15,14 @@ from test_framework.wallet import MiniWallet
 
 class P2PBlocksOnly(DigiByteTestFramework):
     def set_test_params(self):
+        self.setup_clean_chain = True
         self.num_nodes = 1
         self.extra_args = [["-blocksonly"]]
 
     def run_test(self):
         self.miniwallet = MiniWallet(self.nodes[0])
+        # Generate initial blocks for the miniwallet to have UTXOs
+        self.generate(self.miniwallet, 10)
 
         self.blocksonly_mode_tests()
         self.blocks_relay_conn_tests()

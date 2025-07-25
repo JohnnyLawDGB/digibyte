@@ -13,6 +13,7 @@ from test_framework.test_framework import DigiByteTestFramework
 
 class I2PPorts(DigiByteTestFramework):
     def set_test_params(self):
+        self.setup_clean_chain = True
         self.num_nodes = 1
         # The test assumes that an I2P SAM proxy is not listening here.
         self.extra_args = [["-i2psam=127.0.0.1:60000"]]

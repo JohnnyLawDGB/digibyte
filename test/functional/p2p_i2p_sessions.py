@@ -11,6 +11,7 @@ from test_framework.test_framework import DigiByteTestFramework
 
 class I2PSessions(DigiByteTestFramework):
     def set_test_params(self):
+        self.setup_clean_chain = True
         self.num_nodes = 2
         # The test assumes that an I2P SAM proxy is not listening here.
         self.extra_args = [

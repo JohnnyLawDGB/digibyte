@@ -1625,7 +1625,9 @@ bool PeerManagerImpl::PushDandelionInventory(CNode* pnode, const CInv& inv)
     }
     
     LOCK(m_peer_mutex);
-    auto peer_ptr = GetPeerRef(pnode->GetId());
+    // Inline GetPeerRef logic to avoid double locking m_peer_mutex
+    auto it = m_peer_map.find(pnode->GetId());
+    auto peer_ptr = (it != m_peer_map.end()) ? it->second : nullptr;
     if (!peer_ptr) {
         LogPrint(BCLog::DANDELION, "PushDandelionInventory: peer %d not found\n", pnode->GetId());
         return false;

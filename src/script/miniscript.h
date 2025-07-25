@@ -1272,21 +1272,37 @@ private:
                 case Fragment::SHA256: {
                     std::vector<unsigned char> preimage;
                     Availability avail = ctx.SatSHA256(node.data, preimage);
+                    // If no preimage is available, the satisfaction must be INVALID, not an empty element
+                    if (avail != Availability::YES || preimage.empty()) {
+                        return {ZERO32, INVALID};
+                    }
                     return {ZERO32, InputStack(std::move(preimage)).SetAvailable(avail)};
                 }
                 case Fragment::RIPEMD160: {
                     std::vector<unsigned char> preimage;
                     Availability avail = ctx.SatRIPEMD160(node.data, preimage);
+                    // If no preimage is available, the satisfaction must be INVALID, not an empty element
+                    if (avail != Availability::YES || preimage.empty()) {
+                        return {ZERO32, INVALID};
+                    }
                     return {ZERO32, InputStack(std::move(preimage)).SetAvailable(avail)};
                 }
                 case Fragment::HASH256: {
                     std::vector<unsigned char> preimage;
                     Availability avail = ctx.SatHASH256(node.data, preimage);
+                    // If no preimage is available, the satisfaction must be INVALID, not an empty element
+                    if (avail != Availability::YES || preimage.empty()) {
+                        return {ZERO32, INVALID};
+                    }
                     return {ZERO32, InputStack(std::move(preimage)).SetAvailable(avail)};
                 }
                 case Fragment::HASH160: {
                     std::vector<unsigned char> preimage;
                     Availability avail = ctx.SatHASH160(node.data, preimage);
+                    // If no preimage is available, the satisfaction must be INVALID, not an empty element
+                    if (avail != Availability::YES || preimage.empty()) {
+                        return {ZERO32, INVALID};
+                    }
                     return {ZERO32, InputStack(std::move(preimage)).SetAvailable(avail)};
                 }
                 case Fragment::AND_V: {

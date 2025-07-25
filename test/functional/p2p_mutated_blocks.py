@@ -11,6 +11,8 @@ mutated blocks to clear in-flight blocktxn requests from other honest peers.
 from test_framework.p2p import P2PInterface
 from test_framework.messages import (
     BlockTransactions,
+    CBlock,
+    from_hex,
     msg_cmpctblock,
     msg_block,
     msg_blocktxn,
@@ -48,7 +50,12 @@ class MutatedBlocksTest(DigiByteTestFramework):
         # The self-transfer transaction is needed to trigger a compact block
         # `getblocktxn` roundtrip.
         tx = self.wallet.create_self_transfer()["tx"]
-        block = create_block(tmpl=self.nodes[0].getblocktemplate(NORMAL_GBT_REQUEST_PARAMS), txlist=[tx])
+        # For DigiByte multi-algorithm mining, we need to use generatetoaddress instead of getblocktemplate
+        # Generate a block that includes our transaction
+        self.nodes[0].sendrawtransaction(tx.serialize().hex())
+        blockhash = self.generate(self.wallet, 1)[0]
+        block_hex = self.nodes[0].getblock(blockhash, 0)
+        block = from_hex(CBlock(), block_hex)
         add_witness_commitment(block)
         block.solve()
 

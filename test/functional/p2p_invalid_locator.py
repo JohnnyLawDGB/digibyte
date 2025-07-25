@@ -17,7 +17,8 @@ class InvalidLocatorTest(DigiByteTestFramework):
 
     def run_test(self):
         node = self.nodes[0]  # convenience reference to the node
-        self.generatetoaddress(node, 1, node.get_deterministic_priv_key().address)  # Get node out of IBD
+        # Generate enough blocks to test with MAX_LOCATOR_SZ
+        self.generatetoaddress(node, MAX_LOCATOR_SZ + 10, node.get_deterministic_priv_key().address)
 
         self.log.info('Test max locator size')
         block_count = node.getblockcount()

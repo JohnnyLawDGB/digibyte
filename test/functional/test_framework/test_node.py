@@ -316,6 +316,8 @@ class TestNode():
 
     def generate(self, nblocks, maxtries=1000000, **kwargs):
         self.log.debug("TestNode.generate() dispatches `generate` call to `generatetoaddress`")
+        # Remove invalid_call from kwargs if present to avoid duplicate argument error
+        kwargs.pop('invalid_call', None)
         return self.generatetoaddress(nblocks=nblocks, address=self.get_deterministic_priv_key().address, maxtries=maxtries, invalid_call=False, **kwargs)
 
     def generateblock(self, *args, invalid_call, **kwargs):

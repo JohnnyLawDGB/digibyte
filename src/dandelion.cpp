@@ -52,8 +52,11 @@ CNode* CConnman::getDandelionDestination(CNode* pfrom)
 
 bool CConnman::localDandelionDestinationPushInventory(const CInv& inv)
 {
+    LogPrintf("localDandelionDestinationPushInventory called for %s\n", inv.ToString());
+    
     // Check if Dandelion is enabled
     if (!gArgs.GetBoolArg("-dandelion", DEFAULT_DANDELION)) {
+        LogPrintf("localDandelionDestinationPushInventory: Dandelion disabled\n");
         return false;
     }
     
@@ -62,22 +65,25 @@ bool CConnman::localDandelionDestinationPushInventory(const CInv& inv)
         LOCK(m_nodes_mutex);
         if (localDandelionDestination) {
             destination = localDandelionDestination;
+            LogPrintf("localDandelionDestinationPushInventory: Using existing destination peer=%d\n", destination->GetId());
         } else {
             // Try to set local destination
             localDandelionDestination = SelectFromDandelionDestinations();
             if (localDandelionDestination) {
-                LogPrint(BCLog::DANDELION, "Set local Dandelion destination: peer=%d\n", localDandelionDestination->GetId());
+                LogPrintf("Set local Dandelion destination: peer=%d\n", localDandelionDestination->GetId());
                 destination = localDandelionDestination;
             } else {
                 // No Dandelion destinations available yet
-                LogPrint(BCLog::DANDELION, "No Dandelion destinations available for %s\n", inv.ToString());
+                LogPrintf("No Dandelion destinations available for %s\n", inv.ToString());
             }
         }
     }
     
     if (destination && m_msgproc) {
+        LogPrintf("localDandelionDestinationPushInventory: Calling PushDandelionInventory for peer=%d\n", destination->GetId());
         return m_msgproc->PushDandelionInventory(destination, inv);
     }
+    LogPrintf("localDandelionDestinationPushInventory: No destination or msgproc\n");
     return false;
 }
 
@@ -326,6 +332,12 @@ bool CConnman::usingDandelion() const
 {
     LOCK(m_nodes_mutex);
     return vDandelionDestination.size() > 0;
+}
+
+CNode* CConnman::getLocalDandelionDestination() const
+{
+    LOCK(m_nodes_mutex);
+    return localDandelionDestination;
 }
 
 void CConnman::AddDandelionDestination(CNode* pnode)

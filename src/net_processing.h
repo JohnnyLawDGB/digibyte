@@ -123,6 +123,7 @@ public:
     virtual void RelayDandelionTransaction(const CTransaction& tx, CNode* pfrom) = 0;
     virtual void CheckDandelionEmbargoes() = 0;
     virtual bool PushDandelionInventory(CNode* pnode, const CInv& inv) = 0;
+    virtual void PushDandelionTransaction(const uint256& txid) = 0;
 };
 
 #endif // DIGIBYTE_NET_PROCESSING_H

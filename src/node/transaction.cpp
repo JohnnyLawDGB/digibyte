@@ -88,14 +88,14 @@ TransactionError BroadcastTransaction(NodeContext& node, const CTransactionRef t
             // Try to submit the transaction to the stempool only (if dandelion is enabled);
             if (gArgs.GetBoolArg("-dandelion", DEFAULT_DANDELION)) {
                 // Submit to stempool for Dandelion routing
-                LogPrint(BCLog::DANDELION, "BroadcastTransaction: Submitting transaction %s to stempool for Dandelion routing\n", txid.ToString());
+                LogPrintf("BroadcastTransaction: Dandelion enabled, submitting transaction %s to stempool\n", txid.ToString());
                 const MempoolAcceptResult result = AcceptToMemoryPool(node.chainman->ActiveChainstate(), *node.stempool, tx, /*bypass_limits=*/false);
                 if (result.m_result_type != MempoolAcceptResult::ResultType::VALID) {
-                    LogPrint(BCLog::DANDELION, "BroadcastTransaction: Failed to accept transaction %s to stempool: %s\n", 
+                    LogPrintf("BroadcastTransaction: Failed to accept transaction %s to stempool: %s\n", 
                              txid.ToString(), result.m_state.ToString());
                     return HandleATMPError(result.m_state, err_string);
                 }
-                LogPrint(BCLog::DANDELION, "BroadcastTransaction: Successfully accepted transaction %s to stempool (poolsz %u txn, %u kB)\n",
+                LogPrintf("BroadcastTransaction: Successfully accepted transaction %s to stempool (poolsz %u txn, %u kB)\n",
                          txid.ToString(), node.stempool->size(), node.stempool->DynamicMemoryUsage() / 1000);
                 // Don't notify wallet here - stempool transactions should remain separate until fluffed
             } else {
@@ -146,9 +146,28 @@ TransactionError BroadcastTransaction(NodeContext& node, const CTransactionRef t
             LogPrint(BCLog::DANDELION, "dandeliontx %s embargoed for %d seconds\n", txid.ToString(), embargo_timeout);
             CInv embargoTx(MSG_DANDELION_TX, txid);
             node.connman->localDandelionDestinationPushInventory(embargoTx);
+            
+            // Push the transaction immediately to the Dandelion destination
+            // This ensures it actually propagates during the stem phase
+            LogPrintf("BroadcastTransaction: Calling PushDandelionTransaction for %s\n", txid.ToString());
+            node.peerman->PushDandelionTransaction(txid);
+            
             return TransactionError::OK;
         }
         node.peerman->RelayTransaction(txid, wtxid);
+    } else if (gArgs.GetBoolArg("-dandelion", DEFAULT_DANDELION)) {
+        // For Dandelion, we need to set up the embargo and routing even when relay=false
+        // This happens during wallet startup when resubmitting transactions
+        auto current_time = GetTime<std::chrono::milliseconds>();
+        std::chrono::microseconds nEmbargo = DANDELION_EMBARGO_MINIMUM + PoissonNextSend(current_time, DANDELION_EMBARGO_AVG_ADD);
+        node.connman->insertDandelionEmbargo(txid, nEmbargo);
+        auto embargo_timeout = std::chrono::duration_cast<std::chrono::seconds>(nEmbargo - current_time).count();
+        LogPrint(BCLog::DANDELION, "dandeliontx %s embargoed for %d seconds (relay=false)\n", txid.ToString(), embargo_timeout);
+        CInv embargoTx(MSG_DANDELION_TX, txid);
+        node.connman->localDandelionDestinationPushInventory(embargoTx);
+        
+        LogPrintf("BroadcastTransaction: Calling PushDandelionTransaction for %s (relay=false)\n", txid.ToString());
+        node.peerman->PushDandelionTransaction(txid);
     }
 
     return TransactionError::OK;

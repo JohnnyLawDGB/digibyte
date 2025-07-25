@@ -6,6 +6,7 @@
 
 #include <addrman.h>
 #include <banman.h>
+#include <common/args.h>
 #include <blockencodings.h>
 #include <blockfilter.h>
 #include <chainparams.h>
@@ -532,6 +533,7 @@ public:
     void RelayDandelionTransaction(const CTransaction& tx, CNode* pfrom) override;
     void CheckDandelionEmbargoes() override;
     bool PushDandelionInventory(CNode* pnode, const CInv& inv) override EXCLUSIVE_LOCKS_REQUIRED(!m_peer_mutex);
+    void PushDandelionTransaction(const uint256& txid) override;
 
 private:
     /** Consider evicting an outbound peer based on the amount of time they've been behind our tip */
@@ -1587,6 +1589,12 @@ void PeerManagerImpl::RelayDandelionTransaction(const CTransaction& tx, CNode* p
     CNode* destination = m_connman.getDandelionDestination(pfrom);
     if (destination) {
         PushDandelionInventory(destination, inv);
+        
+        // Also send the transaction immediately
+        const CNetMsgMaker msgMaker(destination->GetCommonVersion());
+        m_connman.PushMessage(destination, msgMaker.Make(NetMsgType::DANDELIONTX, tx));
+        LogPrint(BCLog::DANDELION, "Relayed dandelion stem transaction %s to peer=%d\n", 
+                 tx.GetHash().ToString(), destination->GetId());
     }
 }
 
@@ -1594,14 +1602,21 @@ void PeerManagerImpl::CheckDandelionEmbargoes()
 {
     LOCK(m_connman.m_dandelion_embargo_mutex);
     auto current_time = GetTime<std::chrono::milliseconds>();
+    
+    // Log every time we check embargoes
+    if (!m_connman.mDandelionEmbargo.empty()) {
+        LogPrintf("CheckDandelionEmbargoes: Checking %d embargoed transactions\n", m_connman.mDandelionEmbargo.size());
+    }
+    
     for (auto iter = m_connman.mDandelionEmbargo.begin(); iter != m_connman.mDandelionEmbargo.end();) {
         if (m_mempool.exists(iter->first)) {
             LogPrint(BCLog::DANDELION, "Embargoed dandeliontx %s found in mempool; removing from embargo map\n", iter->first.ToString());
             iter = m_connman.mDandelionEmbargo.erase(iter);
         } else if (iter->second < current_time) {
-            LogPrint(BCLog::DANDELION, "dandeliontx %s embargo expired\n", iter->first.ToString());
+            LogPrintf("CheckDandelionEmbargoes: dandeliontx %s embargo expired\n", iter->first.ToString());
             CTransactionRef ptx = m_stempool.get(iter->first);
             if (ptx) {
+                LogPrintf("CheckDandelionEmbargoes: Moving transaction %s from stempool to mempool for broadcast\n", iter->first.ToString());
                 {
                     LOCK(cs_main);
                     AcceptToMemoryPool(m_chainman.ActiveChainstate(), m_mempool, ptx, false);
@@ -1609,9 +1624,14 @@ void PeerManagerImpl::CheckDandelionEmbargoes()
                 LogPrint(BCLog::MEMPOOL, "AcceptToMemoryPool: accepted %s (poolsz %u txn, %u kB)\n",
                                          iter->first.ToString(), m_mempool.size(), m_mempool.DynamicMemoryUsage() / 1000);
                 RelayTransaction(ptx->GetHash(), ptx->GetWitnessHash());
+            } else {
+                LogPrintf("CheckDandelionEmbargoes: Transaction %s not found in stempool!\n", iter->first.ToString());
             }
             iter = m_connman.mDandelionEmbargo.erase(iter);
         } else {
+            // Log remaining time
+            auto remaining = std::chrono::duration_cast<std::chrono::seconds>(iter->second - current_time).count();
+            LogPrint(BCLog::DANDELION, "Transaction %s embargo expires in %d seconds\n", iter->first.ToString(), remaining);
             iter++;
         }
     }
@@ -1641,11 +1661,26 @@ bool PeerManagerImpl::PushDandelionInventory(CNode* pnode, const CInv& inv)
     
     LOCK(tx_relay->m_tx_inventory_mutex);
     if (!tx_relay->m_tx_inventory_known_filter.contains(inv.hash)) {
-        tx_relay->setInventoryTxToSendOther.insert(inv);
-        LogPrint(BCLog::DANDELION, "Queued Dandelion inventory for peer %d: %s\n", pnode->GetId(), inv.ToString());
+        // For Dandelion transactions, use the proper vector
+        if (inv.IsDandelionMsg()) {
+            tx_relay->vInventoryDandelionTxToSend.push_back(inv.hash);
+            LogPrint(BCLog::DANDELION, "Queued Dandelion transaction %s for peer %d\n", inv.hash.ToString(), pnode->GetId());
+        } else {
+            tx_relay->setInventoryTxToSendOther.insert(inv);
+            LogPrint(BCLog::DANDELION, "Queued other inventory for peer %d: %s\n", pnode->GetId(), inv.ToString());
+        }
         return true;
     }
     return false;
+}
+
+void PeerManagerImpl::PushDandelionTransaction(const uint256& txid)
+{
+    LogPrintf("PushDandelionTransaction called for tx %s\n", txid.ToString());
+    
+    // This function is now just a placeholder - the actual sending happens in SendMessages
+    // when processing vInventoryDandelionTxToSend
+    LogPrintf("PushDandelionTransaction: transaction %s queued for Dandelion relay\n", txid.ToString());
 }
 
 void PeerManagerImpl::InitializeNode(CNode& node, ServiceFlags our_services)
@@ -3655,7 +3690,14 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 LOCK(tx_relay->m_bloom_filter_mutex);
                 tx_relay->m_relay_txs = fRelay; // set to true after we get the first filter* message
             }
-            if (fRelay) pfrom.m_relays_txs = true;
+            if (fRelay) {
+                pfrom.m_relays_txs = true;
+                // Send Dandelion discovery message if Dandelion is enabled
+                if (gArgs.GetBoolArg("-dandelion", DEFAULT_DANDELION)) {
+                    pfrom.m_send_dandelion_discovery = true;
+                    LogPrint(BCLog::DANDELION, "Scheduling Dandelion discovery for peer=%d\n", pfrom.GetId());
+                }
+            }
         }
 
         if (greatest_common_version >= WTXID_RELAY_VERSION && m_txreconciliation) {
@@ -3817,6 +3859,13 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
         pfrom.fSuccessfullyConnected = true;
         LogPrintf("DEBUG: VERACK processing completed successfully for peer=%d\n", pfrom.GetId());
+        
+        // Schedule Dandelion discovery message if Dandelion is enabled and peer can relay transactions
+        if (gArgs.GetBoolArg("-dandelion", DEFAULT_DANDELION) && pfrom.m_relays_txs) {
+            pfrom.m_send_dandelion_discovery = true;
+            LogPrint(BCLog::DANDELION, "Scheduling Dandelion discovery after VERACK for peer=%d\n", pfrom.GetId());
+        }
+        
         return;
     }
 
@@ -6057,6 +6106,19 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                             vInv.push_back(CInv(MSG_TX, hash));
                         } else {
                             vInv.push_back(CInv(MSG_DANDELION_TX, hash));
+                            
+                            // For Dandelion stem phase, send the actual transaction immediately
+                            // This is necessary because the transaction is embargoed and won't be
+                            // served via GETDATA during the embargo period
+                            CTransactionRef ptx = m_stempool.get(hash);
+                            if (ptx) {
+                                m_connman.PushMessage(pto, msgMaker.Make(NetMsgType::DANDELIONTX, *ptx));
+                                LogPrintf("SendMessages: Sent Dandelion transaction %s to peer=%d\n", 
+                                         hash.ToString(), pto->GetId());
+                            } else {
+                                LogPrintf("SendMessages: Dandelion transaction %s not found in stempool for peer=%d\n", 
+                                         hash.ToString(), pto->GetId());
+                            }
                         }
                         if (vInv.size() == MAX_INV_SZ) {
                             m_connman.PushMessage(pto, msgMaker.Make(NetMsgType::INV, vInv));

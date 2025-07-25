@@ -1673,6 +1673,7 @@ public:
     bool setLocalDandelionDestination();
     bool usingDandelion() const;
     CNode* getDandelionDestination(CNode* pfrom);
+    CNode* getLocalDandelionDestination() const;
     void AddDandelionDestination(CNode* pnode);
 
 private:

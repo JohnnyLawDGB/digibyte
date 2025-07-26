@@ -2905,15 +2905,8 @@ void CConnman::OpenNetworkConnection(const CAddress& addrConnect, bool fCountFai
         // Dandelion: new outbound connection
         if (gArgs.GetBoolArg("-dandelion", DEFAULT_DANDELION)) {
             vDandelionOutbound.push_back(pnode);
-            if (vDandelionDestination.size() < DANDELION_MAX_DESTINATIONS) {
-                vDandelionDestination.push_back(pnode);
-                // If we don't have a local destination yet, set this as the first one
-                if (!localDandelionDestination) {
-                    localDandelionDestination = pnode;
-                    LogPrint(BCLog::DANDELION, "Set peer=%d as initial local Dandelion destination\n", pnode->GetId());
-                }
-            }
-            LogPrint(BCLog::DANDELION, "Added outbound Dandelion connection: peer=%d, destinations=%d\n", pnode->GetId(), vDandelionDestination.size());
+            LogPrint(BCLog::DANDELION, "Added outbound Dandelion connection: peer=%d (will check for Dandelion support after handshake)\n", pnode->GetId());
+            // Don't add as destination yet - wait for discovery to confirm Dandelion support
         }
 
 

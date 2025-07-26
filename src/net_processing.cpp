@@ -1609,6 +1609,9 @@ void PeerManagerImpl::CheckDandelionEmbargoes()
         LogPrintf("CheckDandelionEmbargoes: Stempool size=%d, Mempool size=%d\n", m_stempool.size(), m_mempool.size());
     }
     
+    // Check if we now have Dandelion destinations available for stuck transactions
+    bool hasDandelionDestinations = m_connman.usingDandelion();
+    
     for (auto iter = m_connman.mDandelionEmbargo.begin(); iter != m_connman.mDandelionEmbargo.end();) {
         if (m_mempool.exists(iter->first)) {
             LogPrint(BCLog::DANDELION, "Embargoed dandeliontx %s found in mempool; removing from embargo map\n", iter->first.ToString());
@@ -1636,6 +1639,20 @@ void PeerManagerImpl::CheckDandelionEmbargoes()
             }
             iter = m_connman.mDandelionEmbargo.erase(iter);
         } else {
+            // Check if this is a transaction waiting for Dandelion peers
+            if (hasDandelionDestinations) {
+                CTransactionRef ptx = m_stempool.get(iter->first);
+                if (ptx) {
+                    // Try to route through Dandelion again
+                    CInv inv(MSG_DANDELION_TX, iter->first);
+                    bool pushed = m_connman.localDandelionDestinationPushInventory(inv);
+                    if (pushed) {
+                        LogPrintf("CheckDandelionEmbargoes: Retrying Dandelion routing for transaction %s\n", iter->first.ToString());
+                        PushDandelionTransaction(iter->first);
+                    }
+                }
+            }
+            
             // Log remaining time
             auto remaining = std::chrono::duration_cast<std::chrono::seconds>(iter->second - current_time).count();
             LogPrint(BCLog::DANDELION, "Transaction %s embargo expires in %d seconds\n", iter->first.ToString(), remaining);
@@ -2606,10 +2623,11 @@ void PeerManagerImpl::ProcessGetData(CNode& pfrom, Peer& peer, const std::atomic
 
         // Handle dandelion messages
         if (inv.IsDandelionMsg()) {
-            int nSendFlags = (inv.type == MSG_DANDELION_TX ? SERIALIZE_TRANSACTION_NO_WITNESS : 0);
+            // Check if witness serialization is requested
+            int nSendFlags = ((inv.type & MSG_WITNESS_FLAG) ? 0 : SERIALIZE_TRANSACTION_NO_WITNESS);
             // Possibly find the tx in the stempool
-            // For Dandelion messages, create GenTxid directly (not witness-aware)
-            auto txinfo = m_stempool.info(GenTxid::Txid(inv.hash));
+            // For Dandelion messages, create GenTxid based on witness flag
+            auto txinfo = m_stempool.info((inv.type & MSG_WITNESS_FLAG) ? GenTxid::Wtxid(inv.hash) : GenTxid::Txid(inv.hash));
 
             // Check for Dandelion service discovery
             if (inv.hash == DANDELION_DISCOVERYHASH) {
@@ -2640,9 +2658,15 @@ void PeerManagerImpl::ProcessGetData(CNode& pfrom, Peer& peer, const std::atomic
 
             // If not embargoed, proceed with normal "send the tx" if we actually have it
             if (txinfo.tx && tx_relay->setDandelionInventoryKnown.count(inv.hash) != 0) {
+                LogPrintf("ProcessGetData: Sending Dandelion transaction %s to peer=%d (witness=%s)\n", 
+                         inv.hash.ToString(), pfrom.GetId(), (inv.type & MSG_WITNESS_FLAG) ? "true" : "false");
                 m_connman.PushMessage(&pfrom, msgMaker.Make(nSendFlags, NetMsgType::DANDELIONTX, *txinfo.tx));
             } else {
                 // If we do not have it, or it's not known, respond with NOTFOUND
+                LogPrintf("ProcessGetData: Dandelion transaction %s not found for peer=%d (have_tx=%s, is_known=%s)\n", 
+                         inv.hash.ToString(), pfrom.GetId(), 
+                         txinfo.tx ? "true" : "false",
+                         tx_relay->setDandelionInventoryKnown.count(inv.hash) ? "true" : "false");
                 vNotFound.push_back(inv);
             }
             continue;
@@ -6170,13 +6194,22 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                                  tx_relay->m_relay_txs ? "true" : "false");
                     }
                     for (const uint256& hash : tx_relay->vInventoryDandelionTxToSend) {
-                        tx_relay->setDandelionInventoryKnown.insert(hash);
+                        // Get the transaction to determine the correct hash to use
+                        CTransactionRef ptx;
+                        uint256 known_hash = hash;
+                        if (hash != DANDELION_DISCOVERYHASH) {
+                            ptx = m_stempool.get(hash);
+                            if (ptx && peer->m_wtxid_relay) {
+                                known_hash = ptx->GetWitnessHash();
+                            }
+                        }
+                        tx_relay->setDandelionInventoryKnown.insert(known_hash);
+                        
                         if (!peer->fSupportsDandelion.load() && hash != DANDELION_DISCOVERYHASH) {
                             LogPrintf("SendMessages: Peer %d doesn't support Dandelion, sending as regular TX\n", pto->GetId());
                             vInv.push_back(CInv(MSG_TX, hash));
                         } else {
                             LogPrintf("SendMessages: Sending MSG_DANDELION_TX %s to peer=%d\n", hash.ToString(), pto->GetId());
-                            vInv.push_back(CInv(MSG_DANDELION_TX, hash));
                             
                             // For Dandelion stem phase, send the actual transaction immediately
                             // This is necessary because the transaction is embargoed and won't be
@@ -6185,6 +6218,14 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                             if (hash != DANDELION_DISCOVERYHASH) {
                                 CTransactionRef ptx = m_stempool.get(hash);
                                 if (ptx) {
+                                    // Use the appropriate hash based on peer's wtxid relay preference
+                                    uint256 inv_hash = peer->m_wtxid_relay ? ptx->GetWitnessHash() : ptx->GetHash();
+                                    // Add appropriate witness flag if peer wants wtxid
+                                    uint32_t inv_type = peer->m_wtxid_relay ? (MSG_DANDELION_TX | MSG_WITNESS_FLAG) : MSG_DANDELION_TX;
+                                    vInv.push_back(CInv(inv_type, inv_hash));
+                                    LogPrintf("SendMessages: Queuing Dandelion INV %s (type=%d) for peer=%d (wtxid_relay=%s)\n", 
+                                             inv_hash.ToString(), inv_type, pto->GetId(), peer->m_wtxid_relay ? "true" : "false");
+                                    
                                     m_connman.PushMessage(pto, msgMaker.Make(NetMsgType::DANDELIONTX, *ptx));
                                     LogPrintf("SendMessages: Sent Dandelion transaction %s to peer=%d\n", 
                                              hash.ToString(), pto->GetId());
@@ -6196,6 +6237,9 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                                         LogPrintf("SendMessages: Transaction %s found in mempool instead of stempool\n", hash.ToString());
                                     }
                                 }
+                            } else {
+                                // Discovery hash - always send as regular MSG_DANDELION_TX
+                                vInv.push_back(CInv(MSG_DANDELION_TX, hash));
                             }
                         }
                         if (vInv.size() == MAX_INV_SZ) {

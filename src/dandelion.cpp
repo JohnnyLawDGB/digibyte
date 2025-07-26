@@ -61,11 +61,14 @@ bool CConnman::localDandelionDestinationPushInventory(const CInv& inv)
     }
     
     CNode* destination = nullptr;
+    bool hasDandelionPeers = false;
     {
         LOCK(m_nodes_mutex);
         // Log current Dandelion state
         LogPrint(BCLog::DANDELION, "localDandelionDestinationPushInventory: Current Dandelion state - Inbound=%d, Outbound=%d, Destinations=%d\n",
                  vDandelionInbound.size(), vDandelionOutbound.size(), vDandelionDestination.size());
+        
+        hasDandelionPeers = !vDandelionDestination.empty();
         
         if (localDandelionDestination) {
             destination = localDandelionDestination;
@@ -93,8 +96,14 @@ bool CConnman::localDandelionDestinationPushInventory(const CInv& inv)
         LogPrintf("localDandelionDestinationPushInventory: Calling PushDandelionInventory for peer=%d\n", destination->GetId());
         return m_msgproc->PushDandelionInventory(destination, inv);
     }
-    LogPrintf("localDandelionDestinationPushInventory: No destination or msgproc (destination=%p, msgproc=%p)\n", 
-             destination, m_msgproc);
+    
+    // If we have no Dandelion-capable peers, return false to trigger fallback to regular broadcast
+    if (!hasDandelionPeers) {
+        LogPrintf("localDandelionDestinationPushInventory: No Dandelion-capable peers available, will fallback to regular broadcast\n");
+    } else {
+        LogPrintf("localDandelionDestinationPushInventory: No destination or msgproc (destination=%p, msgproc=%p)\n", 
+                 destination, m_msgproc);
+    }
     return false;
 }
 
@@ -401,19 +410,19 @@ void CConnman::AddDandelionDestination(CNode* pnode)
         }
     }
     
-    LogPrint(BCLog::DANDELION, "AddDandelionDestination: Peer %d - inbound=%d, outbound=%d, current destinations=%d\n", 
+    LogPrintf("AddDandelionDestination: Peer %d confirmed to support Dandelion - inbound=%d, outbound=%d, current destinations=%d\n", 
              pnode->GetId(), isInbound, isOutbound, vDandelionDestination.size());
     
     // Only add if we haven't reached the maximum destinations
     if (vDandelionDestination.size() < DANDELION_MAX_DESTINATIONS) {
         vDandelionDestination.push_back(pnode);
-        LogPrint(BCLog::DANDELION, "Added peer %d to Dandelion destinations (total: %d)\n", 
+        LogPrintf("Added peer %d to Dandelion destinations (total: %d)\n", 
                  pnode->GetId(), vDandelionDestination.size());
         
         // If this is the first destination and we don't have a local destination set, set it
         if (!localDandelionDestination) {
             localDandelionDestination = pnode;
-            LogPrint(BCLog::DANDELION, "Set peer %d as local Dandelion destination\n", pnode->GetId());
+            LogPrintf("Set peer %d as local Dandelion destination\n", pnode->GetId());
         }
     } else {
         LogPrint(BCLog::DANDELION, "AddDandelionDestination: Max destinations reached (%d), not adding peer %d\n", 

@@ -97,6 +97,12 @@ TransactionError BroadcastTransaction(NodeContext& node, const CTransactionRef t
                 }
                 LogPrintf("BroadcastTransaction: Successfully accepted transaction %s to stempool (poolsz %u txn, %u kB)\n",
                          txid.ToString(), node.stempool->size(), node.stempool->DynamicMemoryUsage() / 1000);
+                // Verify the transaction is actually in the stempool
+                if (node.stempool->exists(txid)) {
+                    LogPrintf("BroadcastTransaction: Verified transaction %s is in stempool\n", txid.ToString());
+                } else {
+                    LogPrintf("BroadcastTransaction: ERROR - Transaction %s not found in stempool after acceptance!\n", txid.ToString());
+                }
                 // Don't notify wallet here - stempool transactions should remain separate until fluffed
             } else {
                 const MempoolAcceptResult result = node.chainman->ProcessTransaction(tx, /*test_accept=*/ false);
@@ -145,12 +151,19 @@ TransactionError BroadcastTransaction(NodeContext& node, const CTransactionRef t
             auto embargo_timeout = std::chrono::duration_cast<std::chrono::seconds>(nEmbargo - current_time).count();
             LogPrint(BCLog::DANDELION, "dandeliontx %s embargoed for %d seconds\n", txid.ToString(), embargo_timeout);
             CInv embargoTx(MSG_DANDELION_TX, txid);
-            node.connman->localDandelionDestinationPushInventory(embargoTx);
             
-            // Push the transaction immediately to the Dandelion destination
-            // This ensures it actually propagates during the stem phase
-            LogPrintf("BroadcastTransaction: Calling PushDandelionTransaction for %s\n", txid.ToString());
-            node.peerman->PushDandelionTransaction(txid);
+            bool pushed = node.connman->localDandelionDestinationPushInventory(embargoTx);
+            if (!pushed) {
+                // No Dandelion destination available - reduce embargo time to minimize delay
+                LogPrintf("BroadcastTransaction: No Dandelion destination available for %s, reducing embargo to 10 seconds\n", txid.ToString());
+                nEmbargo = current_time + DANDELION_EMBARGO_MINIMUM;
+                node.connman->insertDandelionEmbargo(txid, nEmbargo);
+            } else {
+                // Push the transaction immediately to the Dandelion destination
+                // This ensures it actually propagates during the stem phase
+                LogPrintf("BroadcastTransaction: Calling PushDandelionTransaction for %s\n", txid.ToString());
+                node.peerman->PushDandelionTransaction(txid);
+            }
             
             return TransactionError::OK;
         }
@@ -164,10 +177,17 @@ TransactionError BroadcastTransaction(NodeContext& node, const CTransactionRef t
         auto embargo_timeout = std::chrono::duration_cast<std::chrono::seconds>(nEmbargo - current_time).count();
         LogPrint(BCLog::DANDELION, "dandeliontx %s embargoed for %d seconds (relay=false)\n", txid.ToString(), embargo_timeout);
         CInv embargoTx(MSG_DANDELION_TX, txid);
-        node.connman->localDandelionDestinationPushInventory(embargoTx);
         
-        LogPrintf("BroadcastTransaction: Calling PushDandelionTransaction for %s (relay=false)\n", txid.ToString());
-        node.peerman->PushDandelionTransaction(txid);
+        bool pushed = node.connman->localDandelionDestinationPushInventory(embargoTx);
+        if (!pushed) {
+            // No Dandelion destination available - reduce embargo time to minimize delay
+            LogPrintf("BroadcastTransaction: No Dandelion destination available for %s (relay=false), reducing embargo to 10 seconds\n", txid.ToString());
+            nEmbargo = current_time + DANDELION_EMBARGO_MINIMUM;
+            node.connman->insertDandelionEmbargo(txid, nEmbargo);
+        } else {
+            LogPrintf("BroadcastTransaction: Calling PushDandelionTransaction for %s (relay=false)\n", txid.ToString());
+            node.peerman->PushDandelionTransaction(txid);
+        }
     }
 
     return TransactionError::OK;

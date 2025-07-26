@@ -63,6 +63,10 @@ bool CConnman::localDandelionDestinationPushInventory(const CInv& inv)
     CNode* destination = nullptr;
     {
         LOCK(m_nodes_mutex);
+        // Log current Dandelion state
+        LogPrintf("localDandelionDestinationPushInventory: Current Dandelion state - Inbound=%d, Outbound=%d, Destinations=%d\n",
+                 vDandelionInbound.size(), vDandelionOutbound.size(), vDandelionDestination.size());
+        
         if (localDandelionDestination) {
             destination = localDandelionDestination;
             LogPrintf("localDandelionDestinationPushInventory: Using existing destination peer=%d\n", destination->GetId());
@@ -74,7 +78,13 @@ bool CConnman::localDandelionDestinationPushInventory(const CInv& inv)
                 destination = localDandelionDestination;
             } else {
                 // No Dandelion destinations available yet
-                LogPrintf("No Dandelion destinations available for %s\n", inv.ToString());
+                LogPrintf("No Dandelion destinations available for %s (destinations=%d)\n", 
+                         inv.ToString(), vDandelionDestination.size());
+                // Log available outbound connections
+                LogPrintf("Available outbound connections: %d\n", vDandelionOutbound.size());
+                for (const auto& node : vDandelionOutbound) {
+                    LogPrintf("  Outbound peer %d\n", node->GetId());
+                }
             }
         }
     }
@@ -83,14 +93,16 @@ bool CConnman::localDandelionDestinationPushInventory(const CInv& inv)
         LogPrintf("localDandelionDestinationPushInventory: Calling PushDandelionInventory for peer=%d\n", destination->GetId());
         return m_msgproc->PushDandelionInventory(destination, inv);
     }
-    LogPrintf("localDandelionDestinationPushInventory: No destination or msgproc\n");
+    LogPrintf("localDandelionDestinationPushInventory: No destination or msgproc (destination=%p, msgproc=%p)\n", 
+             destination, m_msgproc.get());
     return false;
 }
 
 bool CConnman::insertDandelionEmbargo(const uint256& hash, std::chrono::microseconds& embargo) {
     LOCK(m_dandelion_embargo_mutex);
-    auto pair = mDandelionEmbargo.insert(std::make_pair(hash, embargo));
-    return pair.second;
+    // Use insert_or_assign to allow updating existing embargo times
+    auto [iter, inserted] = mDandelionEmbargo.insert_or_assign(hash, embargo);
+    return inserted;
 }
 
 bool CConnman::isTxDandelionEmbargoed(const uint256& hash) const
@@ -239,7 +251,17 @@ void CConnman::CloseDandelionConnections(const CNode* const pnode)
     }
     // Replace localDandelionDestination if equal to pnode
     if (localDandelionDestination == pnode) {
+        CNode* oldDestination = localDandelionDestination;
         localDandelionDestination = newPto;
+        
+        // Log the change
+        if (oldDestination && !newPto) {
+            LogPrintf("CloseDandelionConnections: Lost local Dandelion destination (peer=%d), no replacement available\n", 
+                     oldDestination->GetId());
+        } else if (oldDestination && newPto) {
+            LogPrintf("CloseDandelionConnections: Replaced local Dandelion destination from peer=%d to peer=%d\n", 
+                     oldDestination->GetId(), newPto->GetId());
+        }
     }
 }
 
@@ -340,6 +362,12 @@ CNode* CConnman::getLocalDandelionDestination() const
     return localDandelionDestination;
 }
 
+std::vector<CNode*> CConnman::getAllDandelionDestinations() const
+{
+    LOCK(m_nodes_mutex);
+    return vDandelionDestination;
+}
+
 void CConnman::AddDandelionDestination(CNode* pnode)
 {
     // Only process if Dandelion is enabled
@@ -395,20 +423,27 @@ void CConnman::AddDandelionDestination(CNode* pnode)
 
 void CConnman::ThreadDandelionShuffle()
 {
+    LogPrintf("ThreadDandelionShuffle: Started\n");
+    
     // Start Dandelion shuffling immediately - no need to wait for IBD
     // Give the node a few seconds to establish some connections first
     if (!interruptNet.sleep_for(std::chrono::seconds(5))) {
         return;
     }
 
-    auto now = GetTime<std::chrono::milliseconds>();
-    auto nNextDandelionShuffle = GetExponentialRand(now, DANDELION_SHUFFLE_INTERVAL);
+    auto now = GetTime<std::chrono::microseconds>();
+    auto nNextDandelionShuffle = PoissonNextSend(now, DANDELION_SHUFFLE_INTERVAL);
+    auto nextShuffleSeconds = std::chrono::duration_cast<std::chrono::seconds>(nNextDandelionShuffle - now).count();
+    LogPrintf("ThreadDandelionShuffle: First shuffle scheduled in %d seconds\n", nextShuffleSeconds);
 
     while (!ShutdownRequested()) {
-        now = GetTime<std::chrono::milliseconds>();
+        now = GetTime<std::chrono::microseconds>();
         if (now > nNextDandelionShuffle) {
+            LogPrintf("ThreadDandelionShuffle: Performing shuffle\n");
             DandelionShuffle();
-            nNextDandelionShuffle = GetExponentialRand(now, DANDELION_SHUFFLE_INTERVAL);
+            nNextDandelionShuffle = PoissonNextSend(now, DANDELION_SHUFFLE_INTERVAL);
+            nextShuffleSeconds = std::chrono::duration_cast<std::chrono::seconds>(nNextDandelionShuffle - now).count();
+            LogPrintf("ThreadDandelionShuffle: Next shuffle scheduled in %d seconds\n", nextShuffleSeconds);
         }
         if (ShutdownRequested()) {
             return;

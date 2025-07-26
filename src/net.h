@@ -1675,6 +1675,7 @@ public:
     CNode* getDandelionDestination(CNode* pfrom);
     CNode* getLocalDandelionDestination() const;
     void AddDandelionDestination(CNode* pnode);
+    std::vector<CNode*> getAllDandelionDestinations() const;
 
 private:
     void ThreadDandelionShuffle();

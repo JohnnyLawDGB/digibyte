@@ -1606,6 +1606,7 @@ void PeerManagerImpl::CheckDandelionEmbargoes()
     // Log every time we check embargoes
     if (!m_connman.mDandelionEmbargo.empty()) {
         LogPrintf("CheckDandelionEmbargoes: Checking %d embargoed transactions\n", m_connman.mDandelionEmbargo.size());
+        LogPrintf("CheckDandelionEmbargoes: Stempool size=%d, Mempool size=%d\n", m_stempool.size(), m_mempool.size());
     }
     
     for (auto iter = m_connman.mDandelionEmbargo.begin(); iter != m_connman.mDandelionEmbargo.end();) {
@@ -1619,11 +1620,17 @@ void PeerManagerImpl::CheckDandelionEmbargoes()
                 LogPrintf("CheckDandelionEmbargoes: Moving transaction %s from stempool to mempool for broadcast\n", iter->first.ToString());
                 {
                     LOCK(cs_main);
-                    AcceptToMemoryPool(m_chainman.ActiveChainstate(), m_mempool, ptx, false);
+                    const MempoolAcceptResult result = AcceptToMemoryPool(m_chainman.ActiveChainstate(), m_mempool, ptx, false);
+                    if (result.m_result_type == MempoolAcceptResult::ResultType::VALID) {
+                        LogPrintf("CheckDandelionEmbargoes: Successfully moved tx %s to mempool\n", iter->first.ToString());
+                        LogPrint(BCLog::MEMPOOL, "AcceptToMemoryPool: accepted %s (poolsz %u txn, %u kB)\n",
+                                                 iter->first.ToString(), m_mempool.size(), m_mempool.DynamicMemoryUsage() / 1000);
+                        RelayTransaction(ptx->GetHash(), ptx->GetWitnessHash());
+                    } else {
+                        LogPrintf("CheckDandelionEmbargoes: Failed to move tx %s to mempool: %s\n", 
+                                 iter->first.ToString(), result.m_state.ToString());
+                    }
                 }
-                LogPrint(BCLog::MEMPOOL, "AcceptToMemoryPool: accepted %s (poolsz %u txn, %u kB)\n",
-                                         iter->first.ToString(), m_mempool.size(), m_mempool.DynamicMemoryUsage() / 1000);
-                RelayTransaction(ptx->GetHash(), ptx->GetWitnessHash());
             } else {
                 LogPrintf("CheckDandelionEmbargoes: Transaction %s not found in stempool!\n", iter->first.ToString());
             }
@@ -1738,6 +1745,35 @@ void PeerManagerImpl::FinalizeNode(const CNode& node)
         misbehavior = WITH_LOCK(peer->m_misbehavior_mutex, return peer->m_misbehavior_score);
         m_wtxid_relay_peers -= peer->m_wtxid_relay;
         assert(m_wtxid_relay_peers >= 0);
+        
+        // Dandelion: Handle any pending Dandelion transactions
+        auto tx_relay = peer->GetTxRelay();
+        if (tx_relay) {
+            LOCK(tx_relay->m_tx_inventory_mutex);
+            if (!tx_relay->vInventoryDandelionTxToSend.empty()) {
+                LogPrintf("FinalizeNode: Peer %d disconnecting with %d pending Dandelion transactions\n", 
+                         nodeid, tx_relay->vInventoryDandelionTxToSend.size());
+                
+                // Get the current local Dandelion destination
+                CNode* newDestination = m_connman.getLocalDandelionDestination();
+                if (newDestination && newDestination != &node) {
+                    // Re-queue the pending transactions to the new destination
+                    for (const uint256& txhash : tx_relay->vInventoryDandelionTxToSend) {
+                        CInv inv(MSG_DANDELION_TX, txhash);
+                        if (PushDandelionInventory(newDestination, inv)) {
+                            LogPrintf("FinalizeNode: Re-queued Dandelion transaction %s to peer %d\n", 
+                                     txhash.ToString(), newDestination->GetId());
+                        } else {
+                            LogPrintf("FinalizeNode: Failed to re-queue Dandelion transaction %s\n", 
+                                     txhash.ToString());
+                        }
+                    }
+                } else {
+                    LogPrintf("FinalizeNode: No alternative Dandelion destination available for re-queuing\n");
+                    // The transactions will remain embargoed and will be broadcast when embargo expires
+                }
+            }
+        }
     }
     CNodeState *state = State(nodeid);
     assert(state != nullptr);
@@ -2579,7 +2615,7 @@ void PeerManagerImpl::ProcessGetData(CNode& pfrom, Peer& peer, const std::atomic
             if (inv.hash == DANDELION_DISCOVERYHASH) {
                 // Peer is requesting the discovery hash, they support Dandelion
                 bool wasAlreadySupporting = peer.fSupportsDandelion.exchange(true);
-                LogPrint(BCLog::DANDELION, "Peer %d supports Dandelion (service discovery)\n", pfrom.GetId());
+                LogPrintf("ProcessGetData: Peer %d requested Dandelion discovery hash - they support Dandelion!\n", pfrom.GetId());
                 // Add this peer as a potential Dandelion destination
                 m_connman.AddDandelionDestination(&pfrom);
                 
@@ -2588,7 +2624,7 @@ void PeerManagerImpl::ProcessGetData(CNode& pfrom, Peer& peer, const std::atomic
                 if (!wasAlreadySupporting && tx_relay != nullptr) {
                     CInv discoveryInv(MSG_DANDELION_TX, DANDELION_DISCOVERYHASH);
                     tx_relay->setInventoryTxToSendOther.insert(discoveryInv);
-                    LogPrint(BCLog::DANDELION, "Sending Dandelion discovery message back to peer %d\n", pfrom.GetId());
+                    LogPrintf("ProcessGetData: Sending Dandelion discovery message back to peer %d\n", pfrom.GetId());
                 }
                 
                 // Don't send the actual discovery hash, just continue
@@ -4146,10 +4182,14 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                     LOCK(tx_relay->m_tx_inventory_mutex);
                     auto result = tx_relay->setDandelionInventoryKnown.insert(inv.hash);
                     const bool fAlreadyHave = !result.second;
-                    LogPrint(BCLog::NET, "got dandelion inv: %s  %s peer=%d\n", inv.ToString(), fAlreadyHave ? "have" : "new", pfrom.GetId());
+                    LogPrintf("ProcessMessage INV: Got dandelion inv: %s  %s peer=%d\n", inv.ToString(), fAlreadyHave ? "have" : "new", pfrom.GetId());
                     if ((!fAlreadyHave && !m_chainman.IsInitialBlockDownload() &&
                         m_connman.isDandelionInbound(&pfrom)) || (inv.hash == DANDELION_DISCOVERYHASH)) {
                         std::vector<CInv> vInv{inv};
+                        LogPrintf("ProcessMessage INV: Requesting dandelion inv %s from peer=%d (is_inbound=%d, is_discovery=%d)\n", 
+                                 inv.hash.ToString(), pfrom.GetId(), 
+                                 m_connman.isDandelionInbound(&pfrom), 
+                                 inv.hash == DANDELION_DISCOVERYHASH);
                         m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETDATA, vInv));
                     }
                 }
@@ -5816,6 +5856,30 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
             LogPrint(BCLog::DANDELION, "Queued Dandelion discovery message for peer=%d\n", pto->GetId());
         }
     }
+    
+    // Check if this peer is a Dandelion destination but hasn't received discovery yet
+    if (gArgs.GetBoolArg("-dandelion", DEFAULT_DANDELION) && !peer->fSupportsDandelion.load()) {
+        // Check if this peer is in the Dandelion destination list
+        std::vector<CNode*> allDests = m_connman.getAllDandelionDestinations();
+        
+        bool isInDestinations = std::find(allDests.begin(), allDests.end(), pto) != allDests.end();
+        
+        if (isInDestinations && pto->m_relays_txs) {
+            // This peer is a Dandelion destination but hasn't received discovery
+            // Send discovery message if not already in queue
+            if (auto tx_relay = peer->GetTxRelay(); tx_relay != nullptr) {
+                LOCK(tx_relay->m_tx_inventory_mutex);
+                CInv discoveryInv(MSG_DANDELION_TX, DANDELION_DISCOVERYHASH);
+                
+                // Check if discovery isn't already queued or known
+                if (tx_relay->setInventoryTxToSendOther.count(discoveryInv) == 0 &&
+                    !tx_relay->m_tx_inventory_known_filter.contains(DANDELION_DISCOVERYHASH)) {
+                    tx_relay->setInventoryTxToSendOther.insert(discoveryInv);
+                    LogPrint(BCLog::DANDELION, "Sending late Dandelion discovery to destination peer=%d\n", pto->GetId());
+                }
+            }
+        }
+    }
 
     const auto current_time{GetTime<std::chrono::microseconds>()};
 
@@ -6064,8 +6128,8 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                     LOCK(tx_relay->m_bloom_filter_mutex);
                     if (!tx_relay->m_relay_txs) {
                         tx_relay->m_tx_inventory_to_send.clear();
-                        LOCK(tx_relay->m_tx_inventory_mutex);
-                        tx_relay->vInventoryDandelionTxToSend.clear();
+                        // Don't clear Dandelion transactions - they should still be sent during stem phase
+                        // even if the peer doesn't want regular transaction relay
                     }
                 }
 
@@ -6100,24 +6164,38 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                 // Add Dandelion transactions
                 {
                     LOCK(tx_relay->m_tx_inventory_mutex);
+                    if (!tx_relay->vInventoryDandelionTxToSend.empty()) {
+                        LogPrintf("SendMessages: Processing %d Dandelion transactions for peer=%d (relay_txs=%s)\n", 
+                                 tx_relay->vInventoryDandelionTxToSend.size(), pto->GetId(), 
+                                 tx_relay->m_relay_txs ? "true" : "false");
+                    }
                     for (const uint256& hash : tx_relay->vInventoryDandelionTxToSend) {
                         tx_relay->setDandelionInventoryKnown.insert(hash);
                         if (!peer->fSupportsDandelion.load() && hash != DANDELION_DISCOVERYHASH) {
+                            LogPrintf("SendMessages: Peer %d doesn't support Dandelion, sending as regular TX\n", pto->GetId());
                             vInv.push_back(CInv(MSG_TX, hash));
                         } else {
+                            LogPrintf("SendMessages: Sending MSG_DANDELION_TX %s to peer=%d\n", hash.ToString(), pto->GetId());
                             vInv.push_back(CInv(MSG_DANDELION_TX, hash));
                             
                             // For Dandelion stem phase, send the actual transaction immediately
                             // This is necessary because the transaction is embargoed and won't be
                             // served via GETDATA during the embargo period
-                            CTransactionRef ptx = m_stempool.get(hash);
-                            if (ptx) {
-                                m_connman.PushMessage(pto, msgMaker.Make(NetMsgType::DANDELIONTX, *ptx));
-                                LogPrintf("SendMessages: Sent Dandelion transaction %s to peer=%d\n", 
-                                         hash.ToString(), pto->GetId());
-                            } else {
-                                LogPrintf("SendMessages: Dandelion transaction %s not found in stempool for peer=%d\n", 
-                                         hash.ToString(), pto->GetId());
+                            // But don't send the discovery hash as a transaction
+                            if (hash != DANDELION_DISCOVERYHASH) {
+                                CTransactionRef ptx = m_stempool.get(hash);
+                                if (ptx) {
+                                    m_connman.PushMessage(pto, msgMaker.Make(NetMsgType::DANDELIONTX, *ptx));
+                                    LogPrintf("SendMessages: Sent Dandelion transaction %s to peer=%d\n", 
+                                             hash.ToString(), pto->GetId());
+                                } else {
+                                    LogPrintf("SendMessages: Dandelion transaction %s not found in stempool for peer=%d\n", 
+                                             hash.ToString(), pto->GetId());
+                                    // Check if it's in the regular mempool (might have been fluffed already)
+                                    if (m_mempool.exists(hash)) {
+                                        LogPrintf("SendMessages: Transaction %s found in mempool instead of stempool\n", hash.ToString());
+                                    }
+                                }
                             }
                         }
                         if (vInv.size() == MAX_INV_SZ) {

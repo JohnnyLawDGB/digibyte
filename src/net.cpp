@@ -1828,12 +1828,16 @@ void CConnman::CreateNodeFromAcceptedSocket(std::unique_ptr<Sock>&& sock,
         m_nodes.push_back(pnode);
         
         // Dandelion: new inbound connection
-        vDandelionInbound.push_back(pnode);
-        CNode* pto = SelectFromDandelionDestinations();
-        if (pto) {
-            mDandelionRoutes.insert(std::make_pair(pnode, pto));
+        if (gArgs.GetBoolArg("-dandelion", DEFAULT_DANDELION)) {
+            vDandelionInbound.push_back(pnode);
+            CNode* pto = SelectFromDandelionDestinations();
+            if (pto) {
+                mDandelionRoutes.insert(std::make_pair(pnode, pto));
+                LogPrint(BCLog::DANDELION, "Added inbound Dandelion connection: peer=%d, route to peer=%d\n", pnode->GetId(), pto->GetId());
+            } else {
+                LogPrint(BCLog::DANDELION, "Added inbound Dandelion connection: peer=%d, no route available yet\n", pnode->GetId());
+            }
         }
-        LogPrint(BCLog::DANDELION, "Added inbound Dandelion connection: peer=%d\n", pnode->GetId());
     }
 
     // We received a new connection, harvest entropy from the time (and our peer count)
@@ -2899,11 +2903,18 @@ void CConnman::OpenNetworkConnection(const CAddress& addrConnect, bool fCountFai
         m_nodes.push_back(pnode);
         
         // Dandelion: new outbound connection
-        vDandelionOutbound.push_back(pnode);
-        if (vDandelionDestination.size() < DANDELION_MAX_DESTINATIONS) {
-            vDandelionDestination.push_back(pnode);
+        if (gArgs.GetBoolArg("-dandelion", DEFAULT_DANDELION)) {
+            vDandelionOutbound.push_back(pnode);
+            if (vDandelionDestination.size() < DANDELION_MAX_DESTINATIONS) {
+                vDandelionDestination.push_back(pnode);
+                // If we don't have a local destination yet, set this as the first one
+                if (!localDandelionDestination) {
+                    localDandelionDestination = pnode;
+                    LogPrint(BCLog::DANDELION, "Set peer=%d as initial local Dandelion destination\n", pnode->GetId());
+                }
+            }
+            LogPrint(BCLog::DANDELION, "Added outbound Dandelion connection: peer=%d, destinations=%d\n", pnode->GetId(), vDandelionDestination.size());
         }
-        LogPrint(BCLog::DANDELION, "Added outbound Dandelion connection: peer=%d, destinations=%d\n", pnode->GetId(), vDandelionDestination.size());
 
 
         // update connection count by network
@@ -2911,7 +2922,9 @@ void CConnman::OpenNetworkConnection(const CAddress& addrConnect, bool fCountFai
     }
     
     // Send Dandelion discovery message to new outbound connections
-    pnode->m_send_dandelion_discovery = true;
+    if (gArgs.GetBoolArg("-dandelion", DEFAULT_DANDELION)) {
+        pnode->m_send_dandelion_discovery = true;
+    }
 }
 
 Mutex NetEventsInterface::g_msgproc_mutex;

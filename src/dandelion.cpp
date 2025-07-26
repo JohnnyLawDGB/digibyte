@@ -94,7 +94,7 @@ bool CConnman::localDandelionDestinationPushInventory(const CInv& inv)
         return m_msgproc->PushDandelionInventory(destination, inv);
     }
     LogPrintf("localDandelionDestinationPushInventory: No destination or msgproc (destination=%p, msgproc=%p)\n", 
-             destination, m_msgproc.get());
+             destination, m_msgproc);
     return false;
 }
 

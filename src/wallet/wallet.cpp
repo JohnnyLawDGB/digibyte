@@ -2821,6 +2821,17 @@ void CWallet::LoadAddressReceiveRequest(const CTxDestination& dest, const std::s
     m_address_book[dest].receive_requests[id] = request;
 }
 
+void CWallet::EraseAddressData(const CTxDestination& dest)
+{
+    // DigiByte fix: Clear in-memory cache when erasing address data from database
+    // This ensures consistency between database and memory state
+    AssertLockHeld(cs_wallet);
+    if (auto* data = common::FindKey(m_address_book, dest)) {
+        data->previously_spent = false;
+        data->receive_requests.clear();
+    }
+}
+
 bool CWallet::IsAddressPreviouslySpent(const CTxDestination& dest) const
 {
     if (auto* data{common::FindKey(m_address_book, dest)}) return data->previously_spent;

@@ -154,10 +154,17 @@ TransactionError BroadcastTransaction(NodeContext& node, const CTransactionRef t
             
             bool pushed = node.connman->localDandelionDestinationPushInventory(embargoTx);
             if (!pushed) {
-                // No Dandelion destination available - reduce embargo time to minimize delay
-                LogPrintf("BroadcastTransaction: No Dandelion destination available for %s, reducing embargo to 10 seconds\n", txid.ToString());
-                nEmbargo = current_time + DANDELION_EMBARGO_MINIMUM;
-                node.connman->insertDandelionEmbargo(txid, nEmbargo);
+                // No Dandelion destination available - fallback to regular broadcast
+                LogPrintf("BroadcastTransaction: No Dandelion destination available for %s, falling back to regular broadcast\n", txid.ToString());
+                // Remove from stempool and add to mempool for regular broadcast
+                node.stempool->removeRecursive(*tx, MemPoolRemovalReason::REORG);
+                const MempoolAcceptResult result = node.chainman->ProcessTransaction(tx, /*test_accept=*/ false);
+                if (result.m_result_type != MempoolAcceptResult::ResultType::VALID) {
+                    return HandleATMPError(result.m_state, err_string);
+                }
+                // Add to unbroadcast for regular relay
+                node.mempool->AddUnbroadcastTx(txid);
+                node.peerman->RelayTransaction(txid, wtxid);
             } else {
                 // Push the transaction immediately to the Dandelion destination
                 // This ensures it actually propagates during the stem phase
@@ -180,10 +187,9 @@ TransactionError BroadcastTransaction(NodeContext& node, const CTransactionRef t
         
         bool pushed = node.connman->localDandelionDestinationPushInventory(embargoTx);
         if (!pushed) {
-            // No Dandelion destination available - reduce embargo time to minimize delay
-            LogPrintf("BroadcastTransaction: No Dandelion destination available for %s (relay=false), reducing embargo to 10 seconds\n", txid.ToString());
-            nEmbargo = current_time + DANDELION_EMBARGO_MINIMUM;
-            node.connman->insertDandelionEmbargo(txid, nEmbargo);
+            // No Dandelion destination available for wallet rebroadcast
+            LogPrintf("BroadcastTransaction: No Dandelion destination available for %s (relay=false), transaction remains in stempool\n", txid.ToString());
+            // Transaction stays in stempool and will be handled when Dandelion peers become available
         } else {
             LogPrintf("BroadcastTransaction: Calling PushDandelionTransaction for %s (relay=false)\n", txid.ToString());
             node.peerman->PushDandelionTransaction(txid);

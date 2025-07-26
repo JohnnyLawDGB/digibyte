@@ -52,11 +52,11 @@ CNode* CConnman::getDandelionDestination(CNode* pfrom)
 
 bool CConnman::localDandelionDestinationPushInventory(const CInv& inv)
 {
-    LogPrintf("localDandelionDestinationPushInventory called for %s\n", inv.ToString());
+    LogPrint(BCLog::DANDELION, "localDandelionDestinationPushInventory called for %s\n", inv.ToString());
     
     // Check if Dandelion is enabled
     if (!gArgs.GetBoolArg("-dandelion", DEFAULT_DANDELION)) {
-        LogPrintf("localDandelionDestinationPushInventory: Dandelion disabled\n");
+        LogPrint(BCLog::DANDELION, "localDandelionDestinationPushInventory: Dandelion disabled\n");
         return false;
     }
     
@@ -64,12 +64,12 @@ bool CConnman::localDandelionDestinationPushInventory(const CInv& inv)
     {
         LOCK(m_nodes_mutex);
         // Log current Dandelion state
-        LogPrintf("localDandelionDestinationPushInventory: Current Dandelion state - Inbound=%d, Outbound=%d, Destinations=%d\n",
+        LogPrint(BCLog::DANDELION, "localDandelionDestinationPushInventory: Current Dandelion state - Inbound=%d, Outbound=%d, Destinations=%d\n",
                  vDandelionInbound.size(), vDandelionOutbound.size(), vDandelionDestination.size());
         
         if (localDandelionDestination) {
             destination = localDandelionDestination;
-            LogPrintf("localDandelionDestinationPushInventory: Using existing destination peer=%d\n", destination->GetId());
+            LogPrint(BCLog::DANDELION, "localDandelionDestinationPushInventory: Using existing destination peer=%d\n", destination->GetId());
         } else {
             // Try to set local destination
             localDandelionDestination = SelectFromDandelionDestinations();
@@ -94,7 +94,7 @@ bool CConnman::localDandelionDestinationPushInventory(const CInv& inv)
         return m_msgproc->PushDandelionInventory(destination, inv);
     }
     LogPrintf("localDandelionDestinationPushInventory: No destination or msgproc (destination=%p, msgproc=%p)\n", 
-             destination, m_msgproc.get());
+             destination, m_msgproc);
     return false;
 }
 

@@ -275,7 +275,6 @@ DIGIBYTE_CORE_H = \
   script/solver.h \
   shutdown.h \
   signet.h \
-  stempool.h \
   streams.h \
   support/allocators/pool.h \
   support/allocators/secure.h \

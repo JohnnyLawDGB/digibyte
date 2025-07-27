@@ -131,6 +131,11 @@ static void UpdateWalletSetting(interfaces::Chain& chain,
  */
 static void RefreshMempoolStatus(CWalletTx& tx, interfaces::Chain& chain)
 {
+    // Don't update state if transaction is already confirmed
+    if (tx.state<TxStateConfirmed>()) {
+        return;
+    }
+    
     if (chain.isInMempool(tx.GetHash()) || chain.isInStempool(tx.GetHash())) {
         tx.m_state = TxStateInMempool();
     } else if (tx.state<TxStateInMempool>()) {

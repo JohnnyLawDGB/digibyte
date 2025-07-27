@@ -5,9 +5,9 @@ This file provides context and guidance for AI assistants working on the DigiByt
 
 ## Repository Structure
 **Required repositories:**
-- `/mnt/c/Users/Jared/code/digibyte` (v8.26 merged code - BUILD/TEST HERE)
-- `/mnt/c/Users/Jared/code/bitcoin-v26.2-for-digibyte` (Bitcoin v26.2 reference)
-- `/mnt/c/Users/Jared/code/digibyte-v8.22.2` (DigiByte v8.22.2 - SOURCE OF TRUTH)
+- `/Users/jt/Code/digibyte` (v8.26 merged code - BUILD/TEST HERE)
+- `/Users/jt/Code/digibyte/bitcoin-v26.2-for-digibyte` (Bitcoin v26.2 reference)
+- `/Users/jt/Code/digibyte/digibyte-v8.22.2` (DigiByte v8.22.2 - SOURCE OF TRUTH)
 
 ## Python Functional Test Fix Strategy
 

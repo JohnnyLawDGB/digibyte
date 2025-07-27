@@ -60,8 +60,10 @@ bool CConnman::localDandelionDestinationPushInventory(const CInv& inv)
         return false;
     }
     
-    CNode* destination = nullptr;
+    // Try all available destinations if the primary one fails
+    std::vector<CNode*> triedDestinations;
     bool hasDandelionPeers = false;
+    
     {
         LOCK(m_nodes_mutex);
         // Log current Dandelion state
@@ -70,39 +72,60 @@ bool CConnman::localDandelionDestinationPushInventory(const CInv& inv)
         
         hasDandelionPeers = !vDandelionDestination.empty();
         
+        // Try the current local destination first
         if (localDandelionDestination) {
-            destination = localDandelionDestination;
-            LogPrint(BCLog::DANDELION, "localDandelionDestinationPushInventory: Using existing destination peer=%d\n", destination->GetId());
-        } else {
-            // Try to set local destination
-            localDandelionDestination = SelectFromDandelionDestinations();
-            if (localDandelionDestination) {
-                LogPrintf("Set local Dandelion destination: peer=%d\n", localDandelionDestination->GetId());
-                destination = localDandelionDestination;
-            } else {
-                // No Dandelion destinations available yet
-                LogPrintf("No Dandelion destinations available for %s (destinations=%d)\n", 
-                         inv.ToString(), vDandelionDestination.size());
-                // Log available outbound connections
-                LogPrintf("Available outbound connections: %d\n", vDandelionOutbound.size());
-                for (const auto& node : vDandelionOutbound) {
-                    LogPrintf("  Outbound peer %d\n", node->GetId());
+            if (m_msgproc) {
+                LogPrintf("localDandelionDestinationPushInventory: Trying existing destination peer=%d\n", localDandelionDestination->GetId());
+                if (m_msgproc->PushDandelionInventory(localDandelionDestination, inv)) {
+                    LogPrintf("localDandelionDestinationPushInventory: Successfully pushed to peer=%d\n", localDandelionDestination->GetId());
+                    return true;
                 }
+                LogPrintf("localDandelionDestinationPushInventory: Failed to push to peer=%d (likely no tx_relay)\n", localDandelionDestination->GetId());
+                triedDestinations.push_back(localDandelionDestination);
             }
         }
-    }
-    
-    if (destination && m_msgproc) {
-        LogPrintf("localDandelionDestinationPushInventory: Calling PushDandelionInventory for peer=%d\n", destination->GetId());
-        return m_msgproc->PushDandelionInventory(destination, inv);
+        
+        // If primary destination failed or doesn't exist, try other destinations
+        for (CNode* candidate : vDandelionDestination) {
+            // Skip if we already tried this destination
+            if (std::find(triedDestinations.begin(), triedDestinations.end(), candidate) != triedDestinations.end()) {
+                continue;
+            }
+            
+            if (m_msgproc) {
+                LogPrintf("localDandelionDestinationPushInventory: Trying alternate destination peer=%d\n", candidate->GetId());
+                if (m_msgproc->PushDandelionInventory(candidate, inv)) {
+                    // Update local destination to this working peer
+                    localDandelionDestination = candidate;
+                    LogPrintf("localDandelionDestinationPushInventory: Successfully pushed to alternate peer=%d, updated as new local destination\n", candidate->GetId());
+                    return true;
+                }
+                LogPrintf("localDandelionDestinationPushInventory: Failed to push to alternate peer=%d\n", candidate->GetId());
+                triedDestinations.push_back(candidate);
+            }
+        }
+        
+        // If all existing destinations failed, try to select a new one
+        localDandelionDestination = SelectFromDandelionDestinations();
+        if (localDandelionDestination && m_msgproc) {
+            // Skip if we already tried this destination
+            if (std::find(triedDestinations.begin(), triedDestinations.end(), localDandelionDestination) == triedDestinations.end()) {
+                LogPrintf("localDandelionDestinationPushInventory: Trying newly selected destination peer=%d\n", localDandelionDestination->GetId());
+                if (m_msgproc->PushDandelionInventory(localDandelionDestination, inv)) {
+                    LogPrintf("localDandelionDestinationPushInventory: Successfully pushed to new destination peer=%d\n", localDandelionDestination->GetId());
+                    return true;
+                }
+                LogPrintf("localDandelionDestinationPushInventory: Failed to push to new destination peer=%d\n", localDandelionDestination->GetId());
+            }
+        }
     }
     
     // If we have no Dandelion-capable peers, return false to trigger fallback to regular broadcast
     if (!hasDandelionPeers) {
         LogPrintf("localDandelionDestinationPushInventory: No Dandelion-capable peers available, will fallback to regular broadcast\n");
     } else {
-        LogPrintf("localDandelionDestinationPushInventory: No destination or msgproc (destination=%p, msgproc=%p)\n", 
-                 destination, m_msgproc);
+        LogPrintf("localDandelionDestinationPushInventory: All %d Dandelion destinations failed (no tx_relay support), will fallback to regular broadcast\n", 
+                 triedDestinations.size());
     }
     return false;
 }

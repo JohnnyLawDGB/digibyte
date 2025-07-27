@@ -155,7 +155,8 @@ TransactionError BroadcastTransaction(NodeContext& node, const CTransactionRef t
             bool pushed = node.connman->localDandelionDestinationPushInventory(embargoTx);
             if (!pushed) {
                 // No Dandelion destination available - fallback to regular broadcast
-                LogPrintf("BroadcastTransaction: No Dandelion destination available for %s, falling back to regular broadcast\n", txid.ToString());
+                LogPrintf("BroadcastTransaction: DANDELION FALLBACK - No viable Dandelion destinations for transaction %s\n", txid.ToString());
+                LogPrintf("BroadcastTransaction: Moving transaction %s from stempool to mempool for regular broadcast\n", txid.ToString());
                 // Remove from stempool and add to mempool for regular broadcast
                 node.stempool->removeRecursive(*tx, MemPoolRemovalReason::REORG);
                 const MempoolAcceptResult result = node.chainman->ProcessTransaction(tx, /*test_accept=*/ false);
@@ -165,10 +166,11 @@ TransactionError BroadcastTransaction(NodeContext& node, const CTransactionRef t
                 // Add to unbroadcast for regular relay
                 node.mempool->AddUnbroadcastTx(txid);
                 node.peerman->RelayTransaction(txid, wtxid);
+                LogPrintf("BroadcastTransaction: Transaction %s successfully moved to mempool and relayed via regular broadcast\n", txid.ToString());
             } else {
                 // Push the transaction immediately to the Dandelion destination
                 // This ensures it actually propagates during the stem phase
-                LogPrintf("BroadcastTransaction: Calling PushDandelionTransaction for %s\n", txid.ToString());
+                LogPrintf("BroadcastTransaction: DANDELION SUCCESS - Transaction %s queued for stem routing\n", txid.ToString());
                 node.peerman->PushDandelionTransaction(txid);
             }
             
@@ -188,10 +190,11 @@ TransactionError BroadcastTransaction(NodeContext& node, const CTransactionRef t
         bool pushed = node.connman->localDandelionDestinationPushInventory(embargoTx);
         if (!pushed) {
             // No Dandelion destination available for wallet rebroadcast
-            LogPrintf("BroadcastTransaction: No Dandelion destination available for %s (relay=false), transaction remains in stempool\n", txid.ToString());
+            LogPrintf("BroadcastTransaction: DANDELION DEFERRED - No viable destinations for %s (relay=false)\n", txid.ToString());
+            LogPrintf("BroadcastTransaction: Transaction %s remains in stempool awaiting Dandelion peers\n", txid.ToString());
             // Transaction stays in stempool and will be handled when Dandelion peers become available
         } else {
-            LogPrintf("BroadcastTransaction: Calling PushDandelionTransaction for %s (relay=false)\n", txid.ToString());
+            LogPrintf("BroadcastTransaction: DANDELION QUEUED - Transaction %s scheduled for stem routing (relay=false)\n", txid.ToString());
             node.peerman->PushDandelionTransaction(txid);
         }
     }

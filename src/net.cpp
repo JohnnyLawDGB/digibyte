@@ -2905,8 +2905,10 @@ void CConnman::OpenNetworkConnection(const CAddress& addrConnect, bool fCountFai
         // Dandelion: new outbound connection
         if (gArgs.GetBoolArg("-dandelion", DEFAULT_DANDELION)) {
             vDandelionOutbound.push_back(pnode);
-            LogPrint(BCLog::DANDELION, "Added outbound Dandelion connection: peer=%d (will check for Dandelion support after handshake)\n", pnode->GetId());
-            // Don't add as destination yet - wait for discovery to confirm Dandelion support
+            LogPrint(BCLog::DANDELION, "Added outbound Dandelion connection: peer=%d\n", pnode->GetId());
+            
+            // Don't add to destinations immediately - wait for discovery
+            // Discovery will complete when peer requests DANDELION_DISCOVERYHASH
         }
 
 
@@ -2914,10 +2916,8 @@ void CConnman::OpenNetworkConnection(const CAddress& addrConnect, bool fCountFai
         if (pnode->IsManualOrFullOutboundConn()) ++m_network_conn_counts[pnode->addr.GetNetwork()];
     }
     
-    // Send Dandelion discovery message to new outbound connections
-    if (gArgs.GetBoolArg("-dandelion", DEFAULT_DANDELION)) {
-        pnode->m_send_dandelion_discovery = true;
-    }
+    // v8.22.2 compatibility: Discovery mechanism disabled
+    // v8.22.2 nodes assume all peers support Dandelion without discovery
 }
 
 Mutex NetEventsInterface::g_msgproc_mutex;

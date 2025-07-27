@@ -2625,29 +2625,24 @@ void PeerManagerImpl::ProcessGetData(CNode& pfrom, Peer& peer, const std::atomic
         if (inv.IsDandelionMsg()) {
             // Check if witness serialization is requested
             int nSendFlags = ((inv.type & MSG_WITNESS_FLAG) ? 0 : SERIALIZE_TRANSACTION_NO_WITNESS);
+            
+            // Handle discovery request - when a peer requests the discovery hash,
+            // mark them as supporting Dandelion
+            if (inv.hash == DANDELION_DISCOVERYHASH) {
+                LogPrintf("ProcessGetData: Peer %d requested Dandelion discovery hash, marking as Dandelion-capable\n", pfrom.GetId());
+                peer.fSupportsDandelion = true;
+                
+                // Add to Dandelion destinations if not already there
+                m_connman.AddDandelionDestination(&pfrom);
+                
+                // Respond with NOTFOUND as this isn't a real transaction
+                vNotFound.push_back(inv);
+                continue;
+            }
+            
             // Possibly find the tx in the stempool
             // For Dandelion messages, create GenTxid based on witness flag
             auto txinfo = m_stempool.info((inv.type & MSG_WITNESS_FLAG) ? GenTxid::Wtxid(inv.hash) : GenTxid::Txid(inv.hash));
-
-            // Check for Dandelion service discovery
-            if (inv.hash == DANDELION_DISCOVERYHASH) {
-                // Peer is requesting the discovery hash, they support Dandelion
-                bool wasAlreadySupporting = peer.fSupportsDandelion.exchange(true);
-                LogPrintf("ProcessGetData: Peer %d requested Dandelion discovery hash - they support Dandelion!\n", pfrom.GetId());
-                // Add this peer as a potential Dandelion destination
-                m_connman.AddDandelionDestination(&pfrom);
-                
-                // If this is the first time we discovered this peer supports Dandelion,
-                // send a discovery message back to them
-                if (!wasAlreadySupporting && tx_relay != nullptr) {
-                    CInv discoveryInv(MSG_DANDELION_TX, DANDELION_DISCOVERYHASH);
-                    tx_relay->setInventoryTxToSendOther.insert(discoveryInv);
-                    LogPrintf("ProcessGetData: Sending Dandelion discovery message back to peer %d\n", pfrom.GetId());
-                }
-                
-                // Don't send the actual discovery hash, just continue
-                continue;
-            }
 
             // Before deciding to send the transaction, check the embargo:
             if (m_connman.isTxDandelionEmbargoed(inv.hash)) {
@@ -5872,36 +5867,12 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
 
     // Send Dandelion discovery message if needed
     if (pto->m_send_dandelion_discovery.exchange(false)) {
-        // Queue Dandelion discovery directly to avoid lock ordering issues
-        if (auto tx_relay = peer->GetTxRelay(); tx_relay != nullptr) {
-            LOCK(tx_relay->m_tx_inventory_mutex);
-            CInv dummyInv(MSG_DANDELION_TX, DANDELION_DISCOVERYHASH);
-            tx_relay->setInventoryTxToSendOther.insert(dummyInv);
-            LogPrint(BCLog::DANDELION, "Queued Dandelion discovery message for peer=%d\n", pto->GetId());
-        }
-    }
-    
-    // Check if this peer is a Dandelion destination but hasn't received discovery yet
-    if (gArgs.GetBoolArg("-dandelion", DEFAULT_DANDELION) && !peer->fSupportsDandelion.load()) {
-        // Check if this peer is in the Dandelion destination list
-        std::vector<CNode*> allDests = m_connman.getAllDandelionDestinations();
-        
-        bool isInDestinations = std::find(allDests.begin(), allDests.end(), pto) != allDests.end();
-        
-        if (isInDestinations && pto->m_relays_txs) {
-            // This peer is a Dandelion destination but hasn't received discovery
-            // Send discovery message if not already in queue
-            if (auto tx_relay = peer->GetTxRelay(); tx_relay != nullptr) {
-                LOCK(tx_relay->m_tx_inventory_mutex);
-                CInv discoveryInv(MSG_DANDELION_TX, DANDELION_DISCOVERYHASH);
-                
-                // Check if discovery isn't already queued or known
-                if (tx_relay->setInventoryTxToSendOther.count(discoveryInv) == 0 &&
-                    !tx_relay->m_tx_inventory_known_filter.contains(DANDELION_DISCOVERYHASH)) {
-                    tx_relay->setInventoryTxToSendOther.insert(discoveryInv);
-                    LogPrint(BCLog::DANDELION, "Sending late Dandelion discovery to destination peer=%d\n", pto->GetId());
-                }
-            }
+        LogPrint(BCLog::DANDELION, "Sending Dandelion discovery message to peer=%d\n", pto->GetId());
+        CInv dummyInv(MSG_DANDELION_TX, DANDELION_DISCOVERYHASH);
+        auto tx_relay = peer->GetTxRelay();
+        if (tx_relay) {
+            PushDandelionInventory(pto, dummyInv);
+            LogPrintf("Sent Dandelion discovery hash to peer=%d\n", pto->GetId());
         }
     }
 

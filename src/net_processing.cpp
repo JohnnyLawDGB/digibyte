@@ -5273,7 +5273,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         LOCK(cs_main);
         if (m_connman.isDandelionInbound(&pfrom)) {
             if (!m_stempool.exists(inv.hash)) {
-                MempoolAcceptResult result = AcceptToMemoryPool(m_chainman.ActiveChainstate(), m_stempool, ptx, false);
+                MempoolAcceptResult result = AcceptToMemoryPoolForStempool(m_chainman.ActiveChainstate(), m_stempool, m_mempool, ptx, false);
                 if (result.m_result_type == MempoolAcceptResult::ResultType::VALID) {
                     LogPrint(BCLog::MEMPOOL, "AcceptToStemPool: peer=%d: accepted %s (poolsz %u txn, %u kB)\n",
                                               pfrom.GetId(), tx.GetHash().ToString(), m_stempool.size(), m_stempool.DynamicMemoryUsage() / 1000);

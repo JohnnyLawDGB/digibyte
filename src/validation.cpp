@@ -1638,6 +1638,85 @@ MempoolAcceptResult AcceptToMemoryPool(Chainstate& active_chainstate, CTxMemPool
     return result;
 }
 
+// DigiByte: Special MemPoolAccept that can see coins from regular mempool when validating for stempool
+// We need a custom coins view that checks both the regular mempool and the stempool
+class CCoinsViewMemPoolWithBoth : public CCoinsViewBacked
+{
+    const CTxMemPool& m_stempool;
+    const CTxMemPool& m_mempool;
+    std::unordered_map<COutPoint, Coin, SaltedOutpointHasher> m_temp_added;
+    mutable std::unordered_set<COutPoint, SaltedOutpointHasher> m_non_base_coins;
+
+public:
+    CCoinsViewMemPoolWithBoth(CCoinsView* baseIn, const CTxMemPool& mempoolIn, const CTxMemPool& stempoolIn) : 
+        CCoinsViewBacked(baseIn), m_stempool(stempoolIn), m_mempool(mempoolIn) {}
+    
+    bool GetCoin(const COutPoint &outpoint, Coin &coin) const override {
+        // First check stempool
+        if (auto ptx = m_stempool.get(outpoint.hash)) {
+            if (outpoint.n < ptx->vout.size()) {
+                coin = Coin(ptx->vout[outpoint.n], MEMPOOL_HEIGHT, false);
+                m_non_base_coins.insert(outpoint);
+                return true;
+            }
+        }
+        // Then check regular mempool
+        if (auto ptx = m_mempool.get(outpoint.hash)) {
+            if (outpoint.n < ptx->vout.size()) {
+                coin = Coin(ptx->vout[outpoint.n], MEMPOOL_HEIGHT, false);
+                m_non_base_coins.insert(outpoint);
+                return true;
+            }
+        }
+        // Finally check base
+        return base->GetCoin(outpoint, coin);
+    }
+};
+
+MempoolAcceptResult AcceptToMemoryPoolForStempool(Chainstate& active_chainstate, CTxMemPool& stempool, CTxMemPool& mempool,
+                                                  const CTransactionRef& tx, bool bypass_limits, bool test_accept)
+    EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
+{
+    AssertLockHeld(::cs_main);
+    const CChainParams& chainparams{active_chainstate.m_chainman.GetParams()};
+
+    // First check if all inputs are available (either in UTXO set or mempool)
+    // This prevents the "bad-txns-inputs-missingorspent" error for transactions
+    // that spend outputs from the mempool
+    CCoinsViewMemPoolWithBoth viewWithBoth(&active_chainstate.CoinsTip(), mempool, stempool);
+    for (const auto& txin : tx->vin) {
+        Coin coin;
+        if (!viewWithBoth.GetCoin(txin.prevout, coin)) {
+            // Input is missing - this transaction cannot be accepted
+            TxValidationState state;
+            state.Invalid(TxValidationResult::TX_MISSING_INPUTS, "bad-txns-inputs-missingorspent");
+            return MempoolAcceptResult::Failure(state);
+        }
+    }
+
+    // Now proceed with normal stempool validation
+    std::vector<COutPoint> coins_to_uncache;
+    auto args = MemPoolAccept::ATMPArgs::SingleAccept(chainparams, GetTime(), bypass_limits, coins_to_uncache, test_accept);
+    MempoolAcceptResult result = MemPoolAccept(stempool, active_chainstate).AcceptSingleTransaction(tx, args);
+    if (result.m_result_type != MempoolAcceptResult::ResultType::VALID) {
+        // Remove coins that were not present in the coins cache before calling
+        // AcceptSingleTransaction(); this is to prevent memory DoS in case we receive a large
+        // number of invalid transactions that attempt to overrun the in-memory coins cache
+        // (`CCoinsViewCache::cacheCoins`).
+
+        for (const COutPoint& hashTx : coins_to_uncache)
+            active_chainstate.CoinsTip().Uncache(hashTx);
+        TRACE2(mempool, rejected,
+                tx->GetHash().data(),
+                result.m_state.GetRejectReason().c_str()
+        );
+    }
+    // After we've (potentially) uncached entries, ensure our coins cache is still within its size limits
+    BlockValidationState state_dummy;
+    active_chainstate.FlushStateToDisk(state_dummy, FlushStateMode::PERIODIC);
+    return result;
+}
+
 PackageMempoolAcceptResult ProcessNewPackage(Chainstate& active_chainstate, CTxMemPool& pool,
                                                    const Package& package, bool test_accept)
 {

@@ -81,7 +81,7 @@ TransactionError BroadcastTransaction(NodeContext& node, const CTransactionRef t
                 } else {
                     // Test acceptance to stempool for consistency with Dandelion routing
                     if (gArgs.GetBoolArg("-dandelion", DEFAULT_DANDELION)) {
-                        AcceptToMemoryPool(node.chainman->ActiveChainstate(), *node.stempool, tx, /*bypass_limits=*/false, /*test_accept=*/true);
+                        AcceptToMemoryPoolForStempool(node.chainman->ActiveChainstate(), *node.stempool, *node.mempool, tx, /*bypass_limits=*/false, /*test_accept=*/true);
                     }
                 }
             }
@@ -89,21 +89,39 @@ TransactionError BroadcastTransaction(NodeContext& node, const CTransactionRef t
             if (gArgs.GetBoolArg("-dandelion", DEFAULT_DANDELION)) {
                 // Submit to stempool for Dandelion routing
                 LogPrintf("BroadcastTransaction: Dandelion enabled, submitting transaction %s to stempool\n", txid.ToString());
-                const MempoolAcceptResult result = AcceptToMemoryPool(node.chainman->ActiveChainstate(), *node.stempool, tx, /*bypass_limits=*/false);
+                const MempoolAcceptResult result = AcceptToMemoryPoolForStempool(node.chainman->ActiveChainstate(), *node.stempool, *node.mempool, tx, /*bypass_limits=*/false);
                 if (result.m_result_type != MempoolAcceptResult::ResultType::VALID) {
                     LogPrintf("BroadcastTransaction: Failed to accept transaction %s to stempool: %s\n", 
                              txid.ToString(), result.m_state.ToString());
-                    return HandleATMPError(result.m_state, err_string);
-                }
-                LogPrintf("BroadcastTransaction: Successfully accepted transaction %s to stempool (poolsz %u txn, %u kB)\n",
-                         txid.ToString(), node.stempool->size(), node.stempool->DynamicMemoryUsage() / 1000);
-                // Verify the transaction is actually in the stempool
-                if (node.stempool->exists(txid)) {
-                    LogPrintf("BroadcastTransaction: Verified transaction %s is in stempool\n", txid.ToString());
+                    
+                    // If it failed due to missing inputs, it might be because the inputs are in mempool
+                    // In this case, fall back to regular broadcast
+                    if (result.m_state.GetResult() == TxValidationResult::TX_MISSING_INPUTS) {
+                        LogPrintf("BroadcastTransaction: Transaction %s has inputs in mempool, falling back to regular broadcast\n", 
+                                 txid.ToString());
+                        // Fall back to regular mempool submission
+                        const MempoolAcceptResult mempool_result = node.chainman->ProcessTransaction(tx, /*test_accept=*/ false);
+                        if (mempool_result.m_result_type != MempoolAcceptResult::ResultType::VALID) {
+                            return HandleATMPError(mempool_result.m_state, err_string);
+                        }
+                        // Add to unbroadcast for immediate relay
+                        if (relay) {
+                            node.mempool->AddUnbroadcastTx(txid);
+                        }
+                    } else {
+                        return HandleATMPError(result.m_state, err_string);
+                    }
                 } else {
-                    LogPrintf("BroadcastTransaction: ERROR - Transaction %s not found in stempool after acceptance!\n", txid.ToString());
+                    LogPrintf("BroadcastTransaction: Successfully accepted transaction %s to stempool (poolsz %u txn, %u kB)\n",
+                             txid.ToString(), node.stempool->size(), node.stempool->DynamicMemoryUsage() / 1000);
+                    // Verify the transaction is actually in the stempool
+                    if (node.stempool->exists(txid)) {
+                        LogPrintf("BroadcastTransaction: Verified transaction %s is in stempool\n", txid.ToString());
+                    } else {
+                        LogPrintf("BroadcastTransaction: ERROR - Transaction %s not found in stempool after acceptance!\n", txid.ToString());
+                    }
+                    // Don't notify wallet here - stempool transactions should remain separate until fluffed
                 }
-                // Don't notify wallet here - stempool transactions should remain separate until fluffed
             } else {
                 const MempoolAcceptResult result = node.chainman->ProcessTransaction(tx, /*test_accept=*/ false);
                 if (result.m_result_type != MempoolAcceptResult::ResultType::VALID) {

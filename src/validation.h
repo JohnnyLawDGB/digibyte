@@ -265,6 +265,11 @@ MempoolAcceptResult AcceptToMemoryPool(Chainstate& active_chainstate, const CTra
 MempoolAcceptResult AcceptToMemoryPool(Chainstate& active_chainstate, CTxMemPool& pool, const CTransactionRef& tx,
                                        bool bypass_limits, bool test_accept=false) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
+/** DigiByte: Dandelion++ variant for stempool validation that can see regular mempool coins */
+MempoolAcceptResult AcceptToMemoryPoolForStempool(Chainstate& active_chainstate, CTxMemPool& stempool, CTxMemPool& mempool, 
+                                                  const CTransactionRef& tx, bool bypass_limits, bool test_accept=false) 
+                                                  EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+
 /**
 * Validate (and maybe submit) a package to the mempool. See doc/policy/packages.md for full details
 * on package validation rules.

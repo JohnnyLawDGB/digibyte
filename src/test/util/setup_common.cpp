@@ -314,7 +314,23 @@ CBlock TestChain100Setup::CreateBlock(
     const CScript& scriptPubKey,
     Chainstate& chainstate)
 {
-    CBlock block = BlockAssembler{chainstate, nullptr}.CreateNewBlock(scriptPubKey, ALGO_SCRYPT)->block;
+    // Determine which algorithm to use based on current chain height
+    int algo = ALGO_SCRYPT; // Default for early blocks
+    
+    const CBlockIndex* tip = chainstate.m_chain.Tip();
+    if (tip) {
+        int nHeight = tip->nHeight + 1;
+        const auto& consensus = chainstate.m_chainman.GetConsensus();
+        
+        // After multi-algo activation, rotate through all algorithms
+        if (nHeight >= consensus.multiAlgoDiffChangeTarget) {
+            // Start with SCRYPT and rotate through all active algorithms
+            static const int algos[] = {ALGO_SCRYPT, ALGO_SHA256D, ALGO_GROESTL, ALGO_SKEIN, ALGO_QUBIT};
+            algo = algos[nHeight % 5];
+        }
+    }
+    
+    CBlock block = BlockAssembler{chainstate, nullptr}.CreateNewBlock(scriptPubKey, algo)->block;
 
     Assert(block.vtx.size() == 1);
     for (const CMutableTransaction& tx : txns) {

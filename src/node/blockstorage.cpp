@@ -512,6 +512,7 @@ bool BlockManager::LoadBlockIndex(const std::optional<uint256>& snapshot_blockha
     if (snapshot_blockhash) {
         const std::optional<AssumeutxoData> maybe_au_data = GetParams().AssumeutxoForBlockhash(*snapshot_blockhash);
         if (!maybe_au_data) {
+            LogPrintf("ERROR: Assumeutxo data not found for blockhash '%s'. This is a DigiByte-specific issue where the snapshot was created with DigiByte blocks but chainparams has Bitcoin assumeutxo data.\n", snapshot_blockhash->ToString());
             m_opts.notifications.fatalError(strprintf("Assumeutxo data not found for the given blockhash '%s'.", snapshot_blockhash->ToString()));
             return false;
         }

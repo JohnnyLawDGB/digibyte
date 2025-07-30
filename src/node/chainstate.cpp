@@ -60,10 +60,13 @@ static ChainstateLoadResult CompleteChainstateInitialization(
     // block file from disk.
     // Note that it also sets fReindex global based on the disk flag!
     // From here on, fReindex and options.reindex values may be different!
+    LogPrintf("CompleteChainstateInitialization: Before LoadBlockIndex\n");
     if (!chainman.LoadBlockIndex()) {
+        LogPrintf("CompleteChainstateInitialization: LoadBlockIndex failed\n");
         if (options.check_interrupt && options.check_interrupt()) return {ChainstateLoadStatus::INTERRUPTED, {}};
         return {ChainstateLoadStatus::FAILURE, _("Error loading block database")};
     }
+    LogPrintf("CompleteChainstateInitialization: After LoadBlockIndex\n");
 
     if (!chainman.BlockIndex().empty() &&
             !chainman.m_blockman.LookupBlockIndex(chainman.GetConsensus().hashGenesisBlock)) {
@@ -102,7 +105,9 @@ static ChainstateLoadResult CompleteChainstateInitialization(
     // At this point we're either in reindex or we've loaded a useful
     // block tree into BlockIndex()!
 
-    for (Chainstate* chainstate : chainman.GetAll()) {
+    auto all_chainstates = chainman.GetAll();
+    LogPrintf("CompleteChainstateInitialization: GetAll() returned %d chainstates\n", all_chainstates.size());
+    for (Chainstate* chainstate : all_chainstates) {
         LogPrintf("Initializing chainstate %s\n", chainstate->ToString());
 
         chainstate->InitCoinsDB(
@@ -184,7 +189,9 @@ ChainstateLoadResult LoadChainstate(ChainstateManager& chainman, const CacheSize
     chainman.InitializeChainstate(options.mempool, options.stempool);
 
     // Load a chain created from a UTXO snapshot, if any exist.
+    LogPrintf("LoadChainstate: Before DetectSnapshotChainstate\n");
     bool has_snapshot = chainman.DetectSnapshotChainstate();
+    LogPrintf("LoadChainstate: After DetectSnapshotChainstate, has_snapshot=%d\n", has_snapshot);
 
     if (has_snapshot && (options.reindex || options.reindex_chainstate)) {
         LogPrintf("[snapshot] deleting snapshot chainstate due to reindexing\n");

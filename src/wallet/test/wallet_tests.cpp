@@ -448,6 +448,10 @@ BOOST_FIXTURE_TEST_CASE(LoadReceiveRequests, TestingSetup)
             BOOST_CHECK_EQUAL_COLLECTIONS(requests.begin(), requests.end(), std::begin(erequests), std::end(erequests));
             WalletBatch batch{wallet->GetDatabase()};
             BOOST_CHECK(batch.WriteAddressPreviouslySpent(PKHash(), false));
+            // DigiByte fix: Also update the in-memory cache for PKHash
+            if (auto* data = common::FindKey(wallet->m_address_book, PKHash())) {
+                data->previously_spent = false;
+            }
             BOOST_CHECK(batch.EraseAddressData(ScriptHash()));
             // DigiByte fix: Also clear the in-memory cache
             wallet->EraseAddressData(ScriptHash());

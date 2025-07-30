@@ -224,6 +224,14 @@ void ChainTestingSetup::LoadVerifyActivateChainstate()
     options.check_level = m_args.GetIntArg("-checklevel", DEFAULT_CHECKLEVEL);
     options.require_full_verification = m_args.IsArgSet("-checkblocks") || m_args.IsArgSet("-checklevel");
     auto [status, error] = LoadChainstate(chainman, m_cache_sizes, options);
+    if (status != node::ChainstateLoadStatus::SUCCESS) {
+        LogPrintf("LoadChainstate failed with status %d: %s\n", static_cast<int>(status), error.original);
+        // DigiByte: Handle snapshot-related failures more gracefully
+        // These can occur due to multi-algo differences in snapshot data
+        // For tests that expect snapshots to work, we shouldn't delete them
+        // Instead, throw an exception to let the test handle it
+        throw std::runtime_error(strprintf("LoadChainstate failed. (%s)", error.original));
+    }
     assert(status == node::ChainstateLoadStatus::SUCCESS);
 
     std::tie(status, error) = VerifyLoadedChainstate(chainman, options);
@@ -324,9 +332,16 @@ CBlock TestChain100Setup::CreateBlock(
         
         // After multi-algo activation, rotate through all algorithms
         if (nHeight >= consensus.multiAlgoDiffChangeTarget) {
-            // Start with SCRYPT and rotate through all active algorithms
-            static const int algos[] = {ALGO_SCRYPT, ALGO_SHA256D, ALGO_GROESTL, ALGO_SKEIN, ALGO_QUBIT};
-            algo = algos[nHeight % 5];
+            // Check if we're before or after the algo swap (ODO activation)
+            if (nHeight < consensus.algoSwapChangeTarget) {
+                // Before block 600: use all 5 original algorithms
+                static const int algos_before[] = {ALGO_SCRYPT, ALGO_SHA256D, ALGO_GROESTL, ALGO_SKEIN, ALGO_QUBIT};
+                algo = algos_before[nHeight % 5];
+            } else {
+                // After block 600: GROESTL is replaced by ODO
+                static const int algos_after[] = {ALGO_SCRYPT, ALGO_SHA256D, ALGO_ODO, ALGO_SKEIN, ALGO_QUBIT};
+                algo = algos_after[nHeight % 5];
+            }
         }
     }
     

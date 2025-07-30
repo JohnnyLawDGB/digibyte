@@ -6100,16 +6100,19 @@ bool ChainstateManager::DetectSnapshotChainstate()
     assert(!m_snapshot_chainstate);
     std::optional<fs::path> path = node::FindSnapshotChainstateDir(m_options.datadir);
     if (!path) {
+        LogPrintf("DetectSnapshotChainstate: No snapshot directory found\n");
         return false;
     }
     std::optional<uint256> base_blockhash = node::ReadSnapshotBaseBlockhash(*path);
     if (!base_blockhash) {
+        LogPrintf("DetectSnapshotChainstate: No base blockhash found\n");
         return false;
     }
     LogPrintf("[snapshot] detected active snapshot chainstate (%s) - loading\n",
         fs::PathToString(*path));
 
     this->ActivateExistingSnapshot(*base_blockhash);
+    LogPrintf("DetectSnapshotChainstate: Activated existing snapshot\n");
     return true;
 }
 

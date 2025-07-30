@@ -177,7 +177,8 @@ bool MockableBatch::ErasePrefix(Span<const std::byte> prefix)
     auto it = m_records.begin();
     while (it != m_records.end()) {
         auto& key = it->first;
-        if (key.size() < prefix.size() || std::search(key.begin(), key.end(), prefix.begin(), prefix.end()) != key.begin()) {
+        // DigiByte fix: Use proper prefix comparison instead of std::search
+        if (key.size() < prefix.size() || !std::equal(prefix.begin(), prefix.end(), key.begin())) {
             it++;
             continue;
         }

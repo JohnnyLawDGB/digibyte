@@ -52,9 +52,9 @@ static void TestBlockSubsidyHalvings(const Consensus::Params& consensusParams)
     CAmount reward1429999 = GetBlockSubsidy(1429999, consensusParams);
     CAmount reward1430000 = GetBlockSubsidy(1430000, consensusParams);
     
-    // Log the values for debugging
-    std::cout << "Block 1,429,999 reward: " << reward1429999 << " (" << reward1429999 / COIN << " DGB)" << std::endl;
-    std::cout << "Block 1,430,000 reward: " << reward1430000 << " (" << reward1430000 / COIN << " DGB)" << std::endl;
+    // Log the values for debugging (commented out to avoid interfering with test progress bar)
+    // std::cout << "Block 1,429,999 reward: " << reward1429999 << " (" << reward1429999 / COIN << " DGB)" << std::endl;
+    // std::cout << "Block 1,430,000 reward: " << reward1430000 << " (" << reward1430000 / COIN << " DGB)" << std::endl;
     
     // Block 1,430,000 should have reward of 2157/2 = 1078.5 DGB
     BOOST_CHECK_EQUAL(reward1430000, 107850000000);

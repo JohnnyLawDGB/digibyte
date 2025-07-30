@@ -410,7 +410,7 @@ struct SnapshotTestSetup : TestChain100Setup {
 // 3. Use dumptxoutset RPC to get the UTXO set hashes
 // 4. Update the assumeutxo data in chainparams.cpp with DigiByte values
 // See VALIDATION_TEST_FIX.md for detailed instructions
-BOOST_FIXTURE_TEST_CASE(DISABLED_chainstatemanager_activate_snapshot, SnapshotTestSetup)
+BOOST_FIXTURE_TEST_CASE(chainstatemanager_activate_snapshot, SnapshotTestSetup)
 {
     this->SetupSnapshot();
 }
@@ -426,7 +426,7 @@ BOOST_FIXTURE_TEST_CASE(DISABLED_chainstatemanager_activate_snapshot, SnapshotTe
 //!   except those marked assume-valid, because those entries don't HAVE_DATA.
 //!
 // FIXME: Disabled - depends on assumeutxo data with Bitcoin block hashes
-BOOST_FIXTURE_TEST_CASE(DISABLED_chainstatemanager_loadblockindex, TestChain100Setup)
+BOOST_FIXTURE_TEST_CASE(chainstatemanager_loadblockindex, TestChain100Setup)
 {
     ChainstateManager& chainman = *Assert(m_node.chainman);
     Chainstate& cs1 = chainman.ActiveChainstate();
@@ -567,7 +567,7 @@ BOOST_FIXTURE_TEST_CASE(DISABLED_chainstatemanager_loadblockindex, TestChain100S
 
 //! Ensure that snapshot chainstates initialize properly when found on disk.
 // FIXME: Disabled - depends on assumeutxo data with Bitcoin block hashes
-BOOST_FIXTURE_TEST_CASE(DISABLED_chainstatemanager_snapshot_init, SnapshotTestSetup)
+BOOST_FIXTURE_TEST_CASE(chainstatemanager_snapshot_init, SnapshotTestSetup)
 {
     ChainstateManager& chainman = *Assert(m_node.chainman);
     Chainstate& bg_chainstate = chainman.ActiveChainstate();
@@ -637,7 +637,7 @@ BOOST_FIXTURE_TEST_CASE(DISABLED_chainstatemanager_snapshot_init, SnapshotTestSe
 }
 
 // FIXME: Disabled - depends on assumeutxo data with Bitcoin block hashes
-BOOST_FIXTURE_TEST_CASE(DISABLED_chainstatemanager_snapshot_completion, SnapshotTestSetup)
+BOOST_FIXTURE_TEST_CASE(chainstatemanager_snapshot_completion, SnapshotTestSetup)
 {
     this->SetupSnapshot();
 
@@ -721,7 +721,7 @@ BOOST_FIXTURE_TEST_CASE(DISABLED_chainstatemanager_snapshot_completion, Snapshot
 }
 
 // FIXME: Disabled - depends on assumeutxo data with Bitcoin block hashes
-BOOST_FIXTURE_TEST_CASE(DISABLED_chainstatemanager_snapshot_completion_hash_mismatch, SnapshotTestSetup)
+BOOST_FIXTURE_TEST_CASE(chainstatemanager_snapshot_completion_hash_mismatch, SnapshotTestSetup)
 {
     auto chainstates = this->SetupSnapshot();
     Chainstate& validation_chainstate = *std::get<0>(chainstates);

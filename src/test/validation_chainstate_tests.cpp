@@ -74,7 +74,7 @@ BOOST_AUTO_TEST_CASE(validation_chainstate_resize_caches)
 // 3. Use dumptxoutset RPC to get the UTXO set hashes
 // 4. Update the assumeutxo data in chainparams.cpp with DigiByte values
 // See VALIDATION_TEST_FIX.md for detailed instructions
-BOOST_FIXTURE_TEST_CASE(DISABLED_chainstate_update_tip, TestChain100Setup)
+BOOST_FIXTURE_TEST_CASE(chainstate_update_tip, TestChain100Setup)
 {
     ChainstateManager& chainman = *Assert(m_node.chainman);
     uint256 curr_tip = ::g_best_block;

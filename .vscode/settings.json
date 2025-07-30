@@ -40,7 +40,8 @@
     "utility": "cpp",
     "memory": "cpp",
     "algorithm": "cpp",
-    "tuple": "cpp"
+    "tuple": "cpp",
+    "iomanip": "cpp"
   },
   "cmake.ignoreCMakeListsMissing": true
 }

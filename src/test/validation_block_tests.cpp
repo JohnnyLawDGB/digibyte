@@ -68,6 +68,9 @@ std::shared_ptr<CBlock> MinerTestingSetup::Block(const uint256& prev_hash)
 {
     static int i = 0;
     static uint64_t time = Params().GenesisBlock().nTime;
+    
+    // Reset counter periodically to avoid overflow and ensure deterministic behavior
+    if (i > 10000) i = 0;
 
     // Determine which algorithm to use based on the current chain height
     int algo = ALGO_SCRYPT; // Default to SCRYPT for early blocks
@@ -82,9 +85,9 @@ std::shared_ptr<CBlock> MinerTestingSetup::Block(const uint256& prev_hash)
             
             // Only use multi-algo after the activation height
             if (nHeight >= consensus.multiAlgoDiffChangeTarget) {
-                // Rotate through all algorithms
+                // Rotate through all algorithms based on height for deterministic behavior
                 static const int algos[] = {ALGO_SHA256D, ALGO_SCRYPT, ALGO_GROESTL, ALGO_SKEIN, ALGO_QUBIT};
-                algo = algos[i % 5];
+                algo = algos[(nHeight + 1) % 5];
             }
         }
     }

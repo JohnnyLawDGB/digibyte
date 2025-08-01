@@ -839,7 +839,7 @@ class CBlock(CBlockHeader):
     def is_valid(self):
         self.calc_sha256()
         target = uint256_from_compact(self.nBits)
-        if self.sha256 > target:
+        if self.powHash > target:
             return False
         for tx in self.vtx:
             if not tx.is_valid():
@@ -851,7 +851,7 @@ class CBlock(CBlockHeader):
     def solve(self):
         self.rehash()
         target = uint256_from_compact(self.nBits)
-        while self.sha256 > target:
+        while self.powHash > target:
             self.nNonce += 1
             self.rehash()
 

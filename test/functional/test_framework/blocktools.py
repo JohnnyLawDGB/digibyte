@@ -128,12 +128,38 @@ def script_BIP34_coinbase_height(height):
     return CScript([CScriptNum(height)])
 
 def get_coinbase_value(height): 
-    if height < 1440:
-        return 72000
-    elif height < 5760:
-        return 16000
-    else:
-        return 8000
+    # DigiByte subsidy schedule for regtest
+    # Note: regtest has different hard fork heights than mainnet
+    # nDiffChangeTarget = 334
+    # alwaysUpdateDiffChangeTarget = 200
+    # workComputationChangeTarget = 400
+    
+    if height < 200:  # Before MultiShield (regtest alwaysUpdateDiffChangeTarget)
+        if height < 1440:
+            return 72000
+        elif height < 5760:
+            return 16000
+        else:
+            return 8000
+    elif height < 400:  # Period V (regtest workComputationChangeTarget)
+        # Starting subsidy
+        subsidy = 2459
+        blocks = height - 200
+        # In regtest, patchBlockRewardDuration2 = 80
+        weeks = (blocks // 80) + 1
+        # Decrease by 1% per period
+        for i in range(weeks):
+            subsidy = subsidy - (subsidy // 100)
+        return subsidy
+    else:  # Period VI
+        # Starting subsidy  
+        subsidy = 2157 // 2
+        blocks = height - 400
+        # Assuming similar decay for regtest
+        months = blocks * 15 // 2592000  # 15 second blocks, ~2.59M seconds per month
+        for i in range(months):
+            subsidy = subsidy * 98884 // 100000
+        return max(subsidy, 0)
 
 def create_coinbase(height, pubkey=None, *, script_pubkey=None, extra_output_script=None, fees=0, nValue=None):
     """Create a coinbase transaction.

@@ -91,12 +91,12 @@ enum class SynchronizationState {
 
 // The following constants are used in GetBlockSubsidy()
 #define BLOCK_TIME_SECONDS 15
-#define MINUTES 60
-#define SECONDS 60
-#define HOURS 24
+#define SECONDS_PER_MINUTE 60
+#define MINUTES_PER_HOUR 60
+#define HOURS_PER_DAY 24
 #define MONTHS_PER_YEAR 12
 #define DAYS_PER_YEAR 365
-#define SECONDS_PER_MONTH (SECONDS * MINUTES * HOURS * DAYS_PER_YEAR / MONTHS_PER_YEAR)
+#define SECONDS_PER_MONTH (SECONDS_PER_MINUTE * MINUTES_PER_HOUR * HOURS_PER_DAY * DAYS_PER_YEAR / MONTHS_PER_YEAR)
 
 extern GlobalMutex g_best_block_mutex;
 extern std::condition_variable g_best_block_cv;

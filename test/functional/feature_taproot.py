@@ -639,7 +639,7 @@ SIG_POP_BYTE = {"failure": {"sign": byte_popper(default_sign)}}
 SINGLE_SIG = {"inputs": [getter("sign")]}
 SIG_ADD_ZERO = {"failure": {"sign": zero_appender(default_sign)}}
 
-DUST_LIMIT = 600
+DUST_LIMIT = 10000  # DigiByte: Conservative dust limit to handle all output types
 MIN_FEE = 50000
 
 # === Actual test cases ===
@@ -1533,10 +1533,10 @@ class TaprootTest(DigiByteTestFramework):
         coinbase = CTransaction()
         coinbase.nVersion = 1
         coinbase.vin = [CTxIn(COutPoint(0, 0xffffffff), CScript([OP_1, OP_1]), SEQUENCE_FINAL)]
-        coinbase.vout = [CTxOut(5000000000, CScript([OP_1]))]
+        coinbase.vout = [CTxOut(7200000000000, CScript([OP_1]))]  # 72000 DGB for first block
         coinbase.nLockTime = 0
         coinbase.rehash()
-        assert coinbase.hash == "f60c73405d499a956d3162e3483c395526ef78286458a4cb17b125aa92e49b20"
+        assert coinbase.hash == "a88d7f67acda143e453155c907bfdeaad0b50a5e6e8cf6be834ea5f9796b5d5d"
         # Mine it
         block = create_block(hashprev=int(self.nodes[0].getbestblockhash(), 16), coinbase=coinbase)
         block.rehash()
@@ -1747,7 +1747,7 @@ class TaprootTest(DigiByteTestFramework):
         aux = tx_test.setdefault("auxiliary", {})
         aux['fullySignedTx'] = tx.serialize().hex()
         keypath_tests.append(tx_test)
-        assert_equal(hashlib.sha256(tx.serialize()).hexdigest(), "24bab662cb55a7f3bae29b559f651674c62bcc1cd442d44715c0133939107b38")
+        assert_equal(hashlib.sha256(tx.serialize()).hexdigest(), "b8aa603b258546b3176a0b7115e1b2ebbe620cffd0bd911a64585f0067437128")
         # Mine the spending transaction
         self.block_submit(self.nodes[0], [tx], "Spending txn", None, sigops_weight=10000, accept=True, witness=True)
 
@@ -1758,6 +1758,8 @@ class TaprootTest(DigiByteTestFramework):
         self.gen_test_vectors()
 
         self.log.info("Post-activation tests...")
+        # Generate more blocks to ensure wallet has mature coins for test_spenders
+        self.generate(self.nodes[0], 100)
         self.test_spenders(self.nodes[0], spenders_taproot_active(), input_counts=[1, 2, 2, 2, 2, 3])
         # Run each test twice; once in isolation, and once combined with others. Testing in isolation
         # means that the standardness is verified in every test (as combined transactions are only standard

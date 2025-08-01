@@ -1231,6 +1231,15 @@ RPCHelpMan getblockchaininfo()
                 {RPCResult::Type::NUM, "headers", "the current number of headers we have validated"},
                 {RPCResult::Type::STR, "bestblockhash", "the hash of the currently best block"},
                 {RPCResult::Type::NUM, "difficulty", "the current difficulty"},
+                {RPCResult::Type::OBJ, "difficulties", "the current difficulty for all active DigiByte algorithms",
+                    {
+                        {RPCResult::Type::NUM, "sha256d", /*optional=*/true, "SHA256D difficulty"},
+                        {RPCResult::Type::NUM, "scrypt", /*optional=*/true, "Scrypt difficulty"},
+                        {RPCResult::Type::NUM, "groestl", /*optional=*/true, "Groestl difficulty"},
+                        {RPCResult::Type::NUM, "skein", /*optional=*/true, "Skein difficulty"},
+                        {RPCResult::Type::NUM, "qubit", /*optional=*/true, "Qubit difficulty"},
+                        {RPCResult::Type::NUM, "odocrypt", /*optional=*/true, "Odocrypt difficulty"},
+                    }},
                 {RPCResult::Type::NUM_TIME, "time", "The block time expressed in " + UNIX_EPOCH_TIME},
                 {RPCResult::Type::NUM_TIME, "mediantime", "The median block time expressed in " + UNIX_EPOCH_TIME},
                 {RPCResult::Type::NUM, "verificationprogress", "estimate of verification progress [0..1]"},
@@ -1261,6 +1270,17 @@ RPCHelpMan getblockchaininfo()
     obj.pushKV("headers", chainman.m_best_header ? chainman.m_best_header->nHeight : -1);
     obj.pushKV("bestblockhash", tip.GetBlockHash().GetHex());
     obj.pushKV("difficulty", GetDifficulty(&tip, nullptr));
+    
+    // Add difficulties for all algorithms
+    const Consensus::Params& consensusParams = chainman.GetParams().GetConsensus();
+    UniValue difficulties(UniValue::VOBJ);
+    for (int algo = 0; algo < NUM_ALGOS_IMPL; algo++) {
+        if (IsAlgoActive(&tip, consensusParams, algo)) {
+            difficulties.pushKV(GetAlgoName(algo), GetDifficulty(&tip, nullptr, algo));
+        }
+    }
+    obj.pushKV("difficulties", difficulties);
+    
     obj.pushKV("time", tip.GetBlockTime());
     obj.pushKV("mediantime", tip.GetMedianTimePast());
     obj.pushKV("verificationprogress", GuessVerificationProgress(chainman.GetParams().TxData(), &tip));

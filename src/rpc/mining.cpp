@@ -60,6 +60,16 @@ extern int miningAlgo;
  * DigiByte: Multi-algo version - computes hashrate for specific algorithm
  */
 static UniValue GetNetworkHashPS(int lookup, int height, const CChain& active_chain, int algo) {
+    // Validate nblocks parameter
+    if (lookup < -1 || lookup == 0) {
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid nblocks. Must be a positive number or -1.");
+    }
+
+    // Validate height parameter
+    if (height < -1 || height > active_chain.Height()) {
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "Block does not exist at specified height");
+    }
+
     const CBlockIndex* pb = active_chain.Tip();
 
     if (height >= 0 && height < active_chain.Height()) {
@@ -70,7 +80,7 @@ static UniValue GetNetworkHashPS(int lookup, int height, const CChain& active_ch
         return 0;
 
     // If lookup is -1, then use blocks since last difficulty change.
-    if (lookup <= 0)
+    if (lookup == -1)
         lookup = pb->nHeight % Params().GetConsensus().DifficultyAdjustmentInterval() + 1;
 
     // If lookup is larger than chain, then set it to chain length.
@@ -440,6 +450,15 @@ static RPCHelpMan getmininginfo()
                         {RPCResult::Type::NUM, "currentblockweight", /*optional=*/true, "The block weight of the last assembled block (only present if a block was ever assembled)"},
                         {RPCResult::Type::NUM, "currentblocktx", /*optional=*/true, "The number of block transactions of the last assembled block (only present if a block was ever assembled)"},
                         {RPCResult::Type::NUM, "difficulty", "The current difficulty"},
+                        {RPCResult::Type::OBJ, "difficulties", "The current difficulty for all active DigiByte algorithms",
+                            {
+                                {RPCResult::Type::NUM, "sha256d", /*optional=*/true, "SHA256D difficulty"},
+                                {RPCResult::Type::NUM, "scrypt", /*optional=*/true, "Scrypt difficulty"},
+                                {RPCResult::Type::NUM, "groestl", /*optional=*/true, "Groestl difficulty"},
+                                {RPCResult::Type::NUM, "skein", /*optional=*/true, "Skein difficulty"},
+                                {RPCResult::Type::NUM, "qubit", /*optional=*/true, "Qubit difficulty"},
+                                {RPCResult::Type::NUM, "odocrypt", /*optional=*/true, "Odocrypt difficulty"},
+                            }},
                         {RPCResult::Type::NUM, "networkhashps", "The network hashes per second"},
                         {RPCResult::Type::NUM, "pooledtx", "The size of the mempool"},
                         {RPCResult::Type::STR, "chain", "current network name (main, test, signet, regtest)"},
@@ -461,7 +480,23 @@ static RPCHelpMan getmininginfo()
     obj.pushKV("blocks",           active_chain.Height());
     if (BlockAssembler::m_last_block_weight) obj.pushKV("currentblockweight", *BlockAssembler::m_last_block_weight);
     if (BlockAssembler::m_last_block_num_txs) obj.pushKV("currentblocktx", *BlockAssembler::m_last_block_num_txs);
-    obj.pushKV("difficulty",       (double)GetDifficulty(active_chain.Tip()));
+    
+    // Get current tip
+    const CBlockIndex* tip = active_chain.Tip();
+    const Consensus::Params& consensusParams = chainman.GetParams().GetConsensus();
+    
+    // Add current difficulty (for current mining algorithm)
+    obj.pushKV("difficulty",       (double)GetDifficulty(tip));
+    
+    // Add difficulties for all algorithms
+    UniValue difficulties(UniValue::VOBJ);
+    for (int algo = 0; algo < NUM_ALGOS_IMPL; algo++) {
+        if (IsAlgoActive(tip, consensusParams, algo)) {
+            difficulties.pushKV(GetAlgoName(algo), (double)GetDifficulty(tip, nullptr, algo));
+        }
+    }
+    obj.pushKV("difficulties", difficulties);
+    
     obj.pushKV("networkhashps",    getnetworkhashps().HandleRequest(request));
     obj.pushKV("pooledtx",         (uint64_t)mempool.size());
     obj.pushKV("chain", chainman.GetParams().GetChainTypeString());

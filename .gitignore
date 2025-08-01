@@ -159,3 +159,4 @@ dist/
 /ci/scratch/
 .vscode/settings.json
 DigiByte-Core.dmg
+.wslconfig

@@ -593,12 +593,18 @@ public:
         consensus.OdoHeight = 600; // DigiByte Odocrypt height
         consensus.MinBIP9WarningHeight = 0;
         consensus.powLimit = uint256S("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
-        consensus.initialTarget[ALGO_ODO] = ArithToUint256(~arith_uint256(0) >> 20); // Odocrypt initial target
+        // Set initial targets for all algorithms (easy difficulty for regtest)
+        consensus.initialTarget[ALGO_SHA256D] = uint256S("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+        consensus.initialTarget[ALGO_SCRYPT] = uint256S("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+        consensus.initialTarget[ALGO_GROESTL] = uint256S("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+        consensus.initialTarget[ALGO_SKEIN] = uint256S("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+        consensus.initialTarget[ALGO_QUBIT] = uint256S("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+        consensus.initialTarget[ALGO_ODO] = uint256S("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"); // Odocrypt initial target
         consensus.nPowTargetTimespan = 14 * 24 * 60 * 60; // two weeks
         consensus.nPowTargetSpacing = 60 / 4; // 15 seconds (DigiByte)
         consensus.fPowAllowMinDifficultyBlocks = true;
-        consensus.fEasyPow = false; // DigiByte setting
-        consensus.fPowNoRetargeting = true;
+        consensus.fEasyPow = true; // DigiByte setting - allow easy pow for regtest
+        consensus.fPowNoRetargeting = true; // No retargeting in regtest for faster mining
         consensus.fRbfEnabled = false; // DigiByte RBF disabled
         
         // DigiByte Specific Consensus Code

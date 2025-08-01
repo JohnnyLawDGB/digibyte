@@ -831,6 +831,7 @@ class DigiByteTestFramework(metaclass=DigiByteTestMetaClass):
                     cache_node,
                     nblocks=25 if i != 7 else 24,
                     address=gen_addresses[i % len(gen_addresses)],
+                    # DigiByte: Let the node choose the appropriate algorithm based on height
                 )
 
             assert_equal(cache_node.getblockchaininfo()["blocks"], 199)

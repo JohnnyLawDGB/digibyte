@@ -2872,6 +2872,37 @@ return RPCHelpMan{
     };
 }
 
+static RPCHelpMan getblockreward()
+{
+    return RPCHelpMan{"getblockreward",
+        "\nReturns the current DGB block reward.\n",
+        {},
+        RPCResult{
+            RPCResult::Type::OBJ, "", "Information about the current block reward",
+            {
+                {RPCResult::Type::NUM, "blockreward", "The current block reward in DGB"},
+            }},
+        RPCExamples{
+            HelpExampleCli("getblockreward", "")
+            + HelpExampleRpc("getblockreward", "")
+        },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+    {
+        ChainstateManager& chainman = EnsureAnyChainman(request.context);
+        LOCK(cs_main);
+        Chainstate& active_chainstate = chainman.ActiveChainstate();
+        CBlockIndex* pindex = active_chainstate.m_chain.Tip();
+
+        if (!pindex)
+            throw JSONRPCError(RPC_INTERNAL_ERROR, "Error: Couldn't find the current block");
+
+        int64_t nReward = GetBlockSubsidy(pindex->nHeight, chainman.GetParams().GetConsensus());
+        UniValue result(UniValue::VOBJ);
+        result.pushKV("blockreward", ValueFromAmount(nReward));
+
+        return result;
+    }};
+}
 
 void RegisterBlockchainRPCCommands(CRPCTable& t)
 {
@@ -2896,6 +2927,7 @@ void RegisterBlockchainRPCCommands(CRPCTable& t)
         {"blockchain", &scantxoutset},
         {"blockchain", &scanblocks},
         {"blockchain", &getblockfilter},
+        {"blockchain", &getblockreward},
         {"blockchain", &dumptxoutset},
         {"blockchain", &loadtxoutset},
         {"blockchain", &getchainstates},

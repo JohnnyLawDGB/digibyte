@@ -256,11 +256,6 @@ class DecodeScriptTest(DigiByteTestFramework):
         assert_equal('OP_RETURN 3011020701010101010101020601010101010101', rpc_result['vin'][0]['scriptSig']['asm'])
 
     def decodescript_datadriven_tests(self):
-        # DigiByte: Skip data-driven tests for now due to address format differences
-        # TODO: Regenerate test data with DigiByte addresses
-        self.log.info("Skipping data-driven tests - need to regenerate with DigiByte addresses")
-        return
-        
         with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'data/rpc_decodescript.json'), encoding='utf-8') as f:
             dd_tests = json.load(f)
 

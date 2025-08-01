@@ -66,14 +66,14 @@
             "asm": "-28398",
             "desc": "raw(02eeee)#5xzck7pr",
             "type": "nonstandard",
-            "p2sh": "2N34iiGoUUkVSPiaaTFpJjB1FR9TXQu3PGM",
+            "p2sh": "yW8waC7LieYNbSmj5mATa9mCAu2hesnjou",
             "segwit": {
                 "asm": "0 96c2368fc30514a438a8bd909f93c49a1549d77198ccbdb792043b666cb24f42",
-                "desc": "addr(dgbrt1qjmprdr7rq522gw9ghkgfly7yng25n4m3nrxtmdujqsakvm9jfapqqvyhcu)#jxykg9qf",
+                "desc": "addr(dgbrt1qjmprdr7rq522gw9ghkgfly7yng25n4m3nrxtmdujqsakvm9jfapq5vjtcf)#av2nwhhv",
                 "hex": "002096c2368fc30514a438a8bd909f93c49a1549d77198ccbdb792043b666cb24f42",
-                "address": "dgbrt1qjmprdr7rq522gw9ghkgfly7yng25n4m3nrxtmdujqsakvm9jfapqqvyhcu",
+                "address": "dgbrt1qjmprdr7rq522gw9ghkgfly7yng25n4m3nrxtmdujqsakvm9jfapq5vjtcf",
                 "type": "witness_v0_scripthash",
-                "p2sh-segwit": "2MtoejEictTQ6XtmHYzoYttt35Ec6krqFKN"
+                "p2sh-segwit": "yMssbA2V8MT2jcxSBW9hjsdypzBGwsMjF2"
             }
         }
     ],

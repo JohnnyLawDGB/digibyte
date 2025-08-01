@@ -117,11 +117,13 @@ class AddressInputTypeGrouping(DigiByteTestFramework):
                 "-addresstype=bech32",
                 "-whitelist=noban@127.0.0.1",
                 "-txindex",
+                "-dandelion=0",  # Disable Dandelion++ for test reliability
             ],
             [
                 "-addresstype=p2sh-segwit",
                 "-whitelist=noban@127.0.0.1",
                 "-txindex",
+                "-dandelion=0",  # Disable Dandelion++ for test reliability
             ],
         ]
 
@@ -130,7 +132,9 @@ class AddressInputTypeGrouping(DigiByteTestFramework):
         self.skip_if_no_sqlite()
 
     def make_payment(self, A, B, v, addr_type):
-        fee_rate = random.randint(1, 20)
+        # DigiByte minimum fee rate is 10000 sat/vB (0.1 DGB/kB)
+        # Use a range from minimum to 2x minimum for variation
+        fee_rate = random.randint(10000, 20000)
         self.log.debug(f"Making payment of {v} DGB at fee_rate {fee_rate}")
         tx = B.sendtoaddress(
             address=A.getnewaddress(address_type=addr_type),
@@ -143,7 +147,10 @@ class AddressInputTypeGrouping(DigiByteTestFramework):
 
         # alias self.nodes[i] to A, B for readability
         A, B = self.nodes[0], self.nodes[1]
-        self.generate(A, COINBASE_MATURITY + 5)
+        
+        # Generate initial blocks to fund node A
+        # We need more than COINBASE_MATURITY for spendable coins
+        self.generate(A, COINBASE_MATURITY + 20)
 
         self.log.info("Creating mixed UTXOs in B's wallet")
         for v in generate_payment_values(3, 10):

@@ -54,7 +54,11 @@ class MempoolPersistTest(DigiByteTestFramework):
         self.add_wallet_options(parser, legacy=False)
     def set_test_params(self):
         self.num_nodes = 3
-        self.extra_args = [[], ["-persistmempool=0"], []]
+        self.extra_args = [
+            ["-dandelion=0"],  # Disable Dandelion++ for test reliability
+            ["-persistmempool=0", "-dandelion=0"],
+            ["-dandelion=0"]
+        ]
 
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()

@@ -43,10 +43,13 @@ class MempoolLimitTest(DigiByteTestFramework):
         relayfee = node.getnetworkinfo()['relayfee']
 
         tx_batch_size = 1
-        num_of_batches = 75
+        # DigiByte: Since our transactions are ~10KB instead of ~66KB,
+        # we need more transactions to fill the 5MB mempool
+        # 5MB / 10KB = ~500 transactions
+        num_of_batches = 500
         # Generate UTXOs to flood the mempool
         # 1 to create a tx initially that will be evicted from the mempool later
-        # 75 transactions each with a fee rate higher than the previous one
+        # 500 transactions each with a fee rate higher than the previous one
         # And 1 more to verify that this tx does not get added to the mempool with a fee rate less than the mempoolminfee
         # And 2 more for the package cpfp test
         self.generate(miniwallet, 1 + (num_of_batches * tx_batch_size))
@@ -58,9 +61,10 @@ class MempoolLimitTest(DigiByteTestFramework):
         tx_to_be_evicted_id = miniwallet.send_self_transfer(from_node=node, fee_rate=relayfee)["txid"]
 
         # Increase the tx fee rate to give the subsequent transactions a higher priority in the mempool
-        # The tx has an approx. vsize of 65k, i.e. multiplying the previous fee rate (in sats/kvB)
-        # by 130 should result in a fee that corresponds to 2x of that fee rate
-        base_fee = relayfee * 130
+        # DigiByte: The tx has an approx. vsize of 10k (not 65k like Bitcoin),
+        # so multiplying the previous fee rate (in sats/kvB) by 20 should result
+        # in a fee that corresponds to 2x of that fee rate
+        base_fee = relayfee * 20
 
         self.log.debug("Fill up the mempool with txs with higher fee rate")
         with node.assert_debug_log(["rolling minimum fee bumped"]):

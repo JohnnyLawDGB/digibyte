@@ -1238,7 +1238,7 @@ RPCHelpMan getblockchaininfo()
                         {RPCResult::Type::NUM, "groestl", /*optional=*/true, "Groestl difficulty"},
                         {RPCResult::Type::NUM, "skein", /*optional=*/true, "Skein difficulty"},
                         {RPCResult::Type::NUM, "qubit", /*optional=*/true, "Qubit difficulty"},
-                        {RPCResult::Type::NUM, "odocrypt", /*optional=*/true, "Odocrypt difficulty"},
+                        {RPCResult::Type::NUM, "odo", /*optional=*/true, "Odocrypt difficulty"},
                     }},
                 {RPCResult::Type::NUM_TIME, "time", "The block time expressed in " + UNIX_EPOCH_TIME},
                 {RPCResult::Type::NUM_TIME, "mediantime", "The median block time expressed in " + UNIX_EPOCH_TIME},

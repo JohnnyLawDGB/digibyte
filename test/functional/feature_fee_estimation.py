@@ -154,7 +154,7 @@ class EstimateFeeTest(DigiByteTestFramework):
         # Node2 is a stingy miner, that
         # produces too small blocks (room for only 55 or so transactions)
         self.start_nodes()
-        self.import_deterministic_coinbase_privkeys()
+        # Skip import_deterministic_coinbase_privkeys() because we use MiniWallet
         self.stop_nodes()
 
     def transact_and_mine(self, numblocks, mining_node):

@@ -22,7 +22,9 @@ class RPCGenerateTest(DigiByteTestFramework):
         self.test_generateblock()
 
     def test_generatetoaddress(self):
-        self.generatetoaddress(self.nodes[0], 1, 'mneYUmWYsuk7kySiURxCi3AGxrAqZxLgPZ')
+        # DigiByte: Use DigiByte regtest addresses (s prefix for P2PKH) - from test framework
+        self.generatetoaddress(self.nodes[0], 1, 'swzkfmbaZb4KARFXeNvtECxhggYJnho4ud')
+        # DigiByte: Invalid address (Bitcoin P2SH format, not valid for DigiByte)
         assert_raises_rpc_error(-5, "Invalid address", self.generatetoaddress, self.nodes[0], 1, '3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy')
 
     def test_generateblock(self):
@@ -49,7 +51,8 @@ class RPCGenerateTest(DigiByteTestFramework):
 
         self.log.info('Generate an empty block to a combo descriptor with compressed pubkey')
         combo_key = '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798'
-        combo_address = 'bcrt1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080'
+        # DigiByte: Use DigiByte regtest bech32 address (dgbrt1 prefix)
+        combo_address = 'dgbrt1qw508d6qejxtdg4y5r3zarvary0c5xw7k2875s5'
         hash = self.generateblock(node, 'combo(' + combo_key + ')', [])['hash']
         block = node.getblock(hash, 2)
         assert_equal(len(block['tx']), 1)
@@ -57,7 +60,8 @@ class RPCGenerateTest(DigiByteTestFramework):
 
         self.log.info('Generate an empty block to a combo descriptor with uncompressed pubkey')
         combo_key = '0408ef68c46d20596cc3f6ddf7c8794f71913add807f1dc55949fa805d764d191c0b7ce6894c126fce0babc6663042f3dde9b0cf76467ea315514e5a6731149c67'
-        combo_address = 'mkc9STceoCcjoXEXe6cm66iJbmjM6zR9B2'
+        # DigiByte: Use DigiByte regtest P2PKH address (s prefix) for uncompressed pubkey
+        combo_address = 'sngCD65ySuZt52Kq1PcYMyo73LbVnGSHFr'
         hash = self.generateblock(node, 'combo(' + combo_key + ')', [])['hash']
         block = node.getblock(hash, 2)
         assert_equal(len(block['tx']), 1)

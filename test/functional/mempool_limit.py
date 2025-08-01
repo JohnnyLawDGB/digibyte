@@ -297,8 +297,9 @@ class MempoolLimitTest(DigiByteTestFramework):
 
         relayfee = node.getnetworkinfo()['relayfee']
         self.log.info('Check that mempoolminfee is minrelaytxfee')
-        assert_equal(node.getmempoolinfo()['minrelaytxfee'], Decimal('0.00001000'))
-        assert_equal(node.getmempoolinfo()['mempoolminfee'], Decimal('0.00001000'))
+        # DigiByte has a minimum relay fee of 0.00010000 DGB (10x Bitcoin's)
+        assert_equal(node.getmempoolinfo()['minrelaytxfee'], Decimal('0.00010000'))
+        assert_equal(node.getmempoolinfo()['mempoolminfee'], Decimal('0.00010000'))
 
         self.fill_mempool()
 

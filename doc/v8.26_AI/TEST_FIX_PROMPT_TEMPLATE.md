@@ -71,6 +71,7 @@ BOOST_CHECK_EQUAL(MAX_MONEY, 21000000000 * COIN);
 - 21 million → 21 billion supply
 - 600 seconds → 15 seconds block time
 - Single algorithm → 5 algorithms (SHA256D, Scrypt, Groestl, Skein, Qubit) + Odocrypt
+- For Dandelion++ issues: Read doc/DANDELION_INFO.md FIRST
 
 ### Step 5: Handle Application Bugs
 

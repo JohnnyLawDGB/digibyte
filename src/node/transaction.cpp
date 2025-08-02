@@ -68,6 +68,10 @@ TransactionError BroadcastTransaction(NodeContext& node, const CTransactionRef t
             // The mempool transaction may have the same or different witness (and
             // wtxid) as this transaction. Use the mempool's wtxid for reannouncement.
             wtxid = mempool_tx->GetWitnessHash();
+        } else if (gArgs.GetBoolArg("-dandelion", DEFAULT_DANDELION) && node.stempool && node.stempool->exists(GenTxid::Txid(txid))) {
+            // Transaction is already in stempool for Dandelion routing
+            LogPrint(BCLog::DANDELION, "BroadcastTransaction: Transaction %s already in stempool, will proceed with relay\n", txid.ToString());
+            // Don't try to re-add to stempool, but DO continue with relay logic below
         } else {
             // Transaction is not already in the mempool.
             if (max_tx_fee > 0) {
@@ -87,10 +91,12 @@ TransactionError BroadcastTransaction(NodeContext& node, const CTransactionRef t
             }
             // Try to submit the transaction to the stempool only (if dandelion is enabled);
             if (gArgs.GetBoolArg("-dandelion", DEFAULT_DANDELION)) {
-                // Submit to stempool for Dandelion routing
-                LogPrintf("BroadcastTransaction: Dandelion enabled, submitting transaction %s to stempool\n", txid.ToString());
-                const MempoolAcceptResult result = AcceptToMemoryPoolForStempool(node.chainman->ActiveChainstate(), *node.stempool, *node.mempool, tx, /*bypass_limits=*/false);
-                if (result.m_result_type != MempoolAcceptResult::ResultType::VALID) {
+                // Only submit if not already in stempool
+                if (!node.stempool->exists(GenTxid::Txid(txid))) {
+                    // Submit to stempool for Dandelion routing
+                    LogPrintf("BroadcastTransaction: Dandelion enabled, submitting transaction %s to stempool\n", txid.ToString());
+                    const MempoolAcceptResult result = AcceptToMemoryPoolForStempool(node.chainman->ActiveChainstate(), *node.stempool, *node.mempool, tx, /*bypass_limits=*/false);
+                    if (result.m_result_type != MempoolAcceptResult::ResultType::VALID) {
                     LogPrintf("BroadcastTransaction: Failed to accept transaction %s to stempool: %s\n", 
                              txid.ToString(), result.m_state.ToString());
                     
@@ -121,6 +127,7 @@ TransactionError BroadcastTransaction(NodeContext& node, const CTransactionRef t
                         LogPrintf("BroadcastTransaction: ERROR - Transaction %s not found in stempool after acceptance!\n", txid.ToString());
                     }
                     // Don't notify wallet here - stempool transactions should remain separate until fluffed
+                    }
                 }
             } else {
                 const MempoolAcceptResult result = node.chainman->ProcessTransaction(tx, /*test_accept=*/ false);

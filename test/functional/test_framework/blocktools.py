@@ -129,37 +129,43 @@ def script_BIP34_coinbase_height(height):
 
 def get_coinbase_value(height): 
     # DigiByte subsidy schedule for regtest
-    # Note: regtest has different hard fork heights than mainnet
+    # Matches GetBlockSubsidy in validation.cpp
     # nDiffChangeTarget = 334
     # alwaysUpdateDiffChangeTarget = 200
     # workComputationChangeTarget = 400
+    COIN = 100000000
     
-    if height < 200:  # Before MultiShield (regtest alwaysUpdateDiffChangeTarget)
+    if height < 334:  # nDiffChangeTarget
         if height < 1440:
             return 72000
         elif height < 5760:
             return 16000
         else:
             return 8000
-    elif height < 400:  # Period V (regtest workComputationChangeTarget)
-        # Starting subsidy
-        subsidy = 2459
-        blocks = height - 200
-        # In regtest, patchBlockRewardDuration2 = 80
-        weeks = (blocks // 80) + 1
+    elif height < 200:  # alwaysUpdateDiffChangeTarget (never true since 334 > 200)
+        # Period IV - This condition can never be true in regtest
+        pass
+    elif height < 400:  # workComputationChangeTarget
+        # Period V
+        subsidy = 2459 * COIN
+        blocks = height - 200  # alwaysUpdateDiffChangeTarget
+        weeks = blocks // 80 + 1  # patchBlockRewardDuration2 = 80
         # Decrease by 1% per period
         for i in range(weeks):
             subsidy = subsidy - (subsidy // 100)
-        return subsidy
-    else:  # Period VI
-        # Starting subsidy  
-        subsidy = 2157 // 2
+        return subsidy // COIN
+    else:
+        # Period VI
+        subsidy = 2157 * COIN // 2
         blocks = height - 400
-        # Assuming similar decay for regtest
-        months = blocks * 15 // 2592000  # 15 second blocks, ~2.59M seconds per month
+        # 15 second blocks, ~2.59M seconds per month
+        months = blocks * 15 // 2592000
         for i in range(months):
             subsidy = subsidy * 98884 // 100000
-        return max(subsidy, 0)
+        # Minimum subsidy is 1 DGB, otherwise 0
+        if subsidy < COIN:
+            return 0
+        return subsidy // COIN
 
 def create_coinbase(height, pubkey=None, *, script_pubkey=None, extra_output_script=None, fees=0, nValue=None):
     """Create a coinbase transaction.

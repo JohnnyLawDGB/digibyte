@@ -42,11 +42,19 @@ pip install --break-system-packages digibyte-scrypt
    - Assertion Failures: Wrong constants (fees, rewards, timing)
    - Address Format Issues: Need DigiByte prefixes
    - Import Errors: Missing test framework functions
+   - Dandelion++ Issues: See doc/DANDELION_INFO.md for stempool/mempool interactions
 
 3. **Application Bug Protocol:**
    - Fix bugs in application code when discovered
    - Document thoroughly
    - Report using standardized format
+
+4. **Dandelion++ Related Test Failures:**
+   - Read doc/DANDELION_INFO.md FIRST
+   - Understand stempool vs mempool separation
+   - Check for "txn-already-in-mempool" errors
+   - Verify embargo and routing behavior
+   - Test with -dandelion=0 to isolate issues
 
 ### Critical DigiByte Test Constants
 ```python
@@ -527,11 +535,23 @@ DigiByte implements Dandelion++ for transaction privacy. Key files:
 - src/dandelion.cpp
 - src/dandelion.h
 - src/stempool.h
+- **doc/DANDELION_INFO.md** - CRITICAL: Read this comprehensive guide before making ANY Dandelion-related changes
 
 Preserve all Dandelion-related code, especially:
 - `NetMsgType::DANDELIONTX` message handling
 - Stem pool management
 - Transaction routing logic
+- Embargo system
+- Two-pool (stempool/mempool) transaction flow
+
+**IMPORTANT**: For any Dandelion++ related issues or changes, ALWAYS consult doc/DANDELION_INFO.md first. This document contains the complete implementation reference including:
+- Protocol summary and differences from BIP-156
+- File structure and dependencies
+- Core implementation details
+- Message flow and processing
+- Stempool implementation
+- Critical implementation notes
+- Known issues and solutions
 
 ### Difficulty Adjustment
 DigiByte uses custom difficulty algorithms:

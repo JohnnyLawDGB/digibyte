@@ -99,9 +99,20 @@ class WalletBackupTest(DigiByteTestFramework):
         self.generate(self.nodes[0], 1)
         self.generate(self.nodes[1], 1)
         self.generate(self.nodes[2], 1)
-        # DigiByte: Use COINBASE_MATURITY instead of hardcoded 100
-        self.generate(self.nodes[3], COINBASE_MATURITY)
+        # DigiByte: Need enough blocks for all coinbases to mature
+        # Node 0 mined at height 0, needs height 8 (COINBASE_MATURITY)
+        # Node 1 mined at height 1, needs height 9
+        # Node 2 mined at height 2, needs height 10
+        # So we need to mine to at least height 10
+        self.generate(self.nodes[3], COINBASE_MATURITY + 2)
 
+        # Debug: Check block count and balances
+        self.log.info(f"Block count: {self.nodes[0].getblockcount()}")
+        self.log.info(f"Node 0 balance: {self.nodes[0].getbalance()}, listunspent: {len(self.nodes[0].listunspent())}")
+        self.log.info(f"Node 1 balance: {self.nodes[1].getbalance()}, listunspent: {len(self.nodes[1].listunspent())}")
+        self.log.info(f"Node 2 balance: {self.nodes[2].getbalance()}, listunspent: {len(self.nodes[2].listunspent())}")
+        self.log.info(f"Node 3 balance: {self.nodes[3].getbalance()}, listunspent: {len(self.nodes[3].listunspent())}")
+        
         assert_equal(self.nodes[0].getbalance(), 72000)  # DigiByte: Block reward is 72000
         assert_equal(self.nodes[1].getbalance(), 72000)
         assert_equal(self.nodes[2].getbalance(), 72000)

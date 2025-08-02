@@ -2,7 +2,7 @@
 
 ## Quick Start Workflow
 Your task is to fix Python functional tests by addressing the underlying issues.
-**NEVER skip or disable tests - always fix the root cause.**
+**NEVER skip or disable tests unless they are already skipped or disabled - always fix the root cause.**
 
 ### Initial Setup (Run Once)
 ```bash

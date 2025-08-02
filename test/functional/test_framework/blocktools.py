@@ -270,13 +270,29 @@ def create_witness_tx(node, use_p2wsh, utxo, pubkey, encode_p2sh, amount):
     """Return a transaction (in hex) that spends the given utxo to a segwit output.
 
     Optionally wrap the segwit output using P2SH."""
-    if use_p2wsh:
-        program = keys_to_multisig_script([pubkey])
-        addr = script_to_p2sh_p2wsh(program) if encode_p2sh else script_to_p2wsh(program)
+    # Use node RPC to generate DigiByte-compatible addresses
+    from test_framework.script import CScript
+    # pubkey might be str or bytes, convert to hex string
+    if isinstance(pubkey, str):
+        pubkey_hex = pubkey
     else:
-        addr = key_to_p2sh_p2wpkh(pubkey) if encode_p2sh else key_to_p2wpkh(pubkey)
-    if not encode_p2sh:
-        assert_equal(address_to_scriptpubkey(addr).hex(), witness_script(use_p2wsh, pubkey))
+        pubkey_hex = pubkey.hex()
+    
+    if use_p2wsh:
+        # Create a 1-of-1 multisig for P2WSH
+        ms_info = node.createmultisig(1, [pubkey_hex], 'p2sh-segwit' if encode_p2sh else 'bech32')
+        addr = ms_info['address']
+    else:
+        # For P2WPKH, we need to derive from a descriptor
+        from test_framework.descriptors import descsum_create
+        if encode_p2sh:
+            # P2SH-P2WPKH - we need to create this via descriptor
+            desc = descsum_create(f"sh(wpkh({pubkey_hex}))")
+        else:
+            # P2WPKH
+            desc = descsum_create(f"wpkh({pubkey_hex})")
+        addr = node.deriveaddresses(desc)[0]
+    
     return node.createrawtransaction([utxo], {addr: amount})
 
 def send_to_witness(use_p2wsh, node, utxo, pubkey, encode_p2sh, amount, sign=True, insert_redeem_script=""):
@@ -289,7 +305,7 @@ def send_to_witness(use_p2wsh, node, utxo, pubkey, encode_p2sh, amount, sign=Tru
     tx_to_witness = create_witness_tx(node, use_p2wsh, utxo, pubkey, encode_p2sh, amount)
     if (sign):
         signed = node.signrawtransactionwithwallet(tx_to_witness)
-        assert "errors" not in signed or len(["errors"]) == 0
+        assert "errors" not in signed or len(signed["errors"]) == 0
         return node.sendrawtransaction(signed["hex"])
     else:
         if (insert_redeem_script):

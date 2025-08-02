@@ -109,7 +109,7 @@ def test_address(node, address, **kwargs):
 def bytes_to_wif(b, compressed=True):
     if compressed:
         b += b'\x01'
-    return byte_to_base58(b, 239)
+    return byte_to_base58(b, 254)  # DigiByte testnet/regtest SECRET_KEY prefix
 
 def generate_keypair(compressed=True, wif=False):
     """Generate a new random keypair and return the corresponding ECKey /

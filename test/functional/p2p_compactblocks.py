@@ -11,6 +11,7 @@ from test_framework.blocktools import (
     add_witness_commitment,
     create_block,
 )
+from test_framework.script import CScript, OP_TRUE
 from test_framework.messages import (
     BlockTransactions,
     BlockTransactionsRequest,
@@ -176,12 +177,10 @@ class CompactBlocksTest(DigiByteTestFramework):
 
     # Create 10 more anyone-can-spend utxo's for testing.
     def make_utxos(self):
-        # Generate a block using RPC instead of manually building
-        blockhash = self.generate(self.wallet, 1)[0]
-        block_hex = self.nodes[0].getblock(blockhash=blockhash, verbosity=0)
-        block = from_hex(CBlock(), block_hex)
-        
-        # Generate maturity blocks
+        # Generate a block
+        block = self.build_block_on_tip(self.nodes[0])
+        self.segwit_node.send_and_ping(msg_no_witness_block(block))
+        assert int(self.nodes[0].getbestblockhash(), 16) == block.sha256
         self.generate(self.wallet, COINBASE_MATURITY)
 
         # Create transaction with multiple anyone-can-spend outputs
@@ -193,24 +192,14 @@ class CompactBlocksTest(DigiByteTestFramework):
             tx.vout.append(CTxOut(out_value, CScript([OP_TRUE])))
         tx.rehash()
 
-        # Submit the transaction to mempool
-        self.nodes[0].sendrawtransaction(tx.serialize().hex())
-        
-        # Generate a block containing the transaction
-        blockhash2 = self.generate(self.wallet, 1)[0]
-        block2_hex = self.nodes[0].getblock(blockhash=blockhash2, verbosity=0) 
-        block2 = from_hex(CBlock(), block2_hex)
-        
-        # Find our transaction in the block and record the UTXOs
-        tx_hash = tx.sha256
-        if tx_hash is None:
-            tx.rehash()
-            tx_hash = tx.sha256
-        
-        for vtx in block2.vtx:
-            if vtx.sha256 == tx_hash:
-                self.utxos.extend([[tx_hash, i, out_value] for i in range(10)])
-                break
+        # Build a block containing the transaction
+        block2 = self.build_block_on_tip(self.nodes[0])
+        block2.vtx.append(tx)
+        block2.hashMerkleRoot = block2.calc_merkle_root()
+        block2.solve()
+        self.segwit_node.send_and_ping(msg_no_witness_block(block2))
+        assert_equal(int(self.nodes[0].getbestblockhash(), 16), block2.sha256)
+        self.utxos.extend([[tx.sha256, i, out_value] for i in range(10)])
 
 
     # Test "sendcmpct" (between peers preferring the same version):
@@ -656,7 +645,17 @@ class CompactBlocksTest(DigiByteTestFramework):
     def test_low_work_compactblocks(self, test_node):
         # A compactblock with insufficient work won't get its header included
         node = self.nodes[0]
-        hashPrevBlock = int(node.getblockhash(node.getblockcount() - 150), 16)
+        # For DigiByte, we need to go back further due to 15-second blocks
+        # Bitcoin has 600-second blocks, so 150 blocks = 25 hours
+        # DigiByte has 15-second blocks, so we need 6000 blocks for similar time
+        # But we'll use a smaller number that still triggers the low-work check
+        blocks_back = 500
+        # Ensure we have enough blocks
+        current_height = node.getblockcount()
+        if current_height < blocks_back:
+            # Generate blocks to ensure we have enough
+            self.generate(self.wallet, blocks_back - current_height)
+        hashPrevBlock = int(node.getblockhash(node.getblockcount() - blocks_back), 16)
         block = self.build_block_on_tip(node)
         block.hashPrevBlock = hashPrevBlock
         block.solve()

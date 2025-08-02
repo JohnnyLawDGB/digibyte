@@ -17,7 +17,7 @@ pip install --break-system-packages digibyte-scrypt
 
 ### Build Test Environment
 ```bash
-cd /mnt/c/Users/Jared/code/digibyte
+# From the digibyte root directory (v8.26)
 ./configure --without-gui && make -j8
 ```
 
@@ -70,14 +70,14 @@ Each sub-agent should:
 1. **FIRST - DigiByte v8.22.2** (SOURCE OF TRUTH - tests passed here!)
    ```bash
    # Check how the test SUCCESSFULLY works in v8.22.2
-   cat /mnt/c/Users/Jared/code/digibyte/digibyte-v8.22.2/test/functional/test_name.py
+   cat digibyte-v8.22.2/test/functional/test_name.py
    ```
    This shows you the CORRECT DigiByte-specific behavior and values.
 
 2. **SECOND - Bitcoin v26.2** (understand what changed)
    ```bash
    # See what Bitcoin changed that might break DigiByte
-   cat /mnt/c/Users/Jared/code/digibyte/bitcoin-v26.2-for-digibyte/test/functional/test_name.py
+   cat bitcoin-v26.2-for-digibyte/test/functional/test_name.py
    ```
    This helps identify new features or changes from Bitcoin.
 
@@ -236,10 +236,10 @@ Create a summary report:
 - **FIX** application bugs when found (don't work around them)
 - **DOCUMENT** every change and bug found
 - **USE** sub-agents for parallel processing efficiency
-- **REFERENCE** the full paths when comparing:
-  - v8.22.2: `/mnt/c/Users/Jared/code/digibyte/digibyte-v8.22.2/`
-  - Bitcoin v26.2: `/mnt/c/Users/Jared/code/digibyte/bitcoin-v26.2-for-digibyte/`
-  - Current v8.26: `/mnt/c/Users/Jared/code/digibyte/`
+- **REFERENCE** the paths when comparing (from digibyte root directory):
+  - v8.22.2: `digibyte-v8.22.2/`
+  - Bitcoin v26.2: `bitcoin-v26.2-for-digibyte/`
+  - Current v8.26: `.` (root directory)
 
 ## Final Notes
 - Tests may interact with each other - be aware of side effects

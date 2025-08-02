@@ -4,10 +4,21 @@
 This file provides context and guidance for AI assistants working on the DigiByte codebase, particularly for the Bitcoin Core v26.2 merge creating DigiByte v8.26.
 
 ## Repository Structure
-**Required repositories:**
-- `/mnt/c/Users/Jared/code/digibyte` (v8.26 merged code - BUILD/TEST HERE)
-- `/mnt/c/Users/Jared/code/digibyte/bitcoin-v26.2-for-digibyte` (Bitcoin v26.2 reference)
-- `/mnt/c/Users/Jared/code/digibyte/digibyte-v8.22.2` (DigiByte v8.22.2 - SOURCE OF TRUTH for DigiByte values)
+**Working directory:** Always run from the root `digibyte/` directory (v8.26 merged code)
+
+**Required reference repositories (subdirectories within digibyte/):**
+- `bitcoin-v26.2-for-digibyte/` (Bitcoin v26.2 reference)
+- `digibyte-v8.22.2/` (DigiByte v8.22.2 - SOURCE OF TRUTH for DigiByte values)
+
+**Directory layout:**
+```
+digibyte/                        # Current v8.26 working directory (YOU ARE HERE)
+├── src/                         # Source code
+├── test/                        # Test files
+├── bitcoin-v26.2-for-digibyte/  # Bitcoin v26.2 reference code
+├── digibyte-v8.22.2/           # DigiByte v8.22.2 reference code
+└── ... (other project files)
+```
 
 ## Python Functional Test Fix Strategy
 

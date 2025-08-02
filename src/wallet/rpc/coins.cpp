@@ -35,14 +35,16 @@ static CAmount GetReceived(const CWallet& wallet, const UniValue& params, bool b
 
     // Filter by own scripts only
     std::set<CScript> output_scripts;
+    std::set<CTxDestination> address_set; // Keep track of addresses too
     for (const auto& address : addresses) {
         auto output_script{GetScriptForDestination(address)};
         if (wallet.IsMine(output_script)) {
             output_scripts.insert(output_script);
+            address_set.insert(address);
         }
     }
 
-    if (output_scripts.empty()) {
+    if (output_scripts.empty() && address_set.empty()) {
         throw JSONRPCError(RPC_WALLET_ERROR, "Address not found in wallet");
     }
 
@@ -67,7 +69,23 @@ static CAmount GetReceived(const CWallet& wallet, const UniValue& params, bool b
         }
 
         for (const CTxOut& txout : wtx.tx->vout) {
+            // For descriptor wallets, also try extracting destination and checking
+            CTxDestination dest;
+            bool matched = false;
+            
+            // First try direct script comparison (works for legacy wallets)
             if (output_scripts.count(txout.scriptPubKey) > 0) {
+                matched = true;
+            }
+            // If that fails, try destination extraction (needed for descriptor wallets)
+            else if (ExtractDestination(txout.scriptPubKey, dest) && address_set.count(dest) > 0) {
+                // Double-check that we own this destination
+                if (wallet.IsMine(dest)) {
+                    matched = true;
+                }
+            }
+            
+            if (matched) {
                 amount += txout.nValue;
             }
         }

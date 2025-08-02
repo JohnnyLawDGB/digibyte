@@ -65,17 +65,30 @@ Each sub-agent should:
 ```
 
 #### 3.2 Compare Three Codebases
-**CRITICAL**: Always check these three versions:
-```bash
-# Current v8.26 (what we're fixing)
-cat test/functional/test_name.py
+**CRITICAL**: Always check these three versions IN THIS ORDER:
 
-# DigiByte v8.22.2 (SOURCE OF TRUTH for DigiByte behavior)
-cat ../digibyte-v8.22.2/test/functional/test_name.py
+1. **FIRST - DigiByte v8.22.2** (SOURCE OF TRUTH - tests passed here!)
+   ```bash
+   # Check how the test SUCCESSFULLY works in v8.22.2
+   cat /mnt/c/Users/Jared/code/digibyte/digibyte-v8.22.2/test/functional/test_name.py
+   ```
+   This shows you the CORRECT DigiByte-specific behavior and values.
 
-# Bitcoin v26.2 (to understand what changed)
-cat ../bitcoin-v26.2-for-digibyte/test/functional/test_name.py
-```
+2. **SECOND - Bitcoin v26.2** (understand what changed)
+   ```bash
+   # See what Bitcoin changed that might break DigiByte
+   cat /mnt/c/Users/Jared/code/digibyte/bitcoin-v26.2-for-digibyte/test/functional/test_name.py
+   ```
+   This helps identify new features or changes from Bitcoin.
+
+3. **THIRD - Current v8.26** (what we're fixing)
+   ```bash
+   # Now look at the broken merged version
+   cat test/functional/test_name.py
+   ```
+   This is where you'll apply fixes based on learnings from steps 1 & 2.
+
+**KEY INSIGHT**: Most test failures can be resolved quickly by seeing how they worked in v8.22.2, as all tests passed there with DigiByte-specific needs already handled!
 
 #### 3.3 Common Fixes by Test Group
 
@@ -217,11 +230,16 @@ Create a summary report:
 
 ## Remember
 - **NEVER** skip or disable tests - always fix the root cause
-- **ALWAYS** compare with v8.22.2 for correct DigiByte behavior  
+- **ALWAYS** start by checking v8.22.2 FIRST - this is your SOURCE OF TRUTH where tests passed!
+- **ALWAYS** compare with v8.22.2 for correct DigiByte behavior and values
 - **ALWAYS** preserve DigiByte-specific functionality
 - **FIX** application bugs when found (don't work around them)
 - **DOCUMENT** every change and bug found
 - **USE** sub-agents for parallel processing efficiency
+- **REFERENCE** the full paths when comparing:
+  - v8.22.2: `/mnt/c/Users/Jared/code/digibyte/digibyte-v8.22.2/`
+  - Bitcoin v26.2: `/mnt/c/Users/Jared/code/digibyte/bitcoin-v26.2-for-digibyte/`
+  - Current v8.26: `/mnt/c/Users/Jared/code/digibyte/`
 
 ## Final Notes
 - Tests may interact with each other - be aware of side effects

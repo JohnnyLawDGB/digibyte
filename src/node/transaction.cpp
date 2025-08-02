@@ -45,6 +45,7 @@ TransactionError BroadcastTransaction(NodeContext& node, const CTransactionRef t
     uint256 txid = tx->GetHash();
     uint256 wtxid = tx->GetWitnessHash();
     bool callback_set = false;
+    bool already_in_mempool = false;  // Track if we already added to regular mempool
 
     {
         LOCK(cs_main);
@@ -114,6 +115,7 @@ TransactionError BroadcastTransaction(NodeContext& node, const CTransactionRef t
                         if (relay) {
                             node.mempool->AddUnbroadcastTx(txid);
                         }
+                        already_in_mempool = true;  // Mark that we've already added to mempool
                     } else {
                         return HandleATMPError(result.m_state, err_string);
                     }
@@ -181,17 +183,21 @@ TransactionError BroadcastTransaction(NodeContext& node, const CTransactionRef t
             if (!pushed) {
                 // No Dandelion destination available - fallback to regular broadcast
                 LogPrintf("BroadcastTransaction: DANDELION FALLBACK - No viable Dandelion destinations for transaction %s\n", txid.ToString());
-                LogPrintf("BroadcastTransaction: Moving transaction %s from stempool to mempool for regular broadcast\n", txid.ToString());
-                // Remove from stempool and add to mempool for regular broadcast
-                node.stempool->removeRecursive(*tx, MemPoolRemovalReason::REORG);
-                const MempoolAcceptResult result = node.chainman->ProcessTransaction(tx, /*test_accept=*/ false);
-                if (result.m_result_type != MempoolAcceptResult::ResultType::VALID) {
-                    return HandleATMPError(result.m_state, err_string);
+                
+                // Only move from stempool to mempool if we haven't already done so
+                if (!already_in_mempool) {
+                    LogPrintf("BroadcastTransaction: Moving transaction %s from stempool to mempool for regular broadcast\n", txid.ToString());
+                    // Remove from stempool and add to mempool for regular broadcast
+                    node.stempool->removeRecursive(*tx, MemPoolRemovalReason::REORG);
+                    const MempoolAcceptResult result = node.chainman->ProcessTransaction(tx, /*test_accept=*/ false);
+                    if (result.m_result_type != MempoolAcceptResult::ResultType::VALID) {
+                        return HandleATMPError(result.m_state, err_string);
+                    }
+                    // Add to unbroadcast for regular relay
+                    node.mempool->AddUnbroadcastTx(txid);
                 }
-                // Add to unbroadcast for regular relay
-                node.mempool->AddUnbroadcastTx(txid);
                 node.peerman->RelayTransaction(txid, wtxid);
-                LogPrintf("BroadcastTransaction: Transaction %s successfully moved to mempool and relayed via regular broadcast\n", txid.ToString());
+                LogPrintf("BroadcastTransaction: Transaction %s relayed via regular broadcast\n", txid.ToString());
             } else {
                 // Push the transaction immediately to the Dandelion destination
                 // This ensures it actually propagates during the stem phase

@@ -12,7 +12,14 @@ This file provides context and guidance for AI assistants working on the DigiByt
 ## Python Functional Test Fix Strategy
 
 ### Overview
-320 Python functional tests (243 unique files) need fixing after Bitcoin v26.2 merge. Only 1 test currently passes.
+315 Python functional tests need fixing after Bitcoin v26.2 merge. Current status:
+- **Passed**: 109 tests
+- **Failed**: 136 tests
+- **Skipped**: 68 tests (mostly BDB not compiled)
+
+### Test Status Tracking
+- **FUNCTIONAL_CHECKLIST_TESTS.md** - Complete list of all tests with pass/fail status
+- **ATTACK_LIST.md** - Failed tests organized into 10 groups for systematic fixing
 
 ### Prerequisites
 ```bash

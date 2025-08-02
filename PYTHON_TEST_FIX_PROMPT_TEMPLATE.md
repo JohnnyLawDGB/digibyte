@@ -1,248 +1,233 @@
 # DigiByte v8.26 Python Functional Test Fix Instructions
 
-## Quick Start Workflow
-Your task is to fix Python functional tests by addressing the underlying issues.
-**NEVER skip or disable tests unless they are already skipped or disabled - always fix the root cause.**
+## Your Mission
+You are tasked with systematically fixing Python functional tests for DigiByte v8.26 (Bitcoin v26.2 merge). The tests have been organized into groups in ATTACK_LIST.md for efficient parallel fixing.
 
-### Initial Setup (Run Once)
+## Test Group Assignment Process
+1. The user will assign you a specific group from ATTACK_LIST.md (e.g., "Group 1: Mempool Tests")
+2. You will receive a list of 10-15 related tests to fix
+3. Use up to 3 sub-agents to work on different tests in parallel for efficiency
+
+## Initial Setup
+
+### Prerequisites
 ```bash
-# Prerequisites
 pip install --break-system-packages digibyte-scrypt
+```
 
-# Build binaries if needed
+### Build Test Environment
+```bash
 cd /mnt/c/Users/Jared/code/digibyte
 ./configure --without-gui && make -j8
 ```
 
-### Main Workflow (Repeat Until All Tests Pass)
-1. **Run test runner to find next failing test:**
-   ```bash
-   ./test/functional/test_runner.py --failfast
-   ```
+### Read Critical Documentation
+1. **CLAUDE.md** - DigiByte-specific constants and test strategy
+2. **ATTACK_LIST.md** - Test groupings and common issues per group
+3. **FUNCTIONAL_CHECKLIST_TESTS.md** - Current test status
+4. **doc/DANDELION_INFO.md** - For any Dandelion++ related issues
 
-2. **Fix the failing test properly**
-   - Analyze the error and find root cause
-   - Compare with reference code
-   - Apply DigiByte-specific fixes
-   - Fix application bugs if discovered
-   - Update test data/constants as needed
-   - NEVER skip or disable tests
+## Test Fixing Workflow
 
-3. **Verify and move to next test**
+### Step 1: Receive Test Group Assignment
+The user will provide you with a group like:
+```
+Fix Group 1: Mempool Tests
+- mempool_accept.py
+- mempool_compatibility.py
+- mempool_datacarrier.py
+... (etc)
+```
 
-## Reference Directories
-Always compare these three codebases when fixing tests:
-- **Current v8.26**: `/mnt/c/Users/Jared/code/digibyte/` (what we're fixing)
-- **DigiByte v8.22.2**: `/mnt/c/Users/Jared/code/digibyte/digibyte-v8.22.2/` (SOURCE OF TRUTH for DigiByte behavior)
-- **Bitcoin v26.2**: `/mnt/c/Users/Jared/code/digibyte/bitcoin-v26.2-for-digibyte/` (to understand what changed)
+### Step 2: Deploy Sub-Agents Strategy
+Use up to 3 sub-agents to work in parallel:
 
-## Critical DigiByte Constants
-These cause the most test failures:
+**Sub-Agent 1**: Handle first 5 tests
+**Sub-Agent 2**: Handle next 5 tests  
+**Sub-Agent 3**: Handle remaining tests
 
-### 1. Coinbase Maturity (TWO VALUES!)
+Each sub-agent should:
+1. Run the test to identify failures
+2. Compare with reference codebases
+3. Apply fixes
+4. Verify the fix works
+5. Report back with results
+
+### Step 3: Fix Process for Each Test
+
+#### 3.1 Run Test and Capture Output
+```bash
+./test/functional/test_name.py 2>&1 | tee test_name_output.log
+
+# For wallet tests with variants:
+./test/functional/test_name.py --descriptors
+./test/functional/test_name.py --legacy-wallet
+```
+
+#### 3.2 Compare Three Codebases
+**CRITICAL**: Always check these three versions:
+```bash
+# Current v8.26 (what we're fixing)
+cat test/functional/test_name.py
+
+# DigiByte v8.22.2 (SOURCE OF TRUTH for DigiByte behavior)
+cat ../digibyte-v8.22.2/test/functional/test_name.py
+
+# Bitcoin v26.2 (to understand what changed)
+cat ../bitcoin-v26.2-for-digibyte/test/functional/test_name.py
+```
+
+#### 3.3 Common Fixes by Test Group
+
+**Group 1: Mempool Tests**
+- Fee calculations: MIN_RELAY_TX_FEE changed from 0.001 to 0.0001 DGB/kB
+- Dandelion++ transaction routing differences
+- Dust threshold calculations
+- Package size limits
+
+**Group 2-4: P2P Network Tests**
+- Port numbers: 12024 (mainnet), 12025 (testnet)
+- Protocol timing adjustments for 15-second blocks
+- Dandelion++ message types (DANDELIONTX)
+- Multi-algorithm version bits
+
+**Group 5-6: RPC Tests**
+- DigiByte-specific RPC methods (getblockreward, etc.)
+- Address format validation
+- Block reward calculations (72000 DGB)
+- Chain parameter differences
+
+**Group 7-8: Feature Tests**
+- Consensus parameters
+- Activation heights
+- UTXO database format
+- Pruning calculations
+
+**Group 9-10: Wallet & Interface Tests**
+- Address generation (dgbt1 prefix)
+- Coinbase maturity (8 blocks for spending, 100 for full)
+- Fee estimation parameters
+- HD key derivation paths
+
+### Step 4: Handle Application Bugs
+
+**IMPORTANT**: When you discover a bug in the actual application code (not just test code):
+
+1. **Fix the Bug** in the application code
+2. **Document the Fix** comprehensively
+3. **Report the Bug** using this format:
+
+```markdown
+## APPLICATION BUG FIXED
+**File**: src/[filename].cpp:XXX
+**Test**: [test_name.py]
+**Issue**: [description]
+**Root Cause**: [Bitcoin v26.2 merge impact]
+**Fix Applied**: [code changes]
+**Impact**: [consequence if unfixed]
+**Testing**: [how verified]
+```
+
+### Step 5: Verify Fixes
+```bash
+# Run individual test
+./test/functional/test_name.py
+
+# If test has variants, run all:
+./test/functional/test_name.py --descriptors
+./test/functional/test_name.py --legacy-wallet
+
+# Run with debug output if needed
+./test/functional/test_name.py --loglevel=debug
+```
+
+## Critical DigiByte Constants Reference
+
+### Consensus Parameters
 ```python
-# CRITICAL: DigiByte has TWO maturity values
-COINBASE_MATURITY = 8      # DigiByte spendable maturity (NOT 100!)
+# Block timing
+BLOCK_TIME = 15  # seconds (NOT 600)
+
+# Supply
+MAX_MONEY = 21000000000  # 21 billion DGB (NOT 21 million)
+SUBSIDY = 72000  # Current block reward in DGB
+
+# Maturity
+COINBASE_MATURITY = 8      # Spendable after 8 blocks
 COINBASE_MATURITY_2 = 100  # Full maturity for some operations
 ```
 
-### 2. Fees
+### Fee Structure
 ```python
-# Transaction fees (per kB)
-DEFAULT_TRANSACTION_MINFEE = Decimal('0.1')     # 0.1 DGB/kB (wallet minimum fee)
-DEFAULT_FALLBACK_FEE = Decimal('0.01')          # 0.01 DGB/kB (fallback fee)
-MIN_RELAY_TX_FEE = Decimal('0.0001')            # 0.0001 DGB/kB (relay minimum)
-DUST_RELAY_TX_FEE = Decimal('0.0003')           # 0.0003 DGB/kB (dust threshold)
-
-# IMPORTANT: v8.26 reduced MIN_RELAY_TX_FEE from 0.001 to 0.0001 DGB/kB
+# Transaction fees (per kB) - CRITICAL: These changed in v8.26!
+DEFAULT_TRANSACTION_MINFEE = Decimal('0.1')     # Wallet minimum fee
+DEFAULT_FALLBACK_FEE = Decimal('0.01')          # Fallback fee
+MIN_RELAY_TX_FEE = Decimal('0.0001')            # Relay minimum (was 0.001)
+DUST_RELAY_TX_FEE = Decimal('0.0003')           # Dust threshold
 ```
 
-### 3. Block Timing
+### Network Parameters
 ```python
-BLOCK_TIME = 15  # 15 seconds (NOT 600)
-```
-
-### 4. Supply
-```python
-MAX_MONEY = 21000000000  # 21 billion DGB (NOT 21 million BTC)
-```
-
-### 5. Network Ports
-```python
+# Ports
 P2P_PORT = 12024         # Mainnet
 P2P_PORT_TESTNET = 12025 # Testnet
-```
 
-### 6. Address Formats
-```python
-# Testnet addresses
+# Address formats
 TESTNET_ADDRESS_PREFIX = 's'    # P2PKH/P2SH (NOT 'm' or 'n')
 TESTNET_BECH32_HRP = 'dgbt'    # Bech32 (NOT 'tb')
 REGTEST_BECH32_HRP = 'dgbrt'   # Regtest (NOT 'bcrt')
 ```
 
-### 7. Current Block Reward
+### Mining Algorithms
 ```python
-SUBSIDY = 72000  # Current reward in DGB
+# DigiByte uses 5 algorithms + Odocrypt
+ALGO_SHA256D = 0
+ALGO_SCRYPT = 1
+ALGO_GROESTL = 2
+ALGO_SKEIN = 3
+ALGO_QUBIT = 4
+ALGO_ODO = 7  # Odocrypt (activates at height 9,112,320)
 ```
 
-## Common Test Failures and Solutions
+## Progress Tracking
 
-### 1. Coinbase Maturity Assertions
-```python
-# WRONG (Bitcoin):
-assert_equal(wallet.getbalance(), 50)  # After 100 blocks
+### After Each Test Fixed
+1. Update your internal tracking
+2. Note any application bugs found
+3. Save test output logs
 
-# CORRECT (DigiByte):
-assert_equal(wallet.getbalance(), 72000)  # After 8 blocks for spending
-# BUT some operations still need 100 blocks!
-```
-
-### 2. Fee Calculations
-```python
-# WRONG (Bitcoin):
-fee = Decimal('0.0001')  # Bitcoin's default
-
-# CORRECT (DigiByte):
-# Use the appropriate fee based on context:
-min_fee = Decimal('0.1')      # DEFAULT_TRANSACTION_MINFEE for wallet operations
-relay_fee = Decimal('0.0001') # MIN_RELAY_TX_FEE for relay checks
-fallback = Decimal('0.01')    # DEFAULT_FALLBACK_FEE when fee estimation fails
-```
-
-### 3. Timing Adjustments
-```python
-# WRONG (Bitcoin):
-self.generate(self.nodes[0], 144)  # One day of blocks
-
-# CORRECT (DigiByte):
-self.generate(self.nodes[0], 5760)  # One day: 86400/15 = 5760 blocks
-```
-
-### 4. RPC Method Not Found
-- Check for DigiByte-specific RPC: `getblockreward`, enhanced `getmininginfo`, etc.
-- Check if Bitcoin methods were renamed or removed
-
-### 5. Address Format Errors
-Always use DigiByte address formats in tests. Update hardcoded addresses.
-
-## DigiByte-Specific Features
-
-### Dandelion++ Privacy
-Tests may fail due to Dandelion++ transaction routing. Look for:
-- `NetMsgType::DANDELIONTX` messages
-- Stem pool behavior
-- Different mempool propagation
-
-### Multi-Algorithm Mining
-DigiByte uses 5 algorithms (SHA256D, Scrypt, Groestl, Skein, Qubit) + Odocrypt:
-```python
-# Mining tests may need algorithm specification
-node.generatetoaddress(1, address, algo=ALGO_SHA256D)
-```
-
-## Test Fixing Process
-
-### 1. Run Individual Test
-```bash
-# Basic run
-./test/functional/test_name.py
-
-# With wallet variant
-./test/functional/test_name.py --legacy-wallet
-./test/functional/test_name.py --descriptors
-
-# Debug mode
-./test/functional/test_name.py --loglevel=debug
-```
-
-### 2. Compare Reference Code
-```bash
-# Check if test exists in v8.22.2
-diff test/functional/test_name.py digibyte-v8.22.2/test/functional/test_name.py
-
-# Compare with Bitcoin v26.2
-diff test/functional/test_name.py bitcoin-v26.2-for-digibyte/test/functional/test_name.py
-```
-
-### 3. Apply Fixes
-Focus on:
-1. Update constants (maturity, fees, timing)
-2. Fix address formats
-3. Handle DigiByte-specific RPC
-4. Adjust for Dandelion++ behavior
-5. Account for multi-algo mining
-
-### 4. Document Application Bugs
-If you find bugs in application code (not just tests):
-
+### After Group Completion
+Create a summary report:
 ```markdown
-## APPLICATION BUG FIXED
-**File**: src/validation.cpp:XXX
-**Test**: test_name.py
-**Issue**: [description]
-**Root Cause**: Bitcoin v26.2 merge impact
-**Fix Applied**: [code changes]
-**Impact**: [what happens if not fixed]
+## Group X: [Group Name] - COMPLETED
+**Total Tests**: X
+**Fixed**: X
+**Application Bugs Found**: X
+
+### Test Results:
+1. test_name.py - FIXED ✓
+   - Issue: [brief description]
+   - Fix: [brief description]
+   
+[... continue for all tests ...]
+
+### Application Bugs Fixed:
+[List all APPLICATION BUG FIXED reports]
 ```
 
-## Multi-Algorithm Mining in RegTest
+## Remember
+- **NEVER** skip or disable tests - always fix the root cause
+- **ALWAYS** compare with v8.22.2 for correct DigiByte behavior  
+- **ALWAYS** preserve DigiByte-specific functionality
+- **FIX** application bugs when found (don't work around them)
+- **DOCUMENT** every change and bug found
+- **USE** sub-agents for parallel processing efficiency
 
-### The Problem
-DigiByte uses 5 mining algorithms (SHA256D, Scrypt, Groestl, Skein, Qubit) + Odocrypt.
-This causes test failures due to:
-1. **Mining timeouts**: Tests expect fast block generation but multi-algo switching slows it down
-2. **Algorithm activation**: Different algorithms activate at different block heights
-3. **Difficulty adjustments**: DigiShield adjusts difficulty between algorithms
-4. **Version bits**: Algorithm bits in block version conflict with test expectations
+## Final Notes
+- Tests may interact with each other - be aware of side effects
+- Some tests require specific node configurations
+- Watch for hardcoded addresses, keys, and transactions
+- Multi-algorithm mining affects many consensus tests
+- Dandelion++ affects transaction propagation tests
 
-### The Solution (Already Applied in chainparams.cpp)
-```cpp
-// Set initial targets for all algorithms to maximum (easiest) difficulty
-consensus.initialTarget[ALGO_SHA256D] = uint256S("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
-consensus.initialTarget[ALGO_SCRYPT] = uint256S("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
-// ... same for all algorithms
-
-// Enable easy mining for tests
-consensus.fEasyPow = true;
-consensus.fPowNoRetargeting = true; // Disable retargeting to avoid difficulty spikes
-```
-
-### Hard Fork Heights in RegTest
-- Block 100: MultiAlgo activation
-- Block 200: MultiShield activation  
-- Block 400: DigiSpeed activation
-- Block 600: Odocrypt activation
-
-**IMPORTANT**: Do NOT change these heights as C++ unit tests depend on them.
-
-### RPC Mining with Algorithm
-DigiByte's `generatetoaddress` RPC accepts an optional `algo` parameter:
-```python
-node.generatetoaddress(nblocks=1, address=addr, algo="sha256d")
-```
-However, algorithms must be active at the current height to be used.
-
-## Common Pitfalls
-1. **Coinbase maturity**: Remember there are TWO values (8 and 100)
-2. **Fee confusion**: 
-   - Wallet min fee: 0.1 DGB/kB (DEFAULT_TRANSACTION_MINFEE)
-   - Relay min fee: 0.0001 DGB/kB (MIN_RELAY_TX_FEE - reduced from 0.001 in v8.26!)
-   - Don't confuse them!
-3. **Block timing**: Many timeouts need adjustment for 15-second blocks
-4. **Supply math**: 21 billion vs 21 million affects many calculations
-5. **Address validation**: Must use DigiByte prefixes
-6. **Algorithm version bits**: Tests checking version bits must account for algorithm bits
-7. **Mining before block 100**: Only Scrypt is available before multi-algo activation
-
-## Verification
-After fixing a test:
-```bash
-# Run the single test
-./test/functional/test_name.py
-
-# Continue to next failing test
-./test/functional/test_runner.py --failfast
-```
-
-Keep fixing tests one by one until all pass!
+Your systematic approach using parallel sub-agents will ensure efficient test fixing while maintaining DigiByte's unique features and catching all application bugs.

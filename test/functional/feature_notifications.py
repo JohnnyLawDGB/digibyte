@@ -51,8 +51,10 @@ class NotificationsTest(DigiByteTestFramework):
             f"-alertnotify=echo > {os.path.join(self.alertnotify_dir, '%s')}",
             f"-blocknotify=echo > {os.path.join(self.blocknotify_dir, '%s')}",
             f"-shutdownnotify=echo > {self.shutdownnotify_file}",
+            "-dandelion=0",  # Disable Dandelion++ to ensure transactions go directly to mempool
         ], [
             f"-walletnotify=echo %h_%b > {os.path.join(self.walletnotify_dir, notify_outputname('%w', '%s'))}",
+            "-dandelion=0",  # Disable Dandelion++ to ensure transactions go directly to mempool
         ]]
         self.wallet_names = [self.default_wallet_name, self.wallet]
         super().setup_network()
@@ -60,7 +62,7 @@ class NotificationsTest(DigiByteTestFramework):
     def run_test(self):
         if self.is_wallet_compiled():
             # Setup the descriptors to be imported to the wallet
-            seed = "cTdGmKFWpbvpKQ7ejrdzqYT2hhjyb3GPHnLAK7wdi5Em67YLwSm9"
+            seed = "egMFpCzuYYAjwDZcfmzUszqctahU9EuNwmoYDxqXRdHnbyEgFFLr"
             xpriv = "tprv8ZgxMBicQKsPfHCsTwkiM1KT56RXbGGTqvc2hgqzycpwbHqqpcajQeMRZoBD35kW4RtyCemu6j34Ku5DEspmgjKdt2qe4SvRch5Kk8B8A2v"
             desc_imports = [{
                 "desc": descsum_create(f"wpkh({xpriv}/0/*)"),

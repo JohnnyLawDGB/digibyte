@@ -67,7 +67,7 @@ COINBASE_MATURITY_2 = 100
 # From BIP141
 WITNESS_COMMITMENT_HEADER = b"\xaa\x21\xa9\xed"
 
-NORMAL_GBT_REQUEST_PARAMS = {"rules": ["segwit"], "algorithm": "scrypt"}
+NORMAL_GBT_REQUEST_PARAMS = {"rules": ["segwit"]}
 MIN_BLOCKS_TO_KEEP = 288
 
 def create_block(hashprev=None, coinbase=None, ntime=None, *, version=None, tmpl=None, txlist=None):

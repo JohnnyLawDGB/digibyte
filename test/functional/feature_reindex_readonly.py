@@ -10,23 +10,37 @@ import os
 import stat
 import subprocess
 from test_framework.test_framework import DigiByteTestFramework
+from test_framework.wallet import MiniWallet
+from test_framework.script import CScript, OP_RETURN
 
 
 class BlockstoreReindexTest(DigiByteTestFramework):
     def set_test_params(self):
         self.setup_clean_chain = True
         self.num_nodes = 1
-        self.extra_args = [["-fastprune"]]
+        # Add regtest-specific args to handle DigiByte multi-algo
+        self.extra_args = [["-fastprune", "-algo=0"]]  # Force SHA256D algorithm
 
     def reindex_readonly(self):
-        self.log.debug("Generate block big enough to start second block file")
-        fastprune_blockfile_size = 0x10000
-        opreturn = "6a"
-        nulldata = fastprune_blockfile_size * "ff"
-        self.generateblock(self.nodes[0], output=f"raw({opreturn}{nulldata})", transactions=[])
+        self.log.debug("Generate blocks big enough to start second block file")
+        
+        # Simple approach: generate many blocks to reach the block file size threshold
+        # With fastprune, blocks files are smaller, so we need more blocks
+        self.generate(self.nodes[0], 500, sync_fun=self.no_op)  # Generate more blocks
         self.stop_node(0)
 
+        # Debug: check what block files exist
+        blocks_dir = self.nodes[0].chain_path / "blocks"
+        self.log.info(f"Block files in {blocks_dir}: {list(blocks_dir.glob('blk*.dat'))}")
+        
         assert (self.nodes[0].chain_path / "blocks" / "blk00000.dat").exists()
+        # If blk00001.dat doesn't exist, that's ok - the test will adapt
+        if not (self.nodes[0].chain_path / "blocks" / "blk00001.dat").exists():
+            self.log.info("blk00001.dat does not exist, generating more blocks")
+            self.start_node(0, extra_args=["-fastprune", "-algo=0"])
+            self.generate(self.nodes[0], 1000, sync_fun=self.no_op)
+            self.stop_node(0)
+        
         assert (self.nodes[0].chain_path / "blocks" / "blk00001.dat").exists()
 
         self.log.debug("Make the first block file read-only")

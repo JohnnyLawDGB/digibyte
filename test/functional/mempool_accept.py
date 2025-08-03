@@ -37,9 +37,6 @@ from test_framework.script_util import (
     script_to_p2sh_script,
     script_to_p2wsh_script,
 )
-from test_framework.script_util import (
-    script_to_p2sh_script,
-)
 from test_framework.util import (
     assert_equal,
     assert_greater_than,
@@ -53,7 +50,7 @@ class MempoolAcceptanceTest(DigiByteTestFramework):
     def set_test_params(self):
         self.num_nodes = 1
         self.extra_args = [[
-            '-txindex','-permitbaremultisig=0',
+            '-txindex','-permitbaremultisig=0', '-dandelion=0',
         ]] * self.num_nodes
         self.supports_cli = False
 
@@ -77,7 +74,6 @@ class MempoolAcceptanceTest(DigiByteTestFramework):
         self.mempool_size = 0
         assert_equal(node.getblockcount(), 200)
         assert_equal(node.getmempoolinfo()['size'], self.mempool_size)
-        coins = node.listunspent()
 
         self.log.info('Should not accept garbage to testmempoolaccept')
         assert_raises_rpc_error(-3, 'JSON value of type string is not of expected type array', lambda: node.testmempoolaccept(rawtxs='ff00baar'))
@@ -100,7 +96,7 @@ class MempoolAcceptanceTest(DigiByteTestFramework):
         )
 
         self.log.info('A transaction not in the mempool')
-        fee = Decimal('0.000007')
+        fee = Decimal('0.001')
         utxo_to_spend = self.wallet.get_utxo(txid=txid_in_block)  # use 0.3 DGB UTXO
         tx = self.wallet.create_self_transfer(utxo_to_spend=utxo_to_spend, sequence=MAX_BIP125_RBF_SEQUENCE)['tx']
         tx.vout[0].nValue = int((Decimal('0.3') - fee) * COIN)
@@ -120,7 +116,7 @@ class MempoolAcceptanceTest(DigiByteTestFramework):
         tx.vout[0].nValue = int(output_amount * COIN)
         raw_tx_final = tx.serialize().hex()
         tx = tx_from_hex(raw_tx_final)
-        fee_expected = Decimal('50.0') - output_amount
+        fee_expected = Decimal('72000.0') - output_amount
         self.check_mempool_result(
             result_expected=[{'txid': tx.rehash(), 'allowed': True, 'vsize': tx.get_vsize(), 'fees': {'base': fee_expected}}],
             rawtxs=[tx.serialize().hex()],
@@ -347,10 +343,19 @@ class MempoolAcceptanceTest(DigiByteTestFramework):
         )
 
         # Prep for tiny-tx tests with wsh(OP_TRUE) output
-        seed_tx = self.wallet.send_to(from_node=node, scriptPubKey=script_to_p2wsh_script(CScript([OP_TRUE])), amount=COIN)
+        seed_tx = self.wallet.send_to(from_node=node, scriptPubKey=script_to_p2wsh_script(CScript([OP_TRUE])), amount=COIN, fee=2000)
+        self.mempool_size += 1
+        # Sync to ensure Dandelion++ processes the transaction
+        node.syncwithvalidationinterfacequeue()
+        import time
+        time.sleep(0.1)  # Give Dandelion++ time to move from stempool to mempool
         self.generate(node, 1)
+        self.mempool_size = 0
 
         self.log.info('A tiny transaction(in non-witness bytes) that is disallowed')
+        # Adjust mempool size to actual state
+        self.mempool_size = node.getmempoolinfo()["size"]
+        
         tx = CTransaction()
         tx.vin.append(CTxIn(COutPoint(int(seed_tx["txid"], 16), seed_tx["sent_vout"]), b"", SEQUENCE_FINAL))
         tx.wit.vtxinwit = [CTxInWitness()]

@@ -46,34 +46,27 @@ class CompactFiltersTest(DigiByteTestFramework):
         self.rpc_timeout = 480
         self.num_nodes = 2
         self.extra_args = [
-            ["-blockfilterindex", "-peerblockfilters"],
-            ["-blockfilterindex"],
+            ["-blockfilterindex", "-peerblockfilters", "-dandelion=0"],
+            ["-blockfilterindex", "-dandelion=0"],
         ]
 
     def run_test(self):
-        # Import MiniWallet for faster block generation
-        from test_framework.wallet import MiniWallet
-        self.wallet = MiniWallet(self.nodes[0])
-        
         # Node 0 supports COMPACT_FILTERS, node 1 does not.
         peer_0 = self.nodes[0].add_p2p_connection(FiltersClient())
         peer_1 = self.nodes[1].add_p2p_connection(FiltersClient())
 
-        # Nodes 0 & 1 share the same first blocks in the chain.
-        # Need enough blocks for checkpoints to be created (typically every 1000 blocks)
-        self.generate(self.wallet, 1100)
+        # Nodes 0 & 1 share the same first 999 blocks in the chain.
+        self.generate(self.nodes[0], 999)
 
         # Stale blocks by disconnecting nodes 0 & 1, mining, then reconnecting
         self.disconnect_nodes(0, 1)
 
-        stale_block_hash = self.generate(self.wallet, 1, sync_fun=self.no_op)[0]
+        stale_block_hash = self.generate(self.nodes[0], 1, sync_fun=self.no_op)[0]
         self.nodes[0].syncwithvalidationinterfacequeue()
-        assert_equal(self.nodes[0].getblockcount(), 1101)
+        assert_equal(self.nodes[0].getblockcount(), 1000)
 
-        # Create MiniWallet for node 1
-        self.wallet1 = MiniWallet(self.nodes[1])
-        self.generate(self.wallet1, 1102, sync_fun=self.no_op)
-        assert_equal(self.nodes[1].getblockcount(), 2202)
+        self.generate(self.nodes[1], 1001, sync_fun=self.no_op)
+        assert_equal(self.nodes[1].getblockcount(), 2000)
 
         # Check that nodes have signalled NODE_COMPACT_FILTERS correctly.
         assert peer_0.nServices & NODE_COMPACT_FILTERS != 0
@@ -99,7 +92,7 @@ class CompactFiltersTest(DigiByteTestFramework):
         self.sync_blocks(timeout=600)
         self.nodes[0].syncwithvalidationinterfacequeue()
 
-        main_block_hash = self.nodes[0].getblockhash(1100)
+        main_block_hash = self.nodes[0].getblockhash(1000)
         assert main_block_hash != stale_block_hash, "node 0 chain did not reorganize"
 
         self.log.info("Check that peers can fetch cfcheckpt on active chain.")

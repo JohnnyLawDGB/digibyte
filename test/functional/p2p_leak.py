@@ -99,7 +99,6 @@ class P2PVersionStore(P2PInterface):
 
 class P2PLeakTest(DigiByteTestFramework):
     def set_test_params(self):
-        self.setup_clean_chain = True
         self.num_nodes = 1
         self.extra_args = [[f"-peertimeout={PEER_TIMEOUT}"]]
 
@@ -120,9 +119,9 @@ class P2PLeakTest(DigiByteTestFramework):
         no_verack_idle_peer = self.nodes[0].add_p2p_connection(NoVerackIdlePeer(), wait_for_verack=False)
 
         # Pre-wtxidRelay peer that sends a version but not a verack and does not support feature negotiation
-        # messages which start at nVersion == 70016
+        # messages which start at nVersion == 70018
         pre_wtxidrelay_peer = self.nodes[0].add_p2p_connection(NoVerackIdlePeer(), send_version=False, wait_for_verack=False)
-        pre_wtxidrelay_peer.send_message(self.create_old_version(70015))
+        pre_wtxidrelay_peer.send_message(self.create_old_version(70017))
 
         # Wait until the peer gets the verack in response to the version. Though, don't wait for the node to receive the
         # verack, since the peer never sent one
@@ -134,13 +133,10 @@ class P2PLeakTest(DigiByteTestFramework):
         pre_wtxidrelay_peer.wait_until(lambda: pre_wtxidrelay_peer.version_received)
 
         # Mine a block and make sure that it's not sent to the connected peers
-        self.generate(self.nodes[0], nblocks=1)
+        self.generate(self.nodes[0], 1)
 
         # Give the node enough time to possibly leak out a message
         time.sleep(PEER_TIMEOUT + 2)
-
-        self.log.info("Connect peer to ensure the net thread runs the disconnect logic at least once")
-        self.nodes[0].add_p2p_connection(P2PInterface())
 
         # Make sure only expected messages came in
         assert not no_version_idle_peer.unexpected_msg
@@ -153,7 +149,7 @@ class P2PLeakTest(DigiByteTestFramework):
 
         assert not pre_wtxidrelay_peer.unexpected_msg
         assert not pre_wtxidrelay_peer.got_wtxidrelay
-        assert not pre_wtxidrelay_peer.got_sendaddrv2
+        assert pre_wtxidrelay_peer.got_sendaddrv2
 
         # Expect peers to be disconnected due to timeout
         assert not no_version_idle_peer.is_connected
@@ -173,7 +169,7 @@ class P2PLeakTest(DigiByteTestFramework):
 
         self.log.info('Check that old peers are disconnected')
         p2p_old_peer = self.nodes[0].add_p2p_connection(P2PInterface(), send_version=False, wait_for_verack=False)
-        with self.nodes[0].assert_debug_log(["using obsolete version 31799; disconnecting"]):
+        with self.nodes[0].assert_debug_log(["peer=4 using obsolete version 31799; disconnecting"]):
             p2p_old_peer.send_message(self.create_old_version(31799))
             p2p_old_peer.wait_for_disconnect()
 

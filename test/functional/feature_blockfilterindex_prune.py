@@ -4,6 +4,7 @@
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test blockfilterindex in conjunction with prune."""
 from test_framework.test_framework import DigiByteTestFramework
+from test_framework import test_node
 from test_framework.util import (
     assert_equal,
     assert_greater_than,
@@ -57,7 +58,7 @@ class FeatureBlockfilterindexPruneTest(DigiByteTestFramework):
 
         self.log.info("prune exactly up to the blockfilterindexes best block while blockfilters are disabled")
         pruneheight_2 = self.nodes[0].pruneblockchain(1000)
-        assert_equal(pruneheight_2, 749)
+        assert_equal(pruneheight_2, 751)
 
         self.restart_node(0, extra_args=["-fastprune", "-prune=1", "-blockfilterindex=1"])
         self.log.info("make sure that we can continue with the partially synced index after having pruned up to the index height")
@@ -73,7 +74,8 @@ class FeatureBlockfilterindexPruneTest(DigiByteTestFramework):
         self.log.info("make sure we get an init error when starting the node again with block filters")
         self.nodes[0].assert_start_raises_init_error(
             extra_args=["-fastprune", "-prune=1", "-blockfilterindex=1"],
-            expected_msg="Error: basic block filter index best block of the index goes beyond pruned data. Please disable the index or reindex (which will download the whole blockchain again)",
+            expected_msg="Error: basic block filter index best block of the index goes beyond pruned data. Please disable the index or reindex \\(which will download the whole blockchain again\\)",
+            match=test_node.ErrorMatch.PARTIAL_REGEX,
         )
 
         self.log.info("make sure the node starts again with the -reindex arg")

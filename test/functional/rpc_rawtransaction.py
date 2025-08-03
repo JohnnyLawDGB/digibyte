@@ -69,9 +69,9 @@ class RawTransactionsTest(DigiByteTestFramework):
     def set_test_params(self):
         self.num_nodes = 3
         self.extra_args = [
-            ["-txindex"],
-            ["-txindex"],
-            ["-fastprune", "-prune=1"],
+            ["-txindex", "-dandelion=0"],
+            ["-txindex", "-dandelion=0"],
+            ["-fastprune", "-prune=1", "-dandelion=0"],
         ]
         # whitelist all peers to speed up tx relay / mempool sync
         for args in self.extra_args:
@@ -84,6 +84,9 @@ class RawTransactionsTest(DigiByteTestFramework):
 
     def run_test(self):
         self.wallet = MiniWallet(self.nodes[0])
+        # Fund the MiniWallet by generating blocks to its address
+        self.generatetoaddress(self.nodes[0], 10, self.wallet.get_address())
+        self.wallet.rescan_utxos()
 
         self.getrawtransaction_tests()
         self.createrawtransaction_tests()
@@ -549,7 +552,7 @@ class RawTransactionsTest(DigiByteTestFramework):
         rawTx = self.nodes[0].decoderawtransaction(rawTxSigned['hex'])
         self.sync_all()
         self.generate(self.nodes[0], 1)
-        assert_equal(self.nodes[0].getbalance(), bal + Decimal('50.00000000') + Decimal('2.19000000'))  # block reward + tx
+        assert_equal(self.nodes[0].getbalance(), bal + Decimal('72000.00000000') + Decimal('2.19000000'))  # block reward + tx
 
         # 2of2 test for combining transactions
         bal = self.nodes[2].getbalance()
@@ -592,7 +595,7 @@ class RawTransactionsTest(DigiByteTestFramework):
         rawTx2 = self.nodes[0].decoderawtransaction(rawTxComb)
         self.sync_all()
         self.generate(self.nodes[0], 1)
-        assert_equal(self.nodes[0].getbalance(), bal + Decimal('50.00000000') + Decimal('2.19000000'))  # block reward + tx
+        assert_equal(self.nodes[0].getbalance(), bal + Decimal('72000.00000000') + Decimal('2.19000000'))  # block reward + tx
 
 
 if __name__ == '__main__':

@@ -29,7 +29,7 @@ class RPCPackagesTest(DigiByteTestFramework):
     def set_test_params(self):
         self.num_nodes = 1
         self.setup_clean_chain = True
-        self.extra_args = [["-whitelist=noban@127.0.0.1"]] # noban speeds up tx relay
+        self.extra_args = [["-whitelist=noban@127.0.0.1", "-minrelaytxfee=0.00000100", "-dandelion=0"]] # noban speeds up tx relay, lower min fee for testing, disable dandelion++ for predictable broadcast
 
     def assert_testres_equal(self, package_hex, testres_expected):
         """Shuffle package_hex and assert that the testmempoolaccept result matches testres_expected. This should only

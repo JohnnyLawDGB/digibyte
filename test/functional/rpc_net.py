@@ -12,6 +12,8 @@ from itertools import product
 import time
 
 import test_framework.messages
+from test_framework.blocktools import COINBASE_MATURITY
+from test_framework.messages import NODE_NETWORK, NODE_WITNESS
 from test_framework.netutil import ADDRMAN_NEW_BUCKET_COUNT, ADDRMAN_TRIED_BUCKET_COUNT, ADDRMAN_BUCKET_SIZE
 from test_framework.p2p import (
     P2PInterface,

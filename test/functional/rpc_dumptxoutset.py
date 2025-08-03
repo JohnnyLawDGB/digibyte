@@ -5,7 +5,7 @@
 """Test the generation of UTXO snapshots using `dumptxoutset`.
 """
 
-from test_framework.blocktools import COINBASE_MATURITY
+from test_framework.blocktools import COINBASE_MATURITY, COINBASE_MATURITY_2
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import (
     assert_equal,
@@ -24,7 +24,7 @@ class DumptxoutsetTest(DigiByteTestFramework):
         node = self.nodes[0]
         mocktime = node.getblockheader(node.getblockhash(0))['time'] + 1
         node.setmocktime(mocktime)
-        self.generate(node, COINBASE_MATURITY)
+        self.generate(node, COINBASE_MATURITY_2)
 
         FILENAME = 'txoutset.dat'
         out = node.dumptxoutset(FILENAME)
@@ -38,15 +38,15 @@ class DumptxoutsetTest(DigiByteTestFramework):
         # Blockhash should be deterministic based on mocked time.
         assert_equal(
             out['base_hash'],
-            '09abf0e7b510f61ca6cf33bab104e9ee99b3528b371d27a2d4b39abb800fba7e')
+            '772c152bf5d47b3586008cf204aedac41c728c888e556c31dc98a02ab9ec33a0')
 
         # UTXO snapshot hash should be deterministic based on mocked time.
         assert_equal(
             sha256sum_file(str(expected_path)).hex(),
-            'b1bacb602eacf5fbc9a7c2ef6eeb0d229c04e98bdf0c2ea5929012cd0eae3830')
+            '569dff39daf764c4c538ec4c0c5471d8ad60afb36b615609fb009c43e0b29a98')
 
         assert_equal(
-            out['txoutset_hash'], 'a0b7baa3bf5ccbd3279728f230d7ca0c44a76e9923fca8f32dbfd08d65ea496a')
+            out['txoutset_hash'], '5a783c47a2e2efa611b75a9ea29ad1f0021e519d96746edfdc7a1a90354c0af0')
         assert_equal(out['nchaintx'], 101)
 
         # Specifying a path to an existing or invalid file will fail.

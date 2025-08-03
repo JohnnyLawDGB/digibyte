@@ -96,8 +96,13 @@ class InvalidBlockRequestTest(DigiByteTestFramework):
 
         self.log.info("Test very broken block.")
 
-        block3 = create_block(tip, create_coinbase(height, nValue=100), block_time)
+        block3 = create_block(tip, create_coinbase(height), block_time)
         block_time += 1
+        block3.vtx[0].vout[0].nValue = 73000 * COIN  # Too high! (DigiByte current subsidy is 72000)
+        block3.vtx[0].sha256 = None
+        block3.vtx[0].calc_sha256()
+        block3.hashMerkleRoot = block3.calc_merkle_root()
+        block3.rehash()
         block3.solve()
 
         peer.send_blocks_and_test([block3], node, success=False, reject_reason='bad-cb-amount')

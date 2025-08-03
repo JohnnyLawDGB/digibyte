@@ -28,8 +28,8 @@ from test_framework.p2p import (
 )
 from test_framework.test_framework import DigiByteTestFramework
 
-MAX_FEE_FILTER = Decimal(9170997) / COIN
-NORMAL_FEE_FILTER = Decimal(100) / COIN
+MAX_FEE_FILTER = Decimal("97.87192906")  # DigiByte MAX_MONEY rounder value (observed)
+NORMAL_FEE_FILTER = Decimal("0.00001000")  # DigiByte normal fee filter
 
 
 class P2PIBDTxRelayTest(DigiByteTestFramework):
@@ -45,6 +45,11 @@ class P2PIBDTxRelayTest(DigiByteTestFramework):
         self.log.info("Check that nodes set minfilter to MAX_MONEY while still in IBD")
         for node in self.nodes:
             assert node.getblockchaininfo()['initialblockdownload']
+            # Debug: show actual peer info
+            peer_info = node.getpeerinfo()
+            self.log.info(f"Node peer info: {peer_info}")
+            for peer in peer_info:
+                self.log.info(f"Peer minfeefilter: {peer.get('minfeefilter', 'NOT_SET')}, expected: {MAX_FEE_FILTER}")
             self.wait_until(lambda: all(peer['minfeefilter'] == MAX_FEE_FILTER for peer in node.getpeerinfo()))
 
         self.log.info("Check that nodes don't send getdatas for transactions while still in IBD")

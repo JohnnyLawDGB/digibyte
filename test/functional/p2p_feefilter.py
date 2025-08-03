@@ -54,8 +54,8 @@ class FeeFilterTest(DigiByteTestFramework):
         # See issue #16499
         # grant noban permission to all peers to speed up tx relay / mempool sync
         self.extra_args = [[
-            "-minrelaytxfee=0.00000100",
-            "-mintxfee=0.00000100",
+            "-minrelaytxfee=0.00000010",
+            "-mintxfee=0.00000010",
             "-whitelist=noban@127.0.0.1",
         ]] * self.num_nodes
 
@@ -87,21 +87,21 @@ class FeeFilterTest(DigiByteTestFramework):
 
         conn = self.nodes[0].add_p2p_connection(TestP2PConn())
 
-        self.log.info("Test txs paying 0.2 sat/byte are received by test connection")
-        txids = [miniwallet.send_self_transfer(fee_rate=Decimal('0.00000200'), from_node=node1)['wtxid'] for _ in range(3)]
+        # First find the minimum fee rate that works
+        txids = [miniwallet.send_self_transfer(fee_rate=Decimal('0.00020000'), from_node=node1)['wtxid'] for _ in range(3)]
         conn.wait_for_invs_to_match(txids)
         conn.clear_invs()
 
-        # Set a fee filter of 0.15 sat/byte on test connection
-        conn.send_and_ping(msg_feefilter(150))
+        # Set a fee filter of 15000 sats/kvB on test connection (15 sats/byte)
+        conn.send_and_ping(msg_feefilter(15000))
 
-        self.log.info("Test txs paying 0.15 sat/byte are received by test connection")
-        txids = [miniwallet.send_self_transfer(fee_rate=Decimal('0.00000150'), from_node=node1)['wtxid'] for _ in range(3)]
+        self.log.info("Test txs paying 150 sat/byte are received by test connection")
+        txids = [miniwallet.send_self_transfer(fee_rate=Decimal('0.00015000'), from_node=node1)['wtxid'] for _ in range(3)]
         conn.wait_for_invs_to_match(txids)
         conn.clear_invs()
 
-        self.log.info("Test txs paying 0.1 sat/byte are no longer received by test connection")
-        txids = [miniwallet.send_self_transfer(fee_rate=Decimal('0.00000100'), from_node=node1)['wtxid'] for _ in range(3)]
+        self.log.info("Test txs paying 100 sat/byte are no longer received by test connection")
+        txids = [miniwallet.send_self_transfer(fee_rate=Decimal('0.00010000'), from_node=node1)['wtxid'] for _ in range(3)]
         self.sync_mempools()  # must be sure node 0 has received all txs
 
         # Send one transaction from node0 that should be received, so that we

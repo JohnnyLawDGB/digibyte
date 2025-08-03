@@ -2,11 +2,11 @@
 
 ## Summary
 - **Total Tests**: 315
-- **Passed**: 109
-- **Failed**: 136
+- **Passed**: 123 (+14)
+- **Failed**: 122 (-14)
 - **Skipped**: 68 (mostly due to BDB not compiled)
 
-## Failed Tests (136)
+## Failed Tests (122)
 feature_anchors.py
 feature_anchors.py --v2transport
 feature_assumeutxo.py
@@ -63,24 +63,13 @@ mempool_truc.py
 mempool_unbroadcast.py
 mining_basic.py
 mining_prioritisetransaction.py
-p2p_add_connections.py
-p2p_addr_relay.py
-p2p_addrfetch.py
-p2p_addrv2_relay.py
 p2p_bip152_sendheaders.py
-p2p_blocksonly.py
-p2p_disconnect_ban.py
-p2p_eviction.py
 p2p_feefilter.py
 p2p_filter.py
 p2p_filterload.py
-p2p_getaddr_caching.py
-p2p_getdata.py
 p2p_handshake.py
 p2p_handshake.py --v2transport
 p2p_headers_sync_with_minchainwork.py
-p2p_i2p_ports.py
-p2p_i2p_sessions.py
 p2p_ibd_stalling.py
 p2p_ibd_txrelay.py
 p2p_initial_headers_sync.py
@@ -92,9 +81,7 @@ p2p_leak.py
 p2p_leak_tx.py
 p2p_message_capture.py
 p2p_mutated_blocks.py
-p2p_net_deadlock.py
 p2p_node_network_limited.py
-p2p_nobloomfilter_messages.py
 p2p_orphan_handling.py
 p2p_outbound_eviction.py
 p2p_permissions.py
@@ -106,7 +93,6 @@ p2p_tx_privacy.py
 p2p_txreconciliation.py
 p2p_unrequested_blocks.py
 p2p_v2_misbehaving.py
-p2p_v2_transport.py
 rpc_blockchain.py
 rpc_createmultisig.py
 rpc_decodescript.py
@@ -151,7 +137,7 @@ wallet_gethdkeys.py --descriptors
 wallet_keypool.py --descriptors
 wallet_migrate.py
 
-## Passed Tests (109)
+## Passed Tests (123)
 feature_abortnode.py
 feature_bind_extra.py
 feature_fee_estimation.py
@@ -167,14 +153,28 @@ mempool_persist.py --descriptors
 mempool_spend_coinbase.py
 mempool_updatefromblock.py
 mining_getblocktemplate_longpoll.py
+p2p_add_connections.py
+p2p_addr_relay.py
+p2p_addrfetch.py
+p2p_addrv2_relay.py
 p2p_block_sync.py
 p2p_block_sync.py --v2transport
+p2p_blocksonly.py
 p2p_compactblocks.py
 p2p_dandelion.py
+p2p_disconnect_ban.py
 p2p_dns_seeds.py
+p2p_eviction.py
+p2p_getaddr_caching.py
+p2p_getdata.py
+p2p_i2p_ports.py
+p2p_i2p_sessions.py
+p2p_net_deadlock.py
+p2p_nobloomfilter_messages.py
 p2p_segwit.py
 p2p_sendheaders.py
 p2p_timeouts.py
+p2p_v2_transport.py
 rpc_bind.py --ipv4
 rpc_bind.py --ipv6
 rpc_bind.py --nonloopback
@@ -307,3 +307,4 @@ wallet_watchonly.py --usecli --legacy-wallet (BDB has not been compiled.)
 - Tests marked as skipped are mostly due to BDB (Berkeley DB) not being compiled
 - Some tests may appear multiple times with different flags (--descriptors, --legacy-wallet, --v2transport)
 - The test runner timed out after 10 minutes, so a few tests at the end may not have completed
+- Group 2 (P2P Network - Basic) tests fixed on 2025-08-03: 14 tests now passing

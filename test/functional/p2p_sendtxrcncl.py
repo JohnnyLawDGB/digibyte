@@ -29,7 +29,7 @@ class PeerNoVerack(P2PInterface):
         # Avoid sending verack in response to version.
         # When calling add_p2p_connection, wait_for_verack=False must be set (see
         # comment in add_p2p_connection).
-        if message.nVersion >= 70016 and self.wtxidrelay:
+        if message.nVersion >= 70018 and self.wtxidrelay:
             self.send_message(msg_wtxidrelay())
 
 class SendTxrcnclReceiver(P2PInterface):
@@ -87,7 +87,7 @@ class SendTxRcnclTest(DigiByteTestFramework):
         self.log.info('SENDTXRCNCL on pre-WTXID version should not be sent')
         peer = self.nodes[0].add_p2p_connection(SendTxrcnclReceiver(), send_version=False, wait_for_verack=False)
         pre_wtxid_version_msg = msg_version()
-        pre_wtxid_version_msg.nVersion = 70015
+        pre_wtxid_version_msg.nVersion = 70017  # DigiByte: Above min (70017) but below WTXID (70018)
         pre_wtxid_version_msg.strSubVer = P2P_SUBVERSION
         pre_wtxid_version_msg.nServices = P2P_SERVICES
         pre_wtxid_version_msg.relay = 1
@@ -199,7 +199,7 @@ class SendTxRcnclTest(DigiByteTestFramework):
         self.log.info('unexpected SENDTXRCNCL is ignored')
         peer = self.nodes[0].add_p2p_connection(PeerNoVerack(), send_version=False, wait_for_verack=False)
         old_version_msg = msg_version()
-        old_version_msg.nVersion = 70015
+        old_version_msg.nVersion = 70017  # DigiByte: Above min (70017) but below WTXID (70018)
         old_version_msg.strSubVer = P2P_SUBVERSION
         old_version_msg.nServices = P2P_SERVICES
         old_version_msg.relay = 1

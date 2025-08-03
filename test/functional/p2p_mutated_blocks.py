@@ -22,6 +22,7 @@ from test_framework.test_framework import DigiByteTestFramework
 from test_framework.blocktools import (
     COINBASE_MATURITY,
     create_block,
+    create_coinbase,
     add_witness_commitment,
     NORMAL_GBT_REQUEST_PARAMS,
 )
@@ -42,6 +43,10 @@ class MutatedBlocksTest(DigiByteTestFramework):
     def run_test(self):
         self.wallet = MiniWallet(self.nodes[0])
         self.generate(self.wallet, COINBASE_MATURITY)
+        
+        # Log the current height
+        info = self.nodes[0].getblockchaininfo()
+        self.log.info(f"Current height: {info['blocks']}, chain: {info['chain']}")
 
         honest_relayer = self.nodes[0].add_outbound_p2p_connection(P2PInterface(), p2p_idx=0, connection_type="outbound-full-relay")
         attacker = self.nodes[0].add_p2p_connection(P2PInterface())
@@ -50,12 +55,26 @@ class MutatedBlocksTest(DigiByteTestFramework):
         # The self-transfer transaction is needed to trigger a compact block
         # `getblocktxn` roundtrip.
         tx = self.wallet.create_self_transfer()["tx"]
-        # For DigiByte multi-algorithm mining, we need to use generatetoaddress instead of getblocktemplate
-        # Generate a block that includes our transaction
-        self.nodes[0].sendrawtransaction(tx.serialize().hex())
-        blockhash = self.generate(self.wallet, 1)[0]
-        block_hex = self.nodes[0].getblock(blockhash, 0)
-        block = from_hex(CBlock(), block_hex)
+        
+        # For DigiByte's multi-algorithm mining, we'll create block manually
+        # since getblocktemplate requires algorithm activation
+        tip = self.nodes[0].getbestblockhash()
+        tip_info = self.nodes[0].getblockheader(tip)
+        height = tip_info['height'] + 1
+        
+        # Create coinbase transaction
+        coinbase = create_coinbase(height=height)
+        
+        # Create block with scrypt algorithm (nVersion with algo bits)
+        from test_framework.messages import BLOCK_VERSION_SCRYPT
+        from test_framework.blockversion import VERSIONBITS_TOP_BITS
+        block = CBlock()
+        block.nVersion = BLOCK_VERSION_SCRYPT | VERSIONBITS_TOP_BITS
+        block.hashPrevBlock = int(tip, 16)
+        block.nTime = tip_info['time'] + 1
+        block.nBits = 0x207fffff  # regtest difficulty
+        block.vtx = [coinbase, tx]
+        block.hashMerkleRoot = block.calc_merkle_root()
         add_witness_commitment(block)
         block.solve()
 
@@ -79,10 +98,10 @@ class MutatedBlocksTest(DigiByteTestFramework):
                    get_block_txn.block_txn_request.indexes == [1]
         honest_relayer.wait_until(self_transfer_requested, timeout=5)
 
-        # Block at height 101 should be the only one in flight from peer 0
+        # Block at height COINBASE_MATURITY+1 should be the only one in flight from peer 0
         peer_info_prior_to_attack = self.nodes[0].getpeerinfo()
         assert_equal(peer_info_prior_to_attack[0]['id'], 0)
-        assert_equal([101], peer_info_prior_to_attack[0]["inflight"])
+        assert_equal([height], peer_info_prior_to_attack[0]["inflight"])
 
         # Attempt to clear the honest relayer's download request by sending the
         # mutated block (as the attacker).
@@ -91,11 +110,11 @@ class MutatedBlocksTest(DigiByteTestFramework):
         # Attacker should get disconnected for sending a mutated block
         attacker.wait_for_disconnect(timeout=5)
 
-        # Block at height 101 should *still* be the only block in-flight from
+        # Block at height COINBASE_MATURITY+1 should *still* be the only block in-flight from
         # peer 0
         peer_info_after_attack = self.nodes[0].getpeerinfo()
         assert_equal(peer_info_after_attack[0]['id'], 0)
-        assert_equal([101], peer_info_after_attack[0]["inflight"])
+        assert_equal([height], peer_info_after_attack[0]["inflight"])
 
         # The honest relayer should be able to complete relaying the block by
         # sending the blocktxn that was requested.

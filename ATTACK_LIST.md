@@ -74,9 +74,9 @@ Focus: Security features, orphan handling, special protocols
 - p2p_mutated_blocks.py
 - p2p_node_network_limited.py
 - p2p_orphan_handling.py
-- p2p_outbound_eviction.py
-- p2p_permissions.py
-- p2p_ping.py
+- ❌ p2p_outbound_eviction.py - Test doesn't exist (not in Bitcoin v26.2)
+- ✅ p2p_permissions.py - Already passing
+- ✅ p2p_ping.py - Already passing
 - p2p_seednode.py
 - p2p_sendtxrcncl.py
 - p2p_tx_download.py
@@ -84,7 +84,7 @@ Focus: Security features, orphan handling, special protocols
 - p2p_txreconciliation.py
 - p2p_unrequested_blocks.py
 - p2p_v2_misbehaving.py
-- p2p_v2_transport.py
+- ✅ p2p_v2_transport.py - Already passing
 
 ## Group 5: RPC Interface - Core (15 tests)
 Focus: Basic RPC functionality, blockchain queries

@@ -55,6 +55,8 @@ class TxDownloadTest(DigiByteTestFramework):
     def set_test_params(self):
         self.setup_clean_chain = True
         self.num_nodes = 2
+        # DigiByte: Disable Dandelion++ to avoid interference with transaction download behavior
+        self.extra_args = [['-dandelion=0'], ['-dandelion=0']]
 
     def test_tx_requests(self):
         self.log.info("Test that we request transactions from all our peers, eventually")
@@ -148,7 +150,10 @@ class TxDownloadTest(DigiByteTestFramework):
         peer2 = self.nodes[0].add_p2p_connection(TestP2PConn())
         for p in [peer1, peer2]:
             p.send_message(msg_inv([CInv(t=MSG_WTX, h=WTXID)]))
-        # One of the peers is asked for the tx
+        # DigiByte: Ensure message processing occurs before checking for getdata
+        # The message processing loop needs to run to send getdata requests
+        peer1.sync_with_ping()
+        peer2.sync_with_ping()
         peer2.wait_until(lambda: sum(p.tx_getdata_count for p in [peer1, peer2]) == 1)
         with p2p_lock:
             peer_expiry, peer_fallback = (peer1, peer2) if peer1.tx_getdata_count == 1 else (peer2, peer1)

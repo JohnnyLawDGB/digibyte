@@ -2,11 +2,11 @@
 
 ## Summary
 - **Total Tests**: 315
-- **Passed**: 123 (+14)
-- **Failed**: 122 (-14)
+- **Passed**: 126 (+17) 
+- **Failed**: 119 (-17)
 - **Skipped**: 68 (mostly due to BDB not compiled)
 
-## Failed Tests (122)
+## Failed Tests (119)
 feature_anchors.py
 feature_anchors.py --v2transport
 feature_assumeutxo.py
@@ -83,9 +83,6 @@ p2p_message_capture.py
 p2p_mutated_blocks.py
 p2p_node_network_limited.py
 p2p_orphan_handling.py
-p2p_outbound_eviction.py
-p2p_permissions.py
-p2p_ping.py
 p2p_seednode.py
 p2p_sendtxrcncl.py
 p2p_tx_download.py
@@ -137,7 +134,7 @@ wallet_gethdkeys.py --descriptors
 wallet_keypool.py --descriptors
 wallet_migrate.py
 
-## Passed Tests (123)
+## Passed Tests (126)
 feature_abortnode.py
 feature_bind_extra.py
 feature_fee_estimation.py
@@ -241,6 +238,9 @@ wallet_txn_clone.py --segwit
 wallet_txn_doublespend.py --descriptors
 wallet_watchonly.py --descriptors
 wallet_watchonly.py --usecli --descriptors
+p2p_permissions.py
+p2p_ping.py
+p2p_v2_transport.py
 
 ## Skipped Tests (68)
 feature_maxuploadtarget.py (BDB has not been compiled.)
@@ -308,3 +308,5 @@ wallet_watchonly.py --usecli --legacy-wallet (BDB has not been compiled.)
 - Some tests may appear multiple times with different flags (--descriptors, --legacy-wallet, --v2transport)
 - The test runner timed out after 10 minutes, so a few tests at the end may not have completed
 - Group 2 (P2P Network - Basic) tests fixed on 2025-08-03: 14 tests now passing
+- Additional P2P tests verified on 2025-08-03: p2p_permissions.py, p2p_ping.py, p2p_v2_transport.py already passing
+- p2p_outbound_eviction.py doesn't exist in DigiByte (not present in Bitcoin v26.2 either)

@@ -730,11 +730,11 @@ public:
             },
             {
                 // For use by test/functional/feature_assumeutxo.py
-                // TODO: Generate correct DigiByte values for block 299
+                // DigiByte regtest values generated from deterministic chain
                 .height = 299,
-                .hash_serialized = AssumeutxoHash{uint256S("0x61d9c2b29a2571a5fe285fe2d8554f91f93309666fc9b8223ee96338de25ff53")},
+                .hash_serialized = AssumeutxoHash{uint256S("0x0c3eb8c1b150495afa0aa96879243937ae989b45b9f8cd14947f5eec8ba7a103")},
                 .nChainTx = 300,
-                .blockhash = uint256S("0x7e0517ef3ea6ecbed9117858e42eedc8eb39e8698a38dcbd1b3962a283233f4c")
+                .blockhash = uint256S("0x2819b3447826b563a8b7cae4e4bcc0c35845149fcd2b99089c0e664c07bc6cfe")
             },
         };
 

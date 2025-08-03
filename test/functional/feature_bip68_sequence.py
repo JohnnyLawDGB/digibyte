@@ -88,7 +88,7 @@ class BIP68Test(DigiByteTestFramework):
     # the first sequence bit is set.
     def test_disable_flag(self):
         # Create some unconfirmed inputs
-        utxo = self.wallet.send_self_transfer(from_node=self.nodes[0])["new_utxo"]
+        utxo = self.wallet.send_self_transfer(from_node=self.nodes[0], fee_rate=self.relayfee)["new_utxo"]
 
         tx1 = CTransaction()
         value = int((utxo["value"] - self.relayfee) * COIN)
@@ -137,7 +137,7 @@ class BIP68Test(DigiByteTestFramework):
         while len(self.wallet.get_utxos(include_immature_coinbase=False, mark_as_spent=False)) < 200:
             import random
             num_outputs = random.randint(1, max_outputs)
-            self.wallet.send_self_transfer_multi(from_node=self.nodes[0], num_outputs=num_outputs)
+            self.wallet.send_self_transfer_multi(from_node=self.nodes[0], num_outputs=num_outputs, fee_per_output=50000, confirmed_only=True)
             self.generate(self.wallet, 1)
 
         utxos = self.wallet.get_utxos(include_immature_coinbase=False)
@@ -222,7 +222,7 @@ class BIP68Test(DigiByteTestFramework):
 
         # Create a mempool tx.
         self.wallet.rescan_utxos()
-        tx1 = self.wallet.send_self_transfer(from_node=self.nodes[0])["tx"]
+        tx1 = self.wallet.send_self_transfer(from_node=self.nodes[0], fee_rate=self.relayfee)["tx"]
         tx1.rehash()
 
         # Anyone-can-spend mempool tx.
@@ -355,7 +355,7 @@ class BIP68Test(DigiByteTestFramework):
     def test_bip68_not_consensus(self):
         assert not softfork_active(self.nodes[0], 'csv')
 
-        tx1 = self.wallet.send_self_transfer(from_node=self.nodes[0])["tx"]
+        tx1 = self.wallet.send_self_transfer(from_node=self.nodes[0], fee_rate=self.relayfee)["tx"]
         tx1.rehash()
 
         # Make an anyone-can-spend transaction

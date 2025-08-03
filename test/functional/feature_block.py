@@ -1424,7 +1424,7 @@ class FullBlockTest(DigiByteTestFramework):
         # unexpectedly disconnected if the DoS score for that error is 50.
         self.helper_peer.wait_for_getheaders(timeout=timeout)
 
-    def reconnect_p2p(self, timeout=60):
+    def reconnect_p2p(self, timeout=10):
         """Tear down and bootstrap the P2P connection to the node.
 
         The node gets disconnected several times in this test. This helper
@@ -1432,7 +1432,7 @@ class FullBlockTest(DigiByteTestFramework):
         self.nodes[0].disconnect_p2ps()
         self.bootstrap_p2p(timeout=timeout)
 
-    def send_blocks(self, blocks, success=True, reject_reason=None, force_send=False, reconnect=False, timeout=960):
+    def send_blocks(self, blocks, success=True, reject_reason=None, force_send=False, reconnect=False, timeout=60):
         """Sends blocks to test node. Syncs and verifies that tip has advanced to most recent block.
 
         Call with success = False if the tip shouldn't advance to the most recent block."""

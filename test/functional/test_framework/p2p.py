@@ -40,6 +40,7 @@ from test_framework.messages import (
     msg_cfheaders,
     msg_cfilter,
     msg_cmpctblock,
+    msg_dandeliontx,
     msg_feefilter,
     msg_filteradd,
     msg_filterclear,
@@ -112,6 +113,7 @@ MESSAGEMAP = {
     b"cfheaders": msg_cfheaders,
     b"cfilter": msg_cfilter,
     b"cmpctblock": msg_cmpctblock,
+    b"dandeliontx": msg_dandeliontx,
     b"feefilter": msg_feefilter,
     b"filteradd": msg_filteradd,
     b"filterclear": msg_filterclear,
@@ -432,6 +434,7 @@ class P2PInterface(P2PConnection):
     def on_sendheaders(self, message): pass
     def on_sendtxrcncl(self, message): pass
     def on_tx(self, message): pass
+    def on_dandeliontx(self, message): pass
     def on_wtxidrelay(self, message): pass
 
     def on_inv(self, message):

@@ -383,6 +383,7 @@ class CInv:
         MSG_FILTERED_BLOCK: "filtered Block",
         MSG_CMPCT_BLOCK: "CompactBlock",
         MSG_DANDELION: "DandelionTx",
+        MSG_DANDELION | MSG_WITNESS_FLAG: "WitnessDandelionTx",
         MSG_WTX: "WTX",
     }
 
@@ -1928,6 +1929,25 @@ class msg_sendtxrcncl:
     def __repr__(self):
         return "msg_sendtxrcncl(version=%lu, salt=%lu)" %\
             (self.version, self.salt)
+
+class msg_dandeliontx:
+    __slots__ = ("tx",)
+    msgtype = b"dandeliontx"
+
+    def __init__(self, tx=None):
+        if tx is None:
+            self.tx = CTransaction()
+        else:
+            self.tx = tx
+
+    def deserialize(self, f):
+        self.tx.deserialize(f)
+
+    def serialize(self):
+        return self.tx.serialize()
+
+    def __repr__(self):
+        return "msg_dandeliontx(tx=%s)" % (repr(self.tx))
 
 class TestFrameworkScript(unittest.TestCase):
     def test_addrv2_encode_decode(self):

@@ -53,8 +53,8 @@ class AddrReceiver(P2PInterface):
                 # relay_tests checks the content of the addr messages match
                 # expectations based on the message creation in setup_addr_msg
                 assert_equal(addr.nServices, 9)
-                if not 8333 <= addr.port < 8343:
-                    raise AssertionError("Invalid addr.port of {} (8333-8342 expected)".format(addr.port))
+                if not 12024 <= addr.port < 12034:
+                    raise AssertionError("Invalid addr.port of {} (12024-12033 expected)".format(addr.port))
                 assert addr.ip.startswith('123.123.')
 
     def on_getaddr(self, message):
@@ -118,7 +118,7 @@ class AddrTest(DigiByteTestFramework):
                 self.counter += 1
             else:
                 addr.ip = f"{random.randrange(128,169)}.{random.randrange(1,255)}.{random.randrange(1,255)}.{random.randrange(1,255)}"
-            addr.port = 8333 + i
+            addr.port = 12024 + i
             addrs.append(addr)
 
         msg = msg_addr()
@@ -285,7 +285,7 @@ class AddrTest(DigiByteTestFramework):
             first_octet = i >> 8
             second_octet = i % 256
             a = f"{first_octet}.{second_octet}.1.1"
-            self.nodes[0].addpeeraddress(a, 8333)
+            self.nodes[0].addpeeraddress(a, 12024)
 
         full_outbound_peer.send_and_ping(msg_getaddr())
         block_relay_peer.send_and_ping(msg_getaddr())

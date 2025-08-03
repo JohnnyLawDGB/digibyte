@@ -93,7 +93,7 @@ Each sub-agent should:
 #### 3.3 Common Fixes by Test Group
 
 **Group 1: Mempool Tests**
-- Fee calculations: MIN_RELAY_TX_FEE changed from 0.001 to 0.0001 DGB/kB
+- Fee calculations: MIN_RELAY_TX_FEE should remain 0.001 DGB/kB (same as v8.22.2)
 - Dandelion++ transaction routing differences
 - Dust threshold calculations
 - Package size limits
@@ -107,7 +107,7 @@ Each sub-agent should:
 **Group 5-6: RPC Tests**
 - DigiByte-specific RPC methods (getblockreward, etc.)
 - Address format validation
-- Block reward calculations (72000 DGB)
+- Block reward calculations (varies by height - 72000 DGB for early blocks)
 - Chain parameter differences
 
 **Group 7-8: Feature Tests**
@@ -163,7 +163,7 @@ BLOCK_TIME = 15  # seconds (NOT 600)
 
 # Supply
 MAX_MONEY = 21000000000  # 21 billion DGB (NOT 21 million)
-SUBSIDY = 72000  # Current block reward in DGB
+SUBSIDY = 72000  # Block reward for heights < 1440 (varies by height - check GetBlockSubsidy)
 
 # Maturity
 COINBASE_MATURITY = 8      # Spendable after 8 blocks
@@ -172,11 +172,11 @@ COINBASE_MATURITY_2 = 100  # Full maturity for some operations
 
 ### Fee Structure
 ```python
-# Transaction fees (per kB) - CRITICAL: These changed in v8.26!
-DEFAULT_TRANSACTION_MINFEE = Decimal('0.1')     # Wallet minimum fee
-DEFAULT_FALLBACK_FEE = Decimal('0.01')          # Fallback fee
-MIN_RELAY_TX_FEE = Decimal('0.0001')            # Relay minimum (was 0.001)
-DUST_RELAY_TX_FEE = Decimal('0.0003')           # Dust threshold
+# Transaction fees (per kB) - CRITICAL: Check these match v8.22.2!
+DEFAULT_TRANSACTION_MINFEE = Decimal('0.1')      # Wallet minimum fee
+DEFAULT_FALLBACK_FEE = Decimal('0.01')           # Fallback fee  
+MIN_RELAY_TX_FEE = Decimal('0.001')              # Relay minimum (same as v8.22.2)
+DUST_RELAY_TX_FEE = Decimal('0.0003')            # Dust threshold
 ```
 
 ### Network Parameters
@@ -200,6 +200,13 @@ ALGO_GROESTL = 2
 ALGO_SKEIN = 3
 ALGO_QUBIT = 4
 ALGO_ODO = 7  # Odocrypt (activates at height 9,112,320)
+```
+
+### DigiByte-Specific RPC Commands
+```
+getblockreward - Returns the current block reward
+getmininginfo - Enhanced with per-algorithm statistics
+getdifficulty - Returns difficulty for all algorithms
 ```
 
 ## Progress Tracking

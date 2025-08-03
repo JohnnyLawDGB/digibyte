@@ -290,7 +290,7 @@ class WalletMiniscriptTest(DigiByteTestFramework):
                     "sequence": seq,
                 }
             ],
-            [{dest_addr: 0.009}],
+            [{dest_addr: 0.001}],
             lt,
         )
 

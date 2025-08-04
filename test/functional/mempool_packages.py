@@ -207,7 +207,8 @@ class MempoolPackagesTest(DigiByteTestFramework):
 
         tx_children = []
         # First create one parent tx with 10 children
-        tx_with_children = self.wallet.send_self_transfer_multi(from_node=self.nodes[0], num_outputs=10)
+        # Use higher fee rate for DigiByte's minimum relay fee
+        tx_with_children = self.wallet.send_self_transfer_multi(from_node=self.nodes[0], num_outputs=10, fee_per_output=5000)
         parent_transaction = tx_with_children["txid"]
         transaction_package = tx_with_children["new_utxos"]
 
@@ -215,7 +216,7 @@ class MempoolPackagesTest(DigiByteTestFramework):
         chain = [] # save sent txs for the purpose of checking node1's mempool later (see below)
         for _ in range(DEFAULT_DESCENDANT_LIMIT - 1):
             utxo = transaction_package.pop(0)
-            new_tx = self.wallet.send_self_transfer_multi(from_node=self.nodes[0], num_outputs=10, utxos_to_spend=[utxo])
+            new_tx = self.wallet.send_self_transfer_multi(from_node=self.nodes[0], num_outputs=10, utxos_to_spend=[utxo], fee_per_output=5000)
             txid = new_tx["txid"]
             chain.append(txid)
             if utxo['txid'] is parent_transaction:

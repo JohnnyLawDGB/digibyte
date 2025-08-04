@@ -34,7 +34,7 @@ class DataCarrierTest(DigiByteTestFramework):
         tx = self.wallet.create_self_transfer(fee_rate=0)["tx"]
         data = [] if data is None else [data]
         tx.vout.append(CTxOut(nValue=0, scriptPubKey=CScript([OP_RETURN] + data)))
-        tx.vout[0].nValue -= tx.get_vsize() * 10  # pay 10sat/vbyte fee for DigiByte
+        tx.vout[0].nValue -= tx.get_vsize() * 100  # pay 100sat/vbyte fee for DigiByte
 
         tx_hex = tx.serialize().hex()
 

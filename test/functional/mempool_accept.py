@@ -374,10 +374,13 @@ class MempoolAcceptanceTest(DigiByteTestFramework):
         )
 
         self.log.info('Minimally-small transaction(in non-witness bytes) that is allowed')
-        tx.vout[0] = CTxOut(COIN - 1000, DUMMY_MIN_OP_RETURN_SCRIPT)
+        # DigiByte requires higher minimum fee - calculate based on transaction size
+        # MIN_STANDARD_TX_NONWITNESS_SIZE is 65 bytes, vsize will be different due to witness
+        # With minimum relay fee of ~100 sat/vB, we need at least 6700 sats for 67 vbytes
+        tx.vout[0] = CTxOut(COIN - 7000, DUMMY_MIN_OP_RETURN_SCRIPT)
         assert_equal(len(tx.serialize_without_witness()), MIN_STANDARD_TX_NONWITNESS_SIZE)
         self.check_mempool_result(
-            result_expected=[{'txid': tx.rehash(), 'allowed': True, 'vsize': tx.get_vsize(), 'fees': { 'base': Decimal('0.00001000')}}],
+            result_expected=[{'txid': tx.rehash(), 'allowed': True, 'vsize': tx.get_vsize(), 'fees': { 'base': Decimal('0.00007000')}}],
             rawtxs=[tx.serialize().hex()],
             maxfeerate=0,
         )

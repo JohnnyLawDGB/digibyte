@@ -54,14 +54,20 @@ class DustRelayFeeTest(DigiByteTestFramework):
         self.log.info(f"-> Test {type_desc} output (size {len(output_script)}, limit {dust_threshold})")
 
         # amount right on the dust threshold should pass
-        tx = self.wallet.create_self_transfer()["tx"]
+        # Create transaction with proper fee for DigiByte (100 sat/vB minimum)
+        # Estimate ~180 vbytes for a typical transaction, so 18000 sats
+        tx = self.wallet.create_self_transfer(fee=18000)["tx"]
         tx.vout.append(CTxOut(nValue=dust_threshold, scriptPubKey=output_script))
-        tx.vout[0].nValue -= dust_threshold  # keep total output value constant
+        tx.vout[0].nValue = int(tx.vout[0].nValue - dust_threshold)  # keep total output value constant
         tx_good_hex = tx.serialize().hex()
-        res = node.testmempoolaccept([tx_good_hex])[0]
+        res = node.testmempoolaccept([tx_good_hex], maxfeerate=0)[0]
         if not res['allowed']:
             self.log.error(f"Transaction rejected: {res.get('reject-reason', 'unknown')}")
             self.log.error(f"Dust threshold: {dust_threshold}, fee rate: {dust_relay_fee}")
+            # Debug: calculate actual fee
+            decoded_tx = node.decoderawtransaction(tx_good_hex)
+            self.log.error(f"Transaction vsize: {decoded_tx.get('vsize', 'unknown')}")
+            self.log.error(f"Number of inputs: {len(decoded_tx['vin'])}, outputs: {len(decoded_tx['vout'])}")
         assert_equal(res['allowed'], True)
 
         # amount just below the dust threshold should fail

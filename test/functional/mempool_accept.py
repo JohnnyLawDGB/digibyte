@@ -96,7 +96,7 @@ class MempoolAcceptanceTest(DigiByteTestFramework):
         )
 
         self.log.info('A transaction not in the mempool')
-        fee = Decimal('0.001')
+        fee = Decimal('0.0007')
         utxo_to_spend = self.wallet.get_utxo(txid=txid_in_block)  # use 0.3 DGB UTXO
         tx = self.wallet.create_self_transfer(utxo_to_spend=utxo_to_spend, sequence=MAX_BIP125_RBF_SEQUENCE)['tx']
         tx.vout[0].nValue = int((Decimal('0.3') - fee) * COIN)
@@ -356,7 +356,7 @@ class MempoolAcceptanceTest(DigiByteTestFramework):
         self.log.info('A tiny transaction(in non-witness bytes) that is disallowed')
         # Adjust mempool size to actual state
         self.mempool_size = node.getmempoolinfo()["size"]
-        
+
         tx = CTransaction()
         tx.vin.append(CTxIn(COutPoint(int(seed_tx["txid"], 16), seed_tx["sent_vout"]), b"", SEQUENCE_FINAL))
         tx.wit.vtxinwit = [CTxInWitness()]
@@ -374,13 +374,10 @@ class MempoolAcceptanceTest(DigiByteTestFramework):
         )
 
         self.log.info('Minimally-small transaction(in non-witness bytes) that is allowed')
-        # DigiByte requires higher minimum fee - calculate based on transaction size
-        # MIN_STANDARD_TX_NONWITNESS_SIZE is 65 bytes, vsize will be different due to witness
-        # With minimum relay fee of ~100 sat/vB, we need at least 6700 sats for 67 vbytes
-        tx.vout[0] = CTxOut(COIN - 7000, DUMMY_MIN_OP_RETURN_SCRIPT)
+        tx.vout[0] = CTxOut(COIN - 100000, DUMMY_MIN_OP_RETURN_SCRIPT)
         assert_equal(len(tx.serialize_without_witness()), MIN_STANDARD_TX_NONWITNESS_SIZE)
         self.check_mempool_result(
-            result_expected=[{'txid': tx.rehash(), 'allowed': True, 'vsize': tx.get_vsize(), 'fees': { 'base': Decimal('0.00007000')}}],
+            result_expected=[{'txid': tx.rehash(), 'allowed': True, 'vsize': tx.get_vsize(), 'fees': { 'base': Decimal('0.001')}}],
             rawtxs=[tx.serialize().hex()],
             maxfeerate=0,
         )

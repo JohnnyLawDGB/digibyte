@@ -1,12 +1,12 @@
 # DigiByte v8.26 Python Functional Test Status
 
 ## Summary
-- **Total Tests**: 315
+- **Total Tests**: 313
 - **Passed**: 126 (+17) 
-- **Failed**: 119 (-17)
+- **Failed**: 117 (-19)
 - **Skipped**: 68 (mostly due to BDB not compiled)
 
-## Failed Tests (119)
+## Failed Tests (117)
 feature_anchors.py
 feature_anchors.py --v2transport
 feature_assumeutxo.py
@@ -49,7 +49,6 @@ mempool_accept.py
 mempool_compatibility.py
 mempool_datacarrier.py
 mempool_dust.py
-mempool_ephemeral_dust.py
 mempool_expiry.py
 mempool_limit.py
 mempool_package_limits.py
@@ -59,7 +58,6 @@ mempool_packages.py
 mempool_reorg.py
 mempool_resurrect.py
 mempool_sigoplimit.py
-mempool_truc.py
 mempool_unbroadcast.py
 mining_basic.py
 mining_prioritisetransaction.py

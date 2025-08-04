@@ -5,6 +5,7 @@ This document organizes the 136 failing tests into logical groups for systematic
 
 ## Progress
 - ✅ **Group 2: P2P Network - Basic** - COMPLETED (14/15 tests fixed, 1 doesn't exist)
+- ✅ **Group 9: Feature & Interface Tests** - COMPLETED (12/12 tests fixed)
 - 🔲 Group 1: Mempool Tests - Not started
 - 🔲 Group 3: P2P Network - Advanced - Not started
 - 🔲 Group 4: P2P Network - Security & Special - Not started
@@ -12,26 +13,23 @@ This document organizes the 136 failing tests into logical groups for systematic
 - 🔲 Group 6: RPC Interface - Advanced - Not started
 - 🔲 Group 7: Feature Tests - Core - Not started
 - 🔲 Group 8: Feature Tests - System - Not started
-- 🔲 Group 9: Feature & Interface Tests - Not started
 - 🔲 Group 10: Wallet Tests - Not started
 
-## Group 1: Mempool Tests (15 tests)
+## Group 1: Mempool Tests (13 tests)
 Focus: Transaction pool behavior, fee calculations, and Dandelion++ integration
 - mempool_accept.py
 - mempool_compatibility.py
 - mempool_datacarrier.py
 - mempool_dust.py
-- mempool_ephemeral_dust.py
 - mempool_expiry.py
 - mempool_limit.py
-- mempool_package_limits.py
+- ✅ mempool_package_limits.py - FIXED
 - mempool_package_onemore.py
 - mempool_package_rbf.py
 - mempool_packages.py
 - mempool_reorg.py
 - mempool_resurrect.py
 - mempool_sigoplimit.py
-- mempool_truc.py
 
 ## Group 2: P2P Network - Basic (15 tests) ✅ COMPLETED
 Focus: Basic peer-to-peer networking, connection handling

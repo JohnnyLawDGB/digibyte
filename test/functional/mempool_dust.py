@@ -40,7 +40,8 @@ DUST_RELAY_TX_FEE = 30000  # default setting for DigiByte [sat/kvB]
 class DustRelayFeeTest(DigiByteTestFramework):
     def set_test_params(self):
         self.num_nodes = 1
-        self.extra_args = [["-dandelion=0"]]
+        # Set dandelion=0 to disable Dandelion++ and use lower minrelaytxfee to allow dust testing
+        self.extra_args = [["-dandelion=0", "-minrelaytxfee=0.0001", f"-dustrelayfee={DUST_RELAY_TX_FEE / 100000000:.8f}"]]
 
     def test_dust_output(self, node: TestNode, dust_relay_fee: Decimal,
                          output_script: CScript, type_desc: str) -> None:
@@ -104,14 +105,15 @@ class DustRelayFeeTest(DigiByteTestFramework):
         )
 
         # test default (no parameter), disabled (=0) and a smaller set of dust fee rates [sat/kvB] to avoid UTXO exhaustion
-        for dustfee_sat_kvb in (DUST_RELAY_TX_FEE, 0, 500, 12345):
+        # Note: All non-zero fees must be >= minrelaytxfee (10000 sat/kvB = 0.0001 DGB/kB)
+        for dustfee_sat_kvb in (DUST_RELAY_TX_FEE, 0, 50000, 75000):
             dustfee_dgb_kvb = dustfee_sat_kvb / Decimal(COIN)
             if dustfee_sat_kvb == DUST_RELAY_TX_FEE:
                 self.log.info(f"Test default dust limit setting ({dustfee_sat_kvb} sat/kvB)...")
             else:
                 dust_parameter = f"-dustrelayfee={dustfee_dgb_kvb:.8f}"
                 self.log.info(f"Test dust limit setting {dust_parameter} ({dustfee_sat_kvb} sat/kvB)...")
-                self.restart_node(0, extra_args=[dust_parameter, "-dandelion=0"])
+                self.restart_node(0, extra_args=[dust_parameter, "-dandelion=0", "-minrelaytxfee=0.0001"])
                 # Generate fresh UTXOs for the wallet after restart
                 self.generate(self.nodes[0], 10)
 

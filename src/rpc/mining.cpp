@@ -457,7 +457,7 @@ static RPCHelpMan getmininginfo()
                                 {RPCResult::Type::NUM, "groestl", /*optional=*/true, "Groestl difficulty"},
                                 {RPCResult::Type::NUM, "skein", /*optional=*/true, "Skein difficulty"},
                                 {RPCResult::Type::NUM, "qubit", /*optional=*/true, "Qubit difficulty"},
-                                {RPCResult::Type::NUM, "odocrypt", /*optional=*/true, "Odocrypt difficulty"},
+                                {RPCResult::Type::NUM, "odo", /*optional=*/true, "Odocrypt difficulty"},
                             }},
                         {RPCResult::Type::NUM, "networkhashps", "The network hashes per second"},
                         {RPCResult::Type::NUM, "pooledtx", "The size of the mempool"},
@@ -635,6 +635,7 @@ static RPCHelpMan getblocktemplate()
                 {"data", RPCArg::Type::STR_HEX, RPCArg::Optional::OMITTED, "proposed block data to check, encoded in hexadecimal; valid only for mode=\"proposal\""},
             },
             },
+            {"algo", RPCArg::Type::STR, RPCArg::Default{GetAlgoName(miningAlgo)}, "Which mining algorithm to use."},
         },
         {
             RPCResult{"If the proposal was accepted with mode=='proposal'", RPCResult::Type::NONE, "", ""},
@@ -838,6 +839,13 @@ static RPCHelpMan getblocktemplate()
         throw JSONRPCError(RPC_INVALID_PARAMETER, "getblocktemplate must be called with the segwit rule set (call with {\"rules\": [\"segwit\"]})");
     }
 
+    // DigiByte: Handle algorithm parameter
+    int algo = miningAlgo;
+    if (!request.params[1].isNull()) {
+        std::string strAlgo = request.params[1].get_str();
+        algo = GetAlgoByName(strAlgo, algo);
+    }
+
     // Update block
     static CBlockIndex* pindexPrev;
     static int64_t time_start;
@@ -855,7 +863,7 @@ static RPCHelpMan getblocktemplate()
 
         // Create new block
         CScript scriptDummy = CScript() << OP_TRUE;
-        pblocktemplate = BlockAssembler{active_chainstate, &mempool}.CreateNewBlock(scriptDummy, ALGO_SHA256D);
+        pblocktemplate = BlockAssembler{active_chainstate, &mempool}.CreateNewBlock(scriptDummy, algo);
         if (!pblocktemplate)
             throw JSONRPCError(RPC_OUT_OF_MEMORY, "Out of memory");
 
@@ -866,7 +874,7 @@ static RPCHelpMan getblocktemplate()
     CBlock* pblock = &pblocktemplate->block; // pointer for convenience
 
     // Update nTime
-    UpdateTime(pblock, consensusParams, pindexPrev, ALGO_SHA256D);
+    UpdateTime(pblock, consensusParams, pindexPrev, algo);
     pblock->nNonce = 0;
 
     // NOTE: If at some point we support pre-segwit miners post-segwit-activation, this needs to take segwit support into consideration

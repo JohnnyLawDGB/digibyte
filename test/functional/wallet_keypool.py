@@ -196,13 +196,13 @@ class KeyPoolTest(DigiByteTestFramework):
         assert_raises_rpc_error(-4, "The transaction amount is too small to pay the fee", w2.walletcreatefundedpsbt, inputs=[], outputs=[{addr.pop(): 0.00005000}], subtractFeeFromOutputs=[0], feeRate=0.10000000)
 
         # creating a transaction without change, with a manual input, should still be possible
-        # Increased amount and fee rate for DigiByte
-        res = w2.walletcreatefundedpsbt(inputs=w2.listunspent(), outputs=[{destination: 0.01000000}], subtractFeeFromOutputs=[0], feeRate=0.10000000)
+        # Use exact amount calculation to avoid change (1.0 DGB input - small fee = ~0.999 DGB output)
+        res = w2.walletcreatefundedpsbt(inputs=w2.listunspent(), outputs=[{destination: 0.99900000}], feeRate=0.01000000)
         assert_equal("psbt" in res, True)
 
         # creating a transaction without change should still be possible
-        # Increased amount and fee rate for DigiByte
-        res = w2.walletcreatefundedpsbt(inputs=[], outputs=[{destination: 0.01000000}], subtractFeeFromOutputs=[0], feeRate=0.10000000)
+        # Use exact amount calculation to avoid change (1.0 DGB input - small fee = ~0.999 DGB output)
+        res = w2.walletcreatefundedpsbt(inputs=[], outputs=[{destination: 0.99900000}], feeRate=0.01000000)
         assert_equal("psbt" in res, True)
         # should work without subtractFeeFromOutputs if the exact fee is subtracted from the amount
         # Increased fee rate to DigiByte's minimum wallet fee

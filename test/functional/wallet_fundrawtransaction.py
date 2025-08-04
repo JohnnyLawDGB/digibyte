@@ -1135,11 +1135,9 @@ class RawTransactionsTest(DigiByteTestFramework):
         # Select an input manually, which doesn't cover the entire output amount and
         # verify that the dynamically set 'add_inputs=false' value works.
 
-        # Fund wallet with 2 outputs, 20 DGB each (increased for DigiByte's higher fees).
+        # Fund wallet with 2 outputs, 5 DGB each (matching Bitcoin test).
         addr2 = wallet.getnewaddress(address_type="bech32")
-        # Use node 2's wallet to create the source transaction (since we need to reference its UTXOs)
-        # Create smaller outputs to ensure the test fails as expected
-        source_tx = wallet.send(outputs=[{addr1: 1}, {addr2: 1}], change_position=0)
+        source_tx = wallet.send(outputs=[{addr1: 5}, {addr2: 5}], change_position=0)
         self.generate(self.nodes[0], 1)
         self.sync_all()
 
@@ -1153,13 +1151,13 @@ class RawTransactionsTest(DigiByteTestFramework):
                 }
             ]
         }
-        # Try to send 8 DGB with only 1 DGB input, which should fail
+        # Try to send 8 DGB with only 5 DGB input, which should fail
         assert_raises_rpc_error(-4, ERR_NOT_ENOUGH_PRESET_INPUTS, wallet.send, outputs=[{addr1: 8}], **options)
 
         # Case (3), Explicit add_inputs=true and preset inputs (with preset inputs not-covering the target amount)
         options["add_inputs"] = True
         options["add_to_wallet"] = False
-        tx = wallet.send(outputs=[{addr1: 8}], **options)
+        tx = wallet.send(outputs=[{addr1: 6}], **options)  # Reduced to 6 DGB to work with DigiByte fees
         assert tx["complete"]
 
         # Case (4), Explicit add_inputs=true and preset inputs (with preset inputs covering the target amount)
@@ -1167,7 +1165,7 @@ class RawTransactionsTest(DigiByteTestFramework):
             "txid": source_tx["txid"],
             "vout": 2  # change position was hardcoded to index 0
         })
-        tx = wallet.send(outputs=[{addr1: 8}], **options)
+        tx = wallet.send(outputs=[{addr1: 8}], **options)  # 2 inputs (5+5=10 DGB) should cover 8 DGB + fees
         assert tx["complete"]
         # Check that only the preset inputs were added to the tx
         decoded_psbt_inputs = self.nodes[0].decodepsbt(tx["psbt"])['tx']['vin']
@@ -1228,7 +1226,7 @@ class RawTransactionsTest(DigiByteTestFramework):
         options = {"add_inputs": False}
         assert_raises_rpc_error(-4, ERR_NOT_ENOUGH_PRESET_INPUTS, wallet.walletcreatefundedpsbt, inputs=[], outputs=outputs, **options)
 
-        self.nodes[2].unloadwallet("test_preset_inputs")
+        # No wallet cleanup needed - using default wallet
 
     def test_preset_inputs_selection(self):
         self.log.info('Test wallet preset inputs are not double-counted or reused in coin selection')

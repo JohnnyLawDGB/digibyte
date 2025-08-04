@@ -29,18 +29,16 @@ class ReplaceByFeeTest(DigiByteTestFramework):
         self.num_nodes = 2
         self.extra_args = [
             [
-                "-maxorphantx=1000",
+                "-maxorphantx=1000",  
                 "-limitancestorcount=50",
                 "-limitancestorsize=101",
-                "-limitdescendantcount=200",
+                "-limitdescendantcount=200", 
                 "-limitdescendantsize=101",
-                "-mempoolfullrbf=1",  # Enable full RBF for DigiByte
-                "-txindex=1",  # Enable transaction index for lookups
+                "-dandelion=0",  # Disable Dandelion++ for testing
             ],
             # second node has default mempool parameters
             [
-                "-mempoolfullrbf=1",  # Enable full RBF for DigiByte
-                "-txindex=1",  # Enable transaction index for lookups  
+                "-dandelion=0",  # Disable Dandelion++ for testing
             ],
         ]
         self.supports_cli = False
@@ -114,54 +112,49 @@ class ReplaceByFeeTest(DigiByteTestFramework):
 
     def test_simple_doublespend(self):
         """Simple doublespend"""
-        tx0_outpoint = self.make_utxo(self.nodes[0], int(1.1 * COIN))
-        self.sync_all()
+        # Get a UTXO from MiniWallet instead of make_utxo
+        tx0_utxo = self.wallet.get_utxo()
 
-        # we use MiniWallet to create a transaction template with inputs correctly set,
-        # and modify the output (amount, scriptPubKey) according to our needs
-        # Use higher fee rate for DigiByte (0.1 DGB/kB instead of default 0.003)
-        # Set sequence to enable RBF (less than MAX_BIP125_RBF_SEQUENCE)
-        tx = self.wallet.create_self_transfer(fee_rate=Decimal("0.1"), sequence=MAX_BIP125_RBF_SEQUENCE - 1)["tx"]
-        tx1a_txid = self.nodes[0].sendrawtransaction(tx.serialize().hex())
+        # Create first transaction with RBF signaling (sequence < MAX_BIP125_RBF_SEQUENCE)
+        tx1a = self.wallet.create_self_transfer(
+            utxo_to_spend=tx0_utxo,
+            sequence=MAX_BIP125_RBF_SEQUENCE - 1,
+            fee_rate=Decimal("0.1")
+        )
+        tx1a_txid = self.nodes[0].sendrawtransaction(tx1a["hex"], 0)
 
         self.log.info(f"tx1a_txid: {tx1a_txid}")
-        
-        # Stop auto-generation temporarily to keep transactions in mempool
-        if hasattr(self, 'mocktime'):
-            self.nodes[0].setmocktime(self.mocktime)
         
         mempool_after_tx1a = self.nodes[0].getrawmempool()
         self.log.info(f"Mempool after tx1a: {mempool_after_tx1a}")
 
-        # Should fail because we haven't changed the fee
-        tx.vout[0].scriptPubKey[-1] ^= 1
+        # Should fail because we haven't changed the fee (use lower fee rate)
+        tx1b = self.wallet.create_self_transfer(
+            utxo_to_spend=tx0_utxo,
+            sequence=MAX_BIP125_RBF_SEQUENCE - 1,
+            fee_rate=Decimal("0.05")  # Lower fee rate, should fail
+        )
 
         # This will raise an exception due to insufficient fee
-        assert_raises_rpc_error(-26, "insufficient fee", self.nodes[0].sendrawtransaction, tx.serialize().hex(), 0)
+        assert_raises_rpc_error(-26, "insufficient fee", self.nodes[0].sendrawtransaction, tx1b["hex"], 0)
 
-        # Extra 0.1 DGB fee
-        tx.vout[0].nValue -= int(0.1 * COIN)
-        tx1b_hex = tx.serialize().hex()
-        # Works when enabled
-        tx1b_txid = self.nodes[0].sendrawtransaction(tx1b_hex, 0)
+        # Create replacement with higher fee rate
+        tx1b = self.wallet.create_self_transfer(
+            utxo_to_spend=tx0_utxo,
+            sequence=MAX_BIP125_RBF_SEQUENCE - 1,
+            fee_rate=Decimal("0.2")  # Higher fee rate
+        )
+        tx1b_txid = self.nodes[0].sendrawtransaction(tx1b["hex"], 0)
 
         self.log.info(f"tx1b_txid: {tx1b_txid}")
         
         mempool = self.nodes[0].getrawmempool()
         self.log.info(f"Final mempool: {mempool}")
-        
-        # Check if transactions are in recent blocks
-        tip_hash = self.nodes[0].getbestblockhash()
-        tip_block = self.nodes[0].getblock(tip_hash, 2)  # verbose=2 gets transaction details
-        self.log.info(f"Latest block transactions: {[tx['txid'] for tx in tip_block['tx']]}")
 
-        # Debug: temporarily comment out assertions to see what's happening
-        # assert tx1a_txid not in mempool
-        # assert tx1b_txid in mempool
-        self.log.info(f"tx1a in mempool: {tx1a_txid in mempool}")
-        self.log.info(f"tx1b in mempool: {tx1b_txid in mempool}")
+        assert tx1a_txid not in mempool
+        assert tx1b_txid in mempool
 
-        assert_equal(tx1b_hex, self.nodes[0].getrawtransaction(tx1b_txid))
+        assert_equal(tx1b["hex"], self.nodes[0].getrawtransaction(tx1b_txid))
 
     def test_doublespend_chain(self):
         """Doublespend of a long chain"""
@@ -237,7 +230,7 @@ class ReplaceByFeeTest(DigiByteTestFramework):
                                   _total_txs=_total_txs):
                     yield x
 
-        fee = int(0.00001 * COIN)
+        fee = int(0.0003 * COIN)  # Higher fee for DigiByte minimum relay
         n = MAX_REPLACEMENT_LIMIT
         tree_txs = list(branch(tx0_outpoint, initial_nValue, n, fee=fee))
         assert_equal(len(tree_txs), n)
@@ -267,7 +260,7 @@ class ReplaceByFeeTest(DigiByteTestFramework):
         # Try again, but with more total transactions than the "max txs
         # double-spent at once" anti-DoS limit.
         for n in (MAX_REPLACEMENT_LIMIT + 1, MAX_REPLACEMENT_LIMIT * 2):
-            fee = int(0.00001 * COIN)
+            fee = int(0.0003 * COIN)  # Higher fee for DigiByte minimum relay
             tx0_outpoint = self.make_utxo(self.nodes[0], initial_nValue)
             tree_txs = list(branch(tx0_outpoint, initial_nValue, n, fee=fee))
             assert_equal(len(tree_txs), n)
@@ -300,7 +293,7 @@ class ReplaceByFeeTest(DigiByteTestFramework):
             utxos_to_spend=[tx0_outpoint],
             sequence=0,
             num_outputs=100,
-            amount_per_output=1000,
+            amount_per_output=30000,  # Higher amount to avoid dust threshold
         )["hex"]
 
         # This will raise an exception due to insufficient fee
@@ -374,7 +367,7 @@ class ReplaceByFeeTest(DigiByteTestFramework):
         # Start by creating a single transaction with many outputs
         initial_nValue = 10 * COIN
         utxo = self.make_utxo(self.nodes[0], initial_nValue)
-        fee = int(0.0001 * COIN)
+        fee = int(0.005 * COIN)  # Much higher fee for large transaction
         split_value = int((initial_nValue - fee) / (MAX_REPLACEMENT_LIMIT + 1))
 
         splitting_tx_utxos = self.wallet.send_self_transfer_multi(
@@ -397,7 +390,7 @@ class ReplaceByFeeTest(DigiByteTestFramework):
         # Now create doublespend of the whole lot; should fail.
         # Need a big enough fee to cover all spending transactions and have
         # a higher fee rate
-        double_spend_value = (split_value - 100 * fee) * (MAX_REPLACEMENT_LIMIT + 1)
+        double_spend_value = (split_value - fee) * (MAX_REPLACEMENT_LIMIT + 1) // 2  # Use half to ensure positive value
         double_tx = self.wallet.create_self_transfer_multi(
             utxos_to_spend=splitting_tx_utxos,
             sequence=0,
@@ -459,6 +452,7 @@ class ReplaceByFeeTest(DigiByteTestFramework):
                     sequence=MAX_BIP125_RBF_SEQUENCE,
                     utxos_to_spend=[root_utxos[graph_num]],
                     num_outputs=txs_per_graph,
+                    fee_per_output=50000,  # Higher fee for DigiByte
                 )
                 assert_equal(True, normal_node.getmempoolentry(optin_parent_tx['txid'])['bip125-replaceable'])
                 new_utxos = optin_parent_tx['new_utxos']
@@ -468,6 +462,7 @@ class ReplaceByFeeTest(DigiByteTestFramework):
                     child_tx = wallet.send_self_transfer(
                         from_node=normal_node,
                         utxo_to_spend=utxo,
+                        fee_rate=Decimal("0.001"),  # Higher fee rate for DigiByte
                     )
 
                     assert normal_node.getmempoolentry(child_tx['txid'])
@@ -592,7 +587,7 @@ class ReplaceByFeeTest(DigiByteTestFramework):
             utxos_to_spend=[tx0_outpoint],
             sequence=0,
             num_outputs=100,
-            amount_per_output=int(0.00001 * COIN),
+            amount_per_output=int(0.0003 * COIN),  # Higher amount to avoid dust
         )["hex"]
 
         # Verify tx1b cannot replace tx1a.
@@ -725,7 +720,7 @@ class ReplaceByFeeTest(DigiByteTestFramework):
 
         # Higher fee, higher feerate, different txid, but the replacement does not provide a relay
         # fee conforming to node's `incrementalrelayfee` policy of 1000 sat per KB.
-        assert_equal(self.nodes[0].getmempoolinfo()["incrementalrelayfee"], Decimal("0.00001"))
+        assert_equal(self.nodes[0].getmempoolinfo()["incrementalrelayfee"], Decimal("0.00010000"))  # DigiByte has higher incremental relay fee
         tx.vout[0].nValue -= 1
         assert_raises_rpc_error(-26, "insufficient fee", self.nodes[0].sendrawtransaction, tx.serialize().hex())
 

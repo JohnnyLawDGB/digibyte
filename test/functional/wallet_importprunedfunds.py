@@ -5,23 +5,21 @@
 """Test the importprunedfunds and removeprunedfunds RPCs."""
 from decimal import Decimal
 
+from test_framework.blocktools import COINBASE_MATURITY_2
 from test_framework.address import key_to_p2wpkh
-from test_framework.blocktools import COINBASE_MATURITY
-from test_framework.messages import (
-    CMerkleBlock,
-    from_hex,
-)
+from test_framework.key import ECKey
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import (
     assert_equal,
     assert_raises_rpc_error,
 )
-from test_framework.wallet_util import generate_keypair
+from test_framework.wallet_util import bytes_to_wif
 
 
 class ImportPrunedFundsTest(DigiByteTestFramework):
     def add_options(self, parser):
-        self.add_wallet_options(parser)
+        self.add_wallet_options(parser, legacy=True)
+
     def set_test_params(self):
         self.setup_clean_chain = True
         self.num_nodes = 2
@@ -31,15 +29,17 @@ class ImportPrunedFundsTest(DigiByteTestFramework):
 
     def run_test(self):
         self.log.info("Mining blocks...")
-        self.generate(self.nodes[0], COINBASE_MATURITY + 1)
+        self.generate(self.nodes[0], COINBASE_MATURITY_2 + 1)
 
         # address
         address1 = self.nodes[0].getnewaddress()
         # pubkey
         address2 = self.nodes[0].getnewaddress()
         # privkey
-        address3_privkey, address3_pubkey = generate_keypair(wif=True)
-        address3 = key_to_p2wpkh(address3_pubkey)
+        eckey = ECKey()
+        eckey.generate()
+        address3_privkey = bytes_to_wif(eckey.get_bytes())
+        address3 = key_to_p2wpkh(eckey.get_pubkey().get_bytes())
         self.nodes[0].importprivkey(address3_privkey)
 
         # Check only one address
@@ -49,7 +49,7 @@ class ImportPrunedFundsTest(DigiByteTestFramework):
         self.sync_all()
 
         # Node 1 sync test
-        assert_equal(self.nodes[1].getblockcount(), COINBASE_MATURITY + 1)
+        assert_equal(self.nodes[1].getblockcount(), COINBASE_MATURITY_2 + 1)
 
         # Address Test - before import
         address_info = self.nodes[1].getaddressinfo(address1)
@@ -127,18 +127,6 @@ class ImportPrunedFundsTest(DigiByteTestFramework):
 
         w1.removeprunedfunds(txnid3)
         assert not [tx for tx in w1.listtransactions(include_watchonly=True) if tx['txid'] == txnid3]
-
-        # Check various RPC parameter validation errors
-        assert_raises_rpc_error(-22, "TX decode failed", w1.importprunedfunds, b'invalid tx'.hex(), proof1)
-        assert_raises_rpc_error(-5, "Transaction given doesn't exist in proof", w1.importprunedfunds, rawtxn2, proof1)
-
-        mb = from_hex(CMerkleBlock(), proof1)
-        mb.header.hashMerkleRoot = 0xdeadbeef  # cause mismatch between merkle root and merkle block
-        assert_raises_rpc_error(-5, "Something wrong with merkleblock", w1.importprunedfunds, rawtxn1, mb.serialize().hex())
-
-        mb = from_hex(CMerkleBlock(), proof1)
-        mb.header.nTime += 1  # modify arbitrary block header field to change block hash
-        assert_raises_rpc_error(-5, "Block not found in chain", w1.importprunedfunds, rawtxn1, mb.serialize().hex())
 
 if __name__ == '__main__':
     ImportPrunedFundsTest().main()

@@ -196,14 +196,12 @@ class ImportRescanTest(DigiByteTestFramework):
             variant.key = self.nodes[1].dumpprivkey(variant.address["address"])
             variant.initial_amount = get_rand_amount()
             variant.initial_txid = self.nodes[0].sendtoaddress(variant.address["address"], variant.initial_amount)
+            # Generate one block for each send to ensure sufficient funds
+            self.generate(self.nodes[0], 1)
+            variant.confirmation_height = self.nodes[0].getblockcount()
+            variant.timestamp = self.nodes[0].getblockheader(self.nodes[0].getbestblockhash())["time"]
             last_variants.append(variant)
 
-        blockhash = self.generate(self.nodes[0], 1)[0]
-        conf_height = self.nodes[0].getblockcount()
-        timestamp = self.nodes[0].getblockheader(blockhash)["time"]
-        for var in last_variants:
-            var.confirmation_height = conf_height
-            var.timestamp = timestamp
         last_variants.clear()
         # Generate a block further in the future (past the rescan window).
         assert_equal(self.nodes[0].getrawmempool(), [])

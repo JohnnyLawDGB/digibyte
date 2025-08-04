@@ -107,12 +107,12 @@ def base58_to_byte(s):
 
 def keyhash_to_p2pkh(hash, main=False):
     assert len(hash) == 20
-    version = 30 if main else 111  # DigiByte mainnet P2PKH is 30, testnet is 111
+    version = 30 if main else 126  # DigiByte mainnet P2PKH is 30, testnet is 126
     return byte_to_base58(hash, version)
 
 def scripthash_to_p2sh(hash, main=False):
     assert len(hash) == 20
-    version = 63 if main else 196  # DigiByte mainnet P2SH is 63, testnet is 196
+    version = 63 if main else 140  # DigiByte mainnet P2SH is 63, testnet is 140
     return byte_to_base58(hash, version)
 
 def key_to_p2pkh(key, main=False):

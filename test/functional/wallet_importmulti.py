@@ -15,7 +15,7 @@ variants.
 - `test_address()` is called to call getaddressinfo for an address on node1
   and test the values returned."""
 
-from test_framework.blocktools import COINBASE_MATURITY
+from test_framework.blocktools import COINBASE_MATURITY_2
 from test_framework.script import (
     CScript,
     OP_NOP,
@@ -36,7 +36,8 @@ from test_framework.wallet_util import (
 
 class ImportMultiTest(DigiByteTestFramework):
     def add_options(self, parser):
-        self.add_wallet_options(parser, descriptors=False)
+        self.add_wallet_options(parser, legacy=True)
+
     def set_test_params(self):
         self.num_nodes = 2
         self.extra_args = [["-addresstype=legacy"], ["-addresstype=legacy"]]
@@ -257,7 +258,7 @@ class ImportMultiTest(DigiByteTestFramework):
 
         # P2SH address
         multisig = get_multisig(self.nodes[0])
-        self.generate(self.nodes[1], COINBASE_MATURITY, sync_fun=self.no_op)
+        self.generate(self.nodes[1], COINBASE_MATURITY_2, sync_fun=self.no_op)
         self.nodes[1].sendtoaddress(multisig.p2sh_addr, 10.00)
         self.generate(self.nodes[1], 1, sync_fun=self.no_op)
         timestamp = self.nodes[1].getblock(self.nodes[1].getbestblockhash())['mediantime']
@@ -277,7 +278,7 @@ class ImportMultiTest(DigiByteTestFramework):
 
         # P2SH + Redeem script
         multisig = get_multisig(self.nodes[0])
-        self.generate(self.nodes[1], COINBASE_MATURITY, sync_fun=self.no_op)
+        self.generate(self.nodes[1], COINBASE_MATURITY_2, sync_fun=self.no_op)
         self.nodes[1].sendtoaddress(multisig.p2sh_addr, 10.00)
         self.generate(self.nodes[1], 1, sync_fun=self.no_op)
         timestamp = self.nodes[1].getblock(self.nodes[1].getbestblockhash())['mediantime']
@@ -297,7 +298,7 @@ class ImportMultiTest(DigiByteTestFramework):
 
         # P2SH + Redeem script + Private Keys + !Watchonly
         multisig = get_multisig(self.nodes[0])
-        self.generate(self.nodes[1], COINBASE_MATURITY, sync_fun=self.no_op)
+        self.generate(self.nodes[1], COINBASE_MATURITY_2, sync_fun=self.no_op)
         self.nodes[1].sendtoaddress(multisig.p2sh_addr, 10.00)
         self.generate(self.nodes[1], 1, sync_fun=self.no_op)
         timestamp = self.nodes[1].getblock(self.nodes[1].getbestblockhash())['mediantime']
@@ -322,7 +323,7 @@ class ImportMultiTest(DigiByteTestFramework):
 
         # P2SH + Redeem script + Private Keys + Watchonly
         multisig = get_multisig(self.nodes[0])
-        self.generate(self.nodes[1], COINBASE_MATURITY, sync_fun=self.no_op)
+        self.generate(self.nodes[1], COINBASE_MATURITY_2, sync_fun=self.no_op)
         self.nodes[1].sendtoaddress(multisig.p2sh_addr, 10.00)
         self.generate(self.nodes[1], 1, sync_fun=self.no_op)
         timestamp = self.nodes[1].getblock(self.nodes[1].getbestblockhash())['mediantime']

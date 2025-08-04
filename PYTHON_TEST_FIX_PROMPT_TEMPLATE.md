@@ -90,37 +90,8 @@ Each sub-agent should:
 
 **KEY INSIGHT**: Most test failures can be resolved quickly by seeing how they worked in v8.22.2, as all tests passed there with DigiByte-specific needs already handled!
 
-#### 3.3 Common Fixes by Test Group
 
-**Group 1: Mempool Tests**
-- Fee calculations: MIN_RELAY_TX_FEE should remain 0.001 DGB/kB (same as v8.22.2)
-- Dandelion++ transaction routing differences
-- Dust threshold calculations
-- Package size limits
 
-**Group 2-4: P2P Network Tests**
-- Port numbers: 12024 (mainnet), 12025 (testnet)
-- Protocol timing adjustments for 15-second blocks
-- Dandelion++ message types (DANDELIONTX)
-- Multi-algorithm version bits
-
-**Group 5-6: RPC Tests**
-- DigiByte-specific RPC methods (getblockreward, etc.)
-- Address format validation
-- Block reward calculations (varies by height - 72000 DGB for early blocks)
-- Chain parameter differences
-
-**Group 7-8: Feature Tests**
-- Consensus parameters
-- Activation heights
-- UTXO database format
-- Pruning calculations
-
-**Group 9-10: Wallet & Interface Tests**
-- Address generation (dgbt1 prefix)
-- Coinbase maturity (8 blocks for spending, 100 for full)
-- Fee estimation parameters
-- HD key derivation paths
 
 ### Step 4: Handle Application Bugs
 

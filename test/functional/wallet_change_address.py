@@ -6,7 +6,7 @@
 
 import re
 
-from test_framework.blocktools import COINBASE_MATURITY
+from test_framework.blocktools import COINBASE_MATURITY, COINBASE_MATURITY_2
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import (
     assert_equal,
@@ -50,8 +50,8 @@ class WalletChangeAddressTest(DigiByteTestFramework):
 
     def run_test(self):
         self.log.info("Setting up")
-        # Mine some coins
-        self.generate(self.nodes[0], COINBASE_MATURITY + 1)
+        # Mine some coins - use longer maturity for DigiByte
+        self.generate(self.nodes[0], COINBASE_MATURITY_2 + 1)
 
         # Get some addresses from the two nodes
         addr1 = [self.nodes[1].getnewaddress() for _ in range(3)]

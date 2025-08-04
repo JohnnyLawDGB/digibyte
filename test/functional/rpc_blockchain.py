@@ -557,7 +557,7 @@ class BlockchainTest(DigiByteTestFramework):
     def _test_getblock(self):
         self.log.info("Test getblock")
         node = self.nodes[0]
-        fee_per_byte = Decimal('0.00000010')
+        fee_per_byte = Decimal('0.000010')
         fee_per_kb = 1000 * fee_per_byte
 
         # Send transaction

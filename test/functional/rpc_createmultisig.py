@@ -211,7 +211,7 @@ class RpcCreateMultiSigTest(DigiByteTestFramework):
 
         self.log.info(f"Created multisig address: {madd}")
         spk = address_to_scriptpubkey(madd)
-        txid = self.wallet.send_to(from_node=self.nodes[0], scriptPubKey=spk, amount=40_00000000, fee=1500)["txid"]
+        txid = self.wallet.send_to(from_node=self.nodes[0], scriptPubKey=spk, amount=40_00000000, fee=15000)["txid"]
         tx = node0.getrawtransaction(txid, True)
         vout = [v["n"] for v in tx["vout"] if madd == v["scriptPubKey"]["address"]]
         assert len(vout) == 1

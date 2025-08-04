@@ -14,9 +14,13 @@ from test_framework.util import (
 
 
 class WalletSendmanyChainTest(DigiByteTestFramework):
+    def add_options(self, parser):
+        self.add_wallet_options(parser)
+
     def set_test_params(self):
         self.num_nodes = 1
         self.setup_clean_chain = True
+        self.extra_args = [["-whitelist=noban@127.0.0.1", "-dandelion=0"]]
 
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()

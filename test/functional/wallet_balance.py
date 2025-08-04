@@ -7,7 +7,7 @@ from decimal import Decimal
 import struct
 
 from test_framework.address import ADDRESS_BCRT1_UNSPENDABLE as ADDRESS_WATCHONLY
-from test_framework.blocktools import COINBASE_MATURITY, COINBASE_MATURITY_2
+from test_framework.blocktools import COINBASE_MATURITY_2
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import (
     assert_equal,
@@ -20,7 +20,7 @@ def create_transactions(node, address, amt, fees):
     # Create and sign raw transactions from node to address for amt.
     # Creates a transaction for each fee and returns an array
     # of the raw transactions.
-    utxos = [u for u in node.listunspent(0) if u['spendable'] and u.get('safe', True)]
+    utxos = [u for u in node.listunspent(0) if u['spendable']]
 
     # Create transactions
     inputs = []
@@ -56,7 +56,6 @@ class WalletTest(DigiByteTestFramework):
         self.extra_args = [
             # Limit mempool descendants as a hack to have wallet txs rejected from the mempool.
             # Set walletrejectlongchains=0 so the wallet still creates the transactions.
-            # Set maxfeerate higher to allow test transactions with higher fees
             ['-limitdescendantcount=3', '-walletrejectlongchains=0'],
             [],
         ]
@@ -80,29 +79,19 @@ class WalletTest(DigiByteTestFramework):
             assert 'watchonly' not in self.nodes[1].getbalances()
 
         self.log.info("Mining blocks ...")
-        # For descriptor wallets, mine to specific addresses to ensure wallet ownership
-        if self.options.descriptors:
-            self.generatetoaddress(self.nodes[0], 1, self.nodes[0].getnewaddress())
-            self.generatetoaddress(self.nodes[1], 1, self.nodes[1].getnewaddress())
-        else:
-            self.generate(self.nodes[0], 1)
-            self.generate(self.nodes[1], 1)
+        self.generate(self.nodes[0], 1)
+        self.generate(self.nodes[1], 1)
 
         # Verify listunspent returns immature coinbase if 'include_immature_coinbase' is set
         assert_equal(len(self.nodes[0].listunspent(query_options={'include_immature_coinbase': True})), 1)
         assert_equal(len(self.nodes[0].listunspent(query_options={'include_immature_coinbase': False})), 0)
 
-        # In DigiByte, we need to sync nodes after generating blocks
-        self.sync_all()
-        # Generate more blocks to ensure coinbase maturity
-        # DigiByte uses COINBASE_MATURITY_2 (100) for full maturity
-        self.generatetoaddress(self.nodes[1], COINBASE_MATURITY_2, ADDRESS_WATCHONLY)
-        self.sync_all()
+        self.generatetoaddress(self.nodes[1], COINBASE_MATURITY_2 + 1, ADDRESS_WATCHONLY)
 
         # Verify listunspent returns all immature coinbases if 'include_immature_coinbase' is set
         # For now, only the legacy wallet will see the coinbases going to the imported 'ADDRESS_WATCHONLY'
         assert_equal(len(self.nodes[0].listunspent(query_options={'include_immature_coinbase': False})), 1 if self.options.descriptors else 2)
-        assert_equal(len(self.nodes[0].listunspent(query_options={'include_immature_coinbase': True})), 1 if self.options.descriptors else COINBASE_MATURITY + 2)
+        assert_equal(len(self.nodes[0].listunspent(query_options={'include_immature_coinbase': True})), 1 if self.options.descriptors else COINBASE_MATURITY_2 + 2)
 
         if not self.options.descriptors:
             # Tests legacy watchonly behavior which is not present (and does not need to be tested) in descriptor wallets
@@ -110,7 +99,7 @@ class WalletTest(DigiByteTestFramework):
             assert_equal(self.nodes[0].getwalletinfo()['balance'], 72000)
             assert_equal(self.nodes[1].getbalances()['mine']['trusted'], 72000)
 
-            assert_equal(self.nodes[0].getbalances()['watchonly']['immature'], 7200000)  # 100 * 72000
+            assert_equal(self.nodes[0].getbalances()['watchonly']['immature'], COINBASE_MATURITY_2 * 72000)
             assert 'watchonly' not in self.nodes[1].getbalances()
 
             assert_equal(self.nodes[0].getbalance(), 72000)
@@ -121,8 +110,8 @@ class WalletTest(DigiByteTestFramework):
         assert_equal(self.nodes[0].getbalance("*", 1), 72000)
         assert_equal(self.nodes[0].getbalance(minconf=1), 72000)
         if not self.options.descriptors:
-            assert_equal(self.nodes[0].getbalance(minconf=0, include_watchonly=True), 144000)  # 2 * 72000
-            assert_equal(self.nodes[0].getbalance("*", 1, True), 144000)
+            assert_equal(self.nodes[0].getbalance(minconf=0, include_watchonly=True), 2 * 72000)
+            assert_equal(self.nodes[0].getbalance("*", 1, True), 2 * 72000)
         else:
             assert_equal(self.nodes[0].getbalance(minconf=0, include_watchonly=True), 72000)
             assert_equal(self.nodes[0].getbalance("*", 1, True), 72000)
@@ -134,7 +123,7 @@ class WalletTest(DigiByteTestFramework):
         self.nodes[1].sendrawtransaction(txs[0]['hex'])  # sending on both nodes is faster than waiting for propagation
 
         self.sync_all()
-        txs = create_transactions(self.nodes[1], self.nodes[0].getnewaddress(), 60, [Decimal('0.01'), Decimal('0.015')])
+        txs = create_transactions(self.nodes[1], self.nodes[0].getnewaddress(), 60, [Decimal('0.01'), Decimal('0.02')])
         self.nodes[1].sendrawtransaction(txs[0]['hex'])
         self.nodes[0].sendrawtransaction(txs[0]['hex'])  # sending on both nodes is faster than waiting for propagation
         self.sync_all()
@@ -187,12 +176,12 @@ class WalletTest(DigiByteTestFramework):
             expected_balances_0 = {'mine':      {'immature':          Decimal('0E-8'),
                                                  'trusted':           Decimal('71959.99'),  # change from node 0's send (72000 - 40 - 0.01)
                                                  'untrusted_pending': Decimal('60.0')},
-                                   'watchonly': {'immature':          Decimal('7200000'),  # 100 * 72000
+                                   'watchonly': {'immature':          COINBASE_MATURITY_2 * 72000,
                                                  'trusted':           Decimal('72000.0'),
                                                  'untrusted_pending': Decimal('0E-8')}}
             expected_balances_1 = {'mine':      {'immature':          Decimal('0E-8'),
-                                                 'trusted':           Decimal('71939.99') - fee_node_1 + Decimal('0.01'),  # Updated for v8.26: Node 1's remaining balance after sending 60 DGB with variable fee
-                                                 'untrusted_pending': Decimal('40.0')}}  # Received 40 DGB from node 0 (unconfirmed)
+                                                 'trusted':           Decimal('0E-8'),  # node 1's send had an unsafe input
+                                                 'untrusted_pending': Decimal('71980.0') - fee_node_1}}  # Doesn't include output of node 0's send since it was spent
             if self.options.descriptors:
                 del expected_balances_0["watchonly"]
             balances_0 = self.nodes[0].getbalances()
@@ -202,46 +191,45 @@ class WalletTest(DigiByteTestFramework):
             del balances_1['lastprocessedblock']
             assert_equal(balances_0, expected_balances_0)
             assert_equal(balances_1, expected_balances_1)
-            # getbalance without any arguments includes unconfirmed transactions, but not untrusted transactions  
-            assert_equal(self.nodes[0].getbalance(), Decimal('71959.99'))  # change from node 0's send
-            assert_equal(self.nodes[1].getbalance(), Decimal('71939.99') - fee_node_1 + Decimal('0.01'))  # Updated for v8.26: node 1's remaining trusted balance
+            # getbalance without any arguments includes unconfirmed transactions, but not untrusted transactions
+            assert_equal(self.nodes[0].getbalance(), Decimal('71959.99'))  # change from node 0's send (72000 - 40 - 0.01)
+            assert_equal(self.nodes[1].getbalance(), Decimal('0'))  # node 1's send had an unsafe input
             # Same with minconf=0
             assert_equal(self.nodes[0].getbalance(minconf=0), Decimal('71959.99'))
-            assert_equal(self.nodes[1].getbalance(minconf=0), Decimal('71939.99') - fee_node_1 + Decimal('0.01'))  # Updated for v8.26
+            assert_equal(self.nodes[1].getbalance(minconf=0), Decimal('0'))
             # getbalance with a minconf incorrectly excludes coins that have been spent more recently than the minconf blocks ago
             # TODO: fix getbalance tracking of coin spentness depth
             assert_equal(self.nodes[0].getbalance(minconf=1), Decimal('0'))
             assert_equal(self.nodes[1].getbalance(minconf=1), Decimal('0'))
             # getunconfirmedbalance
             assert_equal(self.nodes[0].getunconfirmedbalance(), Decimal('60'))  # output of node 1's spend
-            assert_equal(self.nodes[1].getunconfirmedbalance(), Decimal('40'))  # Updated for v8.26: received 40 DGB from node 0
+            assert_equal(self.nodes[1].getunconfirmedbalance(), Decimal('71980') - fee_node_1)  # Doesn't include output of node 0's send since it was spent
             # getwalletinfo.unconfirmed_balance
             assert_equal(self.nodes[0].getwalletinfo()["unconfirmed_balance"], Decimal('60'))
-            assert_equal(self.nodes[1].getwalletinfo()["unconfirmed_balance"], Decimal('40'))  # Updated for v8.26
+            assert_equal(self.nodes[1].getwalletinfo()["unconfirmed_balance"], Decimal('71980') - fee_node_1)
 
         test_balances(fee_node_1=Decimal('0.01'))
 
         # Node 1 bumps the transaction fee and resends
-        self.nodes[1].sendrawtransaction(txs[1]['hex'], 0)  # Allow high fee rate
-        self.nodes[0].sendrawtransaction(txs[1]['hex'], 0)  # sending on both nodes is faster than waiting for propagation
+        self.nodes[1].sendrawtransaction(txs[1]['hex'])
+        self.nodes[0].sendrawtransaction(txs[1]['hex'])  # sending on both nodes is faster than waiting for propagation
         self.sync_all()
 
         self.log.info("Test getbalance and getbalances.mine.untrusted_pending with conflicted unconfirmed inputs")
-        test_balances(fee_node_1=Decimal('0.015'))
+        test_balances(fee_node_1=Decimal('0.02'))
 
         self.generatetoaddress(self.nodes[1], 1, ADDRESS_WATCHONLY)
 
         # balances are correct after the transactions are confirmed
-        # Updated for v8.26: Use the actual balance observed in the test
-        balance_node0 = Decimal('71959.99')  # Node 0's actual balance after all transactions
-        balance_node1 = Decimal('71939.985')  # Node 1's actual balance after all transactions
+        balance_node0 = Decimal('72000') + Decimal('19.99')  # node 1's send plus change from node 0's send
+        balance_node1 = Decimal('72000') - Decimal('20.02')  # change from node 0's send
         assert_equal(self.nodes[0].getbalances()['mine']['trusted'], balance_node0)
         assert_equal(self.nodes[1].getbalances()['mine']['trusted'], balance_node1)
         assert_equal(self.nodes[0].getbalance(), balance_node0)
         assert_equal(self.nodes[1].getbalance(), balance_node1)
 
-        # Send total balance away from node 1 (adjusted for v8.26 balance)
-        txs = create_transactions(self.nodes[1], self.nodes[0].getnewaddress(), Decimal('71939.975'), [Decimal('0.01')])
+        # Send partial balance away from node 1
+        txs = create_transactions(self.nodes[1], self.nodes[0].getnewaddress(), Decimal('29.97'), [Decimal('0.01')])
         self.nodes[1].sendrawtransaction(txs[0]['hex'])
         self.generatetoaddress(self.nodes[1], 2, ADDRESS_WATCHONLY)
 
@@ -251,7 +239,7 @@ class WalletTest(DigiByteTestFramework):
         assert_equal(self.nodes[1].getbalance(minconf=3), Decimal('0'))
 
         # getbalance with minconf=2 will show the new balance.
-        assert_equal(self.nodes[1].getbalance(minconf=2), Decimal('0'))
+        assert_equal(self.nodes[1].getbalance(minconf=2), Decimal('72000') - Decimal('50'))
 
         # check mempool transactions count for wallet unconfirmed balance after
         # dynamically loading the wallet.
@@ -268,7 +256,7 @@ class WalletTest(DigiByteTestFramework):
         # mempool because it is the third descendant of the tx above
         for _ in range(3):
             # Set amount high enough such that all coins are spent by each tx
-            txid = self.nodes[0].sendtoaddress(self.nodes[0].getnewaddress(), 99)
+            txid = self.nodes[0].sendtoaddress(self.nodes[0].getnewaddress(), 72000 - 1)
 
         self.log.info('Check that wallet txs not in the mempool are untrusted')
         assert txid not in self.nodes[0].getrawmempool()
@@ -279,8 +267,8 @@ class WalletTest(DigiByteTestFramework):
         tx_orig = self.nodes[0].gettransaction(txid)['hex']
         # Increase fee by 1 coin
         tx_replace = tx_orig.replace(
-            struct.pack("<q", 99 * 10**8).hex(),
-            struct.pack("<q", 98 * 10**8).hex(),
+            struct.pack("<q", (72000 - 1) * 10**8).hex(),
+            struct.pack("<q", (72000 - 2) * 10**8).hex(),
         )
         tx_replace = self.nodes[0].signrawtransactionwithwallet(tx_replace)['hex']
         # Total balance is given by the sum of outputs of the tx

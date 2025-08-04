@@ -19,6 +19,7 @@ class TxnMallTest(DigiByteTestFramework):
     def set_test_params(self):
         self.num_nodes = 3
         self.supports_cli = False
+        self.extra_args = [["-dandelion=0"], ["-dandelion=0"], ["-dandelion=0"]]
 
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()

@@ -28,9 +28,9 @@ class TransactionTimeRescanTest(DigiByteTestFramework):
     def set_test_params(self):
         self.setup_clean_chain = False
         self.num_nodes = 3
-        self.extra_args = [["-keypool=400"],
-                           ["-keypool=400"],
-                           []
+        self.extra_args = [["-keypool=400", "-dandelion=0"],
+                           ["-keypool=400", "-dandelion=0"],
+                           ["-dandelion=0"]
                           ]
 
     def skip_test_if_missing_module(self):

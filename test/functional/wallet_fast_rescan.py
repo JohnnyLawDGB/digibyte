@@ -63,7 +63,7 @@ class WalletFastRescanTest(DigiByteTestFramework):
                 else:
                     spk = bytes.fromhex(fixed_key.p2wpkh_script)
                     self.log.info(f"-> fixed non-range descriptor address {fixed_key.p2wpkh_addr}")
-                wallet.send_to(from_node=node, scriptPubKey=spk, amount=10000)
+                wallet.send_to(from_node=node, scriptPubKey=spk, amount=10000, fee=15000)
             self.generate(node, 1)
 
         self.log.info("Import wallet backup with block filter index")

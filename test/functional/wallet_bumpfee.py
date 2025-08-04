@@ -17,6 +17,7 @@ from decimal import Decimal
 
 from test_framework.blocktools import (
     COINBASE_MATURITY,
+    COINBASE_MATURITY_2,
 )
 from test_framework.messages import (
     MAX_BIP125_RBF_SEQUENCE,
@@ -77,13 +78,22 @@ class BumpFeeTest(DigiByteTestFramework):
 
         # fund rbf node with 10 coins of 0.001 dgb (100,000 satoshis)
         self.log.info("Mining blocks...")
-        self.generate(peer_node, COINBASE_MATURITY + 10)
+        self.generate(peer_node, COINBASE_MATURITY_2 + 10)
         self.sync_all()
-        for _ in range(30):
+        
+        # Debug: check peer_node balance before sending
+        peer_balance = peer_node.getbalance()
+        self.log.info(f"Peer node balance after mining: {peer_balance}")
+        
+        for i in range(30):
             peer_node.sendtoaddress(rbf_node_address, 9)
         self.sync_all()
         self.generate(peer_node, 1)
         self.sync_all()
+        
+        # Check actual balance received
+        actual_balance = rbf_node.getbalance()
+        self.log.info(f"RBF node actual balance: {actual_balance}")
         assert_equal(rbf_node.getbalance(), Decimal("270"))
 
         self.log.info("Running tests")

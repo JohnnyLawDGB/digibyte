@@ -146,19 +146,33 @@ class TxDownloadTest(DigiByteTestFramework):
     def test_expiry_fallback(self):
         self.log.info('Check that expiry will select another peer for download')
         WTXID = 0xffaa
+        # Set initial mocktime
+        initial_time = int(time.time())
+        self.nodes[0].setmocktime(initial_time)
+        
         peer1 = self.nodes[0].add_p2p_connection(TestP2PConn())
         peer2 = self.nodes[0].add_p2p_connection(TestP2PConn())
-        for p in [peer1, peer2]:
-            p.send_message(msg_inv([CInv(t=MSG_WTX, h=WTXID)]))
-        # DigiByte: Ensure message processing occurs before checking for getdata
-        # The message processing loop needs to run to send getdata requests
+        
+        # Sync to ensure connections are established
         peer1.sync_with_ping()
         peer2.sync_with_ping()
-        peer2.wait_until(lambda: sum(p.tx_getdata_count for p in [peer1, peer2]) == 1)
+        
+        # Send inv messages
+        for p in [peer1, peer2]:
+            p.send_message(msg_inv([CInv(t=MSG_WTX, h=WTXID)]))
+            p.sync_with_ping()
+        
+        # DigiByte: Wait for the transaction request delay
+        # Need to account for NONPREF_PEER_TX_DELAY (2s) since these are inbound peers
+        self.nodes[0].setmocktime(initial_time + NONPREF_PEER_TX_DELAY + 1)
+        
+        # One peer should be selected for download
+        peer2.wait_until(lambda: sum(p.tx_getdata_count for p in [peer1, peer2]) == 1, timeout=10)
         with p2p_lock:
             peer_expiry, peer_fallback = (peer1, peer2) if peer1.tx_getdata_count == 1 else (peer2, peer1)
             assert_equal(peer_fallback.tx_getdata_count, 0)
-        self.nodes[0].setmocktime(int(time.time()) + GETDATA_TX_INTERVAL + 1)  # Wait for request to peer_expiry to expire
+        # Wait for request to peer_expiry to expire (60 seconds)
+        self.nodes[0].setmocktime(initial_time + GETDATA_TX_INTERVAL + NONPREF_PEER_TX_DELAY + 2)
         peer_fallback.wait_until(lambda: peer_fallback.tx_getdata_count >= 1, timeout=1)
         self.restart_node(0)  # reset mocktime
 

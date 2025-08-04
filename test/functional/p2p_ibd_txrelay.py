@@ -28,8 +28,8 @@ from test_framework.p2p import (
 )
 from test_framework.test_framework import DigiByteTestFramework
 
-MAX_FEE_FILTER = Decimal("97.87192906")  # DigiByte MAX_MONEY rounder value (observed)
-NORMAL_FEE_FILTER = Decimal("0.00001000")  # DigiByte normal fee filter
+MAX_FEE_FILTER = Decimal(9936506125) / COIN  # DigiByte MAX_MONEY / COIN
+NORMAL_FEE_FILTER = Decimal(1000) / COIN  # DigiByte normal fee filter
 
 
 class P2PIBDTxRelayTest(DigiByteTestFramework):

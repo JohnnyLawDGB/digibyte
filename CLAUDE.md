@@ -23,10 +23,12 @@ digibyte/                        # Current v8.26 working directory (YOU ARE HERE
 ## Python Functional Test Fix Strategy
 
 ### Overview
-315 Python functional tests need fixing after Bitcoin v26.2 merge. Current status (as of 2025-08-04):
-- **Passed**: 170 tests
-- **Failed**: 76 tests  
-- **Skipped**: 69 tests (mostly BDB not compiled)
+316 Python functional tests after Bitcoin v26.2 merge. Current status (as of 2025-08-04):
+- **Passed**: 176 tests (56%)
+- **Failed**: 125 tests (40%) - 76 unique test files
+- **Skipped**: 15 tests (5%) - mostly USDT tracing tests
+
+**Note**: Successfully built with BDB 4.8 support. Legacy wallet tests now enabled. Major improvement from 69 skipped tests to only 15.
 
 ### Test Status Tracking
 - **FUNCTIONAL_CHECKLIST_TESTS.md** - Complete list of all tests with pass/fail status

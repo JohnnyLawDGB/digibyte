@@ -25,7 +25,7 @@ class AbandonConflictTest(DigiByteTestFramework):
 
     def set_test_params(self):
         self.num_nodes = 2
-        self.extra_args = [["-minrelaytxfee=0.001"], []]
+        self.extra_args = [["-minrelaytxfee=0.001", "-dandelion=0"], ["-dandelion=0"]]
         # whitelist peers to speed up tx relay / mempool sync
         for args in self.extra_args:
             args.append("-whitelist=noban@127.0.0.1")
@@ -39,14 +39,17 @@ class AbandonConflictTest(DigiByteTestFramework):
         self.nodes[0].createwallet(wallet_name="bob")
         bob = self.nodes[0].get_wallet_rpc("bob")
 
-        self.generate(self.nodes[1], COINBASE_MATURITY)
+        # Generate coins to alice's address on node 0
+        alice_addr = alice.getnewaddress()
+        self.generatetoaddress(self.nodes[0], COINBASE_MATURITY + 50, alice_addr)
+        
         balance = alice.getbalance()
         txA = alice.sendtoaddress(alice.getnewaddress(), Decimal("10"))
         txB = alice.sendtoaddress(alice.getnewaddress(), Decimal("10"))
         txC = alice.sendtoaddress(alice.getnewaddress(), Decimal("10"))
         self.sync_mempools()
         self.generate(self.nodes[1], 1)
-
+        
         # Can not abandon non-wallet transaction
         assert_raises_rpc_error(-5, 'Invalid or non-wallet transaction id', lambda: alice.abandontransaction(txid='ff' * 32))
         # Can not abandon confirmed transaction

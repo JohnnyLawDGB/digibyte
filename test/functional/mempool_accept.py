@@ -343,7 +343,8 @@ class MempoolAcceptanceTest(DigiByteTestFramework):
         )
 
         # Prep for tiny-tx tests with wsh(OP_TRUE) output
-        seed_tx = self.wallet.send_to(from_node=node, scriptPubKey=script_to_p2wsh_script(CScript([OP_TRUE])), amount=COIN, fee=2000)
+        # Use higher fee for DigiByte's minimum relay fee requirement
+        seed_tx = self.wallet.send_to(from_node=node, scriptPubKey=script_to_p2wsh_script(CScript([OP_TRUE])), amount=COIN, fee=15000)
         self.mempool_size += 1
         # Sync to ensure Dandelion++ processes the transaction
         node.syncwithvalidationinterfacequeue()

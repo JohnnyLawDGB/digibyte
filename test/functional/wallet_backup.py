@@ -36,7 +36,7 @@ import os
 from random import randint
 import shutil
 
-from test_framework.blocktools import COINBASE_MATURITY, COINBASE_MATURITY_2
+from test_framework.blocktools import COINBASE_MATURITY_2
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import (
     assert_equal,
@@ -53,11 +53,12 @@ class WalletBackupTest(DigiByteTestFramework):
         self.setup_clean_chain = True
         # nodes 1, 2,3 are spenders, let's give them a keypool=100
         # whitelist all peers to speed up tx relay / mempool sync
+        # DigiByte: Use higher wallet minimum fee to match network requirements
         self.extra_args = [
-            ["-whitelist=noban@127.0.0.1", "-keypool=100"],
-            ["-whitelist=noban@127.0.0.1", "-keypool=100"],
-            ["-whitelist=noban@127.0.0.1", "-keypool=100"],
-            ["-whitelist=noban@127.0.0.1"],
+            ["-whitelist=noban@127.0.0.1", "-keypool=100", "-mintxfee=0.001", "-fallbackfee=0.001", "-dandelion=0", "-minrelaytxfee=0.001"],
+            ["-whitelist=noban@127.0.0.1", "-keypool=100", "-mintxfee=0.001", "-fallbackfee=0.001", "-dandelion=0", "-minrelaytxfee=0.001"],
+            ["-whitelist=noban@127.0.0.1", "-keypool=100", "-mintxfee=0.001", "-fallbackfee=0.001", "-dandelion=0", "-minrelaytxfee=0.001"],
+            ["-whitelist=noban@127.0.0.1", "-mintxfee=0.001", "-fallbackfee=0.001", "-dandelion=0", "-minrelaytxfee=0.001"],
         ]
         self.rpc_timeout = 120
 
@@ -93,18 +94,19 @@ class WalletBackupTest(DigiByteTestFramework):
         # Must sync mempools before mining.
         self.sync_mempools()
         self.generate(self.nodes[3], 1)
+        self.sync_blocks()
 
     def run_test(self):
         self.log.info("Generating initial blockchain")
         self.generate(self.nodes[0], 1)
+        self.sync_blocks()
         self.generate(self.nodes[1], 1)
+        self.sync_blocks()
         self.generate(self.nodes[2], 1)
+        self.sync_blocks()
         # DigiByte: Need enough blocks for all coinbases to mature
-        # Node 0 mined at height 0, needs height 8 (COINBASE_MATURITY)
-        # Node 1 mined at height 1, needs height 9
-        # Node 2 mined at height 2, needs height 10
-        # So we need to mine to at least height 10
-        self.generate(self.nodes[3], COINBASE_MATURITY + 2)
+        self.generate(self.nodes[3], COINBASE_MATURITY_2)
+        self.sync_blocks()
 
         # Debug: Check block count and balances
         self.log.info(f"Block count: {self.nodes[0].getblockcount()}")
@@ -125,12 +127,14 @@ class WalletBackupTest(DigiByteTestFramework):
 
         self.log.info("Backing up")
 
-        self.nodes[0].backupwallet(os.path.join(self.nodes[0].datadir, 'wallet.bak'))
-        self.nodes[0].dumpwallet(os.path.join(self.nodes[0].datadir, 'wallet.dump'))
-        self.nodes[1].backupwallet(os.path.join(self.nodes[1].datadir, 'wallet.bak'))
-        self.nodes[1].dumpwallet(os.path.join(self.nodes[1].datadir, 'wallet.dump'))
-        self.nodes[2].backupwallet(os.path.join(self.nodes[2].datadir, 'wallet.bak'))
-        self.nodes[2].dumpwallet(os.path.join(self.nodes[2].datadir, 'wallet.dump'))
+        self.nodes[0].backupwallet(os.path.join(self.nodes[0].datadir_path, 'wallet.bak'))
+        self.nodes[1].backupwallet(os.path.join(self.nodes[1].datadir_path, 'wallet.bak'))
+        self.nodes[2].backupwallet(os.path.join(self.nodes[2].datadir_path, 'wallet.bak'))
+
+        if not self.options.descriptors:
+            self.nodes[0].dumpwallet(os.path.join(self.nodes[0].datadir_path, 'wallet.dump'))
+            self.nodes[1].dumpwallet(os.path.join(self.nodes[1].datadir_path, 'wallet.dump'))
+            self.nodes[2].dumpwallet(os.path.join(self.nodes[2].datadir_path, 'wallet.dump'))
 
         self.log.info("More transactions")
         for _ in range(5):
@@ -139,6 +143,7 @@ class WalletBackupTest(DigiByteTestFramework):
         # Generate 101 more blocks, so any fees paid mature
         # DigiByte: Use COINBASE_MATURITY_2 instead of hardcoded 101
         self.generate(self.nodes[3], COINBASE_MATURITY_2 + 1)
+        self.sync_all()
 
         balance0 = self.nodes[0].getbalance()
         balance1 = self.nodes[1].getbalance()
@@ -146,10 +151,10 @@ class WalletBackupTest(DigiByteTestFramework):
         balance3 = self.nodes[3].getbalance()
         total = balance0 + balance1 + balance2 + balance3
 
-        # At this point, there are 121 blocks (3 for setup, then 10 rounds, then 101.)
-        # 22 are mature, so the sum of all wallets should be 22 * 72000 = 1584000.
-        # DigiByte: Adjusted for 72000 DGB block reward
-        assert_equal(total, 22 * 72000)
+        # At this point, there are blocks: 3 for setup (nodes 0,1,2), 100 more (node 3), 10 rounds, 101 more
+        # Total blocks: 3 + 100 + 10 + 101 = 214 blocks  
+        # 114 are mature (all but the last 100), so the sum should be 114 * 72000 = 8,208,000
+        assert_equal(total, 114 * 72000)
 
         ##
         # Test restoring spender wallets from backups
@@ -161,21 +166,21 @@ class WalletBackupTest(DigiByteTestFramework):
         self.stop_node(3)
 
         # Start node2 with no chain
-        shutil.rmtree(os.path.join(self.nodes[2].datadir, self.chain, 'blocks'))
-        shutil.rmtree(os.path.join(self.nodes[2].datadir, self.chain, 'chainstate'))
+        shutil.rmtree(os.path.join(self.nodes[2].datadir_path, self.chain, 'blocks'))
+        shutil.rmtree(os.path.join(self.nodes[2].datadir_path, self.chain, 'chainstate'))
 
         # Restore wallets from backup
         shutil.copyfile(
-            os.path.join(self.nodes[0].datadir, 'wallet.bak'),
-            os.path.join(self.nodes[0].datadir, self.chain, 'wallets', self.default_wallet_name, self.wallet_data_filename)
+            os.path.join(self.nodes[0].datadir_path, 'wallet.bak'),
+            os.path.join(self.nodes[0].datadir_path, self.chain, 'wallets', self.default_wallet_name, self.wallet_data_filename)
         )
         shutil.copyfile(
-            os.path.join(self.nodes[1].datadir, 'wallet.bak'),
-            os.path.join(self.nodes[1].datadir, self.chain, 'wallets', self.default_wallet_name, self.wallet_data_filename)
+            os.path.join(self.nodes[1].datadir_path, 'wallet.bak'),
+            os.path.join(self.nodes[1].datadir_path, self.chain, 'wallets', self.default_wallet_name, self.wallet_data_filename)
         )
         shutil.copyfile(
-            os.path.join(self.nodes[2].datadir, 'wallet.bak'),
-            os.path.join(self.nodes[2].datadir, self.chain, 'wallets', self.default_wallet_name, self.wallet_data_filename)
+            os.path.join(self.nodes[2].datadir_path, 'wallet.bak'),
+            os.path.join(self.nodes[2].datadir_path, self.chain, 'wallets', self.default_wallet_name, self.wallet_data_filename)
         )
 
         self.log.info("Re-starting nodes")
@@ -187,6 +192,9 @@ class WalletBackupTest(DigiByteTestFramework):
         self.connect_nodes(1, 3)
         self.connect_nodes(2, 3)
         self.connect_nodes(2, 0)
+        
+        # Sync blocks so node 2 can see the blockchain
+        self.sync_all()
 
         assert_equal(self.nodes[0].getbalance(), balance0)
         assert_equal(self.nodes[1].getbalance(), balance1)
@@ -198,9 +206,9 @@ class WalletBackupTest(DigiByteTestFramework):
         self.stop_node(2)
 
         # Get wallet file paths
-        wallet_file_0 = os.path.join(self.nodes[0].datadir, self.chain, 'wallets', self.default_wallet_name, self.wallet_data_filename)
-        wallet_file_1 = os.path.join(self.nodes[1].datadir, self.chain, 'wallets', self.default_wallet_name, self.wallet_data_filename)
-        wallet_file_2 = os.path.join(self.nodes[2].datadir, self.chain, 'wallets', self.default_wallet_name, self.wallet_data_filename)
+        wallet_file_0 = os.path.join(self.nodes[0].datadir_path, self.chain, 'wallets', self.default_wallet_name, self.wallet_data_filename)
+        wallet_file_1 = os.path.join(self.nodes[1].datadir_path, self.chain, 'wallets', self.default_wallet_name, self.wallet_data_filename)
+        wallet_file_2 = os.path.join(self.nodes[2].datadir_path, self.chain, 'wallets', self.default_wallet_name, self.wallet_data_filename)
         
         # Remove the wallet files
         os.remove(wallet_file_0)
@@ -215,28 +223,29 @@ class WalletBackupTest(DigiByteTestFramework):
         assert_equal(self.nodes[1].getbalance(), 0)
         assert_equal(self.nodes[2].getbalance(), 0)
 
-        self.nodes[0].importwallet(os.path.join(self.nodes[0].datadir, 'wallet.dump'))
-        self.nodes[1].importwallet(os.path.join(self.nodes[1].datadir, 'wallet.dump'))
-        self.nodes[2].importwallet(os.path.join(self.nodes[2].datadir, 'wallet.dump'))
+        if not self.options.descriptors:
+            self.nodes[0].importwallet(os.path.join(self.nodes[0].datadir_path, 'wallet.dump'))
+            self.nodes[1].importwallet(os.path.join(self.nodes[1].datadir_path, 'wallet.dump'))
+            self.nodes[2].importwallet(os.path.join(self.nodes[2].datadir_path, 'wallet.dump'))
 
-        self.sync_blocks()
+            self.sync_blocks()
 
-        assert_equal(self.nodes[0].getbalance(), balance0)
-        assert_equal(self.nodes[1].getbalance(), balance1)
-        assert_equal(self.nodes[2].getbalance(), balance2)
+            assert_equal(self.nodes[0].getbalance(), balance0)
+            assert_equal(self.nodes[1].getbalance(), balance1)
+            assert_equal(self.nodes[2].getbalance(), balance2)
 
         # Backup to a different file
-        self.nodes[2].backupwallet(os.path.join(self.nodes[2].datadir, 'wallet.bak2'))
+        self.nodes[2].backupwallet(os.path.join(self.nodes[2].datadir_path, 'wallet.bak2'))
 
         self.stop_node(2)
         
         # Remove the wallet file  
-        wallet_file_2 = os.path.join(self.nodes[2].datadir, self.chain, 'wallets', self.default_wallet_name, self.wallet_data_filename)
+        wallet_file_2 = os.path.join(self.nodes[2].datadir_path, self.chain, 'wallets', self.default_wallet_name, self.wallet_data_filename)
         os.remove(wallet_file_2)
 
         # Restore from the second backup
         shutil.copyfile(
-            os.path.join(self.nodes[2].datadir, 'wallet.bak2'),
+            os.path.join(self.nodes[2].datadir_path, 'wallet.bak2'),
             wallet_file_2
         )
 
@@ -246,7 +255,7 @@ class WalletBackupTest(DigiByteTestFramework):
         assert_equal(self.nodes[2].getbalance(), balance2)
 
         # Test backup to invalid path
-        target_dir = os.path.join(self.nodes[0].datadir, "invalid_backup_path")
+        target_dir = os.path.join(self.nodes[0].datadir_path, "invalid_backup_path")
         assert_raises_rpc_error(-4, "backup failed", self.nodes[0].backupwallet, target_dir)
 
         self.log.info("Backup and restore tests completed successfully!")

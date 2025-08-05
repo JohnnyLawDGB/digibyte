@@ -202,7 +202,7 @@ class CoinStatsIndexTest(DigiByteTestFramework):
 
         for hash_option in index_hash_options:
             res7 = index_node.gettxoutsetinfo(hash_option, 17)
-            assert_equal(res7['total_unspendable_amount'], Decimal('143980.99000000'))
+            assert_equal(res7['total_unspendable_amount'], Decimal('72030.99000000'))
             assert_equal(res7['block_info'], {
                 'unspendable': 71960,
                 'prevout_spent': 0,

@@ -1286,7 +1286,7 @@ class TaprootTest(DigiByteTestFramework):
     def set_test_params(self):
         self.num_nodes = 1
         self.setup_clean_chain = True
-        self.extra_args = [["-par=1"]]
+        self.extra_args = [["-par=1", "-dandelion=0", "-minrelaytxfee=0.00001"]]
 
     def block_submit(self, node, txs, msg, err_msg, cb_pubkey=None, fees=0, sigops_weight=0, witness=False, accept=False):
 

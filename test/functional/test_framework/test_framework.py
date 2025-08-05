@@ -412,9 +412,9 @@ class DigiByteTestFramework(metaclass=DigiByteTestMetaClass):
         # Backwards compatibility: check for old requires_wallet attribute
         if hasattr(self, 'requires_wallet') and self.requires_wallet:
             self._requires_wallet = True
-            # If wallet is required but descriptors is None, set it to False to enable wallet
-            if self.options.descriptors is None:
-                self.options.descriptors = False
+        # If wallet is required (either via old or new method) but descriptors is None, set it to False to enable wallet
+        if self._requires_wallet and self.options.descriptors is None:
+            self.options.descriptors = False
         self.add_nodes(self.num_nodes, self.extra_args)
         self.start_nodes()
         if self._requires_wallet:

@@ -5,6 +5,7 @@
 """Helpful routines for regression testing."""
 
 from base64 import b64encode
+from binascii import unhexlify
 from decimal import Decimal, ROUND_DOWN
 from subprocess import CalledProcessError
 import hashlib
@@ -201,6 +202,10 @@ def assert_array_result(object_array, to_match, expected, should_not_find=False)
 
 # Utility functions
 ###################
+
+
+def hex_str_to_bytes(hex_str):
+    return unhexlify(hex_str.encode('ascii'))
 
 
 def check_json_precision():

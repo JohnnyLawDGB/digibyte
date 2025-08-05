@@ -53,9 +53,17 @@ class BIP68Test(DigiByteTestFramework):
         self.extra_args = [
             [
                 '-testactivationheight=csv@432',
+                '-dandelion=0',
+                '-minrelaytxfee=0.00001',
+                '-acceptnonstdtxn=1',
+                '-easypow',
             ],
             [
                 '-testactivationheight=csv@432',
+                '-dandelion=0',
+                '-minrelaytxfee=0.00001',
+                '-acceptnonstdtxn=0',
+                '-easypow',
             ],
         ]
 
@@ -280,13 +288,17 @@ class BIP68Test(DigiByteTestFramework):
         test_nonzero_locks(tx2, self.nodes[0], self.relayfee, use_height_lock=False)
 
         # Mine tx2, and then try again
-        self.nodes[0].prioritisetransaction(txid=tx2.hash, fee_delta=int(self.relayfee*COIN))
+        self.nodes[0].prioritisetransaction(txid=tx2.hash, fee_delta=int(10*self.relayfee*COIN))
 
         # Advance the time on the node so that we can test timelocks
         self.nodes[0].setmocktime(cur_time+600)
         # Save block template now to use for the reorg later
         tmpl = self.nodes[0].getblocktemplate(NORMAL_GBT_REQUEST_PARAMS)
+        # Generate a couple blocks to make sure transaction gets included
         self.generate(self.nodes[0], 1)
+        # If tx is still in mempool, try generating another block
+        if tx2.hash in self.nodes[0].getrawmempool():
+            self.generate(self.nodes[0], 1)
         assert tx2.hash not in self.nodes[0].getrawmempool()
 
         # Now that tx2 is not in the mempool, a sequence locked spend should

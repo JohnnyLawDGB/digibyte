@@ -17,7 +17,7 @@ from test_framework.util import (
 class AddressesDeprecationTest(DigiByteTestFramework):
     def set_test_params(self):
         self.num_nodes = 2
-        self.extra_args = [[], ["-deprecatedrpc=addresses"]]
+        self.extra_args = [["-minrelaytxfee=0.00001", "-dandelion=0"], ["-deprecatedrpc=addresses", "-minrelaytxfee=0.00001", "-dandelion=0"]]
 
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()

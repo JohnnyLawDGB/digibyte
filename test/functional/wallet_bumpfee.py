@@ -36,12 +36,12 @@ from test_framework.wallet import MiniWallet
 WALLET_PASSPHRASE = "test"
 WALLET_PASSPHRASE_TIMEOUT = 3600
 
-# Fee rates (sat/vB)
-INSUFFICIENT =       1
-ECONOMICAL   =    1500000
-NORMAL       =    6500000
-HIGH         =    7000000
-TOO_HIGH     = 100000000
+# Fee rates (sat/vB) - adjusted for DigiByte
+INSUFFICIENT =       1       # 1 sat/vB
+ECONOMICAL   =      20       # 20 sat/vB = 0.00002 DGB/vB = 0.02 DGB/kB
+NORMAL       =      50       # 50 sat/vB = 0.00005 DGB/vB = 0.05 DGB/kB
+HIGH         =     100       # 100 sat/vB = 0.0001 DGB/vB = 0.1 DGB/kB
+TOO_HIGH     =   10000       # 10000 sat/vB = 0.01 DGB/vB = 10 DGB/kB
 
 def get_change_address(tx, node):
     tx_details = node.getrawtransaction(tx, 1)
@@ -60,6 +60,7 @@ class BumpFeeTest(DigiByteTestFramework):
             "-minrelaytxfee=0.000015",
             "-addresstype=bech32",
             "-whitelist=noban@127.0.0.1",
+            "-dandelion=0",  # Disable Dandelion++ for test
         ] for i in range(self.num_nodes)]
 
     def skip_test_if_missing_module(self):
@@ -788,11 +789,27 @@ def test_change_script_match(self, rbf_node, dest_address):
 
 
 def spend_one_input(node, dest_address, change_size=Decimal("0.00049000"), data=None):
+    # Find any available UTXO instead of specifically looking for 0.001 DGB
+    utxos = node.listunspent()
+    if not utxos:
+        raise RuntimeError("No UTXOs available")
+    
+    # Use the first available UTXO
+    utxo = utxos[0]
     tx_input = dict(
-        sequence=MAX_BIP125_RBF_SEQUENCE, **next(u for u in node.listunspent() if u["amount"] == Decimal("0.00100000")))
-    destinations = {dest_address: Decimal("0.00050000")}
-    if change_size > 0:
-        destinations[node.getrawchangeaddress()] = change_size
+        sequence=MAX_BIP125_RBF_SEQUENCE, 
+        txid=utxo["txid"],
+        vout=utxo["vout"]
+    )
+    
+    # Calculate appropriate output amounts based on available input
+    total_input = utxo["amount"]
+    fee = Decimal("0.00001000")  # Minimum fee
+    output_amount = min(Decimal("0.00050000"), total_input - fee - change_size)
+    
+    destinations = {dest_address: output_amount}
+    if change_size > 0 and total_input - output_amount - fee > 0:
+        destinations[node.getrawchangeaddress()] = total_input - output_amount - fee
     if data:
         destinations['data'] = data
     rawtx = node.createrawtransaction([tx_input], destinations)

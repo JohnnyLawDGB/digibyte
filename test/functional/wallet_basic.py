@@ -571,14 +571,15 @@ class WalletTest(DigiByteTestFramework):
         assert_raises_rpc_error(-3, "Invalid amount", self.nodes[0].sendtoaddress, self.nodes[2].getnewaddress(), 21000000001)  # More than max supply
 
         self.log.info("Test getreceivedbyaddress and getreceivedbylabel")
-        # Create a new address and label
+        # Use node1 to send to node2 since they are connected and in sync after walletbroadcast test
         label = "test_label"
         address = self.nodes[2].getnewaddress(label)
         
-        # Send to the address
-        self.nodes[0].sendtoaddress(address, 5)
-        # Don't sync due to different node states after walletbroadcast test
-        self.generate(self.nodes[0], 1, sync_fun=self.no_op)
+        # Send from node1 to node2
+        self.nodes[1].sendtoaddress(address, 5)
+        # Mine on node1 and sync with node2
+        self.generate(self.nodes[1], 1)
+        self.sync_blocks([self.nodes[1], self.nodes[2]])
         
         # Test getreceivedbyaddress
         assert_equal(self.nodes[2].getreceivedbyaddress(address), 5)
@@ -627,10 +628,12 @@ class WalletTest(DigiByteTestFramework):
         
         # Generate an address to receive funds
         enc_addr = encrypted_wallet.getnewaddress()
+        # Send to encrypted wallet
         self.nodes[0].sendtoaddress(enc_addr, 10)
-        # Don't sync due to different node states after walletbroadcast test
-        self.generate(self.nodes[0], 1, sync_fun=self.no_op)
-        # Make sure node1 sees the block
+        # Sync mempool to ensure node1 sees the transaction
+        self.sync_mempools([self.nodes[0], self.nodes[1]])
+        # Generate block and sync
+        self.generate(self.nodes[0], 1)
         self.sync_blocks([self.nodes[0], self.nodes[1]])
         
         # Should be able to send now

@@ -18,11 +18,13 @@ from test_framework.wallet_util import bytes_to_wif
 
 class ImportPrunedFundsTest(DigiByteTestFramework):
     def add_options(self, parser):
-        self.add_wallet_options(parser, legacy=True)
+        self.add_wallet_options(parser)
 
     def set_test_params(self):
         self.setup_clean_chain = True
         self.num_nodes = 2
+        # Add txindex and disable Dandelion++ to ensure gettxoutproof works properly
+        self.extra_args = [["-txindex", "-dandelion=0"], ["-txindex", "-dandelion=0"]]
 
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()
@@ -66,17 +68,20 @@ class ImportPrunedFundsTest(DigiByteTestFramework):
 
         # Send funds to self
         txnid1 = self.nodes[0].sendtoaddress(address1, 0.1)
-        self.generate(self.nodes[0], 1)
+        self.generate(self.nodes[0], 2)  # Generate extra blocks for DigiByte's fast block times
+        self.sync_all()
         rawtxn1 = self.nodes[0].gettransaction(txnid1)['hex']
         proof1 = self.nodes[0].gettxoutproof([txnid1])
 
         txnid2 = self.nodes[0].sendtoaddress(address2, 0.05)
-        self.generate(self.nodes[0], 1)
+        self.generate(self.nodes[0], 2)  # Generate extra blocks for DigiByte's fast block times
+        self.sync_all()
         rawtxn2 = self.nodes[0].gettransaction(txnid2)['hex']
         proof2 = self.nodes[0].gettxoutproof([txnid2])
 
         txnid3 = self.nodes[0].sendtoaddress(address3, 0.025)
-        self.generate(self.nodes[0], 1)
+        self.generate(self.nodes[0], 2)  # Generate extra blocks for DigiByte's fast block times
+        self.sync_all()
         rawtxn3 = self.nodes[0].gettransaction(txnid3)['hex']
         proof3 = self.nodes[0].gettxoutproof([txnid3])
 

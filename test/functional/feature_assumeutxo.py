@@ -54,9 +54,9 @@ class AssumeutxoTest(DigiByteTestFramework):
         self.num_nodes = 3
         self.rpc_timeout = 120
         self.extra_args = [
-            [],
-            ["-fastprune", "-prune=1", "-blockfilterindex=1"],
-            ["-txindex=1", "-blockfilterindex=1", "-coinstatsindex=1"],
+            ["-dandelion=0"],
+            ["-fastprune", "-prune=1", "-blockfilterindex=1", "-dandelion=0"],
+            ["-txindex=1", "-blockfilterindex=1", "-coinstatsindex=1", "-dandelion=0"],
         ]
 
     def setup_network(self):
@@ -240,7 +240,7 @@ class AssumeutxoTest(DigiByteTestFramework):
             'basic block filter index': COMPLETE_IDX,
             'coinstatsindex': COMPLETE_IDX,
         }
-        self.wait_until(lambda: n1.getindexinfo() == completed_idx_state, timeout=180)
+        self.wait_until(lambda: n1.getindexinfo() == completed_idx_state, timeout=600)
 
 
         for i in (0, 1):

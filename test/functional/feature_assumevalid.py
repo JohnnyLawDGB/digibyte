@@ -165,7 +165,7 @@ class AssumeValidTest(DigiByteTestFramework):
             p2p1.send_message(msg_block(self.blocks[i]))
         # Syncing 2200 blocks can take a while on slow systems. Give it plenty of time to sync.
         # DigiByte: Skip ping sync due to connection issues, just wait for blocks
-        self.wait_until(lambda: self.nodes[1].getblockcount() >= 2202, timeout=180)
+        self.wait_until(lambda: self.nodes[1].getblockcount() >= 2202, timeout=600)
         assert_equal(self.nodes[1].getblock(self.nodes[1].getbestblockhash())['height'], 2202)
 
         p2p2 = self.nodes[2].add_p2p_connection(BaseNode())

@@ -4634,7 +4634,6 @@ static const CRPCCommand commands[] =
     { "wallet",             &backupwallet,                   },
     { "wallet",             &bumpfee,                        },
     { "wallet",             &psbtbumpfee,                    },
-    { "wallet",             &createwallet,                   },
     { "wallet",             &dumpprivkey,                    },
     { "wallet",             &dumpwallet,                     },
     { "wallet",             &encryptwallet,                  },

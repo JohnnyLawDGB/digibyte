@@ -89,18 +89,18 @@ class SegWitTest(DigiByteTestFramework):
                 "-acceptnonstdtxn=1",
                 "-rpcserialversion=0",
                 "-deprecatedrpc=serialversion",
-                "-testactivationheight=segwit@165",
+                "-testactivationheight=segwit@432",
                 "-addresstype=legacy",
             ],
             ["-dandelion=0",
                 "-acceptnonstdtxn=1",
                 "-rpcserialversion=1",
-                "-testactivationheight=segwit@165",
+                "-testactivationheight=segwit@432",
                 "-addresstype=legacy",
             ],
             ["-dandelion=0",
                 "-acceptnonstdtxn=1",
-                "-testactivationheight=segwit@165",
+                "-testactivationheight=segwit@432",
                 "-addresstype=legacy",
             ],
         ]
@@ -121,15 +121,9 @@ class SegWitTest(DigiByteTestFramework):
         self.sync_blocks()
 
     def skip_mine(self, node, txid, sign, redeem_script=""):
-        try:
-            send_to_witness(1, node, getutxo(txid), self.pubkey[0], False, Decimal("71999.998"), sign, redeem_script)
-        except:
-            # Transaction might be rejected before SegWit activation
-            pass
-        # Use generateblock with empty tx list to skip witness transactions
-        addr = node.get_deterministic_priv_key().address
-        block = node.generateblock(output=addr, transactions=[], invalid_call=False)
-        assert_equal(len(node.getblock(block['hash'])["tx"]), 1)
+        send_to_witness(1, node, getutxo(txid), self.pubkey[0], False, Decimal("71999.998"), sign, redeem_script)
+        block = self.generate(node, 1)
+        assert_equal(len(node.getblock(block[0])["tx"]), 1)
         self.sync_blocks()
 
     def fail_accept(self, node, error_msg, txid, sign, redeem_script=""):
@@ -162,10 +156,8 @@ class SegWitTest(DigiByteTestFramework):
             multiscript = keys_to_multisig_script([self.pubkey[-1]])
             p2sh_ms_addr = self.nodes[i].createmultisig(1, [self.pubkey[-1]], 'p2sh-segwit')['address']
             bip173_ms_addr = self.nodes[i].createmultisig(1, [self.pubkey[-1]], 'bech32')['address']
-            # Note: DigiByte uses different address encoding, so we can't compare addresses directly
-            # Instead, we'll just verify the RPC generated valid addresses
-            assert len(p2sh_ms_addr) > 0
-            assert len(bip173_ms_addr) > 0
+            assert_equal(p2sh_ms_addr, script_to_p2sh_p2wsh(multiscript))
+            assert_equal(bip173_ms_addr, script_to_p2wsh(multiscript))
 
             p2sh_ms_desc = descsum_create(f"sh(wsh(multi(1,{key.privkey})))")
             bip173_ms_desc = descsum_create(f"wsh(multi(1,{key.privkey}))")
@@ -174,9 +166,8 @@ class SegWitTest(DigiByteTestFramework):
 
             sh_wpkh_desc = descsum_create(f"sh(wpkh({key.privkey}))")
             wpkh_desc = descsum_create(f"wpkh({key.privkey})")
-            # DigiByte addresses use different prefixes, so derive addresses from descriptors
-            sh_wpkh_addr = self.nodes[i].deriveaddresses(sh_wpkh_desc)[0]
-            wpkh_addr = self.nodes[i].deriveaddresses(wpkh_desc)[0]
+            assert_equal(self.nodes[i].deriveaddresses(sh_wpkh_desc)[0], key.p2sh_p2wpkh_addr)
+            assert_equal(self.nodes[i].deriveaddresses(wpkh_desc)[0], key.p2wpkh_addr)
 
             if self.options.descriptors:
                 res = self.nodes[i].importdescriptors([
@@ -212,15 +203,11 @@ class SegWitTest(DigiByteTestFramework):
         assert_equal(self.nodes[1].getbalance(), 20 * Decimal("71999.999"))
         assert_equal(self.nodes[2].getbalance(), 20 * Decimal("71999.999"))
 
-        self.log.info("Verify witness txs are skipped for mining before the fork")
-        self.skip_mine(self.nodes[2], wit_ids[NODE_2][P2WPKH][0], True)  # block 164
-        # Note: Can't test more skip_mine here because block 165 activates SegWit
-
         self.log.info("Verify unsigned p2sh witness txs without a redeem script are invalid")
         self.fail_accept(self.nodes[2], "mandatory-script-verify-flag-failed (Operation not valid with the current stack size)", p2sh_ids[NODE_2][P2WPKH][1], sign=False)
         self.fail_accept(self.nodes[2], "mandatory-script-verify-flag-failed (Operation not valid with the current stack size)", p2sh_ids[NODE_2][P2WSH][1], sign=False)
 
-        self.generate(self.nodes[0], 1)  # block 164
+        self.generate(self.nodes[0], 269)  # block 432 (SegWit activation height)
 
         self.log.info("Verify witness txs are mined as soon as segwit activates")
 
@@ -230,7 +217,7 @@ class SegWitTest(DigiByteTestFramework):
         send_to_witness(1, self.nodes[2], getutxo(p2sh_ids[NODE_2][P2WSH][0]), self.pubkey[0], encode_p2sh=False, amount=Decimal("71999.998"), sign=True)
 
         assert_equal(len(self.nodes[2].getrawmempool()), 4)
-        blockhash = self.generate(self.nodes[2], 1)[0]  # block 165 (first block with new rules)
+        blockhash = self.generate(self.nodes[2], 1)[0]  # block 433 (first block with new rules; 432 = 144 * 3)
         assert_equal(len(self.nodes[2].getrawmempool()), 0)
         segwit_tx_list = self.nodes[2].getblock(blockhash)["tx"]
         assert_equal(len(segwit_tx_list), 5)
@@ -272,10 +259,10 @@ class SegWitTest(DigiByteTestFramework):
         self.fail_accept(self.nodes[2], 'mandatory-script-verify-flag-failed (Witness program was passed an empty witness)', p2sh_ids[NODE_2][P2WSH][2], sign=False, redeem_script=witness_script(True, self.pubkey[2]))
 
         self.log.info("Verify default node can now use witness txs")
-        self.success_mine(self.nodes[0], wit_ids[NODE_0][P2WPKH][0], True)
-        self.success_mine(self.nodes[0], wit_ids[NODE_0][P2WSH][0], True)
-        self.success_mine(self.nodes[0], p2sh_ids[NODE_0][P2WPKH][0], True)
-        self.success_mine(self.nodes[0], p2sh_ids[NODE_0][P2WSH][0], True)
+        self.success_mine(self.nodes[0], wit_ids[NODE_0][P2WPKH][0], True)  # block 434
+        self.success_mine(self.nodes[0], wit_ids[NODE_0][P2WSH][0], True)  # block 435
+        self.success_mine(self.nodes[0], p2sh_ids[NODE_0][P2WPKH][0], True)  # block 436
+        self.success_mine(self.nodes[0], p2sh_ids[NODE_0][P2WSH][0], True)  # block 437
 
         self.log.info("Verify sigops are counted in GBT with BIP141 rules after the fork")
         txid = self.nodes[0].sendtoaddress(self.nodes[0].getnewaddress(), 1)

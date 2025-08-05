@@ -25,10 +25,11 @@ class MempoolUpdateFromBlockTest(DigiByteTestFramework):
             '-limitdescendantsize=5000',     # 5000 KvB = 5MB to handle tournament graph
             '-limitancestorsize=5000',       # 5000 KvB = 5MB to handle tournament graph
             '-limitancestorcount=100',
-            '-blockmintxfee=0.00001'         # DigiByte min fee rate (0.00001 DGB/kB)
+            '-blockmintxfee=0.00001',        # DigiByte min fee rate (0.00001 DGB/kB)
+            '-dandelion=0'                   # Disable Dandelion++ for testing
         ]]
 
-    def transaction_graph_test(self, size, n_tx_to_mine=None, fee=500_000):
+    def transaction_graph_test(self, size, n_tx_to_mine=None, fee=1_000_000):
         """Create an acyclic tournament (a type of directed graph) of transactions and use it for testing.
 
         Keyword arguments:

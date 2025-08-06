@@ -1,9 +1,9 @@
 # DigiByte v8.26 Python Functional Test Status
 
-## Summary (Updated 2025-08-04)
+## Summary (Updated 2025-08-06)
 - **Total Tests**: 316 (315 + 1 for ALL)
-- **Passed**: 176 (56%)
-- **Failed**: 125 (40%)
+- **Passed**: 181 (57%)
+- **Failed**: 120 (38%)
 - **Skipped**: 15 (5%)
 
 ## Status Key
@@ -185,8 +185,8 @@
 - ✅ rpc_bind.py --nonloopback
 - ✅ rpc_blockchain.py
 - ✅ rpc_blockchain.py --v2transport
-- ❌ rpc_createmultisig.py --descriptors
-- ❌ rpc_createmultisig.py --legacy-wallet
+- ✅ rpc_createmultisig.py --descriptors
+- ✅ rpc_createmultisig.py --legacy-wallet
 - ✅ rpc_decodescript.py
 - ✅ rpc_deprecated.py
 - ✅ rpc_deriveaddresses.py
@@ -206,7 +206,7 @@
 - ✅ rpc_help.py
 - ✅ rpc_invalid_address_message.py
 - ✅ rpc_invalidateblock.py
-- ❌ rpc_mempool_info.py
+- ✅ rpc_mempool_info.py
 - ✅ rpc_misc.py
 - ✅ rpc_mempool_entry_fee_fields.py
 - ✅ rpc_named_arguments.py
@@ -215,12 +215,12 @@
 - ✅ rpc_preciousblock.py
 - ❌ rpc_psbt.py --descriptors
 - ❌ rpc_psbt.py --legacy-wallet
-- ❌ rpc_rawtransaction.py --descriptors
+- ✅ rpc_rawtransaction.py --descriptors
 - ✅ rpc_rawtransaction.py --legacy-wallet
 - ✅ rpc_scanblocks.py
 - ✅ rpc_scantxoutset.py
 - ✅ rpc_setban.py
-- ❌ rpc_signmessage.py
+- ✅ rpc_signmessage.py
 - ❌ rpc_signrawtransaction.py --descriptors
 - ❌ rpc_signrawtransaction.py --legacy-wallet
 - ✅ rpc_signmessagewithprivkey.py

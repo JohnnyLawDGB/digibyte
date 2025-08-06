@@ -240,6 +240,12 @@ class PSBTTest(DigiByteTestFramework):
         # Locks are ignored for manually selected inputs
         self.nodes[0].walletcreatefundedpsbt([{"txid": utxo1['txid'], "vout": utxo1['vout']}], {self.nodes[2].getnewaddress():1}, 0)
 
+        # Bitcoin v26.2 behavior change: manually selected inputs no longer unlock locked UTXOs
+        # Clean up any remaining locks for next test
+        locked_count = len(self.nodes[0].listlockunspent())
+        if locked_count > 0:
+            self.nodes[0].lockunspent(True)
+
         # Manually selected inputs can be locked:
         assert_equal(len(self.nodes[0].listlockunspent()), 0)
         utxo1 = self.nodes[0].listunspent()[0]

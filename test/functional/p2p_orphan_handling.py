@@ -110,10 +110,8 @@ class PeerTxRelayer(P2PTxInvStore):
 
 class OrphanHandlingTest(DigiByteTestFramework):
     def set_test_params(self):
-        self.setup_clean_chain = True
         self.num_nodes = 1
-        # Disable Dandelion++ to avoid complications with transaction relay
-        self.extra_args = [["-dandelion=0"]]
+        self.extra_args = [[]]
 
     def create_parent_and_child(self):
         """Create package with 1 parent and 1 child, normal fees (no cpfp)."""
@@ -126,21 +124,8 @@ class OrphanHandlingTest(DigiByteTestFramework):
         wtxid = int(tx.getwtxid(), 16)
         peer.send_and_ping(msg_inv([CInv(t=MSG_WTX, h=wtxid)]))
         self.nodes[0].bumpmocktime(TXREQUEST_TIME_SKIP)
-        # DigiByte: For orphan transactions, the node might not always request them immediately
-        # Check if getdata is sent within a reasonable time
-        try:
-            peer.wait_for_getdata([wtxid], timeout=5)
-            peer.send_and_ping(msg_tx(tx))
-        except AssertionError:
-            # If no getdata is received, send the transaction anyway
-            # This handles cases where the node already has the transaction or doesn't want it
-            self.log.debug(f"No getdata received for transaction {tx.getwtxid()}, sending anyway")
-            try:
-                peer.send_and_ping(msg_tx(tx))
-            except AssertionError:
-                # If peer disconnected, this is expected for some invalid transactions
-                self.log.debug(f"Peer disconnected when sending transaction {tx.getwtxid()}")
-                pass
+        peer.wait_for_getdata([wtxid])
+        peer.send_and_ping(msg_tx(tx))
 
     @cleanup
     def test_arrival_timing_orphan(self):
@@ -284,66 +269,23 @@ class OrphanHandlingTest(DigiByteTestFramework):
         # This UTXO is unconfirmed and missing.
         missing_tx = self.wallet.create_self_transfer()
         utxo_unconf_missing = missing_tx["new_utxo"]
-        
-        # DigiByte might have auto-broadcast behavior, check and handle
-        was_already_in_mempool = missing_tx["txid"] in node.getrawmempool()
-        if was_already_in_mempool:
-            self.log.info("Missing tx was auto-broadcast by DigiByte wallet, adjusting test")
+        assert missing_tx["txid"] not in node.getrawmempool()
 
-        # DigiByte: Ensure the orphan transaction has sufficient fee
-        # The multi-input transaction needs higher fee to meet relay requirements
-        # Using fee_per_output to ensure we meet the minimum relay fee
         orphan = self.wallet.create_self_transfer_multi(utxos_to_spend=[utxo_conf_old,
-            utxo_conf_recent, utxo_unconf_mempool, utxo_unconf_missing], fee_per_output=50000)
+            utxo_conf_recent, utxo_unconf_mempool, utxo_unconf_missing])
 
-        if was_already_in_mempool:
-            # If missing tx was already broadcast, orphan should be accepted immediately
-            self.relay_transaction(peer, orphan["tx"])
-            self.wait_until(lambda: orphan["txid"] in node.getrawmempool(), timeout=5)
-        else:
-            # Original test flow - orphan has missing parent
-            self.relay_transaction(peer, orphan["tx"])
-            self.nodes[0].bumpmocktime(NONPREF_PEER_TX_DELAY + TXID_RELAY_DELAY)
-            peer.sync_with_ping()
-            assert_equal(len(peer.last_message["getdata"].inv), 2)
-            peer.wait_for_parent_requests([int(txid_conf_old, 16), int(missing_tx["txid"], 16)])
+        self.relay_transaction(peer, orphan["tx"])
+        self.nodes[0].bumpmocktime(NONPREF_PEER_TX_DELAY + TXID_RELAY_DELAY)
+        peer.sync_with_ping()
+        assert_equal(len(peer.last_message["getdata"].inv), 2)
+        peer.wait_for_parent_requests([int(txid_conf_old, 16), int(missing_tx["txid"], 16)])
 
-            # Even though the peer would send a notfound for the "old" confirmed transaction, the node
-            # doesn't give up on the orphan. Once all of the missing parents are received, it should be
-            # submitted to mempool.
-            peer.send_message(msg_notfound(vec=[CInv(MSG_WITNESS_TX, int(txid_conf_old, 16))]))
-            peer.send_and_ping(msg_tx(missing_tx["tx"]))
-            peer.sync_with_ping()
-            
-            # Wait for missing parent to be in mempool first
-            self.wait_until(lambda: missing_tx["txid"] in node.getrawmempool(), timeout=5)
-            
-            # Check all parents are available
-            mempool = node.getrawmempool()
-            self.log.info(f"Mempool contents: {mempool}")
-            self.log.info(f"Required parents: mempool_tx={mempool_tx['txid']}, missing_tx={missing_tx['txid']}")
-            self.log.info(f"Confirmed parents: conf_old={txid_conf_old}, conf_recent={utxo_conf_recent['txid']}")
-            
-            # DigiByte: For this test, we need to manually submit the orphan after all parents are available
-            # The automatic orphan processing might not work as expected due to the notfound message
-            # for the confirmed transaction confusing the orphan handling logic
-            self.log.info("Manually submitting orphan transaction after all parents are available")
-            result = node.testmempoolaccept([orphan["hex"]])
-            self.log.info(f"Testmempoolaccept result: {result}")
-            
-            if result[0]["allowed"]:
-                # If the transaction would be accepted, send it
-                node.sendrawtransaction(orphan["hex"])
-            else:
-                # Log why it's not accepted
-                self.log.error(f"Orphan not accepted: {result[0].get('reject-reason', 'unknown')}")
-                # Try re-sending via peer
-                peer.send_and_ping(msg_tx(orphan["tx"]))
-            
-            self.wait_until(lambda: orphan["txid"] in node.getrawmempool(), timeout=5)
-        
-        # The orphan has 2 unconfirmed ancestors (mempool_tx and missing_tx)
-        # DigiByte only counts unconfirmed ancestors, not confirmed ones
+        # Even though the peer would send a notfound for the "old" confirmed transaction, the node
+        # doesn't give up on the orphan. Once all of the missing parents are received, it should be
+        # submitted to mempool.
+        peer.send_message(msg_notfound(vec=[CInv(MSG_WITNESS_TX, int(txid_conf_old, 16))]))
+        peer.send_and_ping(msg_tx(missing_tx["tx"]))
+        peer.sync_with_ping()
         assert_equal(node.getmempoolentry(orphan["txid"])["ancestorcount"], 3)
 
     @cleanup

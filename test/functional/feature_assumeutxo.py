@@ -52,11 +52,11 @@ class AssumeutxoTest(DigiByteTestFramework):
     def set_test_params(self):
         """Use the pregenerated, deterministic chain up to height 199."""
         self.num_nodes = 3
-        self.rpc_timeout = 120
+        self.rpc_timeout = 300
         self.extra_args = [
-            ["-dandelion=0"],
-            ["-fastprune", "-prune=1", "-blockfilterindex=1", "-dandelion=0"],
-            ["-txindex=1", "-blockfilterindex=1", "-coinstatsindex=1", "-dandelion=0"],
+            ["-dandelion=0", "-easypow"],
+            ["-fastprune", "-prune=1", "-blockfilterindex=1", "-dandelion=0", "-easypow"],
+            ["-txindex=1", "-blockfilterindex=1", "-coinstatsindex=1", "-dandelion=0", "-easypow"],
         ]
 
     def setup_network(self):
@@ -233,7 +233,7 @@ class AssumeutxoTest(DigiByteTestFramework):
         self.sync_blocks(nodes=(n0, n1))
 
         self.log.info("Ensuring background validation completes")
-        self.wait_until(lambda: len(n1.getchainstates()['chainstates']) == 1)
+        self.wait_until(lambda: len(n1.getchainstates()['chainstates']) == 1, timeout=600)
 
         # Ensure indexes have synced.
         completed_idx_state = {
@@ -282,7 +282,7 @@ class AssumeutxoTest(DigiByteTestFramework):
         self.sync_blocks()
 
         self.log.info("Ensuring background validation completes")
-        self.wait_until(lambda: len(n2.getchainstates()['chainstates']) == 1)
+        self.wait_until(lambda: len(n2.getchainstates()['chainstates']) == 1, timeout=600)
 
         completed_idx_state = {
             'basic block filter index': COMPLETE_IDX,

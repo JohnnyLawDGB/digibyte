@@ -430,7 +430,66 @@ Check that depth calculation correctly shows < 8 blocks between coinbase creatio
 
 ---
 
+### Pattern: Relay Fee Configuration for BIP68 Sequence Locks
+**Symptoms:**
+- `non-BIP68-final (-26)` error during sequence lock tests
+- Transactions not properly sequence-locked when expected
+- Transaction accepted in mempool when should be rejected
+
+**Root Cause:**
+BIP68 sequence lock tests use fee calculations that depend on proper relay fee configuration. Using Bitcoin's default minrelaytxfee breaks the fee-based transaction prioritization.
+
+**Solution:**
+```python
+# In test extra_args, change:
+# OLD:
+'-minrelaytxfee=0.00001',  # Bitcoin value
+
+# NEW:
+'-minrelaytxfee=0.001',   # DigiByte value (DGB/kB not BTC/vB)
+```
+
+**Tests Affected:**
+- feature_bip68_sequence.py - Fixed by updating minrelaytxfee
+
+**Verification:**
+Test should pass through all phases without sequence lock errors.
+
+---
+
+### Pattern: Assume* Tests Hanging During Block Generation
+**Symptoms:**
+- feature_assumeutxo.py hangs at "Ensuring background validation completes"
+- feature_assumevalid.py hangs during initialization
+- Tests timeout without producing error messages
+
+**Root Cause:**
+Complex assumeutxo/assumevalid tests involve extensive block generation, validation, and indexing operations that may be incompatible with DigiByte's multi-algorithm PoW or require specialized configuration.
+
+**Solution:**
+```python
+# Add easypow and extend timeouts:
+self.extra_args = [
+    ["-dandelion=0", "-easypow"],
+    # ... other args with "-easypow" added
+]
+self.rpc_timeout = 300  # Increased from 120
+
+# Add timeouts to long-running validations:
+self.wait_until(lambda: condition, timeout=600)
+```
+
+**Tests Affected:**
+- feature_assumeutxo.py - Still hanging after timeout fixes
+- feature_assumevalid.py - Still hanging after timeout fixes
+
+**Status:**
+These tests may require deeper investigation into DigiByte's assumeutxo implementation or may be fundamentally incompatible with multi-algorithm PoW.
+
+---
+
 ## Update Log
 - **2025-08-24**: Initial patterns documented from previous fixes
 - **2025-08-24**: Added 4 new patterns from Group 1 test fixes
+- **2025-08-24**: Added 2 new patterns from Group 2 test fixes
 - Sub-agents will add new patterns as discovered

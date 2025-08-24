@@ -150,7 +150,7 @@ BASE_SCRIPTS = [
     'wallet_groups.py --legacy-wallet',
     'wallet_groups.py --descriptors',
     'p2p_blockfilters.py',
-    # 'feature_assumevalid.py', # FIX This Test Hangs for ever and throws AI off. Needs Fixed LAter
+    'feature_assumevalid.py',
     'wallet_taproot.py --descriptors',
     'feature_bip68_sequence.py',
     'rpc_packages.py',

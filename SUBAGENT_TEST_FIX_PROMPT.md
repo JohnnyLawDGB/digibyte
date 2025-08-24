@@ -141,7 +141,8 @@ In TEST_FIX_PROGRESS.md, update your test:
 ## STRICT RULES - VIOLATIONS = REJECTION
 
 ### FORBIDDEN Actions:
-❌ **NEVER skip tests** - No @skip, @xfail, pytest.skip()
+❌ **NEVER skip tests** - No @skip, @xfail, pytest.skip(), unittest.skip()
+❌ **NEVER skip test sections** - Don't use if conditions to skip test logic
 ❌ **NEVER disable assertions** - Don't comment out assert statements
 ❌ **NEVER change expected values without understanding** - Fix the code, not the test
 ❌ **NEVER use workarounds** - Apply proper fixes only
@@ -153,6 +154,12 @@ In TEST_FIX_PROGRESS.md, update your test:
 ✅ **TEST all variants** - Must work with --descriptors, --legacy-wallet
 ✅ **UNDERSTAND the fix** - Know WHY it works
 ✅ **DOCUMENT everything** - Update tracking files
+
+### SPECIAL INSTRUCTIONS FOR REGTEST SNAPSHOTS:
+For assumevalid/assumeutxo tests:
+✅ **USE correct regtest snapshot hash** - Check C++ tests for the correct hash
+✅ **VERIFY against src/kernel/chainparams.cpp** - The snapshot hash must match
+✅ **DO NOT skip regtest** - The regtest snapshot exists and must be used
 
 ## Common Mistakes to Avoid
 ❌ Using Bitcoin values (50 BTC, 600s, bcrt1)

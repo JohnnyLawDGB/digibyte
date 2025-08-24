@@ -54,14 +54,14 @@ class BIP68Test(DigiByteTestFramework):
             [
                 '-testactivationheight=csv@432',
                 '-dandelion=0',
-                '-minrelaytxfee=0.00001',
+                '-minrelaytxfee=0.001',
                 '-acceptnonstdtxn=1',
                 '-easypow',
             ],
             [
                 '-testactivationheight=csv@432',
                 '-dandelion=0',
-                '-minrelaytxfee=0.00001',
+                '-minrelaytxfee=0.001',
                 '-acceptnonstdtxn=0',
                 '-easypow',
             ],

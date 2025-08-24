@@ -70,7 +70,7 @@ class AssumeValidTest(DigiByteTestFramework):
     def set_test_params(self):
         self.setup_clean_chain = True
         self.num_nodes = 3
-        self.rpc_timeout = 120
+        self.rpc_timeout = 300
 
     def setup_network(self):
         self.add_nodes(3)

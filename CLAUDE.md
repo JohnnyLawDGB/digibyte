@@ -1,114 +1,67 @@
 # CLAUDE.md - AI Assistant Guide for DigiByte Development
 
 ## Overview
-This file provides context and guidance for AI assistants working on the DigiByte codebase, particularly for the Bitcoin Core v26.2 merge creating DigiByte v8.26.
+This file provides essential context for AI assistants working on the DigiByte codebase, particularly for the Bitcoin Core v26.2 merge creating DigiByte v8.26.
 
 ## Repository Structure
-**Working directory:** Always run from the root `digibyte/` directory (v8.26 merged code)
-
-**Required reference repositories (subdirectories within digibyte/):**
-- `bitcoin-v26.2-for-digibyte/` (Bitcoin v26.2 reference)
-- `digibyte-v8.22.2/` (DigiByte v8.22.2 - SOURCE OF TRUTH for DigiByte values)
-
-**Directory layout:**
 ```
-digibyte/                        # Current v8.26 working directory (YOU ARE HERE)
+digibyte/                        # Current v8.26 working directory
 ├── src/                         # Source code
-├── test/                        # Test files
-├── bitcoin-v26.2-for-digibyte/  # Bitcoin v26.2 reference code
-├── digibyte-v8.22.2/           # DigiByte v8.22.2 reference code
-└── ... (other project files)
+├── test/functional/             # Python functional tests
+├── bitcoin-v26.2-for-digibyte/  # Bitcoin v26.2 reference
+├── digibyte-v8.22.2/           # DigiByte v8.22.2 (SOURCE OF TRUTH)
+└── doc/                        # Documentation
 ```
 
-## Python Functional Test Fix Strategy
+## Test Fix Workflow Documentation
 
-### Overview
-316 Python functional tests after Bitcoin v26.2 merge. Current status (as of 2025-08-04):
-- **Passed**: 176 tests (56%)
-- **Failed**: 125 tests (40%) - 76 unique test files
-- **Skipped**: 15 tests (5%) - mostly USDT tracing tests
+### For Orchestrator Agents
+- **MAIN_WORK_PROMPT.md** - Instructions for managing sub-agents
+- **WORK_GROUPS.md** - Test groups with status tracking
+- **TEST_FIX_PROGRESS.md** - Overall progress dashboard
 
-**Note**: Successfully built with BDB 4.8 support. Legacy wallet tests now enabled. Major improvement from 69 skipped tests to only 15.
+### For Sub-Agent Workers
+- **SUBAGENT_TEST_FIX_PROMPT.md** - Test fix methodology
+- **COMMON_FIXES.md** - Reusable fix patterns (CHECK FIRST!)
+- **APPLICATION_BUGS.md** - Track real bugs found
 
-### Test Status Tracking
-- **FUNCTIONAL_CHECKLIST_TESTS.md** - Complete list of all tests with pass/fail status
-- **ATTACK_LIST.md** - Failed tests organized into 10 groups for systematic fixing
+### Current Status (2025-08-24)
+- **Total Tests**: 315 (109 failing)
+- **Strategy**: Orchestrator deploys sub-agents on test groups
+- **Phase 1**: Groups 1-3 (sequential - critical foundation)
+- **Phase 2**: Groups 4-9 (parallel - max 3 agents)
+- **Phase 3**: Groups 10-13 (parallel - cleanup)
 
-### Prerequisites
-```bash
-pip install --break-system-packages digibyte-scrypt
+## Critical DigiByte Constants
+
+### Always use these values instead of Bitcoin defaults:
+```python
+# Block & Mining
+BLOCK_TIME = 15                  # seconds (NOT 600!)
+COINBASE_MATURITY = 8           # blocks (NOT 100!)
+COINBASE_MATURITY_2 = 100       # After certain height
+SUBSIDY = 72000                  # DGB (NOT 50!)
+MAX_MONEY = 21000000000          # 21 billion DGB
+
+# Fees (DigiByte uses KvB not vB!)
+MIN_RELAY_TX_FEE = Decimal('0.001')      # DGB/kB
+DEFAULT_TRANSACTION_FEE = Decimal('0.1')  # DGB/kB
+
+# Network
+P2P_PORT = 12024                 # Mainnet
+P2P_PORT_TESTNET = 12025        # Testnet
+
+# Address Formats
+REGTEST_BECH32 = 'dgbrt'        # NOT 'bcrt'
+TESTNET_BECH32 = 'dgbt'         # NOT 'tb'
 ```
-
-### Fix Methodology
-
-1. **Always Compare Three Codebases:**
-   - v8.26 (current - what we're fixing)
-   - v8.22.2 (SOURCE OF TRUTH for DigiByte values)
-   - Bitcoin v26.2 (to understand what changed)
-
-2. **Common Failure Patterns:**
-   - RPC Method Not Found (-32601): Missing DigiByte-specific methods
-   - Assertion Failures: Wrong constants (fees, rewards, timing)
-   - Address Format Issues: Need DigiByte prefixes
-   - Dandelion++ Issues: See doc/DANDELION_INFO.md FIRST
-
-3. **Critical DigiByte Constants:**
-   ```python
-   P2P_PORT = 12024  # Mainnet
-   P2P_PORT_TESTNET = 12025
-   BLOCK_TIME = 15  # seconds
-   COINBASE_MATURITY = 8  # blocks for spending
-   MIN_RELAY_FEE = Decimal('0.00001000')  # DGB/kB
-   MAX_MONEY = 21000000000  # 21 billion DGB
-   SUBSIDY = 72000  # DGB current reward
-   ```
-
-4. **Test Categories (for parallel work):**
-   - P2P Network (55 tests) - Dandelion++, protocol
-   - Wallet (114 tests) - Address formats, fees
-   - RPC Interface (51 tests) - Custom commands
-   - Mining (3 tests) - Multi-algorithm critical
-   - Mempool (18 tests) - Fee rates, Dandelion++
-   - Feature (62 tests) - Core functionality
-   - Interface (12 tests) - CLI, REST, ZMQ
-   - Tool & Misc (5 tests) - Utilities
-
-### Test Framework Fixes Already Applied
-1. Updated private keys to DigiByte testnet format
-2. Fixed address generation for dgbrt1 addresses
-3. Added digibyte_scrypt module requirement
-4. Fixed coinbase subsidy calculations (blocktools.py)
-5. Updated test parameters for KvB units
-6. Added stempool existence checks (transaction.cpp)
-
-### Application Bug Reporting Format
-```markdown
-## APPLICATION BUG FIXED
-**File**: src/[filename].cpp:XXX
-**Test**: [test_name.py]
-**Issue**: [description]
-**Root Cause**: [Bitcoin v26.2 merge impact]
-**Fix Applied**: [code]
-**Impact**: [consequence if unfixed]
-**Testing**: [how verified]
-```
-
 
 ## DigiByte Unique Features
 
 ### Multi-Algorithm Mining
-DigiByte uses 5 mining algorithms:
-- SHA256D (0), Scrypt (1), Groestl (2), Skein (3), Qubit (4)
-- Odocrypt (7) - Activates at height 9,112,320
+- 5 algorithms: SHA256D (0), Scrypt (1), Groestl (2), Skein (3), Qubit (4)
+- Odocrypt (7) activates at height 9,112,320
 - Each targets 75-second block time (15s × 5 algos)
-
-### Critical Constants
-```cpp
-POW_TARGET_SPACING = 15; // 15 seconds
-MAX_MONEY = 21000000000 * COIN; // 21 billion DGB
-MAINNET_DEFAULT_PORT = 12024;
-TESTNET_DEFAULT_PORT = 12025;
-```
 
 ### Custom RPC Commands
 - `getblockreward` - Current block reward
@@ -116,13 +69,50 @@ TESTNET_DEFAULT_PORT = 12025;
 - Enhanced `getdifficulty` - All algorithm difficulties
 
 ### Dandelion++ Privacy
-**CRITICAL**: Always read doc/DANDELION_INFO.md before any Dandelion++ changes
 - Two-pool system: stempool (private) and mempool (public)
-- Transaction embargo and routing system
+- **CRITICAL**: Read doc/DANDELION_INFO.md before changes
 - Files: src/dandelion.cpp, src/stempool.h
 
-### Difficulty Adjustment
+### Difficulty Adjustment Evolution
 - DigiShield V1 (block 67,200)
 - MultiAlgo V2 (block 145,000)
 - MultiShield V3 (block 400,000)
 - DigiSpeed V4 (block 1,430,000)
+
+## Quick Debug Commands
+
+```bash
+# Check for Bitcoin constants that need updating
+grep -r "50.*BTC\|600.*seconds\|100.*blocks\|bcrt1" test/functional/
+
+# Compare with working v8.22.2
+diff digibyte-v8.22.2/test/functional/[test].py test/functional/[test].py
+
+# Run test with debug info
+./test/functional/[test].py --loglevel=debug --nocleanup
+
+# Check current failing tests
+python3 test/functional/test_runner.py --list-failing
+```
+
+## Common Test Fix Patterns
+
+1. **Block Rewards**: 50 → 72000
+2. **Block Time**: 600s → 15s  
+3. **Maturity**: 100 → 8 (or keep 100 for COINBASE_MATURITY_2)
+4. **Fees**: vB → KvB (multiply by 1000)
+5. **Address**: bcrt1 → dgbrt1
+
+For detailed patterns, see COMMON_FIXES.md
+
+## Important Notes
+
+- **Three-way comparison**: Always compare v8.26 ↔ v8.22.2 ↔ Bitcoin v26.2
+- **Test all variants**: --descriptors, --legacy-wallet, --usecli
+- **Document everything**: Update tracking files immediately
+- **Mock scrypt**: Currently using mock, causes PoW validation issues
+- **v2transport tests**: p2p_leak_tx.py --v2transport is disabled (causes hang) as v2transport is not supported in DigiByte
+
+---
+
+*For detailed test fix instructions, see the workflow documentation files listed above.*

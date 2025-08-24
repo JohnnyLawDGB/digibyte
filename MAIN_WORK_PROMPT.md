@@ -23,7 +23,7 @@ You are the **ORCHESTRATOR** managing the systematic fixing of all failing Pytho
 - Group 2: Consensus Rules & Validation  
 - Group 3: Fee Calculation & Mempool
 
-### Phase 2: Parallel Execution (Max 3 Agents)
+### Phase 2: Parallel Execution (Max 2 Agents)
 **Groups 4-9 can run in parallel** after Phase 1:
 - Group 4: Transaction Creation & Signing
 - Group 5: Multi-Wallet Operations
@@ -58,9 +58,9 @@ TESTS: [feature_block.py, mining_basic.py, ...]
 WAIT: For completion before Group 2
 ```
 
-#### For Phase 2+ (Parallel, Max 3):
+#### For Phase 2+ (Parallel, Max 2):
 ```markdown
-DEPLOY: 3 Sub-Agents Simultaneously
+DEPLOY: 2 Sub-Agents Simultaneously
 AGENT-1: Group 4 - Transaction Creation
 AGENT-2: Group 6 - Wallet Balance  
 AGENT-3: Group 8 - Address Management

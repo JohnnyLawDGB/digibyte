@@ -44,12 +44,11 @@ This file organizes the failing tests into logical work groups for systematic fi
 **Agent**: None
 **Progress**: 3/6 tests fixed
 ```
-1. feature_assumevalid.py ❌ FAILING
-2. feature_assumeutxo.py ❌ FAILING
-3. feature_bip68_sequence.py ❌ FAILING
-4. feature_cltv.py ✅ PASSING
-5. feature_csv_activation.py ✅ PASSING
-6. feature_dersig.py ✅ PASSING
+1. feature_assumeutxo.py ❌ FAILING
+2. feature_bip68_sequence.py ❌ FAILING
+3. feature_cltv.py ✅ PASSING
+4. feature_csv_activation.py ✅ PASSING
+5. feature_dersig.py ✅ PASSING
 ```
 
 ## Group 3: Fee Calculation & Estimation

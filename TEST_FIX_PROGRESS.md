@@ -67,11 +67,10 @@
 | mining_basic.py | 🟢 Fixed | Block version mismatch | Removed algorithm bits from expected version calculation |
 
 ### Group 2: Consensus Rules & Validation
-**Status**: ⚠️ Partial | **Agent**: None | **Progress**: 3/6 passing
+**Status**: ⚠️ Partial | **Agent**: None | **Progress**: 2/5 passing
 
 | Test | Status | Last Error | Fix Applied |
 |------|--------|------------|-------------|
-| feature_assumevalid.py | 🔴 Failed | AssertionError | - |
 | feature_assumeutxo.py | 🔴 Failed | TBD | - |
 | feature_bip68_sequence.py | 🔴 Failed | Sequence lock | - |
 | feature_cltv.py | 🟢 Passing | - | Already fixed |

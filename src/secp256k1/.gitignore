@@ -36,6 +36,13 @@ libtool
 *.o
 *~
 
+# Generated context files
+gen_context
+src/ecmult_static_context.h
+src/libsecp256k1-config.h
+src/libsecp256k1-config.h.in
+src/stamp-h1
+
 coverage/
 coverage.html
 coverage.*.html

@@ -179,7 +179,7 @@ BOOST_AUTO_TEST_CASE(test_assumeutxo)
     BOOST_CHECK_EQUAL(out110.hash_serialized.ToString(), "2da005f8e675e4c37ea7d7266d11d2d9c2485c095fff21692ef299fbba42f87c");
     BOOST_CHECK_EQUAL(out110.nChainTx, 111U);
 
-    const auto out110_2 = *params->AssumeutxoForBlockhash(uint256S("0x96ec8bc9d0a5db6b09635131f56c0ed24d48ae733585094c09a77e856ee1b05d"));
+    const auto out110_2 = *params->AssumeutxoForBlockhash(uint256S("0x56b2d1cd24ac6d9c74d3f06867eb2d1b1ca1d455f635dac3e1a450da96ed6374"));
     BOOST_CHECK_EQUAL(out110_2.hash_serialized.ToString(), "2da005f8e675e4c37ea7d7266d11d2d9c2485c095fff21692ef299fbba42f87c");
     BOOST_CHECK_EQUAL(out110_2.nChainTx, 111U);
 }

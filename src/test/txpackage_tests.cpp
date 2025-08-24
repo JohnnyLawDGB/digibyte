@@ -21,7 +21,8 @@ BOOST_AUTO_TEST_SUITE(txpackage_tests)
 // - More than 10000 * 0.15 = 1500 sats (relay minimum)
 // - Less than 50000 * 0.15 = 7500 sats (mempool minimum)
 // Using 3000 to provide a safe margin above relay minimum.
-static const CAmount low_fee_amt{3000};
+// DigiByte: Scale low_fee_amt by 100x to match DigiByte's fee structure (Bitcoin uses 200)
+static const CAmount low_fee_amt{20000};
 
 // Create placeholder transactions that have no meaning.
 inline CTransactionRef create_placeholder_tx(size_t num_inputs, size_t num_outputs)
@@ -397,8 +398,8 @@ BOOST_FIXTURE_TEST_CASE(package_witness_swap_tests, TestChain100Setup)
 {
     // Mine blocks to mature coinbases.
     mineBlocks(5);
-    // DigiByte: Use 5x the DEFAULT_INCREMENTAL_RELAY_FEE (10000) to match Bitcoin's ratio
-    MockMempoolMinFee(CFeeRate(50000));
+    // DigiByte: Use 5x the DEFAULT_MIN_RELAY_TX_FEE (100000) to match Bitcoin's ratio (5x their 1000)
+    MockMempoolMinFee(CFeeRate(500000));
     LOCK(cs_main);
 
     // Transactions with a same-txid-different-witness transaction in the mempool should be ignored,
@@ -669,8 +670,8 @@ BOOST_FIXTURE_TEST_CASE(package_witness_swap_tests, TestChain100Setup)
 BOOST_FIXTURE_TEST_CASE(package_cpfp_tests, TestChain100Setup)
 {
     mineBlocks(5);
-    // DigiByte: Use 5x the DEFAULT_INCREMENTAL_RELAY_FEE (10000) to match Bitcoin's ratio
-    MockMempoolMinFee(CFeeRate(50000));
+    // DigiByte: Use 5x the DEFAULT_MIN_RELAY_TX_FEE (100000) to match Bitcoin's ratio (5x their 1000)
+    MockMempoolMinFee(CFeeRate(500000));
     LOCK(::cs_main);
     size_t expected_pool_size = m_node.mempool->size();
     CKey child_key;
@@ -756,23 +757,24 @@ BOOST_FIXTURE_TEST_CASE(package_cpfp_tests, TestChain100Setup)
     }
 
     // Just because we allow low-fee parents doesn't mean we allow low-feerate packages.
-    // The mempool minimum feerate is 50sat/vB, but this package just pays too little overall.
+    // The mempool minimum feerate is 500000 sat/kvB (500 sat/vB), but this package just pays too little overall.
     // The child fees would be able to pay for itself, but isn't enough for the entire package.
     Package package_still_too_low;
-    // DigiByte: With mempool min of 50000 sat/kvB and actual sizes:
-    // - Parent: ~154 bytes, needs 7700 sats for mempool
-    // - Child: ~110 bytes, needs 5500 sats for mempool  
-    // - Package: ~264 bytes, needs 13200 sats for mempool
+    // DigiByte: With mempool min of 500000 sat/kvB and actual sizes:
+    // - Parent: ~154 bytes, needs 77000 sats for mempool (154 * 500000 / 1000)
+    // - Child: ~110 bytes, needs 55000 sats for mempool (110 * 500000 / 1000)
+    // - Package: ~264 bytes, needs 132000 sats for mempool (264 * 500000 / 1000)
     // We want child to meet minimum but package total to fail
-    const CAmount parent_fee{4000};   // Below mempool min for parent
-    const CAmount child_fee{6000};    // Above mempool min for child (5500)
-    // Total: 10000 sats < 13200 required for package
+    const CAmount parent_fee{40000};   // Below mempool min for parent (needs 77000)
+    const CAmount child_fee{60000};    // Above mempool min for child (needs 55000)
+    // Total: 100000 sats < 132000 required for package
     auto mtx_parent_cheap = CreateValidMempoolTransaction(/*input_transaction=*/m_coinbase_txns[1], /*input_vout=*/0,
                                                           /*input_height=*/0, /*input_signing_key=*/coinbaseKey,
                                                           /*output_destination=*/parent_spk,
                                                           /*output_amount=*/coinbase_value - parent_fee, /*submit=*/false);
     CTransactionRef tx_parent_cheap = MakeTransactionRef(mtx_parent_cheap);
     package_still_too_low.push_back(tx_parent_cheap);
+    
     BOOST_CHECK(m_node.mempool->GetMinFee().GetFee(GetVirtualTransactionSize(*tx_parent_cheap)) > parent_fee);
     BOOST_CHECK(m_node.mempool->m_min_relay_feerate.GetFee(GetVirtualTransactionSize(*tx_parent_cheap)) <= parent_fee);
 
@@ -782,6 +784,7 @@ BOOST_FIXTURE_TEST_CASE(package_cpfp_tests, TestChain100Setup)
                                                          /*output_amount=*/coinbase_value - parent_fee - child_fee, /*submit=*/false);
     CTransactionRef tx_child_cheap = MakeTransactionRef(mtx_child_cheap);
     package_still_too_low.push_back(tx_child_cheap);
+    
     BOOST_CHECK(m_node.mempool->GetMinFee().GetFee(GetVirtualTransactionSize(*tx_child_cheap)) <= child_fee);
     BOOST_CHECK(m_node.mempool->GetMinFee().GetFee(GetVirtualTransactionSize(*tx_parent_cheap) + GetVirtualTransactionSize(*tx_child_cheap)) > parent_fee + child_fee);
 

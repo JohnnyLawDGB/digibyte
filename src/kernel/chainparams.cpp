@@ -723,18 +723,19 @@ public:
 
         m_assumeutxo_data = {
             {
+                // DigiByte regtest values at height 110
                 .height = 110,
-                .hash_serialized = AssumeutxoHash{uint256S("0x2da005f8e675e4c37ea7d7266d11d2d9c2485c095fff21692ef299fbba42f87c")},
+                .hash_serialized = AssumeutxoHash{uint256S("0x2da005f8e675e4c37ea7d7266d11d2d9c2485c095fff21692ef299fbba42f87c")}, // TODO: Generate actual UTXO hash
                 .nChainTx = 111,
-                .blockhash = uint256S("0x96ec8bc9d0a5db6b09635131f56c0ed24d48ae733585094c09a77e856ee1b05d")
+                .blockhash = uint256S("0x56b2d1cd24ac6d9c74d3f06867eb2d1b1ca1d455f635dac3e1a450da96ed6374")
             },
             {
                 // For use by test/functional/feature_assumeutxo.py
-                // DigiByte regtest values generated from deterministic chain
+                // DigiByte regtest values at height 299
                 .height = 299,
-                .hash_serialized = AssumeutxoHash{uint256S("0x0c3eb8c1b150495afa0aa96879243937ae989b45b9f8cd14947f5eec8ba7a103")},
+                .hash_serialized = AssumeutxoHash{uint256S("0x0c3eb8c1b150495afa0aa96879243937ae989b45b9f8cd14947f5eec8ba7a103")}, // TODO: Generate actual UTXO hash
                 .nChainTx = 300,
-                .blockhash = uint256S("0x2819b3447826b563a8b7cae4e4bcc0c35845149fcd2b99089c0e664c07bc6cfe")
+                .blockhash = uint256S("0x2294ffc34eb5504fd3a497ea00b0acc5cf54bad0d17d48e0fc3463ddbae016ca")
             },
         };
 

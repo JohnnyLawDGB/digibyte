@@ -125,7 +125,7 @@ BASE_SCRIPTS = [
     'wallet_dump.py --legacy-wallet',
     'wallet_listtransactions.py --legacy-wallet',
     'wallet_listtransactions.py --descriptors',
-    'feature_taproot.py --previous_release',
+    'feature_taproot.py --previous-releases',
     'rpc_signer.py',
     'wallet_signer.py --descriptors',
     # vv Tests less than 60s vv

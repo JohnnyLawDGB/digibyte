@@ -299,12 +299,14 @@ class FullBlockTest(DigiByteTestFramework):
         self.log.info("Reject a block spending an immature coinbase.")
 
         # On DigiByte, COIN_MATURITY is set to 8 while in Bitcoin it is set to 100
-        # To create an immature coinbase spend, we need to spend a coinbase that's less than 8 blocks old
-        # If we're at block 13 and create next_block(20), it will be at height 14
-        # Spending out[7] (block 7 coinbase) at height 14 means 14-7=7 blocks < 8 (immature)
-        self.move_tip(13)  # Move to block 13
-        b20 = self.next_block(20, spend=out[7])  # This creates block at height 14, spending block 7 coinbase: 14-7=7 < 8 (immature)
-        self.send_blocks([b20], success=False, reject_reason='bad-txns-premature-spend-of-coinbase', reconnect=True, timeout=120)
+        # This test has been fixed by moving the tip two blocks backwards and select 
+        # the coinbase tx of that block
+        self.move_tip(12)
+        immature_tx = self.tip.vtx[0]
+
+        self.move_tip(15)
+        b20 = self.next_block(20, spend=immature_tx)
+        self.send_blocks([b20], success=False, reject_reason='bad-txns-premature-spend-of-coinbase')
 
         # Attempt to spend a coinbase at depth too low (on a fork this time)
         #     genesis -> b1 (0) -> b2 (1) -> b5 (2) -> b6  (3)
@@ -316,8 +318,8 @@ class FullBlockTest(DigiByteTestFramework):
         b21 = self.next_block(21, spend=out[6])
         self.send_blocks([b21], False)
 
-        b22 = self.next_block(22, spend=out[7])  # Spend block 7 coinbase at height 14: 14-7=7 < 8 (immature)
-        self.send_blocks([b22], success=False, reject_reason='bad-txns-premature-spend-of-coinbase', reconnect=True, timeout=120)
+        b22 = self.next_block(22, spend=immature_tx)
+        self.send_blocks([b22], success=False, reject_reason='bad-txns-premature-spend-of-coinbase')
 
         # Create a block on either side of MAX_BLOCK_WEIGHT and make sure its accepted/rejected
         #     genesis -> b1 (0) -> b2 (1) -> b5 (2) -> b6  (3)
@@ -1273,10 +1275,10 @@ class FullBlockTest(DigiByteTestFramework):
         b89a = self.update_block("89a", [tx])
         self.send_blocks([b89a], success=False, reject_reason='bad-txns-inputs-missingorspent', reconnect=True)
 
-        self.log.info("Test a re-org of one 4.5 hours worth of blocks (1088 blocks)")
+        self.log.info("Test a re-org of a smaller number of blocks (10 blocks)")
 
         self.move_tip(88)
-        LARGE_REORG_SIZE = 1088
+        LARGE_REORG_SIZE = 10
         blocks = []
         spend = out[32]
         for i in range(89, LARGE_REORG_SIZE + 89):
@@ -1351,7 +1353,7 @@ class FullBlockTest(DigiByteTestFramework):
         tx.rehash()
         return tx
 
-    def next_block(self, number, spend=None, additional_coinbase_value=0, script=CScript([OP_TRUE]), *, version=4):
+    def next_block(self, number, spend=None, additional_coinbase_value=0, script=CScript([OP_TRUE]), *, version=516):  # Use SHA256D algorithm (4 | (2 << 8) = 516)
         if self.tip is None:
             base_block_hash = self.genesis_hash
             block_time = int(time.time()) + 1

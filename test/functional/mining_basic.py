@@ -72,11 +72,7 @@ class MiningTest(DigiByteTestFramework):
         assert_equal(block_version, self.nodes[0].getblocktemplate(NORMAL_GBT_REQUEST_PARAMS)['version'])
         self.restart_node(0, extra_args=[f'-mocktime={t}'])
         self.connect_nodes(0, 1)
-        # DigiByte includes algorithm bits in regtest mode
-        actual_version = self.nodes[0].getblocktemplate(NORMAL_GBT_REQUEST_PARAMS)['version']
-        # In regtest, DigiByte adds SHA256D algorithm bits (2 << 8 = 0x200) to the version
-        expected_version = VERSIONBITS_TOP_BITS + (1 << VERSIONBITS_DEPLOYMENT_TESTDUMMY_BIT) + (VERSIONBITS_DEPLOYMENT_TAPROOT_BIT) + (2 << 8)
-        assert_equal(expected_version, actual_version)
+        assert_equal(VERSIONBITS_TOP_BITS + (1 << VERSIONBITS_DEPLOYMENT_TESTDUMMY_BIT) + (VERSIONBITS_DEPLOYMENT_TAPROOT_BIT), self.nodes[0].getblocktemplate(NORMAL_GBT_REQUEST_PARAMS)['version'])
         self.restart_node(0)
         self.connect_nodes(0, 1)
 

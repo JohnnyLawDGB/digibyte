@@ -326,6 +326,111 @@ tail -100 /tmp/test_runner_*/failing_test_*/node0/regtest/debug.log
 
 *This document is continuously updated as new patterns are discovered. Always check here before implementing a fix from scratch!*
 
+---
+
+## New Patterns Discovered
+
+### Pattern: Block Algorithm Issues
+**Symptoms:**
+- Tests hanging or timing out during block creation/solving
+- `high-hash` errors during block validation
+- Long delays in block acceptance
+
+**Root Cause:**
+DigiByte uses multi-algorithm mining (SHA256D, Scrypt, Groestl, Skein, Qubit, Odocrypt). Tests may default to Scrypt which has performance issues in mock environments.
+
+**Solution:**
+```python
+# Force SHA256D algorithm in block creation by setting version bits
+def next_block(self, number, spend=None, additional_coinbase_value=0, script=CScript([OP_TRUE]), *, version=516):
+    # 516 = 4 (base version) | (2 << 8) = 4 | 512 (SHA256D algorithm bits)
+```
+
+**Tests Affected:**
+- feature_block.py - Fixed by setting version=516
+- Any test that creates custom blocks
+
+**Verification:**
+Check that blocks have `nVersion=516` in debug logs instead of default `nVersion=4`.
+
+---
+
+### Pattern: Command Line Argument Mismatch  
+**Symptoms:**
+- `error: unrecognized arguments: --previous_release`
+- Test immediately exits with argument parsing error
+
+**Root Cause:**
+Inconsistent argument naming between test runner and test scripts (singular vs plural).
+
+**Solution:**
+```bash
+# In test_runner.py, fix argument name:
+# OLD:
+'feature_taproot.py --previous_release',
+# NEW:
+'feature_taproot.py --previous-releases',
+```
+
+**Tests Affected:**
+- feature_taproot.py --previous_release - Fixed in test_runner.py
+
+**Verification:**
+Run `python3 test/functional/feature_taproot.py --help` to see correct argument names.
+
+---
+
+### Pattern: Block Version Calculation Mismatch
+**Symptoms:**
+- `AssertionError: not(671089154 == 671088642)` or similar version comparison failures
+- Errors in mining or block template tests
+
+**Root Cause:**
+Test expectations for algorithm bits in block versions don't match actual node behavior in regtest mode.
+
+**Solution:**
+```python
+# Remove algorithm bits from expected version calculation:
+# OLD:
+expected_version = VERSIONBITS_TOP_BITS + (1 << VERSIONBITS_DEPLOYMENT_TESTDUMMY_BIT) + (VERSIONBITS_DEPLOYMENT_TAPROOT_BIT) + (2 << 8)
+# NEW:
+assert_equal(VERSIONBITS_TOP_BITS + (1 << VERSIONBITS_DEPLOYMENT_TESTDUMMY_BIT) + (VERSIONBITS_DEPLOYMENT_TAPROOT_BIT), self.nodes[0].getblocktemplate(NORMAL_GBT_REQUEST_PARAMS)['version'])
+```
+
+**Tests Affected:**
+- mining_basic.py - Fixed by removing algorithm bits from expected version
+
+**Verification:**
+The difference between expected and actual is typically 512 (2 << 8), which is the SHA256D algorithm bits.
+
+---
+
+### Pattern: Coinbase Maturity Timing Issues
+**Symptoms:**
+- Tests expecting immature coinbase rejection but getting acceptance
+- `AssertionError: [node 0] Expected messages "['bad-txns-premature-spend-of-coinbase']" does not partially match log`
+
+**Root Cause:**
+DigiByte has COINBASE_MATURITY = 8 blocks, but test logic may use incorrect block height calculations.
+
+**Solution:**
+```python
+# Use the v8.22.2 approach for immature coinbase testing:
+self.move_tip(12)
+immature_tx = self.tip.vtx[0]  # Get coinbase from block 12
+self.move_tip(15)  # Move to block 15
+b20 = self.next_block(20, spend=immature_tx)  # Creates block at height 16, spending block 12 coinbase: 16-12=4 < 8 (immature)
+```
+
+**Tests Affected:**
+- feature_block.py - Fixed immature coinbase spending logic
+
+**Verification:**
+Check that depth calculation correctly shows < 8 blocks between coinbase creation and spending attempt.
+
+---
+
 ## Update Log
 - **2025-08-24**: Initial patterns documented from previous fixes
+- **2025-08-24**: Added 4 new patterns from Group 1 test fixes
 - Sub-agents will add new patterns as discovered

@@ -2,12 +2,12 @@
 
 This file organizes the failing tests into logical work groups for systematic fixing. Each group contains related tests that share common issues and solutions.
 
-## Overall Status (2025-08-24)
-- **Total Tests**: 315
-- **Passing Tests**: 211
-- **Failed Tests**: 87 (including duplicates from tool output)
-- **Skipped Tests**: 17
-- **Groups**: 13 work groups organized by dependency
+## Overall Status (2025-08-25)
+- **Total Tests**: 312 (2 disabled for hanging)
+- **Passing Tests**: 212 (68%)
+- **Failed Tests**: 82 (26%)
+- **Disabled Tests**: 2 (feature_assumeutxo.py, feature_assumevalid.py - hanging)
+- **Groups**: 14 work groups (Group 14 added for improperly skipped tests)
 - **Strategy**: Phase 1 (Groups 1-3) sequential, then parallel
 
 ## Work Group Status Legend
@@ -24,47 +24,47 @@ This file organizes the failing tests into logical work groups for systematic fi
 ---
 
 ## Group 1: Core Block & Mining Operations
-**Status**: 🔴 Not Started
+**Status**: ⚠️ Partial - Regression detected
 **Priority**: CRITICAL (Phase 1) - Must fix first as other tests depend on these
 **Common Issues**: PoW validation (mock scrypt), block creation, subsidy calculation (72000 DGB), high-hash errors
-**Agent**: None
-**Progress**: 2/4 tests fixed
+**Agent**: Sub-Agent Group 1 (completed with issues)
+**Progress**: 3/5 tests passing
 ```
-1. feature_block.py ❌ FAILING
+1. feature_block.py ❌ FAILING (regression - immature coinbase test)
 2. feature_taproot.py ✅ PASSING
-3. feature_taproot.py --previous_release ❌ FAILING (unrecognized argument)
+3. feature_taproot.py --previous-releases ✅ PASSING
 4. p2p_compactblocks.py ✅ PASSING
-5. mining_basic.py ❌ FAILING
+5. mining_basic.py ✅ PASSING
 ```
 
 ## Group 2: Consensus Rules & Validation
-**Status**: 🔴 Not Started
+**Status**: ⚠️ Partial - 2 tests disabled for hanging
 **Priority**: CRITICAL (Phase 1) - Core consensus mechanisms
 **Common Issues**: Block validation, timing (15s blocks), maturity (8 blocks vs 100 blocks), COINBASE_MATURITY_2
-**Agent**: None
-**Progress**: 3/6 tests fixed
+**Agent**: Sub-Agent Group 2 (completed with blocks)
+**Progress**: 4/6 tests status
 ```
-1. feature_assumeutxo.py ❌ FAILING
-2. feature_assumevalid.py ❌ FAILING
-3. feature_bip68_sequence.py ❌ FAILING
+1. feature_assumeutxo.py 🚫 DISABLED (hanging - multi-algo PoW issue)
+2. feature_assumevalid.py 🚫 DISABLED (hanging - multi-algo PoW issue)
+3. feature_bip68_sequence.py ✅ PASSING
 4. feature_cltv.py ✅ PASSING
 5. feature_csv_activation.py ✅ PASSING
 6. feature_dersig.py ✅ PASSING
 ```
 
 ## Group 3: Fee Calculation & Estimation
-**Status**: 🔴 Not Started
+**Status**: ⚠️ Partial - Regression detected
 **Priority**: CRITICAL (Phase 1) - Many tests depend on correct fees
 **Common Issues**: KvB vs vB units, fee rate calculations, max-fee-exceeded errors
-**Agent**: None
-**Progress**: 1/6 tests fixed
+**Agent**: Sub-Agent Group 3 (completed with regressions)
+**Progress**: 1/5 tests passing
 ```
 1. feature_fee_estimation.py ✅ PASSING
-2. feature_fee_estimator.py ❌ FAILING
-3. feature_maxuploadtarget.py ❌ FAILING (max-fee-exceeded)
-4. wallet_bumpfee.py --descriptors ❌ FAILING (balance issue)
-5. wallet_bumpfee.py --legacy-wallet ❌ FAILING (balance issue)
-6. wallet_fee_estimation_test.py ❌ FAILING
+2. feature_fee_estimator.py ❌ FAILING (confirmation count issue)
+3. feature_maxuploadtarget.py ❓ Unknown (not in recent test run)
+4. wallet_bumpfee.py --descriptors ❌ FAILING (regression after fix attempt)
+5. wallet_bumpfee.py --legacy-wallet ❌ FAILING (regression after fix attempt)
+6. wallet_fee_estimation_test.py ❓ Unknown (not in recent test run)
 ```
 
 ## Group 4: Transaction Creation & PSBTs

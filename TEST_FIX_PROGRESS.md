@@ -1,12 +1,12 @@
 # DigiByte v8.26 Test Fix Progress Tracker
 
-**Last Updated**: 2025-08-25  
-**Total Tests**: 312 (excluded p2p_leak_tx.py --v2transport, feature_assumeutxo.py, feature_assumevalid.py)  
-**Tests Passing**: 246 (79%)
-**Tests Failing**: 48 (15%)
-**Tests Disabled**: 2 (feature_assumeutxo.py, feature_assumevalid.py - hanging issues)
-**Tests Fixed by Sub-Agents**: 43 (Groups 1, 2, 3, 6, 7, 8, 9, 10, 11, 12, 13)
-**Tests In Progress**: 0
+**Last Updated**: 2025-08-25 (Updated after full test run)  
+**Total Tests**: 312  
+**Tests Passing**: 230 (74%)
+**Tests Failing**: 65 (21%)
+**Tests Skipped**: 17 (5%)
+**Tests Fixed Today**: feature_maxuploadtarget.py (Bitcoin v26.2 approach)
+**Known Slow Tests**: feature_block.py (~20min - creates 1088 blocks for 4.5hr reorg test, correct for DigiByte)
 
 **Note**: 
 - p2p_leak_tx.py --v2transport permanently excluded (v2transport not supported)
@@ -16,11 +16,11 @@
 
 ### Phase 1: Critical Foundation (Sequential)
 ```
-[################    ] 86% Complete (14/16 tests passing)
+[############        ] 62% Complete (10/16 tests passing)
 ```
-- Group 1: Core Block & Mining - 5/5 tests passing (100%) ✅ COMPLETE
-- Group 2: Consensus Rules - 4/6 tests passing (67%) - 2 tests disabled (require app-level fixes)
-- Group 3: Fee Calculation - 5/6 tests passing (83%) ✅ COMPLETE (1 performance issue)
+- Group 1: Core Block & Mining - 4/5 tests passing (80%) - feature_block.py fails/times out
+- Group 2: Consensus Rules - 4/6 tests passing (67%) - 2 tests may need app-level fixes
+- Group 3: Fee Calculation - 2/6 tests passing (33%) - wallet_bumpfee tests need revisit
 
 ### Phase 2: Core Functionality (Parallel)
 ```
@@ -46,8 +46,9 @@
 
 | Time | Agent | Group | Action | Result |
 |------|-------|-------|--------|--------|
-| 20:48 | Sub-Agent Group 1 | Group 1 | Fixed all 3 failing tests | ✅ Complete 5/5 passing |
+| 20:48 | Sub-Agent Group 1 | Group 1 | Fixed tests | ⚠️ 4/5 passing, feature_block.py fails |
 | 23:10 | Sub-Agent Group 2 | Group 2 | Fixed feature_bip68_sequence.py | 🟢 1/3 assigned tests fixed |
+| 05:17 | Manual Fix | Group 3 | Fixed feature_maxuploadtarget.py | ✅ Uses Bitcoin v26.2 approach |
 | 23:10 | Sub-Agent Group 2 | Group 2 | Investigated assume* test hangs | 🔄 2/3 tests blocked - deeper investigation needed |
 | 23:50 | Sub-Agent Group 3 | Group 3 | Fixed 4/5 fee calculation tests | ✅ Complete 5/6 passing |
 | 01:28 | Sub-Agent Group 11 | Group 11 | Fixed interface_digibyte_cli.py for wallet variants | ✅ Complete 2/2 passing |

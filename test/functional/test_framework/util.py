@@ -537,13 +537,16 @@ def create_lots_of_big_transactions(mini_wallet, node, fee, tx_batch_size, txout
 
 
 def mine_large_block(test_framework, mini_wallet, node):
-    # DigiByte: With our constraint of ~10KB transactions (vs Bitcoin's 66KB),
-    # we need more transactions to approach the block limit
-    # 10KB * 90 transactions ≈ 900KB (close to 1MB limit)
+    # Generate transactions to create a large block for testing upload limits
+    # Bitcoin uses 14 transactions of ~66KB each for ~900KB blocks
+    # DigiByte's transactions are smaller, so we need more of them
+    # But for performance, we'll create a moderately large block
     txouts = gen_return_txouts()
-    # DigiByte: Use much smaller fee multiplier to avoid maxtxfee limits
-    fee = 2 * node.getnetworkinfo()["relayfee"]
-    create_lots_of_big_transactions(mini_wallet, node, fee, 14, txouts)
+    # Use a moderate fee multiplier that won't exceed maxtxfee (100 DGB)
+    fee = 10 * node.getnetworkinfo()["relayfee"]
+    # Create 30 transactions for a ~300KB block - enough to test functionality
+    # without causing timeouts
+    create_lots_of_big_transactions(mini_wallet, node, fee, 30, txouts)
     test_framework.generate(node, 1)
 
 

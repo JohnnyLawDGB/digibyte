@@ -232,7 +232,7 @@ feature_notifications.py
 ```
 
 ## Group 14: Wallet Lists & History (8 tests)
-**Status**: 🔴 Not Started
+**Status**: ✅ Complete
 **Common Issues**: Transaction history, received amounts
 ```
 wallet_listreceivedby.py --descriptors

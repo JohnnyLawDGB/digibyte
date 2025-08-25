@@ -519,6 +519,46 @@ Test should proceed past transaction creation without `max-fee-exceeded` errors.
 
 ---
 
+## New Patterns Discovered by Group 12 Sub-Agent
+
+### Pattern: Bitcoin Private Keys and Addresses in SegWit Tests  
+**Symptoms:**
+- `Invalid private key encoding (-5)` when importing private keys
+- Test fails early during key import phase
+
+**Root Cause:**
+Bitcoin v26.2 merge introduced Bitcoin-format private keys and addresses that are incompatible with DigiByte's address/key encoding.
+
+**Solution:**
+```python
+# Replace Bitcoin keys/addresses with DigiByte equivalents from v8.22.2:
+# OLD (Bitcoin format):
+pubkeys = [
+    "0363D44AABD0F1699138239DF2F042C3282C0671CC7A76826A55C8203D90E39242",  # cPiM8Ub4...
+    # ... more Bitcoin keys
+]
+self.nodes[0].importprivkey("92e6XLo5jVAVwrQKPNTs93oQco8f8sDNBcpv73Dsrs397fQtFQn")
+uncompressed_spendable_address = ["mvozP4UwyGD2mGZU4D2eMvMLPB9WkMmMQu"]
+
+# NEW (DigiByte format):  
+pubkeys = [
+    "034e05dace5bcaf1d2ac67143bd071d4e040e5777663797310d2a3949ff15d9d4b",  # edSdzE6z...
+    # ... more DigiByte keys
+]
+self.nodes[0].importprivkey("9WpZT7sXr6Zy6183PR89rxVzKbXrBSuDMfUDVVfErSwabyoJEa9")
+uncompressed_spendable_address = ["su9fCxU4iXjMgLe1Yx63jJs6WEJXeNvzv4"]
+```
+
+**Tests Affected:**
+- feature_segwit.py --legacy-wallet - Fixed by replacing all Bitcoin keys with DigiByte equivalents
+- feature_segwit.py --descriptors - Same fixes apply
+- Any test with hardcoded Bitcoin private keys or addresses
+
+**Verification:**
+All test variants should pass without private key encoding errors.
+
+---
+
 ### Pattern: Bitcoin Fee Rates in RBF/Bumpfee Tests
 **Symptoms:**
 - `Insufficient total fee X, must be at least Y (oldFee Z + incrementalFee W) (-8)`
@@ -620,9 +660,41 @@ Transactions should be accepted into mempool without "min relay fee not met" err
 
 ---
 
+### Pattern: Interface Test Wallet Variant Support
+**Symptoms:**
+- `error: unrecognized arguments: --descriptors` or `error: unrecognized arguments: --legacy-wallet`
+- Interface tests listed in test_runner.py with wallet variants but test doesn't support them
+
+**Root Cause:**
+Some interface tests (like interface_digibyte_cli.py) test CLI wallet functionality but don't have built-in support for wallet type variants expected by test_runner.py.
+
+**Solution:**
+```python
+# Add wallet variant support to interface tests
+class TestDigiByteCli(DigiByteTestFramework):
+    def add_options(self, parser):
+        self.add_wallet_options(parser)
+        
+    def set_test_params(self):
+        # existing setup code
+        if self.is_specified_wallet_compiled():
+            self.requires_wallet = True
+```
+
+**Tests Affected:**
+- interface_digibyte_cli.py --descriptors - Fixed by adding wallet variant support
+- interface_digibyte_cli.py --legacy-wallet - Same fix
+
+**Verification:**
+Both variants should run without argument parsing errors and complete successfully.
+
+---
+
 ## Update Log
 - **2025-08-24**: Initial patterns documented from previous fixes
 - **2025-08-24**: Added 4 new patterns from Group 1 test fixes
 - **2025-08-24**: Added 2 new patterns from Group 2 test fixes  
 - **2025-08-24**: Added 4 new patterns from Group 3 fee calculation fixes
+- **2025-08-25**: Added 1 new pattern from Group 11 interface test fix
+- **2025-08-25**: Added 1 new pattern from Group 12 SegWit key conversion fix
 - Sub-agents will add new patterns as discovered

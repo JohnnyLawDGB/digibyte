@@ -511,11 +511,14 @@ def find_output(node, txid, amount, *, blockhash=None):
 # to make it large (helper for constructing large transactions). The
 # total serialized size of the txouts is about 66k vbytes.
 def gen_return_txouts():
-    # For DigiByte mempool tests, we'll return an empty list since 
-    # DigiByte's restrictions make it difficult to create large transactions
-    # with OP_RETURN outputs. The test will still work with regular-sized
-    # transactions, just need more of them to fill the mempool.
-    return []
+    from .messages import CTxOut
+    from .script import CScript, OP_RETURN
+    # Bitcoin creates one 67KB OP_RETURN output
+    # DigiByte has a default limit of 83 bytes, but tests set -datacarriersize=100000
+    # So we can create large OP_RETURN outputs for testing
+    txouts = [CTxOut(nValue=0, scriptPubKey=CScript([OP_RETURN, b'\x01'*67437]))]
+    assert_equal(sum([len(txout.serialize()) for txout in txouts]), 67456)
+    return txouts
 
 
 # Create a spend of each passed-in utxo, splicing in "txouts" to each raw
@@ -537,16 +540,17 @@ def create_lots_of_big_transactions(mini_wallet, node, fee, tx_batch_size, txout
 
 
 def mine_large_block(test_framework, mini_wallet, node):
-    # Generate transactions to create a large block for testing upload limits
-    # Bitcoin uses 14 transactions of ~66KB each for ~900KB blocks
-    # DigiByte's transactions are smaller, so we need more of them
-    # But for performance, we'll create a moderately large block
+    # generate a 66k transaction,
+    # and 14 of them is close to the 1MB block limit
     txouts = gen_return_txouts()
-    # Use a moderate fee multiplier that won't exceed maxtxfee (100 DGB)
-    fee = 10 * node.getnetworkinfo()["relayfee"]
-    # Create 30 transactions for a ~300KB block - enough to test functionality
-    # without causing timeouts
-    create_lots_of_big_transactions(mini_wallet, node, fee, 30, txouts)
+    # DigiByte: Calculate fee for 67KB transaction
+    # DigiByte uses KvB (1000 vbytes), and the transaction is about 67KB
+    # Default relay fee is 0.001 DGB/kB, so for 67KB we need at least 0.067 DGB
+    # Use 10x multiplier for priority, which gives ~0.67 DGB per transaction
+    relay_fee = node.getnetworkinfo()["relayfee"]  # This is per kB
+    tx_size_kb = 68  # Round up to 68KB for safety
+    fee = tx_size_kb * relay_fee * 10  # 10x multiplier for priority
+    create_lots_of_big_transactions(mini_wallet, node, fee, 14, txouts)
     test_framework.generate(node, 1)
 
 

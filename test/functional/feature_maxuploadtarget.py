@@ -60,9 +60,8 @@ class MaxUploadTest(DigiByteTestFramework):
         self.nodes[0].setmocktime(old_time)
 
         # Generate some old blocks
-        # Need enough UTXOs for creating large blocks (30 txs per block * 2 blocks = 60 UTXOs)
         self.wallet = MiniWallet(self.nodes[0])
-        self.generate(self.wallet, 100)
+        self.generate(self.wallet, 130)
 
         # p2p_conns[0] will only request old blocks
         # p2p_conns[1] will only request new blocks
@@ -103,9 +102,8 @@ class MaxUploadTest(DigiByteTestFramework):
 
         # 576MB will be reserved for relaying new blocks, so expect this to
         # succeed for ~235 tries.
-        # DigiByte: With smaller blocks, we need to limit iterations to prevent timeout
-        # Test the functionality with a reasonable number of iterations
-        success_count = min(success_count, 50)
+        # DigiByte: With ~900KB blocks from Bitcoin v26.2 approach, we need ~260 iterations
+        # to hit the 224MB limit. Use actual calculated count.
         
         for i in range(success_count):
             p2p_conns[0].send_and_ping(getdata_request)

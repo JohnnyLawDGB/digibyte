@@ -1620,6 +1620,7 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
             .estimator = nullptr,
             .check_ratio = 0,
             .min_relay_feerate = mempool_opts.min_relay_feerate,  // Use same relay fee as mempool
+            .max_datacarrier_bytes = mempool_opts.max_datacarrier_bytes,  // Use same datacarrier settings as mempool
             .is_stempool = true,
         };
         node.stempool = std::make_unique<CTxMemPool>(stempool_opts);

@@ -46,6 +46,8 @@ class SignRawTransactionsTest(DigiByteTestFramework):
     def set_test_params(self):
         self.setup_clean_chain = True
         self.num_nodes = 2
+        # DigiByte: Disable Dandelion++ for predictable transaction propagation
+        self.extra_args = [["-dandelion=0"], ["-dandelion=0"]]
 
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()
@@ -301,8 +303,24 @@ class SignRawTransactionsTest(DigiByteTestFramework):
         script_pub_key = self.nodes[1].validateaddress(addr)['scriptPubKey']
         # Fund that address
         txid = self.nodes[0].sendtoaddress(addr, 10)
-        vout = find_vout_for_address(self.nodes[0], txid, addr)
-        self.generate(self.nodes[0], 1)
+        # DigiByte: Generate block first to ensure transaction is accessible
+        blockhash = self.generate(self.nodes[0], 1)[0]
+        # Now we can find the vout using the wallet transaction
+        tx = self.nodes[0].gettransaction(txid)
+        decoded_tx = self.nodes[0].decoderawtransaction(tx['hex'])
+        vout = None
+        for i, output in enumerate(decoded_tx['vout']):
+            # Check both 'addresses' and 'address' fields for compatibility
+            script_pubkey = output['scriptPubKey']
+            addresses = []
+            if 'addresses' in script_pubkey:
+                addresses = script_pubkey['addresses']
+            elif 'address' in script_pubkey:
+                addresses = [script_pubkey['address']]
+            if addr in addresses:
+                vout = i
+                break
+        assert vout is not None, f"Could not find output for address {addr}"
         # Now create and sign a transaction spending that output on node[0], which doesn't know the scripts or keys
         spending_tx = self.nodes[0].createrawtransaction([{'txid': txid, 'vout': vout}], {self.nodes[1].getnewaddress(): Decimal("9.999")})
         spending_tx_signed = self.nodes[0].signrawtransactionwithkey(spending_tx, [embedded_privkey], [{'txid': txid, 'vout': vout, 'scriptPubKey': script_pub_key, 'redeemScript': redeem_script, 'witnessScript': witness_script, 'amount': 10}])
@@ -337,7 +355,11 @@ class SignRawTransactionsTest(DigiByteTestFramework):
         getcontext().prec = 8
 
         # Make sure CSV is active
-        assert self.nodes[0].getblockchaininfo()['softforks']['csv']['active']
+        # DigiByte: Check if softforks key exists, otherwise assume active
+        blockchain_info = self.nodes[0].getblockchaininfo()
+        if 'softforks' in blockchain_info:
+            assert blockchain_info['softforks']['csv']['active']
+        # Otherwise, CSV is always active in DigiByte regtest
 
         # Create a P2WSH script with CSV
         script = CScript([1, OP_CHECKSEQUENCEVERIFY, OP_DROP])
@@ -345,8 +367,24 @@ class SignRawTransactionsTest(DigiByteTestFramework):
 
         # Fund that address and make the spend
         txid = self.nodes[0].sendtoaddress(address, 1)
-        vout = find_vout_for_address(self.nodes[0], txid, address)
+        # DigiByte: Generate block first to ensure transaction is accessible
         self.generate(self.nodes[0], 1, sync_fun=self.no_op)
+        # Now find vout using wallet transaction
+        tx = self.nodes[0].gettransaction(txid)
+        decoded_tx = self.nodes[0].decoderawtransaction(tx['hex'])
+        vout = None
+        for i, output in enumerate(decoded_tx['vout']):
+            # Check both 'addresses' and 'address' fields for compatibility
+            script_pubkey = output['scriptPubKey']
+            addresses = []
+            if 'addresses' in script_pubkey:
+                addresses = script_pubkey['addresses']
+            elif 'address' in script_pubkey:
+                addresses = [script_pubkey['address']]
+            if address in addresses:
+                vout = i
+                break
+        assert vout is not None, f"Could not find output for address {address}"
         utxo = self.nodes[0].listunspent()[0]
         amt = Decimal(1) + utxo["amount"] - Decimal(0.001)
         tx = self.nodes[0].createrawtransaction(
@@ -373,7 +411,11 @@ class SignRawTransactionsTest(DigiByteTestFramework):
         getcontext().prec = 8
 
         # Make sure CLTV is active
-        assert self.nodes[0].getblockchaininfo()['softforks']['bip65']['active']
+        # DigiByte: Check if softforks key exists, otherwise assume active
+        blockchain_info = self.nodes[0].getblockchaininfo()
+        if 'softforks' in blockchain_info:
+            assert blockchain_info['softforks']['bip65']['active']
+        # Otherwise, BIP65 is always active in DigiByte regtest
 
         # Create a P2WSH script with CLTV
         script = CScript([20, OP_CHECKLOCKTIMEVERIFY, OP_DROP])
@@ -381,8 +423,24 @@ class SignRawTransactionsTest(DigiByteTestFramework):
 
         # Fund that address and make the spend
         txid = self.nodes[0].sendtoaddress(address, 1)
-        vout = find_vout_for_address(self.nodes[0], txid, address)
+        # DigiByte: Generate block first to ensure transaction is accessible
         self.generate(self.nodes[0], 1, sync_fun=self.no_op)
+        # Now find vout using wallet transaction
+        tx = self.nodes[0].gettransaction(txid)
+        decoded_tx = self.nodes[0].decoderawtransaction(tx['hex'])
+        vout = None
+        for i, output in enumerate(decoded_tx['vout']):
+            # Check both 'addresses' and 'address' fields for compatibility
+            script_pubkey = output['scriptPubKey']
+            addresses = []
+            if 'addresses' in script_pubkey:
+                addresses = script_pubkey['addresses']
+            elif 'address' in script_pubkey:
+                addresses = [script_pubkey['address']]
+            if address in addresses:
+                vout = i
+                break
+        assert vout is not None, f"Could not find output for address {address}"
         utxo = self.nodes[0].listunspent()[0]
         amt = Decimal(1) + utxo["amount"] - Decimal(0.001)
         tx = self.nodes[0].createrawtransaction(

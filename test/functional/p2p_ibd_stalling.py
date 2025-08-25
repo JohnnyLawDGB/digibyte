@@ -50,9 +50,6 @@ class P2PIBDStallingTest(DigiByteTestFramework):
         self.num_nodes = 1
 
     def run_test(self):
-        # DigiByte has BLOCK_DOWNLOAD_WINDOW = 4096, but testing with full window takes too long
-        # Instead, we'll test the core stalling logic by using a smaller number that still
-        # exercises the network behavior, even if it doesn't hit the exact stalling threshold
         NUM_BLOCKS = 1025
         NUM_PEERS = 4
         node = self.nodes[0]
@@ -83,8 +80,7 @@ class P2PIBDStallingTest(DigiByteTestFramework):
 
         # Need to wait until 1023 blocks are received - the magic total bytes number is a workaround in lack of an rpc
         # returning the number of downloaded (but not connected) blocks.
-        # DigiByte: Adjusted byte count based on actual observed values
-        self.wait_until(lambda: self.total_bytes_recv_for_blocks() >= 80000)
+        self.wait_until(lambda: self.total_bytes_recv_for_blocks() == 172761)
 
         self.all_sync_send_with_ping(peers)
         # If there was a peer marked for stalling, it would get disconnected
@@ -95,21 +91,52 @@ class P2PIBDStallingTest(DigiByteTestFramework):
 
         self.log.info("Check that increasing the window beyond 1024 blocks triggers stalling logic")
         headers_message.headers = [CBlockHeader(b) for b in blocks]
-        # NOTE: DigiByte has BLOCK_DOWNLOAD_WINDOW = 4096 vs Bitcoin's 1024
-        # So stalling won't trigger with just 1025 blocks. Test adjusted for DigiByte.
-        # with node.assert_debug_log(expected_msgs=['Stall started']):
-        for p in peers:
-            p.send_message(headers_message)
+        with node.assert_debug_log(expected_msgs=['Stall started']):
+            for p in peers:
+                p.send_message(headers_message)
+            self.all_sync_send_with_ping(peers)
+
+        self.log.info("Check that the stalling peer is disconnected after 2 seconds")
+        self.mocktime += 3
+        node.setmocktime(self.mocktime)
+        peers[0].wait_for_disconnect()
+        assert_equal(node.num_test_p2p_connections(), NUM_PEERS - 1)
+        self.wait_until(lambda: self.is_block_requested(peers, stall_block))
+        # Make sure that SendMessages() is invoked, which assigns the missing block
+        # to another peer and starts the stalling logic for them
         self.all_sync_send_with_ping(peers)
 
-        # NOTE: For DigiByte, the stalling logic doesn't trigger with 1025 blocks since
-        # BLOCK_DOWNLOAD_WINDOW = 4096. The test has been adapted to just verify
-        # basic block download functionality rather than the full stalling behavior.
-        
-        self.log.info("Provide the withheld block so download can complete")
-        for p in peers:
-            if p.is_connected and (stall_block in p.getdata_requests):
-                p.send_message(msg_block(block_dict[stall_block]))
+        self.log.info("Check that the stalling timeout gets doubled to 4 seconds for the next staller")
+        # No disconnect after just 3 seconds
+        self.mocktime += 3
+        node.setmocktime(self.mocktime)
+        self.all_sync_send_with_ping(peers)
+        assert_equal(node.num_test_p2p_connections(), NUM_PEERS - 1)
+
+        self.mocktime += 2
+        node.setmocktime(self.mocktime)
+        self.wait_until(lambda: sum(x.is_connected for x in node.p2ps) == NUM_PEERS - 2)
+        self.wait_until(lambda: self.is_block_requested(peers, stall_block))
+        self.all_sync_send_with_ping(peers)
+
+        self.log.info("Check that the stalling timeout gets doubled to 8 seconds for the next staller")
+        # No disconnect after just 7 seconds
+        self.mocktime += 7
+        node.setmocktime(self.mocktime)
+        self.all_sync_send_with_ping(peers)
+        assert_equal(node.num_test_p2p_connections(), NUM_PEERS - 2)
+
+        self.mocktime += 2
+        node.setmocktime(self.mocktime)
+        self.wait_until(lambda: sum(x.is_connected for x in node.p2ps) == NUM_PEERS - 3)
+        self.wait_until(lambda: self.is_block_requested(peers, stall_block))
+        self.all_sync_send_with_ping(peers)
+
+        self.log.info("Provide the withheld block and check that stalling timeout gets reduced back to 2 seconds")
+        with node.assert_debug_log(expected_msgs=['Decreased stalling timeout to 2 seconds']):
+            for p in peers:
+                if p.is_connected and (stall_block in p.getdata_requests):
+                    p.send_message(msg_block(block_dict[stall_block]))
 
         self.log.info("Check that all outstanding blocks get connected")
         self.wait_until(lambda: node.getblockcount() == NUM_BLOCKS)

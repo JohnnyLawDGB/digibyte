@@ -35,7 +35,6 @@ from test_framework.blocktools import (
     create_block,
     create_coinbase,
 )
-
 from test_framework.messages import (
     CBlockHeader,
     COutPoint,
@@ -55,10 +54,6 @@ from test_framework.util import assert_equal
 from test_framework.wallet_util import generate_keypair
 
 
-from time import sleep
-
-COINBASE_MATURITY_2 = 100
-
 class BaseNode(P2PInterface):
     def send_header_for_blocks(self, new_blocks):
         headers_message = msg_headers()
@@ -70,14 +65,14 @@ class AssumeValidTest(DigiByteTestFramework):
     def set_test_params(self):
         self.setup_clean_chain = True
         self.num_nodes = 3
-        self.rpc_timeout = 300
+        self.rpc_timeout = 120
 
     def setup_network(self):
         self.add_nodes(3)
         # Start node0. We don't start the other nodes yet since
         # we need to pre-mine a block with an invalid transaction
         # signature so we can pass in the block hash as assumevalid.
-        self.start_node(0, extra_args=['-easypow', '-dandelion=0'])
+        self.start_node(0)
 
     def send_blocks_until_disconnected(self, p2p_conn):
         """Keep sending blocks to the node until we're disconnected."""
@@ -112,7 +107,7 @@ class AssumeValidTest(DigiByteTestFramework):
         height += 1
 
         # Bury the block 100 deep so the coinbase output is spendable
-        for _ in range(COINBASE_MATURITY_2):
+        for _ in range(100):
             block = create_block(self.tip, create_coinbase(height), self.block_time)
             block.solve()
             self.blocks.append(block)
@@ -144,8 +139,8 @@ class AssumeValidTest(DigiByteTestFramework):
             height += 1
 
         # Start node1 and node2 with assumevalid so they accept a block with a bad signature.
-        self.start_node(1, extra_args=["-easypow", "-dandelion=0", "-assumevalid=" + hex(block102.sha256)])
-        self.start_node(2, extra_args=["-easypow", "-dandelion=0"]) #, "-assumevalid=" + hex(block102.sha256)])
+        self.start_node(1, extra_args=["-assumevalid=" + hex(block102.sha256)])
+        self.start_node(2, extra_args=["-assumevalid=" + hex(block102.sha256)])
 
         p2p0 = self.nodes[0].add_p2p_connection(BaseNode())
         p2p0.send_header_for_blocks(self.blocks[0:2000])
@@ -153,8 +148,8 @@ class AssumeValidTest(DigiByteTestFramework):
 
         # Send blocks to node0. Block 102 will be rejected.
         self.send_blocks_until_disconnected(p2p0)
-        self.wait_until(lambda: self.nodes[0].getblockcount() >= COINBASE_MATURITY_2 + 1)
-        assert_equal(self.nodes[0].getblockcount(), COINBASE_MATURITY_2 + 1)
+        self.wait_until(lambda: self.nodes[0].getblockcount() >= COINBASE_MATURITY + 1)
+        assert_equal(self.nodes[0].getblockcount(), COINBASE_MATURITY + 1)
 
         p2p1 = self.nodes[1].add_p2p_connection(BaseNode())
         p2p1.send_header_for_blocks(self.blocks[0:2000])
@@ -164,20 +159,16 @@ class AssumeValidTest(DigiByteTestFramework):
         for i in range(2202):
             p2p1.send_message(msg_block(self.blocks[i]))
         # Syncing 2200 blocks can take a while on slow systems. Give it plenty of time to sync.
-        # DigiByte: Skip ping sync due to connection issues, just wait for blocks
-        self.wait_until(lambda: self.nodes[1].getblockcount() >= 2202, timeout=600)
+        p2p1.sync_with_ping(960)
         assert_equal(self.nodes[1].getblock(self.nodes[1].getbestblockhash())['height'], 2202)
 
         p2p2 = self.nodes[2].add_p2p_connection(BaseNode())
         p2p2.send_header_for_blocks(self.blocks[0:200])
 
         # Send blocks to node2. Block 102 will be rejected.
-        # Yoshi: Bitcoin developers must have made a mistake here. Assumevalid was given as an argument
-        #        in start_node(2, ...) so why should it reject block 102.
-        #        Commented out the parameters.
         self.send_blocks_until_disconnected(p2p2)
-        self.wait_until(lambda: self.nodes[2].getblockcount() >= COINBASE_MATURITY_2 + 1)
-        assert_equal(self.nodes[2].getblockcount(), COINBASE_MATURITY_2 + 1)
+        self.wait_until(lambda: self.nodes[2].getblockcount() >= COINBASE_MATURITY + 1)
+        assert_equal(self.nodes[2].getblockcount(), COINBASE_MATURITY + 1)
 
 
 if __name__ == '__main__':

@@ -27,18 +27,11 @@ class ReorgsRestoreTest(DigiByteTestFramework):
 
     def set_test_params(self):
         self.num_nodes = 3
-        # Disable Dandelion++ to ensure immediate transaction propagation
-        self.extra_args = [["-dandelion=0"]] * self.num_nodes
 
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()
 
     def run_test(self):
-        # Generate initial blocks to fund the wallet
-        from test_framework.blocktools import COINBASE_MATURITY_2
-        self.generate(self.nodes[0], COINBASE_MATURITY_2 + 1)
-        self.sync_blocks()
-        
         # Send a tx from which to conflict outputs later
         txid_conflict_from = self.nodes[0].sendtoaddress(self.nodes[0].getnewaddress(), Decimal("10"))
         self.generate(self.nodes[0], 1)
@@ -64,10 +57,8 @@ class ReorgsRestoreTest(DigiByteTestFramework):
         outputs_2 = {}
 
         # Create a conflicted tx broadcast on node0 chain and conflicting tx broadcast on node1 chain. Both spend from txid_conflict_from
-        # DigiByte needs higher fees (0.001 DGB/kB minimum, transaction is ~200 bytes = 0.2 kB)
-        # Using 0.01 DGB fee to be safe
-        outputs_1[self.nodes[0].getnewaddress()] = Decimal("9.99")
-        outputs_2[self.nodes[0].getnewaddress()] = Decimal("9.99")
+        outputs_1[self.nodes[0].getnewaddress()] = Decimal("9.99998")
+        outputs_2[self.nodes[0].getnewaddress()] = Decimal("9.99998")
         conflicted = self.nodes[0].signrawtransactionwithwallet(self.nodes[0].createrawtransaction(inputs, outputs_1))
         conflicting = self.nodes[0].signrawtransactionwithwallet(self.nodes[0].createrawtransaction(inputs, outputs_2))
 

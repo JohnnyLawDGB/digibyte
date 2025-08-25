@@ -36,7 +36,6 @@ class SendallTest(DigiByteTestFramework):
         getcontext().prec=10
         self.num_nodes = 1
         self.setup_clean_chain = True
-        self.extra_args = [["-dandelion=0"]]
 
     def assert_balance_swept_completely(self, tx, balance):
         output_sum = sum([o["value"] for o in tx["decoded"]["vout"]])
@@ -165,7 +164,7 @@ class SendallTest(DigiByteTestFramework):
         assert_raises_rpc_error(-6, "Dynamically assigned remainder results in dust output.", self.wallet.sendall,
                 [{self.recipient: pre_sendall_balance - fee}, self.remainder_target])
         assert_raises_rpc_error(-6, "Dynamically assigned remainder results in dust output.", self.wallet.sendall,
-                [{self.recipient: pre_sendall_balance - fee - Decimal(0.00000001)}, self.remainder_target])
+                [{self.recipient: pre_sendall_balance - fee - Decimal(0.00000010)}, self.remainder_target])
 
     # @cleanup not needed because different wallet used
     def sendall_negative_effective_value(self):
@@ -174,29 +173,29 @@ class SendallTest(DigiByteTestFramework):
         self.nodes[0].createwallet("dustwallet")
         dust_wallet = self.nodes[0].get_wallet_rpc("dustwallet")
 
-        self.def_wallet.sendtoaddress(dust_wallet.getnewaddress(), 0.004)
-        self.def_wallet.sendtoaddress(dust_wallet.getnewaddress(), 0.003)
+        self.def_wallet.sendtoaddress(dust_wallet.getnewaddress(), 0.00000400)
+        self.def_wallet.sendtoaddress(dust_wallet.getnewaddress(), 0.00000300)
         self.generate(self.nodes[0], 1)
         assert_greater_than(dust_wallet.getbalances()["mine"]["trusted"], 0)
 
         assert_raises_rpc_error(-6, "Total value of UTXO pool too low to pay for transaction."
                 + " Try using lower feerate or excluding uneconomic UTXOs with 'send_max' option.",
-                dust_wallet.sendall, recipients=[self.remainder_target], fee_rate=30000)
+                dust_wallet.sendall, recipients=[self.remainder_target], fee_rate=300)
 
         dust_wallet.unloadwallet()
 
     @cleanup
     def sendall_with_send_max(self):
         self.log.info("Check that `send_max` option causes negative value UTXOs to be left behind")
-        self.add_utxos([0.004, 0.003, 1])
+        self.add_utxos([0.00000400, 0.00000300, 1])
 
         # sendall with send_max
-        sendall_tx_receipt = self.wallet.sendall(recipients=[self.remainder_target], fee_rate=30000, send_max=True)
+        sendall_tx_receipt = self.wallet.sendall(recipients=[self.remainder_target], fee_rate=300, send_max=True)
         tx_from_wallet = self.wallet.gettransaction(txid = sendall_tx_receipt["txid"], verbose = True)
 
         assert_equal(len(tx_from_wallet["decoded"]["vin"]), 1)
         self.assert_tx_has_outputs(tx_from_wallet, [{"address": self.remainder_target, "value": 1 + tx_from_wallet["fee"]}])
-        assert_equal(self.wallet.getbalances()["mine"]["trusted"], Decimal("0.007"))
+        assert_equal(self.wallet.getbalances()["mine"]["trusted"], Decimal("0.00000700"))
 
         self.def_wallet.sendtoaddress(self.wallet.getnewaddress(), 1)
         self.generate(self.nodes[0], 1)
@@ -273,24 +272,23 @@ class SendallTest(DigiByteTestFramework):
             recipients=[self.remainder_target],
             inputs=[utxo], send_max=True)
 
-    # NOTE: Commenting out high fee test - DigiByte has different maxtxfee defaults
-    # @cleanup
-    # def sendall_fails_on_high_fee(self):
-    #     self.log.info("Test sendall fails if the transaction fee exceeds the maxtxfee")
-    #     self.add_utxos([21])
+    @cleanup
+    def sendall_fails_on_high_fee(self):
+        self.log.info("Test sendall fails if the transaction fee exceeds the maxtxfee")
+        self.add_utxos([21])
 
-    #     assert_raises_rpc_error(
-    #             -4,
-    #             "Fee exceeds maximum configured by user",
-    #             self.wallet.sendall,
-    #             recipients=[self.remainder_target],
-    #             fee_rate=10000000)
+        assert_raises_rpc_error(
+                -4,
+                "Fee exceeds maximum configured by user",
+                self.wallet.sendall,
+                recipients=[self.remainder_target],
+                fee_rate=100000)
 
     @cleanup
     def sendall_fails_on_low_fee(self):
         self.log.info("Test sendall fails if the transaction fee is lower than the minimum fee rate setting")
-        assert_raises_rpc_error(-8, "Fee rate (9999.900 sat/vB) is lower than the minimum fee rate setting (10000.000 sat/vB)",
-        self.wallet.sendall, recipients=[self.recipient], fee_rate=9999.9)
+        assert_raises_rpc_error(-8, "Fee rate (0.999 sat/vB) is lower than the minimum fee rate setting (1.000 sat/vB)",
+        self.wallet.sendall, recipients=[self.recipient], fee_rate=0.999)
 
     @cleanup
     def sendall_watchonly_specific_inputs(self):
@@ -352,13 +350,13 @@ class SendallTest(DigiByteTestFramework):
             options={"minconf": 7})
 
         self.log.info("Test sendall only spends utxos with a specified number of confirmations when minconf is used")
-        self.wallet.sendall(recipients=[self.remainder_target], fee_rate=30000, options={"minconf": 6})
+        self.wallet.sendall(recipients=[self.remainder_target], fee_rate=300, options={"minconf": 6})
 
         assert_equal(len(self.wallet.listunspent()), 1)
         assert_equal(self.wallet.listunspent()[0]['confirmations'], 3)
 
         # decrease minconf and show the remaining utxo is picked up
-        self.wallet.sendall(recipients=[self.remainder_target], fee_rate=30000, options={"minconf": 3})
+        self.wallet.sendall(recipients=[self.remainder_target], fee_rate=300, options={"minconf": 3})
         assert_equal(self.wallet.getbalance(), 0)
 
     @cleanup
@@ -377,28 +375,27 @@ class SendallTest(DigiByteTestFramework):
             options={"maxconf": 1})
 
         self.log.info("Test sendall only spends utxos with a specified number of confirmations when maxconf is used")
-        self.wallet.sendall(recipients=[self.remainder_target], fee_rate=30000, options={"maxconf":4})
+        self.wallet.sendall(recipients=[self.remainder_target], fee_rate=300, options={"maxconf":4})
         assert_equal(len(self.wallet.listunspent()), 1)
         assert_equal(self.wallet.listunspent()[0]['confirmations'], 6)
 
-    # NOTE: Commenting out transaction size test - DigiByte may have different limits
-    # # This tests needs to be the last one otherwise @cleanup will fail with "Transaction too large" error
-    # def sendall_fails_with_transaction_too_large(self):
-    #     self.log.info("Test that sendall fails if resulting transaction is too large")
+    # This tests needs to be the last one otherwise @cleanup will fail with "Transaction too large" error
+    def sendall_fails_with_transaction_too_large(self):
+        self.log.info("Test that sendall fails if resulting transaction is too large")
 
-    #     # Force the wallet to bulk-generate the addresses we'll need
-    #     self.wallet.keypoolrefill(1600)
+        # Force the wallet to bulk-generate the addresses we'll need
+        self.wallet.keypoolrefill(1600)
 
-    #     # create many inputs
-    #     outputs = {self.wallet.getnewaddress(): 0.025 for _ in range(800)}
-    #     self.def_wallet.sendmany(amounts=outputs)
-    #     self.generate(self.nodes[0], 1)
+        # create many inputs
+        outputs = {self.wallet.getnewaddress(): 0.000025 for _ in range(1600)}
+        self.def_wallet.sendmany(amounts=outputs)
+        self.generate(self.nodes[0], 1)
 
-    #     assert_raises_rpc_error(
-    #             -4,
-    #             "Transaction too large.",
-    #             self.wallet.sendall,
-    #             recipients=[self.remainder_target])
+        assert_raises_rpc_error(
+                -4,
+                "Transaction too large.",
+                self.wallet.sendall,
+                recipients=[self.remainder_target])
 
     def run_test(self):
         self.nodes[0].createwallet("activewallet")
@@ -448,8 +445,8 @@ class SendallTest(DigiByteTestFramework):
         # Sendall fails when using send_max while specifying inputs
         self.sendall_fails_on_specific_inputs_with_send_max()
 
-        # NOTE: High fee test commented out - DigiByte has different maxtxfee defaults
-        # self.sendall_fails_on_high_fee()
+        # Sendall fails when providing a fee that is too high
+        self.sendall_fails_on_high_fee()
 
         # Sendall fails when fee rate is lower than minimum
         self.sendall_fails_on_low_fee()
@@ -463,8 +460,8 @@ class SendallTest(DigiByteTestFramework):
         # Sendall only uses outputs with less than a given number of confirmation when using minconf
         self.sendall_with_maxconf()
 
-        # NOTE: Transaction size test commented out - DigiByte may have different limits
-        # self.sendall_fails_with_transaction_too_large()
+        # Sendall fails when many inputs result to too large transaction
+        self.sendall_fails_with_transaction_too_large()
 
 if __name__ == '__main__':
     SendallTest().main()

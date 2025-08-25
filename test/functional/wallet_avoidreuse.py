@@ -4,6 +4,7 @@
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test the avoid_reuse and setwalletflag features."""
 
+from test_framework.address import address_to_scriptpubkey
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import (
     assert_approx,
@@ -82,11 +83,6 @@ class AvoidReuseTest(DigiByteTestFramework):
         self.test_immutable()
 
         self.generate(self.nodes[0], 110)
-        
-        # Give node 1 some initial funds for testing
-        self.nodes[0].sendtoaddress(self.nodes[1].getnewaddress(), 10)
-        self.generate(self.nodes[0], 1)
-        
         self.test_change_remains_change(self.nodes[1])
         reset_balance(self.nodes[1], self.nodes[0].getnewaddress())
         self.test_sending_from_reused_address_without_avoid_reuse()
@@ -160,20 +156,10 @@ class AvoidReuseTest(DigiByteTestFramework):
     def test_change_remains_change(self, node):
         self.log.info("Test that change doesn't turn into non-change when spent")
 
-        # We need funds for this test, but don't reset the balance entirely
-        # Just ensure we have sufficient funds for the test
-        balance = node.getbalance()
-        if balance < 5:
-            # Generate more funds if needed
-            self.generate(node, 10)
-        
+        reset_balance(node, node.getnewaddress())
         addr = node.getnewaddress()
         txid = node.sendtoaddress(addr, 1)
-        
-        # Find outputs from this specific transaction that are >= 2 DGB (change outputs)
-        all_out = node.listunspent(minconf=0)
-        out = [utxo for utxo in all_out if utxo['txid'] == txid and utxo['amount'] >= 2]
-        
+        out = node.listunspent(minconf=0, query_options={'minimumAmount': 2})
         assert_equal(len(out), 1)
         assert_equal(out[0]['txid'], txid)
         changeaddr = out[0]['address']
@@ -272,7 +258,7 @@ class AvoidReuseTest(DigiByteTestFramework):
         if not self.options.descriptors:
             # For the second send, we transmute it to a related single-key address
             # to make sure it's also detected as re-use
-            fund_spk = self.nodes[0].getaddressinfo(fundaddr)["scriptPubKey"]
+            fund_spk = address_to_scriptpubkey(fundaddr).hex()
             fund_decoded = self.nodes[0].decodescript(fund_spk)
             if second_addr_type == "p2sh-segwit":
                 new_fundaddr = fund_decoded["segwit"]["p2sh-segwit"]

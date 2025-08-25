@@ -22,21 +22,14 @@ def descriptors(out):
 class ScantxoutsetTest(DigiByteTestFramework):
     def set_test_params(self):
         self.num_nodes = 1
-        self.extra_args = [["-dandelion=0"]]
 
     def sendtodestination(self, destination, amount):
         # interpret strings as addresses, assume scriptPubKey otherwise
         if isinstance(destination, str):
             destination = address_to_scriptpubkey(destination)
-        self.wallet.send_to(from_node=self.nodes[0], scriptPubKey=destination, amount=int(COIN * amount), fee=1500)
+        self.wallet.send_to(from_node=self.nodes[0], scriptPubKey=destination, amount=int(COIN * amount))
 
     def run_test(self):
-        # DigiByte v8.26 mining bug: generate() and generatetoaddress() don't include mempool transactions
-        # This test relies on mining blocks that include specific transactions to test addresses
-        # Since the mining is broken, we cannot properly test scantxoutset functionality
-        # TODO: Fix after mining bug is resolved
-        self.log.warning("Skipping rpc_scantxoutset.py due to DigiByte v8.26 mining bug - mempool transactions not included in blocks")
-        return
         self.wallet = MiniWallet(self.nodes[0])
 
         self.log.info("Test if we find coinbase outputs.")
@@ -87,13 +80,6 @@ class ScantxoutsetTest(DigiByteTestFramework):
         assert_raises_rpc_error(-8, "End of range is too high", self.nodes[0].scantxoutset, "start", [{"desc": "desc", "range": [(2 << 31 + 1) - 1000000, (2 << 31 + 1)]}])
         assert_raises_rpc_error(-8, "Range specified as [begin,end] must not have begin after end", self.nodes[0].scantxoutset, "start", [{"desc": "desc", "range": [2, 1]}])
         assert_raises_rpc_error(-8, "Range is too large", self.nodes[0].scantxoutset, "start", [{"desc": "desc", "range": [0, 1000001]}])
-
-        self.log.info("Test range validation.")
-        assert_raises_rpc_error(-8, "End of range is too high", self.nodes[0].scantxoutset, "start", [ {"desc": "desc", "range": -1}])
-        assert_raises_rpc_error(-8, "Range should be greater or equal than 0", self.nodes[0].scantxoutset, "start", [ {"desc": "desc", "range": [-1, 10]}])
-        assert_raises_rpc_error(-8, "End of range is too high", self.nodes[0].scantxoutset, "start", [ {"desc": "desc", "range": [(2 << 31 + 1) - 1000000, (2 << 31 + 1)]}])
-        assert_raises_rpc_error(-8, "Range specified as [begin,end] must not have begin after end", self.nodes[0].scantxoutset, "start", [ {"desc": "desc", "range": [2, 1]}])
-        assert_raises_rpc_error(-8, "Range is too large", self.nodes[0].scantxoutset, "start", [ {"desc": "desc", "range": [0, 1000001]}])
 
         self.log.info("Test extended key derivation.")
         # Run various scans, and verify that the sum of the amounts of the matches corresponds to the expected subset.

@@ -6,7 +6,7 @@
 
 import shutil
 
-from test_framework.blocktools import COINBASE_MATURITY, COINBASE_MATURITY_2
+from test_framework.blocktools import COINBASE_MATURITY
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import (
     assert_equal,
@@ -25,8 +25,6 @@ class WalletHDTest(DigiByteTestFramework):
         # whitelist peers to speed up tx relay / mempool sync
         for args in self.extra_args:
             args.append("-whitelist=noban@127.0.0.1")
-            # Try to disable Dandelion++ for tests
-            args.append("-dandelion=0")
 
         self.supports_cli = False
 
@@ -42,33 +40,29 @@ class WalletHDTest(DigiByteTestFramework):
         change_addr = self.nodes[1].getrawchangeaddress()
         change_addrV = self.nodes[1].getaddressinfo(change_addr)
         if self.options.descriptors:
-            assert_equal(change_addrV["hdkeypath"], "m/84'/1'/0'/1/0")
+            assert_equal(change_addrV["hdkeypath"], "m/84h/1h/0h/1/0")
         else:
             assert_equal(change_addrV["hdkeypath"], "m/0'/1'/0'")  #first internal child key
 
         # Import a non-HD private key in the HD wallet
-        non_hd_add = 'dgbrt1qj5nyrn9vchu5fpt4e8upfqpkw8nzgazeg0tzpx'
-        non_hd_key = 'eeGXx7odSvEzn26XA6gbSr8R62Hk3ctuTSxRSpbSwrvigHTWxsZZ'
+        non_hd_add = 'bcrt1qmevj8zfx0wdvp05cqwkmr6mxkfx60yezwjksmt'
+        non_hd_key = 'cS9umN9w6cDMuRVYdbkfE4c7YUFLJRoXMfhQ569uY4odiQbVN8Rt'
         self.nodes[1].importprivkey(non_hd_key)
 
         # This should be enough to keep the master key and the non-HD key
         self.nodes[1].backupwallet(self.nodes[1].datadir_path / "hd.bak")
         #self.nodes[1].dumpwallet(self.nodes[1].datadir_path / "hd.dump")
 
-        # Generate initial blocks for funding
-        # Note: In DigiByte, COINBASE_MATURITY=8 for early blocks, then COINBASE_MATURITY_2=100
-        # We need enough mature coins to fund all the test transactions
-        self.generate(self.nodes[0], COINBASE_MATURITY_2 + 20)
-        
         # Derive some HD addresses and remember the last
         # Also send funds to each add
+        self.generate(self.nodes[0], COINBASE_MATURITY + 1)
         hd_add = None
         NUM_HD_ADDS = 10
         for i in range(1, NUM_HD_ADDS + 1):
             hd_add = self.nodes[1].getnewaddress()
             hd_info = self.nodes[1].getaddressinfo(hd_add)
             if self.options.descriptors:
-                assert_equal(hd_info["hdkeypath"], "m/84'/1'/0'/0/" + str(i))
+                assert_equal(hd_info["hdkeypath"], "m/84h/1h/0h/0/" + str(i))
             else:
                 assert_equal(hd_info["hdkeypath"], "m/0'/0'/" + str(i) + "'")
             assert_equal(hd_info["hdmasterfingerprint"], hd_fingerprint)
@@ -81,7 +75,7 @@ class WalletHDTest(DigiByteTestFramework):
         change_addr = self.nodes[1].getrawchangeaddress()
         change_addrV = self.nodes[1].getaddressinfo(change_addr)
         if self.options.descriptors:
-            assert_equal(change_addrV["hdkeypath"], "m/84'/1'/0'/1/1")
+            assert_equal(change_addrV["hdkeypath"], "m/84h/1h/0h/1/1")
         else:
             assert_equal(change_addrV["hdkeypath"], "m/0'/1'/1'")  #second internal child key
 
@@ -106,7 +100,7 @@ class WalletHDTest(DigiByteTestFramework):
             hd_add_2 = self.nodes[1].getnewaddress()
             hd_info_2 = self.nodes[1].getaddressinfo(hd_add_2)
             if self.options.descriptors:
-                assert_equal(hd_info_2["hdkeypath"], "m/84'/1'/0'/0/" + str(i))
+                assert_equal(hd_info_2["hdkeypath"], "m/84h/1h/0h/0/" + str(i))
             else:
                 assert_equal(hd_info_2["hdkeypath"], "m/0'/0'/" + str(i) + "'")
             assert_equal(hd_info_2["hdmasterfingerprint"], hd_fingerprint)
@@ -148,7 +142,7 @@ class WalletHDTest(DigiByteTestFramework):
                 keypath = self.nodes[1].getaddressinfo(out['scriptPubKey']['address'])['hdkeypath']
 
         if self.options.descriptors:
-            assert_equal(keypath[0:14], "m/84'/1'/0'/1/")
+            assert_equal(keypath[0:14], "m/84h/1h/0h/1/")
         else:
             assert_equal(keypath[0:7], "m/0'/1'")
 

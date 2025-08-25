@@ -113,5 +113,6 @@ class MinimumChainWorkTest(DigiByteTestFramework):
             expected_msg='Error: Invalid non-hex (test) minimum chain work value specified',
         )
 
+
 if __name__ == '__main__':
     MinimumChainWorkTest().main()

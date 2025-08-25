@@ -102,6 +102,7 @@ class Variant(collections.namedtuple("Variant", "call data address_type rescan p
             assert_equal(tx["category"], "receive")
             assert_equal(tx["label"], self.label)
             assert_equal(tx["txid"], txid)
+
             # If no confirmation height is given, the tx is still in the
             # mempool.
             confirmations = (1 + current_height - confirmation_height) if confirmation_height else 0
@@ -142,6 +143,7 @@ TIMESTAMP_WINDOW = 2 * 60 * 60
 
 AMOUNT_DUST = 0.00000546
 
+
 def get_rand_amount():
     r = random.uniform(AMOUNT_DUST, 1)
     return Decimal(str(round(r, 8)))
@@ -150,6 +152,7 @@ def get_rand_amount():
 class ImportRescanTest(DigiByteTestFramework):
     def add_options(self, parser):
         self.add_wallet_options(parser, descriptors=False)
+
     def set_test_params(self):
         self.num_nodes = 2 + len(IMPORT_NODES)
         self.supports_cli = False
@@ -163,6 +166,7 @@ class ImportRescanTest(DigiByteTestFramework):
         for i, import_node in enumerate(IMPORT_NODES, 2):
             if import_node.prune:
                 self.extra_args[i] += ["-prune=1"]
+
         self.add_nodes(self.num_nodes, extra_args=self.extra_args)
 
         # Import keys with pruning disabled
@@ -196,13 +200,16 @@ class ImportRescanTest(DigiByteTestFramework):
             variant.key = self.nodes[1].dumpprivkey(variant.address["address"])
             variant.initial_amount = get_rand_amount()
             variant.initial_txid = self.nodes[0].sendtoaddress(variant.address["address"], variant.initial_amount)
-            # Generate one block for each send to ensure sufficient funds
-            self.generate(self.nodes[0], 1)
-            variant.confirmation_height = self.nodes[0].getblockcount()
-            variant.timestamp = self.nodes[0].getblockheader(self.nodes[0].getbestblockhash())["time"]
             last_variants.append(variant)
 
+        blockhash = self.generate(self.nodes[0], 1)[0]
+        conf_height = self.nodes[0].getblockcount()
+        timestamp = self.nodes[0].getblockheader(blockhash)["time"]
+        for var in last_variants:
+            var.confirmation_height = conf_height
+            var.timestamp = timestamp
         last_variants.clear()
+
         # Generate a block further in the future (past the rescan window).
         assert_equal(self.nodes[0].getrawmempool(), [])
         set_node_times(

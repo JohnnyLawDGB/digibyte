@@ -110,10 +110,8 @@ class PeerTxRelayer(P2PTxInvStore):
 
 class OrphanHandlingTest(DigiByteTestFramework):
     def set_test_params(self):
-        self.setup_clean_chain = True
         self.num_nodes = 1
-        # Disable Dandelion++ to avoid complications with transaction relay
-        self.extra_args = [["-dandelion=0"]]
+        self.extra_args = [[]]
 
     def create_parent_and_child(self):
         """Create package with 1 parent and 1 child, normal fees (no cpfp)."""
@@ -273,9 +271,8 @@ class OrphanHandlingTest(DigiByteTestFramework):
         utxo_unconf_missing = missing_tx["new_utxo"]
         assert missing_tx["txid"] not in node.getrawmempool()
 
-        # Create orphan with higher fee for DigiByte to ensure it meets relay requirements
         orphan = self.wallet.create_self_transfer_multi(utxos_to_spend=[utxo_conf_old,
-            utxo_conf_recent, utxo_unconf_mempool, utxo_unconf_missing], fee_per_output=1000)
+            utxo_conf_recent, utxo_unconf_mempool, utxo_unconf_missing])
 
         self.relay_transaction(peer, orphan["tx"])
         self.nodes[0].bumpmocktime(NONPREF_PEER_TX_DELAY + TXID_RELAY_DELAY)
@@ -289,36 +286,6 @@ class OrphanHandlingTest(DigiByteTestFramework):
         peer.send_message(msg_notfound(vec=[CInv(MSG_WITNESS_TX, int(txid_conf_old, 16))]))
         peer.send_and_ping(msg_tx(missing_tx["tx"]))
         peer.sync_with_ping()
-        
-        # DigiByte: Wait for missing parent then check orphan processing
-        self.wait_until(lambda: missing_tx["txid"] in node.getrawmempool(), timeout=10)
-        
-        # DigiByte orphan handling may be different - try to get the orphan processed
-        # Wait a bit for automatic processing first
-        try:
-            self.wait_until(lambda: orphan["txid"] in node.getrawmempool(), timeout=3)
-        except AssertionError:
-            # If automatic processing didn't work, try manual approach
-            self.log.info("Orphan not auto-processed, attempting manual submission")
-            try:
-                result = node.testmempoolaccept([orphan["hex"]])
-                self.log.info(f"Mempool accept result: {result}")
-                if result[0]["allowed"]:
-                    node.sendrawtransaction(orphan["hex"])
-                    self.log.info("Manual submission successful")
-                else:
-                    # If it's still not acceptable, there may be a DigiByte-specific issue
-                    self.log.info(f"Orphan rejected: {result[0].get('reject-reason', 'unknown')}")
-                    # For now, skip the ancestor count check as this may be a DigiByte difference
-                    self.log.info("Skipping ancestorcount check due to DigiByte orphan handling differences")
-                    return
-            except Exception as e:
-                self.log.info(f"Manual submission failed: {e}")
-                self.log.info("Skipping ancestorcount check due to DigiByte orphan handling differences")
-                return
-        
-        # If we get here, the orphan should be in mempool
-        assert orphan["txid"] in node.getrawmempool(), "Orphan should be in mempool"
         assert_equal(node.getmempoolentry(orphan["txid"])["ancestorcount"], 3)
 
     @cleanup

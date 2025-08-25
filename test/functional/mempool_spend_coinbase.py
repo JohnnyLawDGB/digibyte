@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# Copyright (c) 2014-2020 The Bitcoin Core developers
 # Copyright (c) 2014-2022 The DigiByte Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
@@ -15,7 +14,6 @@ but less mature coinbase spends are NOT.
 
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import assert_equal, assert_raises_rpc_error
-from test_framework.blocktools import COINBASE_MATURITY_2
 from test_framework.wallet import MiniWallet
 
 
@@ -31,25 +29,12 @@ class MempoolSpendCoinbaseTest(DigiByteTestFramework):
         self.nodes[0].invalidateblock(self.nodes[0].getblockhash(chain_height + 1))
         assert_equal(chain_height, self.nodes[0].getblockcount())
 
-        # In DigiByte, coinbase maturity depends on block height:
-        # - Heights < 145000: COINBASE_MATURITY = 8 blocks
-        # - Heights >= 145000: COINBASE_MATURITY_2 = 100 blocks
-        # Since we're at height 198, both test heights (99 and 100) use the 8-block maturity
-        # We need to test with more recent blocks to properly test the maturity rules
-        
+        # Coinbase at height chain_height-100+1 ok in mempool, should
+        # get mined. Coinbase at height chain_height-100+2 is
+        # too immature to spend.
         coinbase_txid = lambda h: self.nodes[0].getblock(self.nodes[0].getblockhash(h))['tx'][0]
-        
-        # For height < 145000, use COINBASE_MATURITY = 8
-        from test_framework.blocktools import COINBASE_MATURITY
-        mature_height = chain_height - COINBASE_MATURITY + 1  # 198 - 8 + 1 = 191
-        immature_height = chain_height - COINBASE_MATURITY + 2  # 198 - 8 + 2 = 192
-        
-        self.log.info(f"Testing coinbase maturity at height {chain_height}")
-        self.log.info(f"Mature coinbase from height {mature_height} (age: {chain_height - mature_height} blocks)")
-        self.log.info(f"Immature coinbase from height {immature_height} (age: {chain_height - immature_height} blocks)")
-        
-        utxo_mature = wallet.get_utxo(txid=coinbase_txid(mature_height))
-        utxo_immature = wallet.get_utxo(txid=coinbase_txid(immature_height))
+        utxo_mature = wallet.get_utxo(txid=coinbase_txid(chain_height - 100 + 1))
+        utxo_immature = wallet.get_utxo(txid=coinbase_txid(chain_height - 100 + 2))
 
         spend_mature_id = wallet.send_self_transfer(from_node=self.nodes[0], utxo_to_spend=utxo_mature)["txid"]
 
@@ -61,6 +46,7 @@ class MempoolSpendCoinbaseTest(DigiByteTestFramework):
 
         # mempool should have just the mature one
         assert_equal(self.nodes[0].getrawmempool(), [spend_mature_id])
+
         # mine a block, mature one should get confirmed
         self.generate(self.nodes[0], 1)
         assert_equal(set(self.nodes[0].getrawmempool()), set())

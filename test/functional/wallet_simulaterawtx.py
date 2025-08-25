@@ -6,7 +6,7 @@
 """
 
 from decimal import Decimal
-from test_framework.blocktools import COINBASE_MATURITY, COINBASE_MATURITY_2
+from test_framework.blocktools import COINBASE_MATURITY
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import (
     assert_approx,
@@ -21,7 +21,6 @@ class SimulateTxTest(DigiByteTestFramework):
     def set_test_params(self):
         self.setup_clean_chain = True
         self.num_nodes = 1
-        self.extra_args = [["-whitelist=noban@127.0.0.1", "-dandelion=0"]]
 
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()
@@ -34,25 +33,15 @@ class SimulateTxTest(DigiByteTestFramework):
 
         self.generate(node, 1, sync_fun=self.no_op) # Leave IBD
 
-        # Create wallet first
         node.createwallet(wallet_name='w0')
-        w0 = node.get_wallet_rpc('w0')
-        
-        # Generate blocks to get spendable outputs 
-        self.generatetoaddress(node, COINBASE_MATURITY_2 + 20, w0.getnewaddress())
-
-        # Create additional wallets for testing
         node.createwallet(wallet_name='w1')
         node.createwallet(wallet_name='w2', disable_private_keys=True)
+        w0 = node.get_wallet_rpc('w0')
         w1 = node.get_wallet_rpc('w1')
         w2 = node.get_wallet_rpc('w2')
 
-        # Check balance - should have rewards from mature blocks only
-        initial_balance = w0.getbalance()
-        # Update expected balance to match DigiByte's actual behavior
-        # The actual balance shows 1440000 DGB = 20 blocks worth of rewards
-        expected_balance = 1440000.00000000  # Based on actual DigiByte behavior
-        assert_equal(w0.getbalance(), expected_balance)
+        self.generatetoaddress(node, COINBASE_MATURITY + 1, w0.getnewaddress())
+        assert_equal(w0.getbalance(), 50.0)
         assert_equal(w1.getbalance(), 0.0)
 
         address1 = w1.getnewaddress()

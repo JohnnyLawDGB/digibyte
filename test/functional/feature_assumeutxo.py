@@ -52,11 +52,11 @@ class AssumeutxoTest(DigiByteTestFramework):
     def set_test_params(self):
         """Use the pregenerated, deterministic chain up to height 199."""
         self.num_nodes = 3
-        self.rpc_timeout = 300
+        self.rpc_timeout = 120
         self.extra_args = [
-            ["-dandelion=0", "-easypow"],
-            ["-fastprune", "-prune=1", "-blockfilterindex=1", "-dandelion=0", "-easypow"],
-            ["-txindex=1", "-blockfilterindex=1", "-coinstatsindex=1", "-dandelion=0", "-easypow"],
+            [],
+            ["-fastprune", "-prune=1", "-blockfilterindex=1", "-coinstatsindex=1"],
+            ["-txindex=1", "-blockfilterindex=1", "-coinstatsindex=1"],
         ]
 
     def setup_network(self):
@@ -92,9 +92,7 @@ class AssumeutxoTest(DigiByteTestFramework):
                 f.write(valid_snapshot_contents[:32])
                 f.write((valid_num_coins + off).to_bytes(8, "little"))
                 f.write(valid_snapshot_contents[32 + 8:])
-            # Skip detailed error message validation for DigiByte - counts may differ from Bitcoin
-            # expected_error(log_msg=f"bad snapshot - coins left over after deserializing 298 coins" if off == -1 else f"bad snapshot format or truncated snapshot after deserializing 299 coins")
-            expected_error()
+            expected_error(log_msg=f"bad snapshot - coins left over after deserializing 298 coins" if off == -1 else f"bad snapshot format or truncated snapshot after deserializing 299 coins")
 
         self.log.info("  - snapshot file with alternated UTXO data")
         cases = [
@@ -109,8 +107,7 @@ class AssumeutxoTest(DigiByteTestFramework):
                 f.write(valid_snapshot_contents[:(32 + 8 + offset)])
                 f.write(content)
                 f.write(valid_snapshot_contents[(32 + 8 + offset + len(content)):])
-            # Skip detailed hash validation for DigiByte - focus on functionality
-            expected_error()
+            expected_error(log_msg=f"[snapshot] bad snapshot content hash: expected 61d9c2b29a2571a5fe285fe2d8554f91f93309666fc9b8223ee96338de25ff53, got {wrong_hash}")
 
     def test_invalid_chainstate_scenarios(self):
         self.log.info("Test different scenarios of invalid snapshot chainstate in datadir")
@@ -173,7 +170,7 @@ class AssumeutxoTest(DigiByteTestFramework):
 
         assert_equal(
             dump_output['txoutset_hash'],
-            '0c3eb8c1b150495afa0aa96879243937ae989b45b9f8cd14947f5eec8ba7a103')
+            '61d9c2b29a2571a5fe285fe2d8554f91f93309666fc9b8223ee96338de25ff53')
         assert_equal(dump_output['nchaintx'], 300)
         assert_equal(n0.getblockchaininfo()["blocks"], SNAPSHOT_BASE_HEIGHT)
 
@@ -186,9 +183,8 @@ class AssumeutxoTest(DigiByteTestFramework):
 
         assert_equal(n0.getblockchaininfo()["blocks"], FINAL_HEIGHT)
 
-        # Skip detailed error validation tests for DigiByte - focus on core functionality
-        # self.test_invalid_snapshot_scenarios(dump_output['path'])
-        # self.test_invalid_chainstate_scenarios()
+        self.test_invalid_snapshot_scenarios(dump_output['path'])
+        self.test_invalid_chainstate_scenarios()
 
         self.log.info(f"Loading snapshot into second node from {dump_output['path']}")
         loaded = n1.loadtxoutset(dump_output['path'])
@@ -233,14 +229,14 @@ class AssumeutxoTest(DigiByteTestFramework):
         self.sync_blocks(nodes=(n0, n1))
 
         self.log.info("Ensuring background validation completes")
-        self.wait_until(lambda: len(n1.getchainstates()['chainstates']) == 1, timeout=600)
+        self.wait_until(lambda: len(n1.getchainstates()['chainstates']) == 1)
 
         # Ensure indexes have synced.
         completed_idx_state = {
             'basic block filter index': COMPLETE_IDX,
             'coinstatsindex': COMPLETE_IDX,
         }
-        self.wait_until(lambda: n1.getindexinfo() == completed_idx_state, timeout=600)
+        self.wait_until(lambda: n1.getindexinfo() == completed_idx_state)
 
 
         for i in (0, 1):
@@ -282,7 +278,7 @@ class AssumeutxoTest(DigiByteTestFramework):
         self.sync_blocks()
 
         self.log.info("Ensuring background validation completes")
-        self.wait_until(lambda: len(n2.getchainstates()['chainstates']) == 1, timeout=600)
+        self.wait_until(lambda: len(n2.getchainstates()['chainstates']) == 1)
 
         completed_idx_state = {
             'basic block filter index': COMPLETE_IDX,

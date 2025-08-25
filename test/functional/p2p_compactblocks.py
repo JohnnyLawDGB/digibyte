@@ -11,7 +11,6 @@ from test_framework.blocktools import (
     add_witness_commitment,
     create_block,
 )
-from test_framework.script import CScript, OP_TRUE
 from test_framework.messages import (
     BlockTransactions,
     BlockTransactionsRequest,
@@ -152,38 +151,17 @@ class CompactBlocksTest(DigiByteTestFramework):
         self.utxos = []
 
     def build_block_on_tip(self, node):
-        # Build a block on top of the current tip
-        from test_framework.blocktools import create_block
-        
-        # Get current tip info
-        tip_hash = node.getbestblockhash()
-        tip_height = node.getblockcount()
-        tip = node.getblock(tip_hash)
-        
-        # Create block with proper time
-        block_time = tip['time'] + 1
-        
-        # Create minimal template for block creation
-        minimal_tmpl = {
-            'height': tip_height + 1,
-            'previousblockhash': tip_hash,
-            'curtime': block_time,
-            'coinbasevalue': 7200000000000  # 72000 DGB in satoshis
-        }
-        
-        block = create_block(hashprev=int(tip_hash, 16), ntime=block_time, tmpl=minimal_tmpl)
+        block = create_block(tmpl=node.getblocktemplate(NORMAL_GBT_REQUEST_PARAMS))
         block.solve()
         return block
 
     # Create 10 more anyone-can-spend utxo's for testing.
     def make_utxos(self):
-        # Generate a block
         block = self.build_block_on_tip(self.nodes[0])
         self.segwit_node.send_and_ping(msg_no_witness_block(block))
         assert int(self.nodes[0].getbestblockhash(), 16) == block.sha256
         self.generate(self.wallet, COINBASE_MATURITY)
 
-        # Create transaction with multiple anyone-can-spend outputs
         total_value = block.vtx[0].vout[0].nValue
         out_value = total_value // 10
         tx = CTransaction()
@@ -192,7 +170,6 @@ class CompactBlocksTest(DigiByteTestFramework):
             tx.vout.append(CTxOut(out_value, CScript([OP_TRUE])))
         tx.rehash()
 
-        # Build a block containing the transaction
         block2 = self.build_block_on_tip(self.nodes[0])
         block2.vtx.append(tx)
         block2.hashMerkleRoot = block2.calc_merkle_root()
@@ -446,7 +423,7 @@ class CompactBlocksTest(DigiByteTestFramework):
         for _ in range(num_transactions):
             tx = CTransaction()
             tx.vin.append(CTxIn(COutPoint(utxo[0], utxo[1]), b''))
-            tx.vout.append(CTxOut(utxo[2] - 10000, CScript([OP_TRUE, OP_DROP] * 15 + [OP_TRUE])))
+            tx.vout.append(CTxOut(utxo[2] - 1000, CScript([OP_TRUE, OP_DROP] * 15 + [OP_TRUE])))
             tx.rehash()
             utxo = [tx.sha256, 0, tx.vout[0].nValue]
             block.vtx.append(tx)
@@ -645,17 +622,7 @@ class CompactBlocksTest(DigiByteTestFramework):
     def test_low_work_compactblocks(self, test_node):
         # A compactblock with insufficient work won't get its header included
         node = self.nodes[0]
-        # For DigiByte, we need to go back further due to 15-second blocks
-        # Bitcoin has 600-second blocks, so 150 blocks = 25 hours
-        # DigiByte has 15-second blocks, so we need 6000 blocks for similar time
-        # But we'll use a smaller number that still triggers the low-work check
-        blocks_back = 500
-        # Ensure we have enough blocks
-        current_height = node.getblockcount()
-        if current_height < blocks_back:
-            # Generate blocks to ensure we have enough
-            self.generate(self.wallet, blocks_back - current_height)
-        hashPrevBlock = int(node.getblockhash(node.getblockcount() - blocks_back), 16)
+        hashPrevBlock = int(node.getblockhash(node.getblockcount() - 150), 16)
         block = self.build_block_on_tip(node)
         block.hashPrevBlock = hashPrevBlock
         block.solve()
@@ -933,9 +900,6 @@ class CompactBlocksTest(DigiByteTestFramework):
 
     def run_test(self):
         self.wallet = MiniWallet(self.nodes[0])
-        
-        # Generate initial blocks for MiniWallet to have UTXOs
-        self.generate(self.wallet, 1)
 
         # Setup the p2p connections
         self.segwit_node = self.nodes[0].add_p2p_connection(TestP2PConn())

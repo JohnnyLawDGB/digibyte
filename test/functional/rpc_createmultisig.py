@@ -32,8 +32,6 @@ class RpcCreateMultiSigTest(DigiByteTestFramework):
         self.setup_clean_chain = True
         self.num_nodes = 3
         self.supports_cli = False
-        # Disable Dandelion++ to avoid stempool issues and enable txindex
-        self.extra_args = [["-txindex", "-dandelion=0"]] * self.num_nodes
 
     def get_keys(self):
         self.pub = []
@@ -57,36 +55,14 @@ class RpcCreateMultiSigTest(DigiByteTestFramework):
             self.check_addmultisigaddress_errors()
 
         self.log.info('Generating blocks ...')
-        self.generate(self.wallet, 149, sync_fun=self.no_op)
-
-        # Create wmulti wallet once before the loops to avoid repeated creation
-        if self.is_bdb_compiled():
-            if 'wmulti' not in node1.listwallets():
-                try:
-                    node1.loadwallet('wmulti')
-                except JSONRPCException as e:
-                    path = self.nodes[1].wallets_path / "wmulti"
-                    if e.error['code'] == -18 and "Wallet file verification failed. Failed to load database path '{}'. Path does not exist.".format(path) in e.error['message']:
-                        node1.createwallet(wallet_name='wmulti', disable_private_keys=True)
-                    else:
-                        raise
+        self.generate(self.wallet, 149)
 
         self.moved = 0
-        pending_txs = []  # Collect transactions for batch processing
-        
         for self.nkeys in [3, 5]:
             for self.nsigs in [2, 3]:
                 for self.output_type in ["bech32", "p2sh-segwit", "legacy"]:
                     self.get_keys()
-                    tx_result = self.do_multisig()
-                    if tx_result:
-                        pending_txs.append(tx_result)
-        
-        # Mine all pending transactions in one batch
-        if pending_txs:
-            self.log.info(f'Mining batch of {len(pending_txs)} transactions...')
-            self.generate(node0, 1)  # Final sync for balance check
-        
+                    self.do_multisig()
         if self.is_bdb_compiled():
             self.checkbalances()
 
@@ -159,37 +135,33 @@ class RpcCreateMultiSigTest(DigiByteTestFramework):
 
     def checkbalances(self):
         node0, node1, node2 = self.nodes
-        self.generate(node0, COINBASE_MATURITY, sync_fun=self.no_op)
+        self.generate(node0, COINBASE_MATURITY)
 
-        # For Bitcoin v26.2+, need to use default wallet or explicitly load wallets
-        if self.is_bdb_compiled():
-            bal0 = node0.getbalance()
-            bal1 = node1.get_wallet_rpc('wmulti').getbalance()
-            bal2 = node2.getbalance()
-        else:
-            bal0 = 0
-            bal1 = 0 
-            bal2 = 0
+        bal0 = node0.getbalance()
+        bal1 = node1.getbalance()
+        bal2 = node2.getbalance()
         balw = self.wallet.get_balance()
 
         height = node0.getblockchaininfo()["blocks"]
         assert 150 < height < 350
-        # For DigiByte: In regtest mode at this height, block reward is 72000 DGB
-        # Total coins = (height - COINBASE_MATURITY) * 72000
-        total = (height - COINBASE_MATURITY) * 72000
-        
+        total = 149 * 50 + (height - 149 - 100) * 25
         assert bal1 == 0
         assert bal2 == self.moved
-        # The exact balance assertion may vary due to MiniWallet vs traditional wallet differences
-        # Ensure we have reasonable amount of coins 
-        actual_total = bal0 + bal1 + bal2 + balw
-        assert actual_total > total * 0.8, f"Total balance {actual_total} seems too low compared to expected {total}"
-        assert actual_total < total * 1.2, f"Total balance {actual_total} seems too high compared to expected {total}"
+        assert_equal(bal0 + bal1 + bal2 + balw, total)
 
     def do_multisig(self):
         node0, node1, node2 = self.nodes
 
         if self.is_bdb_compiled():
+            if 'wmulti' not in node1.listwallets():
+                try:
+                    node1.loadwallet('wmulti')
+                except JSONRPCException as e:
+                    path = self.nodes[1].wallets_path / "wmulti"
+                    if e.error['code'] == -18 and "Wallet file verification failed. Failed to load database path '{}'. Path does not exist.".format(path) in e.error['message']:
+                        node1.createwallet(wallet_name='wmulti', disable_private_keys=True)
+                    else:
+                        raise
             wmulti = node1.get_wallet_rpc('wmulti')
 
         # Construct the expected descriptor
@@ -208,7 +180,7 @@ class RpcCreateMultiSigTest(DigiByteTestFramework):
         mredeem = msig["redeemScript"]
         assert_equal(desc, msig['descriptor'])
         if self.output_type == 'bech32':
-            assert madd[0:5] == "dgbrt"  # DigiByte regtest bech32 address
+            assert madd[0:4] == "bcrt"  # actually a bech32 address
 
         if self.is_bdb_compiled():
             # compare against addmultisigaddress
@@ -219,10 +191,10 @@ class RpcCreateMultiSigTest(DigiByteTestFramework):
             # addmultisigiaddress and createmultisig work the same
             assert maddw == madd
             assert mredeemw == mredeem
+            wmulti.unloadwallet()
 
-        self.log.info(f"Created multisig address: {madd}")
         spk = address_to_scriptpubkey(madd)
-        txid = self.wallet.send_to(from_node=self.nodes[0], scriptPubKey=spk, amount=40_00000000, fee=15000)["txid"]
+        txid = self.wallet.send_to(from_node=self.nodes[0], scriptPubKey=spk, amount=1300)["txid"]
         tx = node0.getrawtransaction(txid, True)
         vout = [v["n"] for v in tx["vout"] if madd == v["scriptPubKey"]["address"]]
         assert len(vout) == 1
@@ -231,9 +203,9 @@ class RpcCreateMultiSigTest(DigiByteTestFramework):
         value = tx["vout"][vout]["value"]
         prevtxs = [{"txid": txid, "vout": vout, "scriptPubKey": scriptPubKey, "redeemScript": mredeem, "amount": value}]
 
-        self.generate(node0, 1, sync_fun=self.no_op)
+        self.generate(node0, 1)
 
-        outval = value - decimal.Decimal("0.001000")  # DigiByte fee
+        outval = value - decimal.Decimal("0.00001000")
         rawtx = node2.createrawtransaction([{"txid": txid, "vout": vout}], [{self.final: outval}])
 
         prevtx_err = dict(prevtxs[0])
@@ -267,12 +239,11 @@ class RpcCreateMultiSigTest(DigiByteTestFramework):
 
         self.moved += outval
         tx = node0.sendrawtransaction(rawtx3["hex"], 0)
-        blk = self.generate(node0, 1, sync_fun=self.no_op)[0]
+        blk = self.generate(node0, 1)[0]
         assert tx in node0.getblock(blk)["tx"]
 
         txinfo = node0.getrawtransaction(tx, True, blk)
         self.log.info("n/m=%d/%d %s size=%d vsize=%d weight=%d" % (self.nsigs, self.nkeys, self.output_type, txinfo["size"], txinfo["vsize"], txinfo["weight"]))
-        return tx
 
 
 if __name__ == '__main__':

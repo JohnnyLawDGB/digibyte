@@ -97,10 +97,8 @@ class RawTransactionsTest(DigiByteTestFramework):
         self.min_relay_tx_fee = self.nodes[0].getnetworkinfo()['relayfee']
         # This test is not meant to test fee estimation and we'd like
         # to be sure all txs are sent at a consistent desired feerate
-        # DigiByte requires a minimum wallet fee of 0.10000000 DGB/kvB
-        wallet_min_fee = Decimal('0.10000000')
         for node in self.nodes:
-            node.settxfee(wallet_min_fee)
+            node.settxfee(self.min_relay_tx_fee)
 
         # if the fee's positive delta is higher than this value tests will fail,
         # neg. delta always fail the tests.
@@ -112,8 +110,6 @@ class RawTransactionsTest(DigiByteTestFramework):
 
         self.generate(self.nodes[2], 1)
         self.generate(self.nodes[0], 121)
-        # Additional blocks to ensure coinbase maturity for DigiByte
-        self.generate(self.nodes[0], 10)
 
         self.test_add_inputs_default_value()
         self.test_preset_inputs_selection()
@@ -1095,19 +1091,12 @@ class RawTransactionsTest(DigiByteTestFramework):
     def test_add_inputs_default_value(self):
         self.log.info("Test 'add_inputs' default value")
 
-        # Use the default wallet on node 2
-        wallet = self.nodes[2]
+        # Create and fund the wallet with 5 DGB
+        self.nodes[2].createwallet("test_preset_inputs")
+        wallet = self.nodes[2].get_wallet_rpc("test_preset_inputs")
         addr1 = wallet.getnewaddress(address_type="bech32")
-        
-        # Fund the wallet with more DGB for DigiByte's higher fees and multiple test cases
-        self.nodes[0].sendtoaddress(addr1, 100)
+        self.nodes[0].sendtoaddress(addr1, 5)
         self.generate(self.nodes[0], 1)
-        self.sync_all()  # Ensure all nodes are synced
-        
-        # Check balance
-        balance = wallet.getbalance()
-        self.log.info(f"Wallet balance after funding: {balance}")
-        assert balance >= 100, f"Expected balance >= 100, got {balance}"
 
         # Covered cases:
         # 1. Default add_inputs value with no preset inputs (add_inputs=true):
@@ -1126,38 +1115,33 @@ class RawTransactionsTest(DigiByteTestFramework):
         # Case (1), 'send' command
         # 'add_inputs' value is true unless "inputs" are specified, in such case, add_inputs=false.
         # So, the wallet will automatically select coins and create the transaction if only the outputs are provided.
-        # Create a new address for sending to avoid sending to self
-        addr_new = wallet.getnewaddress(address_type="bech32")
-        tx = wallet.send(outputs=[{addr_new: 3}])
+        tx = wallet.send(outputs=[{addr1: 3}])
         assert tx["complete"]
 
         # Case (2), 'send' command
         # Select an input manually, which doesn't cover the entire output amount and
         # verify that the dynamically set 'add_inputs=false' value works.
 
-        # Fund wallet with 2 outputs, 5 DGB each (matching Bitcoin test).
+        # Fund wallet with 2 outputs, 5 DGB each.
         addr2 = wallet.getnewaddress(address_type="bech32")
-        source_tx = wallet.send(outputs=[{addr1: 5}, {addr2: 5}], change_position=0)
+        source_tx = self.nodes[0].send(outputs=[{addr1: 5}, {addr2: 5}], change_position=0)
         self.generate(self.nodes[0], 1)
-        self.sync_all()
 
         # Select only one input.
-        # Since change_position=0, the change is at index 0, and the outputs are at indices 1 and 2
         options = {
             "inputs": [
                 {
                     "txid": source_tx["txid"],
-                    "vout": 1  # This contains 1 DGB
+                    "vout": 1  # change position was hardcoded to index 0
                 }
             ]
         }
-        # Try to send 8 DGB with only 5 DGB input, which should fail  
         assert_raises_rpc_error(-4, ERR_NOT_ENOUGH_PRESET_INPUTS, wallet.send, outputs=[{addr1: 8}], **options)
 
         # Case (3), Explicit add_inputs=true and preset inputs (with preset inputs not-covering the target amount)
         options["add_inputs"] = True
         options["add_to_wallet"] = False
-        tx = wallet.send(outputs=[{addr1: 6}], **options)  # Reduced to 6 DGB to work with DigiByte fees
+        tx = wallet.send(outputs=[{addr1: 8}], **options)
         assert tx["complete"]
 
         # Case (4), Explicit add_inputs=true and preset inputs (with preset inputs covering the target amount)
@@ -1165,7 +1149,7 @@ class RawTransactionsTest(DigiByteTestFramework):
             "txid": source_tx["txid"],
             "vout": 2  # change position was hardcoded to index 0
         })
-        tx = wallet.send(outputs=[{addr1: 6}], **options)  # 2 inputs (5+5=10 DGB) should cover 6 DGB + fees
+        tx = wallet.send(outputs=[{addr1: 8}], **options)
         assert tx["complete"]
         # Check that only the preset inputs were added to the tx
         decoded_psbt_inputs = self.nodes[0].decodepsbt(tx["psbt"])['tx']['vin']
@@ -1174,15 +1158,8 @@ class RawTransactionsTest(DigiByteTestFramework):
             assert_equal(input["txid"], source_tx["txid"])
 
         # Case (5), assert that inputs are added to the tx by explicitly setting add_inputs=true
-        # Check current available balance instead of trying to add more
-        spendable = wallet.getbalances()['mine']['trusted'] 
-        utxos = wallet.listunspent()
-        self.log.info(f"Spendable balance before case 5: {spendable}")
-        self.log.info(f"Available UTXOs: {len(utxos)}, Total UTXO value: {sum(u['amount'] for u in utxos) if utxos else 0}")
-        
-        # Use a smaller amount that should work with remaining funds
         options = {"add_inputs": True, "add_to_wallet": True}
-        tx = wallet.send(outputs=[{addr1: 1}], **options)  # Reduced to 1 DGB
+        tx = wallet.send(outputs=[{addr1: 8}], **options)
         assert tx["complete"]
 
         # 6. Explicit add_inputs=false, no preset inputs:
@@ -1194,7 +1171,7 @@ class RawTransactionsTest(DigiByteTestFramework):
         # Case (1), 'walletcreatefundedpsbt' command
         # Default add_inputs value with no preset inputs (add_inputs=true)
         inputs = []
-        outputs = {self.nodes[1].getnewaddress(): 1}  # Reduced to 1 DGB to match available funds
+        outputs = {self.nodes[1].getnewaddress(): 8}
         assert "psbt" in wallet.walletcreatefundedpsbt(inputs=inputs, outputs=outputs)
 
         # Case (2), 'walletcreatefundedpsbt' command
@@ -1203,19 +1180,19 @@ class RawTransactionsTest(DigiByteTestFramework):
             "txid": source_tx["txid"],
             "vout": 1  # change position was hardcoded to index 0
         }]
-        outputs = {self.nodes[1].getnewaddress(): 1}  # Reduced to 1 DGB to match available funds
+        outputs = {self.nodes[1].getnewaddress(): 8}
         assert_raises_rpc_error(-4, ERR_NOT_ENOUGH_PRESET_INPUTS, wallet.walletcreatefundedpsbt, inputs=inputs, outputs=outputs)
 
         # Case (3), Explicit add_inputs=true and preset inputs (with preset inputs not-covering the target amount)
         options["add_inputs"] = True
-        assert "psbt" in wallet.walletcreatefundedpsbt(outputs=[{addr1: 1}], inputs=inputs, **options)  # Reduced to 1 DGB
+        assert "psbt" in wallet.walletcreatefundedpsbt(outputs=[{addr1: 8}], inputs=inputs, **options)
 
         # Case (4), Explicit add_inputs=true and preset inputs (with preset inputs covering the target amount)
         inputs.append({
             "txid": source_tx["txid"],
             "vout": 2  # change position was hardcoded to index 0
         })
-        psbt_tx = wallet.walletcreatefundedpsbt(outputs=[{addr1: 1}], inputs=inputs, **options)  # Reduced to 1 DGB
+        psbt_tx = wallet.walletcreatefundedpsbt(outputs=[{addr1: 8}], inputs=inputs, **options)
         # Check that only the preset inputs were added to the tx
         decoded_psbt_inputs = self.nodes[0].decodepsbt(psbt_tx["psbt"])['tx']['vin']
         assert_equal(len(decoded_psbt_inputs), 2)
@@ -1233,7 +1210,7 @@ class RawTransactionsTest(DigiByteTestFramework):
         options = {"add_inputs": False}
         assert_raises_rpc_error(-4, ERR_NOT_ENOUGH_PRESET_INPUTS, wallet.walletcreatefundedpsbt, inputs=[], outputs=outputs, **options)
 
-        # No wallet cleanup needed - using default wallet
+        self.nodes[2].unloadwallet("test_preset_inputs")
 
     def test_preset_inputs_selection(self):
         self.log.info('Test wallet preset inputs are not double-counted or reused in coin selection')
@@ -1246,16 +1223,9 @@ class RawTransactionsTest(DigiByteTestFramework):
             outputs[wallet.getnewaddress(address_type="bech32")] = 5
         self.nodes[0].sendmany("", outputs)
         self.generate(self.nodes[0], 1)
-        self.sync_all()  # Ensure all nodes are synced
-        
-        # Wait for confirmations and check balance
-        wallet_balance = wallet.getbalance()
-        self.log.info(f"Wallet balance after sendmany: {wallet_balance}")
-        
-        # Select the preset inputs - don't need to wait for coinbase maturity since this is regular tx
-        coins = wallet.listunspent(minconf=1)  # Only confirmed UTXOs
-        self.log.info(f"Available coins: {len(coins)}")
-        assert len(coins) >= 3, f"Expected at least 3 coins, got {len(coins)}, balance: {wallet_balance}"
+
+        # Select the preset inputs
+        coins = wallet.listunspent()
         preset_inputs = [coins[0], coins[1], coins[2]]
 
         # Now let's create the tx creation options
@@ -1301,7 +1271,7 @@ class RawTransactionsTest(DigiByteTestFramework):
         self.nodes[0].sendtoaddress(wallet.getnewaddress(address_type="bech32"), 5)
         self.generate(self.nodes[0], 1)
 
-        rawtx = wallet.createrawtransaction([{'txid': txid, 'vout': vout}], [{self.nodes[0].getnewaddress(address_type="bech32"): 1}])  # Reduced to 1 DGB
+        rawtx = wallet.createrawtransaction([{'txid': txid, 'vout': vout}], [{self.nodes[0].getnewaddress(address_type="bech32"): 8}])
         fundedtx = wallet.fundrawtransaction(rawtx, fee_rate=10, change_type="bech32")
         # with 71-byte signatures we should expect following tx size
         # tx overhead (10) + 2 inputs (41 each) + 2 p2wpkh (31 each) + (segwit marker and flag (2) + 2 p2wpkh 71 byte sig witnesses (107 each)) / witness scaling factor (4)

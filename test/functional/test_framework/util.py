@@ -5,7 +5,6 @@
 """Helpful routines for regression testing."""
 
 from base64 import b64encode
-from binascii import unhexlify
 from decimal import Decimal, ROUND_DOWN
 from subprocess import CalledProcessError
 import hashlib
@@ -202,10 +201,6 @@ def assert_array_result(object_array, to_match, expected, should_not_find=False)
 
 # Utility functions
 ###################
-
-
-def hex_str_to_bytes(hex_str):
-    return unhexlify(hex_str.encode('ascii'))
 
 
 def check_json_precision():
@@ -513,9 +508,6 @@ def find_output(node, txid, amount, *, blockhash=None):
 def gen_return_txouts():
     from .messages import CTxOut
     from .script import CScript, OP_RETURN
-    # Bitcoin creates one 67KB OP_RETURN output
-    # DigiByte has a default limit of 83 bytes, but tests set -datacarriersize=100000
-    # So we can create large OP_RETURN outputs for testing
     txouts = [CTxOut(nValue=0, scriptPubKey=CScript([OP_RETURN, b'\x01'*67437]))]
     assert_equal(sum([len(txout.serialize()) for txout in txouts]), 67456)
     return txouts
@@ -533,8 +525,7 @@ def create_lots_of_big_transactions(mini_wallet, node, fee, tx_batch_size, txout
         )["tx"]
         tx.vout.extend(txouts)
         res = node.testmempoolaccept([tx.serialize().hex()])[0]
-        # Skip fee assertion for now as DigiByte might have different testmempoolaccept format
-        # assert_equal(res['fees']['base'], fee)
+        assert_equal(res['fees']['base'], fee)
         txids.append(node.sendrawtransaction(tx.serialize().hex()))
     return txids
 
@@ -543,13 +534,7 @@ def mine_large_block(test_framework, mini_wallet, node):
     # generate a 66k transaction,
     # and 14 of them is close to the 1MB block limit
     txouts = gen_return_txouts()
-    # DigiByte: Calculate fee for 67KB transaction
-    # DigiByte uses KvB (1000 vbytes), and the transaction is about 67KB
-    # Default relay fee is 0.001 DGB/kB, so for 67KB we need at least 0.067 DGB
-    # Use 10x multiplier for priority, which gives ~0.67 DGB per transaction
-    relay_fee = node.getnetworkinfo()["relayfee"]  # This is per kB
-    tx_size_kb = 68  # Round up to 68KB for safety
-    fee = tx_size_kb * relay_fee * 10  # 10x multiplier for priority
+    fee = 100 * node.getnetworkinfo()["relayfee"]
     create_lots_of_big_transactions(mini_wallet, node, fee, 14, txouts)
     test_framework.generate(node, 1)
 

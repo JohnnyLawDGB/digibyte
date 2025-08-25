@@ -12,12 +12,10 @@ from test_framework.wallet import MiniWallet
 class MempoolCoinbaseTest(DigiByteTestFramework):
     def set_test_params(self):
         self.num_nodes = 1
-        self.extra_args = [['-dandelion=0']]  # disable Dandelion++ for testing
 
     def run_test(self):
         node = self.nodes[0]
         wallet = MiniWallet(node)
-        wallet.rescan_utxos()
 
         # Spend block 1/2/3's coinbase transactions
         # Mine a block

@@ -53,7 +53,7 @@ Test that the nodes generate the correct change address type:
 from decimal import Decimal
 import itertools
 
-from test_framework.blocktools import COINBASE_MATURITY_2
+from test_framework.blocktools import COINBASE_MATURITY
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.descriptors import (
     descsum_create,
@@ -80,9 +80,8 @@ class AddressTypeTest(DigiByteTestFramework):
             [],
         ]
         # whitelist all peers to speed up tx relay / mempool sync
-        # DigiByte: Disable Dandelion++ to prevent transaction propagation delays
         for args in self.extra_args:
-            args.extend(["-whitelist=noban@127.0.0.1", "-dandelion=0"])
+            args.append("-whitelist=noban@127.0.0.1")
         self.supports_cli = False
 
     def skip_test_if_missing_module(self):
@@ -230,13 +229,7 @@ class AddressTypeTest(DigiByteTestFramework):
     def run_test(self):
         # Mine 101 blocks on node5 to bring nodes out of IBD and make sure that
         # no coinbases are maturing for the nodes-under-test during the test
-        # DigiByte: Use COINBASE_MATURITY_2 to wait for DigiByte maturation
-        self.generate(self.nodes[5], COINBASE_MATURITY_2 + 1)
-        
-        # DigiByte: Fund nodes 0-4 for the test - each needs some initial balance
-        for i in range(4):
-            self.generatetoaddress(self.nodes[5], COINBASE_MATURITY_2 + 1, self.nodes[i].getnewaddress())
-        self.sync_all()
+        self.generate(self.nodes[5], COINBASE_MATURITY + 1)
 
         uncompressed_1 = "0496b538e853519c726a2c91e61ec11600ae1390813a627c66fb8be7947be63c52da7589379515d4e0a604f8141781e62294721166bf621e73a82cbf2342c858ee"
         uncompressed_2 = "047211a824f55b505228e4c3d5194c1fcfaa15a456abdf37f9b9d97a4040afc073dee6c89064984f03385237d92167c13e236446b417ab79a0fcae412ae3316b77"
@@ -273,8 +266,7 @@ class AddressTypeTest(DigiByteTestFramework):
             self.log.info("Sending from node {} ({}) with{} multisig using {}".format(from_node, self.extra_args[from_node], "" if multisig else "out", "default" if address_type is None else address_type))
             old_balances = self.get_balances()
             self.log.debug("Old balances are {}".format(old_balances))
-            # DigiByte: Use COINBASE_MATURITY_2 instead of COINBASE_MATURITY
-            to_send = (old_balances[from_node] / (COINBASE_MATURITY_2 + 1)).quantize(Decimal("0.00000001"))
+            to_send = (old_balances[from_node] / (COINBASE_MATURITY + 1)).quantize(Decimal("0.00000001"))
             sends = {}
             addresses = {}
 
@@ -338,22 +330,10 @@ class AddressTypeTest(DigiByteTestFramework):
             self.log.debug("Check new balances: {}".format(new_balances))
             # We don't know what fee was set, so we can only check bounds on the balance of the sending node
             assert_greater_than(new_balances[from_node], to_send * 10)
-            # DigiByte: Allow tolerance for sender balance due to fee/reward differences
-            sender_upper_bound = to_send * 11
-            if new_balances[from_node] > sender_upper_bound + Decimal('2000'):
-                # If balance exceeds bounds by more than tolerance, fail with debug info
-                assert_greater_than(sender_upper_bound, new_balances[from_node])
-            # Otherwise the check passes with tolerance
+            assert_greater_than(to_send * 11, new_balances[from_node])
             for n, to_node in enumerate(range(from_node + 1, from_node + 4)):
                 to_node %= 4
-                expected_balance = old_balances[to_node] + to_send * 10 * (2 + n)
-                actual_balance = new_balances[to_node]
-                # DigiByte: Allow tolerance for fee calculation differences (about 0.05% of total balance)
-                balance_diff = abs(actual_balance - expected_balance)
-                if balance_diff > Decimal('2000'):  # Allow up to 2000 DGB tolerance for DigiByte fee differences
-                    # If difference is significant, use the old strict assertion for debugging
-                    assert_equal(actual_balance, expected_balance)
-                # If within tolerance, the check passes
+                assert_equal(new_balances[to_node], old_balances[to_node] + to_send * 10 * (2 + n))
 
         # Get one p2sh/segwit address from node2 and two bech32 addresses from node3:
         to_address_p2sh = self.nodes[2].getnewaddress()
@@ -406,7 +386,6 @@ class AddressTypeTest(DigiByteTestFramework):
             self.log.info("Legacy wallets cannot make bech32m addresses")
             assert_raises_rpc_error(-8, "Legacy wallets cannot provide bech32m addresses", self.nodes[0].getnewaddress, "", "bech32m")
             assert_raises_rpc_error(-8, "Legacy wallets cannot provide bech32m addresses", self.nodes[0].getrawchangeaddress, "bech32m")
-
 
 if __name__ == '__main__':
     AddressTypeTest().main()

@@ -26,6 +26,7 @@ from test_framework.util import (
 )
 from test_framework.wallet import MiniWallet
 
+
 class TestP2PConn(P2PInterface):
     def __init__(self):
         super().__init__()
@@ -48,9 +49,6 @@ class MaxUploadTest(DigiByteTestFramework):
             "-datacarriersize=100000",
         ]]
         self.supports_cli = False
-
-    def skip_test_if_missing_module(self):
-        self.skip_if_no_wallet()
 
     def run_test(self):
         # Before we connect anything, we first set the time on the node
@@ -102,9 +100,6 @@ class MaxUploadTest(DigiByteTestFramework):
 
         # 576MB will be reserved for relaying new blocks, so expect this to
         # succeed for ~235 tries.
-        # DigiByte: With ~900KB blocks from Bitcoin v26.2 approach, we need ~260 iterations
-        # to hit the 224MB limit. Use actual calculated count.
-        
         for i in range(success_count):
             p2p_conns[0].send_and_ping(getdata_request)
             assert_equal(p2p_conns[0].block_receive_map[big_old_block], i+1)
@@ -120,9 +115,9 @@ class MaxUploadTest(DigiByteTestFramework):
 
         # Requesting the current block on p2p_conns[1] should succeed indefinitely,
         # even when over the max upload target.
-        # DigiByte: Reduce iterations to prevent timeout while still testing functionality
+        # We'll try 800 times
         getdata_request.inv = [CInv(MSG_BLOCK, big_new_block)]
-        for i in range(100):
+        for i in range(800):
             p2p_conns[1].send_and_ping(getdata_request)
             assert_equal(p2p_conns[1].block_receive_map[big_new_block], i+1)
 

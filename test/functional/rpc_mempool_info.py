@@ -15,7 +15,6 @@ from test_framework.wallet import MiniWallet
 class RPCMempoolInfoTest(DigiByteTestFramework):
     def set_test_params(self):
         self.num_nodes = 1
-        self.extra_args = [["-minrelaytxfee=0.00001", "-dandelion=0"]]
 
     def run_test(self):
         self.wallet = MiniWallet(self.nodes[0])

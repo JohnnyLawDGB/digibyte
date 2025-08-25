@@ -30,7 +30,7 @@ import unittest
 os.environ["REQUIRE_WALLET_TYPE_SET"] = "1"
 
 # Formatting. Default colors to empty strings.
-DEFAULT, BOLD, GREEN, RED, GREY = ("", ""), ("", ""), ("", ""), ("", ""), ("", "")
+DEFAULT, BOLD, GREEN, RED = ("", ""), ("", ""), ("", ""), ("", "")
 try:
     # Make sure python thinks it can write unicode to its stdout
     "\u2713".encode("utf_8").decode(sys.stdout.encoding)
@@ -81,7 +81,6 @@ TEST_FRAMEWORK_MODULES = [
     "ripemd160",
     "script",
     "segwit_addr",
-    "util",
 ]
 
 EXTENDED_SCRIPTS = [
@@ -96,7 +95,6 @@ EXTENDED_SCRIPTS = [
 BASE_SCRIPTS = [
     # Scripts that are run by default.
     # Longest test should go first, to favor running tests in parallel
-    'p2p_dandelion.py', # p2p dandelion anonymous tx test
     # vv Tests less than 5m vv
     'feature_fee_estimation.py',
     'feature_taproot.py',
@@ -108,26 +106,6 @@ BASE_SCRIPTS = [
     'mempool_updatefromblock.py',
     'mempool_persist.py --descriptors',
     'wallet_miniscript.py --descriptors',
-    'wallet_hd.py --legacy-wallet',
-    'wallet_hd.py --descriptors',
-    'wallet_backup.py --legacy-wallet',
-    'wallet_backup.py --descriptors',
-    'p2p_compactblocks.py',
-    'feature_segwit.py --legacy-wallet',
-    'feature_segwit.py --descriptors',
-    'feature_segwit.py --descriptors --v2transport',
-    'wallet_basic.py --legacy-wallet',
-    'wallet_basic.py --descriptors',
-    'wallet_labels.py --legacy-wallet',
-    'wallet_labels.py --descriptors',
-    'p2p_timeouts.py',
-    'p2p_tx_download.py',
-    'wallet_dump.py --legacy-wallet',
-    'wallet_listtransactions.py --legacy-wallet',
-    'wallet_listtransactions.py --descriptors',
-    'feature_taproot.py --previous-releases',
-    'rpc_signer.py',
-    'wallet_signer.py --descriptors',
     # vv Tests less than 60s vv
     'rpc_psbt.py --legacy-wallet',
     'rpc_psbt.py --descriptors',
@@ -136,12 +114,21 @@ BASE_SCRIPTS = [
     'wallet_bumpfee.py --legacy-wallet',
     'wallet_bumpfee.py --descriptors',
     'wallet_import_rescan.py --legacy-wallet',
+    'wallet_backup.py --legacy-wallet',
+    'wallet_backup.py --descriptors',
+    'feature_segwit.py --legacy-wallet',
+    'feature_segwit.py --descriptors',
+    # DigiByte: v2transport disabled
+    # 'feature_segwit.py --descriptors --v2transport',
+    'p2p_tx_download.py',
     'wallet_avoidreuse.py --legacy-wallet',
     'wallet_avoidreuse.py --descriptors',
     'feature_abortnode.py',
     'wallet_address_types.py --legacy-wallet',
     'wallet_address_types.py --descriptors',
     'p2p_orphan_handling.py',
+    'wallet_basic.py --legacy-wallet',
+    'wallet_basic.py --descriptors',
     'feature_maxtipage.py',
     'wallet_multiwallet.py --legacy-wallet',
     'wallet_multiwallet.py --descriptors',
@@ -150,7 +137,7 @@ BASE_SCRIPTS = [
     'wallet_groups.py --legacy-wallet',
     'wallet_groups.py --descriptors',
     'p2p_blockfilters.py',
-    # 'feature_assumevalid.py', # DISABLED: Hangs during initialization - requires investigation of multi-algo PoW compatibility
+    'feature_assumevalid.py',
     'wallet_taproot.py --descriptors',
     'feature_bip68_sequence.py',
     'rpc_packages.py',
@@ -161,10 +148,15 @@ BASE_SCRIPTS = [
     'p2p_feefilter.py',
     'feature_csv_activation.py',
     'p2p_sendheaders.py',
+    'wallet_listtransactions.py --legacy-wallet',
+    'wallet_listtransactions.py --descriptors',
     # vv Tests less than 30s vv
     'p2p_invalid_messages.py',
-    'rpc_createmultisig.py --legacy-wallet',
-    'rpc_createmultisig.py --descriptors',
+    'rpc_createmultisig.py',
+    'p2p_timeouts.py',
+    'wallet_dump.py --legacy-wallet',
+    'rpc_signer.py',
+    'wallet_signer.py --descriptors',
     'wallet_importmulti.py --legacy-wallet',
     'mempool_limit.py',
     'rpc_txoutproof.py',
@@ -174,6 +166,12 @@ BASE_SCRIPTS = [
     'wallet_abandonconflict.py --descriptors',
     'feature_reindex.py',
     'feature_reindex_readonly.py',
+    'wallet_labels.py --legacy-wallet',
+    'wallet_labels.py --descriptors',
+    'p2p_compactblocks.py',
+    'p2p_compactblocks_blocksonly.py',
+    'wallet_hd.py --legacy-wallet',
+    'wallet_hd.py --descriptors',
     'wallet_blank.py --legacy-wallet',
     'wallet_blank.py --descriptors',
     'wallet_keypool_topup.py --legacy-wallet',
@@ -182,7 +180,6 @@ BASE_SCRIPTS = [
     'interface_zmq.py',
     'rpc_invalid_address_message.py',
     'rpc_validateaddress.py',
-    'interface_digibyte_cli.py',
     'interface_digibyte_cli.py --legacy-wallet',
     'interface_digibyte_cli.py --descriptors',
     'feature_bind_extra.py',
@@ -200,9 +197,9 @@ BASE_SCRIPTS = [
     'mempool_spend_coinbase.py',
     'wallet_avoid_mixing_output_types.py --descriptors',
     'mempool_reorg.py',
-    'mempool_persist.py',
     'p2p_block_sync.py',
-    'p2p_block_sync.py --v2transport',
+    # DigiByte: v2transport disabled
+    # 'p2p_block_sync.py --v2transport',
     'wallet_createwallet.py --legacy-wallet',
     'wallet_createwallet.py --usecli',
     'wallet_createwallet.py --descriptors',
@@ -220,32 +217,28 @@ BASE_SCRIPTS = [
     'interface_usdt_net.py',
     'interface_usdt_utxocache.py',
     'interface_usdt_validation.py',
-    'rpc_psbt.py --legacy-wallet',
-    'rpc_psbt.py --descriptors',
     'rpc_users.py',
     'rpc_whitelist.py',
     'feature_proxy.py',
-    'rpc_signrawtransaction.py --legacy-wallet',
-    'rpc_signrawtransaction.py --descriptors',
     'wallet_signrawtransactionwithwallet.py --legacy-wallet',
     'wallet_signrawtransactionwithwallet.py --descriptors',
     'rpc_signrawtransactionwithkey.py',
     'rpc_rawtransaction.py --legacy-wallet',
-    'rpc_rawtransaction.py --descriptors',
     'wallet_transactiontime_rescan.py --descriptors',
     'wallet_transactiontime_rescan.py --legacy-wallet',
     'p2p_addrv2_relay.py',
     'p2p_compactblocks_hb.py',
-    'p2p_compactblocks_hb.py --v2transport',
+    # DigiByte: v2transport disabled
+    # 'p2p_compactblocks_hb.py --v2transport',
     'p2p_disconnect_ban.py',
-    'p2p_disconnect_ban.py --v2transport',
+    # DigiByte: v2transport disabled
+    # 'p2p_disconnect_ban.py --v2transport',
     'feature_posix_fs_permissions.py',
     'rpc_decodescript.py',
     'rpc_blockchain.py',
-    'rpc_blockchain.py --v2transport',
+    # DigiByte: v2transport disabled
+    # 'rpc_blockchain.py --v2transport',
     'rpc_deprecated.py',
-    'wallet_disable.py --legacy-wallet',
-    'wallet_disable.py --descriptors',
     'wallet_disable.py',
     'wallet_change_address.py --legacy-wallet',
     'wallet_change_address.py --descriptors',
@@ -253,6 +246,9 @@ BASE_SCRIPTS = [
     'p2p_getaddr_caching.py',
     'p2p_getdata.py',
     'p2p_addrfetch.py',
+    # DigiByte-specific tests
+    'p2p_dandelion.py',
+    'rpc_getblockreward.py',
     'rpc_net.py',
     'wallet_keypool.py --legacy-wallet',
     'wallet_keypool.py --descriptors',
@@ -264,16 +260,16 @@ BASE_SCRIPTS = [
     'mining_prioritisetransaction.py',
     'p2p_invalid_locator.py',
     'p2p_invalid_block.py',
-    'p2p_invalid_block.py --v2transport',
+    # DigiByte: v2transport disabled
+    # 'p2p_invalid_block.py --v2transport',
     'p2p_invalid_tx.py',
-    'p2p_invalid_tx.py --v2transport',
+    # DigiByte: v2transport disabled
+    # 'p2p_invalid_tx.py --v2transport',
     'p2p_v2_transport.py',
     'example_test.py',
     'wallet_txn_doublespend.py --legacy-wallet',
     'wallet_multisig_descriptor_psbt.py --descriptors',
     'wallet_txn_doublespend.py --descriptors',
-    'feature_backwards_compatibility.py --legacy-wallet',
-    'feature_backwards_compatibility.py --descriptors',
     'wallet_backwards_compatibility.py --legacy-wallet',
     'wallet_backwards_compatibility.py --descriptors',
     'wallet_txn_clone.py --mineblock',
@@ -291,36 +287,31 @@ BASE_SCRIPTS = [
     'wallet_importprunedfunds.py --legacy-wallet',
     'wallet_importprunedfunds.py --descriptors',
     'p2p_leak_tx.py',
-    # 'p2p_leak_tx.py --v2transport',  # Skipped: v2transport not supported in DigiByte, causes test suite to hang
+    # DigiByte: v2transport disabled
+    # 'p2p_leak_tx.py --v2transport',
     'p2p_eviction.py',
     'p2p_ibd_stalling.py',
-    'p2p_ibd_stalling.py --v2transport',
+    # DigiByte: v2transport disabled
+    # 'p2p_ibd_stalling.py --v2transport',
     'p2p_net_deadlock.py',
-    'p2p_net_deadlock.py --v2transport',
-    'rpc_signmessage.py',
+    # DigiByte: v2transport disabled
+    # 'p2p_net_deadlock.py --v2transport',
     'wallet_signmessagewithaddress.py',
     'rpc_signmessagewithprivkey.py',
-    'rpc_generateblock.py',
     'rpc_generate.py',
-    'rpc_getblockreward.py',
     'wallet_balance.py --legacy-wallet',
     'wallet_balance.py --descriptors',
     'p2p_initial_headers_sync.py',
-    'feature_nulldummy.py --legacy-wallet',
-    'feature_nulldummy.py --descriptors',
     'feature_nulldummy.py',
     'mempool_accept.py',
     'mempool_expiry.py',
-    'wallet_import_rescan.py --legacy-wallet',
     'wallet_import_with_label.py --legacy-wallet',
     'wallet_importdescriptors.py --descriptors',
     'wallet_upgradewallet.py --legacy-wallet',
     'wallet_crosschain.py',
     'mining_basic.py',
-    #'feature_signet.py',
+    'feature_signet.py',
     'p2p_mutated_blocks.py',
-    'wallet_bumpfee.py --legacy-wallet',
-    'wallet_bumpfee.py --descriptors',
     'wallet_implicitsegwit.py --legacy-wallet',
     'rpc_named_arguments.py',
     'feature_startupnotify.py',
@@ -340,10 +331,6 @@ BASE_SCRIPTS = [
     'wallet_resendwallettransactions.py --descriptors',
     'wallet_fallbackfee.py --legacy-wallet',
     'wallet_fallbackfee.py --descriptors',
-    'wallet_sendmany_chain.py --legacy-wallet',
-    'wallet_sendmany_chain.py --descriptors',
-    'wallet_fee_estimation_test.py',
-    'feature_fee_estimator.py',
     'rpc_dumptxoutset.py',
     'feature_minchainwork.py',
     'rpc_estimatefee.py',
@@ -355,7 +342,6 @@ BASE_SCRIPTS = [
     'wallet_sendall.py --legacy-wallet',
     'wallet_sendall.py --descriptors',
     'wallet_create_tx.py --descriptors',
-    'wallet_taproot.py',
     'wallet_inactive_hdchains.py --legacy-wallet',
     'wallet_spend_unconfirmed.py',
     'wallet_rescan_unconfirmed.py --descriptors',
@@ -366,7 +352,7 @@ BASE_SCRIPTS = [
     'wallet_coinbase_category.py --descriptors',
     'feature_filelock.py',
     'feature_loadblock.py',
-    # 'feature_assumeutxo.py', # DISABLED: Hangs during background validation - requires investigation of multi-algo PoW compatibility
+    'feature_assumeutxo.py',
     'p2p_dos_header_tree.py',
     'p2p_add_connections.py',
     'feature_bind_port_discover.py',
@@ -408,14 +394,12 @@ BASE_SCRIPTS = [
     'feature_settings.py',
     'rpc_getdescriptorinfo.py',
     'rpc_mempool_info.py',
-    'rpc_addresses_deprecation.py',
     'rpc_help.py',
     'feature_dirsymlinks.py',
     'feature_help.py',
     'feature_shutdown.py',
     'wallet_migration.py',
     'p2p_ibd_txrelay.py',
-    'feature_blockfilterindex_prune.py'
     # Don't append tests at the end to avoid merge conflicts
     # Put them in a random line within the section that fits their approximate run-time
 ]
@@ -454,12 +438,11 @@ def main():
 
     args, unknown_args = parser.parse_known_args()
     if not args.ansi:
-        global DEFAULT, BOLD, GREEN, RED, GREY
+        global DEFAULT, BOLD, GREEN, RED
         DEFAULT = ("", "")
         BOLD = ("", "")
         GREEN = ("", "")
         RED = ("", "")
-        GREY = ("", "")
 
     # args to be passed on always start with two dashes; tests are the remaining unknown args
     tests = [arg for arg in unknown_args if arg[:2] != "--"]
@@ -583,6 +566,7 @@ def run_tests(*, test_list, src_dir, build_dir, tmpdir, jobs=1, enable_coverage=
 
     # Test Framework Tests
     print("Running Unit Tests for Test Framework Modules")
+
     tests_dir = src_dir + '/test/functional/'
     # This allows `test_runner.py` to work from an out-of-source build directory using a symlink,
     # a hard link or a copy on any platform. See https://github.com/digibyte/digibyte/pull/27561.

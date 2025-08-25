@@ -45,30 +45,25 @@ from .script_util import (
 )
 from .util import assert_equal
 
-from .blockversion import (
-    VERSIONBITS_TOP_BITS,
-    BLOCK_VERSION,
-    VERSIONBITS_LAST_OLD_BLOCK_VERSION,
-)
-
 WITNESS_SCALE_FACTOR = 4
 MAX_BLOCK_SIGOPS = 20000
 MAX_BLOCK_SIGOPS_WEIGHT = MAX_BLOCK_SIGOPS * WITNESS_SCALE_FACTOR
 
 # Genesis block time (regtest)
-TIME_GENESIS_BLOCK = 1519460922
+TIME_GENESIS_BLOCK = 1296688602
 
 MAX_FUTURE_BLOCK_TIME = 2 * 60 * 60
 
 # Coinbase transaction outputs can only be spent after this number of new blocks (network rule)
-COINBASE_MATURITY = 8
-COINBASE_MATURITY_2 = 100
+COINBASE_MATURITY = 100
 
 # From BIP141
 WITNESS_COMMITMENT_HEADER = b"\xaa\x21\xa9\xed"
 
 NORMAL_GBT_REQUEST_PARAMS = {"rules": ["segwit"]}
+VERSIONBITS_LAST_OLD_BLOCK_VERSION = 4
 MIN_BLOCKS_TO_KEEP = 288
+
 
 def create_block(hashprev=None, coinbase=None, ntime=None, *, version=None, tmpl=None, txlist=None):
     """Create a block (with regtest difficulty)."""
@@ -91,7 +86,6 @@ def create_block(hashprev=None, coinbase=None, ntime=None, *, version=None, tmpl
                 tx = tx_from_hex(tx)
             block.vtx.append(tx)
     block.hashMerkleRoot = block.calc_merkle_root()
-    # block.calc_scrypt()
     block.calc_sha256()
     return block
 
@@ -127,47 +121,8 @@ def script_BIP34_coinbase_height(height):
         return CScript([res, OP_1])
     return CScript([CScriptNum(height)])
 
-def get_coinbase_value(height): 
-    # DigiByte subsidy schedule for regtest
-    # Matches GetBlockSubsidy in validation.cpp
-    # nDiffChangeTarget = 334
-    # alwaysUpdateDiffChangeTarget = 200
-    # workComputationChangeTarget = 400
-    COIN = 100000000
-    
-    if height < 334:  # nDiffChangeTarget
-        if height < 1440:
-            return 72000
-        elif height < 5760:
-            return 16000
-        else:
-            return 8000
-    elif height < 200:  # alwaysUpdateDiffChangeTarget (never true since 334 > 200)
-        # Period IV - This condition can never be true in regtest
-        pass
-    elif height < 400:  # workComputationChangeTarget
-        # Period V
-        subsidy = 2459 * COIN
-        blocks = height - 200  # alwaysUpdateDiffChangeTarget
-        weeks = blocks // 80 + 1  # patchBlockRewardDuration2 = 80
-        # Decrease by 1% per period
-        for i in range(weeks):
-            subsidy = subsidy - (subsidy // 100)
-        return subsidy // COIN
-    else:
-        # Period VI
-        subsidy = 2157 * COIN // 2
-        blocks = height - 400
-        # 15 second blocks, ~2.59M seconds per month
-        months = blocks * 15 // 2592000
-        for i in range(months):
-            subsidy = subsidy * 98884 // 100000
-        # Minimum subsidy is 1 DGB, otherwise 0
-        if subsidy < COIN:
-            return 0
-        return subsidy // COIN
 
-def create_coinbase(height, pubkey=None, *, script_pubkey=None, extra_output_script=None, fees=0, nValue=None):
+def create_coinbase(height, pubkey=None, *, script_pubkey=None, extra_output_script=None, fees=0, nValue=50):
     """Create a coinbase transaction.
 
     If pubkey is passed in, the coinbase output will be a P2PK output;
@@ -175,14 +130,13 @@ def create_coinbase(height, pubkey=None, *, script_pubkey=None, extra_output_scr
 
     If extra_output_script is given, make a 0-value output to that
     script. This is useful to pad block weight/sigops as needed. """
-    if nValue is None:
-        nValue = get_coinbase_value(height)
-
     coinbase = CTransaction()
     coinbase.vin.append(CTxIn(COutPoint(0, 0xffffffff), script_BIP34_coinbase_height(height), SEQUENCE_FINAL))
     coinbaseoutput = CTxOut()
     coinbaseoutput.nValue = nValue * COIN
-    if nValue == get_coinbase_value(height):
+    if nValue == 50:
+        halvings = int(height / 150)  # regtest
+        coinbaseoutput.nValue >>= halvings
         coinbaseoutput.nValue += fees
     if pubkey is not None:
         coinbaseoutput.scriptPubKey = key_to_p2pk_script(pubkey)
@@ -211,30 +165,6 @@ def create_tx_with_script(prevtx, n, script_sig=b"", *, amount, script_pub_key=C
     tx.vout.append(CTxOut(amount, script_pub_key))
     tx.calc_sha256()
     return tx
-
-def create_transaction(node, txid, to_address, *, amount):
-    """ Return signed transaction spending the first output of the
-        input txid. Note that the node must have a wallet that can
-        sign for the output that is being spent.
-    """
-    raw_tx = create_raw_transaction(node, txid, to_address, amount=amount)
-    tx = tx_from_hex(raw_tx)
-    return tx
-
-def create_raw_transaction(node, txid, to_address, *, amount):
-    """ Return raw signed transaction spending the first output of the
-        input txid. Note that the node must have a wallet that can sign
-        for the output that is being spent.
-    """
-    psbt = node.createpsbt(inputs=[{"txid": txid, "vout": 0}], outputs={to_address: amount})
-    for _ in range(2):
-        for w in node.listwallets():
-            wrpc = node.get_wallet_rpc(w)
-            signed_psbt = wrpc.walletprocesspsbt(psbt)
-            psbt = signed_psbt['psbt']
-    final_psbt = node.finalizepsbt(psbt)
-    assert_equal(final_psbt["complete"], True)
-    return final_psbt['hex']
 
 def get_legacy_sigopcount_block(block, accurate=True):
     count = 0
@@ -270,29 +200,13 @@ def create_witness_tx(node, use_p2wsh, utxo, pubkey, encode_p2sh, amount):
     """Return a transaction (in hex) that spends the given utxo to a segwit output.
 
     Optionally wrap the segwit output using P2SH."""
-    # Use node RPC to generate DigiByte-compatible addresses
-    from test_framework.script import CScript
-    # pubkey might be str or bytes, convert to hex string
-    if isinstance(pubkey, str):
-        pubkey_hex = pubkey
-    else:
-        pubkey_hex = pubkey.hex()
-    
     if use_p2wsh:
-        # Create a 1-of-1 multisig for P2WSH
-        ms_info = node.createmultisig(1, [pubkey_hex], 'p2sh-segwit' if encode_p2sh else 'bech32')
-        addr = ms_info['address']
+        program = keys_to_multisig_script([pubkey])
+        addr = script_to_p2sh_p2wsh(program) if encode_p2sh else script_to_p2wsh(program)
     else:
-        # For P2WPKH, we need to derive from a descriptor
-        from test_framework.descriptors import descsum_create
-        if encode_p2sh:
-            # P2SH-P2WPKH - we need to create this via descriptor
-            desc = descsum_create(f"sh(wpkh({pubkey_hex}))")
-        else:
-            # P2WPKH
-            desc = descsum_create(f"wpkh({pubkey_hex})")
-        addr = node.deriveaddresses(desc)[0]
-    
+        addr = key_to_p2sh_p2wpkh(pubkey) if encode_p2sh else key_to_p2wpkh(pubkey)
+    if not encode_p2sh:
+        assert_equal(address_to_scriptpubkey(addr).hex(), witness_script(use_p2wsh, pubkey))
     return node.createrawtransaction([utxo], {addr: amount})
 
 def send_to_witness(use_p2wsh, node, utxo, pubkey, encode_p2sh, amount, sign=True, insert_redeem_script=""):
@@ -305,7 +219,7 @@ def send_to_witness(use_p2wsh, node, utxo, pubkey, encode_p2sh, amount, sign=Tru
     tx_to_witness = create_witness_tx(node, use_p2wsh, utxo, pubkey, encode_p2sh, amount)
     if (sign):
         signed = node.signrawtransactionwithwallet(tx_to_witness)
-        assert "errors" not in signed or len(signed["errors"]) == 0
+        assert "errors" not in signed or len(["errors"]) == 0
         return node.sendrawtransaction(signed["hex"])
     else:
         if (insert_redeem_script):

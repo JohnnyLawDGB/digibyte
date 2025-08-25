@@ -3,7 +3,6 @@
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test logic for limiting mempool and package ancestors/descendants."""
-from decimal import Decimal
 from test_framework.blocktools import COINBASE_MATURITY
 from test_framework.messages import (
     WITNESS_SCALE_FACTOR,
@@ -29,45 +28,12 @@ def check_package_limits(func):
         package_hex = func(self, *args, **kwargs)
         testres_error_expected = node.testmempoolaccept(rawtxs=package_hex)
         assert_equal(len(testres_error_expected), len(package_hex))
-        
-        # Debug logging
-        self.log.debug(f"Package test results: {testres_error_expected}")
-        
-        package_rejected = False
-        for i, txres in enumerate(testres_error_expected):
-            if "package-error" in txres:
-                assert_equal(txres["package-error"], "package-mempool-limits")
-                package_rejected = True
-            elif "allowed" in txres and not txres["allowed"]:
-                # Some transactions may be individually rejected rather than package-rejected
-                # This is still a valid test result
-                self.log.debug(f"Transaction {i} individually rejected: {txres}")
-                if "too many unconfirmed ancestors" in txres.get("reject-reason", "") or \
-                   "too-long-mempool-chain" in txres.get("reject-reason", ""):
-                    package_rejected = True
-            else:
-                # For DigiByte, check if testmempoolaccept returns a different format
-                # In DigiByte, if there's no "allowed" field and no error, it means accepted
-                if "reject-reason" not in txres and "package-error" not in txres and "allowed" not in txres:
-                    # This means the transaction was accepted, which is not expected
-                    self.log.debug(f"Transaction {i} was unexpectedly accepted: {txres}")
-                else:
-                    # Some other format we don't understand
-                    self.log.warning(f"Unexpected transaction result format: {txres}")
-        
-        if not package_rejected:
-            # The package should have been rejected due to ancestor/descendant limits
-            raise AssertionError("Package should have been rejected due to ancestor/descendant limits")
+        for txres in testres_error_expected:
+            assert_equal(txres["package-error"], "package-mempool-limits")
 
         # Clear mempool and check that the package passes now
         self.generate(node, 1)
-        testres_success = node.testmempoolaccept(rawtxs=package_hex)
-        # In DigiByte, successful testmempoolaccept responses don't include "allowed" field
-        # but failed ones have "allowed": false
-        for res in testres_success:
-            if "allowed" in res:
-                assert res["allowed"], f"Transaction still failing after clearing mempool: {res}"
-            # If "allowed" is not present, it means the transaction passed
+        assert all([res["allowed"] for res in node.testmempoolaccept(rawtxs=package_hex)])
 
     return func_wrapper
 
@@ -81,12 +47,6 @@ class MempoolPackageLimitsTest(DigiByteTestFramework):
         self.wallet = MiniWallet(self.nodes[0])
         # Add enough mature utxos to the wallet so that all txs spend confirmed coins.
         self.generate(self.wallet, COINBASE_MATURITY + 35)
-        
-        # Get DigiByte's minimum relay fee to ensure all transactions meet it
-        self.min_relay_fee = self.nodes[0].getnetworkinfo()['relayfee']
-        # Ensure it's at least the default value
-        if self.min_relay_fee < Decimal('0.001'):
-            self.min_relay_fee = Decimal('0.001')
 
         self.test_chain_limits()
         self.test_desc_count_limits()
@@ -96,10 +56,9 @@ class MempoolPackageLimitsTest(DigiByteTestFramework):
         self.test_anc_count_limits_bushy()
 
         # The node will accept (nonstandard) extra large OP_RETURN outputs
-        # Skip large transaction tests for DigiByte as they cause scriptpubkey errors
-        # self.restart_node(0, extra_args=["-datacarriersize=100000"])
-        # self.test_anc_size_limits()
-        # self.test_desc_size_limits()
+        self.restart_node(0, extra_args=["-datacarriersize=100000"])
+        self.test_anc_size_limits()
+        self.test_desc_size_limits()
 
     @check_package_limits
     def test_chain_limits_helper(self, mempool_count, package_count):
@@ -109,7 +68,7 @@ class MempoolPackageLimitsTest(DigiByteTestFramework):
         chaintip_utxo = self.wallet.send_self_transfer_chain(from_node=node, chain_length=mempool_count)[-1]["new_utxo"]
         # in-package transactions
         for _ in range(package_count):
-            tx = self.wallet.create_self_transfer(utxo_to_spend=chaintip_utxo, fee_rate=self.min_relay_fee)
+            tx = self.wallet.create_self_transfer(utxo_to_spend=chaintip_utxo)
             chaintip_utxo = tx["new_utxo"]
             chain_hex.append(tx["hex"])
         return chain_hex
@@ -150,21 +109,20 @@ class MempoolPackageLimitsTest(DigiByteTestFramework):
         """
         node = self.nodes[0]
         self.log.info("Check that in-mempool and in-package descendants are calculated properly in packages")
-        # Top parent in mempool, M1 - ensure proper fee for multi-output
-        fee_per_output = int(self.min_relay_fee * 100 * 100000)  # 100 vbytes per output estimate
-        m1_utxos = self.wallet.send_self_transfer_multi(from_node=node, num_outputs=2, fee_per_output=fee_per_output)['new_utxos']
+        # Top parent in mempool, M1
+        m1_utxos = self.wallet.send_self_transfer_multi(from_node=node, num_outputs=2)['new_utxos']
 
         package_hex = []
         # Chain A (M2a... M12a)
         chain_a_tip_utxo = self.wallet.send_self_transfer_chain(from_node=node, chain_length=11, utxo_to_spend=m1_utxos[0])[-1]["new_utxo"]
         # Pa
-        pa_hex = self.wallet.create_self_transfer(utxo_to_spend=chain_a_tip_utxo, fee_rate=self.min_relay_fee)["hex"]
+        pa_hex = self.wallet.create_self_transfer(utxo_to_spend=chain_a_tip_utxo)["hex"]
         package_hex.append(pa_hex)
 
         # Chain B (M2b... M13b)
         chain_b_tip_utxo = self.wallet.send_self_transfer_chain(from_node=node, chain_length=12, utxo_to_spend=m1_utxos[1])[-1]["new_utxo"]
         # Pb
-        pb_hex = self.wallet.create_self_transfer(utxo_to_spend=chain_b_tip_utxo, fee_rate=self.min_relay_fee)["hex"]
+        pb_hex = self.wallet.create_self_transfer(utxo_to_spend=chain_b_tip_utxo)["hex"]
         package_hex.append(pb_hex)
 
         assert_equal(24, node.getmempoolinfo()["size"])
@@ -192,19 +150,18 @@ class MempoolPackageLimitsTest(DigiByteTestFramework):
 
         node = self.nodes[0]
         package_hex = []
-        # M1 - ensure proper fee for multi-output
-        fee_per_output = int(self.min_relay_fee * 100 * 100000)  # 100 vbytes per output estimate
-        m1_utxos = self.wallet.send_self_transfer_multi(from_node=node, num_outputs=2, fee_per_output=fee_per_output)['new_utxos']
+        # M1
+        m1_utxos = self.wallet.send_self_transfer_multi(from_node=node, num_outputs=2)['new_utxos']
 
         # Chain M2...M24
-        self.wallet.send_self_transfer_chain(from_node=node, chain_length=23, utxo_to_spend=m1_utxos[0])
+        self.wallet.send_self_transfer_chain(from_node=node, chain_length=23, utxo_to_spend=m1_utxos[0])[-1]["new_utxo"]
 
         # P1
-        p1_tx = self.wallet.create_self_transfer(utxo_to_spend=m1_utxos[1], fee_rate=self.min_relay_fee)
+        p1_tx = self.wallet.create_self_transfer(utxo_to_spend=m1_utxos[1])
         package_hex.append(p1_tx["hex"])
 
         # P2
-        p2_tx = self.wallet.create_self_transfer(utxo_to_spend=p1_tx["new_utxo"], fee_rate=self.min_relay_fee)
+        p2_tx = self.wallet.create_self_transfer(utxo_to_spend=p1_tx["new_utxo"])
         package_hex.append(p2_tx["hex"])
 
         assert_equal(24, node.getmempoolinfo()["size"])
@@ -238,15 +195,12 @@ class MempoolPackageLimitsTest(DigiByteTestFramework):
         for _ in range(2):
             chain_tip_utxo = self.wallet.send_self_transfer_chain(from_node=node, chain_length=12)[-1]["new_utxo"]
             # Save the 13th transaction for the package
-            tx = self.wallet.create_self_transfer(utxo_to_spend=chain_tip_utxo, fee_rate=self.min_relay_fee)
+            tx = self.wallet.create_self_transfer(utxo_to_spend=chain_tip_utxo)
             package_hex.append(tx["hex"])
             pc_parent_utxos.append(tx["new_utxo"])
 
-        # Child Pc - use explicit fee to ensure it meets relay requirements
-        # Calculate fee for multi-input transaction
-        approx_vsize = 200 + (len(pc_parent_utxos) * 100)  # Rough estimate
-        fee_needed = int(self.min_relay_fee * approx_vsize * 100000)  # Convert to satoshis
-        pc_hex = self.wallet.create_self_transfer_multi(utxos_to_spend=pc_parent_utxos, fee_per_output=fee_needed)["hex"]
+        # Child Pc
+        pc_hex = self.wallet.create_self_transfer_multi(utxos_to_spend=pc_parent_utxos)["hex"]
         package_hex.append(pc_hex)
 
         assert_equal(24, node.getmempoolinfo()["size"])
@@ -280,13 +234,11 @@ class MempoolPackageLimitsTest(DigiByteTestFramework):
             # last 2 transactions will be the parents of Pc
             pc_parent_utxos.append(chaintip_utxo)
 
-        # Child Pc - ensure proper fee
-        approx_vsize = 200 + (len(pc_parent_utxos) * 100)  # Rough estimate
-        fee_needed = int(self.min_relay_fee * approx_vsize * 100000)  # Convert to satoshis
-        pc_tx = self.wallet.create_self_transfer_multi(utxos_to_spend=pc_parent_utxos, fee_per_output=fee_needed)
+        # Child Pc
+        pc_tx = self.wallet.create_self_transfer_multi(utxos_to_spend=pc_parent_utxos)
 
         # Child Pd
-        pd_tx = self.wallet.create_self_transfer(utxo_to_spend=pc_tx["new_utxos"][0], fee_rate=self.min_relay_fee)
+        pd_tx = self.wallet.create_self_transfer(utxo_to_spend=pc_tx["new_utxos"][0])
 
         assert_equal(24, node.getmempoolinfo()["size"])
         return [pc_tx["hex"], pd_tx["hex"]]
@@ -309,17 +261,13 @@ class MempoolPackageLimitsTest(DigiByteTestFramework):
         for _ in range(5): # Make package transactions P0 ... P4
             pc_grandparent_utxos = []
             for _ in range(4): # Make mempool transactions M(4i+1)...M(4i+4)
-                pc_grandparent_utxos.append(self.wallet.send_self_transfer(from_node=node, fee_rate=self.min_relay_fee)["new_utxo"])
-            # Package transaction Pi - ensure proper fee
-            approx_vsize = 200 + (len(pc_grandparent_utxos) * 100)  # Rough estimate
-            fee_needed = int(self.min_relay_fee * approx_vsize * 100000)  # Convert to satoshis
-            pi_tx = self.wallet.create_self_transfer_multi(utxos_to_spend=pc_grandparent_utxos, fee_per_output=fee_needed)
+                pc_grandparent_utxos.append(self.wallet.send_self_transfer(from_node=node)["new_utxo"])
+            # Package transaction Pi
+            pi_tx = self.wallet.create_self_transfer_multi(utxos_to_spend=pc_grandparent_utxos)
             package_hex.append(pi_tx["hex"])
             pc_parent_utxos.append(pi_tx["new_utxos"][0])
-        # Package transaction PC - ensure proper fee
-        approx_vsize = 200 + (len(pc_parent_utxos) * 100)  # Rough estimate
-        fee_needed = int(self.min_relay_fee * approx_vsize * 100000)  # Convert to satoshis
-        pc_hex = self.wallet.create_self_transfer_multi(utxos_to_spend=pc_parent_utxos, fee_per_output=fee_needed)["hex"]
+        # Package transaction PC
+        pc_hex = self.wallet.create_self_transfer_multi(utxos_to_spend=pc_parent_utxos)["hex"]
         package_hex.append(pc_hex)
 
         assert_equal(20, node.getmempoolinfo()["size"])

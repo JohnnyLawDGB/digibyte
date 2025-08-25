@@ -30,6 +30,7 @@ from test_framework.wallet import (
 )
 from test_framework.netutil import test_ipv6_local
 
+
 # Test may be skipped and not have zmq installed
 try:
     import zmq
@@ -573,6 +574,7 @@ class ZMQTest (DigiByteTestFramework):
 
         # Should receive the same block hash
         assert_equal(self.nodes[0].getbestblockhash(), subscribers[0].receive().hex())
+
 
 if __name__ == '__main__':
     ZMQTest().main()

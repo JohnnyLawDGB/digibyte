@@ -409,12 +409,6 @@ class DigiByteTestFramework(metaclass=DigiByteTestMetaClass):
 
     def setup_nodes(self):
         """Override this method to customize test node setup"""
-        # Backwards compatibility: check for old requires_wallet attribute
-        if hasattr(self, 'requires_wallet') and self.requires_wallet:
-            self._requires_wallet = True
-        # If wallet is required (either via old or new method) but descriptors is None, set it to False to enable wallet
-        if self._requires_wallet and self.options.descriptors is None:
-            self.options.descriptors = False
         self.add_nodes(self.num_nodes, self.extra_args)
         self.start_nodes()
         if self._requires_wallet:
@@ -837,7 +831,6 @@ class DigiByteTestFramework(metaclass=DigiByteTestMetaClass):
                     cache_node,
                     nblocks=25 if i != 7 else 24,
                     address=gen_addresses[i % len(gen_addresses)],
-                    # DigiByte: Let the node choose the appropriate algorithm based on height
                 )
 
             assert_equal(cache_node.getblockchaininfo()["blocks"], 199)

@@ -1,12 +1,9 @@
 #!/usr/bin/env python3
-# Copyright (c) 2016-2020 The DigiByte Core developers
-# Copyright (c) 2021-2022 The DigiByte Core developers
 # Copyright (c) 2016-2022 The DigiByte Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test segwit transactions and blocks on P2P network."""
 from decimal import Decimal
-import math
 import random
 import struct
 import time
@@ -45,8 +42,6 @@ from test_framework.messages import (
     ser_uint256,
     ser_vector,
     sha256,
-    tx_from_hex,
-    uint256_from_str,
 )
 from test_framework.p2p import (
     P2PInterface,
@@ -75,8 +70,6 @@ from test_framework.script import (
     SIGHASH_ANYONECANPAY,
     SIGHASH_NONE,
     SIGHASH_SINGLE,
-    SegwitV0SignatureHash,
-    LegacySignatureHash,
     hash160,
     sign_input_legacy,
     sign_input_segwitv0,
@@ -97,9 +90,6 @@ from test_framework.util import (
 from test_framework.wallet import MiniWallet
 from test_framework.wallet_util import generate_keypair
 
-# The versionbit bit used to signal activation of SegWit
-VB_WITNESS_BIT = 1
-VB_TOP_BITS = 0x20000000
 
 MAX_SIGOP_COST = 80000
 
@@ -225,15 +215,10 @@ class SegWitTest(DigiByteTestFramework):
         self.num_nodes = 2
         # This test tests SegWit both pre and post-activation, so use the normal BIP9 activation.
         self.extra_args = [
-            ["-acceptnonstdtxn=1", f"-testactivationheight=segwit@{SEGWIT_HEIGHT}", "-whitelist=noban@127.0.0.1", "-par=1", "-dandelion=0"],
-            ["-acceptnonstdtxn=0", f"-testactivationheight=segwit@{SEGWIT_HEIGHT}", "-dandelion=0"],
+            ["-acceptnonstdtxn=1", f"-testactivationheight=segwit@{SEGWIT_HEIGHT}", "-whitelist=noban@127.0.0.1", "-par=1"],
+            ["-acceptnonstdtxn=0", f"-testactivationheight=segwit@{SEGWIT_HEIGHT}"],
         ]
-    
-    def add_options(self, parser):
-        self.add_wallet_options(parser)
-    
-    def skip_test_if_missing_module(self):
-        self.skip_if_no_wallet()
+        self.supports_cli = False
 
     # Helper functions
 
@@ -243,7 +228,6 @@ class SegWitTest(DigiByteTestFramework):
         height = self.nodes[0].getblockcount() + 1
         block_time = self.nodes[0].getblockheader(tip)["mediantime"] + 1
         block = create_block(int(tip, 16), create_coinbase(height), block_time)
-        block.nVersion = version
         block.rehash()
         return block
 
@@ -254,28 +238,6 @@ class SegWitTest(DigiByteTestFramework):
         block.solve()
 
     def run_test(self):
-        # FIXME: P2P connections are failing in DigiByte test framework
-        # For now, we'll run a simplified test that verifies SegWit functionality
-        # without P2P connections
-        
-        self.log.info("Simplified SegWit test - verifying SegWit activation")
-        
-        # Generate blocks to activate SegWit
-        self.nodes[0].generate(SEGWIT_HEIGHT)
-        
-        # Verify SegWit is active
-        assert softfork_active(self.nodes[0], 'segwit')
-        self.log.info("SegWit is active at height {}".format(self.nodes[0].getblockcount()))
-        
-        # Test basic SegWit functionality using RPC
-        # Create a SegWit address
-        addr = self.nodes[0].getnewaddress("", "bech32")
-        assert addr.startswith("dgbrt1"), f"Expected DigiByte regtest bech32 address, got {addr}"
-        
-        self.log.info("SegWit functionality verified. Test passed.")
-        return
-        
-        # Original P2P test code follows (currently unreachable)
         # Setup the p2p connections
         # self.test_node sets P2P_SERVICES, i.e. NODE_WITNESS | NODE_NETWORK
         self.test_node = self.nodes[0].add_p2p_connection(TestP2PConn(), services=P2P_SERVICES)
@@ -360,13 +322,13 @@ class SegWitTest(DigiByteTestFramework):
         self.utxo.append(UTXO(tx.sha256, 0, 49 * 100000000))
         self.generate(self.nodes[0], 1)
 
-    @subtest  # type: ignore
+    @subtest
     def test_unnecessary_witness_before_segwit_activation(self):
         """Verify that blocks with witnesses are rejected before activation."""
 
         tx = CTransaction()
         tx.vin.append(CTxIn(COutPoint(self.utxo[0].sha256, self.utxo[0].n), b""))
-        tx.vout.append(CTxOut(self.utxo[0].nValue - 100000, CScript([OP_TRUE])))
+        tx.vout.append(CTxOut(self.utxo[0].nValue - 1000, CScript([OP_TRUE])))
         tx.wit.vtxinwit.append(CTxInWitness())
         tx.wit.vtxinwit[0].scriptWitness.stack = [CScript([CScriptNum(1)])]
 
@@ -391,7 +353,7 @@ class SegWitTest(DigiByteTestFramework):
         self.utxo.pop(0)
         self.utxo.append(UTXO(tx.sha256, 0, tx.vout[0].nValue))
 
-    @subtest  # type: ignore
+    @subtest
     def test_block_relay(self):
         """Test that block requests to NODE_WITNESS peer are with MSG_WITNESS_FLAG.
 
@@ -421,12 +383,6 @@ class SegWitTest(DigiByteTestFramework):
         self.test_node.announce_block_and_wait_for_getdata(block2, use_header=True)
         assert self.test_node.last_message["getdata"].inv[0].type == blocktype
         test_witness_block(self.nodes[0], self.test_node, block2, True)
-
-        block3 = self.build_next_block(version=(VB_TOP_BITS | (1 << 15) | VERSIONBITS_TOP_BITS))
-        block3.solve()
-        self.test_node.announce_block_and_wait_for_getdata(block3, use_header=True)
-        assert self.test_node.last_message["getdata"].inv[0].type == blocktype
-        test_witness_block(self.nodes[0], self.test_node, block3, True)
 
         # Check that we can getdata for witness blocks or regular blocks,
         # and the right thing happens.
@@ -490,7 +446,7 @@ class SegWitTest(DigiByteTestFramework):
             self.old_node.announce_tx_and_wait_for_getdata(block4.vtx[0])
             assert block4.sha256 not in self.old_node.getdataset
 
-    @subtest  # type: ignore
+    @subtest
     def test_v0_outputs_arent_spendable(self):
         """Test that v0 outputs aren't spendable before segwit activation.
 
@@ -570,7 +526,7 @@ class SegWitTest(DigiByteTestFramework):
         # not be added to recently rejected list.
         tx = CTransaction()
         tx.vin.append(CTxIn(COutPoint(self.utxo[0].sha256, self.utxo[0].n), b""))
-        tx.vout.append(CTxOut(self.utxo[0].nValue - 100000, CScript([OP_TRUE, OP_DROP] * 15 + [OP_TRUE])))
+        tx.vout.append(CTxOut(self.utxo[0].nValue - 1000, CScript([OP_TRUE, OP_DROP] * 15 + [OP_TRUE])))
         tx.wit.vtxinwit.append(CTxInWitness())
         tx.wit.vtxinwit[0].scriptWitness.stack = [b'a']
         tx.rehash()
@@ -604,7 +560,7 @@ class SegWitTest(DigiByteTestFramework):
         self.utxo.pop(0)
         self.utxo.append(UTXO(tx_hash, 0, tx_value))
 
-    @subtest  # type: ignore
+    @subtest
     def test_standardness_v0(self):
         """Test V0 txout standardness.
 
@@ -618,13 +574,12 @@ class SegWitTest(DigiByteTestFramework):
         # First prepare a p2sh output (so that spending it will pass standardness)
         p2sh_tx = CTransaction()
         p2sh_tx.vin = [CTxIn(COutPoint(self.utxo[0].sha256, self.utxo[0].n), b"")]
-        p2sh_tx.vout = [CTxOut(self.utxo[0].nValue - 100000, p2sh_script_pubkey)]
+        p2sh_tx.vout = [CTxOut(self.utxo[0].nValue - 1000, p2sh_script_pubkey)]
         p2sh_tx.rehash()
 
         # Mine it on test_node to create the confirmed output.
         test_transaction_acceptance(self.nodes[0], self.test_node, p2sh_tx, with_witness=True, accepted=True)
         self.generate(self.nodes[0], 1)
-        self.sync_blocks()
 
         # Now test standardness of v0 P2WSH outputs.
         # Start by creating a transaction with two outputs.
@@ -645,7 +600,7 @@ class SegWitTest(DigiByteTestFramework):
         tx2 = CTransaction()
         # tx was accepted, so we spend the second output.
         tx2.vin = [CTxIn(COutPoint(tx.sha256, 1), b"")]
-        tx2.vout = [CTxOut(17000, script_pubkey)]
+        tx2.vout = [CTxOut(7000, script_pubkey)]
         tx2.wit.vtxinwit.append(CTxInWitness())
         tx2.wit.vtxinwit[0].scriptWitness.stack = [witness_script]
         tx2.rehash()
@@ -658,7 +613,7 @@ class SegWitTest(DigiByteTestFramework):
         # P2PKH output; just send tx's first output back to an anyone-can-spend.
         self.sync_mempools([self.nodes[0], self.nodes[1]])
         tx3.vin = [CTxIn(COutPoint(tx.sha256, 0), b"")]
-        tx3.vout = [CTxOut(tx.vout[0].nValue - 100000, CScript([OP_TRUE, OP_DROP] * 15 + [OP_TRUE]))]
+        tx3.vout = [CTxOut(tx.vout[0].nValue - 1000, CScript([OP_TRUE, OP_DROP] * 15 + [OP_TRUE]))]
         tx3.wit.vtxinwit.append(CTxInWitness())
         tx3.wit.vtxinwit[0].scriptWitness.stack = [witness_script]
         tx3.rehash()
@@ -701,12 +656,11 @@ class SegWitTest(DigiByteTestFramework):
         test_transaction_acceptance(self.nodes[0], self.test_node, tx3, with_witness=True, accepted=True)
 
         self.generate(self.nodes[0], 1)
-        self.sync_blocks()
         self.utxo.pop(0)
         self.utxo.append(UTXO(tx3.sha256, 0, tx3.vout[0].nValue))
         assert_equal(len(self.nodes[1].getrawmempool()), 0)
 
-    @subtest  # type: ignore
+    @subtest
     def advance_to_segwit_active(self):
         """Mine enough blocks to activate segwit."""
         assert not softfork_active(self.nodes[0], 'segwit')
@@ -717,7 +671,7 @@ class SegWitTest(DigiByteTestFramework):
         assert softfork_active(self.nodes[0], 'segwit')
         self.segwit_active = True
 
-    @subtest  # type: ignore
+    @subtest
     def test_p2sh_witness(self):
         """Test P2SH wrapped witness programs."""
 
@@ -730,7 +684,7 @@ class SegWitTest(DigiByteTestFramework):
         # Fund the P2SH output
         tx = CTransaction()
         tx.vin.append(CTxIn(COutPoint(self.utxo[0].sha256, self.utxo[0].n), b""))
-        tx.vout.append(CTxOut(self.utxo[0].nValue - 100000, script_pubkey))
+        tx.vout.append(CTxOut(self.utxo[0].nValue - 1000, script_pubkey))
         tx.rehash()
 
         # Verify mempool acceptance and block validity
@@ -743,7 +697,7 @@ class SegWitTest(DigiByteTestFramework):
         # Now test attempts to spend the output.
         spend_tx = CTransaction()
         spend_tx.vin.append(CTxIn(COutPoint(tx.sha256, 0), script_sig))
-        spend_tx.vout.append(CTxOut(tx.vout[0].nValue - 100000, CScript([OP_TRUE])))
+        spend_tx.vout.append(CTxOut(tx.vout[0].nValue - 1000, CScript([OP_TRUE])))
         spend_tx.rehash()
 
         # This transaction should not be accepted into the mempool pre- or
@@ -784,7 +738,7 @@ class SegWitTest(DigiByteTestFramework):
         self.utxo.pop(0)
         self.utxo.append(UTXO(spend_tx.sha256, 0, spend_tx.vout[0].nValue))
 
-    @subtest  # type: ignore
+    @subtest
     def test_witness_commitments(self):
         """Test witness commitments.
 
@@ -851,7 +805,6 @@ class SegWitTest(DigiByteTestFramework):
         block_3.vtx[0].vout[-1].nValue += 1
         block_3.vtx[0].rehash()
         block_3.hashMerkleRoot = block_3.calc_merkle_root()
-        block_3.rehash()
         assert len(block_3.vtx[0].vout) == 4  # 3 OP_returns
         block_3.solve()
         test_witness_block(self.nodes[0], self.test_node, block_3, accepted=True)
@@ -872,7 +825,7 @@ class SegWitTest(DigiByteTestFramework):
         self.utxo.pop(0)
         self.utxo.append(UTXO(tx3.sha256, 0, tx3.vout[0].nValue))
 
-    @subtest  # type: ignore
+    @subtest
     def test_block_malleability(self):
 
         # Make sure that a block that has too big a virtual size
@@ -912,7 +865,7 @@ class SegWitTest(DigiByteTestFramework):
         block.vtx[0].wit.vtxinwit[0].scriptWitness.stack = [ser_uint256(0)]
         test_witness_block(self.nodes[0], self.test_node, block, accepted=True)
 
-    @subtest  # type: ignore
+    @subtest
     def test_witness_block_size(self):
         # TODO: Test that non-witness carrying blocks can't exceed 1MB
         # Skipping this test for now; this is covered in feature_block.py
@@ -987,7 +940,7 @@ class SegWitTest(DigiByteTestFramework):
         self.utxo.pop(0)
         self.utxo.append(UTXO(block.vtx[-1].sha256, 0, block.vtx[-1].vout[0].nValue))
 
-    @subtest  # type: ignore
+    @subtest
     def test_submit_block(self):
         """Test that submitblock adds the nonce automatically when possible."""
         block = self.build_next_block()
@@ -1023,7 +976,7 @@ class SegWitTest(DigiByteTestFramework):
         # Tip should not advance!
         assert self.nodes[0].getbestblockhash() != block_2.hash
 
-    @subtest  # type: ignore
+    @subtest
     def test_extra_witness_data(self):
         """Test extra witness data in a transaction."""
 
@@ -1035,8 +988,8 @@ class SegWitTest(DigiByteTestFramework):
         # First try extra witness data on a tx that doesn't require a witness
         tx = CTransaction()
         tx.vin.append(CTxIn(COutPoint(self.utxo[0].sha256, self.utxo[0].n), b""))
-        tx.vout.append(CTxOut(self.utxo[0].nValue - 20000, script_pubkey))
-        tx.vout.append(CTxOut(10000, CScript([OP_TRUE])))  # non-witness output
+        tx.vout.append(CTxOut(self.utxo[0].nValue - 2000, script_pubkey))
+        tx.vout.append(CTxOut(1000, CScript([OP_TRUE])))  # non-witness output
         tx.wit.vtxinwit.append(CTxInWitness())
         tx.wit.vtxinwit[0].scriptWitness.stack = [CScript([])]
         tx.rehash()
@@ -1098,7 +1051,7 @@ class SegWitTest(DigiByteTestFramework):
         self.utxo.pop(0)
         self.utxo.append(UTXO(tx2.sha256, 0, tx2.vout[0].nValue))
 
-    @subtest  # type: ignore
+    @subtest
     def test_max_witness_push_length(self):
         """Test that witness stack can only allow up to 520 byte pushes."""
 
@@ -1109,12 +1062,12 @@ class SegWitTest(DigiByteTestFramework):
 
         tx = CTransaction()
         tx.vin.append(CTxIn(COutPoint(self.utxo[0].sha256, self.utxo[0].n), b""))
-        tx.vout.append(CTxOut(self.utxo[0].nValue - 100000, script_pubkey))
+        tx.vout.append(CTxOut(self.utxo[0].nValue - 1000, script_pubkey))
         tx.rehash()
 
         tx2 = CTransaction()
         tx2.vin.append(CTxIn(COutPoint(tx.sha256, 0), b""))
-        tx2.vout.append(CTxOut(tx.vout[0].nValue - 100000, CScript([OP_TRUE])))
+        tx2.vout.append(CTxOut(tx.vout[0].nValue - 1000, CScript([OP_TRUE])))
         tx2.wit.vtxinwit.append(CTxInWitness())
         # First try a 521-byte stack element
         tx2.wit.vtxinwit[0].scriptWitness.stack = [b'a' * (MAX_SCRIPT_ELEMENT_SIZE + 1), witness_script]
@@ -1150,12 +1103,12 @@ class SegWitTest(DigiByteTestFramework):
 
         tx = CTransaction()
         tx.vin.append(CTxIn(COutPoint(self.utxo[0].sha256, self.utxo[0].n), b""))
-        tx.vout.append(CTxOut(self.utxo[0].nValue - 100000, long_script_pubkey))
+        tx.vout.append(CTxOut(self.utxo[0].nValue - 1000, long_script_pubkey))
         tx.rehash()
 
         tx2 = CTransaction()
         tx2.vin.append(CTxIn(COutPoint(tx.sha256, 0), b""))
-        tx2.vout.append(CTxOut(tx.vout[0].nValue - 100000, CScript([OP_TRUE])))
+        tx2.vout.append(CTxOut(tx.vout[0].nValue - 1000, CScript([OP_TRUE])))
         tx2.wit.vtxinwit.append(CTxInWitness())
         tx2.wit.vtxinwit[0].scriptWitness.stack = [b'a'] * 44 + [long_witness_script]
         tx2.rehash()
@@ -1182,7 +1135,7 @@ class SegWitTest(DigiByteTestFramework):
         self.utxo.pop()
         self.utxo.append(UTXO(tx2.sha256, 0, tx2.vout[0].nValue))
 
-    @subtest  # type: ignore
+    @subtest
     def test_witness_input_length(self):
         """Test that vin length must match vtxinwit length."""
 
@@ -1226,7 +1179,7 @@ class SegWitTest(DigiByteTestFramework):
         tx2 = BrokenCTransaction()
         for i in range(10):
             tx2.vin.append(CTxIn(COutPoint(tx.sha256, i), b""))
-        tx2.vout.append(CTxOut(value - 30000, CScript([OP_TRUE])))
+        tx2.vout.append(CTxOut(value - 3000, CScript([OP_TRUE])))
 
         # First try using a too long vtxinwit
         for i in range(11):
@@ -1266,7 +1219,7 @@ class SegWitTest(DigiByteTestFramework):
         self.utxo.pop()
         self.utxo.append(UTXO(tx2.sha256, 0, tx2.vout[0].nValue))
 
-    @subtest  # type: ignore
+    @subtest
     def test_tx_relay_after_segwit_activation(self):
         """Test transaction relay after segwit activation.
 
@@ -1280,7 +1233,7 @@ class SegWitTest(DigiByteTestFramework):
         # when spending a non-witness output.
         tx = CTransaction()
         tx.vin.append(CTxIn(COutPoint(self.utxo[0].sha256, self.utxo[0].n), b""))
-        tx.vout.append(CTxOut(self.utxo[0].nValue - 100000, CScript([OP_TRUE, OP_DROP] * 15 + [OP_TRUE])))
+        tx.vout.append(CTxOut(self.utxo[0].nValue - 1000, CScript([OP_TRUE, OP_DROP] * 15 + [OP_TRUE])))
         tx.wit.vtxinwit.append(CTxInWitness())
         tx.wit.vtxinwit[0].scriptWitness.stack = [b'a']
         tx.rehash()
@@ -1300,7 +1253,7 @@ class SegWitTest(DigiByteTestFramework):
         script_pubkey = script_to_p2wsh_script(witness_script)
         tx2 = CTransaction()
         tx2.vin.append(CTxIn(COutPoint(tx_hash, 0), b""))
-        tx2.vout.append(CTxOut(tx.vout[0].nValue - 100000, script_pubkey))
+        tx2.vout.append(CTxOut(tx.vout[0].nValue - 1000, script_pubkey))
         tx2.rehash()
 
         tx3 = CTransaction()
@@ -1358,7 +1311,7 @@ class SegWitTest(DigiByteTestFramework):
         self.utxo.pop(0)
         self.utxo.append(UTXO(tx3.sha256, 0, tx3.vout[0].nValue))
 
-    @subtest  # type: ignore
+    @subtest
     def test_segwit_versions(self):
         """Test validity of future segwit version transactions.
 
@@ -1395,7 +1348,7 @@ class SegWitTest(DigiByteTestFramework):
             else:
                 script_pubkey = CScript([CScriptOp(version), witness_hash])
             tx.vin = [CTxIn(COutPoint(self.utxo[0].sha256, self.utxo[0].n), b"")]
-            tx.vout = [CTxOut(self.utxo[0].nValue - 100000, script_pubkey)]
+            tx.vout = [CTxOut(self.utxo[0].nValue - 1000, script_pubkey)]
             tx.rehash()
             test_transaction_acceptance(self.nodes[1], self.std_node, tx, with_witness=True, accepted=False)
             test_transaction_acceptance(self.nodes[0], self.test_node, tx, with_witness=True, accepted=True)
@@ -1403,7 +1356,6 @@ class SegWitTest(DigiByteTestFramework):
             temp_utxo.append(UTXO(tx.sha256, 0, tx.vout[0].nValue))
 
         self.generate(self.nodes[0], 1)  # Mine all the transactions
-        self.sync_blocks()
         assert len(self.nodes[0].getrawmempool()) == 0
 
         # Finally, verify that version 0 -> version 2 transactions
@@ -1411,7 +1363,7 @@ class SegWitTest(DigiByteTestFramework):
         script_pubkey = CScript([CScriptOp(OP_2), witness_hash])
         tx2 = CTransaction()
         tx2.vin = [CTxIn(COutPoint(tx.sha256, 0), b"")]
-        tx2.vout = [CTxOut(tx.vout[0].nValue - 100000, script_pubkey)]
+        tx2.vout = [CTxOut(tx.vout[0].nValue - 1000, script_pubkey)]
         tx2.wit.vtxinwit.append(CTxInWitness())
         tx2.wit.vtxinwit[0].scriptWitness.stack = [witness_script]
         tx2.rehash()
@@ -1452,7 +1404,7 @@ class SegWitTest(DigiByteTestFramework):
         # Add utxo to our list
         self.utxo.append(UTXO(tx3.sha256, 0, tx3.vout[0].nValue))
 
-    @subtest  # type: ignore
+    @subtest
     def test_premature_coinbase_witness_spend(self):
 
         block = self.build_next_block()
@@ -1485,7 +1437,7 @@ class SegWitTest(DigiByteTestFramework):
         test_witness_block(self.nodes[0], self.test_node, block2, accepted=True)
         self.sync_blocks()
 
-    @subtest  # type: ignore
+    @subtest
     def test_uncompressed_pubkey(self):
         """Test uncompressed pubkey validity in segwit transactions.
 
@@ -1505,7 +1457,7 @@ class SegWitTest(DigiByteTestFramework):
         script_pkh = key_to_p2wpkh_script(pubkey)
         tx = CTransaction()
         tx.vin.append(CTxIn(COutPoint(utxo.sha256, utxo.n), b""))
-        tx.vout.append(CTxOut(utxo.nValue - 100000, script_pkh))
+        tx.vout.append(CTxOut(utxo.nValue - 1000, script_pkh))
         tx.rehash()
 
         # Confirm it in a block.
@@ -1541,7 +1493,7 @@ class SegWitTest(DigiByteTestFramework):
 
         tx3 = CTransaction()
         tx3.vin.append(CTxIn(COutPoint(tx2.sha256, 0), b""))
-        tx3.vout.append(CTxOut(tx2.vout[0].nValue - 100000, script_p2sh))
+        tx3.vout.append(CTxOut(tx2.vout[0].nValue - 1000, script_p2sh))
         tx3.wit.vtxinwit.append(CTxInWitness())
         sign_p2pk_witness_input(witness_script, tx3, 0, SIGHASH_ALL, tx2.vout[0].nValue, key)
 
@@ -1558,7 +1510,7 @@ class SegWitTest(DigiByteTestFramework):
         script_pubkey = keyhash_to_p2pkh_script(pubkeyhash)
         tx4 = CTransaction()
         tx4.vin.append(CTxIn(COutPoint(tx3.sha256, 0), script_sig))
-        tx4.vout.append(CTxOut(tx3.vout[0].nValue - 100000, script_pubkey))
+        tx4.vout.append(CTxOut(tx3.vout[0].nValue - 1000, script_pubkey))
         tx4.wit.vtxinwit.append(CTxInWitness())
         sign_p2pk_witness_input(witness_script, tx4, 0, SIGHASH_ALL, tx3.vout[0].nValue, key)
 
@@ -1582,7 +1534,7 @@ class SegWitTest(DigiByteTestFramework):
         test_witness_block(self.nodes[0], self.test_node, block, accepted=True)
         self.utxo.append(UTXO(tx5.sha256, 0, tx5.vout[0].nValue))
 
-    @subtest  # type: ignore
+    @subtest
     def test_signature_version_1(self):
         key, pubkey = generate_keypair()
         witness_script = key_to_p2pk_script(pubkey)
@@ -1591,7 +1543,7 @@ class SegWitTest(DigiByteTestFramework):
         # First create a witness output for use in the tests.
         tx = CTransaction()
         tx.vin.append(CTxIn(COutPoint(self.utxo[0].sha256, self.utxo[0].n), b""))
-        tx.vout.append(CTxOut(self.utxo[0].nValue - 100000, script_pubkey))
+        tx.vout.append(CTxOut(self.utxo[0].nValue - 1000, script_pubkey))
         tx.rehash()
 
         test_transaction_acceptance(self.nodes[0], self.test_node, tx, with_witness=True, accepted=True)
@@ -1610,7 +1562,7 @@ class SegWitTest(DigiByteTestFramework):
                 block = self.build_next_block()
                 tx = CTransaction()
                 tx.vin.append(CTxIn(COutPoint(prev_utxo.sha256, prev_utxo.n), b""))
-                tx.vout.append(CTxOut(prev_utxo.nValue - 100000, script_pubkey))
+                tx.vout.append(CTxOut(prev_utxo.nValue - 1000, script_pubkey))
                 tx.wit.vtxinwit.append(CTxInWitness())
                 # Too-large input value
                 sign_p2pk_witness_input(witness_script, tx, 0, hashtype, prev_utxo.nValue + 1, key)
@@ -1766,7 +1718,7 @@ class SegWitTest(DigiByteTestFramework):
         for i in range(len(tx.vout)):
             self.utxo.append(UTXO(tx.sha256, i, tx.vout[i].nValue))
 
-    @subtest  # type: ignore
+    @subtest
     def test_non_standard_witness_blinding(self):
         """Test behavior of unnecessary witnesses in transactions does not blind the node for the transaction"""
 
@@ -1780,11 +1732,10 @@ class SegWitTest(DigiByteTestFramework):
         # to a transaction, eg by violating standardness checks.
         tx = CTransaction()
         tx.vin.append(CTxIn(COutPoint(self.utxo[0].sha256, self.utxo[0].n), b""))
-        tx.vout.append(CTxOut(self.utxo[0].nValue - 100000, script_pubkey))
+        tx.vout.append(CTxOut(self.utxo[0].nValue - 1000, script_pubkey))
         tx.rehash()
         test_transaction_acceptance(self.nodes[0], self.test_node, tx, False, True)
         self.generate(self.nodes[0], 1)
-        self.sync_blocks()
 
         # We'll add an unnecessary witness to this transaction that would cause
         # it to be non-standard, to test that violating policy with a witness
@@ -1793,7 +1744,7 @@ class SegWitTest(DigiByteTestFramework):
         # to the rejection cache.
         tx2 = CTransaction()
         tx2.vin.append(CTxIn(COutPoint(tx.sha256, 0), CScript([p2sh_program])))
-        tx2.vout.append(CTxOut(tx.vout[0].nValue - 100000, script_pubkey))
+        tx2.vout.append(CTxOut(tx.vout[0].nValue - 1000, script_pubkey))
         tx2.wit.vtxinwit.append(CTxInWitness())
         tx2.wit.vtxinwit[0].scriptWitness.stack = [b'a' * 400]
         tx2.rehash()
@@ -1807,19 +1758,18 @@ class SegWitTest(DigiByteTestFramework):
         # Now create a new anyone-can-spend utxo for the next test.
         tx3 = CTransaction()
         tx3.vin.append(CTxIn(COutPoint(tx2.sha256, 0), CScript([p2sh_program])))
-        tx3.vout.append(CTxOut(tx2.vout[0].nValue - 100000, CScript([OP_TRUE, OP_DROP] * 15 + [OP_TRUE])))
+        tx3.vout.append(CTxOut(tx2.vout[0].nValue - 1000, CScript([OP_TRUE, OP_DROP] * 15 + [OP_TRUE])))
         tx3.rehash()
         test_transaction_acceptance(self.nodes[0], self.test_node, tx2, False, True)
         test_transaction_acceptance(self.nodes[0], self.test_node, tx3, False, True)
 
         self.generate(self.nodes[0], 1)
-        self.sync_blocks()
 
         # Update our utxo list; we spent the first entry.
         self.utxo.pop(0)
         self.utxo.append(UTXO(tx3.sha256, 0, tx3.vout[0].nValue))
 
-    @subtest  # type: ignore
+    @subtest
     def test_non_standard_witness(self):
         """Test detection of non-standard P2WSH witness"""
         pad = chr(1).encode('latin-1')
@@ -1837,7 +1787,7 @@ class SegWitTest(DigiByteTestFramework):
         tx.vin.append(CTxIn(COutPoint(self.utxo[0].sha256, self.utxo[0].n), b""))
 
         # For each script, generate a pair of P2WSH and P2SH-P2WSH output.
-        outputvalue = (self.utxo[0].nValue - 40000) // (len(scripts) * 2)
+        outputvalue = (self.utxo[0].nValue - 1000) // (len(scripts) * 2)
         for i in scripts:
             p2wsh = script_to_p2wsh_script(i)
             p2wsh_scripts.append(p2wsh)
@@ -1848,7 +1798,6 @@ class SegWitTest(DigiByteTestFramework):
         test_transaction_acceptance(self.nodes[0], self.test_node, tx, with_witness=False, accepted=True)
 
         self.generate(self.nodes[0], 1)
-        self.sync_blocks()
 
         # Creating transactions for tests
         p2wsh_txs = []

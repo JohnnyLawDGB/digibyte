@@ -12,13 +12,11 @@ from test_framework.test_framework import DigiByteTestFramework
 
 class InvalidLocatorTest(DigiByteTestFramework):
     def set_test_params(self):
-        self.setup_clean_chain = True
         self.num_nodes = 1
 
     def run_test(self):
         node = self.nodes[0]  # convenience reference to the node
-        # Generate enough blocks to test with MAX_LOCATOR_SZ
-        self.generatetoaddress(node, MAX_LOCATOR_SZ + 10, node.get_deterministic_priv_key().address)
+        self.generatetoaddress(node, 1, node.get_deterministic_priv_key().address)  # Get node out of IBD
 
         self.log.info('Test max locator size')
         block_count = node.getblockcount()

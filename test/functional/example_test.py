@@ -151,8 +151,7 @@ class ExampleTest(DigiByteTestFramework):
         peer_messaging = self.nodes[0].add_p2p_connection(BaseNode())
 
         # Generating a block on one of the nodes will get us out of IBD
-        # Use sync_fun=self.no_op to avoid sync issues with unconnected nodes
-        blocks = [int(self.generate(self.nodes[0], sync_fun=self.no_op, nblocks=1)[0], 16)]
+        blocks = [int(self.generate(self.nodes[0], sync_fun=lambda: self.sync_all(self.nodes[0:2]), nblocks=1)[0], 16)]
 
         # Notice above how we called an RPC by calling a method with the same
         # name on the node object. Notice also how we used a keyword argument
@@ -172,16 +171,25 @@ class ExampleTest(DigiByteTestFramework):
         self.custom_method()
 
         self.log.info("Create some blocks")
-        # DigiByte-specific: Using RPC to generate blocks instead of manual P2P block creation
-        # The manual block creation doesn't account for DigiByte's multi-algorithm mining
-        # and other consensus differences, causing the P2P connection to be dropped
-        self.log.info("Generating 10 blocks via RPC")
-        new_blocks = self.generate(self.nodes[0], sync_fun=self.no_op, nblocks=10)
-        blocks.extend([int(block_hash, 16) for block_hash in new_blocks])
+        self.tip = int(self.nodes[0].getbestblockhash(), 16)
+        self.block_time = self.nodes[0].getblock(self.nodes[0].getbestblockhash())['time'] + 1
 
-        self.log.info("Syncing blocks between node0 and node1")
-        self.sync_blocks(self.nodes[0:2])
-        
+        height = self.nodes[0].getblockcount()
+
+        for _ in range(10):
+            # Use the blocktools functionality to manually build a block.
+            # Calling the generate() rpc is easier, but this allows us to exactly
+            # control the blocks and transactions.
+            block = create_block(self.tip, create_coinbase(height+1), self.block_time)
+            block.solve()
+            block_message = msg_block(block)
+            # Send message is used to send a P2P message to the node over our P2PInterface
+            peer_messaging.send_message(block_message)
+            self.tip = block.sha256
+            blocks.append(self.tip)
+            self.block_time += 1
+            height += 1
+
         self.log.info("Wait for node1 to reach current tip (height 11) using RPC")
         self.nodes[1].waitforblockheight(11)
 

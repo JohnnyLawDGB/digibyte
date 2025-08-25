@@ -39,8 +39,7 @@ class PrioritiseTransactionTest(DigiByteTestFramework):
     def test_replacement(self):
         self.log.info("Test tx prioritisation stays after a tx is replaced")
         conflicting_input = self.wallet.get_utxo()
-        # DigiByte requires minimum relay fee of 0.001 DGB/kB
-        tx_replacee = self.wallet.create_self_transfer(utxo_to_spend=conflicting_input, fee_rate=Decimal("0.001"))
+        tx_replacee = self.wallet.create_self_transfer(utxo_to_spend=conflicting_input, fee_rate=Decimal("0.0001"))
         tx_replacement = self.wallet.create_self_transfer(utxo_to_spend=conflicting_input, fee_rate=Decimal("0.005"))
         # Add 1 satoshi fee delta to replacee
         self.nodes[0].prioritisetransaction(tx_replacee["txid"], 0, 100)
@@ -71,19 +70,15 @@ class PrioritiseTransactionTest(DigiByteTestFramework):
         #      \ /
         #      tx_d
 
-        # DigiByte requires minimum relay fee of 100000 satoshis/kB
-        # Set fee_per_output high enough to meet minimum relay fee
         tx_o_a = self.wallet.send_self_transfer_multi(
             from_node=self.nodes[0],
             num_outputs=2,
-            fee_per_output=50000,  # 50000 satoshis per output
         )
         txid_a = tx_o_a["txid"]
 
         tx_o_b, tx_o_c = [self.wallet.send_self_transfer(
             from_node=self.nodes[0],
             utxo_to_spend=u,
-            fee_rate=Decimal("0.001"),  # DigiByte min relay fee
         ) for u in tx_o_a["new_utxos"]]
         txid_b = tx_o_b["txid"]
         txid_c = tx_o_c["txid"]
@@ -94,7 +89,6 @@ class PrioritiseTransactionTest(DigiByteTestFramework):
                 self.wallet.get_utxo(txid=txid_b),
                 self.wallet.get_utxo(txid=txid_c),
             ],
-            fee_per_output=50000,  # 50000 satoshis per output
         )
         txid_d = tx_o_d["txid"]
 
@@ -187,13 +181,11 @@ class PrioritiseTransactionTest(DigiByteTestFramework):
         self.relayfee = self.nodes[0].getnetworkinfo()['relayfee']
 
         utxo_count = 90
-        utxos = self.wallet.send_self_transfer_multi(from_node=self.nodes[0], num_outputs=utxo_count, fee_per_output=10000)['new_utxos']
+        utxos = self.wallet.send_self_transfer_multi(from_node=self.nodes[0], num_outputs=utxo_count)['new_utxos']
         self.generate(self.wallet, 1)
         assert_equal(len(self.nodes[0].getrawmempool()), 0)
-        # Use fee rates instead of absolute fees to avoid max-fee-exceeded errors
-        # DigiByte minimum relay fee is 0.001 DGB/kvB = 100000 sat/kvB 
-        # Use low but valid fee rates for the batches
-        fee_rates = [Decimal('0.001'), Decimal('0.002'), Decimal('0.003')] # DGB/kvB
+
+        base_fee = self.relayfee*100 # our transactions are smaller than 100kb
         txids = []
 
         # Create 3 batches of transactions at 3 different fee rate levels
@@ -202,22 +194,13 @@ class PrioritiseTransactionTest(DigiByteTestFramework):
             txids.append([])
             start_range = i * range_size
             end_range = start_range + range_size
-            # Create transactions with fee_rate instead of absolute fee
-            tx_list = []
-            for j in range(end_range - start_range):
-                utxo = utxos[start_range + j]
-                tx_info = self.wallet.create_self_transfer(
-                    utxo_to_spend=utxo, 
-                    fee_rate=fee_rates[i]
-                )
-                tx = tx_info["tx"]
-                tx.vout.extend(self.txouts)
-                
-                res = self.nodes[0].testmempoolaccept([tx.serialize().hex()])[0]
-                if 'allowed' not in res or not res['allowed']:
-                    raise RuntimeError(f"Transaction rejected: {res.get('reject-reason', 'unknown reason')}")
-                tx_list.append(self.nodes[0].sendrawtransaction(tx.serialize().hex()))
-            txids[i] = tx_list
+            txids[i] = create_lots_of_big_transactions(
+                self.wallet,
+                self.nodes[0],
+                (i+1) * base_fee,
+                end_range - start_range,
+                self.txouts,
+                utxos[start_range:end_range])
 
         # Make sure that the size of each group of transactions exceeds
         # MAX_BLOCK_WEIGHT // 4 -- otherwise the test needs to be revised to
@@ -228,36 +211,27 @@ class PrioritiseTransactionTest(DigiByteTestFramework):
             for j in txids[i]:
                 assert j in mempool
                 sizes[i] += mempool[j]['vsize']
-            # DigiByte transactions are smaller than Bitcoin, so relax this constraint
-            if sizes[i] <= MAX_BLOCK_WEIGHT // 4:
-                self.log.warning(f"Batch {i} size ({sizes[i]} vbytes) is smaller than expected ({MAX_BLOCK_WEIGHT // 4} vbytes) but continuing test")
-            # assert sizes[i] > MAX_BLOCK_WEIGHT // 4  # Fail => raise utxo_count
+            assert sizes[i] > MAX_BLOCK_WEIGHT // 4  # Fail => raise utxo_count
 
         assert_equal(self.nodes[0].getprioritisedtransactions(), {})
         # add a fee delta to something in the cheapest bucket and make sure it gets mined
         # also check that a different entry in the cheapest bucket is NOT mined
-        # Use a reasonable fee delta - equivalent to the highest fee rate batch
-        fee_delta = int(fee_rates[2] * COIN)  # 0.003 DGB in satoshis
-        self.nodes[0].prioritisetransaction(txid=txids[0][0], fee_delta=fee_delta)
-        assert_equal(self.nodes[0].getprioritisedtransactions(), {txids[0][0] : { "fee_delta" : fee_delta, "in_mempool" : True}})
+        self.nodes[0].prioritisetransaction(txid=txids[0][0], fee_delta=int(3*base_fee*COIN))
+        assert_equal(self.nodes[0].getprioritisedtransactions(), {txids[0][0] : { "fee_delta" : 3*base_fee*COIN, "in_mempool" : True}})
 
         # Priority disappears when prioritisetransaction is called with an inverse value...
-        self.nodes[0].prioritisetransaction(txid=txids[0][0], fee_delta=-fee_delta)
+        self.nodes[0].prioritisetransaction(txid=txids[0][0], fee_delta=int(-3*base_fee*COIN))
         assert txids[0][0] not in self.nodes[0].getprioritisedtransactions()
         # ... and reappears when prioritisetransaction is called again.
-        self.nodes[0].prioritisetransaction(txid=txids[0][0], fee_delta=fee_delta)
+        self.nodes[0].prioritisetransaction(txid=txids[0][0], fee_delta=int(3*base_fee*COIN))
         assert txids[0][0] in self.nodes[0].getprioritisedtransactions()
+
         self.generate(self.nodes[0], 1)
 
         mempool = self.nodes[0].getrawmempool()
-        self.log.info(f"Mempool after mining: {len(mempool)} transactions remaining")
         self.log.info("Assert that prioritised transaction was mined")
         assert txids[0][0] not in mempool
-        # DigiByte blocks can fit many more small transactions, so this assertion may not hold
-        if txids[0][1] not in mempool:
-            self.log.warning("More transactions were mined than expected due to smaller DigiByte transaction sizes")
-        else:
-            assert txids[0][1] in mempool
+        assert txids[0][1] in mempool
 
         high_fee_tx = None
         for x in txids[2]:
@@ -269,9 +243,8 @@ class PrioritiseTransactionTest(DigiByteTestFramework):
 
         # Add a prioritisation before a tx is in the mempool (de-prioritising a
         # high-fee transaction so that it's now low fee).
-        high_fee_delta = int(fee_rates[1] * COIN)  # 0.002 DGB in satoshis
-        self.nodes[0].prioritisetransaction(txid=high_fee_tx, fee_delta=-high_fee_delta)
-        assert_equal(self.nodes[0].getprioritisedtransactions()[high_fee_tx], { "fee_delta" : -high_fee_delta, "in_mempool" : False})
+        self.nodes[0].prioritisetransaction(txid=high_fee_tx, fee_delta=-int(2*base_fee*COIN))
+        assert_equal(self.nodes[0].getprioritisedtransactions()[high_fee_tx], { "fee_delta" : -2*base_fee*COIN, "in_mempool" : False})
 
         # Add everything back to mempool
         self.nodes[0].invalidateblock(self.nodes[0].getbestblockhash())
@@ -291,7 +264,7 @@ class PrioritiseTransactionTest(DigiByteTestFramework):
         mempool = self.nodes[0].getrawmempool()
         self.log.info("Assert that de-prioritised transaction is still in mempool")
         assert high_fee_tx in mempool
-        assert_equal(self.nodes[0].getprioritisedtransactions()[high_fee_tx], { "fee_delta" : -high_fee_delta, "in_mempool" : True})
+        assert_equal(self.nodes[0].getprioritisedtransactions()[high_fee_tx], { "fee_delta" : -2*base_fee*COIN, "in_mempool" : True})
         for x in txids[2]:
             if (x != high_fee_tx):
                 assert x not in mempool
@@ -308,32 +281,28 @@ class PrioritiseTransactionTest(DigiByteTestFramework):
         # This is a less than 1000-byte transaction, so just set the fee
         # to be the minimum for a 1000-byte transaction and check that it is
         # accepted.
-        # Based on the error, we need at least 10400 satoshis
-        required_fee = 10400
-        self.nodes[0].prioritisetransaction(txid=tx_id, fee_delta=required_fee)
+        self.nodes[0].prioritisetransaction(txid=tx_id, fee_delta=int(self.relayfee*COIN))
+        assert_equal(self.nodes[0].getprioritisedtransactions()[tx_id], { "fee_delta" : self.relayfee*COIN, "in_mempool" : False})
 
         self.log.info("Assert that prioritised free transaction is accepted to mempool")
-        try:
-            assert_equal(self.nodes[0].sendrawtransaction(tx_hex), tx_id)
-            assert tx_id in self.nodes[0].getrawmempool()
-        except Exception as e:
-            # DigiByte may not support prioritising zero-fee transactions due to policy restrictions
-            self.log.warning(f"Could not prioritize zero-fee transaction in DigiByte: {e}")
-            self.log.info("Skipping zero-fee transaction test - DigiByte policy may prevent this")
+        assert_equal(self.nodes[0].sendrawtransaction(tx_hex), tx_id)
+        assert tx_id in self.nodes[0].getrawmempool()
+        assert_equal(self.nodes[0].getprioritisedtransactions()[tx_id], { "fee_delta" : self.relayfee*COIN, "in_mempool" : True})
 
         # Test that calling prioritisetransaction is sufficient to trigger
         # getblocktemplate to (eventually) return a new block.
         mock_time = int(time.time())
         self.nodes[0].setmocktime(mock_time)
         template = self.nodes[0].getblocktemplate({'rules': ['segwit']})
-        # If the zero-fee transaction was successfully added, test template changes
-        if tx_id in self.nodes[0].getrawmempool():
-            self.nodes[0].prioritisetransaction(txid=tx_id, fee_delta=-required_fee)
-            self.nodes[0].setmocktime(mock_time+10)
-            new_template = self.nodes[0].getblocktemplate({'rules': ['segwit']})
-            assert template != new_template
-        else:
-            self.log.info("Skipping template test since zero-fee transaction was not added to mempool")
+        self.nodes[0].prioritisetransaction(txid=tx_id, fee_delta=-int(self.relayfee*COIN))
+
+        # Calling prioritisetransaction with the inverse amount should delete its prioritisation entry
+        assert tx_id not in self.nodes[0].getprioritisedtransactions()
+
+        self.nodes[0].setmocktime(mock_time+10)
+        new_template = self.nodes[0].getblocktemplate({'rules': ['segwit']})
+
+        assert template != new_template
 
 if __name__ == '__main__':
     PrioritiseTransactionTest().main()

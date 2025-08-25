@@ -30,7 +30,6 @@ but still know when to expect mixing due to the wallet being close to empty.
 import random
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.blocktools import COINBASE_MATURITY
-from test_framework.descriptors import descsum_create
 
 ADDRESS_TYPES = [
     "bech32m",
@@ -118,17 +117,11 @@ class AddressInputTypeGrouping(DigiByteTestFramework):
                 "-addresstype=bech32",
                 "-whitelist=noban@127.0.0.1",
                 "-txindex",
-                "-dandelion=0",  # Disable Dandelion++ for test reliability
-                "-fallbackfee=0.001",  # Set fallback fee
-                "-minrelaytxfee=0.00001",  # Lower minimum relay fee
             ],
             [
                 "-addresstype=p2sh-segwit",
                 "-whitelist=noban@127.0.0.1",
                 "-txindex",
-                "-dandelion=0",  # Disable Dandelion++ for test reliability
-                "-fallbackfee=0.001",  # Set fallback fee
-                "-minrelaytxfee=0.00001",  # Lower minimum relay fee
             ],
         ]
 
@@ -137,10 +130,8 @@ class AddressInputTypeGrouping(DigiByteTestFramework):
         self.skip_if_no_sqlite()
 
     def make_payment(self, A, B, v, addr_type):
-        # DigiByte wallet minimum fee rate is 10000 sat/vB
-        # Use exactly minimum to conserve funds
-        fee_rate = 10000
-        self.log.debug(f"Making payment of {v} DGB at fee_rate {fee_rate} sat/vB")
+        fee_rate = random.randint(1, 20)
+        self.log.debug(f"Making payment of {v} DGB at fee_rate {fee_rate}")
         tx = B.sendtoaddress(
             address=A.getnewaddress(address_type=addr_type),
             amount=v,
@@ -152,38 +143,26 @@ class AddressInputTypeGrouping(DigiByteTestFramework):
 
         # alias self.nodes[i] to A, B for readability
         A, B = self.nodes[0], self.nodes[1]
-        
-        # Generate initial blocks to fund node A
-        # Simply mine blocks to node A
-        self.generate(A, 200)  # Mine plenty of blocks to ensure maturity
-        
-        # Check A's balance
-        balance_a = A.getbalance()
-        self.log.info(f"Node A balance after mining: {balance_a} DGB")
+        self.generate(A, COINBASE_MATURITY + 5)
 
         self.log.info("Creating mixed UTXOs in B's wallet")
-        # Send 15 DGB to each address type to account for high fees
-        for v in generate_payment_values(3, 15):
+        for v in generate_payment_values(3, 10):
             self.log.debug(f"Making payment of {v} DGB to legacy")
             A.sendtoaddress(B.getnewaddress(address_type="legacy"), v)
 
-        for v in generate_payment_values(3, 15):
+        for v in generate_payment_values(3, 10):
             self.log.debug(f"Making payment of {v} DGB to p2sh")
             A.sendtoaddress(B.getnewaddress(address_type="p2sh-segwit"), v)
 
-        for v in generate_payment_values(3, 15):
+        for v in generate_payment_values(3, 10):
             self.log.debug(f"Making payment of {v} DGB to bech32")
             A.sendtoaddress(B.getnewaddress(address_type="bech32"), v)
 
-        for v in generate_payment_values(3, 15):
+        for v in generate_payment_values(3, 10):
             self.log.debug(f"Making payment of {v} DGB to bech32m")
             A.sendtoaddress(B.getnewaddress(address_type="bech32m"), v)
 
         self.generate(A, 1)
-        
-        # Check B's balance before sending
-        balance_b = B.getbalance()
-        self.log.info(f"Node B balance before sending: {balance_b} DGB")
 
         self.log.info("Sending payments from B to A")
         for v in generate_payment_values(5, 9):

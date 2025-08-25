@@ -86,7 +86,7 @@ class PruneTest(DigiByteTestFramework):
             ["-maxreceivebuffer=20000"],
             ["-prune=550", "-blockfilterindex=1"],
         ]
-        self.rpc_timeout = 300
+        self.rpc_timeout = 120
 
     def setup_network(self):
         self.setup_nodes()
@@ -129,10 +129,6 @@ class PruneTest(DigiByteTestFramework):
         self.nodes[0].assert_start_raises_init_error(
             expected_msg='Error: Prune mode is incompatible with -txindex.',
             extra_args=['-prune=550', '-txindex'],
-        )
-        self.nodes[0].assert_start_raises_init_error(
-            expected_msg='Error: Prune mode is incompatible with -coinstatsindex.',
-            extra_args=['-prune=550', '-coinstatsindex'],
         )
         self.nodes[0].assert_start_raises_init_error(
             expected_msg='Error: Prune mode is incompatible with -reindex-chainstate. Use full -reindex instead.',
@@ -214,7 +210,7 @@ class PruneTest(DigiByteTestFramework):
         self.log.info("Reconnect nodes")
         self.connect_nodes(0, 1)
         self.connect_nodes(1, 2)
-        self.sync_blocks(self.nodes[0:3], timeout=300)
+        self.sync_blocks(self.nodes[0:3], timeout=120)
 
         self.log.info(f"Verify height on node 2: {self.nodes[2].getblockcount()}")
         self.log.info(f"Usage possibly still high because of stale blocks in block files: {calc_usage(self.prunedir)}")
@@ -222,7 +218,7 @@ class PruneTest(DigiByteTestFramework):
         self.log.info("Mine 220 more large blocks so we have requisite history")
 
         mine_large_blocks(self.nodes[0], 220)
-        self.sync_blocks(self.nodes[0:3], timeout=300)
+        self.sync_blocks(self.nodes[0:3], timeout=120)
 
         usage = calc_usage(self.prunedir)
         self.log.info(f"Usage should be below target: {usage}")
@@ -266,7 +262,7 @@ class PruneTest(DigiByteTestFramework):
 
         self.log.info("Verify node 2 reorged back to the main chain, some blocks of which it had to redownload")
         # Wait for Node 2 to reorg to proper height
-        self.wait_until(lambda: self.nodes[2].getblockcount() >= goalbestheight, timeout=1800)
+        self.wait_until(lambda: self.nodes[2].getblockcount() >= goalbestheight, timeout=900)
         assert_equal(self.nodes[2].getbestblockhash(), goalbesthash)
         # Verify we can now have the data for a block previously pruned
         assert_equal(self.nodes[2].getblock(self.forkhash)["height"], self.forkheight)
@@ -363,7 +359,7 @@ class PruneTest(DigiByteTestFramework):
         self.log.info("Syncing node 5 to test wallet")
         self.connect_nodes(0, 5)
         nds = [self.nodes[0], self.nodes[5]]
-        self.sync_blocks(nds, wait=5, timeout=600)
+        self.sync_blocks(nds, wait=5, timeout=300)
         self.restart_node(5, extra_args=["-prune=550", "-blockfilterindex=1"]) # restart to trigger rescan
         self.log.info("Success")
 
@@ -484,9 +480,6 @@ class PruneTest(DigiByteTestFramework):
         self.test_invalid_command_line_options()
 
         self.test_scanblocks_pruned()
-
-        self.log.info("Test invalid pruning command line options")
-        self.test_invalid_command_line_options()
 
         self.log.info("Done")
 

@@ -49,15 +49,10 @@ class P2PTxSpy(P2PInterface):
 
 class TxPrivacyTest(DigiByteTestFramework):
     def set_test_params(self):
-        self.setup_clean_chain = True
         self.num_nodes = 1
-        # DigiByte: Disable Dandelion++ to avoid interference with transaction relay behavior
-        self.extra_args = [['-dandelion=0']]
 
     def run_test(self):
         self.wallet = MiniWallet(self.nodes[0])
-        # Generate initial blocks for the miniwallet
-        self.generate(self.wallet, 10)
 
         tx_originator = self.nodes[0].add_p2p_connection(P2PInterface())
         spy = self.nodes[0].add_p2p_connection(P2PTxSpy(), wait_for_verack=False)

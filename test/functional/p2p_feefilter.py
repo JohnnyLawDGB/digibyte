@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2016-2022 The DigiByte Core developers
+# Copyright (c) 2016-2021 The DigiByte Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test processing of feefilter messages."""
@@ -45,7 +45,6 @@ class TestP2PConn(P2PInterface):
 
 class FeeFilterTest(DigiByteTestFramework):
     def set_test_params(self):
-        self.setup_clean_chain = True
         self.num_nodes = 2
         # We lower the various required feerates for this test
         # to catch a corner-case where feefilter used to slightly undercut
@@ -54,8 +53,8 @@ class FeeFilterTest(DigiByteTestFramework):
         # See issue #16499
         # grant noban permission to all peers to speed up tx relay / mempool sync
         self.extra_args = [[
-            "-minrelaytxfee=0.00000010",
-            "-mintxfee=0.00000010",
+            "-minrelaytxfee=0.00000100",
+            "-mintxfee=0.00000100",
             "-whitelist=noban@127.0.0.1",
         ]] * self.num_nodes
 
@@ -80,29 +79,24 @@ class FeeFilterTest(DigiByteTestFramework):
         node1 = self.nodes[1]
         node0 = self.nodes[0]
         miniwallet = MiniWallet(node1)
-        
-        # Generate initial blocks for MiniWallet to have UTXOs
-        self.generate(miniwallet, 101)
-        self.sync_all()
 
         conn = self.nodes[0].add_p2p_connection(TestP2PConn())
 
-        # First find the minimum fee rate that works
-        self.log.info("Test txs paying 200 sat/byte are received by test connection")
-        txids = [miniwallet.send_self_transfer(fee_rate=Decimal('0.00020000'), from_node=node1)['wtxid'] for _ in range(3)]
+        self.log.info("Test txs paying 0.2 sat/byte are received by test connection")
+        txids = [miniwallet.send_self_transfer(fee_rate=Decimal('0.00000200'), from_node=node1)['wtxid'] for _ in range(3)]
         conn.wait_for_invs_to_match(txids)
         conn.clear_invs()
 
-        # Set a fee filter of 15000 sats/kvB on test connection (15 sats/byte)
-        conn.send_and_ping(msg_feefilter(15000))
+        # Set a fee filter of 0.15 sat/byte on test connection
+        conn.send_and_ping(msg_feefilter(150))
 
-        self.log.info("Test txs paying 150 sat/byte are received by test connection")
-        txids = [miniwallet.send_self_transfer(fee_rate=Decimal('0.00015000'), from_node=node1)['wtxid'] for _ in range(3)]
+        self.log.info("Test txs paying 0.15 sat/byte are received by test connection")
+        txids = [miniwallet.send_self_transfer(fee_rate=Decimal('0.00000150'), from_node=node1)['wtxid'] for _ in range(3)]
         conn.wait_for_invs_to_match(txids)
         conn.clear_invs()
 
-        self.log.info("Test txs paying 100 sat/byte are no longer received by test connection")
-        txids = [miniwallet.send_self_transfer(fee_rate=Decimal('0.00010000'), from_node=node1)['wtxid'] for _ in range(3)]
+        self.log.info("Test txs paying 0.1 sat/byte are no longer received by test connection")
+        txids = [miniwallet.send_self_transfer(fee_rate=Decimal('0.00000100'), from_node=node1)['wtxid'] for _ in range(3)]
         self.sync_mempools()  # must be sure node 0 has received all txs
 
         # Send one transaction from node0 that should be received, so that we

@@ -24,17 +24,17 @@ class DataCarrierTest(DigiByteTestFramework):
     def set_test_params(self):
         self.num_nodes = 4
         self.extra_args = [
-            ["-dandelion=0"],
-            ["-datacarrier=0", "-dandelion=0"],
-            ["-datacarrier=1", f"-datacarriersize={MAX_OP_RETURN_RELAY - 1}", "-dandelion=0"],
-            ["-datacarrier=1", f"-datacarriersize=2", "-dandelion=0"],
+            [],
+            ["-datacarrier=0"],
+            ["-datacarrier=1", f"-datacarriersize={MAX_OP_RETURN_RELAY - 1}"],
+            ["-datacarrier=1", f"-datacarriersize=2"],
         ]
 
     def test_null_data_transaction(self, node: TestNode, data, success: bool) -> None:
         tx = self.wallet.create_self_transfer(fee_rate=0)["tx"]
         data = [] if data is None else [data]
         tx.vout.append(CTxOut(nValue=0, scriptPubKey=CScript([OP_RETURN] + data)))
-        tx.vout[0].nValue -= tx.get_vsize() * 100  # pay 100sat/vbyte fee for DigiByte
+        tx.vout[0].nValue -= tx.get_vsize()  # simply pay 1sat/vbyte fee
 
         tx_hex = tx.serialize().hex()
 

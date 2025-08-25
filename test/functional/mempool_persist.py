@@ -52,16 +52,10 @@ from test_framework.wallet import MiniWallet, COIN
 class MempoolPersistTest(DigiByteTestFramework):
     def add_options(self, parser):
         self.add_wallet_options(parser, legacy=False)
+
     def set_test_params(self):
         self.num_nodes = 3
-        self.extra_args = [
-            ["-dandelion=0"],  # Disable Dandelion++ for test reliability
-            ["-persistmempool=0", "-dandelion=0"],
-            ["-dandelion=0"]
-        ]
-
-    def skip_test_if_missing_module(self):
-        self.skip_if_no_wallet()
+        self.extra_args = [[], ["-persistmempool=0"], []]
 
     def run_test(self):
         self.mini_wallet = MiniWallet(self.nodes[2])
@@ -159,7 +153,6 @@ class MempoolPersistTest(DigiByteTestFramework):
         assert_equal(result1['filename'], mempooldat1)
         os.remove(mempooldat1)
 
-        # start node0 with wallet disabled so wallet transactions don't get resubmitted
         self.log.debug("Stop-start node0 with -persistmempool=0. Verify that it doesn't load its mempool.dat file.")
         self.stop_nodes()
         self.start_node(0, extra_args=["-persistmempool=0"])
@@ -181,6 +174,7 @@ class MempoolPersistTest(DigiByteTestFramework):
         self.start_node(0)
         assert self.nodes[0].getmempoolinfo()["loaded"]
         assert_equal(len(self.nodes[0].getrawmempool()), 7)
+
         self.log.debug("Remove the mempool.dat file. Verify that savemempool to disk via RPC re-creates it")
         os.remove(mempooldat0)
         result0 = self.nodes[0].savemempool()

@@ -68,13 +68,9 @@ class ChainstateWriteCrashTest(DigiByteTestFramework):
         self.node3_args = ["-blockmaxweight=4000000", "-dustrelayfee=0"]
         self.extra_args = [self.node0_args, self.node1_args, self.node2_args, self.node3_args]
 
-    def skip_test_if_missing_module(self):
-        self.skip_if_no_wallet()
-
     def setup_network(self):
         self.add_nodes(self.num_nodes, extra_args=self.extra_args)
         self.start_nodes()
-        self.import_deterministic_coinbase_privkeys()
         # Leave them unconnected, we'll use submitblock directly in this test
 
     def restart_node(self, node_index, expected_tip):
@@ -188,7 +184,7 @@ class ChainstateWriteCrashTest(DigiByteTestFramework):
             assert_equal(nodei_utxo_hash, node3_utxo_hash)
 
     def generate_small_transactions(self, node, count, utxo_list):
-        FEE = 100000  # TODO: replace this with node relay fee based calculation
+        FEE = 1000  # TODO: replace this with node relay fee based calculation
         num_transactions = 0
         random.shuffle(utxo_list)
         while len(utxo_list) >= 2 and num_transactions < count:
@@ -216,7 +212,6 @@ class ChainstateWriteCrashTest(DigiByteTestFramework):
         self.crashed_on_restart = 0      # Track count of crashes during recovery
 
         # Start by creating a lot of utxos on node3
-        initial_height = self.nodes[3].getblockcount()
         utxo_list = []
         for _ in range(5):
             utxo_list.extend(self.wallet.send_self_transfer_multi(from_node=self.nodes[3], num_outputs=1000)['new_utxos'])

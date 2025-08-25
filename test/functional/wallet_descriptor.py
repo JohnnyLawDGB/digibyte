@@ -9,7 +9,7 @@ try:
 except ImportError:
     pass
 
-from test_framework.blocktools import COINBASE_MATURITY_2
+from test_framework.blocktools import COINBASE_MATURITY
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import (
     assert_equal,
@@ -47,7 +47,7 @@ class WalletDescriptorTest(DigiByteTestFramework):
         self.log.info("Making a descriptor wallet")
         self.nodes[0].createwallet(wallet_name="desc1", descriptors=True)
 
-        # A descriptor wallet should have 100 addresses * 4 types = 400 keys (updated for v8.26)
+        # A descriptor wallet should have 100 addresses * 4 types = 400 keys
         self.log.info("Checking wallet info")
         wallet_info = self.nodes[0].getwalletinfo()
         assert_equal(wallet_info['format'], 'sqlite')
@@ -72,6 +72,10 @@ class WalletDescriptorTest(DigiByteTestFramework):
         assert addr_info['desc'].startswith('wpkh(')
         assert_equal(addr_info['hdkeypath'], 'm/84h/1h/0h/0/0')
 
+        addr = self.nodes[0].getnewaddress("", "bech32m")
+        addr_info = self.nodes[0].getaddressinfo(addr)
+        assert addr_info['desc'].startswith('tr(')
+        assert_equal(addr_info['hdkeypath'], 'm/86h/1h/0h/0/0')
 
         # Check that getrawchangeaddress works
         addr = self.nodes[0].getrawchangeaddress("legacy")
@@ -89,6 +93,10 @@ class WalletDescriptorTest(DigiByteTestFramework):
         assert addr_info['desc'].startswith('wpkh(')
         assert_equal(addr_info['hdkeypath'], 'm/84h/1h/0h/1/0')
 
+        addr = self.nodes[0].getrawchangeaddress("bech32m")
+        addr_info = self.nodes[0].getaddressinfo(addr)
+        assert addr_info['desc'].startswith('tr(')
+        assert_equal(addr_info['hdkeypath'], 'm/86h/1h/0h/1/0')
 
         # Make a wallet to receive coins at
         self.nodes[0].createwallet(wallet_name="desc2", descriptors=True)
@@ -96,7 +104,7 @@ class WalletDescriptorTest(DigiByteTestFramework):
         send_wrpc = self.nodes[0].get_wallet_rpc("desc1")
 
         # Generate some coins
-        send_wrpc.generatetoaddress(COINBASE_MATURITY_2 + 1, send_wrpc.getnewaddress())
+        self.generatetoaddress(self.nodes[0], COINBASE_MATURITY + 1, send_wrpc.getnewaddress())
 
         # Make transactions
         self.log.info("Test sending and receiving")
@@ -121,11 +129,10 @@ class WalletDescriptorTest(DigiByteTestFramework):
 
         # Encrypt wallet 0
         send_wrpc.encryptwallet('pass')
-        send_wrpc.walletpassphrase('pass', 10)
-        addr = send_wrpc.getnewaddress()
-        info2 = send_wrpc.getaddressinfo(addr)
-        assert info1['hdmasterfingerprint'] != info2['hdmasterfingerprint']
-        send_wrpc.walletlock()
+        with WalletUnlock(send_wrpc, "pass"):
+            addr = send_wrpc.getnewaddress()
+            info2 = send_wrpc.getaddressinfo(addr)
+            assert info1['hdmasterfingerprint'] != info2['hdmasterfingerprint']
         assert 'hdmasterfingerprint' in send_wrpc.getaddressinfo(send_wrpc.getnewaddress())
         info3 = send_wrpc.getaddressinfo(addr)
         assert_equal(info2['desc'], info3['desc'])

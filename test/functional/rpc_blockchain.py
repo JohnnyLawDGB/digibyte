@@ -27,7 +27,6 @@ import os
 import subprocess
 import textwrap
 
-from test_framework.address import ADDRESS_BCRT1_P2WSH_OP_TRUE
 from test_framework.blocktools import (
     MAX_FUTURE_BLOCK_TIME,
     TIME_GENESIS_BLOCK,
@@ -50,7 +49,6 @@ from test_framework.util import (
     assert_raises_rpc_error,
     assert_is_hex_string,
     assert_is_hash_string,
-    get_datadir_path,
 )
 from test_framework.wallet import MiniWallet
 
@@ -91,15 +89,6 @@ class BlockchainTest(DigiByteTestFramework):
         self._test_stopatheight()
         self._test_waitforblockheight()
         self._test_getblock()
-        assert self.nodes[0].verifychain(4, 0)
-
-    def mine_chain(self):
-        self.log.info(f"Generate {HEIGHT} blocks after the genesis block in ten-minute steps")
-        for t in range(TIME_GENESIS_BLOCK, TIME_RANGE_END, TIME_RANGE_STEP):
-            # ten-minute steps from genesis block time
-            self.nodes[0].setmocktime(t)
-            self.generate(self.wallet, 1)
-        assert_equal(self.nodes[0].getblockchaininfo()['blocks'], HEIGHT)
         self._test_getdeploymentinfo()
         self._test_y2106()
         assert self.nodes[0].verifychain(4, 0)
@@ -139,8 +128,7 @@ class BlockchainTest(DigiByteTestFramework):
             'blocks',
             'chain',
             'chainwork',
-            'difficulty',      # DigiByte: Keep single difficulty for backward compatibility
-            'difficulties',    # DigiByte: Multi-algorithm difficulties
+            'difficulty',
             'headers',
             'initialblockdownload',
             'mediantime',
@@ -171,7 +159,7 @@ class BlockchainTest(DigiByteTestFramework):
         self.restart_node(0, ['-stopatheight=207'])
         res = self.nodes[0].getblockchaininfo()
         # should have exact keys
-        assert_equal(sorted(res.keys()), sorted(keys))
+        assert_equal(sorted(res.keys()), keys)
 
         self.stop_node(0)
         self.nodes[0].assert_start_raises_init_error(
@@ -201,11 +189,6 @@ class BlockchainTest(DigiByteTestFramework):
         assert res['automatic_pruning']
         assert_equal(res['prune_target_size'], 576716800)
         assert_greater_than(res['size_on_disk'], 0)
-        res = self.nodes[0].getblockchaininfo()
-        self.log.info("getblockchaininfo: %s" % res)
-        # DigiByte: In Bitcoin v26.2, softforks info was moved from getblockchaininfo to getdeploymentinfo
-        # This test is updated to use getdeploymentinfo instead
-        # The softforks assertions are now tested in _test_getdeploymentinfo()
 
     def check_signalling_deploymentinfo_result(self, gdi_result, height, blockhash, status_next):
         assert height >= 144 and height <= 287
@@ -347,8 +330,7 @@ class BlockchainTest(DigiByteTestFramework):
         node = self.nodes[0]
         res = node.gettxoutsetinfo()
 
-        # DigiByte: 200 blocks × 72000 DGB per block = 14,400,000 DGB
-        assert_equal(res['total_amount'], Decimal('14400000.00000000'))
+        assert_equal(res['total_amount'], Decimal('8725.00000000'))
         assert_equal(res['transactions'], HEIGHT)
         assert_equal(res['height'], HEIGHT)
         assert_equal(res['txouts'], HEIGHT)
@@ -448,23 +430,23 @@ class BlockchainTest(DigiByteTestFramework):
     def _test_getdifficulty(self):
         self.log.info("Test getdifficulty")
         difficulty = self.nodes[0].getdifficulty()
-        # DigiByte: getdifficulty returns a single number, not an object
-        # For multi-algorithm difficulties, use getblockchaininfo or getmininginfo
         # 1 hash in 2 should be valid, so difficulty should be 1/2**31
         # binary => decimal => binary math is why we do this check
         assert abs(difficulty * 2**31 - 1) < 0.0001
 
     def _test_getnetworkhashps(self):
         self.log.info("Test getnetworkhashps")
-        # DigiByte: getnetworkhashps has an additional 'algo' parameter
-        # The error message format might be different
-        try:
-            self.nodes[0].getnetworkhashps("a", [])
-            assert False, "Expected RPC error for invalid parameters"
-        except Exception as e:
-            # Just verify we get some error for invalid parameters
-            self.log.info(f"Got expected error for invalid parameters: {str(e)}")
-        
+        assert_raises_rpc_error(
+            -3,
+            textwrap.dedent("""
+            Wrong type passed:
+            {
+                "Position 1 (nblocks)": "JSON value of type string is not of expected type number",
+                "Position 2 (height)": "JSON value of type array is not of expected type number"
+            }
+            """).strip(),
+            lambda: self.nodes[0].getnetworkhashps("a", []),
+        )
         assert_raises_rpc_error(
             -8,
             "Block does not exist at specified height",
@@ -490,14 +472,9 @@ class BlockchainTest(DigiByteTestFramework):
         hashes_per_second = self.nodes[0].getnetworkhashps(100, 0)
         assert_equal(hashes_per_second, 0)
 
-        # DigiByte: With 15-second block times and multi-algo mining,
-        # the network hash rate calculation is different from Bitcoin
-        # Each algo gets 1/5 of blocks, so effective time per algo block is 75 seconds
-        # For 120 blocks of one algo, that's approximately 120 * 75 = 9000 seconds
-        # With 2 hashes per block: 2 * 120 / 9000 = 0.0267 hashes per second
+        # This should be 2 hashes every 10 minutes or 1/300
         hashes_per_second = self.nodes[0].getnetworkhashps()
-        # Just verify we get a reasonable positive value
-        assert hashes_per_second > 0
+        assert abs(hashes_per_second * 300 - 1) < 0.0001
 
     def _test_stopatheight(self):
         self.log.info("Test stopping at height")
@@ -555,14 +532,11 @@ class BlockchainTest(DigiByteTestFramework):
         assert_waitforheight(current_height + 1)
 
     def _test_getblock(self):
-        self.log.info("Test getblock")
         node = self.nodes[0]
-        fee_per_byte = Decimal('0.000010')
+        fee_per_byte = Decimal('0.00000010')
         fee_per_kb = 1000 * fee_per_byte
 
-        # Send transaction
         self.wallet.send_self_transfer(fee_rate=fee_per_kb, from_node=node)
-        # Mine a block to include the transaction
         blockhash = self.generate(node, 1)[0]
 
         def assert_hexblock_hashes(verbosity):
@@ -571,28 +545,16 @@ class BlockchainTest(DigiByteTestFramework):
 
         def assert_fee_not_in_block(verbosity):
             block = node.getblock(blockhash, verbosity)
-            # Skip if block only has coinbase transaction
-            if len(block['tx']) < 2:
-                self.log.info(f"Block only has {len(block['tx'])} transaction(s), skipping fee check")
-                return
             assert 'fee' not in block['tx'][1]
 
         def assert_fee_in_block(verbosity):
             block = node.getblock(blockhash, verbosity)
-            # Skip if block only has coinbase transaction
-            if len(block['tx']) < 2:
-                self.log.info(f"Block only has {len(block['tx'])} transaction(s), skipping fee check")
-                return
             tx = block['tx'][1]
             assert 'fee' in tx
             assert_equal(tx['fee'], tx['vsize'] * fee_per_byte)
 
         def assert_vin_contains_prevout(verbosity):
             block = node.getblock(blockhash, verbosity)
-            # Skip if block only has coinbase transaction
-            if len(block["tx"]) < 2:
-                self.log.info(f"Block only has {len(block['tx'])} transaction(s), skipping vin check")
-                return
             tx = block["tx"][1]
             total_vin = Decimal("0.00000000")
             total_vout = Decimal("0.00000000")
@@ -607,10 +569,6 @@ class BlockchainTest(DigiByteTestFramework):
 
         def assert_vin_does_not_contain_prevout(verbosity):
             block = node.getblock(blockhash, verbosity)
-            # Skip if block only has coinbase transaction
-            if len(block["tx"]) < 2:
-                self.log.info(f"Block only has {len(block['tx'])} transaction(s), skipping vin check")
-                return
             tx = block["tx"][1]
             if isinstance(tx, str):
                 # In verbosity level 1, only the transaction hashes are written

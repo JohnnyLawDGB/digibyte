@@ -16,9 +16,6 @@ from test_framework.util import (
     assert_raises_rpc_error,
     find_vout_for_address,
 )
-from test_framework.wallet_util import (
-    get_key,
-)
 from test_framework.messages import (
     CTxInWitness,
     tx_from_hex,
@@ -42,12 +39,11 @@ RAW_TX = '020000000156b958f78e3f24e0b2f4e4db1255426b0902027cb37e3ddadb52e37c3557
 
 class SignRawTransactionWithWalletTest(DigiByteTestFramework):
     def add_options(self, parser):
-        self.add_wallet_options(parser, legacy=True, descriptors=False)
+        self.add_wallet_options(parser)
 
     def set_test_params(self):
         self.setup_clean_chain = True
         self.num_nodes = 2
-        self.extra_args = [["-whitelist=noban@127.0.0.1", "-dandelion=0"]] * self.num_nodes
 
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()
@@ -68,13 +64,11 @@ class SignRawTransactionWithWalletTest(DigiByteTestFramework):
         Expected results:
 
         3) The transaction has no complete set of signatures
-        4) Three script verification errors occurred
+        4) Two script verification errors occurred
         5) Script verification errors have certain properties ("txid", "vout", "scriptSig", "sequence", "error")
         6) The verification errors refer to the invalid (vin 1) and missing input (vin 2)"""
         self.log.info("Test script verification errors")
-        # Generate a DigiByte-compatible private key
-        key = get_key(self.nodes[0])
-        privKeys = [key.privkey]
+        privKeys = ['cUeKHd5orzT3mz8P9pxyREHfsWtVfgsfDjiZZBcjUBAaGk1BTj7N']
 
         inputs = [
             # Valid pay-to-pubkey script
@@ -94,7 +88,7 @@ class SignRawTransactionWithWalletTest(DigiByteTestFramework):
              'scriptPubKey': 'badbadbadbad'}
         ]
 
-        outputs = {self.nodes[0].getnewaddress(): 0.1}
+        outputs = {'mpLQjfK79b7CCV4VMJWEWAj5Mpx8Up5zxB': 0.1}
 
         rawTx = self.nodes[0].createrawtransaction(inputs, outputs)
 
@@ -112,9 +106,9 @@ class SignRawTransactionWithWalletTest(DigiByteTestFramework):
         # 3) The transaction has no complete set of signatures
         assert not rawTxSigned['complete']
 
-        # 4) Three script verification errors occurred
+        # 4) Two script verification errors occurred
         assert 'errors' in rawTxSigned
-        assert_equal(len(rawTxSigned['errors']), 3)
+        assert_equal(len(rawTxSigned['errors']), 2)
 
         # 5) Script verification errors have certain properties
         assert 'txid' in rawTxSigned['errors'][0]
@@ -124,13 +118,11 @@ class SignRawTransactionWithWalletTest(DigiByteTestFramework):
         assert 'sequence' in rawTxSigned['errors'][0]
         assert 'error' in rawTxSigned['errors'][0]
 
-        # 6) The verification errors refer to inputs 0, 1, and 2 in that order
-        assert_equal(rawTxSigned['errors'][0]['txid'], inputs[0]['txid'])
-        assert_equal(rawTxSigned['errors'][0]['vout'], inputs[0]['vout'])
-        assert_equal(rawTxSigned['errors'][1]['txid'], inputs[1]['txid'])
-        assert_equal(rawTxSigned['errors'][1]['vout'], inputs[1]['vout'])
-        assert_equal(rawTxSigned['errors'][2]['txid'], inputs[2]['txid'])
-        assert_equal(rawTxSigned['errors'][2]['vout'], inputs[2]['vout'])
+        # 6) The verification errors refer to the invalid (vin 1) and missing input (vin 2)
+        assert_equal(rawTxSigned['errors'][0]['txid'], inputs[1]['txid'])
+        assert_equal(rawTxSigned['errors'][0]['vout'], inputs[1]['vout'])
+        assert_equal(rawTxSigned['errors'][1]['txid'], inputs[2]['txid'])
+        assert_equal(rawTxSigned['errors'][1]['vout'], inputs[2]['vout'])
         assert not rawTxSigned['errors'][0]['witness']
 
         # Now test signing failure for transaction with input witnesses
@@ -141,7 +133,7 @@ class SignRawTransactionWithWalletTest(DigiByteTestFramework):
         # 7) The transaction has no complete set of signatures
         assert not rawTxSigned['complete']
 
-        # 8) Two script verification errors occurred (DigiByte specific)
+        # 8) Two script verification errors occurred
         assert 'errors' in rawTxSigned
         assert_equal(len(rawTxSigned['errors']), 2)
 
@@ -206,7 +198,7 @@ class SignRawTransactionWithWalletTest(DigiByteTestFramework):
         vout = find_vout_for_address(self.nodes[0], txid, address)
         self.generate(self.nodes[0], 1)
         utxo = self.nodes[0].listunspent()[0]
-        amt = Decimal(1) + utxo["amount"] - Decimal(0.001)  # DigiByte: Use appropriate fee for minimum relay
+        amt = Decimal(1) + utxo["amount"] - Decimal(0.00001)
         tx = self.nodes[0].createrawtransaction(
             [{"txid": txid, "vout": vout, "sequence": 1},{"txid": utxo["txid"], "vout": utxo["vout"]}],
             [{self.nodes[0].getnewaddress(): amt}],
@@ -241,7 +233,7 @@ class SignRawTransactionWithWalletTest(DigiByteTestFramework):
         vout = find_vout_for_address(self.nodes[0], txid, address)
         self.generate(self.nodes[0], 1)
         utxo = self.nodes[0].listunspent()[0]
-        amt = Decimal(1) + utxo["amount"] - Decimal(0.001)  # DigiByte: Use appropriate fee for minimum relay
+        amt = Decimal(1) + utxo["amount"] - Decimal(0.00001)
         tx = self.nodes[0].createrawtransaction(
             [{"txid": txid, "vout": vout},{"txid": utxo["txid"], "vout": utxo["vout"]}],
             [{self.nodes[0].getnewaddress(): amt}],
@@ -310,9 +302,6 @@ class SignRawTransactionWithWalletTest(DigiByteTestFramework):
             ])
 
     def run_test(self):
-        # Generate enough blocks to have spendable coins
-        self.generatetoaddress(self.nodes[0], 101, self.nodes[0].getnewaddress())
-        
         self.script_verification_error_test()
         self.OP_1NEGATE_test()
         self.test_with_lock_outputs()

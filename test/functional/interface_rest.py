@@ -11,6 +11,7 @@ import json
 import typing
 import urllib.parse
 
+
 from test_framework.messages import (
     BLOCK_HEADER_SIZE,
     COIN,
@@ -32,7 +33,6 @@ INVALID_PARAM = "abc"
 UNKNOWN_PARAM = "0000000000000000000000000000000000000000000000000000000000000000"
 
 
-
 class ReqType(Enum):
     JSON = 1
     BIN = 2
@@ -50,24 +50,12 @@ def filter_output_indices_by_value(vouts, value):
 
 class RESTTest (DigiByteTestFramework):
     def set_test_params(self):
-        self.setup_clean_chain = True
         self.num_nodes = 2
-        self.extra_args = [["-rest", "-blockfilterindex=1", "-dandelion=0"], []]
+        self.extra_args = [["-rest", "-blockfilterindex=1"], []]
+        # whitelist peers to speed up tx relay / mempool sync
+        for args in self.extra_args:
+            args.append("-whitelist=noban@127.0.0.1")
         self.supports_cli = False
-
-    def skip_test_if_missing_module(self):
-        # Skip wallet check since we can test REST API without wallet
-        pass
-
-    def setup_network(self):
-        self.setup_nodes()
-        # Connect the nodes
-        self.connect_nodes(0, 1)
-        # Skip wallet import since we're testing REST API, not wallet functionality
-        
-    def import_deterministic_coinbase_privkeys(self):
-        # Override to skip wallet setup
-        pass
 
     def test_rest_request(
             self,
@@ -108,14 +96,8 @@ class RESTTest (DigiByteTestFramework):
         self.url = urllib.parse.urlparse(self.nodes[0].url)
         self.wallet = MiniWallet(self.nodes[0])
 
-        self.log.info("Generate initial blocks and create test transaction")
-
-        # Generate blocks to get initial UTXOs for MiniWallet
-        self.generate(self.wallet, 101)
-        self.sync_all()
-
-        # Create a test transaction using MiniWallet
-        txid = self.wallet.send_to(from_node=self.nodes[0], scriptPubKey=getnewdestination()[1], amount=int(0.1 * COIN), fee=15000)["txid"]
+        self.log.info("Broadcast test transaction and sync nodes")
+        txid = self.wallet.send_to(from_node=self.nodes[0], scriptPubKey=getnewdestination()[1], amount=int(0.1 * COIN))["txid"]
         self.sync_all()
 
         self.log.info("Test the /tx URI")
@@ -127,7 +109,6 @@ class RESTTest (DigiByteTestFramework):
         hex_response = self.test_rest_request(f"/tx/{txid}", req_type=ReqType.HEX, ret_type=RetType.OBJ)
         assert_greater_than_or_equal(int(hex_response.getheader('content-length')),
                                      json_obj['size']*2)
-
 
         spent = (json_obj['vin'][0]['txid'], json_obj['vin'][0]['vout'])  # get the vin to later check for utxo (should be spent by then)
         # get n of 0.1 outpoint
@@ -185,7 +166,7 @@ class RESTTest (DigiByteTestFramework):
         response_hash = bin_response[4:36][::-1].hex()
 
         assert_equal(bb_hash, response_hash)  # check if getutxo's chaintip during calculation was fine
-        assert_equal(chain_height, 102)  # chain height must be 102
+        assert_equal(chain_height, 201)  # chain height must be 201 (pre-mined chain [200] + generated block [1])
 
         self.log.info("Test the /getutxos URI with and without /checkmempool")
         # Create a transaction, check that it's found with /checkmempool, but
@@ -193,7 +174,7 @@ class RESTTest (DigiByteTestFramework):
         # found with or without /checkmempool.
 
         # do a tx and don't sync
-        txid = self.wallet.send_to(from_node=self.nodes[0], scriptPubKey=getnewdestination()[1], amount=int(0.1 * COIN), fee=15000)["txid"]
+        txid = self.wallet.send_to(from_node=self.nodes[0], scriptPubKey=getnewdestination()[1], amount=int(0.1 * COIN))["txid"]
         json_obj = self.test_rest_request(f"/tx/{txid}")
         # get the spent output to later check for utxo (should be spent by then)
         spent = (json_obj['vin'][0]['txid'], json_obj['vin'][0]['vout'])
@@ -309,8 +290,10 @@ class RESTTest (DigiByteTestFramework):
 
         # See if we can get 5 headers in one response
         self.generate(self.nodes[1], 5)
-        # Wait for filter index to sync but don't expect specific height
-        self.wait_until(lambda: self.nodes[0].getindexinfo()['basic block filter index']['synced'])
+        expected_filter = {
+            'basic block filter index': {'synced': True, 'best_block_height': 208},
+        }
+        self.wait_until(lambda: self.nodes[0].getindexinfo() == expected_filter)
         json_obj = self.test_rest_request(f"/headers/{bb_hash}", query_params={"count": 5})
         assert_equal(len(json_obj), 5)  # now we should have 5 header objects
         json_obj = self.test_rest_request(f"/blockfilterheaders/basic/{bb_hash}", query_params={"count": 5})
@@ -335,7 +318,6 @@ class RESTTest (DigiByteTestFramework):
                 bytes(f'Header count is invalid or out of acceptable range (1-2000): {num}\r\n', 'ascii'),
                 self.test_rest_request(f"/headers/{bb_hash}", ret_type=RetType.BYTES, status=400, query_params={"count": num}),
             )
-
 
         self.log.info("Test tx inclusion in the /mempool and /block URIs")
 

@@ -16,7 +16,7 @@
                 "asm": "OP_HASH160 a4051c02398868af83f28f083208fae99a769263 OP_EQUAL",
                 "desc": "addr(3GeGs1eHUxPz5YyuFe9WPpXid2UsUb5Jos)#juhnnegr",
                 "hex": "a914a4051c02398868af83f28f083208fae99a76926387",
-                "address": "ScFFyJvzfRGoWh4vfyTzX6KM8HRadX9mNx",
+                "address": "3GeGs1eHUxPz5YyuFe9WPpXid2UsUb5Jos",
                 "type": "scripthash"
             }
         }

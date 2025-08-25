@@ -16,6 +16,7 @@ Verify that:
 """
 from test_framework.test_framework import DigiByteTestFramework
 
+
 class IncludeConfTest(DigiByteTestFramework):
     def set_test_params(self):
         self.num_nodes = 1

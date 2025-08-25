@@ -21,7 +21,6 @@ class P2PFeelerReceiver(P2PInterface):
 
 class P2PAddConnections(DigiByteTestFramework):
     def set_test_params(self):
-        self.setup_clean_chain = True
         self.num_nodes = 2
 
     def setup_network(self):

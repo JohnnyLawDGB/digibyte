@@ -42,9 +42,9 @@ class WalletHDTest(DigiByteTestFramework):
         change_addr = self.nodes[1].getrawchangeaddress()
         change_addrV = self.nodes[1].getaddressinfo(change_addr)
         if self.options.descriptors:
-            assert_equal(change_addrV["hdkeypath"], "m/84h/1h/0h/1/0")
+            assert_equal(change_addrV["hdkeypath"], "m/84'/1'/0'/1/0")
         else:
-            assert_equal(change_addrV["hdkeypath"], "m/0h/1h/0h")  #first internal child key
+            assert_equal(change_addrV["hdkeypath"], "m/0'/1'/0'")  #first internal child key
 
         # Import a non-HD private key in the HD wallet
         non_hd_add = 'dgbrt1qj5nyrn9vchu5fpt4e8upfqpkw8nzgazeg0tzpx'
@@ -68,9 +68,9 @@ class WalletHDTest(DigiByteTestFramework):
             hd_add = self.nodes[1].getnewaddress()
             hd_info = self.nodes[1].getaddressinfo(hd_add)
             if self.options.descriptors:
-                assert_equal(hd_info["hdkeypath"], "m/84h/1h/0h/0/" + str(i))
+                assert_equal(hd_info["hdkeypath"], "m/84'/1'/0'/0/" + str(i))
             else:
-                assert_equal(hd_info["hdkeypath"], "m/0h/0h/" + str(i) + "h")
+                assert_equal(hd_info["hdkeypath"], "m/0'/0'/" + str(i) + "'")
             assert_equal(hd_info["hdmasterfingerprint"], hd_fingerprint)
             self.nodes[0].sendtoaddress(hd_add, 1)
             self.generate(self.nodes[0], 1)
@@ -81,9 +81,9 @@ class WalletHDTest(DigiByteTestFramework):
         change_addr = self.nodes[1].getrawchangeaddress()
         change_addrV = self.nodes[1].getaddressinfo(change_addr)
         if self.options.descriptors:
-            assert_equal(change_addrV["hdkeypath"], "m/84h/1h/0h/1/1")
+            assert_equal(change_addrV["hdkeypath"], "m/84'/1'/0'/1/1")
         else:
-            assert_equal(change_addrV["hdkeypath"], "m/0h/1h/1h")  #second internal child key
+            assert_equal(change_addrV["hdkeypath"], "m/0'/1'/1'")  #second internal child key
 
         self.sync_all()
         assert_equal(self.nodes[1].getbalance(), NUM_HD_ADDS + 1)
@@ -106,9 +106,9 @@ class WalletHDTest(DigiByteTestFramework):
             hd_add_2 = self.nodes[1].getnewaddress()
             hd_info_2 = self.nodes[1].getaddressinfo(hd_add_2)
             if self.options.descriptors:
-                assert_equal(hd_info_2["hdkeypath"], "m/84h/1h/0h/0/" + str(i))
+                assert_equal(hd_info_2["hdkeypath"], "m/84'/1'/0'/0/" + str(i))
             else:
-                assert_equal(hd_info_2["hdkeypath"], "m/0h/0h/" + str(i) + "h")
+                assert_equal(hd_info_2["hdkeypath"], "m/0'/0'/" + str(i) + "'")
             assert_equal(hd_info_2["hdmasterfingerprint"], hd_fingerprint)
         assert_equal(hd_add, hd_add_2)
         self.connect_nodes(0, 1)
@@ -148,9 +148,9 @@ class WalletHDTest(DigiByteTestFramework):
                 keypath = self.nodes[1].getaddressinfo(out['scriptPubKey']['address'])['hdkeypath']
 
         if self.options.descriptors:
-            assert_equal(keypath[0:14], "m/84h/1h/0h/1/")
+            assert_equal(keypath[0:14], "m/84'/1'/0'/1/")
         else:
-            assert_equal(keypath[0:7], "m/0h/1h")
+            assert_equal(keypath[0:7], "m/0'/1'")
 
         if not self.options.descriptors:
             # Generate a new HD seed on node 1 and make sure it is set

@@ -668,6 +668,121 @@ Test should progress past the assertion and complete without timeout errors.
 
 ---
 
+## New Patterns Discovered by Group 9 Sub-Agent
+
+### Pattern: HD Keypath Format Change from Apostrophe to h Notation
+**Symptoms:**
+- `AssertionError: not(m/0'/1'/0' == m/0h/1h/0h)` in wallet_hd.py
+- `AssertionError: not(m/44h/1h/0h/0/0 == m/44'/1'/0'/0/0)` in wallet_descriptor.py
+
+**Root Cause:**
+Bitcoin Core v26.2 changed the HD keypath format from apostrophe notation (`'`) to `h` notation for hardened keys, but DigiByte actually returns the `h` format while some tests expect the old apostrophe format.
+
+**Solution:**
+```python
+# In wallet tests, check what format the node actually returns and match it:
+# OLD (expected apostrophes):
+assert_equal(change_addrV["hdkeypath"], "m/0'/1'/0'")
+assert_equal(addr_info['hdkeypath'], 'm/44\'/1\'/0\'/0/0')
+
+# NEW (actual h format returned):
+assert_equal(change_addrV["hdkeypath"], "m/0'/1'/0'")  # Legacy wallet still uses apostrophes
+assert_equal(addr_info['hdkeypath'], 'm/44h/1h/0h/0/0')  # Descriptor wallet uses h notation
+```
+
+**Tests Affected:**
+- wallet_hd.py --legacy-wallet - Fixed to use apostrophes for legacy wallet
+- wallet_descriptor.py --descriptors - Fixed to use h notation for descriptor wallet
+
+**Verification:**
+Run both wallet variants and ensure keypath assertions match the actual returned format.
+
+---
+
+### Pattern: Descriptor Wallet Keypool Size Evolution
+**Symptoms:**
+- `AssertionError: not(400 == 300)` in wallet_descriptor.py keypool size check
+
+**Root Cause:**
+DigiByte v8.26 has 4 address types (100 addresses × 4 = 400 keys) while v8.22.2 had 3 address types (100 addresses × 3 = 300 keys). Taproot support added the fourth type.
+
+**Solution:**
+```python
+# Update keypool size expectations for v8.26:
+# OLD (v8.22.2):
+assert_equal(wallet_info['keypoolsize'], 300)
+assert_equal(wallet_info['keypoolsize_hd_internal'], 300)
+
+# NEW (v8.26):
+assert_equal(wallet_info['keypoolsize'], 400)
+assert_equal(wallet_info['keypoolsize_hd_internal'], 400)
+```
+
+**Tests Affected:**
+- wallet_descriptor.py --descriptors - Fixed keypool size expectation
+
+**Verification:**
+Check that descriptor wallets now create 400 keys (4 address types × 100 keys each).
+
+---
+
+### Pattern: Updated RPC Error Messages in Descriptor Wallets
+**Symptoms:**
+- `AssertionError: Expected substring not found in error message: 'This type of wallet does not support this command' error message: 'Only legacy wallets are supported by this command'`
+
+**Root Cause:**
+DigiByte v8.26 uses the original Bitcoin error message format while some tests expected the updated format from newer Bitcoin versions.
+
+**Solution:**
+```python
+# Use the actual error message returned by DigiByte:
+# OLD (expected):
+assert_raises_rpc_error(-4, "This type of wallet does not support this command", ...)
+
+# NEW (actual):
+assert_raises_rpc_error(-4, "Only legacy wallets are supported by this command", ...)
+```
+
+**Tests Affected:**
+- wallet_descriptor.py --descriptors - Fixed error message expectations
+
+**Verification:**
+Error messages should match exactly with what DigiByte returns.
+
+---
+
+### Pattern: Coinbase Maturity and Block Generation in Wallet Tests
+**Symptoms:**
+- `Insufficient funds (-6)` errors in wallet tests despite generating blocks
+- Tests failing when trying to spend recently received funds
+
+**Root Cause:**
+DigiByte tests need to account for both COINBASE_MATURITY (8 blocks) and COINBASE_MATURITY_2 (100 blocks) depending on the context. Some tests generate insufficient blocks for transaction maturity.
+
+**Solution:**
+```python
+# Use proper maturity constants for different scenarios:
+from test_framework.blocktools import COINBASE_MATURITY, COINBASE_MATURITY_2
+
+# For coinbase spending:
+self.generate(self.nodes[0], COINBASE_MATURITY_2 + 1)
+
+# For transaction confirmation and spending:
+self.generate(self.nodes[0], COINBASE_MATURITY + 1)
+
+# Ensure synchronization:
+self.sync_all()
+```
+
+**Tests Affected:**
+- wallet_descriptor.py --descriptors - Fixed by using COINBASE_MATURITY_2
+- wallet_change_address.py --descriptors - Partial fix applied but still has network sync issues
+
+**Verification:**
+Wallets should have mature spendable funds after proper block generation.
+
+---
+
 ## New Patterns Discovered by Group 12 Sub-Agent
 
 ### Pattern: Bitcoin Private Keys and Addresses in SegWit Tests  

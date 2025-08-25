@@ -4,10 +4,10 @@ This file organizes the failing tests into logical work groups for systematic fi
 
 ## Overall Status (2025-08-25)
 - **Total Tests**: 312 (2 disabled for hanging)
-- **Passing Tests**: 217 (70%)
-- **Failed Tests**: 77 (25%)
+- **Passing Tests**: 234 (75%)
+- **Failed Tests**: 60 (19%)
 - **Disabled Tests**: 2 (feature_assumeutxo.py, feature_assumevalid.py - hanging)
-- **Groups**: 14 work groups (Groups 11-13 COMPLETE)
+- **Groups**: 14 work groups (Groups 1, 3, 10-13 COMPLETE; Groups 2, 9 PARTIAL)
 - **Strategy**: Phase 1 (Groups 1-3) sequential, then parallel
 
 ## Work Group Status Legend
@@ -149,20 +149,20 @@ This file organizes the failing tests into logical work groups for systematic fi
 ```
 
 ## Group 9: Wallet Features
-**Status**: 🔴 Not Started
+**Status**: ⚠️ Partial - 5/8 passing
 **Priority**: MEDIUM (Phase 2) - Advanced wallet features
 **Common Issues**: HD wallet, descriptor wallet issues
-**Agent**: None
-**Progress**: 0/8 tests fixed
+**Agent**: Sub-Agent Group 9 (completed 2025-08-25)
+**Progress**: 5/8 tests fixed (63%)
 ```
-1. wallet_hd.py --legacy-wallet
-2. wallet_descriptor.py --descriptors
-3. wallet_signer.py --descriptors
-4. wallet_taproot.py --descriptors
-5. wallet_disable.py --descriptors
-6. wallet_disable.py --legacy-wallet
-7. wallet_change_address.py --descriptors
-8. wallet_change_address.py --legacy-wallet
+1. wallet_hd.py --legacy-wallet ✅ PASSING
+2. wallet_descriptor.py --descriptors ✅ PASSING
+3. wallet_signer.py --descriptors ✅ PASSING (properly skips)
+4. wallet_taproot.py --descriptors ❌ FAILING (Taproot PSBT assertion)
+5. wallet_disable.py --descriptors ✅ PASSING
+6. wallet_disable.py --legacy-wallet ✅ PASSING
+7. wallet_change_address.py --descriptors ❌ FAILING (node sync issues)
+8. wallet_change_address.py --legacy-wallet ❌ FAILING (node sync issues)
 ```
 
 ## Group 10: P2P Network Tests

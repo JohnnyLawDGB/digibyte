@@ -182,7 +182,7 @@ def compute_taproot_address(pubkey, scripts):
     return output_key_to_p2tr(taproot_construct(pubkey, scripts).output_pubkey)
 
 def compute_raw_taproot_address(pubkey):
-    return encode_segwit_address("bcrt", 1, pubkey)
+    return encode_segwit_address("dgbrt", 1, pubkey)
 
 class WalletTaprootTest(DigiByteTestFramework):
     """Test generation and spending of P2TR address outputs."""
@@ -193,7 +193,7 @@ class WalletTaprootTest(DigiByteTestFramework):
     def set_test_params(self):
         self.num_nodes = 2
         self.setup_clean_chain = True
-        self.extra_args = [['-keypool=100', '-dandelion=0', '-minrelaytxfee=0.00001', '-maxtxfee=10'], ['-keypool=100', '-dandelion=0', '-minrelaytxfee=0.00001', '-maxtxfee=10']]
+        self.extra_args = [['-keypool=100', '-dandelion=0', '-minrelaytxfee=0.001', '-maxtxfee=10'], ['-keypool=100', '-dandelion=0', '-minrelaytxfee=0.001', '-maxtxfee=10']]
         self.supports_cli = False
 
     def skip_test_if_missing_module(self):

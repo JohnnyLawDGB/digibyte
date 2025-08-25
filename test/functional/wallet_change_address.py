@@ -50,8 +50,13 @@ class WalletChangeAddressTest(DigiByteTestFramework):
 
     def run_test(self):
         self.log.info("Setting up")
-        # Mine some coins - use longer maturity for DigiByte
-        self.generate(self.nodes[0], COINBASE_MATURITY_2 + 1)
+        # Ensure nodes are connected
+        self.connect_nodes(0, 1)
+        self.connect_nodes(0, 2)
+        self.connect_nodes(1, 2)
+        
+        # Mine some coins - use longer maturity for DigiByte  
+        self.generate(self.nodes[0], COINBASE_MATURITY_2 + 10)  # Generate extra blocks to ensure mature funds
 
         # Get some addresses from the two nodes
         addr1 = [self.nodes[1].getnewaddress() for _ in range(3)]
@@ -61,7 +66,12 @@ class WalletChangeAddressTest(DigiByteTestFramework):
         # Send 1 + 0.5 coin to each address
         [self.nodes[0].sendtoaddress(addr, 1.0) for addr in addrs]
         [self.nodes[0].sendtoaddress(addr, 0.5) for addr in addrs]
-        self.generate(self.nodes[0], 1)
+        self.generate(self.nodes[0], COINBASE_MATURITY + 1)  # Generate enough blocks for transaction maturity
+        self.sync_all()  # Ensure all nodes see the transactions
+
+        # Debug: Check balances
+        self.log.info(f"Node 1 balance: {self.nodes[1].getbalance()}")
+        self.log.info(f"Node 2 balance: {self.nodes[2].getbalance()}")
 
         for i in range(20):
             for n in [1, 2]:

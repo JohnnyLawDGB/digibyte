@@ -162,7 +162,7 @@ class ImportRescanTest(DigiByteTestFramework):
         self.skip_if_no_wallet()
 
     def setup_network(self):
-        self.extra_args = [[] for _ in range(self.num_nodes)]
+        self.extra_args = [["-dandelion=0", "-maxtxfee=1"] for _ in range(self.num_nodes)]
         for i, import_node in enumerate(IMPORT_NODES, 2):
             if import_node.prune:
                 self.extra_args[i] += ["-prune=1"]
@@ -170,11 +170,11 @@ class ImportRescanTest(DigiByteTestFramework):
         self.add_nodes(self.num_nodes, extra_args=self.extra_args)
 
         # Import keys with pruning disabled
-        self.start_nodes(extra_args=[[]] * self.num_nodes)
+        self.start_nodes(extra_args=[["-dandelion=0"]] * self.num_nodes)
         self.import_deterministic_coinbase_privkeys()
         self.stop_nodes()
 
-        self.start_nodes(extra_args=[["-whitelist=noban@127.0.0.1"]] * self.num_nodes)
+        self.start_nodes(extra_args=[["-whitelist=noban@127.0.0.1", "-dandelion=0"]] * self.num_nodes)
         for i in range(1, self.num_nodes):
             self.connect_nodes(i, 0)
 
@@ -297,7 +297,7 @@ class ImportRescanTest(DigiByteTestFramework):
             )
             variant.child_txid = child["txid"]
             variant.amount_received = 0
-            self.nodes[0].sendrawtransaction(child["hex"])
+            self.nodes[0].sendrawtransaction(child["hex"], 0)
 
         # Mempools should contain the child transactions for each variant.
         assert_equal(len(self.nodes[0].getrawmempool()), len(mempool_variants))

@@ -35,7 +35,7 @@ import os
 from random import randint
 import shutil
 
-from test_framework.blocktools import COINBASE_MATURITY
+from test_framework.blocktools import COINBASE_MATURITY_2
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import (
     assert_equal,
@@ -53,10 +53,10 @@ class WalletBackupTest(DigiByteTestFramework):
         # nodes 1, 2,3 are spenders, let's give them a keypool=100
         # whitelist all peers to speed up tx relay / mempool sync
         self.extra_args = [
-            ["-whitelist=noban@127.0.0.1", "-keypool=100"],
-            ["-whitelist=noban@127.0.0.1", "-keypool=100"],
-            ["-whitelist=noban@127.0.0.1", "-keypool=100"],
-            ["-whitelist=noban@127.0.0.1"],
+            ["-whitelist=noban@127.0.0.1", "-keypool=100", "-dandelion=0"],
+            ["-whitelist=noban@127.0.0.1", "-keypool=100", "-dandelion=0"],
+            ["-whitelist=noban@127.0.0.1", "-keypool=100", "-dandelion=0"],
+            ["-whitelist=noban@127.0.0.1", "-dandelion=0"],
         ]
         self.rpc_timeout = 120
 
@@ -144,11 +144,11 @@ class WalletBackupTest(DigiByteTestFramework):
         self.generate(self.nodes[0], 1)
         self.generate(self.nodes[1], 1)
         self.generate(self.nodes[2], 1)
-        self.generate(self.nodes[3], COINBASE_MATURITY)
+        self.generate(self.nodes[3], COINBASE_MATURITY_2)
 
-        assert_equal(self.nodes[0].getbalance(), 50)
-        assert_equal(self.nodes[1].getbalance(), 50)
-        assert_equal(self.nodes[2].getbalance(), 50)
+        assert_equal(self.nodes[0].getbalance(), 72000)
+        assert_equal(self.nodes[1].getbalance(), 72000)
+        assert_equal(self.nodes[2].getbalance(), 72000)
         assert_equal(self.nodes[3].getbalance(), 0)
 
         self.log.info("Creating transactions")
@@ -170,7 +170,7 @@ class WalletBackupTest(DigiByteTestFramework):
             self.do_one_round()
 
         # Generate 101 more blocks, so any fees paid mature
-        self.generate(self.nodes[3], COINBASE_MATURITY + 1)
+        self.generate(self.nodes[3], COINBASE_MATURITY_2 + 1)
 
         balance0 = self.nodes[0].getbalance()
         balance1 = self.nodes[1].getbalance()
@@ -179,8 +179,8 @@ class WalletBackupTest(DigiByteTestFramework):
         total = balance0 + balance1 + balance2 + balance3
 
         # At this point, there are 214 blocks (103 for setup, then 10 rounds, then 101.)
-        # 114 are mature, so the sum of all wallets should be 114 * 50 = 5700.
-        assert_equal(total, 5700)
+        # 114 are mature, so the sum of all wallets should be 114 * 72000 = 8208000.
+        assert_equal(total, 8208000)
 
         ##
         # Test restoring spender wallets from backups

@@ -38,7 +38,7 @@ class WalletMigrationTest(DigiByteTestFramework):
     def set_test_params(self):
         self.setup_clean_chain = True
         self.num_nodes = 1
-        self.extra_args = [[]]
+        self.extra_args = [["-maxtxfee=1"]]
         self.supports_cli = False
 
     def skip_test_if_missing_module(self):
@@ -774,9 +774,9 @@ class WalletMigrationTest(DigiByteTestFramework):
             locktime += 1
 
         # conflict with parent
-        conflict_unsigned = self.nodes[0].createrawtransaction(inputs=[conflict_utxo], outputs=[{wallet.getnewaddress(): 9.9999}])
+        conflict_unsigned = self.nodes[0].createrawtransaction(inputs=[conflict_utxo], outputs=[{wallet.getnewaddress(): 9.971}])
         conflict_signed = wallet.signrawtransactionwithwallet(conflict_unsigned)["hex"]
-        conflict_txid = self.nodes[0].sendrawtransaction(conflict_signed)
+        conflict_txid = self.nodes[0].sendrawtransaction(conflict_signed, 0)
         self.generate(self.nodes[0], 1)
         assert_equal(wallet.gettransaction(txid=parent_txid)["confirmations"], -1)
         assert_equal(wallet.gettransaction(txid=child_txid)["confirmations"], -1)

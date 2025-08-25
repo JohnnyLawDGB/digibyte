@@ -248,3 +248,44 @@ Remember: 90% of test failures are fees or coinbase maturity issues.
 **Affects**: wallet_avoidreuse.py, other balance-checking tests
 **Added by**: Sub-Agent Group 11
 
+---
+
+## NEW PATTERNS FOUND BY GROUP 12
+
+### Pattern: Bitcoin v26.2 API Structure Changes
+**Error**: Invalid parameters in walletcreatefundedpsbt calls
+**Solution**: Change from `feeRate=0.1, subtractFeeFromOutputs=[0]` to `options={"feeRate": 0.1, "subtractFeeFromOutputs": [0]}`
+**Affects**: wallet_keypool.py and other wallet funding tests
+**Added by**: Sub-Agent Group 12
+
+### Pattern: Bitcoin to DigiByte Address Migration Issues  
+**Error**: Invalid or unsupported Base58-encoded address (-5)
+**Solution**: Replace hardcoded Bitcoin addresses with DigiByte equivalents:
+- `2N7yv4p8G8yEaPddJxY41kPihnWvs39qCMf` → `yb48vjS8NsHWbMpTb3QAbNUeYGW3F8eRas`
+- `bcrt1q...` → `dgbrt1q...` (with proper checksums)
+**Affects**: wallet_importdescriptors.py, any tests with hardcoded addresses
+**Added by**: Sub-Agent Group 12
+
+### Pattern: MiniWallet Framework Fee Issues  
+**Error**: min relay fee not met, 1000 < 13500 (-26)
+**Solution**: Fixed in test_framework/wallet.py by multiplying fees by 100x:
+- DEFAULT_FEE: 0.0001 → 0.01 DGB  
+- send_to fee: 1000 → 100000 satoshis
+- fee_per_output: 1000 → 100000 satoshis  
+- create_self_transfer fee_rate: 0.003 → 0.3 DGB/kB
+**Affects**: wallet_rescan_unconfirmed.py, any tests using MiniWallet
+**Added by**: Sub-Agent Group 12
+**Status**: ✅ FIXED
+
+### Pattern: DigiByte Balance/Maturity Issues  
+**Error**: AssertionError: not(0E-8 == 72000) 
+**Solution**: Use COINBASE_MATURITY_2 (100) for wallet tests instead of COINBASE_MATURITY (8)
+**Affects**: wallet_backup.py, wallet_descriptor.py
+**Added by**: Sub-Agent Group 12
+
+### Pattern: DigiByte Fee Scaling Issues   
+**Error**: Fee exceeds maximum configured by user (-25), insufficient fee for RBF
+**Solution**: Add `-maxtxfee=1` to extra_args and use `sendrawtransaction(tx, 0)` to bypass maxfeerate
+**Affects**: wallet_migration.py, wallet_import_rescan.py
+**Added by**: Sub-Agent Group 12
+

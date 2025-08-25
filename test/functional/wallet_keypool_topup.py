@@ -12,7 +12,7 @@ Two nodes. Node1 is under test. Node0 is providing transactions and generating b
 - connect node1 to node0. Verify that they sync and node1 receives its funds."""
 import shutil
 
-from test_framework.blocktools import COINBASE_MATURITY
+from test_framework.blocktools import COINBASE_MATURITY_2
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import (
     assert_equal,
@@ -26,7 +26,7 @@ class KeypoolRestoreTest(DigiByteTestFramework):
     def set_test_params(self):
         self.setup_clean_chain = True
         self.num_nodes = 4
-        self.extra_args = [[], ['-keypool=100'], ['-keypool=100'], ['-keypool=100']]
+        self.extra_args = [['-dandelion=0'], ['-keypool=100', '-dandelion=0'], ['-keypool=100', '-dandelion=0'], ['-keypool=100', '-dandelion=0']]
 
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()
@@ -34,7 +34,7 @@ class KeypoolRestoreTest(DigiByteTestFramework):
     def run_test(self):
         wallet_path = self.nodes[1].wallets_path / self.default_wallet_name / self.wallet_data_filename
         wallet_backup_path = self.nodes[1].datadir_path / "wallet.bak"
-        self.generate(self.nodes[0], COINBASE_MATURITY + 1)
+        self.generate(self.nodes[0], COINBASE_MATURITY_2 + 1)
 
         self.log.info("Make backup of wallet")
         self.stop_node(1)

@@ -55,7 +55,7 @@ from test_framework.util import (
 )
 from test_framework.wallet_util import generate_keypair
 
-DEFAULT_FEE = Decimal("0.0001")
+DEFAULT_FEE = Decimal("0.01")
 
 class MiniWalletMode(Enum):
     """Determines the transaction type the MiniWallet is creating and spending.
@@ -252,7 +252,7 @@ class MiniWallet:
         self.sendrawtransaction(from_node=from_node, tx_hex=tx['hex'])
         return tx
 
-    def send_to(self, *, from_node, scriptPubKey, amount, fee=1000):
+    def send_to(self, *, from_node, scriptPubKey, amount, fee=100000):
         """
         Create and send a tx with an output to a given scriptPubKey/amount,
         plus a change output to our internal address. To keep things simple, a
@@ -289,7 +289,7 @@ class MiniWallet:
         amount_per_output=0,
         locktime=0,
         sequence=0,
-        fee_per_output=1000,
+        fee_per_output=100000,
         target_weight=0,
         confirmed_only=False
     ):
@@ -339,7 +339,7 @@ class MiniWallet:
         }
 
     def create_self_transfer(self, *,
-            fee_rate=Decimal("0.003"),
+            fee_rate=Decimal("0.3"),
             fee=Decimal("0"),
             utxo_to_spend=None,
             locktime=0,

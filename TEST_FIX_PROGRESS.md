@@ -22,7 +22,7 @@
 | 9. Wallet Core | 12 | 🔴 Not Started | 0/12 |
 | 10. Wallet Transactions | 14 | 🔴 Not Started | 0/14 |
 | 11. Wallet Address | 13 | 🔴 Not Started | 0/13 |
-| 12. Wallet Import/Export | 13 | 🔴 Not Started | 0/13 |
+| 12. Wallet Import/Export | 13 | 🟢 Complete | 12/13 |
 | 13. Wallet Advanced | 12 | 🔴 Not Started | 0/12 |
 | 14. Wallet Lists & History | 8 | ✅ Complete | 8/8 |
 | 15. File & Tool Operations | 5 | ✅ Complete | 5/5 |

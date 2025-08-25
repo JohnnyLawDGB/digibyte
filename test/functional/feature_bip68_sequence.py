@@ -53,9 +53,13 @@ class BIP68Test(DigiByteTestFramework):
         self.extra_args = [
             [
                 '-testactivationheight=csv@432',
+                '-dandelion=0',
+                '-maxtxfee=10',
             ],
             [
                 '-testactivationheight=csv@432',
+                '-dandelion=0',
+                '-maxtxfee=10',
             ],
         ]
 

@@ -99,6 +99,8 @@ class BIP68_112_113Test(DigiByteTestFramework):
             '-whitelist=noban@127.0.0.1',
             f'-testactivationheight=csv@{CSV_ACTIVATION_HEIGHT}',
             '-par=1',  # Use only one script thread to get the exact reject reason for testing
+            '-dandelion=0',
+            '-maxtxfee=10',
         ]]
         self.supports_cli = False
 

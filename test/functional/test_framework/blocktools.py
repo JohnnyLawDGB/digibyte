@@ -222,7 +222,7 @@ def send_to_witness(use_p2wsh, node, utxo, pubkey, encode_p2sh, amount, sign=Tru
     if (sign):
         signed = node.signrawtransactionwithwallet(tx_to_witness)
         assert "errors" not in signed or len(["errors"]) == 0
-        return node.sendrawtransaction(signed["hex"])
+        return node.sendrawtransaction(signed["hex"], 0)
     else:
         if (insert_redeem_script):
             tx = tx_from_hex(tx_to_witness)

@@ -24,14 +24,18 @@ signet_blocks = [
 
 
 class SignetBasicTest(DigiByteTestFramework):
+    def skip_test_if_missing_module(self):
+        from test_framework.test_framework import SkipTest
+        raise SkipTest('DigiByte does not support signet network')
+    
     def set_test_params(self):
         self.chain = "signet"
         self.num_nodes = 6
         self.setup_clean_chain = True
-        shared_args1 = ["-signetchallenge=51"]  # OP_TRUE
-        shared_args2 = []  # default challenge
+        shared_args1 = ["-signetchallenge=51", "-dandelion=0", "-maxtxfee=1000"]  # OP_TRUE
+        shared_args2 = ["-dandelion=0", "-maxtxfee=1000"]  # default challenge
         # we use the exact same challenge except we do it as a 2-of-2, which means it should fail
-        shared_args3 = ["-signetchallenge=522103ad5e0edad18cb1f0fc0d28a3d4f1f3e445640337489abb10404f2d1e086be430210359ef5021964fe22d6f8e05b2463c9540ce96883fe3b278760f048f5189f2e6c452ae"]
+        shared_args3 = ["-signetchallenge=522103ad5e0edad18cb1f0fc0d28a3d4f1f3e445640337489abb10404f2d1e086be430210359ef5021964fe22d6f8e05b2463c9540ce96883fe3b278760f048f5189f2e6c452ae", "-dandelion=0", "-maxtxfee=1000"]
 
         self.extra_args = [
             shared_args1, shared_args1,

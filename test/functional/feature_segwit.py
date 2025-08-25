@@ -92,17 +92,23 @@ class SegWitTest(DigiByteTestFramework):
                 "-deprecatedrpc=serialversion",
                 "-testactivationheight=segwit@165",
                 "-addresstype=legacy",
+                "-dandelion=0",
+                "-maxtxfee=1000",
             ],
             [
                 "-acceptnonstdtxn=1",
                 "-rpcserialversion=1",
                 "-testactivationheight=segwit@165",
                 "-addresstype=legacy",
+                "-dandelion=0",
+                "-maxtxfee=1000",
             ],
             [
                 "-acceptnonstdtxn=1",
                 "-testactivationheight=segwit@165",
                 "-addresstype=legacy",
+                "-dandelion=0",
+                "-maxtxfee=1000",
             ],
         ]
         self.rpc_timeout = 120
@@ -116,13 +122,13 @@ class SegWitTest(DigiByteTestFramework):
         self.sync_all()
 
     def success_mine(self, node, txid, sign, redeem_script=""):
-        send_to_witness(1, node, getutxo(txid), self.pubkey[0], False, Decimal("49.998"), sign, redeem_script)
+        send_to_witness(1, node, getutxo(txid), self.pubkey[0], False, Decimal("71998"), sign, redeem_script)
         block = self.generate(node, 1)
         assert_equal(len(node.getblock(block[0])["tx"]), 2)
         self.sync_blocks()
 
     def fail_accept(self, node, error_msg, txid, sign, redeem_script=""):
-        assert_raises_rpc_error(-26, error_msg, send_to_witness, use_p2wsh=1, node=node, utxo=getutxo(txid), pubkey=self.pubkey[0], encode_p2sh=False, amount=Decimal("49.998"), sign=sign, insert_redeem_script=redeem_script)
+        assert_raises_rpc_error(-26, error_msg, send_to_witness, use_p2wsh=1, node=node, utxo=getutxo(txid), pubkey=self.pubkey[0], encode_p2sh=False, amount=Decimal("71998"), sign=sign, insert_redeem_script=redeem_script)
 
     def run_test(self):
         self.generate(self.nodes[0], 161)  # block 161
@@ -185,15 +191,15 @@ class SegWitTest(DigiByteTestFramework):
         for _ in range(5):
             for n in range(3):
                 for v in range(2):
-                    wit_ids[n][v].append(send_to_witness(v, self.nodes[0], find_spendable_utxo(self.nodes[0], 50), self.pubkey[n], False, Decimal("49.999")))
-                    p2sh_ids[n][v].append(send_to_witness(v, self.nodes[0], find_spendable_utxo(self.nodes[0], 50), self.pubkey[n], True, Decimal("49.999")))
+                    wit_ids[n][v].append(send_to_witness(v, self.nodes[0], find_spendable_utxo(self.nodes[0], 72000), self.pubkey[n], False, Decimal("71999")))
+                    p2sh_ids[n][v].append(send_to_witness(v, self.nodes[0], find_spendable_utxo(self.nodes[0], 72000), self.pubkey[n], True, Decimal("71999")))
 
         self.generate(self.nodes[0], 1)  # block 163
 
         # Make sure all nodes recognize the transactions as theirs
-        assert_equal(self.nodes[0].getbalance(), balance_presetup - 60 * 50 + 20 * Decimal("49.999") + 50)
-        assert_equal(self.nodes[1].getbalance(), 20 * Decimal("49.999"))
-        assert_equal(self.nodes[2].getbalance(), 20 * Decimal("49.999"))
+        assert_equal(self.nodes[0].getbalance(), balance_presetup - 60 * 72000 + 20 * Decimal("71999") + 72000)
+        assert_equal(self.nodes[1].getbalance(), 20 * Decimal("71999"))
+        assert_equal(self.nodes[2].getbalance(), 20 * Decimal("71999"))
 
         self.log.info("Verify unsigned p2sh witness txs without a redeem script are invalid")
         self.fail_accept(self.nodes[2], "mandatory-script-verify-flag-failed (Operation not valid with the current stack size)", p2sh_ids[NODE_2][P2WPKH][1], sign=False)
@@ -203,10 +209,10 @@ class SegWitTest(DigiByteTestFramework):
 
         self.log.info("Verify witness txs are mined as soon as segwit activates")
 
-        send_to_witness(1, self.nodes[2], getutxo(wit_ids[NODE_2][P2WPKH][0]), self.pubkey[0], encode_p2sh=False, amount=Decimal("49.998"), sign=True)
-        send_to_witness(1, self.nodes[2], getutxo(wit_ids[NODE_2][P2WSH][0]), self.pubkey[0], encode_p2sh=False, amount=Decimal("49.998"), sign=True)
-        send_to_witness(1, self.nodes[2], getutxo(p2sh_ids[NODE_2][P2WPKH][0]), self.pubkey[0], encode_p2sh=False, amount=Decimal("49.998"), sign=True)
-        send_to_witness(1, self.nodes[2], getutxo(p2sh_ids[NODE_2][P2WSH][0]), self.pubkey[0], encode_p2sh=False, amount=Decimal("49.998"), sign=True)
+        send_to_witness(1, self.nodes[2], getutxo(wit_ids[NODE_2][P2WPKH][0]), self.pubkey[0], encode_p2sh=False, amount=Decimal("71998"), sign=True)
+        send_to_witness(1, self.nodes[2], getutxo(wit_ids[NODE_2][P2WSH][0]), self.pubkey[0], encode_p2sh=False, amount=Decimal("71998"), sign=True)
+        send_to_witness(1, self.nodes[2], getutxo(p2sh_ids[NODE_2][P2WPKH][0]), self.pubkey[0], encode_p2sh=False, amount=Decimal("71998"), sign=True)
+        send_to_witness(1, self.nodes[2], getutxo(p2sh_ids[NODE_2][P2WSH][0]), self.pubkey[0], encode_p2sh=False, amount=Decimal("71998"), sign=True)
 
         assert_equal(len(self.nodes[2].getrawmempool()), 4)
         blockhash = self.generate(self.nodes[2], 1)[0]  # block 165 (first block with new rules)
@@ -275,7 +281,7 @@ class SegWitTest(DigiByteTestFramework):
         #                      tx2 (segwit input, paying to a non-segwit output) ->
         #                      tx3 (non-segwit input, paying to a non-segwit output).
         # tx1 is allowed to appear in the block, but no others.
-        txid1 = send_to_witness(1, self.nodes[0], find_spendable_utxo(self.nodes[0], 50), self.pubkey[0], False, Decimal("49.996"))
+        txid1 = send_to_witness(1, self.nodes[0], find_spendable_utxo(self.nodes[0], 72000), self.pubkey[0], False, Decimal("71996"))
         hex_tx = self.nodes[0].gettransaction(txid)['hex']
         tx = tx_from_hex(hex_tx)
         assert tx.wit.is_null()  # This should not be a segwit input
@@ -294,9 +300,9 @@ class SegWitTest(DigiByteTestFramework):
         # Now create tx2, which will spend from txid1.
         tx = CTransaction()
         tx.vin.append(CTxIn(COutPoint(int(txid1, 16), 0), b''))
-        tx.vout.append(CTxOut(int(49.99 * COIN), CScript([OP_TRUE, OP_DROP] * 15 + [OP_TRUE])))
+        tx.vout.append(CTxOut(int(71995 * COIN), CScript([OP_TRUE, OP_DROP] * 15 + [OP_TRUE])))
         tx2_hex = self.nodes[0].signrawtransactionwithwallet(tx.serialize().hex())['hex']
-        txid2 = self.nodes[0].sendrawtransaction(tx2_hex)
+        txid2 = self.nodes[0].sendrawtransaction(tx2_hex, 0)
         tx = tx_from_hex(tx2_hex)
         assert not tx.wit.is_null()
 
@@ -310,7 +316,7 @@ class SegWitTest(DigiByteTestFramework):
         # Now create tx3, which will spend from txid2
         tx = CTransaction()
         tx.vin.append(CTxIn(COutPoint(int(txid2, 16), 0), b""))
-        tx.vout.append(CTxOut(int(49.95 * COIN), CScript([OP_TRUE, OP_DROP] * 15 + [OP_TRUE])))  # Huge fee
+        tx.vout.append(CTxOut(int(71990 * COIN), CScript([OP_TRUE, OP_DROP] * 15 + [OP_TRUE])))  # Leave some fee
         tx.calc_sha256()
         txid3 = self.nodes[0].sendrawtransaction(hexstring=tx.serialize().hex(), maxfeerate=0)
         assert tx.wit.is_null()
@@ -348,10 +354,10 @@ class SegWitTest(DigiByteTestFramework):
             ]
 
             # Import a compressed key and an uncompressed key, generate some multisig addresses
-            self.nodes[0].importprivkey("92e6XLo5jVAVwrQKPNTs93oQco8f8sDNBcpv73Dsrs397fQtFQn")
-            uncompressed_spendable_address = ["mvozP4UwyGD2mGZU4D2eMvMLPB9WkMmMQu"]
-            self.nodes[0].importprivkey("cNC8eQ5dg3mFAVePDX4ddmPYpPbw41r9bm2jd1nLJT77e6RrzTRR")
-            compressed_spendable_address = ["mmWQubrDomqpgSYekvsU7HWEVjLFHAakLe"]
+            self.nodes[0].importprivkey("9WpZT7sXr6Zy6183PR89rxVzKbXrBSuDMfUDVVfErSwabyoJEa9")
+            uncompressed_spendable_address = ["su9fCxU4iXjMgLe1Yx63jJs6WEJXeNvzv4"]
+            self.nodes[0].importprivkey("efAPpKtYZjAcYHopymPdqjYd3LVxYGg2GdfyisVMZyP7SfMchyw1")
+            compressed_spendable_address = ["ssEZmM9N4RxyVNd2rKXPoU6NUEGip1ySnf"]
             assert not self.nodes[0].getaddressinfo(uncompressed_spendable_address[0])['iscompressed']
             assert self.nodes[0].getaddressinfo(compressed_spendable_address[0])['iscompressed']
 
@@ -515,10 +521,10 @@ class SegWitTest(DigiByteTestFramework):
 
             # Repeat some tests. This time we don't add witness scripts with importaddress
             # Import a compressed key and an uncompressed key, generate some multisig addresses
-            self.nodes[0].importprivkey("927pw6RW8ZekycnXqBQ2JS5nPyo1yRfGNN8oq74HeddWSpafDJH")
-            uncompressed_spendable_address = ["mguN2vNSCEUh6rJaXoAVwY3YZwZvEmf5xi"]
-            self.nodes[0].importprivkey("cMcrXaaUC48ZKpcyydfFo8PxHAjpsYLhdsp6nmtB3E2ER9UUHWnw")
-            compressed_spendable_address = ["n1UNmpmbVUJ9ytXYXiurmGPQ3TRrXqPWKL"]
+            self.nodes[0].importprivkey("9XHf5DujkEgpSSLNPQJhzC9uTne8CNAkANPyKSVbwNyMAeuj3yn")
+            uncompressed_spendable_address = ["t4LrP9nZrhY2zijA6VMERNkBDojjpSbpyk"]
+            self.nodes[0].importprivkey("ecL1RtGACiNhFDA3iGaFHaqNzDfHt3vfyttoL9QU2HC4yL5gTzR8")
+            compressed_spendable_address = ["svCDbdBn7kpoH2ComzqxrPiuEDPhYA8Fak"]
 
             self.nodes[0].importpubkey(pubkeys[5])
             compressed_solvable_address = [key_to_p2pkh(pubkeys[5])]
@@ -583,12 +589,12 @@ class SegWitTest(DigiByteTestFramework):
             self.create_and_mine_tx_from_txids(spendable_txid)
 
             # import all the private keys so solvable addresses become spendable
-            self.nodes[0].importprivkey("cPiM8Ub4heR9NBYmgVzJQiUH1if44GSBGiqaeJySuL2BKxubvgwb")
-            self.nodes[0].importprivkey("cPpAdHaD6VoYbW78kveN2bsvb45Q7G5PhaPApVUGwvF8VQ9brD97")
-            self.nodes[0].importprivkey("91zqCU5B9sdWxzMt1ca3VzbtVm2YM6Hi5Rxn4UDtxEaN9C9nzXV")
-            self.nodes[0].importprivkey("cPQFjcVRpAUBG8BA9hzr2yEzHwKoMgLkJZBBtK9vJnvGJgMjzTbd")
-            self.nodes[0].importprivkey("cQGtcm34xiLjB1v7bkRa4V3aAc9tS2UTuBZ1UnZGeSeNy627fN66")
-            self.nodes[0].importprivkey("cTW5mR5M45vHxXkeChZdtSPozrFwFgmEvTNnanCW6wrqwaCZ1X7K")
+            self.nodes[0].importprivkey("edSdzE6zFFJ8hMVEWh9idnu9h8uYPQUJLknbRANvMooiMTfQmsCS")
+            self.nodes[0].importprivkey("eboTiEYQbmStx9kN6ddGorGc45DxuiSgtytsaYmutW5iU4vWvLeF")
+            self.nodes[0].importprivkey("9Y1pSRPsx4PcmnX1Wd9j1DAW51BjaWEdXPcUFU4NdVpFvR2rNhH")
+            self.nodes[0].importprivkey("eeU9UuVcudMDbMwGnmZdYG1PYYtivFUiCzhtrxZbAnCr8dSXLXhz")
+            self.nodes[0].importprivkey("eh8Kjz7RDg6FrHPSru8xQZJyVgJFptVXZzusrY6esAEKboRu8kZs")
+            self.nodes[0].importprivkey("ehLPHFXfemHKbkZ1J3bVjq1vyB5hn9rTwXZHX6fah17jLKBwFDXh")
             self.create_and_mine_tx_from_txids(solvable_txid)
 
             # Test that importing native P2WPKH/P2WSH scripts works
@@ -603,7 +609,7 @@ class SegWitTest(DigiByteTestFramework):
                 self.nodes[1].importaddress(scriptPubKey, "", False)
                 rawtxfund = self.nodes[1].fundrawtransaction(transaction)['hex']
                 rawtxfund = self.nodes[1].signrawtransactionwithwallet(rawtxfund)["hex"]
-                txid = self.nodes[1].sendrawtransaction(rawtxfund)
+                txid = self.nodes[1].sendrawtransaction(rawtxfund, 0)
 
                 assert_equal(self.nodes[1].gettransaction(txid, True)["txid"], txid)
                 assert_equal(self.nodes[1].listtransactions("*", 1, 0, True)[0]["txid"], txid)
@@ -619,7 +625,7 @@ class SegWitTest(DigiByteTestFramework):
         self.nodes[0].assert_start_raises_init_error(["-rpcserialversion=100"], "Error: Unknown rpcserialversion requested.")
 
     def mine_and_test_listunspent(self, script_list, ismine):
-        utxo = find_spendable_utxo(self.nodes[0], 50)
+        utxo = find_spendable_utxo(self.nodes[0], 72000)
         tx = CTransaction()
         tx.vin.append(CTxIn(COutPoint(int('0x' + utxo['txid'], 0), utxo['vout'])))
         for i in script_list:

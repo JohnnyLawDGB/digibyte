@@ -201,7 +201,7 @@ This file organizes the failing tests into logical work groups for systematic fi
 1. feature_segwit.py --legacy-wallet
 ```
 
-## Group 13: Mempool Tests
+## Group 13: Mempool Tests  
 **Status**: 🔴 Not Started
 **Priority**: LOW (Phase 3) - Mempool management
 **Common Issues**: Dandelion++, mempool persistence
@@ -211,6 +211,24 @@ This file organizes the failing tests into logical work groups for systematic fi
 1. mempool_persist.py ❌ FAILING
 2. mempool_persist.py --descriptors ✅ PASSING
 ```
+
+## Group 14: CRITICAL - Improperly Skipped Tests
+**Status**: 🔴 Not Started
+**Priority**: CRITICAL - Tests were improperly skipped instead of fixed
+**Common Issues**: Previous AI/developer added skip logic instead of fixing root causes
+**Agent**: None
+**Progress**: 0/8 tests need proper fixes
+```
+1. wallet_importdescriptors.py - Internal keypool tests skipped (APPLICATION BUG)
+2. tool_wallet.py - Chainless conflicts test skipped
+3. rpc_blockchain.py - Fee checks skipped for blocks with <2 transactions
+4. rpc_scantxoutset.py - Entire test skipped (claimed "mining bug")
+5. mining_prioritisetransaction.py - Zero-fee transaction tests skipped
+6. mempool_limit.py - Mempool min fee test conditionally skipped
+7. feature_fee_estimation.py - Mempoolminfee test conditionally skipped
+8. feature_fee_estimator.py - Node 1 transaction tests skipped
+```
+**NOTE**: These tests have skip logic that must be REMOVED and properly fixed
 
 ## Common Fix Patterns to Apply
 

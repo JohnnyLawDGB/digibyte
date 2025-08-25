@@ -85,13 +85,15 @@ Required Actions:
 
 STRICT RULES:
 - DO NOT work on tests outside your assigned group
-- DO NOT skip tests or mark them as xfail  
+- DO NOT skip tests or mark them as xfail
+- DO NOT add conditional skip logic (if condition: skip)
 - DO NOT disable test assertions
 - DO NOT comment out failing code
 - DO NOT change expected values without understanding
 - MUST make tests actually pass with correct behavior
 - MUST test all variants (--descriptors, --legacy-wallet)
 - MUST commit ONLY your group's changes
+- MUST remove any existing skip logic and fix properly
 ```
 
 ### 4. Monitor Progress
@@ -109,6 +111,14 @@ python3 test/functional/test_runner.py [test1] [test2] ...
 ```
 
 ### 5. Sub-Agent Completion & Commit Process
+
+#### CRITICAL: Approval Required Between Groups
+**After each sub-agent completes their group, you MUST:**
+1. Verify all tests in the group pass
+2. Review changes for quality
+3. Create commit for the group
+4. **WAIT FOR USER APPROVAL before deploying next sub-agent**
+5. Do NOT automatically proceed to next group
 
 #### When Sub-Agent Reports Group Complete:
 1. **Verify ALL tests in group pass**:

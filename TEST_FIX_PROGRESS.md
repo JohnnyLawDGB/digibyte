@@ -137,12 +137,29 @@ None currently blocked
 3. **Once Group 1 complete, deploy on Group 2**
 4. **After Phase 1 complete, deploy up to 3 agents on Phase 2 groups**
 
+### Group 14: CRITICAL - Improperly Skipped Tests
+**Status**: 🔴 Not Started | **Agent**: None | **Progress**: 0/8 need proper fixes
+
+| Test | Status | Skip Issue | Required Fix |
+|------|--------|------------|--------------|
+| wallet_importdescriptors.py | 🔴 Skipped | Internal keypool tests skipped | Fix APPLICATION BUG - internal descriptor keys |
+| tool_wallet.py | 🔴 Skipped | Chainless conflicts test skipped | Fix RBF/fee policy differences |
+| rpc_blockchain.py | 🔴 Skipped | Fee checks skipped for small blocks | Always perform fee validation |
+| rpc_scantxoutset.py | 🔴 Skipped | Entire test skipped | Fix alleged "mining bug" |
+| mining_prioritisetransaction.py | 🔴 Skipped | Zero-fee transaction tests | Fix fee prioritization |
+| mempool_limit.py | 🔴 Skipped | Mempool min fee test conditional | Fix mempool filling logic |
+| feature_fee_estimation.py | 🔴 Skipped | Mempoolminfee test conditional | Fix fee estimation |
+| feature_fee_estimator.py | 🔴 Skipped | Node 1 transaction tests | Fix fee estimation reliability |
+
+**WARNING**: These tests have skip logic added by previous AI/developer that MUST be removed and properly fixed.
+
 ## Performance Metrics
 
 - **Average Fix Time per Test**: TBD
-- **Success Rate**: 0% (0/109)
-- **Patterns Discovered**: 0 new
-- **Application Bugs Found**: 0
+- **Success Rate**: 4% (4/109 initially failing)
+- **Patterns Discovered**: 6 new (fee patterns, block rewards, etc.)
+- **Application Bugs Found**: 1 (Critical fee vulnerability)
+- **Tests Improperly Skipped**: 8 (must be fixed)
 
 ---
 

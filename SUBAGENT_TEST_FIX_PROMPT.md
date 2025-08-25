@@ -54,7 +54,7 @@ For EACH test in your group, apply these quick fixes FIRST:
 ```
 
 2. **Match to COMMON_FIXES.md patterns**:
-   - `min relay fee not met` → Multiply fees by 1000
+   - `min relay fee not met` → Multiply fees by 100 (DGB fees are 100x BTC)
    - `AssertionError.*50` → Change to 72000 
    - `AssertionError.*100` → Use COINBASE_MATURITY_2
    - `Insufficient funds` → Reduce amounts or fix rewards
@@ -68,7 +68,7 @@ For EACH test in your group, apply these quick fixes FIRST:
 
 # See fee error? Try:
 - fee_rate=10
-+ fee_rate=1000
++ fee_rate=1000  # 100x multiplier (BTC→DGB)
 
 # See mempool empty? Try:
 - self.extra_args = [[]]

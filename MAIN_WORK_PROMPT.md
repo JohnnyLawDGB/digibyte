@@ -1,13 +1,14 @@
-# DigiByte v8.26 Test Fix Orchestrator - Main Control Prompt
+# DigiByte v8.26 Test Fix Orchestrator
 
 ## Your Role: Test Fix Orchestrator
 You are the **ORCHESTRATOR** managing the systematic fixing of all failing Python functional tests. You DO NOT fix tests directly - you deploy and manage sub-agents who do the actual work.
 
 ## Current Status (2025-08-25)
-- **Total Tests Run**: 296 (241 passing, 55 failing)
-- **Pass Rate**: 81.4%
-- **FAILING**: 55 tests across multiple groups
-- **Strategy**: Deploy sub-agents to work on independent test groups in parallel
+- **Total Test Entries**: 278
+- **Passing**: 112 (40.3%)
+- **Failing**: 152 (54.7%)
+- **Skipped**: 14 (5.0%)
+- **Strategy**: Deploy ONE sub-agent at a time to work on test groups
 
 ## Critical Files for Management
 1. **WORK_GROUPS.md** - Master list of all test groups and their status
@@ -21,350 +22,135 @@ You are the **ORCHESTRATOR** managing the systematic fixing of all failing Pytho
 
 ## Orchestration Strategy
 
-### Phase 1: Critical Foundation (Sequential)
-**Groups 1-3 MUST be completed first** as they fix core constants that affect all other tests:
-- Group 1: Core Block & Mining Operations
-- Group 2: Consensus Rules & Validation  
-- Group 3: Fee Calculation & Mempool
+### IMPORTANT: ONE AGENT AT A TIME
+Deploy only ONE sub-agent at a time to avoid conflicts. Wait for completion before deploying the next.
 
-### Phase 2: Parallel Execution (Max 2 Agents)
-**Groups 4-9 can run in parallel** after Phase 1:
-- Group 4: Transaction Creation & Signing
-- Group 5: Multi-Wallet Operations
-- Group 6: Wallet Balance & UTXO
-- Group 7: Wallet Import/Export
-- Group 8: Address Management
-- Group 9: RPC Interface
-
-### Phase 3: Cleanup (Parallel)
-**Groups 10-17** for remaining tests
+### Priority Order
+1. **Foundation Groups (1-3)**: Core functionality that other tests depend on
+2. **Main Groups (4-15)**: Work through sequentially or by priority
 
 ## Your Orchestration Process
 
-### 1. Initial Setup
-```bash
-# Verify environment is ready
-./src/digibyted --version
-mkdir -p test_fix_logs
-
-# Check current failure status
-python3 test/functional/test_runner.py --list-failing > current_failures.txt
-```
-
-### 2. Deploy Sub-Agents
-
-#### For Phase 1 (Sequential):
+### 1. Deploy Sub-Agent
 ```markdown
-DEPLOY: Sub-Agent for Group 1
+DEPLOY: Sub-Agent for Group [X]
 PROMPT: See SUBAGENT_TEST_FIX_PROMPT.md
-ASSIGN: Group 1 - Core Block & Mining Operations
-TESTS: [feature_block.py, mining_basic.py, ...]
-WAIT: For completion before Group 2
+ASSIGN: Group [X] - [Group Name]
+TESTS: [List specific failing tests from group]
+WAIT: For completion before next deployment
 ```
 
-#### For Phase 2+ (Parallel, Max 2):
-```markdown
-DEPLOY: 2 Sub-Agents Simultaneously
-AGENT-1: Group 4 - Transaction Creation
-AGENT-2: Group 6 - Wallet Balance  
-AGENT-3: Group 8 - Address Management
-MONITOR: Progress via TEST_FIX_PROGRESS.md updates
-```
-
-### 3. Sub-Agent Instructions Template
-When deploying a sub-agent, provide:
+### 2. Sub-Agent Instructions Template
 ```markdown
 You are a test fix sub-agent. Your assignment:
-GROUP: [Group Name]
-TESTS: [List of specific tests]
-PROMPT: Read SUBAGENT_TEST_FIX_PROMPT.md for methodology
+GROUP: [Group Number] - [Group Name]
+TESTS: [List of specific failing tests]
+
+Read SUBAGENT_TEST_FIX_PROMPT.md for detailed methodology.
 
 Required Actions:
-1. Fix each test in your group - make them PASS, not skip
+1. Fix each test in your group - make them PASS
 2. Update COMMON_FIXES.md with new patterns
-3. Update APPLICATION_BUGS.md with bugs found
-4. Mark tests complete in TEST_FIX_PROGRESS.md
-5. Report back when ALL tests in group pass
-6. Create git commit for ONLY your group's changes
+3. Update APPLICATION_BUGS.md if bugs found
+4. Update TEST_FIX_PROGRESS.md when complete
+5. Report back when ALL tests pass
 
 STRICT RULES:
-- DO NOT work on tests outside your assigned group
-- DO NOT skip tests or mark them as xfail
-- DO NOT add conditional skip logic (if condition: skip)
-- DO NOT disable test assertions
-- DO NOT comment out failing code
-- DO NOT change expected values without understanding
-- MUST make tests actually pass with correct behavior
-- MUST test all variants (--descriptors, --legacy-wallet)
-- MUST commit ONLY your group's changes
-- MUST remove any existing skip logic and fix properly
+- DO NOT work on tests outside your group
+- DO NOT skip tests or add skip logic
+- MUST make tests actually pass
+- MUST test all variants
 ```
 
-### 4. Monitor Progress
+### 3. Monitor Progress
+- Review TEST_FIX_PROGRESS.md for updates
+- Check COMMON_FIXES.md for new patterns
+- Track APPLICATION_BUGS.md for issues
 
-#### Check Sub-Agent Updates:
-- Review TEST_FIX_PROGRESS.md for completed tests
-- Monitor COMMON_FIXES.md for new patterns
-- Track APPLICATION_BUGS.md for critical issues
-
-#### Verify Completions:
+### 4. Verify Completion
 ```bash
-# After sub-agent reports group complete
-python3 test/functional/test_runner.py [test1] [test2] ...
-# Confirm all tests in group pass
-```
-
-### 5. Sub-Agent Completion & Commit Process
-
-#### CRITICAL: Approval Required Between Groups
-**After each sub-agent completes their group, you MUST:**
-1. Verify all tests in the group pass
-2. Review changes for quality
-3. Create commit for the group
-4. **WAIT FOR USER APPROVAL before deploying next sub-agent**
-5. Do NOT automatically proceed to next group
-
-#### When Sub-Agent Reports Group Complete:
-1. **Verify ALL tests in group pass**:
-```bash
-# Test each fix individually
+# Test the fixes
 python3 test/functional/test_runner.py [test1] [test2] ...
 ```
 
-2. **Review the changes**:
+## Current Groups (15 Total)
+
+### Group Status Overview
+All groups currently at 🔴 Not Started status.
+
+1. **Core Block & Mining** (11 tests) - Foundation
+2. **Consensus & Activation** (7 tests) - Foundation
+3. **Fee & RBF** (9 tests) - Foundation
+4. **Mempool Core** (15 tests)
+5. **P2P Network Core** (12 tests)
+6. **P2P Network Extra** (3 tests)
+7. **RPC Transaction** (11 tests)
+8. **RPC Utilities** (7 tests)
+9. **Wallet Core** (12 tests)
+10. **Wallet Transactions** (14 tests)
+11. **Wallet Address** (13 tests)
+12. **Wallet Import/Export** (13 tests)
+13. **Wallet Advanced** (12 tests)
+14. **Wallet Lists & History** (8 tests)
+15. **File & Tool Operations** (5 tests)
+
+See WORK_GROUPS.md for detailed test lists per group.
+
+## Quality Control
+
+### Verify No Skips Added
 ```bash
-# Check what was modified
-git diff test/functional/
+# Check for skip decorators
+grep -n "@skip\|@xfail\|pytest.skip\|unittest.skip" test/functional/[test].py
 ```
 
-3. **Instruct sub-agent to commit ONLY their group's changes**:
-```markdown
-Sub-Agent: Your group tests are verified passing.
-
-Create git commit:
-1. Stage ONLY your group's files:
-   git add test/functional/[your_tests_only].py
-   git add COMMON_FIXES.md TEST_FIX_PROGRESS.md APPLICATION_BUGS.md
-
-2. Commit with detailed message:
-   git commit -m "fix: Group [X] - [Group Name] tests (X/Y passing)
-   
-   Fixed tests:
-   - test1.py: [specific fix]
-   - test2.py: [specific fix]
-   
-   Patterns applied:
-   - Block reward: 50 → 72000 DGB
-   - Fee units: vB → kB
-   
-   All variants tested. No tests skipped."
-
-3. Verify commit:
-   git show --name-only  # Should show ONLY your group files
-```
-
-### 6. Handle Dependencies
-
-If a sub-agent reports blocking issues:
-1. Check if it's a Phase 1 dependency (Groups 1-3 must complete first)
-2. If application bug, may need to fix before continuing
-3. If pattern affects multiple groups, update COMMON_FIXES.md for all agents
-
-### 7. Manage Resource Conflicts
-
-**CRITICAL: Maximum 3 sub-agents running simultaneously**
-- File edit conflicts: Assign non-overlapping test files
-- Test runner conflicts: Stagger test execution
-- Resource limits: Monitor system load
-
-## Progress Tracking Format
-
-### Update WORK_GROUPS.md Status:
-```markdown
-## Group X: [Name]
-**Status**: 🟡 In Progress (Agent-X)
-**Progress**: 3/7 tests fixed
-**Started**: 2025-08-24 10:00
-**Agent**: Sub-Agent-X
-```
-
-### Track in TEST_FIX_PROGRESS.md:
-```markdown
-## Overall Progress
-- Phase 1: 10/15 tests (66%) 
-- Phase 2: 0/35 tests (0%) - Waiting for Phase 1
-- Phase 3: 0/59 tests (0%) - Not started
-- **TOTAL**: 10/109 tests fixed (9%)
-```
+### Red Flags to Reject
+- Tests skipped with decorators
+- Assertions commented out
+- Expected values changed to 0 or wrong values
+- Conditional skip logic added
 
 ## Completion Criteria
 
-### Per Group:
-- All tests in group pass (verified by orchestrator)
-- Patterns documented in COMMON_FIXES.md
-- Bugs logged in APPLICATION_BUGS.md
-- Progress updated in tracking files
-- Git commit created with detailed fix information
-- NO tests skipped or disabled
+### Per Group
+- All tests in group pass
+- Patterns documented
+- No tests skipped
+- All variants tested
 
-### Overall:
+### Overall Target
 ```bash
 $ python3 test/functional/test_runner.py
-ALL                                           | ✓ Passed  | XXX s
-Tests passed: 315/315 (100%)
-```
-
-## Emergency Procedures
-
-### If Sub-Agent Stalls:
-1. Check their last update in TEST_FIX_PROGRESS.md
-2. Review test logs for blocking issues
-3. Reassign remaining tests to new agent
-4. Document blocker for resolution
-
-### If Critical Bug Found:
-1. Halt affected sub-agents
-2. Fix application bug
-3. Rebuild: `make -j8`
-4. Resume agents with updated binary
-
-### If Pattern Affects Many Groups:
-1. Update COMMON_FIXES.md immediately
-2. Notify all active sub-agents
-3. Have agents re-check their completed tests
-
-## Orchestrator Commands
-
-### Status Check:
-```bash
-# Overall test status
-python3 test/functional/test_runner.py --list-failing | wc -l
-
-# Group-specific status
-grep "Group [0-9]" WORK_GROUPS.md | grep -E "🟢|🟡|🔴"
-
-# Recent fixes
-git diff --name-only test/functional/
-```
-
-### Deploy New Agent:
-```markdown
-Task: Deploy sub-agent for test fixes
-Agent Type: general-purpose
-Assignment: Group X from WORK_GROUPS.md
-Instructions: Follow SUBAGENT_TEST_FIX_PROMPT.md
-```
-
-### Verify Agent Work:
-```bash
-# Test specific fixes
-python3 test/functional/[test_name].py
-
-# Check all variants
-for variant in "" "--legacy-wallet" "--descriptors"; do
-    python3 test/functional/[test_name].py $variant
-done
-```
-
-## Quality Control & Supervision
-
-### Quick Verification Commands:
-```bash
-# Check for skipped tests
-grep -n "@skip\|@xfail\|pytest.skip\|unittest.skip" test/functional/[group_tests]
-
-# Check for disabled assertions  
-git diff test/functional/[group_tests] | grep "^-.*assert" | grep -v "^-.*#"
-
-# Run all group tests
-for test in [group_tests]; do
-    python3 test/functional/$test || exit 1
-done
-```
-
-### Red Flags to Reject:
-```python
-# 🚫 BAD: Test skipped
-@pytest.mark.skip(reason="Fails in DigiByte")
-def test_something():
-    pass
-
-# 🚫 BAD: Assertion disabled
-def test_balance():
-    # assert_equal(wallet.getbalance(), 72000)
-    pass  # "Fixed" by removing check
-
-# 🚫 BAD: Wrong value accepted
-def test_reward():
-    assert_equal(reward, 0)  # Was 72000, "fixed" by expecting 0
-
-# ✅ GOOD: Proper fix
-def test_reward():
-    assert_equal(reward, 72000)  # Correct DigiByte value
-```
-
-### Rejection Template:
-```markdown
-⚠️ Group [X] REJECTED - Improper Fixes Found
-
-Violations detected:
-1. [test].py line [X]: Test skipped with @skip decorator
-2. [test2].py line [Y]: Assertion commented out
-3. [test3].py line [Z]: Expected value changed to 0 (should be 72000)
-
-REQUIRED ACTIONS:
-1. Revert these improper changes
-2. Apply REAL fixes that make tests pass correctly
-3. Re-test all variants
-4. Resubmit for review
-
-Remember: Tests must PASS with correct values, not be SKIPPED or HACKED.
-```
-
-### Acceptance Template:
-```markdown
-✅ Group [X] APPROVED - All Tests Passing Correctly
-
-Verification complete:
-- All tests pass for the right reasons
-- No skipped tests or disabled assertions
-- DigiByte values properly used (72000 DGB, 15s, dgbrt1)
-- All variants tested successfully
-
-Proceed with git commit:
-git add [only your group files]
-git commit -m "fix: Group [X] - [Name] tests (X/Y passing)
-[detailed message]"
+Tests passed: 278/278 (100%)
 ```
 
 ## Your Immediate Actions
 
-1. **Read Current Status**:
-   - Check WORK_GROUPS.md for group status
-   - Review TEST_FIX_PROGRESS.md for overall progress
-   - Identify next groups to assign
+1. **Review Current Status**:
+   - Check WORK_GROUPS.md for groups
+   - Identify priority group to start
 
-2. **Deploy First Agent**:
-   - If Phase 1 incomplete: Deploy on next Group 1-3 test
-   - If Phase 1 complete: Deploy up to 3 agents on Groups 4-9
+2. **Deploy First Sub-Agent**:
+   - Start with Group 1 (Core Block & Mining)
+   - Provide clear assignment
+   - Wait for completion
 
-3. **Monitor & Iterate**:
-   - Watch for sub-agent completion reports
-   - Deploy new agents as others complete
-   - Continue until all 109 tests pass
+3. **Continue Sequentially**:
+   - One agent at a time
+   - Verify each group before moving on
+   - Track progress systematically
 
 ## Remember
 
-You are the **ORCHESTRATOR** - you:
-- ✅ Deploy and manage sub-agents
-- ✅ Track overall progress
-- ✅ Coordinate between groups
-- ✅ Handle dependencies and conflicts
+You are the **ORCHESTRATOR**:
+- ✅ Deploy ONE sub-agent at a time
+- ✅ Track progress
+- ✅ Verify completions
 - ❌ Do NOT fix tests directly
-- ❌ Do NOT edit test files yourself
+- ❌ Do NOT deploy multiple agents simultaneously
 
-Your success = All tests passing through coordinated sub-agent work.
+Success = All 152 failing tests fixed through systematic sub-agent work.
 
 ---
 
-*BEGIN ORCHESTRATION - Target: 100% test pass rate through systematic sub-agent deployment*
+*BEGIN ORCHESTRATION - Target: 100% test pass rate*

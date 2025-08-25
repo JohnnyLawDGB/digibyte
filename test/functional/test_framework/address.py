@@ -108,12 +108,12 @@ def base58_to_byte(s):
 
 def keyhash_to_p2pkh(hash, main=False):
     assert len(hash) == 20
-    version = 0 if main else 111
+    version = 30 if main else 126  # DigiByte mainnet P2PKH is 30, testnet is 126
     return byte_to_base58(hash, version)
 
 def scripthash_to_p2sh(hash, main=False):
     assert len(hash) == 20
-    version = 5 if main else 196
+    version = 63 if main else 140  # DigiByte mainnet P2SH is 63, testnet is 140
     return byte_to_base58(hash, version)
 
 def key_to_p2pkh(key, main=False):
@@ -171,7 +171,8 @@ def check_script(script):
 
 def bech32_to_bytes(address):
     hrp = address.split('1')[0]
-    if hrp not in ['bc', 'tb', 'bcrt']:
+    # DigiByte: Updated to use DigiByte HRPs
+    if hrp not in ['dgb', 'dgbt', 'dgbrt']:
         return (None, None)
     version, payload = decode_segwit_address(hrp, address)
     if version is None:
@@ -185,9 +186,13 @@ def address_to_scriptpubkey(address):
     if version is not None:
         return program_to_witness_script(version, payload) # testnet segwit scriptpubkey
     payload, version = base58_to_byte(address)
-    if version == 111:  # testnet pubkey hash
+    if version == 111:  # bitcoin testnet pubkey hash
         return keyhash_to_p2pkh_script(payload)
-    elif version == 196:  # testnet script hash
+    elif version == 196:  # bitcoin testnet script hash
+        return scripthash_to_p2sh_script(payload)
+    elif version == 126:  # digibyte testnet/regtest pubkey hash  
+        return keyhash_to_p2pkh_script(payload)
+    elif version == 140:  # digibyte testnet/regtest script hash
         return scripthash_to_p2sh_script(payload)
     # TODO: also support other address formats
     else:
@@ -215,7 +220,7 @@ class TestFrameworkScript(unittest.TestCase):
 
     def test_bech32_decode(self):
         def check_bech32_decode(payload, version):
-            hrp = "tb"
+            hrp = "dgbt"  # DigiByte testnet
             self.assertEqual(bech32_to_bytes(encode_segwit_address(hrp, version, payload)), (version, payload))
 
         check_bech32_decode(bytes.fromhex('36e3e2a33f328de12e4b43c515a75fba2632ecc3'), 0)

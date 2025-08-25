@@ -13,6 +13,7 @@ from test_framework.blocktools import (
     create_tx_with_script,
     get_legacy_sigopcount_block,
     MAX_BLOCK_SIGOPS,
+    VERSIONBITS_LAST_OLD_BLOCK_VERSION,
 )
 from test_framework.messages import (
     CBlock,
@@ -43,17 +44,15 @@ from test_framework.script import (
     OP_INVALIDOPCODE,
     OP_RETURN,
     OP_TRUE,
-    sign_input_legacy,
+    SIGHASH_ALL,
+    LegacySignatureHash,
 )
 from test_framework.script_util import (
     script_to_p2sh_script,
 )
 from test_framework.test_framework import DigiByteTestFramework
-from test_framework.util import (
-    assert_equal,
-    assert_greater_than,
-)
-from test_framework.wallet_util import generate_keypair
+from test_framework.util import assert_equal
+from test_framework.key import ECKey
 from data import invalid_txs
 
 
@@ -99,7 +98,9 @@ class FullBlockTest(DigiByteTestFramework):
         self.bootstrap_p2p()  # Add one p2p connection to the node
 
         self.block_heights = {}
-        self.coinbase_key, self.coinbase_pubkey = generate_keypair()
+        self.coinbase_key = ECKey()
+        self.coinbase_key.generate()
+        self.coinbase_pubkey = self.coinbase_key.get_pubkey().get_bytes()
         self.tip = None
         self.blocks = {}
         self.genesis_hash = int(self.nodes[0].getbestblockhash(), 16)
@@ -306,7 +307,7 @@ class FullBlockTest(DigiByteTestFramework):
 
         self.move_tip(15)
         b20 = self.next_block(20, spend=immature_tx)
-        self.send_blocks([b20], success=False, reject_reason='bad-txns-premature-spend-of-coinbase')
+        self.send_blocks([b20], success=False, reject_reason='bad-txns-premature-spend-of-coinbase', reconnect=True)
 
         # Attempt to spend a coinbase at depth too low (on a fork this time)
         #     genesis -> b1 (0) -> b2 (1) -> b5 (2) -> b6  (3)
@@ -319,7 +320,7 @@ class FullBlockTest(DigiByteTestFramework):
         self.send_blocks([b21], False)
 
         b22 = self.next_block(22, spend=immature_tx)
-        self.send_blocks([b22], success=False, reject_reason='bad-txns-premature-spend-of-coinbase')
+        self.send_blocks([b22], success=False, reject_reason='bad-txns-premature-spend-of-coinbase', reconnect=True)
 
         # Create a block on either side of MAX_BLOCK_WEIGHT and make sure its accepted/rejected
         #     genesis -> b1 (0) -> b2 (1) -> b5 (2) -> b6  (3)
@@ -547,8 +548,12 @@ class FullBlockTest(DigiByteTestFramework):
             # second input is corresponding P2SH output from b39
             tx.vin.append(CTxIn(COutPoint(b39.vtx[i].sha256, 0), b''))
             # Note: must pass the redeem_script (not p2sh_script) to the signature hash function
-            tx.vin[1].scriptSig = CScript([redeem_script])
-            sign_input_legacy(tx, 1, redeem_script, self.coinbase_key)
+            (sighash, err) = LegacySignatureHash(redeem_script, tx, 1, SIGHASH_ALL)
+            sig = self.coinbase_key.sign_ecdsa(sighash) + bytes(bytearray([SIGHASH_ALL]))
+            scriptSig = CScript([sig, redeem_script])
+
+            tx.vin[1].scriptSig = scriptSig
+            tx.rehash()
             new_txs.append(tx)
             lastOutpoint = COutPoint(tx.sha256, 0)
 
@@ -754,7 +759,7 @@ class FullBlockTest(DigiByteTestFramework):
 
         # b57 - a good block with 2 txs, don't submit until end
         self.move_tip(55)
-        self.next_block(57)
+        b57 = self.next_block(57)
         tx = self.create_and_sign_transaction(out[16], 1)
         tx1 = self.create_tx(tx, 0, 1)
         b57 = self.update_block(57, [tx, tx1])
@@ -771,7 +776,7 @@ class FullBlockTest(DigiByteTestFramework):
 
         # b57p2 - a good block with 6 tx'es, don't submit until end
         self.move_tip(55)
-        self.next_block("57p2")
+        b57p2 = self.next_block("57p2")
         tx = self.create_and_sign_transaction(out[16], 1)
         tx1 = self.create_tx(tx, 0, 1)
         tx2 = self.create_tx(tx1, 0, 1)
@@ -808,7 +813,7 @@ class FullBlockTest(DigiByteTestFramework):
         self.next_block(58, spend=out[17])
         tx = CTransaction()
         assert len(out[17].vout) < 42
-        tx.vin.append(CTxIn(COutPoint(out[17].sha256, 42), CScript([OP_TRUE]), SEQUENCE_FINAL))
+        tx.vin.append(CTxIn(COutPoint(out[17].sha256, 42), CScript([OP_TRUE]), 0xffffffff))
         tx.vout.append(CTxOut(0, b""))
         tx.calc_sha256()
         b58 = self.update_block(58, [tx])
@@ -883,7 +888,7 @@ class FullBlockTest(DigiByteTestFramework):
         tx.nLockTime = 0xffffffff  # this locktime is non-final
         tx.vin.append(CTxIn(COutPoint(out[18].sha256, 0)))  # don't set nSequence
         tx.vout.append(CTxOut(0, CScript([OP_TRUE])))
-        assert_greater_than(SEQUENCE_FINAL, tx.vin[0].nSequence)
+        assert tx.vin[0].nSequence < 0xffffffff
         tx.calc_sha256()
         b62 = self.update_block(62, [tx])
         self.send_blocks([b62], success=False, reject_reason='bad-txns-nonfinal', reconnect=True)
@@ -1031,7 +1036,7 @@ class FullBlockTest(DigiByteTestFramework):
         bogus_tx = CTransaction()
         bogus_tx.sha256 = uint256_from_str(b"23c70ed7c0506e9178fc1a987f40a33946d4ad4c962b5ae3a52546da53af0c5c")
         tx = CTransaction()
-        tx.vin.append(CTxIn(COutPoint(bogus_tx.sha256, 0), b"", SEQUENCE_FINAL))
+        tx.vin.append(CTxIn(COutPoint(bogus_tx.sha256, 0), b"", 0xffffffff))
         tx.vout.append(CTxOut(1, b""))
         b70 = self.update_block(70, [tx])
         self.send_blocks([b70], success=False, reject_reason='bad-txns-inputs-missingorspent', reconnect=True)
@@ -1203,10 +1208,9 @@ class FullBlockTest(DigiByteTestFramework):
 
         # now check that tx78 and tx79 have been put back into the peer's mempool
         mempool = self.nodes[0].getrawmempool()
-        # Yoshi: Mempool resurrection not working
-        #assert_equal(len(mempool), 2)
-        #assert tx78.hash in mempool
-        #assert tx79.hash in mempool
+        assert_equal(len(mempool), 2)
+        assert tx78.hash in mempool
+        assert tx79.hash in mempool
 
         # Test invalid opcodes in dead execution paths.
         #
@@ -1275,10 +1279,10 @@ class FullBlockTest(DigiByteTestFramework):
         b89a = self.update_block("89a", [tx])
         self.send_blocks([b89a], success=False, reject_reason='bad-txns-inputs-missingorspent', reconnect=True)
 
-        self.log.info("Test a re-org of a smaller number of blocks (10 blocks)")
+        self.log.info("Test a re-org of one 4.5 hours worth of blocks (1088 blocks)")
 
         self.move_tip(88)
-        LARGE_REORG_SIZE = 10
+        LARGE_REORG_SIZE = 1088
         blocks = []
         spend = out[32]
         for i in range(89, LARGE_REORG_SIZE + 89):
@@ -1345,7 +1349,8 @@ class FullBlockTest(DigiByteTestFramework):
         if (scriptPubKey[0] == OP_TRUE):  # an anyone-can-spend
             tx.vin[0].scriptSig = CScript()
             return
-        sign_input_legacy(tx, 0, spend_tx.vout[0].scriptPubKey, self.coinbase_key)
+        (sighash, err) = LegacySignatureHash(spend_tx.vout[0].scriptPubKey, tx, 0, SIGHASH_ALL)
+        tx.vin[0].scriptSig = CScript([self.coinbase_key.sign_ecdsa(sighash) + bytes(bytearray([SIGHASH_ALL]))])
 
     def create_and_sign_transaction(self, spend_tx, value, script=CScript([OP_TRUE])):
         tx = self.create_tx(spend_tx, 0, value, script)
@@ -1353,7 +1358,7 @@ class FullBlockTest(DigiByteTestFramework):
         tx.rehash()
         return tx
 
-    def next_block(self, number, spend=None, additional_coinbase_value=0, script=CScript([OP_TRUE]), *, version=516):  # Use SHA256D algorithm (4 | (2 << 8) = 516)
+    def next_block(self, number, spend=None, additional_coinbase_value=0, script=CScript([OP_TRUE]), *, version=VERSIONBITS_LAST_OLD_BLOCK_VERSION):
         if self.tip is None:
             base_block_hash = self.genesis_hash
             block_time = int(time.time()) + 1
@@ -1424,7 +1429,7 @@ class FullBlockTest(DigiByteTestFramework):
         # unexpectedly disconnected if the DoS score for that error is 50.
         self.helper_peer.wait_for_getheaders(timeout=timeout)
 
-    def reconnect_p2p(self, timeout=10):
+    def reconnect_p2p(self, timeout=60):
         """Tear down and bootstrap the P2P connection to the node.
 
         The node gets disconnected several times in this test. This helper
@@ -1432,7 +1437,7 @@ class FullBlockTest(DigiByteTestFramework):
         self.nodes[0].disconnect_p2ps()
         self.bootstrap_p2p(timeout=timeout)
 
-    def send_blocks(self, blocks, success=True, reject_reason=None, force_send=False, reconnect=False, timeout=60):
+    def send_blocks(self, blocks, success=True, reject_reason=None, force_send=False, reconnect=False, timeout=960):
         """Sends blocks to test node. Syncs and verifies that tip has advanced to most recent block.
 
         Call with success = False if the tip shouldn't advance to the most recent block."""

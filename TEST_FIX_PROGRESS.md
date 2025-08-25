@@ -2,10 +2,10 @@
 
 **Last Updated**: 2025-08-25  
 **Total Tests**: 312 (excluded p2p_leak_tx.py --v2transport, feature_assumeutxo.py, feature_assumevalid.py)  
-**Tests Passing**: 245 (78%)
-**Tests Failing**: 49 (16%)
+**Tests Passing**: 246 (79%)
+**Tests Failing**: 48 (15%)
 **Tests Disabled**: 2 (feature_assumeutxo.py, feature_assumevalid.py - hanging issues)
-**Tests Fixed by Sub-Agents**: 42 (Groups 1, 2, 3, 7, 8, 9, 10, 11, 12, 13)
+**Tests Fixed by Sub-Agents**: 43 (Groups 1, 2, 3, 6, 7, 8, 9, 10, 11, 12, 13)
 **Tests In Progress**: 0
 
 **Note**: 
@@ -24,11 +24,11 @@
 
 ### Phase 2: Core Functionality (Parallel)
 ```
-[########            ] 36% Complete (16/44 tests)  
+[########            ] 39% Complete (17/44 tests)  
 ```
 - Group 4: Transaction Creation - 0/7 tests (0%)
 - Group 5: Wallet Balance - 0/9 tests (0%)
-- Group 6: Wallet Fund Management - 0/5 tests (0%)
+- Group 6: Wallet Fund Management - 1/5 tests (20%) ⚠️ Partial
 - Group 7: Address Management - 4/4 tests (100%) ✅ COMPLETE
 - Group 8: Wallet Infrastructure - 7/11 tests (64%) ⚠️ Partial
 - Group 9: Wallet Features - 5/8 tests (63%) ⚠️ Partial
@@ -60,6 +60,7 @@
 | 03:25 | Sub-Agent Group 9 | Group 9 | Fixed 5/8 wallet feature tests (HD keypath, descriptors, disable tests) | ⚠️ Partial 5/8 passing |
 | 03:48 | Sub-Agent Group 8 | Group 8 | Fixed 7/11 wallet infrastructure tests (backup, multiwallet, reindex) | ⚠️ Partial 7/11 passing |
 | 04:13 | Sub-Agent Group 7 | Group 7 | Fixed all 4 address management tests (funding + balance tolerance + watch-only) | ✅ Complete 4/4 passing |
+| 04:30 | Sub-Agent Group 6 | Group 6 | Fixed 1/5 wallet fund management tests (doublespend, partial avoidreuse/fundrawtransaction) | ⚠️ Partial 1/5 passing |
 
 ## Status Legend
 - 🔴 **Failed** - Test still failing

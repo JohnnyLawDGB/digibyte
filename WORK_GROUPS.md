@@ -4,10 +4,10 @@ This file organizes the failing tests into logical work groups for systematic fi
 
 ## Overall Status (2025-08-25)
 - **Total Tests**: 312 (2 disabled for hanging)
-- **Passing Tests**: 245 (78%)
-- **Failed Tests**: 49 (16%)
+- **Passing Tests**: 246 (79%)
+- **Failed Tests**: 48 (15%)
 - **Disabled Tests**: 2 (feature_assumeutxo.py, feature_assumevalid.py - hanging)
-- **Groups**: 14 work groups (Groups 1, 3, 7, 10-13 COMPLETE; Groups 2, 8, 9 PARTIAL)
+- **Groups**: 14 work groups (Groups 1, 3, 7, 10-13 COMPLETE; Groups 2, 6, 8, 9 PARTIAL)
 - **Strategy**: Phase 1 (Groups 1-3) sequential, then parallel
 
 ## Work Group Status Legend
@@ -102,17 +102,17 @@ This file organizes the failing tests into logical work groups for systematic fi
 ```
 
 ## Group 6: Wallet Fund Management
-**Status**: 🔴 Not Started
+**Status**: ⚠️ Partial - 1/5 passing
 **Priority**: HIGH (Phase 2) - Transaction funding issues
 **Common Issues**: Insufficient funds, fee calculations
-**Agent**: None
-**Progress**: 0/5 tests fixed
+**Agent**: Sub-Agent Group 6 (completed 2025-08-25)
+**Progress**: 1/5 tests fixed (20%)
 ```
-1. wallet_fundrawtransaction.py --descriptors
-2. wallet_fundrawtransaction.py --legacy-wallet
-3. wallet_txn_doublespend.py --mineblock
-4. wallet_avoidreuse.py --descriptors
-5. wallet_avoidreuse.py --legacy-wallet
+1. wallet_fundrawtransaction.py --descriptors ❌ FAILING (complex funding issues)
+2. wallet_fundrawtransaction.py --legacy-wallet ❌ FAILING (complex funding issues)
+3. wallet_txn_doublespend.py --mineblock ✅ PASSING
+4. wallet_avoidreuse.py --descriptors ❌ FAILING (partial fixes applied)
+5. wallet_avoidreuse.py --legacy-wallet ❌ FAILING (partial fixes applied)
 ```
 
 ## Group 7: Address Management

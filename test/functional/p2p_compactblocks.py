@@ -7,6 +7,7 @@ import random
 
 from test_framework.blocktools import (
     COINBASE_MATURITY,
+    COINBASE_MATURITY_2,
     NORMAL_GBT_REQUEST_PARAMS,
     add_witness_commitment,
     create_block,
@@ -147,6 +148,7 @@ class CompactBlocksTest(DigiByteTestFramework):
         self.num_nodes = 1
         self.extra_args = [[
             "-acceptnonstdtxn=1",
+            "-dandelion=0",
         ]]
         self.utxos = []
 
@@ -160,7 +162,7 @@ class CompactBlocksTest(DigiByteTestFramework):
         block = self.build_block_on_tip(self.nodes[0])
         self.segwit_node.send_and_ping(msg_no_witness_block(block))
         assert int(self.nodes[0].getbestblockhash(), 16) == block.sha256
-        self.generate(self.wallet, COINBASE_MATURITY)
+        self.generate(self.wallet, COINBASE_MATURITY_2)
 
         total_value = block.vtx[0].vout[0].nValue
         out_value = total_value // 10
@@ -266,7 +268,7 @@ class CompactBlocksTest(DigiByteTestFramework):
 
     # This test actually causes digibyted to (reasonably!) disconnect us, so do this last.
     def test_invalid_cmpctblock_message(self):
-        self.generate(self.nodes[0], COINBASE_MATURITY + 1)
+        self.generate(self.nodes[0], COINBASE_MATURITY_2 + 1)
         block = self.build_block_on_tip(self.nodes[0])
 
         cmpct_block = P2PHeaderAndShortIDs()
@@ -283,7 +285,7 @@ class CompactBlocksTest(DigiByteTestFramework):
     def test_compactblock_construction(self, test_node):
         node = self.nodes[0]
         # Generate a bunch of transactions.
-        self.generate(node, COINBASE_MATURITY + 1)
+        self.generate(node, COINBASE_MATURITY_2 + 1)
         num_transactions = 25
 
         segwit_tx_generated = False
@@ -423,7 +425,7 @@ class CompactBlocksTest(DigiByteTestFramework):
         for _ in range(num_transactions):
             tx = CTransaction()
             tx.vin.append(CTxIn(COutPoint(utxo[0], utxo[1]), b''))
-            tx.vout.append(CTxOut(utxo[2] - 1000, CScript([OP_TRUE, OP_DROP] * 15 + [OP_TRUE])))
+            tx.vout.append(CTxOut(utxo[2] - 10000, CScript([OP_TRUE, OP_DROP] * 15 + [OP_TRUE])))
             tx.rehash()
             utxo = [tx.sha256, 0, tx.vout[0].nValue]
             block.vtx.append(tx)

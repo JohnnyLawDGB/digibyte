@@ -323,3 +323,14 @@ Remember: 90% of test failures are fees or coinbase maturity issues.
 **Affects**: tool_signet_miner.py, any signet-specific tests
 **Added by**: Sub-Agent Group 13
 
+---
+
+## NEW PATTERNS FOUND BY GROUP 5
+
+### Pattern: P2P Transaction Fees Too Low
+**Error**: `assert block.vtx[1].hash in node.getrawmempool()` - Transaction not in mempool after being sent
+**Solution**: Increase P2P test transaction fees from 1000 to 10000 satoshis minimum
+**Code**: `CTxOut(utxo[2] - 10000, ...)` instead of `CTxOut(utxo[2] - 1000, ...)`
+**Affects**: p2p_compactblocks.py, any P2P tests creating raw transactions with fees
+**Added by**: Sub-Agent Group 5
+

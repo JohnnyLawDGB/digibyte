@@ -111,7 +111,7 @@ class PeerTxRelayer(P2PTxInvStore):
 class OrphanHandlingTest(DigiByteTestFramework):
     def set_test_params(self):
         self.num_nodes = 1
-        self.extra_args = [[]]
+        self.extra_args = [["-dandelion=0"]]
 
     def create_parent_and_child(self):
         """Create package with 1 parent and 1 child, normal fees (no cpfp)."""

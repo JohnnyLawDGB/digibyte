@@ -50,6 +50,7 @@ class P2PTxSpy(P2PInterface):
 class TxPrivacyTest(DigiByteTestFramework):
     def set_test_params(self):
         self.num_nodes = 1
+        self.extra_args = [["-dandelion=0"]]
 
     def run_test(self):
         self.wallet = MiniWallet(self.nodes[0])

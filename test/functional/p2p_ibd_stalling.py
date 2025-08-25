@@ -48,6 +48,7 @@ class P2PIBDStallingTest(DigiByteTestFramework):
     def set_test_params(self):
         self.setup_clean_chain = True
         self.num_nodes = 1
+        self.extra_args = [["-dandelion=0"]]
 
     def run_test(self):
         NUM_BLOCKS = 1025

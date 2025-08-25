@@ -100,7 +100,7 @@ class P2PVersionStore(P2PInterface):
 class P2PLeakTest(DigiByteTestFramework):
     def set_test_params(self):
         self.num_nodes = 1
-        self.extra_args = [[f"-peertimeout={PEER_TIMEOUT}"]]
+        self.extra_args = [[f"-peertimeout={PEER_TIMEOUT}", "-dandelion=0"]]
 
     def create_old_version(self, nversion):
         old_version_msg = msg_version()

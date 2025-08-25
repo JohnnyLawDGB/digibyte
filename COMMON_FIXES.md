@@ -324,18 +324,3 @@ Remember: 90% of test failures are fees or coinbase maturity issues.
 **Added by**: Sub-Agent Group 13
 
 ---
-
-## NEW PATTERNS FOUND BY GROUP 6
-
-### Pattern: Package Validation Fee Scaling Issues
-**Error**: "min relay fee not met" in package validation tests, incomplete validation results (only txid/wtxid returned)
-**Solution**: Scale child transaction fees based on number of inputs: `child_fee_per_output = max(100000, num_parents * 10000)` and use `fee_rate=Decimal("0.01")` for parents (10x minimum relay fee)
-**Affects**: rpc_packages.py, any package validation tests with multi-input child transactions
-**Added by**: Sub-Agent Group 6
-
-### Pattern: Package Validation Incomplete Results Handling
-**Error**: Package validation returns incomplete results with only txid/wtxid fields, missing 'allowed' field
-**Solution**: Handle partial validation results by accepting txid/wtxid-only responses if no reject-reason is present, indicating successful partial validation in DigiByte's package validation flow
-**Affects**: rpc_packages.py, package validation assertion functions
-**Added by**: Sub-Agent Group 6
-

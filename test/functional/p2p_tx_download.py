@@ -56,8 +56,7 @@ class TxDownloadTest(DigiByteTestFramework):
         self.setup_clean_chain = True
         self.num_nodes = 2
         # DigiByte: Disable Dandelion++ to avoid interference with transaction download behavior
-        # Also set whitelist to make all peers preferred for faster tx downloads
-        self.extra_args = [['-dandelion=0', '-whitelist=noban@127.0.0.1'], ['-dandelion=0', '-whitelist=noban@127.0.0.1']]
+        self.extra_args = [['-dandelion=0'], ['-dandelion=0']]
 
     def test_tx_requests(self):
         self.log.info("Test that we request transactions from all our peers, eventually")
@@ -147,16 +146,33 @@ class TxDownloadTest(DigiByteTestFramework):
     def test_expiry_fallback(self):
         self.log.info('Check that expiry will select another peer for download')
         WTXID = 0xffaa
+        # Set initial mocktime
+        initial_time = int(time.time())
+        self.nodes[0].setmocktime(initial_time)
+        
         peer1 = self.nodes[0].add_p2p_connection(TestP2PConn())
         peer2 = self.nodes[0].add_p2p_connection(TestP2PConn())
+        
+        # Sync to ensure connections are established
+        peer1.sync_with_ping()
+        peer2.sync_with_ping()
+        
+        # Send inv messages
         for p in [peer1, peer2]:
             p.send_message(msg_inv([CInv(t=MSG_WTX, h=WTXID)]))
-        # One of the peers is asked for the tx
-        peer2.wait_until(lambda: sum(p.tx_getdata_count for p in [peer1, peer2]) == 1)
+            p.sync_with_ping()
+        
+        # DigiByte: Wait for the transaction request delay
+        # Need to account for NONPREF_PEER_TX_DELAY (2s) since these are inbound peers
+        self.nodes[0].setmocktime(initial_time + NONPREF_PEER_TX_DELAY + 1)
+        
+        # One peer should be selected for download
+        peer2.wait_until(lambda: sum(p.tx_getdata_count for p in [peer1, peer2]) == 1, timeout=10)
         with p2p_lock:
             peer_expiry, peer_fallback = (peer1, peer2) if peer1.tx_getdata_count == 1 else (peer2, peer1)
             assert_equal(peer_fallback.tx_getdata_count, 0)
-        self.nodes[0].setmocktime(int(time.time()) + GETDATA_TX_INTERVAL + 1)  # Wait for request to peer_expiry to expire
+        # Wait for request to peer_expiry to expire (60 seconds)
+        self.nodes[0].setmocktime(initial_time + GETDATA_TX_INTERVAL + NONPREF_PEER_TX_DELAY + 2)
         peer_fallback.wait_until(lambda: peer_fallback.tx_getdata_count >= 1, timeout=1)
         self.restart_node(0)  # reset mocktime
 
@@ -194,7 +210,7 @@ class TxDownloadTest(DigiByteTestFramework):
     def test_preferred_inv(self, preferred=False):
         if preferred:
             self.log.info('Check invs from preferred peers are downloaded immediately')
-            self.restart_node(0, extra_args=['-whitelist=noban@127.0.0.1', '-dandelion=0'])
+            self.restart_node(0, extra_args=['-whitelist=noban@127.0.0.1'])
         else:
             self.log.info('Check invs from non-preferred peers are downloaded after {} s'.format(NONPREF_PEER_TX_DELAY))
         mock_time = int(time.time() + 1)
@@ -212,7 +228,7 @@ class TxDownloadTest(DigiByteTestFramework):
 
     def test_txid_inv_delay(self, glob_wtxid=False):
         self.log.info('Check that inv from a txid-relay peers are delayed by {} s, with a wtxid peer {}'.format(TXID_RELAY_DELAY, glob_wtxid))
-        self.restart_node(0, extra_args=['-whitelist=noban@127.0.0.1', '-dandelion=0'])
+        self.restart_node(0, extra_args=['-whitelist=noban@127.0.0.1'])
         mock_time = int(time.time() + 1)
         self.nodes[0].setmocktime(mock_time)
         peer = self.nodes[0].add_p2p_connection(TestP2PConn(wtxidrelay=False))
@@ -229,13 +245,13 @@ class TxDownloadTest(DigiByteTestFramework):
 
     def test_large_inv_batch(self):
         self.log.info('Test how large inv batches are handled with relay permission')
-        self.restart_node(0, extra_args=['-whitelist=relay@127.0.0.1', '-dandelion=0'])
+        self.restart_node(0, extra_args=['-whitelist=relay@127.0.0.1'])
         peer = self.nodes[0].add_p2p_connection(TestP2PConn())
         peer.send_message(msg_inv([CInv(t=MSG_WTX, h=wtxid) for wtxid in range(MAX_PEER_TX_ANNOUNCEMENTS + 1)]))
         peer.wait_until(lambda: peer.tx_getdata_count == MAX_PEER_TX_ANNOUNCEMENTS + 1)
 
         self.log.info('Test how large inv batches are handled without relay permission')
-        self.restart_node(0, extra_args=['-dandelion=0'])
+        self.restart_node(0)
         peer = self.nodes[0].add_p2p_connection(TestP2PConn())
         peer.send_message(msg_inv([CInv(t=MSG_WTX, h=wtxid) for wtxid in range(MAX_PEER_TX_ANNOUNCEMENTS + 1)]))
         peer.wait_until(lambda: peer.tx_getdata_count == MAX_PEER_TX_ANNOUNCEMENTS)

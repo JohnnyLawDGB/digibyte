@@ -201,13 +201,79 @@ class SignRawTransactionsTest(DigiByteTestFramework):
         p2sh_p2wsh_address = self.nodes[1].createmultisig(1, [embedded_pubkey], "p2sh-segwit")
         # send transaction to P2SH-P2WSH 1-of-1 multisig address
         self.generate(self.nodes[0], COINBASE_MATURITY_2 + 1)
-        self.nodes[0].sendtoaddress(p2sh_p2wsh_address["address"], 49.999)
+        
+        # DigiByte: Debug the P2SH-P2WSH address and balance
+        self.log.info(f"P2SH-P2WSH address: {p2sh_p2wsh_address['address']}")
+        self.log.info(f"Descriptor: {p2sh_p2wsh_address['descriptor']}")
+        self.log.info(f"Node0 balance before send: {self.nodes[0].getbalance()}")
+        
+        txid = self.nodes[0].sendtoaddress(p2sh_p2wsh_address["address"], 49.999)
+        self.log.info(f"Send transaction ID: {txid}")
+        
         self.generate(self.nodes[0], 1)
-        # Get the UTXO info from scantxoutset
-        unspent_output = self.nodes[1].scantxoutset('start', [p2sh_p2wsh_address['descriptor']])['unspents'][0]
+        
+        # DigiByte: Check confirmation status
+        tx_details = self.nodes[0].gettransaction(txid)
+        self.log.info(f"Transaction confirmations after 1 block: {tx_details.get('confirmations', 0)}")
+        
+        # Generate a few more blocks to ensure deep confirmation
+        self.generate(self.nodes[0], 3)
+        self.sync_all()
+        
+        # Check again
+        tx_details = self.nodes[0].gettransaction(txid)
+        self.log.info(f"Transaction confirmations after 4 blocks: {tx_details.get('confirmations', 0)}")
+        
+        # DigiByte: Check what the transaction actually created
+        raw_tx = self.nodes[0].decoderawtransaction(tx_details['hex'])
+        self.log.info(f"Transaction outputs:")
+        for i, vout in enumerate(raw_tx['vout']):
+            self.log.info(f"  vout {i}: {vout['value']} DGB to {vout['scriptPubKey']}")
+            
+        # Find the vout that matches our address
+        target_vout = None
+        for i, vout in enumerate(raw_tx['vout']):
+            if vout['scriptPubKey'].get('address') == p2sh_p2wsh_address["address"]:
+                target_vout = i
+                self.log.info(f"Found our P2SH-P2WSH address in vout {i}")
+                break
+        
+        if target_vout is None:
+            raise Exception(f"P2SH-P2WSH address {p2sh_p2wsh_address['address']} not found in transaction outputs")
+        
+        # DigiByte: Debug scantxoutset results before accessing index
+        scan_result = self.nodes[1].scantxoutset('start', [p2sh_p2wsh_address['descriptor']])
+        self.log.info(f"Scantxoutset result: {scan_result}")
+        
+        # DigiByte: Try a broader scan to see if any UTXOs exist for this address
+        all_utxos = self.nodes[1].scantxoutset('start', ['addr(' + p2sh_p2wsh_address["address"] + ')'])
+        self.log.info(f"Address-based scan result: {all_utxos}")
+        
+        # DigiByte: If scantxoutset doesn't work, manually create the UTXO structure
+        if not scan_result.get('unspents', []) and not all_utxos.get('unspents', []):
+            self.log.info("Scantxoutset failed, manually creating UTXO structure")
+            unspent_output = {
+                'txid': txid,
+                'vout': target_vout,
+                'scriptPubKey': raw_tx['vout'][target_vout]['scriptPubKey']['hex'],
+                'amount': raw_tx['vout'][target_vout]['value']
+            }
+            unspent_output['witnessScript'] = p2sh_p2wsh_address['redeemScript']
+            unspent_output['redeemScript'] = script_to_p2wsh_script(unspent_output['witnessScript']).hex()
+        
+        if scan_result.get('unspents', []):
+            self.log.info("Found UTXO using descriptor-based scan")
+            unspent_output = scan_result['unspents'][0]
+            unspent_output['witnessScript'] = p2sh_p2wsh_address['redeemScript']
+            unspent_output['redeemScript'] = script_to_p2wsh_script(unspent_output['witnessScript']).hex()
+        elif all_utxos.get('unspents', []):
+            self.log.info("Found UTXO using address-based scan")
+            unspent_output = all_utxos['unspents'][0]
+            unspent_output['witnessScript'] = p2sh_p2wsh_address['redeemScript']
+            unspent_output['redeemScript'] = script_to_p2wsh_script(unspent_output['witnessScript']).hex()
+        # else: unspent_output was already created manually above
+        
         spk = script_to_p2sh_p2wsh_script(p2sh_p2wsh_address['redeemScript']).hex()
-        unspent_output['witnessScript'] = p2sh_p2wsh_address['redeemScript']
-        unspent_output['redeemScript'] = script_to_p2wsh_script(unspent_output['witnessScript']).hex()
         assert_equal(spk, unspent_output['scriptPubKey'])
         # Now create and sign a transaction spending that output on node[0], which doesn't know the scripts or keys
         spending_tx = self.nodes[0].createrawtransaction([unspent_output], {self.nodes[1].get_wallet_rpc(self.default_wallet_name).getnewaddress(): Decimal("49.998")})

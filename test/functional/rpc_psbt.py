@@ -283,6 +283,24 @@ class PSBTTest(DigiByteTestFramework):
         txid = self.nodes[0].sendrawtransaction(signed_tx)
         self.generate(self.nodes[0], 6)
         self.sync_all()
+        
+        # DigiByte: Ensure UTXOs are properly indexed and available
+        self.generate(self.nodes[0], 1)  # Generate additional block to confirm
+        self.sync_all()  # Ensure all nodes synchronized
+        
+        # DigiByte: Verify the funding transaction was successful by checking balances
+        self.log.info(f"Node0 balance after funding: {self.nodes[0].getbalance()}")
+        self.log.info(f"Node1 balance after funding: {self.nodes[1].getbalance()}")
+        # Force wallet rescan to ensure all transactions are indexed
+        self.nodes[1].rescanblockchain()
+        
+        # DigiByte: Debug the funding transaction to see what UTXOs were created
+        funding_tx = self.nodes[0].gettransaction(txid)
+        self.log.info(f"Funding transaction details: {funding_tx}")
+        decoded_tx = self.nodes[0].decoderawtransaction(signed_tx)
+        self.log.info(f"Funding transaction outputs:")
+        for i, vout in enumerate(decoded_tx['vout']):
+            self.log.info(f"  vout {i}: {vout['value']} DGB to {vout['scriptPubKey'].get('address', 'unknown')}")
 
         # Find the output pos
         p2sh_pos = -1
@@ -306,8 +324,43 @@ class PSBTTest(DigiByteTestFramework):
             elif out['scriptPubKey']['address'] == p2pkh:
                 p2pkh_pos = out['n']
 
+        # DigiByte: Verify that all required UTXO positions were found
+        assert p2wpkh_pos != -1, f"p2wpkh address not found in transaction: {p2wpkh}"
+        assert p2sh_p2wpkh_pos != -1, f"p2sh_p2wpkh address not found in transaction: {p2sh_p2wpkh}"
+        assert p2pkh_pos != -1, f"p2pkh address not found in transaction: {p2pkh}"
+        
         inputs = [{"txid": txid, "vout": p2wpkh_pos}, {"txid": txid, "vout": p2sh_p2wpkh_pos}, {"txid": txid, "vout": p2pkh_pos}]
         outputs = [{self.nodes[1].getnewaddress(): 29.99}]
+
+        # DigiByte: Debug what UTXOs node1 has available including unconfirmed
+        node1_utxos_confirmed = self.nodes[1].listunspent()
+        node1_utxos_unconfirmed = self.nodes[1].listunspent(0)  # Include unconfirmed
+        self.log.info(f"Node1 has {len(node1_utxos_confirmed)} confirmed UTXOs and {len(node1_utxos_unconfirmed)} total UTXOs")
+        
+        # Check if the funding transaction UTXOs are visible as unconfirmed
+        for utxo in node1_utxos_unconfirmed:
+            if utxo['txid'] == txid:
+                self.log.info(f"  Found funding UTXO: {utxo['txid']}:{utxo['vout']} = {utxo['amount']} DGB (confirmations: {utxo['confirmations']})")
+                
+        self.log.info(f"Looking for external inputs:")
+        for inp in inputs:
+            self.log.info(f"  Input: {inp['txid']}:{inp['vout']}")
+            
+        # DigiByte: Let's wait for the funding transaction to be confirmed
+        self.log.info("Generating additional blocks to confirm funding transaction")
+        self.generate(self.nodes[0], 1)
+        self.sync_all()
+        
+        # Check again after confirmation
+        node1_utxos_after_conf = self.nodes[1].listunspent()
+        self.log.info(f"Node1 has {len(node1_utxos_after_conf)} UTXOs after confirmation")
+        funding_utxos_found = 0
+        for utxo in node1_utxos_after_conf:
+            if utxo['txid'] == txid:
+                funding_utxos_found += 1
+                self.log.info(f"  Found confirmed funding UTXO: {utxo['txid']}:{utxo['vout']} = {utxo['amount']} DGB")
+        if funding_utxos_found == 0:
+            self.log.error("No funding UTXOs found in node1's wallet after confirmation!")
 
         # spend single key from node 1
         created_psbt = self.nodes[1].walletcreatefundedpsbt(inputs, outputs)
@@ -321,8 +374,8 @@ class PSBTTest(DigiByteTestFramework):
         assert_equal(walletprocesspsbt_out['complete'], True)
         self.nodes[1].sendrawtransaction(walletprocesspsbt_out['hex'])
 
-        self.log.info("Test walletcreatefundedpsbt fee rate of 10000 sat/vB and 0.1 DGB/kvB produces a total fee at or slightly below -maxtxfee (~0.05290000)")
-        res1 = self.nodes[1].walletcreatefundedpsbt(inputs, outputs, 0, {"fee_rate": 10000, "add_inputs": True})
+        self.log.info("Test walletcreatefundedpsbt fee rate of 100000 sat/kB and 0.1 DGB/kB produces a total fee at or slightly below -maxtxfee (~0.05290000)")
+        res1 = self.nodes[1].walletcreatefundedpsbt(inputs, outputs, 0, {"fee_rate": 100000, "add_inputs": True})
         assert_approx(res1["fee"], 0.055, 0.005)
         res2 = self.nodes[1].walletcreatefundedpsbt(inputs, outputs, 0, {"feeRate": "0.1", "add_inputs": True})
         assert_approx(res2["fee"], 0.055, 0.005)

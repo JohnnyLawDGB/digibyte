@@ -174,7 +174,7 @@ class AddressInputTypeGrouping(DigiByteTestFramework):
             self.generate(A, 1)
             assert is_same_type(B, tx)
 
-        tx = self.make_payment(A, B, 30.99, random.choice(ADDRESS_TYPES))
+        tx = self.make_payment(A, B, 25.0, random.choice(ADDRESS_TYPES))
         assert not is_same_type(B, tx)
 
 

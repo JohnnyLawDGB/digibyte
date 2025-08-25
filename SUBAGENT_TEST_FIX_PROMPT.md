@@ -13,7 +13,8 @@ You are a SUB-AGENT assigned to fix specific Python functional tests. You work i
 1. **CLAUDE.md** - DigiByte constants and project structure
 2. **COMMON_FIXES.md** - Check for existing patterns FIRST
 3. **APPLICATION_BUGS.md** - Log any application bugs you find
-4. **DIGIBYTE_FEE_ANALYSIS_V8.26.md** - Read for all fee related issues.
+4. **DIGIBYTE_FEE_ANALYSIS_V8.26.md** - Read for all fee related issues
+5. **doc/DANDELION_INFO.md** - Read for mempool and stempool related issues due to dandelion protocol in DigiByte
 
 ## Working Environment
 ```

@@ -36,12 +36,12 @@ from test_framework.wallet import MiniWallet
 WALLET_PASSPHRASE = "test"
 WALLET_PASSPHRASE_TIMEOUT = 3600
 
-# Fee rates (sat/vB) - adjusted for DigiByte
-INSUFFICIENT =       1       # 1 sat/vB
-ECONOMICAL   =      20       # 20 sat/vB = 0.00002 DGB/vB = 0.02 DGB/kB
-NORMAL       =      50       # 50 sat/vB = 0.00005 DGB/vB = 0.05 DGB/kB
-HIGH         =     100       # 100 sat/vB = 0.0001 DGB/vB = 0.1 DGB/kB
-TOO_HIGH     =   10000       # 10000 sat/vB = 0.01 DGB/vB = 10 DGB/kB
+# Fee rates (sat/vB) - using v8.22.2 working values for DigiByte
+INSUFFICIENT =       1
+ECONOMICAL   =    1500000
+NORMAL       =    6500000  
+HIGH         =    7000000
+TOO_HIGH     = 100000000
 
 def get_change_address(tx, node):
     tx_details = node.getrawtransaction(tx, 1)
@@ -56,8 +56,8 @@ class BumpFeeTest(DigiByteTestFramework):
         self.setup_clean_chain = True
         self.extra_args = [[
             "-walletrbf={}".format(i),
-            "-mintxfee=0.0002",
-            "-minrelaytxfee=0.000015",
+            "-mintxfee=0.001",  # DigiByte: DGB/kB not BTC/vB
+            "-minrelaytxfee=0.001",  # DigiByte: DGB/kB not BTC/vB
             "-addresstype=bech32",
             "-whitelist=noban@127.0.0.1",
             "-dandelion=0",  # Disable Dandelion++ for test
@@ -141,7 +141,7 @@ class BumpFeeTest(DigiByteTestFramework):
         assert_raises_rpc_error(-8, "Insufficient total fee 0.00000141", rbf_node.bumpfee, rbfid, fee_rate=INSUFFICIENT)
 
         self.log.info("Test invalid fee rate settings")
-        assert_raises_rpc_error(-4, "Specified or calculated fee 0.141 is too high (cannot be higher than -maxtxfee 0.10",
+        assert_raises_rpc_error(-4, "Specified or calculated fee 141.00 is too high (cannot be higher than -maxtxfee 100.00",
             rbf_node.bumpfee, rbfid, fee_rate=TOO_HIGH)
         # Test fee_rate with zero values.
         msg = "Insufficient total fee 0.00"
@@ -363,14 +363,14 @@ def test_segwit_bumpfee_succeeds(self, rbf_node, dest_address):
     # which spends it, and make sure bumpfee can be called on it.
 
     segwit_out = rbf_node.getnewaddress(address_type='bech32')
-    segwitid = rbf_node.send({segwit_out: "0.0009"}, options={"change_position": 1})["txid"]
+    segwitid = rbf_node.send({segwit_out: "0.01"}, options={"change_position": 1})["txid"]
 
     rbfraw = rbf_node.createrawtransaction([{
         'txid': segwitid,
         'vout': 0,
         "sequence": MAX_BIP125_RBF_SEQUENCE
-    }], {dest_address: Decimal("0.0005"),
-         rbf_node.getrawchangeaddress(): Decimal("0.0003")})
+    }], {dest_address: Decimal("0.005"),
+         rbf_node.getrawchangeaddress(): Decimal("0.003")})
     rbfsigned = rbf_node.signrawtransactionwithwallet(rbfraw)
     rbfid = rbf_node.sendrawtransaction(rbfsigned["hex"])
     assert rbfid in rbf_node.getrawmempool()
@@ -416,6 +416,8 @@ def test_notmine_bumpfee(self, rbf_node, peer_node, dest_address):
         psbt = rbf_node.walletprocesspsbt(psbt)
         psbt = peer_node.walletprocesspsbt(psbt["psbt"])
         res = rbf_node.testmempoolaccept([psbt["hex"]])
+        if not res[0]["allowed"]:
+            self.log.info(f"Transaction not allowed: {res[0]}")
         assert res[0]["allowed"]
         assert_greater_than(res[0]["fees"]["base"], old_fee)
 
@@ -423,7 +425,7 @@ def test_notmine_bumpfee(self, rbf_node, peer_node, dest_address):
     psbt = rbf_node.psbtbumpfee(txid=rbfid)
     finish_psbtbumpfee(psbt["psbt"])
 
-    psbt = rbf_node.psbtbumpfee(txid=rbfid, fee_rate=old_feerate + 10)
+    psbt = rbf_node.psbtbumpfee(txid=rbfid, fee_rate=old_feerate + 1000)  # Add 1k sat/vB for DigiByte
     finish_psbtbumpfee(psbt["psbt"])
 
     self.clear_mempool()
@@ -455,11 +457,11 @@ def test_bumpfee_with_abandoned_descendant_succeeds(self, rbf_node, rbf_node_add
     parent_id = spend_one_input(rbf_node, rbf_node_address)
     # Submit child transaction with low fee
     child_id = rbf_node.send(outputs={dest_address: 0.00020000},
-                             options={"inputs": [{"txid": parent_id, "vout": 0}], "fee_rate": 2})["txid"]
+                             options={"inputs": [{"txid": parent_id, "vout": 0}], "fee_rate": 200})["txid"]
     assert child_id in rbf_node.getrawmempool()
 
     # Restart the node with higher min relay fee so the descendant tx is no longer in mempool so that we can abandon it
-    self.restart_node(1, ['-minrelaytxfee=0.00005'] + self.extra_args[1])
+    self.restart_node(1, ['-minrelaytxfee=0.005'] + self.extra_args[1])
     rbf_node.walletpassphrase(WALLET_PASSPHRASE, WALLET_PASSPHRASE_TIMEOUT)
     self.connect_nodes(1, 0)
     assert parent_id in rbf_node.getrawmempool()
@@ -804,7 +806,7 @@ def spend_one_input(node, dest_address, change_size=Decimal("0.00049000"), data=
     
     # Calculate appropriate output amounts based on available input
     total_input = utxo["amount"]
-    fee = Decimal("0.00001000")  # Minimum fee
+    fee = Decimal("0.001")  # DigiByte minimum fee (DGB/kB rate for typical tx)
     output_amount = min(Decimal("0.00050000"), total_input - fee - change_size)
     
     destinations = {dest_address: output_amount}

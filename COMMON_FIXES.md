@@ -488,8 +488,141 @@ These tests may require deeper investigation into DigiByte's assumeutxo implemen
 
 ---
 
+---
+
+## New Patterns Discovered by Group 3 Sub-Agent
+
+### Pattern: Incorrect Transaction Fee Multipliers in mine_large_block()
+**Symptoms:**
+- `Transaction rejected: max-fee-exceeded (fee=0.10000000 DGB, size=133 bytes, fee_rate=75187969 sat/kB)`
+- `RuntimeError` during large block creation in feature_maxuploadtarget.py
+
+**Root Cause:**
+The `mine_large_block()` function in util.py was using `fee = 100 * node.getnetworkinfo()["relayfee"]` which creates excessive fees when DigiByte's relay fee (0.001 DGB/kB) is multiplied by 100.
+
+**Solution:**
+```python
+# In test/functional/test_framework/util.py, change:
+# OLD:
+fee = 100 * node.getnetworkinfo()["relayfee"]
+
+# NEW:
+fee = 2 * node.getnetworkinfo()["relayfee"]  # Much smaller multiplier for DigiByte
+```
+
+**Tests Affected:**
+- feature_maxuploadtarget.py - Fixed by reducing fee multiplier
+- Any test using mine_large_block() utility function
+
+**Verification:**
+Test should proceed past transaction creation without `max-fee-exceeded` errors.
+
+---
+
+### Pattern: Bitcoin Fee Rates in RBF/Bumpfee Tests
+**Symptoms:**
+- `Insufficient total fee X, must be at least Y (oldFee Z + incrementalFee W) (-8)`
+- Balance assertion failures: `AssertionError: not(0E-8 == 270)`
+- Fee rate errors in bumpfee operations
+
+**Root Cause:**
+wallet_bumpfee.py was using Bitcoin fee rate constants and Bitcoin fee configuration values unsuitable for DigiByte.
+
+**Solution:**
+```python
+# In wallet_bumpfee.py, update fee rate constants to v8.22.2 working values:
+# OLD (Bitcoin values):
+ECONOMICAL   =      20
+NORMAL       =      50  
+HIGH         =     100
+
+# NEW (DigiByte values):
+ECONOMICAL   =    1500000
+NORMAL       =    6500000  
+HIGH         =    7000000
+
+# Also update node fee configuration:
+# OLD:
+"-mintxfee=0.0002",      # BTC/vB
+"-minrelaytxfee=0.000015", # BTC/vB
+
+# NEW:
+"-mintxfee=0.001",       # DGB/kB
+"-minrelaytxfee=0.001",  # DGB/kB
+```
+
+**Tests Affected:**
+- wallet_bumpfee.py --descriptors - Fixed with proper fee rates and config
+- wallet_bumpfee.py --legacy-wallet - Same fixes apply
+
+**Verification:**
+Balance should show 270.00000000 and bumpfee operations should succeed with appropriate fee increments.
+
+---
+
+### Pattern: Fallback Fee Configuration for Fee Estimation Tests
+**Symptoms:**
+- Transaction confirmation failures: `AssertionError: not(0 == 1)`
+- Fee estimation tests timing out or failing assertions
+- Transactions not included in mined blocks
+
+**Root Cause:**
+Fee estimation tests using Bitcoin fallback fee values (0.01 DGB/kB) and not accounting for Dandelion++ transaction delays.
+
+**Solution:**
+```python
+# In wallet_fee_estimation_test.py, update extra_args:
+# OLD:
+self.extra_args = [
+    ["-fallbackfee=0.01"],
+    ["-fallbackfee=0"]
+]
+
+# NEW:
+self.extra_args = [
+    ["-fallbackfee=0.1", "-minrelaytxfee=0.001", "-dandelion=0"],
+    ["-fallbackfee=0", "-minrelaytxfee=0.001", "-dandelion=0"]
+]
+```
+
+**Tests Affected:**
+- wallet_fee_estimation_test.py - Fixed with higher fallback fee and Dandelion disabled
+
+**Verification:**
+All chained transactions should confirm with 1 confirmation after block mining.
+
+---
+
+### Pattern: Bitcoin Fee Values in Transaction Creation
+**Symptoms:**
+- `min relay fee not met, 1000 < 14100 (-26)`
+- Low fee rates causing transaction rejection
+
+**Root Cause:**
+Individual transaction creation in tests using hardcoded Bitcoin fee values (0.00001 BTC) instead of appropriate DigiByte fees.
+
+**Solution:**
+```python
+# In test functions, replace Bitcoin fee constants:
+# OLD:
+fee = Decimal("0.00001000")  # Bitcoin minimum fee
+
+# NEW:  
+fee = Decimal("0.001")       # DigiByte minimum fee (DGB/kB rate for typical tx)
+```
+
+**Tests Affected:**
+- wallet_bumpfee.py spend_one_input() function - Fixed fee calculation
+- Various test functions creating raw transactions
+
+**Verification:**
+Transactions should be accepted into mempool without "min relay fee not met" errors.
+
+---
+
 ## Update Log
 - **2025-08-24**: Initial patterns documented from previous fixes
 - **2025-08-24**: Added 4 new patterns from Group 1 test fixes
-- **2025-08-24**: Added 2 new patterns from Group 2 test fixes
+- **2025-08-24**: Added 2 new patterns from Group 2 test fixes  
+- **2025-08-24**: Added 4 new patterns from Group 3 fee calculation fixes
 - Sub-agents will add new patterns as discovered

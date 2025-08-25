@@ -19,10 +19,10 @@ class WalletFeeEstimationTest(DigiByteTestFramework):
         self.num_nodes = 2
         self.setup_clean_chain = True
         self.extra_args = [
-            # Node 0: Default settings (with fallback fee)
-            ["-fallbackfee=0.01"],
-            # Node 1: Fallback fee disabled
-            ["-fallbackfee=0"]
+            # Node 0: Default settings (with fallback fee) - DigiByte adjusted
+            ["-fallbackfee=0.1", "-minrelaytxfee=0.001", "-dandelion=0"],
+            # Node 1: Fallback fee disabled but with proper relay fee
+            ["-fallbackfee=0", "-minrelaytxfee=0.001", "-dandelion=0"]
         ]
 
     def skip_test_if_missing_module(self):

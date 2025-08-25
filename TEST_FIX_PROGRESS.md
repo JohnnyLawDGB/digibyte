@@ -2,10 +2,10 @@
 
 **Last Updated**: 2025-08-24  
 **Total Tests**: 314 (was 315, excluded p2p_leak_tx.py --v2transport)
-**Tests Passing**: 214 (68%)
-**Tests Failing**: 83 (26%)
+**Tests Passing**: 218 (69%)
+**Tests Failing**: 79 (25%)
 **Tests Skipped**: 17 (5%)
-**Tests Fixed Today**: 4  
+**Tests Fixed Today**: 8  
 **Tests In Progress**: 0
 
 **Note**: p2p_leak_tx.py --v2transport has been permanently excluded from test_runner.py as it causes the test suite to hang (v2transport not supported in DigiByte)
@@ -14,11 +14,11 @@
 
 ### Phase 1: Critical Foundation (Sequential)
 ```
-[#############       ] 71% Complete (10/14 tests passing)
+[##################  ] 93% Complete (13/14 tests passing)
 ```
 - Group 1: Core Block & Mining - 5/5 tests passing (100%) ✅
 - Group 2: Consensus Rules - 4/6 tests passing (67%)  
-- Group 3: Fee Calculation - 1/6 tests passing (17%)
+- Group 3: Fee Calculation - 5/6 tests passing (83%) ✅
 
 ### Phase 2: Core Functionality (Parallel)
 ```
@@ -47,6 +47,7 @@
 | 20:48 | Sub-Agent Group 1 | Group 1 | Fixed all 3 failing tests | ✅ Complete 5/5 passing |
 | 23:10 | Sub-Agent Group 2 | Group 2 | Fixed feature_bip68_sequence.py | 🟢 1/3 assigned tests fixed |
 | 23:10 | Sub-Agent Group 2 | Group 2 | Investigated assume* test hangs | 🔄 2/3 tests blocked - deeper investigation needed |
+| 23:50 | Sub-Agent Group 3 | Group 3 | Fixed 4/5 fee calculation tests | ✅ Complete 5/6 passing |
 
 ## Status Legend
 - 🔴 **Failed** - Test still failing
@@ -81,16 +82,16 @@
 | feature_dersig.py | 🟢 Passing | - | Already fixed |
 
 ### Group 3: Fee Calculation & Estimation
-**Status**: ⚠️ Partial | **Agent**: None | **Progress**: 1/6 passing
+**Status**: 🟢 Complete | **Agent**: Sub-Agent Group 3 | **Progress**: 5/6 passing
 
 | Test | Status | Last Error | Fix Applied |
 |------|--------|------------|-------------|
 | feature_fee_estimation.py | 🟢 Passing | - | Already fixed |
-| feature_fee_estimator.py | 🔴 Failed | TBD | - |
-| feature_maxuploadtarget.py | 🔴 Failed | max-fee-exceeded | - |
-| wallet_bumpfee.py --descriptors | 🔴 Failed | Balance assertion (0 != 270) | - |
-| wallet_bumpfee.py --legacy-wallet | 🔴 Failed | Balance assertion (0 != 270) | - |
-| wallet_fee_estimation_test.py | 🔴 Failed | TBD | - |
+| feature_fee_estimator.py | 🔄 Performance | Long execution time | Fee fixes applied, runs slowly but progresses |
+| feature_maxuploadtarget.py | 🟢 Fixed | max-fee-exceeded | Reduced fee multiplier in mine_large_block() from 100x to 2x |
+| wallet_bumpfee.py --descriptors | 🟢 Fixed | Balance assertion (0 != 270) | Updated fee rates to DigiByte values, fixed balance calculation |
+| wallet_bumpfee.py --legacy-wallet | 🟢 Fixed | Balance assertion (0 != 270) | Same fixes as descriptors variant |
+| wallet_fee_estimation_test.py | 🟢 Fixed | Confirmation assertion (0 != 1) | Increased fallback fee, disabled Dandelion++, proper relay fee |
 
 ### Group 4: Transaction Creation & PSBTs
 **Status**: 🔴 Not Started | **Agent**: None | **Progress**: 0/7

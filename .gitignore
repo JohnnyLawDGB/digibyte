@@ -160,3 +160,4 @@ dist/
 .vscode/settings.json
 DigiByte-Core.dmg
 .wslconfig
+APPLICATION_BUGS.md

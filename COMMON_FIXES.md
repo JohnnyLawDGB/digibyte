@@ -1,16 +1,28 @@
 # DigiByte Test Suite - Common Fixes
 
 ## Quick Reference
-Most test failures are caused by these 5 issues (in order of frequency):
-1. **Fees** - DigiByte uses different fee structure than Bitcoin
-2. **Coinbase Maturity** - 8 blocks (COINBASE_MATURITY) vs 100 blocks (COINBASE_MATURITY_2)
+Most test failures are caused by these 7 issues (in order of frequency):
+1. **Block Rewards & Fees** - 72000 DGB (not 50 BTC), fees in sat/kB (not sat/vB)
+2. **Coinbase Maturity** - Use COINBASE_MATURITY_2 (100) for wallet tests, COINBASE_MATURITY (8) for initial setup
 3. **Dandelion++** - Causes transaction propagation delays
 4. **Address Prefixes** - DigiByte uses different address formats
-5. **Multi-Algo Mining** - Different block versions and fork heights
+5. **Multi-Algo Mining** - Different block versions
+6. **Fork Heights** - Difficulty changes at blocks 100, 200, 334, 400, 600
+7. **Network Ports** - DigiByte uses different ports than Bitcoin
 
 ---
 
-## 1. FEE ISSUES (Most Common)
+## 1. BLOCK REWARDS & FEES (Most Common)
+
+### Block Rewards in Regtest
+```python
+# DigiByte regtest block rewards (first 1440 blocks):
+SUBSIDY = 72000  # DGB, NOT 50 BTC!
+
+# Common fix:
+- assert_equal(balance, 50)      # Bitcoin
++ assert_equal(balance, 72000)   # DigiByte
+```
 
 ### DigiByte Fee Structure
 ```python
@@ -43,16 +55,39 @@ bumped_fee = original_fee + Decimal('0.01')  # Not 0.00001
 from test_framework.blocktools import COINBASE_MATURITY, COINBASE_MATURITY_2
 
 # DigiByte uses TWO maturity values:
-COINBASE_MATURITY = 8      # Default for most operations
-COINBASE_MATURITY_2 = 100  # After certain height, for some operations
+COINBASE_MATURITY = 8      # Used for initial setup
+COINBASE_MATURITY_2 = 100  # Used for most wallet tests
 
-# Common pattern in tests:
-self.generate(self.nodes[0], COINBASE_MATURITY)  # Use 8, not 100
+# IMPORTANT: Many tests use COINBASE_MATURITY_2 (100) even at low heights!
+# Check what the Bitcoin test originally used.
 ```
 
 ### When to use which:
-- **COINBASE_MATURITY (8)**: Most test setups, initial funding
-- **COINBASE_MATURITY_2 (100)**: Later blocks, specific height-dependent tests
+- **Bitcoin test uses 100?** → Use COINBASE_MATURITY_2 (100)
+- **Bitcoin test uses 101?** → Use COINBASE_MATURITY_2 + 1 (101)  
+- **Initial setup/funding?** → Try COINBASE_MATURITY (8) first
+- **Wallet operations?** → Often need COINBASE_MATURITY_2 (100)
+
+### Common fixes:
+```python
+# Bitcoin test expecting 100 blocks maturity:
+- self.generate(node, 100)
++ self.generate(node, COINBASE_MATURITY_2)  # Keep 100 for wallet tests
+
+# Waiting for coinbase to mature:
+- self.generate(node, 101)  # Bitcoin: 100 + 1
++ self.generate(node, COINBASE_MATURITY_2 + 1)  # DigiByte: 100 + 1
+
+# Initial funding setup:
+- self.generate(node, 100)
++ self.generate(node, COINBASE_MATURITY)  # Try 8 first for simple setups
+```
+
+### Test Failure Patterns:
+```
+AssertionError: not(8 == 100)  # Test expects Bitcoin's 100
+bad-txns-premature-spend-of-coinbase  # Used 100 but needed 8
+```
 
 ---
 
@@ -102,11 +137,61 @@ POW_BLOCK_VERSION = 0x00000204      # Version 516 for PoW tests
 block.nVersion = 0x00000204  # Not 4 or 0x20000000
 ```
 
-### Fork Heights (Regtest)
+---
+
+## 6. FORK HEIGHTS & DIFFICULTY ADJUSTMENTS
+
+### The Problem
+DigiByte evolved through multiple consensus changes that affect mining and difficulty in regtest:
+
 ```python
-# Key activation heights for regtest
-CSV_ACTIVATION_HEIGHT = 500
-SEGWIT_HEIGHT = 0  # Always active in regtest
+# Regtest Fork Heights in v8.26 (affect difficulty & validation)
+MULTIALGO_HEIGHT = 100       # Block 100: 5 mining algorithms activated
+MULTISHIELD_HEIGHT = 200     # Block 200: Per-algo difficulty adjustment
+DIGISHIELD_HEIGHT = 334      # Block 334: DigiShield (real-time difficulty)
+DIGISPEED_HEIGHT = 400       # Block 400: Faster difficulty response
+ODOCRYPT_HEIGHT = 600        # Block 600: Odocrypt algo activates
+
+# Note: v8.22.2 used different heights (e.g., multiAlgo at 290)
+```
+
+### Impact on Tests
+- **Blocks 0-99**: Single algo (Scrypt), simple difficulty
+- **Blocks 100+**: Multi-algo activated, difficulty can spike if mining single algo
+- **Blocks 200+**: Each algo has independent difficulty
+- **Most tests use blocks 0-300**, so they hit multi-algo but rarely reach Odocrypt
+
+### Common Fix
+```python
+# For mining tests that fail due to difficulty:
+# Option 1: Mine before multi-algo activation
+self.generate(node, 50)  # Stay below block 100
+
+# Option 2: Disable multi-algo for testing
+self.extra_args = [["-easypow"]]  # Postpones multi-algo activation
+
+# Option 3: Use lower difficulty for regtest
+self.extra_args = [["-minimumdifficultyblocks=1"]]
+```
+
+---
+
+## 7. NETWORK PORTS
+
+### DigiByte Port Configuration
+```python
+# DigiByte uses different ports than Bitcoin
+MAINNET_P2P = 12024      # Bitcoin: 8333
+MAINNET_RPC = 14022      # Bitcoin: 8332
+TESTNET_P2P = 12026      # Bitcoin: 18333  
+TESTNET_RPC = 14023      # Bitcoin: 18332
+REGTEST_P2P = 14022      # Bitcoin: 18444
+REGTEST_RPC = 14122      # Bitcoin: 18443
+
+# In tests, replace:
+self.nodes[0].add_p2p_connection(P2PInterface(), port=18444)  # Bitcoin
+# With:
+self.nodes[0].add_p2p_connection(P2PInterface(), port=14022)  # DigiByte
 ```
 
 ---
@@ -120,6 +205,8 @@ When a test fails, check in this order:
 3. **Transaction not found?** → Add `-dandelion=0` to all nodes
 4. **Address validation?** → Check prefix (dgbrt, not bcrt)
 5. **Block rejected?** → Set block.nVersion = 0x00000204
+6. **Mining difficulty spike?** → Check fork height, use `-easypow`
+7. **Connection refused?** → Check port numbers (14022 not 18444)
 
 ---
 

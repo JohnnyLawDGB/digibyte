@@ -25,15 +25,20 @@ digibyte/                        # Current v8.26 (broken tests)
 ```
 
 ## Critical DigiByte Constants
+**⚠️ IMPORTANT: See COMMON_FIXES.md for complete list of DigiByte-specific values**
+
+Quick reference for most common values:
 ```python
-# YOU MUST USE THESE VALUES
 BLOCK_TIME = 15                  # NOT 600
 COINBASE_MATURITY = 8           # NOT 100 (but see COINBASE_MATURITY_2!)
 COINBASE_MATURITY_2 = 100       # After certain height
 SUBSIDY = 72000                  # NOT 50
 MIN_RELAY_TX_FEE = Decimal('0.001')  # DGB/kB not BTC/vB
-P2P_PORT = 12024
+DEFAULT_FEE = Decimal('0.1')         # DGB/kB = 100000 sat/kB
+REGTEST_P2P_PORT = 14022        # NOT 18444
 REGTEST_BECH32 = 'dgbrt'        # NOT 'bcrt'
+
+# CRITICAL: Maturity switches at HEIGHT 145000 in ALL networks!
 ```
 
 ## Your Fix Process (For Each Test)
@@ -75,35 +80,19 @@ diff digibyte-v8.22.2/test/functional/[test_name].py bitcoin-v26.2-for-digibyte/
 **KEY INSIGHT**: If v8.22.2 had different values/logic than current v8.26, and the test was passing in v8.22.2, then v8.22.2 is likely correct!
 
 ### 3. Check COMMON_FIXES.md First!
-Before writing any fix, check if pattern exists:
-- Block reward errors → Use 72000
-- Fee calculation errors → Use DGB/kB values
-- Address format errors → Use dgbrt1 prefix
-- Timing errors → Use 15 second blocks
+**ALWAYS check COMMON_FIXES.md before writing any fix!**
+
+The document covers 7 common issues with ready-to-use patterns:
+1. Fees (sat/kB vs sat/vB)
+2. Coinbase maturity (8 vs 100)
+3. Dandelion++ (transaction propagation)
+4. Address prefixes (dgbrt vs bcrt)
+5. Multi-algo mining (block versions)
+6. Fork heights (difficulty changes)
+7. Network ports (14022 vs 18444)
 
 ### 4. Apply Fix
-Common patterns to fix:
-```python
-# Block Rewards
-- assert_equal(balance, 50)
-+ assert_equal(balance, 72000)
-
-# Fees (DigiByte uses kB not vB!)
-- fee = Decimal('0.00001')  # BTC/vB
-+ fee = Decimal('0.001')     # DGB/kB
-
-# Address Prefixes
-- assert address.startswith("bcrt1")
-+ assert address.startswith("dgbrt1")
-
-# Block Time
-- self.wait_until(timeout=600)
-+ self.wait_until(timeout=15)
-
-# Maturity (CHECK CONTEXT!)
-- self.generate(node, 100)
-+ self.generate(node, 8)  # OR keep 100 for COINBASE_MATURITY_2
-```
+Use the exact patterns from COMMON_FIXES.md. If your issue isn't covered there, it might be a new pattern worth documenting.
 
 ### 5. Test ALL Variants
 ```bash
@@ -179,12 +168,13 @@ For assumevalid/assumeutxo tests:
 ✅ **DO NOT skip regtest** - The regtest snapshot exists and must be used
 
 ## Common Mistakes to Avoid
-❌ Using Bitcoin values (50 BTC, 600s, bcrt1)
-❌ Ignoring test variants
-❌ Not checking v8.22.2 first
-❌ Fixing without understanding
+❌ Not checking COMMON_FIXES.md first
+❌ Using Bitcoin values instead of DigiByte values
+❌ Not testing all variants (--descriptors, --legacy-wallet)
+❌ Not checking v8.22.2 reference first
+❌ Fixing without understanding the root cause
 ❌ Working outside assigned group
-❌ Skipping or disabling tests
+❌ Skipping or disabling tests instead of fixing them
 
 ## When You're Blocked
 If completely blocked on a test:

@@ -416,6 +416,102 @@ assert_greater_than(bumped_tx["fee"], original_tx_info["fee"])
 
 ## Dandelion++ Issues
 
+### Pattern: Transaction Not Propagating Between Nodes
+**Symptoms:**
+- Transaction sent but not visible in other node's listtransactions
+- Node1 can't see transaction sent from Node0
+- Tests fail with "transaction not found" errors
+
+**Root Cause:**
+Dandelion++ privacy protocol delays transaction propagation via stem phase and embargo system.
+
+**Solution:**
+```python
+# Disable Dandelion++ in test setup:
+def set_test_params(self):
+    self.extra_args = [["-dandelion=0"]] * self.num_nodes
+```
+
+**Tests Affected:**
+- wallet_listtransactions.py
+- wallet_listreceivedby.py (when using -walletbroadcast=0)
+- wallet_reorgsrestore.py
+
+---
+
+## Initial Funding Issues
+
+### Pattern: Insufficient Funds for New Tests
+**Symptoms:**
+- `Insufficient funds` error
+- `bad-txns-inputs-missingorspent` error
+- Test tries to send coins but wallet has no balance
+
+**Root Cause:**
+Tests that create transactions need initial funding. Cached nodes have funds but new wallets don't.
+
+**Solution:**
+```python
+def run_test(self):
+    # Generate initial blocks to fund the wallet
+    from test_framework.blocktools import COINBASE_MATURITY_2
+    self.generate(self.nodes[0], COINBASE_MATURITY_2 + 1)
+    self.sync_blocks()
+    
+    # Now node0 has spendable coins...
+```
+
+**Tests Affected:**
+- wallet_conflicts.py
+- wallet_reorgsrestore.py
+- wallet_transactiontime_rescan.py
+
+---
+
+## WalletBroadcast Issues
+
+### Pattern: Transactions with -walletbroadcast=0
+**Symptoms:**
+- Transactions created but not in mempool
+- Other nodes don't see transactions
+- Mined blocks don't include expected transactions
+
+**Root Cause:**
+With `-walletbroadcast=0`, transactions stay local and aren't added to mempool.
+
+**Solution:**
+```python
+# After creating transaction with -walletbroadcast=0:
+txid = self.nodes[0].sendtoaddress(addr, amount)
+# Manually broadcast it:
+raw_tx = self.nodes[0].gettransaction(txid)["hex"]
+self.nodes[0].sendrawtransaction(raw_tx)
+```
+
+**Tests Affected:**
+- wallet_listreceivedby.py
+
+---
+
+## Fee Issues with Legacy Wallets
+
+### Pattern: High Fee Requirements for Legacy Wallets
+**Symptoms:**
+- `Fee exceeds maximum configured by user` error
+- Tests pass with descriptors but fail with legacy wallets
+
+**Root Cause:**
+Legacy wallets may estimate higher fees than descriptor wallets.
+
+**Solution:**
+```python
+# When restarting nodes, add higher maxtxfee:
+self.start_node(0, ["-walletbroadcast=0", "-dandelion=0", "-maxtxfee=100"])
+```
+
+**Tests Affected:**
+- wallet_listreceivedby.py --legacy-wallet
+
 ### Pattern: Transaction Not in Mempool
 **Symptoms:**
 - Transaction sent but not immediately visible

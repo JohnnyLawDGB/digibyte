@@ -27,12 +27,18 @@ class ListTransactionsTest(DigiByteTestFramework):
         self.num_nodes = 3
         # This test isn't testing txn relay/timing, so set whitelist on the
         # peers for instant txn relay. This speeds up the test run time 2-3x.
-        self.extra_args = [["-whitelist=noban@127.0.0.1", "-walletrbf=0"]] * self.num_nodes
+        # Disable Dandelion++ to ensure immediate transaction propagation
+        self.extra_args = [["-whitelist=noban@127.0.0.1", "-walletrbf=0", "-dandelion=0"]] * self.num_nodes
 
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()
 
     def run_test(self):
+        # Generate initial blocks to fund node0 and get out of IBD
+        from test_framework.blocktools import COINBASE_MATURITY_2
+        self.generate(self.nodes[0], COINBASE_MATURITY_2 + 1)
+        self.sync_all()
+        
         self.log.info("Test simple send from node0 to node1")
         txid = self.nodes[0].sendtoaddress(self.nodes[1].getnewaddress(), 0.1)
         self.sync_all()

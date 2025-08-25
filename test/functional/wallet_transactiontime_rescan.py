@@ -9,7 +9,7 @@ import concurrent.futures
 import time
 
 from test_framework.authproxy import JSONRPCException
-from test_framework.blocktools import COINBASE_MATURITY
+from test_framework.blocktools import COINBASE_MATURITY, COINBASE_MATURITY_2
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import (
     assert_equal,
@@ -74,7 +74,8 @@ class TransactionTimeRescanTest(DigiByteTestFramework):
         assert_equal(minernode.getblockcount(), 200)
 
         # generate some dgb to create transactions and check blockcount
-        initial_mine = COINBASE_MATURITY + 1
+        # Use COINBASE_MATURITY_2 since we're already at height 200
+        initial_mine = COINBASE_MATURITY_2 + 1
         self.generatetoaddress(minernode, initial_mine, m1)
         assert_equal(minernode.getblockcount(), initial_mine + 200)
 
@@ -86,8 +87,8 @@ class TransactionTimeRescanTest(DigiByteTestFramework):
         miner_wallet.sendtoaddress(wo1, 10)
 
         # generate blocks and check blockcount
-        self.generatetoaddress(minernode, COINBASE_MATURITY, m1)
-        assert_equal(minernode.getblockcount(), initial_mine + 300)
+        self.generatetoaddress(minernode, COINBASE_MATURITY_2, m1)
+        assert_equal(minernode.getblockcount(), initial_mine + 200 + COINBASE_MATURITY_2)
 
         # synchronize nodes and time
         self.sync_all()
@@ -97,8 +98,9 @@ class TransactionTimeRescanTest(DigiByteTestFramework):
         miner_wallet.sendtoaddress(wo2, 5)
 
         # generate blocks and check blockcount
+        # Use COINBASE_MATURITY for consistency (8 blocks)
         self.generatetoaddress(minernode, COINBASE_MATURITY, m1)
-        assert_equal(minernode.getblockcount(), initial_mine + 400)
+        assert_equal(minernode.getblockcount(), initial_mine + 200 + COINBASE_MATURITY_2 + COINBASE_MATURITY)
 
         # synchronize nodes and time
         self.sync_all()
@@ -108,8 +110,9 @@ class TransactionTimeRescanTest(DigiByteTestFramework):
         miner_wallet.sendtoaddress(wo3, 1)
 
         # generate more blocks and check blockcount
-        self.generatetoaddress(minernode, COINBASE_MATURITY, m1)
-        assert_equal(minernode.getblockcount(), initial_mine + 500)
+        # Previous count: initial_mine + 200 + COINBASE_MATURITY_2 + COINBASE_MATURITY, adding another COINBASE_MATURITY_2
+        self.generatetoaddress(minernode, COINBASE_MATURITY_2, m1)
+        assert_equal(minernode.getblockcount(), initial_mine + 200 + 2 * COINBASE_MATURITY_2 + COINBASE_MATURITY)
 
         self.log.info('Check user\'s final balance and transaction count')
         assert_equal(wo_wallet.getbalance(), 16)

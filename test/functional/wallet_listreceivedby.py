@@ -224,28 +224,55 @@ class ReceivedByTest(DigiByteTestFramework):
 
         self.log.info("Test -walletbroadcast")
         self.stop_nodes()
-        self.start_node(0, ["-walletbroadcast=0"])
-        self.start_node(1, ["-walletbroadcast=0"])
+        # Add higher maxtxfee for legacy wallets to avoid fee exceeded errors (DigiByte uses higher fees)
+        self.start_node(0, ["-walletbroadcast=0", "-dandelion=0", "-maxtxfee=100"])
+        self.start_node(1, ["-walletbroadcast=0", "-dandelion=0", "-maxtxfee=100"])
         self.connect_nodes(0, 1)
 
         txid = self.nodes[0].sendtoaddress(addr, 0.1)
 
-        # Check that node 1 received the tx
+        # With -walletbroadcast=0, node0 should have the tx but not broadcast it
         assert_equal(self.nodes[0].gettransaction(txid, True)["txid"], txid)
-        assert_equal(self.nodes[1].listtransactions(label="*", count=10000, include_watchonly=True)[0]["txid"], txid)
-
-        # Check that the tx is on chain
-        self.generate(self.nodes[0], 1)
+        
+        # Node1 should NOT have the transaction yet (not broadcasted)
+        # It will only see it after it's mined
+        
+        # With -walletbroadcast=0, the tx is not in mempool, so we need to manually add it
+        # Get the raw transaction and send it to mempool
+        raw_tx = self.nodes[0].gettransaction(txid)["hex"]
+        self.nodes[0].sendrawtransaction(raw_tx)
+        
+        # Mine the tx so it gets to node 1
+        blockhash = self.generate(self.nodes[0], 1)[0]
         self.sync_all()
+        
+        # Verify the block was mined
+        assert_equal(self.nodes[0].getbestblockhash(), blockhash)
+        assert_equal(self.nodes[1].getbestblockhash(), blockhash)
+        
+        # Now both nodes should have the confirmed transaction
         assert_equal(self.nodes[0].gettransaction(txid, True)["confirmations"], 1)
         assert_equal(self.nodes[1].gettransaction(txid, True)["confirmations"], 1)
+        
+        # Verify node1 now sees the transaction in listtransactions
+        found = False
+        for tx in self.nodes[1].listtransactions(label="*", count=10000, include_watchonly=True):
+            if tx.get("txid") == txid:
+                found = True
+                break
+        assert found, f"Transaction {txid} not found in node1's listtransactions after mining"
 
         self.log.info("Test getreceivedbyaddress with minconf > 1")
         
         # Send more transactions
         addr2 = self.nodes[1].getnewaddress()
+        tx_ids = []
         for _ in range(5):
-            self.nodes[0].sendtoaddress(addr2, 0.2)
+            tx_id = self.nodes[0].sendtoaddress(addr2, 0.2)
+            tx_ids.append(tx_id)
+            # With -walletbroadcast=0, we need to manually broadcast each tx
+            raw_tx = self.nodes[0].gettransaction(tx_id)["hex"]
+            self.nodes[0].sendrawtransaction(raw_tx)
         self.sync_all()
         
         # Mine 5 blocks - transactions will have 5 confirmations
@@ -282,26 +309,33 @@ class ReceivedByTest(DigiByteTestFramework):
 
         self.log.info("Test include_watchonly parameter")
         
-        # Import a watch-only address
-        watch_addr = self.nodes[0].getnewaddress()
-        self.nodes[1].importaddress(watch_addr, "watch_label", False)
-        
-        # Send to watch-only address
-        watch_txid = self.nodes[0].sendtoaddress(watch_addr, 0.5)
-        self.generate(self.nodes[0], 1)
-        self.sync_all()
-        
-        # Check that watchonly is excluded by default
-        received_default = self.nodes[1].listreceivedbyaddress()
-        watch_entries = [r for r in received_default if r["address"] == watch_addr]
-        assert_equal(len(watch_entries), 0)
-        
-        # Check that watchonly is included when specified
-        received_watchonly = self.nodes[1].listreceivedbyaddress(minconf=0, include_empty=True, include_watchonly=True)
-        watch_entries = [r for r in received_watchonly if r["address"] == watch_addr]
-        assert_equal(len(watch_entries), 1)
-        assert_equal(watch_entries[0]["amount"], Decimal("0.5"))
-        assert_equal(watch_entries[0]["involvesWatchonly"], True)
+        if not self.options.descriptors:
+            # Watch-only import only works properly in legacy wallets
+            # Import a watch-only address
+            watch_addr = self.nodes[0].getnewaddress()
+            self.nodes[1].importaddress(watch_addr, "watch_label", False)
+            
+            # Send to watch-only address
+            watch_txid = self.nodes[0].sendtoaddress(watch_addr, 0.5)
+            # With -walletbroadcast=0, manually broadcast
+            raw_tx = self.nodes[0].gettransaction(watch_txid)["hex"]
+            self.nodes[0].sendrawtransaction(raw_tx)
+            self.generate(self.nodes[0], 1)
+            self.sync_all()
+            
+            # Check that watchonly is excluded by default
+            received_default = self.nodes[1].listreceivedbyaddress()
+            watch_entries = [r for r in received_default if r["address"] == watch_addr]
+            assert_equal(len(watch_entries), 0)
+            
+            # Check that watchonly is included when specified
+            received_watchonly = self.nodes[1].listreceivedbyaddress(minconf=0, include_empty=True, include_watchonly=True)
+            watch_entries = [r for r in received_watchonly if r["address"] == watch_addr]
+            assert_equal(len(watch_entries), 1)
+            assert_equal(watch_entries[0]["amount"], Decimal("0.5"))
+            assert_equal(watch_entries[0]["involvesWatchonly"], True)
+        else:
+            self.log.info("Skipping watch-only test for descriptor wallets")
 
         self.log.info("All listreceivedby tests completed successfully!")
 

@@ -25,6 +25,12 @@ class TxConflicts(DigiByteTestFramework):
         self.skip_if_no_wallet()
 
     def get_utxo_of_value(self, from_tx_id, search_value):
+        # Get the actual UTXOs that match this transaction and value
+        utxos = self.nodes[0].listunspent()
+        for utxo in utxos:
+            if utxo['txid'] == from_tx_id and utxo['amount'] == Decimal(f"{search_value}"):
+                return utxo['vout']
+        # Fallback to the original method if not found in listunspent
         return next(tx_out["vout"] for tx_out in self.nodes[0].gettransaction(from_tx_id)["details"] if tx_out["amount"] == Decimal(f"{search_value}"))
 
     def run_test(self):

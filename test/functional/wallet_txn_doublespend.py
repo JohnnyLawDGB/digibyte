@@ -75,7 +75,8 @@ class TxnMallTest(DigiByteTestFramework):
 
         # First: use raw transaction API to send 1240 DGB to node1_address,
         # but don't broadcast:
-        doublespend_fee = Decimal('-.2')
+        # DigiByte uses lower fees than Bitcoin - 0.2 DGB would exceed maxtxfee
+        doublespend_fee = Decimal('-0.01')  # 0.01 DGB fee, reasonable for DigiByte
         rawtx_input_0 = {}
         rawtx_input_0["txid"] = fund_foo_txid
         rawtx_input_0["vout"] = find_output(self.nodes[0], fund_foo_txid, 1219)

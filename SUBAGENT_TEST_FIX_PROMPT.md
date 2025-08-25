@@ -41,15 +41,52 @@ REGTEST_BECH32 = 'dgbrt'        # NOT 'bcrt'
 # CRITICAL: Maturity switches at HEIGHT 145000 in ALL networks!
 ```
 
-## Your Fix Process (For Each Test)
+## Your Fix Process - TWO-PASS APPROACH
 
-### 1. Run Test & Capture Failure
+### PASS 1: QUICK FIXES (Do This FIRST for ALL Tests)
+**Goal: Fix 80% of tests in minutes, not hours**
+
+For EACH test in your group, apply these quick fixes FIRST:
+
+1. **Run test, identify error pattern**:
 ```bash
-./test/functional/[test_name].py --nocleanup 2>&1 | tee test_fix_logs/[test_name]_before.log
-grep -A10 "ERROR\|FAIL\|AssertionError" test_fix_logs/[test_name]_before.log
+./test/functional/[test_name].py 2>&1 | grep -A5 "ERROR\|AssertionError\|FAIL"
 ```
 
-### 2. Three-Way Comparison (CRITICAL - DO THIS FIRST!)
+2. **Match to COMMON_FIXES.md patterns**:
+   - `min relay fee not met` → Multiply fees by 1000
+   - `AssertionError.*50` → Change to 72000 
+   - `AssertionError.*100` → Use COINBASE_MATURITY_2
+   - `Insufficient funds` → Reduce amounts or fix rewards
+   - `not(0 == 5)` → Add `-dandelion=0` to nodes
+
+3. **Apply the most likely fix WITHOUT deep analysis**:
+```python
+# See error with "50"? Try:
+- assert_equal(balance, 50)
++ assert_equal(balance, 72000)
+
+# See fee error? Try:
+- fee_rate=10
++ fee_rate=1000
+
+# See mempool empty? Try:
+- self.extra_args = [[]]
++ self.extra_args = [["-dandelion=0"]]
+```
+
+4. **Quick test** - if it passes, mark fixed and move on:
+```bash
+./test/functional/[test_name].py  # PASS? Move to next test!
+```
+
+5. **Don't overthink in Pass 1** - if quick fix doesn't work, note it and continue to next test
+
+### PASS 2: DEEP DIVE (Only for Tests That Failed Pass 1)
+
+NOW go back and do thorough analysis ONLY for tests that didn't fix easily:
+
+### 1. Run Test & Capture Detailed Failure
 
 **⚠️ IMPORTANT: v8.22.2 tests WERE WORKING! Use them as your SOURCE OF TRUTH!**
 
@@ -120,16 +157,57 @@ Add to COMMON_FIXES.md:
 **Added by**: Sub-Agent Group X
 ```
 
-#### If Application Bug Found:
-Add to APPLICATION_BUGS.md:
-```markdown
-## BUG-XXX: [Description]
-**Found by**: Sub-Agent Group X
-**Test**: [test_name].py
-**File**: src/[file].cpp:[line]
-**Issue**: [description]
-**Fix**: [if you fixed it]
-```
+#### If Application Bug Found (CRITICAL - READ CAREFULLY):
+
+**STOP AND ANALYZE BEFORE ACTING:**
+1. **Is this really a bug or DigiByte-specific behavior?**
+   - Check v8.22.2 - did it work there?
+   - Check if it's a DigiByte feature (Dandelion++, multi-algo, etc.)
+   - Verify it's not intentional DigiByte logic
+
+2. **If it IS a real application bug:**
+   ```markdown
+   ## BUG-XXX: [Clear Description]
+   **Found by**: Sub-Agent Group X
+   **Test**: [test_name].py that exposed the bug
+   **Location**: src/[file].cpp:[line] (exact location)
+   **Symptoms**: [What fails in the test]
+   **Root Cause**: [Why it fails - be specific]
+   **Impact**: [What else might be affected]
+   
+   **Evidence**:
+   - Error message or incorrect behavior
+   - Expected vs actual values
+   - Code snippet showing the bug
+   
+   **Proposed Fix**:
+   ```cpp
+   // Show the exact code change needed
+   - incorrect_code
+   + correct_code
+   ```
+   
+   **Fix Applied**: [YES/NO - explain why]
+   **Risk Assessment**: [LOW/MEDIUM/HIGH - explain]
+   ```
+
+3. **BEFORE applying any fix to application code:**
+   - ✅ Verify fix doesn't break DigiByte-specific logic
+   - ✅ Check if fix affects consensus rules (BE VERY CAREFUL)
+   - ✅ Test fix doesn't break other tests
+   - ❌ DO NOT fix if it changes consensus behavior
+   - ❌ DO NOT fix if you're unsure about impact
+
+4. **If you fix the bug:**
+   - Apply minimal fix only
+   - Document EXACTLY what you changed
+   - Re-run ALL related tests
+   - Update APPLICATION_BUGS.md with "Fix Applied: YES"
+
+5. **If you DON'T fix the bug:**
+   - Document bug thoroughly in APPLICATION_BUGS.md
+   - Mark test as blocked if it can't pass without fix
+   - Note "Fix Applied: NO - [reason]"
 
 ### 7. Update Progress
 In TEST_FIX_PROGRESS.md, update your test:
@@ -146,6 +224,14 @@ In TEST_FIX_PROGRESS.md, update your test:
 
 ## STRICT RULES - VIOLATIONS = REJECTION
 
+### CONSENSUS-CRITICAL AREAS (DO NOT MODIFY WITHOUT EXPLICIT PERMISSION):
+⚠️ **src/validation.cpp** - Block/transaction validation rules
+⚠️ **src/consensus/** - All consensus rules
+⚠️ **src/pow.cpp** - Proof of work calculations
+⚠️ **GetBlockSubsidy()** - Block reward calculations
+⚠️ **Maturity checks** - Coinbase maturity rules
+⚠️ **Fork heights** - Any consensus activation heights
+
 ### FORBIDDEN Actions:
 ❌ **NEVER skip tests** - No @skip, @xfail, pytest.skip(), unittest.skip()
 ❌ **NEVER skip test sections** - Don't use if conditions to skip test logic
@@ -153,6 +239,7 @@ In TEST_FIX_PROGRESS.md, update your test:
 ❌ **NEVER change expected values without understanding** - Fix the code, not the test
 ❌ **NEVER use workarounds** - Apply proper fixes only
 ❌ **NEVER work outside your group** - Stay in your lane
+❌ **NEVER modify consensus code** - Unless you have explicit permission and understanding
 
 ### REQUIRED Actions:
 ✅ **MAKE tests PASS** - Actually fix the underlying issue
@@ -261,41 +348,53 @@ git show --name-only
 # Ensure no other groups' tests included
 ```
 
-## Example Fix Session
+## Example Sessions
+
+### Example: Two-Pass Workflow
 ```bash
-# Assigned: Group 4, test: wallet_basic.py
+# PASS 1: Quick fixes for ALL tests in your group
+# ================================================
+# For each test:
+./test/functional/[test].py 2>&1 | grep -A5 ERROR
 
-# 1. Run test
-./test/functional/wallet_basic.py 2>&1 | tee test_fix_logs/wallet_basic_before.log
+# Error: "AssertionError: not(50 == 72000)"
+# → Quick fix: Change 50 to 72000 → PASS! Next test
 
-# 2. See error: "AssertionError: 50 != 72000"
-grep AssertionError test_fix_logs/wallet_basic_before.log
+# Error: "min relay fee not met" 
+# → Quick fix: Multiply fees by 1000 → PASS! Next test
 
-# 3. Check COMMON_FIXES.md
-# Found: "Block Reward Pattern" - apply it
+# Error: "AssertionError: not(0 == 5)"
+# → Quick fix: Add -dandelion=0 → PASS! Next test
 
-# 4. Compare versions
-diff digibyte-v8.22.2/test/functional/wallet_basic.py test/functional/wallet_basic.py
-# Confirms: Need to change reward from 50 to 72000
+# Error: Complex error
+# → Can't quick fix - note it, continue to next test
 
-# 5. Fix the test
-vim test/functional/wallet_basic.py
-# Change: assert_equal(balance, 50) → assert_equal(balance, 72000)
+# PASS 1 RESULTS: Fixed most tests in minutes!
 
-# 6. Verify fix
-./test/functional/wallet_basic.py  # PASS
-./test/functional/wallet_basic.py --descriptors  # PASS
-
-# 7. Update tracking
-# - Update TEST_FIX_PROGRESS.md: mark as 🟢 Fixed
-# - Pattern already in COMMON_FIXES.md, no update needed
-
-# 8. Move to next test in group
+# PASS 2: Deep dive ONLY on remaining failures
+# =============================================
+# Now do thorough v8.22.2 comparison only for stubborn tests
 ```
 
-## Remember
+
+## Remember: TWO-PASS STRATEGY
+
+### PASS 1 (Quick Fixes - 15 minutes max):
+- ✅ Try COMMON_FIXES patterns first
+- ✅ Apply obvious fixes immediately
+- ✅ Don't analyze deeply - just pattern match
+- ✅ Move quickly through ALL tests
+- ✅ Goal: Fix 80% with simple changes
+
+### PASS 2 (Deep Analysis - as needed):
+- ✅ ONLY for tests that didn't fix in Pass 1
+- ✅ Check v8.22.2 reference
+- ✅ Do three-way comparison
+- ✅ Understand root cause
+- ✅ May discover application bugs
 
 You are a SUB-AGENT - you:
+- ✅ Use TWO-PASS approach for efficiency
 - ✅ Fix ONLY tests in your assigned group
 - ✅ Make tests ACTUALLY PASS (no skipping!)
 - ✅ Document all patterns and bugs found

@@ -13,8 +13,11 @@ You are the **ORCHESTRATOR** managing the systematic fixing of all failing Pytho
 1. **WORK_GROUPS.md** - Master list of all test groups and their status
 2. **TEST_FIX_PROGRESS.md** - Overall progress tracking
 3. **SUBAGENT_TEST_FIX_PROMPT.md** - Template for sub-agent instructions
-4. **APPLICATION_BUGS.md** - Aggregated application bugs found
-5. **COMMON_FIXES.md** - Shared knowledge base of fix patterns
+3. **CLAUDE.md** - DigiByte constants and project structure
+4. **COMMON_FIXES.md** - Check for existing patterns FIRST
+5. **APPLICATION_BUGS.md** - Log any application bugs you find
+6. **DIGIBYTE_FEE_ANALYSIS_V8.26.md** - Read for all fee related issues
+7. **doc/DANDELION_INFO.md** - Read for mempool and stempool related issues due to dandelion protocol in DigiByte
 
 ## Orchestration Strategy
 

@@ -5,7 +5,7 @@
 """Test createwallet watchonly arguments.
 """
 
-from test_framework.blocktools import COINBASE_MATURITY
+from test_framework.blocktools import COINBASE_MATURITY, COINBASE_MATURITY_2
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import (
     assert_equal,
@@ -19,6 +19,7 @@ class CreateWalletWatchonlyTest(DigiByteTestFramework):
 
     def set_test_params(self):
         self.num_nodes = 1
+        self.extra_args = [["-dandelion=0"]]
 
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()
@@ -40,7 +41,7 @@ class CreateWalletWatchonlyTest(DigiByteTestFramework):
         wo_wallet.importpubkey(pubkey=def_wallet.getaddressinfo(wo_change)['pubkey'])
 
         # generate some dgb for testing
-        self.generatetoaddress(node, COINBASE_MATURITY + 1, a1)
+        self.generatetoaddress(node, COINBASE_MATURITY_2 + 1, a1)
 
         # send 1 dgb to our watch-only address
         txid = def_wallet.sendtoaddress(wo_addr, 1)

@@ -29,7 +29,7 @@ but still know when to expect mixing due to the wallet being close to empty.
 
 import random
 from test_framework.test_framework import DigiByteTestFramework
-from test_framework.blocktools import COINBASE_MATURITY
+from test_framework.blocktools import COINBASE_MATURITY, COINBASE_MATURITY_2
 
 ADDRESS_TYPES = [
     "bech32m",
@@ -117,11 +117,13 @@ class AddressInputTypeGrouping(DigiByteTestFramework):
                 "-addresstype=bech32",
                 "-whitelist=noban@127.0.0.1",
                 "-txindex",
+                "-dandelion=0",
             ],
             [
                 "-addresstype=p2sh-segwit",
                 "-whitelist=noban@127.0.0.1",
                 "-txindex",
+                "-dandelion=0",
             ],
         ]
 
@@ -130,7 +132,7 @@ class AddressInputTypeGrouping(DigiByteTestFramework):
         self.skip_if_no_sqlite()
 
     def make_payment(self, A, B, v, addr_type):
-        fee_rate = random.randint(1, 20)
+        fee_rate = random.randint(10000, 20000)  # DigiByte minimum is 10000 sat/vB
         self.log.debug(f"Making payment of {v} DGB at fee_rate {fee_rate}")
         tx = B.sendtoaddress(
             address=A.getnewaddress(address_type=addr_type),
@@ -143,7 +145,7 @@ class AddressInputTypeGrouping(DigiByteTestFramework):
 
         # alias self.nodes[i] to A, B for readability
         A, B = self.nodes[0], self.nodes[1]
-        self.generate(A, COINBASE_MATURITY + 5)
+        self.generate(A, COINBASE_MATURITY_2 + 5)
 
         self.log.info("Creating mixed UTXOs in B's wallet")
         for v in generate_payment_values(3, 10):

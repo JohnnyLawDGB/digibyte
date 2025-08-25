@@ -53,7 +53,7 @@ Test that the nodes generate the correct change address type:
 from decimal import Decimal
 import itertools
 
-from test_framework.blocktools import COINBASE_MATURITY
+from test_framework.blocktools import COINBASE_MATURITY, COINBASE_MATURITY_2
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.descriptors import (
     descsum_create,
@@ -72,12 +72,12 @@ class AddressTypeTest(DigiByteTestFramework):
     def set_test_params(self):
         self.num_nodes = 6
         self.extra_args = [
-            ["-addresstype=legacy"],
-            ["-addresstype=p2sh-segwit"],
-            ["-addresstype=p2sh-segwit", "-changetype=bech32"],
-            ["-addresstype=bech32"],
-            ["-changetype=p2sh-segwit"],
-            [],
+            ["-addresstype=legacy", "-dandelion=0"],
+            ["-addresstype=p2sh-segwit", "-dandelion=0"],
+            ["-addresstype=p2sh-segwit", "-changetype=bech32", "-dandelion=0"],
+            ["-addresstype=bech32", "-dandelion=0"],
+            ["-changetype=p2sh-segwit", "-dandelion=0"],
+            ["-dandelion=0"],
         ]
         # whitelist all peers to speed up tx relay / mempool sync
         for args in self.extra_args:
@@ -229,7 +229,7 @@ class AddressTypeTest(DigiByteTestFramework):
     def run_test(self):
         # Mine 101 blocks on node5 to bring nodes out of IBD and make sure that
         # no coinbases are maturing for the nodes-under-test during the test
-        self.generate(self.nodes[5], COINBASE_MATURITY + 1)
+        self.generate(self.nodes[5], COINBASE_MATURITY_2 + 1)
 
         uncompressed_1 = "0496b538e853519c726a2c91e61ec11600ae1390813a627c66fb8be7947be63c52da7589379515d4e0a604f8141781e62294721166bf621e73a82cbf2342c858ee"
         uncompressed_2 = "047211a824f55b505228e4c3d5194c1fcfaa15a456abdf37f9b9d97a4040afc073dee6c89064984f03385237d92167c13e236446b417ab79a0fcae412ae3316b77"
@@ -266,7 +266,7 @@ class AddressTypeTest(DigiByteTestFramework):
             self.log.info("Sending from node {} ({}) with{} multisig using {}".format(from_node, self.extra_args[from_node], "" if multisig else "out", "default" if address_type is None else address_type))
             old_balances = self.get_balances()
             self.log.debug("Old balances are {}".format(old_balances))
-            to_send = (old_balances[from_node] / (COINBASE_MATURITY + 1)).quantize(Decimal("0.00000001"))
+            to_send = (old_balances[from_node] / (COINBASE_MATURITY_2 + 1)).quantize(Decimal("0.00000001"))
             sends = {}
             addresses = {}
 

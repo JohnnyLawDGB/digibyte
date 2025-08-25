@@ -76,6 +76,9 @@ def cli_get_info_string_to_dict(cli_get_info_string):
 
 
 class TestDigiByteCli(DigiByteTestFramework):
+    def add_options(self, parser):
+        self.add_wallet_options(parser)
+        
     def set_test_params(self):
         self.setup_clean_chain = True
         self.num_nodes = 1

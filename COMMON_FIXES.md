@@ -48,6 +48,15 @@ fee_rate = 1000  # 100x Bitcoin's rate (10 → 1000)
 # Bump fee tests - use higher increments
 bumped_fee = original_fee + Decimal('0.01')  # Not 0.00001
 
+# Balance tracking differences
+# DigiByte has different balance categorization logic than Bitcoin:
+# - getbalance() includes untrusted transactions (Bitcoin excludes them)
+# - getunconfirmedbalance() only includes truly unconfirmed inputs
+# - Balance categories (trusted vs untrusted_pending) work differently
+# Common fixes in balance tests:
+# Bitcoin: assert_equal(node.getbalance(), 0)  # excludes untrusted
+# DigiByte: assert_equal(node.getbalance(), untrusted_amount)  # includes untrusted
+
 # fundrawtransaction fee rate (for auto-calculated fees)
 funded_tx = node.fundrawtransaction(raw_tx, {"fee_rate": 1000})  # sat/kB
 ```

@@ -783,6 +783,110 @@ Wallets should have mature spendable funds after proper block generation.
 
 ---
 
+## New Patterns Discovered by Group 8 Sub-Agent
+
+### Pattern: Wallet Backup/Restore Node Startup Issues
+**Symptoms:**
+- `AssertionError: Unexpected stderr Warning: Skipping -wallet path that doesn't exist. Failed to load database path '/path/to/default_wallet'. Path does not exist.`
+- `FailedToStartError: digibyted exited with status 1 during initialization. Error: Failed to load database path '/path/to/wallets'. Data is not in recognized format.`
+
+**Root Cause:**
+Wallet backup/restore tests manipulate wallet directories during execution, then try to restart nodes that expect wallets to be present. The nodes fail to start because wallet paths are missing or corrupted.
+
+**Solution:**
+```python
+# For descriptor wallets - start without wallets, then restore via RPC:
+if self.options.descriptors:
+    self.start_node(0, ["-nowallet"])
+    self.start_node(1, ["-nowallet"]) 
+    self.start_node(2, ["-nowallet"])
+    
+    # Restore wallets using RPC
+    self.nodes[0].restorewallet(self.default_wallet_name, backup_path)
+    self.nodes[1].restorewallet(self.default_wallet_name, backup_path)
+    self.nodes[2].restorewallet(self.default_wallet_name, backup_path)
+else:
+    # For legacy wallets - start normally after file copy
+    self.start_node(0)
+    self.start_node(1)
+    self.start_node(2)
+
+# For dump/restore scenarios - start without wallets, create new ones:
+self.start_node(0, ["-nowallet"])
+self.start_node(1, ["-nowallet"])
+self.start_node(2, ["-nowallet"])
+
+# Create new empty wallets for import testing
+self.nodes[0].createwallet(self.default_wallet_name, descriptors=self.options.descriptors)
+self.nodes[1].createwallet(self.default_wallet_name, descriptors=self.options.descriptors)
+self.nodes[2].createwallet(self.default_wallet_name, descriptors=self.options.descriptors)
+```
+
+**Tests Affected:**
+- wallet_backup.py --descriptors - Fixed by using -nowallet + restorewallet RPC
+- wallet_backup.py --legacy-wallet - Fixed by using -nowallet + createwallet for dump restore
+
+**Verification:**
+Tests should complete without wallet path errors during node shutdown.
+
+---
+
+### Pattern: TestNode datadir vs datadir_path Attribute Confusion
+**Symptoms:**
+- `TypeError: expected str, bytes or os.PathLike object, not AuthServiceProxyWrapper`
+- Occurs when using `self.nodes[i].datadir` in os.path.join()
+
+**Root Cause:**
+TestNode objects don't have a `datadir` property - they have `datadir_path`. Using `datadir` gets interpreted as an RPC call via `__getattr__`, returning an `AuthServiceProxyWrapper`.
+
+**Solution:**
+```python
+# OLD (incorrect):
+wallet_path = os.path.join(self.nodes[1].datadir, self.chain, "wallets", wallet_name)
+
+# NEW (correct):
+wallet_path = os.path.join(self.nodes[1].datadir_path, self.chain, "wallets", wallet_name)
+```
+
+**Tests Affected:**
+- wallet_keypool_topup.py - Fixed by replacing all `.datadir` with `.datadir_path`
+
+**Verification:**
+Tests should run without TypeError about AuthServiceProxyWrapper.
+
+---
+
+### Pattern: Multi-Coinbase Maturity for Transaction Creation
+**Symptoms:**
+- `AssertionError: not(0E-8 == 72000)` or `AssertionError: not(balance == expected)`
+- Balance is 0 when test expects coinbase rewards to be spendable
+
+**Root Cause:**
+Tests using `COINBASE_MATURITY + 1` blocks expect single coinbase to be spendable, but need multiple mature coinbases for larger transaction amounts.
+
+**Solution:**
+```python
+# OLD (single coinbase):
+self.generatetoaddress(node, nblocks=COINBASE_MATURITY + 1, address=w1.getnewaddress())
+assert_equal(w1.getbalance(), 72000)  # Expects 1 block reward
+
+# NEW (multiple coinbases for larger amounts):
+self.generatetoaddress(node, nblocks=COINBASE_MATURITY_2 + 1, address=w1.getnewaddress())
+assert_equal(w1.getbalance(), 72000 * 2)  # Expects 2 block rewards
+
+# For miner funding:
+self.generatetoaddress(node, COINBASE_MATURITY_2 + 10, miner_wallet.getnewaddress())
+```
+
+**Tests Affected:**
+- wallet_multiwallet.py - Fixed by using COINBASE_MATURITY_2 + 1 blocks for 2x reward
+- wallet_reindex.py - Fixed by using COINBASE_MATURITY_2 for miner funding
+
+**Verification:**
+Balance assertions should match expected values based on number of mature coinbases.
+
+---
+
 ## New Patterns Discovered by Group 12 Sub-Agent
 
 ### Pattern: Bitcoin Private Keys and Addresses in SegWit Tests  

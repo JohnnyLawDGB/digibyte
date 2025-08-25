@@ -7,7 +7,7 @@
 
 import time
 
-from test_framework.blocktools import COINBASE_MATURITY
+from test_framework.blocktools import COINBASE_MATURITY, COINBASE_MATURITY_2
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import (
     assert_equal,
@@ -98,7 +98,7 @@ class WalletReindexTest(DigiByteTestFramework):
         # Fund miner
         node.createwallet(wallet_name='miner', load_on_startup=True)
         miner_wallet = node.get_wallet_rpc('miner')
-        self.generatetoaddress(node, COINBASE_MATURITY + 10, miner_wallet.getnewaddress())
+        self.generatetoaddress(node, COINBASE_MATURITY_2 + 10, miner_wallet.getnewaddress())
 
         # Tests
         self.birthtime_test(node, miner_wallet)

@@ -4,10 +4,10 @@ This file organizes the failing tests into logical work groups for systematic fi
 
 ## Overall Status (2025-08-25)
 - **Total Tests**: 312 (2 disabled for hanging)
-- **Passing Tests**: 234 (75%)
-- **Failed Tests**: 60 (19%)
+- **Passing Tests**: 241 (77%)
+- **Failed Tests**: 53 (17%)
 - **Disabled Tests**: 2 (feature_assumeutxo.py, feature_assumevalid.py - hanging)
-- **Groups**: 14 work groups (Groups 1, 3, 10-13 COMPLETE; Groups 2, 9 PARTIAL)
+- **Groups**: 14 work groups (Groups 1, 3, 10-13 COMPLETE; Groups 2, 8, 9 PARTIAL)
 - **Strategy**: Phase 1 (Groups 1-3) sequential, then parallel
 
 ## Work Group Status Legend
@@ -129,23 +129,23 @@ This file organizes the failing tests into logical work groups for systematic fi
 ```
 
 ## Group 8: Wallet Infrastructure
-**Status**: 🔴 Not Started
+**Status**: ⚠️ Partial - 7/11 passing
 **Priority**: MEDIUM (Phase 2) - Wallet management and persistence
 **Common Issues**: Wallet paths, backup/restore, keypool
-**Agent**: None
-**Progress**: 0/11 tests fixed
+**Agent**: Sub-Agent Group 8 (completed 2025-08-25)
+**Progress**: 7/11 tests fixed (64%)
 ```
-1. wallet_backup.py --descriptors
-2. wallet_backup.py --legacy-wallet
-3. wallet_multiwallet.py --descriptors
-4. wallet_multiwallet.py --legacy-wallet
-5. wallet_multiwallet.py --usecli
-6. wallet_keypool.py --descriptors
-7. wallet_keypool.py --legacy-wallet
-8. wallet_keypool_topup.py --descriptors
-9. wallet_keypool_topup.py --legacy-wallet
-10. wallet_reindex.py --descriptors
-11. wallet_reindex.py --legacy-wallet
+1. wallet_backup.py --descriptors ✅ PASSING
+2. wallet_backup.py --legacy-wallet ✅ PASSING
+3. wallet_multiwallet.py --descriptors ✅ PASSING
+4. wallet_multiwallet.py --legacy-wallet ✅ PASSING
+5. wallet_multiwallet.py --usecli ✅ PASSING
+6. wallet_keypool.py --descriptors ❌ FAILING (complex keypool exhaustion)
+7. wallet_keypool.py --legacy-wallet ❌ FAILING (complex keypool exhaustion)
+8. wallet_keypool_topup.py --descriptors ❌ FAILING (balance recovery issue)
+9. wallet_keypool_topup.py --legacy-wallet ❌ FAILING (balance recovery issue)
+10. wallet_reindex.py --descriptors ✅ PASSING
+11. wallet_reindex.py --legacy-wallet ✅ PASSING
 ```
 
 ## Group 9: Wallet Features

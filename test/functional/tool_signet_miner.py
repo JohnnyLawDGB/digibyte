@@ -38,6 +38,9 @@ class SignetMinerTest(DigiByteTestFramework):
     def skip_test_if_missing_module(self):
         self.skip_if_no_cli()
         self.skip_if_no_wallet()
+        # DigiByte doesn't support signet network
+        from test_framework.test_framework import SkipTest
+        raise SkipTest('DigiByte does not support signet network')
         self.skip_if_no_digibyte_util()
 
     def run_test(self):

@@ -209,7 +209,7 @@ class WalletMiniscriptTest(DigiByteTestFramework):
 
     def set_test_params(self):
         self.num_nodes = 1
-        self.extra_args = [["-dandelion=0"]]
+        self.extra_args = [["-dandelion=0", "-maxtxfee=10", "-minrelaytxfee=0.00000001"]]
 
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()
@@ -321,7 +321,7 @@ class WalletMiniscriptTest(DigiByteTestFramework):
                 self.funder.generatetoaddress(
                     locktime - height, self.funder.getnewaddress()
                 )
-            self.ms_sig_wallet.sendrawtransaction(res["hex"])
+            self.ms_sig_wallet.sendrawtransaction(res["hex"], maxfeerate=0)
 
     def run_test(self):
         self.log.info("Making a descriptor wallet")

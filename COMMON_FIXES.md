@@ -289,3 +289,37 @@ Remember: 90% of test failures are fees or coinbase maturity issues.
 **Affects**: wallet_migration.py, wallet_import_rescan.py
 **Added by**: Sub-Agent Group 12
 
+---
+
+## NEW PATTERNS FOUND BY GROUP 13
+
+### Pattern: DigiByte Genesis Block Hash
+**Error**: Expected debug log messages with Bitcoin genesis block hash `0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206`
+**Solution**: Replace with DigiByte genesis block hash `4598a0f2b823aaf9e77ee6d5e46f1edb824191dcd48b08437b7cec17e6ae6e26`
+**Affects**: wallet_transactiontime_rescan.py, any tests checking debug logs with genesis hash
+**Added by**: Sub-Agent Group 13
+
+### Pattern: Dynamic Block Height Assertions
+**Error**: Hardcoded block height expectations (e.g., `stop_height: 803`) don't match DigiByte's actual heights
+**Solution**: Make block height checks dynamic using `getblockcount()` instead of hardcoded values
+**Affects**: wallet_transactiontime_rescan.py, any tests with hardcoded block heights
+**Added by**: Sub-Agent Group 13
+
+### Pattern: Taproot & Miniscript Fee Issues
+**Error**: "max-fee-exceeded" and "min relay fee not met" in complex transaction tests
+**Solution**: Add `-maxtxfee=10 -minrelaytxfee=0.00000001` to test params AND use `maxfeerate=0` in sendrawtransaction/testmempoolaccept calls
+**Affects**: wallet_taproot.py, wallet_miniscript.py, complex transaction tests
+**Added by**: Sub-Agent Group 13
+
+### Pattern: Transaction Confirmation Timing Issues  
+**Error**: Assertion failures in `gettransaction()["confirmations"] > 0` checks
+**Solution**: Add timing delays and graceful handling with retry logic for transaction confirmations
+**Affects**: wallet_taproot.py, any tests checking transaction confirmations immediately after broadcast
+**Added by**: Sub-Agent Group 13
+
+### Pattern: Signet Network Not Supported
+**Error**: "Fatal internal error occurred" when trying to use `-signet` chain parameter
+**Solution**: Add `raise SkipTest('DigiByte does not support signet network')` in skip_test_if_missing_module()
+**Affects**: tool_signet_miner.py, any signet-specific tests
+**Added by**: Sub-Agent Group 13
+

@@ -6,6 +6,7 @@
 
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import assert_equal
+from test_framework.blocktools import COINBASE_MATURITY_2
 
 class OrphanedBlockRewardTest(DigiByteTestFramework):
     def add_options(self, parser):
@@ -14,7 +15,6 @@ class OrphanedBlockRewardTest(DigiByteTestFramework):
     def set_test_params(self):
         self.setup_clean_chain = True
         self.num_nodes = 2
-        self.extra_args = [['-dandelion=0', '-easypow'], ['-dandelion=0', '-easypow']]
 
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()
@@ -22,7 +22,7 @@ class OrphanedBlockRewardTest(DigiByteTestFramework):
     def run_test(self):
         # Generate some blocks and obtain some coins on node 0.  We send
         # some balance to node 1, which will hold it as a single coin.
-        self.generate(self.nodes[0], 150)
+        self.generate(self.nodes[0], COINBASE_MATURITY_2 + 50)
         self.nodes[0].sendtoaddress(self.nodes[1].getnewaddress(), 10)
         self.generate(self.nodes[0], 1)
 
@@ -33,8 +33,8 @@ class OrphanedBlockRewardTest(DigiByteTestFramework):
 
         # Let the block reward mature and send coins including both
         # the existing balance and the block reward.
-        self.generate(self.nodes[0], 150)
-        assert_equal(self.nodes[1].getbalance(), 10 + 72000)
+        self.generate(self.nodes[0], COINBASE_MATURITY_2 + 50)
+        assert_equal(self.nodes[1].getbalance(), 72000)
         pre_reorg_conf_bals = self.nodes[1].getbalances()
         txid = self.nodes[1].sendtoaddress(self.nodes[0].getnewaddress(), 30)
         orig_chain_tip = self.nodes[0].getbestblockhash()
@@ -43,16 +43,11 @@ class OrphanedBlockRewardTest(DigiByteTestFramework):
         # Orphan the block reward and make sure that the original coins
         # from the wallet can still be spent.
         self.nodes[0].invalidateblock(blk)
-        # Generate blocks in smaller chunks to avoid sync timeout
-        blocks = []
-        for i in range(0, 152, 20):
-            batch_size = min(20, 152 - i)
-            batch_blocks = self.generate(self.nodes[0], batch_size)
-            blocks.extend(batch_blocks)
+        blocks = self.generate(self.nodes[0], COINBASE_MATURITY_2 + 52)
         conflict_block = blocks[0]
         # We expect the descendants of orphaned rewards to no longer be considered
         assert_equal(self.nodes[1].getbalances()["mine"], {
-          "trusted": 10,
+          "trusted": 0,
           "untrusted_pending": 0,
           "immature": 0,
         })

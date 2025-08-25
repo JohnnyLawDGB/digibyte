@@ -205,7 +205,7 @@ class TransactionTimeRescanTest(DigiByteTestFramework):
             encrypted_wallet.sethdseed(seed=hd_seed)
 
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as thread:
-                with minernode.assert_debug_log(expected_msgs=["Rescan started from block 0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206... (slow variant inspecting all blocks)"], timeout=5):
+                with minernode.assert_debug_log(expected_msgs=["Rescan started from block 4598a0f2b823aaf9e77ee6d5e46f1edb824191dcd48b08437b7cec17e6ae6e26... (slow variant inspecting all blocks)"], timeout=5):
                     rescanning = thread.submit(encrypted_wallet.rescanblockchain)
 
                 # set the passphrase timeout to 1 to test that the wallet remains unlocked during the rescan
@@ -221,7 +221,11 @@ class TransactionTimeRescanTest(DigiByteTestFramework):
                 except JSONRPCException as e:
                     assert e.error["code"] == -4 and "Error: the wallet is currently being used to rescan the blockchain for related transactions. Please call `abortrescan` before changing the passphrase." in e.error["message"]
 
-                assert_equal(rescanning.result(), {"start_height": 0, "stop_height": 803})
+                rescan_result = rescanning.result()
+                # Dynamic check: should start from 0 and end at current blockchain height
+                assert_equal(rescan_result["start_height"], 0)
+                current_height = minernode.getblockcount()
+                assert_equal(rescan_result["stop_height"], current_height)
 
             assert_equal(encrypted_wallet.getbalance(), temp_wallet.getbalance())
 

@@ -55,7 +55,9 @@ TIME_GENESIS_BLOCK = 1296688602
 MAX_FUTURE_BLOCK_TIME = 2 * 60 * 60
 
 # Coinbase transaction outputs can only be spent after this number of new blocks (network rule)
-COINBASE_MATURITY = 100
+# DigiByte: Two maturity values
+COINBASE_MATURITY = 8      # Default for most operations
+COINBASE_MATURITY_2 = 100  # After certain height, for some operations
 
 # From BIP141
 WITNESS_COMMITMENT_HEADER = b"\xaa\x21\xa9\xed"

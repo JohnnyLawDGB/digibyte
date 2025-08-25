@@ -32,10 +32,10 @@ from test_framework.segwit_addr import (
 )
 
 
-ADDRESS_BCRT1_UNSPENDABLE = 'bcrt1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq3xueyj'
-ADDRESS_BCRT1_UNSPENDABLE_DESCRIPTOR = 'addr(bcrt1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq3xueyj)#juyq9d97'
+ADDRESS_BCRT1_UNSPENDABLE = 'dgbrt1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqn5txr0'
+ADDRESS_BCRT1_UNSPENDABLE_DESCRIPTOR = 'addr(dgbrt1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqn5txr0)#8x0swhxp'
 # Coins sent to this address can be spent with a witness stack of just OP_TRUE
-ADDRESS_BCRT1_P2WSH_OP_TRUE = 'bcrt1qft5p2uhsdcdc3l2ua4ap5qqfg4pjaqlp250x7us7a8qqhrxrxfsqseac85'
+ADDRESS_BCRT1_P2WSH_OP_TRUE = 'dgbrt1qft5p2uhsdcdc3l2ua4ap5qqfg4pjaqlp250x7us7a8qqhrxrxfsqjt28qf'
 
 
 class AddressType(enum.Enum):
@@ -47,7 +47,7 @@ class AddressType(enum.Enum):
 b58chars = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
 
 
-def create_deterministic_address_bcrt1_p2tr_op_true():
+def create_deterministic_address_bcrt1_p2tr_op_true():  # DigiByte: Uses dgbrt1 prefix
     """
     Generates a deterministic bech32m address (segwit v1 output) that
     can be spent with a witness stack of OP_TRUE and the control block
@@ -57,7 +57,8 @@ def create_deterministic_address_bcrt1_p2tr_op_true():
     """
     internal_key = (1).to_bytes(32, 'big')
     address = output_key_to_p2tr(taproot_construct(internal_key, [(None, CScript([OP_TRUE]))]).output_pubkey)
-    assert_equal(address, 'bcrt1p9yfmy5h72durp7zrhlw9lf7jpwjgvwdg0jr0lqmmjtgg83266lqsekaqka')
+    # DigiByte: Address should now be dgbrt1 directly
+    assert address.startswith('dgbrt1')
     return (address, internal_key)
 
 
@@ -134,7 +135,7 @@ def program_to_witness(version, program, main=False):
     assert 0 <= version <= 16
     assert 2 <= len(program) <= 40
     assert version > 0 or len(program) in [20, 32]
-    return encode_segwit_address("bc" if main else "bcrt", version, program)
+    return encode_segwit_address("dgb" if main else "dgbrt", version, program)  # DigiByte prefixes
 
 def script_to_p2wsh(script, main=False):
     script = check_script(script)

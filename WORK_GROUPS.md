@@ -166,19 +166,20 @@ This file organizes the failing tests into logical work groups for systematic fi
 ```
 
 ## Group 10: P2P Network Tests
-**Status**: 🔴 Not Started
+**Status**: 🟢 Complete
 **Priority**: LOW (Phase 3) - Network protocol issues
 **Common Issues**: Connection drops, peer disconnections, block/tx propagation
-**Agent**: None
-**Progress**: 0/6 tests fixed
+**Agent**: Sub-Agent Group 10 (completed 2025-08-25)
+**Progress**: 5/5 tests fixed
 ```
-1. p2p_orphan_handling.py
-2. p2p_sendheaders.py
-3. p2p_tx_download.py
-4. p2p_headers_sync_with_minchainwork.py
-5. p2p_invalid_tx.py
-6. p2p_invalid_tx.py --v2transport
+1. p2p_orphan_handling.py ✅ PASSING
+2. p2p_sendheaders.py ✅ PASSING
+3. p2p_tx_download.py ✅ PASSING (fixed - removed skip logic, added blockchain context)
+4. p2p_headers_sync_with_minchainwork.py ✅ PASSING
+5. p2p_invalid_tx.py ✅ PASSING
 ```
+
+**Note**: p2p_invalid_tx.py --v2transport works (not disabled as initially thought)
 
 ## Group 11: Interface & CLI Tests
 **Status**: 🟢 Complete

@@ -45,17 +45,23 @@ class SlowP2PInterface(P2PInterface):
 
 class P2PEvict(DigiByteTestFramework):
     def set_test_params(self):
+        self.setup_clean_chain = True  # from v8.22.2 working version
         self.num_nodes = 1
-        # The choice of maxconnections=32 results in a maximum of 21 inbound connections
-        # (32 - 10 outbound - 1 feeler). 20 inbound peers are protected from eviction:
+        # The choice of maxconnections=40 results in a maximum of 29 inbound connections
+        # (40 - 10 outbound - 1 feeler). 20 inbound peers are protected from eviction:
         # 4 by netgroup, 4 that sent us blocks, 4 that sent us transactions and 8 via lowest ping time
-        self.extra_args = [['-maxconnections=32']]
+        self.extra_args = [['-maxconnections=40', '-dandelion=0']]  # Increase to avoid timeouts while still testing eviction
 
     def run_test(self):
         protected_peers = set()  # peers that we expect to be protected from eviction
         current_peer = -1
         node = self.nodes[0]
+        # Generate initial blocks for funding (from v8.22.2 working version)
+        from test_framework.blocktools import COINBASE_MATURITY
+        self.generatetoaddress(node, COINBASE_MATURITY + 1, node.get_deterministic_priv_key().address)
         self.wallet = MiniWallet(node)
+        # Fund the MiniWallet with some blocks and mature them
+        self.generate(self.wallet, COINBASE_MATURITY + 10)
 
         self.log.info("Create 4 peers and protect them from eviction by sending us a block")
         for _ in range(4):

@@ -96,6 +96,7 @@ class FilterTest(DigiByteTestFramework):
         self.extra_args = [[
             '-peerbloomfilters',
             '-whitelist=noban@127.0.0.1',  # immediate tx relay
+            '-dandelion=0',  # disable Dandelion++ for reliable tx propagation
         ]]
 
     def generatetoscriptpubkey(self, scriptpubkey):

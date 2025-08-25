@@ -28,8 +28,8 @@ class FeeEstimatorTest(DigiByteTestFramework):
         # Node 0: Use fallback fee for initial data seeding
         # Node 1: Disable fallback fee to test estimation alone
         self.extra_args = [
-            ["-fallbackfee=0.01"],  # Node 0: With fallback fee
-            ["-fallbackfee=0"],     # Node 1: Without fallback fee
+            ["-fallbackfee=0.1", "-minrelaytxfee=0.001", "-dandelion=0"],  # Node 0: With fallback fee
+            ["-fallbackfee=0", "-minrelaytxfee=0.001", "-dandelion=0"],     # Node 1: Without fallback fee
         ]
 
     def skip_test_if_missing_module(self):

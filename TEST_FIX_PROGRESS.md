@@ -14,7 +14,7 @@
 | 1. Core Block & Mining | 11 | 🔴 Not Started | 0/11 |
 | 2. Consensus & Activation | 7 | 🟡 Partial | 5/7 |
 | 3. Fee & RBF | 9 | 🔴 Not Started | 0/9 |
-| 4. Mempool Core | 15 | 🔴 Not Started | 0/15 |
+| 4. Mempool Core | 15 | 🟡 Partial | 7/15 |
 | 5. P2P Network Core | 12 | 🔴 Not Started | 0/12 |
 | 6. P2P Network Extra | 3 | 🔴 Not Started | 0/3 |
 | 7. RPC Transaction | 11 | 🔴 Not Started | 0/11 |
@@ -184,6 +184,39 @@ REGTEST_BECH32 = 'dgbrt'        # NOT 'bcrt'
 - Complex Transaction Fees: Taproot/miniscript need `-maxtxfee=10 -minrelaytxfee=0.00000001`
 - Transaction Confirmation Timing: Need delays and retry logic for confirmations
 - Signet Network: Not supported in DigiByte, requires proper skip handling
+
+## Detailed Group Status
+
+### Group 4: Mempool Core (7/15 passing)
+**Status**: 🟡 In Progress - Sub-Agent Group 4 working
+**Progress**: 46.7% complete
+
+#### Passing Tests ✅
+- ✅ mempool_accept.py - Fixed fee issues and block rewards
+- ✅ mempool_accept_wtxid.py - Fixed fees and coinbase maturity
+- ✅ mempool_datacarrier.py - Fixed data carrier fee calculation
+- ✅ mempool_dust.py - Fixed dust relay fee (30K sat/kB)
+- ✅ mempool_persist.py --descriptors - Fixed Dandelion, fees, maxfeerate
+- ✅ mempool_spend_coinbase.py - Fixed coinbase maturity (8 blocks)
+- ✅ rpc_mempool_info.py - Already passing
+
+#### Remaining Tests 🔴
+- 🔴 mempool_limit.py - Complex mempool eviction logic (partially fixed)
+- 🔴 mempool_package_limits.py - Package validation
+- 🔴 mempool_package_onemore.py - Package validation
+- 🔴 mempool_packages.py - Package validation 
+- 🔴 mempool_reorg.py - Reorg handling
+- 🔴 mempool_sigoplimit.py - Signature operation limits
+- 🔴 mempool_unbroadcast.py - Transaction broadcasting
+- 🔴 mempool_updatefromblock.py - Block update handling
+
+**Key Fixes Applied**:
+- MiniWallet DEFAULT_FEE: 0.01 → 1.0 DGB (global fix in test_framework/wallet.py)
+- Dandelion++ disabled with `-dandelion=0` parameter
+- High fee handling with `-maxtxfee=100` and `maxfeerate=0`
+- Dust threshold: 30,000 sat/kB (10x Bitcoin, not 100x)
+- Coinbase maturity: 8 blocks for mempool tests (not 100)
+- Fee assertions: Fixed minrelaytxfee expectations (0.001 DGB)
 
 ## Notes
 

@@ -55,7 +55,7 @@ from test_framework.util import (
 )
 from test_framework.wallet_util import generate_keypair
 
-DEFAULT_FEE = Decimal("0.01")
+DEFAULT_FEE = Decimal("0.1")  # DigiByte: 1000x Bitcoin fees (0.1 DGB/kB)
 
 class MiniWalletMode(Enum):
     """Determines the transaction type the MiniWallet is creating and spending.

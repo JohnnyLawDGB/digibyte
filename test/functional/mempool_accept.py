@@ -50,7 +50,7 @@ class MempoolAcceptanceTest(DigiByteTestFramework):
     def set_test_params(self):
         self.num_nodes = 1
         self.extra_args = [[
-            '-txindex','-permitbaremultisig=0',
+            '-txindex','-permitbaremultisig=0', '-dandelion=0',
         ]] * self.num_nodes
         self.supports_cli = False
 
@@ -85,7 +85,7 @@ class MempoolAcceptanceTest(DigiByteTestFramework):
         tx = self.wallet.create_self_transfer()['tx']  # Pick a random coin(base) to spend
         tx.vout.append(deepcopy(tx.vout[0]))
         tx.vout[0].nValue = int(0.3 * COIN)
-        tx.vout[1].nValue = int(49 * COIN)
+        tx.vout[1].nValue = int(71998.7 * COIN)  # DigiByte: leave 1 DGB for fee
         raw_tx_in_block = tx.serialize().hex()
         txid_in_block = self.wallet.sendrawtransaction(from_node=node, tx_hex=raw_tx_in_block)
         self.generate(node, 1)
@@ -96,7 +96,7 @@ class MempoolAcceptanceTest(DigiByteTestFramework):
         )
 
         self.log.info('A transaction not in the mempool')
-        fee = Decimal('0.000007')
+        fee = Decimal('0.0007')  # DigiByte: 100x Bitcoin fees
         utxo_to_spend = self.wallet.get_utxo(txid=txid_in_block)  # use 0.3 DGB UTXO
         tx = self.wallet.create_self_transfer(utxo_to_spend=utxo_to_spend, sequence=MAX_BIP125_RBF_SEQUENCE)['tx']
         tx.vout[0].nValue = int((Decimal('0.3') - fee) * COIN)
@@ -116,7 +116,7 @@ class MempoolAcceptanceTest(DigiByteTestFramework):
         tx.vout[0].nValue = int(output_amount * COIN)
         raw_tx_final = tx.serialize().hex()
         tx = tx_from_hex(raw_tx_final)
-        fee_expected = Decimal('50.0') - output_amount
+        fee_expected = Decimal('72000.0') - output_amount  # DigiByte: 72000 DGB
         self.check_mempool_result(
             result_expected=[{'txid': tx.rehash(), 'allowed': True, 'vsize': tx.get_vsize(), 'fees': {'base': fee_expected}}],
             rawtxs=[tx.serialize().hex()],
@@ -364,10 +364,10 @@ class MempoolAcceptanceTest(DigiByteTestFramework):
         )
 
         self.log.info('Minimally-small transaction(in non-witness bytes) that is allowed')
-        tx.vout[0] = CTxOut(COIN - 1000, DUMMY_MIN_OP_RETURN_SCRIPT)
+        tx.vout[0] = CTxOut(COIN - 100000, DUMMY_MIN_OP_RETURN_SCRIPT)  # DigiByte: 100x fee
         assert_equal(len(tx.serialize_without_witness()), MIN_STANDARD_TX_NONWITNESS_SIZE)
         self.check_mempool_result(
-            result_expected=[{'txid': tx.rehash(), 'allowed': True, 'vsize': tx.get_vsize(), 'fees': { 'base': Decimal('0.00001000')}}],
+            result_expected=[{'txid': tx.rehash(), 'allowed': True, 'vsize': tx.get_vsize(), 'fees': { 'base': Decimal('0.001')}}],
             rawtxs=[tx.serialize().hex()],
             maxfeerate=0,
         )

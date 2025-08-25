@@ -31,6 +31,7 @@ class MempoolLimitTest(DigiByteTestFramework):
         self.extra_args = [[
             "-datacarriersize=100000",
             "-maxmempool=5",
+            "-dandelion=0",
         ]]
         self.supports_cli = False
 
@@ -75,8 +76,8 @@ class MempoolLimitTest(DigiByteTestFramework):
         assert tx_to_be_evicted_id not in node.getrawmempool()
 
         self.log.debug("Check that mempoolminfee is larger than minrelaytxfee")
-        assert_equal(node.getmempoolinfo()['minrelaytxfee'], Decimal('0.00001000'))
-        assert_greater_than(node.getmempoolinfo()['mempoolminfee'], Decimal('0.00001000'))
+        assert_equal(node.getmempoolinfo()['minrelaytxfee'], Decimal('0.00100000'))  # DigiByte: 100x Bitcoin
+        assert_greater_than(node.getmempoolinfo()['mempoolminfee'], Decimal('0.00100000'))  # DigiByte: 100x Bitcoin
 
     def test_rbf_carveout_disallowed(self):
         node = self.nodes[0]
@@ -135,8 +136,8 @@ class MempoolLimitTest(DigiByteTestFramework):
         self.restart_node(0, extra_args=self.extra_args[0])
 
         # Restarting the node resets mempool minimum feerate
-        assert_equal(node.getmempoolinfo()['minrelaytxfee'], Decimal('0.00001000'))
-        assert_equal(node.getmempoolinfo()['mempoolminfee'], Decimal('0.00001000'))
+        assert_equal(node.getmempoolinfo()['minrelaytxfee'], Decimal('0.00100000'))  # DigiByte: 100x Bitcoin
+        assert_equal(node.getmempoolinfo()['mempoolminfee'], Decimal('0.00100000'))  # DigiByte: 100x Bitcoin
 
         self.fill_mempool()
         current_info = node.getmempoolinfo()
@@ -165,7 +166,7 @@ class MempoolLimitTest(DigiByteTestFramework):
         # coin is no longer available, but the cache could still contains the tx.
         cpfp_parent = self.wallet.create_self_transfer(
             utxo_to_spend=mempool_evicted_tx["new_utxo"],
-            fee_rate=mempoolmin_feerate - Decimal('0.00001'),
+            fee_rate=mempoolmin_feerate - Decimal('0.001'),  # DigiByte: 100x Bitcoin
             confirmed_only=True)
         package_hex.append(cpfp_parent["hex"])
         parent_utxos.append(cpfp_parent["new_utxo"])
@@ -225,8 +226,8 @@ class MempoolLimitTest(DigiByteTestFramework):
         self.restart_node(0, extra_args=self.extra_args[0])
 
         # Restarting the node resets mempool minimum feerate
-        assert_equal(node.getmempoolinfo()['minrelaytxfee'], Decimal('0.00001000'))
-        assert_equal(node.getmempoolinfo()['mempoolminfee'], Decimal('0.00001000'))
+        assert_equal(node.getmempoolinfo()['minrelaytxfee'], Decimal('0.00100000'))  # DigiByte: 100x Bitcoin
+        assert_equal(node.getmempoolinfo()['mempoolminfee'], Decimal('0.00100000'))  # DigiByte: 100x Bitcoin
 
         self.fill_mempool()
         current_info = node.getmempoolinfo()
@@ -251,7 +252,7 @@ class MempoolLimitTest(DigiByteTestFramework):
         # coin is no longer available, but the cache could still contain the tx.
         cpfp_parent = self.wallet.create_self_transfer(
             utxo_to_spend=replaced_tx["new_utxo"],
-            fee_rate=mempoolmin_feerate - Decimal('0.00001'),
+            fee_rate=mempoolmin_feerate - Decimal('0.001'),  # DigiByte: 100x Bitcoin
             confirmed_only=True)
 
         self.wallet.rescan_utxos()
@@ -297,8 +298,8 @@ class MempoolLimitTest(DigiByteTestFramework):
 
         relayfee = node.getnetworkinfo()['relayfee']
         self.log.info('Check that mempoolminfee is minrelaytxfee')
-        assert_equal(node.getmempoolinfo()['minrelaytxfee'], Decimal('0.00001000'))
-        assert_equal(node.getmempoolinfo()['mempoolminfee'], Decimal('0.00001000'))
+        assert_equal(node.getmempoolinfo()['minrelaytxfee'], Decimal('0.00100000'))  # DigiByte: 100x Bitcoin
+        assert_equal(node.getmempoolinfo()['mempoolminfee'], Decimal('0.00100000'))  # DigiByte: 100x Bitcoin
 
         self.fill_mempool()
 
@@ -354,9 +355,9 @@ class MempoolLimitTest(DigiByteTestFramework):
         target_weight_each = 200000
         assert_greater_than(target_weight_each * 2, node.getmempoolinfo()["maxmempool"] - node.getmempoolinfo()["bytes"])
         # Should be a true CPFP: parent's feerate is just below mempool min feerate
-        parent_fee = (mempoolmin_feerate / 1000) * (target_weight_each // 4) - Decimal("0.00001")
+        parent_fee = (mempoolmin_feerate / 1000) * (target_weight_each // 4) - Decimal("0.001")  # DigiByte: 100x Bitcoin
         # Parent + child is above mempool minimum feerate
-        child_fee = (worst_feerate_dgbvb) * (target_weight_each // 4) - Decimal("0.00001")
+        child_fee = (worst_feerate_dgbvb) * (target_weight_each // 4) - Decimal("0.001")  # DigiByte: 100x Bitcoin
         # However, when eviction is triggered, these transactions should be at the bottom.
         # This assertion assumes parent and child are the same size.
         miniwallet.rescan_utxos()

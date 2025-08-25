@@ -20,6 +20,7 @@ from test_framework.wallet import MiniWallet
 class MempoolSpendCoinbaseTest(DigiByteTestFramework):
     def set_test_params(self):
         self.num_nodes = 1
+        self.extra_args = [['-dandelion=0', '-maxtxfee=100']]
 
     def run_test(self):
         wallet = MiniWallet(self.nodes[0])
@@ -29,12 +30,12 @@ class MempoolSpendCoinbaseTest(DigiByteTestFramework):
         self.nodes[0].invalidateblock(self.nodes[0].getblockhash(chain_height + 1))
         assert_equal(chain_height, self.nodes[0].getblockcount())
 
-        # Coinbase at height chain_height-100+1 ok in mempool, should
-        # get mined. Coinbase at height chain_height-100+2 is
+        # Coinbase at height chain_height-8+1 ok in mempool, should
+        # get mined. Coinbase at height chain_height-8+2 is
         # too immature to spend.
         coinbase_txid = lambda h: self.nodes[0].getblock(self.nodes[0].getblockhash(h))['tx'][0]
-        utxo_mature = wallet.get_utxo(txid=coinbase_txid(chain_height - 100 + 1))
-        utxo_immature = wallet.get_utxo(txid=coinbase_txid(chain_height - 100 + 2))
+        utxo_mature = wallet.get_utxo(txid=coinbase_txid(chain_height - 8 + 1))  # DigiByte: 8 block maturity
+        utxo_immature = wallet.get_utxo(txid=coinbase_txid(chain_height - 8 + 2))  # DigiByte: 8 block maturity
 
         spend_mature_id = wallet.send_self_transfer(from_node=self.nodes[0], utxo_to_spend=utxo_mature)["txid"]
 
@@ -42,7 +43,7 @@ class MempoolSpendCoinbaseTest(DigiByteTestFramework):
         immature_tx = wallet.create_self_transfer(utxo_to_spend=utxo_immature)
         assert_raises_rpc_error(-26,
                                 "bad-txns-premature-spend-of-coinbase",
-                                lambda: self.nodes[0].sendrawtransaction(immature_tx['hex']))
+                                lambda: self.nodes[0].sendrawtransaction(immature_tx['hex'], 0))  # DigiByte: maxfeerate=0
 
         # mempool should have just the mature one
         assert_equal(self.nodes[0].getrawmempool(), [spend_mature_id])
@@ -52,7 +53,7 @@ class MempoolSpendCoinbaseTest(DigiByteTestFramework):
         assert_equal(set(self.nodes[0].getrawmempool()), set())
 
         # ... and now previously immature can be spent:
-        spend_new_id = self.nodes[0].sendrawtransaction(immature_tx['hex'])
+        spend_new_id = self.nodes[0].sendrawtransaction(immature_tx['hex'], 0)  # DigiByte: maxfeerate=0
         assert_equal(self.nodes[0].getrawmempool(), [spend_new_id])
 
 

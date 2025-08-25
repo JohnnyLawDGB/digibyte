@@ -30,6 +30,7 @@ from test_framework.script import (
     hash160,
 )
 from test_framework.test_framework import DigiByteTestFramework
+from test_framework.blocktools import COINBASE_MATURITY_2
 from test_framework.util import (
     assert_equal,
 )
@@ -38,13 +39,14 @@ class MempoolWtxidTest(DigiByteTestFramework):
     def set_test_params(self):
         self.num_nodes = 1
         self.setup_clean_chain = True
+        self.extra_args = [['-dandelion=0']] * self.num_nodes
 
     def run_test(self):
         node = self.nodes[0]
 
         self.log.info('Start with empty mempool and 101 blocks')
         # The last 100 coinbase transactions are premature
-        blockhash = self.generate(node, 101)[0]
+        blockhash = self.generate(node, COINBASE_MATURITY_2 + 1)[0]
         txid = node.getblock(blockhash=blockhash, verbosity=2)["tx"][0]["txid"]
         assert_equal(node.getmempoolinfo()['size'], 0)
 
@@ -56,7 +58,7 @@ class MempoolWtxidTest(DigiByteTestFramework):
 
         parent = CTransaction()
         parent.vin.append(CTxIn(COutPoint(int(txid, 16), 0), b""))
-        parent.vout.append(CTxOut(int(9.99998 * COIN), script_pubkey))
+        parent.vout.append(CTxOut(int(9.998 * COIN), script_pubkey))  # DigiByte: 100x fee
         parent.rehash()
 
         privkeys = [node.get_deterministic_priv_key().key]
@@ -73,7 +75,7 @@ class MempoolWtxidTest(DigiByteTestFramework):
 
         child_one = CTransaction()
         child_one.vin.append(CTxIn(COutPoint(int(parent_txid, 16), 0), b""))
-        child_one.vout.append(CTxOut(int(9.99996 * COIN), child_script_pubkey))
+        child_one.vout.append(CTxOut(int(9.996 * COIN), child_script_pubkey))  # DigiByte: 100x fee
         child_one.wit.vtxinwit.append(CTxInWitness())
         child_one.wit.vtxinwit[0].scriptWitness.stack = [b'Preimage', b'\x01', witness_script]
         child_one_wtxid = child_one.getwtxid()

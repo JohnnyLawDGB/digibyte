@@ -55,7 +55,7 @@ class MempoolPersistTest(DigiByteTestFramework):
 
     def set_test_params(self):
         self.num_nodes = 3
-        self.extra_args = [[], ["-persistmempool=0"], []]
+        self.extra_args = [["-dandelion=0", "-maxtxfee=100"], ["-persistmempool=0", "-dandelion=0", "-maxtxfee=100"], ["-dandelion=0", "-maxtxfee=100"]]
 
     def run_test(self):
         self.mini_wallet = MiniWallet(self.nodes[2])
@@ -90,7 +90,7 @@ class MempoolPersistTest(DigiByteTestFramework):
         assert_equal(fees['base'], fees['modified'])
         self.nodes[0].prioritisetransaction(txid=last_txid, fee_delta=1000)
         fees = self.nodes[0].getmempoolentry(txid=last_txid)['fees']
-        assert_equal(fees['base'] + Decimal('0.00001000'), fees['modified'])
+        assert_equal(fees['base'] + Decimal('0.00001'), fees['modified'])  # 1000 satoshi fee delta
 
         self.log.info('Check the total base fee is unchanged after prioritisetransaction')
         assert_equal(total_fee_old, self.nodes[0].getmempoolinfo()['total_fee'])
@@ -128,13 +128,13 @@ class MempoolPersistTest(DigiByteTestFramework):
 
         self.log.debug('Verify prioritization is loaded correctly')
         fees = self.nodes[0].getmempoolentry(txid=last_txid)['fees']
-        assert_equal(fees['base'] + Decimal('0.00001000'), fees['modified'])
+        assert_equal(fees['base'] + Decimal('0.00001'), fees['modified'])  # 1000 satoshi fee delta
 
         self.log.debug('Verify all fields are loaded correctly')
         assert_equal(last_entry, self.nodes[0].getmempoolentry(txid=last_txid))
-        self.nodes[0].sendrawtransaction(tx_prioritised_not_submitted['hex'])
+        self.nodes[0].sendrawtransaction(tx_prioritised_not_submitted['hex'], 0)  # DigiByte: maxfeerate=0
         entry_prioritised_before_restart = self.nodes[0].getmempoolentry(txid=tx_prioritised_not_submitted['txid'])
-        assert_equal(entry_prioritised_before_restart['fees']['base'] + Decimal('0.00009999'), entry_prioritised_before_restart['fees']['modified'])
+        assert_equal(entry_prioritised_before_restart['fees']['base'] + Decimal('0.00009999'), entry_prioritised_before_restart['fees']['modified'])  # 99990 satoshi fee delta
 
         # Verify accounting of mempool transactions after restart is correct
         if self.is_sqlite_compiled():
@@ -232,8 +232,8 @@ class MempoolPersistTest(DigiByteTestFramework):
         self.nodes[0].prioritisetransaction(tx_node01["txid"], 0, COIN)
         self.nodes[0].prioritisetransaction(tx_node01_secret["txid"], 0, 2 * COIN)
         self.nodes[1].prioritisetransaction(tx_node01_secret["txid"], 0, 3 * COIN)
-        self.nodes[0].sendrawtransaction(tx_node01["hex"])
-        self.nodes[1].sendrawtransaction(tx_node01["hex"])
+        self.nodes[0].sendrawtransaction(tx_node01["hex"], 0)  # DigiByte: maxfeerate=0
+        self.nodes[1].sendrawtransaction(tx_node01["hex"], 0)  # DigiByte: maxfeerate=0
         assert tx_node0["txid"] in self.nodes[0].getrawmempool()
         assert not tx_node0["txid"] in self.nodes[1].getrawmempool()
         assert not tx_node1["txid"] in self.nodes[0].getrawmempool()
@@ -256,7 +256,7 @@ class MempoolPersistTest(DigiByteTestFramework):
         entry_node01 = self.nodes[1].getmempoolentry(tx_node01["txid"])
         assert_equal(entry_node01["fees"]["base"] + 1, entry_node01["fees"]["modified"])
         # Deltas for not-yet-submitted transactions should be applied as well (prioritisation is stackable).
-        self.nodes[1].sendrawtransaction(tx_node01_secret["hex"])
+        self.nodes[1].sendrawtransaction(tx_node01_secret["hex"], 0)  # DigiByte: maxfeerate=0
         entry_node01_secret = self.nodes[1].getmempoolentry(tx_node01_secret["txid"])
         assert_equal(entry_node01_secret["fees"]["base"] + 5, entry_node01_secret["fees"]["modified"])
         self.stop_nodes()

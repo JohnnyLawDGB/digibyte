@@ -219,7 +219,7 @@ When a test fails, check in this order:
 
 **Only add to this file if you find a UNIQUE issue not covered above.**
 
-Most test failures are variations of the 5 issues listed. Before adding a new pattern:
+Most test failures are variations of the 7 issues listed. Before adding a new pattern:
 1. Check if it's really a fee, maturity, or Dandelion issue in disguise
 2. Verify it affects multiple tests (not just one)
 3. Keep additions brief - just the pattern and fix

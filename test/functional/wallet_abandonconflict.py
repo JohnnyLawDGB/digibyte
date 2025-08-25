@@ -12,7 +12,7 @@
 """
 from decimal import Decimal
 
-from test_framework.blocktools import COINBASE_MATURITY
+from test_framework.blocktools import COINBASE_MATURITY, COINBASE_MATURITY_2
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import (
     assert_equal,
@@ -26,7 +26,7 @@ class AbandonConflictTest(DigiByteTestFramework):
 
     def set_test_params(self):
         self.num_nodes = 2
-        self.extra_args = [["-minrelaytxfee=0.00001"], []]
+        self.extra_args = [["-minrelaytxfee=0.001", "-dandelion=0"], ["-dandelion=0"]]
         # whitelist peers to speed up tx relay / mempool sync
         for args in self.extra_args:
             args.append("-whitelist=noban@127.0.0.1")
@@ -71,30 +71,30 @@ class AbandonConflictTest(DigiByteTestFramework):
         inputs.append({"txid": txB, "vout": nB})
         outputs = {}
 
-        outputs[alice.getnewaddress()] = Decimal("14.99998")
+        outputs[alice.getnewaddress()] = Decimal("14.99")
         outputs[bob.getnewaddress()] = Decimal("5")
         signed = alice.signrawtransactionwithwallet(alice.createrawtransaction(inputs, outputs))
-        txAB1 = self.nodes[0].sendrawtransaction(signed["hex"])
+        txAB1 = self.nodes[0].sendrawtransaction(signed["hex"], maxfeerate=0)
 
-        # Identify the 14.99998dgb output
-        nAB = next(tx_out["vout"] for tx_out in alice.gettransaction(txAB1)["details"] if tx_out["amount"] == Decimal("14.99998"))
+        # Identify the 14.99dgb output
+        nAB = next(tx_out["vout"] for tx_out in alice.gettransaction(txAB1)["details"] if tx_out["amount"] == Decimal("14.99"))
 
         #Create a child tx spending AB1 and C
         inputs = []
         inputs.append({"txid": txAB1, "vout": nAB})
         inputs.append({"txid": txC, "vout": nC})
         outputs = {}
-        outputs[alice.getnewaddress()] = Decimal("24.9996")
+        outputs[alice.getnewaddress()] = Decimal("24.98")
         signed2 = alice.signrawtransactionwithwallet(alice.createrawtransaction(inputs, outputs))
-        txABC2 = self.nodes[0].sendrawtransaction(signed2["hex"])
+        txABC2 = self.nodes[0].sendrawtransaction(signed2["hex"], maxfeerate=0)
 
         # Create a child tx spending ABC2
-        signed3_change = Decimal("24.999")
+        signed3_change = Decimal("24.97")
         inputs = [{"txid": txABC2, "vout": 0}]
         outputs = {alice.getnewaddress(): signed3_change}
         signed3 = alice.signrawtransactionwithwallet(alice.createrawtransaction(inputs, outputs))
         # note tx is never directly referenced, only abandoned as a child of the above
-        self.nodes[0].sendrawtransaction(signed3["hex"])
+        self.nodes[0].sendrawtransaction(signed3["hex"], maxfeerate=0)
 
         # In mempool txs from self should increase balance from change
         newbalance = alice.getbalance()
@@ -103,7 +103,7 @@ class AbandonConflictTest(DigiByteTestFramework):
 
         # Restart the node with a higher min relay fee so the parent tx is no longer in mempool
         # TODO: redo with eviction
-        self.restart_node(0, extra_args=["-minrelaytxfee=0.0001"])
+        self.restart_node(0, extra_args=["-minrelaytxfee=0.001", "-dandelion=0"])
         alice = self.nodes[0].get_wallet_rpc(self.default_wallet_name)
         assert self.nodes[0].getmempoolinfo()['loaded']
 
@@ -139,7 +139,7 @@ class AbandonConflictTest(DigiByteTestFramework):
             assert_equal(tx['trusted'], False)
 
         # Verify that even with a low min relay fee, the tx is not reaccepted from wallet on startup once abandoned
-        self.restart_node(0, extra_args=["-minrelaytxfee=0.00001"])
+        self.restart_node(0, extra_args=["-minrelaytxfee=0.001"])
         alice = self.nodes[0].get_wallet_rpc(self.default_wallet_name)
         assert self.nodes[0].getmempoolinfo()['loaded']
 
@@ -149,24 +149,24 @@ class AbandonConflictTest(DigiByteTestFramework):
         # But if it is received again then it is unabandoned
         # And since now in mempool, the change is available
         # But its child tx remains abandoned
-        self.nodes[0].sendrawtransaction(signed["hex"])
+        self.nodes[0].sendrawtransaction(signed["hex"], maxfeerate=0)
         newbalance = alice.getbalance()
-        assert_equal(newbalance, balance - Decimal("20") + Decimal("14.99998"))
+        assert_equal(newbalance, balance - Decimal("20") + Decimal("14.99"))
         balance = newbalance
 
         # Send child tx again so it is unabandoned
-        self.nodes[0].sendrawtransaction(signed2["hex"])
+        self.nodes[0].sendrawtransaction(signed2["hex"], maxfeerate=0)
         newbalance = alice.getbalance()
-        assert_equal(newbalance, balance - Decimal("10") - Decimal("14.99998") + Decimal("24.9996"))
+        assert_equal(newbalance, balance - Decimal("10") - Decimal("14.99") + Decimal("24.98"))
         balance = newbalance
 
         # Remove using high relay fee again
-        self.restart_node(0, extra_args=["-minrelaytxfee=0.0001"])
+        self.restart_node(0, extra_args=["-minrelaytxfee=0.001", "-dandelion=0"])
         alice = self.nodes[0].get_wallet_rpc(self.default_wallet_name)
         assert self.nodes[0].getmempoolinfo()['loaded']
         assert_equal(len(self.nodes[0].getrawmempool()), 0)
         newbalance = alice.getbalance()
-        assert_equal(newbalance, balance - Decimal("24.9996"))
+        assert_equal(newbalance, balance - Decimal("24.98"))
         balance = newbalance
 
         self.log.info("Test transactions conflicted by a double spend")
@@ -182,7 +182,7 @@ class AbandonConflictTest(DigiByteTestFramework):
         outputs[bob.getnewaddress()] = Decimal("5.9999")
         tx = alice.createrawtransaction(inputs, outputs)
         signed = alice.signrawtransactionwithwallet(tx)
-        double_spend_txid = self.nodes[1].sendrawtransaction(signed["hex"])
+        double_spend_txid = self.nodes[1].sendrawtransaction(signed["hex"], maxfeerate=0)
         self.connect_nodes(0, 1)
         self.generate(self.nodes[1], 1)
 

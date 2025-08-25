@@ -246,7 +246,7 @@ interface_digibyte_cli.py --legacy-wallet
 ```
 
 ## Group 15: File & Tool Operations (5 tests)
-**Status**: 🔴 Not Started
+**Status**: ✅ Complete
 **Common Issues**: Tool operations, file loading
 ```
 feature_loadblock.py

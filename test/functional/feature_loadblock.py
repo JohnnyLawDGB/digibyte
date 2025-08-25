@@ -16,7 +16,7 @@ import sys
 import tempfile
 import urllib
 
-from test_framework.blocktools import COINBASE_MATURITY
+from test_framework.blocktools import COINBASE_MATURITY_2
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import assert_equal
 
@@ -29,7 +29,7 @@ class LoadblockTest(DigiByteTestFramework):
 
     def run_test(self):
         self.nodes[1].setnetworkactive(state=False)
-        self.generate(self.nodes[0], COINBASE_MATURITY, sync_fun=self.no_op)
+        self.generate(self.nodes[0], COINBASE_MATURITY_2, sync_fun=self.no_op)
 
         # Parsing the url of our node to get settings for config file
         data_dir = self.nodes[0].datadir_path

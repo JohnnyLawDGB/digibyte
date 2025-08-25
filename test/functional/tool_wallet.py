@@ -26,6 +26,7 @@ class ToolWalletTest(DigiByteTestFramework):
         self.num_nodes = 1
         self.setup_clean_chain = True
         self.rpc_timeout = 120
+        self.extra_args = [["-maxtxfee=10"]]
 
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()
@@ -421,14 +422,14 @@ class ToolWalletTest(DigiByteTestFramework):
             child_txid = child_send_res["txid"]
             child_txid_bytes = bytes.fromhex(child_txid)[::-1]
             if (child_txid_bytes > parent_txid_bytes):
-                wallet.sendrawtransaction(child_send_res["hex"])
+                wallet.sendrawtransaction(child_send_res["hex"], maxfeerate=0)
                 break
             locktime += 1
 
         # conflict with parent
-        conflict_unsigned = self.nodes[0].createrawtransaction(inputs=[conflict_utxo], outputs=[{wallet.getnewaddress(): 9.9999}])
+        conflict_unsigned = self.nodes[0].createrawtransaction(inputs=[conflict_utxo], outputs=[{wallet.getnewaddress(): 9.9}])
         conflict_signed = wallet.signrawtransactionwithwallet(conflict_unsigned)["hex"]
-        conflict_txid = self.nodes[0].sendrawtransaction(conflict_signed)
+        conflict_txid = self.nodes[0].sendrawtransaction(conflict_signed, maxfeerate=0)
         self.generate(self.nodes[0], 1)
         assert_equal(wallet.gettransaction(txid=parent_txid)["confirmations"], -1)
         assert_equal(wallet.gettransaction(txid=child_txid)["confirmations"], -1)

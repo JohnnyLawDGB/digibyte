@@ -26,13 +26,15 @@ SUBSIDY = 72000  # DGB, NOT 50 BTC!
 
 ### DigiByte Fee Structure
 ```python
-# DigiByte uses satoshis/KvB (not vB like Bitcoin)
-MIN_RELAY_TX_FEE = Decimal('0.001')  # DGB/kB = 1000 sat/kB
-DEFAULT_FEE = Decimal('0.1')         # DGB/kB = 100000 sat/kB
+# DigiByte uses satoshis/kB (not vB like Bitcoin)
+# IMPORTANT: DigiByte fees are 100x Bitcoin fees (NOT 1000x!)
+MIN_RELAY_TX_FEE = Decimal('0.001')  # DGB/kB = 100000 sat/kB (Bitcoin: 1000 sat/kB)
+DEFAULT_FEE = Decimal('0.1')         # DGB/kB = 10000000 sat/kB (Bitcoin: 100000 sat/kB)
 
-# Common fixes:
-# Bitcoin: 0.00001 BTC → DigiByte: 0.001 DGB
-# Bitcoin: fee_rate=10 → DigiByte: fee_rate=1000
+# Common fixes (100x multiplier):
+# Bitcoin: 0.00001 BTC → DigiByte: 0.001 DGB (100x)
+# Bitcoin: fee_rate=10 → DigiByte: fee_rate=1000 (100x)
+# Bitcoin: 1000 sat/kB → DigiByte: 100000 sat/kB (100x)
 ```
 
 ### Quick Fixes
@@ -40,8 +42,8 @@ DEFAULT_FEE = Decimal('0.1')         # DGB/kB = 100000 sat/kB
 # Insufficient funds error - reduce output amount
 output_amount = Decimal('0.999')  # Instead of 0.99999
 
-# Fee rate adjustments
-fee_rate = 1000  # sat/kB instead of 10 sat/vB
+# Fee rate adjustments (100x multiplier)
+fee_rate = 1000  # 100x Bitcoin's rate (10 → 1000)
 
 # Bump fee tests - use higher increments
 bumped_fee = original_fee + Decimal('0.01')  # Not 0.00001
@@ -203,7 +205,7 @@ self.nodes[0].add_p2p_connection(P2PInterface(), port=14022)  # DigiByte
 
 When a test fails, check in this order:
 
-1. **Fee error?** → Multiply fee rates by 100-1000x
+1. **Fee error?** → Multiply fee rates by 100x (NOT 1000x!)
 2. **Maturity error?** → Use COINBASE_MATURITY (8) not 100
 3. **Transaction not found?** → Add `-dandelion=0` to all nodes
 4. **Address validation?** → Check prefix (dgbrt, not bcrt)
@@ -223,3 +225,14 @@ Most test failures are variations of the 5 issues listed. Before adding a new pa
 3. Keep additions brief - just the pattern and fix
 
 Remember: 90% of test failures are fees or coinbase maturity issues.
+
+---
+
+## NEW PATTERNS FOUND BY GROUP 15
+
+### Pattern: Multi-Algorithm Mining Issues
+**Error**: Algorithm 'sha256d' is not currently active.
+**Solution**: Add `-easypow` to extra_args to postpone multi-algo activation
+**Affects**: feature_reindex_readonly.py, any tests using `generateblock()`
+**Added by**: Sub-Agent Group 15
+

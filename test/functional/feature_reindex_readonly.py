@@ -16,14 +16,12 @@ class BlockstoreReindexTest(DigiByteTestFramework):
     def set_test_params(self):
         self.setup_clean_chain = True
         self.num_nodes = 1
-        self.extra_args = [["-fastprune"]]
+        self.extra_args = [["-fastprune", "-easypow"]]
 
     def reindex_readonly(self):
-        self.log.debug("Generate block big enough to start second block file")
-        fastprune_blockfile_size = 0x10000
-        opreturn = "6a"
-        nulldata = fastprune_blockfile_size * "ff"
-        self.generateblock(self.nodes[0], output=f"raw({opreturn}{nulldata})", transactions=[])
+        self.log.debug("Generate blocks big enough to start second block file")
+        # Generate enough blocks to fill the first block file (with fastprune)
+        self.generate(self.nodes[0], 2000)
         self.stop_node(0)
 
         assert (self.nodes[0].chain_path / "blocks" / "blk00000.dat").exists()

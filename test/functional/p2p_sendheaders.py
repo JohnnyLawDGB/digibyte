@@ -106,7 +106,7 @@ from test_framework.util import (
     assert_equal,
 )
 
-DIRECT_FETCH_RESPONSE_TIME = 0.05
+DIRECT_FETCH_RESPONSE_TIME = 0.1  # DigiByte: Use longer timeout like v8.22.2
 
 class BaseNode(P2PInterface):
     def __init__(self):

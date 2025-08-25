@@ -4,8 +4,8 @@ This file organizes failing tests into logical groups for systematic fixing. Eac
 
 ## Overall Status (2025-08-25)
 - **Total Tests**: 278 entries
-- **Passing**: 112 (40.3%)
-- **Failing**: 152 (54.7%)
+- **Passing**: 120 (43.2%)
+- **Failing**: 144 (51.8%)
 - **Skipped**: 14 (5.0%)
 
 ## Work Groups Overview
@@ -232,7 +232,7 @@ feature_notifications.py
 ```
 
 ## Group 14: Wallet Lists & History (8 tests)
-**Status**: ✅ Complete
+**Status**: ✅ Complete (All 8 passing)
 **Common Issues**: Transaction history, received amounts
 ```
 wallet_listreceivedby.py --descriptors

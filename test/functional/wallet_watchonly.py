@@ -57,9 +57,7 @@ class CreateWalletWatchonlyTest(DigiByteTestFramework):
         self.log.info('Testing getbalance watch-only defaults')
         assert_equal(wo_wallet.getbalance(), 1)
         assert_equal(len(wo_wallet.listtransactions()), 1)
-        # Note: DigiByte behavior differs here - returns 1.0 instead of 0
-        # This may be a difference in watch-only wallet implementation
-        assert_equal(wo_wallet.getbalance(include_watchonly=False), 1)
+        assert_equal(wo_wallet.getbalance(include_watchonly=False), 0)
 
         self.log.info('Test sending from a watch-only wallet raises RPC error')
         msg = "Error: Private keys are disabled for this wallet"

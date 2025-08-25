@@ -2,10 +2,10 @@
 
 **Last Updated**: 2025-08-25  
 **Total Tests**: 312 (excluded p2p_leak_tx.py --v2transport, feature_assumeutxo.py, feature_assumevalid.py)  
-**Tests Passing**: 241 (77%)
-**Tests Failing**: 53 (17%)
+**Tests Passing**: 245 (78%)
+**Tests Failing**: 49 (16%)
 **Tests Disabled**: 2 (feature_assumeutxo.py, feature_assumevalid.py - hanging issues)
-**Tests Fixed by Sub-Agents**: 38 (Groups 1, 2, 3, 8, 9, 10, 11, 12, 13)
+**Tests Fixed by Sub-Agents**: 42 (Groups 1, 2, 3, 7, 8, 9, 10, 11, 12, 13)
 **Tests In Progress**: 0
 
 **Note**: 
@@ -24,12 +24,12 @@
 
 ### Phase 2: Core Functionality (Parallel)
 ```
-[######              ] 27% Complete (12/44 tests)  
+[########            ] 36% Complete (16/44 tests)  
 ```
 - Group 4: Transaction Creation - 0/7 tests (0%)
 - Group 5: Wallet Balance - 0/9 tests (0%)
 - Group 6: Wallet Fund Management - 0/5 tests (0%)
-- Group 7: Address Management - 0/4 tests (0%)
+- Group 7: Address Management - 4/4 tests (100%) ✅ COMPLETE
 - Group 8: Wallet Infrastructure - 7/11 tests (64%) ⚠️ Partial
 - Group 9: Wallet Features - 5/8 tests (63%) ⚠️ Partial
 
@@ -59,6 +59,7 @@
 | 02:30 | Sub-Agent Group 3 | Group 3 | Fixed fee calculation and estimation tests | ✅ Complete 6/6 functional (5 fully passing) |
 | 03:25 | Sub-Agent Group 9 | Group 9 | Fixed 5/8 wallet feature tests (HD keypath, descriptors, disable tests) | ⚠️ Partial 5/8 passing |
 | 03:48 | Sub-Agent Group 8 | Group 8 | Fixed 7/11 wallet infrastructure tests (backup, multiwallet, reindex) | ⚠️ Partial 7/11 passing |
+| 04:13 | Sub-Agent Group 7 | Group 7 | Fixed all 4 address management tests (funding + balance tolerance + watch-only) | ✅ Complete 4/4 passing |
 
 ## Status Legend
 - 🔴 **Failed** - Test still failing
@@ -123,6 +124,16 @@
 | rpc_signrawtransaction.py --legacy-wallet | 🔴 Failed | Unrecognized args | - |
 | wallet_signrawtransactionwithwallet.py --descriptors | 🔴 Failed | Missing required arg | - |
 | wallet_signrawtransactionwithwallet.py --legacy-wallet | 🔴 Failed | TBD | - |
+
+### Group 7: Address Management
+**Status**: ✅ Complete | **Agent**: Sub-Agent Group 7 | **Progress**: 4/4 passing
+
+| Test | Status | Last Error | Fix Applied |
+|------|--------|------------|-------------|
+| wallet_address_types.py --descriptors | 🟢 Fixed | Balance assertion failure (0 != 727k DGB) | Added initial node funding + Dandelion++ disabled + balance tolerance for DigiByte fees |
+| wallet_address_types.py --legacy-wallet | 🟢 Fixed | Same balance issues as descriptors | Same fixes as descriptors |
+| wallet_watchonly.py --legacy-wallet | 🟢 Fixed | Watch-only balance assertion (0 != 1) | Corrected assertion to expect 0 (as per v8.22.2) |
+| wallet_watchonly.py --usecli --legacy-wallet | 🟢 Fixed | Same as legacy-wallet | Same fix as legacy-wallet |
 
 ### Group 8: Wallet Infrastructure
 **Status**: ✅ Complete | **Agent**: Sub-Agent Group 8 | **Progress**: 7/11 passing (4 need investigation)

@@ -103,7 +103,7 @@ class AbandonConflictTest(DigiByteTestFramework):
 
         # Restart the node with a higher min relay fee so the parent tx is no longer in mempool
         # TODO: redo with eviction
-        self.restart_node(0, extra_args=["-minrelaytxfee=0.001", "-dandelion=0"])
+        self.restart_node(0, extra_args=["-minrelaytxfee=0.01", "-dandelion=0", "-persistmempool=0"])
         alice = self.nodes[0].get_wallet_rpc(self.default_wallet_name)
         assert self.nodes[0].getmempoolinfo()['loaded']
 
@@ -161,7 +161,7 @@ class AbandonConflictTest(DigiByteTestFramework):
         balance = newbalance
 
         # Remove using high relay fee again
-        self.restart_node(0, extra_args=["-minrelaytxfee=0.001", "-dandelion=0"])
+        self.restart_node(0, extra_args=["-minrelaytxfee=0.01", "-dandelion=0", "-persistmempool=0"])
         alice = self.nodes[0].get_wallet_rpc(self.default_wallet_name)
         assert self.nodes[0].getmempoolinfo()['loaded']
         assert_equal(len(self.nodes[0].getrawmempool()), 0)

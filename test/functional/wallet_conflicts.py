@@ -20,6 +20,7 @@ class TxConflicts(DigiByteTestFramework):
 
     def set_test_params(self):
         self.num_nodes = 3
+        self.extra_args = [["-dandelion=0", "-maxtxfee=10", "-minrelaytxfee=0.00000001"], ["-dandelion=0", "-maxtxfee=10", "-minrelaytxfee=0.00000001"], ["-dandelion=0", "-maxtxfee=10", "-minrelaytxfee=0.00000001"]]
 
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()
@@ -63,7 +64,7 @@ class TxConflicts(DigiByteTestFramework):
         tx_B_1 = self.nodes[0].signrawtransactionwithwallet(self.nodes[0].createrawtransaction(inputs_tx_B_1, {self.nodes[0].getnewaddress(): Decimal("9.99998")}))
 
         self.log.info("Broadcast conflicted transaction")
-        txid_AB_parent = self.nodes[0].sendrawtransaction(tx_AB_parent["hex"])
+        txid_AB_parent = self.nodes[0].sendrawtransaction(tx_AB_parent["hex"], maxfeerate=0)
         self.generate(self.nodes[0], 1, sync_fun=self.no_op)
 
         # Now that 'AB_parent_tx' was broadcast, build 'Child_Tx'

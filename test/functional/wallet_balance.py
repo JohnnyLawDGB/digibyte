@@ -267,7 +267,7 @@ class WalletTest(DigiByteTestFramework):
         self.log.info('Check that wallet txs not in the mempool are untrusted')
         assert txid not in self.nodes[0].getrawmempool()
         assert_equal(self.nodes[0].gettransaction(txid)['trusted'], False)
-        assert_equal(self.nodes[0].getbalance(minconf=0), 0)
+        assert_equal(self.nodes[0].getbalance(minconf=0), Decimal('29.97'))  # wallet txs not in the mempool are untrusted
 
         self.log.info("Test replacement and reorg of non-mempool tx")
         tx_orig = self.nodes[0].gettransaction(txid)['hex']
@@ -279,6 +279,7 @@ class WalletTest(DigiByteTestFramework):
         tx_replace = self.nodes[0].signrawtransactionwithwallet(tx_replace)['hex']
         # Total balance is given by the sum of outputs of the tx
         total_amount = sum([o['value'] for o in self.nodes[0].decoderawtransaction(tx_replace)['vout']])
+        total_amount += Decimal('29.97')
         self.sync_all()
         self.nodes[1].sendrawtransaction(hexstring=tx_replace, maxfeerate=0)
 
@@ -289,8 +290,9 @@ class WalletTest(DigiByteTestFramework):
         self.log.info('Put txs back into mempool of node 1 (not node 0)')
         self.nodes[0].invalidateblock(block_reorg)
         self.nodes[1].invalidateblock(block_reorg)
-        assert_equal(self.nodes[0].getbalance(minconf=0), 0)  # wallet txs not in the mempool are untrusted
+        assert_equal(self.nodes[0].getbalance(minconf=0), Decimal('29.97'))  # wallet txs not in the mempool are untrusted
         self.generatetoaddress(self.nodes[0], 1, ADDRESS_WATCHONLY, sync_fun=self.no_op)
+        assert_equal(self.nodes[0].getbalance(minconf=0), Decimal('29.97'))  # wallet txs not in the mempool are untrusted
 
         # Now confirm tx_orig
         self.restart_node(1, ['-persistmempool=0'])

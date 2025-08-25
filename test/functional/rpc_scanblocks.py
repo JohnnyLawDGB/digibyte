@@ -23,7 +23,7 @@ from test_framework.wallet import (
 class ScanblocksTest(DigiByteTestFramework):
     def set_test_params(self):
         self.num_nodes = 2
-        self.extra_args = [["-blockfilterindex=1"], []]
+        self.extra_args = [["-blockfilterindex=1", "-dandelion=0"], ["-dandelion=0"]]
 
     def run_test(self):
         node = self.nodes[0]

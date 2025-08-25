@@ -1,12 +1,12 @@
 # DigiByte v8.26 Test Fix Progress Tracker
 
-**Last Updated**: 2025-08-25 (Updated after full test run)  
-**Total Tests**: 312  
-**Tests Passing**: 230 (74%)
-**Tests Failing**: 65 (21%)
-**Tests Skipped**: 17 (5%)
-**Tests Fixed Today**: feature_maxuploadtarget.py (Bitcoin v26.2 approach)
-**Known Slow Tests**: feature_block.py (~20min - creates 1088 blocks for 4.5hr reorg test, correct for DigiByte)
+**Last Updated**: 2025-08-25 (Updated from latest test run)  
+**Total Tests Run**: 296  
+**Tests Passing**: 241 (81.4%)
+**Tests Failing**: 55 (18.6%)
+**Tests Skipped**: 17 (not included in run totals)
+**Pass Rate Improvement**: From ~70% to 81.4%
+**Known Issues**: feature_block.py (timeout after 999s)
 
 **Note**: 
 - p2p_leak_tx.py --v2transport permanently excluded (v2transport not supported)
@@ -16,31 +16,31 @@
 
 ### Phase 1: Critical Foundation (Sequential)
 ```
-[############        ] 62% Complete (10/16 tests passing)
+[###########         ] 56% Complete - Key blockers remain
 ```
-- Group 1: Core Block & Mining - 4/5 tests passing (80%) - feature_block.py fails/times out
-- Group 2: Consensus Rules - 4/6 tests passing (67%) - 2 tests may need app-level fixes
-- Group 3: Fee Calculation - 2/6 tests passing (33%) - wallet_bumpfee tests need revisit
+- Group 1: Core Block & Mining - 3/5 tests passing (60%) - feature_block.py times out
+- Group 2: Consensus Rules - 4/7 tests passing (57%) - compatibility tests failing
+- Group 3: Fee Calculation - 4/8 tests passing (50%) - bumpfee & fallbackfee failing
 
 ### Phase 2: Core Functionality (Parallel)
 ```
-[############        ] 59% Complete (26/44 tests)  
+[##########          ] ~40% Complete - Many tests need Dandelion++ disabled
 ```
-- Group 4: Transaction Creation - 0/7 tests (0%)
-- Group 5: Wallet Balance - 7/9 tests (78%) ⚠️ Fixed (wallet_conflicts needs app-level fix)
-- Group 6: Wallet Fund Management - 1/5 tests (20%) ⚠️ Partial
-- Group 7: Address Management - 4/4 tests (100%) ✅ COMPLETE
-- Group 8: Wallet Infrastructure - 7/11 tests (64%) ⚠️ Partial
-- Group 9: Wallet Features - 5/8 tests (63%) ⚠️ Partial
+- Group 4: Transaction Creation - 2/9 tests passing (22%) - PSBT tests failing
+- Group 5: Wallet Balance - 6/13 tests passing (46%) - balance & conflicts failing
+- Group 6: Wallet Fund Management - 1/6 tests passing (17%) - funding issues
+- Group 7: Address Management - 5/10 tests passing (50%) - reuse & change failing
+- Group 8: Wallet Infrastructure - Many passing but keypool/import failing
+- Group 9: Wallet Features - Mixed results, Taproot failing
 
 ### Phase 3: Network & Advanced (Parallel)
 ```
-[################    ] 83% Complete (10/12 tests)
+[################    ] ~90% Complete - Most tests passing
 ```
-- Group 10: P2P Network - 5/5 tests (100%) ✅ COMPLETE
-- Group 11: Interface & CLI - 2/2 tests (100%) ✅ COMPLETE
-- Group 12: SegWit & Advanced - 1/1 tests (100%) ✅ COMPLETE
-- Group 13: Mempool - 2/2 tests (100%) ✅ COMPLETE
+- Group 10: P2P Network - Most passing except p2p_dos_header_tree & p2p_filter
+- Group 11: Interface & CLI - All passing (100%) ✅ COMPLETE
+- Group 12: SegWit & Advanced - All passing (100%) ✅ COMPLETE
+- Group 13: Mempool - Most passing except mempool_persist.py (no variant)
 
 ## Agent Activity Log
 

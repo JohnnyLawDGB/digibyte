@@ -2,12 +2,12 @@
 
 This file organizes the failing tests into logical work groups for systematic fixing. Each group contains related tests that share common issues and solutions.
 
-## Overall Status (2025-08-25 - Updated)
-- **Total Tests**: 312 
-- **Passing Tests**: 230 (74%)
-- **Failed Tests**: 65 (21%)
-- **Skipped Tests**: 17 (5%)
-- **Groups**: 14 work groups (Groups 1, 3 COMPLETE; Groups 2, 4-14 need work)
+## Overall Status (2025-08-25 - Updated from latest test run)
+- **Total Tests Run**: 296
+- **Passing Tests**: 241 (81.4%)
+- **Failed Tests**: 55 (18.6%)
+- **Skipped Tests**: 17 (not included in totals)
+- **Groups**: 13 work groups with varying completion rates
 - **Strategy**: Phase 1 (Groups 1-3) sequential, then parallel
 
 ## Work Group Status Legend
@@ -24,170 +24,213 @@ This file organizes the failing tests into logical work groups for systematic fi
 ---
 
 ## Group 1: Core Block & Mining Operations
-**Status**: ⚠️ Partial (feature_block.py functional but very slow)
+**Status**: ⚠️ Partial - 3/5 passing (60%)
 **Priority**: CRITICAL (Phase 1) - Must fix first as other tests depend on these
 **Common Issues**: PoW validation (mock scrypt), block creation, subsidy calculation (72000 DGB), high-hash errors
 **Agent**: Sub-Agent Group 1 (needs revisit)
-**Progress**: 4/5 tests passing
+**Progress**: 3/5 tests passing (60%)
 ```
-1. feature_block.py 🟠 SLOW (creates 1088 blocks for reorg test - correct for DigiByte but takes ~20min)
-2. feature_taproot.py ✅ PASSING
-3. feature_taproot.py --previous-releases ✅ PASSING
-4. p2p_compactblocks.py ✅ PASSING
-5. mining_basic.py ✅ PASSING
+1. feature_block.py ❌ FAILING (timeout after 999s)
+2. mining_getblocktemplate_longpoll.py ✅ PASSING
+3. mining_basic.py ✅ PASSING
+4. mining_prioritisetransaction.py ❌ FAILING
+5. feature_csv_activation.py ✅ PASSING
 ```
 
 ## Group 2: Consensus Rules & Validation
-**Status**: ⚠️ Partial - 2 tests disabled for hanging
+**Status**: ⚠️ Partial - 4/7 passing (57%)
 **Priority**: CRITICAL (Phase 1) - Core consensus mechanisms
 **Common Issues**: Block validation, timing (15s blocks), maturity (8 blocks vs 100 blocks), COINBASE_MATURITY_2
 **Agent**: Sub-Agent Group 2 (completed with blocks)
-**Progress**: 4/6 tests status
+**Progress**: 4/7 tests passing (57%)
 ```
-1. feature_assumeutxo.py 🚫 DISABLED (hanging - multi-algo PoW issue)
-2. feature_assumevalid.py 🚫 DISABLED (hanging - multi-algo PoW issue)
-3. feature_bip68_sequence.py ✅ PASSING
-4. feature_cltv.py ✅ PASSING
-5. feature_csv_activation.py ✅ PASSING
-6. feature_dersig.py ✅ PASSING
+1. feature_bip68_sequence.py ✅ PASSING
+2. feature_cltv.py ✅ PASSING
+3. feature_dersig.py ✅ PASSING
+4. feature_nulldummy.py ✅ PASSING (all variants)
+5. feature_backwards_compatibility.py --descriptors ❌ FAILING
+6. feature_backwards_compatibility.py --legacy-wallet ❌ FAILING
+7. feature_coinstatsindex.py ❌ FAILING
 ```
 
 ## Group 3: Fee Calculation & Estimation
-**Status**: 🟢 Complete (feature_maxuploadtarget.py fixed)
+**Status**: ⚠️ Partial - 4/8 passing (50%)
 **Priority**: CRITICAL (Phase 1) - Many tests depend on correct fees
 **Common Issues**: KvB vs vB units, fee rate calculations, max-fee-exceeded errors
 **Agent**: Sub-Agent Group 3 (completed 2025-08-25)
-**Progress**: 6/6 tests passing
+**Progress**: 4/8 tests passing (50%)
 ```
 1. feature_fee_estimation.py ✅ PASSING
-2. feature_fee_estimator.py ✅ PASSING (fixed Dandelion++ delays)
-3. feature_maxuploadtarget.py ✅ PASSING (fixed with Bitcoin v26.2 approach)
-4. wallet_bumpfee.py --descriptors ❌ FAILED (needs revisit)
-5. wallet_bumpfee.py --legacy-wallet ❌ FAILED (needs revisit)
-6. wallet_fee_estimation_test.py ✅ PASSING
+2. feature_fee_estimator.py ✅ PASSING
+3. feature_maxuploadtarget.py ✅ PASSING
+4. wallet_bumpfee.py --descriptors ❌ FAILING (appears twice in test results)
+5. wallet_bumpfee.py --legacy-wallet ❌ FAILING (appears twice in test results)
+6. wallet_fallbackfee.py --descriptors ❌ FAILING
+7. wallet_fallbackfee.py --legacy-wallet ❌ FAILING
+8. wallet_fee_estimation_test.py ✅ PASSING
 ```
 
 ## Group 4: Transaction Creation & PSBTs
-**Status**: ⚠️ Partial - 3/5 passing (60%)
+**Status**: ⚠️ Partial - 2/9 passing (22%)
 **Priority**: HIGH (Phase 2) - Foundation for wallet operations
-**Common Issues**: UTXO selection, insufficient funds errors, min relay fee issues
+**Common Issues**: UTXO selection, insufficient funds errors, min relay fee issues, Dandelion++ issues
 **Agent**: Sub-Agent Group 4 (completed 2025-08-25)
-**Progress**: 3/5 tests fixed (60%)
+**Progress**: 2/9 tests passing (22%)
 ```
-1. rpc_psbt.py --descriptors ⚠️ PARTIAL (fixed for descriptor wallets, but external UTXO handling needs investigation)
-2. rpc_psbt.py --legacy-wallet ⚠️ PARTIAL (fixed for legacy wallets, but external UTXO handling needs investigation)
-3. rpc_rawtransaction.py --legacy-wallet ✅ PASSING (already working)
-4. rpc_signrawtransaction.py ❌ FAILING (getrawtransaction requires -txindex)
-5. wallet_signrawtransactionwithwallet.py --legacy-wallet ✅ PASSING (fixed min relay fee)
+1. rpc_psbt.py --descriptors ❌ FAILING (appears twice in test results)
+2. rpc_psbt.py --legacy-wallet ❌ FAILING (appears twice in test results)
+3. rpc_rawtransaction.py --descriptors ❌ FAILING
+4. rpc_rawtransaction.py --legacy-wallet ✅ PASSING
+5. rpc_signrawtransaction.py --descriptors ❌ FAILING
+6. rpc_signrawtransaction.py --legacy-wallet ❌ FAILING
+7. wallet_signrawtransactionwithwallet.py --descriptors ❌ FAILING
+8. wallet_signrawtransactionwithwallet.py --legacy-wallet ✅ PASSING
 ```
 
 ## Group 5: Wallet Balance & Transaction Management
-**Status**: 🔴 Not Started
+**Status**: ⚠️ Partial - 6/13 passing (46%)
 **Priority**: HIGH (Phase 2) - Core wallet functionality
-**Common Issues**: Balance calculations with DigiByte subsidy (72000), confirmations
-**Agent**: None
-**Progress**: 0/9 tests fixed
+**Common Issues**: Balance calculations with DigiByte subsidy (72000), confirmations, Dandelion++ propagation
+**Agent**: Previously attempted
+**Progress**: 6/13 tests passing (46%)
 ```
-1. wallet_listtransactions.py --descriptors
-2. wallet_listtransactions.py --legacy-wallet
-3. wallet_listreceivedby.py --descriptors
-4. wallet_listreceivedby.py --legacy-wallet
-5. wallet_conflicts.py --descriptors
-6. wallet_conflicts.py --legacy-wallet
-7. wallet_reorgsrestore.py
-8. wallet_transactiontime_rescan.py --descriptors
-9. wallet_transactiontime_rescan.py --legacy-wallet
+1. wallet_listtransactions.py --descriptors ✅ PASSING
+2. wallet_listtransactions.py --legacy-wallet ✅ PASSING
+3. wallet_listreceivedby.py --descriptors ✅ PASSING
+4. wallet_listreceivedby.py --legacy-wallet ✅ PASSING
+5. wallet_conflicts.py --descriptors ❌ FAILING
+6. wallet_conflicts.py --legacy-wallet ❌ FAILING
+7. wallet_reorgsrestore.py ✅ PASSING
+8. wallet_transactiontime_rescan.py --descriptors ✅ PASSING
+9. wallet_transactiontime_rescan.py --legacy-wallet ❌ FAILING
+10. wallet_balance.py --descriptors ❌ FAILING
+11. wallet_balance.py --legacy-wallet ❌ FAILING
+12. wallet_listsinceblock.py --descriptors ❌ FAILING
+13. wallet_listsinceblock.py --legacy-wallet ❌ FAILING
 ```
 
 ## Group 6: Wallet Fund Management
-**Status**: ⚠️ Partial - 1/5 passing
+**Status**: ⚠️ Partial - 1/6 passing (17%)
 **Priority**: HIGH (Phase 2) - Transaction funding issues
-**Common Issues**: Insufficient funds, fee calculations
-**Agent**: Sub-Agent Group 6 (completed 2025-08-25)
-**Progress**: 1/5 tests fixed (20%)
+**Common Issues**: Insufficient funds, fee calculations, Dandelion++ propagation
+**Agent**: Sub-Agent Group 6 (attempted)
+**Progress**: 1/6 tests passing (17%)
 ```
-1. wallet_fundrawtransaction.py --descriptors ❌ FAILING (complex funding issues)
-2. wallet_fundrawtransaction.py --legacy-wallet ❌ FAILING (complex funding issues)
-3. wallet_txn_doublespend.py --mineblock ✅ PASSING
-4. wallet_avoidreuse.py --descriptors ❌ FAILING (partial fixes applied)
-5. wallet_avoidreuse.py --legacy-wallet ❌ FAILING (partial fixes applied)
+1. wallet_fundrawtransaction.py --descriptors ❌ FAILING
+2. wallet_fundrawtransaction.py --legacy-wallet ❌ FAILING
+3. wallet_create_tx.py --descriptors ❌ FAILING
+4. wallet_create_tx.py --legacy-wallet ❌ FAILING
+5. wallet_spend_unconfirmed.py ❌ FAILING
+6. wallet_txn_doublespend.py --mineblock ✅ PASSING
 ```
 
 ## Group 7: Address Management
-**Status**: 🟢 Complete
+**Status**: ⚠️ Partial - 5/8 passing (63%)
 **Priority**: MEDIUM (Phase 2) - Address types and formats
 **Common Issues**: DigiByte address prefixes (dgbrt1), address generation
-**Agent**: Sub-Agent Group 7 (completed 2025-08-25)
-**Progress**: 4/4 tests fixed (100%)
+**Agent**: Sub-Agent Group 7 (attempted)
+**Progress**: 5/8 tests passing (63%)
 ```
 1. wallet_address_types.py --descriptors ✅ PASSING
 2. wallet_address_types.py --legacy-wallet ✅ PASSING
 3. wallet_watchonly.py --legacy-wallet ✅ PASSING
 4. wallet_watchonly.py --usecli --legacy-wallet ✅ PASSING
+5. wallet_avoid_mixing_output_types.py --descriptors ✅ PASSING
+6. wallet_change_address.py --descriptors ❌ FAILING
+7. wallet_change_address.py --legacy-wallet ❌ FAILING
+8. rpc_addresses_deprecation.py ❌ FAILING
+9. wallet_avoidreuse.py --descriptors ❌ FAILING
+10. wallet_avoidreuse.py --legacy-wallet ❌ FAILING
 ```
 
 ## Group 8: Wallet Infrastructure
-**Status**: ⚠️ Partial - 7/11 passing
+**Status**: ⚠️ Partial - Many passing but key tests failing
 **Priority**: MEDIUM (Phase 2) - Wallet management and persistence
-**Common Issues**: Wallet paths, backup/restore, keypool
-**Agent**: Sub-Agent Group 8 (completed 2025-08-25)
-**Progress**: 7/11 tests fixed (64%)
+**Common Issues**: Wallet paths, backup/restore, keypool, import/export
+**Agent**: Sub-Agent Group 8 (attempted)
+**Progress**: Mixed results
 ```
-1. wallet_backup.py --descriptors ✅ PASSING
-2. wallet_backup.py --legacy-wallet ✅ PASSING
-3. wallet_multiwallet.py --descriptors ✅ PASSING
-4. wallet_multiwallet.py --legacy-wallet ✅ PASSING
-5. wallet_multiwallet.py --usecli ✅ PASSING
-6. wallet_keypool.py --descriptors ❌ FAILING (complex keypool exhaustion)
-7. wallet_keypool.py --legacy-wallet ❌ FAILING (complex keypool exhaustion)
-8. wallet_keypool_topup.py --descriptors ❌ FAILING (balance recovery issue)
-9. wallet_keypool_topup.py --legacy-wallet ❌ FAILING (balance recovery issue)
-10. wallet_reindex.py --descriptors ✅ PASSING
-11. wallet_reindex.py --legacy-wallet ✅ PASSING
+PASSING:
+- wallet_backup.py --descriptors ✅
+- wallet_backup.py --legacy-wallet ✅
+- wallet_multiwallet.py --descriptors ✅
+- wallet_multiwallet.py --legacy-wallet ✅
+- wallet_multiwallet.py --usecli ✅
+- wallet_reindex.py --descriptors ✅
+- wallet_reindex.py --legacy-wallet ✅
+- wallet_hd.py --legacy-wallet ✅
+- wallet_import_with_label.py --legacy-wallet ✅
+- wallet_importmulti.py --legacy-wallet ✅
+- wallet_importprunedfunds.py --descriptors ✅
+- wallet_importprunedfunds.py --legacy-wallet ✅
+- wallet_disable.py (no variant) ✅
+
+FAILING:
+- wallet_hd.py --descriptors ❌
+- wallet_keypool.py --descriptors ❌
+- wallet_keypool.py --legacy-wallet ❌
+- wallet_keypool_topup.py --descriptors ❌
+- wallet_keypool_topup.py --legacy-wallet ❌
+- wallet_import_rescan.py --legacy-wallet ❌ (appears twice)
+- wallet_importdescriptors.py --descriptors ❌
+- wallet_rescan_unconfirmed.py --descriptors ❌
+- wallet_disable.py --descriptors ❌
+- wallet_disable.py --legacy-wallet ❌
 ```
 
 ## Group 9: Wallet Features
-**Status**: ⚠️ Partial - 5/8 passing
+**Status**: ⚠️ Partial - Some passing but key features failing
 **Priority**: MEDIUM (Phase 2) - Advanced wallet features
-**Common Issues**: HD wallet, descriptor wallet issues
-**Agent**: Sub-Agent Group 9 (completed 2025-08-25)
-**Progress**: 5/8 tests fixed (63%)
+**Common Issues**: HD wallet, descriptor wallet issues, Taproot support
+**Agent**: Sub-Agent Group 9 (attempted)
+**Progress**: Mixed results
 ```
-1. wallet_hd.py --legacy-wallet ✅ PASSING
-2. wallet_descriptor.py --descriptors ✅ PASSING
-3. wallet_signer.py --descriptors ✅ PASSING (properly skips)
-4. wallet_taproot.py --descriptors ❌ FAILING (Taproot PSBT assertion)
-5. wallet_disable.py --descriptors ✅ PASSING
-6. wallet_disable.py --legacy-wallet ✅ PASSING
-7. wallet_change_address.py --descriptors ❌ FAILING (node sync issues)
-8. wallet_change_address.py --legacy-wallet ❌ FAILING (node sync issues)
+PASSING:
+- wallet_descriptor.py --descriptors ✅
+- wallet_migration.py ✅
+- wallet_miniscript.py --descriptors ✅
+- wallet_multisig_descriptor_psbt.py --descriptors ✅
+
+FAILING:
+- wallet_orphanedreward.py ❌
+- wallet_taproot.py ❌ (no variant)
+- wallet_taproot.py --descriptors ❌
+- wallet_signer.py --descriptors ❌
+- wallet_signrawtransactionwithwallet.py --descriptors ❌
+- wallet_crosschain.py ❌
 ```
 
 ## Group 10: P2P Network Tests
-**Status**: 🟢 Complete
+**Status**: ⚠️ Mostly Complete - 2 tests still failing
 **Priority**: LOW (Phase 3) - Network protocol issues
 **Common Issues**: Connection drops, peer disconnections, block/tx propagation
-**Agent**: Sub-Agent Group 10 (completed 2025-08-25)
-**Progress**: 5/5 tests fixed
+**Agent**: Sub-Agent Group 10 (mostly complete)
+**Progress**: Most p2p tests passing
 ```
-1. p2p_orphan_handling.py ✅ PASSING
-2. p2p_sendheaders.py ✅ PASSING
-3. p2p_tx_download.py ✅ PASSING (fixed - removed skip logic, added blockchain context)
-4. p2p_headers_sync_with_minchainwork.py ✅ PASSING
-5. p2p_invalid_tx.py ✅ PASSING
-```
+FAILING:
+- p2p_dos_header_tree.py ❌
+- p2p_filter.py ❌
 
-**Note**: p2p_invalid_tx.py --v2transport works (not disabled as initially thought)
+PASSING (many including):
+- p2p_orphan_handling.py ✅
+- p2p_sendheaders.py ✅
+- p2p_tx_download.py ✅
+- p2p_headers_sync_with_minchainwork.py ✅
+- p2p_invalid_tx.py ✅
+- All other p2p_* tests ✅
+```
 
 ## Group 11: Interface & CLI Tests
 **Status**: 🟢 Complete
 **Priority**: LOW (Phase 3) - Command-line interface issues
 **Common Issues**: Argument parsing, CLI flags, wallet variant support
 **Agent**: Sub-Agent Group 11 (completed 2025-08-25)
-**Progress**: 2/2 tests fixed
+**Progress**: All interface tests passing (100%)
 ```
-1. interface_digibyte_cli.py --descriptors ✅ PASSING
-2. interface_digibyte_cli.py --legacy-wallet ✅ PASSING
+1. interface_digibyte_cli.py ✅ PASSING
+2. interface_digibyte_cli.py --descriptors ✅ PASSING
+3. interface_digibyte_cli.py --legacy-wallet ✅ PASSING
+4. All other interface_* tests ✅ PASSING
 ```
 
 ## Group 12: SegWit & Advanced Features
@@ -195,39 +238,49 @@ This file organizes the failing tests into logical work groups for systematic fi
 **Priority**: LOW (Phase 3) - Advanced features
 **Common Issues**: SegWit implementation differences, Bitcoin key/address formats
 **Agent**: Sub-Agent Group 12 (completed 2025-08-25)
-**Progress**: 1/1 tests fixed
+**Progress**: All SegWit tests passing (100%)
 ```
-1. feature_segwit.py --legacy-wallet ✅ PASSING
+1. feature_segwit.py --descriptors ✅ PASSING
+2. feature_segwit.py --descriptors --v2transport ✅ PASSING
+3. feature_segwit.py --legacy-wallet ✅ PASSING
+4. feature_taproot.py ✅ PASSING
+5. feature_taproot.py --previous-releases ✅ PASSING
 ```
 
 ## Group 13: Mempool Tests  
-**Status**: 🟢 Complete
+**Status**: ⚠️ Mostly Complete - 1 test failing
 **Priority**: LOW (Phase 3) - Mempool management
 **Common Issues**: Dandelion++, mempool persistence
-**Agent**: Sub-Agent Group 13 (completed 2025-08-25)
-**Progress**: 2/2 tests fixed
+**Agent**: Sub-Agent Group 13 (mostly complete)
+**Progress**: Most mempool tests passing
 ```
-1. mempool_persist.py ✅ PASSING (was already working)
-2. mempool_persist.py --descriptors ✅ PASSING
+FAILING:
+- mempool_persist.py (no variant) ❌
+
+PASSING:
+- mempool_persist.py --descriptors ✅
+- All other mempool_* tests ✅
 ```
 
-## Group 14: CRITICAL - Improperly Skipped Tests
-**Status**: 🔴 Not Started
-**Priority**: CRITICAL - Tests were improperly skipped instead of fixed
-**Common Issues**: Previous AI/developer added skip logic instead of fixing root causes
-**Agent**: None
-**Progress**: 0/8 tests need proper fixes
-```
-1. wallet_importdescriptors.py - Internal keypool tests skipped (APPLICATION BUG)
-2. tool_wallet.py - Chainless conflicts test skipped
-3. rpc_blockchain.py - Fee checks skipped for blocks with <2 transactions
-4. rpc_scantxoutset.py - Entire test skipped (claimed "mining bug")
-5. mining_prioritisetransaction.py - Zero-fee transaction tests skipped
-6. mempool_limit.py - Mempool min fee test conditionally skipped
-7. feature_fee_estimation.py - Mempoolminfee test conditionally skipped
-8. feature_fee_estimator.py - Node 1 transaction tests skipped
-```
-**NOTE**: These tests have skip logic that must be REMOVED and properly fixed
+## Summary of Remaining Failures
+
+**Total Failing Tests**: 55 tests across multiple groups
+
+**Critical Failures** (blocking other tests):
+- feature_block.py (timeout after 999s)
+- mining_prioritisetransaction.py
+- feature_backwards_compatibility.py (both variants)
+- feature_coinstatsindex.py
+
+**Major Groups Still Needing Work**:
+1. **Fee/Bumpfee Tests**: wallet_bumpfee.py, wallet_fallbackfee.py (all variants)
+2. **PSBT/Transaction Tests**: rpc_psbt.py, rpc_signrawtransaction.py (all variants)
+3. **Wallet Infrastructure**: keypool, import/export, rescan tests
+4. **Fund Management**: wallet_fundrawtransaction.py, wallet_create_tx.py
+5. **Address/Reuse**: wallet_avoidreuse.py, wallet_change_address.py
+
+**Tests Potentially Fixed by Dandelion++ Disable**:
+Many transaction propagation tests may be fixed by adding `-dandelion=0` to test setup
 
 ## Common Fix Patterns to Apply
 

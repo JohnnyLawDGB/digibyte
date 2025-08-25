@@ -48,8 +48,10 @@ class NotificationsTest(DigiByteTestFramework):
             f"-alertnotify=echo > {os.path.join(self.alertnotify_dir, '%s')}",
             f"-blocknotify=echo > {os.path.join(self.blocknotify_dir, '%s')}",
             f"-shutdownnotify=echo > {self.shutdownnotify_file}",
+            "-dandelion=0",
         ], [
             f"-walletnotify=echo %h_%b > {os.path.join(self.walletnotify_dir, notify_outputname('%w', '%s'))}",
+            "-dandelion=0",
         ]]
         self.wallet_names = [self.default_wallet_name, self.wallet]
         super().setup_network()

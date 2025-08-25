@@ -27,6 +27,7 @@ class ReorgsRestoreTest(DigiByteTestFramework):
 
     def set_test_params(self):
         self.num_nodes = 3
+        self.extra_args = [["-dandelion=0"]] * 3
 
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()
@@ -57,8 +58,8 @@ class ReorgsRestoreTest(DigiByteTestFramework):
         outputs_2 = {}
 
         # Create a conflicted tx broadcast on node0 chain and conflicting tx broadcast on node1 chain. Both spend from txid_conflict_from
-        outputs_1[self.nodes[0].getnewaddress()] = Decimal("9.99998")
-        outputs_2[self.nodes[0].getnewaddress()] = Decimal("9.99998")
+        outputs_1[self.nodes[0].getnewaddress()] = Decimal("9.989")
+        outputs_2[self.nodes[0].getnewaddress()] = Decimal("9.989")
         conflicted = self.nodes[0].signrawtransactionwithwallet(self.nodes[0].createrawtransaction(inputs, outputs_1))
         conflicting = self.nodes[0].signrawtransactionwithwallet(self.nodes[0].createrawtransaction(inputs, outputs_2))
 

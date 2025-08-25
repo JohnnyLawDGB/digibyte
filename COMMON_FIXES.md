@@ -414,7 +414,7 @@ assert_greater_than(bumped_tx["fee"], original_tx_info["fee"])
 
 ---
 
-## Dandelion++ Issues
+## Dandelion++ Issues (CRITICAL FOR ALL TESTS)
 
 ### Pattern: Transaction Not Propagating Between Nodes
 **Symptoms:**
@@ -436,6 +436,8 @@ def set_test_params(self):
 - wallet_listtransactions.py
 - wallet_listreceivedby.py (when using -walletbroadcast=0)
 - wallet_reorgsrestore.py
+- rpc_psbt.py (external UTXO access issues)
+- ALL tests involving transaction propagation between nodes
 
 ---
 

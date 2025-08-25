@@ -4,8 +4,8 @@
 
 ### Test Statistics
 - **Total Test Entries**: 278
-- **Passing**: 112 (40.3%)
-- **Failing**: 152 (54.7%)
+- **Passing**: 120 (43.2%)
+- **Failing**: 144 (51.8%)
 - **Skipped**: 14 (5.0%)
 
 ### Group Progress Summary
@@ -24,7 +24,7 @@
 | 11. Wallet Address | 13 | 🔴 Not Started | 0/13 |
 | 12. Wallet Import/Export | 13 | 🔴 Not Started | 0/13 |
 | 13. Wallet Advanced | 12 | 🔴 Not Started | 0/12 |
-| 14. Wallet Lists & History | 8 | 🔴 Not Started | 0/8 |
+| 14. Wallet Lists & History | 8 | ✅ Complete | 8/8 |
 | 15. File & Tool Operations | 5 | 🔴 Not Started | 0/5 |
 
 ## Critical Issues to Address
@@ -87,9 +87,35 @@ REGTEST_BECH32 = 'dgbrt'        # NOT 'bcrt'
 
 ## Success Metrics
 
-- **Current Pass Rate**: 40.3%
-- **Target**: 100% test passage
-- **Tests Remaining**: 152 to fix
+- **Current Pass Rate**: 43.2%
+- **Target**: 100% test passage  
+- **Tests Remaining**: 144 to fix
+
+## Completed Groups
+
+### Group 14: Wallet Lists & History (2025-08-25) ✅
+**Tests Fixed**: 8/8 (100%)
+- wallet_listreceivedby.py --descriptors ✅
+- wallet_listreceivedby.py --legacy-wallet ✅
+- wallet_listsinceblock.py --descriptors ✅
+- wallet_listsinceblock.py --legacy-wallet ✅
+- wallet_listtransactions.py --descriptors ✅
+- wallet_listtransactions.py --legacy-wallet ✅
+- interface_digibyte_cli.py --descriptors ✅
+- interface_digibyte_cli.py --legacy-wallet ✅
+
+**Common Patterns Found**:
+- Dandelion++ disable needed: Added `-dandelion=0` to prevent transaction propagation delays
+- Block reward corrections: Updated from 50 BTC → 72000 DGB
+- Coinbase maturity: Used COINBASE_MATURITY_2 (100) for wallet operations vs COINBASE_MATURITY (8) for basic setup
+- Fee calculations: Adjusted fees for DigiByte's higher fee structure (sat/kB vs sat/vB)
+- Balance calculations: Updated multi-step calculations to account for DigiByte block rewards
+
+**Key Fixes Applied**:
+- Updated block reward constants in wallet_listreceivedby.py
+- Fixed fee rates in wallet_listsinceblock.py (fundrawtransaction fee_rate param)
+- Corrected balance calculations in interface_digibyte_cli.py
+- Added proper maturity handling across all tests
 
 ## Notes
 

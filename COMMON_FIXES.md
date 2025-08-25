@@ -45,6 +45,9 @@ fee_rate = 1000  # sat/kB instead of 10 sat/vB
 
 # Bump fee tests - use higher increments
 bumped_fee = original_fee + Decimal('0.01')  # Not 0.00001
+
+# fundrawtransaction fee rate (for auto-calculated fees)
+funded_tx = node.fundrawtransaction(raw_tx, {"fee_rate": 1000})  # sat/kB
 ```
 
 ---

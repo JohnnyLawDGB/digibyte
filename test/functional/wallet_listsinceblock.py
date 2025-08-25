@@ -5,7 +5,7 @@
 """Test the listsinceblock RPC."""
 
 from test_framework.address import key_to_p2wpkh
-from test_framework.blocktools import COINBASE_MATURITY
+from test_framework.blocktools import COINBASE_MATURITY, COINBASE_MATURITY_2
 from test_framework.descriptors import descsum_create
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.messages import MAX_BIP125_RBF_SEQUENCE
@@ -26,7 +26,9 @@ class ListSinceBlockTest(DigiByteTestFramework):
         self.num_nodes = 4
         self.setup_clean_chain = True
         # whitelist peers to speed up tx relay / mempool sync
-        self.extra_args = [["-whitelist=noban@127.0.0.1"]] * self.num_nodes
+        # Disable Dandelion++ to prevent transaction propagation issues
+        # Increase max transaction fee for DigiByte testing
+        self.extra_args = [["-whitelist=noban@127.0.0.1", "-dandelion=0", "-maxtxfee=100"]] * self.num_nodes
 
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()
@@ -35,7 +37,7 @@ class ListSinceBlockTest(DigiByteTestFramework):
         # All nodes are in IBD from genesis, so they'll need the miner (node2) to be an outbound connection, or have
         # only one connection. (See fPreferredDownload in net_processing)
         self.connect_nodes(1, 2)
-        self.generate(self.nodes[2], COINBASE_MATURITY + 1)
+        self.generate(self.nodes[2], COINBASE_MATURITY_2 + 10)  # Extra blocks to ensure sufficient mature funds
 
         self.test_no_blockhash()
         self.test_invalid_blockhash()
@@ -214,7 +216,7 @@ class ListSinceBlockTest(DigiByteTestFramework):
         self.split_network()
 
         # send from nodes[1] using utxo to nodes[0]
-        change = '%.8f' % (float(utxo['amount']) - 1.0003)
+        change = '%.8f' % (float(utxo['amount']) - 1.003)
         recipient_dict = {
             self.nodes[0].getnewaddress(): 1,
             self.nodes[1].getnewaddress(): change,
@@ -290,7 +292,7 @@ class ListSinceBlockTest(DigiByteTestFramework):
         # create and sign a transaction
         utxos = self.nodes[2].listunspent()
         utxo = utxos[0]
-        change = '%.8f' % (float(utxo['amount']) - 1.0003)
+        change = '%.8f' % (float(utxo['amount']) - 1.003)
         recipient_dict = {
             self.nodes[0].getnewaddress(): 1,
             self.nodes[2].getnewaddress(): change,
@@ -356,8 +358,8 @@ class ListSinceBlockTest(DigiByteTestFramework):
         tx_input = dict(
             sequence=MAX_BIP125_RBF_SEQUENCE, **next(u for u in spending_node.listunspent()))
         rawtx = spending_node.createrawtransaction(
-            [tx_input], {dest_address: tx_input["amount"] - Decimal("0.00051000"),
-                         spending_node.getrawchangeaddress(): Decimal("0.00050000")})
+            [tx_input], {dest_address: tx_input["amount"] - Decimal("0.00250000"),
+                         spending_node.getrawchangeaddress(): Decimal("0.00200000")})
         signedtx = spending_node.signrawtransactionwithwallet(rawtx)
         orig_tx_id = spending_node.sendrawtransaction(signedtx["hex"])
         original_tx = spending_node.gettransaction(orig_tx_id)
@@ -455,7 +457,7 @@ class ListSinceBlockTest(DigiByteTestFramework):
         block_hash = self.nodes[2].getbestblockhash()
 
         raw_tx = self.nodes[2].createrawtransaction([], [{'data': 'aa'}])
-        funded_tx = self.nodes[2].fundrawtransaction(raw_tx)
+        funded_tx = self.nodes[2].fundrawtransaction(raw_tx, {"fee_rate": 1000})  # sat/kB for DigiByte
         signed_tx = self.nodes[2].signrawtransactionwithwallet(funded_tx['hex'])
         tx_id = self.nodes[2].sendrawtransaction(signed_tx['hex'])
 

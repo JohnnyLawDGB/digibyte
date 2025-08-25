@@ -5,7 +5,7 @@
 """Test the listreceivedbyaddress, listreceivedbylabel, getreceivedybaddress, and getreceivedbylabel RPCs."""
 from decimal import Decimal
 
-from test_framework.blocktools import COINBASE_MATURITY
+from test_framework.blocktools import COINBASE_MATURITY, COINBASE_MATURITY_2
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import (
     assert_array_result,
@@ -22,7 +22,8 @@ class ReceivedByTest(DigiByteTestFramework):
     def set_test_params(self):
         self.num_nodes = 2
         # whitelist peers to speed up tx relay / mempool sync
-        self.extra_args = [["-whitelist=noban@127.0.0.1"]] * self.num_nodes
+        # Disable Dandelion++ to prevent transaction propagation issues
+        self.extra_args = [["-whitelist=noban@127.0.0.1", "-dandelion=0"]] * self.num_nodes
 
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()
@@ -179,7 +180,7 @@ class ReceivedByTest(DigiByteTestFramework):
         label = "label"
         address = self.nodes[0].getnewaddress(label)
 
-        reward = Decimal("25")
+        reward = Decimal("72000")
         self.generatetoaddress(self.nodes[0], 1, address)
         hash = self.nodes[0].getbestblockhash()
 
@@ -220,7 +221,7 @@ class ReceivedByTest(DigiByteTestFramework):
                             {"label": label, "amount": reward})
 
         self.log.info("Generate 100 more blocks")
-        self.generate(self.nodes[0], COINBASE_MATURITY)
+        self.generate(self.nodes[0], COINBASE_MATURITY_2)
 
         self.log.info("getreceivedbyaddress returns reward with defaults")
         balance = self.nodes[0].getreceivedbyaddress(address)

@@ -44,20 +44,35 @@ REGTEST_BECH32 = 'dgbrt'        # NOT 'bcrt'
 grep -A10 "ERROR\|FAIL\|AssertionError" test_fix_logs/[test_name]_before.log
 ```
 
-### 2. Three-Way Comparison (CRITICAL!)
+### 2. Three-Way Comparison (CRITICAL - DO THIS FIRST!)
+
+**⚠️ IMPORTANT: v8.22.2 tests WERE WORKING! Use them as your SOURCE OF TRUTH!**
+
+Previous AI agents may have gone off track. The v8.22.2 version has most tests passing, so when in doubt, check what v8.22.2 did and adapt it to the new structure.
+
 ```bash
-# How it WORKED in v8.22.2
+# STEP 1: Check how it WORKED in v8.22.2 (SOURCE OF TRUTH!)
 cat digibyte-v8.22.2/test/functional/[test_name].py
+# This version WORKED - understand what it expects!
 
-# What CHANGED in Bitcoin v26.2
-cat bitcoin-v26.2-for-digibyte/test/functional/[test_name].py
+# STEP 2: See what CHANGED in Bitcoin v26.2
+cat bitcoin-v26.2-for-digibyte/test/functional/[test_name].py  
+# Understand new features/structure from Bitcoin
 
-# Current BROKEN version
+# STEP 3: Current BROKEN version (may have wrong fixes)
 cat test/functional/[test_name].py
+# This may have incorrect "fixes" from previous attempts
 
-# Find critical differences
+# STEP 4: Find critical differences
 diff digibyte-v8.22.2/test/functional/[test_name].py test/functional/[test_name].py
+# Focus on DigiByte-specific values that may have been lost
+
+# STEP 5: Check if Bitcoin structure changed
+diff digibyte-v8.22.2/test/functional/[test_name].py bitcoin-v26.2-for-digibyte/test/functional/[test_name].py
+# Understand what structural changes came from Bitcoin
 ```
+
+**KEY INSIGHT**: If v8.22.2 had different values/logic than current v8.26, and the test was passing in v8.22.2, then v8.22.2 is likely correct!
 
 ### 3. Check COMMON_FIXES.md First!
 Before writing any fix, check if pattern exists:

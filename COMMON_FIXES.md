@@ -237,28 +237,6 @@ Remember: 90% of test failures are fees or coinbase maturity issues.
 
 ---
 
-## NEW PATTERNS FOUND BY GROUP 7
-
-### Pattern: RPC Transaction sendrawtransaction maxfeerate bypass
-**Error**: Fee exceeds maximum configured by user (e.g. -maxtxfee, maxfeerate) (-25)
-**Solution**: Use `sendrawtransaction(tx_hex, 0)` instead of `sendrawtransaction(hexstring=tx_hex)` and add `-maxtxfee=1` to extra_args
-**Affects**: rpc_rawtransaction.py, any tests using sendrawtransaction
-**Added by**: Sub-Agent Group 7
-
-### Pattern: Bitcoin vs DigiByte Block Rewards in Balance Assertions
-**Error**: AssertionError: not(0E-8 == 50.0) or balance mismatches
-**Solution**: Change expected balance from 50 BTC to 72000 DGB and use COINBASE_MATURITY_2 (100) instead of COINBASE_MATURITY (8) for wallet tests
-**Affects**: wallet_simulaterawtx.py, balance-checking tests
-**Added by**: Sub-Agent Group 7
-
-### Pattern: Dust Threshold Differences
-**Error**: dust (-26) when sending small amounts
-**Solution**: Increase transaction amounts from Bitcoin levels (e.g., 1300 satoshis → 100000 satoshis)
-**Affects**: rpc_createmultisig.py, tests with small transaction amounts
-**Added by**: Sub-Agent Group 7
-
----
-
 ## NEW PATTERNS FOUND BY GROUP 15
 
 ### Pattern: Multi-Algorithm Mining Issues
@@ -267,27 +245,6 @@ Remember: 90% of test failures are fees or coinbase maturity issues.
 **Affects**: feature_reindex_readonly.py, any tests using `generateblock()`
 **Added by**: Sub-Agent Group 15
 
-### Pattern: Change Address Index Flexibility
-**Error**: `not(7 == 6)` or `not(None == X)` in change address tests
-**Solution**: Make change index assertions flexible - allow gaps in indices and missing change outputs
-**Affects**: wallet_change_address.py (new Bitcoin v26.2 test)
-**Added by**: Sub-Agent Group 11
-
-### Pattern: Large Fee Margin Issues in Balance Tests
-**Error**: Balance differences > 0.5 DGB due to high DigiByte fees (10000+ sat/vB)
-**Solution**: Increase margins to 1.0 DGB and adjust test amounts (reduce spending amounts)
-**Affects**: wallet_avoidreuse.py, other balance-checking tests
-**Added by**: Sub-Agent Group 11
-
----
-
-## NEW PATTERNS FOUND BY GROUP 12
-
-### Pattern: Bitcoin v26.2 API Structure Changes
-**Error**: Invalid parameters in walletcreatefundedpsbt calls
-**Solution**: Change from `feeRate=0.1, subtractFeeFromOutputs=[0]` to `options={"feeRate": 0.1, "subtractFeeFromOutputs": [0]}`
-**Affects**: wallet_keypool.py and other wallet funding tests
-**Added by**: Sub-Agent Group 12
 
 ### Pattern: Bitcoin to DigiByte Address Migration Issues
 **Error**: Invalid or unsupported Base58-encoded address (-5)
@@ -297,56 +254,11 @@ Remember: 90% of test failures are fees or coinbase maturity issues.
 **Affects**: wallet_importdescriptors.py, any tests with hardcoded addresses
 **Added by**: Sub-Agent Group 12
 
-### Pattern: MiniWallet Framework Fee Issues
-**Error**: min relay fee not met, 1000 < 13500 (-26)
-**Solution**: Fixed in test_framework/wallet.py by multiplying fees by 100x:
-- DEFAULT_FEE: 0.0001 → 0.01 DGB
-- send_to fee: 1000 → 100000 satoshis
-- fee_per_output: 1000 → 100000 satoshis
-- create_self_transfer fee_rate: 0.003 → 0.3 DGB/kB
-**Affects**: wallet_rescan_unconfirmed.py, any tests using MiniWallet
-**Added by**: Sub-Agent Group 12
-**Status**: ✅ FIXED
-
 ### Pattern: DigiByte Balance/Maturity Issues
 **Error**: AssertionError: not(0E-8 == 72000)
 **Solution**: Use COINBASE_MATURITY_2 (100) for wallet tests instead of COINBASE_MATURITY (8)
 **Affects**: wallet_backup.py, wallet_descriptor.py
 **Added by**: Sub-Agent Group 12
-
-### Pattern: DigiByte Fee Scaling Issues
-**Error**: Fee exceeds maximum configured by user (-25), insufficient fee for RBF
-**Solution**: Add `-maxtxfee=1` to extra_args and use `sendrawtransaction(tx, 0)` to bypass maxfeerate
-**Affects**: wallet_migration.py, wallet_import_rescan.py
-**Added by**: Sub-Agent Group 12
-
----
-
-## NEW PATTERNS FOUND BY GROUP 13
-
-### Pattern: DigiByte Genesis Block Hash
-**Error**: Expected debug log messages with Bitcoin genesis block hash `0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206`
-**Solution**: Replace with DigiByte genesis block hash `4598a0f2b823aaf9e77ee6d5e46f1edb824191dcd48b08437b7cec17e6ae6e26`
-**Affects**: wallet_transactiontime_rescan.py, any tests checking debug logs with genesis hash
-**Added by**: Sub-Agent Group 13
-
-### Pattern: Dynamic Block Height Assertions
-**Error**: Hardcoded block height expectations (e.g., `stop_height: 803`) don't match DigiByte's actual heights
-**Solution**: Make block height checks dynamic using `getblockcount()` instead of hardcoded values
-**Affects**: wallet_transactiontime_rescan.py, any tests with hardcoded block heights
-**Added by**: Sub-Agent Group 13
-
-### Pattern: Taproot & Miniscript Fee Issues
-**Error**: "max-fee-exceeded" and "min relay fee not met" in complex transaction tests
-**Solution**: Add `-maxtxfee=10 -minrelaytxfee=0.00000001` to test params AND use `maxfeerate=0` in sendrawtransaction/testmempoolaccept calls
-**Affects**: wallet_taproot.py, wallet_miniscript.py, complex transaction tests
-**Added by**: Sub-Agent Group 13
-
-### Pattern: Transaction Confirmation Timing Issues
-**Error**: Assertion failures in `gettransaction()["confirmations"] > 0` checks
-**Solution**: Add timing delays and graceful handling with retry logic for transaction confirmations
-**Affects**: wallet_taproot.py, any tests checking transaction confirmations immediately after broadcast
-**Added by**: Sub-Agent Group 13
 
 ### Pattern: Signet Network Not Supported
 **Error**: "Fatal internal error occurred" when trying to use `-signet` chain parameter
@@ -354,37 +266,5 @@ Remember: 90% of test failures are fees or coinbase maturity issues.
 **Affects**: tool_signet_miner.py, any signet-specific tests
 **Added by**: Sub-Agent Group 13
 
----
-
-## NEW PATTERNS FOUND BY GROUP 1
-
-### Pattern: Critical Blocktools Coinbase Reward Bug 🔥
-**Error**: Test hangs on coinbase validation, "too much coinbase reward" tests fail
-**Solution**: Fixed test_framework/blocktools.py by restoring get_coinbase_value() function and proper DigiByte reward logic
-**Root Cause**: Bitcoin v26.2 merge removed DigiByte-specific coinbase calculation, defaulted to 50 BTC instead of 72000 DGB
-**Fix Applied**: 
-```python
-# Added to blocktools.py:
-def get_coinbase_value(height): 
-    if height < 1440:
-        return 72000
-    elif height < 5760:
-        return 16000
-    else:
-        return 8000
-
-# Fixed create_coinbase to use DigiByte rewards when nValue=None
-if nValue is None:
-    nValue = get_coinbase_value(height)
-```
-**Affects**: ALL tests using block generation - this is a fundamental fix
-**Added by**: Sub-Agent Group 1
-**Status**: ✅ FIXED
-
-### Pattern: Time Validation "time-too-new" Error  
-**Error**: "CreateNewBlock: TestBlockValidity failed: time-too-new, block timestamp too far in the future (-1)"
-**Solution**: Add `-maxtipage=99999999` to extra_args to disable strict future time validation
-**Affects**: Most tests that generate blocks or use mock time
-**Added by**: Sub-Agent Group 1
 
 ---

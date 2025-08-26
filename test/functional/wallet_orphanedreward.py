@@ -16,8 +16,8 @@ class OrphanedBlockRewardTest(DigiByteTestFramework):
         self.setup_clean_chain = True
         self.num_nodes = 2
         self.extra_args = [
-            ["-dandelion=0"], 
-            ["-dandelion=0"]
+            ["-dandelion=0", "-easypow"], 
+            ["-dandelion=0", "-easypow"]
         ]
 
     def skip_test_if_missing_module(self):

@@ -21,6 +21,7 @@ class P2PNode(P2PDataStore):
 class P2PLeakTxTest(DigiByteTestFramework):
     def set_test_params(self):
         self.num_nodes = 1
+        self.extra_args = [["-maxtxfee=1", "-dandelion=0"]]
 
     def run_test(self):
         self.gen_node = self.nodes[0]  # The block and tx generating node
@@ -55,8 +56,8 @@ class P2PLeakTxTest(DigiByteTestFramework):
         inbound_peer.wait_for_broadcast(txns=[tx_a["wtxid"]])
 
         tx_b = tx_a["tx"]
-        tx_b.vout[0].nValue -= 9000
-        self.gen_node.sendrawtransaction(tx_b.serialize().hex())
+        tx_b.vout[0].nValue -= 1500
+        self.gen_node.sendrawtransaction(tx_b.serialize().hex(), 1000)  # 1000 DGB/kvB limit
         inbound_peer.wait_until(lambda: "tx" in inbound_peer.last_message and inbound_peer.last_message.get("tx").tx.getwtxid() == tx_b.getwtxid())
 
         self.log.info("Re-request of tx_a after replacement is answered with notfound")

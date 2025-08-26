@@ -149,6 +149,7 @@ class CompactBlocksTest(DigiByteTestFramework):
         self.extra_args = [[
             "-acceptnonstdtxn=1",
             "-dandelion=0",
+            "-easypow",
         ]]
         self.utxos = []
 

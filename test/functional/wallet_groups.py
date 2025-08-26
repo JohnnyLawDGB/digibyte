@@ -49,9 +49,9 @@ class WalletGroupTest(DigiByteTestFramework):
         addr2 = [self.nodes[2].getnewaddress() for _ in range(3)]
         addrs = addr1 + addr2
 
-        # Send 1 + 0.5 coin to each address
-        [self.nodes[0].sendtoaddress(addr, 1.0) for addr in addrs]
-        [self.nodes[0].sendtoaddress(addr, 0.5) for addr in addrs]
+        # Send 50 + 25 coin to each address (DigiByte amounts)
+        [self.nodes[0].sendtoaddress(addr, 50.0) for addr in addrs]
+        [self.nodes[0].sendtoaddress(addr, 25.0) for addr in addrs]
 
         self.generate(self.nodes[0], 1)
         self.sync_all()  # Ensure all nodes see the confirmed transactions
@@ -61,27 +61,27 @@ class WalletGroupTest(DigiByteTestFramework):
         # - node[2] should pick one (1.0 + 0.5) UTXO group corresponding to a
         #   given address, and leave the rest
         self.log.info("Test sending transactions picks one UTXO group and leaves the rest")
-        txid1 = self.nodes[1].sendtoaddress(self.nodes[0].getnewaddress(), 0.2)  # DigiByte: Use v8.22.2 compatible amount
+        txid1 = self.nodes[1].sendtoaddress(self.nodes[0].getnewaddress(), 10.0)  # DigiByte amount
         tx1 = self.nodes[1].getrawtransaction(txid1, True)
         # txid1 should have 1 input and 2 outputs  
         assert_equal(1, len(tx1["vin"]))
         assert_equal(2, len(tx1["vout"]))
-        # one output should be 0.2, the other should be ~0.3 (0.5 - 0.2 = 0.3)
+        # one output should be 10.0, the other should be ~15.0 (25.0 - 10.0 = 15.0)
         v = [vout["value"] for vout in tx1["vout"]]
         v.sort()
-        assert_approx(v[0], vexp=0.2, vspan=0.1)  # DigiByte: Use v8.22.2 compatible expectations
-        assert_approx(v[1], vexp=0.3, vspan=0.1)
+        assert_approx(v[0], vexp=10.0, vspan=5.0)  # DigiByte: sent amount
+        assert_approx(v[1], vexp=15.0, vspan=5.0)  # change amount
 
-        txid2 = self.nodes[2].sendtoaddress(self.nodes[0].getnewaddress(), 0.2)  # DigiByte: Use v8.22.2 compatible amount
+        txid2 = self.nodes[2].sendtoaddress(self.nodes[0].getnewaddress(), 10.0)  # DigiByte amount
         tx2 = self.nodes[2].getrawtransaction(txid2, True)
         # txid2 should have 2 inputs and 2 outputs
         assert_equal(2, len(tx2["vin"]))
         assert_equal(2, len(tx2["vout"]))
-        # one output should be 0.2, the other should be ~1.3 (1.0 + 0.5 - 0.2 = 1.3)
+        # one output should be 10.0, the other should be ~65.0 (50.0 + 25.0 - 10.0 = 65.0)
         v = [vout["value"] for vout in tx2["vout"]]
         v.sort()
-        assert_approx(v[0], vexp=0.2, vspan=0.1)  # DigiByte: Use v8.22.2 compatible expectations
-        assert_approx(v[1], vexp=1.3, vspan=0.1)  # 1.5 - 0.2 = 1.3
+        assert_approx(v[0], vexp=10.0, vspan=5.0)  # DigiByte: sent amount
+        assert_approx(v[1], vexp=65.0, vspan=5.0)  # 75.0 - 10.0 = 65.0
 
         self.log.info("Test avoiding partial spends if warranted, even if avoidpartialspends is disabled")
         self.sync_all()

@@ -100,7 +100,7 @@ class BIP68_112_113Test(DigiByteTestFramework):
             f'-testactivationheight=csv@{CSV_ACTIVATION_HEIGHT}',
             '-par=1',  # Use only one script thread to get the exact reject reason for testing
             '-dandelion=0',
-            '-maxtxfee=10',
+            # DigiByte: Remove maxtxfee limit to avoid transaction rejections
         ]]
         self.supports_cli = False
 

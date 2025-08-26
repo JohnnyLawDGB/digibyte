@@ -34,7 +34,7 @@ class VersionBitsWarningTest(DigiByteTestFramework):
         # Open and close to create zero-length file
         with open(self.alert_filename, 'w', encoding='utf8'):
             pass
-        self.extra_args = [[f"-alertnotify=echo %s >> \"{self.alert_filename}\"", "-dandelion=0", "-maxtxfee=10"]]
+        self.extra_args = [[f"-alertnotify=echo %s >> \"{self.alert_filename}\"", "-dandelion=0"]]  # DigiByte: Remove maxtxfee limit
         self.setup_nodes()
 
     def send_blocks_with_version(self, peer, numblocks, version):

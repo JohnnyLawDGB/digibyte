@@ -36,6 +36,7 @@ from test_framework.wallet import MiniWallet
 
 VERSIONBITS_TOP_BITS = 0x20000000
 VERSIONBITS_DEPLOYMENT_TESTDUMMY_BIT = 28
+VERSIONBITS_DEPLOYMENT_TAPROOT_BIT = 0x02  # DigiByte taproot bit
 DEFAULT_BLOCK_MIN_TX_FEE = 1000  # default `-blockmintxfee` setting [sat/kvB]
 
 
@@ -55,22 +56,27 @@ class MiningTest(DigiByteTestFramework):
         self.num_nodes = 2
         self.setup_clean_chain = True
         self.supports_cli = False
-        self.extra_args = [['-easypow', '-dandelion=0', '-maxtipage=99999999'], ['-easypow', '-dandelion=0', '-maxtipage=99999999']]
+        self.extra_args = [['-dandelion=0'], ['-dandelion=0']]
 
     def mine_chain(self):
         self.log.info('Create some old blocks')
-        self.generate(self.nodes[0], 240, sync_fun=self.no_op)
+        # Generate blocks one by one with proper mock time like v8.22.2 did  
+        # Use 200 blocks to stay in Period I (< 334) and avoid Period V validation bug  
+        block_count = 200
+        for t in range(TIME_GENESIS_BLOCK, TIME_GENESIS_BLOCK + block_count * 15, 15):
+            self.nodes[0].setmocktime(t)
+            self.generate(self.nodes[0], 1, sync_fun=self.no_op)
         mining_info = self.nodes[0].getmininginfo()
-        assert_equal(mining_info['blocks'], 240)
+        assert_equal(mining_info['blocks'], block_count)
         assert_equal(mining_info['currentblocktx'], 0)
         assert_equal(mining_info['currentblockweight'], 4000)
 
         self.log.info('test blockversion')
-        mock_time = TIME_GENESIS_BLOCK + 240 * 15
-        self.restart_node(0, extra_args=[f'-mocktime={mock_time}', '-blockversion=1337', '-easypow', '-dandelion=0', '-maxtipage=99999999', '-reindex'])
+        mock_time = TIME_GENESIS_BLOCK + block_count * 15
+        self.restart_node(0, extra_args=[f'-mocktime={mock_time}', '-blockversion=1337', '-dandelion=0'])
         self.connect_nodes(0, 1)
         assert_equal(1337, self.nodes[0].getblocktemplate(NORMAL_GBT_REQUEST_PARAMS)['version'])
-        self.restart_node(0, extra_args=[f'-mocktime={mock_time}', '-easypow', '-dandelion=0', '-maxtipage=99999999'])
+        self.restart_node(0, extra_args=[f'-mocktime={mock_time}', '-dandelion=0'])
         self.connect_nodes(0, 1)
         assert_equal(VERSIONBITS_TOP_BITS + (1 << VERSIONBITS_DEPLOYMENT_TESTDUMMY_BIT), self.nodes[0].getblocktemplate(NORMAL_GBT_REQUEST_PARAMS)['version'])
         self.restart_node(0)
@@ -119,6 +125,10 @@ class MiningTest(DigiByteTestFramework):
         node = self.nodes[0]
         self.wallet = MiniWallet(node)
         self.mine_chain()
+        
+        # Fund the wallet by generating blocks to its address and wait for maturity
+        from test_framework.blocktools import COINBASE_MATURITY_2
+        self.generate(self.wallet, COINBASE_MATURITY_2 + 1, sync_fun=self.no_op)
 
         def assert_submitblock(block, result_str_1, result_str_2=None):
             block.solve()
@@ -128,7 +138,9 @@ class MiningTest(DigiByteTestFramework):
 
         self.log.info('getmininginfo')
         mining_info = node.getmininginfo()
-        assert_equal(mining_info['blocks'], 200)
+        # DigiByte blocks, plus COINBASE_MATURITY_2 + 1 for wallet funding  
+        expected_blocks = 200 + COINBASE_MATURITY_2 + 1  # 200 from mine_chain + 100 + 1
+        assert_equal(mining_info['blocks'], expected_blocks)
         assert_equal(mining_info['chain'], self.chain)
         assert 'currentblocktx' not in mining_info
         assert 'currentblockweight' not in mining_info

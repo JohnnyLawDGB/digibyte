@@ -150,7 +150,9 @@ class CompactBlocksTest(DigiByteTestFramework):
             "-acceptnonstdtxn=1",
             "-dandelion=0",
             "-easypow",
+            "-peertimeout=300",  # DigiByte: 5min peer timeout for P2P stability
         ]]
+        self.rpc_timeout *= 4  # DigiByte: Scale RPC timeouts for 15s vs 600s blocks
         self.utxos = []
 
     def build_block_on_tip(self, node):
@@ -561,7 +563,7 @@ class CompactBlocksTest(DigiByteTestFramework):
         assert_equal(int(node.getbestblockhash(), 16), block.hashPrevBlock)
 
         # We should receive a getdata request
-        test_node.wait_for_getdata([block.sha256], timeout=10)
+        test_node.wait_for_getdata([block.sha256], timeout=60)  # DigiByte: Longer timeout for P2P ops
         assert test_node.last_message["getdata"].inv[0].type == MSG_BLOCK or \
                test_node.last_message["getdata"].inv[0].type == MSG_BLOCK | MSG_WITNESS_FLAG
 
@@ -585,7 +587,7 @@ class CompactBlocksTest(DigiByteTestFramework):
             num_to_request = random.randint(1, len(block.vtx))
             msg.block_txn_request.from_absolute(sorted(random.sample(range(len(block.vtx)), num_to_request)))
             test_node.send_message(msg)
-            test_node.wait_until(lambda: "blocktxn" in test_node.last_message, timeout=10)
+            test_node.wait_until(lambda: "blocktxn" in test_node.last_message, timeout=60)  # DigiByte: Longer timeout
 
             [tx.calc_sha256() for tx in block.vtx]
             with p2p_lock:

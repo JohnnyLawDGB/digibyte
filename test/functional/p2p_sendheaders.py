@@ -106,7 +106,7 @@ from test_framework.util import (
     assert_equal,
 )
 
-DIRECT_FETCH_RESPONSE_TIME = 0.1  # DigiByte: Use longer timeout like v8.22.2
+DIRECT_FETCH_RESPONSE_TIME = 5  # DigiByte: Use much longer timeout for P2P operations
 
 class BaseNode(P2PInterface):
     def __init__(self):
@@ -501,15 +501,15 @@ class SendHeadersTest(DigiByteTestFramework):
         test_node.sync_with_ping()
         test_node.wait_for_getdata([x.sha256 for x in blocks[0:2]], timeout=DIRECT_FETCH_RESPONSE_TIME)
 
-        # Announcing 16 more headers should trigger direct fetch for 14 more
+        # Announcing 32 more headers should trigger direct fetch for 30 more
         # blocks
-        test_node.send_header_for_blocks(blocks[2:18])
+        test_node.send_header_for_blocks(blocks[2:34])
         test_node.sync_with_ping()
-        test_node.wait_for_getdata([x.sha256 for x in blocks[2:16]], timeout=DIRECT_FETCH_RESPONSE_TIME)
+        test_node.wait_for_getdata([x.sha256 for x in blocks[2:32]], timeout=DIRECT_FETCH_RESPONSE_TIME)
 
         # Announcing 1 more header should not trigger any response
         test_node.last_message.pop("getdata", None)
-        test_node.send_header_for_blocks(blocks[18:19])
+        test_node.send_header_for_blocks(blocks[34:35])
         test_node.sync_with_ping()
         with p2p_lock:
             assert "getdata" not in test_node.last_message

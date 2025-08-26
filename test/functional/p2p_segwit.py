@@ -1774,7 +1774,7 @@ class SegWitTest(DigiByteTestFramework):
         tx.vin.append(CTxIn(COutPoint(self.utxo[0].sha256, self.utxo[0].n), b""))
 
         # For each script, generate a pair of P2WSH and P2SH-P2WSH output.
-        outputvalue = (self.utxo[0].nValue - 100000) // (len(scripts) * 2)
+        outputvalue = (self.utxo[0].nValue - 10000000) // (len(scripts) * 2)
         for i in scripts:
             p2wsh = script_to_p2wsh_script(i)
             p2wsh_scripts.append(p2wsh)
@@ -1792,13 +1792,13 @@ class SegWitTest(DigiByteTestFramework):
         for i in range(len(scripts)):
             p2wsh_tx = CTransaction()
             p2wsh_tx.vin.append(CTxIn(COutPoint(txid, i * 2)))
-            p2wsh_tx.vout.append(CTxOut(outputvalue - 5000, CScript([OP_0, hash160(b"")])))
+            p2wsh_tx.vout.append(CTxOut(outputvalue - 220000, CScript([OP_0, hash160(b"")])))
             p2wsh_tx.wit.vtxinwit.append(CTxInWitness())
             p2wsh_tx.rehash()
             p2wsh_txs.append(p2wsh_tx)
             p2sh_tx = CTransaction()
             p2sh_tx.vin.append(CTxIn(COutPoint(txid, i * 2 + 1), CScript([p2wsh_scripts[i]])))
-            p2sh_tx.vout.append(CTxOut(outputvalue - 5000, CScript([OP_0, hash160(b"")])))
+            p2sh_tx.vout.append(CTxOut(outputvalue - 220000, CScript([OP_0, hash160(b"")])))
             p2sh_tx.wit.vtxinwit.append(CTxInWitness())
             p2sh_tx.rehash()
             p2sh_txs.append(p2sh_tx)

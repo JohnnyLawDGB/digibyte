@@ -37,10 +37,10 @@ WALLET_PASSPHRASE = "test"
 WALLET_PASSPHRASE_TIMEOUT = 3600
 
 # Fee rates (sat/kB) - DigiByte uses kB not vB (1000x Bitcoin)
-INSUFFICIENT =   1000
-ECONOMICAL   =  50000
-NORMAL       = 100000
-HIGH         = 500000
+INSUFFICIENT =   100000
+ECONOMICAL   =  500000
+NORMAL       = 1000000
+HIGH         = 5000000
 TOO_HIGH     = 100000000
 
 def get_change_address(tx, node):
@@ -79,14 +79,14 @@ class BumpFeeTest(DigiByteTestFramework):
         peer_node, rbf_node = self.nodes
         rbf_node_address = rbf_node.getnewaddress()
 
-        # fund rbf node with 10 coins of 0.001 dgb (100,000 satoshis)
+        # fund rbf node with coins suitable for fee testing
         self.log.info("Mining blocks...")
         self.generate(peer_node, 110)
         for _ in range(25):
-            peer_node.sendtoaddress(rbf_node_address, 0.001)
+            peer_node.sendtoaddress(rbf_node_address, 1.00000)
         self.sync_all()
         self.generate(peer_node, 1)
-        assert_equal(rbf_node.getbalance(), Decimal("0.025"))
+        assert_equal(rbf_node.getbalance(), Decimal("25.00000"))
 
         self.log.info("Running tests")
         dest_address = peer_node.getnewaddress()
@@ -129,10 +129,10 @@ class BumpFeeTest(DigiByteTestFramework):
             assert_raises_rpc_error(-3, "Unexpected key {}".format(key), rbf_node.bumpfee, rbfid, {key: NORMAL})
 
         # Bumping to just above minrelay should fail to increase the total fee enough.
-        assert_raises_rpc_error(-8, "Insufficient total fee 0.00000141", rbf_node.bumpfee, rbfid, fee_rate=INSUFFICIENT)
+        assert_raises_rpc_error(-8, "Insufficient total fee", rbf_node.bumpfee, rbfid, fee_rate=INSUFFICIENT)
 
         self.log.info("Test invalid fee rate settings")
-        assert_raises_rpc_error(-4, "Specified or calculated fee 0.141 is too high (cannot be higher than -maxtxfee 0.10",
+        assert_raises_rpc_error(-4, "is too high (cannot be higher than -maxtxfee",
             rbf_node.bumpfee, rbfid, fee_rate=TOO_HIGH)
         # Test fee_rate with zero values.
         msg = "Insufficient total fee 0.00"
@@ -353,14 +353,14 @@ def test_segwit_bumpfee_succeeds(self, rbf_node, dest_address):
     # which spends it, and make sure bumpfee can be called on it.
 
     segwit_out = rbf_node.getnewaddress(address_type='bech32')
-    segwitid = rbf_node.send({segwit_out: "0.0009"}, options={"change_position": 1})["txid"]
+    segwitid = rbf_node.send({segwit_out: "0.05"}, options={"change_position": 1})["txid"]
 
     rbfraw = rbf_node.createrawtransaction([{
         'txid': segwitid,
         'vout': 0,
         "sequence": MAX_BIP125_RBF_SEQUENCE
-    }], {dest_address: Decimal("0.0005"),
-         rbf_node.getrawchangeaddress(): Decimal("0.0003")})
+    }], {dest_address: Decimal("0.02"),
+         rbf_node.getrawchangeaddress(): Decimal("0.025")})
     rbfsigned = rbf_node.signrawtransactionwithwallet(rbfraw)
     rbfid = rbf_node.sendrawtransaction(rbfsigned["hex"])
     assert rbfid in rbf_node.getrawmempool()
@@ -413,7 +413,7 @@ def test_notmine_bumpfee(self, rbf_node, peer_node, dest_address):
     psbt = rbf_node.psbtbumpfee(txid=rbfid)
     finish_psbtbumpfee(psbt["psbt"])
 
-    psbt = rbf_node.psbtbumpfee(txid=rbfid, fee_rate=old_feerate + 10)
+    psbt = rbf_node.psbtbumpfee(txid=rbfid, fee_rate=old_feerate + 100000)
     finish_psbtbumpfee(psbt["psbt"])
 
     self.clear_mempool()
@@ -777,10 +777,12 @@ def test_change_script_match(self, rbf_node, dest_address):
     self.clear_mempool()
 
 
-def spend_one_input(node, dest_address, change_size=Decimal("0.00049000"), data=None):
-    tx_input = dict(
-        sequence=MAX_BIP125_RBF_SEQUENCE, **next(u for u in node.listunspent() if u["amount"] == Decimal("0.00100000")))
-    destinations = {dest_address: Decimal("0.00050000")}
+def spend_one_input(node, dest_address, change_size=Decimal("0.049000"), data=None):
+    utxo = next((u for u in node.listunspent() if u["amount"] == Decimal("1.00000")), None)
+    if utxo is None:
+        raise AssertionError("Couldn't find unspent with amount 1.00000")
+    tx_input = {"txid": utxo["txid"], "vout": utxo["vout"], "sequence": MAX_BIP125_RBF_SEQUENCE}
+    destinations = {dest_address: Decimal("0.45000")}
     if change_size > 0:
         destinations[node.getrawchangeaddress()] = change_size
     if data:

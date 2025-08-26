@@ -1,20 +1,19 @@
 # DigiByte v8.26 Test Fix Sub-Agent Instructions
 
-## Your Role: Test Fix Specialist
-You are a SUB-AGENT assigned to fix specific Python functional tests. You work independently on your assigned group and report back when complete.
+## Your Role: Single Test File Specialist
+You are a SUB-AGENT assigned to fix a SINGLE Python functional test file. You work with deep focus on this one file, performing thorough analysis to identify whether issues are in the test framework or application source code.
 
 ## Your Assignment
-- **GROUP**: [Assigned by orchestrator]
-- **TESTS**: [List provided by orchestrator]
-- **DEADLINE**: Complete all tests in group before reporting back
+- **TEST FILE**: [Single test file assigned by orchestrator]
+- **VARIANTS**: [Any variants like --descriptors, --legacy-wallet]
+- **FOCUS**: Deep analysis - test logic, framework bugs, source code issues
 - **CHANGES**: Leave all changes STAGED for human review (DO NOT commit)
 
 ## Critical Context Files You MUST Read
 1. **CLAUDE.md** - DigiByte constants and project structure
 2. **COMMON_FIXES.md** - Check for existing patterns FIRST
 3. **APPLICATION_BUGS.md** - Log any application bugs you find
-4. **DIGIBYTE_FEE_ANALYSIS_V8.26.md** - Read for all fee related issues
-5. **doc/DANDELION_INFO.md** - Read for mempool and stempool related issues due to dandelion protocol in DigiByte
+4. **doc/DANDELION_INFO.md** - Read for mempool and stempool related issues due to dandelion protocol in DigiByte
 
 ## Working Environment
 ```
@@ -43,10 +42,10 @@ REGTEST_BECH32 = 'dgbrt'        # NOT 'bcrt'
 
 ## Your Fix Process - THREE-PASS APPROACH
 
-### PASS 1: QUICK FIXES (Do This FIRST for ALL Tests)
-**Goal: Fix 80% of tests in minutes, not hours**
+### PASS 1: QUICK FIXES (Try This FIRST)
+**Goal: Resolve if it's a simple DigiByte constant issue**
 
-For EACH test in your group, apply these quick fixes FIRST:
+For your assigned test file, apply these quick fixes FIRST:
 
 1. **Run test, identify error pattern**:
 ```bash
@@ -55,7 +54,7 @@ For EACH test in your group, apply these quick fixes FIRST:
 
 2. **Match to COMMON_FIXES.md patterns**:
    - `min relay fee not met` → Multiply fees by 100 (DGB fees are 100x BTC)
-   - `AssertionError.*50` → Change to 72000 
+   - `AssertionError.*50` → Change to 72000
    - `AssertionError.*100` → Use COINBASE_MATURITY_2
    - `Insufficient funds` → Reduce amounts or fix rewards
    - `not(0 == 5)` → Add `-dandelion=0` to nodes
@@ -80,101 +79,136 @@ For EACH test in your group, apply these quick fixes FIRST:
 ./test/functional/[test_name].py  # PASS? Move to next test!
 ```
 
-5. **Don't overthink in Pass 1** - if quick fix doesn't work, note it and continue to next test
+5. **Don't overthink in Pass 1** - if quick fix doesn't work, proceed to Pass 2
 
-### PASS 2: DEEP DIVE (Only for Tests That Failed Pass 1)
+### PASS 2: TEST FRAMEWORK BUG ANALYSIS (If Pass 1 Failed)
 
-NOW go back and do thorough analysis ONLY for tests that didn't fix easily:
+**CRITICAL: Many remaining failures are due to test framework bugs where tests need adaptation to DigiByte's source code functionality**
 
-### 1. Run Test & Capture Detailed Failure
-
-**⚠️ IMPORTANT: v8.22.2 tests WERE WORKING! Use them as your SOURCE OF TRUTH!**
-
-Previous AI agents may have gone off track. The v8.22.2 version has most tests passing, so when in doubt, check what v8.22.2 did and adapt it to the new structure.
+### 1. Understand What The Test Is Actually Testing
 
 ```bash
-# STEP 1: Check how it WORKED in v8.22.2 (SOURCE OF TRUTH!)
-cat digibyte-v8.22.2/test/functional/[test_name].py
-# This version WORKED - understand what it expects!
+# First, understand the test's purpose and logic flow
+grep -n "def test_\|def run_test\|class\|assert\|log.info" test/functional/[test_name].py
 
-# STEP 2: See what CHANGED in Bitcoin v26.2
-cat bitcoin-v26.2-for-digibyte/test/functional/[test_name].py  
-# Understand new features/structure from Bitcoin
-
-# STEP 3: Current BROKEN version (may have wrong fixes)
-cat test/functional/[test_name].py
-# This may have incorrect "fixes" from previous attempts
-
-# STEP 4: Find critical differences
-diff digibyte-v8.22.2/test/functional/[test_name].py test/functional/[test_name].py
-# Focus on DigiByte-specific values that may have been lost
-
-# STEP 5: Check if Bitcoin structure changed
-diff digibyte-v8.22.2/test/functional/[test_name].py bitcoin-v26.2-for-digibyte/test/functional/[test_name].py
-# Understand what structural changes came from Bitcoin
+# Identify the core functionality being tested
+# Examples:
+# - Block validation? → Focus on consensus rules
+# - Transaction relay? → Check Dandelion++ impact
+# - Fee estimation? → Verify kB vs vB calculations
+# - Wallet balance? → Check maturity and reward calculations
 ```
 
-**KEY INSIGHT**: If v8.22.2 had different values/logic than current v8.26, and the test was passing in v8.22.2, then v8.22.2 is likely correct!
+### 2. Identify Test Framework Issues
 
-### 2. Enhanced Three-Way Differential Analysis
+**Common Test Framework Bugs (tests not properly adapted to DigiByte):**
 
-When test failures persist after Pass 1, perform systematic three-way comparison:
+#### A. Test Assumes Bitcoin Behavior
+```python
+# Example: Test expects immediate mempool entry (Bitcoin)
+# But DigiByte uses Dandelion++ with stempool embargo
+# FIX: Add -dandelion=0 OR adapt test for stempool behavior
+```
+
+#### B. Test Uses Wrong Helper Functions
+```python
+# Example: Test uses create_block() with Bitcoin parameters
+# But DigiByte needs different block version for multi-algo
+# FIX: Update helper function calls with DigiByte parameters
+```
+
+#### C. Test Framework Constants Not Updated
+```python
+# Check test/functional/test_framework/*.py files:
+# - mininode.py: Network magic bytes
+# - blocktools.py: Block creation functions
+# - util.py: Fee calculations, maturity checks
+# - script.py: Address generation
+```
+
+#### D. Test Makes Invalid Assumptions
+```python
+# Example: Test assumes all blocks use same PoW algorithm
+# But DigiByte has 5 algorithms with different difficulties
+# FIX: Adapt test to handle multi-algorithm mining
+```
+
+### 3. Three-Way Test Framework Comparison
 
 ```bash
-# STEP 1: Create unified three-way diff view
-diff3 -m digibyte-v8.22.2/test/functional/[test_name].py \
-         test/functional/[test_name].py \
-         bitcoin-v26.2-for-digibyte/test/functional/[test_name].py > /tmp/test_diff3.txt
+# Compare test framework files that your test imports
+# Example if test imports from blocktools:
 
-# STEP 2: Identify source files used by the test
-grep -h "self.nodes\[0\]\." test/functional/[test_name].py | \
-    sed 's/.*self.nodes\[0\]\.\([a-z_]*\).*/\1/' | sort -u
+diff3 -m digibyte-v8.22.2/test/functional/test_framework/blocktools.py \
+         test/functional/test_framework/blocktools.py \
+         bitcoin-v26.2-for-digibyte/test/functional/test_framework/blocktools.py
 
-# STEP 3: For each relevant source file, create three-way diff
-# Example for validation.cpp if test uses validation functions:
-diff3 -m digibyte-v8.22.2/src/validation.cpp \
-         src/validation.cpp \
-         bitcoin-v26.2-for-digibyte/src/validation.cpp > /tmp/validation_diff3.txt
-
-# STEP 4: Look for merge conflicts and lost DigiByte logic
-grep -n "<<<<<<\|======\|>>>>>>" /tmp/*_diff3.txt
+# Look for DigiByte-specific logic that may be missing or incorrect
 ```
 
-This unified view helps identify:
-- Code that exists in v8.22.2 but was lost in merge
-- Bitcoin code that incorrectly overwrote DigiByte logic
-- Partial merges that left inconsistent state
+### 4. Trace Test Execution Flow
 
-### 3. Check COMMON_FIXES.md First!
-**ALWAYS check COMMON_FIXES.md before writing any fix!**
+```bash
+# Run with maximum debugging to understand actual vs expected behavior
+./test/functional/[test_name].py --loglevel=debug --nocleanup 2>&1 | tee /tmp/test_debug.log
 
-The document covers 7 common issues with ready-to-use patterns:
-1. Fees (sat/kB vs sat/vB)
-2. Coinbase maturity (8 vs 100)
-3. Dandelion++ (transaction propagation)
-4. Address prefixes (dgbrt vs bcrt)
-5. Multi-algo mining (block versions)
-6. Fork heights (difficulty changes)
-7. Network ports (14022 vs 18444)
+# Analyze the execution flow
+grep -n "ERROR\|WARN\|AssertionError" /tmp/test_debug.log
 
-### 4. Apply Fix
-Use the exact patterns from COMMON_FIXES.md. If your issue isn't covered there, it might be a new pattern worth documenting.
+# Check what RPC calls are made and their responses
+grep "RPC call\|response" /tmp/test_debug.log
+```
 
-### 5. Test ALL Variants
+### 5. Test Framework Fix Patterns
+
+#### Pattern 1: Dandelion++ Incompatibility
+```python
+# If test fails due to empty mempool or transaction not found:
+def set_test_params(self):
+    self.extra_args = [['-dandelion=0'] for _ in range(self.num_nodes)]
+```
+
+#### Pattern 2: Fee Calculation Framework Bug
+```python
+# If test framework calculates fees wrong:
+# Check test/functional/test_framework/util.py
+# Look for fee_rate calculations - should use kB not vB
+```
+
+#### Pattern 3: Block Creation Framework Bug
+```python
+# If create_block() fails:
+# Check test/functional/test_framework/blocktools.py
+# Ensure block version includes algorithm bits for DigiByte
+```
+
+#### Pattern 4: Maturity Check Framework Bug
+```python
+# If maturity checks fail:
+# Test framework may not handle HEIGHT 145000 switch
+# COINBASE_MATURITY (8) vs COINBASE_MATURITY_2 (100)
+```
+
+### 6. Apply Test Framework Fixes
+- Fix the test file itself OR
+- Fix test framework files in test/functional/test_framework/
+- Document the framework bug and fix in your report
+
+### 7. Verify All Variants Pass
 ```bash
 # Base test
 ./test/functional/[test_name].py
 
-# With descriptors
+# With descriptors (if applicable)
 ./test/functional/[test_name].py --descriptors
 
-# Legacy wallet
+# Legacy wallet (if applicable)
 ./test/functional/[test_name].py --legacy-wallet
 
-# All must pass!
+# All variants must pass!
 ```
 
-### 6. Document Your Findings
+### 8. Document Test Framework Findings
 
 #### If New Pattern Found:
 Add to COMMON_FIXES.md:
@@ -203,19 +237,19 @@ Add to COMMON_FIXES.md:
    **Symptoms**: [What fails in the test]
    **Root Cause**: [Why it fails - be specific]
    **Impact**: [What else might be affected]
-   
+
    **Evidence**:
    - Error message or incorrect behavior
    - Expected vs actual values
    - Code snippet showing the bug
-   
+
    **Proposed Fix**:
    ```cpp
    // Show the exact code change needed
    - incorrect_code
    + correct_code
    ```
-   
+
    **Fix Applied**: [YES/NO - explain why]
    **Risk Assessment**: [LOW/MEDIUM/HIGH - explain]
    ```
@@ -259,7 +293,7 @@ def set_test_params(self):
 
 **Quick fix for Dandelion-related failures:**
 - Empty mempool? → Add `-dandelion=0` to extra_args
-- Transaction not found? → Add `-dandelion=0` to extra_args  
+- Transaction not found? → Add `-dandelion=0` to extra_args
 - Relay delays? → Add `-dandelion=0` to extra_args
 - GETDATA issues? → Add `-dandelion=0` to extra_args
 
@@ -476,54 +510,75 @@ If completely blocked on a test:
 4. Include blocked tests in final report
 
 ## Your Final Report Format
-When all tests in group complete (or blocked):
+When your assigned test file is complete:
 ```markdown
-## Group X Completion Report
+## Test File Completion Report: [test_name].py
 
-### Tests Fixed: X/Y
-- ✅ test1.py - [brief fix description]
-- ✅ test2.py - [brief fix description]
-- 🔄 test3.py - BLOCKED: [reason]
+### Status: ✅ FIXED / 🔄 BLOCKED
 
-### New Patterns Discovered: X
-- Pattern 1: [name] - Added to COMMON_FIXES.md
-- Pattern 2: [name] - Added to COMMON_FIXES.md
+### Variants Tested:
+- ✅ [test_name].py (base) - [PASS/FAIL + fix description]
+- ✅ [test_name].py --descriptors - [PASS/FAIL + fix description]
+- ✅ [test_name].py --legacy-wallet - [PASS/FAIL + fix description]
 
-### Application Bugs Found: X
-- BUG-001: [description] - Added to APPLICATION_BUGS.md
-- BUG-002: [description] - Fixed in src/[file].cpp
+### Test Purpose & Functionality:
+[Clear explanation of what this test validates]
+
+### Issues Found & Fixed:
+1. **Type**: [Quick Fix / Test Framework Bug / Application Bug]
+   **Issue**: [Detailed description]
+   **Fix**: [What was changed and why]
+   **Location**: [File and line numbers]
+
+### Test Framework Bugs Identified:
+- [Description of any test framework adaptation issues]
+- [Files affected in test/functional/test_framework/]
+
+### Application Bugs Found:
+- BUG-XXX: [description] - Added to APPLICATION_BUGS.md
+- Location: src/[file].cpp:[line]
+- Fix applied: [YES/NO + reason]
+
+### New Patterns Discovered:
+- Pattern: [name] - Added to COMMON_FIXES.md
 
 ### Files Modified:
-- test/functional/test1.py
-- test/functional/test2.py
-- COMMON_FIXES.md (updated)
-- APPLICATION_BUGS.md (updated)
+- test/functional/[test_name].py
+- test/functional/test_framework/[if any]
+- COMMON_FIXES.md (if updated)
+- APPLICATION_BUGS.md (if updated)
+
+### Deep Analysis Notes:
+[Any important observations about test logic, framework issues, or source code]
 
 Ready for human review (changes staged, not committed).
 ```
 
-## Staging Changes for Review (AFTER ALL TESTS PASS)
+## Staging Changes for Review (AFTER TEST PASSES)
 
-Once all tests in your group pass:
+Once your assigned test file and all variants pass:
 
 ### 1. Review Your Changes
 ```bash
 # See what you modified
 git status
-git diff test/functional/
+git diff test/functional/[test_name].py
+git diff test/functional/test_framework/  # if you modified framework files
 ```
 
-### 2. Stage ONLY Your Group's Test Files
+### 2. Stage ONLY Your Test File and Related Changes
 ```bash
-# Add only YOUR group's test files
-git add test/functional/[your_test1].py
-git add test/functional/[your_test2].py
-# DO NOT add tests from other groups!
+# Add your assigned test file
+git add test/functional/[test_name].py
+
+# Add any framework fixes if applicable
+git add test/functional/test_framework/[modified_file].py
 
 # Also add documentation updates
-git add COMMON_FIXES.md
-git add APPLICATION_BUGS.md
+git add COMMON_FIXES.md  # if updated
+git add APPLICATION_BUGS.md  # if updated
 # DO NOT add TEST_FIX_PROGRESS.md (orchestrator handles this)
+# DO NOT add other test files
 ```
 
 ### 3. Leave Changes Staged
@@ -532,55 +587,59 @@ The human reviewer will create the final commit after verifying all changes.
 
 ## Example Sessions
 
-### Example: Three-Pass Workflow
+### Example: Three-Pass Workflow for Single Test File
 ```bash
-# PASS 1: Quick fixes for ALL tests in your group
+# ASSIGNED: wallet_balance.py (with --descriptors and --legacy-wallet variants)
+
+# PASS 1: Quick fixes for your assigned test file
 # ================================================
-# For each test:
-./test/functional/[test].py 2>&1 | grep -A5 ERROR
+./test/functional/wallet_balance.py 2>&1 | grep -A5 ERROR
 
 # Error: "AssertionError: not(50 == 72000)"
-# → Quick fix: Change 50 to 72000 → PASS! Next test
+# → Quick fix: Change 50 to 72000
+# Test passes? Great, test variants too. All pass? Done!
 
-# Error: "min relay fee not met" 
-# → Quick fix: Multiply fees by 1000 → PASS! Next test
+# Error: Complex error that quick fix doesn't solve
+# → Proceed to Pass 2
 
-# Error: "AssertionError: not(0 == 5)"
-# → Quick fix: Add -dandelion=0 → PASS! Next test
+# PASS 2: Test Framework Bug Analysis
+# =====================================
+# Understand what wallet_balance.py is testing:
+# - Balance calculation after mining
+# - UTXO maturity checks
+# - Fee deduction logic
 
-# Error: Complex error
-# → Can't quick fix - note it, continue to next test
+# Check if test framework has bugs:
+# - Does test assume Bitcoin's 100 block maturity?
+# - Does test calculate fees using vB instead of kB?
+# - Does test framework's balance calculation match DigiByte?
 
-# PASS 1 RESULTS: Fixed most tests in minutes!
+# Found framework bug in test/functional/test_framework/util.py
+# Fix the framework bug, test passes? Done!
 
-# PASS 2: Deep dive ONLY on remaining failures
-# =============================================
-# Now do thorough v8.22.2 comparison only for stubborn tests
-# Compare test implementations across versions
-
-# PASS 3: Application bug hunt for STILL failing tests
-# =====================================================
-# Compare actual src/ implementation code
-# Look for merge errors or missing DigiByte updates
-# Document real bugs in APPLICATION_BUGS.md
+# PASS 3: Application Bug Hunt (if still failing)
+# ================================================
+# Compare actual src/wallet/*.cpp implementation
+# Look for merge errors or missing DigiByte logic
+# Found bug in src/wallet/wallet.cpp - document in APPLICATION_BUGS.md
 ```
 
 
 ## Remember: THREE-PASS STRATEGY
 
-### PASS 1 (Quick Fixes - 15 minutes max):
+### PASS 1 (Quick Fixes - 5 minutes):
 - ✅ Try COMMON_FIXES patterns first
-- ✅ Apply obvious fixes immediately
+- ✅ Apply obvious DigiByte constant fixes
 - ✅ Don't analyze deeply - just pattern match
-- ✅ Move quickly through ALL tests
-- ✅ Goal: Fix 80% with simple changes
+- ✅ Test all variants if quick fix works
+- ✅ Goal: Resolve if it's a simple constant issue
 
-### PASS 2 (Deep Test Analysis - as needed):
-- ✅ ONLY for tests that didn't fix in Pass 1
-- ✅ Check v8.22.2 reference
-- ✅ Do three-way test comparison
-- ✅ Understand test expectations
-- ✅ Apply test-level fixes
+### PASS 2 (Test Framework Bug Analysis - 15-30 minutes):
+- ✅ ONLY if Pass 1 didn't fix the issue
+- ✅ Understand what the test is actually testing
+- ✅ Identify test framework adaptation bugs
+- ✅ Check test framework files for DigiByte compatibility
+- ✅ Fix framework bugs that prevent proper DigiByte testing
 
 ### PASS 3 (Application Bug Hunt - last resort):
 - ✅ ONLY for tests still failing after Pass 1 & 2
@@ -589,21 +648,23 @@ The human reviewer will create the final commit after verifying all changes.
 - ✅ Find missing DigiByte constants
 - ✅ Document all bugs in APPLICATION_BUGS.md
 
-You are a SUB-AGENT - you:
-- ✅ Use THREE-PASS approach for efficiency
-- ✅ Fix ONLY tests in your assigned group
-- ✅ Make tests ACTUALLY PASS (no skipping!)
+You are a SUB-AGENT focused on a SINGLE TEST FILE - you:
+- ✅ Use THREE-PASS approach for deep analysis
+- ✅ Fix ONLY your assigned test file and its variants
+- ✅ Thoroughly understand test logic and purpose
+- ✅ Identify and fix test framework bugs
+- ✅ Make test ACTUALLY PASS (no skipping!)
 - ✅ Document all patterns and bugs found
 - ✅ Stage changes for review (no commits)
-- ✅ Report back when group complete
-- ❌ Do NOT work on other groups
+- ✅ Report back when test file complete
+- ❌ Do NOT work on other test files
 - ❌ Do NOT skip or disable tests
 - ❌ Do NOT make changes without testing
 - ❌ Do NOT commit any changes
 - ❌ Do NOT update TEST_FIX_PROGRESS.md
 
-Your success = All tests in your group PASSING (not skipped) + changes staged for review.
+Your success = Your assigned test file and ALL its variants PASSING (not skipped) + thorough understanding of any framework or source bugs + changes staged for review.
 
 ---
 
-*BEGIN WORK on your assigned group - Fix systematically, document thoroughly*
+*BEGIN WORK on your assigned TEST FILE - Perform deep analysis, fix thoroughly, document completely*

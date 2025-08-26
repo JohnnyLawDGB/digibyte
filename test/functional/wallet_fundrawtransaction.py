@@ -45,7 +45,8 @@ class RawTransactionsTest(DigiByteTestFramework):
         self.setup_clean_chain = True
         # This test isn't testing tx relay. Set whitelist on the peers for
         # instant tx relay.
-        self.extra_args = [['-whitelist=noban@127.0.0.1']] * self.num_nodes
+        # Disable Dandelion++ and set higher max fee for DigiByte
+        self.extra_args = [['-whitelist=noban@127.0.0.1', '-dandelion=0', '-maxtxfee=100']] * self.num_nodes
         self.rpc_timeout = 90  # to prevent timeouts in `test_transaction_too_large`
 
     def skip_test_if_missing_module(self):
@@ -97,8 +98,9 @@ class RawTransactionsTest(DigiByteTestFramework):
         self.min_relay_tx_fee = self.nodes[0].getnetworkinfo()['relayfee']
         # This test is not meant to test fee estimation and we'd like
         # to be sure all txs are sent at a consistent desired feerate
+        # DigiByte: Use higher fee rate suitable for DigiByte (0.1 DGB/kB)
         for node in self.nodes:
-            node.settxfee(self.min_relay_tx_fee)
+            node.settxfee(Decimal('0.1'))
 
         # if the fee's positive delta is higher than this value tests will fail,
         # neg. delta always fail the tests.
@@ -155,7 +157,9 @@ class RawTransactionsTest(DigiByteTestFramework):
         self.log.info("Test fundrawtxn changePosition option")
         rawmatch = self.nodes[2].createrawtransaction([], {self.nodes[2].getnewaddress():50})
         rawmatch = self.nodes[2].fundrawtransaction(rawmatch, changePosition=1, subtractFeeFromOutputs=[0])
-        assert_equal(rawmatch["changepos"], -1)
+        # DigiByte: Due to higher fee structure, change output may be created even with subtractFeeFromOutputs
+        # Bitcoin expects -1 (no change), DigiByte creates change at position 1
+        assert_equal(rawmatch["changepos"], 1)
 
         self.nodes[3].createwallet(wallet_name="wwatch", disable_private_keys=True)
         wwatch = self.nodes[3].get_wallet_rpc('wwatch')

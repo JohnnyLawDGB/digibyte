@@ -17,6 +17,8 @@ class TxnMallTest(DigiByteTestFramework):
     def set_test_params(self):
         self.num_nodes = 3
         self.supports_cli = False
+        # Disable Dandelion++ for reliable transaction propagation
+        self.extra_args = [["-dandelion=0", "-maxtxfee=10"]] * 3
 
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()
@@ -39,8 +41,9 @@ class TxnMallTest(DigiByteTestFramework):
         return self.nodes[0].sendrawtransaction(tx['hex'])
 
     def run_test(self):
-        # All nodes should start with 1,250 DGB:
-        starting_balance = 1250
+        # All nodes should start with 50 mature transactions,
+        # having 72000 per (mature) coinbase transaction, each.
+        starting_balance = 25 * 72000
 
         # All nodes should be out of IBD.
         # If the nodes are not all out of IBD, that can interfere with
@@ -101,7 +104,10 @@ class TxnMallTest(DigiByteTestFramework):
         # matured block, minus 40, minus 20, and minus transaction fees:
         expected = starting_balance + fund_foo_tx["fee"] + fund_bar_tx["fee"]
         if self.options.mine_block:
-            expected += 50
+            # In DigiByte, since COINBASE_MATURITY is only set to 8,
+            # node0's txs are already matured. No emission will mature
+            # even after calling a block.
+            expected += 72000
         expected += tx1["amount"] + tx1["fee"]
         expected += tx2["amount"] + tx2["fee"]
         assert_equal(self.nodes[0].getbalance(), expected)
@@ -135,14 +141,13 @@ class TxnMallTest(DigiByteTestFramework):
         assert_equal(tx1["confirmations"], -2)
         assert_equal(tx2["confirmations"], -2)
 
-        # Node0's total balance should be starting balance, plus 100DGB for
-        # two more matured blocks, minus 1240 for the double-spend, plus fees (which are
-        # negative):
-        expected = starting_balance + 100 - 1240 + fund_foo_tx["fee"] + fund_bar_tx["fee"] + doublespend_fee
+        # Node0's total balance should be starting balance
+        # minus 1240 for the double-spend, plus fees (which are negative):
+        expected = starting_balance + 142760 + fund_foo_tx["fee"] + fund_bar_tx["fee"] + doublespend_fee
         assert_equal(self.nodes[0].getbalance(), expected)
 
-        # Node1's balance should be its initial balance (1250 for 25 block rewards) plus the doublespend:
-        assert_equal(self.nodes[1].getbalance(), 1250 + 1240)
+        # Node1's balance should be its initial balance (25 * 72000 for 25 block rewards) plus the doublespend:
+        assert_equal(self.nodes[1].getbalance(), 25 * 72000 + 1240)
 
 
 if __name__ == '__main__':

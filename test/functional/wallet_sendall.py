@@ -36,6 +36,8 @@ class SendallTest(DigiByteTestFramework):
         getcontext().prec=10
         self.num_nodes = 1
         self.setup_clean_chain = True
+        # Disable Dandelion++ and set higher max fee for DigiByte
+        self.extra_args = [["-dandelion=0", "-maxtxfee=10"]]
 
     def assert_balance_swept_completely(self, tx, balance):
         output_sum = sum([o["value"] for o in tx["decoded"]["vout"]])

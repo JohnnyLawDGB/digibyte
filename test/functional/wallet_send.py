@@ -31,9 +31,10 @@ class WalletSendTest(DigiByteTestFramework):
     def set_test_params(self):
         self.num_nodes = 2
         # whitelist all peers to speed up tx relay / mempool sync
+        # Disable Dandelion++ and set higher max fee for DigiByte
         self.extra_args = [
-            ["-whitelist=127.0.0.1","-walletrbf=1"],
-            ["-whitelist=127.0.0.1","-walletrbf=1"],
+            ["-whitelist=127.0.0.1","-walletrbf=1", "-dandelion=0", "-maxtxfee=10"],
+            ["-whitelist=127.0.0.1","-walletrbf=1", "-dandelion=0", "-maxtxfee=10"],
         ]
         getcontext().prec = 8 # Satoshi precision for Decimal
 

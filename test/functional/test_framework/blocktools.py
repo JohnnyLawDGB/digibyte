@@ -124,7 +124,16 @@ def script_BIP34_coinbase_height(height):
     return CScript([CScriptNum(height)])
 
 
-def create_coinbase(height, pubkey=None, *, script_pubkey=None, extra_output_script=None, fees=0, nValue=50):
+def get_coinbase_value(height): 
+    if height < 1440:
+        return 72000
+    elif height < 5760:
+        return 16000
+    else:
+        return 8000
+
+
+def create_coinbase(height, pubkey=None, *, script_pubkey=None, extra_output_script=None, fees=0, nValue=None):
     """Create a coinbase transaction.
 
     If pubkey is passed in, the coinbase output will be a P2PK output;
@@ -135,11 +144,13 @@ def create_coinbase(height, pubkey=None, *, script_pubkey=None, extra_output_scr
     coinbase = CTransaction()
     coinbase.vin.append(CTxIn(COutPoint(0, 0xffffffff), script_BIP34_coinbase_height(height), SEQUENCE_FINAL))
     coinbaseoutput = CTxOut()
+    if nValue is None:
+        nValue = get_coinbase_value(height)
     coinbaseoutput.nValue = nValue * COIN
     if nValue == 50:
         halvings = int(height / 150)  # regtest
         coinbaseoutput.nValue >>= halvings
-        coinbaseoutput.nValue += fees
+    coinbaseoutput.nValue += fees
     if pubkey is not None:
         coinbaseoutput.scriptPubKey = key_to_p2pk_script(pubkey)
     elif script_pubkey is not None:

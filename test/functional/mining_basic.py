@@ -55,22 +55,22 @@ class MiningTest(DigiByteTestFramework):
         self.num_nodes = 2
         self.setup_clean_chain = True
         self.supports_cli = False
+        self.extra_args = [['-easypow', '-dandelion=0', '-maxtipage=99999999'], ['-easypow', '-dandelion=0', '-maxtipage=99999999']]
 
     def mine_chain(self):
         self.log.info('Create some old blocks')
-        for t in range(TIME_GENESIS_BLOCK, TIME_GENESIS_BLOCK + 200 * 600, 600):
-            self.nodes[0].setmocktime(t)
-            self.generate(self.wallet, 1, sync_fun=self.no_op)
+        self.generate(self.nodes[0], 240, sync_fun=self.no_op)
         mining_info = self.nodes[0].getmininginfo()
-        assert_equal(mining_info['blocks'], 200)
+        assert_equal(mining_info['blocks'], 240)
         assert_equal(mining_info['currentblocktx'], 0)
         assert_equal(mining_info['currentblockweight'], 4000)
 
         self.log.info('test blockversion')
-        self.restart_node(0, extra_args=[f'-mocktime={t}', '-blockversion=1337'])
+        mock_time = TIME_GENESIS_BLOCK + 240 * 15
+        self.restart_node(0, extra_args=[f'-mocktime={mock_time}', '-blockversion=1337', '-easypow', '-dandelion=0', '-maxtipage=99999999', '-reindex'])
         self.connect_nodes(0, 1)
         assert_equal(1337, self.nodes[0].getblocktemplate(NORMAL_GBT_REQUEST_PARAMS)['version'])
-        self.restart_node(0, extra_args=[f'-mocktime={t}'])
+        self.restart_node(0, extra_args=[f'-mocktime={mock_time}', '-easypow', '-dandelion=0', '-maxtipage=99999999'])
         self.connect_nodes(0, 1)
         assert_equal(VERSIONBITS_TOP_BITS + (1 << VERSIONBITS_DEPLOYMENT_TESTDUMMY_BIT), self.nodes[0].getblocktemplate(NORMAL_GBT_REQUEST_PARAMS)['version'])
         self.restart_node(0)

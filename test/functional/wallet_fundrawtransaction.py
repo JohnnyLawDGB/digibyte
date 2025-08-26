@@ -560,7 +560,7 @@ class RawTransactionsTest(DigiByteTestFramework):
         funded_psbt = wmulti.walletcreatefundedpsbt(inputs=inputs, outputs=outputs, changeAddress=w2.getrawchangeaddress())['psbt']
 
         signed_psbt = w2.walletprocesspsbt(funded_psbt)
-        self.nodes[2].sendrawtransaction(signed_psbt['hex'])
+        self.nodes[2].sendrawtransaction(signed_psbt['hex'], 0)  # maxfeerate=0 for DigiByte high fees
         self.generate(self.nodes[2], 1)
 
         # Make sure funds are received at node1.
@@ -575,7 +575,8 @@ class RawTransactionsTest(DigiByteTestFramework):
         self.nodes[1].createwallet(wallet_name="locked_wallet", descriptors=self.options.descriptors)
         wallet = self.nodes[1].get_wallet_rpc("locked_wallet")
         # This test is not meant to exercise fee estimation. Making sure all txs are sent at a consistent fee rate.
-        wallet.settxfee(self.min_relay_tx_fee)
+        # DigiByte: Use minimum wallet fee (0.1 DGB/kB) instead of min relay fee
+        wallet.settxfee(Decimal('0.1'))
 
         # Add some balance to the wallet (this will be reverted at the end of the test)
         df_wallet.sendall(recipients=[wallet.getnewaddress()])
@@ -607,7 +608,8 @@ class RawTransactionsTest(DigiByteTestFramework):
 
         # Deduce exact fee to produce a changeless transaction
         tx_size = 110  # Total tx size: 110 vbytes, p2wpkh -> p2wpkh. Input 68 vbytes + rest of tx is 42 vbytes.
-        value = inputs[0]["amount"] - get_fee(tx_size, self.min_relay_tx_fee)
+        # DigiByte: Use wallet fee (0.1 DGB/kB) for fee calculation instead of min relay fee
+        value = inputs[0]["amount"] - get_fee(tx_size, Decimal('0.1'))
 
         outputs = {self.nodes[0].getnewaddress():value}
         rawtx = wallet.createrawtransaction(inputs, outputs)
@@ -642,7 +644,8 @@ class RawTransactionsTest(DigiByteTestFramework):
             self.generate(self.nodes[1], 1)
 
             # Make sure funds are received at node1.
-            assert_equal(oldBalance+Decimal('51.10000000'), self.nodes[0].getbalance())
+            # DigiByte: Block reward is 72000 DGB, not 50 BTC, so total is 72000 + 1.1 = 72001.1
+            assert_equal(oldBalance+Decimal('72001.10000000'), self.nodes[0].getbalance())
 
             # Restore pre-test wallet state
             wallet.sendall(recipients=[df_wallet.getnewaddress(), df_wallet.getnewaddress(), df_wallet.getnewaddress()])

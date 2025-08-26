@@ -175,29 +175,34 @@ class SendallTest(DigiByteTestFramework):
         self.nodes[0].createwallet("dustwallet")
         dust_wallet = self.nodes[0].get_wallet_rpc("dustwallet")
 
-        self.def_wallet.sendtoaddress(dust_wallet.getnewaddress(), 0.00000400)
-        self.def_wallet.sendtoaddress(dust_wallet.getnewaddress(), 0.00000300)
+        # DigiByte: Use higher amounts above minimum transaction thresholds
+        self.def_wallet.sendtoaddress(dust_wallet.getnewaddress(), 0.001)
+        self.def_wallet.sendtoaddress(dust_wallet.getnewaddress(), 0.001)
         self.generate(self.nodes[0], 1)
         assert_greater_than(dust_wallet.getbalances()["mine"]["trusted"], 0)
 
+        # DigiByte: Use minimum fee rate (10000 sat/vB) instead of 300
         assert_raises_rpc_error(-6, "Total value of UTXO pool too low to pay for transaction."
                 + " Try using lower feerate or excluding uneconomic UTXOs with 'send_max' option.",
-                dust_wallet.sendall, recipients=[self.remainder_target], fee_rate=300)
+                dust_wallet.sendall, recipients=[self.remainder_target], fee_rate=10000)
 
         dust_wallet.unloadwallet()
 
     @cleanup
     def sendall_with_send_max(self):
         self.log.info("Check that `send_max` option causes negative value UTXOs to be left behind")
-        self.add_utxos([0.00000400, 0.00000300, 1])
+        # DigiByte: Use higher minimum amounts above transaction thresholds
+        self.add_utxos([0.001, 0.001, 1])
 
         # sendall with send_max
-        sendall_tx_receipt = self.wallet.sendall(recipients=[self.remainder_target], fee_rate=300, send_max=True)
+        # DigiByte: Use minimum fee rate (10000 sat/vB) instead of 300
+        sendall_tx_receipt = self.wallet.sendall(recipients=[self.remainder_target], fee_rate=10000, send_max=True)
         tx_from_wallet = self.wallet.gettransaction(txid = sendall_tx_receipt["txid"], verbose = True)
 
         assert_equal(len(tx_from_wallet["decoded"]["vin"]), 1)
         self.assert_tx_has_outputs(tx_from_wallet, [{"address": self.remainder_target, "value": 1 + tx_from_wallet["fee"]}])
-        assert_equal(self.wallet.getbalances()["mine"]["trusted"], Decimal("0.00000700"))
+        # DigiByte: Update expected balance for higher dust amounts (0.001 + 0.001 = 0.002)
+        assert_equal(self.wallet.getbalances()["mine"]["trusted"], Decimal("0.002"))
 
         self.def_wallet.sendtoaddress(self.wallet.getnewaddress(), 1)
         self.generate(self.nodes[0], 1)

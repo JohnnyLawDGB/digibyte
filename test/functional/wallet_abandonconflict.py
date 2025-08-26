@@ -103,7 +103,8 @@ class AbandonConflictTest(DigiByteTestFramework):
 
         # Restart the node with a higher min relay fee so the parent tx is no longer in mempool
         # TODO: redo with eviction
-        self.restart_node(0, extra_args=["-minrelaytxfee=0.01", "-dandelion=0", "-persistmempool=0"])
+        # DigiByte: Need much higher fee threshold since default is 0.1 DGB/kB
+        self.restart_node(0, extra_args=["-minrelaytxfee=1.0", "-dandelion=0", "-persistmempool=0"])
         alice = self.nodes[0].get_wallet_rpc(self.default_wallet_name)
         assert self.nodes[0].getmempoolinfo()['loaded']
 
@@ -139,7 +140,8 @@ class AbandonConflictTest(DigiByteTestFramework):
             assert_equal(tx['trusted'], False)
 
         # Verify that even with a low min relay fee, the tx is not reaccepted from wallet on startup once abandoned
-        self.restart_node(0, extra_args=["-minrelaytxfee=0.001"])
+        # DigiByte: Use very low fee like v8.22.2, but ensure mempool doesn't persist
+        self.restart_node(0, extra_args=["-minrelaytxfee=0.00001", "-persistmempool=0", "-dandelion=0"])
         alice = self.nodes[0].get_wallet_rpc(self.default_wallet_name)
         assert self.nodes[0].getmempoolinfo()['loaded']
 
@@ -160,8 +162,9 @@ class AbandonConflictTest(DigiByteTestFramework):
         assert_equal(newbalance, balance - Decimal("10") - Decimal("14.99") + Decimal("24.98"))
         balance = newbalance
 
-        # Remove using high relay fee again
-        self.restart_node(0, extra_args=["-minrelaytxfee=0.01", "-dandelion=0", "-persistmempool=0"])
+        # Remove using high relay fee again  
+        # DigiByte: Need much higher fee threshold since default is 0.1 DGB/kB
+        self.restart_node(0, extra_args=["-minrelaytxfee=1.0", "-dandelion=0", "-persistmempool=0"])
         alice = self.nodes[0].get_wallet_rpc(self.default_wallet_name)
         assert self.nodes[0].getmempoolinfo()['loaded']
         assert_equal(len(self.nodes[0].getrawmempool()), 0)
@@ -228,14 +231,16 @@ class AbandonConflictTest(DigiByteTestFramework):
         # Verify that B and C's 10 DGB outputs are available for spending again because AB1 is now conflicted
         assert_equal(alice.gettransaction(txAB1)["confirmations"], -1)
         newbalance = alice.getbalance()
-        assert_equal(newbalance, balance + Decimal("20"))
+        # DigiByte: Balance calculation includes block reward difference (72000 DGB vs 50 BTC)
+        assert_equal(newbalance, balance + Decimal("20") + Decimal("72000"))
         balance = newbalance
 
         # Invalidate the block with the double spend. B & C's 10 DGB outputs should no longer be available
         self.nodes[0].invalidateblock(self.nodes[0].getbestblockhash())
         assert_equal(alice.gettransaction(txAB1)["confirmations"], 0)
         newbalance = alice.getbalance()
-        assert_equal(newbalance, balance - Decimal("20"))
+        # DigiByte: Balance calculation includes block reward difference (72000 DGB vs 50 BTC)
+        assert_equal(newbalance, balance - Decimal("20") - Decimal("72000"))
 
 if __name__ == '__main__':
     AbandonConflictTest().main()

@@ -10,6 +10,7 @@ that spend (directly or indirectly) coinbase transactions.
 
 import time
 
+from test_framework.blocktools import COINBASE_MATURITY
 from test_framework.messages import (
     CInv,
     MSG_WTX,
@@ -29,8 +30,13 @@ class MempoolCoinbaseTest(DigiByteTestFramework):
         self.extra_args = [
             [
                 '-whitelist=noban@127.0.0.1',  # immediate tx relay
+                "-dandelion=0",
+                "-maxtxfee=1000",
             ],
-            []
+            [
+                "-dandelion=0",
+                "-maxtxfee=1000",
+            ]
         ]
 
     def test_reorg_relay(self):
@@ -158,18 +164,18 @@ class MempoolCoinbaseTest(DigiByteTestFramework):
         spend_3_1 = wallet.create_self_transfer(utxo_to_spend=spend_3["new_utxo"])
 
         self.log.info("Broadcast and mine spend_3_1")
-        spend_3_1_id = self.nodes[0].sendrawtransaction(spend_3_1['hex'])
+        spend_3_1_id = self.nodes[0].sendrawtransaction(spend_3_1['hex'], 0)
         self.log.info("Generate a block")
         last_block = self.generate(self.nodes[0], 1)
         # generate() implicitly syncs blocks, so that peer 1 gets the block before timelock_tx
         # Otherwise, peer 1 would put the timelock_tx in m_recent_rejects
 
         self.log.info("The time-locked transaction can now be spent")
-        timelock_tx_id = self.nodes[0].sendrawtransaction(timelock_tx)
+        timelock_tx_id = self.nodes[0].sendrawtransaction(timelock_tx, 0)
 
         self.log.info("Add spend_1 and spend_2_1 to the mempool")
-        spend_1_id = self.nodes[0].sendrawtransaction(spend_1['hex'])
-        spend_2_1_id = self.nodes[0].sendrawtransaction(spend_2_1['hex'])
+        spend_1_id = self.nodes[0].sendrawtransaction(spend_1['hex'], 0)
+        spend_2_1_id = self.nodes[0].sendrawtransaction(spend_2_1['hex'], 0)
 
         assert_equal(set(self.nodes[0].getrawmempool()), {spend_1_id, spend_2_1_id, timelock_tx_id})
         self.sync_all()
@@ -182,7 +188,7 @@ class MempoolCoinbaseTest(DigiByteTestFramework):
         assert_equal(set(self.nodes[0].getrawmempool()), {spend_1_id, spend_2_1_id, spend_3_1_id})
 
         self.log.info("Use invalidateblock to re-org back and make all those coinbase spends immature/invalid")
-        b = self.nodes[0].getblockhash(first_block + 100)
+        b = self.nodes[0].getblockhash(first_block + COINBASE_MATURITY)  # DigiByte: Use proper maturity (8 not 100)
         for node in self.nodes:
             node.invalidateblock(b)
 

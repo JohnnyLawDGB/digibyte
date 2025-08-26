@@ -40,13 +40,13 @@ class ReplaceByFeeTest(DigiByteTestFramework):
                 "-limitdescendantcount=200",
                 "-limitdescendantsize=101",
                 "-dandelion=0",
-                "-maxtxfee=100",
+                "-maxtxfee=10000",  # DigiByte: Higher limit for RBF tests with large fees
                 "-mintxfee=0.0045",
             ],
             # second node has default mempool parameters
             [
                 "-dandelion=0",
-                "-maxtxfee=100",
+                "-maxtxfee=10000",  # DigiByte: Higher limit for RBF tests with large fees
                 "-mintxfee=0.0045",
             ],
         ]
@@ -459,7 +459,7 @@ class ReplaceByFeeTest(DigiByteTestFramework):
             # would invalidate `num_txs_invalidated` transactions.
             tx_hex = wallet.create_self_transfer_multi(
                 utxos_to_spend=root_utxos,
-                fee_per_output=10_000_000,  # absurdly high feerate
+                fee_per_output=500_000_000,  # DigiByte: Much higher fee to beat existing RBF txs (5 DGB vs 0.1 DGB)
             )["hex"]
 
             if failure_expected:
@@ -700,8 +700,9 @@ class ReplaceByFeeTest(DigiByteTestFramework):
         tx = self.wallet.send_self_transfer(from_node=self.nodes[0])['tx']
 
         # Higher fee, higher feerate, different txid, but the replacement does not provide a relay
-        # fee conforming to node's `incrementalrelayfee` policy of 1000 sat per KB.
-        assert_equal(self.nodes[0].getmempoolinfo()["incrementalrelayfee"], Decimal("0.00001"))
+        # fee conforming to node's `incrementalrelayfee` policy.
+        # DigiByte: Uses 10x higher incremental relay fee than Bitcoin (0.0001 vs 0.00001)
+        assert_equal(self.nodes[0].getmempoolinfo()["incrementalrelayfee"], Decimal("0.0001"))
         tx.vout[0].nValue -= 1
         assert_raises_rpc_error(-26, "insufficient fee", self.nodes[0].sendrawtransaction, tx.serialize().hex())
 

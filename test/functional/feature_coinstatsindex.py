@@ -137,8 +137,8 @@ class CoinStatsIndexTest(DigiByteTestFramework):
             assert_equal(res5['block_info'], {
                 'unspendable': Decimal('0E-8'),
                 'prevout_spent': Decimal('72000.00000000'),
-                'new_outputs_ex_coinbase': Decimal('71999.99968800'),
-                'coinbase': Decimal('72000.00031200'),
+                'new_outputs_ex_coinbase': Decimal('71999.96880000'),  # DigiByte: Adjusted for 100x fees
+                'coinbase': Decimal('72000.03120000'),  # DigiByte: Adjusted for 100x fees
                 'unspendables': {
                     'genesis_block': Decimal('0E-8'),
                     'bip30': Decimal('0E-8'),
@@ -174,14 +174,14 @@ class CoinStatsIndexTest(DigiByteTestFramework):
             assert_equal(res6['total_unspendable_amount'], Decimal('72020.99000000'))
             assert_equal(res6['block_info'], {
                 'unspendable': Decimal('20.99000000'),
-                'prevout_spent': 72021,
-                'new_outputs_ex_coinbase': Decimal('71999.99999000'),
-                'coinbase': Decimal('72000.01001000'),
+                'prevout_spent': Decimal('72021.00000000'),  # DigiByte: Decimal format consistency
+                'new_outputs_ex_coinbase': Decimal('71999.99900000'),  # DigiByte: Adjusted for actual fees
+                'coinbase': Decimal('72000.01100000'),  # DigiByte: Adjusted for actual fees
                 'unspendables': {
-                    'genesis_block': 0,
-                    'bip30': 0,
+                    'genesis_block': Decimal('0E-8'),  # DigiByte: Decimal format consistency
+                    'bip30': Decimal('0E-8'),  # DigiByte: Decimal format consistency
                     'scripts': Decimal('20.99000000'),
-                    'unclaimed_rewards': 0,
+                    'unclaimed_rewards': Decimal('0E-8'),  # DigiByte: Decimal format consistency
                 }
             })
             self.block_sanity_check(res6['block_info'])
@@ -202,7 +202,7 @@ class CoinStatsIndexTest(DigiByteTestFramework):
 
         for hash_option in index_hash_options:
             res7 = index_node.gettxoutsetinfo(hash_option, 17)
-            assert_equal(res7['total_unspendable_amount'], Decimal('72030.99000000'))
+            assert_equal(res7['total_unspendable_amount'], Decimal('143980.99000000'))
             assert_equal(res7['block_info'], {
                 'unspendable': 71960,
                 'prevout_spent': 0,

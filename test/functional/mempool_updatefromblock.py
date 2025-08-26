@@ -18,7 +18,7 @@ from test_framework.wallet import MiniWallet
 class MempoolUpdateFromBlockTest(DigiByteTestFramework):
     def set_test_params(self):
         self.num_nodes = 1
-        self.extra_args = [['-limitdescendantsize=1000', '-limitancestorsize=1000', '-limitancestorcount=100']]
+        self.extra_args = [['-limitdescendantsize=1000', '-limitancestorsize=1000', '-limitancestorcount=100', '-dandelion=0', '-maxtxfee=1000']]
 
     def transaction_graph_test(self, size, n_tx_to_mine=None, fee=100_000):
         """Create an acyclic tournament (a type of directed graph) of transactions and use it for testing.
@@ -99,7 +99,7 @@ class MempoolUpdateFromBlockTest(DigiByteTestFramework):
 
     def run_test(self):
         # Use batch size limited by DEFAULT_ANCESTOR_LIMIT = 25 to not fire "too many unconfirmed parents" error.
-        self.transaction_graph_test(size=100, n_tx_to_mine=[25, 50, 75])
+        self.transaction_graph_test(size=100, n_tx_to_mine=[25, 50, 75], fee=510_000)  # DigiByte: higher fee needed
 
 
 if __name__ == '__main__':

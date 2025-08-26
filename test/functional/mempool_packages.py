@@ -31,11 +31,15 @@ class MempoolPackagesTest(DigiByteTestFramework):
             [
                 "-maxorphantx=1000",
                 "-whitelist=noban@127.0.0.1",  # immediate tx relay
+                "-dandelion=0",
+                "-maxtxfee=1000",
             ],
             [
                 "-maxorphantx=1000",
                 "-limitancestorcount={}".format(CUSTOM_ANCESTOR_LIMIT),
                 "-limitdescendantcount={}".format(CUSTOM_DESCENDANT_LIMIT),
+                "-dandelion=0",
+                "-maxtxfee=1000",
             ],
         ]
 

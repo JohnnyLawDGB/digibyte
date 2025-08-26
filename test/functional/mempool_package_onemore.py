@@ -21,7 +21,7 @@ from test_framework.wallet import MiniWallet
 class MempoolPackagesTest(DigiByteTestFramework):
     def set_test_params(self):
         self.num_nodes = 1
-        self.extra_args = [["-maxorphantx=1000"]]
+        self.extra_args = [["-maxorphantx=1000", "-maxtxfee=1000", "-dandelion=0"]]
 
     def chain_tx(self, utxos_to_spend, *, num_outputs=1):
         return self.wallet.send_self_transfer_multi(
@@ -62,7 +62,7 @@ class MempoolPackagesTest(DigiByteTestFramework):
 
         # Make sure we can RBF the chain which used our carve-out rule
         replacable_tx.vout[0].nValue -= 1000000
-        self.nodes[0].sendrawtransaction(replacable_tx.serialize().hex())
+        self.nodes[0].sendrawtransaction(replacable_tx.serialize().hex(), 0)
 
         # Finally, check that we added two transactions
         assert_equal(len(self.nodes[0].getrawmempool()), DEFAULT_ANCESTOR_LIMIT + 3)

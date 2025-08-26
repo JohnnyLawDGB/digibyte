@@ -27,6 +27,8 @@ class PrioritiseTransactionTest(DigiByteTestFramework):
         self.extra_args = [[
             "-printpriority=1",
             "-datacarriersize=100000",
+            "-dandelion=0",
+            "-maxtxfee=1000",
         ]] * self.num_nodes
         self.supports_cli = False
 
@@ -39,20 +41,20 @@ class PrioritiseTransactionTest(DigiByteTestFramework):
     def test_replacement(self):
         self.log.info("Test tx prioritisation stays after a tx is replaced")
         conflicting_input = self.wallet.get_utxo()
-        tx_replacee = self.wallet.create_self_transfer(utxo_to_spend=conflicting_input, fee_rate=Decimal("0.0001"))
-        tx_replacement = self.wallet.create_self_transfer(utxo_to_spend=conflicting_input, fee_rate=Decimal("0.005"))
+        tx_replacee = self.wallet.create_self_transfer(utxo_to_spend=conflicting_input, fee_rate=Decimal("0.01"))  # DigiByte: 100x higher fee rate
+        tx_replacement = self.wallet.create_self_transfer(utxo_to_spend=conflicting_input, fee_rate=Decimal("0.05"))  # DigiByte: 10x higher fee rate
         # Add 1 satoshi fee delta to replacee
         self.nodes[0].prioritisetransaction(tx_replacee["txid"], 0, 100)
         assert_equal(self.nodes[0].getprioritisedtransactions(), { tx_replacee["txid"] : { "fee_delta" : 100, "in_mempool" : False}})
-        self.nodes[0].sendrawtransaction(tx_replacee["hex"])
+        self.nodes[0].sendrawtransaction(tx_replacee["hex"], 0)
         assert_equal(self.nodes[0].getprioritisedtransactions(), { tx_replacee["txid"] : { "fee_delta" : 100, "in_mempool" : True}})
-        self.nodes[0].sendrawtransaction(tx_replacement["hex"])
+        self.nodes[0].sendrawtransaction(tx_replacement["hex"], 0)
         assert tx_replacee["txid"] not in self.nodes[0].getrawmempool()
         assert_equal(self.nodes[0].getprioritisedtransactions(), { tx_replacee["txid"] : { "fee_delta" : 100, "in_mempool" : False}})
 
         # PrioritiseTransaction is additive
         self.nodes[0].prioritisetransaction(tx_replacee["txid"], 0, COIN)
-        self.nodes[0].sendrawtransaction(tx_replacee["hex"])
+        self.nodes[0].sendrawtransaction(tx_replacee["hex"], 0)
         assert_equal(self.nodes[0].getprioritisedtransactions(), { tx_replacee["txid"] : { "fee_delta" : COIN + 100, "in_mempool" : True}})
         self.generate(self.nodes[0], 1)
         assert_equal(self.nodes[0].getprioritisedtransactions(), {})
@@ -130,7 +132,7 @@ class PrioritiseTransactionTest(DigiByteTestFramework):
         assert_equal(prioritisation_map_not_in_mempool[txid_b], {"fee_delta" : fee_delta_b*COIN, "in_mempool" : False})
         assert_equal(prioritisation_map_not_in_mempool[txid_c], {"fee_delta" : (fee_delta_c_1 + fee_delta_c_2)*COIN, "in_mempool" : False})
         for t in [tx_o_a["hex"], tx_o_b["hex"], tx_o_c["hex"], tx_o_d["hex"]]:
-            self.nodes[0].sendrawtransaction(t)
+            self.nodes[0].sendrawtransaction(t, 0)
         raw_after = self.nodes[0].getrawmempool(verbose=True)
         assert_equal(raw_before[txid_a], raw_after[txid_a])
         assert_equal(raw_before, raw_after)
@@ -285,7 +287,7 @@ class PrioritiseTransactionTest(DigiByteTestFramework):
         assert_equal(self.nodes[0].getprioritisedtransactions()[tx_id], { "fee_delta" : self.relayfee*COIN, "in_mempool" : False})
 
         self.log.info("Assert that prioritised free transaction is accepted to mempool")
-        assert_equal(self.nodes[0].sendrawtransaction(tx_hex), tx_id)
+        assert_equal(self.nodes[0].sendrawtransaction(tx_hex, 0), tx_id)
         assert tx_id in self.nodes[0].getrawmempool()
         assert_equal(self.nodes[0].getprioritisedtransactions()[tx_id], { "fee_delta" : self.relayfee*COIN, "in_mempool" : True})
 

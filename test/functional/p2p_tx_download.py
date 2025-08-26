@@ -54,6 +54,7 @@ MAX_GETDATA_INBOUND_WAIT = GETDATA_TX_INTERVAL + INBOUND_PEER_TX_DELAY + TXID_RE
 class TxDownloadTest(DigiByteTestFramework):
     def set_test_params(self):
         self.num_nodes = 2
+        self.extra_args = [["-maxtxfee=1", "-dandelion=0"], ["-maxtxfee=1", "-dandelion=0"]]
 
     def test_tx_requests(self):
         self.log.info("Test that we request transactions from all our peers, eventually")
@@ -96,7 +97,7 @@ class TxDownloadTest(DigiByteTestFramework):
             p.send_and_ping(msg)
 
         self.log.info("Put the tx in node 0's mempool")
-        self.nodes[0].sendrawtransaction(tx['hex'])
+        self.nodes[0].sendrawtransaction(tx['hex'], 1000)  # 1000 DGB/kvB limit
 
         # Since node 1 is connected outbound to an honest peer (node 0), it
         # should get the tx within a timeout. (Assuming that node 0

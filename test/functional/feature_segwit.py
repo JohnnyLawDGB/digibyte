@@ -94,6 +94,8 @@ class SegWitTest(DigiByteTestFramework):
                 "-addresstype=legacy",
                 "-dandelion=0",
                 "-maxtxfee=1000",
+                "-mintxfee=0.1",
+                "-minrelaytxfee=0.001",
             ],
             [
                 "-acceptnonstdtxn=1",
@@ -102,6 +104,8 @@ class SegWitTest(DigiByteTestFramework):
                 "-addresstype=legacy",
                 "-dandelion=0",
                 "-maxtxfee=1000",
+                "-mintxfee=0.1",
+                "-minrelaytxfee=0.001",
             ],
             [
                 "-acceptnonstdtxn=1",
@@ -109,6 +113,8 @@ class SegWitTest(DigiByteTestFramework):
                 "-addresstype=legacy",
                 "-dandelion=0",
                 "-maxtxfee=1000",
+                "-mintxfee=0.1",
+                "-minrelaytxfee=0.001",
             ],
         ]
         self.rpc_timeout = 120

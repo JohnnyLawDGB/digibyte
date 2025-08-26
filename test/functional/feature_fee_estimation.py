@@ -142,7 +142,7 @@ def make_tx(wallet, utxo, feerate):
     """Create a 1in-1out transaction with a specific input and feerate (sat/vb)."""
     return wallet.create_self_transfer(
         utxo_to_spend=utxo,
-        fee_rate=Decimal(feerate * 10000) / COIN,  # DigiByte: 10x higher fee rates
+        fee_rate=Decimal(feerate * 100) / COIN,  # DigiByte: 100x higher fees (100x conversion)
     )
 
 
@@ -171,7 +171,7 @@ class EstimateFeeTest(DigiByteTestFramework):
         # produces too small blocks (room for only 55 or so transactions)
 
     def transact_and_mine(self, numblocks, mining_node):
-        min_fee = Decimal("0.00001")
+        min_fee = Decimal("0.001")
         # We will now mine numblocks blocks generating on average 100 transactions between each block
         # We shuffle our confirmed txout set before each set of transactions
         # small_txpuzzle_randfee will use the transactions that have inputs already in the chain when possible
@@ -260,9 +260,9 @@ class EstimateFeeTest(DigiByteTestFramework):
         # The broadcaster and block producer
         node = self.nodes[0]
         miner = self.nodes[1]
-        # In sat/vb
-        low_feerate = 1
-        high_feerate = 10
+        # In sat/vb - DigiByte needs 100x higher fees than Bitcoin
+        low_feerate = 100
+        high_feerate = 1000
         # Cache the utxos of which to replace the spender after it failed to get
         # confirmed
         utxos_to_respend = []

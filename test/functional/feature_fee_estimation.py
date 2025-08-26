@@ -142,7 +142,7 @@ def make_tx(wallet, utxo, feerate):
     """Create a 1in-1out transaction with a specific input and feerate (sat/vb)."""
     return wallet.create_self_transfer(
         utxo_to_spend=utxo,
-        fee_rate=Decimal(feerate * 100) / COIN,  # DigiByte: 100x higher fees (100x conversion)
+        fee_rate=Decimal(feerate * 1000) / COIN,  # DigiByte: Convert sat/vB to DGB/kB (1000 sat/kB per sat/vB, divide by COIN for DGB)
     )
 
 
@@ -308,6 +308,7 @@ class EstimateFeeTest(DigiByteTestFramework):
         # the rest needed to be RBF'd. We must return the 90% conf rate feerate.
         high_feerate_kvb = Decimal(high_feerate) / COIN * 10 ** 3
         est_feerate = node.estimatesmartfee(2)["feerate"]
+        
         # DigiByte: Fee estimation is less reliable due to 15s blocks, allow 10x tolerance
         if abs(est_feerate / high_feerate_kvb - 1) > 10:
             self.log.info(f"DigiByte: Fee estimation difference too large, skipping exact check: {est_feerate} vs {high_feerate_kvb}")

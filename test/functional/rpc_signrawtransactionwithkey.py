@@ -35,11 +35,11 @@ from decimal import (
 )
 
 INPUTS = [
-    # Valid pay-to-pubkey scripts
+    # Valid pay-to-pubkey scripts for DigiByte private keys
     {'txid': '9b907ef1e3c26fc71fe4a4b3580bc75264112f95050014157059c736f0202e71', 'vout': 0,
-     'scriptPubKey': '76a91460baa0f494b38ce3c940dea67f3804dc52d1fb9488ac'},
+     'scriptPubKey': '76a9149e0fba4896c9771390bf1c931e368cf3494a24da88ac'},  # swzkfmbaZb4KARFXeNvtECxhggYJnho4ud
     {'txid': '83a4f6a6b73660e13ee6cb3c6063fa3759c50c9b7521d0536022961898f4fb02', 'vout': 0,
-     'scriptPubKey': '76a914669b857c03a5ed269d5d85a1ffac9ed5d663072788ac'},
+     'scriptPubKey': '76a9142ebba095e53b855b6ccb9ee969769eca5a90cd4f88ac'},  # smr6v5Zfys8DMCbWXGtzmsJn2WgyqbxFvb
 ]
 OUTPUTS = {'swzkfmbaZb4KARFXeNvtECxhggYJnho4ud': 0.1}
 

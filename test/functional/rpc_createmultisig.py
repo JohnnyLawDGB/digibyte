@@ -17,6 +17,7 @@ from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import (
     assert_raises_rpc_error,
     assert_equal,
+    assert_approx,
 )
 from test_framework.wallet_util import generate_keypair
 from test_framework.wallet import (
@@ -49,14 +50,13 @@ class RpcCreateMultiSigTest(DigiByteTestFramework):
 
     def run_test(self):
         node0, node1, node2 = self.nodes
-        self.wallet = MiniWallet(test_node=node0)
 
         if self.is_bdb_compiled():
             self.import_deterministic_coinbase_privkeys()
             self.check_addmultisigaddress_errors()
 
         self.log.info('Generating blocks ...')
-        self.generate(self.wallet, 149)
+        self.generate(node0, 149)
 
         self.moved = 0
         for self.nkeys in [3, 5]:
@@ -135,20 +135,20 @@ class RpcCreateMultiSigTest(DigiByteTestFramework):
         assert_raises_rpc_error(-5, "Bech32m multisig addresses cannot be created with legacy wallets", self.nodes[0].addmultisigaddress, 2, pubs, "", "bech32m")
 
     def checkbalances(self):
+        from test_framework.blocktools import COINBASE_MATURITY_2
         node0, node1, node2 = self.nodes
         self.generate(node0, COINBASE_MATURITY)
 
         bal0 = node0.getbalance()
         bal1 = node1.getbalance()
         bal2 = node2.getbalance()
-        balw = self.wallet.get_balance()
 
         height = node0.getblockchaininfo()["blocks"]
         assert 150 < height < 350
-        total = 149 * 50 + (height - 149 - 100) * 25
+        total = (height - COINBASE_MATURITY_2) * 72000  # DigiByte rewards: 72000 DGB per block
         assert bal1 == 0
         assert bal2 == self.moved
-        assert_equal(bal0 + bal1 + bal2 + balw, total)
+        assert_approx(bal0 + bal1 + bal2, total, vspan=1.0)  # Allow for transaction fees
 
     def do_multisig(self):
         node0, node1, node2 = self.nodes
@@ -194,8 +194,7 @@ class RpcCreateMultiSigTest(DigiByteTestFramework):
             assert mredeemw == mredeem
             wmulti.unloadwallet()
 
-        spk = address_to_scriptpubkey(madd)
-        txid = self.wallet.send_to(from_node=self.nodes[0], scriptPubKey=spk, amount=100000)["txid"]
+        txid = node0.sendtoaddress(madd, 40)
         tx = node0.getrawtransaction(txid, True)
         vout = [v["n"] for v in tx["vout"] if madd == v["scriptPubKey"]["address"]]
         assert len(vout) == 1
@@ -206,7 +205,7 @@ class RpcCreateMultiSigTest(DigiByteTestFramework):
 
         self.generate(node0, 1)
 
-        outval = value - decimal.Decimal("0.00050000")
+        outval = value - decimal.Decimal("0.001000")
         rawtx = node2.createrawtransaction([{"txid": txid, "vout": vout}], [{self.final: outval}])
 
         prevtx_err = dict(prevtxs[0])

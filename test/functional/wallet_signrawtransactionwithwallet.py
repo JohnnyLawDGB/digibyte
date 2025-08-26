@@ -81,9 +81,9 @@ class SignRawTransactionWithWalletTest(DigiByteTestFramework):
         ]
 
         scripts = [
-            # Valid pay-to-pubkey script
+            # Valid pay-to-pubkey script for DigiByte private key
             {'txid': '9b907ef1e3c26fc71fe4a4b3580bc75264112f95050014157059c736f0202e71', 'vout': 0,
-             'scriptPubKey': '76a91460baa0f494b38ce3c940dea67f3804dc52d1fb9488ac'},
+             'scriptPubKey': '76a9149e0fba4896c9771390bf1c931e368cf3494a24da88ac'},  # swzkfmbaZb4KARFXeNvtECxhggYJnho4ud
             # Invalid script
             {'txid': '5b8673686910442c644b1f4993d8f7753c7c8fcb5c87ee40d56eaeef25204547', 'vout': 7,
              'scriptPubKey': 'badbadbadbad'}
@@ -153,8 +153,11 @@ class SignRawTransactionWithWalletTest(DigiByteTestFramework):
     def test_fully_signed_tx(self):
         self.log.info("Test signing a fully signed transaction does nothing")
         self.nodes[0].walletpassphrase("password", 9999)
-        self.generate(self.nodes[0], COINBASE_MATURITY + 1)
-        rawtx = self.nodes[0].createrawtransaction([], [{self.nodes[0].getnewaddress(): 10}])
+        # Generate blocks and import the coinbase key to fund the wallet
+        self.generate(self.nodes[0], COINBASE_MATURITY + 10)
+        coinbase_key = self.nodes[0].get_deterministic_priv_key()
+        self.nodes[0].importprivkey(coinbase_key.key)
+        rawtx = self.nodes[0].createrawtransaction([], [{self.nodes[0].getnewaddress(): 1}])
         fundedtx = self.nodes[0].fundrawtransaction(rawtx)
         signedtx = self.nodes[0].signrawtransactionwithwallet(fundedtx["hex"])
         assert_equal(signedtx["complete"], True)

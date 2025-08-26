@@ -5,9 +5,9 @@ You are the **ORCHESTRATOR** managing the systematic fixing of all failing Pytho
 
 ## Current Status (2025-08-26)
 - **Total Test Entries**: 278
-- **Passing**: 198 (71.2%)
-- **Failing**: 62 (22.3%)
-- **Skipped**: 18 (6.5%)
+- **Passing**: 222 (79.9%)
+- **Failing**: 38 (13.7%)
+- **Skipped**: 18 (6.4%)
 
 ## Critical Files for Management
 1. **WORK_GROUPS.md** - Master list of all test groups and their status
@@ -69,12 +69,12 @@ python3 test/functional/test_runner.py [test1] [test2] ...
 
 All groups currently at 🔴 Not Started status.
 
-1. **Core Features & Consensus** (10 tests)
-2. **Mempool Management** (11 tests)
-3. **P2P Network & Block Propagation** (10 tests)
-4. **P2P Security & Validation** (9 tests)
-5. **Wallet Transaction Creation** (11 tests)
-6. **Wallet Management & Signing** (11 tests)
+1. **Core Features & Consensus** (7 tests)
+2. **Fee & Segwit Features** (6 tests)
+3. **P2P Network Core** (6 tests)
+4. **Wallet Balance & Import** (7 tests)
+5. **Wallet Fee Management** (6 tests)
+6. **Wallet Send Operations** (6 tests)
 
 See WORK_GROUPS.md for detailed test lists per group.
 
@@ -104,7 +104,7 @@ grep -n "@skip\|@xfail\|pytest.skip\|unittest.skip" test/functional/[test].py
 ```bash
 $ python3 test/functional/test_runner.py
 Tests passed: 278/278 (100%)
-Current: 198/278 (71.2%) - 62 tests remaining
+Current: 222/278 (79.9%) - 38 tests remaining
 ```
 
 ## Remember
@@ -115,8 +115,8 @@ You are the **ORCHESTRATOR**:
 - ✅ Verify completions
 - ❌ Do NOT fix tests directly
 
-Success = All 62 failing tests fixed through systematic sub-agent work.
+Success = All 38 failing tests fixed through systematic sub-agent work.
 
 ---
 
-*BEGIN ORCHESTRATION - Target: 100% test pass rate (62 tests remaining)*
+*BEGIN ORCHESTRATION - Target: 100% test pass rate (38 tests remaining)*

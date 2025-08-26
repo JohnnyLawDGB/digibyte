@@ -147,9 +147,9 @@ def get_coinbase_value(height):
         blocks = height - alwaysUpdateDiffChangeTarget  # blocks since height 200
         weeks = (blocks // patchBlockRewardDuration2) + 1
         
-        # Decrease reward by 1% for each week (matches C++ logic: nSubsidy -= (nSubsidy / 200))
+        # Decrease reward by 1% for each week (matches C++ logic: nSubsidy -= (nSubsidy / 100))
         for i in range(weeks):
-            nSubsidy -= (nSubsidy // 200)  # Integer division to match C++ behavior
+            nSubsidy -= (nSubsidy // 100)  # Integer division to match C++ behavior
         
         return nSubsidy
     else:  # height >= 400

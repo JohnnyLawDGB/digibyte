@@ -56,6 +56,7 @@ class FeeFilterTest(DigiByteTestFramework):
             "-minrelaytxfee=0.00000100",
             "-mintxfee=0.00000100",
             "-whitelist=noban@127.0.0.1",
+            "-dandelion=0",
         ]] * self.num_nodes
 
     def run_test(self):

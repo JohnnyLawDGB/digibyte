@@ -33,9 +33,13 @@ class ReplaceByFeeTest(DigiByteTestFramework):
                 "-limitancestorsize=101",
                 "-limitdescendantcount=200",
                 "-limitdescendantsize=101",
+                "-dandelion=0",
+                "-maxtxfee=100",
             ],
             # second node has default mempool parameters
             [
+                "-dandelion=0",
+                "-maxtxfee=100",
             ],
         ]
         self.supports_cli = False
@@ -112,7 +116,7 @@ class ReplaceByFeeTest(DigiByteTestFramework):
         # we use MiniWallet to create a transaction template with inputs correctly set,
         # and modify the output (amount, scriptPubKey) according to our needs
         tx = self.wallet.create_self_transfer()["tx"]
-        tx1a_txid = self.nodes[0].sendrawtransaction(tx.serialize().hex())
+        tx1a_txid = self.nodes[0].sendrawtransaction(tx.serialize().hex(), 0)
 
         # Should fail because we haven't changed the fee
         tx.vout[0].scriptPubKey[-1] ^= 1

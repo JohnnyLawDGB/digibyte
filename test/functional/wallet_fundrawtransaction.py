@@ -43,9 +43,8 @@ class RawTransactionsTest(DigiByteTestFramework):
     def set_test_params(self):
         self.num_nodes = 4
         self.setup_clean_chain = True
-        # This test isn't testing tx relay. Set whitelist on the peers for
-        # instant tx relay.
-        # Disable Dandelion++ and set higher max fee for DigiByte
+        # This test isn't testing tx relay. Set whitelist on the peers for instant tx relay.
+        # Add Dandelion++ disable for DigiByte (BUG-002 mitigation)
         self.extra_args = [['-whitelist=noban@127.0.0.1', '-dandelion=0', '-maxtxfee=10.0']] * self.num_nodes
         self.rpc_timeout = 90  # to prevent timeouts in `test_transaction_too_large`
 
@@ -834,7 +833,8 @@ class RawTransactionsTest(DigiByteTestFramework):
                     node.fundrawtransaction, rawtx, estimate_mode=mode, conf_target=n, add_inputs=True)
 
         self.log.info("Test invalid fee rate settings")
-        for param, value in {("fee_rate", 10000000), ("feeRate", 100.0)}:
+        # DigiByte: Adjusted fee rates to trigger maxtxfee with DigiByte fee calculation
+        for param, value in {("fee_rate", 10000000), ("feeRate", 500.0)}:
             assert_raises_rpc_error(-4, "Fee exceeds maximum configured by user (e.g. -maxtxfee, maxfeerate)",
                 node.fundrawtransaction, rawtx, add_inputs=True, **{param: value})
             assert_raises_rpc_error(-3, "Amount out of range",

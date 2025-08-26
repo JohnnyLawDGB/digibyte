@@ -20,6 +20,7 @@ class MempoolUnbroadcastTest(DigiByteTestFramework):
 
     def set_test_params(self):
         self.num_nodes = 2
+        self.extra_args = [["-dandelion=0", "-maxtxfee=1000"], ["-dandelion=0", "-maxtxfee=1000"]]
 
     def run_test(self):
         self.wallet = MiniWallet(self.nodes[0])
@@ -42,7 +43,7 @@ class MempoolUnbroadcastTest(DigiByteTestFramework):
 
         # generate a txn using sendrawtransaction
         txFS = self.wallet.create_self_transfer()
-        rpc_tx_hsh = node.sendrawtransaction(txFS["hex"])
+        rpc_tx_hsh = node.sendrawtransaction(txFS["hex"], 0)
 
         # check transactions are in unbroadcast using rpc
         mempoolinfo = self.nodes[0].getmempoolinfo()
@@ -90,7 +91,7 @@ class MempoolUnbroadcastTest(DigiByteTestFramework):
         node.disconnect_p2ps()
 
         self.log.info("Rebroadcast transaction and ensure it is not added to unbroadcast set when already in mempool")
-        rpc_tx_hsh = node.sendrawtransaction(txFS["hex"])
+        rpc_tx_hsh = node.sendrawtransaction(txFS["hex"], 0)
         assert not node.getmempoolentry(rpc_tx_hsh)['unbroadcast']
 
     def test_txn_removal(self):

@@ -32,6 +32,7 @@ class MempoolLimitTest(DigiByteTestFramework):
             "-datacarriersize=100000",
             "-maxmempool=5",
             "-dandelion=0",
+            "-maxtxfee=100000",  # DigiByte: Very high limit for mempool eviction tests
         ]]
         self.supports_cli = False
 
@@ -104,7 +105,7 @@ class MempoolLimitTest(DigiByteTestFramework):
         mempoolmin_feerate = node.getmempoolinfo()["mempoolminfee"]
         tx_A = self.wallet.send_self_transfer(
             from_node=node,
-            fee=(mempoolmin_feerate / 1000) * (A_weight // 4) + Decimal('0.000001'),
+            fee=(mempoolmin_feerate / 1000) * (A_weight // 4) + Decimal('0.000025'),  # DigiByte: Larger buffer for fee precision
             target_weight=A_weight,
             utxo_to_spend=rbf_utxo,
             confirmed_only=True
@@ -122,7 +123,7 @@ class MempoolLimitTest(DigiByteTestFramework):
         non_cpfp_carveout_weight = 40001 # EXTRA_DESCENDANT_TX_SIZE_LIMIT + 1
         tx_C = self.wallet.create_self_transfer(
             target_weight=non_cpfp_carveout_weight,
-            fee = (mempoolmin_feerate / 1000) * (non_cpfp_carveout_weight // 4) + Decimal('0.000001'),
+            fee = (mempoolmin_feerate / 1000) * (non_cpfp_carveout_weight // 4) + Decimal('0.000025'),  # DigiByte: Larger buffer for fee precision
             utxo_to_spend=tx_B["new_utxo"],
             confirmed_only=True
         )
@@ -153,7 +154,7 @@ class MempoolLimitTest(DigiByteTestFramework):
         # happen in the middle of package evaluation, as it can invalidate the coins cache.
         mempool_evicted_tx = self.wallet.send_self_transfer(
             from_node=node,
-            fee=(mempoolmin_feerate / 1000) * (evicted_weight // 4) + Decimal('0.000001'),
+            fee=(mempoolmin_feerate / 1000) * (evicted_weight // 4) + Decimal('0.000025'),  # DigiByte: Larger buffer for fee precision
             target_weight=evicted_weight,
             confirmed_only=True
         )
@@ -179,7 +180,7 @@ class MempoolLimitTest(DigiByteTestFramework):
         parent_weight = 100000
         num_big_parents = 3
         assert_greater_than(parent_weight * num_big_parents, current_info["maxmempool"] - current_info["bytes"])
-        parent_fee = (100 * mempoolmin_feerate / 1000) * (parent_weight // 4)
+        parent_fee = (10 * mempoolmin_feerate / 1000) * (parent_weight // 4)  # DigiByte: Reduced multiplier to avoid max-fee-exceeded
 
         big_parent_txids = []
         for i in range(num_big_parents):
@@ -318,7 +319,7 @@ class MempoolLimitTest(DigiByteTestFramework):
         node.prioritisetransaction(tx_rich["txid"], 0, int(DEFAULT_FEE * COIN))
         package_txns = [tx_rich, tx_poor]
         coins = [tx["new_utxo"] for tx in package_txns]
-        tx_child = miniwallet.create_self_transfer_multi(utxos_to_spend=coins, fee_per_output=10000) #DEFAULT_FEE
+        tx_child = miniwallet.create_self_transfer_multi(utxos_to_spend=coins, fee_per_output=int(DEFAULT_FEE * COIN)) #DEFAULT_FEE
         package_txns.append(tx_child)
 
         submitpackage_result = node.submitpackage([tx["hex"] for tx in package_txns])

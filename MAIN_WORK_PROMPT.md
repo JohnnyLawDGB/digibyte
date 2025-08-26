@@ -41,8 +41,11 @@ Required Actions:
 1. Fix each test in your group - make them PASS
 2. Update COMMON_FIXES.md with new patterns
 3. Update APPLICATION_BUGS.md if bugs found
-4. Update TEST_FIX_PROGRESS.md when complete
-5. Report back when ALL tests pass
+4. Report back when ALL tests pass
+
+IMPORTANT:
+- Leave all changes STAGED for human review (DO NOT commit)
+- DO NOT update TEST_FIX_PROGRESS.md (orchestrator handles this)
 
 STRICT RULES:
 - DO NOT work on tests outside your group
@@ -52,7 +55,7 @@ STRICT RULES:
 ```
 
 ### 3. Monitor Progress
-- Review TEST_FIX_PROGRESS.md for updates
+- Update TEST_FIX_PROGRESS.md yourself (orchestrator task only)
 - Check COMMON_FIXES.md for new patterns
 - Track APPLICATION_BUGS.md for issues
 

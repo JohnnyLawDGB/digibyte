@@ -7,7 +7,7 @@ You are a SUB-AGENT assigned to fix specific Python functional tests. You work i
 - **GROUP**: [Assigned by orchestrator]
 - **TESTS**: [List provided by orchestrator]
 - **DEADLINE**: Complete all tests in group before reporting back
-- **COMMIT**: Create git commit for ONLY your group's changes when done
+- **CHANGES**: Leave all changes STAGED for human review (DO NOT commit)
 
 ## Critical Context Files You MUST Read
 1. **CLAUDE.md** - DigiByte constants and project structure
@@ -41,7 +41,7 @@ REGTEST_BECH32 = 'dgbrt'        # NOT 'bcrt'
 # CRITICAL: Maturity switches at HEIGHT 145000 in ALL networks!
 ```
 
-## Your Fix Process - TWO-PASS APPROACH
+## Your Fix Process - THREE-PASS APPROACH
 
 ### PASS 1: QUICK FIXES (Do This FIRST for ALL Tests)
 **Goal: Fix 80% of tests in minutes, not hours**
@@ -209,10 +209,129 @@ Add to COMMON_FIXES.md:
    - Mark test as blocked if it can't pass without fix
    - Note "Fix Applied: NO - [reason]"
 
-### 7. Update Progress
-In TEST_FIX_PROGRESS.md, update your test:
-```markdown
-- 🟢 [test_name].py - Fixed (Group X)
+### PASS 3: APPLICATION BUG HUNT (Only for Stubborn Tests After Pass 2)
+
+**When simple fixes and test comparisons don't resolve the issue, it's time to look for actual application bugs in the core DigiByte src/ code.**
+
+#### When to Trigger Pass 3:
+- Test still fails after Pass 1 (quick fixes) and Pass 2 (test comparisons)
+- Error messages suggest deeper functionality issues
+- Test behavior differs significantly from v8.22.2 despite correct test code
+- Unexpected consensus or validation errors
+
+#### Systematic Application Bug Hunt Process:
+
+##### 1. Identify Core Functionality Being Tested
+```bash
+# Understand what the test is actually testing
+grep -n "def test_\|def run_test" test/functional/[test_name].py
+
+# Find which RPC calls or functionality is being tested
+grep -n "self.nodes\[0\]\.\|node\." test/functional/[test_name].py | head -20
+
+# Example: If testing getblocktemplate, you'll focus on mining code
+# Example: If testing sendrawtransaction, you'll focus on mempool/validation
+```
+
+##### 2. Three-Way Source Code Comparison
+**CRITICAL: Compare the actual C++ implementation, not just test code!**
+
+```bash
+# STEP 1: Identify the relevant src/ files
+# Based on test functionality, common areas:
+# - Mining tests → src/miner.cpp, src/rpc/mining.cpp
+# - Transaction tests → src/validation.cpp, src/txmempool.cpp
+# - Wallet tests → src/wallet/*.cpp
+# - P2P tests → src/net*.cpp, src/net_processing.cpp
+# - RPC tests → src/rpc/*.cpp
+
+# STEP 2: Compare DigiByte v8.22.2 (WORKING) implementation
+cat digibyte-v8.22.2/src/[relevant_file].cpp | grep -A10 -B10 "[function_name]"
+
+# STEP 3: Compare Bitcoin v26.2 implementation
+cat bitcoin-v26.2-for-digibyte/src/[relevant_file].cpp | grep -A10 -B10 "[function_name]"
+
+# STEP 4: Check current v8.26 (POSSIBLY BROKEN) implementation
+cat src/[relevant_file].cpp | grep -A10 -B10 "[function_name]"
+
+# STEP 5: Detailed diff to find merge errors
+diff -u digibyte-v8.22.2/src/[relevant_file].cpp src/[relevant_file].cpp | grep -A5 -B5 "[critical_section]"
+```
+
+##### 3. Common Application Bug Patterns to Look For:
+
+###### A. DigiByte Constants Not Updated in C++
+```cpp
+// Look for hardcoded Bitcoin values that weren't updated:
+// - Block rewards: 50 * COIN → should be 72000 * COIN
+// - Maturity: 100 → should check for COINBASE_MATURITY vs COINBASE_MATURITY_2
+// - Fee calculations: Missing kB vs vB conversions
+// - Address prefixes: Bitcoin prefixes instead of DigiByte
+```
+
+###### B. Multi-Algorithm Mining Issues
+```cpp
+// Check for algorithm-specific code:
+// - GetAlgo() calls
+// - pow.cpp calculations
+// - Block version handling (nVersion & 0x700000)
+```
+
+###### C. Dandelion++ Integration Problems
+```cpp
+// Look for mempool vs stempool issues:
+// - Transaction relay logic
+// - Pool selection (stempool for privacy, mempool for broadcast)
+// - Missing dandelion checks
+```
+
+###### D. Merge Conflicts/Errors
+```cpp
+// Common merge mistakes:
+// - Duplicate functions with different implementations
+// - Missing DigiByte-specific modifications
+// - Bitcoin logic overwriting DigiByte logic
+// - Incorrect #ifdef conditions
+```
+
+##### 4. Verification Process
+Once you identify a potential bug:
+
+```bash
+# 1. Create minimal test case to confirm bug
+./test/functional/[test_name].py --nocleanup --loglevel=debug
+
+# 2. Test with fix applied
+# Make targeted change to src/ file
+# Recompile: make -j$(nproc)
+# Re-run test
+
+# 3. Ensure fix doesn't break other tests
+./test/functional/test_runner.py --extended
+```
+
+##### 5. Document Application Bug in APPLICATION_BUGS.md
+Use the detailed template with:
+- Exact file and line number
+- Three-way comparison evidence
+- Clear before/after code
+- Risk assessment
+- Whether you applied the fix
+
+#### Example Pass 3 Investigation:
+```bash
+# Test failing: feature_fee_estimation.py
+# Error: Fee estimates way off
+
+# 1. Identify functionality: fee estimation
+# 2. Check relevant src files:
+grep -r "estimatesmartfee" src/
+
+# 3. Compare implementations:
+diff digibyte-v8.22.2/src/policy/fees.cpp src/policy/fees.cpp
+
+# 4. Found issue: Using vB instead of kB for calculations
+# 5. Document in APPLICATION_BUGS.md with proposed fix
 ```
 
 ## Quality Checklist (Per Test)
@@ -220,7 +339,7 @@ In TEST_FIX_PROGRESS.md, update your test:
 - [ ] All variants pass (descriptors, legacy)
 - [ ] DigiByte values used (not Bitcoin)
 - [ ] Pattern documented if new
-- [ ] Progress marked in tracking file
+- [ ] Application bugs documented if found
 
 ## STRICT RULES - VIOLATIONS = REJECTION
 
@@ -293,14 +412,13 @@ When all tests in group complete (or blocked):
 - test/functional/test2.py
 - COMMON_FIXES.md (updated)
 - APPLICATION_BUGS.md (updated)
-- TEST_FIX_PROGRESS.md (updated)
 
-Ready for git commit.
+Ready for human review (changes staged, not committed).
 ```
 
-## Git Commit Process (AFTER ALL TESTS PASS)
+## Staging Changes for Review (AFTER ALL TESTS PASS)
 
-Once orchestrator verifies your group is complete:
+Once all tests in your group pass:
 
 ### 1. Review Your Changes
 ```bash
@@ -319,38 +437,16 @@ git add test/functional/[your_test2].py
 # Also add documentation updates
 git add COMMON_FIXES.md
 git add APPLICATION_BUGS.md
-git add TEST_FIX_PROGRESS.md
+# DO NOT add TEST_FIX_PROGRESS.md (orchestrator handles this)
 ```
 
-### 3. Create Detailed Commit
-```bash
-git commit -m "fix: Group [X] - [Group Name] tests (X/Y passing)
-
-Fixed tests:
-- test1.py: Changed block reward from 50 to 72000 DGB
-- test2.py: Updated fee calculations from vB to kB
-- test3.py: Fixed address prefix from bcrt1 to dgbrt1
-
-Patterns applied:
-- Block reward: 50 → 72000
-- Fee units: vB → kB (multiply by 1000)
-- Address prefix: bcrt1 → dgbrt1
-
-All variants tested (--descriptors, --legacy-wallet)
-No tests skipped or disabled."
-```
-
-### 4. Verify Commit
-```bash
-# Check commit contains ONLY your group
-git show --name-only
-
-# Ensure no other groups' tests included
-```
+### 3. Leave Changes Staged
+**IMPORTANT: DO NOT COMMIT!** Leave all changes staged for human review.
+The human reviewer will create the final commit after verifying all changes.
 
 ## Example Sessions
 
-### Example: Two-Pass Workflow
+### Example: Three-Pass Workflow
 ```bash
 # PASS 1: Quick fixes for ALL tests in your group
 # ================================================
@@ -374,10 +470,17 @@ git show --name-only
 # PASS 2: Deep dive ONLY on remaining failures
 # =============================================
 # Now do thorough v8.22.2 comparison only for stubborn tests
+# Compare test implementations across versions
+
+# PASS 3: Application bug hunt for STILL failing tests
+# =====================================================
+# Compare actual src/ implementation code
+# Look for merge errors or missing DigiByte updates
+# Document real bugs in APPLICATION_BUGS.md
 ```
 
 
-## Remember: TWO-PASS STRATEGY
+## Remember: THREE-PASS STRATEGY
 
 ### PASS 1 (Quick Fixes - 15 minutes max):
 - ✅ Try COMMON_FIXES patterns first
@@ -386,27 +489,34 @@ git show --name-only
 - ✅ Move quickly through ALL tests
 - ✅ Goal: Fix 80% with simple changes
 
-### PASS 2 (Deep Analysis - as needed):
+### PASS 2 (Deep Test Analysis - as needed):
 - ✅ ONLY for tests that didn't fix in Pass 1
 - ✅ Check v8.22.2 reference
-- ✅ Do three-way comparison
-- ✅ Understand root cause
-- ✅ May discover application bugs
+- ✅ Do three-way test comparison
+- ✅ Understand test expectations
+- ✅ Apply test-level fixes
+
+### PASS 3 (Application Bug Hunt - last resort):
+- ✅ ONLY for tests still failing after Pass 1 & 2
+- ✅ Compare src/ implementation code
+- ✅ Look for merge errors in C++ code
+- ✅ Find missing DigiByte constants
+- ✅ Document all bugs in APPLICATION_BUGS.md
 
 You are a SUB-AGENT - you:
-- ✅ Use TWO-PASS approach for efficiency
+- ✅ Use THREE-PASS approach for efficiency
 - ✅ Fix ONLY tests in your assigned group
 - ✅ Make tests ACTUALLY PASS (no skipping!)
 - ✅ Document all patterns and bugs found
-- ✅ Update progress tracking files
-- ✅ Create clean git commit for your group
+- ✅ Stage changes for review (no commits)
 - ✅ Report back when group complete
 - ❌ Do NOT work on other groups
 - ❌ Do NOT skip or disable tests
 - ❌ Do NOT make changes without testing
-- ❌ Do NOT commit other groups' changes
+- ❌ Do NOT commit any changes
+- ❌ Do NOT update TEST_FIX_PROGRESS.md
 
-Your success = All tests in your group PASSING (not skipped) + clean commit.
+Your success = All tests in your group PASSING (not skipped) + changes staged for review.
 
 ---
 

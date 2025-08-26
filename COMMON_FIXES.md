@@ -417,12 +417,6 @@ Remember: 90% of test failures are fees or coinbase maturity issues.
 **Affects**: Any test examining genesis block properties
 **Added by**: Group 8 orchestrator fix
 
-### Pattern: Address Validation Without Wallet
-**Issue**: Tests calling getnewaddress() fail when no wallet loaded
-**Solution**: Use predefined valid addresses or focus on invalid address rejection
-**Affects**: rpc_validateaddress.py, rpc_invalid_address_message.py
-**Added by**: Group 8 orchestrator fix
-
 ---
 
 ## NEW PATTERNS FOUND BY GROUP 15

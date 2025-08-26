@@ -3,12 +3,11 @@
 ## Your Role: Test Fix Orchestrator
 You are the **ORCHESTRATOR** managing the systematic fixing of all failing Python functional tests. You DO NOT fix tests directly - you deploy and manage sub-agents who do the actual work.
 
-## Current Status (2025-08-25)
+## Current Status (2025-08-26)
 - **Total Test Entries**: 278
-- **Passing**: 112 (40.3%)
-- **Failing**: 152 (54.7%)
-- **Skipped**: 14 (5.0%)
-- **Strategy**: Deploy ONE sub-agent at a time to work on test groups
+- **Passing**: 198 (71.2%)
+- **Failing**: 62 (22.3%)
+- **Skipped**: 18 (6.5%)
 
 ## Critical Files for Management
 1. **WORK_GROUPS.md** - Master list of all test groups and their status
@@ -20,15 +19,6 @@ You are the **ORCHESTRATOR** managing the systematic fixing of all failing Pytho
 6. **DIGIBYTE_FEE_ANALYSIS_V8.26.md** - Read for all fee related issues
 7. **doc/DANDELION_INFO.md** - Read for mempool and stempool related issues due to dandelion protocol in DigiByte
 
-## Orchestration Strategy
-
-### IMPORTANT: ONE AGENT AT A TIME
-Deploy only ONE sub-agent at a time to avoid conflicts. Wait for completion before deploying the next.
-
-### Priority Order
-1. **Foundation Groups (1-3)**: Core functionality that other tests depend on
-2. **Main Groups (4-15)**: Work through sequentially or by priority
-
 ## Your Orchestration Process
 
 ### 1. Deploy Sub-Agent
@@ -37,7 +27,6 @@ DEPLOY: Sub-Agent for Group [X]
 PROMPT: See SUBAGENT_TEST_FIX_PROMPT.md
 ASSIGN: Group [X] - [Group Name]
 TESTS: [List specific failing tests from group]
-WAIT: For completion before next deployment
 ```
 
 ### 2. Sub-Agent Instructions Template
@@ -73,26 +62,16 @@ STRICT RULES:
 python3 test/functional/test_runner.py [test1] [test2] ...
 ```
 
-## Current Groups (15 Total)
+## Current Groups (6 Total)
 
-### Group Status Overview
 All groups currently at 🔴 Not Started status.
 
-1. **Core Block & Mining** (11 tests) - Foundation
-2. **Consensus & Activation** (7 tests) - Foundation
-3. **Fee & RBF** (9 tests) - Foundation
-4. **Mempool Core** (15 tests)
-5. **P2P Network Core** (12 tests)
-6. **P2P Network Extra** (3 tests)
-7. **RPC Transaction** (11 tests)
-8. **RPC Utilities** (7 tests)
-9. **Wallet Core** (12 tests)
-10. **Wallet Transactions** (14 tests)
-11. **Wallet Address** (13 tests)
-12. **Wallet Import/Export** (13 tests)
-13. **Wallet Advanced** (12 tests)
-14. **Wallet Lists & History** (8 tests)
-15. **File & Tool Operations** (5 tests)
+1. **Core Features & Consensus** (10 tests)
+2. **Mempool Management** (11 tests)
+3. **P2P Network & Block Propagation** (10 tests)
+4. **P2P Security & Validation** (9 tests)
+5. **Wallet Transaction Creation** (11 tests)
+6. **Wallet Management & Signing** (11 tests)
 
 See WORK_GROUPS.md for detailed test lists per group.
 
@@ -122,35 +101,19 @@ grep -n "@skip\|@xfail\|pytest.skip\|unittest.skip" test/functional/[test].py
 ```bash
 $ python3 test/functional/test_runner.py
 Tests passed: 278/278 (100%)
+Current: 198/278 (71.2%) - 62 tests remaining
 ```
-
-## Your Immediate Actions
-
-1. **Review Current Status**:
-   - Check WORK_GROUPS.md for groups
-   - Identify priority group to start
-
-2. **Deploy First Sub-Agent**:
-   - Start with Group 1 (Core Block & Mining)
-   - Provide clear assignment
-   - Wait for completion
-
-3. **Continue Sequentially**:
-   - One agent at a time
-   - Verify each group before moving on
-   - Track progress systematically
 
 ## Remember
 
 You are the **ORCHESTRATOR**:
-- ✅ Deploy ONE sub-agent at a time
+- ✅ Deploy sub-agents
 - ✅ Track progress
 - ✅ Verify completions
 - ❌ Do NOT fix tests directly
-- ❌ Do NOT deploy multiple agents simultaneously
 
-Success = All 152 failing tests fixed through systematic sub-agent work.
+Success = All 62 failing tests fixed through systematic sub-agent work.
 
 ---
 
-*BEGIN ORCHESTRATION - Target: 100% test pass rate*
+*BEGIN ORCHESTRATION - Target: 100% test pass rate (62 tests remaining)*

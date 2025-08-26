@@ -21,7 +21,7 @@ class CreateTxWalletTest(DigiByteTestFramework):
         self.setup_clean_chain = True
         self.num_nodes = 1
         # Disable Dandelion++ for reliable transaction propagation
-        self.extra_args = [["-dandelion=0", "-limitancestorcount=25", "-limitdescendantcount=25"]]
+        self.extra_args = [["-dandelion=0", "-limitancestorcount=10", "-limitdescendantcount=10"]]
 
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()
@@ -56,7 +56,7 @@ class CreateTxWalletTest(DigiByteTestFramework):
 
         for fee_setting in ['-minrelaytxfee=1', '-mintxfee=1', '-paytxfee=1']:
             self.log.info('Check maxtxfee in combination with {}'.format(fee_setting))
-            self.restart_node(0, extra_args=[fee_setting, "-dandelion=0", "-limitancestorcount=25", "-limitdescendantcount=25"])
+            self.restart_node(0, extra_args=[fee_setting, "-dandelion=0", "-limitancestorcount=10", "-limitdescendantcount=10"])
             self.nodes[0].settxfee(100.00)
             assert_raises_rpc_error(
                 -6,
@@ -70,7 +70,7 @@ class CreateTxWalletTest(DigiByteTestFramework):
             )
 
         self.log.info('Check maxtxfee in combination with settxfee')
-        self.restart_node(0, extra_args=["-dandelion=0", "-limitancestorcount=25", "-limitdescendantcount=25"])
+        self.restart_node(0, extra_args=["-dandelion=0", "-limitancestorcount=10", "-limitdescendantcount=10"])
         self.nodes[0].settxfee(100.00)
         assert_raises_rpc_error(
             -6,

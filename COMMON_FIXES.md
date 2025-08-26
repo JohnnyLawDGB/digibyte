@@ -397,6 +397,34 @@ Remember: 90% of test failures are fees or coinbase maturity issues.
 
 ---
 
+## NEW PATTERNS FOUND BY GROUP 8 (PROPER FIXES)
+
+### Pattern: DigiByte Regtest Private Key Format
+**Issue**: Bitcoin WIF private keys don't work with DigiByte's different SECRET_KEY base58 prefix
+**Solution**: Use proper DigiByte regtest compressed WIF with prefix 254: `eaK7rZGvJVRGyS1hfQ1fzJztgrmN4okjo3zcXBrLU4peQQMHzB7V`
+**Affects**: rpc_signmessagewithprivkey.py, any test using WIF keys
+**Added by**: Group 8 orchestrator fix
+
+### Pattern: DigiByte Genesis ScriptPubKey
+**Issue**: DigiByte genesis coinbase uses different scriptPubKey than Bitcoin
+**Solution**: Use `0x00ac` (OP_0 OP_CHECKSIG) not Bitcoin's `0x0051`
+**Affects**: rpc_scanblocks.py, any BIP158 filter tests using genesis block
+**Added by**: Group 8 orchestrator fix
+
+### Pattern: DigiByte Genesis Block Constants
+**Issue**: Tests using hardcoded Bitcoin genesis values fail
+**Solution**: Use DigiByte regtest genesis hash `0x4598a0f2b823aaf9e77ee6d5e46f1edb824191dcd48b08437b7cec17e6ae6e26`
+**Affects**: Any test examining genesis block properties
+**Added by**: Group 8 orchestrator fix
+
+### Pattern: Address Validation Without Wallet
+**Issue**: Tests calling getnewaddress() fail when no wallet loaded
+**Solution**: Use predefined valid addresses or focus on invalid address rejection
+**Affects**: rpc_validateaddress.py, rpc_invalid_address_message.py
+**Added by**: Group 8 orchestrator fix
+
+---
+
 ## NEW PATTERNS FOUND BY GROUP 15
 
 ### Pattern: Multi-Algorithm Mining Issues

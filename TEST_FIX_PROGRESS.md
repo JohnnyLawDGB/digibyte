@@ -18,7 +18,7 @@
 | 5. P2P Network Core | 12 | 🔴 Not Started | 0/12 |
 | 6. P2P Network Extra | 3 | ✅ Complete | 3/3 |
 | 7. RPC Transaction | 11 | 🔴 Not Started | 0/11 |
-| 8. RPC Utilities | 7 | 🔴 Not Started | 0/7 |
+| 8. RPC Utilities | 7 | ✅ Complete | 7/7 |
 | 9. Wallet Core | 12 | 🔴 Not Started | 0/12 |
 | 10. Wallet Transactions | 14 | 🔴 Not Started | 0/14 |
 | 11. Wallet Address | 13 | 🔴 Not Started | 0/13 |

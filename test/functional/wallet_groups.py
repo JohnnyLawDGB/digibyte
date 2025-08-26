@@ -23,11 +23,11 @@ class WalletGroupTest(DigiByteTestFramework):
         self.setup_clean_chain = True
         self.num_nodes = 5
         self.extra_args = [
-            ["-dandelion=0", "-maxtxfee=1000.0"],  # 1000 DGB for massive transactions
-            ["-dandelion=0", "-maxtxfee=1000.0"],
-            ["-avoidpartialspends", "-dandelion=0", "-maxtxfee=1000.0"],
-            ["-maxapsfee=0.01", "-dandelion=0", "-maxtxfee=1000.0"],
-            ["-maxapsfee=0.022", "-dandelion=0", "-maxtxfee=1000.0"],
+            ["-dandelion=0", "-maxtxfee=10000.0"],  # 10000 DGB for massive 2000-output transactions
+            ["-dandelion=0", "-maxtxfee=10000.0"],
+            ["-avoidpartialspends", "-dandelion=0", "-maxtxfee=10000.0"],
+            ["-maxapsfee=0.01", "-dandelion=0", "-maxtxfee=10000.0"],
+            ["-maxapsfee=0.022", "-dandelion=0", "-maxtxfee=10000.0"],
         ]
         self.rpc_timeout = 480
 

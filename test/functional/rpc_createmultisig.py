@@ -206,7 +206,7 @@ class RpcCreateMultiSigTest(DigiByteTestFramework):
 
         self.generate(node0, 1)
 
-        outval = value - decimal.Decimal("0.00001000")
+        outval = value - decimal.Decimal("0.00050000")
         rawtx = node2.createrawtransaction([{"txid": txid, "vout": vout}], [{self.final: outval}])
 
         prevtx_err = dict(prevtxs[0])

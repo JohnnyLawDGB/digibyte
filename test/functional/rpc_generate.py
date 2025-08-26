@@ -22,7 +22,7 @@ class RPCGenerateTest(DigiByteTestFramework):
         self.test_generateblock()
 
     def test_generatetoaddress(self):
-        self.generatetoaddress(self.nodes[0], 1, 'mneYUmWYsuk7kySiURxCi3AGxrAqZxLgPZ')
+        self.generatetoaddress(self.nodes[0], 1, 'swzkfmbaZb4KARFXeNvtECxhggYJnho4ud')
         assert_raises_rpc_error(-5, "Invalid address", self.generatetoaddress, self.nodes[0], 1, '3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy')
 
     def test_generateblock(self):

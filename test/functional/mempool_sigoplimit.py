@@ -46,7 +46,7 @@ class BytesPerSigOpTest(DigiByteTestFramework):
     def set_test_params(self):
         self.num_nodes = 1
         # allow large datacarrier output to pad transactions
-        self.extra_args = [['-datacarriersize=100000', '-dandelion=0', '-maxtxfee=100000']]  # DigiByte: Higher limit for large sigop tests
+        self.extra_args = [['-datacarriersize=100000', '-dandelion=0', '-maxtxfee=100000', '-minrelaytxfee=0']]  # DigiByte: Higher limit for large sigop tests, disable min relay fee
 
     def create_p2wsh_spending_tx(self, witness_script, output_script):
         """Create a 1-input-1-output P2WSH spending transaction with only the

@@ -4,7 +4,7 @@
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test wallet group functionality."""
 
-from test_framework.blocktools import COINBASE_MATURITY
+from test_framework.blocktools import COINBASE_MATURITY, COINBASE_MATURITY_2
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.messages import (
     tx_from_hex,
@@ -32,7 +32,9 @@ class WalletGroupTest(DigiByteTestFramework):
 
         for args in self.extra_args:
             args.append("-whitelist=noban@127.0.0.1")   # whitelist peers to speed up tx relay / mempool sync
-            args.append(f"-paytxfee={20 * 1e3 / 1e8}")  # apply feerate of 20 sats/vB across all nodes
+            args.append(f"-paytxfee={20 * 1e6 / 1e8}")  # apply feerate of 20 sats/kB across all nodes (DigiByte uses kB not vB)
+            args.append("-dandelion=0")  # disable Dandelion++ for reliable tx propagation
+            args.append("-maxtxfee=100")  # allow higher fees
 
         self.rpc_timeout = 480
 
@@ -47,7 +49,7 @@ class WalletGroupTest(DigiByteTestFramework):
         #  node0 <-- node1 <-- node2 <-- node3 <-- node4 <-- node5)
         self.connect_nodes(0, self.num_nodes - 1)
         # Mine some coins
-        self.generate(self.nodes[0], COINBASE_MATURITY + 1)
+        self.generate(self.nodes[0], COINBASE_MATURITY_2 + 1)
 
         # Get some addresses from the two nodes
         addr1 = [self.nodes[1].getnewaddress() for _ in range(3)]

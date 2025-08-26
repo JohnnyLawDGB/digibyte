@@ -36,12 +36,12 @@ from test_framework.wallet import MiniWallet
 WALLET_PASSPHRASE = "test"
 WALLET_PASSPHRASE_TIMEOUT = 3600
 
-# Fee rates (sat/vB)
-INSUFFICIENT =      1
-ECONOMICAL   =     50
-NORMAL       =    100
-HIGH         =    500
-TOO_HIGH     = 100000
+# Fee rates (sat/kB) - DigiByte uses kB not vB (1000x Bitcoin)
+INSUFFICIENT =   1000
+ECONOMICAL   =  50000
+NORMAL       = 100000
+HIGH         = 500000
+TOO_HIGH     = 100000000
 
 def get_change_address(tx, node):
     tx_details = node.getrawtransaction(tx, 1)
@@ -60,6 +60,8 @@ class BumpFeeTest(DigiByteTestFramework):
             "-mintxfee=0.00002",
             "-addresstype=bech32",
             "-whitelist=noban@127.0.0.1",
+            "-dandelion=0",
+            "-maxtxfee=100",
         ] for i in range(self.num_nodes)]
 
     def skip_test_if_missing_module(self):
@@ -785,7 +787,7 @@ def spend_one_input(node, dest_address, change_size=Decimal("0.00049000"), data=
         destinations['data'] = data
     rawtx = node.createrawtransaction([tx_input], destinations)
     signedtx = node.signrawtransactionwithwallet(rawtx)
-    txid = node.sendrawtransaction(signedtx["hex"])
+    txid = node.sendrawtransaction(signedtx["hex"], 0)
     return txid
 
 

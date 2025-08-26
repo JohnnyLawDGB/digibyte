@@ -55,7 +55,7 @@ from test_framework.util import (
 )
 from test_framework.wallet_util import generate_keypair
 
-DEFAULT_FEE = Decimal("0.1")  # DigiByte: 1000x Bitcoin fees (0.1 DGB/kB)
+DEFAULT_FEE = Decimal("0.01")  # DigiByte: 100x Bitcoin fees (0.01 DGB/kB)
 
 class MiniWalletMode(Enum):
     """Determines the transaction type the MiniWallet is creating and spending.
@@ -339,7 +339,7 @@ class MiniWallet:
         }
 
     def create_self_transfer(self, *,
-            fee_rate=Decimal("0.3"),
+            fee_rate=Decimal("0.03"),
             fee=Decimal("0"),
             utxo_to_spend=None,
             locktime=0,
@@ -358,11 +358,19 @@ class MiniWallet:
             vsize = Decimal(168)  # P2PK (73 bytes scriptSig + 35 bytes scriptPubKey + 60 bytes other)
         else:
             assert False
-        send_value = utxo_to_spend["value"] - (fee or (fee_rate * vsize / 1000))
-
-        # create tx
-        tx = self.create_self_transfer_multi(utxos_to_spend=[utxo_to_spend], locktime=locktime, sequence=sequence, amount_per_output=int(COIN * send_value), target_weight=target_weight)
-        if not target_weight:
+        # For target_weight transactions, need to recalculate fee based on actual size
+        if target_weight:
+            # Create transaction first to get actual size
+            initial_send_value = utxo_to_spend["value"] - Decimal("0.01")  # Use temporary amount
+            tx = self.create_self_transfer_multi(utxos_to_spend=[utxo_to_spend], locktime=locktime, sequence=sequence, amount_per_output=int(COIN * initial_send_value), target_weight=target_weight)
+            actual_vsize = tx["tx"].get_vsize()
+            calculated_fee = fee or (fee_rate * actual_vsize / 1000)
+            final_send_value = utxo_to_spend["value"] - calculated_fee
+            # Recreate with correct amount
+            tx = self.create_self_transfer_multi(utxos_to_spend=[utxo_to_spend], locktime=locktime, sequence=sequence, amount_per_output=int(COIN * final_send_value), target_weight=target_weight)
+        else:
+            send_value = utxo_to_spend["value"] - (fee or (fee_rate * vsize / 1000))
+            tx = self.create_self_transfer_multi(utxos_to_spend=[utxo_to_spend], locktime=locktime, sequence=sequence, amount_per_output=int(COIN * send_value), target_weight=target_weight)
             assert_equal(tx["tx"].get_vsize(), vsize)
         tx["new_utxo"] = tx.pop("new_utxos")[0]
 

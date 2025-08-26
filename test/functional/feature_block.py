@@ -13,7 +13,6 @@ from test_framework.blocktools import (
     create_tx_with_script,
     get_legacy_sigopcount_block,
     MAX_BLOCK_SIGOPS,
-    VERSIONBITS_LAST_OLD_BLOCK_VERSION,
 )
 from test_framework.messages import (
     CBlock,
@@ -80,7 +79,7 @@ class CBrokenBlock(CBlock):
         return super().serialize()
 
 
-DUPLICATE_COINBASE_SCRIPT_SIG = b'\x01\x3d'  # Valid for block at height 61 (0x3d = 61)
+DUPLICATE_COINBASE_SCRIPT_SIG = b'\x01\x78'  # Valid for block at height 120
 
 
 class FullBlockTest(DigiByteTestFramework):
@@ -90,11 +89,6 @@ class FullBlockTest(DigiByteTestFramework):
         self.extra_args = [[
             '-acceptnonstdtxn=1',  # This is a consensus block test, we don't care about tx policy
             '-testactivationheight=bip34@2',
-            '-easypow',  # Prevent multi-algo mining issues
-            '-dandelion=0',  # Disable Dandelion++ for test stability
-            '-maxtipage=99999999',  # Disable strict future time validation
-            '-dbcache=300',  # Increase database cache for faster validation
-            '-checkpoints=0',  # Disable checkpoint verification
         ]]
 
     def run_test(self):
@@ -124,9 +118,8 @@ class FullBlockTest(DigiByteTestFramework):
 
         # These constants chosen specifically to trigger an immature coinbase spend
         # at a certain time below.
-        # DigiByte: Use fewer blocks but still enough for test scenarios
-        NUM_BUFFER_BLOCKS_TO_GENERATE = 50  # Reduced from 99 but enough for outputs
-        NUM_OUTPUTS_TO_COLLECT = 25  # Ensure we have enough outputs for all test cases
+        NUM_BUFFER_BLOCKS_TO_GENERATE = 99
+        NUM_OUTPUTS_TO_COLLECT = 33
 
         # Allow the block to mature
         blocks = []
@@ -299,29 +292,24 @@ class FullBlockTest(DigiByteTestFramework):
 
         # Attempt to spend a coinbase at depth too low
         #     genesis -> b1 (0) -> b2 (1) -> b5 (2) -> b6  (3)
-        #                                          \-> b12 (3) -> b13 (4) -> b15 (5) -> b20 (recent_coinbase)
+        #                                          \-> b12 (3) -> b13 (4) -> b15 (5) -> b20 (7)
         #                      \-> b3 (1) -> b4 (2)
         self.log.info("Reject a block spending an immature coinbase.")
         self.move_tip(15)
-        # DigiByte: For immature coinbase test, we need a coinbase < 8 blocks deep
-        # The current tip (b15) coinbase is at depth 0 - perfect for testing
-        recent_coinbase = self.blocks[15].vtx[0]
-        b20 = self.next_block(20, spend=recent_coinbase)
+        b20 = self.next_block(20, spend=out[7])
         self.send_blocks([b20], success=False, reject_reason='bad-txns-premature-spend-of-coinbase', reconnect=True)
 
         # Attempt to spend a coinbase at depth too low (on a fork this time)
         #     genesis -> b1 (0) -> b2 (1) -> b5 (2) -> b6  (3)
         #                                          \-> b12 (3) -> b13 (4) -> b15 (5)
-        #                                                                \-> b21 (6) -> b22 (recent_coinbase)
+        #                                                                \-> b21 (6) -> b22 (5)
         #                      \-> b3 (1) -> b4 (2)
         self.log.info("Reject a block spending an immature coinbase (on a forked chain)")
         self.move_tip(13)
         b21 = self.next_block(21, spend=out[6])
         self.send_blocks([b21], False)
 
-        # DigiByte: Use the coinbase from b21 (just created) as an immature coinbase
-        recent_coinbase_2 = self.blocks[21].vtx[0]  # This coinbase is at depth=0
-        b22 = self.next_block(22, spend=recent_coinbase_2)
+        b22 = self.next_block(22, spend=out[5])
         self.send_blocks([b22], success=False, reject_reason='bad-txns-premature-spend-of-coinbase', reconnect=True)
 
         # Create a block on either side of MAX_BLOCK_WEIGHT and make sure its accepted/rejected
@@ -646,9 +634,8 @@ class FullBlockTest(DigiByteTestFramework):
         self.log.info("Reject a block with invalid work")
         self.move_tip(44)
         b47 = self.next_block(47)
-        # DigiByte: Use the same approach as v8.22.2 - find an actually invalid hash
         target = uint256_from_compact(b47.nBits)
-        while b47.powHash <= target:
+        while b47.sha256 <= target:
             # Rehash nonces until an invalid too-high-hash block is found.
             b47.nNonce += 1
             b47.rehash()
@@ -843,20 +830,13 @@ class FullBlockTest(DigiByteTestFramework):
         #
         self.log.info("Reject a block with a transaction with a duplicate hash of a previous transaction (BIP30)")
         self.move_tip(60)
-        # DigiByte: The BIP30 test expects a duplicate of the original coinbase
-        # But our optimizations changed the chain length, causing height mismatch
-        # The original duplicate_tx was created at the beginning with scriptSig for height 61
-        actual_height = self.nodes[0].getblockcount()  
-        self.log.info(f"DEBUG: Chain height is {actual_height}, expecting height mismatch issue")
         b61 = self.next_block(61)
         b61.vtx[0].vin[0].scriptSig = DUPLICATE_COINBASE_SCRIPT_SIG
         b61.vtx[0].rehash()
         b61 = self.update_block(61, [])
         assert_equal(duplicate_tx.serialize(), b61.vtx[0].serialize())
-        # DigiByte: Due to optimization changing chain height, BIP34 height check fails first
-        # The block gets rejected for height mismatch before BIP30 validation
-        # No need to reconnect for simple block rejection
-        self.send_blocks([b61], success=False, reject_reason='bad-cb-height', reconnect=False)
+        # BIP30 is always checked on regtest, regardless of the BIP34 activation height
+        self.send_blocks([b61], success=False, reject_reason='bad-txns-BIP30', reconnect=True)
 
         # Test BIP30 (allow duplicate if spent)
         #
@@ -877,14 +857,7 @@ class FullBlockTest(DigiByteTestFramework):
         b_dup_2.vtx[0].rehash()
         b_dup_2 = self.update_block('dup_2', [])
         assert_equal(duplicate_tx.serialize(), b_dup_2.vtx[0].serialize())
-        # DigiByte: Updated confirmation count due to optimized LARGE_REORG_SIZE (20 instead of 288)
-        # The duplicate_tx was created in the first block, so confirmations = current height - 0
-        current_height = self.nodes[0].getblockcount()
-        expected_confirmations = current_height
-        assert_equal(self.nodes[0].gettxout(txid=duplicate_tx.hash, n=0)['confirmations'], expected_confirmations)
-        # DigiByte: Ensure P2P connection is stable after previous disconnect
-        if not hasattr(self, 'helper_peer') or not self.helper_peer.is_connected:
-            self.reconnect_p2p()
+        assert_equal(self.nodes[0].gettxout(txid=duplicate_tx.hash, n=0)['confirmations'], 119)
         self.send_blocks([b_spend_dup_cb, b_dup_2], success=True)
         # The duplicate has less confirmations
         assert_equal(self.nodes[0].gettxout(txid=duplicate_tx.hash, n=0)['confirmations'], 1)
@@ -1290,12 +1263,10 @@ class FullBlockTest(DigiByteTestFramework):
         b89a = self.update_block("89a", [tx])
         self.send_blocks([b89a], success=False, reject_reason='bad-txns-inputs-missingorspent', reconnect=True)
 
-        self.log.info("Test a re-org of moderately sized chain (for DigiByte)")
+        self.log.info("Test a re-org of one week's worth of blocks (1088 blocks)")
 
         self.move_tip(88)
-        # DigiByte: With 15-second blocks, we need to test reorg functionality
-        # But 288 blocks of MAX_BLOCK_WEIGHT is too slow for CI. Use 20 blocks for speed.
-        LARGE_REORG_SIZE = 20  # Optimized for test speed while preserving reorg testing
+        LARGE_REORG_SIZE = 1088
         blocks = []
         spend = out[32]
         for i in range(89, LARGE_REORG_SIZE + 89):
@@ -1311,7 +1282,7 @@ class FullBlockTest(DigiByteTestFramework):
             self.save_spendable_output()
             spend = self.get_spendable_output()
 
-        self.send_blocks(blocks, True, timeout=120)  # Reduced timeout for smaller reorg
+        self.send_blocks(blocks, True, timeout=2440)
         chain1_tip = i
 
         # now create alt chain of same length
@@ -1323,14 +1294,14 @@ class FullBlockTest(DigiByteTestFramework):
 
         # extend alt chain to trigger re-org
         block = self.next_block("alt" + str(chain1_tip + 1))
-        self.send_blocks([block], True, timeout=60)  # Reduced timeout for smaller reorg
+        self.send_blocks([block], True, timeout=2440)
 
         # ... and re-org back to the first chain
         self.move_tip(chain1_tip)
         block = self.next_block(chain1_tip + 1)
         self.send_blocks([block], False, force_send=True)
         block = self.next_block(chain1_tip + 2)
-        self.send_blocks([block], True, timeout=60)  # Reduced timeout for smaller reorg
+        self.send_blocks([block], True, timeout=2440)
 
         self.log.info("Reject a block with an invalid block header version")
         b_v1 = self.next_block('b_v1', version=1)
@@ -1370,7 +1341,7 @@ class FullBlockTest(DigiByteTestFramework):
         tx.rehash()
         return tx
 
-    def next_block(self, number, spend=None, additional_coinbase_value=0, script=CScript([OP_TRUE]), *, version=VERSIONBITS_LAST_OLD_BLOCK_VERSION):
+    def next_block(self, number, spend=None, additional_coinbase_value=0, script=CScript([OP_TRUE]), *, version=4):
         if self.tip is None:
             base_block_hash = self.genesis_hash
             block_time = int(time.time()) + 1

@@ -237,6 +237,28 @@ Remember: 90% of test failures are fees or coinbase maturity issues.
 
 ---
 
+## NEW PATTERNS FOUND BY GROUP 7
+
+### Pattern: RPC Transaction sendrawtransaction maxfeerate bypass
+**Error**: Fee exceeds maximum configured by user (e.g. -maxtxfee, maxfeerate) (-25)
+**Solution**: Use `sendrawtransaction(tx_hex, 0)` instead of `sendrawtransaction(hexstring=tx_hex)` and add `-maxtxfee=1` to extra_args
+**Affects**: rpc_rawtransaction.py, any tests using sendrawtransaction
+**Added by**: Sub-Agent Group 7
+
+### Pattern: Bitcoin vs DigiByte Block Rewards in Balance Assertions
+**Error**: AssertionError: not(0E-8 == 50.0) or balance mismatches
+**Solution**: Change expected balance from 50 BTC to 72000 DGB and use COINBASE_MATURITY_2 (100) instead of COINBASE_MATURITY (8) for wallet tests
+**Affects**: wallet_simulaterawtx.py, balance-checking tests
+**Added by**: Sub-Agent Group 7
+
+### Pattern: Dust Threshold Differences
+**Error**: dust (-26) when sending small amounts
+**Solution**: Increase transaction amounts from Bitcoin levels (e.g., 1300 satoshis → 100000 satoshis)
+**Affects**: rpc_createmultisig.py, tests with small transaction amounts
+**Added by**: Sub-Agent Group 7
+
+---
+
 ## NEW PATTERNS FOUND BY GROUP 15
 
 ### Pattern: Multi-Algorithm Mining Issues

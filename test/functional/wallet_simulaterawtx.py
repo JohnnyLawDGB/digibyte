@@ -6,7 +6,7 @@
 """
 
 from decimal import Decimal
-from test_framework.blocktools import COINBASE_MATURITY
+from test_framework.blocktools import COINBASE_MATURITY, COINBASE_MATURITY_2
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import (
     assert_approx,
@@ -21,6 +21,7 @@ class SimulateTxTest(DigiByteTestFramework):
     def set_test_params(self):
         self.setup_clean_chain = True
         self.num_nodes = 1
+        self.extra_args = [["-dandelion=0"]]
 
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()
@@ -40,8 +41,8 @@ class SimulateTxTest(DigiByteTestFramework):
         w1 = node.get_wallet_rpc('w1')
         w2 = node.get_wallet_rpc('w2')
 
-        self.generatetoaddress(node, COINBASE_MATURITY + 1, w0.getnewaddress())
-        assert_equal(w0.getbalance(), 50.0)
+        self.generatetoaddress(node, COINBASE_MATURITY_2 + 1, w0.getnewaddress())
+        assert_equal(w0.getbalance(), 72000.0)
         assert_equal(w1.getbalance(), 0.0)
 
         address1 = w1.getnewaddress()

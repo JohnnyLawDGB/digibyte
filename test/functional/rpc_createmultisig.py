@@ -32,6 +32,7 @@ class RpcCreateMultiSigTest(DigiByteTestFramework):
         self.setup_clean_chain = True
         self.num_nodes = 3
         self.supports_cli = False
+        self.extra_args = [["-dandelion=0"], ["-dandelion=0"], ["-dandelion=0"]]
 
     def get_keys(self):
         self.pub = []
@@ -180,7 +181,7 @@ class RpcCreateMultiSigTest(DigiByteTestFramework):
         mredeem = msig["redeemScript"]
         assert_equal(desc, msig['descriptor'])
         if self.output_type == 'bech32':
-            assert madd[0:4] == "bcrt"  # actually a bech32 address
+            assert madd[0:5] == "dgbrt"  # actually a bech32 address
 
         if self.is_bdb_compiled():
             # compare against addmultisigaddress
@@ -194,7 +195,7 @@ class RpcCreateMultiSigTest(DigiByteTestFramework):
             wmulti.unloadwallet()
 
         spk = address_to_scriptpubkey(madd)
-        txid = self.wallet.send_to(from_node=self.nodes[0], scriptPubKey=spk, amount=1300)["txid"]
+        txid = self.wallet.send_to(from_node=self.nodes[0], scriptPubKey=spk, amount=100000)["txid"]
         tx = node0.getrawtransaction(txid, True)
         vout = [v["n"] for v in tx["vout"] if madd == v["scriptPubKey"]["address"]]
         assert len(vout) == 1

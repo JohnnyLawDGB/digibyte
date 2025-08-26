@@ -1,7 +1,7 @@
 # DigiByte Test Suite - Common Fixes
 
 ## Quick Reference
-Most test failures are caused by these 8 issues (in order of frequency):
+Most test failures are caused by these 9 issues (in order of frequency):
 1. **Block Rewards & Fees** - 72000 DGB (not 50 BTC), fees in sat/kB (not sat/vB)
 2. **Coinbase Maturity** - Use COINBASE_MATURITY_2 (100) for wallet tests, COINBASE_MATURITY (8) for initial setup
 3. **Dandelion++** - Causes transaction propagation delays
@@ -10,6 +10,7 @@ Most test failures are caused by these 8 issues (in order of frequency):
 6. **Fork Heights** - Difficulty changes at blocks 100, 200, 334, 400, 600
 7. **Network Ports** - DigiByte uses different ports than Bitcoin
 8. **Address & Key Generation** - Must use proper DigiByte prefixes and encoding
+9. **Block Version & Algorithm Changes** - Version bits change at fork heights
 
 ---
 
@@ -378,9 +379,177 @@ When a test fails, check in this order:
 3. **Transaction not found?** → Add `-dandelion=0` to all nodes
 4. **Address validation?** → Check prefix (dgbrt, not bcrt)
 5. **Invalid address error?** → Use node.getnewaddress() or see Pattern #8
-6. **Block rejected?** → Set block.nVersion = 0x00000204
+6. **Block rejected?** → Check version & algo bits - see Pattern #9
 7. **Mining difficulty spike?** → Check fork height, use `-easypow`
 8. **Connection refused?** → Check port numbers (14022 not 18444)
+9. **Algorithm not active?** → Set correct version bits after block 100 - see Pattern #9
+
+---
+
+## 9. BLOCK VERSION & ALGORITHM CHANGES (Critical for Mining & Relay Tests)
+
+### The Problem
+DigiByte's block version field encodes BOTH the base version AND the mining algorithm. This changes at specific heights as DigiByte evolved from single-algo to multi-algo mining.
+
+### Block Version Structure
+
+```python
+# Block version bits layout:
+# Bits 31-28: BIP9 signaling (VERSIONBITS_TOP_BITS)
+# Bits 11-8:  Algorithm identifier  
+# Bits 7-0:   Base version (always 2)
+
+# Constants from src/primitives/block.h:
+BLOCK_VERSION_DEFAULT = 2           # Base version
+BLOCK_VERSION_ALGO = (15 << 8)      # Mask for algo bits: 0x0F00
+
+# Algorithm bits (in bits 8-11):
+BLOCK_VERSION_SCRYPT  = (0 << 8)    # 0x0000
+BLOCK_VERSION_SHA256D = (2 << 8)    # 0x0200  
+BLOCK_VERSION_GROESTL = (4 << 8)    # 0x0400
+BLOCK_VERSION_SKEIN   = (6 << 8)    # 0x0600
+BLOCK_VERSION_QUBIT   = (8 << 8)    # 0x0800
+BLOCK_VERSION_ODO     = (14 << 8)   # 0x0E00
+
+# BIP9 signaling (after ReserveAlgoBits):
+VERSIONBITS_TOP_BITS = 0x20000000   # Bit 29 set
+```
+
+### Four Eras of Block Versioning in REGTEST
+
+#### ERA 1: Simple Scrypt (Blocks 0-99)
+```python
+# Before multi-algo activation
+# Version = 2 (just base version, no algo bits needed)
+block.nVersion = 2  # 0x00000002
+```
+
+#### ERA 2: Multi-Algo without BIP9 (Blocks 100-599)
+```python
+# 5 algorithms active, must set algo bits
+# Version = 2 | algo_bits
+block.nVersion = 0x00000002  # Scrypt  (2 | 0x0000)
+block.nVersion = 0x00000202  # SHA256D (2 | 0x0200)
+block.nVersion = 0x00000402  # Groestl (2 | 0x0400)
+block.nVersion = 0x00000602  # Skein   (2 | 0x0600)
+block.nVersion = 0x00000802  # Qubit   (2 | 0x0800)
+```
+
+#### ERA 3: BIP9 + Multi-Algo (Most regtest tests use this)
+```python
+# After ReserveAlgoBits (always active in regtest)
+# Version = VERSIONBITS_TOP_BITS | 2 | algo_bits
+# ALL 5 algorithms still active:
+block.nVersion = 0x20000002  # Scrypt  with BIP9
+block.nVersion = 0x20000202  # SHA256D with BIP9
+block.nVersion = 0x20000402  # Groestl with BIP9
+block.nVersion = 0x20000602  # Skein   with BIP9
+block.nVersion = 0x20000802  # Qubit   with BIP9
+```
+
+#### ERA 4: With Odocrypt (Blocks 600+)
+```python
+# Now 6 algorithms available (5 original + Odocrypt)
+block.nVersion = 0x20000002  # Scrypt  with BIP9
+block.nVersion = 0x20000202  # SHA256D with BIP9
+block.nVersion = 0x20000402  # Groestl with BIP9
+block.nVersion = 0x20000602  # Skein   with BIP9
+block.nVersion = 0x20000802  # Qubit   with BIP9
+block.nVersion = 0x20000E02  # Odocrypt with BIP9 (NEW!)
+```
+
+### Quick Fix Guide
+
+#### Fix 1: Tests Creating Blocks Manually
+```python
+# WRONG - Bitcoin style:
+block.nVersion = 4
+
+# RIGHT - DigiByte style depends on height:
+height = node.getblockcount()
+if height < 100:
+    block.nVersion = 2  # Pre-multi-algo
+else:
+    # Most tests default to Scrypt with BIP9:
+    block.nVersion = 0x20000002
+    # Or if test needs specific algo:
+    block.nVersion = 0x20000202  # SHA256D
+```
+
+#### Fix 2: Tests Checking Version
+```python
+# WRONG - Exact match:
+assert block.nVersion == 4
+
+# RIGHT - Check base version only:
+base_version = block.nVersion & 0xFF  # Get lower 8 bits
+assert base_version == 2
+
+# Or accept any valid DigiByte version:
+valid_versions = [0x20000002, 0x20000202, 0x20000402, ...]
+assert block.nVersion in valid_versions
+```
+
+#### Fix 3: Mining Tests Failing
+```python
+# ERROR: "Algorithm 'sha256d' is not currently active"
+# FIX: Add -easypow to postpone multi-algo:
+self.extra_args = [["-easypow"]]
+
+# Or stay below block 100:
+self.generate(node, 99)  # Don't cross into multi-algo
+```
+
+#### Fix 4: BIP9 Version Bits Tests
+```python
+# DigiByte uses different mask than Bitcoin:
+VERSIONBITS_TOP_MASK = 0xF0000000  # NOT 0xE0000000
+VERSIONBITS_TOP_BITS = 0x20000000
+
+# When checking BIP9 signaling:
+if (block.nVersion & VERSIONBITS_TOP_MASK) == VERSIONBITS_TOP_BITS:
+    # BIP9 is active
+```
+
+### Complete Version Reference Table
+
+| Algorithm | ERA 1 (0-99) | ERA 2 (100-599) | ERA 3 (Regtest Default) | ERA 4 (600+) |
+|-----------|--------------|-----------------|-------------------------|--------------|
+| Scrypt    | 0x00000002   | 0x00000002      | 0x20000002             | 0x20000002   |
+| SHA256D   | Not Active   | 0x00000202      | 0x20000202             | 0x20000202   |
+| Groestl   | Not Active   | 0x00000402      | 0x20000402             | 0x20000402   |
+| Skein     | Not Active   | 0x00000602      | 0x20000602             | 0x20000602   |
+| Qubit     | Not Active   | 0x00000802      | 0x20000802             | 0x20000802   |
+| Odocrypt  | Not Active   | Not Active      | Not Active             | 0x20000E02   |
+
+### Common Errors & Solutions
+
+| Error | Cause | Fix |
+|-------|-------|-----|
+| `Algorithm 'sha256d' is not currently active` | Wrong version after block 100 | Set algo bits: `nVersion = 0x20000202` |
+| `AssertionError: not(536870914 == 4)` | Test expects Bitcoin version 4 | Accept DigiByte versions |
+| `bad-version(0x00000002)` | Missing BIP9 bits | Use `0x20000002` not `2` |
+| `Block validation failed` | Wrong algo for height | Check height, use correct version |
+
+### Test Framework Already Has This!
+
+```python
+# From test_framework/messages.py:
+BLOCK_VERSION_SCRYPT = (0 << 8)
+BLOCK_VERSION_SHA256D = (2 << 8)
+# ... etc
+
+# Most tests should just use:
+from test_framework.blocktools import create_block
+block = create_block(...)  # Handles version automatically
+```
+
+### Pro Tips
+
+1. **Most regtest tests use `0x20000002`** (Scrypt with BIP9)
+2. **Use `-easypow` to avoid multi-algo complexity**
+3. **Don't hardcode version checks** - mask out algo bits
+4. **Let create_block() handle it** when possible
 
 ---
 

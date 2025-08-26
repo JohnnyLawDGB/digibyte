@@ -20,9 +20,10 @@ import os
 class RejectLowDifficultyHeadersTest(DigiByteTestFramework):
     def set_test_params(self):
         self.setup_clean_chain = True
-        self.chain = 'testnet3'  # Use testnet chain because it has an early checkpoint
+        self.chain = 'regtest'  # DigiByte: Use regtest for faster startup instead of testnet3
         self.num_nodes = 2
-        self.extra_args = [["-minimumchainwork=0x0", '-prune=550', "-dandelion=0", "-easypow"]] * self.num_nodes
+        self.extra_args = [["-minimumchainwork=0x0", '-prune=550', "-dandelion=0", "-easypow", "-peertimeout=300"]] * self.num_nodes
+        self.rpc_timeout *= 8  # DigiByte: Extra long timeout for testnet3 node startup
 
     def add_options(self, parser):
         parser.add_argument(

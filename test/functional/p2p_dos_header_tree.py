@@ -64,7 +64,7 @@ class RejectLowDifficultyHeadersTest(DigiByteTestFramework):
 
         self.log.info("Feed all fork headers (succeeds without checkpoint)")
         # On node 0 it succeeds because checkpoints are disabled
-        self.restart_node(0, extra_args=['-nocheckpoints', "-minimumchainwork=0x0", '-prune=550'])
+        self.restart_node(0, extra_args=['-nocheckpoints', "-minimumchainwork=0x0", '-prune=550', "-dandelion=0", "-easypow", "-peertimeout=300"])
         peer_no_checkpoint = self.nodes[0].add_p2p_connection(P2PInterface())
         peer_no_checkpoint.send_and_ping(msg_headers(self.headers_fork))
         assert {

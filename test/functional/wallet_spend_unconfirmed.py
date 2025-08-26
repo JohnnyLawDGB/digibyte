@@ -149,11 +149,11 @@ class UnconfirmedInputTest(DigiByteTestFramework):
         self.def_wallet.sendtoaddress(address=wallet.getnewaddress(), amount=20)
         self.generate(self.nodes[0], 1) # confirm funding tx
 
-        parent_one_txid = wallet.sendtoaddress(address=wallet.getnewaddress(), amount=1.5, fee_rate=20000)
+        parent_one_txid = wallet.sendtoaddress(address=wallet.getnewaddress(), amount=1.5, fee_rate=2000000)  # 100x for DigiByte
         p_one_tx = wallet.gettransaction(txid=parent_one_txid, verbose=True)
         self.assert_undershoots_target(p_one_tx)
 
-        parent_two_txid = wallet.sendtoaddress(address=wallet.getnewaddress(), amount=1.5, fee_rate=10000)
+        parent_two_txid = wallet.sendtoaddress(address=wallet.getnewaddress(), amount=1.5, fee_rate=1000000)  # 100x for DigiByte
         p_two_tx = wallet.gettransaction(txid=parent_two_txid, verbose=True)
         self.assert_undershoots_target(p_two_tx)
 

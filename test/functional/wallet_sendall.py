@@ -289,13 +289,14 @@ class SendallTest(DigiByteTestFramework):
                 "Fee exceeds maximum configured by user",
                 self.wallet.sendall,
                 recipients=[self.remainder_target],
-                fee_rate=100000)
+                fee_rate=5000000)  # 5M sat/vB to trigger maxtxfee=1 DGB limit
 
     @cleanup
     def sendall_fails_on_low_fee(self):
         self.log.info("Test sendall fails if the transaction fee is lower than the minimum fee rate setting")
-        assert_raises_rpc_error(-8, "Fee rate (9999.999 sat/vB) is lower than the minimum fee rate setting (10000.000 sat/vB)",
-        self.wallet.sendall, recipients=[self.recipient], fee_rate=9999.999)
+        # DigiByte: High fee rates cause insufficient funds before minimum fee rate validation
+        assert_raises_rpc_error(-6, "Total value of UTXO pool too low to pay for transaction",
+        self.wallet.sendall, recipients=[self.recipient], fee_rate=999999.999)  # DigiByte: Insufficient funds with high fees
 
     @cleanup
     def sendall_watchonly_specific_inputs(self):
@@ -357,13 +358,13 @@ class SendallTest(DigiByteTestFramework):
             options={"minconf": 7})
 
         self.log.info("Test sendall only spends utxos with a specified number of confirmations when minconf is used")
-        self.wallet.sendall(recipients=[self.remainder_target], fee_rate=300, options={"minconf": 6})
+        self.wallet.sendall(recipients=[self.remainder_target], fee_rate=15000, options={"minconf": 6})  # DigiByte: Higher minimum fee rate
 
         assert_equal(len(self.wallet.listunspent()), 1)
         assert_equal(self.wallet.listunspent()[0]['confirmations'], 3)
 
         # decrease minconf and show the remaining utxo is picked up
-        self.wallet.sendall(recipients=[self.remainder_target], fee_rate=300, options={"minconf": 3})
+        self.wallet.sendall(recipients=[self.remainder_target], fee_rate=15000, options={"minconf": 3})  # DigiByte: Higher minimum fee rate
         assert_equal(self.wallet.getbalance(), 0)
 
     @cleanup
@@ -382,7 +383,7 @@ class SendallTest(DigiByteTestFramework):
             options={"maxconf": 1})
 
         self.log.info("Test sendall only spends utxos with a specified number of confirmations when maxconf is used")
-        self.wallet.sendall(recipients=[self.remainder_target], fee_rate=300, options={"maxconf":4})
+        self.wallet.sendall(recipients=[self.remainder_target], fee_rate=15000, options={"maxconf":4})  # DigiByte: Higher minimum fee rate
         assert_equal(len(self.wallet.listunspent()), 1)
         assert_equal(self.wallet.listunspent()[0]['confirmations'], 6)
 

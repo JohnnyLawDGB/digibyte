@@ -6,6 +6,7 @@
 
 from test_framework.blocktools import (
     COINBASE_MATURITY,
+    COINBASE_MATURITY_2,
 )
 from test_framework.address import (
     script_to_p2wsh,
@@ -44,7 +45,10 @@ class SignRawTransactionWithWalletTest(DigiByteTestFramework):
     def set_test_params(self):
         self.setup_clean_chain = True
         self.num_nodes = 2
-        self.extra_args = [["-dandelion=0"], ["-dandelion=0"]]
+        self.extra_args = [
+            ["-dandelion=0", "-mintxfee=0.001", "-maxtxfee=10.0"], 
+            ["-dandelion=0", "-mintxfee=0.001", "-maxtxfee=10.0"]
+        ]
 
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()
@@ -154,7 +158,7 @@ class SignRawTransactionWithWalletTest(DigiByteTestFramework):
         self.log.info("Test signing a fully signed transaction does nothing")
         self.nodes[0].walletpassphrase("password", 9999)
         # Generate blocks and import the coinbase key to fund the wallet
-        self.generate(self.nodes[0], COINBASE_MATURITY + 10)
+        self.generate(self.nodes[0], COINBASE_MATURITY_2 + 10)
         coinbase_key = self.nodes[0].get_deterministic_priv_key()
         self.nodes[0].importprivkey(coinbase_key.key)
         rawtx = self.nodes[0].createrawtransaction([], [{self.nodes[0].getnewaddress(): 1}])
@@ -202,7 +206,7 @@ class SignRawTransactionWithWalletTest(DigiByteTestFramework):
         vout = find_vout_for_address(self.nodes[0], txid, address)
         self.generate(self.nodes[0], 1)
         utxo = self.nodes[0].listunspent()[0]
-        amt = Decimal(1) + utxo["amount"] - Decimal(0.00001)
+        amt = Decimal(1) + utxo["amount"] - Decimal(0.001)  # DigiByte minimum relay fee
         tx = self.nodes[0].createrawtransaction(
             [{"txid": txid, "vout": vout, "sequence": 1},{"txid": utxo["txid"], "vout": utxo["vout"]}],
             [{self.nodes[0].getnewaddress(): amt}],
@@ -237,7 +241,7 @@ class SignRawTransactionWithWalletTest(DigiByteTestFramework):
         vout = find_vout_for_address(self.nodes[0], txid, address)
         self.generate(self.nodes[0], 1)
         utxo = self.nodes[0].listunspent()[0]
-        amt = Decimal(1) + utxo["amount"] - Decimal(0.00001)
+        amt = Decimal(1) + utxo["amount"] - Decimal(0.001)  # DigiByte minimum relay fee
         tx = self.nodes[0].createrawtransaction(
             [{"txid": txid, "vout": vout},{"txid": utxo["txid"], "vout": utxo["vout"]}],
             [{self.nodes[0].getnewaddress(): amt}],

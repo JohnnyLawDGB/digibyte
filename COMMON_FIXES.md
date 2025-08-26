@@ -222,7 +222,7 @@ DigiByte uses different Base58 prefixes and Bech32 HRPs than Bitcoin. Tests that
 # Found in: src/kernel/chainparams.cpp
 # Mainnet:
 base58Prefixes[PUBKEY_ADDRESS] = 30    # Mainnet P2PKH addresses start with 'D'
-base58Prefixes[SCRIPT_ADDRESS] = 63    # Mainnet P2SH addresses start with 'S' 
+base58Prefixes[SCRIPT_ADDRESS] = 63    # Mainnet P2SH addresses start with 'S'
 base58Prefixes[SECRET_KEY] = 128       # Mainnet private keys (WIF)
 
 # Testnet:
@@ -338,7 +338,7 @@ def is_valid_address(addr):
     # P2PKH (regtest/testnet)
     if addr.startswith(('s', 't')):  # DigiByte regtest P2PKH
         return True
-    # P2SH (regtest/testnet)  
+    # P2SH (regtest/testnet)
     if addr.startswith('y'):  # DigiByte regtest P2SH
         return True
     # Bech32 (regtest)
@@ -396,7 +396,7 @@ DigiByte's block version field encodes BOTH the base version AND the mining algo
 ```python
 # Block version bits layout:
 # Bits 31-28: BIP9 signaling (VERSIONBITS_TOP_BITS)
-# Bits 11-8:  Algorithm identifier  
+# Bits 11-8:  Algorithm identifier
 # Bits 7-0:   Base version (always 2)
 
 # Constants from src/primitives/block.h:
@@ -405,7 +405,7 @@ BLOCK_VERSION_ALGO = (15 << 8)      # Mask for algo bits: 0x0F00
 
 # Algorithm bits (in bits 8-11):
 BLOCK_VERSION_SCRYPT  = (0 << 8)    # 0x0000
-BLOCK_VERSION_SHA256D = (2 << 8)    # 0x0200  
+BLOCK_VERSION_SHA256D = (2 << 8)    # 0x0200
 BLOCK_VERSION_GROESTL = (4 << 8)    # 0x0400
 BLOCK_VERSION_SKEIN   = (6 << 8)    # 0x0600
 BLOCK_VERSION_QUBIT   = (8 << 8)    # 0x0800
@@ -562,96 +562,7 @@ Most test failures are variations of the 7 issues listed. Before adding a new pa
 2. Verify it affects multiple tests (not just one)
 3. Keep additions brief - just the pattern and fix
 
-Remember: 90% of test failures are fees or coinbase maturity issues.
-
 ---
-
-## NEW PATTERNS FOUND BY GROUP 8 (PROPER FIXES)
-
-### Pattern: DigiByte Regtest Private Key Format
-**Issue**: Bitcoin WIF private keys don't work with DigiByte's different SECRET_KEY base58 prefix
-**Solution**: Use proper DigiByte regtest compressed WIF with prefix 254: `eaK7rZGvJVRGyS1hfQ1fzJztgrmN4okjo3zcXBrLU4peQQMHzB7V`
-**Affects**: rpc_signmessagewithprivkey.py, any test using WIF keys
-**Added by**: Group 8 orchestrator fix
-
-### Pattern: DigiByte Genesis ScriptPubKey
-**Issue**: DigiByte genesis coinbase uses different scriptPubKey than Bitcoin
-**Solution**: Use `0x00ac` (OP_0 OP_CHECKSIG) not Bitcoin's `0x0051`
-**Affects**: rpc_scanblocks.py, any BIP158 filter tests using genesis block
-**Added by**: Group 8 orchestrator fix
-
-### Pattern: DigiByte Genesis Block Constants
-**Issue**: Tests using hardcoded Bitcoin genesis values fail
-**Solution**: Use DigiByte regtest genesis hash `0x4598a0f2b823aaf9e77ee6d5e46f1edb824191dcd48b08437b7cec17e6ae6e26`
-**Affects**: Any test examining genesis block properties
-**Added by**: Group 8 orchestrator fix
-
----
-
-## NEW PATTERNS FOUND BY GROUP 6
-
-### Pattern: DigiByte Wallet Test Fee Issues
-**Error**: `testmempoolaccept` returns `allowed: false` or "Fee exceeds maximum configured by user"  
-**Solution**: Tests fail due to underlying fee calculation bug (BUG-001). Requires core fee validation fixes, not test changes.
-**Affects**: wallet_fundrawtransaction.py, wallet_send.py, wallet_sendall.py
-**Added by**: Sub-Agent Group 6
-
-### Pattern: Bitcoin v26.2 Error Message Changes  
-**Error**: Expected "Transaction too large" but got "The inputs size exceeds the maximum weight..."
-**Solution**: Bitcoin changed error messages between versions - update expected error text to match current version
-**Affects**: wallet_fundrawtransaction.py test_transaction_too_large method
-**Added by**: Sub-Agent Group 6
-
-### Pattern: Wallet Context RPC Errors in New Tests
-**Error**: "Wallet file not specified (must request wallet RPC through /wallet/<filename> uri-path)"
-**Solution**: New Bitcoin tests don't use wallet context properly - use `node.get_wallet_rpc(wallet_name)` instead of direct `node.rpc_call()`
-**Affects**: test_external_inputs method and other new Bitcoin v26.2 tests
-**Added by**: Sub-Agent Group 6
-
----
-
-## NEW PATTERNS FOUND BY GROUP 5
-
-### Pattern: Wallet Fee Management - High Fees Required  
-**Error**: `min relay fee not met`, `Fee exceeds maximum configured by user`, `Insufficient funds`
-**Solution**: DigiByte wallet tests need much higher fees - use `-mintxfee=0.5`, `-minrelaytxfee=0.01`, `-maxtxfee=500.0` in extra_args
-**Affects**: wallet_bumpfee.py, all wallet fee management tests
-**Added by**: Sub-Agent Group 5
-
-### Pattern: Wallet Balance Expectations - DigiByte vs Bitcoin Amounts
-**Error**: `AssertionError: 4.28590000 < [195..235]` - balance much lower than expected  
-**Solution**: Tests use Bitcoin amounts (1.0, 0.5) but comments expect DigiByte amounts (75, 50). Scale up funding amounts by 50-75x
-**Affects**: wallet_groups.py UTXO group tests
-**Added by**: Sub-Agent Group 5
-
-### Pattern: UTXO Function Parameter Mismatch
-**Error**: `Couldn't find unspent with amount 1.00000` when looking for specific UTXO amounts
-**Solution**: Bitcoin v26.2 merge changed function parameters - restore DigiByte v8.22.2 values (9.00000 not 1.00000)
-**Affects**: wallet_bumpfee.py `spend_one_input()` function
-**Added by**: Sub-Agent Group 5
-
-### Pattern: Mempool Chain Limits - DigiByte vs Bitcoin Behavior
-**Error**: `AssertionError: No exception raised` when testing mempool ancestor limits
-**Solution**: DigiByte handles mempool chain limits differently than Bitcoin - may need different limits or skip test section
-**Affects**: wallet_create_tx.py mempool chain tests  
-**Added by**: Sub-Agent Group 5
-
-### Pattern: Debug Log Fee Expectations - Different Fee Calculations
-**Error**: Expected `Fee non-grouped = 282000000` but got `Fee non-grouped = 1410000`
-**Solution**: DigiByte calculates different fee amounts than Bitcoin in wallet selection - update expected values or skip assertion
-**Affects**: wallet_groups.py debug log fee assertions
-**Added by**: Sub-Agent Group 5
-
----
-
-## NEW PATTERNS FOUND BY GROUP 15
-
-### Pattern: Multi-Algorithm Mining Issues
-**Error**: Algorithm 'sha256d' is not currently active.
-**Solution**: Add `-easypow` to extra_args to postpone multi-algo activation
-**Affects**: feature_reindex_readonly.py, any tests using `generateblock()`
-**Added by**: Sub-Agent Group 15
-
 
 ### Pattern: Bitcoin to DigiByte Address Migration Issues
 **Error**: Invalid or unsupported Base58-encoded address (-5)

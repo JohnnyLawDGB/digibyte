@@ -66,7 +66,7 @@ from test_framework.wallet import MiniWallet
 
 # TestP2PConn: A peer we use to send messages to digibyted, and store responses.
 class TestP2PConn(P2PInterface):
-    def __init__(self):
+    def __init__(self, cmpct_version):
         super().__init__()
         self.last_sendcmpct = []
         self.block_announced = False
@@ -74,6 +74,7 @@ class TestP2PConn(P2PInterface):
         # This is for synchronizing the p2p message traffic,
         # so we can eg wait until a particular block is announced.
         self.announced_blockhashes = set()
+        self.cmpct_version = cmpct_version
 
     def on_sendcmpct(self, message):
         self.last_sendcmpct.append(message)
@@ -193,6 +194,7 @@ class CompactBlocksTest(DigiByteTestFramework):
     # - If sendcmpct is then sent with boolean 1, then new block announcements
     #   are made with compact blocks.
     def test_sendcmpct(self, test_node):
+        preferred_version = test_node.cmpct_version
         node = self.nodes[0]
 
         # Make sure we get a SENDCMPCT message from our peer
@@ -244,14 +246,14 @@ class CompactBlocksTest(DigiByteTestFramework):
         test_node.request_headers_and_sync(locator=[tip])
 
         # Now try a SENDCMPCT message with valid version, but announce=False
-        test_node.send_and_ping(msg_sendcmpct(announce=False, version=2))
+        test_node.send_and_ping(msg_sendcmpct(announce=False, version=preferred_version))
         check_announcement_of_new_block(node, test_node, lambda p: "cmpctblock" not in p.last_message)
 
         # Headers sync before next test.
         test_node.request_headers_and_sync(locator=[tip])
 
         # Finally, try a SENDCMPCT message with announce=True
-        test_node.send_and_ping(msg_sendcmpct(announce=True, version=2))
+        test_node.send_and_ping(msg_sendcmpct(announce=True, version=preferred_version))
         check_announcement_of_new_block(node, test_node, lambda p: "cmpctblock" in p.last_message)
 
         # Try one more time (no headers sync should be needed!)
@@ -262,11 +264,11 @@ class CompactBlocksTest(DigiByteTestFramework):
         check_announcement_of_new_block(node, test_node, lambda p: "cmpctblock" in p.last_message)
 
         # Try one more time, after sending a version=1, announce=false message.
-        test_node.send_and_ping(msg_sendcmpct(announce=False, version=1))
+        test_node.send_and_ping(msg_sendcmpct(announce=False, version=preferred_version-1))
         check_announcement_of_new_block(node, test_node, lambda p: "cmpctblock" in p.last_message)
 
         # Now turn off announcements
-        test_node.send_and_ping(msg_sendcmpct(announce=False, version=2))
+        test_node.send_and_ping(msg_sendcmpct(announce=False, version=preferred_version))
         check_announcement_of_new_block(node, test_node, lambda p: "cmpctblock" not in p.last_message and "headers" in p.last_message)
 
     # This test actually causes digibyted to (reasonably!) disconnect us, so do this last.
@@ -616,7 +618,7 @@ class CompactBlocksTest(DigiByteTestFramework):
             assert "blocktxn" not in test_node.last_message
 
         # Request with out-of-bounds tx index results in disconnect
-        bad_peer = self.nodes[0].add_p2p_connection(TestP2PConn())
+        bad_peer = self.nodes[0].add_p2p_connection(TestP2PConn(cmpct_version=2))
         block_hash = node.getblockhash(chain_height)
         block = from_hex(CBlock(), node.getblock(block_hash, False))
         msg.block_txn_request = BlockTransactionsRequest(int(block_hash, 16), [len(block.vtx)])
@@ -752,7 +754,7 @@ class CompactBlocksTest(DigiByteTestFramework):
         node = self.nodes[0]
         tip = node.getbestblockhash()
         peer.get_headers(locator=[int(tip, 16)], hashstop=0)
-        peer.send_and_ping(msg_sendcmpct(announce=True, version=2))
+        peer.send_and_ping(msg_sendcmpct(announce=True, version=peer.cmpct_version))
 
     def test_compactblock_reconstruction_stalling_peer(self, stalling_peer, delivery_peer):
         node = self.nodes[0]
@@ -806,7 +808,7 @@ class CompactBlocksTest(DigiByteTestFramework):
 
     def test_highbandwidth_mode_states_via_getpeerinfo(self):
         # create new p2p connection for a fresh state w/o any prior sendcmpct messages sent
-        hb_test_node = self.nodes[0].add_p2p_connection(TestP2PConn())
+        hb_test_node = self.nodes[0].add_p2p_connection(TestP2PConn(cmpct_version=2))
 
         # assert the RPC getpeerinfo boolean fields `bip152_hb_{to, from}`
         # match the given parameters for the last peer of a given node
@@ -819,7 +821,7 @@ class CompactBlocksTest(DigiByteTestFramework):
         assert_highbandwidth_states(self.nodes[0], hb_to=False, hb_from=False)
 
         # peer requests high-bandwidth mode by sending sendcmpct(1)
-        hb_test_node.send_and_ping(msg_sendcmpct(announce=True, version=2))
+        hb_test_node.send_and_ping(msg_sendcmpct(announce=True, version=hb_test_node.cmpct_version))
         assert_highbandwidth_states(self.nodes[0], hb_to=False, hb_from=True)
 
         # peer generates a block and sends it to node, which should
@@ -829,7 +831,7 @@ class CompactBlocksTest(DigiByteTestFramework):
         assert_highbandwidth_states(self.nodes[0], hb_to=True, hb_from=True)
 
         # peer requests low-bandwidth mode by sending sendcmpct(0)
-        hb_test_node.send_and_ping(msg_sendcmpct(announce=False, version=2))
+        hb_test_node.send_and_ping(msg_sendcmpct(announce=False, version=hb_test_node.cmpct_version))
         assert_highbandwidth_states(self.nodes[0], hb_to=True, hb_from=False)
 
     def test_compactblock_reconstruction_parallel_reconstruction(self, stalling_peer, delivery_peer, inbound_peer, outbound_peer):
@@ -907,10 +909,10 @@ class CompactBlocksTest(DigiByteTestFramework):
         self.wallet = MiniWallet(self.nodes[0])
 
         # Setup the p2p connections
-        self.segwit_node = self.nodes[0].add_p2p_connection(TestP2PConn())
-        self.additional_segwit_node = self.nodes[0].add_p2p_connection(TestP2PConn())
-        self.onemore_inbound_node = self.nodes[0].add_p2p_connection(TestP2PConn())
-        self.outbound_node = self.nodes[0].add_outbound_p2p_connection(TestP2PConn(), p2p_idx=3, connection_type="outbound-full-relay")
+        self.segwit_node = self.nodes[0].add_p2p_connection(TestP2PConn(cmpct_version=2))
+        self.additional_segwit_node = self.nodes[0].add_p2p_connection(TestP2PConn(cmpct_version=2))
+        self.onemore_inbound_node = self.nodes[0].add_p2p_connection(TestP2PConn(cmpct_version=2))
+        self.outbound_node = self.nodes[0].add_outbound_p2p_connection(TestP2PConn(cmpct_version=2), p2p_idx=3, connection_type="outbound-full-relay")
 
         # We will need UTXOs to construct transactions in later tests.
         self.make_utxos()

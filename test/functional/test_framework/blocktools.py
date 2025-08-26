@@ -80,7 +80,13 @@ def create_block(hashprev=None, coinbase=None, ntime=None, *, version=None, tmpl
     else:
         block.nBits = 0x207fffff  # difficulty retargeting is disabled in REGTEST chainparams
     if coinbase is None:
-        coinbase = create_coinbase(height=tmpl['height'])
+        # If template provides coinbasevalue (subsidy + fees), use it
+        # Otherwise calculate subsidy ourselves
+        if tmpl and 'coinbasevalue' in tmpl:
+            # Use the value from template which includes fees
+            coinbase = create_coinbase(height=tmpl['height'], nValue=tmpl['coinbasevalue'] // COIN)
+        else:
+            coinbase = create_coinbase(height=tmpl['height'])
     block.vtx.append(coinbase)
     if txlist:
         for tx in txlist:
@@ -125,11 +131,15 @@ def script_BIP34_coinbase_height(height):
 
 
 def get_coinbase_value(height):
-    # DigiByte regtest consensus parameters
-    nDiffChangeTarget = 334                    # DigiShield activation
-    alwaysUpdateDiffChangeTarget = 200         # MultiShield activation  
-    workComputationChangeTarget = 400          # DigiSpeed activation
+    # DigiByte regtest consensus parameters (from chainparams.cpp)
+    # Note: These differ from mainnet values!
+    nDiffChangeTarget = 334                    # DigiShield activation (mainnet: 67200)
+    alwaysUpdateDiffChangeTarget = 200         # MultiShield activation (mainnet: 400000)
+    workComputationChangeTarget = 400          # DigiSpeed activation (mainnet: 1430000)
+    patchBlockRewardDuration = 10              # Regtest value (mainnet: 10080)
+    patchBlockRewardDuration2 = 80             # Regtest value (mainnet: 80160)
     
+    # Period I, II, III: Original reward schedule (before DigiShield)
     if height < nDiffChangeTarget:  # < 334
         if height < 1440:
             return 72000  # Period I
@@ -137,25 +147,52 @@ def get_coinbase_value(height):
             return 16000  # Period II
         else:
             return 8000   # Period III
-    elif height < alwaysUpdateDiffChangeTarget:  # 334 <= height < 200 (impossible!)
-        # Period IV - never reached due to parameter values
-        return 8000 
-    elif height < workComputationChangeTarget:  # 334 <= height < 400 (Period V)
+    
+    # Period IV: Post-DigiShield, Pre-MultiShield
+    # Note: In regtest, this is blocks 334-199 which is impossible since 334 > 200
+    # So we skip directly to checking the correct condition order
+    
+    # The correct check order based on C++ GetBlockSubsidy:
+    # 1. First check if < 334 (nDiffChangeTarget) - done above
+    # 2. Then check if < 200 (alwaysUpdateDiffChangeTarget) - impossible in regtest
+    # 3. Then check if < 400 (workComputationChangeTarget)
+    
+    # Since alwaysUpdateDiffChangeTarget (200) < nDiffChangeTarget (334) in regtest,
+    # we need to handle this differently than mainnet
+    
+    if height < workComputationChangeTarget:  # 334 <= height < 400
         # Period V: base reward 2459, decreases by 1% every patchBlockRewardDuration2 blocks
-        patchBlockRewardDuration2 = 80  # Regtest value
         nSubsidy = 2459
+        # Calculate blocks since MultiShield activation
+        # But since we're past DigiShield (334) and MultiShield is at 200,
+        # we actually count from 200
         blocks = height - alwaysUpdateDiffChangeTarget  # blocks since height 200
         weeks = (blocks // patchBlockRewardDuration2) + 1
         
-        # Decrease reward by 1% for each week (matches C++ logic: nSubsidy -= (nSubsidy / 100))
+        # Decrease reward by 1% for each period (matches C++ logic: nSubsidy -= (nSubsidy / 100))
         for i in range(weeks):
             nSubsidy -= (nSubsidy // 100)  # Integer division to match C++ behavior
         
         return nSubsidy
     else:  # height >= 400
-        # Period VI and beyond - complex calculations
-        # For test purposes, use simplified value
-        return 1200
+        # Period VI: Complex decay formula
+        # Hard Fork Point: 400 (regtest) vs 1.43M (mainnet)
+        # Starting subsidy: 2157/2 = 1078.5, rounded to 1078
+        nSubsidy = 1078
+        blocks = height - workComputationChangeTarget
+        # Simplified for regtest - use month-based decay
+        # BLOCK_TIME_SECONDS = 15, SECONDS_PER_MONTH ≈ 2592000
+        months = blocks * 15 // 2592000
+        
+        # Apply monthly decay factor: 98884/100000
+        for i in range(months):
+            nSubsidy = (nSubsidy * 98884) // 100000
+        
+        # Minimum 1 DGB, then 0
+        if nSubsidy < 1:
+            nSubsidy = 0
+            
+        return nSubsidy
 
 
 def create_coinbase(height, pubkey=None, *, script_pubkey=None, extra_output_script=None, fees=0, nValue=None):
@@ -170,12 +207,13 @@ def create_coinbase(height, pubkey=None, *, script_pubkey=None, extra_output_scr
     coinbase.vin.append(CTxIn(COutPoint(0, 0xffffffff), script_BIP34_coinbase_height(height), SEQUENCE_FINAL))
     coinbaseoutput = CTxOut()
     if nValue is None:
+        # Calculate subsidy ourselves and add fees
         nValue = get_coinbase_value(height)
-    coinbaseoutput.nValue = nValue * COIN
-    if nValue == 50:
-        halvings = int(height / 150)  # regtest
-        coinbaseoutput.nValue >>= halvings
-    coinbaseoutput.nValue += fees
+        coinbaseoutput.nValue = nValue * COIN + fees
+    else:
+        # nValue provided (e.g., from template) already includes fees
+        # and is in DGB units, so convert to satoshis
+        coinbaseoutput.nValue = nValue * COIN
     if pubkey is not None:
         coinbaseoutput.scriptPubKey = key_to_p2pk_script(pubkey)
     elif script_pubkey is not None:

@@ -38,7 +38,7 @@ class ImportDescriptorsTest(DigiByteTestFramework):
     def set_test_params(self):
         self.num_nodes = 2
         self.extra_args = [["-addresstype=legacy", "-dandelion=0"],
-                           ["-addresstype=bech32", "-keypool=5", "-dandelion=0"]
+                           ["-addresstype=bech32", "-keypool=50", "-dandelion=0"]  # Increased for DigiByte
                           ]
         # whitelist peers to speed up tx relay / mempool sync
         for args in self.extra_args:

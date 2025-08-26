@@ -37,11 +37,11 @@ WALLET_PASSPHRASE = "test"
 WALLET_PASSPHRASE_TIMEOUT = 3600
 
 # Fee rates (sat/kB) - DigiByte uses kB not vB (1000x Bitcoin)
-INSUFFICIENT =   100000
-ECONOMICAL   =  500000
-NORMAL       = 1000000
-HIGH         = 5000000
-TOO_HIGH     = 100000000
+INSUFFICIENT =    50000  # Below minrelaytxfee (100,000 sat/kB)
+ECONOMICAL   =   500000
+NORMAL       =  1000000
+HIGH         =  5000000
+TOO_HIGH     = 1000000000  # 10,000 DGB/kB, should exceed maxtxfee=200 DGB for small tx
 
 def get_change_address(tx, node):
     tx_details = node.getrawtransaction(tx, 1)
@@ -57,11 +57,12 @@ class BumpFeeTest(DigiByteTestFramework):
         self.setup_clean_chain = True
         self.extra_args = [[
             "-walletrbf={}".format(i),
-            "-mintxfee=0.00002",
+            "-mintxfee=0.001",
+            "-minrelaytxfee=0.001", 
             "-addresstype=bech32",
             "-whitelist=noban@127.0.0.1",
             "-dandelion=0",
-            "-maxtxfee=100",
+            "-maxtxfee=200",
         ] for i in range(self.num_nodes)]
 
     def skip_test_if_missing_module(self):
@@ -81,12 +82,12 @@ class BumpFeeTest(DigiByteTestFramework):
 
         # fund rbf node with coins suitable for fee testing
         self.log.info("Mining blocks...")
-        self.generate(peer_node, 110)
-        for _ in range(25):
+        self.generate(peer_node, 200)
+        for _ in range(500):
             peer_node.sendtoaddress(rbf_node_address, 1.00000)
         self.sync_all()
         self.generate(peer_node, 1)
-        assert_equal(rbf_node.getbalance(), Decimal("25.00000"))
+        assert_equal(rbf_node.getbalance(), Decimal("500.00000"))
 
         self.log.info("Running tests")
         dest_address = peer_node.getnewaddress()
@@ -406,6 +407,8 @@ def test_notmine_bumpfee(self, rbf_node, peer_node, dest_address):
         psbt = rbf_node.walletprocesspsbt(psbt)
         psbt = peer_node.walletprocesspsbt(psbt["psbt"])
         res = rbf_node.testmempoolaccept([psbt["hex"]])
+        if not res[0]["allowed"]:
+            self.log.error(f"PSBT testmempoolaccept failed: {res[0]}")
         assert res[0]["allowed"]
         assert_greater_than(res[0]["fees"]["base"], old_fee)
 

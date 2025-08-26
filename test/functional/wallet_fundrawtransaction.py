@@ -46,7 +46,7 @@ class RawTransactionsTest(DigiByteTestFramework):
         # This test isn't testing tx relay. Set whitelist on the peers for
         # instant tx relay.
         # Disable Dandelion++ and set higher max fee for DigiByte
-        self.extra_args = [['-whitelist=noban@127.0.0.1', '-dandelion=0', '-maxtxfee=100']] * self.num_nodes
+        self.extra_args = [['-whitelist=noban@127.0.0.1', '-dandelion=0', '-maxtxfee=10.0']] * self.num_nodes
         self.rpc_timeout = 90  # to prevent timeouts in `test_transaction_too_large`
 
     def skip_test_if_missing_module(self):
@@ -98,7 +98,7 @@ class RawTransactionsTest(DigiByteTestFramework):
         self.min_relay_tx_fee = self.nodes[0].getnetworkinfo()['relayfee']
         # This test is not meant to test fee estimation and we'd like
         # to be sure all txs are sent at a consistent desired feerate
-        # DigiByte: Use higher fee rate suitable for DigiByte (0.1 DGB/kB)
+        # DigiByte: Use the minimum wallet fee (0.1 DGB/kvB) as settxfee cannot be lower
         for node in self.nodes:
             node.settxfee(Decimal('0.1'))
 
@@ -791,10 +791,12 @@ class RawTransactionsTest(DigiByteTestFramework):
 
         result = node.fundrawtransaction(rawtx)  # uses self.min_relay_tx_fee (set by settxfee)
         dgb_kvb_to_sat_vb = 100000  # (1e5)
-        result1 = node.fundrawtransaction(rawtx, fee_rate=str(2 * dgb_kvb_to_sat_vb * self.min_relay_tx_fee))
-        result2 = node.fundrawtransaction(rawtx, feeRate=2 * self.min_relay_tx_fee)
-        result3 = node.fundrawtransaction(rawtx, fee_rate=10 * dgb_kvb_to_sat_vb * self.min_relay_tx_fee)
-        result4 = node.fundrawtransaction(rawtx, feeRate=str(10 * self.min_relay_tx_fee))
+        # DigiByte: Use 0.1 DGB/kvB baseline to match settxfee, not min_relay_tx_fee
+        baseline_fee_rate = Decimal('0.1')  # DGB/kvB
+        result1 = node.fundrawtransaction(rawtx, fee_rate=str(2 * dgb_kvb_to_sat_vb * baseline_fee_rate))
+        result2 = node.fundrawtransaction(rawtx, feeRate=2 * baseline_fee_rate)
+        result3 = node.fundrawtransaction(rawtx, fee_rate=10 * dgb_kvb_to_sat_vb * baseline_fee_rate)
+        result4 = node.fundrawtransaction(rawtx, feeRate=str(10 * baseline_fee_rate))
 
         result_fee_rate = result['fee'] * 1000 / count_bytes(result['hex'])
         assert_fee_amount(result1['fee'], count_bytes(result1['hex']), 2 * result_fee_rate)
@@ -806,11 +808,12 @@ class RawTransactionsTest(DigiByteTestFramework):
         for param, zero_value in product(["fee_rate", "feeRate"], [0, 0.000, 0.00000000, "0", "0.000", "0.00000000"]):
             assert_equal(self.nodes[3].fundrawtransaction(rawtx, {param: zero_value})["fee"], 0)
 
-        # With no arguments passed, expect fee of 141 satoshis.
-        assert_approx(node.fundrawtransaction(rawtx)["fee"], vexp=0.00000141, vspan=0.00000001)
+        # DigiByte: With no arguments passed, expect fee based on 0.1 DGB/kvB (much higher than Bitcoin)
+        # For ~141 byte tx: 0.1 × 141/1000 = 0.0141 DGB
+        assert_approx(node.fundrawtransaction(rawtx)["fee"], vexp=0.0141, vspan=0.0001)
         # Expect fee to be 10,000x higher when an explicit fee rate 10,000x greater is specified.
         result = node.fundrawtransaction(rawtx, fee_rate=10000)
-        assert_approx(result["fee"], vexp=0.0141, vspan=0.0001)
+        assert_approx(result["fee"], vexp=0.0141, vspan=0.0001)  # 10000 sat/vB × 141 bytes = 0.0141 DGB
 
         self.log.info("Test fundrawtxn with invalid estimate_mode settings")
         for k, v in {"number": 42, "object": {"foo": "bar"}}.items():
@@ -831,7 +834,7 @@ class RawTransactionsTest(DigiByteTestFramework):
                     node.fundrawtransaction, rawtx, estimate_mode=mode, conf_target=n, add_inputs=True)
 
         self.log.info("Test invalid fee rate settings")
-        for param, value in {("fee_rate", 100000), ("feeRate", 1.000)}:
+        for param, value in {("fee_rate", 10000000), ("feeRate", 100.0)}:
             assert_raises_rpc_error(-4, "Fee exceeds maximum configured by user (e.g. -maxtxfee, maxfeerate)",
                 node.fundrawtransaction, rawtx, add_inputs=True, **{param: value})
             assert_raises_rpc_error(-3, "Amount out of range",
@@ -895,11 +898,12 @@ class RawTransactionsTest(DigiByteTestFramework):
         rawtx = self.nodes[3].createrawtransaction(inputs, outputs)
 
         # Test subtract fee from outputs with feeRate (DGB/kvB)
+        baseline_fee_rate = Decimal('0.1')  # DGB/kvB to match settxfee
         result = [self.nodes[3].fundrawtransaction(rawtx),  # uses self.min_relay_tx_fee (set by settxfee)
             self.nodes[3].fundrawtransaction(rawtx, subtractFeeFromOutputs=[]),  # empty subtraction list
             self.nodes[3].fundrawtransaction(rawtx, subtractFeeFromOutputs=[0]),  # uses self.min_relay_tx_fee (set by settxfee)
-            self.nodes[3].fundrawtransaction(rawtx, feeRate=2 * self.min_relay_tx_fee),
-            self.nodes[3].fundrawtransaction(rawtx, feeRate=2 * self.min_relay_tx_fee, subtractFeeFromOutputs=[0]),]
+            self.nodes[3].fundrawtransaction(rawtx, feeRate=2 * baseline_fee_rate),
+            self.nodes[3].fundrawtransaction(rawtx, feeRate=2 * baseline_fee_rate, subtractFeeFromOutputs=[0]),]
         dec_tx = [self.nodes[3].decoderawtransaction(tx_['hex']) for tx_ in result]
         output = [d['vout'][1 - r['changepos']]['value'] for d, r in zip(dec_tx, result)]
         change = [d['vout'][r['changepos']]['value'] for d, r in zip(dec_tx, result)]
@@ -915,11 +919,12 @@ class RawTransactionsTest(DigiByteTestFramework):
 
         # Test subtract fee from outputs with fee_rate (sat/vB)
         dgb_kvb_to_sat_vb = 100000  # (1e5)
+        baseline_fee_rate = Decimal('0.1')  # DGB/kvB to match settxfee
         result = [self.nodes[3].fundrawtransaction(rawtx),  # uses self.min_relay_tx_fee (set by settxfee)
             self.nodes[3].fundrawtransaction(rawtx, subtractFeeFromOutputs=[]),  # empty subtraction list
             self.nodes[3].fundrawtransaction(rawtx, subtractFeeFromOutputs=[0]),  # uses self.min_relay_tx_fee (set by settxfee)
-            self.nodes[3].fundrawtransaction(rawtx, fee_rate=2 * dgb_kvb_to_sat_vb * self.min_relay_tx_fee),
-            self.nodes[3].fundrawtransaction(rawtx, fee_rate=2 * dgb_kvb_to_sat_vb * self.min_relay_tx_fee, subtractFeeFromOutputs=[0]),]
+            self.nodes[3].fundrawtransaction(rawtx, fee_rate=2 * dgb_kvb_to_sat_vb * baseline_fee_rate),
+            self.nodes[3].fundrawtransaction(rawtx, fee_rate=2 * dgb_kvb_to_sat_vb * baseline_fee_rate, subtractFeeFromOutputs=[0]),]
         dec_tx = [self.nodes[3].decoderawtransaction(tx_['hex']) for tx_ in result]
         output = [d['vout'][1 - r['changepos']]['value'] for d, r in zip(dec_tx, result)]
         change = [d['vout'][r['changepos']]['value'] for d, r in zip(dec_tx, result)]

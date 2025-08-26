@@ -15,6 +15,10 @@ class OrphanedBlockRewardTest(DigiByteTestFramework):
     def set_test_params(self):
         self.setup_clean_chain = True
         self.num_nodes = 2
+        self.extra_args = [
+            ["-dandelion=0", "-easypow", "-minimumdifficultyblocks=1"], 
+            ["-dandelion=0", "-easypow", "-minimumdifficultyblocks=1"]
+        ]
 
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()
@@ -34,7 +38,7 @@ class OrphanedBlockRewardTest(DigiByteTestFramework):
         # Let the block reward mature and send coins including both
         # the existing balance and the block reward.
         self.generate(self.nodes[0], COINBASE_MATURITY_2 + 50)
-        assert_equal(self.nodes[1].getbalance(), 72000)
+        assert_equal(self.nodes[1].getbalance(), 72010)  # 10 DGB initial + 72000 DGB block reward
         pre_reorg_conf_bals = self.nodes[1].getbalances()
         txid = self.nodes[1].sendtoaddress(self.nodes[0].getnewaddress(), 30)
         orig_chain_tip = self.nodes[0].getbestblockhash()

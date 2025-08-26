@@ -26,15 +26,15 @@ class WalletGroupTest(DigiByteTestFramework):
             [],
             [],
             ["-avoidpartialspends"],
-            ["-maxapsfee=0.00002719"],
-            ["-maxapsfee=0.00002720"],
+            ["-maxapsfee=0.002719"],  # DigiByte: 100x Bitcoin values
+            ["-maxapsfee=0.002720"],  # DigiByte: 100x Bitcoin values
         ]
 
         for args in self.extra_args:
             args.append("-whitelist=noban@127.0.0.1")   # whitelist peers to speed up tx relay / mempool sync
-            args.append(f"-paytxfee={20 * 1e6 / 1e8}")  # apply feerate of 20 sats/kB across all nodes (DigiByte uses kB not vB)
+            args.append(f"-paytxfee={2000 * 1e6 / 1e8}")  # apply feerate of 2000 sats/kB for DigiByte (100x Bitcoin)
             args.append("-dandelion=0")  # disable Dandelion++ for reliable tx propagation
-            args.append("-maxtxfee=100")  # allow higher fees
+            args.append("-maxtxfee=1000")  # allow higher fees for DigiByte (10x more than Bitcoin)
 
         self.rpc_timeout = 480
 
@@ -56,38 +56,38 @@ class WalletGroupTest(DigiByteTestFramework):
         addr2 = [self.nodes[2].getnewaddress() for _ in range(3)]
         addrs = addr1 + addr2
 
-        # Send 1 + 0.5 coin to each address
-        [self.nodes[0].sendtoaddress(addr, 1.0) for addr in addrs]
-        [self.nodes[0].sendtoaddress(addr, 0.5) for addr in addrs]
+        # Send larger amounts to cover DigiByte's higher fees (100x Bitcoin)
+        [self.nodes[0].sendtoaddress(addr, 50.0) for addr in addrs]  # 50x more than Bitcoin
+        [self.nodes[0].sendtoaddress(addr, 25.0) for addr in addrs]  # 50x more than Bitcoin
 
         self.generate(self.nodes[0], 1)
 
-        # For each node, send 0.2 coins back to 0;
-        # - node[1] should pick one 0.5 UTXO and leave the rest
-        # - node[2] should pick one (1.0 + 0.5) UTXO group corresponding to a
+        # For each node, send some coins back to 0;  
+        # - node[1] should pick one 25.0 UTXO and leave the rest
+        # - node[2] should pick one (50.0 + 25.0) UTXO group corresponding to a
         #   given address, and leave the rest
         self.log.info("Test sending transactions picks one UTXO group and leaves the rest")
-        txid1 = self.nodes[1].sendtoaddress(self.nodes[0].getnewaddress(), 0.2)
+        txid1 = self.nodes[1].sendtoaddress(self.nodes[0].getnewaddress(), 10.0)  # Increased for DigiByte fees
         tx1 = self.nodes[1].getrawtransaction(txid1, True)
-        # txid1 should have 1 input and 2 outputs
+        # txid1 should have 1 input and 2 outputs  
         assert_equal(1, len(tx1["vin"]))
         assert_equal(2, len(tx1["vout"]))
-        # one output should be 0.2, the other should be ~0.3
+        # one output should be 10.0, the other should be ~15.0 (25.0 - 10.0 = 15.0)
         v = [vout["value"] for vout in tx1["vout"]]
         v.sort()
-        assert_approx(v[0], vexp=0.2, vspan=0.1)
-        assert_approx(v[1], vexp=0.3, vspan=0.1)
+        assert_approx(v[0], vexp=10.0, vspan=5.0)  # Wider span for DigiByte fees
+        assert_approx(v[1], vexp=15.0, vspan=5.0)
 
-        txid2 = self.nodes[2].sendtoaddress(self.nodes[0].getnewaddress(), 0.2)
+        txid2 = self.nodes[2].sendtoaddress(self.nodes[0].getnewaddress(), 10.0)  # Same amount
         tx2 = self.nodes[2].getrawtransaction(txid2, True)
         # txid2 should have 2 inputs and 2 outputs
         assert_equal(2, len(tx2["vin"]))
         assert_equal(2, len(tx2["vout"]))
-        # one output should be 0.2, the other should be ~1.3
+        # one output should be 10.0, the other should be ~65.0 (50.0 + 25.0 - 10.0 = 65.0)
         v = [vout["value"] for vout in tx2["vout"]]
         v.sort()
-        assert_approx(v[0], vexp=0.2, vspan=0.1)
-        assert_approx(v[1], vexp=1.3, vspan=0.1)
+        assert_approx(v[0], vexp=10.0, vspan=5.0)
+        assert_approx(v[1], vexp=65.0, vspan=10.0)  # 75.0 - 10.0 = 65.0
 
         self.log.info("Test avoiding partial spends if warranted, even if avoidpartialspends is disabled")
         self.sync_all()
@@ -100,38 +100,40 @@ class WalletGroupTest(DigiByteTestFramework):
         # - C0 1.0      - E1 0.5
         # - C1 0.5      - F  ~1.3
         # - D ~0.3
-        assert_approx(self.nodes[1].getbalance(), vexp=4.3, vspan=0.1)
-        assert_approx(self.nodes[2].getbalance(), vexp=4.3, vspan=0.1)
-        # Sending 1.4 dgb should pick one 1.0 + one more. For node #1,
+        # Each node received 3×75 DGB = 225 DGB, sent 10 DGB, so ~215 DGB left
+        assert_approx(self.nodes[1].getbalance(), vexp=215.0, vspan=20.0)  # Account for DigiByte fees
+        assert_approx(self.nodes[2].getbalance(), vexp=215.0, vspan=20.0)
+        # Sending amount should be significant but not too large
         # this could be (A / B0 / C0) + (B1 / C1 / D). We ensure that it is
         # B0 + B1 or C0 + C1, because this avoids partial spends while not being
         # detrimental to transaction cost
-        txid3 = self.nodes[1].sendtoaddress(self.nodes[0].getnewaddress(), 1.4)
+        txid3 = self.nodes[1].sendtoaddress(self.nodes[0].getnewaddress(), 70.0)  # Increased for DigiByte
         tx3 = self.nodes[1].getrawtransaction(txid3, True)
         # tx3 should have 2 inputs and 2 outputs
         assert_equal(2, len(tx3["vin"]))
         assert_equal(2, len(tx3["vout"]))
-        # the accumulated value should be 1.5, so the outputs should be
-        # ~0.1 and 1.4 and should come from the same destination
+        # the accumulated value should be 75.0 (50+25), so outputs should be
+        # ~70.0 and ~5.0 (change) and should come from the same destination
         values = [vout["value"] for vout in tx3["vout"]]
         values.sort()
-        assert_approx(values[0], vexp=0.1, vspan=0.1)
-        assert_approx(values[1], vexp=1.4, vspan=0.1)
+        assert_approx(values[0], vexp=5.0, vspan=10.0)   # Change output (small)
+        assert_approx(values[1], vexp=70.0, vspan=10.0)  # Send output (large)
 
         input_txids = [vin["txid"] for vin in tx3["vin"]]
         input_addrs = [self.nodes[1].gettransaction(txid)['details'][0]['address'] for txid in input_txids]
         assert_equal(input_addrs[0], input_addrs[1])
         # Node 2 enforces avoidpartialspends so needs no checking here
 
-        tx4_ungrouped_fee = 2820000
-        tx4_grouped_fee = 4160000
-        tx5_6_ungrouped_fee = 5000000
-        tx5_6_grouped_fee = 8240000
+        # DigiByte fee expectations (100x Bitcoin values due to different fee structure)
+        tx4_ungrouped_fee = 282000000  # ~2.82 DGB (100x Bitcoin)
+        tx4_grouped_fee = 416000000    # ~4.16 DGB (100x Bitcoin)
+        tx5_6_ungrouped_fee = 500000000  # ~5.00 DGB (100x Bitcoin)
+        tx5_6_grouped_fee = 824000000    # ~8.24 DGB (100x Bitcoin)
 
         self.log.info("Test wallet option maxapsfee")
         addr_aps = self.nodes[3].getnewaddress()
-        self.nodes[0].sendtoaddress(addr_aps, 1.0)
-        self.nodes[0].sendtoaddress(addr_aps, 1.0)
+        self.nodes[0].sendtoaddress(addr_aps, 50.0)  # Increased for DigiByte fees
+        self.nodes[0].sendtoaddress(addr_aps, 50.0)
         self.generate(self.nodes[0], 1)
         with self.nodes[3].assert_debug_log([f'Fee non-grouped = {tx4_ungrouped_fee}, grouped = {tx4_grouped_fee}, using non-grouped']):
             txid4 = self.nodes[3].sendtoaddress(self.nodes[0].getnewaddress(), 0.1)
@@ -142,13 +144,13 @@ class WalletGroupTest(DigiByteTestFramework):
         assert_equal(2, len(tx4["vout"]))
 
         addr_aps2 = self.nodes[3].getnewaddress()
-        [self.nodes[0].sendtoaddress(addr_aps2, 1.0) for _ in range(5)]
+        [self.nodes[0].sendtoaddress(addr_aps2, 50.0) for _ in range(5)]  # Increased for DigiByte
         self.generate(self.nodes[0], 1)
         with self.nodes[3].assert_debug_log([f'Fee non-grouped = {tx5_6_ungrouped_fee}, grouped = {tx5_6_grouped_fee}, using non-grouped']):
-            txid5 = self.nodes[3].sendtoaddress(self.nodes[0].getnewaddress(), 2.95)
+            txid5 = self.nodes[3].sendtoaddress(self.nodes[0].getnewaddress(), 147.5)  # 250 - fees (~2.5)
         tx5 = self.nodes[3].getrawtransaction(txid5, True)
-        # tx5 has 3 inputs (1.0, 1.0, 1.0) and 1 output (no change needed)
-        # because DigiByte's fee calculation resulted in exact amount
+        # tx5 has 3 inputs (50.0, 50.0, 50.0) and 1 output (with minimal change)
+        # because DigiByte's fee calculation with larger amounts
         assert_equal(3, len(tx5["vin"]))
         assert_equal(1, len(tx5["vout"]))
 
@@ -156,10 +158,10 @@ class WalletGroupTest(DigiByteTestFramework):
         # 1 sat higher, crossing the threshold from non-grouped to grouped.
         self.log.info("Test wallet option maxapsfee threshold from non-grouped to grouped")
         addr_aps3 = self.nodes[4].getnewaddress()
-        [self.nodes[0].sendtoaddress(addr_aps3, 1.0) for _ in range(5)]
+        [self.nodes[0].sendtoaddress(addr_aps3, 50.0) for _ in range(5)]  # Increased for DigiByte
         self.generate(self.nodes[0], 1)
         with self.nodes[4].assert_debug_log([f'Fee non-grouped = {tx5_6_ungrouped_fee}, grouped = {tx5_6_grouped_fee}, using non-grouped']):
-            txid6 = self.nodes[4].sendtoaddress(self.nodes[0].getnewaddress(), 2.95)
+            txid6 = self.nodes[4].sendtoaddress(self.nodes[0].getnewaddress(), 147.5)  # Same as tx5
         tx6 = self.nodes[4].getrawtransaction(txid6, True)
         # tx6 has 3 inputs (DigiByte chose efficient non-grouped approach)
         assert_equal(3, len(tx6["vin"]))

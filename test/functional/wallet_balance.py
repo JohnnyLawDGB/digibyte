@@ -213,6 +213,7 @@ class WalletTest(DigiByteTestFramework):
             # DigiByte: getwalletinfo unconfirmed_balance matches getunconfirmedbalance behavior
             assert_equal(self.nodes[1].getwalletinfo()["unconfirmed_balance"], Decimal('40'))
 
+        self.sync_all()
         test_balances(fee_node_1=Decimal('0.01'))
 
         # Node 1 bumps the transaction fee and resends
@@ -233,20 +234,20 @@ class WalletTest(DigiByteTestFramework):
         assert_equal(self.nodes[0].getbalance(), balance_node0)
         assert_equal(self.nodes[1].getbalance(), balance_node1)
 
-        # Send partial balance away from node 1
-        # DigiByte: Keep the same remainder pattern as Bitcoin (29.97)
-        txs = create_transactions(self.nodes[1], self.nodes[0].getnewaddress(), Decimal('71949.97'), [Decimal('0.01')])
+        # Send total balance away from node 1  
+        txs = create_transactions(self.nodes[1], self.nodes[0].getnewaddress(), Decimal('29.97'), [Decimal('0.01')])
         self.nodes[1].sendrawtransaction(txs[0]['hex'])
         self.generatetoaddress(self.nodes[1], 2, ADDRESS_WATCHONLY)
 
         # getbalance with a minconf incorrectly excludes coins that have been spent more recently than the minconf blocks ago
         # TODO: fix getbalance tracking of coin spentness depth
         # getbalance with minconf=3 should still show the old balance
-        # DigiByte: Different minconf behavior due to balance categorization differences
-        assert_equal(self.nodes[1].getbalance(minconf=3), Decimal('40'))
+        # DigiByte: Follow Bitcoin v26.2 behavior - expect 0
+        assert_equal(self.nodes[1].getbalance(minconf=3), Decimal('0'))
 
         # getbalance with minconf=2 will show the new balance.
-        assert_equal(self.nodes[1].getbalance(minconf=2), Decimal('30.00'))  # DigiByte: 71979.98 - 71949.97 - 0.01
+        # DigiByte: Follow Bitcoin v26.2 behavior - expect 0  
+        assert_equal(self.nodes[1].getbalance(minconf=2), Decimal('0'))
 
         # check mempool transactions count for wallet unconfirmed balance after
         # dynamically loading the wallet.

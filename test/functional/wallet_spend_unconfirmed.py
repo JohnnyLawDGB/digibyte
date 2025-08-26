@@ -469,7 +469,7 @@ class UnconfirmedInputTest(DigiByteTestFramework):
 
     def run_test(self):
         self.log.info("Starting UnconfirmedInputTest!")
-        self.target_fee_rate = 30000
+        self.target_fee_rate = 3000000  # Increased for DigiByte (100x multiplier)
         self.def_wallet  = self.nodes[0].get_wallet_rpc(self.default_wallet_name)
         self.generate(self.nodes[0], 110)
 

@@ -390,8 +390,8 @@ def test_notmine_bumpfee(self, rbf_node, peer_node, dest_address):
     # here, the rbftx has a peer_node coin and then adds a rbf_node input
     # Note that this test depends upon the RPC code checking input ownership prior to change outputs
     # (since it can't use fundrawtransaction, it lacks a proper change output)
-    fee = Decimal("0.02")
-    utxos = [node.listunspent(minimumAmount=fee)[-1] for node in (rbf_node, peer_node)]
+    fee = Decimal("0.01")
+    utxos = [node.listunspent(query_options={'minimumAmount': fee})[-1] for node in (rbf_node, peer_node)]
     inputs = [{
         "txid": utxo["txid"],
         "vout": utxo["vout"],
@@ -419,10 +419,10 @@ def test_notmine_bumpfee(self, rbf_node, peer_node, dest_address):
         assert_greater_than(res[0]["fees"]["base"], old_fee)
 
     self.log.info("Test that psbtbumpfee works for non-owned inputs")
-    psbt = rbf_node.psbtbumpfee(txid=rbfid)
+    psbt = rbf_node.psbtbumpfee(txid=rbfid, options={"fee_rate": 150000})
     finish_psbtbumpfee(psbt["psbt"])
 
-    psbt = rbf_node.psbtbumpfee(txid=rbfid, fee_rate=old_feerate + 5000)
+    psbt = rbf_node.psbtbumpfee(txid=rbfid, options={"fee_rate": 200000})
     finish_psbtbumpfee(psbt["psbt"])
 
     self.clear_mempool()

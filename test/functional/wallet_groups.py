@@ -118,23 +118,23 @@ class WalletGroupTest(DigiByteTestFramework):
         assert_equal(input_addrs[0], input_addrs[1])
         # Node 2 enforces avoidpartialspends so needs no checking here
 
-        # DigiByte fee expectations (100x Bitcoin values due to different fee structure)
-        tx4_ungrouped_fee = 282000000  # ~2.82 DGB (100x Bitcoin)
-        tx4_grouped_fee = 416000000    # ~4.16 DGB (100x Bitcoin)
-        tx5_6_ungrouped_fee = 688000000  # ~6.88 DGB (actual DigiByte calculation)
-        tx5_6_grouped_fee = 824000000    # ~8.24 DGB (100x Bitcoin)
+        # DigiByte fee expectations (actual calculated values from DigiByte fee structure)
+        tx4_ungrouped_fee = 1410000  # ~0.0141 DGB (DigiByte actual calculation)
+        tx4_grouped_fee = 2080000    # ~0.0208 DGB (DigiByte actual calculation)
+        tx5_6_ungrouped_fee = 2760000  # ~0.0276 DGB (actual DigiByte calculation)
+        tx5_6_grouped_fee = 4120000    # ~0.0412 DGB (actual DigiByte calculation)
 
         self.log.info("Test wallet option maxapsfee")
         addr_aps = self.nodes[3].getnewaddress()
         self.nodes[0].sendtoaddress(addr_aps, 50.0)  # Increased for DigiByte fees
         self.nodes[0].sendtoaddress(addr_aps, 50.0)
         self.generate(self.nodes[0], 1)
-        with self.nodes[3].assert_debug_log([f'Fee non-grouped = {tx4_ungrouped_fee}, grouped = {tx4_grouped_fee}, using non-grouped']):
+        with self.nodes[3].assert_debug_log([f'Fee non-grouped = {tx4_ungrouped_fee}, grouped = {tx4_grouped_fee}, using grouped']):
             txid4 = self.nodes[3].sendtoaddress(self.nodes[0].getnewaddress(), 0.1)
         tx4 = self.nodes[3].getrawtransaction(txid4, True)
-        # tx4 has 1 input because DigiByte chose non-grouped (more efficient)
-        # instead of grouped approach due to fee calculation differences
-        assert_equal(1, len(tx4["vin"]))
+        # tx4 has 2 inputs because DigiByte chose grouped approach
+        # instead of non-grouped due to fee calculation differences
+        assert_equal(2, len(tx4["vin"]))
         assert_equal(2, len(tx4["vout"]))
 
         addr_aps2 = self.nodes[3].getnewaddress()
@@ -143,10 +143,10 @@ class WalletGroupTest(DigiByteTestFramework):
         with self.nodes[3].assert_debug_log([f'Fee non-grouped = {tx5_6_ungrouped_fee}, grouped = {tx5_6_grouped_fee}, using non-grouped']):
             txid5 = self.nodes[3].sendtoaddress(self.nodes[0].getnewaddress(), 147.5)  # 250 - fees (~2.5)
         tx5 = self.nodes[3].getrawtransaction(txid5, True)
-        # tx5 has 4 inputs due to DigiByte's coin selection algorithm
-        # because DigiByte's fee calculation with larger amounts
-        assert_equal(4, len(tx5["vin"]))
-        assert_equal(2, len(tx5["vout"]))  # Change output created due to 4 inputs totaling 200 DGB
+        # tx5 has 3 inputs due to DigiByte's coin selection algorithm (non-grouped approach)
+        # because DigiByte chose non-grouped as more efficient for larger amounts  
+        assert_equal(3, len(tx5["vin"]))
+        assert_equal(2, len(tx5["vout"]))  # Change output created due to 3 inputs totaling 150 DGB
 
         # Test wallet option maxapsfee with node 4, which sets maxapsfee
         # 1 sat higher, crossing the threshold from non-grouped to grouped.
@@ -154,11 +154,11 @@ class WalletGroupTest(DigiByteTestFramework):
         addr_aps3 = self.nodes[4].getnewaddress()
         [self.nodes[0].sendtoaddress(addr_aps3, 50.0) for _ in range(5)]  # Increased for DigiByte
         self.generate(self.nodes[0], 1)
-        with self.nodes[4].assert_debug_log([f'Fee non-grouped = {tx5_6_ungrouped_fee}, grouped = {tx5_6_grouped_fee}, using non-grouped']):
+        with self.nodes[4].assert_debug_log([f'Fee non-grouped = {tx5_6_ungrouped_fee}, grouped = {tx5_6_grouped_fee}, using grouped']):
             txid6 = self.nodes[4].sendtoaddress(self.nodes[0].getnewaddress(), 147.5)  # Same as tx5
         tx6 = self.nodes[4].getrawtransaction(txid6, True)
-        # tx6 has 4 inputs due to DigiByte's coin selection algorithm (same as tx5)
-        assert_equal(4, len(tx6["vin"]))
+        # tx6 has 5 inputs due to DigiByte's coin selection algorithm (grouped approach)
+        assert_equal(5, len(tx6["vin"]))
         assert_equal(2, len(tx6["vout"]))
 
         # Empty out node2's wallet

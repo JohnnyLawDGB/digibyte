@@ -143,7 +143,7 @@ class PSBTTest(DigiByteTestFramework):
         assert_equal(unconfirmed_txid, utxo1['txid'])
 
         signed_tx1 = wallet.walletprocesspsbt(psbtx1)
-        txid1 = self.nodes[0].sendrawtransaction(signed_tx1['hex'])
+        txid1 = self.nodes[0].sendrawtransaction(signed_tx1['hex'], 1000)
 
         mempool = self.nodes[0].getrawmempool()
         assert txid1 in mempool
@@ -168,7 +168,7 @@ class PSBTTest(DigiByteTestFramework):
                 assert_greater_than_or_equal(self.nodes[0].gettxout(vin['txid'], vin['vout'])['confirmations'], 2)
 
         signed_tx2 = wallet.walletprocesspsbt(psbtx2)
-        txid2 = self.nodes[0].sendrawtransaction(signed_tx2['hex'])
+        txid2 = self.nodes[0].sendrawtransaction(signed_tx2['hex'], 1000)
 
         mempool = self.nodes[0].getrawmempool()
         assert txid1 not in mempool
@@ -302,7 +302,7 @@ class PSBTTest(DigiByteTestFramework):
         # Check decodepsbt fee calculation (input values shall only be counted once per UTXO)
         assert_equal(decoded['fee'], created_psbt['fee'])
         assert_equal(walletprocesspsbt_out['complete'], True)
-        self.nodes[1].sendrawtransaction(walletprocesspsbt_out['hex'])
+        self.nodes[1].sendrawtransaction(walletprocesspsbt_out['hex'], 1000)  # 1000 DGB/kvB limit
 
         self.log.info("Test walletcreatefundedpsbt fee rate of 10000 sat/vB and 0.1 DGB/kvB produces a total fee at or slightly below -maxtxfee (~0.038)")
         res1 = self.nodes[1].walletcreatefundedpsbt(inputs, outputs, 0, {"fee_rate": 10000, "add_inputs": True})
@@ -321,7 +321,7 @@ class PSBTTest(DigiByteTestFramework):
             assert_equal(0, self.nodes[1].walletcreatefundedpsbt(inputs, outputs, 0, {param: zero_value, "add_inputs": True})["fee"])
 
         self.log.info("Test invalid fee rate settings")
-        for param, value in {("fee_rate", 100000000), ("feeRate", 1000)}:
+        for param, value in {("fee_rate", 1000000), ("feeRate", 10)}:
             assert_raises_rpc_error(-4, "Fee exceeds maximum configured by user (e.g. -maxtxfee, maxfeerate)",
                 self.nodes[1].walletcreatefundedpsbt, inputs, outputs, 0, {param: value, "add_inputs": True})
             assert_raises_rpc_error(-3, "Amount out of range",
@@ -377,12 +377,12 @@ class PSBTTest(DigiByteTestFramework):
         # previously this was silently capped at -maxtxfee
         for bool_add, outputs_array in {True: outputs, False: [{self.nodes[1].getnewaddress(): 1}]}.items():
             msg = "Fee exceeds maximum configured by user (e.g. -maxtxfee, maxfeerate)"
-            assert_raises_rpc_error(-4, msg, self.nodes[1].walletcreatefundedpsbt, inputs, outputs_array, 0, {"fee_rate": 10000000, "add_inputs": bool_add})
-            assert_raises_rpc_error(-4, msg, self.nodes[1].walletcreatefundedpsbt, inputs, outputs_array, 0, {"feeRate": 100, "add_inputs": bool_add})
+            assert_raises_rpc_error(-4, msg, self.nodes[1].walletcreatefundedpsbt, inputs, outputs_array, 0, {"fee_rate": 1000000, "add_inputs": bool_add})
+            assert_raises_rpc_error(-4, msg, self.nodes[1].walletcreatefundedpsbt, inputs, outputs_array, 0, {"feeRate": 10, "add_inputs": bool_add})
 
         self.log.info("Test various PSBT operations")
         # partially sign multisig things with node 1
-        psbtx = wmulti.walletcreatefundedpsbt(inputs=[{"txid":txid,"vout":p2wsh_pos},{"txid":txid,"vout":p2sh_pos},{"txid":txid,"vout":p2sh_p2wsh_pos}], outputs={self.nodes[1].getnewaddress():29.99}, changeAddress=self.nodes[1].getrawchangeaddress())['psbt']
+        psbtx = wmulti.walletcreatefundedpsbt(inputs=[{"txid":txid,"vout":p2wsh_pos},{"txid":txid,"vout":p2sh_pos},{"txid":txid,"vout":p2sh_p2wsh_pos}], outputs={self.nodes[1].getnewaddress():25}, changeAddress=self.nodes[1].getrawchangeaddress())['psbt']
         walletprocesspsbt_out = self.nodes[1].walletprocesspsbt(psbtx)
         psbtx = walletprocesspsbt_out['psbt']
         assert_equal(walletprocesspsbt_out['complete'], False)
@@ -393,7 +393,7 @@ class PSBTTest(DigiByteTestFramework):
         # partially sign with node 2. This should be complete and sendable
         walletprocesspsbt_out = self.nodes[2].walletprocesspsbt(psbtx)
         assert_equal(walletprocesspsbt_out['complete'], True)
-        self.nodes[2].sendrawtransaction(walletprocesspsbt_out['hex'])
+        self.nodes[2].sendrawtransaction(walletprocesspsbt_out['hex'], 1000)
 
         # check that walletprocesspsbt fails to decode a non-psbt
         rawtx = self.nodes[1].createrawtransaction([{"txid":txid,"vout":p2wpkh_pos}], {self.nodes[1].getnewaddress():9.99})

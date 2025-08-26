@@ -18,7 +18,7 @@ from test_framework.messages import (
 )
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.blocktools import (
-    COINBASE_MATURITY,
+    COINBASE_MATURITY_2,
     create_block,
     add_witness_commitment,
     NORMAL_GBT_REQUEST_PARAMS,
@@ -39,7 +39,7 @@ class MutatedBlocksTest(DigiByteTestFramework):
 
     def run_test(self):
         self.wallet = MiniWallet(self.nodes[0])
-        self.generate(self.wallet, COINBASE_MATURITY)
+        self.generate(self.wallet, COINBASE_MATURITY_2)
 
         honest_relayer = self.nodes[0].add_outbound_p2p_connection(P2PInterface(), p2p_idx=0, connection_type="outbound-full-relay")
         attacker = self.nodes[0].add_p2p_connection(P2PInterface())

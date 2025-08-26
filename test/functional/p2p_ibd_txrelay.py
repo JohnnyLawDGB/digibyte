@@ -28,7 +28,7 @@ from test_framework.p2p import (
 )
 from test_framework.test_framework import DigiByteTestFramework
 
-MAX_FEE_FILTER = Decimal(9170997) / COIN
+MAX_FEE_FILTER = Decimal(9936506125) / COIN
 NORMAL_FEE_FILTER = Decimal(100) / COIN
 
 

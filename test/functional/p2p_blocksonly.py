@@ -6,8 +6,9 @@
 
 import time
 
+from test_framework.blocktools import COINBASE_MATURITY
 from test_framework.messages import msg_tx, msg_inv, CInv, MSG_WTX
-from test_framework.p2p import P2PInterface, P2PTxInvStore
+from test_framework.p2p import P2PInterface, P2PTxInvStore, P2P_VERSION
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import assert_equal
 from test_framework.wallet import MiniWallet
@@ -16,7 +17,7 @@ from test_framework.wallet import MiniWallet
 class P2PBlocksOnly(DigiByteTestFramework):
     def set_test_params(self):
         self.num_nodes = 1
-        self.extra_args = [["-blocksonly"]]
+        self.extra_args = [["-blocksonly", "-dandelion=0"]]
 
     def run_test(self):
         self.miniwallet = MiniWallet(self.nodes[0])
@@ -42,9 +43,12 @@ class P2PBlocksOnly(DigiByteTestFramework):
         tx_relay_peer = self.nodes[0].add_p2p_connection(P2PInterface())
         assert_equal(self.nodes[0].getpeerinfo()[0]['relaytxes'], True)
 
-        assert_equal(self.nodes[0].testmempoolaccept([tx_hex])[0]['allowed'], True)
-        with self.nodes[0].assert_debug_log(['received getdata for: wtx {} peer'.format(wtxid)]):
-            self.nodes[0].sendrawtransaction(tx_hex)
+        assert_equal(self.nodes[0].testmempoolaccept([tx_hex], 1000)[0]['allowed'], True)
+        expected_message = 'received getdata for: tx {} peer=2'.format(txid)
+        if P2P_VERSION >= 70018:
+            expected_message = 'received getdata for: wtx {} peer=2'.format(wtxid)
+        with self.nodes[0].assert_debug_log([expected_message]):
+            self.nodes[0].sendrawtransaction(tx_hex, 1000)
             tx_relay_peer.wait_for_tx(txid)
             assert_equal(self.nodes[0].getmempoolinfo()['size'], 1)
 
@@ -58,7 +62,7 @@ class P2PBlocksOnly(DigiByteTestFramework):
         assert_equal(first_peer.relay, 1)
         peer_2_info = self.nodes[0].getpeerinfo()[1]
         assert_equal(peer_2_info['permissions'], ['relay'])
-        assert_equal(self.nodes[0].testmempoolaccept([tx_hex])[0]['allowed'], True)
+        assert_equal(self.nodes[0].testmempoolaccept([tx_hex], 1000)[0]['allowed'], True)
 
         self.log.info('Check that the tx from first_peer with relay-permission is relayed to others (ie.second_peer)')
         with self.nodes[0].assert_debug_log(["received getdata"]):
@@ -96,7 +100,7 @@ class P2PBlocksOnly(DigiByteTestFramework):
         self.log.info("Check that txs from RPC are not sent to blockrelay connection")
         conn = self.nodes[0].add_outbound_p2p_connection(P2PTxInvStore(), p2p_idx=1, connection_type="block-relay-only")
 
-        self.nodes[0].sendrawtransaction(tx_hex)
+        self.nodes[0].sendrawtransaction(tx_hex, 1000)
 
         # Bump time forward to ensure m_next_inv_send_time timer pops
         self.nodes[0].setmocktime(int(time.time()) + 60)

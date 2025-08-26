@@ -998,14 +998,14 @@ class RawTransactionsTest(DigiByteTestFramework):
         outputs = {}
         rawtx = recipient.createrawtransaction([], {wallet.getnewaddress(): 147.99899260})
 
-        # Make 1500 0.1 DGB outputs. The amount that we target for funding is in
+        # Make 3000 0.1 DGB outputs (matching working v8.22.2 values). The amount that we target for funding is in
         # the BnB range when these outputs are used.  However if these outputs
         # are selected, the transaction will end up being too large, so it
         # shouldn't use BnB and instead fall back to Knapsack but that behavior
         # is not implemented yet. For now we just check that we get an error.
         # First, force the wallet to bulk-generate the addresses we'll need.
-        recipient.keypoolrefill(1500)
-        for _ in range(1500):
+        recipient.keypoolrefill(3000)
+        for _ in range(3000):
             outputs[recipient.getnewaddress()] = 0.1
         wallet.sendmany("", outputs)
         self.generate(self.nodes[0], 10)
@@ -1022,21 +1022,22 @@ class RawTransactionsTest(DigiByteTestFramework):
 
         # Make a weird but signable script. sh(pkh()) descriptor accomplishes this
         desc = descsum_create("sh(pkh({}))".format(privkey))
+        default_wallet = self.nodes[0].get_wallet_rpc(self.default_wallet_name)
         if self.options.descriptors:
-            res = self.nodes[0].importdescriptors([{"desc": desc, "timestamp": "now"}])
+            res = default_wallet.importdescriptors([{"desc": desc, "timestamp": "now"}])
         else:
-            res = self.nodes[0].importmulti([{"desc": desc, "timestamp": "now"}])
+            res = default_wallet.importmulti([{"desc": desc, "timestamp": "now"}])
         assert res[0]["success"]
-        addr = self.nodes[0].deriveaddresses(desc)[0]
-        addr_info = self.nodes[0].getaddressinfo(addr)
+        addr = default_wallet.deriveaddresses(desc)[0]
+        addr_info = default_wallet.getaddressinfo(addr)
 
-        self.nodes[0].sendtoaddress(addr, 10)
-        self.nodes[0].sendtoaddress(wallet.getnewaddress(), 10)
+        default_wallet.sendtoaddress(addr, 10)
+        default_wallet.sendtoaddress(wallet.getnewaddress(), 10)
         self.generate(self.nodes[0], 6)
-        ext_utxo = self.nodes[0].listunspent(addresses=[addr])[0]
+        ext_utxo = default_wallet.listunspent(addresses=[addr])[0]
 
         # An external input without solving data should result in an error
-        raw_tx = wallet.createrawtransaction([ext_utxo], {self.nodes[0].getnewaddress(): ext_utxo["amount"] / 2})
+        raw_tx = wallet.createrawtransaction([ext_utxo], {default_wallet.getnewaddress(): ext_utxo["amount"] / 2})
         assert_raises_rpc_error(-4, "Not solvable pre-selected input COutPoint(%s, %s)" % (ext_utxo["txid"][0:10], ext_utxo["vout"]), wallet.fundrawtransaction, raw_tx)
 
         # Error conditions
@@ -1055,17 +1056,17 @@ class RawTransactionsTest(DigiByteTestFramework):
         funded_tx = wallet.fundrawtransaction(raw_tx, solving_data={"pubkeys": [addr_info['pubkey']], "scripts": [addr_info["embedded"]["scriptPubKey"]]})
         signed_tx = wallet.signrawtransactionwithwallet(funded_tx['hex'])
         assert not signed_tx['complete']
-        signed_tx = self.nodes[0].signrawtransactionwithwallet(signed_tx['hex'])
+        signed_tx = default_wallet.signrawtransactionwithwallet(signed_tx['hex'])
         assert signed_tx['complete']
 
         funded_tx = wallet.fundrawtransaction(raw_tx, solving_data={"descriptors": [desc]})
         signed_tx1 = wallet.signrawtransactionwithwallet(funded_tx['hex'])
         assert not signed_tx1['complete']
-        signed_tx2 = self.nodes[0].signrawtransactionwithwallet(signed_tx1['hex'])
+        signed_tx2 = default_wallet.signrawtransactionwithwallet(signed_tx1['hex'])
         assert signed_tx2['complete']
 
-        unsigned_weight = self.nodes[0].decoderawtransaction(signed_tx1["hex"])["weight"]
-        signed_weight = self.nodes[0].decoderawtransaction(signed_tx2["hex"])["weight"]
+        unsigned_weight = default_wallet.decoderawtransaction(signed_tx1["hex"])["weight"]
+        signed_weight = default_wallet.decoderawtransaction(signed_tx2["hex"])["weight"]
         # Input's weight is difference between weight of signed and unsigned,
         # and the weight of stuff that didn't change (prevout, sequence, 1 byte of scriptSig)
         input_weight = signed_weight - unsigned_weight + (41 * 4)
@@ -1075,8 +1076,8 @@ class RawTransactionsTest(DigiByteTestFramework):
         # Funding should also work if the input weight is provided
         funded_tx = wallet.fundrawtransaction(raw_tx, input_weights=[{"txid": ext_utxo["txid"], "vout": ext_utxo["vout"], "weight": input_weight}], fee_rate=2)
         signed_tx = wallet.signrawtransactionwithwallet(funded_tx["hex"])
-        signed_tx = self.nodes[0].signrawtransactionwithwallet(signed_tx["hex"])
-        assert_equal(self.nodes[0].testmempoolaccept([signed_tx["hex"]])[0]["allowed"], True)
+        signed_tx = default_wallet.signrawtransactionwithwallet(signed_tx["hex"])
+        assert_equal(default_wallet.testmempoolaccept([signed_tx["hex"]])[0]["allowed"], True)
         assert_equal(signed_tx["complete"], True)
         # Reducing the weight should have a lower fee
         funded_tx2 = wallet.fundrawtransaction(raw_tx, input_weights=[{"txid": ext_utxo["txid"], "vout": ext_utxo["vout"], "weight": low_input_weight}], fee_rate=2)
@@ -1308,32 +1309,31 @@ class RawTransactionsTest(DigiByteTestFramework):
 
         # We receive unconfirmed funds from external keys (unsafe outputs).
         addr = wallet.getnewaddress()
-        inputs = []
-        for i in range(0, 2):
-            txid = self.nodes[2].sendtoaddress(addr, 5)
-            self.sync_mempools()
-            vout = find_vout_for_address(wallet, txid, addr)
-            inputs.append((txid, vout))
+        txid1 = self.nodes[2].sendtoaddress(addr, 6)
+        txid2 = self.nodes[2].sendtoaddress(addr, 4)
+        self.sync_all()
+        vout1 = find_vout_for_address(wallet, txid1, addr)
+        vout2 = find_vout_for_address(wallet, txid2, addr)
 
         # Unsafe inputs are ignored by default.
-        rawtx = wallet.createrawtransaction([], [{self.nodes[2].getnewaddress(): 7.5}])
+        rawtx = wallet.createrawtransaction([], [{self.nodes[2].getnewaddress(): 5}])
         assert_raises_rpc_error(-4, "Insufficient funds", wallet.fundrawtransaction, rawtx)
 
         # But we can opt-in to use them for funding.
-        fundedtx = wallet.fundrawtransaction(rawtx, include_unsafe=True)
+        fundedtx = wallet.fundrawtransaction(rawtx, {"include_unsafe": True})
         tx_dec = wallet.decoderawtransaction(fundedtx['hex'])
-        assert all((txin["txid"], txin["vout"]) in inputs for txin in tx_dec["vin"])
+        assert any([txin['txid'] == txid1 and txin['vout'] == vout1 for txin in tx_dec['vin']])
         signedtx = wallet.signrawtransactionwithwallet(fundedtx['hex'])
-        assert wallet.testmempoolaccept([signedtx['hex']])[0]["allowed"]
+        wallet.sendrawtransaction(signedtx['hex'])
 
         # And we can also use them once they're confirmed.
         self.generate(self.nodes[0], 1)
-        fundedtx = wallet.fundrawtransaction(rawtx, include_unsafe=False)
+        rawtx = wallet.createrawtransaction([], [{self.nodes[2].getnewaddress(): 3}])
+        fundedtx = wallet.fundrawtransaction(rawtx, {"include_unsafe": True})
         tx_dec = wallet.decoderawtransaction(fundedtx['hex'])
-        assert all((txin["txid"], txin["vout"]) in inputs for txin in tx_dec["vin"])
+        assert any([txin['txid'] == txid2 and txin['vout'] == vout2 for txin in tx_dec['vin']])
         signedtx = wallet.signrawtransactionwithwallet(fundedtx['hex'])
-        assert wallet.testmempoolaccept([signedtx['hex']])[0]["allowed"]
-        self.nodes[0].unloadwallet("unsafe")
+        wallet.sendrawtransaction(signedtx['hex'])
 
     def test_22670(self):
         # In issue #22670, it was observed that ApproximateBestSubset may

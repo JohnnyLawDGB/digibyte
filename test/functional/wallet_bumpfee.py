@@ -17,6 +17,7 @@ from decimal import Decimal
 
 from test_framework.blocktools import (
     COINBASE_MATURITY,
+    COINBASE_MATURITY_2,
 )
 from test_framework.messages import (
     MAX_BIP125_RBF_SEQUENCE,
@@ -36,12 +37,12 @@ from test_framework.wallet import MiniWallet
 WALLET_PASSPHRASE = "test"
 WALLET_PASSPHRASE_TIMEOUT = 3600
 
-# Fee rates (sat/kB) - DigiByte uses kB not vB (1000x Bitcoin)
-INSUFFICIENT =    50000  # Below minrelaytxfee (100,000 sat/kB)
-ECONOMICAL   =   500000
-NORMAL       =  1000000
-HIGH         =  5000000
-TOO_HIGH     = 1000000000  # 10,000 DGB/kB, should exceed maxtxfee=200 DGB for small tx
+# Fee rates (sat/vB) - Adjusted for DigiByte
+INSUFFICIENT =        100
+ECONOMICAL   =     150000
+NORMAL       =     650000
+HIGH         =     700000
+TOO_HIGH     =  10000000
 
 def get_change_address(tx, node):
     tx_details = node.getrawtransaction(tx, 1)
@@ -57,12 +58,11 @@ class BumpFeeTest(DigiByteTestFramework):
         self.setup_clean_chain = True
         self.extra_args = [[
             "-walletrbf={}".format(i),
-            "-mintxfee=0.001",
-            "-minrelaytxfee=0.001", 
+            "-mintxfee=0.02",
+            "-minrelaytxfee=0.0015", 
             "-addresstype=bech32",
-            "-whitelist=noban@127.0.0.1",
             "-dandelion=0",
-            "-maxtxfee=200",
+            "-maxtxfee=200.0",
         ] for i in range(self.num_nodes)]
 
     def skip_test_if_missing_module(self):
@@ -71,6 +71,7 @@ class BumpFeeTest(DigiByteTestFramework):
     def clear_mempool(self):
         # Clear mempool between subtests. The subtests may only depend on chainstate (utxos)
         self.generate(self.nodes[1], 1)
+        self.sync_all()
 
     def run_test(self):
         # Encrypt wallet for test_locked_wallet_fails test
@@ -416,7 +417,7 @@ def test_notmine_bumpfee(self, rbf_node, peer_node, dest_address):
     psbt = rbf_node.psbtbumpfee(txid=rbfid)
     finish_psbtbumpfee(psbt["psbt"])
 
-    psbt = rbf_node.psbtbumpfee(txid=rbfid, fee_rate=old_feerate + 100000)
+    psbt = rbf_node.psbtbumpfee(txid=rbfid, fee_rate=old_feerate + 5000)
     finish_psbtbumpfee(psbt["psbt"])
 
     self.clear_mempool()
@@ -426,7 +427,7 @@ def test_bumpfee_with_descendant_fails(self, rbf_node, rbf_node_address, dest_ad
     self.log.info('Test that fee cannot be bumped when it has descendant')
     # parent is send-to-self, so we don't have to check which output is change when creating the child tx
     parent_id = spend_one_input(rbf_node, rbf_node_address)
-    tx = rbf_node.createrawtransaction([{"txid": parent_id, "vout": 0}], {dest_address: 0.00020000})
+    tx = rbf_node.createrawtransaction([{"txid": parent_id, "vout": 0}], {dest_address: 0.02})
     tx = rbf_node.signrawtransactionwithwallet(tx)
     rbf_node.sendrawtransaction(tx["hex"])
     assert_raises_rpc_error(-8, "Transaction has descendants in the wallet", rbf_node.bumpfee, parent_id)
@@ -780,12 +781,12 @@ def test_change_script_match(self, rbf_node, dest_address):
     self.clear_mempool()
 
 
-def spend_one_input(node, dest_address, change_size=Decimal("0.049000"), data=None):
+def spend_one_input(node, dest_address, change_size=Decimal("0.54"), data=None):
     utxo = next((u for u in node.listunspent() if u["amount"] == Decimal("1.00000")), None)
     if utxo is None:
         raise AssertionError("Couldn't find unspent with amount 1.00000")
     tx_input = {"txid": utxo["txid"], "vout": utxo["vout"], "sequence": MAX_BIP125_RBF_SEQUENCE}
-    destinations = {dest_address: Decimal("0.45000")}
+    destinations = {dest_address: Decimal("0.40")}
     if change_size > 0:
         destinations[node.getrawchangeaddress()] = change_size
     if data:

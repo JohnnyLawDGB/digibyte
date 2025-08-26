@@ -372,7 +372,8 @@ void Chainstate::MaybeUpdateMempoolForReorg(
                 const Coin& coin{CoinsTip().AccessCoin(txin.prevout)};
                 assert(!coin.IsSpent());
                 const auto mempool_spend_height{m_chain.Tip()->nHeight + 1};
-                if (coin.IsCoinBase() && mempool_spend_height - coin.nHeight < COINBASE_MATURITY) {
+                const int required_maturity = (coin.nHeight < 145000) ? COINBASE_MATURITY : COINBASE_MATURITY_2;
+                if (coin.IsCoinBase() && mempool_spend_height - coin.nHeight < required_maturity) {
                     return true;
                 }
             }

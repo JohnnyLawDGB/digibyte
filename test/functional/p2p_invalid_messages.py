@@ -22,6 +22,7 @@ from test_framework.messages import (
     msg_ping,
     msg_version,
     ser_string,
+    uint256_from_compact,
 )
 from test_framework.p2p import (
     P2PDataStore,
@@ -267,7 +268,9 @@ class InvalidMessagesTest(DigiByteTestFramework):
         blockheader.nTime = int(time.time())
         blockheader.nBits = blockheader_tip.nBits
         blockheader.rehash()
-        while not blockheader.hash.startswith('0'):
+        # Find valid PoW for DigiByte multi-algorithm (use powHash, not hash)
+        target = uint256_from_compact(blockheader.nBits)
+        while blockheader.powHash > target:
             blockheader.nNonce += 1
             blockheader.rehash()
         peer = self.nodes[0].add_p2p_connection(P2PInterface())
@@ -277,8 +280,9 @@ class InvalidMessagesTest(DigiByteTestFramework):
         assert_equal(chaintips[0]['status'], 'headers-only')
         assert_equal(chaintips[0]['hash'], blockheader.hash)
 
-        # invalidate PoW
-        while not blockheader.hash.startswith('f'):
+        # invalidate PoW - ensure powHash > target  
+        target = uint256_from_compact(blockheader.nBits)
+        while blockheader.powHash <= target:
             blockheader.nNonce += 1
             blockheader.rehash()
         with self.nodes[0].assert_debug_log(['Misbehaving', 'header with invalid proof of work']):

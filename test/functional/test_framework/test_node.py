@@ -779,8 +779,46 @@ class TestNodeCLI():
 
     def send_cli(self, command=None, *args, **kwargs):
         """Run digibyte-cli command. Deserializes returned string as python object."""
-        pos_args = [arg_to_cli(arg) for arg in args]
-        named_args = [str(key) + "=" + arg_to_cli(value) for (key, value) in kwargs.items()]
+        
+        # For send command with options dict containing conf_target/estimate_mode, avoid conflicts  
+        if (command == "send" and 'options' in kwargs and kwargs['options'] is not None and
+            isinstance(kwargs['options'], dict) and 
+            ('conf_target' in kwargs['options'] or 'estimate_mode' in kwargs['options'])):
+            
+            # Remove conflicting None values from kwargs to avoid passing both as arguments and in options
+            filtered_kwargs = {}
+            for key, value in kwargs.items():
+                if key == 'conf_target' and value is None and 'conf_target' in kwargs['options']:
+                    continue  # Skip None conf_target if it's in options
+                elif key == 'estimate_mode' and value is None and 'estimate_mode' in kwargs['options']:
+                    continue  # Skip None estimate_mode if it's in options
+                else:
+                    filtered_kwargs[key] = value
+            
+            pos_args = [arg_to_cli(arg) for arg in args] 
+            named_args = []
+            for key, value in filtered_kwargs.items():
+                if key in ['fee_rate'] and value == "":
+                    # Handle empty string for fee_rate specially
+                    named_args.append(f"{key}=\"\"")
+                else:
+                    named_args.append(f"{key}={arg_to_cli(value)}")
+        else:
+            pos_args = [arg_to_cli(arg) for arg in args]
+            named_args = []
+            for key, value in kwargs.items():
+                if command == "send" and key in ['fee_rate'] and value == "":
+                    # Handle empty string for fee_rate specially in send commands
+                    named_args.append(f"{key}=\"\"")
+                else:
+                    named_args.append(f"{key}={arg_to_cli(value)}")
+        
+        # Fix for DigiByte: convert estimate_mode=null to estimate_mode=unset
+        # DigiByte RPC expects "unset" as default estimate_mode, not "null"
+        if command in ["send", "sendtoaddress", "sendmany", "fundrawtransaction", "walletcreatefundedpsbt"]:
+            for i, arg in enumerate(named_args):
+                if arg == "estimate_mode=null":
+                    named_args[i] = "estimate_mode=unset"
         p_args = [self.binary, f"-datadir={self.datadir}"] + self.options
         if named_args:
             p_args += ["-named"]

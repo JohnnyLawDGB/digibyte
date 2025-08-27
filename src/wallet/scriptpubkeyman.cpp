@@ -2741,8 +2741,12 @@ void DescriptorScriptPubKeyMan::UpdateWalletDescriptor(WalletDescriptor& descrip
         throw std::runtime_error(std::string(__func__) + ": " + error);
     }
 
+    m_map_pubkeys.clear();
+    m_map_script_pub_keys.clear();
+    m_max_cached_index = -1;
     m_wallet_descriptor = descriptor;
-    NotifyCanGetAddressesChanged();
+
+    NotifyFirstKeyTimeChanged(this, m_wallet_descriptor.creation_time);
 }
 
 void DescriptorScriptPubKeyMan::UpgradeDescriptorCache()

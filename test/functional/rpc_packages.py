@@ -136,7 +136,7 @@ class RPCPackagesTest(DigiByteTestFramework):
         }])
 
         self.log.info("Check testmempoolaccept reports txns in packages that exceed max feerate")
-        tx_high_fee = self.wallet.create_self_transfer(fee=Decimal("0.999"))
+        tx_high_fee = self.wallet.create_self_transfer(fee=Decimal("99.999"))  # High fee to exceed DEFAULT_MAX_RAW_TX_FEE_RATE (100 DGB/kB)
         testres_high_fee = node.testmempoolaccept([tx_high_fee["hex"]])
         assert_equal(testres_high_fee, [
             {"txid": tx_high_fee["txid"], "wtxid": tx_high_fee["wtxid"], "allowed": False, "reject-reason": "max-fee-exceeded"}

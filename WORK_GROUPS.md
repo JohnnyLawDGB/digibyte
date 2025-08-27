@@ -1,36 +1,29 @@
 # Test Groups Organization
 
-## Overall Status (2025-08-26)
+## Overall Status (2025-08-27)
 - **Total Tests**: 278
-- **Passing**: 228 (82.0%)
-- **Failing**: 32 (11.5%)
+- **Passing**: 229 (82.4%)
+- **Failing**: 31 (11.2%)
 - **Skipped**: 18 (6.5%)
 
 ---
 
-## Group 1: Core Features & Consensus (6 tests)
+## Group 1: Core Features & Mining (10 tests)
 **Status**: 🔴 Not Started
 ```
 feature_block.py
+feature_coinstatsindex.py
 feature_csv_activation.py
-feature_taproot.py
-feature_versionbits_warning.py
-mining_basic.py
-rpc_getblockstats.py
-```
-
-## Group 2: Fee & Segwit Features (6 tests)
-**Status**: 🔴 Not Started
-```
-feature_fee_estimation.py
 feature_segwit.py --legacy-wallet
-mempool_package_limits.py
-mempool_sigoplimit.py
-wallet_orphanedreward.py
+feature_taproot.py
+feature_utxo_set_hash.py
+mining_basic.py
+mining_getblocktemplate_longpoll.py
+rpc_getblockstats.py
 wallet_spend_unconfirmed.py
 ```
 
-## Group 3: P2P Network Core (5 tests)
+## Group 2: P2P Network & PSBT (9 tests)
 **Status**: 🔴 Not Started
 ```
 p2p_dos_header_tree.py
@@ -38,31 +31,21 @@ p2p_headers_sync_with_minchainwork.py
 p2p_ibd_stalling.py
 p2p_invalid_messages.py
 p2p_node_network_limited.py
+rpc_psbt.py --descriptors
+rpc_psbt.py --legacy-wallet
+wallet_signer.py --descriptors
+wallet_groups.py --descriptors
 ```
 
-## Group 4: Wallet Balance & Import (5 tests)
+## Group 3: Wallet Transactions & Fees (12 tests)
 **Status**: 🔴 Not Started
 ```
 wallet_balance.py --descriptors
 wallet_balance.py --legacy-wallet
-wallet_importdescriptors.py --descriptors
-wallet_signer.py --descriptors
-rpc_psbt.py --descriptors
-rpc_psbt.py --legacy-wallet
-```
-
-## Group 5: Wallet Fee Management (4 tests)
-**Status**: 🔴 Not Started
-```
 wallet_bumpfee.py --descriptors
 wallet_bumpfee.py --legacy-wallet
 wallet_create_tx.py --descriptors
 wallet_create_tx.py --legacy-wallet
-```
-
-## Group 6: Wallet Send Operations (6 tests)
-**Status**: 🔴 Not Started
-```
 wallet_fundrawtransaction.py --descriptors
 wallet_fundrawtransaction.py --legacy-wallet
 wallet_send.py --descriptors

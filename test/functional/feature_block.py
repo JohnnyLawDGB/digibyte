@@ -640,7 +640,7 @@ class FullBlockTest(DigiByteTestFramework):
         self.move_tip(44)
         b47 = self.next_block(47)
         target = uint256_from_compact(b47.nBits)
-        while b47.sha256 <= target:
+        while b47.powHash <= target:
             # Rehash nonces until an invalid too-high-hash block is found.
             b47.nNonce += 1
             b47.rehash()

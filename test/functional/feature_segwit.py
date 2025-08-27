@@ -93,9 +93,6 @@ class SegWitTest(DigiByteTestFramework):
                 "-testactivationheight=segwit@165",
                 "-addresstype=legacy",
                 "-dandelion=0",
-                "-maxtxfee=1000",
-                "-mintxfee=0.1",
-                "-minrelaytxfee=0.001",
             ],
             [
                 "-acceptnonstdtxn=1",
@@ -103,18 +100,12 @@ class SegWitTest(DigiByteTestFramework):
                 "-testactivationheight=segwit@165",
                 "-addresstype=legacy",
                 "-dandelion=0",
-                "-maxtxfee=1000",
-                "-mintxfee=0.1",
-                "-minrelaytxfee=0.001",
             ],
             [
                 "-acceptnonstdtxn=1",
                 "-testactivationheight=segwit@165",
                 "-addresstype=legacy",
                 "-dandelion=0",
-                "-maxtxfee=1000",
-                "-mintxfee=0.1",
-                "-minrelaytxfee=0.001",
             ],
         ]
         self.rpc_timeout = 120
@@ -306,9 +297,9 @@ class SegWitTest(DigiByteTestFramework):
         # Now create tx2, which will spend from txid1.
         tx = CTransaction()
         tx.vin.append(CTxIn(COutPoint(int(txid1, 16), 0), b''))
-        tx.vout.append(CTxOut(int(71995 * COIN), CScript([OP_TRUE, OP_DROP] * 15 + [OP_TRUE])))
+        tx.vout.append(CTxOut(int(71999.99 * COIN), CScript([OP_TRUE, OP_DROP] * 15 + [OP_TRUE])))
         tx2_hex = self.nodes[0].signrawtransactionwithwallet(tx.serialize().hex())['hex']
-        txid2 = self.nodes[0].sendrawtransaction(tx2_hex, 0)
+        txid2 = self.nodes[0].sendrawtransaction(tx2_hex)
         tx = tx_from_hex(tx2_hex)
         assert not tx.wit.is_null()
 
@@ -322,7 +313,7 @@ class SegWitTest(DigiByteTestFramework):
         # Now create tx3, which will spend from txid2
         tx = CTransaction()
         tx.vin.append(CTxIn(COutPoint(int(txid2, 16), 0), b""))
-        tx.vout.append(CTxOut(int(71990 * COIN), CScript([OP_TRUE, OP_DROP] * 15 + [OP_TRUE])))  # Leave some fee
+        tx.vout.append(CTxOut(int(49.95 * COIN), CScript([OP_TRUE, OP_DROP] * 15 + [OP_TRUE])))  # Huge fee
         tx.calc_sha256()
         txid3 = self.nodes[0].sendrawtransaction(hexstring=tx.serialize().hex(), maxfeerate=0)
         assert tx.wit.is_null()
@@ -350,13 +341,13 @@ class SegWitTest(DigiByteTestFramework):
 
             # Some public keys to be used later
             pubkeys = [
-                "0363D44AABD0F1699138239DF2F042C3282C0671CC7A76826A55C8203D90E39242",  # cPiM8Ub4heR9NBYmgVzJQiUH1if44GSBGiqaeJySuL2BKxubvgwb
-                "02D3E626B3E616FC8662B489C123349FECBFC611E778E5BE739B257EAE4721E5BF",  # cPpAdHaD6VoYbW78kveN2bsvb45Q7G5PhaPApVUGwvF8VQ9brD97
-                "04A47F2CBCEFFA7B9BCDA184E7D5668D3DA6F9079AD41E422FA5FD7B2D458F2538A62F5BD8EC85C2477F39650BD391EA6250207065B2A81DA8B009FC891E898F0E",  # 91zqCU5B9sdWxzMt1ca3VzbtVm2YM6Hi5Rxn4UDtxEaN9C9nzXV
-                "02A47F2CBCEFFA7B9BCDA184E7D5668D3DA6F9079AD41E422FA5FD7B2D458F2538",  # cPQFjcVRpAUBG8BA9hzr2yEzHwKoMgLkJZBBtK9vJnvGJgMjzTbd
-                "036722F784214129FEB9E8129D626324F3F6716555B603FFE8300BBCB882151228",  # cQGtcm34xiLjB1v7bkRa4V3aAc9tS2UTuBZ1UnZGeSeNy627fN66
-                "0266A8396EE936BF6D99D17920DB21C6C7B1AB14C639D5CD72B300297E416FD2EC",  # cTW5mR5M45vHxXkeChZdtSPozrFwFgmEvTNnanCW6wrqwaCZ1X7K
-                "0450A38BD7F0AC212FEBA77354A9B036A32E0F7C81FC4E0C5ADCA7C549C4505D2522458C2D9AE3CEFD684E039194B72C8A10F9CB9D4764AB26FCC2718D421D3B84",  # 92h2XPssjBpsJN5CqSP7v9a7cf2kgDunBC6PDFwJHMACM1rrVBJ
+                "034e05dace5bcaf1d2ac67143bd071d4e040e5777663797310d2a3949ff15d9d4b",  # edSdzE6zFFJ8hMVEWh9idnu9h8uYPQUJLknbRANvMooiMTfQmsCS
+                "02e0423ecad2fffb75c7414eb6bc8757e58c65a89ac5f9004d927e885633d7d29e",  # eboTiEYQbmStx9kN6ddGorGc45DxuiSgtytsaYmutW5iU4vWvLeF
+                "04bcf5a134f4fd752048981454ea9fc95999b8553191d488ec44dd644e30331c9ac8a26b9510a153b21e84f77b41755606cd91012b3900a79ef3e367b68733adc1",  # 9Y1pSRPsx4PcmnX1Wd9j1DAW51BjaWEdXPcUFU4NdVpFvR2rNhH
+                "0248bfd2bf6acd6ccec115c253460bbe5e4536964351aad94cc2dcc236dec83359",  # eeU9UuVcudMDbMwGnmZdYG1PYYtivFUiCzhtrxZbAnCr8dSXLXhz
+                "02f9b7252b245ccc4a8264cef7dd1db325b138e7942a68a1a45e5b4c22ae529397",  # eh8Kjz7RDg6FrHPSru8xQZJyVgJFptVXZzusrY6esAEKboRu8kZs
+                "03d3d161080106df78d1f535093138c1acbc7629c4a7cec40d779a430c362ca857",  # ehLPHFXfemHKbkZ1J3bVjq1vyB5hn9rTwXZHX6fah17jLKBwFDXh
+                "047af4be859bf97b26d60e56665a9194c7ef6a8cdb46113fc987f0c7ffdea3994d4af42cce1a39d7b8db96f08aa63bc8abcca2b441876ade8123aacf92493f9b77",  # 9XzyrpAZo65SRLKChxQVbQ7L7MmWLDWeRvkPZVgZ6eGKvdgXbWC
             ]
 
             # Import a compressed key and an uncompressed key, generate some multisig addresses
@@ -601,6 +592,7 @@ class SegWitTest(DigiByteTestFramework):
             self.nodes[0].importprivkey("eeU9UuVcudMDbMwGnmZdYG1PYYtivFUiCzhtrxZbAnCr8dSXLXhz")
             self.nodes[0].importprivkey("eh8Kjz7RDg6FrHPSru8xQZJyVgJFptVXZzusrY6esAEKboRu8kZs")
             self.nodes[0].importprivkey("ehLPHFXfemHKbkZ1J3bVjq1vyB5hn9rTwXZHX6fah17jLKBwFDXh")
+            self.nodes[0].importprivkey("9XzyrpAZo65SRLKChxQVbQ7L7MmWLDWeRvkPZVgZ6eGKvdgXbWC")
             self.create_and_mine_tx_from_txids(solvable_txid)
 
             # Test that importing native P2WPKH/P2WSH scripts works
@@ -615,7 +607,7 @@ class SegWitTest(DigiByteTestFramework):
                 self.nodes[1].importaddress(scriptPubKey, "", False)
                 rawtxfund = self.nodes[1].fundrawtransaction(transaction)['hex']
                 rawtxfund = self.nodes[1].signrawtransactionwithwallet(rawtxfund)["hex"]
-                txid = self.nodes[1].sendrawtransaction(rawtxfund, 0)
+                txid = self.nodes[1].sendrawtransaction(rawtxfund)
 
                 assert_equal(self.nodes[1].gettransaction(txid, True)["txid"], txid)
                 assert_equal(self.nodes[1].listtransactions("*", 1, 0, True)[0]["txid"], txid)

@@ -91,7 +91,8 @@ class ResendWalletTransactionsTest(DigiByteTestFramework):
         # ordering of mapWallet is, if the child is not before the parent, we will create a new
         # child (via bumpfee) and remove the old child (via removeprunedfunds) until we get the
         # ordering of child before parent.
-        child_inputs = [{"txid": txid, "vout": 0}]
+        # DigiByte: Set sequence to signal RBF for proper replacement
+        child_inputs = [{"txid": txid, "vout": 0, "sequence": 0xfffffffd}]  # Signal RBF
         child_txid = node.sendall(recipients=[addr], inputs=child_inputs)["txid"]
         # Get the child tx's info for manual bumping
         child_tx_info = node.gettransaction(txid=child_txid, verbose=True)
@@ -105,7 +106,8 @@ class ResendWalletTransactionsTest(DigiByteTestFramework):
             # Manually bump the tx
             # The inputs and the output address stay the same, just changing the amount for the new fee
             child_output_value -= additional_child_fee
-            bumped_raw = node.createrawtransaction(inputs=child_inputs, outputs=[{addr: child_output_value}])
+            # DigiByte: Ensure replacement tx also signals RBF
+            bumped_raw = node.createrawtransaction(inputs=[{"txid": txid, "vout": 0, "sequence": 0xfffffffd}], outputs=[{addr: child_output_value}])
             bumped = node.signrawtransactionwithwallet(bumped_raw)
             bumped_txid = node.decoderawtransaction(bumped["hex"])["txid"]
             # Sometimes we will get a signature that is a little bit shorter than we expect which causes the

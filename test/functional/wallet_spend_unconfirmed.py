@@ -26,7 +26,7 @@ class UnconfirmedInputTest(DigiByteTestFramework):
         self.nodes[0].createwallet(walletname)
         wallet = self.nodes[0].get_wallet_rpc(walletname)
 
-        self.def_wallet.sendtoaddress(address=wallet.getnewaddress(), amount=20)
+        self.def_wallet.sendtoaddress(address=wallet.getnewaddress(), amount=2)
         self.generate(self.nodes[0], 1) # confirm funding tx
         return wallet
 
@@ -96,7 +96,7 @@ class UnconfirmedInputTest(DigiByteTestFramework):
         self.log.info("Start test feerate with low feerate unconfirmed input")
         wallet = self.setup_and_fund_wallet("unconfirmed_low_wallet")
 
-        parent_txid = wallet.sendtoaddress(address=wallet.getnewaddress(), amount=1, fee_rate=10000)
+        parent_txid = wallet.sendtoaddress(address=wallet.getnewaddress(), amount=1, fee_rate=11000)
         parent_tx = wallet.gettransaction(txid=parent_txid, verbose=True)
 
         self.assert_undershoots_target(parent_tx)
@@ -146,7 +146,7 @@ class UnconfirmedInputTest(DigiByteTestFramework):
         wallet = self.setup_and_fund_wallet("two_parents_wallet")
 
         # Add second UTXO to tested wallet
-        self.def_wallet.sendtoaddress(address=wallet.getnewaddress(), amount=20)
+        self.def_wallet.sendtoaddress(address=wallet.getnewaddress(), amount=2)
         self.generate(self.nodes[0], 1) # confirm funding tx
 
         parent_one_txid = wallet.sendtoaddress(address=wallet.getnewaddress(), amount=1.5, fee_rate=13000)  # Below target
@@ -157,7 +157,7 @@ class UnconfirmedInputTest(DigiByteTestFramework):
         p_two_tx = wallet.gettransaction(txid=parent_two_txid, verbose=True)
         self.assert_undershoots_target(p_two_tx)
 
-        ancestor_aware_txid = wallet.sendtoaddress(address=self.def_wallet.getnewaddress(), amount=18, fee_rate=self.target_fee_rate)
+        ancestor_aware_txid = wallet.sendtoaddress(address=self.def_wallet.getnewaddress(), amount=2.8, fee_rate=self.target_fee_rate)
         ancestor_aware_tx = wallet.gettransaction(txid=ancestor_aware_txid, verbose=True)
         self.assert_spends_only_parents(ancestor_aware_tx, [parent_one_txid, parent_two_txid])
 
@@ -174,7 +174,7 @@ class UnconfirmedInputTest(DigiByteTestFramework):
         wallet = self.setup_and_fund_wallet("two_mixed_parents_wallet")
 
         # Add second UTXO to tested wallet
-        self.def_wallet.sendtoaddress(address=wallet.getnewaddress(), amount=20)
+        self.def_wallet.sendtoaddress(address=wallet.getnewaddress(), amount=2)
         self.generate(self.nodes[0], 1) # confirm funding tx
 
         high_parent_txid = wallet.sendtoaddress(address=wallet.getnewaddress(), amount=1.5, fee_rate=self.target_fee_rate*2)
@@ -182,12 +182,12 @@ class UnconfirmedInputTest(DigiByteTestFramework):
         # This time the parent is greater than the child
         self.assert_beats_target(p_high_tx)
 
-        parent_low_txid = wallet.sendtoaddress(address=wallet.getnewaddress(), amount=1.5, fee_rate=10000)
+        parent_low_txid = wallet.sendtoaddress(address=wallet.getnewaddress(), amount=1.5, fee_rate=11000)
         p_low_tx = wallet.gettransaction(txid=parent_low_txid, verbose=True)
         # Other parent needs bump
         self.assert_undershoots_target(p_low_tx)
 
-        ancestor_aware_txid = wallet.sendtoaddress(address=self.def_wallet.getnewaddress(), amount=18, fee_rate=self.target_fee_rate)
+        ancestor_aware_txid = wallet.sendtoaddress(address=self.def_wallet.getnewaddress(), amount=2.8, fee_rate=self.target_fee_rate)
         ancestor_aware_tx = wallet.gettransaction(txid=ancestor_aware_txid, verbose=True)
         self.assert_spends_only_parents(ancestor_aware_tx, [parent_low_txid, high_parent_txid])
 
@@ -206,7 +206,7 @@ class UnconfirmedInputTest(DigiByteTestFramework):
         self.log.info("Start test with low parent and high grandparent tx")
         wallet = self.setup_and_fund_wallet("high_low_chain_wallet")
 
-        grandparent_txid = wallet.sendtoaddress(address=wallet.getnewaddress(), amount=1.8, fee_rate=self.target_fee_rate * 10)
+        grandparent_txid = wallet.sendtoaddress(address=wallet.getnewaddress(), amount=1.8, fee_rate=self.target_fee_rate * 2)
         gp_tx = wallet.gettransaction(txid=grandparent_txid, verbose=True)
         # grandparent has higher feerate
         self.assert_beats_target(gp_tx)
@@ -236,7 +236,7 @@ class UnconfirmedInputTest(DigiByteTestFramework):
         self.log.info("Start test with low parent and higher low grandparent tx")
         wallet = self.setup_and_fund_wallet("low_and_lower_chain_wallet")
 
-        grandparent_txid = wallet.sendtoaddress(address=wallet.getnewaddress(), amount=1.8, fee_rate=14000)  # Higher than parent but below target
+        grandparent_txid = wallet.sendtoaddress(address=wallet.getnewaddress(), amount=1.8, fee_rate=15000)  # Higher than parent but below target
         gp_tx = wallet.gettransaction(txid=grandparent_txid, verbose=True)
 
         # grandparent has higher feerate, but below target
@@ -263,7 +263,7 @@ class UnconfirmedInputTest(DigiByteTestFramework):
         self.log.info("Start test feerate with low feerate unconfirmed input, while subtracting from output")
         wallet = self.setup_and_fund_wallet("unconfirmed_low_wallet_sffo")
 
-        parent_txid = wallet.sendtoaddress(address=wallet.getnewaddress(), amount=1, fee_rate=10000)
+        parent_txid = wallet.sendtoaddress(address=wallet.getnewaddress(), amount=1, fee_rate=11000)
         parent_tx = wallet.gettransaction(txid=parent_txid, verbose=True)
 
         self.assert_undershoots_target(parent_tx)
@@ -285,7 +285,7 @@ class UnconfirmedInputTest(DigiByteTestFramework):
         self.log.info("Start test with preset input from low feerate unconfirmed transaction")
         wallet = self.setup_and_fund_wallet("preset_input")
 
-        parent_txid = wallet.sendtoaddress(address=wallet.getnewaddress(), amount=1, fee_rate=10000)
+        parent_txid = wallet.sendtoaddress(address=wallet.getnewaddress(), amount=1, fee_rate=11000)
         parent_tx = wallet.gettransaction(txid=parent_txid, verbose=True)
 
         self.assert_undershoots_target(parent_tx)
@@ -311,7 +311,7 @@ class UnconfirmedInputTest(DigiByteTestFramework):
         self.log.info("Start test to rbf a transaction unconfirmed input to bump it")
         wallet = self.setup_and_fund_wallet("bump")
 
-        parent_txid = wallet.sendtoaddress(address=wallet.getnewaddress(), amount=1, fee_rate=10000)
+        parent_txid = wallet.sendtoaddress(address=wallet.getnewaddress(), amount=1, fee_rate=11000)
         parent_tx = wallet.gettransaction(txid=parent_txid, verbose=True)
 
         self.assert_undershoots_target(parent_tx)
@@ -343,7 +343,7 @@ class UnconfirmedInputTest(DigiByteTestFramework):
         self.log.info("Start test where two UTXOs have overlapping ancestry")
         wallet = self.setup_and_fund_wallet("overlapping_ancestry_wallet")
 
-        parent_txid = wallet.sendtoaddress(address=wallet.getnewaddress(), amount=1, fee_rate=10000)
+        parent_txid = wallet.sendtoaddress(address=wallet.getnewaddress(), amount=1, fee_rate=11000)
         two_output_parent_tx = wallet.gettransaction(txid=parent_txid, verbose=True)
 
         self.assert_undershoots_target(two_output_parent_tx)
@@ -365,13 +365,13 @@ class UnconfirmedInputTest(DigiByteTestFramework):
         self.log.info("Start test where a low-fee sibling tx gets created and check that bumping ignores it")
         wallet = self.setup_and_fund_wallet("ignore-sibling")
 
-        parent_txid = wallet.sendtoaddress(address=wallet.getnewaddress(), amount=1, fee_rate=2)
+        parent_txid = wallet.sendtoaddress(address=wallet.getnewaddress(), amount=1, fee_rate=12000)
         parent_tx = wallet.gettransaction(txid=parent_txid, verbose=True)
 
         self.assert_undershoots_target(parent_tx)
 
         # create sibling tx
-        sibling_txid = wallet.sendtoaddress(address=self.def_wallet.getnewaddress(), amount=0.9, fee_rate=10000)
+        sibling_txid = wallet.sendtoaddress(address=self.def_wallet.getnewaddress(), amount=0.9, fee_rate=11000)
         sibling_tx = wallet.gettransaction(txid=sibling_txid, verbose=True)
         self.assert_undershoots_target(sibling_tx)
 
@@ -393,7 +393,7 @@ class UnconfirmedInputTest(DigiByteTestFramework):
         self.log.info("Start test where a high-fee sibling tx bumps the parent")
         wallet = self.setup_and_fund_wallet("generous-sibling")
 
-        parent_txid = wallet.sendtoaddress(address=wallet.getnewaddress(), amount=1, fee_rate=10000)
+        parent_txid = wallet.sendtoaddress(address=wallet.getnewaddress(), amount=1, fee_rate=11000)
         parent_tx = wallet.gettransaction(txid=parent_txid, verbose=True)
         self.assert_undershoots_target(parent_tx)
 
@@ -445,7 +445,7 @@ class UnconfirmedInputTest(DigiByteTestFramework):
         external_address = self.def_wallet.getnewaddress()
         address_info = self.def_wallet.getaddressinfo(external_address)
         external_descriptor = address_info["desc"]
-        parent_txid = wallet.sendtoaddress(address=external_address, amount=1, fee_rate=10000)
+        parent_txid = wallet.sendtoaddress(address=external_address, amount=1, fee_rate=11000)
         parent_tx = wallet.gettransaction(txid=parent_txid, verbose=True)
 
         self.assert_undershoots_target(parent_tx)
@@ -469,7 +469,7 @@ class UnconfirmedInputTest(DigiByteTestFramework):
 
     def run_test(self):
         self.log.info("Starting UnconfirmedInputTest!")
-        self.target_fee_rate = 15000  # DigiByte fee rate: Above minimum 10000 sat/vB (Bitcoin uses 30)
+        self.target_fee_rate = 30000  # DigiByte fee rate: Above minimum 10000 sat/kB (Bitcoin uses 30)
         self.def_wallet  = self.nodes[0].get_wallet_rpc(self.default_wallet_name)
         self.generate(self.nodes[0], 110)
 

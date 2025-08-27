@@ -1385,8 +1385,8 @@ class TaprootTest(DigiByteTestFramework):
                 amount = int(random.randrange(int(avg*0.85 + 0.5), int(avg*1.15 + 0.5)) + 0.5)
                 balance -= amount
                 fund_tx.vout.append(CTxOut(amount, spenders[done + i].script))
-            # Add change
-            fund_tx.vout.append(CTxOut(balance - 10000, random.choice(host_spks)))
+            # Add change (DigiByte uses higher fees than Bitcoin)
+            fund_tx.vout.append(CTxOut(balance - 1000000, random.choice(host_spks)))
             # Ask the wallet to sign
             fund_tx = tx_from_hex(node.signrawtransactionwithwallet(fund_tx.serialize().hex())["hex"])
             # Construct UTXOData entries

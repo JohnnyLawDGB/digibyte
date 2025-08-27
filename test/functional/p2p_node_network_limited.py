@@ -50,7 +50,7 @@ class NodeNetworkLimitedTest(DigiByteTestFramework):
     def run_test(self):
         node = self.nodes[0].add_p2p_connection(P2PIgnoreInv())
 
-        expected_services = NODE_NETWORK | NODE_WITNESS | NODE_NETWORK_LIMITED
+        expected_services = NODE_WITNESS | NODE_NETWORK_LIMITED
 
         self.log.info("Check that node has signalled expected services.")
         assert_equal(node.nServices, expected_services)

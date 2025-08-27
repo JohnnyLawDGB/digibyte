@@ -137,8 +137,8 @@ class CoinStatsIndexTest(DigiByteTestFramework):
             assert_equal(res5['block_info'], {
                 'unspendable': Decimal('0E-8'),
                 'prevout_spent': Decimal('72000.00000000'),
-                'new_outputs_ex_coinbase': Decimal('71999.96880000'),  # DigiByte: Adjusted for 100x fees
-                'coinbase': Decimal('72000.03120000'),  # DigiByte: Adjusted for 100x fees
+                'new_outputs_ex_coinbase': Decimal('71999.99688000'),  # DigiByte: Corrected fees
+                'coinbase': Decimal('72000.00312000'),  # DigiByte: Corrected fees
                 'unspendables': {
                     'genesis_block': Decimal('0E-8'),
                     'bip30': Decimal('0E-8'),

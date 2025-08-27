@@ -2007,12 +2007,19 @@ bool CWallet::SubmitTxMemoryPoolAndRelay(CWalletTx& wtx, std::string& err_string
     bool ret = chain().broadcastTransaction(wtx.tx, m_default_max_tx_fee, relay, err_string);
     if (ret) {
         wtx.m_state = TxStateInMempool{};
-        // Refresh status to ensure we have the correct state (mempool vs stempool)
-        RefreshMempoolStatus(wtx, chain());
+        // When Dandelion is disabled, transactions go directly to mempool but may take
+        // time to propagate through internal structures. Don't overwrite the state we
+        // just set unless we're certain the transaction is not in mempool.
         if (gArgs.GetBoolArg("-dandelion", true)) {
+            // Only refresh status for Dandelion mode where stempool/mempool transitions occur
+            RefreshMempoolStatus(wtx, chain());
             WalletLogPrintf("SubmitTxMemoryPoolAndRelay: Transaction %s submitted for Dandelion routing, state=%s\n", 
                            wtx.GetHash().ToString(), 
                            wtx.state<TxStateInMempool>() ? "InMempool" : "NotInMempool");
+        } else {
+            // In non-Dandelion mode, trust that broadcastTransaction success means InMempool
+            WalletLogPrintf("SubmitTxMemoryPoolAndRelay: Transaction %s added to mempool (Dandelion disabled)\n", 
+                           wtx.GetHash().ToString());
         }
     }
     return ret;

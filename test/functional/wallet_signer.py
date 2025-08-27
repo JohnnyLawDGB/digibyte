@@ -47,8 +47,8 @@ class WalletSignerTest(DigiByteTestFramework):
         self.num_nodes = 2
 
         self.extra_args = [
-            [],
-            [f"-signer={self.mock_signer_path()}", '-keypool=10'],
+            ['-dandelion=0'],
+            [f"-signer={self.mock_signer_path()}", '-keypool=10', '-dandelion=0'],
         ]
 
     def skip_test_if_missing_module(self):

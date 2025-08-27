@@ -35,9 +35,9 @@ from test_framework.wallet import MiniWallet
 
 
 VERSIONBITS_TOP_BITS = 0x20000000
-VERSIONBITS_DEPLOYMENT_TESTDUMMY_BIT = 28
+VERSIONBITS_DEPLOYMENT_TESTDUMMY_BIT = 27
 VERSIONBITS_DEPLOYMENT_TAPROOT_BIT = 0x02  # DigiByte taproot bit
-DEFAULT_BLOCK_MIN_TX_FEE = 1000  # default `-blockmintxfee` setting [sat/kvB]
+DEFAULT_BLOCK_MIN_TX_FEE = 100000  # default `-blockmintxfee` setting [sat/kvB] - DigiByte uses higher fees
 
 
 def assert_template(node, block, expect, rehash=True):
@@ -78,7 +78,7 @@ class MiningTest(DigiByteTestFramework):
         assert_equal(1337, self.nodes[0].getblocktemplate(NORMAL_GBT_REQUEST_PARAMS)['version'])
         self.restart_node(0, extra_args=[f'-mocktime={mock_time}', '-dandelion=0'])
         self.connect_nodes(0, 1)
-        assert_equal(VERSIONBITS_TOP_BITS + (1 << VERSIONBITS_DEPLOYMENT_TESTDUMMY_BIT), self.nodes[0].getblocktemplate(NORMAL_GBT_REQUEST_PARAMS)['version'])
+        assert_equal(VERSIONBITS_TOP_BITS + (1 << VERSIONBITS_DEPLOYMENT_TESTDUMMY_BIT) + VERSIONBITS_DEPLOYMENT_TAPROOT_BIT, self.nodes[0].getblocktemplate(NORMAL_GBT_REQUEST_PARAMS)['version'])
         self.restart_node(0)
         self.connect_nodes(0, 1)
 
@@ -125,10 +125,6 @@ class MiningTest(DigiByteTestFramework):
         node = self.nodes[0]
         self.wallet = MiniWallet(node)
         self.mine_chain()
-        
-        # Fund the wallet by generating blocks to its address and wait for maturity
-        from test_framework.blocktools import COINBASE_MATURITY_2
-        self.generate(self.wallet, COINBASE_MATURITY_2 + 1, sync_fun=self.no_op)
 
         def assert_submitblock(block, result_str_1, result_str_2=None):
             block.solve()
@@ -138,15 +134,19 @@ class MiningTest(DigiByteTestFramework):
 
         self.log.info('getmininginfo')
         mining_info = node.getmininginfo()
-        # DigiByte blocks, plus COINBASE_MATURITY_2 + 1 for wallet funding  
-        expected_blocks = 200 + COINBASE_MATURITY_2 + 1  # 200 from mine_chain + 100 + 1
+        # Only 200 blocks from mine_chain at this point 
+        expected_blocks = 200  # 200 from mine_chain
         assert_equal(mining_info['blocks'], expected_blocks)
         assert_equal(mining_info['chain'], self.chain)
         assert 'currentblocktx' not in mining_info
         assert 'currentblockweight' not in mining_info
         assert_equal(mining_info['difficulty'], Decimal('4.656542373906925E-10'))
-        assert_equal(mining_info['networkhashps'], Decimal('0.003333333333333334'))
+        assert_equal(mining_info['networkhashps'], Decimal('459.6844444444445'))
         assert_equal(mining_info['pooledtx'], 0)
+        
+        # Fund the wallet by generating blocks to its address and wait for maturity
+        from test_framework.blocktools import COINBASE_MATURITY_2
+        self.generate(self.wallet, COINBASE_MATURITY_2 + 1, sync_fun=self.no_op)
 
         self.log.info("getblocktemplate: Test default witness commitment")
         txid = int(self.wallet.send_self_transfer(from_node=node)['wtxid'], 16)
@@ -277,7 +277,15 @@ class MiningTest(DigiByteTestFramework):
         block.solve()
 
         def chain_tip(b_hash, *, status='headers-only', branchlen=1):
-            return {'hash': b_hash, 'height': 202, 'branchlen': branchlen, 'status': status}
+            # For headers-only: height = current + 1, for active: height stays same when accepted
+            current_height = node.getblockcount()
+            if status == 'active':
+                # When block becomes active, it's at the current chain height (doesn't increment)
+                height = current_height
+            else:
+                # Headers-only are at current height + 1
+                height = current_height + 1
+            return {'hash': b_hash, 'height': height, 'branchlen': branchlen, 'status': status}
 
         assert chain_tip(block.hash) not in node.getchaintips()
         node.submitheader(hexdata=block.serialize().hex())

@@ -42,6 +42,7 @@ class MempoolPackageLimitsTest(DigiByteTestFramework):
     def set_test_params(self):
         self.num_nodes = 1
         self.setup_clean_chain = True
+        self.extra_args = [["-dandelion=0"]]
 
     def run_test(self):
         self.wallet = MiniWallet(self.nodes[0])
@@ -289,7 +290,7 @@ class MempoolPackageLimitsTest(DigiByteTestFramework):
         node = self.nodes[0]
         parent_utxos = []
         target_vsize = 30_000
-        high_fee = 10 * target_vsize  # 10 sats/vB
+        high_fee = 1000 * target_vsize  # 1000 sats/kB (DigiByte uses kB not vB)
         target_weight = target_vsize * WITNESS_SCALE_FACTOR
         self.log.info("Check that in-mempool and in-package ancestor size limits are calculated properly in packages")
         # Mempool transactions A and B
@@ -320,7 +321,7 @@ class MempoolPackageLimitsTest(DigiByteTestFramework):
         """
         node = self.nodes[0]
         target_vsize = 21_000
-        high_fee = 10 * target_vsize  # 10 sats/vB
+        high_fee = 1000 * target_vsize  # 1000 sats/kB (DigiByte uses kB not vB)
         target_weight = target_vsize * WITNESS_SCALE_FACTOR
         self.log.info("Check that in-mempool and in-package descendant sizes are calculated properly in packages")
         # Top parent in mempool, Ma

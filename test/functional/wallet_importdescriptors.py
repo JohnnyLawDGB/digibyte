@@ -38,7 +38,7 @@ class ImportDescriptorsTest(DigiByteTestFramework):
     def set_test_params(self):
         self.num_nodes = 2
         self.extra_args = [["-addresstype=legacy", "-dandelion=0"],
-                           ["-addresstype=bech32", "-keypool=25", "-dandelion=0"]
+                           ["-addresstype=bech32", "-keypool=5", "-dandelion=0"]
                           ]
         # whitelist peers to speed up tx relay / mempool sync
         for args in self.extra_args:
@@ -63,6 +63,8 @@ class ImportDescriptorsTest(DigiByteTestFramework):
         if 'warnings' in result[0]:
             observed_warnings = result[0]['warnings']
         assert_equal("\n".join(sorted(warnings)), "\n".join(sorted(observed_warnings)))
+        if result[0]['success'] != success:
+            self.log.info(f"Import result: {result[0]}")
         assert_equal(result[0]['success'], success)
         if error_code is not None:
             assert_equal(result[0]['error']['code'], error_code)
@@ -287,10 +289,12 @@ class ImportDescriptorsTest(DigiByteTestFramework):
         assert_equal(wpriv.getwalletinfo()['keypoolsize'], 0)
         assert_raises_rpc_error(-4, 'This wallet has no available keys', wpriv.getnewaddress, '', 'p2sh-segwit')
         assert_equal(wpriv.getwalletinfo()['keypoolsize_hd_internal'], 21)
+        # Fixed: getrawchangeaddress now works after fixing UpdateWalletDescriptor
         wpriv.getrawchangeaddress('p2sh-segwit')
 
         self.test_importdesc({**range_request, "range": [0, 20], "internal": False}, wallet=wpriv, success=True)
         assert_equal(wpriv.getwalletinfo()['keypoolsize'], 21)
+        # Fixed: Address generation now works after fixing UpdateWalletDescriptor
         wpriv.getnewaddress('', 'p2sh-segwit')
         assert_equal(wpriv.getwalletinfo()['keypoolsize_hd_internal'], 0)
         assert_raises_rpc_error(-4, 'This wallet has no available keys', wpriv.getrawchangeaddress, 'p2sh-segwit')
@@ -377,7 +381,7 @@ class ImportDescriptorsTest(DigiByteTestFramework):
                               },
                              success=True)
         address = w1.getrawchangeaddress('legacy')
-        assert_equal(address, "yLNBqWLAfws7BAqX7NeGcMYrcePpo44GCY")
+        assert_equal(address, "srE5HKcxaGQGFAKeCJUa8MqyFAwyq4TXui")  # DigiByte address format
 
         self.log.info('Check can deactivate active descriptor')
         self.test_importdesc({'desc': descsum_create('pkh([12345678]' + xpub + '/*)'),
@@ -395,8 +399,8 @@ class ImportDescriptorsTest(DigiByteTestFramework):
         assert_raises_rpc_error(-4, 'This wallet has no available keys', w1.getrawchangeaddress, 'legacy')
 
         # # Test importing a descriptor containing a WIF private key
-        wif_priv = "cTe1f5rdT8A8DFgVWTjyPwACsDPJM9ff4QngFxUixCSvvbg1x6sh"
-        address = "yb48vjS8NsHWbMpTb3QAbNUeYGW3F8eRas"
+        wif_priv = "edXCnU5d4zoSPxVEkG9KN2g1aijtHZLyFLNdSuVXrF3rPyW8zQ5g"  # DigiByte WIF format
+        address = "yYgbAnhYyoB4nM7ESJu8XTouyebHB9RkJG"  # DigiByte address
         desc = "sh(wpkh(" + wif_priv + "))"
         self.log.info("Should import a descriptor with a WIF private key as spendable")
         self.test_importdesc({"desc": descsum_create(desc),
@@ -411,9 +415,9 @@ class ImportDescriptorsTest(DigiByteTestFramework):
                      address,
                      solvable=True,
                      ismine=True)
-        txid = w0.sendtoaddress(address, 49.99995540)
+        txid = w0.sendtoaddress(address, 71999.97770)  # DigiByte amount from v8.22.2
         self.generatetoaddress(self.nodes[0], 6, w0.getnewaddress())
-        tx = wpriv.createrawtransaction([{"txid": txid, "vout": 0}], {w0.getnewaddress(): 49.999})
+        tx = wpriv.createrawtransaction([{"txid": txid, "vout": 0}], {w0.getnewaddress(): 71999.977})
         signed_tx = wpriv.signrawtransactionwithwallet(tx)
         w1.sendrawtransaction(signed_tx['hex'])
 
@@ -452,9 +456,9 @@ class ImportDescriptorsTest(DigiByteTestFramework):
 
         assert_equal(wmulti_priv.getwalletinfo()['keypoolsize'], 1001) # Range end (1000) is inclusive, so 1001 addresses generated
         addr = wmulti_priv.getnewaddress('', 'bech32') # uses receive 0
-        assert_equal(addr, 'dgbrt1qdt0qy5p7dzhxzmegnn4ulzhard33s2809arjqgjndx87rv5vd0fqrnqq7z') # Derived at m/84'/0'/0'/0
+        assert_equal(addr, 'dgbrt1qdt0qy5p7dzhxzmegnn4ulzhard33s2809arjqgjndx87rv5vd0fqg24gr6') # Derived at m/84'/0'/0'/0
         change_addr = wmulti_priv.getrawchangeaddress('bech32') # uses change 0
-        assert_equal(change_addr, 'dgbrt1qt9uhe3a9hnq7vajl7a094z4s3crm9ttf8zw3f5v9gr2nyd7e3lns26evgj') # Derived at m/84'/1'/0'/0
+        assert_equal(change_addr, 'dgbrt1qt9uhe3a9hnq7vajl7a094z4s3crm9ttf8zw3f5v9gr2nyd7e3lnsx8zvqy') # Derived at m/84'/1'/0'/0
         assert_equal(wmulti_priv.getwalletinfo()['keypoolsize'], 1000)
         txid = w0.sendtoaddress(addr, 10)
         self.generate(self.nodes[0], 6)
@@ -485,9 +489,9 @@ class ImportDescriptorsTest(DigiByteTestFramework):
 
         assert_equal(wmulti_pub.getwalletinfo()['keypoolsize'], 1000) # The first one was already consumed by previous import and is detected as used
         addr = wmulti_pub.getnewaddress('', 'bech32') # uses receive 1
-        assert_equal(addr, 'dgbrt1qp8s25ckjl7gr6x2q3dx3tn2pytwp05upkjztk6ey857tt50r5aeq7kzfkn') # Derived at m/84'/0'/0'/1
+        assert_equal(addr, 'dgbrt1qp8s25ckjl7gr6x2q3dx3tn2pytwp05upkjztk6ey857tt50r5aeq3gvnyc') # Derived at m/84'/0'/0'/1
         change_addr = wmulti_pub.getrawchangeaddress('bech32') # uses change 2
-        assert_equal(change_addr, 'dgbrt1qp6j3jw8yetefte7kw6v5pc89rkgakzy98p6gf7ayslaveaxqyjus6cslkg') # Derived at m/84'/1'/0'/2
+        assert_equal(change_addr, 'dgbrt1qp6j3jw8yetefte7kw6v5pc89rkgakzy98p6gf7ayslaveaxqyjus3urcg9') # Derived at m/84'/1'/0'/2
         assert send_txid in self.nodes[0].getrawmempool(True)
         assert send_txid in (x['txid'] for x in wmulti_pub.listunspent(0))
         assert_equal(wmulti_pub.getwalletinfo()['keypoolsize'], 999)
@@ -587,9 +591,9 @@ class ImportDescriptorsTest(DigiByteTestFramework):
 
         addr = wmulti_priv_big.getnewaddress()
         w0.sendtoaddress(addr, 10)
-        self.generate(self.nodes[0], 1)
+        self.generate(self.nodes[0], 1)  # Just 1 block like v8.22.2
         # It is standard and would relay.
-        txid = wmulti_priv_big.sendtoaddress(w0.getnewaddress(), 9.999)
+        txid = wmulti_priv_big.sendtoaddress(w0.getnewaddress(), 9.9)  # Match v8.22.2 amount
         decoded = wmulti_priv_big.gettransaction(txid=txid, verbose=True)['decoded']
         # 20 sigs + dummy + witness script
         assert_equal(len(decoded['vin'][0]['txinwitness']), 22)
@@ -692,7 +696,7 @@ class ImportDescriptorsTest(DigiByteTestFramework):
 
         encrypted_wallet.walletpassphrase("passphrase", 99999)
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as thread:
-            with self.nodes[0].assert_debug_log(expected_msgs=["Rescan started from block 0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206... (slow variant inspecting all blocks)"], timeout=5):
+            with self.nodes[0].assert_debug_log(expected_msgs=["Rescan started from block 4598a0f2b823aaf9e77ee6d5e46f1edb824191dcd48b08437b7cec17e6ae6e26... (slow variant inspecting all blocks)"], timeout=5):
                 importing = thread.submit(encrypted_wallet.importdescriptors, requests=[descriptor])
 
             # Set the passphrase timeout to 1 to test that the wallet remains unlocked during the rescan

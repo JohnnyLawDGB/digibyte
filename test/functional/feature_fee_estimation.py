@@ -260,9 +260,9 @@ class EstimateFeeTest(DigiByteTestFramework):
         # The broadcaster and block producer
         node = self.nodes[0]
         miner = self.nodes[1]
-        # In sat/vb - DigiByte needs 100x higher fees than Bitcoin
-        low_feerate = 100
-        high_feerate = 1000
+        # In sat/vb - DigiByte needs higher fees than Bitcoin but not too high to consume small UTXOs
+        low_feerate = 10
+        high_feerate = 100
         # Cache the utxos of which to replace the spender after it failed to get
         # confirmed
         utxos_to_respend = []

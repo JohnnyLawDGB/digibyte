@@ -4,7 +4,7 @@
 You are the **ORCHESTRATOR** managing sub-agents to fix failing tests. Deploy UP TO 3 SUB-AGENTS IN PARALLEL on individual test files. Most failures are APPLICATION BUGS in src/ code - ensure sub-agents hunt them aggressively.
 
 ## Current Status (2025-08-27)
-- **Failing**: 20 tests (most have application bugs!)
+- **Failing**: 13 tests (most have application bugs!)
 - **Strategy**: Deploy 3 parallel sub-agents, replace as they complete
 
 ## Critical Files
@@ -60,9 +60,9 @@ Report back with:
 2. Monitor their progress
 3. When one completes → Update TEST_FIX_PROGRESS.md
 4. Immediately deploy new sub-agent on next test file
-5. Continue until all 20 tests are complete
+5. Continue until all 13 tests are complete
 
-## Current Failing Tests (20 Total)
+## Current Failing Tests (13 Total)
 See WORK_GROUPS.md for specific test names grouped by category.
 
 ## Quality Control
@@ -107,7 +107,7 @@ You are the **ORCHESTRATOR**:
 - ❌ Do NOT fix tests directly
 - ❌ Do NOT let agent slots sit empty
 
-**Success = 20 tests fixed via continuous parallel execution**
+**Success = 13 tests fixed via continuous parallel execution**
 
 ---
 

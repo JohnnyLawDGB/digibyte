@@ -1,62 +1,40 @@
 # Test Groups Organization
 
 ## Overall Status (2025-08-27)
-- **Total Tests**: 278
-- **Passing**: 258 (92.8%)
-- **Failing**: 20 (7.2%)
-- **Skipped**: 60 (not included in totals)
+- **Total Tests**: 247 (excluding skipped)
+- **Passing**: 234 (94.7%)
+- **Failing**: 13 (5.3%)
+- **Skipped**: 18
 
 ---
 
-## Group 1: Core Features & Mining (5 tests)
-**Status**: 🟡 In Progress
-```
-feature_block.py
-feature_csv_activation.py
-feature_segwit.py --legacy-wallet
-feature_taproot.py
-mining_basic.py
-wallet_spend_unconfirmed.py
-```
-**Tests Completed from Original Group**: 
-- feature_coinstatsindex.py ✓
-- feature_utxo_set_hash.py ✓
-- mining_getblocktemplate_longpoll.py ✓
-- rpc_getblockstats.py ✓
-
-## Group 2: P2P Network & RPC (6 tests)
-**Status**: 🟡 In Progress
-```
-p2p_dos_header_tree.py
-p2p_headers_sync_with_minchainwork.py
-p2p_invalid_messages.py
-p2p_node_network_limited.py
-rpc_createmultisig.py
-rpc_psbt.py --descriptors
-rpc_psbt.py --legacy-wallet
-wallet_signer.py --descriptors
-```
-**Tests Completed from Original Group**: 
-- p2p_ibd_stalling.py ✓
-- wallet_groups.py --descriptors ✓
-
-## Group 3: Wallet Transactions & Fees (9 tests)
+## Group 1: Core Features & P2P (5 tests)
 **Status**: 🔴 Not Started
 ```
+feature_block.py
+feature_segwit.py --legacy-wallet
+p2p_headers_sync_with_minchainwork.py
 wallet_balance.py --descriptors
 wallet_balance.py --legacy-wallet
+```
+
+## Group 2: RPC & PSBT Operations (4 tests)
+**Status**: 🔴 Not Started
+```
+rpc_packages.py
+rpc_psbt.py --descriptors
+rpc_psbt.py --legacy-wallet
+rpc_rawtransaction.py --legacy-wallet
+```
+
+## Group 3: Wallet Transactions & Fees (4 tests)
+**Status**: 🔴 Not Started
+```
 wallet_bumpfee.py --descriptors
 wallet_bumpfee.py --legacy-wallet
 wallet_create_tx.py --descriptors
 wallet_create_tx.py --legacy-wallet
-wallet_fundrawtransaction.py --descriptors
-wallet_fundrawtransaction.py --legacy-wallet
-wallet_send.py --descriptors
-wallet_send.py --legacy-wallet
-wallet_sendall.py --descriptors
-wallet_sendall.py --legacy-wallet
 ```
-**Note**: Legacy wallet variants are skipped in test suite
 
 ## Common Fix Patterns
 

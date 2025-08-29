@@ -449,6 +449,8 @@ static RPCHelpMan getmininginfo()
                         {RPCResult::Type::NUM, "blocks", "The current block"},
                         {RPCResult::Type::NUM, "currentblockweight", /*optional=*/true, "The block weight of the last assembled block (only present if a block was ever assembled)"},
                         {RPCResult::Type::NUM, "currentblocktx", /*optional=*/true, "The number of block transactions of the last assembled block (only present if a block was ever assembled)"},
+                        {RPCResult::Type::NUM, "pow_algo_id", "The current mining algorithm ID"},
+                        {RPCResult::Type::STR, "pow_algo", "The current mining algorithm name"},
                         {RPCResult::Type::NUM, "difficulty", "The current difficulty"},
                         {RPCResult::Type::OBJ, "difficulties", "The current difficulty for all active DigiByte algorithms",
                             {
@@ -480,6 +482,10 @@ static RPCHelpMan getmininginfo()
     obj.pushKV("blocks",           active_chain.Height());
     if (BlockAssembler::m_last_block_weight) obj.pushKV("currentblockweight", *BlockAssembler::m_last_block_weight);
     if (BlockAssembler::m_last_block_num_txs) obj.pushKV("currentblocktx", *BlockAssembler::m_last_block_num_txs);
+    
+    // Add current mining algorithm info (DigiByte specific)
+    obj.pushKV("pow_algo_id",      miningAlgo);
+    obj.pushKV("pow_algo",         GetAlgoName(miningAlgo));
     
     // Get current tip
     const CBlockIndex* tip = active_chain.Tip();

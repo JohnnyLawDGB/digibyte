@@ -27,6 +27,7 @@
 #include <node/context.h>
 #include <node/transaction.h>
 #include <node/utxo_snapshot.h>
+#include <pow.h>
 #include <primitives/transaction.h>
 #include <rpc/server.h>
 #include <rpc/server_util.h>
@@ -74,15 +75,27 @@ static CUpdatedBlock latestblock GUARDED_BY(cs_blockchange);
  */
 double GetDifficulty(const CBlockIndex* tip, const CBlockIndex* blockindex, int algo)
 {
-    if (blockindex == nullptr) {
-        if (tip == nullptr) return 1.0;
-        blockindex = tip;
+    unsigned int nBits;
+    unsigned int powLimit = InitialDifficulty(Params().GetConsensus(), algo);
+    if (blockindex == nullptr)
+    {
+        if (tip == nullptr)
+            nBits = powLimit;
+        else
+        {
+            blockindex = GetLastBlockIndexForAlgo(tip, Params().GetConsensus(), algo);
+            if (blockindex == nullptr)
+                nBits = powLimit;
+            else
+                nBits = blockindex->nBits;
+        }  
     }
-    CHECK_NONFATAL(blockindex);
+    else
+        nBits = blockindex->nBits;
 
-    int nShift = (blockindex->nBits >> 24) & 0xff;
+    int nShift = (nBits >> 24) & 0xff;
     double dDiff =
-        (double)0x0000ffff / (double)(blockindex->nBits & 0x00ffffff);
+        (double)0x0000ffff / (double)(nBits & 0x00ffffff);
 
     while (nShift < 29)
     {

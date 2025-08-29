@@ -625,7 +625,7 @@ static RPCHelpMan getblocktemplate()
         "    https://github.com/digibyte/bips/blob/master/bip-0009.mediawiki#getblocktemplate_changes\n"
         "    https://github.com/digibyte/bips/blob/master/bip-0145.mediawiki\n",
         {
-            {"template_request", RPCArg::Type::OBJ, RPCArg::Optional::NO, "Format of the template",
+            {"template_request", RPCArg::Type::OBJ, RPCArg::Default{UniValue::VOBJ}, "Format of the template",
             {
                 {"mode", RPCArg::Type::STR, /* treat as named arg */ RPCArg::Optional::OMITTED, "This must be set to \"template\", \"proposal\" (see BIP 23), or omitted"},
                 {"capabilities", RPCArg::Type::ARR, /* treat as named arg */ RPCArg::Optional::OMITTED, "A list of strings",
@@ -769,6 +769,13 @@ static RPCHelpMan getblocktemplate()
         }
     }
 
+    // DigiByte: Handle algorithm parameter (moved earlier to match v8.22.2)
+    int algo = miningAlgo;
+    if (!request.params[1].isNull()) {
+        std::string strAlgo = request.params[1].get_str();
+        algo = GetAlgoByName(strAlgo, algo);
+    }
+
     if (strMode != "template")
         throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid mode");
 
@@ -843,13 +850,6 @@ static RPCHelpMan getblocktemplate()
     // GBT must be called with 'segwit' set in the rules
     if (setClientRules.count("segwit") != 1) {
         throw JSONRPCError(RPC_INVALID_PARAMETER, "getblocktemplate must be called with the segwit rule set (call with {\"rules\": [\"segwit\"]})");
-    }
-
-    // DigiByte: Handle algorithm parameter
-    int algo = miningAlgo;
-    if (!request.params[1].isNull()) {
-        std::string strAlgo = request.params[1].get_str();
-        algo = GetAlgoByName(strAlgo, algo);
     }
 
     // Update block

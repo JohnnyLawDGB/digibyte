@@ -182,6 +182,12 @@ UniValue blockToJSON(node::BlockManager& blockman, const CBlock& block, const CB
 {
     UniValue result = blockheaderToJSON(tip, blockindex);
 
+    // Add DigiByte-specific multi-algorithm mining fields
+    int algo = block.GetAlgo();
+    result.pushKV("pow_algo_id", algo);
+    result.pushKV("pow_algo", GetAlgoName(algo));
+    result.pushKV("pow_hash", block.GetPoWAlgoHash(Params().GetConsensus()).GetHex());
+
     result.pushKV("strippedsize", (int)::GetSerializeSize(block, PROTOCOL_VERSION | SERIALIZE_TRANSACTION_NO_WITNESS));
     result.pushKV("size", (int)::GetSerializeSize(block, PROTOCOL_VERSION));
     result.pushKV("weight", (int)::GetBlockWeight(block));
@@ -683,6 +689,9 @@ static RPCHelpMan getblock()
                     {RPCResult::Type::NUM, "height", "The block height or index"},
                     {RPCResult::Type::NUM, "version", "The block version"},
                     {RPCResult::Type::STR_HEX, "versionHex", "The block version formatted in hexadecimal"},
+                    {RPCResult::Type::NUM, "pow_algo_id", "The mining algorithm ID used for this block"},
+                    {RPCResult::Type::STR, "pow_algo", "The mining algorithm name (sha256d, scrypt, groestl, skein, qubit, or odo)"},
+                    {RPCResult::Type::STR_HEX, "pow_hash", "The proof-of-work hash for this block's algorithm"},
                     {RPCResult::Type::STR_HEX, "merkleroot", "The merkle root"},
                     {RPCResult::Type::ARR, "tx", "The transaction ids",
                         {{RPCResult::Type::STR_HEX, "", "The transaction id"}}},

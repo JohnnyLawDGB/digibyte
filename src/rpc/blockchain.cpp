@@ -182,15 +182,15 @@ UniValue blockToJSON(node::BlockManager& blockman, const CBlock& block, const CB
 {
     UniValue result = blockheaderToJSON(tip, blockindex);
 
-    // Add DigiByte-specific multi-algorithm mining fields
+    result.pushKV("strippedsize", (int)::GetSerializeSize(block, PROTOCOL_VERSION | SERIALIZE_TRANSACTION_NO_WITNESS));
+    result.pushKV("size", (int)::GetSerializeSize(block, PROTOCOL_VERSION));
+    result.pushKV("weight", (int)::GetBlockWeight(block));
+    
+    // Add DigiByte-specific multi-algorithm mining fields (after size fields for v8.22.2 compatibility)
     int algo = block.GetAlgo();
     result.pushKV("pow_algo_id", algo);
     result.pushKV("pow_algo", GetAlgoName(algo));
     result.pushKV("pow_hash", block.GetPoWAlgoHash(Params().GetConsensus()).GetHex());
-
-    result.pushKV("strippedsize", (int)::GetSerializeSize(block, PROTOCOL_VERSION | SERIALIZE_TRANSACTION_NO_WITNESS));
-    result.pushKV("size", (int)::GetSerializeSize(block, PROTOCOL_VERSION));
-    result.pushKV("weight", (int)::GetBlockWeight(block));
     UniValue txs(UniValue::VARR);
 
     switch (verbosity) {

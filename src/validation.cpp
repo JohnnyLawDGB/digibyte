@@ -1838,7 +1838,8 @@ bool IsAlgoActive(const CBlockIndex* pindexPrev, const Consensus::Params& consen
     if (nHeight < consensus.multiAlgoDiffChangeTarget) {
         return algo == ALGO_SCRYPT;
     }
-    else if (nHeight < consensus.algoSwapChangeTarget)
+    else if (nHeight < consensus.algoSwapChangeTarget ||
+             (pindexPrev == nullptr ? 0 : pindexPrev->nHeight + 1) < consensus.DeploymentHeight(Consensus::DEPLOYMENT_ODO))
     {
         return algo == ALGO_SHA256D
             || algo == ALGO_SCRYPT
@@ -1848,8 +1849,6 @@ bool IsAlgoActive(const CBlockIndex* pindexPrev, const Consensus::Params& consen
     }
     else
     {
-        // TODO: Add proper ODO deployment check using VersionBitsCache
-        // For now, use simple height-based activation
         return algo == ALGO_SHA256D
             || algo == ALGO_SCRYPT
             || algo == ALGO_SKEIN

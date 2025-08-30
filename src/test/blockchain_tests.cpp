@@ -40,6 +40,7 @@ static void RejectDifficultyMismatch(double difficulty, double expected_difficul
 static void TestDifficulty(uint32_t nbits, double expected_difficulty)
 {
     CBlockIndex* block_index = CreateBlockIndexWithNbits(nbits);
+    // Using algorithm 2 (Groestl) for testing DigiByte multi-algo difficulty calculation
     double difficulty = GetDifficulty(NULL, block_index, 2);
     delete block_index;
 

@@ -102,6 +102,9 @@ BASE_SCRIPTS = [
     # - feature_assumeutxo.py (line 357)
     # These tests need DigiByte-specific snapshot hashes and PoW validation logic
     
+    # DigiByte: Multi-Algorithm Mining Tests
+    'feature_digibyte_multialgo_mining.py',
+    
     # vv Tests less than 5m vv
     'feature_fee_estimation.py',
     'feature_taproot.py',

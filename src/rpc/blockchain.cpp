@@ -167,7 +167,9 @@ UniValue blockheaderToJSON(const CBlockIndex* tip, const CBlockIndex* blockindex
     result.pushKV("mediantime", (int64_t)blockindex->GetMedianTimePast());
     result.pushKV("nonce", (uint64_t)blockindex->nNonce);
     result.pushKV("bits", strprintf("%08x", blockindex->nBits));
-    result.pushKV("difficulty", GetDifficulty(nullptr, blockindex));
+    result.pushKV("difficulty", GetDifficulty(nullptr, blockindex, blockindex->GetAlgo()));
+    result.pushKV("pow_algo_id", blockindex->GetAlgo());
+    result.pushKV("pow_algo", GetAlgoName(blockindex->GetAlgo()));
     result.pushKV("chainwork", blockindex->nChainWork.GetHex());
     result.pushKV("nTx", (uint64_t)blockindex->nTx);
 
@@ -428,10 +430,21 @@ static RPCHelpMan syncwithvalidationinterfacequeue()
 static RPCHelpMan getdifficulty()
 {
     return RPCHelpMan{"getdifficulty",
-                "\nReturns the proof-of-work difficulty as a multiple of the minimum difficulty.\n",
+                "\nReturns the proof-of-work difficulty for all active DigiByte mining algorithms.\n",
                 {},
                 RPCResult{
-                    RPCResult::Type::NUM, "", "the proof-of-work difficulty as a multiple of the minimum difficulty."},
+                    RPCResult::Type::OBJ, "", "",
+                    {
+                        {RPCResult::Type::OBJ, "difficulties", "The current difficulty for all active DigiByte algorithms",
+                            {
+                                {RPCResult::Type::NUM, "sha256d", /*optional=*/true, "SHA256D difficulty"},
+                                {RPCResult::Type::NUM, "scrypt", /*optional=*/true, "Scrypt difficulty"},
+                                {RPCResult::Type::NUM, "groestl", /*optional=*/true, "Groestl difficulty (before Odocrypt)"},
+                                {RPCResult::Type::NUM, "skein", /*optional=*/true, "Skein difficulty"},
+                                {RPCResult::Type::NUM, "qubit", /*optional=*/true, "Qubit difficulty"},
+                                {RPCResult::Type::NUM, "odo", /*optional=*/true, "Odocrypt difficulty (after activation)"},
+                            }},
+                    }},
                 RPCExamples{
                     HelpExampleCli("getdifficulty", "")
             + HelpExampleRpc("getdifficulty", "")
@@ -440,7 +453,22 @@ static RPCHelpMan getdifficulty()
 {
     ChainstateManager& chainman = EnsureAnyChainman(request.context);
     LOCK(cs_main);
-    return GetDifficulty(chainman.ActiveChain().Tip(), nullptr);
+    
+    const CBlockIndex* tip = chainman.ActiveChain().Tip();
+    const Consensus::Params& consensusParams = chainman.GetParams().GetConsensus();
+    
+    UniValue obj(UniValue::VOBJ);
+    UniValue difficulties(UniValue::VOBJ);
+    
+    // Add difficulty for each active algorithm
+    for (int algo = 0; algo < NUM_ALGOS_IMPL; algo++) {
+        if (IsAlgoActive(tip, consensusParams, algo)) {
+            difficulties.pushKV(GetAlgoName(algo), GetDifficulty(tip, nullptr, algo));
+        }
+    }
+    
+    obj.pushKV("difficulties", difficulties);
+    return obj;
 },
     };
 }
@@ -552,6 +580,8 @@ static RPCHelpMan getblockheader()
                             {RPCResult::Type::NUM, "nonce", "The nonce"},
                             {RPCResult::Type::STR_HEX, "bits", "The bits"},
                             {RPCResult::Type::NUM, "difficulty", "The difficulty"},
+                            {RPCResult::Type::NUM, "pow_algo_id", "The mining algorithm ID"},
+                            {RPCResult::Type::STR, "pow_algo", "The mining algorithm name"},
                             {RPCResult::Type::STR_HEX, "chainwork", "Expected number of hashes required to produce the current chain"},
                             {RPCResult::Type::NUM, "nTx", "The number of transactions in the block"},
                             {RPCResult::Type::STR_HEX, "previousblockhash", /*optional=*/true, "The hash of the previous block (if available)"},

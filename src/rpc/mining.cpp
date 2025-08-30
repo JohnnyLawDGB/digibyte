@@ -242,6 +242,8 @@ static RPCHelpMan generatetodescriptor()
             {"num_blocks", RPCArg::Type::NUM, RPCArg::Optional::NO, "How many blocks are generated."},
             {"descriptor", RPCArg::Type::STR, RPCArg::Optional::NO, "The descriptor to send the newly generated digibyte to."},
             {"maxtries", RPCArg::Type::NUM, RPCArg::Default{DEFAULT_MAX_TRIES}, "How many iterations to try."},
+            {"algo", RPCArg::Type::STR, RPCArg::Default{GetAlgoName(ALGO_SCRYPT)}, 
+             "The mining algorithm to use (sha256d, scrypt, groestl, skein, qubit, odo)"},
         },
         RPCResult{
             RPCResult::Type::ARR, "", "hashes of blocks generated",
@@ -266,8 +268,15 @@ static RPCHelpMan generatetodescriptor()
     const CTxMemPool& mempool = EnsureMemPool(node);
     ChainstateManager& chainman = EnsureChainman(node);
 
-    // DigiByte: Use default mining algorithm
-    return generateBlocks(chainman, mempool, coinbase_script, num_blocks, max_tries, miningAlgo);
+    // Add algorithm parsing
+    int algo = ALGO_SCRYPT;  // Default
+    if (!request.params[3].isNull()) {
+        std::string strAlgo = request.params[3].get_str();
+        algo = GetAlgoByName(strAlgo, ALGO_SCRYPT);
+    }
+
+    // DigiByte: Use specified mining algorithm
+    return generateBlocks(chainman, mempool, coinbase_script, num_blocks, max_tries, algo);
 },
     };
 }
@@ -397,7 +406,7 @@ static RPCHelpMan generateblock()
     {
         LOCK(cs_main);
 
-        std::unique_ptr<CBlockTemplate> blocktemplate(BlockAssembler{chainman.ActiveChainstate(), nullptr}.CreateNewBlock(coinbase_script, ALGO_SHA256D));
+        std::unique_ptr<CBlockTemplate> blocktemplate(BlockAssembler{chainman.ActiveChainstate(), nullptr}.CreateNewBlock(coinbase_script, miningAlgo));
         if (!blocktemplate) {
             throw JSONRPCError(RPC_INTERNAL_ERROR, "Couldn't create new block");
         }
@@ -461,6 +470,15 @@ static RPCHelpMan getmininginfo()
                                 {RPCResult::Type::NUM, "qubit", /*optional=*/true, "Qubit difficulty"},
                                 {RPCResult::Type::NUM, "odo", /*optional=*/true, "Odocrypt difficulty"},
                             }},
+                        {RPCResult::Type::OBJ, "networkhashesps", "Network hashes per second for each algorithm",
+                            {
+                                {RPCResult::Type::NUM, "sha256d", /*optional=*/true, "SHA256D network hashrate"},
+                                {RPCResult::Type::NUM, "scrypt", /*optional=*/true, "Scrypt network hashrate"},
+                                {RPCResult::Type::NUM, "groestl", /*optional=*/true, "Groestl network hashrate"},
+                                {RPCResult::Type::NUM, "skein", /*optional=*/true, "Skein network hashrate"},
+                                {RPCResult::Type::NUM, "qubit", /*optional=*/true, "Qubit network hashrate"},
+                                {RPCResult::Type::NUM, "odo", /*optional=*/true, "Odocrypt network hashrate"},
+                            }},
                         {RPCResult::Type::NUM, "networkhashps", "The network hashes per second"},
                         {RPCResult::Type::NUM, "pooledtx", "The size of the mempool"},
                         {RPCResult::Type::STR, "chain", "current network name (main, test, signet, regtest)"},
@@ -502,6 +520,17 @@ static RPCHelpMan getmininginfo()
         }
     }
     obj.pushKV("difficulties", difficulties);
+    
+    // Add per-algorithm network hashrates (DigiByte specific)
+    UniValue networkhashesps(UniValue::VOBJ);
+    for (int algo = 0; algo < NUM_ALGOS_IMPL; algo++) {
+        if (IsAlgoActive(tip, consensusParams, algo)) {
+            // Calculate hashrate for last 120 blocks of this algorithm
+            networkhashesps.pushKV(GetAlgoName(algo), 
+                GetNetworkHashPS(120, -1, active_chain, algo));
+        }
+    }
+    obj.pushKV("networkhashesps", networkhashesps);
     
     obj.pushKV("networkhashps",    getnetworkhashps().HandleRequest(request));
     obj.pushKV("pooledtx",         (uint64_t)mempool.size());

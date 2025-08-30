@@ -121,8 +121,10 @@ CBlockIndex* CChain::FindEarliestAtLeast(int64_t nTime, int height) const
  */
 int CBlockIndex::GetAlgo() const
 {
-    // For blocks below height 145000, always return ALGO_SCRYPT
+    // For blocks below the multi-algo height, always return ALGO_SCRYPT
     // This handles early blocks before multi-algo was implemented
+    // Note: This uses mainnet height (145000). For proper chain-specific behavior,
+    // use GetAlgoForBlockIndex() with consensus parameters instead.
     if (nHeight < 145000) {
         return ALGO_SCRYPT;
     }
@@ -139,6 +141,32 @@ int CBlockIndex::GetAlgo() const
 
     // If still not recognized:
     LogPrintf("Warning: block at height=%d has unrecognized nVersion=0x%08x\n", nHeight, nVersion);
+    return ALGO_UNKNOWN;
+}
+
+// Helper function that uses consensus parameters to determine algorithm correctly for any chain
+int GetAlgoForBlockIndex(const CBlockIndex* blockindex, const Consensus::Params& consensus)
+{
+    if (!blockindex) {
+        return ALGO_SCRYPT;
+    }
+    
+    // For blocks below the multi-algo height, always return ALGO_SCRYPT
+    if (blockindex->nHeight < consensus.multiAlgoDiffChangeTarget) {
+        return ALGO_SCRYPT;
+    }
+
+    // Otherwise, parse from version bits:
+    switch (blockindex->nVersion & BLOCK_VERSION_ALGO) {
+        case BLOCK_VERSION_SCRYPT:   return ALGO_SCRYPT;
+        case BLOCK_VERSION_SHA256D:  return ALGO_SHA256D;
+        case BLOCK_VERSION_GROESTL:  return ALGO_GROESTL;
+        case BLOCK_VERSION_SKEIN:    return ALGO_SKEIN;
+        case BLOCK_VERSION_QUBIT:    return ALGO_QUBIT;
+        case BLOCK_VERSION_ODO:      return ALGO_ODO;
+    }
+    // If still not recognized:
+    LogPrintf("Warning: block at height=%d has unrecognized nVersion=0x%08x\n", blockindex->nHeight, blockindex->nVersion);
     return ALGO_UNKNOWN;
 }
 

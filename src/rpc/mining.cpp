@@ -88,9 +88,13 @@ static UniValue GetNetworkHashPS(int lookup, int height, const CChain& active_ch
         lookup = pb->nHeight;
 
     // DigiByte: Find the most recent block with the specified algo
-    while(pb->GetAlgo() != algo) {
-        assert (pb->pprev);
+    while(pb && pb->GetAlgo() != algo) {
         pb = pb->pprev;
+    }
+    
+    // If no block with the specified algorithm is found, return 0
+    if (!pb) {
+        return 0;
     }
 
     const CBlockIndex *pb0 = pb;
@@ -99,6 +103,7 @@ static UniValue GetNetworkHashPS(int lookup, int height, const CChain& active_ch
     arith_uint256 workDiff = GetBlockProof(*pb0, algo); 
 
     for (int i = 0; i < lookup; i++) {
+        if (!pb0->pprev) break;  // Reached genesis block
         pb0 = pb0->pprev;
         // DigiByte: Only count blocks with matching algo
         if(pb0->GetAlgo() == algo) {

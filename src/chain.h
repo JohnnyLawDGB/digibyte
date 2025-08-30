@@ -525,5 +525,8 @@ CBlockLocator GetLocator(const CBlockIndex* index);
 /** Construct a list of hash entries to put in a locator.  */
 std::vector<uint256> LocatorEntries(const CBlockIndex* index);
 
+/** DigiByte: Get mining algorithm for a block using consensus parameters */
+int GetAlgoForBlockIndex(const CBlockIndex* blockindex, const Consensus::Params& consensus);
+
 
 #endif // DIGIBYTE_CHAIN_H

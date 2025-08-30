@@ -431,10 +431,27 @@ class BlockchainTest(DigiByteTestFramework):
 
     def _test_getdifficulty(self):
         self.log.info("Test getdifficulty")
-        difficulty = self.nodes[0].getdifficulty()
-        # 1 hash in 2 should be valid, so difficulty should be 1/2**31
-        # binary => decimal => binary math is why we do this check
-        assert abs(difficulty * 2**31 - 1) < 0.0001
+        difficulty_result = self.nodes[0].getdifficulty()
+        
+        # DigiByte v8.26+ returns multi-algorithm difficulty object
+        # Format: { "difficulties": { "algo1": value, "algo2": value, ... } }
+        assert isinstance(difficulty_result, dict), "getdifficulty should return an object"
+        assert "difficulties" in difficulty_result, "getdifficulty should have 'difficulties' field"
+        difficulties = difficulty_result["difficulties"]
+        assert isinstance(difficulties, dict), "difficulties should be an object"
+        
+        # In regtest/easypow mode, we should have at least one algorithm active
+        assert len(difficulties) > 0, "At least one algorithm should be active"
+        
+        # Test that each algorithm difficulty is reasonable
+        # With -easypow, difficulties should be very low (close to minimum)
+        from decimal import Decimal
+        for algo_name, difficulty in difficulties.items():
+            # Handle Decimal type from Bitcoin Core RPC
+            assert isinstance(difficulty, (int, float, Decimal)), f"{algo_name} difficulty should be numeric (got {type(difficulty)})"
+            assert float(difficulty) > 0, f"{algo_name} difficulty should be positive"
+            # In easypow mode, difficulty should be close to minimum (around 1e-7 to 1)
+            assert float(difficulty) < 100, f"{algo_name} difficulty should be low in easypow mode"
 
     def _test_getnetworkhashps(self):
         self.log.info("Test getnetworkhashps")

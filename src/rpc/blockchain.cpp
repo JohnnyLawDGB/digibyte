@@ -167,9 +167,10 @@ UniValue blockheaderToJSON(const CBlockIndex* tip, const CBlockIndex* blockindex
     result.pushKV("mediantime", (int64_t)blockindex->GetMedianTimePast());
     result.pushKV("nonce", (uint64_t)blockindex->nNonce);
     result.pushKV("bits", strprintf("%08x", blockindex->nBits));
-    result.pushKV("difficulty", GetDifficulty(nullptr, blockindex, blockindex->GetAlgo()));
-    result.pushKV("pow_algo_id", blockindex->GetAlgo());
-    result.pushKV("pow_algo", GetAlgoName(blockindex->GetAlgo()));
+    int algo = GetAlgoForBlockIndex(blockindex, Params().GetConsensus());
+    result.pushKV("difficulty", GetDifficulty(nullptr, blockindex, algo));
+    result.pushKV("pow_algo_id", algo);
+    result.pushKV("pow_algo", GetAlgoName(algo));
     result.pushKV("chainwork", blockindex->nChainWork.GetHex());
     result.pushKV("nTx", (uint64_t)blockindex->nTx);
 

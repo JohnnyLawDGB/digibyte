@@ -1174,7 +1174,7 @@ bool BlockManager::ReadBlockFromDisk(CBlock& block, const FlatFilePos& pos) cons
     }
 
     // Check the header
-    if (!CheckProofOfWork(GetPoWAlgoHash(block), block.nBits, GetConsensus())) {
+    if (!CheckProofOfWork(block.GetPoWAlgoHash(GetConsensus()), block.nBits, GetConsensus())) {
         return error("ReadBlockFromDisk: Errors in block header at %s", pos.ToString());
     }
 

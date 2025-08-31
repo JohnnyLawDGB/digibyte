@@ -350,6 +350,7 @@ static RPCHelpMan generateblock()
                 },
             },
             {"submit", RPCArg::Type::BOOL, RPCArg::Default{true}, "Whether to submit the block before the RPC call returns or to return it as hex."},
+            {"algo", RPCArg::Type::STR, RPCArg::Default{GetAlgoName(miningAlgo)}, "The mining algorithm to use (sha256d, scrypt, groestl, skein, qubit, or odo)."},
         },
         RPCResult{
             RPCResult::Type::OBJ, "", "",
@@ -405,13 +406,20 @@ static RPCHelpMan generateblock()
     }
 
     const bool process_new_block{request.params[2].isNull() ? true : request.params[2].get_bool()};
+    
+    // DigiByte: Get algorithm parameter
+    int algo = miningAlgo;
+    if (!request.params[3].isNull()) {
+        algo = GetAlgoByName(request.params[3].get_str(), miningAlgo);
+    }
+    
     CBlock block;
 
     ChainstateManager& chainman = EnsureChainman(node);
     {
         LOCK(cs_main);
 
-        std::unique_ptr<CBlockTemplate> blocktemplate(BlockAssembler{chainman.ActiveChainstate(), nullptr}.CreateNewBlock(coinbase_script, miningAlgo));
+        std::unique_ptr<CBlockTemplate> blocktemplate(BlockAssembler{chainman.ActiveChainstate(), nullptr}.CreateNewBlock(coinbase_script, algo));
         if (!blocktemplate) {
             throw JSONRPCError(RPC_INTERNAL_ERROR, "Couldn't create new block");
         }
@@ -1051,6 +1059,10 @@ static RPCHelpMan getblocktemplate()
     result.pushKV("curtime", pblock->GetBlockTime());
     result.pushKV("bits", strprintf("%08x", pblock->nBits));
     result.pushKV("height", (int64_t)(pindexPrev->nHeight+1));
+    
+    // DigiByte: Add algorithm information
+    result.pushKV("pow_algo_id", algo);
+    result.pushKV("pow_algo", GetAlgoName(algo));
     
     // DigiByte: Add odokey for Odocrypt algorithm
     if (algo == ALGO_ODO) {

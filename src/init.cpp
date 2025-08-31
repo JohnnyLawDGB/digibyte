@@ -45,6 +45,7 @@
 #include <netbase.h>
 #include <netgroup.h>
 #include <node/blockmanager_args.h>
+#include <primitives/block.h>
 #include <node/blockstorage.h>
 #include <node/caches.h>
 #include <node/chainstate.h>
@@ -1073,6 +1074,12 @@ bool AppInitParameterInteraction(const ArgsManager& args)
     }
 
     nBytesPerSigOp = args.GetIntArg("-bytespersigop", nBytesPerSigOp);
+
+    // Algo
+    std::string strAlgo = args.GetArg("-algo", "scrypt");
+    miningAlgo = GetAlgoByName(strAlgo, ALGO_SCRYPT);
+
+    LogPrintf("Selected Algo: %s\n", strAlgo);
 
     if (!g_wallet_init_interface.ParameterInteraction()) return false;
 

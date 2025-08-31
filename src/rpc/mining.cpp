@@ -898,8 +898,10 @@ static RPCHelpMan getblocktemplate()
     static CBlockIndex* pindexPrev;
     static int64_t time_start;
     static std::unique_ptr<CBlockTemplate> pblocktemplate;
+    static int lastAlgo;  // DigiByte: Track algorithm changes
     if (pindexPrev != active_chain.Tip() ||
-        (mempool.GetTransactionsUpdated() != nTransactionsUpdatedLast && GetTime() - time_start > 5))
+        (mempool.GetTransactionsUpdated() != nTransactionsUpdatedLast && GetTime() - time_start > 5) ||
+        algo != lastAlgo)  // DigiByte: Regenerate template if algorithm changed
     {
         // Clear pindexPrev so future calls make a new block, despite any failures from here on
         pindexPrev = nullptr;
@@ -908,6 +910,7 @@ static RPCHelpMan getblocktemplate()
         nTransactionsUpdatedLast = mempool.GetTransactionsUpdated();
         CBlockIndex* pindexPrevNew = active_chain.Tip();
         time_start = GetTime();
+        lastAlgo = algo;  // DigiByte: Store current algorithm
 
         // Create new block
         CScript scriptDummy = CScript() << OP_TRUE;

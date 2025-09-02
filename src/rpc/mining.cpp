@@ -740,6 +740,8 @@ static RPCHelpMan getblocktemplate()
                 {RPCResult::Type::NUM_TIME, "curtime", "current timestamp in " + UNIX_EPOCH_TIME},
                 {RPCResult::Type::STR, "bits", "compressed target of next block"},
                 {RPCResult::Type::NUM, "height", "The height of the next block"},
+                {RPCResult::Type::NUM, "pow_algo_id", "The mining algorithm ID (DigiByte multi-algo)"},
+                {RPCResult::Type::STR, "pow_algo", "The mining algorithm name (DigiByte multi-algo)"},
                 {RPCResult::Type::STR_HEX, "signet_challenge", /*optional=*/true, "Only on signet"},
                 {RPCResult::Type::STR_HEX, "default_witness_commitment", /*optional=*/true, "a valid witness commitment for the unmodified block template"},
             }},

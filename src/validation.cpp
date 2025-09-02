@@ -370,9 +370,12 @@ void Chainstate::MaybeUpdateMempoolForReorg(
                 if (it2 != m_mempool->mapTx.end())
                     continue;
                 const Coin& coin{CoinsTip().AccessCoin(txin.prevout)};
-                assert(!coin.IsSpent());
+                // Check if coin is spent - if so, the transaction is invalid
+                if (coin.IsSpent()) {
+                    return true;
+                }
                 const auto mempool_spend_height{m_chain.Tip()->nHeight + 1};
-                const int required_maturity = (coin.nHeight < 145000) ? COINBASE_MATURITY : COINBASE_MATURITY_2;
+                const int required_maturity = (coin.nHeight < m_chainman.GetConsensus().multiAlgoDiffChangeTarget) ? COINBASE_MATURITY : COINBASE_MATURITY_2;
                 if (coin.IsCoinBase() && mempool_spend_height - coin.nHeight < required_maturity) {
                     return true;
                 }

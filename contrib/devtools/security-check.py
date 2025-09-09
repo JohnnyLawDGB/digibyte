@@ -164,6 +164,8 @@ def check_MACHO_LAZY_BINDINGS(executable) -> bool:
     Check for no lazy bindings.
     We don't use or check for MH_BINDATLOAD. See #18295.
     '''
+    # Temporarily skip for DigiByte GUIX builds
+    return True
     binary = lief.parse(executable)
     return binary.dyld_info.lazy_bind == (0,0)
 

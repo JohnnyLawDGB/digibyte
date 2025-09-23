@@ -144,7 +144,7 @@ $(OSX_BACKGROUND_IMAGE)@2x.png: contrib/macdeploy/$(OSX_BACKGROUND_SVG)
 $(OSX_BACKGROUND_IMAGE): $(OSX_BACKGROUND_IMAGE).png $(OSX_BACKGROUND_IMAGE)@2x.png
 	tiffutil -cathidpicheck $^ -out $@
 
-deploydir: $(OSX_DMG)
+deploydir: $(OSX_ZIP)
 else !BUILD_DARWIN
 APP_DIST_DIR=$(top_builddir)/dist
 APP_DIST_EXTRAS=$(APP_DIST_DIR)/.background/$(OSX_BACKGROUND_IMAGE) $(APP_DIST_DIR)/Applications
@@ -170,10 +170,10 @@ $(APP_DIST_DIR)/Applications:
 $(APP_DIST_DIR)/$(OSX_APP)/Contents/MacOS/DigiByte-Qt: $(OSX_APP_BUILT) $(OSX_PACKAGING)
 	INSTALL_NAME_TOOL=$(INSTALL_NAME_TOOL) OTOOL=$(OTOOL) STRIP=$(STRIP) $(PYTHON) $(OSX_DEPLOY_SCRIPT) $(OSX_APP) $(OSX_VOLNAME) -translations-dir=$(QT_TRANSLATION_DIR)
 
-deploydir: $(APP_DIST_DIR)/$(OSX_APP)/Contents/MacOS/DigiByte-Qt $(APP_DIST_EXTRAS)
+deploydir: $(APP_DIST_DIR)/$(OSX_APP)/Contents/MacOS/DigiByte-Qt
 endif !BUILD_DARWIN
 
-deploy: $(OSX_DMG)
+deploy: $(OSX_ZIP)
 endif
 $(DIGIBYTE_QT_BIN): FORCE
 	$(MAKE) -C src qt/$(@F)

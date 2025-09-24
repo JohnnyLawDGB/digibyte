@@ -223,7 +223,7 @@ HOST_CFLAGS+=$(find /gnu/store -maxdepth 1 -mindepth 1 -type d -exec echo -n " -
 case "$HOST" in
     *linux*)  HOST_CFLAGS+=" -ffile-prefix-map=${PWD}=." ;;
     *mingw*)  HOST_CFLAGS+=" -fno-ident" ;;
-    *darwin*) HOST_CFLAGS+=" -fstack-protector-all" ;;
+    *darwin*) unset HOST_CFLAGS ;;
 esac
 
 # CXXFLAGS
@@ -237,7 +237,6 @@ esac
 case "$HOST" in
     *linux*)  HOST_LDFLAGS="-Wl,--as-needed -Wl,--dynamic-linker=$glibc_dynamic_linker -static-libstdc++ -Wl,-O2" ;;
     *mingw*)  HOST_LDFLAGS="-Wl,--no-insert-timestamp" ;;
-    *darwin*) HOST_LDFLAGS="-Wl,-bind_at_load -Wl,-headerpad_max_install_names -Wl,-fixup_chains" ;;
 esac
 
 # Make $HOST-specific native binaries from depends available in $PATH

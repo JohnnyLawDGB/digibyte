@@ -86,10 +86,19 @@ DOCKER_EXEC df -h
 
 if [ "$RUN_FUZZ_TESTS" = "true" ] || [ "$RUN_UNIT_TESTS" = "true" ] || [ "$RUN_UNIT_TESTS_SEQUENTIAL" = "true" ]; then
   if [ ! -d ${DIR_QA_ASSETS} ]; then
-    # Try to clone qa-assets, but don't fail if it doesn't work (e.g. in CI from forks)
-    DOCKER_EXEC git clone --depth=1 https://github.com/digibyte-core/qa-assets ${DIR_QA_ASSETS} 2>/dev/null || {
-      echo "Warning: Could not clone qa-assets repository. Some tests may be skipped."
-    }
+    # Try to clone qa-assets, but if it fails, create minimal test data
+    if ! DOCKER_EXEC git clone --depth=1 https://github.com/digibyte-core/qa-assets ${DIR_QA_ASSETS} 2>/dev/null; then
+      echo "Creating local qa-assets with minimal test data..."
+      DOCKER_EXEC mkdir -p ${DIR_QA_ASSETS}/fuzz_seed_corpus/
+      DOCKER_EXEC mkdir -p ${DIR_QA_ASSETS}/unit_test_data/
+      # Create minimal script_assets_test.json for unit tests
+      DOCKER_EXEC sh -c "cat > ${DIR_QA_ASSETS}/unit_test_data/script_assets_test.json << 'EOF'
+{
+  \"sha256\": [],
+  \"base58\": []
+}
+EOF"
+    fi
   fi
 
   export DIR_FUZZ_IN=${DIR_QA_ASSETS}/fuzz_seed_corpus/

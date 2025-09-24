@@ -364,3 +364,69 @@ jobs:
         # Discussed in https://github.com/digibyte/digibyte/pull/28509
         if: github.event_name != 'pull_request'
         run: py -3 test\functional\test_runner.py --jobs $env:NUMBER_OF_PROCESSORS --ci --quiet --tmpdirprefix=$env:RUNNER_TEMP --combinedlogslen=99999999 --timeout-factor=$env:TEST_RUNNER_TIMEOUT_FACTOR --extended
+
+  linux-native:
+    name: 'Ubuntu 22.04 native, Qt GUI, with depends, unit tests, functional tests'
+    runs-on: ubuntu-22.04
+
+    # No need to run on the read-only mirror, unless it is a PR.
+    if: github.repository != 'digibyte-core/gui' || github.event_name == 'pull_request'
+
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libtool autotools-dev automake pkg-config bsdmainutils python3-zmq python3 libevent-dev libboost-dev libsqlite3-dev libdb++-dev systemtap-sdt-dev libminiupnpc-dev libnatpmp-dev qtbase5-dev qttools5-dev qttools5-dev-tools qtwayland5 libqrencode-dev ccache curl ca-certificates
+
+      - name: Set Ccache directory
+        run: echo "CCACHE_DIR=${RUNNER_TEMP}/ccache_dir" >> "$GITHUB_ENV"
+
+      - name: Restore Ccache cache
+        id: ccache-cache
+        uses: actions/cache/restore@v3
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ${{ github.job }}-ccache-${{ github.run_id }}
+          restore-keys: ${{ github.job }}-ccache-
+
+      - name: Install Python Packages
+        run: |
+          pip3 install pypandoc digibyte_scrypt pyzmq
+
+      - name: Build Dependencies
+        run: |
+          cd depends
+          make -j$(nproc) HOST=x86_64-pc-linux-gnu
+          cd ..
+
+      - name: Configure and Build
+        run: |
+          ./autogen.sh
+          CONFIG_SITE=$PWD/depends/x86_64-pc-linux-gnu/share/config.site ./configure --with-gui=yes --enable-reduce-exports
+          make -j$(nproc)
+
+      - name: Run Unit Tests
+        run: make check
+
+      - name: Run Functional Tests
+        run: test/functional/test_runner.py -j$(nproc)
+
+      - name: Upload Test Suite Log
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: linux-test-suite-log
+          path: src/test-suite.log
+
+      - name: Save Ccache cache
+        uses: actions/cache/save@v3
+        if: github.event_name != 'pull_request' && steps.ccache-cache.outputs.cache-hit != 'true'
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          # https://github.com/actions/cache/blob/main/tips-and-workarounds.md#update-a-cache
+          key: ${{ github.job }}-ccache-${{ github.run_id }}

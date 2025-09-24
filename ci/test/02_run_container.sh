@@ -80,7 +80,7 @@ CI_EXEC "${BASE_ROOT_DIR}/ci/test/01_base_install.sh"
 
 # Fixes permission issues when there is a container UID/GID mismatch with the owner
 # of the git source code directory.
-CI_EXEC git config --global --add safe.directory \"*\"
+CI_EXEC git config --global --add safe.directory '*'
 
 CI_EXEC mkdir -p "${BINS_SCRATCH_DIR}"
 

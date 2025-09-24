@@ -70,7 +70,7 @@ jobs:
           git rebase --exec "echo Running test-one-commit on \$( git log -1 ) && ./autogen.sh && CC=clang CXX=clang++ ./configure && make clean && make -j $(nproc) check && ./test/functional/test_runner.py -j $(( $(nproc) * 2 ))" ${{ env.TEST_BASE }}
 
   macos-native-x86_64:
-    name: 'macOS 13 native, x86_64, no depends, sqlite only, gui'
+    name: 'macOS 13 native, x86_64, with depends, unit tests, functional tests'
     # Use latest image, but hardcode version to avoid silent upgrades (and breaks).
     # See: https://github.com/actions/runner-images#available-images.
     runs-on: macos-13  # Use M1 once available https://github.com/github/roadmap/issues/528
@@ -79,10 +79,6 @@ jobs:
     if: github.repository != 'digibyte-core/gui' || github.event_name == 'pull_request'
 
     timeout-minutes: 120
-
-    env:
-      FILE_ENV: './ci/test/00_setup_env_mac_native.sh'
-      BASE_ROOT_DIR: ${{ github.workspace }}
 
     steps:
       - name: Checkout
@@ -112,8 +108,34 @@ jobs:
           key: ${{ github.job }}-ccache-${{ github.run_id }}
           restore-keys: ${{ github.job }}-ccache-
 
-      - name: CI script
-        run: ./ci/test_run_all.sh
+      - name: Install Python Packages
+        run: |
+          pip3 install --break-system-packages pypandoc digibyte_scrypt pyzmq
+
+      - name: Build Dependencies
+        run: |
+          cd depends
+          make -j2 HOST=x86_64-apple-darwin
+          cd ..
+
+      - name: Configure and Build
+        run: |
+          ./autogen.sh
+          CONFIG_SITE=$PWD/depends/x86_64-apple-darwin/share/config.site ./configure --with-gui=no --enable-reduce-exports
+          make -j2
+
+      - name: Run Unit Tests
+        run: make check
+
+      - name: Run Functional Tests
+        run: test/functional/test_runner.py -j2
+
+      - name: Upload Test Suite Log
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: test-suite-log
+          path: src/test-suite.log
 
       - name: Save Ccache cache
         uses: actions/cache/save@v3

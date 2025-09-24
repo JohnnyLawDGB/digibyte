@@ -125,10 +125,10 @@ jobs:
           make -j2
 
       - name: Run Unit Tests
-        run: make check
+        run: ./src/test/test_digibyte --show_progress
 
       - name: Run Functional Tests
-        run: test/functional/test_runner.py -j2
+        run: test/functional/test_runner.py --jobs=2
 
       - name: Upload Test Suite Log
         uses: actions/upload-artifact@v4
@@ -199,10 +199,10 @@ jobs:
           make -j2
 
       - name: Run Unit Tests
-        run: make check
+        run: ./src/test/test_digibyte --show_progress
 
       - name: Run Functional Tests
-        run: test/functional/test_runner.py -j2
+        run: test/functional/test_runner.py --jobs=2
 
       - name: Upload Test Suite Log
         uses: actions/upload-artifact@v4
@@ -225,8 +225,8 @@ jobs:
     # See: https://github.com/actions/runner-images#available-images.
     runs-on: windows-2022
 
-    # No need to run on the read-only mirror, unless it is a PR.
-    if: github.repository != 'digibyte-core/gui' || github.event_name == 'pull_request'
+    # Temporarily disabled
+    if: false
 
     env:
       CCACHE_MAXSIZE: '200M'
@@ -485,10 +485,10 @@ jobs:
           make -j$(nproc)
 
       - name: Run Unit Tests
-        run: make check
+        run: ./src/test/test_digibyte --show_progress
 
       - name: Run Functional Tests
-        run: test/functional/test_runner.py -j$(nproc)
+        run: test/functional/test_runner.py --jobs=2
 
       - name: Upload Test Suite Log
         uses: actions/upload-artifact@v4

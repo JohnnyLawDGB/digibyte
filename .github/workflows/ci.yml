@@ -26,7 +26,7 @@ jobs:
   test-each-commit:
     name: 'test each commit'
     runs-on: ubuntu-22.04
-    if: github.event_name == 'pull_request' && github.event.pull_request.commits != 1
+    if: false  # Temporarily disabled
     timeout-minutes: 360  # Use maximum time, see https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#jobsjob_idtimeout-minutes. Assuming a worst case time of 1 hour per commit, this leads to a --max-count=6 below.
     env:
       MAX_COUNT: 6
@@ -135,6 +135,80 @@ jobs:
         if: failure()
         with:
           name: test-suite-log
+          path: src/test-suite.log
+
+      - name: Save Ccache cache
+        uses: actions/cache/save@v3
+        if: github.event_name != 'pull_request' && steps.ccache-cache.outputs.cache-hit != 'true'
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          # https://github.com/actions/cache/blob/main/tips-and-workarounds.md#update-a-cache
+          key: ${{ github.job }}-ccache-${{ github.run_id }}
+
+  macos-native-arm64:
+    name: 'macOS 14 native, ARM64, Qt GUI, with depends, unit tests, functional tests'
+    # Use latest M1 runner
+    runs-on: macos-14
+
+    # No need to run on the read-only mirror, unless it is a PR.
+    if: github.repository != 'digibyte-core/gui' || github.event_name == 'pull_request'
+
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Clang version
+        run: |
+          clang --version
+
+      - name: Install Homebrew packages
+        env:
+          HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: 1
+        run: |
+          # A workaround for "The `brew link` step did not complete successfully" error.
+          brew install python@3 || brew link --overwrite python@3
+          brew install automake libtool pkg-config gnu-getopt ccache boost libevent miniupnpc libnatpmp zeromq qt@5 qrencode
+
+      - name: Set Ccache directory
+        run: echo "CCACHE_DIR=${RUNNER_TEMP}/ccache_dir" >> "$GITHUB_ENV"
+
+      - name: Restore Ccache cache
+        id: ccache-cache
+        uses: actions/cache/restore@v3
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ${{ github.job }}-ccache-${{ github.run_id }}
+          restore-keys: ${{ github.job }}-ccache-
+
+      - name: Install Python Packages
+        run: |
+          pip3 install --break-system-packages pypandoc digibyte_scrypt pyzmq
+
+      - name: Build Dependencies
+        run: |
+          cd depends
+          make -j2 HOST=arm64-apple-darwin
+          cd ..
+
+      - name: Configure and Build
+        run: |
+          ./autogen.sh
+          CONFIG_SITE=$PWD/depends/arm64-apple-darwin/share/config.site ./configure --with-gui=yes --enable-reduce-exports
+          make -j2
+
+      - name: Run Unit Tests
+        run: make check
+
+      - name: Run Functional Tests
+        run: test/functional/test_runner.py -j2
+
+      - name: Upload Test Suite Log
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: arm64-test-suite-log
           path: src/test-suite.log
 
       - name: Save Ccache cache

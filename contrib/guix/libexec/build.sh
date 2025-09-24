@@ -223,7 +223,7 @@ HOST_CFLAGS+=$(find /gnu/store -maxdepth 1 -mindepth 1 -type d -exec echo -n " -
 case "$HOST" in
     *linux*)  HOST_CFLAGS+=" -ffile-prefix-map=${PWD}=." ;;
     *mingw*)  HOST_CFLAGS+=" -fno-ident" ;;
-    *darwin*) unset HOST_CFLAGS ;;
+    *darwin*) HOST_CFLAGS+=" -fstack-protector-all" ;;
 esac
 
 # CXXFLAGS
@@ -237,6 +237,7 @@ esac
 case "$HOST" in
     *linux*)  HOST_LDFLAGS="-Wl,--as-needed -Wl,--dynamic-linker=$glibc_dynamic_linker -static-libstdc++ -Wl,-O2" ;;
     *mingw*)  HOST_LDFLAGS="-Wl,--no-insert-timestamp" ;;
+    *darwin*) HOST_LDFLAGS="-Wl,-bind_at_load -Wl,-headerpad_max_install_names -Wl,-fixup_chains" ;;
 esac
 
 # Make $HOST-specific native binaries from depends available in $PATH
@@ -268,9 +269,7 @@ mkdir -p "$DISTSRC"
     make --jobs="$JOBS" ${V:+V=1}
 
     # Check that symbol/security checks tools are sane.
-    # Temporarily disabled for DigiByte v8.26 build - CONTROL_FLOW test incompatibility
-    # make test-security-check ${V:+V=1}
-    echo "Skipping test-security-check for DigiByte GUIX build"
+    make test-security-check ${V:+V=1}
     # Perform basic security checks on a series of executables.
     make -C src --jobs=1 check-security ${V:+V=1}
     # Check that executables only contain allowed version symbols.
@@ -317,20 +316,7 @@ mkdir -p "$DISTSRC"
                     | gzip -9n > "${OUTDIR}/${DISTNAME}-${HOST}-unsigned.tar.gz" \
                     || ( rm -f "${OUTDIR}/${DISTNAME}-${HOST}-unsigned.tar.gz" && exit 1 )
             )
-            # Skip security test that's failing with SDK 12.x by ignoring make errors
-            make -k deploy ${V:+V=1} OSX_ZIP="${OUTDIR}/${DISTNAME}-${HOST}-unsigned.zip" 2>&1 | tee deploy.log || true
-            # Check if ZIP was created successfully
-            if [ -f "${OUTDIR}/${DISTNAME}-${HOST}-unsigned.zip" ]; then
-                echo "macOS ZIP package created successfully"
-            else
-                echo "Warning: ZIP creation may have failed, attempting manual packaging..."
-                # Fallback: manually create ZIP if make deploy failed
-                if [ -d "DigiByte-Qt.app" ]; then
-                    mkdir -p dist
-                    cp -R DigiByte-Qt.app dist/
-                    cd dist && zip -r "${OUTDIR}/${DISTNAME}-${HOST}-unsigned.zip" DigiByte-Qt.app && cd ..
-                fi
-            fi
+            make deploy ${V:+V=1} OSX_ZIP="${OUTDIR}/${DISTNAME}-${HOST}-unsigned.zip"
             ;;
     esac
     (

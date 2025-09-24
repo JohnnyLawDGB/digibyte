@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# Copyright (c) 2015-2021 The Bitcoin Core developers
 # Copyright (c) 2015-2022 The DigiByte Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
@@ -138,16 +137,15 @@ class TestSecurityChecks(unittest.TestCase):
                 (0, ''))
         else:
             # arm64 darwin doesn't support non-PIE binaries, control flow or executable stacks
-            # Note: SDK 12.x doesn't support fixup_chains flags, so we accept both results
-            result1 = call_security_check(cc, source, executable, ['-Wl,-flat_namespace','-fno-stack-protector'])
-            # Accept both: with FIXUP_CHAINS (newer SDK) or without (older SDK)
-            self.assertIn(result1[1], [executable+': failed NOUNDEFS Canary',
-                                       executable+': failed NOUNDEFS Canary FIXUP_CHAINS'])
-            # Skip the fixup_chains specific test for compatibility
-            result2 = call_security_check(cc, source, executable, ['-Wl,-flat_namespace','-fstack-protector-all'])
-            self.assertEqual(result2, (1, executable+': failed NOUNDEFS'))
-            result3 = call_security_check(cc, source, executable, ['-Wl,-bind_at_load','-fstack-protector-all'])
-            self.assertEqual(result3, (0, ''))
+            self.assertEqual(call_security_check(cc, source, executable, ['-Wl,-flat_namespace','-fno-stack-protector', '-Wl,-no_fixup_chains']),
+                (1, executable+': failed NOUNDEFS Canary FIXUP_CHAINS'))
+            self.assertEqual(call_security_check(cc, source, executable, ['-Wl,-flat_namespace','-fno-stack-protector', '-Wl,-fixup_chains']),
+                (1, executable+': failed NOUNDEFS Canary'))
+            self.assertEqual(call_security_check(cc, source, executable, ['-Wl,-flat_namespace','-fstack-protector-all', '-Wl,-fixup_chains']),
+                (1, executable+': failed NOUNDEFS'))
+            self.assertEqual(call_security_check(cc, source, executable, ['-Wl,-bind_at_load','-fstack-protector-all', '-Wl,-fixup_chains']),
+                (0, ''))
+
 
         clean_files(source, executable)
 

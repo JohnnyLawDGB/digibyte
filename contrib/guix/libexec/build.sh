@@ -290,14 +290,8 @@ mkdir -p "$DISTSRC"
     INSTALLPATH="${PWD}/installed/${DISTNAME}"
     mkdir -p "${INSTALLPATH}"
     # Install built DigiByte Core to $INSTALLPATH
-    case "$HOST" in
-        *darwin*)
-            make install-strip DESTDIR="${INSTALLPATH}" ${V:+V=1}
-            ;;
-        *)
-            make install DESTDIR="${INSTALLPATH}" ${V:+V=1}
-            ;;
-    esac
+    # Note: Do NOT strip Darwin binaries as it corrupts them
+    make install DESTDIR="${INSTALLPATH}" ${V:+V=1}
 
     case "$HOST" in
         *darwin*)

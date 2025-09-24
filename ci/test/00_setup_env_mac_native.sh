@@ -11,10 +11,11 @@ export HOST=x86_64-apple-darwin
 # Therefore, `--break-system-packages` is needed.
 export PIP_PACKAGES="--break-system-packages zmq"
 export GOAL="install"
-export DIGIBYTE_CONFIG="--with-gui --with-miniupnpc --with-natpmp --enable-reduce-exports"
+export DIGIBYTE_CONFIG="--with-gui=no --enable-reduce-exports"
 export CI_OS_NAME="macos"
-export NO_DEPENDS=1
+# Remove NO_DEPENDS=1 to use depends system as requested
 export OSX_SDK=""
 export CCACHE_MAXSIZE=400M
-export RUN_FUZZ_TESTS=true
-export FUZZ_TESTS_CONFIG="--exclude banman"  # https://github.com/digibyte/digibyte/issues/27924
+# Enable unit and functional tests as requested
+export RUN_UNIT_TESTS=true
+export RUN_FUNCTIONAL_TESTS=true

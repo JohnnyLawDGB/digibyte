@@ -105,14 +105,14 @@ jobs:
       - if: matrix.build-mode == 'manual'
         shell: bash
         run: |
-          # Build Dependencies
+          # Build Dependencies (without Qt GUI)
           cd depends
-          make -j2 HOST=aarch64-apple-darwin24.2.0
+          make -j2 HOST=aarch64-apple-darwin24.2.0 NO_QT=1
           cd ..
 
           # Configure and Build
           ./autogen.sh
-          CONFIG_SITE=$PWD/depends/aarch64-apple-darwin24.2.0/share/config.site ./configure --with-bdb --with-sqlite --with-gui=no --with-zmq
+          CONFIG_SITE=$PWD/depends/aarch64-apple-darwin24.2.0/share/config.site ./configure --with-bdb --with-sqlite --with-gui=no --with-zmq --disable-wallet
           make -j2
 
       - name: Perform CodeQL Analysis

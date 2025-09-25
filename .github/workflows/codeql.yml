@@ -71,15 +71,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Restore depends cache
-        if: matrix.build-mode == 'manual'
-        id: depends-cache
-        uses: actions/cache/restore@v3
-        with:
-          path: depends/x86_64-pc-linux-gnu
-          key: codeql-depends-${{ hashFiles('depends/packages/**') }}
-          restore-keys: codeql-depends-
-
       # Initializes the CodeQL tools for scanning.
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
@@ -102,32 +93,19 @@ jobs:
       # to build your code.
       # ℹ️ Command-line programs to run using the OS shell.
       # 📚 See https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#jobsjob_idstepsrun
-      - if: matrix.build-mode == 'manual' && steps.depends-cache.outputs.cache-hit != 'true'
-        name: Build Dependencies
-        run: |
-          cd depends
-          make -j$(nproc) HOST=x86_64-pc-linux-gnu NO_QT=1 NO_UPNP=1 NO_NATPMP=1 NO_ZMQ=1
-          cd ..
-
       - if: matrix.build-mode == 'manual'
         name: Quick build for CodeQL analysis
         shell: bash
         run: |
           # Quick minimal build just for CodeQL analysis
-          # Using depends like Ubuntu 22.04 CI configuration
+          # Match the simple Ubuntu 22.04 CI configuration
           ./autogen.sh
-          CONFIG_SITE=$PWD/depends/x86_64-pc-linux-gnu/share/config.site ./configure --disable-tests --disable-bench --with-gui=no
+          ./configure --disable-wallet --disable-tests --disable-bench --disable-fuzz --disable-fuzz-binary \
+                      --with-gui=no --disable-man --disable-zmq --without-utils --without-daemon
           # Build just the core libraries needed for analysis
-          make -j$(nproc) src/libbitcoin_server.a src/libbitcoin_common.a src/libbitcoin_util.a src/libbitcoin_consensus.a
+          make -j$(nproc) src/libdigibyte_node.a src/libdigibyte_common.a src/libdigibyte_util.a src/libdigibyte_consensus.a
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
         with:
           category: "/language:${{matrix.language}}"
-
-      - name: Save depends cache
-        if: matrix.build-mode == 'manual' && github.event_name != 'pull_request' && steps.depends-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v3
-        with:
-          path: depends/x86_64-pc-linux-gnu
-          key: codeql-depends-${{ hashFiles('depends/packages/**') }}

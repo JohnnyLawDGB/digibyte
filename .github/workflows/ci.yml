@@ -9,7 +9,9 @@ on:
   # See: https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#push.
   push:
     branches:
-      - '**'
+      - develop
+      - master
+      - 'release/**'
     tags-ignore:
       - '**'
 

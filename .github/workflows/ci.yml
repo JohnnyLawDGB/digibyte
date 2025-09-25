@@ -112,11 +112,27 @@ jobs:
         run: |
           pip3 install --break-system-packages pypandoc digibyte_scrypt pyzmq
 
+      - name: Restore depends cache
+        id: depends-cache
+        uses: actions/cache/restore@v3
+        with:
+          path: depends/x86_64-apple-darwin
+          key: ${{ github.job }}-depends-${{ hashFiles('depends/packages/**') }}
+          restore-keys: ${{ github.job }}-depends-
+
       - name: Build Dependencies
+        if: steps.depends-cache.outputs.cache-hit != 'true'
         run: |
           cd depends
           make -j2 HOST=x86_64-apple-darwin
           cd ..
+
+      - name: Save depends cache
+        uses: actions/cache/save@v3
+        if: github.event_name != 'pull_request' && steps.depends-cache.outputs.cache-hit != 'true'
+        with:
+          path: depends/x86_64-apple-darwin
+          key: ${{ github.job }}-depends-${{ hashFiles('depends/packages/**') }}
 
       - name: Configure and Build
         run: |
@@ -186,11 +202,27 @@ jobs:
         run: |
           pip3 install --break-system-packages pypandoc digibyte_scrypt pyzmq
 
+      - name: Restore depends cache
+        id: depends-cache
+        uses: actions/cache/restore@v3
+        with:
+          path: depends/arm64-apple-darwin
+          key: ${{ github.job }}-depends-${{ hashFiles('depends/packages/**') }}
+          restore-keys: ${{ github.job }}-depends-
+
       - name: Build Dependencies
+        if: steps.depends-cache.outputs.cache-hit != 'true'
         run: |
           cd depends
           make -j2 HOST=arm64-apple-darwin
           cd ..
+
+      - name: Save depends cache
+        uses: actions/cache/save@v3
+        if: github.event_name != 'pull_request' && steps.depends-cache.outputs.cache-hit != 'true'
+        with:
+          path: depends/arm64-apple-darwin
+          key: ${{ github.job }}-depends-${{ hashFiles('depends/packages/**') }}
 
       - name: Configure and Build
         run: |
@@ -472,11 +504,27 @@ jobs:
         run: |
           pip3 install pypandoc digibyte_scrypt pyzmq
 
+      - name: Restore depends cache
+        id: depends-cache
+        uses: actions/cache/restore@v3
+        with:
+          path: depends/x86_64-pc-linux-gnu
+          key: ${{ github.job }}-depends-${{ hashFiles('depends/packages/**') }}
+          restore-keys: ${{ github.job }}-depends-
+
       - name: Build Dependencies
+        if: steps.depends-cache.outputs.cache-hit != 'true'
         run: |
           cd depends
           make -j$(nproc) HOST=x86_64-pc-linux-gnu
           cd ..
+
+      - name: Save depends cache
+        uses: actions/cache/save@v3
+        if: github.event_name != 'pull_request' && steps.depends-cache.outputs.cache-hit != 'true'
+        with:
+          path: depends/x86_64-pc-linux-gnu
+          key: ${{ github.job }}-depends-${{ hashFiles('depends/packages/**') }}
 
       - name: Configure and Build
         run: |

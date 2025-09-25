@@ -125,11 +125,7 @@ jobs:
           export PKG_CONFIG_PATH="$Qt5_DIR/lib/pkgconfig:$PKG_CONFIG_PATH"
           ./autogen.sh
           CONFIG_SITE=$PWD/depends/x86_64-apple-darwin/share/config.site ./configure --with-gui=yes --enable-reduce-exports
-          if [ "${{ steps.build-cache.outputs.cache-hit }}" != "true" ]; then
-            make -j2
-          else
-            make -j2 -C src/test
-          fi
+          make -j2
 
       - name: Run Unit Tests
         run: ./src/test/test_digibyte --show_progress
@@ -262,11 +258,7 @@ jobs:
           export PKG_CONFIG_PATH="$Qt5_DIR/lib/pkgconfig:$PKG_CONFIG_PATH"
           ./autogen.sh
           CONFIG_SITE=$PWD/depends/arm64-apple-darwin/share/config.site ./configure --with-gui=yes --enable-reduce-exports
-          if [ "${{ steps.build-cache.outputs.cache-hit }}" != "true" ]; then
-            make -j2
-          else
-            make -j2 -C src/test
-          fi
+          make -j2
 
       - name: Run Unit Tests
         run: ./src/test/test_digibyte --show_progress
@@ -372,11 +364,7 @@ jobs:
         run: |
           ./autogen.sh
           CONFIG_SITE=$PWD/depends/x86_64-pc-linux-gnu/share/config.site ./configure --with-gui=yes --enable-reduce-exports
-          if [ "${{ steps.build-cache.outputs.cache-hit }}" != "true" ]; then
-            make -j$(nproc)
-          else
-            make -j$(nproc) -C src/test
-          fi
+          make -j$(nproc)
 
       - name: Run Unit Tests
         run: ./src/test/test_digibyte --show_progress

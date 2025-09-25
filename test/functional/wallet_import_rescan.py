@@ -145,7 +145,7 @@ AMOUNT_DUST = 0.00054600  # 100x Bitcoin's dust amount for DigiByte
 
 
 def get_rand_amount():
-    r = random.uniform(0.01, 1)  # Use much larger minimum for DigiByte
+    r = random.uniform(AMOUNT_DUST, 1)
     return Decimal(str(round(r, 8)))
 
 

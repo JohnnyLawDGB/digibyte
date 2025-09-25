@@ -89,6 +89,17 @@ jobs:
           sudo xcode-select --switch /Applications/Xcode_15.0.app
           clang --version
 
+      - name: Cache Homebrew
+        id: brew-cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/Library/Caches/Homebrew
+            /usr/local/Cellar
+            /usr/local/opt
+          key: ${{ github.job }}-brew-${{ hashFiles('.github/workflows/ci.yml') }}
+          restore-keys: ${{ github.job }}-brew-
+
       - name: Install Homebrew packages
         env:
           HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: 1
@@ -134,11 +145,29 @@ jobs:
           path: depends/x86_64-apple-darwin
           key: ${{ github.job }}-depends-${{ hashFiles('depends/packages/**') }}
 
+      - name: Cache build artifacts
+        id: build-cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            src/digibyte
+            src/digibyte-cli
+            src/digibyte-tx
+            src/qt/digibyte-qt
+            src/test/test_digibyte
+            src/bench/bench_digibyte
+          key: ${{ github.job }}-build-${{ hashFiles('src/**/*.cpp', 'src/**/*.h', 'depends/x86_64-apple-darwin/**') }}
+          restore-keys: ${{ github.job }}-build-
+
       - name: Configure and Build
         run: |
           ./autogen.sh
           CONFIG_SITE=$PWD/depends/x86_64-apple-darwin/share/config.site ./configure --with-gui=yes --enable-reduce-exports
-          make -j2
+          if [ "${{ steps.build-cache.outputs.cache-hit }}" != "true" ]; then
+            make -j2
+          else
+            make -j2 -C src/test
+          fi
 
       - name: Run Unit Tests
         run: ./src/test/test_digibyte --show_progress
@@ -178,6 +207,17 @@ jobs:
       - name: Clang version
         run: |
           clang --version
+
+      - name: Cache Homebrew
+        id: brew-cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/Library/Caches/Homebrew
+            /opt/homebrew/Cellar
+            /opt/homebrew/opt
+          key: ${{ github.job }}-brew-${{ hashFiles('.github/workflows/ci.yml') }}
+          restore-keys: ${{ github.job }}-brew-
 
       - name: Install Homebrew packages
         env:
@@ -224,11 +264,29 @@ jobs:
           path: depends/arm64-apple-darwin
           key: ${{ github.job }}-depends-${{ hashFiles('depends/packages/**') }}
 
+      - name: Cache build artifacts
+        id: build-cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            src/digibyte
+            src/digibyte-cli
+            src/digibyte-tx
+            src/qt/digibyte-qt
+            src/test/test_digibyte
+            src/bench/bench_digibyte
+          key: ${{ github.job }}-build-${{ hashFiles('src/**/*.cpp', 'src/**/*.h', 'depends/arm64-apple-darwin/**') }}
+          restore-keys: ${{ github.job }}-build-
+
       - name: Configure and Build
         run: |
           ./autogen.sh
           CONFIG_SITE=$PWD/depends/arm64-apple-darwin/share/config.site ./configure --with-gui=yes --enable-reduce-exports
-          make -j2
+          if [ "${{ steps.build-cache.outputs.cache-hit }}" != "true" ]; then
+            make -j2
+          else
+            make -j2 -C src/test
+          fi
 
       - name: Run Unit Tests
         run: ./src/test/test_digibyte --show_progress
@@ -526,11 +584,29 @@ jobs:
           path: depends/x86_64-pc-linux-gnu
           key: ${{ github.job }}-depends-${{ hashFiles('depends/packages/**') }}
 
+      - name: Cache build artifacts
+        id: build-cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            src/digibyte
+            src/digibyte-cli
+            src/digibyte-tx
+            src/qt/digibyte-qt
+            src/test/test_digibyte
+            src/bench/bench_digibyte
+          key: ${{ github.job }}-build-${{ hashFiles('src/**/*.cpp', 'src/**/*.h', 'depends/x86_64-pc-linux-gnu/**') }}
+          restore-keys: ${{ github.job }}-build-
+
       - name: Configure and Build
         run: |
           ./autogen.sh
           CONFIG_SITE=$PWD/depends/x86_64-pc-linux-gnu/share/config.site ./configure --with-gui=yes --enable-reduce-exports
-          make -j$(nproc)
+          if [ "${{ steps.build-cache.outputs.cache-hit }}" != "true" ]; then
+            make -j$(nproc)
+          else
+            make -j$(nproc) -C src/test
+          fi
 
       - name: Run Unit Tests
         run: ./src/test/test_digibyte --show_progress

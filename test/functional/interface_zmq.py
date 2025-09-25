@@ -106,7 +106,8 @@ class ZMQTest (DigiByteTestFramework):
         self.num_nodes = 2
         # This test isn't testing txn relay/timing, so set whitelist on the
         # peers for instant txn relay. This speeds up the test run time 2-3x.
-        self.extra_args = [["-whitelist=noban@127.0.0.1"]] * self.num_nodes
+        # Also disable Dandelion++ to prevent transaction propagation delays
+        self.extra_args = [["-whitelist=noban@127.0.0.1", "-dandelion=0"]] * self.num_nodes
         self.zmq_port_base = p2p_port(self.num_nodes + 1)
 
     def skip_test_if_missing_module(self):
@@ -335,7 +336,9 @@ class ZMQTest (DigiByteTestFramework):
 
         self.log.info("Testing RBF notification")
         # Replace it to test eviction/addition notification
-        payment_tx['tx'].vout[0].nValue -= 1000
+        # DigiByte uses 100x Bitcoin fees and kB-based calculation
+        # Need much larger fee bump for RBF to be accepted
+        payment_tx['tx'].vout[0].nValue -= 100000  # 100x Bitcoin's typical RBF bump for DigiByte
         rbf_txid = self.nodes[1].sendrawtransaction(payment_tx['tx'].serialize().hex())
         self.sync_all()
         assert_equal((payment_txid, "R", seq_num), seq.receive_sequence())
@@ -397,7 +400,8 @@ class ZMQTest (DigiByteTestFramework):
         for _ in range(5):
             more_tx.append(self.wallet.send_self_transfer(from_node=self.nodes[0]))
 
-        orig_tx['tx'].vout[0].nValue -= 1000
+        # DigiByte requires higher RBF fee bump (100x Bitcoin's typical bump)
+        orig_tx['tx'].vout[0].nValue -= 100000  # Increased for DigiByte RBF requirements
         bump_txid = self.nodes[0].sendrawtransaction(orig_tx['tx'].serialize().hex())
         # Mine the pre-bump tx
         txs_to_add = [orig_tx['hex']] + [tx['hex'] for tx in more_tx]
@@ -481,7 +485,7 @@ class ZMQTest (DigiByteTestFramework):
         # We have node 0 do all these to avoid p2p races with RBF announcements
         for _ in range(num_txs):
             txs.append(self.wallet.send_self_transfer(from_node=self.nodes[0]))
-        txs[-1]['tx'].vout[0].nValue -= 1000
+        txs[-1]['tx'].vout[0].nValue -= 100000  # Increased for DigiByte RBF requirements (100x Bitcoin)
         self.nodes[0].sendrawtransaction(txs[-1]['tx'].serialize().hex())
         self.sync_all()
         self.generatetoaddress(self.nodes[0], 1, ADDRESS_BCRT1_UNSPENDABLE)

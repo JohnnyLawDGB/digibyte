@@ -145,7 +145,9 @@ AMOUNT_DUST = 0.00054600  # 100x Bitcoin's dust amount for DigiByte
 
 
 def get_rand_amount():
-    r = random.uniform(AMOUNT_DUST, 1)
+    # Use higher minimum (0.1 DGB) to ensure sufficient funds after fee subtraction
+    # This prevents intermittent failures when creating child transactions with subtract_fee_from_outputs
+    r = random.uniform(0.1, 1)
     return Decimal(str(round(r, 8)))
 
 

@@ -102,8 +102,8 @@ jobs:
           ./autogen.sh
           ./configure --disable-wallet --disable-tests --disable-bench --disable-fuzz --disable-fuzz-binary \
                       --with-gui=no --disable-man --disable-zmq --without-utils --without-daemon
-          # Build just the core libraries needed for analysis
-          make -j$(nproc) src/libdigibyte_node.a src/libdigibyte_common.a src/libdigibyte_util.a src/libdigibyte_consensus.a
+          # Build all available libraries for analysis
+          make -j$(nproc) -C src
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3

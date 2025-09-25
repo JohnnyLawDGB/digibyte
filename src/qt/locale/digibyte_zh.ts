@@ -1,4 +1,4 @@
-<TS language="zh" version="2.1">
+<TS version="2.1" language="zh">
 <context>
     <name>AddressBookPage</name>
     <message>
@@ -570,19 +570,19 @@
     <message>
         <source>Type: %1
 </source>
-        <translation>类型：%1
+        <translation type="unfinished">種類: %1
 </translation>
     </message>
     <message>
         <source>Label: %1
 </source>
-        <translation>标签：%1
+        <translation type="unfinished">標記: %1
 </translation>
     </message>
     <message>
         <source>Address: %1
 </source>
-        <translation>地址：%1
+        <translation type="unfinished">地址: %1
 </translation>
     </message>
     <message>

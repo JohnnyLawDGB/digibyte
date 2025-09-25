@@ -1,4 +1,4 @@
-<TS language="zh_CN" version="2.1">
+<TS version="2.1" language="zh_CN">
 <context>
     <name>AddressBookPage</name>
     <message>
@@ -3402,7 +3402,7 @@ Note:  Since the fee is calculated on a per-byte basis, a fee of "100 satoshis p
         <source>No wallet has been loaded.
 Go to File &gt; Open Wallet to load a wallet.
 - OR -</source>
-        <translation>未加载钱包。
+        <translation type="unfinished">未加载钱包。
 请转到“文件”菜单 &gt; “打开钱包”来加载一个钱包。
 - 或者 -</translation>
     </message>

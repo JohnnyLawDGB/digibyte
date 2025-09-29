@@ -11,6 +11,7 @@
 #include <kernel/messagestartchars.h> // IWYU pragma: export
 #include <netaddress.h>
 #include <primitives/transaction.h>
+#include <primitives/oracle.h>
 #include <serialize.h>
 #include <streams.h>
 #include <uint256.h>
@@ -271,6 +272,21 @@ extern const char* DANDELIONTX;
  * txreconciliation, as described by BIP 330.
  */
 extern const char* SENDTXRCNCL;
+/**
+ * The oracleprice message transmits an oracle price report from a single oracle node.
+ * Part of the DigiDollar Oracle System.
+ */
+extern const char* ORACLEPRICE;
+/**
+ * The oraclebundle message transmits a collection of oracle messages for consensus.
+ * Part of the DigiDollar Oracle System.
+ */
+extern const char* ORACLEBUNDLE;
+/**
+ * The getoracles message requests oracle data from peers.
+ * Part of the DigiDollar Oracle System.
+ */
+extern const char* GETORACLES;
 }; // namespace NetMsgType
 
 /* Get a vector of all valid message types (see above) */
@@ -492,6 +508,11 @@ enum GetDataMsg : uint32_t {
     // MSG_FILTERED_WITNESS_BLOCK is defined in BIP144 as reserved for future
     // use and remains unused.
     // MSG_FILTERED_WITNESS_BLOCK = MSG_FILTERED_BLOCK | MSG_WITNESS_FLAG,
+
+    // DigiDollar Oracle Messages
+    MSG_ORACLE_PRICE = 0x40000000,
+    MSG_ORACLE_BUNDLE = 0x40000001,
+    MSG_GET_ORACLE_DATA = 0x40000002,
 };
 
 /** inv message data */
@@ -529,6 +550,10 @@ public:
     {
         return type == MSG_DANDELION_TX || type == MSG_DANDELION_WITNESS_TX;
     }
+    bool IsOracleMsg() const
+    {
+        return type == MSG_ORACLE_PRICE || type == MSG_ORACLE_BUNDLE || type == MSG_GET_ORACLE_DATA;
+    }
 
     uint32_t type;
     uint256 hash;
@@ -536,5 +561,58 @@ public:
 
 /** Convert a TX/WITNESS_TX/WTX CInv to a GenTxid. */
 GenTxid ToGenTxid(const CInv& inv);
+
+/**
+ * Oracle Price Message for P2P Network
+ * Wraps COraclePriceMessage for network transmission
+ */
+class OraclePriceMsg
+{
+public:
+    COraclePriceMessage price_message;
+
+    SERIALIZE_METHODS(OraclePriceMsg, obj)
+    {
+        READWRITE(obj.price_message);
+    }
+
+    uint256 GetHash() const;
+};
+
+/**
+ * Oracle Bundle Message for P2P Network
+ * Wraps COracleBundle for network transmission
+ */
+class OracleBundleMsg
+{
+public:
+    COracleBundle bundle;
+    uint256 block_hash; // Block this bundle is for
+
+    SERIALIZE_METHODS(OracleBundleMsg, obj)
+    {
+        READWRITE(obj.bundle);
+        READWRITE(obj.block_hash);
+    }
+
+    uint256 GetHash() const;
+};
+
+/**
+ * Get Oracle Data Message for P2P Network
+ * Request oracle data from peers
+ */
+class GetOracleDataMsg
+{
+public:
+    int32_t epoch;
+    uint32_t oracle_id; // Optional: specific oracle ID, 0xFFFFFFFF for all
+
+    SERIALIZE_METHODS(GetOracleDataMsg, obj)
+    {
+        READWRITE(obj.epoch);
+        READWRITE(obj.oracle_id);
+    }
+};
 
 #endif // DIGIBYTE_PROTOCOL_H

@@ -70,6 +70,7 @@ namespace BCLog {
         TXRECONCILIATION = (1 << 28),
         SCAN        = (1 << 29),
         TXPACKAGES  = (1 << 30),
+        DIGIDOLLAR  = (1U << 31),
         ALL         = ~(uint32_t)0,
     };
     enum class Level {

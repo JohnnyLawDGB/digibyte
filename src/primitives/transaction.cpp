@@ -16,6 +16,7 @@
 
 #include <cassert>
 #include <stdexcept>
+#include <sstream>
 
 std::string COutPoint::ToString() const
 {
@@ -119,4 +120,27 @@ std::string CTransaction::ToString() const
     for (const auto& tx_out : vout)
         str += "    " + tx_out.ToString() + "\n";
     return str;
+}
+
+std::string GetDigiDollarTxTypeName(DigiDollarTxType type) {
+    switch(type) {
+        case DD_TX_NONE: return "NONE";
+        case DD_TX_MINT: return "MINT";
+        case DD_TX_TRANSFER: return "TRANSFER";
+        case DD_TX_REDEEM: return "REDEEM";
+        case DD_TX_PARTIAL: return "PARTIAL_REDEEM";
+        case DD_TX_EMERGENCY: return "EMERGENCY_REDEEM";
+        default: return "UNKNOWN";
+    }
+}
+
+std::string CTransaction::GetDigiDollarInfo() const {
+    if (!IsDigiDollarTransaction(*this)) {
+        return "Not a DigiDollar transaction";
+    }
+
+    std::ostringstream ss;
+    ss << "DigiDollar " << GetDigiDollarTxTypeName(GetDigiDollarTxType(*this));
+    ss << " (flags: 0x" << std::hex << (int)GetDigiDollarFlags(*this) << ")";
+    return ss.str();
 }

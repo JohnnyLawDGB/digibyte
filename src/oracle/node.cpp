@@ -1,0 +1,643 @@
+// Copyright (c) 2024 The DigiByte Core developers
+// Distributed under the MIT software license, see the accompanying
+// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
+#include <oracle/node.h>
+
+#include <algorithm>
+#include <chrono>
+#include <iomanip>
+#include <sstream>
+#include <thread>
+
+#ifdef HAVE_CURL
+#include <curl/curl.h>
+#endif
+
+#include <chainparams.h>
+#include <kernel/chainparams.h>
+#include <logging.h>
+#include <net.h>
+#include <netmessagemaker.h>
+#include <node/context.h>
+#include <random.h>
+#include <util/strencodings.h>
+#include <util/time.h>
+#include <validation.h>
+
+//! Global oracle manager instance
+std::unique_ptr<OracleManager> g_oracle_manager;
+
+// CURL callback function for writing response data
+[[maybe_unused]] static size_t WriteCallback(void* contents, size_t size, size_t nmemb, std::string* response)
+{
+    size_t total_size = size * nmemb;
+    response->append(static_cast<char*>(contents), total_size);
+    return total_size;
+}
+
+/**
+ * OracleNode Implementation
+ */
+
+OracleNode::OracleNode()
+    : oracle_id(0), running(false), enabled(false)
+{
+}
+
+OracleNode::OracleNode(uint32_t oracle_id_in, const CKey& private_key_in)
+    : oracle_id(oracle_id_in), private_key(private_key_in), running(false), enabled(false)
+{
+    public_key = private_key.GetPubKey();
+}
+
+OracleNode::~OracleNode()
+{
+    Stop();
+}
+
+bool OracleNode::Initialize(uint32_t oracle_id_in, const std::string& private_key_hex)
+{
+    oracle_id = oracle_id_in;
+
+    // Parse private key
+    if (!IsHex(private_key_hex)) {
+        LogPrintf("Oracle: Invalid hex format for oracle %d\n", oracle_id);
+        return false;
+    }
+    auto key_data_opt = TryParseHex<unsigned char>(private_key_hex);
+    if (!key_data_opt) {
+        LogPrintf("Oracle: Invalid private key format for oracle %d\n", oracle_id);
+        return false;
+    }
+
+    std::vector<unsigned char> key_data = *key_data_opt;
+    if (key_data.size() != 32) {
+        LogPrintf("Oracle: Invalid private key length for oracle %d\n", oracle_id);
+        return false;
+    }
+
+    private_key.Set(key_data.begin(), key_data.end(), true);
+    if (!private_key.IsValid()) {
+        LogPrintf("Oracle: Invalid private key for oracle %d\n", oracle_id);
+        return false;
+    }
+
+    public_key = private_key.GetPubKey();
+
+    // Validate against chainparams
+    if (!ValidateOracleId()) {
+        LogPrintf("Oracle: Oracle ID %d not found in chainparams\n", oracle_id);
+        return false;
+    }
+
+    // Set default exchange endpoints
+    exchange_endpoints = {
+        "https://api.binance.com/api/v3/ticker/price?symbol=DGBUSDT",
+        "https://api.coinbase.com/v2/exchange-rates?currency=DGB",
+        "https://api.kraken.com/0/public/Ticker?pair=DGBUSD",
+        "https://bittrex.com/api/v1.1/public/getticker?market=USD-DGB",
+        "https://poloniex.com/public?command=returnTicker"
+    };
+
+    enabled.store(true);
+    LogPrintf("Oracle: Initialized oracle %d with pubkey %s\n", oracle_id, HexStr(public_key));
+    return true;
+}
+
+void OracleNode::SetExchangeEndpoints(const std::vector<std::string>& endpoints)
+{
+    exchange_endpoints = endpoints;
+    LogPrintf("Oracle: Set %d exchange endpoints for oracle %d\n", endpoints.size(), oracle_id);
+}
+
+void OracleNode::Start()
+{
+    if (running.load()) {
+        LogPrintf("Oracle: Oracle %d is already running\n", oracle_id);
+        return;
+    }
+
+    if (!enabled.load()) {
+        LogPrintf("Oracle: Oracle %d is disabled, cannot start\n", oracle_id);
+        return;
+    }
+
+    if (!ValidatePrivateKey()) {
+        LogPrintf("Oracle: Oracle %d has invalid configuration, cannot start\n", oracle_id);
+        return;
+    }
+
+    running.store(true);
+    price_thread = std::thread(&OracleNode::PriceThreadFunc, this);
+    LogPrintf("Oracle: Started oracle %d\n", oracle_id);
+}
+
+void OracleNode::Stop()
+{
+    if (!running.load()) {
+        return;
+    }
+
+    running.store(false);
+    if (price_thread.joinable()) {
+        price_thread.join();
+    }
+    LogPrintf("Oracle: Stopped oracle %d\n", oracle_id);
+}
+
+CAmount OracleNode::GetCurrentPrice() const
+{
+    std::lock_guard<std::mutex> lock(mtx_price);
+    return current_price;
+}
+
+int64_t OracleNode::GetLastUpdateTime() const
+{
+    std::lock_guard<std::mutex> lock(mtx_price);
+    return last_update_time;
+}
+
+bool OracleNode::HasValidPrice() const
+{
+    std::lock_guard<std::mutex> lock(mtx_price);
+    return current_price > 0 && (GetTime() - last_update_time) < ORACLE_MAX_AGE_SECONDS;
+}
+
+COraclePriceMessage OracleNode::CreatePriceMessage(CAmount price, int64_t timestamp)
+{
+    COraclePriceMessage message(oracle_id, price, timestamp);
+
+    // Sign the message
+    uint256 hash = message.GetSignatureHash();
+    std::vector<unsigned char> signature;
+
+    if (!private_key.Sign(hash, signature)) {
+        LogPrintf("Oracle: Failed to sign price message for oracle %d\n", oracle_id);
+        return COraclePriceMessage(); // Return empty message on failure
+    }
+
+    message.signature = signature;
+    return message;
+}
+
+bool OracleNode::BroadcastPriceMessage(const COraclePriceMessage& message)
+{
+    if (!message.IsValid()) {
+        LogPrintf("Oracle: Invalid price message for oracle %d\n", oracle_id);
+        return false;
+    }
+
+    // Validate signature
+    if (!message.ValidateSignature(public_key)) {
+        LogPrintf("Oracle: Invalid signature on price message for oracle %d\n", oracle_id);
+        return false;
+    }
+
+    // TODO: Implement P2P broadcasting
+    // For now, just log the message
+    LogPrintf("Oracle: Broadcasting price message - Oracle: %d, Price: %d, Time: %d\n",
+             message.oracle_id, message.price_satoshis, message.timestamp);
+
+    // Update last broadcast time
+    last_broadcast_time = GetTime();
+    return true;
+}
+
+void OracleNode::PriceThreadFunc()
+{
+    LogPrintf("Oracle: Price thread started for oracle %d\n", oracle_id);
+
+    while (running.load()) {
+        try {
+            if (enabled.load()) {
+                // Fetch and update price
+                FetchAndUpdatePrice();
+
+                // Broadcast if needed
+                if (ShouldBroadcast()) {
+                    BroadcastCurrentPrice();
+                }
+            }
+
+            // Sleep for the configured interval
+            std::this_thread::sleep_for(std::chrono::seconds(price_update_interval));
+        }
+        catch (const std::exception& e) {
+            LogPrintf("Oracle: Exception in price thread for oracle %d: %s\n", oracle_id, e.what());
+            std::this_thread::sleep_for(std::chrono::seconds(60)); // Wait 1 minute on error
+        }
+    }
+
+    LogPrintf("Oracle: Price thread stopped for oracle %d\n", oracle_id);
+}
+
+void OracleNode::FetchAndUpdatePrice()
+{
+    CAmount median_price = FetchMedianPrice();
+
+    if (median_price > 0) {
+        std::lock_guard<std::mutex> lock(mtx_price);
+        current_price = median_price;
+        last_update_time = GetTime();
+
+        LogPrintf("Oracle: Updated price for oracle %d: %d satoshis/USD\n", oracle_id, median_price);
+    } else {
+        LogPrintf("Oracle: Failed to fetch valid price for oracle %d\n", oracle_id);
+    }
+}
+
+CAmount OracleNode::FetchMedianPrice()
+{
+    ExchangePriceFetcher fetcher(exchange_endpoints);
+    return fetcher.GetMedianPrice();
+}
+
+void OracleNode::BroadcastCurrentPrice()
+{
+    CAmount price = GetCurrentPrice();
+    int64_t timestamp = GetTime();
+
+    if (price > 0) {
+        COraclePriceMessage message = CreatePriceMessage(price, timestamp);
+        BroadcastPriceMessage(message);
+    }
+}
+
+bool OracleNode::ShouldBroadcast() const
+{
+    int64_t now = GetTime();
+    return (now - last_broadcast_time) >= broadcast_interval && HasValidPrice();
+}
+
+bool OracleNode::ValidateOracleId() const
+{
+    const CChainParams& params = Params();
+    const OracleNodeInfo* oracle_config = params.GetOracleNode(oracle_id);
+
+    if (!oracle_config) {
+        return false;
+    }
+
+    // Verify public key matches chainparams
+    return oracle_config->pubkey == public_key;
+}
+
+bool OracleNode::ValidatePrivateKey() const
+{
+    return private_key.IsValid() && public_key.IsValid() && ValidateOracleId();
+}
+
+/**
+ * ExchangePriceFetcher Implementation
+ */
+
+ExchangePriceFetcher::ExchangePriceFetcher()
+{
+    // Initialize CURL globally if not already done
+    static bool curl_initialized = false;
+    if (!curl_initialized) {
+#ifdef HAVE_CURL
+        curl_global_init(CURL_GLOBAL_DEFAULT);
+#endif
+        curl_initialized = true;
+    }
+}
+
+ExchangePriceFetcher::ExchangePriceFetcher(const std::vector<std::string>& endpoints)
+    : exchange_endpoints(endpoints)
+{
+    // Initialize CURL globally if not already done
+    static bool curl_initialized = false;
+    if (!curl_initialized) {
+#ifdef HAVE_CURL
+        curl_global_init(CURL_GLOBAL_DEFAULT);
+#endif
+        curl_initialized = true;
+    }
+}
+
+void ExchangePriceFetcher::SetExchangeEndpoints(const std::vector<std::string>& endpoints)
+{
+    exchange_endpoints = endpoints;
+}
+
+std::vector<ExchangePriceFetcher::ExchangePrice> ExchangePriceFetcher::FetchAllPrices()
+{
+    std::vector<ExchangePrice> prices;
+
+    // For testing/mockup, return mock prices
+    // In real implementation, would fetch from actual exchanges
+    int64_t timestamp = GetTime();
+
+    // Mock exchange prices with slight variation
+    prices.emplace_back("Binance", 5000 + GetRand(200) - 100, timestamp);    // $0.05 ± $0.001
+    prices.emplace_back("Coinbase", 4950 + GetRand(200) - 100, timestamp);   // $0.0495 ± $0.001
+    prices.emplace_back("Kraken", 5050 + GetRand(200) - 100, timestamp);     // $0.0505 ± $0.001
+    prices.emplace_back("Bittrex", 5025 + GetRand(200) - 100, timestamp);    // $0.05025 ± $0.001
+    prices.emplace_back("Poloniex", 4975 + GetRand(200) - 100, timestamp);   // $0.04975 ± $0.001
+
+    return FilterValidPrices(prices);
+}
+
+CAmount ExchangePriceFetcher::GetMedianPrice()
+{
+    std::vector<ExchangePrice> prices = FetchAllPrices();
+    return GetMedianPrice(prices);
+}
+
+CAmount ExchangePriceFetcher::GetMedianPrice(const std::vector<ExchangePrice>& prices)
+{
+    if (prices.empty()) {
+        return 0;
+    }
+
+    // Extract price values and sort
+    std::vector<CAmount> price_values;
+    for (const auto& price : prices) {
+        if (price.valid && IsValidPrice(price.price)) {
+            price_values.push_back(price.price);
+        }
+    }
+
+    if (price_values.empty()) {
+        return 0;
+    }
+
+    std::sort(price_values.begin(), price_values.end());
+
+    // Calculate median
+    size_t size = price_values.size();
+    if (size % 2 == 0) {
+        // Even number - average of middle two
+        return (price_values[size/2 - 1] + price_values[size/2]) / 2;
+    } else {
+        // Odd number - middle element
+        return price_values[size/2];
+    }
+}
+
+// Individual exchange fetchers - Mock implementations for now
+ExchangePriceFetcher::ExchangePrice ExchangePriceFetcher::FetchFromBinance()
+{
+    return ExchangePrice("Binance", 5000, GetTime());
+}
+
+ExchangePriceFetcher::ExchangePrice ExchangePriceFetcher::FetchFromCoinbase()
+{
+    return ExchangePrice("Coinbase", 4950, GetTime());
+}
+
+ExchangePriceFetcher::ExchangePrice ExchangePriceFetcher::FetchFromKraken()
+{
+    return ExchangePrice("Kraken", 5050, GetTime());
+}
+
+ExchangePriceFetcher::ExchangePrice ExchangePriceFetcher::FetchFromBittrex()
+{
+    return ExchangePrice("Bittrex", 5025, GetTime());
+}
+
+ExchangePriceFetcher::ExchangePrice ExchangePriceFetcher::FetchFromPoloniex()
+{
+    return ExchangePrice("Poloniex", 4975, GetTime());
+}
+
+std::string ExchangePriceFetcher::HttpRequest(const std::string& url)
+{
+    // Mock HTTP request - in real implementation would use CURL
+    LogPrintf("Oracle: Mock HTTP request to %s\n", url);
+    return "{\"price\":\"0.05\"}"; // Mock JSON response
+}
+
+CAmount ExchangePriceFetcher::ParseBinancePrice(const std::string& response)
+{
+    // Mock JSON parsing - return 5000 (cents) = $0.05
+    return 5000;
+}
+
+CAmount ExchangePriceFetcher::ParseCoinbasePrice(const std::string& response)
+{
+    // Mock JSON parsing
+    return 4950;
+}
+
+CAmount ExchangePriceFetcher::ParseKrakenPrice(const std::string& response)
+{
+    // Mock JSON parsing
+    return 5050;
+}
+
+CAmount ExchangePriceFetcher::ParseBittrexPrice(const std::string& response)
+{
+    // Mock JSON parsing
+    return 5025;
+}
+
+CAmount ExchangePriceFetcher::ParsePoloniexPrice(const std::string& response)
+{
+    // Mock JSON parsing
+    return 4975;
+}
+
+bool ExchangePriceFetcher::IsValidPrice(CAmount price) const
+{
+    // Price should be positive and reasonable (between $0.001 and $10 per DGB)
+    return price > 100 && price < 1000000; // 0.1 cents to $10
+}
+
+std::vector<ExchangePriceFetcher::ExchangePrice> ExchangePriceFetcher::FilterValidPrices(
+    const std::vector<ExchangePrice>& prices) const
+{
+    std::vector<ExchangePrice> filtered;
+    for (const auto& price : prices) {
+        if (price.valid && IsValidPrice(price.price)) {
+            filtered.push_back(price);
+        }
+    }
+    return filtered;
+}
+
+/**
+ * OracleManager Implementation
+ */
+
+OracleManager::OracleManager()
+{
+}
+
+OracleManager::~OracleManager()
+{
+    Shutdown();
+}
+
+bool OracleManager::Initialize()
+{
+    if (initialized) {
+        return true;
+    }
+
+    LogPrintf("Oracle: Initializing Oracle Manager\n");
+    initialized = true;
+    return true;
+}
+
+void OracleManager::Shutdown()
+{
+    if (!initialized) {
+        return;
+    }
+
+    LogPrintf("Oracle: Shutting down Oracle Manager\n");
+    StopAll();
+
+    std::lock_guard<std::mutex> lock(mtx_manager);
+    oracle_nodes.clear();
+    initialized = false;
+}
+
+bool OracleManager::AddOracleNode(uint32_t oracle_id, const std::string& private_key_hex)
+{
+    std::lock_guard<std::mutex> lock(mtx_manager);
+
+    // Check if oracle already exists
+    for (const auto& node : oracle_nodes) {
+        if (node->GetOracleId() == oracle_id) {
+            LogPrintf("Oracle: Oracle %d already exists\n", oracle_id);
+            return false;
+        }
+    }
+
+    // Create new oracle node
+    auto oracle_node = std::make_unique<OracleNode>();
+    if (!oracle_node->Initialize(oracle_id, private_key_hex)) {
+        LogPrintf("Oracle: Failed to initialize oracle %d\n", oracle_id);
+        return false;
+    }
+
+    oracle_nodes.push_back(std::move(oracle_node));
+    LogPrintf("Oracle: Added oracle %d to manager\n", oracle_id);
+    return true;
+}
+
+bool OracleManager::RemoveOracleNode(uint32_t oracle_id)
+{
+    std::lock_guard<std::mutex> lock(mtx_manager);
+
+    auto it = std::find_if(oracle_nodes.begin(), oracle_nodes.end(),
+        [oracle_id](const std::unique_ptr<OracleNode>& node) {
+            return node->GetOracleId() == oracle_id;
+        });
+
+    if (it != oracle_nodes.end()) {
+        (*it)->Stop();
+        oracle_nodes.erase(it);
+        LogPrintf("Oracle: Removed oracle %d from manager\n", oracle_id);
+        return true;
+    }
+
+    return false;
+}
+
+OracleNode* OracleManager::GetOracleNode(uint32_t oracle_id)
+{
+    std::lock_guard<std::mutex> lock(mtx_manager);
+
+    auto it = std::find_if(oracle_nodes.begin(), oracle_nodes.end(),
+        [oracle_id](const std::unique_ptr<OracleNode>& node) {
+            return node->GetOracleId() == oracle_id;
+        });
+
+    return (it != oracle_nodes.end()) ? it->get() : nullptr;
+}
+
+void OracleManager::StartAll()
+{
+    std::lock_guard<std::mutex> lock(mtx_manager);
+
+    for (auto& node : oracle_nodes) {
+        node->Start();
+    }
+    LogPrintf("Oracle: Started all oracle nodes (%d total)\n", oracle_nodes.size());
+}
+
+void OracleManager::StopAll()
+{
+    std::lock_guard<std::mutex> lock(mtx_manager);
+
+    for (auto& node : oracle_nodes) {
+        node->Stop();
+    }
+    LogPrintf("Oracle: Stopped all oracle nodes\n");
+}
+
+void OracleManager::EnableOracle(uint32_t oracle_id, bool enable)
+{
+    OracleNode* node = GetOracleNode(oracle_id);
+    if (node) {
+        node->SetEnabled(enable);
+        LogPrintf("Oracle: %s oracle %d\n", enable ? "Enabled" : "Disabled", oracle_id);
+    }
+}
+
+size_t OracleManager::GetActiveOracleCount() const
+{
+    std::lock_guard<std::mutex> lock(mtx_manager);
+
+    size_t count = 0;
+    for (const auto& node : oracle_nodes) {
+        if (node->IsRunning() && node->IsEnabled()) {
+            count++;
+        }
+    }
+    return count;
+}
+
+std::vector<uint32_t> OracleManager::GetActiveOracleIds() const
+{
+    std::lock_guard<std::mutex> lock(mtx_manager);
+
+    std::vector<uint32_t> active_ids;
+    for (const auto& node : oracle_nodes) {
+        if (node->IsRunning() && node->IsEnabled()) {
+            active_ids.push_back(node->GetOracleId());
+        }
+    }
+    return active_ids;
+}
+
+bool OracleManager::IsOracleRunning(uint32_t oracle_id) const
+{
+    std::lock_guard<std::mutex> lock(mtx_manager);
+
+    auto it = std::find_if(oracle_nodes.begin(), oracle_nodes.end(),
+        [oracle_id](const std::unique_ptr<OracleNode>& node) {
+            return node->GetOracleId() == oracle_id;
+        });
+
+    return (it != oracle_nodes.end()) && (*it)->IsRunning();
+}
+
+OracleManager& OracleManager::GetInstance()
+{
+    if (!g_oracle_manager) {
+        g_oracle_manager = std::make_unique<OracleManager>();
+    }
+    return *g_oracle_manager;
+}
+
+void OracleManager::StartOracleService()
+{
+    OracleManager& manager = GetInstance();
+    manager.Initialize();
+    LogPrintf("Oracle: Oracle service started\n");
+}
+
+void OracleManager::StopOracleService()
+{
+    if (g_oracle_manager) {
+        g_oracle_manager->Shutdown();
+        g_oracle_manager.reset();
+        LogPrintf("Oracle: Oracle service stopped\n");
+    }
+}

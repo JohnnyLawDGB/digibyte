@@ -3,6 +3,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #include <validation.h>
+#include <digidollar/validation.h>
 
 #include <kernel/chain.h>
 #include <kernel/coinstats.h>
@@ -18,6 +19,8 @@
 #include <consensus/tx_check.h>
 #include <consensus/tx_verify.h>
 #include <consensus/validation.h>
+#include <digidollar/validation.h>
+#include <oracle/bundle_manager.h>
 #include <cuckoocache.h>
 #include <flatfile.h>
 #include <hash.h>
@@ -718,6 +721,29 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
 
     if (!CheckTransaction(tx, state)) {
         return false; // state filled in by CheckTransaction
+    }
+
+    // DigiDollar consensus validation with blockchain context
+    if (DigiDollar::HasDigiDollarMarker(tx)) {
+        // Check if DigiDollar is enabled via BIP9 deployment
+        if (!DigiDollar::IsDigiDollarEnabled(m_active_chainstate.m_chain.Tip(), m_active_chainstate.m_chainman)) {
+            return state.Invalid(TxValidationResult::TX_CONSENSUS, "digidollar-not-active",
+                               "DigiDollar features not yet activated");
+        }
+
+        // Create validation context with current blockchain state
+        DigiDollar::ValidationContext ddContext(
+            m_active_chainstate.m_chain.Height() + 1,  // Height for next block
+            GetOraclePriceForTransaction(tx),           // Current oracle price
+            DigiDollar::GetSystemCollateralRatio(),     // System health
+            args.m_chainparams                          // Chain parameters
+        );
+
+        if (!DigiDollar::ValidateDigiDollarTransaction(tx, ddContext, state)) {
+            LogPrintf("DigiDollar: Transaction validation failed (txid: %s): %s\n",
+                      hash.ToString(), state.GetRejectReason());
+            return false; // state filled in by DigiDollar validation
+        }
     }
 
     // Coinbase is only valid in a block, not as a loose transaction
@@ -1753,6 +1779,34 @@ PackageMempoolAcceptResult ProcessNewPackage(Chainstate& active_chainstate, CTxM
     return result;
 }
 
+/**
+ * Get oracle price for DigiDollar transaction validation
+ *
+ * This function retrieves the current DGB/USD price from the oracle system.
+ * For mempool transactions, it uses the most recent oracle price.
+ * For block validation, it uses the price at the specific block height.
+ *
+ * @param tx Transaction requiring price validation
+ * @return Oracle price in cents (e.g., 50000 = $500.00 DGB)
+ */
+CAmount GetOraclePriceForTransaction(const CTransaction& tx) {
+    // Use the oracle integration system to get current price
+    CAmount oracle_price = OracleIntegration::GetCurrentOraclePrice();
+
+    if (oracle_price > 0) {
+        LogPrintf("DigiDollar: Using oracle price: %d cents ($%.4f)\n",
+                  oracle_price, static_cast<double>(oracle_price) / 100.0);
+        return oracle_price;
+    }
+
+    // Fallback to safe default if oracle system unavailable
+    static const CAmount FALLBACK_ORACLE_PRICE = 5000; // $0.05 DGB
+    LogPrintf("DigiDollar: Oracle system unavailable, using fallback price: %d cents ($%.4f)\n",
+              FALLBACK_ORACLE_PRICE, static_cast<double>(FALLBACK_ORACLE_PRICE) / 100.0);
+
+    return FALLBACK_ORACLE_PRICE;
+}
+
 CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams)
 {
     
@@ -2600,6 +2654,34 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
             if (!SequenceLocks(tx, nLockTimeFlags, prevheights, *pindex)) {
                 LogPrintf("ERROR: %s: contains a non-BIP68-final transaction\n", __func__);
                 return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-txns-nonfinal");
+            }
+
+            // DigiDollar contextual validation (requires blockchain state)
+            if (DigiDollar::HasDigiDollarMarker(tx)) {
+                // Check if DigiDollar is enabled via BIP9 deployment
+                if (!DigiDollar::IsDigiDollarEnabled(pindex->pprev, m_chainman)) {
+                    return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "digidollar-not-active",
+                                       "DigiDollar features not yet activated");
+                }
+
+                // Create validation context with current blockchain state
+                // Note: For Phase 1, we use placeholder values for oracle price and system collateral
+                // In Phase 2, these would be retrieved from the oracle system
+                DigiDollar::ValidationContext ddContext(
+                    pindex->nHeight,
+                    50000,  // Placeholder: $500.00 DGB price
+                    150,    // Placeholder: 150% system collateral
+                    m_chainman.GetParams()
+                );
+
+                TxValidationState dd_state;
+                if (!DigiDollar::ValidateDigiDollarTransaction(tx, ddContext, dd_state)) {
+                    // DigiDollar validation failure is a consensus failure
+                    state.Invalid(BlockValidationResult::BLOCK_CONSENSUS,
+                                dd_state.GetRejectReason(), dd_state.GetDebugMessage());
+                    return error("%s: DigiDollar validation failed: %s, %s", __func__,
+                               tx.GetHash().ToString(), dd_state.ToString());
+                }
             }
         }
 
@@ -3986,6 +4068,13 @@ bool CheckBlock(const CBlock& block, BlockValidationState& state, const Consensu
 
     if (fCheckPOW && fCheckMerkleRoot)
         block.fChecked = true;
+
+    // Validate oracle data (if present and after activation)
+    // Note: Oracle validation uses a pindex_prev of nullptr in CheckBlock context
+    // Full oracle validation is performed in ContextualCheckBlock
+    if (!OracleDataValidator::ValidateBlockOracleData(block, nullptr, consensusParams)) {
+        return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-oracle-data", "invalid oracle data in block");
+    }
 
     return true;
 }

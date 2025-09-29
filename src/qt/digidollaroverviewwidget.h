@@ -1,0 +1,115 @@
+// Copyright (c) 2025 The DigiByte Core developers
+// Distributed under the MIT software license, see the accompanying
+// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
+#ifndef DIGIBYTE_QT_DIGIDOLLAROVERVIEWWIDGET_H
+#define DIGIBYTE_QT_DIGIDOLLAROVERVIEWWIDGET_H
+
+#include <QWidget>
+
+class WalletModel;
+class ClientModel;
+
+QT_BEGIN_NAMESPACE
+class QLabel;
+class QVBoxLayout;
+class QHBoxLayout;
+class QGridLayout;
+class QFrame;
+class QProgressBar;
+QT_END_NAMESPACE
+
+/**
+ * DigiDollar overview widget showing balances, oracle price, and system health.
+ * This widget provides a summary view of the user's DigiDollar holdings and
+ * system status information.
+ */
+class DigiDollarOverviewWidget : public QWidget
+{
+    Q_OBJECT
+
+public:
+    explicit DigiDollarOverviewWidget(QWidget *parent = nullptr);
+    ~DigiDollarOverviewWidget();
+
+    void setWalletModel(WalletModel* model);
+    void setClientModel(ClientModel* model);
+    void updateView();
+
+    /** Show incoming DigiDollar transaction notification */
+    void incomingDDTransaction(const QString& date, const QString& amount,
+                               const QString& type, const QString& address);
+
+Q_SIGNALS:
+    /** Fired when a message should be reported to the user */
+    void message(const QString &title, const QString &message, unsigned int style);
+
+public Q_SLOTS:
+    /** Update balance displays */
+    void updateBalance();
+    /** Update oracle price display */
+    void updateOraclePrice();
+    /** Update system health status */
+    void updateSystemHealth();
+
+private Q_SLOTS:
+    /** Update recent transactions display */
+    void updateRecentTransactions();
+
+private:
+    void setupUI();
+    void setupBalanceSection();
+    void setupSystemHealthSection();
+    void setupRecentTransactionsSection();
+    void connectSignals();
+
+    QString formatDDAmount(double amount) const;
+    QString formatDGBAmount(double amount) const;
+    QString formatUSDAmount(double amount) const;
+
+    // UI components
+    QVBoxLayout* m_mainLayout;
+
+    // Balance section
+    QFrame* m_balanceFrame;
+    QGridLayout* m_balanceLayout;
+    QLabel* m_ddBalanceLabel;
+    QLabel* m_ddBalanceValue;
+    QLabel* m_dgbCollateralLabel;
+    QLabel* m_dgbCollateralValue;
+    QLabel* m_usdValueLabel;
+    QLabel* m_usdValueValue;
+
+    // System health section
+    QFrame* m_systemHealthFrame;
+    QGridLayout* m_systemHealthLayout;
+    QLabel* m_oraclePriceLabel;
+    QLabel* m_oraclePriceValue;
+    QLabel* m_systemHealthLabel;
+    QLabel* m_systemHealthValue;
+    QLabel* m_dcaLevelLabel;
+    QLabel* m_dcaLevelValue;
+    QLabel* m_errLevelLabel;
+    QLabel* m_errLevelValue;
+    QProgressBar* m_systemHealthBar;
+
+    // Recent transactions section
+    QFrame* m_transactionsFrame;
+    QVBoxLayout* m_transactionsLayout;
+    QLabel* m_transactionsTitle;
+    QLabel* m_recentTransactionsInfo;
+
+    // Models
+    WalletModel* m_walletModel;
+    ClientModel* m_clientModel;
+
+    // Data
+    double m_ddBalance;
+    double m_dgbCollateral;
+    double m_oraclePrice;
+    QString m_systemHealthStatus;
+    int m_dcaLevel;
+    int m_errLevel;
+};
+
+#endif // DIGIBYTE_QT_DIGIDOLLAROVERVIEWWIDGET_H

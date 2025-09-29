@@ -23,6 +23,8 @@
 #include <timedata.h>
 #include <util/moneystr.h>
 #include <validation.h>
+#include <oracle/bundle_manager.h>
+#include <consensus/digidollar.h>
 
 #include <algorithm>
 #include <utility>
@@ -163,6 +165,15 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
     pblock->vtx[0] = MakeTransactionRef(std::move(coinbaseTx));
     pblocktemplate->vchCoinbaseCommitment = m_chainstate.m_chainman.GenerateCoinbaseCommitment(*pblock, pindexPrev);
     pblocktemplate->vTxFees[0] = -nFees;
+
+    // Add oracle bundle to block (after DigiDollar activation)
+    if (DigiDollar::IsDigiDollarEnabled(pindexPrev, m_chainstate.m_chainman)) {
+        OracleBundleManager& oracle_manager = OracleBundleManager::GetInstance();
+        if (!oracle_manager.AddOracleBundleToBlock(*pblock, nHeight)) {
+            LogPrintf("CreateNewBlock(): Warning - Failed to add oracle bundle to block %d\n", nHeight);
+            // Continue with block creation even if oracle bundle fails (graceful degradation)
+        }
+    }
 
     LogPrintf("CreateNewBlock(): block weight: %u txs: %u fees: %ld sigops %d\n", GetBlockWeight(*pblock), nBlockTx, nFees, nBlockSigOpsCost);
 

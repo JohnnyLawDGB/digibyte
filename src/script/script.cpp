@@ -144,6 +144,12 @@ std::string GetOpName(opcodetype opcode)
     // Opcode added by BIP 342 (Tapscript)
     case OP_CHECKSIGADD            : return "OP_CHECKSIGADD";
 
+    // DigiDollar specific opcodes
+    case OP_DIGIDOLLAR             : return "OP_DIGIDOLLAR";
+    case OP_DDVERIFY               : return "OP_DDVERIFY";
+    case OP_CHECKPRICE             : return "OP_CHECKPRICE";
+    case OP_CHECKCOLLATERAL        : return "OP_CHECKCOLLATERAL";
+
     case OP_INVALIDOPCODE          : return "OP_INVALIDOPCODE";
 
     default:

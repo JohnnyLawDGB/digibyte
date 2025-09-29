@@ -37,6 +37,7 @@ constexpr bool ValidDeployment(BuriedDeployment dep) { return dep <= DEPLOYMENT_
 enum DeploymentPos : uint16_t {
     DEPLOYMENT_TESTDUMMY,
     DEPLOYMENT_TAPROOT, // Deployment of Schnorr/Taproot (BIPs 340-342)
+    DEPLOYMENT_DIGIDOLLAR, // Deployment of DigiDollar stablecoin features
     // NOTE: Also add new deployments to VersionBitsDeploymentInfo in deploymentinfo.cpp
     MAX_VERSION_BITS_DEPLOYMENTS
 };
@@ -176,6 +177,11 @@ struct Params {
     uint256 nMinimumChainWork;
     /** By default assume that the signatures in ancestors of this block are valid */
     uint256 defaultAssumeValid;
+
+    // DigiDollar specific consensus fields
+    int nDDOracleEpochBlocks{100};      // Blocks per oracle rotation epoch
+    int nDDOracleUpdateInterval{4};     // Blocks between price updates
+    int nDDActivationHeight{0};         // Height at which DigiDollar activates
 
     /**
      * If true, witness commitments contain a payload equal to a DigiByte Script solution

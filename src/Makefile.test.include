@@ -72,6 +72,24 @@ DIGIBYTE_TESTS =\
   test/base32_tests.cpp \
   test/base58_tests.cpp \
   test/base64_tests.cpp \
+  test/digidollar_activation_tests.cpp \
+  test/digidollar_address_tests.cpp \
+  test/digidollar_consensus_tests.cpp \
+  test/digidollar_dca_tests.cpp \
+  test/digidollar_health_tests.cpp \
+  test/digidollar_opcodes_tests.cpp \
+  test/digidollar_oracle_tests.cpp \
+  test/digidollar_p2p_tests.cpp \
+  test/digidollar_rpc_tests.cpp \
+  test/digidollar_scripts_tests.cpp \
+  test/digidollar_structures_tests.cpp \
+  test/digidollar_transaction_tests.cpp \
+  test/digidollar_transfer_tests.cpp \
+  test/digidollar_txbuilder_tests.cpp \
+  test/digidollar_validation_tests.cpp \
+  test/digidollar_volatility_tests.cpp \
+  test/digidollar_wallet_tests.cpp \
+  test/digidollar_mint_tests.cpp \
   test/bech32_tests.cpp \
   test/bip32_tests.cpp \
   test/blockchain_tests.cpp \

@@ -31,6 +31,34 @@
  */
 static const int SERIALIZE_TRANSACTION_NO_WITNESS = 0x40000000;
 
+/** DigiDollar transaction types */
+enum DigiDollarTxType : uint8_t {
+    DD_TX_NONE = 0,
+    DD_TX_MINT = 1,      // Lock DGB, create DigiDollars
+    DD_TX_TRANSFER = 2,  // Transfer DigiDollars between addresses
+    DD_TX_REDEEM = 3,    // Burn DigiDollars, unlock DGB
+    DD_TX_PARTIAL = 4,   // Partial redemption
+    DD_TX_EMERGENCY = 5, // Emergency redemption with ERR
+    DD_TX_MAX = 6        // For validation
+};
+
+/** DigiDollar transaction marker in nVersion */
+static const int32_t DD_TX_VERSION = 0x0D1D0770;  // "DigiDollar" marker
+static const int32_t DD_VERSION_MASK = 0x0000FFFF;
+static const int32_t DD_TYPE_MASK = 0xFF000000;
+static const int32_t DD_FLAGS_MASK = 0x00FF0000;
+
+
+/** Version construction */
+inline int32_t MakeDigiDollarVersion(DigiDollarTxType type, uint8_t flags = 0) {
+    return (static_cast<int32_t>(type) << 24) |
+           (static_cast<int32_t>(flags) << 16) |
+           (DD_TX_VERSION & DD_VERSION_MASK);
+}
+
+/** Helper functions */
+std::string GetDigiDollarTxTypeName(DigiDollarTxType type);
+
 /** An outpoint - a combination of a transaction hash and an index n into its vout */
 class COutPoint
 {
@@ -373,7 +401,29 @@ public:
         }
         return false;
     }
+
+    /** DigiDollar transaction information */
+    std::string GetDigiDollarInfo() const;
 };
+
+/** Helper functions for DigiDollar transaction version encoding */
+inline bool IsDigiDollarTransaction(const CTransaction& tx) {
+    return (tx.nVersion & DD_VERSION_MASK) == (DD_TX_VERSION & DD_VERSION_MASK);
+}
+
+inline DigiDollarTxType GetDigiDollarTxType(const CTransaction& tx) {
+    if (!IsDigiDollarTransaction(tx)) {
+        return DD_TX_NONE;
+    }
+    return static_cast<DigiDollarTxType>((tx.nVersion & DD_TYPE_MASK) >> 24);
+}
+
+inline uint8_t GetDigiDollarFlags(const CTransaction& tx) {
+    if (!IsDigiDollarTransaction(tx)) {
+        return 0;
+    }
+    return static_cast<uint8_t>((tx.nVersion & DD_FLAGS_MASK) >> 16);
+}
 
 /** A mutable version of CTransaction. */
 struct CMutableTransaction
@@ -415,6 +465,19 @@ struct CMutableTransaction
             }
         }
         return false;
+    }
+
+    /** DigiDollar helpers */
+    void SetDigiDollarType(DigiDollarTxType type, uint8_t flags = 0) {
+        nVersion = MakeDigiDollarVersion(type, flags);
+    }
+
+    bool IsDigiDollar() const {
+        return (nVersion & DD_VERSION_MASK) == (DD_TX_VERSION & DD_VERSION_MASK);
+    }
+
+    DigiDollarTxType GetDDType() const {
+        return GetDigiDollarTxType(CTransaction(*this));
     }
 };
 

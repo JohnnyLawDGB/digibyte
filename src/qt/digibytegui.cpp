@@ -279,7 +279,7 @@ void DigiByteGUI::createActions()
     tabGroup->addAction(historyAction);
 
     digiDollarAction = new QAction(tr("DigiDollar"), this);
-    digiDollarAction->setStatusTip(tr("DigiDollar - Coming Soon"));
+    digiDollarAction->setStatusTip(tr("Browse and manage DigiDollar positions"));
     digiDollarAction->setToolTip(digiDollarAction->statusTip());
     digiDollarAction->setCheckable(true);
     tabGroup->addAction(digiDollarAction);
@@ -311,16 +311,9 @@ void DigiByteGUI::createActions()
     connect(historyAction, &QAction::triggered, [this]{ showNormalIfMinimized(); });
     connect(historyAction, &QAction::triggered, this, &DigiByteGUI::gotoHistoryPage);
     
-    // Coming Soon actions
-    connect(digiDollarAction, &QAction::triggered, [this]{ 
-        showNormalIfMinimized(); 
-        QMessageBox msgBox(this);
-        msgBox.setWindowTitle(tr("Coming Soon"));
-        msgBox.setTextFormat(Qt::RichText);
-        msgBox.setText(tr("DigiDollar functionality will be available in a future release.<br><br>Learn more at <a href='https://digibyte.io/digidollar'>DigiByte.io/DigiDollar</a>"));
-        msgBox.exec();
-        overviewAction->setChecked(true);
-    });
+    // DigiDollar action
+    connect(digiDollarAction, &QAction::triggered, [this]{ showNormalIfMinimized(); });
+    connect(digiDollarAction, &QAction::triggered, this, &DigiByteGUI::gotoDigiDollarPage);
     // Commenting out Mint and Redeem connect statements
     /*
     connect(mintAction, &QAction::triggered, [this]{ 
@@ -1050,6 +1043,12 @@ void DigiByteGUI::gotoSendCoinsPage(QString addr)
 {
     sendCoinsAction->setChecked(true);
     if (walletFrame) walletFrame->gotoSendCoinsPage(addr);
+}
+
+void DigiByteGUI::gotoDigiDollarPage()
+{
+    digiDollarAction->setChecked(true);
+    if (walletFrame) walletFrame->gotoDigiDollarPage();
 }
 
 void DigiByteGUI::gotoSignMessageTab(QString addr)

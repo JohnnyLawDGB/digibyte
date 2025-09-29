@@ -4,7 +4,10 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #include <base58.h>
 
+#include <addresstype.h>
 #include <hash.h>
+#include <kernel/chainparams.h>
+#include <pubkey.h>
 #include <uint256.h>
 #include <util/strencodings.h>
 #include <util/string.h>
@@ -12,7 +15,9 @@
 #include <assert.h>
 #include <string.h>
 
+#include <algorithm>
 #include <limits>
+#include <variant>
 
 /** All alphanumeric characters except for "0", "I", "O", and "l" */
 static const char* pszBase58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
@@ -164,4 +169,142 @@ bool DecodeBase58Check(const std::string& str, std::vector<unsigned char>& vchRe
         return false;
     }
     return DecodeBase58Check(str.c_str(), vchRet, max_ret);
+}
+
+//
+// DigiDollar address implementation
+//
+
+// Static constants for version bytes that generate correct prefixes
+const std::vector<unsigned char> CDigiDollarAddress::DD_P2TR_MAINNET = {0x52, 0x85};  // "DD"
+const std::vector<unsigned char> CDigiDollarAddress::DD_P2TR_TESTNET = {0xb1, 0x29};  // "TD"
+const std::vector<unsigned char> CDigiDollarAddress::DD_P2TR_REGTEST = {0xa3, 0xa4};  // "RD"
+
+CDigiDollarAddress::CDigiDollarAddress() : fValid(false)
+{
+}
+
+CDigiDollarAddress::CDigiDollarAddress(const std::string& str) : fValid(false)
+{
+    std::vector<unsigned char> vchTemp;
+    if (DecodeBase58Check(str, vchTemp, 256)) {
+        if (vchTemp.size() >= 2) {
+            if (vchTemp.size() == 34) { // 2 byte version + 32 bytes data
+                vchVersion.assign(vchTemp.begin(), vchTemp.begin() + 2);
+                vchData.assign(vchTemp.begin() + 2, vchTemp.end());
+                fValid = (vchVersion == DD_P2TR_MAINNET ||
+                         vchVersion == DD_P2TR_TESTNET ||
+                         vchVersion == DD_P2TR_REGTEST);
+            }
+        }
+    }
+}
+
+bool CDigiDollarAddress::SetDigiDollar(const CTxDestination& dest, int type)
+{
+    // Reset state
+    vchData.clear();
+    vchVersion.clear();
+    fValid = false;
+
+    // Check if destination is valid
+    if (!IsValidDestination(dest)) {
+        return false;
+    }
+
+    // Only P2TR addresses can be DigiDollar addresses
+    if (!std::holds_alternative<WitnessV1Taproot>(dest)) {
+        return false;
+    }
+
+    const WitnessV1Taproot& taproot = std::get<WitnessV1Taproot>(dest);
+
+    // Set appropriate version based on network type
+    switch (type) {
+        case CChainParams::DIGIDOLLAR_ADDRESS:
+            vchVersion = DD_P2TR_MAINNET;
+            break;
+        case CChainParams::DIGIDOLLAR_ADDRESS_TESTNET:
+            vchVersion = DD_P2TR_TESTNET;
+            break;
+        case CChainParams::DIGIDOLLAR_ADDRESS_REGTEST:
+            vchVersion = DD_P2TR_REGTEST;
+            break;
+        default:
+            return false;
+    }
+
+    // Copy the 32-byte pubkey data
+    vchData.resize(32);
+    std::copy(taproot.begin(), taproot.end(), vchData.begin());
+    fValid = true;
+
+    return true;
+}
+
+CTxDestination CDigiDollarAddress::GetDigiDollarDestination() const
+{
+    if (!IsValid()) {
+        return CNoDestination();
+    }
+
+    if (vchData.size() != 32) {
+        return CNoDestination();
+    }
+
+    // Convert to P2TR destination
+    uint256 hash;
+    std::copy(vchData.begin(), vchData.end(), hash.begin());
+    return WitnessV1Taproot(XOnlyPubKey(hash));
+}
+
+std::string CDigiDollarAddress::ToString() const
+{
+    if (!IsValid()) {
+        return "";
+    }
+
+    // Create version + data vector
+    std::vector<unsigned char> vch;
+    vch.reserve(34);
+    vch.insert(vch.end(), vchVersion.begin(), vchVersion.end());
+    vch.insert(vch.end(), vchData.begin(), vchData.end());
+
+    return EncodeBase58Check(vch);
+}
+
+bool CDigiDollarAddress::IsValid() const
+{
+    return fValid && vchData.size() == 32 && vchVersion.size() == 2;
+}
+
+bool CDigiDollarAddress::IsValidDigiDollarAddress(const std::string& str)
+{
+    if (str.length() < 2) {
+        return false;
+    }
+
+    // Check for valid prefixes
+    std::string prefix = str.substr(0, 2);
+    return (prefix == "DD" || prefix == "TD" || prefix == "RD");
+}
+
+//
+// Helper functions
+//
+
+std::string EncodeDigiDollarAddress(const CTxDestination& dest)
+{
+    CDigiDollarAddress addr;
+    // For now, default to mainnet - this should be determined by chain params
+    if (!addr.SetDigiDollar(dest, CChainParams::DIGIDOLLAR_ADDRESS)) {
+        return "";
+    }
+    return addr.ToString();
+}
+
+CTxDestination DecodeDigiDollarAddress(const std::string& str)
+{
+    CDigiDollarAddress addr(str);
+    return addr.GetDigiDollarDestination();
 }

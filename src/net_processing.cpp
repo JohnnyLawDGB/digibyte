@@ -28,6 +28,7 @@
 #include <policy/policy.h>
 #include <policy/settings.h>
 #include <primitives/block.h>
+#include <primitives/oracle.h>
 #include <primitives/transaction.h>
 #include <random.h>
 #include <reverse_iterator.h>
@@ -5308,6 +5309,174 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 }
             }
         }
+        return;
+    }
+
+    if (msg_type == NetMsgType::ORACLEPRICE) {
+        // Rate limiting: max 100 oracle messages per hour per peer
+        static std::map<NodeId, std::pair<int64_t, int>> oracle_rate_limit;
+        int64_t now = GetTime();
+
+        // Cleanup old entries (older than 2 hours)
+        if (oracle_rate_limit.size() > 100) { // Only cleanup when map gets large
+            auto it = oracle_rate_limit.begin();
+            while (it != oracle_rate_limit.end()) {
+                if (now - it->second.first > 7200) { // 2 hours
+                    it = oracle_rate_limit.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+        }
+
+        auto& [last_reset, count] = oracle_rate_limit[pfrom.GetId()];
+        if (now - last_reset > 3600) { // Reset every hour
+            last_reset = now;
+            count = 0;
+        }
+
+        if (++count > 100) {
+            LogPrintf("Oracle message rate limit exceeded from peer=%d (count=%d)\n", pfrom.GetId(), count);
+            Misbehaving(*peer, 5, "oracle message rate limit exceeded");
+            return;
+        }
+
+        OraclePriceMsg oracle_msg;
+        vRecv >> oracle_msg;
+
+        // Basic validation
+        if (!oracle_msg.price_message.IsValid()) {
+            LogPrintf("Received invalid oracle price message from peer=%d\n", pfrom.GetId());
+            Misbehaving(*peer, 10, "invalid oracle price message");
+            return;
+        }
+
+        // Validate oracle exists (this will be implemented properly in validation.cpp)
+        // For now, just check oracle_id is in valid range
+        if (oracle_msg.price_message.oracle_id == 0 || oracle_msg.price_message.oracle_id > ORACLE_TOTAL_COUNT) {
+            LogPrintf("Received oracle price from invalid oracle ID %d from peer=%d\n",
+                      oracle_msg.price_message.oracle_id, pfrom.GetId());
+            Misbehaving(*peer, 10, "invalid oracle ID");
+            return;
+        }
+
+        // Enhanced timestamp validation
+        int64_t msg_time = oracle_msg.price_message.timestamp;
+        if (msg_time > now + 60) { // Max 1 minute future
+            LogPrintf("Oracle message from future (msg_time=%d, now=%d, diff=%d) from peer=%d\n",
+                      msg_time, now, msg_time - now, pfrom.GetId());
+            Misbehaving(*peer, 2, "oracle message from future");
+            return;
+        }
+        if (msg_time < now - ORACLE_MAX_AGE_SECONDS) { // Max 1 hour old
+            LogPrintf("Oracle message too old (msg_time=%d, now=%d, age=%d) from peer=%d\n",
+                      msg_time, now, now - msg_time, pfrom.GetId());
+            return; // Don't penalize for old messages, just ignore
+        }
+
+        // Validate price is reasonable (basic sanity check)
+        if (oracle_msg.price_message.price_satoshis <= 0 ||
+            oracle_msg.price_message.price_satoshis > COIN * 1000000) { // Max $1M per DGB
+            LogPrintf("Oracle price out of reasonable range (%d) from oracle %d peer=%d\n",
+                      oracle_msg.price_message.price_satoshis,
+                      oracle_msg.price_message.oracle_id, pfrom.GetId());
+            Misbehaving(*peer, 5, "unreasonable oracle price");
+            return;
+        }
+
+        // TODO: Validate oracle signature when oracle nodes are fully implemented
+        // TODO: Store in oracle pool for consensus calculation
+        // TODO: Relay to other peers
+
+        LogPrint(BCLog::NET, "Processed oracle price message: oracle_id=%d, price=%d, timestamp=%d, peer=%d\n",
+                 oracle_msg.price_message.oracle_id, oracle_msg.price_message.price_satoshis,
+                 oracle_msg.price_message.timestamp, pfrom.GetId());
+        return;
+    }
+
+    if (msg_type == NetMsgType::ORACLEBUNDLE) {
+        // Rate limiting for bundles: max 10 per hour per peer
+        static std::map<NodeId, std::pair<int64_t, int>> bundle_rate_limit;
+        int64_t now = GetTime();
+
+        // Cleanup old entries (older than 2 hours)
+        if (bundle_rate_limit.size() > 100) { // Only cleanup when map gets large
+            auto it = bundle_rate_limit.begin();
+            while (it != bundle_rate_limit.end()) {
+                if (now - it->second.first > 7200) { // 2 hours
+                    it = bundle_rate_limit.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+        }
+
+        auto& [last_reset, count] = bundle_rate_limit[pfrom.GetId()];
+        if (now - last_reset > 3600) { // Reset every hour
+            last_reset = now;
+            count = 0;
+        }
+
+        if (++count > 10) {
+            LogPrintf("Oracle bundle rate limit exceeded from peer=%d (count=%d)\n", pfrom.GetId(), count);
+            Misbehaving(*peer, 10, "oracle bundle rate limit exceeded");
+            return;
+        }
+
+        OracleBundleMsg bundle_msg;
+        vRecv >> bundle_msg;
+
+        // Validate bundle size is reasonable
+        if (bundle_msg.bundle.messages.size() > ORACLE_ACTIVE_COUNT) {
+            LogPrintf("Oracle bundle too large (%d messages) from peer=%d\n",
+                      bundle_msg.bundle.messages.size(), pfrom.GetId());
+            Misbehaving(*peer, 10, "oversized oracle bundle");
+            return;
+        }
+
+        // Validate bundle has sufficient consensus
+        if (!bundle_msg.bundle.HasConsensus()) {
+            LogPrintf("Oracle bundle lacks consensus (%d of %d required) from peer=%d\n",
+                      bundle_msg.bundle.messages.size(), ORACLE_CONSENSUS_REQUIRED, pfrom.GetId());
+            Misbehaving(*peer, 5, "oracle bundle lacks consensus");
+            return;
+        }
+
+        // Validate epoch is reasonable (not too far in past/future)
+        int32_t current_epoch = GetCurrentEpoch(m_chainman.ActiveChain().Height());
+        if (!bundle_msg.bundle.ValidateEpoch(current_epoch)) {
+            LogPrintf("Oracle bundle has invalid epoch %d (current=%d) from peer=%d\n",
+                      bundle_msg.bundle.epoch, current_epoch, pfrom.GetId());
+            Misbehaving(*peer, 5, "invalid oracle bundle epoch");
+            return;
+        }
+
+        // TODO: Store bundle for block validation
+        // TODO: Relay to other peers
+
+        LogPrint(BCLog::NET, "Processed oracle bundle: epoch=%d, messages=%d, block_hash=%s, peer=%d\n",
+                 bundle_msg.bundle.epoch, bundle_msg.bundle.messages.size(),
+                 bundle_msg.block_hash.ToString(), pfrom.GetId());
+        return;
+    }
+
+    if (msg_type == NetMsgType::GETORACLES) {
+        GetOracleDataMsg request;
+        vRecv >> request;
+
+        // Validate epoch is reasonable
+        int32_t current_epoch = GetCurrentEpoch(m_chainman.ActiveChain().Height());
+        if (request.epoch < current_epoch - 24 || request.epoch > current_epoch + 1) {
+            LogPrintf("Oracle data request for unreasonable epoch %d (current=%d) from peer=%d\n",
+                      request.epoch, current_epoch, pfrom.GetId());
+            return;
+        }
+
+        // TODO: Send requested oracle data to peer
+        // TODO: Implement oracle data response logic
+
+        LogPrint(BCLog::NET, "Processed oracle data request for epoch %d, oracle_id=%d from peer=%d\n",
+                 request.epoch, request.oracle_id, pfrom.GetId());
         return;
     }
 

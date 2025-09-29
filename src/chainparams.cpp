@@ -97,6 +97,16 @@ void ReadRegTestArgs(const ArgsManager& args, CChainParams::RegTestOptions& opti
             throw std::runtime_error(strprintf("Invalid deployment (%s)", vDeploymentParams[0]));
         }
     }
+
+    // Handle DigiDollar specific activation height for regtest
+    if (auto digidollar_height = args.GetIntArg("-digidollaractivationheight")) {
+        CChainParams::VersionBitsParameters vbparams{};
+        vbparams.start_time = Consensus::BIP9Deployment::ALWAYS_ACTIVE;
+        vbparams.timeout = Consensus::BIP9Deployment::NO_TIMEOUT;
+        vbparams.min_activation_height = *digidollar_height;
+        options.version_bits_parameters[Consensus::DEPLOYMENT_DIGIDOLLAR] = vbparams;
+        LogPrintf("Setting DigiDollar activation height for regtest to %d\n", *digidollar_height);
+    }
 }
 
 static std::unique_ptr<const CChainParams> globalChainParams;

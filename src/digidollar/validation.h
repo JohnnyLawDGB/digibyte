@@ -1,0 +1,518 @@
+// Copyright (c) 2025 The DigiByte Core developers
+// Distributed under the MIT software license, see the accompanying
+// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
+#ifndef DIGIBYTE_DIGIDOLLAR_VALIDATION_H
+#define DIGIBYTE_DIGIDOLLAR_VALIDATION_H
+
+#include <script/script.h>
+#include <script/interpreter.h>
+#include <script/script_error.h>
+#include <consensus/validation.h>
+#include <consensus/amount.h>
+#include <consensus/dca.h>
+#include <primitives/transaction.h>
+#include <chainparams.h>
+
+#include <cstdint>
+#include <vector>
+
+namespace DigiDollar {
+
+/**
+ * DigiDollar transaction types (embedded in nVersion)
+ */
+enum DigiDollarTxType : uint8_t {
+    DD_TX_MINT = 1,      // Mint new DigiDollars by locking DGB collateral
+    DD_TX_TRANSFER = 2,  // Transfer DigiDollars between addresses
+    DD_TX_REDEEM = 3,    // Redeem DigiDollars and unlock collateral
+    DD_TX_PARTIAL = 4,   // Partial redemption with price verification
+    DD_TX_ERR = 5        // Emergency Redemption Ratio (ERR) redemption
+};
+
+/**
+ * DigiDollar transaction version marker
+ * Format: 0x4444XXYY where XX is transaction type, YY is sub-version
+ */
+static const uint32_t DD_TX_VERSION = 0x44440000;
+
+/**
+ * Script type identification for DigiDollar operations
+ */
+enum class ScriptType {
+    NOT_DIGIDOLLAR,     // Regular Bitcoin/DigiByte script
+    COLLATERAL_LOCK,    // P2TR script locking DGB collateral
+    DD_TOKEN_OUTPUT     // P2TR script for DigiDollar token output
+};
+
+/**
+ * Collateral redemption paths available in P2TR MAST
+ */
+enum class RedemptionPath {
+    NORMAL = 0,      // Standard timelock expiry redemption
+    EMERGENCY = 1,   // Oracle-approved emergency override (8-of-15)
+    PARTIAL = 2,     // Partial redemption with price verification
+    ERR = 3          // Emergency Redemption Ratio (system under-collateralized)
+};
+
+/**
+ * Validation context for DigiDollar operations
+ * Contains current blockchain state needed for validation
+ */
+struct ValidationContext {
+    int nHeight;                     // Current block height
+    CAmount oraclePrice;             // Current DGB price in cents (e.g., 50000 = $500.00)
+    int systemCollateral;            // System-wide collateral ratio percentage
+    const CChainParams& params;      // Chain parameters including DD consensus params
+
+    ValidationContext(int height, CAmount price, int collateral, const CChainParams& chainParams)
+        : nHeight(height), oraclePrice(price), systemCollateral(collateral), params(chainParams) {}
+};
+
+// ============================================================================
+// Core Validation Functions
+// ============================================================================
+
+/**
+ * Validate DigiDollar script according to consensus rules
+ *
+ * @param script Script to validate
+ * @param ctx Validation context with current blockchain state
+ * @param serror Optional pointer to receive script error code
+ * @return true if script is valid, false otherwise
+ */
+bool ValidateDigiDollarScript(const CScript& script,
+                              const ValidationContext& ctx,
+                              ScriptError* serror = nullptr);
+
+/**
+ * Validate complete DigiDollar transaction
+ *
+ * Performs comprehensive validation including:
+ * - Transaction type verification
+ * - Amount validation (mint limits, output minimums)
+ * - Collateral ratio requirements
+ * - Input/output consistency
+ *
+ * @param tx Transaction to validate
+ * @param ctx Validation context
+ * @param state Transaction validation state for error reporting
+ * @return true if transaction is valid, false otherwise
+ */
+bool ValidateDigiDollarTransaction(const CTransaction& tx,
+                                  const ValidationContext& ctx,
+                                  TxValidationState& state);
+
+// ============================================================================
+// Script Analysis Functions
+// ============================================================================
+
+/**
+ * Identify the type of script (DD collateral, DD token, or regular)
+ *
+ * @param script Script to analyze
+ * @return ScriptType indicating the script's purpose
+ */
+ScriptType IdentifyScriptType(const CScript& script);
+
+/**
+ * Extract DigiDollar amount from script
+ *
+ * @param script Script containing DD amount
+ * @param amount Output parameter to receive extracted amount
+ * @return true if amount successfully extracted, false otherwise
+ */
+bool ExtractDDAmount(const CScript& script, CAmount& amount);
+
+/**
+ * Check if script is a DigiDollar collateral locking script
+ *
+ * @param script Script to check
+ * @return true if script locks DGB collateral for DD minting
+ */
+bool IsCollateralScript(const CScript& script);
+
+/**
+ * Check if script is a DigiDollar token output script
+ *
+ * @param script Script to check
+ * @return true if script represents DD token ownership
+ */
+bool IsDDTokenScript(const CScript& script);
+
+/**
+ * Check if transaction has DigiDollar marker in version field
+ *
+ * @param tx Transaction to check
+ * @return true if transaction is DigiDollar-related
+ */
+bool HasDigiDollarMarker(const CTransaction& tx);
+
+/**
+ * Extract DigiDollar transaction type from version field
+ *
+ * @param tx Transaction to analyze
+ * @return DigiDollarTxType or throws if not a DD transaction
+ */
+DigiDollarTxType GetDigiDollarTxType(const CTransaction& tx);
+
+// ============================================================================
+// Path-Specific Validation Functions
+// ============================================================================
+
+/**
+ * Validate normal redemption path conditions
+ *
+ * Checks that timelock has expired and other normal conditions are met.
+ *
+ * @param script Redemption script
+ * @param currentHeight Current block height
+ * @return true if normal redemption is valid
+ */
+bool ValidateNormalRedemption(const CScript& script, int currentHeight);
+
+/**
+ * Validate emergency redemption path conditions
+ *
+ * Verifies 8-of-15 oracle signature threshold is met.
+ *
+ * @param script Emergency redemption script
+ * @param sigs Oracle signatures provided
+ * @return true if emergency override is valid
+ */
+bool ValidateEmergencyRedemption(const CScript& script,
+                                const std::vector<std::vector<unsigned char>>& sigs);
+
+/**
+ * Validate partial redemption path conditions
+ *
+ * Checks that oracle price is current and conditions are met for partial redemption.
+ *
+ * @param script Partial redemption script
+ * @param oraclePrice Current oracle price
+ * @return true if partial redemption is valid
+ */
+bool ValidatePartialRedemption(const CScript& script, CAmount oraclePrice);
+
+/**
+ * Validate ERR (Emergency Redemption Ratio) path conditions
+ *
+ * Checks that system is under-collateralized (< 100%) enabling ERR redemptions.
+ *
+ * @param script ERR redemption script
+ * @param systemCollateral System-wide collateral ratio percentage
+ * @return true if ERR redemption is valid
+ */
+bool ValidateERRRedemption(const CScript& script, int systemCollateral);
+
+// ============================================================================
+// Amount and Collateral Validation
+// ============================================================================
+
+/**
+ * Validate DigiDollar mint amount against consensus limits
+ *
+ * @param amount Amount to validate (in cents)
+ * @param params Chain parameters
+ * @return true if amount is within valid range for minting
+ */
+bool ValidateMintAmount(CAmount amount, const CChainParams& params);
+
+/**
+ * Validate DigiDollar output amount against minimum requirements
+ *
+ * @param amount Amount to validate (in cents)
+ * @param params Chain parameters
+ * @return true if amount meets minimum output requirements
+ */
+bool ValidateOutputAmount(CAmount amount, const CChainParams& params);
+
+/**
+ * Validate collateral ratio for mint operation
+ *
+ * Checks that DGB locked provides sufficient collateral for DD minted,
+ * considering lock time requirements and DCA adjustments.
+ *
+ * @param dgbLocked Amount of DGB locked as collateral
+ * @param ddMinted Amount of DD being minted
+ * @param lockTime Lock period in blocks
+ * @param ctx Validation context with current price and system state
+ * @return true if collateral ratio is sufficient
+ */
+bool ValidateCollateralRatio(CAmount dgbLocked, CAmount ddMinted,
+                            int64_t lockTime, const ValidationContext& ctx);
+
+/**
+ * Calculate required DGB collateral for DD mint
+ *
+ * @param ddAmount DD amount to mint (in cents)
+ * @param lockTime Lock period in blocks
+ * @param ctx Validation context
+ * @return Required DGB amount in satoshis
+ */
+CAmount CalculateRequiredCollateral(CAmount ddAmount, int64_t lockTime,
+                                   const ValidationContext& ctx);
+
+/**
+ * Get effective collateral ratio after DCA adjustments
+ *
+ * @param baseRatio Base collateral ratio for lock period
+ * @param systemCollateral Current system collateral percentage
+ * @param params Chain parameters
+ * @return Effective ratio after DCA multiplier
+ */
+int GetEffectiveCollateralRatio(int baseRatio, int systemCollateral,
+                               const CChainParams& params);
+
+// ============================================================================
+// Transaction Type Validation
+// ============================================================================
+
+/**
+ * Validate mint transaction structure and amounts
+ *
+ * @param tx Mint transaction
+ * @param ctx Validation context
+ * @param state Transaction validation state
+ * @return true if mint transaction is valid
+ */
+bool ValidateMintTransaction(const CTransaction& tx,
+                            const ValidationContext& ctx,
+                            TxValidationState& state);
+
+/**
+ * Validate transfer transaction (DD conservation)
+ *
+ * @param tx Transfer transaction
+ * @param ctx Validation context
+ * @param state Transaction validation state
+ * @return true if transfer transaction is valid
+ */
+bool ValidateTransferTransaction(const CTransaction& tx,
+                                const ValidationContext& ctx,
+                                TxValidationState& state);
+
+/**
+ * Validate redemption transaction
+ *
+ * @param tx Redemption transaction
+ * @param ctx Validation context
+ * @param state Transaction validation state
+ * @return true if redemption transaction is valid
+ */
+bool ValidateRedemptionTransaction(const CTransaction& tx,
+                                  const ValidationContext& ctx,
+                                  TxValidationState& state);
+
+// ============================================================================
+// Helper Functions for Output Validation
+// ============================================================================
+
+/**
+ * Validate collateral output in mint transaction
+ *
+ * Checks that collateral output:
+ * - Uses P2TR script format
+ * - Has minimum value above dust threshold
+ * - Contains valid redemption paths
+ *
+ * @param output Collateral output to validate
+ * @param tx Transaction containing the output
+ * @param state Transaction validation state for error reporting
+ * @return true if collateral output is valid
+ */
+bool ValidateCollateralOutput(const CTxOut& output, const CTransaction& tx,
+                             TxValidationState& state);
+
+/**
+ * Validate DigiDollar token output in transaction
+ *
+ * Checks that DD output:
+ * - Has 0 DGB value
+ * - Uses P2TR script format
+ * - Contains valid DD amount encoding
+ *
+ * @param output DD token output to validate
+ * @param tx Transaction containing the output
+ * @param state Transaction validation state for error reporting
+ * @return true if DD output is valid
+ */
+bool ValidateDDOutput(const CTxOut& output, const CTransaction& tx,
+                     TxValidationState& state);
+
+/**
+ * Extract lock time from collateral script
+ *
+ * Parses the collateral script to extract the timelock period.
+ * Returns the lock time in blocks.
+ *
+ * @param script Collateral script to parse
+ * @return Lock time in blocks, or default value if extraction fails
+ */
+int64_t ExtractLockTime(const CScript& script);
+
+/**
+ * Get current system-wide collateral ratio
+ *
+ * Calculates the overall health of the DigiDollar system by comparing
+ * total locked collateral value to total minted DD value.
+ *
+ * @return System collateral ratio as percentage (e.g., 150 for 150%)
+ */
+CAmount GetSystemCollateralRatio();
+
+// ============================================================================
+// Redemption Transaction Helper Functions
+// ============================================================================
+
+/**
+ * Validate normal redemption conditions (timelock expiry)
+ *
+ * @param tx Redemption transaction
+ * @param ctx Validation context
+ * @param state Transaction validation state
+ * @return true if normal redemption conditions are met
+ */
+bool ValidateNormalRedemptionConditions(const CTransaction& tx,
+                                       const ValidationContext& ctx,
+                                       TxValidationState& state);
+
+/**
+ * Validate emergency redemption conditions (ERR or oracle approval)
+ *
+ * @param tx Redemption transaction
+ * @param ctx Validation context
+ * @param state Transaction validation state
+ * @return true if emergency redemption conditions are met
+ */
+bool ValidateEmergencyRedemptionConditions(const CTransaction& tx,
+                                         const ValidationContext& ctx,
+                                         TxValidationState& state);
+
+/**
+ * Validate partial redemption conditions
+ *
+ * @param tx Redemption transaction
+ * @param ctx Validation context
+ * @param state Transaction validation state
+ * @return true if partial redemption conditions are met
+ */
+bool ValidatePartialRedemptionConditions(const CTransaction& tx,
+                                       const ValidationContext& ctx,
+                                       TxValidationState& state);
+
+/**
+ * Validate collateral release amount is reasonable
+ *
+ * @param tx Redemption transaction
+ * @param ctx Validation context
+ * @param ddBurned Amount of DD being burned
+ * @param state Transaction validation state
+ * @return true if collateral release amount is valid
+ */
+bool ValidateCollateralReleaseAmount(const CTransaction& tx,
+                                   const ValidationContext& ctx,
+                                   CAmount ddBurned,
+                                   TxValidationState& state);
+
+/**
+ * Validate script path spending for collateral input
+ *
+ * @param tx Redemption transaction
+ * @param ctx Validation context
+ * @param state Transaction validation state
+ * @return true if script path spending is valid
+ */
+bool ValidateScriptPathSpending(const CTransaction& tx,
+                               const ValidationContext& ctx,
+                               TxValidationState& state);
+
+// ============================================================================
+// ERR (Emergency Redemption Ratio) Validation Functions
+// ============================================================================
+
+/**
+ * Validate ERR redemption transaction
+ *
+ * Verifies that ERR redemption meets all requirements:
+ * - ERR is currently active (system < 100% collateralized)
+ * - Correct ERR adjustment ratio applied
+ * - Oracle consensus verified for ERR activation
+ * - DD properly burned in transaction
+ * - Collateral release matches ERR calculation
+ *
+ * @param tx ERR redemption transaction
+ * @param ctx Validation context
+ * @param state Transaction validation state
+ * @return true if ERR redemption is valid
+ */
+bool ValidateERRRedemption(const CTransaction& tx,
+                          const ValidationContext& ctx,
+                          TxValidationState& state);
+
+/**
+ * Check if minting should be blocked due to ERR
+ *
+ * During ERR activation, new mints are blocked to:
+ * - Prevent further system destabilization
+ * - Focus on processing redemptions
+ * - Allow system health to recover
+ *
+ * @param ctx Validation context
+ * @return true if minting should be blocked
+ */
+bool ShouldBlockMintingDuringERR(const ValidationContext& ctx);
+
+/**
+ * Check if normal redemptions should be blocked due to ERR
+ *
+ * During ERR activation, normal redemptions are queued and
+ * processed through the ERR system for fair distribution.
+ *
+ * @param ctx Validation context
+ * @return true if normal redemptions should be blocked
+ */
+bool ShouldBlockNormalRedemptionsDuringERR(const ValidationContext& ctx);
+
+/**
+ * Validate ERR adjustment amount
+ *
+ * Verifies that the collateral return amount matches the
+ * expected ERR adjustment for current system health.
+ *
+ * @param originalCollateral Original collateral amount
+ * @param adjustedCollateral ERR-adjusted collateral amount
+ * @param systemHealth Current system health percentage
+ * @return true if ERR adjustment is correct
+ */
+bool ValidateERRAdjustmentAmount(CAmount originalCollateral,
+                                CAmount adjustedCollateral,
+                                int systemHealth);
+
+/**
+ * Validate oracle consensus for ERR activation
+ *
+ * Checks that sufficient oracle signatures (8-of-15) exist
+ * to authorize ERR activation for under-collateralized system.
+ *
+ * @param tx Transaction containing oracle consensus data
+ * @param ctx Validation context
+ * @return true if oracle consensus is valid
+ */
+bool ValidateERROracleConsensus(const CTransaction& tx,
+                               const ValidationContext& ctx);
+
+/**
+ * Calculate expected ERR adjustment for system health
+ *
+ * Returns the expected collateral return percentage based on
+ * current system health and ERR tier thresholds.
+ *
+ * @param systemHealth Current system health percentage (0-30000)
+ * @return ERR adjustment ratio (0.80-0.95)
+ */
+double CalculateExpectedERRAdjustment(int systemHealth);
+
+} // namespace DigiDollar
+
+#endif // DIGIBYTE_DIGIDOLLAR_VALIDATION_H

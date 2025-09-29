@@ -1,0 +1,260 @@
+// Copyright (c) 2024 The DigiByte Core developers
+// Distributed under the MIT software license, see the accompanying
+// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
+#ifndef DIGIBYTE_DIGIDOLLAR_TXBUILDER_H
+#define DIGIBYTE_DIGIDOLLAR_TXBUILDER_H
+
+#include <primitives/transaction.h>
+#include <consensus/amount.h>
+#include <key.h>
+#include <script/script.h>
+#include <digidollar/digidollar.h>
+#include <digidollar/validation.h>
+#include <consensus/digidollar.h>
+#include <kernel/chainparams.h>
+#include <base58.h>
+
+#include <vector>
+#include <string>
+#include <utility>
+
+namespace DigiDollar {
+
+// Result of transaction building
+struct TxBuilderResult {
+    bool success;
+    CMutableTransaction tx;
+    std::string error;
+    CAmount totalFees;
+    CAmount collateralRequired;
+
+    TxBuilderResult() : success(false), totalFees(0), collateralRequired(0) {}
+};
+
+// Parameters for minting DigiDollars (txbuilder version)
+struct TxBuilderMintParams {
+    CAmount ddAmount;           // Amount of DD to mint (in cents)
+    int lockDays;               // Lock period in days
+    CKey ownerKey;              // Owner's private key
+    CAmount feeRate;            // Fee rate in sat/vB
+    std::vector<COutPoint> utxos; // Available UTXOs for collateral
+
+    TxBuilderMintParams() : ddAmount(0), lockDays(0), feeRate(1000) {} // Default 1000 sat/vB
+};
+
+// Parameters for transferring DigiDollars (V2 - enhanced for tests)
+struct TxBuilderTransferParams {
+    std::vector<std::pair<std::string, CAmount>> recipients; // DD address, amount
+    CAmount feeRate;            // Fee rate in sat/vB
+    std::vector<COutPoint> ddUtxos;    // DD UTXOs to spend
+    std::vector<COutPoint> feeUtxos;   // DGB UTXOs for fees
+    CKey spenderKey;            // Key for signing DD inputs
+
+    TxBuilderTransferParams() : feeRate(1000) {} // Default 1000 sat/vB
+};
+
+// Legacy alias for compatibility
+using TransferParams = TxBuilderTransferParams;
+
+// Parameters for redeeming DigiDollars (enhanced for TDD)
+struct TxBuilderRedeemParams {
+    COutPoint collateralOutpoint;  // Collateral to unlock
+    CAmount ddToRedeem;             // Amount of DD to burn
+    RedemptionPath path;            // Which redemption path to use
+    CKey ownerKey;                  // Owner's private key
+    CAmount feeRate;                // Fee rate in sat/vB
+    std::vector<COutPoint> ddUtxos; // DD UTXOs to burn
+    std::vector<COutPoint> feeUtxos; // DGB UTXOs for fees
+
+    TxBuilderRedeemParams() : ddToRedeem(0), path(RedemptionPath::NORMAL), feeRate(1000) {}
+};
+
+// Legacy alias for compatibility
+using RedeemParams = TxBuilderRedeemParams;
+
+// Redeemable position information for wallet functions
+struct RedeemablePosition {
+    COutPoint collateralOutpoint;    // The collateral UTXO
+    CAmount ddAmount;                // DD amount that can be redeemed
+    CAmount dgbLocked;               // DGB collateral locked
+    int64_t unlockHeight;            // Height when normal redemption is available
+    std::vector<RedemptionPath> availablePaths; // Available redemption paths
+    bool canRedeemNow;               // Whether any path is currently available
+    CAmount estimatedReturn;         // Estimated DGB return amount
+
+    RedeemablePosition() : ddAmount(0), dgbLocked(0), unlockHeight(0), canRedeemNow(false), estimatedReturn(0) {}
+};
+
+// Base transaction builder class
+class TxBuilder {
+protected:
+    const CChainParams& chainParams;
+    int currentHeight;
+    CAmount oraclePrice;
+
+    // Helper functions
+    CAmount CalculateFee(const CMutableTransaction& tx, CAmount feeRate) const;
+    bool SelectCoins(const std::vector<COutPoint>& utxos, CAmount target,
+                     std::vector<CTxIn>& inputs, CAmount& total) const;
+    CAmount GetUTXOValue(const COutPoint& outpoint) const;
+    int GetCurrentSystemCollateral() const;
+
+public:
+    TxBuilder(const CChainParams& params, int height, CAmount price);
+    virtual ~TxBuilder() = default;
+
+    // Validation helpers
+    bool ValidateAmount(CAmount amount) const;
+    bool ValidateFeeRate(CAmount feeRate) const;
+};
+
+/**
+ * Mint transaction builder for DigiDollar
+ *
+ * Handles the creation of mint transactions that lock DGB collateral
+ * and create new DigiDollar outputs. Features include:
+ * - 8 lock tier support (30 days to 10 years)
+ * - Dynamic Collateral Adjustment (DCA) based on system health
+ * - P2TR outputs with MAST redemption paths
+ * - Comprehensive validation and error handling
+ */
+class MintTxBuilder : public TxBuilder {
+public:
+    using TxBuilder::TxBuilder;
+
+    /**
+     * Build a complete mint transaction
+     * @param params Mint parameters including DD amount, lock period, keys, etc.
+     * @return Transaction builder result with success/error and transaction data
+     */
+    TxBuilderResult BuildMintTransaction(const TxBuilderMintParams& params);
+
+    /**
+     * Calculate required DGB collateral for given DD amount and lock period
+     * @param ddAmount DigiDollar amount to mint (in cents)
+     * @param lockDays Lock period in days
+     * @return Required DGB collateral amount in satoshis
+     */
+    CAmount CalculateRequiredCollateral(CAmount ddAmount, int lockDays) const;
+
+    /**
+     * Convert lock days to blocks using DigiByte's 15-second block time
+     * @param days Lock period in days
+     * @return Equivalent number of blocks
+     */
+    int64_t LockDaysToBlocks(int days) const;
+
+protected:
+
+private:
+    CScript CreateCollateralScript(const TxBuilderMintParams& params) const;
+    CScript CreateDDOutputScript(const CKey& owner, CAmount amount) const;
+    bool ValidateMintParams(const TxBuilderMintParams& params) const;
+    CKey GenerateChangeKey() const;
+};
+
+// Transfer transaction builder
+class TransferTxBuilder : public TxBuilder {
+public:
+    using TxBuilder::TxBuilder;
+    TxBuilderResult BuildTransferTransaction(const TxBuilderTransferParams& params);
+    bool ValidateTransferParams(const TxBuilderTransferParams& params) const;
+    CAmount CalculateTotalDDInput(const std::vector<CTxOut>& inputs,
+                                  const std::vector<CAmount>& amounts) const;
+    CScript CreateDDTransferScript(const CPubKey& recipient, CAmount amount) const;
+    bool SelectDDInputs(const std::vector<CTxOut>& available, CAmount needed,
+                       std::vector<CTxOut>& selected, CAmount& total);
+
+private:
+    bool ValidateDDAddress(const std::string& address) const;
+    CAmount GetDDFromUTXO(const COutPoint& outpoint) const;
+    CAmount CalculateTotalDDInputs(const std::vector<COutPoint>& ddUtxos) const;
+    CAmount CalculateTotalDDOutputs(const std::vector<std::pair<std::string, CAmount>>& recipients) const;
+};
+
+/**
+ * Redeem transaction builder for DigiDollar
+ *
+ * Handles the creation of redemption transactions that unlock DGB collateral
+ * and burn DigiDollar tokens. Features include:
+ * - 4 redemption paths (Normal, Emergency, Partial, ERR)
+ * - Taproot script path spending with MAST
+ * - Timelock validation and emergency conditions
+ * - Collateral release calculation with oracle price integration
+ */
+class RedeemTxBuilder : public TxBuilder {
+public:
+    using TxBuilder::TxBuilder;
+
+    /**
+     * Build a complete redemption transaction
+     * @param params Redemption parameters including DD amount, path, keys, etc.
+     * @return Transaction builder result with success/error and transaction data
+     */
+    TxBuilderResult BuildRedemptionTransaction(const TxBuilderRedeemParams& params);
+
+    /**
+     * Determine the appropriate redemption path based on current conditions
+     * @param params Redemption parameters
+     * @return The optimal redemption path for current system state
+     */
+    RedemptionPath DetermineRedemptionPath(const TxBuilderRedeemParams& params) const;
+
+    /**
+     * Calculate collateral return amount based on current conditions
+     * @param ddAmount DigiDollar amount being redeemed
+     * @param originalCollateral Original collateral locked
+     * @param currentPrice Current oracle price
+     * @return Amount of DGB collateral to release
+     */
+    CAmount CalculateCollateralReturn(CAmount ddAmount, CAmount originalCollateral,
+                                     CAmount currentPrice) const;
+
+    /**
+     * Verify redemption conditions are met for the specified path
+     * @param params Redemption parameters
+     * @param path Redemption path to verify
+     * @return true if conditions are met for this path
+     */
+    bool VerifyRedemptionConditions(const TxBuilderRedeemParams& params,
+                                   RedemptionPath path) const;
+
+    /**
+     * Create redemption script for the specified path
+     * @param path Redemption path
+     * @param owner Owner key for script creation
+     * @return Redemption script for the path
+     */
+    CScript CreateRedemptionScript(RedemptionPath path, const CKey& owner) const;
+
+private:
+    bool ValidateRedemptionPath(const TxBuilderRedeemParams& params) const;
+    CAmount CalculateRedemptionAmount(const TxBuilderRedeemParams& params) const;
+    bool ValidateRedeemParams(const TxBuilderRedeemParams& params) const;
+    CCollateralPosition GetCollateralPosition(const COutPoint& outpoint) const;
+};
+
+// Utility functions for working with DigiDollar transactions
+
+// Note: LockDaysToBlocks, GetCollateralRatioForLockTime, and GetDCAMultiplier
+// are defined in consensus/digidollar.h and implemented there
+
+/**
+ * Encode DigiDollar address from destination
+ * @param dest Destination (should be WitnessV1Taproot)
+ * @param chainParams Chain parameters for network type
+ * @return DigiDollar address string
+ */
+std::string EncodeDigiDollarAddress(const CTxDestination& dest, const CChainParams& chainParams);
+
+/**
+ * Estimate transaction virtual size
+ * @param tx Transaction to estimate
+ * @return Estimated virtual size in vBytes
+ */
+size_t EstimateTransactionVSize(const CMutableTransaction& tx);
+
+} // namespace DigiDollar
+
+#endif // DIGIBYTE_DIGIDOLLAR_TXBUILDER_H

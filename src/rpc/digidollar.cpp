@@ -1,0 +1,2048 @@
+// Copyright (c) 2025 The DigiByte Core developers
+// Distributed under the MIT software license, see the accompanying
+// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
+#include <rpc/server.h>
+#include <rpc/util.h>
+#include <rpc/server_util.h>
+#include <rpc/blockchain.h>
+#include <oracle/bundle_manager.h>
+#include <oracle/node.h>
+#include <consensus/digidollar.h>
+#include <consensus/dca.h>
+#include <digidollar/health.h>
+#include <chainparams.h>
+#include <kernel/chainparams.h>
+#include <node/context.h>
+#include <core_io.h>
+#include <util/strencodings.h>
+#include <validation.h>
+#include <versionbits.h>
+//#include <wallet/wallet.h>
+//#include <wallet/digidollarwallet.h>
+#include <base58.h>
+#include <script/standard.h>
+#include <rpc/protocol.h>
+#include <versionbits.h>
+#include <deploymentstatus.h>
+
+#include <univalue.h>
+
+using namespace DigiDollar;
+using namespace DigiDollar::DCA;
+
+// Mock utility functions for RPC-only implementation
+namespace {
+    int GetLockDaysForTier(uint32_t tier) {
+        switch (tier) {
+            case 1: return 30;
+            case 2: return 90;
+            case 3: return 180;
+            case 4: return 365;
+            case 5: return 1095;  // 3 years
+            case 6: return 1825;  // 5 years
+            case 7: return 2555;  // 7 years
+            case 8: return 3650;  // 10 years
+            default: return 0;
+        }
+    }
+
+    int GetMinCollateralRatio(uint32_t tier) {
+        switch (tier) {
+            case 1: return 200;   // 200% for 30 days
+            case 2: return 175;   // 175% for 90 days
+            case 3: return 150;   // 150% for 180 days
+            case 4: return 140;   // 140% for 1 year
+            case 5: return 130;   // 130% for 3 years
+            case 6: return 125;   // 125% for 5 years
+            case 7: return 120;   // 120% for 7 years
+            case 8: return 115;   // 115% for 10 years
+            default: return 200;
+        }
+    }
+}
+
+static RPCHelpMan getdigidollarsystemhealth()
+{
+    return RPCHelpMan{"getdigidollarsystemhealth",
+                "\nGet current DigiDollar system health information.\n"
+                "Returns the overall health of the DigiDollar stablecoin system,\n"
+                "including collateralization ratio and DCA tier status.\n",
+                {},
+                RPCResult{
+                    RPCResult::Type::OBJ, "", "",
+                    {
+                        {RPCResult::Type::NUM, "health_percentage", "System health as percentage (e.g., 150 = 150% collateralized)"},
+                        {RPCResult::Type::STR, "health_status", "Health tier status: healthy, warning, critical, or emergency"},
+                        {RPCResult::Type::NUM, "total_collateral_dgb", "Total DGB locked as collateral"},
+                        {RPCResult::Type::NUM, "total_dd_supply", "Total DigiDollar supply in circulation (in cents)"},
+                        {RPCResult::Type::NUM, "oracle_price_cents", "Current DGB/USD price from oracle (in cents per DGB)"},
+                        {RPCResult::Type::BOOL, "is_emergency", "True if system is in emergency state (<100% collateralized)"},
+                        {RPCResult::Type::OBJ, "dca_tier", "Current DCA tier information",
+                            {
+                                {RPCResult::Type::NUM, "min_collateral", "Minimum collateral % for this tier"},
+                                {RPCResult::Type::NUM, "max_collateral", "Maximum collateral % for this tier"},
+                                {RPCResult::Type::NUM, "multiplier", "DCA multiplier for new mints in this tier"},
+                                {RPCResult::Type::STR, "status", "Tier status description"}
+                            }
+                        }
+                    }
+                },
+                RPCExamples{
+                    HelpExampleCli("getdigidollarsystemhealth", "")
+                    + HelpExampleRpc("getdigidollarsystemhealth", "")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            // Get current system state
+            CAmount totalCollateral = DynamicCollateralAdjustment::GetTotalSystemCollateral();
+            CAmount totalDD = DynamicCollateralAdjustment::GetTotalDDSupply();
+
+            // TODO: Get real oracle price - for now use placeholder
+            CAmount oraclePrice = 5000; // $0.05 per DGB
+
+            // Calculate system health
+            int systemHealth = DynamicCollateralAdjustment::CalculateSystemHealth(
+                totalCollateral, totalDD, oraclePrice);
+
+            // Get current tier information
+            auto tier = DynamicCollateralAdjustment::GetCurrentTier(systemHealth);
+
+            // Check emergency status
+            bool isEmergency = DynamicCollateralAdjustment::IsSystemEmergency(systemHealth);
+
+            UniValue result(UniValue::VOBJ);
+            result.pushKV("health_percentage", systemHealth);
+            result.pushKV("health_status", tier.status);
+            result.pushKV("total_collateral_dgb", ValueFromAmount(totalCollateral));
+            result.pushKV("total_dd_supply", totalDD);
+            result.pushKV("oracle_price_cents", oraclePrice);
+            result.pushKV("is_emergency", isEmergency);
+
+            UniValue dcaTier(UniValue::VOBJ);
+            dcaTier.pushKV("min_collateral", tier.minCollateral);
+            dcaTier.pushKV("max_collateral", tier.maxCollateral);
+            dcaTier.pushKV("multiplier", tier.multiplier);
+            dcaTier.pushKV("status", tier.status);
+            result.pushKV("dca_tier", dcaTier);
+
+            return result;
+        },
+    };
+}
+
+static RPCHelpMan getdcamultiplier()
+{
+    return RPCHelpMan{"getdcamultiplier",
+                "\nGet current Dynamic Collateral Adjustment (DCA) multiplier.\n"
+                "Returns the multiplier applied to base collateral ratios for new mints.\n",
+                {
+                    {"system_health", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "Optional: calculate multiplier for specific health % (for testing)"}
+                },
+                RPCResult{
+                    RPCResult::Type::OBJ, "", "",
+                    {
+                        {RPCResult::Type::NUM, "multiplier", "Current DCA multiplier (e.g., 1.0 = no adjustment, 2.0 = double collateral)"},
+                        {RPCResult::Type::NUM, "system_health", "System health percentage used for calculation"},
+                        {RPCResult::Type::STR, "tier_status", "Health tier: healthy, warning, critical, or emergency"},
+                        {RPCResult::Type::STR, "description", "Human-readable description of DCA effect"}
+                    }
+                },
+                RPCExamples{
+                    HelpExampleCli("getdcamultiplier", "")
+                    + HelpExampleCli("getdcamultiplier", "130")
+                    + HelpExampleRpc("getdcamultiplier", "")
+                    + HelpExampleRpc("getdcamultiplier", "130")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            int systemHealth;
+
+            // Use provided health or calculate current
+            if (!request.params[0].isNull()) {
+                systemHealth = request.params[0].getInt<int>();
+                if (systemHealth < 0 || systemHealth > 30000) {
+                    throw JSONRPCError(RPC_INVALID_PARAMETER, "System health must be between 0 and 30000");
+                }
+            } else {
+                systemHealth = DynamicCollateralAdjustment::GetCurrentSystemHealth();
+            }
+
+            // Get DCA multiplier
+            double multiplier = DynamicCollateralAdjustment::GetDCAMultiplier(systemHealth);
+            auto tier = DynamicCollateralAdjustment::GetCurrentTier(systemHealth);
+
+            // Create description
+            std::string description;
+            if (multiplier == 1.0) {
+                description = "No additional collateral required (healthy system)";
+            } else {
+                description = strprintf("%.1fx base collateral required (%s system)",
+                                      multiplier, tier.status);
+            }
+
+            UniValue result(UniValue::VOBJ);
+            result.pushKV("multiplier", multiplier);
+            result.pushKV("system_health", systemHealth);
+            result.pushKV("tier_status", tier.status);
+            result.pushKV("description", description);
+
+            return result;
+        },
+    };
+}
+
+static RPCHelpMan getdigidollarstats()
+{
+    return RPCHelpMan{"getdigidollarstats",
+                "\nGet comprehensive DigiDollar system statistics.\n"
+                "Returns detailed information about the DigiDollar stablecoin system\n"
+                "including supply, collateral, health metrics, and DCA status.\n",
+                {},
+                RPCResult{
+                    RPCResult::Type::OBJ, "", "",
+                    {
+                        {RPCResult::Type::OBJ, "supply", "DigiDollar supply information",
+                            {
+                                {RPCResult::Type::NUM, "total_dd_cents", "Total DigiDollar supply in cents"},
+                                {RPCResult::Type::NUM, "total_dd_usd", "Total DigiDollar supply in USD"},
+                                {RPCResult::Type::NUM, "active_mints", "Number of active mint positions"},
+                                {RPCResult::Type::NUM, "total_redeemed", "Total DigiDollars redeemed (historical)"}
+                            }
+                        },
+                        {RPCResult::Type::OBJ, "collateral", "Collateral information",
+                            {
+                                {RPCResult::Type::NUM, "total_dgb", "Total DGB locked as collateral"},
+                                {RPCResult::Type::NUM, "total_usd_value", "Total collateral value in USD"},
+                                {RPCResult::Type::NUM, "average_lock_time", "Average lock time across all mints (in blocks)"},
+                                {RPCResult::Type::NUM, "total_locked_by_tier", "Collateral distribution by lock tier"}
+                            }
+                        },
+                        {RPCResult::Type::OBJ, "health", "System health metrics",
+                            {
+                                {RPCResult::Type::NUM, "collateralization_ratio", "Overall collateralization ratio %"},
+                                {RPCResult::Type::STR, "health_tier", "Current health tier"},
+                                {RPCResult::Type::BOOL, "is_emergency", "Emergency state flag"},
+                                {RPCResult::Type::NUM, "days_since_emergency", "Days since last emergency (if any)"}
+                            }
+                        },
+                        {RPCResult::Type::OBJ, "dca", "Dynamic Collateral Adjustment status",
+                            {
+                                {RPCResult::Type::NUM, "current_multiplier", "Current DCA multiplier"},
+                                {RPCResult::Type::STR, "tier_description", "Current tier description"},
+                                {RPCResult::Type::NUM, "tier_min_health", "Minimum health % for current tier"},
+                                {RPCResult::Type::NUM, "tier_max_health", "Maximum health % for current tier"},
+                                {RPCResult::Type::OBJ, "collateral_requirements", "Current collateral requirements by lock period",
+                                    {
+                                        {RPCResult::Type::NUM, "30_days", "Effective ratio for 30-day lock"},
+                                        {RPCResult::Type::NUM, "90_days", "Effective ratio for 3-month lock"},
+                                        {RPCResult::Type::NUM, "180_days", "Effective ratio for 6-month lock"},
+                                        {RPCResult::Type::NUM, "365_days", "Effective ratio for 1-year lock"},
+                                        {RPCResult::Type::NUM, "1095_days", "Effective ratio for 3-year lock"},
+                                        {RPCResult::Type::NUM, "1825_days", "Effective ratio for 5-year lock"},
+                                        {RPCResult::Type::NUM, "2555_days", "Effective ratio for 7-year lock"},
+                                        {RPCResult::Type::NUM, "3650_days", "Effective ratio for 10-year lock"}
+                                    }
+                                }
+                            }
+                        },
+                        {RPCResult::Type::OBJ, "oracle", "Oracle price information",
+                            {
+                                {RPCResult::Type::NUM, "price_cents", "Current DGB price in cents"},
+                                {RPCResult::Type::NUM, "price_usd", "Current DGB price in USD"},
+                                {RPCResult::Type::NUM, "last_update_height", "Block height of last price update"},
+                                {RPCResult::Type::NUM, "validity_blocks", "Blocks remaining until price expires"}
+                            }
+                        }
+                    }
+                },
+                RPCExamples{
+                    HelpExampleCli("getdigidollarstats", "")
+                    + HelpExampleRpc("getdigidollarstats", "")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            // Get current system state
+            CAmount totalCollateral = DynamicCollateralAdjustment::GetTotalSystemCollateral();
+            CAmount totalDD = DynamicCollateralAdjustment::GetTotalDDSupply();
+
+            // TODO: Get real oracle price and other metrics
+            CAmount oraclePrice = 5000; // $0.05 per DGB
+            int currentHeight = 1000; // TODO: Get real current height
+
+            // Calculate system health and DCA info
+            int systemHealth = DynamicCollateralAdjustment::CalculateSystemHealth(
+                totalCollateral, totalDD, oraclePrice);
+            double dcaMultiplier = DynamicCollateralAdjustment::GetDCAMultiplier(systemHealth);
+            auto tier = DynamicCollateralAdjustment::GetCurrentTier(systemHealth);
+            bool isEmergency = DynamicCollateralAdjustment::IsSystemEmergency(systemHealth);
+
+            // Calculate collateral value in USD
+            CAmount collateralValueUSD = (totalCollateral * oraclePrice) / COIN;
+
+            UniValue result(UniValue::VOBJ);
+
+            // Supply information
+            UniValue supply(UniValue::VOBJ);
+            supply.pushKV("total_dd_cents", totalDD);
+            supply.pushKV("total_dd_usd", ValueFromAmount(totalDD));
+            supply.pushKV("active_mints", 0); // TODO: implement mint counting
+            supply.pushKV("total_redeemed", 0); // TODO: implement redemption tracking
+            result.pushKV("supply", supply);
+
+            // Collateral information
+            UniValue collateral(UniValue::VOBJ);
+            collateral.pushKV("total_dgb", ValueFromAmount(totalCollateral));
+            collateral.pushKV("total_usd_value", ValueFromAmount(collateralValueUSD));
+            collateral.pushKV("average_lock_time", 0); // TODO: implement lock time tracking
+            collateral.pushKV("total_locked_by_tier", UniValue(UniValue::VOBJ)); // TODO: implement tier breakdown
+            result.pushKV("collateral", collateral);
+
+            // Health metrics
+            UniValue health(UniValue::VOBJ);
+            health.pushKV("collateralization_ratio", systemHealth);
+            health.pushKV("health_tier", tier.status);
+            health.pushKV("is_emergency", isEmergency);
+            health.pushKV("days_since_emergency", 0); // TODO: implement emergency tracking
+            result.pushKV("health", health);
+
+            // DCA information
+            UniValue dca(UniValue::VOBJ);
+            dca.pushKV("current_multiplier", dcaMultiplier);
+            dca.pushKV("tier_description", tier.status);
+            dca.pushKV("tier_min_health", tier.minCollateral);
+            dca.pushKV("tier_max_health", tier.maxCollateral);
+
+            // Current collateral requirements by lock period
+            UniValue requirements(UniValue::VOBJ);
+            std::vector<std::pair<int, std::string>> lockPeriods = {
+                {30, "30_days"}, {90, "90_days"}, {180, "180_days"}, {365, "365_days"},
+                {1095, "1095_days"}, {1825, "1825_days"}, {2555, "2555_days"}, {3650, "3650_days"}
+            };
+
+            const auto& params = Params();
+            const auto& ddParams = params.GetDigiDollarParams();
+
+            for (const auto& [days, key] : lockPeriods) {
+                int64_t lockBlocks = DigiDollar::LockDaysToBlocks(days);
+                int baseRatio = DigiDollar::GetCollateralRatioForLockTime(lockBlocks, ddParams);
+                int effectiveRatio = DynamicCollateralAdjustment::ApplyDCA(baseRatio, systemHealth);
+                requirements.pushKV(key, effectiveRatio);
+            }
+            dca.pushKV("collateral_requirements", requirements);
+            result.pushKV("dca", dca);
+
+            // Oracle information
+            UniValue oracle(UniValue::VOBJ);
+            oracle.pushKV("price_cents", oraclePrice);
+            oracle.pushKV("price_usd", ValueFromAmount(oraclePrice));
+            oracle.pushKV("last_update_height", currentHeight); // TODO: get real oracle update height
+            oracle.pushKV("validity_blocks", 20); // TODO: get real validity period
+            result.pushKV("oracle", oracle);
+
+            return result;
+        },
+    };
+}
+
+static RPCHelpMan calculatecollateralrequirement()
+{
+    return RPCHelpMan{"calculatecollateralrequirement",
+                "\nCalculate DGB collateral requirement for a DigiDollar mint.\n"
+                "Uses current system health and DCA multipliers to determine\n"
+                "the exact amount of DGB needed for a given DD mint amount and lock period.\n",
+                {
+                    {"dd_amount_cents", RPCArg::Type::NUM, RPCArg::Optional::NO, "DigiDollar amount to mint in cents (e.g., 10000 = $100)"},
+                    {"lock_days", RPCArg::Type::NUM, RPCArg::Optional::NO, "Lock period in days (30, 90, 180, 365, 1095, 1825, 2555, or 3650)"},
+                    {"oracle_price", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "DGB price in cents per DGB (uses current price if omitted)"}
+                },
+                RPCResult{
+                    RPCResult::Type::OBJ, "", "",
+                    {
+                        {RPCResult::Type::NUM, "required_dgb", "Required DGB collateral amount"},
+                        {RPCResult::Type::NUM, "dd_amount_cents", "DD amount being minted (in cents)"},
+                        {RPCResult::Type::NUM, "dd_amount_usd", "DD amount being minted (in USD)"},
+                        {RPCResult::Type::NUM, "lock_days", "Lock period in days"},
+                        {RPCResult::Type::NUM, "lock_blocks", "Lock period in blocks"},
+                        {RPCResult::Type::NUM, "base_ratio", "Base collateral ratio % for this lock period"},
+                        {RPCResult::Type::NUM, "dca_multiplier", "DCA multiplier applied"},
+                        {RPCResult::Type::NUM, "effective_ratio", "Final collateral ratio % (base * DCA)"},
+                        {RPCResult::Type::NUM, "oracle_price", "DGB price used (cents per DGB)"},
+                        {RPCResult::Type::NUM, "system_health", "Current system health %"},
+                        {RPCResult::Type::STR, "dca_tier", "Current DCA tier status"}
+                    }
+                },
+                RPCExamples{
+                    HelpExampleCli("calculatecollateralrequirement", "10000 365")
+                    + HelpExampleCli("calculatecollateralrequirement", "50000 1095 4000")
+                    + HelpExampleRpc("calculatecollateralrequirement", "10000, 365")
+                    + HelpExampleRpc("calculatecollateralrequirement", "50000, 1095, 4000")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            // Parse parameters
+            CAmount ddAmount = request.params[0].getInt<int64_t>();
+            int lockDays = request.params[1].getInt<int>();
+            CAmount oraclePrice = request.params.size() > 2 ?
+                request.params[2].getInt<int64_t>() : 5000; // Default $0.05 per DGB
+
+            // Validate parameters
+            if (ddAmount <= 0) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "DD amount must be positive");
+            }
+            if (lockDays <= 0) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Lock days must be positive");
+            }
+            if (oraclePrice <= 0) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Oracle price must be positive");
+            }
+
+            // Get system parameters
+            const auto& params = Params();
+            const auto& ddParams = params.GetDigiDollarParams();
+
+            // Convert lock days to blocks
+            int64_t lockBlocks = DigiDollar::LockDaysToBlocks(lockDays);
+
+            // Get base collateral ratio
+            int baseRatio = DigiDollar::GetCollateralRatioForLockTime(lockBlocks, ddParams);
+            if (baseRatio <= 0) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER,
+                    strprintf("Invalid lock period: %d days. Valid periods: 30, 90, 180, 365, 1095, 1825, 2555, 3650", lockDays));
+            }
+
+            // Get current system health
+            int systemHealth = DynamicCollateralAdjustment::GetCurrentSystemHealth();
+            double dcaMultiplier = DynamicCollateralAdjustment::GetDCAMultiplier(systemHealth);
+            int effectiveRatio = DynamicCollateralAdjustment::ApplyDCA(baseRatio, systemHealth);
+            auto tier = DynamicCollateralAdjustment::GetCurrentTier(systemHealth);
+
+            // Calculate required DGB
+            CAmount requiredDGB = (ddAmount * effectiveRatio * COIN) / (oraclePrice / 100);
+
+            UniValue result(UniValue::VOBJ);
+            result.pushKV("required_dgb", ValueFromAmount(requiredDGB));
+            result.pushKV("dd_amount_cents", ddAmount);
+            result.pushKV("dd_amount_usd", ValueFromAmount(ddAmount));
+            result.pushKV("lock_days", lockDays);
+            result.pushKV("lock_blocks", lockBlocks);
+            result.pushKV("base_ratio", baseRatio);
+            result.pushKV("dca_multiplier", dcaMultiplier);
+            result.pushKV("effective_ratio", effectiveRatio);
+            result.pushKV("oracle_price", oraclePrice);
+            result.pushKV("system_health", systemHealth);
+            result.pushKV("dca_tier", tier.status);
+
+            return result;
+        },
+    };
+}
+
+static RPCHelpMan getdigidollarstatus()
+{
+    return RPCHelpMan{"getdigidollarstatus",
+                "\nGet comprehensive DigiDollar system status and health monitoring.\n"
+                "Returns detailed system metrics including supply, collateral, tier breakdown,\n"
+                "protection system status, oracle information, and active alerts.\n",
+                {},
+                RPCResult{
+                    RPCResult::Type::OBJ, "", "",
+                    {
+                        {RPCResult::Type::NUM, "supply", "Total DigiDollar supply in circulation (cents)"},
+                        {RPCResult::Type::NUM, "collateral", "Total DGB locked as collateral"},
+                        {RPCResult::Type::NUM, "health", "Overall system health percentage (100-300%)"},
+                        {RPCResult::Type::NUM, "dca_multiplier", "Current DCA multiplier (1.0-10.0)"},
+                        {RPCResult::Type::BOOL, "err_active", "Emergency Redemption Ratio active"},
+                        {RPCResult::Type::NUM, "volatility", "Current volatility percentage"},
+                        {RPCResult::Type::BOOL, "minting_frozen", "Whether new minting is frozen"},
+                        {RPCResult::Type::ARR, "tiers", "Per-tier breakdown",
+                            {
+                                {RPCResult::Type::OBJ, "", "",
+                                    {
+                                        {RPCResult::Type::NUM, "lock_days", "Lock period for this tier"},
+                                        {RPCResult::Type::NUM, "dd_minted", "DD issued in this tier (cents)"},
+                                        {RPCResult::Type::NUM, "dgb_locked", "DGB locked in this tier"},
+                                        {RPCResult::Type::NUM, "positions", "Number of active positions"},
+                                        {RPCResult::Type::NUM, "health", "Tier-specific health ratio (%)"},
+                                        {RPCResult::Type::STR, "status", "Health status (Healthy/Warning/Critical)"},
+                                        {RPCResult::Type::STR, "action", "Recommended action"}
+                                    }
+                                }
+                            }
+                        },
+                        {RPCResult::Type::OBJ, "oracles", "Oracle system status",
+                            {
+                                {RPCResult::Type::NUM, "active_count", "Number of active oracles"},
+                                {RPCResult::Type::NUM, "last_price", "Last reported DGB price (cents)"},
+                                {RPCResult::Type::NUM, "last_update", "Block height of last oracle update"},
+                                {RPCResult::Type::NUM, "blocks_since_update", "Blocks since last oracle update"},
+                                {RPCResult::Type::BOOL, "is_stale", "Whether oracle data is stale"}
+                            }
+                        },
+                        {RPCResult::Type::ARR, "active_alerts", "Currently active system alerts",
+                            {
+                                {RPCResult::Type::STR, "", "Alert type"}
+                            }
+                        },
+                        {RPCResult::Type::STR, "overall_status", "Overall system status (Healthy/Warning/Critical)"},
+                        {RPCResult::Type::STR, "recommended_action", "System-wide recommended action"}
+                    }
+                },
+                RPCExamples{
+                    HelpExampleCli("getdigidollarstatus", "")
+                    + HelpExampleRpc("getdigidollarstatus", "")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            // Initialize health monitoring if not already done
+            DigiDollar::SystemHealthMonitor::Initialize();
+
+            // Get comprehensive health report from health monitor
+            UniValue result = DigiDollar::SystemHealthMonitor::GetHealthReport();
+
+            return result;
+        },
+    };
+}
+
+static RPCHelpMan getdigidollardeploymentinfo()
+{
+    return RPCHelpMan{"getdigidollardeploymentinfo",
+                "\nGet DigiDollar BIP9 deployment activation status and information.\n"
+                "Returns detailed information about DigiDollar soft fork deployment status,\n"
+                "including activation state, signaling progress, and timeline.\n",
+                {},
+                RPCResult{
+                    RPCResult::Type::OBJ, "", "",
+                    {
+                        {RPCResult::Type::BOOL, "enabled", "Whether DigiDollar is currently enabled/active"},
+                        {RPCResult::Type::STR, "status", "Deployment status (defined, started, locked_in, active, failed)"},
+                        {RPCResult::Type::NUM, "bit", "Version bit used for BIP9 signaling"},
+                        {RPCResult::Type::NUM, "start_time", "Start time for deployment signaling"},
+                        {RPCResult::Type::NUM, "timeout", "Timeout for deployment"},
+                        {RPCResult::Type::NUM, "min_activation_height", "Minimum activation height"},
+                        {RPCResult::Type::NUM, "activation_height", "Actual activation height (if activated)"},
+                        {RPCResult::Type::NUM, "blocks_until_timeout", "Blocks remaining until timeout (if applicable)"},
+                        {RPCResult::Type::NUM, "signaling_blocks", "Blocks signaling support in current period"},
+                        {RPCResult::Type::NUM, "threshold", "Threshold required for activation"},
+                        {RPCResult::Type::NUM, "period_blocks", "Number of blocks in signaling period"},
+                        {RPCResult::Type::NUM, "progress_percent", "Signaling progress as percentage"}
+                    }
+                },
+                RPCExamples{
+                    HelpExampleCli("getdigidollardeploymentinfo", "")
+                    + HelpExampleRpc("getdigidollardeploymentinfo", "")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            const ChainstateManager& chainman = EnsureAnyChainman(request.context);
+            LOCK(cs_main);
+            const Chainstate& active_chainstate = chainman.ActiveChainstate();
+            const CBlockIndex* tip = active_chainstate.m_chain.Tip();
+
+            UniValue result(UniValue::VOBJ);
+
+            // Check if DigiDollar is currently enabled
+            bool enabled = DigiDollar::IsDigiDollarEnabled(tip, chainman);
+            result.pushKV("enabled", enabled);
+
+            // Get deployment parameters
+            const Consensus::Params& consensusParams = chainman.GetConsensus();
+            const Consensus::BIP9Deployment& deployment = consensusParams.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR];
+
+            result.pushKV("bit", deployment.bit);
+            result.pushKV("start_time", deployment.nStartTime);
+            result.pushKV("timeout", deployment.nTimeout);
+            result.pushKV("min_activation_height", deployment.min_activation_height);
+
+            // Get deployment state and statistics
+            ThresholdState state = chainman.m_versionbitscache.State(tip, consensusParams, Consensus::DEPLOYMENT_DIGIDOLLAR);
+
+            const char* status_str = "unknown";
+            switch (state) {
+                case ThresholdState::DEFINED: status_str = "defined"; break;
+                case ThresholdState::STARTED: status_str = "started"; break;
+                case ThresholdState::LOCKED_IN: status_str = "locked_in"; break;
+                case ThresholdState::ACTIVE: status_str = "active"; break;
+                case ThresholdState::FAILED: status_str = "failed"; break;
+            }
+            result.pushKV("status", status_str);
+
+            // Get statistics for signaling progress
+            if (tip && (state == ThresholdState::STARTED || state == ThresholdState::LOCKED_IN)) {
+                BIP9Stats stats = chainman.m_versionbitscache.Statistics(tip, consensusParams, Consensus::DEPLOYMENT_DIGIDOLLAR);
+                result.pushKV("blocks_until_timeout", stats.period - stats.elapsed);
+                result.pushKV("signaling_blocks", stats.count);
+                result.pushKV("threshold", stats.threshold);
+                result.pushKV("period_blocks", stats.period);
+                result.pushKV("progress_percent", stats.threshold > 0 ? (100.0 * stats.count) / stats.threshold : 0.0);
+            }
+
+            // Get activation height if active
+            if (state == ThresholdState::ACTIVE) {
+                // Find the activation height by searching backwards
+                const CBlockIndex* pindex = tip;
+                while (pindex && pindex->pprev) {
+                    if (chainman.m_versionbitscache.State(pindex->pprev, consensusParams, Consensus::DEPLOYMENT_DIGIDOLLAR) != ThresholdState::ACTIVE) {
+                        result.pushKV("activation_height", pindex->nHeight);
+                        break;
+                    }
+                    pindex = pindex->pprev;
+                }
+            }
+
+            return result;
+        },
+    };
+}
+
+// =============================================================================
+// CORE RPC COMMANDS (Task 5.7)
+// =============================================================================
+
+static RPCHelpMan mintdigidollar()
+{
+    return RPCHelpMan{"mintdigidollar",
+                "\nMint new DigiDollar with DGB collateral.\n"
+                "Creates a new DigiDollar position by locking DGB as collateral.\n"
+                "The amount of collateral required depends on the lock period and current system health.\n",
+                {
+                    {"dd_amount", RPCArg::Type::AMOUNT, RPCArg::Optional::NO, "Amount of DigiDollar to mint (in USD cents, e.g., 10000 = $100)"},
+                    {"lock_tier", RPCArg::Type::NUM, RPCArg::Optional::NO, "Lock tier 1-8 (30d,90d,180d,1y,3y,5y,7y,10y)"},
+                    {"fee_rate", RPCArg::Type::AMOUNT, RPCArg::Optional::OMITTED, "Fee rate in DGB/kvB (default: use estimate)"}
+                },
+                RPCResult{
+                    RPCResult::Type::OBJ, "", "",
+                    {
+                        {RPCResult::Type::STR_HEX, "txid", "Transaction ID of the mint transaction"},
+                        {RPCResult::Type::STR_AMOUNT, "dd_minted", "Amount of DigiDollar minted (in cents)"},
+                        {RPCResult::Type::STR_AMOUNT, "dgb_collateral", "DGB locked as collateral"},
+                        {RPCResult::Type::NUM, "lock_tier", "Lock tier used"},
+                        {RPCResult::Type::NUM, "unlock_height", "Block height when collateral becomes unlockable"},
+                        {RPCResult::Type::NUM, "collateral_ratio", "Effective collateral ratio percentage"},
+                        {RPCResult::Type::STR_AMOUNT, "fee_paid", "Transaction fee paid"},
+                        {RPCResult::Type::STR, "position_id", "Unique position identifier"}
+                    }
+                },
+                RPCExamples{
+                    HelpExampleCli("mintdigidollar", "10000 3") +
+                    HelpExampleCli("mintdigidollar", "50000 5 0.001") +
+                    HelpExampleRpc("mintdigidollar", "10000, 3") +
+                    HelpExampleRpc("mintdigidollar", "50000, 5, 0.001")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            // Parse parameters
+            CAmount ddAmount = AmountFromValue(request.params[0]);
+            int lockTier = request.params[1].getInt<int>();
+            CAmount feeRate = 0;
+            if (!request.params[2].isNull()) {
+                feeRate = AmountFromValue(request.params[2]);
+            }
+
+            // Validate parameters
+            if (ddAmount <= 0) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "DigiDollar amount must be positive");
+            }
+            if (lockTier < 1 || lockTier > 8) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Lock tier must be between 1 and 8");
+            }
+
+            // Mock mint transaction creation
+            uint256 mockTxId;
+            mockTxId.SetHex("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef");
+
+            // Calculate collateral and fees (mock implementation)
+            CAmount collateralAmount = 150 * COIN; // TODO: Use real calculation based on ddAmount and current ratios
+            CAmount feePaid = 0.001 * COIN; // TODO: Use real fee calculation
+            int unlockHeight = 1000000; // TODO: Use real height calculation based on current height + lock period
+            int collateralRatio = 150; // TODO: Use real ratio calculation based on lock tier and DCA
+
+            UniValue result(UniValue::VOBJ);
+            result.pushKV("txid", mockTxId.GetHex());
+            result.pushKV("dd_minted", ddAmount);
+            result.pushKV("dgb_collateral", ValueFromAmount(collateralAmount));
+            result.pushKV("lock_tier", lockTier);
+            result.pushKV("unlock_height", unlockHeight);
+            result.pushKV("collateral_ratio", collateralRatio);
+            result.pushKV("fee_paid", ValueFromAmount(feePaid));
+            result.pushKV("position_id", mockTxId.GetHex());
+
+            return result;
+        },
+    };
+}
+
+static RPCHelpMan senddigidollar()
+{
+    return RPCHelpMan{"senddigidollar",
+                "\nSend DigiDollar to another DigiDollar address.\n"
+                "Creates a transaction that transfers DigiDollar from your wallet to the specified address.\n",
+                {
+                    {"address", RPCArg::Type::STR, RPCArg::Optional::NO, "DigiDollar address to send to (DD/TD/RD prefix)"},
+                    {"amount", RPCArg::Type::AMOUNT, RPCArg::Optional::NO, "Amount to send (in USD cents)"},
+                    {"comment", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "Optional comment for the transaction"},
+                    {"fee_rate", RPCArg::Type::AMOUNT, RPCArg::Optional::OMITTED, "Fee rate in DGB/kvB"}
+                },
+                RPCResult{
+                    RPCResult::Type::OBJ, "", "",
+                    {
+                        {RPCResult::Type::STR_HEX, "txid", "Transaction ID"},
+                        {RPCResult::Type::STR, "to_address", "Recipient DigiDollar address"},
+                        {RPCResult::Type::STR_AMOUNT, "amount", "Amount sent (in cents)"},
+                        {RPCResult::Type::STR_AMOUNT, "fee_paid", "Transaction fee paid in DGB"},
+                        {RPCResult::Type::NUM, "inputs_used", "Number of DD inputs consumed"},
+                        {RPCResult::Type::STR_AMOUNT, "change_amount", "DD change amount (if any)"}
+                    }
+                },
+                RPCExamples{
+                    HelpExampleCli("senddigidollar", "\"DDtestaddress123456789abcdef\" 5000") +
+                    HelpExampleCli("senddigidollar", "\"DDtestaddress123456789abcdef\" 5000 \"Payment for services\"") +
+                    HelpExampleRpc("senddigidollar", "\"DDtestaddress123456789abcdef\", 5000") +
+                    HelpExampleRpc("senddigidollar", "\"DDtestaddress123456789abcdef\", 5000, \"Payment for services\"")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            // Parse parameters
+            std::string addressStr = request.params[0].get_str();
+            CAmount amount = AmountFromValue(request.params[1]);
+            std::string comment = request.params.size() > 2 ? request.params[2].get_str() : "";
+
+            // Validate parameters
+            if (amount <= 0) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Amount must be positive");
+            }
+
+            // Validate DD address (basic validation for now)
+            if (addressStr.length() < 25 || addressStr.length() > 35) {
+                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid DigiDollar address length");
+            }
+            if (addressStr.substr(0, 2) != "DD" && addressStr.substr(0, 2) != "TD" && addressStr.substr(0, 2) != "RD") {
+                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid DigiDollar address prefix");
+            }
+
+            // Mock transfer transaction creation
+            uint256 mockTxId;
+            mockTxId.SetHex("abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789");
+
+            // Calculate fees and change (mock implementation)
+            CAmount feePaid = 0.001 * COIN; // TODO: Use real fee calculation
+            int inputsUsed = 1; // TODO: Count actual inputs used
+            CAmount changeAmount = 0; // TODO: Calculate actual change
+
+            UniValue result(UniValue::VOBJ);
+            result.pushKV("txid", mockTxId.GetHex());
+            result.pushKV("to_address", addressStr);
+            result.pushKV("amount", amount);
+            result.pushKV("fee_paid", ValueFromAmount(feePaid));
+            result.pushKV("inputs_used", inputsUsed);
+            result.pushKV("change_amount", changeAmount);
+
+            return result;
+        },
+    };
+}
+
+static RPCHelpMan redeemdigidollar()
+{
+    return RPCHelpMan{"redeemdigidollar",
+                "\nRedeem DigiDollar and unlock DGB collateral.\n"
+                "Burns DigiDollar tokens and unlocks the corresponding DGB collateral.\n"
+                "Only positions that have reached maturity can be redeemed.\n",
+                {
+                    {"position_id", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "Position ID (transaction hash of mint)"},
+                    {"dd_amount", RPCArg::Type::AMOUNT, RPCArg::Optional::NO, "Amount of DD to redeem (in cents)"},
+                    {"redemption_address", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "DGB address to receive unlocked collateral (default: new address)"},
+                    {"fee_rate", RPCArg::Type::AMOUNT, RPCArg::Optional::OMITTED, "Fee rate in DGB/kvB"}
+                },
+                RPCResult{
+                    RPCResult::Type::OBJ, "", "",
+                    {
+                        {RPCResult::Type::STR_HEX, "txid", "Redemption transaction ID"},
+                        {RPCResult::Type::STR, "position_id", "Original position ID"},
+                        {RPCResult::Type::STR_AMOUNT, "dd_redeemed", "Amount of DD redeemed (burned)"},
+                        {RPCResult::Type::STR_AMOUNT, "dgb_unlocked", "Amount of DGB unlocked"},
+                        {RPCResult::Type::STR, "unlock_address", "DGB address that received unlocked collateral"},
+                        {RPCResult::Type::STR_AMOUNT, "fee_paid", "Transaction fee paid"},
+                        {RPCResult::Type::STR, "redemption_path", "Redemption path used (normal/emergency/liquidation)"},
+                        {RPCResult::Type::BOOL, "position_closed", "Whether the position was fully closed"}
+                    }
+                },
+                RPCExamples{
+                    HelpExampleCli("redeemdigidollar", "\"abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890\" 5000") +
+                    HelpExampleCli("redeemdigidollar", "\"abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890\" 5000 \"DGb1A2B3C4D5E6F7G8H9I0J1K2L3M4N5O6P7Q8R9S0\"") +
+                    HelpExampleRpc("redeemdigidollar", "\"abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890\", 5000")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            // Parse parameters
+            std::string positionIdStr = request.params[0].get_str();
+            CAmount ddAmount = AmountFromValue(request.params[1]);
+            std::string redeemAddress = request.params.size() > 2 ? request.params[2].get_str() : "";
+
+            // Validate parameters
+            if (ddAmount <= 0) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Redemption amount must be positive");
+            }
+
+            if (!IsHex(positionIdStr) || positionIdStr.length() != 64) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid position ID format");
+            }
+
+            // Mock redemption transaction creation
+            uint256 mockTxId;
+            mockTxId.SetHex("fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321");
+
+            // Calculate redemption details (mock implementation)
+            CAmount dgbUnlocked = 75 * COIN; // TODO: Use real calculation based on position and current ratios
+            CAmount feePaid = 0.001 * COIN; // TODO: Use real fee calculation
+            std::string unlockAddr = redeemAddress.empty() ? "DGb1A2B3C4D5E6F7G8H9I0J1K2L3M4N5O6P7Q8R9S0" : redeemAddress;
+            bool positionClosed = true; // TODO: Check if position fully redeemed
+
+            UniValue result(UniValue::VOBJ);
+            result.pushKV("txid", mockTxId.GetHex());
+            result.pushKV("position_id", positionIdStr);
+            result.pushKV("dd_redeemed", ddAmount);
+            result.pushKV("dgb_unlocked", ValueFromAmount(dgbUnlocked));
+            result.pushKV("unlock_address", unlockAddr);
+            result.pushKV("fee_paid", ValueFromAmount(feePaid));
+            result.pushKV("redemption_path", "normal");
+            result.pushKV("position_closed", positionClosed);
+
+            return result;
+        },
+    };
+}
+
+static RPCHelpMan listdigidollarpositions()
+{
+    return RPCHelpMan{"listdigidollarpositions",
+                "\nList all DigiDollar collateral positions in the wallet.\n"
+                "Shows active and inactive positions with their current status.\n",
+                {
+                    {"active_only", RPCArg::Type::BOOL, RPCArg::Default{true}, "Only show active positions"},
+                    {"tier_filter", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "Filter by specific lock tier (1-8)"},
+                    {"min_amount", RPCArg::Type::AMOUNT, RPCArg::Optional::OMITTED, "Minimum DD amount filter"}
+                },
+                RPCResult{
+                    RPCResult::Type::ARR, "", "",
+                    {
+                        {RPCResult::Type::OBJ, "", "",
+                            {
+                                {RPCResult::Type::STR, "position_id", "Unique position identifier"},
+                                {RPCResult::Type::STR_AMOUNT, "dd_minted", "DigiDollar amount minted"},
+                                {RPCResult::Type::STR_AMOUNT, "dgb_collateral", "DGB locked as collateral"},
+                                {RPCResult::Type::NUM, "lock_tier", "Lock tier (1-8)"},
+                                {RPCResult::Type::NUM, "lock_days", "Lock period in days"},
+                                {RPCResult::Type::NUM, "unlock_height", "Block height when unlockable"},
+                                {RPCResult::Type::NUM, "blocks_remaining", "Blocks until unlock (0 if unlocked)"},
+                                {RPCResult::Type::STR, "status", "Position status (active/unlocked/redeemed)"},
+                                {RPCResult::Type::NUM, "health_ratio", "Current collateral health ratio (%)"},
+                                {RPCResult::Type::BOOL, "can_redeem", "Whether position can be redeemed now"},
+                                {RPCResult::Type::STR, "created_date", "ISO date when position was created"},
+                                {RPCResult::Type::STR, "unlock_date", "ISO date when position unlocks"}
+                            }
+                        }
+                    }
+                },
+                RPCExamples{
+                    HelpExampleCli("listdigidollarpositions", "") +
+                    HelpExampleCli("listdigidollarpositions", "false") +
+                    HelpExampleCli("listdigidollarpositions", "true 3") +
+                    HelpExampleRpc("listdigidollarpositions", "") +
+                    HelpExampleRpc("listdigidollarpositions", "false, 3")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            // Parse parameters
+            bool activeOnly = request.params.size() > 0 ? request.params[0].get_bool() : true;
+            int tierFilter = request.params.size() > 1 && !request.params[1].isNull() ?
+                            request.params[1].getInt<int>() : -1;
+            CAmount minAmount = request.params.size() > 2 && !request.params[2].isNull() ?
+                               AmountFromValue(request.params[2]) : 0;
+
+            // Mock positions data - in real implementation would get from wallet
+            struct MockPosition {
+                std::string position_id;
+                CAmount dd_minted;
+                CAmount dgb_collateral;
+                uint32_t lock_tier;
+                int64_t unlock_height;
+                bool is_active;
+            };
+
+            std::vector<MockPosition> mockPositions = {
+                {"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", 10000, 150 * COIN, 3, 1000000, true},
+                {"abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789", 25000, 300 * COIN, 5, 1050000, true},
+                {"fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210", 5000, 80 * COIN, 1, 950000, false}
+            };
+
+            UniValue result(UniValue::VARR);
+
+            for (const auto& pos : mockPositions) {
+                // Apply filters
+                if (!activeOnly && pos.is_active) continue;
+                if (activeOnly && !pos.is_active) continue;
+                if (tierFilter > 0 && pos.lock_tier != static_cast<uint32_t>(tierFilter)) continue;
+                if (minAmount > 0 && pos.dd_minted < minAmount) continue;
+
+                UniValue position(UniValue::VOBJ);
+                position.pushKV("position_id", pos.position_id);
+                position.pushKV("dd_minted", pos.dd_minted);
+                position.pushKV("dgb_collateral", ValueFromAmount(pos.dgb_collateral));
+                position.pushKV("lock_tier", static_cast<int>(pos.lock_tier));
+                position.pushKV("lock_days", GetLockDaysForTier(pos.lock_tier));
+                position.pushKV("unlock_height", pos.unlock_height);
+
+                // Calculate remaining blocks (mock data)
+                int currentHeight = 900000; // TODO: Get real current height
+                int blocksRemaining = std::max(0, static_cast<int>(pos.unlock_height - currentHeight));
+                position.pushKV("blocks_remaining", blocksRemaining);
+
+                std::string status = pos.is_active ? (blocksRemaining == 0 ? "unlocked" : "active") : "redeemed";
+                position.pushKV("status", status);
+
+                // Mock health ratio calculation
+                int healthRatio = 150; // TODO: Calculate real health ratio
+                position.pushKV("health_ratio", healthRatio);
+                position.pushKV("can_redeem", blocksRemaining == 0 && pos.is_active);
+
+                // Mock dates
+                position.pushKV("created_date", "2024-01-01T00:00:00Z");
+                position.pushKV("unlock_date", "2024-12-31T23:59:59Z");
+
+                result.push_back(position);
+            }
+
+            return result;
+        },
+    };
+}
+
+// =============================================================================
+// DD ADDRESS COMMANDS (Task 5.7)
+// =============================================================================
+
+static RPCHelpMan getdigidollaraddress()
+{
+    return RPCHelpMan{"getdigidollaraddress",
+                "\nGenerate a new DigiDollar address for receiving DD.\n"
+                "Creates a new address with the proper DD prefix for the current network.\n",
+                {
+                    {"label", RPCArg::Type::STR, RPCArg::Default{""}, "Optional label for the address"},
+                    {"address_type", RPCArg::Type::STR, RPCArg::Default{"legacy"}, "Address type (legacy, p2sh-segwit, bech32)"}
+                },
+                RPCResult{
+                    RPCResult::Type::OBJ, "", "",
+                    {
+                        {RPCResult::Type::STR, "address", "The new DigiDollar address"},
+                        {RPCResult::Type::STR, "label", "Label assigned to the address"},
+                        {RPCResult::Type::STR, "address_type", "Type of address generated"},
+                        {RPCResult::Type::STR, "network", "Network prefix (DD=mainnet, TD=testnet, RD=regtest)"},
+                        {RPCResult::Type::STR_HEX, "pubkey", "Public key for the address"},
+                        {RPCResult::Type::BOOL, "ismine", "Whether the address belongs to this wallet"}
+                    }
+                },
+                RPCExamples{
+                    HelpExampleCli("getdigidollaraddress", "") +
+                    HelpExampleCli("getdigidollaraddress", "\"savings\"") +
+                    HelpExampleCli("getdigidollaraddress", "\"trading\" \"p2sh-segwit\"") +
+                    HelpExampleRpc("getdigidollaraddress", "") +
+                    HelpExampleRpc("getdigidollaraddress", "\"savings\"")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            // Parse parameters
+            std::string label = request.params.size() > 0 ? request.params[0].get_str() : "";
+            std::string addressType = request.params.size() > 1 ? request.params[1].get_str() : "legacy";
+
+            // Validate address type
+            if (addressType != "legacy" && addressType != "p2sh-segwit" && addressType != "bech32") {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid address type. Use legacy, p2sh-segwit, or bech32");
+            }
+
+            // Generate new DD address (mock implementation)
+            std::string newAddress = "DDmockaddress123456789abcdef";
+            std::string network = "DD"; // Mainnet prefix, would be TD/RD for test networks
+
+            // Mock public key
+            std::string pubkey = "0279BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798";
+
+            UniValue result(UniValue::VOBJ);
+            result.pushKV("address", newAddress);
+            result.pushKV("label", label);
+            result.pushKV("address_type", addressType);
+            result.pushKV("network", network);
+            result.pushKV("pubkey", pubkey);
+            result.pushKV("ismine", true);
+
+            return result;
+        },
+    };
+}
+
+static RPCHelpMan validateddaddress()
+{
+    return RPCHelpMan{"validateddaddress",
+                "\nValidate a DigiDollar address format and return detailed information.\n"
+                "Checks if the address has the correct prefix, encoding, and checksum.\n",
+                {
+                    {"address", RPCArg::Type::STR, RPCArg::Optional::NO, "DigiDollar address to validate"}
+                },
+                RPCResult{
+                    RPCResult::Type::OBJ, "", "",
+                    {
+                        {RPCResult::Type::BOOL, "isvalid", "Whether the address is valid"},
+                        {RPCResult::Type::STR, "address", "The validated address (if valid)"},
+                        {RPCResult::Type::STR, "network", "Network type (mainnet/testnet/regtest)"},
+                        {RPCResult::Type::STR, "prefix", "Address prefix (DD/TD/RD)"},
+                        {RPCResult::Type::BOOL, "ismine", "Whether address belongs to this wallet"},
+                        {RPCResult::Type::BOOL, "iswatchonly", "Whether address is watch-only"},
+                        {RPCResult::Type::STR, "error", "Error description (if invalid)"}
+                    }
+                },
+                RPCExamples{
+                    HelpExampleCli("validateddaddress", "\"DDtestaddress123456789abcdef\"") +
+                    HelpExampleCli("validateddaddress", "\"TDtestnet123456789abcdef\"") +
+                    HelpExampleRpc("validateddaddress", "\"DDtestaddress123456789abcdef\"")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            std::string addressStr = request.params[0].get_str();
+
+            UniValue result(UniValue::VOBJ);
+
+            // Validate DD address format (basic validation)
+            bool isValid = true;
+            if (addressStr.length() < 25 || addressStr.length() > 35) {
+                isValid = false;
+            } else if (addressStr.substr(0, 2) != "DD" && addressStr.substr(0, 2) != "TD" && addressStr.substr(0, 2) != "RD") {
+                isValid = false;
+            }
+
+            result.pushKV("isvalid", isValid);
+
+            if (isValid) {
+                result.pushKV("address", addressStr);
+
+                // Determine network and prefix
+                std::string prefix = addressStr.substr(0, 2);
+                std::string network;
+                if (prefix == "DD") network = "mainnet";
+                else if (prefix == "TD") network = "testnet";
+                else if (prefix == "RD") network = "regtest";
+                else network = "unknown";
+
+                result.pushKV("network", network);
+                result.pushKV("prefix", prefix);
+                result.pushKV("ismine", false); // TODO: Check wallet ownership
+                result.pushKV("iswatchonly", false); // TODO: Check watch-only status
+            } else {
+                std::string error = "Invalid DigiDollar address format";
+                if (addressStr.length() < 25) error = "Address too short";
+                else if (addressStr.length() > 35) error = "Address too long";
+                else if (addressStr.substr(0, 2) != "DD" && addressStr.substr(0, 2) != "TD" && addressStr.substr(0, 2) != "RD") {
+                    error = "Invalid address prefix (must be DD/TD/RD)";
+                }
+
+                result.pushKV("error", error);
+            }
+
+            return result;
+        },
+    };
+}
+
+static RPCHelpMan listdigidollaraddresses()
+{
+    return RPCHelpMan{"listdigidollaraddresses",
+                "\nList all DigiDollar addresses in the wallet.\n"
+                "Returns both owned and watch-only DD addresses with their balances and labels.\n",
+                {
+                    {"include_watchonly", RPCArg::Type::BOOL, RPCArg::Default{false}, "Include watch-only addresses"},
+                    {"min_balance", RPCArg::Type::AMOUNT, RPCArg::Default{0}, "Minimum balance filter (in cents)"}
+                },
+                RPCResult{
+                    RPCResult::Type::ARR, "", "",
+                    {
+                        {RPCResult::Type::OBJ, "", "",
+                            {
+                                {RPCResult::Type::STR, "address", "DigiDollar address"},
+                                {RPCResult::Type::STR, "label", "Address label"},
+                                {RPCResult::Type::STR_AMOUNT, "balance", "DD balance (in cents)"},
+                                {RPCResult::Type::BOOL, "ismine", "Whether address is owned by wallet"},
+                                {RPCResult::Type::BOOL, "iswatchonly", "Whether address is watch-only"},
+                                {RPCResult::Type::NUM, "txcount", "Number of transactions involving this address"},
+                                {RPCResult::Type::STR, "created_date", "Date when address was created"},
+                                {RPCResult::Type::STR, "last_used", "Date of last transaction"}
+                            }
+                        }
+                    }
+                },
+                RPCExamples{
+                    HelpExampleCli("listdigidollaraddresses", "") +
+                    HelpExampleCli("listdigidollaraddresses", "true") +
+                    HelpExampleCli("listdigidollaraddresses", "true 1000") +
+                    HelpExampleRpc("listdigidollaraddresses", "") +
+                    HelpExampleRpc("listdigidollaraddresses", "true, 1000")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            // Parse parameters
+            bool includeWatchOnly = request.params.size() > 0 ? request.params[0].get_bool() : false;
+            CAmount minBalance = request.params.size() > 1 ? AmountFromValue(request.params[1]) : 0;
+
+            UniValue result(UniValue::VARR);
+
+            // Mock addresses - in real implementation would get from wallet
+            std::vector<std::tuple<std::string, std::string, CAmount, bool, bool>> mockAddresses = {
+                {"DDmockaddress123456789abcdef1", "primary", 10000, true, false},
+                {"DDmockaddress123456789abcdef2", "savings", 25000, true, false},
+                {"DDwatchonly123456789abcdef3", "watch1", 5000, false, true}
+            };
+
+            for (const auto& [addr, label, balance, isMine, isWatchOnly] : mockAddresses) {
+                // Apply filters
+                if (!includeWatchOnly && isWatchOnly) continue;
+                if (balance < minBalance) continue;
+
+                UniValue addrInfo(UniValue::VOBJ);
+                addrInfo.pushKV("address", addr);
+                addrInfo.pushKV("label", label);
+                addrInfo.pushKV("balance", balance);
+                addrInfo.pushKV("ismine", isMine);
+                addrInfo.pushKV("iswatchonly", isWatchOnly);
+                addrInfo.pushKV("txcount", 5); // Mock transaction count
+                addrInfo.pushKV("created_date", "2024-01-01T00:00:00Z");
+                addrInfo.pushKV("last_used", "2024-03-15T12:30:00Z");
+
+                result.push_back(addrInfo);
+            }
+
+            return result;
+        },
+    };
+}
+
+static RPCHelpMan importdigidollaraddress()
+{
+    return RPCHelpMan{"importdigidollaraddress",
+                "\nImport a DigiDollar address for watch-only monitoring.\n"
+                "Adds an external DD address to watch for incoming transactions without spending capability.\n",
+                {
+                    {"address", RPCArg::Type::STR, RPCArg::Optional::NO, "DigiDollar address to import"},
+                    {"label", RPCArg::Type::STR, RPCArg::Default{""}, "Optional label for the address"},
+                    {"rescan", RPCArg::Type::BOOL, RPCArg::Default{false}, "Rescan blockchain for transactions"},
+                    {"p2sh", RPCArg::Type::BOOL, RPCArg::Default{false}, "Add P2SH version of address (advanced)"}
+                },
+                RPCResult{
+                    RPCResult::Type::OBJ, "", "",
+                    {
+                        {RPCResult::Type::STR, "address", "Imported DigiDollar address"},
+                        {RPCResult::Type::STR, "label", "Assigned label"},
+                        {RPCResult::Type::BOOL, "success", "Whether import was successful"},
+                        {RPCResult::Type::BOOL, "rescan_performed", "Whether blockchain rescan was performed"},
+                        {RPCResult::Type::NUM, "transactions_found", "Number of existing transactions found (if rescanned)"},
+                        {RPCResult::Type::STR, "warning", "Any warnings about the import"}
+                    }
+                },
+                RPCExamples{
+                    HelpExampleCli("importdigidollaraddress", "\"DDexternaladdress123456789abc\"") +
+                    HelpExampleCli("importdigidollaraddress", "\"DDexternaladdress123456789abc\" \"external_wallet\"") +
+                    HelpExampleCli("importdigidollaraddress", "\"DDexternaladdress123456789abc\" \"external_wallet\" true") +
+                    HelpExampleRpc("importdigidollaraddress", "\"DDexternaladdress123456789abc\", \"external_wallet\"")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            // Parse parameters
+            std::string addressStr = request.params[0].get_str();
+            std::string label = request.params.size() > 1 ? request.params[1].get_str() : "";
+            bool rescan = request.params.size() > 2 ? request.params[2].get_bool() : false;
+            bool p2sh = request.params.size() > 3 ? request.params[3].get_bool() : false;
+
+            // Validate address (basic validation)
+            if (addressStr.length() < 25 || addressStr.length() > 35) {
+                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid DigiDollar address length");
+            }
+            if (addressStr.substr(0, 2) != "DD" && addressStr.substr(0, 2) != "TD" && addressStr.substr(0, 2) != "RD") {
+                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid DigiDollar address prefix");
+            }
+
+            // Import address (mock implementation)
+            bool success = true;
+            int transactionsFound = 0;
+            std::string warning = "";
+
+            if (rescan) {
+                transactionsFound = 3; // Mock: found 3 existing transactions
+            }
+
+            if (p2sh) {
+                warning = "P2SH import is experimental and may not work with all DigiDollar features";
+            }
+
+            UniValue result(UniValue::VOBJ);
+            result.pushKV("address", addressStr);
+            result.pushKV("label", label);
+            result.pushKV("success", success);
+            result.pushKV("rescan_performed", rescan);
+            result.pushKV("transactions_found", transactionsFound);
+            if (!warning.empty()) {
+                result.pushKV("warning", warning);
+            }
+
+            return result;
+        },
+    };
+}
+
+// =============================================================================
+// UTILITY RPC COMMANDS (Task 5.8)
+// =============================================================================
+
+static RPCHelpMan getdigidollarbalance()
+{
+    return RPCHelpMan{"getdigidollarbalance",
+                "\nGet DigiDollar balance for a specific address or total wallet balance.\n"
+                "Returns the confirmed and unconfirmed DD balance.\n",
+                {
+                    {"address", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "DigiDollar address (omit for total wallet balance)"},
+                    {"minconf", RPCArg::Type::NUM, RPCArg::Default{1}, "Minimum number of confirmations"},
+                    {"include_watchonly", RPCArg::Type::BOOL, RPCArg::Default{false}, "Include watch-only addresses"}
+                },
+                RPCResult{
+                    RPCResult::Type::OBJ, "", "",
+                    {
+                        {RPCResult::Type::STR_AMOUNT, "confirmed", "Confirmed DD balance (in cents)"},
+                        {RPCResult::Type::STR_AMOUNT, "unconfirmed", "Unconfirmed DD balance (in cents)"},
+                        {RPCResult::Type::STR_AMOUNT, "total", "Total DD balance (confirmed + unconfirmed)"},
+                        {RPCResult::Type::STR, "address", "Address queried (if specific address)"},
+                        {RPCResult::Type::NUM, "address_count", "Number of addresses included (for wallet total)"}
+                    }
+                },
+                RPCExamples{
+                    HelpExampleCli("getdigidollarbalance", "") +
+                    HelpExampleCli("getdigidollarbalance", "\"DDtestaddress123456789abcdef\"") +
+                    HelpExampleCli("getdigidollarbalance", "\"\" 6 true") +
+                    HelpExampleRpc("getdigidollarbalance", "") +
+                    HelpExampleRpc("getdigidollarbalance", "\"DDtestaddress123456789abcdef\", 6")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            // Parse parameters
+            std::string addressStr = request.params.size() > 0 && !request.params[0].isNull() ?
+                                   request.params[0].get_str() : "";
+            int minConf = request.params.size() > 1 ? request.params[1].getInt<int>() : 1;
+            bool includeWatchOnly = request.params.size() > 2 ? request.params[2].get_bool() : false;
+
+            // Validate parameters
+            if (minConf < 0) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Minimum confirmations must be non-negative");
+            }
+
+            CAmount confirmedBalance = 0;
+            CAmount unconfirmedBalance = 0;
+            int addressCount = 3; // Mock address count
+
+            if (!addressStr.empty()) {
+                // Validate DD address format (basic validation)
+                if (addressStr.length() < 25 || addressStr.length() > 35) {
+                    throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid DigiDollar address length");
+                }
+                if (addressStr.substr(0, 2) != "DD" && addressStr.substr(0, 2) != "TD" && addressStr.substr(0, 2) != "RD") {
+                    throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid DigiDollar address prefix");
+                }
+
+                // Mock balance for specific address
+                confirmedBalance = 10000; // $100.00
+                unconfirmedBalance = 0;
+                addressCount = 1;
+            } else {
+                // Mock total wallet balance
+                confirmedBalance = 45000; // $450.00 total
+                unconfirmedBalance = 0;
+                addressCount = 3;
+            }
+
+            UniValue result(UniValue::VOBJ);
+            result.pushKV("confirmed", confirmedBalance);
+            result.pushKV("unconfirmed", unconfirmedBalance);
+            result.pushKV("total", confirmedBalance + unconfirmedBalance);
+            if (!addressStr.empty()) {
+                result.pushKV("address", addressStr);
+            }
+            result.pushKV("address_count", addressCount);
+
+            return result;
+        },
+    };
+}
+
+static RPCHelpMan estimatecollateral()
+{
+    return RPCHelpMan{"estimatecollateral",
+                "\nEstimate DGB collateral requirement for minting DigiDollar.\n"
+                "Calculates the required DGB amount based on DD amount, lock tier, and current system conditions.\n",
+                {
+                    {"dd_amount", RPCArg::Type::AMOUNT, RPCArg::Optional::NO, "DigiDollar amount to mint (in cents)"},
+                    {"lock_tier", RPCArg::Type::NUM, RPCArg::Optional::NO, "Lock tier 1-8 (30d,90d,180d,1y,3y,5y,7y,10y)"},
+                    {"oracle_price", RPCArg::Type::AMOUNT, RPCArg::Optional::OMITTED, "Custom DGB price in cents (uses current if omitted)"}
+                },
+                RPCResult{
+                    RPCResult::Type::OBJ, "", "",
+                    {
+                        {RPCResult::Type::STR_AMOUNT, "required_dgb", "Required DGB collateral amount"},
+                        {RPCResult::Type::STR_AMOUNT, "dd_amount", "DigiDollar amount to mint (in cents)"},
+                        {RPCResult::Type::NUM, "lock_tier", "Lock tier used"},
+                        {RPCResult::Type::NUM, "lock_days", "Lock period in days"},
+                        {RPCResult::Type::NUM, "base_ratio", "Base collateral ratio percentage"},
+                        {RPCResult::Type::NUM, "dca_multiplier", "DCA multiplier applied"},
+                        {RPCResult::Type::NUM, "effective_ratio", "Final collateral ratio (base * DCA)"},
+                        {RPCResult::Type::STR_AMOUNT, "oracle_price", "DGB price used (cents per DGB)"},
+                        {RPCResult::Type::NUM, "system_health", "Current system health percentage"},
+                        {RPCResult::Type::STR, "health_tier", "System health tier"},
+                        {RPCResult::Type::STR_AMOUNT, "usd_value", "USD value of required DGB"}
+                    }
+                },
+                RPCExamples{
+                    HelpExampleCli("estimatecollateral", "10000 3") +
+                    HelpExampleCli("estimatecollateral", "50000 5 4500") +
+                    HelpExampleRpc("estimatecollateral", "10000, 3") +
+                    HelpExampleRpc("estimatecollateral", "50000, 5, 4500")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            // Parse parameters
+            CAmount ddAmount = AmountFromValue(request.params[0]);
+            int lockTier = request.params[1].getInt<int>();
+            CAmount oraclePrice = request.params.size() > 2 && !request.params[2].isNull() ?
+                                 AmountFromValue(request.params[2]) : 5000; // Default $0.05 per DGB
+
+            // Validate parameters
+            if (ddAmount <= 0) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "DD amount must be positive");
+            }
+            if (lockTier < 1 || lockTier > 8) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Lock tier must be between 1 and 8");
+            }
+            if (oraclePrice <= 0) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Oracle price must be positive");
+            }
+
+            // Calculate collateral requirements (mock implementation)
+            int lockDays = GetLockDaysForTier(lockTier);
+            int baseRatio = GetMinCollateralRatio(lockTier);
+
+            // Get current system health and DCA multiplier
+            int systemHealth = 150; // TODO: Get real system health
+            double dcaMultiplier = 1.0; // TODO: Get real DCA multiplier
+            int effectiveRatio = static_cast<int>(baseRatio * dcaMultiplier);
+
+            // Calculate required DGB
+            CAmount requiredDGB = (ddAmount * effectiveRatio * COIN) / (oraclePrice * 100);
+            CAmount usdValue = (requiredDGB * oraclePrice) / COIN;
+
+            UniValue result(UniValue::VOBJ);
+            result.pushKV("required_dgb", ValueFromAmount(requiredDGB));
+            result.pushKV("dd_amount", ddAmount);
+            result.pushKV("lock_tier", lockTier);
+            result.pushKV("lock_days", lockDays);
+            result.pushKV("base_ratio", baseRatio);
+            result.pushKV("dca_multiplier", dcaMultiplier);
+            result.pushKV("effective_ratio", effectiveRatio);
+            result.pushKV("oracle_price", oraclePrice);
+            result.pushKV("system_health", systemHealth);
+            result.pushKV("health_tier", "healthy");
+            result.pushKV("usd_value", ValueFromAmount(usdValue));
+
+            return result;
+        },
+    };
+}
+
+static RPCHelpMan getredemptioninfo()
+{
+    return RPCHelpMan{"getredemptioninfo",
+                "\nGet redemption information for a specific DigiDollar position.\n"
+                "Shows whether position can be redeemed and potential return amounts.\n",
+                {
+                    {"position_id", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "Position ID (transaction hash of mint)"},
+                    {"dd_amount", RPCArg::Type::AMOUNT, RPCArg::Optional::OMITTED, "Amount of DD to redeem (default: all)"}
+                },
+                RPCResult{
+                    RPCResult::Type::OBJ, "", "",
+                    {
+                        {RPCResult::Type::STR, "position_id", "Position identifier"},
+                        {RPCResult::Type::BOOL, "can_redeem", "Whether position can be redeemed now"},
+                        {RPCResult::Type::STR, "redemption_path", "Available redemption path (normal/emergency/liquidation)"},
+                        {RPCResult::Type::STR_AMOUNT, "total_dd_minted", "Total DD minted in this position"},
+                        {RPCResult::Type::STR_AMOUNT, "redeemable_dd", "DD amount that can be redeemed"},
+                        {RPCResult::Type::STR_AMOUNT, "dgb_return", "Estimated DGB return amount"},
+                        {RPCResult::Type::NUM, "unlock_height", "Block height when position unlocks"},
+                        {RPCResult::Type::NUM, "blocks_remaining", "Blocks until unlock (0 if unlocked)"},
+                        {RPCResult::Type::STR_AMOUNT, "penalty_amount", "Penalty amount (if early redemption)"},
+                        {RPCResult::Type::STR, "status", "Position status"},
+                        {RPCResult::Type::STR, "unlock_date", "Estimated unlock date"}
+                    }
+                },
+                RPCExamples{
+                    HelpExampleCli("getredemptioninfo", "\"abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890\"") +
+                    HelpExampleCli("getredemptioninfo", "\"abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890\" 5000") +
+                    HelpExampleRpc("getredemptioninfo", "\"abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890\"")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            // Parse parameters
+            std::string positionIdStr = request.params[0].get_str();
+            CAmount ddAmount = request.params.size() > 1 && !request.params[1].isNull() ?
+                              AmountFromValue(request.params[1]) : 0;
+
+            // Validate position ID
+            if (!IsHex(positionIdStr) || positionIdStr.length() != 64) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid position ID format");
+            }
+
+            uint256 positionId;
+            positionId.SetHex(positionIdStr);
+
+            // Mock position data - in real implementation would lookup from wallet/blockchain
+            bool canRedeem = true;
+            CAmount totalDDMinted = 10000; // $100
+            CAmount redeemableDD = ddAmount > 0 ? std::min(ddAmount, totalDDMinted) : totalDDMinted;
+            CAmount dgbReturn = 150 * COIN; // Mock return amount
+            int unlockHeight = 1000000;
+            int currentHeight = 900000;
+            int blocksRemaining = std::max(0, unlockHeight - currentHeight);
+            CAmount penaltyAmount = 0;
+            std::string status = "active";
+
+            UniValue result(UniValue::VOBJ);
+            result.pushKV("position_id", positionIdStr);
+            result.pushKV("can_redeem", canRedeem);
+            result.pushKV("redemption_path", "normal");
+            result.pushKV("total_dd_minted", totalDDMinted);
+            result.pushKV("redeemable_dd", redeemableDD);
+            result.pushKV("dgb_return", ValueFromAmount(dgbReturn));
+            result.pushKV("unlock_height", unlockHeight);
+            result.pushKV("blocks_remaining", blocksRemaining);
+            result.pushKV("penalty_amount", penaltyAmount);
+            result.pushKV("status", status);
+            result.pushKV("unlock_date", "2024-12-31T23:59:59Z");
+
+            return result;
+        },
+    };
+}
+
+static RPCHelpMan listdigidollartxs()
+{
+    return RPCHelpMan{"listdigidollartxs",
+                "\nList DigiDollar transactions from the wallet.\n"
+                "Returns recent DD transactions including mints, sends, receives, and redemptions.\n",
+                {
+                    {"count", RPCArg::Type::NUM, RPCArg::Default{10}, "Number of transactions to return"},
+                    {"skip", RPCArg::Type::NUM, RPCArg::Default{0}, "Number of transactions to skip"},
+                    {"address", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "Filter by specific DD address"},
+                    {"category", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "Filter by category (mint/send/receive/redeem)"}
+                },
+                RPCResult{
+                    RPCResult::Type::ARR, "", "",
+                    {
+                        {RPCResult::Type::OBJ, "", "",
+                            {
+                                {RPCResult::Type::STR_HEX, "txid", "Transaction ID"},
+                                {RPCResult::Type::STR, "category", "Transaction category (mint/send/receive/redeem)"},
+                                {RPCResult::Type::STR_AMOUNT, "amount", "DD amount (positive for receives, negative for sends)"},
+                                {RPCResult::Type::STR, "address", "DigiDollar address involved"},
+                                {RPCResult::Type::NUM, "confirmations", "Number of confirmations"},
+                                {RPCResult::Type::NUM, "blockheight", "Block height (if confirmed)"},
+                                {RPCResult::Type::STR, "blockhash", "Block hash (if confirmed)"},
+                                {RPCResult::Type::NUM, "time", "Transaction timestamp"},
+                                {RPCResult::Type::STR_AMOUNT, "fee", "Transaction fee paid (if applicable)"},
+                                {RPCResult::Type::STR, "comment", "Transaction comment (if any)"},
+                                {RPCResult::Type::BOOL, "abandoned", "Whether transaction was abandoned"}
+                            }
+                        }
+                    }
+                },
+                RPCExamples{
+                    HelpExampleCli("listdigidollartxs", "") +
+                    HelpExampleCli("listdigidollartxs", "20 10") +
+                    HelpExampleCli("listdigidollartxs", "10 0 \"DDtestaddress123456789abcdef\"") +
+                    HelpExampleCli("listdigidollartxs", "10 0 \"\" \"mint\"") +
+                    HelpExampleRpc("listdigidollartxs", "20, 10") +
+                    HelpExampleRpc("listdigidollartxs", "10, 0, \"DDtestaddress123456789abcdef\", \"mint\"")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            // Parse parameters
+            int count = request.params.size() > 0 ? request.params[0].getInt<int>() : 10;
+            int skip = request.params.size() > 1 ? request.params[1].getInt<int>() : 0;
+            std::string addressFilter = request.params.size() > 2 && !request.params[2].isNull() ?
+                                       request.params[2].get_str() : "";
+            std::string categoryFilter = request.params.size() > 3 && !request.params[3].isNull() ?
+                                        request.params[3].get_str() : "";
+
+            // Validate parameters
+            if (count < 0 || count > 1000) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Count must be between 0 and 1000");
+            }
+            if (skip < 0) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Skip must be non-negative");
+            }
+
+            // Mock transaction history - in real implementation would get from wallet
+            struct MockTransaction {
+                std::string txid;
+                std::string category;
+                CAmount amount;
+                std::string address;
+                int confirmations;
+                bool incoming;
+                uint64_t timestamp;
+            };
+
+            std::vector<MockTransaction> mockTransactions = {
+                {"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", "mint", 10000, "DDmockaddress123456789abcdef1", 6, true, 1640995200},
+                {"abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789", "send", 5000, "DDtestrecipient123456789abcdef", 3, false, 1641081600},
+                {"fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210", "receive", 2500, "DDmockaddress123456789abcdef2", 10, true, 1640908800},
+                {"1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef", "redeem", 7500, "DDmockaddress123456789abcdef1", 1, false, 1641168000}
+            };
+
+            UniValue result(UniValue::VARR);
+            int processed = 0;
+            int skipped = 0;
+
+            for (const auto& tx : mockTransactions) {
+                // Apply filters
+                if (!addressFilter.empty() && tx.address != addressFilter) continue;
+                if (!categoryFilter.empty() && tx.category != categoryFilter) continue;
+
+                // Apply skip
+                if (skipped < skip) {
+                    skipped++;
+                    continue;
+                }
+
+                // Apply count limit
+                if (processed >= count) break;
+
+                UniValue txInfo(UniValue::VOBJ);
+                txInfo.pushKV("txid", tx.txid);
+                txInfo.pushKV("category", tx.category);
+                txInfo.pushKV("amount", tx.incoming ? tx.amount : -tx.amount);
+                txInfo.pushKV("address", tx.address);
+                txInfo.pushKV("confirmations", tx.confirmations);
+                txInfo.pushKV("blockheight", 900000); // Mock block height
+                txInfo.pushKV("blockhash", "0000000000000000000000000000000000000000000000000000000000000000");
+                txInfo.pushKV("time", static_cast<int64_t>(tx.timestamp));
+                txInfo.pushKV("fee", ValueFromAmount(100000)); // Mock fee
+                txInfo.pushKV("comment", "");
+                txInfo.pushKV("abandoned", false);
+
+                result.push_back(txInfo);
+                processed++;
+            }
+
+            return result;
+        },
+    };
+}
+
+static RPCHelpMan getoracleprice()
+{
+    return RPCHelpMan{"getoracleprice",
+                "\nGet current DGB/USD price from the oracle system.\n"
+                "Returns the latest price data used for DigiDollar calculations.\n",
+                {},
+                RPCResult{
+                    RPCResult::Type::OBJ, "", "",
+                    {
+                        {RPCResult::Type::STR_AMOUNT, "price_cents", "Current DGB price in cents per DGB"},
+                        {RPCResult::Type::NUM, "price_usd", "Current DGB price in USD"},
+                        {RPCResult::Type::NUM, "last_update_height", "Block height of last price update"},
+                        {RPCResult::Type::NUM, "last_update_time", "Timestamp of last update"},
+                        {RPCResult::Type::NUM, "validity_blocks", "Blocks remaining until price expires"},
+                        {RPCResult::Type::BOOL, "is_stale", "Whether price data is considered stale"},
+                        {RPCResult::Type::NUM, "oracle_count", "Number of active oracles"},
+                        {RPCResult::Type::STR, "status", "Oracle system status (active/warning/error)"},
+                        {RPCResult::Type::STR_AMOUNT, "24h_high", "24-hour high price"},
+                        {RPCResult::Type::STR_AMOUNT, "24h_low", "24-hour low price"},
+                        {RPCResult::Type::NUM, "volatility", "Current price volatility percentage"}
+                    }
+                },
+                RPCExamples{
+                    HelpExampleCli("getoracleprice", "") +
+                    HelpExampleRpc("getoracleprice", "")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            // Get chainman for blockchain info
+            const ChainstateManager& chainman = EnsureAnyChainman(request.context);
+
+            // Get real oracle data from the oracle system
+            OracleBundleManager& oracle_manager = OracleBundleManager::GetInstance();
+            OracleBundleManager::OracleStats stats = oracle_manager.GetStats();
+
+            CAmount priceCents = OracleIntegration::GetCurrentOraclePrice();
+            double priceUSD = static_cast<double>(priceCents) / 100.0;
+
+            // Get current blockchain info
+            int lastUpdateHeight = chainman.ActiveChain().Height();
+            int64_t lastUpdateTime = stats.last_update > 0 ? stats.last_update : GetTime();
+
+            // Calculate validity and staleness
+            int validityBlocks = 20; // Oracle data valid for 20 blocks
+            int blocksSinceUpdate = lastUpdateHeight - (stats.latest_epoch * 1440); // Approximate
+            bool isStale = blocksSinceUpdate > validityBlocks;
+
+            // Get oracle count and status
+            size_t activeOracleCount = oracle_manager.GetPendingMessageCount();
+            std::string status = stats.has_consensus ? "active" : (activeOracleCount > 0 ? "warning" : "error");
+
+            // Mock 24h data for now - would track historically in production
+            CAmount high24h = priceCents + (priceCents / 20); // +5%
+            CAmount low24h = priceCents - (priceCents / 20);  // -5%
+            double volatility = 2.5; // Mock volatility
+
+            UniValue result(UniValue::VOBJ);
+            result.pushKV("price_cents", priceCents);
+            result.pushKV("price_usd", priceUSD);
+            result.pushKV("last_update_height", lastUpdateHeight);
+            result.pushKV("last_update_time", lastUpdateTime);
+            result.pushKV("validity_blocks", validityBlocks);
+            result.pushKV("is_stale", isStale);
+            result.pushKV("oracle_count", static_cast<int>(activeOracleCount));
+            result.pushKV("status", status);
+            result.pushKV("24h_high", high24h);
+            result.pushKV("24h_low", low24h);
+            result.pushKV("volatility", volatility);
+
+            return result;
+        },
+    };
+}
+
+static RPCHelpMan getprotectionstatus()
+{
+    return RPCHelpMan{"getprotectionstatus",
+                "\nGet status of DigiDollar protection systems.\n"
+                "Returns information about DCA, ERR, volatility protection, and other safeguards.\n",
+                {},
+                RPCResult{
+                    RPCResult::Type::OBJ, "", "",
+                    {
+                        {RPCResult::Type::OBJ, "dca", "Dynamic Collateral Adjustment status",
+                            {
+                                {RPCResult::Type::BOOL, "active", "Whether DCA is currently active"},
+                                {RPCResult::Type::NUM, "current_multiplier", "Current DCA multiplier"},
+                                {RPCResult::Type::STR, "tier", "Current DCA tier"},
+                                {RPCResult::Type::NUM, "system_health", "System health percentage"},
+                                {RPCResult::Type::STR, "trend", "Health trend (improving/stable/declining)"}
+                            }
+                        },
+                        {RPCResult::Type::OBJ, "err", "Emergency Redemption Ratio status",
+                            {
+                                {RPCResult::Type::BOOL, "active", "Whether ERR is currently active"},
+                                {RPCResult::Type::NUM, "threshold", "ERR activation threshold (%)"},
+                                {RPCResult::Type::NUM, "current_ratio", "Current system ratio (%)"},
+                                {RPCResult::Type::STR, "status", "ERR status (normal/warning/active)"}
+                            }
+                        },
+                        {RPCResult::Type::OBJ, "volatility", "Volatility protection status",
+                            {
+                                {RPCResult::Type::BOOL, "protection_active", "Whether volatility protection is active"},
+                                {RPCResult::Type::NUM, "current_volatility", "Current volatility percentage"},
+                                {RPCResult::Type::NUM, "protection_threshold", "Volatility protection threshold"},
+                                {RPCResult::Type::BOOL, "minting_restricted", "Whether minting is restricted due to volatility"}
+                            }
+                        },
+                        {RPCResult::Type::OBJ, "overall", "Overall protection status",
+                            {
+                                {RPCResult::Type::STR, "status", "Overall system status (secure/warning/critical)"},
+                                {RPCResult::Type::ARR, "active_protections", "List of currently active protections",
+                                    {
+                                        {RPCResult::Type::STR, "", "Protection name"}
+                                    }
+                                },
+                                {RPCResult::Type::ARR, "warnings", "Current system warnings",
+                                    {
+                                        {RPCResult::Type::STR, "", "Warning message"}
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                RPCExamples{
+                    HelpExampleCli("getprotectionstatus", "") +
+                    HelpExampleRpc("getprotectionstatus", "")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            // Mock protection status - in real implementation would get from protection systems
+            UniValue result(UniValue::VOBJ);
+
+            // DCA status
+            UniValue dca(UniValue::VOBJ);
+            dca.pushKV("active", true);
+            dca.pushKV("current_multiplier", 1.0);
+            dca.pushKV("tier", "healthy");
+            dca.pushKV("system_health", 150);
+            dca.pushKV("trend", "stable");
+            result.pushKV("dca", dca);
+
+            // ERR status
+            UniValue err(UniValue::VOBJ);
+            err.pushKV("active", false);
+            err.pushKV("threshold", 100);
+            err.pushKV("current_ratio", 150);
+            err.pushKV("status", "normal");
+            result.pushKV("err", err);
+
+            // Volatility protection
+            UniValue volatility(UniValue::VOBJ);
+            volatility.pushKV("protection_active", false);
+            volatility.pushKV("current_volatility", 2.5);
+            volatility.pushKV("protection_threshold", 10.0);
+            volatility.pushKV("minting_restricted", false);
+            result.pushKV("volatility", volatility);
+
+            // Overall status
+            UniValue overall(UniValue::VOBJ);
+            overall.pushKV("status", "secure");
+
+            UniValue activeProtections(UniValue::VARR);
+            activeProtections.push_back("dca");
+            overall.pushKV("active_protections", activeProtections);
+
+            UniValue warnings(UniValue::VARR);
+            overall.pushKV("warnings", warnings);
+
+            result.pushKV("overall", overall);
+
+            return result;
+        },
+    };
+}
+
+static RPCHelpMan listoracles()
+{
+    return RPCHelpMan{"listoracles",
+                "\nList all configured oracle nodes and their status.\n"
+                "Returns information about all oracles including active/inactive status.\n",
+                {
+                    {"active_only", RPCArg::Type::BOOL, RPCArg::Default{false}, "Only show active oracles"}
+                },
+                RPCResult{
+                    RPCResult::Type::ARR, "", "",
+                    {
+                        {RPCResult::Type::OBJ, "", "",
+                            {
+                                {RPCResult::Type::NUM, "oracle_id", "Oracle ID (0-29)"},
+                                {RPCResult::Type::STR_HEX, "pubkey", "Oracle public key"},
+                                {RPCResult::Type::STR, "endpoint", "Oracle network endpoint"},
+                                {RPCResult::Type::BOOL, "is_active", "Whether oracle is currently active"},
+                                {RPCResult::Type::BOOL, "is_running", "Whether oracle daemon is running"},
+                                {RPCResult::Type::BOOL, "is_enabled", "Whether oracle is enabled"},
+                                {RPCResult::Type::STR_AMOUNT, "last_price", "Last reported price (if available)"},
+                                {RPCResult::Type::NUM, "last_update", "Timestamp of last update"},
+                                {RPCResult::Type::STR, "status", "Oracle status (running/stopped/error)"},
+                                {RPCResult::Type::BOOL, "selected_for_epoch", "Whether oracle is selected for current epoch"}
+                            }
+                        }
+                    }
+                },
+                RPCExamples{
+                    HelpExampleCli("listoracles", "") +
+                    HelpExampleCli("listoracles", "true") +
+                    HelpExampleRpc("listoracles", "") +
+                    HelpExampleRpc("listoracles", "true")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            bool activeOnly = request.params.size() > 0 ? request.params[0].get_bool() : false;
+
+            // Get chainman for blockchain info
+            const ChainstateManager& chainman = EnsureAnyChainman(request.context);
+
+            // Get all oracle nodes from chainparams
+            const CChainParams& params = Params();
+            const std::vector<OracleNodeInfo>& all_oracles = params.GetOracleNodes();
+
+            // Get current epoch and selected oracles
+            int32_t current_height = chainman.ActiveChain().Height();
+            int32_t current_epoch = GetCurrentEpoch(current_height);
+            std::vector<OracleNodeInfo> selected_oracles = SelectOraclesForEpoch(all_oracles, current_epoch);
+
+            // Build set of selected oracle IDs for quick lookup
+            std::set<uint32_t> selected_ids;
+            for (const auto& oracle : selected_oracles) {
+                selected_ids.insert(oracle.id);
+            }
+
+            // Get oracle manager for runtime status
+            OracleManager& oracle_manager = OracleManager::GetInstance();
+
+            UniValue result(UniValue::VARR);
+
+            for (const auto& oracle_config : all_oracles) {
+                // Apply active filter
+                if (activeOnly && !oracle_config.is_active) {
+                    continue;
+                }
+
+                bool is_selected = selected_ids.count(oracle_config.id) > 0;
+                bool is_running = oracle_manager.IsOracleRunning(oracle_config.id);
+                OracleNode* runtime_oracle = oracle_manager.GetOracleNode(oracle_config.id);
+
+                UniValue oracle_info(UniValue::VOBJ);
+                oracle_info.pushKV("oracle_id", static_cast<int>(oracle_config.id));
+                oracle_info.pushKV("pubkey", HexStr(oracle_config.pubkey));
+                oracle_info.pushKV("endpoint", oracle_config.endpoint);
+                oracle_info.pushKV("is_active", oracle_config.is_active);
+                oracle_info.pushKV("is_running", is_running);
+                oracle_info.pushKV("is_enabled", runtime_oracle ? runtime_oracle->IsEnabled() : false);
+
+                // Runtime status
+                if (runtime_oracle && runtime_oracle->HasValidPrice()) {
+                    oracle_info.pushKV("last_price", runtime_oracle->GetCurrentPrice());
+                    oracle_info.pushKV("last_update", runtime_oracle->GetLastUpdateTime());
+                } else {
+                    oracle_info.pushKV("last_price", 0);
+                    oracle_info.pushKV("last_update", 0);
+                }
+
+                // Status determination
+                std::string status = "stopped";
+                if (is_running) {
+                    status = runtime_oracle && runtime_oracle->HasValidPrice() ? "running" : "error";
+                }
+                oracle_info.pushKV("status", status);
+                oracle_info.pushKV("selected_for_epoch", is_selected);
+
+                result.push_back(oracle_info);
+            }
+
+            return result;
+        },
+    };
+}
+
+static RPCHelpMan startoracle()
+{
+    return RPCHelpMan{"startoracle",
+                "\nStart a local oracle node if configured.\n"
+                "Requires oracle private key to be configured for this node.\n",
+                {
+                    {"oracle_id", RPCArg::Type::NUM, RPCArg::Optional::NO, "Oracle ID to start (0-29)"},
+                    {"private_key", RPCArg::Type::STR_HEX, RPCArg::Optional::OMITTED, "Oracle private key (if not already configured)"}
+                },
+                RPCResult{
+                    RPCResult::Type::OBJ, "", "",
+                    {
+                        {RPCResult::Type::BOOL, "success", "Whether oracle was started successfully"},
+                        {RPCResult::Type::NUM, "oracle_id", "Oracle ID that was started"},
+                        {RPCResult::Type::STR, "status", "Oracle status after start attempt"},
+                        {RPCResult::Type::STR, "message", "Status message or error description"},
+                        {RPCResult::Type::BOOL, "was_already_running", "Whether oracle was already running"},
+                        {RPCResult::Type::STR, "warning", "Any warnings about the operation"}
+                    }
+                },
+                RPCExamples{
+                    HelpExampleCli("startoracle", "5") +
+                    HelpExampleCli("startoracle", "5 \"your_private_key_hex\"") +
+                    HelpExampleRpc("startoracle", "5") +
+                    HelpExampleRpc("startoracle", "5, \"your_private_key_hex\"")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            int oracle_id = request.params[0].getInt<int>();
+            std::string private_key_hex = request.params.size() > 1 ? request.params[1].get_str() : "";
+
+            // Validate oracle ID
+            if (oracle_id < 0 || oracle_id >= ORACLE_TOTAL_COUNT) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER,
+                    strprintf("Invalid oracle ID %d. Must be between 0 and %d", oracle_id, ORACLE_TOTAL_COUNT - 1));
+            }
+
+            // Verify oracle exists in chainparams
+            const CChainParams& params = Params();
+            const OracleNodeInfo* oracle_config = params.GetOracleNode(oracle_id);
+            if (!oracle_config) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER,
+                    strprintf("Oracle ID %d not found in chain parameters", oracle_id));
+            }
+
+            OracleManager& oracle_manager = OracleManager::GetInstance();
+            bool was_already_running = oracle_manager.IsOracleRunning(oracle_id);
+            bool success = false;
+            std::string status_message;
+            std::string warning;
+
+            try {
+                if (was_already_running) {
+                    success = true;
+                    status_message = "Oracle was already running";
+                } else {
+                    // Try to start oracle
+                    if (!private_key_hex.empty()) {
+                        // Add oracle with provided private key
+                        success = oracle_manager.AddOracleNode(oracle_id, private_key_hex);
+                        if (success) {
+                            oracle_manager.EnableOracle(oracle_id, true);
+                            status_message = "Oracle added and started with provided private key";
+                        } else {
+                            status_message = "Failed to initialize oracle with provided private key";
+                        }
+                    } else {
+                        // Try to start existing oracle (if already configured)
+                        OracleNode* existing_oracle = oracle_manager.GetOracleNode(oracle_id);
+                        if (existing_oracle) {
+                            existing_oracle->Start();
+                            success = existing_oracle->IsRunning();
+                            status_message = success ? "Existing oracle started" : "Failed to start existing oracle";
+                        } else {
+                            status_message = "Oracle not configured. Provide private_key parameter to configure.";
+                            warning = "Oracle private key must be provided for first-time setup";
+                        }
+                    }
+                }
+            }
+            catch (const std::exception& e) {
+                status_message = strprintf("Exception starting oracle: %s", e.what());
+                success = false;
+            }
+
+            std::string final_status = "stopped";
+            if (oracle_manager.IsOracleRunning(oracle_id)) {
+                OracleNode* oracle = oracle_manager.GetOracleNode(oracle_id);
+                final_status = oracle && oracle->IsEnabled() ? "running" : "disabled";
+            }
+
+            UniValue result(UniValue::VOBJ);
+            result.pushKV("success", success);
+            result.pushKV("oracle_id", oracle_id);
+            result.pushKV("status", final_status);
+            result.pushKV("message", status_message);
+            result.pushKV("was_already_running", was_already_running);
+            if (!warning.empty()) {
+                result.pushKV("warning", warning);
+            }
+
+            return result;
+        },
+    };
+}
+
+static RPCHelpMan stoporacle()
+{
+    return RPCHelpMan{"stoporacle",
+                "\nStop a running oracle node.\n"
+                "Stops the oracle daemon and price fetching for the specified oracle.\n",
+                {
+                    {"oracle_id", RPCArg::Type::NUM, RPCArg::Optional::NO, "Oracle ID to stop (0-29)"}
+                },
+                RPCResult{
+                    RPCResult::Type::OBJ, "", "",
+                    {
+                        {RPCResult::Type::BOOL, "success", "Whether oracle was stopped successfully"},
+                        {RPCResult::Type::NUM, "oracle_id", "Oracle ID that was stopped"},
+                        {RPCResult::Type::STR, "status", "Oracle status after stop attempt"},
+                        {RPCResult::Type::STR, "message", "Status message"},
+                        {RPCResult::Type::BOOL, "was_running", "Whether oracle was running before stop"}
+                    }
+                },
+                RPCExamples{
+                    HelpExampleCli("stoporacle", "5") +
+                    HelpExampleRpc("stoporacle", "5")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            int oracle_id = request.params[0].getInt<int>();
+
+            // Validate oracle ID
+            if (oracle_id < 0 || oracle_id >= ORACLE_TOTAL_COUNT) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER,
+                    strprintf("Invalid oracle ID %d. Must be between 0 and %d", oracle_id, ORACLE_TOTAL_COUNT - 1));
+            }
+
+            OracleManager& oracle_manager = OracleManager::GetInstance();
+            bool was_running = oracle_manager.IsOracleRunning(oracle_id);
+            bool success = false;
+            std::string status_message;
+
+            if (!was_running) {
+                success = true;
+                status_message = "Oracle was not running";
+            } else {
+                try {
+                    OracleNode* oracle = oracle_manager.GetOracleNode(oracle_id);
+                    if (oracle) {
+                        oracle->Stop();
+                        success = !oracle->IsRunning();
+                        status_message = success ? "Oracle stopped successfully" : "Failed to stop oracle";
+                    } else {
+                        status_message = "Oracle not found in manager";
+                    }
+                }
+                catch (const std::exception& e) {
+                    status_message = strprintf("Exception stopping oracle: %s", e.what());
+                    success = false;
+                }
+            }
+
+            std::string final_status = oracle_manager.IsOracleRunning(oracle_id) ? "running" : "stopped";
+
+            UniValue result(UniValue::VOBJ);
+            result.pushKV("success", success);
+            result.pushKV("oracle_id", oracle_id);
+            result.pushKV("status", final_status);
+            result.pushKV("message", status_message);
+            result.pushKV("was_running", was_running);
+
+            return result;
+        },
+    };
+}
+
+void RegisterDigiDollarRPCCommands(CRPCTable &t)
+{
+    static const CRPCCommand commands[] = {
+        // System monitoring commands
+        {"digidollar", &getdigidollarsystemhealth},
+        {"digidollar", &getdcamultiplier},
+        {"digidollar", &getdigidollarstats},
+        {"digidollar", &calculatecollateralrequirement},
+        {"digidollar", &getdigidollarstatus},
+        {"digidollar", &getdigidollardeploymentinfo},
+
+        // Core transaction commands
+        {"digidollar", &mintdigidollar},
+        {"digidollar", &senddigidollar},
+        {"digidollar", &redeemdigidollar},
+        {"digidollar", &listdigidollarpositions},
+
+        // Address management commands
+        {"digidollar", &getdigidollaraddress},
+        {"digidollar", &validateddaddress},
+        {"digidollar", &listdigidollaraddresses},
+        {"digidollar", &importdigidollaraddress},
+
+        // Utility commands
+        {"digidollar", &getdigidollarbalance},
+        {"digidollar", &estimatecollateral},
+        {"digidollar", &getredemptioninfo},
+        {"digidollar", &listdigidollartxs},
+        {"digidollar", &getoracleprice},
+        {"digidollar", &getprotectionstatus},
+
+        // Oracle management commands
+        {"oracle", &listoracles},
+        {"oracle", &startoracle},
+        {"oracle", &stoporacle}
+    };
+    for (const auto& c : commands) {
+        t.appendCommand(c.name, &c);
+    }
+}

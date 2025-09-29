@@ -206,11 +206,17 @@ enum opcodetype
     // Opcode added by BIP 342 (Tapscript)
     OP_CHECKSIGADD = 0xba,
 
+    // DigiDollar specific opcodes (using OP_NOP slots for soft fork)
+    OP_DIGIDOLLAR = 0xbb,       // OP_NOP11 - Marks DD outputs
+    OP_DDVERIFY = 0xbc,         // OP_NOP12 - Verify DD conditions
+    OP_CHECKPRICE = 0xbd,       // OP_NOP13 - Check oracle price
+    OP_CHECKCOLLATERAL = 0xbe,  // OP_NOP14 - Verify collateral ratio
+
     OP_INVALIDOPCODE = 0xff,
 };
 
 // Maximum value that an opcode can be
-static const unsigned int MAX_OPCODE = OP_NOP10;
+static const unsigned int MAX_OPCODE = OP_CHECKCOLLATERAL;
 
 std::string GetOpName(opcodetype opcode);
 

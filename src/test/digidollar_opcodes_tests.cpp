@@ -1,0 +1,365 @@
+// Copyright (c) 2025 The DigiByte Core developers
+// Distributed under the MIT software license, see the accompanying
+// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
+#include <script/script.h>
+#include <script/interpreter.h>
+#include <script/script_error.h>
+#include <util/strencodings.h>
+#include <test/util/setup_common.h>
+#include <consensus/amount.h>
+
+#include <boost/test/unit_test.hpp>
+
+// Forward declare CastToBool from interpreter.cpp
+bool CastToBool(const std::vector<unsigned char>& vch);
+
+BOOST_AUTO_TEST_SUITE(digidollar_opcodes_tests)
+
+// Helper function to create a mock signature checker for testing
+class MockSignatureChecker : public BaseSignatureChecker
+{
+public:
+    bool CheckECDSASignature(const std::vector<unsigned char>& scriptSig, const std::vector<unsigned char>& vchPubKey, const CScript& scriptCode, SigVersion sigversion) const override
+    {
+        return true; // Mock implementation for testing
+    }
+};
+
+// Test that DigiDollar opcodes have correct values
+BOOST_AUTO_TEST_CASE(digidollar_opcode_values)
+{
+    // These opcodes should use OP_NOP slots for soft fork compatibility
+    BOOST_CHECK_EQUAL(static_cast<int>(OP_DIGIDOLLAR), 0xbb);      // OP_NOP11
+    BOOST_CHECK_EQUAL(static_cast<int>(OP_DDVERIFY), 0xbc);        // OP_NOP12
+    BOOST_CHECK_EQUAL(static_cast<int>(OP_CHECKPRICE), 0xbd);      // OP_NOP13
+    BOOST_CHECK_EQUAL(static_cast<int>(OP_CHECKCOLLATERAL), 0xbe); // OP_NOP14
+
+    // Verify OP_CHECKSIGADD exists (BIP342)
+    BOOST_CHECK_EQUAL(static_cast<int>(OP_CHECKSIGADD), 0xba);
+}
+
+// Test that opcode names are correct
+BOOST_AUTO_TEST_CASE(digidollar_opcode_names)
+{
+    BOOST_CHECK_EQUAL(GetOpName(OP_DIGIDOLLAR), "OP_DIGIDOLLAR");
+    BOOST_CHECK_EQUAL(GetOpName(OP_DDVERIFY), "OP_DDVERIFY");
+    BOOST_CHECK_EQUAL(GetOpName(OP_CHECKPRICE), "OP_CHECKPRICE");
+    BOOST_CHECK_EQUAL(GetOpName(OP_CHECKCOLLATERAL), "OP_CHECKCOLLATERAL");
+}
+
+// Test OP_DIGIDOLLAR basic functionality
+BOOST_AUTO_TEST_CASE(op_digidollar_basic)
+{
+    std::vector<std::vector<unsigned char>> stack;
+    MockSignatureChecker checker;
+    ScriptError error;
+    ScriptExecutionData execdata;
+
+    // Test with valid DigiDollar amount
+    CScript script;
+    script << CScriptNum(100000) << OP_DIGIDOLLAR;  // 1.0 DGB in satoshis
+
+    BOOST_CHECK(EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::BASE, execdata, &error));
+    BOOST_CHECK_EQUAL(error, SCRIPT_ERR_OK);
+    BOOST_CHECK_EQUAL(stack.size(), 1);
+    BOOST_CHECK(CastToBool(stack.back())); // Should push true for valid amount
+}
+
+// Test OP_DIGIDOLLAR with zero amount
+BOOST_AUTO_TEST_CASE(op_digidollar_zero_amount)
+{
+    std::vector<std::vector<unsigned char>> stack;
+    MockSignatureChecker checker;
+    ScriptError error;
+    ScriptExecutionData execdata;
+
+    CScript script;
+    script << CScriptNum(0) << OP_DIGIDOLLAR;
+
+    BOOST_CHECK(EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::BASE, execdata, &error));
+    BOOST_CHECK_EQUAL(error, SCRIPT_ERR_OK);
+    BOOST_CHECK_EQUAL(stack.size(), 1);
+    BOOST_CHECK(!CastToBool(stack.back())); // Should push false for zero amount
+}
+
+// Test OP_DIGIDOLLAR with negative amount (should fail)
+BOOST_AUTO_TEST_CASE(op_digidollar_negative_amount)
+{
+    std::vector<std::vector<unsigned char>> stack;
+    MockSignatureChecker checker;
+    ScriptError error;
+    ScriptExecutionData execdata;
+
+    CScript script;
+    script << CScriptNum(-100) << OP_DIGIDOLLAR;
+
+    BOOST_CHECK(!EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::BASE, execdata, &error));
+    BOOST_CHECK_EQUAL(error, SCRIPT_ERR_INVALID_DD_AMOUNT);
+}
+
+// Test OP_DIGIDOLLAR with amount exceeding MAX_MONEY (should fail)
+BOOST_AUTO_TEST_CASE(op_digidollar_overflow_amount)
+{
+    std::vector<std::vector<unsigned char>> stack;
+    MockSignatureChecker checker;
+    ScriptError error;
+    ScriptExecutionData execdata;
+
+    CScript script;
+    script << CScriptNum(MAX_MONEY + 1) << OP_DIGIDOLLAR;
+
+    BOOST_CHECK(!EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::BASE, execdata, &error));
+    BOOST_CHECK_EQUAL(error, SCRIPT_ERR_INVALID_DD_AMOUNT);
+}
+
+// Test OP_DIGIDOLLAR with insufficient stack (should fail)
+BOOST_AUTO_TEST_CASE(op_digidollar_insufficient_stack)
+{
+    std::vector<std::vector<unsigned char>> stack;
+    MockSignatureChecker checker;
+    ScriptError error;
+    ScriptExecutionData execdata;
+
+    CScript script;
+    script << OP_DIGIDOLLAR; // No amount on stack
+
+    BOOST_CHECK(!EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::BASE, execdata, &error));
+    BOOST_CHECK_EQUAL(error, SCRIPT_ERR_INVALID_STACK_OPERATION);
+}
+
+// Test OP_DDVERIFY basic functionality
+BOOST_AUTO_TEST_CASE(op_ddverify_basic)
+{
+    std::vector<std::vector<unsigned char>> stack;
+    MockSignatureChecker checker;
+    ScriptError error;
+    ScriptExecutionData execdata;
+
+    // Test with true value (should pass)
+    CScript script;
+    script << OP_TRUE << OP_DDVERIFY;
+
+    BOOST_CHECK(EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::BASE, execdata, &error));
+    BOOST_CHECK_EQUAL(error, SCRIPT_ERR_OK);
+    BOOST_CHECK_EQUAL(stack.size(), 0); // Should consume the stack item
+}
+
+// Test OP_DDVERIFY with false value (should fail)
+BOOST_AUTO_TEST_CASE(op_ddverify_false)
+{
+    std::vector<std::vector<unsigned char>> stack;
+    MockSignatureChecker checker;
+    ScriptError error;
+    ScriptExecutionData execdata;
+
+    CScript script;
+    script << OP_FALSE << OP_DDVERIFY;
+
+    BOOST_CHECK(!EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::BASE, execdata, &error));
+    BOOST_CHECK_EQUAL(error, SCRIPT_ERR_DD_VERIFY);
+}
+
+// Test OP_DDVERIFY with insufficient stack (should fail)
+BOOST_AUTO_TEST_CASE(op_ddverify_insufficient_stack)
+{
+    std::vector<std::vector<unsigned char>> stack;
+    MockSignatureChecker checker;
+    ScriptError error;
+    ScriptExecutionData execdata;
+
+    CScript script;
+    script << OP_DDVERIFY; // No value on stack
+
+    BOOST_CHECK(!EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::BASE, execdata, &error));
+    BOOST_CHECK_EQUAL(error, SCRIPT_ERR_INVALID_STACK_OPERATION);
+}
+
+// Test OP_CHECKPRICE basic functionality
+BOOST_AUTO_TEST_CASE(op_checkprice_basic)
+{
+    std::vector<std::vector<unsigned char>> stack;
+    MockSignatureChecker checker;
+    ScriptError error;
+    ScriptExecutionData execdata;
+
+    // Test with mock oracle price (assumes GetMockOraclePrice returns 100000)
+    CScript script;
+    script << CScriptNum(100000) << OP_CHECKPRICE;
+
+    BOOST_CHECK(EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::BASE, execdata, &error));
+    BOOST_CHECK_EQUAL(error, SCRIPT_ERR_OK);
+    BOOST_CHECK_EQUAL(stack.size(), 1);
+    BOOST_CHECK(CastToBool(stack.back())); // Should push true for matching price
+}
+
+// Test OP_CHECKPRICE with non-matching price
+BOOST_AUTO_TEST_CASE(op_checkprice_mismatch)
+{
+    std::vector<std::vector<unsigned char>> stack;
+    MockSignatureChecker checker;
+    ScriptError error;
+    ScriptExecutionData execdata;
+
+    CScript script;
+    script << CScriptNum(50000) << OP_CHECKPRICE; // Different from mock oracle price
+
+    BOOST_CHECK(EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::BASE, execdata, &error));
+    BOOST_CHECK_EQUAL(error, SCRIPT_ERR_OK);
+    BOOST_CHECK_EQUAL(stack.size(), 1);
+    BOOST_CHECK(!CastToBool(stack.back())); // Should push false for non-matching price
+}
+
+// Test OP_CHECKPRICE with insufficient stack (should fail)
+BOOST_AUTO_TEST_CASE(op_checkprice_insufficient_stack)
+{
+    std::vector<std::vector<unsigned char>> stack;
+    MockSignatureChecker checker;
+    ScriptError error;
+    ScriptExecutionData execdata;
+
+    CScript script;
+    script << OP_CHECKPRICE; // No price on stack
+
+    BOOST_CHECK(!EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::BASE, execdata, &error));
+    BOOST_CHECK_EQUAL(error, SCRIPT_ERR_INVALID_STACK_OPERATION);
+}
+
+// Test OP_CHECKCOLLATERAL basic functionality
+BOOST_AUTO_TEST_CASE(op_checkcollateral_basic)
+{
+    std::vector<std::vector<unsigned char>> stack;
+    MockSignatureChecker checker;
+    ScriptError error;
+    ScriptExecutionData execdata;
+
+    // Test with sufficient collateral (ratio >= threshold)
+    CScript script;
+    script << CScriptNum(150) << CScriptNum(120) << OP_CHECKCOLLATERAL; // ratio=150, threshold=120
+
+    BOOST_CHECK(EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::BASE, execdata, &error));
+    BOOST_CHECK_EQUAL(error, SCRIPT_ERR_OK);
+    BOOST_CHECK_EQUAL(stack.size(), 1);
+    BOOST_CHECK(CastToBool(stack.back())); // Should push true for sufficient collateral
+}
+
+// Test OP_CHECKCOLLATERAL with insufficient collateral
+BOOST_AUTO_TEST_CASE(op_checkcollateral_insufficient)
+{
+    std::vector<std::vector<unsigned char>> stack;
+    MockSignatureChecker checker;
+    ScriptError error;
+    ScriptExecutionData execdata;
+
+    CScript script;
+    script << CScriptNum(100) << CScriptNum(120) << OP_CHECKCOLLATERAL; // ratio=100, threshold=120
+
+    BOOST_CHECK(EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::BASE, execdata, &error));
+    BOOST_CHECK_EQUAL(error, SCRIPT_ERR_OK);
+    BOOST_CHECK_EQUAL(stack.size(), 1);
+    BOOST_CHECK(!CastToBool(stack.back())); // Should push false for insufficient collateral
+}
+
+// Test OP_CHECKCOLLATERAL with equal values (should pass)
+BOOST_AUTO_TEST_CASE(op_checkcollateral_equal)
+{
+    std::vector<std::vector<unsigned char>> stack;
+    MockSignatureChecker checker;
+    ScriptError error;
+    ScriptExecutionData execdata;
+
+    CScript script;
+    script << CScriptNum(120) << CScriptNum(120) << OP_CHECKCOLLATERAL; // ratio=120, threshold=120
+
+    BOOST_CHECK(EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::BASE, execdata, &error));
+    BOOST_CHECK_EQUAL(error, SCRIPT_ERR_OK);
+    BOOST_CHECK_EQUAL(stack.size(), 1);
+    BOOST_CHECK(CastToBool(stack.back())); // Should push true for equal values
+}
+
+// Test OP_CHECKCOLLATERAL with insufficient stack (should fail)
+BOOST_AUTO_TEST_CASE(op_checkcollateral_insufficient_stack)
+{
+    std::vector<std::vector<unsigned char>> stack;
+    MockSignatureChecker checker;
+    ScriptError error;
+    ScriptExecutionData execdata;
+
+    CScript script;
+    script << CScriptNum(120) << OP_CHECKCOLLATERAL; // Only one value on stack
+
+    BOOST_CHECK(!EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::BASE, execdata, &error));
+    BOOST_CHECK_EQUAL(error, SCRIPT_ERR_INVALID_STACK_OPERATION);
+}
+
+// Test DigiDollar opcodes behave as NOPs when flag is not set (soft fork compatibility)
+BOOST_AUTO_TEST_CASE(opcodes_as_nops_without_flag)
+{
+    std::vector<std::vector<unsigned char>> stack;
+    MockSignatureChecker checker;
+    ScriptError error;
+    ScriptExecutionData execdata;
+
+    // All DD opcodes should behave as NOPs without SCRIPT_VERIFY_DIGIDOLLAR flag
+    CScript script;
+    script << CScriptNum(100000) << OP_DIGIDOLLAR;
+
+    BOOST_CHECK(EvalScript(stack, script, SCRIPT_VERIFY_NONE, checker, SigVersion::BASE, execdata, &error));
+    BOOST_CHECK_EQUAL(error, SCRIPT_ERR_OK);
+    // Without the flag, they should behave as NOPs and leave stack unchanged
+    BOOST_CHECK_EQUAL(stack.size(), 1);
+    BOOST_CHECK_EQUAL(CScriptNum(stack.back(), false).GetInt64(), 100000);
+}
+
+// Test complex DigiDollar script combining multiple opcodes
+BOOST_AUTO_TEST_CASE(complex_digidollar_script)
+{
+    std::vector<std::vector<unsigned char>> stack;
+    MockSignatureChecker checker;
+    ScriptError error;
+    ScriptExecutionData execdata;
+
+    // Create a complex script: amount -> OP_DIGIDOLLAR -> OP_DDVERIFY -> price check -> collateral check
+    CScript script;
+    script << CScriptNum(100000) << OP_DIGIDOLLAR; // Mark as DD output
+    script << OP_DDVERIFY;                          // Verify the DD condition
+    script << CScriptNum(100000) << OP_CHECKPRICE; // Check oracle price
+    script << CScriptNum(150) << CScriptNum(120) << OP_CHECKCOLLATERAL; // Check collateral
+    script << OP_BOOLAND; // Combine all conditions with AND
+
+    BOOST_CHECK(EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::BASE, execdata, &error));
+    BOOST_CHECK_EQUAL(error, SCRIPT_ERR_OK);
+    BOOST_CHECK_EQUAL(stack.size(), 1);
+    BOOST_CHECK(CastToBool(stack.back())); // All conditions should pass
+}
+
+// Test script error string representation
+BOOST_AUTO_TEST_CASE(digidollar_script_error_strings)
+{
+    BOOST_CHECK_EQUAL(ScriptErrorString(SCRIPT_ERR_INVALID_DD_AMOUNT), "Invalid DigiDollar amount");
+    BOOST_CHECK_EQUAL(ScriptErrorString(SCRIPT_ERR_DD_VERIFY), "DigiDollar verification failed");
+    BOOST_CHECK_EQUAL(ScriptErrorString(SCRIPT_ERR_ORACLE_PRICE_STALE), "Oracle price is stale");
+    BOOST_CHECK_EQUAL(ScriptErrorString(SCRIPT_ERR_INSUFFICIENT_COLLATERAL), "Insufficient collateral ratio");
+}
+
+// Test that opcodes work with different signature versions
+BOOST_AUTO_TEST_CASE(opcodes_different_sigversions)
+{
+    std::vector<std::vector<unsigned char>> stack;
+    MockSignatureChecker checker;
+    ScriptError error;
+    ScriptExecutionData execdata;
+
+    CScript script;
+    script << CScriptNum(100000) << OP_DIGIDOLLAR;
+
+    // Test with different signature versions
+    BOOST_CHECK(EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::BASE, execdata, &error));
+    BOOST_CHECK_EQUAL(error, SCRIPT_ERR_OK);
+
+    stack.clear();
+    BOOST_CHECK(EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::WITNESS_V0, execdata, &error));
+    BOOST_CHECK_EQUAL(error, SCRIPT_ERR_OK);
+}
+
+BOOST_AUTO_TEST_SUITE_END()

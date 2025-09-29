@@ -159,6 +159,10 @@ DIGIBYTE_CORE_H = \
   dbwrapper.h \
   deploymentinfo.h \
   deploymentstatus.h \
+  digidollar/digidollar.h \
+  digidollar/scripts.h \
+  digidollar/txbuilder.h \
+  digidollar/validation.h \
   external_signer.h \
   flatfile.h \
   headerssync.h \
@@ -344,6 +348,7 @@ DIGIBYTE_CORE_H = \
   wallet/context.h \
   wallet/crypter.h \
   wallet/db.h \
+  wallet/digidollarwallet.h \
   wallet/dump.h \
   wallet/external_signer_scriptpubkeyman.h \
   wallet/feebumper.h \
@@ -448,6 +453,7 @@ libdigibyte_node_a_SOURCES = \
   pow.cpp \
   rest.cpp \
   rpc/blockchain.cpp \
+  rpc/digidollar.cpp \
   rpc/fees.cpp \
   rpc/mempool.cpp \
   rpc/mining.cpp \
@@ -503,6 +509,7 @@ libdigibyte_wallet_a_SOURCES = \
   wallet/context.cpp \
   wallet/crypter.cpp \
   wallet/db.cpp \
+  wallet/digidollarwallet.cpp \
   wallet/dump.cpp \
   wallet/external_signer_scriptpubkeyman.cpp \
   wallet/feebumper.cpp \
@@ -635,11 +642,23 @@ libdigibyte_consensus_a_SOURCES = \
   arith_uint256.cpp \
   arith_uint256.h \
   consensus/amount.h \
+  consensus/dca.cpp \
+  consensus/dca.h \
+  consensus/digidollar.cpp \
+  consensus/digidollar.h \
+  consensus/digidollar_transaction_validation.cpp \
+  consensus/digidollar_transaction_validation.h \
+  consensus/digidollar_tx.cpp \
+  consensus/digidollar_tx.h \
+  consensus/err.cpp \
+  consensus/err.h \
   consensus/merkle.cpp \
   consensus/merkle.h \
   consensus/params.h \
   consensus/tx_check.cpp \
   consensus/validation.h \
+  consensus/volatility.cpp \
+  consensus/volatility.h \
   crypto/blake.cpp \
   crypto/bmw.cpp \
   crypto/cubehash.cpp \
@@ -678,6 +697,14 @@ libdigibyte_consensus_a_SOURCES = \
   prevector.h \
   primitives/block.cpp \
   primitives/block.h \
+  primitives/oracle.cpp \
+  primitives/oracle.h \
+  oracle/node.cpp \
+  oracle/node.h \
+  oracle/exchange.cpp \
+  oracle/exchange.h \
+  oracle/bundle_manager.cpp \
+  oracle/bundle_manager.h \
   primitives/transaction.cpp \
   primitives/transaction.h \
   pubkey.cpp \
@@ -720,6 +747,11 @@ libdigibyte_common_a_SOURCES = \
   core_read.cpp \
   core_write.cpp \
   deploymentinfo.cpp \
+  digidollar/digidollar.cpp \
+  digidollar/health.cpp \
+  digidollar/scripts.cpp \
+  digidollar/txbuilder.cpp \
+  digidollar/validation.cpp \
   external_signer.cpp \
   init/common.cpp \
   kernel/chainparams.cpp \

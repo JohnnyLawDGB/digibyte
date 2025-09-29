@@ -6,6 +6,9 @@
 #include <consensus/amount.h>
 #include <primitives/transaction.h>
 #include <consensus/validation.h>
+#include <digidollar/validation.h>
+#include <digidollar/digidollar.h>
+#include <chainparams.h>
 
 bool CheckTransaction(const CTransaction& tx, TxValidationState& state)
 {
@@ -52,6 +55,41 @@ bool CheckTransaction(const CTransaction& tx, TxValidationState& state)
         for (const auto& txin : tx.vin)
             if (txin.prevout.IsNull())
                 return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-prevout-null");
+    }
+
+    // DigiDollar basic transaction validation
+    // Note: Full validation with blockchain context happens later in consensus
+    if (DigiDollar::HasDigiDollarMarker(tx)) {
+        // Basic DigiDollar transaction checks that don't require blockchain state
+        try {
+            DigiDollar::DigiDollarTxType txType = DigiDollar::GetDigiDollarTxType(tx);
+
+            // Validate transaction structure based on type
+            switch (txType) {
+                case DigiDollar::DD_TX_MINT:
+                case DigiDollar::DD_TX_TRANSFER:
+                case DigiDollar::DD_TX_REDEEM:
+                    // Basic structure validation - detailed validation happens in context
+                    break;
+                default:
+                    return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-dd-tx-type");
+            }
+
+            // Validate DD amounts in outputs don't exceed limits
+            for (const auto& output : tx.vout) {
+                if (DigiDollar::IsDDTokenScript(output.scriptPubKey)) {
+                    CAmount ddAmount;
+                    if (!DigiDollar::ExtractDDAmount(output.scriptPubKey, ddAmount)) {
+                        return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-dd-amount-extraction");
+                    }
+                    if (ddAmount <= 0 || ddAmount > MAX_DIGIDOLLAR) {
+                        return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-dd-amount-range");
+                    }
+                }
+            }
+        } catch (const std::exception&) {
+            return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-dd-tx-format");
+        }
     }
 
     return true;

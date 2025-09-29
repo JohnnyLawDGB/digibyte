@@ -14,6 +14,7 @@
 #ifndef DIGIBYTE_BASE58_H
 #define DIGIBYTE_BASE58_H
 
+#include <addresstype.h>
 #include <span.h>
 
 #include <string>
@@ -40,5 +41,38 @@ std::string EncodeBase58Check(Span<const unsigned char> input);
  * vector (vchRet), return true if decoding is successful
  */
 [[nodiscard]] bool DecodeBase58Check(const std::string& str, std::vector<unsigned char>& vchRet, int max_ret_len);
+
+/**
+ * DigiDollar address encoding class
+ * Supports DD (mainnet), TD (testnet), and RD (regtest) prefixes
+ * Only works with P2TR (Taproot) destinations
+ */
+class CDigiDollarAddress
+{
+private:
+    std::vector<unsigned char> vchData;
+    std::vector<unsigned char> vchVersion;
+    bool fValid;
+
+public:
+    // Version bytes for DigiDollar addresses (2-byte prefixes)
+    static const std::vector<unsigned char> DD_P2TR_MAINNET;  // Generates "DD" prefix
+    static const std::vector<unsigned char> DD_P2TR_TESTNET;  // Generates "TD" prefix
+    static const std::vector<unsigned char> DD_P2TR_REGTEST;  // Generates "RD" prefix
+
+    CDigiDollarAddress();
+    explicit CDigiDollarAddress(const std::string& str);
+
+    bool SetDigiDollar(const CTxDestination& dest, int type);
+    CTxDestination GetDigiDollarDestination() const;
+    std::string ToString() const;
+    bool IsValid() const;
+
+    static bool IsValidDigiDollarAddress(const std::string& str);
+};
+
+// Helper functions for DigiDollar addresses
+std::string EncodeDigiDollarAddress(const CTxDestination& dest);
+CTxDestination DecodeDigiDollarAddress(const std::string& str);
 
 #endif // DIGIBYTE_BASE58_H

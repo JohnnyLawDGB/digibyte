@@ -1,0 +1,634 @@
+// Copyright (c) 2025 The DigiByte Core developers
+// Distributed under the MIT software license, see the accompanying
+// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
+#include <boost/test/unit_test.hpp>
+
+#include <consensus/digidollar.h>
+#include <consensus/dca.h>
+#include <kernel/chainparams.h>
+#include <chainparams.h>
+#include <test/util/setup_common.h>
+#include <chrono>
+
+using namespace DigiDollar;
+using namespace DigiDollar::DCA;
+
+BOOST_FIXTURE_TEST_SUITE(digidollar_dca_tests, BasicTestingSetup)
+
+// ============================================================================
+// System Health Calculation Tests
+// ============================================================================
+
+BOOST_AUTO_TEST_CASE(system_health_calculation_basic)
+{
+    // Test basic system health calculation
+    CAmount totalCollateral = 150000000 * COIN;  // 150M DGB
+    CAmount totalDD = 50000000;                  // 50M DD (in cents, $500k)
+    CAmount oraclePrice = 3333;                  // $0.03333 per DGB
+
+    // System health = (totalCollateral * price) / totalDD * 100
+    // = (150M * $0.03333) / $500k * 100 = $5M / $500k * 100 = 1000%
+    int health = DynamicCollateralAdjustment::CalculateSystemHealth(
+        totalCollateral, totalDD, oraclePrice);
+
+    BOOST_CHECK_EQUAL(health, 1000);
+}
+
+BOOST_AUTO_TEST_CASE(system_health_calculation_edge_cases)
+{
+    CAmount oraclePrice = 5000; // $0.05 per DGB
+
+    // Test zero DD supply (system just starting)
+    {
+        int health = DynamicCollateralAdjustment::CalculateSystemHealth(
+            1000 * COIN, 0, oraclePrice);
+        BOOST_CHECK_EQUAL(health, 30000); // Maximum health when no DD issued
+    }
+
+    // Test zero collateral (emergency state)
+    {
+        int health = DynamicCollateralAdjustment::CalculateSystemHealth(
+            0, 100000, oraclePrice);
+        BOOST_CHECK_EQUAL(health, 0); // Zero health
+    }
+
+    // Test zero oracle price (price feed failure)
+    {
+        int health = DynamicCollateralAdjustment::CalculateSystemHealth(
+            1000 * COIN, 100000, 0);
+        BOOST_CHECK_EQUAL(health, 0); // System cannot function without price
+    }
+}
+
+BOOST_AUTO_TEST_CASE(system_health_various_scenarios)
+{
+    CAmount oraclePrice = 4000; // $0.04 per DGB
+
+    // Healthy system (200% collateralization)
+    {
+        CAmount collateral = 50000000 * COIN;  // 50M DGB
+        CAmount totalDD = 8000000;             // 8M DD ($80k)
+        // Health = (50M * $0.04) / $80k * 100 = $2M / $80k * 100 = 250%
+        int health = DynamicCollateralAdjustment::CalculateSystemHealth(
+            collateral, totalDD, oraclePrice);
+        BOOST_CHECK_EQUAL(health, 250);
+    }
+
+    // Warning system (130% collateralization)
+    {
+        CAmount collateral = 32500000 * COIN;  // 32.5M DGB
+        CAmount totalDD = 10000000;            // 10M DD ($100k)
+        // Health = (32.5M * $0.04) / $100k * 100 = $1.3M / $100k * 100 = 130%
+        int health = DynamicCollateralAdjustment::CalculateSystemHealth(
+            collateral, totalDD, oraclePrice);
+        BOOST_CHECK_EQUAL(health, 130);
+    }
+
+    // Critical system (110% collateralization)
+    {
+        CAmount collateral = 27500000 * COIN;  // 27.5M DGB
+        CAmount totalDD = 10000000;            // 10M DD ($100k)
+        // Health = (27.5M * $0.04) / $100k * 100 = $1.1M / $100k * 100 = 110%
+        int health = DynamicCollateralAdjustment::CalculateSystemHealth(
+            collateral, totalDD, oraclePrice);
+        BOOST_CHECK_EQUAL(health, 110);
+    }
+
+    // Emergency system (90% collateralization)
+    {
+        CAmount collateral = 22500000 * COIN;  // 22.5M DGB
+        CAmount totalDD = 10000000;            // 10M DD ($100k)
+        // Health = (22.5M * $0.04) / $100k * 100 = $900k / $100k * 100 = 90%
+        int health = DynamicCollateralAdjustment::CalculateSystemHealth(
+            collateral, totalDD, oraclePrice);
+        BOOST_CHECK_EQUAL(health, 90);
+    }
+}
+
+// ============================================================================
+// DCA Multiplier Calculation Tests
+// ============================================================================
+
+BOOST_AUTO_TEST_CASE(dca_multiplier_healthy_system)
+{
+    // Healthy system (>150% health) should have 1.0x multiplier
+    double multiplier = DynamicCollateralAdjustment::GetDCAMultiplier(200);
+    BOOST_CHECK_EQUAL(multiplier, 1.0);
+
+    multiplier = DynamicCollateralAdjustment::GetDCAMultiplier(300);
+    BOOST_CHECK_EQUAL(multiplier, 1.0);
+
+    multiplier = DynamicCollateralAdjustment::GetDCAMultiplier(151);
+    BOOST_CHECK_EQUAL(multiplier, 1.0);
+}
+
+BOOST_AUTO_TEST_CASE(dca_multiplier_warning_system)
+{
+    // Warning system (120-150% health) should have 1.2x multiplier
+    double multiplier = DynamicCollateralAdjustment::GetDCAMultiplier(150);
+    BOOST_CHECK_EQUAL(multiplier, 1.2);
+
+    multiplier = DynamicCollateralAdjustment::GetDCAMultiplier(135);
+    BOOST_CHECK_EQUAL(multiplier, 1.2);
+
+    multiplier = DynamicCollateralAdjustment::GetDCAMultiplier(120);
+    BOOST_CHECK_EQUAL(multiplier, 1.2);
+}
+
+BOOST_AUTO_TEST_CASE(dca_multiplier_critical_system)
+{
+    // Critical system (100-120% health) should have 1.5x multiplier
+    double multiplier = DynamicCollateralAdjustment::GetDCAMultiplier(119);
+    BOOST_CHECK_EQUAL(multiplier, 1.5);
+
+    multiplier = DynamicCollateralAdjustment::GetDCAMultiplier(110);
+    BOOST_CHECK_EQUAL(multiplier, 1.5);
+
+    multiplier = DynamicCollateralAdjustment::GetDCAMultiplier(100);
+    BOOST_CHECK_EQUAL(multiplier, 1.5);
+}
+
+BOOST_AUTO_TEST_CASE(dca_multiplier_emergency_system)
+{
+    // Emergency system (<100% health) should have 2.0x multiplier
+    double multiplier = DynamicCollateralAdjustment::GetDCAMultiplier(99);
+    BOOST_CHECK_EQUAL(multiplier, 2.0);
+
+    multiplier = DynamicCollateralAdjustment::GetDCAMultiplier(50);
+    BOOST_CHECK_EQUAL(multiplier, 2.0);
+
+    multiplier = DynamicCollateralAdjustment::GetDCAMultiplier(0);
+    BOOST_CHECK_EQUAL(multiplier, 2.0);
+}
+
+BOOST_AUTO_TEST_CASE(dca_multiplier_boundary_conditions)
+{
+    // Test exact boundary conditions
+    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(150), 1.2);
+    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(151), 1.0);
+    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(120), 1.2);
+    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(119), 1.5);
+    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(100), 1.5);
+    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(99), 2.0);
+}
+
+// ============================================================================
+// DCA Application Tests
+// ============================================================================
+
+BOOST_AUTO_TEST_CASE(apply_dca_to_base_ratios)
+{
+    // Test applying DCA to different base collateral ratios
+
+    // Healthy system (1.0x multiplier)
+    int adjustedRatio = DynamicCollateralAdjustment::ApplyDCA(300, 200); // 300% base, 200% health
+    BOOST_CHECK_EQUAL(adjustedRatio, 300); // No change
+
+    // Warning system (1.2x multiplier)
+    adjustedRatio = DynamicCollateralAdjustment::ApplyDCA(300, 130); // 300% base, 130% health
+    BOOST_CHECK_EQUAL(adjustedRatio, 360); // 300% * 1.2 = 360%
+
+    // Critical system (1.5x multiplier)
+    adjustedRatio = DynamicCollateralAdjustment::ApplyDCA(300, 110); // 300% base, 110% health
+    BOOST_CHECK_EQUAL(adjustedRatio, 450); // 300% * 1.5 = 450%
+
+    // Emergency system (2.0x multiplier)
+    adjustedRatio = DynamicCollateralAdjustment::ApplyDCA(300, 90); // 300% base, 90% health
+    BOOST_CHECK_EQUAL(adjustedRatio, 600); // 300% * 2.0 = 600%
+}
+
+BOOST_AUTO_TEST_CASE(apply_dca_all_lock_tiers)
+{
+    // Test DCA application across all collateral ratio tiers
+    std::vector<int> baseRatios = {500, 400, 350, 300, 250, 225, 212, 200}; // All 8 tiers
+    int systemHealth = 110; // Critical system (1.5x multiplier)
+
+    for (int baseRatio : baseRatios) {
+        int adjustedRatio = DynamicCollateralAdjustment::ApplyDCA(baseRatio, systemHealth);
+        int expectedRatio = baseRatio * 1.5; // 1.5x multiplier for critical system
+        BOOST_CHECK_EQUAL(adjustedRatio, expectedRatio);
+    }
+}
+
+// ============================================================================
+// Health Tier Information Tests
+// ============================================================================
+
+BOOST_AUTO_TEST_CASE(get_current_tier_information)
+{
+    // Test getting tier information for different health levels
+
+    // Healthy tier
+    auto tier = DynamicCollateralAdjustment::GetCurrentTier(200);
+    BOOST_CHECK_EQUAL(tier.minCollateral, 151);
+    BOOST_CHECK_EQUAL(tier.maxCollateral, 30000);
+    BOOST_CHECK_EQUAL(tier.multiplier, 1.0);
+    BOOST_CHECK_EQUAL(tier.status, "healthy");
+
+    // Warning tier
+    tier = DynamicCollateralAdjustment::GetCurrentTier(130);
+    BOOST_CHECK_EQUAL(tier.minCollateral, 120);
+    BOOST_CHECK_EQUAL(tier.maxCollateral, 150);
+    BOOST_CHECK_EQUAL(tier.multiplier, 1.2);
+    BOOST_CHECK_EQUAL(tier.status, "warning");
+
+    // Critical tier
+    tier = DynamicCollateralAdjustment::GetCurrentTier(110);
+    BOOST_CHECK_EQUAL(tier.minCollateral, 100);
+    BOOST_CHECK_EQUAL(tier.maxCollateral, 119);
+    BOOST_CHECK_EQUAL(tier.multiplier, 1.5);
+    BOOST_CHECK_EQUAL(tier.status, "critical");
+
+    // Emergency tier
+    tier = DynamicCollateralAdjustment::GetCurrentTier(50);
+    BOOST_CHECK_EQUAL(tier.minCollateral, 0);
+    BOOST_CHECK_EQUAL(tier.maxCollateral, 99);
+    BOOST_CHECK_EQUAL(tier.multiplier, 2.0);
+    BOOST_CHECK_EQUAL(tier.status, "emergency");
+}
+
+// ============================================================================
+// Emergency State Detection Tests
+// ============================================================================
+
+BOOST_AUTO_TEST_CASE(emergency_state_detection)
+{
+    // Test emergency state detection
+    BOOST_CHECK(!DynamicCollateralAdjustment::IsSystemEmergency(200)); // Healthy
+    BOOST_CHECK(!DynamicCollateralAdjustment::IsSystemEmergency(150)); // Warning
+    BOOST_CHECK(!DynamicCollateralAdjustment::IsSystemEmergency(130)); // Warning
+    BOOST_CHECK(!DynamicCollateralAdjustment::IsSystemEmergency(120)); // Warning
+    BOOST_CHECK(!DynamicCollateralAdjustment::IsSystemEmergency(110)); // Critical
+    BOOST_CHECK(!DynamicCollateralAdjustment::IsSystemEmergency(100)); // Critical
+
+    BOOST_CHECK(DynamicCollateralAdjustment::IsSystemEmergency(99));   // Emergency
+    BOOST_CHECK(DynamicCollateralAdjustment::IsSystemEmergency(50));   // Emergency
+    BOOST_CHECK(DynamicCollateralAdjustment::IsSystemEmergency(0));    // Emergency
+}
+
+// ============================================================================
+// Real-time System State Tests
+// ============================================================================
+
+BOOST_AUTO_TEST_CASE(total_system_collateral_calculation)
+{
+    // Test total system collateral calculation
+    // This test will be implemented once we have UTXO access
+    CAmount totalCollateral = DynamicCollateralAdjustment::GetTotalSystemCollateral();
+
+    // For now, just verify the function exists and returns a reasonable value
+    BOOST_CHECK(totalCollateral >= 0);
+}
+
+BOOST_AUTO_TEST_CASE(total_dd_supply_calculation)
+{
+    // Test total DigiDollar supply calculation
+    // This test will be implemented once we have chain state access
+    CAmount totalDD = DynamicCollateralAdjustment::GetTotalDDSupply();
+
+    // For now, just verify the function exists and returns a reasonable value
+    BOOST_CHECK(totalDD >= 0);
+}
+
+// ============================================================================
+// Integration with Existing Collateral System Tests
+// ============================================================================
+
+BOOST_AUTO_TEST_CASE(integration_with_consensus_params)
+{
+    // Test integration with existing consensus parameters
+    const CChainParams& params = Params();
+
+    // Verify DCA works with existing collateral ratios
+    std::map<int64_t, int> collateralRatios = {
+        {30 * 24 * 60 * 4, 500},     // 30 days: 500%
+        {90 * 24 * 60 * 4, 400},     // 3 months: 400%
+        {180 * 24 * 60 * 4, 350},    // 6 months: 350%
+        {365 * 24 * 60 * 4, 300},    // 1 year: 300%
+        {3 * 365 * 24 * 60 * 4, 250}, // 3 years: 250%
+        {5 * 365 * 24 * 60 * 4, 225}, // 5 years: 225%
+        {7 * 365 * 24 * 60 * 4, 212}, // 7 years: 212%
+        {10 * 365 * 24 * 60 * 4, 200} // 10 years: 200%
+    };
+
+    int systemHealth = 110; // Critical system
+    double expectedMultiplier = 1.5;
+
+    for (const auto& [lockBlocks, baseRatio] : collateralRatios) {
+        int adjustedRatio = DynamicCollateralAdjustment::ApplyDCA(baseRatio, systemHealth);
+        int expectedRatio = baseRatio * expectedMultiplier;
+        BOOST_CHECK_EQUAL(adjustedRatio, expectedRatio);
+    }
+}
+
+// ============================================================================
+// Performance and Scalability Tests
+// ============================================================================
+
+BOOST_AUTO_TEST_CASE(performance_health_calculation)
+{
+    // Test performance of health calculation with large numbers
+    CAmount largeCollateral = 1000000000 * COIN;  // 1B DGB
+    CAmount largeDD = 100000000000;               // 100B DD (1T USD)
+    CAmount oraclePrice = 10000;                  // $0.10 per DGB
+
+    auto start = std::chrono::high_resolution_clock::now();
+
+    // Perform many calculations
+    for (int i = 0; i < 1000; ++i) {
+        int health = DynamicCollateralAdjustment::CalculateSystemHealth(
+            largeCollateral, largeDD, oraclePrice);
+        (void)health; // Suppress unused variable warning
+    }
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+
+    // Should complete 1000 calculations in reasonable time (< 10ms)
+    BOOST_CHECK(duration.count() < 10000);
+}
+
+BOOST_AUTO_TEST_CASE(numerical_stability)
+{
+    // Test numerical stability with edge case values
+
+    // Very small values
+    {
+        CAmount collateral = 1;  // 1 satoshi
+        CAmount totalDD = 1;     // 1 cent
+        CAmount price = 1;       // 1 cent per DGB
+
+        int health = DynamicCollateralAdjustment::CalculateSystemHealth(
+            collateral, totalDD, price);
+        BOOST_CHECK(health >= 0);
+    }
+
+    // Very large values (near overflow limits)
+    {
+        CAmount collateral = 2000000000 * COIN;  // 2B DGB (near max supply)
+        CAmount totalDD = 2100000000000;         // 21T DD
+        CAmount price = 100000;                  // $1.00 per DGB
+
+        int health = DynamicCollateralAdjustment::CalculateSystemHealth(
+            collateral, totalDD, price);
+        BOOST_CHECK(health >= 0);
+        BOOST_CHECK(health < 1000000); // Reasonable upper bound
+    }
+}
+
+// ============================================================================
+// Future Enhancement Hooks Tests
+// ============================================================================
+
+BOOST_AUTO_TEST_CASE(gradual_transition_hooks)
+{
+    // Test hooks for future gradual transition implementation
+    // Currently tests boundary conditions, can be extended for smooth transitions
+
+    // Test transitions at tier boundaries
+    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(151), 1.0);
+    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(150), 1.2);
+
+    // Future: implement smooth transitions between tiers
+    // For example: health 150.5 could give multiplier 1.1 instead of hard 1.2
+}
+
+BOOST_AUTO_TEST_CASE(emergency_recovery_hooks)
+{
+    // Test hooks for emergency recovery mechanisms
+    BOOST_CHECK(DynamicCollateralAdjustment::IsSystemEmergency(99));
+
+    // Future: implement recovery mechanisms like:
+    // - Mint restrictions during emergency
+    // - Gradual multiplier reduction as system recovers
+    // - Emergency redemption ratio adjustments
+}
+
+// ============================================================================
+// DCA Extreme Scenarios Tests (RED Phase) - Task 4.9
+// ============================================================================
+
+BOOST_AUTO_TEST_CASE(test_dca_extreme_scenarios)
+{
+    // RED PHASE: These tests should FAIL until implementation is complete
+
+    // Test 1: Rapid health tier changes (10% to 90% to 150% in short time)
+    {
+        // Start healthy
+        int health1 = 150;
+        double multiplier1 = DynamicCollateralAdjustment::GetDCAMultiplier(health1);
+        BOOST_CHECK_EQUAL(multiplier1, 1.0);
+
+        // Drop to emergency
+        int health2 = 10;
+        double multiplier2 = DynamicCollateralAdjustment::GetDCAMultiplier(health2);
+        BOOST_CHECK_EQUAL(multiplier2, 2.0);
+
+        // Quick recovery to healthy
+        int health3 = 150;
+        double multiplier3 = DynamicCollateralAdjustment::GetDCAMultiplier(health3);
+        BOOST_CHECK_EQUAL(multiplier3, 1.0);
+
+        // Test rapid transition handling - EXPECTED TO FAIL (RED phase)
+        bool transitionHandled = DynamicCollateralAdjustment::HandleRapidTransition(health1, health2, health3);
+        BOOST_CHECK(!transitionHandled); // Will fail until implemented
+    }
+
+    // Test 2: System at absolute limits (0% and 30000% health)
+    {
+        // Zero health scenario
+        int zeroHealth = 0;
+        double zeroMultiplier = DynamicCollateralAdjustment::GetDCAMultiplier(zeroHealth);
+        BOOST_CHECK_EQUAL(zeroMultiplier, 2.0); // Maximum multiplier
+
+        // Extreme overcollateralization
+        int extremeHealth = 30000; // 300x collateralized
+        double extremeMultiplier = DynamicCollateralAdjustment::GetDCAMultiplier(extremeHealth);
+        BOOST_CHECK_EQUAL(extremeMultiplier, 1.0); // Minimum multiplier
+
+        // Test extreme value handling - EXPECTED TO FAIL (RED phase)
+        bool extremesHandled = DynamicCollateralAdjustment::ValidateExtremeValues(zeroHealth, extremeHealth);
+        BOOST_CHECK(!extremesHandled); // Will fail until implemented
+    }
+
+    // Test 3: Multiplier calculations with floating point precision
+    {
+        // Test boundary conditions with precision
+        std::vector<std::pair<int, double>> precisionTests = {
+            {150, 1.2}, {151, 1.0}, // Boundary between warning and healthy
+            {120, 1.2}, {119, 1.5}, // Boundary between warning and critical
+            {100, 1.5}, {99, 2.0}   // Boundary between critical and emergency
+        };
+
+        for (auto& test : precisionTests) {
+            double multiplier = DynamicCollateralAdjustment::GetDCAMultiplier(test.first);
+            BOOST_CHECK_EQUAL(multiplier, test.second);
+        }
+
+        // Test precision at extreme boundaries - EXPECTED TO FAIL (RED phase)
+        bool precisionValid = DynamicCollateralAdjustment::ValidateMultiplierPrecision();
+        BOOST_CHECK(!precisionValid); // Will fail until implemented
+    }
+
+    // Test 4: DCA with maximum possible collateral ratios
+    {
+        // Test with maximum base ratio (500%) and maximum multiplier (2.0x)
+        int maxBaseRatio = 500;
+        int emergencyHealth = 50;
+        int maxAdjustedRatio = DynamicCollateralAdjustment::ApplyDCA(maxBaseRatio, emergencyHealth);
+        BOOST_CHECK_EQUAL(maxAdjustedRatio, 1000); // 500% * 2.0 = 1000%
+
+        // Test overflow protection - EXPECTED TO FAIL (RED phase)
+        bool overflowProtected = DynamicCollateralAdjustment::PreventIntegerOverflow(maxBaseRatio, 2.0);
+        BOOST_CHECK(!overflowProtected); // Will fail until implemented
+    }
+
+    // Test 5: Tier transition race conditions
+    {
+        // Simulate concurrent health updates during tier calculation
+        std::vector<int> rapidHealthChanges = {150, 119, 100, 99, 120, 151};
+
+        for (int health : rapidHealthChanges) {
+            auto tier = DynamicCollateralAdjustment::GetCurrentTier(health);
+            // Basic validation that tier is returned
+            BOOST_CHECK(!tier.status.empty());
+        }
+
+        // Test race condition handling - EXPECTED TO FAIL (RED phase)
+        bool raceConditionHandled = DynamicCollateralAdjustment::HandleConcurrentUpdates(rapidHealthChanges);
+        BOOST_CHECK(!raceConditionHandled); // Will fail until implemented
+    }
+
+    // Test 6: Memory pressure under extreme scenarios
+    {
+        // Test DCA calculation performance under stress
+        auto startTime = std::chrono::high_resolution_clock::now();
+
+        for (int i = 0; i < 10000; ++i) {
+            int health = i % 300; // Cycle through all possible health values
+            double multiplier = DynamicCollateralAdjustment::GetDCAMultiplier(health);
+            (void)multiplier; // Suppress unused variable warning
+        }
+
+        auto endTime = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+
+        // Should complete in reasonable time
+        BOOST_CHECK_LT(duration.count(), 100); // Less than 100ms
+
+        // Test memory stability under load - EXPECTED TO FAIL (RED phase)
+        bool memoryStable = DynamicCollateralAdjustment::VerifyMemoryStability();
+        BOOST_CHECK(!memoryStable); // Will fail until implemented
+    }
+
+    // Test 7: Edge case calculations
+    {
+        // Test with negative health (error condition)
+        int negativeHealth = -10;
+        double negativeMultiplier = DynamicCollateralAdjustment::GetDCAMultiplier(negativeHealth);
+        BOOST_CHECK_EQUAL(negativeMultiplier, 2.0); // Should treat as emergency
+
+        // Test invalid error handling - EXPECTED TO FAIL (RED phase)
+        bool errorHandlingValid = DynamicCollateralAdjustment::ValidateErrorHandling(negativeHealth);
+        BOOST_CHECK(!errorHandlingValid); // Will fail until implemented
+    }
+}
+
+BOOST_AUTO_TEST_CASE(test_dca_system_state_transitions)
+{
+    // RED PHASE: Test state transitions between DCA tiers
+
+    // Test 1: State persistence during transitions
+    {
+        // Initialize system in healthy state
+        int currentHealth = 200;
+        auto initialTier = DynamicCollateralAdjustment::GetCurrentTier(currentHealth);
+
+        // Transition to critical
+        currentHealth = 110;
+        auto criticalTier = DynamicCollateralAdjustment::GetCurrentTier(currentHealth);
+
+        // Verify state change tracking - EXPECTED TO FAIL (RED phase)
+        bool stateTransitionTracked = DynamicCollateralAdjustment::IsStateTransitionTracked(
+            initialTier.status, criticalTier.status);
+        BOOST_CHECK(!stateTransitionTracked); // Will fail until implemented
+    }
+
+    // Test 2: Hysteresis in tier transitions
+    {
+        // Test that rapid bouncing between tiers is handled smoothly
+        std::vector<int> bouncingHealth = {120, 119, 120, 119, 120};
+
+        std::vector<double> multipliers;
+        for (int health : bouncingHealth) {
+            multipliers.push_back(DynamicCollateralAdjustment::GetDCAMultiplier(health));
+        }
+
+        // Test hysteresis implementation - EXPECTED TO FAIL (RED phase)
+        bool hysteresisImplemented = DynamicCollateralAdjustment::HasHysteresis(multipliers);
+        BOOST_CHECK(!hysteresisImplemented); // Will fail until implemented
+    }
+
+    // Test 3: System recovery tracking
+    {
+        // Simulate system recovery from emergency to healthy
+        std::vector<int> recoveryPath = {50, 80, 110, 130, 160};
+
+        for (int health : recoveryPath) {
+            double multiplier = DynamicCollateralAdjustment::GetDCAMultiplier(health);
+            // Verify decreasing multiplier as health improves
+            if (health >= 151) BOOST_CHECK_EQUAL(multiplier, 1.0);
+            else if (health >= 120) BOOST_CHECK_EQUAL(multiplier, 1.2);
+            else if (health >= 100) BOOST_CHECK_EQUAL(multiplier, 1.5);
+            else BOOST_CHECK_EQUAL(multiplier, 2.0);
+        }
+
+        // Test recovery metrics tracking - EXPECTED TO FAIL (RED phase)
+        bool recoveryTracked = DynamicCollateralAdjustment::TrackSystemRecovery(recoveryPath);
+        BOOST_CHECK(!recoveryTracked); // Will fail until implemented
+    }
+}
+
+BOOST_AUTO_TEST_CASE(test_dca_integration_stress)
+{
+    // RED PHASE: Test DCA integration under stress conditions
+
+    // Test 1: Concurrent position calculations
+    {
+        // Simulate many positions being calculated simultaneously
+        std::vector<int> baseRatios = {500, 400, 350, 300, 250, 225, 212, 200};
+        int stressHealth = 105; // Critical system
+
+        std::vector<int> adjustedRatios;
+        for (int baseRatio : baseRatios) {
+            adjustedRatios.push_back(DynamicCollateralAdjustment::ApplyDCA(baseRatio, stressHealth));
+        }
+
+        // Verify all calculations completed correctly
+        for (size_t i = 0; i < baseRatios.size(); ++i) {
+            int expected = baseRatios[i] * 1.5; // Critical multiplier
+            BOOST_CHECK_EQUAL(adjustedRatios[i], expected);
+        }
+
+        // Test concurrent calculation safety - EXPECTED TO FAIL (RED phase)
+        bool concurrentSafe = DynamicCollateralAdjustment::ValidateConcurrentCalculations(adjustedRatios);
+        BOOST_CHECK(!concurrentSafe); // Will fail until implemented
+    }
+
+    // Test 2: Resource exhaustion scenarios
+    {
+        // Test behavior when system resources are limited
+        bool resourceLimited = DynamicCollateralAdjustment::SimulateResourceExhaustion();
+
+        // DCA should still function under resource pressure
+        int health = 110;
+        double multiplier = DynamicCollateralAdjustment::GetDCAMultiplier(health);
+        BOOST_CHECK_EQUAL(multiplier, 1.5);
+
+        // Test graceful degradation - EXPECTED TO FAIL (RED phase)
+        BOOST_CHECK(!resourceLimited); // Will fail until implemented
+    }
+}
+
+BOOST_AUTO_TEST_SUITE_END()

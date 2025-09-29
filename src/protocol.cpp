@@ -5,6 +5,8 @@
 #include <protocol.h>
 
 #include <common/system.h>
+#include <primitives/oracle.h>
+#include <hash.h>
 
 #include <atomic>
 
@@ -47,6 +49,9 @@ const char* GETCFCHECKPT = "getcfcheckpt";
 const char* CFCHECKPT = "cfcheckpt";
 const char* WTXIDRELAY = "wtxidrelay";
 const char* SENDTXRCNCL = "sendtxrcncl";
+const char* ORACLEPRICE = "oracleprice";
+const char* ORACLEBUNDLE = "oraclebundle";
+const char* GETORACLES = "getoracles";
 } // namespace NetMsgType
 
 /** All known message types. Keep this in the same order as the list of
@@ -89,6 +94,9 @@ const static std::vector<std::string> g_all_net_message_types{
     NetMsgType::CFCHECKPT,
     NetMsgType::WTXIDRELAY,
     NetMsgType::SENDTXRCNCL,
+    NetMsgType::ORACLEPRICE,
+    NetMsgType::ORACLEBUNDLE,
+    NetMsgType::GETORACLES,
 };
 
 CMessageHeader::CMessageHeader(const MessageStartChars& pchMessageStartIn, const char* pszCommand, unsigned int nMessageSizeIn)
@@ -167,6 +175,9 @@ std::string CInv::GetCommand() const
     case MSG_FILTERED_BLOCK: return cmd.append(NetMsgType::MERKLEBLOCK);
     case MSG_CMPCT_BLOCK:    return cmd.append(NetMsgType::CMPCTBLOCK);
     case MSG_DANDELION_TX:   return cmd.append(NetMsgType::DANDELIONTX);
+    case MSG_ORACLE_PRICE:   return cmd.append(NetMsgType::ORACLEPRICE);
+    case MSG_ORACLE_BUNDLE:  return cmd.append(NetMsgType::ORACLEBUNDLE);
+    case MSG_GET_ORACLE_DATA: return cmd.append(NetMsgType::GETORACLES);
     default:
         throw std::out_of_range(strprintf("CInv::GetCommand(): type=%d unknown type", type));
     }
@@ -230,4 +241,16 @@ GenTxid ToGenTxid(const CInv& inv)
 {
     assert(inv.IsGenTxMsg());
     return inv.IsMsgWtx() ? GenTxid::Wtxid(inv.hash) : GenTxid::Txid(inv.hash);
+}
+
+uint256 OraclePriceMsg::GetHash() const
+{
+    return price_message.GetSignatureHash();
+}
+
+uint256 OracleBundleMsg::GetHash() const
+{
+    CHashWriter hasher(0);
+    hasher << bundle << block_hash;
+    return hasher.GetHash();
 }

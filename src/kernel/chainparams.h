@@ -7,8 +7,10 @@
 #define DIGIBYTE_KERNEL_CHAINPARAMS_H
 
 #include <consensus/params.h>
+#include <consensus/digidollar.h>
 #include <kernel/messagestartchars.h>
 #include <primitives/block.h>
+#include <primitives/oracle.h>
 #include <uint256.h>
 #include <util/chaintype.h>
 #include <util/hash_type.h>
@@ -88,6 +90,9 @@ public:
         SECRET_KEY_OLD,
         EXT_PUBLIC_KEY,
         EXT_SECRET_KEY,
+        DIGIDOLLAR_ADDRESS,
+        DIGIDOLLAR_ADDRESS_TESTNET,
+        DIGIDOLLAR_ADDRESS_REGTEST,
 
         MAX_BASE58_TYPES
     };
@@ -131,6 +136,17 @@ public:
     }
 
     const ChainTxData& TxData() const { return chainTxData; }
+
+    /** Get DigiDollar consensus parameters */
+    const DigiDollar::ConsensusParams& GetDigiDollarParams() const { return digidollarParams; }
+
+    // DigiDollar Oracle System
+    /** Get all oracle nodes */
+    const std::vector<OracleNodeInfo>& GetOracleNodes() const { return vOracleNodes; }
+    /** Get oracle node by ID */
+    const OracleNodeInfo* GetOracleNode(uint32_t id) const;
+    /** Get number of active oracles per epoch */
+    uint32_t GetActiveOracleCount() const;
 
     /**
      * SigNetOptions holds configurations for creating a signet CChainParams.
@@ -183,6 +199,8 @@ protected:
     CCheckpointData checkpointData;
     std::vector<AssumeutxoData> m_assumeutxo_data;
     ChainTxData chainTxData;
+    DigiDollar::ConsensusParams digidollarParams;
+    std::vector<OracleNodeInfo> vOracleNodes;
 };
 
 #endif // DIGIBYTE_KERNEL_CHAINPARAMS_H

@@ -11,6 +11,7 @@
 #include <pubkey.h>
 #include <script/script.h>
 #include <uint256.h>
+#include <consensus/amount.h>
 
 typedef std::vector<unsigned char> valtype;
 
@@ -428,6 +429,13 @@ static bool EvalChecksig(const valtype& sig, const valtype& pubkey, CScript::con
     assert(false);
 }
 
+// Temporary mock function for testing DigiDollar oracle price
+// Will be replaced with real oracle integration in Phase 2
+static CAmount GetMockOraclePrice() {
+    // Return a fixed price for testing (e.g., $0.10 per DGB in micro-USD)
+    return 100000;
+}
+
 bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& script, unsigned int flags, const BaseSignatureChecker& checker, SigVersion sigversion, ScriptExecutionData& execdata, ScriptError* serror)
 {
     static const CScriptNum bnZero(0);
@@ -621,6 +629,112 @@ bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& 
                 {
                     if (flags & SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS)
                         return set_error(serror, SCRIPT_ERR_DISCOURAGE_UPGRADABLE_NOPS);
+                }
+                break;
+
+                // DigiDollar specific opcodes
+                case OP_DIGIDOLLAR:
+                {
+                    // Stack: <amount>
+                    if (stack.size() < 1)
+                        return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
+
+                    if (!(flags & SCRIPT_VERIFY_DIGIDOLLAR)) {
+                        // Behave as NOP when flag is not set (soft fork compatibility)
+                        break;
+                    }
+
+                    CScriptNum amount(0);
+                    try {
+                        amount = CScriptNum(stacktop(-1), fRequireMinimal);
+                    } catch (const scriptnum_error&) {
+                        return set_error(serror, SCRIPT_ERR_INVALID_DD_AMOUNT);
+                    }
+                    if (amount < 0 || amount.GetInt64() > MAX_MONEY)
+                        return set_error(serror, SCRIPT_ERR_INVALID_DD_AMOUNT);
+
+                    // Pop amount and push true/false
+                    popstack(stack);
+                    stack.push_back(amount > 0 ? vchTrue : vchFalse);
+                }
+                break;
+
+                case OP_DDVERIFY:
+                {
+                    if (!(flags & SCRIPT_VERIFY_DIGIDOLLAR)) {
+                        // Behave as NOP when flag is not set (soft fork compatibility)
+                        break;
+                    }
+
+                    // Verify DigiDollar conditions
+                    if (stack.size() < 1)
+                        return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
+
+                    if (!CastToBool(stacktop(-1)))
+                        return set_error(serror, SCRIPT_ERR_DD_VERIFY);
+
+                    popstack(stack);
+                }
+                break;
+
+                case OP_CHECKPRICE:
+                {
+                    // Stack: <price>
+                    if (stack.size() < 1)
+                        return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
+
+                    if (!(flags & SCRIPT_VERIFY_DIGIDOLLAR)) {
+                        // Behave as NOP when flag is not set (soft fork compatibility)
+                        break;
+                    }
+
+                    // Get oracle price (mock for now, will be integrated later)
+                    CAmount oraclePrice = GetMockOraclePrice();
+                    CScriptNum stackPrice(0);
+                    try {
+                        stackPrice = CScriptNum(stacktop(-1), fRequireMinimal);
+                    } catch (const scriptnum_error&) {
+                        popstack(stack);
+                        stack.push_back(vchFalse);  // Invalid price format
+                        break;
+                    }
+
+                    popstack(stack);
+                    stack.push_back(oraclePrice == stackPrice.GetInt64() ? vchTrue : vchFalse);
+                }
+                break;
+
+                case OP_CHECKCOLLATERAL:
+                {
+                    // Stack: <ratio> <threshold>
+                    if (stack.size() < 2)
+                        return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
+
+                    if (!(flags & SCRIPT_VERIFY_DIGIDOLLAR)) {
+                        // Behave as NOP when flag is not set (soft fork compatibility)
+                        // Need to pop 2 items to maintain stack consistency
+                        popstack(stack);
+                        popstack(stack);
+                        break;
+                    }
+
+                    CScriptNum ratio(0);
+                    CScriptNum threshold(0);
+                    try {
+                        ratio = CScriptNum(stacktop(-2), fRequireMinimal);
+                        threshold = CScriptNum(stacktop(-1), fRequireMinimal);
+                    } catch (const scriptnum_error&) {
+                        popstack(stack);
+                        popstack(stack);
+                        stack.push_back(vchFalse);  // Invalid number format
+                        break;
+                    }
+
+                    popstack(stack);
+                    popstack(stack);
+
+                    // Compare ratio to threshold
+                    stack.push_back(ratio >= threshold ? vchTrue : vchFalse);
                 }
                 break;
 

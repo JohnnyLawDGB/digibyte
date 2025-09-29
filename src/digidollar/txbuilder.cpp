@@ -1,0 +1,807 @@
+// Copyright (c) 2024 The DigiByte Core developers
+// Distributed under the MIT software license, see the accompanying
+// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
+#include <digidollar/txbuilder.h>
+#include <digidollar/scripts.h>
+#include <digidollar/digidollar.h>
+#include <digidollar/validation.h>
+#include <consensus/digidollar.h>
+#include <script/standard.h>
+#include <validation.h>
+#include <base58.h>
+#include <random.h>
+#include <policy/policy.h>
+
+#include <algorithm>
+#include <cassert>
+
+// Forward declare to avoid namespace conflicts
+
+namespace DigiDollar {
+
+// Constants for mint transaction building
+static const CAmount DUST_THRESHOLD = 1000;        // Minimum change output (1000 sats)
+static const size_t ESTIMATED_TX_VSIZE = 250;      // Estimated transaction size in vB
+static const int DEFAULT_SYSTEM_COLLATERAL = 150;   // Default system health (150%)
+static const double MAX_FEE_RATIO = 0.5;           // Maximum fee as ratio of total input
+
+// ============================================================================
+// Base TxBuilder implementation
+// ============================================================================
+
+TxBuilder::TxBuilder(const CChainParams& params, int height, CAmount price)
+    : chainParams(params), currentHeight(height), oraclePrice(price) {}
+
+CAmount TxBuilder::CalculateFee(const CMutableTransaction& tx, CAmount feeRate) const {
+    // Estimate transaction virtual size
+    size_t vsize = EstimateTransactionVSize(tx);
+    return (vsize * feeRate) / 1000;  // Convert sat/vB to total fee
+}
+
+bool TxBuilder::SelectCoins(const std::vector<COutPoint>& utxos, CAmount target,
+                           std::vector<CTxIn>& inputs, CAmount& total) const {
+    total = 0;
+    inputs.clear();
+
+    // Simple greedy selection - in production would use more sophisticated algorithm
+    for (const auto& utxo : utxos) {
+        CAmount value = GetUTXOValue(utxo);
+        if (value > 0) {
+            inputs.push_back(CTxIn(utxo));
+            total += value;
+            if (total >= target) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+CAmount TxBuilder::GetUTXOValue(const COutPoint& outpoint) const {
+    // This is a simplified implementation
+    // In production, this would query the UTXO set
+    // For now, return a reasonable value for testing
+    return 100 * COIN; // 100 DGB placeholder
+}
+
+bool TxBuilder::ValidateAmount(CAmount amount) const {
+    return amount > 0 && amount <= MAX_MONEY;
+}
+
+bool TxBuilder::ValidateFeeRate(CAmount feeRate) const {
+    return feeRate >= 1 && feeRate <= 100000; // 1 to 100k sat/vB
+}
+
+// ============================================================================
+// MintTxBuilder implementation
+// ============================================================================
+
+CAmount MintTxBuilder::CalculateRequiredCollateral(CAmount ddAmount, int lockDays) const {
+    // Validate inputs
+    if (ddAmount <= 0) {
+        return 0;
+    }
+
+    if (oraclePrice <= 0) {
+        return 0; // Cannot calculate without valid oracle price
+    }
+
+    // Convert days to blocks
+    int64_t lockBlocks = LockDaysToBlocks(lockDays);
+
+    // Get base collateral ratio
+    const auto& ddParams = chainParams.GetDigiDollarParams();
+    int baseRatio = GetCollateralRatioForLockTime(lockBlocks, ddParams);
+
+    // Apply DCA if needed (check actual system health)
+    int systemCollateral = GetCurrentSystemCollateral(); // Would query chain state
+    double dcaMultiplier = GetDCAMultiplier(systemCollateral, ddParams);
+    double adjustedRatio = (baseRatio * dcaMultiplier) / 100.0;
+
+    // Calculate required DGB
+    // DD amount is in cents, oracle price is in cents per DGB
+    CAmount usdValue = ddAmount; // DD amount = USD value in cents
+
+    // Use 64-bit arithmetic to prevent overflow
+    uint64_t dgbFor100Percent = (static_cast<uint64_t>(usdValue) * static_cast<uint64_t>(COIN)) / static_cast<uint64_t>(oraclePrice);
+    uint64_t requiredCollateral = static_cast<uint64_t>(dgbFor100Percent * adjustedRatio);
+
+    // Check for overflow
+    if (requiredCollateral > static_cast<uint64_t>(MAX_MONEY)) {
+        return 0; // Amount too large
+    }
+
+    return static_cast<CAmount>(requiredCollateral);
+}
+
+int64_t MintTxBuilder::LockDaysToBlocks(int days) const {
+    return DigiDollar::LockDaysToBlocks(days);
+}
+
+CScript MintTxBuilder::CreateCollateralScript(const TxBuilderMintParams& params) const {
+    // Create P2TR collateral locking script using the scripts.h MintParams
+    // Use global namespace to access the correct MintParams from scripts.h
+    ::DigiDollar::MintParams scriptParams;
+    scriptParams.ddAmount = params.ddAmount;
+    scriptParams.lockHeight = currentHeight + LockDaysToBlocks(params.lockDays);
+
+    CPubKey pubkey = params.ownerKey.GetPubKey();
+    scriptParams.ownerKey = XOnlyPubKey(pubkey);
+    scriptParams.internalKey = XOnlyPubKey(pubkey);
+    scriptParams.oracleKeys = GetOracleKeys(15); // Mock oracle keys
+
+    return CreateCollateralP2TR(scriptParams);
+}
+
+CScript MintTxBuilder::CreateDDOutputScript(const CKey& owner, CAmount amount) const {
+    CPubKey pubkey = owner.GetPubKey();
+    return CreateDigiDollarP2TR(XOnlyPubKey(pubkey), amount);
+}
+
+bool MintTxBuilder::ValidateMintParams(const TxBuilderMintParams& params) const {
+    const auto& ddParams = chainParams.GetDigiDollarParams();
+
+    // Validate amount range (check for zero, negative, and excessive amounts)
+    if (params.ddAmount <= 0) {
+        return false;
+    }
+
+    if (!IsValidMintAmount(params.ddAmount, ddParams)) {
+        return false;
+    }
+
+    // Validate lock period (30 days to 10 years)
+    if (params.lockDays < 30 || params.lockDays > 10 * 365) {
+        return false;
+    }
+
+    // Validate key
+    if (!params.ownerKey.IsValid()) {
+        return false;
+    }
+
+    // Validate fee rate (must be reasonable)
+    if (!ValidateFeeRate(params.feeRate)) {
+        return false;
+    }
+
+    // Validate that UTXOs are provided
+    if (params.utxos.empty()) {
+        return false;
+    }
+
+    // Additional sanity checks
+    if (params.ddAmount > MAX_DIGIDOLLAR) {
+        return false;
+    }
+
+    return true;
+}
+
+int TxBuilder::GetCurrentSystemCollateral() const {
+    // Placeholder implementation - in production this would:
+    // 1. Query the UTXO set for all DigiDollar collateral positions
+    // 2. Calculate total DGB locked vs total DD minted
+    // 3. Apply current oracle price to get system-wide collateral ratio
+    // For now, return a conservative default
+    return DEFAULT_SYSTEM_COLLATERAL;
+}
+
+CKey MintTxBuilder::GenerateChangeKey() const {
+    // Generate a new key for change
+    CKey changeKey;
+    changeKey.MakeNewKey(true);
+    return changeKey;
+}
+
+TxBuilderResult MintTxBuilder::BuildMintTransaction(const TxBuilderMintParams& params) {
+    TxBuilderResult result;
+
+    // Validate parameters
+    if (!ValidateMintParams(params)) {
+        result.error = "Invalid mint parameters";
+        return result;
+    }
+
+    // Check oracle price availability
+    if (oraclePrice <= 0) {
+        result.error = "Oracle price unavailable or invalid";
+        return result;
+    }
+
+    // Create transaction
+    CMutableTransaction tx;
+    tx.SetDigiDollarType(::DD_TX_MINT);
+
+    // Calculate required collateral
+    result.collateralRequired = CalculateRequiredCollateral(params.ddAmount, params.lockDays);
+
+    // Check if collateral calculation failed
+    if (result.collateralRequired <= 0) {
+        result.error = "Failed to calculate required collateral";
+        return result;
+    }
+
+    // Estimate fees (rough estimate before final inputs are selected)
+    CAmount estimatedFees = ESTIMATED_TX_VSIZE * params.feeRate / 1000;
+
+    // Sanity check on total required amount
+    if (result.collateralRequired > MAX_MONEY - estimatedFees) {
+        result.error = "Required collateral amount too large";
+        return result;
+    }
+
+    // Select inputs for collateral + fees
+    std::vector<CTxIn> inputs;
+    CAmount totalIn = 0;
+    if (!SelectCoins(params.utxos, result.collateralRequired + estimatedFees,
+                     inputs, totalIn)) {
+        result.error = "Insufficient funds for collateral and fees";
+        return result;
+    }
+
+    tx.vin = inputs;
+
+    // Create collateral output (P2TR)
+    CScript collateralScript = CreateCollateralScript(params);
+    tx.vout.push_back(CTxOut(result.collateralRequired, collateralScript));
+
+    // Create DD output (P2TR) - 0 DGB value, amount in witness/script
+    CScript ddScript = CreateDDOutputScript(params.ownerKey, params.ddAmount);
+    tx.vout.push_back(CTxOut(0, ddScript));
+
+    // Calculate actual fees and change
+    result.totalFees = CalculateFee(tx, params.feeRate);
+
+    // Ensure fees are reasonable
+    if (result.totalFees > static_cast<CAmount>(totalIn * MAX_FEE_RATIO)) {
+        result.error = "Transaction fees too high";
+        return result;
+    }
+
+    CAmount change = totalIn - result.collateralRequired - result.totalFees;
+
+    if (change < 0) {
+        result.error = "Insufficient funds after fee calculation";
+        return result;
+    } else if (change > 0) {
+        // Only create change output if amount is above dust threshold
+        if (change >= DUST_THRESHOLD) {
+            // Create change output
+            CKey changeKey = GenerateChangeKey();
+            CPubKey changePubkey = changeKey.GetPubKey();
+            CTxDestination changeDest{WitnessV1Taproot(XOnlyPubKey(changePubkey))};
+            tx.vout.push_back(CTxOut(change, GetScriptForDestination(changeDest)));
+        } else {
+            // Small change goes to fee (dust avoidance)
+            result.totalFees += change;
+        }
+    }
+
+    result.tx = tx;
+    result.success = true;
+    return result;
+}
+
+// ============================================================================
+// TransferTxBuilder implementation
+// ============================================================================
+
+bool TransferTxBuilder::ValidateDDAddress(const std::string& address) const {
+    return CDigiDollarAddress::IsValidDigiDollarAddress(address);
+}
+
+CAmount TransferTxBuilder::GetDDFromUTXO(const COutPoint& outpoint) const {
+    // This would query the UTXO set to get the DD amount
+    // For now, return a placeholder value
+    return 1000 * 100; // $1000 in cents
+}
+
+bool TransferTxBuilder::ValidateTransferParams(const TxBuilderTransferParams& params) const {
+    // Must have recipients
+    if (params.recipients.empty()) {
+        return false;
+    }
+
+    // Validate all recipient addresses and amounts
+    const auto& ddParams = chainParams.GetDigiDollarParams();
+    CAmount totalOutput = 0;
+    for (const auto& [address, amount] : params.recipients) {
+        // Validate address format
+        if (!ValidateDDAddress(address)) {
+            return false;
+        }
+
+        // Validate amount ranges
+        if (amount <= 0) {
+            return false; // No zero or negative amounts
+        }
+
+        if (amount < GetMinimumDDOutput(ddParams)) {
+            return false; // Below dust threshold
+        }
+
+        // Check maximum single transfer limit ($100,000)
+        if (amount > 10000000) { // $100,000.00 in cents
+            return false;
+        }
+
+        totalOutput += amount;
+    }
+
+    // Must have DD inputs
+    if (params.ddUtxos.empty()) {
+        return false;
+    }
+
+    // Validate key
+    if (!params.spenderKey.IsValid()) {
+        return false;
+    }
+
+    // Validate fee rate
+    if (!ValidateFeeRate(params.feeRate)) {
+        return false;
+    }
+
+    return true;
+}
+
+CAmount TransferTxBuilder::CalculateTotalDDInputs(const std::vector<COutPoint>& ddUtxos) const {
+    CAmount total = 0;
+    for (const auto& utxo : ddUtxos) {
+        total += GetDDFromUTXO(utxo);
+    }
+    return total;
+}
+
+CAmount TransferTxBuilder::CalculateTotalDDOutputs(const std::vector<std::pair<std::string, CAmount>>& recipients) const {
+    CAmount total = 0;
+    for (const auto& [address, amount] : recipients) {
+        total += amount;
+    }
+    return total;
+}
+
+// New functions for enhanced transfer functionality
+
+CAmount TransferTxBuilder::CalculateTotalDDInput(const std::vector<CTxOut>& inputs,
+                                                const std::vector<CAmount>& amounts) const {
+    CAmount total = 0;
+
+    // If amounts are provided, use them (for testing/mocking)
+    if (!amounts.empty()) {
+        for (CAmount amount : amounts) {
+            total += amount;
+        }
+        return total;
+    }
+
+    // Otherwise extract from actual outputs
+    for (const auto& output : inputs) {
+        CAmount ddAmount = 0;
+        if (ExtractDDAmount(output.scriptPubKey, ddAmount)) {
+            total += ddAmount;
+        }
+    }
+
+    return total;
+}
+
+CScript TransferTxBuilder::CreateDDTransferScript(const CPubKey& recipient, CAmount amount) const {
+    // Create P2TR script for DD transfer
+    XOnlyPubKey xonly(recipient);
+    return CreateDigiDollarP2TR(xonly, amount);
+}
+
+bool TransferTxBuilder::SelectDDInputs(const std::vector<CTxOut>& available, CAmount needed,
+                                      std::vector<CTxOut>& selected, CAmount& total) {
+    selected.clear();
+    total = 0;
+
+    // Simple greedy selection
+    for (const auto& output : available) {
+        CAmount ddAmount = 0;
+        if (ExtractDDAmount(output.scriptPubKey, ddAmount) && ddAmount > 0) {
+            selected.push_back(output);
+            total += ddAmount;
+
+            if (total >= needed) {
+                return true; // Found sufficient inputs
+            }
+        }
+    }
+
+    return total >= needed;
+}
+
+TxBuilderResult TransferTxBuilder::BuildTransferTransaction(const TxBuilderTransferParams& params) {
+    TxBuilderResult result;
+
+    // Validate parameters
+    if (!ValidateTransferParams(params)) {
+        result.error = "Invalid transfer parameters";
+        return result;
+    }
+
+    // Calculate totals and check DD conservation
+    CAmount totalDDIn = CalculateTotalDDInputs(params.ddUtxos);
+    CAmount totalDDOut = CalculateTotalDDOutputs(params.recipients);
+
+    // Strict DD conservation check
+    if (totalDDIn < totalDDOut) {
+        result.error = "Insufficient DD balance for transfer";
+        return result;
+    }
+
+    // Check for dust outputs
+    const auto& ddParams = chainParams.GetDigiDollarParams();
+    for (const auto& [address, amount] : params.recipients) {
+        if (amount < GetMinimumDDOutput(ddParams)) {
+            result.error = "Transfer amount below dust threshold";
+            return result;
+        }
+    }
+
+    // Create transaction with DD transfer marker
+    CMutableTransaction tx;
+    tx.SetDigiDollarType(::DD_TX_TRANSFER);
+
+    // Add DD inputs
+    for (const auto& utxo : params.ddUtxos) {
+        tx.vin.push_back(CTxIn(utxo));
+    }
+
+    // Add fee inputs if needed for transaction fees
+    CAmount estimatedFees = 250 * params.feeRate / 1000; // Improved estimate
+    if (!params.feeUtxos.empty()) {
+        std::vector<CTxIn> feeInputs;
+        CAmount totalFeeIn = 0;
+
+        if (!SelectCoins(params.feeUtxos, estimatedFees, feeInputs, totalFeeIn)) {
+            result.error = "Insufficient DGB for transaction fees";
+            return result;
+        }
+
+        // Add fee inputs to transaction
+        tx.vin.insert(tx.vin.end(), feeInputs.begin(), feeInputs.end());
+
+        // Add DGB change output if needed
+        if (totalFeeIn > estimatedFees + DUST_THRESHOLD) {
+            CAmount dgbChange = totalFeeIn - estimatedFees;
+            CPubKey changePubkey = params.spenderKey.GetPubKey();
+            CTxDestination changeDest{WitnessV1Taproot(XOnlyPubKey(changePubkey))};
+            tx.vout.push_back(CTxOut(dgbChange, GetScriptForDestination(changeDest)));
+        }
+    }
+
+    // Add DD outputs for recipients (all with 0 DGB value)
+    for (const auto& [address, amount] : params.recipients) {
+        CTxDestination dest = DecodeDigiDollarAddress(address);
+        const auto* taproot = std::get_if<WitnessV1Taproot>(&dest);
+        if (!taproot) {
+            result.error = "Failed to decode DD address: " + address;
+            return result;
+        }
+
+        CScript ddScript = CreateDigiDollarP2TR(*taproot, amount);
+        tx.vout.push_back(CTxOut(0, ddScript)); // DD outputs always have 0 DGB value
+    }
+
+    // Add DD change output if needed
+    CAmount ddChange = totalDDIn - totalDDOut;
+    if (ddChange > 0) {
+        // Only create change if above dust threshold
+        if (ddChange >= GetMinimumDDOutput(ddParams)) {
+            CPubKey changePubkey = params.spenderKey.GetPubKey();
+            CScript changeScript = CreateDigiDollarP2TR(XOnlyPubKey(changePubkey), ddChange);
+            tx.vout.push_back(CTxOut(0, changeScript));
+        } else {
+            // If change is dust, add it to fees (this violates strict conservation but handles dust)
+            result.error = "DD change amount is below dust threshold";
+            return result;
+        }
+    }
+
+    // Final validation - ensure DD conservation
+    CAmount finalDDOut = 0;
+    for (const auto& output : tx.vout) {
+        CAmount ddAmount = 0;
+        if (ExtractDDAmount(output.scriptPubKey, ddAmount)) {
+            finalDDOut += ddAmount;
+        }
+    }
+
+    if (totalDDIn != finalDDOut) {
+        result.error = "DD conservation violation: input=" + std::to_string(totalDDIn) +
+                      " output=" + std::to_string(finalDDOut);
+        return result;
+    }
+
+    // Calculate actual fees
+    result.totalFees = CalculateFee(tx, params.feeRate);
+
+    result.tx = tx;
+    result.success = true;
+    return result;
+}
+
+// ============================================================================
+// RedeemTxBuilder implementation
+// ============================================================================
+
+bool RedeemTxBuilder::ValidateRedemptionPath(const TxBuilderRedeemParams& params) const {
+    // Validate that the chosen path is valid for current conditions
+    switch (params.path) {
+        case RedemptionPath::NORMAL:
+            // Would check if timelock has expired
+            return true; // Simplified
+        case RedemptionPath::EMERGENCY:
+            // Would check if oracle approval exists
+            return true; // Simplified
+        case RedemptionPath::PARTIAL:
+            // Would check if partial redemption is allowed
+            return true; // Simplified
+        case RedemptionPath::ERR:
+            // Would check if system collateral < 100%
+            return true; // Simplified
+        default:
+            return false;
+    }
+}
+
+CAmount RedeemTxBuilder::CalculateRedemptionAmount(const TxBuilderRedeemParams& params) const {
+    // Get collateral position data
+    CCollateralPosition position = GetCollateralPosition(params.collateralOutpoint);
+
+    // Calculate DGB to release based on DD burned and current conditions
+    // This is simplified - actual implementation would consider:
+    // - Current oracle price
+    // - Redemption path specifics
+    // - Partial vs full redemption
+
+    if (params.path == RedemptionPath::ERR) {
+        // ERR path: may get less DGB due to system under-collateralization
+        return position.dgbLocked * 90 / 100; // 90% recovery simplified
+    } else {
+        // Normal/emergency path: full collateral recovery
+        return position.dgbLocked;
+    }
+}
+
+bool RedeemTxBuilder::ValidateRedeemParams(const TxBuilderRedeemParams& params) const {
+    // Validate DD amount
+    if (params.ddToRedeem <= 0) {
+        return false;
+    }
+
+    // Validate redemption path
+    if (!ValidateRedemptionPath(params)) {
+        return false;
+    }
+
+    // Validate key
+    if (!params.ownerKey.IsValid()) {
+        return false;
+    }
+
+    // Validate fee rate
+    if (!ValidateFeeRate(params.feeRate)) {
+        return false;
+    }
+
+    // Validate collateral outpoint
+    if (params.collateralOutpoint.IsNull()) {
+        return false;
+    }
+
+    // Validate DD UTXOs
+    if (params.ddUtxos.empty()) {
+        return false;
+    }
+
+    return true;
+}
+
+CScript RedeemTxBuilder::CreateRedemptionScript(RedemptionPath path, const CKey& owner) const {
+    // Create the appropriate redemption script based on path
+    // This would use the script functions from scripts.h
+    // For now, return a placeholder
+    return CScript();
+}
+
+CCollateralPosition RedeemTxBuilder::GetCollateralPosition(const COutPoint& outpoint) const {
+    // This would query the chain state for collateral position details
+    // For now, return a placeholder
+    CCollateralPosition position;
+    position.outpoint = outpoint;
+    position.dgbLocked = 1000 * COIN; // 1000 DGB
+    position.ddMinted = 50000; // $500 in cents
+    position.unlockHeight = currentHeight + 1000;
+    position.collateralRatio = 300;
+    return position;
+}
+
+TxBuilderResult RedeemTxBuilder::BuildRedemptionTransaction(const TxBuilderRedeemParams& params) {
+    TxBuilderResult result;
+
+    // Validate parameters
+    if (!ValidateRedeemParams(params)) {
+        result.error = "Invalid redemption parameters";
+        return result;
+    }
+
+    // Check oracle price availability
+    if (oraclePrice <= 0) {
+        result.error = "Oracle price unavailable for redemption";
+        return result;
+    }
+
+    // Verify redemption conditions are met
+    if (!VerifyRedemptionConditions(params, params.path)) {
+        result.error = "Redemption conditions not met for path " + std::to_string(static_cast<int>(params.path));
+        return result;
+    }
+
+    // Create transaction
+    CMutableTransaction tx;
+
+    // Set type based on redemption path
+    if (params.path == RedemptionPath::PARTIAL) {
+        tx.SetDigiDollarType(::DD_TX_PARTIAL); // Use partial redemption type
+    } else if (params.path == RedemptionPath::EMERGENCY ||
+               params.path == RedemptionPath::ERR) {
+        tx.SetDigiDollarType(::DD_TX_EMERGENCY); // Use emergency type
+    } else {
+        tx.SetDigiDollarType(::DD_TX_REDEEM);
+    }
+
+    // Add collateral input
+    tx.vin.push_back(CTxIn(params.collateralOutpoint));
+
+    // Add DD inputs to burn
+    for (const auto& utxo : params.ddUtxos) {
+        tx.vin.push_back(CTxIn(utxo));
+    }
+
+    // Add fee inputs if provided
+    if (!params.feeUtxos.empty()) {
+        std::vector<CTxIn> feeInputs;
+        CAmount totalFeeIn = 0;
+        CAmount estimatedFees = 300 * params.feeRate / 1000; // Rough estimate
+
+        if (!SelectCoins(params.feeUtxos, estimatedFees, feeInputs, totalFeeIn)) {
+            result.error = "Insufficient funds for fees";
+            return result;
+        }
+
+        tx.vin.insert(tx.vin.end(), feeInputs.begin(), feeInputs.end());
+    }
+
+    // Calculate DGB to release
+    CAmount dgbToRelease = CalculateRedemptionAmount(params);
+
+    // Add DGB output to owner
+    CPubKey pubkey = params.ownerKey.GetPubKey();
+    CTxDestination dest{WitnessV1Taproot(XOnlyPubKey(pubkey))};
+    tx.vout.push_back(CTxOut(dgbToRelease, GetScriptForDestination(dest)));
+
+    // Handle partial redemption remainder
+    if (params.path == RedemptionPath::PARTIAL) {
+        // Create new collateral output for remainder
+        // This would need to be implemented based on specific partial redemption logic
+    }
+
+    // Calculate fees and handle change
+    result.totalFees = CalculateFee(tx, params.feeRate);
+
+    result.tx = tx;
+    result.success = true;
+    return result;
+}
+
+RedemptionPath RedeemTxBuilder::DetermineRedemptionPath(const TxBuilderRedeemParams& params) const {
+    // Analyze current conditions to determine optimal redemption path
+
+    // Check if ERR conditions are met (system under-collateralized)
+    if (GetCurrentSystemCollateral() < 100) {
+        return RedemptionPath::ERR;
+    }
+
+    // Get collateral position to check timelock
+    CCollateralPosition position = GetCollateralPosition(params.collateralOutpoint);
+
+    // Check if normal redemption is available (timelock expired)
+    if (currentHeight >= position.unlockHeight) {
+        return RedemptionPath::NORMAL;
+    }
+
+    // Check if partial redemption is requested
+    if (params.ddToRedeem < position.ddMinted) {
+        return RedemptionPath::PARTIAL;
+    }
+
+    // Default to emergency path if normal conditions not met
+    return RedemptionPath::EMERGENCY;
+}
+
+CAmount RedeemTxBuilder::CalculateCollateralReturn(CAmount ddAmount, CAmount originalCollateral,
+                                                  CAmount currentPrice) const {
+    // Calculate collateral return based on DD amount and current price
+    if (ddAmount <= 0 || originalCollateral <= 0 || currentPrice <= 0) {
+        return 0;
+    }
+
+    // For simplicity, return proportional amount of original collateral
+    // In production, this would consider price changes and redemption path specifics
+    return originalCollateral; // Simplified - return full collateral for now
+}
+
+bool RedeemTxBuilder::VerifyRedemptionConditions(const TxBuilderRedeemParams& params,
+                                                RedemptionPath path) const {
+    // Verify conditions are met for the specified redemption path
+
+    CCollateralPosition position = GetCollateralPosition(params.collateralOutpoint);
+
+    switch (path) {
+        case RedemptionPath::NORMAL:
+            // Check if timelock has expired
+            return currentHeight >= position.unlockHeight;
+
+        case RedemptionPath::EMERGENCY:
+            // Check if emergency conditions are met (oracle approval would be verified here)
+            return true; // Simplified - would check oracle signatures
+
+        case RedemptionPath::PARTIAL:
+            // Check if partial redemption is allowed and oracle price is valid
+            return params.ddToRedeem < position.ddMinted && oraclePrice > 0;
+
+        case RedemptionPath::ERR:
+            // Check if system is under-collateralized
+            return GetCurrentSystemCollateral() < 100;
+
+        default:
+            return false;
+    }
+}
+
+// ============================================================================
+// Utility Functions
+// ============================================================================
+
+// LockDaysToBlocks, GetCollateralRatioForLockTime, and GetDCAMultiplier
+// are implemented in consensus/digidollar.cpp
+
+std::string EncodeDigiDollarAddress(const CTxDestination& dest, const CChainParams& chainParams) {
+    const auto* taproot = std::get_if<WitnessV1Taproot>(&dest);
+    if (!taproot) {
+        return "";
+    }
+
+    // Use the CDigiDollarAddress class to encode
+    CDigiDollarAddress addr;
+    if (addr.SetDigiDollar(dest, 0)) { // 0 for mainnet, would use appropriate network type
+        return addr.ToString();
+    }
+
+    return "";
+}
+
+size_t EstimateTransactionVSize(const CMutableTransaction& tx) {
+    // Simplified estimation - actual implementation would be more sophisticated
+    size_t baseSize = ::GetSerializeSize(tx, PROTOCOL_VERSION);
+
+    // Add witness overhead estimation
+    size_t witnessSize = 0;
+    for (size_t i = 0; i < tx.vin.size(); ++i) {
+        // Estimate P2TR witness size (signature + control block)
+        witnessSize += 64 + 33; // signature + control block estimate
+    }
+
+    // Virtual size calculation: (base_size * 3 + total_size) / 4
+    size_t totalSize = baseSize + witnessSize;
+    return (baseSize * 3 + totalSize) / 4;
+}
+
+} // namespace DigiDollar

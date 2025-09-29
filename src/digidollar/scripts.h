@@ -1,0 +1,102 @@
+// Copyright (c) 2024 The DigiByte Core developers
+// Distributed under the MIT software license, see the accompanying
+// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
+#ifndef DIGIBYTE_DIGIDOLLAR_SCRIPTS_H
+#define DIGIBYTE_DIGIDOLLAR_SCRIPTS_H
+
+#include <script/script.h>
+#include <key.h>
+#include <consensus/amount.h>
+#include <pubkey.h>
+#include <script/standard.h>
+#include <uint256.h>
+
+#include <vector>
+#include <cstdint>
+
+namespace DigiDollar {
+
+/**
+ * Parameters for minting DigiDollars with P2TR collateral locking
+ */
+struct MintParams {
+    CAmount ddAmount;                    //!< Amount of DD to mint (in cents)
+    int64_t lockHeight;                  //!< Block height when normally redeemable
+    XOnlyPubKey ownerKey;               //!< Owner's taproot public key
+    XOnlyPubKey internalKey;            //!< Taproot internal key for MAST construction
+    std::vector<XOnlyPubKey> oracleKeys; //!< Oracle public keys (typically 15)
+
+    //! Constructor
+    MintParams() : ddAmount(0), lockHeight(0) {}
+};
+
+/**
+ * Create P2TR collateral locking script with MAST redemption paths
+ *
+ * This creates a Taproot output with 4 spending conditions:
+ * 1. Normal redemption after timelock (weight 64 - most likely)
+ * 2. Emergency override with 8-of-15 oracle consensus (weight 4 - rare)
+ * 3. Partial redemption with price verification (weight 16 - medium)
+ * 4. ERR redemption when system under-collateralized (weight 2 - very rare)
+ *
+ * @param params Parameters including DD amount, lock period, keys, etc.
+ * @return CScript P2TR script (OP_1 + 32-byte taproot output)
+ */
+CScript CreateCollateralP2TR(const MintParams& params);
+
+/**
+ * Create simple P2TR script for DigiDollar token outputs
+ *
+ * This creates a simple Taproot output for transferring DigiDollars
+ * with amount verification and key path spending.
+ *
+ * @param owner Owner's taproot public key
+ * @param ddAmount DigiDollar amount in cents
+ * @return CScript P2TR script for DD token
+ */
+CScript CreateDigiDollarP2TR(const XOnlyPubKey& owner, CAmount ddAmount);
+
+/**
+ * Generate oracle public keys (mock implementation for Phase 1)
+ *
+ * In Phase 1, this generates deterministic keys for testing.
+ * In Phase 2, this will connect to real oracle infrastructure.
+ *
+ * @param count Number of oracle keys to generate (default 15)
+ * @return Vector of oracle public keys
+ */
+std::vector<XOnlyPubKey> GetOracleKeys(size_t count = 15);
+
+/**
+ * Create individual redemption path scripts
+ * These are combined into the MAST tree by CreateCollateralP2TR
+ */
+
+/**
+ * Normal redemption path - redeemable after timelock expires
+ * Script: <lockHeight> OP_CHECKLOCKTIMEVERIFY OP_DROP OP_DIGIDOLLAR <amount> OP_EQUALVERIFY <ownerKey> OP_CHECKSIG
+ */
+CScript CreateNormalRedemptionPath(const MintParams& params);
+
+/**
+ * Emergency redemption path - 8-of-15 oracle override
+ * Script: OP_DIGIDOLLAR <amount> OP_EQUALVERIFY <15 oracle keys with OP_CHECKSIGADD> OP_8 OP_EQUAL
+ */
+CScript CreateEmergencyPath(const MintParams& params);
+
+/**
+ * Partial redemption path - with price verification
+ * Script: OP_DIGIDOLLAR OP_DDVERIFY <ownerKey> OP_CHECKSIGVERIFY OP_CHECKPRICE
+ */
+CScript CreatePartialRedemptionPath(const MintParams& params);
+
+/**
+ * ERR (Emergency Redemption Ratio) path - when system < 100% collateralized
+ * Script: OP_CHECKCOLLATERAL OP_100 OP_LESSTHAN OP_VERIFY OP_DIGIDOLLAR OP_DDVERIFY <ownerKey> OP_CHECKSIG
+ */
+CScript CreateERRPath(const MintParams& params);
+
+} // namespace DigiDollar
+
+#endif // DIGIBYTE_DIGIDOLLAR_SCRIPTS_H

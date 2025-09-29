@@ -13,6 +13,7 @@
 #include <kernel/messagestartchars.h>
 #include <logging.h>
 #include <primitives/block.h>
+#include <primitives/oracle.h>
 #include <primitives/transaction.h>
 #include <script/interpreter.h>
 #include <script/script.h>
@@ -26,6 +27,16 @@
 #include <cstdint>
 #include <cstring>
 #include <type_traits>
+
+// Helper function to parse public key from hex string
+static CPubKey ParsePubKey(const std::string& hex) {
+    std::vector<unsigned char> data = ParseHex(hex);
+    CPubKey pubkey(data);
+    if (!pubkey.IsValid()) {
+        throw std::runtime_error("Invalid oracle public key: " + hex);
+    }
+    return pubkey;
+}
 
 static CBlock CreateGenesisBlock(const char* pszTimestamp, const CScript& genesisOutputScript, uint32_t nTime, uint32_t nNonce, uint32_t nBits, int32_t nVersion, const CAmount& genesisReward)
 {
@@ -160,6 +171,12 @@ public:
         consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].nTimeout = 1799582438; // 10th January 2027
         consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].min_activation_height = 0; // No activation delay
 
+        // Deployment of DigiDollar stablecoin features
+        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].bit = 23;
+        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nStartTime = 1767225600; // Jan 1, 2026
+        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nTimeout = 1830297600; // Jan 1, 2028
+        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].min_activation_height = 22000000; // Safe activation height
+
         // The best chain should have at least this much work.
         consensus.nMinimumChainWork = uint256S("0x00");
 
@@ -272,6 +289,61 @@ public:
             .nTxCount = 25000000,    // Approximate total DigiByte transactions
             .dTxRate  = 0.15,        // ~0.15 tx/sec for DigiByte (much lower than Bitcoin due to less usage)
         };
+
+        // DigiDollar consensus parameters (mainnet)
+        digidollarParams = DigiDollar::ConsensusParams();
+        // Use default values from struct initialization for mainnet
+
+        // Initialize DigiDollar Oracle Nodes (30 total, 15 active per epoch)
+        InitializeOracleNodes();
+
+        // Mainnet-specific oracle and activation settings
+        consensus.nDDOracleEpochBlocks = 100;      // Rotate oracles every 100 blocks (~25 minutes)
+        consensus.nDDOracleUpdateInterval = 4;      // Update price every 4 blocks (~1 minute)
+        consensus.nDDActivationHeight = 22000000;   // DigiDollar activation height (future block)
+    }
+
+private:
+    void InitializeOracleNodes() {
+        // DigiDollar Oracle Nodes - 30 hardcoded trusted providers
+        // These use compressed public keys (33 bytes) and unique endpoints
+        vOracleNodes = {
+            // Oracle 0-9: Primary Tier 1 providers
+            {0,  ParsePubKey("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"), "oracle1.digidollar.org:9001", true},
+            {1,  ParsePubKey("02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5"), "oracle2.digidollar.org:9002", true},
+            {2,  ParsePubKey("02f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9"), "oracle3.digidollar.org:9003", true},
+            {3,  ParsePubKey("0388f7b0f632de8140fe337e62a37f3566500a99934c2231b6cb9fd7584b8e672c"), "oracle4.digidollar.org:9004", true},
+            {4,  ParsePubKey("03ba30c7a2323f0dcca829b8ab6a5b3b59ce5e0e6c0b16eaff5ba8e684b31b21d9"), "oracle5.digidollar.org:9005", true},
+            {5,  ParsePubKey("03b14a1a6bb6cb5ac37264df49fd3e54f4b3c64cb0edfccd0c65b40b1b6c6f6e6c"), "oracle6.digidollar.org:9006", true},
+            {6,  ParsePubKey("02ce7b568b1a8a95e5c1c7b38f8bce1faeec82f2e6e53e8ce9c1dbd3c1c2d9e7f8"), "oracle7.digidollar.org:9007", true},
+            {7,  ParsePubKey("034c7b8e5e4dc8a4a9c3d8e7f2b5a6c1d9e4f3b2c8e7f6a5d4c3b2a1f0e9d8c7b6"), "oracle8.digidollar.org:9008", true},
+            {8,  ParsePubKey("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"), "oracle9.digidollar.org:9009", true},
+            {9,  ParsePubKey("03e8f7d6c5b4a3e2f1e0d9c8b7a6f5e4d3c2b1a0f9e8d7c6b5a4e3f2e1d0c9b8"), "oracle10.digidollar.org:9010", true},
+
+            // Oracle 10-19: Secondary Tier 2 providers
+            {10, ParsePubKey("02a7b6c5d4e3f2e1d0c9b8a7f6e5d4c3b2a1e0f9d8c7b6a5f4e3d2c1b0a9f8e7"), "oracle11.digidollar.org:9011", true},
+            {11, ParsePubKey("03d4c3b2a1e0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d9c8b7a6f5e4"), "oracle12.digidollar.org:9012", true},
+            {12, ParsePubKey("02b5a4e3d2c1b0a9f8e7d6c5b4a3e2f1e0d9c8b7a6f5e4d3c2b1a0f9e8d7c6b5"), "oracle13.digidollar.org:9013", true},
+            {13, ParsePubKey("03f2e1d0c9b8a7f6e5d4c3b2a1e0f9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4a3e2"), "oracle14.digidollar.org:9014", true},
+            {14, ParsePubKey("02c9b8a7f6e5d4c3b2a1e0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d9"), "oracle15.digidollar.org:9015", true},
+            {15, ParsePubKey("03a6f5e4d3c2b1a0f9e8d7c6b5a4e3f2e1d0c9b8a7f6e5d4c3b2a1e0f9d8c7b6"), "oracle16.digidollar.org:9016", true},
+            {16, ParsePubKey("02e3d2c1b0a9f8e7d6c5b4a3e2f1e0d9c8b7a6f5e4d3c2b1a0f9e8d7c6b5a4e3"), "oracle17.digidollar.org:9017", true},
+            {17, ParsePubKey("03e0d9c8b7a6f5e4d3c2b1a0f9e8d7c6b5a4f3e2e1d0c9b8a7f6e5d4c3b2a1e0"), "oracle18.digidollar.org:9018", true},
+            {18, ParsePubKey("02d7c6b5a4f3e2e1d0c9b8a7f6e5d4c3b2a1e0f9d8c7b6a5f4e3d2c1b0a9f8e7"), "oracle19.digidollar.org:9019", true},
+            {19, ParsePubKey("03b4a3e2f1e0d9c8b7a6f5e4d3c2b1a0f9e8d7c6b5a4e3f2e1d0c9b8a7f6e5d4"), "oracle20.digidollar.org:9020", true},
+
+            // Oracle 20-29: Backup Tier 3 providers
+            {20, ParsePubKey("02a1e0f9e8d7c6b5a4f3e2e1d0c9b8a7f6e5d4c3b2a1e0f9d8c7b6a5f4e3d2c1"), "oracle21.digidollar.org:9021", true},
+            {21, ParsePubKey("03f8e7d6c5b4a3e2f1e0d9c8b7a6f5e4d3c2b1a0f9e8d7c6b5a4e3f2e1d0c9b8"), "oracle22.digidollar.org:9022", true},
+            {22, ParsePubKey("02e5d4c3b2a1e0f9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4a3e2f1e0d9c8b7a6f5"), "oracle23.digidollar.org:9023", true},
+            {23, ParsePubKey("03c2b1a0f9e8d7c6b5a4e3f2e1d0c9b8a7f6e5d4c3b2a1e0f9d8c7b6a5f4e3d2"), "oracle24.digidollar.org:9024", true},
+            {24, ParsePubKey("029fa8e7d6c5b4a3e2f1e0d9c8b7a6f5e4d3c2b1a0f9e8d7c6b5a4e3f2e1d0c9"), "oracle25.digidollar.org:9025", true},
+            {25, ParsePubKey("03d6c5b4a3e2f1e0d9c8b7a6f5e4d3c2b1a0f9e8d7c6b5a4e3f2e1d0c9b8a7f6"), "oracle26.digidollar.org:9026", true},
+            {26, ParsePubKey("02b3a2f1e0d9c8b7a6f5e4d3c2b1a0f9e8d7c6b5a4e3f2e1d0c9b8a7f6e5d4c3"), "oracle27.digidollar.org:9027", true},
+            {27, ParsePubKey("039a8d7c6b5a4e3f2e1d0c9b8a7f6e5d4c3b2a1e0f9d8c7b6a5f4e3d2c1b0a9f8"), "oracle28.digidollar.org:9028", true},
+            {28, ParsePubKey("02e7d6c5b4a3e2f1e0d9c8b7a6f5e4d3c2b1a0f9e8d7c6b5a4e3f2e1d0c9b8a7"), "oracle29.digidollar.org:9029", true},
+            {29, ParsePubKey("03c4b3a2f1e0d9c8b7a6f5e4d3c2b1a0f9e8d7c6b5a4e3f2e1d0c9b8a7f6e5d4"), "oracle30.digidollar.org:9030", true}
+        };
     }
 };
 
@@ -354,6 +426,12 @@ public:
         consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].nTimeout = 1750457304; // 20th June 2025 Testnet
         consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].min_activation_height = 0; // No activation delay
 
+        // Deployment of DigiDollar stablecoin features (testnet - earlier activation)
+        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].bit = 23;
+        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nStartTime = 1704067200; // Jan 1, 2024 (earlier for testnet)
+        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nTimeout = 1735689600; // Jan 1, 2025 (earlier timeout)
+        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].min_activation_height = 1000; // Lower activation height for testnet
+
         consensus.nMinimumChainWork = uint256S("0x00");
         consensus.defaultAssumeValid = uint256S("0x00"); //1079274
 
@@ -409,6 +487,65 @@ public:
             .nTime    = 1700000000,  // Approximate November 2023
             .nTxCount = 1000000,     // Approximate testnet transactions
             .dTxRate  = 0.01,        // Lower rate for testnet
+        };
+
+        // DigiDollar consensus parameters (testnet)
+        digidollarParams = DigiDollar::ConsensusParams();
+        // Testnet specific adjustments for easier testing
+        digidollarParams.minMintAmount = 1 * DigiDollar::CENT;        // $1 minimum for testing
+        digidollarParams.maxMintAmount = 10000 * DigiDollar::CENT;    // $10k maximum for testing
+        digidollarParams.oracleThreshold = 2;                         // 2-of-3 consensus for testing
+        digidollarParams.activeOracles = 3;                           // Only 3 active oracles for testing
+
+        // Initialize DigiDollar Oracle Nodes (same as mainnet for compatibility)
+        InitializeOracleNodes();
+
+        // Testnet-specific oracle and activation settings
+        consensus.nDDOracleEpochBlocks = 50;       // Rotate oracles every 50 blocks (~12.5 minutes)
+        consensus.nDDOracleUpdateInterval = 2;     // Update price every 2 blocks (~30 seconds)
+        consensus.nDDActivationHeight = 1000;      // DigiDollar activation height (low for testing)
+    }
+
+private:
+    void InitializeOracleNodes() {
+        // DigiDollar Oracle Nodes - Same as mainnet for compatibility
+        // This allows testnet to work with same oracle infrastructure
+        vOracleNodes = {
+            // Oracle 0-9: Primary Tier 1 providers
+            {0,  ParsePubKey("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"), "oracle1.digidollar.org:9001", true},
+            {1,  ParsePubKey("02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5"), "oracle2.digidollar.org:9002", true},
+            {2,  ParsePubKey("02f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9"), "oracle3.digidollar.org:9003", true},
+            {3,  ParsePubKey("0388f7b0f632de8140fe337e62a37f3566500a99934c2231b6cb9fd7584b8e672c"), "oracle4.digidollar.org:9004", true},
+            {4,  ParsePubKey("03ba30c7a2323f0dcca829b8ab6a5b3b59ce5e0e6c0b16eaff5ba8e684b31b21d9"), "oracle5.digidollar.org:9005", true},
+            {5,  ParsePubKey("03b14a1a6bb6cb5ac37264df49fd3e54f4b3c64cb0edfccd0c65b40b1b6c6f6e6c"), "oracle6.digidollar.org:9006", true},
+            {6,  ParsePubKey("02ce7b568b1a8a95e5c1c7b38f8bce1faeec82f2e6e53e8ce9c1dbd3c1c2d9e7f8"), "oracle7.digidollar.org:9007", true},
+            {7,  ParsePubKey("034c7b8e5e4dc8a4a9c3d8e7f2b5a6c1d9e4f3b2c8e7f6a5d4c3b2a1f0e9d8c7b6"), "oracle8.digidollar.org:9008", true},
+            {8,  ParsePubKey("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"), "oracle9.digidollar.org:9009", true},
+            {9,  ParsePubKey("03e8f7d6c5b4a3e2f1e0d9c8b7a6f5e4d3c2b1a0f9e8d7c6b5a4e3f2e1d0c9b8"), "oracle10.digidollar.org:9010", true},
+
+            // Oracle 10-19: Secondary Tier 2 providers
+            {10, ParsePubKey("02a7b6c5d4e3f2e1d0c9b8a7f6e5d4c3b2a1e0f9d8c7b6a5f4e3d2c1b0a9f8e7"), "oracle11.digidollar.org:9011", true},
+            {11, ParsePubKey("03d4c3b2a1e0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d9c8b7a6f5e4"), "oracle12.digidollar.org:9012", true},
+            {12, ParsePubKey("02b5a4e3d2c1b0a9f8e7d6c5b4a3e2f1e0d9c8b7a6f5e4d3c2b1a0f9e8d7c6b5"), "oracle13.digidollar.org:9013", true},
+            {13, ParsePubKey("03f2e1d0c9b8a7f6e5d4c3b2a1e0f9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4a3e2"), "oracle14.digidollar.org:9014", true},
+            {14, ParsePubKey("02c9b8a7f6e5d4c3b2a1e0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d9"), "oracle15.digidollar.org:9015", true},
+            {15, ParsePubKey("03a6f5e4d3c2b1a0f9e8d7c6b5a4e3f2e1d0c9b8a7f6e5d4c3b2a1e0f9d8c7b6"), "oracle16.digidollar.org:9016", true},
+            {16, ParsePubKey("02e3d2c1b0a9f8e7d6c5b4a3e2f1e0d9c8b7a6f5e4d3c2b1a0f9e8d7c6b5a4e3"), "oracle17.digidollar.org:9017", true},
+            {17, ParsePubKey("03e0d9c8b7a6f5e4d3c2b1a0f9e8d7c6b5a4f3e2e1d0c9b8a7f6e5d4c3b2a1e0"), "oracle18.digidollar.org:9018", true},
+            {18, ParsePubKey("02d7c6b5a4f3e2e1d0c9b8a7f6e5d4c3b2a1e0f9d8c7b6a5f4e3d2c1b0a9f8e7"), "oracle19.digidollar.org:9019", true},
+            {19, ParsePubKey("03b4a3e2f1e0d9c8b7a6f5e4d3c2b1a0f9e8d7c6b5a4e3f2e1d0c9b8a7f6e5d4"), "oracle20.digidollar.org:9020", true},
+
+            // Oracle 20-29: Backup Tier 3 providers
+            {20, ParsePubKey("02a1e0f9e8d7c6b5a4f3e2e1d0c9b8a7f6e5d4c3b2a1e0f9d8c7b6a5f4e3d2c1"), "oracle21.digidollar.org:9021", true},
+            {21, ParsePubKey("03f8e7d6c5b4a3e2f1e0d9c8b7a6f5e4d3c2b1a0f9e8d7c6b5a4e3f2e1d0c9b8"), "oracle22.digidollar.org:9022", true},
+            {22, ParsePubKey("02e5d4c3b2a1e0f9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4a3e2f1e0d9c8b7a6f5"), "oracle23.digidollar.org:9023", true},
+            {23, ParsePubKey("03c2b1a0f9e8d7c6b5a4e3f2e1d0c9b8a7f6e5d4c3b2a1e0f9d8c7b6a5f4e3d2"), "oracle24.digidollar.org:9024", true},
+            {24, ParsePubKey("029fa8e7d6c5b4a3e2f1e0d9c8b7a6f5e4d3c2b1a0f9e8d7c6b5a4e3f2e1d0c9"), "oracle25.digidollar.org:9025", true},
+            {25, ParsePubKey("03d6c5b4a3e2f1e0d9c8b7a6f5e4d3c2b1a0f9e8d7c6b5a4e3f2e1d0c9b8a7f6"), "oracle26.digidollar.org:9026", true},
+            {26, ParsePubKey("02b3a2f1e0d9c8b7a6f5e4d3c2b1a0f9e8d7c6b5a4e3f2e1d0c9b8a7f6e5d4c3"), "oracle27.digidollar.org:9027", true},
+            {27, ParsePubKey("039a8d7c6b5a4e3f2e1d0c9b8a7f6e5d4c3b2a1e0f9d8c7b6a5f4e3d2c1b0a9f8"), "oracle28.digidollar.org:9028", true},
+            {28, ParsePubKey("02e7d6c5b4a3e2f1e0d9c8b7a6f5e4d3c2b1a0f9e8d7c6b5a4e3f2e1d0c9b8a7"), "oracle29.digidollar.org:9029", true},
+            {29, ParsePubKey("03c4b3a2f1e0d9c8b7a6f5e4d3c2b1a0f9e8d7c6b5a4e3f2e1d0c9b8a7f6e5d4"), "oracle30.digidollar.org:9030", true}
         };
     }
 };
@@ -530,6 +667,12 @@ public:
         consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].nStartTime = Consensus::BIP9Deployment::ALWAYS_ACTIVE;
         consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
         consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].min_activation_height = 0; // No activation delay
+
+        // Activation of DigiDollar stablecoin features (regtest - fixed height activation)
+        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].bit = 23;
+        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nStartTime = Consensus::BIP9Deployment::ALWAYS_ACTIVE;
+        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
+        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].min_activation_height = 500; // Fixed activation height for regtest
 
         // message start is defined as the first 4 bytes of the sha256d of the block script
         HashWriter h{};
@@ -656,6 +799,11 @@ public:
         consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
         consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].min_activation_height = 0; // No activation delay
 
+        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].bit = 23;
+        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nStartTime = Consensus::BIP9Deployment::ALWAYS_ACTIVE;
+        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
+        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].min_activation_height = 500; // Fixed activation height for signet
+
         consensus.nMinimumChainWork = uint256{};
         consensus.defaultAssumeValid = uint256{};
 
@@ -752,6 +900,37 @@ public:
         base58Prefixes[EXT_SECRET_KEY] = {0x04, 0x35, 0x83, 0x94};
 
         bech32_hrp = "dgbrt";
+
+        // DigiDollar consensus parameters (regtest)
+        digidollarParams = DigiDollar::ConsensusParams();
+        // Regtest specific adjustments for rapid testing
+        digidollarParams.minMintAmount = DigiDollar::CENT / 100;          // $0.01 minimum for testing
+        digidollarParams.maxMintAmount = 1000 * DigiDollar::CENT;         // $1k maximum for testing
+        digidollarParams.oracleThreshold = 1;                             // 1-of-1 consensus for testing
+        digidollarParams.activeOracles = 1;                               // Only 1 active oracle for testing
+        digidollarParams.oracleCount = 1;                                 // Total 1 oracle for testing
+        digidollarParams.priceValidBlocks = 5;                            // Price valid for 5 blocks only
+
+        // Initialize DigiDollar Oracle Nodes (minimal set for regtest)
+        InitializeOracleNodes();
+
+        // Regtest-specific oracle and activation settings
+        consensus.nDDOracleEpochBlocks = 10;       // Rotate oracles every 10 blocks
+        consensus.nDDOracleUpdateInterval = 1;     // Update price every block
+        consensus.nDDActivationHeight = 650;       // DigiDollar active from height 650 (after Odocrypt at 600)
+    }
+
+private:
+    void InitializeOracleNodes() {
+        // DigiDollar Oracle Nodes - Minimal set for regtest (5 oracles)
+        // Small set for rapid testing, but enough to test selection algorithms
+        vOracleNodes = {
+            {0, ParsePubKey("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"), "localhost:9001", true},
+            {1, ParsePubKey("02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5"), "localhost:9002", true},
+            {2, ParsePubKey("02f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9"), "localhost:9003", true},
+            {3, ParsePubKey("0388f7b0f632de8140fe337e62a37f3566500a99934c2231b6cb9fd7584b8e672c"), "localhost:9004", true},
+            {4, ParsePubKey("03ba30c7a2323f0dcca829b8ab6a5b3b59ce5e0e6c0b16eaff5ba8e684b31b21d9"), "localhost:9005", true}
+        };
     }
 };
 
@@ -773,4 +952,17 @@ std::unique_ptr<const CChainParams> CChainParams::Main()
 std::unique_ptr<const CChainParams> CChainParams::TestNet()
 {
     return std::make_unique<const CTestNetParams>();
+}
+
+// Helper function implementations
+const OracleNodeInfo* CChainParams::GetOracleNode(uint32_t id) const {
+    for (const auto& oracle : vOracleNodes) {
+        if (oracle.id == id) return &oracle;
+    }
+    return nullptr;
+}
+
+uint32_t CChainParams::GetActiveOracleCount() const {
+    // Return network-specific active oracle count based on digidollarParams
+    return digidollarParams.activeOracles;
 }

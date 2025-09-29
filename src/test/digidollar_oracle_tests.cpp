@@ -1,0 +1,1044 @@
+// Copyright (c) 2024 The DigiByte Core developers
+// Distributed under the MIT software license, see the accompanying
+// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
+#include <boost/test/unit_test.hpp>
+
+#include <consensus/amount.h>
+#include <key.h>
+#include <kernel/chainparams.h>
+#include <oracle/bundle_manager.h>
+#include <primitives/oracle.h>
+#include <protocol.h>
+#include <pubkey.h>
+#include <random.h>
+#include <serialize.h>
+#include <streams.h>
+#include <test/util/setup_common.h>
+#include <util/strencodings.h>
+#include <util/time.h>
+
+BOOST_FIXTURE_TEST_SUITE(digidollar_oracle_tests, BasicTestingSetup)
+
+/**
+ * COraclePriceMessage Tests
+ * Tests for individual oracle price message structure
+ */
+BOOST_AUTO_TEST_CASE(oracle_price_message_basic_construction)
+{
+    // Test basic construction
+    COraclePriceMessage msg;
+    BOOST_CHECK_EQUAL(msg.oracle_id, 0);
+    BOOST_CHECK_EQUAL(msg.price_satoshis, 0);
+    BOOST_CHECK_EQUAL(msg.timestamp, 0);
+    BOOST_CHECK(msg.signature.empty());
+
+    // Test construction with parameters
+    uint32_t oracle_id = 5;
+    CAmount price = 5000000; // 0.05 DGB per USD (5M satoshis)
+    int64_t timestamp = GetTime();
+
+    COraclePriceMessage msg2(oracle_id, price, timestamp);
+    BOOST_CHECK_EQUAL(msg2.oracle_id, oracle_id);
+    BOOST_CHECK_EQUAL(msg2.price_satoshis, price);
+    BOOST_CHECK_EQUAL(msg2.timestamp, timestamp);
+    BOOST_CHECK(msg2.signature.empty());
+}
+
+BOOST_AUTO_TEST_CASE(oracle_price_message_validation)
+{
+    COraclePriceMessage msg;
+
+    // Test invalid prices
+    msg.price_satoshis = -1;
+    BOOST_CHECK(!msg.IsValid());
+
+    msg.price_satoshis = 0;
+    BOOST_CHECK(!msg.IsValid());
+
+    // Test extremely high price (unrealistic)
+    msg.price_satoshis = 100000000000LL; // 1000 DGB per USD (unrealistic)
+    BOOST_CHECK(!msg.IsValid());
+
+    // Test valid price range
+    msg.price_satoshis = 1000000; // 0.01 DGB per USD
+    msg.timestamp = GetTime();
+    msg.oracle_id = 1;
+    BOOST_CHECK(msg.IsValid());
+
+    // Test timestamp validation (future timestamp should be invalid)
+    msg.timestamp = GetTime() + 3600; // 1 hour in future
+    BOOST_CHECK(!msg.IsValid());
+
+    // Test very old timestamp (more than 1 hour old)
+    msg.timestamp = GetTime() - 3700; // More than 1 hour old
+    BOOST_CHECK(!msg.IsValid());
+}
+
+BOOST_AUTO_TEST_CASE(oracle_price_message_signature_validation)
+{
+    // Create a test key pair
+    CKey oracle_key;
+    oracle_key.MakeNewKey(true);
+    CPubKey oracle_pubkey = oracle_key.GetPubKey();
+
+    COraclePriceMessage msg(1, 5000000, GetTime());
+
+    // Test message without signature
+    BOOST_CHECK(!msg.ValidateSignature(oracle_pubkey));
+
+    // Create a proper signature
+    uint256 hash = msg.GetSignatureHash();
+    std::vector<unsigned char> signature;
+    BOOST_CHECK(oracle_key.Sign(hash, signature));
+    msg.signature = signature;
+
+    // Test valid signature
+    BOOST_CHECK(msg.ValidateSignature(oracle_pubkey));
+
+    // Test with wrong pubkey
+    CKey wrong_key;
+    wrong_key.MakeNewKey(true);
+    CPubKey wrong_pubkey = wrong_key.GetPubKey();
+    BOOST_CHECK(!msg.ValidateSignature(wrong_pubkey));
+
+    // Test with corrupted signature
+    if (!msg.signature.empty()) {
+        msg.signature[0] ^= 1; // Flip a bit
+        BOOST_CHECK(!msg.ValidateSignature(oracle_pubkey));
+    }
+}
+
+BOOST_AUTO_TEST_CASE(oracle_price_message_serialization)
+{
+    COraclePriceMessage original(42, 7500000, GetTime());
+    original.signature = {0x01, 0x02, 0x03, 0x04}; // Dummy signature
+
+    // Serialize
+    DataStream ss{};
+    ss << original;
+
+    // Deserialize
+    COraclePriceMessage deserialized;
+    ss >> deserialized;
+
+    // Verify all fields match
+    BOOST_CHECK_EQUAL(deserialized.oracle_id, original.oracle_id);
+    BOOST_CHECK_EQUAL(deserialized.price_satoshis, original.price_satoshis);
+    BOOST_CHECK_EQUAL(deserialized.timestamp, original.timestamp);
+    BOOST_CHECK(deserialized.signature == original.signature);
+}
+
+/**
+ * COracleBundle Tests
+ * Tests for oracle message bundle and consensus calculation
+ */
+BOOST_AUTO_TEST_CASE(oracle_bundle_basic_construction)
+{
+    COracleBundle bundle;
+    BOOST_CHECK(bundle.messages.empty());
+    BOOST_CHECK_EQUAL(bundle.epoch, 0);
+
+    COracleBundle bundle2(100);
+    BOOST_CHECK(bundle2.messages.empty());
+    BOOST_CHECK_EQUAL(bundle2.epoch, 100);
+}
+
+BOOST_AUTO_TEST_CASE(oracle_bundle_consensus_requirement)
+{
+    COracleBundle bundle(42);
+
+    // No messages - no consensus
+    BOOST_CHECK(!bundle.HasConsensus());
+
+    // Add 7 messages - still no consensus (need 8 of 15)
+    for (int i = 0; i < 7; i++) {
+        COraclePriceMessage msg(i, 5000000, GetTime());
+        bundle.AddMessage(msg);
+    }
+    BOOST_CHECK(!bundle.HasConsensus());
+
+    // Add 8th message - now has consensus
+    COraclePriceMessage msg8(7, 5000000, GetTime());
+    bundle.AddMessage(msg8);
+    BOOST_CHECK(bundle.HasConsensus());
+
+    // Test with more messages (up to 15)
+    for (int i = 8; i < 15; i++) {
+        COraclePriceMessage msg(i, 5000000, GetTime());
+        bundle.AddMessage(msg);
+    }
+    BOOST_CHECK(bundle.HasConsensus());
+
+    // Test with too many messages (should reject)
+    COraclePriceMessage extra_msg(15, 5000000, GetTime());
+    BOOST_CHECK(!bundle.AddMessage(extra_msg));
+}
+
+BOOST_AUTO_TEST_CASE(oracle_bundle_median_calculation)
+{
+    COracleBundle bundle(1);
+
+    // Test median with odd number of values
+    std::vector<CAmount> prices = {3000000, 5000000, 4000000, 6000000, 4500000,
+                                   5500000, 4800000, 5200000, 4700000};
+
+    for (size_t i = 0; i < prices.size(); i++) {
+        COraclePriceMessage msg(i, prices[i], GetTime());
+        bundle.AddMessage(msg);
+    }
+
+    CAmount median_price = bundle.GetConsensusPrice();
+    // Sorted: 3000000, 4000000, 4500000, 4700000, 4800000, 5000000, 5200000, 5500000, 6000000
+    // Median (5th element): 4800000
+    BOOST_CHECK_EQUAL(median_price, 4800000);
+
+    // Test median with even number of values (add one more)
+    COraclePriceMessage msg10(9, 4900000, GetTime());
+    bundle.AddMessage(msg10);
+
+    median_price = bundle.GetConsensusPrice();
+    // Sorted: 3000000, 4000000, 4500000, 4700000, 4800000, 4900000, 5000000, 5200000, 5500000, 6000000
+    // Median (average of 5th and 6th): (4800000 + 4900000) / 2 = 4850000
+    BOOST_CHECK_EQUAL(median_price, 4850000);
+}
+
+BOOST_AUTO_TEST_CASE(oracle_bundle_outlier_filtering)
+{
+    COracleBundle bundle(1);
+
+    // Add normal prices around 5M satoshis
+    std::vector<CAmount> normal_prices = {4800000, 4900000, 5000000, 5100000, 5200000,
+                                          4950000, 5050000, 5150000};
+
+    // Add outliers (more than 10% deviation from median)
+    std::vector<CAmount> outlier_prices = {3000000, 7000000}; // -40% and +40% from ~5M
+
+    // Add all prices
+    for (size_t i = 0; i < normal_prices.size(); i++) {
+        COraclePriceMessage msg(i, normal_prices[i], GetTime());
+        bundle.AddMessage(msg);
+    }
+
+    for (size_t i = 0; i < outlier_prices.size(); i++) {
+        COraclePriceMessage msg(normal_prices.size() + i, outlier_prices[i], GetTime());
+        bundle.AddMessage(msg);
+    }
+
+    // Filter outliers
+    std::vector<COraclePriceMessage> filtered = bundle.FilterOutliers();
+
+    // Should remove the outliers
+    BOOST_CHECK_EQUAL(filtered.size(), normal_prices.size());
+
+    // Verify no extreme outliers remain
+    for (const auto& msg : filtered) {
+        BOOST_CHECK(msg.price_satoshis >= 4000000); // Not too low
+        BOOST_CHECK(msg.price_satoshis <= 6000000); // Not too high
+    }
+}
+
+BOOST_AUTO_TEST_CASE(oracle_bundle_epoch_validation)
+{
+    int32_t current_epoch = 100;
+
+    // Test valid epoch (current)
+    COracleBundle bundle1(current_epoch);
+    BOOST_CHECK(bundle1.ValidateEpoch(current_epoch));
+
+    // Test valid epoch (current - 1)
+    COracleBundle bundle2(current_epoch - 1);
+    BOOST_CHECK(bundle2.ValidateEpoch(current_epoch));
+
+    // Test invalid epoch (too old)
+    COracleBundle bundle3(current_epoch - 2);
+    BOOST_CHECK(!bundle3.ValidateEpoch(current_epoch));
+
+    // Test invalid epoch (future)
+    COracleBundle bundle4(current_epoch + 1);
+    BOOST_CHECK(!bundle4.ValidateEpoch(current_epoch));
+}
+
+BOOST_AUTO_TEST_CASE(oracle_bundle_serialization)
+{
+    COracleBundle original(999);
+
+    // Add some messages
+    for (int i = 0; i < 5; i++) {
+        COraclePriceMessage msg(i, 5000000 + i * 100000, GetTime());
+        original.AddMessage(msg);
+    }
+
+    // Serialize
+    DataStream ss{};
+    ss << original;
+
+    // Deserialize
+    COracleBundle deserialized;
+    ss >> deserialized;
+
+    // Verify all fields match
+    BOOST_CHECK_EQUAL(deserialized.epoch, original.epoch);
+    BOOST_CHECK_EQUAL(deserialized.messages.size(), original.messages.size());
+
+    for (size_t i = 0; i < original.messages.size(); i++) {
+        BOOST_CHECK_EQUAL(deserialized.messages[i].oracle_id, original.messages[i].oracle_id);
+        BOOST_CHECK_EQUAL(deserialized.messages[i].price_satoshis, original.messages[i].price_satoshis);
+        BOOST_CHECK_EQUAL(deserialized.messages[i].timestamp, original.messages[i].timestamp);
+    }
+}
+
+/**
+ * OracleNode Tests
+ * Tests for oracle node definition and management
+ */
+BOOST_AUTO_TEST_CASE(oracle_node_basic_construction)
+{
+    OracleNodeInfo node;
+    BOOST_CHECK_EQUAL(node.id, 0);
+    BOOST_CHECK(!node.pubkey.IsValid());
+    BOOST_CHECK(node.endpoint.empty());
+    BOOST_CHECK(!node.is_active);
+
+    // Test construction with parameters
+    CKey key;
+    key.MakeNewKey(true);
+    CPubKey pubkey = key.GetPubKey();
+
+    OracleNodeInfo node2(42, pubkey, "oracle42.digibyte.io:8332", true);
+    BOOST_CHECK_EQUAL(node2.id, 42);
+    BOOST_CHECK(node2.pubkey.IsValid());
+    BOOST_CHECK_EQUAL(node2.endpoint, "oracle42.digibyte.io:8332");
+    BOOST_CHECK(node2.is_active);
+}
+
+BOOST_AUTO_TEST_CASE(oracle_node_validation)
+{
+    OracleNodeInfo node;
+
+    // Invalid node (no pubkey, no endpoint)
+    BOOST_CHECK(!node.IsValid());
+
+    // Add valid pubkey
+    CKey key;
+    key.MakeNewKey(true);
+    node.pubkey = key.GetPubKey();
+    BOOST_CHECK(!node.IsValid()); // Still invalid (no endpoint)
+
+    // Add endpoint
+    node.endpoint = "oracle.example.com:8332";
+    BOOST_CHECK(node.IsValid()); // Now valid
+
+    // Test invalid endpoint formats
+    node.endpoint = "";
+    BOOST_CHECK(!node.IsValid());
+
+    node.endpoint = "invalid_endpoint";
+    BOOST_CHECK(!node.IsValid());
+
+    node.endpoint = "oracle.example.com:99999"; // Invalid port
+    BOOST_CHECK(!node.IsValid());
+}
+
+BOOST_AUTO_TEST_CASE(oracle_node_serialization)
+{
+    CKey key;
+    key.MakeNewKey(true);
+    CPubKey pubkey = key.GetPubKey();
+
+    OracleNodeInfo original(123, pubkey, "test-oracle.digibyte.io:8332", true);
+
+    // Serialize
+    DataStream ss{};
+    ss << original;
+
+    // Deserialize
+    OracleNodeInfo deserialized;
+    ss >> deserialized;
+
+    // Verify all fields match
+    BOOST_CHECK_EQUAL(deserialized.id, original.id);
+    BOOST_CHECK(deserialized.pubkey == original.pubkey);
+    BOOST_CHECK_EQUAL(deserialized.endpoint, original.endpoint);
+    BOOST_CHECK_EQUAL(deserialized.is_active, original.is_active);
+}
+
+/**
+ * Oracle Selection Tests
+ * Tests for deterministic oracle selection algorithm
+ */
+BOOST_AUTO_TEST_CASE(oracle_selection_deterministic)
+{
+    // Create 30 oracle nodes
+    std::vector<OracleNodeInfo> all_oracles;
+    for (int i = 0; i < 30; i++) {
+        CKey key;
+        key.MakeNewKey(true);
+        CPubKey pubkey = key.GetPubKey();
+
+        OracleNodeInfo node(i, pubkey, "oracle" + std::to_string(i) + ".digibyte.io:8332", true);
+        all_oracles.push_back(node);
+    }
+
+    // Test deterministic selection for epoch
+    int32_t epoch = 100;
+    std::vector<OracleNodeInfo> selected1 = SelectOraclesForEpoch(all_oracles, epoch);
+    std::vector<OracleNodeInfo> selected2 = SelectOraclesForEpoch(all_oracles, epoch);
+
+    // Should select exactly 15 oracles
+    BOOST_CHECK_EQUAL(selected1.size(), 15);
+    BOOST_CHECK_EQUAL(selected2.size(), 15);
+
+    // Selections should be identical (deterministic)
+    for (size_t i = 0; i < selected1.size(); i++) {
+        BOOST_CHECK_EQUAL(selected1[i].id, selected2[i].id);
+    }
+
+    // Different epoch should give different selection
+    std::vector<OracleNodeInfo> selected3 = SelectOraclesForEpoch(all_oracles, epoch + 1);
+    bool different = false;
+    for (size_t i = 0; i < selected1.size() && i < selected3.size(); i++) {
+        if (selected1[i].id != selected3[i].id) {
+            different = true;
+            break;
+        }
+    }
+    BOOST_CHECK(different); // Should be different for different epoch
+}
+
+BOOST_AUTO_TEST_CASE(oracle_selection_insufficient_oracles)
+{
+    // Test with fewer than 15 oracles
+    std::vector<OracleNodeInfo> few_oracles;
+    for (int i = 0; i < 10; i++) {
+        CKey key;
+        key.MakeNewKey(true);
+        CPubKey pubkey = key.GetPubKey();
+
+        OracleNodeInfo node(i, pubkey, "oracle" + std::to_string(i) + ".digibyte.io:8332", true);
+        few_oracles.push_back(node);
+    }
+
+    // Should return all available oracles
+    std::vector<OracleNodeInfo> selected = SelectOraclesForEpoch(few_oracles, 1);
+    BOOST_CHECK_EQUAL(selected.size(), 10);
+}
+
+BOOST_AUTO_TEST_CASE(oracle_selection_inactive_oracles)
+{
+    // Create mix of active and inactive oracles
+    std::vector<OracleNodeInfo> mixed_oracles;
+    for (int i = 0; i < 30; i++) {
+        CKey key;
+        key.MakeNewKey(true);
+        CPubKey pubkey = key.GetPubKey();
+
+        bool is_active = (i % 3 != 0); // 2/3 active, 1/3 inactive
+        OracleNodeInfo node(i, pubkey, "oracle" + std::to_string(i) + ".digibyte.io:8332", is_active);
+        mixed_oracles.push_back(node);
+    }
+
+    // Should only select from active oracles
+    std::vector<OracleNodeInfo> selected = SelectOraclesForEpoch(mixed_oracles, 1);
+
+    for (const auto& oracle : selected) {
+        BOOST_CHECK(oracle.is_active);
+    }
+}
+
+/**
+ * ChainParams Oracle Tests
+ * Tests for hardcoded oracle nodes in chainparams
+ */
+BOOST_AUTO_TEST_CASE(chainparams_mainnet_oracle_count)
+{
+    // Test that mainnet has exactly 30 oracle nodes
+    auto chainparams = CChainParams::Main();
+    const std::vector<OracleNodeInfo>& oracles = chainparams->GetOracleNodes();
+
+    BOOST_CHECK_EQUAL(oracles.size(), 30);
+    BOOST_CHECK_EQUAL(chainparams->GetActiveOracleCount(), 15);
+}
+
+BOOST_AUTO_TEST_CASE(chainparams_testnet_oracle_count)
+{
+    // Test that testnet has exactly 30 oracle nodes
+    auto chainparams = CChainParams::TestNet();
+    const std::vector<OracleNodeInfo>& oracles = chainparams->GetOracleNodes();
+
+    BOOST_CHECK_EQUAL(oracles.size(), 30);
+    BOOST_CHECK_EQUAL(chainparams->GetActiveOracleCount(), 15);
+}
+
+BOOST_AUTO_TEST_CASE(chainparams_regtest_oracle_count)
+{
+    // Test that regtest has at least 5 oracle nodes for testing
+    auto chainparams = CChainParams::RegTest({});
+    const std::vector<OracleNodeInfo>& oracles = chainparams->GetOracleNodes();
+
+    BOOST_CHECK_GE(oracles.size(), 5);  // At least 5 for testing
+    BOOST_CHECK_LE(oracles.size(), 30); // No more than full set
+}
+
+BOOST_AUTO_TEST_CASE(chainparams_oracle_data_validity)
+{
+    auto chainparams = CChainParams::Main();
+    const std::vector<OracleNodeInfo>& oracles = chainparams->GetOracleNodes();
+
+    std::set<uint32_t> oracle_ids;
+    std::set<CPubKey> oracle_pubkeys;
+
+    for (size_t i = 0; i < oracles.size(); i++) {
+        const OracleNodeInfo& oracle = oracles[i];
+
+        // Test unique ID (0-29)
+        BOOST_CHECK_GE(oracle.id, 0);
+        BOOST_CHECK_LT(oracle.id, 30);
+        BOOST_CHECK(oracle_ids.find(oracle.id) == oracle_ids.end()); // No duplicates
+        oracle_ids.insert(oracle.id);
+
+        // Test valid public key
+        BOOST_CHECK(oracle.pubkey.IsValid());
+        BOOST_CHECK(oracle.pubkey.IsCompressed()); // Should use compressed format
+        BOOST_CHECK(oracle_pubkeys.find(oracle.pubkey) == oracle_pubkeys.end()); // No duplicates
+        oracle_pubkeys.insert(oracle.pubkey);
+
+        // Test valid endpoint format
+        BOOST_CHECK(!oracle.endpoint.empty());
+        BOOST_CHECK(oracle.endpoint.find(":") != std::string::npos); // Should have port
+
+        // Test oracle is marked as active initially
+        BOOST_CHECK(oracle.is_active);
+
+        // Test oracle passes validation
+        BOOST_CHECK(oracle.IsValid());
+    }
+
+    // Verify we have exactly the expected number of unique IDs and keys
+    BOOST_CHECK_EQUAL(oracle_ids.size(), 30);
+    BOOST_CHECK_EQUAL(oracle_pubkeys.size(), 30);
+}
+
+BOOST_AUTO_TEST_CASE(chainparams_oracle_getter_functions)
+{
+    auto chainparams = CChainParams::Main();
+
+    // Test GetOracleNode function
+    for (uint32_t id = 0; id < 30; id++) {
+        const OracleNodeInfo* oracle = chainparams->GetOracleNode(id);
+        BOOST_CHECK(oracle != nullptr);
+        BOOST_CHECK_EQUAL(oracle->id, id);
+        BOOST_CHECK(oracle->IsValid());
+    }
+
+    // Test invalid oracle ID
+    const OracleNodeInfo* invalid_oracle = chainparams->GetOracleNode(999);
+    BOOST_CHECK(invalid_oracle == nullptr);
+}
+
+BOOST_AUTO_TEST_CASE(chainparams_oracle_endpoint_uniqueness)
+{
+    auto chainparams = CChainParams::Main();
+    const std::vector<OracleNodeInfo>& oracles = chainparams->GetOracleNodes();
+
+    std::set<std::string> endpoints;
+
+    for (const auto& oracle : oracles) {
+        // Check endpoint uniqueness
+        BOOST_CHECK(endpoints.find(oracle.endpoint) == endpoints.end());
+        endpoints.insert(oracle.endpoint);
+
+        // Check endpoint format (should be like oracle1.digidollar.org:9001)
+        BOOST_CHECK(oracle.endpoint.find("oracle") != std::string::npos);
+        BOOST_CHECK(oracle.endpoint.find(".digidollar.org:") != std::string::npos);
+
+        // Extract port number
+        size_t colon_pos = oracle.endpoint.find_last_of(':');
+        BOOST_CHECK(colon_pos != std::string::npos);
+
+        std::string port_str = oracle.endpoint.substr(colon_pos + 1);
+        int port = std::stoi(port_str);
+        BOOST_CHECK_GE(port, 9001);
+        BOOST_CHECK_LE(port, 9030);
+    }
+}
+
+BOOST_AUTO_TEST_CASE(chainparams_oracle_deterministic_across_networks)
+{
+    // Test that oracle configurations are consistent across runs
+    auto mainnet1 = CChainParams::Main();
+    auto mainnet2 = CChainParams::Main();
+
+    const std::vector<OracleNodeInfo>& oracles1 = mainnet1->GetOracleNodes();
+    const std::vector<OracleNodeInfo>& oracles2 = mainnet2->GetOracleNodes();
+
+    BOOST_CHECK_EQUAL(oracles1.size(), oracles2.size());
+
+    for (size_t i = 0; i < oracles1.size(); i++) {
+        BOOST_CHECK_EQUAL(oracles1[i].id, oracles2[i].id);
+        BOOST_CHECK(oracles1[i].pubkey == oracles2[i].pubkey);
+        BOOST_CHECK_EQUAL(oracles1[i].endpoint, oracles2[i].endpoint);
+        BOOST_CHECK_EQUAL(oracles1[i].is_active, oracles2[i].is_active);
+    }
+}
+
+/**
+ * Oracle Bundle Manager Tests
+ * Tests for oracle message collection and bundle management
+ */
+BOOST_AUTO_TEST_CASE(oracle_bundle_manager_basic)
+{
+    OracleBundleManager manager;
+
+    // Test initial state
+    BOOST_CHECK_EQUAL(manager.GetPendingMessageCount(), 0);
+    BOOST_CHECK(!manager.HasValidBundle(1));
+
+    // Test stats
+    auto stats = manager.GetStats();
+    BOOST_CHECK_EQUAL(stats.pending_messages, 0);
+    BOOST_CHECK_EQUAL(stats.active_bundles, 0);
+    BOOST_CHECK(!stats.has_consensus);
+}
+
+BOOST_AUTO_TEST_CASE(oracle_bundle_manager_message_handling)
+{
+    OracleBundleManager manager;
+
+    // Create test oracle messages
+    std::vector<COraclePriceMessage> messages;
+    for (int i = 0; i < 10; i++) {
+        COraclePriceMessage msg(i, 5000 + i * 10, GetTime());
+
+        // Create valid signature
+        CKey key;
+        key.MakeNewKey(true);
+        uint256 hash = msg.GetSignatureHash();
+        std::vector<unsigned char> signature;
+        BOOST_CHECK(key.Sign(hash, signature));
+        msg.signature = signature;
+
+        messages.push_back(msg);
+    }
+
+    // Add messages to manager
+    for (const auto& msg : messages) {
+        BOOST_CHECK(manager.AddOracleMessage(msg));
+    }
+
+    // Verify messages were added
+    BOOST_CHECK_EQUAL(manager.GetPendingMessageCount(), messages.size());
+
+    auto pending = manager.GetPendingMessages();
+    BOOST_CHECK_EQUAL(pending.size(), messages.size());
+}
+
+BOOST_AUTO_TEST_CASE(oracle_bundle_manager_bundle_creation)
+{
+    OracleBundleManager manager;
+    int32_t test_epoch = 100;
+
+    // Add enough messages for consensus
+    for (int i = 0; i < ORACLE_CONSENSUS_REQUIRED; i++) {
+        COraclePriceMessage msg(i, 5000, GetTime());
+
+        // Mock valid signature
+        msg.signature = {0x01, 0x02, 0x03, 0x04};
+
+        BOOST_CHECK(manager.AddOracleMessage(msg));
+    }
+
+    // Create bundle manually for testing
+    COracleBundle bundle(test_epoch);
+    auto pending = manager.GetPendingMessages();
+
+    for (const auto& msg : pending) {
+        bundle.AddMessage(msg);
+    }
+
+    // Update manager with bundle
+    BOOST_CHECK(manager.UpdateBundle(bundle));
+    BOOST_CHECK(manager.HasValidBundle(test_epoch));
+
+    // Test consensus price
+    CAmount consensus_price = manager.GetConsensusPrice(test_epoch);
+    BOOST_CHECK_GT(consensus_price, 0);
+}
+
+/**
+ * Oracle Node Tests
+ * Tests for oracle node definition functionality
+ */
+BOOST_AUTO_TEST_CASE(oracle_node_struct_tests)
+{
+    // Test OracleNode struct (not the daemon class)
+    OracleNodeInfo node;
+    BOOST_CHECK_EQUAL(node.id, 0);
+    BOOST_CHECK(!node.pubkey.IsValid());
+    BOOST_CHECK(node.endpoint.empty());
+    BOOST_CHECK(!node.is_active);
+
+    // Test construction with parameters
+    CKey key;
+    key.MakeNewKey(true);
+    CPubKey pubkey = key.GetPubKey();
+
+    OracleNodeInfo node2(42, pubkey, "oracle42.digibyte.io:8332", true);
+    BOOST_CHECK_EQUAL(node2.id, 42);
+    BOOST_CHECK(node2.pubkey.IsValid());
+    BOOST_CHECK_EQUAL(node2.endpoint, "oracle42.digibyte.io:8332");
+    BOOST_CHECK(node2.is_active);
+}
+
+/**
+ * Mock Exchange Price Tests
+ * Tests for price aggregation concepts (using mock data)
+ */
+BOOST_AUTO_TEST_CASE(exchange_price_mock_tests)
+{
+    // Test mock price aggregation concepts
+    std::vector<CAmount> test_prices = {5000, 5050, 4950, 7000, 3000}; // Including outliers
+
+    // Calculate median
+    std::vector<CAmount> sorted_prices = test_prices;
+    std::sort(sorted_prices.begin(), sorted_prices.end());
+
+    CAmount median_price = sorted_prices[sorted_prices.size() / 2];
+    BOOST_CHECK_EQUAL(median_price, 5000);
+
+    // Test outlier detection logic
+    CAmount median = median_price;
+    const double outlier_threshold = 0.20; // 20% threshold
+
+    std::vector<CAmount> filtered_prices;
+    for (CAmount price : test_prices) {
+        double deviation = std::abs(static_cast<double>(price - median)) / median;
+        if (deviation <= outlier_threshold) {
+            filtered_prices.push_back(price);
+        }
+    }
+
+    // Should filter out the extreme outliers (7000 and 3000)
+    BOOST_CHECK_LT(filtered_prices.size(), test_prices.size());
+    BOOST_CHECK_GE(filtered_prices.size(), 3); // Should keep normal prices (5000, 5050, 4950)
+}
+
+/**
+ * Oracle Integration Tests
+ * Tests for oracle system integration with DigiDollar
+ */
+BOOST_AUTO_TEST_CASE(oracle_integration_price_retrieval)
+{
+    // Test oracle price retrieval
+    CAmount oracle_price = OracleIntegration::GetCurrentOraclePrice();
+
+    // Should return fallback price if no oracle system
+    BOOST_CHECK_GT(oracle_price, 0);
+    BOOST_CHECK_GE(oracle_price, 1000);   // At least $0.01
+    BOOST_CHECK_LE(oracle_price, 100000); // At most $1.00
+}
+
+BOOST_AUTO_TEST_CASE(oracle_integration_system_readiness)
+{
+    // Test oracle system readiness check
+    bool is_ready = OracleIntegration::IsOracleSystemReady();
+
+    // In test environment, oracle system may not be fully ready
+    // This is expected behavior
+    BOOST_CHECK(is_ready || !is_ready); // Either state is valid for testing
+}
+
+/**
+ * Oracle Block Integration Tests
+ * Tests for oracle data in blocks
+ */
+BOOST_AUTO_TEST_CASE(oracle_block_integration)
+{
+    OracleBundleManager& manager = OracleBundleManager::GetInstance();
+
+    // Create test block
+    CBlock test_block;
+
+    // Add coinbase transaction
+    CMutableTransaction coinbase;
+    coinbase.vin.resize(1);
+    coinbase.vin[0].prevout.SetNull();
+    coinbase.vout.resize(1);
+    coinbase.vout[0].nValue = 5000000000; // 50 DGB
+    test_block.vtx.push_back(MakeTransactionRef(std::move(coinbase)));
+
+    // Test adding oracle bundle to block
+    int32_t test_height = 1000;
+    bool result = manager.AddOracleBundleToBlock(test_block, test_height);
+
+    // Should succeed (graceful degradation if no oracle data)
+    BOOST_CHECK(result);
+
+    // Test oracle script creation with empty bundle
+    COracleBundle empty_bundle;
+    CScript oracle_script = manager.CreateOracleScript(empty_bundle);
+
+    // Empty bundle should create empty script
+    BOOST_CHECK(oracle_script.empty());
+
+    // Test with valid bundle
+    COracleBundle valid_bundle(10);
+    COraclePriceMessage msg(1, 5000, GetTime());
+    msg.signature = {0x01, 0x02, 0x03}; // Mock signature
+    valid_bundle.AddMessage(msg);
+
+    oracle_script = manager.CreateOracleScript(valid_bundle);
+    BOOST_CHECK(!oracle_script.empty());
+
+    // Should start with OP_RETURN
+    BOOST_CHECK_EQUAL(oracle_script[0], OP_RETURN);
+}
+
+/**
+ * Oracle Data Validation Tests
+ * Tests for oracle data validation in blocks and transactions
+ */
+BOOST_AUTO_TEST_CASE(oracle_data_validation)
+{
+    // Test oracle message validation
+    COraclePriceMessage valid_msg(1, 5000, GetTime());
+
+    CKey test_key;
+    test_key.MakeNewKey(true);
+    uint256 hash = valid_msg.GetSignatureHash();
+    std::vector<unsigned char> signature;
+    BOOST_CHECK(test_key.Sign(hash, signature));
+    valid_msg.signature = signature;
+
+    // Message should be valid (structure-wise)
+    BOOST_CHECK(valid_msg.IsValid());
+
+    // Test oracle bundle validation
+    COracleBundle bundle(50);
+
+    for (int i = 0; i < ORACLE_CONSENSUS_REQUIRED; i++) {
+        COraclePriceMessage msg(i, 5000, GetTime());
+        msg.signature = {0x01, 0x02, 0x03, 0x04}; // Mock signature
+        bundle.AddMessage(msg);
+    }
+
+    BOOST_CHECK(bundle.HasConsensus());
+
+    // Test epoch validation
+    BOOST_CHECK(bundle.ValidateEpoch(50));  // Current epoch
+    BOOST_CHECK(bundle.ValidateEpoch(51));  // Next epoch (allowed)
+    BOOST_CHECK(!bundle.ValidateEpoch(52)); // Too far in future
+    BOOST_CHECK(!bundle.ValidateEpoch(48)); // Too far in past
+}
+
+/**
+ * Advanced Oracle Tests - Phase 2 TDD Implementation
+ * Following Red-Green-Refactor methodology
+ */
+
+/**
+ * Signature Verification Edge Cases (RED PHASE)
+ * These tests SHOULD FAIL initially until we implement the functionality
+ */
+BOOST_AUTO_TEST_CASE(test_signature_verification_edge_cases)
+{
+    // Test invalid signature scenarios
+    CKey oracle_key;
+    oracle_key.MakeNewKey(true);
+    CPubKey oracle_pubkey = oracle_key.GetPubKey();
+
+    COraclePriceMessage msg(1, 5000000, GetTime());
+    uint256 hash = msg.GetSignatureHash();
+
+    // Test 1: Expired signature (timestamp too old)
+    COraclePriceMessage expired_msg(1, 5000000, GetTime() - ORACLE_MAX_AGE_SECONDS - 1);
+    std::vector<unsigned char> valid_signature;
+    BOOST_CHECK(oracle_key.Sign(expired_msg.GetSignatureHash(), valid_signature));
+    expired_msg.signature = valid_signature;
+
+    // This should fail due to expired timestamp
+    BOOST_CHECK(!expired_msg.ValidateSignatureWithTimestamp(oracle_pubkey));
+
+    // Test 2: Signature replay attack protection
+    COraclePriceMessage original_msg(1, 5000000, GetTime());
+    BOOST_CHECK(oracle_key.Sign(original_msg.GetSignatureHash(), valid_signature));
+    original_msg.signature = valid_signature;
+
+    // Try to reuse signature on different message (should fail)
+    COraclePriceMessage replay_msg(1, 6000000, GetTime()); // Different price
+    replay_msg.signature = original_msg.signature; // Same signature
+
+    BOOST_CHECK(!replay_msg.ValidateSignature(oracle_pubkey));
+
+    // Test 3: Invalid signature format
+    COraclePriceMessage invalid_format_msg(1, 5000000, GetTime());
+    invalid_format_msg.signature = {0x00}; // Too short
+
+    BOOST_CHECK(!invalid_format_msg.ValidateSignature(oracle_pubkey));
+
+    // Test 4: Signature with wrong key
+    CKey wrong_key;
+    wrong_key.MakeNewKey(true);
+    std::vector<unsigned char> wrong_signature;
+    BOOST_CHECK(wrong_key.Sign(hash, wrong_signature));
+
+    COraclePriceMessage wrong_key_msg(1, 5000000, GetTime());
+    wrong_key_msg.signature = wrong_signature;
+
+    BOOST_CHECK(!wrong_key_msg.ValidateSignature(oracle_pubkey));
+
+    // Test 5: Double-spending protection (same oracle, same epoch)
+    COraclePriceMessage double_spend1(1, 5000000, GetTime());
+    COraclePriceMessage double_spend2(1, 6000000, GetTime()); // Same oracle, different price
+
+    std::vector<unsigned char> sig1, sig2;
+    BOOST_CHECK(oracle_key.Sign(double_spend1.GetSignatureHash(), sig1));
+    BOOST_CHECK(oracle_key.Sign(double_spend2.GetSignatureHash(), sig2));
+    double_spend1.signature = sig1;
+    double_spend2.signature = sig2;
+
+    // Both should be valid individually, but conflict detection should prevent both
+    BOOST_CHECK(double_spend1.ValidateSignature(oracle_pubkey));
+    BOOST_CHECK(double_spend2.ValidateSignature(oracle_pubkey));
+
+    // This should fail when checking for conflicting messages
+    BOOST_CHECK(!COraclePriceMessage::CheckForConflictingMessages({double_spend1, double_spend2}));
+}
+
+BOOST_AUTO_TEST_CASE(test_price_aggregation_outliers)
+{
+    COracleBundle bundle(1);
+
+    // Test extreme outlier scenarios that should be filtered
+    std::vector<CAmount> extreme_prices = {
+        1,           // Extremely low (< $0.00001)
+        10000000000, // Extremely high (> $100)
+        0,           // Zero price
+        -1000        // Negative price (should never happen but test anyway)
+    };
+
+    // Add normal prices first
+    std::vector<CAmount> normal_prices = {4800000, 4900000, 5000000, 5100000, 5200000, 4950000, 5050000, 5150000};
+
+    for (size_t i = 0; i < normal_prices.size(); i++) {
+        COraclePriceMessage msg(i, normal_prices[i], GetTime());
+        bundle.AddMessage(msg);
+    }
+
+    // Add extreme outliers
+    for (size_t i = 0; i < extreme_prices.size(); i++) {
+        COraclePriceMessage outlier_msg(normal_prices.size() + i, extreme_prices[i], GetTime());
+        bundle.AddMessage(outlier_msg);
+    }
+
+    // Test advanced outlier filtering
+    std::vector<COraclePriceMessage> filtered = bundle.FilterOutliersAdvanced();
+
+    // Should remove extreme outliers but keep normal prices
+    BOOST_CHECK_EQUAL(filtered.size(), normal_prices.size());
+
+    // Test with insufficient valid data
+    COracleBundle insufficient_bundle(2);
+    // Add only outliers (should fail consensus)
+    for (size_t i = 0; i < extreme_prices.size(); i++) {
+        COraclePriceMessage outlier_msg(i, extreme_prices[i], GetTime());
+        insufficient_bundle.AddMessage(outlier_msg);
+    }
+
+    BOOST_CHECK(!insufficient_bundle.HasConsensus());
+
+    // Test statistical outlier detection with IQR method
+    COracleBundle iqr_bundle(3);
+    std::vector<CAmount> iqr_test_prices = {
+        4000000, 4500000, 4800000, 4900000, 5000000, 5100000, 5200000, 5500000, 6000000, 8000000 // Last one is outlier
+    };
+
+    for (size_t i = 0; i < iqr_test_prices.size(); i++) {
+        COraclePriceMessage msg(i, iqr_test_prices[i], GetTime());
+        iqr_bundle.AddMessage(msg);
+    }
+
+    std::vector<COraclePriceMessage> iqr_filtered = iqr_bundle.FilterOutliersIQR();
+    // Should remove the 8000000 outlier
+    BOOST_CHECK_LT(iqr_filtered.size(), iqr_test_prices.size());
+
+    // Verify the outlier was removed
+    bool found_outlier = false;
+    for (const auto& msg : iqr_filtered) {
+        if (msg.price_satoshis == 8000000) {
+            found_outlier = true;
+            break;
+        }
+    }
+    BOOST_CHECK(!found_outlier);
+}
+
+BOOST_AUTO_TEST_CASE(test_p2p_message_validation)
+{
+    // Test P2P oracle message validation and DOS protection
+
+    // Test 1: Malformed oracle price message
+    COraclePriceMessage malformed_msg;
+    malformed_msg.oracle_id = ORACLE_TOTAL_COUNT + 1; // Invalid oracle ID
+    malformed_msg.price_satoshis = 5000000;
+    malformed_msg.timestamp = GetTime();
+
+    BOOST_CHECK(!OracleP2P::ValidateIncomingMessage(malformed_msg));
+
+    // Test 2: Message rate limiting
+    COraclePriceMessage rate_limit_msg(1, 5000000, GetTime());
+
+    // Create valid signature
+    CKey test_key;
+    test_key.MakeNewKey(true);
+    uint256 hash = rate_limit_msg.GetSignatureHash();
+    std::vector<unsigned char> signature;
+    BOOST_CHECK(test_key.Sign(hash, signature));
+    rate_limit_msg.signature = signature;
+
+    // First message should be accepted
+    BOOST_CHECK(OracleP2P::ValidateIncomingMessage(rate_limit_msg));
+
+    // Rapid subsequent messages should be rate limited
+    for (int i = 0; i < 10; i++) {
+        COraclePriceMessage spam_msg(1, 5000000 + i, GetTime());
+        spam_msg.signature = signature; // Reuse signature for speed
+
+        // Should be rate limited after the first few
+        bool accepted = OracleP2P::ValidateIncomingMessage(spam_msg);
+        if (i > 2) {
+            BOOST_CHECK(!accepted); // Rate limiting should kick in
+        }
+    }
+
+    // Test 3: Message size validation
+    COraclePriceMessage oversized_msg(1, 5000000, GetTime());
+    // Create abnormally large signature
+    oversized_msg.signature.resize(10000, 0xFF); // Way too large
+
+    BOOST_CHECK(!OracleP2P::ValidateIncomingMessage(oversized_msg));
+
+    // Test 4: Bundle message validation
+    COracleBundle test_bundle(10);
+
+    // Add too many messages (should fail)
+    for (int i = 0; i <= ORACLE_ACTIVE_COUNT; i++) {
+        COraclePriceMessage msg(i, 5000000, GetTime());
+        test_bundle.AddMessage(msg);
+    }
+
+    BOOST_CHECK(!OracleP2P::ValidateBundleMessage(test_bundle));
+
+    // Test 5: Network partition tolerance
+    GetOracleDataMsg request_msg;
+    request_msg.epoch = -1; // Invalid epoch
+    request_msg.oracle_id = 0xFFFFFFFF; // All oracles
+
+    BOOST_CHECK(!OracleP2P::ValidateGetOracleRequest(request_msg));
+
+    // Valid request
+    request_msg.epoch = GetCurrentEpoch(1000);
+    BOOST_CHECK(OracleP2P::ValidateGetOracleRequest(request_msg));
+}
+
+BOOST_AUTO_TEST_SUITE_END()

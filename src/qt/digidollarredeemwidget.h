@@ -71,6 +71,9 @@ private:
     void updateRedeemButtons();
     void updatePositionInfo();
     void loadPositionDetails();
+    void applyTheme();
+    void updateValidationLabels();
+    void updateAmountValidation();
 
     bool validatePositionId() const;
     bool validateAmount() const;

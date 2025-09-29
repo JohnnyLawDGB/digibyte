@@ -69,6 +69,9 @@ private:
     void connectSignals();
     void updateMintButton();
     void updateCollateralCalculation();
+    void updateAmountValidation();
+    void updateUSDEquivalent();
+    void applyTheme();
     void calculateRequiredCollateral();
 
     bool validateAmount() const;

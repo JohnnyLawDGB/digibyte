@@ -33,6 +33,7 @@
 
 #include <QDebug>
 #include <QMessageBox>
+#include <QRegularExpression>
 #include <QSet>
 #include <QTimer>
 
@@ -628,4 +629,200 @@ CAmount WalletModel::getAvailableBalance(const CCoinControl* control)
     }
     // Fetch balance from the wallet, taking into account the selected coins
     return wallet().getAvailableBalance(*control);
+}
+
+// DigiDollar method implementations
+WalletModel::DigiDollarSendResult WalletModel::sendDigiDollar(const QString& address, CAmount amount, const QString& comment)
+{
+    // Validate address format first
+    if (!validateDigiDollarAddress(address)) {
+        return DigiDollarSendResult(InvalidAddress, "", "Invalid DigiDollar address format");
+    }
+
+    // Check if wallet is locked
+    if (getEncryptionStatus() == Locked) {
+        return DigiDollarSendResult(TransactionCreationFailed, "", "Wallet is locked. Please unlock to send DigiDollar.");
+    }
+
+    // Check if amount is positive
+    if (amount <= 0) {
+        return DigiDollarSendResult(InvalidAmount, "", "Send amount must be positive");
+    }
+
+    // Check if we have sufficient DigiDollar balance
+    CAmount currentBalance = getDigiDollarBalance();
+    if (amount > currentBalance) {
+        return DigiDollarSendResult(AmountExceedsBalance, "",
+            QString("Insufficient DigiDollar balance. Available: %1, Requested: %2")
+                .arg(QString::number(currentBalance / 100.0, 'f', 2))
+                .arg(QString::number(amount / 100.0, 'f', 2)));
+    }
+
+    try {
+        // Call the RPC method via interfaces::Wallet
+        // For now, using a mock implementation since the actual RPC integration needs wallet interface updates
+        // TODO: Integrate with actual senddigidollar RPC method
+
+        // Generate a mock transaction ID for demonstration
+        uint256 mockTxId;
+        mockTxId.SetHex("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef12");
+
+        return DigiDollarSendResult(OK, QString::fromStdString(mockTxId.GetHex()), "");
+
+    } catch (const std::exception& e) {
+        return DigiDollarSendResult(TransactionCreationFailed, "", QString::fromStdString(e.what()));
+    }
+}
+
+WalletModel::DigiDollarMintResult WalletModel::mintDigiDollar(CAmount ddAmount, int lockTier)
+{
+    // Validate lock tier
+    if (lockTier < 1 || lockTier > 8) {
+        return DigiDollarMintResult(InvalidAmount, "", "", "Invalid lock tier. Must be between 1 and 8.");
+    }
+
+    // Check if wallet is locked
+    if (getEncryptionStatus() == Locked) {
+        return DigiDollarMintResult(TransactionCreationFailed, "", "", "Wallet is locked. Please unlock to mint DigiDollar.");
+    }
+
+    // Check if amount is positive
+    if (ddAmount <= 0) {
+        return DigiDollarMintResult(InvalidAmount, "", "", "Mint amount must be positive");
+    }
+
+    // Calculate required collateral
+    CAmount requiredCollateral = calculateRequiredCollateral(ddAmount, lockTier);
+    CAmount availableDGBBalance = getAvailableDGBBalance();
+
+    if (requiredCollateral > availableDGBBalance) {
+        return DigiDollarMintResult(AmountExceedsBalance, "", "",
+            QString("Insufficient DGB balance for collateral. Required: %1, Available: %2")
+                .arg(QString::number(requiredCollateral / 100000000.0, 'f', 8))
+                .arg(QString::number(availableDGBBalance / 100000000.0, 'f', 8)));
+    }
+
+    try {
+        // Call the RPC method via interfaces::Wallet
+        // For now, using a mock implementation
+        // TODO: Integrate with actual mintdigidollar RPC method
+
+        // Generate mock transaction and position IDs
+        uint256 mockTxId;
+        mockTxId.SetHex("abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890ab");
+
+        return DigiDollarMintResult(OK, QString::fromStdString(mockTxId.GetHex()),
+                                  QString::fromStdString(mockTxId.GetHex()), "");
+
+    } catch (const std::exception& e) {
+        return DigiDollarMintResult(TransactionCreationFailed, "", "", QString::fromStdString(e.what()));
+    }
+}
+
+WalletModel::DigiDollarRedeemResult WalletModel::redeemDigiDollar(const QString& positionId, CAmount amount, const QString& redeemAddress)
+{
+    // Validate position ID format
+    if (positionId.length() != 64 || !positionId.contains(QRegularExpression("^[0-9a-fA-F]{64}$"))) {
+        return DigiDollarRedeemResult(InvalidAmount, "", "Invalid position ID format");
+    }
+
+    // Check if wallet is locked
+    if (getEncryptionStatus() == Locked) {
+        return DigiDollarRedeemResult(TransactionCreationFailed, "", "Wallet is locked. Please unlock to redeem DigiDollar.");
+    }
+
+    // Check if amount is positive
+    if (amount <= 0) {
+        return DigiDollarRedeemResult(InvalidAmount, "", "Redeem amount must be positive");
+    }
+
+    // Validate redemption address if provided
+    if (!redeemAddress.isEmpty()) {
+        if (!validateAddress(redeemAddress)) {
+            return DigiDollarRedeemResult(InvalidAddress, "", "Invalid DGB address for redemption");
+        }
+    }
+
+    try {
+        // Call the RPC method via interfaces::Wallet
+        // For now, using a mock implementation
+        // TODO: Integrate with actual redeemdigidollar RPC method
+
+        // Generate a mock transaction ID
+        uint256 mockTxId;
+        mockTxId.SetHex("fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321");
+
+        return DigiDollarRedeemResult(OK, QString::fromStdString(mockTxId.GetHex()), "");
+
+    } catch (const std::exception& e) {
+        return DigiDollarRedeemResult(TransactionCreationFailed, "", QString::fromStdString(e.what()));
+    }
+}
+
+CAmount WalletModel::getDigiDollarBalance() const
+{
+    // TODO: Implement actual DigiDollar balance retrieval
+    // For now, return a mock balance for demonstration
+    // This should call getdigidollarbalance RPC or query wallet state
+    return 10000; // Mock balance of 100.00 DD (in cents)
+}
+
+CAmount WalletModel::getAvailableDGBBalance() const
+{
+    // Get the regular DGB balance from the wallet
+    const interfaces::WalletBalances& balances = getCachedBalance();
+    return balances.balance;
+}
+
+bool WalletModel::validateDigiDollarAddress(const QString& address) const
+{
+    // DigiDollar addresses start with DD (mainnet), TD (testnet), or RD (regtest)
+    if (address.length() < 42 || address.length() > 62) {
+        return false;
+    }
+
+    if (!address.startsWith("DD") && !address.startsWith("TD") && !address.startsWith("RD")) {
+        return false;
+    }
+
+    // Check if the rest contains only valid bech32 characters
+    QRegularExpression bech32Regex("^[023456789acdefghjklmnpqrstuvwxyz]+$");
+    QString addressBody = address.mid(2); // Skip the prefix
+    return bech32Regex.match(addressBody).hasMatch();
+}
+
+CAmount WalletModel::calculateRequiredCollateral(CAmount ddAmount, int lockTier) const
+{
+    // Mock collateral calculation based on lock tier
+    // In reality, this would use the DCA (Dynamic Collateral Adjustment) formula
+    // and current system health metrics
+
+    // Base collateral ratios for each tier (as percentages)
+    const double tierRatios[8] = {
+        200.0, // Tier 1 (30 days) - 200%
+        175.0, // Tier 2 (90 days) - 175%
+        160.0, // Tier 3 (180 days) - 160%
+        150.0, // Tier 4 (1 year) - 150%
+        140.0, // Tier 5 (3 years) - 140%
+        130.0, // Tier 6 (5 years) - 130%
+        125.0, // Tier 7 (7 years) - 125%
+        120.0  // Tier 8 (10 years) - 120%
+    };
+
+    if (lockTier < 1 || lockTier > 8) {
+        return 0;
+    }
+
+    double collateralRatio = tierRatios[lockTier - 1];
+
+    // TODO: Get actual DGB/USD price from oracle
+    // For mock purposes, assuming 1 DD = $1 and 1 DGB = $0.01
+    double dgbPriceUSD = 0.01;
+    double ddValueUSD = ddAmount / 100.0; // ddAmount is in cents
+
+    // Calculate required DGB amount
+    double requiredDGBValue = ddValueUSD * (collateralRatio / 100.0);
+    CAmount requiredDGB = static_cast<CAmount>(requiredDGBValue / dgbPriceUSD * 100000000); // Convert to satoshis
+
+    return requiredDGB;
 }

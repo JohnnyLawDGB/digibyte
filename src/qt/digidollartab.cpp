@@ -5,6 +5,7 @@
 #include <qt/digidollartab.h>
 
 #include <qt/digidollaroverviewwidget.h>
+#include <qt/digidollarreceivewidget.h>
 #include <qt/digidollarsendwidget.h>
 #include <qt/digidollarmintwidget.h>
 #include <qt/digidollarredeemwidget.h>
@@ -21,6 +22,7 @@ DigiDollarTab::DigiDollarTab(QWidget *parent) :
     m_tabWidget(nullptr),
     m_mainLayout(nullptr),
     m_overviewWidget(nullptr),
+    m_receiveWidget(nullptr),
     m_sendWidget(nullptr),
     m_mintWidget(nullptr),
     m_redeemWidget(nullptr),
@@ -50,6 +52,9 @@ void DigiDollarTab::setupUI()
     m_overviewWidget = new DigiDollarOverviewWidget(this);
     m_overviewWidget->setObjectName("overviewWidget");
 
+    m_receiveWidget = new DigiDollarReceiveWidget(this);
+    m_receiveWidget->setObjectName("receiveWidget");
+
     m_sendWidget = new DigiDollarSendWidget(this);
     m_sendWidget->setObjectName("sendWidget");
 
@@ -62,12 +67,13 @@ void DigiDollarTab::setupUI()
     m_positionsWidget = new DigiDollarPositionsWidget(this);
     m_positionsWidget->setObjectName("positionsWidget");
 
-    // Add tabs
+    // Add tabs in order: Overview, Receive, Send, Mint, Redeem, Vault
     m_tabWidget->addTab(m_overviewWidget, tr("Overview"));
+    m_tabWidget->addTab(m_receiveWidget, tr("&Receive"));
     m_tabWidget->addTab(m_sendWidget, tr("Send"));
     m_tabWidget->addTab(m_mintWidget, tr("Mint"));
     m_tabWidget->addTab(m_redeemWidget, tr("Redeem"));
-    m_tabWidget->addTab(m_positionsWidget, tr("Positions"));
+    m_tabWidget->addTab(m_positionsWidget, tr("Vault"));
 
     // Add tab widget to main layout
     m_mainLayout->addWidget(m_tabWidget);
@@ -84,6 +90,11 @@ void DigiDollarTab::connectSignals()
     // Connect sub-widget signals
     if (m_overviewWidget) {
         // Connect overview widget signals when they're implemented
+    }
+
+    if (m_receiveWidget) {
+        connect(m_receiveWidget, &DigiDollarReceiveWidget::message,
+                this, &DigiDollarTab::message);
     }
 
     if (m_sendWidget) {
@@ -114,6 +125,8 @@ void DigiDollarTab::setWalletModel(WalletModel* model)
     // Pass wallet model to sub-widgets
     if (m_overviewWidget)
         m_overviewWidget->setWalletModel(model);
+    if (m_receiveWidget)
+        m_receiveWidget->setWalletModel(model);
     if (m_sendWidget)
         m_sendWidget->setWalletModel(model);
     if (m_mintWidget)
@@ -134,6 +147,8 @@ void DigiDollarTab::setClientModel(ClientModel* model)
     // Pass client model to sub-widgets
     if (m_overviewWidget)
         m_overviewWidget->setClientModel(model);
+    if (m_receiveWidget)
+        m_receiveWidget->setClientModel(model);
     if (m_sendWidget)
         m_sendWidget->setClientModel(model);
     if (m_mintWidget)
@@ -149,6 +164,8 @@ void DigiDollarTab::updateView()
     // Update all sub-widgets
     if (m_overviewWidget)
         m_overviewWidget->updateView();
+    if (m_receiveWidget)
+        m_receiveWidget->updateView();
     if (m_sendWidget)
         m_sendWidget->updateView();
     if (m_mintWidget)
@@ -215,19 +232,23 @@ void DigiDollarTab::onTabChanged(int index)
         if (m_overviewWidget)
             m_overviewWidget->updateView();
         break;
-    case 1: // Send
+    case 1: // Receive
+        if (m_receiveWidget)
+            m_receiveWidget->updateView();
+        break;
+    case 2: // Send
         if (m_sendWidget)
             m_sendWidget->updateView();
         break;
-    case 2: // Mint
+    case 3: // Mint
         if (m_mintWidget)
             m_mintWidget->updateView();
         break;
-    case 3: // Redeem
+    case 4: // Redeem
         if (m_redeemWidget)
             m_redeemWidget->updateView();
         break;
-    case 4: // Positions
+    case 5: // Vault
         if (m_positionsWidget)
             m_positionsWidget->updateView();
         break;

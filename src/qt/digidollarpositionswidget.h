@@ -63,6 +63,8 @@ private Q_SLOTS:
     void onPositionClicked(int row, int column);
     /** Redeem button clicked for a specific position */
     void onRedeemPositionClicked();
+    /** Show context menu for table */
+    void showContextMenu(const QPoint& point);
 
 private:
     void setupUI();
@@ -70,6 +72,7 @@ private:
     void connectSignals();
     void populatePositionsTable();
     void loadPositionsFromWallet();
+    void applyTheme();
     void addPositionToTable(const DigiDollarPosition& position, int row);
     QPushButton* createRedeemButton(const QString& positionId);
 

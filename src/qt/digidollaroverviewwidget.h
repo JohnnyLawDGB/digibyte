@@ -17,6 +17,8 @@ class QHBoxLayout;
 class QGridLayout;
 class QFrame;
 class QProgressBar;
+class QListWidget;
+class QSpacerItem;
 QT_END_NAMESPACE
 
 /**
@@ -51,6 +53,9 @@ public Q_SLOTS:
     void updateOraclePrice();
     /** Update system health status */
     void updateSystemHealth();
+    /** Set monospaced font for balance labels */
+    void setMonospacedFont(bool use_embedded_font);
+    // REMOVED: updateTheme() and applyTheme() - CSS handles all theming now
 
 private Q_SLOTS:
     /** Update recent transactions display */
@@ -62,6 +67,7 @@ private:
     void setupSystemHealthSection();
     void setupRecentTransactionsSection();
     void connectSignals();
+    void addDemoTransactions(); // For demo purposes only
 
     QString formatDDAmount(double amount) const;
     QString formatDGBAmount(double amount) const;
@@ -97,6 +103,7 @@ private:
     QFrame* m_transactionsFrame;
     QVBoxLayout* m_transactionsLayout;
     QLabel* m_transactionsTitle;
+    QListWidget* m_transactionsList;
     QLabel* m_recentTransactionsInfo;
 
     // Models

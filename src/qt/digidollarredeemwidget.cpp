@@ -9,6 +9,7 @@
 #include <qt/clientmodel.h>
 #include <qt/guiutil.h>
 #include <qt/digibyteunits.h>
+#include <consensus/amount.h>
 
 #include <QLabel>
 #include <QLineEdit>
@@ -21,6 +22,8 @@
 #include <QFont>
 #include <QMessageBox>
 #include <QRegularExpression>
+#include <QApplication>
+#include <QPalette>
 
 DigiDollarRedeemWidget::DigiDollarRedeemWidget(QWidget *parent) :
     QWidget(parent),
@@ -70,6 +73,7 @@ DigiDollarRedeemWidget::DigiDollarRedeemWidget(QWidget *parent) :
 {
     setupUI();
     connectSignals();
+    // REMOVED: applyTheme() - Let CSS handle all theming
 }
 
 DigiDollarRedeemWidget::~DigiDollarRedeemWidget()
@@ -81,8 +85,8 @@ void DigiDollarRedeemWidget::setupUI()
 {
     // Create main layout
     m_mainLayout = new QVBoxLayout(this);
-    m_mainLayout->setSpacing(20);
-    m_mainLayout->setContentsMargins(20, 20, 20, 20);
+    m_mainLayout->setSpacing(12);
+    m_mainLayout->setContentsMargins(16, 16, 16, 16);
 
     // Create validators
     m_amountValidator = new AmountValidator(0.00000001, 999999999.99999999, this);
@@ -107,8 +111,8 @@ void DigiDollarRedeemWidget::setupPositionSection()
     m_positionFrame->setObjectName("positionFrame");
 
     m_positionLayout = new QGridLayout(m_positionFrame);
-    m_positionLayout->setSpacing(10);
-    m_positionLayout->setContentsMargins(15, 15, 15, 15);
+    m_positionLayout->setSpacing(8);
+    m_positionLayout->setContentsMargins(10, 10, 10, 10);
 
     // Title
     QLabel* positionTitle = new QLabel(tr("Select Position"), this);
@@ -122,7 +126,7 @@ void DigiDollarRedeemWidget::setupPositionSection()
     m_positionIdLabel = new QLabel(tr("Position ID:"), this);
     m_positionIdEdit = new QLineEdit(this);
     m_positionIdEdit->setObjectName("positionIdEdit");
-    m_positionIdEdit->setPlaceholderText("Enter position ID");
+    m_positionIdEdit->setPlaceholderText("Enter position ID (e.g., a1b2c3d4...)");
     QFont monospaceFont = GUIUtil::fixedPitchFont();
     m_positionIdEdit->setFont(monospaceFont);
 
@@ -132,7 +136,7 @@ void DigiDollarRedeemWidget::setupPositionSection()
     // Position validation label
     m_positionValidationLabel = new QLabel(this);
     m_positionValidationLabel->setObjectName("positionValidationLabel");
-    m_positionValidationLabel->setStyleSheet("QLabel { color: #666666; }");
+    // Theme styling will be applied in applyTheme()
     m_positionValidationLabel->setText(tr("Enter a position ID to load details"));
     m_positionLayout->addWidget(m_positionValidationLabel, 2, 0, 1, 2);
 
@@ -147,8 +151,8 @@ void DigiDollarRedeemWidget::setupAmountSection()
     m_amountFrame->setObjectName("amountFrame");
 
     m_amountLayout = new QGridLayout(m_amountFrame);
-    m_amountLayout->setSpacing(10);
-    m_amountLayout->setContentsMargins(15, 15, 15, 15);
+    m_amountLayout->setSpacing(8);
+    m_amountLayout->setContentsMargins(10, 10, 10, 10);
 
     // Title
     QLabel* amountTitle = new QLabel(tr("Redeem Amount"), this);
@@ -195,8 +199,8 @@ void DigiDollarRedeemWidget::setupPositionInfoSection()
     m_positionInfoFrame->setObjectName("positionInfoFrame");
 
     m_positionInfoLayout = new QGridLayout(m_positionInfoFrame);
-    m_positionInfoLayout->setSpacing(10);
-    m_positionInfoLayout->setContentsMargins(15, 15, 15, 15);
+    m_positionInfoLayout->setSpacing(8);
+    m_positionInfoLayout->setContentsMargins(10, 10, 10, 10);
 
     // Title
     m_positionInfoLabel = new QLabel(tr("Position Details"), this);
@@ -262,7 +266,7 @@ void DigiDollarRedeemWidget::setupButtonSection()
 
     m_buttonLayout = new QHBoxLayout(m_buttonFrame);
     m_buttonLayout->setSpacing(10);
-    m_buttonLayout->setContentsMargins(15, 15, 15, 15);
+    m_buttonLayout->setContentsMargins(10, 10, 10, 10);
 
     // Clear button
     m_clearButton = new QPushButton(tr("Clear"), this);
@@ -276,14 +280,14 @@ void DigiDollarRedeemWidget::setupButtonSection()
     m_redeemAllButton = new QPushButton(tr("Redeem All"), this);
     m_redeemAllButton->setObjectName("redeemAllButton");
     m_redeemAllButton->setEnabled(false);
-    m_redeemAllButton->setStyleSheet("QPushButton:enabled { background-color: #ff6600; color: white; font-weight: bold; }");
+    // Theme will be applied in applyTheme()
     m_buttonLayout->addWidget(m_redeemAllButton);
 
     // Redeem button
     m_redeemButton = new QPushButton(tr("Redeem"), this);
     m_redeemButton->setObjectName("redeemButton");
     m_redeemButton->setEnabled(false);
-    m_redeemButton->setStyleSheet("QPushButton:enabled { background-color: #006600; color: white; font-weight: bold; }");
+    // Theme will be applied in applyTheme()
     m_buttonLayout->addWidget(m_redeemButton);
 
     m_mainLayout->addWidget(m_buttonFrame);
@@ -316,6 +320,7 @@ void DigiDollarRedeemWidget::setWalletModel(WalletModel* model)
         // Connect wallet model signals
         updateBalance();
         updatePositions();
+        // REMOVED: applyTheme() - Let CSS handle all theming
     }
 }
 
@@ -326,6 +331,7 @@ void DigiDollarRedeemWidget::setClientModel(ClientModel* model)
     if (m_clientModel) {
         // Connect client model signals
         updatePositions();
+        // REMOVED: applyTheme() - Let CSS handle all theming
     }
 }
 
@@ -359,20 +365,20 @@ void DigiDollarRedeemWidget::onPositionIdChanged()
 
     if (positionId.isEmpty()) {
         m_positionValidationLabel->setText(tr("Enter a position ID to load details"));
-        m_positionValidationLabel->setStyleSheet("QLabel { color: #666666; }");
+        updateValidationLabels();
         m_positionFound = false;
     } else if (validatePositionId()) {
         loadPositionDetails();
         if (m_positionFound) {
             m_positionValidationLabel->setText(tr("✓ Position found and loaded"));
-            m_positionValidationLabel->setStyleSheet("QLabel { color: #006600; }");
+            updateValidationLabels();
         } else {
             m_positionValidationLabel->setText(tr("✗ Position not found"));
-            m_positionValidationLabel->setStyleSheet("QLabel { color: #cc0000; }");
+            updateValidationLabels();
         }
     } else {
         m_positionValidationLabel->setText(tr("✗ Invalid position ID format"));
-        m_positionValidationLabel->setStyleSheet("QLabel { color: #cc0000; }");
+        updateValidationLabels();
         m_positionFound = false;
     }
 
@@ -382,6 +388,7 @@ void DigiDollarRedeemWidget::onPositionIdChanged()
 
 void DigiDollarRedeemWidget::onAmountChanged()
 {
+    updateAmountValidation();
     updateRedeemButtons();
 }
 
@@ -405,11 +412,49 @@ void DigiDollarRedeemWidget::onRedeemClicked()
     msgBox.setDefaultButton(QMessageBox::No);
 
     if (msgBox.exec() == QMessageBox::Yes) {
-        // TODO: Actually create the redeem transaction
-        emit message(tr("Redeem Transaction Created"),
-                    tr("DigiDollar redeem transaction created successfully!"),
-                    QMessageBox::Information);
-        onClearClicked();
+        if (!m_walletModel) {
+            Q_EMIT message(tr("Error"), tr("No wallet model available"), QMessageBox::Critical);
+            return;
+        }
+
+        // Convert amount from double to CAmount (cents)
+        CAmount amountCents = static_cast<CAmount>(amount * 100);
+
+        // Call the wallet model to redeem DigiDollar
+        WalletModel::DigiDollarRedeemResult result = m_walletModel->redeemDigiDollar(m_selectedPositionId, amountCents, "");
+
+        if (result.status == WalletModel::OK) {
+            Q_EMIT message(tr("Redeem Transaction Created"),
+                        tr("DigiDollar redeem transaction created successfully!\n\nTransaction ID: %1")
+                        .arg(result.txid),
+                        QMessageBox::Information);
+            onClearClicked();
+            updateBalance(); // Refresh balance displays
+            updatePositions(); // Refresh positions
+        } else {
+            QString errorTitle;
+            QString errorMessage = result.reasonFailed;
+
+            switch (result.status) {
+            case WalletModel::InvalidAddress:
+                errorTitle = tr("Invalid Position");
+                break;
+            case WalletModel::InvalidAmount:
+                errorTitle = tr("Invalid Amount");
+                break;
+            case WalletModel::AmountExceedsBalance:
+                errorTitle = tr("Insufficient Redeemable Amount");
+                break;
+            case WalletModel::TransactionCreationFailed:
+                errorTitle = tr("Transaction Failed");
+                break;
+            default:
+                errorTitle = tr("Redeem Error");
+                break;
+            }
+
+            Q_EMIT message(errorTitle, errorMessage, QMessageBox::Critical);
+        }
     }
 }
 
@@ -430,11 +475,49 @@ void DigiDollarRedeemWidget::onRedeemAllClicked()
     msgBox.setDefaultButton(QMessageBox::No);
 
     if (msgBox.exec() == QMessageBox::Yes) {
-        // TODO: Actually create the full redeem transaction
-        emit message(tr("Position Closed"),
-                    tr("DigiDollar position closed successfully!"),
-                    QMessageBox::Information);
-        onClearClicked();
+        if (!m_walletModel) {
+            Q_EMIT message(tr("Error"), tr("No wallet model available"), QMessageBox::Critical);
+            return;
+        }
+
+        // Convert full redeemable amount from double to CAmount (cents)
+        CAmount amountCents = static_cast<CAmount>(m_redeemableAmount * 100);
+
+        // Call the wallet model to redeem the full position
+        WalletModel::DigiDollarRedeemResult result = m_walletModel->redeemDigiDollar(m_selectedPositionId, amountCents, "");
+
+        if (result.status == WalletModel::OK) {
+            Q_EMIT message(tr("Position Closed"),
+                        tr("DigiDollar position closed successfully!\n\nTransaction ID: %1")
+                        .arg(result.txid),
+                        QMessageBox::Information);
+            onClearClicked();
+            updateBalance(); // Refresh balance displays
+            updatePositions(); // Refresh positions
+        } else {
+            QString errorTitle;
+            QString errorMessage = result.reasonFailed;
+
+            switch (result.status) {
+            case WalletModel::InvalidAddress:
+                errorTitle = tr("Invalid Position");
+                break;
+            case WalletModel::InvalidAmount:
+                errorTitle = tr("Invalid Amount");
+                break;
+            case WalletModel::AmountExceedsBalance:
+                errorTitle = tr("Insufficient Redeemable Amount");
+                break;
+            case WalletModel::TransactionCreationFailed:
+                errorTitle = tr("Transaction Failed");
+                break;
+            default:
+                errorTitle = tr("Redeem Error");
+                break;
+            }
+
+            Q_EMIT message(errorTitle, errorMessage, QMessageBox::Critical);
+        }
     }
 }
 
@@ -469,17 +552,7 @@ void DigiDollarRedeemWidget::updatePositionInfo()
         // Update health bar
         m_healthBar->setValue(static_cast<int>(m_positionHealth));
 
-        // Color code health status
-        if (m_positionHealth >= 80) {
-            m_healthStatusValue->setStyleSheet("QLabel { color: #006600; }");
-            m_healthBar->setStyleSheet("QProgressBar::chunk { background-color: #006600; }");
-        } else if (m_positionHealth >= 50) {
-            m_healthStatusValue->setStyleSheet("QLabel { color: #ff6600; }");
-            m_healthBar->setStyleSheet("QProgressBar::chunk { background-color: #ff6600; }");
-        } else {
-            m_healthStatusValue->setStyleSheet("QLabel { color: #cc0000; }");
-            m_healthBar->setStyleSheet("QProgressBar::chunk { background-color: #cc0000; }");
-        }
+        // REMOVED: All health bar and status color coding - Let CSS handle theming
     } else {
         // Reset to default values
         m_ddMintedValue->setText("0.00000000 DD");
@@ -574,5 +647,75 @@ QString DigiDollarRedeemWidget::formatBlockTime(int blocks) const
         return QString("%1h %2m").arg(hours).arg(minutes);
     } else {
         return QString("%1m").arg(minutes);
+    }
+}
+
+// REMOVED: applyTheme() - All styling now handled by CSS files (light.css/dark.css)
+// This method was overriding the CSS theme with programmatic styling
+void DigiDollarRedeemWidget::applyTheme()
+{
+    // Method disabled - CSS handles all theming now
+}
+
+
+void DigiDollarRedeemWidget::updateValidationLabels()
+{
+    QPalette palette = QApplication::palette();
+    int lightness = palette.color(QPalette::WindowText).lightness();
+    bool isDarkTheme = lightness > 127;
+
+    QString successColor = isDarkTheme ? "#4caf50" : "#28a745";
+    QString errorColor = isDarkTheme ? "#f44336" : "#dc3545";
+    QString infoColor = palette.color(QPalette::Mid).name();
+
+    // Update position validation styling
+    QString validationText = m_positionValidationLabel->text();
+    if (validationText.contains("✓")) {
+        m_positionValidationLabel->setStyleSheet(QString("QLabel { color: %1; font-size: 11px; font-weight: bold; }").arg(successColor));
+        m_positionIdEdit->setStyleSheet(QString("QLineEdit { border: 2px solid %1; }").arg(successColor));
+    } else if (validationText.contains("✗")) {
+        m_positionValidationLabel->setStyleSheet(QString("QLabel { color: %1; font-size: 11px; font-weight: bold; }").arg(errorColor));
+        m_positionIdEdit->setStyleSheet(QString("QLineEdit { border: 2px solid %1; }").arg(errorColor));
+    } else {
+        m_positionValidationLabel->setStyleSheet(QString("QLabel { color: %1; font-size: 11px; }").arg(infoColor));
+        m_positionIdEdit->setStyleSheet("");
+    }
+
+    // Update amount input styling based on validation
+    updateAmountValidation();
+}
+
+void DigiDollarRedeemWidget::updateAmountValidation()
+{
+    QString amountText = m_amountEdit->text();
+    if (amountText.isEmpty()) {
+        m_amountEdit->setStyleSheet("");
+        return;
+    }
+
+    QPalette palette = QApplication::palette();
+    int lightness = palette.color(QPalette::WindowText).lightness();
+    bool isDarkTheme = lightness > 127;
+
+    QString successColor = isDarkTheme ? "#4caf50" : "#28a745";
+    QString warningColor = isDarkTheme ? "#ff9800" : "#ffc107";
+    QString errorColor = isDarkTheme ? "#f44336" : "#dc3545";
+    QString errorBg = isDarkTheme ? "#4a2c2c" : "#ffeaea";
+    QString warningBg = isDarkTheme ? "#4a3d2a" : "#fff3cd";
+
+    bool isValidFormat = validateAmount();
+    bool isRedeemable = validateRedeemable();
+
+    if (!isValidFormat) {
+        // Invalid format
+        m_amountEdit->setStyleSheet(QString("QLineEdit { border: 2px solid %1; background-color: %2; }").arg(errorColor).arg(errorBg));
+    } else if (m_positionFound && !isRedeemable) {
+        // Valid format but exceeds redeemable amount
+        m_amountEdit->setStyleSheet(QString("QLineEdit { border: 2px solid %1; background-color: %2; }").arg(warningColor).arg(warningBg));
+    } else if (isValidFormat && isRedeemable) {
+        // Valid and redeemable
+        m_amountEdit->setStyleSheet(QString("QLineEdit { border: 2px solid %1; }").arg(successColor));
+    } else {
+        m_amountEdit->setStyleSheet("");
     }
 }

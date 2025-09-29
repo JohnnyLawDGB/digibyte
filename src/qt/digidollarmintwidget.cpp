@@ -9,6 +9,7 @@
 #include <qt/clientmodel.h>
 #include <qt/guiutil.h>
 #include <qt/digibyteunits.h>
+#include <consensus/amount.h>
 
 #include <QLabel>
 #include <QLineEdit>
@@ -21,6 +22,8 @@
 #include <QProgressBar>
 #include <QFont>
 #include <QMessageBox>
+#include <QApplication>
+#include <QPalette>
 
 DigiDollarMintWidget::DigiDollarMintWidget(QWidget *parent) :
     QWidget(parent),
@@ -65,6 +68,7 @@ DigiDollarMintWidget::DigiDollarMintWidget(QWidget *parent) :
 {
     setupUI();
     connectSignals();
+    // REMOVED: applyTheme() - Let CSS handle all theming
 }
 
 DigiDollarMintWidget::~DigiDollarMintWidget()
@@ -76,15 +80,28 @@ void DigiDollarMintWidget::setupUI()
 {
     // Create main layout
     m_mainLayout = new QVBoxLayout(this);
-    m_mainLayout->setSpacing(20);
-    m_mainLayout->setContentsMargins(20, 20, 20, 20);
+    m_mainLayout->setSpacing(12);
+    m_mainLayout->setContentsMargins(16, 16, 16, 16);
 
     // Create validators
     m_amountValidator = new AmountValidator(0.00000001, 999999999.99999999, this);
 
+    // Create horizontal layout for mint amount and lock period side-by-side
+    QHBoxLayout* topLayout = new QHBoxLayout();
+    topLayout->setSpacing(12);
+
     // Setup sections
     setupMintAmountSection();
     setupLockTierSection();
+
+    // Add mint amount and lock period to horizontal layout
+    topLayout->addWidget(m_amountFrame);
+    topLayout->addWidget(m_lockTierFrame);
+
+    // Add horizontal layout to main layout
+    m_mainLayout->addLayout(topLayout);
+
+    // Add collateral section below (full width)
     setupCollateralSection();
     setupButtonSection();
 
@@ -99,11 +116,14 @@ void DigiDollarMintWidget::setupMintAmountSection()
     // Create mint amount frame
     m_amountFrame = new QFrame(this);
     m_amountFrame->setFrameStyle(QFrame::StyledPanel);
+    m_amountFrame->setFrameShadow(QFrame::Sunken);
     m_amountFrame->setObjectName("amountFrame");
 
     m_amountLayout = new QGridLayout(m_amountFrame);
-    m_amountLayout->setSpacing(10);
-    m_amountLayout->setContentsMargins(15, 15, 15, 15);
+    m_amountLayout->setSpacing(8);
+    m_amountLayout->setContentsMargins(10, 10, 10, 10);
+    m_amountLayout->setHorizontalSpacing(12);
+    m_amountLayout->setVerticalSpacing(8);
 
     // Title
     QLabel* amountTitle = new QLabel(tr("Mint Amount"), this);
@@ -114,33 +134,50 @@ void DigiDollarMintWidget::setupMintAmountSection()
     m_amountLayout->addWidget(amountTitle, 0, 0, 1, 3);
 
     // Amount input
-    m_amountLabel = new QLabel(tr("DD to Mint:"), this);
+    m_amountLabel = new QLabel(tr("Amount to Mint:"), this);
+    m_amountLabel->setToolTip(tr("Enter the amount of DigiDollar to mint"));
+    m_amountLabel->setBuddy(m_amountEdit);
+
+    // Create horizontal layout for amount input and suffix
+    QHBoxLayout* amountInputLayout = new QHBoxLayout();
+    amountInputLayout->setSpacing(8);
+
     m_amountEdit = new QLineEdit(this);
     m_amountEdit->setObjectName("amountEdit");
     m_amountEdit->setValidator(m_amountValidator);
     m_amountEdit->setPlaceholderText("0.00000000");
+    m_amountEdit->setToolTip(tr("The amount of DigiDollar to mint.\n\nSupported formats:\n• 0.00000001 (minimum)\n• Up to 8 decimal places\n• Maximum: 999,999,999.99999999"));
     QFont monospaceFont = GUIUtil::fixedPitchFont();
     m_amountEdit->setFont(monospaceFont);
 
     m_amountSuffix = new QLabel("DD", this);
     m_amountSuffix->setObjectName("amountSuffix");
+    // Theme styling applied in applyTheme()
+
+    amountInputLayout->addWidget(m_amountEdit, 1);
+    amountInputLayout->addWidget(m_amountSuffix, 0);
 
     m_amountLayout->addWidget(m_amountLabel, 1, 0);
-    m_amountLayout->addWidget(m_amountEdit, 1, 1);
-    m_amountLayout->addWidget(m_amountSuffix, 1, 2);
+    m_amountLayout->addLayout(amountInputLayout, 1, 1);
 
     // USD value
-    m_usdValueLabel = new QLabel(tr("USD Value:"), this);
+    m_usdValueLabel = new QLabel(tr("USD Equivalent:"), this);
     m_usdValueLabel->setObjectName("usdValueLabel");
+    m_usdValueLabel->setToolTip(tr("Equivalent value in US Dollars (DigiDollar is pegged to $1 USD)"));
     m_usdValueValue = new QLabel("$0.00", this);
     m_usdValueValue->setObjectName("usdValueValue");
     m_usdValueValue->setFont(monospaceFont);
-    m_usdValueValue->setStyleSheet("QLabel { color: #666666; }");
+    // Theme styling applied in applyTheme() and updateUSDEquivalent()
+    m_usdValueValue->setToolTip(tr("USD value updates in real-time as you type"));
 
     m_amountLayout->addWidget(m_usdValueLabel, 2, 0);
-    m_amountLayout->addWidget(m_usdValueValue, 2, 1, 1, 2);
+    m_amountLayout->addWidget(m_usdValueValue, 2, 1);
 
-    m_mainLayout->addWidget(m_amountFrame);
+    // Add stretch to push everything left
+    m_amountLayout->setColumnStretch(1, 0);
+    m_amountLayout->setColumnStretch(2, 1);
+
+    // Frame is added to horizontal layout in setupUI()
 }
 
 void DigiDollarMintWidget::setupLockTierSection()
@@ -148,26 +185,32 @@ void DigiDollarMintWidget::setupLockTierSection()
     // Create lock tier frame
     m_lockTierFrame = new QFrame(this);
     m_lockTierFrame->setFrameStyle(QFrame::StyledPanel);
+    m_lockTierFrame->setFrameShadow(QFrame::Sunken);
     m_lockTierFrame->setObjectName("lockTierFrame");
 
     m_lockTierLayout = new QGridLayout(m_lockTierFrame);
-    m_lockTierLayout->setSpacing(10);
-    m_lockTierLayout->setContentsMargins(15, 15, 15, 15);
+    m_lockTierLayout->setSpacing(8);
+    m_lockTierLayout->setContentsMargins(10, 10, 10, 10);
+    m_lockTierLayout->setHorizontalSpacing(12);
+    m_lockTierLayout->setVerticalSpacing(8);
 
     // Title
-    QLabel* tierTitle = new QLabel(tr("Lock Tier"), this);
+    QLabel* tierTitle = new QLabel(tr("Lock Period"), this);
     QFont titleFont = tierTitle->font();
     titleFont.setBold(true);
     titleFont.setPointSize(titleFont.pointSize() + 2);
     tierTitle->setFont(titleFont);
     m_lockTierLayout->addWidget(tierTitle, 0, 0, 1, 2);
 
-    // Lock tier combo
-    m_lockTierLabel = new QLabel(tr("Lock Period:"), this);
+    // Lock period combo
+    m_lockTierLabel = new QLabel(tr("Lock &Duration:"), this);
+    m_lockTierLabel->setToolTip(tr("Select how long to lock your DGB collateral"));
     m_lockTierCombo = new QComboBox(this);
     m_lockTierCombo->setObjectName("lockTierCombo");
+    m_lockTierCombo->setToolTip(tr("Longer locks require less collateral (30 days: 500%, 10 years: 200%)"));
+    m_lockTierLabel->setBuddy(m_lockTierCombo);
 
-    // Add all 8 tiers
+    // Add all 8 lock periods
     for (int i = 1; i <= 8; ++i) {
         m_lockTierCombo->addItem(getLockTierDisplayName(i), i);
     }
@@ -177,15 +220,22 @@ void DigiDollarMintWidget::setupLockTierSection()
 
     // Lock tier info
     m_lockTierInfoLabel = new QLabel(tr("Collateral Ratio:"), this);
-    m_lockTierInfoValue = new QLabel("150%", this);
+    m_lockTierInfoLabel->setToolTip(tr("Required collateral ratio for the selected tier"));
+    m_lockTierInfoValue = new QLabel("200%", this);
     m_lockTierInfoValue->setObjectName("lockTierInfoValue");
     QFont monospaceFont = GUIUtil::fixedPitchFont();
     m_lockTierInfoValue->setFont(monospaceFont);
+    // Theme styling applied in applyTheme()
+    m_lockTierInfoValue->setToolTip(tr("This ratio determines how much DGB you need to lock"));
 
     m_lockTierLayout->addWidget(m_lockTierInfoLabel, 2, 0);
     m_lockTierLayout->addWidget(m_lockTierInfoValue, 2, 1);
 
-    m_mainLayout->addWidget(m_lockTierFrame);
+    // Add stretch to push everything left
+    m_lockTierLayout->setColumnStretch(1, 0);
+    m_lockTierLayout->setColumnStretch(2, 1);
+
+    // Frame is added to horizontal layout in setupUI()
 }
 
 void DigiDollarMintWidget::setupCollateralSection()
@@ -193,11 +243,14 @@ void DigiDollarMintWidget::setupCollateralSection()
     // Create collateral frame
     m_collateralFrame = new QFrame(this);
     m_collateralFrame->setFrameStyle(QFrame::StyledPanel);
+    m_collateralFrame->setFrameShadow(QFrame::Sunken);
     m_collateralFrame->setObjectName("collateralFrame");
 
     m_collateralLayout = new QGridLayout(m_collateralFrame);
-    m_collateralLayout->setSpacing(10);
-    m_collateralLayout->setContentsMargins(15, 15, 15, 15);
+    m_collateralLayout->setSpacing(8);
+    m_collateralLayout->setContentsMargins(10, 10, 10, 10);
+    m_collateralLayout->setHorizontalSpacing(12);
+    m_collateralLayout->setVerticalSpacing(8);
 
     // Title
     QLabel* collateralTitle = new QLabel(tr("Collateral Requirements"), this);
@@ -210,10 +263,13 @@ void DigiDollarMintWidget::setupCollateralSection()
     // Oracle price
     m_oraclePriceLabel = new QLabel(tr("Oracle Price:"), this);
     m_oraclePriceLabel->setObjectName("oraclePriceLabel");
+    m_oraclePriceLabel->setToolTip(tr("Current DGB price from oracle feed"));
     m_oraclePriceValue = new QLabel("$0.01 USD/DGB", this);
     m_oraclePriceValue->setObjectName("oraclePriceValue");
     QFont monospaceFont = GUIUtil::fixedPitchFont();
     m_oraclePriceValue->setFont(monospaceFont);
+    // Theme styling applied in applyTheme()
+    m_oraclePriceValue->setToolTip(tr("Real-time DGB price used for collateral calculations"));
 
     m_collateralLayout->addWidget(m_oraclePriceLabel, 1, 0);
     m_collateralLayout->addWidget(m_oraclePriceValue, 1, 1);
@@ -221,19 +277,25 @@ void DigiDollarMintWidget::setupCollateralSection()
     // Required collateral
     m_collateralLabel = new QLabel(tr("Required DGB:"), this);
     m_collateralLabel->setObjectName("collateralLabel");
+    m_collateralLabel->setToolTip(tr("Amount of DGB that will be locked as collateral"));
     m_collateralValue = new QLabel("0.00000000 DGB", this);
     m_collateralValue->setObjectName("collateralValue");
     m_collateralValue->setFont(monospaceFont);
+    // Theme styling applied dynamically in updateCollateralCalculation()
+    m_collateralValue->setToolTip(tr("This DGB will be locked until the position is closed"));
 
     m_collateralLayout->addWidget(m_collateralLabel, 2, 0);
     m_collateralLayout->addWidget(m_collateralValue, 2, 1);
 
     // Collateral ratio
-    m_ratioLabel = new QLabel(tr("Ratio:"), this);
+    m_ratioLabel = new QLabel(tr("Current Ratio:"), this);
     m_ratioLabel->setObjectName("ratioLabel");
-    m_ratioValue = new QLabel("150%", this);
+    m_ratioLabel->setToolTip(tr("Actual collateral ratio for this mint"));
+    m_ratioValue = new QLabel("200%", this);
     m_ratioValue->setObjectName("ratioValue");
     m_ratioValue->setFont(monospaceFont);
+    // Theme styling applied dynamically in updateCollateralCalculation()
+    m_ratioValue->setToolTip(tr("Higher ratios provide more safety margin"));
 
     m_collateralLayout->addWidget(m_ratioLabel, 3, 0);
     m_collateralLayout->addWidget(m_ratioValue, 3, 1);
@@ -249,9 +311,12 @@ void DigiDollarMintWidget::setupCollateralSection()
     // Available DGB
     m_availableDGBLabel = new QLabel(tr("Available DGB:"), this);
     m_availableDGBLabel->setObjectName("availableDGBLabel");
+    m_availableDGBLabel->setToolTip(tr("Your current available DGB balance"));
     m_availableDGBValue = new QLabel("0.00000000 DGB", this);
     m_availableDGBValue->setObjectName("availableDGBValue");
     m_availableDGBValue->setFont(monospaceFont);
+    // Theme styling applied in applyTheme()
+    m_availableDGBValue->setToolTip(tr("Your current spendable DGB balance"));
 
     m_collateralLayout->addWidget(m_availableDGBLabel, 5, 0);
     m_collateralLayout->addWidget(m_availableDGBValue, 5, 1);
@@ -264,24 +329,31 @@ void DigiDollarMintWidget::setupButtonSection()
     // Create button frame
     m_buttonFrame = new QFrame(this);
     m_buttonFrame->setObjectName("buttonFrame");
+    m_buttonFrame->setFrameStyle(QFrame::NoFrame);
 
     m_buttonLayout = new QHBoxLayout(m_buttonFrame);
     m_buttonLayout->setSpacing(10);
-    m_buttonLayout->setContentsMargins(15, 15, 15, 15);
+    m_buttonLayout->setContentsMargins(10, 10, 10, 10);
 
     // Clear button
-    m_clearButton = new QPushButton(tr("Clear"), this);
+    m_clearButton = new QPushButton(tr("&Clear"), this);
     m_clearButton->setObjectName("clearButton");
+    m_clearButton->setToolTip(tr("Clear all fields"));
+    m_clearButton->setAutoDefault(false);
+    m_clearButton->setMinimumHeight(32);
     m_buttonLayout->addWidget(m_clearButton);
 
-    // Add stretch
+    // Add stretch to push mint button to the right
     m_buttonLayout->addStretch();
 
-    // Mint button
-    m_mintButton = new QPushButton(tr("Mint DigiDollar"), this);
+    // Mint button - styled to match main wallet
+    m_mintButton = new QPushButton(tr("&Mint DigiDollar"), this);
     m_mintButton->setObjectName("mintButton");
     m_mintButton->setEnabled(false);
-    m_mintButton->setStyleSheet("QPushButton:enabled { background-color: #006600; color: white; font-weight: bold; }");
+    m_mintButton->setDefault(true);
+    m_mintButton->setAutoDefault(true);
+    m_mintButton->setMinimumHeight(32);
+    m_mintButton->setToolTip(tr("Confirm and create this DigiDollar mint transaction"));
     m_buttonLayout->addWidget(m_mintButton);
 
     m_mainLayout->addWidget(m_buttonFrame);
@@ -311,6 +383,7 @@ void DigiDollarMintWidget::setWalletModel(WalletModel* model)
     if (m_walletModel) {
         // Connect wallet model signals
         updateBalance();
+        // REMOVED: applyTheme() - Let CSS handle all theming
     }
 }
 
@@ -321,6 +394,7 @@ void DigiDollarMintWidget::setClientModel(ClientModel* model)
     if (m_clientModel) {
         // Connect client model signals
         updateOraclePrice();
+        // REMOVED: applyTheme() - Let CSS handle all theming
     }
 }
 
@@ -333,10 +407,12 @@ void DigiDollarMintWidget::updateView()
 
 void DigiDollarMintWidget::updateBalance()
 {
-    // In a real implementation, this would query the wallet for DGB balance
     if (m_walletModel) {
-        // TODO: Get actual DGB balance from wallet
-        // m_availableDGBBalance = m_walletModel->getDGBBalance();
+        // Get actual DGB balance from wallet (in satoshis)
+        CAmount balanceSatoshis = m_walletModel->getAvailableDGBBalance();
+        m_availableDGBBalance = balanceSatoshis / 100000000.0; // Convert satoshis to DGB
+    } else {
+        m_availableDGBBalance = 0.0;
     }
 
     m_availableDGBValue->setText(formatDGBAmount(m_availableDGBBalance));
@@ -361,11 +437,14 @@ void DigiDollarMintWidget::onAmountChanged()
         m_mintAmount = amountText.toDouble();
         double usdValue = m_mintAmount * 1.0; // DD should be pegged to $1
         m_usdValueValue->setText(formatUSDAmount(usdValue));
+        updateUSDEquivalent();
     } else {
         m_mintAmount = 0.0;
         m_usdValueValue->setText("$0.00");
+        updateUSDEquivalent();
     }
 
+    updateAmountValidation();
     updateCollateralCalculation();
     updateMintButton();
 }
@@ -400,11 +479,46 @@ void DigiDollarMintWidget::onMintClicked()
     msgBox.setDefaultButton(QMessageBox::No);
 
     if (msgBox.exec() == QMessageBox::Yes) {
-        // TODO: Actually create the mint transaction
-        emit message(tr("Mint Transaction Created"),
-                    tr("DigiDollar mint transaction created successfully!"),
-                    QMessageBox::Information);
-        onClearClicked();
+        if (!m_walletModel) {
+            Q_EMIT message(tr("Error"), tr("No wallet model available"), QMessageBox::Critical);
+            return;
+        }
+
+        // Convert amount from double to CAmount (cents)
+        CAmount ddAmountCents = static_cast<CAmount>(m_mintAmount * 100);
+
+        // Call the wallet model to mint DigiDollar
+        WalletModel::DigiDollarMintResult result = m_walletModel->mintDigiDollar(ddAmountCents, m_selectedTier);
+
+        if (result.status == WalletModel::OK) {
+            Q_EMIT message(tr("Mint Transaction Created"),
+                        tr("DigiDollar mint transaction created successfully!\n\nTransaction ID: %1\nPosition ID: %2")
+                        .arg(result.txid)
+                        .arg(result.positionId),
+                        QMessageBox::Information);
+            onClearClicked();
+            updateBalance(); // Refresh balance displays
+        } else {
+            QString errorTitle;
+            QString errorMessage = result.reasonFailed;
+
+            switch (result.status) {
+            case WalletModel::InvalidAmount:
+                errorTitle = tr("Invalid Amount");
+                break;
+            case WalletModel::AmountExceedsBalance:
+                errorTitle = tr("Insufficient Collateral");
+                break;
+            case WalletModel::TransactionCreationFailed:
+                errorTitle = tr("Transaction Failed");
+                break;
+            default:
+                errorTitle = tr("Mint Error");
+                break;
+            }
+
+            Q_EMIT message(errorTitle, errorMessage, QMessageBox::Critical);
+        }
     }
 }
 
@@ -433,14 +547,7 @@ void DigiDollarMintWidget::updateCollateralCalculation()
     m_ratioValue->setText(formatRatio(m_collateralRatio));
     m_ratioBar->setValue(static_cast<int>(m_collateralRatio));
 
-    // Color code the collateral display based on availability
-    if (m_requiredCollateral > m_availableDGBBalance) {
-        m_collateralValue->setStyleSheet("QLabel { color: #cc0000; }");
-        m_ratioBar->setStyleSheet("QProgressBar::chunk { background-color: #cc0000; }");
-    } else {
-        m_collateralValue->setStyleSheet("QLabel { color: #006600; }");
-        m_ratioBar->setStyleSheet("QProgressBar::chunk { background-color: #006600; }");
-    }
+    // REMOVED: Color-coded collateral displays - Let CSS handle theming
 }
 
 void DigiDollarMintWidget::calculateRequiredCollateral()
@@ -448,9 +555,12 @@ void DigiDollarMintWidget::calculateRequiredCollateral()
     if (m_mintAmount > 0 && m_oraclePrice > 0) {
         m_collateralRatio = getCollateralRatioForTier(m_selectedTier);
 
-        // Calculate required DGB: (DD amount * $1) / (DGB price * ratio/100)
+        // Calculate required DGB: (DD amount * $1 * ratio/100) / DGB price
+        // Example: 1000 DD * 500% = need $5000 of DGB collateral
+        // If DGB = $0.01, need 5000 / 0.01 = 500,000 DGB
         double usdValue = m_mintAmount * 1.0; // DD is pegged to $1
-        m_requiredCollateral = usdValue / (m_oraclePrice * (m_collateralRatio / 100.0));
+        double requiredUsdCollateral = usdValue * (m_collateralRatio / 100.0);
+        m_requiredCollateral = requiredUsdCollateral / m_oraclePrice;
     } else {
         m_requiredCollateral = 0.0;
         m_collateralRatio = getCollateralRatioForTier(m_selectedTier);
@@ -494,37 +604,89 @@ QString DigiDollarMintWidget::formatRatio(double ratio) const
 
 double DigiDollarMintWidget::getCollateralRatioForTier(int tier) const
 {
-    // Define collateral ratios for each tier (higher tier = lower ratio)
+    // Collateral ratios from DigiByte_v8.26_DigiDollar_Implementation_Report.md
     switch (tier) {
-    case 1: return 200.0; // 200% for shortest lock
-    case 2: return 185.0;
-    case 3: return 170.0;
-    case 4: return 155.0;
-    case 5: return 140.0;
-    case 6: return 125.0;
-    case 7: return 115.0;
-    case 8: return 110.0; // 110% for longest lock
-    default: return 150.0;
+    case 1: return 500.0; // 30 days - Maximum safety for short-term positions
+    case 2: return 400.0; // 3 months - High collateral for quarterly positions
+    case 3: return 350.0; // 6 months - Semi-annual positions with strong buffer
+    case 4: return 300.0; // 1 year - Annual positions with 3x collateral
+    case 5: return 250.0; // 3 years - Medium-term stable positions
+    case 6: return 225.0; // 5 years - Long-term positions
+    case 7: return 212.0; // 7 years - Extended positions
+    case 8: return 200.0; // 10 years - Minimum 2x collateral for decade locks
+    default: return 300.0;
     }
 }
 
 QString DigiDollarMintWidget::getLockTierDisplayName(int tier) const
 {
-    return QString("Tier %1 (%2 blocks)").arg(tier).arg(getLockTierBlocks(tier));
+    // Display names from DigiByte_v8.26_DigiDollar_Implementation_Report.md
+    switch (tier) {
+    case 1: return tr("30 days (500% collateral)");
+    case 2: return tr("3 months (400% collateral)");
+    case 3: return tr("6 months (350% collateral)");
+    case 4: return tr("1 year (300% collateral)");
+    case 5: return tr("3 years (250% collateral)");
+    case 6: return tr("5 years (225% collateral)");
+    case 7: return tr("7 years (212% collateral)");
+    case 8: return tr("10 years (200% collateral)");
+    default: return tr("1 year (300% collateral)");
+    }
 }
 
 int DigiDollarMintWidget::getLockTierBlocks(int tier) const
 {
-    // Define lock periods for each tier (powers of 8)
+    // Lock periods in blocks (15 second blocks)
+    // 1 day = 5760 blocks, 1 month = 172800 blocks, 1 year = 2102400 blocks
     switch (tier) {
-    case 1: return 8;        // 8 blocks
-    case 2: return 64;       // 8^2
-    case 3: return 512;      // 8^3
-    case 4: return 4096;     // 8^4
-    case 5: return 32768;    // 8^5
-    case 6: return 262144;   // 8^6
-    case 7: return 2097152;  // 8^7
-    case 8: return 16777216; // 8^8
-    default: return 8;
+    case 1: return 172800;      // 30 days
+    case 2: return 518400;      // 3 months (90 days)
+    case 3: return 1036800;     // 6 months (180 days)
+    case 4: return 2102400;     // 1 year (365 days)
+    case 5: return 6307200;     // 3 years
+    case 6: return 10512000;    // 5 years
+    case 7: return 14716800;    // 7 years
+    case 8: return 21024000;    // 10 years
+    default: return 2102400;    // 1 year
     }
+}
+
+// REMOVED: applyTheme() method
+// All theming is now handled by light.css and dark.css files
+// This allows the DigiByte blue theme to work properly
+
+void DigiDollarMintWidget::updateAmountValidation()
+{
+    QString amountText = m_amountEdit->text();
+    QPalette palette = QApplication::palette();
+    int lightness = palette.color(QPalette::WindowText).lightness();
+    bool isDarkTheme = lightness > 127;
+
+    QString successColor = isDarkTheme ? "#4caf50" : "#28a745";
+    QString warningColor = isDarkTheme ? "#ff9800" : "#ffc107";
+    QString errorColor = isDarkTheme ? "#f44336" : "#dc3545";
+
+    if (!amountText.isEmpty()) {
+        bool isValid = validateAmount();
+        bool hasCollateral = validateCollateral();
+
+        if (!isValid) {
+            // Invalid format - only border color, let system handle background
+            m_amountEdit->setStyleSheet(QString("QLineEdit { border: 2px solid %1; }").arg(errorColor));
+        } else if (!hasCollateral) {
+            // Valid format but insufficient collateral
+            m_amountEdit->setStyleSheet(QString("QLineEdit { border: 2px solid %1; }").arg(warningColor));
+        } else {
+            // Valid and sufficient collateral
+            m_amountEdit->setStyleSheet(QString("QLineEdit { border: 2px solid %1; }").arg(successColor));
+        }
+    } else {
+        m_amountEdit->setStyleSheet("");
+    }
+}
+
+void DigiDollarMintWidget::updateUSDEquivalent()
+{
+    // REMOVED: All programmatic styling - Let CSS handle theming
+    // USD value updates are handled by the CSS theme files
 }

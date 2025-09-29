@@ -159,6 +159,56 @@ public:
     // Otherwise, uses the wallet's cached available balance.
     CAmount getAvailableBalance(const wallet::CCoinControl* control);
 
+    // DigiDollar specific methods
+    struct DigiDollarSendResult
+    {
+        DigiDollarSendResult(StatusCode _status = OK, QString _txid = "", QString _reasonFailed = "")
+            : status(_status), txid(_txid), reasonFailed(_reasonFailed) {}
+        StatusCode status;
+        QString txid;
+        QString reasonFailed;
+    };
+
+    struct DigiDollarMintResult
+    {
+        DigiDollarMintResult(StatusCode _status = OK, QString _txid = "", QString _positionId = "", QString _reasonFailed = "")
+            : status(_status), txid(_txid), positionId(_positionId), reasonFailed(_reasonFailed) {}
+        StatusCode status;
+        QString txid;
+        QString positionId;
+        QString reasonFailed;
+    };
+
+    struct DigiDollarRedeemResult
+    {
+        DigiDollarRedeemResult(StatusCode _status = OK, QString _txid = "", QString _reasonFailed = "")
+            : status(_status), txid(_txid), reasonFailed(_reasonFailed) {}
+        StatusCode status;
+        QString txid;
+        QString reasonFailed;
+    };
+
+    // Send DigiDollar to an address
+    DigiDollarSendResult sendDigiDollar(const QString& address, CAmount amount, const QString& comment = "");
+
+    // Mint DigiDollar with collateral
+    DigiDollarMintResult mintDigiDollar(CAmount ddAmount, int lockTier);
+
+    // Redeem DigiDollar position
+    DigiDollarRedeemResult redeemDigiDollar(const QString& positionId, CAmount amount, const QString& redeemAddress = "");
+
+    // Get DigiDollar balance
+    CAmount getDigiDollarBalance() const;
+
+    // Get available DGB balance for collateral
+    CAmount getAvailableDGBBalance() const;
+
+    // Validate DigiDollar address
+    bool validateDigiDollarAddress(const QString& address) const;
+
+    // Calculate required collateral for minting
+    CAmount calculateRequiredCollateral(CAmount ddAmount, int lockTier) const;
+
 private:
     std::unique_ptr<interfaces::Wallet> m_wallet;
     std::unique_ptr<interfaces::Handler> m_handler_unload;

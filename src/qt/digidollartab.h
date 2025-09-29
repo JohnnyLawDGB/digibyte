@@ -8,6 +8,7 @@
 #include <QWidget>
 
 class DigiDollarOverviewWidget;
+class DigiDollarReceiveWidget;
 class DigiDollarSendWidget;
 class DigiDollarMintWidget;
 class DigiDollarRedeemWidget;
@@ -69,6 +70,7 @@ private:
 
     // Sub-widgets
     DigiDollarOverviewWidget* m_overviewWidget;
+    DigiDollarReceiveWidget* m_receiveWidget;
     DigiDollarSendWidget* m_sendWidget;
     DigiDollarMintWidget* m_mintWidget;
     DigiDollarRedeemWidget* m_redeemWidget;

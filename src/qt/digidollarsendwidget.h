@@ -6,6 +6,7 @@
 #define DIGIBYTE_QT_DIGIDOLLARSENDWIDGET_H
 
 #include <QWidget>
+#include <QValidator>
 
 class WalletModel;
 class ClientModel;
@@ -20,7 +21,9 @@ class QVBoxLayout;
 class QHBoxLayout;
 class QGridLayout;
 class QFrame;
-class QValidator;
+class QToolButton;
+class QScrollArea;
+class QSpacerItem;
 QT_END_NAMESPACE
 
 /**
@@ -59,6 +62,10 @@ private Q_SLOTS:
     void onSendClicked();
     /** Clear all fields */
     void onClearClicked();
+    /** Use available balance */
+    void onUseAvailableBalanceClicked();
+    /** Paste address from clipboard */
+    void onPasteAddressClicked();
 
 private:
     void setupUI();
@@ -66,7 +73,11 @@ private:
     void setupAmountSection();
     void setupFeeSection();
     void setupButtonSection();
+    void setupStyleSheets();
     void connectSignals();
+    void applyTheme();
+    void updateAddressValidation();
+    void updateAmountValidation();
     void updateSendButton();
     void updateUSDEquivalent();
     void updateFeeDisplay();
@@ -86,6 +97,7 @@ private:
     QGridLayout* m_addressLayout;
     QLabel* m_addressLabel;
     QLineEdit* m_addressEdit;
+    QToolButton* m_pasteAddressButton;
     QLabel* m_addressValidationLabel;
 
     // Amount section
@@ -94,6 +106,7 @@ private:
     QLabel* m_amountLabel;
     QLineEdit* m_amountEdit;
     QLabel* m_amountSuffix;
+    QPushButton* m_useAvailableBalanceButton;
     QLabel* m_usdEquivalentLabel;
     QLabel* m_usdEquivalentValue;
     QLabel* m_availableBalanceLabel;

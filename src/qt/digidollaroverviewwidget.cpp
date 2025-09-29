@@ -8,6 +8,8 @@
 #include <qt/clientmodel.h>
 #include <qt/guiutil.h>
 #include <qt/digibyteunits.h>
+#include <qt/optionsmodel.h>
+#include <qt/platformstyle.h>
 
 #include <QLabel>
 #include <QVBoxLayout>
@@ -17,6 +19,16 @@
 #include <QProgressBar>
 #include <QFont>
 #include <QTimer>
+#include <QSpacerItem>
+#include <QListWidget>
+#include <QListWidgetItem>
+#include <QCursor>
+#include <QBrush>
+#include <QColor>
+#include <QAbstractScrollArea>
+#include <QAbstractItemView>
+#include <QApplication>
+#include <QPalette>
 
 DigiDollarOverviewWidget::DigiDollarOverviewWidget(QWidget *parent) :
     QWidget(parent),
@@ -43,6 +55,7 @@ DigiDollarOverviewWidget::DigiDollarOverviewWidget(QWidget *parent) :
     m_transactionsFrame(nullptr),
     m_transactionsLayout(nullptr),
     m_transactionsTitle(nullptr),
+    m_transactionsList(nullptr),
     m_recentTransactionsInfo(nullptr),
     m_walletModel(nullptr),
     m_clientModel(nullptr),
@@ -55,6 +68,10 @@ DigiDollarOverviewWidget::DigiDollarOverviewWidget(QWidget *parent) :
 {
     setupUI();
     connectSignals();
+    // REMOVED: applyTheme() - Let CSS handle all theming
+
+    // Add some demo transactions for display purposes
+    addDemoTransactions();
 }
 
 DigiDollarOverviewWidget::~DigiDollarOverviewWidget()
@@ -66,12 +83,25 @@ void DigiDollarOverviewWidget::setupUI()
 {
     // Create main layout
     m_mainLayout = new QVBoxLayout(this);
-    m_mainLayout->setSpacing(20);
-    m_mainLayout->setContentsMargins(20, 20, 20, 20);
+    m_mainLayout->setSpacing(12);
+    m_mainLayout->setContentsMargins(16, 16, 16, 16);
+
+    // Create horizontal layout for balance and system health side-by-side
+    QHBoxLayout* topLayout = new QHBoxLayout();
+    topLayout->setSpacing(20);
 
     // Setup sections
     setupBalanceSection();
     setupSystemHealthSection();
+
+    // Add balance and system health frames to horizontal layout
+    topLayout->addWidget(m_balanceFrame);
+    topLayout->addWidget(m_systemHealthFrame);
+
+    // Add the horizontal layout to main layout
+    m_mainLayout->addLayout(topLayout);
+
+    // Add transactions section below
     setupRecentTransactionsSection();
 
     setLayout(m_mainLayout);
@@ -79,88 +109,141 @@ void DigiDollarOverviewWidget::setupUI()
 
 void DigiDollarOverviewWidget::setupBalanceSection()
 {
-    // Create balance frame
+    // Create balance frame with styling matching main wallet
     m_balanceFrame = new QFrame(this);
-    m_balanceFrame->setFrameStyle(QFrame::StyledPanel);
+    m_balanceFrame->setFrameShape(QFrame::StyledPanel);
+    m_balanceFrame->setFrameShadow(QFrame::Raised);
     m_balanceFrame->setObjectName("balanceFrame");
 
-    m_balanceLayout = new QGridLayout(m_balanceFrame);
-    m_balanceLayout->setSpacing(10);
-    m_balanceLayout->setContentsMargins(15, 15, 15, 15);
+    QVBoxLayout* frameVLayout = new QVBoxLayout(m_balanceFrame);
+    frameVLayout->setObjectName("frameVLayout");
 
-    // Title
-    QLabel* balanceTitle = new QLabel(tr("DigiDollar Balance"), this);
+    // Title with status indicator layout (similar to main wallet)
+    QHBoxLayout* titleLayout = new QHBoxLayout();
+    titleLayout->setObjectName("titleLayout");
+
+    QLabel* balanceTitle = new QLabel(tr("DigiDollar Balances"), this);
     QFont titleFont = balanceTitle->font();
     titleFont.setBold(true);
-    titleFont.setPointSize(titleFont.pointSize() + 2);
+    titleFont.setWeight(75); // Match main wallet weight
     balanceTitle->setFont(titleFont);
-    m_balanceLayout->addWidget(balanceTitle, 0, 0, 1, 2);
+    titleLayout->addWidget(balanceTitle);
 
-    // DD Balance
-    m_ddBalanceLabel = new QLabel(tr("DD Balance:"), this);
+    // Add spacer to push content left (matching main wallet layout)
+    QSpacerItem* titleSpacer = new QSpacerItem(40, 20, QSizePolicy::Expanding, QSizePolicy::Minimum);
+    titleLayout->addItem(titleSpacer);
+
+    frameVLayout->addLayout(titleLayout);
+
+    // Grid layout for balance items
+    m_balanceLayout = new QGridLayout();
+    m_balanceLayout->setSpacing(12); // Match main wallet spacing
+    m_balanceLayout->setObjectName("balanceGridLayout");
+
+    // DD Balance (Available)
+    m_ddBalanceLabel = new QLabel(tr("Available:"), this);
     m_ddBalanceLabel->setObjectName("ddBalanceLabel");
     m_ddBalanceValue = new QLabel("0.00000000 DD", this);
     m_ddBalanceValue->setObjectName("ddBalanceValue");
-    QFont monospaceFont = GUIUtil::fixedPitchFont();
-    m_ddBalanceValue->setFont(monospaceFont);
+    m_ddBalanceValue->setCursor(QCursor(Qt::IBeamCursor));
+    m_ddBalanceValue->setAlignment(Qt::AlignRight | Qt::AlignTrailing | Qt::AlignVCenter);
+    m_ddBalanceValue->setTextInteractionFlags(Qt::LinksAccessibleByMouse | Qt::TextSelectableByKeyboard | Qt::TextSelectableByMouse);
+    m_ddBalanceValue->setToolTip(tr("Your current spendable DigiDollar balance"));
     m_balanceLayout->addWidget(m_ddBalanceLabel, 1, 0);
     m_balanceLayout->addWidget(m_ddBalanceValue, 1, 1);
 
-    // DGB Collateral
-    m_dgbCollateralLabel = new QLabel(tr("DGB Collateral:"), this);
+    // DGB Collateral (Pending/Locked)
+    m_dgbCollateralLabel = new QLabel(tr("Collateral:"), this);
     m_dgbCollateralLabel->setObjectName("dgbCollateralLabel");
     m_dgbCollateralValue = new QLabel("0.00000000 DGB", this);
     m_dgbCollateralValue->setObjectName("dgbCollateralValue");
-    m_dgbCollateralValue->setFont(monospaceFont);
+    m_dgbCollateralValue->setCursor(QCursor(Qt::IBeamCursor));
+    m_dgbCollateralValue->setAlignment(Qt::AlignRight | Qt::AlignTrailing | Qt::AlignVCenter);
+    m_dgbCollateralValue->setTextInteractionFlags(Qt::LinksAccessibleByMouse | Qt::TextSelectableByKeyboard | Qt::TextSelectableByMouse);
+    m_dgbCollateralValue->setToolTip(tr("Total DGB locked as collateral for DigiDollars"));
     m_balanceLayout->addWidget(m_dgbCollateralLabel, 2, 0);
     m_balanceLayout->addWidget(m_dgbCollateralValue, 2, 1);
 
-    // USD Value
-    m_usdValueLabel = new QLabel(tr("USD Value:"), this);
+    // Add separator line
+    QFrame* line = new QFrame(m_balanceFrame);
+    line->setObjectName("line");
+    line->setFrameShape(QFrame::HLine);
+    line->setFrameShadow(QFrame::Sunken);
+    m_balanceLayout->addWidget(line, 3, 0, 1, 2);
+
+    // USD Value (Total)
+    m_usdValueLabel = new QLabel(tr("Total:"), this);
     m_usdValueLabel->setObjectName("usdValueLabel");
     m_usdValueValue = new QLabel("$0.00", this);
     m_usdValueValue->setObjectName("usdValueValue");
-    m_usdValueValue->setFont(monospaceFont);
-    m_balanceLayout->addWidget(m_usdValueLabel, 3, 0);
-    m_balanceLayout->addWidget(m_usdValueValue, 3, 1);
+    m_usdValueValue->setCursor(QCursor(Qt::IBeamCursor));
+    m_usdValueValue->setAlignment(Qt::AlignRight | Qt::AlignTrailing | Qt::AlignVCenter);
+    m_usdValueValue->setTextInteractionFlags(Qt::LinksAccessibleByMouse | Qt::TextSelectableByKeyboard | Qt::TextSelectableByMouse);
+    m_usdValueValue->setToolTip(tr("Your total DigiDollar value in USD"));
+    m_balanceLayout->addWidget(m_usdValueLabel, 4, 0);
+    m_balanceLayout->addWidget(m_usdValueValue, 4, 1);
 
-    m_mainLayout->addWidget(m_balanceFrame);
+    // Add horizontal spacer
+    QSpacerItem* horizontalSpacer = new QSpacerItem(40, 20, QSizePolicy::Expanding, QSizePolicy::Minimum);
+    m_balanceLayout->addItem(horizontalSpacer, 2, 2, 1, 1);
+
+    frameVLayout->addLayout(m_balanceLayout);
+    // REMOVED: m_mainLayout->addWidget(m_balanceFrame);
+    // Frame is now added to horizontal layout in setupUI()
 }
 
 void DigiDollarOverviewWidget::setupSystemHealthSection()
 {
-    // Create system health frame
+    // Create system health frame with styling matching main wallet
     m_systemHealthFrame = new QFrame(this);
-    m_systemHealthFrame->setFrameStyle(QFrame::StyledPanel);
+    m_systemHealthFrame->setFrameShape(QFrame::StyledPanel);
+    m_systemHealthFrame->setFrameShadow(QFrame::Raised);
     m_systemHealthFrame->setObjectName("systemHealthFrame");
 
-    m_systemHealthLayout = new QGridLayout(m_systemHealthFrame);
-    m_systemHealthLayout->setSpacing(10);
-    m_systemHealthLayout->setContentsMargins(15, 15, 15, 15);
+    QVBoxLayout* frameVLayout = new QVBoxLayout(m_systemHealthFrame);
+    frameVLayout->setObjectName("healthFrameVLayout");
 
-    // Title
-    QLabel* healthTitle = new QLabel(tr("System Health"), this);
+    // Title with status indicator layout
+    QHBoxLayout* titleLayout = new QHBoxLayout();
+    titleLayout->setObjectName("healthTitleLayout");
+
+    QLabel* healthTitle = new QLabel(tr("System Health & Oracle"), this);
     QFont titleFont = healthTitle->font();
     titleFont.setBold(true);
-    titleFont.setPointSize(titleFont.pointSize() + 2);
+    titleFont.setWeight(75); // Match main wallet weight
     healthTitle->setFont(titleFont);
-    m_systemHealthLayout->addWidget(healthTitle, 0, 0, 1, 2);
+    titleLayout->addWidget(healthTitle);
+
+    // Add spacer to push content left
+    QSpacerItem* titleSpacer = new QSpacerItem(40, 20, QSizePolicy::Expanding, QSizePolicy::Minimum);
+    titleLayout->addItem(titleSpacer);
+
+    frameVLayout->addLayout(titleLayout);
+
+    // Grid layout for health items
+    m_systemHealthLayout = new QGridLayout();
+    m_systemHealthLayout->setSpacing(12); // Match main wallet spacing
+    m_systemHealthLayout->setObjectName("healthGridLayout");
 
     // Oracle Price
-    m_oraclePriceLabel = new QLabel(tr("Oracle Price:"), this);
+    m_oraclePriceLabel = new QLabel(tr("DGB/USD Price:"), this);
     m_oraclePriceLabel->setObjectName("oraclePriceLabel");
     m_oraclePriceValue = new QLabel("Loading...", this);
     m_oraclePriceValue->setObjectName("oraclePriceValue");
-    QFont monospaceFont = GUIUtil::fixedPitchFont();
-    m_oraclePriceValue->setFont(monospaceFont);
+    m_oraclePriceValue->setCursor(QCursor(Qt::IBeamCursor));
+    m_oraclePriceValue->setAlignment(Qt::AlignRight | Qt::AlignTrailing | Qt::AlignVCenter);
+    m_oraclePriceValue->setTextInteractionFlags(Qt::LinksAccessibleByMouse | Qt::TextSelectableByKeyboard | Qt::TextSelectableByMouse);
+    m_oraclePriceValue->setToolTip(tr("Current DigiByte to USD exchange rate from oracle"));
     m_systemHealthLayout->addWidget(m_oraclePriceLabel, 1, 0);
     m_systemHealthLayout->addWidget(m_oraclePriceValue, 1, 1);
 
     // System Health Status
-    m_systemHealthLabel = new QLabel(tr("System Health:"), this);
+    m_systemHealthLabel = new QLabel(tr("System Status:"), this);
     m_systemHealthLabel->setObjectName("systemHealthLabel");
     m_systemHealthValue = new QLabel("Healthy", this);
     m_systemHealthValue->setObjectName("systemHealthValue");
+    m_systemHealthValue->setAlignment(Qt::AlignRight | Qt::AlignTrailing | Qt::AlignVCenter);
+    m_systemHealthValue->setToolTip(tr("Overall DigiDollar system health status"));
     m_systemHealthLayout->addWidget(m_systemHealthLabel, 2, 0);
     m_systemHealthLayout->addWidget(m_systemHealthValue, 2, 1);
 
@@ -169,6 +252,8 @@ void DigiDollarOverviewWidget::setupSystemHealthSection()
     m_dcaLevelLabel->setObjectName("dcaLevelLabel");
     m_dcaLevelValue = new QLabel("0", this);
     m_dcaLevelValue->setObjectName("dcaLevelValue");
+    m_dcaLevelValue->setAlignment(Qt::AlignRight | Qt::AlignTrailing | Qt::AlignVCenter);
+    m_dcaLevelValue->setToolTip(tr("Current Dollar-Cost Averaging intervention level"));
     m_systemHealthLayout->addWidget(m_dcaLevelLabel, 3, 0);
     m_systemHealthLayout->addWidget(m_dcaLevelValue, 3, 1);
 
@@ -177,44 +262,79 @@ void DigiDollarOverviewWidget::setupSystemHealthSection()
     m_errLevelLabel->setObjectName("errLevelLabel");
     m_errLevelValue = new QLabel("0", this);
     m_errLevelValue->setObjectName("errLevelValue");
+    m_errLevelValue->setAlignment(Qt::AlignRight | Qt::AlignTrailing | Qt::AlignVCenter);
+    m_errLevelValue->setToolTip(tr("Current Emergency Response Reserve level"));
     m_systemHealthLayout->addWidget(m_errLevelLabel, 4, 0);
     m_systemHealthLayout->addWidget(m_errLevelValue, 4, 1);
 
-    // System Health Progress Bar
+    // System Health Progress Bar with improved styling
     m_systemHealthBar = new QProgressBar(this);
     m_systemHealthBar->setObjectName("systemHealthBar");
     m_systemHealthBar->setRange(0, 100);
     m_systemHealthBar->setValue(100); // Start at 100% healthy
-    m_systemHealthBar->setTextVisible(false);
+    m_systemHealthBar->setTextVisible(true);
+    m_systemHealthBar->setFormat("%p% Healthy");
+    m_systemHealthBar->setMinimumHeight(20);
+    m_systemHealthBar->setToolTip(tr("Visual indicator of overall system health"));
     m_systemHealthLayout->addWidget(m_systemHealthBar, 5, 0, 1, 2);
 
-    m_mainLayout->addWidget(m_systemHealthFrame);
+    // Add horizontal spacer
+    QSpacerItem* horizontalSpacer = new QSpacerItem(40, 20, QSizePolicy::Expanding, QSizePolicy::Minimum);
+    m_systemHealthLayout->addItem(horizontalSpacer, 2, 2, 1, 1);
+
+    frameVLayout->addLayout(m_systemHealthLayout);
+    // REMOVED: m_mainLayout->addWidget(m_systemHealthFrame);
+    // Frame is now added to horizontal layout in setupUI()
 }
 
 void DigiDollarOverviewWidget::setupRecentTransactionsSection()
 {
-    // Create recent transactions frame
+    // Create recent transactions frame with styling matching main wallet
     m_transactionsFrame = new QFrame(this);
-    m_transactionsFrame->setFrameStyle(QFrame::StyledPanel);
+    m_transactionsFrame->setFrameShape(QFrame::StyledPanel);
+    m_transactionsFrame->setFrameShadow(QFrame::Raised);
     m_transactionsFrame->setObjectName("transactionsFrame");
 
-    m_transactionsLayout = new QVBoxLayout(m_transactionsFrame);
-    m_transactionsLayout->setSpacing(10);
-    m_transactionsLayout->setContentsMargins(15, 15, 15, 15);
+    QVBoxLayout* frameVLayout = new QVBoxLayout(m_transactionsFrame);
+    frameVLayout->setObjectName("transactionsFrameVLayout");
 
-    // Title
-    m_transactionsTitle = new QLabel(tr("Recent DigiDollar Transactions"), this);
+    // Title with status indicator layout
+    QHBoxLayout* titleLayout = new QHBoxLayout();
+    titleLayout->setObjectName("transactionsTitleLayout");
+
+    m_transactionsTitle = new QLabel(tr("Recent DigiDollar transactions"), this);
     QFont titleFont = m_transactionsTitle->font();
     titleFont.setBold(true);
-    titleFont.setPointSize(titleFont.pointSize() + 2);
+    titleFont.setWeight(75); // Match main wallet weight
     m_transactionsTitle->setFont(titleFont);
-    m_transactionsLayout->addWidget(m_transactionsTitle);
+    titleLayout->addWidget(m_transactionsTitle);
 
-    // Info
+    // Add spacer to push content left
+    QSpacerItem* titleSpacer = new QSpacerItem(40, 20, QSizePolicy::Expanding, QSizePolicy::Minimum);
+    titleLayout->addItem(titleSpacer);
+
+    frameVLayout->addLayout(titleLayout);
+
+    // Create list widget for transactions (similar to main wallet)
+    m_transactionsList = new QListWidget(this);
+    m_transactionsList->setObjectName("transactionsList");
+    m_transactionsList->setFrameShape(QFrame::NoFrame);
+    m_transactionsList->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_transactionsList->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_transactionsList->setSizeAdjustPolicy(QAbstractScrollArea::AdjustToContents);
+    m_transactionsList->setSelectionMode(QAbstractItemView::NoSelection);
+    m_transactionsList->setUniformItemSizes(true);
+    m_transactionsList->setMinimumHeight(150); // Set reasonable height
+
+    // Info label for when no transactions exist
     m_recentTransactionsInfo = new QLabel(tr("No recent DigiDollar transactions"), this);
     m_recentTransactionsInfo->setObjectName("recentTransactionsInfo");
-    m_recentTransactionsInfo->setStyleSheet("QLabel { color: #666666; }");
-    m_transactionsLayout->addWidget(m_recentTransactionsInfo);
+    // Theme styling will be applied in applyTheme()
+    m_recentTransactionsInfo->setAlignment(Qt::AlignCenter);
+    m_recentTransactionsInfo->setVisible(true);
+
+    frameVLayout->addWidget(m_transactionsList);
+    frameVLayout->addWidget(m_recentTransactionsInfo);
 
     m_mainLayout->addWidget(m_transactionsFrame);
 
@@ -239,6 +359,14 @@ void DigiDollarOverviewWidget::setWalletModel(WalletModel* model)
         // These would connect to actual wallet balance change signals
         // For now, we'll update periodically
         updateBalance();
+
+        // Connect to options model for font updates
+        if (m_walletModel->getOptionsModel()) {
+            connect(m_walletModel->getOptionsModel(), &OptionsModel::useEmbeddedMonospacedFontChanged,
+                    this, &DigiDollarOverviewWidget::setMonospacedFont);
+            setMonospacedFont(m_walletModel->getOptionsModel()->getUseEmbeddedMonospacedFont());
+            // REMOVED: applyTheme() - Let CSS handle all theming
+        }
     }
 }
 
@@ -250,6 +378,14 @@ void DigiDollarOverviewWidget::setClientModel(ClientModel* model)
         // Connect client model signals for oracle price updates
         updateOraclePrice();
         updateSystemHealth();
+
+        // Connect to options model for font updates
+        if (m_clientModel->getOptionsModel()) {
+            connect(m_clientModel->getOptionsModel(), &OptionsModel::useEmbeddedMonospacedFontChanged,
+                    this, &DigiDollarOverviewWidget::setMonospacedFont);
+            setMonospacedFont(m_clientModel->getOptionsModel()->getUseEmbeddedMonospacedFont());
+            // REMOVED: applyTheme() - Let CSS handle all theming
+        }
     }
 }
 
@@ -264,13 +400,39 @@ void DigiDollarOverviewWidget::updateView()
 void DigiDollarOverviewWidget::incomingDDTransaction(const QString& date, const QString& amount,
                                                     const QString& type, const QString& address)
 {
-    // Update recent transactions info
-    QString transactionInfo = QString("Latest: %1 %2 DD (%3)")
+    // Add transaction to list widget
+    QListWidgetItem* item = new QListWidgetItem(m_transactionsList);
+    QString transactionText = QString("%1 %2 DD - %3")
                                 .arg(type)
                                 .arg(amount)
                                 .arg(date);
-    m_recentTransactionsInfo->setText(transactionInfo);
-    m_recentTransactionsInfo->setStyleSheet("QLabel { color: #006600; }");
+    item->setText(transactionText);
+    item->setToolTip(QString("Address: %1").arg(address));
+
+    // Color code transaction types with theme support
+    QPalette palette = QApplication::palette();
+    int lightness = palette.color(QPalette::WindowText).lightness();
+    bool isDarkTheme = lightness > 127;
+
+    if (type.contains("Received") || type.contains("Minted")) {
+        QString successColor = isDarkTheme ? "#4caf50" : "#28a745";
+        item->setForeground(QBrush(QColor(successColor)));
+    } else if (type.contains("Sent") || type.contains("Redeemed")) {
+        QString errorColor = isDarkTheme ? "#f44336" : "#dc3545";
+        item->setForeground(QBrush(QColor(errorColor)));
+    }
+
+    // Insert at top (most recent first)
+    m_transactionsList->insertItem(0, item);
+
+    // Limit to 5 most recent transactions
+    while (m_transactionsList->count() > 5) {
+        delete m_transactionsList->takeItem(m_transactionsList->count() - 1);
+    }
+
+    // Hide the "no transactions" label and show the list
+    m_recentTransactionsInfo->setVisible(false);
+    m_transactionsList->setVisible(true);
 
     // Update balance after a short delay to allow for processing
     QTimer::singleShot(1000, this, &DigiDollarOverviewWidget::updateBalance);
@@ -279,12 +441,19 @@ void DigiDollarOverviewWidget::incomingDDTransaction(const QString& date, const 
 void DigiDollarOverviewWidget::updateBalance()
 {
     // In a real implementation, this would query the wallet for DigiDollar balances
-    // For now, we'll show placeholder values
+    // For now, we'll show demo values to show the styling
 
     if (m_walletModel) {
         // TODO: Get actual DigiDollar balance from wallet
         // m_ddBalance = m_walletModel->getDDBalance();
         // m_dgbCollateral = m_walletModel->getDGBCollateral();
+        // For demo, use some sample values
+        m_ddBalance = 1000.50; // Demo DD balance
+        m_dgbCollateral = 50000.0; // Demo DGB collateral
+    } else {
+        // Demo values when no wallet is connected
+        m_ddBalance = 0.0;
+        m_dgbCollateral = 0.0;
     }
 
     // Update display
@@ -299,15 +468,18 @@ void DigiDollarOverviewWidget::updateBalance()
 void DigiDollarOverviewWidget::updateOraclePrice()
 {
     // In a real implementation, this would query the oracle price
-    // For now, we'll show a placeholder
+    // For now, we'll show a mock price for demonstration
 
     if (m_clientModel) {
         // TODO: Get actual oracle price
         // m_oraclePrice = m_clientModel->getOraclePrice();
     }
 
+    // For demo, use a mock price regardless of client model status
+    m_oraclePrice = 0.015; // Mock price: $0.015 per DGB
+
     if (m_oraclePrice > 0) {
-        m_oraclePriceValue->setText(formatUSDAmount(m_oraclePrice) + " USD/DGB");
+        m_oraclePriceValue->setText(QString("$%1").arg(QString::number(m_oraclePrice, 'f', 4)));
     } else {
         m_oraclePriceValue->setText("Loading...");
     }
@@ -339,23 +511,21 @@ void DigiDollarOverviewWidget::updateSystemHealth()
     m_errLevelValue->setText(QString::number(m_errLevel));
     m_systemHealthBar->setValue(healthPercentage);
 
-    // Color code the health status
-    if (healthStatus == "Healthy") {
-        m_systemHealthValue->setStyleSheet("QLabel { color: #006600; }");
-        m_systemHealthBar->setStyleSheet("QProgressBar::chunk { background-color: #006600; }");
-    } else if (healthStatus == "Monitoring") {
-        m_systemHealthValue->setStyleSheet("QLabel { color: #ff6600; }");
-        m_systemHealthBar->setStyleSheet("QProgressBar::chunk { background-color: #ff6600; }");
-    } else {
-        m_systemHealthValue->setStyleSheet("QLabel { color: #cc0000; }");
-        m_systemHealthBar->setStyleSheet("QProgressBar::chunk { background-color: #cc0000; }");
-    }
+    // REMOVED: applyTheme() call - Let CSS handle all theming
 }
 
 void DigiDollarOverviewWidget::updateRecentTransactions()
 {
     // In a real implementation, this would query recent DigiDollar transactions
-    // For now, we'll keep the current display
+    // For now, check if we have any items to show
+    bool hasTransactions = (m_transactionsList->count() > 0);
+    m_recentTransactionsInfo->setVisible(!hasTransactions);
+    m_transactionsList->setVisible(hasTransactions);
+
+    // TODO: Query actual recent DigiDollar transactions from wallet
+    // Example:
+    // std::vector<DigiDollarTransaction> recent = m_walletModel->getRecentDDTransactions(5);
+    // populateTransactionsList(recent);
 }
 
 QString DigiDollarOverviewWidget::formatDDAmount(double amount) const
@@ -371,4 +541,30 @@ QString DigiDollarOverviewWidget::formatDGBAmount(double amount) const
 QString DigiDollarOverviewWidget::formatUSDAmount(double amount) const
 {
     return "$" + QString::number(amount, 'f', 2);
+}
+
+void DigiDollarOverviewWidget::setMonospacedFont(bool use_embedded_font)
+{
+    QFont f = GUIUtil::fixedPitchFont(use_embedded_font);
+    f.setWeight(QFont::Bold);
+
+    // Apply to all value labels
+    m_ddBalanceValue->setFont(f);
+    m_dgbCollateralValue->setFont(f);
+    m_usdValueValue->setFont(f);
+    m_oraclePriceValue->setFont(f);
+}
+
+// REMOVED: updateTheme() and applyTheme() methods
+// All theming is now handled by light.css and dark.css files
+// This allows the DigiByte blue theme to work properly
+
+void DigiDollarOverviewWidget::addDemoTransactions()
+{
+    // Add some demo transactions to show the interface
+    // In production, this would be removed and real transactions would be loaded
+
+    incomingDDTransaction("2025-01-15 14:30", "+250.00", "Received", "dgbrt1234...abc");
+    incomingDDTransaction("2025-01-14 16:45", "-75.50", "Sent", "dgbrt5678...def");
+    incomingDDTransaction("2025-01-13 09:15", "+500.00", "Minted", "dgbrt9012...ghi");
 }

@@ -7,7 +7,7 @@ DigiDollar is a fully decentralized USD-pegged stablecoin native to the DigiByte
 
 ## Core Features
 - **Native UTXO Implementation**: Built directly into DigiByte Core without sidechains
-- **Treasury-Model Collateral**: 7 lock periods (30 days to 10 years) with ratios from 500% to 200%
+- **Treasury-Model Collateral**: 8 lock periods (30 days to 10 years) with ratios from 500% to 200%
 - **Four-Layer Protection**: Higher collateral + DCA + ERR + Reserve dynamics
 - **Taproot Enhanced**: P2TR outputs for privacy, efficiency, and flexibility
 - **Decentralized Oracles**: 30 hardcoded nodes with 8-of-15 threshold consensus

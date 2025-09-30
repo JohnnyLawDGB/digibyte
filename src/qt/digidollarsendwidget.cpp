@@ -9,6 +9,7 @@
 #include <qt/guiutil.h>
 #include <qt/digibyteunits.h>
 #include <consensus/amount.h>
+#include <base58.h>
 
 #include <QLabel>
 #include <QLineEdit>
@@ -64,7 +65,7 @@ DigiDollarSendWidget::DigiDollarSendWidget(QWidget *parent) :
     m_clientModel(nullptr),
     m_availableBalance(0.0),
     m_oraclePrice(1.0),
-    m_estimatedFee(0.001)
+    m_estimatedFee(0.001)  // TODO: Implement dynamic fee estimation based on transaction size and network conditions
 {
     setupUI();
     connectSignals();
@@ -700,20 +701,9 @@ QValidator::State DigiDollarAddressValidator::validate(QString& input, int& pos)
 
 bool DigiDollarAddressValidator::isValidDDAddress(const QString& address) const
 {
-    // Basic validation for DigiDollar addresses
-    // DD = mainnet, TD = testnet, RD = regtest
-    if (address.length() < 42 || address.length() > 62) {
-        return false;
-    }
-
-    if (!address.startsWith("DD") && !address.startsWith("TD") && !address.startsWith("RD")) {
-        return false;
-    }
-
-    // Check if the rest contains only valid bech32 characters
-    QRegularExpression bech32Regex("^[023456789acdefghjklmnpqrstuvwxyz]+$");
-    QString addressBody = address.mid(2); // Skip the prefix
-    return bech32Regex.match(addressBody).hasMatch();
+    // Use the proper CDigiDollarAddress validation function
+    // This ensures full validation including checksum verification
+    return CDigiDollarAddress::IsValidDigiDollarAddress(address.toStdString());
 }
 
 // AmountValidator implementation

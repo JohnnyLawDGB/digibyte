@@ -142,6 +142,7 @@ private:
 
 /**
  * Validator for DigiDollar addresses (DD, TD, RD prefixes)
+ * Uses CDigiDollarAddress::IsValidDigiDollarAddress() for proper validation
  */
 class DigiDollarAddressValidator : public QValidator
 {

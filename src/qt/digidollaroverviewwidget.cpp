@@ -15,6 +15,8 @@
 #include <digidollar/health.h>
 #include <chainparams.h>
 #include <wallet/digidollarwallet.h>
+#include <uint256.h>
+#include <interfaces/wallet.h>
 
 #include <QLabel>
 #include <QVBoxLayout>
@@ -353,6 +355,9 @@ void DigiDollarOverviewWidget::connectSignals()
     QTimer* updateTimer = new QTimer(this);
     connect(updateTimer, &QTimer::timeout, this, &DigiDollarOverviewWidget::updateView);
     updateTimer->start(30000); // 30 seconds
+
+    // Note: Additional wallet and client model signals will be connected
+    // in setWalletModel() and setClientModel() once models are available
 }
 
 void DigiDollarOverviewWidget::setWalletModel(WalletModel* model)
@@ -360,10 +365,17 @@ void DigiDollarOverviewWidget::setWalletModel(WalletModel* model)
     m_walletModel = model;
 
     if (m_walletModel) {
-        // Connect wallet model signals
-        // These would connect to actual wallet balance change signals
-        // For now, we'll update periodically
+        // Connect wallet model signals for automatic updates
+        connect(m_walletModel, &WalletModel::balanceChanged,
+                this, &DigiDollarOverviewWidget::updateBalance);
+
+        // Update transaction history when balance changes (indicates new transaction)
+        connect(m_walletModel, &WalletModel::balanceChanged,
+                this, &DigiDollarOverviewWidget::updateRecentTransactions);
+
+        // Initial updates
         updateBalance();
+        updateRecentTransactions();
 
         // Connect to options model for font updates
         if (m_walletModel->getOptionsModel()) {
@@ -380,7 +392,17 @@ void DigiDollarOverviewWidget::setClientModel(ClientModel* model)
     m_clientModel = model;
 
     if (m_clientModel) {
-        // Connect client model signals for oracle price updates
+        // Connect client model signals for updates on new blocks
+        connect(m_clientModel, &ClientModel::numBlocksChanged,
+                this, &DigiDollarOverviewWidget::updateOraclePrice);
+        connect(m_clientModel, &ClientModel::numBlocksChanged,
+                this, &DigiDollarOverviewWidget::updateSystemHealth);
+
+        // Update transaction confirmations on new blocks
+        connect(m_clientModel, &ClientModel::numBlocksChanged,
+                this, &DigiDollarOverviewWidget::updateRecentTransactions);
+
+        // Initial updates
         updateOraclePrice();
         updateSystemHealth();
 
@@ -564,6 +586,32 @@ void DigiDollarOverviewWidget::updateRecentTransactions()
 
     // Get transaction history
     std::vector<DDTransaction> transactions = ddWallet->GetDDTransactionHistory();
+
+    // Update confirmations for all transactions based on current blockchain height
+    if (m_clientModel) {
+        int currentHeight = m_clientModel->getNumBlocks();
+        for (auto& tx : transactions) {
+            // Try to get actual confirmation count from wallet
+            uint256 txHash;
+            txHash.SetHex(tx.txid);
+
+            // Get transaction details from wallet to update confirmations
+            interfaces::WalletTxStatus tx_status;
+            interfaces::WalletOrderForm order_form;
+            bool in_mempool;
+            int num_blocks;
+            interfaces::WalletTx wtx = m_walletModel->wallet().getWalletTxDetails(
+                txHash, tx_status, order_form, in_mempool, num_blocks);
+
+            if (!wtx.tx) {
+                // Transaction not found in wallet yet (might be in mempool)
+                tx.confirmations = 0;
+            } else {
+                // Use depth_in_main_chain as confirmations
+                tx.confirmations = tx_status.depth_in_main_chain;
+            }
+        }
+    }
 
     // Clear existing items
     m_transactionsList->clear();

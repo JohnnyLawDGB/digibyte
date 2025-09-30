@@ -8,6 +8,9 @@
 #include <qt/clientmodel.h>
 #include <qt/guiutil.h>
 #include <qt/qrimagewidget.h>
+#include <qt/sendcoinsrecipient.h>
+#include <qt/recentrequeststablemodel.h>
+#include <consensus/amount.h>
 
 #include <QLabel>
 #include <QLineEdit>
@@ -401,17 +404,14 @@ void DigiDollarReceiveWidget::generateNewAddress()
         return;
     }
 
-    // TODO: Get new DD address from wallet
-    // For now, generate a mock DD address for demonstration
-    QString newAddress;
-    if (m_walletModel) {
-        // In a real implementation, this would call something like:
-        // newAddress = m_walletModel->getNewDigiDollarAddress(m_labelEdit->text());
-
-        // For now, generate a mock address with DD prefix
-        static int addressCounter = 1;
-        newAddress = QString("DD1qw508d6qejxtdg4y5r3zarvary0c5xw7k%1").arg(addressCounter++, 6, 10, QChar('0'));
+    // Get label from input field
+    QString label = m_labelEdit->text();
+    if (label.isEmpty()) {
+        label = tr("Payment request");
     }
+
+    // Generate new DD address using wallet model
+    QString newAddress = m_walletModel->getNewDigiDollarAddress(label);
 
     if (newAddress.isEmpty()) {
         Q_EMIT message(tr("Error"), tr("Failed to generate new DigiDollar address"), QMessageBox::Critical);
@@ -432,7 +432,31 @@ void DigiDollarReceiveWidget::generateNewAddress()
     // Show QR section
     m_qrFrame->setVisible(true);
 
-    // Add to recent requests table
+    // Create payment request and save to wallet
+    SendCoinsRecipient recipient;
+    recipient.address = m_currentAddress;
+    recipient.label = m_currentLabel;
+
+    // Parse amount if provided
+    bool ok = false;
+    double amountValue = m_currentAmount.toDouble(&ok);
+    if (ok && amountValue > 0) {
+        // Convert DD amount to satoshis (cents to satoshis)
+        // 1 DD = 100 cents, 1 DGB = 100,000,000 satoshis
+        // For display purposes, store as cents
+        recipient.amount = static_cast<CAmount>(amountValue * 100);
+    } else {
+        recipient.amount = 0; // No specific amount requested
+    }
+
+    recipient.message = m_currentMessage;
+
+    // Add to recent requests table model (this persists to wallet.dat)
+    if (m_walletModel && m_walletModel->getRecentRequestsTableModel()) {
+        m_walletModel->getRecentRequestsTableModel()->addNewRequest(recipient);
+    }
+
+    // Add to UI table for immediate display
     QString dateStr = QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm");
     QString amountStr = m_currentAmount.isEmpty() ? tr("Any") : formatDDAmount(m_currentAmount.toDouble());
     addRequestToTable(dateStr, m_currentLabel, amountStr, m_currentAddress);

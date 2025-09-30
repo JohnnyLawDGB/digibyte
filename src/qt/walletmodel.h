@@ -210,6 +210,9 @@ public:
     // Calculate required collateral for minting
     CAmount calculateRequiredCollateral(CAmount ddAmount, int lockTier) const;
 
+    // Generate new DigiDollar receiving address
+    QString getNewDigiDollarAddress(const QString& label = "");
+
 private:
     std::unique_ptr<interfaces::Wallet> m_wallet;
     std::unique_ptr<interfaces::Handler> m_handler_unload;

@@ -952,6 +952,18 @@ WalletModel::DigiDollarMintResult WalletModel::mintDigiDollar(CAmount ddAmount, 
             ddWallet->AddCollateralPosition(position);
             LogPrintf("DigiDollar Qt: Position stored in wallet - ID: %s, DD: %d, DGB: %d, Tier: %d\n",
                       positionId.GetHex(), ddAmount, result.collateralRequired, lockTier);
+
+            // Add mint transaction to history
+            DDTransaction mintTx;
+            mintTx.txid = txId.GetHex();
+            mintTx.amount = ddAmount;
+            mintTx.timestamp = GetTime();
+            mintTx.confirmations = 0;
+            mintTx.incoming = true;
+            mintTx.address = ""; // No counterparty for mint
+            mintTx.category = "mint";
+            ddWallet->AddMockTransaction(mintTx);
+            LogPrintf("DigiDollar Qt: Mint transaction added to history\n");
         } else {
             LogPrintf("DigiDollar Qt: WARNING - DD wallet not available, position not stored\n");
         }
@@ -1150,4 +1162,52 @@ CAmount WalletModel::calculateRequiredCollateral(CAmount ddAmount, int lockTier)
     CAmount requiredDGB_satoshis = static_cast<CAmount>(requiredDGB_decimal * 100000000);
 
     return requiredDGB_satoshis;
+}
+
+QString WalletModel::getNewDigiDollarAddress(const QString& label)
+{
+    LogPrintf("DigiDollar Qt: getNewDigiDollarAddress called with label: %s\n", label.toStdString());
+
+    try {
+        // Get the wallet pointer
+        wallet::CWallet* pWallet = wallet().wallet();
+        if (!pWallet) {
+            LogPrintf("DigiDollar Qt: ERROR - Wallet pointer not available\n");
+            return QString();
+        }
+
+        // Generate a new Taproot (P2TR) destination for DigiDollar
+        // DigiDollar addresses must be P2TR (Taproot) type
+        auto result = m_wallet->getNewDestination(OutputType::BECH32M, label.toStdString());
+
+        if (!result) {
+            LogPrintf("DigiDollar Qt: ERROR - Failed to generate new destination: %s\n",
+                     util::ErrorString(result).translated);
+            return QString();
+        }
+
+        CTxDestination dest = *result;
+
+        // Convert the destination to DigiDollar address format
+        // DigiDollar addresses use DD (mainnet), TD (testnet), RD (regtest) prefixes
+        std::string ddAddress = EncodeDigiDollarAddress(dest);
+
+        if (ddAddress.empty()) {
+            LogPrintf("DigiDollar Qt: ERROR - Failed to encode DigiDollar address\n");
+            return QString();
+        }
+
+        LogPrintf("DigiDollar Qt: Generated DD address: %s\n", ddAddress);
+
+        // Add address to address book with label if provided
+        if (!label.isEmpty()) {
+            m_wallet->setAddressBook(dest, label.toStdString(), wallet::AddressPurpose::RECEIVE);
+        }
+
+        return QString::fromStdString(ddAddress);
+
+    } catch (const std::exception& e) {
+        LogPrintf("DigiDollar Qt: getNewDigiDollarAddress exception - %s\n", e.what());
+        return QString();
+    }
 }

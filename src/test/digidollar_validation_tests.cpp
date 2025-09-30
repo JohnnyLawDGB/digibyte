@@ -316,7 +316,7 @@ BOOST_FIXTURE_TEST_CASE(transaction_validation_mint_tx, DigiDollarValidationTest
 {
     // Create a mock mint transaction
     CMutableTransaction mtx;
-    mtx.nVersion = 0x44440001; // DD_TX_VERSION | DD_TX_MINT
+    mtx.nVersion = 0x01000770; // DD_TX_MINT (type=1 in bits 24-31, marker=0x0770 in bits 0-15)
 
     // Add collateral input (simplified for test)
     mtx.vin.resize(1);
@@ -351,7 +351,7 @@ BOOST_FIXTURE_TEST_CASE(transaction_validation_invalid_mint_amount, DigiDollarVa
 {
     // Create mint transaction with invalid amount
     CMutableTransaction mtx;
-    mtx.nVersion = 0x44440001; // DD_TX_VERSION | DD_TX_MINT
+    mtx.nVersion = 0x01000770; // DD_TX_MINT (type=1 in bits 24-31, marker=0x0770 in bits 0-15)
 
     mtx.vin.resize(1);
     mtx.vin[0].prevout = COutPoint(uint256S("0x1234"), 0);
@@ -392,7 +392,7 @@ BOOST_FIXTURE_TEST_CASE(transaction_validation_unknown_tx_type, DigiDollarValida
 {
     // Test unknown DD transaction type
     CMutableTransaction mtx;
-    mtx.nVersion = 0x44440004; // DD_TX_VERSION | unknown type (4)
+    mtx.nVersion = 0x04000770; // DD_TX_PARTIAL (type=4 in bits 24-31, marker=0x0770 in bits 0-15)
 
     mtx.vin.resize(1);
     mtx.vin[0].prevout = COutPoint(uint256S("0x1234"), 0);
@@ -436,7 +436,7 @@ BOOST_FIXTURE_TEST_CASE(mint_validation_valid_basic_mint, DigiDollarValidationTe
 {
     // Test a valid basic mint transaction with correct collateral
     CMutableTransaction mtx;
-    mtx.nVersion = 0x44440001; // DD_TX_VERSION | DD_TX_MINT
+    mtx.nVersion = 0x01000770; // DD_TX_MINT (type=1 in bits 24-31, marker=0x0770 in bits 0-15)
 
     // Add collateral input
     mtx.vin.resize(1);
@@ -475,7 +475,7 @@ BOOST_FIXTURE_TEST_CASE(mint_validation_insufficient_collateral, DigiDollarValid
 {
     // Test mint with insufficient collateral (should fail)
     CMutableTransaction mtx;
-    mtx.nVersion = 0x44440001; // DD_TX_VERSION | DD_TX_MINT
+    mtx.nVersion = 0x01000770; // DD_TX_MINT (type=1 in bits 24-31, marker=0x0770 in bits 0-15)
 
     mtx.vin.resize(1);
     mtx.vin[0].prevout = COutPoint(uint256S("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"), 0);
@@ -511,7 +511,7 @@ BOOST_FIXTURE_TEST_CASE(mint_validation_invalid_dd_amount, DigiDollarValidationT
 {
     // Test mint with amount below minimum ($100)
     CMutableTransaction mtx;
-    mtx.nVersion = 0x44440001; // DD_TX_VERSION | DD_TX_MINT
+    mtx.nVersion = 0x01000770; // DD_TX_MINT (type=1 in bits 24-31, marker=0x0770 in bits 0-15)
 
     mtx.vin.resize(1);
     mtx.vin[0].prevout = COutPoint(uint256S("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"), 0);
@@ -546,7 +546,7 @@ BOOST_FIXTURE_TEST_CASE(mint_validation_excessive_dd_amount, DigiDollarValidatio
 {
     // Test mint with amount above maximum ($100k)
     CMutableTransaction mtx;
-    mtx.nVersion = 0x44440001; // DD_TX_VERSION | DD_TX_MINT
+    mtx.nVersion = 0x01000770; // DD_TX_MINT (type=1 in bits 24-31, marker=0x0770 in bits 0-15)
 
     mtx.vin.resize(1);
     mtx.vin[0].prevout = COutPoint(uint256S("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"), 0);
@@ -577,7 +577,7 @@ BOOST_FIXTURE_TEST_CASE(mint_validation_no_inputs, DigiDollarValidationTestSetup
 {
     // Test mint transaction with no inputs (should fail)
     CMutableTransaction mtx;
-    mtx.nVersion = 0x44440001; // DD_TX_VERSION | DD_TX_MINT
+    mtx.nVersion = 0x01000770; // DD_TX_MINT (type=1 in bits 24-31, marker=0x0770 in bits 0-15)
 
     // No inputs
     mtx.vin.clear();
@@ -599,7 +599,7 @@ BOOST_FIXTURE_TEST_CASE(mint_validation_insufficient_outputs, DigiDollarValidati
 {
     // Test mint transaction with insufficient outputs (needs collateral + DD)
     CMutableTransaction mtx;
-    mtx.nVersion = 0x44440001; // DD_TX_VERSION | DD_TX_MINT
+    mtx.nVersion = 0x01000770; // DD_TX_MINT (type=1 in bits 24-31, marker=0x0770 in bits 0-15)
 
     mtx.vin.resize(1);
     mtx.vin[0].prevout = COutPoint(uint256S("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"), 0);
@@ -622,7 +622,7 @@ BOOST_FIXTURE_TEST_CASE(mint_validation_invalid_collateral_script, DigiDollarVal
 {
     // Test mint with non-P2TR collateral script
     CMutableTransaction mtx;
-    mtx.nVersion = 0x44440001; // DD_TX_VERSION | DD_TX_MINT
+    mtx.nVersion = 0x01000770; // DD_TX_MINT (type=1 in bits 24-31, marker=0x0770 in bits 0-15)
 
     mtx.vin.resize(1);
     mtx.vin[0].prevout = COutPoint(uint256S("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"), 0);
@@ -650,7 +650,7 @@ BOOST_FIXTURE_TEST_CASE(mint_validation_dd_output_nonzero_value, DigiDollarValid
 {
     // Test mint with DD output having non-zero DGB value (should be 0)
     CMutableTransaction mtx;
-    mtx.nVersion = 0x44440001; // DD_TX_VERSION | DD_TX_MINT
+    mtx.nVersion = 0x01000770; // DD_TX_MINT (type=1 in bits 24-31, marker=0x0770 in bits 0-15)
 
     mtx.vin.resize(1);
     mtx.vin[0].prevout = COutPoint(uint256S("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"), 0);
@@ -688,7 +688,7 @@ BOOST_FIXTURE_TEST_CASE(mint_validation_dca_multiplier_adjustment, DigiDollarVal
     validationContext.systemCollateral = 110; // Triggers +50% collateral requirement
 
     CMutableTransaction mtx;
-    mtx.nVersion = 0x44440001; // DD_TX_VERSION | DD_TX_MINT
+    mtx.nVersion = 0x01000770; // DD_TX_MINT (type=1 in bits 24-31, marker=0x0770 in bits 0-15)
 
     mtx.vin.resize(1);
     mtx.vin[0].prevout = COutPoint(uint256S("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"), 0);
@@ -735,7 +735,7 @@ BOOST_FIXTURE_TEST_CASE(mint_validation_multiple_dd_outputs, DigiDollarValidatio
 {
     // Test mint with multiple DD outputs (should handle correctly)
     CMutableTransaction mtx;
-    mtx.nVersion = 0x44440001; // DD_TX_VERSION | DD_TX_MINT
+    mtx.nVersion = 0x01000770; // DD_TX_MINT (type=1 in bits 24-31, marker=0x0770 in bits 0-15)
 
     mtx.vin.resize(1);
     mtx.vin[0].prevout = COutPoint(uint256S("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"), 0);
@@ -776,7 +776,7 @@ BOOST_FIXTURE_TEST_CASE(mint_validation_invalid_oracle_price, DigiDollarValidati
     validationContext.oraclePrice = 0; // Invalid price
 
     CMutableTransaction mtx;
-    mtx.nVersion = 0x44440001; // DD_TX_VERSION | DD_TX_MINT
+    mtx.nVersion = 0x01000770; // DD_TX_MINT (type=1 in bits 24-31, marker=0x0770 in bits 0-15)
 
     mtx.vin.resize(1);
     mtx.vin[0].prevout = COutPoint(uint256S("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"), 0);
@@ -810,7 +810,7 @@ BOOST_FIXTURE_TEST_CASE(mint_validation_dust_collateral, DigiDollarValidationTes
 {
     // Test mint with collateral below dust threshold
     CMutableTransaction mtx;
-    mtx.nVersion = 0x44440001; // DD_TX_VERSION | DD_TX_MINT
+    mtx.nVersion = 0x01000770; // DD_TX_MINT (type=1 in bits 24-31, marker=0x0770 in bits 0-15)
 
     mtx.vin.resize(1);
     mtx.vin[0].prevout = COutPoint(uint256S("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"), 0);
@@ -844,7 +844,7 @@ BOOST_FIXTURE_TEST_CASE(mint_validation_edge_case_exact_minimum, DigiDollarValid
 {
     // Test mint with exact minimum amount and collateral
     CMutableTransaction mtx;
-    mtx.nVersion = 0x44440001; // DD_TX_VERSION | DD_TX_MINT
+    mtx.nVersion = 0x01000770; // DD_TX_MINT (type=1 in bits 24-31, marker=0x0770 in bits 0-15)
 
     mtx.vin.resize(1);
     mtx.vin[0].prevout = COutPoint(uint256S("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"), 0);
@@ -878,7 +878,7 @@ BOOST_FIXTURE_TEST_CASE(mint_validation_edge_case_exact_maximum, DigiDollarValid
 {
     // Test mint with exact maximum amount
     CMutableTransaction mtx;
-    mtx.nVersion = 0x44440001; // DD_TX_VERSION | DD_TX_MINT
+    mtx.nVersion = 0x01000770; // DD_TX_MINT (type=1 in bits 24-31, marker=0x0770 in bits 0-15)
 
     mtx.vin.resize(1);
     mtx.vin[0].prevout = COutPoint(uint256S("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"), 0);
@@ -921,7 +921,7 @@ BOOST_FIXTURE_TEST_CASE(test_validate_transfer_transaction_basic, DigiDollarVali
 {
     // Arrange: Create a basic DD transfer transaction
     CMutableTransaction mtx;
-    mtx.nVersion = 0x44440002; // DD_TX_VERSION | DD_TX_TRANSFER
+    mtx.nVersion = 0x02000770; // DD_TX_TRANSFER (type=2 in bits 24-31, marker=0x0770 in bits 0-15)
 
     // Add DD input
     mtx.vin.resize(1);
@@ -948,7 +948,7 @@ BOOST_FIXTURE_TEST_CASE(test_transfer_dd_conservation_check, DigiDollarValidatio
 {
     // Arrange: Transfer that violates DD conservation (input != output)
     CMutableTransaction mtx;
-    mtx.nVersion = 0x44440002; // DD_TX_VERSION | DD_TX_TRANSFER
+    mtx.nVersion = 0x02000770; // DD_TX_TRANSFER (type=2 in bits 24-31, marker=0x0770 in bits 0-15)
 
     // Add DD input
     mtx.vin.resize(1);
@@ -980,7 +980,7 @@ BOOST_FIXTURE_TEST_CASE(test_transfer_invalid_dd_amounts, DigiDollarValidationTe
 {
     // Arrange: Transfer with invalid DD amounts
     CMutableTransaction mtx;
-    mtx.nVersion = 0x44440002; // DD_TX_VERSION | DD_TX_TRANSFER
+    mtx.nVersion = 0x02000770; // DD_TX_TRANSFER (type=2 in bits 24-31, marker=0x0770 in bits 0-15)
 
     mtx.vin.resize(1);
     mtx.vin[0].prevout = COutPoint(uint256S("fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321"), 0);
@@ -1006,7 +1006,7 @@ BOOST_FIXTURE_TEST_CASE(test_transfer_script_validation, DigiDollarValidationTes
 {
     // Arrange: Transfer with valid P2TR scripts
     CMutableTransaction mtx;
-    mtx.nVersion = 0x44440002; // DD_TX_VERSION | DD_TX_TRANSFER
+    mtx.nVersion = 0x02000770; // DD_TX_TRANSFER (type=2 in bits 24-31, marker=0x0770 in bits 0-15)
 
     mtx.vin.resize(1);
     mtx.vin[0].prevout = COutPoint(uint256S("0987654321fedcba0987654321fedcba0987654321fedcba0987654321fedcba"), 0);
@@ -1032,7 +1032,7 @@ BOOST_FIXTURE_TEST_CASE(test_transfer_p2tr_spending_validation, DigiDollarValida
 {
     // Arrange: Transfer spending valid P2TR outputs
     CMutableTransaction mtx;
-    mtx.nVersion = 0x44440002; // DD_TX_VERSION | DD_TX_TRANSFER
+    mtx.nVersion = 0x02000770; // DD_TX_TRANSFER (type=2 in bits 24-31, marker=0x0770 in bits 0-15)
 
     // Add multiple DD inputs
     mtx.vin.resize(2);
@@ -1063,7 +1063,7 @@ BOOST_FIXTURE_TEST_CASE(test_transfer_multiple_recipients, DigiDollarValidationT
 {
     // Arrange: Transfer to multiple recipients
     CMutableTransaction mtx;
-    mtx.nVersion = 0x44440002; // DD_TX_VERSION | DD_TX_TRANSFER
+    mtx.nVersion = 0x02000770; // DD_TX_TRANSFER (type=2 in bits 24-31, marker=0x0770 in bits 0-15)
 
     mtx.vin.resize(1);
     mtx.vin[0].prevout = COutPoint(uint256S("3333333333333333333333333333333333333333333333333333333333333333"), 0);
@@ -1099,7 +1099,7 @@ BOOST_FIXTURE_TEST_CASE(test_transfer_utxo_set_update, DigiDollarValidationTestS
 {
     // Arrange: Transfer that should update UTXO tracking
     CMutableTransaction mtx;
-    mtx.nVersion = 0x44440002; // DD_TX_VERSION | DD_TX_TRANSFER
+    mtx.nVersion = 0x02000770; // DD_TX_TRANSFER (type=2 in bits 24-31, marker=0x0770 in bits 0-15)
 
     mtx.vin.resize(1);
     mtx.vin[0].prevout = COutPoint(uint256S("4444444444444444444444444444444444444444444444444444444444444444"), 0);
@@ -1129,7 +1129,7 @@ BOOST_FIXTURE_TEST_CASE(test_transfer_with_change_output, DigiDollarValidationTe
 {
     // Arrange: Transfer with change back to sender
     CMutableTransaction mtx;
-    mtx.nVersion = 0x44440002; // DD_TX_VERSION | DD_TX_TRANSFER
+    mtx.nVersion = 0x02000770; // DD_TX_TRANSFER (type=2 in bits 24-31, marker=0x0770 in bits 0-15)
 
     mtx.vin.resize(1);
     mtx.vin[0].prevout = COutPoint(uint256S("5555555555555555555555555555555555555555555555555555555555555555"), 0);
@@ -1165,7 +1165,7 @@ BOOST_FIXTURE_TEST_CASE(test_transfer_non_zero_dgb_value_rejection, DigiDollarVa
 {
     // Arrange: Transfer with non-zero DGB value (should be rejected)
     CMutableTransaction mtx;
-    mtx.nVersion = 0x44440002; // DD_TX_VERSION | DD_TX_TRANSFER
+    mtx.nVersion = 0x02000770; // DD_TX_TRANSFER (type=2 in bits 24-31, marker=0x0770 in bits 0-15)
 
     mtx.vin.resize(1);
     mtx.vin[0].prevout = COutPoint(uint256S("6666666666666666666666666666666666666666666666666666666666666666"), 0);
@@ -1192,7 +1192,7 @@ BOOST_FIXTURE_TEST_CASE(test_transfer_maximum_amount_limits, DigiDollarValidatio
 {
     // Arrange: Transfer at maximum allowed amount
     CMutableTransaction mtx;
-    mtx.nVersion = 0x44440002; // DD_TX_VERSION | DD_TX_TRANSFER
+    mtx.nVersion = 0x02000770; // DD_TX_TRANSFER (type=2 in bits 24-31, marker=0x0770 in bits 0-15)
 
     mtx.vin.resize(1);
     mtx.vin[0].prevout = COutPoint(uint256S("7777777777777777777777777777777777777777777777777777777777777777"), 0);
@@ -1220,7 +1220,7 @@ BOOST_FIXTURE_TEST_CASE(test_transfer_exceed_maximum_amount, DigiDollarValidatio
 {
     // Arrange: Transfer exceeding maximum allowed amount
     CMutableTransaction mtx;
-    mtx.nVersion = 0x44440002; // DD_TX_VERSION | DD_TX_TRANSFER
+    mtx.nVersion = 0x02000770; // DD_TX_TRANSFER (type=2 in bits 24-31, marker=0x0770 in bits 0-15)
 
     mtx.vin.resize(1);
     mtx.vin[0].prevout = COutPoint(uint256S("8888888888888888888888888888888888888888888888888888888888888888"), 0);
@@ -1245,7 +1245,7 @@ BOOST_FIXTURE_TEST_CASE(test_transfer_input_output_consistency, DigiDollarValida
 {
     // Arrange: Comprehensive transfer validation
     CMutableTransaction mtx;
-    mtx.nVersion = 0x44440002; // DD_TX_VERSION | DD_TX_TRANSFER
+    mtx.nVersion = 0x02000770; // DD_TX_TRANSFER (type=2 in bits 24-31, marker=0x0770 in bits 0-15)
 
     // Multiple inputs
     mtx.vin.resize(3);
@@ -1297,7 +1297,7 @@ BOOST_FIXTURE_TEST_CASE(test_validate_redemption_transaction_normal_after_timelo
 {
     // Arrange: Create normal redemption after timelock expiry
     CMutableTransaction mtx;
-    mtx.nVersion = 0x44440003; // DD_TX_VERSION | DD_TX_REDEEM
+    mtx.nVersion = 0x03000770; // DD_TX_REDEEM (type=3 in bits 24-31, marker=0x0770 in bits 0-15)
 
     // Add collateral input (timelock expired)
     mtx.vin.resize(1);
@@ -1332,7 +1332,7 @@ BOOST_FIXTURE_TEST_CASE(test_validate_redemption_transaction_before_timelock, Di
 {
     // Arrange: Create redemption before timelock expiry (should fail)
     CMutableTransaction mtx;
-    mtx.nVersion = 0x44440003; // DD_TX_VERSION | DD_TX_REDEEM
+    mtx.nVersion = 0x03000770; // DD_TX_REDEEM (type=3 in bits 24-31, marker=0x0770 in bits 0-15)
 
     // Add collateral input (timelock NOT expired)
     mtx.vin.resize(1);
@@ -1369,7 +1369,7 @@ BOOST_FIXTURE_TEST_CASE(test_validate_err_redemption, DigiDollarValidationTestSe
     validationContext.systemCollateral = 80; // 80% system collateral (triggers ERR)
 
     CMutableTransaction mtx;
-    mtx.nVersion = 0x44440005; // DD_TX_VERSION | DD_TX_EMERGENCY (ERR)
+    mtx.nVersion = 0x05000770; // DD_TX_ERR (type=5 in bits 24-31, marker=0x0770 in bits 0-15)
 
     // Add collateral and DD inputs
     mtx.vin.resize(2);
@@ -1401,7 +1401,7 @@ BOOST_FIXTURE_TEST_CASE(test_validate_dd_burning_verification, DigiDollarValidat
 {
     // Arrange: Create redemption with DD burning (DD inputs > DD outputs)
     CMutableTransaction mtx;
-    mtx.nVersion = 0x44440003; // DD_TX_VERSION | DD_TX_REDEEM
+    mtx.nVersion = 0x03000770; // DD_TX_REDEEM (type=3 in bits 24-31, marker=0x0770 in bits 0-15)
 
     // Add collateral input
     mtx.vin.resize(1);
@@ -1436,7 +1436,7 @@ BOOST_FIXTURE_TEST_CASE(test_validate_collateral_release, DigiDollarValidationTe
 {
     // Arrange: Create redemption with proper collateral release calculation
     CMutableTransaction mtx;
-    mtx.nVersion = 0x44440003; // DD_TX_VERSION | DD_TX_REDEEM
+    mtx.nVersion = 0x03000770; // DD_TX_REDEEM (type=3 in bits 24-31, marker=0x0770 in bits 0-15)
 
     // Add inputs
     mtx.vin.resize(2);
@@ -1469,7 +1469,7 @@ BOOST_FIXTURE_TEST_CASE(test_validate_partial_redemption_rules, DigiDollarValida
 {
     // Arrange: Create partial redemption transaction
     CMutableTransaction mtx;
-    mtx.nVersion = 0x44440004; // DD_TX_VERSION | DD_TX_PARTIAL
+    mtx.nVersion = 0x04000770; // DD_TX_PARTIAL (type=4 in bits 24-31, marker=0x0770 in bits 0-15)
 
     // Add collateral input
     mtx.vin.resize(1);
@@ -1509,7 +1509,7 @@ BOOST_FIXTURE_TEST_CASE(test_validate_script_path_validation, DigiDollarValidati
 {
     // Arrange: Create redemption with script path spending validation
     CMutableTransaction mtx;
-    mtx.nVersion = 0x44440003; // DD_TX_VERSION | DD_TX_REDEEM
+    mtx.nVersion = 0x03000770; // DD_TX_REDEEM (type=3 in bits 24-31, marker=0x0770 in bits 0-15)
 
     // Add collateral input with proper witness stack (would contain script path)
     mtx.vin.resize(1);
@@ -1544,7 +1544,7 @@ BOOST_FIXTURE_TEST_CASE(test_validate_utxo_update_verification, DigiDollarValida
 {
     // Arrange: Create redemption that should update UTXO set correctly
     CMutableTransaction mtx;
-    mtx.nVersion = 0x44440003; // DD_TX_VERSION | DD_TX_REDEEM
+    mtx.nVersion = 0x03000770; // DD_TX_REDEEM (type=3 in bits 24-31, marker=0x0770 in bits 0-15)
 
     // Add inputs that will be spent
     mtx.vin.resize(2);
@@ -1577,7 +1577,7 @@ BOOST_FIXTURE_TEST_CASE(test_validate_invalid_redemption_no_collateral_input, Di
 {
     // Arrange: Create redemption without collateral input (should fail)
     CMutableTransaction mtx;
-    mtx.nVersion = 0x44440003; // DD_TX_VERSION | DD_TX_REDEEM
+    mtx.nVersion = 0x03000770; // DD_TX_REDEEM (type=3 in bits 24-31, marker=0x0770 in bits 0-15)
 
     // Add only DD input, no collateral input
     mtx.vin.resize(1);
@@ -1609,7 +1609,7 @@ BOOST_FIXTURE_TEST_CASE(test_validate_invalid_redemption_no_dd_inputs, DigiDolla
 {
     // Arrange: Create redemption without DD inputs to burn (should fail)
     CMutableTransaction mtx;
-    mtx.nVersion = 0x44440003; // DD_TX_VERSION | DD_TX_REDEEM
+    mtx.nVersion = 0x03000770; // DD_TX_REDEEM (type=3 in bits 24-31, marker=0x0770 in bits 0-15)
 
     // Add only collateral input, no DD inputs
     mtx.vin.resize(1);
@@ -1641,7 +1641,7 @@ BOOST_FIXTURE_TEST_CASE(test_validate_invalid_collateral_amount, DigiDollarValid
 {
     // Arrange: Create redemption with incorrect collateral release amount
     CMutableTransaction mtx;
-    mtx.nVersion = 0x44440003; // DD_TX_VERSION | DD_TX_REDEEM
+    mtx.nVersion = 0x03000770; // DD_TX_REDEEM (type=3 in bits 24-31, marker=0x0770 in bits 0-15)
 
     // Add inputs
     mtx.vin.resize(2);
@@ -1674,7 +1674,7 @@ BOOST_FIXTURE_TEST_CASE(test_validate_emergency_redemption_conditions, DigiDolla
 {
     // Arrange: Create emergency redemption transaction
     CMutableTransaction mtx;
-    mtx.nVersion = 0x44440005; // DD_TX_VERSION | DD_TX_EMERGENCY
+    mtx.nVersion = 0x05000770; // DD_TX_ERR (type=5 in bits 24-31, marker=0x0770 in bits 0-15)
 
     // Add collateral and DD inputs
     mtx.vin.resize(2);
@@ -1706,7 +1706,7 @@ BOOST_FIXTURE_TEST_CASE(test_validate_redemption_fee_handling, DigiDollarValidat
 {
     // Arrange: Create redemption with fee inputs and change
     CMutableTransaction mtx;
-    mtx.nVersion = 0x44440003; // DD_TX_VERSION | DD_TX_REDEEM
+    mtx.nVersion = 0x03000770; // DD_TX_REDEEM (type=3 in bits 24-31, marker=0x0770 in bits 0-15)
 
     // Add collateral, DD, and fee inputs
     mtx.vin.resize(3);
@@ -1750,7 +1750,7 @@ BOOST_FIXTURE_TEST_CASE(err_validation_blocks_normal_redemptions_during_err, Dig
 
     // Create normal redemption transaction
     CMutableTransaction mtx;
-    mtx.nVersion = 0x44440003; // DD_TX_VERSION | DD_TX_REDEEM
+    mtx.nVersion = 0x03000770; // DD_TX_REDEEM (type=3 in bits 24-31, marker=0x0770 in bits 0-15)
 
     // Add collateral and DD inputs
     mtx.vin.resize(2);
@@ -1787,7 +1787,7 @@ BOOST_FIXTURE_TEST_CASE(err_validation_allows_err_redemptions_during_err, DigiDo
 
     // Create ERR redemption transaction
     CMutableTransaction mtx;
-    mtx.nVersion = 0x44440005; // DD_TX_VERSION | DD_TX_ERR (new ERR transaction type)
+    mtx.nVersion = 0x05000770; // DD_TX_ERR (type=5 in bits 24-31, marker=0x0770 in bits 0-15) (new ERR transaction type)
 
     // Add collateral and DD inputs
     mtx.vin.resize(2);
@@ -1824,7 +1824,7 @@ BOOST_FIXTURE_TEST_CASE(err_validation_rejects_incorrect_err_adjustment, DigiDol
 
     // Create ERR redemption with INCORRECT adjustment
     CMutableTransaction mtx;
-    mtx.nVersion = 0x44440005; // DD_TX_VERSION | DD_TX_ERR
+    mtx.nVersion = 0x05000770; // DD_TX_ERR (type=5 in bits 24-31, marker=0x0770 in bits 0-15)
 
     mtx.vin.resize(2);
     mtx.vin[0].prevout = COutPoint(uint256S("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"), 0);
@@ -1860,7 +1860,7 @@ BOOST_FIXTURE_TEST_CASE(err_validation_blocks_minting_during_err, DigiDollarVali
 
     // Create mint transaction during ERR
     CMutableTransaction mtx;
-    mtx.nVersion = 0x44440001; // DD_TX_VERSION | DD_TX_MINT
+    mtx.nVersion = 0x01000770; // DD_TX_MINT (type=1 in bits 24-31, marker=0x0770 in bits 0-15)
 
     mtx.vin.resize(1);
     mtx.vin[0].prevout = COutPoint(uint256S("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"), 0);
@@ -1906,7 +1906,7 @@ BOOST_FIXTURE_TEST_CASE(err_validation_minimum_protection_floor, DigiDollarValid
 
     // Create ERR redemption with minimum protection (80%)
     CMutableTransaction mtx;
-    mtx.nVersion = 0x44440005; // DD_TX_VERSION | DD_TX_ERR
+    mtx.nVersion = 0x05000770; // DD_TX_ERR (type=5 in bits 24-31, marker=0x0770 in bits 0-15)
 
     mtx.vin.resize(2);
     mtx.vin[0].prevout = COutPoint(uint256S("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"), 0);
@@ -1964,7 +1964,7 @@ BOOST_FIXTURE_TEST_CASE(volatility_validation_mint_allowed_stable, DigiDollarVal
 
     // Create mint transaction
     CMutableTransaction mtx;
-    mtx.nVersion = 0x44440001; // DD_TX_VERSION | DD_TX_MINT
+    mtx.nVersion = 0x01000770; // DD_TX_MINT (type=1 in bits 24-31, marker=0x0770 in bits 0-15)
     mtx.vin.resize(1);
     mtx.vin[0].prevout = COutPoint(uint256S("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"), 0);
 
@@ -2007,7 +2007,7 @@ BOOST_FIXTURE_TEST_CASE(volatility_validation_mint_blocked_high_volatility, Digi
 
     // Create mint transaction
     CMutableTransaction mtx;
-    mtx.nVersion = 0x44440001; // DD_TX_VERSION | DD_TX_MINT
+    mtx.nVersion = 0x01000770; // DD_TX_MINT (type=1 in bits 24-31, marker=0x0770 in bits 0-15)
     mtx.vin.resize(1);
     mtx.vin[0].prevout = COutPoint(uint256S("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"), 0);
 
@@ -2060,7 +2060,7 @@ BOOST_FIXTURE_TEST_CASE(volatility_validation_all_operations_blocked, DigiDollar
 
     // Test 1: Mint transaction
     CMutableTransaction mintTx;
-    mintTx.nVersion = 0x44440001; // DD_TX_VERSION | DD_TX_MINT
+    mintTx.nVersion = 0x01000770; // DD_TX_MINT (type=1 in bits 24-31, marker=0x0770 in bits 0-15)
     mintTx.vin.resize(1);
     mintTx.vin[0].prevout = COutPoint(uint256S("1111111111111111111111111111111111111111111111111111111111111111"), 0);
 
@@ -2074,7 +2074,7 @@ BOOST_FIXTURE_TEST_CASE(volatility_validation_all_operations_blocked, DigiDollar
 
     // Test 2: Transfer transaction
     CMutableTransaction transferTx;
-    transferTx.nVersion = 0x44440002; // DD_TX_VERSION | DD_TX_TRANSFER
+    transferTx.nVersion = 0x02000770; // DD_TX_TRANSFER (type=2 in bits 24-31, marker=0x0770 in bits 0-15)
     transferTx.vin.resize(1);
     transferTx.vin[0].prevout = COutPoint(uint256S("2222222222222222222222222222222222222222222222222222222222222222"), 0);
     transferTx.vout.resize(1);
@@ -2085,7 +2085,7 @@ BOOST_FIXTURE_TEST_CASE(volatility_validation_all_operations_blocked, DigiDollar
 
     // Test 3: Redeem transaction
     CMutableTransaction redeemTx;
-    redeemTx.nVersion = 0x44440003; // DD_TX_VERSION | DD_TX_REDEEM
+    redeemTx.nVersion = 0x03000770; // DD_TX_REDEEM (type=3 in bits 24-31, marker=0x0770 in bits 0-15)
     redeemTx.vin.resize(1);
     redeemTx.vin[0].prevout = COutPoint(uint256S("3333333333333333333333333333333333333333333333333333333333333333"), 0);
 
@@ -2142,7 +2142,7 @@ BOOST_FIXTURE_TEST_CASE(volatility_validation_cooldown_enforcement, DigiDollarVa
 
     // Create mint transaction during cooldown
     CMutableTransaction mtx;
-    mtx.nVersion = 0x44440001; // DD_TX_VERSION | DD_TX_MINT
+    mtx.nVersion = 0x01000770; // DD_TX_MINT (type=1 in bits 24-31, marker=0x0770 in bits 0-15)
     mtx.vin.resize(1);
     mtx.vin[0].prevout = COutPoint(uint256S("4444444444444444444444444444444444444444444444444444444444444444"), 0);
 
@@ -2227,7 +2227,7 @@ BOOST_FIXTURE_TEST_CASE(volatility_validation_override_mechanism, DigiDollarVali
 
     // Create mint transaction after override
     CMutableTransaction mtx;
-    mtx.nVersion = 0x44440001; // DD_TX_VERSION | DD_TX_MINT
+    mtx.nVersion = 0x01000770; // DD_TX_MINT (type=1 in bits 24-31, marker=0x0770 in bits 0-15)
     mtx.vin.resize(1);
     mtx.vin[0].prevout = COutPoint(uint256S("5555555555555555555555555555555555555555555555555555555555555555"), 0);
 
@@ -2280,7 +2280,7 @@ BOOST_FIXTURE_TEST_CASE(volatility_validation_gradual_unfreezing, DigiDollarVali
 
     // Create test transactions
     CMutableTransaction mintTx;
-    mintTx.nVersion = 0x44440001; // DD_TX_VERSION | DD_TX_MINT
+    mintTx.nVersion = 0x01000770; // DD_TX_MINT (type=1 in bits 24-31, marker=0x0770 in bits 0-15)
     mintTx.vin.resize(1);
     mintTx.vin[0].prevout = COutPoint(uint256S("6666666666666666666666666666666666666666666666666666666666666666"), 0);
 

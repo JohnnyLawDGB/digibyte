@@ -143,7 +143,7 @@ BOOST_AUTO_TEST_CASE(digidollar_output_edge_cases)
     CDigiDollarOutput output;
 
     // Test maximum valid amount
-    output.nDDAmount = MAX_MONEY;
+    output.nDDAmount = MAX_DIGIDOLLAR;
     output.nLockTime = 0;
     output.collateralId = uint256S("0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef");
     BOOST_CHECK(output.IsValid());

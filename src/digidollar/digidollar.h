@@ -112,4 +112,20 @@ public:
     friend bool operator!=(const CCollateralPosition& a, const CCollateralPosition& b);
 };
 
+// Forward declarations
+class CBlockIndex;
+class ChainstateManager;
+namespace Consensus {
+    struct Params;
+}
+
+namespace DigiDollar {
+    /**
+     * Check if DigiDollar is enabled using BIP9 deployment status.
+     * This is the proper way to check DigiDollar activation.
+     */
+    bool IsDigiDollarEnabled(const CBlockIndex* pindexPrev, const ChainstateManager& chainman);
+    bool IsDigiDollarEnabled(const CBlockIndex* pindexPrev, const Consensus::Params& params);
+}
+
 #endif // DIGIBYTE_DIGIDOLLAR_DIGIDOLLAR_H

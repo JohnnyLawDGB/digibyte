@@ -25,6 +25,7 @@
 #include <validation.h>
 #include <oracle/bundle_manager.h>
 #include <consensus/digidollar.h>
+#include <digidollar/digidollar.h>
 
 #include <algorithm>
 #include <utility>

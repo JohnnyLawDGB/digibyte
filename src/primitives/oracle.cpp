@@ -31,12 +31,13 @@ bool COraclePriceMessage::IsValid() const
     // Check price is positive and reasonable
     if (price_satoshis <= 0) return false;
 
-    // Check price is not unrealistically high (100 DGB per USD)
-    if (price_satoshis > 100000000000LL) return false;
+    // Check price is not unrealistically high (1000 DGB per USD = 100 billion satoshis per USD)
+    // This allows for extreme price movements while preventing integer overflow attacks
+    if (price_satoshis > 100000000000000LL) return false; // 1 million DGB per USD max
 
-    // Check timestamp is not in the future (with 5 minute tolerance)
+    // Check timestamp is not in the future (with 1 minute tolerance for clock skew)
     int64_t current_time = GetTime();
-    if (timestamp > current_time + 300) return false;
+    if (timestamp > current_time + 60) return false;
 
     // Check timestamp is not too old (1 hour max)
     if (timestamp < current_time - ORACLE_MAX_AGE_SECONDS) return false;
@@ -146,8 +147,8 @@ bool COracleBundle::AddMessage(const COraclePriceMessage& message)
         if (existing.oracle_id == message.oracle_id) return false;
     }
 
-    // Validate the message
-    if (!message.IsValid()) return false;
+    // Note: Timestamp/price validation should be done at P2P layer via ValidateIncomingMessage()
+    // AddMessage() only checks structural constraints (no duplicates, size limits)
 
     messages.push_back(message);
     return true;

@@ -4,6 +4,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #include <validation.h>
 #include <digidollar/validation.h>
+#include <digidollar/digidollar.h>
 
 #include <kernel/chain.h>
 #include <kernel/coinstats.h>

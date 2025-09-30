@@ -642,23 +642,17 @@ libdigibyte_consensus_a_SOURCES = \
   arith_uint256.cpp \
   arith_uint256.h \
   consensus/amount.h \
-  consensus/dca.cpp \
-  consensus/dca.h \
   consensus/digidollar.cpp \
   consensus/digidollar.h \
   consensus/digidollar_transaction_validation.cpp \
   consensus/digidollar_transaction_validation.h \
   consensus/digidollar_tx.cpp \
   consensus/digidollar_tx.h \
-  consensus/err.cpp \
-  consensus/err.h \
   consensus/merkle.cpp \
   consensus/merkle.h \
   consensus/params.h \
   consensus/tx_check.cpp \
   consensus/validation.h \
-  consensus/volatility.cpp \
-  consensus/volatility.h \
   crypto/blake.cpp \
   crypto/bmw.cpp \
   crypto/cubehash.cpp \
@@ -697,14 +691,6 @@ libdigibyte_consensus_a_SOURCES = \
   prevector.h \
   primitives/block.cpp \
   primitives/block.h \
-  primitives/oracle.cpp \
-  primitives/oracle.h \
-  oracle/node.cpp \
-  oracle/node.h \
-  oracle/exchange.cpp \
-  oracle/exchange.h \
-  oracle/bundle_manager.cpp \
-  oracle/bundle_manager.h \
   primitives/transaction.cpp \
   primitives/transaction.h \
   pubkey.cpp \
@@ -744,6 +730,12 @@ libdigibyte_common_a_SOURCES = \
   common/settings.cpp \
   common/system.cpp \
   compressor.cpp \
+  consensus/dca.cpp \
+  consensus/dca.h \
+  consensus/err.cpp \
+  consensus/err.h \
+  consensus/volatility.cpp \
+  consensus/volatility.h \
   core_read.cpp \
   core_write.cpp \
   deploymentinfo.cpp \
@@ -762,9 +754,19 @@ libdigibyte_common_a_SOURCES = \
   netaddress.cpp \
   netbase.cpp \
   net_permissions.cpp \
+  oracle/bundle_manager.cpp \
+  oracle/bundle_manager.h \
+  oracle/exchange.cpp \
+  oracle/exchange.h \
+  oracle/mock_oracle.cpp \
+  oracle/mock_oracle.h \
+  oracle/node.cpp \
+  oracle/node.h \
   outputtype.cpp \
   policy/feerate.cpp \
   policy/policy.cpp \
+  primitives/oracle.cpp \
+  primitives/oracle.h \
   protocol.cpp \
   psbt.cpp \
   rpc/external_signer.cpp \

@@ -161,3 +161,28 @@ bool operator!=(const CCollateralPosition& a, const CCollateralPosition& b)
 {
     return !(a == b);
 }
+
+// =====================================
+// DigiDollar Activation Functions
+// =====================================
+
+#include <consensus/params.h>
+#include <deploymentstatus.h>
+#include <validation.h>
+
+namespace DigiDollar {
+
+bool IsDigiDollarEnabled(const CBlockIndex* pindexPrev, const ChainstateManager& chainman)
+{
+    return DeploymentActiveAfter(pindexPrev, chainman, Consensus::DEPLOYMENT_DIGIDOLLAR);
+}
+
+bool IsDigiDollarEnabled(const CBlockIndex* pindexPrev, const Consensus::Params& params)
+{
+    // For cases where we only have consensus params and a VersionBitsCache isn't available
+    // We'll need to create a temporary cache - not ideal but needed for some contexts
+    VersionBitsCache cache;
+    return DeploymentActiveAfter(pindexPrev, params, Consensus::DEPLOYMENT_DIGIDOLLAR, cache);
+}
+
+} // namespace DigiDollar

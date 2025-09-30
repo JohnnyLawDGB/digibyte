@@ -139,7 +139,7 @@ BOOST_AUTO_TEST_CASE(parameter_validation_test)
     BOOST_CHECK(!DigiDollar::ValidateConsensusParams(invalidParams5, strError));
 
     DigiDollar::ConsensusParams invalidParams6 = validParams;
-    invalidParams6.oracleThreshold = invalidParams6.activeOracles; // Not more than half
+    invalidParams6.oracleThreshold = invalidParams6.activeOracles + 1; // Exceeds active oracles
     BOOST_CHECK(!DigiDollar::ValidateConsensusParams(invalidParams6, strError));
 
     // Test invalid DCA levels

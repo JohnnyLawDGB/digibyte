@@ -4,6 +4,7 @@
 
 #include <consensus/digidollar.h>
 #include <consensus/params.h>
+#include <digidollar/digidollar.h>
 #include <kernel/chainparams.h>
 #include <chainparams.h>
 #include <test/util/setup_common.h>
@@ -43,14 +44,35 @@ BOOST_AUTO_TEST_CASE(test_bip9_state_transitions)
     VersionBitsCache cache;
     CBlockIndex* tip = nullptr;
 
-    // Create genesis block - should be STARTED since we're past starttime
-    tip = CreateTestBlock(nullptr, VERSIONBITS_TOP_BITS, TEST_BLOCK_TIME);
+    // BIP9 evaluates state at period boundaries (heights where (h+1) % period == 0)
+    // With TEST_WINDOW=4, period boundaries are at heights 3, 7, 11, 15, etc.
+
+    // Mine initial blocks to establish proper MTP before start time
+    // We need at least 11 blocks for MTP calculation
+    // Mine blocks 0-10 before start time
+    for (int i = 0; i < 11; i++) {
+        tip = CreateTestBlock(tip, VERSIONBITS_TOP_BITS, TEST_START_TIME - 1000 + i * 10);
+    }
+
+    // At height 10, state is evaluated at height 7 (last period boundary)
+    // At height 7, MTP is still before start time, so state should be DEFINED
     ThresholdState state = cache.State(tip, testParams, Consensus::DEPLOYMENT_DIGIDOLLAR);
+    BOOST_CHECK_EQUAL(state, ThresholdState::DEFINED);
+
+    // Mine more blocks past start time
+    // Need enough blocks so that at the NEXT period boundary (height 11), MTP >= start time
+    for (int i = 0; i < 10; i++) {
+        tip = CreateTestBlock(tip, VERSIONBITS_TOP_BITS, TEST_START_TIME + 1000 + i * 10);
+    }
+
+    // At height 20, state is evaluated at height 19 (last period boundary)
+    // At height 19, MTP should be past start time, so state should be STARTED
+    state = cache.State(tip, testParams, Consensus::DEPLOYMENT_DIGIDOLLAR);
     BOOST_CHECK_EQUAL(state, ThresholdState::STARTED);
 
-    // Generate blocks without signaling - should remain STARTED
+    // Generate more blocks without signaling - should remain STARTED
     for (int i = 0; i < TEST_WINDOW; i++) {
-        tip = CreateTestBlock(tip, VERSIONBITS_TOP_BITS, TEST_BLOCK_TIME + i);
+        tip = CreateTestBlock(tip, VERSIONBITS_TOP_BITS, TEST_START_TIME + 2000 + i * 10);
     }
     state = cache.State(tip, testParams, Consensus::DEPLOYMENT_DIGIDOLLAR);
     BOOST_CHECK_EQUAL(state, ThresholdState::STARTED);
@@ -59,20 +81,24 @@ BOOST_AUTO_TEST_CASE(test_bip9_state_transitions)
     uint32_t signal_bit = 1 << testParams.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].bit;
     int32_t signaling_version = VERSIONBITS_TOP_BITS | signal_bit;
 
-    // Generate 3 out of 4 blocks with signaling (>= 75% threshold)
+    // Signal in a complete period (4 blocks)
+    // Need 3 out of 4 (75%) to reach threshold
+    // This period will end at height 27 (next period boundary)
     for (int i = 0; i < 3; i++) {
-        tip = CreateTestBlock(tip, signaling_version, 1500000100 + i);
+        tip = CreateTestBlock(tip, signaling_version, TEST_START_TIME + 3000 + i * 10);
     }
-    tip = CreateTestBlock(tip, VERSIONBITS_TOP_BITS, 1500000103); // One non-signaling
+    tip = CreateTestBlock(tip, VERSIONBITS_TOP_BITS, TEST_START_TIME + 3030); // One non-signaling
 
+    // Now at height 27 (period boundary), threshold should be met -> LOCKED_IN
     state = cache.State(tip, testParams, Consensus::DEPLOYMENT_DIGIDOLLAR);
     BOOST_CHECK_EQUAL(state, ThresholdState::LOCKED_IN);
 
-    // Generate another window to move to ACTIVE
-    for (int i = 0; i < 4; i++) {
-        tip = CreateTestBlock(tip, VERSIONBITS_TOP_BITS, 1500000200 + i);
+    // Generate another complete period to move to ACTIVE
+    for (int i = 0; i < TEST_WINDOW; i++) {
+        tip = CreateTestBlock(tip, VERSIONBITS_TOP_BITS, TEST_START_TIME + 4000 + i * 10);
     }
 
+    // Now at height 31 (period boundary), should transition to ACTIVE
     state = cache.State(tip, testParams, Consensus::DEPLOYMENT_DIGIDOLLAR);
     BOOST_CHECK_EQUAL(state, ThresholdState::ACTIVE);
 }
@@ -96,26 +122,38 @@ BOOST_AUTO_TEST_CASE(test_activation_threshold)
     VersionBitsCache cache;
     CBlockIndex* tip = nullptr;
 
-    tip = CreateTestBlock(nullptr, VERSIONBITS_TOP_BITS, 1500000000);
+    // Mine initial blocks to establish MTP and reach STARTED state
+    for (int i = 0; i < 11; i++) {
+        tip = CreateTestBlock(tip, VERSIONBITS_TOP_BITS, 999999900 + i * 10);
+    }
+    for (int i = 0; i < 10; i++) {
+        tip = CreateTestBlock(tip, VERSIONBITS_TOP_BITS, 1000000100 + i * 10);
+    }
+
+    // Now at height 20, should be in STARTED state
+    ThresholdState state = cache.State(tip, testParams, Consensus::DEPLOYMENT_DIGIDOLLAR);
+    BOOST_CHECK_EQUAL(state, ThresholdState::STARTED);
 
     uint32_t signal_bit = 1 << testParams.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].bit;
     int32_t signaling_version = VERSIONBITS_TOP_BITS | signal_bit;
 
-    // Test just below threshold (2 out of 4 = 50% < 75%)
+    // Test just below threshold (2 out of 4 = 50% < 75%) - heights 21-24
     tip = CreateTestBlock(tip, signaling_version, 1500000001);
     tip = CreateTestBlock(tip, signaling_version, 1500000002);
     tip = CreateTestBlock(tip, VERSIONBITS_TOP_BITS, 1500000003);
     tip = CreateTestBlock(tip, VERSIONBITS_TOP_BITS, 1500000004);
 
-    ThresholdState state = cache.State(tip, testParams, Consensus::DEPLOYMENT_DIGIDOLLAR);
+    // At height 24 (not a period boundary), state evaluated at 23, should still be STARTED
+    state = cache.State(tip, testParams, Consensus::DEPLOYMENT_DIGIDOLLAR);
     BOOST_CHECK_EQUAL(state, ThresholdState::STARTED);
 
-    // Test at threshold (3 out of 4 = 75%)
+    // Test at threshold (3 out of 4 = 75%) - heights 25-28 (period boundary at 27)
     tip = CreateTestBlock(tip, signaling_version, 1500000005);
     tip = CreateTestBlock(tip, signaling_version, 1500000006);
     tip = CreateTestBlock(tip, signaling_version, 1500000007);
     tip = CreateTestBlock(tip, VERSIONBITS_TOP_BITS, 1500000008);
 
+    // At height 28, state evaluated at 27 (period boundary), should be LOCKED_IN
     state = cache.State(tip, testParams, Consensus::DEPLOYMENT_DIGIDOLLAR);
     BOOST_CHECK_EQUAL(state, ThresholdState::LOCKED_IN);
 }
@@ -138,8 +176,13 @@ BOOST_AUTO_TEST_CASE(test_pre_post_activation_behavior)
 
     CBlockIndex* tip = nullptr;
 
-    // Test before activation - create a block in STARTED state
-    tip = CreateTestBlock(nullptr, VERSIONBITS_TOP_BITS, 1500000000);
+    // Mine initial blocks to establish MTP and reach STARTED state
+    for (int i = 0; i < 11; i++) {
+        tip = CreateTestBlock(tip, VERSIONBITS_TOP_BITS, 999999900 + i * 10);
+    }
+    for (int i = 0; i < 10; i++) {
+        tip = CreateTestBlock(tip, VERSIONBITS_TOP_BITS, 1000000100 + i * 10);
+    }
 
     // Should not be enabled in STARTED state
     BOOST_CHECK(!DigiDollar::IsDigiDollarEnabled(tip, testParams));
@@ -148,21 +191,21 @@ BOOST_AUTO_TEST_CASE(test_pre_post_activation_behavior)
     uint32_t signal_bit = 1 << testParams.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].bit;
     int32_t signaling_version = VERSIONBITS_TOP_BITS | signal_bit;
 
-    // Create signaling blocks
+    // Create signaling blocks (heights 21-24, period ends at 23)
     for (int i = 0; i < 3; i++) {
-        tip = CreateTestBlock(tip, signaling_version, 1500000001 + i);
+        tip = CreateTestBlock(tip, signaling_version, 1500000001 + i * 10);
     }
-    tip = CreateTestBlock(tip, VERSIONBITS_TOP_BITS, 1500000004);
+    tip = CreateTestBlock(tip, VERSIONBITS_TOP_BITS, 1500000031);
 
-    // Still in LOCKED_IN, should not be enabled yet
+    // Still in LOCKED_IN at height 24, should not be enabled yet
     BOOST_CHECK(!DigiDollar::IsDigiDollarEnabled(tip, testParams));
 
-    // Complete activation
+    // Complete activation by mining another period (heights 25-28, period ends at 27)
     for (int i = 0; i < 4; i++) {
-        tip = CreateTestBlock(tip, VERSIONBITS_TOP_BITS, 1500000010 + i);
+        tip = CreateTestBlock(tip, VERSIONBITS_TOP_BITS, 1500000100 + i * 10);
     }
 
-    // Now should be ACTIVE and enabled
+    // Now at height 28, should be ACTIVE and enabled
     BOOST_CHECK(DigiDollar::IsDigiDollarEnabled(tip, testParams));
 }
 
@@ -185,25 +228,43 @@ BOOST_AUTO_TEST_CASE(test_activation_rollback)
     VersionBitsCache cache;
 
     // Create main chain with activation
-    CBlockIndex* main_tip = CreateTestBlock(nullptr, VERSIONBITS_TOP_BITS, 1500000000);
+    CBlockIndex* main_tip = nullptr;
+
+    // Mine initial blocks to establish MTP
+    for (int i = 0; i < 11; i++) {
+        main_tip = CreateTestBlock(main_tip, VERSIONBITS_TOP_BITS, 999999900 + i * 10);
+    }
+    for (int i = 0; i < 10; i++) {
+        main_tip = CreateTestBlock(main_tip, VERSIONBITS_TOP_BITS, 1000000100 + i * 10);
+    }
 
     uint32_t signal_bit = 1 << testParams.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].bit;
     int32_t signaling_version = VERSIONBITS_TOP_BITS | signal_bit;
 
-    // Build chain to LOCKED_IN
+    // Build chain to LOCKED_IN by signaling in a complete period (heights 21-24)
     for (int i = 0; i < 3; i++) {
-        main_tip = CreateTestBlock(main_tip, signaling_version, 1500000001 + i);
+        main_tip = CreateTestBlock(main_tip, signaling_version, 1500000001 + i * 10);
     }
-    main_tip = CreateTestBlock(main_tip, VERSIONBITS_TOP_BITS, 1500000004);
+    main_tip = CreateTestBlock(main_tip, VERSIONBITS_TOP_BITS, 1500000031);
 
+    // At height 24, evaluated at period boundary 23, should be LOCKED_IN
     ThresholdState state = cache.State(main_tip, testParams, Consensus::DEPLOYMENT_DIGIDOLLAR);
     BOOST_CHECK_EQUAL(state, ThresholdState::LOCKED_IN);
 
-    // Create alternative chain without activation
-    CBlockIndex* alt_tip = CreateTestBlock(nullptr, VERSIONBITS_TOP_BITS, 1500000000);
+    // Create alternative chain without activation (separate chain from genesis)
+    CBlockIndex* alt_tip = nullptr;
 
+    // Mine initial blocks to establish MTP on alternative chain
+    for (int i = 0; i < 11; i++) {
+        alt_tip = CreateTestBlock(alt_tip, VERSIONBITS_TOP_BITS, 999999900 + i * 10);
+    }
+    for (int i = 0; i < 10; i++) {
+        alt_tip = CreateTestBlock(alt_tip, VERSIONBITS_TOP_BITS, 1000000100 + i * 10);
+    }
+
+    // Continue without signaling for a full period (heights 21-24)
     for (int i = 0; i < 4; i++) {
-        alt_tip = CreateTestBlock(alt_tip, VERSIONBITS_TOP_BITS, 1500000001 + i);
+        alt_tip = CreateTestBlock(alt_tip, VERSIONBITS_TOP_BITS, 1500000001 + i * 10);
     }
 
     // Alternative chain should still be in STARTED state
@@ -234,15 +295,29 @@ BOOST_AUTO_TEST_CASE(test_activation_timeout)
     VersionBitsCache cache;
     CBlockIndex* tip = nullptr;
 
-    // Generate blocks past timeout without sufficient signaling
-    tip = CreateTestBlock(nullptr, VERSIONBITS_TOP_BITS, 1600000000); // Past timeout
-
-    // Generate blocks past timeout
-    for (int i = 0; i < 4; i++) {
-        tip = CreateTestBlock(tip, VERSIONBITS_TOP_BITS, 1600000000 + i);
+    // Mine initial blocks before start time
+    for (int i = 0; i < 11; i++) {
+        tip = CreateTestBlock(tip, VERSIONBITS_TOP_BITS, 999999900 + i * 10);
     }
 
+    // Mine blocks that cross start time to enter STARTED state (heights 11-20)
+    for (int i = 0; i < 10; i++) {
+        tip = CreateTestBlock(tip, VERSIONBITS_TOP_BITS, 1000000100 + i * 10);
+    }
+
+    // Verify we're in STARTED state
     ThresholdState state = cache.State(tip, testParams, Consensus::DEPLOYMENT_DIGIDOLLAR);
+    BOOST_CHECK_EQUAL(state, ThresholdState::STARTED);
+
+    // Generate blocks past timeout without sufficient signaling
+    // Need to ensure MTP crosses the timeout threshold (1500000000)
+    // Mine blocks with timestamps past timeout (heights 21-31)
+    for (int i = 0; i < 11; i++) {
+        tip = CreateTestBlock(tip, VERSIONBITS_TOP_BITS, 1600000000 + i * 100);
+    }
+
+    // At height 31 (period boundary), MTP should be past timeout, state should be FAILED
+    state = cache.State(tip, testParams, Consensus::DEPLOYMENT_DIGIDOLLAR);
     BOOST_CHECK_EQUAL(state, ThresholdState::FAILED);
 
     // Verify DigiDollar is not enabled in FAILED state
@@ -281,9 +356,8 @@ static CBlockIndex* CreateTestBlock(CBlockIndex* pprev, int32_t nVersion, int64_
     pindex->nHeight = pprev ? pprev->nHeight + 1 : 0;
     pindex->nBits = DEFAULT_REGTEST_BITS;
 
-    // Set median time past - for BIP9 evaluation
-    // In real implementation this would be calculated from previous blocks
-    pindex->nTimeMax = nTime;
+    // Build skip pointers for efficient chain traversal
+    pindex->BuildSkip();
 
     // Store the raw pointer before moving the unique_ptr
     CBlockIndex* result = pindex.get();

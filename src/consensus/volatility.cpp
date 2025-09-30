@@ -103,17 +103,30 @@ double VolatilityMonitor::CalculateVolatility(int64_t timeWindow)
         return 0.0;
     }
 
-    // Calculate percentage changes
+    // Calculate volatility as the maximum absolute percentage change from the starting price
+    // This better reflects the actual price movement for freeze thresholds
+    CAmount startPrice = windowPrices.front().price;
+    double maxAbsChange = 0.0;
+
+    for (size_t i = 1; i < windowPrices.size(); ++i) {
+        double change = std::abs(CalculatePercentageChange(startPrice, windowPrices[i].price));
+        maxAbsChange = std::max(maxAbsChange, change);
+    }
+
+    // Also calculate standard deviation for additional volatility metric
     std::vector<double> percentChanges;
     percentChanges.reserve(windowPrices.size() - 1);
 
     for (size_t i = 1; i < windowPrices.size(); ++i) {
         double change = CalculatePercentageChange(windowPrices[i-1].price, windowPrices[i].price);
-        percentChanges.push_back(change);
+        percentChanges.push_back(std::abs(change));
     }
 
-    // Return standard deviation of percentage changes
-    return CalculateStandardDeviation(percentChanges);
+    double stdDevVolatility = CalculateStandardDeviation(percentChanges);
+
+    // Return the maximum of: max absolute change and 2x standard deviation
+    // This captures both large single moves and sustained volatility
+    return std::max(maxAbsChange, stdDevVolatility * 2.0);
 }
 
 VolatilityState VolatilityMonitor::GetCurrentState()
@@ -346,8 +359,62 @@ void VolatilityMonitor::UpdateVolatilityState()
         return;
     }
 
-    // Update state will be called externally with proper height
-    // This is a simplified implementation for testing
+    // Calculate volatility for different time windows
+    currentState.hourlyVolatility = CalculateVolatility(3600);      // 1 hour
+    currentState.dailyVolatility = CalculateVolatility(24 * 3600);  // 24 hours
+    currentState.weeklyVolatility = CalculateVolatility(7 * 24 * 3600); // 7 days
+
+    // Get the most recent height from price history (if available)
+    uint32_t currentHeight = priceHistory.empty() ? lastUpdateHeight : priceHistory.back().height;
+
+    // Update freeze state based on thresholds
+    bool shouldFreezeMint = (currentState.hourlyVolatility >= VolatilityThresholds::FREEZE_MINT_1H);
+    bool shouldFreezeAll = (currentState.dailyVolatility >= VolatilityThresholds::FREEZE_ALL_24H) ||
+                          (currentState.weeklyVolatility >= VolatilityThresholds::EMERGENCY_7D);
+
+    // Log warnings
+    if (currentState.hourlyVolatility >= VolatilityThresholds::WARNING_1H) {
+        LogPrintf("VolatilityMonitor: WARNING - High volatility detected: 1h=%.2f%%, 24h=%.2f%%, 7d=%.2f%%\n",
+                  currentState.hourlyVolatility, currentState.dailyVolatility, currentState.weeklyVolatility);
+    }
+
+    // Handle freeze state changes
+    if (shouldFreezeAll && !currentState.allOperationsFrozen) {
+        // Trigger all operations freeze
+        currentState.allOperationsFrozen = true;
+        currentState.mintingFrozen = true;
+        currentState.freezeHeight = currentHeight;
+        currentState.cooldownEndHeight = currentHeight + VolatilityThresholds::COOLDOWN_BLOCKS;
+
+        LogPrintf("VolatilityMonitor: FREEZE - All DigiDollar operations frozen due to high volatility (%.2f%% daily, %.2f%% weekly)\n",
+                  currentState.dailyVolatility, currentState.weeklyVolatility);
+
+    } else if (shouldFreezeMint && !currentState.mintingFrozen) {
+        // Trigger minting freeze only
+        currentState.mintingFrozen = true;
+        currentState.freezeHeight = currentHeight;
+        currentState.cooldownEndHeight = currentHeight + VolatilityThresholds::COOLDOWN_BLOCKS;
+
+        LogPrintf("VolatilityMonitor: FREEZE - DigiDollar minting frozen due to high volatility (%.2f%% hourly)\n",
+                  currentState.hourlyVolatility);
+    }
+
+    // Check if we should unfreeze (only if not in cooldown and volatility is low)
+    if ((currentState.mintingFrozen || currentState.allOperationsFrozen) &&
+        currentHeight > currentState.cooldownEndHeight) {
+
+        bool canUnfreeze = (currentState.hourlyVolatility < VolatilityThresholds::WARNING_1H) &&
+                          (currentState.dailyVolatility < VolatilityThresholds::FREEZE_MINT_1H) &&
+                          (currentState.weeklyVolatility < VolatilityThresholds::FREEZE_ALL_24H);
+
+        if (canUnfreeze) {
+            LogPrintf("VolatilityMonitor: UNFREEZE - Volatility stabilized, unfreezing operations\n");
+            currentState.mintingFrozen = false;
+            currentState.allOperationsFrozen = false;
+            currentState.freezeHeight = 0;
+            currentState.cooldownEndHeight = 0;
+        }
+    }
 }
 
 void VolatilityMonitor::CleanOldHistory()
@@ -358,7 +425,9 @@ void VolatilityMonitor::CleanOldHistory()
         return;
     }
 
-    const int64_t cutoffTime = GetTime() - (MAX_HISTORY_DAYS * 24 * 3600);
+    // Use the most recent timestamp as reference, not current time
+    // This ensures consistent behavior in tests and when replaying history
+    const int64_t cutoffTime = priceHistory.back().timestamp - (MAX_HISTORY_DAYS * 24 * 3600);
 
     // Remove old entries
     while (!priceHistory.empty() && priceHistory.front().timestamp < cutoffTime) {

@@ -163,6 +163,16 @@ bool operator<(const CInv& a, const CInv& b)
 std::string CInv::GetCommand() const
 {
     std::string cmd;
+
+    // Check for oracle messages first (they're outside MSG_TYPE_MASK range)
+    switch (type)
+    {
+    case MSG_ORACLE_PRICE:   return NetMsgType::ORACLEPRICE;
+    case MSG_ORACLE_BUNDLE:  return NetMsgType::ORACLEBUNDLE;
+    case MSG_GET_ORACLE_DATA: return NetMsgType::GETORACLES;
+    }
+
+    // Handle witness flag for standard messages
     if (type & MSG_WITNESS_FLAG)
         cmd.append("witness-");
     int masked = type & MSG_TYPE_MASK;
@@ -175,9 +185,6 @@ std::string CInv::GetCommand() const
     case MSG_FILTERED_BLOCK: return cmd.append(NetMsgType::MERKLEBLOCK);
     case MSG_CMPCT_BLOCK:    return cmd.append(NetMsgType::CMPCTBLOCK);
     case MSG_DANDELION_TX:   return cmd.append(NetMsgType::DANDELIONTX);
-    case MSG_ORACLE_PRICE:   return cmd.append(NetMsgType::ORACLEPRICE);
-    case MSG_ORACLE_BUNDLE:  return cmd.append(NetMsgType::ORACLEBUNDLE);
-    case MSG_GET_ORACLE_DATA: return cmd.append(NetMsgType::GETORACLES);
     default:
         throw std::out_of_range(strprintf("CInv::GetCommand(): type=%d unknown type", type));
     }

@@ -10,7 +10,9 @@
 #include <coins.h>
 #include <consensus/amount.h>
 #include <consensus/consensus.h>
+#include <consensus/digidollar.h>
 #include <consensus/validation.h>
+#include <logging.h>
 #include <policy/feerate.h>
 #include <primitives/transaction.h>
 #include <script/interpreter.h>
@@ -93,9 +95,23 @@ bool IsStandard(const CScript& scriptPubKey, const std::optional<unsigned>& max_
 
 bool IsStandardTx(const CTransaction& tx, const std::optional<unsigned>& max_datacarrier_bytes, bool permit_bare_multisig, const CFeeRate& dust_relay_fee, std::string& reason)
 {
-    if (tx.nVersion > TX_MAX_STANDARD_VERSION || tx.nVersion < 1) {
+    // Allow DigiDollar transactions with special version markers
+    // Check lower 16 bits for 0x0770 marker (consensus layer format)
+    const int32_t DD_TX_VERSION = 0x0D1D0770;
+    const int32_t DD_VERSION_MASK = 0x0000FFFF;
+    bool isDigiDollar = (tx.nVersion & DD_VERSION_MASK) == (DD_TX_VERSION & DD_VERSION_MASK);
+
+    LogPrintf("IsStandardTx: version=%d, isDigiDollar=%d, TX_MAX_STANDARD_VERSION=%d\n",
+              tx.nVersion, isDigiDollar, TX_MAX_STANDARD_VERSION);
+
+    if (!isDigiDollar && (tx.nVersion > TX_MAX_STANDARD_VERSION || tx.nVersion < 1)) {
+        LogPrintf("IsStandardTx: REJECTED - version out of range\n");
         reason = "version";
         return false;
+    }
+
+    if (isDigiDollar) {
+        LogPrintf("IsStandardTx: ALLOWED - DigiDollar transaction detected\n");
     }
 
     // Extremely large transactions with lots of inputs can cost the network
@@ -142,8 +158,11 @@ bool IsStandardTx(const CTransaction& tx, const std::optional<unsigned>& max_dat
             reason = "bare-multisig";
             return false;
         } else if (IsDust(txout, dust_relay_fee)) {
-            reason = "dust";
-            return false;
+            // Skip dust check for DigiDollar transactions - DD tokens have 0 DGB value
+            if (!isDigiDollar) {
+                reason = "dust";
+                return false;
+            }
         }
     }
 

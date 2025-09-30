@@ -10,6 +10,8 @@
 #include <qt/guiutil.h>
 #include <qt/digibyteunits.h>
 #include <consensus/amount.h>
+#include <logging.h>
+#include <node/interface_ui.h>
 
 #include <QLabel>
 #include <QLineEdit>
@@ -68,6 +70,8 @@ DigiDollarMintWidget::DigiDollarMintWidget(QWidget *parent) :
 {
     setupUI();
     connectSignals();
+    // Initialize tier selection to trigger calculation of default tier
+    onLockTierChanged();
     // REMOVED: applyTheme() - Let CSS handle all theming
 }
 
@@ -203,11 +207,11 @@ void DigiDollarMintWidget::setupLockTierSection()
     m_lockTierLayout->addWidget(tierTitle, 0, 0, 1, 2);
 
     // Lock period combo
-    m_lockTierLabel = new QLabel(tr("Lock &Duration:"), this);
-    m_lockTierLabel->setToolTip(tr("Select how long to lock your DGB collateral"));
+    m_lockTierLabel = new QLabel(tr("Time Lock Period:"), this);
+    m_lockTierLabel->setToolTip(tr("Select how long your DGB collateral will be locked"));
     m_lockTierCombo = new QComboBox(this);
     m_lockTierCombo->setObjectName("lockTierCombo");
-    m_lockTierCombo->setToolTip(tr("Longer locks require less collateral (30 days: 500%, 10 years: 200%)"));
+    m_lockTierCombo->setToolTip(tr("WARNING: Your DGB will be locked for this period and cannot be accessed until the timelock expires.\nLonger locks require less collateral (30 days: 500%, 10 years: 200%)"));
     m_lockTierLabel->setBuddy(m_lockTierCombo);
 
     // Add all 8 lock periods
@@ -217,6 +221,9 @@ void DigiDollarMintWidget::setupLockTierSection()
 
     m_lockTierLayout->addWidget(m_lockTierLabel, 1, 0);
     m_lockTierLayout->addWidget(m_lockTierCombo, 1, 1);
+
+    // Set default selection to first tier (30 days)
+    m_lockTierCombo->setCurrentIndex(0);
 
     // Lock tier info
     m_lockTierInfoLabel = new QLabel(tr("Collateral Ratio:"), this);
@@ -452,6 +459,7 @@ void DigiDollarMintWidget::onAmountChanged()
 void DigiDollarMintWidget::onLockTierChanged()
 {
     m_selectedTier = m_lockTierCombo->currentData().toInt();
+    LogPrintf("DigiDollar Qt: Lock tier changed to: %d\n", m_selectedTier);
     double ratio = getCollateralRatioForTier(m_selectedTier);
     m_lockTierInfoValue->setText(formatRatio(ratio));
 
@@ -465,16 +473,37 @@ void DigiDollarMintWidget::onMintClicked()
         return;
     }
 
-    // In a real implementation, this would create and broadcast the mint transaction
+    // Calculate unlock details for user warning
+    int lockBlocks = getLockTierBlocks(m_selectedTier);
+    int currentHeight = m_clientModel ? m_clientModel->getNumBlocks() : 0;
+    int unlockHeight = currentHeight + lockBlocks;
+    QString lockPeriodStr = getLockTierDisplayName(m_selectedTier);
+
     QMessageBox msgBox(this);
-    msgBox.setWindowTitle(tr("Confirm Mint"));
+    msgBox.setWindowTitle(tr("Confirm DigiDollar Mint"));
+    msgBox.setIcon(QMessageBox::Warning);
     msgBox.setText(tr("Mint %1 DD by locking %2 DGB?")
                   .arg(formatDDAmount(m_mintAmount))
                   .arg(formatDGBAmount(m_requiredCollateral)));
-    msgBox.setInformativeText(tr("Lock Tier: %1\nCollateral Ratio: %2\nLock Period: %3 blocks")
-                             .arg(m_selectedTier)
-                             .arg(formatRatio(m_collateralRatio))
-                             .arg(getLockTierBlocks(m_selectedTier)));
+
+    QString warningText = tr(
+        "⚠️ TIMELOCK WARNING ⚠️\n\n"
+        "Your DGB will be LOCKED for %1\n"
+        "You will NOT be able to access this DGB until block %2\n\n"
+        "Lock Period: %3 (%4 blocks)\n"
+        "Collateral Ratio: %5\n"
+        "Current Block: %6\n"
+        "Unlock Block: %7\n\n"
+        "Make sure you understand this commitment before proceeding!")
+        .arg(lockPeriodStr)
+        .arg(unlockHeight)
+        .arg(lockPeriodStr)
+        .arg(lockBlocks)
+        .arg(formatRatio(m_collateralRatio))
+        .arg(currentHeight)
+        .arg(unlockHeight);
+
+    msgBox.setInformativeText(warningText);
     msgBox.setStandardButtons(QMessageBox::Yes | QMessageBox::No);
     msgBox.setDefaultButton(QMessageBox::No);
 
@@ -491,11 +520,32 @@ void DigiDollarMintWidget::onMintClicked()
         WalletModel::DigiDollarMintResult result = m_walletModel->mintDigiDollar(ddAmountCents, m_selectedTier);
 
         if (result.status == WalletModel::OK) {
-            Q_EMIT message(tr("Mint Transaction Created"),
-                        tr("DigiDollar mint transaction created successfully!\n\nTransaction ID: %1\nPosition ID: %2")
+            // Format collateral amount
+            QString collateralStr = QString::number(result.collateralLocked / 100000000.0, 'f', 8) + " DGB";
+            QString ddAmountStr = QString::number(ddAmountCents / 100.0, 'f', 2) + " DD";
+
+            QString successMessage = tr("DigiDollar mint transaction created successfully!\n\n"
+                           "Transaction ID:\n%1\n\n"
+                           "Amount Minted: %2\n"
+                           "Collateral Locked: %3\n"
+                           "Lock Tier: %4")
                         .arg(result.txid)
-                        .arg(result.positionId),
-                        QMessageBox::Information);
+                        .arg(ddAmountStr)
+                        .arg(collateralStr)
+                        .arg(m_selectedTier);
+
+            LogPrintf("DigiDollar Qt: Showing success message dialog\n");
+
+            // Show modal message box directly
+            QMessageBox msgBox(this);
+            msgBox.setWindowTitle(tr("Mint Successful"));
+            msgBox.setText(successMessage);
+            msgBox.setIcon(QMessageBox::Information);
+            msgBox.setStandardButtons(QMessageBox::Ok);
+            msgBox.exec();
+
+            LogPrintf("DigiDollar Qt: Success message shown\n");
+
             onClearClicked();
             updateBalance(); // Refresh balance displays
         } else {

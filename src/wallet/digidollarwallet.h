@@ -86,9 +86,16 @@ private:
     CAmount total_dd_balance;
     CAmount locked_collateral;
 
+    // Pointer to wallet for UTXO access
+    wallet::CWallet* m_wallet;
+
 public:
     DigiDollarWallet();
+    DigiDollarWallet(wallet::CWallet* wallet);
     virtual ~DigiDollarWallet() = default;
+
+    // Set wallet pointer (for initialization)
+    void SetWallet(wallet::CWallet* wallet) { m_wallet = wallet; }
 
     // ====================================================================
     // PHASE 5 TASK 5.1: DATABASE EXTENSION FUNCTIONS
@@ -135,6 +142,13 @@ public:
     CAmount GetTotalDDBalance() const;
 
     /**
+     * Scan wallet UTXOs for DigiDollar outputs and populate dd_balances map
+     * Should be called after wallet loads and when new blocks are processed
+     * @return Number of DD UTXOs found
+     */
+    size_t ScanForDDUTXOs();
+
+    /**
      * Get total locked collateral from active positions
      * @return Locked collateral amount in satoshis
      */
@@ -146,6 +160,12 @@ public:
      * @return Vector of collateral positions
      */
     std::vector<WalletCollateralPosition> GetPositions(bool active_only = true) const;
+
+    /**
+     * Add a collateral position to the wallet
+     * @param position The position to add
+     */
+    void AddCollateralPosition(const WalletCollateralPosition& position);
 
     // ====================================================================
     // PHASE 5 TASK 5.3: TRANSACTION CREATION FUNCTIONS
@@ -291,6 +311,9 @@ protected:
     bool SelectDDCoins(const CAmount& target_amount, std::vector<COutPoint>& selected_utxos, CAmount& selected_total) const;
     bool SelectFeeCoins(const CAmount& fee_amount, std::vector<COutPoint>& selected_utxos, CAmount& selected_total) const;
     CAmount CalculateTransactionFee(const CMutableTransaction& tx) const;
+
+    // Database persistence
+    void LoadFromDatabase();
 };
 
 /**

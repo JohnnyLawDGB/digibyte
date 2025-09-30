@@ -171,12 +171,13 @@ public:
 
     struct DigiDollarMintResult
     {
-        DigiDollarMintResult(StatusCode _status = OK, QString _txid = "", QString _positionId = "", QString _reasonFailed = "")
-            : status(_status), txid(_txid), positionId(_positionId), reasonFailed(_reasonFailed) {}
+        DigiDollarMintResult(StatusCode _status = OK, QString _txid = "", QString _positionId = "", QString _reasonFailed = "", CAmount _collateralLocked = 0)
+            : status(_status), txid(_txid), positionId(_positionId), reasonFailed(_reasonFailed), collateralLocked(_collateralLocked) {}
         StatusCode status;
         QString txid;
         QString positionId;
         QString reasonFailed;
+        CAmount collateralLocked;  // Amount of DGB locked as collateral (in satoshis)
     };
 
     struct DigiDollarRedeemResult

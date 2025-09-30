@@ -15,6 +15,8 @@
 // Forward declarations
 class CBlockIndex;
 class ChainstateManager;
+class CTransaction;
+class CScript;
 namespace Consensus {
     struct Params;
 }
@@ -24,6 +26,16 @@ namespace DigiDollar {
 // DigiByte specific constants
 static const int BLOCKS_PER_DAY = 24 * 60 * 4;  // 5760 blocks (15s blocks)
 static const CAmount CENT = 1000000;  // DigiDollar cent in satoshis
+
+// DigiDollar transaction types
+enum DigiDollarTxType : uint8_t {
+    DD_TX_NONE = 0,
+    DD_TX_MINT = 1,      // Lock DGB, create DigiDollars
+    DD_TX_TRANSFER = 2,  // Transfer DigiDollars between addresses
+    DD_TX_REDEEM = 3,    // Burn DigiDollars, unlock DGB
+    DD_TX_PARTIAL = 4,   // Partial redemption
+    DD_TX_ERR = 5        // Emergency Redemption Ratio (ERR) redemption
+};
 
 /**
  * Core consensus parameters for the DigiDollar stablecoin system.
@@ -126,12 +138,8 @@ bool ValidateConsensusParams(const ConsensusParams& params, std::string& strErro
  */
 bool IsDigiDollarActive(int nHeight, const Consensus::Params& consensusParams);
 
-/**
- * Check if DigiDollar is enabled using BIP9 deployment status.
- * This is the proper way to check DigiDollar activation after implementing BIP9 deployment.
- */
-bool IsDigiDollarEnabled(const CBlockIndex* pindexPrev, const ChainstateManager& chainman);
-bool IsDigiDollarEnabled(const CBlockIndex* pindexPrev, const Consensus::Params& params);
+// Note: IsDigiDollarEnabled() functions are in digidollar/digidollar.h
+// (not here) as they require deployment checking which is not part of consensus library
 
 /**
  * Get the tier index for a lock period.
@@ -145,6 +153,20 @@ int GetLockTierIndex(int64_t lockBlocks, const ConsensusParams& params);
  * Converts block count to human-readable format (e.g., "30 days", "1 year").
  */
 std::string FormatLockPeriod(int64_t lockBlocks);
+
+/**
+ * Check if transaction has DigiDollar marker in version field
+ */
+bool HasDigiDollarMarker(const CTransaction& tx);
+
+/**
+ * Extract DigiDollar transaction type from version field
+ */
+DigiDollarTxType GetDigiDollarTxType(const CTransaction& tx);
+
+// Note: IsDDTokenScript() and ExtractDDAmount() are declared in
+// src/digidollar/validation.h as they require CScript methods not
+// available in the consensus library
 
 } // namespace DigiDollar
 

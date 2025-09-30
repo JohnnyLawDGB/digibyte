@@ -18,7 +18,7 @@
 
 using namespace DigiDollar;
 
-BOOST_FIXTURE_TEST_SUITE(digidollar_mint_tests, BasicTestingSetup)
+BOOST_FIXTURE_TEST_SUITE(digidollar_mint_tests, TestingSetup)
 
 // Helper function to create a test key
 CKey CreateTestKey() {

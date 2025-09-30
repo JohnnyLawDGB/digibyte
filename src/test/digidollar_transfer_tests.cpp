@@ -17,7 +17,38 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <map>
+
 using namespace DigiDollar;
+
+// Mock UTXO store for testing - maps outpoint to DD amount
+std::map<COutPoint, CAmount> g_mockDDUTXOs;
+std::map<COutPoint, CAmount> g_mockDGBUTXOs;
+
+/**
+ * Test-specific TransferTxBuilder that uses mock UTXO stores
+ */
+class MockTransferTxBuilder : public TransferTxBuilder {
+public:
+    using TransferTxBuilder::TransferTxBuilder;
+
+protected:
+    CAmount GetDDFromUTXO(const COutPoint& outpoint) const override {
+        auto it = g_mockDDUTXOs.find(outpoint);
+        if (it != g_mockDDUTXOs.end()) {
+            return it->second;
+        }
+        return 0;
+    }
+
+    CAmount GetDGBFromUTXO(const COutPoint& outpoint) const override {
+        auto it = g_mockDGBUTXOs.find(outpoint);
+        if (it != g_mockDGBUTXOs.end()) {
+            return it->second;
+        }
+        return 100 * COIN; // Default for testing
+    }
+};
 
 BOOST_FIXTURE_TEST_SUITE(digidollar_transfer_tests, TestingSetup)
 
@@ -25,7 +56,7 @@ BOOST_FIXTURE_TEST_SUITE(digidollar_transfer_tests, TestingSetup)
  * Test fixture for DigiDollar transfer transaction tests
  * Sets up necessary environment for testing transfer operations
  */
-struct DDTransferTestFixture {
+struct DDTransferTestFixture : public TestingSetup {
     // Test chain parameters
     const CChainParams& chainParams;
 
@@ -45,7 +76,7 @@ struct DDTransferTestFixture {
     static const CAmount MAX_TRANSFER_AMOUNT = 10000000; // $100,000.00
     static const CAmount DUST_AMOUNT = 50;        // $0.50
 
-    DDTransferTestFixture() : chainParams(Params()) {
+    DDTransferTestFixture() : chainParams(m_node.chainman->GetParams()) {
         // Generate test keys
         senderKey.MakeNewKey(true);
         recipientKey.MakeNewKey(true);
@@ -55,6 +86,10 @@ struct DDTransferTestFixture {
         currentHeight = 100000;
         oraclePrice = 2500; // $25.00 per DGB
         systemCollateral = 150; // 150% healthy system
+
+        // Clear mock UTXO stores
+        g_mockDDUTXOs.clear();
+        g_mockDGBUTXOs.clear();
     }
 
     /**
@@ -62,7 +97,9 @@ struct DDTransferTestFixture {
      */
     COutPoint CreateMockDDUTXO(CAmount ddAmount) {
         // Mock UTXO creation - in real implementation this would reference blockchain
-        return COutPoint(InsecureRand256(), 0);
+        COutPoint outpoint(InsecureRand256(), 0);
+        g_mockDDUTXOs[outpoint] = ddAmount; // Store amount in mock store
+        return outpoint;
     }
 
     /**
@@ -70,7 +107,9 @@ struct DDTransferTestFixture {
      */
     COutPoint CreateMockDGBUTXO(CAmount dgbAmount) {
         // Mock UTXO creation
-        return COutPoint(InsecureRand256(), 1);
+        COutPoint outpoint(InsecureRand256(), 1);
+        g_mockDGBUTXOs[outpoint] = dgbAmount; // Store amount in mock store
+        return outpoint;
     }
 
     /**
@@ -100,6 +139,12 @@ struct DDTransferTestFixture {
     }
 };
 
+// Define static const members
+const CAmount DDTransferTestFixture::TEST_DD_AMOUNT;
+const CAmount DDTransferTestFixture::LARGE_DD_AMOUNT;
+const CAmount DDTransferTestFixture::MAX_TRANSFER_AMOUNT;
+const CAmount DDTransferTestFixture::DUST_AMOUNT;
+
 // =============================================================================
 // Basic Transfer Creation Tests
 // =============================================================================
@@ -110,14 +155,18 @@ BOOST_FIXTURE_TEST_CASE(test_basic_transfer_creation, DDTransferTestFixture)
     std::string recipientAddr = CreateDDAddress(recipientKey.GetPubKey());
     TransferParams params = BuildTransferParams({{recipientAddr, TEST_DD_AMOUNT}});
 
-    TransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
+    MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
 
-    // Act: Build transfer transaction - EXPECTED TO FAIL (RED phase)
+    // Act: Build transfer transaction
     TxBuilderResult result = builder.BuildTransferTransaction(params);
 
-    // Assert: This should fail since we haven't implemented the function yet
-    BOOST_CHECK(!result.success);
-    BOOST_CHECK(!result.error.empty());
+    // Assert: Should succeed with proper implementation
+    if (!result.success) {
+        BOOST_TEST_MESSAGE("Transfer failed: " << result.error);
+    }
+    BOOST_CHECK(result.success);
+    BOOST_CHECK(result.error.empty());
+    BOOST_CHECK_GT(result.tx.vout.size(), 0);
 }
 
 BOOST_FIXTURE_TEST_CASE(test_transfer_with_change, DDTransferTestFixture)
@@ -127,7 +176,7 @@ BOOST_FIXTURE_TEST_CASE(test_transfer_with_change, DDTransferTestFixture)
     CAmount transferAmount = TEST_DD_AMOUNT / 2; // Transfer half
     TransferParams params = BuildTransferParams({{recipientAddr, transferAmount}});
 
-    TransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
+    MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
 
     // Act: Build transfer with change - EXPECTED TO FAIL (RED phase)
     TxBuilderResult result = builder.BuildTransferTransaction(params);
@@ -153,7 +202,7 @@ BOOST_FIXTURE_TEST_CASE(test_multiple_dd_inputs_consolidation, DDTransferTestFix
     params.ddUtxos.push_back(CreateMockDDUTXO(TEST_DD_AMOUNT));
     params.ddUtxos.push_back(CreateMockDDUTXO(LARGE_DD_AMOUNT));
 
-    TransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
+    MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
 
     // Act: Build consolidation transfer - EXPECTED TO FAIL (RED phase)
     TxBuilderResult result = builder.BuildTransferTransaction(params);
@@ -177,7 +226,7 @@ BOOST_FIXTURE_TEST_CASE(test_multiple_recipients, DDTransferTestFixture)
     };
 
     TransferParams params = BuildTransferParams(recipients);
-    TransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
+    MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
 
     // Act: Build multi-recipient transfer - EXPECTED TO FAIL (RED phase)
     TxBuilderResult result = builder.BuildTransferTransaction(params);
@@ -198,7 +247,7 @@ BOOST_FIXTURE_TEST_CASE(test_insufficient_balance_handling, DDTransferTestFixtur
     CAmount excessiveAmount = TEST_DD_AMOUNT * 10; // 10x available
     TransferParams params = BuildTransferParams({{recipientAddr, excessiveAmount}});
 
-    TransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
+    MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
 
     // Act: Attempt transfer with insufficient balance - EXPECTED TO FAIL (RED phase)
     TxBuilderResult result = builder.BuildTransferTransaction(params);
@@ -217,7 +266,7 @@ BOOST_FIXTURE_TEST_CASE(test_zero_amount_validation, DDTransferTestFixture)
     std::string recipientAddr = CreateDDAddress(recipientKey.GetPubKey());
     TransferParams params = BuildTransferParams({{recipientAddr, 0}});
 
-    TransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
+    MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
 
     // Act: Attempt zero transfer - EXPECTED TO FAIL (RED phase)
     TxBuilderResult result = builder.BuildTransferTransaction(params);
@@ -233,7 +282,7 @@ BOOST_FIXTURE_TEST_CASE(test_negative_amount_validation, DDTransferTestFixture)
     std::string recipientAddr = CreateDDAddress(recipientKey.GetPubKey());
     TransferParams params = BuildTransferParams({{recipientAddr, -1000}});
 
-    TransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
+    MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
 
     // Act: Attempt negative transfer - EXPECTED TO FAIL (RED phase)
     TxBuilderResult result = builder.BuildTransferTransaction(params);
@@ -255,7 +304,7 @@ BOOST_FIXTURE_TEST_CASE(test_maximum_transfer_limits, DDTransferTestFixture)
         params.ddUtxos.push_back(CreateMockDDUTXO(MAX_TRANSFER_AMOUNT / 100));
     }
 
-    TransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
+    MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
 
     // Act: Attempt maximum transfer - EXPECTED TO FAIL (RED phase)
     TxBuilderResult result = builder.BuildTransferTransaction(params);
@@ -272,7 +321,7 @@ BOOST_FIXTURE_TEST_CASE(test_exceed_maximum_transfer_limits, DDTransferTestFixtu
     CAmount excessiveAmount = MAX_TRANSFER_AMOUNT + 1;
     TransferParams params = BuildTransferParams({{recipientAddr, excessiveAmount}});
 
-    TransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
+    MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
 
     // Act: Attempt excessive transfer - EXPECTED TO FAIL (RED phase)
     TxBuilderResult result = builder.BuildTransferTransaction(params);
@@ -292,7 +341,7 @@ BOOST_FIXTURE_TEST_CASE(test_dd_conservation_verification, DDTransferTestFixture
     std::string recipientAddr = CreateDDAddress(recipientKey.GetPubKey());
     TransferParams params = BuildTransferParams({{recipientAddr, TEST_DD_AMOUNT}});
 
-    TransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
+    MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
 
     // Act: Build conservation test - EXPECTED TO FAIL (RED phase)
     TxBuilderResult result = builder.BuildTransferTransaction(params);
@@ -313,7 +362,7 @@ BOOST_FIXTURE_TEST_CASE(test_dust_threshold_handling, DDTransferTestFixture)
     std::string recipientAddr = CreateDDAddress(recipientKey.GetPubKey());
     TransferParams params = BuildTransferParams({{recipientAddr, DUST_AMOUNT}});
 
-    TransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
+    MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
 
     // Act: Attempt dust transfer - EXPECTED TO FAIL (RED phase)
     TxBuilderResult result = builder.BuildTransferTransaction(params);
@@ -333,7 +382,7 @@ BOOST_FIXTURE_TEST_CASE(test_invalid_recipient_validation, DDTransferTestFixture
     std::string invalidAddr = "invalid_dd_address_format";
     TransferParams params = BuildTransferParams({{invalidAddr, TEST_DD_AMOUNT}});
 
-    TransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
+    MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
 
     // Act: Attempt transfer to invalid address - EXPECTED TO FAIL (RED phase)
     TxBuilderResult result = builder.BuildTransferTransaction(params);
@@ -348,7 +397,7 @@ BOOST_FIXTURE_TEST_CASE(test_empty_recipient_validation, DDTransferTestFixture)
     // Arrange: Empty recipients list
     TransferParams params = BuildTransferParams({});
 
-    TransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
+    MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
 
     // Act: Attempt transfer with no recipients - EXPECTED TO FAIL (RED phase)
     TxBuilderResult result = builder.BuildTransferTransaction(params);
@@ -368,7 +417,7 @@ BOOST_FIXTURE_TEST_CASE(test_transaction_version_validation, DDTransferTestFixtu
     std::string recipientAddr = CreateDDAddress(recipientKey.GetPubKey());
     TransferParams params = BuildTransferParams({{recipientAddr, TEST_DD_AMOUNT}});
 
-    TransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
+    MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
 
     // Act: Build transfer and check version - EXPECTED TO FAIL (RED phase)
     TxBuilderResult result = builder.BuildTransferTransaction(params);
@@ -388,7 +437,7 @@ BOOST_FIXTURE_TEST_CASE(test_transaction_type_validation, DDTransferTestFixture)
     std::string recipientAddr = CreateDDAddress(recipientKey.GetPubKey());
     TransferParams params = BuildTransferParams({{recipientAddr, TEST_DD_AMOUNT}});
 
-    TransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
+    MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
 
     // Act: Build and validate transaction type - EXPECTED TO FAIL (RED phase)
     TxBuilderResult result = builder.BuildTransferTransaction(params);
@@ -409,7 +458,7 @@ BOOST_FIXTURE_TEST_CASE(test_validate_transfer_params, DDTransferTestFixture)
     TransferParams validParams = BuildTransferParams({{recipientAddr, TEST_DD_AMOUNT}});
     TransferParams invalidParams = BuildTransferParams({{recipientAddr, -1000}});
 
-    TransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
+    MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
 
     // Act & Assert: These should fail in RED phase since methods don't exist yet
     // In GREEN phase, we'll test:
@@ -427,7 +476,7 @@ BOOST_FIXTURE_TEST_CASE(test_calculate_total_dd_input, DDTransferTestFixture)
     std::vector<CTxOut> inputs;
     std::vector<CAmount> amounts = {1000, 2000, 3000}; // $10, $20, $30
 
-    TransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
+    MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
 
     // Act & Assert: This should fail in RED phase since method doesn't exist
     // In GREEN phase:
@@ -444,7 +493,7 @@ BOOST_FIXTURE_TEST_CASE(test_create_dd_transfer_script, DDTransferTestFixture)
     CPubKey recipient = recipientKey.GetPubKey();
     CAmount amount = TEST_DD_AMOUNT;
 
-    TransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
+    MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
 
     // Act & Assert: This should fail in RED phase since method doesn't exist
     // In GREEN phase:
@@ -465,7 +514,7 @@ BOOST_FIXTURE_TEST_CASE(test_select_dd_inputs, DDTransferTestFixture)
     std::vector<CTxOut> selected;
     CAmount total = 0;
 
-    TransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
+    MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
 
     // Act & Assert: This should fail in RED phase since method doesn't exist
     // In GREEN phase:
@@ -494,7 +543,7 @@ BOOST_FIXTURE_TEST_CASE(test_maximum_inputs_consolidation, DDTransferTestFixture
         params.ddUtxos.push_back(CreateMockDDUTXO(100)); // $1.00 each
     }
 
-    TransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
+    MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
 
     // Act: Attempt large consolidation - EXPECTED TO FAIL (RED phase)
     TxBuilderResult result = builder.BuildTransferTransaction(params);
@@ -514,7 +563,7 @@ BOOST_FIXTURE_TEST_CASE(test_precise_amount_matching, DDTransferTestFixture)
     params.ddUtxos.clear();
     params.ddUtxos.push_back(CreateMockDDUTXO(TEST_DD_AMOUNT));
 
-    TransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
+    MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
 
     // Act: Build exact amount transfer - EXPECTED TO FAIL (RED phase)
     TxBuilderResult result = builder.BuildTransferTransaction(params);

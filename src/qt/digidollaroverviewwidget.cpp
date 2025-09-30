@@ -10,6 +10,11 @@
 #include <qt/digibyteunits.h>
 #include <qt/optionsmodel.h>
 #include <qt/platformstyle.h>
+#include <oracle/mock_oracle.h>
+#include <consensus/dca.h>
+#include <digidollar/health.h>
+#include <chainparams.h>
+#include <wallet/digidollarwallet.h>
 
 #include <QLabel>
 #include <QVBoxLayout>
@@ -440,18 +445,21 @@ void DigiDollarOverviewWidget::incomingDDTransaction(const QString& date, const 
 
 void DigiDollarOverviewWidget::updateBalance()
 {
-    // In a real implementation, this would query the wallet for DigiDollar balances
-    // For now, we'll show demo values to show the styling
-
+    // Get actual DigiDollar balance from wallet
     if (m_walletModel) {
-        // TODO: Get actual DigiDollar balance from wallet
-        // m_ddBalance = m_walletModel->getDDBalance();
-        // m_dgbCollateral = m_walletModel->getDGBCollateral();
-        // For demo, use some sample values
-        m_ddBalance = 1000.50; // Demo DD balance
-        m_dgbCollateral = 50000.0; // Demo DGB collateral
+        // Get DD balance from wallet (in cents)
+        CAmount balanceCents = m_walletModel->getDigiDollarBalance();
+        m_ddBalance = balanceCents / 100.0; // Convert cents to DD
+
+        // TODO: Get locked collateral from wallet positions
+        // For now, use mock value as this requires position tracking
+        m_dgbCollateral = 0.0;
+
+        // Try to get actual available DGB balance
+        CAmount dgbBalance = m_walletModel->getAvailableDGBBalance();
+        // Store this for display purposes if needed
     } else {
-        // Demo values when no wallet is connected
+        // No wallet connected
         m_ddBalance = 0.0;
         m_dgbCollateral = 0.0;
     }
@@ -460,26 +468,30 @@ void DigiDollarOverviewWidget::updateBalance()
     m_ddBalanceValue->setText(formatDDAmount(m_ddBalance));
     m_dgbCollateralValue->setText(formatDGBAmount(m_dgbCollateral));
 
-    // Calculate USD value
-    double usdValue = m_ddBalance * 1.0; // DD should be pegged to $1
+    // Calculate USD value (DD should be pegged to $1)
+    double usdValue = m_ddBalance * 1.0;
     m_usdValueValue->setText(formatUSDAmount(usdValue));
 }
 
 void DigiDollarOverviewWidget::updateOraclePrice()
 {
-    // In a real implementation, this would query the oracle price
-    // For now, we'll show a mock price for demonstration
+    // Get price from MockOracleManager if in RegTest, otherwise use real oracle
+    if (Params().GetChainType() == ChainType::REGTEST && MockOracleManager::GetInstance().IsEnabled()) {
+        // Get price from mock oracle (price is in cents per DGB)
+        // e.g., 1000000 cents/DGB = $10,000/DGB
+        // e.g., 1 cent/DGB = $0.01/DGB
+        CAmount priceCents = MockOracleManager::GetInstance().GetCurrentPrice();
 
-    if (m_clientModel) {
-        // TODO: Get actual oracle price
-        // m_oraclePrice = m_clientModel->getOraclePrice();
+        // Convert cents to dollars
+        m_oraclePrice = priceCents / 100.0;
+    } else {
+        // TODO: Get actual oracle price from production oracle system
+        // For now, use a default price
+        m_oraclePrice = 0.015; // Default: $0.015 per DGB
     }
 
-    // For demo, use a mock price regardless of client model status
-    m_oraclePrice = 0.015; // Mock price: $0.015 per DGB
-
     if (m_oraclePrice > 0) {
-        m_oraclePriceValue->setText(QString("$%1").arg(QString::number(m_oraclePrice, 'f', 4)));
+        m_oraclePriceValue->setText(QString("$%1").arg(QString::number(m_oraclePrice, 'f', 6)));
     } else {
         m_oraclePriceValue->setText("Loading...");
     }
@@ -487,45 +499,152 @@ void DigiDollarOverviewWidget::updateOraclePrice()
 
 void DigiDollarOverviewWidget::updateSystemHealth()
 {
-    // In a real implementation, this would query system health metrics
-    // For now, we'll show healthy status
-
+    // Get real system health metrics from DigiDollar system
     QString healthStatus = "Healthy";
     int healthPercentage = 100;
+    m_dcaLevel = 0;
+    m_errLevel = 0;
 
-    if (m_clientModel) {
-        // TODO: Get actual system health metrics
-        // healthStatus = m_clientModel->getSystemHealthStatus();
-        // m_dcaLevel = m_clientModel->getDCALevel();
-        // m_errLevel = m_clientModel->getERRLevel();
+    try {
+        // Get current system health using DCA functions
+        int systemHealth = DigiDollar::DCA::DynamicCollateralAdjustment::GetCurrentSystemHealth();
 
-        // Determine health percentage based on DCA/ERR levels
-        if (m_dcaLevel > 0 || m_errLevel > 0) {
+        // Get current tier information
+        auto tier = DigiDollar::DCA::DynamicCollateralAdjustment::GetCurrentTier(systemHealth);
+
+        // Determine health status based on tier
+        if (systemHealth >= 150) {
+            healthStatus = "Healthy";
+            healthPercentage = 100;
+        } else if (systemHealth >= 120) {
+            healthStatus = "Good";
+            healthPercentage = 85;
+        } else if (systemHealth >= 100) {
             healthStatus = "Monitoring";
-            healthPercentage = 75;
+            healthPercentage = 70;
+            m_dcaLevel = 1;
+        } else {
+            healthStatus = "Critical";
+            healthPercentage = 50;
+            m_dcaLevel = 2;
+            m_errLevel = 1;
         }
+
+        // Check if system is in emergency
+        bool isEmergency = DigiDollar::DCA::DynamicCollateralAdjustment::IsSystemEmergency(systemHealth);
+        if (isEmergency) {
+            healthStatus = "Emergency";
+            healthPercentage = 25;
+            m_errLevel = 2;
+        }
+
+    } catch (const std::exception& e) {
+        // If there's an error getting system health, show unknown status
+        healthStatus = "Unknown";
+        healthPercentage = 50;
     }
 
     m_systemHealthValue->setText(healthStatus);
     m_dcaLevelValue->setText(QString::number(m_dcaLevel));
     m_errLevelValue->setText(QString::number(m_errLevel));
     m_systemHealthBar->setValue(healthPercentage);
-
-    // REMOVED: applyTheme() call - Let CSS handle all theming
 }
 
 void DigiDollarOverviewWidget::updateRecentTransactions()
 {
-    // In a real implementation, this would query recent DigiDollar transactions
-    // For now, check if we have any items to show
+    if (!m_walletModel) {
+        return;
+    }
+
+    // Get recent transactions from DigiDollarWallet
+    DigiDollarWallet* ddWallet = m_walletModel->wallet().getDigiDollarWallet();
+    if (!ddWallet) {
+        return;
+    }
+
+    // Get transaction history
+    std::vector<DDTransaction> transactions = ddWallet->GetDDTransactionHistory();
+
+    // Clear existing items
+    m_transactionsList->clear();
+
+    // Show recent transactions (last 10)
+    int count = 0;
+    for (auto it = transactions.rbegin(); it != transactions.rend() && count < 10; ++it, ++count) {
+        const DDTransaction& tx = *it;
+
+        // Create transaction item widget
+        QWidget* itemWidget = new QWidget();
+        QHBoxLayout* layout = new QHBoxLayout(itemWidget);
+        layout->setContentsMargins(10, 5, 10, 5);
+
+        // Transaction type icon and category
+        QString icon;
+        QString categoryText;
+        if (tx.category == "mint") {
+            icon = "🏦";
+            categoryText = tr("Mint");
+        } else if (tx.category == "redeem") {
+            icon = "💰";
+            categoryText = tr("Redeem");
+        } else if (tx.category == "send") {
+            icon = "📤";
+            categoryText = tr("Send");
+        } else if (tx.category == "receive") {
+            icon = "📥";
+            categoryText = tr("Receive");
+        } else {
+            icon = "💵";
+            categoryText = QString::fromStdString(tx.category);
+        }
+
+        QLabel* iconLabel = new QLabel(icon);
+        iconLabel->setFixedWidth(30);
+        layout->addWidget(iconLabel);
+
+        QLabel* categoryLabel = new QLabel(categoryText);
+        categoryLabel->setFixedWidth(80);
+        layout->addWidget(categoryLabel);
+
+        // Amount
+        QLabel* amountLabel = new QLabel(QString("$%1").arg(tx.amount / 100.0, 0, 'f', 2));
+        QFont monospaceFont = GUIUtil::fixedPitchFont();
+        amountLabel->setFont(monospaceFont);
+        amountLabel->setFixedWidth(100);
+        amountLabel->setAlignment(Qt::AlignRight);
+        layout->addWidget(amountLabel);
+
+        // Confirmations
+        QString confirmText;
+        if (tx.confirmations == 0) {
+            confirmText = tr("Pending");
+        } else if (tx.confirmations < 6) {
+            confirmText = QString("%1 conf").arg(tx.confirmations);
+        } else {
+            confirmText = tr("Confirmed");
+        }
+        QLabel* confirmLabel = new QLabel(confirmText);
+        confirmLabel->setFixedWidth(100);
+        layout->addWidget(confirmLabel);
+
+        // Date/time
+        QDateTime dateTime = QDateTime::fromSecsSinceEpoch(tx.timestamp);
+        QLabel* dateLabel = new QLabel(dateTime.toString("MMM dd, yyyy"));
+        dateLabel->setAlignment(Qt::AlignRight);
+        layout->addWidget(dateLabel);
+
+        layout->addStretch();
+
+        // Add to list
+        QListWidgetItem* item = new QListWidgetItem(m_transactionsList);
+        item->setSizeHint(itemWidget->sizeHint());
+        m_transactionsList->setItemWidget(item, itemWidget);
+    }
+
+    // Show/hide based on whether we have transactions
     bool hasTransactions = (m_transactionsList->count() > 0);
     m_recentTransactionsInfo->setVisible(!hasTransactions);
     m_transactionsList->setVisible(hasTransactions);
-
-    // TODO: Query actual recent DigiDollar transactions from wallet
-    // Example:
-    // std::vector<DigiDollarTransaction> recent = m_walletModel->getRecentDDTransactions(5);
-    // populateTransactionsList(recent);
 }
 
 QString DigiDollarOverviewWidget::formatDDAmount(double amount) const
@@ -561,10 +680,6 @@ void DigiDollarOverviewWidget::setMonospacedFont(bool use_embedded_font)
 
 void DigiDollarOverviewWidget::addDemoTransactions()
 {
-    // Add some demo transactions to show the interface
-    // In production, this would be removed and real transactions would be loaded
-
-    incomingDDTransaction("2025-01-15 14:30", "+250.00", "Received", "dgbrt1234...abc");
-    incomingDDTransaction("2025-01-14 16:45", "-75.50", "Sent", "dgbrt5678...def");
-    incomingDDTransaction("2025-01-13 09:15", "+500.00", "Minted", "dgbrt9012...ghi");
+    // Demo transactions removed - only real transactions from wallet will be shown
+    // Real transactions are loaded via wallet notification system
 }

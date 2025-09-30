@@ -6,6 +6,8 @@
 #define DIGIBYTE_QT_DIGIDOLLARPOSITIONSWIDGET_H
 
 #include <QWidget>
+#include <consensus/amount.h>
+#include <wallet/digidollarwallet.h>
 
 class WalletModel;
 class ClientModel;
@@ -70,6 +72,8 @@ private:
     void setupUI();
     void setupTableHeader();
     void connectSignals();
+    void connectWalletSignals();
+    void connectClientSignals();
     void populatePositionsTable();
     void loadPositionsFromWallet();
     void applyTheme();
@@ -81,6 +85,11 @@ private:
     QString formatBlockTime(int blocks) const;
     QString formatHealthStatus(double health) const;
     QWidget* createHealthWidget(double health) const;
+
+    // Backend integration helpers
+    CAmount GetMockOraclePrice() const;
+    std::vector<WalletCollateralPosition> GetWalletPositions() const;
+    double CalculatePositionHealth(CAmount ddAmount, CAmount dgbCollateral, CAmount oraclePrice) const;
 
     // UI components
     QVBoxLayout* m_mainLayout;

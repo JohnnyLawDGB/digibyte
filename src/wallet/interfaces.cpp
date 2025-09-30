@@ -26,6 +26,7 @@
 #include <wallet/rpc/wallet.h>
 #include <wallet/spend.h>
 #include <wallet/wallet.h>
+#include <wallet/digidollarwallet.h>
 
 #include <memory>
 #include <string>
@@ -555,6 +556,10 @@ public:
         return MakeSignalHandler(m_wallet->NotifyCanGetAddressesChanged.connect(fn));
     }
     CWallet* wallet() override { return m_wallet.get(); }
+
+    DigiDollarWallet* getDigiDollarWallet() override {
+        return m_wallet ? m_wallet->GetDDWallet() : nullptr;
+    }
 
     WalletContext& m_context;
     std::shared_ptr<CWallet> m_wallet;

@@ -7,6 +7,8 @@
 #include <deploymentstatus.h>
 #include <validation.h>
 #include <tinyformat.h>
+#include <primitives/transaction.h>
+#include <script/script.h>
 
 #include <algorithm>
 #include <sstream>
@@ -176,18 +178,8 @@ bool IsDigiDollarActive(int nHeight, const Consensus::Params& consensusParams)
     return nHeight >= consensusParams.nDDActivationHeight;
 }
 
-bool IsDigiDollarEnabled(const CBlockIndex* pindexPrev, const ChainstateManager& chainman)
-{
-    return DeploymentActiveAfter(pindexPrev, chainman, Consensus::DEPLOYMENT_DIGIDOLLAR);
-}
-
-bool IsDigiDollarEnabled(const CBlockIndex* pindexPrev, const Consensus::Params& params)
-{
-    // For cases where we only have consensus params and a VersionBitsCache isn't available
-    // We'll need to create a temporary cache - not ideal but needed for some contexts
-    VersionBitsCache cache;
-    return DeploymentActiveAfter(pindexPrev, params, Consensus::DEPLOYMENT_DIGIDOLLAR, cache);
-}
+// Note: IsDigiDollarEnabled() functions moved to digidollar/digidollar.cpp
+// as they require deployment checking which is not part of consensus library
 
 int GetLockTierIndex(int64_t lockBlocks, const ConsensusParams& params)
 {
@@ -226,6 +218,74 @@ std::string FormatLockPeriod(int64_t lockBlocks)
             return strprintf("%d years", years);
         }
     }
+}
+
+bool HasDigiDollarMarker(const CTransaction& tx)
+{
+    // DigiDollar transactions use version field with specific marker
+    // Format: Lower 16 bits must match DD_TX_VERSION (0x0770)
+    // Bits 16-23: flags, Bits 24-31: transaction type
+    const int32_t DD_TX_VERSION = 0x0D1D0770;
+    const int32_t DD_VERSION_MASK = 0x0000FFFF;
+    return (tx.nVersion & DD_VERSION_MASK) == (DD_TX_VERSION & DD_VERSION_MASK);
+}
+
+DigiDollarTxType GetDigiDollarTxType(const CTransaction& tx)
+{
+    if (!HasDigiDollarMarker(tx)) {
+        return DD_TX_NONE;
+    }
+    // Extract type from bits 24-31 of version field
+    const int32_t DD_TYPE_MASK = 0xFF000000;
+    return static_cast<DigiDollarTxType>((tx.nVersion & DD_TYPE_MASK) >> 24);
+}
+
+bool IsDDTokenScript(const CScript& script)
+{
+    // DigiDollar token scripts use OP_DIGIDOLLAR (OP_NOP10)
+    // Simple check: look for OP_DIGIDOLLAR in script
+    for (auto pc = script.begin(); pc != script.end();) {
+        opcodetype opcode;
+        if (!script.GetOp(pc, opcode)) {
+            break;
+        }
+        if (opcode == OP_NOP10) { // OP_DIGIDOLLAR
+            return true;
+        }
+    }
+    return false;
+}
+
+bool ExtractDDAmount(const CScript& script, CAmount& amount)
+{
+    // Initialize to invalid
+    amount = -1;
+
+    // Look for OP_DIGIDOLLAR followed by amount data
+    for (auto pc = script.begin(); pc != script.end();) {
+        opcodetype opcode;
+        std::vector<unsigned char> data;
+
+        if (!script.GetOp(pc, opcode, data)) {
+            break;
+        }
+
+        if (opcode == OP_NOP10) { // OP_DIGIDOLLAR
+            // Next should be the amount
+            if (script.GetOp(pc, opcode, data)) {
+                if (data.size() == 8) {
+                    // Extract 8-byte amount
+                    amount = 0;
+                    for (size_t i = 0; i < 8; i++) {
+                        amount |= static_cast<CAmount>(data[i]) << (i * 8);
+                    }
+                    return true;
+                }
+            }
+        }
+    }
+
+    return false;
 }
 
 } // namespace DigiDollar

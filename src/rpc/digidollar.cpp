@@ -8,8 +8,10 @@
 #include <rpc/blockchain.h>
 #include <oracle/bundle_manager.h>
 #include <oracle/node.h>
+#include <oracle/mock_oracle.h>
 #include <consensus/digidollar.h>
 #include <consensus/dca.h>
+#include <digidollar/digidollar.h>
 #include <digidollar/health.h>
 #include <chainparams.h>
 #include <kernel/chainparams.h>
@@ -18,8 +20,12 @@
 #include <util/strencodings.h>
 #include <validation.h>
 #include <versionbits.h>
-//#include <wallet/wallet.h>
-//#include <wallet/digidollarwallet.h>
+#include <wallet/wallet.h>
+#include <wallet/rpc/util.h>
+#include <wallet/spend.h>
+#include <wallet/coinselection.h>
+#include <digidollar/txbuilder.h>
+#include <node/transaction.h>
 #include <base58.h>
 #include <script/standard.h>
 #include <rpc/protocol.h>
@@ -607,9 +613,9 @@ static RPCHelpMan mintdigidollar()
                 "Creates a new DigiDollar position by locking DGB as collateral.\n"
                 "The amount of collateral required depends on the lock period and current system health.\n",
                 {
-                    {"dd_amount", RPCArg::Type::AMOUNT, RPCArg::Optional::NO, "Amount of DigiDollar to mint (in USD cents, e.g., 10000 = $100)"},
+                    {"dd_amount", RPCArg::Type::NUM, RPCArg::Optional::NO, "Amount of DigiDollar to mint (in USD cents, e.g., 10000 = $100)"},
                     {"lock_tier", RPCArg::Type::NUM, RPCArg::Optional::NO, "Lock tier 1-8 (30d,90d,180d,1y,3y,5y,7y,10y)"},
-                    {"fee_rate", RPCArg::Type::AMOUNT, RPCArg::Optional::OMITTED, "Fee rate in DGB/kvB (default: use estimate)"}
+                    {"fee_rate", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "Fee rate in sat/vB (default: 1000)"}
                 },
                 RPCResult{
                     RPCResult::Type::OBJ, "", "",
@@ -632,13 +638,18 @@ static RPCHelpMan mintdigidollar()
                 },
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
         {
+            // Get wallet
+            std::shared_ptr<wallet::CWallet> pwallet = wallet::GetWalletForJSONRPCRequest(request);
+            if (!pwallet) throw JSONRPCError(RPC_WALLET_NOT_FOUND, "No wallet is loaded");
+
+            // Ensure wallet is unlocked
+            wallet::EnsureWalletIsUnlocked(*pwallet);
+
             // Parse parameters
-            CAmount ddAmount = AmountFromValue(request.params[0]);
+            CAmount ddAmount = request.params[0].getInt<int64_t>();
             int lockTier = request.params[1].getInt<int>();
-            CAmount feeRate = 0;
-            if (!request.params[2].isNull()) {
-                feeRate = AmountFromValue(request.params[2]);
-            }
+            CAmount feeRate = request.params.size() > 2 && !request.params[2].isNull() ?
+                request.params[2].getInt<int64_t>() : 1000; // Default 1000 sat/vB
 
             // Validate parameters
             if (ddAmount <= 0) {
@@ -648,27 +659,96 @@ static RPCHelpMan mintdigidollar()
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Lock tier must be between 1 and 8");
             }
 
-            // Mock mint transaction creation
-            uint256 mockTxId;
-            mockTxId.SetHex("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef");
+            // Get chainman and current height
+            const ChainstateManager& chainman = EnsureAnyChainman(request.context);
+            int currentHeight = chainman.ActiveChain().Height();
 
-            // Calculate collateral and fees (mock implementation)
-            CAmount collateralAmount = 150 * COIN; // TODO: Use real calculation based on ddAmount and current ratios
-            CAmount feePaid = 0.001 * COIN; // TODO: Use real fee calculation
-            int unlockHeight = 1000000; // TODO: Use real height calculation based on current height + lock period
-            int collateralRatio = 150; // TODO: Use real ratio calculation based on lock tier and DCA
+            // Get oracle price
+            CAmount oraclePrice = MockOracleManager::GetInstance().GetCurrentPrice();
+            if (oraclePrice <= 0) {
+                oraclePrice = 1 * COIN; // Fallback to $1 = 1 DGB for testing
+            }
 
-            UniValue result(UniValue::VOBJ);
-            result.pushKV("txid", mockTxId.GetHex());
-            result.pushKV("dd_minted", ddAmount);
-            result.pushKV("dgb_collateral", ValueFromAmount(collateralAmount));
-            result.pushKV("lock_tier", lockTier);
-            result.pushKV("unlock_height", unlockHeight);
-            result.pushKV("collateral_ratio", collateralRatio);
-            result.pushKV("fee_paid", ValueFromAmount(feePaid));
-            result.pushKV("position_id", mockTxId.GetHex());
+            // Convert lock tier to days
+            int lockDays = GetLockDaysForTier(lockTier);
 
-            return result;
+            // Get available UTXOs from wallet
+            std::vector<COutPoint> availableUtxos;
+            {
+                LOCK(pwallet->cs_wallet);
+                wallet::CoinsResult coins = wallet::AvailableCoins(*pwallet);
+                for (const wallet::COutput& coin : coins.All()) {
+                    availableUtxos.push_back(coin.outpoint);
+                }
+            }
+
+            if (availableUtxos.empty()) {
+                throw JSONRPCError(RPC_WALLET_INSUFFICIENT_FUNDS, "No available UTXOs for collateral");
+            }
+
+            // Generate owner key from wallet
+            CKey ownerKey;
+            {
+                LOCK(pwallet->cs_wallet);
+                // Generate a new key for this mint position
+                // In production, would integrate with wallet's key management
+                ownerKey.MakeNewKey(true); // Generate compressed key
+            }
+
+            // Build mint transaction using MintTxBuilder
+            DigiDollar::MintTxBuilder builder(Params(), currentHeight, oraclePrice);
+
+            DigiDollar::TxBuilderMintParams params;
+            params.ddAmount = ddAmount;
+            params.lockDays = lockDays;
+            params.ownerKey = ownerKey;
+            params.feeRate = feeRate;
+            params.utxos = availableUtxos;
+
+            DigiDollar::TxBuilderResult result = builder.BuildMintTransaction(params);
+
+            if (!result.success) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "Failed to build mint transaction: " + result.error);
+            }
+
+            // Sign transaction
+            bool signSuccess = false;
+            {
+                LOCK(pwallet->cs_wallet);
+                signSuccess = pwallet->SignTransaction(result.tx);
+            }
+
+            if (!signSuccess) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "Failed to sign mint transaction");
+            }
+
+            // Create transaction reference for commitment
+            CTransactionRef tx = MakeTransactionRef(result.tx);
+
+            // Commit transaction to wallet and broadcast
+            {
+                LOCK(pwallet->cs_wallet);
+                pwallet->CommitTransaction(tx, {}, {});
+            }
+
+            // Calculate unlock height
+            int blocksPerDay = 24 * 60 * 60 / 15; // 15-second blocks in DigiByte
+            int unlockHeight = currentHeight + (lockDays * blocksPerDay);
+
+            // Calculate collateral ratio based on lock tier and DCA
+            int collateralRatio = 150; // Default, could be calculated from DCA
+
+            UniValue resultObj(UniValue::VOBJ);
+            resultObj.pushKV("txid", tx->GetHash().GetHex());
+            resultObj.pushKV("dd_minted", ddAmount);
+            resultObj.pushKV("dgb_collateral", ValueFromAmount(result.collateralRequired));
+            resultObj.pushKV("lock_tier", lockTier);
+            resultObj.pushKV("unlock_height", unlockHeight);
+            resultObj.pushKV("collateral_ratio", collateralRatio);
+            resultObj.pushKV("fee_paid", ValueFromAmount(result.totalFees));
+            resultObj.pushKV("position_id", tx->GetHash().GetHex());
+
+            return resultObj;
         },
     };
 }
@@ -2006,6 +2086,242 @@ static RPCHelpMan stoporacle()
     };
 }
 
+// =============================================================================
+// Mock Oracle RPC Commands (RegTest only)
+// =============================================================================
+
+static RPCHelpMan setmockoracleprice()
+{
+    return RPCHelpMan{"setmockoracleprice",
+                "\nSet mock oracle price for testing (RegTest only).\n"
+                "This command allows setting a custom DGB/USD price for testing DigiDollar\n"
+                "functionality in RegTest mode without requiring real oracle nodes.\n",
+                {
+                    {"price", RPCArg::Type::AMOUNT, RPCArg::Optional::NO, "Price in satoshis per USD (e.g., 1000000 = $0.01/DGB)"}
+                },
+                RPCResult{
+                    RPCResult::Type::OBJ, "", "",
+                    {
+                        {RPCResult::Type::NUM, "price", "New mock oracle price in satoshis per USD"},
+                        {RPCResult::Type::NUM, "price_usd", "Price as USD per DGB"},
+                        {RPCResult::Type::NUM, "update_height", "Block height of update"},
+                        {RPCResult::Type::BOOL, "enabled", "Whether mock oracle is enabled"}
+                    }
+                },
+                RPCExamples{
+                    HelpExampleCli("setmockoracleprice", "1000000") +
+                    "\nSet price to $0.01 per DGB\n" +
+                    HelpExampleCli("setmockoracleprice", "5000000") +
+                    "\nSet price to $0.05 per DGB\n" +
+                    HelpExampleRpc("setmockoracleprice", "1000000")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            // Only allow in RegTest mode
+            if (Params().GetChainType() != ChainType::REGTEST) {
+                throw JSONRPCError(RPC_METHOD_NOT_FOUND,
+                    "setmockoracleprice is only available in RegTest mode");
+            }
+
+            CAmount price = AmountFromValue(request.params[0]);
+
+            if (price <= 0) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER,
+                    "Price must be positive");
+            }
+
+            // Price should be reasonable (between $0.00001 and $100 per DGB)
+            const CAmount MIN_PRICE = 1000;           // $0.00001 per DGB
+            const CAmount MAX_PRICE = 10000000000LL;  // $100 per DGB
+
+            if (price < MIN_PRICE || price > MAX_PRICE) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER,
+                    strprintf("Price must be between %d and %d satoshis/USD", MIN_PRICE, MAX_PRICE));
+            }
+
+            // Set the mock price
+            MockOracleManager::GetInstance().SetMockPrice(price);
+
+            // Build result
+            UniValue result(UniValue::VOBJ);
+            result.pushKV("price", price);
+            result.pushKV("price_usd", ValueFromAmount(price));
+            result.pushKV("update_height", MockOracleManager::GetInstance().GetLastUpdateHeight());
+            result.pushKV("enabled", MockOracleManager::GetInstance().IsEnabled());
+
+            return result;
+        },
+    };
+}
+
+static RPCHelpMan getmockoracleprice()
+{
+    return RPCHelpMan{"getmockoracleprice",
+                "\nGet current mock oracle price (RegTest only).\n"
+                "Returns the current mock oracle price used for testing DigiDollar\n"
+                "functionality in RegTest mode.\n",
+                {},
+                RPCResult{
+                    RPCResult::Type::OBJ, "", "",
+                    {
+                        {RPCResult::Type::NUM, "price", "Current mock oracle price in satoshis per USD"},
+                        {RPCResult::Type::NUM, "price_usd", "Price as USD per DGB"},
+                        {RPCResult::Type::NUM, "last_update_height", "Block height of last update"},
+                        {RPCResult::Type::BOOL, "enabled", "Whether mock oracle is enabled"},
+                        {RPCResult::Type::NUM, "current_height", "Current blockchain height"}
+                    }
+                },
+                RPCExamples{
+                    HelpExampleCli("getmockoracleprice", "") +
+                    HelpExampleRpc("getmockoracleprice", "")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            // Only allow in RegTest mode
+            if (Params().GetChainType() != ChainType::REGTEST) {
+                throw JSONRPCError(RPC_METHOD_NOT_FOUND,
+                    "getmockoracleprice is only available in RegTest mode");
+            }
+
+            CAmount price = MockOracleManager::GetInstance().GetCurrentPrice();
+            int64_t lastHeight = MockOracleManager::GetInstance().GetLastUpdateHeight();
+            bool enabled = MockOracleManager::GetInstance().IsEnabled();
+
+            // Get current height from chain state (optional for mock oracle)
+            int currentHeight = 0;
+            try {
+                const node::NodeContext& node = EnsureAnyNodeContext(request.context);
+                if (node.chainman) {
+                    LOCK(node.chainman->GetMutex());
+                    currentHeight = node.chainman->ActiveHeight();
+                }
+            } catch (...) {
+                // Height tracking is optional for mock oracle
+                currentHeight = 0;
+            }
+
+            UniValue result(UniValue::VOBJ);
+            result.pushKV("price", price);
+            result.pushKV("price_usd", ValueFromAmount(price));
+            result.pushKV("last_update_height", lastHeight);
+            result.pushKV("enabled", enabled);
+            result.pushKV("current_height", currentHeight);
+
+            return result;
+        },
+    };
+}
+
+static RPCHelpMan simulatepricevolatility()
+{
+    return RPCHelpMan{"simulatepricevolatility",
+                "\nSimulate price volatility for testing (RegTest only).\n"
+                "Adjusts the mock oracle price by a given percentage to test\n"
+                "DigiDollar system responses to price changes.\n",
+                {
+                    {"percent_change", RPCArg::Type::NUM, RPCArg::Optional::NO, "Percentage change (positive or negative, e.g., 50 for +50%, -20 for -20%)"}
+                },
+                RPCResult{
+                    RPCResult::Type::OBJ, "", "",
+                    {
+                        {RPCResult::Type::NUM, "old_price", "Previous mock oracle price"},
+                        {RPCResult::Type::NUM, "new_price", "New mock oracle price after volatility"},
+                        {RPCResult::Type::NUM, "percent_change", "Percentage change applied"},
+                        {RPCResult::Type::NUM, "update_height", "Block height of update"}
+                    }
+                },
+                RPCExamples{
+                    HelpExampleCli("simulatepricevolatility", "50") +
+                    "\nIncrease price by 50%\n" +
+                    HelpExampleCli("simulatepricevolatility", "-80") +
+                    "\nDecrease price by 80%\n" +
+                    HelpExampleRpc("simulatepricevolatility", "50")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            // Only allow in RegTest mode
+            if (Params().GetChainType() != ChainType::REGTEST) {
+                throw JSONRPCError(RPC_METHOD_NOT_FOUND,
+                    "simulatepricevolatility is only available in RegTest mode");
+            }
+
+            int percentChange = request.params[0].getInt<int>();
+
+            if (percentChange < -100 || percentChange > 1000) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER,
+                    "Percentage change must be between -100 and 1000");
+            }
+
+            CAmount oldPrice = MockOracleManager::GetInstance().GetCurrentPrice();
+            MockOracleManager::GetInstance().SimulateVolatility(percentChange);
+            CAmount newPrice = MockOracleManager::GetInstance().GetCurrentPrice();
+
+            UniValue result(UniValue::VOBJ);
+            result.pushKV("old_price", oldPrice);
+            result.pushKV("new_price", newPrice);
+            result.pushKV("percent_change", percentChange);
+            result.pushKV("update_height", MockOracleManager::GetInstance().GetLastUpdateHeight());
+
+            return result;
+        },
+    };
+}
+
+static RPCHelpMan enablemockoracle()
+{
+    return RPCHelpMan{"enablemockoracle",
+                "\nEnable or disable mock oracle (RegTest only).\n"
+                "Controls whether the mock oracle is active for testing.\n",
+                {
+                    {"enable", RPCArg::Type::BOOL, RPCArg::Optional::NO, "true to enable, false to disable"}
+                },
+                RPCResult{
+                    RPCResult::Type::OBJ, "", "",
+                    {
+                        {RPCResult::Type::BOOL, "enabled", "New enabled status"},
+                        {RPCResult::Type::NUM, "current_price", "Current mock oracle price"},
+                        {RPCResult::Type::NUM, "current_height", "Current blockchain height"}
+                    }
+                },
+                RPCExamples{
+                    HelpExampleCli("enablemockoracle", "true") +
+                    HelpExampleCli("enablemockoracle", "false") +
+                    HelpExampleRpc("enablemockoracle", "true")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            // Only allow in RegTest mode
+            if (Params().GetChainType() != ChainType::REGTEST) {
+                throw JSONRPCError(RPC_METHOD_NOT_FOUND,
+                    "enablemockoracle is only available in RegTest mode");
+            }
+
+            bool enable = request.params[0].get_bool();
+            MockOracleManager::GetInstance().SetEnabled(enable);
+
+            // Get current height from chain state (optional for mock oracle)
+            int currentHeight = 0;
+            try {
+                const node::NodeContext& node = EnsureAnyNodeContext(request.context);
+                if (node.chainman) {
+                    LOCK(node.chainman->GetMutex());
+                    currentHeight = node.chainman->ActiveHeight();
+                }
+            } catch (...) {
+                // Height tracking is optional for mock oracle
+                currentHeight = 0;
+            }
+
+            UniValue result(UniValue::VOBJ);
+            result.pushKV("enabled", MockOracleManager::GetInstance().IsEnabled());
+            result.pushKV("current_price", MockOracleManager::GetInstance().GetCurrentPrice());
+            result.pushKV("current_height", currentHeight);
+
+            return result;
+        },
+    };
+}
+
 void RegisterDigiDollarRPCCommands(CRPCTable &t)
 {
     static const CRPCCommand commands[] = {
@@ -2040,7 +2356,13 @@ void RegisterDigiDollarRPCCommands(CRPCTable &t)
         // Oracle management commands
         {"oracle", &listoracles},
         {"oracle", &startoracle},
-        {"oracle", &stoporacle}
+        {"oracle", &stoporacle},
+
+        // Mock Oracle commands (RegTest only)
+        {"digidollar", &setmockoracleprice},
+        {"digidollar", &getmockoracleprice},
+        {"digidollar", &simulatepricevolatility},
+        {"digidollar", &enablemockoracle}
     };
     for (const auto& c : commands) {
         t.appendCommand(c.name, &c);

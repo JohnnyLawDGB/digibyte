@@ -8,6 +8,10 @@
 #include <qt/clientmodel.h>
 #include <qt/guiutil.h>
 #include <qt/digibyteunits.h>
+#include <interfaces/wallet.h>
+#include <wallet/digidollarwallet.h>
+#include <consensus/amount.h>
+#include <algorithm>
 
 #include <QTableWidget>
 #include <QTableWidgetItem>
@@ -187,12 +191,35 @@ void DigiDollarPositionsWidget::connectSignals()
     autoRefreshTimer->start(60000); // 60 seconds
 }
 
+void DigiDollarPositionsWidget::connectWalletSignals()
+{
+    if (!m_walletModel) {
+        return;
+    }
+
+    // Connect to wallet balance changes (indicates new transactions)
+    connect(m_walletModel, &WalletModel::balanceChanged,
+            this, &DigiDollarPositionsWidget::updatePositions);
+}
+
+void DigiDollarPositionsWidget::connectClientSignals()
+{
+    if (!m_clientModel) {
+        return;
+    }
+
+    // Connect to new blocks (for timelock countdown and health updates)
+    connect(m_clientModel, &ClientModel::numBlocksChanged,
+            this, &DigiDollarPositionsWidget::updatePositions);
+}
+
 void DigiDollarPositionsWidget::setWalletModel(WalletModel* model)
 {
     m_walletModel = model;
 
     if (m_walletModel) {
-        // Connect wallet model signals
+        // Connect wallet model signals for real-time updates
+        connectWalletSignals();
         updatePositions();
         // applyTheme(); // REMOVED: Now handled by CSS files
     }
@@ -203,7 +230,8 @@ void DigiDollarPositionsWidget::setClientModel(ClientModel* model)
     m_clientModel = model;
 
     if (m_clientModel) {
-        // Connect client model signals
+        // Connect client model signals for block updates
+        connectClientSignals();
         updatePositions();
         // applyTheme(); // REMOVED: Now handled by CSS files
     }
@@ -406,80 +434,54 @@ void DigiDollarPositionsWidget::showContextMenu(const QPoint& point)
 
 void DigiDollarPositionsWidget::loadPositionsFromWallet()
 {
-    // In a real implementation, this would query the wallet for all DigiDollar positions
-    // For now, we'll create some sample data
-
     m_positions.clear();
 
-    if (m_walletModel) {
-        // TODO: Load actual positions from wallet
-        // For demonstration, add 5 sample positions with accurate calculations
-        // Assuming DGB price = $0.01 for these examples
+    if (!m_walletModel || !m_clientModel) {
+        return;
+    }
 
-        // Position 1: 30 days (500% collateral)
-        // 1000 DD needs $5000 collateral = 500,000 DGB @ $0.01
-        // Locked for 2,592,000 seconds = 172,800 blocks (30 days)
-        DigiDollarPosition pos1;
-        pos1.positionId = "vault001";
-        pos1.ddMinted = 1000.0;
-        pos1.dgbCollateral = 500000.0;  // 1000 * 500% / 0.01
-        pos1.lockTier = 1;
-        pos1.blocksRemaining = 86400;    // ~15 days remaining (half expired)
-        pos1.health = 100.0;             // Exactly at required collateral
-        pos1.canRedeem = false;
-        m_positions.append(pos1);
+    // Get wallet backend interface
+    interfaces::Wallet& wallet = m_walletModel->wallet();
 
-        // Position 2: 3 months (400% collateral)
-        // 2500 DD needs $10,000 collateral = 1,000,000 DGB @ $0.01
-        // Locked for 7,776,000 seconds = 518,400 blocks (90 days)
-        DigiDollarPosition pos2;
-        pos2.positionId = "vault002";
-        pos2.ddMinted = 2500.0;
-        pos2.dgbCollateral = 1100000.0;  // Over-collateralized by 10%
-        pos2.lockTier = 2;
-        pos2.blocksRemaining = 259200;   // ~45 days remaining
-        pos2.health = 110.0;             // 110% of required (10% over)
-        pos2.canRedeem = false;
-        m_positions.append(pos2);
+    // Get current blockchain height for timelock calculations
+    int currentHeight = m_clientModel->getNumBlocks();
 
-        // Position 3: 6 months (350% collateral)
-        // 5000 DD needs $17,500 collateral = 1,750,000 DGB @ $0.01
-        // Locked for 15,552,000 seconds = 1,036,800 blocks (180 days)
-        DigiDollarPosition pos3;
-        pos3.positionId = "vault003";
-        pos3.ddMinted = 5000.0;
-        pos3.dgbCollateral = 1925000.0;  // Over-collateralized by 10%
-        pos3.lockTier = 3;
-        pos3.blocksRemaining = 518400;   // ~90 days remaining
-        pos3.health = 110.0;             // 110% of required (10% over)
-        pos3.canRedeem = false;
-        m_positions.append(pos3);
+    // Get current oracle price (RegTest: $0.01 = 1000000 cents per DGB)
+    // In RegTest, we use the mock oracle price
+    CAmount oraclePrice = GetMockOraclePrice();
 
-        // Position 4: 1 year (300% collateral)
-        // 10000 DD needs $30,000 collateral = 3,000,000 DGB @ $0.01
-        // Locked for 31,536,000 seconds = 2,102,400 blocks (365 days)
-        DigiDollarPosition pos4;
-        pos4.positionId = "vault004";
-        pos4.ddMinted = 10000.0;
-        pos4.dgbCollateral = 3600000.0;  // Over-collateralized by 20%
-        pos4.lockTier = 4;
-        pos4.blocksRemaining = 1051200;  // ~183 days remaining (half done)
-        pos4.health = 120.0;             // 120% of required (20% over)
-        pos4.canRedeem = false;
-        m_positions.append(pos4);
+    // Get positions from wallet backend
+    std::vector<WalletCollateralPosition> walletPositions = GetWalletPositions();
 
-        // Position 5: 3 years (250% collateral) - EXPIRED
-        // 500 DD needs $1,250 collateral = 125,000 DGB @ $0.01
-        // Locked for 94,608,000 seconds = 6,307,200 blocks (1095 days)
-        DigiDollarPosition pos5;
-        pos5.positionId = "vault005";
-        pos5.ddMinted = 500.0;
-        pos5.dgbCollateral = 150000.0;   // Over-collateralized by 20%
-        pos5.lockTier = 5;
-        pos5.blocksRemaining = 0;        // Expired - can redeem
-        pos5.health = 120.0;             // 120% of required (20% over)
-        pos5.canRedeem = true;
-        m_positions.append(pos5);
+    for (const auto& wp : walletPositions) {
+        if (!wp.is_active) {
+            continue; // Skip inactive positions
+        }
+
+        DigiDollarPosition pos;
+
+        // Position ID (use txid as string)
+        pos.positionId = QString::fromStdString(wp.position_id.ToString());
+
+        // DD minted (convert from cents to DD with 8 decimals)
+        pos.ddMinted = wp.dd_minted / 100.0; // cents to dollars
+
+        // DGB collateral (convert from satoshis to DGB)
+        pos.dgbCollateral = wp.dgb_collateral / 100000000.0;
+
+        // Lock tier
+        pos.lockTier = wp.lock_tier;
+
+        // Calculate blocks remaining until unlock
+        pos.blocksRemaining = std::max<int64_t>(0, wp.unlock_height - currentHeight);
+
+        // Calculate health ratio using actual oracle price
+        pos.health = CalculatePositionHealth(wp.dd_minted, wp.dgb_collateral, oraclePrice);
+
+        // Can redeem if timelock expired
+        pos.canRedeem = (pos.blocksRemaining == 0);
+
+        m_positions.append(pos);
     }
 }
 
@@ -809,4 +811,59 @@ QString DigiDollarPositionsWidget::formatHealthStatus(double health) const
 void DigiDollarPositionsWidget::applyTheme()
 {
     // Method disabled - CSS handles all theming now
+}
+
+// =============================================================================
+// Backend Integration Helper Functions
+// =============================================================================
+
+CAmount DigiDollarPositionsWidget::GetMockOraclePrice() const
+{
+    // For RegTest, we use a mock oracle price
+    // Default: $0.01 per DGB = 1000000 cents per 100M satoshis
+    // This means 1 DGB (100M sats) = $0.01 = 1 cent
+
+    // Try to get price from oracle system if available
+    // For now, use default RegTest price
+    // TODO: Integrate with mock oracle RPC when available
+
+    return 1000000; // $0.01 per DGB in RegTest
+}
+
+std::vector<WalletCollateralPosition> DigiDollarPositionsWidget::GetWalletPositions() const
+{
+    std::vector<WalletCollateralPosition> positions;
+
+    if (!m_walletModel) {
+        return positions;
+    }
+
+    // Access DigiDollarWallet directly from wallet model
+    DigiDollarWallet* ddWallet = m_walletModel->wallet().getDigiDollarWallet();
+    if (ddWallet) {
+        positions = ddWallet->GetPositions(true); // active positions only
+    }
+
+    return positions;
+}
+
+double DigiDollarPositionsWidget::CalculatePositionHealth(CAmount ddAmount, CAmount dgbCollateral, CAmount oraclePrice) const
+{
+    if (ddAmount == 0) {
+        return 300.0; // Perfect health if no DD issued
+    }
+
+    // Calculate DGB collateral value in cents
+    // dgbCollateral is in satoshis (1 DGB = 100,000,000 satoshis)
+    // oraclePrice is in cents per DGB
+    // So: collateralValue = (dgbCollateral * oraclePrice) / 100,000,000
+
+    CAmount collateralValueCents = (dgbCollateral * oraclePrice) / 100000000LL;
+
+    // Health ratio = (Collateral Value / DD Value) * 100
+    // ddAmount is already in cents
+    double healthRatio = (static_cast<double>(collateralValueCents) * 100.0) / static_cast<double>(ddAmount);
+
+    // Cap at 300% for display purposes
+    return std::min(healthRatio, 300.0);
 }

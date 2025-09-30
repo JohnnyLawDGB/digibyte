@@ -63,6 +63,7 @@ class CKeyID;
 class CPubKey;
 class Coin;
 class SigningProvider;
+class DigiDollarWallet;
 enum class MemPoolRemovalReason;
 enum class SigningResult;
 enum class TransactionError;
@@ -429,6 +430,9 @@ private:
     // Must be the only method adding data to it.
     void AddScriptPubKeyMan(const uint256& id, std::unique_ptr<ScriptPubKeyMan> spkm_man);
 
+    // DigiDollar wallet functionality
+    std::unique_ptr<DigiDollarWallet> m_dd_wallet;
+
     /**
      * Catch wallet up to current chain, scanning new blocks, updating the best
      * block locator and m_last_block_processed, and registering for
@@ -460,18 +464,10 @@ public:
     unsigned int nMasterKeyMaxID = 0;
 
     /** Construct wallet with specified name and database implementation. */
-    CWallet(interfaces::Chain* chain, const std::string& name, std::unique_ptr<WalletDatabase> database)
-        : m_chain(chain),
-          m_name(name),
-          m_database(std::move(database))
-    {
-    }
+    CWallet(interfaces::Chain* chain, const std::string& name, std::unique_ptr<WalletDatabase> database);
 
-    ~CWallet()
-    {
-        // Should not have slots connected at this point.
-        assert(NotifyUnload.empty());
-    }
+    // Destructor declared here but defined in wallet.cpp to support unique_ptr with incomplete type
+    ~CWallet();
 
     bool IsCrypted() const;
     bool IsLocked() const override;
@@ -1023,6 +1019,10 @@ public:
 
     //! Add a descriptor to the wallet, return a ScriptPubKeyMan & associated output type
     ScriptPubKeyMan* AddWalletDescriptor(WalletDescriptor& desc, const FlatSigningProvider& signing_provider, const std::string& label, bool internal) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
+
+    //! Get DigiDollar wallet instance
+    DigiDollarWallet* GetDDWallet() { return m_dd_wallet.get(); }
+    const DigiDollarWallet* GetDDWallet() const { return m_dd_wallet.get(); }
 
     /** Move all records from the BDB database to a new SQLite database for storage.
      * The original BDB file will be deleted and replaced with a new SQLite file.

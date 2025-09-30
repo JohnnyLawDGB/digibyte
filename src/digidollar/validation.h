@@ -11,6 +11,7 @@
 #include <consensus/validation.h>
 #include <consensus/amount.h>
 #include <consensus/dca.h>
+#include <consensus/digidollar.h>
 #include <primitives/transaction.h>
 #include <chainparams.h>
 
@@ -19,16 +20,7 @@
 
 namespace DigiDollar {
 
-/**
- * DigiDollar transaction types (embedded in nVersion)
- */
-enum DigiDollarTxType : uint8_t {
-    DD_TX_MINT = 1,      // Mint new DigiDollars by locking DGB collateral
-    DD_TX_TRANSFER = 2,  // Transfer DigiDollars between addresses
-    DD_TX_REDEEM = 3,    // Redeem DigiDollars and unlock collateral
-    DD_TX_PARTIAL = 4,   // Partial redemption with price verification
-    DD_TX_ERR = 5        // Emergency Redemption Ratio (ERR) redemption
-};
+// DigiDollarTxType enum is now defined in consensus/digidollar.h
 
 /**
  * DigiDollar transaction version marker

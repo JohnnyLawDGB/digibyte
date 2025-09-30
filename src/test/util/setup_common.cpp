@@ -8,6 +8,7 @@
 #include <addrman.h>
 #include <banman.h>
 #include <chainparams.h>
+#include <key.h>
 #include <common/system.h>
 #include <common/url.h>
 #include <consensus/consensus.h>
@@ -90,6 +91,7 @@ BasicTestingSetup::BasicTestingSetup(const ChainType chainType, const std::vecto
     : m_path_root{fs::temp_directory_path() / "test_common_" PACKAGE_NAME / g_insecure_rand_ctx_temp_path.rand256().ToString()},
       m_args{}
 {
+    std::cerr << "DEBUG: BasicTestingSetup constructor entered" << std::endl;
     m_node.args = &gArgs;
     std::vector<const char*> arguments = Cat(
         {
@@ -142,6 +144,9 @@ BasicTestingSetup::BasicTestingSetup(const ChainType chainType, const std::vecto
         noui_connect();
         noui_connected = true;
     }
+
+    // Note: ECC_Start() is already called by kernel::Context constructor above (line 132)
+    // Do NOT call it again here or it will cause an assertion failure!
 }
 
 BasicTestingSetup::~BasicTestingSetup()

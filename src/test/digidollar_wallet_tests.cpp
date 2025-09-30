@@ -20,16 +20,24 @@
 
 using namespace DigiDollar;
 
+// Helper function to create DD address - moved outside fixture to avoid member function call issues
+static std::string CreateTestDDAddress(const CPubKey& pubkey) {
+    // Create P2TR destination
+    // Note: Params() is safe to call here because TestingSetup initializes chain params before any tests run
+    WitnessV1Taproot dest{XOnlyPubKey(pubkey)};
+    const CChainParams& params = Params();
+    return EncodeDigiDollarAddress(dest, params);
+}
+
 BOOST_FIXTURE_TEST_SUITE(digidollar_wallet_tests, TestingSetup)
 
 /**
  * Test fixture for DigiDollar wallet function tests
  * Sets up necessary environment for testing wallet operations
+ * CRITICAL: Must NOT initialize chainParams in constructor - causes crash!
+ * Access via Params() instead after TestingSetup initializes chain params.
  */
 struct DDWalletTestFixture {
-    // Test chain parameters
-    const CChainParams& chainParams;
-
     // Test keys
     CKey walletKey;
     CKey recipientKey;
@@ -43,7 +51,10 @@ struct DDWalletTestFixture {
     static const CAmount LARGE_DD_AMOUNT = 5000000; // $50,000.00
     static const CAmount MAX_TRANSFER_AMOUNT = 10000000; // $100,000.00
 
-    DDWalletTestFixture() : chainParams(Params()) {
+    DDWalletTestFixture() {
+        // Note: ECC context is already initialized by TestingSetup
+        // Do NOT call ECC_Start() here as it will cause double initialization
+
         // Generate test keys
         walletKey.MakeNewKey(true);
         recipientKey.MakeNewKey(true);
@@ -67,7 +78,9 @@ struct DDWalletTestFixture {
     std::string CreateDDAddress(const CPubKey& pubkey) {
         // Create P2TR destination
         WitnessV1Taproot dest{XOnlyPubKey(pubkey)};
-        return EncodeDigiDollarAddress(dest, chainParams);
+        const CChainParams& params = Params();
+        std::string result = EncodeDigiDollarAddress(dest, params);
+        return result;
     }
 
     /**
@@ -237,7 +250,8 @@ BOOST_FIXTURE_TEST_CASE(digidollar_wallet_database_write_dd_balance, DDWalletTes
 {
     // Arrange: Create enhanced wallet and test address
     EnhancedDDWallet wallet;
-    std::string testAddr = CreateDDAddress(walletKey.GetPubKey());
+    CPubKey pubkey = walletKey.GetPubKey();
+    std::string testAddr = CreateTestDDAddress(pubkey);
     CDigiDollarAddress addr(testAddr);
     CAmount testBalance = 500000; // $5,000.00
 
@@ -1598,4 +1612,4 @@ BOOST_FIXTURE_TEST_CASE(test_wallet_redemption_notification, DDWalletTestFixture
     // Should include transaction details in notification
 }
 
-BOOST_AUTO_TEST_SUITE_END()
+BOOST_AUTO_TEST_SUITE_END() 

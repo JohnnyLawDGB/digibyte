@@ -10,6 +10,7 @@
 #include <config/digibyte-config.h>
 #endif
 #include <addresstype.h>
+#include <wallet/digidollarwallet.h>
 #include <blockfilter.h>
 #include <chain.h>
 #include <coins.h>
@@ -87,6 +88,21 @@ struct KeyOriginInfo;
 using interfaces::FoundBlock;
 
 namespace wallet {
+
+// CWallet constructor - defined here to support unique_ptr with incomplete type (DigiDollarWallet)
+CWallet::CWallet(interfaces::Chain* chain, const std::string& name, std::unique_ptr<WalletDatabase> database)
+    : m_chain(chain),
+      m_name(name),
+      m_database(std::move(database))
+{
+}
+
+// CWallet destructor - defined here to support unique_ptr with incomplete type (DigiDollarWallet)
+CWallet::~CWallet()
+{
+    // Should not have slots connected at this point.
+    assert(NotifyUnload.empty());
+}
 
 bool AddWalletSetting(interfaces::Chain& chain, const std::string& wallet_name)
 {
@@ -1498,6 +1514,11 @@ void CWallet::blockConnected(ChainstateRole role, const interfaces::BlockInfo& b
     for (size_t index = 0; index < block.data->vtx.size(); index++) {
         SyncTransaction(block.data->vtx[index], TxStateConfirmed{block.hash, block.height, static_cast<int>(index)});
         transactionRemovedFromMempool(block.data->vtx[index], MemPoolRemovalReason::BLOCK);
+    }
+
+    // Rescan for DigiDollar UTXOs after block is connected
+    if (m_dd_wallet) {
+        m_dd_wallet->ScanForDDUTXOs();
     }
 }
 
@@ -2912,6 +2933,9 @@ std::shared_ptr<CWallet> CWallet::Create(WalletContext& context, const std::stri
     walletInstance->m_keypool_size = std::max(args.GetIntArg("-keypool", DEFAULT_KEYPOOL_SIZE), int64_t{1});
     walletInstance->m_notify_tx_changed_script = args.GetArg("-walletnotify", "");
 
+    // Initialize DigiDollar wallet
+    walletInstance->m_dd_wallet = std::make_unique<DigiDollarWallet>(walletInstance.get());
+
     // Load wallet
     bool rescan_required = false;
     DBErrors nLoadWalletRet = walletInstance->LoadWallet();
@@ -3335,6 +3359,13 @@ void CWallet::postInitProcess()
 
     // Update wallet transactions with current mempool transactions.
     WITH_LOCK(cs_wallet, chain().requestMempoolTransactions(*this));
+
+    // Scan for DigiDollar UTXOs
+    if (m_dd_wallet) {
+        LogPrintf("Wallet: Scanning for DigiDollar UTXOs...\n");
+        size_t dd_utxo_count = m_dd_wallet->ScanForDDUTXOs();
+        LogPrintf("Wallet: DigiDollar scan complete - Found %d DD UTXOs\n", dd_utxo_count);
+    }
 }
 
 bool CWallet::BackupWallet(const std::string& strDest) const

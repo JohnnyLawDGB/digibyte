@@ -567,18 +567,56 @@ void DigiDollarRedeemWidget::updatePositionInfo()
 
 void DigiDollarRedeemWidget::loadPositionDetails()
 {
-    // In a real implementation, this would query the wallet/blockchain for position details
-    // For now, we'll simulate some data for testing
+    // Query the wallet for position details
+    if (!m_walletModel || m_selectedPositionId.isEmpty()) {
+        m_positionFound = false;
+        m_positionDDMinted = 0.0;
+        m_positionDGBCollateral = 0.0;
+        m_positionLockTier = 0;
+        m_positionBlocksRemaining = 0;
+        m_positionHealth = 0.0;
+        m_redeemableAmount = 0.0;
+        return;
+    }
 
+    // Convert position ID string to uint256
+    uint256 positionId;
+    positionId.SetHex(m_selectedPositionId.toStdString());
+    if (positionId.IsNull()) {
+        m_positionFound = false;
+        return;
+    }
+
+    // Get positions from wallet
+    // In a real implementation, would call wallet API to get position by ID
+    // For now, use wallet model to query position details
+
+    // Mock implementation - check if position exists
+    // TODO: Replace with actual wallet query via interfaces::Wallet
     if (m_selectedPositionId.length() >= 8) {
-        // Simulate found position with sample data
+        // For testing: simulate found position with sample data
         m_positionFound = true;
-        m_positionDDMinted = 100.0;
-        m_positionDGBCollateral = 15000.0;
-        m_positionLockTier = 3;
-        m_positionBlocksRemaining = 256;
-        m_positionHealth = 85.0;
+        m_positionDDMinted = 100.0;  // 100 DD = $100
+        m_positionDGBCollateral = 15000.0; // 15000 DGB locked
+        m_positionLockTier = 3; // 180 days
+        m_positionBlocksRemaining = 256; // ~64 minutes remaining (256 blocks * 15 sec)
+        m_positionHealth = 85.0; // 85% health
         m_redeemableAmount = m_positionDDMinted; // Can redeem full amount
+
+        // In production, would query:
+        // auto positions = m_walletModel->getCollateralPositions();
+        // for (const auto& pos : positions) {
+        //     if (pos.position_id == positionId) {
+        //         m_positionFound = true;
+        //         m_positionDDMinted = pos.dd_minted / 100.0; // cents to dollars
+        //         m_positionDGBCollateral = pos.dgb_collateral / COIN; // sats to DGB
+        //         m_positionLockTier = pos.lock_tier;
+        //         m_positionBlocksRemaining = std::max(0, pos.unlock_height - currentHeight);
+        //         m_positionHealth = calculateHealth(pos, currentPrice);
+        //         m_redeemableAmount = calculateRedeemable(pos);
+        //         break;
+        //     }
+        // }
     } else {
         m_positionFound = false;
         m_positionDDMinted = 0.0;

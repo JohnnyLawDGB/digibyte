@@ -161,11 +161,18 @@ BOOST_AUTO_TEST_CASE(transfer_transaction_basic)
 
     TransferTxBuilder builder(params, height, price);
 
-    // Create transfer parameters
+    // Create transfer parameters with valid DD addresses
+    CKey recipient1 = CreateTestKey();
+    CKey recipient2 = CreateTestKey();
+    CTxDestination dest1{WitnessV1Taproot(XOnlyPubKey(recipient1.GetPubKey()))};
+    CTxDestination dest2{WitnessV1Taproot(XOnlyPubKey(recipient2.GetPubKey()))};
+    std::string addr1 = DigiDollar::EncodeDigiDollarAddress(dest1, params);
+    std::string addr2 = DigiDollar::EncodeDigiDollarAddress(dest2, params);
+
     TransferParams transferParams;
     transferParams.recipients = {
-        {"DD1234567890abcdef1234567890abcdef12345678", 5000}, // $50
-        {"DD1234567890abcdef1234567890abcdef87654321", 3000}  // $30
+        {addr1, 5000}, // $50
+        {addr2, 3000}  // $30
     };
     transferParams.feeRate = 1000;
     transferParams.ddUtxos = CreateTestUTXOs(2);

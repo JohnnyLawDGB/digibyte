@@ -25,8 +25,19 @@
 #include <node/interface_ui.h>
 #include <psbt.h>
 #include <util/translation.h>
+#include <util/strencodings.h> // for strprintf
 #include <wallet/coincontrol.h>
 #include <wallet/wallet.h> // for CRecipient
+#include <wallet/digidollarwallet.h> // for DigiDollarWallet
+#include <base58.h> // for CDigiDollarAddress
+#include <uint256.h>
+#include <hash.h>
+#include <crypto/sha256.h> // for CSHA256
+#include <util/time.h> // for GetTime
+#include <logging.h> // for LogPrintf
+#include <digidollar/txbuilder.h> // for MintTxBuilder
+#include <oracle/mock_oracle.h> // for MockOracleManager
+#include <kernel/chainparams.h> // for CChainParams
 
 #include <stdint.h>
 #include <functional>
@@ -659,62 +670,312 @@ WalletModel::DigiDollarSendResult WalletModel::sendDigiDollar(const QString& add
     }
 
     try {
-        // Call the RPC method via interfaces::Wallet
-        // For now, using a mock implementation since the actual RPC integration needs wallet interface updates
-        // TODO: Integrate with actual senddigidollar RPC method
+        // NOTE: Backend integration for DigiDollar sending
+        // This connects the Qt UI to the actual DigiDollarWallet backend
 
-        // Generate a mock transaction ID for demonstration
-        uint256 mockTxId;
-        mockTxId.SetHex("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef12");
+        // Create DigiDollarWallet instance (in production, would be part of wallet interface)
+        DigiDollarWallet ddWallet;
 
-        return DigiDollarSendResult(OK, QString::fromStdString(mockTxId.GetHex()), "");
+        // Set mock balance for testing if needed
+        if (currentBalance > 0) {
+            ddWallet.SetMockBalance(currentBalance);
+        }
+
+        // Create DigiDollar address object
+        CDigiDollarAddress recipientAddr(address.toStdString());
+
+        // Call backend to create and send transaction
+        std::string txid;
+        std::string error;
+        bool success = ddWallet.TransferDigiDollar(recipientAddr, amount, txid, error);
+
+        if (!success) {
+            // Transaction creation or sending failed
+            LogPrintf("DigiDollar Qt: Send failed - %s\n", error);
+            return DigiDollarSendResult(TransactionCreationFailed, "", QString::fromStdString(error));
+        }
+
+        // Transaction successfully created and broadcast
+        LogPrintf("DigiDollar Qt: Send successful - %d cents to %s, txid: %s\n",
+                  amount, address.toStdString(), txid);
+
+        // TODO: In production implementation:
+        // 1. Integrate with actual wallet::CWallet via interfaces
+        // 2. Add transaction to wallet database
+        // 3. Update transaction table model
+        // 4. Emit signals for balance updates
+
+        return DigiDollarSendResult(OK, QString::fromStdString(txid), "");
 
     } catch (const std::exception& e) {
+        LogPrintf("DigiDollar Qt: Send exception - %s\n", e.what());
         return DigiDollarSendResult(TransactionCreationFailed, "", QString::fromStdString(e.what()));
     }
 }
 
 WalletModel::DigiDollarMintResult WalletModel::mintDigiDollar(CAmount ddAmount, int lockTier)
 {
+    LogPrintf("DigiDollar Qt: ========== MINT DIGIDOLLAR START ==========\n");
+    LogPrintf("DigiDollar Qt: mintDigiDollar called - Amount: %d cents, Tier: %d\n", ddAmount, lockTier);
+
     // Validate lock tier
     if (lockTier < 1 || lockTier > 8) {
+        LogPrintf("DigiDollar Qt: ERROR - Invalid lock tier: %d\n", lockTier);
         return DigiDollarMintResult(InvalidAmount, "", "", "Invalid lock tier. Must be between 1 and 8.");
     }
+    LogPrintf("DigiDollar Qt: Lock tier validation passed\n");
 
     // Check if wallet is locked
     if (getEncryptionStatus() == Locked) {
+        LogPrintf("DigiDollar Qt: ERROR - Wallet is locked\n");
         return DigiDollarMintResult(TransactionCreationFailed, "", "", "Wallet is locked. Please unlock to mint DigiDollar.");
     }
+    LogPrintf("DigiDollar Qt: Wallet encryption check passed\n");
 
     // Check if amount is positive
     if (ddAmount <= 0) {
+        LogPrintf("DigiDollar Qt: ERROR - Invalid amount: %d\n", ddAmount);
         return DigiDollarMintResult(InvalidAmount, "", "", "Mint amount must be positive");
     }
+    LogPrintf("DigiDollar Qt: Amount validation passed\n");
 
     // Calculate required collateral
     CAmount requiredCollateral = calculateRequiredCollateral(ddAmount, lockTier);
     CAmount availableDGBBalance = getAvailableDGBBalance();
 
+    LogPrintf("DigiDollar Qt: Required collateral: %d sats (%.8f DGB)\n",
+              requiredCollateral, requiredCollateral / 100000000.0);
+    LogPrintf("DigiDollar Qt: Available balance: %d sats (%.8f DGB)\n",
+              availableDGBBalance, availableDGBBalance / 100000000.0);
+
     if (requiredCollateral > availableDGBBalance) {
+        LogPrintf("DigiDollar Qt: ERROR - Insufficient balance\n");
         return DigiDollarMintResult(AmountExceedsBalance, "", "",
             QString("Insufficient DGB balance for collateral. Required: %1, Available: %2")
                 .arg(QString::number(requiredCollateral / 100000000.0, 'f', 8))
                 .arg(QString::number(availableDGBBalance / 100000000.0, 'f', 8)));
     }
+    LogPrintf("DigiDollar Qt: Balance check passed\n");
 
     try {
-        // Call the RPC method via interfaces::Wallet
-        // For now, using a mock implementation
-        // TODO: Integrate with actual mintdigidollar RPC method
+        // Step 1: Convert lock tier to lock days for TxBuilder
+        const int lockDaysForTier[8] = {30, 90, 180, 365, 1095, 1825, 2555, 3650};
+        int lockDays = lockDaysForTier[lockTier - 1];
+        LogPrintf("DigiDollar Qt: Step 1 - Lock days for tier %d: %d days\n", lockTier, lockDays);
 
-        // Generate mock transaction and position IDs
-        uint256 mockTxId;
-        mockTxId.SetHex("abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890ab");
+        // Step 2: Get current blockchain height from client model
+        if (!m_client_model) {
+            LogPrintf("DigiDollar Qt: ERROR - Client model not available\n");
+            return DigiDollarMintResult(TransactionCreationFailed, "", "", "Client model not available");
+        }
+        int currentHeight = m_client_model->getNumBlocks();
+        LogPrintf("DigiDollar Qt: Step 2 - Current blockchain height: %d\n", currentHeight);
 
-        return DigiDollarMintResult(OK, QString::fromStdString(mockTxId.GetHex()),
-                                  QString::fromStdString(mockTxId.GetHex()), "");
+        // Step 3: Get oracle price (use MockOracleManager for RegTest)
+        // Oracle price format: cents per DGB (how many USD cents to buy 1 DGB)
+        // For example: $0.01/DGB = 1 cent per DGB, so oraclePrice = 1
+        CAmount oraclePrice = MockOracleManager::GetInstance().GetCurrentPrice();
+        LogPrintf("DigiDollar Qt: Step 3 - MockOracleManager returned price: %d cents/DGB\n", oraclePrice);
+
+        if (oraclePrice <= 0) {
+            // Fallback to default price if mock oracle not initialized
+            // Default: $0.01/DGB = 1 cent per DGB
+            oraclePrice = 1; // 1 cent per DGB
+            LogPrintf("DigiDollar Qt: WARNING - Using fallback oracle price: %d cents/DGB\n", oraclePrice);
+            MockOracleManager::GetInstance().SetMockPrice(oraclePrice);
+        } else {
+            LogPrintf("DigiDollar Qt: Using oracle price: %d cents per DGB\n", oraclePrice);
+        }
+
+        // Step 4: Get wallet pointer for accessing UTXOs and signing
+        wallet::CWallet* pWallet = wallet().wallet();
+        if (!pWallet) {
+            LogPrintf("DigiDollar Qt: ERROR - Wallet pointer not available\n");
+            return DigiDollarMintResult(TransactionCreationFailed, "", "", "Wallet not available");
+        }
+        LogPrintf("DigiDollar Qt: Step 4 - Wallet pointer obtained\n");
+
+        // Step 5: Collect available UTXOs from wallet for collateral
+        // Build UTXO map for value lookup
+        std::map<COutPoint, CAmount> utxoValues;
+        std::vector<COutPoint> availableUtxos;
+        CAmount totalAvailable = 0;
+
+        LogPrintf("DigiDollar Qt: Step 5 - Collecting UTXOs from wallet...\n");
+        {
+            LOCK(pWallet->cs_wallet);
+
+            // Get all available coins from wallet
+            auto coins = wallet().listCoins();
+            LogPrintf("DigiDollar Qt: listCoins returned %d destinations\n", coins.size());
+
+            for (const auto& [dest, outputs] : coins) {
+                LogPrintf("DigiDollar Qt: Processing destination with %d outputs\n", outputs.size());
+                for (const auto& outpoint_txout : outputs) {
+                    const COutPoint& outpoint = std::get<0>(outpoint_txout);
+                    const interfaces::WalletTxOut& wtxout = std::get<1>(outpoint_txout);
+
+                    LogPrintf("DigiDollar Qt: Checking UTXO %s:%d - Value: %d, Depth: %d, Spent: %s\n",
+                              outpoint.hash.GetHex(), outpoint.n, wtxout.txout.nValue,
+                              wtxout.depth_in_main_chain, wtxout.is_spent ? "YES" : "NO");
+
+                    // Only use confirmed, spendable UTXOs
+                    if (wtxout.depth_in_main_chain > 0 && !wtxout.is_spent) {
+                        availableUtxos.push_back(outpoint);
+                        utxoValues[outpoint] = wtxout.txout.nValue;
+                        totalAvailable += wtxout.txout.nValue;
+                        LogPrintf("DigiDollar Qt: Added UTXO - Total now: %d sats\n", totalAvailable);
+                    }
+                }
+            }
+        }
+
+        if (availableUtxos.empty()) {
+            LogPrintf("DigiDollar Qt: ERROR - No available UTXOs found\n");
+            return DigiDollarMintResult(TransactionCreationFailed, "", "",
+                "No available UTXOs for collateral. Please ensure wallet has confirmed DGB balance.");
+        }
+
+        LogPrintf("DigiDollar Qt: Found %d available UTXOs totaling %d satoshis (%.8f DGB)\n",
+                  availableUtxos.size(), totalAvailable, totalAvailable / 100000000.0);
+
+        // Step 6: Generate owner key for the mint position
+        CKey ownerKey;
+        ownerKey.MakeNewKey(true); // Generate compressed key
+        CPubKey ownerPubKey = ownerKey.GetPubKey();
+        LogPrintf("DigiDollar Qt: Step 6 - Generated owner key - PubKey: %s\n",
+                  HexStr(ownerPubKey));
+
+        // Step 7: Build mint transaction using custom MintTxBuilder that has UTXO access
+        LogPrintf("DigiDollar Qt: Step 7 - Building mint transaction...\n");
+
+        // Create a custom builder class that can access UTXO values
+        class QtMintTxBuilder : public DigiDollar::MintTxBuilder {
+        private:
+            const std::map<COutPoint, CAmount>& m_utxo_values;
+        public:
+            QtMintTxBuilder(const CChainParams& params, int height, CAmount price,
+                          const std::map<COutPoint, CAmount>& utxo_values)
+                : MintTxBuilder(params, height, price), m_utxo_values(utxo_values) {}
+
+            CAmount GetDGBFromUTXO(const COutPoint& outpoint) const override {
+                auto it = m_utxo_values.find(outpoint);
+                if (it != m_utxo_values.end()) {
+                    return it->second;
+                }
+                return 0; // UTXO not found
+            }
+        };
+
+        QtMintTxBuilder builder(Params(), currentHeight, oraclePrice, utxoValues);
+
+        DigiDollar::TxBuilderMintParams params;
+        params.ddAmount = ddAmount;
+        params.lockDays = lockDays;
+        params.ownerKey = ownerKey;
+        // DigiDollar transactions require minimum 1 DGB fee
+        // TxBuilder formula: (vsize * feeRate) / 1000
+        // For ~200 vB tx: (200 * 500000) / 1000 = 100,000,000 sats = 1 DGB
+        params.feeRate = 500000; // High fee rate to ensure >= 1 DGB total fee
+        params.utxos = availableUtxos;
+
+        LogPrintf("DigiDollar Qt: TxBuilder params - DD: %d cents, Days: %d, Height: %d, Price: %d, UTXOs: %d\n",
+                  ddAmount, lockDays, currentHeight, oraclePrice, availableUtxos.size());
+
+        DigiDollar::TxBuilderResult result = builder.BuildMintTransaction(params);
+
+        if (!result.success) {
+            LogPrintf("DigiDollar Qt: ERROR - BuildMintTransaction failed: %s\n", result.error);
+            return DigiDollarMintResult(TransactionCreationFailed, "", "",
+                QString::fromStdString("Failed to build mint transaction: " + result.error));
+        }
+
+        LogPrintf("DigiDollar Qt: Transaction built successfully!\n");
+        LogPrintf("DigiDollar Qt: - Inputs: %d, Outputs: %d\n", result.tx.vin.size(), result.tx.vout.size());
+        LogPrintf("DigiDollar Qt: - Collateral required: %d sats (%.8f DGB)\n",
+                  result.collateralRequired, result.collateralRequired / 100000000.0);
+        LogPrintf("DigiDollar Qt: - Total fees: %d sats (%.8f DGB)\n",
+                  result.totalFees, result.totalFees / 100000000.0);
+
+        // Step 8: Sign the transaction
+        LogPrintf("DigiDollar Qt: Step 8 - Signing transaction...\n");
+        bool signSuccess = false;
+        {
+            LOCK(pWallet->cs_wallet);
+            signSuccess = pWallet->SignTransaction(result.tx);
+        }
+
+        if (!signSuccess) {
+            LogPrintf("DigiDollar Qt: ERROR - Failed to sign transaction\n");
+            // Check if transaction has any inputs that need signing
+            LogPrintf("DigiDollar Qt: Transaction has %d inputs\n", result.tx.vin.size());
+            for (size_t i = 0; i < result.tx.vin.size(); i++) {
+                LogPrintf("DigiDollar Qt: Input %d: %s:%d - scriptSig size: %d\n",
+                          i, result.tx.vin[i].prevout.hash.GetHex(), result.tx.vin[i].prevout.n,
+                          result.tx.vin[i].scriptSig.size());
+            }
+            return DigiDollarMintResult(TransactionCreationFailed, "", "",
+                "Failed to sign mint transaction. Check wallet keys.");
+        }
+
+        LogPrintf("DigiDollar Qt: Transaction signed successfully\n");
+
+        // Step 9: Create transaction reference for broadcast
+        CTransactionRef txRef = MakeTransactionRef(result.tx);
+        uint256 txId = txRef->GetHash();
+        uint256 positionId = txId; // Position ID is the mint transaction ID
+
+        LogPrintf("DigiDollar Qt: Step 9 - Transaction ID: %s\n", txId.GetHex());
+
+        // Step 10: Broadcast transaction to mempool
+        LogPrintf("DigiDollar Qt: Step 10 - Broadcasting transaction to mempool...\n");
+
+        try {
+            wallet().commitTransaction(txRef, /*value_map=*/{}, /*order_form=*/{});
+            LogPrintf("DigiDollar Qt: Transaction broadcast successful!\n");
+        } catch (const std::exception& e) {
+            LogPrintf("DigiDollar Qt: ERROR - Failed to broadcast transaction: %s\n", e.what());
+            return DigiDollarMintResult(TransactionCreationFailed, "", "",
+                QString("Failed to broadcast transaction: %1").arg(e.what()));
+        }
+
+        // Step 11: Store position in wallet database for tracking
+        LogPrintf("DigiDollar Qt: Step 11 - Storing position in wallet...\n");
+
+        // Store position in DigiDollarWallet
+        DigiDollarWallet* ddWallet = m_wallet->getDigiDollarWallet();
+        if (ddWallet) {
+            // DigiByte has 15-second blocks: 4 blocks/min * 60 min/hr * 24 hr/day = 5760 blocks/day
+            int64_t lockBlocks = DigiDollar::LockDaysToBlocks(lockDays);
+            int unlockHeight = currentHeight + lockBlocks;
+            WalletCollateralPosition position(positionId, ddAmount, result.collateralRequired, lockTier, unlockHeight);
+            ddWallet->AddCollateralPosition(position);
+            LogPrintf("DigiDollar Qt: Position stored in wallet - ID: %s, DD: %d, DGB: %d, Tier: %d\n",
+                      positionId.GetHex(), ddAmount, result.collateralRequired, lockTier);
+        } else {
+            LogPrintf("DigiDollar Qt: WARNING - DD wallet not available, position not stored\n");
+        }
+
+        LogPrintf("DigiDollar Qt: ========== MINT DIGIDOLLAR SUCCESS ==========\n");
+        LogPrintf("DigiDollar Qt: Summary:\n");
+        LogPrintf("DigiDollar Qt: - TxID: %s\n", txId.GetHex());
+        LogPrintf("DigiDollar Qt: - Position ID: %s\n", positionId.GetHex());
+        LogPrintf("DigiDollar Qt: - DD Minted: %d cents ($%.2f)\n", ddAmount, ddAmount / 100.0);
+        LogPrintf("DigiDollar Qt: - Collateral: %d sats (%.8f DGB)\n",
+                  result.collateralRequired, result.collateralRequired / 100000000.0);
+        LogPrintf("DigiDollar Qt: - Fees: %d sats (%.8f DGB)\n",
+                  result.totalFees, result.totalFees / 100000000.0);
+        LogPrintf("DigiDollar Qt: - Lock tier: %d (%d days)\n", lockTier, lockDays);
+
+        return DigiDollarMintResult(OK,
+                                  QString::fromStdString(txId.GetHex()),
+                                  QString::fromStdString(positionId.GetHex()),
+                                  "",
+                                  result.collateralRequired);
 
     } catch (const std::exception& e) {
+        LogPrintf("DigiDollar Qt: ========== MINT DIGIDOLLAR FAILED ==========\n");
+        LogPrintf("DigiDollar Qt: Exception: %s\n", e.what());
         return DigiDollarMintResult(TransactionCreationFailed, "", "", QString::fromStdString(e.what()));
     }
 }
@@ -744,13 +1005,59 @@ WalletModel::DigiDollarRedeemResult WalletModel::redeemDigiDollar(const QString&
     }
 
     try {
-        // Call the RPC method via interfaces::Wallet
-        // For now, using a mock implementation
-        // TODO: Integrate with actual redeemdigidollar RPC method
+        // Convert position ID to uint256
+        uint256 positionIdHash;
+        positionIdHash.SetHex(positionId.toStdString());
+        if (positionIdHash.IsNull()) {
+            return DigiDollarRedeemResult(InvalidAmount, "", "Invalid position ID hex format");
+        }
 
+        // Integration with wallet backend for redemption
+        // This would interface with DigiDollarWallet and RedeemTxBuilder
+
+        // Step 1: Check if position exists and can be redeemed
+        // In production: query wallet positions via interfaces::Wallet
+        // auto positions = wallet().getDigiDollarPositions();
+        // bool positionFound = false;
+        // for (const auto& pos : positions) {
+        //     if (pos.position_id == positionIdHash) {
+        //         positionFound = true;
+        //         break;
+        //     }
+        // }
+        // if (!positionFound) {
+        //     return DigiDollarRedeemResult(InvalidAmount, "", "Position not found");
+        // }
+
+        // Step 2: Determine appropriate redemption path
+        // RedemptionPath path = determineRedemptionPath(position, currentHeight, systemHealth);
+        // - NORMAL: If timelock expired
+        // - EMERGENCY: If oracle 8-of-15 approval available
+        // - PARTIAL: For partial redemption
+        // - ERR: If system < 100% collateralized
+
+        // Step 3: Build redemption transaction using RedeemTxBuilder
+        // CTransactionRef tx_out;
+        // std::string error;
+        // if (!wallet().redeemDigiDollar(positionIdHash, amount, tx_out, error)) {
+        //     return DigiDollarRedeemResult(TransactionCreationFailed, "", QString::fromStdString(error));
+        // }
+
+        // Step 4: Sign and broadcast transaction
+        // if (!wallet().broadcastTransaction(tx_out)) {
+        //     return DigiDollarRedeemResult(TransactionCreationFailed, "", "Failed to broadcast transaction");
+        // }
+
+        // Step 5: Update wallet state
+        // wallet().updatePositionStatus(positionIdHash, false); // Mark as redeemed
+
+        // Mock implementation for RegTest testing
         // Generate a mock transaction ID
         uint256 mockTxId;
         mockTxId.SetHex("fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321");
+
+        // In production, would return:
+        // return DigiDollarRedeemResult(OK, QString::fromStdString(tx_out->GetHash().ToString()), "");
 
         return DigiDollarRedeemResult(OK, QString::fromStdString(mockTxId.GetHex()), "");
 
@@ -761,10 +1068,28 @@ WalletModel::DigiDollarRedeemResult WalletModel::redeemDigiDollar(const QString&
 
 CAmount WalletModel::getDigiDollarBalance() const
 {
-    // TODO: Implement actual DigiDollar balance retrieval
-    // For now, return a mock balance for demonstration
-    // This should call getdigidollarbalance RPC or query wallet state
-    return 10000; // Mock balance of 100.00 DD (in cents)
+    // Query actual DigiDollar balance from wallet
+    // DD balance is tracked separately from regular DGB balance
+    // Balance is stored in cents (e.g., 10000 = $100.00 DD)
+
+    try {
+        // Get DigiDollar wallet instance from wallet interface
+        DigiDollarWallet* ddWallet = m_wallet->getDigiDollarWallet();
+        if (!ddWallet) {
+            LogPrintf("DigiDollar Qt: DD wallet not available\n");
+            return 0;
+        }
+
+        // Get the total DD balance
+        CAmount balance = ddWallet->GetTotalDDBalance();
+
+        LogPrintf("DigiDollar Qt: getDigiDollarBalance returning %d cents\n", balance);
+        return balance;
+
+    } catch (const std::exception& e) {
+        LogPrintf("DigiDollar Qt: getDigiDollarBalance exception - %s\n", e.what());
+        return 0;
+    }
 }
 
 CAmount WalletModel::getAvailableDGBBalance() const
@@ -793,20 +1118,17 @@ bool WalletModel::validateDigiDollarAddress(const QString& address) const
 
 CAmount WalletModel::calculateRequiredCollateral(CAmount ddAmount, int lockTier) const
 {
-    // Mock collateral calculation based on lock tier
-    // In reality, this would use the DCA (Dynamic Collateral Adjustment) formula
-    // and current system health metrics
-
-    // Base collateral ratios for each tier (as percentages)
+    // Collateral ratios from consensus (8-tier lock period system)
+    // Higher ratios for shorter locks (treasury model)
     const double tierRatios[8] = {
-        200.0, // Tier 1 (30 days) - 200%
-        175.0, // Tier 2 (90 days) - 175%
-        160.0, // Tier 3 (180 days) - 160%
-        150.0, // Tier 4 (1 year) - 150%
-        140.0, // Tier 5 (3 years) - 140%
-        130.0, // Tier 6 (5 years) - 130%
-        125.0, // Tier 7 (7 years) - 125%
-        120.0  // Tier 8 (10 years) - 120%
+        500.0, // Tier 1 (30 days) - 500%
+        400.0, // Tier 2 (3 months) - 400%
+        350.0, // Tier 3 (6 months) - 350%
+        300.0, // Tier 4 (1 year) - 300%
+        250.0, // Tier 5 (3 years) - 250%
+        225.0, // Tier 6 (5 years) - 225%
+        212.0, // Tier 7 (7 years) - 212%
+        200.0  // Tier 8 (10 years) - 200%
     };
 
     if (lockTier < 1 || lockTier > 8) {
@@ -815,14 +1137,17 @@ CAmount WalletModel::calculateRequiredCollateral(CAmount ddAmount, int lockTier)
 
     double collateralRatio = tierRatios[lockTier - 1];
 
-    // TODO: Get actual DGB/USD price from oracle
-    // For mock purposes, assuming 1 DD = $1 and 1 DGB = $0.01
-    double dgbPriceUSD = 0.01;
-    double ddValueUSD = ddAmount / 100.0; // ddAmount is in cents
+    // Get oracle price (mock for RegTest)
+    // Default: 1 DGB = $0.01 USD
+    double dgbPriceUSD = 0.01; // Mock oracle price - will be updated from RPC
+    double ddValueUSD = ddAmount / 100.0; // ddAmount is in cents, convert to dollars
 
-    // Calculate required DGB amount
-    double requiredDGBValue = ddValueUSD * (collateralRatio / 100.0);
-    CAmount requiredDGB = static_cast<CAmount>(requiredDGBValue / dgbPriceUSD * 100000000); // Convert to satoshis
+    // Calculate required USD value of collateral
+    double requiredCollateralUSD = ddValueUSD * (collateralRatio / 100.0);
 
-    return requiredDGB;
+    // Calculate required DGB amount and convert to satoshis
+    double requiredDGB_decimal = requiredCollateralUSD / dgbPriceUSD;
+    CAmount requiredDGB_satoshis = static_cast<CAmount>(requiredDGB_decimal * 100000000);
+
+    return requiredDGB_satoshis;
 }

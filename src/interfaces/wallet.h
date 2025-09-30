@@ -28,6 +28,7 @@
 
 class CFeeRate;
 class CKey;
+class DigiDollarWallet;
 enum class FeeReason;
 enum class OutputType;
 enum class TransactionError;
@@ -314,6 +315,9 @@ public:
 
     //! Return pointer to internal wallet class, useful for testing.
     virtual wallet::CWallet* wallet() { return nullptr; }
+
+    //! Get DigiDollar wallet instance
+    virtual class DigiDollarWallet* getDigiDollarWallet() = 0;
 };
 
 //! Wallet chain client that in addition to having chain client methods for

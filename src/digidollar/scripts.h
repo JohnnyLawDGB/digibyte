@@ -97,6 +97,24 @@ CScript CreatePartialRedemptionPath(const MintParams& params);
  */
 CScript CreateERRPath(const MintParams& params);
 
+// ============================================================================
+// Phase 1 Script Metadata Tracking (internal testing use only)
+// ============================================================================
+// INTERNAL USE ONLY - not part of public API
+// These functions support Phase 1 testing by tracking script metadata.
+// Phase 2 will track this in the UTXO database properly.
+
+enum class ScriptType;  // Forward declaration from validation.h
+
+struct ScriptMetadata {
+    ScriptType type;
+    CAmount ddAmount;
+    int64_t lockHeight;
+};
+
+void RegisterScriptMetadata(const CScript& script, ScriptType type, CAmount ddAmount, int64_t lockHeight);
+bool GetScriptMetadata(const CScript& script, ScriptMetadata& metadata);
+
 } // namespace DigiDollar
 
 #endif // DIGIBYTE_DIGIDOLLAR_SCRIPTS_H

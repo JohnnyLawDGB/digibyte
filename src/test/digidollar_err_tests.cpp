@@ -503,7 +503,7 @@ BOOST_FIXTURE_TEST_CASE(err_blocks_normal_redemptions_when_active, DigiDollarERR
     validationContext.systemCollateral = 90; // ERR active
 
     CMutableTransaction mtx;
-    mtx.nVersion = 0x44440003; // DD_TX_VERSION | DD_TX_REDEEM
+    mtx.nVersion = 0x03000770; // DD_TX_REDEEM (type=3 in bits 24-31, marker=0x0770 in bits 0-15)
 
     // Add normal redemption inputs/outputs
     mtx.vin.resize(2);
@@ -537,7 +537,7 @@ BOOST_FIXTURE_TEST_CASE(err_allows_err_redemptions_when_active, DigiDollarERRTes
     validationContext.systemCollateral = 85; // ERR active
 
     CMutableTransaction mtx;
-    mtx.nVersion = 0x44440005; // DD_TX_VERSION | DD_TX_ERR
+    mtx.nVersion = 0x05000770; // DD_TX_ERR (type=5 in bits 24-31, marker=0x0770 in bits 0-15)
 
     // Add ERR redemption inputs/outputs
     mtx.vin.resize(2);
@@ -571,7 +571,7 @@ BOOST_FIXTURE_TEST_CASE(err_validates_adjusted_collateral_return, DigiDollarERRT
     validationContext.systemCollateral = 90; // 90% health = 90% return
 
     CMutableTransaction mtx;
-    mtx.nVersion = 0x44440005; // DD_TX_VERSION | DD_TX_ERR
+    mtx.nVersion = 0x05000770; // DD_TX_ERR (type=5 in bits 24-31, marker=0x0770 in bits 0-15)
 
     mtx.vin.resize(2);
     mtx.vin[0].prevout = COutPoint(uint256S("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"), 0);

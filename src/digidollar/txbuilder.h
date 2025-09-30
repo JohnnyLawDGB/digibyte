@@ -100,6 +100,11 @@ protected:
     CAmount GetUTXOValue(const COutPoint& outpoint) const;
     int GetCurrentSystemCollateral() const;
 
+    // Virtual method for UTXO value lookup (can be overridden by child classes)
+    // This is used by SelectCoins to determine UTXO values when building transactions
+    virtual CAmount GetDGBFromUTXO(const COutPoint& outpoint) const { return 100 * COIN; }
+    virtual CAmount GetUTXOValueVirtual(const COutPoint& outpoint) const { return GetDGBFromUTXO(outpoint); }
+
 public:
     TxBuilder(const CChainParams& params, int height, CAmount price);
     virtual ~TxBuilder() = default;
@@ -166,9 +171,13 @@ public:
     bool SelectDDInputs(const std::vector<CTxOut>& available, CAmount needed,
                        std::vector<CTxOut>& selected, CAmount& total);
 
+protected:
+    // Virtual for testing - can be overridden
+    virtual CAmount GetDDFromUTXO(const COutPoint& outpoint) const;
+    virtual CAmount GetDGBFromUTXO(const COutPoint& outpoint) const;
+
 private:
     bool ValidateDDAddress(const std::string& address) const;
-    CAmount GetDDFromUTXO(const COutPoint& outpoint) const;
     CAmount CalculateTotalDDInputs(const std::vector<COutPoint>& ddUtxos) const;
     CAmount CalculateTotalDDOutputs(const std::vector<std::pair<std::string, CAmount>>& recipients) const;
 };

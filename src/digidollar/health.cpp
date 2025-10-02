@@ -97,6 +97,10 @@ std::vector<int> SystemHealthMonitor::GetHealthHistory(int blocks)
         return history;
     }
 
+    // Cap the maximum history size to prevent excessive memory allocation
+    const int MAX_HISTORY_REQUEST = 100000;
+    int blocksToFetch = std::min(blocks, MAX_HISTORY_REQUEST);
+
     // Get current chain tip
     // TODO: Fix chainstate access - temporary mock implementation
     // In a production system, this should receive a ChainstateManager reference
@@ -107,7 +111,7 @@ std::vector<int> SystemHealthMonitor::GetHealthHistory(int blocks)
     int64_t currentHeight = 1000000; // Mock current height
 
     // Collect history from most recent to oldest
-    for (int i = 0; i < blocks && (currentHeight - i) >= 0; ++i) {
+    for (int i = 0; i < blocksToFetch && (currentHeight - i) >= 0; ++i) {
         int64_t height = currentHeight - i;
         auto it = s_healthHistory.find(height);
         if (it != s_healthHistory.end()) {
@@ -292,9 +296,11 @@ void SystemHealthMonitor::ScanUTXOSet()
     //     // Update metrics accordingly
     // }
 
-    // For testing purposes, use some default values
-    s_currentMetrics.totalDDSupply = 1000000000; // $10M in cents
-    s_currentMetrics.totalCollateral = 35800000000; // 358 DGB
+    // For testing purposes, use totals that match tier data
+    // Sum of all tiers: 3600 + 5000 + 4166 + 2000 + 2500 + 2777 = 20043 cents
+    s_currentMetrics.totalDDSupply = 20043; // $200.43 in cents
+    // Sum of all tier collateral: 10800M + 12500M + 10000M + 10000M + 10000M + 10000M = 63300M sats
+    s_currentMetrics.totalCollateral = 63300000000; // 633 DGB
 
     LogPrint(BCLog::DIGIDOLLAR, "UTXO scan complete: %s DD supply, %s DGB collateral\n",
              FormatMoney(s_currentMetrics.totalDDSupply),
@@ -306,7 +312,7 @@ void SystemHealthMonitor::UpdateTierMetrics()
     // Calculate current DGB price for health calculations
     CAmount currentPrice = GetLastOraclePrice();
     if (currentPrice == 0) {
-        currentPrice = 50000; // Default $5.00 if no oracle data
+        currentPrice = 50000; // Default $0.50 per DGB (50000 * 0.001 cents = 50 cents)
     }
 
     // Update overall system health
@@ -318,11 +324,15 @@ void SystemHealthMonitor::UpdateTierMetrics()
 
     // Update per-tier metrics
     // Note: In real implementation, this would analyze actual positions by tier
-    // For testing, distribute mock data across tiers
-    if (s_currentMetrics.tiers.size() >= 3) {
-        // Tier 1: 30-day (mock data)
-        s_currentMetrics.tiers[0].ddMinted = 360000; // $3,600
-        s_currentMetrics.tiers[0].dgbLocked = 10800000000; // 108 DGB
+    // For testing, distribute mock data across all tiers
+    // Total mock: 1000000000 cents DD ($10M), 35800000000 satoshis (358 DGB)
+    // With price 50000 (0.001 cents/DGB), 358 DGB = $179 value
+    // Health = ($179 / $10M) * 100 = 0.00179% (SEVERELY UNDERCOLLATERALIZED)
+    // Let's use realistic amounts instead
+    if (s_currentMetrics.tiers.size() >= 6) {
+        // Tier 0: 30-day (mock data) - 150% ratio
+        s_currentMetrics.tiers[0].ddMinted = 3600; // $36.00
+        s_currentMetrics.tiers[0].dgbLocked = 10800000000; // 108 DGB worth $54
         s_currentMetrics.tiers[0].positions = 2;
         s_currentMetrics.tiers[0].healthRatio = HealthUtils::CalculateHealthRatio(
             s_currentMetrics.tiers[0].ddMinted,
@@ -330,9 +340,9 @@ void SystemHealthMonitor::UpdateTierMetrics()
             currentPrice
         );
 
-        // Tier 2: 90-day (mock data)
-        s_currentMetrics.tiers[1].ddMinted = 500000; // $5,000
-        s_currentMetrics.tiers[1].dgbLocked = 12500000000; // 125 DGB
+        // Tier 1: 90-day (mock data) - 125% ratio
+        s_currentMetrics.tiers[1].ddMinted = 5000; // $50.00
+        s_currentMetrics.tiers[1].dgbLocked = 12500000000; // 125 DGB worth $62.50
         s_currentMetrics.tiers[1].positions = 2;
         s_currentMetrics.tiers[1].healthRatio = HealthUtils::CalculateHealthRatio(
             s_currentMetrics.tiers[1].ddMinted,
@@ -340,13 +350,43 @@ void SystemHealthMonitor::UpdateTierMetrics()
             currentPrice
         );
 
-        // Tier 3: 365-day (mock data)
-        s_currentMetrics.tiers[2].ddMinted = 750000; // $7,500
-        s_currentMetrics.tiers[2].dgbLocked = 16500000000; // 165 DGB
+        // Tier 2: 180-day (mock data) - 120% ratio
+        s_currentMetrics.tiers[2].ddMinted = 4166; // $41.66
+        s_currentMetrics.tiers[2].dgbLocked = 10000000000; // 100 DGB worth $50
         s_currentMetrics.tiers[2].positions = 2;
         s_currentMetrics.tiers[2].healthRatio = HealthUtils::CalculateHealthRatio(
             s_currentMetrics.tiers[2].ddMinted,
             s_currentMetrics.tiers[2].dgbLocked,
+            currentPrice
+        );
+
+        // Tier 3: 365-day (mock data) - 250% ratio
+        s_currentMetrics.tiers[3].ddMinted = 2000; // $20.00
+        s_currentMetrics.tiers[3].dgbLocked = 10000000000; // 100 DGB worth $50
+        s_currentMetrics.tiers[3].positions = 2;
+        s_currentMetrics.tiers[3].healthRatio = HealthUtils::CalculateHealthRatio(
+            s_currentMetrics.tiers[3].ddMinted,
+            s_currentMetrics.tiers[3].dgbLocked,
+            currentPrice
+        );
+
+        // Tier 4: 730-day (mock data) - 200% ratio
+        s_currentMetrics.tiers[4].ddMinted = 2500; // $25.00
+        s_currentMetrics.tiers[4].dgbLocked = 10000000000; // 100 DGB worth $50
+        s_currentMetrics.tiers[4].positions = 2;
+        s_currentMetrics.tiers[4].healthRatio = HealthUtils::CalculateHealthRatio(
+            s_currentMetrics.tiers[4].ddMinted,
+            s_currentMetrics.tiers[4].dgbLocked,
+            currentPrice
+        );
+
+        // Tier 5: 1825-day (mock data) - 180% ratio
+        s_currentMetrics.tiers[5].ddMinted = 2777; // $27.77
+        s_currentMetrics.tiers[5].dgbLocked = 10000000000; // 100 DGB worth $50
+        s_currentMetrics.tiers[5].positions = 2;
+        s_currentMetrics.tiers[5].healthRatio = HealthUtils::CalculateHealthRatio(
+            s_currentMetrics.tiers[5].ddMinted,
+            s_currentMetrics.tiers[5].dgbLocked,
             currentPrice
         );
     }
@@ -385,7 +425,7 @@ void SystemHealthMonitor::RecordHealthHistory(int64_t height, int health)
     s_healthHistory[height] = health;
 
     // Limit history size to prevent memory bloat
-    const size_t MAX_HISTORY = 10000; // Keep last 10k blocks
+    const size_t MAX_HISTORY = 100000; // Keep last 100k blocks
     if (s_healthHistory.size() > MAX_HISTORY) {
         // Remove oldest entries
         auto it = s_healthHistory.begin();
@@ -403,7 +443,10 @@ int SystemHealthMonitor::CalculateSystemHealth(CAmount ddSupply, CAmount collate
     }
 
     // Calculate collateral value in cents
-    CAmount collateralValue = (collateral * price) / 100000000; // DGB to cents
+    // price is in 0.001 cents per DGB format (e.g., 50000 = 50 cents = $0.50)
+    // collateral is in satoshis
+    // Formula: (satoshis / COIN) * (price / 1000) = cents
+    CAmount collateralValue = (collateral * price) / (COIN * 1000);
 
     // Health = (Collateral Value / DD Value) * 100
     int health = static_cast<int>((collateralValue * 100) / ddSupply);
@@ -464,7 +507,7 @@ CAmount SystemHealthMonitor::GetLastOraclePrice()
             return history.back().price;
         }
     }
-    return 50000; // Default $500.00 DGB if no oracle data
+    return 50000; // Default $0.50 per DGB (50000 * 0.001 cents = 50 cents)
 }
 
 int64_t SystemHealthMonitor::GetLastOracleUpdate()
@@ -552,7 +595,10 @@ int CalculateHealthRatio(CAmount ddAmount, CAmount dgbAmount, CAmount dgbPrice)
     }
 
     // Calculate DGB value in cents
-    CAmount dgbValue = (dgbAmount * dgbPrice) / 100000000;
+    // dgbPrice is in 0.001 cents per DGB format (e.g., 50000 = 50 cents = $0.50)
+    // dgbAmount is in satoshis
+    // Formula: (satoshis / COIN) * (price / 1000) = cents
+    CAmount dgbValue = (dgbAmount * dgbPrice) / (COIN * 1000);
 
     // Health = (Collateral Value / DD Value) * 100
     int health = static_cast<int>((dgbValue * 100) / ddAmount);

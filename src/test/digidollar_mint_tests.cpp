@@ -18,7 +18,7 @@
 
 using namespace DigiDollar;
 
-BOOST_FIXTURE_TEST_SUITE(digidollar_mint_tests, TestingSetup)
+BOOST_FIXTURE_TEST_SUITE(digidollar_mint_tests, RegTestingSetup)
 
 // Helper function to create a test key
 CKey CreateTestKey() {
@@ -63,6 +63,11 @@ public:
         return (it != m_utxo_values.end()) ? it->second : 100 * COIN; // Default for testing
     }
 
+    // Override GetUTXOValueVirtual to make SelectCoins work with mocked values
+    CAmount GetUTXOValueVirtual(const COutPoint& outpoint) const override {
+        return GetUTXOValue(outpoint);
+    }
+
     // Expose public methods for testing
     using MintTxBuilder::CalculateRequiredCollateral;
 };
@@ -90,11 +95,14 @@ BOOST_AUTO_TEST_CASE(mint_minimum_amount)
     mintParams.ddAmount = 100; // $1.00 in cents
     mintParams.lockDays = 365; // 1 year
     mintParams.ownerKey = CreateTestKey();
-    mintParams.feeRate = 1000; // 1000 sat/vB
+    mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
     mintParams.utxos = utxos;
 
     TxBuilderResult result = builder.BuildMintTransaction(mintParams);
 
+    if (!result.success) {
+        std::cout << "ERROR: BuildMintTransaction FAILED: " << result.error << std::endl;
+    }
     BOOST_CHECK(result.success);
     BOOST_CHECK(result.error.empty());
     BOOST_CHECK(result.tx.vin.size() > 0);
@@ -128,7 +136,7 @@ BOOST_AUTO_TEST_CASE(mint_standard_amounts)
         mintParams.ddAmount = amount;
         mintParams.lockDays = 365;
         mintParams.ownerKey = CreateTestKey();
-        mintParams.feeRate = 1000;
+        mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
         mintParams.utxos = utxos;
 
         TxBuilderResult result = builder.BuildMintTransaction(mintParams);
@@ -164,7 +172,7 @@ BOOST_AUTO_TEST_CASE(mint_maximum_amount)
     mintParams.ddAmount = 10000000; // $100,000 in cents (max per transaction)
     mintParams.lockDays = 3650; // 10 years (lowest collateral ratio)
     mintParams.ownerKey = CreateTestKey();
-    mintParams.feeRate = 1000;
+    mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
     mintParams.utxos = utxos;
 
     TxBuilderResult result = builder.BuildMintTransaction(mintParams);
@@ -194,7 +202,7 @@ BOOST_AUTO_TEST_CASE(mint_invalid_amounts)
         mintParams.ddAmount = 0;
         mintParams.lockDays = 365;
         mintParams.ownerKey = CreateTestKey();
-        mintParams.feeRate = 1000;
+        mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
         mintParams.utxos = utxos;
 
         TxBuilderResult result = builder.BuildMintTransaction(mintParams);
@@ -208,7 +216,7 @@ BOOST_AUTO_TEST_CASE(mint_invalid_amounts)
         mintParams.ddAmount = -1000;
         mintParams.lockDays = 365;
         mintParams.ownerKey = CreateTestKey();
-        mintParams.feeRate = 1000;
+        mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
         mintParams.utxos = utxos;
 
         TxBuilderResult result = builder.BuildMintTransaction(mintParams);
@@ -222,7 +230,7 @@ BOOST_AUTO_TEST_CASE(mint_invalid_amounts)
         mintParams.ddAmount = 5000; // $50 in cents
         mintParams.lockDays = 365;
         mintParams.ownerKey = CreateTestKey();
-        mintParams.feeRate = 1000;
+        mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
         mintParams.utxos = utxos;
 
         TxBuilderResult result = builder.BuildMintTransaction(mintParams);
@@ -236,7 +244,7 @@ BOOST_AUTO_TEST_CASE(mint_invalid_amounts)
         mintParams.ddAmount = 15000000; // $150k in cents
         mintParams.lockDays = 365;
         mintParams.ownerKey = CreateTestKey();
-        mintParams.feeRate = 1000;
+        mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
         mintParams.utxos = utxos;
 
         TxBuilderResult result = builder.BuildMintTransaction(mintParams);
@@ -350,7 +358,7 @@ BOOST_AUTO_TEST_CASE(collateral_insufficient_rejection)
     mintParams.ddAmount = 10000; // $100 (needs ~600 DGB collateral)
     mintParams.lockDays = 365;
     mintParams.ownerKey = CreateTestKey();
-    mintParams.feeRate = 1000;
+    mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
     mintParams.utxos = utxos;
 
     TxBuilderResult result = builder.BuildMintTransaction(mintParams);
@@ -379,7 +387,7 @@ BOOST_AUTO_TEST_CASE(p2tr_script_creation_through_transaction)
     mintParams.ddAmount = 10000;
     mintParams.lockDays = 365;
     mintParams.ownerKey = CreateTestKey();
-    mintParams.feeRate = 1000;
+    mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
     mintParams.utxos = utxos;
 
     TxBuilderResult result = builder.BuildMintTransaction(mintParams);
@@ -414,7 +422,7 @@ BOOST_AUTO_TEST_CASE(p2tr_redemption_paths_verification)
     mintParams.ddAmount = 10000;
     mintParams.lockDays = 365;
     mintParams.ownerKey = CreateTestKey();
-    mintParams.feeRate = 1000;
+    mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
     mintParams.utxos = utxos;
 
     TxBuilderResult result = builder.BuildMintTransaction(mintParams);
@@ -444,7 +452,7 @@ BOOST_AUTO_TEST_CASE(transaction_version_field)
     mintParams.ddAmount = 10000;
     mintParams.lockDays = 365;
     mintParams.ownerKey = CreateTestKey();
-    mintParams.feeRate = 1000;
+    mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
     mintParams.utxos = utxos;
 
     TxBuilderResult result = builder.BuildMintTransaction(mintParams);
@@ -477,7 +485,7 @@ BOOST_AUTO_TEST_CASE(transaction_input_consumption)
     mintParams.ddAmount = 10000; // $100
     mintParams.lockDays = 365;
     mintParams.ownerKey = CreateTestKey();
-    mintParams.feeRate = 1000;
+    mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
     mintParams.utxos = utxos;
 
     TxBuilderResult result = builder.BuildMintTransaction(mintParams);
@@ -514,7 +522,7 @@ BOOST_AUTO_TEST_CASE(transaction_output_creation)
     mintParams.ddAmount = 10000;
     mintParams.lockDays = 365;
     mintParams.ownerKey = CreateTestKey();
-    mintParams.feeRate = 1000;
+    mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
     mintParams.utxos = utxos;
 
     TxBuilderResult result = builder.BuildMintTransaction(mintParams);
@@ -587,7 +595,7 @@ BOOST_AUTO_TEST_CASE(transaction_signing_preparation)
     mintParams.ddAmount = 10000;
     mintParams.lockDays = 365;
     mintParams.ownerKey = CreateTestKey();
-    mintParams.feeRate = 1000;
+    mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
     mintParams.utxos = utxos;
 
     TxBuilderResult result = builder.BuildMintTransaction(mintParams);
@@ -631,7 +639,7 @@ BOOST_AUTO_TEST_CASE(edge_case_exact_collateral_no_change)
     mintParams.ddAmount = ddAmount;
     mintParams.lockDays = lockDays;
     mintParams.ownerKey = CreateTestKey();
-    mintParams.feeRate = 1000;
+    mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
     mintParams.utxos = utxos;
 
     TxBuilderResult result = builder.BuildMintTransaction(mintParams);
@@ -663,7 +671,7 @@ BOOST_AUTO_TEST_CASE(edge_case_multiple_inputs)
     mintParams.ddAmount = 10000; // $100 (needs ~600 DGB)
     mintParams.lockDays = 365;
     mintParams.ownerKey = CreateTestKey();
-    mintParams.feeRate = 1000;
+    mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
     mintParams.utxos = utxos;
 
     TxBuilderResult result = builder.BuildMintTransaction(mintParams);
@@ -692,7 +700,7 @@ BOOST_AUTO_TEST_CASE(edge_case_invalid_lock_times)
         mintParams.ddAmount = 10000;
         mintParams.lockDays = lockDays;
         mintParams.ownerKey = CreateTestKey();
-        mintParams.feeRate = 1000;
+        mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
         mintParams.utxos = utxos;
 
         TxBuilderResult result = builder.BuildMintTransaction(mintParams);
@@ -717,7 +725,7 @@ BOOST_AUTO_TEST_CASE(edge_case_oracle_price_unavailable)
     mintParams.ddAmount = 10000;
     mintParams.lockDays = 365;
     mintParams.ownerKey = CreateTestKey();
-    mintParams.feeRate = 1000;
+    mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
     mintParams.utxos = utxos;
 
     TxBuilderResult result = builder.BuildMintTransaction(mintParams);
@@ -784,7 +792,7 @@ BOOST_AUTO_TEST_CASE(edge_case_invalid_keys)
     mintParams.ddAmount = 10000;
     mintParams.lockDays = 365;
     // mintParams.ownerKey not set (invalid)
-    mintParams.feeRate = 1000;
+    mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
     mintParams.utxos = utxos;
 
     TxBuilderResult result = builder.BuildMintTransaction(mintParams);
@@ -878,7 +886,7 @@ BOOST_AUTO_TEST_CASE(mint_with_dca_healthy_system)
     mintParams.ddAmount = 10000; // $100
     mintParams.lockDays = 365;   // 1 year (300% base ratio)
     mintParams.ownerKey = CreateTestKey();
-    mintParams.feeRate = 1000;
+    mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
     mintParams.utxos = utxos;
 
     TxBuilderResult result = builder.BuildMintTransaction(mintParams);
@@ -910,7 +918,7 @@ BOOST_AUTO_TEST_CASE(mint_with_dca_warning_system)
     mintParams.ddAmount = 10000; // $100
     mintParams.lockDays = 365;   // 1 year (300% base ratio)
     mintParams.ownerKey = CreateTestKey();
-    mintParams.feeRate = 1000;
+    mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
     mintParams.utxos = utxos;
 
     // TODO: Mock system health to return 130% for warning tier
@@ -944,7 +952,7 @@ BOOST_AUTO_TEST_CASE(mint_with_dca_critical_system)
     mintParams.ddAmount = 10000; // $100
     mintParams.lockDays = 365;   // 1 year (300% base ratio)
     mintParams.ownerKey = CreateTestKey();
-    mintParams.feeRate = 1000;
+    mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
     mintParams.utxos = utxos;
 
     // TODO: Mock system health to return 110% for critical tier
@@ -977,7 +985,7 @@ BOOST_AUTO_TEST_CASE(mint_with_dca_emergency_system)
     mintParams.ddAmount = 10000; // $100
     mintParams.lockDays = 365;   // 1 year (300% base ratio)
     mintParams.ownerKey = CreateTestKey();
-    mintParams.feeRate = 1000;
+    mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
     mintParams.utxos = utxos;
 
     // TODO: Mock system health to return 90% for emergency tier
@@ -1031,7 +1039,7 @@ BOOST_AUTO_TEST_CASE(mint_dca_applies_to_all_lock_tiers)
         mintParams.ddAmount = ddAmount;
         mintParams.lockDays = tier.days;
         mintParams.ownerKey = CreateTestKey();
-        mintParams.feeRate = 1000;
+        mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
         mintParams.utxos = utxos;
 
         TxBuilderResult result = builder.BuildMintTransaction(mintParams);
@@ -1066,7 +1074,7 @@ BOOST_AUTO_TEST_CASE(mint_insufficient_funds_with_dca)
     mintParams.ddAmount = 10000; // $100
     mintParams.lockDays = 365;   // 1 year (300% base = 60k DGB)
     mintParams.ownerKey = CreateTestKey();
-    mintParams.feeRate = 1000;
+    mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
     mintParams.utxos = utxos;
 
     // TODO: Mock system health to trigger emergency DCA (2.0x = 120k DGB required)
@@ -1094,7 +1102,7 @@ BOOST_AUTO_TEST_CASE(mint_dca_real_time_adjustment)
     mintParams.ddAmount = 10000;
     mintParams.lockDays = 365;
     mintParams.ownerKey = CreateTestKey();
-    mintParams.feeRate = 1000;
+    mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
     mintParams.utxos = utxos;
 
     // TODO: Test that system health is calculated during mint validation

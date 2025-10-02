@@ -106,14 +106,21 @@ bool IsDDTokenScript(const CScript& script) {
 }
 
 bool HasDigiDollarMarker(const CTransaction& tx) {
-    return (tx.nVersion & 0xFFFF0000) == DD_TX_VERSION;
+    // DigiDollar transactions use version field with specific marker
+    // Format: Lower 16 bits must match DD_TX_VERSION (0x0770)
+    // Bits 16-23: flags, Bits 24-31: transaction type
+    const int32_t DD_VERSION_MASK = 0x0000FFFF;
+    const int32_t DD_TX_VERSION_MARKER = 0x0770;
+    return (tx.nVersion & DD_VERSION_MASK) == DD_TX_VERSION_MARKER;
 }
 
 DigiDollarTxType GetDigiDollarTxType(const CTransaction& tx) {
     if (!HasDigiDollarMarker(tx)) {
         throw std::runtime_error("Transaction does not have DigiDollar marker");
     }
-    return static_cast<DigiDollarTxType>((tx.nVersion >> 16) & 0xFF);
+    // Extract type from bits 24-31 of version field
+    const int32_t DD_TYPE_MASK = 0xFF000000;
+    return static_cast<DigiDollarTxType>((tx.nVersion & DD_TYPE_MASK) >> 24);
 }
 
 // ============================================================================

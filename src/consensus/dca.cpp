@@ -19,8 +19,8 @@ namespace DCA {
 const std::vector<HealthTier> DynamicCollateralAdjustment::HEALTH_TIERS = {
     HealthTier(0,   99,  2.0, "emergency"),  // <100%: Emergency (2.0x multiplier)
     HealthTier(100, 119, 1.5, "critical"),   // 100-119%: Critical (1.5x multiplier)
-    HealthTier(120, 150, 1.2, "warning"),    // 120-150%: Warning (1.2x multiplier)
-    HealthTier(151, 30000, 1.0, "healthy")   // >150%: Healthy (1.0x multiplier)
+    HealthTier(120, 149, 1.2, "warning"),    // 120-149%: Warning (1.2x multiplier)
+    HealthTier(150, 30000, 1.0, "healthy")   // >=150%: Healthy (1.0x multiplier)
 };
 
 int DynamicCollateralAdjustment::CalculateSystemHealth(CAmount totalCollateral,
@@ -50,8 +50,9 @@ int DynamicCollateralAdjustment::CalculateSystemHealth(CAmount totalCollateral,
     }
 
     // Calculate total collateral value in USD cents
-    // totalCollateral is in satoshis, oraclePrice is in cents per DGB
-    // Convert: (satoshis / COIN) * (cents per DGB) = cents
+    // totalCollateral is in satoshis
+    // oraclePrice is in 0.001 cents per DGB (e.g., 3333 = 3.333 cents)
+    // Convert: (satoshis / COIN) * (price / 1000) = cents
     CAmount collateralValueCents;
 
     // Avoid overflow by checking if we can safely multiply
@@ -59,9 +60,11 @@ int DynamicCollateralAdjustment::CalculateSystemHealth(CAmount totalCollateral,
     if (totalCollateral > maxSafeValue) {
         LogPrintf("DCA: Potential overflow in collateral calculation, using conservative estimate\n");
         // Use conservative calculation to avoid overflow
-        collateralValueCents = (totalCollateral / COIN) * oraclePrice;
+        // Divide by COIN first, then multiply by price, then divide by 1000
+        collateralValueCents = ((totalCollateral / COIN) * oraclePrice) / 1000;
     } else {
-        collateralValueCents = (totalCollateral * oraclePrice) / COIN;
+        // Multiply first for precision, then divide
+        collateralValueCents = (totalCollateral * oraclePrice) / (COIN * 1000);
     }
 
     // Calculate system health percentage
@@ -114,8 +117,8 @@ int DynamicCollateralAdjustment::ApplyDCA(int baseRatio, int systemHealth)
     // Apply multiplier to base ratio
     double adjustedRatio = baseRatio * multiplier;
 
-    // Round to nearest integer
-    int finalRatio = static_cast<int>(adjustedRatio + 0.5);
+    // Truncate to integer (no rounding)
+    int finalRatio = static_cast<int>(adjustedRatio);
 
     LogPrint(BCLog::DIGIDOLLAR, "DCA: Applied %.1fx multiplier to %d%% base ratio -> %d%% final ratio\n",
              multiplier, baseRatio, finalRatio);

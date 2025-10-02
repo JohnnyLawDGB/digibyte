@@ -56,10 +56,10 @@ struct ConsensusParams {
         {10 * 365 * 24 * 60 * 4, 200}      // 10 years: 200%
     };
 
-    // Transaction limits
-    CAmount minMintAmount = 100 * CENT;        // $100 minimum
-    CAmount maxMintAmount = 100000 * CENT;     // $100k maximum per tx
-    CAmount minOutputAmount = 100;             // $1 minimum output
+    // Transaction limits (amounts in cents: 100 cents = $1.00)
+    CAmount minMintAmount = 10000;             // $100 minimum (10000 cents)
+    CAmount maxMintAmount = 10000000;          // $100k maximum per tx (10000000 cents)
+    CAmount minOutputAmount = 100;             // $1 minimum output (100 cents)
 
     // Oracle configuration
     uint32_t oracleCount = 30;                 // Total hardcoded oracles

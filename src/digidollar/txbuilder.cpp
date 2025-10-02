@@ -48,8 +48,8 @@ bool TxBuilder::SelectCoins(const std::vector<COutPoint>& utxos, CAmount target,
 
     // Simple greedy selection - in production would use more sophisticated algorithm
     for (const auto& utxo : utxos) {
-        // Use virtual GetDGBFromUTXO to allow child classes to override UTXO lookup
-        CAmount value = GetDGBFromUTXO(utxo);
+        // Use virtual GetUTXOValueVirtual to allow child classes to override UTXO lookup
+        CAmount value = GetUTXOValueVirtual(utxo);
         if (value > 0) {
             inputs.push_back(CTxIn(utxo));
             total += value;

@@ -67,10 +67,10 @@ void DigiDollarTab::setupUI()
     m_positionsWidget = new DigiDollarPositionsWidget(this);
     m_positionsWidget->setObjectName("positionsWidget");
 
-    // Add tabs in order: Overview, Receive, Send, Mint, Redeem, Vault
+    // Add tabs in order: Overview, Send, Receive, Mint, Redeem, Vault
     m_tabWidget->addTab(m_overviewWidget, tr("Overview"));
-    m_tabWidget->addTab(m_receiveWidget, tr("&Receive"));
     m_tabWidget->addTab(m_sendWidget, tr("Send"));
+    m_tabWidget->addTab(m_receiveWidget, tr("&Receive"));
     m_tabWidget->addTab(m_mintWidget, tr("Mint"));
     m_tabWidget->addTab(m_redeemWidget, tr("Redeem"));
     m_tabWidget->addTab(m_positionsWidget, tr("Vault"));

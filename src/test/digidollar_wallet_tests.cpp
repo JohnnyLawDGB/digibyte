@@ -34,10 +34,12 @@ BOOST_FIXTURE_TEST_SUITE(digidollar_wallet_tests, TestingSetup)
 /**
  * Test fixture for DigiDollar wallet function tests
  * Sets up necessary environment for testing wallet operations
- * CRITICAL: Must NOT initialize chainParams in constructor - causes crash!
- * Access via Params() instead after TestingSetup initializes chain params.
+ * Inherits from TestingSetup to properly initialize chain params and ECC context
  */
-struct DDWalletTestFixture {
+struct DDWalletTestFixture : public TestingSetup {
+    // Test chain parameters
+    const CChainParams& chainParams;
+
     // Test keys
     CKey walletKey;
     CKey recipientKey;
@@ -51,9 +53,9 @@ struct DDWalletTestFixture {
     static const CAmount LARGE_DD_AMOUNT = 5000000; // $50,000.00
     static const CAmount MAX_TRANSFER_AMOUNT = 10000000; // $100,000.00
 
-    DDWalletTestFixture() {
-        // Note: ECC context is already initialized by TestingSetup
-        // Do NOT call ECC_Start() here as it will cause double initialization
+    DDWalletTestFixture() : TestingSetup(ChainType::REGTEST), chainParams(Params()) {
+        // Note: TestingSetup base class initializes ECC context and chain params
+        // chainParams is now safe to use as it references the initialized global params
 
         // Generate test keys
         walletKey.MakeNewKey(true);
@@ -78,8 +80,7 @@ struct DDWalletTestFixture {
     std::string CreateDDAddress(const CPubKey& pubkey) {
         // Create P2TR destination
         WitnessV1Taproot dest{XOnlyPubKey(pubkey)};
-        const CChainParams& params = Params();
-        std::string result = EncodeDigiDollarAddress(dest, params);
+        std::string result = EncodeDigiDollarAddress(dest, chainParams);
         return result;
     }
 

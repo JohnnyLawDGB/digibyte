@@ -31,6 +31,17 @@ struct DDTransaction {
     std::string category;   // "send", "receive", "mint", "redeem"
 
     DDTransaction();
+
+    SERIALIZE_METHODS(DDTransaction, obj)
+    {
+        READWRITE(obj.txid);
+        READWRITE(obj.amount);
+        READWRITE(obj.timestamp);
+        READWRITE(obj.confirmations);
+        READWRITE(obj.incoming);
+        READWRITE(obj.address);
+        READWRITE(obj.category);
+    }
 };
 
 // =============================================================================
@@ -49,6 +60,13 @@ struct WalletDDBalance {
     WalletDDBalance() : balance(0), last_updated(0) {}
     WalletDDBalance(const CDigiDollarAddress& addr, CAmount bal)
         : address(addr), balance(bal), last_updated(0) {}
+
+    SERIALIZE_METHODS(WalletDDBalance, obj)
+    {
+        READWRITE(obj.address);
+        READWRITE(obj.balance);
+        READWRITE(obj.last_updated);
+    }
 };
 
 struct WalletCollateralPosition {
@@ -63,6 +81,16 @@ struct WalletCollateralPosition {
         : dd_minted(0), dgb_collateral(0), lock_tier(0), unlock_height(0), is_active(false) {}
     WalletCollateralPosition(const uint256& id, CAmount dd, CAmount dgb, uint32_t tier, int64_t height)
         : position_id(id), dd_minted(dd), dgb_collateral(dgb), lock_tier(tier), unlock_height(height), is_active(true) {}
+
+    SERIALIZE_METHODS(WalletCollateralPosition, obj)
+    {
+        READWRITE(obj.position_id);
+        READWRITE(obj.dd_minted);
+        READWRITE(obj.dgb_collateral);
+        READWRITE(obj.lock_tier);
+        READWRITE(obj.unlock_height);
+        READWRITE(obj.is_active);
+    }
 };
 
 /**
@@ -312,8 +340,34 @@ protected:
     bool SelectFeeCoins(const CAmount& fee_amount, std::vector<COutPoint>& selected_utxos, CAmount& selected_total) const;
     CAmount CalculateTransactionFee(const CMutableTransaction& tx) const;
 
-    // Database persistence
-    void LoadFromDatabase();
+private:
+    /**
+     * Helper: Load all positions from database
+     */
+    size_t LoadPositionsFromDatabase();
+
+    /**
+     * Helper: Load all DD balances from database
+     */
+    size_t LoadBalancesFromDatabase();
+
+    /**
+     * Helper: Load all DD transactions from database
+     */
+    size_t LoadTransactionsFromDatabase();
+
+    /**
+     * Recalculate totals from loaded data
+     */
+    void RecalculateTotals();
+
+public:
+    /**
+     * Load all DigiDollar data from wallet database
+     * Called during wallet initialization
+     * @return Number of items loaded
+     */
+    size_t LoadFromDatabase();
 };
 
 /**

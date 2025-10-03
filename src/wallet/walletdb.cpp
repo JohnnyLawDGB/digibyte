@@ -6,6 +6,7 @@
 
 #include <common/system.h>
 #include <key_io.h>
+#include <logging.h>
 #include <protocol.h>
 #include <script/script.h>
 #include <serialize.h>
@@ -22,6 +23,8 @@
 #include <wallet/sqlite.h>
 #endif
 #include <wallet/wallet.h>
+#include <wallet/digidollarwallet.h>
+#include <digidollar/digidollar.h>
 
 #include <atomic>
 #include <optional>
@@ -60,6 +63,14 @@ const std::string WALLETDESCRIPTORCKEY{"walletdescriptorckey"};
 const std::string WALLETDESCRIPTORKEY{"walletdescriptorkey"};
 const std::string WATCHMETA{"watchmeta"};
 const std::string WATCHS{"watchs"};
+
+// DigiDollar database keys
+const std::string DD_POSITION{"ddposition"};
+const std::string DD_TRANSACTION{"ddtx"};
+const std::string DD_BALANCE{"ddbalance"};
+const std::string DD_OUTPUT{"ddutxo"};
+const std::string DD_METADATA{"ddmeta"};
+
 const std::unordered_set<std::string> LEGACY_TYPES{CRYPTED_KEY, CSCRIPT, DEFAULTKEY, HDCHAIN, KEYMETA, KEY, OLD_KEY, POOL, WATCHMETA, WATCHS};
 } // namespace DBKeys
 
@@ -296,6 +307,241 @@ bool WalletBatch::WriteLockedUTXO(const COutPoint& output)
 bool WalletBatch::EraseLockedUTXO(const COutPoint& output)
 {
     return EraseIC(std::make_pair(DBKeys::LOCKED_UTXO, std::make_pair(output.hash, output.n)));
+}
+
+// DigiDollar persistence write methods
+bool WalletBatch::WritePosition(const WalletCollateralPosition& position)
+{
+    if (position.position_id.IsNull()) {
+        return error("DigiDollar: Cannot write position with null ID");
+    }
+
+    bool success = WriteIC(std::make_pair(DBKeys::DD_POSITION, position.position_id), position);
+
+    if (success) {
+        LogPrint(BCLog::WALLETDB, "DigiDollar: Wrote position %s to database (minted=%d, collateral=%d, tier=%d)\n",
+                 position.position_id.ToString(), position.dd_minted, position.dgb_collateral, position.lock_tier);
+    }
+
+    return success;
+}
+
+bool WalletBatch::WriteDDTransaction(const DDTransaction& ddtx)
+{
+    if (ddtx.txid.empty()) {
+        return error("DigiDollar: Cannot write transaction with empty txid");
+    }
+
+    uint256 txid;
+    txid.SetHex(ddtx.txid);
+
+    bool success = WriteIC(std::make_pair(DBKeys::DD_TRANSACTION, txid), ddtx);
+
+    if (success) {
+        LogPrint(BCLog::WALLETDB, "DigiDollar: Wrote transaction %s to database (amount=%d, category=%s)\n",
+                 ddtx.txid, ddtx.amount, ddtx.category);
+    }
+
+    return success;
+}
+
+bool WalletBatch::WriteDDBalance(const std::string& address, const WalletDDBalance& balance)
+{
+    if (address.empty()) {
+        return error("DigiDollar: Cannot write balance with empty address");
+    }
+
+    bool success = WriteIC(std::make_pair(DBKeys::DD_BALANCE, address), balance);
+
+    if (success) {
+        LogPrint(BCLog::WALLETDB, "DigiDollar: Wrote balance for address %s to database (balance=%d)\n",
+                 address, balance.balance);
+    }
+
+    return success;
+}
+
+bool WalletBatch::WriteDDOutput(const uint256& output_id, const CDigiDollarOutput& output)
+{
+    if (output_id.IsNull()) {
+        return error("DigiDollar: Cannot write output with null ID");
+    }
+
+    bool success = WriteIC(std::make_pair(DBKeys::DD_OUTPUT, output_id), output);
+
+    if (success) {
+        LogPrint(BCLog::WALLETDB, "DigiDollar: Wrote output %s to database (amount=%d)\n",
+                 output_id.ToString(), output.nDDAmount);
+    }
+
+    return success;
+}
+
+bool WalletBatch::WriteDDMetadata(const std::string& key, const std::string& value)
+{
+    if (key.empty()) {
+        return error("DigiDollar: Cannot write metadata with empty key");
+    }
+
+    bool success = WriteIC(std::make_pair(DBKeys::DD_METADATA, key), value);
+
+    if (success) {
+        LogPrint(BCLog::WALLETDB, "DigiDollar: Wrote metadata %s=%s to database\n", key, value);
+    }
+
+    return success;
+}
+
+// DigiDollar persistence read methods
+bool WalletBatch::ReadPosition(const uint256& position_id, WalletCollateralPosition& position)
+{
+    if (position_id.IsNull()) {
+        LogPrint(BCLog::WALLETDB, "DigiDollar: Cannot read position with null ID\n");
+        return false;
+    }
+
+    bool success = m_batch->Read(std::make_pair(DBKeys::DD_POSITION, position_id), position);
+
+    if (success) {
+        LogPrint(BCLog::WALLETDB, "DigiDollar: Read position %s from database (DD: %d, DGB: %d)\n",
+                 position_id.ToString(), position.dd_minted, position.dgb_collateral);
+    }
+
+    return success;
+}
+
+bool WalletBatch::ReadDDTransaction(const uint256& txid, DDTransaction& ddtx)
+{
+    if (txid.IsNull()) {
+        LogPrint(BCLog::WALLETDB, "DigiDollar: Cannot read transaction with null ID\n");
+        return false;
+    }
+
+    bool success = m_batch->Read(std::make_pair(DBKeys::DD_TRANSACTION, txid), ddtx);
+
+    if (success) {
+        LogPrint(BCLog::WALLETDB, "DigiDollar: Read transaction %s from database (amount: %d)\n",
+                 txid.ToString(), ddtx.amount);
+    }
+
+    return success;
+}
+
+bool WalletBatch::ReadDDBalance(const std::string& address, WalletDDBalance& balance)
+{
+    if (address.empty()) {
+        LogPrint(BCLog::WALLETDB, "DigiDollar: Cannot read balance with empty address\n");
+        return false;
+    }
+
+    bool success = m_batch->Read(std::make_pair(DBKeys::DD_BALANCE, address), balance);
+
+    if (success) {
+        LogPrint(BCLog::WALLETDB, "DigiDollar: Read balance for address %s from database (balance: %d)\n",
+                 address, balance.balance);
+    }
+
+    return success;
+}
+
+bool WalletBatch::ReadDDOutput(const uint256& output_id, CDigiDollarOutput& output)
+{
+    if (output_id.IsNull()) {
+        LogPrint(BCLog::WALLETDB, "DigiDollar: Cannot read output with null ID\n");
+        return false;
+    }
+
+    bool success = m_batch->Read(std::make_pair(DBKeys::DD_OUTPUT, output_id), output);
+
+    if (success) {
+        LogPrint(BCLog::WALLETDB, "DigiDollar: Read output %s from database\n", output_id.ToString());
+    }
+
+    return success;
+}
+
+bool WalletBatch::ReadDDMetadata(const std::string& key, std::string& value)
+{
+    if (key.empty()) {
+        LogPrint(BCLog::WALLETDB, "DigiDollar: Cannot read metadata with empty key\n");
+        return false;
+    }
+
+    bool success = m_batch->Read(std::make_pair(DBKeys::DD_METADATA, key), value);
+
+    if (success) {
+        LogPrint(BCLog::WALLETDB, "DigiDollar: Read metadata %s=%s from database\n", key, value);
+    }
+
+    return success;
+}
+
+// DigiDollar persistence erase methods
+bool WalletBatch::ErasePosition(const uint256& position_id)
+{
+    if (position_id.IsNull()) {
+        LogPrint(BCLog::WALLETDB, "DigiDollar: Cannot erase position with null ID\n");
+        return false;
+    }
+
+    bool success = EraseIC(std::make_pair(DBKeys::DD_POSITION, position_id));
+
+    if (success) {
+        LogPrint(BCLog::WALLETDB, "DigiDollar: Erased position %s from database\n",
+                 position_id.ToString());
+    }
+
+    return success;
+}
+
+bool WalletBatch::EraseDDTransaction(const uint256& txid)
+{
+    if (txid.IsNull()) {
+        LogPrint(BCLog::WALLETDB, "DigiDollar: Cannot erase transaction with null ID\n");
+        return false;
+    }
+
+    bool success = EraseIC(std::make_pair(DBKeys::DD_TRANSACTION, txid));
+
+    if (success) {
+        LogPrint(BCLog::WALLETDB, "DigiDollar: Erased transaction %s from database\n",
+                 txid.ToString());
+    }
+
+    return success;
+}
+
+bool WalletBatch::EraseDDBalance(const std::string& address)
+{
+    if (address.empty()) {
+        LogPrint(BCLog::WALLETDB, "DigiDollar: Cannot erase balance with empty address\n");
+        return false;
+    }
+
+    bool success = EraseIC(std::make_pair(DBKeys::DD_BALANCE, address));
+
+    if (success) {
+        LogPrint(BCLog::WALLETDB, "DigiDollar: Erased balance for address %s from database\n", address);
+    }
+
+    return success;
+}
+
+bool WalletBatch::EraseDDOutput(const uint256& output_id)
+{
+    if (output_id.IsNull()) {
+        LogPrint(BCLog::WALLETDB, "DigiDollar: Cannot erase output with null ID\n");
+        return false;
+    }
+
+    bool success = EraseIC(std::make_pair(DBKeys::DD_OUTPUT, output_id));
+
+    if (success) {
+        LogPrint(BCLog::WALLETDB, "DigiDollar: Erased output %s from database\n",
+                 output_id.ToString());
+    }
+
+    return success;
 }
 
 bool LoadKey(CWallet* pwallet, DataStream& ssKey, DataStream& ssValue, std::string& strErr)

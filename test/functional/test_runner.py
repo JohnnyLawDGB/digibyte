@@ -260,6 +260,8 @@ BASE_SCRIPTS = [
     # DigiByte-specific tests
     'p2p_dandelion.py',
     'rpc_getblockreward.py',
+    'wallet_digidollar_persistence_restart.py --legacy-wallet',
+    'wallet_digidollar_persistence_restart.py --descriptors',
     'rpc_net.py',
     'wallet_keypool.py --legacy-wallet',
     'wallet_keypool.py --descriptors',

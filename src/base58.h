@@ -69,6 +69,25 @@ public:
     bool IsValid() const;
 
     static bool IsValidDigiDollarAddress(const std::string& str);
+
+    // Serialization support
+    template<typename Stream>
+    void Serialize(Stream& s) const {
+        std::string str = ToString();
+        s << str;
+    }
+
+    template<typename Stream>
+    void Unserialize(Stream& s) {
+        std::string str;
+        s >> str;
+        *this = CDigiDollarAddress(str);
+    }
+
+    // Comparison operator for testing
+    bool operator==(const CDigiDollarAddress& other) const {
+        return vchData == other.vchData && vchVersion == other.vchVersion && fValid == other.fValid;
+    }
 };
 
 // Helper functions for DigiDollar addresses

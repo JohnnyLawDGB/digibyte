@@ -19,6 +19,10 @@ class CScript;
 class uint160;
 class uint256;
 struct CBlockLocator;
+struct DDTransaction;
+struct WalletCollateralPosition;
+struct WalletDDBalance;
+struct CDigiDollarOutput;
 
 namespace wallet {
 class CKeyPool;
@@ -88,6 +92,13 @@ extern const std::string WALLETDESCRIPTORCKEY;
 extern const std::string WALLETDESCRIPTORKEY;
 extern const std::string WATCHMETA;
 extern const std::string WATCHS;
+
+// DigiDollar database keys
+extern const std::string DD_POSITION;      // "ddposition" - Collateral positions
+extern const std::string DD_TRANSACTION;   // "ddtx"       - DD transaction history
+extern const std::string DD_BALANCE;       // "ddbalance"  - DD balance per address
+extern const std::string DD_OUTPUT;        // "ddutxo"     - DD UTXO tracking
+extern const std::string DD_METADATA;      // "ddmeta"     - DD wallet metadata
 
 // Keys in this set pertain only to the legacy wallet (LegacyScriptPubKeyMan) and are removed during migration from legacy to descriptors.
 extern const std::unordered_set<std::string> LEGACY_TYPES;
@@ -266,6 +277,26 @@ public:
     bool WriteLockedUTXO(const COutPoint& output);
     bool EraseLockedUTXO(const COutPoint& output);
 
+    // DigiDollar persistence write methods
+    bool WritePosition(const WalletCollateralPosition& position);
+    bool WriteDDTransaction(const DDTransaction& ddtx);
+    bool WriteDDBalance(const std::string& address, const WalletDDBalance& balance);
+    bool WriteDDOutput(const uint256& output_id, const CDigiDollarOutput& output);
+    bool WriteDDMetadata(const std::string& key, const std::string& value);
+
+    // DigiDollar persistence read methods
+    bool ReadPosition(const uint256& position_id, WalletCollateralPosition& position);
+    bool ReadDDTransaction(const uint256& txid, DDTransaction& ddtx);
+    bool ReadDDBalance(const std::string& address, WalletDDBalance& balance);
+    bool ReadDDOutput(const uint256& output_id, CDigiDollarOutput& output);
+    bool ReadDDMetadata(const std::string& key, std::string& value);
+
+    // DigiDollar persistence erase methods
+    bool ErasePosition(const uint256& position_id);
+    bool EraseDDTransaction(const uint256& txid);
+    bool EraseDDBalance(const std::string& address);
+    bool EraseDDOutput(const uint256& output_id);
+
     bool WriteAddressPreviouslySpent(const CTxDestination& dest, bool previously_spent);
     bool WriteAddressReceiveRequest(const CTxDestination& dest, const std::string& id, const std::string& receive_request);
     bool EraseAddressReceiveRequest(const CTxDestination& dest, const std::string& id);
@@ -291,6 +322,10 @@ public:
     bool TxnCommit();
     //! Abort current transaction
     bool TxnAbort();
+
+    //! Get database cursor for iteration
+    std::unique_ptr<DatabaseCursor> GetNewCursor() { return m_batch->GetNewCursor(); }
+
 private:
     std::unique_ptr<DatabaseBatch> m_batch;
     WalletDatabase& m_database;

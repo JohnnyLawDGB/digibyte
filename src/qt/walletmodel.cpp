@@ -1122,10 +1122,12 @@ bool WalletModel::validateDigiDollarAddress(const QString& address) const
         return false;
     }
 
-    // Check if the rest contains only valid bech32 characters
-    QRegularExpression bech32Regex("^[023456789acdefghjklmnpqrstuvwxyz]+$");
+    // Check if the rest contains only valid Base58 characters
+    // Base58 alphabet: 123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz
+    // (excludes 0, O, I, l to avoid confusion)
+    QRegularExpression base58Regex("^[123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz]+$");
     QString addressBody = address.mid(2); // Skip the prefix
-    return bech32Regex.match(addressBody).hasMatch();
+    return base58Regex.match(addressBody).hasMatch();
 }
 
 CAmount WalletModel::calculateRequiredCollateral(CAmount ddAmount, int lockTier) const

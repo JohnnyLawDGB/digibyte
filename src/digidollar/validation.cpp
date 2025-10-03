@@ -73,20 +73,12 @@ ScriptType IdentifyScriptType(const CScript& script) {
     return ScriptType::NOT_DIGIDOLLAR;
 }
 
-bool ExtractDDAmount(const CScript& script, CAmount& amount) {
-    // Initialize amount to invalid value
-    amount = -1;
-
-    // Phase 1: Use metadata tracking for scripts created by Create*P2TR functions
-    ScriptMetadata metadata;
-    if (GetScriptMetadata(script, metadata)) {
-        amount = metadata.ddAmount;
-        return true;
-    }
-
-    // Unknown script or not a DD script
-    return false;
-}
+// Note: The following functions are defined in consensus/digidollar.cpp
+// to avoid duplicate symbols (these were previously duplicated here):
+// - ExtractDDAmount()
+// - IsDDTokenScript()
+// - HasDigiDollarMarker()
+// - GetDigiDollarTxType()
 
 bool IsCollateralScript(const CScript& script) {
     // For Phase 1, we identify collateral scripts by their complexity
@@ -98,29 +90,6 @@ bool IsCollateralScript(const CScript& script) {
         return script.size() > 50; // Simplified heuristic
     }
     return false;
-}
-
-bool IsDDTokenScript(const CScript& script) {
-    ScriptType type = IdentifyScriptType(script);
-    return type == ScriptType::DD_TOKEN_OUTPUT;
-}
-
-bool HasDigiDollarMarker(const CTransaction& tx) {
-    // DigiDollar transactions use version field with specific marker
-    // Format: Lower 16 bits must match DD_TX_VERSION (0x0770)
-    // Bits 16-23: flags, Bits 24-31: transaction type
-    const int32_t DD_VERSION_MASK = 0x0000FFFF;
-    const int32_t DD_TX_VERSION_MARKER = 0x0770;
-    return (tx.nVersion & DD_VERSION_MASK) == DD_TX_VERSION_MARKER;
-}
-
-DigiDollarTxType GetDigiDollarTxType(const CTransaction& tx) {
-    if (!HasDigiDollarMarker(tx)) {
-        throw std::runtime_error("Transaction does not have DigiDollar marker");
-    }
-    // Extract type from bits 24-31 of version field
-    const int32_t DD_TYPE_MASK = 0xFF000000;
-    return static_cast<DigiDollarTxType>((tx.nVersion & DD_TYPE_MASK) >> 24);
 }
 
 // ============================================================================

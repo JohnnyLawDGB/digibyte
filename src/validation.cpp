@@ -6010,7 +6010,7 @@ SnapshotCompletionResult ChainstateManager::MaybeCompleteSnapshotValidation()
             "Please report this incident to %s, including how you obtained the snapshot. "
             "The invalid snapshot chainstate will be left on disk in case it is "
             "helpful in diagnosing the issue that caused this error."),
-            PACKAGE_NAME, snapshot_tip_height, snapshot_base_height, snapshot_base_height, PACKAGE_BUGREPORT
+            CLIENT_NAME, snapshot_tip_height, snapshot_base_height, snapshot_base_height, PACKAGE_BUGREPORT
         );
 
         LogPrintf("[snapshot] !!! %s\n", user_error.original);

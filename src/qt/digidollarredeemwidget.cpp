@@ -606,7 +606,7 @@ void DigiDollarRedeemWidget::loadPositionDetails()
         // In production, would query:
         // auto positions = m_walletModel->getCollateralPositions();
         // for (const auto& pos : positions) {
-        //     if (pos.position_id == positionId) {
+        //     if (pos.dd_timelock_id == positionId) {
         //         m_positionFound = true;
         //         m_positionDDMinted = pos.dd_minted / 100.0; // cents to dollars
         //         m_positionDGBCollateral = pos.dgb_collateral / COIN; // sats to DGB

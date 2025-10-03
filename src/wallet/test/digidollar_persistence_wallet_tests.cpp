@@ -151,7 +151,7 @@ BOOST_AUTO_TEST_CASE(digidollarwallet_write_balance_zero_amount)
 }
 
 // =============================================================================
-// PHASE 3 TASK 3.2: WritePosition Tests
+// PHASE 3 TASK 3.2: WriteDDTimeLock Tests
 // =============================================================================
 
 BOOST_AUTO_TEST_CASE(digidollarwallet_write_position_persists)
@@ -162,17 +162,17 @@ BOOST_AUTO_TEST_CASE(digidollarwallet_write_position_persists)
     uint256 pos_id = uint256S("0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef");
     WalletCollateralPosition pos(pos_id, 10000, 500000, 3, 100000);
 
-    BOOST_CHECK(dd_wallet.WritePosition(pos));
+    BOOST_CHECK(dd_wallet.WriteDDTimeLock(pos));
 
     // Verify in database
     WalletBatch batch(m_wallet.GetDatabase());
     WalletCollateralPosition read_pos;
-    BOOST_CHECK(batch.ReadPosition(pos_id, read_pos));
+    BOOST_CHECK(batch.ReadDDTimeLock(pos_id, read_pos));
     BOOST_CHECK_EQUAL(read_pos.dd_minted, 10000);
     BOOST_CHECK_EQUAL(read_pos.dgb_collateral, 500000);
 
     // Verify in memory
-    auto positions = dd_wallet.GetPositions(false); // Get all positions, not just active
+    auto positions = dd_wallet.GetDDTimeLocks(false); // Get all positions, not just active
     BOOST_CHECK_EQUAL(positions.size(), 1);
     BOOST_CHECK_EQUAL(positions[0].dd_minted, 10000);
 }
@@ -189,8 +189,8 @@ BOOST_AUTO_TEST_CASE(digidollarwallet_write_position_updates_locked_collateral)
     WalletCollateralPosition pos2(id2, 3000, 150000, 1, 30000);
 
     // Both positions are active by default in constructor
-    BOOST_CHECK(dd_wallet.WritePosition(pos1));
-    BOOST_CHECK(dd_wallet.WritePosition(pos2));
+    BOOST_CHECK(dd_wallet.WriteDDTimeLock(pos1));
+    BOOST_CHECK(dd_wallet.WriteDDTimeLock(pos2));
 
     // Verify locked collateral is sum of both
     BOOST_CHECK_EQUAL(dd_wallet.GetLockedCollateral(), 400000);
@@ -204,19 +204,19 @@ BOOST_AUTO_TEST_CASE(digidollarwallet_write_position_updates_existing)
 
     // Write initial position
     WalletCollateralPosition pos1(pos_id, 1000, 50000, 1, 10000);
-    BOOST_CHECK(dd_wallet.WritePosition(pos1));
+    BOOST_CHECK(dd_wallet.WriteDDTimeLock(pos1));
 
     // Verify initial values
-    auto positions = dd_wallet.GetPositions(false);
+    auto positions = dd_wallet.GetDDTimeLocks(false);
     BOOST_CHECK_EQUAL(positions.size(), 1);
     BOOST_CHECK_EQUAL(positions[0].dd_minted, 1000);
 
     // Update position
     WalletCollateralPosition pos2(pos_id, 2000, 100000, 2, 20000);
-    BOOST_CHECK(dd_wallet.WritePosition(pos2));
+    BOOST_CHECK(dd_wallet.WriteDDTimeLock(pos2));
 
     // Verify updated values in memory
-    positions = dd_wallet.GetPositions(false);
+    positions = dd_wallet.GetDDTimeLocks(false);
     BOOST_CHECK_EQUAL(positions.size(), 1);
     BOOST_CHECK_EQUAL(positions[0].dd_minted, 2000);
     BOOST_CHECK_EQUAL(positions[0].dgb_collateral, 100000);
@@ -224,7 +224,7 @@ BOOST_AUTO_TEST_CASE(digidollarwallet_write_position_updates_existing)
     // Verify updated values in database
     WalletBatch batch(m_wallet.GetDatabase());
     WalletCollateralPosition read_pos;
-    BOOST_CHECK(batch.ReadPosition(pos_id, read_pos));
+    BOOST_CHECK(batch.ReadDDTimeLock(pos_id, read_pos));
     BOOST_CHECK_EQUAL(read_pos.dd_minted, 2000);
     BOOST_CHECK_EQUAL(read_pos.dgb_collateral, 100000);
 }
@@ -237,7 +237,7 @@ BOOST_AUTO_TEST_CASE(digidollarwallet_write_position_persists_metadata)
     uint256 pos_id = uint256S("0x4444444444444444444444444444444444444444444444444444444444444444");
     WalletCollateralPosition pos(pos_id, 7500, 375000, 3, 75000);
 
-    BOOST_CHECK(dd_wallet.WritePosition(pos));
+    BOOST_CHECK(dd_wallet.WriteDDTimeLock(pos));
 
     // Verify locked_collateral metadata is written to database
     WalletBatch batch(m_wallet.GetDatabase());
@@ -257,7 +257,7 @@ BOOST_AUTO_TEST_CASE(digidollarwallet_write_position_invalid_id)
     uint256 null_id;
     WalletCollateralPosition pos(null_id, 1000, 50000, 1, 10000);
 
-    BOOST_CHECK(!dd_wallet.WritePosition(pos));
+    BOOST_CHECK(!dd_wallet.WriteDDTimeLock(pos));
 }
 
 BOOST_AUTO_TEST_CASE(digidollarwallet_write_position_inactive_no_locked)
@@ -269,7 +269,7 @@ BOOST_AUTO_TEST_CASE(digidollarwallet_write_position_inactive_no_locked)
     WalletCollateralPosition pos(pos_id, 1000, 50000, 1, 10000);
     pos.is_active = false;
 
-    BOOST_CHECK(dd_wallet.WritePosition(pos));
+    BOOST_CHECK(dd_wallet.WriteDDTimeLock(pos));
 
     // Verify locked collateral is NOT counted for inactive position
     BOOST_CHECK_EQUAL(dd_wallet.GetLockedCollateral(), 0);
@@ -286,7 +286,7 @@ BOOST_AUTO_TEST_CASE(digidollarwallet_update_position_status)
     // Create and write position
     uint256 pos_id = uint256S("0x3333333333333333333333333333333333333333333333333333333333333333");
     WalletCollateralPosition pos(pos_id, 10000, 500000, 3, 100000);
-    BOOST_REQUIRE(dd_wallet.WritePosition(pos));
+    BOOST_REQUIRE(dd_wallet.WriteDDTimeLock(pos));
     BOOST_CHECK_EQUAL(dd_wallet.GetLockedCollateral(), 500000);
 
     // Mark inactive (simulate redemption)
@@ -295,7 +295,7 @@ BOOST_AUTO_TEST_CASE(digidollarwallet_update_position_status)
     // Verify database updated
     WalletBatch batch(m_wallet.GetDatabase());
     WalletCollateralPosition read_pos;
-    BOOST_CHECK(batch.ReadPosition(pos_id, read_pos));
+    BOOST_CHECK(batch.ReadDDTimeLock(pos_id, read_pos));
     BOOST_CHECK(!read_pos.is_active);
 
     // Verify locked collateral decreased
@@ -311,9 +311,9 @@ BOOST_AUTO_TEST_CASE(digidollarwallet_update_position_status_multiple)
     uint256 id2 = uint256S("0x5555555555555555555555555555555555555555555555555555555555555555");
     uint256 id3 = uint256S("0x6666666666666666666666666666666666666666666666666666666666666666");
 
-    dd_wallet.WritePosition(WalletCollateralPosition(id1, 5000, 250000, 2, 50000));
-    dd_wallet.WritePosition(WalletCollateralPosition(id2, 3000, 150000, 1, 30000));
-    dd_wallet.WritePosition(WalletCollateralPosition(id3, 2000, 100000, 1, 20000));
+    dd_wallet.WriteDDTimeLock(WalletCollateralPosition(id1, 5000, 250000, 2, 50000));
+    dd_wallet.WriteDDTimeLock(WalletCollateralPosition(id2, 3000, 150000, 1, 30000));
+    dd_wallet.WriteDDTimeLock(WalletCollateralPosition(id3, 2000, 100000, 1, 20000));
 
     BOOST_CHECK_EQUAL(dd_wallet.GetLockedCollateral(), 500000);
 
@@ -326,7 +326,7 @@ BOOST_AUTO_TEST_CASE(digidollarwallet_update_position_status_multiple)
     // Verify in database
     WalletBatch batch(m_wallet.GetDatabase());
     WalletCollateralPosition read_pos;
-    BOOST_CHECK(batch.ReadPosition(id2, read_pos));
+    BOOST_CHECK(batch.ReadDDTimeLock(id2, read_pos));
     BOOST_CHECK(!read_pos.is_active);
 }
 
@@ -355,7 +355,7 @@ BOOST_AUTO_TEST_CASE(digidollarwallet_update_position_status_reactivate)
     // Create position
     uint256 pos_id = uint256S("0x8888888888888888888888888888888888888888888888888888888888888888");
     WalletCollateralPosition pos(pos_id, 10000, 500000, 3, 100000);
-    BOOST_REQUIRE(dd_wallet.WritePosition(pos));
+    BOOST_REQUIRE(dd_wallet.WriteDDTimeLock(pos));
 
     // Mark inactive
     BOOST_CHECK(dd_wallet.UpdatePositionStatus(pos_id, false));
@@ -368,7 +368,7 @@ BOOST_AUTO_TEST_CASE(digidollarwallet_update_position_status_reactivate)
     // Verify in database
     WalletBatch batch(m_wallet.GetDatabase());
     WalletCollateralPosition read_pos;
-    BOOST_CHECK(batch.ReadPosition(pos_id, read_pos));
+    BOOST_CHECK(batch.ReadDDTimeLock(pos_id, read_pos));
     BOOST_CHECK(read_pos.is_active);
 }
 
@@ -385,8 +385,8 @@ BOOST_AUTO_TEST_CASE(digidollarwallet_load_from_database_positions)
 
     WalletCollateralPosition pos1(id1, 10000, 500000, 3, 100000);
     WalletCollateralPosition pos2(id2, 5000, 250000, 2, 50000);
-    batch.WritePosition(pos1);
-    batch.WritePosition(pos2);
+    batch.WriteDDTimeLock(pos1);
+    batch.WriteDDTimeLock(pos2);
 
     // Create NEW wallet instance (simulates restart)
     DigiDollarWallet fresh_wallet(&m_wallet);
@@ -396,7 +396,7 @@ BOOST_AUTO_TEST_CASE(digidollarwallet_load_from_database_positions)
     BOOST_CHECK_EQUAL(loaded, 2);
 
     // Verify positions restored
-    auto positions = fresh_wallet.GetPositions();
+    auto positions = fresh_wallet.GetDDTimeLocks();
     BOOST_CHECK_EQUAL(positions.size(), 2);
     BOOST_CHECK_EQUAL(fresh_wallet.GetLockedCollateral(), 750000);
 }
@@ -450,7 +450,7 @@ BOOST_AUTO_TEST_CASE(digidollarwallet_load_from_database_mixed)
     // Write 2 positions
     uint256 pos_id = uint256S("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
     WalletCollateralPosition pos(pos_id, 10000, 500000, 3, 100000);
-    batch.WritePosition(pos);
+    batch.WriteDDTimeLock(pos);
 
     // Write 1 balance
     CDigiDollarAddress addr("DD1qtest333333333333333333333333333333333");
@@ -511,9 +511,9 @@ BOOST_AUTO_TEST_CASE(digidollarwallet_load_from_database_recalculates_totals)
     WalletCollateralPosition pos3(id3, 3000, 150000, 1, 30000);
     pos3.is_active = true;
 
-    batch.WritePosition(pos1);
-    batch.WritePosition(pos2);
-    batch.WritePosition(pos3);
+    batch.WriteDDTimeLock(pos1);
+    batch.WriteDDTimeLock(pos2);
+    batch.WriteDDTimeLock(pos3);
 
     // Create NEW wallet instance
     DigiDollarWallet fresh_wallet(&m_wallet);
@@ -524,11 +524,11 @@ BOOST_AUTO_TEST_CASE(digidollarwallet_load_from_database_recalculates_totals)
     BOOST_CHECK_EQUAL(fresh_wallet.GetLockedCollateral(), 650000);
 
     // Verify all positions loaded (including inactive)
-    auto all_positions = fresh_wallet.GetPositions(false);
+    auto all_positions = fresh_wallet.GetDDTimeLocks(false);
     BOOST_CHECK_EQUAL(all_positions.size(), 3);
 
     // Verify only active positions returned by default
-    auto active_positions = fresh_wallet.GetPositions(true);
+    auto active_positions = fresh_wallet.GetDDTimeLocks(true);
     BOOST_CHECK_EQUAL(active_positions.size(), 2);
 }
 
@@ -541,7 +541,7 @@ BOOST_AUTO_TEST_CASE(digidollarwallet_persistence_integration_test)
 
     uint256 pos_id = uint256S("0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee");
     WalletCollateralPosition pos(pos_id, 10000, 500000, 3, 100000);
-    wallet1.WritePosition(pos);
+    wallet1.WriteDDTimeLock(pos);
 
     CDigiDollarAddress addr("DD1qtest999999999999999999999999999999999");
     wallet1.WriteDDBalance(addr, 10000);
@@ -567,9 +567,9 @@ BOOST_AUTO_TEST_CASE(digidollarwallet_persistence_integration_test)
     BOOST_CHECK_EQUAL(wallet2.GetBalanceCount(), 1);
     BOOST_CHECK_EQUAL(wallet2.GetLockedCollateral(), 500000);
 
-    auto positions = wallet2.GetPositions();
+    auto positions = wallet2.GetDDTimeLocks();
     BOOST_CHECK_EQUAL(positions.size(), 1);
-    BOOST_CHECK_EQUAL(positions[0].position_id, pos_id);
+    BOOST_CHECK_EQUAL(positions[0].dd_timelock_id, pos_id);
     BOOST_CHECK_EQUAL(positions[0].dd_minted, 10000);
     BOOST_CHECK_EQUAL(positions[0].dgb_collateral, 500000);
 }

@@ -94,7 +94,7 @@ extern const std::string WATCHMETA;
 extern const std::string WATCHS;
 
 // DigiDollar database keys
-extern const std::string DD_POSITION;      // "ddposition" - Collateral positions
+extern const std::string DD_POSITION;      // "ddposition" - DDTimeLocks (time-locked DGB backing DigiDollars)
 extern const std::string DD_TRANSACTION;   // "ddtx"       - DD transaction history
 extern const std::string DD_BALANCE;       // "ddbalance"  - DD balance per address
 extern const std::string DD_OUTPUT;        // "ddutxo"     - DD UTXO tracking
@@ -278,21 +278,21 @@ public:
     bool EraseLockedUTXO(const COutPoint& output);
 
     // DigiDollar persistence write methods
-    bool WritePosition(const WalletCollateralPosition& position);
+    bool WriteDDTimeLock(const WalletCollateralPosition& position);
     bool WriteDDTransaction(const DDTransaction& ddtx);
     bool WriteDDBalance(const std::string& address, const WalletDDBalance& balance);
     bool WriteDDOutput(const uint256& output_id, const CDigiDollarOutput& output);
     bool WriteDDMetadata(const std::string& key, const std::string& value);
 
     // DigiDollar persistence read methods
-    bool ReadPosition(const uint256& position_id, WalletCollateralPosition& position);
+    bool ReadDDTimeLock(const uint256& dd_timelock_id, WalletCollateralPosition& position);
     bool ReadDDTransaction(const uint256& txid, DDTransaction& ddtx);
     bool ReadDDBalance(const std::string& address, WalletDDBalance& balance);
     bool ReadDDOutput(const uint256& output_id, CDigiDollarOutput& output);
     bool ReadDDMetadata(const std::string& key, std::string& value);
 
     // DigiDollar persistence erase methods
-    bool ErasePosition(const uint256& position_id);
+    bool EraseDDTimeLock(const uint256& dd_timelock_id);
     bool EraseDDTransaction(const uint256& txid);
     bool EraseDDBalance(const std::string& address);
     bool EraseDDOutput(const uint256& output_id);

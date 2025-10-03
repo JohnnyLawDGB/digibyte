@@ -24,6 +24,7 @@
 #include <wallet/rpc/util.h>
 #include <wallet/spend.h>
 #include <wallet/coinselection.h>
+#include <wallet/digidollarwallet.h>
 #include <digidollar/txbuilder.h>
 #include <node/transaction.h>
 #include <base58.h>
@@ -757,7 +758,8 @@ static RPCHelpMan senddigidollar()
 {
     return RPCHelpMan{"senddigidollar",
                 "\nSend DigiDollar to another DigiDollar address.\n"
-                "Creates a transaction that transfers DigiDollar from your wallet to the specified address.\n",
+                "Creates a transaction that transfers DigiDollar from your wallet to the specified address.\n"
+                "This is the primary RPC command for Phase 7.7 - DD transfers via API.\n",
                 {
                     {"address", RPCArg::Type::STR, RPCArg::Optional::NO, "DigiDollar address to send to (DD/TD/RD prefix)"},
                     {"amount", RPCArg::Type::AMOUNT, RPCArg::Optional::NO, "Amount to send (in USD cents)"},
@@ -770,9 +772,10 @@ static RPCHelpMan senddigidollar()
                         {RPCResult::Type::STR_HEX, "txid", "Transaction ID"},
                         {RPCResult::Type::STR, "to_address", "Recipient DigiDollar address"},
                         {RPCResult::Type::STR_AMOUNT, "amount", "Amount sent (in cents)"},
-                        {RPCResult::Type::STR_AMOUNT, "fee_paid", "Transaction fee paid in DGB"},
-                        {RPCResult::Type::NUM, "inputs_used", "Number of DD inputs consumed"},
-                        {RPCResult::Type::STR_AMOUNT, "change_amount", "DD change amount (if any)"}
+                        {RPCResult::Type::STR, "status", "Transaction status (success/pending/failed)"},
+                        {RPCResult::Type::STR_AMOUNT, "fee_paid", "Transaction fee paid in DGB (optional)"},
+                        {RPCResult::Type::NUM, "inputs_used", "Number of DD inputs consumed (optional)"},
+                        {RPCResult::Type::STR_AMOUNT, "change_amount", "DD change amount if any (optional)"}
                     }
                 },
                 RPCExamples{
@@ -783,40 +786,67 @@ static RPCHelpMan senddigidollar()
                 },
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
         {
+            // PHASE 7.7: Integration with backend TransferDigiDollar() from Phase 2.1
+
+            // Get wallet
+            std::shared_ptr<wallet::CWallet> const pwallet = GetWalletForJSONRPCRequest(request);
+            if (!pwallet) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "Wallet not found");
+            }
+
+            // Get DigiDollar wallet
+            DigiDollarWallet* dd_wallet = pwallet->GetDDWallet();
+            if (!dd_wallet) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "DigiDollar wallet not initialized");
+            }
+
             // Parse parameters
             std::string addressStr = request.params[0].get_str();
             CAmount amount = AmountFromValue(request.params[1]);
             std::string comment = request.params.size() > 2 ? request.params[2].get_str() : "";
 
-            // Validate parameters
+            // Validate amount
             if (amount <= 0) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Amount must be positive");
             }
 
-            // Validate DD address (basic validation for now)
-            if (addressStr.length() < 25 || addressStr.length() > 35) {
-                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid DigiDollar address length");
+            // Parse and validate DD address
+            CDigiDollarAddress dd_address;
+            dd_address.SetString(addressStr);
+            if (!dd_address.IsValid()) {
+                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid DigiDollar address");
             }
-            if (addressStr.substr(0, 2) != "DD" && addressStr.substr(0, 2) != "TD" && addressStr.substr(0, 2) != "RD") {
-                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid DigiDollar address prefix");
+
+            // Check balance
+            CAmount balance = dd_wallet->GetTotalDDBalance();
+            if (amount > balance) {
+                throw JSONRPCError(RPC_WALLET_INSUFFICIENT_FUNDS,
+                    strprintf("Insufficient DD balance (have %s cents, need %s cents)",
+                             FormatMoney(balance), FormatMoney(amount)));
             }
 
-            // Mock transfer transaction creation
-            uint256 mockTxId;
-            mockTxId.SetHex("abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789");
+            // Execute transfer using backend function (Phase 2.1)
+            std::string txid;
+            std::string error;
 
-            // Calculate fees and change (mock implementation)
-            CAmount feePaid = 0.001 * COIN; // TODO: Use real fee calculation
-            int inputsUsed = 1; // TODO: Count actual inputs used
-            CAmount changeAmount = 0; // TODO: Calculate actual change
+            bool success = dd_wallet->TransferDigiDollar(dd_address, amount, txid, error);
 
+            if (!success) {
+                throw JSONRPCError(RPC_WALLET_ERROR,
+                    strprintf("Transfer failed: %s", error));
+            }
+
+            // Build result
             UniValue result(UniValue::VOBJ);
-            result.pushKV("txid", mockTxId.GetHex());
+            result.pushKV("txid", txid);
             result.pushKV("to_address", addressStr);
-            result.pushKV("amount", amount);
-            result.pushKV("fee_paid", ValueFromAmount(feePaid));
-            result.pushKV("inputs_used", inputsUsed);
-            result.pushKV("change_amount", changeAmount);
+            result.pushKV("amount", ValueFromAmount(amount));
+            result.pushKV("status", "success");
+
+            // Optional: Add comment to wallet transaction if provided
+            if (!comment.empty()) {
+                result.pushKV("comment", comment);
+            }
 
             return result;
         },
@@ -1309,6 +1339,20 @@ static RPCHelpMan getdigidollarbalance()
                 },
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
         {
+            // PHASE 7.7: Integration with DigiDollarWallet backend
+
+            // Get wallet
+            std::shared_ptr<wallet::CWallet> const pwallet = GetWalletForJSONRPCRequest(request);
+            if (!pwallet) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "Wallet not found");
+            }
+
+            // Get DigiDollar wallet
+            DigiDollarWallet* dd_wallet = pwallet->GetDDWallet();
+            if (!dd_wallet) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "DigiDollar wallet not initialized");
+            }
+
             // Parse parameters
             std::string addressStr = request.params.size() > 0 && !request.params[0].isNull() ?
                                    request.params[0].get_str() : "";
@@ -1322,26 +1366,24 @@ static RPCHelpMan getdigidollarbalance()
 
             CAmount confirmedBalance = 0;
             CAmount unconfirmedBalance = 0;
-            int addressCount = 3; // Mock address count
+            int addressCount = 0;
 
             if (!addressStr.empty()) {
-                // Validate DD address format (basic validation)
-                if (addressStr.length() < 25 || addressStr.length() > 35) {
-                    throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid DigiDollar address length");
-                }
-                if (addressStr.substr(0, 2) != "DD" && addressStr.substr(0, 2) != "TD" && addressStr.substr(0, 2) != "RD") {
-                    throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid DigiDollar address prefix");
+                // Get balance for specific address
+                CDigiDollarAddress dd_address;
+                dd_address.SetString(addressStr);
+                if (!dd_address.IsValid()) {
+                    throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid DigiDollar address");
                 }
 
-                // Mock balance for specific address
-                confirmedBalance = 10000; // $100.00
-                unconfirmedBalance = 0;
+                confirmedBalance = dd_wallet->GetDDBalance(dd_address);
+                unconfirmedBalance = 0; // TODO: Track unconfirmed balance separately
                 addressCount = 1;
             } else {
-                // Mock total wallet balance
-                confirmedBalance = 45000; // $450.00 total
-                unconfirmedBalance = 0;
-                addressCount = 3;
+                // Get total wallet balance
+                confirmedBalance = dd_wallet->GetTotalDDBalance();
+                unconfirmedBalance = 0; // TODO: Track unconfirmed balance separately
+                addressCount = dd_wallet->GetBalanceCount();
             }
 
             UniValue result(UniValue::VOBJ);
@@ -1555,6 +1597,20 @@ static RPCHelpMan listdigidollartxs()
                 },
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
         {
+            // PHASE 7.7: Integration with DigiDollarWallet backend
+
+            // Get wallet
+            std::shared_ptr<wallet::CWallet> const pwallet = GetWalletForJSONRPCRequest(request);
+            if (!pwallet) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "Wallet not found");
+            }
+
+            // Get DigiDollar wallet
+            DigiDollarWallet* dd_wallet = pwallet->GetDDWallet();
+            if (!dd_wallet) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "DigiDollar wallet not initialized");
+            }
+
             // Parse parameters
             int count = request.params.size() > 0 ? request.params[0].getInt<int>() : 10;
             int skip = request.params.size() > 1 ? request.params[1].getInt<int>() : 0;
@@ -1571,29 +1627,14 @@ static RPCHelpMan listdigidollartxs()
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Skip must be non-negative");
             }
 
-            // Mock transaction history - in real implementation would get from wallet
-            struct MockTransaction {
-                std::string txid;
-                std::string category;
-                CAmount amount;
-                std::string address;
-                int confirmations;
-                bool incoming;
-                uint64_t timestamp;
-            };
-
-            std::vector<MockTransaction> mockTransactions = {
-                {"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", "mint", 10000, "DDmockaddress123456789abcdef1", 6, true, 1640995200},
-                {"abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789", "send", 5000, "DDtestrecipient123456789abcdef", 3, false, 1641081600},
-                {"fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210", "receive", 2500, "DDmockaddress123456789abcdef2", 10, true, 1640908800},
-                {"1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef", "redeem", 7500, "DDmockaddress123456789abcdef1", 1, false, 1641168000}
-            };
+            // Get transaction history from wallet
+            std::vector<DDTransaction> transactions = dd_wallet->GetDDTransactionHistory();
 
             UniValue result(UniValue::VARR);
             int processed = 0;
             int skipped = 0;
 
-            for (const auto& tx : mockTransactions) {
+            for (const auto& tx : transactions) {
                 // Apply filters
                 if (!addressFilter.empty() && tx.address != addressFilter) continue;
                 if (!categoryFilter.empty() && tx.category != categoryFilter) continue;
@@ -1613,12 +1654,12 @@ static RPCHelpMan listdigidollartxs()
                 txInfo.pushKV("amount", tx.incoming ? tx.amount : -tx.amount);
                 txInfo.pushKV("address", tx.address);
                 txInfo.pushKV("confirmations", tx.confirmations);
-                txInfo.pushKV("blockheight", 900000); // Mock block height
-                txInfo.pushKV("blockhash", "0000000000000000000000000000000000000000000000000000000000000000");
                 txInfo.pushKV("time", static_cast<int64_t>(tx.timestamp));
-                txInfo.pushKV("fee", ValueFromAmount(100000)); // Mock fee
-                txInfo.pushKV("comment", "");
-                txInfo.pushKV("abandoned", false);
+                // Optional fields - may not be available for all transactions
+                // txInfo.pushKV("blockheight", blockheight);
+                // txInfo.pushKV("blockhash", blockhash);
+                // txInfo.pushKV("fee", fee);
+                // txInfo.pushKV("comment", comment);
 
                 result.push_back(txInfo);
                 processed++;

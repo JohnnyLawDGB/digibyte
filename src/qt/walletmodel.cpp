@@ -670,15 +670,11 @@ WalletModel::DigiDollarSendResult WalletModel::sendDigiDollar(const QString& add
     }
 
     try {
-        // NOTE: Backend integration for DigiDollar sending
-        // This connects the Qt UI to the actual DigiDollarWallet backend
-
-        // Create DigiDollarWallet instance (in production, would be part of wallet interface)
-        DigiDollarWallet ddWallet;
-
-        // Set mock balance for testing if needed
-        if (currentBalance > 0) {
-            ddWallet.SetMockBalance(currentBalance);
+        // Get DigiDollar wallet instance from wallet interface
+        DigiDollarWallet* ddWallet = m_wallet->getDigiDollarWallet();
+        if (!ddWallet) {
+            LogPrintf("DigiDollar Qt: DigiDollar wallet not available\n");
+            return DigiDollarSendResult(TransactionCreationFailed, "", "DigiDollar wallet not initialized");
         }
 
         // Create DigiDollar address object
@@ -687,7 +683,7 @@ WalletModel::DigiDollarSendResult WalletModel::sendDigiDollar(const QString& add
         // Call backend to create and send transaction
         std::string txid;
         std::string error;
-        bool success = ddWallet.TransferDigiDollar(recipientAddr, amount, txid, error);
+        bool success = ddWallet->TransferDigiDollar(recipientAddr, amount, txid, error);
 
         if (!success) {
             // Transaction creation or sending failed
@@ -699,11 +695,10 @@ WalletModel::DigiDollarSendResult WalletModel::sendDigiDollar(const QString& add
         LogPrintf("DigiDollar Qt: Send successful - %d cents to %s, txid: %s\n",
                   amount, address.toStdString(), txid);
 
-        // TODO: In production implementation:
-        // 1. Integrate with actual wallet::CWallet via interfaces
-        // 2. Add transaction to wallet database
-        // 3. Update transaction table model
-        // 4. Emit signals for balance updates
+        // TODO: Future enhancements:
+        // 1. Update transaction table model to show DD transactions
+        // 2. Emit balance update signals if not already handled by backend
+        // 3. Add DD transaction notifications
 
         return DigiDollarSendResult(OK, QString::fromStdString(txid), "");
 
@@ -1032,7 +1027,7 @@ WalletModel::DigiDollarRedeemResult WalletModel::redeemDigiDollar(const QString&
         // auto positions = wallet().getDigiDollarPositions();
         // bool positionFound = false;
         // for (const auto& pos : positions) {
-        //     if (pos.position_id == positionIdHash) {
+        //     if (pos.dd_timelock_id == positionIdHash) {
         //         positionFound = true;
         //         break;
         //     }

@@ -128,7 +128,7 @@ struct DDTransferTestFixture : public TestingSetup {
     TransferParams BuildTransferParams(const std::vector<std::pair<std::string, CAmount>>& recipients) {
         TransferParams params;
         params.recipients = recipients;
-        params.feeRate = 1000; // 1000 sat/vB
+        params.feeRate = 100000; // 100,000 sat/kB (DigiByte minimum relay fee)
         params.spenderKey = senderKey;
 
         // Add some mock UTXOs
@@ -571,6 +571,620 @@ BOOST_FIXTURE_TEST_CASE(test_precise_amount_matching, DDTransferTestFixture)
     // Assert: Should fail in RED phase
     BOOST_CHECK(!result.success);
     BOOST_CHECK(!result.error.empty());
+}
+
+// =============================================================================
+// Phase 2.2 - DD Input Assembly Tests
+// =============================================================================
+
+BOOST_FIXTURE_TEST_CASE(test_build_transfer_inputs, DDTransferTestFixture)
+{
+    // Arrange: Create mock DD UTXOs
+    COutPoint utxo1 = CreateMockDDUTXO(5000);  // $50.00
+    COutPoint utxo2 = CreateMockDDUTXO(3000);  // $30.00
+
+    std::string recipientAddr = CreateDDAddress(recipientKey.GetPubKey());
+    TransferParams params = BuildTransferParams({{recipientAddr, 8000}}); // $80.00
+
+    // Set specific UTXOs
+    params.ddUtxos.clear();
+    params.ddUtxos.push_back(utxo1);
+    params.ddUtxos.push_back(utxo2);
+
+    MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
+
+    // Act: Build transfer transaction
+    TxBuilderResult result = builder.BuildTransferTransaction(params);
+
+    // Assert: Transaction should be created with correct inputs
+    BOOST_CHECK_EQUAL(result.success, true);
+
+    // Verify DD inputs were added (should be first 2 inputs before fee inputs)
+    BOOST_CHECK_GE(result.tx.vin.size(), 2);
+    BOOST_CHECK(result.tx.vin[0].prevout == utxo1);
+    BOOST_CHECK(result.tx.vin[1].prevout == utxo2);
+}
+
+BOOST_FIXTURE_TEST_CASE(test_single_dd_input_assembly, DDTransferTestFixture)
+{
+    // Arrange: Single DD UTXO
+    COutPoint utxo = CreateMockDDUTXO(10000);  // $100.00
+
+    std::string recipientAddr = CreateDDAddress(recipientKey.GetPubKey());
+    TransferParams params = BuildTransferParams({{recipientAddr, 10000}}); // Exact match
+
+    params.ddUtxos.clear();
+    params.ddUtxos.push_back(utxo);
+
+    MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
+
+    // Act: Build transfer
+    TxBuilderResult result = builder.BuildTransferTransaction(params);
+
+    // Assert: Single input should be present
+    BOOST_CHECK_EQUAL(result.success, true);
+    BOOST_CHECK_GE(result.tx.vin.size(), 1);
+    BOOST_CHECK(result.tx.vin[0].prevout == utxo);
+}
+
+BOOST_FIXTURE_TEST_CASE(test_multiple_dd_inputs_assembly, DDTransferTestFixture)
+{
+    // Arrange: Multiple DD UTXOs for consolidation
+    std::vector<COutPoint> utxos;
+    TransferParams params;
+    params.recipients = {{CreateDDAddress(recipientKey.GetPubKey()), 15000}}; // $150.00
+    params.feeRate = 100000; // 100,000 sat/kB
+    params.spenderKey = senderKey;
+    params.feeUtxos.push_back(CreateMockDGBUTXO(100000));
+
+    // Create 5 small UTXOs
+    for (int i = 0; i < 5; ++i) {
+        COutPoint utxo = CreateMockDDUTXO(3000);  // $30.00 each
+        utxos.push_back(utxo);
+        params.ddUtxos.push_back(utxo);
+    }
+
+    MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
+
+    // Act: Build consolidation transfer
+    TxBuilderResult result = builder.BuildTransferTransaction(params);
+
+    // Assert: All 5 DD inputs should be assembled
+    BOOST_CHECK_EQUAL(result.success, true);
+    BOOST_CHECK_GE(result.tx.vin.size(), 5);
+
+    // Verify each input matches
+    for (size_t i = 0; i < utxos.size(); ++i) {
+        BOOST_CHECK(result.tx.vin[i].prevout == utxos[i]);
+    }
+}
+
+BOOST_FIXTURE_TEST_CASE(test_dd_input_count_matches_utxo_count, DDTransferTestFixture)
+{
+    // Arrange: Variable number of UTXOs
+    std::string recipientAddr = CreateDDAddress(recipientKey.GetPubKey());
+
+    // Test with 1, 3, and 10 UTXOs
+    std::vector<int> utxoCounts = {1, 3, 10};
+
+    for (int count : utxoCounts) {
+        TransferParams params;
+        params.recipients = {{recipientAddr, count * 1000}}; // $10.00 per UTXO
+        params.feeRate = 100000; // 100,000 sat/kB
+        params.spenderKey = senderKey;
+        params.feeUtxos.push_back(CreateMockDGBUTXO(100000));
+
+        for (int i = 0; i < count; ++i) {
+            params.ddUtxos.push_back(CreateMockDDUTXO(1000));
+        }
+
+        MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
+
+        // Act: Build transfer
+        TxBuilderResult result = builder.BuildTransferTransaction(params);
+
+        // Assert: Input count should match (DD inputs + possibly fee inputs)
+        BOOST_CHECK_EQUAL(result.success, true);
+        BOOST_CHECK_GE(result.tx.vin.size(), static_cast<size_t>(count));
+    }
+}
+
+// =============================================================================
+// Phase 2.3 - DD Output Assembly Tests
+// =============================================================================
+
+BOOST_FIXTURE_TEST_CASE(test_build_transfer_outputs, DDTransferTestFixture)
+{
+    // Arrange: Transfer params with 2 recipients
+    std::string recipient1 = CreateDDAddress(recipientKey.GetPubKey());
+    CKey recipient2Key;
+    recipient2Key.MakeNewKey(true);
+    std::string recipient2 = CreateDDAddress(recipient2Key.GetPubKey());
+
+    TransferParams params;
+    params.recipients = {
+        {recipient1, 50000},  // $500.00
+        {recipient2, 25000}   // $250.00
+    };
+    params.feeRate = 100000; // 100,000 sat/kB (minimum relay fee for DigiByte)
+    params.spenderKey = senderKey;
+
+    // Create DD UTXOs with sufficient balance (need 75000 cents total)
+    params.ddUtxos.push_back(CreateMockDDUTXO(50000)); // $500
+    params.ddUtxos.push_back(CreateMockDDUTXO(25000)); // $250
+
+    // Add fee UTXOs
+    params.feeUtxos.push_back(CreateMockDGBUTXO(100000)); // 0.001 DGB
+
+    MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
+
+    // Act: Build transfer transaction
+    TxBuilderResult result = builder.BuildTransferTransaction(params);
+
+    // Assert: Transaction should be built successfully
+    BOOST_CHECK_MESSAGE(result.success, "Transfer failed: " << result.error);
+
+    // Verify number of outputs (2 recipients + potentially DGB change, no DD change needed)
+    BOOST_CHECK_GE(result.tx.vout.size(), 2);
+
+    // Find DD outputs (those with 0 DGB value)
+    std::vector<CTxOut> ddOutputs;
+    for (const auto& output : result.tx.vout) {
+        if (output.nValue == 0) {
+            ddOutputs.push_back(output);
+        }
+    }
+
+    // Should have exactly 2 DD outputs for our 2 recipients
+    BOOST_CHECK_EQUAL(ddOutputs.size(), 2);
+
+    // Verify DD amounts in outputs by extracting from scripts
+    CAmount totalDDOut = 0;
+    for (const auto& output : ddOutputs) {
+        CAmount ddAmount = 0;
+        bool extracted = DigiDollar::ExtractDDAmount(output.scriptPubKey, ddAmount);
+        BOOST_CHECK_MESSAGE(extracted, "Failed to extract DD amount from output");
+        totalDDOut += ddAmount;
+    }
+
+    // Total DD output should equal requested amounts (75000)
+    BOOST_CHECK_EQUAL(totalDDOut, 75000);
+
+    // Verify each output has proper P2TR script
+    for (const auto& output : ddOutputs) {
+        // P2TR scripts start with OP_1 (0x51) followed by 32 bytes
+        BOOST_CHECK_GE(output.scriptPubKey.size(), 34);
+        BOOST_CHECK_EQUAL(output.scriptPubKey[0], 0x51); // OP_1
+    }
+}
+
+BOOST_FIXTURE_TEST_CASE(test_single_recipient_output, DDTransferTestFixture)
+{
+    // Arrange: Single recipient transfer
+    std::string recipient = CreateDDAddress(recipientKey.GetPubKey());
+
+    TransferParams params;
+    params.recipients = {{recipient, 30000}}; // $300.00
+    params.feeRate = 100000; // 100,000 sat/kB
+    params.spenderKey = senderKey;
+    params.ddUtxos.push_back(CreateMockDDUTXO(30000)); // Exact amount
+    params.feeUtxos.push_back(CreateMockDGBUTXO(100000));
+
+    MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
+
+    // Act
+    TxBuilderResult result = builder.BuildTransferTransaction(params);
+
+    // Assert
+    BOOST_CHECK_MESSAGE(result.success, "Transfer failed: " << result.error);
+
+    // Find DD outputs
+    std::vector<CTxOut> ddOutputs;
+    for (const auto& output : result.tx.vout) {
+        if (output.nValue == 0) {
+            ddOutputs.push_back(output);
+        }
+    }
+
+    // Should have exactly 1 DD output (exact match, no change)
+    BOOST_CHECK_EQUAL(ddOutputs.size(), 1);
+
+    // Verify amount
+    CAmount ddAmount = 0;
+    BOOST_CHECK(DigiDollar::ExtractDDAmount(ddOutputs[0].scriptPubKey, ddAmount));
+    BOOST_CHECK_EQUAL(ddAmount, 30000);
+}
+
+BOOST_FIXTURE_TEST_CASE(test_output_p2tr_script_format, DDTransferTestFixture)
+{
+    // Arrange
+    std::string recipient = CreateDDAddress(recipientKey.GetPubKey());
+
+    TransferParams params;
+    params.recipients = {{recipient, 10000}}; // $100.00
+    params.feeRate = 100000; // 100,000 sat/kB
+    params.spenderKey = senderKey;
+    params.ddUtxos.push_back(CreateMockDDUTXO(10000));
+    params.feeUtxos.push_back(CreateMockDGBUTXO(100000));
+
+    MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
+
+    // Act
+    TxBuilderResult result = builder.BuildTransferTransaction(params);
+
+    // Assert
+    BOOST_CHECK(result.success);
+
+    // Get DD output
+    CTxOut ddOutput;
+    bool found = false;
+    for (const auto& output : result.tx.vout) {
+        if (output.nValue == 0) {
+            ddOutput = output;
+            found = true;
+            break;
+        }
+    }
+    BOOST_CHECK(found);
+
+    // Verify P2TR script structure
+    // P2TR: OP_1 <32-byte-pubkey> (possibly followed by DD amount data)
+    BOOST_CHECK_GE(ddOutput.scriptPubKey.size(), 34);
+
+    // First byte should be OP_1 (version 1 witness)
+    BOOST_CHECK_EQUAL(ddOutput.scriptPubKey[0], 0x51);
+
+    // Second byte should be 0x20 (32 bytes following)
+    BOOST_CHECK_EQUAL(ddOutput.scriptPubKey[1], 0x20);
+}
+
+BOOST_FIXTURE_TEST_CASE(test_all_recipients_get_outputs, DDTransferTestFixture)
+{
+    // Arrange: 3 recipients with different amounts
+    std::string recipient1 = CreateDDAddress(recipientKey.GetPubKey());
+
+    CKey recipient2Key, recipient3Key;
+    recipient2Key.MakeNewKey(true);
+    recipient3Key.MakeNewKey(true);
+
+    std::string recipient2 = CreateDDAddress(recipient2Key.GetPubKey());
+    std::string recipient3 = CreateDDAddress(recipient3Key.GetPubKey());
+
+    TransferParams params;
+    params.recipients = {
+        {recipient1, 10000},  // $100.00
+        {recipient2, 20000},  // $200.00
+        {recipient3, 30000}   // $300.00
+    };
+    params.feeRate = 100000; // 100,000 sat/kB
+    params.spenderKey = senderKey;
+    params.ddUtxos.push_back(CreateMockDDUTXO(60000)); // Exact total
+    params.feeUtxos.push_back(CreateMockDGBUTXO(100000));
+
+    MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
+
+    // Act
+    TxBuilderResult result = builder.BuildTransferTransaction(params);
+
+    // Assert
+    BOOST_CHECK_MESSAGE(result.success, "Transfer failed: " << result.error);
+
+    // Count DD outputs
+    std::vector<CAmount> ddAmounts;
+    for (const auto& output : result.tx.vout) {
+        if (output.nValue == 0) {
+            CAmount amount = 0;
+            if (DigiDollar::ExtractDDAmount(output.scriptPubKey, amount)) {
+                ddAmounts.push_back(amount);
+            }
+        }
+    }
+
+    // Should have 3 DD outputs
+    BOOST_CHECK_EQUAL(ddAmounts.size(), 3);
+
+    // Verify all requested amounts are present (order may vary)
+    CAmount totalOut = 0;
+    for (CAmount amount : ddAmounts) {
+        totalOut += amount;
+    }
+    BOOST_CHECK_EQUAL(totalOut, 60000);
+}
+
+BOOST_FIXTURE_TEST_CASE(test_output_amounts_match_requested, DDTransferTestFixture)
+{
+    // Arrange: Multiple recipients with specific amounts
+    std::string recipient1 = CreateDDAddress(recipientKey.GetPubKey());
+    CKey recipient2Key;
+    recipient2Key.MakeNewKey(true);
+    std::string recipient2 = CreateDDAddress(recipient2Key.GetPubKey());
+
+    CAmount amount1 = 12345; // $123.45
+    CAmount amount2 = 67890; // $678.90
+
+    TransferParams params;
+    params.recipients = {
+        {recipient1, amount1},
+        {recipient2, amount2}
+    };
+    params.feeRate = 100000; // 100,000 sat/kB
+    params.spenderKey = senderKey;
+    params.ddUtxos.push_back(CreateMockDDUTXO(amount1 + amount2));
+    params.feeUtxos.push_back(CreateMockDGBUTXO(100000));
+
+    MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
+
+    // Act
+    TxBuilderResult result = builder.BuildTransferTransaction(params);
+
+    // Assert
+    BOOST_CHECK_MESSAGE(result.success, "Transfer failed: " << result.error);
+
+    // Extract all DD amounts
+    std::vector<CAmount> ddAmounts;
+    for (const auto& output : result.tx.vout) {
+        if (output.nValue == 0) {
+            CAmount amount = 0;
+            if (DigiDollar::ExtractDDAmount(output.scriptPubKey, amount)) {
+                ddAmounts.push_back(amount);
+            }
+        }
+    }
+
+    // Sort for comparison
+    std::sort(ddAmounts.begin(), ddAmounts.end());
+    std::vector<CAmount> expected = {amount1, amount2};
+    std::sort(expected.begin(), expected.end());
+
+    BOOST_CHECK_EQUAL(ddAmounts.size(), expected.size());
+    for (size_t i = 0; i < ddAmounts.size(); ++i) {
+        BOOST_CHECK_EQUAL(ddAmounts[i], expected[i]);
+    }
+}
+
+// =============================================================================
+// Phase 2.4 - Fee Input Assembly Tests
+// =============================================================================
+
+BOOST_FIXTURE_TEST_CASE(test_fee_inputs_added, DDTransferTestFixture)
+{
+    // Arrange: Create transfer params with fee inputs
+    COutPoint ddUtxo = CreateMockDDUTXO(50000);  // $500.00
+    COutPoint feeUtxo = CreateMockDGBUTXO(100000); // 0.001 DGB for fees
+
+    std::string recipientAddr = CreateDDAddress(recipientKey.GetPubKey());
+
+    TransferParams params;
+    params.recipients = {{recipientAddr, 50000}};
+    params.feeRate = 100000; // 100,000 sat/kB
+    params.spenderKey = senderKey;
+    params.ddUtxos = {ddUtxo};
+    params.feeUtxos = {feeUtxo};
+
+    MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
+
+    // Act: Build transfer transaction
+    TxBuilderResult result = builder.BuildTransferTransaction(params);
+
+    // Assert: Transaction should be created successfully
+    BOOST_CHECK_EQUAL(result.success, true);
+
+    // Verify input count (1 DD + 1 fee = 2 total)
+    BOOST_CHECK_EQUAL(result.tx.vin.size(), 2);
+
+    // Verify first input is DD input
+    BOOST_CHECK(result.tx.vin[0].prevout == ddUtxo);
+
+    // Verify second input is fee input
+    BOOST_CHECK(result.tx.vin[1].prevout == feeUtxo);
+}
+
+// =============================================================================
+// Phase 2.6 - Transaction Finalization Tests
+// =============================================================================
+
+BOOST_FIXTURE_TEST_CASE(test_transaction_finalization, DDTransferTestFixture)
+{
+    // Arrange: Create transfer params with valid inputs and outputs
+    std::string recipientAddr = CreateDDAddress(recipientKey.GetPubKey());
+
+    TxBuilderTransferParams params;
+    params.recipients = {{recipientAddr, 50000}}; // $500.00
+    params.feeRate = 100000; // 100,000 sat/kB
+    params.spenderKey = senderKey;
+
+    // Create DD UTXO with sufficient balance
+    params.ddUtxos.push_back(CreateMockDDUTXO(50000)); // Exact amount
+    params.feeUtxos.push_back(CreateMockDGBUTXO(100000)); // Fee UTXO
+
+    MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
+
+    // Act: Build transfer transaction
+    TxBuilderResult result = builder.BuildTransferTransaction(params);
+
+    // Assert: Transaction should be finalized successfully
+    BOOST_CHECK_MESSAGE(result.success, "Transaction finalization failed: " << result.error);
+    BOOST_CHECK(result.error.empty());
+
+    // Verify transaction structure
+    BOOST_CHECK_GT(result.tx.vin.size(), 0);  // Must have inputs
+    BOOST_CHECK_GT(result.tx.vout.size(), 0); // Must have outputs
+
+    // Verify transaction version is set to 2 (SegWit v2)
+    BOOST_CHECK_EQUAL(result.tx.nVersion, 2);
+
+    // Verify locktime is set to 0 (immediate broadcast)
+    BOOST_CHECK_EQUAL(result.tx.nLockTime, 0);
+}
+
+BOOST_FIXTURE_TEST_CASE(test_transaction_version_and_locktime, DDTransferTestFixture)
+{
+    // Arrange
+    std::string recipientAddr = CreateDDAddress(recipientKey.GetPubKey());
+
+    TxBuilderTransferParams params;
+    params.recipients = {{recipientAddr, 25000}}; // $250.00
+    params.feeRate = 100000; // 100,000 sat/kB
+    params.spenderKey = senderKey;
+    params.ddUtxos.push_back(CreateMockDDUTXO(25000));
+    params.feeUtxos.push_back(CreateMockDGBUTXO(100000));
+
+    MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
+
+    // Act
+    TxBuilderResult result = builder.BuildTransferTransaction(params);
+
+    // Assert: Verify version and locktime
+    BOOST_CHECK(result.success);
+    BOOST_CHECK_EQUAL(result.tx.nVersion, 2);
+    BOOST_CHECK_EQUAL(result.tx.nLockTime, 0);
+}
+
+BOOST_FIXTURE_TEST_CASE(test_dd_amount_balance_verification, DDTransferTestFixture)
+{
+    // Arrange: Create transfer with balanced DD amounts
+    std::string recipientAddr = CreateDDAddress(recipientKey.GetPubKey());
+
+    TxBuilderTransferParams params;
+    params.recipients = {{recipientAddr, 30000}}; // $300.00
+    params.feeRate = 100000; // 100,000 sat/kB
+    params.spenderKey = senderKey;
+    params.ddUtxos.push_back(CreateMockDDUTXO(30000)); // Exact balance
+    params.feeUtxos.push_back(CreateMockDGBUTXO(100000));
+
+    MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
+
+    // Act
+    TxBuilderResult result = builder.BuildTransferTransaction(params);
+
+    // Assert: DD amounts should balance
+    BOOST_CHECK_MESSAGE(result.success, "DD balance verification failed: " << result.error);
+
+    // Extract and verify total DD input and output
+    CAmount totalDDIn = 0;
+    for (const auto& utxo : params.ddUtxos) {
+        totalDDIn += g_mockDDUTXOs[utxo];
+    }
+
+    CAmount totalDDOut = 0;
+    for (const auto& output : result.tx.vout) {
+        if (output.nValue == 0) { // DD outputs have 0 DGB value
+            CAmount ddAmount = 0;
+            if (DigiDollar::ExtractDDAmount(output.scriptPubKey, ddAmount)) {
+                totalDDOut += ddAmount;
+            }
+        }
+    }
+
+    BOOST_CHECK_EQUAL(totalDDIn, totalDDOut);
+}
+
+BOOST_FIXTURE_TEST_CASE(test_dd_amount_mismatch_detection, DDTransferTestFixture)
+{
+    // Arrange: Create transfer with insufficient DD inputs (should fail)
+    std::string recipientAddr = CreateDDAddress(recipientKey.GetPubKey());
+
+    TxBuilderTransferParams params;
+    params.recipients = {{recipientAddr, 50000}}; // $500.00
+    params.feeRate = 100000; // 100,000 sat/kB
+    params.spenderKey = senderKey;
+    params.ddUtxos.push_back(CreateMockDDUTXO(30000)); // Only $300.00 (insufficient!)
+    params.feeUtxos.push_back(CreateMockDGBUTXO(100000));
+
+    MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
+
+    // Act
+    TxBuilderResult result = builder.BuildTransferTransaction(params);
+
+    // Assert: Should fail due to insufficient DD
+    BOOST_CHECK(!result.success);
+    BOOST_CHECK(!result.error.empty());
+    BOOST_CHECK(result.error.find("Insufficient DD balance") != std::string::npos);
+}
+
+BOOST_FIXTURE_TEST_CASE(test_empty_inputs_validation, DDTransferTestFixture)
+{
+    // Arrange: Create params with no DD inputs
+    std::string recipientAddr = CreateDDAddress(recipientKey.GetPubKey());
+
+    TxBuilderTransferParams params;
+    params.recipients = {{recipientAddr, 10000}}; // $100.00
+    params.feeRate = 100000; // 100,000 sat/kB
+    params.spenderKey = senderKey;
+    // No ddUtxos provided!
+    params.feeUtxos.push_back(CreateMockDGBUTXO(100000));
+
+    MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
+
+    // Act
+    TxBuilderResult result = builder.BuildTransferTransaction(params);
+
+    // Assert: Should fail validation
+    BOOST_CHECK(!result.success);
+    BOOST_CHECK(!result.error.empty());
+}
+
+BOOST_FIXTURE_TEST_CASE(test_empty_outputs_validation, DDTransferTestFixture)
+{
+    // Arrange: Create params with no recipients
+    TxBuilderTransferParams params;
+    params.recipients = {}; // No recipients!
+    params.feeRate = 100000; // 100,000 sat/kB
+    params.spenderKey = senderKey;
+    params.ddUtxos.push_back(CreateMockDDUTXO(10000));
+    params.feeUtxos.push_back(CreateMockDGBUTXO(100000));
+
+    MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
+
+    // Act
+    TxBuilderResult result = builder.BuildTransferTransaction(params);
+
+    // Assert: Should fail validation
+    BOOST_CHECK(!result.success);
+    BOOST_CHECK(!result.error.empty());
+}
+
+BOOST_FIXTURE_TEST_CASE(test_complete_transaction_structure, DDTransferTestFixture)
+{
+    // Arrange: Complete valid transfer
+    std::string recipientAddr = CreateDDAddress(recipientKey.GetPubKey());
+
+    TxBuilderTransferParams params;
+    params.recipients = {{recipientAddr, 40000}}; // $400.00
+    params.feeRate = 100000; // 100,000 sat/kB
+    params.spenderKey = senderKey;
+    params.ddUtxos.push_back(CreateMockDDUTXO(40000));
+    params.feeUtxos.push_back(CreateMockDGBUTXO(100000));
+
+    MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
+
+    // Act
+    TxBuilderResult result = builder.BuildTransferTransaction(params);
+
+    // Assert: Complete validation
+    BOOST_CHECK_MESSAGE(result.success, "Transaction failed: " << result.error);
+
+    // Structure checks
+    BOOST_CHECK_GT(result.tx.vin.size(), 0);   // Has inputs
+    BOOST_CHECK_GT(result.tx.vout.size(), 0);  // Has outputs
+    BOOST_CHECK_EQUAL(result.tx.nVersion, 2);  // Version 2
+    BOOST_CHECK_EQUAL(result.tx.nLockTime, 0); // Locktime 0
+
+    // Fee checks
+    BOOST_CHECK_GT(result.totalFees, 0); // Has fees calculated
+
+    // DD conservation
+    CAmount totalDDIn = g_mockDDUTXOs[params.ddUtxos[0]];
+    CAmount totalDDOut = 0;
+    for (const auto& output : result.tx.vout) {
+        if (output.nValue == 0) {
+            CAmount ddAmount = 0;
+            if (DigiDollar::ExtractDDAmount(output.scriptPubKey, ddAmount)) {
+                totalDDOut += ddAmount;
+            }
+        }
+    }
+    BOOST_CHECK_EQUAL(totalDDIn, totalDDOut);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

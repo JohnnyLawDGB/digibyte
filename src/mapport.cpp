@@ -187,7 +187,7 @@ static bool ProcessUpnp()
             }
         }
 
-        std::string strDesc = PACKAGE_NAME " " + FormatFullVersion();
+        std::string strDesc = std::string(CLIENT_NAME) + " " + FormatFullVersion();
 
         do {
             r = UPNP_AddPortMapping(urls.controlURL, data.first.servicetype, port.c_str(), port.c_str(), lanaddr, strDesc.c_str(), "TCP", nullptr, "0");

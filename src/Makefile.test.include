@@ -85,6 +85,7 @@ DIGIBYTE_TESTS =\
   test/digidollar_structures_tests.cpp \
   test/digidollar_transaction_tests.cpp \
   test/digidollar_transfer_tests.cpp \
+  test/digidollar_change_tests.cpp \
   test/digidollar_txbuilder_tests.cpp \
   test/digidollar_validation_tests.cpp \
   test/digidollar_volatility_tests.cpp \

@@ -89,6 +89,15 @@ private:
     QString formatDDAmount(double amount) const;
     QString formatUSDAmount(double amount) const;
 
+    // Phase 7.2-7.3: Helper methods for improved UX
+    void showError(const QString& title, const QString& message);
+    void showWarning(const QString& title, const QString& message);
+    bool checkWalletState();
+    bool showConfirmationDialog(const QString& address, double amount);
+    void executeTransfer(const QString& address, double amount);
+    void showSuccess(const QString& txid, double amount);
+    void showBackendError(int status, const QString& reasonFailed);
+
     // UI components
     QVBoxLayout* m_mainLayout;
 

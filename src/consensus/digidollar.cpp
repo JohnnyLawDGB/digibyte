@@ -9,6 +9,7 @@
 #include <tinyformat.h>
 #include <primitives/transaction.h>
 #include <script/script.h>
+#include <digidollar/scripts.h>
 
 #include <algorithm>
 #include <sstream>
@@ -283,6 +284,14 @@ bool ExtractDDAmount(const CScript& script, CAmount& amount)
                 }
             }
         }
+    }
+
+    // Phase 1: For P2TR scripts, try metadata lookup
+    // (Phase 2 will use UTXO database for actual deployment)
+    DigiDollar::ScriptMetadata metadata;
+    if (DigiDollar::GetScriptMetadata(script, metadata)) {
+        amount = metadata.ddAmount;
+        return amount > 0;
     }
 
     return false;

@@ -3,6 +3,17 @@
 ## Overview
 This document outlines the complete implementation plan for DigiDollar Send/Receive functionality using Test-Driven Development (TDD) methodology. The goal is to achieve 100% working, tested send/receive operations that integrate seamlessly with the existing persistence layer.
 
+**Total Implementation**: 47 tasks across 9 phases
+- Phase 0: 3 tasks (terminology refactoring)
+- Phase 1: 5 tasks (coin selection)
+- Phase 2: 6 tasks (transaction building)
+- Phase 3: 3 tasks (signing)
+- Phase 4: 4 tasks (broadcasting)
+- Phase 5: 4 tasks (balance updates)
+- Phase 6: 5 tasks (receive operations)
+- Phase 7: 7 tasks (Qt/RPC integration)
+- Phase 8: 9 tasks (testing + final validation)
+
 ## Current State Analysis
 
 ### ✅ Already Implemented (COMPLETE)
@@ -155,25 +166,42 @@ This document outlines the complete implementation plan for DigiDollar Send/Rece
 ### Phase 2: Transaction Building (CORE LOGIC)
 **Goal**: Enable complete transfer transaction construction
 
-#### Task 2.1: Input Assembly
+#### Task 2.1: Enable TransferDigiDollar() Function
+- **Test**: Test that TransferDigiDollar() can be called without errors
+- **Impl**: Uncomment and integrate existing TransferDigiDollar() in digidollarwallet.cpp
+- **Verify**: Function compiles and links correctly with Phase 1 coin selection
+- **Files**: src/wallet/digidollarwallet.cpp
+- **Note**: Existing code is commented out, needs integration with new GetDDTimeLocks()
+
+#### Task 2.2: Input Assembly
 - **Test**: Test DD input creation from selected UTXOs
-- **Impl**: Build CTxIn objects from DD UTXOs
-- **Verify**: Inputs reference correct position outputs
+- **Impl**: Build CTxIn objects from DD UTXOs in TransferTxBuilder
+- **Verify**: Inputs reference correct time-lock outputs (vout[1])
+- **Files**: src/digidollar/txbuilder.cpp
 
-#### Task 2.2: Output Assembly
+#### Task 2.3: Output Assembly
 - **Test**: Test DD output creation for recipients
-- **Impl**: Create DD outputs with proper scripts and amounts
-- **Verify**: Outputs have correct DD amounts and addresses
+- **Impl**: Create DD outputs with proper P2TR scripts and amounts
+- **Verify**: Outputs have correct DD amounts and recipient addresses
+- **Files**: src/digidollar/txbuilder.cpp
 
-#### Task 2.3: Fee Calculation
+#### Task 2.4: Fee Calculation
 - **Test**: Test transaction fee estimation
-- **Impl**: Implement accurate fee calculation based on tx size
+- **Impl**: Implement accurate fee calculation based on tx size and fee rate
 - **Verify**: Fees match expected size-based calculation
+- **Files**: src/wallet/digidollarwallet.cpp, src/digidollar/txbuilder.cpp
 
-#### Task 2.4: Transaction Finalization
+#### Task 2.5: Change Output Creation
+- **Test**: Test DD change and DGB change outputs
+- **Impl**: Add change outputs to transaction when overpaying
+- **Verify**: Correct change amounts returned to sender
+- **Files**: src/digidollar/txbuilder.cpp
+
+#### Task 2.6: Transaction Finalization
 - **Test**: Test complete transaction structure
-- **Impl**: Assemble inputs, outputs, witnesses
-- **Verify**: Transaction passes basic validation
+- **Impl**: Assemble inputs, outputs, witnesses in TransferTxBuilder
+- **Verify**: Transaction passes basic validation (CheckTransaction)
+- **Files**: src/digidollar/txbuilder.cpp
 
 ### Phase 3: Transaction Signing (SECURITY CRITICAL)
 **Goal**: Properly sign all transaction inputs
@@ -262,6 +290,13 @@ This document outlines the complete implementation plan for DigiDollar Send/Rece
 - **Impl**: Record received transactions with metadata
 - **Verify**: History shows incoming transactions
 
+#### Task 6.5: Wallet Notification on Receive
+- **Test**: Test that wallet signals new DD transaction received
+- **Impl**: Emit NotifyDDTransactionChanged signal when DD received
+- **Verify**: Qt wallet updates UI when DD received
+- **Files**: src/wallet/digidollarwallet.cpp, src/qt/walletmodel.cpp
+- **Note**: Required for real-time UI updates
+
 ### Phase 7: Qt Wallet Integration (USER INTERFACE)
 **Goal**: Complete Qt send/receive UI functionality
 
@@ -294,6 +329,13 @@ This document outlines the complete implementation plan for DigiDollar Send/Rece
 - **Test**: Test transaction list refresh
 - **Impl**: Update transaction list after send/receive
 - **Verify**: New transactions appear in list
+
+#### Task 7.7: RPC Command Integration
+- **Test**: Test transferdigidollar RPC command works end-to-end
+- **Impl**: Ensure transferdigidollar RPC calls DigiDollarWallet::TransferDigiDollar()
+- **Verify**: Can send DD via RPC command from digibyte-cli
+- **Files**: src/rpc/digidollar_transactions.cpp
+- **Note**: RPC command already exists but may need updates after Phase 2 changes
 
 ### Phase 8: Comprehensive Testing (QUALITY ASSURANCE)
 **Goal**: Ensure complete test coverage for send/receive
@@ -338,6 +380,25 @@ This document outlines the complete implementation plan for DigiDollar Send/Rece
 - Test high-volume sends
 - Test concurrent transactions
 - Test large transaction sizes
+
+#### Task 8.9: End-to-End Validation (FINAL VERIFICATION)
+- **Test**: Complete send/receive flow in Qt wallet on regtest
+- **Steps**:
+  1. Start fresh regtest node with Qt wallet
+  2. Mine blocks to activate DigiDollar (650+ blocks)
+  3. Mint 1000 DD in Wallet A
+  4. Start second Qt wallet (Wallet B)
+  5. Get DD receive address from Wallet B
+  6. Send 500 DD from Wallet A to Wallet B
+  7. Verify Wallet A balance: 500 DD remaining
+  8. Verify Wallet B balance: 500 DD received
+  9. Restart both wallets
+  10. Verify balances persist correctly
+  11. Verify transaction history in both wallets
+  12. Send 250 DD from Wallet B back to Wallet A
+  13. Verify final balances: A=750 DD, B=250 DD
+- **Verify**: ALL functional requirements from Success Criteria pass
+- **Critical**: This is the FINAL validation before declaring success
 
 ## Critical Dependencies
 

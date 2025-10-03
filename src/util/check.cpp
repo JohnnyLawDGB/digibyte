@@ -20,7 +20,7 @@ std::string StrFormatInternalBug(std::string_view msg, std::string_view file, in
     return strprintf("Internal bug detected: %s\n%s:%d (%s)\n"
                      "%s %s\n"
                      "Please report this issue here: %s\n",
-                     msg, file, line, func, PACKAGE_NAME, FormatFullVersion(), PACKAGE_BUGREPORT);
+                     msg, file, line, func, CLIENT_NAME, FormatFullVersion(), "https://github.com/DigiByte-Core/digibyte/issues");
 }
 
 NonFatalCheckError::NonFatalCheckError(std::string_view msg, std::string_view file, int line, std::string_view func)

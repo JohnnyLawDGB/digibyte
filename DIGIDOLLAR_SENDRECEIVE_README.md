@@ -11,7 +11,7 @@ Implement 100% functional, tested DigiDollar send/receive functionality that:
 - ✅ Works in Qt wallet GUI
 - ✅ Passes all tests
 
-## 📚 Complete Documentation (8 Files)
+## 📚 Complete Documentation (11 Files)
 
 ### 1. **INDEX.md** - Start Here
 Navigation guide for all documentation.
@@ -25,15 +25,22 @@ Quick reference and overview of the project.
 cat DIGIDOLLAR_SENDRECEIVE_SUMMARY.md
 ```
 
-### 3. **TASKS.md** - Task List ⭐ CRITICAL
-40+ tasks across 8 phases with dependencies.
+### 3. **IMPLEMENTATION_CHECKLIST.md** - Master Checklist ⭐ NEW
+47 tasks across 9 phases with completion checkboxes.
+```bash
+cat DIGIDOLLAR_SENDRECEIVE_IMPLEMENTATION_CHECKLIST.md
+```
+
+### 4. **TASKS.md** - Task List ⭐ CRITICAL
+47 tasks across 9 phases with full details and dependencies.
 ```bash
 cat DIGIDOLLAR_SENDRECEIVE_TASKS.md
 ```
 
-### 4. **ORCHESTRATOR.md** - For Orchestrator Agent
+### 5. **ORCHESTRATOR.md** - For Orchestrator Agent
 Instructions for managing sub-agents and enforcing TDD.
 **MUST READ**:
+- DIGIDOLLAR_SENDRECEIVE_IMPLEMENTATION_CHECKLIST.md
 - DIGIDOLLAR_SENDRECEIVE_TASKS.md
 - DIGIDOLLAR_SENDRECEIVE_EXPLAINER.md
 - DIGIDOLLAR_DB_PERSISTENCE_EXPLAINER.md
@@ -41,7 +48,7 @@ Instructions for managing sub-agents and enforcing TDD.
 cat DIGIDOLLAR_SENDRECEIVE_ORCHESTRATOR.md
 ```
 
-### 5. **SUBAGENT.md** - For Sub-Agents
+### 6. **SUBAGENT.md** - For Sub-Agents
 TDD process, code patterns, integration requirements.
 **MUST INTEGRATE WITH**:
 - Existing persistence layer (WalletBatch, wallet.dat)
@@ -51,19 +58,19 @@ TDD process, code patterns, integration requirements.
 cat DIGIDOLLAR_SENDRECEIVE_SUBAGENT.md
 ```
 
-### 6. **TDD_GUIDE.md** - Methodology
+### 7. **TDD_GUIDE.md** - Methodology
 Detailed TDD examples for each phase.
 ```bash
 cat DIGIDOLLAR_SENDRECEIVE_TDD_GUIDE.md
 ```
 
-### 7. **EXPLAINER.md** - Architecture
+### 8. **EXPLAINER.md** - Architecture
 System design, data flow, integration points.
 ```bash
 cat DIGIDOLLAR_SENDRECEIVE_EXPLAINER.md
 ```
 
-### 8. **VERIFICATION.md** - Final Checklist ✅
+### 9. **VERIFICATION.md** - Final Checklist ✅
 Complete verification checklist for declaring done.
 ```bash
 cat DIGIDOLLAR_SENDRECEIVE_VERIFICATION.md
@@ -88,9 +95,9 @@ Mint Transaction creates:
 ```
 
 ### Function Naming
-- `GetPositions()` → Returns DD time-locks (existing function, understand it returns time-locks)
-- `position_id` → timelock_id (in new code)
-- `WalletCollateralPosition` → Represents a DD time-lock
+- `GetDDTimeLocks()` → Returns DD time-locks (RENAMED from GetPositions in Phase 0)
+- `dd_timelock_id` → Time-lock transaction ID (RENAMED from position_id in Phase 0)
+- `WalletCollateralPosition` → Represents a DD time-lock (struct name unchanged for compatibility)
 
 ### In Documentation/Comments
 Always say: "Time-Locked DGB backing DD" or "DD time-lock"
@@ -103,8 +110,8 @@ Never say: "position" (unless referring to existing code variable names)
 // Database operations (wallet.dat)
 WalletBatch batch(database);
 
-// Write position
-batch.WritePosition(position);
+// Write DD time-lock (renamed from WritePosition in Phase 0)
+batch.WriteDDTimeLock(timelock);
 
 // Write balance
 batch.WriteDDBalance(address, amount);
@@ -123,19 +130,19 @@ Mint Transaction:
 └─ vout[1]: DigiDollar (DD, spendable) ← THIS IS THE DD UTXO
 
 To spend DD:
-COutPoint dd_utxo(position_id, 1);  // Always index 1!
+COutPoint dd_utxo(dd_timelock_id, 1);  // Always index 1!
 ```
 
-### Position Tracking
+### DD Time-Lock Tracking
 ```cpp
-// Get active positions (in-memory cache)
-std::vector<WalletCollateralPosition> positions = GetPositions(true);
+// Get active DD time-locks (in-memory cache)
+std::vector<WalletCollateralPosition> timelocks = GetDDTimeLocks(true);
 
-// Each position has:
-position.position_id   // txid of mint transaction
-position.dd_amount     // DD amount in cents
-position.dgb_locked    // Collateral amount
-position.is_active     // true if not redeemed
+// Each time-lock has:
+timelock.dd_timelock_id   // txid of mint transaction (renamed from position_id)
+timelock.dd_amount        // DD amount in cents
+timelock.dgb_locked       // Time-Locked DGB collateral amount
+timelock.is_active        // true if not redeemed
 ```
 
 ## ✅ Success Criteria (ALL MUST PASS)

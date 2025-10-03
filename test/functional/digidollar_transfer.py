@@ -15,7 +15,6 @@ from test_framework.util import (
     assert_equal,
     assert_greater_than,
     assert_greater_than_or_equal,
-    assert_in,
     assert_raises_rpc_error,
     connect_nodes,
 )
@@ -283,7 +282,7 @@ class DigiDollarTransferTest(DigiByteTestFramework):
 
         # DGB fees should be minimal for DD transfers
         assert_greater_than_or_equal(dgb_decrease, Decimal('0'))  # Some fee is expected
-        assert_less_than(dgb_decrease, Decimal('0.01'))  # But should be very small
+        assert dgb_decrease < Decimal('0.01'), "DGB fee too high for DD transfer"  # But should be very small
 
     def test_network_propagation(self):
         """Test DD transfer propagation across the network."""
@@ -306,7 +305,7 @@ class DigiDollarTransferTest(DigiByteTestFramework):
 
         for i in range(self.num_nodes):
             mempool = self.nodes[i].getrawmempool()
-            assert_in(txid, mempool, f"Transaction not in node {i} mempool")
+            assert txid in mempool, f"Transaction not in node {i} mempool"
 
         # Mine block on different node and verify propagation
         self.nodes[2].generate(1)
@@ -335,7 +334,7 @@ class DigiDollarTransferTest(DigiByteTestFramework):
         # Balance should remain approximately the same (minus fees)
         final_balance = self.nodes[0].getdigidollarbalance()
         balance_diff = abs(final_balance - initial_balance)
-        assert_less_than(balance_diff, Decimal('1.00'))  # Allow for fees
+        assert balance_diff < Decimal('1.00'), "Balance changed too much for self-transfer"  # Allow for fees
 
         # Test very precise amounts
         precise_amounts = [

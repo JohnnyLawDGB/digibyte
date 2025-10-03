@@ -14,7 +14,7 @@ BOOST_AUTO_TEST_CASE(walletcollateralposition_serialize_roundtrip)
 {
     // Create original position
     WalletCollateralPosition original;
-    original.position_id = uint256S("0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef");
+    original.dd_timelock_id = uint256S("0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef");
     original.dd_minted = 10000;  // $100.00
     original.dgb_collateral = 500000;
     original.lock_tier = 3;
@@ -30,7 +30,7 @@ BOOST_AUTO_TEST_CASE(walletcollateralposition_serialize_roundtrip)
     stream >> deserialized;
 
     // Verify all fields match
-    BOOST_CHECK(deserialized.position_id == original.position_id);
+    BOOST_CHECK(deserialized.dd_timelock_id == original.dd_timelock_id);
     BOOST_CHECK_EQUAL(deserialized.dd_minted, original.dd_minted);
     BOOST_CHECK_EQUAL(deserialized.dgb_collateral, original.dgb_collateral);
     BOOST_CHECK_EQUAL(deserialized.lock_tier, original.lock_tier);

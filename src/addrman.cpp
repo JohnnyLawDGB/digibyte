@@ -6,6 +6,7 @@
 #include <addrman.h>
 #include <addrman_impl.h>
 
+#include <clientversion.h>
 #include <hash.h>
 #include <logging.h>
 #include <logging/timer.h>
@@ -251,7 +252,7 @@ void AddrManImpl::Unserialize(Stream& s_)
         throw InvalidAddrManVersionError(strprintf(
             "Unsupported format of addrman database: %u. It is compatible with formats >=%u, "
             "but the maximum supported by this version of %s is %u.",
-            uint8_t{format}, lowest_compatible, PACKAGE_NAME, uint8_t{FILE_FORMAT}));
+            uint8_t{format}, lowest_compatible, CLIENT_NAME, uint8_t{FILE_FORMAT}));
     }
 
     s >> nKey;

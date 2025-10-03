@@ -18,7 +18,7 @@ BOOST_AUTO_TEST_CASE(walletbatch_write_position)
 
     // Create test position
     WalletCollateralPosition pos;
-    pos.position_id = uint256S("0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef");
+    pos.dd_timelock_id = uint256S("0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef");
     pos.dd_minted = 10000;
     pos.dgb_collateral = 500000;
     pos.lock_tier = 3;
@@ -26,7 +26,7 @@ BOOST_AUTO_TEST_CASE(walletbatch_write_position)
     pos.is_active = true;
 
     // Write (WILL FAIL - method doesn't exist)
-    BOOST_CHECK(batch.WritePosition(pos));
+    BOOST_CHECK(batch.WriteDDTimeLock(pos));
 }
 
 BOOST_AUTO_TEST_CASE(walletbatch_write_ddtransaction)
@@ -95,14 +95,14 @@ BOOST_AUTO_TEST_CASE(walletbatch_write_read_roundtrip)
     {
         wallet::WalletBatch batch(*database);
         WalletCollateralPosition pos;
-        pos.position_id = uint256S("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        pos.dd_timelock_id = uint256S("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
         pos.dd_minted = 50000;
         pos.dgb_collateral = 2500000;
         pos.lock_tier = 5;
         pos.unlock_height = 200000;
         pos.is_active = true;
 
-        BOOST_CHECK(batch.WritePosition(pos));
+        BOOST_CHECK(batch.WriteDDTimeLock(pos));
     }
 
     // Read position back (will be implemented in Phase 2, Task 2.2)
@@ -117,21 +117,21 @@ BOOST_AUTO_TEST_CASE(walletbatch_read_position)
 
     // Write position
     WalletCollateralPosition original;
-    original.position_id = uint256S("0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef");
+    original.dd_timelock_id = uint256S("0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef");
     original.dd_minted = 10000;
     original.dgb_collateral = 500000;
     original.lock_tier = 3;
     original.unlock_height = 100000;
     original.is_active = true;
 
-    BOOST_REQUIRE(batch.WritePosition(original));
+    BOOST_REQUIRE(batch.WriteDDTimeLock(original));
 
     // Read position (WILL FAIL - method doesn't exist)
     WalletCollateralPosition read_pos;
-    BOOST_CHECK(batch.ReadPosition(original.position_id, read_pos));
+    BOOST_CHECK(batch.ReadDDTimeLock(original.dd_timelock_id, read_pos));
 
     // Verify all fields match
-    BOOST_CHECK_EQUAL(read_pos.position_id, original.position_id);
+    BOOST_CHECK_EQUAL(read_pos.dd_timelock_id, original.dd_timelock_id);
     BOOST_CHECK_EQUAL(read_pos.dd_minted, original.dd_minted);
     BOOST_CHECK_EQUAL(read_pos.dgb_collateral, original.dgb_collateral);
     BOOST_CHECK_EQUAL(read_pos.lock_tier, original.lock_tier);
@@ -246,7 +246,7 @@ BOOST_AUTO_TEST_CASE(walletbatch_read_nonexistent)
     WalletCollateralPosition pos;
 
     // Should return false for non-existent key
-    BOOST_CHECK(!batch.ReadPosition(fake_id, pos));
+    BOOST_CHECK(!batch.ReadDDTimeLock(fake_id, pos));
 
     // Try to read non-existent transaction
     uint256 fake_txid = uint256S("0x1111111111111111111111111111111111111111111111111111111111111111");
@@ -277,25 +277,25 @@ BOOST_AUTO_TEST_CASE(walletbatch_erase_position)
 
     // Write position
     WalletCollateralPosition pos;
-    pos.position_id = uint256S("0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef");
+    pos.dd_timelock_id = uint256S("0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef");
     pos.dd_minted = 10000;
     pos.dgb_collateral = 500000;
     pos.lock_tier = 3;
     pos.unlock_height = 100000;
     pos.is_active = true;
 
-    BOOST_REQUIRE(batch.WritePosition(pos));
+    BOOST_REQUIRE(batch.WriteDDTimeLock(pos));
 
     // Verify it exists
     WalletCollateralPosition read_pos;
-    BOOST_CHECK(batch.ReadPosition(pos.position_id, read_pos));
+    BOOST_CHECK(batch.ReadDDTimeLock(pos.dd_timelock_id, read_pos));
 
     // Erase it (WILL FAIL - method doesn't exist)
-    BOOST_CHECK(batch.ErasePosition(pos.position_id));
+    BOOST_CHECK(batch.EraseDDTimeLock(pos.dd_timelock_id));
 
     // Verify it's gone
     WalletCollateralPosition deleted_pos;
-    BOOST_CHECK(!batch.ReadPosition(pos.position_id, deleted_pos));
+    BOOST_CHECK(!batch.ReadDDTimeLock(pos.dd_timelock_id, deleted_pos));
 }
 
 BOOST_AUTO_TEST_CASE(walletbatch_erase_ddtransaction)
@@ -381,7 +381,7 @@ BOOST_AUTO_TEST_CASE(walletbatch_erase_nonexistent)
 
     // Erase non-existent position should return true (like Bitcoin Core behavior)
     uint256 fake_id = uint256S("0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef");
-    BOOST_CHECK(batch.ErasePosition(fake_id));
+    BOOST_CHECK(batch.EraseDDTimeLock(fake_id));
 }
 
 BOOST_AUTO_TEST_CASE(walletbatch_complete_lifecycle)
@@ -391,25 +391,25 @@ BOOST_AUTO_TEST_CASE(walletbatch_complete_lifecycle)
 
     // Test complete lifecycle: Write → Read → Erase → Verify Gone
     WalletCollateralPosition pos;
-    pos.position_id = uint256S("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+    pos.dd_timelock_id = uint256S("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
     pos.dd_minted = 20000;
     pos.dgb_collateral = 1000000;
     pos.lock_tier = 5;
 
     // Write
-    BOOST_CHECK(batch.WritePosition(pos));
+    BOOST_CHECK(batch.WriteDDTimeLock(pos));
 
     // Read and verify
     WalletCollateralPosition read1;
-    BOOST_REQUIRE(batch.ReadPosition(pos.position_id, read1));
+    BOOST_REQUIRE(batch.ReadDDTimeLock(pos.dd_timelock_id, read1));
     BOOST_CHECK_EQUAL(read1.dd_minted, 20000);
 
     // Erase
-    BOOST_CHECK(batch.ErasePosition(pos.position_id));
+    BOOST_CHECK(batch.EraseDDTimeLock(pos.dd_timelock_id));
 
     // Verify gone
     WalletCollateralPosition read2;
-    BOOST_CHECK(!batch.ReadPosition(pos.position_id, read2));
+    BOOST_CHECK(!batch.ReadDDTimeLock(pos.dd_timelock_id, read2));
 }
 
 BOOST_AUTO_TEST_SUITE_END()

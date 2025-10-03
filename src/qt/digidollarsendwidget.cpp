@@ -10,6 +10,7 @@
 #include <qt/digibyteunits.h>
 #include <consensus/amount.h>
 #include <base58.h>
+#include <logging.h>
 
 #include <QLabel>
 #include <QLineEdit>
@@ -29,6 +30,8 @@
 #include <QSpacerItem>
 #include <QSizePolicy>
 #include <QPalette>
+#include <QProgressDialog>
+#include <QAbstractButton>
 
 DigiDollarSendWidget::DigiDollarSendWidget(QWidget *parent) :
     QWidget(parent),
@@ -413,97 +416,83 @@ void DigiDollarSendWidget::onAmountChanged()
 
 void DigiDollarSendWidget::onSendClicked()
 {
-    if (!validateAddress() || !validateAmount() || !validateBalance()) {
-        // Show specific error message
-        QString error;
-        if (!validateAddress()) {
-            error = tr("Please enter a valid DigiDollar address.");
-        } else if (!validateAmount()) {
-            error = tr("Please enter a valid amount (0.00000001 to 999,999,999.99999999 DD).");
-        } else if (!validateBalance()) {
-            error = tr("Insufficient balance. Total needed: %1 DD (including %2 DD fee).")
-                   .arg(formatDDAmount(m_amountEdit->text().toDouble() + m_estimatedFee))
-                   .arg(formatDDAmount(m_estimatedFee));
-        }
+    // PHASE 7.3: Comprehensive input validation with user-friendly messages
+    QString address = m_addressEdit->text().trimmed();
+    QString amountText = m_amountEdit->text().trimmed();
 
-        Q_EMIT message(tr("Invalid Input"), error, QMessageBox::Warning);
+    // Error: Empty fields
+    if (address.isEmpty()) {
+        showError(tr("Missing Address"),
+                  tr("Please enter a DigiDollar address.\n\nThe recipient's DD address is required to send DigiDollar."));
+        m_addressEdit->setFocus();
         return;
     }
 
-    QString address = m_addressEdit->text();
-    QString amountText = m_amountEdit->text();
+    if (amountText.isEmpty()) {
+        showError(tr("Missing Amount"),
+                  tr("Please enter an amount to send.\n\nSpecify how much DigiDollar you want to send (e.g., 100.00)."));
+        m_amountEdit->setFocus();
+        return;
+    }
+
+    // Error: Invalid address format
+    if (!validateAddress()) {
+        showError(tr("Invalid DigiDollar Address"),
+                  tr("The address format is invalid.\n\n"
+                     "Valid DigiDollar addresses:\n"
+                     "• Start with DD (Mainnet)\n"
+                     "• Start with TD (Testnet)\n"
+                     "• Start with RD (Regtest)\n\n"
+                     "Please check the address and try again."));
+        m_addressEdit->setFocus();
+        return;
+    }
+
+    // Error: Invalid amount format
+    if (!validateAmount()) {
+        showError(tr("Invalid Amount"),
+                  tr("The amount is invalid.\n\n"
+                     "Valid amount format:\n"
+                     "• Positive number\n"
+                     "• Maximum 8 decimal places\n"
+                     "• Between 0.00000001 and 999,999,999 DD\n\n"
+                     "Please enter a valid amount."));
+        m_amountEdit->setFocus();
+        return;
+    }
+
     double amount = amountText.toDouble();
     double total = amount + m_estimatedFee;
 
-    // In a real implementation, this would create and broadcast the transaction
-    QMessageBox msgBox(this);
-    msgBox.setWindowTitle(tr("Confirm DigiDollar Transaction"));
-    msgBox.setText(tr("<b>Send %1 to:</b><br/>%2")
+    // Error: Insufficient balance
+    if (!validateBalance()) {
+        showError(tr("Insufficient DigiDollar Balance"),
+                  tr("You don't have enough DigiDollar for this transfer.\n\n"
+                     "Available balance: %1\n"
+                     "Amount to send: %2\n"
+                     "Transaction fee: %3\n"
+                     "Total required: %4\n\n"
+                     "Please enter a smaller amount or add more DD to your wallet.")
+                  .arg(formatDDAmount(m_availableBalance))
                   .arg(formatDDAmount(amount))
-                  .arg(address));
-    msgBox.setInformativeText(tr("<table>"
-                               "<tr><td>Amount:</td><td align='right'>%1</td></tr>"
-                               "<tr><td>Network fee:</td><td align='right'>%2</td></tr>"
-                               "<tr><td><b>Total:</b></td><td align='right'><b>%3</b></td></tr>"
-                               "<tr><td>USD Equivalent:</td><td align='right'>$%4</td></tr>"
-                               "</table>")
-                             .arg(formatDDAmount(amount))
-                             .arg(formatDDAmount(m_estimatedFee))
-                             .arg(formatDDAmount(total))
-                             .arg(QString::number(amount, 'f', 2)));
-    msgBox.setStandardButtons(QMessageBox::Yes | QMessageBox::No);
-    msgBox.setDefaultButton(QMessageBox::No);
-    msgBox.setIcon(QMessageBox::Question);
-
-    QAbstractButton* yesButton = msgBox.button(QMessageBox::Yes);
-    yesButton->setText(tr("&Send DigiDollar"));
-    QAbstractButton* noButton = msgBox.button(QMessageBox::No);
-    noButton->setText(tr("&Cancel"));
-
-    if (msgBox.exec() == QMessageBox::Yes) {
-        if (!m_walletModel) {
-            Q_EMIT message(tr("Error"), tr("No wallet model available"), QMessageBox::Critical);
-            return;
-        }
-
-        // Convert amount from double to CAmount (cents)
-        CAmount amountCents = static_cast<CAmount>(amount * 100);
-
-        // Call the wallet model to send DigiDollar
-        WalletModel::DigiDollarSendResult result = m_walletModel->sendDigiDollar(address, amountCents, "");
-
-        if (result.status == WalletModel::OK) {
-            Q_EMIT message(tr("Transaction Sent"),
-                        tr("DigiDollar transaction sent successfully!\n\nTransaction ID: %1")
-                        .arg(result.txid),
-                        QMessageBox::Information);
-            onClearClicked();
-            updateBalance(); // Refresh balance display
-        } else {
-            QString errorTitle;
-            QString errorMessage = result.reasonFailed;
-
-            switch (result.status) {
-            case WalletModel::InvalidAddress:
-                errorTitle = tr("Invalid Address");
-                break;
-            case WalletModel::InvalidAmount:
-                errorTitle = tr("Invalid Amount");
-                break;
-            case WalletModel::AmountExceedsBalance:
-                errorTitle = tr("Insufficient Balance");
-                break;
-            case WalletModel::TransactionCreationFailed:
-                errorTitle = tr("Transaction Failed");
-                break;
-            default:
-                errorTitle = tr("Send Error");
-                break;
-            }
-
-            Q_EMIT message(errorTitle, errorMessage, QMessageBox::Critical);
-        }
+                  .arg(formatDDAmount(m_estimatedFee))
+                  .arg(formatDDAmount(total)));
+        m_amountEdit->setFocus();
+        return;
     }
+
+    // PHASE 7.3: Wallet state validation
+    if (!checkWalletState()) {
+        return; // Error already displayed by checkWalletState()
+    }
+
+    // PHASE 7.2: Enhanced confirmation dialog with fee display
+    if (!showConfirmationDialog(address, amount)) {
+        return; // User cancelled
+    }
+
+    // PHASE 7.3: Execute transfer with progress indicator
+    executeTransfer(address, amount);
 }
 
 void DigiDollarSendWidget::onClearClicked()
@@ -609,6 +598,302 @@ QString DigiDollarSendWidget::formatDDAmount(double amount) const
 QString DigiDollarSendWidget::formatUSDAmount(double amount) const
 {
     return "$" + QString::number(amount, 'f', 2);
+}
+
+// PHASE 7.3: Error display helper
+void DigiDollarSendWidget::showError(const QString& title, const QString& message)
+{
+    QMessageBox msgBox(this);
+    msgBox.setIcon(QMessageBox::Critical);
+    msgBox.setWindowTitle(title);
+    msgBox.setText(message);
+    msgBox.setStandardButtons(QMessageBox::Ok);
+    msgBox.exec();
+
+    // Log for debugging
+    LogPrintf("DigiDollar GUI Error: %s - %s\n",
+              title.toStdString(), message.toStdString());
+}
+
+// PHASE 7.3: Warning display helper
+void DigiDollarSendWidget::showWarning(const QString& title, const QString& message)
+{
+    QMessageBox msgBox(this);
+    msgBox.setIcon(QMessageBox::Warning);
+    msgBox.setWindowTitle(title);
+    msgBox.setText(message);
+    msgBox.setStandardButtons(QMessageBox::Ok);
+    msgBox.exec();
+
+    // Log for debugging
+    LogPrintf("DigiDollar GUI Warning: %s - %s\n",
+              title.toStdString(), message.toStdString());
+}
+
+// PHASE 7.3: Wallet state validation
+bool DigiDollarSendWidget::checkWalletState()
+{
+    if (!m_walletModel) {
+        showError(tr("Wallet Error"),
+                  tr("Wallet is not available.\n\nPlease ensure your wallet is properly loaded."));
+        return false;
+    }
+
+    // Check if wallet is locked
+    WalletModel::EncryptionStatus encStatus = m_walletModel->getEncryptionStatus();
+    if (encStatus == WalletModel::Locked) {
+        // Prompt for unlock
+        WalletModel::UnlockContext ctx(m_walletModel->requestUnlock());
+        if (!ctx.isValid()) {
+            showWarning(tr("Wallet Locked"),
+                       tr("Your wallet is locked.\n\n"
+                          "Please unlock your wallet to send DigiDollar.\n\n"
+                          "Go to Settings > Unlock Wallet to unlock."));
+            return false;
+        }
+    }
+
+    // Check if DigiDollar wallet initialized (balance check serves as proxy)
+    if (m_availableBalance < 0) {
+        showError(tr("DigiDollar Not Available"),
+                 tr("DigiDollar wallet is not initialized.\n\n"
+                    "This may indicate a wallet initialization error."));
+        return false;
+    }
+
+    return true;
+}
+
+// PHASE 7.2: Enhanced confirmation dialog
+bool DigiDollarSendWidget::showConfirmationDialog(const QString& address, double amount)
+{
+    double total = amount + m_estimatedFee;
+    double usdEquivalent = amount * m_oraclePrice; // DD should be pegged to $1
+
+    // Create confirmation message with detailed breakdown
+    QString confirmMsg = tr(
+        "<b style='font-size: 14px;'>Confirm DigiDollar Transfer</b><br/><br/>"
+        "<table cellpadding='4' style='font-size: 12px;'>"
+        "<tr><td><b>Send to:</b></td><td style='font-family: monospace;'>%1</td></tr>"
+        "<tr><td colspan='2'><hr/></td></tr>"
+        "<tr><td><b>Amount:</b></td><td align='right'><b style='font-size: 13px;'>%2</b></td></tr>"
+        "<tr><td>Network Fee:</td><td align='right'>%3</td></tr>"
+        "<tr><td colspan='2'><hr/></td></tr>"
+        "<tr><td><b>Total Deducted:</b></td><td align='right'><b style='font-size: 13px;'>%4</b></td></tr>"
+        "<tr><td>USD Equivalent:</td><td align='right'>%5</td></tr>"
+        "</table><br/>"
+        "<span style='color: #666; font-size: 11px;'>This transaction cannot be reversed once sent.</span>"
+    ).arg(address)
+     .arg(formatDDAmount(amount))
+     .arg(formatDDAmount(m_estimatedFee))
+     .arg(formatDDAmount(total))
+     .arg(formatUSDAmount(usdEquivalent));
+
+    QMessageBox msgBox(this);
+    msgBox.setWindowTitle(tr("Confirm DigiDollar Transfer"));
+    msgBox.setText(confirmMsg);
+    msgBox.setStandardButtons(QMessageBox::Yes | QMessageBox::No);
+    msgBox.setDefaultButton(QMessageBox::No); // Safety: default to cancel
+    msgBox.setIcon(QMessageBox::Question);
+
+    // Customize button text
+    QAbstractButton* yesButton = msgBox.button(QMessageBox::Yes);
+    yesButton->setText(tr("&Send DigiDollar"));
+    QAbstractButton* noButton = msgBox.button(QMessageBox::No);
+    noButton->setText(tr("&Cancel"));
+
+    int result = msgBox.exec();
+
+    if (result == QMessageBox::Yes) {
+        LogPrintf("DigiDollar: User confirmed transfer of %f DD to %s\n",
+                  amount, address.toStdString());
+        return true;
+    } else {
+        LogPrintf("DigiDollar: User cancelled transfer\n");
+        return false;
+    }
+}
+
+// PHASE 7.3: Execute transfer with progress indicator and error handling
+void DigiDollarSendWidget::executeTransfer(const QString& address, double amount)
+{
+    // Show progress dialog
+    QProgressDialog progress(tr("Sending DigiDollar..."),
+                            tr("Cancel"), 0, 0, this);
+    progress.setWindowModality(Qt::WindowModal);
+    progress.setMinimumDuration(0); // Show immediately
+    progress.setCancelButton(nullptr); // No cancel during transfer
+    progress.show();
+    QApplication::processEvents(); // Force update
+
+    // Disable UI during transfer
+    m_sendButton->setEnabled(false);
+    m_addressEdit->setEnabled(false);
+    m_amountEdit->setEnabled(false);
+    m_clearButton->setEnabled(false);
+    m_useAvailableBalanceButton->setEnabled(false);
+
+    // Convert amount from double to CAmount (cents)
+    CAmount amountCents = static_cast<CAmount>(amount * 100);
+
+    // Call the wallet model to send DigiDollar
+    WalletModel::DigiDollarSendResult result = m_walletModel->sendDigiDollar(address, amountCents, "");
+
+    // Close progress dialog
+    progress.close();
+
+    // Re-enable UI
+    m_sendButton->setEnabled(true);
+    m_addressEdit->setEnabled(true);
+    m_amountEdit->setEnabled(true);
+    m_clearButton->setEnabled(true);
+    m_useAvailableBalanceButton->setEnabled(true);
+
+    // Handle result
+    if (result.status == WalletModel::OK) {
+        // Success!
+        showSuccess(result.txid, amount);
+        onClearClicked();
+        updateBalance(); // Refresh balance display
+    } else {
+        // Error occurred - map to user-friendly message
+        showBackendError(static_cast<int>(result.status), result.reasonFailed);
+    }
+}
+
+// PHASE 7.3: Success notification
+void DigiDollarSendWidget::showSuccess(const QString& txid, double amount)
+{
+    QString successMsg = tr(
+        "<b style='font-size: 14px; color: green;'>✓ DigiDollar Transfer Successful</b><br/><br/>"
+        "<table cellpadding='4' style='font-size: 12px;'>"
+        "<tr><td><b>Amount Sent:</b></td><td align='right'>%1</td></tr>"
+        "<tr><td><b>Transaction ID:</b></td><td style='font-family: monospace; font-size: 10px;'>%2</td></tr>"
+        "</table><br/>"
+        "<span style='color: #666; font-size: 11px;'>"
+        "Your transaction has been broadcast to the network.<br/>"
+        "It will be confirmed in the next block."
+        "</span>"
+    ).arg(formatDDAmount(amount))
+     .arg(txid);
+
+    QMessageBox msgBox(this);
+    msgBox.setWindowTitle(tr("Transfer Successful"));
+    msgBox.setText(successMsg);
+    msgBox.setIcon(QMessageBox::Information);
+    msgBox.setStandardButtons(QMessageBox::Ok);
+    msgBox.exec();
+
+    LogPrintf("DigiDollar: Transfer successful - txid: %s\n", txid.toStdString());
+}
+
+// PHASE 7.3: Backend error message mapping
+void DigiDollarSendWidget::showBackendError(int status, const QString& reasonFailed)
+{
+    QString errorTitle;
+    QString errorMessage;
+
+    // Map backend errors to user-friendly messages
+    switch (status) {
+    case WalletModel::InvalidAddress:
+        errorTitle = tr("Invalid Address");
+        errorMessage = tr(
+            "The recipient address is invalid.\n\n"
+            "Please check the address format and try again.\n\n"
+            "Technical details: %1"
+        ).arg(reasonFailed);
+        break;
+
+    case WalletModel::InvalidAmount:
+        errorTitle = tr("Invalid Amount");
+        errorMessage = tr(
+            "The transfer amount is invalid.\n\n"
+            "Please ensure the amount is:\n"
+            "• Greater than 0\n"
+            "• Within the maximum limit\n"
+            "• Properly formatted\n\n"
+            "Technical details: %1"
+        ).arg(reasonFailed);
+        break;
+
+    case WalletModel::AmountExceedsBalance:
+        errorTitle = tr("Insufficient Balance");
+        errorMessage = tr(
+            "You don't have enough DigiDollar for this transfer.\n\n"
+            "%1\n\n"
+            "Please:\n"
+            "• Enter a smaller amount, or\n"
+            "• Add more DD to your wallet"
+        ).arg(reasonFailed);
+        break;
+
+    case WalletModel::TransactionCreationFailed:
+        errorTitle = tr("Transaction Failed");
+
+        // Parse specific error types
+        if (reasonFailed.contains("locked", Qt::CaseInsensitive)) {
+            errorMessage = tr(
+                "Your wallet is locked.\n\n"
+                "Please unlock your wallet to send DigiDollar.\n\n"
+                "Go to Settings > Unlock Wallet"
+            );
+        } else if (reasonFailed.contains("coin selection", Qt::CaseInsensitive) ||
+                   reasonFailed.contains("SelectDDCoins", Qt::CaseInsensitive)) {
+            errorMessage = tr(
+                "Unable to select DigiDollar for transfer.\n\n"
+                "This may occur if:\n"
+                "• Your DD is locked in pending transactions\n"
+                "• The requested amount requires too many inputs\n\n"
+                "Please try:\n"
+                "• Waiting for pending transactions to confirm\n"
+                "• Sending a smaller amount\n\n"
+                "Technical details: %1"
+            ).arg(reasonFailed);
+        } else if (reasonFailed.contains("signing", Qt::CaseInsensitive)) {
+            errorMessage = tr(
+                "Transaction signing failed.\n\n"
+                "Please ensure:\n"
+                "• Your wallet is unlocked\n"
+                "• You have the required private keys\n\n"
+                "Technical details: %1"
+            ).arg(reasonFailed);
+        } else if (reasonFailed.contains("mempool", Qt::CaseInsensitive) ||
+                   reasonFailed.contains("broadcast", Qt::CaseInsensitive)) {
+            errorMessage = tr(
+                "Transaction was rejected by the network.\n\n"
+                "This may occur if:\n"
+                "• Network fees are too low\n"
+                "• The transaction conflicts with another\n"
+                "• Network connectivity issues\n\n"
+                "Please try:\n"
+                "• Waiting a few moments and trying again\n"
+                "• Checking your network connection\n\n"
+                "Technical details: %1"
+            ).arg(reasonFailed);
+        } else {
+            // Generic transaction failure
+            errorMessage = tr(
+                "Failed to create or send the transaction.\n\n"
+                "Technical details: %1\n\n"
+                "If this problem persists, please check:\n"
+                "• Wallet synchronization status\n"
+                "• Network connection\n"
+                "• Available DigiDollar balance"
+            ).arg(reasonFailed);
+        }
+        break;
+
+    default:
+        errorTitle = tr("Transfer Error");
+        errorMessage = tr(
+            "An unexpected error occurred during transfer.\n\n"
+            "Error details: %1\n\n"
+            "Please try again or contact support if the issue persists."
+        ).arg(reasonFailed);
+        break;
+    }
+
+    showError(errorTitle, errorMessage);
 }
 
 void DigiDollarSendWidget::updateAddressValidation()

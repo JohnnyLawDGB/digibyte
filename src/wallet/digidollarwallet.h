@@ -70,7 +70,7 @@ struct WalletDDBalance {
 };
 
 struct WalletCollateralPosition {
-    uint256 position_id;  // txid of mint tx
+    uint256 dd_timelock_id;  // txid of mint tx
     CAmount dd_minted;
     CAmount dgb_collateral;
     uint32_t lock_tier;
@@ -80,17 +80,30 @@ struct WalletCollateralPosition {
     WalletCollateralPosition()
         : dd_minted(0), dgb_collateral(0), lock_tier(0), unlock_height(0), is_active(false) {}
     WalletCollateralPosition(const uint256& id, CAmount dd, CAmount dgb, uint32_t tier, int64_t height)
-        : position_id(id), dd_minted(dd), dgb_collateral(dgb), lock_tier(tier), unlock_height(height), is_active(true) {}
+        : dd_timelock_id(id), dd_minted(dd), dgb_collateral(dgb), lock_tier(tier), unlock_height(height), is_active(true) {}
 
     SERIALIZE_METHODS(WalletCollateralPosition, obj)
     {
-        READWRITE(obj.position_id);
+        READWRITE(obj.dd_timelock_id);
         READWRITE(obj.dd_minted);
         READWRITE(obj.dgb_collateral);
         READWRITE(obj.lock_tier);
         READWRITE(obj.unlock_height);
         READWRITE(obj.is_active);
     }
+};
+
+/**
+ * Represents a spendable DigiDollar UTXO
+ * DD UTXOs are always at output index 1 of DDTimeLock mint transactions
+ */
+struct DDUtxo {
+    COutPoint outpoint;     // UTXO reference (dd_timelock_id, 1)
+    CAmount dd_amount;      // DD amount in cents
+    bool is_spendable;      // Always true for active DDTimeLocks
+
+    DDUtxo(const COutPoint& out, CAmount amt)
+        : outpoint(out), dd_amount(amt), is_spendable(true) {}
 };
 
 /**
@@ -138,19 +151,19 @@ public:
     bool WriteDDBalance(const CDigiDollarAddress& addr, const CAmount& balance);
 
     /**
-     * Write collateral position to wallet database
-     * @param position Collateral position data
+     * Write DDTimeLock (time-locked DGB backing DigiDollars) to wallet database
+     * @param position DDTimeLock data (collateral position)
      * @return true if write successful
      */
-    bool WritePosition(const WalletCollateralPosition& position);
+    bool WriteDDTimeLock(const WalletCollateralPosition& position);
 
     /**
      * Update position active status
-     * @param position_id Position identifier
+     * @param dd_timelock_id Position identifier
      * @param active New active status
      * @return true if update successful
      */
-    bool UpdatePositionStatus(const uint256& position_id, bool active);
+    bool UpdatePositionStatus(const uint256& dd_timelock_id, bool active);
 
     // ====================================================================
     // PHASE 5 TASK 5.2: BALANCE TRACKING FUNCTIONS
@@ -183,11 +196,25 @@ public:
     CAmount GetLockedCollateral() const;
 
     /**
-     * Get list of collateral positions
-     * @param active_only Only return active positions if true
-     * @return Vector of collateral positions
+     * Get list of DigiDollar Time-Locked DGB vaults (DDTimeLocks)
+     * These are Time-Locked DGB backing DigiDollar value
+     * @param active_only Only return active time locks if true
+     * @return Vector of DDTimeLock positions
      */
-    std::vector<WalletCollateralPosition> GetPositions(bool active_only = true) const;
+    std::vector<WalletCollateralPosition> GetDDTimeLocks(bool active_only = true) const;
+
+    /**
+     * Get all spendable DigiDollar UTXOs from active DDTimeLocks
+     * @return Vector of DD UTXOs (output index 1 of each DDTimeLock)
+     */
+    std::vector<DDUtxo> GetDDUTXOs() const;
+
+    /**
+     * Get DD amount from UTXO using DDTimeLock cache
+     * @param outpoint UTXO outpoint (should be dd_timelock_id with n=1)
+     * @return DD amount in cents, or 0 if UTXO not found or invalid
+     */
+    CAmount GetDDFromUTXO(const COutPoint& outpoint) const;
 
     /**
      * Add a collateral position to the wallet
@@ -219,12 +246,12 @@ public:
 
     /**
      * Create redemption transaction using transaction builders
-     * @param position_id Position to redeem
+     * @param dd_timelock_id Position to redeem
      * @param amount Amount of DD to redeem
      * @param tx_out Output transaction reference
      * @return true if transaction created successfully
      */
-    bool RedeemDigiDollar(const uint256& position_id, const CAmount& amount, CTransactionRef& tx_out);
+    bool RedeemDigiDollar(const uint256& dd_timelock_id, const CAmount& amount, CTransactionRef& tx_out);
 
     /**
      * Transfer DigiDollars to another address
@@ -316,6 +343,75 @@ public:
      */
     CAmount GetDGBBalance() const;
 
+    // ====================================================================
+    // PHASE 5.2: UTXO SET UPDATE FUNCTIONS
+    // ====================================================================
+
+    /**
+     * Mark DD UTXOs as spent after transaction committed
+     * @param spent_utxos Vector of UTXOs that were consumed as inputs
+     * @return true if UTXOs marked successfully
+     */
+    bool MarkDDUTXOsSpent(const std::vector<COutPoint>& spent_utxos);
+
+    /**
+     * Add new DD UTXO from change output
+     * @param tx The committed transaction
+     * @param change_vout Index of change output in transaction
+     * @param dd_amount DD amount in change output
+     * @return true if UTXO added successfully
+     */
+    bool AddDDChangeUTXO(const CTransactionRef& tx, uint32_t change_vout, CAmount dd_amount);
+
+    /**
+     * Complete UTXO set update after transfer
+     * Marks inputs spent, adds change output
+     * @param tx The committed transaction
+     * @param input_utxos DD UTXOs used as inputs
+     * @param change_vout Index of change output (-1 if no change)
+     * @param change_amount DD amount in change output
+     * @return true if update successful
+     */
+    bool UpdateDDUTXOSet(const CTransactionRef& tx,
+                         const std::vector<COutPoint>& input_utxos,
+                         int change_vout,
+                         CAmount change_amount);
+
+    // ====================================================================
+    // PHASE 5.3: DDTIMELOCK STATUS MANAGEMENT FUNCTIONS
+    // ====================================================================
+
+    /**
+     * Update DDTimeLock status after DD transfer or redemption
+     * @param dd_timelock_id The DDTimeLock position ID
+     * @param new_status New active status (true = active, false = fully redeemed)
+     * @return true if status updated successfully
+     */
+    bool UpdateDDTimeLockStatus(const uint256& dd_timelock_id, bool new_status);
+
+    /**
+     * Track partial DD redemption from a DDTimeLock
+     * @param dd_timelock_id The DDTimeLock position ID
+     * @param dd_redeemed Amount of DD redeemed
+     * @return true if partial redemption tracked successfully
+     */
+    bool TrackPartialRedemption(const uint256& dd_timelock_id, CAmount dd_redeemed);
+
+    /**
+     * Get DDTimeLock lifecycle status
+     * @param dd_timelock_id The DDTimeLock position ID
+     * @return Status string: "active", "partially_redeemed", "fully_redeemed", "not_found"
+     */
+    std::string GetDDTimeLockStatus(const uint256& dd_timelock_id) const;
+
+    /**
+     * Check if DDTimeLock is redeemable (unlocked and has DD remaining)
+     * @param dd_timelock_id The DDTimeLock position ID
+     * @param current_height Current blockchain height
+     * @return true if redeemable
+     */
+    bool IsDDTimeLockRedeemable(const uint256& dd_timelock_id, int current_height) const;
+
     // Test/mock functions
     void SetMockBalance(CAmount balance) { mockBalance = balance; }
     void AddMockTransaction(const DDTransaction& tx) { mockHistory.push_back(tx); }
@@ -329,16 +425,88 @@ public:
     size_t GetPositionCount() const { return collateral_positions.size(); }
     void ClearWalletData();
 
+    // Coin selection and fee calculation helpers (public for testing and integration)
+    bool SelectDDCoins(const CAmount& target_amount, std::vector<COutPoint>& selected_utxos, CAmount& selected_total) const;
+    bool SelectFeeCoins(const CAmount& fee_amount, std::vector<COutPoint>& selected_utxos, CAmount& selected_total) const;
+    CAmount CalculateTransactionFee(const CMutableTransaction& tx) const;
+
+    // Phase 3.1: P2TR signing for DD inputs (Schnorr signatures)
+    bool SignDDInputs(CMutableTransaction& tx, const std::vector<COutPoint>& dd_utxos);
+
+    // Phase 3.2: Fee input signing (standard P2TR/P2WPKH DGB inputs)
+    bool SignFeeInputs(CMutableTransaction& tx,
+                       const std::vector<COutPoint>& fee_utxos,
+                       size_t dd_input_count);
+
+    // Phase 3.3: Complete transaction signing coordination
+    bool SignTransaction(CMutableTransaction& tx,
+                        const std::vector<COutPoint>& dd_utxos,
+                        const std::vector<COutPoint>& fee_utxos);
+
+    // Phase 4.1: Mempool submission
+    bool CommitDDTransaction(const CTransactionRef& tx, std::string& error);
+
+    // Phase 4.3: Confirmation tracking
+    /**
+     * Get confirmation count for DD transaction
+     * @param txid Transaction ID to check
+     * @return Number of confirmations (0 if unconfirmed or not found)
+     */
+    int GetDDTransactionConfirmations(const uint256& txid) const;
+
+    /**
+     * Update confirmation counts for all DD transactions when new block arrives
+     * @param block_hash Hash of the newly connected block
+     */
+    void UpdateDDConfirmations(const uint256& block_hash);
+
+    /**
+     * Get all unconfirmed DD transactions (0 confirmations)
+     * @return Vector of transaction IDs with 0 confirmations
+     */
+    std::vector<uint256> GetUnconfirmedDDTransactions() const;
+
+    // ====================================================================
+    // PHASE 6: RECEIVE OPERATIONS (Tasks 6.1-6.3)
+    // ====================================================================
+
+    /**
+     * Detect if transaction has DD outputs to our wallet (Task 6.1)
+     * Checks each transaction output to see if it's a DD output owned by this wallet
+     * @param tx Transaction to check
+     * @param our_dd_outputs Output: Vector of (vout_index, dd_amount) for our outputs
+     * @return true if any outputs are ours
+     */
+    bool DetectIncomingDDOutputs(const CTransactionRef& tx,
+                                 std::vector<std::pair<uint32_t, CAmount>>& our_dd_outputs);
+
+    /**
+     * Add received DD UTXO to spendable set (Task 6.3)
+     * Creates a WalletCollateralPosition for received DD (not from our mint)
+     * Similar to AddDDChangeUTXO() but for DD received from others
+     * @param tx The transaction containing the DD output
+     * @param vout_index Index of DD output we received
+     * @param dd_amount DD amount received
+     * @return true if UTXO added successfully
+     */
+    bool AddReceivedDDUTXO(const CTransactionRef& tx, uint32_t vout_index, CAmount dd_amount);
+
+    /**
+     * Process incoming DD transaction (Tasks 6.1-6.3 combined)
+     * Main coordinator for receiving DD:
+     * 1. Detects DD outputs to our wallet
+     * 2. Credits balance (automatic via UTXO-derived approach)
+     * 3. Adds received UTXOs to spendable set
+     * @param tx The incoming transaction
+     * @return true if processing successful
+     */
+    bool ProcessIncomingDDTransaction(const CTransactionRef& tx);
+
 protected:
     // Internal helper functions for Phase 5
     bool ValidateMintParams(const CAmount& dd_amount, uint32_t lock_tier) const;
     bool ValidateTransferParams(const CDigiDollarAddress& to, const CAmount& amount) const;
-    bool ValidateRedeemParams(const uint256& position_id, const CAmount& amount) const;
-
-    // Coin selection and fee calculation helpers
-    bool SelectDDCoins(const CAmount& target_amount, std::vector<COutPoint>& selected_utxos, CAmount& selected_total) const;
-    bool SelectFeeCoins(const CAmount& fee_amount, std::vector<COutPoint>& selected_utxos, CAmount& selected_total) const;
-    CAmount CalculateTransactionFee(const CMutableTransaction& tx) const;
+    bool ValidateRedeemParams(const uint256& dd_timelock_id, const CAmount& amount) const;
 
 private:
     /**

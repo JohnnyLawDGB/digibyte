@@ -461,7 +461,7 @@ void DigiDollarPositionsWidget::loadPositionsFromWallet()
         DigiDollarPosition pos;
 
         // Position ID (use txid as string)
-        pos.positionId = QString::fromStdString(wp.position_id.ToString());
+        pos.positionId = QString::fromStdString(wp.dd_timelock_id.ToString());
 
         // DD minted (convert from cents to DD with 8 decimals)
         pos.ddMinted = wp.dd_minted / 100.0; // cents to dollars
@@ -841,7 +841,7 @@ std::vector<WalletCollateralPosition> DigiDollarPositionsWidget::GetWalletPositi
     // Access DigiDollarWallet directly from wallet model
     DigiDollarWallet* ddWallet = m_walletModel->wallet().getDigiDollarWallet();
     if (ddWallet) {
-        positions = ddWallet->GetPositions(true); // active positions only
+        positions = ddWallet->GetDDTimeLocks(true); // active time locks only
     }
 
     return positions;

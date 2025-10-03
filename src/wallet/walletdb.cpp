@@ -310,17 +310,17 @@ bool WalletBatch::EraseLockedUTXO(const COutPoint& output)
 }
 
 // DigiDollar persistence write methods
-bool WalletBatch::WritePosition(const WalletCollateralPosition& position)
+bool WalletBatch::WriteDDTimeLock(const WalletCollateralPosition& position)
 {
-    if (position.position_id.IsNull()) {
-        return error("DigiDollar: Cannot write position with null ID");
+    if (position.dd_timelock_id.IsNull()) {
+        return error("DigiDollar: Cannot write DDTimeLock with null ID");
     }
 
-    bool success = WriteIC(std::make_pair(DBKeys::DD_POSITION, position.position_id), position);
+    bool success = WriteIC(std::make_pair(DBKeys::DD_POSITION, position.dd_timelock_id), position);
 
     if (success) {
-        LogPrint(BCLog::WALLETDB, "DigiDollar: Wrote position %s to database (minted=%d, collateral=%d, tier=%d)\n",
-                 position.position_id.ToString(), position.dd_minted, position.dgb_collateral, position.lock_tier);
+        LogPrint(BCLog::WALLETDB, "DigiDollar: Wrote DDTimeLock %s to database (minted=%d, collateral=%d, tier=%d)\n",
+                 position.dd_timelock_id.ToString(), position.dd_minted, position.dgb_collateral, position.lock_tier);
     }
 
     return success;
@@ -393,18 +393,18 @@ bool WalletBatch::WriteDDMetadata(const std::string& key, const std::string& val
 }
 
 // DigiDollar persistence read methods
-bool WalletBatch::ReadPosition(const uint256& position_id, WalletCollateralPosition& position)
+bool WalletBatch::ReadDDTimeLock(const uint256& dd_timelock_id, WalletCollateralPosition& position)
 {
-    if (position_id.IsNull()) {
-        LogPrint(BCLog::WALLETDB, "DigiDollar: Cannot read position with null ID\n");
+    if (dd_timelock_id.IsNull()) {
+        LogPrint(BCLog::WALLETDB, "DigiDollar: Cannot read DDTimeLock with null ID\n");
         return false;
     }
 
-    bool success = m_batch->Read(std::make_pair(DBKeys::DD_POSITION, position_id), position);
+    bool success = m_batch->Read(std::make_pair(DBKeys::DD_POSITION, dd_timelock_id), position);
 
     if (success) {
-        LogPrint(BCLog::WALLETDB, "DigiDollar: Read position %s from database (DD: %d, DGB: %d)\n",
-                 position_id.ToString(), position.dd_minted, position.dgb_collateral);
+        LogPrint(BCLog::WALLETDB, "DigiDollar: Read DDTimeLock %s from database (DD: %d, DGB: %d)\n",
+                 dd_timelock_id.ToString(), position.dd_minted, position.dgb_collateral);
     }
 
     return success;
@@ -477,18 +477,18 @@ bool WalletBatch::ReadDDMetadata(const std::string& key, std::string& value)
 }
 
 // DigiDollar persistence erase methods
-bool WalletBatch::ErasePosition(const uint256& position_id)
+bool WalletBatch::EraseDDTimeLock(const uint256& dd_timelock_id)
 {
-    if (position_id.IsNull()) {
-        LogPrint(BCLog::WALLETDB, "DigiDollar: Cannot erase position with null ID\n");
+    if (dd_timelock_id.IsNull()) {
+        LogPrint(BCLog::WALLETDB, "DigiDollar: Cannot erase DDTimeLock with null ID\n");
         return false;
     }
 
-    bool success = EraseIC(std::make_pair(DBKeys::DD_POSITION, position_id));
+    bool success = EraseIC(std::make_pair(DBKeys::DD_POSITION, dd_timelock_id));
 
     if (success) {
-        LogPrint(BCLog::WALLETDB, "DigiDollar: Erased position %s from database\n",
-                 position_id.ToString());
+        LogPrint(BCLog::WALLETDB, "DigiDollar: Erased DDTimeLock %s from database\n",
+                 dd_timelock_id.ToString());
     }
 
     return success;

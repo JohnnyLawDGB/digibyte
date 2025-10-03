@@ -492,27 +492,15 @@ TxBuilderResult TransferTxBuilder::BuildTransferTransaction(const TxBuilderTrans
         tx.vin.push_back(CTxIn(utxo));
     }
 
-    // Add fee inputs if needed for transaction fees
-    CAmount estimatedFees = 250 * params.feeRate / 1000; // Improved estimate
-    if (!params.feeUtxos.empty()) {
-        std::vector<CTxIn> feeInputs;
-        CAmount totalFeeIn = 0;
-
-        if (!SelectCoins(params.feeUtxos, estimatedFees, feeInputs, totalFeeIn)) {
-            result.error = "Insufficient DGB for transaction fees";
-            return result;
-        }
-
-        // Add fee inputs to transaction
-        tx.vin.insert(tx.vin.end(), feeInputs.begin(), feeInputs.end());
-
-        // Add DGB change output if needed
-        if (totalFeeIn > estimatedFees + DUST_THRESHOLD) {
-            CAmount dgbChange = totalFeeIn - estimatedFees;
-            CPubKey changePubkey = params.spenderKey.GetPubKey();
-            CTxDestination changeDest{WitnessV1Taproot(XOnlyPubKey(changePubkey))};
-            tx.vout.push_back(CTxOut(dgbChange, GetScriptForDestination(changeDest)));
-        }
+    // Add DGB fee inputs (after DD inputs)
+    // Note: Phase 2.1 already selected these UTXOs, so we just add them directly
+    CAmount totalFeeIn = 0;
+    for (const auto& utxo : params.feeUtxos) {
+        tx.vin.push_back(CTxIn(utxo));
+        // Calculate total fee input value for change calculation
+        totalFeeIn += GetDGBFromUTXO(utxo);
+        LogPrintf("DigiDollar: Added fee input %s:%d\n",
+                  utxo.hash.ToString(), utxo.n);
     }
 
     // Add DD outputs for recipients (all with 0 DGB value)
@@ -536,10 +524,27 @@ TxBuilderResult TransferTxBuilder::BuildTransferTransaction(const TxBuilderTrans
             CPubKey changePubkey = params.spenderKey.GetPubKey();
             CScript changeScript = CreateDigiDollarP2TR(XOnlyPubKey(changePubkey), ddChange);
             tx.vout.push_back(CTxOut(0, changeScript));
+            LogPrintf("DigiDollar: Added DD change output: %d cents\n", ddChange);
         } else {
             // If change is dust, add it to fees (this violates strict conservation but handles dust)
             result.error = "DD change amount is below dust threshold";
             return result;
+        }
+    }
+
+    // Calculate actual fee based on transaction with all outputs
+    CAmount actualFee = CalculateFee(tx, params.feeRate);
+
+    // Add DGB change output if needed (after we know actual fee)
+    if (totalFeeIn > 0) {
+        CAmount dgbChange = totalFeeIn - actualFee;
+        if (dgbChange > 0 && dgbChange >= DUST_THRESHOLD) {
+            // Create DGB change output
+            CPubKey changePubkey = params.spenderKey.GetPubKey();
+            CTxDestination changeDest{WitnessV1Taproot(XOnlyPubKey(changePubkey))};
+            CScript dgbChangeScript = GetScriptForDestination(changeDest);
+            tx.vout.push_back(CTxOut(dgbChange, dgbChangeScript));
+            LogPrintf("DigiDollar: Added DGB change output: %d sats\n", dgbChange);
         }
     }
 
@@ -558,11 +563,58 @@ TxBuilderResult TransferTxBuilder::BuildTransferTransaction(const TxBuilderTrans
         return result;
     }
 
-    // Calculate actual fees
-    result.totalFees = CalculateFee(tx, params.feeRate);
+    // Set actual fees (already calculated above)
+    result.totalFees = actualFee;
 
+    // ============================================================================
+    // Phase 2.6: Transaction Finalization
+    // ============================================================================
+
+    // Set transaction version (SegWit v2)
+    tx.nVersion = 2;
+
+    // Set locktime (0 for immediate broadcast)
+    tx.nLockTime = 0;
+
+    // Validate transaction structure - must have inputs
+    if (tx.vin.empty()) {
+        result.error = "Transaction has no inputs";
+        return result;
+    }
+
+    // Validate transaction structure - must have outputs
+    if (tx.vout.empty()) {
+        result.error = "Transaction has no outputs";
+        return result;
+    }
+
+    // Verify DD amounts balance (conservation check)
+    CAmount totalDDInCheck = 0;
+    for (const auto& utxo : params.ddUtxos) {
+        totalDDInCheck += GetDDFromUTXO(utxo);
+    }
+
+    CAmount totalDDOutCheck = 0;
+    for (const auto& [addr, amt] : params.recipients) {
+        totalDDOutCheck += amt;
+    }
+    // Add DD change if exists
+    if (ddChange > 0 && ddChange >= minOutput) {
+        totalDDOutCheck += ddChange;
+    }
+
+    if (totalDDInCheck < totalDDOutCheck) {
+        result.error = strprintf("DD amount mismatch: in=%d, out=%d", totalDDInCheck, totalDDOutCheck);
+        return result;
+    }
+
+    // Transaction is valid - finalize
     result.tx = tx;
     result.success = true;
+
+    LogPrintf("DigiDollar: Transaction finalized - %d inputs, %d outputs, version=%d, locktime=%d\n",
+              tx.vin.size(), tx.vout.size(), tx.nVersion, tx.nLockTime);
+
     return result;
 }
 

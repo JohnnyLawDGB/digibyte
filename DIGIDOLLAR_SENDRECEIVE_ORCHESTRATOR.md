@@ -3,6 +3,21 @@
 ## Your Role
 You are the **Orchestrator Agent** for the DigiDollar Send/Receive implementation. Your job is to manage sub-agents who will implement each phase using strict Test-Driven Development (TDD).
 
+## Mission Summary
+Implement **100% functional, tested DigiDollar send/receive** across 9 phases with 47 total tasks:
+- **Phase 0**: 3 tasks (function renaming for correct terminology)
+- **Phase 1**: 5 tasks (coin selection foundation)
+- **Phase 2**: 6 tasks (transaction building)
+- **Phase 3**: 3 tasks (transaction signing)
+- **Phase 4**: 4 tasks (broadcasting & confirmation)
+- **Phase 5**: 4 tasks (balance & state updates)
+- **Phase 6**: 5 tasks (receive operations + notifications)
+- **Phase 7**: 7 tasks (Qt & RPC integration)
+- **Phase 8**: 9 tasks (comprehensive testing)
+- **Task 8.9**: FINAL end-to-end validation in Qt wallet
+
+**Success = Can send DD from Wallet A to Wallet B, restart both wallets, verify balances persist, all tests pass.**
+
 ## 📚 REQUIRED READING - READ ALL BEFORE STARTING
 
 Before you begin, you MUST read these documents to understand the complete context:
@@ -10,33 +25,35 @@ Before you begin, you MUST read these documents to understand the complete conte
 ### Send/Receive Documentation (READ ALL)
 1. **DIGIDOLLAR_TERMINOLOGY.md** - **CRITICAL: Correct terminology (Time-Locked DGB, NOT "positions")**
 2. **DIGIDOLLAR_SENDRECEIVE_README.md** - Overview and quick reference
-3. **DIGIDOLLAR_SENDRECEIVE_TASKS.md** - Complete task list (40+ tasks, 8 phases)
-4. **DIGIDOLLAR_SENDRECEIVE_EXPLAINER.md** - Architecture, data flow, integration
-5. **DIGIDOLLAR_SENDRECEIVE_TDD_GUIDE.md** - TDD methodology with examples
-6. **DIGIDOLLAR_SENDRECEIVE_SUBAGENT.md** - Sub-agent instructions (you'll give to them)
-7. **DIGIDOLLAR_SENDRECEIVE_VERIFICATION.md** - Final verification checklist
+3. **DIGIDOLLAR_SENDRECEIVE_IMPLEMENTATION_CHECKLIST.md** - **Master checklist (47 tasks overview)**
+4. **DIGIDOLLAR_SENDRECEIVE_TASKS.md** - Complete task list (47 tasks across 9 phases)
+5. **DIGIDOLLAR_SENDRECEIVE_EXPLAINER.md** - Architecture, data flow, integration
+6. **DIGIDOLLAR_SENDRECEIVE_TDD_GUIDE.md** - TDD methodology with examples
+7. **DIGIDOLLAR_SENDRECEIVE_SUBAGENT.md** - Sub-agent instructions (you'll give to them)
+8. **DIGIDOLLAR_SENDRECEIVE_VERIFICATION.md** - Final verification checklist
 
 ### Persistence Layer Documentation (CRITICAL - Already Implemented)
-8. **DIGIDOLLAR_DB_PERSISTENCE_EXPLAINER.md** - How wallet.dat persistence works
+9. **DIGIDOLLAR_DB_PERSISTENCE_EXPLAINER.md** - How wallet.dat persistence works
    - WalletBatch read/write operations
    - Position/balance/transaction storage (NOTE: "positions" = DD time-locks)
    - Auto-loading on wallet startup
    - In-memory cache management
 
 ### Existing Code to Analyze
-9. **src/wallet/digidollarwallet.cpp** - Wallet implementation (GetPositions returns DD time-locks, LoadFromDatabase)
-10. **src/wallet/walletdb.cpp** - Database operations (WritePosition, WriteDDBalance, etc.)
-11. **src/digidollar/txbuilder.cpp** - Transaction builders (TransferTxBuilder, RedeemTxBuilder)
-12. **src/test/digidollar_transfer_tests.cpp** - Existing transfer tests (MockTransferTxBuilder pattern)
-13. **src/test/digidollar_wallet_tests.cpp** - Existing wallet tests
+10. **src/wallet/digidollarwallet.cpp** - Wallet implementation (GetDDTimeLocks returns DD time-locks, LoadFromDatabase)
+11. **src/wallet/walletdb.cpp** - Database operations (WriteDDTimeLock, WriteDDBalance, etc.)
+12. **src/digidollar/txbuilder.cpp** - Transaction builders (TransferTxBuilder, RedeemTxBuilder)
+13. **src/test/digidollar_transfer_tests.cpp** - Existing transfer tests (MockTransferTxBuilder pattern)
+14. **src/test/digidollar_wallet_tests.cpp** - Existing wallet tests
 
 ### Critical Integration Points You Must Understand
 - **UTXO Structure**: Mint transactions have vout[0]=Time-Locked DGB (collateral), vout[1]=DD (always index 1!)
-- **Time-Lock Tracking**: GetPositions(true) returns active DD time-locks from cache (Time-Locked DGB backing DD)
-- **Database Persistence**: All operations MUST use WalletBatch (WritePosition, WriteDDBalance, WriteDDTransaction)
+- **Time-Lock Tracking**: GetDDTimeLocks(true) returns active DD time-locks from cache (Time-Locked DGB backing DD) - RENAMED in Phase 0
+- **Database Persistence**: All operations MUST use WalletBatch (WriteDDTimeLock, WriteDDBalance, WriteDDTransaction)
 - **Auto-Loading**: LoadFromDatabase() called in constructor - everything persists
 - **Existing Tests**: Leverage digidollar_transfer_tests.cpp and digidollar_wallet_tests.cpp
 - **TERMINOLOGY**: These are NOT "positions" - they are **Time-Locked DGB backing DigiDollars** (DDTimeLocks)
+- **Phase 0 Required**: Must complete function renaming (GetPositions→GetDDTimeLocks, position_id→dd_timelock_id) BEFORE Phase 1
 
 ## Critical Rules
 
@@ -63,8 +80,12 @@ Before you begin, you MUST read these documents to understand the complete conte
 #### Phase Execution Order (STRICT SEQUENCE)
 You MUST execute phases in this exact order:
 
+**PHASE 0 (PREREQUISITE - MUST COMPLETE FIRST)**:
+- Phase 0: Foundation Refactoring → Rename GetPositions to GetDDTimeLocks, position_id to dd_timelock_id
+- CRITICAL: All existing tests must still pass after Phase 0
+
 **SEQUENTIAL (No Parallelization)**:
-- Phase 1: Coin Selection Foundation → CRITICAL PATH
+- Phase 1: Coin Selection Foundation → CRITICAL PATH (depends on Phase 0)
 - Phase 2: Transaction Building → DEPENDS ON PHASE 1
 - Phase 3: Transaction Signing → DEPENDS ON PHASE 2
 
@@ -79,6 +100,14 @@ You MUST execute phases in this exact order:
 
 #### Sub-Agent Deployment Strategy
 
+**Phase 0: Foundation Refactoring (FIRST)**
+- Deploy 3 sub-agents (one per task)
+- Task 0.1 → Rename GetPositions() to GetDDTimeLocks()
+- Task 0.2 → Rename position_id to dd_timelock_id
+- Task 0.3 → Update database functions (WriteDDTimeLock, ReadDDTimeLock)
+- CRITICAL: All existing tests MUST still pass after each rename
+- CRITICAL: Maintain backward compatibility with wallet.dat
+
 **Phase 1: Coin Selection Foundation**
 - Deploy 5 sub-agents (one per task)
 - Tasks 1.1 → 1.2 → 1.3 → 1.4 → 1.5 (sequential)
@@ -86,8 +115,12 @@ You MUST execute phases in this exact order:
 - CRITICAL: Task 1.5 needs 1.3 & 1.4 complete
 
 **Phase 2: Transaction Building**
-- Deploy 4 sub-agents (one per task)
-- Tasks can run in parallel EXCEPT 2.4 depends on 2.1, 2.2, 2.3
+- Deploy 6 sub-agents (one per task)
+- Task 2.1 FIRST (enable TransferDigiDollar function)
+- Tasks 2.2, 2.3 can run in parallel after 2.1
+- Task 2.4 needs 2.2, 2.3 complete
+- Task 2.5 needs 2.4 complete
+- Task 2.6 needs all previous tasks complete (final assembly)
 
 **Phase 3: Transaction Signing**
 - Deploy 3 sub-agents (one per task)
@@ -102,17 +135,23 @@ You MUST execute phases in this exact order:
 - Can run in parallel with Phase 4
 
 **Phase 6: Receive Operations**
-- Deploy 4 sub-agents (one per task)
+- Deploy 5 sub-agents (one per task)
+- Task 6.1 FIRST (incoming transaction detection)
 - Tasks 6.2, 6.3, 6.4 can run in parallel after 6.1
+- Task 6.5 runs after 6.2 (wallet notification)
 
 **Phase 7: Qt Integration**
-- Deploy 6 sub-agents
-- Task 7.1 → (7.2, 7.3, 7.4) → (7.5, 7.6)
-- First sequential, then parallel, then final parallel
+- Deploy 7 sub-agents
+- Task 7.1 FIRST (wire send dialog to backend)
+- Tasks 7.2, 7.3, 7.4 can run in parallel after 7.1
+- Tasks 7.5, 7.6, 7.7 can run in parallel after 7.2-7.4
+- Task 7.7 validates RPC command integration
 
 **Phase 8: Testing**
-- Deploy 8 sub-agents (one per task)
-- All can run in parallel (independent test suites)
+- Deploy 9 sub-agents (one per task)
+- Tasks 8.1-8.8 can run in parallel (independent test suites)
+- Task 8.9 MUST run LAST after all other tests pass (end-to-end validation)
+- CRITICAL: Task 8.9 is the FINAL verification before declaring success
 
 ### Sub-Agent Communication Protocol
 
@@ -497,3 +536,139 @@ Before proceeding, confirm you understand:
 
 **Orchestrator Version**: 1.0
 **Strategy**: Strict TDD, Phased Execution, Quality First
+
+## 🎉 Declaring Success
+
+### When to Declare Success
+You can ONLY declare send/receive implementation COMPLETE after **ALL** of the following are verified:
+
+#### Phase Completion (All Must Pass)
+- ✅ Phase 0: All 3 tasks complete (function renaming)
+- ✅ Phase 1: All 5 tasks complete (coin selection)
+- ✅ Phase 2: All 6 tasks complete (transaction building)
+- ✅ Phase 3: All 3 tasks complete (signing)
+- ✅ Phase 4: All 4 tasks complete (broadcasting)
+- ✅ Phase 5: All 4 tasks complete (balance updates)
+- ✅ Phase 6: All 5 tasks complete (receive operations)
+- ✅ Phase 7: All 7 tasks complete (Qt/RPC integration)
+- ✅ Phase 8: All 9 tasks complete (testing)
+
+#### Technical Verification (All Must Pass)
+- ✅ Wallet compiles: `make -j$(nproc) src/qt/digibyte-qt` succeeds
+- ✅ All unit tests pass: `./src/test/test_digibyte --run_test=digidollar_*`
+- ✅ All functional tests pass: `./test/functional/digidollar_*.py`
+- ✅ No compiler warnings
+- ✅ No memory leaks (valgrind clean)
+- ✅ Test coverage ≥ 80%
+
+#### Task 8.9: End-to-End Validation (CRITICAL - MUST PASS)
+This is the FINAL proof that everything works:
+
+1. ✅ Start fresh regtest node with Qt wallet
+2. ✅ Mine 650+ blocks (activate DigiDollar)
+3. ✅ Mint 1000 DD in Wallet A
+4. ✅ Start Wallet B (second Qt instance)
+5. ✅ Get DD receive address from Wallet B
+6. ✅ **Send 500 DD from Wallet A to Wallet B via Qt interface**
+7. ✅ Verify Wallet A balance: 500 DD remaining
+8. ✅ Verify Wallet B balance: 500 DD received
+9. ✅ **Restart both wallets**
+10. ✅ Verify Wallet A balance still: 500 DD
+11. ✅ Verify Wallet B balance still: 500 DD
+12. ✅ Verify transaction history present in both wallets
+13. ✅ **Send 250 DD from Wallet B back to Wallet A**
+14. ✅ Verify Wallet A balance: 750 DD
+15. ✅ Verify Wallet B balance: 250 DD
+
+#### Functional Verification (All Must Work)
+- ✅ Send DD from Qt wallet
+- ✅ Send DD via RPC command (transferdigidollar)
+- ✅ Receive DD (balance updates automatically)
+- ✅ Balance persists across wallet restarts
+- ✅ Transaction history persists across wallet restarts
+- ✅ UTXO set remains consistent
+- ✅ No double-spending possible
+- ✅ Error messages are user-friendly
+- ✅ Works on regtest, testnet, mainnet (proper prefixes)
+
+### Final Declaration Message
+
+When ALL above criteria are met, report to user:
+
+```markdown
+# 🎉 DIGIDOLLAR SEND/RECEIVE IMPLEMENTATION COMPLETE
+
+## Summary
+✅ **47 tasks across 9 phases** - ALL COMPLETE
+✅ **Wallet compiles** - No errors, no warnings
+✅ **All tests pass** - Unit + Functional + Integration
+✅ **End-to-end validation** - Qt wallet send/receive works perfectly
+✅ **Persistence verified** - Balances/history survive wallet restart
+
+## Technical Validation
+- Compilation: ✅ PASS
+- Unit Tests: ✅ ALL PASS (X/X tests)
+- Functional Tests: ✅ ALL PASS (Y/Y tests)
+- Test Coverage: ✅ Z% (target: ≥80%)
+- Memory Leaks: ✅ NONE (valgrind clean)
+- Integration: ✅ SEAMLESS
+
+## End-to-End Validation (Task 8.9)
+✅ Minted 1000 DD in Wallet A
+✅ Sent 500 DD from A → B
+✅ Wallet A: 500 DD remaining
+✅ Wallet B: 500 DD received
+✅ **Restarted both wallets**
+✅ Balances persisted correctly
+✅ Transaction history intact
+✅ Sent 250 DD from B → A
+✅ Final: A=750 DD, B=250 DD
+
+## Production Readiness
+✅ Can send DD from wallet A to wallet B
+✅ Can receive DD in wallet B from wallet A
+✅ Balances accurate at all times
+✅ Everything persists in wallet.dat
+✅ UTXO tracking 100% correct
+✅ Qt wallet fully functional
+✅ RPC commands fully functional
+✅ All error cases handled
+
+## Next Steps
+1. User can test on testnet
+2. Additional stress testing (optional)
+3. Prepare for mainnet deployment
+
+**SEND/RECEIVE IS READY FOR PRODUCTION** 🚀
+```
+
+### If NOT All Criteria Met
+Do NOT declare success. Instead report:
+
+```markdown
+## SEND/RECEIVE STATUS: IN PROGRESS
+
+### Remaining Work
+- Phase X: Y tasks incomplete
+  - Task X.Y: [Status/Blocker]
+  - Task X.Z: [Status/Blocker]
+
+### Current Issues
+- [List any blockers or failing tests]
+
+### Next Actions
+- [What needs to happen next]
+
+### ETA
+- Estimated completion: [X days/hours]
+```
+
+## Remember
+**DO NOT** declare success unless Task 8.9 (end-to-end validation) proves that you can:
+1. Send 500 DD from Wallet A → Wallet B (via Qt)
+2. Restart both wallets
+3. Verify balances persist (A=500, B=500)
+4. Send 250 DD from Wallet B → Wallet A (via Qt)
+5. Verify final balances (A=750, B=250)
+
+If the above works, SEND/RECEIVE IS COMPLETE ✅

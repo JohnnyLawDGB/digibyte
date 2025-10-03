@@ -66,28 +66,34 @@ for (const auto& pos : positions) {
 
 ### Function Naming
 
-#### Existing Functions (Keep as-is, but document correctly)
+#### Phase 0: Rename Existing Functions (REQUIRED)
 ```cpp
-// Existing function names (don't change)
-GetPositions()           // Returns DD time-locks
-WritePosition()          // Saves DD time-lock
-position_id              // Time-lock transaction ID
+// OLD NAMES (Phase 0 will rename these):
+GetPositions()           // → RENAME to GetDDTimeLocks()
+WritePosition()          // → RENAME to WriteDDTimeLock()
+ReadPosition()           // → RENAME to ReadDDTimeLock()
+position_id              // → RENAME to dd_timelock_id
 
-// But document them correctly:
+// NEW NAMES (After Phase 0 refactoring):
+GetDDTimeLocks()         // Returns DD time-locks
+WriteDDTimeLock()        // Saves DD time-lock
+ReadDDTimeLock()         // Reads DD time-lock
+dd_timelock_id           // Time-lock transaction ID
+
+// Properly documented:
 /**
  * Get active DD time-locks (Time-Locked DGB backing DigiDollars)
  * @param active_only If true, only return active time-locks
  * @return Vector of DD time-lock structures
  */
-std::vector<WalletCollateralPosition> GetPositions(bool active_only = false);
+std::vector<WalletCollateralPosition> GetDDTimeLocks(bool active_only = false);
 ```
 
-#### New Functions (Use correct naming)
+#### Variable Naming (After Phase 0)
 ```cpp
-// New functions should use better naming:
-GetDDTimeLocks()         // Alternative to GetPositions()
-dd_timelock_id           // Instead of position_id
-timelock.dd_amount       // Instead of pos.dd_amount
+// Use correct naming in all new code:
+timelock.dd_timelock_id  // Time-lock transaction ID
+timelock.dd_amount       // DD amount in cents
 timelock.dgb_locked      // Time-Locked DGB amount
 ```
 

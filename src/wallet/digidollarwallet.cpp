@@ -300,9 +300,10 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
         params.recipients.push_back({to.ToString(), amount});
         params.feeRate = 100000; // 100,000 sat/kB (DigiByte minimum relay fee)
 
-        // Select DD UTXOs to cover the amount
+        // Select DD UTXOs to cover the amount (with individual amounts - FIX #7)
         CAmount selectedDDTotal = 0;
-        if (!SelectDDCoins(amount, params.ddUtxos, selectedDDTotal)) {
+        std::vector<CAmount> selected_dd_amounts;
+        if (!SelectDDCoins(amount, params.ddUtxos, selectedDDTotal, &selected_dd_amounts)) {
             // Fallback: Create mock DD UTXO for testing
             LogPrintf("DigiDollar: No DD UTXOs found, using mock UTXO for testing\n");
             uint256 mockTxid;
@@ -311,6 +312,12 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
             params.ddUtxos.push_back(mockUtxo);
             selectedDDTotal = currentBalance; // Assume mock UTXO has full balance
         }
+
+        // CRITICAL: Pass DD UTXO amounts to txbuilder (FIX #3 & #7)
+        // Pass individual amounts for each UTXO (required by txbuilder)
+        params.ddAmounts = selected_dd_amounts;
+        LogPrintf("DigiDollar: Passing %d DD UTXO amounts to txbuilder - total: %d cents\n",
+                  selected_dd_amounts.size(), selectedDDTotal);
 
         // Select DGB UTXOs for fees (estimated)
         CAmount estimatedFee = 100000; // 0.001 DGB estimated fee
@@ -1916,10 +1923,11 @@ bool DigiDollarWallet::ValidateRedeemParams(const uint256& dd_timelock_id, const
     return true;
 }
 
-bool DigiDollarWallet::SelectDDCoins(const CAmount& target_amount, std::vector<COutPoint>& selected_utxos, CAmount& selected_total) const {
+bool DigiDollarWallet::SelectDDCoins(const CAmount& target_amount, std::vector<COutPoint>& selected_utxos, CAmount& selected_total, std::vector<CAmount>* amounts) const {
     // Reset output parameters
     selected_total = 0;
     selected_utxos.clear();
+    if (amounts) amounts->clear();
 
     // Validate target amount
     if (target_amount <= 0) {
@@ -1944,11 +1952,18 @@ bool DigiDollarWallet::SelectDDCoins(const CAmount& target_amount, std::vector<C
               });
 
     // Select UTXOs until target amount met
+    // FIXED: Now selects ALL DD UTXOs (both minted and received)
+    // Signing logic properly handles both types:
+    //  - Minted DD: Uses custom owner keys from dd_owner_keys map
+    //  - Received DD: Uses wallet's regular key management
     for (const auto& utxo : available_utxos) {
         if (selected_total >= target_amount) break;
 
         selected_utxos.push_back(utxo.outpoint);
         selected_total += utxo.dd_amount;
+
+        // Store individual amounts if requested (CRITICAL FIX #7)
+        if (amounts) amounts->push_back(utxo.dd_amount);
 
         LogPrintf("DigiDollar: SelectDDCoins - Selected UTXO %s:%d (%d cents, total: %d)\n",
                   utxo.outpoint.hash.ToString(), utxo.outpoint.n,
@@ -2157,8 +2172,12 @@ bool DigiDollarWallet::SignDDInputs(CMutableTransaction& tx,
                       i, tx.vin[i].scriptWitness.IsNull() ? "NULL" : "NOT NULL");
         }
 
-        // Wallet's SignTransaction will sign inputs it has keys for
-        // IMPORTANT: This should NOT touch DD inputs (no keys for them)
+        // CRITICAL FIX: Wallet's SignTransaction will sign inputs it has keys for
+        // This includes:
+        //  - ALL fee inputs (DGB UTXOs)
+        //  - RECEIVED DD inputs (wallet has keys from address generation)
+        // It will NOT sign:
+        //  - MINTED DD inputs (use custom owner keys not in wallet descriptors)
         bool sign_result = m_wallet->SignTransaction(tx);
         LogPrintf("DigiDollar: SignDDInputs - SignTransaction returned: %s\n", sign_result ? "true" : "false");
 
@@ -2207,16 +2226,25 @@ bool DigiDollarWallet::SignDDInputs(CMutableTransaction& tx,
     PrecomputedTransactionData txdata;
     txdata.Init(tx, std::move(prevouts), /* force=*/ true);
 
-    // NOW sign DD inputs with Schnorr signatures using owner keys
-    // DD inputs use custom Taproot keys not in wallet descriptors
+    // NOW manually sign DD inputs that wallet couldn't sign (minted DD with owner keys)
+    // RECEIVED DD was already signed by wallet's SignTransaction above
     for (size_t i = 0; i < dd_utxos.size(); i++) {
+        // Check if this input is already signed
+        bool already_signed = !tx.vin[i].scriptWitness.IsNull() &&
+                             !tx.vin[i].scriptWitness.stack.empty();
+
+        if (already_signed) {
+            LogPrintf("DigiDollar: SignDDInputs - DD input %d already signed by wallet (received DD)\n", i);
+            continue;  // Skip - wallet already signed it
+        }
+
         const COutPoint& outpoint = dd_utxos[i];
 
-        // Get the owner key for this DD UTXO
+        // Get the owner key for this DD UTXO (minted DD)
         CKey ownerKey;
         if (!GetOwnerKey(outpoint.hash, ownerKey)) {
-            LogPrintf("DigiDollar: SignDDInputs - Owner key not found for DD UTXO %s\n",
-                      outpoint.hash.ToString());
+            LogPrintf("DigiDollar: SignDDInputs - DD input %d not signed and no owner key found for %s\n",
+                      i, outpoint.hash.ToString());
             return false;
         }
 
@@ -2865,6 +2893,10 @@ bool DigiDollarWallet::AddReceivedDDUTXO(const CTransactionRef& tx,
     // Add to DD UTXO tracking (primary balance source)
     COutPoint received_utxo(txid, vout_index);
     dd_utxos[received_utxo] = dd_amount;
+
+    // NOTE: We don't need to extract owner keys for received DD
+    // The wallet already has the private keys for P2TR outputs it created
+    // Signing will be handled by the wallet's scriptPubKeyMan when spending
 
     // Create new WalletCollateralPosition for received DD
     // Key difference from minted DD: no collateral in our wallet

@@ -632,13 +632,10 @@ TxBuilderResult TransferTxBuilder::BuildTransferTransaction(const TxBuilderTrans
     LogPrintf("DigiDollar: Added OP_RETURN with %d DD output amounts\n", ddOutputAmounts.size());
 
     // Final validation - ensure DD conservation
+    // DD amounts are now stored in OP_RETURN, so sum up ddOutputAmounts instead
     CAmount finalDDOut = 0;
-    for (size_t i = 0; i < tx.vout.size(); i++) {
-        CAmount ddAmount = 0;
-        if (DigiDollar::ExtractDDAmount(tx.vout[i].scriptPubKey, ddAmount)) {
-            LogPrintf("DigiDollar: Output %d has DD amount: %d cents\n", i, ddAmount);
-            finalDDOut += ddAmount;
-        }
+    for (CAmount amt : ddOutputAmounts) {
+        finalDDOut += amt;
     }
 
     LogPrintf("DigiDollar: Conservation check - Input: %d cents, Output: %d cents\n",

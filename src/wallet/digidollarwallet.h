@@ -480,7 +480,7 @@ public:
     void ClearWalletData();
 
     // Coin selection and fee calculation helpers (public for testing and integration)
-    bool SelectDDCoins(const CAmount& target_amount, std::vector<COutPoint>& selected_utxos, CAmount& selected_total) const;
+    bool SelectDDCoins(const CAmount& target_amount, std::vector<COutPoint>& selected_utxos, CAmount& selected_total, std::vector<CAmount>* amounts = nullptr) const;
     bool SelectFeeCoins(const CAmount& fee_amount, std::vector<COutPoint>& selected_utxos, CAmount& selected_total, std::vector<CAmount>* selected_amounts = nullptr) const;
     CAmount CalculateTransactionFee(const CMutableTransaction& tx) const;
 

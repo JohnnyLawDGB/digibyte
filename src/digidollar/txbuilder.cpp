@@ -529,7 +529,9 @@ TxBuilderResult TransferTxBuilder::BuildTransferTransaction(const TxBuilderTrans
     }
 
     // Add DD outputs for recipients (all with 0 DGB value)
+    LogPrintf("DigiDollar: TxBuilder - recipients.size=%d\n", params.recipients.size());
     for (const auto& [address, amount] : params.recipients) {
+        LogPrintf("DigiDollar: Creating DD output - address=%s, amount=%d cents\n", address, amount);
         CTxDestination dest = DecodeDigiDollarAddress(address);
         const auto* taproot = std::get_if<WitnessV1Taproot>(&dest);
         if (!taproot) {
@@ -539,6 +541,7 @@ TxBuilderResult TransferTxBuilder::BuildTransferTransaction(const TxBuilderTrans
 
         CScript ddScript = CreateDigiDollarP2TR(*taproot, amount);
         tx.vout.push_back(CTxOut(0, ddScript)); // DD outputs always have 0 DGB value
+        LogPrintf("DigiDollar: Added DD output for %s: %d cents\n", address, amount);
     }
 
     // Add DD change output if needed
@@ -600,8 +603,10 @@ TxBuilderResult TransferTxBuilder::BuildTransferTransaction(const TxBuilderTrans
     // Phase 2.6: Transaction Finalization
     // ============================================================================
 
-    // Set transaction version (SegWit v2)
-    tx.nVersion = 2;
+    // Set transaction version - use DigiDollar marker to bypass dust checks
+    // Format: bits 0-15 = 0x0770 (marker), bits 24-31 = transaction type
+    // DD_TX_TRANSFER = 2, so version = 0x02000770
+    tx.nVersion = 0x02000770;
 
     // Set locktime (0 for immediate broadcast)
     tx.nLockTime = 0;

@@ -1165,6 +1165,14 @@ CWalletTx* CWallet::AddToWallet(CTransactionRef tx, const TxState& state, const 
     // Break debit/credit balance caches:
     wtx.MarkDirty();
 
+    // DigiDollar: Check if this is a DD transaction and track it
+    if (fInsertedNew && m_dd_wallet && DigiDollar::HasDigiDollarMarker(*tx)) {
+        WalletLogPrintf("DigiDollar: Calling ProcessIncomingTransaction for tx %s\n", hash.ToString());
+        m_dd_wallet->ProcessIncomingTransaction(tx, hash);
+    } else if (fInsertedNew && DigiDollar::HasDigiDollarMarker(*tx)) {
+        WalletLogPrintf("DigiDollar: DD tx detected but m_dd_wallet is null for tx %s\n", hash.ToString());
+    }
+
     // Notify UI of new or updated transaction
     NotifyTransactionChanged(hash, fInsertedNew ? CT_NEW : CT_UPDATED);
 

@@ -2767,6 +2767,117 @@ std::vector<uint256> DigiDollarWallet::GetUnconfirmedDDTransactions() const {
     return unconfirmed;
 }
 
+void DigiDollarWallet::ProcessIncomingTransaction(const CTransactionRef& tx, const uint256& txid) {
+    if (!m_wallet) {
+        LogPrintf("DigiDollar: ProcessIncomingTransaction called but no wallet pointer\n");
+        return;
+    }
+
+    try {
+        // First, extract DD amounts from OP_RETURN (same logic as DetectIncomingDDOutputs)
+        std::vector<CAmount> dd_amounts;
+        int txType = 0;
+
+        for (const auto& vout : tx->vout) {
+            if (vout.scriptPubKey.size() > 0 && vout.scriptPubKey[0] == OP_RETURN) {
+                CScript::const_iterator pc = vout.scriptPubKey.begin();
+                opcodetype opcode;
+                std::vector<unsigned char> data;
+
+                // Skip OP_RETURN
+                if (!vout.scriptPubKey.GetOp(pc, opcode)) break;
+
+                // Check for "DD" marker
+                if (!vout.scriptPubKey.GetOp(pc, opcode, data)) break;
+                if (data.size() != 2 || data[0] != 'D' || data[1] != 'D') break;
+
+                // Get transaction type
+                if (!vout.scriptPubKey.GetOp(pc, opcode, data)) break;
+                CScriptNum txTypeNum(data, true);
+                txType = txTypeNum.getint();
+
+                // Extract DD amounts
+                while (vout.scriptPubKey.GetOp(pc, opcode, data)) {
+                    if (data.size() > 0) {
+                        CScriptNum amount(data, true);
+                        dd_amounts.push_back(amount.getint());
+                    }
+                }
+                break;
+            }
+        }
+
+        // Skip mint transactions - they're already handled by mint code
+        if (txType == 1) {
+            return;
+        }
+
+        if (dd_amounts.empty()) {
+            return; // No DD amounts in this transaction
+        }
+
+        // Now check P2TR outputs we own
+        size_t dd_output_index = 0;
+        for (size_t n = 0; n < tx->vout.size(); ++n) {
+            const CTxOut& txout = tx->vout[n];
+
+            // Skip OP_RETURN and non-zero value outputs
+            if (txout.scriptPubKey.size() > 0 && txout.scriptPubKey[0] == OP_RETURN) continue;
+            if (txout.nValue != 0) continue;
+
+            // Check if it's a P2TR output (OP_1 + 32 bytes = DD output)
+            if (txout.scriptPubKey.size() == 34 && txout.scriptPubKey[0] == OP_1) {
+                // Check if we own this output
+                LOCK(m_wallet->cs_wallet);
+                wallet::isminetype mine = m_wallet->IsMine(txout);
+                if (!(mine & wallet::ISMINE_SPENDABLE)) {
+                    dd_output_index++;
+                    continue; // Not ours
+                }
+
+                // Get DD amount for this output
+                if (dd_output_index >= dd_amounts.size()) {
+                    dd_output_index++;
+                    continue;
+                }
+                CAmount dd_amount = dd_amounts[dd_output_index];
+                dd_output_index++;
+
+                LogPrintf("DigiDollar: Detected incoming DD transaction - txid: %s, vout: %d, amount: %d cents\n",
+                          txid.GetHex(), n, dd_amount);
+
+                // Add to transaction history (txType already checked above, only TRANSFER here)
+                DDTransaction ddtx;
+                ddtx.txid = txid.GetHex();
+                ddtx.amount = dd_amount;
+                ddtx.timestamp = GetTime();
+                ddtx.confirmations = 0; // Will be updated later
+                ddtx.incoming = true;
+                ddtx.address = ""; // Could extract sender address if needed
+                ddtx.category = "receive";
+
+                transaction_history.push_back(ddtx);
+
+                // Persist to database
+                if (m_wallet) {
+                    wallet::WalletBatch batch(m_wallet->GetDatabase());
+                    if (!batch.WriteDDTransaction(ddtx)) {
+                        LogPrintf("DigiDollar: WARNING - Failed to persist received transaction to database\n");
+                    }
+                }
+
+                LogPrintf("DigiDollar: Added receive transaction to history - TxID: %s, Amount: %d cents\n",
+                          txid.GetHex(), dd_amount);
+
+                // Only process first DD output (there should only be one per receive anyway)
+                break;
+            }
+        }
+    } catch (const std::exception& e) {
+        LogPrintf("DigiDollar: ProcessIncomingTransaction exception - %s\n", e.what());
+    }
+}
+
 // =============================================================================
 // PHASE 6: RECEIVE OPERATIONS (Tasks 6.1-6.3)
 // =============================================================================

@@ -522,6 +522,14 @@ public:
      */
     std::vector<uint256> GetUnconfirmedDDTransactions() const;
 
+    /**
+     * Process incoming DD transaction and add to history
+     * Called when wallet receives a new transaction
+     * @param tx The transaction
+     * @param txid Transaction ID
+     */
+    void ProcessIncomingTransaction(const CTransactionRef& tx, const uint256& txid);
+
     // ====================================================================
     // PHASE 6: RECEIVE OPERATIONS (Tasks 6.1-6.3)
     // ====================================================================

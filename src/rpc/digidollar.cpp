@@ -1080,28 +1080,51 @@ static RPCHelpMan getdigidollaraddress()
                 },
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
         {
-            // Parse parameters
-            std::string label = request.params.size() > 0 ? request.params[0].get_str() : "";
-            std::string addressType = request.params.size() > 1 ? request.params[1].get_str() : "legacy";
+            std::shared_ptr<wallet::CWallet> const pwallet = wallet::GetWalletForJSONRPCRequest(request);
+            if (!pwallet) return UniValue::VNULL;
 
-            // Validate address type
-            if (addressType != "legacy" && addressType != "p2sh-segwit" && addressType != "bech32") {
-                throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid address type. Use legacy, p2sh-segwit, or bech32");
+            LOCK(pwallet->cs_wallet);
+
+            if (!pwallet->CanGetAddresses()) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "Error: This wallet has no available keys");
             }
 
-            // Generate new DD address (mock implementation)
-            std::string newAddress = "DDmockaddress123456789abcdef";
-            std::string network = "DD"; // Mainnet prefix, would be TD/RD for test networks
+            // Parse parameters
+            std::string label = request.params.size() > 0 ? request.params[0].get_str() : "";
 
-            // Mock public key
-            std::string pubkey = "0279BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798";
+            // DigiDollar addresses must be P2TR (Taproot/bech32m)
+            OutputType output_type = OutputType::BECH32M;
+
+            // Generate new destination
+            auto op_dest = pwallet->GetNewDestination(output_type, label);
+            if (!op_dest) {
+                throw JSONRPCError(RPC_WALLET_KEYPOOL_RAN_OUT, util::ErrorString(op_dest).original);
+            }
+            CTxDestination dest = *op_dest;
+
+            // Encode as DigiDollar address
+            std::string newAddress = EncodeDigiDollarAddress(dest);
+
+            // Get network prefix
+            std::string network;
+            switch (Params().GetChainType()) {
+                case ChainType::REGTEST:
+                    network = "RD";
+                    break;
+                case ChainType::TESTNET:
+                    network = "TD";
+                    break;
+                case ChainType::MAIN:
+                default:
+                    network = "DD";
+                    break;
+            }
 
             UniValue result(UniValue::VOBJ);
             result.pushKV("address", newAddress);
             result.pushKV("label", label);
-            result.pushKV("address_type", addressType);
+            result.pushKV("address_type", "bech32m");
             result.pushKV("network", network);
-            result.pushKV("pubkey", pubkey);
             result.pushKV("ismine", true);
 
             return result;
@@ -1375,7 +1398,6 @@ RPCHelpMan getdigidollarbalance()
             std::string addressStr = request.params.size() > 0 && !request.params[0].isNull() ?
                                    request.params[0].get_str() : "";
             int minConf = request.params.size() > 1 ? request.params[1].getInt<int>() : 1;
-            bool includeWatchOnly = request.params.size() > 2 ? request.params[2].get_bool() : false;
 
             // Validate parameters
             if (minConf < 0) {

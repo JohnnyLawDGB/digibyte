@@ -1,625 +1,505 @@
 # DigiDollar Send/Receive Implementation Tasks
 
-## Overview
-This document outlines the complete implementation plan for DigiDollar Send/Receive functionality using Test-Driven Development (TDD) methodology. The goal is to achieve 100% working, tested send/receive operations that integrate seamlessly with the existing persistence layer.
-
-**Total Implementation**: 47 tasks across 9 phases
-- Phase 0: 3 tasks (terminology refactoring)
-- Phase 1: 5 tasks (coin selection)
-- Phase 2: 6 tasks (transaction building)
-- Phase 3: 3 tasks (signing)
-- Phase 4: 4 tasks (broadcasting)
-- Phase 5: 4 tasks (balance updates)
-- Phase 6: 5 tasks (receive operations)
-- Phase 7: 7 tasks (Qt/RPC integration)
-- Phase 8: 9 tasks (testing + final validation)
-
-## Current State Analysis
-
-### ✅ Already Implemented (COMPLETE)
-1. **Address Generation** (Receive)
-   - `getNewDigiDollarAddress()` in WalletModel ✅
-   - P2TR (Taproot) address generation ✅
-   - DD/TD/RD prefix encoding (Base58) ✅
-   - Address book integration ✅
-   - Payment request persistence ✅
-
-2. **Address Validation**
-   - Base58 format validation ✅
-   - Prefix validation (DD/TD/RD) ✅
-   - Length validation (42-62 chars) ✅
-
-3. **Database Persistence**
-   - DD time-lock storage (WriteDDTimeLock/ReadDDTimeLock) ✅
-   - Balance tracking ✅
-   - Transaction history ✅
-   - Auto-load on startup ✅
-
-4. **Backend Infrastructure**
-   - `TransferTxBuilder` class ✅
-   - `TxBuilderTransferParams` structure ✅
-   - `RedeemTxBuilder` class ✅
-   - RPC commands (getdigidollaraddress, transferdigidollar) ✅
-
-### ⚠️ Needs Refactoring (PHASE 0)
-1. **Function Naming**
-   - `GetPositions()` → Rename to `GetDDTimeLocks()` ⚠️
-   - `position_id` → Rename to `dd_timelock_id` ⚠️
-   - `WritePosition()` → Rename to `WriteDDTimeLock()` ⚠️
-   - `ReadPosition()` → Rename to `ReadDDTimeLock()` ⚠️
-   - Update all tests to use correct terminology ⚠️
-
-### ⚠️ Partially Implemented (NEEDS COMPLETION)
-1. **Coin Selection**
-   - `SelectDDCoins()` - Basic implementation, needs testing ⚠️
-   - `SelectFeeCoins()` - Placeholder only (RED phase) ❌
-
-2. **Transfer Logic**
-   - `TransferDigiDollar()` - Commented out (RED phase) ⚠️
-   - Transaction building logic exists but disabled ⚠️
-   - Validation logic present ✅
-
-3. **Qt Integration**
-   - `sendDigiDollar()` in WalletModel - Basic structure ⚠️
-   - Balance checking present ✅
-   - Error handling partial ⚠️
-
-### ❌ Missing (NEEDS IMPLEMENTATION)
-1. **UTXO Management**
-   - DD UTXO tracking/scanning ❌
-   - DD UTXO value lookup ❌
-   - DGB UTXO selection for fees ❌
-   - Change output creation ❌
-
-2. **Transaction Signing**
-   - DD input signing ❌
-   - Fee input signing ❌
-   - Witness data construction ❌
-
-3. **Transaction Broadcasting**
-   - Mempool submission ❌
-   - Network propagation ❌
-   - Confirmation tracking ❌
-
-4. **Balance Updates**
-   - Post-send balance recalculation ❌
-   - UTXO set updates ❌
-   - Position status updates ❌
-
-5. **Receive Detection**
-   - Incoming DD transaction detection ❌
-   - Balance updates on receive ❌
-   - Notification system ❌
-
-6. **Testing Infrastructure**
-   - Unit tests for coin selection ❌
-   - Functional tests for send/receive ❌
-   - Integration tests with persistence ❌
-
-## Implementation Phases (TDD Methodology)
-
-### Phase 0: Foundation Refactoring (PREREQUISITE)
-**Goal**: Rename existing functions to use correct terminology before implementing send/receive
-
-#### Task 0.1: Rename GetPositions() to GetDDTimeLocks()
-- **Test**: Update all existing tests that reference GetPositions()
-- **Impl**: Rename `GetPositions()` to `GetDDTimeLocks()` in src/wallet/digidollarwallet.cpp and digidollarwallet.h
-- **Verify**: All existing tests still pass with new function name
-- **Files**:
-  - src/wallet/digidollarwallet.cpp
-  - src/wallet/digidollarwallet.h
-  - src/test/digidollar_wallet_tests.cpp
-  - src/test/digidollar_*.cpp (all test files using GetPositions)
-- **Note**: This establishes correct terminology foundation (Time-Locked DGB backing DD, NOT "positions")
-
-#### Task 0.2: Rename position_id to dd_timelock_id
-- **Test**: Update all tests that reference position_id
-- **Impl**: Rename `position_id` member variable to `dd_timelock_id` in WalletCollateralPosition struct
-- **Verify**: All existing tests still pass with new variable name
-- **Files**:
-  - src/wallet/digidollarwallet.h (struct definition)
-  - src/wallet/digidollarwallet.cpp (all usages)
-  - src/wallet/walletdb.cpp (serialization)
-  - All test files
-- **Note**: Reinforces that these IDs reference DD time-locks, not generic "positions"
-
-#### Task 0.3: Update Database Read/Write Functions
-- **Test**: Verify database persistence still works with renamed fields
-- **Impl**: Update `WritePosition()` to `WriteDDTimeLock()` and `ReadPosition()` to `ReadDDTimeLock()`
-- **Verify**: Data persists and loads correctly, existing wallet.dat files still readable
-- **Files**:
-  - src/wallet/walletdb.h
-  - src/wallet/walletdb.cpp
-  - src/wallet/digidollarwallet.cpp (callers)
-- **Note**: Maintains backward compatibility with existing wallet.dat format while using correct naming
-
-### Phase 1: Coin Selection Foundation (CRITICAL PATH)
-**Goal**: Implement robust UTXO selection for DD and DGB coins
-
-#### Task 1.1: DD UTXO Tracking
-- **Test**: Test DD UTXO identification from DD time-locks
-- **Impl**: Implement `GetDDUTXOs()` to scan DD time-locks (Time-Locked DGB backing DD) for spendable DD outputs
-- **Verify**: Unit test confirms UTXOs match persisted DD time-locks
-- **Note**: Uses GetDDTimeLocks() to retrieve active time-locks (Time-Locked DGB backing DigiDollars)
-
-#### Task 1.2: DD UTXO Value Lookup
-- **Test**: Test DD amount retrieval from UTXO
-- **Impl**: Implement `GetDDFromUTXO()` using DD time-lock cache
-- **Verify**: Lookup returns correct DD amount for time-lock outputs
-- **Note**: Cache stores Time-Locked DGB time-locks (collateral) + DD amounts
-
-#### Task 1.3: SelectDDCoins Enhancement
-- **Test**: Test greedy coin selection algorithm
-- **Impl**: Enhance `SelectDDCoins()` with proper UTXO selection
-- **Verify**: Selects minimum UTXOs to cover target amount
-
-#### Task 1.4: DGB UTXO Selection
-- **Test**: Test DGB coin selection for fees
-- **Impl**: Implement `SelectFeeCoins()` using wallet UTXO set
-- **Verify**: Selects sufficient DGB for estimated fees
-
-#### Task 1.5: Change Calculation
-- **Test**: Test DD and DGB change calculations
-- **Impl**: Add change output creation logic
-- **Verify**: Correct change amounts returned to sender
-
-### Phase 2: Transaction Building (CORE LOGIC)
-**Goal**: Enable complete transfer transaction construction
-
-#### Task 2.1: Enable TransferDigiDollar() Function
-- **Test**: Test that TransferDigiDollar() can be called without errors
-- **Impl**: Uncomment and integrate existing TransferDigiDollar() in digidollarwallet.cpp
-- **Verify**: Function compiles and links correctly with Phase 1 coin selection
-- **Files**: src/wallet/digidollarwallet.cpp
-- **Note**: Existing code is commented out, needs integration with new GetDDTimeLocks()
-
-#### Task 2.2: Input Assembly
-- **Test**: Test DD input creation from selected UTXOs
-- **Impl**: Build CTxIn objects from DD UTXOs in TransferTxBuilder
-- **Verify**: Inputs reference correct time-lock outputs (vout[1])
-- **Files**: src/digidollar/txbuilder.cpp
-
-#### Task 2.3: Output Assembly
-- **Test**: Test DD output creation for recipients
-- **Impl**: Create DD outputs with proper P2TR scripts and amounts
-- **Verify**: Outputs have correct DD amounts and recipient addresses
-- **Files**: src/digidollar/txbuilder.cpp
-
-#### Task 2.4: Fee Calculation
-- **Test**: Test transaction fee estimation
-- **Impl**: Implement accurate fee calculation based on tx size and fee rate
-- **Verify**: Fees match expected size-based calculation
-- **Files**: src/wallet/digidollarwallet.cpp, src/digidollar/txbuilder.cpp
-
-#### Task 2.5: Change Output Creation
-- **Test**: Test DD change and DGB change outputs
-- **Impl**: Add change outputs to transaction when overpaying
-- **Verify**: Correct change amounts returned to sender
-- **Files**: src/digidollar/txbuilder.cpp
-
-#### Task 2.6: Transaction Finalization
-- **Test**: Test complete transaction structure
-- **Impl**: Assemble inputs, outputs, witnesses in TransferTxBuilder
-- **Verify**: Transaction passes basic validation (CheckTransaction)
-- **Files**: src/digidollar/txbuilder.cpp
-
-### Phase 3: Transaction Signing (SECURITY CRITICAL)
-**Goal**: Properly sign all transaction inputs
-
-#### Task 3.1: DD Input Signing
-- **Test**: Test P2TR signature generation for DD inputs
-- **Impl**: Sign DD inputs using position owner keys
-- **Verify**: Signatures validate against scriptPubKey
-
-#### Task 3.2: Fee Input Signing
-- **Test**: Test DGB input signatures
-- **Impl**: Sign fee inputs using wallet keys
-- **Verify**: All inputs properly signed
-
-#### Task 3.3: Witness Construction
-- **Test**: Test witness data assembly
-- **Impl**: Build complete witness stack for P2TR
-- **Verify**: Transaction passes script verification
-
-### Phase 4: Broadcasting & Confirmation (NETWORK)
-**Goal**: Submit transactions to network and track status
-
-#### Task 4.1: Mempool Submission
-- **Test**: Test transaction submission to mempool
-- **Impl**: Implement `CommitDDTransaction()`
-- **Verify**: Transaction enters mempool successfully
-
-#### Task 4.2: Network Propagation
-- **Test**: Test transaction relay to peers
-- **Impl**: Ensure proper inv/tx message handling
-- **Verify**: Transaction propagates to connected nodes
-
-#### Task 4.3: Confirmation Tracking
-- **Test**: Test confirmation counting
-- **Impl**: Track confirmations in transaction history
-- **Verify**: Confirmations update on new blocks
-
-#### Task 4.4: Reorganization Handling
-- **Test**: Test reorg impact on DD transactions
-- **Impl**: Handle chain reorganizations properly
-- **Verify**: Transactions update correctly after reorg
-
-### Phase 5: Balance & State Updates (DATA INTEGRITY)
-**Goal**: Maintain accurate balances and UTXO state
-
-#### Task 5.1: Post-Send Balance Update
-- **Test**: Test balance reduction after send
-- **Impl**: Update DD balance after successful send
-- **Verify**: Balance reflects spent amount
-
-#### Task 5.2: UTXO Set Updates
-- **Test**: Test UTXO spent/created tracking
-- **Impl**: Mark spent UTXOs, add new outputs
-- **Verify**: UTXO set accurately reflects chain state
-
-#### Task 5.3: Position Status Management
-- **Test**: Test position status after partial spend
-- **Impl**: Update position status when DD spent
-- **Verify**: Positions marked correctly (active/spent/partial)
-
-#### Task 5.4: Transaction History Recording
-- **Test**: Test outgoing transaction persistence
-- **Impl**: Save send transaction to database
-- **Verify**: Transaction persists and loads correctly
-
-### Phase 6: Receive Operations (INCOMING)
-**Goal**: Detect and process incoming DD transactions
-
-#### Task 6.1: Incoming Transaction Detection
-- **Test**: Test detection of DD transactions to our addresses
-- **Impl**: Scan blocks for transactions to wallet addresses
-- **Verify**: Incoming DD transactions identified
-
-#### Task 6.2: Balance Credit
-- **Test**: Test balance increase on receive
-- **Impl**: Credit DD balance for received outputs
-- **Verify**: Balance increases by received amount
-
-#### Task 6.3: UTXO Addition
-- **Test**: Test new UTXO tracking
-- **Impl**: Add received outputs to spendable UTXO set
-- **Verify**: Received UTXOs become spendable
-
-#### Task 6.4: Receive History
-- **Test**: Test incoming transaction history
-- **Impl**: Record received transactions with metadata
-- **Verify**: History shows incoming transactions
-
-#### Task 6.5: Wallet Notification on Receive
-- **Test**: Test that wallet signals new DD transaction received
-- **Impl**: Emit NotifyDDTransactionChanged signal when DD received
-- **Verify**: Qt wallet updates UI when DD received
-- **Files**: src/wallet/digidollarwallet.cpp, src/qt/walletmodel.cpp
-- **Note**: Required for real-time UI updates
-
-### Phase 7: Qt Wallet Integration (USER INTERFACE)
-**Goal**: Complete Qt send/receive UI functionality
-
-#### Task 7.1: Send Dialog Enhancement
-- **Test**: Test full send flow from UI
-- **Impl**: Wire up send dialog to backend
-- **Verify**: Can send DD from Qt wallet
-
-#### Task 7.2: Transaction Confirmation
-- **Test**: Test user confirmation before send
-- **Impl**: Show transaction preview dialog
-- **Verify**: User can review and confirm
-
-#### Task 7.3: Error Handling & Display
-- **Test**: Test error message display
-- **Impl**: Show user-friendly error messages
-- **Verify**: All errors properly communicated
-
-#### Task 7.4: Success Notification
-- **Test**: Test success message and txid display
-- **Impl**: Show success dialog with transaction ID
-- **Verify**: User sees confirmation
-
-#### Task 7.5: Balance Refresh
-- **Test**: Test UI balance updates
-- **Impl**: Refresh balance display after send/receive
-- **Verify**: Balance updates in real-time
-
-#### Task 7.6: Transaction List Updates
-- **Test**: Test transaction list refresh
-- **Impl**: Update transaction list after send/receive
-- **Verify**: New transactions appear in list
-
-#### Task 7.7: RPC Command Integration
-- **Test**: Test transferdigidollar RPC command works end-to-end
-- **Impl**: Ensure transferdigidollar RPC calls DigiDollarWallet::TransferDigiDollar()
-- **Verify**: Can send DD via RPC command from digibyte-cli
-- **Files**: src/rpc/digidollar_transactions.cpp
-- **Note**: RPC command already exists but may need updates after Phase 2 changes
-
-### Phase 8: Comprehensive Testing (QUALITY ASSURANCE)
-**Goal**: Ensure complete test coverage for send/receive
-
-#### Task 8.1: Unit Tests - Coin Selection
-- Test suite for SelectDDCoins
-- Test suite for SelectFeeCoins
-- Edge cases (exact match, insufficient funds, etc.)
-
-#### Task 8.2: Unit Tests - Transaction Building
-- Test suite for TransferTxBuilder
-- Test various recipient configurations
-- Test change calculations
-
-#### Task 8.3: Unit Tests - Signing
-- Test suite for signature generation
-- Test witness construction
-- Test multi-input scenarios
-
-#### Task 8.4: Functional Tests - Basic Send/Receive
-- Test simple send between wallets
-- Test receive detection
-- Test balance updates
-
-#### Task 8.5: Functional Tests - Edge Cases
-- Test insufficient balance scenarios
-- Test invalid addresses
-- Test network failures
-- Test double-spend prevention
-
-#### Task 8.6: Functional Tests - Multi-Node
-- Test send/receive across network
-- Test mempool propagation
-- Test confirmation tracking
-
-#### Task 8.7: Integration Tests - Persistence
-- Test send/receive with wallet restart
-- Test transaction history persistence
-- Test UTXO state recovery
-
-#### Task 8.8: Stress Tests
-- Test high-volume sends
-- Test concurrent transactions
-- Test large transaction sizes
-
-#### Task 8.9: End-to-End Validation (FINAL VERIFICATION)
-- **Test**: Complete send/receive flow in Qt wallet on regtest
-- **Steps**:
-  1. Start fresh regtest node with Qt wallet
-  2. Mine blocks to activate DigiDollar (650+ blocks)
-  3. Mint 1000 DD in Wallet A
-  4. Start second Qt wallet (Wallet B)
-  5. Get DD receive address from Wallet B
-  6. Send 500 DD from Wallet A to Wallet B
-  7. Verify Wallet A balance: 500 DD remaining
-  8. Verify Wallet B balance: 500 DD received
-  9. Restart both wallets
-  10. Verify balances persist correctly
-  11. Verify transaction history in both wallets
-  12. Send 250 DD from Wallet B back to Wallet A
-  13. Verify final balances: A=750 DD, B=250 DD
-- **Verify**: ALL functional requirements from Success Criteria pass
-- **Critical**: This is the FINAL validation before declaring success
-
-## Critical Dependencies
-
-### Must Be Working Before Starting
-1. ✅ Database persistence (Phase 1-7 complete)
-2. ✅ DD time-lock tracking (complete, needs Phase 0 refactoring)
-3. ✅ Address generation (complete)
-4. ✅ Address validation (complete)
-5. ⚠️ Phase 0 refactoring (rename functions to correct terminology)
-
-### External Dependencies
-1. TransferTxBuilder (exists, needs integration)
-2. RedeemTxBuilder (exists, needs integration)
-3. Wallet UTXO interface
-4. Mempool interface
-5. Chain state interface
-
-## Success Criteria
-
-### Phase Completion Requirements
-- ✅ All unit tests pass (RED → GREEN → REFACTOR)
-- ✅ All functional tests pass
-- ✅ No regressions in existing tests
-- ✅ Code coverage ≥ 80% for new code
-- ✅ Manual Qt testing successful
-- ✅ Documentation updated
-
-### Overall Success Criteria
-
-#### Functional Requirements (MUST ALL PASS)
-1. ✅ **Send DD from wallet A to wallet B**
-   - Select DD UTXOs from active time-locks via GetDDTimeLocks()
-   - Build valid transfer transaction with TransferTxBuilder
-   - Sign with P2TR (Taproot) signatures
-   - Broadcast to network successfully
-   - Transaction enters mempool and gets mined
-
-2. ✅ **Balance correctly updates on both sides**
-   - Sender balance decreases by sent amount
-   - Receiver balance increases by received amount
-   - Balances persist to wallet.dat via WriteDDBalance()
-   - Balances reload correctly after wallet restart
-
-3. ✅ **Transaction persists and survives restart**
-   - Sent transactions saved via WriteDDTransaction()
-   - Received transactions saved via WriteDDTransaction()
-   - Transaction history loads via LoadTransactionsFromDatabase()
-   - Confirmations update correctly
-
-4. ✅ **UTXO set remains consistent**
-   - Spent DD UTXOs marked as spent
-   - New DD UTXOs from received transactions tracked
-   - UTXO state persists to wallet.dat
-   - No double-spending possible
-   - GetDDUTXOs() always returns accurate spendable set
-
-5. ✅ **Mempool and chain state remain valid**
-   - Transactions validate correctly
-   - No orphan transactions
-   - Reorg handling works correctly
-   - Network propagation successful
-
-6. ✅ **Qt UI provides smooth UX**
-   - Send dialog works end-to-end
-   - Balance displays update in real-time
-   - Transaction list shows sent/received
-   - Error messages are user-friendly
-   - Success confirmations clear
-
-7. ✅ **All error cases handled gracefully**
-   - Insufficient balance → clear error
-   - Invalid address → validation error
-   - Network failure → retry/abort options
-   - Wallet locked → unlock prompt
-   - Fee too low → suggest higher fee
-
-8. ✅ **Works on regtest, testnet, and mainnet**
-   - Proper address prefixes (RD/TD/DD)
-   - Chain-specific parameters
-   - Network-specific validation
-
-#### Technical Requirements (MUST ALL PASS)
-1. ✅ **Wallet compiles without errors**
-   ```bash
-   make -j$(nproc) src/qt/digibyte-qt  # Must succeed
-   ```
-
-2. ✅ **All unit tests pass**
-   ```bash
-   ./src/test/test_digibyte --run_test=digidollar_*  # All pass
-   ```
-
-3. ✅ **All functional tests pass**
-   ```bash
-   ./test/functional/digidollar_transfer.py         # Pass
-   ./test/functional/digidollar_wallet.py           # Pass
-   ./test/functional/wallet_digidollar_*.py         # Pass (new)
-   ```
-
-4. ✅ **Code quality standards**
-   - Test coverage ≥ 80%
-   - No memory leaks (valgrind clean)
-   - No compiler warnings
-   - Follows DigiByte coding standards
-   - All functions documented
-
-5. ✅ **Integration with persistence layer**
-   - Uses WalletBatch for all database operations
-   - Maintains in-memory cache consistency
-   - Auto-loads on wallet startup via LoadFromDatabase()
-   - Atomic database updates (no partial states)
-
-## Testing Strategy
-
-### Test Pyramid
+## CRITICAL BUGS DISCOVERED - MUST FIX
+
+### Current Implementation Status
+**BROKEN** - Send/Receive does NOT work. Critical architectural flaws found:
+
+#### 🔴 BUG #1: NO BLOCKCHAIN TRANSACTIONS
+**Location**: `digidollarwallet.cpp:219-414` (TransferDigiDollar with string params)
+- Transaction is built correctly by TransferTxBuilder
+- **BUT NEVER BROADCAST TO NETWORK**
+- Just sets `txid = result.tx.GetHash().ToString()` and returns
+- Missing: Call to `CommitTransaction()` or `BroadcastTransaction()`
+
+#### 🔴 BUG #2: BROKEN DD UTXO MODEL
+**Location**: `digidollarwallet.cpp:994` (GetDDUTXOs)
+```cpp
+COutPoint dd_outpoint(timelock.dd_timelock_id, 1);  // DD always at index 1
 ```
-                  /\
-                 /  \
-                /E2E \      ← 5 comprehensive scenarios
-               /------\
-              /  Func  \    ← 20 functional tests
-             /----------\
-            / Unit Tests \  ← 50+ unit tests
-           /--------------\
+- Assumes DD UTXO is ALWAYS `(mint_txid, 1)` from original mint
+- Only works for FIRST spend after mint
+- After one transfer, DD exists in NEW transaction outputs
+- No tracking of DD outputs from transfer transactions
+- **Result**: DD can only be spent once, then becomes "unspendable"
+
+#### 🔴 BUG #3: DESTROYS TIME-LOCKS ON TRANSFER
+**Location**: `digidollarwallet.cpp:314-392`
+- Marks mint position as "inactive" when DD is transferred
+- Creates fake "change position" with split collateral
+- **WRONG**: Time-lock should stay ACTIVE until redemption
+- Only DD ownership changes, NOT the locked DGB!
+
+#### 🔴 BUG #4: NO RECEIVING LOGIC
+- No code to detect incoming DD transfers
+- No blockchain scanning for DD outputs to our addresses
+- Receiving wallet has NO IDEA DD was sent to it
+
+### THE CORRECT DIGIDOLLAR MODEL
+
+#### Mint Transaction (Creates Time-Lock + DD)
+```
+Mint TX: abc123...
+├─ vout[0]: 1000 DGB (Time-Locked until maturity) ← STAYS HERE UNTIL REDEMPTION
+└─ vout[1]: 500 DD (spendable DigiDollar token)   ← CAN BE TRANSFERRED
 ```
 
-### Test Categories
-1. **Unit Tests** (C++ in src/test/)
-   - Coin selection algorithms
-   - Transaction building logic
-   - Signature generation
-   - UTXO management
+#### Transfer Transaction (Moves DD, NOT Collateral!)
+```
+Transfer TX: def456...
+Inputs:
+  ├─ vin[0]: abc123:1 (spending 500 DD from mint)  ← Spending DD token
+  └─ vin[1]: fee_utxo (DGB for fees)
+Outputs:
+  ├─ vout[0]: 300 DD (to recipient)                ← New DD UTXO
+  ├─ vout[1]: 200 DD (change back to sender)       ← New DD UTXO
+  └─ vout[2]: DGB change
+```
 
-2. **Functional Tests** (Python in test/functional/)
-   - wallet_digidollar_send.py
-   - wallet_digidollar_receive.py
-   - wallet_digidollar_sendreceive_persistence.py
-   - wallet_digidollar_sendreceive_multinode.py
+**CRITICAL**: The time-locked DGB (mint TX vout[0]) NEVER MOVES!
 
-3. **Integration Tests** (Python)
-   - With persistence layer
-   - With mempool
-   - With block validation
-   - Multi-wallet scenarios
+#### What the Wallet Must Track
 
-4. **Manual Tests** (Qt Wallet)
-   - Send flow walkthrough
-   - Receive flow walkthrough
-   - Error handling verification
-   - UI/UX validation
+1. **Time-Lock Positions** (collateral_positions map)
+   - Represents locked DGB from MINT transactions
+   - Stays ACTIVE until redemption
+   - NEVER modified during transfers
 
-## Risk Assessment
+2. **DD UTXOs** (NEW - currently missing!)
+   - Spendable DD outputs from BOTH mint AND transfer transactions
+   - Can come from:
+     - vout[1] of mint transactions
+     - vout[0], vout[1], etc. of transfer transactions
+   - Must track actual blockchain UTXOs, not assume position
 
-### High Risk Areas
-1. **UTXO Consistency** - Critical for preventing loss of funds
-   - Mitigation: Extensive UTXO state testing
-   - Mitigation: Atomic database updates
+3. **Balance Calculation**
+   - Balance = Sum of spendable DD UTXOs (NOT sum of active positions!)
 
-2. **Signature Security** - Invalid signatures = failed transactions
-   - Mitigation: Comprehensive signing tests
-   - Mitigation: Use proven cryptographic libraries
+## IMPLEMENTATION PLAN - 6 CRITICAL FIXES
 
-3. **Double Spend Prevention** - Must prevent spending same UTXO twice
-   - Mitigation: Proper UTXO locking
-   - Mitigation: Transaction conflict detection
+### FIX #1: Implement DD UTXO Tracking System
+**Priority**: CRITICAL (Foundation for everything)
 
-4. **Balance Accuracy** - Must always reflect true spendable amount
-   - Mitigation: Balance derivation from UTXO set only
-   - Mitigation: No cached balance without validation
+**Problem**: GetDDUTXOs() assumes DD is always (mint_tx, 1)
+**Solution**: Track actual DD UTXOs from blockchain
 
-### Medium Risk Areas
-1. Network propagation failures
-2. Chain reorganization handling
-3. Fee estimation accuracy
-4. Qt UI state management
+**Tasks**:
+1. Add `std::map<COutPoint, CAmount> dd_utxos` to DigiDollarWallet
+   - Maps (txid, vout) → DD amount
+   - Tracks ALL DD outputs (from mint AND transfers)
 
-### Low Risk Areas
-1. Address validation (already complete)
-2. Database persistence (already tested)
-3. Position tracking (already working)
+2. Update on Mint:
+   - Add (mint_tx, 1) → dd_amount to dd_utxos map
+   - Persist via WriteDDUTXO()
 
-## File Change Summary
+3. Update on Send:
+   - Remove spent UTXOs from dd_utxos map
+   - Add change outputs from transaction to dd_utxos map
+   - DO NOT mark time-lock as inactive!
 
-### New Files to Create
-- `test/functional/wallet_digidollar_send.py`
-- `test/functional/wallet_digidollar_receive.py`
-- `test/functional/wallet_digidollar_sendreceive_persistence.py`
-- `test/functional/wallet_digidollar_sendreceive_multinode.py`
-- `src/test/digidollar_coinselection_tests.cpp`
-- `src/test/digidollar_signing_tests.cpp`
+4. Update on Receive:
+   - Scan transaction outputs for DD to our addresses
+   - Add received UTXOs to dd_utxos map
+   - Update balance
 
-### Files to Modify
-- `src/wallet/digidollarwallet.cpp` (SelectDDCoins, SelectFeeCoins, TransferDigiDollar)
-- `src/wallet/digidollarwallet.h` (Add UTXO management methods)
-- `src/qt/walletmodel.cpp` (Complete sendDigiDollar implementation)
-- `src/qt/digidollarsendwidget.cpp` (Wire to backend)
-- `src/rpc/digidollar_transactions.cpp` (Complete transferdigidollar RPC)
+5. Update GetDDUTXOs():
+```cpp
+std::vector<DDUtxo> DigiDollarWallet::GetDDUTXOs() const {
+    std::vector<DDUtxo> utxos;
+    for (const auto& [outpoint, dd_amount] : dd_utxos) {
+        // Verify UTXO is still unspent in wallet
+        if (IsUTXOSpendable(outpoint)) {
+            utxos.emplace_back(outpoint, dd_amount);
+        }
+    }
+    return utxos;
+}
+```
 
-## Notes for Sub-Agents
+6. Update GetTotalDDBalance():
+```cpp
+CAmount DigiDollarWallet::GetTotalDDBalance() const {
+    CAmount balance = 0;
+    for (const auto& [outpoint, dd_amount] : dd_utxos) {
+        if (IsUTXOSpendable(outpoint)) {
+            balance += dd_amount;
+        }
+    }
+    return balance;
+}
+```
 
-### Code Style Guidelines
-- Follow existing DigiByte Core coding standards
-- Use TDD: Write test first (RED), implement (GREEN), refactor
-- Add comprehensive logging with LogPrintf
-- Handle all error cases explicitly
-- Document all public methods
-
-### Common Patterns
-- UTXO selection: Greedy algorithm (smallest UTXOs first)
-- Error handling: Return false + error string out parameter
-- Logging: Prefix all logs with "DigiDollar: "
-- Testing: Use BOOST_CHECK_* macros for C++, assert_* for Python
-
-### Integration Points
-- DigiDollarWallet ↔ WalletModel (Qt layer)
-- DigiDollarWallet ↔ WalletBatch (persistence)
-- DigiDollarWallet ↔ TransferTxBuilder (tx building)
-- DigiDollarWallet ↔ CWallet (UTXO/mempool)
+**Files to Modify**:
+- src/wallet/digidollarwallet.h (add dd_utxos map)
+- src/wallet/digidollarwallet.cpp (GetDDUTXOs, GetTotalDDBalance)
+- src/wallet/walletdb.h (add WriteDDUTXO/ReadDDUTXO)
+- src/wallet/walletdb.cpp (implement UTXO persistence)
 
 ---
 
-**Document Version**: 1.0
+### FIX #2: Fix Transfer to Preserve Time-Locks
+**Priority**: CRITICAL
+
+**Problem**: Transfer marks positions inactive and creates fake change positions
+**Solution**: Leave time-locks alone, only manage DD UTXOs
+
+**Current BAD Code** (lines 309-392):
+```cpp
+// Mark spent input positions as inactive  ← WRONG!
+for (const auto& dd_utxo : dd_utxos) {
+    UpdatePositionStatus(dd_timelock_id, false);  ← DO NOT DO THIS!
+}
+
+// Create change position  ← WRONG!
+WalletCollateralPosition changePosition(changeTxId, dd_change, ...);  ← NO!
+AddCollateralPosition(changePosition);  ← WRONG!
+```
+
+**New CORRECT Code**:
+```cpp
+// CRITICAL: Time-locks (collateral positions) NEVER change during transfers!
+// Only DD UTXOs move. The locked DGB stays in place until redemption.
+
+// Remove spent DD UTXOs from tracking
+for (const auto& spent_utxo : params.ddUtxos) {
+    dd_utxos.erase(spent_utxo);
+    LogPrintf("DigiDollar: Marked DD UTXO %s:%d as spent\n",
+              spent_utxo.hash.ToString(), spent_utxo.n);
+}
+
+// Add new DD UTXOs from transaction outputs (for change)
+// Extract DD outputs from result.tx and add to dd_utxos map
+for (size_t i = 0; i < result.tx.vout.size(); i++) {
+    CAmount dd_amount = 0;
+    if (ExtractDDAmount(result.tx.vout[i].scriptPubKey, dd_amount)) {
+        // Check if this output is to our address (change)
+        if (IsMine(result.tx.vout[i])) {
+            COutPoint new_utxo(result.tx.GetHash(), i);
+            dd_utxos[new_utxo] = dd_amount;
+            LogPrintf("DigiDollar: Added change DD UTXO %s:%d (%d cents)\n",
+                      new_utxo.hash.ToString(), i, dd_amount);
+        }
+    }
+}
+
+// Time-lock positions remain ACTIVE and UNCHANGED
+LogPrintf("DigiDollar: Transfer complete - time-locks preserved\n");
+```
+
+**Files to Modify**:
+- src/wallet/digidollarwallet.cpp (TransferDigiDollar - both versions)
+
+---
+
+### FIX #3: Implement Transaction Broadcasting
+**Priority**: CRITICAL
+
+**Problem**: Transactions built but never broadcast
+**Solution**: Actually send transactions to network
+
+**Add after transaction is built** (line ~310):
+```cpp
+// Build transaction (already working)
+DigiDollar::TxBuilderResult result = builder.BuildTransferTransaction(params);
+if (!result.success) {
+    error = result.error;
+    return false;
+}
+
+// NEW: Actually broadcast the transaction!
+CTransactionRef tx_ref = MakeTransactionRef(result.tx);
+
+// Submit to mempool
+TxValidationState state;
+if (!AcceptToMemoryPool(m_wallet->chain(), state, tx_ref,
+                        /* bypass_limits */ false)) {
+    error = strprintf("Transaction rejected: %s", state.GetRejectReason());
+    LogPrintf("DigiDollar: Mempool rejection - %s\n", error);
+    return false;
+}
+
+// Broadcast to network
+m_wallet->chain().broadcastTransaction(tx_ref);
+LogPrintf("DigiDollar: Transaction broadcast successful - txid: %s\n",
+          tx_ref->GetHash().ToString());
+
+txid = tx_ref->GetHash().ToString();
+```
+
+**Files to Modify**:
+- src/wallet/digidollarwallet.cpp (TransferDigiDollar)
+
+**Dependencies**:
+- Need access to chain interface for broadcasting
+- May need to pass CWallet pointer or chain pointer
+
+---
+
+### FIX #4: Implement Receive Detection
+**Priority**: CRITICAL
+
+**Problem**: No incoming transaction detection
+**Solution**: Scan blockchain for DD outputs to our addresses
+
+**New Method**:
+```cpp
+void DigiDollarWallet::ScanForIncomingDD(const CTransactionRef& tx) {
+    LogPrintf("DigiDollar: Scanning transaction %s for incoming DD\n",
+              tx->GetHash().ToString());
+
+    // Check each output
+    for (size_t i = 0; i < tx->vout.size(); i++) {
+        const CTxOut& txout = tx->vout[i];
+
+        // Extract DD amount from scriptPubKey
+        CAmount dd_amount = 0;
+        if (!ExtractDDAmount(txout.scriptPubKey, dd_amount)) {
+            continue; // Not a DD output
+        }
+
+        // Check if output is to our address
+        if (!IsMine(txout)) {
+            continue; // Not ours
+        }
+
+        // Add to our DD UTXOs
+        COutPoint new_utxo(tx->GetHash(), i);
+        dd_utxos[new_utxo] = dd_amount;
+
+        // Persist to database
+        WalletBatch batch(m_wallet->GetDatabase());
+        batch.WriteDDUTXO(new_utxo, dd_amount);
+
+        // Update balance
+        CAmount new_balance = GetTotalDDBalance();
+        batch.WriteDDBalance(GetDDAddress(), new_balance);
+
+        // Add to transaction history
+        DDTransaction ddtx;
+        ddtx.txid = tx->GetHash().ToString();
+        ddtx.amount = dd_amount;
+        ddtx.timestamp = GetTime();
+        ddtx.confirmations = 0;
+        ddtx.incoming = true;
+        ddtx.category = "receive";
+        batch.WriteDDTransaction(ddtx);
+
+        LogPrintf("DigiDollar: Received %d DD cents in %s:%d\n",
+                  dd_amount, tx->GetHash().ToString(), i);
+
+        // Notify UI
+        NotifyDDTransactionChanged(this, ddtx);
+    }
+}
+```
+
+**Hook into Wallet Transaction Processing**:
+```cpp
+// In wallet transaction processor (when new tx confirmed or enters mempool)
+void DigiDollarWallet::ProcessTransaction(const CTransactionRef& tx) {
+    // Check if this is a DD transaction
+    if (IsDigiDollarTransaction(tx)) {
+        ScanForIncomingDD(tx);
+    }
+}
+```
+
+**Files to Create/Modify**:
+- src/wallet/digidollarwallet.cpp (add ScanForIncomingDD, ProcessTransaction)
+- src/wallet/digidollarwallet.h (declare methods)
+- src/wallet/wallet.cpp (call DigiDollarWallet::ProcessTransaction when tx arrives)
+
+---
+
+### FIX #5: Add DD UTXO Database Persistence
+**Priority**: CRITICAL (Required by Fix #1)
+
+**Problem**: DD UTXOs not persisted to wallet.dat
+**Solution**: Add UTXO read/write to WalletBatch
+
+**Add to walletdb.h**:
+```cpp
+/** Write DD UTXO to database */
+bool WriteDDUTXO(const COutPoint& outpoint, const CAmount& dd_amount);
+
+/** Read DD UTXO from database */
+bool ReadDDUTXO(const COutPoint& outpoint, CAmount& dd_amount);
+
+/** Erase DD UTXO from database */
+bool EraseDDUTXO(const COutPoint& outpoint);
+```
+
+**Add to walletdb.cpp**:
+```cpp
+bool WalletBatch::WriteDDUTXO(const COutPoint& outpoint, const CAmount& dd_amount) {
+    return WriteIC(std::make_pair(DBKeys::DD_UTXO, outpoint), dd_amount);
+}
+
+bool WalletBatch::ReadDDUTXO(const COutPoint& outpoint, CAmount& dd_amount) {
+    return m_batch->Read(std::make_pair(DBKeys::DD_UTXO, outpoint), dd_amount);
+}
+
+bool WalletBatch::EraseDDUTXO(const COutPoint& outpoint) {
+    return m_batch->Erase(std::make_pair(DBKeys::DD_UTXO, outpoint));
+}
+```
+
+**Add to LoadFromDatabase**:
+```cpp
+// Load DD UTXOs from database
+void DigiDollarWallet::LoadFromDatabase() {
+    WalletBatch batch(m_wallet->GetDatabase());
+
+    // Load existing time-locks (already working)
+    // ...
+
+    // Load DD UTXOs (NEW)
+    Dbc* cursor = batch.GetCursor();
+    while (true) {
+        CDataStream ssKey, ssValue;
+        DatabaseCursor::Status status = cursor->ReadAtCursor(ssKey, ssValue);
+        if (status == DatabaseCursor::DONE) break;
+
+        std::string key_type;
+        ssKey >> key_type;
+
+        if (key_type == DBKeys::DD_UTXO) {
+            COutPoint outpoint;
+            CAmount dd_amount;
+            ssKey >> outpoint;
+            ssValue >> dd_amount;
+            dd_utxos[outpoint] = dd_amount;
+            LogPrintf("DigiDollar: Loaded DD UTXO %s:%d (%d cents)\n",
+                      outpoint.hash.ToString(), outpoint.n, dd_amount);
+        }
+    }
+
+    LogPrintf("DigiDollar: Loaded %d DD UTXOs from database\n", dd_utxos.size());
+}
+```
+
+**Files to Modify**:
+- src/wallet/walletdb.h (declare methods)
+- src/wallet/walletdb.cpp (implement persistence)
+- src/wallet/digidollarwallet.cpp (LoadFromDatabase)
+
+---
+
+### FIX #6: Update Unit Tests
+**Priority**: HIGH (Verify fixes work)
+
+**Problem**: Existing tests assume broken model
+**Solution**: Update tests to match correct architecture
+
+**Update**: src/test/digidollar_transfer_tests.cpp
+
+**Key Changes**:
+1. Tests should NOT expect positions to be marked inactive after transfer
+2. Tests should verify DD UTXOs are tracked correctly
+3. Tests should verify time-locks stay active
+4. Add test for receiving DD
+
+**Example Test**:
+```cpp
+BOOST_AUTO_TEST_CASE(test_transfer_preserves_timelock)
+{
+    // Setup: Create mint position
+    uint256 mint_txid = CreateMintPosition(wallet, 10000); // 100 DD
+
+    // Verify initial state
+    BOOST_CHECK_EQUAL(wallet.GetTotalDDBalance(), 10000);
+    auto timelocks = wallet.GetDDTimeLocks(true);
+    BOOST_CHECK_EQUAL(timelocks.size(), 1);
+    BOOST_CHECK(timelocks[0].is_active);
+
+    // Transfer 50 DD
+    std::string txid, error;
+    CDigiDollarAddress recipient("DD1test...");
+    bool success = wallet.TransferDigiDollar(recipient, 5000, txid, error);
+
+    BOOST_CHECK(success);
+
+    // Verify time-lock is STILL ACTIVE (critical!)
+    timelocks = wallet.GetDDTimeLocks(true);
+    BOOST_CHECK_EQUAL(timelocks.size(), 1);
+    BOOST_CHECK(timelocks[0].is_active); // Must still be active!
+
+    // Verify balance decreased
+    BOOST_CHECK_EQUAL(wallet.GetTotalDDBalance(), 5000); // 50 DD remaining
+
+    // Verify DD UTXOs updated
+    auto utxos = wallet.GetDDUTXOs();
+    // Should have change UTXO from transfer, NOT original mint UTXO
+    bool found_change = false;
+    for (const auto& utxo : utxos) {
+        if (utxo.hash.ToString() == txid) {
+            found_change = true;
+            BOOST_CHECK_EQUAL(utxo.dd_amount, 5000); // 50 DD change
+        }
+    }
+    BOOST_CHECK(found_change);
+}
+```
+
+**Files to Modify**:
+- src/test/digidollar_transfer_tests.cpp (update all transfer tests)
+- Add new test file: src/test/digidollar_utxo_tests.cpp
+
+---
+
+## IMPLEMENTATION ORDER (CRITICAL PATH)
+
+### Phase 1: Foundation (MUST DO FIRST)
+1. ✅ FIX #5: DD UTXO Database Persistence (walletdb.h/cpp)
+2. ✅ FIX #1: DD UTXO Tracking System (digidollarwallet.h/cpp)
+
+### Phase 2: Core Fixes (SEQUENTIAL)
+3. ✅ FIX #2: Fix Transfer Logic (preserve time-locks)
+4. ✅ FIX #3: Transaction Broadcasting
+
+### Phase 3: Receiving (DEPENDS ON PHASE 1 & 2)
+5. ✅ FIX #4: Receive Detection
+
+### Phase 4: Testing & Validation
+6. ✅ FIX #6: Update Unit Tests
+7. ✅ Compile and test
+8. ✅ End-to-end Qt testing
+
+---
+
+## SUCCESS CRITERIA
+
+### Must ALL Pass:
+- [ ] Can mint 100 DD in regtest Qt wallet
+- [ ] Can send 50 DD to another address
+- [ ] Sending wallet shows 50 DD remaining
+- [ ] **Time-lock position stays ACTIVE after send** (critical!)
+- [ ] Transaction appears in blockchain (not just in-memory)
+- [ ] Can send DD to self, receive it properly
+- [ ] Restart wallet, balance still 50 DD
+- [ ] Can send the remaining 50 DD
+- [ ] All unit tests pass
+- [ ] All functional tests pass
+
+---
+
+## FILES TO MODIFY - SUMMARY
+
+### Header Files
+- src/wallet/digidollarwallet.h (add dd_utxos map, new methods)
+- src/wallet/walletdb.h (DD UTXO persistence methods)
+
+### Implementation Files
+- src/wallet/digidollarwallet.cpp (ALL 6 fixes)
+- src/wallet/walletdb.cpp (UTXO persistence)
+- src/wallet/wallet.cpp (hook receive detection)
+
+### Test Files
+- src/test/digidollar_transfer_tests.cpp (update existing tests)
+- src/test/digidollar_utxo_tests.cpp (NEW - UTXO tracking tests)
+
+---
+
+**Document Version**: 2.0 - CRITICAL BUG FIX EDITION
 **Last Updated**: 2025-10-03
-**Status**: Ready for Orchestrator
+**Status**: Ready for Implementation - FIX THESE BUGS!

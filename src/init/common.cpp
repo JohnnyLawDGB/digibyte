@@ -149,6 +149,6 @@ void LogPackageVersion()
 #else
     version_string += " (release build)";
 #endif
-    LogPrintf(CLIENT_NAME " version %s\n", version_string);
+    LogPrintf("%s version %s\n", CLIENT_NAME, version_string);
 }
 } // namespace init

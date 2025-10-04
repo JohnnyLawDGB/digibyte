@@ -338,6 +338,7 @@ CAmount TransferTxBuilder::GetDDFromUTXO(const COutPoint& outpoint) const {
 bool TransferTxBuilder::ValidateTransferParams(const TxBuilderTransferParams& params) const {
     // Must have recipients
     if (params.recipients.empty()) {
+        LogPrintf("DigiDollar: ValidateTransferParams FAILED - No recipients\n");
         return false;
     }
 
@@ -348,20 +349,24 @@ bool TransferTxBuilder::ValidateTransferParams(const TxBuilderTransferParams& pa
     for (const auto& [address, amount] : params.recipients) {
         // Validate address format
         if (!ValidateDDAddress(address)) {
+            LogPrintf("DigiDollar: ValidateTransferParams FAILED - Invalid address: %s\n", address);
             return false;
         }
 
         // Validate amount ranges
         if (amount <= 0) {
+            LogPrintf("DigiDollar: ValidateTransferParams FAILED - Non-positive amount: %d\n", amount);
             return false; // No zero or negative amounts
         }
 
         if (amount < minOutput) {
+            LogPrintf("DigiDollar: ValidateTransferParams FAILED - Below dust threshold: %d < %d\n", amount, minOutput);
             return false; // Below dust threshold
         }
 
         // Check maximum single transfer limit ($100,000)
         if (amount > 10000000) { // $100,000.00 in cents
+            LogPrintf("DigiDollar: ValidateTransferParams FAILED - Exceeds max transfer: %d > 10000000\n", amount);
             return false;
         }
 
@@ -370,19 +375,23 @@ bool TransferTxBuilder::ValidateTransferParams(const TxBuilderTransferParams& pa
 
     // Must have DD inputs
     if (params.ddUtxos.empty()) {
+        LogPrintf("DigiDollar: ValidateTransferParams FAILED - No DD UTXOs\n");
         return false;
     }
 
     // Validate key
     if (!params.spenderKey.IsValid()) {
+        LogPrintf("DigiDollar: ValidateTransferParams FAILED - Invalid spender key\n");
         return false;
     }
 
     // Validate fee rate
     if (!ValidateFeeRate(params.feeRate)) {
+        LogPrintf("DigiDollar: ValidateTransferParams FAILED - Invalid fee rate: %d\n", params.feeRate);
         return false;
     }
 
+    LogPrintf("DigiDollar: ValidateTransferParams PASSED\n");
     return true;
 }
 
@@ -464,7 +473,16 @@ TxBuilderResult TransferTxBuilder::BuildTransferTransaction(const TxBuilderTrans
     }
 
     // Calculate totals and check DD conservation
-    CAmount totalDDIn = CalculateTotalDDInputs(params.ddUtxos);
+    CAmount totalDDIn = 0;
+    if (!params.ddAmounts.empty() && params.ddAmounts.size() == params.ddUtxos.size()) {
+        // Use provided amounts
+        for (CAmount amount : params.ddAmounts) {
+            totalDDIn += amount;
+        }
+    } else {
+        // Fallback to UTXO lookup
+        totalDDIn = CalculateTotalDDInputs(params.ddUtxos);
+    }
     CAmount totalDDOut = CalculateTotalDDOutputs(params.recipients);
 
     // Strict DD conservation check

@@ -18,7 +18,7 @@
 #include <script/sign.h>
 #include <script/signingprovider.h>
 #include <script/interpreter.h>
-#include <test/util/random.h>
+#include <random.h>
 
 #include <algorithm>
 #include <regex>
@@ -263,7 +263,7 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
         // Build transfer transaction using TxBuilder
         DigiDollar::TxBuilderTransferParams params;
         params.recipients.push_back({to.ToString(), amount});
-        params.feeRate = 1000; // 1000 sat/vB default
+        params.feeRate = 100000; // 100,000 sat/kB (DigiByte minimum relay fee)
 
         // Select DD UTXOs to cover the amount
         CAmount selectedDDTotal = 0;
@@ -1254,13 +1254,41 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
         DigiDollar::TxBuilderTransferParams params;
         params.recipients.push_back({to.ToString(), amount});
         params.ddUtxos = dd_utxos;
-        params.feeUtxos = fee_utxos;
-        params.feeRate = 1000;  // 1000 sat/vB default
 
-        // Generate spending key (mock for testing - would come from wallet)
+        // Populate DD amounts for each UTXO
+        for (const auto& utxo : dd_utxos) {
+            CAmount dd_amount = GetDDFromUTXO(utxo);
+            params.ddAmounts.push_back(dd_amount);
+        }
+
+        params.feeUtxos = fee_utxos;
+        params.feeRate = 100000;  // 100,000 sat/kB (DigiByte minimum relay fee)
+
+        // Get the spending key from wallet
+        // For DD transfers, we need the key that owns the first DD UTXO
+        if (dd_utxos.empty()) {
+            LogPrintf("DigiDollar: No DD UTXOs available for transfer\n");
+            return false;
+        }
+
+        // Look up the position for the first DD UTXO
+        auto it = collateral_positions.find(dd_utxos[0].hash);
+        if (it == collateral_positions.end()) {
+            LogPrintf("DigiDollar: DD UTXO position not found: %s\n", dd_utxos[0].hash.ToString());
+            return false;
+        }
+
+        const WalletCollateralPosition& position = it->second;
+
+        // Retrieve owner key from DD owner keys map
         CKey spenderKey;
-        spenderKey.MakeNewKey(true);
+        if (!GetOwnerKey(dd_utxos[0].hash, spenderKey)) {
+            LogPrintf("DigiDollar: Owner key not found for DD UTXO %s\n", dd_utxos[0].hash.ToString());
+            return false;
+        }
+
         params.spenderKey = spenderKey;
+        LogPrintf("DigiDollar: Retrieved owner key for DD transfer from position %s\n", dd_utxos[0].hash.ToString());
 
         // Get current chain height and oracle price (mock values for now)
         int currentHeight = 100000;  // TODO: Get actual height from chainstate
@@ -1278,70 +1306,29 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
         // Create transaction reference
         tx_out = MakeTransactionRef(result.tx);
 
-        // PHASE 5.1: Update sender balance by marking spent positions inactive
-        // Balance is UTXO-derived, so marking positions inactive automatically updates balance
-        LogPrintf("DigiDollar: Updating positions after transfer (PHASE 5.1)\n");
+        // CRITICAL: DD Transfers DON'T create/destroy time-locks!
+        // Time-locks (vout[0] of mint) stay intact until redemption
+        // Only DD tokens (vout[1]) move between wallets
+        //
+        // What we need to do:
+        // 1. Mark spent DD UTXOs as spent (NOT the time-lock position!)
+        // 2. Add new DD UTXOs from transaction outputs (for change)
+        // 3. DO NOT modify time-lock positions at all
+        //
+        // The time-lock position stays ACTIVE because the DGB is still locked!
+        // Only the DD ownership changes.
 
-        // Mark spent input positions as inactive
-        for (const auto& dd_utxo : dd_utxos) {
-            uint256 dd_timelock_id = dd_utxo.hash;
+        LogPrintf("DigiDollar: Transfer completed - DD ownership transferred, time-locks unchanged\n");
 
-            if (!UpdatePositionStatus(dd_timelock_id, false)) {
-                LogPrintf("DigiDollar: WARNING - Failed to mark position %s as spent\n",
-                         dd_timelock_id.ToString());
-            } else {
-                LogPrintf("DigiDollar: Marked position %s as spent\n",
-                         dd_timelock_id.ToString());
-            }
-        }
-
-        // PHASE 5.1: Create change position if there's DD change
-        CAmount dd_change = selectedDDTotal - amount;
-        if (dd_change > 0) {
-            LogPrintf("DigiDollar: Creating change position for %d cents\n", dd_change);
-
-            // Transaction structure: vout[0] = recipient DD, vout[1] = change DD (if any)
-            if (result.tx.vout.size() >= 2) {
-                uint256 changeTxId = result.tx.GetHash();
-
-                // Calculate proportional collateral for change
-                CAmount totalInputCollateral = 0;
-                for (const auto& dd_utxo : dd_utxos) {
-                    auto it = collateral_positions.find(dd_utxo.hash);
-                    if (it != collateral_positions.end()) {
-                        totalInputCollateral += it->second.dgb_collateral;
-                    }
-                }
-
-                CAmount changeCollateral = (totalInputCollateral * dd_change) / selectedDDTotal;
-
-                // Get unlock height from first input position (inherit lock tier)
-                int64_t unlockHeight = 0;
-                uint32_t lockTier = 1;
-                if (!dd_utxos.empty()) {
-                    auto it = collateral_positions.find(dd_utxos[0].hash);
-                    if (it != collateral_positions.end()) {
-                        unlockHeight = it->second.unlock_height;
-                        lockTier = it->second.lock_tier;
-                    }
-                }
-
-                // Create change position
-                WalletCollateralPosition changePosition(
-                    changeTxId,
-                    dd_change,
-                    changeCollateral,
-                    lockTier,
-                    unlockHeight
-                );
-
-                // Persist change position
-                AddCollateralPosition(changePosition);
-
-                LogPrintf("DigiDollar: Created change position %s with %d DD cents\n",
-                         changeTxId.ToString(), dd_change);
-            }
-        }
+        // The transaction is built correctly by txbuilder:
+        // - Inputs: DD UTXOs being spent
+        // - Outputs: DD to recipient, DD change (if any), DGB change (if any)
+        //
+        // Balance will update automatically when we detect our change output
+        // (either in this wallet if sending to self, or in receiving wallet)
+        //
+        // IMPORTANT: We do NOT mark positions inactive or create new positions!
+        // The collateral positions represent time-locked DGB, which doesn't move.
 
         // Create DD transaction record for history
         DDTransaction ddtx;
@@ -1366,6 +1353,7 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
 
         // Log balance update
         CAmount newBalance = GetTotalDDBalance();
+        CAmount dd_change = selectedDDTotal - amount; // Calculate change from selected inputs
         LogPrintf("DigiDollar: Transfer successful - %d cents to %s (txid: %s)\n",
                   amount, to.ToString(), ddtx.txid);
         LogPrintf("DigiDollar: Balance after transfer: %d (change: %d)\n",
@@ -1997,7 +1985,7 @@ bool DigiDollarWallet::SignDDInputs(CMutableTransaction& tx, const std::vector<C
 
         // Sign with Schnorr (BIP340)
         std::vector<unsigned char> sig(64); // Schnorr signatures are 64 bytes
-        uint256 aux_rand = InsecureRand256(); // Auxiliary random data for Schnorr
+        uint256 aux_rand = GetRandHash(); // Auxiliary random data for Schnorr
 
         if (!signing_key.SignSchnorr(sighash, sig, nullptr, aux_rand)) {
             LogPrintf("DigiDollar: SignDDInputs - Schnorr signing failed for input %d\n", i);
@@ -2295,15 +2283,6 @@ bool DigiDollarWallet::UpdateDDUTXOSet(const CTransactionRef& tx,
     return true;
 }
 
-        UpdateInput(tx.vin[input_index], sigdata);
-
-        LogPrintf("DigiDollar: SignFeeInputs - Successfully signed fee input %d\n", input_index);
-    }
-
-    LogPrintf("DigiDollar: SignFeeInputs - Successfully signed all %d fee inputs\n", fee_utxos.size());
-    return true;
-}
-
 // =============================================================================
 // PHASE 4.1: MEMPOOL SUBMISSION IMPLEMENTATION
 // =============================================================================
@@ -2503,8 +2482,8 @@ bool DigiDollarWallet::DetectIncomingDDOutputs(const CTransactionRef& tx,
             LOCK(m_wallet->cs_wallet);
 
             // Check if we own this output
-            isminetype mine = m_wallet->IsMine(txout);
-            if (mine & ISMINE_SPENDABLE) {
+            wallet::isminetype mine = m_wallet->IsMine(txout);
+            if (mine & wallet::ISMINE_SPENDABLE) {
                 LogPrintf("DigiDollar: Detected incoming DD output - vout[%d]: %d DD cents\n",
                           i, dd_amount);
                 our_dd_outputs.push_back(std::make_pair(i, dd_amount));

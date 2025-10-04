@@ -32,6 +32,7 @@
 
 #include <chain.h>
 #include <chainparams.h>
+#include <clientversion.h>
 #include <common/system.h>
 #include <interfaces/handler.h>
 #include <interfaces/node.h>
@@ -341,15 +342,15 @@ void DigiByteGUI::createActions()
     quitAction->setStatusTip(tr("Quit application"));
     quitAction->setShortcut(QKeySequence(tr("Ctrl+Q")));
     quitAction->setMenuRole(QAction::QuitRole);
-    aboutAction = new QAction(tr("&About %1").arg(CLIENT_NAME), this);
-    aboutAction->setStatusTip(tr("Show information about %1").arg(CLIENT_NAME));
+    aboutAction = new QAction(tr("&About %1").arg(QString::fromStdString(CLIENT_NAME)), this);
+    aboutAction->setStatusTip(tr("Show information about %1").arg(QString::fromStdString(CLIENT_NAME)));
     aboutAction->setMenuRole(QAction::AboutRole);
     aboutAction->setEnabled(false);
     aboutQtAction = new QAction(tr("About &Qt"), this);
     aboutQtAction->setStatusTip(tr("Show information about Qt"));
     aboutQtAction->setMenuRole(QAction::AboutQtRole);
     optionsAction = new QAction(tr("&Options…"), this);
-    optionsAction->setStatusTip(tr("Modify configuration options for %1").arg(CLIENT_NAME));
+    optionsAction->setStatusTip(tr("Modify configuration options for %1").arg(QString::fromStdString(CLIENT_NAME)));
     optionsAction->setMenuRole(QAction::PreferencesRole);
     optionsAction->setEnabled(false);
 
@@ -410,7 +411,7 @@ void DigiByteGUI::createActions()
 
     showHelpMessageAction = new QAction(tr("&Command-line options"), this);
     showHelpMessageAction->setMenuRole(QAction::NoRole);
-    showHelpMessageAction->setStatusTip(tr("Show the %1 help message to get a list with possible DigiByte command-line options").arg(CLIENT_NAME));
+    showHelpMessageAction->setStatusTip(tr("Show the %1 help message to get a list with possible DigiByte command-line options").arg(QString::fromStdString(CLIENT_NAME)));
 
     m_mask_values_action = new QAction(tr("&Mask values"), this);
     m_mask_values_action->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_M));
@@ -891,7 +892,7 @@ void DigiByteGUI::createTrayIcon()
 #ifndef Q_OS_MACOS
     if (QSystemTrayIcon::isSystemTrayAvailable()) {
         trayIcon = new QSystemTrayIcon(m_network_style->getTrayAndWindowIcon(), this);
-        QString toolTip = tr("%1 client").arg(CLIENT_NAME) + " " + m_network_style->getTitleAddText();
+        QString toolTip = tr("%1 client").arg(QString::fromStdString(CLIENT_NAME)) + " " + m_network_style->getTitleAddText();
         trayIcon->setToolTip(toolTip);
     }
 #endif
@@ -1289,7 +1290,7 @@ void DigiByteGUI::createWallet()
 void DigiByteGUI::message(const QString& title, QString message, unsigned int style, bool* ret, const QString& detailed_message)
 {
     // Default title. On macOS, the window title is ignored (as required by the macOS Guidelines).
-    QString strTitle{CLIENT_NAME};
+    QString strTitle = QString::fromStdString(CLIENT_NAME);
     // Default to information icon
     int nMBoxIcon = QMessageBox::Information;
     int nNotifyIcon = Notificator::Information;
@@ -1348,7 +1349,7 @@ void DigiByteGUI::message(const QString& title, QString message, unsigned int st
 
 void DigiByteGUI::changeEvent(QEvent *e)
 {
-    if (e->type() == QEvent::PaletteChange) {
+    if (e->type() == QEvent::PaletteChange && overviewAction) {
         overviewAction->setIcon(platformStyle->SingleColorIcon(QStringLiteral(":/icons/overview")));
         sendCoinsAction->setIcon(platformStyle->SingleColorIcon(QStringLiteral(":/icons/send")));
         receiveCoinsAction->setIcon(platformStyle->SingleColorIcon(QStringLiteral(":/icons/receiving_addresses")));
@@ -1547,7 +1548,7 @@ void DigiByteGUI::updateProxyIcon()
 
 void DigiByteGUI::updateWindowTitle()
 {
-    QString window_title = CLIENT_NAME;
+    QString window_title = QString::fromStdString(CLIENT_NAME);
 #ifdef ENABLE_WALLET
     if (walletFrame) {
         WalletModel* const wallet_model = walletFrame->currentWalletModel();

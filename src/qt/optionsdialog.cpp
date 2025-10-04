@@ -7,6 +7,7 @@
 #endif
 
 #include <qt/optionsdialog.h>
+#include <clientversion.h>
 #include <qt/forms/ui_optionsdialog.h>
 
 #include <qt/digibyteunits.h>
@@ -92,7 +93,7 @@ OptionsDialog::OptionsDialog(QWidget* parent, bool enableWallet)
     }
 
 #ifdef ENABLE_EXTERNAL_SIGNER
-    ui->externalSignerPath->setToolTip(ui->externalSignerPath->toolTip().arg(CLIENT_NAME));
+    ui->externalSignerPath->setToolTip(ui->externalSignerPath->toolTip().arg(QString::fromStdString(CLIENT_NAME)));
 #else
     //: "External signing" means using devices such as hardware wallets.
     ui->externalSignerPath->setToolTip(tr("Compiled without external signing support (required for external signing)"));
@@ -110,12 +111,12 @@ OptionsDialog::OptionsDialog(QWidget* parent, bool enableWallet)
 
     QDir translations(":translations");
 
-    ui->digibyteAtStartup->setToolTip(ui->digibyteAtStartup->toolTip().arg(CLIENT_NAME));
-    ui->digibyteAtStartup->setText(ui->digibyteAtStartup->text().arg(CLIENT_NAME));
+    ui->digibyteAtStartup->setToolTip(ui->digibyteAtStartup->toolTip().arg(QString::fromStdString(CLIENT_NAME)));
+    ui->digibyteAtStartup->setText(ui->digibyteAtStartup->text().arg(QString::fromStdString(CLIENT_NAME)));
 
-    ui->openDigiByteConfButton->setToolTip(ui->openDigiByteConfButton->toolTip().arg(CLIENT_NAME));
+    ui->openDigiByteConfButton->setToolTip(ui->openDigiByteConfButton->toolTip().arg(QString::fromStdString(CLIENT_NAME)));
 
-    ui->lang->setToolTip(ui->lang->toolTip().arg(CLIENT_NAME));
+    ui->lang->setToolTip(ui->lang->toolTip().arg(QString::fromStdString(CLIENT_NAME)));
     ui->lang->addItem(QString("(") + tr("default") + QString(")"), QVariant(""));
     for (const QString &langStr : translations.entryList())
     {

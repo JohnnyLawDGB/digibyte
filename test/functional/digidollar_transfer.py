@@ -16,7 +16,6 @@ from test_framework.util import (
     assert_greater_than,
     assert_greater_than_or_equal,
     assert_raises_rpc_error,
-    connect_nodes,
 )
 from decimal import Decimal
 
@@ -290,7 +289,7 @@ class DigiDollarTransferTest(DigiByteTestFramework):
 
         # Ensure all nodes are connected
         for i in range(self.num_nodes - 1):
-            connect_nodes(self.nodes[i], self.nodes[i + 1])
+            self.connect_nodes(i, i + 1)
 
         # Create transfer on node 0
         receiver_address = self.nodes[3].getdigidollaraddress()

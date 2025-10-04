@@ -695,10 +695,12 @@ WalletModel::DigiDollarSendResult WalletModel::sendDigiDollar(const QString& add
         LogPrintf("DigiDollar Qt: Send successful - %d cents to %s, txid: %s\n",
                   amount, address.toStdString(), txid);
 
-        // TODO: Future enhancements:
-        // 1. Update transaction table model to show DD transactions
-        // 2. Emit balance update signals if not already handled by backend
-        // 3. Add DD transaction notifications
+        // PHASE 7.4-7.6: Emit signals for UI updates
+        // Force balance refresh to update all widgets
+        checkBalanceChanged(m_wallet->getBalances());
+
+        // Emit pollBalanceChanged to trigger UI refresh across all widgets
+        Q_EMIT pollBalanceChanged();
 
         return DigiDollarSendResult(OK, QString::fromStdString(txid), "");
 
@@ -838,8 +840,14 @@ WalletModel::DigiDollarMintResult WalletModel::mintDigiDollar(CAmount ddAmount, 
         CKey ownerKey;
         ownerKey.MakeNewKey(true); // Generate compressed key
         CPubKey ownerPubKey = ownerKey.GetPubKey();
-        LogPrintf("DigiDollar Qt: Step 6 - Generated owner key - PubKey: %s\n",
-                  HexStr(ownerPubKey));
+        CKeyID ownerKeyID = ownerPubKey.GetID();
+
+        // Store the owner key in DigiDollarWallet (works for both legacy and descriptor wallets)
+        // The key will be stored in dd_owner_keys map indexed by position ID
+        // Note: Position ID will be the mint transaction hash
+
+        LogPrintf("DigiDollar Qt: Step 6 - Generated owner key - PubKey: %s, KeyID: %s\n",
+                  HexStr(ownerPubKey), HexStr(ownerKeyID));
 
         // Step 7: Build mint transaction using custom MintTxBuilder that has UTXO access
         LogPrintf("DigiDollar Qt: Step 7 - Building mint transaction...\n");
@@ -944,7 +952,12 @@ WalletModel::DigiDollarMintResult WalletModel::mintDigiDollar(CAmount ddAmount, 
             int64_t lockBlocks = DigiDollar::LockDaysToBlocks(lockDays);
             int unlockHeight = currentHeight + lockBlocks;
             WalletCollateralPosition position(positionId, ddAmount, result.collateralRequired, lockTier, unlockHeight);
+            position.owner_keyid = ownerKeyID;  // Store the owner key ID for later transfer signing
             ddWallet->AddCollateralPosition(position);
+
+            // Store the owner key in DD wallet for transfer signing
+            ddWallet->StoreOwnerKey(positionId, ownerKey);
+            LogPrintf("DigiDollar Qt: Stored owner key for position %s\n", positionId.GetHex());
             LogPrintf("DigiDollar Qt: Position stored in wallet - ID: %s, DD: %d, DGB: %d, Tier: %d\n",
                       positionId.GetHex(), ddAmount, result.collateralRequired, lockTier);
 

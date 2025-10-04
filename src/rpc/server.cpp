@@ -5,6 +5,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #include <rpc/server.h>
 
+#include <clientversion.h>
 #include <common/args.h>
 #include <common/system.h>
 #include <logging.h>
@@ -164,16 +165,18 @@ static RPCHelpMan help()
 
 static RPCHelpMan stop()
 {
-    static const std::string RESULT{CLIENT_NAME " stopping"};
+    static const std::string RESULT{CLIENT_NAME + " stopping"};
     return RPCHelpMan{"stop",
     // Also accept the hidden 'wait' integer argument (milliseconds)
     // For instance, 'stop 1000' makes the call wait 1 second before returning
     // to the client (intended for testing)
-                "\nRequest a graceful shutdown of " CLIENT_NAME ".",
+                "\nRequest a graceful shutdown of " + CLIENT_NAME + ".",
                 {
                     {"wait", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "how long to wait in ms", RPCArgOptions{.hidden=true}},
                 },
-                RPCResult{RPCResult::Type::STR, "", "A string with the content '" + RESULT + "'"},
+                {
+                    RPCResult{RPCResult::Type::STR, "", "A string with the content '" + RESULT + "'"},
+                },
                 RPCExamples{""},
         [&](const RPCHelpMan& self, const JSONRPCRequest& jsonRequest) -> UniValue
 {

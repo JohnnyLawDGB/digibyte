@@ -76,6 +76,7 @@ struct WalletCollateralPosition {
     uint32_t lock_tier;
     int64_t unlock_height;
     bool is_active;
+    CKeyID owner_keyid;      // Key ID that owns this DD time-lock
 
     WalletCollateralPosition()
         : dd_minted(0), dgb_collateral(0), lock_tier(0), unlock_height(0), is_active(false) {}
@@ -90,6 +91,7 @@ struct WalletCollateralPosition {
         READWRITE(obj.lock_tier);
         READWRITE(obj.unlock_height);
         READWRITE(obj.is_active);
+        READWRITE(obj.owner_keyid);
     }
 };
 
@@ -127,6 +129,10 @@ private:
     CAmount total_dd_balance;
     CAmount locked_collateral;
 
+    // DD owner keys storage (for signing transfers)
+    // Maps dd_timelock_id -> owner CKey
+    std::map<uint256, CKey> dd_owner_keys;
+
     // Pointer to wallet for UTXO access
     wallet::CWallet* m_wallet;
 
@@ -137,6 +143,32 @@ public:
 
     // Set wallet pointer (for initialization)
     void SetWallet(wallet::CWallet* wallet) { m_wallet = wallet; }
+
+    // ====================================================================
+    // DD OWNER KEY MANAGEMENT (for Taproot/Descriptor wallet compatibility)
+    // ====================================================================
+
+    /**
+     * Store DD owner key for a time-lock position
+     * @param dd_timelock_id The time-lock position ID (mint tx hash)
+     * @param key The owner private key
+     */
+    void StoreOwnerKey(const uint256& dd_timelock_id, const CKey& key) {
+        dd_owner_keys[dd_timelock_id] = key;
+    }
+
+    /**
+     * Retrieve DD owner key for a time-lock position
+     * @param dd_timelock_id The time-lock position ID
+     * @param key Output parameter for the key
+     * @return true if key found
+     */
+    bool GetOwnerKey(const uint256& dd_timelock_id, CKey& key) const {
+        auto it = dd_owner_keys.find(dd_timelock_id);
+        if (it == dd_owner_keys.end()) return false;
+        key = it->second;
+        return true;
+    }
 
     // ====================================================================
     // PHASE 5 TASK 5.1: DATABASE EXTENSION FUNCTIONS

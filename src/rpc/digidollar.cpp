@@ -789,7 +789,7 @@ static RPCHelpMan senddigidollar()
             // PHASE 7.7: Integration with backend TransferDigiDollar() from Phase 2.1
 
             // Get wallet
-            std::shared_ptr<wallet::CWallet> const pwallet = GetWalletForJSONRPCRequest(request);
+            std::shared_ptr<wallet::CWallet> const pwallet = wallet::GetWalletForJSONRPCRequest(request);
             if (!pwallet) {
                 throw JSONRPCError(RPC_WALLET_ERROR, "Wallet not found");
             }
@@ -811,8 +811,7 @@ static RPCHelpMan senddigidollar()
             }
 
             // Parse and validate DD address
-            CDigiDollarAddress dd_address;
-            dd_address.SetString(addressStr);
+            CDigiDollarAddress dd_address(addressStr);
             if (!dd_address.IsValid()) {
                 throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid DigiDollar address");
             }
@@ -821,8 +820,8 @@ static RPCHelpMan senddigidollar()
             CAmount balance = dd_wallet->GetTotalDDBalance();
             if (amount > balance) {
                 throw JSONRPCError(RPC_WALLET_INSUFFICIENT_FUNDS,
-                    strprintf("Insufficient DD balance (have %s cents, need %s cents)",
-                             FormatMoney(balance), FormatMoney(amount)));
+                    strprintf("Insufficient DD balance (have %d cents, need %d cents)",
+                             balance, amount));
             }
 
             // Execute transfer using backend function (Phase 2.1)
@@ -1342,7 +1341,7 @@ static RPCHelpMan getdigidollarbalance()
             // PHASE 7.7: Integration with DigiDollarWallet backend
 
             // Get wallet
-            std::shared_ptr<wallet::CWallet> const pwallet = GetWalletForJSONRPCRequest(request);
+            std::shared_ptr<wallet::CWallet> const pwallet = wallet::GetWalletForJSONRPCRequest(request);
             if (!pwallet) {
                 throw JSONRPCError(RPC_WALLET_ERROR, "Wallet not found");
             }
@@ -1370,8 +1369,7 @@ static RPCHelpMan getdigidollarbalance()
 
             if (!addressStr.empty()) {
                 // Get balance for specific address
-                CDigiDollarAddress dd_address;
-                dd_address.SetString(addressStr);
+                CDigiDollarAddress dd_address(addressStr);
                 if (!dd_address.IsValid()) {
                     throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid DigiDollar address");
                 }
@@ -1600,7 +1598,7 @@ static RPCHelpMan listdigidollartxs()
             // PHASE 7.7: Integration with DigiDollarWallet backend
 
             // Get wallet
-            std::shared_ptr<wallet::CWallet> const pwallet = GetWalletForJSONRPCRequest(request);
+            std::shared_ptr<wallet::CWallet> const pwallet = wallet::GetWalletForJSONRPCRequest(request);
             if (!pwallet) {
                 throw JSONRPCError(RPC_WALLET_ERROR, "Wallet not found");
             }

@@ -1,520 +1,461 @@
-# DigiDollar Send/Receive Sub-Agent Prompt
+# DigiDollar Send/Receive Sub-Agent - BUG FIX MODE
 
 ## Your Role
-You are a **Sub-Agent** assigned to implement ONE specific task for the DigiDollar Send/Receive feature. You MUST follow strict Test-Driven Development (TDD) methodology.
+You are a **Sub-Agent** assigned to fix ONE specific bug in DigiDollar Send/Receive. You MUST follow strict TDD methodology: RED → GREEN → REFACTOR.
 
-## Critical Context - READ BEFORE STARTING
+## 🔴 CRITICAL: The System is BROKEN
 
-### Available Documentation (Reference as Needed)
-- **DIGIDOLLAR_TERMINOLOGY.md** - **CRITICAL: Correct terminology (Time-Locked DGB, NOT "positions")**
-- **DIGIDOLLAR_SENDRECEIVE_TASKS.md** - Master task list and context
-- **DIGIDOLLAR_SENDRECEIVE_EXPLAINER.md** - Architecture and data flow
-- **DIGIDOLLAR_SENDRECEIVE_TDD_GUIDE.md** - Detailed TDD examples
-- **DIGIDOLLAR_DB_PERSISTENCE_EXPLAINER.md** - How persistence works (CRITICAL!)
+**READ**: DIGIDOLLAR_SENDRECEIVE_TASKS.md for complete bug analysis
 
-### Existing Persistence Layer (MUST INTEGRATE WITH)
-The DigiDollar wallet already has 100% working database persistence:
+### The 4 Critical Bugs:
+1. NO BROADCASTING - Transactions never sent to network
+2. BROKEN UTXO MODEL - Can only spend DD once
+3. DESTROYS TIME-LOCKS - Marks positions inactive (wrong!)
+4. NO RECEIVING - Can't detect incoming DD
 
-**Database Storage (wallet.dat)**:
-- Positions: `WalletBatch::WritePosition()` / `ReadPosition()`
-- Balances: `WalletBatch::WriteDDBalance()` / `ReadDDBalance()`
-- Transactions: `WalletBatch::WriteDDTransaction()` / `ReadDDTransaction()`
-- DD Outputs: `WalletBatch::WriteDDOutput()` / `ReadDDOutput()`
+## The CORRECT DigiDollar Model
 
-**In-Memory Cache**:
-- `collateral_positions` - Map of position_id → WalletCollateralPosition
-- `dd_balances` - Map of address → CAmount
-- `dd_transaction_history` - Vector of DDTransaction
-
-**Auto-Loading**:
-- `DigiDollarWallet::LoadFromDatabase()` - Called on wallet startup
-- Loads all positions, balances, transactions from wallet.dat
-
-### UTXO Structure for DigiDollar
-
-**CRITICAL TERMINOLOGY**: These are **Time-Locked DGB backing DigiDollars** (DDTimeLocks), NOT "positions"!
-
-Every minted DigiDollar creates a time-lock transaction with:
-- **Output 0**: Time-Locked DGB (collateral backing DD) - P2TR script with timelock
-- **Output 1**: DigiDollar amount (spendable DD) - P2TR script with DD marker
-
-**Example**:
+### Mint Transaction
 ```
-DD Time-Lock TX: abc123...
-├─ vout[0]: 1000 DGB (Time-Locked DGB backing 500 DD, locked until maturity)
-└─ vout[1]: 500 DD (spendable DigiDollar, can be transferred)
+Mint TX: abc123...
+├─ vout[0]: 1000 DGB (Time-Locked) ← NEVER MOVES until redemption!
+└─ vout[1]: 500 DD (spendable)     ← CAN be transferred
 ```
 
-To spend DD, you reference: `COutPoint(timelock_id, 1)`
+###Transfer Transaction
+```
+Transfer TX: def456...
+Inputs:
+  ├─ vin[0]: abc123:1 (500 DD)  ← Spending DD token from mint
+  └─ vin[1]: fee_utxo
+Outputs:
+  ├─ vout[0]: 300 DD (recipient) ← NEW DD UTXO
+  ├─ vout[1]: 200 DD (change)    ← NEW DD UTXO
+  └─ vout[2]: DGB change
+```
 
-**Function Naming**:
-- GetDDTimeLocks() → Returns active DD time-locks (Time-Locked DGB backing DD) - RENAMED in Phase 0
-- dd_timelock_id → Time-lock transaction ID (renamed from position_id in Phase 0)
-- WalletCollateralPosition → Represents a DD time-lock (Time-Locked DGB + DD)
+**KEY INSIGHT**: The locked DGB (vout[0] of mint) NEVER MOVES! Only DD tokens transfer between wallets.
 
-### Integration Requirements
-Your implementation MUST:
-1. ✅ Use existing `GetDDTimeLocks()` to get active DD time-locks (renamed from GetPositions in Phase 0)
-2. ✅ Persist transactions via `WalletBatch::WriteDDTransaction()`
-3. ✅ Update balances via `WalletBatch::WriteDDBalance()`
-4. ✅ Track UTXOs by time-lock output index (always index 1 for DD)
-5. ✅ Maintain UTXO consistency with wallet.dat
-6. ✅ Support wallet restart (everything persists)
+### What Wallet Must Track
+
+**1. Time-Lock Positions** (collateral_positions map)
+- Represents locked DGB from MINT transactions
+- Stays ACTIVE until redemption
+- **NEVER modified during transfers!** ← This is the core bug!
+
+**2. DD UTXOs** (NEW - dd_utxos map)
+- Spendable DD outputs
+- From BOTH mint AND transfer transactions
+- Updated on send/receive
+
+**3. Balance**
+- = Sum of spendable DD UTXOs (NOT sum of active positions!)
 
 ## TDD Process (MANDATORY)
 
 ### Step 1: RED Phase
-**Write a FAILING test first**
+**Write a FAILING test first - prove the bug exists**
 
-1. Identify what behavior you're testing
-2. Write a test that checks this behavior
-3. Run the test - it MUST fail
-4. Document the failure output
-
-**Example RED Phase**:
+**Example for FIX #2** (Time-lock preservation):
 ```cpp
-// File: src/test/digidollar_coinselection_tests.cpp
-BOOST_AUTO_TEST_CASE(test_select_dd_coins_basic)
+// File: src/test/digidollar_transfer_tests.cpp
+BOOST_AUTO_TEST_CASE(test_transfer_preserves_timelock)
 {
-    // Setup
+    // Setup: Create mint position
     DigiDollarWallet wallet;
-    wallet.AddMockPosition("pos1", 10000, 100*COIN, 1, 100); // 100 DD
+    uint256 mint_txid = CreateMintPosition(wallet, 10000); // 100 DD
 
-    // Execute
-    std::vector<COutPoint> selected;
-    CAmount total = 0;
-    bool result = wallet.SelectDDCoins(5000, selected, total);
+    // Verify initial state
+    BOOST_CHECK_EQUAL(wallet.GetTotalDDBalance(), 10000);
+    auto timelocks = wallet.GetDDTimeLocks(true);
+    BOOST_CHECK_EQUAL(timelocks.size(), 1);
+    BOOST_CHECK(timelocks[0].is_active);  // Active before transfer
 
-    // Verify (will FAIL initially)
-    BOOST_CHECK_EQUAL(result, true);
-    BOOST_CHECK_EQUAL(total, 10000); // Expects 100 DD but gets 0
-    BOOST_CHECK_EQUAL(selected.size(), 1);
+    // Execute: Transfer 50 DD
+    std::string txid, error;
+    CDigiDollarAddress recipient("DD1test...");
+    bool success = wallet.TransferDigiDollar(recipient, 5000, txid, error);
+
+    BOOST_CHECK(success);
+
+    // CRITICAL TEST: Time-lock must STILL be active!
+    timelocks = wallet.GetDDTimeLocks(true);
+    BOOST_CHECK_EQUAL(timelocks.size(), 1);
+    BOOST_CHECK(timelocks[0].is_active);  // ← THIS WILL FAIL (proves bug!)
+
+    // Verify balance decreased
+    BOOST_CHECK_EQUAL(wallet.GetTotalDDBalance(), 5000); // 50 DD remaining
 }
 ```
 
 **Expected RED Output**:
 ```
-test/digidollar_coinselection_tests.cpp(45): error: in "test_select_dd_coins_basic":
-  check result == true has failed [false != true]
-test/digidollar_coinselection_tests.cpp(46): error: in "test_select_dd_coins_basic":
-  check total == 10000 has failed [0 != 10000]
+test/digidollar_transfer_tests.cpp(XX): error:
+  check timelocks[0].is_active has failed [false != true]
+  ← GOOD! Test proves time-lock incorrectly marked inactive
 ```
 
 ### Step 2: GREEN Phase
-**Write MINIMAL code to pass the test**
+**Fix the bug - make test pass**
 
-1. Implement ONLY what's needed to pass
-2. Don't over-engineer
-3. Run test - it MUST pass now
-4. Document the success
+**For FIX #2** (Remove bad code that marks positions inactive):
 
-**Example GREEN Phase**:
+**REMOVE this BAD code** (lines 314-392 in digidollarwallet.cpp):
 ```cpp
-// File: src/wallet/digidollarwallet.cpp
-bool DigiDollarWallet::SelectDDCoins(const CAmount& target_amount,
-                                      std::vector<COutPoint>& selected_utxos,
-                                      CAmount& selected_total) const {
-    selected_total = 0;
-    selected_utxos.clear();
-
-    // Get all active DD time-locks
-    std::vector<WalletCollateralPosition> timelocks = GetDDTimeLocks(true);
-
-    // Select UTXOs until target met
-    for (const auto& timelock : timelocks) {
-        if (selected_total >= target_amount) break;
-
-        COutPoint utxo(timelock.dd_timelock_id, 1); // DD output at index 1
-        selected_utxos.push_back(utxo);
-        selected_total += timelock.dd_amount;
-    }
-
-    return selected_total >= target_amount;
+// ❌ BAD CODE - DELETE THIS!
+for (const auto& dd_utxo : dd_utxos) {
+    UpdatePositionStatus(dd_timelock_id, false);  // ← WRONG!
 }
+
+// ❌ BAD CODE - DELETE THIS!
+WalletCollateralPosition changePosition(...);
+AddCollateralPosition(changePosition);  // ← WRONG!
+```
+
+**ADD this CORRECT code**:
+```cpp
+// ✅ CORRECT CODE - Time-locks NEVER change during transfers!
+// Only DD UTXOs move. Locked DGB stays in place.
+
+// Remove spent DD UTXOs from tracking
+for (const auto& spent_utxo : params.ddUtxos) {
+    dd_utxos.erase(spent_utxo);
+    LogPrintf("DigiDollar: Marked DD UTXO %s:%d as spent\n",
+              spent_utxo.hash.ToString(), spent_utxo.n);
+}
+
+// Add new DD UTXOs from transaction outputs (for change)
+for (size_t i = 0; i < result.tx.vout.size(); i++) {
+    CAmount dd_amount = 0;
+    if (ExtractDDAmount(result.tx.vout[i].scriptPubKey, dd_amount)) {
+        // Check if output is to our address (change)
+        if (IsMine(result.tx.vout[i])) {
+            COutPoint new_utxo(result.tx.GetHash(), i);
+            dd_utxos[new_utxo] = dd_amount;
+            LogPrintf("DigiDollar: Added change DD UTXO %s:%d (%d cents)\n",
+                      new_utxo.hash.ToString(), i, dd_amount);
+        }
+    }
+}
+
+// Time-lock positions remain ACTIVE and UNCHANGED
+LogPrintf("DigiDollar: Transfer complete - time-locks preserved\n");
 ```
 
 **Expected GREEN Output**:
 ```
-Running test/digidollar_coinselection_tests.cpp...
-test_select_dd_coins_basic: PASSED ✅
+Running test/digidollar_transfer_tests.cpp...
+test_transfer_preserves_timelock: PASSED ✅
 ```
 
 ### Step 3: REFACTOR Phase
-**Clean up code while keeping tests passing**
+**Clean up code while keeping test passing**
 
-1. Improve code quality
-2. Add documentation
-3. Extract common logic
-4. Run tests - MUST still pass
+Add:
+- Better logging
+- Error handling
+- Edge case checks
+- Documentation
 
-**Example REFACTOR Phase**:
+Run test again - MUST still pass!
+
+## Fix-Specific Instructions
+
+### FIX #5: DD UTXO Database Persistence
+
+**Files**: src/wallet/walletdb.h, src/wallet/walletdb.cpp
+
+**TDD Steps**:
+1. RED: Write test for WriteDDUTXO/ReadDDUTXO
+2. GREEN: Implement methods in WalletBatch
+3. REFACTOR: Add to LoadFromDatabase
+
+**Add to walletdb.h**:
 ```cpp
-// File: src/wallet/digidollarwallet.cpp
-bool DigiDollarWallet::SelectDDCoins(const CAmount& target_amount,
-                                      std::vector<COutPoint>& selected_utxos,
-                                      CAmount& selected_total) const {
-    // Reset output parameters
-    selected_total = 0;
-    selected_utxos.clear();
+class WalletBatch {
+public:
+    /** Write DD UTXO to database */
+    bool WriteDDUTXO(const COutPoint& outpoint, const CAmount& dd_amount);
 
-    LogPrintf("DigiDollar: SelectDDCoins - target: %d cents\n", target_amount);
+    /** Read DD UTXO from database */
+    bool ReadDDUTXO(const COutPoint& outpoint, CAmount& dd_amount);
 
-    // Get all active DD time-locks (cached)
-    std::vector<WalletCollateralPosition> timelocks = GetDDTimeLocks(true);
-
-    if (timelocks.empty()) {
-        LogPrintf("DigiDollar: No active DD time-locks for coin selection\n");
-        return false;
-    }
-
-    // Greedy selection: pick smallest UTXOs first (better for privacy)
-    std::sort(timelocks.begin(), timelocks.end(),
-              [](const auto& a, const auto& b) { return a.dd_amount < b.dd_amount; });
-
-    // Select UTXOs until target amount met
-    for (const auto& timelock : timelocks) {
-        if (selected_total >= target_amount) break;
-
-        // DD output is always at index 1 (index 0 is Time-Locked DGB collateral)
-        COutPoint utxo(timelock.dd_timelock_id, 1);
-        selected_utxos.push_back(utxo);
-        selected_total += timelock.dd_amount;
-
-        LogPrintf("DigiDollar: Selected UTXO %s:%d (%d cents)\n",
-                  timelock.dd_timelock_id.ToString(), 1, timelock.dd_amount);
-    }
-
-    bool success = (selected_total >= target_amount);
-    LogPrintf("DigiDollar: Coin selection %s - selected %d cents from %d UTXOs\n",
-              success ? "SUCCESS" : "FAILED", selected_total, selected_utxos.size());
-
-    return success;
-}
-```
-
-## Task Assignment Structure
-
-You will receive a task in this format:
-
-```markdown
-## Task Assignment: Phase X.Y - [Task Name]
-
-**Objective**: [What to implement]
-
-**Files to Modify**:
-- [file1.cpp] - [what to add]
-- [file2.h] - [declarations]
-- [test_file.cpp] - [test code]
-
-**Dependencies**:
-- Requires: [Previous tasks that must be complete]
-- Provides: [What this task enables]
-
-**Acceptance Criteria**:
-- [ ] Test fails initially (RED proof)
-- [ ] Test passes after implementation (GREEN proof)
-- [ ] Code is refactored and documented
-- [ ] No regressions
-
-**Existing Tests to Leverage**:
-- [existing_test.cpp] - [what to reuse/extend]
-
-**Reference Implementation**:
-[Any example code to follow]
-```
-
-## Response Format
-
-You MUST respond in this exact format:
-
-```markdown
-## Task [Phase.Task] - [Name] - COMPLETE ✅
-
-### RED Phase ❌
-**Test File**: `[filepath]:[line_number]`
-**Test Code**:
-```cpp
-[Your failing test code]
-```
-**Failure Output**:
-```
-[Actual test failure message]
-```
-
-### GREEN Phase ✅
-**Implementation File**: `[filepath]:[line_number]`
-**Implementation Code**:
-```cpp
-[Your implementation code]
-```
-**Success Output**:
-```
-[Test passing message]
-```
-
-### REFACTOR Phase ♻️
-**Improvements Made**:
-- [List of improvements]
-- [E.g., "Added logging", "Improved variable names", etc.]
-
-**Final Test Output**:
-```
-[Test still passing after refactor]
-```
-
-### Files Modified
-- `[file1]:[lines]` - [description of changes]
-- `[file2]:[lines]` - [description of changes]
-
-### Integration Notes
-[Any notes about how this integrates with other components]
-
-### Blockers / Issues
-[Any problems encountered, or "None"]
-```
-
-## Common Patterns & Best Practices
-
-### Pattern 1: UTXO Selection
-```cpp
-bool SelectCoins(CAmount target, std::vector<COutPoint>& selected, CAmount& total) {
-    total = 0;
-    selected.clear();
-
-    std::vector<UTXO> available = GetAvailableUTXOs();
-
-    // Sort by amount (greedy algorithm)
-    std::sort(available.begin(), available.end(),
-              [](const auto& a, const auto& b) { return a.amount < b.amount; });
-
-    for (const auto& utxo : available) {
-        if (total >= target) break;
-        selected.push_back(utxo.outpoint);
-        total += utxo.amount;
-    }
-
-    return total >= target;
-}
-```
-
-### Pattern 2: Transaction Building
-```cpp
-TxBuilderResult BuildTransaction(const Params& params) {
-    TxBuilderResult result;
-
-    // Validate parameters
-    if (!ValidateParams(params)) {
-        result.error = "Invalid parameters";
-        return result;
-    }
-
-    // Build inputs
-    CMutableTransaction tx;
-    for (const auto& utxo : params.inputs) {
-        tx.vin.push_back(CTxIn(utxo));
-    }
-
-    // Build outputs
-    for (const auto& [address, amount] : params.outputs) {
-        CScript scriptPubKey = GetScriptForAddress(address);
-        tx.vout.push_back(CTxOut(amount, scriptPubKey));
-    }
-
-    result.success = true;
-    result.tx = tx;
-    return result;
-}
-```
-
-### Pattern 3: Error Handling
-```cpp
-bool DigiDollarOperation(/*params*/, std::string& error) {
-    try {
-        // Validation
-        if (!ValidateParams()) {
-            error = "Validation failed: invalid parameters";
-            return false;
-        }
-
-        // Operation
-        if (!PerformOperation()) {
-            error = "Operation failed: insufficient balance";
-            return false;
-        }
-
-        return true;
-
-    } catch (const std::exception& e) {
-        error = strprintf("Exception: %s", e.what());
-        LogPrintf("DigiDollar: %s\n", error);
-        return false;
-    }
-}
-```
-
-### Pattern 4: Logging
-```cpp
-// Always prefix DigiDollar logs
-LogPrintf("DigiDollar: [Component] - [Action] - [Details]\n");
-
-// Examples:
-LogPrintf("DigiDollar: CoinSelection - Selected %d UTXOs totaling %d cents\n", count, total);
-LogPrintf("DigiDollar: TxBuilder - Building transfer for %d recipients\n", recipients.size());
-LogPrintf("DigiDollar: Wallet - Balance update: %d → %d cents\n", old_balance, new_balance);
-```
-
-## Existing Test Files Reference
-
-### Unit Tests (C++)
-```cpp
-// File: src/test/digidollar_transfer_tests.cpp
-// Pattern: MockTransferTxBuilder for UTXO mocking
-
-class MockTransferTxBuilder : public TransferTxBuilder {
-protected:
-    CAmount GetDDFromUTXO(const COutPoint& outpoint) const override {
-        auto it = g_mockDDUTXOs.find(outpoint);
-        return (it != g_mockDDUTXOs.end()) ? it->second : 0;
-    }
+    /** Erase DD UTXO from database */
+    bool EraseDDUTXO(const COutPoint& outpoint);
 };
-
-// Use this pattern for your tests!
 ```
 
-### Functional Tests (Python)
-```python
-# File: test/functional/digidollar_transfer.py
-# Pattern: Multi-node transfer testing
+**Add to walletdb.cpp**:
+```cpp
+bool WalletBatch::WriteDDUTXO(const COutPoint& outpoint, const CAmount& dd_amount) {
+    return WriteIC(std::make_pair(DBKeys::DD_UTXO, outpoint), dd_amount);
+}
 
-def test_simple_transfer(self):
-    # Get initial balances
-    sender_balance = self.nodes[0].getdigidollarbalance()
-    receiver_balance = self.nodes[1].getdigidollarbalance()
+bool WalletBatch::ReadDDUTXO(const COutPoint& outpoint, CAmount& dd_amount) {
+    return m_batch->Read(std::make_pair(DBKeys::DD_UTXO, outpoint), dd_amount);
+}
 
-    # Get receiver address
-    receiver_addr = self.nodes[1].getdigidollaraddress()
-
-    # Send DD
-    txid = self.nodes[0].transferdigidollar(receiver_addr, "100.00")
-
-    # Mine block
-    self.nodes[0].generate(1)
-    self.sync_all()
-
-    # Verify balances
-    assert_equal(self.nodes[0].getdigidollarbalance(), sender_balance - 10000)
-    assert_equal(self.nodes[1].getdigidollarbalance(), receiver_balance + 10000)
+bool WalletBatch::EraseDDUTXO(const COutPoint& outpoint) {
+    return m_batch->Erase(std::make_pair(DBKeys::DD_UTXO, outpoint));
+}
 ```
-
-## Special Instructions Per Phase
-
-### Phase 1: Coin Selection
-- **Focus**: UTXO tracking and selection algorithms
-- **Test Pattern**: Mock UTXOs, test selection logic
-- **Key Files**: `digidollarwallet.cpp`, `digidollar_wallet_tests.cpp`
-- **Critical**: Must handle insufficient balance gracefully
-
-### Phase 2: Transaction Building
-- **Focus**: Assembling inputs/outputs correctly
-- **Test Pattern**: Use MockTransferTxBuilder from existing tests
-- **Key Files**: `txbuilder.cpp`, `digidollar_transfer_tests.cpp`
-- **Critical**: Proper amount calculations (no overflow)
-
-### Phase 3: Transaction Signing
-- **Focus**: P2TR signature generation
-- **Test Pattern**: Verify signatures against scriptPubKey
-- **Key Files**: `digidollarwallet.cpp`, `digidollar_transaction_tests.cpp`
-- **Critical**: NEVER log private keys, always validate sigs
-
-### Phase 4: Broadcasting
-- **Focus**: Mempool submission and network relay
-- **Test Pattern**: Multi-node functional tests
-- **Key Files**: `digidollarwallet.cpp`, `digidollar_transfer.py`
-- **Critical**: Handle network failures gracefully
-
-### Phase 5: Balance Updates
-- **Focus**: Maintaining accurate state
-- **Test Pattern**: Check balance before/after operations
-- **Key Files**: `digidollarwallet.cpp`, `walletdb.cpp`
-- **Critical**: Atomic updates (all or nothing)
-
-### Phase 6: Receive Operations
-- **Focus**: Detecting incoming transactions
-- **Test Pattern**: Send from node A, verify receipt on node B
-- **Key Files**: `digidollarwallet.cpp`, `digidollar_wallet.py`
-- **Critical**: Don't miss transactions (scan all blocks)
-
-### Phase 7: Qt Integration
-- **Focus**: UI wiring and error display
-- **Test Pattern**: Manual testing with Qt wallet
-- **Key Files**: `walletmodel.cpp`, `digidollarsendwidget.cpp`
-- **Critical**: User-friendly error messages
-
-### Phase 8: Testing
-- **Focus**: Comprehensive coverage
-- **Test Pattern**: Edge cases and stress tests
-- **Key Files**: All test files
-- **Critical**: No regressions in existing tests
-
-## Common Mistakes to Avoid
-
-❌ **DON'T**:
-- Write implementation before test
-- Skip refactor phase
-- Leave commented-out code
-- Use magic numbers
-- Ignore edge cases
-- Leave TODOs in production code
-
-✅ **DO**:
-- Write test first (RED)
-- Implement minimally (GREEN)
-- Refactor for quality (REFACTOR)
-- Use constants/enums
-- Test edge cases explicitly
-- Complete all TODOs before marking done
-
-## Quick Reference
-
-### Test Compilation
-```bash
-make -j$(nproc) test_digibyte
-```
-
-### Run Specific Unit Test
-```bash
-./src/test/test_digibyte --run_test=digidollar_coinselection_tests
-```
-
-### Run Specific Functional Test
-```bash
-./test/functional/digidollar_transfer.py
-```
-
-### Check Test Coverage
-```bash
-./configure --enable-lcov
-make cov
-```
-
-## Success Checklist
-
-Before reporting task complete:
-- [ ] Test written and initially failed (RED proof)
-- [ ] Implementation written and test passes (GREEN proof)
-- [ ] Code refactored and documented (REFACTOR proof)
-- [ ] No compiler warnings
-- [ ] No memory leaks (valgrind clean)
-- [ ] Existing tests still pass
-- [ ] Code follows DigiByte style guide
-- [ ] All error cases handled
-- [ ] Logging added for debugging
-- [ ] Integration points validated
 
 ---
 
-**Remember**: Quality over speed. A well-tested feature is worth 10 rushed features.
+### FIX #1: DD UTXO Tracking System
 
-**Your mission**: Implement your assigned task with TDD discipline, ensuring every line of code has a test proving it works.
+**Files**: src/wallet/digidollarwallet.h, src/wallet/digidollarwallet.cpp
 
-Good luck, Sub-Agent! 🚀
+**TDD Steps**:
+1. RED: Write test expecting DD UTXOs from transfer
+2. GREEN: Add dd_utxos map, update GetDDUTXOs()
+3. REFACTOR: Update GetTotalDDBalance()
+
+**Add to digidollarwallet.h**:
+```cpp
+class DigiDollarWallet {
+private:
+    // NEW: Track actual DD UTXOs (from mint AND transfers)
+    std::map<COutPoint, CAmount> dd_utxos;
+public:
+    // ... existing methods ...
+};
+```
+
+**Update GetDDUTXOs()**:
+```cpp
+std::vector<DDUtxo> DigiDollarWallet::GetDDUTXOs() const {
+    std::vector<DDUtxo> utxos;
+    for (const auto& [outpoint, dd_amount] : dd_utxos) {
+        // Verify UTXO still unspent
+        if (IsUTXOSpendable(outpoint)) {
+            utxos.emplace_back(outpoint, dd_amount);
+        }
+    }
+    return utxos;
+}
+```
+
+**Update GetTotalDDBalance()**:
+```cpp
+CAmount DigiDollarWallet::GetTotalDDBalance() const {
+    CAmount balance = 0;
+    for (const auto& [outpoint, dd_amount] : dd_utxos) {
+        if (IsUTXOSpendable(outpoint)) {
+            balance += dd_amount;
+        }
+    }
+    return balance;
+}
+```
+
+---
+
+### FIX #2: Fix Transfer Logic
+
+**Files**: src/wallet/digidollarwallet.cpp
+
+**TDD Steps**:
+1. RED: Test time-lock stays active (see example above)
+2. GREEN: Remove position marking, add UTXO management
+3. REFACTOR: Clean up
+
+**Critical Changes**:
+- DELETE lines 314-332: UpdatePositionStatus() calls
+- DELETE lines 333-392: AddCollateralPosition() for change
+- ADD: dd_utxos.erase() for spent UTXOs
+- ADD: dd_utxos[new_utxo] for change
+
+---
+
+### FIX #3: Transaction Broadcasting
+
+**Files**: src/wallet/digidollarwallet.cpp
+
+**TDD Steps**:
+1. RED: Test transaction enters mempool
+2. GREEN: Add AcceptToMemoryPool + broadcastTransaction
+3. REFACTOR: Error handling
+
+**Add after line ~310** (after transaction building):
+```cpp
+// NEW: Actually broadcast the transaction!
+CTransactionRef tx_ref = MakeTransactionRef(result.tx);
+
+// Submit to mempool
+TxValidationState state;
+if (!AcceptToMemoryPool(m_wallet->chain(), state, tx_ref,
+                        /* bypass_limits */ false)) {
+    error = strprintf("Transaction rejected: %s", state.GetRejectReason());
+    LogPrintf("DigiDollar: Mempool rejection - %s\n", error);
+    return false;
+}
+
+// Broadcast to network
+m_wallet->chain().broadcastTransaction(tx_ref);
+LogPrintf("DigiDollar: Transaction broadcast successful - txid: %s\n",
+          tx_ref->GetHash().ToString());
+
+txid = tx_ref->GetHash().ToString();
+```
+
+---
+
+### FIX #4: Receive Detection
+
+**Files**: src/wallet/digidollarwallet.cpp, digidollarwallet.h
+
+**TDD Steps**:
+1. RED: Test incoming DD detection
+2. GREEN: Implement ScanForIncomingDD
+3. REFACTOR: Hook into wallet transaction processing
+
+**Add to digidollarwallet.h**:
+```cpp
+void ScanForIncomingDD(const CTransactionRef& tx);
+void ProcessTransaction(const CTransactionRef& tx);
+```
+
+**Add to digidollarwallet.cpp**:
+```cpp
+void DigiDollarWallet::ScanForIncomingDD(const CTransactionRef& tx) {
+    LogPrintf("DigiDollar: Scanning %s for incoming DD\n",
+              tx->GetHash().ToString());
+
+    for (size_t i = 0; i < tx->vout.size(); i++) {
+        const CTxOut& txout = tx->vout[i];
+
+        // Extract DD amount
+        CAmount dd_amount = 0;
+        if (!ExtractDDAmount(txout.scriptPubKey, dd_amount)) {
+            continue; // Not DD
+        }
+
+        // Check if ours
+        if (!IsMine(txout)) {
+            continue; // Not ours
+        }
+
+        // Add to DD UTXOs
+        COutPoint new_utxo(tx->GetHash(), i);
+        dd_utxos[new_utxo] = dd_amount;
+
+        // Persist
+        WalletBatch batch(m_wallet->GetDatabase());
+        batch.WriteDDUTXO(new_utxo, dd_amount);
+
+        // Update balance
+        CAmount new_balance = GetTotalDDBalance();
+        batch.WriteDDBalance(GetDDAddress(), new_balance);
+
+        // Add to history
+        DDTransaction ddtx;
+        ddtx.txid = tx->GetHash().ToString();
+        ddtx.amount = dd_amount;
+        ddtx.timestamp = GetTime();
+        ddtx.confirmations = 0;
+        ddtx.incoming = true;
+        ddtx.category = "receive";
+        batch.WriteDDTransaction(ddtx);
+
+        LogPrintf("DigiDollar: Received %d DD in %s:%d\n",
+                  dd_amount, tx->GetHash().ToString(), i);
+    }
+}
+```
+
+---
+
+### FIX #6: Update Unit Tests
+
+**Files**: src/test/digidollar_transfer_tests.cpp
+
+**TDD Steps**:
+1. Update all tests to NOT expect position inactivation
+2. Add test for time-lock preservation (see example above)
+3. Add test for DD UTXO tracking
+
+**Changes Needed**:
+- REMOVE assertions expecting `is_active == false` after transfer
+- ADD assertions verifying `is_active == true` after transfer
+- ADD tests for dd_utxos map updates
+
+---
+
+## Quality Requirements (EVERY Fix)
+
+### After Implementation:
+
+**1. Compile Check**:
+```bash
+make -j$(nproc) src/qt/digibyte-qt
+# MUST succeed with no errors
+```
+
+**2. Test Check**:
+```bash
+./src/test/test_digibyte --run_test=digidollar_*
+# ALL tests MUST pass
+```
+
+**3. No Warnings**:
+- Zero compiler warnings
+- Zero test warnings
+
+**4. Git Commit**:
+```bash
+git add [modified files]
+git commit -m "GREEN: Fix #X - [description]"
+```
+
+## Report Format
+
+### On Completion:
+
+```markdown
+## FIX #X Complete ✅
+
+**RED Phase**:
+- Test file: src/test/[file]:LINE
+- Initial failure: [error message]
+
+**GREEN Phase**:
+- Implementation: src/wallet/[file]:LINES
+- Test now passes ✅
+
+**REFACTOR Phase**:
+- Added logging
+- Improved error handling
+
+**Verification**:
+- Compilation: ✅ SUCCESS
+- All tests: ✅ PASS (X/X)
+- Warnings: ✅ NONE
+
+**Files Modified**:
+- [list files with line ranges]
+```
+
+### If Blocked:
+
+```markdown
+## FIX #X Blocked ❌
+
+**Issue**: [problem description]
+**Error**: [compilation/test error]
+**Need**: [what's needed to proceed]
+```
+
+## Remember
+
+- **TDD is MANDATORY**: Write failing test FIRST
+- **Time-locks NEVER change during transfers**: Core concept!
+- **Compile after EVERY change**: No broken builds
+- **All tests must pass**: No regressions
+- **Report back immediately**: Keep orchestrator informed
+
+---
+
+**Sub-Agent Version**: 2.0 - Bug Fix Mode
+**Your Mission**: Fix ONE bug, follow TDD, report success
+**Success**: Test passes + wallet compiles + no regressions

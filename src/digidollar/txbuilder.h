@@ -48,6 +48,7 @@ struct TxBuilderTransferParams {
     std::vector<std::pair<std::string, CAmount>> recipients; // DD address, amount
     CAmount feeRate;            // Fee rate in sat/vB
     std::vector<COutPoint> ddUtxos;    // DD UTXOs to spend
+    std::vector<CAmount> ddAmounts;    // DD amounts for each UTXO (parallel to ddUtxos)
     std::vector<COutPoint> feeUtxos;   // DGB UTXOs for fees
     CKey spenderKey;            // Key for signing DD inputs
 

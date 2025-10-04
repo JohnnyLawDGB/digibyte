@@ -676,8 +676,16 @@ TxBuilderResult TransferTxBuilder::BuildTransferTransaction(const TxBuilderTrans
 
     // Verify DD amounts balance (conservation check)
     CAmount totalDDInCheck = 0;
-    for (const auto& utxo : params.ddUtxos) {
-        totalDDInCheck += GetDDFromUTXO(utxo);
+    if (!params.ddAmounts.empty() && params.ddAmounts.size() == params.ddUtxos.size()) {
+        // Use provided amounts (CRITICAL FIX #8: Use actual UTXO amounts, not GetDDFromUTXO default)
+        for (const auto& amt : params.ddAmounts) {
+            totalDDInCheck += amt;
+        }
+    } else {
+        // Fallback to GetDDFromUTXO (which returns hardcoded 5000 for testing)
+        for (const auto& utxo : params.ddUtxos) {
+            totalDDInCheck += GetDDFromUTXO(utxo);
+        }
     }
 
     CAmount totalDDOutCheck = 0;

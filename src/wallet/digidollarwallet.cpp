@@ -327,9 +327,19 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
         }
         params.feeAmounts = fee_amounts;  // Pass actual fee UTXO amounts
 
-        // Generate spending key (in real implementation, would get from wallet)
+        // Get spending key - must be from dd_owner_keys map so change is recognized as "mine"
+        // The dd_owner_keys map stores the owner key for each DD position (indexed by timelock txid)
         CKey spenderKey;
-        spenderKey.MakeNewKey(true);
+        if (!params.ddUtxos.empty() && dd_owner_keys.count(params.ddUtxos[0].hash) > 0) {
+            // Use the stored owner key for this DD UTXO
+            spenderKey = dd_owner_keys[params.ddUtxos[0].hash];
+            LogPrintf("DigiDollar: Using stored owner key for DD UTXO %s\n", params.ddUtxos[0].hash.ToString());
+        } else {
+            // Fallback: generate new key (for testing/mock scenarios)
+            // In production, this should never happen - all DD UTXOs should have owner keys
+            spenderKey.MakeNewKey(true);
+            LogPrintf("DigiDollar: WARNING - No owner key found for DD UTXO, using generated key\n");
+        }
         params.spenderKey = spenderKey;
 
         // Build transaction
@@ -413,25 +423,76 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
         }
 
         // Add new DD UTXOs from transaction outputs (for change and potentially recipient if to ourselves)
-        for (size_t i = 0; i < result.tx.vout.size(); i++) {
-            CAmount dd_amount = 0;
+        // Extract DD amounts from OP_RETURN (same logic as DetectIncomingDDOutputs)
+        std::vector<CAmount> dd_amounts;
+        for (const auto& txout : result.tx.vout) {
+            if (txout.scriptPubKey.size() > 0 && txout.scriptPubKey[0] == OP_RETURN) {
+                CScript::const_iterator pc = txout.scriptPubKey.begin();
+                opcodetype opcode;
+                std::vector<unsigned char> data;
 
-            // Check if this output contains DD
-            if (DigiDollar::ExtractDDAmount(result.tx.vout[i].scriptPubKey, dd_amount)) {
-                // Check if this output is to our address (change or self-transfer)
-                if (m_wallet->IsMine(result.tx.vout[i])) {
-                    COutPoint new_utxo(result.tx.GetHash(), i);
-                    dd_utxos[new_utxo] = dd_amount;
+                // Skip OP_RETURN
+                if (!txout.scriptPubKey.GetOp(pc, opcode)) continue;
 
-                    // Persist to database
-                    if (!batch.WriteDDUTXO(new_utxo, dd_amount)) {
-                        LogPrintf("DigiDollar: WARNING - Failed to write DD UTXO %s:%d to database\n",
-                                 new_utxo.hash.ToString(), i);
+                // Check for "DD" marker
+                if (!txout.scriptPubKey.GetOp(pc, opcode, data)) continue;
+                if (data.size() != 2 || data[0] != 'D' || data[1] != 'D') continue;
+
+                // Get transaction type
+                if (!txout.scriptPubKey.GetOp(pc, opcode, data)) continue;
+                CScriptNum txType(data, true);
+                if (txType.getint() != 2) continue;  // Only TRANSFER transactions (type 2)
+
+                // Extract DD amounts
+                while (txout.scriptPubKey.GetOp(pc, opcode, data)) {
+                    if (data.size() > 0) {
+                        CScriptNum amount_num(data, true);
+                        dd_amounts.push_back(amount_num.getint());
                     }
-
-                    LogPrintf("DigiDollar: Added change DD UTXO %s:%d (%d cents)\n",
-                              new_utxo.hash.ToString(), i, dd_amount);
                 }
+                break;
+            }
+        }
+
+        // Now match P2TR outputs with DD amounts
+        // We know the change output belongs to us because we created it with our owner key
+        size_t dd_output_index = 0;
+        for (size_t i = 0; i < result.tx.vout.size(); i++) {
+            const CTxOut& txout = result.tx.vout[i];
+
+            // Skip OP_RETURN and non-zero value outputs
+            if (txout.scriptPubKey.size() > 0 && txout.scriptPubKey[0] == OP_RETURN) continue;
+            if (txout.nValue != 0) continue;  // DD outputs have 0 DGB value
+
+            // Check if it's a P2TR output (OP_1 + 32 bytes)
+            if (txout.scriptPubKey.size() == 34 && txout.scriptPubKey[0] == OP_1) {
+                // This is a DD output
+                if (dd_output_index < dd_amounts.size()) {
+                    CAmount dd_amount = dd_amounts[dd_output_index];
+
+                    // Check if this is the change output (output 1 in transfer txs)
+                    // The change output was created with our owner key, so it's ours
+                    // Output 0 is recipient, output 1+ is change
+                    bool is_ours = (dd_output_index > 0);  // First DD output goes to recipient, rest is change
+
+                    if (is_ours) {
+                        COutPoint new_utxo(result.tx.GetHash(), i);
+                        dd_utxos[new_utxo] = dd_amount;
+
+                        // Store the owner key for this new DD UTXO so we can spend it later
+                        dd_owner_keys[result.tx.GetHash()] = spenderKey;
+
+                        // Persist to database
+                        if (!batch.WriteDDUTXO(new_utxo, dd_amount)) {
+                            LogPrintf("DigiDollar: WARNING - Failed to write DD UTXO %s:%d to database\n",
+                                     new_utxo.hash.ToString(), i);
+                        }
+
+                        LogPrintf("DigiDollar: Added change DD UTXO %s:%d (%d cents)\n",
+                                  new_utxo.hash.ToString(), i, dd_amount);
+                    }
+                }
+                dd_output_index++;
             }
         }
 
@@ -2695,44 +2756,73 @@ bool DigiDollarWallet::DetectIncomingDDOutputs(const CTransactionRef& tx,
     LogPrint(BCLog::WALLETDB, "DigiDollar: DetectIncomingDDOutputs - Checking transaction %s\n",
              tx->GetHash().ToString());
 
-    // Iterate through transaction outputs
+    // First, extract DD amounts from OP_RETURN
+    // Format: OP_RETURN <"DD"> <txType> <amount1> <amount2> ...
+    std::vector<CAmount> dd_amounts;
+    for (const auto& txout : tx->vout) {
+        if (txout.scriptPubKey.size() > 0 && txout.scriptPubKey[0] == OP_RETURN) {
+            // Parse OP_RETURN data
+            CScript::const_iterator pc = txout.scriptPubKey.begin();
+            opcodetype opcode;
+            std::vector<unsigned char> data;
+
+            // Skip OP_RETURN
+            if (!txout.scriptPubKey.GetOp(pc, opcode)) continue;
+
+            // Check for "DD" marker
+            if (!txout.scriptPubKey.GetOp(pc, opcode, data)) continue;
+            if (data.size() != 2 || data[0] != 'D' || data[1] != 'D') continue;
+
+            // Get transaction type
+            if (!txout.scriptPubKey.GetOp(pc, opcode, data)) continue;
+            CScriptNum txType(data, true);
+            if (txType.getint() != 2) continue;  // Only TRANSFER transactions (type 2)
+
+            // Extract DD amounts
+            while (txout.scriptPubKey.GetOp(pc, opcode, data)) {
+                if (data.size() > 0) {
+                    CScriptNum amount(data, true);
+                    dd_amounts.push_back(amount.getint());
+                    LogPrintf("DigiDollar: Found DD amount in OP_RETURN: %d cents\n", amount.getint());
+                }
+            }
+            break;  // Only one OP_RETURN per transaction
+        }
+    }
+
+    if (dd_amounts.empty()) {
+        LogPrint(BCLog::WALLETDB, "DigiDollar: No DD amounts found in OP_RETURN\n");
+        return false;
+    }
+
+    // Now match P2TR outputs with DD amounts
+    size_t dd_output_index = 0;
     for (uint32_t i = 0; i < tx->vout.size(); i++) {
         const CTxOut& txout = tx->vout[i];
 
-        // Check if output is DD token script
-        if (!DigiDollar::IsDDTokenScript(txout.scriptPubKey)) {
-            LogPrint(BCLog::WALLETDB, "DigiDollar: Output %d is not a DD token script\n", i);
-            continue;  // Not a DD output
-        }
+        // Skip OP_RETURN and non-zero value outputs
+        if (txout.scriptPubKey.size() > 0 && txout.scriptPubKey[0] == OP_RETURN) continue;
+        if (txout.nValue != 0) continue;  // DD outputs have 0 DGB value
 
-        // Extract DD amount from script
-        CAmount dd_amount = 0;
-        if (!DigiDollar::ExtractDDAmount(txout.scriptPubKey, dd_amount)) {
-            LogPrint(BCLog::WALLETDB, "DigiDollar: Failed to extract DD amount from output %d\n", i);
-            continue;  // Invalid DD output
-        }
+        // Check if it's a P2TR output (OP_1 + 32 bytes)
+        if (txout.scriptPubKey.size() == 34 && txout.scriptPubKey[0] == OP_1) {
+            // This is a DD output - check if we own it
+            if (m_wallet) {
+                LOCK(m_wallet->cs_wallet);
 
-        if (dd_amount <= 0) {
-            LogPrint(BCLog::WALLETDB, "DigiDollar: Output %d has invalid DD amount: %d\n", i, dd_amount);
-            continue;  // Invalid amount
-        }
-
-        // Check if output address belongs to our wallet
-        // For DD outputs, we need to check if we can spend it
-        if (m_wallet) {
-            LOCK(m_wallet->cs_wallet);
-
-            // Check if we own this output
-            wallet::isminetype mine = m_wallet->IsMine(txout);
-            if (mine & wallet::ISMINE_SPENDABLE) {
-                LogPrintf("DigiDollar: Detected incoming DD output - vout[%d]: %d DD cents\n",
-                          i, dd_amount);
-                our_dd_outputs.push_back(std::make_pair(i, dd_amount));
-            } else {
-                LogPrint(BCLog::WALLETDB, "DigiDollar: Output %d is DD but not ours (mine=%d)\n", i, mine);
+                wallet::isminetype mine = m_wallet->IsMine(txout);
+                if (mine & wallet::ISMINE_SPENDABLE) {
+                    if (dd_output_index < dd_amounts.size()) {
+                        CAmount dd_amount = dd_amounts[dd_output_index];
+                        LogPrintf("DigiDollar: Detected incoming DD output - vout[%d]: %d DD cents\n",
+                                  i, dd_amount);
+                        our_dd_outputs.push_back(std::make_pair(i, dd_amount));
+                    }
+                } else {
+                    LogPrint(BCLog::WALLETDB, "DigiDollar: Output %d is DD P2TR but not ours (mine=%d)\n", i, mine);
+                }
             }
-        } else {
-            LogPrint(BCLog::WALLETDB, "DigiDollar: No wallet pointer, cannot check ownership\n");
+            dd_output_index++;
         }
     }
 
@@ -2771,6 +2861,10 @@ bool DigiDollarWallet::AddReceivedDDUTXO(const CTransactionRef& tx,
 
     LogPrintf("DigiDollar: AddReceivedDDUTXO - Adding received DD UTXO: %s:%d (%d DD cents)\n",
               txid.ToString(), vout_index, dd_amount);
+
+    // Add to DD UTXO tracking (primary balance source)
+    COutPoint received_utxo(txid, vout_index);
+    dd_utxos[received_utxo] = dd_amount;
 
     // Create new WalletCollateralPosition for received DD
     // Key difference from minted DD: no collateral in our wallet

@@ -549,7 +549,11 @@ TxBuilderResult TransferTxBuilder::BuildTransferTransaction(const TxBuilderTrans
             return result;
         }
 
-        CScript ddScript = CreateDigiDollarP2TR(*taproot, amount);
+        // Create P2TR output directly from the decoded address
+        // The address is already a fully-formed Taproot output key (already tweaked by wallet)
+        // We don't want to tweak it again, so we create the scriptPubKey directly
+        CScript ddScript;
+        ddScript << OP_1 << ToByteVector(*taproot);
         tx.vout.push_back(CTxOut(0, ddScript)); // DD outputs always have 0 DGB value
         LogPrintf("DigiDollar: Added DD output for %s: %d cents\n", address, amount);
     }
@@ -559,8 +563,22 @@ TxBuilderResult TransferTxBuilder::BuildTransferTransaction(const TxBuilderTrans
     if (ddChange > 0) {
         // Only create change if above dust threshold
         if (ddChange >= minOutput) {
+            // Create change output using same approach as recipient outputs
+            // Use the spender's public key directly without extra tweaking
             CPubKey changePubkey = params.spenderKey.GetPubKey();
-            CScript changeScript = CreateDigiDollarP2TR(XOnlyPubKey(changePubkey), ddChange);
+            XOnlyPubKey xonly(changePubkey);
+
+            // Apply Taproot tweak to get the output key
+            // This matches what CreateDigiDollarP2TR does
+            auto tweaked = xonly.CreateTapTweak(nullptr);
+            if (!tweaked) {
+                result.error = "Failed to create Taproot tweak for change output";
+                return result;
+            }
+            XOnlyPubKey output_key = tweaked->first;
+
+            CScript changeScript;
+            changeScript << OP_1 << ToByteVector(output_key);
             tx.vout.push_back(CTxOut(0, changeScript));
             LogPrintf("DigiDollar: Added DD change output: %d cents\n", ddChange);
         } else {
@@ -589,6 +607,29 @@ TxBuilderResult TransferTxBuilder::BuildTransferTransaction(const TxBuilderTrans
             LogPrintf("DigiDollar: Added DGB change output: %d sats\n", dgbChange);
         }
     }
+
+    // Add OP_RETURN with DD amounts for each output (needed for receiver to identify amounts)
+    // Format: OP_RETURN <"DD"> <txType> <output_count> <amount1> <amount2> ... <amountN>
+    std::vector<CAmount> ddOutputAmounts;
+    for (const auto& [address, amount] : params.recipients) {
+        ddOutputAmounts.push_back(amount);
+    }
+    if (ddChange > 0 && ddChange >= minOutput) {
+        ddOutputAmounts.push_back(ddChange);
+    }
+
+    CScript metadataScript;
+    metadataScript << OP_RETURN
+                   << std::vector<unsigned char>{'D', 'D'}
+                   << CScriptNum(2);  // 2 = TRANSFER transaction
+
+    // Add each DD output amount
+    for (CAmount amt : ddOutputAmounts) {
+        metadataScript << CScriptNum(amt);
+    }
+
+    tx.vout.push_back(CTxOut(0, metadataScript));
+    LogPrintf("DigiDollar: Added OP_RETURN with %d DD output amounts\n", ddOutputAmounts.size());
 
     // Final validation - ensure DD conservation
     CAmount finalDDOut = 0;

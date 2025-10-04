@@ -548,21 +548,57 @@ bool ValidateTransferTransaction(const CTransaction& tx,
         return state.Invalid(TxValidationResult::TX_CONSENSUS, "all-operations-frozen");
     }
 
-    // Validate all DD outputs
+    // Extract DD amounts from OP_RETURN (needed for cross-node validation)
+    // Format: OP_RETURN <"DD"> <txType> <amount1> <amount2> ...
+    std::vector<CAmount> dd_amounts;
     for (const auto& output : tx.vout) {
-        if (IsDDTokenScript(output.scriptPubKey)) {
+        if (output.scriptPubKey.size() > 0 && output.scriptPubKey[0] == OP_RETURN) {
+            CScript::const_iterator pc = output.scriptPubKey.begin();
+            opcodetype opcode;
+            std::vector<unsigned char> data;
+
+            // Skip OP_RETURN
+            if (!output.scriptPubKey.GetOp(pc, opcode)) continue;
+
+            // Check for "DD" marker
+            if (!output.scriptPubKey.GetOp(pc, opcode, data)) continue;
+            if (data.size() != 2 || data[0] != 'D' || data[1] != 'D') continue;
+
+            // Get transaction type
+            if (!output.scriptPubKey.GetOp(pc, opcode, data)) continue;
+            CScriptNum txType(data, true);
+            if (txType.getint() != 2) continue;  // Must be TRANSFER (type 2)
+
+            // Extract DD amounts
+            while (output.scriptPubKey.GetOp(pc, opcode, data)) {
+                if (data.size() > 0) {
+                    CScriptNum amount(data, true);
+                    dd_amounts.push_back(amount.getint());
+                }
+            }
+            break;
+        }
+    }
+
+    if (dd_amounts.empty()) {
+        return state.Invalid(TxValidationResult::TX_CONSENSUS, "transfer-no-op-return-data");
+    }
+
+    // Validate P2TR outputs using amounts from OP_RETURN
+    size_t dd_amount_index = 0;
+    for (const auto& output : tx.vout) {
+        // Skip OP_RETURN and non-zero value outputs
+        if (output.scriptPubKey.size() > 0 && output.scriptPubKey[0] == OP_RETURN) continue;
+        if (output.nValue != 0) continue;
+
+        // Check if it's a P2TR output (OP_1 + 32 bytes)
+        if (output.scriptPubKey.size() == 34 && output.scriptPubKey[0] == OP_1) {
+            if (dd_amount_index >= dd_amounts.size()) {
+                return state.Invalid(TxValidationResult::TX_CONSENSUS, "transfer-dd-output-amount-mismatch");
+            }
+
+            CAmount ddAmount = dd_amounts[dd_amount_index++];
             ddOutputCount++;
-
-            // DD outputs must have 0 DGB value
-            if (output.nValue != 0) {
-                return state.Invalid(TxValidationResult::TX_CONSENSUS, "transfer-dd-output-non-zero-value");
-            }
-
-            // Extract and validate DD amount
-            CAmount ddAmount;
-            if (!ExtractDDAmount(output.scriptPubKey, ddAmount)) {
-                return state.Invalid(TxValidationResult::TX_CONSENSUS, "transfer-invalid-dd-amount-encoding");
-            }
 
             // Validate amount is positive and within limits
             if (ddAmount <= 0) {
@@ -574,13 +610,8 @@ bool ValidateTransferTransaction(const CTransaction& tx,
             }
 
             // Check maximum single transfer limit ($100,000)
-            if (ddAmount > 10000000) { // $100,000.00 in cents
+            if (ddAmount > 10000000) {
                 return state.Invalid(TxValidationResult::TX_CONSENSUS, "transfer-dd-amount-exceeds-maximum");
-            }
-
-            // Validate script is P2TR format
-            if (output.scriptPubKey.size() != 34 || output.scriptPubKey[0] != OP_1) {
-                return state.Invalid(TxValidationResult::TX_CONSENSUS, "transfer-dd-output-not-p2tr");
             }
 
             outputDD += ddAmount;
@@ -1011,26 +1042,8 @@ bool ValidateDDOutput(const CTxOut& output, const CTransaction& tx,
     return true;
 }
 
-bool ExtractDDAmount(const CScript& script, CAmount& amount) {
-    // Phase 1: DD amount is not stored in the script itself
-    // It needs to be calculated from the full transaction context:
-    //   DD_amount = (collateral_value * oracle_price * 100) / (collateral_ratio * COIN)
-    //
-    // Since we can't determine this from the script alone, this function
-    // will be called from the transaction validation context where we have
-    // access to the full transaction and can calculate it.
-    //
-    // For now, extract amount from metadata if available
-    ScriptMetadata metadata;
-    if (GetScriptMetadata(script, metadata)) {
-        amount = metadata.ddAmount;
-        return true;
-    }
-
-    // Phase 2 will use UTXO database to track DD amounts
-    // For now, return false to indicate we need transaction-level calculation
-    return false;
-}
+// ExtractDDAmount is defined in consensus/digidollar.cpp
+// Removed duplicate implementation
 
 int64_t ExtractLockTime(const CScript& script) {
     // Extract lock time from collateral script

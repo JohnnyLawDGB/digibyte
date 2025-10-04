@@ -485,7 +485,9 @@ public:
     CAmount CalculateTransactionFee(const CMutableTransaction& tx) const;
 
     // Phase 3.1: P2TR signing for DD inputs (Schnorr signatures)
-    bool SignDDInputs(CMutableTransaction& tx, const std::vector<COutPoint>& dd_utxos);
+    bool SignDDInputs(CMutableTransaction& tx,
+                      const std::vector<COutPoint>& dd_utxos,
+                      const std::vector<COutPoint>& fee_utxos);
 
     // Phase 3.2: Fee input signing (standard P2TR/P2WPKH DGB inputs)
     bool SignFeeInputs(CMutableTransaction& tx,

@@ -614,9 +614,9 @@ RPCHelpMan mintdigidollar()
                 "Creates a new DigiDollar position by locking DGB as collateral.\n"
                 "The amount of collateral required depends on the lock period and current system health.\n",
                 {
-                    {"dd_amount", RPCArg::Type::NUM, RPCArg::Optional::NO, "Amount of DigiDollar to mint (in USD cents, e.g., 10000 = $100)"},
-                    {"lock_tier", RPCArg::Type::NUM, RPCArg::Optional::NO, "Lock tier 1-8 (30d,90d,180d,1y,3y,5y,7y,10y)"},
-                    {"fee_rate", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "Fee rate in sat/kB (default: 100000)"}
+                    {"dd_amount", RPCArg::Type::NUM, RPCArg::Optional::NO, "Amount of DigiDollar to mint (in USD cents, e.g., 10000 = $100)", RPCArgOptions{.skip_type_check = true}},
+                    {"lock_tier", RPCArg::Type::NUM, RPCArg::Optional::NO, "Lock tier 1-8 (30d,90d,180d,1y,3y,5y,7y,10y)", RPCArgOptions{.skip_type_check = true}},
+                    {"fee_rate", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "Fee rate in sat/kB (default: 100000)", RPCArgOptions{.skip_type_check = true}}
                 },
                 RPCResult{
                     RPCResult::Type::OBJ, "", "",
@@ -699,7 +699,7 @@ RPCHelpMan mintdigidollar()
             DigiDollar::MintTxBuilder builder(Params(), currentHeight, oraclePrice);
 
             DigiDollar::TxBuilderMintParams params;
-            params.ddAmount = ddAmount;
+            params.ddAmount = ddAmount;  // Amount in cents (e.g., 5000 = $50.00)
             params.lockDays = lockDays;
             params.ownerKey = ownerKey;
             params.feeRate = feeRate;
@@ -749,7 +749,10 @@ RPCHelpMan mintdigidollar()
                 LOCK(pwallet->cs_wallet);
                 pwallet->GetDDWallet()->AddCollateralPosition(position);
 
-                LogPrintf("DigiDollar RPC: Added position %s with %d DD cents\n",
+                // CRITICAL: Store the owner key for this position so we can spend it later
+                pwallet->GetDDWallet()->StoreOwnerKey(tx->GetHash(), ownerKey);
+
+                LogPrintf("DigiDollar RPC: Added position %s with %d DD cents and stored owner key\n",
                          position.dd_timelock_id.ToString(), ddAmount);
             } else {
                 LogPrintf("DigiDollar RPC: WARNING - No DD wallet context, position not persisted\n");
@@ -781,9 +784,9 @@ RPCHelpMan senddigidollar()
                 "This is the primary RPC command for Phase 7.7 - DD transfers via API.\n",
                 {
                     {"address", RPCArg::Type::STR, RPCArg::Optional::NO, "DigiDollar address to send to (DD/TD/RD prefix)"},
-                    {"amount", RPCArg::Type::AMOUNT, RPCArg::Optional::NO, "Amount to send (in USD cents)"},
+                    {"amount", RPCArg::Type::NUM, RPCArg::Optional::NO, "Amount to send (in USD cents, e.g., 10000 = $100.00)", RPCArgOptions{.skip_type_check = true}},
                     {"comment", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "Optional comment for the transaction"},
-                    {"fee_rate", RPCArg::Type::AMOUNT, RPCArg::Optional::OMITTED, "Fee rate in DGB/kvB"}
+                    {"fee_rate", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "Fee rate in sat/kB", RPCArgOptions{.skip_type_check = true}}
                 },
                 RPCResult{
                     RPCResult::Type::OBJ, "", "",
@@ -821,7 +824,7 @@ RPCHelpMan senddigidollar()
 
             // Parse parameters
             std::string addressStr = request.params[0].get_str();
-            CAmount amount = AmountFromValue(request.params[1]);
+            CAmount amount = request.params[1].getInt<int64_t>();  // Amount in USD cents
             std::string comment = request.params.size() > 2 ? request.params[2].get_str() : "";
 
             // Validate amount
@@ -1050,31 +1053,25 @@ RPCHelpMan listdigidollarpositions()
 // =============================================================================
 // DD ADDRESS COMMANDS (Task 5.7)
 // =============================================================================
+// NOTE: getdigidollaraddress is OBSOLETE - actual implementation is now in
+// src/wallet/rpcwallet.cpp as a static function for proper wallet context.
+// This version is kept for reference only and is not registered.
+// =============================================================================
 
-static RPCHelpMan getdigidollaraddress()
+RPCHelpMan getdigidollaraddress()
 {
     return RPCHelpMan{"getdigidollaraddress",
                 "\nGenerate a new DigiDollar address for receiving DD.\n"
                 "Creates a new address with the proper DD prefix for the current network.\n",
                 {
-                    {"label", RPCArg::Type::STR, RPCArg::Default{""}, "Optional label for the address"},
-                    {"address_type", RPCArg::Type::STR, RPCArg::Default{"legacy"}, "Address type (legacy, p2sh-segwit, bech32)"}
+                    {"label", RPCArg::Type::STR, RPCArg::Default{""}, "Optional label for the address"}
                 },
                 RPCResult{
-                    RPCResult::Type::OBJ, "", "",
-                    {
-                        {RPCResult::Type::STR, "address", "The new DigiDollar address"},
-                        {RPCResult::Type::STR, "label", "Label assigned to the address"},
-                        {RPCResult::Type::STR, "address_type", "Type of address generated"},
-                        {RPCResult::Type::STR, "network", "Network prefix (DD=mainnet, TD=testnet, RD=regtest)"},
-                        {RPCResult::Type::STR_HEX, "pubkey", "Public key for the address"},
-                        {RPCResult::Type::BOOL, "ismine", "Whether the address belongs to this wallet"}
-                    }
+                    RPCResult::Type::STR, "address", "The new DigiDollar address"
                 },
                 RPCExamples{
                     HelpExampleCli("getdigidollaraddress", "") +
                     HelpExampleCli("getdigidollaraddress", "\"savings\"") +
-                    HelpExampleCli("getdigidollaraddress", "\"trading\" \"p2sh-segwit\"") +
                     HelpExampleRpc("getdigidollaraddress", "") +
                     HelpExampleRpc("getdigidollaraddress", "\"savings\"")
                 },
@@ -1105,29 +1102,11 @@ static RPCHelpMan getdigidollaraddress()
             // Encode as DigiDollar address
             std::string newAddress = EncodeDigiDollarAddress(dest);
 
-            // Get network prefix
-            std::string network;
-            switch (Params().GetChainType()) {
-                case ChainType::REGTEST:
-                    network = "RD";
-                    break;
-                case ChainType::TESTNET:
-                    network = "TD";
-                    break;
-                case ChainType::MAIN:
-                default:
-                    network = "DD";
-                    break;
+            if (newAddress.empty()) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "Failed to encode DigiDollar address");
             }
 
-            UniValue result(UniValue::VOBJ);
-            result.pushKV("address", newAddress);
-            result.pushKV("label", label);
-            result.pushKV("address_type", "bech32m");
-            result.pushKV("network", network);
-            result.pushKV("ismine", true);
-
-            return result;
+            return newAddress;
         },
     };
 }
@@ -1367,8 +1346,8 @@ RPCHelpMan getdigidollarbalance()
                         {RPCResult::Type::STR_AMOUNT, "confirmed", "Confirmed DD balance (in cents)"},
                         {RPCResult::Type::STR_AMOUNT, "unconfirmed", "Unconfirmed DD balance (in cents)"},
                         {RPCResult::Type::STR_AMOUNT, "total", "Total DD balance (confirmed + unconfirmed)"},
-                        {RPCResult::Type::STR, "address", "Address queried (if specific address)"},
-                        {RPCResult::Type::NUM, "address_count", "Number of addresses included (for wallet total)"}
+                        {RPCResult::Type::STR, "address", /*optional=*/true, "Address queried (if specific address)"},
+                        {RPCResult::Type::NUM, "address_count", /*optional=*/true, "Number of addresses included (for wallet total)"}
                     }
                 },
                 RPCExamples{
@@ -2177,23 +2156,23 @@ static RPCHelpMan setmockoracleprice()
                 "This command allows setting a custom DGB/USD price for testing DigiDollar\n"
                 "functionality in RegTest mode without requiring real oracle nodes.\n",
                 {
-                    {"price", RPCArg::Type::AMOUNT, RPCArg::Optional::NO, "Price in satoshis per USD (e.g., 1000000 = $0.01/DGB)"}
+                    {"price", RPCArg::Type::NUM, RPCArg::Optional::NO, "Price in cents per DGB (e.g., 50 = $0.50/DGB, 10000 = $100/DGB)", RPCArgOptions{.skip_type_check = true}}
                 },
                 RPCResult{
                     RPCResult::Type::OBJ, "", "",
                     {
-                        {RPCResult::Type::NUM, "price", "New mock oracle price in satoshis per USD"},
-                        {RPCResult::Type::NUM, "price_usd", "Price as USD per DGB"},
+                        {RPCResult::Type::NUM, "price", "New mock oracle price in cents per DGB"},
+                        {RPCResult::Type::STR, "price_usd", "Price formatted as USD per DGB"},
                         {RPCResult::Type::NUM, "update_height", "Block height of update"},
                         {RPCResult::Type::BOOL, "enabled", "Whether mock oracle is enabled"}
                     }
                 },
                 RPCExamples{
-                    HelpExampleCli("setmockoracleprice", "1000000") +
-                    "\nSet price to $0.01 per DGB\n" +
-                    HelpExampleCli("setmockoracleprice", "5000000") +
-                    "\nSet price to $0.05 per DGB\n" +
-                    HelpExampleRpc("setmockoracleprice", "1000000")
+                    HelpExampleCli("setmockoracleprice", "50") +
+                    "\nSet price to $0.50 per DGB (50 cents)\n" +
+                    HelpExampleCli("setmockoracleprice", "10000") +
+                    "\nSet price to $100.00 per DGB (10000 cents)\n" +
+                    HelpExampleRpc("setmockoracleprice", "50")
                 },
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
         {
@@ -2203,20 +2182,20 @@ static RPCHelpMan setmockoracleprice()
                     "setmockoracleprice is only available in RegTest mode");
             }
 
-            CAmount price = AmountFromValue(request.params[0]);
+            CAmount price = request.params[0].getInt<int64_t>();
 
             if (price <= 0) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER,
                     "Price must be positive");
             }
 
-            // Price should be reasonable (between $0.00001 and $100 per DGB)
-            const CAmount MIN_PRICE = 1000;           // $0.00001 per DGB
-            const CAmount MAX_PRICE = 10000000000LL;  // $100 per DGB
+            // Price should be reasonable (between $0.01 and $1000 per DGB in cents)
+            const CAmount MIN_PRICE = 1;         // 1 cent = $0.01 per DGB
+            const CAmount MAX_PRICE = 100000;    // 100,000 cents = $1000 per DGB
 
             if (price < MIN_PRICE || price > MAX_PRICE) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER,
-                    strprintf("Price must be between %d and %d satoshis/USD", MIN_PRICE, MAX_PRICE));
+                    strprintf("Price must be between %d and %d cents per DGB", MIN_PRICE, MAX_PRICE));
             }
 
             // Set the mock price
@@ -2225,7 +2204,8 @@ static RPCHelpMan setmockoracleprice()
             // Build result
             UniValue result(UniValue::VOBJ);
             result.pushKV("price", price);
-            result.pushKV("price_usd", ValueFromAmount(price));
+            // Format as dollars (divide cents by 100)
+            result.pushKV("price_usd", strprintf("$%.2f", price / 100.0));
             result.pushKV("update_height", MockOracleManager::GetInstance().GetLastUpdateHeight());
             result.pushKV("enabled", MockOracleManager::GetInstance().IsEnabled());
 
@@ -2420,7 +2400,7 @@ void RegisterDigiDollarRPCCommands(CRPCTable &t)
         // {"digidollar", &listdigidollarpositions},
 
         // Address management commands
-        {"digidollar", &getdigidollaraddress},
+        // {"digidollar", &getdigidollaraddress},  // Moved to wallet RPC commands for proper wallet context
         {"digidollar", &validateddaddress},
         {"digidollar", &listdigidollaraddresses},
         {"digidollar", &importdigidollaraddress},

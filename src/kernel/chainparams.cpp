@@ -492,8 +492,9 @@ public:
         // DigiDollar consensus parameters (testnet)
         digidollarParams = DigiDollar::ConsensusParams();
         // Testnet specific adjustments for easier testing
-        digidollarParams.minMintAmount = 1 * DigiDollar::CENT;        // $1 minimum for testing
-        digidollarParams.maxMintAmount = 10000 * DigiDollar::CENT;    // $10k maximum for testing
+        // NOTE: DD amounts are in CENTS, not satoshis. 100 cents = $1.00
+        digidollarParams.minMintAmount = 100;              // 100 cents = $1 minimum for testing
+        digidollarParams.maxMintAmount = 1000000;          // 1,000,000 cents = $10k maximum for testing
         digidollarParams.oracleThreshold = 2;                         // 2-of-3 consensus for testing
         digidollarParams.activeOracles = 3;                           // Only 3 active oracles for testing
 
@@ -904,8 +905,9 @@ public:
         // DigiDollar consensus parameters (regtest)
         digidollarParams = DigiDollar::ConsensusParams();
         // Regtest specific adjustments for rapid testing
-        digidollarParams.minMintAmount = DigiDollar::CENT / 100;          // $0.01 minimum for testing
-        digidollarParams.maxMintAmount = 1000 * DigiDollar::CENT;         // $1k maximum for testing
+        // NOTE: DD amounts are in CENTS, not satoshis. 100 cents = $1.00
+        digidollarParams.minMintAmount = 1;              // 1 cent = $0.01 minimum for testing
+        digidollarParams.maxMintAmount = 100000;         // 100,000 cents = $1000 maximum for testing
         digidollarParams.oracleThreshold = 1;                             // 1-of-1 consensus for testing
         digidollarParams.activeOracles = 1;                               // Only 1 active oracle for testing
         digidollarParams.oracleCount = 1;                                 // Total 1 oracle for testing

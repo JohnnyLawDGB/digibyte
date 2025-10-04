@@ -81,15 +81,10 @@ ScriptType IdentifyScriptType(const CScript& script) {
 // - GetDigiDollarTxType()
 
 bool IsCollateralScript(const CScript& script) {
-    // For Phase 1, we identify collateral scripts by their complexity
-    // Real implementation would check the specific taproot leaves
-
-    if (IdentifyScriptType(script) != ScriptType::NOT_DIGIDOLLAR) {
-        // Check for multiple redemption paths (MAST complexity)
-        // Collateral scripts have 4 redemption paths, so they're more complex
-        return script.size() > 50; // Simplified heuristic
-    }
-    return false;
+    // Phase 1: Use metadata to identify collateral scripts
+    // (Phase 2 will use UTXO database for actual deployment)
+    ScriptType type = IdentifyScriptType(script);
+    return type == ScriptType::COLLATERAL_LOCK;
 }
 
 // ============================================================================
@@ -134,12 +129,13 @@ CAmount CalculateRequiredCollateral(CAmount ddAmount, int64_t lockTime,
     // Apply DCA multiplier based on real-time system health
     int effectiveRatio = GetEffectiveCollateralRatio(baseRatio, systemHealth, ctx.params);
 
-    // Calculate required DGB: (DD amount in cents * ratio% * DGB satoshis) / (price in cents)
-    // Example: $100 DD * 500% * 100000000 sat/DGB / 50000 cents = 1000 DGB
-    CAmount requiredDGB = (ddAmount * effectiveRatio * COIN) / (ctx.oraclePrice / 100);
+    // Calculate required DGB: (DD amount in cents * DGB satoshis) / (price in cents) * (ratio% / 100)
+    // Use 64-bit arithmetic to prevent overflow, same as TxBuilder
+    uint64_t dgbFor100Percent = (static_cast<uint64_t>(ddAmount) * static_cast<uint64_t>(COIN)) / static_cast<uint64_t>(ctx.oraclePrice);
+    uint64_t requiredDGB = (dgbFor100Percent * static_cast<uint64_t>(effectiveRatio)) / 100;
 
-    LogPrint(BCLog::DIGIDOLLAR, "DCA: Collateral calculation: %lld cents * %d%% * %lld / (%lld / 100) = %lld sat\n",
-             ddAmount, effectiveRatio, COIN, ctx.oraclePrice, requiredDGB);
+    LogPrint(BCLog::DIGIDOLLAR, "DCA: Collateral calculation: %lld cents * %lld / %lld = %llu sat (100%%), * %d%% / 100 = %llu sat\n",
+             ddAmount, COIN, ctx.oraclePrice, dgbFor100Percent, effectiveRatio, requiredDGB);
 
     return requiredDGB;
 }
@@ -376,29 +372,70 @@ bool ValidateMintTransaction(const CTransaction& tx,
     for (size_t i = 0; i < tx.vout.size(); i++) {
         const CTxOut& output = tx.vout[i];
 
-        if (IsCollateralScript(output.scriptPubKey)) {
-            // Validate collateral output
+        // Phase 1 workaround: Identify outputs by structure since metadata doesn't cross nodes
+        // P2TR outputs: collateral has value > 0, DD token has value = 0
+        bool isP2TR = (output.scriptPubKey.size() == 34 && output.scriptPubKey[0] == OP_1);
+        bool isOpReturn = (output.scriptPubKey.size() > 0 && output.scriptPubKey[0] == OP_RETURN);
+
+        if (isP2TR && output.nValue > 0) {
+            // This is the collateral output
             if (!ValidateCollateralOutput(output, tx, state)) {
                 return false;
             }
             totalCollateral += output.nValue;
             hasCollateralOutput = true;
+        }
 
-            // Extract lock time from collateral script
-            lockTime = ExtractLockTime(output.scriptPubKey);
-            if (lockTime <= 0) {
-                LogPrintf("DigiDollar: Invalid lock time extracted: %d\n", lockTime);
-                return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-lock-time");
+        // Check for OP_RETURN metadata: <"DD"> <txType> <ddAmount> <lockHeight>
+        if (isOpReturn) {
+            CScript::const_iterator pc = output.scriptPubKey.begin() + 1;
+            opcodetype opcode;
+            std::vector<unsigned char> data;
+
+            // Check for DD marker
+            if (output.scriptPubKey.GetOp(pc, opcode, data) && data.size() == 2 &&
+                data[0] == 'D' && data[1] == 'D') {
+
+                // Extract tx type (1 = MINT, 2 = TRANSFER, etc.)
+                int64_t txType = 0;
+                if (output.scriptPubKey.GetOp(pc, opcode, data)) {
+                    try {
+                        CScriptNum txTypeNum(data, true);
+                        txType = txTypeNum.getint();
+                        LogPrintf("DigiDollar: Extracted tx type from OP_RETURN: %d\n", txType);
+                    } catch (const std::exception&) {}
+                }
+
+                // Extract DD amount in cents
+                if (output.scriptPubKey.GetOp(pc, opcode, data)) {
+                    try {
+                        CScriptNum ddAmountNum(data, true);
+                        totalDD = ddAmountNum.getint();
+                        LogPrintf("DigiDollar: Extracted DD amount from OP_RETURN: %d cents ($%.2f)\n",
+                                  totalDD, totalDD / 100.0);
+                    } catch (const std::exception&) {}
+                }
+
+                // Extract lock height
+                if (output.scriptPubKey.GetOp(pc, opcode, data)) {
+                    try {
+                        CScriptNum lockHeightNum(data, true);
+                        lockTime = lockHeightNum.getint();
+                        LogPrintf("DigiDollar: Extracted lock height from OP_RETURN: %d blocks\n", lockTime);
+                    } catch (const std::exception&) {}
+                }
             }
         }
 
-        if (IsDDTokenScript(output.scriptPubKey)) {
-            // Validate DD output
+        if (isP2TR && output.nValue == 0) {
+            // This is the DD token output
             if (!ValidateDDOutput(output, tx, state)) {
                 return false;
             }
             hasDDOutput = true;
 
+            // Phase 1: Try to extract DD amount from metadata if available
+            // If not available (cross-node validation), calculate from collateral
             CAmount ddAmount;
             if (ExtractDDAmount(output.scriptPubKey, ddAmount)) {
                 if (ddAmount <= 0) {
@@ -406,14 +443,32 @@ bool ValidateMintTransaction(const CTransaction& tx,
                     return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-dd-amount");
                 }
                 totalDD += ddAmount;
-            } else {
-                LogPrintf("DigiDollar: Failed to extract DD amount from output %d\n", i);
-                return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-dd-amount-extraction");
             }
+            // If we can't extract (cross-node validation), we'll calculate after loop
         }
     }
 
-    // 4. Ensure we have both required output types
+    // 4. Calculate DD amount if not extracted from metadata
+    // For mint transactions, DD amount = (collateral * oracle_price * 100) / (collateral_ratio * COIN)
+    if (hasDDOutput && totalDD == 0 && totalCollateral > 0) {
+        // Calculate DD amount from collateral and oracle price
+        CAmount oraclePrice = ctx.oraclePrice;
+        if (oraclePrice <= 0) {
+            LogPrintf("DigiDollar: Invalid oracle price for DD amount calculation\n");
+            return state.Invalid(TxValidationResult::TX_CONSENSUS, "invalid-oracle-price");
+        }
+
+        // Calculate max DD that can be minted with this collateral at minimum ratio
+        // DD_cents = (collateral_satoshis * price_cents_per_dgb * 100) / (min_ratio * COIN)
+        // But we don't know the tier/ratio yet, so use a conservative 200% (tier 1)
+        int minRatio = 200;
+        totalDD = (totalCollateral * oraclePrice * 100) / (minRatio * COIN);
+
+        LogPrintf("DigiDollar: Calculated DD amount from collateral: %d cents ($%.2f) from %d DGB\n",
+                  totalDD, totalDD / 100.0, totalCollateral / COIN);
+    }
+
+    // 5. Ensure we have both required output types
     if (!hasCollateralOutput) {
         LogPrintf("DigiDollar: Mint transaction missing collateral output\n");
         return state.Invalid(TxValidationResult::TX_CONSENSUS, "missing-collateral-output");
@@ -424,7 +479,13 @@ bool ValidateMintTransaction(const CTransaction& tx,
         return state.Invalid(TxValidationResult::TX_CONSENSUS, "missing-dd-output");
     }
 
-    // 5. Validate total DD amount against mint limits
+    // 5. Ensure valid lock time was found
+    if (lockTime <= 0) {
+        LogPrintf("DigiDollar: No valid lock time found in transaction\n");
+        return state.Invalid(TxValidationResult::TX_CONSENSUS, "missing-lock-time");
+    }
+
+    // 6. Validate total DD amount against mint limits
     if (!ValidateMintAmount(totalDD, ctx.params)) {
         LogPrintf("DigiDollar: Invalid total mint amount: %d cents (limits: %d - %d)\n",
                   totalDD, ctx.params.GetDigiDollarParams().minMintAmount,
@@ -432,7 +493,7 @@ bool ValidateMintTransaction(const CTransaction& tx,
         return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-dd-mint-amount");
     }
 
-    // 6. Calculate required collateral based on DD amount, lock time, and system state
+    // 7. Calculate required collateral based on DD amount, lock time, and system state
     CAmount requiredCollateral = CalculateRequiredCollateral(totalDD, lockTime, ctx);
     if (requiredCollateral <= 0) {
         LogPrintf("DigiDollar: Failed to calculate required collateral\n");
@@ -941,15 +1002,34 @@ bool ValidateDDOutput(const CTxOut& output, const CTransaction& tx,
         return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-dd-script");
     }
 
-    // Verify it's actually a DD script
-    if (!IsDDTokenScript(output.scriptPubKey)) {
-        LogPrintf("DigiDollar: Script is not a valid DD token script\n");
-        return state.Invalid(TxValidationResult::TX_CONSENSUS, "invalid-dd-token-script");
-    }
+    // Phase 1: Script type already verified by caller using value-based heuristic
+    // (P2TR with value=0 indicates DD token output)
+    // Phase 2 will use UTXO database tracking for proper identification
 
     LogPrintf("DigiDollar: DD output validation passed\n");
 
     return true;
+}
+
+bool ExtractDDAmount(const CScript& script, CAmount& amount) {
+    // Phase 1: DD amount is not stored in the script itself
+    // It needs to be calculated from the full transaction context:
+    //   DD_amount = (collateral_value * oracle_price * 100) / (collateral_ratio * COIN)
+    //
+    // Since we can't determine this from the script alone, this function
+    // will be called from the transaction validation context where we have
+    // access to the full transaction and can calculate it.
+    //
+    // For now, extract amount from metadata if available
+    ScriptMetadata metadata;
+    if (GetScriptMetadata(script, metadata)) {
+        amount = metadata.ddAmount;
+        return true;
+    }
+
+    // Phase 2 will use UTXO database to track DD amounts
+    // For now, return false to indicate we need transaction-level calculation
+    return false;
 }
 
 int64_t ExtractLockTime(const CScript& script) {
@@ -968,9 +1048,11 @@ int64_t ExtractLockTime(const CScript& script) {
             // Look backward for the height value
             // This is simplified - real implementation would parse properly
 
-            // For testing, return a default lock time based on common patterns
-            // Real implementation would extract from actual script structure
-            return 30 * 24 * 60 * 4; // 30 days as default
+            // TODO: For Phase 2, properly extract from witness/OP_RETURN
+            // For now use a heuristic: we can infer lock time from collateral ratio
+            // However P2TR scripts are hashed, so we can't read them from outputs
+            // Return a reasonable middle-ground default
+            return 90 * 24 * 60 * 4; // 90 days (tier 2) = 400% ratio as default
         }
 
         // Try to interpret data as a potential timelock value

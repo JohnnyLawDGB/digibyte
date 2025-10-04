@@ -51,8 +51,8 @@ int DynamicCollateralAdjustment::CalculateSystemHealth(CAmount totalCollateral,
 
     // Calculate total collateral value in USD cents
     // totalCollateral is in satoshis
-    // oraclePrice is in 0.001 cents per DGB (e.g., 3333 = 3.333 cents)
-    // Convert: (satoshis / COIN) * (price / 1000) = cents
+    // oraclePrice is in cents per DGB (e.g., 50 = $0.50 per DGB)
+    // Convert: (satoshis / COIN) * price = cents
     CAmount collateralValueCents;
 
     // Avoid overflow by checking if we can safely multiply
@@ -60,11 +60,11 @@ int DynamicCollateralAdjustment::CalculateSystemHealth(CAmount totalCollateral,
     if (totalCollateral > maxSafeValue) {
         LogPrintf("DCA: Potential overflow in collateral calculation, using conservative estimate\n");
         // Use conservative calculation to avoid overflow
-        // Divide by COIN first, then multiply by price, then divide by 1000
-        collateralValueCents = ((totalCollateral / COIN) * oraclePrice) / 1000;
+        // Divide by COIN first, then multiply by price
+        collateralValueCents = (totalCollateral / COIN) * oraclePrice;
     } else {
         // Multiply first for precision, then divide
-        collateralValueCents = (totalCollateral * oraclePrice) / (COIN * 1000);
+        collateralValueCents = (totalCollateral * oraclePrice) / COIN;
     }
 
     // Calculate system health percentage

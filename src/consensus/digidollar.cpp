@@ -10,6 +10,7 @@
 #include <primitives/transaction.h>
 #include <script/script.h>
 #include <digidollar/scripts.h>
+#include <digidollar/validation.h>
 
 #include <algorithm>
 #include <sstream>
@@ -254,6 +255,15 @@ bool IsDDTokenScript(const CScript& script)
             return true;
         }
     }
+
+    // Phase 1: For P2TR scripts (Taproot), check metadata
+    // The OP_DIGIDOLLAR is inside the Taproot script tree, not in scriptPubKey
+    // (Phase 2 will use UTXO database for actual deployment)
+    DigiDollar::ScriptMetadata metadata;
+    if (DigiDollar::GetScriptMetadata(script, metadata)) {
+        return metadata.type == DigiDollar::ScriptType::DD_TOKEN_OUTPUT;
+    }
+
     return false;
 }
 

@@ -226,27 +226,18 @@ CScript CreateDigiDollarP2TR(const XOnlyPubKey& owner, CAmount ddAmount)
     }
 
     try {
-        TaprootBuilder builder;
-
-        // Simple transfer path with DD amount verification
-        CScript transferPath;
-        transferPath << OP_DIGIDOLLAR << ddAmount << OP_EQUALVERIFY;
-        transferPath << ToByteVector(owner) << OP_CHECKSIG;
-
-        // Single script tree (depth 0)
-        builder.Add(0, transferPath, 0xC0);
-        builder.Finalize(owner);
-
-        if (!builder.IsValid() || !builder.IsComplete()) {
-            // LogPrintf("DigiDollar: Failed to create DD P2TR script\n");
+        // For Phase 1, use simple key-path-only Taproot (no script tree)
+        // This allows spending with just a Schnorr signature
+        // We need to tweak the key for proper Taproot
+        auto tweaked = owner.CreateTapTweak(nullptr);
+        if (!tweaked) {
             return CScript();
         }
+        XOnlyPubKey output_key = tweaked->first;
 
-        // Create P2TR output
+        // Create P2TR output with the tweaked key
         CScript scriptPubKey;
-        WitnessV1Taproot output = builder.GetOutput();
-
-        scriptPubKey << OP_1 << ToByteVector(output);
+        scriptPubKey << OP_1 << ToByteVector(output_key);
 
         // LogPrintf("DigiDollar: Created DD P2TR script for %d DD (size: %d bytes)\n",
         //           ddAmount, scriptPubKey.size());

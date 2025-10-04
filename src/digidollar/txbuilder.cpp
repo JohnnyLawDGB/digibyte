@@ -171,12 +171,12 @@ bool MintTxBuilder::ValidateMintParams(const TxBuilderMintParams& params) const 
         return false;
     }
 
-    // Convert cents to CENT encoding for validation
+    // Validate against consensus parameters
     // params.ddAmount is in cents (100 cents = $1.00)
-    // CENT represents $1.00 in satoshis (despite the misleading name)
-    // So to convert: cents / 100 * CENT
-    if (!IsValidMintAmount((params.ddAmount / 100) * CENT, ddParams)) {
-        LogPrintf("ValidateMintParams FAILED: IsValidMintAmount returned false for %d cents\n", params.ddAmount);
+    // Consensus params (minMintAmount/maxMintAmount) are also in cents
+    if (!IsValidMintAmount(params.ddAmount, ddParams)) {
+        LogPrintf("ValidateMintParams FAILED: IsValidMintAmount returned false for %d cents (min=%d, max=%d)\n",
+                 params.ddAmount, ddParams.minMintAmount, ddParams.maxMintAmount);
         return false;
     }
 
@@ -285,6 +285,16 @@ TxBuilderResult MintTxBuilder::BuildMintTransaction(const TxBuilderMintParams& p
     // Create DD output (P2TR) - 0 DGB value, amount in witness/script
     CScript ddScript = CreateDDOutputScript(params.ownerKey, params.ddAmount);
     tx.vout.push_back(CTxOut(0, ddScript));
+
+    // Add OP_RETURN output with metadata for validation
+    // Format: OP_RETURN <"DD"> <txType> <ddAmount> <lockHeight>
+    int64_t lockHeight = currentHeight + LockDaysToBlocks(params.lockDays);
+    CScript metadataScript = CScript() << OP_RETURN
+                                       << std::vector<unsigned char>{'D', 'D'}
+                                       << CScriptNum(1)  // 1 = MINT transaction
+                                       << CScriptNum(params.ddAmount)  // DD amount in cents
+                                       << CScriptNum(lockHeight);  // Lock height in blocks
+    tx.vout.push_back(CTxOut(0, metadataScript));
 
     // Calculate actual fees and change
     result.totalFees = CalculateFee(tx, params.feeRate);
@@ -572,10 +582,9 @@ TxBuilderResult TransferTxBuilder::BuildTransferTransaction(const TxBuilderTrans
     if (totalFeeIn > 0) {
         CAmount dgbChange = totalFeeIn - actualFee;
         if (dgbChange > 0 && dgbChange >= DUST_THRESHOLD) {
-            // Create DGB change output
-            CPubKey changePubkey = params.spenderKey.GetPubKey();
-            CTxDestination changeDest{WitnessV1Taproot(XOnlyPubKey(changePubkey))};
-            CScript dgbChangeScript = GetScriptForDestination(changeDest);
+            // Create DGB change output using a P2WPKH (not P2TR) to differentiate from DD outputs
+            // This ensures DGB change won't be confused with DD outputs
+            CScript dgbChangeScript = GetScriptForDestination(WitnessV0KeyHash(params.spenderKey.GetPubKey()));
             tx.vout.push_back(CTxOut(dgbChange, dgbChangeScript));
             LogPrintf("DigiDollar: Added DGB change output: %d sats\n", dgbChange);
         }
@@ -583,12 +592,16 @@ TxBuilderResult TransferTxBuilder::BuildTransferTransaction(const TxBuilderTrans
 
     // Final validation - ensure DD conservation
     CAmount finalDDOut = 0;
-    for (const auto& output : tx.vout) {
+    for (size_t i = 0; i < tx.vout.size(); i++) {
         CAmount ddAmount = 0;
-        if (DigiDollar::ExtractDDAmount(output.scriptPubKey, ddAmount)) {
+        if (DigiDollar::ExtractDDAmount(tx.vout[i].scriptPubKey, ddAmount)) {
+            LogPrintf("DigiDollar: Output %d has DD amount: %d cents\n", i, ddAmount);
             finalDDOut += ddAmount;
         }
     }
+
+    LogPrintf("DigiDollar: Conservation check - Input: %d cents, Output: %d cents\n",
+              totalDDIn, finalDDOut);
 
     if (totalDDIn != finalDDOut) {
         result.error = "DD conservation violation: input=" + std::to_string(totalDDIn) +

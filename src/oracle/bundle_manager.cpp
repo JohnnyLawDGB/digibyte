@@ -11,6 +11,7 @@
 #include <consensus/consensus.h>
 #include <kernel/chainparams.h>
 #include <logging.h>
+#include <oracle/mock_oracle.h>
 #include <primitives/block.h>
 #include <primitives/transaction.h>
 #include <script/standard.h>
@@ -601,12 +602,20 @@ namespace OracleIntegration {
 
 CAmount GetCurrentOraclePrice()
 {
+    // In RegTest mode, use MockOracleManager for testing
+    if (Params().GetChainType() == ChainType::REGTEST) {
+        CAmount mockPrice = MockOracleManager::GetInstance().GetCurrentPrice();
+        if (mockPrice > 0) {
+            return mockPrice;
+        }
+    }
+
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     CAmount price = manager.GetLatestPrice();
 
-    // Fallback to mock price if no oracle data available
+    // Fallback to default price if no oracle data available
     if (price <= 0) {
-        price = 5000; // $0.05 default price
+        price = 5000; // $50.00 per DGB default price
         LogPrintf("Oracle: Using fallback price: %d cents\n", price);
     }
 

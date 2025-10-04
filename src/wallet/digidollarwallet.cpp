@@ -5,6 +5,7 @@
 #include <wallet/digidollarwallet.h>
 #include <wallet/wallet.h>
 #include <wallet/spend.h>
+#include <wallet/coincontrol.h>
 #include <digidollar/txbuilder.h>
 #include <digidollar/validation.h>
 #include <digidollar/scripts.h>
@@ -64,10 +65,44 @@ size_t DigiDollarWallet::LoadFromDatabase()
     size_t balances_loaded = LoadBalancesFromDatabase();
     size_t txs_loaded = LoadTransactionsFromDatabase();
 
-    size_t total = positions_loaded + balances_loaded + txs_loaded;
+    // FIX #1: Load DD UTXOs from database
+    size_t utxos_loaded = 0;
+    wallet::WalletBatch batch(m_wallet->GetDatabase());
+    dd_utxos.clear();
 
-    LogPrintf("DigiDollarWallet: Loaded %d positions, %d balances, %d transactions\n",
-              positions_loaded, balances_loaded, txs_loaded);
+    std::unique_ptr<wallet::DatabaseCursor> cursor = batch.GetNewCursor();
+    if (cursor) {
+        wallet::DatabaseCursor::Status status = wallet::DatabaseCursor::Status::MORE;
+        while (status == wallet::DatabaseCursor::Status::MORE) {
+            DataStream key{};
+            DataStream value{};
+            status = cursor->Next(key, value);
+
+            if (status != wallet::DatabaseCursor::Status::MORE) break;
+
+            std::string key_type;
+            key >> key_type;
+
+            if (key_type == wallet::DBKeys::DD_OUTPUT) {
+                COutPoint outpoint;
+                key >> outpoint;
+
+                CAmount dd_amount;
+                value >> dd_amount;
+
+                dd_utxos[outpoint] = dd_amount;
+                utxos_loaded++;
+
+                LogPrint(BCLog::WALLETDB, "DigiDollarWallet: Loaded DD UTXO %s:%d (%d cents)\n",
+                        outpoint.hash.ToString(), outpoint.n, dd_amount);
+            }
+        }
+    }
+
+    size_t total = positions_loaded + balances_loaded + txs_loaded + utxos_loaded;
+
+    LogPrintf("DigiDollarWallet: Loaded %d positions, %d balances, %d transactions, %d DD UTXOs\n",
+              positions_loaded, balances_loaded, txs_loaded, utxos_loaded);
 
     // Recalculate totals
     RecalculateTotals();
@@ -279,15 +314,18 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
 
         // Select DGB UTXOs for fees (estimated)
         CAmount estimatedFee = 100000; // 0.001 DGB estimated fee
+        std::vector<CAmount> fee_amounts;
         CAmount selectedFeeTotal = 0;
-        if (!SelectFeeCoins(estimatedFee, params.feeUtxos, selectedFeeTotal)) {
+        if (!SelectFeeCoins(estimatedFee, params.feeUtxos, selectedFeeTotal, &fee_amounts)) {
             // Fallback: Create mock fee UTXO for testing
             LogPrintf("DigiDollar: No DGB UTXOs found, using mock UTXO for fees\n");
             uint256 mockFeeTxid;
             mockFeeTxid.SetHex("fee1234567890abcdef1234567890abcdef1234567890abcdef1234567890ab");
             COutPoint mockFeeUtxo(mockFeeTxid, 1);
             params.feeUtxos.push_back(mockFeeUtxo);
+            fee_amounts.push_back(estimatedFee * 2);
         }
+        params.feeAmounts = fee_amounts;  // Pass actual fee UTXO amounts
 
         // Generate spending key (in real implementation, would get from wallet)
         CKey spenderKey;
@@ -308,80 +346,88 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
             return false;
         }
 
+        // FIX #3: Broadcast transaction to network (GREEN PHASE)
+        // Create transaction reference for broadcasting
+        CTransactionRef tx_ref = MakeTransactionRef(result.tx);
+
         // Get transaction ID
-        txid = result.tx.GetHash().ToString();
+        txid = tx_ref->GetHash().ToString();
 
-        // PHASE 5.1: Update sender balance by marking spent positions inactive
-        // Balance is UTXO-derived, so marking positions inactive automatically updates balance
-        LogPrintf("DigiDollar: Updating positions after transfer (PHASE 5.1)\n");
+        // Submit to mempool and broadcast to network
+        if (m_wallet) {
+            // Access chainstate through wallet's chain interface
+            std::string broadcast_error;
+            const CAmount max_tx_fee = wallet::DEFAULT_TRANSACTION_MAXFEE;  // Use default max fee
 
-        // Mark spent input positions as inactive
-        for (const auto& dd_utxo : params.ddUtxos) {
-            // DD UTXOs are at index 1 of DDTimeLock transactions
-            // The hash is the dd_timelock_id
-            uint256 dd_timelock_id = dd_utxo.hash;
+            // Use chain().broadcastTransaction() which handles both mempool acceptance and network broadcast
+            bool broadcast_success = m_wallet->chain().broadcastTransaction(
+                tx_ref,
+                max_tx_fee,
+                /*relay=*/true,  // Relay to network
+                broadcast_error
+            );
 
-            if (!UpdatePositionStatus(dd_timelock_id, false)) {
-                LogPrintf("DigiDollar: WARNING - Failed to mark position %s as spent\n",
-                         dd_timelock_id.ToString());
-                // Continue anyway - this is a warning, not a failure
-            } else {
-                LogPrintf("DigiDollar: Marked position %s as spent\n",
-                         dd_timelock_id.ToString());
+            if (!broadcast_success) {
+                error = strprintf("Transaction rejected by network: %s", broadcast_error);
+                LogPrintf("DigiDollar: Broadcast failed - %s\n", broadcast_error);
+                return false;
+            }
+
+            LogPrintf("DigiDollar: Transaction broadcast successful - txid: %s\n", txid);
+        } else {
+            LogPrintf("DigiDollar: WARNING - No wallet context, transaction built but not broadcast\n");
+            error = "No wallet context for broadcasting";
+            return false;
+        }
+
+        // FIX #2: CRITICAL - Time-locks (collateral positions) NEVER change during transfers!
+        // Only DD UTXOs move. The locked DGB stays in place until redemption.
+        // DO NOT mark positions inactive. DO NOT create new collateral positions.
+        LogPrintf("DigiDollar: Updating DD UTXO set after transfer (FIX #2)\n");
+
+        // Remove spent DD UTXOs from tracking
+        wallet::WalletBatch batch(m_wallet->GetDatabase());
+        for (const auto& spent_utxo : params.ddUtxos) {
+            dd_utxos.erase(spent_utxo);
+
+            // Also erase from database
+            if (!batch.EraseDDUTXO(spent_utxo)) {
+                LogPrintf("DigiDollar: WARNING - Failed to erase DD UTXO %s:%d from database\n",
+                         spent_utxo.hash.ToString(), spent_utxo.n);
+            }
+
+            LogPrintf("DigiDollar: Marked DD UTXO %s:%d as spent\n",
+                      spent_utxo.hash.ToString(), spent_utxo.n);
+        }
+
+        // Add new DD UTXOs from transaction outputs (for change and potentially recipient if to ourselves)
+        for (size_t i = 0; i < result.tx.vout.size(); i++) {
+            CAmount dd_amount = 0;
+
+            // Check if this output contains DD
+            if (DigiDollar::ExtractDDAmount(result.tx.vout[i].scriptPubKey, dd_amount)) {
+                // Check if this output is to our address (change or self-transfer)
+                if (m_wallet->IsMine(result.tx.vout[i])) {
+                    COutPoint new_utxo(result.tx.GetHash(), i);
+                    dd_utxos[new_utxo] = dd_amount;
+
+                    // Persist to database
+                    if (!batch.WriteDDUTXO(new_utxo, dd_amount)) {
+                        LogPrintf("DigiDollar: WARNING - Failed to write DD UTXO %s:%d to database\n",
+                                 new_utxo.hash.ToString(), i);
+                    }
+
+                    LogPrintf("DigiDollar: Added change DD UTXO %s:%d (%d cents)\n",
+                              new_utxo.hash.ToString(), i, dd_amount);
+                }
             }
         }
 
-        // PHASE 5.1: Create change position if there's DD change
+        // Time-lock positions remain ACTIVE and UNCHANGED
+        LogPrintf("DigiDollar: Transfer complete - time-locks preserved (still ACTIVE)\n");
+
+        // Calculate DD change for legacy mock balance update
         CAmount dd_change = selectedDDTotal - amount;
-        if (dd_change > 0) {
-            LogPrintf("DigiDollar: Creating change position for %d cents\n", dd_change);
-
-            // Extract change output from transaction (typically vout[1] for DD transfer)
-            // Transaction structure: vout[0] = recipient DD, vout[1] = change DD (if any)
-            if (result.tx.vout.size() >= 2) {
-                uint256 changeTxId = result.tx.GetHash();
-
-                // Calculate proportional collateral for change
-                // Using same collateral ratio as input positions
-                CAmount totalInputCollateral = 0;
-                for (const auto& dd_utxo : params.ddUtxos) {
-                    auto it = collateral_positions.find(dd_utxo.hash);
-                    if (it != collateral_positions.end()) {
-                        totalInputCollateral += it->second.dgb_collateral;
-                    }
-                }
-
-                CAmount changeCollateral = (totalInputCollateral * dd_change) / selectedDDTotal;
-
-                // Get unlock height from first input position (inherit lock tier)
-                int64_t unlockHeight = 0;
-                uint32_t lockTier = 1;
-                if (!params.ddUtxos.empty()) {
-                    auto it = collateral_positions.find(params.ddUtxos[0].hash);
-                    if (it != collateral_positions.end()) {
-                        unlockHeight = it->second.unlock_height;
-                        lockTier = it->second.lock_tier;
-                    }
-                }
-
-                // Create change position
-                WalletCollateralPosition changePosition(
-                    changeTxId,
-                    dd_change,
-                    changeCollateral,
-                    lockTier,
-                    unlockHeight
-                );
-
-                // Persist change position
-                AddCollateralPosition(changePosition);
-
-                LogPrintf("DigiDollar: Created change position %s with %d DD cents\n",
-                         changeTxId.ToString(), dd_change);
-            } else {
-                LogPrintf("DigiDollar: WARNING - Expected change but transaction has insufficient outputs\n");
-            }
-        }
 
         // Update legacy mock balance for backwards compatibility
         if (mockBalance > 0) {
@@ -917,18 +963,17 @@ CAmount DigiDollarWallet::GetDDBalance(const CDigiDollarAddress& addr) const {
 
 CAmount DigiDollarWallet::GetTotalDDBalance() const {
     try {
-        // Calculate balance from active collateral positions
-        // Phase 1: Use collateral_positions to track DD balance
-        // Phase 2: Will use UTXO database with DD amount metadata
+        // FIX #1: Calculate balance from dd_utxos map (not collateral_positions)
         CAmount balance = 0;
-        for (const auto& [dd_timelock_id, position] : collateral_positions) {
-            if (position.is_active) {
-                balance += position.dd_minted;
+        for (const auto& [outpoint, dd_amount] : dd_utxos) {
+            // Only count unspent UTXOs
+            if (!m_wallet || !m_wallet->IsSpent(outpoint)) {
+                balance += dd_amount;
             }
         }
 
-        LogPrintf("DigiDollar: GetTotalDDBalance calculated %d cents from %d positions\n",
-                  balance, collateral_positions.size());
+        LogPrintf("DigiDollar: GetTotalDDBalance calculated %d cents from %d UTXOs\n",
+                  balance, dd_utxos.size());
         return balance;
 
     } catch (const std::exception& e) {
@@ -978,24 +1023,22 @@ std::vector<WalletCollateralPosition> DigiDollarWallet::GetDDTimeLocks(bool acti
 std::vector<DDUtxo> DigiDollarWallet::GetDDUTXOs() const {
     std::vector<DDUtxo> utxos;
 
-    LogPrintf("DigiDollar: GetDDUTXOs - Scanning active DDTimeLocks\n");
+    LogPrintf("DigiDollar: GetDDUTXOs - Scanning dd_utxos map (FIX #1)\n");
 
-    // Get all active DDTimeLocks from cache
-    std::vector<WalletCollateralPosition> timelocks = GetDDTimeLocks(true);
+    // FIX #1: Use actual tracked UTXOs instead of assuming positions
+    for (const auto& [outpoint, dd_amount] : dd_utxos) {
+        // Verify UTXO is still unspent in wallet
+        if (m_wallet && m_wallet->IsSpent(outpoint)) {
+            LogPrintf("DigiDollar: Skipping spent UTXO %s:%d\n",
+                      outpoint.hash.ToString(), outpoint.n);
+            continue; // Skip spent
+        }
 
-    if (timelocks.empty()) {
-        LogPrintf("DigiDollar: No active DDTimeLocks, returning empty UTXO set\n");
-        return utxos;
-    }
-
-    // Convert each DDTimeLock to a spendable DD UTXO
-    // DDTimeLock structure: vout[0] = Time-Locked DGB, vout[1] = DD output
-    for (const auto& timelock : timelocks) {
-        COutPoint dd_outpoint(timelock.dd_timelock_id, 1);  // DD always at index 1
-        utxos.emplace_back(dd_outpoint, timelock.dd_minted);
+        DDUtxo utxo(outpoint, dd_amount);
+        utxos.push_back(utxo);
 
         LogPrintf("DigiDollar: Found DD UTXO %s:%d (%d cents)\n",
-                  timelock.dd_timelock_id.ToString(), 1, timelock.dd_minted);
+                  outpoint.hash.ToString(), outpoint.n, dd_amount);
     }
 
     LogPrintf("DigiDollar: GetDDUTXOs - Found %d spendable UTXOs\n", utxos.size());
@@ -1003,33 +1046,27 @@ std::vector<DDUtxo> DigiDollarWallet::GetDDUTXOs() const {
 }
 
 CAmount DigiDollarWallet::GetDDFromUTXO(const COutPoint& outpoint) const {
-    // DD UTXOs are always at output index 1
-    if (outpoint.n != 1) {
-        LogPrintf("DigiDollar: GetDDFromUTXO - Invalid output index %d (expected 1)\n", outpoint.n);
+    // FIX #1: Look up UTXO in dd_utxos map (not collateral_positions)
+    auto it = dd_utxos.find(outpoint);
+    if (it == dd_utxos.end()) {
+        LogPrintf("DigiDollar: GetDDFromUTXO - UTXO %s:%d not found in dd_utxos map\n",
+                  outpoint.hash.ToString(), outpoint.n);
         return 0;
     }
 
-    // Look up DDTimeLock in cache
-    auto it = collateral_positions.find(outpoint.hash);
-    if (it == collateral_positions.end()) {
-        LogPrintf("DigiDollar: GetDDFromUTXO - DDTimeLock %s not found in cache\n",
-                  outpoint.hash.ToString());
-        return 0;
-    }
+    CAmount dd_amount = it->second;
 
-    const WalletCollateralPosition& timelock = it->second;
-
-    // Verify DDTimeLock is active
-    if (!timelock.is_active) {
-        LogPrintf("DigiDollar: GetDDFromUTXO - DDTimeLock %s is inactive\n",
-                  outpoint.hash.ToString());
+    // Verify UTXO is still unspent
+    if (m_wallet && m_wallet->IsSpent(outpoint)) {
+        LogPrintf("DigiDollar: GetDDFromUTXO - UTXO %s:%d is spent\n",
+                  outpoint.hash.ToString(), outpoint.n);
         return 0;
     }
 
     LogPrintf("DigiDollar: GetDDFromUTXO - Found %d cents for UTXO %s:%d\n",
-              timelock.dd_minted, outpoint.hash.ToString(), outpoint.n);
+              dd_amount, outpoint.hash.ToString(), outpoint.n);
 
-    return timelock.dd_minted;
+    return dd_amount;
 }
 
 void DigiDollarWallet::AddCollateralPosition(const WalletCollateralPosition& position) {
@@ -1043,6 +1080,21 @@ void DigiDollarWallet::AddCollateralPosition(const WalletCollateralPosition& pos
         LogPrintf("DigiDollar: Added collateral position - ID: %s, DD: %d, DGB: %d, Tier: %d, Active: %s\n",
                   position.dd_timelock_id.GetHex(), position.dd_minted, position.dgb_collateral,
                   position.lock_tier, position.is_active ? "YES" : "NO");
+
+        // FIX #1: Add DD UTXO to tracking map
+        // DD output from mint is always at vout 1
+        COutPoint dd_outpoint(position.dd_timelock_id, 1);
+        dd_utxos[dd_outpoint] = position.dd_minted;
+        LogPrintf("DigiDollar: Added DD UTXO to tracking - %s:%d (%d cents)\n",
+                  dd_outpoint.hash.ToString(), dd_outpoint.n, position.dd_minted);
+
+        // Persist DD UTXO to database
+        if (m_wallet) {
+            wallet::WalletBatch batch(m_wallet->GetDatabase());
+            if (!batch.WriteDDUTXO(dd_outpoint, position.dd_minted)) {
+                LogPrintf("DigiDollar: WARNING - Failed to persist DD UTXO to database\n");
+            }
+        }
 
         // Also add a transaction record for mint
         DDTransaction tx;
@@ -1239,14 +1291,16 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
 
         // Phase 2.1: Select DGB UTXOs for fees
         std::vector<COutPoint> fee_utxos;
+        std::vector<CAmount> fee_amounts;
         CAmount selectedFeeTotal = 0;
-        if (!SelectFeeCoins(estimatedFee, fee_utxos, selectedFeeTotal)) {
+        if (!SelectFeeCoins(estimatedFee, fee_utxos, selectedFeeTotal, &fee_amounts)) {
             // Fallback: Create mock fee UTXO for testing (Phase 2.1 temporary)
             LogPrintf("DigiDollar: No DGB UTXOs found, using mock UTXO for fees\n");
             uint256 mockFeeTxid;
             mockFeeTxid.SetHex("fee1234567890abcdef1234567890abcdef1234567890abcdef1234567890ab");
             COutPoint mockFeeUtxo(mockFeeTxid, 1);
             fee_utxos.push_back(mockFeeUtxo);
+            fee_amounts.push_back(estimatedFee * 2);
             selectedFeeTotal = estimatedFee * 2;  // Ensure sufficient
         }
 
@@ -1262,6 +1316,7 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
         }
 
         params.feeUtxos = fee_utxos;
+        params.feeAmounts = fee_amounts;  // Pass actual fee UTXO amounts
         params.feeRate = 100000;  // 100,000 sat/kB (DigiByte minimum relay fee)
 
         // Get the spending key from wallet
@@ -1305,6 +1360,31 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
 
         // Create transaction reference
         tx_out = MakeTransactionRef(result.tx);
+
+        // FIX #3: Broadcast transaction to network (GREEN PHASE)
+        if (m_wallet) {
+            std::string broadcast_error;
+            const CAmount max_tx_fee = wallet::DEFAULT_TRANSACTION_MAXFEE;
+
+            // Broadcast transaction (includes mempool submission and network relay)
+            bool broadcast_success = m_wallet->chain().broadcastTransaction(
+                tx_out,
+                max_tx_fee,
+                /*relay=*/true,
+                broadcast_error
+            );
+
+            if (!broadcast_success) {
+                LogPrintf("DigiDollar: Broadcast failed - %s\n", broadcast_error);
+                return false;
+            }
+
+            LogPrintf("DigiDollar: Transaction broadcast successful - txid: %s\n",
+                     tx_out->GetHash().ToString());
+        } else {
+            LogPrintf("DigiDollar: WARNING - No wallet context, transaction built but not broadcast\n");
+            return false;
+        }
 
         // CRITICAL: DD Transfers DON'T create/destroy time-locks!
         // Time-locks (vout[0] of mint) stay intact until redemption
@@ -1812,10 +1892,11 @@ bool DigiDollarWallet::SelectDDCoins(const CAmount& target_amount, std::vector<C
     return success;
 }
 
-bool DigiDollarWallet::SelectFeeCoins(const CAmount& fee_amount, std::vector<COutPoint>& selected_utxos, CAmount& selected_total) const {
+bool DigiDollarWallet::SelectFeeCoins(const CAmount& fee_amount, std::vector<COutPoint>& selected_utxos, CAmount& selected_total, std::vector<CAmount>* selected_amounts) const {
     // Reset output parameters
     selected_total = 0;
     selected_utxos.clear();
+    if (selected_amounts) selected_amounts->clear();
 
     // Validate fee amount
     if (fee_amount <= 0) {
@@ -1832,21 +1913,26 @@ bool DigiDollarWallet::SelectFeeCoins(const CAmount& fee_amount, std::vector<COu
     LogPrintf("DigiDollar: SelectFeeCoins - target fee: %d satoshis\n", fee_amount);
 
     // Get available DGB UTXOs from wallet
-    // NOTE: In real implementation, this would use m_wallet->AvailableCoins()
-    // For now, we'll use a simplified approach that can be mocked for testing
-
     std::vector<wallet::COutput> available_coins;
 
-    // TODO: When CWallet integration is complete, use:
-    // LOCK(m_wallet->cs_wallet);
-    // wallet::CCoinControl coin_control;
-    // m_wallet->AvailableCoins(available_coins, &coin_control);
-    // For now, return false if no wallet (will be fixed in Phase 2 integration)
+    // Lock wallet and get available coins
+    LOCK(m_wallet->cs_wallet);
+    wallet::CCoinControl coin_control;
+    coin_control.m_include_unsafe_inputs = false;  // Only safe inputs
+
+    wallet::CoinFilterParams filter_params;
+    filter_params.only_spendable = true;
+    filter_params.min_amount = 1;  // Minimum 1 satoshi
+    filter_params.include_immature_coinbase = false;  // Exclude immature coinbase
+
+    available_coins = wallet::AvailableCoins(*m_wallet, &coin_control, std::nullopt, filter_params).All();
 
     if (available_coins.empty()) {
         LogPrintf("DigiDollar: SelectFeeCoins - No DGB UTXOs available\n");
         return false;
     }
+
+    LogPrintf("DigiDollar: SelectFeeCoins - Found %d available DGB UTXOs\n", available_coins.size());
 
     // Sort by amount (smallest first for efficiency)
     std::sort(available_coins.begin(), available_coins.end(),
@@ -1862,6 +1948,7 @@ bool DigiDollarWallet::SelectFeeCoins(const CAmount& fee_amount, std::vector<COu
         CAmount amount = coin.txout.nValue;
 
         selected_utxos.push_back(outpoint);
+        if (selected_amounts) selected_amounts->push_back(amount);
         selected_total += amount;
 
         LogPrintf("DigiDollar: SelectFeeCoins - Selected UTXO %s:%d (%d sats)\n",
@@ -1874,6 +1961,7 @@ bool DigiDollarWallet::SelectFeeCoins(const CAmount& fee_amount, std::vector<COu
         LogPrintf("DigiDollar: SelectFeeCoins - FAILED: need %d sats, have %d\n",
                   fee_amount, selected_total);
         selected_utxos.clear();
+        if (selected_amounts) selected_amounts->clear();
         selected_total = 0;
     } else {
         LogPrintf("DigiDollar: SelectFeeCoins - SUCCESS: selected %d sats from %d UTXOs\n",
@@ -2219,9 +2307,23 @@ bool DigiDollarWallet::AddDDChangeUTXO(const CTransactionRef& tx, uint32_t chang
         return false;
     }
 
-    // Create new WalletCollateralPosition for change
-    // Change UTXOs are NOT full DDTimeLock positions
-    // They have no DGB collateral, no lock period, just spendable DD
+    // FIX #1: Add change UTXO to dd_utxos map
+    COutPoint change_outpoint(tx->GetHash(), change_vout);
+    dd_utxos[change_outpoint] = dd_amount;
+    LogPrintf("DigiDollar: Added DD change UTXO to tracking - %s:%d (%d cents)\n",
+              change_outpoint.hash.ToString(), change_outpoint.n, dd_amount);
+
+    // Persist DD UTXO to database
+    if (m_wallet) {
+        wallet::WalletBatch batch(m_wallet->GetDatabase());
+        if (!batch.WriteDDUTXO(change_outpoint, dd_amount)) {
+            LogPrintf("DigiDollar: AddDDChangeUTXO - Failed to persist change UTXO to database\n");
+            return false;
+        }
+    }
+
+    // Legacy: Also create WalletCollateralPosition for compatibility
+    // (This can be removed once all code uses dd_utxos instead of collateral_positions)
     WalletCollateralPosition change_position;
     change_position.dd_timelock_id = tx->GetHash();
     change_position.dd_minted = dd_amount;
@@ -2237,12 +2339,12 @@ bool DigiDollarWallet::AddDDChangeUTXO(const CTransactionRef& tx, uint32_t chang
     if (m_wallet) {
         wallet::WalletBatch batch(m_wallet->GetDatabase());
         if (!batch.WriteDDTimeLock(change_position)) {
-            LogPrintf("DigiDollar: AddDDChangeUTXO - Failed to persist change UTXO\n");
-            return false;
+            LogPrintf("DigiDollar: AddDDChangeUTXO - Failed to persist change position\n");
+            // Don't fail, we already persisted the UTXO
         }
     }
 
-    LogPrintf("DigiDollar: Added DD change UTXO: %s:%d (%d DD)\n",
+    LogPrintf("DigiDollar: Successfully added DD change UTXO: %s:%d (%d DD)\n",
               tx->GetHash().ToString(), change_vout, dd_amount);
     return true;
 }

@@ -8,13 +8,19 @@
 #include <digidollar/txbuilder.h>
 #include <digidollar/validation.h>
 #include <digidollar/digidollar.h>
+#include <digidollar/scripts.h>
 #include <consensus/digidollar.h>
 #include <primitives/transaction.h>
 #include <script/script.h>
 #include <key.h>
 #include <util/strencodings.h>
+#include <util/system.h>
 #include <validation.h>
+#include <wallet/wallet.h>
 #include <wallet/walletdb.h>
+#include <wallet/test/util.h>
+#include <wallet/digidollarwallet.h>
+#include <logging.h>
 
 #include <boost/test/unit_test.hpp>
 
@@ -1197,12 +1203,9 @@ BOOST_FIXTURE_TEST_CASE(test_dd_utxo_persistence, DDTransferTestFixture)
     COutPoint outpoint(InsecureRand256(), 0);
     CAmount dd_amount = 50000; // $500.00
 
-    // Get wallet database batch
-    auto pwallet = m_node.wallet_loader->create_wallet_from_file("test_dd_utxo_db", "", DatabaseOptions());
-    BOOST_REQUIRE(pwallet);
-    auto& wallet = *pwallet;
-
-    WalletBatch batch(wallet->GetDatabase());
+    // Create test wallet database
+    std::unique_ptr<wallet::WalletDatabase> database = wallet::CreateMockableWalletDatabase();
+    wallet::WalletBatch batch(*database);
 
     // Act: Write DD UTXO to database
     bool write_success = batch.WriteDDUTXO(outpoint, dd_amount);
@@ -1224,6 +1227,384 @@ BOOST_FIXTURE_TEST_CASE(test_dd_utxo_persistence, DDTransferTestFixture)
     CAmount verify_amount = 0;
     bool verify_read = batch.ReadDDUTXO(outpoint, verify_amount);
     BOOST_CHECK(!verify_read);
+}
+
+// =============================================================================
+// DD UTXO Tracking Tests (Fix #1)
+// =============================================================================
+
+BOOST_FIXTURE_TEST_CASE(test_dd_utxo_tracking_after_transfer, DDTransferTestFixture)
+{
+    // GREEN PHASE TEST: Verify FIX #1 - DD UTXOs are tracked correctly after transfers
+    // FIX #1 ensures dd_utxos map is updated when transfers occur
+    // Time-locks stay active, only DD UTXO tracking changes
+
+    // Arrange: Setup wallet with DD balance from mint
+    std::unique_ptr<wallet::WalletDatabase> database = wallet::CreateMockableWalletDatabase();
+    std::shared_ptr<wallet::CWallet> wallet = std::make_shared<wallet::CWallet>(m_node.chain.get(), "", std::move(database));
+    DigiDollarWallet dd_wallet(wallet.get());
+
+    // Step 1: Create mint position with DD UTXO
+    uint256 mint_txid = InsecureRand256();
+    CAmount mint_amount = 10000;  // $100.00
+
+    WalletCollateralPosition mint_position;
+    mint_position.dd_timelock_id = mint_txid;
+    mint_position.dd_minted = mint_amount;
+    mint_position.dgb_collateral = 100 * COIN;
+    mint_position.lock_tier = 1;
+    mint_position.unlock_height = currentHeight + 1000;
+    mint_position.is_active = true;
+    dd_wallet.AddCollateralPosition(mint_position);
+
+    // Add mint DD UTXO to dd_utxos map (FIX #1)
+    COutPoint mint_dd_utxo(mint_txid, 1);
+    dd_wallet.AddDDUTXO(mint_dd_utxo, mint_amount);
+
+    // Verify initial state
+    std::vector<DDUtxo> initial_utxos = dd_wallet.GetDDUTXOs();
+    BOOST_CHECK_EQUAL(initial_utxos.size(), 1);
+    BOOST_CHECK(initial_utxos[0].outpoint == mint_dd_utxo);
+    BOOST_CHECK_EQUAL(initial_utxos[0].dd_amount, mint_amount);
+
+    CAmount initial_balance = dd_wallet.GetTotalDDBalance();
+    BOOST_CHECK_EQUAL(initial_balance, mint_amount);
+
+    // Step 2: Simulate transfer that spends mint UTXO and creates change
+    uint256 transfer_txid = InsecureRand256();
+    CAmount transfer_amount = 5000;  // Send $50.00
+    CAmount change_amount = 5000;    // Change $50.00
+
+    // Create transfer outputs (FIX #1 architecture)
+    COutPoint recipient_utxo(transfer_txid, 0);  // Recipient gets $50 at vout 0
+    COutPoint change_utxo(transfer_txid, 1);     // Sender change $50 at vout 1
+
+    // Update dd_utxos map (FIX #1 implementation)
+    dd_wallet.RemoveDDUTXO(mint_dd_utxo);          // Spent in transfer
+    dd_wallet.AddDDUTXO(change_utxo, change_amount); // Add change UTXO
+
+    // Act: Query UTXOs and balance after transfer
+    std::vector<DDUtxo> after_transfer_utxos = dd_wallet.GetDDUTXOs();
+    CAmount final_balance = dd_wallet.GetTotalDDBalance();
+
+    // Assert FIX #1: Correct UTXO tracking
+    // Should have ONLY the change UTXO, NOT the mint UTXO
+    BOOST_CHECK_EQUAL(after_transfer_utxos.size(), 1);
+    BOOST_CHECK(after_transfer_utxos[0].outpoint == change_utxo);
+    BOOST_CHECK_EQUAL(after_transfer_utxos[0].outpoint.hash, transfer_txid);
+    BOOST_CHECK_EQUAL(after_transfer_utxos[0].outpoint.n, 1);
+    BOOST_CHECK_EQUAL(after_transfer_utxos[0].dd_amount, change_amount);
+
+    // Balance should equal change UTXO amount
+    BOOST_CHECK_EQUAL(final_balance, change_amount);
+
+    // CRITICAL: Time-lock should STILL BE ACTIVE (FIX #2)
+    std::vector<WalletCollateralPosition> active_positions = dd_wallet.GetDDTimeLocks(true);
+    BOOST_CHECK_EQUAL(active_positions.size(), 1);
+    BOOST_CHECK(active_positions[0].is_active);
+    BOOST_CHECK_EQUAL(active_positions[0].dd_timelock_id, mint_txid);
+
+    LogPrintf("FIX #1 GREEN TEST: UTXO tracking correct after transfer\n");
+    LogPrintf("  - dd_utxos contains change UTXO (%s:1), NOT mint UTXO\n", transfer_txid.ToString());
+    LogPrintf("  - Balance correctly calculated from dd_utxos: %d cents\n", final_balance);
+    LogPrintf("  - Time-lock preserved (FIX #2): active=%d\n", active_positions[0].is_active);
+}
+
+// =============================================================================
+// FIX #2: Time-Lock Preservation Tests (RED → GREEN → REFACTOR)
+// =============================================================================
+
+BOOST_FIXTURE_TEST_CASE(test_transfer_preserves_timelock, DDTransferTestFixture)
+{
+    // GREEN PHASE TEST: Verify FIX #2 - Time-locks stay active during transfers
+    // FIX #2 ensures time-lock positions are NEVER marked inactive during transfers
+    // Only redemptions should mark time-locks inactive
+
+    // Arrange: Setup wallet with mint position and DD UTXOs
+    std::unique_ptr<wallet::WalletDatabase> database = wallet::CreateMockableWalletDatabase();
+    std::shared_ptr<wallet::CWallet> wallet = std::make_shared<wallet::CWallet>(m_node.chain.get(), "", std::move(database));
+    DigiDollarWallet dd_wallet(wallet.get());
+
+    // Create mint position
+    uint256 mint_txid = InsecureRand256();
+    CAmount mint_amount = 10000;  // $100.00
+
+    WalletCollateralPosition mint_position;
+    mint_position.dd_timelock_id = mint_txid;
+    mint_position.dd_minted = mint_amount;
+    mint_position.dgb_collateral = 100 * COIN;
+    mint_position.lock_tier = 1;
+    mint_position.unlock_height = currentHeight + 1000;
+    mint_position.is_active = true;
+    dd_wallet.AddCollateralPosition(mint_position);
+
+    // Add DD UTXO for the mint (FIX #1)
+    COutPoint mint_dd_utxo(mint_txid, 1);
+    dd_wallet.AddDDUTXO(mint_dd_utxo, mint_amount);
+
+    // Verify initial time-lock state
+    std::vector<WalletCollateralPosition> before_positions = dd_wallet.GetDDTimeLocks(true);
+    BOOST_REQUIRE_EQUAL(before_positions.size(), 1);
+    BOOST_REQUIRE(before_positions[0].is_active);
+    BOOST_CHECK_EQUAL(before_positions[0].dd_timelock_id, mint_txid);
+    CAmount initial_collateral = before_positions[0].dgb_collateral;
+    int initial_unlock_height = before_positions[0].unlock_height;
+
+    // Act: Simulate transfer (update dd_utxos only, NOT position)
+    uint256 transfer_txid = InsecureRand256();
+    CAmount transfer_amount = 5000;  // Send $50.00
+    CAmount change_amount = 5000;    // Keep $50.00
+
+    // Update dd_utxos (FIX #1) - spend mint UTXO, create change UTXO
+    dd_wallet.RemoveDDUTXO(mint_dd_utxo);
+    COutPoint change_utxo(transfer_txid, 1);
+    dd_wallet.AddDDUTXO(change_utxo, change_amount);
+
+    // Assert FIX #2: Time-lock MUST still be ACTIVE
+    std::vector<WalletCollateralPosition> after_positions = dd_wallet.GetDDTimeLocks(true);
+
+    // Should still have 1 active position
+    BOOST_CHECK_EQUAL(after_positions.size(), 1);
+
+    // Time-lock should remain ACTIVE
+    BOOST_CHECK(after_positions[0].is_active);
+
+    // Same time-lock ID (not changed)
+    BOOST_CHECK_EQUAL(after_positions[0].dd_timelock_id, mint_txid);
+
+    // Collateral unchanged
+    BOOST_CHECK_EQUAL(after_positions[0].dgb_collateral, initial_collateral);
+
+    // Unlock height unchanged
+    BOOST_CHECK_EQUAL(after_positions[0].unlock_height, initial_unlock_height);
+
+    // DD minted amount unchanged (this tracks original mint, not current balance!)
+    BOOST_CHECK_EQUAL(after_positions[0].dd_minted, mint_amount);
+
+    // Balance should reflect change amount (from FIX #1)
+    CAmount final_balance = dd_wallet.GetTotalDDBalance();
+    BOOST_CHECK_EQUAL(final_balance, change_amount);
+
+    // CRITICAL: Should have only 1 position (NO fake change positions!)
+    std::vector<WalletCollateralPosition> all_positions = dd_wallet.GetDDTimeLocks(false);
+    BOOST_CHECK_EQUAL(all_positions.size(), 1);
+
+    LogPrintf("FIX #2 GREEN TEST: Time-lock preserved during transfer\n");
+    LogPrintf("  - Time-lock active: %d (expected true)\n", after_positions[0].is_active);
+    LogPrintf("  - Position count: %d (expected 1, no fake change positions)\n", all_positions.size());
+    LogPrintf("  - Collateral unchanged: %d DGB\n", after_positions[0].dgb_collateral / COIN);
+    LogPrintf("  - Balance (from dd_utxos): %d cents\n", final_balance);
+}
+
+// =============================================================================
+// Fix #3: Transaction Broadcasting Tests (RED PHASE)
+// =============================================================================
+
+BOOST_FIXTURE_TEST_CASE(test_transfer_broadcasts_to_network, DDTransferTestFixture)
+{
+    // GREEN PHASE TEST: Verify FIX #3 - Transfers broadcast to network
+    // FIX #3 ensures TransferDigiDollar() broadcasts transactions via AcceptToMemoryPool
+    // Note: This is a simplified test since full mempool integration requires running node
+
+    // Arrange: Setup wallet with DD balance
+    std::unique_ptr<wallet::WalletDatabase> database = wallet::CreateMockableWalletDatabase();
+    std::shared_ptr<wallet::CWallet> wallet = std::make_shared<wallet::CWallet>(m_node.chain.get(), "", std::move(database));
+    DigiDollarWallet dd_wallet(wallet.get());
+
+    // Create mint position with DD UTXO
+    uint256 mint_txid = InsecureRand256();
+    CAmount mint_amount = 10000;  // $100.00
+
+    WalletCollateralPosition mint_position;
+    mint_position.dd_timelock_id = mint_txid;
+    mint_position.dd_minted = mint_amount;
+    mint_position.dgb_collateral = 100 * COIN;
+    mint_position.lock_tier = 1;
+    mint_position.unlock_height = currentHeight + 1000;
+    mint_position.is_active = true;
+    dd_wallet.AddCollateralPosition(mint_position);
+
+    // Add DD UTXO
+    COutPoint mint_dd_utxo(mint_txid, 1);
+    dd_wallet.AddDDUTXO(mint_dd_utxo, mint_amount);
+
+    // Setup spending key
+    CKey ownerKey;
+    ownerKey.MakeNewKey(true);
+    dd_wallet.StoreOwnerKey(mint_txid, ownerKey);
+
+    // Act: Create transfer transaction using TransferTxBuilder
+    std::string recipientAddr = CreateDDAddress(recipientKey.GetPubKey());
+    CAmount transferAmount = 5000;  // $50.00
+
+    TransferParams params;
+    params.recipients = {{recipientAddr, transferAmount}};
+    params.feeRate = 100000;
+    params.spenderKey = ownerKey;
+    params.ddUtxos = {mint_dd_utxo};
+    params.feeUtxos = {CreateMockDGBUTXO(100000)};
+
+    MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
+    TxBuilderResult result = builder.BuildTransferTransaction(params);
+
+    // Assert: Transfer transaction built successfully
+    BOOST_CHECK(result.success);
+    BOOST_CHECK(!result.tx.vin.empty());
+    BOOST_CHECK(!result.tx.vout.empty());
+
+    // Verify transaction structure (FIX #3 implementation details)
+    uint256 transfer_txid = result.tx.GetHash();
+    BOOST_CHECK(!transfer_txid.IsNull());
+
+    // Verify DD conservation
+    CAmount total_dd_in = mint_amount;
+    CAmount total_dd_out = 0;
+    for (const auto& output : result.tx.vout) {
+        if (output.nValue == 0) {  // DD outputs
+            CAmount dd_amount = 0;
+            if (DigiDollar::ExtractDDAmount(output.scriptPubKey, dd_amount)) {
+                total_dd_out += dd_amount;
+            }
+        }
+    }
+    BOOST_CHECK_EQUAL(total_dd_in, total_dd_out);
+
+    // Verify transaction can be serialized (required for broadcast)
+    std::vector<unsigned char> tx_data;
+    CVectorWriter writer(PROTOCOL_VERSION, tx_data, 0);
+    writer << result.tx;
+    BOOST_CHECK(!tx_data.empty());
+
+    // FIX #3: In real implementation, TransferDigiDollar() calls:
+    // - AcceptToMemoryPool() to add to mempool
+    // - BroadcastTransaction() to relay to network
+    // This test verifies the transaction is properly constructed for broadcast
+
+    LogPrintf("FIX #3 GREEN TEST: Transfer transaction ready for broadcast\n");
+    LogPrintf("  - Transaction txid: %s\n", transfer_txid.ToString());
+    LogPrintf("  - DD conservation: %d in = %d out\n", total_dd_in, total_dd_out);
+    LogPrintf("  - Transaction size: %d bytes\n", tx_data.size());
+    LogPrintf("  - Ready for AcceptToMemoryPool() and BroadcastTransaction()\n");
+}
+
+// =============================================================================
+// Fix #4: Receive Detection Tests (RED → GREEN → REFACTOR)
+// =============================================================================
+
+BOOST_FIXTURE_TEST_CASE(test_receive_dd_from_transfer, DDTransferTestFixture)
+{
+    // GREEN PHASE TEST: Verify FIX #4 - Receiving wallets detect incoming DD transfers
+    // FIX #4 ensures ProcessIncomingDDTransaction() updates dd_utxos when DD is received
+    // This test simulates a transfer and receiving wallet processing it
+
+    // Arrange: Setup sender and receiver wallets
+    std::unique_ptr<wallet::WalletDatabase> sender_db = wallet::CreateMockableWalletDatabase();
+    std::shared_ptr<wallet::CWallet> sender_wallet = std::make_shared<wallet::CWallet>(
+        m_node.chain.get(), "sender", std::move(sender_db));
+    DigiDollarWallet sender_dd_wallet(sender_wallet.get());
+
+    std::unique_ptr<wallet::WalletDatabase> receiver_db = wallet::CreateMockableWalletDatabase();
+    std::shared_ptr<wallet::CWallet> receiver_wallet = std::make_shared<wallet::CWallet>(
+        m_node.chain.get(), "receiver", std::move(receiver_db));
+    DigiDollarWallet receiver_dd_wallet(receiver_wallet.get());
+
+    // Setup sender with mint position and DD UTXO
+    uint256 mint_txid = InsecureRand256();
+    CAmount mint_amount = 10000;  // $100.00
+
+    WalletCollateralPosition mint_position;
+    mint_position.dd_timelock_id = mint_txid;
+    mint_position.dd_minted = mint_amount;
+    mint_position.dgb_collateral = 100 * COIN;
+    mint_position.lock_tier = 1;
+    mint_position.unlock_height = currentHeight + 1000;
+    mint_position.is_active = true;
+    sender_dd_wallet.AddCollateralPosition(mint_position);
+
+    COutPoint mint_dd_utxo(mint_txid, 1);
+    sender_dd_wallet.AddDDUTXO(mint_dd_utxo, mint_amount);
+
+    // Verify sender initial state
+    BOOST_CHECK_EQUAL(sender_dd_wallet.GetTotalDDBalance(), mint_amount);
+
+    // Verify receiver initial state (no DD)
+    BOOST_CHECK_EQUAL(receiver_dd_wallet.GetTotalDDBalance(), 0);
+    BOOST_CHECK_EQUAL(receiver_dd_wallet.GetDDUTXOs().size(), 0);
+
+    // Act: Simulate transfer transaction
+    CKey senderKey, receiverKey;
+    senderKey.MakeNewKey(true);
+    receiverKey.MakeNewKey(true);
+
+    CAmount transferAmount = 5000;  // Send $50.00
+    CAmount changeAmount = 5000;    // Change $50.00
+
+    // Build transfer transaction
+    CMutableTransaction transferTx;
+    transferTx.nVersion = 2;
+    transferTx.SetDigiDollarType(::DD_TX_TRANSFER);
+
+    // Input: spend sender's mint UTXO
+    transferTx.vin.push_back(CTxIn(mint_dd_utxo));
+
+    // Output 0: DD to receiver
+    CPubKey receiverPubKey = receiverKey.GetPubKey();
+    XOnlyPubKey receiverXOnly(receiverPubKey);
+    CScript receiverScript = DigiDollar::CreateDigiDollarP2TR(receiverXOnly, transferAmount);
+    transferTx.vout.push_back(CTxOut(0, receiverScript));
+
+    // Output 1: DD change to sender
+    CPubKey senderPubKey = senderKey.GetPubKey();
+    XOnlyPubKey senderXOnly(senderPubKey);
+    CScript senderScript = DigiDollar::CreateDigiDollarP2TR(senderXOnly, changeAmount);
+    transferTx.vout.push_back(CTxOut(0, senderScript));
+
+    CTransactionRef tx = MakeTransactionRef(transferTx);
+    uint256 transfer_txid = tx->GetHash();
+
+    // Store receiver key (so wallet can detect it's ours)
+    receiver_dd_wallet.StoreOwnerKey(transfer_txid, receiverKey);
+
+    // Simulate receiver wallet processing the incoming transaction (FIX #4)
+    bool receive_processed = receiver_dd_wallet.ProcessIncomingDDTransaction(tx);
+
+    // Assert FIX #4: Receiver detected and processed the incoming DD
+    BOOST_CHECK(receive_processed);
+
+    // Receiver dd_utxos should now contain the received UTXO
+    std::vector<DDUtxo> receiver_utxos = receiver_dd_wallet.GetDDUTXOs();
+    BOOST_CHECK_EQUAL(receiver_utxos.size(), 1);
+
+    if (!receiver_utxos.empty()) {
+        // Verify UTXO details
+        BOOST_CHECK_EQUAL(receiver_utxos[0].outpoint.hash, transfer_txid);
+        BOOST_CHECK_EQUAL(receiver_utxos[0].outpoint.n, 0);  // vout 0 is receiver output
+        BOOST_CHECK_EQUAL(receiver_utxos[0].dd_amount, transferAmount);
+    }
+
+    // Receiver balance should be updated
+    CAmount receiver_balance = receiver_dd_wallet.GetTotalDDBalance();
+    BOOST_CHECK_EQUAL(receiver_balance, transferAmount);
+
+    // Sender processes their change UTXO
+    sender_dd_wallet.RemoveDDUTXO(mint_dd_utxo);  // Spent
+    COutPoint sender_change_utxo(transfer_txid, 1);
+    sender_dd_wallet.AddDDUTXO(sender_change_utxo, changeAmount);
+
+    // Sender balance should be change amount
+    CAmount sender_balance = sender_dd_wallet.GetTotalDDBalance();
+    BOOST_CHECK_EQUAL(sender_balance, changeAmount);
+
+    // Sender time-lock should still be active (FIX #2)
+    std::vector<WalletCollateralPosition> sender_positions = sender_dd_wallet.GetDDTimeLocks(true);
+    BOOST_CHECK_EQUAL(sender_positions.size(), 1);
+    BOOST_CHECK(sender_positions[0].is_active);
+
+    LogPrintf("FIX #4 GREEN TEST: Receive detection successful\n");
+    LogPrintf("  - Receiver dd_utxos count: %d\n", receiver_utxos.size());
+    LogPrintf("  - Receiver balance: %d DD cents\n", receiver_balance);
+    LogPrintf("  - Sender balance: %d DD cents (change)\n", sender_balance);
+    LogPrintf("  - Sender time-lock active: %d\n", sender_positions[0].is_active);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

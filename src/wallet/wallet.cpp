@@ -1446,6 +1446,12 @@ void CWallet::SyncTransaction(const CTransactionRef& ptx, const SyncTxState& sta
     // available of the outputs it spends. So force those to be
     // recomputed, also:
     MarkInputsDirty(ptx);
+
+    // FIX #4: Process incoming DigiDollar transactions
+    // Check if this transaction contains DD outputs to our wallet
+    if (m_dd_wallet) {
+        m_dd_wallet->ProcessIncomingDDTransaction(ptx);
+    }
 }
 
 void CWallet::transactionAddedToMempool(const CTransactionRef& tx) {

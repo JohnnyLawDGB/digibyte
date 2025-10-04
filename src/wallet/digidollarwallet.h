@@ -125,6 +125,11 @@ private:
     std::map<uint256, WalletCollateralPosition> collateral_positions;
     std::vector<DDTransaction> transaction_history;
 
+    // FIX #1: Track actual DD UTXOs (not just positions)
+    // Maps (txid, vout) → DD amount in cents
+    // This replaces the broken assumption that DD is always at (mint_txid, 1)
+    std::map<COutPoint, CAmount> dd_utxos;
+
     // Internal state tracking (Task 5.2)
     CAmount total_dd_balance;
     CAmount locked_collateral;
@@ -247,6 +252,23 @@ public:
      * @return DD amount in cents, or 0 if UTXO not found or invalid
      */
     CAmount GetDDFromUTXO(const COutPoint& outpoint) const;
+
+    /**
+     * Add DD UTXO to tracking map (FIX #1)
+     * @param outpoint UTXO outpoint (txid, vout)
+     * @param dd_amount DD amount in cents
+     */
+    void AddDDUTXO(const COutPoint& outpoint, CAmount dd_amount) {
+        dd_utxos[outpoint] = dd_amount;
+    }
+
+    /**
+     * Remove DD UTXO from tracking map when spent (FIX #1)
+     * @param outpoint UTXO outpoint to remove
+     */
+    void RemoveDDUTXO(const COutPoint& outpoint) {
+        dd_utxos.erase(outpoint);
+    }
 
     /**
      * Add a collateral position to the wallet
@@ -459,7 +481,7 @@ public:
 
     // Coin selection and fee calculation helpers (public for testing and integration)
     bool SelectDDCoins(const CAmount& target_amount, std::vector<COutPoint>& selected_utxos, CAmount& selected_total) const;
-    bool SelectFeeCoins(const CAmount& fee_amount, std::vector<COutPoint>& selected_utxos, CAmount& selected_total) const;
+    bool SelectFeeCoins(const CAmount& fee_amount, std::vector<COutPoint>& selected_utxos, CAmount& selected_total, std::vector<CAmount>* selected_amounts = nullptr) const;
     CAmount CalculateTransactionFee(const CMutableTransaction& tx) const;
 
     // Phase 3.1: P2TR signing for DD inputs (Schnorr signatures)

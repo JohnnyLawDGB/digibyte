@@ -6,6 +6,7 @@
 #include <key_io.h>
 #include <rpc/server.h>
 #include <rpc/util.h>
+#include <rpc/digidollar.h>
 #include <util/translation.h>
 #include <wallet/context.h>
 #include <wallet/receive.h>
@@ -956,6 +957,14 @@ Span<const CRPCCommand> GetWalletRPCCommands()
         {"wallet", &walletpassphrase},
         {"wallet", &walletpassphrasechange},
         {"wallet", &walletprocesspsbt},
+
+        // DigiDollar wallet commands
+        {"digidollar", &mintdigidollar},
+        {"digidollar", &senddigidollar},
+        {"digidollar", &redeemdigidollar},
+        {"digidollar", &listdigidollarpositions},
+        {"digidollar", &getdigidollarbalance},
+        {"digidollar", &listdigidollartxs},
     };
     return commands;
 }

@@ -309,6 +309,57 @@ bool WalletBatch::EraseLockedUTXO(const COutPoint& output)
     return EraseIC(std::make_pair(DBKeys::LOCKED_UTXO, std::make_pair(output.hash, output.n)));
 }
 
+// DigiDollar UTXO persistence methods (Fix #5)
+bool WalletBatch::WriteDDUTXO(const COutPoint& outpoint, const CAmount& dd_amount)
+{
+    if (outpoint.IsNull()) {
+        return error("DigiDollar: Cannot write DD UTXO with null outpoint");
+    }
+
+    bool success = WriteIC(std::make_pair(DBKeys::DD_OUTPUT, outpoint), dd_amount);
+
+    if (success) {
+        LogPrint(BCLog::WALLETDB, "DigiDollar: Wrote DD UTXO %s:%d to database (amount=%d)\n",
+                 outpoint.hash.ToString(), outpoint.n, dd_amount);
+    }
+
+    return success;
+}
+
+bool WalletBatch::ReadDDUTXO(const COutPoint& outpoint, CAmount& dd_amount)
+{
+    if (outpoint.IsNull()) {
+        LogPrint(BCLog::WALLETDB, "DigiDollar: Cannot read DD UTXO with null outpoint\n");
+        return false;
+    }
+
+    bool success = m_batch->Read(std::make_pair(DBKeys::DD_OUTPUT, outpoint), dd_amount);
+
+    if (success) {
+        LogPrint(BCLog::WALLETDB, "DigiDollar: Read DD UTXO %s:%d from database (amount=%d)\n",
+                 outpoint.hash.ToString(), outpoint.n, dd_amount);
+    }
+
+    return success;
+}
+
+bool WalletBatch::EraseDDUTXO(const COutPoint& outpoint)
+{
+    if (outpoint.IsNull()) {
+        LogPrint(BCLog::WALLETDB, "DigiDollar: Cannot erase DD UTXO with null outpoint\n");
+        return false;
+    }
+
+    bool success = EraseIC(std::make_pair(DBKeys::DD_OUTPUT, outpoint));
+
+    if (success) {
+        LogPrint(BCLog::WALLETDB, "DigiDollar: Erased DD UTXO %s:%d from database\n",
+                 outpoint.hash.ToString(), outpoint.n);
+    }
+
+    return success;
+}
+
 // DigiDollar persistence write methods
 bool WalletBatch::WriteDDTimeLock(const WalletCollateralPosition& position)
 {

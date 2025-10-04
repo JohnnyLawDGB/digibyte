@@ -607,7 +607,7 @@ static RPCHelpMan getdigidollardeploymentinfo()
 // CORE RPC COMMANDS (Task 5.7)
 // =============================================================================
 
-static RPCHelpMan mintdigidollar()
+RPCHelpMan mintdigidollar()
 {
     return RPCHelpMan{"mintdigidollar",
                 "\nMint new DigiDollar with DGB collateral.\n"
@@ -616,7 +616,7 @@ static RPCHelpMan mintdigidollar()
                 {
                     {"dd_amount", RPCArg::Type::NUM, RPCArg::Optional::NO, "Amount of DigiDollar to mint (in USD cents, e.g., 10000 = $100)"},
                     {"lock_tier", RPCArg::Type::NUM, RPCArg::Optional::NO, "Lock tier 1-8 (30d,90d,180d,1y,3y,5y,7y,10y)"},
-                    {"fee_rate", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "Fee rate in sat/vB (default: 1000)"}
+                    {"fee_rate", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "Fee rate in sat/kB (default: 100000)"}
                 },
                 RPCResult{
                     RPCResult::Type::OBJ, "", "",
@@ -650,7 +650,7 @@ static RPCHelpMan mintdigidollar()
             CAmount ddAmount = request.params[0].getInt<int64_t>();
             int lockTier = request.params[1].getInt<int>();
             CAmount feeRate = request.params.size() > 2 && !request.params[2].isNull() ?
-                request.params[2].getInt<int64_t>() : 1000; // Default 1000 sat/vB
+                request.params[2].getInt<int64_t>() : 100000; // Default 100000 sat/kB (DigiByte minimum)
 
             // Validate parameters
             if (ddAmount <= 0) {
@@ -660,9 +660,8 @@ static RPCHelpMan mintdigidollar()
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Lock tier must be between 1 and 8");
             }
 
-            // Get chainman and current height
-            const ChainstateManager& chainman = EnsureAnyChainman(request.context);
-            int currentHeight = chainman.ActiveChain().Height();
+            // Get current height from wallet's chain interface
+            int currentHeight = pwallet->GetLastBlockHeight();
 
             // Get oracle price
             CAmount oraclePrice = MockOracleManager::GetInstance().GetCurrentPrice();
@@ -736,6 +735,26 @@ static RPCHelpMan mintdigidollar()
             int blocksPerDay = 24 * 60 * 60 / 15; // 15-second blocks in DigiByte
             int unlockHeight = currentHeight + (lockDays * blocksPerDay);
 
+            // CRITICAL FIX: Persist DD position to DigiDollarWallet
+            if (pwallet->GetDDWallet()) {
+                WalletCollateralPosition position;
+                position.dd_timelock_id = tx->GetHash();
+                position.dgb_collateral = result.collateralRequired;
+                position.dd_minted = ddAmount;
+                position.lock_tier = lockTier;
+                position.unlock_height = unlockHeight;
+                position.is_active = true;
+                position.owner_keyid = ownerKey.GetPubKey().GetID();
+
+                LOCK(pwallet->cs_wallet);
+                pwallet->GetDDWallet()->AddCollateralPosition(position);
+
+                LogPrintf("DigiDollar RPC: Added position %s with %d DD cents\n",
+                         position.dd_timelock_id.ToString(), ddAmount);
+            } else {
+                LogPrintf("DigiDollar RPC: WARNING - No DD wallet context, position not persisted\n");
+            }
+
             // Calculate collateral ratio based on lock tier and DCA
             int collateralRatio = 150; // Default, could be calculated from DCA
 
@@ -754,7 +773,7 @@ static RPCHelpMan mintdigidollar()
     };
 }
 
-static RPCHelpMan senddigidollar()
+RPCHelpMan senddigidollar()
 {
     return RPCHelpMan{"senddigidollar",
                 "\nSend DigiDollar to another DigiDollar address.\n"
@@ -852,7 +871,7 @@ static RPCHelpMan senddigidollar()
     };
 }
 
-static RPCHelpMan redeemdigidollar()
+RPCHelpMan redeemdigidollar()
 {
     return RPCHelpMan{"redeemdigidollar",
                 "\nRedeem DigiDollar and unlock DGB collateral.\n"
@@ -923,7 +942,7 @@ static RPCHelpMan redeemdigidollar()
     };
 }
 
-static RPCHelpMan listdigidollarpositions()
+RPCHelpMan listdigidollarpositions()
 {
     return RPCHelpMan{"listdigidollarpositions",
                 "\nList all DigiDollar collateral positions in the wallet.\n"
@@ -1309,7 +1328,7 @@ static RPCHelpMan importdigidollaraddress()
 // UTILITY RPC COMMANDS (Task 5.8)
 // =============================================================================
 
-static RPCHelpMan getdigidollarbalance()
+RPCHelpMan getdigidollarbalance()
 {
     return RPCHelpMan{"getdigidollarbalance",
                 "\nGet DigiDollar balance for a specific address or total wallet balance.\n"
@@ -1554,7 +1573,7 @@ static RPCHelpMan getredemptioninfo()
     };
 }
 
-static RPCHelpMan listdigidollartxs()
+RPCHelpMan listdigidollartxs()
 {
     return RPCHelpMan{"listdigidollartxs",
                 "\nList DigiDollar transactions from the wallet.\n"
@@ -2372,11 +2391,11 @@ void RegisterDigiDollarRPCCommands(CRPCTable &t)
         {"digidollar", &getdigidollarstatus},
         {"digidollar", &getdigidollardeploymentinfo},
 
-        // Core transaction commands
-        {"digidollar", &mintdigidollar},
-        {"digidollar", &senddigidollar},
-        {"digidollar", &redeemdigidollar},
-        {"digidollar", &listdigidollarpositions},
+        // Core transaction commands (moved to wallet RPC table)
+        // {"digidollar", &mintdigidollar},
+        // {"digidollar", &senddigidollar},
+        // {"digidollar", &redeemdigidollar},
+        // {"digidollar", &listdigidollarpositions},
 
         // Address management commands
         {"digidollar", &getdigidollaraddress},
@@ -2384,11 +2403,11 @@ void RegisterDigiDollarRPCCommands(CRPCTable &t)
         {"digidollar", &listdigidollaraddresses},
         {"digidollar", &importdigidollaraddress},
 
-        // Utility commands
-        {"digidollar", &getdigidollarbalance},
+        // Utility commands (moved to wallet RPC table)
+        // {"digidollar", &getdigidollarbalance},
         {"digidollar", &estimatecollateral},
         {"digidollar", &getredemptioninfo},
-        {"digidollar", &listdigidollartxs},
+        // {"digidollar", &listdigidollartxs},
         {"digidollar", &getoracleprice},
         {"digidollar", &getprotectionstatus},
 

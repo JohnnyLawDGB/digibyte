@@ -277,6 +277,11 @@ public:
     bool WriteLockedUTXO(const COutPoint& output);
     bool EraseLockedUTXO(const COutPoint& output);
 
+    // DigiDollar UTXO persistence methods (Fix #5)
+    bool WriteDDUTXO(const COutPoint& outpoint, const CAmount& dd_amount);
+    bool ReadDDUTXO(const COutPoint& outpoint, CAmount& dd_amount);
+    bool EraseDDUTXO(const COutPoint& outpoint);
+
     // DigiDollar persistence write methods
     bool WriteDDTimeLock(const WalletCollateralPosition& position);
     bool WriteDDTransaction(const DDTransaction& ddtx);

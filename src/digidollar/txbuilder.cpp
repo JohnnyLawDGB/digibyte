@@ -512,13 +512,20 @@ TxBuilderResult TransferTxBuilder::BuildTransferTransaction(const TxBuilderTrans
 
     // Add DGB fee inputs (after DD inputs)
     // Note: Phase 2.1 already selected these UTXOs, so we just add them directly
+    LogPrintf("DigiDollar: TxBuilder - feeUtxos.size=%d, feeAmounts.size=%d\n",
+              params.feeUtxos.size(), params.feeAmounts.size());
+
     CAmount totalFeeIn = 0;
-    for (const auto& utxo : params.feeUtxos) {
+    for (size_t i = 0; i < params.feeUtxos.size(); ++i) {
+        const auto& utxo = params.feeUtxos[i];
         tx.vin.push_back(CTxIn(utxo));
-        // Calculate total fee input value for change calculation
-        totalFeeIn += GetDGBFromUTXO(utxo);
-        LogPrintf("DigiDollar: Added fee input %s:%d\n",
-                  utxo.hash.ToString(), utxo.n);
+        // Get actual fee UTXO amount from feeAmounts
+        CAmount feeAmount = (i < params.feeAmounts.size()) ? params.feeAmounts[i] : GetDGBFromUTXO(utxo);
+        LogPrintf("DigiDollar: Fee input %d - using %s: %d sats\n",
+                  i, (i < params.feeAmounts.size()) ? "feeAmounts[i]" : "GetDGBFromUTXO()", feeAmount);
+        totalFeeIn += feeAmount;
+        LogPrintf("DigiDollar: Added fee input %s:%d (%d sats)\n",
+                  utxo.hash.ToString(), utxo.n, feeAmount);
     }
 
     // Add DD outputs for recipients (all with 0 DGB value)
@@ -551,7 +558,12 @@ TxBuilderResult TransferTxBuilder::BuildTransferTransaction(const TxBuilderTrans
     }
 
     // Calculate actual fee based on transaction with all outputs
-    CAmount actualFee = CalculateFee(tx, params.feeRate);
+    const CAmount MIN_DD_FEE = 10000000;  // 0.1 DGB minimum fee
+    CAmount calculatedFee = CalculateFee(tx, params.feeRate);
+    CAmount actualFee = std::max(calculatedFee, MIN_DD_FEE);
+
+    LogPrintf("DigiDollar: Fee calculation - calculated: %d sats, minimum: %d sats, actual: %d sats\n",
+              calculatedFee, MIN_DD_FEE, actualFee);
 
     // Add DGB change output if needed (after we know actual fee)
     if (totalFeeIn > 0) {

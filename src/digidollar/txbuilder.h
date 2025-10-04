@@ -50,6 +50,7 @@ struct TxBuilderTransferParams {
     std::vector<COutPoint> ddUtxos;    // DD UTXOs to spend
     std::vector<CAmount> ddAmounts;    // DD amounts for each UTXO (parallel to ddUtxos)
     std::vector<COutPoint> feeUtxos;   // DGB UTXOs for fees
+    std::vector<CAmount> feeAmounts;   // DGB amounts for each fee UTXO (parallel to feeUtxos)
     CKey spenderKey;            // Key for signing DD inputs
 
     TxBuilderTransferParams() : feeRate(1000) {} // Default 1000 sat/vB

@@ -316,8 +316,10 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
         // CRITICAL: Pass DD UTXO amounts to txbuilder (FIX #3 & #7)
         // Pass individual amounts for each UTXO (required by txbuilder)
         params.ddAmounts = selected_dd_amounts;
-        LogPrintf("DigiDollar: Passing %d DD UTXO amounts to txbuilder - total: %d cents\n",
+        LogPrintf("DigiDollar: GUI Transfer - Passing %d DD UTXO amounts to txbuilder - total: %d cents\n",
                   selected_dd_amounts.size(), selectedDDTotal);
+        LogPrintf("DigiDollar: GUI Transfer - ddUtxos.size()=%d, ddAmounts.size()=%d\n",
+                  params.ddUtxos.size(), params.ddAmounts.size());
 
         // Select DGB UTXOs for fees (estimated)
         CAmount estimatedFee = 100000; // 0.001 DGB estimated fee

@@ -201,6 +201,9 @@ public:
     // Get DigiDollar balance
     CAmount getDigiDollarBalance() const;
 
+    // Get locked collateral amount
+    CAmount getLockedCollateral() const;
+
     // Get available DGB balance for collateral
     CAmount getAvailableDGBBalance() const;
 

@@ -4417,17 +4417,19 @@ DigiDollarReceiveWidget QPushButton#removeRequestButton:pressed {
     border: 1px solid #9e9e9e;
 }
 
-/* Table widget - white background with DigiByte blue alternating rows */
+/* Table widget - dark background matching Vault page */
 DigiDollarReceiveWidget QTableWidget {
-    background-color: #A7C6ED;
-    color: #ffffff;
-    gridline-color: #8FB1E3;
+    background-color: #2a2a2a;
+    color: #e0e0e0;
+    gridline-color: #4a4a4a;
     border: 1px solid rgba(255, 255, 255, 0.15);
-    alternate-background-color: #9BB8E8;
+    alternate-background-color: #333333;
+    selection-background-color: #0066CC;
+    selection-color: #ffffff;
 }
 
 DigiDollarReceiveWidget QTableWidget::item {
-    color: #ffffff;
+    color: #e0e0e0;
     padding: 8px;
 }
 
@@ -4437,7 +4439,7 @@ DigiDollarReceiveWidget QTableWidget::item:selected {
 }
 
 DigiDollarReceiveWidget QTableWidget::item:alternate {
-    background-color: #9BB8E8;
+    background-color: #333333;
 }
 
 /* Table header - blue background with white text */

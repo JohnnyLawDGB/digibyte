@@ -190,11 +190,12 @@ void DigiDollarReceiveWidget::setupQRSection()
     m_qrTitle->setFont(titleFont);
     m_qrTitle->setAlignment(Qt::AlignCenter);
 
-    // QR code image
+    // QR code image (hidden to save space)
     m_qrImage = new QRImageWidget(this);
     m_qrImage->setObjectName("qrImage");
     m_qrImage->setMinimumSize(250, 250);
     m_qrImage->setMaximumSize(250, 250);
+    m_qrImage->setVisible(false);
 
     // Center the QR code
     QHBoxLayout* qrCenterLayout = new QHBoxLayout();
@@ -223,10 +224,12 @@ void DigiDollarReceiveWidget::setupQRSection()
     m_copyQRButton = new QPushButton(tr("Copy &QR Code"), this);
     m_copyQRButton->setObjectName("copyQRButton");
     m_copyQRButton->setToolTip(tr("Copy the QR code image to the clipboard"));
+    m_copyQRButton->setVisible(false); // Hidden to save space
 
     m_saveQRButton = new QPushButton(tr("&Save QR Code"), this);
     m_saveQRButton->setObjectName("saveQRButton");
     m_saveQRButton->setToolTip(tr("Save the QR code as an image file"));
+    m_saveQRButton->setVisible(false); // Hidden to save space
 
     m_qrButtonLayout->addStretch();
     m_qrButtonLayout->addWidget(m_copyAddressButton);
@@ -242,6 +245,9 @@ void DigiDollarReceiveWidget::setupQRSection()
     m_qrLayout->addLayout(m_qrButtonLayout);
 
     m_mainLayout->addWidget(m_qrFrame);
+
+    // Frame is visible but QR image and QR buttons are hidden to save space
+    m_qrFrame->setVisible(true);
 }
 
 void DigiDollarReceiveWidget::setupRecentRequestsSection()
@@ -429,7 +435,7 @@ void DigiDollarReceiveWidget::generateNewAddress()
     // Update QR code
     updateQRCode();
 
-    // Show QR section
+    // Show address section (QR image hidden to save space)
     m_qrFrame->setVisible(true);
 
     // Create payment request and save to wallet

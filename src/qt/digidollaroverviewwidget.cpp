@@ -160,7 +160,7 @@ void DigiDollarOverviewWidget::setupBalanceSection()
     m_balanceLayout->addWidget(m_ddBalanceValue, 1, 1);
 
     // DGB Collateral (Pending/Locked)
-    m_dgbCollateralLabel = new QLabel(tr("Collateral:"), this);
+    m_dgbCollateralLabel = new QLabel(tr("Time Locked Collateral:"), this);
     m_dgbCollateralLabel->setObjectName("dgbCollateralLabel");
     m_dgbCollateralValue = new QLabel("0.00000000 DGB", this);
     m_dgbCollateralValue->setObjectName("dgbCollateralValue");
@@ -473,13 +473,9 @@ void DigiDollarOverviewWidget::updateBalance()
         CAmount balanceCents = m_walletModel->getDigiDollarBalance();
         m_ddBalance = balanceCents / 100.0; // Convert cents to DD
 
-        // TODO: Get locked collateral from wallet positions
-        // For now, use mock value as this requires position tracking
-        m_dgbCollateral = 0.0;
-
-        // Try to get actual available DGB balance
-        CAmount dgbBalance = m_walletModel->getAvailableDGBBalance();
-        // Store this for display purposes if needed
+        // Get locked collateral from wallet positions (in satoshis)
+        CAmount collateralSats = m_walletModel->getLockedCollateral();
+        m_dgbCollateral = collateralSats / 100000000.0; // Convert satoshis to DGB
     } else {
         // No wallet connected
         m_ddBalance = 0.0;

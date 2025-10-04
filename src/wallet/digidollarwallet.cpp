@@ -459,7 +459,6 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
         tx.address = to.ToString();
         tx.category = "send";
 
-        mockHistory.push_back(tx);
         transaction_history.push_back(tx);
 
         // Verify balance updated correctly
@@ -1119,7 +1118,13 @@ void DigiDollarWallet::AddCollateralPosition(const WalletCollateralPosition& pos
         tx.category = "mint";
         transaction_history.push_back(tx);
 
-        // TODO: Write transaction to database (Phase 5.1 - requires proper serialization)
+        // Persist transaction to database
+        if (m_wallet) {
+            wallet::WalletBatch batch(m_wallet->GetDatabase());
+            if (!batch.WriteDDTransaction(tx)) {
+                LogPrintf("DigiDollar: WARNING - Failed to persist mint transaction to database\n");
+            }
+        }
 
         LogPrintf("DigiDollar: Added mint transaction to history - TxID: %s\n", tx.txid);
     } catch (const std::exception& e) {
@@ -2077,7 +2082,71 @@ bool DigiDollarWallet::SignDDInputs(CMutableTransaction& tx,
                   outpoint.hash.ToString(), outpoint.n, prev_height, txout.nValue);
     }
 
-    // Manually sign DD inputs with Schnorr signatures using owner keys
+    // IMPORTANT: For Taproot, we must sign fee inputs FIRST, then DD inputs
+    // This is because Taproot sighash includes the witness data of other inputs
+    // If we sign DD inputs first, the sighash will be different when fee inputs are added later
+
+    // Sign fee inputs using wallet's standard signing
+    if (!fee_utxos.empty()) {
+        LogPrintf("DigiDollar: SignDDInputs - Signing fee inputs FIRST using wallet's SignTransaction\n");
+
+        // Log DD input witness BEFORE SignTransaction
+        for (size_t i = 0; i < dd_utxos.size(); i++) {
+            LogPrintf("DigiDollar: SignDDInputs - DD input %d witness BEFORE SignTransaction: %s\n",
+                      i, tx.vin[i].scriptWitness.IsNull() ? "NULL" : "NOT NULL");
+        }
+
+        // Wallet's SignTransaction will sign inputs it has keys for
+        // IMPORTANT: This should NOT touch DD inputs (no keys for them)
+        bool sign_result = m_wallet->SignTransaction(tx);
+        LogPrintf("DigiDollar: SignDDInputs - SignTransaction returned: %s\n", sign_result ? "true" : "false");
+
+        // Log DD input witness AFTER SignTransaction
+        for (size_t i = 0; i < dd_utxos.size(); i++) {
+            LogPrintf("DigiDollar: SignDDInputs - DD input %d witness AFTER SignTransaction: %s\n",
+                      i, tx.vin[i].scriptWitness.IsNull() ? "NULL" : "NOT NULL");
+        }
+
+        // Verify that fee inputs were actually signed
+        bool all_fee_inputs_signed = true;
+        for (size_t i = dd_utxos.size(); i < tx.vin.size(); i++) {
+            bool has_witness = !tx.vin[i].scriptWitness.IsNull() &&
+                             !tx.vin[i].scriptWitness.stack.empty();
+            bool has_scriptsig = !tx.vin[i].scriptSig.empty();
+
+            if (!has_witness && !has_scriptsig) {
+                all_fee_inputs_signed = false;
+                LogPrintf("DigiDollar: SignDDInputs - Fee input %d was NOT signed\n", i);
+                return false;
+            }
+
+            LogPrintf("DigiDollar: SignDDInputs - Fee input %d signed (witness: %s, scriptSig: %s)\n",
+                      i, has_witness ? "yes" : "no", has_scriptsig ? "yes" : "no");
+        }
+
+        if (!all_fee_inputs_signed) {
+            LogPrintf("DigiDollar: SignDDInputs - Not all fee inputs were signed\n");
+            return false;
+        }
+
+        LogPrintf("DigiDollar: SignDDInputs - All fee inputs signed successfully\n");
+    }
+
+    // Create PrecomputedTransactionData for proper Taproot sighash calculation
+    // NOW with fee inputs already signed
+    std::vector<CTxOut> prevouts;
+    for (size_t idx = 0; idx < tx.vin.size(); idx++) {
+        const auto& input = tx.vin[idx];
+        const Coin& coin = coins.at(input.prevout);
+        prevouts.push_back(coin.out);
+        LogPrintf("DigiDollar: SignDDInputs - Prevout %d: amount=%d, scriptPubKey=%s\n",
+                  idx, coin.out.nValue, HexStr(coin.out.scriptPubKey));
+    }
+
+    PrecomputedTransactionData txdata;
+    txdata.Init(tx, std::move(prevouts), /* force=*/ true);
+
+    // NOW sign DD inputs with Schnorr signatures using owner keys
     // DD inputs use custom Taproot keys not in wallet descriptors
     for (size_t i = 0; i < dd_utxos.size(); i++) {
         const COutPoint& outpoint = dd_utxos[i];
@@ -2090,8 +2159,20 @@ bool DigiDollarWallet::SignDDInputs(CMutableTransaction& tx,
             return false;
         }
 
-        LogPrintf("DigiDollar: SignDDInputs - Owner pubkey: %s\n",
-                  HexStr(ownerKey.GetPubKey()));
+        CPubKey ownerPubKey = ownerKey.GetPubKey();
+        XOnlyPubKey ownerXOnly(ownerPubKey);
+
+        LogPrintf("DigiDollar: SignDDInputs - Owner compressed pubkey: %s\n", HexStr(ownerPubKey));
+        LogPrintf("DigiDollar: SignDDInputs - Owner x-only pubkey: %s\n", HexStr(ownerXOnly));
+
+        // Compute what the tweaked output key should be
+        auto tweaked = ownerXOnly.CreateTapTweak(nullptr);
+        if (!tweaked) {
+            LogPrintf("DigiDollar: SignDDInputs - Failed to compute tweak for input %d\n", i);
+            return false;
+        }
+        XOnlyPubKey expected_output_key = tweaked->first;
+        LogPrintf("DigiDollar: SignDDInputs - Expected tweaked output key: %s\n", HexStr(expected_output_key));
 
         // Get the CTxOut for signing
         const Coin& coin = coins.at(outpoint);
@@ -2105,7 +2186,7 @@ bool DigiDollarWallet::SignDDInputs(CMutableTransaction& tx,
 
         // Extract and log the output key from the script
         std::vector<unsigned char> outputKeyBytes(prevOutput.scriptPubKey.begin() + 2, prevOutput.scriptPubKey.end());
-        LogPrintf("DigiDollar: SignDDInputs - Output key in script: %s\n", HexStr(outputKeyBytes));
+        LogPrintf("DigiDollar: SignDDInputs - Actual output key in script: %s\n", HexStr(outputKeyBytes));
 
         // Create Schnorr signature for Taproot key-path spending
         std::vector<unsigned char> sig(64); // Schnorr signatures are always 64 bytes
@@ -2113,18 +2194,35 @@ bool DigiDollarWallet::SignDDInputs(CMutableTransaction& tx,
         // For Taproot, amount must be the value of the UTXO being spent (DD outputs have value=0)
         CAmount amount = prevOutput.nValue;
 
-        // Calculate sighash for Taproot
-        uint256 sighash = SignatureHash(prevOutput.scriptPubKey, tx, i, SIGHASH_DEFAULT, amount, SigVersion::TAPROOT);
+        // Calculate sighash for Taproot key-path spending
+        // Create ScriptExecutionData for Taproot (no annex, no script)
+        ScriptExecutionData execdata;
+        execdata.m_annex_init = true;
+        execdata.m_annex_present = false;
+
+        uint256 sighash;
+        if (!SignatureHashSchnorr(sighash, execdata, tx, i, SIGHASH_DEFAULT, SigVersion::TAPROOT, txdata, MissingDataBehavior::FAIL)) {
+            LogPrintf("DigiDollar: SignDDInputs - Failed to compute Taproot sighash for input %d\n", i);
+            return false;
+        }
+
+        LogPrintf("DigiDollar: SignDDInputs - SIGNING - input %d, amount: %d, scriptPubKey: %s\n",
+                  i, amount, HexStr(prevOutput.scriptPubKey));
+        LogPrintf("DigiDollar: SignDDInputs - SIGNING - sighash: %s\n", sighash.ToString());
 
         // Generate auxiliary randomness for Schnorr signing
         uint256 aux = GetRandHash();
 
         // Sign with Schnorr (BIP340)
-        // For key-path-only Taproot (no script tree), merkle_root is nullptr
-        if (!ownerKey.SignSchnorr(sighash, sig, nullptr, aux)) {
+        // The signature must be created with the tweaked private key since the output uses the tweaked public key
+        // Pass the merkle_root as empty (nullptr in IsNull check) to apply the tweak: sign with p + H_TapTweak(P)
+        uint256 empty_merkle_root;
+        if (!ownerKey.SignSchnorr(sighash, sig, &empty_merkle_root, aux)) {
             LogPrintf("DigiDollar: SignDDInputs - Failed to create Schnorr signature for input %d\n", i);
             return false;
         }
+
+        LogPrintf("DigiDollar: SignDDInputs - Created signature: %s\n", HexStr(sig));
 
         // For Taproot key-path spending, witness is just the signature
         tx.vin[i].scriptWitness.stack.clear();
@@ -2132,40 +2230,6 @@ bool DigiDollarWallet::SignDDInputs(CMutableTransaction& tx,
 
         LogPrintf("DigiDollar: SignDDInputs - Signed DD input %d with Schnorr signature (%d bytes)\n",
                   i, sig.size());
-    }
-
-    // Sign fee inputs using wallet's standard signing
-    // The wallet will sign inputs it has keys for and skip the DD inputs (already signed)
-    if (!fee_utxos.empty()) {
-        LogPrintf("DigiDollar: SignDDInputs - Signing fee inputs using wallet's SignTransaction\n");
-
-        // Wallet's SignTransaction will try to sign all inputs
-        // It will succeed on fee inputs (has keys) and skip/fail on DD inputs (already signed or no keys)
-        m_wallet->SignTransaction(tx);  // May return false due to DD inputs, that's okay
-
-        // Verify that fee inputs were actually signed
-        bool all_fee_inputs_signed = true;
-        for (size_t i = dd_utxos.size(); i < tx.vin.size(); i++) {
-            // Check if this input has a witness or scriptSig
-            bool has_witness = !tx.vin[i].scriptWitness.IsNull() &&
-                             !tx.vin[i].scriptWitness.stack.empty();
-            bool has_scriptsig = !tx.vin[i].scriptSig.empty();
-
-            if (!has_witness && !has_scriptsig) {
-                all_fee_inputs_signed = false;
-                LogPrintf("DigiDollar: SignDDInputs - Fee input %d not signed (no witness or scriptSig)\n", i);
-            } else {
-                LogPrintf("DigiDollar: SignDDInputs - Fee input %d signed (witness: %s, scriptSig: %s)\n",
-                          i, has_witness ? "yes" : "no", has_scriptsig ? "yes" : "no");
-            }
-        }
-
-        if (!all_fee_inputs_signed) {
-            LogPrintf("DigiDollar: SignDDInputs - Failed to sign all fee inputs\n");
-            return false;
-        }
-
-        LogPrintf("DigiDollar: SignDDInputs - All fee inputs signed successfully\n");
     }
 
     LogPrintf("DigiDollar: SignDDInputs - Successfully signed all inputs (%d DD + %d fee)\n",

@@ -12,6 +12,8 @@
 #include <script/script.h>
 #include <uint256.h>
 #include <consensus/amount.h>
+#include <logging.h>
+#include <util/strencodings.h>
 
 typedef std::vector<unsigned char> valtype;
 
@@ -1832,7 +1834,15 @@ bool GenericTransactionSignatureChecker<T>::CheckSchnorrSignature(Span<const uns
     if (!SignatureHashSchnorr(sighash, execdata, *txTo, nIn, hashtype, sigversion, *this->txdata, m_mdb)) {
         return set_error(serror, SCRIPT_ERR_SCHNORR_SIG_HASHTYPE);
     }
-    if (!VerifySchnorrSignature(sig, pubkey, sighash)) return set_error(serror, SCRIPT_ERR_SCHNORR_SIG);
+
+    LogPrintf("DigiDollar: CheckSchnorrSignature - pubkey: %s, sighash: %s, sig: %s\n",
+              HexStr(pubkey), sighash.ToString(), HexStr(sig));
+
+    if (!VerifySchnorrSignature(sig, pubkey, sighash)) {
+        LogPrintf("DigiDollar: CheckSchnorrSignature - FAILED verification\n");
+        return set_error(serror, SCRIPT_ERR_SCHNORR_SIG);
+    }
+    LogPrintf("DigiDollar: CheckSchnorrSignature - PASSED verification\n");
     return true;
 }
 

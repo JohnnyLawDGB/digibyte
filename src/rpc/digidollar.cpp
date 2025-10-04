@@ -864,6 +864,11 @@ RPCHelpMan senddigidollar()
             result.pushKV("amount", ValueFromAmount(amount));
             result.pushKV("status", "success");
 
+            // Add optional fields (placeholder values for now - TODO: get from TransferDigiDollar result)
+            result.pushKV("fee_paid", ValueFromAmount(0));  // TODO: track actual fee
+            result.pushKV("inputs_used", 0);  // TODO: track DD inputs used
+            result.pushKV("change_amount", ValueFromAmount(0));  // TODO: track DD change
+
             // Optional: Add comment to wallet transaction if provided
             if (!comment.empty()) {
                 result.pushKV("comment", comment);

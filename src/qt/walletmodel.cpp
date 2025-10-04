@@ -961,17 +961,7 @@ WalletModel::DigiDollarMintResult WalletModel::mintDigiDollar(CAmount ddAmount, 
             LogPrintf("DigiDollar Qt: Position stored in wallet - ID: %s, DD: %d, DGB: %d, Tier: %d\n",
                       positionId.GetHex(), ddAmount, result.collateralRequired, lockTier);
 
-            // Add mint transaction to history
-            DDTransaction mintTx;
-            mintTx.txid = txId.GetHex();
-            mintTx.amount = ddAmount;
-            mintTx.timestamp = GetTime();
-            mintTx.confirmations = 0;
-            mintTx.incoming = true;
-            mintTx.address = ""; // No counterparty for mint
-            mintTx.category = "mint";
-            ddWallet->AddMockTransaction(mintTx);
-            LogPrintf("DigiDollar Qt: Mint transaction added to history\n");
+            // Note: Transaction is automatically added to history by AddCollateralPosition()
         } else {
             LogPrintf("DigiDollar Qt: WARNING - DD wallet not available, position not stored\n");
         }
@@ -1108,6 +1098,24 @@ CAmount WalletModel::getDigiDollarBalance() const
 
     } catch (const std::exception& e) {
         LogPrintf("DigiDollar Qt: getDigiDollarBalance exception - %s\n", e.what());
+        return 0;
+    }
+}
+
+CAmount WalletModel::getLockedCollateral() const
+{
+    try {
+        DigiDollarWallet* ddWallet = m_wallet->getDigiDollarWallet();
+        if (!ddWallet) {
+            return 0;
+        }
+
+        CAmount locked = ddWallet->GetLockedCollateral();
+        LogPrintf("DigiDollar Qt: getLockedCollateral returning %d satoshis\n", locked);
+        return locked;
+
+    } catch (const std::exception& e) {
+        LogPrintf("DigiDollar Qt: getLockedCollateral exception - %s\n", e.what());
         return 0;
     }
 }

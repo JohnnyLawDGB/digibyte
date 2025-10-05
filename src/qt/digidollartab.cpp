@@ -115,6 +115,8 @@ void DigiDollarTab::connectSignals()
     if (m_positionsWidget) {
         connect(m_positionsWidget, &DigiDollarPositionsWidget::message,
                 this, &DigiDollarTab::message);
+        connect(m_positionsWidget, &DigiDollarPositionsWidget::redeemRequested,
+                this, &DigiDollarTab::onRedeemRequested);
     }
 }
 
@@ -232,13 +234,13 @@ void DigiDollarTab::onTabChanged(int index)
         if (m_overviewWidget)
             m_overviewWidget->updateView();
         break;
-    case 1: // Receive
-        if (m_receiveWidget)
-            m_receiveWidget->updateView();
-        break;
-    case 2: // Send
+    case 1: // Send
         if (m_sendWidget)
             m_sendWidget->updateView();
+        break;
+    case 2: // Receive
+        if (m_receiveWidget)
+            m_receiveWidget->updateView();
         break;
     case 3: // Mint
         if (m_mintWidget)
@@ -254,5 +256,14 @@ void DigiDollarTab::onTabChanged(int index)
         break;
     default:
         break;
+    }
+}
+
+void DigiDollarTab::onRedeemRequested(const QString &positionId)
+{
+    // Switch to Redeem tab (index 4) and populate the position ID
+    if (m_redeemWidget) {
+        m_redeemWidget->setPosition(positionId);
+        m_tabWidget->setCurrentIndex(4); // Redeem tab
     }
 }

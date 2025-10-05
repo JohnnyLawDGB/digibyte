@@ -94,6 +94,7 @@ DIGIBYTE_TESTS =\
   test/digidollar_persistence_serialization_tests.cpp \
   test/digidollar_persistence_keys_tests.cpp \
   test/digidollar_persistence_walletbatch_tests.cpp \
+  test/digidollar_redeem_tests.cpp \
   test/bech32_tests.cpp \
   test/bip32_tests.cpp \
   test/blockchain_tests.cpp \

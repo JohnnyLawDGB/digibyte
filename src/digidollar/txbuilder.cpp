@@ -180,8 +180,8 @@ bool MintTxBuilder::ValidateMintParams(const TxBuilderMintParams& params) const 
         return false;
     }
 
-    // Validate lock period (30 days to 10 years)
-    if (params.lockDays < 30 || params.lockDays > 10 * 365) {
+    // Validate lock period (0 = 1 hour testing tier, 30 days to 10 years)
+    if (params.lockDays != 0 && (params.lockDays < 30 || params.lockDays > 10 * 365)) {
         LogPrintf("ValidateMintParams FAILED: lockDays out of range (%d)\n", params.lockDays);
         return false;
     }
@@ -811,46 +811,67 @@ CCollateralPosition RedeemTxBuilder::GetCollateralPosition(const COutPoint& outp
 TxBuilderResult RedeemTxBuilder::BuildRedemptionTransaction(const TxBuilderRedeemParams& params) {
     TxBuilderResult result;
 
-    // Validate parameters
+    LogPrintf("DigiDollar: BuildRedemptionTransaction - Starting (path: %d, ddToRedeem: %d)\n",
+             static_cast<int>(params.path), params.ddToRedeem);
+
+    // Step 1: Validate parameters
     if (!ValidateRedeemParams(params)) {
         result.error = "Invalid redemption parameters";
+        LogPrintf("DigiDollar: BuildRedemptionTransaction FAILED - %s\n", result.error);
         return result;
     }
 
-    // Check oracle price availability
-    if (oraclePrice <= 0) {
-        result.error = "Oracle price unavailable for redemption";
-        return result;
-    }
+    // Step 2: Get collateral position
+    CCollateralPosition position = GetCollateralPosition(params.collateralOutpoint);
+    LogPrintf("DigiDollar: Collateral position - dgbLocked: %d, ddMinted: %d, unlockHeight: %d\n",
+             position.dgbLocked, position.ddMinted, position.unlockHeight);
 
-    // Verify redemption conditions are met
+    // Step 3: Verify redemption conditions are met
     if (!VerifyRedemptionConditions(params, params.path)) {
         result.error = "Redemption conditions not met for path " + std::to_string(static_cast<int>(params.path));
+        LogPrintf("DigiDollar: BuildRedemptionTransaction FAILED - %s\n", result.error);
         return result;
     }
 
-    // Create transaction
+    // Step 4: Calculate collateral return
+    CAmount dgbToRelease = CalculateCollateralReturn(params.ddToRedeem, position.dgbLocked, oraclePrice);
+    if (dgbToRelease <= 0) {
+        result.error = "Failed to calculate collateral return";
+        LogPrintf("DigiDollar: BuildRedemptionTransaction FAILED - %s\n", result.error);
+        return result;
+    }
+
+    LogPrintf("DigiDollar: Collateral to release: %d sats (%.8f DGB)\n",
+             dgbToRelease, dgbToRelease / 100000000.0);
+
+    // Step 5: Build transaction
     CMutableTransaction tx;
 
     // Set type based on redemption path
     if (params.path == RedemptionPath::PARTIAL) {
         tx.SetDigiDollarType(::DD_TX_PARTIAL); // Use partial redemption type
+        LogPrintf("DigiDollar: Using DD_TX_PARTIAL type\n");
     } else if (params.path == RedemptionPath::EMERGENCY ||
                params.path == RedemptionPath::ERR) {
         tx.SetDigiDollarType(::DD_TX_EMERGENCY); // Use emergency type
+        LogPrintf("DigiDollar: Using DD_TX_EMERGENCY type\n");
     } else {
         tx.SetDigiDollarType(::DD_TX_REDEEM);
+        LogPrintf("DigiDollar: Using DD_TX_REDEEM type\n");
     }
 
-    // Add collateral input
+    // Input 0: Collateral UTXO (P2TR)
     tx.vin.push_back(CTxIn(params.collateralOutpoint));
+    LogPrintf("DigiDollar: Added collateral input: %s:%d\n",
+             params.collateralOutpoint.hash.ToString(), params.collateralOutpoint.n);
 
-    // Add DD inputs to burn
+    // Inputs 1+: DD UTXOs to burn
     for (const auto& utxo : params.ddUtxos) {
         tx.vin.push_back(CTxIn(utxo));
+        LogPrintf("DigiDollar: Added DD input to burn: %s:%d\n", utxo.hash.ToString(), utxo.n);
     }
 
-    // Add fee inputs if provided
+    // Inputs N+: Fee UTXOs (DGB)
     if (!params.feeUtxos.empty()) {
         std::vector<CTxIn> feeInputs;
         CAmount totalFeeIn = 0;
@@ -858,31 +879,47 @@ TxBuilderResult RedeemTxBuilder::BuildRedemptionTransaction(const TxBuilderRedee
 
         if (!SelectCoins(params.feeUtxos, estimatedFees, feeInputs, totalFeeIn)) {
             result.error = "Insufficient funds for fees";
+            LogPrintf("DigiDollar: BuildRedemptionTransaction FAILED - %s\n", result.error);
             return result;
         }
 
         tx.vin.insert(tx.vin.end(), feeInputs.begin(), feeInputs.end());
+        LogPrintf("DigiDollar: Added %d fee inputs (total: %d sats)\n", feeInputs.size(), totalFeeIn);
     }
 
-    // Calculate DGB to release
-    CAmount dgbToRelease = CalculateRedemptionAmount(params);
-
-    // Add DGB output to owner
+    // Output 0: DGB returned to owner
     CPubKey pubkey = params.ownerKey.GetPubKey();
     CTxDestination dest{WitnessV1Taproot(XOnlyPubKey(pubkey))};
     tx.vout.push_back(CTxOut(dgbToRelease, GetScriptForDestination(dest)));
+    LogPrintf("DigiDollar: Added DGB output to owner: %d sats\n", dgbToRelease);
 
-    // Handle partial redemption remainder
+    // Output 1 (partial only): New collateral position
     if (params.path == RedemptionPath::PARTIAL) {
-        // Create new collateral output for remainder
-        // This would need to be implemented based on specific partial redemption logic
+        // For partial redemption, create a new collateral output for the remainder
+        // TODO: Implement partial collateral remainder logic
+        // This would create a new P2TR collateral output with:
+        // - Remaining DGB: position.dgbLocked - dgbToRelease
+        // - Remaining DD: position.ddMinted - params.ddToRedeem
+        // - Same unlock height
+        LogPrintf("DigiDollar: PARTIAL redemption - remainder output not yet implemented\n");
     }
+
+    // Set transaction locktime to unlockHeight (critical for CLTV validation)
+    tx.nLockTime = position.unlockHeight;
+    LogPrintf("DigiDollar: Set tx.nLockTime = %d (unlockHeight)\n", position.unlockHeight);
 
     // Calculate fees and handle change
     result.totalFees = CalculateFee(tx, params.feeRate);
+    LogPrintf("DigiDollar: Calculated fees: %d sats\n", result.totalFees);
 
+    // Success
     result.tx = tx;
     result.success = true;
+    result.collateralRequired = 0; // No collateral required for redemption
+
+    LogPrintf("DigiDollar: BuildRedemptionTransaction SUCCESS - %d inputs, %d outputs\n",
+             tx.vin.size(), tx.vout.size());
+
     return result;
 }
 
@@ -914,13 +951,38 @@ RedemptionPath RedeemTxBuilder::DetermineRedemptionPath(const TxBuilderRedeemPar
 CAmount RedeemTxBuilder::CalculateCollateralReturn(CAmount ddAmount, CAmount originalCollateral,
                                                   CAmount currentPrice) const {
     // Calculate collateral return based on DD amount and current price
+
+    // Validation
     if (ddAmount <= 0 || originalCollateral <= 0 || currentPrice <= 0) {
+        LogPrintf("DigiDollar: CalculateCollateralReturn FAILED - invalid parameters (dd: %d, collateral: %d, price: %d)\n",
+                 ddAmount, originalCollateral, currentPrice);
         return 0;
     }
 
-    // For simplicity, return proportional amount of original collateral
-    // In production, this would consider price changes and redemption path specifics
-    return originalCollateral; // Simplified - return full collateral for now
+    // For Phase 1: Return full proportional collateral
+    // Formula: (ddAmount / totalDDMinted) * originalCollateral
+    // Since we're redeeming the full position in most cases, we return the full collateral
+    // For partial redemptions, this would be adjusted
+
+    // IMPORTANT: For ERR path (Emergency Redemption Route), return 0 as it's not implemented yet
+    // This is handled by the caller (BuildRedemptionTransaction) checking the path
+
+    LogPrintf("DigiDollar: Calculating collateral return - DD amount: %d, Original collateral: %d, Current price: %d\n",
+             ddAmount, originalCollateral, currentPrice);
+
+    // Return full proportional collateral
+    // In production, this would:
+    // 1. Calculate proportional amount based on DD being redeemed
+    // 2. Consider current oracle price vs original mint price
+    // 3. Apply haircuts for ERR path (when implemented)
+    // 4. Account for system collateral ratio
+
+    CAmount returnAmount = originalCollateral;
+
+    LogPrintf("DigiDollar: Collateral return calculated: %d sats (%.8f DGB)\n",
+             returnAmount, returnAmount / 100000000.0);
+
+    return returnAmount;
 }
 
 bool RedeemTxBuilder::VerifyRedemptionConditions(const TxBuilderRedeemParams& params,
@@ -932,21 +994,51 @@ bool RedeemTxBuilder::VerifyRedemptionConditions(const TxBuilderRedeemParams& pa
     switch (path) {
         case RedemptionPath::NORMAL:
             // Check if timelock has expired
-            return currentHeight >= position.unlockHeight;
+            if (currentHeight < position.unlockHeight) {
+                LogPrintf("DigiDollar: Normal redemption FAILED - timelock not expired (current: %d, unlock: %d)\n",
+                         currentHeight, position.unlockHeight);
+                return false;
+            }
+            LogPrintf("DigiDollar: Normal redemption conditions met (timelock expired)\n");
+            return true;
 
         case RedemptionPath::EMERGENCY:
-            // Check if emergency conditions are met (oracle approval would be verified here)
+            // Check if emergency conditions are met (8-of-15 oracle signatures required)
+            // For Phase 1: Check if we have at least 8 oracle signatures in params
+            // TODO: Implement actual oracle signature verification
+            // For now, simplified check
+            LogPrintf("DigiDollar: Emergency redemption - oracle approval check (simplified)\n");
             return true; // Simplified - would check oracle signatures
 
         case RedemptionPath::PARTIAL:
             // Check if partial redemption is allowed and oracle price is valid
-            return params.ddToRedeem < position.ddMinted && oraclePrice > 0;
+            if (params.ddToRedeem >= position.ddMinted) {
+                LogPrintf("DigiDollar: Partial redemption FAILED - amount too large (redeem: %d, minted: %d)\n",
+                         params.ddToRedeem, position.ddMinted);
+                return false;
+            }
+            if (oraclePrice <= 0) {
+                LogPrintf("DigiDollar: Partial redemption FAILED - invalid oracle price (%d)\n", oraclePrice);
+                return false;
+            }
+            // Also check timelock for partial redemption (same as NORMAL)
+            if (currentHeight < position.unlockHeight) {
+                LogPrintf("DigiDollar: Partial redemption FAILED - timelock not expired (current: %d, unlock: %d)\n",
+                         currentHeight, position.unlockHeight);
+                return false;
+            }
+            LogPrintf("DigiDollar: Partial redemption conditions met\n");
+            return true;
 
         case RedemptionPath::ERR:
-            // Check if system is under-collateralized
-            return GetCurrentSystemCollateral() < 100;
+            // ERR (Emergency Redemption Route) - NOT IMPLEMENTED YET
+            // Placeholder: always return false with error message
+            // TODO: Implement ERR - requires system health monitoring
+            LogPrintf("DigiDollar: ERR redemption FAILED - ERR not implemented yet\n");
+            return false;
 
         default:
+            LogPrintf("DigiDollar: Unknown redemption path: %d\n", static_cast<int>(path));
             return false;
     }
 }

@@ -398,6 +398,27 @@ public:
     CAmount GetDGBBalance() const;
 
     // ====================================================================
+    // PHASE 2: STATE MANAGEMENT - DD BURNING & POSITION CLOSURE (Task 6)
+    // ====================================================================
+
+    /**
+     * Burn DigiDollars by selecting and marking UTXOs as spent (Task 6a)
+     * @param amount Amount of DD to burn in cents
+     * @param burnedUtxos Output parameter: list of UTXOs that were burned
+     * @return true if burning successful, false otherwise
+     */
+    bool BurnDigiDollars(CAmount amount, std::vector<COutPoint>& burnedUtxos);
+
+    /**
+     * Close or update collateral position after redemption (Task 6b)
+     * @param outpoint The collateral position outpoint (dd_timelock_id)
+     * @param partial true for partial redemption, false for full redemption
+     * @param remainingDD Amount of DD remaining after partial redemption (0 for full)
+     * @return true if position updated successfully
+     */
+    bool CloseCollateralPosition(const COutPoint& outpoint, bool partial = false, CAmount remainingDD = 0);
+
+    // ====================================================================
     // PHASE 5.2: UTXO SET UPDATE FUNCTIONS
     // ====================================================================
 

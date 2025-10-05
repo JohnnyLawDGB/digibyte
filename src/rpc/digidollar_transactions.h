@@ -44,6 +44,16 @@ UniValue transferdigidollar(const JSONRPCRequest& request);
 UniValue redeemdigidollar(const JSONRPCRequest& request);
 
 /**
+ * Get redemption information for a collateral position
+ */
+UniValue getredemptioninfo(const JSONRPCRequest& request);
+
+/**
+ * List all redeemable collateral positions
+ */
+UniValue listredeemablepositions(const JSONRPCRequest& request);
+
+/**
  * Set mock oracle price (for testing)
  */
 UniValue setmockoracleprice(const JSONRPCRequest& request);

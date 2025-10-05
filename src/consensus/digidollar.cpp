@@ -70,6 +70,10 @@ CAmount GetMinimumDDOutput(const ConsensusParams& params)
 
 int64_t LockDaysToBlocks(int days)
 {
+    // Special case: 0 days = 1 hour (240 blocks) for testing
+    if (days == 0) {
+        return 240; // 1 hour at 15-second blocks
+    }
     return static_cast<int64_t>(days) * BLOCKS_PER_DAY;
 }
 

@@ -304,26 +304,8 @@ void DigiDollarPositionsWidget::onRedeemPositionClicked()
         return;
     }
 
-    // Confirm redeem
-    QMessageBox msgBox(this);
-    msgBox.setWindowTitle(tr("Confirm Redeem"));
-    msgBox.setText(tr("Redeem position %1?").arg(positionId));
-    msgBox.setInformativeText(tr("DD Minted: %1\nDGB Collateral: %2\nHealth: %3%")
-                             .arg(formatDDAmount(position.ddMinted))
-                             .arg(formatDGBAmount(position.dgbCollateral))
-                             .arg(QString::number(position.health, 'f', 1)));
-    msgBox.setStandardButtons(QMessageBox::Yes | QMessageBox::No);
-    msgBox.setDefaultButton(QMessageBox::No);
-
-    if (msgBox.exec() == QMessageBox::Yes) {
-        // TODO: Actually create the redeem transaction
-        Q_EMIT message(tr("Redeem Transaction Created"),
-                    tr("Redeem transaction created for position %1").arg(positionId),
-                    QMessageBox::Information);
-
-        // Refresh the table after a delay
-        QTimer::singleShot(2000, this, &DigiDollarPositionsWidget::updatePositions);
-    }
+    // Emit signal to request redemption (will be handled by parent tab)
+    Q_EMIT redeemRequested(positionId);
 }
 
 void DigiDollarPositionsWidget::showContextMenu(const QPoint& point)
@@ -390,15 +372,9 @@ void DigiDollarPositionsWidget::showContextMenu(const QPoint& point)
     // Redeem action (if applicable)
     if (position.canRedeem) {
         QAction* redeemAction = contextMenu.addAction(tr("💰 Redeem Vault"));
-        connect(redeemAction, &QAction::triggered, [this, row]() {
-            // Find the redeem button for this vault and trigger it
-            QWidget* buttonWidget = m_positionsTable->cellWidget(row, COL_ACTIONS);
-            if (buttonWidget) {
-                QPushButton* button = buttonWidget->findChild<QPushButton*>();
-                if (button) {
-                    button->click();
-                }
-            }
+        connect(redeemAction, &QAction::triggered, [this, position]() {
+            // Emit signal to request redemption
+            Q_EMIT redeemRequested(position.positionId);
         });
     }
 
@@ -542,6 +518,10 @@ void DigiDollarPositionsWidget::addPositionToTable(const DigiDollarPosition& pos
     QString lockPeriodName;
     QString lockPeriodTooltip;
     switch(position.lockTier) {
+        case 0:
+            lockPeriodName = tr("1 hour");
+            lockPeriodTooltip = tr("1 hour time lock (1000% collateral) - TESTING ONLY");
+            break;
         case 1:
             lockPeriodName = tr("30 days");
             lockPeriodTooltip = tr("30 day time lock (500% collateral)");

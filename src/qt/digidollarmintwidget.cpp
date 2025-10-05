@@ -214,8 +214,8 @@ void DigiDollarMintWidget::setupLockTierSection()
     m_lockTierCombo->setToolTip(tr("WARNING: Your DGB will be locked for this period and cannot be accessed until the timelock expires.\nLonger locks require less collateral (30 days: 500%, 10 years: 200%)"));
     m_lockTierLabel->setBuddy(m_lockTierCombo);
 
-    // Add all 8 lock periods
-    for (int i = 1; i <= 8; ++i) {
+    // Add all 9 lock periods (including 1-hour test tier)
+    for (int i = 0; i <= 8; ++i) {
         m_lockTierCombo->addItem(getLockTierDisplayName(i), i);
     }
 
@@ -656,14 +656,15 @@ double DigiDollarMintWidget::getCollateralRatioForTier(int tier) const
 {
     // Collateral ratios from DigiByte_v8.26_DigiDollar_Implementation_Report.md
     switch (tier) {
-    case 1: return 500.0; // 30 days - Maximum safety for short-term positions
-    case 2: return 400.0; // 3 months - High collateral for quarterly positions
-    case 3: return 350.0; // 6 months - Semi-annual positions with strong buffer
-    case 4: return 300.0; // 1 year - Annual positions with 3x collateral
-    case 5: return 250.0; // 3 years - Medium-term stable positions
-    case 6: return 225.0; // 5 years - Long-term positions
-    case 7: return 212.0; // 7 years - Extended positions
-    case 8: return 200.0; // 10 years - Minimum 2x collateral for decade locks
+    case 0: return 1000.0; // 1 hour - Testing only (10x collateral)
+    case 1: return 500.0;  // 30 days - Maximum safety for short-term positions
+    case 2: return 400.0;  // 3 months - High collateral for quarterly positions
+    case 3: return 350.0;  // 6 months - Semi-annual positions with strong buffer
+    case 4: return 300.0;  // 1 year - Annual positions with 3x collateral
+    case 5: return 250.0;  // 3 years - Medium-term stable positions
+    case 6: return 225.0;  // 5 years - Long-term positions
+    case 7: return 212.0;  // 7 years - Extended positions
+    case 8: return 200.0;  // 10 years - Minimum 2x collateral for decade locks
     default: return 300.0;
     }
 }
@@ -672,6 +673,7 @@ QString DigiDollarMintWidget::getLockTierDisplayName(int tier) const
 {
     // Display names from DigiByte_v8.26_DigiDollar_Implementation_Report.md
     switch (tier) {
+    case 0: return tr("1 hour (1000% collateral) - TESTING ONLY");
     case 1: return tr("30 days (500% collateral)");
     case 2: return tr("3 months (400% collateral)");
     case 3: return tr("6 months (350% collateral)");
@@ -687,8 +689,9 @@ QString DigiDollarMintWidget::getLockTierDisplayName(int tier) const
 int DigiDollarMintWidget::getLockTierBlocks(int tier) const
 {
     // Lock periods in blocks (15 second blocks)
-    // 1 day = 5760 blocks, 1 month = 172800 blocks, 1 year = 2102400 blocks
+    // 1 hour = 240 blocks, 1 day = 5760 blocks, 1 month = 172800 blocks, 1 year = 2102400 blocks
     switch (tier) {
+    case 0: return 240;         // 1 hour (testing only)
     case 1: return 172800;      // 30 days
     case 2: return 518400;      // 3 months (90 days)
     case 3: return 1036800;     // 6 months (180 days)

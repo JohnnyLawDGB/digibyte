@@ -10,6 +10,8 @@
 #include <qt/guiutil.h>
 #include <qt/digibyteunits.h>
 #include <consensus/amount.h>
+#include <univalue.h>
+#include <logging.h>
 
 #include <QLabel>
 #include <QLineEdit>
@@ -115,29 +117,29 @@ void DigiDollarRedeemWidget::setupPositionSection()
     m_positionLayout->setContentsMargins(10, 10, 10, 10);
 
     // Title
-    QLabel* positionTitle = new QLabel(tr("Select Position"), this);
+    QLabel* positionTitle = new QLabel(tr("Select Time Lock"), this);
     QFont titleFont = positionTitle->font();
     titleFont.setBold(true);
     titleFont.setPointSize(titleFont.pointSize() + 2);
     positionTitle->setFont(titleFont);
     m_positionLayout->addWidget(positionTitle, 0, 0, 1, 2);
 
-    // Position ID input
-    m_positionIdLabel = new QLabel(tr("Position ID:"), this);
+    // Vault ID input
+    m_positionIdLabel = new QLabel(tr("Vault ID:"), this);
     m_positionIdEdit = new QLineEdit(this);
     m_positionIdEdit->setObjectName("positionIdEdit");
-    m_positionIdEdit->setPlaceholderText("Enter position ID (e.g., a1b2c3d4...)");
+    m_positionIdEdit->setPlaceholderText("Enter Vault ID (e.g., a1b2c3d4...)");
     QFont monospaceFont = GUIUtil::fixedPitchFont();
     m_positionIdEdit->setFont(monospaceFont);
 
     m_positionLayout->addWidget(m_positionIdLabel, 1, 0);
     m_positionLayout->addWidget(m_positionIdEdit, 1, 1);
 
-    // Position validation label
+    // Validation label
     m_positionValidationLabel = new QLabel(this);
     m_positionValidationLabel->setObjectName("positionValidationLabel");
     // Theme styling will be applied in applyTheme()
-    m_positionValidationLabel->setText(tr("Enter a position ID to load details"));
+    m_positionValidationLabel->setText(tr("Enter a Vault ID to load details"));
     m_positionLayout->addWidget(m_positionValidationLabel, 2, 0, 1, 2);
 
     m_mainLayout->addWidget(m_positionFrame);
@@ -203,7 +205,7 @@ void DigiDollarRedeemWidget::setupPositionInfoSection()
     m_positionInfoLayout->setContentsMargins(10, 10, 10, 10);
 
     // Title
-    m_positionInfoLabel = new QLabel(tr("Position Details"), this);
+    m_positionInfoLabel = new QLabel(tr("Time Lock Details"), this);
     QFont titleFont = m_positionInfoLabel->font();
     titleFont.setBold(true);
     titleFont.setPointSize(titleFont.pointSize() + 2);
@@ -342,6 +344,15 @@ void DigiDollarRedeemWidget::updateView()
     updatePositionInfo();
 }
 
+void DigiDollarRedeemWidget::setPosition(const QString& outpoint)
+{
+    m_selectedPositionId = outpoint;
+    m_positionIdEdit->setText(outpoint);
+    loadPositionDetails();
+    updatePositionInfo();
+    updateRedeemButtons();
+}
+
 void DigiDollarRedeemWidget::updateBalance()
 {
     // In a real implementation, this would query the wallet for DigiDollar balance
@@ -428,6 +439,7 @@ void DigiDollarRedeemWidget::onRedeemClicked()
                         tr("DigiDollar redeem transaction created successfully!\n\nTransaction ID: %1")
                         .arg(result.txid),
                         QMessageBox::Information);
+            Q_EMIT redemptionCompleted(); // Notify other widgets
             onClearClicked();
             updateBalance(); // Refresh balance displays
             updatePositions(); // Refresh positions
@@ -491,6 +503,7 @@ void DigiDollarRedeemWidget::onRedeemAllClicked()
                         tr("DigiDollar position closed successfully!\n\nTransaction ID: %1")
                         .arg(result.txid),
                         QMessageBox::Information);
+            Q_EMIT redemptionCompleted(); // Notify other widgets
             onClearClicked();
             updateBalance(); // Refresh balance displays
             updatePositions(); // Refresh positions
@@ -587,37 +600,44 @@ void DigiDollarRedeemWidget::loadPositionDetails()
         return;
     }
 
-    // Get positions from wallet
-    // In a real implementation, would call wallet API to get position by ID
-    // For now, use wallet model to query position details
+    // Query position from RPC
+    try {
+        UniValue params(UniValue::VARR);
+        params.push_back(false); // active_only = false (show all positions)
 
-    // Mock implementation - check if position exists
-    // TODO: Replace with actual wallet query via interfaces::Wallet
-    if (m_selectedPositionId.length() >= 8) {
-        // For testing: simulate found position with sample data
-        m_positionFound = true;
-        m_positionDDMinted = 100.0;  // 100 DD = $100
-        m_positionDGBCollateral = 15000.0; // 15000 DGB locked
-        m_positionLockTier = 3; // 180 days
-        m_positionBlocksRemaining = 256; // ~64 minutes remaining (256 blocks * 15 sec)
-        m_positionHealth = 85.0; // 85% health
-        m_redeemableAmount = m_positionDDMinted; // Can redeem full amount
+        UniValue result = m_walletModel->executeRpc("listdigidollarpositions", params);
 
-        // In production, would query:
-        // auto positions = m_walletModel->getCollateralPositions();
-        // for (const auto& pos : positions) {
-        //     if (pos.dd_timelock_id == positionId) {
-        //         m_positionFound = true;
-        //         m_positionDDMinted = pos.dd_minted / 100.0; // cents to dollars
-        //         m_positionDGBCollateral = pos.dgb_collateral / COIN; // sats to DGB
-        //         m_positionLockTier = pos.lock_tier;
-        //         m_positionBlocksRemaining = std::max(0, pos.unlock_height - currentHeight);
-        //         m_positionHealth = calculateHealth(pos, currentPrice);
-        //         m_redeemableAmount = calculateRedeemable(pos);
-        //         break;
-        //     }
-        // }
-    } else {
+        if (result.isArray()) {
+            m_positionFound = false;
+            for (size_t i = 0; i < result.size(); i++) {
+                const UniValue& pos = result[i];
+                std::string pid = pos.find_value("position_id").get_str();
+
+                if (pid == m_selectedPositionId.toStdString()) {
+                    // Found the position!
+                    m_positionFound = true;
+                    m_positionDDMinted = pos.find_value("dd_minted").getInt<int64_t>() / 100.0; // cents to DD
+                    m_positionDGBCollateral = pos.find_value("dgb_collateral").get_real();
+                    m_positionLockTier = pos.find_value("lock_tier").getInt<int>();
+                    m_positionBlocksRemaining = pos.find_value("blocks_remaining").getInt<int>();
+                    m_positionHealth = pos.find_value("health_ratio").get_real();
+                    m_redeemableAmount = m_positionDDMinted; // Can redeem full amount
+                    break;
+                }
+            }
+
+            if (!m_positionFound) {
+                // Position not found in list
+                m_positionDDMinted = 0.0;
+                m_positionDGBCollateral = 0.0;
+                m_positionLockTier = 0;
+                m_positionBlocksRemaining = 0;
+                m_positionHealth = 0.0;
+                m_redeemableAmount = 0.0;
+            }
+        }
+    } catch (const std::exception& e) {
+        LogPrintf("DigiDollar Qt: Failed to load position details - %s\n", e.what());
         m_positionFound = false;
         m_positionDDMinted = 0.0;
         m_positionDGBCollateral = 0.0;

@@ -39,9 +39,15 @@ public:
     void setClientModel(ClientModel* model);
     void updateView();
 
+    /** Set position to redeem (e.g., from Vault tab) */
+    void setPosition(const QString& outpoint);
+
 Q_SIGNALS:
     /** Fired when a message should be reported to the user */
     void message(const QString &title, const QString &message, unsigned int style);
+
+    /** Fired when redemption completes successfully */
+    void redemptionCompleted();
 
 public Q_SLOTS:
     /** Update balance display */

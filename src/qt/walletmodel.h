@@ -213,6 +213,9 @@ public:
     // Calculate required collateral for minting
     CAmount calculateRequiredCollateral(CAmount ddAmount, int lockTier) const;
 
+    // Execute RPC command (for DigiDollar widgets)
+    UniValue executeRpc(const std::string& command, const UniValue& params) const;
+
     // Generate new DigiDollar receiving address
     QString getNewDigiDollarAddress(const QString& label = "");
 

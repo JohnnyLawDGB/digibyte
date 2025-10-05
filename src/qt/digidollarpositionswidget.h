@@ -53,6 +53,8 @@ public:
 Q_SIGNALS:
     /** Fired when a message should be reported to the user */
     void message(const QString &title, const QString &message, unsigned int style);
+    /** Fired when redeem is requested for a specific position */
+    void redeemRequested(const QString &positionId);
 
 public Q_SLOTS:
     /** Update positions table */

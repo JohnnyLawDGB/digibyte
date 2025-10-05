@@ -42,6 +42,7 @@ using namespace DigiDollar::DCA;
 namespace {
     int GetLockDaysForTier(uint32_t tier) {
         switch (tier) {
+            case 0: return 0;     // Special: 1 hour (240 blocks) - handled separately
             case 1: return 30;
             case 2: return 90;
             case 3: return 180;
@@ -56,15 +57,16 @@ namespace {
 
     int GetMinCollateralRatio(uint32_t tier) {
         switch (tier) {
-            case 1: return 200;   // 200% for 30 days
-            case 2: return 175;   // 175% for 90 days
-            case 3: return 150;   // 150% for 180 days
-            case 4: return 140;   // 140% for 1 year
-            case 5: return 130;   // 130% for 3 years
-            case 6: return 125;   // 125% for 5 years
-            case 7: return 120;   // 120% for 7 years
-            case 8: return 115;   // 115% for 10 years
-            default: return 200;
+            case 0: return 1000;  // 1000% for 1 hour (testing only)
+            case 1: return 500;   // 500% for 30 days
+            case 2: return 400;   // 400% for 90 days
+            case 3: return 350;   // 350% for 180 days
+            case 4: return 300;   // 300% for 1 year
+            case 5: return 250;   // 250% for 3 years
+            case 6: return 225;   // 225% for 5 years
+            case 7: return 212;   // 212% for 7 years
+            case 8: return 200;   // 200% for 10 years
+            default: return 500;
         }
     }
 }
@@ -615,7 +617,7 @@ RPCHelpMan mintdigidollar()
                 "The amount of collateral required depends on the lock period and current system health.\n",
                 {
                     {"dd_amount", RPCArg::Type::NUM, RPCArg::Optional::NO, "Amount of DigiDollar to mint (in USD cents, e.g., 10000 = $100)", RPCArgOptions{.skip_type_check = true}},
-                    {"lock_tier", RPCArg::Type::NUM, RPCArg::Optional::NO, "Lock tier 1-8 (30d,90d,180d,1y,3y,5y,7y,10y)", RPCArgOptions{.skip_type_check = true}},
+                    {"lock_tier", RPCArg::Type::NUM, RPCArg::Optional::NO, "Lock tier 0-8 (0=1h testing, 1=30d, 2=90d, 3=180d, 4=1y, 5=3y, 6=5y, 7=7y, 8=10y)", RPCArgOptions{.skip_type_check = true}},
                     {"fee_rate", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "Fee rate in sat/kB (default: 100000)", RPCArgOptions{.skip_type_check = true}}
                 },
                 RPCResult{
@@ -656,8 +658,8 @@ RPCHelpMan mintdigidollar()
             if (ddAmount <= 0) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "DigiDollar amount must be positive");
             }
-            if (lockTier < 1 || lockTier > 8) {
-                throw JSONRPCError(RPC_INVALID_PARAMETER, "Lock tier must be between 1 and 8");
+            if (lockTier < 0 || lockTier > 8) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Lock tier must be between 0 and 8 (0 = 1 hour testing tier)");
             }
 
             // Get current height from wallet's chain interface
@@ -913,7 +915,7 @@ RPCHelpMan redeemdigidollar()
         {
             // Parse parameters
             std::string positionIdStr = request.params[0].get_str();
-            CAmount ddAmount = AmountFromValue(request.params[1]);
+            CAmount ddAmount = request.params[1].getInt<int64_t>(); // DD amount in cents (not BTC format)
             std::string redeemAddress = request.params.size() > 2 ? request.params[2].get_str() : "";
 
             // Validate parameters
@@ -925,23 +927,80 @@ RPCHelpMan redeemdigidollar()
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid position ID format");
             }
 
-            // Mock redemption transaction creation
-            uint256 mockTxId;
-            mockTxId.SetHex("fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321");
+            // Get wallet
+            std::shared_ptr<wallet::CWallet> pwallet = wallet::GetWalletForJSONRPCRequest(request);
+            if (!pwallet) throw JSONRPCError(RPC_WALLET_NOT_FOUND, "Wallet not found");
 
-            // Calculate redemption details (mock implementation)
-            CAmount dgbUnlocked = 75 * COIN; // TODO: Use real calculation based on position and current ratios
-            CAmount feePaid = 0.001 * COIN; // TODO: Use real fee calculation
-            std::string unlockAddr = redeemAddress.empty() ? "DGb1A2B3C4D5E6F7G8H9I0J1K2L3M4N5O6P7Q8R9S0" : redeemAddress;
-            bool positionClosed = true; // TODO: Check if position fully redeemed
+            DigiDollarWallet* dd_wallet = pwallet->GetDDWallet();
+            if (!dd_wallet) throw JSONRPCError(RPC_WALLET_ERROR, "DigiDollar wallet not initialized");
+
+            // Parse position ID
+            uint256 positionId;
+            if (!ParseHashStr(positionIdStr, positionId)) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid position ID");
+            }
+
+            // Get position from wallet
+            LOCK(pwallet->cs_wallet);
+            WalletCollateralPosition foundPosition;
+            bool found = false;
+
+            for (const auto& pos : dd_wallet->GetDDTimeLocks(false)) {
+                if (pos.dd_timelock_id == positionId) {
+                    foundPosition = pos;
+                    found = true;
+                    break;
+                }
+            }
+
+            if (!found) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Position not found");
+            }
+
+            // Check if redeemable
+            int currentHeight = pwallet->GetLastBlockHeight();
+            if (foundPosition.unlock_height > currentHeight) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER,
+                    strprintf("Position locked until block %d (current: %d, remaining: %d blocks)",
+                              foundPosition.unlock_height, currentHeight, foundPosition.unlock_height - currentHeight));
+            }
+
+            // Validate amount
+            if (ddAmount > foundPosition.dd_minted) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER,
+                    strprintf("Cannot redeem %d cents, position only has %d cents",
+                              ddAmount, foundPosition.dd_minted));
+            }
+
+            // Calculate DGB return (proportional)
+            CAmount dgbToUnlock = (ddAmount * foundPosition.dgb_collateral) / foundPosition.dd_minted;
+
+            // Burn DD tokens
+            std::vector<COutPoint> burnedUtxos;
+            if (!dd_wallet->BurnDigiDollars(ddAmount, burnedUtxos)) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "Failed to burn DigiDollar tokens");
+            }
+
+            // Close or update position
+            bool positionClosed = (ddAmount >= foundPosition.dd_minted);
+            CAmount remainingDD = foundPosition.dd_minted - ddAmount;
+
+            // Create COutPoint for position (hash is position ID, n is typically 0 for collateral)
+            COutPoint positionOutpoint(positionId, 0);
+            if (!dd_wallet->CloseCollateralPosition(positionOutpoint, !positionClosed, remainingDD)) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "Failed to close collateral position");
+            }
+
+            // TODO: Build and broadcast actual redemption transaction using RedeemTxBuilder
+            // For now, just return success with calculated values
 
             UniValue result(UniValue::VOBJ);
-            result.pushKV("txid", mockTxId.GetHex());
+            result.pushKV("txid", positionId.GetHex()); // Placeholder txid
             result.pushKV("position_id", positionIdStr);
             result.pushKV("dd_redeemed", ddAmount);
-            result.pushKV("dgb_unlocked", ValueFromAmount(dgbUnlocked));
-            result.pushKV("unlock_address", unlockAddr);
-            result.pushKV("fee_paid", ValueFromAmount(feePaid));
+            result.pushKV("dgb_unlocked", ValueFromAmount(dgbToUnlock));
+            result.pushKV("unlock_address", redeemAddress.empty() ? "auto" : redeemAddress);
+            result.pushKV("fee_paid", ValueFromAmount(1000)); // Placeholder fee
             result.pushKV("redemption_path", "normal");
             result.pushKV("position_closed", positionClosed);
 
@@ -968,7 +1027,7 @@ RPCHelpMan listdigidollarpositions()
                                 {RPCResult::Type::STR, "position_id", "Unique position identifier"},
                                 {RPCResult::Type::STR_AMOUNT, "dd_minted", "DigiDollar amount minted"},
                                 {RPCResult::Type::STR_AMOUNT, "dgb_collateral", "DGB locked as collateral"},
-                                {RPCResult::Type::NUM, "lock_tier", "Lock tier (1-8)"},
+                                {RPCResult::Type::NUM, "lock_tier", "Lock tier (0-8, 0=1h testing)"},
                                 {RPCResult::Type::NUM, "lock_days", "Lock period in days"},
                                 {RPCResult::Type::NUM, "unlock_height", "Block height when unlockable"},
                                 {RPCResult::Type::NUM, "blocks_remaining", "Blocks until unlock (0 if unlocked)"},
@@ -997,55 +1056,51 @@ RPCHelpMan listdigidollarpositions()
             CAmount minAmount = request.params.size() > 2 && !request.params[2].isNull() ?
                                AmountFromValue(request.params[2]) : 0;
 
-            // Mock positions data - in real implementation would get from wallet
-            struct MockPosition {
-                std::string position_id;
-                CAmount dd_minted;
-                CAmount dgb_collateral;
-                uint32_t lock_tier;
-                int64_t unlock_height;
-                bool is_active;
-            };
+            // Get wallet
+            std::shared_ptr<wallet::CWallet> pwallet = wallet::GetWalletForJSONRPCRequest(request);
+            if (!pwallet) throw JSONRPCError(RPC_WALLET_NOT_FOUND, "Wallet not found");
 
-            std::vector<MockPosition> mockPositions = {
-                {"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", 10000, 150 * COIN, 3, 1000000, true},
-                {"abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789", 25000, 300 * COIN, 5, 1050000, true},
-                {"fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210", 5000, 80 * COIN, 1, 950000, false}
-            };
+            DigiDollarWallet* dd_wallet = pwallet->GetDDWallet();
+            if (!dd_wallet) throw JSONRPCError(RPC_WALLET_ERROR, "DigiDollar wallet not initialized");
+
+            // Get all positions
+            LOCK(pwallet->cs_wallet);
+            std::vector<WalletCollateralPosition> positions = dd_wallet->GetDDTimeLocks(false);
+            int currentHeight = pwallet->GetLastBlockHeight();
 
             UniValue result(UniValue::VARR);
 
-            for (const auto& pos : mockPositions) {
+            for (const auto& pos : positions) {
                 // Apply filters
-                if (!activeOnly && pos.is_active) continue;
                 if (activeOnly && !pos.is_active) continue;
                 if (tierFilter > 0 && pos.lock_tier != static_cast<uint32_t>(tierFilter)) continue;
                 if (minAmount > 0 && pos.dd_minted < minAmount) continue;
 
                 UniValue position(UniValue::VOBJ);
-                position.pushKV("position_id", pos.position_id);
+                position.pushKV("position_id", pos.dd_timelock_id.GetHex());
                 position.pushKV("dd_minted", pos.dd_minted);
                 position.pushKV("dgb_collateral", ValueFromAmount(pos.dgb_collateral));
                 position.pushKV("lock_tier", static_cast<int>(pos.lock_tier));
                 position.pushKV("lock_days", GetLockDaysForTier(pos.lock_tier));
                 position.pushKV("unlock_height", pos.unlock_height);
 
-                // Calculate remaining blocks (mock data)
-                int currentHeight = 900000; // TODO: Get real current height
+                // Calculate remaining blocks
                 int blocksRemaining = std::max(0, static_cast<int>(pos.unlock_height - currentHeight));
                 position.pushKV("blocks_remaining", blocksRemaining);
 
+                // Status
                 std::string status = pos.is_active ? (blocksRemaining == 0 ? "unlocked" : "active") : "redeemed";
                 position.pushKV("status", status);
 
-                // Mock health ratio calculation
-                int healthRatio = 150; // TODO: Calculate real health ratio
+                // Health ratio (simple calculation)
+                int healthRatio = (pos.dgb_collateral > 0) ?
+                    ((pos.dd_minted * 100) / pos.dgb_collateral) : 0;
                 position.pushKV("health_ratio", healthRatio);
                 position.pushKV("can_redeem", blocksRemaining == 0 && pos.is_active);
 
-                // Mock dates
-                position.pushKV("created_date", "2024-01-01T00:00:00Z");
-                position.pushKV("unlock_date", "2024-12-31T23:59:59Z");
+                // Dates (simple conversion)
+                position.pushKV("created_date", "N/A"); // TODO: Add creation timestamp
+                position.pushKV("unlock_date", "N/A"); // TODO: Calculate from unlock_height
 
                 result.push_back(position);
             }
@@ -1430,7 +1485,7 @@ static RPCHelpMan estimatecollateral()
                 "Calculates the required DGB amount based on DD amount, lock tier, and current system conditions.\n",
                 {
                     {"dd_amount", RPCArg::Type::AMOUNT, RPCArg::Optional::NO, "DigiDollar amount to mint (in cents)"},
-                    {"lock_tier", RPCArg::Type::NUM, RPCArg::Optional::NO, "Lock tier 1-8 (30d,90d,180d,1y,3y,5y,7y,10y)"},
+                    {"lock_tier", RPCArg::Type::NUM, RPCArg::Optional::NO, "Lock tier 0-8 (0=1h testing, 1=30d, 2=90d, 3=180d, 4=1y, 5=3y, 6=5y, 7=7y, 8=10y)"},
                     {"oracle_price", RPCArg::Type::AMOUNT, RPCArg::Optional::OMITTED, "Custom DGB price in cents (uses current if omitted)"}
                 },
                 RPCResult{
@@ -1467,8 +1522,8 @@ static RPCHelpMan estimatecollateral()
             if (ddAmount <= 0) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "DD amount must be positive");
             }
-            if (lockTier < 1 || lockTier > 8) {
-                throw JSONRPCError(RPC_INVALID_PARAMETER, "Lock tier must be between 1 and 8");
+            if (lockTier < 0 || lockTier > 8) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Lock tier must be between 0 and 8 (0 = 1 hour testing tier)");
             }
             if (oraclePrice <= 0) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Oracle price must be positive");

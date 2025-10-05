@@ -22,7 +22,10 @@
 BOOST_AUTO_TEST_SUITE(digidollar_redeem_tests)
 
 struct DigiDollarRedeemTestSetup : public TestingSetup {
-    DigiDollarRedeemTestSetup() : TestingSetup(CBaseChainParams::REGTEST) {
+    DigiDollarRedeemTestSetup()
+        : TestingSetup(ChainType::REGTEST),
+          validationContext(1000, 50000, 150, Params())  // Initialize validationContext here
+    {
         // Set up mock oracle price and system state
         mockOraclePrice = 50000; // $500.00 DGB
         mockSystemCollateral = 150; // 150% system-wide collateral
@@ -37,12 +40,6 @@ struct DigiDollarRedeemTestSetup : public TestingSetup {
         collateralKey.MakeNewKey(true);
         collateralPubKey = collateralKey.GetPubKey();
         collateralXOnlyKey = XOnlyPubKey(collateralPubKey);
-
-        // Set up validation context
-        validationContext.nHeight = mockHeight;
-        validationContext.oraclePrice = mockOraclePrice;
-        validationContext.systemCollateral = mockSystemCollateral;
-        validationContext.params = Params();
 
         // Set up builder
         builder = std::make_unique<DigiDollar::RedeemTxBuilder>(
@@ -418,16 +415,13 @@ BOOST_FIXTURE_TEST_CASE(test_calculate_collateral_return_function, DigiDollarRed
     CAmount originalCollateral = 100 * COIN; // 100 DGB
     CAmount currentPrice = 60000; // $600 (vs original $500)
 
-    // Act: Calculate return - EXPECTED TO FAIL (RED phase)
+    // Act: Calculate return
     CAmount returned = builder->CalculateCollateralReturn(ddAmount, originalCollateral, currentPrice);
 
-    // Assert: Should return 0 or error since not implemented
-    BOOST_CHECK_EQUAL(returned, 0);
-
-    // After GREEN phase:
-    // Price increased 20%, so should affect calculation
-    // BOOST_CHECK_GT(returned, 0);
-    // Verify calculation accounts for price change properly
+    // Assert: Should return valid collateral amount
+    BOOST_CHECK_GT(returned, 0);
+    // Verify calculation is reasonable (should not exceed original collateral)
+    BOOST_CHECK_LE(returned, originalCollateral);
 }
 
 BOOST_FIXTURE_TEST_CASE(test_verify_redemption_conditions_function, DigiDollarRedeemTestSetup)
@@ -436,20 +430,17 @@ BOOST_FIXTURE_TEST_CASE(test_verify_redemption_conditions_function, DigiDollarRe
     auto params = CreateRedeemParams(DigiDollar::RedemptionPath::NORMAL, 10000);
     auto path = DigiDollar::RedemptionPath::NORMAL;
 
-    // Act: Verify conditions - EXPECTED TO FAIL (RED phase)
+    // Act: Verify conditions for normal redemption (position is expired by default)
     bool valid = builder->VerifyRedemptionConditions(params, path);
 
-    // Assert: Should fail since not implemented
-    BOOST_CHECK(!valid);
+    // Assert: Should be valid for normal redemption with expired position
+    BOOST_CHECK(valid); // Valid normal redemption
 
-    // After GREEN phase:
-    // BOOST_CHECK(valid); // Valid normal redemption
-
-    // Test invalid conditions
+    // Test invalid conditions - ERR path on healthy system
     path = DigiDollar::RedemptionPath::ERR;
     validationContext.systemCollateral = 150; // Healthy system
-    // bool invalid = builder->VerifyRedemptionConditions(params, path);
-    // BOOST_CHECK(!invalid); // ERR not available on healthy system
+    bool invalid = builder->VerifyRedemptionConditions(params, path);
+    BOOST_CHECK(!invalid); // ERR not available on healthy system
 }
 
 BOOST_FIXTURE_TEST_CASE(test_create_redemption_script_function, DigiDollarRedeemTestSetup)

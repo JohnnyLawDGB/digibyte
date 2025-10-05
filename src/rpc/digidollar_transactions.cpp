@@ -157,29 +157,147 @@ UniValue redeemdigidollar(const JSONRPCRequest& request)
 {
     if (request.fHelp || request.params.size() < 1 || request.params.size() > 2) {
         throw std::runtime_error(
-            "redeemdigidollar amount [redeem_type]\n"
-            "\nRedeem DigiDollar tokens.\n"
+            "redeemdigidollar \"collateral_outpoint\" [amount]\n"
+            "\nRedeem DigiDollar tokens and unlock collateral.\n"
             "\nArguments:\n"
-            "1. amount                       (numeric, required) DD amount to redeem\n"
-            "2. redeem_type                  (string, optional) normal|partial|emergency\n"
+            "1. collateral_outpoint          (string, required) Collateral UTXO to redeem (format: \"txid:vout\")\n"
+            "2. amount                       (numeric, optional) DD amount to redeem (default: full position)\n"
             "\nResult:\n"
-            "\"txid\"                        (string) Transaction ID\n"
+            "{\n"
+            "  \"txid\": \"...\",            (string) Transaction ID\n"
+            "  \"dgb_unlocked\": n,          (numeric) DGB collateral unlocked\n"
+            "  \"dd_burned\": n,             (numeric) DD tokens burned\n"
+            "  \"success\": true|false       (boolean) Redemption success\n"
+            "}\n"
         );
     }
 
-    double amount = request.params[1].get_real();
-    std::string redeem_type = request.params.size() > 1 ? request.params[1].get_str() : "normal";
-
-    // GREEN phase: Basic validation
-    if (amount <= 0) {
-        throw JSONRPCError(RPC_INVALID_PARAMETER, "Amount must be positive");
-    }
-    if (redeem_type != "normal" && redeem_type != "partial" && redeem_type != "emergency") {
-        throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid redeem type");
+    // Parse collateral outpoint
+    std::string outpointStr = request.params[0].get_str();
+    size_t colonPos = outpointStr.find(':');
+    if (colonPos == std::string::npos) {
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid outpoint format (expected txid:vout)");
     }
 
-    // GREEN phase: Return mock transaction ID
-    return UniValue("abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890");
+    std::string txidStr = outpointStr.substr(0, colonPos);
+    std::string voutStr = outpointStr.substr(colonPos + 1);
+
+    uint256 txid;
+    if (!ParseHashStr(txidStr, txid)) {
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid txid in outpoint");
+    }
+
+    int vout = std::stoi(voutStr);
+    if (vout < 0) {
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid vout in outpoint");
+    }
+
+    COutPoint collateralOutpoint(txid, vout);
+
+    // Get wallet - for now return mock response
+    // TODO: Implement actual redemption logic when wallet integration is ready
+
+    UniValue result(UniValue::VOBJ);
+    result.pushKV("txid", "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890");
+    result.pushKV("dgb_unlocked", 300000.00);
+    result.pushKV("dd_burned", 1000.00);
+    result.pushKV("success", true);
+
+    return result;
+}
+
+UniValue getredemptioninfo(const JSONRPCRequest& request)
+{
+    if (request.fHelp || request.params.size() != 1) {
+        throw std::runtime_error(
+            "getredemptioninfo \"collateral_outpoint\"\n"
+            "\nGet redemption information for a collateral position.\n"
+            "\nArguments:\n"
+            "1. collateral_outpoint          (string, required) Collateral UTXO (format: \"txid:vout\")\n"
+            "\nResult:\n"
+            "{\n"
+            "  \"can_redeem\": true|false,   (boolean) Whether position can be redeemed\n"
+            "  \"timelock_remaining\": n,    (numeric) Blocks until timelock expires\n"
+            "  \"dd_minted\": n,             (numeric) DD amount minted\n"
+            "  \"dgb_locked\": n,            (numeric) DGB collateral locked\n"
+            "  \"dgb_returned\": n,          (numeric) DGB that would be returned\n"
+            "  \"unlock_height\": n,         (numeric) Block height when unlockable\n"
+            "  \"current_height\": n,        (numeric) Current block height\n"
+            "  \"available_paths\": [...],   (array) Available redemption paths\n"
+            "  \"err_active\": true|false    (boolean) Whether ERR is active\n"
+            "}\n"
+        );
+    }
+
+    // Parse outpoint
+    std::string outpointStr = request.params[0].get_str();
+    size_t colonPos = outpointStr.find(':');
+    if (colonPos == std::string::npos) {
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid outpoint format (expected txid:vout)");
+    }
+
+    // TODO: Implement actual lookup when wallet integration is ready
+    // For now, return mock data
+
+    UniValue result(UniValue::VOBJ);
+    result.pushKV("can_redeem", true);
+    result.pushKV("timelock_remaining", 0);
+    result.pushKV("dd_minted", 1000.00);
+    result.pushKV("dgb_locked", 300000.00);
+    result.pushKV("dgb_returned", 300000.00);
+    result.pushKV("unlock_height", 172800);
+    result.pushKV("current_height", 180000);
+
+    UniValue paths(UniValue::VARR);
+    paths.push_back("NORMAL");
+    result.pushKV("available_paths", paths);
+
+    result.pushKV("err_active", false);
+
+    return result;
+}
+
+UniValue listredeemablepositions(const JSONRPCRequest& request)
+{
+    if (request.fHelp || request.params.size() > 1) {
+        throw std::runtime_error(
+            "listredeemablepositions [min_height]\n"
+            "\nList all collateral positions that can be redeemed.\n"
+            "\nArguments:\n"
+            "1. min_height                   (numeric, optional) Minimum block height filter\n"
+            "\nResult:\n"
+            "[\n"
+            "  {\n"
+            "    \"outpoint\": \"txid:vout\", (string) Collateral UTXO\n"
+            "    \"dd_minted\": n,           (numeric) DD amount minted\n"
+            "    \"dgb_locked\": n,          (numeric) DGB collateral locked\n"
+            "    \"unlock_height\": n,       (numeric) Unlock block height\n"
+            "    \"status\": \"...\",        (string) Position status\n"
+            "    \"available_paths\": [...]  (array) Available redemption paths\n"
+            "  }\n"
+            "]\n"
+        );
+    }
+
+    // TODO: Implement actual position lookup when wallet integration is ready
+    // For now, return mock data
+
+    UniValue result(UniValue::VARR);
+
+    UniValue position(UniValue::VOBJ);
+    position.pushKV("outpoint", "abc:0");
+    position.pushKV("dd_minted", 1000.00);
+    position.pushKV("dgb_locked", 300000.00);
+    position.pushKV("unlock_height", 172800);
+    position.pushKV("status", "redeemable");
+
+    UniValue paths(UniValue::VARR);
+    paths.push_back("NORMAL");
+    position.pushKV("available_paths", paths);
+
+    result.push_back(position);
+
+    return result;
 }
 
 UniValue setmockoracleprice(const JSONRPCRequest& request)
@@ -231,7 +349,9 @@ const CRPCCommand digidollar_transaction_commands[] = {
     {"digidollar", "getdigidollarbalance",     &getdigidollarbalance,     {}},
     {"digidollar", "mintdigidollar",           &mintdigidollar,           {"amount", "lockdays", "collateral_address"}},
     {"digidollar", "transferdigidollar",       &transferdigidollar,       {"address", "amount"}},
-    {"digidollar", "redeemdigidollar",         &redeemdigidollar,         {"amount", "redeem_type"}},
+    {"digidollar", "redeemdigidollar",         &redeemdigidollar,         {"collateral_outpoint", "amount"}},
+    {"digidollar", "getredemptioninfo",        &getredemptioninfo,        {"collateral_outpoint"}},
+    {"digidollar", "listredeemablepositions",  &listredeemablepositions,  {"min_height"}},
     {"digidollar", "setmockoracleprice",       &setmockoracleprice,       {"price"}},
     {"digidollar", "createrawddtransaction",   &createrawddtransaction,   {"inputs", "outputs"}},
 };

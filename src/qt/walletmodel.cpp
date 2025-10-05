@@ -28,6 +28,7 @@
 #include <util/strencodings.h> // for strprintf
 #include <wallet/coincontrol.h>
 #include <wallet/wallet.h> // for CRecipient
+#include <univalue.h>
 #include <wallet/digidollarwallet.h> // for DigiDollarWallet
 #include <base58.h> // for CDigiDollarAddress
 #include <uint256.h>
@@ -716,9 +717,9 @@ WalletModel::DigiDollarMintResult WalletModel::mintDigiDollar(CAmount ddAmount, 
     LogPrintf("DigiDollar Qt: mintDigiDollar called - Amount: %d cents, Tier: %d\n", ddAmount, lockTier);
 
     // Validate lock tier
-    if (lockTier < 1 || lockTier > 8) {
+    if (lockTier < 0 || lockTier > 8) {
         LogPrintf("DigiDollar Qt: ERROR - Invalid lock tier: %d\n", lockTier);
-        return DigiDollarMintResult(InvalidAmount, "", "", "Invalid lock tier. Must be between 1 and 8.");
+        return DigiDollarMintResult(InvalidAmount, "", "", "Invalid lock tier. Must be between 0 and 8 (0 = 1 hour testing).");
     }
     LogPrintf("DigiDollar Qt: Lock tier validation passed\n");
 
@@ -756,8 +757,8 @@ WalletModel::DigiDollarMintResult WalletModel::mintDigiDollar(CAmount ddAmount, 
 
     try {
         // Step 1: Convert lock tier to lock days for TxBuilder
-        const int lockDaysForTier[8] = {30, 90, 180, 365, 1095, 1825, 2555, 3650};
-        int lockDays = lockDaysForTier[lockTier - 1];
+        const int lockDaysForTier[9] = {0, 30, 90, 180, 365, 1095, 1825, 2555, 3650};
+        int lockDays = lockDaysForTier[lockTier];
         LogPrintf("DigiDollar Qt: Step 1 - Lock days for tier %d: %d days\n", lockTier, lockDays);
 
         // Step 2: Get current blockchain height from client model
@@ -1022,54 +1023,34 @@ WalletModel::DigiDollarRedeemResult WalletModel::redeemDigiDollar(const QString&
             return DigiDollarRedeemResult(InvalidAmount, "", "Invalid position ID hex format");
         }
 
-        // Integration with wallet backend for redemption
-        // This would interface with DigiDollarWallet and RedeemTxBuilder
+        // Call redeemdigidollar RPC
+        LogPrintf("DigiDollar Qt: Calling redeemdigidollar RPC - Position: %s, Amount: %d cents\n",
+                  positionId.toStdString(), amount);
 
-        // Step 1: Check if position exists and can be redeemed
-        // In production: query wallet positions via interfaces::Wallet
-        // auto positions = wallet().getDigiDollarPositions();
-        // bool positionFound = false;
-        // for (const auto& pos : positions) {
-        //     if (pos.dd_timelock_id == positionIdHash) {
-        //         positionFound = true;
-        //         break;
-        //     }
-        // }
-        // if (!positionFound) {
-        //     return DigiDollarRedeemResult(InvalidAmount, "", "Position not found");
-        // }
+        UniValue params(UniValue::VARR);
+        params.push_back(positionId.toStdString());
+        params.push_back(amount);
+        if (!redeemAddress.isEmpty()) {
+            params.push_back(redeemAddress.toStdString());
+        }
 
-        // Step 2: Determine appropriate redemption path
-        // RedemptionPath path = determineRedemptionPath(position, currentHeight, systemHealth);
-        // - NORMAL: If timelock expired
-        // - EMERGENCY: If oracle 8-of-15 approval available
-        // - PARTIAL: For partial redemption
-        // - ERR: If system < 100% collateralized
+        UniValue result;
+        try {
+            result = m_node.executeRpc("redeemdigidollar", params, "");
+        } catch (const UniValue& objError) {
+            std::string errorMsg = objError.find_value("message").get_str();
+            LogPrintf("DigiDollar Qt: Redeem RPC failed - %s\n", errorMsg);
+            return DigiDollarRedeemResult(TransactionCreationFailed, "", QString::fromStdString(errorMsg));
+        } catch (const std::exception& e) {
+            LogPrintf("DigiDollar Qt: Redeem RPC exception - %s\n", e.what());
+            return DigiDollarRedeemResult(TransactionCreationFailed, "", QString::fromStdString(e.what()));
+        }
 
-        // Step 3: Build redemption transaction using RedeemTxBuilder
-        // CTransactionRef tx_out;
-        // std::string error;
-        // if (!wallet().redeemDigiDollar(positionIdHash, amount, tx_out, error)) {
-        //     return DigiDollarRedeemResult(TransactionCreationFailed, "", QString::fromStdString(error));
-        // }
+        // Extract transaction ID from result
+        std::string txid = result.find_value("txid").get_str();
+        LogPrintf("DigiDollar Qt: Redemption successful - TxID: %s\n", txid);
 
-        // Step 4: Sign and broadcast transaction
-        // if (!wallet().broadcastTransaction(tx_out)) {
-        //     return DigiDollarRedeemResult(TransactionCreationFailed, "", "Failed to broadcast transaction");
-        // }
-
-        // Step 5: Update wallet state
-        // wallet().updatePositionStatus(positionIdHash, false); // Mark as redeemed
-
-        // Mock implementation for RegTest testing
-        // Generate a mock transaction ID
-        uint256 mockTxId;
-        mockTxId.SetHex("fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321");
-
-        // In production, would return:
-        // return DigiDollarRedeemResult(OK, QString::fromStdString(tx_out->GetHash().ToString()), "");
-
-        return DigiDollarRedeemResult(OK, QString::fromStdString(mockTxId.GetHex()), "");
+        return DigiDollarRedeemResult(OK, QString::fromStdString(txid), "");
 
     } catch (const std::exception& e) {
         return DigiDollarRedeemResult(TransactionCreationFailed, "", QString::fromStdString(e.what()));
@@ -1148,24 +1129,25 @@ bool WalletModel::validateDigiDollarAddress(const QString& address) const
 
 CAmount WalletModel::calculateRequiredCollateral(CAmount ddAmount, int lockTier) const
 {
-    // Collateral ratios from consensus (8-tier lock period system)
+    // Collateral ratios from consensus (9-tier lock period system with 1-hour testing tier)
     // Higher ratios for shorter locks (treasury model)
-    const double tierRatios[8] = {
-        500.0, // Tier 1 (30 days) - 500%
-        400.0, // Tier 2 (3 months) - 400%
-        350.0, // Tier 3 (6 months) - 350%
-        300.0, // Tier 4 (1 year) - 300%
-        250.0, // Tier 5 (3 years) - 250%
-        225.0, // Tier 6 (5 years) - 225%
-        212.0, // Tier 7 (7 years) - 212%
-        200.0  // Tier 8 (10 years) - 200%
+    const double tierRatios[9] = {
+        1000.0, // Tier 0 (1 hour) - 1000% (TESTING ONLY)
+        500.0,  // Tier 1 (30 days) - 500%
+        400.0,  // Tier 2 (3 months) - 400%
+        350.0,  // Tier 3 (6 months) - 350%
+        300.0,  // Tier 4 (1 year) - 300%
+        250.0,  // Tier 5 (3 years) - 250%
+        225.0,  // Tier 6 (5 years) - 225%
+        212.0,  // Tier 7 (7 years) - 212%
+        200.0   // Tier 8 (10 years) - 200%
     };
 
-    if (lockTier < 1 || lockTier > 8) {
+    if (lockTier < 0 || lockTier > 8) {
         return 0;
     }
 
-    double collateralRatio = tierRatios[lockTier - 1];
+    double collateralRatio = tierRatios[lockTier];
 
     // Get oracle price (mock for RegTest)
     // Default: 1 DGB = $0.01 USD
@@ -1180,6 +1162,11 @@ CAmount WalletModel::calculateRequiredCollateral(CAmount ddAmount, int lockTier)
     CAmount requiredDGB_satoshis = static_cast<CAmount>(requiredDGB_decimal * 100000000);
 
     return requiredDGB_satoshis;
+}
+
+UniValue WalletModel::executeRpc(const std::string& command, const UniValue& params) const
+{
+    return m_node.executeRpc(command, params, "");
 }
 
 QString WalletModel::getNewDigiDollarAddress(const QString& label)

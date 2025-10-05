@@ -3386,4 +3386,186 @@ BOOST_FIXTURE_TEST_CASE(test_ignore_non_wallet_dd_outputs, DDWalletTestFixture)
     // BOOST_CHECK_EQUAL(wallet.GetPositionCount(), 0);  // No positions added
 }
 
+// =============================================================================
+// PHASE 2: STATE MANAGEMENT TESTS - DD BURNING & POSITION CLOSURE (Task 6)
+// =============================================================================
+
+BOOST_AUTO_TEST_CASE(test_burn_digidollars_basic) {
+    // Arrange: Setup wallet with DD UTXOs
+    DigiDollarWallet wallet;
+
+    // Create mock DD UTXOs
+    CAmount dd_amount1 = 10000; // $100.00
+    CAmount dd_amount2 = 5000;  // $50.00
+
+    COutPoint utxo1(InsecureRand256(), 1);
+    COutPoint utxo2(InsecureRand256(), 1);
+
+    wallet.AddDDUTXO(utxo1, dd_amount1);
+    wallet.AddDDUTXO(utxo2, dd_amount2);
+
+    // Create a mock position for the first UTXO
+    WalletCollateralPosition pos1;
+    pos1.dd_timelock_id = utxo1.hash;
+    pos1.dd_minted = dd_amount1;
+    pos1.dgb_collateral = 1000000; // 0.01 DGB
+    pos1.lock_tier = 1;
+    pos1.unlock_height = 1000;
+    pos1.is_active = true;
+    wallet.AddCollateralPosition(pos1);
+
+    WalletCollateralPosition pos2;
+    pos2.dd_timelock_id = utxo2.hash;
+    pos2.dd_minted = dd_amount2;
+    pos2.dgb_collateral = 500000; // 0.005 DGB
+    pos2.lock_tier = 1;
+    pos2.unlock_height = 1000;
+    pos2.is_active = true;
+    wallet.AddCollateralPosition(pos2);
+
+    // Verify initial balance
+    CAmount initial_balance = wallet.GetTotalDDBalance();
+    BOOST_CHECK_EQUAL(initial_balance, dd_amount1 + dd_amount2);
+
+    // Act: Burn 10000 cents ($100.00)
+    std::vector<COutPoint> burned_utxos;
+    bool result = wallet.BurnDigiDollars(10000, burned_utxos);
+
+    // Assert: Burning successful
+    BOOST_CHECK(result);
+    BOOST_CHECK_EQUAL(burned_utxos.size(), 1); // Should use first UTXO
+    BOOST_CHECK(burned_utxos[0] == utxo1); // Check utxo match
+
+    // Verify balance decreased (note: no wallet pointer, so dd_utxos map is source of truth)
+    // Balance should be 5000 cents remaining
+    BOOST_CHECK_EQUAL(wallet.GetTotalDDBalance(), 5000);
+}
+
+BOOST_AUTO_TEST_CASE(test_burn_digidollars_insufficient_balance) {
+    // Arrange: Setup wallet with limited DD
+    DigiDollarWallet wallet;
+
+    COutPoint utxo1(InsecureRand256(), 1);
+    wallet.AddDDUTXO(utxo1, 1000); // Only $10.00
+
+    WalletCollateralPosition pos;
+    pos.dd_timelock_id = utxo1.hash;
+    pos.dd_minted = 1000;
+    pos.dgb_collateral = 100000;
+    pos.lock_tier = 1;
+    pos.unlock_height = 1000;
+    pos.is_active = true;
+    wallet.AddCollateralPosition(pos);
+
+    // Act: Try to burn 5000 cents ($50.00) - more than available
+    std::vector<COutPoint> burned_utxos;
+    bool result = wallet.BurnDigiDollars(5000, burned_utxos);
+
+    // Assert: Should fail
+    BOOST_CHECK(!result);
+    BOOST_CHECK_EQUAL(burned_utxos.size(), 0);
+
+    // Balance unchanged
+    BOOST_CHECK_EQUAL(wallet.GetTotalDDBalance(), 1000);
+}
+
+BOOST_AUTO_TEST_CASE(test_close_collateral_position_full) {
+    // Arrange: Setup wallet with position
+    DigiDollarWallet wallet;
+
+    uint256 position_id = InsecureRand256();
+    COutPoint position_outpoint(position_id, 0);
+
+    WalletCollateralPosition pos;
+    pos.dd_timelock_id = position_id;
+    pos.dd_minted = 10000; // $100.00
+    pos.dgb_collateral = 2000000; // 0.02 DGB
+    pos.lock_tier = 1;
+    pos.unlock_height = 1000;
+    pos.is_active = true;
+    wallet.AddCollateralPosition(pos);
+
+    // Act: Close position completely
+    bool result = wallet.CloseCollateralPosition(position_outpoint, false, 0);
+
+    // Assert: Position closed successfully
+    BOOST_CHECK(result);
+
+    // Verify position is inactive
+    auto positions = wallet.GetDDTimeLocks(false); // Get all positions including inactive
+    BOOST_CHECK_EQUAL(positions.size(), 1);
+    BOOST_CHECK_EQUAL(positions[0].is_active, false);
+}
+
+BOOST_AUTO_TEST_CASE(test_close_collateral_position_partial) {
+    // Arrange: Setup wallet with position
+    DigiDollarWallet wallet;
+
+    uint256 position_id = InsecureRand256();
+    COutPoint position_outpoint(position_id, 0);
+
+    WalletCollateralPosition pos;
+    pos.dd_timelock_id = position_id;
+    pos.dd_minted = 10000; // $100.00
+    pos.dgb_collateral = 2000000; // 0.02 DGB
+    pos.lock_tier = 1;
+    pos.unlock_height = 1000;
+    pos.is_active = true;
+    wallet.AddCollateralPosition(pos);
+
+    // Act: Partial redemption - redeem 6000 cents, leaving 4000 cents
+    bool result = wallet.CloseCollateralPosition(position_outpoint, true, 4000);
+
+    // Assert: Position updated successfully
+    BOOST_CHECK(result);
+
+    // Verify position is still active with updated amounts
+    auto positions = wallet.GetDDTimeLocks(true); // Get active positions only
+    BOOST_CHECK_EQUAL(positions.size(), 1);
+    BOOST_CHECK_EQUAL(positions[0].is_active, true);
+    BOOST_CHECK_EQUAL(positions[0].dd_minted, 4000); // Remaining DD
+
+    // Verify proportional collateral release: (6000/10000) * 2000000 = 1200000 released
+    // Remaining: 2000000 - 1200000 = 800000
+    BOOST_CHECK_EQUAL(positions[0].dgb_collateral, 800000);
+}
+
+BOOST_AUTO_TEST_CASE(test_burn_and_close_integration) {
+    // Arrange: Setup wallet with DD and position
+    DigiDollarWallet wallet;
+
+    uint256 position_id = InsecureRand256();
+    COutPoint utxo(position_id, 1);
+    COutPoint position_outpoint(position_id, 0);
+
+    CAmount dd_amount = 10000; // $100.00
+    wallet.AddDDUTXO(utxo, dd_amount);
+
+    WalletCollateralPosition pos;
+    pos.dd_timelock_id = position_id;
+    pos.dd_minted = dd_amount;
+    pos.dgb_collateral = 2000000; // 0.02 DGB
+    pos.lock_tier = 1;
+    pos.unlock_height = 1000;
+    pos.is_active = true;
+    wallet.AddCollateralPosition(pos);
+
+    // Act: Simulate full redemption workflow
+    // 1. Burn DD
+    std::vector<COutPoint> burned_utxos;
+    bool burn_result = wallet.BurnDigiDollars(dd_amount, burned_utxos);
+    BOOST_CHECK(burn_result);
+
+    // 2. Close position
+    bool close_result = wallet.CloseCollateralPosition(position_outpoint, false, 0);
+    BOOST_CHECK(close_result);
+
+    // Assert: DD balance is zero
+    BOOST_CHECK_EQUAL(wallet.GetTotalDDBalance(), 0);
+
+    // Position is inactive
+    auto positions = wallet.GetDDTimeLocks(true);
+    BOOST_CHECK_EQUAL(positions.size(), 0); // No active positions
+}
+
 BOOST_AUTO_TEST_SUITE_END()

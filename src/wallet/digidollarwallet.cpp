@@ -858,6 +858,227 @@ CAmount DigiDollarWallet::GetDGBBalance() const {
 }
 
 // =============================================================================
+// PHASE 2: STATE MANAGEMENT - DD BURNING & POSITION CLOSURE (Task 6)
+// =============================================================================
+
+bool DigiDollarWallet::BurnDigiDollars(CAmount amount, std::vector<COutPoint>& burnedUtxos) {
+    LogPrintf("DigiDollar: BurnDigiDollars - Burning %d DD cents\n", amount);
+
+    // Validate input
+    if (amount <= 0) {
+        LogPrintf("DigiDollar: BurnDigiDollars - Invalid amount: %d\n", amount);
+        return false;
+    }
+
+    // Clear output parameter
+    burnedUtxos.clear();
+
+    // Step 1: Get all spendable DD UTXOs
+    std::vector<DDUtxo> available_utxos = GetDDUTXOs();
+    if (available_utxos.empty()) {
+        LogPrintf("DigiDollar: BurnDigiDollars - No DD UTXOs available\n");
+        return false;
+    }
+
+    // Step 2: Select UTXOs to burn (simple greedy selection)
+    CAmount selected_amount = 0;
+    std::vector<COutPoint> selected_utxos;
+
+    for (const auto& utxo : available_utxos) {
+        // Add this UTXO
+        selected_utxos.push_back(utxo.outpoint);
+        selected_amount += utxo.dd_amount;
+        LogPrintf("DigiDollar: BurnDigiDollars - Selected UTXO %s:%d (%d DD), total now: %d\n",
+                  utxo.outpoint.hash.ToString(), utxo.outpoint.n, utxo.dd_amount, selected_amount);
+
+        // Check if we now have enough
+        if (selected_amount >= amount) {
+            LogPrintf("DigiDollar: BurnDigiDollars - Have enough DD (%d >= %d), stopping selection\n",
+                      selected_amount, amount);
+            break;
+        }
+    }
+
+    // Check if we have enough DD
+    if (selected_amount < amount) {
+        LogPrintf("DigiDollar: BurnDigiDollars - Insufficient DD balance: need %d, have %d\n",
+                  amount, selected_amount);
+        return false;
+    }
+
+    // Step 3: Mark UTXOs as spent in collateral_positions (if they exist there)
+    // Note: MarkDDUTXOsSpent only works for UTXOs that have collateral positions
+    // For UTXOs without positions (e.g., received DD), we just remove from dd_utxos map
+    bool has_positions = false;
+    for (const auto& utxo : selected_utxos) {
+        auto it = collateral_positions.find(utxo.hash);
+        if (it != collateral_positions.end()) {
+            has_positions = true;
+            break;
+        }
+    }
+
+    if (has_positions) {
+        if (!MarkDDUTXOsSpent(selected_utxos)) {
+            LogPrintf("DigiDollar: BurnDigiDollars - Failed to mark UTXOs as spent in positions\n");
+            return false;
+        }
+    }
+
+    // Step 4: Remove from dd_utxos tracking map
+    for (const auto& utxo : selected_utxos) {
+        RemoveDDUTXO(utxo);
+        LogPrintf("DigiDollar: BurnDigiDollars - Removed UTXO from tracking: %s:%d\n",
+                  utxo.hash.ToString(), utxo.n);
+    }
+
+    // Step 5: Erase from database
+    if (m_wallet) {
+        wallet::WalletBatch batch(m_wallet->GetDatabase());
+        for (const auto& utxo : selected_utxos) {
+            if (!batch.EraseDDUTXO(utxo)) {
+                LogPrintf("DigiDollar: BurnDigiDollars - Warning: Failed to erase UTXO from DB: %s:%d\n",
+                          utxo.hash.ToString(), utxo.n);
+                // Continue burning other UTXOs even if one fails
+            }
+        }
+    }
+
+    // Step 6: Update total DD balance (recalculate from remaining UTXOs)
+    CAmount new_balance = 0;
+    for (const auto& [outpoint, dd_amt] : dd_utxos) {
+        new_balance += dd_amt;
+    }
+    total_dd_balance = new_balance;
+
+    // Step 7: Return burned UTXOs
+    burnedUtxos = selected_utxos;
+
+    LogPrintf("DigiDollar: BurnDigiDollars - Successfully burned %d DD cents using %d UTXOs\n",
+              amount, burnedUtxos.size());
+    LogPrintf("DigiDollar: BurnDigiDollars - New total DD balance: %d cents\n", total_dd_balance);
+
+    return true;
+}
+
+bool DigiDollarWallet::CloseCollateralPosition(const COutPoint& outpoint, bool partial, CAmount remainingDD) {
+    LogPrintf("DigiDollar: CloseCollateralPosition - %s closure of position %s:%d\n",
+              partial ? "Partial" : "Full", outpoint.hash.ToString(), outpoint.n);
+
+    // Validate input
+    if (outpoint.IsNull()) {
+        LogPrintf("DigiDollar: CloseCollateralPosition - Invalid outpoint (null)\n");
+        return false;
+    }
+
+    // For partial redemptions, validate remaining DD
+    if (partial && remainingDD <= 0) {
+        LogPrintf("DigiDollar: CloseCollateralPosition - Invalid remaining DD for partial redemption: %d\n",
+                  remainingDD);
+        return false;
+    }
+
+    // Step 1: Find collateral position
+    // The outpoint.hash is the dd_timelock_id (mint tx hash)
+    auto it = collateral_positions.find(outpoint.hash);
+    if (it == collateral_positions.end()) {
+        LogPrintf("DigiDollar: CloseCollateralPosition - Position not found: %s\n",
+                  outpoint.hash.ToString());
+        return false;
+    }
+
+    // Store original values for logging and potential rollback
+    CAmount original_dd = it->second.dd_minted;
+    CAmount original_dgb = it->second.dgb_collateral;
+    bool originally_active = it->second.is_active;
+
+    // Step 2: Handle full vs partial redemption
+    if (partial) {
+        // Partial redemption: update position
+        CAmount redeemed_dd = it->second.dd_minted - remainingDD;
+
+        // Calculate proportional DGB release
+        // released_dgb = (redeemed_dd / original_dd) * original_dgb
+        CAmount released_dgb = 0;
+        if (original_dd > 0) {
+            released_dgb = (redeemed_dd * original_dgb) / original_dd;
+        }
+
+        // Update position
+        it->second.dd_minted = remainingDD;
+        it->second.dgb_collateral -= released_dgb;
+        it->second.is_active = true; // Keep active for partial redemption
+
+        LogPrintf("DigiDollar: CloseCollateralPosition - Partial redemption: %d DD redeemed, %d DD remaining\n",
+                  redeemed_dd, remainingDD);
+        LogPrintf("DigiDollar: CloseCollateralPosition - Partial redemption: %d DGB released, %d DGB remaining\n",
+                  released_dgb, it->second.dgb_collateral);
+    } else {
+        // Full redemption: mark position as inactive
+        it->second.is_active = false;
+
+        LogPrintf("DigiDollar: CloseCollateralPosition - Full redemption: position marked inactive\n");
+        LogPrintf("DigiDollar: CloseCollateralPosition - Full redemption: %d DD redeemed, %d DGB released\n",
+                  original_dd, original_dgb);
+    }
+
+    // Step 3: Persist changes to wallet database
+    if (m_wallet) {
+        wallet::WalletBatch batch(m_wallet->GetDatabase());
+
+        if (!batch.WriteDDTimeLock(it->second)) {
+            LogPrintf("DigiDollar: CloseCollateralPosition - Failed to persist position update\n");
+            // Rollback in-memory changes
+            it->second.dd_minted = original_dd;
+            it->second.dgb_collateral = original_dgb;
+            it->second.is_active = originally_active;
+            return false;
+        }
+
+        // For full redemptions, also archive the position to history
+        // (Keep in database but marked inactive for accounting/auditing)
+        // This is already handled by is_active = false flag
+    }
+
+    // Step 4: Update locked collateral tracking
+    if (it->second.is_active != originally_active || partial) {
+        CAmount total_locked = 0;
+        for (const auto& [id, pos] : collateral_positions) {
+            if (pos.is_active) {
+                total_locked += pos.dgb_collateral;
+            }
+        }
+        locked_collateral = total_locked;
+
+        LogPrintf("DigiDollar: CloseCollateralPosition - Updated total locked collateral: %d DGB\n",
+                  locked_collateral);
+    }
+
+    // Step 5: Record closure in transaction history
+    DDTransaction ddtx;
+    ddtx.txid = outpoint.hash.ToString();
+    ddtx.amount = partial ? (original_dd - remainingDD) : original_dd;
+    ddtx.timestamp = GetTime();
+    ddtx.confirmations = 0;
+    ddtx.incoming = false; // Redemption (DD going out, DGB coming in)
+    ddtx.address = "";
+    ddtx.category = partial ? "partial_redeem" : "redeem";
+
+    if (m_wallet) {
+        wallet::WalletBatch batch(m_wallet->GetDatabase());
+        if (!batch.WriteDDTransaction(ddtx)) {
+            LogPrintf("DigiDollar: CloseCollateralPosition - Warning: Failed to write transaction to history\n");
+            // Don't fail the entire operation for history write failure
+        }
+    }
+
+    LogPrintf("DigiDollar: CloseCollateralPosition - Successfully %s position %s\n",
+              partial ? "updated" : "closed", outpoint.hash.ToString());
+
+    return true;
+}
+
+// =============================================================================
 // PHASE 5 TASK 5.1: DATABASE EXTENSION IMPLEMENTATIONS
 // =============================================================================
 

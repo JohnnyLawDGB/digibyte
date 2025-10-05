@@ -59,6 +59,8 @@ public Q_SLOTS:
 private Q_SLOTS:
     /** Handle tab change to update the active widget */
     void onTabChanged(int index);
+    /** Handle redeem request from Vault tab */
+    void onRedeemRequested(const QString &positionId);
 
 private:
     void setupUI();

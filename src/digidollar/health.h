@@ -13,6 +13,19 @@
 #include <vector>
 #include <string>
 #include <map>
+#include <memory>
+
+// Forward declarations
+class CCoinsView;
+class CTxMemPool;
+
+namespace node {
+    class BlockManager;
+}
+
+namespace wallet {
+    class CWallet;
+}
 
 namespace DigiDollar {
 
@@ -135,6 +148,27 @@ public:
      */
     static void Shutdown();
 
+    /**
+     * Aggregate DigiDollar statistics from all loaded wallets
+     * Provides network-wide view by summing across all wallet positions
+     * @param wallets Vector of loaded wallets to aggregate
+     * @param totalDDSupply [out] Total DD supply across all wallets
+     * @param totalCollateral [out] Total DGB collateral across all wallets
+     */
+    static void AggregateWalletStats(
+        const std::vector<std::shared_ptr<wallet::CWallet>>& wallets,
+        CAmount& totalDDSupply,
+        CAmount& totalCollateral);
+
+    /**
+     * Scan UTXO set to find all DigiDollar vaults network-wide
+     * This is the CRITICAL function for network-wide tracking
+     * @param view CCoinsView to scan (usually from chainstate)
+     * @param blockman BlockManager for accessing full transaction data
+     * @param mempool Optional mempool for checking recent transactions
+     */
+    static void ScanUTXOSet(CCoinsView* view, const node::BlockManager* blockman, const CTxMemPool* mempool = nullptr);
+
 private:
     // Internal data structures
     static SystemMetrics s_currentMetrics;
@@ -142,7 +176,6 @@ private:
     static bool s_initialized;
 
     // Internal helper methods
-    static void ScanUTXOSet();
     static void UpdateTierMetrics();
     static void UpdateProtectionStatus();
     static void UpdateOracleStatus();

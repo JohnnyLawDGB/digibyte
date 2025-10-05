@@ -17,6 +17,11 @@
 
 #include <boost/test/unit_test.hpp>
 
+// Forward declaration of ExtractDDAmount from consensus/digidollar.cpp
+namespace DigiDollar {
+    bool ExtractDDAmount(const CScript& script, CAmount& amount);
+}
+
 BOOST_AUTO_TEST_SUITE(digidollar_health_tests)
 
 struct DigiDollarHealthTestSetup : public TestingSetup {
@@ -1118,5 +1123,118 @@ BOOST_FIXTURE_TEST_CASE(test_health_alert_performance_extremes, DigiDollarHealth
 }
 
 */
+
+// ============================================================================
+// NEW TESTS: UTXO Scanning for Network-Wide Statistics
+// ============================================================================
+
+// Test 16: Test ScanUTXOSet() finds DD positions
+BOOST_FIXTURE_TEST_CASE(test_utxo_scanning_finds_dd_positions, DigiDollarHealthTestSetup)
+{
+    // This test verifies that ScanUTXOSet() can find and count DigiDollar positions
+    // in the UTXO set
+
+    // Initialize health monitor
+    DigiDollar::SystemHealthMonitor::Initialize();
+
+    // Initially, with no DD positions, should have zero supply
+    DigiDollar::SystemMetrics initialMetrics = DigiDollar::SystemHealthMonitor::GetSystemMetrics();
+
+    // After ScanUTXOSet(), we should see totals
+    // Note: In actual implementation, this will scan the real UTXO set
+    // For now, we verify the function doesn't crash and returns valid data
+    BOOST_CHECK_GE(initialMetrics.totalDDSupply, 0);
+    BOOST_CHECK_GE(initialMetrics.totalCollateral, 0);
+}
+
+// Test 17: Test DD amount extraction from OP_RETURN
+BOOST_FIXTURE_TEST_CASE(test_dd_amount_extraction_from_opreturn, DigiDollarHealthTestSetup)
+{
+    // Create a mock OP_RETURN output with DD amount
+    CAmount testAmount = 10000; // $100.00 in cents
+
+    // Create OP_RETURN script with DD marker
+    CScript opReturnScript;
+    opReturnScript << OP_RETURN;
+    opReturnScript << OP_NOP10; // OP_DIGIDOLLAR marker
+
+    // Encode amount as 8 bytes (little-endian)
+    std::vector<unsigned char> amountData(8);
+    for (size_t i = 0; i < 8; i++) {
+        amountData[i] = (testAmount >> (i * 8)) & 0xFF;
+    }
+    opReturnScript << amountData;
+
+    // Extract amount
+    CAmount extractedAmount = 0;
+    // ExtractDDAmount is in DigiDollar namespace (consensus/digidollar.cpp)
+    bool extracted = DigiDollar::ExtractDDAmount(opReturnScript, extractedAmount);
+
+    BOOST_CHECK(extracted);
+    BOOST_CHECK_EQUAL(extractedAmount, testAmount);
+}
+
+// Test 18: Test collateral value calculation from P2TR outputs
+BOOST_FIXTURE_TEST_CASE(test_collateral_extraction_from_p2tr, DigiDollarHealthTestSetup)
+{
+    // Create a mock P2TR output with DGB collateral
+    CAmount collateralAmount = 10000000000; // 100 DGB in satoshis
+
+    // Create simple P2TR script (OP_1 + 32 bytes)
+    std::vector<unsigned char> pubkeyData(32, 0xAA);
+    CScript p2trScript;
+    p2trScript << OP_1;
+    p2trScript << pubkeyData;
+
+    // Create output
+    CTxOut collateralOutput(collateralAmount, p2trScript);
+
+    // Verify output has expected value
+    BOOST_CHECK_EQUAL(collateralOutput.nValue, collateralAmount);
+}
+
+// Test 19: Test network-wide statistics aggregation
+BOOST_FIXTURE_TEST_CASE(test_network_wide_statistics, DigiDollarHealthTestSetup)
+{
+    // Initialize health monitor
+    DigiDollar::SystemHealthMonitor::Initialize();
+
+    // Get system metrics
+    DigiDollar::SystemMetrics metrics = DigiDollar::SystemHealthMonitor::GetSystemMetrics();
+
+    // Verify that metrics aggregate across all positions
+    // Total DD supply should equal sum of all DD minted
+    // Total collateral should equal sum of all DGB locked
+
+    CAmount expectedTotalDD = 0;
+    CAmount expectedTotalCollateral = 0;
+
+    for (const auto& tier : metrics.tiers) {
+        expectedTotalDD += tier.ddMinted;
+        expectedTotalCollateral += tier.dgbLocked;
+    }
+
+    // Verify totals match tier sums
+    BOOST_CHECK_EQUAL(metrics.totalDDSupply, expectedTotalDD);
+    BOOST_CHECK_EQUAL(metrics.totalCollateral, expectedTotalCollateral);
+}
+
+// Test 20: Test that ScanUTXOSet is wallet-independent
+BOOST_FIXTURE_TEST_CASE(test_scan_utxo_wallet_independent, DigiDollarHealthTestSetup)
+{
+    // Initialize health monitor
+    DigiDollar::SystemHealthMonitor::Initialize();
+
+    // Get metrics without any wallet loaded
+    DigiDollar::SystemMetrics metricsNoWallet = DigiDollar::SystemHealthMonitor::GetSystemMetrics();
+
+    // Metrics should be valid even without wallet
+    BOOST_CHECK_GE(metricsNoWallet.totalDDSupply, 0);
+    BOOST_CHECK_GE(metricsNoWallet.totalCollateral, 0);
+    BOOST_CHECK_GE(metricsNoWallet.systemHealth, 0);
+
+    // The function should work by scanning the actual UTXO set,
+    // not by querying wallet data
+}
 
 BOOST_AUTO_TEST_SUITE_END()

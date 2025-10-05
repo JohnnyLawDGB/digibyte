@@ -50,10 +50,11 @@ int DynamicCollateralAdjustment::CalculateSystemHealth(CAmount totalCollateral,
     }
 
     // Calculate total collateral value in USD cents
-    // totalCollateral is in satoshis
-    // oraclePrice is in cents per DGB (e.g., 50 = $0.50 per DGB)
-    // Convert: (satoshis / COIN) * price = cents
-    CAmount collateralValueCents;
+    // totalCollateral is in satoshis (1 DGB = 100,000,000 satoshis)
+    // oraclePrice is in milli-cents per DGB (e.g., 5000 = $0.05 = 5 cents per DGB)
+    // Note: oraclePrice = actual_price_in_dollars * 100,000
+    // Convert: (satoshis * millicents/DGB) / satoshis/DGB / 1000 = cents
+    CAmount collateralValueMillicents;
 
     // Avoid overflow by checking if we can safely multiply
     const CAmount maxSafeValue = std::numeric_limits<CAmount>::max() / oraclePrice;
@@ -61,11 +62,14 @@ int DynamicCollateralAdjustment::CalculateSystemHealth(CAmount totalCollateral,
         LogPrintf("DCA: Potential overflow in collateral calculation, using conservative estimate\n");
         // Use conservative calculation to avoid overflow
         // Divide by COIN first, then multiply by price
-        collateralValueCents = (totalCollateral / COIN) * oraclePrice;
+        collateralValueMillicents = (totalCollateral / COIN) * oraclePrice;
     } else {
         // Multiply first for precision, then divide
-        collateralValueCents = (totalCollateral * oraclePrice) / COIN;
+        collateralValueMillicents = (totalCollateral * oraclePrice) / COIN;
     }
+
+    // Convert from millicents to cents
+    CAmount collateralValueCents = collateralValueMillicents / 1000;
 
     // Calculate system health percentage
     // health = (collateral_value_usd / total_dd_usd) * 100
@@ -88,7 +92,7 @@ int DynamicCollateralAdjustment::CalculateSystemHealth(CAmount totalCollateral,
     // Cap at reasonable maximum (300% = very healthy system)
     int systemHealth = std::min(static_cast<int>(healthCalculation), 30000);
 
-    LogPrint(BCLog::DIGIDOLLAR, "DCA: System health calculated: %d%% (collateral: %lld DGB, DD: %lld cents, price: %lld cents/DGB)\n",
+    LogPrint(BCLog::DIGIDOLLAR, "DCA: System health calculated: %d%% (collateral: %lld DGB, DD: %lld cents, price: %lld millicents/DGB)\n",
              systemHealth, totalCollateral / COIN, totalDD, oraclePrice);
 
     return systemHealth;

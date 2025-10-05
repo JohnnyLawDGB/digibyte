@@ -11,6 +11,7 @@
 #include <interfaces/wallet.h>
 #include <wallet/digidollarwallet.h>
 #include <consensus/amount.h>
+#include <oracle/mock_oracle.h>
 #include <algorithm>
 
 #include <QTableWidget>
@@ -673,11 +674,11 @@ QWidget* DigiDollarPositionsWidget::createHealthWidget(double health) const
     layout->setSpacing(0);
 
     QProgressBar* healthBar = new QProgressBar(widget);
-    healthBar->setRange(0, 200);  // Allow up to 200% collateralization
+    healthBar->setRange(0, 500);  // Allow up to 500% collateralization
     healthBar->setValue(static_cast<int>(health));
-    healthBar->setFormat(QString("%1%").arg(QString::number(health, 'f', 0)));
+    healthBar->setFormat(QString("%1%").arg(QString::number(health, 'f', 1)));
     healthBar->setFixedHeight(20);
-    healthBar->setMinimumWidth(80);
+    healthBar->setMinimumWidth(100);
 
     // Use system palette for theme-aware styling
     QPalette palette = QApplication::palette();
@@ -799,15 +800,15 @@ void DigiDollarPositionsWidget::applyTheme()
 
 CAmount DigiDollarPositionsWidget::GetMockOraclePrice() const
 {
-    // For RegTest, we use a mock oracle price
-    // Default: $0.01 per DGB = 1000000 cents per 100M satoshis
-    // This means 1 DGB (100M sats) = $0.01 = 1 cent
+    // Get price from MockOracleManager
+    // Oracle price format: CENTS per DGB
+    // Example: 1 = $0.01 per DGB, 50 = $0.50 per DGB
+    if (MockOracleManager::GetInstance().IsEnabled()) {
+        return MockOracleManager::GetInstance().GetCurrentPrice();
+    }
 
-    // Try to get price from oracle system if available
-    // For now, use default RegTest price
-    // TODO: Integrate with mock oracle RPC when available
-
-    return 1000000; // $0.01 per DGB in RegTest
+    // Fallback if mock oracle not enabled
+    return 1; // $0.01 per DGB default
 }
 
 std::vector<WalletCollateralPosition> DigiDollarPositionsWidget::GetWalletPositions() const
@@ -830,20 +831,26 @@ std::vector<WalletCollateralPosition> DigiDollarPositionsWidget::GetWalletPositi
 double DigiDollarPositionsWidget::CalculatePositionHealth(CAmount ddAmount, CAmount dgbCollateral, CAmount oraclePrice) const
 {
     if (ddAmount == 0) {
-        return 300.0; // Perfect health if no DD issued
+        return 0.0; // No DD = no health to display
     }
 
-    // Calculate DGB collateral value in cents
+    // Calculate DGB collateral value in USD cents
     // dgbCollateral is in satoshis (1 DGB = 100,000,000 satoshis)
-    // oraclePrice is in cents per DGB
-    // So: collateralValue = (dgbCollateral * oraclePrice) / 100,000,000
+    // oraclePrice format: CENTS per DGB (e.g., 1 = $0.01 per DGB)
 
-    CAmount collateralValueCents = (dgbCollateral * oraclePrice) / 100000000LL;
+    // Step 1: Calculate DGB amount in whole coins
+    double dgbAmount = dgbCollateral / 100000000.0;
+
+    // Step 2: oraclePrice is already in cents per DGB
+    double centsPerDGB = static_cast<double>(oraclePrice);
+
+    // Step 3: Calculate value in cents
+    CAmount collateralValueCents = static_cast<CAmount>(dgbAmount * centsPerDGB);
 
     // Health ratio = (Collateral Value / DD Value) * 100
     // ddAmount is already in cents
     double healthRatio = (static_cast<double>(collateralValueCents) * 100.0) / static_cast<double>(ddAmount);
 
-    // Cap at 300% for display purposes
-    return std::min(healthRatio, 300.0);
+    // Cap at 500% for display purposes (max collateral ratio)
+    return std::min(healthRatio, 500.0);
 }

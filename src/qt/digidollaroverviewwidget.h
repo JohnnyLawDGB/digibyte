@@ -91,6 +91,10 @@ private:
     QGridLayout* m_systemHealthLayout;
     QLabel* m_oraclePriceLabel;
     QLabel* m_oraclePriceValue;
+    QLabel* m_networkTotalDDLabel;
+    QLabel* m_networkTotalDDValue;
+    QLabel* m_networkTotalCollateralLabel;
+    QLabel* m_networkTotalCollateralValue;
     QLabel* m_systemHealthLabel;
     QLabel* m_systemHealthValue;
     QLabel* m_dcaLevelLabel;

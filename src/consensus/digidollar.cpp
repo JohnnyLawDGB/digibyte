@@ -276,36 +276,67 @@ bool ExtractDDAmount(const CScript& script, CAmount& amount)
     // Initialize to invalid
     amount = -1;
 
-    // Look for OP_DIGIDOLLAR followed by amount data
-    for (auto pc = script.begin(); pc != script.end();) {
-        opcodetype opcode;
-        std::vector<unsigned char> data;
+    // Try parsing OP_RETURN format: OP_RETURN <"DD"> <txType> <ddAmount> <lockHeight>
+    auto pc = script.begin();
+    opcodetype opcode;
+    std::vector<unsigned char> data;
 
-        if (!script.GetOp(pc, opcode, data)) {
-            break;
+    // Check for OP_RETURN
+    if (!script.GetOp(pc, opcode, data) || opcode != OP_RETURN) {
+        // Not an OP_RETURN, try fallback methods
+        // Phase 1: For P2TR scripts, try metadata lookup
+        DigiDollar::ScriptMetadata metadata;
+        if (DigiDollar::GetScriptMetadata(script, metadata)) {
+            amount = metadata.ddAmount;
+            return amount > 0;
         }
+        return false;
+    }
 
-        if (opcode == OP_NOP10) { // OP_DIGIDOLLAR
-            // Next should be the amount
+    // Save position after OP_RETURN to try multiple formats
+    auto pc_after_opreturn = pc;
+
+    // TRY FORMAT 1: New format - OP_RETURN <"DD"> <txType> <ddAmount> <lockHeight>
+    // Get next opcode/data
+    if (script.GetOp(pc, opcode, data)) {
+        // Check if it's "DD" marker (2 bytes)
+        if (data.size() == 2 && data[0] == 'D' && data[1] == 'D') {
+            // Get transaction type (CScriptNum)
             if (script.GetOp(pc, opcode, data)) {
-                if (data.size() == 8) {
-                    // Extract 8-byte amount
-                    amount = 0;
-                    for (size_t i = 0; i < 8; i++) {
-                        amount |= static_cast<CAmount>(data[i]) << (i * 8);
+                // Get DD amount (CScriptNum) - this is the critical value
+                if (script.GetOp(pc, opcode, data)) {
+                    // Decode CScriptNum from data
+                    try {
+                        CScriptNum scriptNum(data, false);  // false = don't require minimal encoding
+                        amount = scriptNum.GetInt64();
+
+                        // Sanity check: DD amount should be reasonable
+                        if (amount >= 1 && amount <= 100000000000LL) {  // 1 cent to 1 trillion cents
+                            return true;
+                        }
+                    } catch (const scriptnum_error&) {
+                        // Fall through to try other formats
                     }
-                    return true;
                 }
             }
         }
     }
 
-    // Phase 1: For P2TR scripts, try metadata lookup
-    // (Phase 2 will use UTXO database for actual deployment)
-    DigiDollar::ScriptMetadata metadata;
-    if (DigiDollar::GetScriptMetadata(script, metadata)) {
-        amount = metadata.ddAmount;
-        return amount > 0;
+    // TRY FORMAT 2: Old format - OP_RETURN OP_NOP10 <8_byte_amount>
+    // Reset to position after OP_RETURN
+    pc = pc_after_opreturn;
+
+    // Check for OP_NOP10 (OP_DIGIDOLLAR marker)
+    if (script.GetOp(pc, opcode, data) && opcode == OP_NOP10) {
+        // Next should be the 8-byte amount
+        if (script.GetOp(pc, opcode, data) && data.size() == 8) {
+            // Extract 8-byte amount (little-endian)
+            amount = 0;
+            for (size_t i = 0; i < 8; i++) {
+                amount |= static_cast<CAmount>(data[i]) << (i * 8);
+            }
+            return amount > 0;
+        }
     }
 
     return false;

@@ -17,6 +17,9 @@
 #include <wallet/digidollarwallet.h>
 #include <uint256.h>
 #include <interfaces/wallet.h>
+#include <interfaces/node.h>
+#include <univalue.h>
+#include <rpc/util.h>
 
 #include <QLabel>
 #include <QVBoxLayout>
@@ -52,6 +55,10 @@ DigiDollarOverviewWidget::DigiDollarOverviewWidget(QWidget *parent) :
     m_systemHealthLayout(nullptr),
     m_oraclePriceLabel(nullptr),
     m_oraclePriceValue(nullptr),
+    m_networkTotalDDLabel(nullptr),
+    m_networkTotalDDValue(nullptr),
+    m_networkTotalCollateralLabel(nullptr),
+    m_networkTotalCollateralValue(nullptr),
     m_systemHealthLabel(nullptr),
     m_systemHealthValue(nullptr),
     m_dcaLevelLabel(nullptr),
@@ -129,7 +136,7 @@ void DigiDollarOverviewWidget::setupBalanceSection()
     QHBoxLayout* titleLayout = new QHBoxLayout();
     titleLayout->setObjectName("titleLayout");
 
-    QLabel* balanceTitle = new QLabel(tr("DigiDollar Balances"), this);
+    QLabel* balanceTitle = new QLabel(tr("Your DigiDollar Balances"), this);
     QFont titleFont = balanceTitle->font();
     titleFont.setBold(true);
     titleFont.setWeight(75); // Match main wallet weight
@@ -148,7 +155,7 @@ void DigiDollarOverviewWidget::setupBalanceSection()
     m_balanceLayout->setObjectName("balanceGridLayout");
 
     // DD Balance (Available)
-    m_ddBalanceLabel = new QLabel(tr("Available:"), this);
+    m_ddBalanceLabel = new QLabel(tr("Your DD Balance:"), this);
     m_ddBalanceLabel->setObjectName("ddBalanceLabel");
     m_ddBalanceValue = new QLabel("0.00000000 DD", this);
     m_ddBalanceValue->setObjectName("ddBalanceValue");
@@ -160,14 +167,14 @@ void DigiDollarOverviewWidget::setupBalanceSection()
     m_balanceLayout->addWidget(m_ddBalanceValue, 1, 1);
 
     // DGB Collateral (Pending/Locked)
-    m_dgbCollateralLabel = new QLabel(tr("Time Locked Collateral:"), this);
+    m_dgbCollateralLabel = new QLabel(tr("Your Locked Collateral:"), this);
     m_dgbCollateralLabel->setObjectName("dgbCollateralLabel");
     m_dgbCollateralValue = new QLabel("0.00000000 DGB", this);
     m_dgbCollateralValue->setObjectName("dgbCollateralValue");
     m_dgbCollateralValue->setCursor(QCursor(Qt::IBeamCursor));
     m_dgbCollateralValue->setAlignment(Qt::AlignRight | Qt::AlignTrailing | Qt::AlignVCenter);
     m_dgbCollateralValue->setTextInteractionFlags(Qt::LinksAccessibleByMouse | Qt::TextSelectableByKeyboard | Qt::TextSelectableByMouse);
-    m_dgbCollateralValue->setToolTip(tr("Total DGB locked as collateral for DigiDollars"));
+    m_dgbCollateralValue->setToolTip(tr("Your DGB locked as collateral for DigiDollars in your wallet"));
     m_balanceLayout->addWidget(m_dgbCollateralLabel, 2, 0);
     m_balanceLayout->addWidget(m_dgbCollateralValue, 2, 1);
 
@@ -214,7 +221,7 @@ void DigiDollarOverviewWidget::setupSystemHealthSection()
     QHBoxLayout* titleLayout = new QHBoxLayout();
     titleLayout->setObjectName("healthTitleLayout");
 
-    QLabel* healthTitle = new QLabel(tr("System Health & Oracle"), this);
+    QLabel* healthTitle = new QLabel(tr("Network DigiDollar Status"), this);
     QFont titleFont = healthTitle->font();
     titleFont.setBold(true);
     titleFont.setWeight(75); // Match main wallet weight
@@ -244,15 +251,39 @@ void DigiDollarOverviewWidget::setupSystemHealthSection()
     m_systemHealthLayout->addWidget(m_oraclePriceLabel, 1, 0);
     m_systemHealthLayout->addWidget(m_oraclePriceValue, 1, 1);
 
+    // Network Total DD Supply
+    m_networkTotalDDLabel = new QLabel(tr("Network Total DD:"), this);
+    m_networkTotalDDLabel->setObjectName("networkTotalDDLabel");
+    m_networkTotalDDValue = new QLabel("Loading...", this);
+    m_networkTotalDDValue->setObjectName("networkTotalDDValue");
+    m_networkTotalDDValue->setCursor(QCursor(Qt::IBeamCursor));
+    m_networkTotalDDValue->setAlignment(Qt::AlignRight | Qt::AlignTrailing | Qt::AlignVCenter);
+    m_networkTotalDDValue->setTextInteractionFlags(Qt::LinksAccessibleByMouse | Qt::TextSelectableByKeyboard | Qt::TextSelectableByMouse);
+    m_networkTotalDDValue->setToolTip(tr("Total DigiDollar supply across the entire network"));
+    m_systemHealthLayout->addWidget(m_networkTotalDDLabel, 2, 0);
+    m_systemHealthLayout->addWidget(m_networkTotalDDValue, 2, 1);
+
+    // Network Total Collateral
+    m_networkTotalCollateralLabel = new QLabel(tr("Network Total Collateral:"), this);
+    m_networkTotalCollateralLabel->setObjectName("networkTotalCollateralLabel");
+    m_networkTotalCollateralValue = new QLabel("Loading...", this);
+    m_networkTotalCollateralValue->setObjectName("networkTotalCollateralValue");
+    m_networkTotalCollateralValue->setCursor(QCursor(Qt::IBeamCursor));
+    m_networkTotalCollateralValue->setAlignment(Qt::AlignRight | Qt::AlignTrailing | Qt::AlignVCenter);
+    m_networkTotalCollateralValue->setTextInteractionFlags(Qt::LinksAccessibleByMouse | Qt::TextSelectableByKeyboard | Qt::TextSelectableByMouse);
+    m_networkTotalCollateralValue->setToolTip(tr("Total DGB locked as collateral across the entire network"));
+    m_systemHealthLayout->addWidget(m_networkTotalCollateralLabel, 3, 0);
+    m_systemHealthLayout->addWidget(m_networkTotalCollateralValue, 3, 1);
+
     // System Health Status
-    m_systemHealthLabel = new QLabel(tr("System Status:"), this);
+    m_systemHealthLabel = new QLabel(tr("System Health:"), this);
     m_systemHealthLabel->setObjectName("systemHealthLabel");
     m_systemHealthValue = new QLabel("Healthy", this);
     m_systemHealthValue->setObjectName("systemHealthValue");
     m_systemHealthValue->setAlignment(Qt::AlignRight | Qt::AlignTrailing | Qt::AlignVCenter);
-    m_systemHealthValue->setToolTip(tr("Overall DigiDollar system health status"));
-    m_systemHealthLayout->addWidget(m_systemHealthLabel, 2, 0);
-    m_systemHealthLayout->addWidget(m_systemHealthValue, 2, 1);
+    m_systemHealthValue->setToolTip(tr("Overall DigiDollar network-wide health status"));
+    m_systemHealthLayout->addWidget(m_systemHealthLabel, 4, 0);
+    m_systemHealthLayout->addWidget(m_systemHealthValue, 4, 1);
 
     // DCA Level
     m_dcaLevelLabel = new QLabel(tr("DCA Level:"), this);
@@ -261,8 +292,8 @@ void DigiDollarOverviewWidget::setupSystemHealthSection()
     m_dcaLevelValue->setObjectName("dcaLevelValue");
     m_dcaLevelValue->setAlignment(Qt::AlignRight | Qt::AlignTrailing | Qt::AlignVCenter);
     m_dcaLevelValue->setToolTip(tr("Current Dollar-Cost Averaging intervention level"));
-    m_systemHealthLayout->addWidget(m_dcaLevelLabel, 3, 0);
-    m_systemHealthLayout->addWidget(m_dcaLevelValue, 3, 1);
+    m_systemHealthLayout->addWidget(m_dcaLevelLabel, 5, 0);
+    m_systemHealthLayout->addWidget(m_dcaLevelValue, 5, 1);
 
     // ERR Level
     m_errLevelLabel = new QLabel(tr("ERR Level:"), this);
@@ -271,8 +302,8 @@ void DigiDollarOverviewWidget::setupSystemHealthSection()
     m_errLevelValue->setObjectName("errLevelValue");
     m_errLevelValue->setAlignment(Qt::AlignRight | Qt::AlignTrailing | Qt::AlignVCenter);
     m_errLevelValue->setToolTip(tr("Current Emergency Response Reserve level"));
-    m_systemHealthLayout->addWidget(m_errLevelLabel, 4, 0);
-    m_systemHealthLayout->addWidget(m_errLevelValue, 4, 1);
+    m_systemHealthLayout->addWidget(m_errLevelLabel, 6, 0);
+    m_systemHealthLayout->addWidget(m_errLevelValue, 6, 1);
 
     // System Health Progress Bar with improved styling
     m_systemHealthBar = new QProgressBar(this);
@@ -282,8 +313,8 @@ void DigiDollarOverviewWidget::setupSystemHealthSection()
     m_systemHealthBar->setTextVisible(true);
     m_systemHealthBar->setFormat("%p% Healthy");
     m_systemHealthBar->setMinimumHeight(20);
-    m_systemHealthBar->setToolTip(tr("Visual indicator of overall system health"));
-    m_systemHealthLayout->addWidget(m_systemHealthBar, 5, 0, 1, 2);
+    m_systemHealthBar->setToolTip(tr("Visual indicator of overall network health"));
+    m_systemHealthLayout->addWidget(m_systemHealthBar, 7, 0, 1, 2);
 
     // Add horizontal spacer
     QSpacerItem* horizontalSpacer = new QSpacerItem(40, 20, QSizePolicy::Expanding, QSizePolicy::Minimum);
@@ -495,9 +526,9 @@ void DigiDollarOverviewWidget::updateOraclePrice()
 {
     // Get price from MockOracleManager if in RegTest, otherwise use real oracle
     if (Params().GetChainType() == ChainType::REGTEST && MockOracleManager::GetInstance().IsEnabled()) {
-        // Get price from mock oracle (price is in cents per DGB)
-        // e.g., 1000000 cents/DGB = $10,000/DGB
-        // e.g., 1 cent/DGB = $0.01/DGB
+        // Get price from mock oracle
+        // Oracle price format: CENTS per DGB
+        // Example: 1 = $0.01 per DGB, 50 = $0.50 per DGB
         CAmount priceCents = MockOracleManager::GetInstance().GetCurrentPrice();
 
         // Convert cents to dollars
@@ -517,55 +548,77 @@ void DigiDollarOverviewWidget::updateOraclePrice()
 
 void DigiDollarOverviewWidget::updateSystemHealth()
 {
-    // Get real system health metrics from DigiDollar system
-    QString healthStatus = "Healthy";
-    int healthPercentage = 100;
-    m_dcaLevel = 0;
-    m_errLevel = 0;
+    // NETWORK-WIDE TRACKING: Call RPC to get network-wide system health
+    // This ensures Bob and Alice both see identical stats across the entire network
 
-    try {
-        // Get current system health using DCA functions
-        int systemHealth = DigiDollar::DCA::DynamicCollateralAdjustment::GetCurrentSystemHealth();
-
-        // Get current tier information
-        auto tier = DigiDollar::DCA::DynamicCollateralAdjustment::GetCurrentTier(systemHealth);
-
-        // Determine health status based on tier
-        if (systemHealth >= 150) {
-            healthStatus = "Healthy";
-            healthPercentage = 100;
-        } else if (systemHealth >= 120) {
-            healthStatus = "Good";
-            healthPercentage = 85;
-        } else if (systemHealth >= 100) {
-            healthStatus = "Monitoring";
-            healthPercentage = 70;
-            m_dcaLevel = 1;
-        } else {
-            healthStatus = "Critical";
-            healthPercentage = 50;
-            m_dcaLevel = 2;
-            m_errLevel = 1;
-        }
-
-        // Check if system is in emergency
-        bool isEmergency = DigiDollar::DCA::DynamicCollateralAdjustment::IsSystemEmergency(systemHealth);
-        if (isEmergency) {
-            healthStatus = "Emergency";
-            healthPercentage = 25;
-            m_errLevel = 2;
-        }
-
-    } catch (const std::exception& e) {
-        // If there's an error getting system health, show unknown status
-        healthStatus = "Unknown";
-        healthPercentage = 50;
+    if (!m_clientModel) {
+        m_systemHealthValue->setText("No Connection");
+        m_networkTotalDDValue->setText("N/A");
+        m_networkTotalCollateralValue->setText("N/A");
+        m_dcaLevelValue->setText("N/A");
+        m_errLevelValue->setText("N/A");
+        m_systemHealthBar->setValue(0);
+        return;
     }
 
-    m_systemHealthValue->setText(healthStatus);
-    m_dcaLevelValue->setText(QString::number(m_dcaLevel));
-    m_errLevelValue->setText(QString::number(m_errLevel));
-    m_systemHealthBar->setValue(healthPercentage);
+    try {
+        // Execute RPC call to get network-wide system health
+        UniValue params(UniValue::VARR); // No parameters needed
+        UniValue result = m_clientModel->node().executeRpc("getdigidollarsystemhealth", params, "");
+
+        // Extract values from RPC result
+        int healthPercentage = result.find_value("health_percentage").getInt<int>();
+        std::string healthStatus = result.find_value("health_status").get_str();
+        CAmount totalCollateralSats = AmountFromValue(result.find_value("total_collateral_dgb"));
+        CAmount totalDDCents = result.find_value("total_dd_supply").getInt<int64_t>();
+        bool isEmergency = result.find_value("is_emergency").get_bool();
+
+        // Get DCA tier info
+        const UniValue& dcaTier = result.find_value("dca_tier");
+        double dcaMultiplier = dcaTier.find_value("multiplier").get_real();
+
+        // Update network-wide stats
+        double totalDD = totalDDCents / 100.0; // Convert cents to DD
+        double totalCollateralDGB = totalCollateralSats / 100000000.0; // Convert satoshis to DGB
+
+        m_networkTotalDDValue->setText(QString("$%1").arg(QString::number(totalDD, 'f', 2)));
+        m_networkTotalCollateralValue->setText(QString("%1 DGB").arg(QString::number(totalCollateralDGB, 'f', 2)));
+
+        // Update system health display
+        // RPC returns health_percentage as actual percentage (e.g., 151 = 151%)
+        double healthPercent = static_cast<double>(healthPercentage);
+
+        QString statusText;
+        if (healthPercentage >= 150) {
+            statusText = QString("%1% Healthy").arg(QString::number(healthPercent, 'f', 1));
+        } else if (healthPercentage >= 120) {
+            statusText = QString("%1% Warning").arg(QString::number(healthPercent, 'f', 1));
+        } else if (healthPercentage >= 100) {
+            statusText = QString("%1% Stressed").arg(QString::number(healthPercent, 'f', 1));
+        } else {
+            statusText = QString("%1% CRITICAL").arg(QString::number(healthPercent, 'f', 1));
+        }
+
+        m_systemHealthValue->setText(statusText);
+
+        // Update DCA and ERR levels
+        m_dcaLevelValue->setText(QString("%1x").arg(QString::number(dcaMultiplier, 'f', 1)));
+        m_errLevelValue->setText(isEmergency ? "ACTIVE" : "Inactive");
+
+        // Update progress bar (scale 0-500% to 0-100%)
+        int barValue = std::min(100, static_cast<int>((healthPercent * 100) / 500));
+        m_systemHealthBar->setValue(barValue);
+        m_systemHealthBar->setFormat(QString("%1% Network Health").arg(QString::number(healthPercent, 'f', 1)));
+
+    } catch (const std::exception& e) {
+        m_systemHealthValue->setText("Error");
+        m_networkTotalDDValue->setText("Error");
+        m_networkTotalCollateralValue->setText("Error");
+        m_dcaLevelValue->setText("Unknown");
+        m_errLevelValue->setText("Unknown");
+        m_systemHealthBar->setValue(0);
+        LogPrintf("DigiDollar: updateSystemHealth RPC error - %s\n", e.what());
+    }
 }
 
 void DigiDollarOverviewWidget::updateRecentTransactions()
@@ -716,6 +769,8 @@ void DigiDollarOverviewWidget::setMonospacedFont(bool use_embedded_font)
     m_dgbCollateralValue->setFont(f);
     m_usdValueValue->setFont(f);
     m_oraclePriceValue->setFont(f);
+    m_networkTotalDDValue->setFont(f);
+    m_networkTotalCollateralValue->setFont(f);
 }
 
 // REMOVED: updateTheme() and applyTheme() methods

@@ -20,8 +20,8 @@ class DigiDollarNetworkTrackingTest(DigiByteTestFramework):
         self.num_nodes = 2
         self.setup_clean_chain = True
         self.extra_args = [
-            ["-digidollar=1"],
-            ["-digidollar=1"]
+            ["-digidollar=1", "-debug=digidollar"],
+            ["-digidollar=1", "-debug=digidollar"]
         ]
 
     def skip_test_if_missing_module(self):
@@ -33,21 +33,41 @@ class DigiDollarNetworkTrackingTest(DigiByteTestFramework):
         self.log.info("=" * 80)
 
         # Setup: Generate blocks and set oracle price
+        # Need lots of blocks because oracle price is $0.01 per DGB
+        # Minting $175 DD requires ~57,500 DGB collateral
         self.log.info("Setting up test environment...")
-        self.nodes[0].generate(110)
+        self.nodes[0].generate(700)  # Matches Qt test setup
         self.sync_all()
 
-        # Set oracle price on both nodes
+        # Set oracle price on both nodes (using $0.01 per DGB to match Qt test)
         for node in self.nodes:
-            node.setmockoracleprice(50000)  # $0.50 per DGB
+            node.setmockoracleprice(1)  # $0.01 per DGB
 
-        # Phase 1: Bob mints DD
-        self.log.info("\n--- Phase 1: Bob (node 0) mints DigiDollar ---")
-        bob_mint = self.nodes[0].mintdigidollar(50000, 4)  # $500.00, 365 days (tier 4)
-        self.log.info(f"Bob minted $500 DD, txid: {bob_mint['txid']}")
+        # Phase 1: Bob mints 3 DigiDollars (matching Qt test structure)
+        self.log.info("\n--- Phase 1: Bob (node 0) mints 3 DigiDollars ---")
+
+        # Mint #1: $100.00 DD, tier 4 (365 days)
+        bob_mint1 = self.nodes[0].mintdigidollar(10000, 4)
+        self.log.info(f"Mint #1: $100.00 DD, txid: {bob_mint1['txid']}, collateral: {bob_mint1['dgb_collateral']} DGB")
+
+        # Mint #2: $50.00 DD, tier 3 (180 days)
+        bob_mint2 = self.nodes[0].mintdigidollar(5000, 3)
+        self.log.info(f"Mint #2: $50.00 DD, txid: {bob_mint2['txid']}, collateral: {bob_mint2['dgb_collateral']} DGB")
+
+        # Mint #3: $25.00 DD, tier 2 (90 days)
+        bob_mint3 = self.nodes[0].mintdigidollar(2500, 2)
+        self.log.info(f"Mint #3: $25.00 DD, txid: {bob_mint3['txid']}, collateral: {bob_mint3['dgb_collateral']} DGB")
+
+        self.log.info("Bob's total minted: $175.00 DD (17500 cents)")
+
+        # Wait for Dandelion embargo to expire (transaction moves from stempool to mempool)
+        import time
+        self.log.info("Waiting 30 seconds for Dandelion embargo to expire...")
+        time.sleep(30)
 
         # Mine blocks to confirm
-        self.nodes[0].generate(2)
+        self.log.info("Mining blocks to confirm all transactions...")
+        self.nodes[0].generate(10)
         self.sync_all()
 
         # Phase 2: Network-wide tracking test
@@ -57,12 +77,14 @@ class DigiDollarNetworkTrackingTest(DigiByteTestFramework):
         alice_health = self.nodes[1].getdigidollarsystemhealth()
 
         self.log.info(f"\nBob (node 0) sees:")
-        self.log.info(f"  Total DD Supply: {bob_health['total_dd_supply']}")
-        self.log.info(f"  Total Collateral: {bob_health['total_collateral_locked']}")
+        self.log.info(f"  Total DD Supply: {bob_health['total_dd_supply']} cents (expected: 17500)")
+        self.log.info(f"  Total Collateral: {bob_health['total_collateral_locked']} DGB (expected: 57500)")
+        self.log.info(f"  System Health: {bob_health['health_percentage']}%")
 
         self.log.info(f"\nAlice (node 1) sees:")
-        self.log.info(f"  Total DD Supply: {alice_health['total_dd_supply']}")
-        self.log.info(f"  Total Collateral: {alice_health['total_collateral_locked']}")
+        self.log.info(f"  Total DD Supply: {alice_health['total_dd_supply']} cents (expected: 17500)")
+        self.log.info(f"  Total Collateral: {alice_health['total_collateral_locked']} DGB (expected: 57500)")
+        self.log.info(f"  System Health: {alice_health['health_percentage']}%")
 
         # CRITICAL ASSERTION: Both nodes MUST see identical stats
         self.log.info("\n--- Verifying network-wide consistency ---")

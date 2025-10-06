@@ -1,6 +1,7 @@
 #!/bin/bash
 # DigiDollar Qt GUI Network-Wide Tracking Test
 # Tests that both Bob and Alice see identical network statistics
+# Bob mints 3 DigiDollar transactions, Alice only observes
 
 set -e
 
@@ -38,37 +39,79 @@ BOB_PID=$!
 echo "Bob's Qt started (PID: $BOB_PID)"
 sleep 8
 
-# Step 3: Create Bob's wallet and generate 655 blocks
-echo "=== Step 3: Creating Bob's wallet and generating 655 blocks ==="
+# Step 3: Create Bob's wallet and generate 700 blocks (extra for multiple mints)
+echo "=== Step 3: Creating Bob's wallet and generating 700 blocks ==="
 ./src/digibyte-cli -regtest -datadir=/tmp/bob_regtest -rpcport=18443 createwallet "bob" > /dev/null
-./src/digibyte-cli -regtest -datadir=/tmp/bob_regtest -rpcport=18443 -generate 655 > /dev/null
-echo "✓ Bob has 655 blocks"
+./src/digibyte-cli -regtest -datadir=/tmp/bob_regtest -rpcport=18443 -generate 700 > /dev/null
+echo "✓ Bob has 700 blocks (ensuring enough mature UTXOs for 3 mints)"
 echo ""
 
-# Step 4: Bob mints DigiDollars
-echo "=== Step 4: Bob minting \$100.00 DD ==="
+# Step 4: Bob mints DigiDollars (3 separate mints)
+echo "=== Step 4: Bob minting DigiDollars (3 separate mints) ==="
 COOKIE=$(cat /tmp/bob_regtest/regtest/.cookie)
-BOB_MINT=$(curl --silent --user "$COOKIE" \
-  --data-binary '{"jsonrpc":"1.0","id":"bob_mint","method":"mintdigidollar","params":[10000,4]}' \
+
+# Mint #1: $100.00 DD with 365 day lock (tier 4)
+echo "Mint #1: \$100.00 DD (365 days, tier 4)"
+BOB_MINT1=$(curl --silent --user "$COOKIE" \
+  --data-binary '{"jsonrpc":"1.0","id":"bob_mint1","method":"mintdigidollar","params":[10000,4]}' \
   -H 'content-type: text/plain;' \
   http://127.0.0.1:18443/)
 
-BOB_TXID=$(echo "$BOB_MINT" | jq -r '.result.txid // empty')
-if [ -z "$BOB_TXID" ]; then
-    echo "❌ Bob's mint failed:"
-    echo "$BOB_MINT" | jq '.'
+BOB_TXID1=$(echo "$BOB_MINT1" | jq -r '.result.txid // empty')
+if [ -z "$BOB_TXID1" ]; then
+    echo "❌ Bob's mint #1 failed:"
+    echo "$BOB_MINT1" | jq '.'
     exit 1
 fi
+echo "  ✓ txid: ${BOB_TXID1:0:16}..."
+echo "  ✓ Collateral: $(echo "$BOB_MINT1" | jq -r '.result.dgb_collateral') DGB"
+echo ""
+sleep 1
 
-echo "✓ Bob minted \$100 DD (txid: ${BOB_TXID:0:16}...)"
-echo "  Collateral: $(echo "$BOB_MINT" | jq -r '.result.dgb_collateral') DGB"
+# Mint #2: $50.00 DD with 180 day lock (tier 3)
+echo "Mint #2: \$50.00 DD (180 days, tier 3)"
+BOB_MINT2=$(curl --silent --user "$COOKIE" \
+  --data-binary '{"jsonrpc":"1.0","id":"bob_mint2","method":"mintdigidollar","params":[5000,3]}' \
+  -H 'content-type: text/plain;' \
+  http://127.0.0.1:18443/)
+
+BOB_TXID2=$(echo "$BOB_MINT2" | jq -r '.result.txid // empty')
+if [ -z "$BOB_TXID2" ]; then
+    echo "❌ Bob's mint #2 failed:"
+    echo "$BOB_MINT2" | jq '.'
+    exit 1
+fi
+echo "  ✓ txid: ${BOB_TXID2:0:16}..."
+echo "  ✓ Collateral: $(echo "$BOB_MINT2" | jq -r '.result.dgb_collateral') DGB"
+echo ""
+sleep 1
+
+# Mint #3: $25.00 DD with 90 day lock (tier 2)
+echo "Mint #3: \$25.00 DD (90 days, tier 2)"
+BOB_MINT3=$(curl --silent --user "$COOKIE" \
+  --data-binary '{"jsonrpc":"1.0","id":"bob_mint3","method":"mintdigidollar","params":[2500,2]}' \
+  -H 'content-type: text/plain;' \
+  http://127.0.0.1:18443/)
+
+BOB_TXID3=$(echo "$BOB_MINT3" | jq -r '.result.txid // empty')
+if [ -z "$BOB_TXID3" ]; then
+    echo "❌ Bob's mint #3 failed:"
+    echo "$BOB_MINT3" | jq '.'
+    exit 1
+fi
+echo "  ✓ txid: ${BOB_TXID3:0:16}..."
+echo "  ✓ Collateral: $(echo "$BOB_MINT3" | jq -r '.result.dgb_collateral') DGB"
 echo ""
 
-# Step 5: Generate 10 blocks to confirm Bob's mint
-echo "=== Step 5: Confirming Bob's mint (10 blocks) ==="
+echo "Bob's total minted: \$175.00 DD (17500 cents)"
+echo ""
+
+# Step 5: Bob generates 10 blocks to confirm his mints
+echo "=== Step 5: Bob generating 10 blocks to confirm mints ==="
 ./src/digibyte-cli -regtest -datadir=/tmp/bob_regtest -rpcport=18443 -generate 10 > /dev/null
 sleep 3
-echo "✓ Bob's mint confirmed (height: $(./src/digibyte-cli -regtest -datadir=/tmp/bob_regtest -rpcport=18443 getblockcount))"
+BOB_HEIGHT=$(./src/digibyte-cli -regtest -datadir=/tmp/bob_regtest -rpcport=18443 getblockcount)
+echo "✓ Bob's mints confirmed (height: $BOB_HEIGHT)"
 echo ""
 
 # Step 6: Start Alice's node
@@ -90,49 +133,16 @@ ALICE_PID=$!
 echo "Alice's Qt started (PID: $ALICE_PID)"
 sleep 8
 
-# Step 7: Create Alice's wallet and generate blocks
-echo "=== Step 7: Creating Alice's wallet and generating 200 blocks ==="
+# Step 7: Create Alice's wallet (she only observes, doesn't mint)
+echo "=== Step 7: Creating Alice's wallet and syncing ==="
 ./src/digibyte-cli -regtest -datadir=/tmp/alice_regtest -rpcport=18446 createwallet "alice" > /dev/null
-./src/digibyte-cli -regtest -datadir=/tmp/alice_regtest -rpcport=18446 -generate 200 > /dev/null
 sleep 5
-echo "✓ Alice synced (height: $(./src/digibyte-cli -regtest -datadir=/tmp/alice_regtest -rpcport=18446 getblockcount))"
-echo ""
-
-# Step 8: Alice mints DigiDollars
-echo "=== Step 8: Alice minting \$100.00 DD ==="
+ALICE_HEIGHT=$(./src/digibyte-cli -regtest -datadir=/tmp/alice_regtest -rpcport=18446 getblockcount)
+echo "✓ Alice synced (height: $ALICE_HEIGHT)"
 ALICE_COOKIE=$(cat /tmp/alice_regtest/regtest/.cookie)
-ALICE_MINT=$(curl --silent --user "$ALICE_COOKIE" \
-  --data-binary '{"jsonrpc":"1.0","id":"alice_mint","method":"mintdigidollar","params":[10000,3]}' \
-  -H 'content-type: text/plain;' \
-  http://127.0.0.1:18446/)
-
-ALICE_TXID=$(echo "$ALICE_MINT" | jq -r '.result.txid // empty')
-if [ -z "$ALICE_TXID" ]; then
-    echo "❌ Alice's mint failed:"
-    echo "$ALICE_MINT" | jq '.'
-    echo ""
-    echo "Note: You can manually mint via Alice's Qt GUI:"
-    echo "  1. Go to DigiDollar tab → Mint"
-    echo "  2. Enter: Amount 100, Lock Period 180 days"
-    echo "  3. Click Mint DigiDollars"
-    ALICE_MANUAL=true
-else
-    echo "✓ Alice minted \$100 DD (txid: ${ALICE_TXID:0:16}...)"
-    echo "  Collateral: $(echo "$ALICE_MINT" | jq -r '.result.dgb_collateral') DGB"
-    ALICE_MANUAL=false
-fi
 echo ""
 
-# Step 9: Generate 10 blocks to confirm Alice's mint (if successful)
-if [ "$ALICE_MANUAL" = false ]; then
-    echo "=== Step 9: Confirming Alice's mint (10 blocks) ==="
-    ./src/digibyte-cli -regtest -datadir=/tmp/alice_regtest -rpcport=18446 -generate 10 > /dev/null
-    sleep 3
-    echo "✓ Alice's mint confirmed (height: $(./src/digibyte-cli -regtest -datadir=/tmp/alice_regtest -rpcport=18446 getblockcount))"
-    echo ""
-fi
-
-# Step 10: Verify network-wide tracking
+# Step 8: Verify network-wide tracking
 echo "=========================================="
 echo "CRITICAL TEST: Network-Wide Tracking"
 echo "=========================================="
@@ -182,6 +192,14 @@ else
 fi
 
 echo ""
+echo "Expected values from Bob's 3 mints:"
+echo "  - Total DD Supply: 17500 cents (\$175.00)"
+echo "  - Tier 4 (300% ratio): \$100.00 DD → $((10000 * 3)) DGB = 30000 DGB"
+echo "  - Tier 3 (350% ratio): \$50.00 DD → $((5000 * 350 / 100)) DGB = 17500 DGB"
+echo "  - Tier 2 (400% ratio): \$25.00 DD → $((2500 * 4)) DGB = 10000 DGB"
+echo "  - Total Collateral: 57500 DGB"
+echo ""
+
 echo "=========================================="
 echo "Qt GUI Windows Are Open"
 echo "=========================================="
@@ -191,13 +209,13 @@ echo ""
 echo "1. Navigate to: DigiDollar tab → Overview"
 echo ""
 echo "2. Verify 'Network DigiDollar Status' section shows:"
-echo "   - Network Total DD: Should be IDENTICAL on both"
-echo "   - Network Total Collateral: Should be IDENTICAL on both"
+echo "   - Network Total DD: Should be IDENTICAL on both (~\$175.00)"
+echo "   - Network Total Collateral: Should be IDENTICAL on both (~57500 DGB)"
 echo "   - System Health: Should be IDENTICAL on both"
 echo ""
 echo "3. Personal balances will be DIFFERENT:"
-echo "   - Bob: ~\$100 DD"
-echo "   - Alice: ~\$100 DD (or \$0 if manual mint needed)"
+echo "   - Bob: \$175.00 DD (from his 3 mints)"
+echo "   - Alice: \$0.00 DD (did not mint)"
 echo ""
 echo "Press Ctrl+C when done testing"
 echo ""

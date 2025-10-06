@@ -84,7 +84,7 @@ class DigiDollarProtectionTest(DigiByteTestFramework):
         self.sync_all()
 
         # Verify system is in healthy state initially
-        initial_health = self.nodes[0].getdigidollarsystemhealth()
+        initial_health = self.nodes[0].getdigidollarstats()
         self.log.info(f"Initial system health: {initial_health}")
 
         # Store initial values for comparison
@@ -95,7 +95,7 @@ class DigiDollarProtectionTest(DigiByteTestFramework):
         self.log.info("Testing system health monitoring...")
 
         # Get comprehensive system health data
-        health = self.nodes[0].getdigidollarsystemhealth()
+        health = self.nodes[0].getdigidollarstats()
 
         # Verify required health metrics are present
         required_metrics = [
@@ -118,7 +118,7 @@ class DigiDollarProtectionTest(DigiByteTestFramework):
 
         # Test health monitoring across nodes
         for i in range(self.num_nodes):
-            node_health = self.nodes[i].getdigidollarsystemhealth()
+            node_health = self.nodes[i].getdigidollarstats()
             # Health should be consistent across nodes
             assert_equal(node_health['system_collateral_ratio'], health['system_collateral_ratio'])
             assert_equal(node_health['total_dd_supply'], health['total_dd_supply'])
@@ -431,7 +431,7 @@ class DigiDollarProtectionTest(DigiByteTestFramework):
             self.sync_all()
 
             dca_info = self.nodes[0].getdcamultiplier()
-            system_health = self.nodes[0].getdigidollarsystemhealth()
+            system_health = self.nodes[0].getdigidollarstats()
 
             # Verify DCA level progression
             dca_level = dca_info.get('level', 0)
@@ -496,7 +496,7 @@ class DigiDollarProtectionTest(DigiByteTestFramework):
         self.sync_all()
 
         # Record stress state
-        stress_health = self.nodes[0].getdigidollarsystemhealth()
+        stress_health = self.nodes[0].getdigidollarstats()
         stress_dca = self.nodes[0].getdcamultiplier()
 
         # Begin recovery by improving price gradually
@@ -510,7 +510,7 @@ class DigiDollarProtectionTest(DigiByteTestFramework):
             self.sync_all()
 
             # Monitor recovery progress
-            recovery_health = self.nodes[0].getdigidollarsystemhealth()
+            recovery_health = self.nodes[0].getdigidollarstats()
             recovery_dca = self.nodes[0].getdcamultiplier()
 
             recovery_ratio = Decimal(recovery_health['system_collateral_ratio'])
@@ -528,7 +528,7 @@ class DigiDollarProtectionTest(DigiByteTestFramework):
                 assert_equal(recovery_multiplier, Decimal('1.0'))
 
         # Verify full recovery
-        final_health = self.nodes[0].getdigidollarsystemhealth()
+        final_health = self.nodes[0].getdigidollarstats()
         final_protection = self.nodes[0].getprotectionstatus()
 
         # All protection mechanisms should be back to normal

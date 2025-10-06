@@ -12,9 +12,8 @@ class CRPCTable;
 // DigiDollar RPC command declarations
 
 // System monitoring commands
-RPCHelpMan getdigidollarsystemhealth();
-RPCHelpMan getdcamultiplier();
 RPCHelpMan getdigidollarstats();
+RPCHelpMan getdcamultiplier();
 RPCHelpMan calculatecollateralrequirement();
 RPCHelpMan getdigidollarstatus();
 

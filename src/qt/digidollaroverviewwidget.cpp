@@ -564,7 +564,7 @@ void DigiDollarOverviewWidget::updateSystemHealth()
     try {
         // Execute RPC call to get network-wide system health
         UniValue params(UniValue::VARR); // No parameters needed
-        UniValue result = m_clientModel->node().executeRpc("getdigidollarsystemhealth", params, "");
+        UniValue result = m_clientModel->node().executeRpc("getdigidollarstats", params, "");
 
         // Extract values from RPC result
         int healthPercentage = result.find_value("health_percentage").getInt<int>();

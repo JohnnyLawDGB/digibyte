@@ -153,7 +153,7 @@ echo ""
 # Get Bob's view
 echo "=== Bob's View (RPC) ==="
 BOB_HEALTH=$(curl --silent --user "$COOKIE" \
-  --data-binary '{"jsonrpc":"1.0","id":"test","method":"getdigidollarsystemhealth","params":[]}' \
+  --data-binary '{"jsonrpc":"1.0","id":"test","method":"getdigidollarstats","params":[]}' \
   -H 'content-type: text/plain;' \
   http://127.0.0.1:18443/)
 echo "$BOB_HEALTH" | jq '.result'
@@ -162,7 +162,7 @@ echo ""
 # Get Alice's view
 echo "=== Alice's View (RPC) ==="
 ALICE_HEALTH=$(curl --silent --user "$ALICE_COOKIE" \
-  --data-binary '{"jsonrpc":"1.0","id":"test","method":"getdigidollarsystemhealth","params":[]}' \
+  --data-binary '{"jsonrpc":"1.0","id":"test","method":"getdigidollarstats","params":[]}' \
   -H 'content-type: text/plain;' \
   http://127.0.0.1:18446/)
 echo "$ALICE_HEALTH" | jq '.result'

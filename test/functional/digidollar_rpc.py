@@ -82,8 +82,8 @@ class DigiDollarRPCTest(DigiByteTestFramework):
         """Test system monitoring RPC commands."""
         self.log.info("Testing system monitoring RPC commands...")
 
-        # Test getdigidollarsystemhealth
-        health = self.nodes[0].getdigidollarsystemhealth()
+        # Test getdigidollarstats
+        health = self.nodes[0].getdigidollarstats()
         self.log.info(f"System health response: {health}")
 
         required_health_fields = [
@@ -108,8 +108,8 @@ class DigiDollarRPCTest(DigiByteTestFramework):
         # Both should see IDENTICAL network stats from UTXO set
         self.log.info("Testing network-wide DD tracking (CRITICAL)...")
 
-        bob_health = self.nodes[0].getdigidollarsystemhealth()
-        alice_health = self.nodes[1].getdigidollarsystemhealth()
+        bob_health = self.nodes[0].getdigidollarstats()
+        alice_health = self.nodes[1].getdigidollarstats()
 
         self.log.info(f"Bob sees: supply={bob_health['total_dd_supply']}, collateral={bob_health['total_collateral_locked']}")
         self.log.info(f"Alice sees: supply={alice_health['total_dd_supply']}, collateral={alice_health['total_collateral_locked']}")
@@ -383,7 +383,7 @@ class DigiDollarRPCTest(DigiByteTestFramework):
 
         # Test JSON serialization
         responses = {
-            'health': self.nodes[0].getdigidollarsystemhealth(),
+            'health': self.nodes[0].getdigidollarstats(),
             'stats': self.nodes[0].getdigidollarstats(),
             'positions': self.nodes[0].listdigidollarpositions(),
             'oracle': self.nodes[0].getoracleprice(),

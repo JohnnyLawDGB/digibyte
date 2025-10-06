@@ -74,8 +74,8 @@ class DigiDollarNetworkTrackingTest(DigiByteTestFramework):
         # Phase 2: Network-wide tracking test
         self.log.info("\n--- Phase 2: CRITICAL TEST - Network-wide stats ---")
 
-        bob_health = self.nodes[0].getdigidollarsystemhealth()
-        alice_health = self.nodes[1].getdigidollarsystemhealth()
+        bob_health = self.nodes[0].getdigidollarstats()
+        alice_health = self.nodes[1].getdigidollarstats()
 
         self.log.info(f"\nBob (node 0) sees:")
         self.log.info(f"  Total DD Supply: {bob_health['total_dd_supply']} cents (expected: 17500)")

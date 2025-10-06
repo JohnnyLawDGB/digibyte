@@ -261,7 +261,7 @@ class DigiDollarRedeemTest(DigiByteTestFramework):
         # For testing, we'll manipulate oracle price to simulate this condition
 
         # Get current system health
-        initial_health = self.nodes[0].getdigidollarsystemhealth()
+        initial_health = self.nodes[0].getdigidollarstats()
         self.log.info(f"Initial system health: {initial_health}")
 
         # Dramatically increase oracle price to simulate DGB crash
@@ -301,7 +301,7 @@ class DigiDollarRedeemTest(DigiByteTestFramework):
             self.log.info("ERR not triggered by price manipulation, testing protection mechanisms...")
 
             # Even if ERR isn't triggered, the system should show stress
-            system_health = self.nodes[0].getdigidollarsystemhealth()
+            system_health = self.nodes[0].getdigidollarstats()
             assert 'system_collateral_ratio' in system_health
 
             # System should be under stress

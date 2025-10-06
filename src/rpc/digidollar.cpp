@@ -73,9 +73,9 @@ namespace {
     }
 }
 
-static RPCHelpMan getdigidollarsystemhealth()
+RPCHelpMan getdigidollarstats()
 {
-    return RPCHelpMan{"getdigidollarsystemhealth",
+    return RPCHelpMan{"getdigidollarstats",
                 "\nGet current DigiDollar system health information.\n"
                 "Returns the overall health of the DigiDollar stablecoin system,\n"
                 "including collateralization ratio and DCA tier status.\n",
@@ -104,8 +104,8 @@ static RPCHelpMan getdigidollarsystemhealth()
                     }
                 },
                 RPCExamples{
-                    HelpExampleCli("getdigidollarsystemhealth", "")
-                    + HelpExampleRpc("getdigidollarsystemhealth", "")
+                    HelpExampleCli("getdigidollarstats", "")
+                    + HelpExampleRpc("getdigidollarstats", "")
                 },
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
         {
@@ -242,158 +242,6 @@ static RPCHelpMan getdcamultiplier()
     };
 }
 
-static RPCHelpMan getdigidollarstats()
-{
-    return RPCHelpMan{"getdigidollarstats",
-                "\nGet comprehensive DigiDollar system statistics.\n"
-                "Returns detailed information about the DigiDollar stablecoin system\n"
-                "including supply, collateral, health metrics, and DCA status.\n",
-                {},
-                RPCResult{
-                    RPCResult::Type::OBJ, "", "",
-                    {
-                        {RPCResult::Type::OBJ, "supply", "DigiDollar supply information",
-                            {
-                                {RPCResult::Type::NUM, "total_dd_cents", "Total DigiDollar supply in cents"},
-                                {RPCResult::Type::NUM, "total_dd_usd", "Total DigiDollar supply in USD"},
-                                {RPCResult::Type::NUM, "active_mints", "Number of active mint positions"},
-                                {RPCResult::Type::NUM, "total_redeemed", "Total DigiDollars redeemed (historical)"}
-                            }
-                        },
-                        {RPCResult::Type::OBJ, "collateral", "Collateral information",
-                            {
-                                {RPCResult::Type::NUM, "total_dgb", "Total DGB locked as collateral"},
-                                {RPCResult::Type::NUM, "total_usd_value", "Total collateral value in USD"},
-                                {RPCResult::Type::NUM, "average_lock_time", "Average lock time across all mints (in blocks)"},
-                                {RPCResult::Type::OBJ, "total_locked_by_tier", "Collateral distribution by lock tier"}
-                            }
-                        },
-                        {RPCResult::Type::OBJ, "health", "System health metrics",
-                            {
-                                {RPCResult::Type::NUM, "collateralization_ratio", "Overall collateralization ratio %"},
-                                {RPCResult::Type::STR, "health_tier", "Current health tier"},
-                                {RPCResult::Type::BOOL, "is_emergency", "Emergency state flag"},
-                                {RPCResult::Type::NUM, "days_since_emergency", "Days since last emergency (if any)"}
-                            }
-                        },
-                        {RPCResult::Type::OBJ, "dca", "Dynamic Collateral Adjustment status",
-                            {
-                                {RPCResult::Type::NUM, "current_multiplier", "Current DCA multiplier"},
-                                {RPCResult::Type::STR, "tier_description", "Current tier description"},
-                                {RPCResult::Type::NUM, "tier_min_health", "Minimum health % for current tier"},
-                                {RPCResult::Type::NUM, "tier_max_health", "Maximum health % for current tier"},
-                                {RPCResult::Type::OBJ, "collateral_requirements", "Current collateral requirements by lock period",
-                                    {
-                                        {RPCResult::Type::NUM, "30_days", "Effective ratio for 30-day lock"},
-                                        {RPCResult::Type::NUM, "90_days", "Effective ratio for 3-month lock"},
-                                        {RPCResult::Type::NUM, "180_days", "Effective ratio for 6-month lock"},
-                                        {RPCResult::Type::NUM, "365_days", "Effective ratio for 1-year lock"},
-                                        {RPCResult::Type::NUM, "1095_days", "Effective ratio for 3-year lock"},
-                                        {RPCResult::Type::NUM, "1825_days", "Effective ratio for 5-year lock"},
-                                        {RPCResult::Type::NUM, "2555_days", "Effective ratio for 7-year lock"},
-                                        {RPCResult::Type::NUM, "3650_days", "Effective ratio for 10-year lock"}
-                                    }
-                                }
-                            }
-                        },
-                        {RPCResult::Type::OBJ, "oracle", "Oracle price information",
-                            {
-                                {RPCResult::Type::NUM, "price_cents", "Current DGB price in cents"},
-                                {RPCResult::Type::NUM, "price_usd", "Current DGB price in USD"},
-                                {RPCResult::Type::NUM, "last_update_height", "Block height of last price update"},
-                                {RPCResult::Type::NUM, "validity_blocks", "Blocks remaining until price expires"}
-                            }
-                        }
-                    }
-                },
-                RPCExamples{
-                    HelpExampleCli("getdigidollarstats", "")
-                    + HelpExampleRpc("getdigidollarstats", "")
-                },
-        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
-        {
-            // Get current system state
-            CAmount totalCollateral = DynamicCollateralAdjustment::GetTotalSystemCollateral();
-            CAmount totalDD = DynamicCollateralAdjustment::GetTotalDDSupply();
-
-            // TODO: Get real oracle price and other metrics
-            CAmount oraclePrice = 5000; // $0.05 per DGB
-            int currentHeight = 1000; // TODO: Get real current height
-
-            // Calculate system health and DCA info
-            int systemHealth = DynamicCollateralAdjustment::CalculateSystemHealth(
-                totalCollateral, totalDD, oraclePrice);
-            double dcaMultiplier = DynamicCollateralAdjustment::GetDCAMultiplier(systemHealth);
-            auto tier = DynamicCollateralAdjustment::GetCurrentTier(systemHealth);
-            bool isEmergency = DynamicCollateralAdjustment::IsSystemEmergency(systemHealth);
-
-            // Calculate collateral value in USD
-            CAmount collateralValueUSD = (totalCollateral * oraclePrice) / COIN;
-
-            UniValue result(UniValue::VOBJ);
-
-            // Supply information
-            UniValue supply(UniValue::VOBJ);
-            supply.pushKV("total_dd_cents", totalDD);
-            supply.pushKV("total_dd_usd", ValueFromAmount(totalDD));
-            supply.pushKV("active_mints", 0); // TODO: implement mint counting
-            supply.pushKV("total_redeemed", 0); // TODO: implement redemption tracking
-            result.pushKV("supply", supply);
-
-            // Collateral information
-            UniValue collateral(UniValue::VOBJ);
-            collateral.pushKV("total_dgb", ValueFromAmount(totalCollateral));
-            collateral.pushKV("total_usd_value", ValueFromAmount(collateralValueUSD));
-            collateral.pushKV("average_lock_time", 0); // TODO: implement lock time tracking
-            collateral.pushKV("total_locked_by_tier", UniValue(UniValue::VOBJ)); // TODO: implement tier breakdown
-            result.pushKV("collateral", collateral);
-
-            // Health metrics
-            UniValue health(UniValue::VOBJ);
-            health.pushKV("collateralization_ratio", systemHealth);
-            health.pushKV("health_tier", tier.status);
-            health.pushKV("is_emergency", isEmergency);
-            health.pushKV("days_since_emergency", 0); // TODO: implement emergency tracking
-            result.pushKV("health", health);
-
-            // DCA information
-            UniValue dca(UniValue::VOBJ);
-            dca.pushKV("current_multiplier", dcaMultiplier);
-            dca.pushKV("tier_description", tier.status);
-            dca.pushKV("tier_min_health", tier.minCollateral);
-            dca.pushKV("tier_max_health", tier.maxCollateral);
-
-            // Current collateral requirements by lock period
-            UniValue requirements(UniValue::VOBJ);
-            std::vector<std::pair<int, std::string>> lockPeriods = {
-                {30, "30_days"}, {90, "90_days"}, {180, "180_days"}, {365, "365_days"},
-                {1095, "1095_days"}, {1825, "1825_days"}, {2555, "2555_days"}, {3650, "3650_days"}
-            };
-
-            const auto& params = Params();
-            const auto& ddParams = params.GetDigiDollarParams();
-
-            for (const auto& [days, key] : lockPeriods) {
-                int64_t lockBlocks = DigiDollar::LockDaysToBlocks(days);
-                int baseRatio = DigiDollar::GetCollateralRatioForLockTime(lockBlocks, ddParams);
-                int effectiveRatio = DynamicCollateralAdjustment::ApplyDCA(baseRatio, systemHealth);
-                requirements.pushKV(key, effectiveRatio);
-            }
-            dca.pushKV("collateral_requirements", requirements);
-            result.pushKV("dca", dca);
-
-            // Oracle information
-            UniValue oracle(UniValue::VOBJ);
-            oracle.pushKV("price_cents", oraclePrice);
-            oracle.pushKV("price_usd", ValueFromAmount(oraclePrice));
-            oracle.pushKV("last_update_height", currentHeight); // TODO: get real oracle update height
-            oracle.pushKV("validity_blocks", 20); // TODO: get real validity period
-            result.pushKV("oracle", oracle);
-
-            return result;
-        },
-    };
-}
 
 static RPCHelpMan calculatecollateralrequirement()
 {
@@ -482,73 +330,6 @@ static RPCHelpMan calculatecollateralrequirement()
             result.pushKV("oracle_price", oraclePrice);
             result.pushKV("system_health", systemHealth);
             result.pushKV("dca_tier", tier.status);
-
-            return result;
-        },
-    };
-}
-
-static RPCHelpMan getdigidollarstatus()
-{
-    return RPCHelpMan{"getdigidollarstatus",
-                "\nGet comprehensive DigiDollar system status and health monitoring.\n"
-                "Returns detailed system metrics including supply, collateral, tier breakdown,\n"
-                "protection system status, oracle information, and active alerts.\n",
-                {},
-                RPCResult{
-                    RPCResult::Type::OBJ, "", "",
-                    {
-                        {RPCResult::Type::NUM, "supply", "Total DigiDollar supply in circulation (cents)"},
-                        {RPCResult::Type::NUM, "collateral", "Total DGB locked as collateral"},
-                        {RPCResult::Type::NUM, "health", "Overall system health percentage (100-300%)"},
-                        {RPCResult::Type::NUM, "dca_multiplier", "Current DCA multiplier (1.0-10.0)"},
-                        {RPCResult::Type::BOOL, "err_active", "Emergency Redemption Ratio active"},
-                        {RPCResult::Type::NUM, "volatility", "Current volatility percentage"},
-                        {RPCResult::Type::BOOL, "minting_frozen", "Whether new minting is frozen"},
-                        {RPCResult::Type::ARR, "tiers", "Per-tier breakdown",
-                            {
-                                {RPCResult::Type::OBJ, "", "",
-                                    {
-                                        {RPCResult::Type::NUM, "lock_days", "Lock period for this tier"},
-                                        {RPCResult::Type::NUM, "dd_minted", "DD issued in this tier (cents)"},
-                                        {RPCResult::Type::NUM, "dgb_locked", "DGB locked in this tier"},
-                                        {RPCResult::Type::NUM, "positions", "Number of active positions"},
-                                        {RPCResult::Type::NUM, "health", "Tier-specific health ratio (%)"},
-                                        {RPCResult::Type::STR, "status", "Health status (Healthy/Warning/Critical)"},
-                                        {RPCResult::Type::STR, "action", "Recommended action"}
-                                    }
-                                }
-                            }
-                        },
-                        {RPCResult::Type::OBJ, "oracles", "Oracle system status",
-                            {
-                                {RPCResult::Type::NUM, "active_count", "Number of active oracles"},
-                                {RPCResult::Type::NUM, "last_price", "Last reported DGB price (cents)"},
-                                {RPCResult::Type::NUM, "last_update", "Block height of last oracle update"},
-                                {RPCResult::Type::NUM, "blocks_since_update", "Blocks since last oracle update"},
-                                {RPCResult::Type::BOOL, "is_stale", "Whether oracle data is stale"}
-                            }
-                        },
-                        {RPCResult::Type::ARR, "active_alerts", "Currently active system alerts",
-                            {
-                                {RPCResult::Type::STR, "", "Alert type"}
-                            }
-                        },
-                        {RPCResult::Type::STR, "overall_status", "Overall system status (Healthy/Warning/Critical)"},
-                        {RPCResult::Type::STR, "recommended_action", "System-wide recommended action"}
-                    }
-                },
-                RPCExamples{
-                    HelpExampleCli("getdigidollarstatus", "")
-                    + HelpExampleRpc("getdigidollarstatus", "")
-                },
-        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
-        {
-            // Initialize health monitoring if not already done
-            DigiDollar::SystemHealthMonitor::Initialize();
-
-            // Get comprehensive health report from health monitor
-            UniValue result = DigiDollar::SystemHealthMonitor::GetHealthReport();
 
             return result;
         },
@@ -2487,11 +2268,9 @@ void RegisterDigiDollarRPCCommands(CRPCTable &t)
 {
     static const CRPCCommand commands[] = {
         // System monitoring commands
-        {"digidollar", &getdigidollarsystemhealth},
-        {"digidollar", &getdcamultiplier},
         {"digidollar", &getdigidollarstats},
+        {"digidollar", &getdcamultiplier},
         {"digidollar", &calculatecollateralrequirement},
-        {"digidollar", &getdigidollarstatus},
         {"digidollar", &getdigidollardeploymentinfo},
 
         // Core transaction commands (moved to wallet RPC table)

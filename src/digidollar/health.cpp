@@ -231,18 +231,29 @@ void SystemHealthMonitor::Initialize()
         return;
     }
 
-    LogPrint(BCLog::DIGIDOLLAR, "Initialize: Initializing DigiDollar health monitoring system (totalDDSupply was %ld before reset)\n",
+    LogPrint(BCLog::DIGIDOLLAR, "Initialize: Initializing DigiDollar health monitoring system (totalDDSupply=%ld)\n",
              s_currentMetrics.totalDDSupply);
 
-    // Initialize metrics structure
-    s_currentMetrics = SystemMetrics();
-    LogPrint(BCLog::DIGIDOLLAR, "Initialize: Reset metrics structure (totalDDSupply now %ld)\n",
-             s_currentMetrics.totalDDSupply);
+    // Don't reset metrics if they've already been populated by ScanUTXOSet
+    if (s_currentMetrics.totalDDSupply == 0 && s_currentMetrics.totalCollateral == 0) {
+        LogPrint(BCLog::DIGIDOLLAR, "Initialize: No existing data, initializing fresh metrics structure\n");
+        // Initialize metrics structure
+        s_currentMetrics = SystemMetrics();
 
-    // Initialize tier breakdown
-    s_currentMetrics.tiers.clear();
-    for (int lockDays : TIER_LOCK_DAYS) {
-        s_currentMetrics.tiers.emplace_back(lockDays, 0, 0, 0, 0);
+        // Initialize tier breakdown
+        s_currentMetrics.tiers.clear();
+        for (int lockDays : TIER_LOCK_DAYS) {
+            s_currentMetrics.tiers.emplace_back(lockDays, 0, 0, 0, 0);
+        }
+    } else {
+        LogPrint(BCLog::DIGIDOLLAR, "Initialize: Metrics already populated (totalDDSupply=%ld, totalCollateral=%ld), preserving data\n",
+                 s_currentMetrics.totalDDSupply, s_currentMetrics.totalCollateral);
+        // Just ensure tiers are initialized if empty
+        if (s_currentMetrics.tiers.empty()) {
+            for (int lockDays : TIER_LOCK_DAYS) {
+                s_currentMetrics.tiers.emplace_back(lockDays, 0, 0, 0, 0);
+            }
+        }
     }
 
     // Clear health history

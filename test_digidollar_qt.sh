@@ -33,6 +33,7 @@ mkdir -p /tmp/bob_regtest
     -listen=1 \
     -discover=0 \
     -digidollar=1 \
+    -txindex=1 \
     -fallbackfee=0.0001 \
     > /tmp/bob_qt.log 2>&1 &
 BOB_PID=$!
@@ -126,6 +127,7 @@ mkdir -p /tmp/alice_regtest
     -listen=1 \
     -discover=0 \
     -digidollar=1 \
+    -txindex=1 \
     -fallbackfee=0.0001 \
     -connect=127.0.0.1:18444 \
     > /tmp/alice_qt.log 2>&1 &
@@ -173,6 +175,9 @@ ALICE_SUPPLY=$(echo "$ALICE_HEALTH" | jq '.result.total_dd_supply')
 BOB_COLLATERAL=$(echo "$BOB_HEALTH" | jq '.result.total_collateral_dgb')
 ALICE_COLLATERAL=$(echo "$ALICE_HEALTH" | jq '.result.total_collateral_dgb')
 
+BOB_HEALTH_PCT=$(echo "$BOB_HEALTH" | jq '.result.health_percentage')
+ALICE_HEALTH_PCT=$(echo "$ALICE_HEALTH" | jq '.result.health_percentage')
+
 echo "=========================================="
 echo "Verification Results:"
 echo "=========================================="
@@ -189,6 +194,22 @@ if [ "$BOB_COLLATERAL" = "$ALICE_COLLATERAL" ]; then
 else
     echo "❌ total_collateral_dgb MISMATCH!"
     echo "   Bob: $BOB_COLLATERAL, Alice: $ALICE_COLLATERAL"
+fi
+
+if [ "$BOB_HEALTH_PCT" = "$ALICE_HEALTH_PCT" ]; then
+    echo "✅ health_percentage MATCHES: $BOB_HEALTH_PCT%"
+else
+    echo "❌ health_percentage MISMATCH!"
+    echo "   Bob: $BOB_HEALTH_PCT%, Alice: $ALICE_HEALTH_PCT%"
+fi
+
+# Verify health calculation is correct (328% for our test case)
+EXPECTED_HEALTH=328
+if [ "$BOB_HEALTH_PCT" = "$EXPECTED_HEALTH" ]; then
+    echo "✅ health_percentage CORRECT: $EXPECTED_HEALTH%"
+else
+    echo "❌ health_percentage INCORRECT!"
+    echo "   Expected: $EXPECTED_HEALTH%, Got: $BOB_HEALTH_PCT%"
 fi
 
 echo ""

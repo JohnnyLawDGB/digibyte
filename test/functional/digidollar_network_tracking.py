@@ -80,12 +80,12 @@ class DigiDollarNetworkTrackingTest(DigiByteTestFramework):
         self.log.info(f"\nBob (node 0) sees:")
         self.log.info(f"  Total DD Supply: {bob_health['total_dd_supply']} cents (expected: 17500)")
         self.log.info(f"  Total Collateral: {bob_health['total_collateral_locked']} DGB (expected: 57500)")
-        self.log.info(f"  System Health: {bob_health['health_percentage']}%")
+        self.log.info(f"  System Health: {bob_health['health_percentage']}% (expected: 328%)")
 
         self.log.info(f"\nAlice (node 1) sees:")
         self.log.info(f"  Total DD Supply: {alice_health['total_dd_supply']} cents (expected: 17500)")
         self.log.info(f"  Total Collateral: {alice_health['total_collateral_locked']} DGB (expected: 57500)")
-        self.log.info(f"  System Health: {alice_health['health_percentage']}%")
+        self.log.info(f"  System Health: {alice_health['health_percentage']}% (expected: 328%)")
 
         # CRITICAL ASSERTION: Both nodes MUST see identical stats
         self.log.info("\n--- Verifying network-wide consistency ---")
@@ -100,8 +100,20 @@ class DigiDollarNetworkTrackingTest(DigiByteTestFramework):
             raise AssertionError(f"FAILED: Nodes see different collateral! Bob: {bob_health['total_collateral_locked']}, Alice: {alice_health['total_collateral_locked']}")
         assert_equal(bob_health['total_collateral_locked'], alice_health['total_collateral_locked'])
 
+        # Both nodes MUST see identical system health percentage
+        if bob_health['health_percentage'] != alice_health['health_percentage']:
+            raise AssertionError(f"FAILED: Nodes see different health! Bob: {bob_health['health_percentage']}%, Alice: {alice_health['health_percentage']}%")
+        assert_equal(bob_health['health_percentage'], alice_health['health_percentage'])
+
+        # Verify health calculation is correct: (57500 DGB * $0.01) / ($175.00) * 100 = 328%
+        expected_health = 328
+        if bob_health['health_percentage'] != expected_health:
+            raise AssertionError(f"FAILED: Incorrect health calculation! Got: {bob_health['health_percentage']}%, Expected: {expected_health}%")
+        assert_equal(bob_health['health_percentage'], expected_health)
+
         self.log.info("✓ SUCCESS: Both nodes see identical network stats!")
         self.log.info("✓ UTXO-based tracking is working correctly!")
+        self.log.info(f"✓ System health correctly calculated: {expected_health}%")
 
         self.log.info("\n" + "=" * 80)
         self.log.info("ALL TESTS PASSED - NETWORK-WIDE TRACKING WORKS!")

@@ -141,7 +141,9 @@ static RPCHelpMan getdigidollarsystemhealth()
             }
 
             // Get current oracle price (mock for now)
-            CAmount oraclePrice = 1; // $0.01 per DGB in cents
+            // Oracle price format: millicents per DGB (actual_price_in_dollars * 100,000)
+            // For $0.01 per DGB: 0.01 * 100,000 = 1,000 millicents/DGB
+            CAmount oraclePrice = 1000; // $0.01 per DGB = 1000 millicents/DGB
 
             // Calculate system health
             int systemHealth = DynamicCollateralAdjustment::CalculateSystemHealth(
@@ -158,7 +160,7 @@ static RPCHelpMan getdigidollarsystemhealth()
             result.pushKV("health_status", tier.status);
             result.pushKV("total_collateral_dgb", ValueFromAmount(totalCollateral));
             result.pushKV("total_dd_supply", totalDD);
-            result.pushKV("oracle_price_cents", oraclePrice);
+            result.pushKV("oracle_price_cents", oraclePrice / 1000); // Convert millicents to cents for display
             result.pushKV("is_emergency", isEmergency);
 
             // Add fields expected by tests

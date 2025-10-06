@@ -227,13 +227,17 @@ UniValue SystemHealthMonitor::GetHealthReport()
 void SystemHealthMonitor::Initialize()
 {
     if (s_initialized) {
+        LogPrint(BCLog::DIGIDOLLAR, "Initialize: Already initialized, skipping\n");
         return;
     }
 
-    LogPrint(BCLog::DIGIDOLLAR, "Initializing DigiDollar health monitoring system\n");
+    LogPrint(BCLog::DIGIDOLLAR, "Initialize: Initializing DigiDollar health monitoring system (totalDDSupply was %ld before reset)\n",
+             s_currentMetrics.totalDDSupply);
 
     // Initialize metrics structure
     s_currentMetrics = SystemMetrics();
+    LogPrint(BCLog::DIGIDOLLAR, "Initialize: Reset metrics structure (totalDDSupply now %ld)\n",
+             s_currentMetrics.totalDDSupply);
 
     // Initialize tier breakdown
     s_currentMetrics.tiers.clear();
@@ -488,7 +492,10 @@ void SystemHealthMonitor::UpdateTierMetrics()
     // Update per-tier metrics
     // Note: In real implementation, this would analyze actual positions by tier
     // For testing/mock mode (when ScanUTXOSet hasn't run), use mock data across all tiers
+    LogPrint(BCLog::DIGIDOLLAR, "UpdateTierMetrics: BEFORE CONDITION CHECK - tiers.size()=%d, totalDDSupply=%ld\n",
+             s_currentMetrics.tiers.size(), s_currentMetrics.totalDDSupply);
     if (s_currentMetrics.tiers.size() >= 6 && s_currentMetrics.totalDDSupply == 0) {
+        LogPrint(BCLog::DIGIDOLLAR, "UpdateTierMetrics: MOCK MODE TRIGGERED!\n");
         // Mock mode - populate with test data
         // Tier 0: 30-day (mock data) - 150% ratio
         s_currentMetrics.tiers[0].ddMinted = 3600; // $36.00

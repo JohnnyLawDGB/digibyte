@@ -20,8 +20,8 @@ class DigiDollarNetworkTrackingTest(DigiByteTestFramework):
         self.num_nodes = 2
         self.setup_clean_chain = True
         self.extra_args = [
-            ["-digidollar=1", "-debug=digidollar"],
-            ["-digidollar=1", "-debug=digidollar"]
+            ["-digidollar=1", "-debug=digidollar", "-txindex=1"],
+            ["-digidollar=1", "-debug=digidollar", "-txindex=1"]
         ]
 
     def skip_test_if_missing_module(self):

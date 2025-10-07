@@ -53,6 +53,7 @@ private:
     std::vector<unsigned char> vchData;
     std::vector<unsigned char> vchVersion;
     bool fValid;
+    std::string original_str;  // Store original string for invalid addresses (testing support)
 
 public:
     // Version bytes for DigiDollar addresses (2-byte prefixes)
@@ -73,7 +74,7 @@ public:
     // Serialization support
     template<typename Stream>
     void Serialize(Stream& s) const {
-        std::string str = ToString();
+        std::string str = fValid ? ToString() : original_str;
         s << str;
     }
 
@@ -86,7 +87,7 @@ public:
 
     // Comparison operator for testing
     bool operator==(const CDigiDollarAddress& other) const {
-        return vchData == other.vchData && vchVersion == other.vchVersion && fValid == other.fValid;
+        return vchData == other.vchData && vchVersion == other.vchVersion && fValid == other.fValid && original_str == other.original_str;
     }
 };
 

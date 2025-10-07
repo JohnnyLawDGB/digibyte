@@ -1831,7 +1831,7 @@ BOOST_AUTO_TEST_CASE(timelock_mast_path_selection)
         << OP_CHECKSIG;
 
     // Path 2: 30-day timelock
-    int64_t lock30Days = 30 * 5760; // 30 days * 5760 blocks/day
+    int64_t lock30Days = 30 * DigiDollar::BLOCKS_PER_DAY; // 30 days
     CScript path2 = CScript()
         << lock30Days
         << OP_CHECKLOCKTIMEVERIFY
@@ -1840,7 +1840,7 @@ BOOST_AUTO_TEST_CASE(timelock_mast_path_selection)
         << OP_CHECKSIG;
 
     // Path 3: 1-year timelock
-    int64_t lock1Year = 365 * 5760; // 1 year
+    int64_t lock1Year = 365 * DigiDollar::BLOCKS_PER_DAY; // 1 year
     CScript path3 = CScript()
         << lock1Year
         << OP_CHECKLOCKTIMEVERIFY
@@ -2269,10 +2269,10 @@ BOOST_AUTO_TEST_CASE(timelock_multi_input_validation)
     // Vault 3: 1 year (2102400 blocks) <- Longest
     // Vault 4: 6 months (1036800 blocks)
     // Transaction nLockTime must be >= 2102400 (1 year vault)
-    int64_t vault1Lock = 30 * 5760;
-    int64_t vault2Lock = 90 * 5760;
-    int64_t vault3Lock = 365 * 5760; // Longest
-    int64_t vault4Lock = 180 * 5760;
+    int64_t vault1Lock = 30 * DigiDollar::BLOCKS_PER_DAY;
+    int64_t vault2Lock = 90 * DigiDollar::BLOCKS_PER_DAY;
+    int64_t vault3Lock = 365 * DigiDollar::BLOCKS_PER_DAY; // Longest
+    int64_t vault4Lock = 180 * DigiDollar::BLOCKS_PER_DAY;
 
     BOOST_CHECK(vault3Lock > vault1Lock);
     BOOST_CHECK(vault3Lock > vault2Lock);

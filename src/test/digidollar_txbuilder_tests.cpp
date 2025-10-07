@@ -35,6 +35,37 @@ std::vector<COutPoint> CreateTestUTXOs(size_t count) {
     return utxos;
 }
 
+// Test MintTxBuilder with larger UTXO values for collateral
+class TestMintTxBuilder : public MintTxBuilder {
+public:
+    using MintTxBuilder::MintTxBuilder;
+
+    // Override to provide larger UTXOs (10,000 DGB each instead of 100 DGB)
+    CAmount GetDGBFromUTXO(const COutPoint& outpoint) const override {
+        return 10000 * COIN; // 10,000 DGB per UTXO
+    }
+};
+
+// Test RedeemTxBuilder with larger UTXO values
+class TestRedeemTxBuilder : public RedeemTxBuilder {
+public:
+    using RedeemTxBuilder::RedeemTxBuilder;
+
+    CAmount GetDGBFromUTXO(const COutPoint& outpoint) const override {
+        return 10000 * COIN; // 10,000 DGB per UTXO
+    }
+};
+
+// Test TransferTxBuilder with larger UTXO values
+class TestTransferTxBuilder : public TransferTxBuilder {
+public:
+    using TransferTxBuilder::TransferTxBuilder;
+
+    CAmount GetDGBFromUTXO(const COutPoint& outpoint) const override {
+        return 10000 * COIN; // 10,000 DGB per UTXO
+    }
+};
+
 BOOST_AUTO_TEST_CASE(txbuilder_basic_construction)
 {
     // Test basic construction of transaction builders
@@ -54,9 +85,9 @@ BOOST_AUTO_TEST_CASE(mint_transaction_basic)
 {
     const CChainParams& params = Params();
     int height = 1000;
-    CAmount price = 5000; // $0.05 per DGB (5000 cents per DGB)
+    CAmount price = 1000; // $0.01 per DGB (1000 cents per DGB) - matches default mock oracle
 
-    MintTxBuilder builder(params, height, price);
+    TestMintTxBuilder builder(params, height, price);
 
     // Create mint parameters
     TxBuilderMintParams mintParams;
@@ -69,8 +100,20 @@ BOOST_AUTO_TEST_CASE(mint_transaction_basic)
     // Build mint transaction
     TxBuilderResult result = builder.BuildMintTransaction(mintParams);
 
+    // Debug output
+    if (!result.success) {
+        std::cout << "MINT FAILED: " << result.error << std::endl;
+        std::cout << "Collateral required: " << result.collateralRequired << std::endl;
+    } else {
+        std::cout << "MINT SUCCEEDED!" << std::endl;
+        std::cout << "Inputs: " << result.tx.vin.size() << std::endl;
+        std::cout << "Outputs: " << result.tx.vout.size() << std::endl;
+        std::cout << "Collateral: " << result.collateralRequired << std::endl;
+        std::cout << "Fees: " << result.totalFees << std::endl;
+    }
+
     BOOST_CHECK(result.success);
-    BOOST_CHECK(!result.error.empty() == false); // No error
+    BOOST_CHECK(result.error.empty()); // No error
     BOOST_CHECK(result.tx.vin.size() > 0);
     BOOST_CHECK(result.tx.vout.size() >= 2); // Collateral + DD outputs
     BOOST_CHECK(result.collateralRequired > 0);
@@ -85,9 +128,9 @@ BOOST_AUTO_TEST_CASE(mint_transaction_insufficient_funds)
 {
     const CChainParams& params = Params();
     int height = 1000;
-    CAmount price = 5000; // $0.05 per DGB (5000 cents per DGB)
+    CAmount price = 1000; // $0.01 per DGB (1000 cents per DGB)
 
-    MintTxBuilder builder(params, height, price);
+    TestMintTxBuilder builder(params, height, price);
 
     // Create mint parameters with no UTXOs
     TxBuilderMintParams mintParams;
@@ -95,26 +138,27 @@ BOOST_AUTO_TEST_CASE(mint_transaction_insufficient_funds)
     mintParams.lockDays = 365;   // 1 year
     mintParams.ownerKey = CreateTestKey();
     mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
-    // No UTXOs provided
+    // No UTXOs provided - this should cause "Invalid mint parameters" error
 
     // Build mint transaction should fail
     TxBuilderResult result = builder.BuildMintTransaction(mintParams);
 
     BOOST_CHECK(!result.success);
     BOOST_CHECK(!result.error.empty());
-    BOOST_CHECK(result.error.find("Insufficient funds") != std::string::npos ||
-                result.error.find("Invalid mint parameters") != std::string::npos);
+    // The error will be "Invalid mint parameters" because validation checks UTXOs first
+    BOOST_CHECK(result.error.find("Invalid mint parameters") != std::string::npos);
 }
 
 BOOST_AUTO_TEST_CASE(mint_transaction_invalid_amount)
 {
     const CChainParams& params = Params();
     int height = 1000;
-    CAmount price = 5000; // $0.05 per DGB (5000 cents per DGB)
+    CAmount price = 1000; // $0.01 per DGB (1000 cents per DGB)
 
-    MintTxBuilder builder(params, height, price);
+    TestMintTxBuilder builder(params, height, price);
 
-    // Create mint parameters with invalid amount (too small)
+    // Create mint parameters with invalid amount (below minimum)
+    // Check consensus params for actual minimum - typically $100 (10000 cents)
     TxBuilderMintParams mintParams;
     mintParams.ddAmount = 5000; // $50 in cents (below $100 minimum)
     mintParams.lockDays = 365;  // 1 year
@@ -122,25 +166,27 @@ BOOST_AUTO_TEST_CASE(mint_transaction_invalid_amount)
     mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
     mintParams.utxos = CreateTestUTXOs(5);
 
-    // Build mint transaction should fail
+    // Build mint transaction should fail due to invalid amount
     TxBuilderResult result = builder.BuildMintTransaction(mintParams);
 
     BOOST_CHECK(!result.success);
     BOOST_CHECK(!result.error.empty());
+    // Should get "Invalid mint parameters" error
+    BOOST_CHECK(result.error.find("Invalid mint parameters") != std::string::npos);
 }
 
 BOOST_AUTO_TEST_CASE(collateral_calculation)
 {
     const CChainParams& params = Params();
     int height = 1000;
-    CAmount price = 5000; // $0.05 per DGB (5000 cents per DGB)
+    CAmount price = 1000; // $0.01 per DGB (1000 cents per DGB)
 
-    MintTxBuilder builder(params, height, price);
+    TestMintTxBuilder builder(params, height, price);
 
     // Test collateral calculation for different lock periods
     CAmount ddAmount = 10000; // $100
 
-    // 30 days should require more collateral than 1 year
+    // 30 days should require more collateral than 1 year (higher ratio)
     CAmount collateral30Days = builder.CalculateRequiredCollateral(ddAmount, 30);
     CAmount collateral1Year = builder.CalculateRequiredCollateral(ddAmount, 365);
 
@@ -148,18 +194,19 @@ BOOST_AUTO_TEST_CASE(collateral_calculation)
     BOOST_CHECK(collateral30Days > 0);
     BOOST_CHECK(collateral1Year > 0);
 
-    // Test with larger amount
+    // Test with larger amount - collateral should scale linearly
     CAmount collateralLarge = builder.CalculateRequiredCollateral(ddAmount * 10, 365);
-    BOOST_CHECK(collateralLarge > collateral1Year * 9); // Should be roughly 10x
+    BOOST_CHECK(collateralLarge > collateral1Year * 9); // Should be roughly 10x (allowing for rounding)
+    BOOST_CHECK(collateralLarge <= collateral1Year * 11); // But not too much more
 }
 
 BOOST_AUTO_TEST_CASE(transfer_transaction_basic)
 {
     const CChainParams& params = Params();
     int height = 1000;
-    CAmount price = 5000; // $0.05 per DGB (5000 cents per DGB)
+    CAmount price = 1000; // $0.01 per DGB (1000 cents per DGB)
 
-    TransferTxBuilder builder(params, height, price);
+    TestTransferTxBuilder builder(params, height, price);
 
     // Create transfer parameters with valid DD addresses
     CKey recipient1 = CreateTestKey();
@@ -169,7 +216,7 @@ BOOST_AUTO_TEST_CASE(transfer_transaction_basic)
     std::string addr1 = DigiDollar::EncodeDigiDollarAddress(dest1, params);
     std::string addr2 = DigiDollar::EncodeDigiDollarAddress(dest2, params);
 
-    TransferParams transferParams;
+    TxBuilderTransferParams transferParams;
     transferParams.recipients = {
         {addr1, 5000}, // $50
         {addr2, 3000}  // $30
@@ -178,11 +225,18 @@ BOOST_AUTO_TEST_CASE(transfer_transaction_basic)
     transferParams.ddUtxos = CreateTestUTXOs(2);
     transferParams.feeUtxos = CreateTestUTXOs(2);
     transferParams.spenderKey = CreateTestKey();
+    // Provide DD amounts for the test UTXOs (total must >= output amount)
+    transferParams.ddAmounts = {5000, 3000}; // Total 8000 cents available
 
     // Build transfer transaction
     TxBuilderResult result = builder.BuildTransferTransaction(transferParams);
 
+    if (!result.success) {
+        std::cout << "TRANSFER FAILED: " << result.error << std::endl;
+    }
+
     BOOST_CHECK(result.success);
+    BOOST_CHECK(result.error.empty());
     BOOST_CHECK(result.tx.vin.size() > 0);
     BOOST_CHECK(result.tx.vout.size() >= 2); // At least recipient outputs
 
@@ -195,36 +249,39 @@ BOOST_AUTO_TEST_CASE(transfer_transaction_invalid_address)
 {
     const CChainParams& params = Params();
     int height = 1000;
-    CAmount price = 5000; // $0.05 per DGB (5000 cents per DGB)
+    CAmount price = 1000; // $0.01 per DGB (1000 cents per DGB)
 
-    TransferTxBuilder builder(params, height, price);
+    TestTransferTxBuilder builder(params, height, price);
 
     // Create transfer parameters with invalid address
-    TransferParams transferParams;
+    TxBuilderTransferParams transferParams;
     transferParams.recipients = {
         {"INVALID_ADDRESS_FORMAT", 5000} // Invalid DD address
     };
     transferParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
     transferParams.ddUtxos = CreateTestUTXOs(2);
     transferParams.spenderKey = CreateTestKey();
+    transferParams.ddAmounts = {5000, 3000}; // Provide DD amounts
 
-    // Build transfer transaction should fail
+    // Build transfer transaction should fail due to invalid address
     TxBuilderResult result = builder.BuildTransferTransaction(transferParams);
 
     BOOST_CHECK(!result.success);
     BOOST_CHECK(!result.error.empty());
+    // Should get "Invalid transfer parameters" error
+    BOOST_CHECK(result.error.find("Invalid transfer parameters") != std::string::npos);
 }
 
 BOOST_AUTO_TEST_CASE(redeem_transaction_basic)
 {
     const CChainParams& params = Params();
     int height = 1000;
-    CAmount price = 5000; // $0.05 per DGB (5000 cents per DGB)
+    CAmount price = 1000; // $0.01 per DGB (1000 cents per DGB)
 
-    RedeemTxBuilder builder(params, height, price);
+    TestRedeemTxBuilder builder(params, height, price);
 
     // Create redeem parameters
-    RedeemParams redeemParams;
+    TxBuilderRedeemParams redeemParams;
     uint256 collateralHash;
     collateralHash.SetHex("abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890");
     redeemParams.collateralOutpoint = COutPoint(collateralHash, 0);
@@ -238,7 +295,12 @@ BOOST_AUTO_TEST_CASE(redeem_transaction_basic)
     // Build redeem transaction
     TxBuilderResult result = builder.BuildRedemptionTransaction(redeemParams);
 
+    if (!result.success) {
+        std::cout << "REDEEM FAILED: " << result.error << std::endl;
+    }
+
     BOOST_CHECK(result.success);
+    BOOST_CHECK(result.error.empty());
     BOOST_CHECK(result.tx.vin.size() > 0);
     BOOST_CHECK(result.tx.vout.size() >= 1); // DGB output
 
@@ -251,9 +313,9 @@ BOOST_AUTO_TEST_CASE(redeem_transaction_different_paths)
 {
     const CChainParams& params = Params();
     int height = 1000;
-    CAmount price = 5000; // $0.05 per DGB (5000 cents per DGB)
+    CAmount price = 1000; // $0.01 per DGB (1000 cents per DGB)
 
-    RedeemTxBuilder builder(params, height, price);
+    TestRedeemTxBuilder builder(params, height, price);
 
     uint256 collateralHash;
     collateralHash.SetHex("abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890");
@@ -266,7 +328,7 @@ BOOST_AUTO_TEST_CASE(redeem_transaction_different_paths)
     };
 
     for (RedemptionPath path : paths) {
-        RedeemParams redeemParams;
+        TxBuilderRedeemParams redeemParams;
         redeemParams.collateralOutpoint = COutPoint(collateralHash, 0);
         redeemParams.ddToRedeem = 10000; // $100
         redeemParams.path = path;
@@ -276,7 +338,13 @@ BOOST_AUTO_TEST_CASE(redeem_transaction_different_paths)
         redeemParams.feeUtxos = CreateTestUTXOs(1);
 
         TxBuilderResult result = builder.BuildRedemptionTransaction(redeemParams);
+
+        if (!result.success) {
+            std::cout << "REDEEM PATH " << static_cast<int>(path) << " FAILED: " << result.error << std::endl;
+        }
+
         BOOST_CHECK(result.success);
+        BOOST_CHECK(result.error.empty());
     }
 }
 
@@ -284,9 +352,9 @@ BOOST_AUTO_TEST_CASE(fee_calculation)
 {
     const CChainParams& params = Params();
     int height = 1000;
-    CAmount price = 5000; // $0.05 per DGB (5000 cents per DGB)
+    CAmount price = 1000; // $0.01 per DGB (1000 cents per DGB)
 
-    MintTxBuilder builder(params, height, price);
+    TestMintTxBuilder builder(params, height, price);
 
     // Create a simple transaction for fee calculation
     CMutableTransaction tx;
@@ -330,9 +398,9 @@ BOOST_AUTO_TEST_CASE(transaction_validation_integration)
 {
     const CChainParams& params = Params();
     int height = 1000;
-    CAmount price = 5000; // $0.05 per DGB (5000 cents per DGB)
+    CAmount price = 1000; // $0.01 per DGB (1000 cents per DGB)
 
-    MintTxBuilder builder(params, height, price);
+    TestMintTxBuilder builder(params, height, price);
 
     // Create valid mint parameters
     TxBuilderMintParams mintParams;
@@ -364,9 +432,9 @@ BOOST_AUTO_TEST_CASE(edge_cases_and_error_handling)
 {
     const CChainParams& params = Params();
     int height = 1000;
-    CAmount price = 5000; // $0.05 per DGB (5000 cents per DGB)
+    CAmount price = 1000; // $0.01 per DGB (1000 cents per DGB)
 
-    MintTxBuilder builder(params, height, price);
+    TestMintTxBuilder builder(params, height, price);
 
     // Test with zero DD amount
     {

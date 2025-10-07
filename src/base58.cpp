@@ -184,7 +184,7 @@ CDigiDollarAddress::CDigiDollarAddress() : fValid(false)
 {
 }
 
-CDigiDollarAddress::CDigiDollarAddress(const std::string& str) : fValid(false)
+CDigiDollarAddress::CDigiDollarAddress(const std::string& str) : fValid(false), original_str(str)
 {
     std::vector<unsigned char> vchTemp;
     if (DecodeBase58Check(str, vchTemp, 256)) {
@@ -195,6 +195,10 @@ CDigiDollarAddress::CDigiDollarAddress(const std::string& str) : fValid(false)
                 fValid = (vchVersion == DD_P2TR_MAINNET ||
                          vchVersion == DD_P2TR_TESTNET ||
                          vchVersion == DD_P2TR_REGTEST);
+                // Clear original_str for valid addresses (not needed)
+                if (fValid) {
+                    original_str.clear();
+                }
             }
         }
     }

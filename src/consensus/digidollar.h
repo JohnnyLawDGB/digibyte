@@ -46,7 +46,6 @@ struct ConsensusParams {
     // Collateral ratios (higher for shorter periods - treasury model)
     // Map of lock time in blocks to collateral ratio percentage
     std::map<int64_t, int> collateralRatios = {
-        {240, 1000},                       // 1 hour: 1000% (testing only)
         {30 * 24 * 60 * 4, 500},           // 30 days: 500%
         {90 * 24 * 60 * 4, 400},           // 3 months: 400%
         {180 * 24 * 60 * 4, 350},          // 6 months: 350%

@@ -175,7 +175,7 @@ public:
         consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].bit = 23;
         consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nStartTime = 1767225600; // Jan 1, 2026
         consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nTimeout = 1830297600; // Jan 1, 2028
-        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].min_activation_height = 22000000; // Safe activation height
+        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].min_activation_height = 22014720; // Aligned to confirmation window (546 * 40320)
 
         // The best chain should have at least this much work.
         consensus.nMinimumChainWork = uint256S("0x00");

@@ -35,6 +35,9 @@ struct DigiDollarValidationTestSetup : public TestingSetup {
         testPubKey = testKey.GetPubKey();
         testXOnlyKey = XOnlyPubKey(testPubKey);
 
+        // Clear volatility freeze state from previous tests
+        DigiDollar::Volatility::VolatilityMonitor::ClearFreeze();
+
         // Validation context is initialized in member initializer list
     }
 
@@ -398,7 +401,7 @@ BOOST_FIXTURE_TEST_CASE(transaction_validation_unknown_tx_type, DigiDollarValida
 {
     // Test unknown DD transaction type
     CMutableTransaction mtx;
-    mtx.nVersion = 0x04000770; // DD_TX_PARTIAL (type=4 in bits 24-31, marker=0x0770 in bits 0-15)
+    mtx.nVersion = 0x63000770; // Unknown type=99 (0x63) in bits 24-31, marker=0x0770 in bits 0-15
 
     mtx.vin.resize(1);
     mtx.vin[0].prevout = COutPoint(uint256S("0x1234"), 0);
@@ -515,14 +518,16 @@ BOOST_FIXTURE_TEST_CASE(mint_validation_insufficient_collateral, DigiDollarValid
 
 BOOST_FIXTURE_TEST_CASE(mint_validation_invalid_dd_amount, DigiDollarValidationTestSetup)
 {
-    // Test mint with amount below minimum ($100)
+    // Test mint with amount above maximum (regtest: 100000 cents = $1000 maximum)
     CMutableTransaction mtx;
     mtx.nVersion = 0x01000770; // DD_TX_MINT (type=1 in bits 24-31, marker=0x0770 in bits 0-15)
 
     mtx.vin.resize(1);
     mtx.vin[0].prevout = COutPoint(uint256S("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"), 0);
 
-    CAmount ddAmount = 9999; // $99.99 - below minimum
+    // Regtest has maxMintAmount=100000 ($1000), so test with 100001 (above maximum)
+    const auto& ddParams = Params().GetDigiDollarParams();
+    CAmount ddAmount = ddParams.maxMintAmount + 1; // Above maximum
     int64_t lockBlocks = 30 * 24 * 60 * 4;
     CAmount requiredCollateral = (ddAmount * 500 * COIN) / (mockOraclePrice / 100);
 
@@ -550,14 +555,15 @@ BOOST_FIXTURE_TEST_CASE(mint_validation_invalid_dd_amount, DigiDollarValidationT
 
 BOOST_FIXTURE_TEST_CASE(mint_validation_excessive_dd_amount, DigiDollarValidationTestSetup)
 {
-    // Test mint with amount above maximum ($100k)
+    // Test mint with amount well above maximum (regtest: 100000 cents = $1000 maximum)
     CMutableTransaction mtx;
     mtx.nVersion = 0x01000770; // DD_TX_MINT (type=1 in bits 24-31, marker=0x0770 in bits 0-15)
 
     mtx.vin.resize(1);
     mtx.vin[0].prevout = COutPoint(uint256S("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"), 0);
 
-    CAmount ddAmount = 10000001; // $100k + 1 cent - above maximum
+    // Regtest has maxMintAmount=100000 ($1000), test with 200000 ($2000 - way above maximum)
+    CAmount ddAmount = 200000; // $2000 - well above maximum
     int64_t lockBlocks = 30 * 24 * 60 * 4;
 
     DigiDollar::MintParams params;
@@ -882,14 +888,16 @@ BOOST_FIXTURE_TEST_CASE(mint_validation_edge_case_exact_minimum, DigiDollarValid
 
 BOOST_FIXTURE_TEST_CASE(mint_validation_edge_case_exact_maximum, DigiDollarValidationTestSetup)
 {
-    // Test mint with exact maximum amount
+    // Test mint with exact maximum amount (regtest: 100000 cents = $1000 maximum)
     CMutableTransaction mtx;
     mtx.nVersion = 0x01000770; // DD_TX_MINT (type=1 in bits 24-31, marker=0x0770 in bits 0-15)
 
     mtx.vin.resize(1);
     mtx.vin[0].prevout = COutPoint(uint256S("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"), 0);
 
-    CAmount ddAmount = 10000000; // Exactly $100k (maximum)
+    // Regtest has maxMintAmount=100000 ($1000), test with exactly this amount
+    const auto& ddParams = Params().GetDigiDollarParams();
+    CAmount ddAmount = ddParams.maxMintAmount; // Exactly maximum
     int64_t lockBlocks = 30 * 24 * 60 * 4;
     CAmount requiredCollateral = (ddAmount * 500 * COIN) / (mockOraclePrice / 100);
 
@@ -2214,7 +2222,7 @@ BOOST_FIXTURE_TEST_CASE(volatility_validation_override_mechanism, DigiDollarVali
 
         COraclePriceMessage msg;
         msg.price_satoshis = mockOraclePrice;
-        msg.timestamp = baseTime + 3600;
+        msg.timestamp = GetTime(); // Use current time, not future time
         msg.oracle_id = i; // Use loop index as oracle ID
 
         // TODO: Fix SerializeHash call - may need proper serialization

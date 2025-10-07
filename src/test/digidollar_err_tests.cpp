@@ -18,6 +18,7 @@
 #include <consensus/validation.h>
 #include <test/util/setup_common.h>
 #include <util/strencodings.h>
+#include <chainparams.h>
 #include <chrono>
 #include <algorithm>
 #include <limits>
@@ -27,7 +28,9 @@
 BOOST_AUTO_TEST_SUITE(digidollar_err_tests)
 
 struct DigiDollarERRTestSetup : public TestingSetup {
-    DigiDollarERRTestSetup() : TestingSetup(CBaseChainParams::REGTEST) {
+    DigiDollarERRTestSetup() : TestingSetup(ChainType::REGTEST),
+        validationContext(1000, 50000, 100, Params()) // Initialize in member initializer list
+    {
         // Set up mock oracle price and system state
         mockOraclePrice = 50000; // $500.00 DGB
         mockHeight = 1000;
@@ -37,19 +40,15 @@ struct DigiDollarERRTestSetup : public TestingSetup {
         testPubKey = testKey.GetPubKey();
         testXOnlyKey = XOnlyPubKey(testPubKey);
 
-        // Set up validation context
-        validationContext.nHeight = mockHeight;
-        validationContext.oraclePrice = mockOraclePrice;
-        validationContext.params = Params();
-
-        // Generate oracle nodes for consensus
+        // Generate oracle keys for consensus
         for (int i = 0; i < 15; i++) {
             CKey oracleKey;
             oracleKey.MakeNewKey(true);
             oracleKeys.push_back(oracleKey);
 
-            OracleNode node(i, oracleKey.GetPubKey(), "http://oracle" + std::to_string(i) + ".example.com", true);
-            oracleNodes.push_back(node);
+            // Create XOnlyPubKey for oracle
+            XOnlyPubKey xonly(oracleKey.GetPubKey());
+            oracleXOnlyKeys.push_back(xonly);
         }
     }
 
@@ -60,7 +59,7 @@ struct DigiDollarERRTestSetup : public TestingSetup {
     int mockHeight;
     DigiDollar::ValidationContext validationContext;
     std::vector<CKey> oracleKeys;
-    std::vector<OracleNode> oracleNodes;
+    std::vector<XOnlyPubKey> oracleXOnlyKeys;
 };
 
 // ============================================================================
@@ -73,7 +72,7 @@ BOOST_FIXTURE_TEST_CASE(err_activation_when_system_health_below_100, DigiDollarE
     int systemHealth = 99;
 
     // Act: Check if ERR should activate - EXPECTED TO FAIL (RED phase)
-    bool shouldActivate = DigiDollar::ERR::ShouldActivateERR(systemHealth);
+    bool shouldActivate = DigiDollar::ERR::EmergencyRedemptionRatio::ShouldActivateERR(systemHealth);
 
     // Assert: Should fail since ERR system is not implemented yet
     BOOST_CHECK(!shouldActivate); // Will fail until implementation
@@ -88,14 +87,14 @@ BOOST_FIXTURE_TEST_CASE(err_no_activation_when_system_health_100_or_above, DigiD
     int systemHealth = 100;
 
     // Act: Check if ERR should activate - EXPECTED TO FAIL (RED phase)
-    bool shouldActivate = DigiDollar::ERR::ShouldActivateERR(systemHealth);
+    bool shouldActivate = DigiDollar::ERR::EmergencyRedemptionRatio::ShouldActivateERR(systemHealth);
 
     // Assert: Should fail in RED phase
     BOOST_CHECK(!shouldActivate);
 
     // Test with health above 100%
     systemHealth = 150;
-    shouldActivate = DigiDollar::ERR::ShouldActivateERR(systemHealth);
+    shouldActivate = DigiDollar::ERR::EmergencyRedemptionRatio::ShouldActivateERR(systemHealth);
     BOOST_CHECK(!shouldActivate);
 
     // After GREEN phase:
@@ -109,7 +108,7 @@ BOOST_FIXTURE_TEST_CASE(err_activation_various_unhealthy_levels, DigiDollarERRTe
 
     for (int health : unhealthyLevels) {
         // Act: Check ERR activation - EXPECTED TO FAIL (RED phase)
-        bool shouldActivate = DigiDollar::ERR::ShouldActivateERR(health);
+        bool shouldActivate = DigiDollar::ERR::EmergencyRedemptionRatio::ShouldActivateERR(health);
 
         // Assert: Should fail in RED phase
         BOOST_CHECK(!shouldActivate);
@@ -129,7 +128,7 @@ BOOST_FIXTURE_TEST_CASE(err_ratio_calculation_95_to_100_percent_health, DigiDoll
     int systemHealth = 97;
 
     // Act: Calculate ERR adjustment ratio - EXPECTED TO FAIL (RED phase)
-    double adjustmentRatio = DigiDollar::ERR::CalculateERRAdjustment(systemHealth);
+    double adjustmentRatio = DigiDollar::ERR::EmergencyRedemptionRatio::CalculateERRAdjustment(systemHealth);
 
     // Assert: Should fail since ERR calculation is not implemented
     BOOST_CHECK_EQUAL(adjustmentRatio, 0.0); // Will be 0 until implemented
@@ -144,7 +143,7 @@ BOOST_FIXTURE_TEST_CASE(err_ratio_calculation_90_to_95_percent_health, DigiDolla
     int systemHealth = 92;
 
     // Act: Calculate ERR adjustment ratio - EXPECTED TO FAIL (RED phase)
-    double adjustmentRatio = DigiDollar::ERR::CalculateERRAdjustment(systemHealth);
+    double adjustmentRatio = DigiDollar::ERR::EmergencyRedemptionRatio::CalculateERRAdjustment(systemHealth);
 
     // Assert: Should fail in RED phase
     BOOST_CHECK_EQUAL(adjustmentRatio, 0.0);
@@ -159,7 +158,7 @@ BOOST_FIXTURE_TEST_CASE(err_ratio_calculation_85_to_90_percent_health, DigiDolla
     int systemHealth = 87;
 
     // Act: Calculate ERR adjustment ratio - EXPECTED TO FAIL (RED phase)
-    double adjustmentRatio = DigiDollar::ERR::CalculateERRAdjustment(systemHealth);
+    double adjustmentRatio = DigiDollar::ERR::EmergencyRedemptionRatio::CalculateERRAdjustment(systemHealth);
 
     // Assert: Should fail in RED phase
     BOOST_CHECK_EQUAL(adjustmentRatio, 0.0);
@@ -174,7 +173,7 @@ BOOST_FIXTURE_TEST_CASE(err_ratio_calculation_below_85_percent_health, DigiDolla
     int systemHealth = 70;
 
     // Act: Calculate ERR adjustment ratio - EXPECTED TO FAIL (RED phase)
-    double adjustmentRatio = DigiDollar::ERR::CalculateERRAdjustment(systemHealth);
+    double adjustmentRatio = DigiDollar::ERR::EmergencyRedemptionRatio::CalculateERRAdjustment(systemHealth);
 
     // Assert: Should fail in RED phase
     BOOST_CHECK_EQUAL(adjustmentRatio, 0.0);
@@ -201,7 +200,7 @@ BOOST_FIXTURE_TEST_CASE(err_ratio_calculation_edge_cases, DigiDollarERRTestSetup
         double expectedRatio = testCase.second;
 
         // Act: Calculate ratio - EXPECTED TO FAIL (RED phase)
-        double actualRatio = DigiDollar::ERR::CalculateERRAdjustment(health);
+        double actualRatio = DigiDollar::ERR::EmergencyRedemptionRatio::CalculateERRAdjustment(health);
 
         // Assert: Should fail in RED phase
         BOOST_CHECK_EQUAL(actualRatio, 0.0);
@@ -222,7 +221,7 @@ BOOST_FIXTURE_TEST_CASE(err_adjusted_redemption_calculation, DigiDollarERRTestSe
     int systemHealth = 90;
 
     // Act: Get adjusted redemption amount - EXPECTED TO FAIL (RED phase)
-    CAmount adjustedRedemption = DigiDollar::ERR::GetAdjustedRedemption(normalRedemption, systemHealth);
+    CAmount adjustedRedemption = DigiDollar::ERR::EmergencyRedemptionRatio::GetAdjustedRedemption(normalRedemption, systemHealth);
 
     // Assert: Should fail in RED phase
     BOOST_CHECK_EQUAL(adjustedRedemption, 0);
@@ -245,7 +244,7 @@ BOOST_FIXTURE_TEST_CASE(err_adjusted_redemption_various_amounts, DigiDollarERRTe
 
     for (CAmount amount : testAmounts) {
         // Act: Get adjusted amount - EXPECTED TO FAIL (RED phase)
-        CAmount adjusted = DigiDollar::ERR::GetAdjustedRedemption(amount, systemHealth);
+        CAmount adjusted = DigiDollar::ERR::EmergencyRedemptionRatio::GetAdjustedRedemption(amount, systemHealth);
 
         // Assert: Should fail in RED phase
         BOOST_CHECK_EQUAL(adjusted, 0);
@@ -263,7 +262,7 @@ BOOST_FIXTURE_TEST_CASE(err_adjusted_redemption_minimum_ratio, DigiDollarERRTest
     int systemHealth = 50; // Very low health
 
     // Act: Get adjusted redemption - EXPECTED TO FAIL (RED phase)
-    CAmount adjustedRedemption = DigiDollar::ERR::GetAdjustedRedemption(normalRedemption, systemHealth);
+    CAmount adjustedRedemption = DigiDollar::ERR::EmergencyRedemptionRatio::GetAdjustedRedemption(normalRedemption, systemHealth);
 
     // Assert: Should fail in RED phase
     BOOST_CHECK_EQUAL(adjustedRedemption, 0);
@@ -321,11 +320,11 @@ BOOST_FIXTURE_TEST_CASE(err_oracle_consensus_insufficient_signatures, DigiDollar
 
 BOOST_FIXTURE_TEST_CASE(err_oracle_consensus_no_messages, DigiDollarERRTestSetup)
 {
-    // Arrange: Empty oracle messages
-    std::vector<DigiDollar::COraclePriceMessage> messages;
+    // Arrange: Empty oracle bundle
+    COracleBundle bundle(1); // Epoch 1, no messages
 
     // Act: Check oracle consensus - EXPECTED TO FAIL (RED phase)
-    bool hasConsensus = DigiDollar::ERR::HasOracleConsensus(messages);
+    bool hasConsensus = DigiDollar::ERR::EmergencyRedemptionRatio::HasOracleConsensus(bundle);
 
     // Assert: Should fail in RED phase
     BOOST_CHECK(!hasConsensus);
@@ -337,17 +336,15 @@ BOOST_FIXTURE_TEST_CASE(err_oracle_consensus_no_messages, DigiDollarERRTestSetup
 BOOST_FIXTURE_TEST_CASE(err_oracle_consensus_exactly_threshold, DigiDollarERRTestSetup)
 {
     // Arrange: Create exactly 8 oracle messages (minimum threshold)
-    std::vector<DigiDollar::COraclePriceMessage> messages;
+    COracleBundle bundle(1); // Epoch 1
     for (int i = 0; i < 8; i++) {
-        DigiDollar::COraclePriceMessage msg;
-        msg.price = mockOraclePrice;
-        msg.timestamp = GetTime();
-        msg.oracleKey = oracleXOnlyKeys[i];
-        messages.push_back(msg);
+        COraclePriceMessage msg(i, mockOraclePrice, GetTime());
+        msg.signature = std::vector<unsigned char>(64, 0x01); // Mock signature
+        bundle.AddMessage(msg);
     }
 
     // Act: Check consensus at threshold - EXPECTED TO FAIL (RED phase)
-    bool hasConsensus = DigiDollar::ERR::HasOracleConsensus(messages);
+    bool hasConsensus = DigiDollar::ERR::EmergencyRedemptionRatio::HasOracleConsensus(bundle);
 
     // Assert: Should fail in RED phase
     BOOST_CHECK(!hasConsensus);
@@ -366,7 +363,7 @@ BOOST_FIXTURE_TEST_CASE(err_state_inactive_when_healthy, DigiDollarERRTestSetup)
     validationContext.systemCollateral = 150;
 
     // Act: Get current ERR state - EXPECTED TO FAIL (RED phase)
-    DigiDollar::ERR::ERRState state = DigiDollar::ERR::GetCurrentState();
+    DigiDollar::ERR::ERRState state = DigiDollar::ERR::EmergencyRedemptionRatio::GetCurrentState();
 
     // Assert: Should fail since ERR state management is not implemented
     BOOST_CHECK(!state.isActive);
@@ -384,7 +381,7 @@ BOOST_FIXTURE_TEST_CASE(err_state_active_when_unhealthy, DigiDollarERRTestSetup)
     validationContext.systemCollateral = 90;
 
     // Act: Get current ERR state - EXPECTED TO FAIL (RED phase)
-    DigiDollar::ERR::ERRState state = DigiDollar::ERR::GetCurrentState();
+    DigiDollar::ERR::ERRState state = DigiDollar::ERR::EmergencyRedemptionRatio::GetCurrentState();
 
     // Assert: Should fail in RED phase
     BOOST_CHECK(!state.isActive);
@@ -402,7 +399,7 @@ BOOST_FIXTURE_TEST_CASE(err_state_tracks_activation_height, DigiDollarERRTestSet
     validationContext.nHeight = 50000;
 
     // Act: Get ERR state with activation height - EXPECTED TO FAIL (RED phase)
-    DigiDollar::ERR::ERRState state = DigiDollar::ERR::GetCurrentState();
+    DigiDollar::ERR::ERRState state = DigiDollar::ERR::EmergencyRedemptionRatio::GetCurrentState();
 
     // Assert: Should fail in RED phase
     BOOST_CHECK_EQUAL(state.activationHeight, 0);
@@ -414,17 +411,17 @@ BOOST_FIXTURE_TEST_CASE(err_state_tracks_activation_height, DigiDollarERRTestSet
 BOOST_FIXTURE_TEST_CASE(err_state_tracks_oracle_consensus_hash, DigiDollarERRTestSetup)
 {
     // Arrange: ERR activation with oracle consensus
-    std::vector<DigiDollar::COraclePriceMessage> messages;
+    std::vector<COraclePriceMessage> messages;
     for (int i = 0; i < 8; i++) {
-        DigiDollar::COraclePriceMessage msg;
-        msg.price = mockOraclePrice;
+        COraclePriceMessage msg;
+        msg.price_satoshis = mockOraclePrice;
         msg.timestamp = GetTime();
-        msg.oracleKey = oracleXOnlyKeys[i];
+        msg.oracle_id = i;
         messages.push_back(msg);
     }
 
     // Act: Get ERR state with oracle consensus - EXPECTED TO FAIL (RED phase)
-    DigiDollar::ERR::ERRState state = DigiDollar::ERR::GetCurrentState();
+    DigiDollar::ERR::ERRState state = DigiDollar::ERR::EmergencyRedemptionRatio::GetCurrentState();
 
     // Assert: Should fail in RED phase
     BOOST_CHECK(state.oracleConsensusHash.IsNull());
@@ -443,7 +440,7 @@ BOOST_FIXTURE_TEST_CASE(err_queue_empty_when_inactive, DigiDollarERRTestSetup)
     validationContext.systemCollateral = 150;
 
     // Act: Get ERR queue - EXPECTED TO FAIL (RED phase)
-    std::vector<COutPoint> queue = DigiDollar::ERR::GetERRQueue();
+    std::vector<COutPoint> queue = DigiDollar::ERR::EmergencyRedemptionRatio::GetERRQueue();
 
     // Assert: Should fail since ERR queue is not implemented
     BOOST_CHECK(queue.empty());
@@ -465,7 +462,7 @@ BOOST_FIXTURE_TEST_CASE(err_queue_processes_redemptions_when_active, DigiDollarE
     };
 
     // Act: Get ERR queue - EXPECTED TO FAIL (RED phase)
-    std::vector<COutPoint> queue = DigiDollar::ERR::GetERRQueue();
+    std::vector<COutPoint> queue = DigiDollar::ERR::EmergencyRedemptionRatio::GetERRQueue();
 
     // Assert: Should fail in RED phase
     BOOST_CHECK(queue.empty());
@@ -483,7 +480,7 @@ BOOST_FIXTURE_TEST_CASE(err_queue_prioritizes_by_request_time, DigiDollarERRTest
     validationContext.systemCollateral = 85;
 
     // Act: Get prioritized queue - EXPECTED TO FAIL (RED phase)
-    std::vector<COutPoint> queue = DigiDollar::ERR::GetERRQueue();
+    std::vector<COutPoint> queue = DigiDollar::ERR::EmergencyRedemptionRatio::GetERRQueue();
 
     // Assert: Should fail in RED phase
     BOOST_CHECK(queue.empty());
@@ -611,17 +608,17 @@ BOOST_FIXTURE_TEST_CASE(err_requires_oracle_consensus_for_activation, DigiDollar
     validationContext.systemCollateral = 90;
 
     // Create insufficient oracle messages (only 7)
-    std::vector<DigiDollar::COraclePriceMessage> insufficientMessages;
+    std::vector<COraclePriceMessage> insufficientMessages;
     for (int i = 0; i < 7; i++) {
-        DigiDollar::COraclePriceMessage msg;
-        msg.price = mockOraclePrice;
+        COraclePriceMessage msg;
+        msg.price_satoshis = mockOraclePrice;
         msg.timestamp = GetTime();
-        msg.oracleKey = oracleXOnlyKeys[i];
+        msg.oracle_id = i;
         insufficientMessages.push_back(msg);
     }
 
     // Act: Check ERR activation without consensus - EXPECTED TO FAIL (RED phase)
-    bool shouldActivate = DigiDollar::ERR::ShouldActivateERR(validationContext.systemCollateral);
+    bool shouldActivate = DigiDollar::ERR::EmergencyRedemptionRatio::ShouldActivateERR(validationContext.systemCollateral);
 
     // Assert: Should fail in RED phase
     BOOST_CHECK(!shouldActivate);
@@ -640,13 +637,13 @@ BOOST_FIXTURE_TEST_CASE(err_deactivates_when_system_recovers, DigiDollarERRTestS
     // Arrange: System recovers from unhealthy to healthy
     // Start unhealthy
     validationContext.systemCollateral = 90;
-    DigiDollar::ERR::ERRState initialState = DigiDollar::ERR::GetCurrentState();
+    DigiDollar::ERR::ERRState initialState = DigiDollar::ERR::EmergencyRedemptionRatio::GetCurrentState();
 
     // System recovers
     validationContext.systemCollateral = 105; // Above 100%
 
     // Act: Check ERR state after recovery - EXPECTED TO FAIL (RED phase)
-    DigiDollar::ERR::ERRState recoveredState = DigiDollar::ERR::GetCurrentState();
+    DigiDollar::ERR::ERRState recoveredState = DigiDollar::ERR::EmergencyRedemptionRatio::GetCurrentState();
 
     // Assert: Should fail in RED phase
     BOOST_CHECK(!recoveredState.isActive);
@@ -662,13 +659,13 @@ BOOST_FIXTURE_TEST_CASE(err_clears_queue_on_deactivation, DigiDollarERRTestSetup
     validationContext.systemCollateral = 85;
 
     // Add some pending redemptions (would be done in real implementation)
-    std::vector<COutPoint> queueBeforeRecovery = DigiDollar::ERR::GetERRQueue();
+    std::vector<COutPoint> queueBeforeRecovery = DigiDollar::ERR::EmergencyRedemptionRatio::GetERRQueue();
 
     // System recovers
     validationContext.systemCollateral = 110;
 
     // Act: Check queue after recovery - EXPECTED TO FAIL (RED phase)
-    std::vector<COutPoint> queueAfterRecovery = DigiDollar::ERR::GetERRQueue();
+    std::vector<COutPoint> queueAfterRecovery = DigiDollar::ERR::EmergencyRedemptionRatio::GetERRQueue();
 
     // Assert: Should fail in RED phase
     BOOST_CHECK(queueAfterRecovery.empty());
@@ -688,8 +685,8 @@ BOOST_FIXTURE_TEST_CASE(err_handles_zero_system_health, DigiDollarERRTestSetup)
     int systemHealth = 0;
 
     // Act: Check ERR behavior at zero health - EXPECTED TO FAIL (RED phase)
-    bool shouldActivate = DigiDollar::ERR::ShouldActivateERR(systemHealth);
-    double adjustmentRatio = DigiDollar::ERR::CalculateERRAdjustment(systemHealth);
+    bool shouldActivate = DigiDollar::ERR::EmergencyRedemptionRatio::ShouldActivateERR(systemHealth);
+    double adjustmentRatio = DigiDollar::ERR::EmergencyRedemptionRatio::CalculateERRAdjustment(systemHealth);
 
     // Assert: Should fail in RED phase
     BOOST_CHECK(!shouldActivate);
@@ -706,8 +703,8 @@ BOOST_FIXTURE_TEST_CASE(err_handles_negative_system_health, DigiDollarERRTestSet
     int systemHealth = -10;
 
     // Act: Check ERR behavior with negative health - EXPECTED TO FAIL (RED phase)
-    bool shouldActivate = DigiDollar::ERR::ShouldActivateERR(systemHealth);
-    double adjustmentRatio = DigiDollar::ERR::CalculateERRAdjustment(systemHealth);
+    bool shouldActivate = DigiDollar::ERR::EmergencyRedemptionRatio::ShouldActivateERR(systemHealth);
+    double adjustmentRatio = DigiDollar::ERR::EmergencyRedemptionRatio::CalculateERRAdjustment(systemHealth);
 
     // Assert: Should fail in RED phase
     BOOST_CHECK(!shouldActivate);
@@ -724,7 +721,7 @@ BOOST_FIXTURE_TEST_CASE(err_handles_extremely_high_system_health, DigiDollarERRT
     int systemHealth = 50000; // 500x overcollateralized
 
     // Act: Check ERR behavior with high health - EXPECTED TO FAIL (RED phase)
-    bool shouldActivate = DigiDollar::ERR::ShouldActivateERR(systemHealth);
+    bool shouldActivate = DigiDollar::ERR::EmergencyRedemptionRatio::ShouldActivateERR(systemHealth);
 
     // Assert: Should fail in RED phase
     BOOST_CHECK(!shouldActivate);
@@ -739,7 +736,7 @@ BOOST_FIXTURE_TEST_CASE(err_validates_minimum_redemption_amounts, DigiDollarERRT
     validationContext.systemCollateral = 90;
 
     CAmount tinyAmount = 1; // 1 satoshi
-    CAmount adjustedAmount = DigiDollar::ERR::GetAdjustedRedemption(tinyAmount, 90);
+    CAmount adjustedAmount = DigiDollar::ERR::EmergencyRedemptionRatio::GetAdjustedRedemption(tinyAmount, 90);
 
     // Act & Assert: Should fail in RED phase
     BOOST_CHECK_EQUAL(adjustedAmount, 0);
@@ -755,7 +752,7 @@ BOOST_FIXTURE_TEST_CASE(err_validates_maximum_redemption_amounts, DigiDollarERRT
     validationContext.systemCollateral = 85;
 
     CAmount maxAmount = 1000000 * COIN; // 1M DGB
-    CAmount adjustedAmount = DigiDollar::ERR::GetAdjustedRedemption(maxAmount, 85);
+    CAmount adjustedAmount = DigiDollar::ERR::EmergencyRedemptionRatio::GetAdjustedRedemption(maxAmount, 85);
 
     // Act & Assert: Should fail in RED phase
     BOOST_CHECK_EQUAL(adjustedAmount, 0);
@@ -780,12 +777,12 @@ BOOST_FIXTURE_TEST_CASE(test_err_extreme_activation_scenarios, DigiDollarERRTest
         std::vector<bool> activationResults;
 
         for (int health : oscillatingHealth) {
-            bool shouldActivate = DigiDollar::ERR::ShouldActivateERR(health);
+            bool shouldActivate = DigiDollar::ERR::EmergencyRedemptionRatio::ShouldActivateERR(health);
             activationResults.push_back(shouldActivate);
         }
 
         // Test oscillation stability - EXPECTED TO FAIL (RED phase)
-        bool oscillationHandled = DigiDollar::ERR::HandleHealthOscillation(oscillatingHealth, activationResults);
+        bool oscillationHandled = DigiDollar::ERR::EmergencyRedemptionRatio::HandleHealthOscillation(oscillatingHealth, activationResults);
         BOOST_CHECK(!oscillationHandled); // Will fail until implemented
     }
 
@@ -796,7 +793,7 @@ BOOST_FIXTURE_TEST_CASE(test_err_extreme_activation_scenarios, DigiDollarERRTest
 
         for (double health : preciseHealth) {
             int intHealth = static_cast<int>(health * 100); // Convert to basis points
-            bool shouldActivate = DigiDollar::ERR::ShouldActivateERR(intHealth / 100);
+            bool shouldActivate = DigiDollar::ERR::EmergencyRedemptionRatio::ShouldActivateERR(intHealth / 100);
 
             if (intHealth < 10000) { // Less than 100.00%
                 // Should activate but currently doesn't due to lack of implementation
@@ -805,7 +802,7 @@ BOOST_FIXTURE_TEST_CASE(test_err_extreme_activation_scenarios, DigiDollarERRTest
         }
 
         // Test precision boundary handling - EXPECTED TO FAIL (RED phase)
-        bool precisionHandled = DigiDollar::ERR::ValidatePrecisionBoundaries(preciseHealth);
+        bool precisionHandled = DigiDollar::ERR::EmergencyRedemptionRatio::ValidatePrecisionBoundaries(preciseHealth);
         BOOST_CHECK(!precisionHandled); // Will fail until implemented
     }
 
@@ -815,7 +812,7 @@ BOOST_FIXTURE_TEST_CASE(test_err_extreme_activation_scenarios, DigiDollarERRTest
         std::vector<int> extremeHealthValues = {-1000, -1, 0, 1, 50000, 100000};
 
         for (int health : extremeHealthValues) {
-            bool shouldActivate = DigiDollar::ERR::ShouldActivateERR(health);
+            bool shouldActivate = DigiDollar::ERR::EmergencyRedemptionRatio::ShouldActivateERR(health);
 
             // All negative or zero health should trigger ERR
             if (health < 100) {
@@ -827,7 +824,7 @@ BOOST_FIXTURE_TEST_CASE(test_err_extreme_activation_scenarios, DigiDollarERRTest
         }
 
         // Test extreme value validation - EXPECTED TO FAIL (RED phase)
-        bool extremeValuesHandled = DigiDollar::ERR::ValidateExtremeHealthValues(extremeHealthValues);
+        bool extremeValuesHandled = DigiDollar::ERR::EmergencyRedemptionRatio::ValidateExtremeHealthValues(extremeHealthValues);
         BOOST_CHECK(!extremeValuesHandled); // Will fail until implemented
     }
 
@@ -839,7 +836,7 @@ BOOST_FIXTURE_TEST_CASE(test_err_extreme_activation_scenarios, DigiDollarERRTest
 
         // Simulate concurrent activation checks
         for (int i = 0; i < 10; ++i) {
-            bool result = DigiDollar::ERR::ShouldActivateERR(borderlineHealth);
+            bool result = DigiDollar::ERR::EmergencyRedemptionRatio::ShouldActivateERR(borderlineHealth);
             concurrentResults.push_back(result);
         }
 
@@ -849,7 +846,7 @@ BOOST_FIXTURE_TEST_CASE(test_err_extreme_activation_scenarios, DigiDollarERRTest
         BOOST_CHECK(allSame);
 
         // Test thread safety - EXPECTED TO FAIL (RED phase)
-        bool threadSafe = DigiDollar::ERR::ValidateThreadSafety(concurrentResults);
+        bool threadSafe = DigiDollar::ERR::EmergencyRedemptionRatio::ValidateThreadSafety(concurrentResults);
         BOOST_CHECK(!threadSafe); // Will fail until implemented
     }
 
@@ -862,20 +859,21 @@ BOOST_FIXTURE_TEST_CASE(test_err_extreme_activation_scenarios, DigiDollarERRTest
             validationContext.systemCollateral = health;
 
             // Test with insufficient oracle messages
-            std::vector<DigiDollar::COraclePriceMessage> insufficientMessages;
+            COracleBundle insufficientBundle(1); // Epoch 1
+            std::vector<COraclePriceMessage> insufficientMessages;
             for (int i = 0; i < 5; i++) { // Only 5 out of required 8
-                DigiDollar::COraclePriceMessage msg;
-                msg.price = mockOraclePrice;
-                msg.timestamp = GetTime();
+                COraclePriceMessage msg(i, mockOraclePrice, GetTime());
+                msg.signature = std::vector<unsigned char>(64, 0x01);
+                insufficientBundle.AddMessage(msg);
                 insufficientMessages.push_back(msg);
             }
 
             // Should not activate without consensus even if health is low
-            bool hasConsensus = DigiDollar::ERR::HasOracleConsensus(insufficientMessages);
+            bool hasConsensus = DigiDollar::ERR::EmergencyRedemptionRatio::HasOracleConsensus(insufficientBundle);
             BOOST_CHECK(!hasConsensus);
 
             // Test consensus failure handling - EXPECTED TO FAIL (RED phase)
-            bool consensusFailureHandled = DigiDollar::ERR::HandleConsensusFailure(health, insufficientMessages);
+            bool consensusFailureHandled = DigiDollar::ERR::EmergencyRedemptionRatio::HandleConsensusFailure(health, insufficientMessages);
             BOOST_CHECK(!consensusFailureHandled); // Will fail until implemented
         }
     }
@@ -889,7 +887,7 @@ BOOST_FIXTURE_TEST_CASE(test_err_extreme_activation_scenarios, DigiDollarERRTest
         bool stateCorrupted = true;
 
         // ERR should handle corrupted state gracefully
-        bool canActivateWithCorruption = DigiDollar::ERR::ShouldActivateERRWithCorruptedState(
+        bool canActivateWithCorruption = DigiDollar::ERR::EmergencyRedemptionRatio::ShouldActivateERRWithCorruptedState(
             validationContext.systemCollateral, stateCorrupted);
 
         // Test corruption handling - EXPECTED TO FAIL (RED phase)
@@ -910,7 +908,7 @@ BOOST_FIXTURE_TEST_CASE(test_err_activation_timing_precision, DigiDollarERRTestS
             validationContext.nHeight = blockHeight;
             validationContext.systemCollateral = 95; // Should trigger ERR
 
-            bool activatedAtBlock = DigiDollar::ERR::ShouldActivateERRAtHeight(
+            bool activatedAtBlock = DigiDollar::ERR::EmergencyRedemptionRatio::ShouldActivateERRAtHeight(
                 validationContext.systemCollateral, blockHeight);
 
             // Test block-specific activation - EXPECTED TO FAIL (RED phase)
@@ -929,7 +927,7 @@ BOOST_FIXTURE_TEST_CASE(test_err_activation_timing_precision, DigiDollarERRTestS
         };
 
         for (int64_t testTime : testTimes) {
-            bool activatedAtTime = DigiDollar::ERR::ShouldActivateERRAtTime(
+            bool activatedAtTime = DigiDollar::ERR::EmergencyRedemptionRatio::ShouldActivateERRAtTime(
                 95, testTime); // 95% health
 
             // Test time-based activation - EXPECTED TO FAIL (RED phase)
@@ -943,11 +941,11 @@ BOOST_FIXTURE_TEST_CASE(test_err_activation_timing_precision, DigiDollarERRTestS
         validationContext.systemCollateral = 90; // Should trigger ERR
 
         // First check should not activate immediately
-        bool immediateActivation = DigiDollar::ERR::ShouldActivateERR(90);
+        bool immediateActivation = DigiDollar::ERR::EmergencyRedemptionRatio::ShouldActivateERR(90);
         BOOST_CHECK(!immediateActivation); // Currently expected
 
         // Test activation delay - EXPECTED TO FAIL (RED phase)
-        bool delayMechanismActive = DigiDollar::ERR::HasActivationDelay(90);
+        bool delayMechanismActive = DigiDollar::ERR::EmergencyRedemptionRatio::HasActivationDelay(90);
         BOOST_CHECK(!delayMechanismActive); // Will fail until implemented
     }
 }
@@ -966,13 +964,13 @@ BOOST_FIXTURE_TEST_CASE(test_err_ratio_calculation_extremes, DigiDollarERRTestSe
         };
 
         for (auto& test : precisionTests) {
-            double ratio = DigiDollar::ERR::CalculateERRAdjustment(test.first);
+            double ratio = DigiDollar::ERR::EmergencyRedemptionRatio::CalculateERRAdjustment(test.first);
 
             // Currently returns 0.0 in RED phase
             BOOST_CHECK_EQUAL(ratio, 0.0);
 
             // Test precision validation - EXPECTED TO FAIL (RED phase)
-            bool precisionValid = DigiDollar::ERR::ValidateRatioPrecision(test.first, test.second);
+            bool precisionValid = DigiDollar::ERR::EmergencyRedemptionRatio::ValidateRatioPrecision(test.first, test.second);
             BOOST_CHECK(!precisionValid); // Will fail until implemented
         }
     }
@@ -983,13 +981,13 @@ BOOST_FIXTURE_TEST_CASE(test_err_ratio_calculation_extremes, DigiDollarERRTestSe
         CAmount maxRedemption = std::numeric_limits<CAmount>::max() / 2;
         int health = 85;
 
-        CAmount adjustedAmount = DigiDollar::ERR::GetAdjustedRedemption(maxRedemption, health);
+        CAmount adjustedAmount = DigiDollar::ERR::EmergencyRedemptionRatio::GetAdjustedRedemption(maxRedemption, health);
 
         // Currently returns 0 in RED phase
         BOOST_CHECK_EQUAL(adjustedAmount, 0);
 
         // Test overflow protection - EXPECTED TO FAIL (RED phase)
-        bool overflowProtected = DigiDollar::ERR::PreventCalculationOverflow(maxRedemption, health);
+        bool overflowProtected = DigiDollar::ERR::EmergencyRedemptionRatio::PreventCalculationOverflow(maxRedemption, health);
         BOOST_CHECK(!overflowProtected); // Will fail until implemented
     }
 
@@ -1002,8 +1000,8 @@ BOOST_FIXTURE_TEST_CASE(test_err_ratio_calculation_extremes, DigiDollarERRTestSe
             CAmount amount = (i + 1) * COIN; // 1 to 1000 DGB
             int health = 85 + (i % 15); // Health from 85-99%
 
-            double ratio1 = DigiDollar::ERR::CalculateERRAdjustment(health);
-            double ratio2 = DigiDollar::ERR::CalculateERRAdjustment(health);
+            double ratio1 = DigiDollar::ERR::EmergencyRedemptionRatio::CalculateERRAdjustment(health);
+            double ratio2 = DigiDollar::ERR::EmergencyRedemptionRatio::CalculateERRAdjustment(health);
 
             // Results should be consistent
             BOOST_CHECK_EQUAL(ratio1, ratio2);
@@ -1011,7 +1009,7 @@ BOOST_FIXTURE_TEST_CASE(test_err_ratio_calculation_extremes, DigiDollarERRTestSe
         }
 
         // Test calculation consistency - EXPECTED TO FAIL (RED phase)
-        bool calculationsConsistent = DigiDollar::ERR::ValidateCalculationConsistency(stressTests);
+        bool calculationsConsistent = DigiDollar::ERR::EmergencyRedemptionRatio::ValidateCalculationConsistency(stressTests);
         BOOST_CHECK(!calculationsConsistent); // Will fail until implemented
     }
 }
@@ -1036,39 +1034,41 @@ BOOST_FIXTURE_TEST_CASE(test_err_oracle_consensus_stress, DigiDollarERRTestSetup
         BOOST_CHECK(!hasConsensus); // Currently expected in RED phase
 
         // Test large message handling - EXPECTED TO FAIL (RED phase)
-        bool largeMessageHandling = DigiDollar::ERR::HandleLargeOracleMessageCount(largeBundle);
+        bool largeMessageHandling = DigiDollar::ERR::EmergencyRedemptionRatio::HandleLargeOracleMessageCount(largeBundle);
         BOOST_CHECK(!largeMessageHandling); // Will fail until implemented
     }
 
     // Test 2: Malformed oracle message handling
     {
-        std::vector<DigiDollar::COraclePriceMessage> malformedMessages;
+        COracleBundle malformedBundle(1); // Epoch 1
+        std::vector<COraclePriceMessage> malformedMessages;
 
         // Create messages with various malformations
         for (int i = 0; i < 8; ++i) {
-            DigiDollar::COraclePriceMessage msg;
+            COraclePriceMessage msg(i, mockOraclePrice, GetTime());
 
             // Various malformations
             if (i % 4 == 0) {
-                msg.price = 0; // Invalid price
+                msg.price_satoshis = 0; // Invalid price
             } else if (i % 4 == 1) {
                 msg.timestamp = 0; // Invalid timestamp
             } else if (i % 4 == 2) {
                 // Invalid signature (empty)
+                msg.signature.clear();
             } else {
                 // Valid message
-                msg.price = mockOraclePrice;
-                msg.timestamp = GetTime();
+                msg.signature = std::vector<unsigned char>(64, 0x01);
             }
 
+            malformedBundle.AddMessage(msg);
             malformedMessages.push_back(msg);
         }
 
-        bool hasConsensus = DigiDollar::ERR::HasOracleConsensus(malformedMessages);
+        bool hasConsensus = DigiDollar::ERR::EmergencyRedemptionRatio::HasOracleConsensus(malformedBundle);
         BOOST_CHECK(!hasConsensus); // Should reject malformed messages
 
         // Test malformed message handling - EXPECTED TO FAIL (RED phase)
-        bool malformedHandling = DigiDollar::ERR::ValidateMalformedMessageHandling(malformedMessages);
+        bool malformedHandling = DigiDollar::ERR::EmergencyRedemptionRatio::ValidateMalformedMessageHandling(malformedMessages);
         BOOST_CHECK(!malformedHandling); // Will fail until implemented
     }
 
@@ -1077,17 +1077,16 @@ BOOST_FIXTURE_TEST_CASE(test_err_oracle_consensus_stress, DigiDollarERRTestSetup
         // Measure time to process oracle consensus under load
         auto startTime = std::chrono::high_resolution_clock::now();
 
-        std::vector<DigiDollar::COraclePriceMessage> loadTestMessages;
+        COracleBundle loadTestBundle(1); // Epoch 1
         for (int i = 0; i < 15; ++i) {
-            DigiDollar::COraclePriceMessage msg;
-            msg.price = mockOraclePrice;
-            msg.timestamp = GetTime();
-            loadTestMessages.push_back(msg);
+            COraclePriceMessage msg(i, mockOraclePrice, GetTime());
+            msg.signature = std::vector<unsigned char>(64, 0x01);
+            loadTestBundle.AddMessage(msg);
         }
 
         // Perform consensus check multiple times
         for (int i = 0; i < 100; ++i) {
-            bool consensus = DigiDollar::ERR::HasOracleConsensus(loadTestMessages);
+            bool consensus = DigiDollar::ERR::EmergencyRedemptionRatio::HasOracleConsensus(loadTestBundle);
             (void)consensus; // Suppress unused variable warning
         }
 
@@ -1098,7 +1097,7 @@ BOOST_FIXTURE_TEST_CASE(test_err_oracle_consensus_stress, DigiDollarERRTestSetup
         BOOST_CHECK_LT(duration.count(), 1000);
 
         // Test performance under load - EXPECTED TO FAIL (RED phase)
-        bool performanceAcceptable = DigiDollar::ERR::ValidateConsensusPerformance(duration.count());
+        bool performanceAcceptable = DigiDollar::ERR::EmergencyRedemptionRatio::ValidateConsensusPerformance(duration.count());
         BOOST_CHECK(!performanceAcceptable); // Will fail until implemented
     }
 }

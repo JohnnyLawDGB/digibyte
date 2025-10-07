@@ -7,6 +7,9 @@
 #include <wallet/digidollarwallet.h>
 #include <wallet/test/util.h>
 #include <test/util/setup_common.h>
+#include <key_io.h>
+#include <pubkey.h>
+#include <script/standard.h>
 
 BOOST_FIXTURE_TEST_SUITE(digidollar_persistence_walletbatch_tests, BasicTestingSetup)
 
@@ -51,13 +54,19 @@ BOOST_AUTO_TEST_CASE(walletbatch_write_ddbalance)
     std::unique_ptr<wallet::WalletDatabase> database = wallet::CreateMockableWalletDatabase();
     wallet::WalletBatch batch(*database);
 
+    // Create a valid DD address from P2TR destination
+    uint256 hash;
+    hash.SetHex("1234567890123456789012345678901234567890123456789012345678901234");
+    XOnlyPubKey xonly_pubkey(hash);
+    WitnessV1Taproot taproot_dest(xonly_pubkey);
+
     WalletDDBalance balance;
-    balance.address = CDigiDollarAddress("DD1qtest123");
+    balance.address.SetDigiDollar(taproot_dest, CChainParams::DIGIDOLLAR_ADDRESS_REGTEST);
     balance.balance = 10000;
     balance.last_updated = 1234567890;
 
     std::string address = balance.address.ToString();
-    BOOST_CHECK(batch.WriteDDBalance(address, balance));  // WILL FAIL
+    BOOST_CHECK(batch.WriteDDBalance(address, balance));
 }
 
 BOOST_AUTO_TEST_CASE(walletbatch_write_ddoutput)
@@ -175,21 +184,27 @@ BOOST_AUTO_TEST_CASE(walletbatch_read_ddbalance)
     std::unique_ptr<wallet::WalletDatabase> database = wallet::CreateMockableWalletDatabase();
     wallet::WalletBatch batch(*database);
 
+    // Create a valid DD address from P2TR destination
+    uint256 hash;
+    hash.SetHex("abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd");
+    XOnlyPubKey xonly_pubkey(hash);
+    WitnessV1Taproot taproot_dest(xonly_pubkey);
+
     // Write balance
     WalletDDBalance original;
-    original.address = CDigiDollarAddress("DD1qtest123...");
+    original.address.SetDigiDollar(taproot_dest, CChainParams::DIGIDOLLAR_ADDRESS_REGTEST);
     original.balance = 10000;
     original.last_updated = 1234567890;
 
     std::string address = original.address.ToString();
     BOOST_REQUIRE(batch.WriteDDBalance(address, original));
 
-    // Read balance (WILL FAIL)
+    // Read balance
     WalletDDBalance read_balance;
     BOOST_CHECK(batch.ReadDDBalance(address, read_balance));
 
     // Verify
-    BOOST_CHECK(read_balance.address == original.address);
+    BOOST_CHECK_EQUAL(read_balance.address.ToString(), original.address.ToString());
     BOOST_CHECK_EQUAL(read_balance.balance, original.balance);
     BOOST_CHECK_EQUAL(read_balance.last_updated, original.last_updated);
 }
@@ -330,9 +345,15 @@ BOOST_AUTO_TEST_CASE(walletbatch_erase_ddbalance)
     std::unique_ptr<wallet::WalletDatabase> database = wallet::CreateMockableWalletDatabase();
     wallet::WalletBatch batch(*database);
 
+    // Create a valid DD address from P2TR destination
+    uint256 hash;
+    hash.SetHex("fedcbafedcbafedcbafedcbafedcbafedcbafedcbafedcbafedcbafedcbafed");
+    XOnlyPubKey xonly_pubkey(hash);
+    WitnessV1Taproot taproot_dest(xonly_pubkey);
+
     // Write balance
     WalletDDBalance balance;
-    balance.address = CDigiDollarAddress("DD1qtest123...");
+    balance.address.SetDigiDollar(taproot_dest, CChainParams::DIGIDOLLAR_ADDRESS_REGTEST);
     balance.balance = 10000;
 
     std::string address = balance.address.ToString();
@@ -342,7 +363,7 @@ BOOST_AUTO_TEST_CASE(walletbatch_erase_ddbalance)
     WalletDDBalance read_balance;
     BOOST_CHECK(batch.ReadDDBalance(address, read_balance));
 
-    // Erase it (WILL FAIL)
+    // Erase it
     BOOST_CHECK(batch.EraseDDBalance(address));
 
     // Verify it's gone

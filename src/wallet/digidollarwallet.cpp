@@ -1147,23 +1147,25 @@ bool DigiDollarWallet::WriteDDBalance(const CDigiDollarAddress& addr, const CAmo
 
 bool DigiDollarWallet::WriteDDTimeLock(const WalletCollateralPosition& position) {
     try {
-        if (!m_wallet) {
-            return error("DigiDollarWallet::WriteDDTimeLock: No wallet pointer");
-        }
-
         if (position.dd_timelock_id.IsNull()) {
             return error("DigiDollarWallet::WriteDDTimeLock: Invalid position ID");
         }
 
-        // Write to database
-        wallet::WalletBatch batch(m_wallet->GetDatabase());
-        if (!batch.WriteDDTimeLock(position)) {
-            return error("DigiDollarWallet::WriteDDTimeLock: Database write failed for %s",
-                         position.dd_timelock_id.ToString());
-        }
-
-        // Update in-memory cache
+        // Update in-memory cache first (works in both test and production mode)
         collateral_positions[position.dd_timelock_id] = position;
+
+        // Write to database (only if wallet pointer exists - production mode)
+        if (m_wallet) {
+            wallet::WalletBatch batch(m_wallet->GetDatabase());
+            if (!batch.WriteDDTimeLock(position)) {
+                return error("DigiDollarWallet::WriteDDTimeLock: Database write failed for %s",
+                             position.dd_timelock_id.ToString());
+            }
+        } else {
+            // Testing mode - no database, just in-memory
+            LogPrintf("DigiDollarWallet: WriteDDTimeLock in test mode (no database) - ID: %s\n",
+                      position.dd_timelock_id.GetHex());
+        }
 
         // Recalculate locked collateral if active
         if (position.is_active) {
@@ -1174,7 +1176,12 @@ bool DigiDollarWallet::WriteDDTimeLock(const WalletCollateralPosition& position)
                 }
             }
             locked_collateral = total_locked;
-            batch.WriteDDMetadata("locked_collateral", std::to_string(total_locked));
+
+            // Write metadata to database (only in production mode)
+            if (m_wallet) {
+                wallet::WalletBatch batch(m_wallet->GetDatabase());
+                batch.WriteDDMetadata("locked_collateral", std::to_string(total_locked));
+            }
         }
 
         LogPrint(BCLog::WALLETDB, "DigiDollarWallet: Wrote DDTimeLock %s (DD: %d, DGB: %d, tier: %d)\n",
@@ -1200,6 +1207,16 @@ bool DigiDollarWallet::UpdatePositionStatus(const uint256& dd_timelock_id, bool 
 
     // Update status in memory
     it->second.is_active = active;
+
+    // FIX: When deactivating a position, remove its DD UTXO from tracking map
+    // DD output from mint is always at vout 1
+    COutPoint dd_outpoint(dd_timelock_id, 1);
+    if (!active) {
+        // Position being spent/redeemed - remove DD UTXO
+        dd_utxos.erase(dd_outpoint);
+        LogPrintf("DigiDollar: Removed DD UTXO %s:%d from tracking (position deactivated)\n",
+                  dd_outpoint.hash.ToString(), dd_outpoint.n);
+    }
 
     // Write updated position to database (if wallet pointer is set)
     if (m_wallet) {
@@ -1268,8 +1285,13 @@ CAmount DigiDollarWallet::GetTotalDDBalance() const {
         // FIX #1: Calculate balance from dd_utxos map (not collateral_positions)
         CAmount balance = 0;
         for (const auto& [outpoint, dd_amount] : dd_utxos) {
-            // Only count unspent UTXOs
-            if (!m_wallet || !m_wallet->IsSpent(outpoint)) {
+            // Only count unspent UTXOs if we have wallet context
+            // In testing scenarios (m_wallet == nullptr), count all UTXOs in the map
+            if (!m_wallet) {
+                // Testing scenario: count all UTXOs in map
+                balance += dd_amount;
+            } else if (!m_wallet->IsSpent(outpoint)) {
+                // Production scenario: only count unspent UTXOs
                 balance += dd_amount;
             }
         }
@@ -2056,8 +2078,16 @@ void DigiDollarWallet::AddMockPosition(const uint256& id, CAmount dd, CAmount dg
     // For testing without a wallet pointer, directly update in-memory cache
     if (!m_wallet) {
         collateral_positions[id] = position;
+
+        // FIX #1: Also add DD UTXO to dd_utxos map
+        // DD UTXOs are always at output index 1 of DDTimeLock mint transactions
+        COutPoint dd_utxo(id, 1);
+        dd_utxos[dd_utxo] = dd;
+
         LogPrintf("DigiDollarWallet: Added mock position %s (DD: %d, DGB: %d) - NO DB\n",
                   id.ToString(), dd, dgb);
+        LogPrintf("DigiDollarWallet: Added DD UTXO %s:%d with amount %d\n",
+                  id.ToString(), 1, dd);
     } else {
         WriteDDTimeLock(position);
     }
@@ -2069,6 +2099,9 @@ void DigiDollarWallet::ClearWalletData() {
     transaction_history.clear();
     total_dd_balance = 0;
     locked_collateral = 0;
+
+    // FIX #1: Also clear DD UTXO tracking map
+    dd_utxos.clear();
 
     // Also clear legacy mock data
     ClearMockData();
@@ -2698,39 +2731,41 @@ bool DigiDollarWallet::MarkDDUTXOsSpent(const std::vector<COutPoint>& spent_utxo
 
     // Mark each UTXO as spent
     for (const auto& utxo : spent_utxos) {
-        // DD UTXOs are at vout[1] of DDTimeLock transactions
-        // The outpoint.hash is the dd_timelock_id
-
-        // Validate UTXO index (DD outputs are always at index 1)
-        if (utxo.n != 1) {
-            LogPrintf("DigiDollar: MarkDDUTXOsSpent - Invalid UTXO index %d (expected 1): %s:%d\n",
-                      utxo.n, utxo.hash.ToString(), utxo.n);
-            // Continue marking other UTXOs even if one is invalid
-            continue;
-        }
-
-        // Find position in cache
-        auto it = collateral_positions.find(utxo.hash);
-        if (it == collateral_positions.end()) {
-            LogPrintf("DigiDollar: MarkDDUTXOsSpent - Warning: UTXO not found: %s:%d\n",
+        // FIX #1: Remove UTXO from dd_utxos tracking map
+        auto utxo_it = dd_utxos.find(utxo);
+        if (utxo_it == dd_utxos.end()) {
+            LogPrintf("DigiDollar: MarkDDUTXOsSpent - Warning: UTXO not found in tracking map: %s:%d\n",
                       utxo.hash.ToString(), utxo.n);
-            return false; // UTXO doesnt exist - this is an error
+            // Continue - may be collateral position
+        } else {
+            // Remove from tracking map
+            CAmount dd_amount = utxo_it->second;
+            dd_utxos.erase(utxo_it);
+            LogPrintf("DigiDollar: Removed DD UTXO from tracking map: %s:%d (%d DD)\n",
+                      utxo.hash.ToString(), utxo.n, dd_amount);
         }
 
-        // Mark as inactive (spent)
-        it->second.is_active = false;
+        // Check if this is a DDTimeLock position (only at vout[1])
+        if (utxo.n == 1) {
+            // Find position in cache
+            auto it = collateral_positions.find(utxo.hash);
+            if (it != collateral_positions.end()) {
+                // Mark as inactive (spent)
+                it->second.is_active = false;
 
-        // Persist to database if wallet available
-        if (batch) {
-            if (!batch->WriteDDTimeLock(it->second)) {
-                LogPrintf("DigiDollar: MarkDDUTXOsSpent - Failed to persist spent UTXO: %s\n",
-                          utxo.hash.ToString());
-                return false;
+                // Persist to database if wallet available
+                if (batch) {
+                    if (!batch->WriteDDTimeLock(it->second)) {
+                        LogPrintf("DigiDollar: MarkDDUTXOsSpent - Failed to persist spent position: %s\n",
+                                  utxo.hash.ToString());
+                        return false;
+                    }
+                }
+
+                LogPrintf("DigiDollar: Marked DDTimeLock position as spent: %s:%d (%d DD)\n",
+                          utxo.hash.ToString(), utxo.n, it->second.dd_minted);
             }
         }
-
-        LogPrintf("DigiDollar: Marked DD UTXO as spent: %s:%d (%d DD)\n",
-                  utxo.hash.ToString(), utxo.n, it->second.dd_minted);
     }
 
     LogPrintf("DigiDollar: Successfully marked %d DD UTXOs as spent\n", spent_utxos.size());

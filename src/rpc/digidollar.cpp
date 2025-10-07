@@ -321,7 +321,7 @@ static RPCHelpMan calculatecollateralrequirement()
             UniValue result(UniValue::VOBJ);
             result.pushKV("required_dgb", ValueFromAmount(requiredDGB));
             result.pushKV("dd_amount_cents", ddAmount);
-            result.pushKV("dd_amount_usd", ValueFromAmount(ddAmount));
+            result.pushKV("dd_amount_usd", ddAmount / 100.0);  // Convert cents to USD
             result.pushKV("lock_days", lockDays);
             result.pushKV("lock_blocks", lockBlocks);
             result.pushKV("base_ratio", baseRatio);

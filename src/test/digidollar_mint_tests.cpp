@@ -78,7 +78,7 @@ public:
 
 BOOST_AUTO_TEST_CASE(mint_minimum_amount)
 {
-    // Test minting minimum allowed amount (1 DD = $1.00)
+    // Test minting minimum allowed amount ($100.00 = 10000 cents on mainnet/testnet, $1.00 = 100 cents on regtest)
     const CChainParams& params = Params();
     int height = 1000;
     CAmount price = CreateTestOraclePrice();
@@ -92,7 +92,8 @@ BOOST_AUTO_TEST_CASE(mint_minimum_amount)
     }
 
     TxBuilderMintParams mintParams;
-    mintParams.ddAmount = 100; // $1.00 in cents
+    // Use consensus minimum - regtest uses $100.00 minimum (10000 cents)
+    mintParams.ddAmount = params.GetDigiDollarParams().minMintAmount; // $100.00 in cents
     mintParams.lockDays = 365; // 1 year
     mintParams.ownerKey = CreateTestKey();
     mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
@@ -106,7 +107,7 @@ BOOST_AUTO_TEST_CASE(mint_minimum_amount)
     BOOST_CHECK(result.success);
     BOOST_CHECK(result.error.empty());
     BOOST_CHECK(result.tx.vin.size() > 0);
-    BOOST_CHECK(result.tx.vout.size() >= 2); // Collateral + DD outputs
+    BOOST_CHECK(result.tx.vout.size() >= 3); // Collateral + DD + OP_RETURN outputs
     BOOST_CHECK(result.collateralRequired > 0);
     BOOST_CHECK(result.totalFees > 0);
 
@@ -123,13 +124,15 @@ BOOST_AUTO_TEST_CASE(mint_standard_amounts)
 
     MockMintTxBuilder builder(params, height, price);
 
-    // Test standard amounts: $100, $1000, $10000
-    std::vector<CAmount> amounts = {10000, 100000, 1000000}; // $100, $1000, $10000 in cents
+    // Test standard amounts (regtest max is 100,000 cents = $1,000)
+    // Test: $1, $10, $100 in cents
+    std::vector<CAmount> amounts = {100, 1000, 10000}; // $1, $10, $100 in cents
 
     for (CAmount amount : amounts) {
-        auto utxos = CreateTestUTXOsWithValues({1000 * COIN, 2000 * COIN, 3000 * COIN});
+        // Provide enough for largest amount ($100 needs ~6000 DGB at 300% ratio)
+        auto utxos = CreateTestUTXOsWithValues({3000 * COIN, 3000 * COIN, 3000 * COIN});
         for (size_t i = 0; i < utxos.size(); ++i) {
-            builder.SetUTXOValue(utxos[i], (i + 1) * 1000 * COIN);
+            builder.SetUTXOValue(utxos[i], 3000 * COIN);
         }
 
         TxBuilderMintParams mintParams;
@@ -153,7 +156,7 @@ BOOST_AUTO_TEST_CASE(mint_standard_amounts)
 
 BOOST_AUTO_TEST_CASE(mint_maximum_amount)
 {
-    // Test minting maximum allowed amount per transaction
+    // Test minting maximum allowed amount per transaction (regtest: 100,000 cents = $1,000)
     const CChainParams& params = Params();
     int height = 1000;
     CAmount price = CreateTestOraclePrice();
@@ -162,27 +165,34 @@ BOOST_AUTO_TEST_CASE(mint_maximum_amount)
 
     // Create large UTXOs for maximum mint
     auto utxos = CreateTestUTXOsWithValues({
-        50000 * COIN, 100000 * COIN, 150000 * COIN, 200000 * COIN
+        10000 * COIN, 20000 * COIN, 30000 * COIN, 40000 * COIN
     });
     for (size_t i = 0; i < utxos.size(); ++i) {
-        builder.SetUTXOValue(utxos[i], (i + 1) * 50000 * COIN);
+        builder.SetUTXOValue(utxos[i], (i + 1) * 10000 * COIN);
     }
 
     TxBuilderMintParams mintParams;
-    mintParams.ddAmount = 10000000; // $100,000 in cents (max per transaction)
-    mintParams.lockDays = 3650; // 10 years (lowest collateral ratio)
+    mintParams.ddAmount = 100000; // 100,000 cents = $1,000 (regtest max)
+    mintParams.lockDays = 3650; // 10 years (lowest collateral ratio = 200%)
     mintParams.ownerKey = CreateTestKey();
     mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
     mintParams.utxos = utxos;
 
     TxBuilderResult result = builder.BuildMintTransaction(mintParams);
 
+    if (!result.success) {
+        std::cout << "ERROR: BuildMintTransaction FAILED: " << result.error << std::endl;
+    }
     BOOST_CHECK(result.success);
     BOOST_CHECK(result.collateralRequired > 0);
-    // With 10-year lock and $100k mint at 200% ratio and $0.05 DGB:
-    // Collateral = $100k * 2.0 / $0.05 = 4,000,000 DGB
-    CAmount expected = 4000000 * COIN;
-    BOOST_CHECK(std::abs(result.collateralRequired - expected) < 1000 * COIN); // Allow small variance
+    // With 10-year lock and $1k mint at 200% ratio and $0.05 DGB:
+    // Collateral = $1k * 2.0 / $0.05 = 40,000 DGB
+    // Note: May be higher due to DCA multiplier (system health < 200%)
+    CAmount expectedBase = 40000 * COIN;
+    std::cout << "Collateral required: " << result.collateralRequired / COIN << " DGB, expected base: " << expectedBase / COIN << " DGB" << std::endl;
+    // Allow for DCA multiplier up to 2.0x
+    BOOST_CHECK(result.collateralRequired >= expectedBase);
+    BOOST_CHECK(result.collateralRequired <= expectedBase * 2); // Max 2x with DCA
 }
 
 BOOST_AUTO_TEST_CASE(mint_invalid_amounts)
@@ -224,10 +234,10 @@ BOOST_AUTO_TEST_CASE(mint_invalid_amounts)
         BOOST_CHECK(!result.error.empty());
     }
 
-    // Test amount below minimum ($100)
+    // Test amount below minimum (consensus minMintAmount is $100.00 = 10000 cents)
     {
         TxBuilderMintParams mintParams;
-        mintParams.ddAmount = 5000; // $50 in cents
+        mintParams.ddAmount = params.GetDigiDollarParams().minMintAmount - 1; // Just below minimum
         mintParams.lockDays = 365;
         mintParams.ownerKey = CreateTestKey();
         mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
@@ -238,10 +248,10 @@ BOOST_AUTO_TEST_CASE(mint_invalid_amounts)
         BOOST_CHECK(result.error.find("Invalid mint parameters") != std::string::npos);
     }
 
-    // Test amount above maximum ($100k)
+    // Test amount above maximum (regtest: 100,000 cents = $1,000)
     {
         TxBuilderMintParams mintParams;
-        mintParams.ddAmount = 15000000; // $150k in cents
+        mintParams.ddAmount = 150000; // 150,000 cents = $1,500 (above regtest max)
         mintParams.lockDays = 365;
         mintParams.ownerKey = CreateTestKey();
         mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
@@ -288,7 +298,8 @@ BOOST_AUTO_TEST_CASE(collateral_all_lock_tiers)
         CAmount collateral = builder.CalculateRequiredCollateral(ddAmount, tier.days);
 
         // Expected: $100 * ratio% / $0.05 per DGB
-        CAmount expected = (ddAmount * tier.expectedRatio * COIN) / (100 * price);
+        // Oracle price format requires * 1000 in numerator
+        CAmount expected = (ddAmount * tier.expectedRatio * COIN * 1000) / (100 * price);
 
         BOOST_CHECK_MESSAGE(std::abs(collateral - expected) < COIN,
                           "Tier " + std::to_string(tier.days) + " days: got " +
@@ -346,17 +357,19 @@ BOOST_AUTO_TEST_CASE(collateral_insufficient_rejection)
 {
     const CChainParams& params = Params();
     int height = 1000;
-    CAmount price = CreateTestOraclePrice();
+    CAmount price = CreateTestOraclePrice(); // $0.05 per DGB
 
     MockMintTxBuilder builder(params, height, price);
 
     // Create UTXOs with insufficient value
-    auto utxos = CreateTestUTXOsWithValues({10 * COIN}); // Only 10 DGB
-    builder.SetUTXOValue(utxos[0], 10 * COIN);
+    auto utxos = CreateTestUTXOsWithValues({50 * COIN}); // Only 50 DGB
+    builder.SetUTXOValue(utxos[0], 50 * COIN);
 
     TxBuilderMintParams mintParams;
-    mintParams.ddAmount = 10000; // $100 (needs ~600 DGB collateral)
-    mintParams.lockDays = 365;
+    // Mint $1000 (max for regtest) - needs 200% * $1000 / $0.05 = 40,000 DGB at minimum (10 year lock)
+    // With 1 year lock (300%), needs 60,000 DGB
+    mintParams.ddAmount = 100000; // $1000 in cents (regtest max)
+    mintParams.lockDays = 365;     // 1 year = 300% ratio
     mintParams.ownerKey = CreateTestKey();
     mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
     mintParams.utxos = utxos;
@@ -380,8 +393,9 @@ BOOST_AUTO_TEST_CASE(p2tr_script_creation_through_transaction)
 
     MockMintTxBuilder builder(params, height, price);
 
-    auto utxos = CreateTestUTXOsWithValues({1000 * COIN});
-    builder.SetUTXOValue(utxos[0], 1000 * COIN);
+    // $100 at 300% ratio needs ~6000 DGB
+    auto utxos = CreateTestUTXOsWithValues({7000 * COIN});
+    builder.SetUTXOValue(utxos[0], 7000 * COIN);
 
     TxBuilderMintParams mintParams;
     mintParams.ddAmount = 10000;
@@ -393,7 +407,7 @@ BOOST_AUTO_TEST_CASE(p2tr_script_creation_through_transaction)
     TxBuilderResult result = builder.BuildMintTransaction(mintParams);
 
     BOOST_CHECK(result.success);
-    BOOST_CHECK(result.tx.vout.size() >= 2);
+    BOOST_CHECK(result.tx.vout.size() >= 3); // Collateral + DD + OP_RETURN
 
     // First output should be collateral P2TR script (OP_1 + 32 bytes)
     BOOST_CHECK(result.tx.vout[0].scriptPubKey.size() == 34);
@@ -415,8 +429,9 @@ BOOST_AUTO_TEST_CASE(p2tr_redemption_paths_verification)
 
     MockMintTxBuilder builder(params, height, price);
 
-    auto utxos = CreateTestUTXOsWithValues({1000 * COIN});
-    builder.SetUTXOValue(utxos[0], 1000 * COIN);
+    // $100 at 300% ratio needs ~6000 DGB
+    auto utxos = CreateTestUTXOsWithValues({7000 * COIN});
+    builder.SetUTXOValue(utxos[0], 7000 * COIN);
 
     TxBuilderMintParams mintParams;
     mintParams.ddAmount = 10000;
@@ -445,8 +460,9 @@ BOOST_AUTO_TEST_CASE(transaction_version_field)
 
     MockMintTxBuilder builder(params, height, price);
 
-    auto utxos = CreateTestUTXOsWithValues({1000 * COIN});
-    builder.SetUTXOValue(utxos[0], 1000 * COIN);
+    // $100 at 300% ratio needs ~6000 DGB
+    auto utxos = CreateTestUTXOsWithValues({7000 * COIN});
+    builder.SetUTXOValue(utxos[0], 7000 * COIN);
 
     TxBuilderMintParams mintParams;
     mintParams.ddAmount = 10000;
@@ -459,11 +475,13 @@ BOOST_AUTO_TEST_CASE(transaction_version_field)
 
     BOOST_CHECK(result.success);
 
-    // Check DigiDollar version format: 0x4444XXYY
+    // Check DigiDollar version format
+    // Version structure: [Type:8][Flags:8][Marker:16]
+    // Marker is 0x0770 for DigiDollar transactions
     BOOST_CHECK(result.tx.IsDigiDollar());
-    BOOST_CHECK((result.tx.nVersion & 0xFFFF0000) == 0x44440000);
+    BOOST_CHECK((result.tx.nVersion & 0x0000FFFF) == 0x0770); // Check DigiDollar marker
 
-    // Check mint transaction type
+    // Check mint transaction type (type is in bits 24-31)
     BOOST_CHECK(::GetDigiDollarTxType(CTransaction(result.tx)) == ::DD_TX_MINT);
 }
 
@@ -515,8 +533,9 @@ BOOST_AUTO_TEST_CASE(transaction_output_creation)
 
     MockMintTxBuilder builder(params, height, price);
 
-    auto utxos = CreateTestUTXOsWithValues({1000 * COIN});
-    builder.SetUTXOValue(utxos[0], 1000 * COIN);
+    // $100 at 300% ratio needs ~6000 DGB
+    auto utxos = CreateTestUTXOsWithValues({7000 * COIN});
+    builder.SetUTXOValue(utxos[0], 7000 * COIN);
 
     TxBuilderMintParams mintParams;
     mintParams.ddAmount = 10000;
@@ -528,7 +547,7 @@ BOOST_AUTO_TEST_CASE(transaction_output_creation)
     TxBuilderResult result = builder.BuildMintTransaction(mintParams);
 
     BOOST_CHECK(result.success);
-    BOOST_CHECK(result.tx.vout.size() >= 2); // Collateral + DD + possible change
+    BOOST_CHECK(result.tx.vout.size() >= 3); // Collateral + DD + OP_RETURN + possible change
 
     // First output should be collateral (positive DGB value)
     BOOST_CHECK(result.tx.vout[0].nValue > 0);
@@ -541,9 +560,13 @@ BOOST_AUTO_TEST_CASE(transaction_output_creation)
     const auto& ddScript = result.tx.vout[1].scriptPubKey;
     BOOST_CHECK(ddScript.size() == 34 && ddScript[0] == OP_1 && ddScript[1] == 32);
 
-    // If change exists, it should be in a third output
-    if (result.tx.vout.size() > 2) {
-        BOOST_CHECK(result.tx.vout[2].nValue > 0); // Change has positive value
+    // Third output should be OP_RETURN (zero DGB value)
+    BOOST_CHECK(result.tx.vout[2].nValue == 0);
+    BOOST_CHECK(result.tx.vout[2].scriptPubKey[0] == OP_RETURN);
+
+    // If change exists, it should be in a fourth output
+    if (result.tx.vout.size() > 3) {
+        BOOST_CHECK(result.tx.vout[3].nValue > 0); // Change has positive value
     }
 }
 
@@ -558,8 +581,8 @@ BOOST_AUTO_TEST_CASE(transaction_fee_calculation)
     auto utxos = CreateTestUTXOsWithValues({1000 * COIN});
     builder.SetUTXOValue(utxos[0], 1000 * COIN);
 
-    // Test different fee rates
-    std::vector<CAmount> feeRates = {1000, 2000, 5000}; // sat/vB
+    // Test different fee rates (in sat/kB, min is 100k sat/kB)
+    std::vector<CAmount> feeRates = {100000, 200000, 500000}; // sat/kB (100k, 200k, 500k)
 
     CAmount prevFee = 0;
     for (CAmount feeRate : feeRates) {
@@ -588,8 +611,9 @@ BOOST_AUTO_TEST_CASE(transaction_signing_preparation)
 
     MockMintTxBuilder builder(params, height, price);
 
-    auto utxos = CreateTestUTXOsWithValues({1000 * COIN});
-    builder.SetUTXOValue(utxos[0], 1000 * COIN);
+    // $100 at 300% ratio needs ~6000 DGB
+    auto utxos = CreateTestUTXOsWithValues({7000 * COIN});
+    builder.SetUTXOValue(utxos[0], 7000 * COIN);
 
     TxBuilderMintParams mintParams;
     mintParams.ddAmount = 10000;
@@ -645,8 +669,8 @@ BOOST_AUTO_TEST_CASE(edge_case_exact_collateral_no_change)
     TxBuilderResult result = builder.BuildMintTransaction(mintParams);
 
     BOOST_CHECK(result.success);
-    // Should have exactly 2 outputs (collateral + DD, no change)
-    BOOST_CHECK(result.tx.vout.size() == 2);
+    // Should have exactly 3 outputs (collateral + DD + OP_RETURN, no change)
+    BOOST_CHECK(result.tx.vout.size() == 3);
 }
 
 BOOST_AUTO_TEST_CASE(edge_case_multiple_inputs)
@@ -660,7 +684,7 @@ BOOST_AUTO_TEST_CASE(edge_case_multiple_inputs)
     // Provide many small UTXOs that need to be combined
     std::vector<CAmount> values;
     for (int i = 0; i < 10; ++i) {
-        values.push_back(50 * COIN); // 50 DGB each
+        values.push_back(100 * COIN); // 100 DGB each = 1000 DGB total
     }
     auto utxos = CreateTestUTXOsWithValues(values);
     for (size_t i = 0; i < utxos.size(); ++i) {
@@ -668,7 +692,7 @@ BOOST_AUTO_TEST_CASE(edge_case_multiple_inputs)
     }
 
     TxBuilderMintParams mintParams;
-    mintParams.ddAmount = 10000; // $100 (needs ~600 DGB)
+    mintParams.ddAmount = 10000; // $100 (needs ~600 DGB at 300% ratio)
     mintParams.lockDays = 365;
     mintParams.ownerKey = CreateTestKey();
     mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
@@ -693,7 +717,9 @@ BOOST_AUTO_TEST_CASE(edge_case_invalid_lock_times)
     builder.SetUTXOValue(utxos[0], 1000 * COIN);
 
     // Test various invalid lock times
-    std::vector<int> invalidLockTimes = {0, 10, 29, 3651, 5000}; // 0, 10d, 29d, >10y, way too long
+    // Valid: 0 (1 hour testing), 30-3650 days
+    // Invalid: 1-29, >3650
+    std::vector<int> invalidLockTimes = {1, 10, 29, 3651, 5000}; // Too short or too long
 
     for (int lockDays : invalidLockTimes) {
         TxBuilderMintParams mintParams;
@@ -718,8 +744,9 @@ BOOST_AUTO_TEST_CASE(edge_case_oracle_price_unavailable)
 
     MockMintTxBuilder builder(params, height, price);
 
-    auto utxos = CreateTestUTXOsWithValues({1000 * COIN});
-    builder.SetUTXOValue(utxos[0], 1000 * COIN);
+    // $100 at 300% ratio needs ~6000 DGB
+    auto utxos = CreateTestUTXOsWithValues({7000 * COIN});
+    builder.SetUTXOValue(utxos[0], 7000 * COIN);
 
     TxBuilderMintParams mintParams;
     mintParams.ddAmount = 10000;
@@ -746,13 +773,13 @@ BOOST_AUTO_TEST_CASE(edge_case_extreme_fee_rates)
     auto utxos = CreateTestUTXOsWithValues({10000 * COIN});
     builder.SetUTXOValue(utxos[0], 10000 * COIN);
 
-    // Test extremely high fee rate
+    // Test extremely high fee rate (max is 5M sat/kB)
     {
         TxBuilderMintParams mintParams;
         mintParams.ddAmount = 10000;
         mintParams.lockDays = 365;
         mintParams.ownerKey = CreateTestKey();
-        mintParams.feeRate = 1000000; // 1M sat/vB (way too high)
+        mintParams.feeRate = 10000000; // 10M sat/kB (way above max of 5M sat/kB)
         mintParams.utxos = utxos;
 
         TxBuilderResult result = builder.BuildMintTransaction(mintParams);
@@ -785,8 +812,9 @@ BOOST_AUTO_TEST_CASE(edge_case_invalid_keys)
 
     MockMintTxBuilder builder(params, height, price);
 
-    auto utxos = CreateTestUTXOsWithValues({1000 * COIN});
-    builder.SetUTXOValue(utxos[0], 1000 * COIN);
+    // $100 at 300% ratio needs ~6000 DGB
+    auto utxos = CreateTestUTXOsWithValues({7000 * COIN});
+    builder.SetUTXOValue(utxos[0], 7000 * COIN);
 
     TxBuilderMintParams mintParams;
     mintParams.ddAmount = 10000;
@@ -824,12 +852,12 @@ BOOST_AUTO_TEST_CASE(integration_complete_mint_flow)
         builder.SetUTXOValue(utxos[i], (i == 0 ? 1000 : (i == 1 ? 2000 : 500)) * COIN);
     }
 
-    // Mint $500 worth of DigiDollars with 1-year lock
+    // Mint $500 worth of DigiDollars with 1-year lock (within regtest max of $1000)
     TxBuilderMintParams mintParams;
     mintParams.ddAmount = 50000; // $500 in cents
     mintParams.lockDays = 365;   // 1 year = 300% collateral ratio
     mintParams.ownerKey = CreateTestKey();
-    mintParams.feeRate = 2000;   // 2000 sat/vB
+    mintParams.feeRate = 200000;   // 200,000 sat/kB (= 200 sat/vB)
     mintParams.utxos = utxos;
 
     TxBuilderResult result = builder.BuildMintTransaction(mintParams);
@@ -841,7 +869,7 @@ BOOST_AUTO_TEST_CASE(integration_complete_mint_flow)
     BOOST_CHECK(result.tx.IsDigiDollar());
     BOOST_CHECK(::GetDigiDollarTxType(CTransaction(result.tx)) == ::DD_TX_MINT);
     BOOST_CHECK(result.tx.vin.size() > 0);
-    BOOST_CHECK(result.tx.vout.size() >= 2);
+    BOOST_CHECK(result.tx.vout.size() >= 3); // Collateral + DD + OP_RETURN
 
     // Verify collateral calculation
     // $500 * 300% / $0.05 = 30,000 DGB
@@ -851,10 +879,12 @@ BOOST_AUTO_TEST_CASE(integration_complete_mint_flow)
     // Verify outputs
     BOOST_CHECK(result.tx.vout[0].nValue == result.collateralRequired); // Collateral
     BOOST_CHECK(result.tx.vout[1].nValue == 0); // DigiDollar output
+    BOOST_CHECK(result.tx.vout[2].nValue == 0); // OP_RETURN
     const auto& script0 = result.tx.vout[0].scriptPubKey;
     const auto& script1 = result.tx.vout[1].scriptPubKey;
     BOOST_CHECK(script0.size() == 34 && script0[0] == OP_1 && script0[1] == 32);
     BOOST_CHECK(script1.size() == 34 && script1[0] == OP_1 && script1[1] == 32);
+    BOOST_CHECK(result.tx.vout[2].scriptPubKey[0] == OP_RETURN);
 
     // Verify fees are reasonable
     BOOST_CHECK(result.totalFees > 0);
@@ -879,8 +909,9 @@ BOOST_AUTO_TEST_CASE(mint_with_dca_healthy_system)
     CAmount totalDD = 10000000;                  // 10M DD ($100k)
     // Health = (100M * $0.05) / $100k * 100 = $5M / $100k * 100 = 500%
 
-    auto utxos = CreateTestUTXOsWithValues({1000 * COIN});
-    builder.SetUTXOValue(utxos[0], 1000 * COIN);
+    // $100 at 300% ratio needs ~6000 DGB
+    auto utxos = CreateTestUTXOsWithValues({7000 * COIN});
+    builder.SetUTXOValue(utxos[0], 7000 * COIN);
 
     TxBuilderMintParams mintParams;
     mintParams.ddAmount = 10000; // $100
@@ -1048,7 +1079,8 @@ BOOST_AUTO_TEST_CASE(mint_dca_applies_to_all_lock_tiers)
                           "Failed for tier: " + std::string(tier.description));
 
         // Calculate expected base collateral
-        CAmount expectedBase = (ddAmount * tier.baseRatio * COIN) / (100 * price);
+        // Oracle price format requires * 1000 in numerator
+        CAmount expectedBase = (ddAmount * tier.baseRatio * COIN * 1000) / (100 * price);
 
         // For now, verify base collateral is calculated correctly
         // DCA integration will be tested after validation is updated

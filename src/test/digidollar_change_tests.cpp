@@ -90,6 +90,49 @@ struct DDChangeTestFixture : public TestingSetup {
         WitnessV1Taproot dest(xonly);
         return EncodeDigiDollarAddress(dest, chainParams);
     }
+
+    /**
+     * Extract DD amounts from OP_RETURN metadata output
+     * Transfer format: OP_RETURN <"DD"> <txType=2> <amount1> <amount2> ... <amountN>
+     */
+    bool ExtractDDAmountsFromOpReturn(const CScript& script, std::vector<CAmount>& amounts) {
+        amounts.clear();
+
+        auto pc = script.begin();
+        opcodetype opcode;
+        std::vector<unsigned char> data;
+
+        // Check for OP_RETURN
+        if (!script.GetOp(pc, opcode, data) || opcode != OP_RETURN) {
+            return false;
+        }
+
+        // Get "DD" marker
+        if (!script.GetOp(pc, opcode, data) || data.size() != 2 || data[0] != 'D' || data[1] != 'D') {
+            return false;
+        }
+
+        // Get transaction type (should be 2 for TRANSFER)
+        if (!script.GetOp(pc, opcode, data)) {
+            return false;
+        }
+
+        // Extract all remaining amounts
+        while (script.GetOp(pc, opcode, data)) {
+            try {
+                CScriptNum scriptNum(data, false);
+                CAmount amount = scriptNum.GetInt64();
+                if (amount > 0) {
+                    amounts.push_back(amount);
+                }
+            } catch (const scriptnum_error&) {
+                // Skip invalid data
+                continue;
+            }
+        }
+
+        return !amounts.empty();
+    }
 };
 
 // =============================================================================
@@ -117,18 +160,30 @@ BOOST_FIXTURE_TEST_CASE(test_dd_change_output, DDChangeTestFixture)
     BOOST_CHECK_EQUAL(result.success, true);
     BOOST_CHECK_MESSAGE(result.error.empty(), "Unexpected error: " << result.error);
 
-    // Count DD outputs (should have 1 recipient + 1 DD change)
+    // Find OP_RETURN output and extract DD amounts
     std::vector<CAmount> ddAmounts;
+    bool found_opreturn = false;
     for (const auto& output : result.tx.vout) {
-        if (output.nValue == 0) {
-            CAmount amount = 0;
-            if (DigiDollar::ExtractDDAmount(output.scriptPubKey, amount)) {
-                ddAmounts.push_back(amount);
-            }
+        if (output.scriptPubKey.size() > 0 && output.scriptPubKey[0] == OP_RETURN) {
+            found_opreturn = ExtractDDAmountsFromOpReturn(output.scriptPubKey, ddAmounts);
+            break;
         }
     }
 
-    // Should have 2 DD outputs: recipient + change
+    BOOST_CHECK_MESSAGE(found_opreturn, "No OP_RETURN found in transaction");
+
+    // Debug: Count P2TR DD outputs
+    int dd_p2tr_count = 0;
+    for (const auto& output : result.tx.vout) {
+        if (output.nValue == 0 && output.scriptPubKey.size() > 0 && output.scriptPubKey[0] == 0x51) {
+            dd_p2tr_count++;
+        }
+    }
+    if (ddAmounts.size() != dd_p2tr_count) {
+        BOOST_TEST_MESSAGE("WARNING: OP_RETURN amounts (" << ddAmounts.size() << ") != P2TR outputs (" << dd_p2tr_count << ")");
+    }
+
+    // Should have 2 DD amounts in OP_RETURN: recipient + change
     BOOST_CHECK_EQUAL(ddAmounts.size(), 2);
 
     // Verify total DD is conserved (1000 DD)
@@ -154,7 +209,7 @@ BOOST_FIXTURE_TEST_CASE(test_dgb_change_output, DDChangeTestFixture)
     params.feeRate = 100000; // 100,000 sat/kB
     params.spenderKey = senderKey;
     params.ddUtxos.push_back(CreateMockDDUTXO(10000)); // Exact DD amount
-    params.feeUtxos.push_back(CreateMockDGBUTXO(1000000)); // 0.01 DGB (large for fees)
+    params.feeUtxos.push_back(CreateMockDGBUTXO(20000000)); // 0.2 DGB (enough for 0.1 min fee + change)
 
     MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
 
@@ -182,8 +237,12 @@ BOOST_FIXTURE_TEST_CASE(test_dgb_change_output, DDChangeTestFixture)
     }
 
     // Change should be less than input minus minimum fee
-    BOOST_CHECK_LT(totalDGBOut, 1000000); // Less than the 0.01 DGB input
+    BOOST_CHECK_LT(totalDGBOut, 20000000); // Less than the 0.2 DGB input
     BOOST_CHECK_GT(totalDGBOut, 0); // But greater than zero (we should have change)
+
+    // Should be approximately input - min_fee (0.2 - 0.1 = 0.1 DGB)
+    BOOST_CHECK_GT(totalDGBOut, 9000000); // At least 0.09 DGB change
+    BOOST_CHECK_LT(totalDGBOut, 11000000); // At most 0.11 DGB change
 }
 
 BOOST_FIXTURE_TEST_CASE(test_no_dd_change_exact_amount, DDChangeTestFixture)
@@ -206,18 +265,19 @@ BOOST_FIXTURE_TEST_CASE(test_no_dd_change_exact_amount, DDChangeTestFixture)
     // Assert
     BOOST_CHECK_EQUAL(result.success, true);
 
-    // Count DD outputs (should have only 1 recipient, no change)
+    // Find OP_RETURN and extract DD amounts
     std::vector<CAmount> ddAmounts;
+    bool found_opreturn = false;
     for (const auto& output : result.tx.vout) {
-        if (output.nValue == 0) {
-            CAmount amount = 0;
-            if (DigiDollar::ExtractDDAmount(output.scriptPubKey, amount)) {
-                ddAmounts.push_back(amount);
-            }
+        if (output.scriptPubKey.size() > 0 && output.scriptPubKey[0] == OP_RETURN) {
+            found_opreturn = ExtractDDAmountsFromOpReturn(output.scriptPubKey, ddAmounts);
+            break;
         }
     }
 
-    // Should have exactly 1 DD output (recipient only, no change)
+    BOOST_CHECK_MESSAGE(found_opreturn, "No OP_RETURN found in transaction");
+
+    // Should have exactly 1 DD amount in OP_RETURN (recipient only, no change)
     BOOST_CHECK_EQUAL(ddAmounts.size(), 1);
     BOOST_CHECK_EQUAL(ddAmounts[0], 50000);
 }

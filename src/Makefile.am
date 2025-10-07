@@ -397,6 +397,7 @@ libdigibyte_node_a_SOURCES = \
   dandelion.cpp \
   dbwrapper.cpp \
   deploymentstatus.cpp \
+  digidollar/health.cpp \
   flatfile.cpp \
   headerssync.cpp \
   httprpc.cpp \
@@ -740,7 +741,6 @@ libdigibyte_common_a_SOURCES = \
   core_write.cpp \
   deploymentinfo.cpp \
   digidollar/digidollar.cpp \
-  digidollar/health.cpp \
   digidollar/scripts.cpp \
   digidollar/txbuilder.cpp \
   digidollar/validation.cpp \

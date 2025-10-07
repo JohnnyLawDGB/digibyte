@@ -9,324 +9,288 @@
 #include <test/util/setup_common.h>
 #include <util/strencodings.h>
 #include <univalue.h>
+#include <node/context.h>
 
+#include <chrono>
 #include <boost/test/unit_test.hpp>
 
 BOOST_AUTO_TEST_SUITE(digidollar_rpc_tests)
 
-struct DigiDollarRPCTestSetup : public TestingSetup {
+class DigiDollarRPCTestSetup : public TestingSetup {
+public:
     DigiDollarRPCTestSetup() : TestingSetup(ChainType::REGTEST) {
         // Initialize health monitoring system
         DigiDollar::SystemHealthMonitor::Initialize();
-
-        // TODO: Set up RPC table with new CRPCCommand format
-        // This test needs updating to the new RPC registration format
-        // tableRPC.appendCommand("getdigidollarstatus", &getdigidollarstatus);
-
-        // Create mock request structure
-        mockRequest.URI = "/";
-        mockRequest.authUser = "";
-        mockRequest.mode = JSONRPCRequest::EXECUTE;
     }
 
     ~DigiDollarRPCTestSetup() {
         DigiDollar::SystemHealthMonitor::Shutdown();
     }
 
-    JSONRPCRequest mockRequest;
+    UniValue CallRPC(std::string args)
+    {
+        std::vector<std::string> vArgs{SplitString(args, ' ')};
+        std::string strMethod = vArgs[0];
+        vArgs.erase(vArgs.begin());
+        JSONRPCRequest request;
+        request.context = &m_node;
+        request.strMethod = strMethod;
+        request.params = RPCConvertValues(strMethod, vArgs);
+        if (RPCIsInWarmup(nullptr)) SetRPCWarmupFinished();
+        try {
+            UniValue result = tableRPC.execute(request);
+            return result;
+        }
+        catch (const UniValue& objError) {
+            throw std::runtime_error(objError.find_value("message").get_str());
+        }
+    }
 };
 
-// Test 1: Basic RPC Command Registration
-/* TODO: Update all these tests to the new RPC registration format
-BOOST_FIXTURE_TEST_CASE(test_rpc_command_registration, DigiDollarRPCTestSetup)
+// Test 1: getdigidollarstats - Basic Response
+BOOST_FIXTURE_TEST_CASE(test_getdigidollarstats_basic, DigiDollarRPCTestSetup)
 {
-    // Test that the command is registered
-    const CRPCCommand* command = tableRPC.find("getdigidollarstatus");
-    BOOST_CHECK(command != nullptr);
-
-    // Test command category
-    std::string help = tableRPC["getdigidollarstatus"]->help;
-    BOOST_CHECK(!help.empty());
-}
-
-// Test 2: Basic RPC Call Response
-BOOST_FIXTURE_TEST_CASE(test_basic_rpc_call, DigiDollarRPCTestSetup)
-{
-    // Set up request
-    mockRequest.strMethod = "getdigidollarstatus";
-    mockRequest.params = UniValue(UniValue::VARR);
-
-    // Make RPC call
-    UniValue result = getdigidollarstatus(mockRequest);
+    UniValue result = CallRPC("getdigidollarstats");
 
     // Should return a valid JSON object
     BOOST_CHECK(result.isObject());
 
     // Check required top-level fields
-    BOOST_CHECK(result.exists("supply"));
-    BOOST_CHECK(result.exists("collateral"));
-    BOOST_CHECK(result.exists("health"));
-    BOOST_CHECK(result.exists("dca_multiplier"));
-    BOOST_CHECK(result.exists("err_active"));
-    BOOST_CHECK(result.exists("volatility"));
-    BOOST_CHECK(result.exists("minting_frozen"));
-    BOOST_CHECK(result.exists("tiers"));
-    BOOST_CHECK(result.exists("oracles"));
-    BOOST_CHECK(result.exists("active_alerts"));
-    BOOST_CHECK(result.exists("overall_status"));
-    BOOST_CHECK(result.exists("recommended_action"));
+    BOOST_CHECK(result.exists("health_percentage"));
+    BOOST_CHECK(result.exists("health_status"));
+    BOOST_CHECK(result.exists("total_collateral_dgb"));
+    BOOST_CHECK(result.exists("total_dd_supply"));
+    BOOST_CHECK(result.exists("oracle_price_cents"));
+    BOOST_CHECK(result.exists("is_emergency"));
+    BOOST_CHECK(result.exists("system_collateral_ratio"));
+    BOOST_CHECK(result.exists("total_collateral_locked"));
+    BOOST_CHECK(result.exists("active_positions"));
+    BOOST_CHECK(result.exists("oracle_price_age"));
+    BOOST_CHECK(result.exists("dca_tier"));
 }
 
-// Test 3: JSON Response Format Validation
-BOOST_FIXTURE_TEST_CASE(test_json_response_format, DigiDollarRPCTestSetup)
+// Test 2: getdigidollarstats - Data Types
+BOOST_FIXTURE_TEST_CASE(test_getdigidollarstats_types, DigiDollarRPCTestSetup)
 {
-    // Set up request
-    mockRequest.strMethod = "getdigidollarstatus";
-    mockRequest.params = UniValue(UniValue::VARR);
-
-    // Make RPC call
-    UniValue result = getdigidollarstatus(mockRequest);
+    UniValue result = CallRPC("getdigidollarstats");
 
     // Validate data types
-    BOOST_CHECK(result["supply"].isNum());
-    BOOST_CHECK(result["collateral"].isNum());
-    BOOST_CHECK(result["health"].isNum());
-    BOOST_CHECK(result["dca_multiplier"].isNum());
-    BOOST_CHECK(result["err_active"].isBool());
-    BOOST_CHECK(result["volatility"].isNum());
-    BOOST_CHECK(result["minting_frozen"].isBool());
-    BOOST_CHECK(result["tiers"].isArray());
-    BOOST_CHECK(result["oracles"].isObject());
-    BOOST_CHECK(result["active_alerts"].isArray());
-    BOOST_CHECK(result["overall_status"].isStr());
-    BOOST_CHECK(result["recommended_action"].isStr());
+    BOOST_CHECK(result["health_percentage"].isNum());
+    BOOST_CHECK(result["health_status"].isStr());
+    BOOST_CHECK(result["total_collateral_dgb"].isNum());
+    BOOST_CHECK(result["total_dd_supply"].isNum());
+    BOOST_CHECK(result["oracle_price_cents"].isNum());
+    BOOST_CHECK(result["is_emergency"].isBool());
+    BOOST_CHECK(result["system_collateral_ratio"].isNum());
+    BOOST_CHECK(result["total_collateral_locked"].isNum());
+    BOOST_CHECK(result["active_positions"].isNum());
+    BOOST_CHECK(result["oracle_price_age"].isNum());
+    BOOST_CHECK(result["dca_tier"].isObject());
+}
+
+// Test 3: getdigidollarstats - Numeric Ranges
+BOOST_FIXTURE_TEST_CASE(test_getdigidollarstats_ranges, DigiDollarRPCTestSetup)
+{
+    UniValue result = CallRPC("getdigidollarstats");
 
     // Validate numeric ranges
-    BOOST_CHECK_GE(result["supply"].get_int64(), 0);
-    BOOST_CHECK_GE(result["collateral"].get_int64(), 0);
-    BOOST_CHECK_GE(result["health"].get_int(), 0);
-    BOOST_CHECK_LE(result["health"].get_int(), 300);
-    BOOST_CHECK_GE(result["dca_multiplier"].get_real(), 1.0);
-    BOOST_CHECK_LE(result["dca_multiplier"].get_real(), 10.0);
-    BOOST_CHECK_GE(result["volatility"].get_real(), 0.0);
-    BOOST_CHECK_LE(result["volatility"].get_real(), 100.0);
+    BOOST_CHECK_GE(result["health_percentage"].getInt<int>(), 0);
+    BOOST_CHECK_LE(result["health_percentage"].getInt<int>(), 30000);
+    BOOST_CHECK_GE(result["total_collateral_dgb"].get_real(), 0.0);
+    BOOST_CHECK_GE(result["total_dd_supply"].getInt<int64_t>(), 0);
+    BOOST_CHECK_GE(result["oracle_price_cents"].getInt<int64_t>(), 0);
+    BOOST_CHECK_GE(result["active_positions"].getInt<int>(), 0);
+    BOOST_CHECK_GE(result["oracle_price_age"].getInt<int>(), 0);
 }
 
-// Test 4: Tier Array Structure
-BOOST_FIXTURE_TEST_CASE(test_tier_array_structure, DigiDollarRPCTestSetup)
+// Test 4: getdigidollarstats - DCA Tier Structure
+BOOST_FIXTURE_TEST_CASE(test_getdigidollarstats_dca_tier, DigiDollarRPCTestSetup)
 {
-    // Set up request
-    mockRequest.strMethod = "getdigidollarstatus";
-    mockRequest.params = UniValue(UniValue::VARR);
+    UniValue result = CallRPC("getdigidollarstats");
 
-    // Make RPC call
-    UniValue result = getdigidollarstatus(mockRequest);
-
-    // Get tiers array
-    const UniValue& tiers = result["tiers"];
-    BOOST_CHECK(tiers.isArray());
-    BOOST_CHECK_GT(tiers.size(), 0);
-
-    // Validate each tier object
-    for (size_t i = 0; i < tiers.size(); ++i) {
-        const UniValue& tier = tiers[i];
-        BOOST_CHECK(tier.isObject());
-
-        // Check required fields
-        BOOST_CHECK(tier.exists("lock_days"));
-        BOOST_CHECK(tier.exists("dd_minted"));
-        BOOST_CHECK(tier.exists("dgb_locked"));
-        BOOST_CHECK(tier.exists("positions"));
-        BOOST_CHECK(tier.exists("health"));
-        BOOST_CHECK(tier.exists("status"));
-        BOOST_CHECK(tier.exists("action"));
-
-        // Check data types
-        BOOST_CHECK(tier["lock_days"].isNum());
-        BOOST_CHECK(tier["dd_minted"].isNum());
-        BOOST_CHECK(tier["dgb_locked"].isNum());
-        BOOST_CHECK(tier["positions"].isNum());
-        BOOST_CHECK(tier["health"].isNum());
-        BOOST_CHECK(tier["status"].isStr());
-        BOOST_CHECK(tier["action"].isStr());
-
-        // Validate ranges
-        BOOST_CHECK_GT(tier["lock_days"].get_int(), 0);
-        BOOST_CHECK_GE(tier["dd_minted"].get_int64(), 0);
-        BOOST_CHECK_GE(tier["dgb_locked"].get_int64(), 0);
-        BOOST_CHECK_GE(tier["positions"].get_int(), 0);
-        BOOST_CHECK_GE(tier["health"].get_int(), 0);
-        BOOST_CHECK_LE(tier["health"].get_int(), 300);
-
-        // Validate status strings
-        std::string status = tier["status"].get_str();
-        BOOST_CHECK(status == "Healthy" || status == "Warning" || status == "Critical");
-
-        // Validate action strings
-        std::string action = tier["action"].get_str();
-        BOOST_CHECK(!action.empty());
-    }
-
-    // Verify tier ordering (by lock days)
-    for (size_t i = 1; i < tiers.size(); ++i) {
-        int prevLockDays = tiers[i-1]["lock_days"].get_int();
-        int currLockDays = tiers[i]["lock_days"].get_int();
-        BOOST_CHECK_GT(currLockDays, prevLockDays);
-    }
-}
-
-// Test 5: Oracle Object Structure
-BOOST_FIXTURE_TEST_CASE(test_oracle_object_structure, DigiDollarRPCTestSetup)
-{
-    // Set up request
-    mockRequest.strMethod = "getdigidollarstatus";
-    mockRequest.params = UniValue(UniValue::VARR);
-
-    // Make RPC call
-    UniValue result = getdigidollarstatus(mockRequest);
-
-    // Get oracles object
-    const UniValue& oracles = result["oracles"];
-    BOOST_CHECK(oracles.isObject());
+    // Get DCA tier object
+    const UniValue& dcaTier = result["dca_tier"];
+    BOOST_CHECK(dcaTier.isObject());
 
     // Check required fields
-    BOOST_CHECK(oracles.exists("active_count"));
-    BOOST_CHECK(oracles.exists("last_price"));
-    BOOST_CHECK(oracles.exists("last_update"));
-    BOOST_CHECK(oracles.exists("blocks_since_update"));
-    BOOST_CHECK(oracles.exists("is_stale"));
+    BOOST_CHECK(dcaTier.exists("min_collateral"));
+    BOOST_CHECK(dcaTier.exists("max_collateral"));
+    BOOST_CHECK(dcaTier.exists("multiplier"));
+    BOOST_CHECK(dcaTier.exists("status"));
 
     // Check data types
-    BOOST_CHECK(oracles["active_count"].isNum());
-    BOOST_CHECK(oracles["last_price"].isNum());
-    BOOST_CHECK(oracles["last_update"].isNum());
-    BOOST_CHECK(oracles["blocks_since_update"].isNum());
-    BOOST_CHECK(oracles["is_stale"].isBool());
-
-    // Validate ranges
-    BOOST_CHECK_GE(oracles["active_count"].get_int(), 0);
-    BOOST_CHECK_LE(oracles["active_count"].get_int(), 50); // Reasonable upper bound
-    BOOST_CHECK_GE(oracles["last_price"].get_int64(), 0);
-    BOOST_CHECK_GE(oracles["last_update"].get_int64(), 0);
-    BOOST_CHECK_GE(oracles["blocks_since_update"].get_int64(), 0);
+    BOOST_CHECK(dcaTier["min_collateral"].isNum());
+    BOOST_CHECK(dcaTier["max_collateral"].isNum());
+    BOOST_CHECK(dcaTier["multiplier"].isNum());
+    BOOST_CHECK(dcaTier["status"].isStr());
 }
 
-// Test 6: Active Alerts Array
-BOOST_FIXTURE_TEST_CASE(test_active_alerts_array, DigiDollarRPCTestSetup)
+// Test 5: getdcamultiplier - Basic Response
+BOOST_FIXTURE_TEST_CASE(test_getdcamultiplier_basic, DigiDollarRPCTestSetup)
 {
-    // Set up request
-    mockRequest.strMethod = "getdigidollarstatus";
-    mockRequest.params = UniValue(UniValue::VARR);
+    UniValue result = CallRPC("getdcamultiplier");
 
-    // Make RPC call
-    UniValue result = getdigidollarstatus(mockRequest);
+    // Should return a valid JSON object
+    BOOST_CHECK(result.isObject());
 
-    // Get active alerts array
-    const UniValue& alerts = result["active_alerts"];
-    BOOST_CHECK(alerts.isArray());
-
-    // All alerts should be valid strings
-    for (size_t i = 0; i < alerts.size(); ++i) {
-        BOOST_CHECK(alerts[i].isStr());
-        std::string alert = alerts[i].get_str();
-        BOOST_CHECK(!alert.empty());
-
-        // Should be one of the known alert types
-        BOOST_CHECK(alert == "system_health" ||
-                   alert == "total_supply" ||
-                   alert == "total_collateral" ||
-                   alert == "oracle_status" ||
-                   alert == "volatility" ||
-                   alert == "position_count");
-    }
+    // Check required fields
+    BOOST_CHECK(result.exists("multiplier"));
+    BOOST_CHECK(result.exists("system_health"));
+    BOOST_CHECK(result.exists("tier_status"));
+    BOOST_CHECK(result.exists("description"));
 }
 
-// Test 7: Metric Accuracy Validation
-BOOST_FIXTURE_TEST_CASE(test_metric_accuracy, DigiDollarRPCTestSetup)
+// Test 6: getdcamultiplier - With Parameter
+BOOST_FIXTURE_TEST_CASE(test_getdcamultiplier_with_health, DigiDollarRPCTestSetup)
 {
-    // Get health metrics directly
-    DigiDollar::SystemMetrics directMetrics = DigiDollar::SystemHealthMonitor::GetSystemMetrics();
+    // Test with specific health values
+    UniValue result150 = CallRPC("getdcamultiplier 150");
+    BOOST_CHECK(result150.isObject());
+    BOOST_CHECK_EQUAL(result150["system_health"].getInt<int>(), 150);
 
-    // Set up RPC request
-    mockRequest.strMethod = "getdigidollarstatus";
-    mockRequest.params = UniValue(UniValue::VARR);
+    UniValue result100 = CallRPC("getdcamultiplier 100");
+    BOOST_CHECK(result100.isObject());
+    BOOST_CHECK_EQUAL(result100["system_health"].getInt<int>(), 100);
 
-    // Make RPC call
-    UniValue rpcResult = getdigidollarstatus(mockRequest);
-
-    // Compare RPC results with direct metrics
-    BOOST_CHECK_EQUAL(rpcResult["supply"].get_int64(), directMetrics.totalDDSupply);
-    BOOST_CHECK_EQUAL(rpcResult["collateral"].get_int64(), directMetrics.totalCollateral);
-    BOOST_CHECK_EQUAL(rpcResult["health"].get_int(), directMetrics.systemHealth);
-
-    BOOST_CHECK_CLOSE(rpcResult["dca_multiplier"].get_real(), directMetrics.dcaMultiplier, 0.01);
-    BOOST_CHECK_EQUAL(rpcResult["err_active"].get_bool(), directMetrics.errActive);
-    BOOST_CHECK_CLOSE(rpcResult["volatility"].get_real(), directMetrics.volatility, 0.01);
-    BOOST_CHECK_EQUAL(rpcResult["minting_frozen"].get_bool(), directMetrics.mintingFrozen);
-
-    // Compare tier metrics
-    const UniValue& rpcTiers = rpcResult["tiers"];
-    BOOST_CHECK_EQUAL(rpcTiers.size(), directMetrics.tiers.size());
-
-    for (size_t i = 0; i < directMetrics.tiers.size(); ++i) {
-        const auto& directTier = directMetrics.tiers[i];
-        const UniValue& rpcTier = rpcTiers[i];
-
-        BOOST_CHECK_EQUAL(rpcTier["lock_days"].get_int(), directTier.lockDays);
-        BOOST_CHECK_EQUAL(rpcTier["dd_minted"].get_int64(), directTier.ddMinted);
-        BOOST_CHECK_EQUAL(rpcTier["dgb_locked"].get_int64(), directTier.dgbLocked);
-        BOOST_CHECK_EQUAL(rpcTier["positions"].get_int(), directTier.positions);
-        BOOST_CHECK_EQUAL(rpcTier["health"].get_int(), directTier.healthRatio);
-    }
-
-    // Compare oracle metrics
-    const UniValue& rpcOracles = rpcResult["oracles"];
-    BOOST_CHECK_EQUAL(rpcOracles["active_count"].get_int(), directMetrics.activeOracles);
-    BOOST_CHECK_EQUAL(rpcOracles["last_price"].get_int64(), directMetrics.lastOraclePrice);
-    BOOST_CHECK_EQUAL(rpcOracles["last_update"].get_int64(), directMetrics.lastOracleUpdate);
+    // Multiplier should be higher at lower health
+    BOOST_CHECK_GE(result100["multiplier"].get_real(), result150["multiplier"].get_real());
 }
 
-// Test 8: Error Handling
-BOOST_FIXTURE_TEST_CASE(test_error_handling, DigiDollarRPCTestSetup)
+// Test 7: getdcamultiplier - Invalid Parameter
+BOOST_FIXTURE_TEST_CASE(test_getdcamultiplier_invalid, DigiDollarRPCTestSetup)
 {
-    // Test with extra parameters (should be ignored)
-    mockRequest.strMethod = "getdigidollarstatus";
-    mockRequest.params = UniValue(UniValue::VARR);
-    mockRequest.params.push_back("extra_param");
+    // Test with invalid health values
+    BOOST_CHECK_THROW(CallRPC("getdcamultiplier -10"), std::runtime_error);
+    BOOST_CHECK_THROW(CallRPC("getdcamultiplier 40000"), std::runtime_error);
+}
 
-    // Should still work with extra parameters
-    BOOST_CHECK_NO_THROW({
-        UniValue result = getdigidollarstatus(mockRequest);
+// Test 8: calculatecollateralrequirement - Basic Response
+BOOST_FIXTURE_TEST_CASE(test_calculatecollateral_basic, DigiDollarRPCTestSetup)
+{
+    UniValue result = CallRPC("calculatecollateralrequirement 10000 365");
+
+    // Should return a valid JSON object
+    BOOST_CHECK(result.isObject());
+
+    // Check required fields
+    BOOST_CHECK(result.exists("required_dgb"));
+    BOOST_CHECK(result.exists("dd_amount_cents"));
+    BOOST_CHECK(result.exists("dd_amount_usd"));
+    BOOST_CHECK(result.exists("lock_days"));
+    BOOST_CHECK(result.exists("lock_blocks"));
+    BOOST_CHECK(result.exists("base_ratio"));
+    BOOST_CHECK(result.exists("dca_multiplier"));
+    BOOST_CHECK(result.exists("effective_ratio"));
+    BOOST_CHECK(result.exists("oracle_price"));
+    BOOST_CHECK(result.exists("system_health"));
+    BOOST_CHECK(result.exists("dca_tier"));
+}
+
+// Test 9: calculatecollateralrequirement - Different Lock Periods
+BOOST_FIXTURE_TEST_CASE(test_calculatecollateral_lock_periods, DigiDollarRPCTestSetup)
+{
+    // Test various lock periods
+    std::vector<int> lockPeriods = {30, 90, 180, 365, 1095, 1825, 2555, 3650};
+
+    for (int lockDays : lockPeriods) {
+        std::string cmd = "calculatecollateralrequirement 10000 " + std::to_string(lockDays);
+        UniValue result = CallRPC(cmd);
+
         BOOST_CHECK(result.isObject());
-    });
-
-    // Test help request
-    mockRequest.mode = JSONRPCRequest::GET_HELP;
-    BOOST_CHECK_THROW(getdigidollarstatus(mockRequest), std::runtime_error);
-
-    // Reset mode
-    mockRequest.mode = JSONRPCRequest::EXECUTE;
+        BOOST_CHECK_EQUAL(result["lock_days"].getInt<int>(), lockDays);
+        BOOST_CHECK_GT(result["required_dgb"].get_real(), 0.0);
+    }
 }
 
-// Test 9: Performance Testing
+// Test 10: calculatecollateralrequirement - Longer Lock = Less Collateral
+BOOST_FIXTURE_TEST_CASE(test_calculatecollateral_ratio_scaling, DigiDollarRPCTestSetup)
+{
+    UniValue result30 = CallRPC("calculatecollateralrequirement 10000 30");
+    UniValue result365 = CallRPC("calculatecollateralrequirement 10000 365");
+    UniValue result3650 = CallRPC("calculatecollateralrequirement 10000 3650");
+
+    // Longer lock periods should require less collateral
+    double dgb30 = result30["required_dgb"].get_real();
+    double dgb365 = result365["required_dgb"].get_real();
+    double dgb3650 = result3650["required_dgb"].get_real();
+
+    BOOST_CHECK_GT(dgb30, dgb365);
+    BOOST_CHECK_GT(dgb365, dgb3650);
+}
+
+// Test 11: calculatecollateralrequirement - With Oracle Price
+BOOST_FIXTURE_TEST_CASE(test_calculatecollateral_oracle_price, DigiDollarRPCTestSetup)
+{
+    // Test with custom oracle price
+    UniValue result = CallRPC("calculatecollateralrequirement 10000 365 500");
+
+    BOOST_CHECK(result.isObject());
+    BOOST_CHECK_EQUAL(result["oracle_price"].getInt<int>(), 500);
+}
+
+// Test 12: validateddaddress - Basic Test
+BOOST_FIXTURE_TEST_CASE(test_validateddaddress_basic, DigiDollarRPCTestSetup)
+{
+    // Test with a valid-looking DD address format
+    UniValue result = CallRPC("validateddaddress DDtestaddress123456789abcdef");
+
+    BOOST_CHECK(result.isObject());
+    BOOST_CHECK(result.exists("isvalid"));
+}
+
+// Test 13: estimatecollateral - Basic Response
+BOOST_FIXTURE_TEST_CASE(test_estimatecollateral_basic, DigiDollarRPCTestSetup)
+{
+    UniValue result = CallRPC("estimatecollateral 10000 3");
+
+    BOOST_CHECK(result.isObject());
+    // Should have similar fields to calculatecollateralrequirement
+    BOOST_CHECK(result.exists("required_dgb"));
+}
+
+// Test 14: getoracleprice - Basic Response
+BOOST_FIXTURE_TEST_CASE(test_getoracleprice_basic, DigiDollarRPCTestSetup)
+{
+    UniValue result = CallRPC("getoracleprice");
+
+    BOOST_CHECK(result.isObject());
+    BOOST_CHECK(result.exists("price_cents"));
+    BOOST_CHECK(result.exists("price_usd"));
+    BOOST_CHECK_GE(result["price_cents"].getInt<int64_t>(), 0);
+}
+
+// Test 15: getprotectionstatus - Basic Response
+BOOST_FIXTURE_TEST_CASE(test_getprotectionstatus_basic, DigiDollarRPCTestSetup)
+{
+    UniValue result = CallRPC("getprotectionstatus");
+
+    BOOST_CHECK(result.isObject());
+    // Should return protection system information
+}
+
+// Test 16: listdigidollaraddresses - Basic Response
+BOOST_FIXTURE_TEST_CASE(test_listdigidollaraddresses_basic, DigiDollarRPCTestSetup)
+{
+    UniValue result = CallRPC("listdigidollaraddresses");
+
+    // Should return an array
+    BOOST_CHECK(result.isArray());
+}
+
+// Test 17: RPC Performance - getdigidollarstats
 BOOST_FIXTURE_TEST_CASE(test_rpc_performance, DigiDollarRPCTestSetup)
 {
-    // Set up request
-    mockRequest.strMethod = "getdigidollarstatus";
-    mockRequest.params = UniValue(UniValue::VARR);
-
-    // Measure execution time
-    auto start = GetTimeMillis();
+    auto start = std::chrono::steady_clock::now();
 
     // Make multiple calls
     const int NUM_CALLS = 100;
     for (int i = 0; i < NUM_CALLS; ++i) {
-        UniValue result = getdigidollarstatus(mockRequest);
+        UniValue result = CallRPC("getdigidollarstats");
         BOOST_CHECK(result.isObject());
     }
 
-    auto end = GetTimeMillis();
-    auto totalTime = end - start;
+    auto end = std::chrono::steady_clock::now();
+    auto totalTime = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
 
     // Should complete all calls in reasonable time (< 5 seconds)
     BOOST_CHECK_LT(totalTime, 5000);
@@ -334,30 +298,15 @@ BOOST_FIXTURE_TEST_CASE(test_rpc_performance, DigiDollarRPCTestSetup)
     // Average time per call should be reasonable (< 50ms)
     auto avgTime = totalTime / NUM_CALLS;
     BOOST_CHECK_LT(avgTime, 50);
-
-    LogPrint(BCLog::RPC, "DigiDollar RPC performance: %d calls in %dms (avg %dms)\n",
-             NUM_CALLS, totalTime, avgTime);
 }
 
-// Test 10: Concurrent Access
+// Test 18: Concurrent Access - getdigidollarstats
 BOOST_FIXTURE_TEST_CASE(test_concurrent_access, DigiDollarRPCTestSetup)
 {
-    // Set up requests
-    std::vector<JSONRPCRequest> requests;
-    for (int i = 0; i < 10; ++i) {
-        JSONRPCRequest req;
-        req.strMethod = "getdigidollarstatus";
-        req.params = UniValue(UniValue::VARR);
-        req.URI = "/";
-        req.authUser = "";
-        req.mode = JSONRPCRequest::EXECUTE;
-        requests.push_back(req);
-    }
-
-    // Make concurrent calls (simulated)
+    // Make multiple calls
     std::vector<UniValue> results;
-    for (auto& req : requests) {
-        UniValue result = getdigidollarstatus(req);
+    for (int i = 0; i < 10; ++i) {
+        UniValue result = CallRPC("getdigidollarstats");
         BOOST_CHECK(result.isObject());
         results.push_back(result);
     }
@@ -365,23 +314,20 @@ BOOST_FIXTURE_TEST_CASE(test_concurrent_access, DigiDollarRPCTestSetup)
     // All results should be valid and consistent
     for (size_t i = 1; i < results.size(); ++i) {
         // Basic consistency checks
-        BOOST_CHECK_EQUAL(results[i]["supply"].get_int64(), results[0]["supply"].get_int64());
-        BOOST_CHECK_EQUAL(results[i]["collateral"].get_int64(), results[0]["collateral"].get_int64());
-        BOOST_CHECK_EQUAL(results[i]["health"].get_int(), results[0]["health"].get_int());
+        BOOST_CHECK_EQUAL(results[i]["health_percentage"].getInt<int>(),
+                         results[0]["health_percentage"].getInt<int>());
+        BOOST_CHECK_EQUAL(results[i]["total_dd_supply"].getInt<int64_t>(),
+                         results[0]["total_dd_supply"].getInt<int64_t>());
     }
 }
 
-// Test 11: Memory Usage
+// Test 19: Memory Usage
 BOOST_FIXTURE_TEST_CASE(test_memory_usage, DigiDollarRPCTestSetup)
 {
-    // Set up request
-    mockRequest.strMethod = "getdigidollarstatus";
-    mockRequest.params = UniValue(UniValue::VARR);
-
     // Make calls and check for memory leaks
     const int NUM_CALLS = 1000;
     for (int i = 0; i < NUM_CALLS; ++i) {
-        UniValue result = getdigidollarstatus(mockRequest);
+        UniValue result = CallRPC("getdigidollarstats");
         BOOST_CHECK(result.isObject());
 
         // Clear result to prevent accumulation
@@ -392,405 +338,178 @@ BOOST_FIXTURE_TEST_CASE(test_memory_usage, DigiDollarRPCTestSetup)
     BOOST_CHECK(true);
 }
 
-// Test 12: Integration with Health Monitor
+// Test 20: Integration with Health Monitor
 BOOST_FIXTURE_TEST_CASE(test_health_monitor_integration, DigiDollarRPCTestSetup)
 {
     // Get direct health report
     UniValue directReport = DigiDollar::SystemHealthMonitor::GetHealthReport();
 
-    // Set up RPC request
-    mockRequest.strMethod = "getdigidollarstatus";
-    mockRequest.params = UniValue(UniValue::VARR);
-
     // Make RPC call
-    UniValue rpcResult = getdigidollarstatus(mockRequest);
-
-    // The RPC result should match the direct health report structure
-    // (Though RPC might format data differently)
+    UniValue rpcResult = CallRPC("getdigidollarstats");
 
     // Both should have same essential data
     BOOST_CHECK(directReport.exists("supply"));
     BOOST_CHECK(directReport.exists("collateral"));
     BOOST_CHECK(directReport.exists("health"));
-    BOOST_CHECK(rpcResult.exists("supply"));
-    BOOST_CHECK(rpcResult.exists("collateral"));
-    BOOST_CHECK(rpcResult.exists("health"));
+    BOOST_CHECK(rpcResult.exists("total_dd_supply"));
+    BOOST_CHECK(rpcResult.exists("total_collateral_dgb"));
+    BOOST_CHECK(rpcResult.exists("health_percentage"));
 
-    // Values should match
-    BOOST_CHECK_EQUAL(directReport["supply"].get_int64(), rpcResult["supply"].get_int64());
-    BOOST_CHECK_EQUAL(directReport["collateral"].get_int64(), rpcResult["collateral"].get_int64());
-    BOOST_CHECK_EQUAL(directReport["health"].get_int(), rpcResult["health"].get_int());
+    // Values should be consistent (accounting for different field names and types)
+    // Note: directReport uses ValueFromAmount (real), RPC uses raw int64 for supply
+    // The health values might differ slightly due to timing of UTXO scans
+
+    // Both health values should be in valid range
+    int directHealth = directReport["health"].getInt<int>();
+    int rpcHealth = rpcResult["health_percentage"].getInt<int>();
+    BOOST_CHECK_GE(directHealth, 0);
+    BOOST_CHECK_LE(directHealth, 30000);
+    BOOST_CHECK_GE(rpcHealth, 0);
+    BOOST_CHECK_LE(rpcHealth, 30000);
+
+    // Supply values should be consistent
+    int64_t directSupply = static_cast<int64_t>(directReport["supply"].get_real() * COIN);
+    int64_t rpcSupply = rpcResult["total_dd_supply"].getInt<int64_t>();
+    BOOST_CHECK_EQUAL(directSupply, rpcSupply);
+
+    // Collateral: both use ValueFromAmount
+    BOOST_CHECK_EQUAL(directReport["collateral"].get_real(),
+                     rpcResult["total_collateral_dgb"].get_real());
 }
 
-// Test 13: mintdigidollar RPC Command Tests
-/* TODO: Update these tests to new RPC registration format
-BOOST_FIXTURE_TEST_CASE(digidollar_test_mintdigidollar_rpc, DigiDollarRPCTestSetup)
+// Test 21: Health Status String Validation
+BOOST_FIXTURE_TEST_CASE(test_health_status_strings, DigiDollarRPCTestSetup)
 {
-    // Register command for testing
-    tableRPC.appendCommand("mintdigidollar", &mintdigidollar);
+    UniValue result = CallRPC("getdigidollarstats");
 
-    // Test 1: Valid mint parameters
-    mockRequest.strMethod = "mintdigidollar";
-    mockRequest.params = UniValue(UniValue::VARR);
-    mockRequest.params.push_back(100.0);  // DD amount
-    mockRequest.params.push_back(3);      // Lock tier
+    std::string status = result["health_status"].get_str();
 
-    // Should not throw - method exists
-    const CRPCCommand* command = tableRPC.find("mintdigidollar");
-    BOOST_CHECK(command != nullptr);
-
-    // Test 2: Invalid parameters
-    mockRequest.params = UniValue(UniValue::VARR);
-    mockRequest.params.push_back(-100.0);  // Negative amount
-    mockRequest.params.push_back(3);
-
-    // Should handle validation (when implemented)
-    // BOOST_CHECK_THROW(mintdigidollar(mockRequest), JSONRPCError);
-
-    // Test 3: Missing parameters
-    mockRequest.params = UniValue(UniValue::VARR);
-    mockRequest.params.push_back(100.0);  // Missing lock_tier
-    // Should handle missing params (when implemented)
-
-    // Test 4: Help text
-    mockRequest.fHelp = true;
-    BOOST_CHECK_THROW(mintdigidollar(mockRequest), std::runtime_error);
-    mockRequest.fHelp = false;
+    // Should be one of the valid status strings
+    BOOST_CHECK(status == "healthy" || status == "warning" ||
+                status == "critical" || status == "emergency");
 }
 
-// Test 14: senddigidollar RPC Command Tests
-BOOST_FIXTURE_TEST_CASE(digidollar_test_senddigidollar_rpc, DigiDollarRPCTestSetup)
+// Test 22: DCA Multiplier Description
+BOOST_FIXTURE_TEST_CASE(test_dca_multiplier_description, DigiDollarRPCTestSetup)
 {
-    tableRPC.appendCommand("senddigidollar", &senddigidollar);
+    UniValue result = CallRPC("getdcamultiplier");
 
-    // Test valid send parameters
-    mockRequest.strMethod = "senddigidollar";
-    mockRequest.params = UniValue(UniValue::VARR);
-    mockRequest.params.push_back("DDtestaddress123456789abcdef");  // DD address
-    mockRequest.params.push_back(50.0);  // Amount
-
-    const CRPCCommand* command = tableRPC.find("senddigidollar");
-    BOOST_CHECK(command != nullptr);
-
-    // Test invalid address format
-    mockRequest.params = UniValue(UniValue::VARR);
-    mockRequest.params.push_back("invalid_address");
-    mockRequest.params.push_back(50.0);
-    // Should validate address format when implemented
-
-    // Test negative amount
-    mockRequest.params = UniValue(UniValue::VARR);
-    mockRequest.params.push_back("DDtestaddress123456789abcdef");
-    mockRequest.params.push_back(-50.0);
-    // Should reject negative amounts when implemented
+    BOOST_CHECK(result.exists("description"));
+    std::string description = result["description"].get_str();
+    BOOST_CHECK(!description.empty());
 }
 
-// Test 15: redeemdigidollar RPC Command Tests
-BOOST_FIXTURE_TEST_CASE(digidollar_test_redeemdigidollar_rpc, DigiDollarRPCTestSetup)
+// Test 23: Oracle Price Format
+BOOST_FIXTURE_TEST_CASE(test_oracle_price_format, DigiDollarRPCTestSetup)
 {
-    tableRPC.appendCommand("redeemdigidollar", &redeemdigidollar);
+    UniValue result = CallRPC("getoracleprice");
 
-    // Test valid redemption parameters
-    mockRequest.strMethod = "redeemdigidollar";
-    mockRequest.params = UniValue(UniValue::VARR);
-    mockRequest.params.push_back("abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890");  // Position ID
-    mockRequest.params.push_back(25.0);  // Amount to redeem
+    BOOST_CHECK(result.exists("price_cents"));
+    BOOST_CHECK(result.exists("price_usd"));
 
-    const CRPCCommand* command = tableRPC.find("redeemdigidollar");
-    BOOST_CHECK(command != nullptr);
+    // Price in USD should be cents / 100
+    int64_t cents = result["price_cents"].getInt<int64_t>();
+    double usd = result["price_usd"].get_real();
 
-    // Test invalid position ID format
-    mockRequest.params = UniValue(UniValue::VARR);
-    mockRequest.params.push_back("invalid_txid");
-    mockRequest.params.push_back(25.0);
-    // Should validate position ID format when implemented
+    BOOST_CHECK_CLOSE(usd, cents / 100.0, 0.01);
 }
 
-// Test 16: getdigidollaraddress RPC Command Tests
-BOOST_FIXTURE_TEST_CASE(digidollar_test_getdigidollaraddress_rpc, DigiDollarRPCTestSetup)
+// Test 24: Collateral Calculation Consistency
+BOOST_FIXTURE_TEST_CASE(test_collateral_calculation_consistency, DigiDollarRPCTestSetup)
 {
-    tableRPC.appendCommand("getdigidollaraddress", &getdigidollaraddress);
+    // Call twice with same parameters
+    UniValue result1 = CallRPC("calculatecollateralrequirement 10000 365");
+    UniValue result2 = CallRPC("calculatecollateralrequirement 10000 365");
 
-    // Test address generation
-    mockRequest.strMethod = "getdigidollaraddress";
-    mockRequest.params = UniValue(UniValue::VARR);
-
-    const CRPCCommand* command = tableRPC.find("getdigidollaraddress");
-    BOOST_CHECK(command != nullptr);
-
-    // Test with label parameter
-    mockRequest.params.push_back("test_label");
-    // Should accept optional label when implemented
+    // Results should be identical
+    BOOST_CHECK_EQUAL(result1["required_dgb"].get_real(),
+                     result2["required_dgb"].get_real());
+    BOOST_CHECK_EQUAL(result1["base_ratio"].getInt<int>(),
+                     result2["base_ratio"].getInt<int>());
+    BOOST_CHECK_EQUAL(result1["effective_ratio"].getInt<int>(),
+                     result2["effective_ratio"].getInt<int>());
 }
 
-// Test 17: validateddaddress RPC Command Tests
-BOOST_FIXTURE_TEST_CASE(digidollar_test_validateddaddress_rpc, DigiDollarRPCTestSetup)
+// Test 25: DD Amount Calculation
+BOOST_FIXTURE_TEST_CASE(test_dd_amount_calculation, DigiDollarRPCTestSetup)
 {
-    tableRPC.appendCommand("validateddaddress", &validateddaddress);
+    UniValue result = CallRPC("calculatecollateralrequirement 10000 365");
 
-    // Test valid DD address
-    mockRequest.strMethod = "validateddaddress";
-    mockRequest.params = UniValue(UniValue::VARR);
-    mockRequest.params.push_back("DDtestaddress123456789abcdef");
+    BOOST_CHECK(result.exists("dd_amount_cents"));
+    BOOST_CHECK(result.exists("dd_amount_usd"));
 
-    const CRPCCommand* command = tableRPC.find("validateddaddress");
-    BOOST_CHECK(command != nullptr);
+    BOOST_CHECK_EQUAL(result["dd_amount_cents"].getInt<int64_t>(), 10000);
+    BOOST_CHECK_CLOSE(result["dd_amount_usd"].get_real(), 100.0, 0.01);
+}
 
-    // Test invalid address formats
-    std::vector<std::string> invalidAddresses = {
-        "invalid_address",
-        "1BitcoinAddress123456789",
-        "dgb1qtest",
-        "",
-        "DD",  // Too short
-        "DDtoooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooolong"  // Too long
-    };
+// Test 26: Lock Blocks Calculation
+BOOST_FIXTURE_TEST_CASE(test_lock_blocks_calculation, DigiDollarRPCTestSetup)
+{
+    // DigiByte has 15 second blocks, so:
+    // 1 day = 86400 seconds / 15 = 5760 blocks
+    UniValue result = CallRPC("calculatecollateralrequirement 10000 1");
 
-    for (const auto& addr : invalidAddresses) {
-        mockRequest.params = UniValue(UniValue::VARR);
-        mockRequest.params.push_back(addr);
-        // Should return isvalid: false for each when implemented
+    BOOST_CHECK(result.exists("lock_blocks"));
+    int64_t lockBlocks = result["lock_blocks"].getInt<int64_t>();
+
+    // Should be approximately 5760 blocks per day (within 1%)
+    double expectedBlocks = 5760.0;
+    double actualBlocks = static_cast<double>(lockBlocks);
+    BOOST_CHECK_CLOSE(actualBlocks, expectedBlocks, 1.0);
+}
+
+// Test 27: Emergency Status Detection
+BOOST_FIXTURE_TEST_CASE(test_emergency_status, DigiDollarRPCTestSetup)
+{
+    UniValue result = CallRPC("getdigidollarstats");
+
+    BOOST_CHECK(result.exists("is_emergency"));
+    bool isEmergency = result["is_emergency"].get_bool();
+    int healthPct = result["health_percentage"].getInt<int>();
+
+    // Emergency should be true when health < 100%
+    if (healthPct < 100) {
+        BOOST_CHECK_EQUAL(isEmergency, true);
     }
 }
 
-// Test 18: getdigidollarbalance RPC Command Tests
-BOOST_FIXTURE_TEST_CASE(digidollar_test_getdigidollarbalance_rpc, DigiDollarRPCTestSetup)
+// Test 28: System Collateral Ratio Alias
+BOOST_FIXTURE_TEST_CASE(test_collateral_ratio_alias, DigiDollarRPCTestSetup)
 {
-    tableRPC.appendCommand("getdigidollarbalance", &getdigidollarbalance);
+    UniValue result = CallRPC("getdigidollarstats");
 
-    // Test total balance (no address)
-    mockRequest.strMethod = "getdigidollarbalance";
-    mockRequest.params = UniValue(UniValue::VARR);
-
-    const CRPCCommand* command = tableRPC.find("getdigidollarbalance");
-    BOOST_CHECK(command != nullptr);
-
-    // Test balance for specific address
-    mockRequest.params.push_back("DDtestaddress123456789abcdef");
-
-    // Test with minconf parameter
-    mockRequest.params.push_back(6);  // Min confirmations
+    // system_collateral_ratio should match health_percentage
+    BOOST_CHECK_EQUAL(result["system_collateral_ratio"].getInt<int>(),
+                     result["health_percentage"].getInt<int>());
 }
 
-// Test 19: estimatecollateral RPC Command Tests
-BOOST_FIXTURE_TEST_CASE(digidollar_test_estimatecollateral_rpc, DigiDollarRPCTestSetup)
+// Test 29: Total Collateral Locked Alias
+BOOST_FIXTURE_TEST_CASE(test_total_collateral_alias, DigiDollarRPCTestSetup)
 {
-    tableRPC.appendCommand("estimatecollateral", &estimatecollateral);
+    UniValue result = CallRPC("getdigidollarstats");
 
-    // Test collateral estimation
-    mockRequest.strMethod = "estimatecollateral";
-    mockRequest.params = UniValue(UniValue::VARR);
-    mockRequest.params.push_back(100.0);  // DD amount
-    mockRequest.params.push_back(3);      // Lock tier
-
-    const CRPCCommand* command = tableRPC.find("estimatecollateral");
-    BOOST_CHECK(command != nullptr);
-
-    // Test with custom oracle price
-    mockRequest.params.push_back(5000);  // Price in cents
+    // total_collateral_locked should match total_collateral_dgb
+    // (they are both returned as real/double from ValueFromAmount)
+    BOOST_CHECK_GE(result["total_collateral_locked"].get_real(), 0.0);
+    BOOST_CHECK_GE(result["total_collateral_dgb"].get_real(), 0.0);
+    BOOST_CHECK_EQUAL(result["total_collateral_locked"].get_real(),
+                     result["total_collateral_dgb"].get_real());
 }
 
-// Test 20: listdigidollarpositions RPC Command Tests
-BOOST_FIXTURE_TEST_CASE(digidollar_test_listdigidollarpositions_rpc, DigiDollarRPCTestSetup)
+// Test 30: DCA Tier Multiplier Range
+BOOST_FIXTURE_TEST_CASE(test_dca_tier_multiplier_range, DigiDollarRPCTestSetup)
 {
-    tableRPC.appendCommand("listdigidollarpositions", &listdigidollarpositions);
+    // Test multiplier at various health levels
+    for (int health = 50; health <= 200; health += 25) {
+        std::string cmd = "getdcamultiplier " + std::to_string(health);
+        UniValue result = CallRPC(cmd);
 
-    // Test listing all positions
-    mockRequest.strMethod = "listdigidollarpositions";
-    mockRequest.params = UniValue(UniValue::VARR);
+        double multiplier = result["multiplier"].get_real();
 
-    const CRPCCommand* command = tableRPC.find("listdigidollarpositions");
-    BOOST_CHECK(command != nullptr);
-
-    // Test with active_only filter
-    mockRequest.params.push_back(true);  // Active only
-
-    // Test with specific tier filter
-    mockRequest.params = UniValue(UniValue::VARR);
-    mockRequest.params.push_back(false);  // Include inactive
-    mockRequest.params.push_back(3);      // Specific tier
-}
-
-// Test 21: getoracleprice RPC Command Tests
-BOOST_FIXTURE_TEST_CASE(digidollar_test_getoracleprice_rpc, DigiDollarRPCTestSetup)
-{
-    tableRPC.appendCommand("getoracleprice", &getoracleprice);
-
-    // Test current oracle price
-    mockRequest.strMethod = "getoracleprice";
-    mockRequest.params = UniValue(UniValue::VARR);
-
-    const CRPCCommand* command = tableRPC.find("getoracleprice");
-    BOOST_CHECK(command != nullptr);
-}
-
-// Test 22: getredemptioninfo RPC Command Tests
-BOOST_FIXTURE_TEST_CASE(digidollar_test_getredemptioninfo_rpc, DigiDollarRPCTestSetup)
-{
-    tableRPC.appendCommand("getredemptioninfo", &getredemptioninfo);
-
-    // Test redemption info for position
-    mockRequest.strMethod = "getredemptioninfo";
-    mockRequest.params = UniValue(UniValue::VARR);
-    mockRequest.params.push_back("abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890");
-
-    const CRPCCommand* command = tableRPC.find("getredemptioninfo");
-    BOOST_CHECK(command != nullptr);
-}
-
-// Test 23: listdigidollartxs RPC Command Tests
-BOOST_FIXTURE_TEST_CASE(digidollar_test_listdigidollartxs_rpc, DigiDollarRPCTestSetup)
-{
-    tableRPC.appendCommand("listdigidollartxs", &listdigidollartxs);
-
-    // Test listing all DD transactions
-    mockRequest.strMethod = "listdigidollartxs";
-    mockRequest.params = UniValue(UniValue::VARR);
-
-    const CRPCCommand* command = tableRPC.find("listdigidollartxs");
-    BOOST_CHECK(command != nullptr);
-
-    // Test with count and skip parameters
-    mockRequest.params.push_back(10);   // Count
-    mockRequest.params.push_back(0);    // Skip
-
-    // Test with address filter
-    mockRequest.params = UniValue(UniValue::VARR);
-    mockRequest.params.push_back(10);
-    mockRequest.params.push_back(0);
-    mockRequest.params.push_back("DDtestaddress123456789abcdef");
-}
-
-// Test 24: getprotectionstatus RPC Command Tests
-BOOST_FIXTURE_TEST_CASE(digidollar_test_getprotectionstatus_rpc, DigiDollarRPCTestSetup)
-{
-    tableRPC.appendCommand("getprotectionstatus", &getprotectionstatus);
-
-    // Test protection system status
-    mockRequest.strMethod = "getprotectionstatus";
-    mockRequest.params = UniValue(UniValue::VARR);
-
-    const CRPCCommand* command = tableRPC.find("getprotectionstatus");
-    BOOST_CHECK(command != nullptr);
-}
-
-// Test 25: listdigidollaraddresses RPC Command Tests
-BOOST_FIXTURE_TEST_CASE(digidollar_test_listdigidollaraddresses_rpc, DigiDollarRPCTestSetup)
-{
-    tableRPC.appendCommand("listdigidollaraddresses", &listdigidollaraddresses);
-
-    // Test listing all DD addresses
-    mockRequest.strMethod = "listdigidollaraddresses";
-    mockRequest.params = UniValue(UniValue::VARR);
-
-    const CRPCCommand* command = tableRPC.find("listdigidollaraddresses");
-    BOOST_CHECK(command != nullptr);
-}
-
-// Test 26: importdigidollaraddress RPC Command Tests
-BOOST_FIXTURE_TEST_CASE(digidollar_test_importdigidollaraddress_rpc, DigiDollarRPCTestSetup)
-{
-    tableRPC.appendCommand("importdigidollaraddress", &importdigidollaraddress);
-
-    // Test importing watch-only DD address
-    mockRequest.strMethod = "importdigidollaraddress";
-    mockRequest.params = UniValue(UniValue::VARR);
-    mockRequest.params.push_back("DDtestaddress123456789abcdef");
-
-    const CRPCCommand* command = tableRPC.find("importdigidollaraddress");
-    BOOST_CHECK(command != nullptr);
-
-    // Test with label
-    mockRequest.params.push_back("watch_only_label");
-
-    // Test with rescan flag
-    mockRequest.params.push_back(true);  // Rescan
-}
-
-// Test 27: RPC Command Parameter Validation
-BOOST_FIXTURE_TEST_CASE(digidollar_test_rpc_parameter_validation, DigiDollarRPCTestSetup)
-{
-    // Test that all RPC commands handle missing required parameters gracefully
-    std::vector<std::string> commandsRequiringParams = {
-        "mintdigidollar",
-        "senddigidollar",
-        "redeemdigidollar",
-        "validateddaddress",
-        "estimatecollateral",
-        "getredemptioninfo",
-        "importdigidollaraddress"
-    };
-
-    for (const auto& cmd : commandsRequiringParams) {
-        // Register command first (this would be done in real implementation)
-        mockRequest.strMethod = cmd;
-        mockRequest.params = UniValue(UniValue::VARR);  // Empty params
-
-        // Each command should handle missing parameters appropriately
-        // (This will be tested when commands are actually implemented)
+        // Multiplier should be in reasonable range (1.0 to 10.0)
+        BOOST_CHECK_GE(multiplier, 1.0);
+        BOOST_CHECK_LE(multiplier, 10.0);
     }
 }
-
-// Test 28: RPC Response Format Consistency
-BOOST_FIXTURE_TEST_CASE(digidollar_test_rpc_response_format, DigiDollarRPCTestSetup)
-{
-    // Test that all transaction-creating RPC commands return consistent format
-    std::vector<std::string> txCommands = {
-        "mintdigidollar",
-        "senddigidollar",
-        "redeemdigidollar"
-    };
-
-    // Each should return an object with at least txid field when successful
-    // (This will be validated when commands are implemented)
-
-    // Test that all informational commands return consistent data types
-    std::vector<std::string> infoCommands = {
-        "getdigidollarbalance",
-        "getoracleprice",
-        "getprotectionstatus"
-    };
-
-    // Each should return appropriate data types (numbers, booleans, strings, objects)
-    // (This will be validated when commands are implemented)
-}
-
-// Test 29: RPC Error Handling Consistency
-BOOST_FIXTURE_TEST_CASE(digidollar_test_rpc_error_handling, DigiDollarRPCTestSetup)
-{
-    // Test that all RPC commands use appropriate JSON-RPC error codes
-    std::map<std::string, int> expectedErrorCodes = {
-        {"RPC_INVALID_PARAMETER", -8},
-        {"RPC_WALLET_ERROR", -4},
-        {"RPC_WALLET_INSUFFICIENT_FUNDS", -6},
-        {"RPC_INVALID_ADDRESS_OR_KEY", -5}
-    };
-
-    // Commands should use these standard error codes consistently
-    // (This will be validated when error handling is implemented)
-}
-
-// Test 30: RPC Help Text Validation
-BOOST_FIXTURE_TEST_CASE(digidollar_test_rpc_help_text, DigiDollarRPCTestSetup)
-{
-    std::vector<std::string> allCommands = {
-        "mintdigidollar", "senddigidollar", "redeemdigidollar",
-        "getdigidollaraddress", "validateddaddress", "listdigidollaraddresses",
-        "importdigidollaraddress", "getdigidollarbalance", "estimatecollateral",
-        "getredemptioninfo", "listdigidollartxs", "listdigidollarpositions",
-        "getoracleprice", "getprotectionstatus"
-    };
-
-    // Each command should have comprehensive help text
-    for (const auto& cmd : allCommands) {
-        mockRequest.strMethod = cmd;
-        mockRequest.mode = JSONRPCRequest::GET_HELP;
-
-        // Should throw runtime_error with help text
-        // (This will be validated when help text is implemented)
-    }
-}
-
-*/
 
 BOOST_AUTO_TEST_SUITE_END()

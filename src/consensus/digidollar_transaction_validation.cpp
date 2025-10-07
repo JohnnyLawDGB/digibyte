@@ -28,12 +28,20 @@ bool ValidateCollateralRatio(CAmount ddAmount, CAmount collateralAmount, CAmount
     if (ddAmount <= 0) return false;
     if (collateralAmount <= 0) return false;
 
-    // Calculate required collateral in DGB cents
-    // ddAmount is in DD cents, oraclePrice is DGB cents per USD cent
-    CAmount requiredCollateralCents = (ddAmount * requiredRatio * oraclePrice) / (100 * 100);
-    CAmount collateralCents = collateralAmount / 10000; // Convert satoshis to DGB cents
+    // Calculate required collateral value in cents
+    // ddAmount is in cents (100 cents = $1.00)
+    // requiredRatio is percentage (200 = 200%)
+    // oraclePrice is cents per DGB (5000 = $50.00 per DGB)
+    // collateralAmount is in DGB satoshis (100000000 satoshis = 1 DGB)
 
-    return collateralCents >= requiredCollateralCents;
+    // Required USD value = ddAmount * requiredRatio / 100
+    CAmount requiredUSDCents = (ddAmount * requiredRatio) / 100;
+
+    // Collateral value in cents = (collateralAmount / COIN) * oraclePrice
+    // = collateralAmount * oraclePrice / COIN
+    CAmount collateralValueCents = (collateralAmount * oraclePrice) / COIN;
+
+    return collateralValueCents >= requiredUSDCents;
 }
 
 bool ValidateOraclePrice(CAmount price) {
@@ -59,7 +67,8 @@ bool ValidateDDConservation(CAmount inputs, CAmount outputs, CAmount fee) {
 bool ValidateDDAddress(const std::string& address) {
     // Basic format validation for DD addresses
     // DD addresses start with "dd1" (bech32 format)
-    if (address.length() < 6) return false;
+    // Minimum length is 4 ("dd1" + at least 1 character)
+    if (address.length() < 4) return false;
     if (address.substr(0, 3) != "dd1") return false;
 
     // Additional validation would check bech32 encoding
@@ -206,6 +215,14 @@ bool ValidateDDWitnessStack(const std::vector<std::vector<unsigned char>>& stack
     if (stack[1].size() != 8) return false; // Lock time
     if (stack[2].size() != 64) return false; // Signature
 
+    // Optional 4th element (e.g., pubkey) but must not be empty
+    if (stack.size() >= 4) {
+        // Check that any additional elements are not empty
+        for (size_t i = 3; i < stack.size(); ++i) {
+            if (stack[i].empty()) return false; // Empty elements not allowed
+        }
+    }
+
     return true;
 }
 
@@ -214,7 +231,10 @@ ScriptExecutionResult ExecuteDDScript(const CScript& script) {
     result.success = false;
     result.stackSize = 0;
 
+    // Empty script is valid and succeeds
     if (script.empty()) {
+        result.success = true;
+        result.stackSize = 0;
         return result;
     }
 
@@ -240,6 +260,9 @@ ScriptExecutionResult ExecuteDDScript(const CScript& script) {
                 case OP_3:
                     stack.push_back({3});
                     break;
+                case OP_4:
+                    stack.push_back({4});
+                    break;
                 case OP_ADD:
                     if (stack.size() >= 2) {
                         auto b = stack.back(); stack.pop_back();
@@ -256,18 +279,25 @@ ScriptExecutionResult ExecuteDDScript(const CScript& script) {
                         auto a = stack.back(); stack.pop_back();
                         bool equal = (a == b);
                         stack.push_back(equal ? std::vector<unsigned char>{1} : std::vector<unsigned char>{0});
-                        result.success = equal;
                     }
                     break;
                 default:
-                    // Unknown opcode
+                    // Unknown opcode - fail execution
+                    result.stackSize = stack.size();
+                    result.success = false;
                     return result;
             }
         }
 
         result.stackSize = stack.size();
-        if (!stack.empty() && !stack.back().empty() && stack.back()[0] != 0) {
+
+        // Script succeeds if stack is empty OR top element is true (non-zero)
+        if (stack.empty()) {
             result.success = true;
+        } else if (!stack.back().empty() && stack.back()[0] != 0) {
+            result.success = true;
+        } else {
+            result.success = false;
         }
 
     } catch (...) {

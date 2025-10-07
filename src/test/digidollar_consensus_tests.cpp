@@ -67,19 +67,21 @@ BOOST_AUTO_TEST_CASE(mint_amount_validation_test)
 {
     DigiDollar::ConsensusParams params;
 
-    // Test valid amounts
-    BOOST_CHECK(DigiDollar::IsValidMintAmount(100 * DigiDollar::CENT, params)); // Minimum
-    BOOST_CHECK(DigiDollar::IsValidMintAmount(1000 * DigiDollar::CENT, params)); // Mid-range
-    BOOST_CHECK(DigiDollar::IsValidMintAmount(100000 * DigiDollar::CENT, params)); // Maximum
+    // Test valid amounts (amounts are in CENTS, not satoshis)
+    // Default params: minMintAmount = 10000 cents ($100), maxMintAmount = 10000000 cents ($100k)
+    BOOST_CHECK(DigiDollar::IsValidMintAmount(10000, params)); // Minimum: $100.00
+    BOOST_CHECK(DigiDollar::IsValidMintAmount(100000, params)); // Mid-range: $1,000.00
+    BOOST_CHECK(DigiDollar::IsValidMintAmount(10000000, params)); // Maximum: $100,000.00
 
     // Test invalid amounts (too low)
-    BOOST_CHECK(!DigiDollar::IsValidMintAmount(99 * DigiDollar::CENT, params)); // Below minimum
-    BOOST_CHECK(!DigiDollar::IsValidMintAmount(1, params)); // Very low
+    BOOST_CHECK(!DigiDollar::IsValidMintAmount(9999, params)); // Below minimum ($99.99)
+    BOOST_CHECK(!DigiDollar::IsValidMintAmount(100, params)); // Way below ($1.00)
+    BOOST_CHECK(!DigiDollar::IsValidMintAmount(1, params)); // Very low ($0.01)
     BOOST_CHECK(!DigiDollar::IsValidMintAmount(0, params)); // Zero
 
     // Test invalid amounts (too high)
-    BOOST_CHECK(!DigiDollar::IsValidMintAmount(100001 * DigiDollar::CENT, params)); // Above maximum
-    BOOST_CHECK(!DigiDollar::IsValidMintAmount(1000000 * DigiDollar::CENT, params)); // Much above maximum
+    BOOST_CHECK(!DigiDollar::IsValidMintAmount(10000001, params)); // Above maximum ($100,000.01)
+    BOOST_CHECK(!DigiDollar::IsValidMintAmount(100000000, params)); // Much above maximum ($1,000,000.00)
 }
 
 BOOST_AUTO_TEST_CASE(minimum_output_test)
@@ -227,10 +229,10 @@ BOOST_AUTO_TEST_CASE(chainparams_digidollar_integration_test)
     BOOST_CHECK(DigiDollar::ValidateConsensusParams(testDD, strError));
     BOOST_CHECK(DigiDollar::ValidateConsensusParams(regTestDD, strError));
 
-    // Test network-specific differences
-    BOOST_CHECK_EQUAL(mainDD.minMintAmount, 100 * DigiDollar::CENT); // Mainnet: $100 min
-    BOOST_CHECK_EQUAL(testDD.minMintAmount, 1 * DigiDollar::CENT);   // Testnet: $1 min
-    BOOST_CHECK_EQUAL(regTestDD.minMintAmount, DigiDollar::CENT / 100); // Regtest: $0.01 min
+    // Test network-specific differences (amounts are in CENTS, not satoshis)
+    BOOST_CHECK_EQUAL(mainDD.minMintAmount, 10000); // Mainnet: 10000 cents = $100.00 min
+    BOOST_CHECK_EQUAL(testDD.minMintAmount, 100);   // Testnet: 100 cents = $1.00 min
+    BOOST_CHECK_EQUAL(regTestDD.minMintAmount, 1);  // Regtest: 1 cent = $0.01 min
 
     BOOST_CHECK_EQUAL(mainDD.oracleThreshold, 8);  // Mainnet: 8-of-15
     BOOST_CHECK_EQUAL(testDD.oracleThreshold, 2);  // Testnet: 2-of-3

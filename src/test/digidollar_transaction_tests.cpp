@@ -427,8 +427,9 @@ struct DigiDollarTransactionTestFixture {
     }
 
     // Helper to create test amounts
+    // NOTE: Returns cents (100 cents = $1.00), NOT satoshis
     CAmount CreateTestAmount(double dollars) {
-        return static_cast<CAmount>(dollars * DigiDollar::CENT);
+        return static_cast<CAmount>(dollars * 100);
     }
 
     // Helper to create test lock periods
@@ -505,8 +506,8 @@ BOOST_FIXTURE_TEST_CASE(test_lock_tier_validation, DigiDollarTransactionTestFixt
 
 BOOST_FIXTURE_TEST_CASE(test_collateral_ratio_validation, DigiDollarTransactionTestFixture)
 {
-    CAmount ddAmount = CreateTestAmount(1000.0); // $1000 DD
-    CAmount oraclePrice = 5000; // $0.05 per DGB (5000 cents per DGB)
+    CAmount ddAmount = CreateTestAmount(1000.0); // $1000 DD = 100000 cents
+    CAmount oraclePrice = 5; // $0.05 per DGB (5 cents per DGB)
 
     struct CollateralTest {
         double dgbAmount;

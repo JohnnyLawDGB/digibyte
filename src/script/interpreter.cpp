@@ -637,14 +637,15 @@ bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& 
                 // DigiDollar specific opcodes
                 case OP_DIGIDOLLAR:
                 {
-                    // Stack: <amount>
-                    if (stack.size() < 1)
-                        return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
-
+                    // CRITICAL FIX: Check flag BEFORE stack validation to avoid consensus split
                     if (!(flags & SCRIPT_VERIFY_DIGIDOLLAR)) {
                         // Behave as NOP when flag is not set (soft fork compatibility)
                         break;
                     }
+
+                    // Stack: <amount>
+                    if (stack.size() < 1)
+                        return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
 
                     CScriptNum amount(0);
                     try {
@@ -681,14 +682,15 @@ bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& 
 
                 case OP_CHECKPRICE:
                 {
-                    // Stack: <price>
-                    if (stack.size() < 1)
-                        return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
-
+                    // CRITICAL FIX: Check flag BEFORE stack validation to avoid consensus split
                     if (!(flags & SCRIPT_VERIFY_DIGIDOLLAR)) {
                         // Behave as NOP when flag is not set (soft fork compatibility)
                         break;
                     }
+
+                    // Stack: <price>
+                    if (stack.size() < 1)
+                        return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
 
                     // Get oracle price (mock for now, will be integrated later)
                     CAmount oraclePrice = GetMockOraclePrice();
@@ -708,17 +710,17 @@ bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& 
 
                 case OP_CHECKCOLLATERAL:
                 {
+                    // CRITICAL FIX: Check flag BEFORE stack validation AND do NOT pop stack in NOP mode
+                    // Popping stack when flag not set causes CONSENSUS SPLIT!
+                    if (!(flags & SCRIPT_VERIFY_DIGIDOLLAR)) {
+                        // Behave as TRUE NOP when flag is not set (soft fork compatibility)
+                        // DO NOT touch stack - that would cause consensus split!
+                        break;
+                    }
+
                     // Stack: <ratio> <threshold>
                     if (stack.size() < 2)
                         return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
-
-                    if (!(flags & SCRIPT_VERIFY_DIGIDOLLAR)) {
-                        // Behave as NOP when flag is not set (soft fork compatibility)
-                        // Need to pop 2 items to maintain stack consistency
-                        popstack(stack);
-                        popstack(stack);
-                        break;
-                    }
 
                     CScriptNum ratio(0);
                     CScriptNum threshold(0);

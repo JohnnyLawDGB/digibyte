@@ -302,6 +302,19 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "sendmsgtopeer", 0, "peer_id" },
     { "stop", 0, "wait" },
     { "addnode", 2, "v2transport" },
+    // DigiDollar RPC commands
+    { "getdcamultiplier", 0, "system_health" },
+    { "calculatecollateralrequirement", 0, "dd_amount_cents" },
+    { "calculatecollateralrequirement", 1, "lock_days" },
+    { "calculatecollateralrequirement", 2, "oracle_price" },
+    { "estimatecollateral", 0, "dd_amount_cents" },
+    { "estimatecollateral", 1, "lock_tier" },
+    { "estimatecollateral", 2, "oracle_price" },
+    { "setmockoracleprice", 0, "price_cents" },
+    { "setmockoracleprice", 1, "height" },
+    { "simulatepricevolatility", 0, "num_updates" },
+    { "simulatepricevolatility", 1, "max_change_pct" },
+    { "enablemockoracle", 0, "enable" },
 };
 // clang-format on
 

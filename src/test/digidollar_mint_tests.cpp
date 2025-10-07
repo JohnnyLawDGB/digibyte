@@ -189,7 +189,6 @@ BOOST_AUTO_TEST_CASE(mint_maximum_amount)
     // Collateral = $1k * 2.0 / $0.05 = 40,000 DGB
     // Note: May be higher due to DCA multiplier (system health < 200%)
     CAmount expectedBase = 40000 * COIN;
-    std::cout << "Collateral required: " << result.collateralRequired / COIN << " DGB, expected base: " << expectedBase / COIN << " DGB" << std::endl;
     // Allow for DCA multiplier up to 2.0x
     BOOST_CHECK(result.collateralRequired >= expectedBase);
     BOOST_CHECK(result.collateralRequired <= expectedBase * 2); // Max 2x with DCA

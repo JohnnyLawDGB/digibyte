@@ -100,18 +100,6 @@ BOOST_AUTO_TEST_CASE(mint_transaction_basic)
     // Build mint transaction
     TxBuilderResult result = builder.BuildMintTransaction(mintParams);
 
-    // Debug output
-    if (!result.success) {
-        std::cout << "MINT FAILED: " << result.error << std::endl;
-        std::cout << "Collateral required: " << result.collateralRequired << std::endl;
-    } else {
-        std::cout << "MINT SUCCEEDED!" << std::endl;
-        std::cout << "Inputs: " << result.tx.vin.size() << std::endl;
-        std::cout << "Outputs: " << result.tx.vout.size() << std::endl;
-        std::cout << "Collateral: " << result.collateralRequired << std::endl;
-        std::cout << "Fees: " << result.totalFees << std::endl;
-    }
-
     BOOST_CHECK(result.success);
     BOOST_CHECK(result.error.empty()); // No error
     BOOST_CHECK(result.tx.vin.size() > 0);

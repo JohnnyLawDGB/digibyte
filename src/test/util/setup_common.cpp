@@ -91,7 +91,6 @@ BasicTestingSetup::BasicTestingSetup(const ChainType chainType, const std::vecto
     : m_path_root{fs::temp_directory_path() / "test_common_" PACKAGE_NAME / g_insecure_rand_ctx_temp_path.rand256().ToString()},
       m_args{}
 {
-    std::cerr << "DEBUG: BasicTestingSetup constructor entered" << std::endl;
     m_node.args = &gArgs;
     std::vector<const char*> arguments = Cat(
         {

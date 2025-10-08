@@ -1018,24 +1018,46 @@ TxBuilderResult RedeemTxBuilder::BuildRedemptionTransaction(const TxBuilderRedee
     }
 
     // Inputs N+: Fee UTXOs (DGB)
+    // CRITICAL FIX: Use the pre-selected fee UTXOs directly, don't re-select!
+    // The caller (wallet or RPC) has already selected the appropriate fee UTXOs
     CAmount totalFeeIn = 0;
     if (!params.feeUtxos.empty()) {
-        std::vector<CTxIn> feeInputs;
-        CAmount estimatedFees = 300 * params.feeRate / 1000; // Rough estimate
-
-        if (!SelectCoins(params.feeUtxos, estimatedFees, feeInputs, totalFeeIn)) {
-            result.error = "Insufficient funds for fees";
-            LogPrintf("DigiDollar: BuildRedemptionTransaction FAILED - %s\n", result.error);
-            return result;
+        // Add all pre-selected fee UTXOs as inputs
+        for (const auto& feeUtxo : params.feeUtxos) {
+            tx.vin.push_back(CTxIn(feeUtxo));
         }
 
-        tx.vin.insert(tx.vin.end(), feeInputs.begin(), feeInputs.end());
-        LogPrintf("DigiDollar: Added %d fee inputs (total: %d sats)\n", feeInputs.size(), totalFeeIn);
+        // Calculate total fee input from provided amounts
+        if (!params.feeAmounts.empty() && params.feeAmounts.size() == params.feeUtxos.size()) {
+            for (CAmount amount : params.feeAmounts) {
+                totalFeeIn += amount;
+            }
+            LogPrintf("DigiDollar: Added %d fee inputs (total: %d sats) from pre-selected UTXOs\n",
+                      params.feeUtxos.size(), totalFeeIn);
+        } else {
+            // Fallback: Try to get amounts from UTXO set (shouldn't normally happen)
+            LogPrintf("DigiDollar: WARNING - feeAmounts not provided or size mismatch, using GetUTXOValue\n");
+            for (const auto& feeUtxo : params.feeUtxos) {
+                CAmount amount = GetUTXOValue(feeUtxo);
+                totalFeeIn += amount;
+            }
+            LogPrintf("DigiDollar: Added %d fee inputs (total: %d sats) via GetUTXOValue fallback\n",
+                      params.feeUtxos.size(), totalFeeIn);
+        }
     }
 
     // Output 0: DGB returned to owner
-    CPubKey pubkey = params.ownerKey.GetPubKey();
-    CTxDestination dest{WitnessV1Taproot(XOnlyPubKey(pubkey))};
+    // CRITICAL FIX: Use wallet change address if provided, otherwise use owner key
+    CTxDestination dest;
+    if (params.collateralDest.has_value()) {
+        dest = params.collateralDest.value();
+        LogPrintf("DigiDollar: Using provided wallet destination for returned collateral\n");
+    } else {
+        // Fallback to owner key (for backwards compatibility)
+        CPubKey pubkey = params.ownerKey.GetPubKey();
+        dest = CTxDestination{WitnessV1Taproot(XOnlyPubKey(pubkey))};
+        LogPrintf("DigiDollar: Using owner key pubkey for returned collateral (wallet may not recognize)\n");
+    }
     tx.vout.push_back(CTxOut(dgbToRelease, GetScriptForDestination(dest)));
     LogPrintf("DigiDollar: Added DGB output to owner: %d sats\n", dgbToRelease);
 
@@ -1056,6 +1078,17 @@ TxBuilderResult RedeemTxBuilder::BuildRedemptionTransaction(const TxBuilderRedee
 
     // Calculate actual fees
     result.totalFees = CalculateFee(tx, params.feeRate);
+
+    // CRITICAL: Ensure fee meets DigiByte minimum relay fee (100,000 sat/kB)
+    // For a typical redemption tx (~400 vB), minimum is ~40,000 sats
+    // Add safety margin to ensure relay acceptance
+    CAmount minRelayFee = 50000; // 0.0005 DGB minimum to ensure acceptance
+    if (result.totalFees < minRelayFee) {
+        LogPrintf("DigiDollar: Calculated fee (%d sats) below minimum relay fee, using %d sats\n",
+                  result.totalFees, minRelayFee);
+        result.totalFees = minRelayFee;
+    }
+
     LogPrintf("DigiDollar: Calculated fees: %d sats (fee inputs: %d sats)\n", result.totalFees, totalFeeIn);
 
     // Add fee change output if needed

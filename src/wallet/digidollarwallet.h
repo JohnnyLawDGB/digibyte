@@ -502,7 +502,7 @@ public:
 
     // Coin selection and fee calculation helpers (public for testing and integration)
     bool SelectDDCoins(const CAmount& target_amount, std::vector<COutPoint>& selected_utxos, CAmount& selected_total, std::vector<CAmount>* amounts = nullptr) const;
-    bool SelectFeeCoins(const CAmount& fee_amount, std::vector<COutPoint>& selected_utxos, CAmount& selected_total, std::vector<CAmount>* selected_amounts = nullptr) const;
+    bool SelectFeeCoins(const CAmount& fee_amount, std::vector<COutPoint>& selected_utxos, CAmount& selected_total, std::vector<CAmount>* selected_amounts = nullptr, const std::vector<COutPoint>* exclude_utxos = nullptr) const;
     CAmount CalculateTransactionFee(const CMutableTransaction& tx) const;
 
     // Phase 3.1: P2TR signing for DD inputs (Schnorr signatures)

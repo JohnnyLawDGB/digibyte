@@ -322,10 +322,12 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
                   params.ddUtxos.size(), params.ddAmounts.size());
 
         // Select DGB UTXOs for fees (estimated)
+        // CRITICAL: Exclude DD UTXOs from fee selection to prevent double-spend
+        std::vector<COutPoint> exclude_dd_utxos = params.ddUtxos;
         CAmount estimatedFee = 100000; // 0.001 DGB estimated fee
         std::vector<CAmount> fee_amounts;
         CAmount selectedFeeTotal = 0;
-        if (!SelectFeeCoins(estimatedFee, params.feeUtxos, selectedFeeTotal, &fee_amounts)) {
+        if (!SelectFeeCoins(estimatedFee, params.feeUtxos, selectedFeeTotal, &fee_amounts, &exclude_dd_utxos)) {
             // Fallback: Create mock fee UTXO for testing
             LogPrintf("DigiDollar: No DGB UTXOs found, using mock UTXO for fees\n");
             uint256 mockFeeTxid;
@@ -1647,10 +1649,12 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
         CAmount estimatedFee = CalculateTransactionFee(estimateTx);
 
         // Phase 2.1: Select DGB UTXOs for fees
+        // CRITICAL: Exclude DD UTXOs from fee selection to prevent double-spend
+        std::vector<COutPoint> exclude_dd_utxos = dd_utxos;
         std::vector<COutPoint> fee_utxos;
         std::vector<CAmount> fee_amounts;
         CAmount selectedFeeTotal = 0;
-        if (!SelectFeeCoins(estimatedFee, fee_utxos, selectedFeeTotal, &fee_amounts)) {
+        if (!SelectFeeCoins(estimatedFee, fee_utxos, selectedFeeTotal, &fee_amounts, &exclude_dd_utxos)) {
             // Fallback: Create mock fee UTXO for testing (Phase 2.1 temporary)
             LogPrintf("DigiDollar: No DGB UTXOs found, using mock UTXO for fees\n");
             uint256 mockFeeTxid;
@@ -1844,6 +1848,27 @@ bool DigiDollarWallet::RedeemDigiDollar(const uint256& dd_timelock_id, const CAm
         }
         params.ownerKey = ownerKey;
 
+        // CRITICAL FIX: Get a wallet address for the returned collateral
+        // This ensures the wallet recognizes the returned DGB as belonging to it
+        // Try BECH32M first (Taproot), fallback to BECH32 for legacy wallets
+        if (m_wallet) {
+            LOCK(m_wallet->cs_wallet);
+            std::string label = "";  // Empty label
+            auto op_dest = m_wallet->GetNewDestination(OutputType::BECH32M, label);
+            if (!op_dest) {
+                // Legacy wallet fallback: try BECH32 (SegWit v0)
+                LogPrintf("DigiDollar: BECH32M not available, trying BECH32 for legacy wallet\n");
+                op_dest = m_wallet->GetNewDestination(OutputType::BECH32, label);
+            }
+            if (op_dest) {
+                params.collateralDest = *op_dest;
+                LogPrintf("DigiDollar: Using wallet destination for returned collateral\n");
+            } else {
+                LogPrintf("DigiDollar: WARNING - Could not get wallet address, using owner key (wallet may not recognize)\n");
+                LogPrintf("DigiDollar: Error: %s\n", util::ErrorString(op_dest).original);
+            }
+        }
+
         params.feeRate = 100000; // 100,000 sat/kB (DigiByte minimum relay fee)
 
         // Select DD UTXOs to burn
@@ -1863,8 +1888,16 @@ bool DigiDollarWallet::RedeemDigiDollar(const uint256& dd_timelock_id, const CAm
         estimatedFee = estimatedFee + (estimatedFee * 50 / 100); // 50% margin for worst case
         LogPrintf("DigiDollar: Estimated redemption fee: %d sats (%.8f DGB)\n", estimatedFee, estimatedFee / 100000000.0);
 
+        // Build exclude list: collateral outpoint + all DD UTXOs that will be burned
+        std::vector<COutPoint> exclude_utxos;
+        exclude_utxos.push_back(params.collateralOutpoint);  // Don't select collateral as fee input
+        exclude_utxos.insert(exclude_utxos.end(), params.ddUtxos.begin(), params.ddUtxos.end());  // Don't select DD UTXOs as fee inputs
+
+        LogPrintf("DigiDollar: Built exclude list with %d UTXOs (1 collateral + %d DD)\n",
+                  exclude_utxos.size(), params.ddUtxos.size());
+
         CAmount selectedFeeTotal = 0;
-        if (!SelectFeeCoins(estimatedFee, params.feeUtxos, selectedFeeTotal)) {
+        if (!SelectFeeCoins(estimatedFee, params.feeUtxos, selectedFeeTotal, nullptr, &exclude_utxos)) {
             LogPrintf("DigiDollar: Insufficient DGB balance for fees\n");
             return false;
         }
@@ -2317,7 +2350,7 @@ bool DigiDollarWallet::SelectDDCoins(const CAmount& target_amount, std::vector<C
     return success;
 }
 
-bool DigiDollarWallet::SelectFeeCoins(const CAmount& fee_amount, std::vector<COutPoint>& selected_utxos, CAmount& selected_total, std::vector<CAmount>* selected_amounts) const {
+bool DigiDollarWallet::SelectFeeCoins(const CAmount& fee_amount, std::vector<COutPoint>& selected_utxos, CAmount& selected_total, std::vector<CAmount>* selected_amounts, const std::vector<COutPoint>* exclude_utxos) const {
     // Reset output parameters
     selected_total = 0;
     selected_utxos.clear();
@@ -2336,6 +2369,9 @@ bool DigiDollarWallet::SelectFeeCoins(const CAmount& fee_amount, std::vector<COu
     }
 
     LogPrintf("DigiDollar: SelectFeeCoins - target fee: %d satoshis\n", fee_amount);
+    if (exclude_utxos && !exclude_utxos->empty()) {
+        LogPrintf("DigiDollar: SelectFeeCoins - excluding %d UTXOs from selection\n", exclude_utxos->size());
+    }
 
     // Get available DGB UTXOs from wallet
     std::vector<wallet::COutput> available_coins;
@@ -2357,7 +2393,7 @@ bool DigiDollarWallet::SelectFeeCoins(const CAmount& fee_amount, std::vector<COu
         return false;
     }
 
-    LogPrintf("DigiDollar: SelectFeeCoins - Found %d available DGB UTXOs\n", available_coins.size());
+    LogPrintf("DigiDollar: SelectFeeCoins - Found %d available DGB UTXOs before filtering\n", available_coins.size());
 
     // Sort by amount (smallest first for efficiency)
     std::sort(available_coins.begin(), available_coins.end(),
@@ -2365,12 +2401,26 @@ bool DigiDollarWallet::SelectFeeCoins(const CAmount& fee_amount, std::vector<COu
                   return a.txout.nValue < b.txout.nValue;
               });
 
-    // Select UTXOs until fee covered
+    // Select UTXOs until fee covered, excluding any specified UTXOs
     for (const auto& coin : available_coins) {
         if (selected_total >= fee_amount) break;
 
         COutPoint outpoint = coin.outpoint;
         CAmount amount = coin.txout.nValue;
+
+        // CRITICAL: Skip if this UTXO is in the exclude list (collateral or DD UTXOs)
+        if (exclude_utxos) {
+            bool should_exclude = false;
+            for (const auto& exclude : *exclude_utxos) {
+                if (outpoint == exclude) {
+                    should_exclude = true;
+                    LogPrintf("DigiDollar: SelectFeeCoins - EXCLUDING UTXO %s:%d (in exclude list)\n",
+                              outpoint.hash.ToString(), outpoint.n);
+                    break;
+                }
+            }
+            if (should_exclude) continue;
+        }
 
         selected_utxos.push_back(outpoint);
         if (selected_amounts) selected_amounts->push_back(amount);

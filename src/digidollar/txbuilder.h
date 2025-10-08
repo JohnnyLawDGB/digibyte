@@ -64,11 +64,14 @@ struct TxBuilderRedeemParams {
     COutPoint collateralOutpoint;  // Collateral to unlock
     CAmount ddToRedeem;             // Amount of DD to burn
     RedemptionPath path;            // Which redemption path to use
-    CKey ownerKey;                  // Owner's private key
+    CKey ownerKey;                  // Owner's private key (for signing collateral input)
     CAmount feeRate;                // Fee rate in sat/vB
     std::vector<COutPoint> ddUtxos; // DD UTXOs to burn
     std::vector<COutPoint> feeUtxos; // DGB UTXOs for fees
     std::vector<CAmount> feeAmounts; // Amounts of fee UTXOs
+
+    // Optional: Destination for returned collateral (if not set, uses ownerKey pubkey)
+    std::optional<CTxDestination> collateralDest;
 
     // Optional pre-queried position data (caller can provide to avoid UTXO lookups)
     CAmount collateralAmount = 0;   // Actual DGB collateral locked (0 = not provided)

@@ -862,6 +862,29 @@ RPCHelpMan redeemdigidollar()
             }
             redeemParams.ownerKey = ownerKey;
 
+            // CRITICAL FIX: Get a wallet address for the returned collateral
+            // This ensures the wallet recognizes the returned DGB as belonging to it
+            // Try BECH32M first (Taproot), fallback to BECH32 for legacy wallets
+            CTxDestination changeDest;
+            {
+                LOCK(pwallet->cs_wallet);
+                std::string label = "";  // Empty label
+                auto op_dest = pwallet->GetNewDestination(OutputType::BECH32M, label);
+                if (!op_dest) {
+                    // Legacy wallet fallback: try BECH32 (SegWit v0)
+                    LogPrintf("DigiDollar: BECH32M not available, trying BECH32 for legacy wallet\n");
+                    op_dest = pwallet->GetNewDestination(OutputType::BECH32, label);
+                }
+                if (op_dest) {
+                    changeDest = *op_dest;
+                    redeemParams.collateralDest = changeDest;
+                    LogPrintf("DigiDollar: Using wallet destination for returned collateral\n");
+                } else {
+                    LogPrintf("DigiDollar: WARNING - Could not get wallet address, using owner key (wallet may not recognize)\n");
+                    LogPrintf("DigiDollar: Error: %s\n", util::ErrorString(op_dest).original);
+                }
+            }
+
             // CRITICAL FIX: Query wallet's position cache which has correct unlock heights
             // The wallet already tracks positions correctly via GetDDTimeLocks
             {
@@ -906,11 +929,19 @@ RPCHelpMan redeemdigidollar()
             }
 
             // Select fee UTXOs from wallet
+            // CRITICAL: Build exclude list to prevent selecting collateral or DD UTXOs as fee inputs
+            std::vector<COutPoint> exclude_utxos;
+            exclude_utxos.push_back(redeemParams.collateralOutpoint);  // Don't select collateral
+            exclude_utxos.insert(exclude_utxos.end(), redeemParams.ddUtxos.begin(), redeemParams.ddUtxos.end());  // Don't select DD UTXOs
+
+            LogPrintf("DigiDollar: Building exclude list with %d UTXOs (1 collateral + %d DD)\n",
+                      exclude_utxos.size(), redeemParams.ddUtxos.size());
+
             CAmount estimatedFee = 10000000; // 0.1 DGB minimum for redemption tx fees
             CAmount selectedFeeTotal = 0;
             std::vector<CAmount> feeAmounts;
 
-            if (!dd_wallet->SelectFeeCoins(estimatedFee, redeemParams.feeUtxos, selectedFeeTotal, &feeAmounts)) {
+            if (!dd_wallet->SelectFeeCoins(estimatedFee, redeemParams.feeUtxos, selectedFeeTotal, &feeAmounts, &exclude_utxos)) {
                 throw JSONRPCError(RPC_WALLET_INSUFFICIENT_FUNDS, "Insufficient DGB balance for transaction fees");
             }
 

@@ -429,6 +429,48 @@ ALICE_HEIGHT=$(./src/digibyte-cli -regtest -datadir=/tmp/alice_regtest -rpcport=
 echo "✓ Redemption confirmed (Bob height: $BOB_HEIGHT, Alice height: $ALICE_HEIGHT)"
 echo ""
 
+# CRITICAL: Verify redemption transaction returns exact collateral amount
+echo "=========================================="
+echo "CRITICAL: Verify Redemption Transaction"
+echo "=========================================="
+echo ""
+
+# Get the mint transaction to find collateral amount
+MINT_TX=$(curl --silent --user "$COOKIE" \
+  --data-binary "{\"jsonrpc\":\"1.0\",\"id\":\"test\",\"method\":\"getrawtransaction\",\"params\":[\"$BOB_TXID4\",true]}" \
+  -H 'content-type: text/plain;' \
+  http://127.0.0.1:18443/)
+
+MINT_COLLATERAL=$(echo "$MINT_TX" | jq -r '.result.vout[0].value')
+echo "Mint transaction locked: $MINT_COLLATERAL DGB as collateral"
+
+# Get the redemption transaction
+REDEEM_TX=$(curl --silent --user "$COOKIE" \
+  --data-binary "{\"jsonrpc\":\"1.0\",\"id\":\"test\",\"method\":\"getrawtransaction\",\"params\":[\"$REDEEM_TXID\",true]}" \
+  -H 'content-type: text/plain;' \
+  http://127.0.0.1:18443/)
+
+# Output 0 should be the returned collateral
+REDEEM_COLLATERAL=$(echo "$REDEEM_TX" | jq -r '.result.vout[0].value')
+echo "Redemption transaction returned: $REDEEM_COLLATERAL DGB"
+
+# Verify they match EXACTLY
+if [ "$MINT_COLLATERAL" = "$REDEEM_COLLATERAL" ]; then
+    echo ""
+    echo "✅✅✅ PASS: Redemption returns EXACTLY the locked collateral ✅✅✅"
+    echo "   Locked:   $MINT_COLLATERAL DGB"
+    echo "   Returned: $REDEEM_COLLATERAL DGB"
+    echo "   Difference: 0 DGB"
+else
+    echo ""
+    echo "❌❌❌ FAIL: Redemption amount mismatch! ❌❌❌"
+    echo "   Locked:   $MINT_COLLATERAL DGB"
+    echo "   Returned: $REDEEM_COLLATERAL DGB"
+    echo "   Difference: $(echo "$MINT_COLLATERAL - $REDEEM_COLLATERAL" | bc) DGB"
+    exit 1
+fi
+echo ""
+
 # Step 16: Verify network stats after redemption
 echo "=========================================="
 echo "Step 16: Verify network stats after redemption"

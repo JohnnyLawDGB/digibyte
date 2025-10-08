@@ -194,13 +194,32 @@ UniValue redeemdigidollar(const JSONRPCRequest& request)
 
     COutPoint collateralOutpoint(txid, vout);
 
-    // Get wallet - for now return mock response
-    // TODO: Implement actual redemption logic when wallet integration is ready
+    // Get wallet
+    std::shared_ptr<CWallet> const pwallet = GetWalletForJSONRPCRequest(request);
+    if (!pwallet) {
+        throw JSONRPCError(RPC_WALLET_ERROR, "Wallet not found");
+    }
+
+    // Get DigiDollar wallet
+    DigiDollarWallet* ddWallet = pwallet->getDigiDollarWallet();
+    if (!ddWallet) {
+        throw JSONRPCError(RPC_WALLET_ERROR, "DigiDollar wallet not available");
+    }
+
+    // Parse amount (optional, defaults to full position)
+    CAmount amount = 0; // 0 means redeem full position
+    if (request.params.size() > 1) {
+        amount = AmountFromValue(request.params[1]);
+    }
+
+    // Call wallet redemption function
+    CTransactionRef tx_out;
+    if (!ddWallet->RedeemDigiDollar(txid, amount, tx_out)) {
+        throw JSONRPCError(RPC_WALLET_ERROR, "Redemption failed");
+    }
 
     UniValue result(UniValue::VOBJ);
-    result.pushKV("txid", "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890");
-    result.pushKV("dgb_unlocked", 300000.00);
-    result.pushKV("dd_burned", 1000.00);
+    result.pushKV("txid", tx_out->GetHash().ToString());
     result.pushKV("success", true);
 
     return result;

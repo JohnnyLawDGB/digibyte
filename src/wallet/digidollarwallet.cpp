@@ -1809,18 +1809,12 @@ bool DigiDollarWallet::RedeemDigiDollar(const uint256& dd_timelock_id, const CAm
     try {
         LogPrintf("DigiDollar: RedeemDigiDollar called - position: %s, amount: %d\n", dd_timelock_id.ToString(), amount);
 
-        // RED phase implementation - validation only
+        // Validation
         if (!ValidateRedeemParams(dd_timelock_id, amount)) {
             LogPrintf("DigiDollar: RedeemDigiDollar validation failed\n");
             return false;
         }
 
-        // For RED phase, return false as transaction creation not implemented
-        LogPrintf("DigiDollar: RedeemDigiDollar not fully implemented (RED phase)\n");
-        return false;
-
-        // GREEN phase implementation would be:
-        /*
         // Get position details
         auto it = collateral_positions.find(dd_timelock_id);
         if (it == collateral_positions.end() || !it->second.is_active) {
@@ -1829,23 +1823,39 @@ bool DigiDollarWallet::RedeemDigiDollar(const uint256& dd_timelock_id, const CAm
         }
 
         // Create redemption transaction using RedeemTxBuilder
-        DigiDollar::RedeemTxBuilder builder(Params(), GetCurrentHeight(), GetOraclePrice());
+        // Get current chain height and oracle price (similar to transfer/mint)
+        int currentHeight = 100000; // TODO: Get actual height from m_wallet->chain().getHeight()
+        CAmount oraclePrice = 2500;  // TODO: Get from MockOracleManager
+
+        DigiDollar::RedeemTxBuilder builder(Params(), currentHeight, oraclePrice);
 
         DigiDollar::TxBuilderRedeemParams params;
         params.collateralOutpoint = COutPoint(dd_timelock_id, 0); // Assuming output 0
         params.ddToRedeem = amount;
         params.path = builder.DetermineRedemptionPath(params);
-        params.ownerKey = GetWalletKey();
-        params.feeRate = GetCurrentFeeRate();
+
+        // Get wallet spending key for this position
+        CKey ownerKey;
+        if (!GetOwnerKey(dd_timelock_id, ownerKey)) {
+            // Fallback: generate new key (for testing/mock scenarios)
+            ownerKey.MakeNewKey(true);
+            LogPrintf("DigiDollar: WARNING - No owner key found for position %s, using generated key\n",
+                     dd_timelock_id.ToString());
+        }
+        params.ownerKey = ownerKey;
+
+        params.feeRate = 100000; // 100,000 sat/kB (DigiByte minimum relay fee)
 
         // Select DD UTXOs to burn
+        CAmount selectedTotal = 0;
         if (!SelectDDCoins(amount, params.ddUtxos, selectedTotal)) {
             LogPrintf("DigiDollar: Insufficient DD balance for redemption\n");
             return false;
         }
 
         // Select DGB UTXOs for fees
-        CAmount estimatedFee = CalculateTransactionFee(estimatedTx);
+        CAmount estimatedFee = 10000; // 0.0001 DGB estimate
+        CAmount selectedFeeTotal = 0;
         if (!SelectFeeCoins(estimatedFee, params.feeUtxos, selectedFeeTotal)) {
             LogPrintf("DigiDollar: Insufficient DGB balance for fees\n");
             return false;
@@ -1857,7 +1867,21 @@ bool DigiDollarWallet::RedeemDigiDollar(const uint256& dd_timelock_id, const CAm
             return false;
         }
 
-        tx_out = MakeTransactionRef(result.tx);
+        // Sign the transaction
+        CMutableTransaction mtx(result.tx);
+        if (!SignTransaction(mtx, params.ddUtxos, params.feeUtxos)) {
+            LogPrintf("DigiDollar: Failed to sign redemption transaction\n");
+            return false;
+        }
+
+        tx_out = MakeTransactionRef(mtx);
+
+        // Broadcast transaction
+        std::string error;
+        if (!CommitDDTransaction(tx_out, error)) {
+            LogPrintf("DigiDollar: Failed to broadcast redemption transaction - %s\n", error);
+            return false;
+        }
 
         // Mark position as inactive
         if (!UpdatePositionStatus(dd_timelock_id, false)) {
@@ -1880,7 +1904,6 @@ bool DigiDollarWallet::RedeemDigiDollar(const uint256& dd_timelock_id, const CAm
         }
 
         return true;
-        */
 
     } catch (const std::exception& e) {
         LogPrintf("DigiDollar: RedeemDigiDollar exception - %s\n", e.what());

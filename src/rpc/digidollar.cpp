@@ -122,10 +122,16 @@ RPCHelpMan getdigidollarstats()
             {
                 LOCK(cs_main);
                 Chainstate& active_chainstate = chainman.ActiveChainstate();
-                // Flush to ensure we scan the most recent state
-                active_chainstate.ForceFlushStateToDisk();
 
-                // Get the CoinsDB for cursor iteration (like scantxoutset does)
+                // CRITICAL: Flush CoinsTip cache to disk BEFORE scanning
+                // This ensures recent redemption transactions are visible in the UTXO database
+                // Without this flush, the CoinsDB scanner will see stale data
+                BlockValidationState flush_state;
+                if (!active_chainstate.FlushStateToDisk(flush_state, FlushStateMode::ALWAYS)) {
+                    LogPrintf("DigiDollar: WARNING - Failed to flush state to disk before UTXO scan\n");
+                }
+
+                // Get the CoinsDB for cursor iteration (only CCoinsViewDB supports cursors)
                 CCoinsViewDB& coins_db = active_chainstate.CoinsDB();
                 const node::BlockManager& blockman = chainman.m_blockman;
                 const CTxMemPool* mempool = node.mempool.get();
@@ -490,19 +496,21 @@ RPCHelpMan mintdigidollar()
             // Get oracle price
             CAmount oraclePrice = MockOracleManager::GetInstance().GetCurrentPrice();
             if (oraclePrice <= 0) {
-                oraclePrice = 1 * COIN; // Fallback to $1 = 1 DGB for testing
+                oraclePrice = 1; // Fallback to 1 cent per DGB = $0.01/DGB
             }
 
             // Convert lock tier to days
             int lockDays = GetLockDaysForTier(lockTier);
 
-            // Get available UTXOs from wallet
+            // Get available UTXOs from wallet and build value map
             std::vector<COutPoint> availableUtxos;
+            std::map<COutPoint, CAmount> utxoValues;
             {
                 LOCK(pwallet->cs_wallet);
                 wallet::CoinsResult coins = wallet::AvailableCoins(*pwallet);
                 for (const wallet::COutput& coin : coins.All()) {
                     availableUtxos.push_back(coin.outpoint);
+                    utxoValues[coin.outpoint] = coin.txout.nValue;
                 }
             }
 
@@ -519,8 +527,28 @@ RPCHelpMan mintdigidollar()
                 ownerKey.MakeNewKey(true); // Generate compressed key
             }
 
-            // Build mint transaction using MintTxBuilder
-            DigiDollar::MintTxBuilder builder(Params(), currentHeight, oraclePrice);
+            // Create custom MintTxBuilder that can look up actual UTXO values
+            // This is critical - without this, SelectCoins uses hardcoded placeholder values
+            // and selects hundreds of UTXOs, wasting millions of DGB!
+            class RpcMintTxBuilder : public DigiDollar::MintTxBuilder {
+            private:
+                const std::map<COutPoint, CAmount>& m_utxo_values;
+            public:
+                RpcMintTxBuilder(const CChainParams& params, int height, CAmount price,
+                               const std::map<COutPoint, CAmount>& utxo_values)
+                    : MintTxBuilder(params, height, price), m_utxo_values(utxo_values) {}
+
+                CAmount GetDGBFromUTXO(const COutPoint& outpoint) const override {
+                    auto it = m_utxo_values.find(outpoint);
+                    if (it != m_utxo_values.end()) {
+                        return it->second;
+                    }
+                    return 0; // UTXO not found
+                }
+            };
+
+            // Build mint transaction using custom RpcMintTxBuilder with UTXO value lookup
+            RpcMintTxBuilder builder(Params(), currentHeight, oraclePrice, utxoValues);
 
             DigiDollar::TxBuilderMintParams params;
             params.ddAmount = ddAmount;  // Amount in cents (e.g., 5000 = $50.00)
@@ -555,9 +583,9 @@ RPCHelpMan mintdigidollar()
                 pwallet->CommitTransaction(tx, {}, {});
             }
 
-            // Calculate unlock height
-            int blocksPerDay = 24 * 60 * 60 / 15; // 15-second blocks in DigiByte
-            int unlockHeight = currentHeight + (lockDays * blocksPerDay);
+            // Calculate unlock height using consensus function (handles tier 0 special case)
+            int64_t lockBlocks = DigiDollar::LockDaysToBlocks(lockDays);
+            int unlockHeight = currentHeight + lockBlocks;
 
             // CRITICAL FIX: Persist DD position to DigiDollarWallet
             if (pwallet->GetDDWallet()) {
@@ -794,35 +822,148 @@ RPCHelpMan redeemdigidollar()
                               ddAmount, foundPosition.dd_minted));
             }
 
-            // Calculate DGB return (proportional)
-            CAmount dgbToUnlock = (ddAmount * foundPosition.dgb_collateral) / foundPosition.dd_minted;
-
-            // Burn DD tokens
-            std::vector<COutPoint> burnedUtxos;
-            if (!dd_wallet->BurnDigiDollars(ddAmount, burnedUtxos)) {
-                throw JSONRPCError(RPC_WALLET_ERROR, "Failed to burn DigiDollar tokens");
+            // Get oracle price
+            CAmount oraclePrice = MockOracleManager::GetInstance().GetCurrentPrice();
+            if (oraclePrice <= 0) {
+                oraclePrice = 1 * COIN; // Fallback
             }
 
-            // Close or update position
+            // Generate redemption key from wallet
+            CKey redemptionKey;
+            {
+                LOCK(pwallet->cs_wallet);
+                redemptionKey.MakeNewKey(true);
+            }
+
+            // Build redemption transaction using RedeemTxBuilder
+            DigiDollar::RedeemTxBuilder redeemBuilder(Params(), currentHeight, oraclePrice);
+
+            DigiDollar::TxBuilderRedeemParams redeemParams;
+            redeemParams.collateralOutpoint = COutPoint(positionId, 0); // Collateral is at vout 0
+            redeemParams.ddUtxos = {COutPoint(positionId, 1)};  // DD output is at vout 1
+            redeemParams.ddToRedeem = ddAmount;
+            redeemParams.path = DigiDollar::RedemptionPath::NORMAL;
+            redeemParams.ownerKey = redemptionKey;
+            redeemParams.feeRate = 100000; // 100000 sat/kB
+
+            // Get the owner key for this position
+            CKey ownerKey;
+            if (!dd_wallet->GetOwnerKey(positionId, ownerKey)) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "Owner key not found for position");
+            }
+            redeemParams.ownerKey = ownerKey;
+
+            // CRITICAL FIX: Query wallet's position cache which has correct unlock heights
+            // The wallet already tracks positions correctly via GetDDTimeLocks
+            {
+                LOCK(pwallet->cs_wallet);
+
+                // Get DigiDollar wallet instance
+                DigiDollarWallet* ddWallet = pwallet->GetDDWallet();
+                if (!ddWallet) {
+                    throw JSONRPCError(RPC_WALLET_ERROR, "DigiDollar wallet not available");
+                }
+
+                // Get position data from wallet's time-lock cache
+                std::vector<WalletCollateralPosition> positions = ddWallet->GetDDTimeLocks(false);
+
+                bool found = false;
+                for (const auto& pos : positions) {
+                    if (pos.dd_timelock_id == positionId) {
+                        // Found the position in wallet's cache!
+                        redeemParams.collateralAmount = pos.dgb_collateral;
+                        redeemParams.ddMinted = pos.dd_minted;
+                        redeemParams.unlockHeight = pos.unlock_height;
+
+                        LogPrintf("DigiDollar: Found position in wallet cache:\n");
+                        LogPrintf("  - Collateral: %d sats (%.8f DGB)\n", pos.dgb_collateral, pos.dgb_collateral / 100000000.0);
+                        LogPrintf("  - DD Minted: %d cents\n", pos.dd_minted);
+                        LogPrintf("  - Unlock Height: %d\n", pos.unlock_height);
+
+                        found = true;
+                        break;
+                    }
+                }
+
+                if (!found) {
+                    LogPrintf("DigiDollar: WARNING - Position not found in wallet cache, using fallback\n");
+                    // Fallback to direct UTXO query
+                    auto it = pwallet->mapWallet.find(positionId);
+                    if (it != pwallet->mapWallet.end()) {
+                        redeemParams.collateralAmount = it->second.tx->vout[0].nValue;
+                        LogPrintf("DigiDollar: Fallback - using collateral amount: %d sats\n", redeemParams.collateralAmount);
+                    }
+                }
+            }
+
+            DigiDollar::TxBuilderResult redeemResult = redeemBuilder.BuildRedemptionTransaction(redeemParams);
+
+            if (!redeemResult.success) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "Failed to build redemption transaction: " + redeemResult.error);
+            }
+
+            // Sign redemption transaction using manual Schnorr signing for Taproot inputs
+            // Build list of DD UTXOs (collateral + DD token) and fee UTXOs if any
+            std::vector<COutPoint> dd_inputs = {redeemParams.collateralOutpoint};
+            dd_inputs.insert(dd_inputs.end(), redeemParams.ddUtxos.begin(), redeemParams.ddUtxos.end());
+            std::vector<COutPoint> fee_inputs; // No fee inputs in redemption tx
+
+            bool signSuccess = dd_wallet->SignDDInputs(redeemResult.tx, dd_inputs, fee_inputs);
+
+            if (!signSuccess) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "Failed to sign redemption transaction with Schnorr signatures");
+            }
+
+            // Create transaction reference
+            CTransactionRef redeemTx = MakeTransactionRef(redeemResult.tx);
+
+            // Commit transaction to wallet and broadcast
+            {
+                LOCK(pwallet->cs_wallet);
+                pwallet->CommitTransaction(redeemTx, {}, {});
+            }
+
+            // Calculate collateral returned (proportional to DD redeemed)
+            CAmount dgbUnlocked = (ddAmount * foundPosition.dgb_collateral) / foundPosition.dd_minted;
+
+            // Update position in DigiDollarWallet
             bool positionClosed = (ddAmount >= foundPosition.dd_minted);
-            CAmount remainingDD = foundPosition.dd_minted - ddAmount;
 
-            // Create COutPoint for position (hash is position ID, n is typically 0 for collateral)
-            COutPoint positionOutpoint(positionId, 0);
-            if (!dd_wallet->CloseCollateralPosition(positionOutpoint, !positionClosed, remainingDD)) {
-                throw JSONRPCError(RPC_WALLET_ERROR, "Failed to close collateral position");
+            if (positionClosed) {
+                // Mark position as inactive
+                foundPosition.is_active = false;
+                dd_wallet->WriteDDTimeLock(foundPosition);
+            } else {
+                // Update position with remaining amounts
+                CAmount remainingDD = foundPosition.dd_minted - ddAmount;
+                CAmount remainingCollateral = foundPosition.dgb_collateral - dgbUnlocked;
+                foundPosition.dd_minted = remainingDD;
+                foundPosition.dgb_collateral = remainingCollateral;
+                dd_wallet->WriteDDTimeLock(foundPosition);
             }
 
-            // TODO: Build and broadcast actual redemption transaction using RedeemTxBuilder
-            // For now, just return success with calculated values
+            // Add redemption transaction to history for GUI display
+            DDTransaction redeemTxHistory;
+            redeemTxHistory.txid = redeemTx->GetHash().GetHex();
+            redeemTxHistory.amount = ddAmount;  // DD amount redeemed (burned)
+            redeemTxHistory.confirmations = 0;   // Pending confirmation
+            redeemTxHistory.timestamp = GetTime();
+            redeemTxHistory.incoming = false;    // Redemption = outgoing DD (burning)
+            redeemTxHistory.address = redeemAddress.empty() ? "self" : redeemAddress;
+            redeemTxHistory.category = "redeem";
+
+            // Add to history using proper method
+            if (!dd_wallet->AddRedemptionToHistory(redeemTxHistory)) {
+                LogPrintf("DigiDollar: WARNING - Failed to add redemption to history\n");
+            }
 
             UniValue result(UniValue::VOBJ);
-            result.pushKV("txid", positionId.GetHex()); // Placeholder txid
+            result.pushKV("txid", redeemTx->GetHash().GetHex());
             result.pushKV("position_id", positionIdStr);
             result.pushKV("dd_redeemed", ddAmount);
-            result.pushKV("dgb_unlocked", ValueFromAmount(dgbToUnlock));
+            result.pushKV("dgb_unlocked", ValueFromAmount(dgbUnlocked));
             result.pushKV("unlock_address", redeemAddress.empty() ? "auto" : redeemAddress);
-            result.pushKV("fee_paid", ValueFromAmount(1000)); // Placeholder fee
+            result.pushKV("fee_paid", ValueFromAmount(redeemResult.totalFees));
             result.pushKV("redemption_path", "normal");
             result.pushKV("position_closed", positionClosed);
 

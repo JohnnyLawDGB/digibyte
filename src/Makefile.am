@@ -1089,7 +1089,7 @@ lib_LTLIBRARIES += $(LIBDIGIBYTECONSENSUS)
 include_HEADERS = script/digibyteconsensus.h
 libdigibyteconsensus_la_SOURCES = support/cleanse.cpp $(crypto_libdigibyte_crypto_base_la_SOURCES) $(libdigibyte_consensus_a_SOURCES)
 
-libdigibyteconsensus_la_LDFLAGS = $(AM_LDFLAGS) -no-undefined $(RELDFLAGS)
+libdigibyteconsensus_la_LDFLAGS = $(AM_LDFLAGS) -no-undefined $(RELDFLAGS) -Wl,-undefined,dynamic_lookup
 libdigibyteconsensus_la_LIBADD = $(LIBSECP256K1)
 libdigibyteconsensus_la_CPPFLAGS = $(AM_CPPFLAGS) -I$(builddir)/obj -I$(srcdir)/secp256k1/include -DBUILD_DIGIBYTE_INTERNAL
 libdigibyteconsensus_la_CXXFLAGS = $(AM_CXXFLAGS) $(PIE_FLAGS)

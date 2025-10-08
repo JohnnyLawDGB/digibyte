@@ -431,10 +431,7 @@ void DigiDollarPositionsWidget::loadPositionsFromWallet()
     std::vector<WalletCollateralPosition> walletPositions = GetWalletPositions();
 
     for (const auto& wp : walletPositions) {
-        if (!wp.is_active) {
-            continue; // Skip inactive positions
-        }
-
+        // Show ALL positions including redeemed ones
         DigiDollarPosition pos;
 
         // Position ID (use txid as string)
@@ -455,8 +452,11 @@ void DigiDollarPositionsWidget::loadPositionsFromWallet()
         // Calculate health ratio using actual oracle price
         pos.health = CalculatePositionHealth(wp.dd_minted, wp.dgb_collateral, oraclePrice);
 
-        // Can redeem if timelock expired
-        pos.canRedeem = (pos.blocksRemaining == 0);
+        // Can redeem if timelock expired AND position is still active
+        pos.canRedeem = (pos.blocksRemaining == 0) && wp.is_active;
+
+        // Track redeemed status
+        pos.isRedeemed = !wp.is_active;
 
         m_positions.append(pos);
     }
@@ -490,11 +490,25 @@ void DigiDollarPositionsWidget::addPositionToTable(const DigiDollarPosition& pos
 {
     QFont monospaceFont = GUIUtil::fixedPitchFont();
 
+    // Determine theme for redeemed styling
+    QPalette palette = QApplication::palette();
+    int lightness = palette.color(QPalette::WindowText).lightness();
+    bool isDarkTheme = lightness > 127;
+    QColor redeemedTextColor = isDarkTheme ? QColor("#888888") : QColor("#999999");
+    QColor redeemedBgColor = isDarkTheme ? QColor("#2a2a2a") : QColor("#f5f5f5");
+
     // Vault ID
     QTableWidgetItem* idItem = new QTableWidgetItem(position.positionId);
     idItem->setFont(monospaceFont);
     idItem->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled);
     idItem->setToolTip(tr("Vault ID: %1\nClick to copy to clipboard").arg(position.positionId));
+
+    // Apply redeemed styling
+    if (position.isRedeemed) {
+        idItem->setForeground(QBrush(redeemedTextColor));
+        idItem->setBackground(QBrush(redeemedBgColor));
+    }
+
     m_positionsTable->setItem(row, COL_POSITION_ID, idItem);
 
     // DD Minted
@@ -504,6 +518,13 @@ void DigiDollarPositionsWidget::addPositionToTable(const DigiDollarPosition& pos
     ddItem->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
     ddItem->setToolTip(tr("DigiDollar Minted: %1\nThis is the amount of DD tokens you received for this position")
                      .arg(formatDDAmount(position.ddMinted)));
+
+    // Apply redeemed styling
+    if (position.isRedeemed) {
+        ddItem->setForeground(QBrush(redeemedTextColor));
+        ddItem->setBackground(QBrush(redeemedBgColor));
+    }
+
     m_positionsTable->setItem(row, COL_DD_MINTED, ddItem);
 
     // DGB Collateral
@@ -513,6 +534,13 @@ void DigiDollarPositionsWidget::addPositionToTable(const DigiDollarPosition& pos
     dgbItem->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
     dgbItem->setToolTip(tr("DGB Collateral: %1\nThis is your locked DigiByte collateral that backs this position")
                        .arg(formatDGBAmount(position.dgbCollateral)));
+
+    // Apply redeemed styling
+    if (position.isRedeemed) {
+        dgbItem->setForeground(QBrush(redeemedTextColor));
+        dgbItem->setBackground(QBrush(redeemedBgColor));
+    }
+
     m_positionsTable->setItem(row, COL_DGB_COLLATERAL, dgbItem);
 
     // Lock Period
@@ -564,15 +592,36 @@ void DigiDollarPositionsWidget::addPositionToTable(const DigiDollarPosition& pos
     tierItem->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled);
     tierItem->setTextAlignment(Qt::AlignCenter);
     tierItem->setToolTip(lockPeriodTooltip);
+
+    // Apply redeemed styling
+    if (position.isRedeemed) {
+        tierItem->setForeground(QBrush(redeemedTextColor));
+        tierItem->setBackground(QBrush(redeemedBgColor));
+    }
+
     m_positionsTable->setItem(row, COL_LOCK_TIER, tierItem);
 
     // Time Remaining
-    QTableWidgetItem* timeItem = new QTableWidgetItem(formatBlockTime(position.blocksRemaining));
+    QString timeText;
+    if (position.isRedeemed) {
+        timeText = tr("Redeemed");
+    } else {
+        timeText = formatBlockTime(position.blocksRemaining);
+    }
+
+    QTableWidgetItem* timeItem = new QTableWidgetItem(timeText);
     timeItem->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled);
     timeItem->setTextAlignment(Qt::AlignCenter);
 
-    // Enhanced styling for expired positions
-    if (position.blocksRemaining <= 0) {
+    // Apply styling based on status
+    if (position.isRedeemed) {
+        // Redeemed status - grayed out
+        timeItem->setForeground(QBrush(redeemedTextColor));
+        timeItem->setBackground(QBrush(redeemedBgColor));
+        timeItem->setFont(QFont(timeItem->font().family(), timeItem->font().pointSize(), QFont::Bold));
+        timeItem->setToolTip(tr("This vault has been redeemed"));
+    } else if (position.blocksRemaining <= 0) {
+        // Expired but not redeemed - red warning
         QPalette palette = QApplication::palette();
         int lightness = palette.color(QPalette::WindowText).lightness();
         bool isDarkTheme = lightness > 127;
@@ -583,7 +632,8 @@ void DigiDollarPositionsWidget::addPositionToTable(const DigiDollarPosition& pos
         timeItem->setBackground(QBrush(QColor(errorBg)));
         timeItem->setFont(QFont(timeItem->font().family(), timeItem->font().pointSize(), QFont::Bold));
         timeItem->setToolTip(tr("⚠️ This position has expired and can be redeemed immediately"));
-    } else if (position.blocksRemaining <= 100) { // Warning for positions expiring soon
+    } else if (position.blocksRemaining <= 100) {
+        // Warning for positions expiring soon
         QPalette palette = QApplication::palette();
         int lightness = palette.color(QPalette::WindowText).lightness();
         bool isDarkTheme = lightness > 127;
@@ -600,17 +650,24 @@ void DigiDollarPositionsWidget::addPositionToTable(const DigiDollarPosition& pos
 
     // Health Status (using a custom widget with progress bar)
     QWidget* healthWidget = createHealthWidget(position.health);
+
+    // Apply redeemed styling to health widget background
+    if (position.isRedeemed) {
+        healthWidget->setStyleSheet(QString("background-color: %1;").arg(redeemedBgColor.name()));
+    }
+
     m_positionsTable->setCellWidget(row, COL_HEALTH, healthWidget);
 
     // Actions (Redeem button)
-    QPushButton* redeemButton = createRedeemButton(position.positionId);
-    redeemButton->setEnabled(position.canRedeem);
+    QPushButton* redeemButton = createRedeemButton(position.positionId, position.isRedeemed, position.canRedeem);
     m_positionsTable->setCellWidget(row, COL_ACTIONS, redeemButton);
 }
 
-QPushButton* DigiDollarPositionsWidget::createRedeemButton(const QString& positionId)
+QPushButton* DigiDollarPositionsWidget::createRedeemButton(const QString& positionId, bool isRedeemed, bool canRedeem)
 {
-    QPushButton* button = new QPushButton(tr("Redeem"), this);
+    // Set button text based on status
+    QString buttonText = isRedeemed ? tr("Redeemed") : tr("Redeem");
+    QPushButton* button = new QPushButton(buttonText, this);
     button->setProperty("positionId", positionId);
     button->setFixedSize(80, 28);
 
@@ -619,46 +676,80 @@ QPushButton* DigiDollarPositionsWidget::createRedeemButton(const QString& positi
     int lightness = palette.color(QPalette::WindowText).lightness();
     bool isDarkTheme = lightness > 127;
 
-    QString successColor = isDarkTheme ? "#4caf50" : "#28a745";
-    QString successHover = isDarkTheme ? "#5cbf60" : "#34ce57";
-    QString successPressed = isDarkTheme ? "#449d48" : "#1e7e34";
-    QString disabledBg = isDarkTheme ? "#555555" : "#cccccc";
-    QString disabledText = isDarkTheme ? "#999999" : "#888888";
+    QString buttonStyle;
+    QString tooltip;
 
-    QString redeemButtonStyle = QString(
-        "QPushButton { "
-        "  background-color: %1; "
-        "  color: white; "
-        "  border: none; "
-        "  border-radius: 5px; "
-        "  padding: 6px 12px; "
-        "  font-weight: 600; "
-        "  font-size: 11px; "
-        "  min-width: 60px; "
-        "} "
-        "QPushButton:hover { "
-        "  background-color: %2; "
-        "  transform: translateY(-1px); "
-        "} "
-        "QPushButton:pressed { "
-        "  background-color: %3; "
-        "  transform: translateY(0px); "
-        "} "
-        "QPushButton:disabled { "
-        "  background-color: %4; "
-        "  color: %5; "
-        "  transform: none; "
-        "}")
-        .arg(successColor)
-        .arg(successHover)
-        .arg(successPressed)
-        .arg(disabledBg)
-        .arg(disabledText);
+    if (isRedeemed) {
+        // Redeemed status - red button that's disabled
+        QString redeemedColor = isDarkTheme ? "#d32f2f" : "#c62828";
+        buttonStyle = QString(
+            "QPushButton { "
+            "  background-color: %1; "
+            "  color: white; "
+            "  border: none; "
+            "  border-radius: 5px; "
+            "  padding: 6px 12px; "
+            "  font-weight: 600; "
+            "  font-size: 11px; "
+            "  min-width: 60px; "
+            "}")
+            .arg(redeemedColor);
+        tooltip = tr("This vault has already been redeemed");
+        button->setEnabled(false);
+    } else if (canRedeem) {
+        // Can redeem - green button
+        QString successColor = isDarkTheme ? "#4caf50" : "#28a745";
+        QString successHover = isDarkTheme ? "#5cbf60" : "#34ce57";
+        QString successPressed = isDarkTheme ? "#449d48" : "#1e7e34";
 
-    button->setStyleSheet(redeemButtonStyle);
+        buttonStyle = QString(
+            "QPushButton { "
+            "  background-color: %1; "
+            "  color: white; "
+            "  border: none; "
+            "  border-radius: 5px; "
+            "  padding: 6px 12px; "
+            "  font-weight: 600; "
+            "  font-size: 11px; "
+            "  min-width: 60px; "
+            "} "
+            "QPushButton:hover { "
+            "  background-color: %2; "
+            "  transform: translateY(-1px); "
+            "} "
+            "QPushButton:pressed { "
+            "  background-color: %3; "
+            "  transform: translateY(0px); "
+            "}")
+            .arg(successColor)
+            .arg(successHover)
+            .arg(successPressed);
+        tooltip = tr("Click to redeem this DigiDollar position\nThis will return your DGB collateral and burn the DD tokens");
+        button->setEnabled(true);
+    } else {
+        // Cannot redeem yet - disabled gray button
+        QString disabledBg = isDarkTheme ? "#555555" : "#cccccc";
+        QString disabledText = isDarkTheme ? "#999999" : "#888888";
 
-    // Add tooltip
-    button->setToolTip(tr("Click to redeem this DigiDollar position\nThis will return your DGB collateral and burn the DD tokens"));
+        buttonStyle = QString(
+            "QPushButton { "
+            "  background-color: %1; "
+            "  color: %2; "
+            "  border: none; "
+            "  border-radius: 5px; "
+            "  padding: 6px 12px; "
+            "  font-weight: 600; "
+            "  font-size: 11px; "
+            "  min-width: 60px; "
+            "}")
+            .arg(disabledBg)
+            .arg(disabledText);
+        tooltip = tr("This vault cannot be redeemed yet\nWait until the time lock expires");
+        button->setEnabled(false);
+    }
+
+    button->setStyleSheet(buttonStyle);
+    button->setToolTip(tooltip);
 
     connect(button, &QPushButton::clicked,
             this, &DigiDollarPositionsWidget::onRedeemPositionClicked);
@@ -822,7 +913,7 @@ std::vector<WalletCollateralPosition> DigiDollarPositionsWidget::GetWalletPositi
     // Access DigiDollarWallet directly from wallet model
     DigiDollarWallet* ddWallet = m_walletModel->wallet().getDigiDollarWallet();
     if (ddWallet) {
-        positions = ddWallet->GetDDTimeLocks(true); // active time locks only
+        positions = ddWallet->GetDDTimeLocks(false); // Get ALL time locks including redeemed ones
     }
 
     return positions;

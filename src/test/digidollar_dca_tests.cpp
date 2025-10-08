@@ -302,6 +302,7 @@ BOOST_AUTO_TEST_CASE(integration_with_consensus_params)
 
     // Verify DCA works with existing collateral ratios
     std::map<int64_t, int> collateralRatios = {
+        {240, 1000},                 // 1 hour: 1000% (testing/onboarding)
         {30 * 24 * 60 * 4, 500},     // 30 days: 500%
         {90 * 24 * 60 * 4, 400},     // 3 months: 400%
         {180 * 24 * 60 * 4, 350},    // 6 months: 350%

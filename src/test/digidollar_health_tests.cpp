@@ -216,8 +216,8 @@ BOOST_FIXTURE_TEST_CASE(test_system_statistics, DigiDollarHealthTestSetup)
     // Calculate system health percentage
     if (metrics.totalDDSupply > 0 && metrics.totalCollateral > 0) {
         // Health = (Collateral Value / DD Value) * 100
-        // mockOraclePrice is in 0.001 cents per DGB format
-        CAmount collateralValue = (metrics.totalCollateral * mockOraclePrice) / (COIN * 1000);
+        // mockOraclePrice is in cents per DGB (e.g., 1 = $0.01/DGB)
+        CAmount collateralValue = (metrics.totalCollateral * mockOraclePrice) / COIN;
         int calculatedHealth = (collateralValue * 100) / metrics.totalDDSupply;
 
         // System health should be reasonable

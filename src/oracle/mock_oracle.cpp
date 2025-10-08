@@ -149,9 +149,9 @@ void MockOracleManager::Reset()
 {
     LOCK(cs_price);
 
-    mockPrice = 1000000;      // Reset to $0.01 per DGB
+    mockPrice = 1;      // Reset to 1 cent per DGB = $0.01 per DGB
     lastUpdateHeight = 0;
     enabled = true;
 
-    LogPrintf("MockOracleManager: Reset to default state (price: %d)\n", mockPrice);
+    LogPrintf("MockOracleManager: Reset to default state (price: %d cents per DGB = $0.01/DGB)\n", mockPrice);
 }

@@ -429,9 +429,10 @@ BOOST_FIXTURE_TEST_CASE(test_verify_redemption_conditions_function, DigiDollarRe
     // Test VerifyRedemptionConditions function
     auto params = CreateRedeemParams(DigiDollar::RedemptionPath::NORMAL, 10000);
     auto path = DigiDollar::RedemptionPath::NORMAL;
+    auto position = CreateTestPosition(10000, true); // expired position
 
     // Act: Verify conditions for normal redemption (position is expired by default)
-    bool valid = builder->VerifyRedemptionConditions(params, path);
+    bool valid = builder->VerifyRedemptionConditions(params, path, position);
 
     // Assert: Should be valid for normal redemption with expired position
     BOOST_CHECK(valid); // Valid normal redemption
@@ -439,7 +440,7 @@ BOOST_FIXTURE_TEST_CASE(test_verify_redemption_conditions_function, DigiDollarRe
     // Test invalid conditions - ERR path on healthy system
     path = DigiDollar::RedemptionPath::ERR;
     validationContext.systemCollateral = 150; // Healthy system
-    bool invalid = builder->VerifyRedemptionConditions(params, path);
+    bool invalid = builder->VerifyRedemptionConditions(params, path, position);
     BOOST_CHECK(!invalid); // ERR not available on healthy system
 }
 

@@ -2426,7 +2426,8 @@ BOOST_AUTO_TEST_CASE(collateral_vault_timelock_tiers)
     };
 
     std::vector<TierTest> tiers = {
-        {30 * DigiDollar::BLOCKS_PER_DAY, 500, "30 days: 500% (highest collateral, shortest lock)"},
+        {240, 1000, "1 hour: 1000% (highest collateral, testing/onboarding)"},
+        {30 * DigiDollar::BLOCKS_PER_DAY, 500, "30 days: 500%"},
         {90 * DigiDollar::BLOCKS_PER_DAY, 400, "3 months: 400%"},
         {180 * DigiDollar::BLOCKS_PER_DAY, 350, "6 months: 350%"},
         {365 * DigiDollar::BLOCKS_PER_DAY, 300, "1 year: 300%"},
@@ -2799,6 +2800,7 @@ BOOST_AUTO_TEST_CASE(timelock_8_lock_tiers)
     };
 
     std::vector<TierTest> tiers = {
+        {240, 1000, "Tier 0: 1 hour = 1000% collateral (testing/onboarding)"},
         {30 * DigiDollar::BLOCKS_PER_DAY, 500, "Tier 1: 30 days = 500% collateral"},
         {90 * DigiDollar::BLOCKS_PER_DAY, 400, "Tier 2: 3 months = 400% collateral"},
         {180 * DigiDollar::BLOCKS_PER_DAY, 350, "Tier 3: 6 months = 350% collateral"},

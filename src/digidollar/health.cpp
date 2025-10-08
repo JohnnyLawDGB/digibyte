@@ -36,7 +36,8 @@ std::map<int64_t, int> SystemHealthMonitor::s_healthHistory;
 bool SystemHealthMonitor::s_initialized = false;
 
 // Standard tier definitions (lock days)
-static const std::vector<int> TIER_LOCK_DAYS = {30, 90, 180, 365, 730, 1825}; // 30d to 5y
+// NOTE: Tier 0 uses 0 to represent 1 hour (240 blocks) - special case handled by LockDaysToBlocks()
+static const std::vector<int> TIER_LOCK_DAYS = {0, 30, 90, 180, 365, 730, 1825, 2555, 3650}; // 1h, 30d to 10y
 
 SystemMetrics SystemHealthMonitor::GetSystemMetrics()
 {

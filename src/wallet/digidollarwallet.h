@@ -577,6 +577,14 @@ public:
     bool AddReceivedDDUTXO(const CTransactionRef& tx, uint32_t vout_index, CAmount dd_amount);
 
     /**
+     * Add redemption transaction to history
+     * Records redemption in transaction_history and persists to database
+     * @param tx DDTransaction object with redemption details
+     * @return true if successfully added and persisted
+     */
+    bool AddRedemptionToHistory(const DDTransaction& tx);
+
+    /**
      * Process incoming DD transaction (Tasks 6.1-6.3 combined)
      * Main coordinator for receiving DD:
      * 1. Detects DD outputs to our wallet

@@ -31,6 +31,7 @@ struct DigiDollarPosition {
     int blocksRemaining;
     double health;
     bool canRedeem;
+    bool isRedeemed;
 };
 
 /**
@@ -80,7 +81,7 @@ private:
     void loadPositionsFromWallet();
     void applyTheme();
     void addPositionToTable(const DigiDollarPosition& position, int row);
-    QPushButton* createRedeemButton(const QString& positionId);
+    QPushButton* createRedeemButton(const QString& positionId, bool isRedeemed, bool canRedeem);
 
     QString formatDDAmount(double amount) const;
     QString formatDGBAmount(double amount) const;

@@ -1449,6 +1449,29 @@ void DigiDollarWallet::AddCollateralPosition(const WalletCollateralPosition& pos
     }
 }
 
+bool DigiDollarWallet::AddRedemptionToHistory(const DDTransaction& tx) {
+    try {
+        // Add to in-memory history
+        transaction_history.push_back(tx);
+
+        // Persist to database
+        if (m_wallet) {
+            wallet::WalletBatch batch(m_wallet->GetDatabase());
+            if (!batch.WriteDDTransaction(tx)) {
+                LogPrintf("DigiDollar: WARNING - Failed to persist redemption transaction to database\n");
+                return false;
+            }
+        }
+
+        LogPrintf("DigiDollar: Added redemption transaction to history - TxID: %s, Amount: %d cents\n",
+                  tx.txid, tx.amount);
+        return true;
+    } catch (const std::exception& e) {
+        LogPrintf("DigiDollar: AddRedemptionToHistory exception - %s\n", e.what());
+        return false;
+    }
+}
+
 size_t DigiDollarWallet::ScanForDDUTXOs() {
     if (!m_wallet) {
         LogPrintf("DigiDollar: ScanForDDUTXOs called but no wallet pointer set\n");
@@ -2524,15 +2547,6 @@ bool DigiDollarWallet::SignDDInputs(CMutableTransaction& tx,
         LogPrintf("DigiDollar: SignDDInputs - Owner compressed pubkey: %s\n", HexStr(ownerPubKey));
         LogPrintf("DigiDollar: SignDDInputs - Owner x-only pubkey: %s\n", HexStr(ownerXOnly));
 
-        // Compute what the tweaked output key should be
-        auto tweaked = ownerXOnly.CreateTapTweak(nullptr);
-        if (!tweaked) {
-            LogPrintf("DigiDollar: SignDDInputs - Failed to compute tweak for input %d\n", i);
-            return false;
-        }
-        XOnlyPubKey expected_output_key = tweaked->first;
-        LogPrintf("DigiDollar: SignDDInputs - Expected tweaked output key: %s\n", HexStr(expected_output_key));
-
         // Get the CTxOut for signing
         const Coin& coin = coins.at(outpoint);
         const CTxOut& prevOutput = coin.out;
@@ -2543,52 +2557,148 @@ bool DigiDollarWallet::SignDDInputs(CMutableTransaction& tx,
             return false;
         }
 
-        // Extract and log the output key from the script
+        // Extract the output key from the script (this is the TWEAKED key = internal_key + merkle_root_hash)
         std::vector<unsigned char> outputKeyBytes(prevOutput.scriptPubKey.begin() + 2, prevOutput.scriptPubKey.end());
         LogPrintf("DigiDollar: SignDDInputs - Actual output key in script: %s\n", HexStr(outputKeyBytes));
 
-        // Create Schnorr signature for Taproot key-path spending
-        std::vector<unsigned char> sig(64); // Schnorr signatures are always 64 bytes
+        // CRITICAL FIX: Reconstruct the Taproot tree to get the merkle root
+        // We need to rebuild the same MAST tree that was used during mint
+        // to calculate the correct merkle root for signing
 
-        // For Taproot, amount must be the value of the UTXO being spent (DD outputs have value=0)
-        CAmount amount = prevOutput.nValue;
+        // Get the position data to reconstruct the MAST tree
+        WalletCollateralPosition position;
+        bool found_position = false;
+        for (const auto& [pos_id, pos] : collateral_positions) {
+            if (pos_id == outpoint.hash) {
+                position = pos;
+                found_position = true;
+                break;
+            }
+        }
 
-        // Calculate sighash for Taproot key-path spending
-        // Create ScriptExecutionData for Taproot (no annex, no script)
-        ScriptExecutionData execdata;
-        execdata.m_annex_init = true;
-        execdata.m_annex_present = false;
-
-        uint256 sighash;
-        if (!SignatureHashSchnorr(sighash, execdata, tx, i, SIGHASH_DEFAULT, SigVersion::TAPROOT, txdata, MissingDataBehavior::FAIL)) {
-            LogPrintf("DigiDollar: SignDDInputs - Failed to compute Taproot sighash for input %d\n", i);
+        if (!found_position) {
+            LogPrintf("DigiDollar: SignDDInputs - Position not found for %s, cannot reconstruct MAST tree\n",
+                      outpoint.hash.ToString());
             return false;
         }
 
-        LogPrintf("DigiDollar: SignDDInputs - SIGNING - input %d, amount: %d, scriptPubKey: %s\n",
-                  i, amount, HexStr(prevOutput.scriptPubKey));
-        LogPrintf("DigiDollar: SignDDInputs - SIGNING - sighash: %s\n", sighash.ToString());
+        // Rebuild the MAST tree using the same parameters as mint
+        TaprootBuilder builder;
+
+        // Recreate redemption path scripts (same as CreateCollateralP2TR)
+        DigiDollar::MintParams scriptParams;
+        scriptParams.ddAmount = position.dd_minted;
+        scriptParams.lockHeight = position.unlock_height;
+        scriptParams.ownerKey = ownerXOnly;
+        scriptParams.internalKey = ownerXOnly;
+        scriptParams.oracleKeys = DigiDollar::GetOracleKeys(15); // Same as mint
+
+        // Add the 4 redemption paths in the same order as mint
+        CScript normalPath = DigiDollar::CreateNormalRedemptionPath(scriptParams);
+        if (!normalPath.empty()) {
+            builder.Add(1, normalPath, 0xC0);
+        }
+
+        CScript partialPath = DigiDollar::CreatePartialRedemptionPath(scriptParams);
+        if (!partialPath.empty()) {
+            builder.Add(2, partialPath, 0xC0);
+        }
+
+        CScript emergencyPath = DigiDollar::CreateEmergencyPath(scriptParams);
+        if (!emergencyPath.empty()) {
+            builder.Add(3, emergencyPath, 0xC0);
+        }
+
+        CScript errPath = DigiDollar::CreateERRPath(scriptParams);
+        if (!errPath.empty()) {
+            builder.Add(3, errPath, 0xC0);
+        }
+
+        // Finalize with the internal key to get the merkle root
+        builder.Finalize(ownerXOnly);
+
+        if (!builder.IsValid() || !builder.IsComplete()) {
+            LogPrintf("DigiDollar: SignDDInputs - Failed to rebuild Taproot tree for signing\n");
+            return false;
+        }
+
+        // Get the TaprootSpendData which contains the merkle root
+        TaprootSpendData spend_data = builder.GetSpendData();
+
+        // Verify the output key matches what we expect
+        XOnlyPubKey computed_output_key(outputKeyBytes);
+        WitnessV1Taproot expected_output = builder.GetOutput();
+
+        LogPrintf("DigiDollar: SignDDInputs - Reconstructed merkle root: %s\n",
+                  spend_data.merkle_root.IsNull() ? "NULL" : HexStr(spend_data.merkle_root));
+        LogPrintf("DigiDollar: SignDDInputs - Expected output key from builder: %s\n",
+                  HexStr(expected_output));
+
+        // CRITICAL: Use SCRIPT-PATH spending to execute the Normal Redemption Path
+        // For redemption, we need to execute the OP_CHECKLOCKTIMEVERIFY script,
+        // which requires script-path spending, NOT key-path spending.
+
+        // Get the control block for the normal redemption path from spend_data
+        std::pair<CScript, int> script_key = {normalPath, TAPROOT_LEAF_TAPSCRIPT};
+        auto it = spend_data.scripts.find(script_key);
+        if (it == spend_data.scripts.end() || it->second.empty()) {
+            LogPrintf("DigiDollar: SignDDInputs - Control block not found for normal redemption path\n");
+            return false;
+        }
+
+        // Get the shortest control block (most efficient)
+        std::vector<unsigned char> control_block = *it->second.begin();
+
+        LogPrintf("DigiDollar: SignDDInputs - Found control block (%d bytes) for normal redemption\n",
+                  control_block.size());
+
+        // Calculate the leaf hash for the normal redemption script
+        uint256 leaf_hash = ComputeTapleafHash(TAPROOT_LEAF_TAPSCRIPT, normalPath);
+
+        LogPrintf("DigiDollar: SignDDInputs - Leaf hash: %s\n", leaf_hash.ToString());
+
+        // Create Schnorr signature for Taproot SCRIPT-PATH spending
+        std::vector<unsigned char> sig(64); // Schnorr signatures are always 64 bytes
+
+        // Calculate sighash for Taproot script-path spending
+        ScriptExecutionData execdata;
+        execdata.m_annex_init = true;
+        execdata.m_annex_present = false;
+        execdata.m_tapleaf_hash = leaf_hash;
+        execdata.m_tapleaf_hash_init = true;
+        execdata.m_codeseparator_pos_init = true;
+        execdata.m_codeseparator_pos = 0xFFFFFFFF; // No OP_CODESEPARATOR in our script
+
+        uint256 sighash;
+        if (!SignatureHashSchnorr(sighash, execdata, tx, i, SIGHASH_DEFAULT, SigVersion::TAPSCRIPT, txdata, MissingDataBehavior::FAIL)) {
+            LogPrintf("DigiDollar: SignDDInputs - Failed to compute Tapscript sighash for input %d\n", i);
+            return false;
+        }
+
+        LogPrintf("DigiDollar: SignDDInputs - SCRIPT-PATH SIGNING - input %d, sighash: %s\n",
+                  i, sighash.ToString());
 
         // Generate auxiliary randomness for Schnorr signing
         uint256 aux = GetRandHash();
 
-        // Sign with Schnorr (BIP340)
-        // The signature must be created with the tweaked private key since the output uses the tweaked public key
-        // Pass the merkle_root as empty (nullptr in IsNull check) to apply the tweak: sign with p + H_TapTweak(P)
-        uint256 empty_merkle_root;
-        if (!ownerKey.SignSchnorr(sighash, sig, &empty_merkle_root, aux)) {
+        // Sign with Schnorr using the INTERNAL KEY (not tweaked!)
+        // For script-path spending, we sign with the internal key and provide the leaf hash
+        if (!ownerKey.SignSchnorr(sighash, sig, &leaf_hash, aux)) {
             LogPrintf("DigiDollar: SignDDInputs - Failed to create Schnorr signature for input %d\n", i);
             return false;
         }
 
         LogPrintf("DigiDollar: SignDDInputs - Created signature: %s\n", HexStr(sig));
 
-        // For Taproot key-path spending, witness is just the signature
+        // For Taproot SCRIPT-PATH spending, witness stack is:
+        // [signature, script, control_block]
         tx.vin[i].scriptWitness.stack.clear();
         tx.vin[i].scriptWitness.stack.push_back(sig);
+        tx.vin[i].scriptWitness.stack.push_back(std::vector<unsigned char>(normalPath.begin(), normalPath.end()));
+        tx.vin[i].scriptWitness.stack.push_back(control_block);
 
-        LogPrintf("DigiDollar: SignDDInputs - Signed DD input %d with Schnorr signature (%d bytes)\n",
-                  i, sig.size());
+        LogPrintf("DigiDollar: SignDDInputs - Witness stack: sig (%d bytes) + script (%d bytes) + control (%d bytes)\n",
+                  sig.size(), normalPath.size(), control_block.size());
     }
 
     LogPrintf("DigiDollar: SignDDInputs - Successfully signed all inputs (%d DD + %d fee)\n",

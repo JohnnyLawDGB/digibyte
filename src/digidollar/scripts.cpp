@@ -226,9 +226,11 @@ CScript CreateDigiDollarP2TR(const XOnlyPubKey& owner, CAmount ddAmount)
     }
 
     try {
-        // For Phase 1, use simple key-path-only Taproot (no script tree)
-        // This allows spending with just a Schnorr signature
-        // We need to tweak the key for proper Taproot
+        // CRITICAL: DD token output must use the SAME Taproot tweak as the collateral output
+        // Otherwise redemption will fail because they have different keys
+        // Since we don't have the merkle root here, we use the SAME logic as CreateCollateral P2TR
+        // which is key-path only (nullptr merkle root)
+        // Both outputs will use the same tweak for key-path spending
         auto tweaked = owner.CreateTapTweak(nullptr);
         if (!tweaked) {
             return CScript();

@@ -185,10 +185,10 @@ BOOST_AUTO_TEST_CASE(mint_maximum_amount)
     }
     BOOST_CHECK(result.success);
     BOOST_CHECK(result.collateralRequired > 0);
-    // With 10-year lock and $1k mint at 200% ratio and $0.05 DGB:
-    // Collateral = $1k * 2.0 / $0.05 = 40,000 DGB
+    // With 10-year lock and $1k mint at 200% ratio and $50.00 DGB:
+    // Collateral = ($1k / $50) * 2.0 = 20 DGB * 2.0 = 40 DGB
     // Note: May be higher due to DCA multiplier (system health < 200%)
-    CAmount expectedBase = 40000 * COIN;
+    CAmount expectedBase = ((100000 * COIN) / 5000) * 200 / 100; // 40 DGB
     // Allow for DCA multiplier up to 2.0x
     BOOST_CHECK(result.collateralRequired >= expectedBase);
     BOOST_CHECK(result.collateralRequired <= expectedBase * 2); // Max 2x with DCA
@@ -283,6 +283,7 @@ BOOST_AUTO_TEST_CASE(collateral_all_lock_tiers)
     };
 
     std::vector<LockTier> tiers = {
+        {0, 1000},    // 1 hour (0 days = 240 blocks): 1000% (testing/onboarding)
         {30, 500},    // 30 days: 500%
         {90, 400},    // 3 months: 400%
         {180, 350},   // 6 months: 350%
@@ -296,9 +297,10 @@ BOOST_AUTO_TEST_CASE(collateral_all_lock_tiers)
     for (const auto& tier : tiers) {
         CAmount collateral = builder.CalculateRequiredCollateral(ddAmount, tier.days);
 
-        // Expected: $100 * ratio% / $0.05 per DGB
-        // Oracle price format requires * 1000 in numerator
-        CAmount expected = (ddAmount * tier.expectedRatio * COIN * 1000) / (100 * price);
+        // Expected: $100 * ratio% / $50.00 per DGB
+        // Oracle price is in cents per DGB, ratio is percentage
+        // Formula: (ddAmount * COIN / price) * (ratio / 100)
+        CAmount expected = ((ddAmount * COIN) / price) * tier.expectedRatio / 100;
 
         BOOST_CHECK_MESSAGE(std::abs(collateral - expected) < COIN,
                           "Tier " + std::to_string(tier.days) + " days: got " +
@@ -688,9 +690,11 @@ BOOST_AUTO_TEST_CASE(edge_case_multiple_inputs)
     MockMintTxBuilder builder(params, height, price);
 
     // Provide many small UTXOs that need to be combined
+    // With $100 DD at 300% ratio and $50/DGB: need 6 DGB
+    // Use 2 DGB UTXOs so multiple inputs are required
     std::vector<CAmount> values;
     for (int i = 0; i < 10; ++i) {
-        values.push_back(1000 * COIN); // 1000 DGB each = 10,000 DGB total
+        values.push_back(2 * COIN); // 2 DGB each = 20 DGB total
     }
     auto utxos = CreateTestUTXOsWithValues(values);
     for (size_t i = 0; i < utxos.size(); ++i) {
@@ -698,7 +702,7 @@ BOOST_AUTO_TEST_CASE(edge_case_multiple_inputs)
     }
 
     TxBuilderMintParams mintParams;
-    mintParams.ddAmount = 10000; // $100 (needs ~6000 DGB at 300% ratio)
+    mintParams.ddAmount = 10000; // $100 (needs 6 DGB at 300% ratio)
     mintParams.lockDays = 365;
     mintParams.ownerKey = CreateTestKey();
     mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
@@ -879,9 +883,9 @@ BOOST_AUTO_TEST_CASE(integration_complete_mint_flow)
     BOOST_CHECK(result.tx.vout.size() >= 3); // Collateral + DD + OP_RETURN
 
     // Verify collateral calculation
-    // $500 * 300% / $0.05 = 30,000 DGB
-    CAmount expectedCollateral = 30000 * COIN;
-    BOOST_CHECK(std::abs(result.collateralRequired - expectedCollateral) < 100 * COIN);
+    // $500 / $50 * 300% = 10 DGB * 3 = 30 DGB
+    CAmount expectedCollateral = ((50000 * COIN) / 5000) * 300 / 100; // 30 DGB
+    BOOST_CHECK(std::abs(result.collateralRequired - expectedCollateral) < COIN);
 
     // Verify outputs
     BOOST_CHECK(result.tx.vout[0].nValue == result.collateralRequired); // Collateral
@@ -932,9 +936,9 @@ BOOST_AUTO_TEST_CASE(mint_with_dca_healthy_system)
     BOOST_CHECK(result.success);
 
     // With healthy system, DCA multiplier should be 1.0x (no adjustment)
-    // Expected: $100 at 300% ratio with $0.05/DGB = 6000 DGB (no DCA adjustment)
-    CAmount expectedBaseCollateral = 6000 * COIN;
-    BOOST_CHECK(std::abs(result.collateralRequired - expectedBaseCollateral) < 100 * COIN);
+    // Expected: $100 / $50 * 300% = 2 DGB * 3 = 6 DGB (no DCA adjustment)
+    CAmount expectedBaseCollateral = ((10000 * COIN) / 5000) * 300 / 100; // 6 DGB
+    BOOST_CHECK(std::abs(result.collateralRequired - expectedBaseCollateral) < COIN);
 }
 
 BOOST_AUTO_TEST_CASE(mint_with_dca_warning_system)
@@ -968,9 +972,9 @@ BOOST_AUTO_TEST_CASE(mint_with_dca_warning_system)
     BOOST_CHECK(result.success);
 
     // With warning system, DCA multiplier should be 1.2x
-    // Expected: $100 at 300% ratio = 6000 DGB base (7200 with 1.2x DCA)
+    // Expected: $100 / $50 * 300% = 6 DGB base (7.2 DGB with 1.2x DCA)
     // For now, test without DCA integration until validation is updated
-    CAmount baseCollateral = 6000 * COIN;
+    CAmount baseCollateral = ((10000 * COIN) / 5000) * 300 / 100; // 6 DGB
     BOOST_CHECK(result.collateralRequired >= baseCollateral);
 }
 
@@ -1002,9 +1006,9 @@ BOOST_AUTO_TEST_CASE(mint_with_dca_critical_system)
     BOOST_CHECK(result.success);
 
     // With critical system, DCA multiplier should be 1.5x
-    // Expected: $100 at 300% ratio = 6000 DGB base (9000 with 1.5x DCA)
+    // Expected: $100 / $50 * 300% = 6 DGB base (9 DGB with 1.5x DCA)
     // For now, test basic structure
-    CAmount baseCollateral = 6000 * COIN;
+    CAmount baseCollateral = ((10000 * COIN) / 5000) * 300 / 100; // 6 DGB
     BOOST_CHECK(result.collateralRequired >= baseCollateral);
 }
 
@@ -1036,9 +1040,9 @@ BOOST_AUTO_TEST_CASE(mint_with_dca_emergency_system)
     BOOST_CHECK(result.success);
 
     // With emergency system, DCA multiplier should be 2.0x
-    // Expected: $100 at 300% ratio = 6000 DGB base (12000 with 2.0x DCA)
+    // Expected: $100 / $50 * 300% = 6 DGB base (12 DGB with 2.0x DCA)
     // For now, test basic structure
-    CAmount baseCollateral = 6000 * COIN;
+    CAmount baseCollateral = ((10000 * COIN) / 5000) * 300 / 100; // 6 DGB
     BOOST_CHECK(result.collateralRequired >= baseCollateral);
 }
 
@@ -1059,6 +1063,7 @@ BOOST_AUTO_TEST_CASE(mint_dca_applies_to_all_lock_tiers)
     };
 
     std::vector<LockTier> tiers = {
+        {0, 1000, "1 hour"},
         {30, 500, "30 days"},
         {90, 400, "3 months"},
         {180, 350, "6 months"},
@@ -1073,9 +1078,9 @@ BOOST_AUTO_TEST_CASE(mint_dca_applies_to_all_lock_tiers)
 
     for (const auto& tier : tiers) {
         // Create sufficient UTXOs (conservative estimate)
-        // Max ratio is 500% for 30 days: $100 * 500% / $0.05 = 100,000 DGB
-        auto utxos = CreateTestUTXOsWithValues({110000 * COIN});
-        builder.SetUTXOValue(utxos[0], 110000 * COIN);
+        // Max ratio is 1000% for 1 hour: $100 * 1000% / $0.05 = 200,000 DGB
+        auto utxos = CreateTestUTXOsWithValues({210000 * COIN});
+        builder.SetUTXOValue(utxos[0], 210000 * COIN);
 
         TxBuilderMintParams mintParams;
         mintParams.ddAmount = ddAmount;
@@ -1090,8 +1095,8 @@ BOOST_AUTO_TEST_CASE(mint_dca_applies_to_all_lock_tiers)
                           "Failed for tier: " + std::string(tier.description));
 
         // Calculate expected base collateral
-        // Oracle price format requires * 1000 in numerator
-        CAmount expectedBase = (ddAmount * tier.baseRatio * COIN * 1000) / (100 * price);
+        // Oracle price is in cents per DGB, ratio is percentage
+        CAmount expectedBase = ((ddAmount * COIN) / price) * tier.baseRatio / 100;
 
         // For now, verify base collateral is calculated correctly
         // DCA integration will be tested after validation is updated

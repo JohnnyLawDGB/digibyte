@@ -1533,6 +1533,9 @@ void CWallet::blockConnected(ChainstateRole role, const interfaces::BlockInfo& b
     // Rescan for DigiDollar UTXOs after block is connected
     if (m_dd_wallet) {
         m_dd_wallet->ScanForDDUTXOs();
+
+        // Update confirmation counts for all DD transactions
+        m_dd_wallet->UpdateDDConfirmations(block.hash);
     }
 }
 

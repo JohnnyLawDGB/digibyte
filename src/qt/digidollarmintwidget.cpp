@@ -222,8 +222,8 @@ void DigiDollarMintWidget::setupLockTierSection()
     m_lockTierLayout->addWidget(m_lockTierLabel, 1, 0);
     m_lockTierLayout->addWidget(m_lockTierCombo, 1, 1);
 
-    // Set default selection to first tier (30 days)
-    m_lockTierCombo->setCurrentIndex(0);
+    // Set default selection to tier 1 (30 days) - tier 0 is 1-hour testing only
+    m_lockTierCombo->setCurrentIndex(1);
 
     // Lock tier info
     m_lockTierInfoLabel = new QLabel(tr("Collateral Ratio:"), this);

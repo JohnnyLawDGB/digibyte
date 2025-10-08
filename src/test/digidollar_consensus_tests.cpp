@@ -34,9 +34,9 @@ BOOST_AUTO_TEST_CASE(collateral_ratio_lookup_test)
     BOOST_CHECK_EQUAL(DigiDollar::GetCollateralRatioForLockTime(15 * 365 * DigiDollar::BLOCKS_PER_DAY, params), 200); // 15 years
     BOOST_CHECK_EQUAL(DigiDollar::GetCollateralRatioForLockTime(100 * 365 * DigiDollar::BLOCKS_PER_DAY, params), 200); // 100 years
 
-    // Test very short periods
-    BOOST_CHECK_EQUAL(DigiDollar::GetCollateralRatioForLockTime(1, params), 500); // 1 block
-    BOOST_CHECK_EQUAL(DigiDollar::GetCollateralRatioForLockTime(DigiDollar::BLOCKS_PER_DAY, params), 500); // 1 day
+    // Test very short periods (now map to 1-hour tier = 1000%)
+    BOOST_CHECK_EQUAL(DigiDollar::GetCollateralRatioForLockTime(1, params), 1000); // 1 block (< 240 blocks)
+    BOOST_CHECK_EQUAL(DigiDollar::GetCollateralRatioForLockTime(DigiDollar::BLOCKS_PER_DAY, params), 500); // 1 day (> 240 blocks, maps to 30-day tier)
 }
 
 BOOST_AUTO_TEST_CASE(dca_multiplier_test)
@@ -176,19 +176,21 @@ BOOST_AUTO_TEST_CASE(lock_tier_index_test)
 {
     DigiDollar::ConsensusParams params;
 
-    // Test tier index lookup
-    BOOST_CHECK_EQUAL(DigiDollar::GetLockTierIndex(15 * DigiDollar::BLOCKS_PER_DAY, params), 0); // 30 day tier
-    BOOST_CHECK_EQUAL(DigiDollar::GetLockTierIndex(60 * DigiDollar::BLOCKS_PER_DAY, params), 1); // 90 day tier
-    BOOST_CHECK_EQUAL(DigiDollar::GetLockTierIndex(120 * DigiDollar::BLOCKS_PER_DAY, params), 2); // 180 day tier
-    BOOST_CHECK_EQUAL(DigiDollar::GetLockTierIndex(200 * DigiDollar::BLOCKS_PER_DAY, params), 3); // 365 day tier
+    // Test tier index lookup (tier 0 is now 1-hour tier at 240 blocks)
+    BOOST_CHECK_EQUAL(DigiDollar::GetLockTierIndex(100, params), 0); // 1-hour tier (< 240 blocks)
+    BOOST_CHECK_EQUAL(DigiDollar::GetLockTierIndex(15 * DigiDollar::BLOCKS_PER_DAY, params), 1); // 30 day tier
+    BOOST_CHECK_EQUAL(DigiDollar::GetLockTierIndex(60 * DigiDollar::BLOCKS_PER_DAY, params), 2); // 90 day tier
+    BOOST_CHECK_EQUAL(DigiDollar::GetLockTierIndex(120 * DigiDollar::BLOCKS_PER_DAY, params), 3); // 180 day tier
+    BOOST_CHECK_EQUAL(DigiDollar::GetLockTierIndex(200 * DigiDollar::BLOCKS_PER_DAY, params), 4); // 365 day tier
 
     // Test exact tier boundaries
-    BOOST_CHECK_EQUAL(DigiDollar::GetLockTierIndex(30 * DigiDollar::BLOCKS_PER_DAY, params), 0); // Exactly 30 days
-    BOOST_CHECK_EQUAL(DigiDollar::GetLockTierIndex(90 * DigiDollar::BLOCKS_PER_DAY, params), 1); // Exactly 90 days
-    BOOST_CHECK_EQUAL(DigiDollar::GetLockTierIndex(365 * DigiDollar::BLOCKS_PER_DAY, params), 3); // Exactly 365 days
+    BOOST_CHECK_EQUAL(DigiDollar::GetLockTierIndex(240, params), 0); // Exactly 1 hour (240 blocks)
+    BOOST_CHECK_EQUAL(DigiDollar::GetLockTierIndex(30 * DigiDollar::BLOCKS_PER_DAY, params), 1); // Exactly 30 days
+    BOOST_CHECK_EQUAL(DigiDollar::GetLockTierIndex(90 * DigiDollar::BLOCKS_PER_DAY, params), 2); // Exactly 90 days
+    BOOST_CHECK_EQUAL(DigiDollar::GetLockTierIndex(365 * DigiDollar::BLOCKS_PER_DAY, params), 4); // Exactly 365 days
 
     // Test beyond all tiers
-    BOOST_CHECK_EQUAL(DigiDollar::GetLockTierIndex(15 * 365 * DigiDollar::BLOCKS_PER_DAY, params), 7); // Last tier index
+    BOOST_CHECK_EQUAL(DigiDollar::GetLockTierIndex(15 * 365 * DigiDollar::BLOCKS_PER_DAY, params), 8); // Last tier index (now 8 with new tier)
 }
 
 BOOST_AUTO_TEST_CASE(format_lock_period_test)
@@ -248,8 +250,8 @@ BOOST_AUTO_TEST_CASE(edge_cases_test)
 {
     DigiDollar::ConsensusParams params;
 
-    // Test zero lock time
-    BOOST_CHECK_EQUAL(DigiDollar::GetCollateralRatioForLockTime(0, params), 500); // Should use highest ratio
+    // Test zero lock time (maps to 1-hour tier = 1000%)
+    BOOST_CHECK_EQUAL(DigiDollar::GetCollateralRatioForLockTime(0, params), 1000); // Maps to 1-hour tier
 
     // Test maximum possible values
     BOOST_CHECK_EQUAL(DigiDollar::GetCollateralRatioForLockTime(std::numeric_limits<int64_t>::max(), params), 200);

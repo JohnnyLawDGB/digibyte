@@ -69,6 +69,11 @@ struct TxBuilderRedeemParams {
     std::vector<COutPoint> ddUtxos; // DD UTXOs to burn
     std::vector<COutPoint> feeUtxos; // DGB UTXOs for fees
 
+    // Optional pre-queried position data (caller can provide to avoid UTXO lookups)
+    CAmount collateralAmount = 0;   // Actual DGB collateral locked (0 = not provided)
+    CAmount ddMinted = 0;            // DD amount minted (0 = not provided)
+    uint32_t unlockHeight = 0;       // Unlock height (0 = not provided)
+
     TxBuilderRedeemParams() : ddToRedeem(0), path(RedemptionPath::NORMAL), feeRate(1000) {}
 };
 
@@ -226,10 +231,12 @@ public:
      * Verify redemption conditions are met for the specified path
      * @param params Redemption parameters
      * @param path Redemption path to verify
+     * @param position Collateral position (already queried, avoid duplicate lookups)
      * @return true if conditions are met for this path
      */
     bool VerifyRedemptionConditions(const TxBuilderRedeemParams& params,
-                                   RedemptionPath path) const;
+                                   RedemptionPath path,
+                                   const CCollateralPosition& position) const;
 
     /**
      * Create redemption script for the specified path

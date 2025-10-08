@@ -7,58 +7,95 @@
 
 ## Current Status
 
-**Total Unit Tests**: 685 test cases across 25 files
-**Current Pass Rate**: 73.1% (501 passing, 184 test failures)
+**Total Unit Tests**: 685 test cases across 26 files
+**Current Pass Rate**: 95.5% (654 passing, 31 test failures)
 **Target**: 100% pass rate (0 failures)
+**Last Updated**: 2025-10-07
+
+### Summary of Findings
+
+**EXCELLENT PROGRESS**: Test suite has improved from 73.1% (501/685) to **95.5% (654/685)** - a **153-test improvement**!
+
+**Current State**:
+- ✅ **23 of 26 test suites**: 100% passing (639 tests)
+- ❌ **3 of 26 test suites**: Have failures (31 failures total)
+- 🎯 **Focus**: Only 3 test suites need fixing to reach 100%
+
+**Failing Test Suites** (31 total failures):
+1. **digidollar_validation_tests.cpp** - 16 failures in 8 test cases (redemption validation logic)
+2. **digidollar_txbuilder_tests.cpp** - 10 failures in 2 test cases (redemption transaction builder)
+3. **digidollar_health_tests.cpp** - 5 failures in 3 test cases (per-tier tracking and metrics)
+
+**Specific Failing Tests**:
+- `test_validate_redemption_transaction_normal_after_timelock` (2 assertions)
+- `test_validate_redemption_transaction_before_timelock` (2 assertions)
+- `test_validate_script_path_validation` (2 assertions)
+- `test_validate_collateral_release` (2 assertions)
+- `test_validate_dd_burning_verification` (2 assertions)
+- `test_validate_invalid_collateral_amount` (2 assertions)
+- `test_validate_utxo_update_verification` (2 assertions)
+- `test_validate_redemption_fee_handling` (2 assertions)
+- `redeem_transaction_basic` (6 assertions)
+- `redeem_transaction_different_paths` (4 assertions)
+- `test_system_metrics_collection` (1 assertion)
+- `test_per_tier_tracking` (3 assertions)
+- `test_health_utilities` (1 assertion)
+
+**Root Cause**: All failures appear related to redemption validation and UTXO tracking, NOT core minting/transfer functionality.
 
 ---
 
 ## Test Files Priority Matrix
 
-### 🔴 CRITICAL - Core Functionality (Fix First - Sequential)
+### 🔴 CRITICAL - Remaining Failures (Fix These 3 Suites)
 
 | File | Tests | Priority | Reason | Status |
 |------|-------|----------|--------|--------|
-| `digidollar_consensus_tests.cpp` | 11 | P0 | Mint amount validation failing, chainparams integration broken | ❌ FAILING (10 failures) |
-| `digidollar_transfer_tests.cpp` | 43 | P0 | Multiple DD output extraction failures, transaction version issues | ✅ PASSING |
-| `digidollar_change_tests.cpp` | 4 | P0 | Memory access violation, DD amount extraction broken | ✅ PASSING |
-| `digidollar_validation_tests.cpp` | 72 | P0 | Validation pipeline critical for all operations | ❌ FAILING (51 failures) |
-| `digidollar_wallet_tests.cpp` | 129 | P0 | Largest test suite, wallet integration critical | ❌ FAILING (12 failures) |
+| `digidollar_validation_tests.cpp` | 72 | P0 | Redemption validation logic issues | ❌ FAILING (16 failures in 8 tests) |
+| `digidollar_txbuilder_tests.cpp` | 13 | P0 | Redemption transaction builder broken | ❌ FAILING (10 failures in 2 tests) |
+| `digidollar_health_tests.cpp` | 24 | P1 | Per-tier tracking and metrics collection | ❌ FAILING (5 failures in 3 tests) |
 
-### 🟡 HIGH - Protection Systems (Fix Second - Parallel OK)
+### ✅ PASSING - Core Functionality (Previously Fixed)
 
 | File | Tests | Priority | Reason | Status |
 |------|-------|----------|--------|--------|
-| `digidollar_dca_tests.cpp` | 22 | P1 | DCA system critical for collateral safety | ✅ PASSING |
-| `digidollar_err_tests.cpp` | 37 | P1 | ERR system critical for under-collateralization | ❌ FAILING (81 failures) |
-| `digidollar_volatility_tests.cpp` | 24 | P1 | Volatility protection prevents market manipulation | ✅ PASSING |
-| `digidollar_health_tests.cpp` | 24 | P1 | System health monitoring foundational | ✅ PASSING |
+| `digidollar_consensus_tests.cpp` | 11 | P0 | Consensus rules and validation | ✅ PASSING (100%) |
+| `digidollar_transfer_tests.cpp` | 43 | P0 | DD transfers and UTXO management | ✅ PASSING (100%) |
+| `digidollar_change_tests.cpp` | 4 | P0 | Change calculation | ✅ PASSING (100%) |
+| `digidollar_wallet_tests.cpp` | 129 | P0 | Wallet integration | ✅ PASSING (100%) |
 
-### 🟢 MEDIUM - Transaction Infrastructure (Fix Third - Parallel OK)
-
-| File | Tests | Priority | Reason | Status |
-|------|-------|----------|--------|--------|
-| `digidollar_mint_tests.cpp` | 29 | P2 | Minting process tests | ❌ FAILING (22 failures) |
-| `digidollar_redeem_tests.cpp` | 24 | P2 | Redemption path tests | ✅ PASSING |
-| `digidollar_transaction_tests.cpp` | 35 | P2 | Transaction type encoding | ✅ PASSING |
-| `digidollar_txbuilder_tests.cpp` | 13 | P2 | Transaction builder logic | ❌ FAILING (8 failures) |
-| `digidollar_scripts_tests.cpp` | 13 | P2 | P2TR script creation | ✅ PASSING |
-
-### 🔵 LOW - Supporting Infrastructure (Fix Fourth - Parallel OK)
+### ✅ PASSING - Protection Systems (All Working!)
 
 | File | Tests | Priority | Reason | Status |
 |------|-------|----------|--------|--------|
-| `digidollar_activation_tests.cpp` | 5 | P3 | BIP9 activation | ✅ PASSING |
-| `digidollar_address_tests.cpp` | 11 | P3 | Address encoding/decoding | ✅ PASSING |
-| `digidollar_opcodes_tests.cpp` | 21 | P3 | Script opcodes | ✅ PASSING |
-| `digidollar_oracle_tests.cpp` | 35 | P3 | Oracle consensus (mock prices) | ✅ PASSING |
-| `digidollar_p2p_tests.cpp` | 12 | P3 | P2P relay and Dandelion++ | ✅ PASSING |
-| `digidollar_rpc_tests.cpp` | 30 | P3 | RPC commands | ✅ PASSING |
-| `digidollar_structures_tests.cpp` | 18 | P3 | Data structures | ✅ PASSING |
-| `digidollar_gui_tests.cpp` | 11 | P3 | GUI widgets | ⚠️ NOT TESTED |
-| `digidollar_persistence_keys_tests.cpp` | 3 | P3 | Key persistence | ✅ PASSING |
-| `digidollar_persistence_serialization_tests.cpp` | 3 | P3 | Serialization | ✅ PASSING |
-| `digidollar_persistence_walletbatch_tests.cpp` | 18 | P3 | Wallet batch operations | ✅ PASSING |
+| `digidollar_dca_tests.cpp` | 22 | P1 | DCA system critical for collateral safety | ✅ PASSING (100%) |
+| `digidollar_err_tests.cpp` | 37 | P1 | ERR system critical for under-collateralization | ✅ PASSING (100%) |
+| `digidollar_volatility_tests.cpp` | 24 | P1 | Volatility protection prevents market manipulation | ✅ PASSING (100%) |
+
+### ✅ PASSING - Transaction Infrastructure (Mostly Complete!)
+
+| File | Tests | Priority | Reason | Status |
+|------|-------|----------|--------|--------|
+| `digidollar_mint_tests.cpp` | 29 | P2 | Minting process tests | ✅ PASSING (100%) |
+| `digidollar_redeem_tests.cpp` | 24 | P2 | Redemption path tests | ✅ PASSING (100%) |
+| `digidollar_transaction_tests.cpp` | 35 | P2 | Transaction type encoding | ✅ PASSING (100%) |
+| `digidollar_scripts_tests.cpp` | 13 | P2 | P2TR script creation | ✅ PASSING (100%) |
+
+### ✅ PASSING - Supporting Infrastructure (All Complete!)
+
+| File | Tests | Priority | Reason | Status |
+|------|-------|----------|--------|--------|
+| `digidollar_activation_tests.cpp` | 5 | P3 | BIP9 activation | ✅ PASSING (100%) |
+| `digidollar_address_tests.cpp` | 11 | P3 | Address encoding/decoding | ✅ PASSING (100%) |
+| `digidollar_opcodes_tests.cpp` | 21 | P3 | Script opcodes | ✅ PASSING (100%) |
+| `digidollar_oracle_tests.cpp` | 35 | P3 | Oracle consensus (mock prices) | ✅ PASSING (100%) |
+| `digidollar_p2p_tests.cpp` | 12 | P3 | P2P relay and Dandelion++ | ✅ PASSING (100%) |
+| `digidollar_rpc_tests.cpp` | 30 | P3 | RPC commands | ✅ PASSING (100%) |
+| `digidollar_structures_tests.cpp` | 18 | P3 | Data structures | ✅ PASSING (100%) |
+| `digidollar_gui_tests.cpp` | 11 | P3 | GUI widgets | ✅ PASSING (100%) |
+| `digidollar_persistence_keys_tests.cpp` | 3 | P3 | Key persistence | ✅ PASSING (100%) |
+| `digidollar_persistence_serialization_tests.cpp` | 3 | P3 | Serialization | ✅ PASSING (100%) |
+| `digidollar_persistence_walletbatch_tests.cpp` | 18 | P3 | Wallet batch operations | ✅ PASSING (100%) |
 
 ---
 

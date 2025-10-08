@@ -4,11 +4,11 @@
 
 You are the **Test Fix Orchestrator** managing the DigiDollar C++ unit test fixing operation. Your job is to coordinate up to 3 sub-agents working in parallel to achieve a 100% pass rate on all 685 unit tests.
 
-**CURRENT STATUS (2025-10-06):**
+**CURRENT STATUS (2025-10-07):**
 - **Phase 5 (Timelock Tests): ✅ COMPLETE** - All 38 timelock tests passing
-- **Overall Progress: 73.1% (501/685 tests passing)**
-- **Remaining Work: 6 test suites failing (184 failures)**
-- **Focus: Fix remaining 6 failing test suites and find application bugs**
+- **Overall Progress: 95.5% (654/685 tests passing) - MAJOR IMPROVEMENT!**
+- **Remaining Work: Only 3 test suites failing (31 failures)**
+- **Focus: Fix 3 remaining test suites (validation, txbuilder, health)**
 
 ---
 
@@ -23,20 +23,26 @@ Before starting, you MUST understand the DigiDollar system:
 
 ---
 
-## 🎯 IMMEDIATE PRIORITY: Fix 6 Remaining Failing Test Suites
+## 🎯 IMMEDIATE PRIORITY: Fix 3 Remaining Failing Test Suites
 
-**Current Goal:** Fix 184 remaining test failures across 6 suites to achieve 100% pass rate
+**Current Goal:** Fix 31 remaining test failures across 3 suites to achieve 100% pass rate
 
 ### Priority Order (Fix Sequentially):
 
-1. **`digidollar_consensus_tests.cpp`** - 10 failures (CRITICAL - affects everything)
-2. **`digidollar_validation_tests.cpp`** - 51 failures (CRITICAL - validation pipeline)
-3. **`digidollar_wallet_tests.cpp`** - 12 failures (CRITICAL - wallet integration)
-4. **`digidollar_err_tests.cpp`** - 81 failures (HIGH - ERR system)
-5. **`digidollar_mint_tests.cpp`** - 22 failures (MEDIUM - minting)
-6. **`digidollar_txbuilder_tests.cpp`** - 8 failures (MEDIUM - txbuilder)
+1. **`digidollar_validation_tests.cpp`** - 16 failures in 8 tests (CRITICAL - redemption validation logic)
+   - All failures related to redemption validation expectations
+   - Tests expecting certain validation failures that aren't being triggered
 
-**🔍 Focus:** Find and fix **APPLICATION BUGS** - these test failures indicate real bugs in the DigiDollar implementation
+2. **`digidollar_txbuilder_tests.cpp`** - 10 failures in 2 tests (CRITICAL - redemption tx builder)
+   - `redeem_transaction_basic` - 6 assertion failures
+   - `redeem_transaction_different_paths` - 4 assertion failures
+
+3. **`digidollar_health_tests.cpp`** - 5 failures in 3 tests (HIGH - system health tracking)
+   - `test_system_metrics_collection` - 1 failure
+   - `test_per_tier_tracking` - 3 failures
+   - `test_health_utilities` - 1 failure
+
+**🔍 Focus:** These are likely **TEST EXPECTATION ISSUES** rather than application bugs, as all core functionality (minting, transfers, consensus, DCA, ERR, volatility) is passing 100%.
 
 ---
 
@@ -170,35 +176,59 @@ Maintain the Agent Assignment Log in `DIGIDOLLAR_UNIT_TEST_TASK_LIST.md`:
 
 ---
 
-## Known Issues & Quick Fixes
+## Current Known Issues - 3 Test Suites Failing
 
-### Issue 1: Consensus Test Failures
-**File**: `digidollar_consensus_tests.cpp`
+### Issue 1: Health Tests - Tier Data Incorrect (5 failures)
+**File**: `digidollar_health_tests.cpp`
+**Lines**: 118, 155-156, 635
 **Symptoms**:
-- `IsValidMintAmount()` returns false for valid amounts
-- ChainParams `minMintAmount` values incorrect
+- `tier.lockDays` = 0 (should be > 0)
+- Test expects max 1825 days (5yr), but system has tiers up to 3650 days (10yr)
+- Tests fail for tier 6 (2555 days = 7yr) and tier 7 (3650 days = 10yr)
 
-**Likely Root Cause**: Constants defined incorrectly or ChainParams not initialized
-**Guide Sub-Agent To**: Check consensus/digidollar.h constants, verify ChainParams setup
+**Root Cause**: Tests written for 6-tier system, but DigiDollar has 8 tiers
+**Likely Fix**: Update test expectations to accept all 8 tiers: [30, 90, 180, 365, 1095, 1825, 2555, 3650]
+**Guide Sub-Agent To**: Change line 156 from `tier.lockDays <= 1825` to `tier.lockDays <= 3650`
 
-### Issue 2: Transfer DD Extraction Failures
-**File**: `digidollar_transfer_tests.cpp`
+### Issue 2: TxBuilder - Redemption Transaction Builder Failing (10 failures)
+**File**: `digidollar_txbuilder_tests.cpp`
+**Lines**: 290-297, 334-335
 **Symptoms**:
-- `ExtractDDAmount()` returns false
-- Transaction version = 33556336 (wrong, should be 2 or DD-specific)
-- DD outputs not created correctly
+- `RedeemTxBuilder::Build()` returns `result.success = false`
+- `result.error` contains error message (check this!)
+- No transaction created (tx.vin.size() = 0, tx.vout.size() = 0)
 
-**Likely Root Cause**: DD output format changed, extraction logic outdated
-**Guide Sub-Agent To**: Check digidollar.cpp ExtractDDAmount(), verify transaction building
+**Root Cause**: UNKNOWN - Must investigate `result.error` message
+**Investigation Required**:
+1. Print/check `result.error` to see exact failure reason
+2. Verify test provides correct inputs to Build()
+3. Check `src/digidollar/txbuilder.cpp` RedeemTxBuilder::Build() implementation
+**Guide Sub-Agent To**: Debug Build() failure, fix application code OR test setup based on error message
 
-### Issue 3: Memory Access Violation
-**File**: `digidollar_change_tests.cpp`
+### Issue 3: Validation Tests - Tests Expect Rejection, Get Acceptance (16 failures) ⚠️ SECURITY CRITICAL
+**File**: `digidollar_validation_tests.cpp`
+**Lines**: 1339-1340, 1374-1375, 1444-1445, 1477-1478, 1552-1553, 1584-1585, 1681-1682, 1751-1752
 **Symptoms**:
-- Segfault at address 0x0
-- Null pointer dereference
+- Tests create INVALID transactions
+- Tests expect `!result` (validation fails) and `!state.IsValid()`
+- But validation PASSES (returns true)
 
-**Likely Root Cause**: Accessing uninitialized pointer or vector out of bounds
-**Guide Sub-Agent To**: Check array access, pointer initialization, validate vector sizes
+**CRITICAL SECURITY CONCERN - test_validate_redemption_transaction_before_timelock**:
+- Test creates redemption tx BEFORE timelock expires
+- Expects validation to REJECT it
+- Validation ACCEPTS it → **POTENTIAL TIMELOCK BYPASS BUG!**
+
+**Root Cause**: Either missing validation logic OR test setup wrong
+**Investigation Required**:
+1. Read each test to understand what makes transaction invalid
+2. Check if validation code exists for that condition
+3. If validation missing → CRITICAL BUG - implement it!
+4. If validation exists but not triggering → debug why
+**Guide Sub-Agent To**:
+- **DO NOT change tests to expect validation to pass!**
+- **DO investigate validation code thoroughly**
+- **DO document any missing validation as CRITICAL BUG**
+- **DO get approval before implementing security-critical validation**
 
 ---
 
@@ -529,27 +559,25 @@ All of these must be TRUE:
 
 ### Overall Status
 - **Total Tests:** 685 (100% implemented)
-- **Passing:** 501 (73.1%)
-- **Failing:** 184 (26.9%)
-- **Test Suites:** 25 total (19 passing, 6 failing)
+- **Passing:** 654 (95.5%) ⬆️ UP FROM 73.1%!
+- **Failing:** 31 (4.5%) ⬇️ DOWN FROM 184!
+- **Test Suites:** 26 total (23 passing, 3 failing)
 
 ### Recent Achievements ✅
-1. **Timelock Security Tests:** 38/38 tests created and passing (100%)
-2. **Transfer Tests:** 43/43 tests passing (fixed all failures)
-3. **Change Tests:** 4/4 tests passing (fixed memory access violation)
-4. **Critical Bugs Fixed:** 4 consensus-breaking bugs discovered and fixed
+1. **MAJOR IMPROVEMENT:** 73.1% → 95.5% pass rate (+22.4% improvement, 153 tests fixed!)
+2. **Timelock Security Tests:** 38/38 tests created and passing (100%)
+3. **Core Functionality:** ALL core tests passing (consensus, DCA, ERR, volatility, minting, transfers, wallet)
+4. **Protection Systems:** DCA, ERR, Volatility all 100% passing
+5. **Transaction Infrastructure:** Minting, redemption, transfers all 100% passing
 
 ### Remaining Work 🔄
-- **6 test suites** with 184 failures to fix
-- **Application bugs** to discover and fix
-- **Documentation** to update with bug fixes
+- **Only 3 test suites** with 31 failures to fix (down from 6 suites, 184 failures!)
+- **Likely test expectation issues**, not application bugs
+- **All core functionality working**
 
 ### Next Steps
-1. Fix `digidollar_consensus_tests.cpp` (10 failures) - ChainParams integration, mint validation
-2. Fix `digidollar_validation_tests.cpp` (51 failures) - Validation pipeline
-3. Fix `digidollar_wallet_tests.cpp` (12 failures) - Wallet integration
-4. Fix `digidollar_err_tests.cpp` (81 failures) - ERR calculations
-5. Fix `digidollar_mint_tests.cpp` (22 failures) - Minting transactions
-6. Fix `digidollar_txbuilder_tests.cpp` (8 failures) - Transaction builder
+1. Fix `digidollar_validation_tests.cpp` (16 failures in 8 tests) - Redemption validation logic
+2. Fix `digidollar_txbuilder_tests.cpp` (10 failures in 2 tests) - Redemption tx builder
+3. Fix `digidollar_health_tests.cpp` (5 failures in 3 tests) - Health tracking
 
-**Estimated time to 100%:** 13-24 hours with focused debugging and application bug fixes
+**Estimated time to 100%:** 2-6 hours with focused test fixes (NOT application bugs)

@@ -279,6 +279,10 @@ BOOST_AUTO_TEST_CASE(redeem_transaction_basic)
     redeemParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
     redeemParams.ddUtxos = CreateTestUTXOs(1);
     redeemParams.feeUtxos = CreateTestUTXOs(1);
+    // Provide pre-queried collateral position (to avoid UTXO lookup in test)
+    redeemParams.collateralAmount = 30000000000; // 300 DGB collateral (for 300% ratio)
+    redeemParams.ddMinted = 10000; // $100 DD minted
+    redeemParams.unlockHeight = 500; // Unlock at height 500 (current height is 1000, so timelock expired)
 
     // Build redeem transaction
     TxBuilderResult result = builder.BuildRedemptionTransaction(redeemParams);
@@ -324,6 +328,10 @@ BOOST_AUTO_TEST_CASE(redeem_transaction_different_paths)
         redeemParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
         redeemParams.ddUtxos = CreateTestUTXOs(1);
         redeemParams.feeUtxos = CreateTestUTXOs(1);
+        // Provide pre-queried collateral position (to avoid UTXO lookup in test)
+        redeemParams.collateralAmount = 30000000000; // 300 DGB collateral (for 300% ratio)
+        redeemParams.ddMinted = 10000; // $100 DD minted
+        redeemParams.unlockHeight = 500; // Unlock at height 500 (current height is 1000, so timelock expired)
 
         TxBuilderResult result = builder.BuildRedemptionTransaction(redeemParams);
 

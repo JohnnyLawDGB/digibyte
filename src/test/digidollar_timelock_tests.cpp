@@ -1579,7 +1579,7 @@ BOOST_AUTO_TEST_CASE(timelock_schnorr_validation)
     CMutableTransaction txBadLock = tx;
     txBadLock.nLockTime = lockHeight - 1; // Too early
 
-    const CTransaction txBadLockConst(txBadLock);
+    CTransaction txBadLockConst(txBadLock);
     BOOST_CHECK(!VerifyScript(CScript(), timelockScript, nullptr, SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY,
                              TransactionSignatureChecker(&txBadLockConst, 0, 0, MissingDataBehavior::ASSERT_FAIL),
                              &error));
@@ -1629,7 +1629,7 @@ BOOST_AUTO_TEST_CASE(timelock_ecdsa_validation)
     txEarly.nLockTime = lockHeight - 1; // Before lock
 
     ScriptError error;
-    const CTransaction txEarlyConst(txEarly);
+    CTransaction txEarlyConst(txEarly);
     BOOST_CHECK(!VerifyScript(CScript(), timelockScript, nullptr, SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY,
                              TransactionSignatureChecker(&txEarlyConst, 0, 0, MissingDataBehavior::ASSERT_FAIL),
                              &error));
@@ -1648,7 +1648,7 @@ BOOST_AUTO_TEST_CASE(timelock_ecdsa_validation)
     CScript invalidSigScript = CScript() << mockECDSASig << ToByteVector(pubkey);
 
     // Timelock valid, but signature invalid
-    const CTransaction txConst(tx);
+    CTransaction txConst(tx);
     BOOST_CHECK(!VerifyScript(invalidSigScript, timelockScript, nullptr, SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY,
                              TransactionSignatureChecker(&txConst, 0, 0, MissingDataBehavior::ASSERT_FAIL),
                              &error));
@@ -1706,7 +1706,7 @@ BOOST_AUTO_TEST_CASE(timelock_ecdsa_validation)
 
     // Before timelock
     txMulti.nLockTime = lockHeight2 - 1;
-    const CTransaction txMultiConst(txMulti);
+    CTransaction txMultiConst(txMulti);
     BOOST_CHECK(!VerifyScript(CScript(), multisigTimelock, nullptr, SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY,
                              TransactionSignatureChecker(&txMultiConst, 0, 0, MissingDataBehavior::ASSERT_FAIL),
                              &error));

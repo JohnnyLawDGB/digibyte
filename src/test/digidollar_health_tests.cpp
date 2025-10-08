@@ -115,7 +115,7 @@ BOOST_FIXTURE_TEST_CASE(test_system_metrics_collection, DigiDollarHealthTestSetu
 
     // Check tier structure
     for (const auto& tier : metrics.tiers) {
-        BOOST_CHECK_GT(tier.lockDays, 0);
+        BOOST_CHECK_GE(tier.lockDays, 0); // Tier 0 has lockDays=0 (240 blocks = ~1 hour for testing)
         BOOST_CHECK_GE(tier.ddMinted, 0);
         BOOST_CHECK_GE(tier.dgbLocked, 0);
         BOOST_CHECK_GE(tier.positions, 0);
@@ -152,8 +152,9 @@ BOOST_FIXTURE_TEST_CASE(test_per_tier_tracking, DigiDollarHealthTestSetup)
     // Test individual tier metrics
     for (const auto& tier : tiers) {
         // Lock days should be reasonable
-        BOOST_CHECK_GE(tier.lockDays, 30);
-        BOOST_CHECK_LE(tier.lockDays, 1825); // Max 5 years
+        // System has 9 tiers: 240 blocks (~1hr), 30 days, 90 days, 180 days, 365 days, 1095 days, 1825 days, 2555 days, 3650 days
+        BOOST_CHECK_GE(tier.lockDays, 0);    // Tier 0 = 240 blocks (~1 hour for testing/onboarding)
+        BOOST_CHECK_LE(tier.lockDays, 3650); // Max 10 years (tier 8)
 
         // Amounts should be consistent
         if (tier.positions > 0) {
@@ -630,10 +631,11 @@ BOOST_FIXTURE_TEST_CASE(test_health_utilities, DigiDollarHealthTestSetup)
     BOOST_CHECK_GE(GetTierIndex(1825), 0);
 
     // Test lock days conversion
-    for (int tier = 0; tier < 6; tier++) {
+    // System now has 9 tiers (0-8): 240 blocks, 30d, 90d, 180d, 365d, 1095d, 1825d, 2555d, 3650d
+    for (int tier = 0; tier < 9; tier++) {
         int lockDays = GetTierLockDays(tier);
-        BOOST_CHECK_GT(lockDays, 0);
-        BOOST_CHECK_LE(lockDays, 1825); // 5 years max
+        BOOST_CHECK_GE(lockDays, 0);    // Tier 0 has lockDays=0 (240 blocks = ~1 hour)
+        BOOST_CHECK_LE(lockDays, 3650); // 10 years max (tier 8)
     }
 
     // Test health ratio calculation

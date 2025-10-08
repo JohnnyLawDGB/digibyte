@@ -341,6 +341,12 @@ bool GetScriptOp(CScriptBase::const_iterator& pc, CScriptBase::const_iterator en
 
 bool IsOpSuccess(const opcodetype& opcode)
 {
+    // CRITICAL: Exclude DigiDollar opcodes (0xbb-0xbe) from OP_SUCCESSx range
+    // These opcodes are used for DigiDollar redemption scripts and must be executed
+    if (opcode >= OP_DIGIDOLLAR && opcode <= OP_CHECKCOLLATERAL) {
+        return false;  // OP_DIGIDOLLAR=0xbb, OP_DDVERIFY=0xbc, OP_CHECKPRICE=0xbd, OP_CHECKCOLLATERAL=0xbe
+    }
+
     return opcode == 80 || opcode == 98 || (opcode >= 126 && opcode <= 129) ||
            (opcode >= 131 && opcode <= 134) || (opcode >= 137 && opcode <= 138) ||
            (opcode >= 141 && opcode <= 142) || (opcode >= 149 && opcode <= 153) ||

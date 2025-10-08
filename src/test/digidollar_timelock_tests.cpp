@@ -1580,8 +1580,9 @@ BOOST_AUTO_TEST_CASE(timelock_schnorr_validation)
     txBadLock.nLockTime = lockHeight - 1; // Too early
 
     CTransaction txBadLockConst(txBadLock);
+    TransactionSignatureChecker badLockChecker(&txBadLockConst, 0, 0, MissingDataBehavior::ASSERT_FAIL);
     BOOST_CHECK(!VerifyScript(CScript(), timelockScript, nullptr, SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY,
-                             TransactionSignatureChecker(&txBadLockConst, 0, 0, MissingDataBehavior::ASSERT_FAIL),
+                             badLockChecker,
                              &error));
     BOOST_TEST_MESSAGE("✓ Transaction nLockTime must be >= CLTV value");
 
@@ -1649,8 +1650,9 @@ BOOST_AUTO_TEST_CASE(timelock_ecdsa_validation)
 
     // Timelock valid, but signature invalid
     CTransaction txConst(tx);
+    TransactionSignatureChecker txChecker(&txConst, 0, 0, MissingDataBehavior::ASSERT_FAIL);
     BOOST_CHECK(!VerifyScript(invalidSigScript, timelockScript, nullptr, SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY,
-                             TransactionSignatureChecker(&txConst, 0, 0, MissingDataBehavior::ASSERT_FAIL),
+                             txChecker,
                              &error));
     BOOST_TEST_MESSAGE("✓ Invalid ECDSA signature rejected after timelock check");
 

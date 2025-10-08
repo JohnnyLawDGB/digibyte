@@ -1854,25 +1854,41 @@ bool DigiDollarWallet::RedeemDigiDollar(const uint256& dd_timelock_id, const CAm
         }
 
         // Select DGB UTXOs for fees
-        CAmount estimatedFee = 10000; // 0.0001 DGB estimate
+        // CRITICAL FIX: Properly estimate redemption transaction fees
+        // Redemption tx structure: 3 inputs (collateral + DD + fee), 2 outputs (return + change)
+        // Approximate vsize: ~400 bytes with script-path spending
+        // Fee calculation: vsize * feeRate / 1000 (feeRate is in sat/kB)
+        CAmount estimatedFee = (400 * params.feeRate) / 1000; // Proper fee estimate
+        // Add safety margin
+        estimatedFee = estimatedFee + (estimatedFee * 50 / 100); // 50% margin for worst case
+        LogPrintf("DigiDollar: Estimated redemption fee: %d sats (%.8f DGB)\n", estimatedFee, estimatedFee / 100000000.0);
+
         CAmount selectedFeeTotal = 0;
         if (!SelectFeeCoins(estimatedFee, params.feeUtxos, selectedFeeTotal)) {
             LogPrintf("DigiDollar: Insufficient DGB balance for fees\n");
             return false;
         }
 
+        LogPrintf("DigiDollar: CALLING BuildRedemptionTransaction now...\n");
         auto result = builder.BuildRedemptionTransaction(params);
+        LogPrintf("DigiDollar: BuildRedemptionTransaction returned success=%d, error='%s'\n",
+                  result.success, result.error.c_str());
         if (!result.success) {
             LogPrintf("DigiDollar: Redemption transaction build failed - %s\n", result.error);
             return false;
         }
+        LogPrintf("DigiDollar: BuildRedemptionTransaction SUCCESS, transaction has %d inputs and %d outputs\n",
+                  result.tx.vin.size(), result.tx.vout.size());
 
-        // Sign the transaction
+        // Sign the transaction (includes collateral, DD, and fee inputs)
+        LogPrintf("DigiDollar: ABOUT TO CALL SignRedemptionTransaction with %d DD inputs and %d fee inputs\n",
+                  params.ddUtxos.size(), params.feeUtxos.size());
         CMutableTransaction mtx(result.tx);
-        if (!SignTransaction(mtx, params.ddUtxos, params.feeUtxos)) {
+        if (!SignRedemptionTransaction(mtx, params.collateralOutpoint, params.ddUtxos, params.feeUtxos, ownerKey)) {
             LogPrintf("DigiDollar: Failed to sign redemption transaction\n");
             return false;
         }
+        LogPrintf("DigiDollar: SignRedemptionTransaction RETURNED SUCCESS\n");
 
         tx_out = MakeTransactionRef(mtx);
 
@@ -2704,9 +2720,11 @@ bool DigiDollarWallet::SignDDInputs(CMutableTransaction& tx,
         // Generate auxiliary randomness for Schnorr signing
         uint256 aux = GetRandHash();
 
-        // Sign with Schnorr using the INTERNAL KEY (not tweaked!)
-        // For script-path spending, we sign with the internal key and provide the leaf hash
-        if (!ownerKey.SignSchnorr(sighash, sig, &leaf_hash, aux)) {
+        // CRITICAL FIX: Sign with UNTWEAKED internal key for script-path spending
+        // The leaf hash is already committed in the sighash (via execdata.m_tapleaf_hash)
+        // Passing &leaf_hash would TWEAK the key (only correct for key-path spending)
+        // For script-path: Sign with untweaked key, verify against pubkey in script
+        if (!ownerKey.SignSchnorr(sighash, sig, nullptr, aux)) {
             LogPrintf("DigiDollar: SignDDInputs - Failed to create Schnorr signature for input %d\n", i);
             return false;
         }
@@ -2854,6 +2872,411 @@ bool DigiDollarWallet::SignTransaction(CMutableTransaction& tx,
     }
 
     LogPrintf("DigiDollar: SignTransaction - Successfully signed all inputs\n");
+    return true;
+}
+
+// =============================================================================
+// REDEMPTION-SPECIFIC SIGNING (INCLUDES COLLATERAL INPUT)
+// =============================================================================
+
+bool DigiDollarWallet::SignRedemptionTransaction(CMutableTransaction& tx,
+                                                  const COutPoint& collateral_outpoint,
+                                                  const std::vector<COutPoint>& dd_utxos,
+                                                  const std::vector<COutPoint>& fee_utxos,
+                                                  const CKey& owner_key) {
+    LogPrintf("DigiDollar: SignRedemptionTransaction - Signing collateral + %d DD inputs + %d fee inputs\n",
+              dd_utxos.size(), fee_utxos.size());
+
+    if (!m_wallet) {
+        LogPrintf("DigiDollar: SignRedemptionTransaction - No wallet available\n");
+        return false;
+    }
+
+    LOCK(m_wallet->cs_wallet);
+
+    // Build coins map for ALL inputs (collateral + DD + fee)
+    std::map<COutPoint, Coin> coins;
+
+    // 1. Add COLLATERAL input (index 0) to coins map
+    const auto collateral_mi = m_wallet->mapWallet.find(collateral_outpoint.hash);
+    if (collateral_mi == m_wallet->mapWallet.end() || collateral_outpoint.n >= collateral_mi->second.tx->vout.size()) {
+        LogPrintf("DigiDollar: SignRedemptionTransaction - Failed to find collateral transaction %s in wallet\n",
+                  collateral_outpoint.hash.ToString());
+        return false;
+    }
+
+    const wallet::CWalletTx& collateral_wtx = collateral_mi->second;
+    const CTxOut& collateral_txout = collateral_wtx.tx->vout[collateral_outpoint.n];
+    int collateral_height = collateral_wtx.state<wallet::TxStateConfirmed>() ?
+                           collateral_wtx.state<wallet::TxStateConfirmed>()->confirmed_block_height : 0;
+
+    coins[collateral_outpoint] = Coin(collateral_txout, collateral_height, collateral_wtx.IsCoinBase());
+
+    LogPrintf("DigiDollar: SignRedemptionTransaction - Added collateral coin for %s:%d at height %d, value %d\n",
+              collateral_outpoint.hash.ToString(), collateral_outpoint.n, collateral_height, collateral_txout.nValue);
+
+    // 2. Add DD UTXOs to coins map (inputs 1+)
+    for (const auto& outpoint : dd_utxos) {
+        const auto mi = m_wallet->mapWallet.find(outpoint.hash);
+        if (mi == m_wallet->mapWallet.end() || outpoint.n >= mi->second.tx->vout.size()) {
+            LogPrintf("DigiDollar: SignRedemptionTransaction - Failed to find DD transaction %s in wallet\n",
+                      outpoint.hash.ToString());
+            return false;
+        }
+
+        const wallet::CWalletTx& wtx = mi->second;
+        const CTxOut& txout = wtx.tx->vout[outpoint.n];
+        int prev_height = wtx.state<wallet::TxStateConfirmed>() ?
+                         wtx.state<wallet::TxStateConfirmed>()->confirmed_block_height : 0;
+
+        coins[outpoint] = Coin(txout, prev_height, wtx.IsCoinBase());
+
+        LogPrintf("DigiDollar: SignRedemptionTransaction - Added DD coin for %s:%d at height %d\n",
+                  outpoint.hash.ToString(), outpoint.n, prev_height);
+    }
+
+    // 3. Add fee UTXOs to coins map
+    for (const auto& outpoint : fee_utxos) {
+        const auto mi = m_wallet->mapWallet.find(outpoint.hash);
+        if (mi == m_wallet->mapWallet.end() || outpoint.n >= mi->second.tx->vout.size()) {
+            LogPrintf("DigiDollar: SignRedemptionTransaction - Failed to find fee transaction %s in wallet\n",
+                      outpoint.hash.ToString());
+            return false;
+        }
+
+        const wallet::CWalletTx& wtx = mi->second;
+        const CTxOut& txout = wtx.tx->vout[outpoint.n];
+        int prev_height = wtx.state<wallet::TxStateConfirmed>() ?
+                         wtx.state<wallet::TxStateConfirmed>()->confirmed_block_height : 0;
+
+        coins[outpoint] = Coin(txout, prev_height, wtx.IsCoinBase());
+
+        LogPrintf("DigiDollar: SignRedemptionTransaction - Added fee coin for %s:%d at height %d, value %d\n",
+                  outpoint.hash.ToString(), outpoint.n, prev_height, txout.nValue);
+    }
+
+    // 4. Sign fee inputs FIRST using wallet's standard signing
+    if (!fee_utxos.empty()) {
+        LogPrintf("DigiDollar: SignRedemptionTransaction - Signing fee inputs FIRST using wallet's SignTransaction\n");
+
+        bool sign_result = m_wallet->SignTransaction(tx);
+        LogPrintf("DigiDollar: SignRedemptionTransaction - SignTransaction returned: %s\n", sign_result ? "true" : "false");
+
+        // Verify that fee inputs were actually signed
+        // Fee inputs start at index (1 + dd_utxos.size())
+        size_t fee_input_start = 1 + dd_utxos.size();
+        for (size_t i = fee_input_start; i < tx.vin.size(); i++) {
+            bool has_witness = !tx.vin[i].scriptWitness.IsNull() && !tx.vin[i].scriptWitness.stack.empty();
+            bool has_scriptsig = !tx.vin[i].scriptSig.empty();
+
+            if (!has_witness && !has_scriptsig) {
+                LogPrintf("DigiDollar: SignRedemptionTransaction - Fee input %d was NOT signed\n", i);
+                return false;
+            }
+
+            LogPrintf("DigiDollar: SignRedemptionTransaction - Fee input %d signed successfully\n", i);
+        }
+    }
+
+    // 5. Create PrecomputedTransactionData for proper Taproot sighash calculation
+    std::vector<CTxOut> prevouts;
+    for (size_t idx = 0; idx < tx.vin.size(); idx++) {
+        const auto& input = tx.vin[idx];
+        const Coin& coin = coins.at(input.prevout);
+        prevouts.push_back(coin.out);
+        LogPrintf("DigiDollar: SignRedemptionTransaction - Prevout %d: amount=%d, scriptPubKey=%s\n",
+                  idx, coin.out.nValue, HexStr(coin.out.scriptPubKey));
+    }
+
+    PrecomputedTransactionData txdata;
+    txdata.Init(tx, std::move(prevouts), /* force=*/ true);
+
+    // 6. Sign COLLATERAL input at index 0 (script-path spending)
+    {
+        LogPrintf("DigiDollar: SignRedemptionTransaction - Signing collateral input at index 0\n");
+
+        // Get the position data to reconstruct the MAST tree
+        WalletCollateralPosition position;
+        bool found_position = false;
+        for (const auto& [pos_id, pos] : collateral_positions) {
+            if (pos_id == collateral_outpoint.hash) {
+                position = pos;
+                found_position = true;
+                break;
+            }
+        }
+
+        if (!found_position) {
+            LogPrintf("DigiDollar: SignRedemptionTransaction - Position not found for %s\n",
+                      collateral_outpoint.hash.ToString());
+            return false;
+        }
+
+        // Use the owner_key parameter - it should be the correct key from RPC
+        CPubKey ownerPubKey = owner_key.GetPubKey();
+        XOnlyPubKey ownerXOnly(ownerPubKey);
+
+        LogPrintf("DigiDollar: SignRedemptionTransaction - Using owner key: %s\n",
+                  HexStr(ownerXOnly));
+
+        // Rebuild the MAST tree using the same parameters as mint
+        TaprootBuilder builder;
+
+        DigiDollar::MintParams scriptParams;
+        scriptParams.ddAmount = position.dd_minted;
+        scriptParams.lockHeight = position.unlock_height;
+        scriptParams.ownerKey = ownerXOnly;
+        scriptParams.internalKey = ownerXOnly;
+        scriptParams.oracleKeys = DigiDollar::GetOracleKeys(15);
+
+        // Add the 4 redemption paths in the same order as mint
+        CScript normalPath = DigiDollar::CreateNormalRedemptionPath(scriptParams);
+        if (!normalPath.empty()) {
+            builder.Add(1, normalPath, 0xC0);
+        }
+
+        CScript partialPath = DigiDollar::CreatePartialRedemptionPath(scriptParams);
+        if (!partialPath.empty()) {
+            builder.Add(2, partialPath, 0xC0);
+        }
+
+        CScript emergencyPath = DigiDollar::CreateEmergencyPath(scriptParams);
+        if (!emergencyPath.empty()) {
+            builder.Add(3, emergencyPath, 0xC0);
+        }
+
+        CScript errPath = DigiDollar::CreateERRPath(scriptParams);
+        if (!errPath.empty()) {
+            builder.Add(3, errPath, 0xC0);
+        }
+
+        // Finalize with the internal key
+        builder.Finalize(ownerXOnly);
+
+        if (!builder.IsValid() || !builder.IsComplete()) {
+            LogPrintf("DigiDollar: SignRedemptionTransaction - Failed to rebuild Taproot tree for collateral\n");
+            return false;
+        }
+
+        // Get the TaprootSpendData
+        TaprootSpendData spend_data = builder.GetSpendData();
+
+        // Get the control block for the normal redemption path
+        std::pair<CScript, int> script_key = {normalPath, TAPROOT_LEAF_TAPSCRIPT};
+        auto it = spend_data.scripts.find(script_key);
+        if (it == spend_data.scripts.end() || it->second.empty()) {
+            LogPrintf("DigiDollar: SignRedemptionTransaction - Control block not found for normal redemption path\n");
+            return false;
+        }
+
+        std::vector<unsigned char> control_block = *it->second.begin();
+
+        LogPrintf("DigiDollar: SignRedemptionTransaction - Found control block (%d bytes) for normal redemption\n",
+                  control_block.size());
+
+        // Calculate the leaf hash for the normal redemption script
+        uint256 leaf_hash = ComputeTapleafHash(TAPROOT_LEAF_TAPSCRIPT, normalPath);
+
+        LogPrintf("DigiDollar: SignRedemptionTransaction - Leaf hash: %s\n", leaf_hash.ToString());
+
+        // Create Schnorr signature for Taproot SCRIPT-PATH spending
+        std::vector<unsigned char> sig(64);
+
+        // Calculate sighash for Taproot script-path spending
+        ScriptExecutionData execdata;
+        execdata.m_annex_init = true;
+        execdata.m_annex_present = false;
+        execdata.m_tapleaf_hash = leaf_hash;
+        execdata.m_tapleaf_hash_init = true;
+        execdata.m_codeseparator_pos_init = true;
+        execdata.m_codeseparator_pos = 0xFFFFFFFF;
+
+        uint256 sighash;
+        if (!SignatureHashSchnorr(sighash, execdata, tx, 0, SIGHASH_DEFAULT, SigVersion::TAPSCRIPT, txdata, MissingDataBehavior::FAIL)) {
+            LogPrintf("DigiDollar: SignRedemptionTransaction - Failed to compute Tapscript sighash for collateral input\n");
+            return false;
+        }
+
+        LogPrintf("DigiDollar: SignRedemptionTransaction - Collateral SCRIPT-PATH sighash: %s\n", sighash.ToString());
+
+        // Generate auxiliary randomness for Schnorr signing
+        uint256 aux = GetRandHash();
+
+        // Sign with UNTWEAKED internal key for script-path spending
+        if (!owner_key.SignSchnorr(sighash, sig, nullptr, aux)) {
+            LogPrintf("DigiDollar: SignRedemptionTransaction - Failed to create Schnorr signature for collateral\n");
+            return false;
+        }
+
+        LogPrintf("DigiDollar: SignRedemptionTransaction - Created collateral signature: %s\n", HexStr(sig));
+
+        // Set witness stack: [signature, script, control_block]
+        tx.vin[0].scriptWitness.stack.clear();
+        tx.vin[0].scriptWitness.stack.push_back(sig);
+        tx.vin[0].scriptWitness.stack.push_back(std::vector<unsigned char>(normalPath.begin(), normalPath.end()));
+        tx.vin[0].scriptWitness.stack.push_back(control_block);
+
+        LogPrintf("DigiDollar: SignRedemptionTransaction - Collateral witness stack: sig (%d) + script (%d) + control (%d)\n",
+                  sig.size(), normalPath.size(), control_block.size());
+    }
+
+    // 7. Sign DD inputs (indices 1, 2, 3...) using SCRIPT-PATH spending
+    // CRITICAL FIX: DD tokens use the SAME MAST tree as collateral (both created by CreateCollateralP2TR)
+    // They must be signed with script-path spending, not key-path!
+    for (size_t i = 0; i < dd_utxos.size(); i++) {
+        size_t input_index = 1 + i;  // DD inputs start at index 1 (after collateral at index 0)
+
+        // Check if this input is already signed
+        bool already_signed = !tx.vin[input_index].scriptWitness.IsNull() &&
+                             !tx.vin[input_index].scriptWitness.stack.empty();
+
+        if (already_signed) {
+            LogPrintf("DigiDollar: SignRedemptionTransaction - DD input %d already signed by wallet\n", input_index);
+            continue;
+        }
+
+        const COutPoint& outpoint = dd_utxos[i];
+
+        // DD tokens from the same mint transaction use the same owner key as the collateral
+        CKey ddOwnerKey = owner_key;
+
+        CPubKey ddOwnerPubKey = ddOwnerKey.GetPubKey();
+        XOnlyPubKey ddOwnerXOnly(ddOwnerPubKey);
+
+        LogPrintf("DigiDollar: SignRedemptionTransaction - DD input %d using owner key: %s\n",
+                  input_index, HexStr(ddOwnerXOnly));
+
+        // Get the CTxOut for signing
+        const Coin& coin = coins.at(outpoint);
+        const CTxOut& prevOutput = coin.out;
+
+        // Verify it's a valid Taproot output
+        if (prevOutput.scriptPubKey.size() != 34 || prevOutput.scriptPubKey[0] != OP_1) {
+            LogPrintf("DigiDollar: SignRedemptionTransaction - Invalid Taproot output for DD input %d\n", input_index);
+            return false;
+        }
+
+        // CRITICAL FIX: DD tokens have the SAME MAST tree as collateral
+        // Get the position data to get the mint parameters
+        WalletCollateralPosition dd_position;
+        bool found_dd_position = false;
+        for (const auto& [pos_id, pos] : collateral_positions) {
+            if (pos_id == collateral_outpoint.hash) {
+                dd_position = pos;
+                found_dd_position = true;
+                break;
+            }
+        }
+
+        if (!found_dd_position) {
+            LogPrintf("DigiDollar: SignRedemptionTransaction - Position not found for DD input %d\n", input_index);
+            return false;
+        }
+
+        // Build the same Taproot tree structure to get the control block
+        DigiDollar::MintParams scriptParams;
+        scriptParams.ddAmount = dd_position.dd_minted;  // Use position's DD amount
+        scriptParams.lockHeight = dd_position.unlock_height;
+        scriptParams.ownerKey = ddOwnerXOnly;
+        scriptParams.internalKey = ddOwnerXOnly;
+        scriptParams.oracleKeys = DigiDollar::GetOracleKeys(15);
+
+        // Build Taproot tree with the same 4 paths as during mint
+        TaprootBuilder builder;
+
+        CScript normalPath = DigiDollar::CreateNormalRedemptionPath(scriptParams);
+        if (!normalPath.empty()) {
+            builder.Add(1, normalPath, 0xC0);
+        }
+
+        CScript partialPath = DigiDollar::CreatePartialRedemptionPath(scriptParams);
+        if (!partialPath.empty()) {
+            builder.Add(2, partialPath, 0xC0);
+        }
+
+        CScript emergencyPath = DigiDollar::CreateEmergencyPath(scriptParams);
+        if (!emergencyPath.empty()) {
+            builder.Add(3, emergencyPath, 0xC0);
+        }
+
+        CScript errPath = DigiDollar::CreateERRPath(scriptParams);
+        if (!errPath.empty()) {
+            builder.Add(3, errPath, 0xC0);
+        }
+
+        builder.Finalize(ddOwnerXOnly);
+
+        if (!builder.IsValid() || !builder.IsComplete()) {
+            LogPrintf("DigiDollar: SignRedemptionTransaction - Failed to rebuild Taproot tree for DD input %d\n", input_index);
+            return false;
+        }
+
+        TaprootSpendData spend_data = builder.GetSpendData();
+
+        // Get control block for normal redemption path
+        std::pair<CScript, int> script_key = {normalPath, TAPROOT_LEAF_TAPSCRIPT};
+        auto it = spend_data.scripts.find(script_key);
+        if (it == spend_data.scripts.end() || it->second.empty()) {
+            LogPrintf("DigiDollar: SignRedemptionTransaction - Control block not found for DD input %d\n", input_index);
+            return false;
+        }
+
+        std::vector<unsigned char> control_block = *it->second.begin();
+
+        // Calculate leaf hash
+        uint256 leaf_hash = ComputeTapleafHash(TAPROOT_LEAF_TAPSCRIPT, normalPath);
+
+        // Create Schnorr signature for SCRIPT-PATH spending
+        std::vector<unsigned char> dd_sig(64);
+
+        ScriptExecutionData dd_execdata;
+        dd_execdata.m_annex_init = true;
+        dd_execdata.m_annex_present = false;
+        dd_execdata.m_tapleaf_hash = leaf_hash;
+        dd_execdata.m_tapleaf_hash_init = true;
+        dd_execdata.m_codeseparator_pos_init = true;
+        dd_execdata.m_codeseparator_pos = 0xFFFFFFFF;
+
+        uint256 dd_sighash;
+        if (!SignatureHashSchnorr(dd_sighash, dd_execdata, tx, input_index, SIGHASH_DEFAULT, SigVersion::TAPSCRIPT, txdata, MissingDataBehavior::FAIL)) {
+            LogPrintf("DigiDollar: SignRedemptionTransaction - Failed to compute script-path sighash for DD input %d\n", input_index);
+            return false;
+        }
+
+        LogPrintf("DigiDollar: SignRedemptionTransaction - DD input %d SCRIPT-PATH sighash: %s\n",
+                  input_index, dd_sighash.ToString());
+
+        uint256 dd_aux = GetRandHash();
+
+        // Sign with UNTWEAKED key for script-path spending
+        if (!ddOwnerKey.SignSchnorr(dd_sighash, dd_sig, nullptr, dd_aux)) {
+            LogPrintf("DigiDollar: SignRedemptionTransaction - Failed to create Schnorr signature for DD input %d\n", input_index);
+            return false;
+        }
+
+        // Set witness stack: [signature, script, control_block] for script-path
+        tx.vin[input_index].scriptWitness.stack.clear();
+        tx.vin[input_index].scriptWitness.stack.push_back(dd_sig);
+        tx.vin[input_index].scriptWitness.stack.push_back(std::vector<unsigned char>(normalPath.begin(), normalPath.end()));
+        tx.vin[input_index].scriptWitness.stack.push_back(control_block);
+
+        LogPrintf("DigiDollar: SignRedemptionTransaction - DD input %d signed successfully with SCRIPT-PATH (witness: sig %d + script %d + control %d)\n",
+                  input_index, dd_sig.size(), normalPath.size(), control_block.size());
+    }
+
+    // 8. Verify all inputs are signed
+    for (size_t i = 0; i < tx.vin.size(); i++) {
+        bool has_witness = !tx.vin[i].scriptWitness.IsNull() && !tx.vin[i].scriptWitness.stack.empty();
+        bool has_scriptsig = !tx.vin[i].scriptSig.empty();
+
+        if (!has_witness && !has_scriptsig) {
+            LogPrintf("DigiDollar: SignRedemptionTransaction - Input %d not signed\n", i);
+            return false;
+        }
+    }
+
+    LogPrintf("DigiDollar: SignRedemptionTransaction - Successfully signed all inputs (1 collateral + %d DD + %d fee)\n",
+              dd_utxos.size(), fee_utxos.size());
     return true;
 }
 

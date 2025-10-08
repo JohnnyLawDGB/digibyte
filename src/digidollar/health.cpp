@@ -288,7 +288,7 @@ void SystemHealthMonitor::Shutdown()
     s_initialized = false;
 }
 
-void SystemHealthMonitor::ScanUTXOSet(CCoinsView* view, const node::BlockManager* blockman, const CTxMemPool* mempool)
+void SystemHealthMonitor::ScanUTXOSet(CCoinsView* view, CCoinsView* validation_view, const node::BlockManager* blockman, const CTxMemPool* mempool)
 {
     // Reset counters
     s_currentMetrics.totalDDSupply = 0;
@@ -320,6 +320,7 @@ void SystemHealthMonitor::ScanUTXOSet(CCoinsView* view, const node::BlockManager
     }
 
     LogPrint(BCLog::DIGIDOLLAR, "ScanUTXOSet: Starting blockchain-wide UTXO scan with full transaction access\n");
+    LogPrintf("DigiDollar: ========== STARTING UTXO SCAN ==========\n");
 
     size_t vaults_found = 0;
     size_t dd_amount_extracted = 0;
@@ -341,8 +342,16 @@ void SystemHealthMonitor::ScanUTXOSet(CCoinsView* view, const node::BlockManager
             break;
         }
 
-        utxos_scanned++;
         const uint256& txid = key.hash;
+
+        //  Skip spent coins - they are marked for deletion but haven't been pruned yet
+        if (coin.IsSpent()) {
+            LogPrintf("DigiDollar: UTXO Scanner skipping spent coin: %s:%d\n", txid.ToString(), key.n);
+            pcursor->Next();
+            continue;
+        }
+
+        utxos_scanned++;
 
         // Check if this UTXO is part of a DD transaction we haven't processed
         if (processed_txids.find(txid) == processed_txids.end()) {
@@ -359,6 +368,19 @@ void SystemHealthMonitor::ScanUTXOSet(CCoinsView* view, const node::BlockManager
                     coin.out.scriptPubKey[0] == OP_1 && coin.out.nValue > 0) {
                     p2tr_found++;
                     LogPrint(BCLog::DIGIDOLLAR, "ScanUTXOSet: Found P2TR output 0 with value, fetching full transaction...\n");
+
+                    // CRITICAL: Before processing, validate this UTXO still exists in current chainstate
+                    // CoinsDB may contain spent-but-not-pruned coins
+                    if (validation_view) {
+                        Coin validation_coin;
+                        if (!validation_view->GetCoin(key, validation_coin) || validation_coin.IsSpent()) {
+                            LogPrintf("DigiDollar: Skipping spent DD vault: %s:%d\n", txid.ToString(), key.n);
+                            // Skip this output - mark txid as processed to avoid checking other outputs
+                            processed_txids.insert(txid);
+                            // Continue to next UTXO (main loop will call pcursor->Next())
+                            break; // Break out of the if(key.n == 0) block
+                        }
+                    }
 
                     // This looks like a DD vault (output 0 of mint tx)
                     // Now fetch the full transaction to check for OP_RETURN and extract DD amount
@@ -444,6 +466,10 @@ void SystemHealthMonitor::ScanUTXOSet(CCoinsView* view, const node::BlockManager
                     LogPrint(BCLog::DIGIDOLLAR, "ScanUTXOSet: Found DD vault - collateral=%s, DD=%s (%s)\n",
                              FormatMoney(collateral), FormatMoney(ddAmount),
                              exactAmount ? "exact" : "estimated");
+
+                    // ALWAYS log vault findings (not just BCLog::DIGIDOLLAR)
+                    LogPrintf("DigiDollar: UTXO Scanner found vault: %s:0 - Collateral=%s DGB, DD=%s cents\n",
+                             txid.ToString(), FormatMoney(collateral), FormatMoney(ddAmount));
                 }
             }
         }
@@ -458,6 +484,11 @@ void SystemHealthMonitor::ScanUTXOSet(CCoinsView* view, const node::BlockManager
              FormatMoney(s_currentMetrics.totalDDSupply));
     LogPrint(BCLog::DIGIDOLLAR, "ScanUTXOSet: Exact amounts: %d, Estimated amounts: %d\n",
              dd_amount_extracted, dd_amount_estimated);
+
+    LogPrintf("DigiDollar: ========== UTXO SCAN COMPLETE ==========\n");
+    LogPrintf("DigiDollar: Found %zu vaults, Total Collateral: %s DGB, Total DD: %s cents\n",
+             vaults_found, FormatMoney(s_currentMetrics.totalCollateral),
+             FormatMoney(s_currentMetrics.totalDDSupply));
 }
 
 void SystemHealthMonitor::AggregateWalletStats(
@@ -503,9 +534,13 @@ void SystemHealthMonitor::UpdateTierMetrics()
 
     // Update per-tier metrics
     // Note: In real implementation, this would analyze actual positions by tier
-    // For testing/mock mode (when ScanUTXOSet hasn't run), use mock data across all tiers
-    LogPrint(BCLog::DIGIDOLLAR, "UpdateTierMetrics: BEFORE CONDITION CHECK - tiers.size()=%d, totalDDSupply=%ld\n",
+    // MOCK MODE DISABLED - Always use actual on-chain data from ScanUTXOSet
+    LogPrint(BCLog::DIGIDOLLAR, "UpdateTierMetrics: Using actual on-chain data (tiers.size()=%d, totalDDSupply=%ld)\n",
              s_currentMetrics.tiers.size(), s_currentMetrics.totalDDSupply);
+
+    // Mock mode completely disabled per user requirement: "do not fall back to mock data!!!"
+    // When scanner finds 0 vaults, stats should correctly show 0, not mock data
+    /*
     if (s_currentMetrics.tiers.size() >= 6 && s_currentMetrics.totalDDSupply == 0) {
         LogPrint(BCLog::DIGIDOLLAR, "UpdateTierMetrics: MOCK MODE TRIGGERED!\n");
         // Mock mode - populate with test data
@@ -577,6 +612,7 @@ void SystemHealthMonitor::UpdateTierMetrics()
             s_currentMetrics.totalCollateral += tier.dgbLocked;
         }
     }
+    */
 
     // Update overall system health
     s_currentMetrics.systemHealth = CalculateSystemHealth(

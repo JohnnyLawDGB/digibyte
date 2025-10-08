@@ -520,6 +520,13 @@ public:
                         const std::vector<COutPoint>& dd_utxos,
                         const std::vector<COutPoint>& fee_utxos);
 
+    // Redemption-specific signing (includes collateral input)
+    bool SignRedemptionTransaction(CMutableTransaction& tx,
+                                   const COutPoint& collateral_outpoint,
+                                   const std::vector<COutPoint>& dd_utxos,
+                                   const std::vector<COutPoint>& fee_utxos,
+                                   const CKey& owner_key);
+
     // Phase 4.1: Mempool submission
     bool CommitDDTransaction(const CTransactionRef& tx, std::string& error);
 

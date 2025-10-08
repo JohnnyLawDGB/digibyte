@@ -64,10 +64,8 @@ CScript CreateNormalRedemptionPath(const MintParams& params)
     // Normal redemption after timelock
     script << params.lockHeight << OP_CHECKLOCKTIMEVERIFY << OP_DROP;
 
-    // Verify DigiDollar amount
-    script << OP_DIGIDOLLAR << params.ddAmount << OP_EQUALVERIFY;
-
     // Owner signature verification
+    // DD amount validation happens at transaction validation layer, not in script
     script << ToByteVector(params.ownerKey) << OP_CHECKSIG;
 
     // // LogPrintf("DigiDollar: Created normal redemption path for %d DD at height %d\n",
@@ -86,7 +84,8 @@ CScript CreateEmergencyPath(const MintParams& params)
     CScript script;
 
     // Verify DigiDollar amount first
-    script << OP_DIGIDOLLAR << params.ddAmount << OP_EQUALVERIFY;
+    // Use CScriptNum to ensure proper minimal encoding without OP_SUCCESSx bytes
+    script << OP_DIGIDOLLAR << CScriptNum(params.ddAmount) << OP_EQUALVERIFY;
 
     // Add oracle multisig (8-of-15 or 8-of-N)
     size_t oracleCount = std::min(params.oracleKeys.size(), size_t(15));

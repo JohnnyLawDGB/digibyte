@@ -68,6 +68,7 @@ struct TxBuilderRedeemParams {
     CAmount feeRate;                // Fee rate in sat/vB
     std::vector<COutPoint> ddUtxos; // DD UTXOs to burn
     std::vector<COutPoint> feeUtxos; // DGB UTXOs for fees
+    std::vector<CAmount> feeAmounts; // Amounts of fee UTXOs
 
     // Optional pre-queried position data (caller can provide to avoid UTXO lookups)
     CAmount collateralAmount = 0;   // Actual DGB collateral locked (0 = not provided)

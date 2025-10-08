@@ -24,7 +24,7 @@ namespace DigiDollar {
 
 // Constants for mint transaction building
 static const CAmount DUST_THRESHOLD = 1000;        // Minimum change output (1000 sats)
-static const size_t ESTIMATED_TX_VSIZE = 250;      // Estimated transaction size in vB
+static const size_t ESTIMATED_TX_VSIZE = 500;      // Estimated transaction size in vB (increased for multiple inputs)
 static const int DEFAULT_SYSTEM_COLLATERAL = 150;   // Default system health (150%)
 static const double MAX_FEE_RATIO = 0.5;           // Maximum fee as ratio of total input
 
@@ -301,32 +301,56 @@ TxBuilderResult MintTxBuilder::BuildMintTransaction(const TxBuilderMintParams& p
                                        << CScriptNum(lockHeight);  // Lock height in blocks
     tx.vout.push_back(CTxOut(0, metadataScript));
 
-    // Calculate actual fees and change
-    result.totalFees = CalculateFee(tx, params.feeRate);
+    // Iterative fee calculation to account for change output
+    // We need to calculate fee, then add change output, then recalculate fee
+    CAmount change = 0;
+    result.totalFees = 0;
 
-    // Ensure fees are reasonable
-    if (result.totalFees > static_cast<CAmount>(totalIn * MAX_FEE_RATIO)) {
-        result.error = "Transaction fees too high";
-        return result;
-    }
-
-    CAmount change = totalIn - result.collateralRequired - result.totalFees;
+    // First iteration: calculate fee without change output
+    CAmount feeWithoutChange = CalculateFee(tx, params.feeRate);
+    change = totalIn - result.collateralRequired - feeWithoutChange;
 
     if (change < 0) {
         result.error = "Insufficient funds after fee calculation";
         return result;
-    } else if (change > 0) {
-        // Only create change output if amount is above dust threshold
-        if (change >= DUST_THRESHOLD) {
-            // Create change output
-            CKey changeKey = GenerateChangeKey();
-            CPubKey changePubkey = changeKey.GetPubKey();
-            CTxDestination changeDest{WitnessV1Taproot(XOnlyPubKey(changePubkey))};
-            tx.vout.push_back(CTxOut(change, GetScriptForDestination(changeDest)));
-        } else {
-            // Small change goes to fee (dust avoidance)
-            result.totalFees += change;
+    }
+
+    // If we have significant change, add change output and recalculate
+    if (change >= DUST_THRESHOLD) {
+        // Create change output
+        CKey changeKey = GenerateChangeKey();
+        CPubKey changePubkey = changeKey.GetPubKey();
+        CTxDestination changeDest{WitnessV1Taproot(XOnlyPubKey(changePubkey))};
+        tx.vout.push_back(CTxOut(change, GetScriptForDestination(changeDest)));
+
+        // Recalculate fee with change output included
+        result.totalFees = CalculateFee(tx, params.feeRate);
+
+        // Ensure fees are reasonable
+        if (result.totalFees > static_cast<CAmount>(totalIn * MAX_FEE_RATIO)) {
+            result.error = "Transaction fees too high";
+            return result;
         }
+
+        // Adjust change amount based on actual fee
+        change = totalIn - result.collateralRequired - result.totalFees;
+
+        if (change < 0) {
+            result.error = "Insufficient funds after final fee calculation";
+            return result;
+        }
+
+        if (change < DUST_THRESHOLD) {
+            // Change became dust after fee adjustment, remove change output
+            tx.vout.pop_back();
+            result.totalFees += change;  // Add dust to fee
+        } else {
+            // Update change output with correct amount
+            tx.vout.back().nValue = change;
+        }
+    } else {
+        // No change output, small change goes to fee
+        result.totalFees = feeWithoutChange + change;
     }
 
     result.tx = tx;
@@ -986,15 +1010,17 @@ TxBuilderResult RedeemTxBuilder::BuildRedemptionTransaction(const TxBuilderRedee
              params.collateralOutpoint.hash.ToString(), params.collateralOutpoint.n);
 
     // Inputs 1+: DD UTXOs to burn
+    // CRITICAL: DD UTXOs also have CLTV in their script (same MAST tree as collateral)
+    // So they MUST use nSequence < 0xFFFFFFFF to enable locktime checking
     for (const auto& utxo : params.ddUtxos) {
-        tx.vin.push_back(CTxIn(utxo));
-        LogPrintf("DigiDollar: Added DD input to burn: %s:%d\n", utxo.hash.ToString(), utxo.n);
+        tx.vin.push_back(CTxIn(utxo, CScript(), 0xFFFFFFFE));
+        LogPrintf("DigiDollar: Added DD input to burn: %s:%d (nSequence=0xFFFFFFFE for CLTV)\n", utxo.hash.ToString(), utxo.n);
     }
 
     // Inputs N+: Fee UTXOs (DGB)
+    CAmount totalFeeIn = 0;
     if (!params.feeUtxos.empty()) {
         std::vector<CTxIn> feeInputs;
-        CAmount totalFeeIn = 0;
         CAmount estimatedFees = 300 * params.feeRate / 1000; // Rough estimate
 
         if (!SelectCoins(params.feeUtxos, estimatedFees, feeInputs, totalFeeIn)) {
@@ -1028,17 +1054,37 @@ TxBuilderResult RedeemTxBuilder::BuildRedemptionTransaction(const TxBuilderRedee
     tx.nLockTime = position.unlockHeight;
     LogPrintf("DigiDollar: Set tx.nLockTime = %d (unlockHeight)\n", position.unlockHeight);
 
-    // Calculate fees and handle change
+    // Calculate actual fees
     result.totalFees = CalculateFee(tx, params.feeRate);
-    LogPrintf("DigiDollar: Calculated fees: %d sats\n", result.totalFees);
+    LogPrintf("DigiDollar: Calculated fees: %d sats (fee inputs: %d sats)\n", result.totalFees, totalFeeIn);
+
+    // Add fee change output if needed
+    if (totalFeeIn > 0) {
+        CAmount feeChange = totalFeeIn - result.totalFees;
+        if (feeChange < 0) {
+            result.error = "Insufficient fee inputs for calculated fee";
+            LogPrintf("DigiDollar: BuildRedemptionTransaction FAILED - %s\n", result.error);
+            return result;
+        }
+
+        if (feeChange >= DUST_THRESHOLD) {
+            // Add change output
+            tx.vout.push_back(CTxOut(feeChange, GetScriptForDestination(dest)));
+            LogPrintf("DigiDollar: Added fee change output: %d sats\n", feeChange);
+        } else {
+            // Dust goes to miner as fee
+            result.totalFees += feeChange;
+            LogPrintf("DigiDollar: Fee change (%d sats) below dust, added to fee\n", feeChange);
+        }
+    }
 
     // Success
     result.tx = tx;
     result.success = true;
     result.collateralRequired = 0; // No collateral required for redemption
 
-    LogPrintf("DigiDollar: BuildRedemptionTransaction SUCCESS - %d inputs, %d outputs\n",
-             tx.vin.size(), tx.vout.size());
+    LogPrintf("DigiDollar: BuildRedemptionTransaction SUCCESS - %d inputs, %d outputs, fee: %d sats\n",
+             tx.vin.size(), tx.vout.size(), result.totalFees);
 
     return result;
 }
@@ -1225,8 +1271,9 @@ size_t EstimateTransactionVSize(const CMutableTransaction& tx) {
     size_t totalSize = baseSize + witnessSize;
     size_t vsize = (baseSize * 3 + totalSize) / 4;
 
-    // Add 10% safety margin to account for estimation errors
-    return vsize + (vsize / 10);
+    // Add 35% safety margin to account for estimation errors
+    // Taproot transactions with script-path spending can be larger than key-path estimates
+    return vsize + (vsize * 35 / 100);
 }
 
 } // namespace DigiDollar

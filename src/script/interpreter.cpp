@@ -643,21 +643,26 @@ bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& 
                         break;
                     }
 
-                    // Stack: <amount>
-                    if (stack.size() < 1)
-                        return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
+                    // CRITICAL FIX: Read DD amount from SCRIPT (next element), not from stack
+                    // Script structure: OP_DIGIDOLLAR <amount> OP_EQUALVERIFY
+                    // The amount is embedded in the Tapscript, not provided via witness
+                    opcodetype opcodeAmount;
+                    std::vector<unsigned char> vchAmount;
+
+                    if (!script.GetOp(pc, opcodeAmount, vchAmount)) {
+                        return set_error(serror, SCRIPT_ERR_INVALID_DD_AMOUNT);
+                    }
 
                     CScriptNum amount(0);
                     try {
-                        amount = CScriptNum(stacktop(-1), fRequireMinimal);
+                        amount = CScriptNum(vchAmount, fRequireMinimal);
                     } catch (const scriptnum_error&) {
                         return set_error(serror, SCRIPT_ERR_INVALID_DD_AMOUNT);
                     }
                     if (amount < 0 || amount.GetInt64() > MAX_MONEY)
                         return set_error(serror, SCRIPT_ERR_INVALID_DD_AMOUNT);
 
-                    // Pop amount and push true/false
-                    popstack(stack);
+                    // Push validation result (true if amount > 0) onto stack
                     stack.push_back(amount > 0 ? vchTrue : vchFalse);
                 }
                 break;
@@ -1851,6 +1856,10 @@ bool GenericTransactionSignatureChecker<T>::CheckSchnorrSignature(Span<const uns
 template <class T>
 bool GenericTransactionSignatureChecker<T>::CheckLockTime(const CScriptNum& nLockTime) const
 {
+    // DIAGNOSTIC: Log ALL values for debugging
+    LogPrintf("DigiDollar: CheckLockTime - script_value=%d, tx.nLockTime=%d, nIn=%d, sequence=0x%x\n",
+              nLockTime.GetInt64(), txTo->nLockTime, nIn, txTo->vin[nIn].nSequence);
+
     // There are two kinds of nLockTime: lock-by-blockheight
     // and lock-by-blocktime, distinguished by whether
     // nLockTime < LOCKTIME_THRESHOLD.
@@ -1861,13 +1870,18 @@ bool GenericTransactionSignatureChecker<T>::CheckLockTime(const CScriptNum& nLoc
     if (!(
         (txTo->nLockTime <  LOCKTIME_THRESHOLD && nLockTime <  LOCKTIME_THRESHOLD) ||
         (txTo->nLockTime >= LOCKTIME_THRESHOLD && nLockTime >= LOCKTIME_THRESHOLD)
-    ))
+    )) {
+        LogPrintf("DigiDollar: CheckLockTime FAILED - type mismatch\n");
         return false;
+    }
 
-    // Now that we know we're comparing apples-to-apples, the
+    // Now that we're comparing apples-to-apples, the
     // comparison is a simple numeric one.
-    if (nLockTime > (int64_t)txTo->nLockTime)
+    if (nLockTime > (int64_t)txTo->nLockTime) {
+        LogPrintf("DigiDollar: CheckLockTime FAILED - script value %d > tx locktime %d\n",
+                  nLockTime.GetInt64(), txTo->nLockTime);
         return false;
+    }
 
     // Finally the nLockTime feature can be disabled in IsFinalTx()
     // and thus CHECKLOCKTIMEVERIFY bypassed if every txin has
@@ -1879,9 +1893,13 @@ bool GenericTransactionSignatureChecker<T>::CheckLockTime(const CScriptNum& nLoc
     // prevent this condition. Alternatively we could test all
     // inputs, but testing just this input minimizes the data
     // required to prove correct CHECKLOCKTIMEVERIFY execution.
-    if (CTxIn::SEQUENCE_FINAL == txTo->vin[nIn].nSequence)
+    if (CTxIn::SEQUENCE_FINAL == txTo->vin[nIn].nSequence) {
+        LogPrintf("DigiDollar: CheckLockTime FAILED - input %d has SEQUENCE_FINAL (0x%x)\n",
+                  nIn, txTo->vin[nIn].nSequence);
         return false;
+    }
 
+    LogPrintf("DigiDollar: CheckLockTime PASSED\n");
     return true;
 }
 

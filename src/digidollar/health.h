@@ -167,7 +167,7 @@ public:
      * @param blockman BlockManager for accessing full transaction data
      * @param mempool Optional mempool for checking recent transactions
      */
-    static void ScanUTXOSet(CCoinsView* view, const node::BlockManager* blockman, const CTxMemPool* mempool = nullptr);
+    static void ScanUTXOSet(CCoinsView* view, CCoinsView* validation_view, const node::BlockManager* blockman, const CTxMemPool* mempool = nullptr);
 
 private:
     // Internal data structures

@@ -119,32 +119,36 @@ RPCHelpMan getdigidollarstats()
             ChainstateManager& chainman = EnsureChainman(node);
 
             // Access the UTXO set (like gettxoutsetinfo does)
+            // CRITICAL: Must flush OUTSIDE the lock, then re-acquire lock for scanning
+            Chainstate& active_chainstate = chainman.ActiveChainstate();
+
+            // Step 1: Force flush all cached coins to disk (like gettxoutsetinfo does)
+            LogPrintf("DigiDollar: getdigidollarstats - About to ForceFlushStateToDisk...\n");
+            active_chainstate.ForceFlushStateToDisk();
+            LogPrintf("DigiDollar: getdigidollarstats - ForceFlushStateToDisk completed\n");
+
+            // Step 2: Now acquire lock and access the flushed CoinsDB
+            CCoinsView* coins_view;
+            node::BlockManager* blockman;
             {
-                LOCK(cs_main);
-                Chainstate& active_chainstate = chainman.ActiveChainstate();
-
-                // CRITICAL: Flush CoinsTip cache to disk BEFORE scanning
-                // This ensures recent redemption transactions are visible in the UTXO database
-                // Without this flush, the CoinsDB scanner will see stale data
-                BlockValidationState flush_state;
-                if (!active_chainstate.FlushStateToDisk(flush_state, FlushStateMode::ALWAYS)) {
-                    LogPrintf("DigiDollar: WARNING - Failed to flush state to disk before UTXO scan\n");
-                }
-
-                // Get the CoinsDB for cursor iteration (only CCoinsViewDB supports cursors)
-                CCoinsViewDB& coins_db = active_chainstate.CoinsDB();
-                const node::BlockManager& blockman = chainman.m_blockman;
-                const CTxMemPool* mempool = node.mempool.get();
-
-                // Scan UTXO set to find ALL DigiDollar vaults network-wide
-                // Pass BlockManager for full transaction access
-                DigiDollar::SystemHealthMonitor::ScanUTXOSet(&coins_db, &blockman, mempool);
-
-                // Get metrics from scanner
-                DigiDollar::SystemMetrics metrics = DigiDollar::SystemHealthMonitor::GetSystemMetrics();
-                totalCollateral = metrics.totalCollateral;
-                totalDD = metrics.totalDDSupply;
+                LOCK(::cs_main);
+                coins_view = &active_chainstate.CoinsDB();
+                blockman = &active_chainstate.m_blockman;
             }
+
+            const CTxMemPool* mempool = node.mempool.get();
+
+            // Scan UTXO set to find ALL DigiDollar vaults network-wide
+            // Pass BlockManager for full transaction access
+            // Pass both CoinsDB (for iteration) and CoinsTip (for validation)
+            LogPrintf("DigiDollar: getdigidollarstats - About to call ScanUTXOSet...\n");
+            DigiDollar::SystemHealthMonitor::ScanUTXOSet(coins_view, &active_chainstate.CoinsTip(), blockman, mempool);
+            LogPrintf("DigiDollar: getdigidollarstats - ScanUTXOSet completed\n");
+
+            // Get metrics from scanner
+            DigiDollar::SystemMetrics metrics = DigiDollar::SystemHealthMonitor::GetSystemMetrics();
+            totalCollateral = metrics.totalCollateral;
+            totalDD = metrics.totalDDSupply;
 
             // Get current oracle price (mock for now)
             // Oracle price format: millicents per DGB (actual_price_in_dollars * 100,000)
@@ -790,6 +794,11 @@ RPCHelpMan redeemdigidollar()
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid position ID");
             }
 
+            LogPrintf("DigiDollar: ====== REDEMPTION REQUEST ======\n");
+            LogPrintf("DigiDollar: Position ID (mint txid): %s\n", positionId.ToString());
+            LogPrintf("DigiDollar: Will try to spend: %s:0 (collateral) and %s:1 (DD token)\n",
+                     positionId.ToString(), positionId.ToString());
+
             // Get position from wallet
             LOCK(pwallet->cs_wallet);
             WalletCollateralPosition foundPosition;
@@ -896,19 +905,42 @@ RPCHelpMan redeemdigidollar()
                 }
             }
 
+            // Select fee UTXOs from wallet
+            CAmount estimatedFee = 10000000; // 0.1 DGB minimum for redemption tx fees
+            CAmount selectedFeeTotal = 0;
+            std::vector<CAmount> feeAmounts;
+
+            if (!dd_wallet->SelectFeeCoins(estimatedFee, redeemParams.feeUtxos, selectedFeeTotal, &feeAmounts)) {
+                throw JSONRPCError(RPC_WALLET_INSUFFICIENT_FUNDS, "Insufficient DGB balance for transaction fees");
+            }
+
+            redeemParams.feeAmounts = feeAmounts;
+            LogPrintf("DigiDollar: Selected %d sats in fees from %d UTXOs for redemption\n",
+                     selectedFeeTotal, redeemParams.feeUtxos.size());
+
             DigiDollar::TxBuilderResult redeemResult = redeemBuilder.BuildRedemptionTransaction(redeemParams);
 
             if (!redeemResult.success) {
                 throw JSONRPCError(RPC_WALLET_ERROR, "Failed to build redemption transaction: " + redeemResult.error);
             }
 
-            // Sign redemption transaction using manual Schnorr signing for Taproot inputs
-            // Build list of DD UTXOs (collateral + DD token) and fee UTXOs if any
-            std::vector<COutPoint> dd_inputs = {redeemParams.collateralOutpoint};
-            dd_inputs.insert(dd_inputs.end(), redeemParams.ddUtxos.begin(), redeemParams.ddUtxos.end());
-            std::vector<COutPoint> fee_inputs; // No fee inputs in redemption tx
+            LogPrintf("DigiDollar: Redemption transaction built with %d inputs:\n", redeemResult.tx.vin.size());
+            for (size_t i = 0; i < redeemResult.tx.vin.size(); i++) {
+                LogPrintf("DigiDollar:   Input %d: %s:%d\n", i,
+                         redeemResult.tx.vin[i].prevout.hash.ToString(),
+                         redeemResult.tx.vin[i].prevout.n);
+            }
 
-            bool signSuccess = dd_wallet->SignDDInputs(redeemResult.tx, dd_inputs, fee_inputs);
+            // Sign redemption transaction using specialized function that handles:
+            // - Collateral (input 0): script-path spending with MAST tree
+            // - DD tokens (input 1+): key-path spending (no MAST)
+            // - Fee inputs: standard wallet signing
+            bool signSuccess = dd_wallet->SignRedemptionTransaction(
+                redeemResult.tx,
+                redeemParams.collateralOutpoint,
+                redeemParams.ddUtxos,
+                redeemParams.feeUtxos,
+                ownerKey);
 
             if (!signSuccess) {
                 throw JSONRPCError(RPC_WALLET_ERROR, "Failed to sign redemption transaction with Schnorr signatures");

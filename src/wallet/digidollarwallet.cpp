@@ -2650,11 +2650,71 @@ bool DigiDollarWallet::SignDDInputs(CMutableTransaction& tx,
         std::vector<unsigned char> outputKeyBytes(prevOutput.scriptPubKey.begin() + 2, prevOutput.scriptPubKey.end());
         LogPrintf("DigiDollar: SignDDInputs - Actual output key in script: %s\n", HexStr(outputKeyBytes));
 
-        // CRITICAL FIX: Reconstruct the Taproot tree to get the merkle root
-        // We need to rebuild the same MAST tree that was used during mint
-        // to calculate the correct merkle root for signing
+        // CRITICAL: Check if this is a DD output (vout 1) or collateral output (vout 0)
+        // DD outputs (vout 1) are simple P2TR with key-path only
+        // Collateral outputs (vout 0) have MAST and require script-path spending
 
-        // Get the position data to reconstruct the MAST tree
+        // Check output index - DD is always vout[1] in mint transactions
+        if (outpoint.n == 1) {
+            // This is a DD token output (vout 1) - use KEY-PATH signing
+            LogPrintf("DigiDollar: SignDDInputs - Output %s:%d is vout[1] (DD token), using key-path signing\n",
+                      outpoint.hash.ToString(), outpoint.n);
+
+            auto tweaked = ownerXOnly.CreateTapTweak(nullptr);  // nullptr = no merkle root
+            if (!tweaked) {
+                LogPrintf("DigiDollar: SignDDInputs - Failed to create tap tweak for key-path signing\n");
+                return false;
+            }
+
+            XOnlyPubKey expected_output_key = tweaked->first;
+
+            // Verify the output key matches our expectation
+            if (outputKeyBytes.size() != 32 ||
+                !std::equal(outputKeyBytes.begin(), outputKeyBytes.end(), expected_output_key.begin())) {
+                LogPrintf("DigiDollar: SignDDInputs - Output key mismatch for key-path (expected: %s, got: %s)\n",
+                         HexStr(expected_output_key), HexStr(outputKeyBytes));
+                return false;
+            }
+
+            LogPrintf("DigiDollar: SignDDInputs - Using KEY-PATH signing for DD token\n");
+
+            // Calculate sighash for Taproot KEY-PATH spending
+            uint256 sighash;
+            ScriptExecutionData execdata;
+            execdata.m_annex_init = true;
+            execdata.m_annex_present = false;
+            // For key-path: NO tapleaf hash (that's only for script-path)
+            execdata.m_tapleaf_hash_init = false;
+
+            if (!SignatureHashSchnorr(sighash, execdata, tx, i, SIGHASH_DEFAULT, SigVersion::TAPROOT, txdata, MissingDataBehavior::FAIL)) {
+                LogPrintf("DigiDollar: SignDDInputs - Failed to compute key-path sighash for input %d\n", i);
+                return false;
+            }
+
+            LogPrintf("DigiDollar: SignDDInputs - KEY-PATH sighash: %s\n", sighash.ToString());
+
+            // Sign with tweaked key (key-path signing)
+            // For simple P2TR (no merkle root), pass empty hash to apply tweak
+            std::vector<unsigned char> sig(64);
+            uint256 aux = GetRandHash();
+            uint256 empty_merkle_root;  // Null/zero hash for simple P2TR
+
+            if (!ownerKey.SignSchnorr(sighash, sig, &empty_merkle_root, aux)) {
+                LogPrintf("DigiDollar: SignDDInputs - Failed to create key-path signature for input %d\n", i);
+                return false;
+            }
+
+            LogPrintf("DigiDollar: SignDDInputs - Created key-path signature: %s\n", HexStr(sig));
+
+            // For Taproot KEY-PATH spending, witness stack is: [signature]
+            tx.vin[i].scriptWitness.stack.clear();
+            tx.vin[i].scriptWitness.stack.push_back(sig);
+
+            LogPrintf("DigiDollar: SignDDInputs - KEY-PATH witness stack: sig (%d bytes)\n", sig.size());
+            continue;  // Move to next input
+        }
+
+        // This is vout[0] (collateral) - get position data to reconstruct MAST tree
         WalletCollateralPosition position;
         bool found_position = false;
         for (const auto& [pos_id, pos] : collateral_positions) {
@@ -2666,8 +2726,9 @@ bool DigiDollarWallet::SignDDInputs(CMutableTransaction& tx,
         }
 
         if (!found_position) {
-            LogPrintf("DigiDollar: SignDDInputs - Position not found for %s, cannot reconstruct MAST tree\n",
-                      outpoint.hash.ToString());
+            // No position found for collateral output - this shouldn't happen
+            LogPrintf("DigiDollar: SignDDInputs - No position found for collateral %s:%d\n",
+                      outpoint.hash.ToString(), outpoint.n);
             return false;
         }
 
@@ -3170,9 +3231,9 @@ bool DigiDollarWallet::SignRedemptionTransaction(CMutableTransaction& tx,
                   sig.size(), normalPath.size(), control_block.size());
     }
 
-    // 7. Sign DD inputs (indices 1, 2, 3...) using SCRIPT-PATH spending
-    // CRITICAL FIX: DD tokens use the SAME MAST tree as collateral (both created by CreateCollateralP2TR)
-    // They must be signed with script-path spending, not key-path!
+    // 7. Sign DD inputs (indices 1, 2, 3...) using KEY-PATH spending
+    // DD token outputs (vout[1]) are simple P2TR with key-path only (no MAST, no CLTV)
+    // Only collateral outputs (vout[0]) have MAST and use script-path spending
     for (size_t i = 0; i < dd_utxos.size(); i++) {
         size_t input_index = 1 + i;  // DD inputs start at index 1 (after collateral at index 0)
 
@@ -3206,112 +3267,77 @@ bool DigiDollarWallet::SignRedemptionTransaction(CMutableTransaction& tx,
             return false;
         }
 
-        // CRITICAL FIX: DD tokens have the SAME MAST tree as collateral
-        // Get the position data to get the mint parameters
-        WalletCollateralPosition dd_position;
-        bool found_dd_position = false;
-        for (const auto& [pos_id, pos] : collateral_positions) {
-            if (pos_id == collateral_outpoint.hash) {
-                dd_position = pos;
-                found_dd_position = true;
-                break;
+        // Extract the output key from the script (this is the TWEAKED key)
+        std::vector<unsigned char> outputKeyBytes(prevOutput.scriptPubKey.begin() + 2, prevOutput.scriptPubKey.end());
+        LogPrintf("DigiDollar: SignRedemptionTransaction - Actual output key in script: %s\n", HexStr(outputKeyBytes));
+
+        // CRITICAL: DD token outputs (vout[1]) are simple P2TR with key-path only
+        // Check if this is a DD token output (vout[1])
+        if (outpoint.n == 1) {
+            // This is a DD token output (vout 1) - use KEY-PATH signing
+            LogPrintf("DigiDollar: SignRedemptionTransaction - Output %s:%d is vout[1] (DD token), using key-path signing\n",
+                      outpoint.hash.ToString(), outpoint.n);
+
+            auto tweaked = ddOwnerXOnly.CreateTapTweak(nullptr);
+            if (!tweaked) {
+                LogPrintf("DigiDollar: SignRedemptionTransaction - Failed to create tap tweak for key-path signing\n");
+                return false;
             }
-        }
 
-        if (!found_dd_position) {
-            LogPrintf("DigiDollar: SignRedemptionTransaction - Position not found for DD input %d\n", input_index);
+            XOnlyPubKey expected_output_key = tweaked->first;
+
+            // Verify the output key matches our expectation
+            if (outputKeyBytes.size() != 32 ||
+                !std::equal(outputKeyBytes.begin(), outputKeyBytes.end(), expected_output_key.begin())) {
+                LogPrintf("DigiDollar: SignRedemptionTransaction - Output key mismatch for key-path (expected: %s, got: %s)\n",
+                         HexStr(expected_output_key), HexStr(outputKeyBytes));
+                return false;
+            }
+
+            LogPrintf("DigiDollar: SignRedemptionTransaction - Using KEY-PATH signing for DD token\n");
+
+            // Calculate sighash for Taproot KEY-PATH spending
+            uint256 dd_sighash;
+            ScriptExecutionData dd_execdata;
+            dd_execdata.m_annex_init = true;
+            dd_execdata.m_annex_present = false;
+            // For key-path: NO tapleaf hash (that's only for script-path)
+            dd_execdata.m_tapleaf_hash_init = false;
+
+            if (!SignatureHashSchnorr(dd_sighash, dd_execdata, tx, input_index, SIGHASH_DEFAULT, SigVersion::TAPROOT, txdata, MissingDataBehavior::FAIL)) {
+                LogPrintf("DigiDollar: SignRedemptionTransaction - Failed to compute key-path sighash for input %d\n", input_index);
+                return false;
+            }
+
+            LogPrintf("DigiDollar: SignRedemptionTransaction - DD input %d KEY-PATH sighash: %s\n",
+                      input_index, dd_sighash.ToString());
+
+            // Sign with tweaked key (key-path signing)
+            // For simple P2TR (no merkle root), pass empty hash to apply tweak
+            std::vector<unsigned char> dd_sig(64);
+            uint256 dd_aux = GetRandHash();
+            uint256 empty_merkle_root;  // Null/zero hash for simple P2TR
+
+            if (!ddOwnerKey.SignSchnorr(dd_sighash, dd_sig, &empty_merkle_root, dd_aux)) {
+                LogPrintf("DigiDollar: SignRedemptionTransaction - Failed to create key-path signature for input %d\n", input_index);
+                return false;
+            }
+
+            LogPrintf("DigiDollar: SignRedemptionTransaction - Created key-path signature: %s\n", HexStr(dd_sig));
+
+            // For Taproot KEY-PATH spending, witness stack is: [signature]
+            tx.vin[input_index].scriptWitness.stack.clear();
+            tx.vin[input_index].scriptWitness.stack.push_back(dd_sig);
+
+            LogPrintf("DigiDollar: SignRedemptionTransaction - DD input %d signed successfully with KEY-PATH (witness: sig %d bytes)\n",
+                      input_index, dd_sig.size());
+        } else {
+            // This shouldn't happen in normal redemption (DD is always vout[1])
+            // But handle it for safety by returning error
+            LogPrintf("DigiDollar: SignRedemptionTransaction - ERROR: DD input %d is from vout[%d], expected vout[1]\n",
+                      input_index, outpoint.n);
             return false;
         }
-
-        // Build the same Taproot tree structure to get the control block
-        DigiDollar::MintParams scriptParams;
-        scriptParams.ddAmount = dd_position.dd_minted;  // Use position's DD amount
-        scriptParams.lockHeight = dd_position.unlock_height;
-        scriptParams.ownerKey = ddOwnerXOnly;
-        scriptParams.internalKey = ddOwnerXOnly;
-        scriptParams.oracleKeys = DigiDollar::GetOracleKeys(15);
-
-        // Build Taproot tree with the same 4 paths as during mint
-        TaprootBuilder builder;
-
-        CScript normalPath = DigiDollar::CreateNormalRedemptionPath(scriptParams);
-        if (!normalPath.empty()) {
-            builder.Add(1, normalPath, 0xC0);
-        }
-
-        CScript partialPath = DigiDollar::CreatePartialRedemptionPath(scriptParams);
-        if (!partialPath.empty()) {
-            builder.Add(2, partialPath, 0xC0);
-        }
-
-        CScript emergencyPath = DigiDollar::CreateEmergencyPath(scriptParams);
-        if (!emergencyPath.empty()) {
-            builder.Add(3, emergencyPath, 0xC0);
-        }
-
-        CScript errPath = DigiDollar::CreateERRPath(scriptParams);
-        if (!errPath.empty()) {
-            builder.Add(3, errPath, 0xC0);
-        }
-
-        builder.Finalize(ddOwnerXOnly);
-
-        if (!builder.IsValid() || !builder.IsComplete()) {
-            LogPrintf("DigiDollar: SignRedemptionTransaction - Failed to rebuild Taproot tree for DD input %d\n", input_index);
-            return false;
-        }
-
-        TaprootSpendData spend_data = builder.GetSpendData();
-
-        // Get control block for normal redemption path
-        std::pair<CScript, int> script_key = {normalPath, TAPROOT_LEAF_TAPSCRIPT};
-        auto it = spend_data.scripts.find(script_key);
-        if (it == spend_data.scripts.end() || it->second.empty()) {
-            LogPrintf("DigiDollar: SignRedemptionTransaction - Control block not found for DD input %d\n", input_index);
-            return false;
-        }
-
-        std::vector<unsigned char> control_block = *it->second.begin();
-
-        // Calculate leaf hash
-        uint256 leaf_hash = ComputeTapleafHash(TAPROOT_LEAF_TAPSCRIPT, normalPath);
-
-        // Create Schnorr signature for SCRIPT-PATH spending
-        std::vector<unsigned char> dd_sig(64);
-
-        ScriptExecutionData dd_execdata;
-        dd_execdata.m_annex_init = true;
-        dd_execdata.m_annex_present = false;
-        dd_execdata.m_tapleaf_hash = leaf_hash;
-        dd_execdata.m_tapleaf_hash_init = true;
-        dd_execdata.m_codeseparator_pos_init = true;
-        dd_execdata.m_codeseparator_pos = 0xFFFFFFFF;
-
-        uint256 dd_sighash;
-        if (!SignatureHashSchnorr(dd_sighash, dd_execdata, tx, input_index, SIGHASH_DEFAULT, SigVersion::TAPSCRIPT, txdata, MissingDataBehavior::FAIL)) {
-            LogPrintf("DigiDollar: SignRedemptionTransaction - Failed to compute script-path sighash for DD input %d\n", input_index);
-            return false;
-        }
-
-        LogPrintf("DigiDollar: SignRedemptionTransaction - DD input %d SCRIPT-PATH sighash: %s\n",
-                  input_index, dd_sighash.ToString());
-
-        uint256 dd_aux = GetRandHash();
-
-        // Sign with UNTWEAKED key for script-path spending
-        if (!ddOwnerKey.SignSchnorr(dd_sighash, dd_sig, nullptr, dd_aux)) {
-            LogPrintf("DigiDollar: SignRedemptionTransaction - Failed to create Schnorr signature for DD input %d\n", input_index);
-            return false;
-        }
-
-        // Set witness stack: [signature, script, control_block] for script-path
-        tx.vin[input_index].scriptWitness.stack.clear();
-        tx.vin[input_index].scriptWitness.stack.push_back(dd_sig);
-        tx.vin[input_index].scriptWitness.stack.push_back(std::vector<unsigned char>(normalPath.begin(), normalPath.end()));
-        tx.vin[input_index].scriptWitness.stack.push_back(control_block);
-
-        LogPrintf("DigiDollar: SignRedemptionTransaction - DD input %d signed successfully with SCRIPT-PATH (witness: sig %d + script %d + control %d)\n",
-                  input_index, dd_sig.size(), normalPath.size(), control_block.size());
     }
 
     // 8. Verify all inputs are signed

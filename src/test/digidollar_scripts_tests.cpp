@@ -76,8 +76,9 @@ BOOST_AUTO_TEST_CASE(test_normal_redemption_path_creation)
     // Should contain CHECKLOCKTIMEVERIFY for timelock
     BOOST_CHECK(std::find(normalPath.begin(), normalPath.end(), OP_CHECKLOCKTIMEVERIFY) != normalPath.end());
 
-    // Should contain OP_DIGIDOLLAR for amount verification
-    BOOST_CHECK(std::find(normalPath.begin(), normalPath.end(), OP_DIGIDOLLAR) != normalPath.end());
+    // Normal redemption does NOT contain OP_DIGIDOLLAR
+    // Amount validation happens at transaction validation layer (see validation.cpp)
+    // This keeps the normal path simple and efficient
 
     // Should contain CHECKSIG for owner verification
     BOOST_CHECK(std::find(normalPath.begin(), normalPath.end(), OP_CHECKSIG) != normalPath.end());

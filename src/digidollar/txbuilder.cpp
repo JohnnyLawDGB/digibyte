@@ -284,11 +284,10 @@ TxBuilderResult MintTxBuilder::BuildMintTransaction(const TxBuilderMintParams& p
     CScript collateralScript = CreateCollateralScript(params);
     tx.vout.push_back(CTxOut(result.collateralRequired, collateralScript));
 
-    // CRITICAL FIX: DD output must use the SAME Taproot construction as collateral
-    // Otherwise they will have different keys and redemption will fail
-    // Use CreateCollateralScript which builds the MAST tree, ensuring both outputs
-    // have the same merkle root and can be spent with the same key
-    CScript ddScript = CreateCollateralScript(params);  // Use same script as collateral!
+    // DD token output: Simple P2TR (key-path only, no MAST, no CLTV)
+    // DD tokens must be freely transferable, unlike collateral which has timelock
+    // Use CreateDDOutputScript for simple P2TR with key-path spending only
+    CScript ddScript = CreateDDOutputScript(params.ownerKey, params.ddAmount);
     tx.vout.push_back(CTxOut(0, ddScript));
 
     // Add OP_RETURN output with metadata for validation

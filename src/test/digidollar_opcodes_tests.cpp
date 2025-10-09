@@ -57,8 +57,9 @@ BOOST_AUTO_TEST_CASE(op_digidollar_basic)
     ScriptExecutionData execdata;
 
     // Test with valid DigiDollar amount
+    // OP_DIGIDOLLAR reads amount from script, not from stack
     CScript script;
-    script << CScriptNum(100000) << OP_DIGIDOLLAR;  // 1.0 DGB in satoshis
+    script << OP_DIGIDOLLAR << CScriptNum(100000);  // 1.0 DGB in satoshis
 
     BOOST_CHECK(EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::BASE, execdata, &error));
     BOOST_CHECK_EQUAL(error, SCRIPT_ERR_OK);
@@ -75,7 +76,7 @@ BOOST_AUTO_TEST_CASE(op_digidollar_zero_amount)
     ScriptExecutionData execdata;
 
     CScript script;
-    script << CScriptNum(0) << OP_DIGIDOLLAR;
+    script << OP_DIGIDOLLAR << CScriptNum(0);
 
     BOOST_CHECK(EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::BASE, execdata, &error));
     BOOST_CHECK_EQUAL(error, SCRIPT_ERR_OK);
@@ -92,7 +93,7 @@ BOOST_AUTO_TEST_CASE(op_digidollar_negative_amount)
     ScriptExecutionData execdata;
 
     CScript script;
-    script << CScriptNum(-100) << OP_DIGIDOLLAR;
+    script << OP_DIGIDOLLAR << CScriptNum(-100);
 
     BOOST_CHECK(!EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::BASE, execdata, &error));
     BOOST_CHECK_EQUAL(error, SCRIPT_ERR_INVALID_DD_AMOUNT);
@@ -107,7 +108,7 @@ BOOST_AUTO_TEST_CASE(op_digidollar_overflow_amount)
     ScriptExecutionData execdata;
 
     CScript script;
-    script << CScriptNum(MAX_MONEY + 1) << OP_DIGIDOLLAR;
+    script << OP_DIGIDOLLAR << CScriptNum(MAX_MONEY + 1);
 
     BOOST_CHECK(!EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::BASE, execdata, &error));
     BOOST_CHECK_EQUAL(error, SCRIPT_ERR_INVALID_DD_AMOUNT);
@@ -122,10 +123,10 @@ BOOST_AUTO_TEST_CASE(op_digidollar_insufficient_stack)
     ScriptExecutionData execdata;
 
     CScript script;
-    script << OP_DIGIDOLLAR; // No amount on stack
+    script << OP_DIGIDOLLAR; // No amount in script
 
     BOOST_CHECK(!EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::BASE, execdata, &error));
-    BOOST_CHECK_EQUAL(error, SCRIPT_ERR_INVALID_STACK_OPERATION);
+    BOOST_CHECK_EQUAL(error, SCRIPT_ERR_INVALID_DD_AMOUNT); // Changed from INVALID_STACK_OPERATION
 }
 
 // Test OP_DDVERIFY basic functionality
@@ -301,14 +302,16 @@ BOOST_AUTO_TEST_CASE(opcodes_as_nops_without_flag)
     ScriptExecutionData execdata;
 
     // All DD opcodes should behave as NOPs without SCRIPT_VERIFY_DIGIDOLLAR flag
+    // Push a value on stack first so we can verify stack is unchanged
     CScript script;
-    script << CScriptNum(100000) << OP_DIGIDOLLAR;
+    script << CScriptNum(100000) << OP_DIGIDOLLAR << CScriptNum(999);
 
     BOOST_CHECK(EvalScript(stack, script, SCRIPT_VERIFY_NONE, checker, SigVersion::BASE, execdata, &error));
     BOOST_CHECK_EQUAL(error, SCRIPT_ERR_OK);
-    // Without the flag, they should behave as NOPs and leave stack unchanged
-    BOOST_CHECK_EQUAL(stack.size(), 1);
-    BOOST_CHECK_EQUAL(CScriptNum(stack.back(), false).GetInt64(), 100000);
+    // Without the flag, OP_DIGIDOLLAR behaves as NOP, leaving stack with the two pushed values
+    BOOST_CHECK_EQUAL(stack.size(), 2);
+    BOOST_CHECK_EQUAL(CScriptNum(stack[0], false).GetInt64(), 100000);
+    BOOST_CHECK_EQUAL(CScriptNum(stack[1], false).GetInt64(), 999);
 }
 
 // Test complex DigiDollar script combining multiple opcodes
@@ -319,13 +322,13 @@ BOOST_AUTO_TEST_CASE(complex_digidollar_script)
     ScriptError error;
     ScriptExecutionData execdata;
 
-    // Create a complex script: amount -> OP_DIGIDOLLAR -> OP_DDVERIFY -> price check -> collateral check
+    // Create a complex script: OP_DIGIDOLLAR -> OP_DDVERIFY -> price check -> collateral check
     CScript script;
-    script << CScriptNum(100000) << OP_DIGIDOLLAR; // Mark as DD output
-    script << OP_DDVERIFY;                          // Verify the DD condition
-    script << CScriptNum(100000) << OP_CHECKPRICE; // Check oracle price
-    script << CScriptNum(150) << CScriptNum(120) << OP_CHECKCOLLATERAL; // Check collateral
-    script << OP_BOOLAND; // Combine all conditions with AND
+    script << OP_DIGIDOLLAR << CScriptNum(100000); // Mark as DD output (pushes true)
+    script << OP_DDVERIFY;                          // Verify the DD condition (pops true)
+    script << CScriptNum(100000) << OP_CHECKPRICE; // Check oracle price (pushes true)
+    script << CScriptNum(150) << CScriptNum(120) << OP_CHECKCOLLATERAL; // Check collateral (pushes true)
+    script << OP_BOOLAND; // Combine last two conditions with AND
 
     BOOST_CHECK(EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::BASE, execdata, &error));
     BOOST_CHECK_EQUAL(error, SCRIPT_ERR_OK);
@@ -351,7 +354,7 @@ BOOST_AUTO_TEST_CASE(opcodes_different_sigversions)
     ScriptExecutionData execdata;
 
     CScript script;
-    script << CScriptNum(100000) << OP_DIGIDOLLAR;
+    script << OP_DIGIDOLLAR << CScriptNum(100000);
 
     // Test with different signature versions
     BOOST_CHECK(EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::BASE, execdata, &error));

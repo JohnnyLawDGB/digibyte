@@ -660,7 +660,10 @@ BOOST_AUTO_TEST_CASE(edge_case_exact_collateral_no_change)
     CAmount ddAmount = 10000;
     int lockDays = 365;
     CAmount requiredCollateral = builder.CalculateRequiredCollateral(ddAmount, lockDays);
-    CAmount estimatedFees = 25000; // 0.00025 DGB fee estimate
+    // Use realistic fee estimate based on ESTIMATED_TX_VSIZE (500 vB) @ 100k sat/kB
+    // Fee = (500 * 100000) / 1000 = 50,000 satoshis
+    // Add extra buffer for change output if created
+    CAmount estimatedFees = 75000; // 0.00075 DGB fee estimate (with buffer)
 
     // Provide exact amount needed (collateral + fees)
     auto utxos = CreateTestUTXOsWithValues({requiredCollateral + estimatedFees});

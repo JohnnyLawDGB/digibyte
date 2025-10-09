@@ -1,398 +1,266 @@
-# DigiDollar Unit Test Fix - Task List
-**Generated**: 2025-10-06
-**Objective**: Achieve 100% pass rate for all 685 C++ unit tests
-**Strategy**: Orchestrator manages up to 3 parallel sub-agents, each fixing 1 test file at a time
+# DigiDollar Unit Test Task List
+
+**Generated**: 2025-10-09
+**Objective**: Fix 1 failing unit test to achieve 100% pass rate
+**Strategy**: Deploy single sub-agent to add missing flag mapping
 
 ---
 
-## Current Status
+## 🎉 Current Status - EXCELLENT
 
-**Total Unit Tests**: 685 test cases across 26 files
-**Current Pass Rate**: 95.5% (654 passing, 31 test failures)
+### Test Suite Health
+
+**Total Unit Tests**: 1,258 test cases
+**Current Pass Rate**: **99.92%** (1,257 passing, 1 failing)
 **Target**: 100% pass rate (0 failures)
-**Last Updated**: 2025-10-07
 
-### Summary of Findings
+### Summary
 
-**EXCELLENT PROGRESS**: Test suite has improved from 73.1% (501/685) to **95.5% (654/685)** - a **153-test improvement**!
-
-**Current State**:
-- ✅ **23 of 26 test suites**: 100% passing (639 tests)
-- ❌ **3 of 26 test suites**: Have failures (31 failures total)
-- 🎯 **Focus**: Only 3 test suites need fixing to reach 100%
-
-**Failing Test Suites** (31 total failures):
-1. **digidollar_validation_tests.cpp** - 16 failures in 8 test cases (redemption validation logic)
-2. **digidollar_txbuilder_tests.cpp** - 10 failures in 2 test cases (redemption transaction builder)
-3. **digidollar_health_tests.cpp** - 5 failures in 3 test cases (per-tier tracking and metrics)
-
-**Specific Failing Tests**:
-- `test_validate_redemption_transaction_normal_after_timelock` (2 assertions)
-- `test_validate_redemption_transaction_before_timelock` (2 assertions)
-- `test_validate_script_path_validation` (2 assertions)
-- `test_validate_collateral_release` (2 assertions)
-- `test_validate_dd_burning_verification` (2 assertions)
-- `test_validate_invalid_collateral_amount` (2 assertions)
-- `test_validate_utxo_update_verification` (2 assertions)
-- `test_validate_redemption_fee_handling` (2 assertions)
-- `redeem_transaction_basic` (6 assertions)
-- `redeem_transaction_different_paths` (4 assertions)
-- `test_system_metrics_collection` (1 assertion)
-- `test_per_tier_tracking` (3 assertions)
-- `test_health_utilities` (1 assertion)
-
-**Root Cause**: All failures appear related to redemption validation and UTXO tracking, NOT core minting/transfer functionality.
+Out of 1,258 total unit tests, only **ONE** test is failing. This demonstrates exceptional code quality in the DigiDollar implementation.
 
 ---
 
-## Test Files Priority Matrix
+## The Single Failing Test
 
-### 🔴 CRITICAL - Remaining Failures (Fix These 3 Suites)
+### Test Details
 
-| File | Tests | Priority | Reason | Status |
-|------|-------|----------|--------|--------|
-| `digidollar_validation_tests.cpp` | 72 | P0 | Redemption validation logic issues | ❌ FAILING (16 failures in 8 tests) |
-| `digidollar_txbuilder_tests.cpp` | 13 | P0 | Redemption transaction builder broken | ❌ FAILING (10 failures in 2 tests) |
-| `digidollar_health_tests.cpp` | 24 | P1 | Per-tier tracking and metrics collection | ❌ FAILING (5 failures in 3 tests) |
+| Test Suite | Test Case | File | Line | Error |
+|------------|-----------|------|------|-------|
+| `transaction_tests` | `tx_valid` | `/home/jared/Code/digibyte/src/test/transaction_tests.cpp` | 194 | `mapFlagNames is missing a script verification flag` |
 
-### ✅ PASSING - Core Functionality (Previously Fixed)
+### Root Cause Analysis
 
-| File | Tests | Priority | Reason | Status |
-|------|-------|----------|--------|--------|
-| `digidollar_consensus_tests.cpp` | 11 | P0 | Consensus rules and validation | ✅ PASSING (100%) |
-| `digidollar_transfer_tests.cpp` | 43 | P0 | DD transfers and UTXO management | ✅ PASSING (100%) |
-| `digidollar_change_tests.cpp` | 4 | P0 | Change calculation | ✅ PASSING (100%) |
-| `digidollar_wallet_tests.cpp` | 129 | P0 | Wallet integration | ✅ PASSING (100%) |
+**What Happened:**
+- DigiDollar added `SCRIPT_VERIFY_DIGIDOLLAR` to `STANDARD_SCRIPT_VERIFY_FLAGS` (in `src/policy/policy.h:118`)
+- The flag was NOT added to the test's `mapFlagNames` mapping (in `src/test/transaction_tests.cpp:48-70`)
+- Test function `CheckMapFlagNames()` verifies all standard flags are mapped
+- Test fails because DIGIDOLLAR flag is missing from the mapping
 
-### ✅ PASSING - Protection Systems (All Working!)
+**The Fix:**
+Add this single line to `mapFlagNames` (between lines 68-69):
+```cpp
+{std::string("DIGIDOLLAR"), (unsigned int)SCRIPT_VERIFY_DIGIDOLLAR},
+```
 
-| File | Tests | Priority | Reason | Status |
-|------|-------|----------|--------|--------|
-| `digidollar_dca_tests.cpp` | 22 | P1 | DCA system critical for collateral safety | ✅ PASSING (100%) |
-| `digidollar_err_tests.cpp` | 37 | P1 | ERR system critical for under-collateralization | ✅ PASSING (100%) |
-| `digidollar_volatility_tests.cpp` | 24 | P1 | Volatility protection prevents market manipulation | ✅ PASSING (100%) |
+### Risk Assessment
 
-### ✅ PASSING - Transaction Infrastructure (Mostly Complete!)
-
-| File | Tests | Priority | Reason | Status |
-|------|-------|----------|--------|--------|
-| `digidollar_mint_tests.cpp` | 29 | P2 | Minting process tests | ✅ PASSING (100%) |
-| `digidollar_redeem_tests.cpp` | 24 | P2 | Redemption path tests | ✅ PASSING (100%) |
-| `digidollar_transaction_tests.cpp` | 35 | P2 | Transaction type encoding | ✅ PASSING (100%) |
-| `digidollar_scripts_tests.cpp` | 13 | P2 | P2TR script creation | ✅ PASSING (100%) |
-
-### ✅ PASSING - Supporting Infrastructure (All Complete!)
-
-| File | Tests | Priority | Reason | Status |
-|------|-------|----------|--------|--------|
-| `digidollar_activation_tests.cpp` | 5 | P3 | BIP9 activation | ✅ PASSING (100%) |
-| `digidollar_address_tests.cpp` | 11 | P3 | Address encoding/decoding | ✅ PASSING (100%) |
-| `digidollar_opcodes_tests.cpp` | 21 | P3 | Script opcodes | ✅ PASSING (100%) |
-| `digidollar_oracle_tests.cpp` | 35 | P3 | Oracle consensus (mock prices) | ✅ PASSING (100%) |
-| `digidollar_p2p_tests.cpp` | 12 | P3 | P2P relay and Dandelion++ | ✅ PASSING (100%) |
-| `digidollar_rpc_tests.cpp` | 30 | P3 | RPC commands | ✅ PASSING (100%) |
-| `digidollar_structures_tests.cpp` | 18 | P3 | Data structures | ✅ PASSING (100%) |
-| `digidollar_gui_tests.cpp` | 11 | P3 | GUI widgets | ✅ PASSING (100%) |
-| `digidollar_persistence_keys_tests.cpp` | 3 | P3 | Key persistence | ✅ PASSING (100%) |
-| `digidollar_persistence_serialization_tests.cpp` | 3 | P3 | Serialization | ✅ PASSING (100%) |
-| `digidollar_persistence_walletbatch_tests.cpp` | 18 | P3 | Wallet batch operations | ✅ PASSING (100%) |
+**Risk Level:** 🟢 LOW
+- Simple addition, not modification
+- Follows existing pattern
+- Only affects test code
+- Easy to verify
+- Easy to revert
 
 ---
 
-## ✅ COMPLETE: Cryptographic Timelock Security Tests
+## Task Assignment
 
-### Test File Created: `digidollar_timelock_tests.cpp`
+### Single Agent Deployment
 
-**Priority**: 🔴 **CRITICAL - P0**
-**Total Tests**: 38 test cases
-**Status**: ✅ PASSING (All 38 tests passing)
+| Agent ID | Task | File | Lines to Modify | Estimated Time | Status |
+|----------|------|------|-----------------|----------------|--------|
+| Agent-1 | Add DIGIDOLLAR flag mapping | `src/test/transaction_tests.cpp` | 69 (add 1 line) | 5-10 minutes | ⏳ Pending |
 
-#### Test Coverage Completed:
+### Agent Instructions
 
-**1. OP_CHECKLOCKTIMEVERIFY (CLTV) Tests** (8 tests) ✅
-- [x] Test CLTV with block height-based timelocks (30 days → blocks)
-- [x] Test CLTV with timestamp-based timelocks (1 year → Unix timestamp)
-- [x] Test CLTV enforcement (transaction rejected before timelock)
-- [x] Test CLTV acceptance (transaction accepted after timelock)
-- [x] Test CLTV with nLockTime interaction
-- [x] Test CLTV with negative timelock (should fail)
-- [x] Test CLTV with max timelock (10 years)
-- [x] Test CLTV script validation
-
-**2. OP_CHECKSEQUENCEVERIFY (CSV) Tests** (6 tests) ✅
-- [x] Test CSV relative timelock (blocks since UTXO creation)
-- [x] Test CSV with sequence number encoding
-- [x] Test CSV with BIP68 compliance
-- [x] Test CSV enforcement before relative time expires
-- [x] Test CSV acceptance after relative time expires
-- [x] Test CSV with different sequence types (blocks vs time)
-
-**3. nLockTime Transaction Tests** (5 tests) ✅
-- [x] Test nLockTime prevents early mining (block height)
-- [x] Test nLockTime prevents early mining (timestamp)
-- [x] Test nLockTime with mempool acceptance rules
-- [x] Test nLockTime with block validation
-- [x] Test nLockTime edge cases (height vs timestamp boundary)
-
-**4. Timelock Cryptographic Security** (8 tests) ✅
-- [x] Test timelock cannot be bypassed with signature manipulation
-- [x] Test timelock cannot be bypassed with script modification
-- [x] Test timelock with Schnorr signature validation
-- [x] Test timelock with ECDSA signature validation
-- [x] Test timelock with P2TR witness validation
-- [x] Test timelock with MAST tree path selection
-- [x] Test timelock replay protection (same tx different times)
-- [x] Test timelock with chain reorganization scenarios
-
-**5. DigiDollar-Specific Timelock Integration** (6 tests) ✅
-- [x] Test collateral vault timelock (all 8 tiers: 30d→10y)
-- [x] Test normal redemption path requires timelock expiry
-- [x] Test emergency redemption bypasses timelock (8-of-15 oracles)
-- [x] Test partial redemption with active timelock
-- [x] Test ERR redemption with active timelock
-- [x] Test timelock metadata in OP_RETURN encoding
-
-**6. Timelock Attack Vectors** (5 tests) ✅
-- [x] Test timelock DOS attack prevention (cannot spam timelocked txs)
-- [x] Test timelock grief attack prevention (cannot lock others' funds)
-- [x] Test timelock front-running prevention
-- [x] Test timelock with RBF (Replace-By-Fee) attacks
-- [x] Test timelock with transaction malleability
-
-**Total Completed**: **38 timelock security tests - ✅ ALL PASSING**
+**Agent-1 Task:**
+1. Read `src/test/transaction_tests.cpp` lines 48-70 (mapFlagNames)
+2. Find `SCRIPT_VERIFY_DIGIDOLLAR` definition in `src/script/interpreter.h`
+3. Add mapping: `{std::string("DIGIDOLLAR"), (unsigned int)SCRIPT_VERIFY_DIGIDOLLAR},`
+4. Place it after line 68 (after "DISCOURAGE_UPGRADABLE_PUBKEYTYPE")
+5. Compile: `make -j$(nproc) test_digibyte`
+6. Test: `./src/test/test_digibyte --run_test=transaction_tests/tx_valid`
+7. Verify: `./src/test/test_digibyte` (all 1,258 tests should pass)
 
 ---
 
-## Orchestration Workflow
+## Verification Checklist
 
-### Phase 1: Critical Core (Sequential - 1 agent at a time)
-**Objective**: Fix foundation tests that everything depends on
-**Parallelization**: ❌ NO - Fix sequentially to avoid conflicts
+### Pre-Fix Status
+- [ ] Run tests: `./src/test/test_digibyte 2>&1 | tail -5`
+- [ ] Confirm output: `*** 1 failure is detected`
+- [ ] Note failing test: `transaction_tests/tx_valid`
 
-1. **Agent 1**: `digidollar_consensus_tests.cpp` (11 tests)
-2. **Agent 1**: `digidollar_transfer_tests.cpp` (43 tests)
-3. **Agent 1**: `digidollar_change_tests.cpp` (4 tests)
-4. **Agent 1**: `digidollar_validation_tests.cpp` (72 tests)
-5. **Agent 1**: `digidollar_wallet_tests.cpp` (129 tests)
+### Post-Fix Verification
+- [ ] Compilation successful with no warnings
+- [ ] Specific test passes: `transaction_tests/tx_valid`
+- [ ] Full suite passes: 1,258 / 1,258 tests (100%)
+- [ ] Output shows: `*** No errors detected`
+- [ ] No new warnings introduced
+- [ ] Code follows existing style
 
-**Estimated Time**: 5 cycles × 2-4 hours = **10-20 hours**
-
----
-
-### Phase 2: Protection Systems (Parallel - 3 agents)
-**Objective**: Fix DCA, ERR, volatility, health systems
-**Parallelization**: ✅ YES - Independent systems
-
-**Batch 2A** (parallel):
-- **Agent A**: `digidollar_dca_tests.cpp` (22 tests)
-- **Agent B**: `digidollar_err_tests.cpp` (37 tests)
-- **Agent C**: `digidollar_volatility_tests.cpp` (24 tests)
-
-**Batch 2B** (parallel):
-- **Agent A**: `digidollar_health_tests.cpp` (24 tests)
-
-**Estimated Time**: 2 batches × 2-3 hours = **4-6 hours**
+### Quality Checks
+- [ ] Only one line was added
+- [ ] No other code was modified
+- [ ] Flag name spelling is exact: "DIGIDOLLAR"
+- [ ] Formatting matches other entries
+- [ ] Comma placement is correct
 
 ---
 
-### Phase 3: Transaction Infrastructure (Parallel - 3 agents)
-**Objective**: Fix minting, redemption, transaction building
-**Parallelization**: ✅ YES - Can work in parallel
+## Files Involved
 
-**Batch 3A** (parallel):
-- **Agent A**: `digidollar_mint_tests.cpp` (29 tests)
-- **Agent B**: `digidollar_redeem_tests.cpp` (24 tests)
-- **Agent C**: `digidollar_transaction_tests.cpp` (35 tests)
+### Files to Read
 
-**Batch 3B** (parallel):
-- **Agent A**: `digidollar_txbuilder_tests.cpp` (13 tests)
-- **Agent B**: `digidollar_scripts_tests.cpp` (13 tests)
+| File | Purpose | Lines to Examine |
+|------|---------|------------------|
+| `/home/jared/Code/digibyte/src/test/transaction_tests.cpp` | Test file with missing mapping | 48-70, 89-95, 192-194 |
+| `/home/jared/Code/digibyte/src/script/interpreter.h` | Flag definition location | Search for `SCRIPT_VERIFY_DIGIDOLLAR` |
+| `/home/jared/Code/digibyte/src/policy/policy.h` | Standard flags definition | 104-118 |
 
-**Estimated Time**: 2 batches × 2-3 hours = **4-6 hours**
+### Files to Modify
 
----
-
-### Phase 4: Supporting Infrastructure (Parallel - 3 agents)
-**Objective**: Fix remaining tests
-**Parallelization**: ✅ YES - All independent
-
-**Batch 4A** (parallel):
-- **Agent A**: `digidollar_opcodes_tests.cpp` (21 tests)
-- **Agent B**: `digidollar_oracle_tests.cpp` (35 tests)
-- **Agent C**: `digidollar_p2p_tests.cpp` (12 tests)
-
-**Batch 4B** (parallel):
-- **Agent A**: `digidollar_rpc_tests.cpp` (30 tests)
-- **Agent B**: `digidollar_structures_tests.cpp` (18 tests)
-- **Agent C**: `digidollar_gui_tests.cpp` (11 tests)
-
-**Batch 4C** (parallel):
-- **Agent A**: `digidollar_persistence_keys_tests.cpp` (3 tests)
-- **Agent B**: `digidollar_persistence_serialization_tests.cpp` (3 tests)
-- **Agent C**: `digidollar_persistence_walletbatch_tests.cpp` (18 tests)
-
-**Estimated Time**: 3 batches × 1-2 hours = **3-6 hours**
-
----
-
-### Phase 5: NEW - Cryptographic Timelock Security (Create & Validate)
-**Objective**: Create comprehensive timelock security test suite
-**Parallelization**: ⚠️ PARTIAL - Create first, then parallelize test categories
-
-**Step 5A**: Create test file structure (1 agent)
-- **Agent A**: Create `digidollar_timelock_tests.cpp` with all test scaffolding
-
-**Step 5B**: Implement test categories (parallel - 3 agents)
-- **Agent A**: CLTV tests (8) + CSV tests (6) = 14 tests
-- **Agent B**: nLockTime tests (5) + Crypto security (8) = 13 tests
-- **Agent C**: DigiDollar integration (6) + Attack vectors (5) = 11 tests
-
-**Estimated Time**: 1 + 1 = **2-4 hours**
-
----
-
-## Total Estimated Timeline
-
-| Phase | Work Type | Agent Mode | Estimated Time |
-|-------|-----------|------------|----------------|
-| Phase 1 | Critical Core | Sequential (1 agent) | 10-20 hours |
-| Phase 2 | Protection Systems | Parallel (3 agents) | 4-6 hours |
-| Phase 3 | Transaction Infra | Parallel (3 agents) | 4-6 hours |
-| Phase 4 | Supporting Infra | Parallel (3 agents) | 3-6 hours |
-| Phase 5 | Timelock Security | Mixed (1→3 agents) | 2-4 hours |
-| **TOTAL** | **All Phases** | **Mixed** | **23-42 hours** |
-
-**With 3 parallel agents**: Estimated **1-2 weeks wall-clock time**
+| File | Modification | Line |
+|------|-------------|------|
+| `/home/jared/Code/digibyte/src/test/transaction_tests.cpp` | Add flag mapping | 69 (new line) |
 
 ---
 
 ## Success Criteria
 
-### ✅ Definition of Done
+### Definition of Done ✅
 
-1. **All 647 existing unit tests passing** (100% pass rate)
-2. **38 new timelock security tests created and passing**
-3. **Total: 685 unit tests at 100% pass rate**
-4. **Zero application bugs remaining** (all found bugs documented and fixed)
-5. **Cryptographic timelock security validated** (CLTV, CSV, nLockTime)
-6. **All tests run successfully in CI**: `./src/test/test_digibyte --run_test=digidollar_*`
+All of these must be TRUE:
 
-### 📊 Progress Tracking
-
-**Current**: 19/25 files passing, 501/685 tests passing (73.1%)
-**Target**: 25/25 files fixed, 685/685 tests passing (100%)
-**Remaining**: 6 files failing, 184 test failures to fix (some tests have multiple assertions)
+1. ✅ Test `transaction_tests/tx_valid` passes
+2. ✅ All 1,258 unit tests passing (100% pass rate)
+3. ✅ No compiler warnings
+4. ✅ No test regressions
+5. ✅ Code follows existing style
+6. ✅ Only one line added (no other changes)
+7. ✅ Fix documented
 
 ---
 
-## Known Issues to Fix
+## Timeline
 
-### Critical Bugs Found in Test Runs
+### Estimated Duration
 
-**FIXED** ✅ (Previously Failing, Now Passing):
-1. **`digidollar_transfer_tests.cpp`**: All 43 tests now passing
-   - Fixed DD output extraction
-   - Fixed transaction version issues
-   - Fixed DD amount balance verification
+| Phase | Activity | Time |
+|-------|----------|------|
+| Analysis | Understanding the issue | ✅ Complete |
+| Deployment | Launch sub-agent | 1 minute |
+| Reading | Agent reads files | 2 minutes |
+| Coding | Add one line | 1 minute |
+| Compilation | Build test binary | 2 minutes |
+| Testing | Run test suite | 3-5 minutes |
+| Verification | Confirm success | 1 minute |
+| **TOTAL** | **End-to-end** | **10-12 minutes** |
 
-2. **`digidollar_change_tests.cpp`**: All 4 tests now passing
-   - Fixed memory access violation
-   - Fixed DD amount extraction
+---
 
-**STILL FAILING** ❌ (6 test suites, 184 failures):
+## Agent Progress Log
 
-1. **`digidollar_consensus_tests.cpp`** - 10 failures (out of 11 tests):
-   - ❌ `IsValidMintAmount()` failing for valid amounts (100, 1000, 100000 cents)
-   - ❌ ChainParams integration broken: `minMintAmount` mismatch
-     - Mainnet: expects 10000 cents, getting 100000000
-     - Testnet: expects 100 cents, getting 1000000
-     - Regtest: expects 1 cent, getting 10000
+| Timestamp | Agent | Activity | Status | Notes |
+|-----------|-------|----------|--------|-------|
+| 2025-10-09 | Analysis | Identified failing test | ✅ Complete | Only 1 test failing out of 1,258 |
+| - | Agent-1 | Add DIGIDOLLAR flag mapping | ⏳ Pending | Ready to deploy |
+| - | Verification | Run full test suite | ⏳ Pending | After Agent-1 completes |
+| - | Completion | Report to user | ⏳ Pending | After verification passes |
 
-2. **`digidollar_err_tests.cpp`** - 81 failures (out of 37 tests):
-   - ❌ ERR system calculations failing (multiple assertions per test)
-   - ❌ Emergency redemption validation broken
+**Legend:**
+- ⏳ Pending
+- 🔄 In Progress
+- ✅ Complete
+- ❌ Failed
 
-3. **`digidollar_mint_tests.cpp`** - 22 failures (out of 29 tests):
-   - ❌ Minting transaction creation failing
-   - ❌ Assertion error: CCheckQueue worker threads not empty
+---
 
-4. **`digidollar_txbuilder_tests.cpp`** - 8 failures (out of 13 tests):
-   - ❌ Transaction builder logic broken
+## Expected Outcome
 
-5. **`digidollar_validation_tests.cpp`** - 51 failures (out of 72 tests):
-   - ❌ Validation pipeline critical failures
+### Before Fix
+```bash
+$ ./src/test/test_digibyte 2>&1 | tail -3
+test/transaction_tests.cpp(194): error: in "transaction_tests/tx_valid":
+  mapFlagNames is missing a script verification flag
 
-6. **`digidollar_wallet_tests.cpp`** - 12 failures (out of 129 tests):
-   - ❌ Wallet integration issues
+*** 1 failure is detected in the test module "DigiByte Core Test Suite"
+```
 
-### Bug Documentation Format
+### After Fix
+```bash
+$ ./src/test/test_digibyte 2>&1 | tail -3
+Running 1258 test cases...
 
-Each sub-agent must create bug reports in `DIGIDOLLAR_BUGS_FOUND.md`:
+*** No errors detected in the test module "DigiByte Core Test Suite"
+```
+
+**Result:** 1,258 / 1,258 tests passing (100% pass rate) ✅
+
+---
+
+## Code Change Example
+
+### BEFORE (lines 67-70)
+```cpp
+    {std::string("DISCOURAGE_OP_SUCCESS"), (unsigned int)SCRIPT_VERIFY_DISCOURAGE_OP_SUCCESS},
+    {std::string("DISCOURAGE_UPGRADABLE_TAPROOT_VERSION"), (unsigned int)SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_TAPROOT_VERSION},
+    {std::string("DISCOURAGE_UPGRADABLE_PUBKEYTYPE"), (unsigned int)SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_PUBKEYTYPE},
+};
+```
+
+### AFTER (lines 67-71)
+```cpp
+    {std::string("DISCOURAGE_OP_SUCCESS"), (unsigned int)SCRIPT_VERIFY_DISCOURAGE_OP_SUCCESS},
+    {std::string("DISCOURAGE_UPGRADABLE_TAPROOT_VERSION"), (unsigned int)SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_TAPROOT_VERSION},
+    {std::string("DISCOURAGE_UPGRADABLE_PUBKEYTYPE"), (unsigned int)SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_PUBKEYTYPE},
+    {std::string("DIGIDOLLAR"), (unsigned int)SCRIPT_VERIFY_DIGIDOLLAR},  // ← NEW LINE
+};
+```
+
+**Change:** One line added
+
+---
+
+## Notes
+
+- This is the **simplest possible** unit test fix
+- 99.92% pass rate indicates **excellent code quality**
+- No application bugs - just a forgotten test mapping
+- Fix is **guaranteed** to work if instructions are followed
+- Sub-agent should complete in under 15 minutes
+- Zero risk of breaking existing functionality
+
+---
+
+## Completion Report Template
+
+When complete, agent should report:
 
 ```markdown
-## Bug #X: [Short Description]
-**File**: [test file that exposed bug]
-**Severity**: Critical/High/Medium/Low
-**Component**: [application file with bug]
-**Symptom**: [what's failing]
-**Root Cause**: [why it's failing]
-**Fix Applied**: [code change made]
-**Tests Affected**: [which tests now pass]
+## ✅ Unit Test Fix Complete
+
+### Summary
+- **Tests Fixed:** 1
+- **Final Pass Rate:** 100% (1,258 / 1,258)
+- **Time Taken:** [X] minutes
+
+### What Was Done
+- Added `DIGIDOLLAR` flag mapping to mapFlagNames in transaction_tests.cpp
+
+### File Modified
+- `/home/jared/Code/digibyte/src/test/transaction_tests.cpp` (line 69)
+  - Added: `{std::string("DIGIDOLLAR"), (unsigned int)SCRIPT_VERIFY_DIGIDOLLAR},`
+
+### Verification
+- ✅ Compilation successful
+- ✅ test `transaction_tests/tx_valid` passes
+- ✅ Full test suite: 1,258 / 1,258 passing
+- ✅ No warnings
+- ✅ No regressions
+
+### Test Output
+```
+Running 1258 test cases...
+*** No errors detected in the test module "DigiByte Core Test Suite"
+```
+
+**Status:** ✅ MISSION COMPLETE - 100% PASS RATE ACHIEVED
 ```
 
 ---
 
-## Agent Assignment Log
-
-| Phase | Batch | Agent | File | Tests | Status | Start Time | End Time | Bugs Found |
-|-------|-------|-------|------|-------|--------|------------|----------|------------|
-| 1 | - | A | digidollar_consensus_tests.cpp | 11 | 🔄 | - | - | - |
-| 1 | - | A | digidollar_transfer_tests.cpp | 43 | ⏳ | - | - | - |
-| 1 | - | A | digidollar_change_tests.cpp | 4 | ⏳ | - | - | - |
-| 1 | - | A | digidollar_validation_tests.cpp | 72 | ⏳ | - | - | - |
-| 1 | - | A | digidollar_wallet_tests.cpp | 129 | ⏳ | - | - | - |
-| 2 | A | A | digidollar_dca_tests.cpp | 22 | ⏳ | - | - | - |
-| 2 | A | B | digidollar_err_tests.cpp | 37 | ⏳ | - | - | - |
-| 2 | A | C | digidollar_volatility_tests.cpp | 24 | ⏳ | - | - | - |
-| 2 | B | A | digidollar_health_tests.cpp | 24 | ⏳ | - | - | - |
-| 3 | A | A | digidollar_mint_tests.cpp | 29 | ⏳ | - | - | - |
-| 3 | A | B | digidollar_redeem_tests.cpp | 24 | ⏳ | - | - | - |
-| 3 | A | C | digidollar_transaction_tests.cpp | 35 | ⏳ | - | - | - |
-| 3 | B | A | digidollar_txbuilder_tests.cpp | 13 | ⏳ | - | - | - |
-| 3 | B | B | digidollar_scripts_tests.cpp | 13 | ⏳ | - | - | - |
-| 4 | A | A | digidollar_opcodes_tests.cpp | 21 | ⏳ | - | - | - |
-| 4 | A | B | digidollar_oracle_tests.cpp | 35 | ⏳ | - | - | - |
-| 4 | A | C | digidollar_p2p_tests.cpp | 12 | ⏳ | - | - | - |
-| 4 | B | A | digidollar_rpc_tests.cpp | 30 | ⏳ | - | - | - |
-| 4 | B | B | digidollar_structures_tests.cpp | 18 | ⏳ | - | - | - |
-| 4 | B | C | digidollar_gui_tests.cpp | 11 | ⏳ | - | - | - |
-| 4 | C | A | digidollar_persistence_keys_tests.cpp | 3 | ⏳ | - | - | - |
-| 4 | C | B | digidollar_persistence_serialization_tests.cpp | 3 | ⏳ | - | - | - |
-| 4 | C | C | digidollar_persistence_walletbatch_tests.cpp | 18 | ⏳ | - | - | - |
-| 5 | A | A | digidollar_timelock_tests.cpp | 38 (NEW) | ⏳ | - | - | - |
-
-**Legend**: 🔄 In Progress | ⏳ Pending | ✅ Complete | ❌ Failed
-
----
-
-## Final Validation Checklist
-
-After all phases complete, orchestrator must verify:
-
-- [ ] Run full test suite: `./src/test/test_digibyte --run_test=digidollar_*`
-- [ ] Confirm 685/685 tests passing (100% pass rate)
-- [ ] Review `DIGIDOLLAR_BUGS_FOUND.md` for all documented bugs
-- [ ] Verify all bug fixes applied correctly
-- [ ] Run tests 3 times to ensure stability (no flaky tests)
-- [ ] Verify timelock security tests cover all attack vectors
-- [ ] Confirm cryptographic soundness validated
-- [ ] Update DIGIDOLLAR_TEST_REPORT.md with final results
-- [ ] Git commit all test fixes with detailed commit message
-- [ ] Create summary report of all work completed
-
----
-
-**Generated**: 2025-10-06
-**Status**: Ready for Orchestrator Execution
-**Total Tests to Fix**: 647 existing + 38 new = 685 total
-**Estimated Completion**: 1-2 weeks with 3 parallel agents
+**Generated:** 2025-10-09
+**Status:** Ready for agent deployment
+**Objective:** Achieve 100% unit test pass rate (1,258 / 1,258)
+**Estimated Completion:** 10-15 minutes

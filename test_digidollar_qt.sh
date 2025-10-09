@@ -1,14 +1,122 @@
 #!/bin/bash
 # DigiDollar Qt GUI Network-Wide Tracking Test
-# Tests that both Bob and Alice see identical network statistics
-# Bob mints 3 DigiDollar transactions, Alice only observes
+# Tests network-wide statistics and DD transfers between Bob, Alice, and Charlie
+# Comprehensive balance tracking and verification throughout all operations
 
 set -e
 
 echo "=========================================="
 echo "DigiDollar Qt RegTest Automated Test"
+echo "Enhanced with 3-wallet DD transfers"
 echo "=========================================="
 echo ""
+
+# Helper function to get network stats
+get_network_stats() {
+    local NODE_NAME=$1
+    local RPC_PORT=$2
+    local COOKIE=$3
+
+    local STATS=$(curl --silent --user "$COOKIE" \
+        --data-binary '{"jsonrpc":"1.0","id":"stats","method":"getdigidollarstats","params":[]}' \
+        -H 'content-type: text/plain;' \
+        http://127.0.0.1:${RPC_PORT}/)
+
+    echo "$STATS"
+}
+
+# Helper function to get wallet DD balance
+get_dd_balance() {
+    local NODE_NAME=$1
+    local RPC_PORT=$2
+    local COOKIE=$3
+    local WALLET_NAME=$(echo "$NODE_NAME" | tr '[:upper:]' '[:lower:]')  # bob, alice, charlie
+
+    local BALANCE=$(curl --silent --user "$COOKIE" \
+        --data-binary '{"jsonrpc":"1.0","id":"balance","method":"getdigidollarbalance","params":[]}' \
+        -H 'content-type: text/plain;' \
+        http://127.0.0.1:${RPC_PORT}/wallet/${WALLET_NAME})
+
+    echo "$BALANCE" | jq -r '.result.total // 0'
+}
+
+# Helper function to display network monitoring
+display_network_monitor() {
+    local STEP_DESC=$1
+
+    echo "=========================================="
+    echo "NETWORK MONITOR: $STEP_DESC"
+    echo "=========================================="
+    echo ""
+
+    # Get Bob's network stats
+    BOB_STATS=$(get_network_stats "Bob" 18443 "$BOB_COOKIE")
+    BOB_DD_SUPPLY=$(echo "$BOB_STATS" | jq -r '.result.total_dd_supply // 0')
+    BOB_COLLATERAL=$(echo "$BOB_STATS" | jq -r '.result.total_collateral_dgb // 0')
+    BOB_HEALTH=$(echo "$BOB_STATS" | jq -r '.result.health_percentage // 0')
+
+    # Get Alice's network stats
+    ALICE_STATS=$(get_network_stats "Alice" 18446 "$ALICE_COOKIE")
+    ALICE_DD_SUPPLY=$(echo "$ALICE_STATS" | jq -r '.result.total_dd_supply // 0')
+    ALICE_COLLATERAL=$(echo "$ALICE_STATS" | jq -r '.result.total_collateral_dgb // 0')
+    ALICE_HEALTH=$(echo "$ALICE_STATS" | jq -r '.result.health_percentage // 0')
+
+    # Get Charlie's network stats
+    CHARLIE_STATS=$(get_network_stats "Charlie" 18447 "$CHARLIE_COOKIE")
+    CHARLIE_DD_SUPPLY=$(echo "$CHARLIE_STATS" | jq -r '.result.total_dd_supply // 0')
+    CHARLIE_COLLATERAL=$(echo "$CHARLIE_STATS" | jq -r '.result.total_collateral_dgb // 0')
+    CHARLIE_HEALTH=$(echo "$CHARLIE_STATS" | jq -r '.result.health_percentage // 0')
+
+    # Get individual wallet balances
+    BOB_BALANCE=$(get_dd_balance "Bob" 18443 "$BOB_COOKIE")
+    ALICE_BALANCE=$(get_dd_balance "Alice" 18446 "$ALICE_COOKIE")
+    CHARLIE_BALANCE=$(get_dd_balance "Charlie" 18447 "$CHARLIE_COOKIE")
+
+    echo "Network-Wide Statistics (all nodes should match):"
+    echo "  Bob's view:     Total DD: $BOB_DD_SUPPLY cents | Collateral: $BOB_COLLATERAL DGB | Health: $BOB_HEALTH%"
+    echo "  Alice's view:   Total DD: $ALICE_DD_SUPPLY cents | Collateral: $ALICE_COLLATERAL DGB | Health: $ALICE_HEALTH%"
+    echo "  Charlie's view: Total DD: $CHARLIE_DD_SUPPLY cents | Collateral: $CHARLIE_COLLATERAL DGB | Health: $CHARLIE_HEALTH%"
+    echo ""
+
+    # Verify network stats match
+    if [ "$BOB_DD_SUPPLY" = "$ALICE_DD_SUPPLY" ] && [ "$BOB_DD_SUPPLY" = "$CHARLIE_DD_SUPPLY" ]; then
+        echo "✅ Network Total DD Supply MATCHES on all nodes: $BOB_DD_SUPPLY cents (\$$(echo "scale=2; $BOB_DD_SUPPLY / 100" | bc))"
+    else
+        echo "❌ Network Total DD Supply MISMATCH!"
+        exit 1
+    fi
+
+    if [ "$BOB_COLLATERAL" = "$ALICE_COLLATERAL" ] && [ "$BOB_COLLATERAL" = "$CHARLIE_COLLATERAL" ]; then
+        echo "✅ Network Total Collateral MATCHES on all nodes: $BOB_COLLATERAL DGB"
+    else
+        echo "❌ Network Total Collateral MISMATCH!"
+        exit 1
+    fi
+
+    if [ "$BOB_HEALTH" = "$ALICE_HEALTH" ] && [ "$BOB_HEALTH" = "$CHARLIE_HEALTH" ]; then
+        echo "✅ Network Health MATCHES on all nodes: $BOB_HEALTH%"
+    else
+        echo "❌ Network Health MISMATCH!"
+        exit 1
+    fi
+
+    echo ""
+    echo "Individual Wallet DD Balances:"
+    echo "  Bob:     $BOB_BALANCE cents (\$$(echo "scale=2; $BOB_BALANCE / 100" | bc))"
+    echo "  Alice:   $ALICE_BALANCE cents (\$$(echo "scale=2; $ALICE_BALANCE / 100" | bc))"
+    echo "  Charlie: $CHARLIE_BALANCE cents (\$$(echo "scale=2; $CHARLIE_BALANCE / 100" | bc))"
+    echo ""
+
+    # Verify conservation of DD (sum of balances = network total)
+    TOTAL_BALANCE=$((BOB_BALANCE + ALICE_BALANCE + CHARLIE_BALANCE))
+    if [ "$TOTAL_BALANCE" = "$BOB_DD_SUPPLY" ]; then
+        echo "✅ DD CONSERVATION: Sum of wallet balances ($TOTAL_BALANCE) = Network total ($BOB_DD_SUPPLY)"
+    else
+        echo "❌ DD CONSERVATION VIOLATION: Sum ($TOTAL_BALANCE) != Network total ($BOB_DD_SUPPLY)"
+        exit 1
+    fi
+    echo ""
+}
 
 # Step 1: Clean environment
 echo "=== Step 1: Cleaning environment ==="
@@ -18,6 +126,7 @@ sleep 2
 rm -rf ~/Library/Application\ Support/DigiByte/regtest
 rm -rf /tmp/bob_regtest
 rm -rf /tmp/alice_regtest
+rm -rf /tmp/charlie_regtest
 echo "✓ Clean environment ready"
 echo ""
 
@@ -41,11 +150,12 @@ BOB_PID=$!
 echo "Bob's Qt started (PID: $BOB_PID)"
 sleep 8
 
-# Step 3: Create Bob's wallet and generate 700 blocks (extra for multiple mints)
+# Step 3: Create Bob's wallet and generate 700 blocks
 echo "=== Step 3: Creating Bob's wallet and generating 700 blocks ==="
 ./src/digibyte-cli -regtest -datadir=/tmp/bob_regtest -rpcport=18443 createwallet "bob" > /dev/null
 ./src/digibyte-cli -regtest -datadir=/tmp/bob_regtest -rpcport=18443 -generate 700 > /dev/null
-echo "✓ Bob has 700 blocks (ensuring enough mature UTXOs for 3 mints)"
+echo "✓ Bob has 700 blocks (ensuring enough mature UTXOs for mints)"
+BOB_COOKIE=$(cat /tmp/bob_regtest/regtest/.cookie)
 echo ""
 
 # Step 4: Set oracle price
@@ -57,11 +167,10 @@ echo ""
 
 # Step 5: Bob mints DigiDollars (3 separate mints)
 echo "=== Step 5: Bob minting DigiDollars (3 separate mints) ==="
-COOKIE=$(cat /tmp/bob_regtest/regtest/.cookie)
 
 # Mint #1: $100.00 DD with 365 day lock (tier 4)
 echo "Mint #1: \$100.00 DD (365 days, tier 4)"
-BOB_MINT1=$(curl --silent --user "$COOKIE" \
+BOB_MINT1=$(curl --silent --user "$BOB_COOKIE" \
   --data-binary '{"jsonrpc":"1.0","id":"bob_mint1","method":"mintdigidollar","params":[10000,4]}' \
   -H 'content-type: text/plain;' \
   http://127.0.0.1:18443/)
@@ -79,7 +188,7 @@ sleep 1
 
 # Mint #2: $50.00 DD with 180 day lock (tier 3)
 echo "Mint #2: \$50.00 DD (180 days, tier 3)"
-BOB_MINT2=$(curl --silent --user "$COOKIE" \
+BOB_MINT2=$(curl --silent --user "$BOB_COOKIE" \
   --data-binary '{"jsonrpc":"1.0","id":"bob_mint2","method":"mintdigidollar","params":[5000,3]}' \
   -H 'content-type: text/plain;' \
   http://127.0.0.1:18443/)
@@ -97,7 +206,7 @@ sleep 1
 
 # Mint #3: $25.00 DD with 90 day lock (tier 2)
 echo "Mint #3: \$25.00 DD (90 days, tier 2)"
-BOB_MINT3=$(curl --silent --user "$COOKIE" \
+BOB_MINT3=$(curl --silent --user "$BOB_COOKIE" \
   --data-binary '{"jsonrpc":"1.0","id":"bob_mint3","method":"mintdigidollar","params":[2500,2]}' \
   -H 'content-type: text/plain;' \
   http://127.0.0.1:18443/)
@@ -155,86 +264,44 @@ echo "✓ Alice's oracle price set"
 ALICE_COOKIE=$(cat /tmp/alice_regtest/regtest/.cookie)
 echo ""
 
-# Step 9: Verify network-wide tracking
-echo "=========================================="
-echo "CRITICAL TEST: Network-Wide Tracking"
-echo "=========================================="
+# Step 9: Start Charlie's node
+echo "=== Step 9: Starting Charlie's Qt node ==="
+mkdir -p /tmp/charlie_regtest
+./src/qt/digibyte-qt \
+    -regtest \
+    -datadir=/tmp/charlie_regtest \
+    -port=18448 \
+    -rpcport=18447 \
+    -server \
+    -listen=1 \
+    -discover=0 \
+    -digidollar=1 \
+    -txindex=1 \
+    -fallbackfee=0.0001 \
+    -dandelion=0 \
+    -connect=127.0.0.1:18444 \
+    > /tmp/charlie_qt.log 2>&1 &
+CHARLIE_PID=$!
+echo "Charlie's Qt started (PID: $CHARLIE_PID)"
+sleep 8
+
+# Step 10: Create Charlie's wallet and set oracle price
+echo "=== Step 10: Creating Charlie's wallet, setting oracle price, and syncing ==="
+./src/digibyte-cli -regtest -datadir=/tmp/charlie_regtest -rpcport=18447 createwallet "charlie" > /dev/null
+./src/digibyte-cli -regtest -datadir=/tmp/charlie_regtest -rpcport=18447 setmockoracleprice 1 > /dev/null
+sleep 5
+CHARLIE_HEIGHT=$(./src/digibyte-cli -regtest -datadir=/tmp/charlie_regtest -rpcport=18447 getblockcount)
+echo "✓ Charlie synced (height: $CHARLIE_HEIGHT)"
+echo "✓ Charlie's oracle price set"
+CHARLIE_COOKIE=$(cat /tmp/charlie_regtest/regtest/.cookie)
 echo ""
 
-# Get Bob's view
-echo "=== Bob's View (RPC) ==="
-BOB_HEALTH=$(curl --silent --user "$COOKIE" \
-  --data-binary '{"jsonrpc":"1.0","id":"test","method":"getdigidollarstats","params":[]}' \
-  -H 'content-type: text/plain;' \
-  http://127.0.0.1:18443/)
-echo "$BOB_HEALTH" | jq '.result'
-echo ""
+# Monitor network state after Bob's mints
+display_network_monitor "After Bob's 3 Mints"
 
-# Get Alice's view
-echo "=== Alice's View (RPC) ==="
-ALICE_HEALTH=$(curl --silent --user "$ALICE_COOKIE" \
-  --data-binary '{"jsonrpc":"1.0","id":"test","method":"getdigidollarstats","params":[]}' \
-  -H 'content-type: text/plain;' \
-  http://127.0.0.1:18446/)
-echo "$ALICE_HEALTH" | jq '.result'
-echo ""
-
-# Compare values
-BOB_SUPPLY=$(echo "$BOB_HEALTH" | jq '.result.total_dd_supply')
-ALICE_SUPPLY=$(echo "$ALICE_HEALTH" | jq '.result.total_dd_supply')
-
-BOB_COLLATERAL=$(echo "$BOB_HEALTH" | jq '.result.total_collateral_dgb')
-ALICE_COLLATERAL=$(echo "$ALICE_HEALTH" | jq '.result.total_collateral_dgb')
-
-BOB_HEALTH_PCT=$(echo "$BOB_HEALTH" | jq '.result.health_percentage')
-ALICE_HEALTH_PCT=$(echo "$ALICE_HEALTH" | jq '.result.health_percentage')
-
+# Step 11: Bob mints $10 DD with 1-hour lock
 echo "=========================================="
-echo "Verification Results:"
-echo "=========================================="
-
-if [ "$BOB_SUPPLY" = "$ALICE_SUPPLY" ]; then
-    echo "✅ total_dd_supply MATCHES: $BOB_SUPPLY cents"
-else
-    echo "❌ total_dd_supply MISMATCH!"
-    echo "   Bob: $BOB_SUPPLY, Alice: $ALICE_SUPPLY"
-fi
-
-if [ "$BOB_COLLATERAL" = "$ALICE_COLLATERAL" ]; then
-    echo "✅ total_collateral_dgb MATCHES: $BOB_COLLATERAL DGB"
-else
-    echo "❌ total_collateral_dgb MISMATCH!"
-    echo "   Bob: $BOB_COLLATERAL, Alice: $ALICE_COLLATERAL"
-fi
-
-if [ "$BOB_HEALTH_PCT" = "$ALICE_HEALTH_PCT" ]; then
-    echo "✅ health_percentage MATCHES: $BOB_HEALTH_PCT%"
-else
-    echo "❌ health_percentage MISMATCH!"
-    echo "   Bob: $BOB_HEALTH_PCT%, Alice: $ALICE_HEALTH_PCT%"
-fi
-
-# Verify health calculation is correct (328% for our test case)
-EXPECTED_HEALTH=328
-if [ "$BOB_HEALTH_PCT" = "$EXPECTED_HEALTH" ]; then
-    echo "✅ health_percentage CORRECT: $EXPECTED_HEALTH%"
-else
-    echo "❌ health_percentage INCORRECT!"
-    echo "   Expected: $EXPECTED_HEALTH%, Got: $BOB_HEALTH_PCT%"
-fi
-
-echo ""
-echo "Expected values from Bob's 3 mints:"
-echo "  - Total DD Supply: 17500 cents (\$175.00)"
-echo "  - Tier 4 (300% ratio): \$100.00 DD → $((10000 * 3)) DGB = 30000 DGB"
-echo "  - Tier 3 (350% ratio): \$50.00 DD → $((5000 * 350 / 100)) DGB = 17500 DGB"
-echo "  - Tier 2 (400% ratio): \$25.00 DD → $((2500 * 4)) DGB = 10000 DGB"
-echo "  - Total Collateral: 57500 DGB"
-echo ""
-
-# Step 10: Bob mints $100 DD with 1-hour lock
-echo "=========================================="
-echo "Step 10: Bob mints \$100 DD with 1-hour lock"
+echo "Step 11: Bob mints \$10 DD with 1-hour lock"
 echo "=========================================="
 echo ""
 
@@ -247,7 +314,7 @@ echo "✓ Bob height: $BOB_HEIGHT"
 echo ""
 
 echo "Mint #4: \$10.00 DD (1 hour, tier 0 = 240 blocks, 1000% = 10000 DGB)"
-BOB_MINT4=$(curl --silent --user "$COOKIE" \
+BOB_MINT4=$(curl --silent --user "$BOB_COOKIE" \
   --data-binary '{"jsonrpc":"1.0","id":"bob_mint4","method":"mintdigidollar","params":[1000,0]}' \
   -H 'content-type: text/plain;' \
   http://127.0.0.1:18443/)
@@ -263,7 +330,6 @@ echo "  ✓ Collateral: $(echo "$BOB_MINT4" | jq -r '.result.dgb_collateral') DG
 echo "  ✓ Lock blocks: 240 (1 hour)"
 echo ""
 
-# Dandelion disabled for testing, transaction goes directly to mempool
 MINT4_TXID=$(echo "$BOB_MINT4" | jq -r '.result.txid')
 sleep 2
 
@@ -293,73 +359,27 @@ echo "✓ Mint #4 confirmed (height: $BOB_HEIGHT, confirmations: $TX_CONFIRMATIO
 echo "✓ Lock will expire at height: $((BOB_HEIGHT + 238))"
 echo ""
 
-# Step 11: Generate 120 blocks (halfway through lock period)
+# Monitor network state after 4th mint
+display_network_monitor "After Bob's 4th Mint (\$10 DD, 1-hour lock)"
+
+# Step 12: Generate 120 blocks (halfway through lock period)
 echo "=========================================="
-echo "Step 11: Generate 120 blocks (halfway through lock)"
+echo "Step 12: Generate 120 blocks (halfway through lock)"
 echo "=========================================="
 echo ""
 ./src/digibyte-cli -regtest -datadir=/tmp/bob_regtest -rpcport=18443 -generate 120 > /dev/null
 sleep 5
 BOB_HEIGHT=$(./src/digibyte-cli -regtest -datadir=/tmp/bob_regtest -rpcport=18443 getblockcount)
 ALICE_HEIGHT=$(./src/digibyte-cli -regtest -datadir=/tmp/alice_regtest -rpcport=18446 getblockcount)
+CHARLIE_HEIGHT=$(./src/digibyte-cli -regtest -datadir=/tmp/charlie_regtest -rpcport=18447 getblockcount)
 echo "✓ Bob height: $BOB_HEIGHT"
 echo "✓ Alice height: $ALICE_HEIGHT"
+echo "✓ Charlie height: $CHARLIE_HEIGHT"
 echo "✓ Blocks until unlock: $((BOB_HEIGHT + 118))"
 echo ""
 
-# Step 12: Verify network stats match
-echo "=========================================="
-echo "Step 12: Verify network stats match"
-echo "=========================================="
-echo ""
-
-# Get Bob's view
-echo "=== Bob's View ==="
-BOB_STATS=$(curl --silent --user "$COOKIE" \
-  --data-binary '{"jsonrpc":"1.0","id":"test","method":"getdigidollarstats","params":[]}' \
-  -H 'content-type: text/plain;' \
-  http://127.0.0.1:18443/)
-echo "$BOB_STATS" | jq '.result'
-echo ""
-
-# Get Alice's view
-echo "=== Alice's View ==="
-ALICE_STATS=$(curl --silent --user "$ALICE_COOKIE" \
-  --data-binary '{"jsonrpc":"1.0","id":"test","method":"getdigidollarstats","params":[]}' \
-  -H 'content-type: text/plain;' \
-  http://127.0.0.1:18446/)
-echo "$ALICE_STATS" | jq '.result'
-echo ""
-
-# Compare values
-BOB_SUPPLY_2=$(echo "$BOB_STATS" | jq '.result.total_dd_supply')
-ALICE_SUPPLY_2=$(echo "$ALICE_STATS" | jq '.result.total_dd_supply')
-
-BOB_COLLATERAL_2=$(echo "$BOB_STATS" | jq '.result.total_collateral_dgb')
-ALICE_COLLATERAL_2=$(echo "$ALICE_STATS" | jq '.result.total_collateral_dgb')
-
-BOB_HEALTH_PCT_2=$(echo "$BOB_STATS" | jq '.result.health_percentage')
-ALICE_HEALTH_PCT_2=$(echo "$ALICE_STATS" | jq '.result.health_percentage')
-
-echo "Verification (with 4th mint):"
-if [ "$BOB_SUPPLY_2" = "$ALICE_SUPPLY_2" ]; then
-    echo "✅ total_dd_supply MATCHES: $BOB_SUPPLY_2 cents (expected 18500 = \$185.00)"
-else
-    echo "❌ total_dd_supply MISMATCH! Bob: $BOB_SUPPLY_2, Alice: $ALICE_SUPPLY_2"
-fi
-
-if [ "$BOB_COLLATERAL_2" = "$ALICE_COLLATERAL_2" ]; then
-    echo "✅ total_collateral_dgb MATCHES: $BOB_COLLATERAL_2 DGB"
-else
-    echo "❌ total_collateral_dgb MISMATCH! Bob: $BOB_COLLATERAL_2, Alice: $ALICE_COLLATERAL_2"
-fi
-
-if [ "$BOB_HEALTH_PCT_2" = "$ALICE_HEALTH_PCT_2" ]; then
-    echo "✅ health_percentage MATCHES: $BOB_HEALTH_PCT_2%"
-else
-    echo "❌ health_percentage MISMATCH! Bob: $BOB_HEALTH_PCT_2%, Alice: $ALICE_HEALTH_PCT_2%"
-fi
-echo ""
+# Monitor network state halfway through lock
+display_network_monitor "Halfway Through Lock Period (120 blocks)"
 
 # Step 13: Try early redemption (should FAIL)
 echo "=========================================="
@@ -367,7 +387,7 @@ echo "Step 13: Try early redemption (should FAIL)"
 echo "=========================================="
 echo ""
 echo "Attempting to redeem vault before lock expires..."
-EARLY_REDEEM=$(curl --silent --user "$COOKIE" \
+EARLY_REDEEM=$(curl --silent --user "$BOB_COOKIE" \
   --data-binary "{\"jsonrpc\":\"1.0\",\"id\":\"early_redeem\",\"method\":\"redeemdigidollar\",\"params\":[\"$BOB_TXID4\",1000]}" \
   -H 'content-type: text/plain;' \
   http://127.0.0.1:18443/)
@@ -382,7 +402,7 @@ else
 fi
 echo ""
 
-# Step 14: Generate another 120+ blocks
+# Step 14: Generate another 125 blocks (past lock expiry)
 echo "=========================================="
 echo "Step 14: Generate 125 more blocks (past lock)"
 echo "=========================================="
@@ -391,8 +411,10 @@ echo ""
 sleep 5
 BOB_HEIGHT=$(./src/digibyte-cli -regtest -datadir=/tmp/bob_regtest -rpcport=18443 getblockcount)
 ALICE_HEIGHT=$(./src/digibyte-cli -regtest -datadir=/tmp/alice_regtest -rpcport=18446 getblockcount)
+CHARLIE_HEIGHT=$(./src/digibyte-cli -regtest -datadir=/tmp/charlie_regtest -rpcport=18447 getblockcount)
 echo "✓ Bob height: $BOB_HEIGHT"
 echo "✓ Alice height: $ALICE_HEIGHT"
+echo "✓ Charlie height: $CHARLIE_HEIGHT"
 echo "✓ Lock period EXPIRED - redemption should now work"
 echo ""
 
@@ -402,7 +424,7 @@ echo "Step 15: Redeem the 1-hour vault (should SUCCEED)"
 echo "=========================================="
 echo ""
 echo "Attempting to redeem vault after lock expires..."
-REDEEM_SUCCESS=$(curl --silent --user "$COOKIE" \
+REDEEM_SUCCESS=$(curl --silent --user "$BOB_COOKIE" \
   --data-binary "{\"jsonrpc\":\"1.0\",\"id\":\"redeem_success\",\"method\":\"redeemdigidollar\",\"params\":[\"$BOB_TXID4\",1000]}" \
   -H 'content-type: text/plain;' \
   http://127.0.0.1:18443/)
@@ -426,7 +448,8 @@ echo "=== Generating 10 blocks to confirm redemption ==="
 sleep 5
 BOB_HEIGHT=$(./src/digibyte-cli -regtest -datadir=/tmp/bob_regtest -rpcport=18443 getblockcount)
 ALICE_HEIGHT=$(./src/digibyte-cli -regtest -datadir=/tmp/alice_regtest -rpcport=18446 getblockcount)
-echo "✓ Redemption confirmed (Bob height: $BOB_HEIGHT, Alice height: $ALICE_HEIGHT)"
+CHARLIE_HEIGHT=$(./src/digibyte-cli -regtest -datadir=/tmp/charlie_regtest -rpcport=18447 getblockcount)
+echo "✓ Redemption confirmed (Bob: $BOB_HEIGHT, Alice: $ALICE_HEIGHT, Charlie: $CHARLIE_HEIGHT)"
 echo ""
 
 # CRITICAL: Verify redemption transaction returns exact collateral amount
@@ -436,7 +459,7 @@ echo "=========================================="
 echo ""
 
 # Get the mint transaction to find collateral amount
-MINT_TX=$(curl --silent --user "$COOKIE" \
+MINT_TX=$(curl --silent --user "$BOB_COOKIE" \
   --data-binary "{\"jsonrpc\":\"1.0\",\"id\":\"test\",\"method\":\"getrawtransaction\",\"params\":[\"$BOB_TXID4\",true]}" \
   -H 'content-type: text/plain;' \
   http://127.0.0.1:18443/)
@@ -445,7 +468,7 @@ MINT_COLLATERAL=$(echo "$MINT_TX" | jq -r '.result.vout[0].value')
 echo "Mint transaction locked: $MINT_COLLATERAL DGB as collateral"
 
 # Get the redemption transaction
-REDEEM_TX=$(curl --silent --user "$COOKIE" \
+REDEEM_TX=$(curl --silent --user "$BOB_COOKIE" \
   --data-binary "{\"jsonrpc\":\"1.0\",\"id\":\"test\",\"method\":\"getrawtransaction\",\"params\":[\"$REDEEM_TXID\",true]}" \
   -H 'content-type: text/plain;' \
   http://127.0.0.1:18443/)
@@ -471,94 +494,274 @@ else
 fi
 echo ""
 
-# Step 16: Verify network stats after redemption
+# Monitor network state after redemption
+display_network_monitor "After Redemption of 4th Mint"
+
+# Step 16: NEW - Bob sends DD to Alice and Charlie
 echo "=========================================="
-echo "Step 16: Verify network stats after redemption"
+echo "Step 16: DigiDollar Transfer Tests"
 echo "=========================================="
 echo ""
 
-# Get Bob's view after redemption
-echo "=== Bob's View (After Redemption) ==="
-BOB_FINAL=$(curl --silent --user "$COOKIE" \
-  --data-binary '{"jsonrpc":"1.0","id":"test","method":"getdigidollarstats","params":[]}' \
+# Get Alice's DD receive address
+echo "Getting Alice's DD receive address..."
+ALICE_DD_ADDR=$(curl --silent --user "$ALICE_COOKIE" \
+  --data-binary '{"jsonrpc":"1.0","id":"getaddr","method":"getdigidollaraddress","params":[]}' \
   -H 'content-type: text/plain;' \
-  http://127.0.0.1:18443/)
-echo "$BOB_FINAL" | jq '.result'
-echo ""
+  http://127.0.0.1:18446/wallet/alice | jq -r '.result')
+echo "✓ Alice's DD address: $ALICE_DD_ADDR"
 
-# Get Alice's view after redemption
-echo "=== Alice's View (After Redemption) ==="
-ALICE_FINAL=$(curl --silent --user "$ALICE_COOKIE" \
-  --data-binary '{"jsonrpc":"1.0","id":"test","method":"getdigidollarstats","params":[]}' \
+# Get Charlie's DD receive address
+echo "Getting Charlie's DD receive address..."
+CHARLIE_DD_ADDR=$(curl --silent --user "$CHARLIE_COOKIE" \
+  --data-binary '{"jsonrpc":"1.0","id":"getaddr","method":"getdigidollaraddress","params":[]}' \
   -H 'content-type: text/plain;' \
-  http://127.0.0.1:18446/)
-echo "$ALICE_FINAL" | jq '.result'
+  http://127.0.0.1:18447/wallet/charlie | jq -r '.result')
+echo "✓ Charlie's DD address: $CHARLIE_DD_ADDR"
 echo ""
 
-# Compare final values
-BOB_SUPPLY_FINAL=$(echo "$BOB_FINAL" | jq '.result.total_dd_supply')
-ALICE_SUPPLY_FINAL=$(echo "$ALICE_FINAL" | jq '.result.total_dd_supply')
+# Transfer 1: Bob sends $34.67 to Alice
+echo "=== Transfer #1: Bob → Alice (\$34.67) ==="
+echo "Before transfer:"
+BOB_BAL_BEFORE=$(get_dd_balance "Bob" 18443 "$BOB_COOKIE")
+ALICE_BAL_BEFORE=$(get_dd_balance "Alice" 18446 "$ALICE_COOKIE")
+echo "  Bob:   $BOB_BAL_BEFORE cents (\$$(echo "scale=2; $BOB_BAL_BEFORE / 100" | bc))"
+echo "  Alice: $ALICE_BAL_BEFORE cents (\$$(echo "scale=2; $ALICE_BAL_BEFORE / 100" | bc))"
+echo ""
 
-BOB_COLLATERAL_FINAL=$(echo "$BOB_FINAL" | jq '.result.total_collateral_dgb')
-ALICE_COLLATERAL_FINAL=$(echo "$ALICE_FINAL" | jq '.result.total_collateral_dgb')
+TRANSFER1=$(curl --silent --user "$BOB_COOKIE" \
+  --data-binary "{\"jsonrpc\":\"1.0\",\"id\":\"transfer1\",\"method\":\"senddigidollar\",\"params\":[\"$ALICE_DD_ADDR\",3467]}" \
+  -H 'content-type: text/plain;' \
+  http://127.0.0.1:18443/wallet/bob)
 
-BOB_HEALTH_PCT_FINAL=$(echo "$BOB_FINAL" | jq '.result.health_percentage')
-ALICE_HEALTH_PCT_FINAL=$(echo "$ALICE_FINAL" | jq '.result.health_percentage')
-
-echo "Verification (after redemption):"
-if [ "$BOB_SUPPLY_FINAL" = "$ALICE_SUPPLY_FINAL" ] && [ "$BOB_SUPPLY_FINAL" = "17500" ]; then
-    echo "✅ total_dd_supply MATCHES and CORRECT: $BOB_SUPPLY_FINAL cents (expected 17500 = \$175.00)"
-else
-    echo "❌ total_dd_supply issue! Bob: $BOB_SUPPLY_FINAL, Alice: $ALICE_SUPPLY_FINAL (expected 17500)"
+TRANSFER1_TXID=$(echo "$TRANSFER1" | jq -r '.result.txid // empty')
+if [ -z "$TRANSFER1_TXID" ]; then
+    echo "❌ Transfer #1 failed:"
+    echo "$TRANSFER1" | jq '.'
+    exit 1
 fi
+echo "✓ Transfer sent, txid: ${TRANSFER1_TXID:0:16}..."
+sleep 2
 
-if [ "$BOB_COLLATERAL_FINAL" = "$ALICE_COLLATERAL_FINAL" ] && [ "$BOB_COLLATERAL_FINAL" = "57500" ]; then
-    echo "✅ total_collateral_dgb MATCHES and CORRECT: $BOB_COLLATERAL_FINAL DGB (expected 57500)"
-else
-    echo "❌ total_collateral_dgb issue! Bob: $BOB_COLLATERAL_FINAL, Alice: $ALICE_COLLATERAL_FINAL (expected 57500)"
-fi
+# Confirm transfer
+./src/digibyte-cli -regtest -datadir=/tmp/bob_regtest -rpcport=18443 -generate 5 > /dev/null
+sleep 5
+echo "✓ Transfer confirmed"
+echo ""
 
-if [ "$BOB_HEALTH_PCT_FINAL" = "$ALICE_HEALTH_PCT_FINAL" ]; then
-    echo "✅ health_percentage MATCHES: $BOB_HEALTH_PCT_FINAL%"
+echo "After transfer:"
+BOB_BAL_AFTER1=$(get_dd_balance "Bob" 18443 "$BOB_COOKIE")
+ALICE_BAL_AFTER1=$(get_dd_balance "Alice" 18446 "$ALICE_COOKIE")
+echo "  Bob:   $BOB_BAL_AFTER1 cents (\$$(echo "scale=2; $BOB_BAL_AFTER1 / 100" | bc))"
+echo "  Alice: $ALICE_BAL_AFTER1 cents (\$$(echo "scale=2; $ALICE_BAL_AFTER1 / 100" | bc))"
+echo ""
+
+# Verify transfer amounts
+BOB_CHANGE=$((BOB_BAL_BEFORE - BOB_BAL_AFTER1))
+ALICE_CHANGE=$((ALICE_BAL_AFTER1 - ALICE_BAL_BEFORE))
+echo "Balance changes:"
+echo "  Bob decreased by:   $BOB_CHANGE cents (expected: 3467)"
+echo "  Alice increased by: $ALICE_CHANGE cents (expected: 3467)"
+
+if [ "$BOB_CHANGE" -eq 3467 ] && [ "$ALICE_CHANGE" -eq 3467 ]; then
+    echo "✅ Transfer #1 amounts verified correctly"
 else
-    echo "❌ health_percentage MISMATCH! Bob: $BOB_HEALTH_PCT_FINAL%, Alice: $ALICE_HEALTH_PCT_FINAL%"
+    echo "❌ Transfer #1 amounts incorrect!"
+    exit 1
 fi
+echo ""
+
+# Monitor network state after first transfer
+display_network_monitor "After Transfer #1 (Bob → Alice \$34.67)"
+
+# Transfer 2: Bob sends $12.53 to Charlie
+echo "=== Transfer #2: Bob → Charlie (\$12.53) ==="
+echo "Before transfer:"
+BOB_BAL_BEFORE2=$(get_dd_balance "Bob" 18443 "$BOB_COOKIE")
+CHARLIE_BAL_BEFORE=$(get_dd_balance "Charlie" 18447 "$CHARLIE_COOKIE")
+echo "  Bob:     $BOB_BAL_BEFORE2 cents (\$$(echo "scale=2; $BOB_BAL_BEFORE2 / 100" | bc))"
+echo "  Charlie: $CHARLIE_BAL_BEFORE cents (\$$(echo "scale=2; $CHARLIE_BAL_BEFORE / 100" | bc))"
+echo ""
+
+TRANSFER2=$(curl --silent --user "$BOB_COOKIE" \
+  --data-binary "{\"jsonrpc\":\"1.0\",\"id\":\"transfer2\",\"method\":\"senddigidollar\",\"params\":[\"$CHARLIE_DD_ADDR\",1253]}" \
+  -H 'content-type: text/plain;' \
+  http://127.0.0.1:18443/wallet/bob)
+
+TRANSFER2_TXID=$(echo "$TRANSFER2" | jq -r '.result.txid // empty')
+if [ -z "$TRANSFER2_TXID" ]; then
+    echo "❌ Transfer #2 failed:"
+    echo "$TRANSFER2" | jq '.'
+    exit 1
+fi
+echo "✓ Transfer sent, txid: ${TRANSFER2_TXID:0:16}..."
+sleep 2
+
+# Confirm transfer
+./src/digibyte-cli -regtest -datadir=/tmp/bob_regtest -rpcport=18443 -generate 5 > /dev/null
+sleep 5
+echo "✓ Transfer confirmed"
+echo ""
+
+echo "After transfer:"
+BOB_BAL_AFTER2=$(get_dd_balance "Bob" 18443 "$BOB_COOKIE")
+CHARLIE_BAL_AFTER=$(get_dd_balance "Charlie" 18447 "$CHARLIE_COOKIE")
+echo "  Bob:     $BOB_BAL_AFTER2 cents (\$$(echo "scale=2; $BOB_BAL_AFTER2 / 100" | bc))"
+echo "  Charlie: $CHARLIE_BAL_AFTER cents (\$$(echo "scale=2; $CHARLIE_BAL_AFTER / 100" | bc))"
+echo ""
+
+# Verify transfer amounts
+BOB_CHANGE2=$((BOB_BAL_BEFORE2 - BOB_BAL_AFTER2))
+CHARLIE_CHANGE=$((CHARLIE_BAL_AFTER - CHARLIE_BAL_BEFORE))
+echo "Balance changes:"
+echo "  Bob decreased by:     $BOB_CHANGE2 cents (expected: 1253)"
+echo "  Charlie increased by: $CHARLIE_CHANGE cents (expected: 1253)"
+
+if [ "$BOB_CHANGE2" -eq 1253 ] && [ "$CHARLIE_CHANGE" -eq 1253 ]; then
+    echo "✅ Transfer #2 amounts verified correctly"
+else
+    echo "❌ Transfer #2 amounts incorrect!"
+    exit 1
+fi
+echo ""
+
+# Monitor network state after second transfer
+display_network_monitor "After Transfer #2 (Bob → Charlie \$12.53)"
+
+# Step 17: Final comprehensive balance verification
+echo "=========================================="
+echo "Step 17: Final Balance Verification"
+echo "=========================================="
+echo ""
+
+# Calculate expected final balances
+# Bob started with $175.00 (17500 cents)
+# Bob sent $34.67 (3467 cents) to Alice
+# Bob sent $12.53 (1253 cents) to Charlie
+# Bob expected: 17500 - 3467 - 1253 = 12780 cents ($127.80)
+EXPECTED_BOB=12780
+EXPECTED_ALICE=3467
+EXPECTED_CHARLIE=1253
+EXPECTED_NETWORK_TOTAL=17500
+
+echo "Expected final balances:"
+echo "  Bob:     $EXPECTED_BOB cents (\$$(echo "scale=2; $EXPECTED_BOB / 100" | bc))"
+echo "  Alice:   $EXPECTED_ALICE cents (\$$(echo "scale=2; $EXPECTED_ALICE / 100" | bc))"
+echo "  Charlie: $EXPECTED_CHARLIE cents (\$$(echo "scale=2; $EXPECTED_CHARLIE / 100" | bc))"
+echo "  Network: $EXPECTED_NETWORK_TOTAL cents (\$$(echo "scale=2; $EXPECTED_NETWORK_TOTAL / 100" | bc))"
+echo ""
+
+# Get actual balances
+ACTUAL_BOB=$(get_dd_balance "Bob" 18443 "$BOB_COOKIE")
+ACTUAL_ALICE=$(get_dd_balance "Alice" 18446 "$ALICE_COOKIE")
+ACTUAL_CHARLIE=$(get_dd_balance "Charlie" 18447 "$CHARLIE_COOKIE")
+
+# Get network total
+BOB_STATS_FINAL=$(get_network_stats "Bob" 18443 "$BOB_COOKIE")
+ACTUAL_NETWORK=$(echo "$BOB_STATS_FINAL" | jq -r '.result.total_dd_supply')
+
+echo "Actual final balances:"
+echo "  Bob:     $ACTUAL_BOB cents (\$$(echo "scale=2; $ACTUAL_BOB / 100" | bc))"
+echo "  Alice:   $ACTUAL_ALICE cents (\$$(echo "scale=2; $ACTUAL_ALICE / 100" | bc))"
+echo "  Charlie: $ACTUAL_CHARLIE cents (\$$(echo "scale=2; $ACTUAL_CHARLIE / 100" | bc))"
+echo "  Network: $ACTUAL_NETWORK cents (\$$(echo "scale=2; $ACTUAL_NETWORK / 100" | bc))"
 echo ""
 
 echo "=========================================="
-echo "1-HOUR LOCK CYCLE TEST COMPLETE"
+echo "Final Verification Results:"
+echo "=========================================="
+
+# Verify Bob's balance
+if [ "$ACTUAL_BOB" -eq "$EXPECTED_BOB" ]; then
+    echo "✅ Bob's balance CORRECT: $ACTUAL_BOB cents"
+else
+    echo "❌ Bob's balance INCORRECT! Expected: $EXPECTED_BOB, Got: $ACTUAL_BOB"
+    exit 1
+fi
+
+# Verify Alice's balance
+if [ "$ACTUAL_ALICE" -eq "$EXPECTED_ALICE" ]; then
+    echo "✅ Alice's balance CORRECT: $ACTUAL_ALICE cents"
+else
+    echo "❌ Alice's balance INCORRECT! Expected: $EXPECTED_ALICE, Got: $ACTUAL_ALICE"
+    exit 1
+fi
+
+# Verify Charlie's balance
+if [ "$ACTUAL_CHARLIE" -eq "$EXPECTED_CHARLIE" ]; then
+    echo "✅ Charlie's balance CORRECT: $ACTUAL_CHARLIE cents"
+else
+    echo "❌ Charlie's balance INCORRECT! Expected: $EXPECTED_CHARLIE, Got: $ACTUAL_CHARLIE"
+    exit 1
+fi
+
+# Verify network total
+if [ "$ACTUAL_NETWORK" -eq "$EXPECTED_NETWORK_TOTAL" ]; then
+    echo "✅ Network total CORRECT: $ACTUAL_NETWORK cents"
+else
+    echo "❌ Network total INCORRECT! Expected: $EXPECTED_NETWORK_TOTAL, Got: $ACTUAL_NETWORK"
+    exit 1
+fi
+
+# Verify conservation
+ACTUAL_SUM=$((ACTUAL_BOB + ACTUAL_ALICE + ACTUAL_CHARLIE))
+if [ "$ACTUAL_SUM" -eq "$ACTUAL_NETWORK" ]; then
+    echo "✅ DD CONSERVATION verified: Sum of balances ($ACTUAL_SUM) = Network total ($ACTUAL_NETWORK)"
+else
+    echo "❌ DD CONSERVATION VIOLATION! Sum: $ACTUAL_SUM, Network: $ACTUAL_NETWORK"
+    exit 1
+fi
+
+echo ""
+echo "=========================================="
+echo "ALL TESTS PASSED!"
 echo "=========================================="
 echo ""
 echo "Test Summary:"
-echo "  1. ✓ Minted \$100 DD with 1-hour lock (240 blocks)"
-echo "  2. ✓ Generated 120 blocks (halfway through lock)"
-echo "  3. ✓ Verified network stats matched on both nodes"
-echo "  4. ✓ Early redemption correctly rejected"
-echo "  5. ✓ Generated 125+ blocks (past lock expiry)"
+echo "  1. ✓ Bob minted \$175.00 DD (3 long-term vaults)"
+echo "  2. ✓ Bob minted \$10.00 DD with 1-hour lock"
+echo "  3. ✓ Alice and Charlie synced and saw same network stats"
+echo "  4. ✓ Network stats matched across all 3 nodes at every step"
+echo "  5. ✓ Early redemption correctly rejected"
 echo "  6. ✓ Redemption succeeded after lock expired"
-echo "  7. ✓ Network stats returned to original values"
+echo "  7. ✓ Exact collateral amount returned on redemption"
+echo "  8. ✓ Bob sent \$34.67 DD to Alice"
+echo "  9. ✓ Bob sent \$12.53 DD to Charlie"
+echo " 10. ✓ All final balances verified correct"
+echo " 11. ✓ DD conservation verified (sum = network total)"
 echo ""
 
 echo "=========================================="
 echo "Qt GUI Windows Are Open"
 echo "=========================================="
 echo ""
-echo "Check the following in BOTH Qt windows:"
+echo "Check the following in ALL THREE Qt windows:"
 echo ""
 echo "1. Navigate to: DigiDollar tab → Overview"
 echo ""
 echo "2. Verify 'Network DigiDollar Status' section shows:"
-echo "   - Network Total DD: Should be IDENTICAL on both (~\$175.00)"
-echo "   - Network Total Collateral: Should be IDENTICAL on both (~57500 DGB)"
-echo "   - System Health: Should be IDENTICAL on both"
+echo "   - Network Total DD: Should be IDENTICAL on all 3 (~\$175.00)"
+echo "   - Network Total Collateral: Should be IDENTICAL on all 3 (~57500 DGB)"
+echo "   - System Health: Should be IDENTICAL on all 3"
 echo ""
-echo "3. Personal balances will be DIFFERENT:"
-echo "   - Bob: \$175.00 DD (from his 3 remaining mints)"
-echo "   - Alice: \$0.00 DD (did not mint)"
+echo "3. Personal balances should be DIFFERENT:"
+echo "   - Bob:     \$127.80 DD (12780 cents)"
+echo "   - Alice:   \$34.67 DD (3467 cents)"
+echo "   - Charlie: \$12.53 DD (1253 cents)"
 echo ""
-echo "4. The 4th mint (\$100 DD, 1-hour lock) was redeemed"
+echo "4. The 4th mint (\$10 DD, 1-hour lock) was redeemed"
+echo ""
+echo "5. Transfer history should show:"
+echo "   - Bob: 2 sends to Alice and Charlie"
+echo "   - Alice: 1 receive from Bob"
+echo "   - Charlie: 1 receive from Bob"
 echo ""
 echo "Qt windows remain open for manual verification"
+echo "Process IDs:"
+echo "  Bob:     $BOB_PID"
+echo "  Alice:   $ALICE_PID"
+echo "  Charlie: $CHARLIE_PID"
+echo ""
 echo "Press Ctrl+C to stop the Qt clients"
 echo ""
 

@@ -170,8 +170,14 @@ The DigiDollar system is built into DigiByte Core with code organized in these m
 │ 2. Calculate required DD amount             │
 │    (may be higher if ERR active)            │
 │ 3. Select DD UTXOs to burn                  │
-│ 4. Create redemption transaction            │
-│ 5. Sign with appropriate script path        │
+│ 4. Create redemption transaction with:      │
+│    • Input 0: Collateral (vout[0])          │
+│    • Input 1+: DD tokens (vout[1])          │
+│    • Input N: Fee input                     │
+│ 5. Sign inputs with TWO different methods:  │
+│    • Collateral: SCRIPT-PATH (MAST + sig)   │
+│    • DD tokens: KEY-PATH (signature only)   │
+│    • Fees: Standard ECDSA                   │
 │ 6. Burn DigiDollars (remove from UTXO)      │
 │ 7. Unlock proportional DGB collateral       │
 │ 8. Update or close position in database     │
@@ -365,13 +371,35 @@ double GetDCAMultiplier(int systemHealth) {
 - ✅ Sophisticated UTXO selection with overflow protection
 - ✅ OP_RETURN metadata for cross-node validation
 - ✅ Proper fee estimation and change handling
-- ✅ P2TR output creation with MAST redemption paths
+- ✅ Dual P2TR output creation: collateral with MAST, DD token with key-path only
+
+**Transaction Output Structure (Lines 283-291):**
+```cpp
+// Output 0: Collateral vault (P2TR with 4-path MAST + CLTV timelock)
+CScript collateralScript = CreateCollateralScript(params);  // MAST structure
+tx.vout.push_back(CTxOut(result.collateralRequired, collateralScript));
+
+// Output 1: DD token (SIMPLE P2TR - key-path only, NO MAST, NO CLTV)
+// DD tokens must be freely transferable, unlike collateral which has timelock
+CScript ddScript = CreateDDOutputScript(params.ownerKey, params.ddAmount);
+tx.vout.push_back(CTxOut(0, ddScript));  // 0 DGB value
+```
+
+**Critical Design Decision:**
+- **Collateral (vout[0])**: Complex P2TR with 4 MAST paths (Normal/Emergency/Partial/ERR) and CLTV timelock
+- **DD Token (vout[1])**: Simple P2TR key-path only - freely transferable, no scripts, no timelock
+- **Why Different**: DD tokens need to move freely between users; only collateral needs locking/redemption paths
+
+**Witness Structure:**
+- **Collateral spending (redemption)**: `[signature] [script] [control_block]` - SCRIPT-PATH
+- **DD token spending (transfers)**: `[signature]` - KEY-PATH (64 bytes only)
 
 **Recent Refactoring Highlights:**
 - Enhanced system health integration for DCA
 - Improved fee calculation and UTXO management
 - Better error handling and validation
 - Optimized coin selection algorithms
+- **Fixed DD token output**: Changed from CreateCollateralScript() to CreateDDOutputScript() for free transferability
 
 ### 3.4 Minting GUI Implementation
 
@@ -1046,13 +1074,17 @@ bool RemoveDDUTXOFromDatabase(const COutPoint& outpoint);  // ✅ Working
         │                  BUILD MINT TRANSACTION                     │
         ├─────────────────────────────────────────────────────────────┤
         │ 1. Select DGB UTXOs (greedy algorithm for collateral+fees) │
-        │ 2. Create P2TR Collateral Vault with 4 exit paths:         │
-        │    • Normal (timelock) • Emergency (oracles)               │
-        │    • Partial (burn extra DD) • ERR (system crisis)         │
-        │ 3. Create P2TR DigiDollar Output (0 DGB, DD in metadata)   │
-        │ 4. Add OP_RETURN with transaction type (0x01000770)        │
+        │ 2. Create vout[0]: Collateral vault (P2TR with MAST)       │
+        │    • 4 redemption paths: Normal/Emergency/Partial/ERR      │
+        │    • CLTV timelock + complex script structure              │
+        │    • CreateCollateralScript() - MAST with 4 paths          │
+        │ 3. Create vout[1]: DD token (SIMPLE P2TR, key-path only)   │
+        │    • NO MAST, NO CLTV - freely transferable                │
+        │    • CreateDDOutputScript() - just Taproot tweak           │
+        │    • Witness when spending: [64-byte signature] only       │
+        │ 4. Create vout[2]: OP_RETURN metadata (tx type + amounts)  │
         │ 5. Calculate fees and create change outputs                 │
-        │ CODE: /src/digidollar/scripts.cpp - MAST creation           │
+        │ CODE: /src/digidollar/txbuilder.cpp lines 283-291           │
         └─────────────────────────────────────────────────────────────┘
                                       │
                                       ▼
@@ -1127,18 +1159,42 @@ bool RemoveDDUTXOFromDatabase(const COutPoint& outpoint);  // ✅ Working
                                       │
                                       ▼
         ┌─────────────────────────────────────────────────────────────┐
-        │        🔑 CRITICAL TAPROOT SIGNING ORDER (Recent Fix)      │
+        │    🔑 TAPROOT SIGNING: KEY-PATH vs SCRIPT-PATH (Critical)  │
         ├─────────────────────────────────────────────────────────────┤
-        │ ⚠️  MUST SIGN FEE INPUTS FIRST, THEN DD INPUTS!             │
-        │     (Taproot sighash includes witness data of other inputs) │
+        │ ⚠️  Transfer transactions set LOCKTIME = 0 (no timelock)    │
+        │                                                             │
+        │ SIGNING PROCESS (Lines 2653-2714 in SignDDInputs):         │
         │                                                             │
         │ 1. Sign DGB Fee Inputs FIRST:                               │
         │    → wallet's SignTransaction() creates ECDSA signatures    │
-        │ 2. Sign DD Inputs SECOND:                                   │
-        │    → Schnorr signatures for P2TR DD inputs                  │
-        │    → Get owner keys from position database                  │
+        │    → (Taproot sighash includes witness data of other inputs)│
+        │                                                             │
+        │ 2. For EACH DD Input - Check Output Index (outpoint.n):    │
+        │                                                             │
+        │    IF outpoint.n == 1 (DD token output):                    │
+        │    ✅ USE KEY-PATH SIGNING:                                 │
+        │       • DD tokens are simple P2TR (no MAST tree)           │
+        │       • Tweak key with EMPTY merkle root                    │
+        │       • Sign with Schnorr signature                         │
+        │       • Witness stack: [64-byte signature] (key-path)       │
+        │       • This is the standard transfer case!                 │
+        │                                                             │
+        │    ELSE (outpoint.n == 0, collateral vault):                │
+        │    🔒 USE SCRIPT-PATH SIGNING:                              │
+        │       • Collateral has MAST tree with 4 redemption paths   │
+        │       • Reconstruct taproot tree from position data         │
+        │       • Sign with script-path leaf verification             │
+        │       • Witness stack: [sig, script, control_block]         │
+        │       • Only used during redemption, not transfers!         │
+        │                                                             │
         │ 3. Validate: Check signatures, amounts, DD conservation     │
+        │                                                             │
+        │ KEY INSIGHT: Transfer txs spend vout[1] (DD tokens) using  │
+        │ simple key-path signing. Only redemptions spend vout[0]     │
+        │ (collateral) which requires complex script-path signing.    │
+        │                                                             │
         │ CODE: /src/wallet/digidollarwallet.cpp - SignDDInputs       │
+        │       Lines 2653-2714 contain the vout index check logic    │
         └─────────────────────────────────────────────────────────────┘
                                       │
                                       ▼

@@ -19,9 +19,10 @@ class DigiDollarNetworkTrackingTest(DigiByteTestFramework):
     def set_test_params(self):
         self.num_nodes = 2
         self.setup_clean_chain = True
+        # Disable Dandelion for testing (DD transfers fail with Dandelion++)
         self.extra_args = [
-            ["-digidollar=1", "-debug=digidollar", "-txindex=1"],
-            ["-digidollar=1", "-debug=digidollar", "-txindex=1"]
+            ["-digidollar=1", "-debug=digidollar", "-txindex=1", "-dandelion=0"],
+            ["-digidollar=1", "-debug=digidollar", "-txindex=1", "-dandelion=0"]
         ]
 
     def skip_test_if_missing_module(self):

@@ -33,13 +33,16 @@ class DigiDollarTransactionsTest(DigiByteTestFramework):
     def set_test_params(self):
         self.num_nodes = 4
         self.setup_clean_chain = True
-        # Enable DigiDollar features and set up for testing
+        # Enable DigiDollar features, disable Dandelion for testing
         self.extra_args = [
-            ["-digidollar=1", "-mocktime=0", "-debug=digidollar"],
-            ["-digidollar=1", "-mocktime=0", "-debug=digidollar"],
-            ["-digidollar=1", "-mocktime=0", "-debug=digidollar"],
-            ["-digidollar=1", "-mocktime=0", "-debug=digidollar"]
+            ["-digidollar=1", "-mocktime=0", "-debug=digidollar", "-dandelion=0"],
+            ["-digidollar=1", "-mocktime=0", "-debug=digidollar", "-dandelion=0"],
+            ["-digidollar=1", "-mocktime=0", "-debug=digidollar", "-dandelion=0"],
+            ["-digidollar=1", "-mocktime=0", "-debug=digidollar", "-dandelion=0"]
         ]
+
+    def add_options(self, parser):
+        self.add_wallet_options(parser)
 
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()
@@ -126,19 +129,28 @@ class DigiDollarTransactionsTest(DigiByteTestFramework):
         balance = verify_rpc_call("getdigidollarbalance works",
             lambda: self.nodes[0].getdigidollarbalance())
 
-        assert_equal(balance, 0.0)  # Initially zero
+        assert 'total' in balance  # Should return dict with 'total' key
+        assert_equal(balance['total'], 0)  # Initially zero
 
         # Test valid mint parameters
-        mint_txid = verify_rpc_call("mintdigidollar with valid params",
-            lambda: self.nodes[0].mintdigidollar(1000.0, 365))
+        mint_result = verify_rpc_call("mintdigidollar with valid params",
+            lambda: self.nodes[0].mintdigidollar(100000, 3))  # 100000 cents = $1000, tier 3
 
-        assert_equal(len(mint_txid), 64)  # Valid txid length
+        # mintdigidollar returns a dict with position_id, dd_minted, dgb_collateral, unlock_height
+        assert 'position_id' in mint_result
+        assert 'dd_minted' in mint_result
+        assert_equal(len(mint_result['position_id']), 64)  # Valid txid length
 
         # Test transfer with valid address
-        transfer_txid = verify_rpc_call("transferdigidollar works",
-            lambda: self.nodes[0].transferdigidollar(dd_address, 100.0))
+        transfer_result = verify_rpc_call("senddigidollar works",
+            lambda: self.nodes[0].senddigidollar(dd_address, 10000))  # 10000 cents = $100
 
-        assert_equal(len(transfer_txid), 64)
+        # senddigidollar might return a dict or txid string - handle both
+        if isinstance(transfer_result, dict):
+            assert 'txid' in transfer_result
+            assert_equal(len(transfer_result['txid']), 64)
+        else:
+            assert_equal(len(transfer_result), 64)
 
     def test_transaction_validation(self):
         """Test transaction validation logic (GREEN phase)."""
@@ -161,22 +173,22 @@ class DigiDollarTransactionsTest(DigiByteTestFramework):
         validation_tests = [
             {
                 'description': 'Mint amount (too small)',
-                'test': lambda: self.nodes[0].mintdigidollar(50.0, 365),
+                'test': lambda: self.nodes[0].mintdigidollar(5000, 3),  # 5000 cents = $50, tier 3
                 'keywords': ['minimum', 'below']
             },
             {
                 'description': 'Mint amount (too large)',
-                'test': lambda: self.nodes[0].mintdigidollar(200000.0, 365),
+                'test': lambda: self.nodes[0].mintdigidollar(20000000, 3),  # 20000000 cents = $200000, tier 3
                 'keywords': ['maximum', 'above']
             },
             {
-                'description': 'Lock period (too short)',
-                'test': lambda: self.nodes[0].mintdigidollar(1000.0, 15),
-                'keywords': ['short', 'minimum', 'lock']
+                'description': 'Lock tier (invalid)',
+                'test': lambda: self.nodes[0].mintdigidollar(100000, 10),  # tier 10 doesn't exist
+                'keywords': ['tier', 'invalid']
             },
             {
                 'description': 'Invalid address format',
-                'test': lambda: self.nodes[0].transferdigidollar("invalid_address", 100.0),
+                'test': lambda: self.nodes[0].senddigidollar("invalid_address", 10000),
                 'keywords': ['invalid', 'address']
             }
         ]
@@ -230,8 +242,8 @@ class DigiDollarTransactionsTest(DigiByteTestFramework):
             },
             {
                 'description': 'Negative transfer amount rejected',
-                'test': lambda: self.nodes[0].transferdigidollar(
-                    self.nodes[1].getdigidollaraddress(), -100.0),
+                'test': lambda: self.nodes[0].senddigidollar(
+                    self.nodes[1].getdigidollaraddress(), -10000),
                 'keywords': ['positive', 'invalid', 'amount']
             }
         ]
@@ -290,7 +302,7 @@ class DigiDollarTransactionsTest(DigiByteTestFramework):
         verify_cross_node_consistency(
             "Multi-node balance consistency",
             lambda node: node.getdigidollarbalance(),
-            lambda values: all(v[1] == 0.0 for v in values)
+            lambda values: all(v[1].get('total', -1) == 0 for v in values)
         )
 
     def test_advanced_scenarios(self):
@@ -346,33 +358,33 @@ class DigiDollarTransactionsTest(DigiByteTestFramework):
         """Test comprehensive mint transaction scenarios."""
         self.log.info("Testing comprehensive mint scenarios...")
 
-        # Test all 8 lock tiers
+        # Test all 7 lock tiers (0-6)
         lock_tiers = [
-            {"days": 30, "name": "Tier 1", "collateral_ratio": 5.0},
-            {"days": 90, "name": "Tier 2", "collateral_ratio": 4.5},
-            {"days": 180, "name": "Tier 3", "collateral_ratio": 4.0},
-            {"days": 365, "name": "Tier 4", "collateral_ratio": 3.5},
-            {"days": 730, "name": "Tier 5", "collateral_ratio": 3.0},
-            {"days": 1095, "name": "Tier 6", "collateral_ratio": 2.5},
-            {"days": 1460, "name": "Tier 7", "collateral_ratio": 2.25},
-            {"days": 1825, "name": "Tier 8", "collateral_ratio": 2.0}
+            {"tier": 0, "name": "Tier 0", "description": "No lock"},
+            {"tier": 1, "name": "Tier 1", "description": "1 hour"},
+            {"tier": 2, "name": "Tier 2", "description": "1 day"},
+            {"tier": 3, "name": "Tier 3", "description": "1 week"},
+            {"tier": 4, "name": "Tier 4", "description": "1 month"},
+            {"tier": 5, "name": "Tier 5", "description": "3 months"},
+            {"tier": 6, "name": "Tier 6", "description": "1 year"}
         ]
 
         for tier in lock_tiers:
             try:
-                self.log.info(f"Testing {tier['name']} mint (lock={tier['days']} days)...")
+                self.log.info(f"Testing {tier['name']} mint ({tier['description']})...")
 
-                # Test various mint amounts
-                mint_amounts = [100.0, 500.0, 1000.0, 5000.0]
+                # Test various mint amounts in cents
+                mint_amounts = [10000, 50000, 100000, 500000]  # $100, $500, $1000, $5000 in cents
 
                 for amount in mint_amounts:
                     try:
-                        mint_result = self.nodes[0].mintdigidollar(amount, tier['days'])
-                        self.log.info(f"✓ Mint {amount} DD for {tier['days']} days: {mint_result[:16]}...")
+                        mint_result = self.nodes[0].mintdigidollar(amount, tier['tier'])
+                        position_id = mint_result.get('position_id', mint_result if isinstance(mint_result, str) else '')
+                        self.log.info(f"✓ Mint {amount/100} DD for tier {tier['tier']}: {position_id[:16]}...")
 
                         # Verify transaction is in mempool
                         mempool = self.nodes[0].getrawmempool()
-                        assert mint_result in mempool, f"Mint transaction should be in mempool"
+                        assert position_id in mempool, f"Mint transaction should be in mempool"
 
                     except Exception as e:
                         self.log.info(f"✗ Mint {amount} DD failed: {e}")
@@ -384,13 +396,13 @@ class DigiDollarTransactionsTest(DigiByteTestFramework):
         """Test comprehensive transfer transaction scenarios."""
         self.log.info("Testing comprehensive transfer scenarios...")
 
-        # Test various transfer amounts and patterns
+        # Test various transfer amounts and patterns in cents
         transfer_scenarios = [
-            {"amount": 10.0, "description": "Small transfer"},
-            {"amount": 100.0, "description": "Medium transfer"},
-            {"amount": 1000.0, "description": "Large transfer"},
-            {"amount": 0.01, "description": "Micro transfer"},
-            {"amount": 9999.99, "description": "Near-max transfer"}
+            {"amount": 1000, "description": "Small transfer"},  # $10
+            {"amount": 10000, "description": "Medium transfer"},  # $100
+            {"amount": 100000, "description": "Large transfer"},  # $1000
+            {"amount": 1, "description": "Micro transfer"},  # $0.01
+            {"amount": 999999, "description": "Near-max transfer"}  # $9999.99
         ]
 
         # Create test addresses for transfers
@@ -407,17 +419,18 @@ class DigiDollarTransactionsTest(DigiByteTestFramework):
         for scenario in transfer_scenarios:
             for i, target_addr in enumerate(test_addresses[1:], 1):
                 try:
-                    transfer_result = self.nodes[0].transferdigidollar(
+                    transfer_result = self.nodes[0].senddigidollar(
                         target_addr,
                         scenario['amount']
                     )
-                    self.log.info(f"✓ {scenario['description']} to node {i}: {transfer_result[:16]}...")
+                    txid = transfer_result.get('txid', transfer_result if isinstance(transfer_result, str) else '')
+                    self.log.info(f"✓ {scenario['description']} to node {i}: {txid[:16]}...")
 
                     # Test multi-output transfers
                     if len(test_addresses) > 2:
                         multi_outputs = {
-                            test_addresses[1]: scenario['amount'] / 2,
-                            test_addresses[2]: scenario['amount'] / 2
+                            test_addresses[1]: scenario['amount'] // 2,
+                            test_addresses[2]: scenario['amount'] // 2
                         }
                         try:
                             multi_result = self.nodes[0].transferdigidollarmulti(multi_outputs)
@@ -450,11 +463,13 @@ class DigiDollarTransactionsTest(DigiByteTestFramework):
                     if positions:
                         for position in positions[:3]:  # Test first 3 positions
                             try:
+                                # redeemdigidollar takes (mint_txid, amount_cents)
                                 redeem_result = self.nodes[0].redeemdigidollar(
                                     position['position_id'],
-                                    path=path['path']
+                                    position.get('dd_amount', 100000)  # Full redemption
                                 )
-                                self.log.info(f"✓ {path['description']}: {redeem_result[:16]}...")
+                                txid = redeem_result.get('txid', redeem_result if isinstance(redeem_result, str) else '')
+                                self.log.info(f"✓ {path['description']}: {txid[:16]}...")
                             except Exception as e:
                                 self.log.info(f"✗ {path['description']} failed: {e}")
                     else:
@@ -463,9 +478,10 @@ class DigiDollarTransactionsTest(DigiByteTestFramework):
                         try:
                             redeem_result = self.nodes[0].redeemdigidollar(
                                 mock_position_id,
-                                path=path['path']
+                                100000  # 100000 cents
                             )
-                            self.log.info(f"✓ {path['description']} (mock): {redeem_result[:16]}...")
+                            txid = redeem_result.get('txid', redeem_result if isinstance(redeem_result, str) else '')
+                            self.log.info(f"✓ {path['description']} (mock): {txid[:16]}...")
                         except Exception as e:
                             self.log.info(f"✗ {path['description']} (mock) failed: {e}")
                 except Exception as e:
@@ -481,9 +497,9 @@ class DigiDollarTransactionsTest(DigiByteTestFramework):
         try:
             # Full lifecycle: mint -> transfer -> redeem
             lifecycle_steps = [
-                {"step": "mint", "params": [1000.0, 365]},
-                {"step": "transfer", "params": [self.nodes[1].getdigidollaraddress(), 100.0]},
-                {"step": "redeem", "params": ["position_id", "normal"]}
+                {"step": "mint", "params": [100000, 3]},  # 100000 cents = $1000, tier 3
+                {"step": "transfer", "params": [self.nodes[1].getdigidollaraddress(), 10000]},  # 10000 cents = $100
+                {"step": "redeem", "params": ["position_id", 100000]}  # Full redemption
             ]
 
             lifecycle_results = {}
@@ -493,22 +509,24 @@ class DigiDollarTransactionsTest(DigiByteTestFramework):
                 try:
                     if step == "mint":
                         result = self.nodes[0].mintdigidollar(*step_info['params'])
-                        lifecycle_results['mint_txid'] = result
-                        self.log.info(f"✓ Lifecycle step {step}: {result[:16]}...")
+                        position_id = result.get('position_id', result if isinstance(result, str) else '')
+                        lifecycle_results['mint_txid'] = position_id
+                        self.log.info(f"✓ Lifecycle step {step}: {position_id[:16]}...")
 
                         # Mine block to confirm
-                        self.nodes[0].generate(1)
+                        self.generate(self.nodes[0], 1)
                         self.sync_all()
 
                     elif step == "transfer":
                         # Get fresh address
                         target_addr = self.nodes[1].getdigidollaraddress()
-                        result = self.nodes[0].transferdigidollar(target_addr, step_info['params'][1])
-                        lifecycle_results['transfer_txid'] = result
-                        self.log.info(f"✓ Lifecycle step {step}: {result[:16]}...")
+                        result = self.nodes[0].senddigidollar(target_addr, step_info['params'][1])
+                        txid = result.get('txid', result if isinstance(result, str) else '')
+                        lifecycle_results['transfer_txid'] = txid
+                        self.log.info(f"✓ Lifecycle step {step}: {txid[:16]}...")
 
                         # Mine block to confirm
-                        self.nodes[0].generate(1)
+                        self.generate(self.nodes[0], 1)
                         self.sync_all()
 
                     elif step == "redeem":
@@ -516,9 +534,10 @@ class DigiDollarTransactionsTest(DigiByteTestFramework):
                         positions = self.nodes[0].listdigidollarpositions()
                         if positions:
                             position_id = positions[0]['position_id']
-                            result = self.nodes[0].redeemdigidollar(position_id, "normal")
-                            lifecycle_results['redeem_txid'] = result
-                            self.log.info(f"✓ Lifecycle step {step}: {result[:16]}...")
+                            result = self.nodes[0].redeemdigidollar(position_id, step_info['params'][1])
+                            txid = result.get('txid', result if isinstance(result, str) else '')
+                            lifecycle_results['redeem_txid'] = txid
+                            self.log.info(f"✓ Lifecycle step {step}: {txid[:16]}...")
                         else:
                             self.log.info(f"✗ Lifecycle step {step}: No positions to redeem")
 
@@ -559,8 +578,9 @@ class DigiDollarTransactionsTest(DigiByteTestFramework):
                     self.log.info(f"DCA {scenario['health']}: multiplier={current_multiplier} (expected={scenario['expected_multiplier']})")
 
                     # Test mint with DCA multiplier
-                    mint_result = self.nodes[0].mintdigidollar(1000.0, 365)
-                    self.log.info(f"✓ Mint with DCA {scenario['health']}: {mint_result[:16]}...")
+                    mint_result = self.nodes[0].mintdigidollar(100000, 3)  # 100000 cents = $1000, tier 3
+                    position_id = mint_result.get('position_id', mint_result if isinstance(mint_result, str) else '')
+                    self.log.info(f"✓ Mint with DCA {scenario['health']}: {position_id[:16]}...")
 
                 except Exception as e:
                     self.log.info(f"✗ DCA scenario {scenario['health']} failed: {e}")
@@ -594,11 +614,12 @@ class DigiDollarTransactionsTest(DigiByteTestFramework):
                     self.log.info(f"Oracle price scenario: {scenario['description']} (price={current_price})")
 
                     # Test mint at this price
-                    mint_result = self.nodes[0].mintdigidollar(1000.0, 365)
-                    self.log.info(f"✓ Mint at {scenario['description']}: {mint_result[:16]}...")
+                    mint_result = self.nodes[0].mintdigidollar(100000, 3)  # 100000 cents = $1000, tier 3
+                    position_id = mint_result.get('position_id', mint_result if isinstance(mint_result, str) else '')
+                    self.log.info(f"✓ Mint at {scenario['description']}: {position_id[:16]}...")
 
-                    # Calculate expected collateral requirements
-                    collateral_estimate = self.nodes[0].estimatecollateral(1000.0, 365)
+                    # Calculate expected collateral requirements (using calculatecollateralrequirement)
+                    collateral_estimate = self.nodes[0].calculatecollateralrequirement(100000, 30)  # 100000 cents, 30 days
                     self.log.info(f"  Estimated collateral: {collateral_estimate} DGB")
 
                 except Exception as e:

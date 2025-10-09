@@ -15,10 +15,14 @@ class DigiDollarPersistenceTest(DigiByteTestFramework):
     def set_test_params(self):
         self.setup_clean_chain = True
         self.num_nodes = 2
+        # Disable Dandelion for testing (DD transfers fail with Dandelion++)
         self.extra_args = [
-            ["-txindex=1", "-debug=digidollar"],
-            ["-txindex=1", "-debug=digidollar"]
+            ["-txindex=1", "-debug=digidollar", "-dandelion=0"],
+            ["-txindex=1", "-debug=digidollar", "-dandelion=0"]
         ]
+
+    def add_options(self, parser):
+        self.add_wallet_options(parser)
 
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()

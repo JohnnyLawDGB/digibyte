@@ -278,7 +278,7 @@ class DigiDollarActivationTest(DigiByteTestFramework):
             monitoring_commands = [
                 ("getblockchaininfo", "Check overall blockchain status"),
                 ("getdeploymentinfo", "Check deployment-specific info"),
-                ("getdigidollarstatus", "Check DigiDollar status"),
+                ("getdigidollarstats", "Check DigiDollar stats"),
                 ("getmininginfo", "Check mining status")
             ]
 

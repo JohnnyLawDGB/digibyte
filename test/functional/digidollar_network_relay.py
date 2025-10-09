@@ -36,6 +36,9 @@ class DigiDollarNetworkRelayTest(DigiByteTestFramework):
             ["-digidollar=1", "-dandelion=1"],  # Node 4: DD enabled, Dandelion enabled
         ]
 
+    def add_options(self, parser):
+        self.add_wallet_options(parser)
+
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()
 
@@ -71,7 +74,8 @@ class DigiDollarNetworkRelayTest(DigiByteTestFramework):
         # Generate initial blocks past coinbase maturity on node 0
         self.log.info("Generating initial blocks...")
         self.nodes[0].generate(110)
-        self.sync_all()
+        # Only sync the connected nodes (0, 1, 2)
+        self.sync_blocks([self.nodes[0], self.nodes[1], self.nodes[2]])
 
         # Set mock oracle price ($0.50 per DGB)
         base_price = 50000  # 50000 satoshis per USD
@@ -82,14 +86,15 @@ class DigiDollarNetworkRelayTest(DigiByteTestFramework):
         self.log.info("Minting DigiDollars on test nodes...")
 
         # Node 0: Large position for testing
-        self.nodes[0].mintdigidollar("1000.00", 365)
+        self.nodes[0].mintdigidollar(100000, 4)  # $1000.00 in cents, tier 4 (365 days)
 
         # Node 1: Medium position
-        self.nodes[1].mintdigidollar("500.00", 180)
+        self.nodes[1].mintdigidollar(50000, 3)  # $500.00 in cents, tier 3 (180 days)
 
         # Mine blocks to confirm
         self.nodes[0].generate(3)
-        self.sync_all()
+        # Only sync the connected nodes (0, 1, 2)
+        self.sync_blocks([self.nodes[0], self.nodes[1], self.nodes[2]])
 
         # Verify initial balances
         balance_0 = self.nodes[0].getdigidollarbalance()
@@ -98,8 +103,9 @@ class DigiDollarNetworkRelayTest(DigiByteTestFramework):
         self.log.info(f"Node 0 DD balance: {balance_0}")
         self.log.info(f"Node 1 DD balance: {balance_1}")
 
-        assert_greater_than(balance_0, Decimal('0'))
-        assert_greater_than(balance_1, Decimal('0'))
+        # balances are dicts now, check 'total' key
+        assert_greater_than(balance_0['total'], Decimal('0'))
+        assert_greater_than(balance_1['total'], Decimal('0'))
 
     def test_basic_relay(self):
         """Test basic DD transaction relay between 2 directly connected nodes."""
@@ -108,10 +114,11 @@ class DigiDollarNetworkRelayTest(DigiByteTestFramework):
         # Get receiver address from node 2
         receiver_address = self.nodes[2].getdigidollaraddress()
         transfer_amount = Decimal('50.00')
+        transfer_amount_cents = int(transfer_amount * 100)
 
         # Create and broadcast DD transfer from node 0
         self.log.info(f"Node 0 sending {transfer_amount} DD to node 2...")
-        result = self.nodes[0].senddigidollar(receiver_address, str(transfer_amount))
+        result = self.nodes[0].senddigidollar(receiver_address, transfer_amount_cents)
         txid = result['txid']
 
         self.log.info(f"Transaction ID: {txid}")
@@ -147,6 +154,7 @@ class DigiDollarNetworkRelayTest(DigiByteTestFramework):
         # Get receiver address from node 2
         receiver_address = self.nodes[2].getdigidollaraddress()
         transfer_amount = Decimal('75.00')
+        transfer_amount_cents = int(transfer_amount * 100)
 
         # Record initial mempool states
         initial_mempool_1 = set(self.nodes[1].getrawmempool())
@@ -154,7 +162,7 @@ class DigiDollarNetworkRelayTest(DigiByteTestFramework):
 
         # Create DD transfer from node 0 (must hop through node 1 to reach node 2)
         self.log.info(f"Node 0 sending {transfer_amount} DD (will relay through node 1)...")
-        result = self.nodes[0].senddigidollar(receiver_address, str(transfer_amount))
+        result = self.nodes[0].senddigidollar(receiver_address, transfer_amount_cents)
         txid = result['txid']
 
         # Wait for propagation
@@ -187,9 +195,10 @@ class DigiDollarNetworkRelayTest(DigiByteTestFramework):
 
         receiver_address = self.nodes[2].getdigidollaraddress()
         transfer_amount = Decimal('25.00')
+        transfer_amount_cents = int(transfer_amount * 100)
 
         # Send from node 0, should relay through hub (node 1) to node 2
-        result = self.nodes[0].senddigidollar(receiver_address, str(transfer_amount))
+        result = self.nodes[0].senddigidollar(receiver_address, transfer_amount_cents)
         txid = result['txid']
 
         # Wait for propagation
@@ -210,11 +219,12 @@ class DigiDollarNetworkRelayTest(DigiByteTestFramework):
 
         receiver_address = self.nodes[2].getdigidollaraddress()
         transfer_amount = Decimal('10.00')
+        transfer_amount_cents = int(transfer_amount * 100)
 
         # Measure relay time
         start_time = time.time()
 
-        result = self.nodes[0].senddigidollar(receiver_address, str(transfer_amount))
+        result = self.nodes[0].senddigidollar(receiver_address, transfer_amount_cents)
         txid = result['txid']
 
         # Poll for transaction in node 2's mempool (max 5 seconds)
@@ -246,11 +256,12 @@ class DigiDollarNetworkRelayTest(DigiByteTestFramework):
 
         receiver_address = self.nodes[1].getdigidollaraddress()
         transfer_amount = Decimal('15.00')
+        transfer_amount_cents = int(transfer_amount * 100)
 
         # Send multiple DD transfers
         txids = []
         for i in range(3):
-            result = self.nodes[0].senddigidollar(receiver_address, str(transfer_amount))
+            result = self.nodes[0].senddigidollar(receiver_address, transfer_amount_cents)
             txids.append(result['txid'])
 
         # Wait for propagation
@@ -285,9 +296,10 @@ class DigiDollarNetworkRelayTest(DigiByteTestFramework):
 
         # Mint DD on nodes 3 and 4
         self.nodes[3].generate(110)  # Get mature coinbase
-        self.nodes[3].mintdigidollar("200.00", 365)
+        self.nodes[3].mintdigidollar(20000, 4)  # $200.00 in cents, tier 4 (365 days)
         self.nodes[3].generate(3)
-        self.sync_all()
+        # Only sync node 3 (Dandelion test, node 4 not connected yet)
+        # Don't sync_all as nodes aren't fully connected
 
         # Connect Dandelion nodes in a topology
         self.connect_nodes(3, 4)
@@ -297,9 +309,10 @@ class DigiDollarNetworkRelayTest(DigiByteTestFramework):
 
         receiver_address = self.nodes[4].getdigidollaraddress()
         transfer_amount = Decimal('30.00')
+        transfer_amount_cents = int(transfer_amount * 100)
 
         self.log.info(f"Sending DD with Dandelion++ enabled...")
-        result = self.nodes[3].senddigidollar(receiver_address, str(transfer_amount))
+        result = self.nodes[3].senddigidollar(receiver_address, transfer_amount_cents)
         txid = result['txid']
 
         # With Dandelion++:

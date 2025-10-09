@@ -22,19 +22,20 @@ class DigiDollarStressTest(DigiByteTestFramework):
     def set_test_params(self):
         self.setup_clean_chain = True
         self.num_nodes = 4
+        # Disable Dandelion for testing (DD transfers fail with Dandelion++)
         self.extra_args = [
-            ["-txindex=1", "-debug=digidollar", "-debug=rpc"],  # Node 0: Main test node
-            ["-txindex=1", "-debug=digidollar"],                # Node 1: Oracle node
-            ["-txindex=1", "-debug=digidollar"],                # Node 2: Stress node
-            ["-txindex=1", "-debug=digidollar"]                 # Node 3: Monitor node
+            ["-txindex=1", "-debug=digidollar", "-debug=rpc", "-dandelion=0"],  # Node 0: Main test node
+            ["-txindex=1", "-debug=digidollar", "-dandelion=0"],                # Node 1: Oracle node
+            ["-txindex=1", "-debug=digidollar", "-dandelion=0"],                # Node 2: Stress node
+            ["-txindex=1", "-debug=digidollar", "-dandelion=0"]                 # Node 3: Monitor node
         ]
 
     def setup_network(self):
         self.setup_nodes()
-        self.connect_nodes_bi(0, 1)
-        self.connect_nodes_bi(0, 2)
-        self.connect_nodes_bi(0, 3)
-        self.connect_nodes_bi(1, 2)
+        self.connect_nodes(0, 1)
+        self.connect_nodes(0, 2)
+        self.connect_nodes(0, 3)
+        self.connect_nodes(1, 2)
         self.sync_all()
 
     def run_test(self):

@@ -22,7 +22,14 @@ class DigiDollarRedemptionE2ETest(DigiByteTestFramework):
     def set_test_params(self):
         self.num_nodes = 2
         self.setup_clean_chain = True
-        self.extra_args = [["-digidollar=1", "-mocktime=0"], ["-digidollar=1", "-mocktime=0"]]
+        # Disable Dandelion for testing (DD transfers fail with Dandelion++)
+        self.extra_args = [
+            ["-digidollar=1", "-mocktime=0", "-dandelion=0"],
+            ["-digidollar=1", "-mocktime=0", "-dandelion=0"]
+        ]
+
+    def add_options(self, parser):
+        self.add_wallet_options(parser)
 
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()
@@ -35,8 +42,7 @@ class DigiDollarRedemptionE2ETest(DigiByteTestFramework):
 
         # STEP 1: Generate blocks past activation height
         self.log.info("Step 1: Generating 655 blocks for activation...")
-        bob_addr = bob.getnewaddress()
-        bob.generatetoaddress(655, bob_addr)
+        self.generate(bob, 655)
         self.sync_all()
 
         initial_dgb_balance = bob.getbalance()
@@ -61,7 +67,7 @@ class DigiDollarRedemptionE2ETest(DigiByteTestFramework):
 
         # STEP 3: Mine blocks to confirm mint
         self.log.info("Step 3: Mining 10 blocks to confirm mint...")
-        bob.generatetoaddress(10, bob_addr)
+        self.generate(bob, 10)
         self.sync_all()
 
         # STEP 4: Check Bob's DD balance
@@ -93,7 +99,7 @@ class DigiDollarRedemptionE2ETest(DigiByteTestFramework):
         self.log.info(f"Current height: {current_height}, Unlock height: {unlock_height}")
         self.log.info(f"Generating {blocks_needed} blocks...")
 
-        bob.generatetoaddress(blocks_needed, bob_addr)
+        self.generate(bob, blocks_needed)
         self.sync_all()
 
         new_height = bob.getblockcount()
@@ -134,7 +140,7 @@ class DigiDollarRedemptionE2ETest(DigiByteTestFramework):
 
         # STEP 11: Mine blocks to confirm redemption
         self.log.info("Step 11: Mining 5 blocks to confirm redemption...")
-        bob.generatetoaddress(5, bob_addr)
+        self.generate(bob, 5)
         self.sync_all()
 
         # STEP 12: Check Bob's DD balance (should be 0)

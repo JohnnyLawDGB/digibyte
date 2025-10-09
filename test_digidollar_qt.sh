@@ -11,33 +11,70 @@ echo "Enhanced with 3-wallet DD transfers"
 echo "=========================================="
 echo ""
 
-# Helper function to get network stats
+# Helper function to get network stats with retry logic
 get_network_stats() {
     local NODE_NAME=$1
     local RPC_PORT=$2
     local COOKIE=$3
+    local MAX_RETRIES=5
+    local RETRY_COUNT=0
 
-    local STATS=$(curl --silent --user "$COOKIE" \
-        --data-binary '{"jsonrpc":"1.0","id":"stats","method":"getdigidollarstats","params":[]}' \
-        -H 'content-type: text/plain;' \
-        http://127.0.0.1:${RPC_PORT}/)
+    while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+        local STATS=$(curl --silent --user "$COOKIE" \
+            --data-binary '{"jsonrpc":"1.0","id":"stats","method":"getdigidollarstats","params":[]}' \
+            -H 'content-type: text/plain;' \
+            http://127.0.0.1:${RPC_PORT}/)
 
+        # Check if we got valid data
+        local DD_SUPPLY=$(echo "$STATS" | jq -r '.result.total_dd_supply // empty')
+
+        if [ -n "$DD_SUPPLY" ]; then
+            echo "$STATS"
+            return 0
+        fi
+
+        # Retry with delay
+        RETRY_COUNT=$((RETRY_COUNT + 1))
+        if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+            sleep 2
+        fi
+    done
+
+    # Return the last response even if invalid (for error reporting)
     echo "$STATS"
 }
 
-# Helper function to get wallet DD balance
+# Helper function to get wallet DD balance with retry logic
 get_dd_balance() {
     local NODE_NAME=$1
     local RPC_PORT=$2
     local COOKIE=$3
     local WALLET_NAME=$(echo "$NODE_NAME" | tr '[:upper:]' '[:lower:]')  # bob, alice, charlie
+    local MAX_RETRIES=5
+    local RETRY_COUNT=0
 
-    local BALANCE=$(curl --silent --user "$COOKIE" \
-        --data-binary '{"jsonrpc":"1.0","id":"balance","method":"getdigidollarbalance","params":[]}' \
-        -H 'content-type: text/plain;' \
-        http://127.0.0.1:${RPC_PORT}/wallet/${WALLET_NAME})
+    while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+        local BALANCE=$(curl --silent --user "$COOKIE" \
+            --data-binary '{"jsonrpc":"1.0","id":"balance","method":"getdigidollarbalance","params":[]}' \
+            -H 'content-type: text/plain;' \
+            http://127.0.0.1:${RPC_PORT}/wallet/${WALLET_NAME})
 
-    echo "$BALANCE" | jq -r '.result.total // 0'
+        local TOTAL=$(echo "$BALANCE" | jq -r '.result.total // empty')
+
+        if [ -n "$TOTAL" ]; then
+            echo "$TOTAL"
+            return 0
+        fi
+
+        # Retry with delay
+        RETRY_COUNT=$((RETRY_COUNT + 1))
+        if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+            sleep 2
+        fi
+    done
+
+    # Return 0 if all retries failed
+    echo "0"
 }
 
 # Helper function to display network monitoring
@@ -227,7 +264,8 @@ echo ""
 # Step 6: Bob generates 10 blocks to confirm his mints
 echo "=== Step 6: Bob generating 10 blocks to confirm mints ==="
 ./src/digibyte-cli -regtest -datadir=/tmp/bob_regtest -rpcport=18443 -generate 10 > /dev/null
-sleep 3
+sleep 10
+echo "  Waiting for wallet to process blocks..."
 BOB_HEIGHT=$(./src/digibyte-cli -regtest -datadir=/tmp/bob_regtest -rpcport=18443 getblockcount)
 echo "✓ Bob's mints confirmed (height: $BOB_HEIGHT)"
 echo ""
@@ -257,7 +295,8 @@ sleep 8
 echo "=== Step 8: Creating Alice's wallet, setting oracle price, and syncing ==="
 ./src/digibyte-cli -regtest -datadir=/tmp/alice_regtest -rpcport=18446 createwallet "alice" > /dev/null
 ./src/digibyte-cli -regtest -datadir=/tmp/alice_regtest -rpcport=18446 setmockoracleprice 1 > /dev/null
-sleep 5
+sleep 8
+echo "  Waiting for sync and balance calculation..."
 ALICE_HEIGHT=$(./src/digibyte-cli -regtest -datadir=/tmp/alice_regtest -rpcport=18446 getblockcount)
 echo "✓ Alice synced (height: $ALICE_HEIGHT)"
 echo "✓ Alice's oracle price set"
@@ -289,7 +328,8 @@ sleep 8
 echo "=== Step 10: Creating Charlie's wallet, setting oracle price, and syncing ==="
 ./src/digibyte-cli -regtest -datadir=/tmp/charlie_regtest -rpcport=18447 createwallet "charlie" > /dev/null
 ./src/digibyte-cli -regtest -datadir=/tmp/charlie_regtest -rpcport=18447 setmockoracleprice 1 > /dev/null
-sleep 5
+sleep 8
+echo "  Waiting for sync and balance calculation..."
 CHARLIE_HEIGHT=$(./src/digibyte-cli -regtest -datadir=/tmp/charlie_regtest -rpcport=18447 getblockcount)
 echo "✓ Charlie synced (height: $CHARLIE_HEIGHT)"
 echo "✓ Charlie's oracle price set"
@@ -297,6 +337,8 @@ CHARLIE_COOKIE=$(cat /tmp/charlie_regtest/regtest/.cookie)
 echo ""
 
 # Monitor network state after Bob's mints
+echo "  Waiting for network-wide stats to propagate..."
+sleep 5
 display_network_monitor "After Bob's 3 Mints"
 
 # Step 11: Bob mints $10 DD with 1-hour lock
@@ -308,7 +350,8 @@ echo ""
 # Generate 200 more blocks to ensure Bob has enough UTXOs for 1000% collateral
 echo "=== Generating 200 blocks for additional UTXOs ==="
 ./src/digibyte-cli -regtest -datadir=/tmp/bob_regtest -rpcport=18443 -generate 200 > /dev/null
-sleep 5
+sleep 10
+echo "  Waiting for wallet to process blocks..."
 BOB_HEIGHT=$(./src/digibyte-cli -regtest -datadir=/tmp/bob_regtest -rpcport=18443 getblockcount)
 echo "✓ Bob height: $BOB_HEIGHT"
 echo ""
@@ -337,7 +380,8 @@ sleep 2
 echo "=== Generating 2 blocks to confirm mint ==="
 ADDR=$(./src/digibyte-cli -regtest -datadir=/tmp/bob_regtest -rpcport=18443 -rpcwallet=bob getnewaddress)
 ./src/digibyte-cli -regtest -datadir=/tmp/bob_regtest -rpcport=18443 -rpcwallet=bob generatetoaddress 2 "$ADDR" > /dev/null
-sleep 5
+sleep 10
+echo "  Waiting for wallet to process blocks..."
 BOB_HEIGHT=$(./src/digibyte-cli -regtest -datadir=/tmp/bob_regtest -rpcport=18443 getblockcount)
 
 # Verify the transaction is actually confirmed
@@ -346,7 +390,8 @@ if [ "$TX_CONFIRMATIONS" -eq 0 ]; then
     echo "⚠️  WARNING: Mint transaction still NOT confirmed after 2 blocks!"
     echo "Attempting to mine 10 more blocks..."
     ./src/digibyte-cli -regtest -datadir=/tmp/bob_regtest -rpcport=18443 -rpcwallet=bob generatetoaddress 10 "$ADDR" > /dev/null
-    sleep 5
+    sleep 10
+    echo "  Waiting for wallet to process blocks..."
     TX_CONFIRMATIONS=$(./src/digibyte-cli -regtest -datadir=/tmp/bob_regtest -rpcport=18443 -rpcwallet=bob gettransaction "$MINT4_TXID" 2>/dev/null | jq -r '.confirmations // 0')
     BOB_HEIGHT=$(./src/digibyte-cli -regtest -datadir=/tmp/bob_regtest -rpcport=18443 getblockcount)
     if [ "$TX_CONFIRMATIONS" -eq 0 ]; then
@@ -360,6 +405,8 @@ echo "✓ Lock will expire at height: $((BOB_HEIGHT + 238))"
 echo ""
 
 # Monitor network state after 4th mint
+echo "  Waiting for network-wide stats to propagate..."
+sleep 5
 display_network_monitor "After Bob's 4th Mint (\$10 DD, 1-hour lock)"
 
 # Step 12: Generate 120 blocks (halfway through lock period)
@@ -368,7 +415,8 @@ echo "Step 12: Generate 120 blocks (halfway through lock)"
 echo "=========================================="
 echo ""
 ./src/digibyte-cli -regtest -datadir=/tmp/bob_regtest -rpcport=18443 -generate 120 > /dev/null
-sleep 5
+sleep 10
+echo "  Waiting for wallet to process blocks..."
 BOB_HEIGHT=$(./src/digibyte-cli -regtest -datadir=/tmp/bob_regtest -rpcport=18443 getblockcount)
 ALICE_HEIGHT=$(./src/digibyte-cli -regtest -datadir=/tmp/alice_regtest -rpcport=18446 getblockcount)
 CHARLIE_HEIGHT=$(./src/digibyte-cli -regtest -datadir=/tmp/charlie_regtest -rpcport=18447 getblockcount)
@@ -379,6 +427,8 @@ echo "✓ Blocks until unlock: $((BOB_HEIGHT + 118))"
 echo ""
 
 # Monitor network state halfway through lock
+echo "  Waiting for network-wide stats to propagate..."
+sleep 5
 display_network_monitor "Halfway Through Lock Period (120 blocks)"
 
 # Step 13: Try early redemption (should FAIL)
@@ -408,7 +458,8 @@ echo "Step 14: Generate 125 more blocks (past lock)"
 echo "=========================================="
 echo ""
 ./src/digibyte-cli -regtest -datadir=/tmp/bob_regtest -rpcport=18443 -generate 125 > /dev/null
-sleep 5
+sleep 10
+echo "  Waiting for wallet to process blocks..."
 BOB_HEIGHT=$(./src/digibyte-cli -regtest -datadir=/tmp/bob_regtest -rpcport=18443 getblockcount)
 ALICE_HEIGHT=$(./src/digibyte-cli -regtest -datadir=/tmp/alice_regtest -rpcport=18446 getblockcount)
 CHARLIE_HEIGHT=$(./src/digibyte-cli -regtest -datadir=/tmp/charlie_regtest -rpcport=18447 getblockcount)
@@ -445,7 +496,8 @@ echo ""
 # Generate 10 blocks to confirm redemption
 echo "=== Generating 10 blocks to confirm redemption ==="
 ./src/digibyte-cli -regtest -datadir=/tmp/bob_regtest -rpcport=18443 -generate 10 > /dev/null
-sleep 5
+sleep 10
+echo "  Waiting for wallet to process blocks..."
 BOB_HEIGHT=$(./src/digibyte-cli -regtest -datadir=/tmp/bob_regtest -rpcport=18443 getblockcount)
 ALICE_HEIGHT=$(./src/digibyte-cli -regtest -datadir=/tmp/alice_regtest -rpcport=18446 getblockcount)
 CHARLIE_HEIGHT=$(./src/digibyte-cli -regtest -datadir=/tmp/charlie_regtest -rpcport=18447 getblockcount)
@@ -495,6 +547,8 @@ fi
 echo ""
 
 # Monitor network state after redemption
+echo "  Waiting for network-wide stats to propagate..."
+sleep 5
 display_network_monitor "After Redemption of 4th Mint"
 
 # Step 16: NEW - Bob sends DD to Alice and Charlie
@@ -545,7 +599,8 @@ sleep 2
 
 # Confirm transfer
 ./src/digibyte-cli -regtest -datadir=/tmp/bob_regtest -rpcport=18443 -generate 5 > /dev/null
-sleep 5
+sleep 10
+echo "  Waiting for wallet to process blocks..."
 echo "✓ Transfer confirmed"
 echo ""
 
@@ -572,6 +627,8 @@ fi
 echo ""
 
 # Monitor network state after first transfer
+echo "  Waiting for network-wide stats to propagate..."
+sleep 5
 display_network_monitor "After Transfer #1 (Bob → Alice \$34.67)"
 
 # Transfer 2: Bob sends $12.53 to Charlie
@@ -599,7 +656,8 @@ sleep 2
 
 # Confirm transfer
 ./src/digibyte-cli -regtest -datadir=/tmp/bob_regtest -rpcport=18443 -generate 5 > /dev/null
-sleep 5
+sleep 10
+echo "  Waiting for wallet to process blocks..."
 echo "✓ Transfer confirmed"
 echo ""
 
@@ -626,6 +684,8 @@ fi
 echo ""
 
 # Monitor network state after second transfer
+echo "  Waiting for network-wide stats to propagate..."
+sleep 5
 display_network_monitor "After Transfer #2 (Bob → Charlie \$12.53)"
 
 # Step 17: Final comprehensive balance verification

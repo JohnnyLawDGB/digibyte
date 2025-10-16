@@ -148,7 +148,8 @@ class DigiDollarRedeemTest(DigiByteTestFramework):
         # Verify the DGB unlocked amount makes sense
         # Should be approximately (redeem_amount_cents / 100) / oracle_price
         oracle_price = self.nodes[1].getoracleprice()
-        expected_dgb = Decimal(redeem_amount_cents) / Decimal('100') * Decimal(oracle_price['price']) / Decimal('100000000')
+        # Use price_usd field (correct field name from RPC response)
+        expected_dgb = Decimal(redeem_amount_cents) / Decimal('100') * Decimal(oracle_price['price_usd']) / Decimal('100000000')
         tolerance = expected_dgb * Decimal('0.05')  # 5% tolerance (to account for collateral ratios)
 
         assert abs(dgb_unlocked - expected_dgb) <= tolerance, \

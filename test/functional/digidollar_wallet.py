@@ -134,11 +134,12 @@ class DigiDollarWalletTest(DigiByteTestFramework):
         self.log.info("Testing wallet position management...")
 
         # Create multiple positions with different characteristics
-        # Tier mapping: 1=30d, 2=90d, 3=180d, 4=365d, 5=730d
+        # Tier mapping: 1=30d, 2=90d, 3=180d, 4=365d, 5=3y(1095d), 6=5y, 7=7y, 8=10y
+        # Note: Max mint amount is 100,000 cents ($1000)
         positions_data = [
-            {"amount": 50000, "tier": 1, "label": "short_term"},    # 500.00 DD, 30 days
-            {"amount": 150000, "tier": 3, "label": "medium_term"},  # 1500.00 DD, 180 days
-            {"amount": 300000, "tier": 5, "label": "long_term"}     # 3000.00 DD, 730 days
+            {"amount": 30000, "tier": 1, "label": "short_term"},    # 300.00 DD, 30 days
+            {"amount": 50000, "tier": 3, "label": "medium_term"},   # 500.00 DD, 180 days
+            {"amount": 80000, "tier": 5, "label": "long_term"}      # 800.00 DD, 3 years (1095 days)
         ]
 
         created_positions = []
@@ -193,8 +194,13 @@ class DigiDollarWalletTest(DigiByteTestFramework):
         """Test wallet transaction creation and management."""
         self.log.info("Testing wallet transaction creation...")
 
+        # Give node1 some DGB to work with
+        self.nodes[1].generate(110)  # Need maturity (8 blocks minimum in DigiByte)
+        self.sync_all()
+
         # Test transaction creation workflow
         initial_dgb_balance = self.nodes[1].getbalance()
+        self.log.info(f"Node 1 DGB balance: {initial_dgb_balance}")
 
         # Create mint transaction through wallet
         mint_amount = 80000  # 800.00 DD = 80000 cents

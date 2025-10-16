@@ -61,11 +61,10 @@ class DigiDollarNetworkTrackingTest(DigiByteTestFramework):
 
         self.log.info("Bob's total minted: $175.00 DD (17500 cents)")
 
-        # Wait for Dandelion embargo to expire (transaction moves from stempool to mempool)
-        # Embargo can be up to ~50 seconds, so wait 60 to be safe
-        import time
-        self.log.info("Waiting 60 seconds for Dandelion embargo to expire...")
-        time.sleep(60)
+        # Sync mempools to ensure all nodes see the transactions
+        # (Dandelion is disabled via -dandelion=0, so no embargo wait needed)
+        self.log.info("Syncing mempools across all nodes...")
+        self.sync_mempools()
 
         # Mine blocks to confirm
         self.log.info("Mining blocks to confirm all transactions...")

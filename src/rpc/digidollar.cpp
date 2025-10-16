@@ -150,14 +150,23 @@ RPCHelpMan getdigidollarstats()
             totalCollateral = metrics.totalCollateral;
             totalDD = metrics.totalDDSupply;
 
-            // Get current oracle price (mock for now)
-            // Oracle price format: millicents per DGB (actual_price_in_dollars * 100,000)
-            // For $0.01 per DGB: 0.01 * 100,000 = 1,000 millicents/DGB
-            CAmount oraclePrice = 1000; // $0.01 per DGB = 1000 millicents/DGB
+            // Get current oracle price from MockOracleManager
+            // Oracle price format: cents per DGB (e.g., 50 = $0.50/DGB)
+            CAmount oraclePrice = MockOracleManager::GetInstance().GetCurrentPrice();
+
+            // Convert oracle price (cents per DGB) to millicents per DGB for CalculateSystemHealth
+            // Oracle returns cents/DGB, CalculateSystemHealth expects millicents/DGB (cents * 1000)
+            CAmount oraclePriceMillicents = oraclePrice * 1000;
 
             // Calculate system health
-            int systemHealth = DynamicCollateralAdjustment::CalculateSystemHealth(
-                totalCollateral, totalDD, oraclePrice);
+            // IMPORTANT: Return 0% if no DD minted network-wide (instead of default 30000%)
+            int systemHealth;
+            if (totalDD == 0) {
+                systemHealth = 0;  // No DD minted = 0% health, not 30000%
+            } else {
+                systemHealth = DynamicCollateralAdjustment::CalculateSystemHealth(
+                    totalCollateral, totalDD, oraclePriceMillicents);
+            }
 
             // Get current tier information
             auto tier = DynamicCollateralAdjustment::GetCurrentTier(systemHealth);
@@ -170,7 +179,7 @@ RPCHelpMan getdigidollarstats()
             result.pushKV("health_status", tier.status);
             result.pushKV("total_collateral_dgb", ValueFromAmount(totalCollateral));
             result.pushKV("total_dd_supply", totalDD);
-            result.pushKV("oracle_price_cents", oraclePrice / 1000); // Convert millicents to cents for display
+            result.pushKV("oracle_price_cents", oraclePrice); // Oracle price is already in cents per DGB
             result.pushKV("is_emergency", isEmergency);
 
             // Add fields expected by tests

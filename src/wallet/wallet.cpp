@@ -1447,6 +1447,14 @@ void CWallet::RecursiveUpdateTxState(const uint256& tx_hash, const TryUpdatingSt
 
 void CWallet::SyncTransaction(const CTransactionRef& ptx, const SyncTxState& state, bool update_tx, bool rescanning_old_block)
 {
+    // FIX #4: Process incoming DigiDollar transactions FIRST
+    // DD transfer outputs have 0 DGB value, which causes IsMine() to return false
+    // We need to process DD transactions before AddToWalletIfInvolvingMe() so that
+    // DD UTXOs are detected and added regardless of IsMine() result
+    if (m_dd_wallet && IsDigiDollarTransaction(*ptx)) {
+        m_dd_wallet->ProcessIncomingDDTransaction(ptx);
+    }
+
     if (!AddToWalletIfInvolvingMe(ptx, state, update_tx, rescanning_old_block))
         return; // Not one of ours
 
@@ -1454,12 +1462,6 @@ void CWallet::SyncTransaction(const CTransactionRef& ptx, const SyncTxState& sta
     // available of the outputs it spends. So force those to be
     // recomputed, also:
     MarkInputsDirty(ptx);
-
-    // FIX #4: Process incoming DigiDollar transactions
-    // Check if this transaction contains DD outputs to our wallet
-    if (m_dd_wallet) {
-        m_dd_wallet->ProcessIncomingDDTransaction(ptx);
-    }
 }
 
 void CWallet::transactionAddedToMempool(const CTransactionRef& tx) {

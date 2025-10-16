@@ -363,11 +363,12 @@ void SystemHealthMonitor::ScanUTXOSet(CCoinsView* view, CCoinsView* validation_v
                          coin.out.scriptPubKey.size() > 0 ? coin.out.scriptPubKey[0] : 0,
                          FormatMoney(coin.out.nValue));
 
-                // Check if output 0 is a P2TR with value (potential vault)
-                if (coin.out.scriptPubKey.size() >= 34 &&
-                    coin.out.scriptPubKey[0] == OP_1 && coin.out.nValue > 0) {
-                    p2tr_found++;
-                    LogPrint(BCLog::DIGIDOLLAR, "ScanUTXOSet: Found P2TR output 0 with value, fetching full transaction...\n");
+                // Check if output 0 is a P2PKH collateral output (vaults are 25 bytes starting with OP_DUP)
+                // NOTE: Despite CreateCollateralP2TR trying to create P2TR, wallet signing converts to P2PKH
+                if (coin.out.scriptPubKey.size() == 25 &&
+                    coin.out.scriptPubKey[0] == OP_DUP && coin.out.nValue > 0) {
+                    p2tr_found++;  // Keep counter name for now (means "potential vaults found")
+                    LogPrint(BCLog::DIGIDOLLAR, "ScanUTXOSet: Found P2PKH output 0 with value, fetching full transaction...\n");
 
                     // CRITICAL: Before processing, validate this UTXO still exists in current chainstate
                     // CoinsDB may contain spent-but-not-pruned coins
@@ -404,9 +405,10 @@ void SystemHealthMonitor::ScanUTXOSet(CCoinsView* view, CCoinsView* validation_v
 
                         // Verify structure: need at least 3 outputs
                         if (tx->vout.size() >= 3) {
-                            // Check output 1 is P2TR with zero value (DD token)
-                            if (tx->vout[1].scriptPubKey.size() >= 34 &&
-                                tx->vout[1].scriptPubKey[0] == OP_1 &&
+                            // Check output 1 is P2PKH with zero value (DD token)
+                            // NOTE: Like collateral, DD tokens are also converted to P2PKH by wallet signing
+                            if (tx->vout[1].scriptPubKey.size() == 25 &&
+                                tx->vout[1].scriptPubKey[0] == OP_DUP &&
                                 tx->vout[1].nValue == 0) {
 
                                 // Check output 2 is OP_RETURN with DD marker

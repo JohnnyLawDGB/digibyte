@@ -17,7 +17,7 @@ from decimal import Decimal
 
 class DigiDollarTxAmountsTest(DigiByteTestFramework):
     def add_options(self, parser):
-        self.add_wallet_options(parser, descriptors=False)
+        self.add_wallet_options(parser)
 
     def set_test_params(self):
         self.num_nodes = 1

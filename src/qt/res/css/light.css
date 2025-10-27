@@ -186,6 +186,10 @@ QWidget#centralWidget {
     color:#003366;
     }
 
+    QMessageBox QLabel {
+    color:#003366 !important;
+    }
+
 /* Options Dialog and other dialog content */
 QDialog {
 background-color:#ffffff;
@@ -4334,6 +4338,16 @@ QListView#listTransactions {
 
 /* Ensure QFrame#frame_2 has correct base text color that gets inherited by palette */
 QFrame#frame_2 {
+    color: #003366 !important;
+}
+
+/* Make sure all labels in transaction list are dark blue (NOT selected state) */
+QFrame#frame_2 QListView::item QLabel,
+QFrame#frame_2 QListView QLabel,
+QListView#listTransactions QLabel,
+QListView#listTransactions::item QLabel,
+TransactionOverviewWidget::item QLabel,
+TransactionOverviewWidget QListView QLabel {
     color: #003366 !important;
 }
 

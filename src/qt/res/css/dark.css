@@ -206,6 +206,10 @@ QWidget#centralWidget {
     color:#ffffff;
     }
 
+    QMessageBox QLabel {
+    color:#ffffff !important;
+    }
+
 /* Options Dialog and other dialog content */
 QDialog {
 background-color:#002352;

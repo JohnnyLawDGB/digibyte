@@ -2786,21 +2786,21 @@ QListView::item:selected {
     color: #003366;
 }
 
-/* Menu Improvements */
+/* Menu Improvements - LIGHT MODE FIX */
 QMenu {
     color: #003366;
-    background-color: #002244;
+    background-color: #ffffff;
     border: 1px solid #0066cc;
 }
 
 QMenu::item:selected {
-    background-color: #0066cc;
+    background-color: #e6f2ff;
     color: #003366;
 }
 
 QMenu::separator {
     height: 1px;
-    background-color: #004488;
+    background-color: #d0d0d0;
     margin: 5px 0;
 }
 
@@ -4297,24 +4297,23 @@ RPCConsole QWidget[objectName="tab_info"] QLabel {
 }
 
 
-/* FORCE ALL TRANSACTION TEXT TO BE DARK BLUE IN LIGHT MODE */
-/* This overrides any hardcoded colors from C++ */
-QFrame#frame_2,
-QFrame#frame_2 *,
-QFrame#frame_2 QWidget,
+/* FORCE TRANSACTION TEXT TO BE DARK BLUE IN LIGHT MODE - MAC FIX */
+/* This overrides any hardcoded colors from C++ EXCEPT amount columns */
 QFrame#frame_2 QLabel,
-QFrame#frame_2 QListView,
-QFrame#frame_2 QListView *,
 QFrame#frame_2 QListView::item,
-QFrame#frame_2 QListView::item *,
 QListView#listTransactions,
-QListView#listTransactions *,
 QListView#listTransactions::item,
-QListView#listTransactions::item QLabel,
-TransactionOverviewWidget,
-TransactionOverviewWidget *,
 TransactionOverviewWidget QLabel {
-    color: #003366 \!important;
+    color: #003366 !important;
+    font-weight: normal !important;
+}
+
+/* BUT allow specific transaction list amounts to inherit their colors */
+QFrame#frame_2,
+QFrame#frame_2 QWidget,
+TransactionOverviewWidget {
+    color: #003366;
+    font-weight: normal;
 }
 
 /* Selected items should have white text */
@@ -4322,5 +4321,17 @@ QFrame#frame_2 QListView::item:selected,
 QFrame#frame_2 QListView::item:selected *,
 QListView#listTransactions::item:selected,
 QListView#listTransactions::item:selected * {
-    color: #ffffff \!important;
+    color: #ffffff !important;
+}
+
+/* Ensure received amounts are green and sent amounts are red */
+TransactionView QTableView {
+    qproperty-receivedColor: #228B22 !important;
+    qproperty-sentColor: #DC143C !important;
+}
+
+/* Force overview transaction amounts to also respect colors */
+TransactionOverviewWidget QListView {
+    qproperty-receivedColor: #228B22 !important;
+    qproperty-sentColor: #DC143C !important;
 }

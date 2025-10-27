@@ -429,22 +429,23 @@ QVariant TransactionTableModel::addressColor(const TransactionRecord *wtx) const
     // Check if we're using dark theme
     QString currentTheme = walletModel->getOptionsModel()->data(walletModel->getOptionsModel()->index(OptionsModel::Theme), Qt::EditRole).toString();
     bool isDarkTheme = (currentTheme == "dark");
-    
-    // Show addresses without label in a less visible color
+
+    // Always return the appropriate color for the current theme
+    // Dark theme: white text, Light theme: dark blue text
     switch(wtx->type)
     {
     case TransactionRecord::RecvWithAddress:
     case TransactionRecord::SendToAddress:
     case TransactionRecord::Generated:
         {
-        QString label = walletModel->getAddressTableModel()->labelForAddress(QString::fromStdString(wtx->address));
-        if(label.isEmpty())
-            return isDarkTheme ? QColor(255, 255, 255) : QColor(0, 51, 102);
+        // Return theme-appropriate color for both labeled and unlabeled addresses
+        return isDarkTheme ? QColor(255, 255, 255) : QColor(0, 51, 102);
         } break;
     default:
         break;
     }
-    return QVariant();
+    // For other transaction types, also return theme-appropriate color
+    return isDarkTheme ? QColor(255, 255, 255) : QColor(0, 51, 102);
 }
 
 QString TransactionTableModel::formatTxAmount(const TransactionRecord *wtx, bool showUnconfirmed, DigiByteUnits::SeparatorStyle separators) const

@@ -44,9 +44,8 @@
 #endif
 #endif
 
-// On macOS, be32enc is already defined in sys/endian.h
-// Only define it if not on macOS
-#ifndef __APPLE__
+// Portable BSD-style encode function for big-endian
+// This works with potentially unaligned pointers and is used only in scrypt
 static inline void be32enc(void *pp, uint32_t x)
 {
 	uint8_t *p = (uint8_t *)pp;
@@ -55,10 +54,6 @@ static inline void be32enc(void *pp, uint32_t x)
 	p[1] = (x >> 16) & 0xff;
 	p[0] = (x >> 24) & 0xff;
 }
-#else
-// On macOS, use the system provided function
-#include <sys/endian.h>
-#endif
 
 /**
  * PBKDF2_SHA256(passwd, passwdlen, salt, saltlen, c, buf, dkLen):

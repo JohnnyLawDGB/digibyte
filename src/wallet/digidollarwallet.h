@@ -29,6 +29,11 @@ struct DDTransaction {
     bool incoming;          // true for receives, false for sends
     std::string address;    // counterparty address
     std::string category;   // "send", "receive", "mint", "redeem"
+    int blockheight;        // Block height when confirmed (-1 if unconfirmed)
+    std::string blockhash;  // Block hash when confirmed (empty if unconfirmed)
+    CAmount fee;            // Transaction fee paid (0 if not applicable)
+    std::string comment;    // Transaction comment (empty if none)
+    bool abandoned;         // Whether transaction was abandoned
 
     DDTransaction();
 
@@ -41,6 +46,11 @@ struct DDTransaction {
         READWRITE(obj.incoming);
         READWRITE(obj.address);
         READWRITE(obj.category);
+        READWRITE(obj.blockheight);
+        READWRITE(obj.blockhash);
+        READWRITE(obj.fee);
+        READWRITE(obj.comment);
+        READWRITE(obj.abandoned);
     }
 };
 

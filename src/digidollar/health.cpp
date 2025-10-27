@@ -363,12 +363,12 @@ void SystemHealthMonitor::ScanUTXOSet(CCoinsView* view, CCoinsView* validation_v
                          coin.out.scriptPubKey.size() > 0 ? coin.out.scriptPubKey[0] : 0,
                          FormatMoney(coin.out.nValue));
 
-                // Check if output 0 is a P2PKH collateral output (vaults are 25 bytes starting with OP_DUP)
-                // NOTE: Despite CreateCollateralP2TR trying to create P2TR, wallet signing converts to P2PKH
-                if (coin.out.scriptPubKey.size() == 25 &&
-                    coin.out.scriptPubKey[0] == OP_DUP && coin.out.nValue > 0) {
-                    p2tr_found++;  // Keep counter name for now (means "potential vaults found")
-                    LogPrint(BCLog::DIGIDOLLAR, "ScanUTXOSet: Found P2PKH output 0 with value, fetching full transaction...\n");
+                // Check if output 0 is a P2TR collateral output (vaults are 34 bytes starting with OP_1)
+                // DigiDollar minting creates native P2TR (Taproot) outputs for collateral vaults
+                if (coin.out.scriptPubKey.size() == 34 &&
+                    coin.out.scriptPubKey[0] == OP_1 && coin.out.nValue > 0) {
+                    p2tr_found++;  // Found potential P2TR vault
+                    LogPrint(BCLog::DIGIDOLLAR, "ScanUTXOSet: Found P2TR output 0 with value, fetching full transaction...\n");
 
                     // CRITICAL: Before processing, validate this UTXO still exists in current chainstate
                     // CoinsDB may contain spent-but-not-pruned coins
@@ -397,18 +397,18 @@ void SystemHealthMonitor::ScanUTXOSet(CCoinsView* view, CCoinsView* validation_v
                     if (tx) {
                         // Check if this is actually a DigiDollar mint transaction
                         // DD mint structure:
-                        // - Output 0: P2TR collateral vault (has value > 0)
-                        // - Output 1: P2TR DD token (value = 0, has OP_DIGIDOLLAR marker)
+                        // - Output 0: P2TR collateral vault (has value > 0, 34 bytes, OP_1)
+                        // - Output 1: P2TR DD token (value = 0, 34 bytes, OP_1, simple key-path)
                         // - Output 2: OP_RETURN with DD metadata (contains exact DD amount)
 
                         bool isValidDDMint = false;
 
                         // Verify structure: need at least 3 outputs
                         if (tx->vout.size() >= 3) {
-                            // Check output 1 is P2PKH with zero value (DD token)
-                            // NOTE: Like collateral, DD tokens are also converted to P2PKH by wallet signing
-                            if (tx->vout[1].scriptPubKey.size() == 25 &&
-                                tx->vout[1].scriptPubKey[0] == OP_DUP &&
+                            // Check output 1 is P2TR with zero value (DD token)
+                            // DD tokens are simple P2TR (key-path only) for free transferability
+                            if (tx->vout[1].scriptPubKey.size() == 34 &&
+                                tx->vout[1].scriptPubKey[0] == OP_1 &&
                                 tx->vout[1].nValue == 0) {
 
                                 // Check output 2 is OP_RETURN with DD marker

@@ -1614,7 +1614,7 @@ static RPCHelpMan getredemptioninfo()
                         {RPCResult::Type::STR_AMOUNT, "redeemable_dd", "DD amount that can be redeemed"},
                         {RPCResult::Type::STR_AMOUNT, "dgb_return", "Estimated DGB return amount"},
                         {RPCResult::Type::NUM, "unlock_height", "Block height when position unlocks"},
-                        {RPCResult::Type::NUM, "blocks_remaining", "Blocks until unlock (0 if unlocked)"},
+                        {RPCResult::Type::NUM, "timelock_remaining", "Blocks until unlock (0 if unlocked)"},
                         {RPCResult::Type::STR_AMOUNT, "penalty_amount", "Penalty amount (if early redemption)"},
                         {RPCResult::Type::STR, "status", "Position status"},
                         {RPCResult::Type::STR, "unlock_date", "Estimated unlock date"}
@@ -1659,7 +1659,7 @@ static RPCHelpMan getredemptioninfo()
             result.pushKV("redeemable_dd", redeemableDD);
             result.pushKV("dgb_return", ValueFromAmount(dgbReturn));
             result.pushKV("unlock_height", unlockHeight);
-            result.pushKV("blocks_remaining", blocksRemaining);
+            result.pushKV("timelock_remaining", blocksRemaining);
             result.pushKV("penalty_amount", penaltyAmount);
             result.pushKV("status", status);
             result.pushKV("unlock_date", "2024-12-31T23:59:59Z");
@@ -1767,12 +1767,12 @@ RPCHelpMan listdigidollartxs()
                 txInfo.pushKV("amount", tx.incoming ? tx.amount : -tx.amount);
                 txInfo.pushKV("address", tx.address);
                 txInfo.pushKV("confirmations", tx.confirmations);
+                txInfo.pushKV("blockheight", tx.blockheight);
+                txInfo.pushKV("blockhash", tx.blockhash);
                 txInfo.pushKV("time", static_cast<int64_t>(tx.timestamp));
-                // Optional fields - may not be available for all transactions
-                // txInfo.pushKV("blockheight", blockheight);
-                // txInfo.pushKV("blockhash", blockhash);
-                // txInfo.pushKV("fee", fee);
-                // txInfo.pushKV("comment", comment);
+                txInfo.pushKV("fee", ValueFromAmount(tx.fee));
+                txInfo.pushKV("comment", tx.comment);
+                txInfo.pushKV("abandoned", tx.abandoned);
 
                 result.push_back(txInfo);
                 processed++;

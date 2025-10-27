@@ -160,7 +160,8 @@ echo "=== Step 1: Cleaning environment ==="
 pkill -f "digibyte-qt.*regtest" 2>/dev/null || true
 pkill -f "digibyted.*regtest" 2>/dev/null || true
 sleep 2
-rm -rf ~/Library/Application\ Support/DigiByte/regtest
+rm -rf ~/.digibyte/regtest 2>/dev/null || true  # Linux path
+rm -rf ~/Library/Application\ Support/DigiByte/regtest 2>/dev/null || true  # macOS path
 rm -rf /tmp/bob_regtest
 rm -rf /tmp/alice_regtest
 rm -rf /tmp/charlie_regtest
@@ -170,7 +171,18 @@ echo ""
 # Step 2: Start Bob's node
 echo "=== Step 2: Starting Bob's Qt node ==="
 mkdir -p /tmp/bob_regtest
-./src/qt/digibyte-qt \
+
+# Use clean environment with only essential display variables (works on Linux/Mac)
+env -i \
+    DISPLAY="${DISPLAY}" \
+    XAUTHORITY="${XAUTHORITY}" \
+    WAYLAND_DISPLAY="${WAYLAND_DISPLAY}" \
+    XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}" \
+    XDG_SESSION_TYPE="${XDG_SESSION_TYPE}" \
+    HOME="${HOME}" \
+    USER="${USER}" \
+    PATH="${PATH}" \
+    ./src/qt/digibyte-qt \
     -regtest \
     -datadir=/tmp/bob_regtest \
     -port=18444 \
@@ -273,7 +285,18 @@ echo ""
 # Step 7: Start Alice's node
 echo "=== Step 7: Starting Alice's Qt node ==="
 mkdir -p /tmp/alice_regtest
-./src/qt/digibyte-qt \
+
+# Use clean environment with only essential display variables (works on Linux/Mac)
+env -i \
+    DISPLAY="${DISPLAY}" \
+    XAUTHORITY="${XAUTHORITY}" \
+    WAYLAND_DISPLAY="${WAYLAND_DISPLAY}" \
+    XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}" \
+    XDG_SESSION_TYPE="${XDG_SESSION_TYPE}" \
+    HOME="${HOME}" \
+    USER="${USER}" \
+    PATH="${PATH}" \
+    ./src/qt/digibyte-qt \
     -regtest \
     -datadir=/tmp/alice_regtest \
     -port=18445 \
@@ -306,7 +329,18 @@ echo ""
 # Step 9: Start Charlie's node
 echo "=== Step 9: Starting Charlie's Qt node ==="
 mkdir -p /tmp/charlie_regtest
-./src/qt/digibyte-qt \
+
+# Use clean environment with only essential display variables (works on Linux/Mac)
+env -i \
+    DISPLAY="${DISPLAY}" \
+    XAUTHORITY="${XAUTHORITY}" \
+    WAYLAND_DISPLAY="${WAYLAND_DISPLAY}" \
+    XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}" \
+    XDG_SESSION_TYPE="${XDG_SESSION_TYPE}" \
+    HOME="${HOME}" \
+    USER="${USER}" \
+    PATH="${PATH}" \
+    ./src/qt/digibyte-qt \
     -regtest \
     -datadir=/tmp/charlie_regtest \
     -port=18448 \
@@ -825,5 +859,5 @@ echo ""
 echo "Press Ctrl+C to stop the Qt clients"
 echo ""
 
-# Wait indefinitely (commented out for automated testing)
-# wait
+# Wait indefinitely - keeps Qt windows open for manual inspection
+wait

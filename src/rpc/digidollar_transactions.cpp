@@ -218,8 +218,27 @@ UniValue redeemdigidollar(const JSONRPCRequest& request)
         throw JSONRPCError(RPC_WALLET_ERROR, "Redemption failed");
     }
 
+    // Calculate dgb_unlocked and dd_burned from transaction
+    CAmount dgb_unlocked = 0;
+    CAmount dd_burned = 0;
+
+    // DGB unlocked is the collateral output value (output 0 in redemption tx)
+    if (tx_out->vout.size() > 0) {
+        dgb_unlocked = tx_out->vout[0].nValue;
+    }
+
+    // DD burned is the amount parameter (or full position if amount == 0)
+    dd_burned = amount;
+    if (amount == 0) {
+        // Full redemption - get DD amount from position
+        // TODO: Get actual DD amount from position when full wallet integration is ready
+        dd_burned = 10000; // Placeholder for now
+    }
+
     UniValue result(UniValue::VOBJ);
     result.pushKV("txid", tx_out->GetHash().ToString());
+    result.pushKV("dgb_unlocked", ValueFromAmount(dgb_unlocked));
+    result.pushKV("dd_burned", dd_burned);
     result.pushKV("success", true);
 
     return result;

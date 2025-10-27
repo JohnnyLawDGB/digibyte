@@ -260,6 +260,25 @@ BASE_SCRIPTS = [
     # DigiByte-specific tests
     'p2p_dandelion.py',
     'rpc_getblockreward.py',
+    # DigiDollar tests
+    'digidollar_stress.py',
+    'digidollar_persistence.py',
+    'digidollar_network_tracking.py',
+    'digidollar_redeem.py',
+    'digidollar_redemption_e2e.py',
+    'digidollar_transactions.py',
+    'digidollar_wallet.py',
+    'digidollar_oracle.py',
+    'digidollar_mint.py',
+    'digidollar_transfer.py',
+    'digidollar_network_relay.py',
+    'digidollar_rpc.py',
+    'digidollar_redeem_stats.py',
+    'digidollar_redemption_amounts.py',
+    'digidollar_protection.py',
+    'digidollar_activation.py',
+    'digidollar_basic.py',
+    'digidollar_tx_amounts_debug.py',
     'wallet_digidollar_persistence_restart.py --legacy-wallet',
     'wallet_digidollar_persistence_restart.py --descriptors',
     'rpc_net.py',
@@ -819,7 +838,7 @@ class TestResult():
 def check_script_prefixes():
     """Check that test scripts start with one of the allowed name prefixes."""
 
-    good_prefixes_re = re.compile("^(example|feature|interface|mempool|mining|p2p|rpc|wallet|tool)_")
+    good_prefixes_re = re.compile("^(example|feature|interface|mempool|mining|p2p|rpc|wallet|tool|digidollar)_")
     bad_script_names = [script for script in ALL_SCRIPTS if good_prefixes_re.match(script) is None]
 
     if bad_script_names:

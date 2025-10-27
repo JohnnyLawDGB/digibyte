@@ -333,18 +333,26 @@ class DigiDollarWalletTest(DigiByteTestFramework):
         """Test wallet backup and recovery with DD data."""
         self.log.info("Testing wallet backup and recovery...")
 
+        # Ensure we're using the default wallet
+        try:
+            # Get the default wallet RPC
+            wallet = self.nodes[0].get_wallet_rpc(self.default_wallet_name)
+        except:
+            # If that fails, just use nodes[0] directly
+            wallet = self.nodes[0]
+
         # Create DD position to backup
         backup_amount = 60000  # 600.00 DD = 60000 cents
         dca_tier = 3  # 180 days = tier 3
-        backup_result = self.nodes[0].mintdigidollar(backup_amount, dca_tier)
+        backup_result = wallet.mintdigidollar(backup_amount, dca_tier)
 
         self.nodes[0].generate(1)
         self.sync_all()
 
         # Get wallet state before backup
-        balance_info = self.nodes[0].getdigidollarbalance()
+        balance_info = wallet.getdigidollarbalance()
         pre_backup_balance = balance_info['total'] if isinstance(balance_info, dict) else balance_info
-        pre_backup_positions = self.nodes[0].listdigidollarpositions()
+        pre_backup_positions = wallet.listdigidollarpositions()
 
         # Test wallet backup
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -352,7 +360,7 @@ class DigiDollarWalletTest(DigiByteTestFramework):
 
             try:
                 # Backup wallet
-                self.nodes[0].backupwallet(backup_file)
+                wallet.backupwallet(backup_file)
                 assert os.path.exists(backup_file)
                 self.log.info(f"Wallet backed up to: {backup_file}")
 

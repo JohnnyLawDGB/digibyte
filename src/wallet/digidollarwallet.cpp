@@ -31,7 +31,8 @@
 // =============================================================================
 
 DDTransaction::DDTransaction()
-    : amount(0), timestamp(0), confirmations(0), incoming(false), category("unknown") {}
+    : amount(0), timestamp(0), confirmations(0), incoming(false), category("unknown"),
+      blockheight(-1), blockhash(""), fee(0), comment(""), abandoned(false) {}
 
 // =============================================================================
 // DigiDollarWallet Implementation

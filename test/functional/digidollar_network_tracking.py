@@ -40,6 +40,17 @@ class DigiDollarNetworkTrackingTest(DigiByteTestFramework):
         self.nodes[0].generate(700)  # Matches Qt test setup
         self.sync_all()
 
+        # CRITICAL FIX: Consolidate UTXOs after maturity to avoid huge mint transactions
+        # With 700 tiny coinbase outputs, mint transactions can have 28+ inputs
+        # which creates transactions >700 vB that fail min relay fee checks
+        self.log.info("Consolidating UTXOs to reduce mint transaction sizes...")
+        balance = self.nodes[0].getbalance()
+        addr = self.nodes[0].getnewaddress()
+        # Send 90% of balance to self in one transaction, leave 10% for fees
+        self.nodes[0].sendtoaddress(addr, balance * Decimal('0.9'), "", "", False)
+        self.nodes[0].generate(10)  # Mature the consolidated UTXO
+        self.sync_all()
+
         # Set oracle price on both nodes (using $0.01 per DGB to match Qt test)
         for node in self.nodes:
             node.setmockoracleprice(1)  # $0.01 per DGB
@@ -47,16 +58,21 @@ class DigiDollarNetworkTrackingTest(DigiByteTestFramework):
         # Phase 1: Bob mints 3 DigiDollars (matching Qt test structure)
         self.log.info("\n--- Phase 1: Bob (node 0) mints 3 DigiDollars ---")
 
+        # CRITICAL FIX: Use higher fee rate to handle large transactions with many inputs
+        # Default 100k sat/kB is often insufficient when wallet selects many small UTXOs
+        # Use 500k sat/kB to ensure mint transactions meet min relay fee requirements
+        fee_rate = 500000  # 500k sat/kB = 0.005 DGB/kB
+
         # Mint #1: $100.00 DD, tier 4 (365 days)
-        bob_mint1 = self.nodes[0].mintdigidollar(10000, 4)
+        bob_mint1 = self.nodes[0].mintdigidollar(10000, 4, fee_rate)
         self.log.info(f"Mint #1: $100.00 DD, txid: {bob_mint1['txid']}, collateral: {bob_mint1['dgb_collateral']} DGB")
 
         # Mint #2: $50.00 DD, tier 3 (180 days)
-        bob_mint2 = self.nodes[0].mintdigidollar(5000, 3)
+        bob_mint2 = self.nodes[0].mintdigidollar(5000, 3, fee_rate)
         self.log.info(f"Mint #2: $50.00 DD, txid: {bob_mint2['txid']}, collateral: {bob_mint2['dgb_collateral']} DGB")
 
         # Mint #3: $25.00 DD, tier 2 (90 days)
-        bob_mint3 = self.nodes[0].mintdigidollar(2500, 2)
+        bob_mint3 = self.nodes[0].mintdigidollar(2500, 2, fee_rate)
         self.log.info(f"Mint #3: $25.00 DD, txid: {bob_mint3['txid']}, collateral: {bob_mint3['dgb_collateral']} DGB")
 
         self.log.info("Bob's total minted: $175.00 DD (17500 cents)")

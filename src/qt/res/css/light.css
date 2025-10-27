@@ -1879,7 +1879,7 @@ background-color:rgba(255, 255, 255, 0.15);
     }
 
     #contentWidget QLabel {
-    color: #333333 !important;
+    color: #003366 !important;
     font-size: 14pt !important;
     font-weight: normal;
     }
@@ -1905,7 +1905,7 @@ background-color:rgba(255, 255, 255, 0.15);
 
     /* Ensure text readability in modal overlay */
     ModalOverlay QLabel {
-    color: #333333 !important;
+    color: #003366 !important;
     }
 
     ModalOverlay QWidget#bgWidget {
@@ -1913,7 +1913,15 @@ background-color:rgba(255, 255, 255, 0.15);
     }
 
     ModalOverlay QWidget#contentWidget QLabel {
-    color: #333333 !important;
+    color: #003366 !important;
+    }
+
+    /* Override inline styles from modaloverlay.ui */
+    ModalOverlay #infoText,
+    ModalOverlay #infoTextStrong,
+    ModalOverlay QLabel#infoText,
+    ModalOverlay QLabel#infoTextStrong {
+    color: #003366 !important;
     }
 
     QWidget#bgWidget .QPushButton#closeButton {
@@ -4314,6 +4322,19 @@ QFrame#frame_2 QWidget,
 TransactionOverviewWidget {
     color: #003366;
     font-weight: normal;
+}
+
+/* Set palette for transaction overview to ensure C++ painter gets correct colors */
+TransactionOverviewWidget,
+QListView#listTransactions {
+    color: #003366 !important;
+    selection-background-color: #0066CC;
+    selection-color: #ffffff;
+}
+
+/* Ensure QFrame#frame_2 has correct base text color that gets inherited by palette */
+QFrame#frame_2 {
+    color: #003366 !important;
 }
 
 /* Selected items should have white text */

@@ -1869,6 +1869,14 @@ background-color:rgba(255, 255, 255, 0.15);
     color: #ffffff !important;
     }
 
+    /* Override inline styles from modaloverlay.ui */
+    ModalOverlay #infoText,
+    ModalOverlay #infoTextStrong,
+    ModalOverlay QLabel#infoText,
+    ModalOverlay QLabel#infoTextStrong {
+    color: #ffffff !important;
+    }
+
 
     /* SEND DIALOG */
 

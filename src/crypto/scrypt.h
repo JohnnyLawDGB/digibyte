@@ -27,9 +27,11 @@ void
 PBKDF2_SHA256(const uint8_t *passwd, size_t passwdlen, const uint8_t *salt,
     size_t saltlen, uint64_t c, uint8_t *buf, size_t dkLen);
 
-// On macOS, these functions are already defined in sys/endian.h
-// Only define them if they're not already available
-#ifndef __APPLE__
+// Use system-provided endian functions on BSD/macOS, provide our own elsewhere
+#if defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__)
+#include <sys/endian.h>
+#else
+// Portable inline implementations for little-endian encoding/decoding
 static inline uint32_t le32dec(const void *pp)
 {
         const uint8_t *p = (uint8_t const *)pp;
@@ -45,8 +47,5 @@ static inline void le32enc(void *pp, uint32_t x)
         p[2] = (x >> 16) & 0xff;
         p[3] = (x >> 24) & 0xff;
 }
-#else
-// On macOS, use the system provided functions
-#include <sys/endian.h>
 #endif
 #endif

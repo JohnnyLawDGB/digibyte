@@ -528,7 +528,7 @@ background-color:rgba(255, 255, 255, 0.15);
 
     QTableView::item { /* Table Item - DARK MODE FIX */
     background-color: rgba(255, 255, 255, 0.05);
-    color: #ffffff;
+    /* Don't override color here - let the model set red/green for amounts */
     font-size:9pt;
     }
 
@@ -2866,7 +2866,7 @@ TransactionView {
 TransactionView QTableView {
     background-color: rgba(255, 255, 255, 0.05);
     border: 1px solid rgba(255, 255, 255, 0.1);
-    color: #ffffff;
+    /* Don't override color here - let the model set red/green for amounts */
 }
 
 TransactionView QTableView::item {

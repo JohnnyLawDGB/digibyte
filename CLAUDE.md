@@ -108,10 +108,10 @@ For detailed patterns, see COMMON_FIXES.md
 ## Important Notes
 
 - **Three-way comparison**: Always compare v8.26 ↔ v8.22.2 ↔ Bitcoin v26.2
-- **Test all variants**: --descriptors, --legacy-wallet, --usecli
+- **Test all variants**: --descriptors, --legacy-wallet, --usecli, --v2transport
 - **Document everything**: Update tracking files immediately
 - **Mock scrypt**: Currently using mock, causes PoW validation issues
-- **v2transport tests**: p2p_leak_tx.py --v2transport is disabled (causes hang) as v2transport is not supported in DigiByte
+- **V2 transport**: BIP324 V2 P2P transport is fully supported and tested (disabled by default, enable with `-v2transport=1`)
 
 ---
 

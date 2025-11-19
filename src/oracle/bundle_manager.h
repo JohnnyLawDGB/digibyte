@@ -29,7 +29,7 @@ class OracleBundleManager
 {
 private:
     mutable std::mutex mtx_bundles;
-    mutable std::mutex mtx_messages;
+    mutable std::recursive_mutex mtx_messages;
 
     // Current oracle bundles by epoch
     std::unordered_map<int32_t, COracleBundle> epoch_bundles;

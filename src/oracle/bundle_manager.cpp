@@ -55,7 +55,7 @@ bool OracleBundleManager::AddOracleMessage(const COraclePriceMessage& message)
         return false;
     }
 
-    std::lock_guard<std::mutex> lock(mtx_messages);
+    std::lock_guard<std::recursive_mutex> lock(mtx_messages);
 
     // Calculate message hash for duplicate detection
     uint256 msg_hash = message.GetSignatureHash();
@@ -96,7 +96,7 @@ bool OracleBundleManager::AddOracleMessage(const COraclePriceMessage& message)
 
 bool OracleBundleManager::RemoveOracleMessage(uint32_t oracle_id)
 {
-    std::lock_guard<std::mutex> lock(mtx_messages);
+    std::lock_guard<std::recursive_mutex> lock(mtx_messages);
 
     auto it = pending_messages.find(oracle_id);
     if (it != pending_messages.end()) {
@@ -110,7 +110,7 @@ bool OracleBundleManager::RemoveOracleMessage(uint32_t oracle_id)
 
 std::vector<COraclePriceMessage> OracleBundleManager::GetPendingMessages() const
 {
-    std::lock_guard<std::mutex> lock(mtx_messages);
+    std::lock_guard<std::recursive_mutex> lock(mtx_messages);
 
     std::vector<COraclePriceMessage> messages;
     messages.reserve(pending_messages.size());
@@ -124,7 +124,7 @@ std::vector<COraclePriceMessage> OracleBundleManager::GetPendingMessages() const
 
 size_t OracleBundleManager::GetPendingMessageCount() const
 {
-    std::lock_guard<std::mutex> lock(mtx_messages);
+    std::lock_guard<std::recursive_mutex> lock(mtx_messages);
     return pending_messages.size();
 }
 
@@ -360,7 +360,7 @@ bool OracleBundleManager::ValidateOracleDataInBlock(const CBlock& block, int32_t
 
 bool OracleBundleManager::HasOracleMessage(const uint256& hash) const
 {
-    std::lock_guard<std::mutex> lock(mtx_messages);
+    std::lock_guard<std::recursive_mutex> lock(mtx_messages);
     return seen_message_hashes.count(hash) > 0;
 }
 
@@ -396,7 +396,7 @@ OracleBundleManager::OracleStats OracleBundleManager::GetStats() const
     OracleStats stats;
 
     {
-        std::lock_guard<std::mutex> lock(mtx_messages);
+        std::lock_guard<std::recursive_mutex> lock(mtx_messages);
         stats.pending_messages = pending_messages.size();
     }
 
@@ -511,7 +511,7 @@ bool OracleBundleManager::ValidateConfiguration() const
 
 bool OracleBundleManager::TryCreateBundle(int32_t epoch)
 {
-    std::lock_guard<std::mutex> messages_lock(mtx_messages);
+    std::lock_guard<std::recursive_mutex> messages_lock(mtx_messages);
 
     // Check if we have enough messages for consensus
     if (pending_messages.size() < static_cast<size_t>(min_oracle_count)) {

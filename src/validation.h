@@ -112,7 +112,7 @@ void StartScriptCheckWorkerThreads(int threads_num);
 void StopScriptCheckWorkerThreads();
 
 /** Get oracle price for DigiDollar transaction validation */
-CAmount GetOraclePriceForTransaction(const CTransaction& tx);
+CAmount GetOraclePriceForTransaction(const CTransaction& tx, int nHeight = 0);
 
 CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams);
 

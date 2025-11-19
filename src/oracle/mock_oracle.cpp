@@ -99,13 +99,13 @@ COracleBundle MockOracleManager::CreateMockBundle(int height)
     for (uint32_t i = 0; i < ORACLE_CONSENSUS_REQUIRED; i++) {
         COraclePriceMessage msg;
         msg.oracle_id = i;
-        msg.price_satoshis = mockPrice;
+        msg.price_micro_usd = mockPrice;
         msg.timestamp = GetTime();
 
-        // Create mock signature (64 bytes of deterministic data)
-        msg.signature.resize(64);
+        // Create mock Schnorr signature (64 bytes of deterministic data)
+        msg.schnorr_sig.resize(64);
         for (size_t j = 0; j < 64; j++) {
-            msg.signature[j] = static_cast<unsigned char>((i * 64 + j) % 256);
+            msg.schnorr_sig[j] = static_cast<unsigned char>((i * 64 + j) % 256);
         }
 
         bundle.messages.push_back(msg);

@@ -30,6 +30,7 @@
 #include <primitives/block.h>
 #include <primitives/oracle.h>
 #include <primitives/transaction.h>
+#include <oracle/bundle_manager.h>
 #include <random.h>
 #include <reverse_iterator.h>
 #include <scheduler.h>
@@ -5375,22 +5376,56 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         }
 
         // Validate price is reasonable (basic sanity check)
-        if (oracle_msg.price_message.price_satoshis <= 0 ||
-            oracle_msg.price_message.price_satoshis > COIN * 1000000) { // Max $1M per DGB
-            LogPrintf("Oracle price out of reasonable range (%d) from oracle %d peer=%d\n",
-                      oracle_msg.price_message.price_satoshis,
+        // Micro-USD format: 1,000,000 = $1.00
+        static constexpr uint64_t MIN_PRICE_MICRO_USD = 100;        // $0.0001
+        static constexpr uint64_t MAX_PRICE_MICRO_USD = 10000000;   // $10.00
+        if (oracle_msg.price_message.price_micro_usd < MIN_PRICE_MICRO_USD ||
+            oracle_msg.price_message.price_micro_usd > MAX_PRICE_MICRO_USD) {
+            LogPrintf("Oracle price out of reasonable range (%llu) from oracle %d peer=%d\n",
+                      oracle_msg.price_message.price_micro_usd,
                       oracle_msg.price_message.oracle_id, pfrom.GetId());
             Misbehaving(*peer, 5, "unreasonable oracle price");
             return;
         }
 
-        // TODO: Validate oracle signature when oracle nodes are fully implemented
-        // TODO: Store in oracle pool for consensus calculation
-        // TODO: Relay to other peers
+        // Validate oracle signature
+        if (!oracle_msg.price_message.Verify()) {
+            LogPrintf("Oracle message signature verification failed from oracle %d peer=%d\n",
+                      oracle_msg.price_message.oracle_id, pfrom.GetId());
+            Misbehaving(*peer, 20, "invalid oracle signature");
+            return;
+        }
 
-        LogPrint(BCLog::NET, "Processed oracle price message: oracle_id=%d, price=%d, timestamp=%d, peer=%d\n",
-                 oracle_msg.price_message.oracle_id, oracle_msg.price_message.price_satoshis,
+        // Check for duplicate message
+        uint256 msg_hash = oracle_msg.GetHash();
+        OracleBundleManager& bundleManager = OracleBundleManager::GetInstance();
+
+        if (bundleManager.HasOracleMessage(msg_hash)) {
+            LogPrint(BCLog::NET, "Ignoring duplicate oracle message from oracle %d peer=%d\n",
+                     oracle_msg.price_message.oracle_id, pfrom.GetId());
+            return; // Don't relay duplicates
+        }
+
+        // Store in oracle bundle manager
+        if (!bundleManager.AddOracleMessage(oracle_msg.price_message)) {
+            LogPrint(BCLog::NET, "Failed to add oracle message to bundle manager from oracle %d peer=%d\n",
+                     oracle_msg.price_message.oracle_id, pfrom.GetId());
+            return;
+        }
+
+        LogPrint(BCLog::NET, "Accepted oracle price message: oracle_id=%d, price=%llu micro-USD, timestamp=%d, peer=%d\n",
+                 oracle_msg.price_message.oracle_id, oracle_msg.price_message.price_micro_usd,
                  oracle_msg.price_message.timestamp, pfrom.GetId());
+
+        // Relay to other peers (but not back to sender)
+        m_connman.ForEachNode([&oracle_msg, sender_id = pfrom.GetId(), this](CNode* pnode) {
+            if (pnode->GetId() == sender_id) return; // Don't relay back to sender
+
+            m_connman.PushMessage(pnode, CNetMsgMaker(pnode->GetCommonVersion()).Make(NetMsgType::ORACLEPRICE, oracle_msg));
+
+            LogPrint(BCLog::NET, "Relayed oracle message to peer=%d\n", pnode->GetId());
+        });
+
         return;
     }
 

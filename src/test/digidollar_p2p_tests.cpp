@@ -97,7 +97,7 @@ BOOST_AUTO_TEST_CASE(test_oracle_price_msg_serialization)
     uint256 hash = oracle_price.GetSignatureHash();
     std::vector<unsigned char> signature;
     BOOST_CHECK(key.Sign(hash, signature));
-    oracle_price.signature = signature;
+    oracle_price.schnorr_sig = signature;
 
     // Test serialization
     OraclePriceMsg msg;
@@ -113,8 +113,8 @@ BOOST_AUTO_TEST_CASE(test_oracle_price_msg_serialization)
 
     // Verify content
     BOOST_CHECK_EQUAL(deserialized_msg.price_message.oracle_id, 1);
-    BOOST_CHECK_EQUAL(deserialized_msg.price_message.price_satoshis, COIN * 50000);
-    BOOST_CHECK(deserialized_msg.price_message.signature == signature);
+    BOOST_CHECK_EQUAL(deserialized_msg.price_message.price_micro_usd, COIN * 50000);
+    BOOST_CHECK(deserialized_msg.price_message.schnorr_sig == signature);
 }
 
 BOOST_AUTO_TEST_CASE(test_oracle_bundle_msg_serialization)
@@ -219,28 +219,33 @@ BOOST_AUTO_TEST_CASE(test_oracle_message_validation_signature)
     CKey oracle_key;
     oracle_key.MakeNewKey(true);
     CPubKey oracle_pubkey = oracle_key.GetPubKey();
+    XOnlyPubKey oracle_xonly = XOnlyPubKey(oracle_pubkey);
 
     COraclePriceMessage msg{1, COIN * 50000, GetTime()};
+    msg.oracle_pubkey = oracle_xonly;
 
     // Sign with correct key
     uint256 hash = msg.GetSignatureHash();
     std::vector<unsigned char> valid_signature;
     BOOST_CHECK(oracle_key.Sign(hash, valid_signature));
-    msg.signature = valid_signature;
+    msg.schnorr_sig = valid_signature;
 
     // Should validate with correct pubkey
-    BOOST_CHECK(msg.ValidateSignature(oracle_pubkey));
+    BOOST_CHECK(msg.Verify());
 
     // Should fail with wrong pubkey
     CKey wrong_key;
     wrong_key.MakeNewKey(true);
     CPubKey wrong_pubkey = wrong_key.GetPubKey();
+    XOnlyPubKey wrong_xonly = XOnlyPubKey(wrong_pubkey);
+    msg.oracle_pubkey = wrong_xonly;
 
-    BOOST_CHECK(!msg.ValidateSignature(wrong_pubkey));
+    BOOST_CHECK(!msg.Verify());
 
-    // Should fail with corrupted signature
-    msg.signature[0] ^= 0x01; // flip a bit
-    BOOST_CHECK(!msg.ValidateSignature(oracle_pubkey));
+    // Should fail with corrupted signature (restore correct pubkey first)
+    msg.oracle_pubkey = oracle_xonly;
+    msg.schnorr_sig[0] ^= 0x01; // flip a bit
+    BOOST_CHECK(!msg.Verify());
 }
 
 BOOST_AUTO_TEST_CASE(test_oracle_bundle_consensus_validation)

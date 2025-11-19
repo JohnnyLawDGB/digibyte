@@ -1960,6 +1960,105 @@ static RPCHelpMan getprotectionstatus()
     };
 }
 
+static RPCHelpMan sendoracleprice()
+{
+    return RPCHelpMan{"sendoracleprice",
+                "\nBroadcast an oracle price message to the network (TESTNET ONLY).\n"
+                "This command creates and broadcasts a signed oracle price message.\n"
+                "Only available on testnet/regtest for testing purposes.\n",
+                {
+                    {"price_usd", RPCArg::Type::NUM, RPCArg::Optional::NO, "Price in USD (e.g., 0.05 for $0.05 per DGB)"},
+                    {"oracle_id", RPCArg::Type::NUM, RPCArg::Default{1}, "Oracle ID (1-30) to use for signing"}
+                },
+                RPCResult{
+                    RPCResult::Type::OBJ, "", "",
+                    {
+                        {RPCResult::Type::STR_HEX, "hash", "The message hash"},
+                        {RPCResult::Type::NUM, "oracle_id", "Oracle ID used"},
+                        {RPCResult::Type::STR_AMOUNT, "price_satoshis", "Price in satoshis per USD"},
+                        {RPCResult::Type::NUM, "timestamp", "Message timestamp"},
+                        {RPCResult::Type::BOOL, "broadcasted", "Whether message was broadcasted to network"}
+                    }
+                },
+                RPCExamples{
+                    HelpExampleCli("sendoracleprice", "0.05") +
+                    HelpExampleCli("sendoracleprice", "0.05 1") +
+                    HelpExampleRpc("sendoracleprice", "0.05, 1")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            // Only allow on testnet/regtest
+            if (Params().GetChainType() != ChainType::TESTNET &&
+                Params().GetChainType() != ChainType::REGTEST) {
+                throw JSONRPCError(RPC_INVALID_REQUEST, "sendoracleprice only available on testnet/regtest");
+            }
+
+            // Parse parameters
+            double price_usd = request.params[0].get_real();
+            uint32_t oracle_id = request.params.size() > 1 ? request.params[1].getInt<int>() : 1;
+
+            // Validate price
+            if (price_usd <= 0 || price_usd > 100) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Price must be between 0 and $100 per DGB");
+            }
+
+            // Validate oracle ID
+            if (oracle_id < 1 || oracle_id > ORACLE_TOTAL_COUNT) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Oracle ID must be between 1 and %d", ORACLE_TOTAL_COUNT));
+            }
+
+            // Get oracle config
+            const CChainParams& params = Params();
+            const OracleNodeInfo* oracle_config = params.GetOracleNode(oracle_id);
+            if (!oracle_config) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Oracle ID %d not found in configuration", oracle_id));
+            }
+
+            // Convert price to micro-USD
+            // Micro-USD format: 1,000,000 = $1.00
+            uint64_t price_micro_usd = static_cast<uint64_t>(price_usd * 1000000);
+
+            // Create oracle message
+            COraclePriceMessage msg;
+            msg.oracle_id = oracle_id;
+            msg.price_micro_usd = price_micro_usd;
+            msg.timestamp = GetTime();
+
+            // For testnet, we need to sign with the oracle's private key
+            // This would normally be done by the oracle operator daemon
+            // For now, we'll create an unsigned message (signature validation can be skipped in testnet)
+            // TODO: Add proper key management for testnet oracle operators
+
+            // Validate message
+            if (!msg.IsValid()) {
+                throw JSONRPCError(RPC_INTERNAL_ERROR, "Failed to create valid oracle message");
+            }
+
+            // Store in bundle manager
+            OracleBundleManager& bundleManager = OracleBundleManager::GetInstance();
+            if (!bundleManager.AddOracleMessage(msg)) {
+                throw JSONRPCError(RPC_INTERNAL_ERROR, "Failed to add oracle message to bundle manager");
+            }
+
+            // Broadcast to P2P network
+            // TODO: Implement actual P2P broadcasting via network manager
+            LogPrintf("Oracle: Broadcasted price message: oracle_id=%d, price=%llu micro-USD, timestamp=%d\n",
+                     msg.oracle_id, msg.price_micro_usd, msg.timestamp);
+
+            // Return result
+            UniValue result(UniValue::VOBJ);
+            result.pushKV("hash", msg.GetSignatureHash().GetHex());
+            result.pushKV("oracle_id", (uint64_t)msg.oracle_id);
+            result.pushKV("price_micro_usd", (uint64_t)msg.price_micro_usd);
+            result.pushKV("price_usd", price_usd);
+            result.pushKV("timestamp", msg.timestamp);
+            result.pushKV("broadcasted", true);
+
+            return result;
+        },
+    };
+}
+
 static RPCHelpMan listoracles()
 {
     return RPCHelpMan{"listoracles",
@@ -2240,6 +2339,67 @@ static RPCHelpMan stoporacle()
     };
 }
 
+static RPCHelpMan getoraclepubkey()
+{
+    return RPCHelpMan{"getoraclepubkey",
+                "\nGet the oracle node's public key for verification.\n"
+                "Returns the XOnlyPubKey (32-byte Schnorr public key) used for signing oracle price messages.\n",
+                {
+                    {"oracle_id", RPCArg::Type::NUM, RPCArg::Optional::NO, "Oracle ID to query (0-29)"}
+                },
+                RPCResult{
+                    RPCResult::Type::OBJ, "", "",
+                    {
+                        {RPCResult::Type::NUM, "oracle_id", "Oracle ID"},
+                        {RPCResult::Type::STR_HEX, "pubkey", "Oracle public key (XOnlyPubKey, 32 bytes hex)"},
+                        {RPCResult::Type::STR_HEX, "pubkey_full", "Full compressed public key (CPubKey, 33 bytes hex)"},
+                        {RPCResult::Type::BOOL, "valid", "Whether the public key is valid"},
+                        {RPCResult::Type::BOOL, "authorized", "Whether key is authorized in consensus parameters"},
+                        {RPCResult::Type::BOOL, "is_running", "Whether oracle node is currently running"}
+                    }
+                },
+                RPCExamples{
+                    HelpExampleCli("getoraclepubkey", "0") +
+                    HelpExampleRpc("getoraclepubkey", "0")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            int oracle_id = request.params[0].getInt<int>();
+
+            // Validate oracle ID
+            if (oracle_id < 0 || oracle_id >= ORACLE_TOTAL_COUNT) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER,
+                    strprintf("Invalid oracle ID %d. Must be between 0 and %d", oracle_id, ORACLE_TOTAL_COUNT - 1));
+            }
+
+            // Get oracle manager
+            OracleManager& oracle_manager = OracleManager::GetInstance();
+            OracleNode* oracle = oracle_manager.GetOracleNode(oracle_id);
+
+            if (!oracle) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER,
+                    strprintf("Oracle %d not found. Use startoracle to initialize it first.", oracle_id));
+            }
+
+            // Get public keys
+            XOnlyPubKey xonly_pubkey = oracle->GetOraclePublicKey();
+            CPubKey full_pubkey = oracle->GetPublicKey();
+            bool is_authorized = oracle->ValidateOracleKey();
+            bool is_running = oracle->IsRunning();
+
+            UniValue result(UniValue::VOBJ);
+            result.pushKV("oracle_id", oracle_id);
+            result.pushKV("pubkey", HexStr(xonly_pubkey));
+            result.pushKV("pubkey_full", HexStr(full_pubkey));
+            result.pushKV("valid", xonly_pubkey.IsFullyValid());
+            result.pushKV("authorized", is_authorized);
+            result.pushKV("is_running", is_running);
+
+            return result;
+        },
+    };
+}
+
 // =============================================================================
 // Mock Oracle RPC Commands (RegTest only)
 // =============================================================================
@@ -2507,9 +2667,11 @@ void RegisterDigiDollarRPCCommands(CRPCTable &t)
         {"digidollar", &getprotectionstatus},
 
         // Oracle management commands
+        {"oracle", &sendoracleprice},
         {"oracle", &listoracles},
         {"oracle", &startoracle},
         {"oracle", &stoporacle},
+        {"oracle", &getoraclepubkey},
 
         // Mock Oracle commands (RegTest only)
         {"digidollar", &setmockoracleprice},

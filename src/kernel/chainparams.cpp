@@ -301,6 +301,17 @@ public:
         consensus.nDDOracleEpochBlocks = 100;      // Rotate oracles every 100 blocks (~25 minutes)
         consensus.nDDOracleUpdateInterval = 4;      // Update price every 4 blocks (~1 minute)
         consensus.nDDActivationHeight = 22000000;   // DigiDollar activation height (future block)
+
+        // Oracle system (Phase One: DISABLED on mainnet)
+        consensus.nOracleActivationHeight = std::numeric_limits<int>::max();  // Never activates
+        consensus.nOracleEpochLength = 1440;          // 24 hours (placeholder for Phase Two)
+        consensus.nOracleRequiredMessages = 8;        // Phase Two: 8-of-15 consensus
+        consensus.nOracleTotalOracles = 15;           // Phase Two: 15 active oracles
+
+        // No oracle public keys configured for mainnet (Phase One is testnet-only)
+        // vOraclePublicKeys remains empty
+
+        LogPrintf("Oracle: Mainnet oracle system DISABLED (Phase One is testnet-only)\n");
     }
 
 private:
@@ -500,6 +511,23 @@ public:
 
         // Initialize DigiDollar Oracle Nodes (same as mainnet for compatibility)
         InitializeOracleNodes();
+
+        // Oracle system parameters (Phase One: Testnet)
+        consensus.nOracleActivationHeight = 1000000;  // Activate at height 1M on testnet
+        consensus.nOracleEpochLength = 1440;          // 24 hours (1440 blocks * 15 seconds)
+        consensus.nOracleRequiredMessages = 1;        // Phase One: 1-of-1 consensus
+        consensus.nOracleTotalOracles = 1;            // Phase One: Single oracle
+
+        // Phase One: Hardcoded testnet oracle public key
+        // This is the XOnlyPubKey for the hardcoded testnet oracle
+        // Corresponds to private key: 0x0000000000000000000000000000000000000000000000000000000000000001
+        // XOnlyPubKey: G point on secp256k1 curve
+        consensus.vOraclePublicKeys.push_back(
+            "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"  // Hardcoded testnet oracle
+        );
+
+        LogPrintf("Oracle: Testnet oracle activation height: %d\n", consensus.nOracleActivationHeight);
+        LogPrintf("Oracle: Phase One - 1-of-1 consensus with hardcoded oracle\n");
 
         // Testnet-specific oracle and activation settings
         consensus.nDDOracleEpochBlocks = 50;       // Rotate oracles every 50 blocks (~12.5 minutes)
@@ -920,6 +948,19 @@ public:
         consensus.nDDOracleEpochBlocks = 10;       // Rotate oracles every 10 blocks
         consensus.nDDOracleUpdateInterval = 1;     // Update price every block
         consensus.nDDActivationHeight = 650;       // DigiDollar active from height 650 (after Odocrypt at 600)
+
+        // Oracle system parameters (RegTest uses MockOracleManager)
+        consensus.nOracleActivationHeight = 1;     // Activate immediately
+        consensus.nOracleEpochLength = 144;        // 2.4 hours (144 blocks * 15 seconds)
+        consensus.nOracleRequiredMessages = 1;     // 1-of-1 for testing
+        consensus.nOracleTotalOracles = 1;         // Single oracle for testing
+
+        // RegTest: Use same hardcoded oracle key as testnet
+        consensus.vOraclePublicKeys.push_back(
+            "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
+        );
+
+        LogPrintf("Oracle: RegTest oracle activation height: %d\n", consensus.nOracleActivationHeight);
     }
 
 private:

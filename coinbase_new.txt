@@ -1,0 +1,43 @@
+CAmount CoinbaseFetcher::FetchPrice()
+{
+    // Use Coinbase spot price API
+    // Endpoint: /v2/prices/DGB-USD/spot
+    // JSON format: {"data":{"amount":"0.01234","currency":"USD"}}
+    std::string url = base_url + "/v2/prices/DGB-USD/spot";
+    std::string response = HttpGet(url);
+
+    if (response.empty()) {
+        LogPrint(BCLog::ORACLE, "CoinbaseFetcher: Empty response\n");
+        return 0;
+    }
+
+    // Parse nested JSON: data.amount
+    try {
+        UniValue json;
+        if (!json.read(response)) {
+            LogPrint(BCLog::ORACLE, "CoinbaseFetcher: Failed to parse JSON\n");
+            return 0;
+        }
+
+        if (!json.isObject() || !json.exists("data")) {
+            LogPrint(BCLog::ORACLE, "CoinbaseFetcher: Missing 'data' field\n");
+            return 0;
+        }
+
+        const UniValue& data = json["data"];
+        if (!data.isObject() || !data.exists("amount")) {
+            LogPrint(BCLog::ORACLE, "CoinbaseFetcher: Missing 'amount' field\n");
+            return 0;
+        }
+
+        std::string priceStr = data["amount"].get_str();
+        CAmount priceMicroUSD = ConvertToMicroUSD(priceStr);
+
+        LogPrint(BCLog::ORACLE, "Coinbase: %s (%lld micro-USD)\n", priceStr.c_str(), priceMicroUSD);
+        return priceMicroUSD;
+
+    } catch (const std::exception& e) {
+        LogPrint(BCLog::ORACLE, "CoinbaseFetcher: Error parsing response: %s\n", e.what());
+        return 0;
+    }
+}

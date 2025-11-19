@@ -22,6 +22,7 @@
 #include <consensus/validation.h>
 #include <digidollar/validation.h>
 #include <oracle/bundle_manager.h>
+#include <primitives/oracle.h>
 #include <cuckoocache.h>
 #include <flatfile.h>
 #include <hash.h>
@@ -1790,7 +1791,7 @@ PackageMempoolAcceptResult ProcessNewPackage(Chainstate& active_chainstate, CTxM
  * @param tx Transaction requiring price validation
  * @return Oracle price in cents (e.g., 50000 = $500.00 DGB)
  */
-CAmount GetOraclePriceForTransaction(const CTransaction& tx) {
+CAmount GetOraclePriceForTransaction(const CTransaction& tx, int nHeight) {
     // Use the oracle integration system to get current price
     CAmount oracle_price = OracleIntegration::GetCurrentOraclePrice();
 
@@ -2781,6 +2782,33 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
         nSigOpsCost,
         time_5 - time_start // in microseconds (µs)
     );
+
+    // Update oracle price cache (Phase One: testnet only)
+    if (m_chainman.GetParams().GetChainType() == ChainType::TESTNET && !fJustCheck) {
+        if (!block.vtx.empty() && block.vtx[0]->vout.size() >= 2) {
+            const CTxOut& oracle_output = block.vtx[0]->vout[1];
+
+            if (oracle_output.scriptPubKey.IsUnspendable() && oracle_output.scriptPubKey.size() > 2) {
+                std::vector<unsigned char> data(oracle_output.scriptPubKey.begin() + 2, oracle_output.scriptPubKey.end());
+
+                try {
+                    CDataStream ss(data, SER_NETWORK, PROTOCOL_VERSION);
+                    COracleBundle bundle;
+                    ss >> bundle;
+
+                    // Update oracle price cache for this height
+                    OracleBundleManager& manager = OracleBundleManager::GetInstance();
+                    manager.UpdatePriceCache(pindex->nHeight, bundle.median_price_micro_usd);
+
+                    LogPrint(BCLog::DIGIDOLLAR, "Oracle: Updated price cache at height %d: %llu micro-USD ($%.6f)\n",
+                             pindex->nHeight, bundle.median_price_micro_usd, bundle.median_price_micro_usd / 1000000.0);
+
+                } catch (const std::exception& e) {
+                    LogPrint(BCLog::DIGIDOLLAR, "Oracle: Failed to update price cache: %s\n", e.what());
+                }
+            }
+        }
+    }
 
     return true;
 }
@@ -4285,6 +4313,34 @@ static bool ContextualCheckBlock(const CBlock& block, BlockValidationState& stat
     // failed).
     if (GetBlockWeight(block) > MAX_BLOCK_WEIGHT) {
         return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-blk-weight", strprintf("%s : weight limit failed", __func__));
+    }
+
+    // Oracle bundle timestamp validation (Phase One: testnet only)
+    if (chainman.GetParams().GetChainType() == ChainType::TESTNET && !block.vtx.empty() && block.vtx[0]->vout.size() >= 2) {
+        const CTxOut& oracle_output = block.vtx[0]->vout[1];
+
+        if (oracle_output.scriptPubKey.IsUnspendable() && oracle_output.scriptPubKey.size() > 2) {
+            std::vector<unsigned char> data(oracle_output.scriptPubKey.begin() + 2, oracle_output.scriptPubKey.end());
+
+            try {
+                CDataStream ss(data, SER_NETWORK, PROTOCOL_VERSION);
+                COracleBundle bundle;
+                ss >> bundle;
+
+                // Verify timestamp is within ±1 hour of block time
+                if (std::abs(static_cast<int64_t>(bundle.timestamp) - static_cast<int64_t>(block.nTime)) > 3600) {
+                    return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-oracle-bundle-timestamp",
+                                       strprintf("Oracle bundle timestamp too far from block time: bundle=%d, block=%d",
+                                                bundle.timestamp, block.nTime));
+                }
+
+                LogPrint(BCLog::DIGIDOLLAR, "Oracle: Block timestamp validation passed: bundle=%d, block=%d\n",
+                         bundle.timestamp, block.nTime);
+
+            } catch (...) {
+                // Already validated in CheckBlock, ignore deserialization errors here
+            }
+        }
     }
 
     return true;

@@ -29,9 +29,9 @@ BOOST_AUTO_TEST_CASE(oracle_price_message_basic_construction)
     // Test basic construction
     COraclePriceMessage msg;
     BOOST_CHECK_EQUAL(msg.oracle_id, 0);
-    BOOST_CHECK_EQUAL(msg.price_satoshis, 0);
+    BOOST_CHECK_EQUAL(msg.price_micro_usd, 0);
     BOOST_CHECK_EQUAL(msg.timestamp, 0);
-    BOOST_CHECK(msg.signature.empty());
+    BOOST_CHECK(msg.schnorr_sig.empty());
 
     // Test construction with parameters
     uint32_t oracle_id = 5;
@@ -40,9 +40,9 @@ BOOST_AUTO_TEST_CASE(oracle_price_message_basic_construction)
 
     COraclePriceMessage msg2(oracle_id, price, timestamp);
     BOOST_CHECK_EQUAL(msg2.oracle_id, oracle_id);
-    BOOST_CHECK_EQUAL(msg2.price_satoshis, price);
+    BOOST_CHECK_EQUAL(msg2.price_micro_usd, price);
     BOOST_CHECK_EQUAL(msg2.timestamp, timestamp);
-    BOOST_CHECK(msg2.signature.empty());
+    BOOST_CHECK(msg2.schnorr_sig.empty());
 }
 
 BOOST_AUTO_TEST_CASE(oracle_price_message_validation)
@@ -50,18 +50,18 @@ BOOST_AUTO_TEST_CASE(oracle_price_message_validation)
     COraclePriceMessage msg;
 
     // Test invalid prices
-    msg.price_satoshis = -1;
+    msg.price_micro_usd = -1;
     BOOST_CHECK(!msg.IsValid());
 
-    msg.price_satoshis = 0;
+    msg.price_micro_usd = 0;
     BOOST_CHECK(!msg.IsValid());
 
     // Test extremely high price (unrealistic)
-    msg.price_satoshis = 100000000000LL; // 1000 DGB per USD (unrealistic)
+    msg.price_micro_usd = 100000000000LL; // 1000 DGB per USD (unrealistic)
     BOOST_CHECK(!msg.IsValid());
 
     // Test valid price range
-    msg.price_satoshis = 1000000; // 0.01 DGB per USD
+    msg.price_micro_usd = 1000000; // 0.01 DGB per USD
     msg.timestamp = GetTime();
     msg.oracle_id = 1;
     BOOST_CHECK(msg.IsValid());
@@ -85,34 +85,37 @@ BOOST_AUTO_TEST_CASE(oracle_price_message_signature_validation)
     COraclePriceMessage msg(1, 5000000, GetTime());
 
     // Test message without signature
-    BOOST_CHECK(!msg.ValidateSignature(oracle_pubkey));
+    msg.oracle_pubkey = XOnlyPubKey(oracle_pubkey);
+    BOOST_CHECK(!msg.Verify());
 
     // Create a proper signature
     uint256 hash = msg.GetSignatureHash();
     std::vector<unsigned char> signature;
     BOOST_CHECK(oracle_key.Sign(hash, signature));
-    msg.signature = signature;
+    msg.schnorr_sig = signature;
 
     // Test valid signature
-    BOOST_CHECK(msg.ValidateSignature(oracle_pubkey));
+    BOOST_CHECK(msg.Verify());
 
     // Test with wrong pubkey
     CKey wrong_key;
     wrong_key.MakeNewKey(true);
     CPubKey wrong_pubkey = wrong_key.GetPubKey();
-    BOOST_CHECK(!msg.ValidateSignature(wrong_pubkey));
+    msg.oracle_pubkey = XOnlyPubKey(wrong_pubkey);
+    BOOST_CHECK(!msg.Verify());
 
     // Test with corrupted signature
-    if (!msg.signature.empty()) {
-        msg.signature[0] ^= 1; // Flip a bit
-        BOOST_CHECK(!msg.ValidateSignature(oracle_pubkey));
+    if (!msg.schnorr_sig.empty()) {
+        msg.schnorr_sig[0] ^= 1; // Flip a bit
+        msg.oracle_pubkey = XOnlyPubKey(oracle_pubkey);
+        BOOST_CHECK(!msg.Verify());
     }
 }
 
 BOOST_AUTO_TEST_CASE(oracle_price_message_serialization)
 {
     COraclePriceMessage original(42, 7500000, GetTime());
-    original.signature = {0x01, 0x02, 0x03, 0x04}; // Dummy signature
+    original.schnorr_sig = {0x01, 0x02, 0x03, 0x04}; // Dummy signature
 
     // Serialize
     DataStream ss{};
@@ -124,9 +127,9 @@ BOOST_AUTO_TEST_CASE(oracle_price_message_serialization)
 
     // Verify all fields match
     BOOST_CHECK_EQUAL(deserialized.oracle_id, original.oracle_id);
-    BOOST_CHECK_EQUAL(deserialized.price_satoshis, original.price_satoshis);
+    BOOST_CHECK_EQUAL(deserialized.price_micro_usd, original.price_micro_usd);
     BOOST_CHECK_EQUAL(deserialized.timestamp, original.timestamp);
-    BOOST_CHECK(deserialized.signature == original.signature);
+    BOOST_CHECK(deserialized.schnorr_sig == original.schnorr_sig);
 }
 
 /**
@@ -233,8 +236,8 @@ BOOST_AUTO_TEST_CASE(oracle_bundle_outlier_filtering)
 
     // Verify no extreme outliers remain
     for (const auto& msg : filtered) {
-        BOOST_CHECK(msg.price_satoshis >= 4000000); // Not too low
-        BOOST_CHECK(msg.price_satoshis <= 6000000); // Not too high
+        BOOST_CHECK(msg.price_micro_usd >= 4000000); // Not too low
+        BOOST_CHECK(msg.price_micro_usd <= 6000000); // Not too high
     }
 }
 
@@ -283,7 +286,7 @@ BOOST_AUTO_TEST_CASE(oracle_bundle_serialization)
 
     for (size_t i = 0; i < original.messages.size(); i++) {
         BOOST_CHECK_EQUAL(deserialized.messages[i].oracle_id, original.messages[i].oracle_id);
-        BOOST_CHECK_EQUAL(deserialized.messages[i].price_satoshis, original.messages[i].price_satoshis);
+        BOOST_CHECK_EQUAL(deserialized.messages[i].price_micro_usd, original.messages[i].price_micro_usd);
         BOOST_CHECK_EQUAL(deserialized.messages[i].timestamp, original.messages[i].timestamp);
     }
 }
@@ -641,7 +644,7 @@ BOOST_AUTO_TEST_CASE(oracle_bundle_manager_bundle_creation)
         COraclePriceMessage msg(i, 5000, GetTime());
 
         // Mock valid signature
-        msg.signature = {0x01, 0x02, 0x03, 0x04};
+        msg.schnorr_sig = {0x01, 0x02, 0x03, 0x04};
 
         bundle.AddMessage(msg);
     }
@@ -774,7 +777,7 @@ BOOST_AUTO_TEST_CASE(oracle_block_integration)
     // Test with valid bundle
     COracleBundle valid_bundle(10);
     COraclePriceMessage msg(1, 5000, GetTime());
-    msg.signature = {0x01, 0x02, 0x03}; // Mock signature
+    msg.schnorr_sig = {0x01, 0x02, 0x03}; // Mock signature
     valid_bundle.AddMessage(msg);
 
     oracle_script = manager.CreateOracleScript(valid_bundle);
@@ -798,7 +801,7 @@ BOOST_AUTO_TEST_CASE(oracle_data_validation)
     uint256 hash = valid_msg.GetSignatureHash();
     std::vector<unsigned char> signature;
     BOOST_CHECK(test_key.Sign(hash, signature));
-    valid_msg.signature = signature;
+    valid_msg.schnorr_sig = signature;
 
     // Message should be valid (structure-wise)
     BOOST_CHECK(valid_msg.IsValid());
@@ -808,7 +811,7 @@ BOOST_AUTO_TEST_CASE(oracle_data_validation)
 
     for (int i = 0; i < ORACLE_CONSENSUS_REQUIRED; i++) {
         COraclePriceMessage msg(i, 5000, GetTime());
-        msg.signature = {0x01, 0x02, 0x03, 0x04}; // Mock signature
+        msg.schnorr_sig = {0x01, 0x02, 0x03, 0x04}; // Mock signature
         bundle.AddMessage(msg);
     }
 
@@ -844,27 +847,30 @@ BOOST_AUTO_TEST_CASE(test_signature_verification_edge_cases)
     COraclePriceMessage expired_msg(1, 5000000, GetTime() - ORACLE_MAX_AGE_SECONDS - 1);
     std::vector<unsigned char> valid_signature;
     BOOST_CHECK(oracle_key.Sign(expired_msg.GetSignatureHash(), valid_signature));
-    expired_msg.signature = valid_signature;
+    expired_msg.schnorr_sig = valid_signature;
 
     // This should fail due to expired timestamp
-    BOOST_CHECK(!expired_msg.ValidateSignatureWithTimestamp(oracle_pubkey));
+    expired_msg.oracle_pubkey = XOnlyPubKey(oracle_pubkey);
+    BOOST_CHECK(!expired_msg.Verify());
 
     // Test 2: Signature replay attack protection
     COraclePriceMessage original_msg(1, 5000000, GetTime());
     BOOST_CHECK(oracle_key.Sign(original_msg.GetSignatureHash(), valid_signature));
-    original_msg.signature = valid_signature;
+    original_msg.schnorr_sig = valid_signature;
 
     // Try to reuse signature on different message (should fail)
     COraclePriceMessage replay_msg(1, 6000000, GetTime()); // Different price
-    replay_msg.signature = original_msg.signature; // Same signature
+    replay_msg.schnorr_sig = original_msg.schnorr_sig; // Same signature
+    replay_msg.oracle_pubkey = XOnlyPubKey(oracle_pubkey);
 
-    BOOST_CHECK(!replay_msg.ValidateSignature(oracle_pubkey));
+    BOOST_CHECK(!replay_msg.Verify());
 
     // Test 3: Invalid signature format
     COraclePriceMessage invalid_format_msg(1, 5000000, GetTime());
-    invalid_format_msg.signature = {0x00}; // Too short
+    invalid_format_msg.schnorr_sig = {0x00}; // Too short
+    invalid_format_msg.oracle_pubkey = XOnlyPubKey(oracle_pubkey);
 
-    BOOST_CHECK(!invalid_format_msg.ValidateSignature(oracle_pubkey));
+    BOOST_CHECK(!invalid_format_msg.Verify());
 
     // Test 4: Signature with wrong key
     CKey wrong_key;
@@ -873,9 +879,10 @@ BOOST_AUTO_TEST_CASE(test_signature_verification_edge_cases)
     BOOST_CHECK(wrong_key.Sign(hash, wrong_signature));
 
     COraclePriceMessage wrong_key_msg(1, 5000000, GetTime());
-    wrong_key_msg.signature = wrong_signature;
+    wrong_key_msg.schnorr_sig = wrong_signature;
+    wrong_key_msg.oracle_pubkey = XOnlyPubKey(oracle_pubkey);
 
-    BOOST_CHECK(!wrong_key_msg.ValidateSignature(oracle_pubkey));
+    BOOST_CHECK(!wrong_key_msg.Verify());
 
     // Test 5: Double-spending protection (same oracle, same epoch)
     COraclePriceMessage double_spend1(1, 5000000, GetTime());
@@ -884,12 +891,14 @@ BOOST_AUTO_TEST_CASE(test_signature_verification_edge_cases)
     std::vector<unsigned char> sig1, sig2;
     BOOST_CHECK(oracle_key.Sign(double_spend1.GetSignatureHash(), sig1));
     BOOST_CHECK(oracle_key.Sign(double_spend2.GetSignatureHash(), sig2));
-    double_spend1.signature = sig1;
-    double_spend2.signature = sig2;
+    double_spend1.schnorr_sig = sig1;
+    double_spend2.schnorr_sig = sig2;
+    double_spend1.oracle_pubkey = XOnlyPubKey(oracle_pubkey);
+    double_spend2.oracle_pubkey = XOnlyPubKey(oracle_pubkey);
 
     // Both should be valid individually, but conflict detection should prevent both
-    BOOST_CHECK(double_spend1.ValidateSignature(oracle_pubkey));
-    BOOST_CHECK(double_spend2.ValidateSignature(oracle_pubkey));
+    BOOST_CHECK(double_spend1.Verify());
+    BOOST_CHECK(double_spend2.Verify());
 
     // This should fail when checking for conflicting messages
     BOOST_CHECK(!COraclePriceMessage::CheckForConflictingMessages({double_spend1, double_spend2}));
@@ -955,7 +964,7 @@ BOOST_AUTO_TEST_CASE(test_price_aggregation_outliers)
     // Verify the outlier was removed
     bool found_outlier = false;
     for (const auto& msg : iqr_filtered) {
-        if (msg.price_satoshis == 8000000) {
+        if (msg.price_micro_usd == 8000000) {
             found_outlier = true;
             break;
         }
@@ -970,7 +979,7 @@ BOOST_AUTO_TEST_CASE(test_p2p_message_validation)
     // Test 1: Malformed oracle price message
     COraclePriceMessage malformed_msg;
     malformed_msg.oracle_id = ORACLE_TOTAL_COUNT + 1; // Invalid oracle ID
-    malformed_msg.price_satoshis = 5000000;
+    malformed_msg.price_micro_usd = 5000000;
     malformed_msg.timestamp = GetTime();
 
     BOOST_CHECK(!OracleP2P::ValidateIncomingMessage(malformed_msg));
@@ -984,7 +993,7 @@ BOOST_AUTO_TEST_CASE(test_p2p_message_validation)
     uint256 hash = rate_limit_msg.GetSignatureHash();
     std::vector<unsigned char> signature;
     BOOST_CHECK(test_key.Sign(hash, signature));
-    rate_limit_msg.signature = signature;
+    rate_limit_msg.schnorr_sig = signature;
 
     // First message should be accepted
     BOOST_CHECK(OracleP2P::ValidateIncomingMessage(rate_limit_msg));
@@ -992,7 +1001,7 @@ BOOST_AUTO_TEST_CASE(test_p2p_message_validation)
     // Rapid subsequent messages should be rate limited
     for (int i = 0; i < 10; i++) {
         COraclePriceMessage spam_msg(1, 5000000 + i, GetTime());
-        spam_msg.signature = signature; // Reuse signature for speed
+        spam_msg.schnorr_sig = signature; // Reuse signature for speed
 
         // Should be rate limited after the first few
         bool accepted = OracleP2P::ValidateIncomingMessage(spam_msg);
@@ -1004,7 +1013,7 @@ BOOST_AUTO_TEST_CASE(test_p2p_message_validation)
     // Test 3: Message size validation
     COraclePriceMessage oversized_msg(1, 5000000, GetTime());
     // Create abnormally large signature
-    oversized_msg.signature.resize(10000, 0xFF); // Way too large
+    oversized_msg.schnorr_sig.resize(10000, 0xFF); // Way too large
 
     BOOST_CHECK(!OracleP2P::ValidateIncomingMessage(oversized_msg));
 

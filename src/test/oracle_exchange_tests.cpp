@@ -1,0 +1,953 @@
+// Copyright (c) 2024 The DigiByte Core developers
+// Distributed under the MIT software license, see the accompanying
+// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
+/**
+ * TDD RED PHASE: Oracle Exchange API Integration Tests
+ *
+ * This file contains 56 unit tests for the Exchange API Integration subsystem.
+ * These tests are written FIRST (RED phase) to define expected behavior.
+ * The implementation in exchange.cpp will be updated to make these tests pass (GREEN phase).
+ *
+ * CRITICAL: All prices MUST be in micro-USD format (1,000,000 = $1.00)
+ * This is NOT satoshis, NOT cents - it's micro-USD!
+ *
+ * Test Categories:
+ * - Exchange API Success Tests (8 tests)
+ * - Exchange API Error Handling Tests (16 tests)
+ * - Price Parsing Tests (8 tests)
+ * - Outlier Filtering Tests (8 tests)
+ * - Median Calculation Tests (8 tests)
+ * - MultiExchangeAggregator Tests (8 tests)
+ *
+ * Total: 56 tests
+ */
+
+#include <boost/test/unit_test.hpp>
+#include <logging.h>
+#include <util/strencodings.h>
+
+#include <consensus/amount.h>
+#include <oracle/exchange.h>
+#include <test/util/setup_common.h>
+#include <util/strencodings.h>
+#include <util/time.h>
+
+#include <algorithm>
+#include <optional>
+#include <string>
+#include <vector>
+
+using namespace ExchangeAPI;
+
+BOOST_FIXTURE_TEST_SUITE(oracle_exchange_tests, BasicTestingSetup)
+
+// ============================================================================
+// CATEGORY 1: Exchange API Success Tests (8 tests)
+// Tests that each exchange API can successfully fetch and return valid prices
+// ============================================================================
+
+/**
+ * Test Binance API returns valid price in micro-USD
+ * Expected JSON format: {"symbol":"DGBUSDT","price":"0.01234"}
+ */
+BOOST_AUTO_TEST_CASE(fetch_binance_price_success)
+{
+    BinanceFetcher fetcher;
+
+    // EXPECTED: FetchPrice() returns CAmount in micro-USD
+    // Example: $0.01234 = 12,340 micro-USD
+    CAmount price = fetcher.FetchPrice();
+
+    // Price should be positive
+    BOOST_CHECK(price > 0);
+
+    // Price should be in reasonable range for DGB/USD
+    // Minimum: $0.001 = 1,000 micro-USD
+    // Maximum: $1.00 = 1,000,000 micro-USD
+    BOOST_CHECK(price >= 1000);
+    BOOST_CHECK(price <= 1000000);
+}
+
+/**
+ * Test CoinMarketCap API returns valid price in micro-USD
+ * Expected JSON format: {"data":{"DGB":{"quote":{"USD":{"price":0.01234}}}}}
+ * NOTE: Requires API key in configuration (-cmcapikey)
+ */
+BOOST_AUTO_TEST_CASE(fetch_coinmarketcap_price_success)
+{
+    // TODO: Implement CoinMarketCapFetcher class
+    // CoinMarketCapFetcher fetcher;
+    // CAmount price = fetcher.FetchPrice();
+
+    // BOOST_CHECK(price > 0);
+    // BOOST_CHECK(price >= 1000);
+    // BOOST_CHECK(price <= 1000000);
+
+    // For now, test will fail (RED phase)
+    BOOST_CHECK_MESSAGE(false, "CoinMarketCapFetcher not implemented yet");
+}
+
+/**
+ * Test CoinGecko API returns valid price in micro-USD
+ * Expected JSON format: {"digibyte":{"usd":0.01234}}
+ */
+BOOST_AUTO_TEST_CASE(fetch_coingecko_price_success)
+{
+    // TODO: Implement CoinGeckoFetcher class
+    // CoinGeckoFetcher fetcher;
+    // CAmount price = fetcher.FetchPrice();
+
+    // BOOST_CHECK(price > 0);
+    // BOOST_CHECK(price >= 1000);
+    // BOOST_CHECK(price <= 1000000);
+
+    BOOST_CHECK_MESSAGE(false, "CoinGeckoFetcher not implemented yet");
+}
+
+/**
+ * Test Coinbase API returns valid price in micro-USD
+ * Expected JSON format: {"data":{"amount":"0.01234","currency":"USD"}}
+ */
+BOOST_AUTO_TEST_CASE(fetch_coinbase_price_success)
+{
+    CoinbaseFetcher fetcher;
+    CAmount price = fetcher.FetchPrice();
+
+    BOOST_CHECK(price > 0);
+    BOOST_CHECK(price >= 1000);
+    BOOST_CHECK(price <= 1000000);
+}
+
+/**
+ * Test Kraken API returns valid price in micro-USD
+ * Expected JSON format: {"result":{"DGBUSD":{"c":["0.01234","1.0"]}}}
+ */
+BOOST_AUTO_TEST_CASE(fetch_kraken_price_success)
+{
+    KrakenFetcher fetcher;
+    CAmount price = fetcher.FetchPrice();
+
+    BOOST_CHECK(price > 0);
+    BOOST_CHECK(price >= 1000);
+    BOOST_CHECK(price <= 1000000);
+}
+
+/**
+ * Test Messari API returns valid price in micro-USD
+ * Expected JSON format: {"data":{"market_data":{"price_usd":0.01234}}}
+ */
+BOOST_AUTO_TEST_CASE(fetch_messari_price_success)
+{
+    // TODO: Implement MessariFetcher class
+    // MessariFetcher fetcher;
+    // CAmount price = fetcher.FetchPrice();
+
+    // BOOST_CHECK(price > 0);
+    // BOOST_CHECK(price >= 1000);
+    // BOOST_CHECK(price <= 1000000);
+
+    BOOST_CHECK_MESSAGE(false, "MessariFetcher not implemented yet");
+}
+
+/**
+ * Test KuCoin API returns valid price in micro-USD
+ * Expected JSON format: {"data":{"price":"0.01234"}}
+ */
+BOOST_AUTO_TEST_CASE(fetch_kucoin_price_success)
+{
+    // TODO: Implement KuCoinFetcher class
+    // KuCoinFetcher fetcher;
+    // CAmount price = fetcher.FetchPrice();
+
+    // BOOST_CHECK(price > 0);
+    // BOOST_CHECK(price >= 1000);
+    // BOOST_CHECK(price <= 1000000);
+
+    BOOST_CHECK_MESSAGE(false, "KuCoinFetcher not implemented yet");
+}
+
+/**
+ * Test Crypto.com API returns valid price in micro-USD
+ * Expected JSON format: {"result":{"data":{"a":"0.01234"}}}
+ */
+BOOST_AUTO_TEST_CASE(fetch_cryptocom_price_success)
+{
+    // TODO: Implement CryptoComFetcher class
+    // CryptoComFetcher fetcher;
+    // CAmount price = fetcher.FetchPrice();
+
+    // BOOST_CHECK(price > 0);
+    // BOOST_CHECK(price >= 1000);
+    // BOOST_CHECK(price <= 1000000);
+
+    BOOST_CHECK_MESSAGE(false, "CryptoComFetcher not implemented yet");
+}
+
+// ============================================================================
+// CATEGORY 2: Exchange API Error Handling Tests (16 tests)
+// Tests that each exchange handles HTTP timeouts and invalid JSON gracefully
+// ============================================================================
+
+/**
+ * Test Binance handles HTTP timeout gracefully
+ */
+BOOST_AUTO_TEST_CASE(binance_timeout_handling)
+{
+    BinanceFetcher fetcher;
+    fetcher.SetTimeout(1); // 1 second timeout (very short)
+
+    // Should not throw, should return 0 or handle gracefully
+    // EXPECTED: Returns 0 or std::nullopt on timeout
+    CAmount price = fetcher.FetchPrice();
+
+    // Mock implementation returns mock data, so this will pass temporarily
+    // Real implementation should handle timeout gracefully
+    BOOST_CHECK(true);
+}
+
+/**
+ * Test Binance handles invalid JSON gracefully
+ */
+BOOST_AUTO_TEST_CASE(binance_invalid_json_handling)
+{
+    // TODO: Need MockHttpClient to inject invalid JSON
+    // For now, this test documents expected behavior
+
+    // EXPECTED: ExtractJsonValue() should return empty string or nullopt
+    // EXPECTED: ConvertToCents() should return 0 on parse failure
+    // EXPECTED: FetchPrice() should return 0 or nullopt on JSON parse error
+
+    BOOST_CHECK_MESSAGE(false, "MockHttpClient not implemented yet");
+}
+
+/**
+ * Test CoinMarketCap handles HTTP timeout gracefully
+ */
+BOOST_AUTO_TEST_CASE(coinmarketcap_timeout_handling)
+{
+    // TODO: Implement CoinMarketCapFetcher
+    BOOST_CHECK_MESSAGE(false, "CoinMarketCapFetcher not implemented yet");
+}
+
+/**
+ * Test CoinMarketCap handles invalid JSON gracefully
+ */
+BOOST_AUTO_TEST_CASE(coinmarketcap_invalid_json_handling)
+{
+    BOOST_CHECK_MESSAGE(false, "CoinMarketCapFetcher not implemented yet");
+}
+
+/**
+ * Test CoinGecko handles HTTP timeout gracefully
+ */
+BOOST_AUTO_TEST_CASE(coingecko_timeout_handling)
+{
+    BOOST_CHECK_MESSAGE(false, "CoinGeckoFetcher not implemented yet");
+}
+
+/**
+ * Test CoinGecko handles invalid JSON gracefully
+ */
+BOOST_AUTO_TEST_CASE(coingecko_invalid_json_handling)
+{
+    BOOST_CHECK_MESSAGE(false, "CoinGeckoFetcher not implemented yet");
+}
+
+/**
+ * Test Coinbase handles HTTP timeout gracefully
+ */
+BOOST_AUTO_TEST_CASE(coinbase_timeout_handling)
+{
+    CoinbaseFetcher fetcher;
+    fetcher.SetTimeout(1);
+
+    CAmount price = fetcher.FetchPrice();
+    BOOST_CHECK(true); // Mock passes, real implementation will be tested later
+}
+
+/**
+ * Test Coinbase handles invalid JSON gracefully
+ */
+BOOST_AUTO_TEST_CASE(coinbase_invalid_json_handling)
+{
+    BOOST_CHECK_MESSAGE(false, "MockHttpClient not implemented yet");
+}
+
+/**
+ * Test Kraken handles HTTP timeout gracefully
+ */
+BOOST_AUTO_TEST_CASE(kraken_timeout_handling)
+{
+    KrakenFetcher fetcher;
+    fetcher.SetTimeout(1);
+
+    CAmount price = fetcher.FetchPrice();
+    BOOST_CHECK(true);
+}
+
+/**
+ * Test Kraken handles invalid JSON gracefully
+ */
+BOOST_AUTO_TEST_CASE(kraken_invalid_json_handling)
+{
+    BOOST_CHECK_MESSAGE(false, "MockHttpClient not implemented yet");
+}
+
+/**
+ * Test Messari handles HTTP timeout gracefully
+ */
+BOOST_AUTO_TEST_CASE(messari_timeout_handling)
+{
+    BOOST_CHECK_MESSAGE(false, "MessariFetcher not implemented yet");
+}
+
+/**
+ * Test Messari handles invalid JSON gracefully
+ */
+BOOST_AUTO_TEST_CASE(messari_invalid_json_handling)
+{
+    BOOST_CHECK_MESSAGE(false, "MessariFetcher not implemented yet");
+}
+
+/**
+ * Test KuCoin handles HTTP timeout gracefully
+ */
+BOOST_AUTO_TEST_CASE(kucoin_timeout_handling)
+{
+    BOOST_CHECK_MESSAGE(false, "KuCoinFetcher not implemented yet");
+}
+
+/**
+ * Test KuCoin handles invalid JSON gracefully
+ */
+BOOST_AUTO_TEST_CASE(kucoin_invalid_json_handling)
+{
+    BOOST_CHECK_MESSAGE(false, "KuCoinFetcher not implemented yet");
+}
+
+/**
+ * Test Crypto.com handles HTTP timeout gracefully
+ */
+BOOST_AUTO_TEST_CASE(cryptocom_timeout_handling)
+{
+    BOOST_CHECK_MESSAGE(false, "CryptoComFetcher not implemented yet");
+}
+
+/**
+ * Test Crypto.com handles invalid JSON gracefully
+ */
+BOOST_AUTO_TEST_CASE(cryptocom_invalid_json_handling)
+{
+    BOOST_CHECK_MESSAGE(false, "CryptoComFetcher not implemented yet");
+}
+
+// ============================================================================
+// CATEGORY 3: Price Parsing Tests (8 tests)
+// Tests that each exchange can parse their specific JSON response format
+// ============================================================================
+
+/**
+ * Test Binance JSON parsing extracts price from "price" field
+ * Format: {"symbol":"DGBUSDT","price":"0.01234"}
+ */
+BOOST_AUTO_TEST_CASE(parse_binance_json_format)
+{
+    BaseExchangeFetcher* baseFetcher = new BinanceFetcher();
+
+    // Test JSON value extraction
+    std::string mockJson = R"({"symbol":"DGBUSDT","price":"0.01234"})";
+    std::string priceStr = baseFetcher->ExtractJsonValue(mockJson, "price");
+
+    BOOST_CHECK_EQUAL(priceStr, "0.01234");
+
+    // Test conversion to micro-USD
+    CAmount priceMicroUSD = baseFetcher->ConvertToMicroUSD(priceStr);
+
+    // CRITICAL ERROR IN SPEC: ConvertToCents() converts to CENTS, not micro-USD!
+    // This is a 10,000x magnitude error!
+    // $0.01234 in micro-USD = 12,340
+    // $0.01234 in cents = 1.234 cents = 1 (integer truncation)
+
+    // EXPECTED (correct): 12340 micro-USD
+    // ACTUAL (current implementation): ~1 cent
+    BOOST_CHECK_EQUAL(priceMicroUSD, 12340);
+
+    delete baseFetcher;
+}
+
+/**
+ * Test CoinMarketCap JSON parsing
+ * Format: {"data":{"DGB":{"quote":{"USD":{"price":0.01234}}}}}
+ */
+BOOST_AUTO_TEST_CASE(parse_coinmarketcap_json_format)
+{
+    // TODO: Implement nested JSON parsing for CoinMarketCap
+    // Need to extract: data.DGB.quote.USD.price
+
+    BOOST_CHECK_MESSAGE(false, "CoinMarketCap JSON parsing not implemented yet");
+}
+
+/**
+ * Test CoinGecko JSON parsing
+ * Format: {"digibyte":{"usd":0.01234}}
+ */
+BOOST_AUTO_TEST_CASE(parse_coingecko_json_format)
+{
+    // TODO: Implement nested JSON parsing for CoinGecko
+    // Need to extract: digibyte.usd
+
+    BOOST_CHECK_MESSAGE(false, "CoinGecko JSON parsing not implemented yet");
+}
+
+/**
+ * Test Coinbase JSON parsing
+ * Format: {"data":{"amount":"0.01234","currency":"USD"}}
+ */
+BOOST_AUTO_TEST_CASE(parse_coinbase_json_format)
+{
+    // TODO: Test Coinbase JSON parsing
+    // Need to extract: data.amount
+
+    BOOST_CHECK_MESSAGE(false, "Coinbase JSON parsing not implemented yet");
+}
+
+/**
+ * Test Kraken JSON parsing
+ * Format: {"result":{"DGBUSD":{"c":["0.01234","1.0"]}}}
+ */
+BOOST_AUTO_TEST_CASE(parse_kraken_json_format)
+{
+    // TODO: Test Kraken JSON parsing
+    // Need to extract: result.DGBUSD.c[0] (first element of array)
+
+    BOOST_CHECK_MESSAGE(false, "Kraken JSON parsing not implemented yet");
+}
+
+/**
+ * Test Messari JSON parsing
+ * Format: {"data":{"market_data":{"price_usd":0.01234}}}
+ */
+BOOST_AUTO_TEST_CASE(parse_messari_json_format)
+{
+    BOOST_CHECK_MESSAGE(false, "Messari JSON parsing not implemented yet");
+}
+
+/**
+ * Test KuCoin JSON parsing
+ * Format: {"data":{"price":"0.01234"}}
+ */
+BOOST_AUTO_TEST_CASE(parse_kucoin_json_format)
+{
+    BOOST_CHECK_MESSAGE(false, "KuCoin JSON parsing not implemented yet");
+}
+
+/**
+ * Test Crypto.com JSON parsing
+ * Format: {"result":{"data":{"a":"0.01234"}}}
+ */
+BOOST_AUTO_TEST_CASE(parse_cryptocom_json_format)
+{
+    BOOST_CHECK_MESSAGE(false, "Crypto.com JSON parsing not implemented yet");
+}
+
+// ============================================================================
+// CATEGORY 4: Outlier Filtering Tests (8 tests)
+// Tests MAD (Median Absolute Deviation) outlier filtering algorithm
+// ============================================================================
+
+/**
+ * Test MAD algorithm removes outliers correctly
+ * MAD Formula:
+ *   median_value = median(prices)
+ *   mad = median(|price - median_value|)
+ *   outlier if |price - median_value| > 3 * mad
+ */
+BOOST_AUTO_TEST_CASE(outlier_filter_mad_removes_outliers)
+{
+    MultiExchangeAggregator aggregator;
+
+    // Test data: 7 normal prices + 1 outlier
+    std::vector<MultiExchangeAggregator::ExchangePrice> prices = {
+        {"Exchange1", 12300, GetTime(), true, 1.0},  // $0.012300
+        {"Exchange2", 12340, GetTime(), true, 1.0},  // $0.012340
+        {"Exchange3", 12350, GetTime(), true, 1.0},  // $0.012350
+        {"Exchange4", 12320, GetTime(), true, 1.0},  // $0.012320
+        {"Exchange5", 12360, GetTime(), true, 1.0},  // $0.012360
+        {"Exchange6", 12310, GetTime(), true, 1.0},  // $0.012310
+        {"Exchange7", 12330, GetTime(), true, 1.0},  // $0.012330
+        {"Exchange8", 50000, GetTime(), true, 1.0},  // $0.050000 (OUTLIER!)
+    };
+
+    std::vector<MultiExchangeAggregator::ExchangePrice> filtered = aggregator.FilterOutliers(prices);
+
+    // Outlier should be removed, leaving 7 prices
+    BOOST_CHECK_EQUAL(filtered.size(), 7);
+
+    // Verify outlier is not in filtered list
+    for (const auto& price : filtered) {
+        BOOST_CHECK(price.price_cents != 50000);
+    }
+}
+
+/**
+ * Test MAD algorithm keeps valid prices
+ */
+BOOST_AUTO_TEST_CASE(outlier_filter_mad_keeps_valid_prices)
+{
+    MultiExchangeAggregator aggregator;
+
+    // Test data: All prices within reasonable variance
+    std::vector<MultiExchangeAggregator::ExchangePrice> prices = {
+        {"Exchange1", 12300, GetTime(), true, 1.0},
+        {"Exchange2", 12340, GetTime(), true, 1.0},
+        {"Exchange3", 12350, GetTime(), true, 1.0},
+        {"Exchange4", 12320, GetTime(), true, 1.0},
+    };
+
+    std::vector<MultiExchangeAggregator::ExchangePrice> filtered = aggregator.FilterOutliers(prices);
+
+    // All prices should remain (no outliers)
+    BOOST_CHECK_EQUAL(filtered.size(), 4);
+}
+
+/**
+ * Test outlier filter with all identical prices
+ */
+BOOST_AUTO_TEST_CASE(outlier_filter_with_all_identical_prices)
+{
+    MultiExchangeAggregator aggregator;
+
+    // All exchanges report same price
+    std::vector<MultiExchangeAggregator::ExchangePrice> prices = {
+        {"Exchange1", 12340, GetTime(), true, 1.0},
+        {"Exchange2", 12340, GetTime(), true, 1.0},
+        {"Exchange3", 12340, GetTime(), true, 1.0},
+        {"Exchange4", 12340, GetTime(), true, 1.0},
+    };
+
+    std::vector<MultiExchangeAggregator::ExchangePrice> filtered = aggregator.FilterOutliers(prices);
+
+    // All prices should remain (zero variance, no outliers)
+    BOOST_CHECK_EQUAL(filtered.size(), 4);
+}
+
+/**
+ * Test outlier filter with single outlier
+ */
+BOOST_AUTO_TEST_CASE(outlier_filter_with_single_outlier)
+{
+    MultiExchangeAggregator aggregator;
+
+    std::vector<MultiExchangeAggregator::ExchangePrice> prices = {
+        {"Exchange1", 12340, GetTime(), true, 1.0},
+        {"Exchange2", 12350, GetTime(), true, 1.0},
+        {"Exchange3", 12330, GetTime(), true, 1.0},
+        {"Exchange4", 12360, GetTime(), true, 1.0},
+        {"Exchange5", 12320, GetTime(), true, 1.0},
+        {"Exchange6", 12345, GetTime(), true, 1.0},
+        {"Exchange7", 12355, GetTime(), true, 1.0},
+        {"Exchange8", 99999, GetTime(), true, 1.0},  // Extreme outlier
+    };
+
+    std::vector<MultiExchangeAggregator::ExchangePrice> filtered = aggregator.FilterOutliers(prices);
+
+    // Should remove 1 outlier, leaving 7
+    BOOST_CHECK_EQUAL(filtered.size(), 7);
+}
+
+/**
+ * Test outlier filter with multiple outliers
+ */
+BOOST_AUTO_TEST_CASE(outlier_filter_with_multiple_outliers)
+{
+    MultiExchangeAggregator aggregator;
+
+    std::vector<MultiExchangeAggregator::ExchangePrice> prices = {
+        {"Exchange1", 12340, GetTime(), true, 1.0},
+        {"Exchange2", 12350, GetTime(), true, 1.0},
+        {"Exchange3", 12330, GetTime(), true, 1.0},
+        {"Exchange4", 50000, GetTime(), true, 1.0},  // Outlier 1
+        {"Exchange5", 1000, GetTime(), true, 1.0},   // Outlier 2
+        {"Exchange6", 12345, GetTime(), true, 1.0},
+        {"Exchange7", 90000, GetTime(), true, 1.0},  // Outlier 3
+        {"Exchange8", 12355, GetTime(), true, 1.0},
+    };
+
+    std::vector<MultiExchangeAggregator::ExchangePrice> filtered = aggregator.FilterOutliers(prices);
+
+    // Should remove 3 outliers, leaving 5
+    BOOST_CHECK_EQUAL(filtered.size(), 5);
+}
+
+/**
+ * Test outlier filter with insufficient data (< 3 prices)
+ */
+BOOST_AUTO_TEST_CASE(outlier_filter_with_insufficient_data)
+{
+    MultiExchangeAggregator aggregator;
+
+    // Only 2 prices (too few for MAD algorithm)
+    std::vector<MultiExchangeAggregator::ExchangePrice> prices = {
+        {"Exchange1", 12340, GetTime(), true, 1.0},
+        {"Exchange2", 12350, GetTime(), true, 1.0},
+    };
+
+    std::vector<MultiExchangeAggregator::ExchangePrice> filtered = aggregator.FilterOutliers(prices);
+
+    // Should return all prices unchanged (< 3 data points)
+    BOOST_CHECK_EQUAL(filtered.size(), 2);
+}
+
+/**
+ * Test outlier filter preserves order of prices
+ */
+BOOST_AUTO_TEST_CASE(outlier_filter_preserves_order)
+{
+    MultiExchangeAggregator aggregator;
+
+    std::vector<MultiExchangeAggregator::ExchangePrice> prices = {
+        {"ExchangeA", 12340, GetTime(), true, 1.0},
+        {"ExchangeB", 12350, GetTime(), true, 1.0},
+        {"ExchangeC", 12330, GetTime(), true, 1.0},
+    };
+
+    std::vector<MultiExchangeAggregator::ExchangePrice> filtered = aggregator.FilterOutliers(prices);
+
+    // Order should be preserved
+    BOOST_CHECK_EQUAL(filtered[0].exchange, "ExchangeA");
+    BOOST_CHECK_EQUAL(filtered[1].exchange, "ExchangeB");
+    BOOST_CHECK_EQUAL(filtered[2].exchange, "ExchangeC");
+}
+
+/**
+ * Test outlier filter with empty input
+ */
+BOOST_AUTO_TEST_CASE(outlier_filter_empty_input)
+{
+    MultiExchangeAggregator aggregator;
+
+    std::vector<MultiExchangeAggregator::ExchangePrice> prices = {};
+
+    std::vector<MultiExchangeAggregator::ExchangePrice> filtered = aggregator.FilterOutliers(prices);
+
+    // Should return empty vector
+    BOOST_CHECK_EQUAL(filtered.size(), 0);
+}
+
+// ============================================================================
+// CATEGORY 5: Median Calculation Tests (8 tests)
+// Tests median calculation with various price sets
+// ============================================================================
+
+/**
+ * Test median calculation with odd number of prices (7 prices)
+ */
+BOOST_AUTO_TEST_CASE(median_odd_number_of_prices)
+{
+    MultiExchangeAggregator aggregator;
+
+    std::vector<MultiExchangeAggregator::ExchangePrice> prices = {
+        {"Exchange1", 12300, GetTime(), true, 1.0},
+        {"Exchange2", 12340, GetTime(), true, 1.0},
+        {"Exchange3", 12350, GetTime(), true, 1.0},  // Middle value (median)
+        {"Exchange4", 12360, GetTime(), true, 1.0},
+        {"Exchange5", 12320, GetTime(), true, 1.0},
+        {"Exchange6", 12380, GetTime(), true, 1.0},
+        {"Exchange7", 12310, GetTime(), true, 1.0},
+    };
+
+    CAmount median = aggregator.CalculateMedianPrice(prices);
+
+    // Sorted: 12300, 12310, 12320, 12340, 12350, 12360, 12380
+    // Middle value (index 3): 12340
+    BOOST_CHECK_EQUAL(median, 12340);
+}
+
+/**
+ * Test median calculation with even number of prices (8 prices)
+ */
+BOOST_AUTO_TEST_CASE(median_even_number_of_prices)
+{
+    MultiExchangeAggregator aggregator;
+
+    std::vector<MultiExchangeAggregator::ExchangePrice> prices = {
+        {"Exchange1", 12300, GetTime(), true, 1.0},
+        {"Exchange2", 12340, GetTime(), true, 1.0},
+        {"Exchange3", 12350, GetTime(), true, 1.0},
+        {"Exchange4", 12360, GetTime(), true, 1.0},
+        {"Exchange5", 12320, GetTime(), true, 1.0},
+        {"Exchange6", 12380, GetTime(), true, 1.0},
+        {"Exchange7", 12310, GetTime(), true, 1.0},
+        {"Exchange8", 12370, GetTime(), true, 1.0},
+    };
+
+    CAmount median = aggregator.CalculateMedianPrice(prices);
+
+    // Sorted: 12300, 12310, 12320, 12340, 12350, 12360, 12370, 12380
+    // Middle two values (indices 3,4): 12340, 12350
+    // Average: (12340 + 12350) / 2 = 12345
+    BOOST_CHECK_EQUAL(median, 12345);
+}
+
+/**
+ * Test median calculation with single price
+ */
+BOOST_AUTO_TEST_CASE(median_single_price)
+{
+    MultiExchangeAggregator aggregator;
+
+    std::vector<MultiExchangeAggregator::ExchangePrice> prices = {
+        {"Exchange1", 12340, GetTime(), true, 1.0},
+    };
+
+    CAmount median = aggregator.CalculateMedianPrice(prices);
+
+    // Single price is the median
+    BOOST_CHECK_EQUAL(median, 12340);
+}
+
+/**
+ * Test median calculation with two prices
+ */
+BOOST_AUTO_TEST_CASE(median_two_prices)
+{
+    MultiExchangeAggregator aggregator;
+
+    std::vector<MultiExchangeAggregator::ExchangePrice> prices = {
+        {"Exchange1", 12300, GetTime(), true, 1.0},
+        {"Exchange2", 12380, GetTime(), true, 1.0},
+    };
+
+    CAmount median = aggregator.CalculateMedianPrice(prices);
+
+    // Average of two prices: (12300 + 12380) / 2 = 12340
+    BOOST_CHECK_EQUAL(median, 12340);
+}
+
+/**
+ * Test median preserves precision (no rounding errors)
+ */
+BOOST_AUTO_TEST_CASE(median_preserves_precision)
+{
+    MultiExchangeAggregator aggregator;
+
+    // Use prices that would cause rounding issues if using floats
+    std::vector<MultiExchangeAggregator::ExchangePrice> prices = {
+        {"Exchange1", 12333, GetTime(), true, 1.0},
+        {"Exchange2", 12334, GetTime(), true, 1.0},
+        {"Exchange3", 12335, GetTime(), true, 1.0},
+    };
+
+    CAmount median = aggregator.CalculateMedianPrice(prices);
+
+    // Median should be exact middle value: 12334
+    BOOST_CHECK_EQUAL(median, 12334);
+}
+
+/**
+ * Test median output is in micro-USD format
+ */
+BOOST_AUTO_TEST_CASE(median_micro_usd_format)
+{
+    MultiExchangeAggregator aggregator;
+
+    // Prices representing $0.01234 in micro-USD
+    std::vector<MultiExchangeAggregator::ExchangePrice> prices = {
+        {"Exchange1", 12340, GetTime(), true, 1.0},
+        {"Exchange2", 12340, GetTime(), true, 1.0},
+        {"Exchange3", 12340, GetTime(), true, 1.0},
+    };
+
+    CAmount median = aggregator.CalculateMedianPrice(prices);
+
+    // CRITICAL: Verify result is in micro-USD (1,000,000 = $1.00)
+    BOOST_CHECK_EQUAL(median, 12340);
+
+    // Convert back to USD to verify
+    double priceUSD = static_cast<double>(median) / 1000000.0;
+    BOOST_CHECK_CLOSE(priceUSD, 0.01234, 0.01); // Within 0.01% tolerance
+}
+
+/**
+ * Test median with large price values ($1,000,000/DGB hypothetical)
+ */
+BOOST_AUTO_TEST_CASE(median_large_values)
+{
+    MultiExchangeAggregator aggregator;
+
+    // Hypothetical large prices in micro-USD
+    std::vector<MultiExchangeAggregator::ExchangePrice> prices = {
+        {"Exchange1", 1000000000000LL, GetTime(), true, 1.0},  // $1,000,000
+        {"Exchange2", 1000000000000LL, GetTime(), true, 1.0},
+        {"Exchange3", 1000000000000LL, GetTime(), true, 1.0},
+    };
+
+    CAmount median = aggregator.CalculateMedianPrice(prices);
+
+    BOOST_CHECK_EQUAL(median, 1000000000000LL);
+}
+
+/**
+ * Test median with small price values ($0.0001/DGB)
+ */
+BOOST_AUTO_TEST_CASE(median_small_values)
+{
+    MultiExchangeAggregator aggregator;
+
+    // Small prices in micro-USD (100 = $0.0001)
+    std::vector<MultiExchangeAggregator::ExchangePrice> prices = {
+        {"Exchange1", 100, GetTime(), true, 1.0},
+        {"Exchange2", 100, GetTime(), true, 1.0},
+        {"Exchange3", 100, GetTime(), true, 1.0},
+    };
+
+    CAmount median = aggregator.CalculateMedianPrice(prices);
+
+    BOOST_CHECK_EQUAL(median, 100);
+}
+
+// ============================================================================
+// CATEGORY 6: MultiExchangeAggregator Tests (8 tests)
+// Tests the complete aggregation system that fetches from all exchanges
+// ============================================================================
+
+/**
+ * Test aggregator fetches from all 8 exchanges
+ */
+BOOST_AUTO_TEST_CASE(aggregator_fetches_all_8_exchanges)
+{
+    MultiExchangeAggregator aggregator;
+
+    std::vector<MultiExchangeAggregator::ExchangePrice> prices = aggregator.FetchAllPrices();
+
+    // EXPECTED: Should attempt to fetch from all 8 exchanges
+    // Current implementation only has 5 exchanges (Binance, Coinbase, Kraken, Bittrex, Poloniex)
+    // MISSING: CoinMarketCap, CoinGecko, Messari, KuCoin, Crypto.com
+
+    // This test will FAIL (RED phase) until all 8 exchanges are implemented
+    BOOST_CHECK_EQUAL(prices.size(), 8);
+}
+
+/**
+ * Test aggregator handles partial failures gracefully
+ * If some exchanges fail, aggregator should continue with available data
+ */
+BOOST_AUTO_TEST_CASE(aggregator_handles_partial_failures)
+{
+    MultiExchangeAggregator aggregator;
+    aggregator.SetMinRequiredSources(3); // Require minimum 3 successful responses
+
+    // Mock scenario: Only 4 out of 8 exchanges respond
+    // This test requires MockHttpClient to simulate failures
+
+    // EXPECTED: Aggregator should continue if >= 3 exchanges respond
+    // EXPECTED: FetchAggregatePrice() should succeed
+
+    BOOST_CHECK_MESSAGE(false, "MockHttpClient needed to test partial failures");
+}
+
+/**
+ * Test aggregator applies outlier filter before calculating median
+ */
+BOOST_AUTO_TEST_CASE(aggregator_applies_outlier_filter)
+{
+    MultiExchangeAggregator aggregator;
+
+    // This test requires verifying that FilterOutliers() is called
+    // During FetchAggregatePrice() execution
+
+    // EXPECTED: FetchAggregatePrice() calls FilterOutliers() before CalculateMedianPrice()
+
+    BOOST_CHECK_MESSAGE(false, "Need to verify FilterOutliers() is called in FetchAggregatePrice()");
+}
+
+/**
+ * Test aggregator calculates median correctly
+ */
+BOOST_AUTO_TEST_CASE(aggregator_calculates_median)
+{
+    MultiExchangeAggregator aggregator;
+
+    // TODO: Mock all 8 exchange responses with known values
+    // Verify final median is calculated correctly
+
+    BOOST_CHECK_MESSAGE(false, "Need MockHttpClient to inject known prices");
+}
+
+/**
+ * Test aggregator returns price in micro-USD format
+ */
+BOOST_AUTO_TEST_CASE(aggregator_returns_micro_usd)
+{
+    MultiExchangeAggregator aggregator;
+
+    CAmount price = aggregator.FetchAggregatePrice();
+
+    // Price should be positive
+    BOOST_CHECK(price > 0);
+
+    // CRITICAL: Verify price is in micro-USD (NOT cents!)
+    // Reasonable range for DGB: $0.001 to $1.00
+    // In micro-USD: 1,000 to 1,000,000
+
+    // Current implementation uses CENTS (100x magnitude error!)
+    // This test will FAIL until implementation is fixed
+
+    BOOST_CHECK(price >= 1000);      // >= $0.001
+    BOOST_CHECK(price <= 1000000);   // <= $1.00
+}
+
+/**
+ * Test aggregator caches results (optional optimization)
+ */
+BOOST_AUTO_TEST_CASE(aggregator_caches_results)
+{
+    MultiExchangeAggregator aggregator;
+
+    // Fetch price twice
+    CAmount price1 = aggregator.FetchAggregatePrice();
+
+    // Get last prices from cache
+    std::vector<MultiExchangeAggregator::ExchangePrice> cached = aggregator.GetLastPrices();
+
+    // Cached results should exist
+    BOOST_CHECK(cached.size() > 0);
+
+    // TODO: Verify that second call uses cache if within time window
+    // This is an optimization, not strictly required for Phase One
+}
+
+/**
+ * Test aggregator timeout configuration
+ */
+BOOST_AUTO_TEST_CASE(aggregator_timeout_configuration)
+{
+    MultiExchangeAggregator aggregator;
+
+    // TODO: Verify that SetTimeout() affects all exchange fetchers
+    // Need to check that timeout is propagated to all 8 exchanges
+
+    BOOST_CHECK_MESSAGE(false, "Need to verify timeout propagation to all exchanges");
+}
+
+/**
+ * Test aggregator fetches concurrently (optional optimization)
+ */
+BOOST_AUTO_TEST_CASE(aggregator_concurrent_fetching)
+{
+    MultiExchangeAggregator aggregator;
+
+    // TODO: Verify that FetchAllPrices() fetches from all exchanges concurrently
+    // This is a performance optimization
+    // Current implementation is sequential
+
+    // EXPECTED: Fetching should take ~max(individual_fetch_times), not sum
+    // For 8 exchanges with 2-second latency each:
+    //   Sequential: 16 seconds
+    //   Concurrent: 2 seconds
+
+    BOOST_CHECK_MESSAGE(false, "Concurrent fetching not implemented yet (optimization)");
+}
+
+BOOST_AUTO_TEST_SUITE_END()

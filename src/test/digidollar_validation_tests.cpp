@@ -2227,7 +2227,7 @@ BOOST_FIXTURE_TEST_CASE(volatility_validation_override_mechanism, DigiDollarVali
         oracleKey.MakeNewKey(true);
 
         COraclePriceMessage msg;
-        msg.price_satoshis = mockOraclePrice;
+        msg.price_micro_usd = mockOraclePrice;
         msg.timestamp = GetTime(); // Use current time, not future time
         msg.oracle_id = i; // Use loop index as oracle ID
 
@@ -2235,8 +2235,8 @@ BOOST_FIXTURE_TEST_CASE(volatility_validation_override_mechanism, DigiDollarVali
         // uint256 hash = SerializeHash(msg);
         uint256 hash = uint256S("0000000000000000000000000000000000000000000000000000000000000000"); // Mock hash
         // TODO: Fix signature call - may need proper signing method
-        // oracleKey.SignSchnorr(hash, msg.signature);
-        msg.signature = std::vector<unsigned char>(64, 0); // Mock signature
+        // oracleKey.SignSchnorr(hash, msg.schnorr_sig);
+        msg.schnorr_sig = std::vector<unsigned char>(64, 0); // Mock signature
 
         approvals.push_back(msg);
     }

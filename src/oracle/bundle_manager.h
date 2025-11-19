@@ -7,6 +7,7 @@
 
 #include <memory>
 #include <mutex>
+#include <set>
 #include <unordered_map>
 
 #include <consensus/amount.h>
@@ -36,6 +37,9 @@ private:
     // Individual oracle messages waiting to be bundled
     std::unordered_map<uint32_t, COraclePriceMessage> pending_messages;
 
+    // Track seen messages for duplicate detection
+    std::set<uint256> seen_message_hashes;
+
     // Cached price data
     CAmount cached_price{0};
     int32_t cached_epoch{-1};
@@ -44,6 +48,7 @@ private:
     // Configuration
     bool enabled{true};
     int32_t min_oracle_count{ORACLE_CONSENSUS_REQUIRED};
+    int32_t total_oracle_count{ORACLE_ACTIVE_COUNT};
 
 public:
     OracleBundleManager();
@@ -81,8 +86,9 @@ public:
     bool ValidateOracleDataInBlock(const CBlock& block, int32_t block_height, const Consensus::Params& params) const;
 
     //! Network functions
-    void BroadcastMessage(const COraclePriceMessage& message);
+    bool BroadcastMessage(const COraclePriceMessage& message);
     void ProcessIncomingMessage(const COraclePriceMessage& message);
+    bool HasOracleMessage(const uint256& hash) const;
 
     //! Status and statistics
     struct OracleStats {
@@ -100,6 +106,24 @@ public:
     static void Initialize();
     static void Shutdown();
 
+    //! Configuration validation
+    bool ValidateConfiguration() const;
+
+    //! Price cache management
+    /**
+     * Update oracle price cache for a specific height
+     * @param height Block height
+     * @param price_micro_usd Price in micro-USD
+     */
+    void UpdatePriceCache(int height, uint64_t price_micro_usd);
+
+    /**
+     * Get oracle price for a specific height
+     * @param height Block height
+     * @return Price in micro-USD, or 0 if not available
+     */
+    uint64_t GetOraclePriceForHeight(int height) const;
+
 private:
     //! Internal helpers
     bool TryCreateBundle(int32_t epoch);
@@ -107,6 +131,10 @@ private:
     bool IsValidOracleMessage(const COraclePriceMessage& message) const;
     std::vector<uint32_t> GetActiveOraclesForEpoch(int32_t epoch) const;
     bool HasRequiredSignatures(const COracleBundle& bundle, int32_t block_height) const;
+
+    //! Price cache (block height -> price in micro-USD)
+    std::map<int, uint64_t> height_to_price;
+    mutable std::mutex mtx_price_cache;
 };
 
 /**
@@ -143,6 +171,11 @@ namespace OracleIntegration {
 
     //! Get current oracle price for DigiDollar operations
     CAmount GetCurrentOraclePrice();
+
+    //! Get oracle price for a specific block height
+    //! @param nHeight Block height to query
+    //! @return Price in micro-USD (1,000,000 = $1.00), or 0 if not available
+    CAmount GetOraclePriceForHeight(int nHeight);
 
     //! Check if oracle system is ready
     bool IsOracleSystemReady();

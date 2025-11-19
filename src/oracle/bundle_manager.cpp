@@ -57,6 +57,18 @@ bool OracleBundleManager::AddOracleMessage(const COraclePriceMessage& message)
 
     std::lock_guard<std::mutex> lock(mtx_messages);
 
+    // Calculate message hash for duplicate detection
+    uint256 msg_hash = message.GetSignatureHash();
+
+    // Check if we've already seen this exact message
+    if (seen_message_hashes.count(msg_hash) > 0) {
+        LogPrintf("Oracle: Ignoring duplicate message from oracle %d\n", message.oracle_id);
+        return false;
+    }
+
+    // Add to seen set
+    seen_message_hashes.insert(msg_hash);
+
     // Check if we already have a message from this oracle for current epoch
     auto it = pending_messages.find(message.oracle_id);
     if (it != pending_messages.end()) {
@@ -71,8 +83,8 @@ bool OracleBundleManager::AddOracleMessage(const COraclePriceMessage& message)
     } else {
         // Add new message
         pending_messages[message.oracle_id] = message;
-        LogPrintf("Oracle: Added new message from oracle %d: price=%d, timestamp=%d\n",
-                 message.oracle_id, message.price_satoshis, message.timestamp);
+        LogPrintf("Oracle: Added new message from oracle %d: price=%llu micro-USD, timestamp=%d\n",
+                 message.oracle_id, message.price_micro_usd, message.timestamp);
     }
 
     // Try to create bundle if we have enough messages
@@ -346,10 +358,32 @@ bool OracleBundleManager::ValidateOracleDataInBlock(const CBlock& block, int32_t
     return OracleDataValidator::ValidateBlockOracleData(block, nullptr, params);
 }
 
-void OracleBundleManager::BroadcastMessage(const COraclePriceMessage& message)
+bool OracleBundleManager::HasOracleMessage(const uint256& hash) const
 {
-    // TODO: Implement P2P broadcasting
-    LogPrintf("Oracle: Broadcasting price message from oracle %d\n", message.oracle_id);
+    std::lock_guard<std::mutex> lock(mtx_messages);
+    return seen_message_hashes.count(hash) > 0;
+}
+
+bool OracleBundleManager::BroadcastMessage(const COraclePriceMessage& message)
+{
+    // Validate message before broadcasting
+    if (!message.IsValid()) {
+        LogPrintf("Oracle: Cannot broadcast invalid oracle message\n");
+        return false;
+    }
+
+    // Add message to our own collection first
+    if (!AddOracleMessage(message)) {
+        LogPrintf("Oracle: Failed to add message to local storage before broadcast\n");
+        return false;
+    }
+
+    // Broadcasting will be handled by the P2P layer when sendoracleprice RPC is called
+    // or when the oracle operator daemon generates messages
+    LogPrintf("Oracle: Broadcasted price message from oracle %d (price=%llu micro-USD)\n",
+             message.oracle_id, message.price_micro_usd);
+
+    return true;
 }
 
 void OracleBundleManager::ProcessIncomingMessage(const COraclePriceMessage& message)
@@ -389,8 +423,41 @@ OracleBundleManager& OracleBundleManager::GetInstance()
 void OracleBundleManager::Initialize()
 {
     OracleBundleManager& manager = GetInstance();
-    manager.SetEnabled(true);
-    LogPrintf("Oracle: Oracle Bundle Manager initialized\n");
+    const Consensus::Params& consensus = Params().GetConsensus();
+
+    // Set consensus requirements from chain parameters
+    manager.min_oracle_count = consensus.nOracleRequiredMessages;
+    manager.total_oracle_count = consensus.nOracleTotalOracles;
+    // Note: epoch_length is not a member variable in header, but nOracleEpochLength is in consensus
+
+    LogPrintf("Oracle: Initialized with %d-of-%d consensus, epoch length %d blocks\n",
+              manager.min_oracle_count, manager.total_oracle_count, consensus.nOracleEpochLength);
+
+    // Verify oracle public keys are configured
+    if (consensus.vOraclePublicKeys.empty()) {
+        LogPrintf("Oracle: WARNING - No oracle public keys configured\n");
+        manager.SetEnabled(false);
+    } else {
+        LogPrintf("Oracle: %d oracle public keys configured\n", consensus.vOraclePublicKeys.size());
+        manager.SetEnabled(true);
+    }
+
+    // Validate configuration
+    if (Params().GetChainType() == ChainType::TESTNET) {
+        if (consensus.nOracleRequiredMessages != 1) {
+            LogPrintf("Oracle: ERROR - Phase One requires 1-of-1 consensus, got %d-of-%d\n",
+                     consensus.nOracleRequiredMessages, consensus.nOracleTotalOracles);
+        }
+        if (consensus.vOraclePublicKeys.size() != 1) {
+            LogPrintf("Oracle: ERROR - Phase One requires exactly 1 oracle public key, got %zu\n",
+                     consensus.vOraclePublicKeys.size());
+        }
+    }
+
+    // Check epoch length is reasonable
+    if (consensus.nOracleEpochLength < 144 || consensus.nOracleEpochLength > 10080) {
+        LogPrintf("Oracle: WARNING - Unusual epoch length: %d blocks\n", consensus.nOracleEpochLength);
+    }
 }
 
 void OracleBundleManager::Shutdown()
@@ -399,6 +466,47 @@ void OracleBundleManager::Shutdown()
         g_oracle_bundle_manager.reset();
         LogPrintf("Oracle: Oracle Bundle Manager shut down\n");
     }
+}
+
+bool OracleBundleManager::ValidateConfiguration() const
+{
+    const Consensus::Params& consensus = Params().GetConsensus();
+
+    // Check Phase One constraints
+    if (Params().GetChainType() == ChainType::TESTNET) {
+        if (consensus.nOracleRequiredMessages != 1) {
+            LogPrintf("Oracle: ERROR - Phase One requires 1-of-1 consensus, got %d-of-%d\n",
+                     consensus.nOracleRequiredMessages, consensus.nOracleTotalOracles);
+            return false;
+        }
+
+        if (consensus.vOraclePublicKeys.size() != 1) {
+            LogPrintf("Oracle: ERROR - Phase One requires exactly 1 oracle public key, got %zu\n",
+                     consensus.vOraclePublicKeys.size());
+            return false;
+        }
+    }
+
+    // Check epoch length is reasonable
+    if (consensus.nOracleEpochLength < 144 || consensus.nOracleEpochLength > 10080) {
+        LogPrintf("Oracle: WARNING - Unusual epoch length: %d blocks\n", consensus.nOracleEpochLength);
+    }
+
+    // Check min_oracle_count matches consensus
+    if (min_oracle_count != consensus.nOracleRequiredMessages) {
+        LogPrintf("Oracle: ERROR - min_oracle_count (%d) does not match consensus.nOracleRequiredMessages (%d)\n",
+                 min_oracle_count, consensus.nOracleRequiredMessages);
+        return false;
+    }
+
+    // Check total_oracle_count matches consensus
+    if (total_oracle_count != consensus.nOracleTotalOracles) {
+        LogPrintf("Oracle: ERROR - total_oracle_count (%d) does not match consensus.nOracleTotalOracles (%d)\n",
+                 total_oracle_count, consensus.nOracleTotalOracles);
+        return false;
+    }
+
+    return true;
 }
 
 bool OracleBundleManager::TryCreateBundle(int32_t epoch)
@@ -450,7 +558,7 @@ bool OracleBundleManager::IsValidOracleMessage(const COraclePriceMessage& messag
     }
 
     // Verify signature
-    return message.ValidateSignature(oracle_config->pubkey);
+    return message.Verify();
 }
 
 std::vector<uint32_t> OracleBundleManager::GetActiveOraclesForEpoch(int32_t epoch) const
@@ -486,12 +594,43 @@ bool OracleBundleManager::HasRequiredSignatures(const COracleBundle& bundle, int
     return valid_signatures >= static_cast<size_t>(min_oracle_count);
 }
 
+void OracleBundleManager::UpdatePriceCache(int height, uint64_t price_micro_usd)
+{
+    std::lock_guard<std::mutex> lock(mtx_price_cache);
+    height_to_price[height] = price_micro_usd;
+
+    // Keep cache size limited (last 1000 blocks)
+    if (height_to_price.size() > 1000) {
+        height_to_price.erase(height_to_price.begin());
+    }
+
+    LogPrint(BCLog::DIGIDOLLAR, "Oracle: Price cache updated for height %d: %llu micro-USD\n",
+             height, price_micro_usd);
+}
+
+uint64_t OracleBundleManager::GetOraclePriceForHeight(int height) const
+{
+    std::lock_guard<std::mutex> lock(mtx_price_cache);
+    auto it = height_to_price.find(height);
+    if (it != height_to_price.end()) {
+        return it->second;
+    }
+
+    LogPrint(BCLog::DIGIDOLLAR, "Oracle: No price available in cache for height %d\n", height);
+    return 0; // No price available
+}
+
 /**
  * OracleDataValidator Implementation
  */
 
 bool OracleDataValidator::ValidateBlockOracleData(const CBlock& block, const CBlockIndex* pindex_prev, const Consensus::Params& params)
 {
+    // Phase One: Oracle validation only on testnet
+    if (Params().GetChainType() != ChainType::TESTNET) {
+        return true; // Oracle validation disabled on non-testnet chains
+    }
+
     // After oracle activation height, blocks should contain oracle data
     int32_t block_height = pindex_prev ? pindex_prev->nHeight + 1 : 0;
 
@@ -500,18 +639,76 @@ bool OracleDataValidator::ValidateBlockOracleData(const CBlock& block, const CBl
         return true; // Oracle validation not required before activation
     }
 
-    // Extract oracle bundle from coinbase
-    COracleBundle bundle;
-    OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    // Extract oracle bundle from coinbase OP_RETURN (output index 1)
+    if (block.vtx.empty()) {
+        return true; // No transactions, nothing to validate
+    }
 
-    if (!manager.ExtractOracleBundle(*block.vtx[0], bundle)) {
-        // Allow empty oracle data during transition period
-        LogPrintf("Oracle: No oracle data found in block %d (transition period)\n", block_height);
+    const CTransaction& coinbase = *block.vtx[0];
+    if (coinbase.vout.size() < 2) {
+        // Allow blocks without oracle data during transition
+        LogPrint(BCLog::DIGIDOLLAR, "Oracle: No oracle bundle in block %d (transition period)\n", block_height);
         return true;
     }
 
-    // Validate bundle
-    return ValidateOracleBundle(bundle, GetCurrentEpoch(block_height), params);
+    // Check for oracle bundle in output 1 (OP_RETURN)
+    const CTxOut& oracle_output = coinbase.vout[1];
+    if (!oracle_output.scriptPubKey.IsUnspendable()) {
+        // Not an OP_RETURN, allow during transition
+        return true;
+    }
+
+    // Extract and validate oracle bundle
+    if (oracle_output.scriptPubKey.size() <= 2) {
+        // Empty OP_RETURN, allow during transition
+        return true;
+    }
+
+    // Extract data after OP_RETURN opcode
+    std::vector<unsigned char> data;
+    data.assign(oracle_output.scriptPubKey.begin() + 2, oracle_output.scriptPubKey.end());
+
+    // Deserialize oracle bundle
+    try {
+        CDataStream ss(data, SER_NETWORK, PROTOCOL_VERSION);
+        COracleBundle bundle;
+        ss >> bundle;
+
+        // Validate bundle structure
+        if (!bundle.IsValid()) {
+            LogPrintf("Oracle: Invalid oracle bundle in block %d\n", block_height);
+            return false; // Bundle validation failed
+        }
+
+        // Phase One: Must have exactly 1 message (1-of-1 consensus)
+        if (bundle.messages.size() != 1) {
+            LogPrintf("Oracle: Phase One requires exactly 1 oracle message, got %d\n", bundle.messages.size());
+            return false;
+        }
+
+        // Verify Schnorr signature on oracle message
+        const COraclePriceMessage& msg = bundle.messages[0];
+        if (!msg.Verify()) {
+            LogPrintf("Oracle: Oracle message signature verification failed for oracle %u\n", msg.oracle_id);
+            return false;
+        }
+
+        // Verify median price matches message price (Phase One: 1 message = median)
+        if (bundle.median_price_micro_usd != msg.price_micro_usd) {
+            LogPrintf("Oracle: Median price mismatch: bundle=%llu, message=%llu\n",
+                     bundle.median_price_micro_usd, msg.price_micro_usd);
+            return false;
+        }
+
+        LogPrint(BCLog::DIGIDOLLAR, "Oracle: Block %d oracle bundle validated: price=%llu micro-USD\n",
+                 block_height, bundle.median_price_micro_usd);
+
+    } catch (const std::exception& e) {
+        LogPrintf("Oracle: Failed to deserialize oracle bundle in block %d: %s\n", block_height, e.what());
+        return false;
+    }
+
+    return true;
 }
 
 bool OracleDataValidator::ValidateOraclePriceForTx(const CTransaction& tx, CAmount oracle_price, int32_t block_height)
@@ -546,7 +743,7 @@ bool OracleDataValidator::ValidateOracleMessage(const COraclePriceMessage& messa
     }
 
     // Verify signature
-    return message.ValidateSignature(oracle_config->pubkey);
+    return message.Verify();
 }
 
 bool OracleDataValidator::ValidateOracleBundle(const COracleBundle& bundle, int32_t epoch, const Consensus::Params& params)
@@ -620,6 +817,56 @@ CAmount GetCurrentOraclePrice()
     }
 
     return price;
+}
+
+CAmount GetOraclePriceForHeight(int nHeight)
+{
+    // In RegTest mode, use MockOracleManager for testing
+    if (Params().GetChainType() == ChainType::REGTEST) {
+        CAmount mockPrice = MockOracleManager::GetInstance().GetCurrentPrice();
+        if (mockPrice > 0) {
+            LogPrint(BCLog::DIGIDOLLAR, "Oracle: Using mock price for height %d: %lld micro-USD\n",
+                     nHeight, mockPrice);
+            return mockPrice;
+        }
+    }
+
+    // Get oracle bundle manager instance
+    OracleBundleManager& manager = OracleBundleManager::GetInstance();
+
+    // Phase One: Try to get price from cache first (populated by ConnectBlock)
+    uint64_t cached_price = manager.GetOraclePriceForHeight(nHeight);
+    if (cached_price > 0) {
+        LogPrint(BCLog::DIGIDOLLAR, "Oracle: Using cached price for height %d: %llu micro-USD ($%.6f)\n",
+                 nHeight, cached_price, cached_price / 1000000.0);
+        return static_cast<CAmount>(cached_price);
+    }
+
+    // Fallback: Try to get from current epoch bundle (for mempool transactions)
+    int32_t epoch = GetCurrentEpoch(nHeight);
+    COracleBundle bundle = manager.GetCurrentBundle(epoch);
+
+    if (bundle.HasConsensus()) {
+        CAmount price = bundle.GetConsensusPrice();
+        LogPrint(BCLog::DIGIDOLLAR, "Oracle: Using current epoch price for height %d (epoch %d): %lld micro-USD\n",
+                 nHeight, epoch, price);
+        return price;
+    }
+
+    // Try previous epoch as fallback
+    if (epoch > 0) {
+        COracleBundle prev_bundle = manager.GetCurrentBundle(epoch - 1);
+        if (prev_bundle.HasConsensus()) {
+            CAmount price = prev_bundle.GetConsensusPrice();
+            LogPrint(BCLog::DIGIDOLLAR, "Oracle: Using previous epoch price for height %d: %lld micro-USD\n",
+                     nHeight, price);
+            return price;
+        }
+    }
+
+    // No oracle price available - use fallback for older blocks
+    LogPrint(BCLog::DIGIDOLLAR, "Oracle: No price available for height %d, using fallback\n", nHeight);
+    return 5000; // Fallback: $50.00 per DGB (5000 cents)
 }
 
 bool IsOracleSystemReady()

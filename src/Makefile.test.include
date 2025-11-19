@@ -80,6 +80,14 @@ DIGIBYTE_TESTS =\
   test/digidollar_health_tests.cpp \
   test/digidollar_opcodes_tests.cpp \
   test/digidollar_oracle_tests.cpp \
+  test/oracle_bundle_manager_tests.cpp \
+  test/oracle_block_validation_tests.cpp \
+  test/oracle_config_tests.cpp \
+  test/oracle_exchange_tests.cpp \
+  test/oracle_integration_tests.cpp \
+  test/oracle_message_tests.cpp \
+  test/oracle_miner_tests.cpp \
+  test/oracle_p2p_tests.cpp \
   test/digidollar_p2p_tests.cpp \
   test/digidollar_rpc_tests.cpp \
   test/digidollar_scripts_tests.cpp \

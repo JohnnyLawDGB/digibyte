@@ -72,6 +72,28 @@ public:
     uint32_t GetOracleId() const { return oracle_id; }
     CPubKey GetPublicKey() const { return public_key; }
 
+    //! Key management (Phase One: Testnet hardcoded key)
+    /**
+     * Get oracle private key (hardcoded for Phase One testnet)
+     * WARNING: This uses a hardcoded key for testnet only
+     * Mainnet will use secure key management
+     * @return CKey private key for signing
+     */
+    CKey GetOraclePrivateKey();
+
+    /**
+     * Get oracle public key (derived from private key)
+     * @return XOnlyPubKey public key for Schnorr signatures
+     */
+    XOnlyPubKey GetOraclePublicKey();
+
+    /**
+     * Validate oracle key matches consensus parameters
+     * Verifies that the oracle's public key is authorized in chainparams
+     * @return true if key is authorized for oracle operation
+     */
+    bool ValidateOracleKey();
+
     //! Message creation and broadcasting
     COraclePriceMessage CreatePriceMessage(CAmount price, int64_t timestamp);
     bool BroadcastPriceMessage(const COraclePriceMessage& message);

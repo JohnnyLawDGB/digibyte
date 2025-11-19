@@ -183,6 +183,13 @@ struct Params {
     int nDDOracleUpdateInterval{4};     // Blocks between price updates
     int nDDActivationHeight{0};         // Height at which DigiDollar activates
 
+    /** Oracle system parameters (Phase One: Testnet only) */
+    int nOracleActivationHeight{std::numeric_limits<int>::max()};  // Height when oracle system activates
+    int nOracleEpochLength{1440};               // Blocks per oracle epoch (default: 1440 = 24 hours)
+    int nOracleRequiredMessages{1};             // Messages required for consensus (Phase One: 1)
+    int nOracleTotalOracles{1};                 // Total active oracles (Phase One: 1)
+    std::vector<std::string> vOraclePublicKeys; // Hardcoded oracle public keys (hex encoded XOnlyPubKey)
+
     /**
      * If true, witness commitments contain a payload equal to a DigiByte Script solution
      * to the signet challenge. See BIP325.
@@ -216,6 +223,16 @@ struct Params {
         return std::numeric_limits<int>::max();
     }
 };
+
+/**
+ * Check if oracle system is active at given height
+ * @param params Consensus parameters
+ * @param nHeight Block height to check
+ * @return true if oracle system is active
+ */
+inline bool IsOracleActive(const Params& params, int nHeight) {
+    return nHeight >= params.nOracleActivationHeight;
+}
 
 } // namespace Consensus
 

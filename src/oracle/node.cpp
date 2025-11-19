@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <chrono>
 #include <iomanip>
+#include <limits>
 #include <sstream>
 #include <thread>
 
@@ -20,6 +21,8 @@
 #include <net.h>
 #include <netmessagemaker.h>
 #include <node/context.h>
+#include <oracle/bundle_manager.h>
+#include <oracle/exchange.h>
 #include <random.h>
 #include <util/strencodings.h>
 #include <util/time.h>
@@ -43,12 +46,19 @@ std::unique_ptr<OracleManager> g_oracle_manager;
 OracleNode::OracleNode()
     : oracle_id(0), running(false), enabled(false)
 {
+    // Phase One: Update every DigiByte block (15 seconds)
+    price_update_interval = 15;
+    // Broadcast every block
+    broadcast_interval = 15;
 }
 
 OracleNode::OracleNode(uint32_t oracle_id_in, const CKey& private_key_in)
     : oracle_id(oracle_id_in), private_key(private_key_in), running(false), enabled(false)
 {
     public_key = private_key.GetPubKey();
+    // Phase One: Update every DigiByte block (15 seconds)
+    price_update_interval = 15;
+    broadcast_interval = 15;
 }
 
 OracleNode::~OracleNode()
@@ -113,6 +123,12 @@ void OracleNode::SetExchangeEndpoints(const std::vector<std::string>& endpoints)
 
 void OracleNode::Start()
 {
+    // CRITICAL: Oracle only runs on TESTNET for Phase One
+    if (Params().GetChainType() != ChainType::TESTNET) {
+        LogPrintf("Oracle: Not starting - only enabled on testnet (Phase One)\n");
+        return;
+    }
+
     if (running.load()) {
         LogPrintf("Oracle: Oracle %d is already running\n", oracle_id);
         return;
@@ -123,6 +139,12 @@ void OracleNode::Start()
         return;
     }
 
+    // Validate oracle key matches chainparams
+    if (!ValidateOracleKey()) {
+        LogPrintf("Oracle: ERROR - Oracle key validation failed for oracle %d, cannot start\n", oracle_id);
+        return;
+    }
+
     if (!ValidatePrivateKey()) {
         LogPrintf("Oracle: Oracle %d has invalid configuration, cannot start\n", oracle_id);
         return;
@@ -130,7 +152,7 @@ void OracleNode::Start()
 
     running.store(true);
     price_thread = std::thread(&OracleNode::PriceThreadFunc, this);
-    LogPrintf("Oracle: Started oracle %d\n", oracle_id);
+    LogPrintf("Oracle: Started oracle %d on testnet (Phase One: 1-of-1 consensus)\n", oracle_id);
 }
 
 void OracleNode::Stop()
@@ -168,16 +190,18 @@ COraclePriceMessage OracleNode::CreatePriceMessage(CAmount price, int64_t timest
 {
     COraclePriceMessage message(oracle_id, price, timestamp);
 
-    // Sign the message
-    uint256 hash = message.GetSignatureHash();
-    std::vector<unsigned char> signature;
+    // Set oracle public key (XOnlyPubKey)
+    message.oracle_pubkey = XOnlyPubKey(public_key);
 
-    if (!private_key.Sign(hash, signature)) {
-        LogPrintf("Oracle: Failed to sign price message for oracle %d\n", oracle_id);
+    // Set nonce for uniqueness
+    message.nonce = GetRand<uint64_t>(std::numeric_limits<uint64_t>::max());
+
+    // Sign the message using Schnorr signature
+    if (!message.Sign(private_key)) {
+        LogPrintf("Oracle: Failed to create Schnorr signature for oracle %d\n", oracle_id);
         return COraclePriceMessage(); // Return empty message on failure
     }
 
-    message.signature = signature;
     return message;
 }
 
@@ -188,16 +212,18 @@ bool OracleNode::BroadcastPriceMessage(const COraclePriceMessage& message)
         return false;
     }
 
-    // Validate signature
-    if (!message.ValidateSignature(public_key)) {
-        LogPrintf("Oracle: Invalid signature on price message for oracle %d\n", oracle_id);
+    // Validate Schnorr signature
+    if (!message.Verify()) {
+        LogPrintf("Oracle: Invalid Schnorr signature on price message for oracle %d\n", oracle_id);
         return false;
     }
 
-    // TODO: Implement P2P broadcasting
-    // For now, just log the message
-    LogPrintf("Oracle: Broadcasting price message - Oracle: %d, Price: %d, Time: %d\n",
-             message.oracle_id, message.price_satoshis, message.timestamp);
+    LogPrintf("Oracle: Broadcasting price message - Oracle: %d, Price: %llu micro-USD, Time: %lld\n",
+             message.oracle_id, message.price_micro_usd, message.timestamp);
+
+    // Send to bundle manager for processing
+    OracleBundleManager& bundleManager = OracleBundleManager::GetInstance();
+    bundleManager.BroadcastMessage(message);
 
     // Update last broadcast time
     last_broadcast_time = GetTime();
@@ -249,8 +275,22 @@ void OracleNode::FetchAndUpdatePrice()
 
 CAmount OracleNode::FetchMedianPrice()
 {
-    ExchangePriceFetcher fetcher(exchange_endpoints);
-    return fetcher.GetMedianPrice();
+    // Use the real MultiExchangeAggregator from exchange.cpp
+    // This fetches from all 8 exchanges and returns median with outlier filtering
+    ExchangeAPI::MultiExchangeAggregator aggregator;
+    aggregator.SetMinRequiredSources(3);  // Need at least 3 exchanges
+    aggregator.SetOutlierThreshold(0.10); // 10% deviation threshold
+
+    CAmount price = aggregator.FetchAggregatePrice();
+
+    if (price > 0) {
+        LogPrintf("Oracle: Fetched aggregate price from exchanges: %lld micro-USD ($%.6f)\n",
+                 price, static_cast<double>(price) / 1000000.0);
+    } else {
+        LogPrintf("Oracle: Failed to fetch aggregate price from exchanges\n");
+    }
+
+    return price;
 }
 
 void OracleNode::BroadcastCurrentPrice()
@@ -286,6 +326,105 @@ bool OracleNode::ValidateOracleId() const
 bool OracleNode::ValidatePrivateKey() const
 {
     return private_key.IsValid() && public_key.IsValid() && ValidateOracleId();
+}
+
+CKey OracleNode::GetOraclePrivateKey()
+{
+    CKey key;
+
+    // Phase One: Hardcoded testnet oracle private key
+    // This is ONLY for testnet! Mainnet will use secure key management
+
+    // Hardcoded key: Private key corresponding to the testnet oracle public key
+    // Public key: 79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798
+    // This is a well-known test key (private key = 1)
+    std::vector<unsigned char> keydata = ParseHex(
+        "0000000000000000000000000000000000000000000000000000000000000001"
+    );
+
+    // CKey::Set() returns void, so we call it and then check if key is valid
+    key.Set(keydata.begin(), keydata.end(), true);
+
+    // Verify key is valid
+    if (!key.IsValid()) {
+        LogPrintf("Oracle: ERROR - Oracle private key is not valid\n");
+        return CKey();
+    }
+
+    // Verify key is compressed
+    if (!key.IsCompressed()) {
+        LogPrintf("Oracle: WARNING - Oracle key should be compressed\n");
+    }
+
+    LogPrint(BCLog::DIGIDOLLAR, "Oracle: Loaded hardcoded testnet oracle private key\n");
+
+    return key;
+}
+
+XOnlyPubKey OracleNode::GetOraclePublicKey()
+{
+    CKey privkey = GetOraclePrivateKey();
+
+    if (!privkey.IsValid()) {
+        LogPrintf("Oracle: ERROR - Cannot derive public key from invalid private key\n");
+        return XOnlyPubKey();
+    }
+
+    // Get compressed public key
+    CPubKey pubkey = privkey.GetPubKey();
+
+    // Convert to XOnlyPubKey for Schnorr signatures
+    XOnlyPubKey xonly(pubkey);
+
+    LogPrint(BCLog::DIGIDOLLAR, "Oracle: Public key: %s\n", HexStr(xonly));
+
+    return xonly;
+}
+
+bool OracleNode::ValidateOracleKey()
+{
+    // Get oracle public key
+    XOnlyPubKey oracle_xonly_pubkey = GetOraclePublicKey();
+
+    if (!oracle_xonly_pubkey.IsFullyValid()) {
+        LogPrintf("Oracle: ERROR - Oracle public key is not valid\n");
+        return false;
+    }
+
+    // Get expected public key from consensus parameters
+    const CChainParams& params = Params();
+    const OracleNodeInfo* oracle_config = params.GetOracleNode(oracle_id);
+
+    if (!oracle_config) {
+        LogPrintf("Oracle: ERROR - No oracle configuration found for oracle %d\n", oracle_id);
+        return false;
+    }
+
+    // Get the expected public key from chainparams
+    CPubKey expected_pubkey = oracle_config->pubkey;
+
+    if (!expected_pubkey.IsValid()) {
+        LogPrintf("Oracle: ERROR - Expected public key in chainparams is not valid\n");
+        return false;
+    }
+
+    // Convert expected pubkey to XOnlyPubKey for comparison
+    XOnlyPubKey expected_xonly(expected_pubkey);
+
+    // Convert both to hex for comparison
+    std::string our_pubkey_hex = HexStr(oracle_xonly_pubkey);
+    std::string expected_pubkey_hex = HexStr(expected_xonly);
+
+    // Check if our public key matches the expected one
+    if (our_pubkey_hex != expected_pubkey_hex) {
+        LogPrintf("Oracle: ERROR - Oracle public key mismatch\n");
+        LogPrintf("Oracle: Our key:      %s\n", our_pubkey_hex);
+        LogPrintf("Oracle: Expected key: %s\n", expected_pubkey_hex);
+        return false;
+    }
+
+    LogPrintf("Oracle: Key validation successful - authorized for oracle operation (oracle_id=%d)\n", oracle_id);
+    return true;
 }
 
 /**
@@ -628,9 +767,28 @@ OracleManager& OracleManager::GetInstance()
 
 void OracleManager::StartOracleService()
 {
+    // CRITICAL: Only start on testnet for Phase One
+    if (Params().GetChainType() != ChainType::TESTNET) {
+        LogPrintf("Oracle: Oracle service not started - testnet only (Phase One)\n");
+        return;
+    }
+
     OracleManager& manager = GetInstance();
     manager.Initialize();
-    LogPrintf("Oracle: Oracle service started\n");
+
+    // Phase One: Create single hardcoded testnet oracle (oracle_id = 0)
+    // WARNING: This is for testnet only! Mainnet will use different key management
+    const std::string testnet_oracle_key = "0000000000000000000000000000000000000000000000000000000000000001";
+
+    if (manager.AddOracleNode(0, testnet_oracle_key)) {
+        LogPrintf("Oracle: Added testnet oracle (id=0) with hardcoded key\n");
+
+        // Start the oracle
+        manager.StartAll();
+        LogPrintf("Oracle: Oracle service started on testnet (Phase One: 1-of-1 consensus)\n");
+    } else {
+        LogPrintf("Oracle: Failed to add testnet oracle\n");
+    }
 }
 
 void OracleManager::StopOracleService()

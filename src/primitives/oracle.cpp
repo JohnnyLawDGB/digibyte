@@ -21,19 +21,21 @@
  * COraclePriceMessage Implementation
  */
 
-COraclePriceMessage::COraclePriceMessage(uint32_t oracle_id_in, CAmount price_in, int64_t timestamp_in)
-    : oracle_id(oracle_id_in), price_satoshis(price_in), timestamp(timestamp_in)
+COraclePriceMessage::COraclePriceMessage(uint32_t oracle_id_in, uint64_t price_in, int64_t timestamp_in)
+    : oracle_id(oracle_id_in), price_micro_usd(price_in), timestamp(timestamp_in)
 {
 }
 
 bool COraclePriceMessage::IsValid() const
 {
-    // Check price is positive and reasonable
-    if (price_satoshis <= 0) return false;
+    // Check price is positive and in reasonable range
+    // Micro-USD format: 1,000,000 = $1.00
+    // Realistic DGB price range: $0.0001 to $10.00
+    static constexpr uint64_t MIN_PRICE_MICRO_USD = 100;        // $0.0001
+    static constexpr uint64_t MAX_PRICE_MICRO_USD = 10000000;   // $10.00
 
-    // Check price is not unrealistically high (1000 DGB per USD = 100 billion satoshis per USD)
-    // This allows for extreme price movements while preventing integer overflow attacks
-    if (price_satoshis > 100000000000000LL) return false; // 1 million DGB per USD max
+    if (price_micro_usd < MIN_PRICE_MICRO_USD) return false;
+    if (price_micro_usd > MAX_PRICE_MICRO_USD) return false;
 
     // Check timestamp is not in the future (with 1 minute tolerance for clock skew)
     int64_t current_time = GetTime();
@@ -42,31 +44,43 @@ bool COraclePriceMessage::IsValid() const
     // Check timestamp is not too old (1 hour max)
     if (timestamp < current_time - ORACLE_MAX_AGE_SECONDS) return false;
 
-    return true;
+    // Verify Schnorr signature
+    return Verify();
 }
 
-bool COraclePriceMessage::ValidateSignature(const CPubKey& oracle_pubkey) const
+bool COraclePriceMessage::Sign(const CKey& key, const uint256* merkle_root, const uint256& aux)
 {
-    if (signature.empty()) return false;
-    if (!oracle_pubkey.IsValid()) return false;
-
-    // Get the hash to verify
+    // Get message hash
     uint256 hash = GetSignatureHash();
 
-    // Verify ECDSA signature
-    return oracle_pubkey.Verify(hash, signature);
-}
+    // Create Schnorr signature (64 bytes)
+    schnorr_sig.resize(64);
+    if (!key.SignSchnorr(hash, schnorr_sig, merkle_root, aux)) {
+        schnorr_sig.clear();
+        return false;
+    }
 
-bool COraclePriceMessage::ValidateSignatureWithTimestamp(const CPubKey& oracle_pubkey) const
-{
-    // First check basic signature validity
-    if (!ValidateSignature(oracle_pubkey)) return false;
-
-    // Then check timestamp validity (not expired)
-    int64_t current_time = GetTime();
-    if (timestamp < current_time - ORACLE_MAX_AGE_SECONDS) return false;
+    // Set oracle pubkey from private key
+    oracle_pubkey = XOnlyPubKey(key.GetPubKey());
 
     return true;
+}
+
+bool COraclePriceMessage::Verify() const
+{
+    // Check signature size
+    if (schnorr_sig.size() != 64) {
+        return false;
+    }
+
+    // Check pubkey is valid
+    if (!oracle_pubkey.IsFullyValid()) {
+        return false;
+    }
+
+    // Verify Schnorr signature
+    uint256 hash = GetSignatureHash();
+    return oracle_pubkey.VerifySchnorr(hash, schnorr_sig);
 }
 
 bool COraclePriceMessage::CheckForConflictingMessages(const std::vector<COraclePriceMessage>& messages)
@@ -88,12 +102,12 @@ bool COraclePriceMessage::CheckForConflictingMessages(const std::vector<COracleP
             const COraclePriceMessage* existing = it->second;
 
             // Check if they're actually different (not just duplicate)
-            if (existing->price_satoshis != msg.price_satoshis ||
+            if (existing->price_micro_usd != msg.price_micro_usd ||
                 existing->timestamp != msg.timestamp) {
                 LogPrint(BCLog::DIGIDOLLAR, "CheckForConflictingMessages: Conflict detected for oracle %u: "
-                         "existing price %d (time %d) vs new price %d (time %d)\n",
-                         msg.oracle_id, existing->price_satoshis, existing->timestamp,
-                         msg.price_satoshis, msg.timestamp);
+                         "existing price %llu micro-USD (time %d) vs new price %llu micro-USD (time %d)\n",
+                         msg.oracle_id, existing->price_micro_usd, existing->timestamp,
+                         msg.price_micro_usd, msg.timestamp);
                 return false; // Conflicting messages found
             }
             // If messages are identical, it's just a duplicate - continue
@@ -107,11 +121,14 @@ bool COraclePriceMessage::CheckForConflictingMessages(const std::vector<COracleP
 
 uint256 COraclePriceMessage::GetSignatureHash() const
 {
-    // Create deterministic hash for signing
-    HashWriter ss{};
+    // Create deterministic hash for signing (BIP-340 compatible)
+    // Hash all message fields EXCEPT signature and pubkey
+    CHashWriter ss(0);
     ss << oracle_id;
-    ss << price_satoshis;
+    ss << price_micro_usd;
     ss << timestamp;
+    ss << block_height;
+    ss << nonce;
 
     return ss.GetHash();
 }
@@ -119,9 +136,12 @@ uint256 COraclePriceMessage::GetSignatureHash() const
 bool operator==(const COraclePriceMessage& a, const COraclePriceMessage& b)
 {
     return a.oracle_id == b.oracle_id &&
-           a.price_satoshis == b.price_satoshis &&
+           a.price_micro_usd == b.price_micro_usd &&
            a.timestamp == b.timestamp &&
-           a.signature == b.signature;
+           a.block_height == b.block_height &&
+           a.nonce == b.nonce &&
+           a.oracle_pubkey == b.oracle_pubkey &&
+           a.schnorr_sig == b.schnorr_sig;
 }
 
 bool operator!=(const COraclePriceMessage& a, const COraclePriceMessage& b)
@@ -135,6 +155,46 @@ bool operator!=(const COraclePriceMessage& a, const COraclePriceMessage& b)
 
 COracleBundle::COracleBundle(int32_t epoch_in) : epoch(epoch_in)
 {
+}
+
+bool COracleBundle::IsValid() const
+{
+    // Check if bundle has messages
+    if (messages.empty()) {
+        return false;
+    }
+
+    // Verify all message signatures
+    for (const auto& msg : messages) {
+        if (!msg.Verify()) {
+            LogPrint(BCLog::DIGIDOLLAR, "Oracle: Message signature verification failed for oracle %u\n", msg.oracle_id);
+            return false;
+        }
+
+        if (!msg.IsValid()) {
+            LogPrint(BCLog::DIGIDOLLAR, "Oracle: Message validation failed for oracle %u\n", msg.oracle_id);
+            return false;
+        }
+    }
+
+    // Verify timestamp is reasonable (within 1 hour of current time)
+    int64_t current_time = GetTime();
+    if (timestamp > current_time + 3600 || timestamp < current_time - 3600) {
+        LogPrint(BCLog::DIGIDOLLAR, "Oracle: Bundle timestamp out of range: %d (current: %d)\n", timestamp, current_time);
+        return false;
+    }
+
+    // Verify median price matches calculated consensus price (if consensus achieved)
+    if (HasConsensus()) {
+        uint64_t calculated_median = GetConsensusPrice();
+        if (median_price_micro_usd != calculated_median) {
+            LogPrint(BCLog::DIGIDOLLAR, "Oracle: Median price mismatch: bundle=%llu, calculated=%llu\n",
+                     median_price_micro_usd, calculated_median);
+            return false;
+        }
+    }
+
+    return true;
 }
 
 bool COracleBundle::AddMessage(const COraclePriceMessage& message)
@@ -160,7 +220,7 @@ bool COracleBundle::HasConsensus() const
     return messages.size() >= ORACLE_CONSENSUS_REQUIRED;
 }
 
-CAmount COracleBundle::GetConsensusPrice() const
+uint64_t COracleBundle::GetConsensusPrice() const
 {
     if (!HasConsensus()) return 0;
 
@@ -169,10 +229,10 @@ CAmount COracleBundle::GetConsensusPrice() const
     if (filtered.empty()) return 0;
 
     // Extract prices and sort them
-    std::vector<CAmount> prices;
+    std::vector<uint64_t> prices;
     prices.reserve(filtered.size());
     for (const auto& msg : filtered) {
-        prices.push_back(msg.price_satoshis);
+        prices.push_back(msg.price_micro_usd);
     }
     std::sort(prices.begin(), prices.end());
 
@@ -201,13 +261,13 @@ std::vector<COraclePriceMessage> COracleBundle::FilterOutliers() const
     }
 
     // Calculate initial median
-    std::vector<CAmount> prices;
+    std::vector<uint64_t> prices;
     for (const auto& msg : messages) {
-        prices.push_back(msg.price_satoshis);
+        prices.push_back(msg.price_micro_usd);
     }
     std::sort(prices.begin(), prices.end());
 
-    CAmount median;
+    uint64_t median;
     size_t size = prices.size();
     if (size % 2 == 0) {
         median = (prices[size/2 - 1] + prices[size/2]) / 2;
@@ -217,10 +277,12 @@ std::vector<COraclePriceMessage> COracleBundle::FilterOutliers() const
 
     // Filter messages that are within 10% of median
     std::vector<COraclePriceMessage> filtered;
-    CAmount threshold = median * ORACLE_OUTLIER_THRESHOLD_PCT / 100;
+    uint64_t threshold = median * ORACLE_OUTLIER_THRESHOLD_PCT / 100;
 
     for (const auto& msg : messages) {
-        CAmount deviation = std::abs(msg.price_satoshis - median);
+        uint64_t deviation = (msg.price_micro_usd > median) ?
+                             (msg.price_micro_usd - median) :
+                             (median - msg.price_micro_usd);
         if (deviation <= threshold) {
             filtered.push_back(msg);
         }
@@ -240,16 +302,16 @@ std::vector<COraclePriceMessage> COracleBundle::FilterOutliersAdvanced() const
     valid_messages.reserve(messages.size()); // Optimize memory allocation
 
     // First pass: remove obviously invalid prices with defined bounds
-    static constexpr CAmount MIN_REALISTIC_PRICE = 1000;        // $0.00001 per DGB
-    static constexpr CAmount MAX_REALISTIC_PRICE = 10000000000LL; // $100 per DGB
+    static constexpr uint64_t MIN_REALISTIC_PRICE = 100;        // $0.0001 per DGB
+    static constexpr uint64_t MAX_REALISTIC_PRICE = 10000000;   // $10.00 per DGB
 
     for (const auto& msg : messages) {
         // Extreme bounds checking with early exit conditions
-        if (msg.price_satoshis <= 0 ||
-            msg.price_satoshis > MAX_REALISTIC_PRICE ||
-            msg.price_satoshis < MIN_REALISTIC_PRICE) {
-            LogPrint(BCLog::DIGIDOLLAR, "FilterOutliersAdvanced: Rejecting price %d from oracle %u (out of bounds)\n",
-                     msg.price_satoshis, msg.oracle_id);
+        if (msg.price_micro_usd == 0 ||
+            msg.price_micro_usd > MAX_REALISTIC_PRICE ||
+            msg.price_micro_usd < MIN_REALISTIC_PRICE) {
+            LogPrint(BCLog::DIGIDOLLAR, "FilterOutliersAdvanced: Rejecting price %llu micro-USD from oracle %u (out of bounds)\n",
+                     msg.price_micro_usd, msg.oracle_id);
             continue;
         }
 
@@ -263,14 +325,14 @@ std::vector<COraclePriceMessage> COracleBundle::FilterOutliersAdvanced() const
     }
 
     // Second pass: statistical outlier removal using modified Z-score
-    std::vector<CAmount> prices;
+    std::vector<uint64_t> prices;
     for (const auto& msg : valid_messages) {
-        prices.push_back(msg.price_satoshis);
+        prices.push_back(msg.price_micro_usd);
     }
     std::sort(prices.begin(), prices.end());
 
     // Calculate median
-    CAmount median;
+    uint64_t median;
     size_t size = prices.size();
     if (size % 2 == 0) {
         median = (prices[size/2 - 1] + prices[size/2]) / 2;
@@ -279,13 +341,14 @@ std::vector<COraclePriceMessage> COracleBundle::FilterOutliersAdvanced() const
     }
 
     // Calculate MAD (Median Absolute Deviation)
-    std::vector<CAmount> deviations;
-    for (CAmount price : prices) {
-        deviations.push_back(std::abs(price - median));
+    std::vector<uint64_t> deviations;
+    for (uint64_t price : prices) {
+        uint64_t deviation = (price > median) ? (price - median) : (median - price);
+        deviations.push_back(deviation);
     }
     std::sort(deviations.begin(), deviations.end());
 
-    CAmount mad;
+    uint64_t mad;
     if (deviations.size() % 2 == 0) {
         mad = (deviations[deviations.size()/2 - 1] + deviations[deviations.size()/2]) / 2;
     } else {
@@ -294,15 +357,18 @@ std::vector<COraclePriceMessage> COracleBundle::FilterOutliersAdvanced() const
 
     // Filter using modified Z-score (threshold: 3.5)
     std::vector<COraclePriceMessage> final_filtered;
-    const CAmount threshold_multiplier = 35; // 3.5 * 10 for integer math
-    const CAmount mad_multiplier = 10;
+    const uint64_t threshold_multiplier = 35; // 3.5 * 10 for integer math
+    const uint64_t mad_multiplier = 10;
 
     for (const auto& msg : valid_messages) {
         if (mad == 0) {
             // All values are identical - include all
             final_filtered.push_back(msg);
         } else {
-            CAmount modified_zscore = (std::abs(msg.price_satoshis - median) * mad_multiplier) / mad;
+            uint64_t deviation = (msg.price_micro_usd > median) ?
+                                 (msg.price_micro_usd - median) :
+                                 (median - msg.price_micro_usd);
+            uint64_t modified_zscore = (deviation * mad_multiplier) / mad;
             if (modified_zscore <= threshold_multiplier) {
                 final_filtered.push_back(msg);
             }
@@ -319,9 +385,9 @@ std::vector<COraclePriceMessage> COracleBundle::FilterOutliersIQR() const
     }
 
     // Extract and sort prices
-    std::vector<std::pair<CAmount, size_t>> price_indices;
+    std::vector<std::pair<uint64_t, size_t>> price_indices;
     for (size_t i = 0; i < messages.size(); i++) {
-        price_indices.push_back({messages[i].price_satoshis, i});
+        price_indices.push_back({messages[i].price_micro_usd, i});
     }
     std::sort(price_indices.begin(), price_indices.end());
 
@@ -330,18 +396,18 @@ std::vector<COraclePriceMessage> COracleBundle::FilterOutliersIQR() const
     size_t q1_index = n / 4;
     size_t q3_index = 3 * n / 4;
 
-    CAmount q1 = price_indices[q1_index].first;
-    CAmount q3 = price_indices[q3_index].first;
-    CAmount iqr = q3 - q1;
+    uint64_t q1 = price_indices[q1_index].first;
+    uint64_t q3 = price_indices[q3_index].first;
+    uint64_t iqr = q3 - q1;
 
     // IQR bounds (1.5 * IQR rule)
-    CAmount lower_bound = q1 - (iqr * 3 / 2); // 1.5 * IQR
-    CAmount upper_bound = q3 + (iqr * 3 / 2);
+    uint64_t lower_bound = (q1 > (iqr * 3 / 2)) ? (q1 - (iqr * 3 / 2)) : 0; // Prevent underflow
+    uint64_t upper_bound = q3 + (iqr * 3 / 2);
 
     // Filter messages within bounds
     std::vector<COraclePriceMessage> filtered;
     for (const auto& msg : messages) {
-        if (msg.price_satoshis >= lower_bound && msg.price_satoshis <= upper_bound) {
+        if (msg.price_micro_usd >= lower_bound && msg.price_micro_usd <= upper_bound) {
             filtered.push_back(msg);
         }
     }
@@ -561,12 +627,12 @@ bool CheckRateLimit(uint32_t oracle_id)
 
 bool CheckMessageSize(const COraclePriceMessage& message)
 {
-    const size_t max_signature_size = 1000; // Reasonable limit for ECDSA signature
+    const size_t expected_schnorr_sig_size = 64; // BIP-340 Schnorr signature size
 
-    // Check signature size
-    if (message.signature.size() > max_signature_size) return false;
+    // Check signature size - must be exactly 64 bytes for Schnorr
+    if (message.schnorr_sig.size() != expected_schnorr_sig_size) return false;
 
-    // Message structure is fixed size except for signature, so this is sufficient
+    // Message structure is now fixed size with Schnorr signatures
     return true;
 }
 

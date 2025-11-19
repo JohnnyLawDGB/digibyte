@@ -250,7 +250,7 @@ BOOST_FIXTURE_TEST_CASE(err_oracle_consensus_sufficient_signatures, DigiDollarER
     for (int i = 0; i < 8; i++) {
         COraclePriceMessage msg(i, mockOraclePrice, GetTime());
         // In real implementation, would sign the message
-        msg.signature = std::vector<unsigned char>(64, 0x01); // Mock signature
+        msg.schnorr_sig = std::vector<unsigned char>(64, 0x01); // Mock signature
         bundle.AddMessage(msg);
     }
 
@@ -268,7 +268,7 @@ BOOST_FIXTURE_TEST_CASE(err_oracle_consensus_insufficient_signatures, DigiDollar
 
     for (int i = 0; i < 7; i++) {
         COraclePriceMessage msg(i, mockOraclePrice, GetTime());
-        msg.signature = std::vector<unsigned char>(64, 0x01); // Mock signature
+        msg.schnorr_sig = std::vector<unsigned char>(64, 0x01); // Mock signature
         bundle.AddMessage(msg);
     }
 
@@ -303,7 +303,7 @@ BOOST_FIXTURE_TEST_CASE(err_oracle_consensus_exactly_threshold, DigiDollarERRTes
     COracleBundle bundle(1); // Epoch 1
     for (int i = 0; i < 8; i++) {
         COraclePriceMessage msg(i, mockOraclePrice, GetTime());
-        msg.signature = std::vector<unsigned char>(64, 0x01); // Mock signature
+        msg.schnorr_sig = std::vector<unsigned char>(64, 0x01); // Mock signature
         bundle.AddMessage(msg);
     }
 
@@ -368,7 +368,7 @@ BOOST_FIXTURE_TEST_CASE(err_state_tracks_oracle_consensus_hash, DigiDollarERRTes
     std::vector<COraclePriceMessage> messages;
     for (int i = 0; i < 8; i++) {
         COraclePriceMessage msg;
-        msg.price_satoshis = mockOraclePrice;
+        msg.price_micro_usd = mockOraclePrice;
         msg.timestamp = GetTime();
         msg.oracle_id = i;
         messages.push_back(msg);
@@ -546,7 +546,7 @@ BOOST_FIXTURE_TEST_CASE(err_requires_oracle_consensus_for_activation, DigiDollar
     std::vector<COraclePriceMessage> insufficientMessages;
     for (int i = 0; i < 7; i++) {
         COraclePriceMessage msg;
-        msg.price_satoshis = mockOraclePrice;
+        msg.price_micro_usd = mockOraclePrice;
         msg.timestamp = GetTime();
         msg.oracle_id = i;
         insufficientMessages.push_back(msg);
@@ -772,7 +772,7 @@ BOOST_FIXTURE_TEST_CASE(test_err_extreme_activation_scenarios, DigiDollarERRTest
             std::vector<COraclePriceMessage> insufficientMessages;
             for (int i = 0; i < 5; i++) { // Only 5 out of required 8
                 COraclePriceMessage msg(i, mockOraclePrice, GetTime());
-                msg.signature = std::vector<unsigned char>(64, 0x01);
+                msg.schnorr_sig = std::vector<unsigned char>(64, 0x01);
                 insufficientBundle.AddMessage(msg);
                 insufficientMessages.push_back(msg);
             }
@@ -935,7 +935,7 @@ BOOST_FIXTURE_TEST_CASE(test_err_oracle_consensus_stress, DigiDollarERRTestSetup
         // Add maximum number of oracle messages
         for (int i = 0; i < 100; ++i) { // More than the 15 expected oracles
             COraclePriceMessage msg(i, mockOraclePrice, GetTime());
-            msg.signature = std::vector<unsigned char>(64, 0x01);
+            msg.schnorr_sig = std::vector<unsigned char>(64, 0x01);
             largeBundle.AddMessage(msg);
         }
 
@@ -959,15 +959,15 @@ BOOST_FIXTURE_TEST_CASE(test_err_oracle_consensus_stress, DigiDollarERRTestSetup
 
             // Various malformations
             if (i % 4 == 0) {
-                msg.price_satoshis = 0; // Invalid price
+                msg.price_micro_usd = 0; // Invalid price
             } else if (i % 4 == 1) {
                 msg.timestamp = 0; // Invalid timestamp
             } else if (i % 4 == 2) {
                 // Invalid signature (empty)
-                msg.signature.clear();
+                msg.schnorr_sig.clear();
             } else {
                 // Valid message
-                msg.signature = std::vector<unsigned char>(64, 0x01);
+                msg.schnorr_sig = std::vector<unsigned char>(64, 0x01);
             }
 
             malformedBundle.AddMessage(msg);
@@ -990,7 +990,7 @@ BOOST_FIXTURE_TEST_CASE(test_err_oracle_consensus_stress, DigiDollarERRTestSetup
         COracleBundle loadTestBundle(1); // Epoch 1
         for (int i = 0; i < 15; ++i) {
             COraclePriceMessage msg(i, mockOraclePrice, GetTime());
-            msg.signature = std::vector<unsigned char>(64, 0x01);
+            msg.schnorr_sig = std::vector<unsigned char>(64, 0x01);
             loadTestBundle.AddMessage(msg);
         }
 

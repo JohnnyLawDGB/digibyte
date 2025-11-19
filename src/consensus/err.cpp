@@ -343,7 +343,7 @@ uint256 EmergencyRedemptionRatio::CalculateOracleConsensusHash(const COracleBund
     for (const auto& message : bundle.messages) {
         // Add oracle ID, price, and timestamp
         data.insert(data.end(), (unsigned char*)&message.oracle_id, (unsigned char*)&message.oracle_id + sizeof(message.oracle_id));
-        data.insert(data.end(), (unsigned char*)&message.price_satoshis, (unsigned char*)&message.price_satoshis + sizeof(message.price_satoshis));
+        data.insert(data.end(), (unsigned char*)&message.price_micro_usd, (unsigned char*)&message.price_micro_usd + sizeof(message.price_micro_usd));
         data.insert(data.end(), (unsigned char*)&message.timestamp, (unsigned char*)&message.timestamp + sizeof(message.timestamp));
     }
 

@@ -6,6 +6,7 @@
 #define DIGIBYTE_PRIMITIVES_ORACLE_H
 
 #include <consensus/amount.h>
+#include <key.h>
 #include <pubkey.h>
 #include <serialize.h>
 #include <uint256.h>
@@ -17,39 +18,52 @@
 /**
  * Oracle Price Message
  * Individual price report from a single oracle node
+ * Uses BIP-340 Schnorr signatures for compact, efficient verification
  */
 class COraclePriceMessage
 {
 public:
     uint32_t oracle_id{0};
-    CAmount price_satoshis{0};    // Price in satoshis per USD
-    int64_t timestamp{0};
-    std::vector<unsigned char> signature;  // ECDSA signature
+    uint64_t price_micro_usd{0};         // Price in micro-USD (1,000,000 = $1.00)
+    int64_t timestamp{0};                // Unix timestamp
+    int32_t block_height{0};             // Block height when created
+    uint64_t nonce{0};                   // Random nonce for uniqueness
+    XOnlyPubKey oracle_pubkey;           // Schnorr public key (32 bytes)
+    std::vector<unsigned char> schnorr_sig;  // Schnorr signature (64 bytes)
 
     //! Constructors
     COraclePriceMessage() = default;
-    COraclePriceMessage(uint32_t oracle_id_in, CAmount price_in, int64_t timestamp_in);
+    COraclePriceMessage(uint32_t oracle_id_in, uint64_t price_in, int64_t timestamp_in);
 
     //! Serialization
     SERIALIZE_METHODS(COraclePriceMessage, obj)
     {
         READWRITE(obj.oracle_id);
-        READWRITE(obj.price_satoshis);
+        READWRITE(obj.price_micro_usd);
         READWRITE(obj.timestamp);
-        READWRITE(obj.signature);
+        READWRITE(obj.block_height);
+        READWRITE(obj.nonce);
+        READWRITE(obj.oracle_pubkey);
+        READWRITE(obj.schnorr_sig);
     }
 
     //! Validation
     bool IsValid() const;
-    bool ValidateSignature(const CPubKey& oracle_pubkey) const;
 
     /**
-     * Validate signature with timestamp expiry check.
-     * Combines signature validation with timestamp freshness validation.
-     * @param oracle_pubkey The public key to verify the signature against
-     * @return true if signature is valid and timestamp is not expired
+     * Sign the message with a private key using Schnorr signature
+     * @param key Private key to sign with
+     * @param merkle_root Optional Taproot merkle root (nullptr for oracle signatures)
+     * @param aux Optional auxiliary random data (default: zero hash)
+     * @return true if signature was created successfully
      */
-    bool ValidateSignatureWithTimestamp(const CPubKey& oracle_pubkey) const;
+    bool Sign(const CKey& key, const uint256* merkle_root = nullptr, const uint256& aux = uint256());
+
+    /**
+     * Verify Schnorr signature
+     * @return true if signature is valid
+     */
+    bool Verify() const;
 
     //! Get hash for signature verification
     uint256 GetSignatureHash() const;
@@ -76,6 +90,8 @@ class COracleBundle
 public:
     std::vector<COraclePriceMessage> messages;
     int32_t epoch{0};
+    uint64_t median_price_micro_usd{0};      // Median price in micro-USD (Phase One: must match single message)
+    int64_t timestamp{0};                     // Unix timestamp of bundle creation
 
     //! Constructors
     COracleBundle() = default;
@@ -86,14 +102,19 @@ public:
     {
         READWRITE(obj.messages);
         READWRITE(obj.epoch);
+        READWRITE(obj.median_price_micro_usd);
+        READWRITE(obj.timestamp);
     }
+
+    //! Validation
+    bool IsValid() const;                   // Validate bundle structure and signatures
 
     //! Message management
     bool AddMessage(const COraclePriceMessage& message);
 
     //! Consensus validation
     bool HasConsensus() const;              // Requires 8 of 15 messages
-    CAmount GetConsensusPrice() const;      // Median price calculation
+    uint64_t GetConsensusPrice() const;     // Median price calculation (micro-USD)
     bool ValidateEpoch(int32_t current_epoch) const;
 
     //! Outlier filtering

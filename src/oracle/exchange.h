@@ -33,7 +33,7 @@ public:
 
     virtual ~BaseExchangeFetcher() = default;
 
-    //! Fetch current DGB/USD price in cents (e.g., 5000 = $0.05)
+    //! Fetch current DGB/USD price in micro-USD (e.g., 50000 = $0.05)
     virtual CAmount FetchPrice() = 0;
 
     //! Get exchange name
@@ -42,16 +42,16 @@ public:
     //! Set request timeout
     void SetTimeout(int seconds) { timeout_seconds = seconds; }
 
+    //! Convert price string to micro-USD (1,000,000 = $1.00) - Public for testing
+    CAmount ConvertToMicroUSD(const std::string& price_str);
+    CAmount ConvertToMicroUSD(double price_usd);
+
+    //! Parse JSON response - Public for testing
+    std::string ExtractJsonValue(const std::string& json, const std::string& key);
+
 protected:
     //! Make HTTP GET request
     std::string HttpGet(const std::string& url);
-
-    //! Parse JSON response
-    std::string ExtractJsonValue(const std::string& json, const std::string& key);
-
-    //! Convert price string to cents
-    CAmount ConvertToCents(const std::string& price_str);
-    CAmount ConvertToCents(double price_usd);
 };
 
 /**
@@ -99,6 +99,30 @@ private:
 };
 
 /**
+ * CoinMarketCap Fetcher
+ * Fetches DGB/USD from CoinMarketCap Pro API
+ * Requires API key configuration
+ */
+class CoinMarketCapFetcher : public BaseExchangeFetcher
+{
+public:
+    CoinMarketCapFetcher();
+    CAmount FetchPrice() override;
+};
+
+/**
+ * CoinGecko Fetcher
+ * Fetches DGB/USD from CoinGecko public API
+ * No API key required
+ */
+class CoinGeckoFetcher : public BaseExchangeFetcher
+{
+public:
+    CoinGeckoFetcher();
+    CAmount FetchPrice() override;
+};
+
+/**
  * Bittrex Exchange Fetcher
  * Fetches DGB/USD from Bittrex
  */
@@ -127,6 +151,42 @@ private:
 };
 
 /**
+ * Messari Fetcher
+ * Fetches DGB/USD from Messari API
+ * No API key required
+ */
+class MessariFetcher : public BaseExchangeFetcher
+{
+public:
+    MessariFetcher();
+    CAmount FetchPrice() override;
+};
+
+/**
+ * KuCoin Exchange Fetcher
+ * Fetches DGB/USDT from KuCoin
+ * No API key required for public endpoints
+ */
+class KuCoinFetcher : public BaseExchangeFetcher
+{
+public:
+    KuCoinFetcher();
+    CAmount FetchPrice() override;
+};
+
+/**
+ * Crypto.com Exchange Fetcher
+ * Fetches DGB/USD from Crypto.com
+ * No API key required for public endpoints
+ */
+class CryptoComFetcher : public BaseExchangeFetcher
+{
+public:
+    CryptoComFetcher();
+    CAmount FetchPrice() override;
+};
+
+/**
  * Multi-Exchange Price Aggregator
  * Fetches from multiple exchanges and calculates median/weighted average
  */
@@ -135,7 +195,7 @@ class MultiExchangeAggregator
 public:
     struct ExchangePrice {
         std::string exchange;
-        CAmount price_cents;
+        CAmount price_cents;  // DEPRECATED NAME: Actually stores micro-USD (1,000,000 = $1.00)
         int64_t timestamp;
         bool success;
         double weight;

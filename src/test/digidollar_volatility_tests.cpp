@@ -65,15 +65,15 @@ struct DigiDollarVolatilityTestSetup : public TestingSetup {
         if (timestamp == 0) timestamp = mockTimestamp;
 
         COraclePriceMessage msg;
-        msg.price_satoshis = price;
+        msg.price_micro_usd = price;
         msg.timestamp = timestamp;
         msg.oracle_id = 1; // Use fixed oracle ID for test
 
         // Create signature (simplified for tests)
         // TODO: Fix SerializeHash call - may need proper serialization
         // uint256 hash = SerializeHash(msg);
-        // testKey.SignSchnorr(hash, msg.signature);
-        msg.signature = std::vector<unsigned char>(64, 0); // Mock signature
+        // testKey.SignSchnorr(hash, msg.schnorr_sig);
+        msg.schnorr_sig = std::vector<unsigned char>(64, 0); // Mock signature
 
         return msg;
     }
@@ -408,14 +408,14 @@ BOOST_FIXTURE_TEST_CASE(override_mechanism_sufficient_approvals, DigiDollarVolat
         oracleKey.MakeNewKey(true);
 
         COraclePriceMessage msg;
-        msg.price_satoshis = basePrice;
+        msg.price_micro_usd = basePrice;
         msg.timestamp = mockTimestamp;
         msg.oracle_id = i + 1; // Use loop index + 1 as oracle ID
 
         // TODO: Fix SerializeHash call - may need proper serialization
         // uint256 hash = SerializeHash(msg);
-        // oracleKey.SignSchnorr(hash, msg.signature);
-        msg.signature = std::vector<unsigned char>(64, 0); // Mock signature
+        // oracleKey.SignSchnorr(hash, msg.schnorr_sig);
+        msg.schnorr_sig = std::vector<unsigned char>(64, 0); // Mock signature
 
         approvals.push_back(msg);
     }
@@ -441,14 +441,14 @@ BOOST_FIXTURE_TEST_CASE(override_mechanism_invalid_signatures, DigiDollarVolatil
     std::vector<COraclePriceMessage> approvals;
     for (int i = 0; i < 8; i++) {
         COraclePriceMessage msg;
-        msg.price_satoshis = basePrice;
+        msg.price_micro_usd = basePrice;
         msg.timestamp = mockTimestamp;
         msg.oracle_id = 1; // Use fixed oracle ID for test
         // msg.nHeight = mockHeight; // Field not available in COraclePriceMessage
         // msg.pubkey = testXOnlyKey; // Field not available in COraclePriceMessage
 
         // Invalid signature (all zeros)
-        msg.signature = std::vector<unsigned char>(64, 0);
+        msg.schnorr_sig = std::vector<unsigned char>(64, 0);
 
         approvals.push_back(msg);
     }
@@ -881,7 +881,7 @@ BOOST_FIXTURE_TEST_CASE(test_volatility_oracle_override_extremes, DigiDollarVola
         std::vector<COraclePriceMessage> maliciousOverrides;
         for (int i = 0; i < 8; ++i) {
             COraclePriceMessage msg;
-            msg.price_satoshis = basePrice;
+            msg.price_micro_usd = basePrice;
             msg.timestamp = mockTimestamp;
             msg.oracle_id = i + 1; // Use loop index + 1 as oracle ID
             // msg.nHeight = mockHeight; // Field not available in COraclePriceMessage
@@ -896,8 +896,8 @@ BOOST_FIXTURE_TEST_CASE(test_volatility_oracle_override_extremes, DigiDollarVola
             // uint256 hash = SerializeHash(msg);
             uint256 hash = uint256S("0000000000000000000000000000000000000000000000000000000000000000"); // Mock hash
             // TODO: Fix signature call - may need proper signing method
-            // testKey.SignSchnorr(hash, msg.signature);
-            msg.signature = std::vector<unsigned char>(64, 0); // Mock signature
+            // testKey.SignSchnorr(hash, msg.schnorr_sig);
+            msg.schnorr_sig = std::vector<unsigned char>(64, 0); // Mock signature
 
             maliciousOverrides.push_back(msg);
         }
@@ -948,7 +948,7 @@ BOOST_FIXTURE_TEST_CASE(test_volatility_oracle_override_extremes, DigiDollarVola
 
         for (int i = 0; i < 8; ++i) {
             COraclePriceMessage msg;
-            msg.price_satoshis = basePrice + (i * 1000); // Different prices
+            msg.price_micro_usd = basePrice + (i * 1000); // Different prices
             msg.timestamp = mockTimestamp + (i * 60); // Different timestamps
             msg.oracle_id = i + 1; // Use loop index + 1 as oracle ID
             // msg.nHeight = mockHeight + i; // Field not available in COraclePriceMessage
@@ -958,8 +958,8 @@ BOOST_FIXTURE_TEST_CASE(test_volatility_oracle_override_extremes, DigiDollarVola
             // uint256 hash = SerializeHash(msg);
             uint256 hash = uint256S("0000000000000000000000000000000000000000000000000000000000000000"); // Mock hash
             // TODO: Fix signature call - may need proper signing method
-            // testKey.SignSchnorr(hash, msg.signature);
-            msg.signature = std::vector<unsigned char>(64, 0); // Mock signature
+            // testKey.SignSchnorr(hash, msg.schnorr_sig);
+            msg.schnorr_sig = std::vector<unsigned char>(64, 0); // Mock signature
 
             conflictingMessages.push_back(msg);
         }
@@ -982,7 +982,7 @@ BOOST_FIXTURE_TEST_CASE(test_volatility_oracle_override_extremes, DigiDollarVola
         std::vector<COraclePriceMessage> futureMessages;
         for (int i = 0; i < 8; ++i) {
             COraclePriceMessage msg;
-            msg.price_satoshis = basePrice;
+            msg.price_micro_usd = basePrice;
             msg.timestamp = freezeTime + 86400; // 1 day in future
             msg.oracle_id = i + 1; // Use loop index + 1 as oracle ID
             // msg.nHeight = mockHeight + 1000; // Field not available in COraclePriceMessage
@@ -992,8 +992,8 @@ BOOST_FIXTURE_TEST_CASE(test_volatility_oracle_override_extremes, DigiDollarVola
             // uint256 hash = SerializeHash(msg);
             uint256 hash = uint256S("0000000000000000000000000000000000000000000000000000000000000000"); // Mock hash
             // TODO: Fix signature call - may need proper signing method
-            // testKey.SignSchnorr(hash, msg.signature);
-            msg.signature = std::vector<unsigned char>(64, 0); // Mock signature
+            // testKey.SignSchnorr(hash, msg.schnorr_sig);
+            msg.schnorr_sig = std::vector<unsigned char>(64, 0); // Mock signature
 
             futureMessages.push_back(msg);
         }

@@ -116,22 +116,21 @@ CAmount MintTxBuilder::CalculateRequiredCollateral(CAmount ddAmount, int lockDay
     double adjustedRatio = baseRatio * dcaMultiplier;
 
     // Calculate required DGB
-    // DD amount is in cents (100 = $1.00), oracle price is in micro-USD (1,000,000 = $1.00)
+    // DD amount is in cents (100 = $1.00), oracle price is in cents (100 = $1.00)
     CAmount usdValue = ddAmount; // DD amount = USD value in cents
 
-    LogPrintf("DigiDollar TxBuilder: CalculateRequiredCollateral - DD: %d cents, Price: %d micro-USD, BaseRatio: %d%%, DCA: %.2f, AdjustedRatio: %.2f%%\n",
+    LogPrintf("DigiDollar TxBuilder: CalculateRequiredCollateral - DD: %d cents, Price: %d cents, BaseRatio: %d%%, DCA: %.2f, AdjustedRatio: %.2f%%\n",
               ddAmount, oraclePrice, baseRatio, dcaMultiplier, adjustedRatio);
 
     // Use 64-bit arithmetic to prevent overflow
-    // Oracle price format: micro-USD (1,000,000 = $1.00 DGB price)
-    // DD is in cents, so convert: DD_cents * 10000 = DD_micro_usd
-    // Formula: DGB_sats = (DD_cents * 10000 * COIN * ratio) / (oracle_micro_usd * 100)
-    uint64_t ddMicroUSD = static_cast<uint64_t>(usdValue) * 10000;
-    uint64_t requiredCollateral = (ddMicroUSD * static_cast<uint64_t>(COIN) * static_cast<uint64_t>(adjustedRatio)) /
+    // Oracle price format: cents (100 = $1.00 DGB price)
+    // Both DD and oracle price are in cents (unified format)
+    // Formula: DGB_sats = (DD_cents * COIN * ratio) / (oracle_cents * 100)
+    uint64_t requiredCollateral = (static_cast<uint64_t>(usdValue) * static_cast<uint64_t>(COIN) * static_cast<uint64_t>(adjustedRatio)) /
                                    (static_cast<uint64_t>(oraclePrice) * 100);
 
-    LogPrintf("DigiDollar TxBuilder: - DD in micro-USD: %llu, Required collateral: %llu sats (%.8f DGB)\n",
-              ddMicroUSD, requiredCollateral, requiredCollateral / 100000000.0);
+    LogPrintf("DigiDollar TxBuilder: - Required collateral: %llu sats (%.8f DGB)\n",
+              requiredCollateral, requiredCollateral / 100000000.0);
 
     // Check for overflow
     if (requiredCollateral > static_cast<uint64_t>(MAX_MONEY)) {

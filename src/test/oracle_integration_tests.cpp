@@ -77,7 +77,7 @@ BOOST_AUTO_TEST_CASE(end_to_end_oracle_flow)
     // ExchangeAPI::MultiExchangeAggregator aggregator;
     // CAmount price = aggregator.FetchAggregatePrice();
 
-    CAmount mock_price = 50000; // $0.05 in micro-USD (Phase One testnet price)
+    CAmount mock_price = 5; // $0.05 (5 cents) in micro-USD (Phase One testnet price)
     BOOST_CHECK(mock_price > 0);
     LogPrintf("   - Fetched price from exchanges: %lld micro-USD ($%.6f)\n",
               mock_price, mock_price / 1000000.0);

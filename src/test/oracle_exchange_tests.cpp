@@ -67,7 +67,7 @@ BOOST_AUTO_TEST_CASE(fetch_binance_price_success)
     // Minimum: $0.001 = 1,000 micro-USD
     // Maximum: $1.00 = 1,000,000 micro-USD
     BOOST_CHECK(price >= 1000);
-    BOOST_CHECK(price <= 1000000);
+    BOOST_CHECK(price <= 100);
 }
 
 /**
@@ -83,7 +83,7 @@ BOOST_AUTO_TEST_CASE(fetch_coinmarketcap_price_success)
 
     // BOOST_CHECK(price > 0);
     // BOOST_CHECK(price >= 1000);
-    // BOOST_CHECK(price <= 1000000);
+    // BOOST_CHECK(price <= 100);
 
     // Phase 2 TODO: Implement CoinMarketCapFetcher
     BOOST_WARN_MESSAGE(true, "CoinMarketCapFetcher not implemented - Phase 2 work");
@@ -101,7 +101,7 @@ BOOST_AUTO_TEST_CASE(fetch_coingecko_price_success)
 
     // BOOST_CHECK(price > 0);
     // BOOST_CHECK(price >= 1000);
-    // BOOST_CHECK(price <= 1000000);
+    // BOOST_CHECK(price <= 100);
 
     // Phase 2 TODO: Implement CoinGeckoFetcher
     BOOST_WARN_MESSAGE(true, "CoinGeckoFetcher not implemented - Phase 2 work");
@@ -118,7 +118,7 @@ BOOST_AUTO_TEST_CASE(fetch_coinbase_price_success)
 
     BOOST_CHECK(price > 0);
     BOOST_CHECK(price >= 1000);
-    BOOST_CHECK(price <= 1000000);
+    BOOST_CHECK(price <= 100);
 }
 
 /**
@@ -132,7 +132,7 @@ BOOST_AUTO_TEST_CASE(fetch_kraken_price_success)
 
     BOOST_CHECK(price > 0);
     BOOST_CHECK(price >= 1000);
-    BOOST_CHECK(price <= 1000000);
+    BOOST_CHECK(price <= 100);
 }
 
 /**
@@ -147,7 +147,7 @@ BOOST_AUTO_TEST_CASE(fetch_messari_price_success)
 
     // BOOST_CHECK(price > 0);
     // BOOST_CHECK(price >= 1000);
-    // BOOST_CHECK(price <= 1000000);
+    // BOOST_CHECK(price <= 100);
 
     // Phase 2 TODO: Implement MessariFetcher
     BOOST_WARN_MESSAGE(true, "MessariFetcher not implemented - Phase 2 work");
@@ -164,7 +164,7 @@ BOOST_AUTO_TEST_CASE(fetch_kucoin_price_success)
 
     BOOST_CHECK(price > 0);
     BOOST_CHECK(price >= 1000);
-    BOOST_CHECK(price <= 1000000);
+    BOOST_CHECK(price <= 100);
 }
 
 /**
@@ -178,7 +178,7 @@ BOOST_AUTO_TEST_CASE(fetch_cryptocom_price_success)
 
     BOOST_CHECK(price > 0);
     BOOST_CHECK(price >= 1000);
-    BOOST_CHECK(price <= 1000000);
+    BOOST_CHECK(price <= 100);
 }
 
 // ============================================================================
@@ -538,7 +538,7 @@ BOOST_AUTO_TEST_CASE(outlier_filter_mad_removes_outliers)
 
     // Verify outlier is not in filtered list
     for (const auto& price : filtered) {
-        BOOST_CHECK(price.price_micro_usd != 50000);
+        BOOST_CHECK(price.price_micro_usd != 5);
     }
 }
 
@@ -950,7 +950,7 @@ BOOST_AUTO_TEST_CASE(aggregator_returns_micro_usd)
     // This test will FAIL until implementation is fixed
 
     BOOST_CHECK(price >= 1000);      // >= $0.001
-    BOOST_CHECK(price <= 1000000);   // <= $1.00
+    BOOST_CHECK(price <= 100);   // <= $1.00
 }
 
 /**

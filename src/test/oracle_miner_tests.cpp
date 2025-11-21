@@ -77,7 +77,7 @@ BOOST_AUTO_TEST_CASE(add_oracle_bundle_to_coinbase)
     // Create oracle price message
     COraclePriceMessage msg;
     msg.oracle_id = 0;
-    msg.price_micro_usd = 50000;  // $0.05 in micro-USD
+    msg.price_micro_usd = 5;  // $0.05 in micro-USD
     msg.timestamp = GetTime();
     msg.block_height = 101;
     msg.nonce = FastRandomContext().rand64();
@@ -137,7 +137,7 @@ BOOST_AUTO_TEST_CASE(oracle_bundle_serialization_format)
 
     COraclePriceMessage msg;
     msg.oracle_id = 0;
-    msg.price_micro_usd = 123456;  // $0.123456 in micro-USD
+    msg.price_micro_usd = 12;  // $0.123456 in micro-USD
     msg.timestamp = GetTime();
     msg.block_height = 101;
     msg.nonce = FastRandomContext().rand64();
@@ -198,7 +198,7 @@ BOOST_AUTO_TEST_CASE(oracle_bundle_size_limit)
 
     COraclePriceMessage msg;
     msg.oracle_id = 0;
-    msg.price_micro_usd = 50000;
+    msg.price_micro_usd = 5;
     msg.timestamp = GetTime();
     msg.block_height = 101;
     msg.nonce = FastRandomContext().rand64();
@@ -272,7 +272,7 @@ BOOST_AUTO_TEST_CASE(create_new_block_includes_oracle_bundle)
 
     COraclePriceMessage msg;
     msg.oracle_id = 0;
-    msg.price_micro_usd = 50000;  // $0.05
+    msg.price_micro_usd = 5;  // $0.05
     msg.timestamp = GetTime();
     msg.block_height = m_node.chainman->ActiveHeight() + 1;
     msg.nonce = FastRandomContext().rand64();
@@ -380,7 +380,7 @@ BOOST_AUTO_TEST_CASE(create_new_block_phase_one_single_oracle)
 
     COraclePriceMessage msg;
     msg.oracle_id = 0;  // First oracle
-    msg.price_micro_usd = 50000;
+    msg.price_micro_usd = 5;
     msg.timestamp = GetTime();
     msg.block_height = m_node.chainman->ActiveHeight() + 1;
     msg.nonce = FastRandomContext().rand64();

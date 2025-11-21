@@ -31,7 +31,7 @@ class COraclePriceMessage
 {
 public:
     uint32_t oracle_id{0};
-    uint64_t price_micro_usd{0};         // Price in micro-USD (1,000,000 = $1.00)
+    uint64_t price_micro_usd{0};         // Price in DigiDollar cents (100 = $1.00) - field name kept for compatibility
     int64_t timestamp{0};                // Unix timestamp
     int32_t block_height{0};             // Block height when created
     uint64_t nonce{0};                   // Random nonce for uniqueness
@@ -97,7 +97,7 @@ class COracleBundle
 public:
     std::vector<COraclePriceMessage> messages;
     int32_t epoch{0};
-    uint64_t median_price_micro_usd{0};      // Median price in micro-USD (Phase One: must match single message)
+    uint64_t median_price_micro_usd{0};      // Median price in DigiDollar cents (100 = $1.00) - field name kept for compatibility
     int64_t timestamp{0};                     // Unix timestamp of bundle creation
 
     //! Constructors
@@ -121,7 +121,7 @@ public:
 
     //! Consensus validation
     bool HasConsensus(int min_required = ORACLE_CONSENSUS_REQUIRED) const;   // Configurable consensus threshold (default: 8 of 15)
-    uint64_t GetConsensusPrice(int min_required = ORACLE_CONSENSUS_REQUIRED) const;     // Median price calculation (micro-USD)
+    uint64_t GetConsensusPrice(int min_required = ORACLE_CONSENSUS_REQUIRED) const;     // Median price calculation (DigiDollar cents: 100 = $1.00)
     bool ValidateEpoch(int32_t current_epoch) const;
 
     //! Outlier filtering

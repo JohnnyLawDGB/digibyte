@@ -60,7 +60,7 @@ static COraclePriceMessage CreateValidOracleMessage(const CKey& privkey, uint32_
 
     COraclePriceMessage msg;
     msg.oracle_id = oracle_id;
-    msg.price_micro_usd = 5000000; // 0.05 DGB per USD (typical price)
+    msg.price_micro_usd = 500; // 0.05 DGB per USD (typical price)
     msg.timestamp = timestamp;
     msg.block_height = 0;
     msg.nonce = 0;

@@ -948,7 +948,7 @@ public:
         // Regtest-specific oracle and activation settings
         consensus.nDDOracleEpochBlocks = 10;       // Rotate oracles every 10 blocks
         consensus.nDDOracleUpdateInterval = 1;     // Update price every block
-        consensus.nDDActivationHeight = 600;       // DigiDollar active from height 600 (for testing)
+        consensus.nDDActivationHeight = 650;       // DigiDollar active from height 650 (after Odocrypt at 600)
 
         // Oracle system parameters (RegTest uses MockOracleManager)
         consensus.nOracleActivationHeight = 1;     // Activate immediately

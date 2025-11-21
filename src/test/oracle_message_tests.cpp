@@ -40,7 +40,7 @@ BOOST_AUTO_TEST_CASE(schnorr_signature_creation_valid)
     // Create oracle message
     COraclePriceMessage msg;
     msg.oracle_pubkey = pubkey;                    // WILL FAIL: field doesn't exist
-    msg.price_micro_usd = 50000;                   // WILL FAIL: field doesn't exist (should be $0.05)
+    msg.price_micro_usd = 5;                   // WILL FAIL: field doesn't exist (should be $0.05)
     msg.timestamp = GetTime();                      // OK: exists but wrong type (int64_t exists)
 
     // Get message hash for signing
@@ -71,7 +71,7 @@ BOOST_AUTO_TEST_CASE(schnorr_signature_verification_valid)
     // Create and sign message
     COraclePriceMessage msg;
     msg.oracle_pubkey = pubkey;                    // WILL FAIL
-    msg.price_micro_usd = 123456;                  // WILL FAIL: $0.123456
+    msg.price_micro_usd = 12;                  // WILL FAIL: $0.123456
     msg.timestamp = GetTime();
 
     uint256 hash = msg.GetSignatureHash();         // Fixed: use GetSignatureHash()
@@ -98,7 +98,7 @@ BOOST_AUTO_TEST_CASE(schnorr_signature_verification_invalid)
 
     COraclePriceMessage msg;
     msg.oracle_pubkey = pubkey;                    // WILL FAIL
-    msg.price_micro_usd = 50000;                   // WILL FAIL
+    msg.price_micro_usd = 5;                   // WILL FAIL
     msg.timestamp = GetTime();
 
     // Create invalid signature (all zeros)
@@ -126,7 +126,7 @@ BOOST_AUTO_TEST_CASE(schnorr_signature_wrong_pubkey)
     // Create message signed by privkey1
     COraclePriceMessage msg;
     msg.oracle_pubkey = pubkey1;                   // WILL FAIL
-    msg.price_micro_usd = 50000;                   // WILL FAIL
+    msg.price_micro_usd = 5;                   // WILL FAIL
     msg.timestamp = GetTime();
 
     uint256 hash = msg.GetSignatureHash();         // Fixed: use GetSignatureHash()
@@ -154,7 +154,7 @@ BOOST_AUTO_TEST_CASE(schnorr_signature_tampered_message)
     // Create and sign original message
     COraclePriceMessage msg;
     msg.oracle_pubkey = pubkey;                    // WILL FAIL
-    msg.price_micro_usd = 50000;                   // WILL FAIL: $0.05
+    msg.price_micro_usd = 5;                   // WILL FAIL: $0.05
     msg.timestamp = GetTime();
 
     uint256 hash = msg.GetSignatureHash();         // Fixed: use GetSignatureHash()
@@ -165,7 +165,7 @@ BOOST_AUTO_TEST_CASE(schnorr_signature_tampered_message)
     BOOST_REQUIRE(msg.Verify());                   // WILL FAIL
 
     // Tamper with message (change price)
-    msg.price_micro_usd = 60000;                   // WILL FAIL: $0.06
+    msg.price_micro_usd = 6;                   // WILL FAIL: $0.06
 
     // Verification should now fail
     BOOST_CHECK(!msg.Verify());                    // WILL FAIL
@@ -184,7 +184,7 @@ BOOST_AUTO_TEST_CASE(schnorr_signature_64_bytes)
 
     COraclePriceMessage msg;
     msg.oracle_pubkey = pubkey;                    // WILL FAIL
-    msg.price_micro_usd = 50000;                   // WILL FAIL
+    msg.price_micro_usd = 5;                   // WILL FAIL
     msg.timestamp = GetTime();
 
     uint256 hash = msg.GetSignatureHash();         // Fixed: use GetSignatureHash()
@@ -218,7 +218,7 @@ BOOST_AUTO_TEST_CASE(oracle_message_creation)
     // Create message with all required fields
     COraclePriceMessage msg;
     msg.oracle_pubkey = pubkey;                    // WILL FAIL: 32-byte x-only pubkey
-    msg.price_micro_usd = 50000;                   // WILL FAIL: $0.05 in micro-USD
+    msg.price_micro_usd = 5;                   // WILL FAIL: $0.05 in micro-USD
     msg.timestamp = GetTime();                      // OK: exists
     msg.schnorr_sig.resize(64);                    // WILL FAIL: 64-byte signature
 
@@ -243,7 +243,7 @@ BOOST_AUTO_TEST_CASE(oracle_message_serialization)
     // Create and sign message
     COraclePriceMessage msg;
     msg.oracle_pubkey = pubkey;                    // WILL FAIL
-    msg.price_micro_usd = 123456;                  // WILL FAIL: $0.123456
+    msg.price_micro_usd = 12;                  // WILL FAIL: $0.123456
     msg.timestamp = 1700000000;
 
     uint256 hash = msg.GetSignatureHash();         // Fixed: use GetSignatureHash()
@@ -273,7 +273,7 @@ BOOST_AUTO_TEST_CASE(oracle_message_deserialization)
     // Create original message
     COraclePriceMessage msg1;
     msg1.oracle_pubkey = pubkey;                   // WILL FAIL
-    msg1.price_micro_usd = 50000;                  // WILL FAIL
+    msg1.price_micro_usd = 5;                  // WILL FAIL
     msg1.timestamp = 1700000000;
 
     uint256 hash = msg1.GetSignatureHash();        // Fixed: use GetSignatureHash()
@@ -307,7 +307,7 @@ BOOST_AUTO_TEST_CASE(oracle_message_hash_calculation)
 
     COraclePriceMessage msg;
     msg.oracle_pubkey = pubkey;                    // WILL FAIL
-    msg.price_micro_usd = 50000;                   // WILL FAIL
+    msg.price_micro_usd = 5;                   // WILL FAIL
     msg.timestamp = 1700000000;
 
     // GetHash() should return deterministic hash
@@ -319,7 +319,7 @@ BOOST_AUTO_TEST_CASE(oracle_message_hash_calculation)
     BOOST_CHECK(!hash1.IsNull());
 
     // Different message should produce different hash
-    msg.price_micro_usd = 60000;                   // WILL FAIL
+    msg.price_micro_usd = 6;                   // WILL FAIL
     uint256 hash3 = msg.GetSignatureHash();        // Fixed: use GetSignatureHash()
     BOOST_CHECK(hash1 != hash3);
 }
@@ -338,7 +338,7 @@ BOOST_AUTO_TEST_CASE(oracle_message_sign_and_verify)
     // Create message
     COraclePriceMessage msg;
     msg.oracle_pubkey = pubkey;                    // WILL FAIL
-    msg.price_micro_usd = 50000;                   // WILL FAIL
+    msg.price_micro_usd = 5;                   // WILL FAIL
     msg.timestamp = GetTime();
 
     // Sign message
@@ -365,11 +365,11 @@ BOOST_AUTO_TEST_CASE(oracle_message_micro_usd_format)
     // Test micro-USD conversion
     // 1 USD = 1,000,000 micro-USD
     // $0.05 per DGB = 50,000 micro-USD
-    msg.price_micro_usd = 50000;                   // WILL FAIL: field doesn't exist
+    msg.price_micro_usd = 5;                   // WILL FAIL: field doesn't exist
     BOOST_CHECK_EQUAL(msg.price_micro_usd, 50000); // WILL FAIL
 
     // Test various price points
-    msg.price_micro_usd = 1000000;                 // WILL FAIL: $1.00
+    msg.price_micro_usd = 100;                 // WILL FAIL: $1.00
     BOOST_CHECK_EQUAL(msg.price_micro_usd, 1000000);
 
     msg.price_micro_usd = 12340;                   // WILL FAIL: $0.01234
@@ -379,7 +379,7 @@ BOOST_AUTO_TEST_CASE(oracle_message_micro_usd_format)
     msg.price_micro_usd = 100;                     // WILL FAIL: $0.0001 (minimum)
     BOOST_CHECK_GE(msg.price_micro_usd, 100);
 
-    msg.price_micro_usd = 10000000;                // WILL FAIL: $10.00 (maximum)
+    msg.price_micro_usd = 1000;                // WILL FAIL: $10.00 (maximum)
     BOOST_CHECK_LE(msg.price_micro_usd, 10000000);
 
     // Verify NOT in satoshis (current implementation)
@@ -402,7 +402,7 @@ BOOST_AUTO_TEST_CASE(oracle_message_timestamp_validation)
     COraclePriceMessage msg;
     msg.oracle_id = 0;
     msg.oracle_pubkey = pubkey;
-    msg.price_micro_usd = 50000;
+    msg.price_micro_usd = 5;
     msg.block_height = 1000;
     msg.nonce = 12345;
 
@@ -441,7 +441,7 @@ BOOST_AUTO_TEST_CASE(oracle_message_reject_future_timestamp)
     COraclePriceMessage msg;
     msg.oracle_id = 0;
     msg.oracle_pubkey = pubkey;
-    msg.price_micro_usd = 50000;
+    msg.price_micro_usd = 5;
     msg.block_height = 1000;
     msg.nonce = 12345;
 
@@ -474,7 +474,7 @@ BOOST_AUTO_TEST_CASE(oracle_message_reject_old_timestamp)
     // Test timestamp 61 minutes ago (should be invalid)
     COraclePriceMessage msg1;
     msg1.oracle_id = 1;
-    msg1.price_micro_usd = 50000;
+    msg1.price_micro_usd = 5;
     msg1.timestamp = GetTime() - 3660;  // 61 minutes
     msg1.block_height = 0;
     msg1.nonce = 0;
@@ -484,7 +484,7 @@ BOOST_AUTO_TEST_CASE(oracle_message_reject_old_timestamp)
     // Test timestamp 2 hours ago (should be invalid)
     COraclePriceMessage msg2;
     msg2.oracle_id = 1;
-    msg2.price_micro_usd = 50000;
+    msg2.price_micro_usd = 5;
     msg2.timestamp = GetTime() - 7200;
     msg2.block_height = 0;
     msg2.nonce = 0;
@@ -494,7 +494,7 @@ BOOST_AUTO_TEST_CASE(oracle_message_reject_old_timestamp)
     // Test timestamp exactly 1 hour ago (boundary, should still be valid)
     COraclePriceMessage msg3;
     msg3.oracle_id = 1;
-    msg3.price_micro_usd = 50000;
+    msg3.price_micro_usd = 5;
     msg3.timestamp = GetTime() - 3600;
     msg3.block_height = 0;
     msg3.nonce = 0;

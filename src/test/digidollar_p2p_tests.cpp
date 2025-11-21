@@ -86,7 +86,7 @@ BOOST_AUTO_TEST_CASE(test_oracle_message_enum_values)
 BOOST_AUTO_TEST_CASE(test_oracle_price_msg_serialization)
 {
     // Create a test oracle price message
-    COraclePriceMessage oracle_price{1, COIN * 50000, GetTime()};
+    COraclePriceMessage oracle_price{1, 5, GetTime()};
 
     // Create test key for signing
     CKey key;
@@ -113,7 +113,7 @@ BOOST_AUTO_TEST_CASE(test_oracle_price_msg_serialization)
 
     // Verify content
     BOOST_CHECK_EQUAL(deserialized_msg.price_message.oracle_id, 1);
-    BOOST_CHECK_EQUAL(deserialized_msg.price_message.price_micro_usd, COIN * 50000);
+    BOOST_CHECK_EQUAL(deserialized_msg.price_message.price_micro_usd, 5);
     BOOST_CHECK(deserialized_msg.price_message.schnorr_sig == signature);
 }
 
@@ -124,7 +124,7 @@ BOOST_AUTO_TEST_CASE(test_oracle_bundle_msg_serialization)
 
     // Add some test messages
     for (uint32_t i = 1; i <= 3; ++i) {
-        COraclePriceMessage msg{i, COIN * (50000 + i * 100), GetTime()};
+        COraclePriceMessage msg{i, COIN * (5 + i * 100), GetTime()};
         bundle.AddMessage(msg);
     }
 
@@ -201,15 +201,15 @@ BOOST_AUTO_TEST_CASE(test_oracle_message_validation_timestamp)
     int64_t now = GetTime();
 
     // Valid message (recent timestamp)
-    COraclePriceMessage valid_msg{1, COIN * 50000, now - 30}; // 30 seconds ago
+    COraclePriceMessage valid_msg{1, 5, now - 30}; // 30 seconds ago
     BOOST_CHECK(valid_msg.IsValid());
 
     // Message too far in future (should be invalid)
-    COraclePriceMessage future_msg{1, COIN * 50000, now + 120}; // 2 minutes in future
+    COraclePriceMessage future_msg{1, 5, now + 120}; // 2 minutes in future
     BOOST_CHECK(!future_msg.IsValid());
 
     // Message too old (should be invalid)
-    COraclePriceMessage old_msg{1, COIN * 50000, now - 7200}; // 2 hours ago
+    COraclePriceMessage old_msg{1, 5, now - 7200}; // 2 hours ago
     BOOST_CHECK(!old_msg.IsValid());
 }
 
@@ -221,7 +221,7 @@ BOOST_AUTO_TEST_CASE(test_oracle_message_validation_signature)
     CPubKey oracle_pubkey = oracle_key.GetPubKey();
     XOnlyPubKey oracle_xonly = XOnlyPubKey(oracle_pubkey);
 
-    COraclePriceMessage msg{1, COIN * 50000, GetTime()};
+    COraclePriceMessage msg{1, 5, GetTime()};
     msg.oracle_pubkey = oracle_xonly;
 
     // Sign with correct key
@@ -255,13 +255,13 @@ BOOST_AUTO_TEST_CASE(test_oracle_bundle_consensus_validation)
 
     // Bundle with insufficient messages should not have consensus
     for (uint32_t i = 1; i <= 7; ++i) {
-        COraclePriceMessage msg{i, COIN * 50000, GetTime()};
+        COraclePriceMessage msg{i, 5, GetTime()};
         bundle.AddMessage(msg);
     }
     BOOST_CHECK(!bundle.HasConsensus()); // Only 7 messages, need 8
 
     // Add one more message to reach consensus
-    COraclePriceMessage msg8{8, COIN * 50000, GetTime()};
+    COraclePriceMessage msg8{8, 5, GetTime()};
     bundle.AddMessage(msg8);
     BOOST_CHECK(bundle.HasConsensus()); // Now has 8 messages
 }
@@ -290,9 +290,9 @@ BOOST_AUTO_TEST_CASE(test_oracle_message_types_in_all_net_message_types)
 BOOST_AUTO_TEST_CASE(test_oracle_message_hash_functions)
 {
     // Test hash functions for oracle messages
-    COraclePriceMessage msg1{1, COIN * 50000, 1234567890};
-    COraclePriceMessage msg2{1, COIN * 50000, 1234567890};
-    COraclePriceMessage msg3{2, COIN * 50000, 1234567890}; // different oracle_id
+    COraclePriceMessage msg1{1, 5, 1234567890};
+    COraclePriceMessage msg2{1, 5, 1234567890};
+    COraclePriceMessage msg3{2, 5, 1234567890}; // different oracle_id
 
     // Same messages should have same hash
     BOOST_CHECK_EQUAL(msg1.GetSignatureHash(), msg2.GetSignatureHash());

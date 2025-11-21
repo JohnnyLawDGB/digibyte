@@ -1041,8 +1041,8 @@ CAmount GetCurrentOraclePrice()
 
     // Fallback to default price if no oracle data available
     if (price <= 0) {
-        price = 50000000; // $50.00 per DGB default price (50,000,000 micro-USD)
-        LogPrintf("Oracle: Using fallback price: %d micro-USD ($%.6f)\n", price, price / 1000000.0);
+        price = 5; // $0.05 per DGB default price (5 cents)
+        LogPrintf("Oracle: Using fallback price: %d cents ($%.2f)\n", price, price / 100.0);
     }
 
     return price;
@@ -1095,7 +1095,7 @@ CAmount GetOraclePriceForHeight(int nHeight)
 
     // No oracle price available - use fallback for older blocks
     LogPrint(BCLog::DIGIDOLLAR, "Oracle: No price available for height %d, using fallback\n", nHeight);
-    return 50000000; // Fallback: $50.00 per DGB (50,000,000 micro-USD)
+    return 5; // Fallback: $0.05 per DGB (5 cents)
 }
 
 bool IsOracleSystemReady()

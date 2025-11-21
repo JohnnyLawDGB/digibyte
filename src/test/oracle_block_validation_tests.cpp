@@ -156,7 +156,7 @@ BOOST_AUTO_TEST_CASE(checkblock_accepts_valid_oracle_bundle)
     oracle_key.MakeNewKey(true);
 
     // Create block with valid oracle bundle
-    uint64_t price = 50000; // $0.05 in micro-USD
+    uint64_t price = 5; // $0.05 (5 cents) in micro-USD
     int64_t timestamp = GetTime();
     int32_t block_height = 700;  // Above activation height (600)
     CScript coinbase_script_sig = CScript() << block_height << OP_0;
@@ -283,14 +283,14 @@ BOOST_AUTO_TEST_CASE(checkblock_rejects_bundle_wrong_consensus)
     int32_t block_height = 700;  // Above activation height (600)
 
     // Create bundle with TWO messages (violates Phase One 1-of-1)
-    COraclePriceMessage msg1 = CreateValidOracleMessage(oracle_key1, 50000, timestamp, block_height);
-    COraclePriceMessage msg2 = CreateValidOracleMessage(oracle_key2, 50100, timestamp, block_height);
+    COraclePriceMessage msg1 = CreateValidOracleMessage(oracle_key1, 5, timestamp, block_height);
+    COraclePriceMessage msg2 = CreateValidOracleMessage(oracle_key2, 6, timestamp, block_height);
 
     COracleBundle bundle;
     bundle.messages.push_back(msg1);
     bundle.messages.push_back(msg2); // INVALID: Phase One requires exactly 1 message
     bundle.epoch = GetCurrentEpoch(block_height);
-    bundle.median_price_micro_usd = 50050; // Median of two prices
+    bundle.median_price_micro_usd = 5; // Median: 5 cents ($0.05)
     bundle.timestamp = timestamp;
 
     // Create block

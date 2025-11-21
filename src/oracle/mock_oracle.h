@@ -22,7 +22,7 @@ class MockOracleManager
 private:
     static MockOracleManager* instance;
 
-    CAmount mockPrice;              // Price in satoshis per USD (e.g., 1000000 = $0.01/DGB)
+    CAmount mockPrice;              // Price in DigiDollar cents (e.g., 1 = $0.01/DGB, 100 = $1.00/DGB)
     int64_t lastUpdateHeight;       // Height of last price update
     bool enabled;                   // Whether mock oracle is enabled
 
@@ -41,13 +41,13 @@ public:
 
     /**
      * Get current mock oracle price
-     * @return Price in satoshis per USD
+     * @return Price in DigiDollar cents (100 = $1.00)
      */
     CAmount GetCurrentPrice() const;
 
     /**
      * Set mock oracle price
-     * @param price Price in satoshis per USD
+     * @param price Price in DigiDollar cents (100 = $1.00)
      */
     void SetMockPrice(CAmount price);
 

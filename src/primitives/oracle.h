@@ -55,7 +55,7 @@ public:
     }
 
     //! Validation
-    bool IsValid() const;
+    bool IsValid(int64_t reference_time = 0) const;
 
     /**
      * Sign the message with a private key using Schnorr signature
@@ -114,7 +114,7 @@ public:
     }
 
     //! Validation
-    bool IsValid(int min_required = ORACLE_CONSENSUS_REQUIRED) const;  // Validate bundle structure and signatures
+    bool IsValid(int64_t reference_time = 0, int min_required = ORACLE_CONSENSUS_REQUIRED) const;  // Validate bundle structure and signatures
 
     //! Message management
     bool AddMessage(const COraclePriceMessage& message);

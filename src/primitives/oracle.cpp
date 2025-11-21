@@ -27,7 +27,7 @@ COraclePriceMessage::COraclePriceMessage(uint32_t oracle_id_in, uint64_t price_i
 {
 }
 
-bool COraclePriceMessage::IsValid() const
+bool COraclePriceMessage::IsValid(int64_t reference_time) const
 {
     // Check price is positive and in reasonable range
     // DigiDollar cents format: 100 cents = $1.00
@@ -38,8 +38,10 @@ bool COraclePriceMessage::IsValid() const
     if (price_micro_usd < MIN_PRICE_CENTS) return false;
     if (price_micro_usd > MAX_PRICE_CENTS) return false;
 
+    // Use provided reference time (block time during validation) or current time
+    int64_t current_time = (reference_time > 0) ? reference_time : GetTime();
+
     // Check timestamp is not in the future (with 1 minute tolerance for clock skew)
-    int64_t current_time = GetTime();
     if (timestamp > current_time + 60) return false;
 
     // Check timestamp is not too old (1 hour max)
@@ -164,12 +166,15 @@ COracleBundle::COracleBundle(int32_t epoch_in) : epoch(epoch_in)
 {
 }
 
-bool COracleBundle::IsValid(int min_required) const
+bool COracleBundle::IsValid(int64_t reference_time, int min_required) const
 {
     // Check if bundle has messages
     if (messages.empty()) {
         return false;
     }
+
+    // Use provided reference time (block time during validation) or current time
+    int64_t current_time = (reference_time > 0) ? reference_time : GetTime();
 
     // Verify all message signatures (skip for Phase One compact format)
     for (const auto& msg : messages) {
@@ -184,14 +189,13 @@ bool COracleBundle::IsValid(int min_required) const
         }
 
         // Basic message validation (price range, timestamp, etc)
-        if (!msg.IsValid()) {
+        if (!msg.IsValid(reference_time)) {
             LogPrint(BCLog::DIGIDOLLAR, "Oracle: Message validation failed for oracle %u\n", msg.oracle_id);
             return false;
         }
     }
 
-    // Verify timestamp is reasonable (within 1 hour of current time)
-    int64_t current_time = GetTime();
+    // Verify timestamp is reasonable (within 1 hour of reference time)
     if (timestamp > current_time + 3600 || timestamp < current_time - 3600) {
         LogPrint(BCLog::DIGIDOLLAR, "Oracle: Bundle timestamp out of range: %d (current: %d)\n", timestamp, current_time);
         return false;

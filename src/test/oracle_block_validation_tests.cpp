@@ -363,7 +363,7 @@ BOOST_AUTO_TEST_CASE(contextual_checkblock_timestamp_validation)
 
     CBlock block = CreateBlockWithOracleBundle(
         oracle_key,
-        50000,
+        5,  // 5 cents = $0.05 (valid range: 1-1000 cents)
         oracle_timestamp,
         block_height,
         CScript() << block_height << OP_0
@@ -379,7 +379,11 @@ BOOST_AUTO_TEST_CASE(contextual_checkblock_timestamp_validation)
     const Consensus::Params& params = Params().GetConsensus();
 
     // First validate with CheckBlock
-    BOOST_REQUIRE(CheckBlock(block, state, params, false, false));
+    bool check_result = CheckBlock(block, state, params, false, false);
+    if (!check_result) {
+        LogPrintf("CheckBlock FAILED: %s - %s\n", state.GetRejectReason(), state.GetDebugMessage());
+    }
+    BOOST_REQUIRE(check_result);
 
     // EXPECTED FAILURE: ContextualCheckBlock may not exist or validate oracle timestamps
     // Note: This is a static function in validation.cpp, may need to be exposed
@@ -420,7 +424,7 @@ BOOST_AUTO_TEST_CASE(contextual_checkblock_rejects_old_bundle)
 
     CBlock block = CreateBlockWithOracleBundle(
         oracle_key,
-        50000,
+        5,  // 5 cents = $0.05 (valid range: 1-1000 cents)
         oracle_timestamp,
         block_height,
         CScript() << block_height << OP_0

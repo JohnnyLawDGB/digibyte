@@ -639,9 +639,9 @@ BOOST_FIXTURE_TEST_CASE(test_health_utilities, DigiDollarHealthTestSetup)
     }
 
     // Test health ratio calculation
-    CAmount ddAmount = 10000; // $100.00 DD
-    CAmount dgbAmount = 3000000000; // 30 DGB
-    CAmount dgbPrice = 50; // $0.50 per DGB (50 cents)
+    CAmount ddAmount = 10000; // $100.00 DD (in cents)
+    CAmount dgbAmount = 3000000000; // 30 DGB (in satoshis)
+    CAmount dgbPrice = 50; // $0.50 per DGB (50 cents, unified cents format)
 
     int healthRatio = CalculateHealthRatio(ddAmount, dgbAmount, dgbPrice);
     // 30 DGB * $0.50 = $15.00 value / $100 DD = 15% ratio

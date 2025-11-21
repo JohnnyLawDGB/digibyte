@@ -105,7 +105,7 @@ BOOST_AUTO_TEST_CASE(p2p_oracle_message_relay_valid)
 
     // For now, just verify message structure is correct
     BOOST_CHECK_EQUAL(msg.oracle_id, 1);
-    BOOST_CHECK_EQUAL(msg.price_micro_usd, 5000000);
+    BOOST_CHECK_EQUAL(msg.price_micro_usd, 500);
     BOOST_CHECK_GT(msg.timestamp, 0);
     BOOST_CHECK(!msg.schnorr_sig.empty());
 }

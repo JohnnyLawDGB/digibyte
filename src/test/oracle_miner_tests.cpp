@@ -415,7 +415,7 @@ BOOST_AUTO_TEST_CASE(create_new_block_phase_one_single_oracle)
 
     if (!extracted_bundle.messages.empty()) {
         BOOST_CHECK_EQUAL(extracted_bundle.messages[0].oracle_id, 0);
-        BOOST_CHECK_EQUAL(extracted_bundle.messages[0].price_micro_usd, 50000);
+        BOOST_CHECK_EQUAL(extracted_bundle.messages[0].price_micro_usd, 5);
         BOOST_CHECK_EQUAL(extracted_bundle.messages[0].timestamp, msg.timestamp);
     }
 }

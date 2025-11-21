@@ -122,7 +122,7 @@ BOOST_AUTO_TEST_CASE(exchange_aggregator_integration)
 
     // Price should be reasonable (between $0.001 and $10)
     BOOST_CHECK(aggregate_price >= 1000);      // >= $0.001
-    BOOST_CHECK(aggregate_price <= 1000);  // <= $10
+    BOOST_CHECK(aggregate_price <= 10000000);  // <= $10
 
     // Check successful sources
     size_t successful_sources = aggregator.GetSuccessfulSourceCount();

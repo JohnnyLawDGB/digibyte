@@ -30,9 +30,9 @@ using namespace DigiDollar::Volatility;
 
 struct DigiDollarVolatilityTestSetup : public TestingSetup {
     DigiDollarVolatilityTestSetup() : TestingSetup(ChainType::REGTEST),
-        validationContext(1000, 50000, 150, Params()) {
+        validationContext(1000, 50, 150, Params()) {
         // Set up mock oracle price and system state
-        basePrice = 50000; // $500.00 DGB (in hundredths)
+        basePrice = 50; // $0.50 DGB (50 cents in unified format)
         mockHeight = 1000;
         mockTimestamp = GetTime();
 
@@ -111,14 +111,14 @@ BOOST_FIXTURE_TEST_CASE(price_history_tracking_24h_window, DigiDollarVolatilityT
 
     // Record prices over 24 hours with 1-hour intervals
     for (int hour = 0; hour < 24; hour++) {
-        CAmount price = basePrice + (hour % 2 == 0 ? 1000 : -1000); // ±$10 alternating
+        CAmount price = basePrice + (hour % 2 == 0 ? 1 : -1); // ±$0.01 alternating (±2%)
         VolatilityMonitor::RecordPrice(price, mockTimestamp + hour * 3600);
     }
 
     // Calculate 24-hour volatility
     double volatility24h = VolatilityMonitor::CalculateVolatility(24 * 3600);
     BOOST_CHECK(volatility24h > 0.0);
-    BOOST_CHECK(volatility24h < 5.0); // Should be low for ±$10 swings on $500 base
+    BOOST_CHECK(volatility24h < 5.0); // Should be low for ±$0.01 swings on $0.50 base (±2%)
 }
 
 BOOST_FIXTURE_TEST_CASE(price_history_tracking_7d_window, DigiDollarVolatilityTestSetup)
@@ -143,7 +143,7 @@ BOOST_FIXTURE_TEST_CASE(price_history_tracking_30d_storage, DigiDollarVolatility
 
     // Record prices for 35 days to test 30-day limit
     for (int day = 0; day < 35; day++) {
-        CAmount price = basePrice + (day * 100); // Linear growth
+        CAmount price = basePrice + (day * 1); // Linear growth ($0.01/day)
         VolatilityMonitor::RecordPrice(price, mockTimestamp + day * 24 * 3600);
     }
 
@@ -181,11 +181,11 @@ BOOST_FIXTURE_TEST_CASE(volatility_calculation_high_volatility, DigiDollarVolati
 
     // Record highly volatile prices
     std::vector<CAmount> prices = {
-        basePrice,           // $500.00
-        basePrice * 120 / 100, // $600.00 (+20%)
-        basePrice * 80 / 100,  // $400.00 (-33%)
-        basePrice * 110 / 100, // $550.00 (+37.5%)
-        basePrice * 70 / 100   // $350.00 (-36%)
+        basePrice,           // $0.50
+        basePrice * 120 / 100, // $0.60 (+20%)
+        basePrice * 80 / 100,  // $0.40 (-33%)
+        basePrice * 110 / 100, // $0.55 (+37.5%)
+        basePrice * 70 / 100   // $0.35 (-36%)
     };
 
     for (size_t i = 0; i < prices.size(); i++) {
@@ -204,11 +204,11 @@ BOOST_FIXTURE_TEST_CASE(volatility_calculation_standard_deviation, DigiDollarVol
     // Record prices with known standard deviation pattern
     // Note: MIN_PRICE_INTERVAL is 3600 seconds, so we must use hourly intervals
     std::vector<CAmount> prices = {
-        basePrice,              // $500.00 (mean)
-        basePrice * 102 / 100,  // $510.00 (+2%)
-        basePrice * 98 / 100,   // $490.00 (-2%)
-        basePrice * 104 / 100,  // $520.00 (+4%)
-        basePrice * 96 / 100    // $480.00 (-4%)
+        basePrice,              // $0.50 (mean)
+        basePrice * 102 / 100,  // $0.51 (+2%)
+        basePrice * 98 / 100,   // $0.49 (-2%)
+        basePrice * 104 / 100,  // $0.52 (+4%)
+        basePrice * 96 / 100    // $0.48 (-4%)
     };
 
     for (size_t i = 0; i < prices.size(); i++) {
@@ -411,11 +411,12 @@ BOOST_FIXTURE_TEST_CASE(override_mechanism_sufficient_approvals, DigiDollarVolat
         msg.price_micro_usd = basePrice;
         msg.timestamp = mockTimestamp;
         msg.oracle_id = i + 1; // Use loop index + 1 as oracle ID
+        msg.block_height = mockHeight;
+        msg.oracle_pubkey = XOnlyPubKey(oracleKey.GetPubKey());
 
-        // TODO: Fix SerializeHash call - may need proper serialization
-        // uint256 hash = SerializeHash(msg);
-        // oracleKey.SignSchnorr(hash, msg.schnorr_sig);
-        msg.schnorr_sig = std::vector<unsigned char>(64, 0); // Mock signature
+        // Phase One compact format: no embedded signature
+        // Leave schnorr_sig empty to indicate compact format
+        msg.schnorr_sig.clear();
 
         approvals.push_back(msg);
     }
@@ -676,7 +677,7 @@ BOOST_FIXTURE_TEST_CASE(test_volatility_freeze_extreme_scenarios, DigiDollarVola
         auto startTime = std::chrono::high_resolution_clock::now();
 
         for (int i = 0; i < 10000; ++i) {
-            CAmount price = basePrice + (i % 100 - 50) * 1000; // Price variations
+            CAmount price = basePrice + (i % 100 - 50) * 1; // Price variations (±$0.50 range)
             AdvanceTime(60, 0); // 1-minute intervals (no block advancement)
             VolatilityMonitor::RecordPrice(price, mockTimestamp, mockHeight);
 
@@ -948,7 +949,7 @@ BOOST_FIXTURE_TEST_CASE(test_volatility_oracle_override_extremes, DigiDollarVola
 
         for (int i = 0; i < 8; ++i) {
             COraclePriceMessage msg;
-            msg.price_micro_usd = basePrice + (i * 1000); // Different prices
+            msg.price_micro_usd = basePrice + (i * 1); // Different prices ($0.01 increments)
             msg.timestamp = mockTimestamp + (i * 60); // Different timestamps
             msg.oracle_id = i + 1; // Use loop index + 1 as oracle ID
             // msg.nHeight = mockHeight + i; // Field not available in COraclePriceMessage

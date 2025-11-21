@@ -923,10 +923,10 @@ CCollateralPosition RedeemTxBuilder::GetCollateralPosition(const COutPoint& outp
     // Calculate collateral ratio
     if (position.ddMinted > 0) {
         // Ratio = (collateral_dgb_value_usd / dd_minted_usd) * 100
-        // Oracle price is in micro-USD (1,000,000 = $1.00), DD is in cents (100 = $1.00)
-        // DGB_value_cents = (dgbLocked_sats * oracle_micro_usd) / (COIN * 10000)
+        // Oracle price is in cents (100 = $1.00), DD is in cents (100 = $1.00)
+        // DGB_value_cents = (dgbLocked_sats * oracle_cents) / COIN
         // ratio = (DGB_value_cents * 100) / ddMinted_cents
-        CAmount dgbValueCents = (position.dgbLocked * oraclePrice) / (COIN * 10000);
+        CAmount dgbValueCents = (position.dgbLocked * oraclePrice) / COIN;
         position.collateralRatio = (dgbValueCents * 100) / position.ddMinted;
     } else {
         position.collateralRatio = 0;

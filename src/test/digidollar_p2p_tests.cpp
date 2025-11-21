@@ -222,13 +222,9 @@ BOOST_AUTO_TEST_CASE(test_oracle_message_validation_signature)
     XOnlyPubKey oracle_xonly = XOnlyPubKey(oracle_pubkey);
 
     COraclePriceMessage msg{1, 5, GetTime()};
-    msg.oracle_pubkey = oracle_xonly;
 
-    // Sign with correct key
-    uint256 hash = msg.GetSignatureHash();
-    std::vector<unsigned char> valid_signature;
-    BOOST_CHECK(oracle_key.Sign(hash, valid_signature));
-    msg.schnorr_sig = valid_signature;
+    // Sign with correct key using Schnorr signature
+    BOOST_CHECK(msg.Sign(oracle_key));
 
     // Should validate with correct pubkey
     BOOST_CHECK(msg.Verify());

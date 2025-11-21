@@ -452,10 +452,10 @@ void SystemHealthMonitor::ScanUTXOSet(CCoinsView* view, CCoinsView* validation_v
                         // Using oracle price to estimate
                         CAmount oraclePrice = GetLastOraclePrice();
                         if (oraclePrice == 0) {
-                            oraclePrice = 500000; // Default $0.50 per DGB (500,000 micro-USD)
+                            oraclePrice = 50; // Default $0.50 per DGB (50 cents)
                         }
-                        // Oracle price is in micro-USD (1,000,000 = $1.00)
-                        CAmount collateralValue = (collateral * oraclePrice) / (COIN * 10000); // in cents
+                        // Oracle price is in cents (100 = $1.00)
+                        CAmount collateralValue = (collateral * oraclePrice) / COIN; // in cents
                         ddAmount = (collateralValue * 100) / 150; // Reverse 150% ratio (conservative estimate)
                         dd_amount_estimated++;
                     }
@@ -532,7 +532,7 @@ void SystemHealthMonitor::UpdateTierMetrics()
     // Calculate current DGB price for health calculations
     CAmount currentPrice = GetLastOraclePrice();
     if (currentPrice == 0) {
-        currentPrice = 500000; // Default $0.50 per DGB (500,000 micro-USD)
+        currentPrice = 50; // Default $0.50 per DGB (50 cents)
     }
 
     // Update per-tier metrics
@@ -679,10 +679,10 @@ int SystemHealthMonitor::CalculateSystemHealth(CAmount ddSupply, CAmount collate
     }
 
     // Calculate collateral value in cents
-    // price is in micro-USD (1,000,000 = $1.00 DGB price)
+    // price is in cents (100 = $1.00 DGB price)
     // collateral is in satoshis
-    // Formula: (satoshis * price_micro_usd) / (COIN * 10000) = cents
-    CAmount collateralValue = (collateral * price) / (COIN * 10000);
+    // Formula: (satoshis * price_cents) / COIN = cents
+    CAmount collateralValue = (collateral * price) / COIN;
 
     // Health = (Collateral Value / DD Value) * 100
     int health = static_cast<int>((collateralValue * 100) / ddSupply);
@@ -743,7 +743,7 @@ CAmount SystemHealthMonitor::GetLastOraclePrice()
             return history.back().price;
         }
     }
-    return 500000; // Default $0.50 per DGB (500,000 micro-USD)
+    return 50; // Default $0.50 per DGB (50 cents)
 }
 
 int64_t SystemHealthMonitor::GetLastOracleUpdate()
@@ -831,10 +831,10 @@ int CalculateHealthRatio(CAmount ddAmount, CAmount dgbAmount, CAmount dgbPrice)
     }
 
     // Calculate DGB value in cents
-    // dgbPrice is in micro-USD (1,000,000 = $1.00 DGB price)
+    // dgbPrice is in cents (100 = $1.00 DGB price)
     // dgbAmount is in satoshis
-    // Formula: (satoshis * price_micro_usd) / (COIN * 10000) = cents
-    CAmount dgbValue = (dgbAmount * dgbPrice) / (COIN * 10000);
+    // Formula: (satoshis * price_cents) / COIN = cents
+    CAmount dgbValue = (dgbAmount * dgbPrice) / COIN;
 
     // Health = (Collateral Value / DD Value) * 100
     int health = static_cast<int>((dgbValue * 100) / ddAmount);

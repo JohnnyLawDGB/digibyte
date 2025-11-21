@@ -67,7 +67,7 @@ BOOST_AUTO_TEST_CASE(fetch_binance_price_success)
     // Minimum: $0.001 = 1,000 micro-USD
     // Maximum: $1.00 = 1,000,000 micro-USD
     BOOST_CHECK(price >= 1000);
-    BOOST_CHECK(price <= 100);
+    BOOST_CHECK(price <= 1000000);
 }
 
 /**
@@ -118,7 +118,7 @@ BOOST_AUTO_TEST_CASE(fetch_coinbase_price_success)
 
     BOOST_CHECK(price > 0);
     BOOST_CHECK(price >= 1000);
-    BOOST_CHECK(price <= 100);
+    BOOST_CHECK(price <= 1000000);
 }
 
 /**
@@ -132,7 +132,7 @@ BOOST_AUTO_TEST_CASE(fetch_kraken_price_success)
 
     BOOST_CHECK(price > 0);
     BOOST_CHECK(price >= 1000);
-    BOOST_CHECK(price <= 100);
+    BOOST_CHECK(price <= 1000000);
 }
 
 /**
@@ -164,7 +164,7 @@ BOOST_AUTO_TEST_CASE(fetch_kucoin_price_success)
 
     BOOST_CHECK(price > 0);
     BOOST_CHECK(price >= 1000);
-    BOOST_CHECK(price <= 100);
+    BOOST_CHECK(price <= 1000000);
 }
 
 /**
@@ -178,7 +178,7 @@ BOOST_AUTO_TEST_CASE(fetch_cryptocom_price_success)
 
     BOOST_CHECK(price > 0);
     BOOST_CHECK(price >= 1000);
-    BOOST_CHECK(price <= 100);
+    BOOST_CHECK(price <= 1000000);
 }
 
 // ============================================================================
@@ -950,7 +950,7 @@ BOOST_AUTO_TEST_CASE(aggregator_returns_micro_usd)
     // This test will FAIL until implementation is fixed
 
     BOOST_CHECK(price >= 1000);      // >= $0.001
-    BOOST_CHECK(price <= 100);   // <= $1.00
+    BOOST_CHECK(price <= 1000000);   // <= $1.00
 }
 
 /**

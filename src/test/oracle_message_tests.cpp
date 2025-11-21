@@ -366,11 +366,11 @@ BOOST_AUTO_TEST_CASE(oracle_message_micro_usd_format)
     // 1 USD = 1,000,000 micro-USD
     // $0.05 per DGB = 50,000 micro-USD
     msg.price_micro_usd = 5;                   // WILL FAIL: field doesn't exist
-    BOOST_CHECK_EQUAL(msg.price_micro_usd, 50000); // WILL FAIL
+    BOOST_CHECK_EQUAL(msg.price_micro_usd, 5); // WILL FAIL
 
     // Test various price points
     msg.price_micro_usd = 100;                 // WILL FAIL: $1.00
-    BOOST_CHECK_EQUAL(msg.price_micro_usd, 1000000);
+    BOOST_CHECK_EQUAL(msg.price_micro_usd, 100);
 
     msg.price_micro_usd = 12340;                   // WILL FAIL: $0.01234
     BOOST_CHECK_EQUAL(msg.price_micro_usd, 12340);

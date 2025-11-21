@@ -85,23 +85,23 @@ CAmount CCollateralPosition::GetCurrentCollateralRatio(CAmount currentPrice) con
     }
 
     // Calculate: (dgbLocked * currentPrice * 100) / ddMinted
-    // dgbLocked is in satoshis, currentPrice is in micro-USD (1,000,000 = $1.00 DGB price)
+    // dgbLocked is in satoshis, currentPrice is in cents (100 = $1.00 DGB price)
     // ddMinted is in cents (100 = $1.00 USD)
     // Result is percentage * 100 (e.g., 200 for 200%)
 
-    // Convert DGB to whole units first to avoid overflow
-    CAmount dgbInWholeUnits = dgbLocked / COIN;
+    // Calculate DGB value in cents: (satoshis * price_cents) / COIN
+    CAmount dgbValueCents = (dgbLocked * currentPrice) / COIN;
 
-    // Avoid overflow by checking if multiplication would exceed limits
-    if (dgbInWholeUnits > 0 && currentPrice > 0) {
+    // Avoid division by zero
+    if (dgbValueCents > 0 && ddMinted > 0) {
         // Check for potential overflow
-        if (dgbInWholeUnits > (std::numeric_limits<CAmount>::max() / currentPrice / 100)) {
+        if (dgbValueCents > (std::numeric_limits<CAmount>::max() / 100)) {
             // Handle overflow case - return a very large ratio
             return std::numeric_limits<CAmount>::max();
         }
 
-        CAmount totalValue = dgbInWholeUnits * currentPrice * 100;
-        return totalValue / ddMinted;
+        CAmount ratio = (dgbValueCents * 100) / ddMinted;
+        return ratio;
     }
 
     return 0;

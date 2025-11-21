@@ -871,8 +871,8 @@ bool OracleDataValidator::ValidateBlockOracleData(const CBlock& block, const CBl
     // IMPORTANT: Once we successfully extract a bundle, we MUST validate it fully
     // No transition period leniency for bundles that are present but invalid
 
-    // Validate bundle structure
-    if (!bundle.IsValid()) {
+    // Validate bundle structure (use block time as reference for timestamp validation)
+    if (!bundle.IsValid(block.nTime)) {
         LogPrintf("Oracle: Invalid oracle bundle in block %d\n", block_height);
         return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-oracle-bundle", "invalid oracle bundle structure");
     }

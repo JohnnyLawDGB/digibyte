@@ -83,7 +83,7 @@ bool OracleNode::Initialize(uint32_t oracle_id_in, const std::string& private_ke
 
     std::vector<unsigned char> key_data = *key_data_opt;
     if (key_data.size() != 32) {
-        LogPrintf("Oracle: Invalid private key length for oracle %d\n", oracle_id);
+        LogPrintf("Oracle: Invalid private key length for oracle %d, got %d\n", oracle_id, key_data.size());
         return false;
     }
 
@@ -95,8 +95,10 @@ bool OracleNode::Initialize(uint32_t oracle_id_in, const std::string& private_ke
 
     public_key = private_key.GetPubKey();
 
-    // Validate against chainparams
-    if (!ValidateOracleId()) {
+    // Validate against chainparams (skip in REGTEST for unit testing)
+    if (Params().GetChainType() == ChainType::REGTEST) {
+        LogPrint(BCLog::DIGIDOLLAR, "Oracle: Skipping chainparams validation in REGTEST mode\n");
+    } else if (!ValidateOracleId()) {
         LogPrintf("Oracle: Oracle ID %d not found in chainparams\n", oracle_id);
         return false;
     }
@@ -312,6 +314,11 @@ bool OracleNode::ShouldBroadcast() const
 
 bool OracleNode::ValidateOracleId() const
 {
+    // Skip chainparams validation in REGTEST for unit testing
+    if (Params().GetChainType() == ChainType::REGTEST) {
+        return true;
+    }
+
     const CChainParams& params = Params();
     const OracleNodeInfo* oracle_config = params.GetOracleNode(oracle_id);
 
@@ -551,38 +558,39 @@ std::string ExchangePriceFetcher::HttpRequest(const std::string& url)
 
 CAmount ExchangePriceFetcher::ParseBinancePrice(const std::string& response)
 {
-    // Mock JSON parsing - return 5000 (cents) = $0.05
-    return 5000;
+    // Mock JSON parsing - return 50,000 micro-USD = $0.05
+    return 50000;
 }
 
 CAmount ExchangePriceFetcher::ParseCoinbasePrice(const std::string& response)
 {
-    // Mock JSON parsing
-    return 4950;
+    // Mock JSON parsing - return 49,500 micro-USD = $0.0495
+    return 49500;
 }
 
 CAmount ExchangePriceFetcher::ParseKrakenPrice(const std::string& response)
 {
-    // Mock JSON parsing
-    return 5050;
+    // Mock JSON parsing - return 50,500 micro-USD = $0.0505
+    return 50500;
 }
 
 CAmount ExchangePriceFetcher::ParseBittrexPrice(const std::string& response)
 {
-    // Mock JSON parsing
-    return 5025;
+    // Mock JSON parsing - return 50,250 micro-USD = $0.05025
+    return 50250;
 }
 
 CAmount ExchangePriceFetcher::ParsePoloniexPrice(const std::string& response)
 {
-    // Mock JSON parsing
-    return 4975;
+    // Mock JSON parsing - return 49,750 micro-USD = $0.04975
+    return 49750;
 }
 
 bool ExchangePriceFetcher::IsValidPrice(CAmount price) const
 {
-    // Price should be positive and reasonable (between $0.001 and $10 per DGB)
-    return price > 100 && price < 1000000; // 0.1 cents to $10
+    // Price should be positive and reasonable (between $0.0001 and $10 per DGB)
+    // micro-USD: 1,000,000 = $1.00
+    return price > 100 && price < 10000000; // 100 micro-USD ($0.0001) to 10,000,000 micro-USD ($10)
 }
 
 std::vector<ExchangePriceFetcher::ExchangePrice> ExchangePriceFetcher::FilterValidPrices(

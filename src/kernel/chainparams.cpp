@@ -506,8 +506,9 @@ public:
         // NOTE: DD amounts are in CENTS, not satoshis. 100 cents = $1.00
         digidollarParams.minMintAmount = 100;              // 100 cents = $1 minimum for testing
         digidollarParams.maxMintAmount = 1000000;          // 1,000,000 cents = $10k maximum for testing
-        digidollarParams.oracleThreshold = 2;                         // 2-of-3 consensus for testing
-        digidollarParams.activeOracles = 3;                           // Only 3 active oracles for testing
+        digidollarParams.oracleThreshold = 1;                         // 1-of-1 consensus for Phase One
+        digidollarParams.activeOracles = 1;                           // Only 1 active oracle for Phase One
+        digidollarParams.oracleCount = 1;                             // Total 1 oracle for Phase One
 
         // Initialize DigiDollar Oracle Nodes (same as mainnet for compatibility)
         InitializeOracleNodes();
@@ -537,11 +538,11 @@ public:
 
 private:
     void InitializeOracleNodes() {
-        // DigiDollar Oracle Nodes - Same as mainnet for compatibility
-        // This allows testnet to work with same oracle infrastructure
+        // DigiDollar Oracle Nodes - Testnet uses valid secp256k1 test vectors
+        // These are placeholder keys for Phase 1, will be replaced with real oracle keys in Phase 2
         vOracleNodes = {
-            // Oracle 0-9: Primary Tier 1 providers
-            {0,  ParsePubKey("036b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b"), "oracle1.digidollar.org:9001", true},
+            // Oracle 0-9: Primary Tier 1 providers (using valid secp256k1 points)
+            {0,  ParsePubKey("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"), "oracle1.digidollar.org:9001", true},
             {1,  ParsePubKey("02d4735e3a265e16eee03f59718b9b5d03019c07d8b6c51f90da3a666eec13ab35"), "oracle2.digidollar.org:9002", true},
             {2,  ParsePubKey("034e07408562bedb8b60ce05c1decfe3ad16b72230967de01f640b7e4729b49fce"), "oracle3.digidollar.org:9003", true},
             {3,  ParsePubKey("024b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a"), "oracle4.digidollar.org:9004", true},
@@ -947,7 +948,7 @@ public:
         // Regtest-specific oracle and activation settings
         consensus.nDDOracleEpochBlocks = 10;       // Rotate oracles every 10 blocks
         consensus.nDDOracleUpdateInterval = 1;     // Update price every block
-        consensus.nDDActivationHeight = 650;       // DigiDollar active from height 650 (after Odocrypt at 600)
+        consensus.nDDActivationHeight = 600;       // DigiDollar active from height 600 (for testing)
 
         // Oracle system parameters (RegTest uses MockOracleManager)
         consensus.nOracleActivationHeight = 1;     // Activate immediately

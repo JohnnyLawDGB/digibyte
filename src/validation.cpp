@@ -22,6 +22,7 @@
 #include <consensus/validation.h>
 #include <digidollar/validation.h>
 #include <oracle/bundle_manager.h>
+#include <oracle/mock_oracle.h>
 #include <primitives/oracle.h>
 #include <cuckoocache.h>
 #include <flatfile.h>
@@ -2323,6 +2324,33 @@ DisconnectResult Chainstate::DisconnectBlock(const CBlock& block, const CBlockIn
     // move best block pointer to prevout block
     view.SetBestBlock(pindex->pprev->GetBlockHash());
 
+    // Revert oracle price cache if this block had oracle data (Phase One: testnet and regtest)
+    auto chain_type = Params().GetChainType();
+    if (chain_type == ChainType::TESTNET || chain_type == ChainType::REGTEST) {
+        if (!block.vtx.empty() && block.vtx[0]->vout.size() >= 2) {
+            const CTxOut& oracle_output = block.vtx[0]->vout[1];
+            if (oracle_output.scriptPubKey.IsUnspendable() && oracle_output.scriptPubKey.size() > 2) {
+                // This block had oracle data, need to revert the cache
+                OracleBundleManager& manager = OracleBundleManager::GetInstance();
+                manager.RemovePriceCache(pindex->nHeight);
+
+                // In RegTest mode, also revert MockOracleManager by getting previous price
+                if (chain_type == ChainType::REGTEST && pindex->pprev) {
+                    // Reset to previous height's price or default
+                    uint64_t prevPrice = manager.GetOraclePriceForHeight(pindex->pprev->nHeight);
+                    if (prevPrice > 0) {
+                        MockOracleManager::GetInstance().SetMockPrice(prevPrice);
+                    } else {
+                        // Reset to default if no previous price
+                        MockOracleManager::GetInstance().Reset();
+                    }
+                }
+
+                LogPrint(BCLog::DIGIDOLLAR, "Oracle: Reverted price cache at height %d during block disconnect\n", pindex->nHeight);
+            }
+        }
+    }
+
     return fClean ? DISCONNECT_OK : DISCONNECT_UNCLEAN;
 }
 
@@ -2785,29 +2813,25 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
         time_5 - time_start // in microseconds (µs)
     );
 
-    // Update oracle price cache (Phase One: testnet only)
-    if (m_chainman.GetParams().GetChainType() == ChainType::TESTNET && !fJustCheck) {
-        if (!block.vtx.empty() && block.vtx[0]->vout.size() >= 2) {
-            const CTxOut& oracle_output = block.vtx[0]->vout[1];
+    // Update oracle price cache (Phase One: testnet and regtest)
+    auto chain_type = m_chainman.GetParams().GetChainType();
+    if ((chain_type == ChainType::TESTNET || chain_type == ChainType::REGTEST) && !fJustCheck) {
+        if (!block.vtx.empty()) {
+            // Use OracleBundleManager's ExtractOracleBundle to properly parse compact format
+            OracleBundleManager& manager = OracleBundleManager::GetInstance();
+            COracleBundle bundle;
 
-            if (oracle_output.scriptPubKey.IsUnspendable() && oracle_output.scriptPubKey.size() > 2) {
-                std::vector<unsigned char> data(oracle_output.scriptPubKey.begin() + 2, oracle_output.scriptPubKey.end());
+            if (manager.ExtractOracleBundle(*block.vtx[0], bundle)) {
+                // Update oracle price cache for this height
+                manager.UpdatePriceCache(pindex->nHeight, bundle.median_price_micro_usd);
 
-                try {
-                    CDataStream ss(data, SER_NETWORK, PROTOCOL_VERSION);
-                    COracleBundle bundle;
-                    ss >> bundle;
-
-                    // Update oracle price cache for this height
-                    OracleBundleManager& manager = OracleBundleManager::GetInstance();
-                    manager.UpdatePriceCache(pindex->nHeight, bundle.median_price_micro_usd);
-
-                    LogPrint(BCLog::DIGIDOLLAR, "Oracle: Updated price cache at height %d: %llu micro-USD ($%.6f)\n",
-                             pindex->nHeight, bundle.median_price_micro_usd, bundle.median_price_micro_usd / 1000000.0);
-
-                } catch (const std::exception& e) {
-                    LogPrint(BCLog::DIGIDOLLAR, "Oracle: Failed to update price cache: %s\n", e.what());
+                // In RegTest mode, also update MockOracleManager so GetCurrentOraclePrice() returns correct value
+                if (chain_type == ChainType::REGTEST) {
+                    MockOracleManager::GetInstance().SetMockPrice(bundle.median_price_micro_usd);
                 }
+
+                LogPrint(BCLog::DIGIDOLLAR, "Oracle: Updated price cache at height %d: %llu micro-USD ($%.6f)\n",
+                         pindex->nHeight, bundle.median_price_micro_usd, bundle.median_price_micro_usd / 1000000.0);
             }
         }
     }
@@ -4103,8 +4127,8 @@ bool CheckBlock(const CBlock& block, BlockValidationState& state, const Consensu
     // Validate oracle data (if present and after activation)
     // Note: Oracle validation uses a pindex_prev of nullptr in CheckBlock context
     // Full oracle validation is performed in ContextualCheckBlock
-    if (!OracleDataValidator::ValidateBlockOracleData(block, nullptr, consensusParams)) {
-        return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-oracle-data", "invalid oracle data in block");
+    if (!OracleDataValidator::ValidateBlockOracleData(block, nullptr, consensusParams, state)) {
+        return false; // State already set by ValidateBlockOracleData
     }
 
     return true;
@@ -4317,12 +4341,20 @@ static bool ContextualCheckBlock(const CBlock& block, BlockValidationState& stat
         return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-blk-weight", strprintf("%s : weight limit failed", __func__));
     }
 
-    // Oracle bundle timestamp validation (Phase One: testnet only)
-    if (chainman.GetParams().GetChainType() == ChainType::TESTNET && !block.vtx.empty() && block.vtx[0]->vout.size() >= 2) {
+    // Oracle bundle timestamp validation (Phase One: testnet and regtest)
+    auto chain_type = chainman.GetParams().GetChainType();
+    if ((chain_type == ChainType::TESTNET || chain_type == ChainType::REGTEST) && !block.vtx.empty() && block.vtx[0]->vout.size() >= 2) {
         const CTxOut& oracle_output = block.vtx[0]->vout[1];
 
         if (oracle_output.scriptPubKey.IsUnspendable() && oracle_output.scriptPubKey.size() > 2) {
             std::vector<unsigned char> data(oracle_output.scriptPubKey.begin() + 2, oracle_output.scriptPubKey.end());
+
+            // Skip validation if oracle output is too small (< 100 bytes means no real bundle)
+            // Valid oracle bundles are ~200+ bytes (pubkey + signature + data)
+            if (data.size() < 100) {
+                LogPrint(BCLog::DIGIDOLLAR, "Oracle: Skipping validation, output too small (%d bytes)\n", data.size());
+                return true;  // Block has no oracle bundle, which is acceptable
+            }
 
             try {
                 CDataStream ss(data, SER_NETWORK, PROTOCOL_VERSION);
@@ -4336,11 +4368,28 @@ static bool ContextualCheckBlock(const CBlock& block, BlockValidationState& stat
                                                 bundle.timestamp, block.nTime));
                 }
 
-                LogPrint(BCLog::DIGIDOLLAR, "Oracle: Block timestamp validation passed: bundle=%d, block=%d\n",
-                         bundle.timestamp, block.nTime);
+                // Phase One: Verify exactly 1 oracle message (1-of-1 consensus)
+                if (bundle.messages.size() != 1) {
+                    return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-oracle-bundle-consensus",
+                                       strprintf("Phase One requires exactly 1 oracle message, got %d", bundle.messages.size()));
+                }
 
-            } catch (...) {
-                // Already validated in CheckBlock, ignore deserialization errors here
+                // Verify oracle message signature
+                for (const auto& msg : bundle.messages) {
+                    if (!msg.Verify()) {
+                        return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-oracle-bundle-signature",
+                                           "Oracle message signature verification failed");
+                    }
+                }
+
+                LogPrint(BCLog::DIGIDOLLAR, "Oracle: Block validation passed: bundle=%d, block=%d, messages=%d\n",
+                         bundle.timestamp, block.nTime, bundle.messages.size());
+
+            } catch (const std::exception& e) {
+                LogPrint(BCLog::DIGIDOLLAR, "Oracle: Bundle validation error: %s\n", e.what());
+                // Deserialization errors are validation failures
+                return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-oracle-bundle-format",
+                                   strprintf("Oracle bundle deserialization failed: %s", e.what()));
             }
         }
     }

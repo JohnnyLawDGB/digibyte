@@ -116,21 +116,22 @@ CAmount MintTxBuilder::CalculateRequiredCollateral(CAmount ddAmount, int lockDay
     double adjustedRatio = baseRatio * dcaMultiplier;
 
     // Calculate required DGB
-    // DD amount is in cents, oracle price is in cents per DGB
+    // DD amount is in cents (100 = $1.00), oracle price is in micro-USD (1,000,000 = $1.00)
     CAmount usdValue = ddAmount; // DD amount = USD value in cents
 
-    LogPrintf("DigiDollar TxBuilder: CalculateRequiredCollateral - DD: %d cents, Price: %d cents/DGB, BaseRatio: %d%%, DCA: %.2f, AdjustedRatio: %.2f%%\n",
+    LogPrintf("DigiDollar TxBuilder: CalculateRequiredCollateral - DD: %d cents, Price: %d micro-USD, BaseRatio: %d%%, DCA: %.2f, AdjustedRatio: %.2f%%\n",
               ddAmount, oraclePrice, baseRatio, dcaMultiplier, adjustedRatio);
 
     // Use 64-bit arithmetic to prevent overflow
-    // Oracle price format: cents per DGB (e.g., 1 for $0.01/DGB, 100 for $1.00/DGB)
-    // Formula: DGB = (USD_in_cents * COIN) / oracle_price_cents
-    uint64_t dgbFor100Percent = (static_cast<uint64_t>(usdValue) * static_cast<uint64_t>(COIN)) / static_cast<uint64_t>(oraclePrice);
-    // adjustedRatio is a percentage (e.g., 500 for 500%), convert to multiplier by dividing by 100
-    uint64_t requiredCollateral = (dgbFor100Percent * static_cast<uint64_t>(adjustedRatio)) / 100;
+    // Oracle price format: micro-USD (1,000,000 = $1.00 DGB price)
+    // DD is in cents, so convert: DD_cents * 10000 = DD_micro_usd
+    // Formula: DGB_sats = (DD_cents * 10000 * COIN * ratio) / (oracle_micro_usd * 100)
+    uint64_t ddMicroUSD = static_cast<uint64_t>(usdValue) * 10000;
+    uint64_t requiredCollateral = (ddMicroUSD * static_cast<uint64_t>(COIN) * static_cast<uint64_t>(adjustedRatio)) /
+                                   (static_cast<uint64_t>(oraclePrice) * 100);
 
-    LogPrintf("DigiDollar TxBuilder: - DGB for 100%%: %llu sats, Required collateral: %llu sats (%.8f DGB)\n",
-              dgbFor100Percent, requiredCollateral, requiredCollateral / 100000000.0);
+    LogPrintf("DigiDollar TxBuilder: - DD in micro-USD: %llu, Required collateral: %llu sats (%.8f DGB)\n",
+              ddMicroUSD, requiredCollateral, requiredCollateral / 100000000.0);
 
     // Check for overflow
     if (requiredCollateral > static_cast<uint64_t>(MAX_MONEY)) {
@@ -922,10 +923,12 @@ CCollateralPosition RedeemTxBuilder::GetCollateralPosition(const COutPoint& outp
 
     // Calculate collateral ratio
     if (position.ddMinted > 0) {
-        // Ratio = (collateral_dgb * oracle_price) / dd_minted * 100
-        // Since oracle price is in cents per DGB, and DD is in cents:
-        // ratio = (dgbLocked_sats / COIN * oraclePrice_cents) / ddMinted_cents * 100
-        position.collateralRatio = (position.dgbLocked / COIN * oraclePrice) * 100 / position.ddMinted;
+        // Ratio = (collateral_dgb_value_usd / dd_minted_usd) * 100
+        // Oracle price is in micro-USD (1,000,000 = $1.00), DD is in cents (100 = $1.00)
+        // DGB_value_cents = (dgbLocked_sats * oracle_micro_usd) / (COIN * 10000)
+        // ratio = (DGB_value_cents * 100) / ddMinted_cents
+        CAmount dgbValueCents = (position.dgbLocked * oraclePrice) / (COIN * 10000);
+        position.collateralRatio = (dgbValueCents * 100) / position.ddMinted;
     } else {
         position.collateralRatio = 0;
     }

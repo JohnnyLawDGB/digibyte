@@ -18,6 +18,8 @@
 class CBlock;
 class CTransaction;
 class CBlockIndex;
+class BlockValidationState;
+class CConnman;
 
 namespace Consensus { struct Params; }
 
@@ -75,6 +77,7 @@ public:
     bool AddOracleBundleToBlock(CBlock& block, int32_t block_height) const;
     CScript CreateOracleScript(const COracleBundle& bundle) const;
     bool ExtractOracleBundle(const CTransaction& coinbase_tx, COracleBundle& bundle) const;
+    bool TryCreateBundle(int32_t epoch);  // Explicitly create bundle for given epoch
 
     //! Price functions
     CAmount GetConsensusPrice(int32_t epoch) const;
@@ -89,6 +92,7 @@ public:
     bool BroadcastMessage(const COraclePriceMessage& message);
     void ProcessIncomingMessage(const COraclePriceMessage& message);
     bool HasOracleMessage(const uint256& hash) const;
+    void SetConnman(CConnman* connman);
 
     //! Status and statistics
     struct OracleStats {
@@ -105,6 +109,9 @@ public:
     static OracleBundleManager& GetInstance();
     static void Initialize();
     static void Shutdown();
+
+    //! Clear all state (for testing)
+    void Clear();
 
     //! Configuration validation
     bool ValidateConfiguration() const;
@@ -124,9 +131,14 @@ public:
      */
     uint64_t GetOraclePriceForHeight(int height) const;
 
+    /**
+     * Remove oracle price cache for a specific height (used during block disconnect)
+     * @param height Block height to remove
+     */
+    void RemovePriceCache(int height);
+
 private:
     //! Internal helpers
-    bool TryCreateBundle(int32_t epoch);
     void UpdateEpochBundle(int32_t epoch);
     bool IsValidOracleMessage(const COraclePriceMessage& message) const;
     std::vector<uint32_t> GetActiveOraclesForEpoch(int32_t epoch) const;
@@ -135,6 +147,9 @@ private:
     //! Price cache (block height -> price in micro-USD)
     std::map<int, uint64_t> height_to_price;
     mutable std::mutex mtx_price_cache;
+
+    //! P2P connection manager for broadcasting
+    CConnman* m_connman{nullptr};
 };
 
 /**
@@ -145,7 +160,7 @@ class OracleDataValidator
 {
 public:
     //! Block validation
-    static bool ValidateBlockOracleData(const CBlock& block, const CBlockIndex* pindex_prev, const Consensus::Params& params);
+    static bool ValidateBlockOracleData(const CBlock& block, const CBlockIndex* pindex_prev, const Consensus::Params& params, BlockValidationState& state);
 
     //! Transaction validation for DigiDollar operations
     static bool ValidateOraclePriceForTx(const CTransaction& tx, CAmount oracle_price, int32_t block_height);

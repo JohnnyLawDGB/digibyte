@@ -31,6 +31,7 @@
 #include <node/peerman_args.h>
 #include <node/validation_cache_args.h>
 #include <noui.h>
+#include <oracle/bundle_manager.h>
 #include <policy/fees.h>
 #include <policy/fees_args.h>
 #include <pow.h>
@@ -293,6 +294,10 @@ TestChain100Setup::TestChain100Setup(
     constexpr std::array<unsigned char, 32> vchKey = {
         {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}};
     coinbaseKey.Set(vchKey.begin(), vchKey.end(), true);
+
+    // Initialize OracleBundleManager before creating blocks
+    // This is needed because DigiDollar activates at height 100 in regtest
+    OracleBundleManager::Initialize();
 
     // Generate a 100-block chain:
     this->mineBlocks(100);

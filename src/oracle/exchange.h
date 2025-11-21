@@ -195,14 +195,14 @@ class MultiExchangeAggregator
 public:
     struct ExchangePrice {
         std::string exchange;
-        CAmount price_cents;  // DEPRECATED NAME: Actually stores micro-USD (1,000,000 = $1.00)
+        CAmount price_micro_usd;  // Price in micro-USD (1,000,000 = $1.00)
         int64_t timestamp;
         bool success;
         double weight;
 
-        ExchangePrice() : price_cents(0), timestamp(0), success(false), weight(1.0) {}
+        ExchangePrice() : price_micro_usd(0), timestamp(0), success(false), weight(1.0) {}
         ExchangePrice(const std::string& exchange_name, CAmount price, int64_t time, bool ok, double w = 1.0)
-            : exchange(exchange_name), price_cents(price), timestamp(time), success(ok), weight(w) {}
+            : exchange(exchange_name), price_micro_usd(price), timestamp(time), success(ok), weight(w) {}
     };
 
 private:

@@ -211,12 +211,13 @@ enum opcodetype
     OP_DDVERIFY = 0xbc,         // OP_NOP12 - Verify DD conditions
     OP_CHECKPRICE = 0xbd,       // OP_NOP13 - Check oracle price
     OP_CHECKCOLLATERAL = 0xbe,  // OP_NOP14 - Verify collateral ratio
+    OP_ORACLE = 0xbf,           // OP_NOP15 - Oracle price data marker
 
     OP_INVALIDOPCODE = 0xff,
 };
 
 // Maximum value that an opcode can be
-static const unsigned int MAX_OPCODE = OP_CHECKCOLLATERAL;
+static const unsigned int MAX_OPCODE = OP_ORACLE;
 
 std::string GetOpName(opcodetype opcode);
 

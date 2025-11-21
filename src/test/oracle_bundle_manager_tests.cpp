@@ -15,7 +15,7 @@
 #include <test/util/setup_common.h>
 #include <util/time.h>
 
-BOOST_FIXTURE_TEST_SUITE(oracle_bundle_manager_tests, TestingSetup)
+BOOST_FIXTURE_TEST_SUITE(oracle_bundle_manager_tests, RegTestingSetup)
 
 /**
  * Test Phase One: 1-of-1 Consensus Bundle Creation
@@ -24,6 +24,7 @@ BOOST_AUTO_TEST_CASE(phase_one_bundle_creation)
 {
     // Initialize bundle manager
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    manager.Clear(); // Clear state for test isolation
     manager.SetEnabled(true);
     manager.SetMinOracleCount(1); // Phase One: 1-of-1
 
@@ -55,7 +56,10 @@ BOOST_AUTO_TEST_CASE(phase_one_bundle_creation)
     // Get current epoch
     int32_t epoch = GetCurrentEpoch(1000);
 
-    // Try to create bundle
+    // Create bundle for this epoch
+    manager.TryCreateBundle(epoch);
+
+    // Verify bundle was created
     BOOST_CHECK(manager.HasValidBundle(epoch));
 
     // Get bundle
@@ -77,6 +81,7 @@ BOOST_AUTO_TEST_CASE(phase_one_bundle_creation)
 BOOST_AUTO_TEST_CASE(message_validation)
 {
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    manager.Clear(); // Clear state for test isolation
     manager.SetEnabled(true);
     manager.SetMinOracleCount(1);
 
@@ -133,6 +138,7 @@ BOOST_AUTO_TEST_CASE(exchange_aggregator_integration)
 BOOST_AUTO_TEST_CASE(bundle_persistence_cleanup)
 {
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    manager.Clear(); // Clear state for test isolation
     manager.SetEnabled(true);
     manager.SetMinOracleCount(1);
 
@@ -170,10 +176,10 @@ BOOST_AUTO_TEST_CASE(oracle_node_price_fetching)
     // Initialize with test key
     CKey test_key;
     test_key.MakeNewKey(true);
-    std::vector<unsigned char> key_data(test_key.begin(), test_key.end());
-    std::string key_hex = HexStr(key_data);
+    // Get the 32-byte private key data
+    std::string key_hex = HexStr(Span{test_key.begin(), test_key.end()});
 
-    BOOST_CHECK(oracle.Initialize(0, key_hex));
+    BOOST_REQUIRE(oracle.Initialize(0, key_hex));
 
     // Create and sign a price message
     CAmount test_price = 50000;
@@ -195,6 +201,7 @@ BOOST_AUTO_TEST_CASE(oracle_node_price_fetching)
 BOOST_AUTO_TEST_CASE(bundle_validation_rules)
 {
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    manager.Clear(); // Clear state for test isolation
     manager.SetEnabled(true);
     manager.SetMinOracleCount(1);
 
@@ -227,6 +234,7 @@ BOOST_AUTO_TEST_CASE(bundle_validation_rules)
 BOOST_AUTO_TEST_CASE(phase_one_testnet_config)
 {
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    manager.Clear(); // Clear state for test isolation
 
     // For Phase One, min oracle count should be 1 on testnet
     manager.SetMinOracleCount(1);
@@ -241,8 +249,9 @@ BOOST_AUTO_TEST_CASE(phase_one_testnet_config)
 
     BOOST_CHECK(manager.AddOracleMessage(msg));
 
-    // With 1-of-1 consensus, bundle should be created
+    // With 1-of-1 consensus, create bundle
     int32_t epoch = GetCurrentEpoch(1000);
+    manager.TryCreateBundle(epoch);
     BOOST_CHECK(manager.HasValidBundle(epoch));
 
     // Verify price is available
@@ -258,6 +267,7 @@ BOOST_AUTO_TEST_CASE(phase_one_testnet_config)
 BOOST_AUTO_TEST_CASE(oracle_stats_reporting)
 {
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    manager.Clear(); // Clear state for test isolation
     manager.SetEnabled(true);
     manager.SetMinOracleCount(1);
 
@@ -273,6 +283,10 @@ BOOST_AUTO_TEST_CASE(oracle_stats_reporting)
     msg.Sign(oracle_key);
 
     manager.AddOracleMessage(msg);
+
+    // Create bundle to achieve consensus
+    int32_t epoch = GetCurrentEpoch(1000);
+    manager.TryCreateBundle(epoch);
 
     // Check updated stats
     stats = manager.GetStats();

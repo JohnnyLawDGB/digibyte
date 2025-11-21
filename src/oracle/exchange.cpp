@@ -183,11 +183,33 @@ CAmount BinanceFetcher::FetchDGBUSDT()
     std::string response = HttpGet(url);
 
     if (response.empty()) {
+        LogPrint(BCLog::DIGIDOLLAR, "BinanceFetcher: Empty response\n");
         return 0;
     }
 
-    std::string price_str = ExtractJsonValue(response, "price");
-    return ConvertToMicroUSD(price_str);
+    // Parse JSON using UniValue
+    try {
+        UniValue json;
+        if (!json.read(response)) {
+            LogPrint(BCLog::DIGIDOLLAR, "BinanceFetcher: Failed to parse JSON\n");
+            return 0;
+        }
+
+        if (!json.isObject() || !json.exists("price")) {
+            LogPrint(BCLog::DIGIDOLLAR, "BinanceFetcher: Missing 'price' field\n");
+            return 0;
+        }
+
+        std::string price_str = json["price"].get_str();
+        CAmount price_micro_usd = ConvertToMicroUSD(price_str);
+
+        LogPrint(BCLog::DIGIDOLLAR, "Binance: %s (%lld micro-USD)\n", price_str.c_str(), price_micro_usd);
+        return price_micro_usd;
+
+    } catch (const std::exception& e) {
+        LogPrint(BCLog::DIGIDOLLAR, "BinanceFetcher: Error parsing response: %s\n", e.what());
+        return 0;
+    }
 }
 
 CAmount BinanceFetcher::FetchDGBBTC_BTCUSDT()
@@ -342,21 +364,51 @@ BittrexFetcher::BittrexFetcher()
 
 CAmount BittrexFetcher::FetchPrice()
 {
-    std::string url = base_url + "/v3/markets/USD-DGB/ticker";
+    // Bittrex v3 API: https://api.bittrex.com/v3/markets/DGB-USD/ticker
+    std::string url = base_url + "/v3/markets/DGB-USD/ticker";
     std::string response = HttpGet(url);
 
     if (response.empty()) {
+        LogPrint(BCLog::DIGIDOLLAR, "BittrexFetcher: Empty response\n");
         return 0;
     }
 
-    std::string price_str = ParseBittrexResponse(response);
-    return ConvertToMicroUSD(price_str);
+    // Parse JSON using UniValue
+    // Expected format: {"symbol":"DGB-USD","lastTradeRate":"0.01234"}
+    try {
+        UniValue json;
+        if (!json.read(response)) {
+            LogPrint(BCLog::DIGIDOLLAR, "BittrexFetcher: Failed to parse JSON\n");
+            return 0;
+        }
+
+        if (!json.isObject() || !json.exists("lastTradeRate")) {
+            LogPrint(BCLog::DIGIDOLLAR, "BittrexFetcher: Missing 'lastTradeRate' field\n");
+            return 0;
+        }
+
+        std::string price_str = json["lastTradeRate"].get_str();
+        CAmount price_micro_usd = ConvertToMicroUSD(price_str);
+
+        // Validate range ($0.0001 to $10.00)
+        if (price_micro_usd < 100 || price_micro_usd > 10000000) {
+            LogPrint(BCLog::DIGIDOLLAR, "BittrexFetcher: Price out of range: %lld micro-USD\n", price_micro_usd);
+            return 0;
+        }
+
+        LogPrint(BCLog::DIGIDOLLAR, "Bittrex: %s (%lld micro-USD)\n", price_str.c_str(), price_micro_usd);
+        return price_micro_usd;
+
+    } catch (const std::exception& e) {
+        LogPrint(BCLog::DIGIDOLLAR, "BittrexFetcher: Error parsing response: %s\n", e.what());
+        return 0;
+    }
 }
 
 std::string BittrexFetcher::ParseBittrexResponse(const std::string& response)
 {
-    // Extract last price from Bittrex response
-    return "0.05025";
+    // Deprecated - now using direct UniValue parsing in FetchPrice()
+    return "";
 }
 
 /**
@@ -370,21 +422,51 @@ PoloniexFetcher::PoloniexFetcher()
 
 CAmount PoloniexFetcher::FetchPrice()
 {
-    std::string url = base_url + "/public?command=returnTicker";
+    // Poloniex API: https://api.poloniex.com/markets/DGB_USDT/price
+    std::string url = "https://api.poloniex.com/markets/DGB_USDT/price";
     std::string response = HttpGet(url);
 
     if (response.empty()) {
+        LogPrint(BCLog::DIGIDOLLAR, "PoloniexFetcher: Empty response\n");
         return 0;
     }
 
-    std::string price_str = ParsePoloniexResponse(response);
-    return ConvertToMicroUSD(price_str);
+    // Parse JSON using UniValue
+    // Expected format: {"symbol":"DGB_USDT","price":"0.01234"}
+    try {
+        UniValue json;
+        if (!json.read(response)) {
+            LogPrint(BCLog::DIGIDOLLAR, "PoloniexFetcher: Failed to parse JSON\n");
+            return 0;
+        }
+
+        if (!json.isObject() || !json.exists("price")) {
+            LogPrint(BCLog::DIGIDOLLAR, "PoloniexFetcher: Missing 'price' field\n");
+            return 0;
+        }
+
+        std::string price_str = json["price"].get_str();
+        CAmount price_micro_usd = ConvertToMicroUSD(price_str);
+
+        // Validate range ($0.0001 to $10.00)
+        if (price_micro_usd < 100 || price_micro_usd > 10000000) {
+            LogPrint(BCLog::DIGIDOLLAR, "PoloniexFetcher: Price out of range: %lld micro-USD\n", price_micro_usd);
+            return 0;
+        }
+
+        LogPrint(BCLog::DIGIDOLLAR, "Poloniex: %s (%lld micro-USD)\n", price_str.c_str(), price_micro_usd);
+        return price_micro_usd;
+
+    } catch (const std::exception& e) {
+        LogPrint(BCLog::DIGIDOLLAR, "PoloniexFetcher: Error parsing response: %s\n", e.what());
+        return 0;
+    }
 }
 
 std::string PoloniexFetcher::ParsePoloniexResponse(const std::string& response)
 {
-    // Extract USDT_DGB price from Poloniex ticker
-    return "0.04975";
+    // Deprecated - now using direct UniValue parsing in FetchPrice()
+    return "";
 }
 
 /**
@@ -463,42 +545,42 @@ CAmount KuCoinFetcher::FetchPrice()
         return 0;
     }
 
-    // Parse JSON: {"data":{"price":"0.01234"}}
-    // Use simple JSON extraction for now
+    // Parse JSON using UniValue
+    // Expected format: {"data":{"price":"0.01234"}}
+    try {
+        UniValue json;
+        if (!json.read(response)) {
+            LogPrint(BCLog::DIGIDOLLAR, "KuCoinFetcher: Failed to parse JSON\n");
+            return 0;
+        }
 
-    // Find "data" object
-    size_t data_pos = response.find("\"data\"");
-    if (data_pos == std::string::npos) {
-        LogPrint(BCLog::DIGIDOLLAR, "KuCoinFetcher: 'data' field not found in response\n");
+        if (!json.isObject() || !json.exists("data")) {
+            LogPrint(BCLog::DIGIDOLLAR, "KuCoinFetcher: Missing 'data' field\n");
+            return 0;
+        }
+
+        const UniValue& data = json["data"];
+        if (!data.isObject() || !data.exists("price")) {
+            LogPrint(BCLog::DIGIDOLLAR, "KuCoinFetcher: Missing 'price' field in data\n");
+            return 0;
+        }
+
+        std::string price_str = data["price"].get_str();
+        CAmount price_micro_usd = ConvertToMicroUSD(price_str);
+
+        // Validate range ($0.0001 to $10.00)
+        if (price_micro_usd < 100 || price_micro_usd > 10000000) {
+            LogPrint(BCLog::DIGIDOLLAR, "KuCoinFetcher: Price out of range: %lld micro-USD\n", price_micro_usd);
+            return 0;
+        }
+
+        LogPrint(BCLog::DIGIDOLLAR, "KuCoin: %s (%lld micro-USD)\n", price_str.c_str(), price_micro_usd);
+        return price_micro_usd;
+
+    } catch (const std::exception& e) {
+        LogPrint(BCLog::DIGIDOLLAR, "KuCoinFetcher: Error parsing response: %s\n", e.what());
         return 0;
     }
-
-    // Find "price" field within data
-    size_t price_pos = response.find("\"price\"", data_pos);
-    if (price_pos == std::string::npos) {
-        LogPrint(BCLog::DIGIDOLLAR, "KuCoinFetcher: 'price' field not found in response\n");
-        return 0;
-    }
-
-    // Extract price value (looking for the value after "price":")
-    size_t start = response.find("\"", price_pos + 7); // Skip past "price":
-    if (start == std::string::npos) {
-        return 0;
-    }
-    start++; // Skip opening quote
-
-    size_t end = response.find("\"", start);
-    if (end == std::string::npos) {
-        return 0;
-    }
-
-    std::string price_str = response.substr(start, end - start);
-    CAmount price_micro_usd = ConvertToMicroUSD(price_str);
-
-    LogPrint(BCLog::DIGIDOLLAR, "KuCoinFetcher: Price = $%s (%lld micro-USD)\n",
-             price_str.c_str(), price_micro_usd);
-
-    return price_micro_usd;
 }
 
 /**
@@ -520,49 +602,49 @@ CAmount CryptoComFetcher::FetchPrice()
         return 0;
     }
 
-    // Parse JSON: {"result":{"data":{"a":"0.01234"}}}
+    // Parse JSON using UniValue
+    // Expected format: {"result":{"data":{"a":"0.01234"}}}
     // "a" = best ask price
+    try {
+        UniValue json;
+        if (!json.read(response)) {
+            LogPrint(BCLog::DIGIDOLLAR, "CryptoComFetcher: Failed to parse JSON\n");
+            return 0;
+        }
 
-    // Find "result" object
-    size_t result_pos = response.find("\"result\"");
-    if (result_pos == std::string::npos) {
-        LogPrint(BCLog::DIGIDOLLAR, "CryptoComFetcher: 'result' field not found in response\n");
+        if (!json.isObject() || !json.exists("result")) {
+            LogPrint(BCLog::DIGIDOLLAR, "CryptoComFetcher: Missing 'result' field\n");
+            return 0;
+        }
+
+        const UniValue& result = json["result"];
+        if (!result.isObject() || !result.exists("data")) {
+            LogPrint(BCLog::DIGIDOLLAR, "CryptoComFetcher: Missing 'data' field in result\n");
+            return 0;
+        }
+
+        const UniValue& data = result["data"];
+        if (!data.isObject() || !data.exists("a")) {
+            LogPrint(BCLog::DIGIDOLLAR, "CryptoComFetcher: Missing 'a' field in data\n");
+            return 0;
+        }
+
+        std::string price_str = data["a"].get_str();
+        CAmount price_micro_usd = ConvertToMicroUSD(price_str);
+
+        // Validate range ($0.0001 to $10.00)
+        if (price_micro_usd < 100 || price_micro_usd > 10000000) {
+            LogPrint(BCLog::DIGIDOLLAR, "CryptoComFetcher: Price out of range: %lld micro-USD\n", price_micro_usd);
+            return 0;
+        }
+
+        LogPrint(BCLog::DIGIDOLLAR, "Crypto.com: %s (%lld micro-USD)\n", price_str.c_str(), price_micro_usd);
+        return price_micro_usd;
+
+    } catch (const std::exception& e) {
+        LogPrint(BCLog::DIGIDOLLAR, "CryptoComFetcher: Error parsing response: %s\n", e.what());
         return 0;
     }
-
-    // Find "data" object within result
-    size_t data_pos = response.find("\"data\"", result_pos);
-    if (data_pos == std::string::npos) {
-        LogPrint(BCLog::DIGIDOLLAR, "CryptoComFetcher: 'data' field not found in response\n");
-        return 0;
-    }
-
-    // Find "a" field (ask price) within data
-    size_t ask_pos = response.find("\"a\"", data_pos);
-    if (ask_pos == std::string::npos) {
-        LogPrint(BCLog::DIGIDOLLAR, "CryptoComFetcher: 'a' field not found in response\n");
-        return 0;
-    }
-
-    // Extract ask price value
-    size_t start = response.find("\"", ask_pos + 3); // Skip past "a":
-    if (start == std::string::npos) {
-        return 0;
-    }
-    start++; // Skip opening quote
-
-    size_t end = response.find("\"", start);
-    if (end == std::string::npos) {
-        return 0;
-    }
-
-    std::string price_str = response.substr(start, end - start);
-    CAmount price_micro_usd = ConvertToMicroUSD(price_str);
-
-    LogPrint(BCLog::DIGIDOLLAR, "CryptoComFetcher: Price = $%s (%lld micro-USD)\n",
-             price_str.c_str(), price_micro_usd);
-
-    return price_micro_usd;
 }
 
 
@@ -822,7 +904,7 @@ CAmount MultiExchangeAggregator::CalculateMedianPrice(const std::vector<Exchange
 
     std::vector<CAmount> price_values;
     for (const auto& price : prices) {
-        price_values.push_back(price.price_cents);
+        price_values.push_back(price.price_micro_usd);
     }
 
     std::sort(price_values.begin(), price_values.end());
@@ -858,7 +940,7 @@ CAmount MultiExchangeAggregator::CalculateWeightedAverage(const std::vector<Exch
     double total_weight = 0.0;
 
     for (const auto& price : prices) {
-        weighted_sum += price.price_cents * price.weight;
+        weighted_sum += price.price_micro_usd * price.weight;
         total_weight += price.weight;
     }
 
@@ -887,12 +969,12 @@ std::vector<MultiExchangeAggregator::ExchangePrice> MultiExchangeAggregator::Fil
     CAmount threshold = static_cast<CAmount>(median * outlier_threshold);
 
     for (const auto& price : prices) {
-        CAmount deviation = std::abs(price.price_cents - median);
+        CAmount deviation = std::abs(price.price_micro_usd - median);
         if (deviation <= threshold) {
             filtered.push_back(price);
         } else {
             LogPrintf("Oracle: Filtered outlier from %s: %lld micro-USD (median: %lld, threshold: %lld)\n",
-                     price.exchange, price.price_cents, median, threshold);
+                     price.exchange, price.price_micro_usd, median, threshold);
         }
     }
 
@@ -959,7 +1041,7 @@ std::vector<MultiExchangeAggregator::ExchangePrice> MultiExchangeAggregator::Fil
 {
     std::vector<ExchangePrice> valid_prices;
     for (const auto& price : prices) {
-        if (price.success && price.price_cents > 0) {
+        if (price.success && price.price_micro_usd > 0) {
             valid_prices.push_back(price);
         }
     }
@@ -971,7 +1053,7 @@ void MultiExchangeAggregator::LogPriceResults(const std::vector<ExchangePrice>& 
     LogPrintf("Oracle: Price aggregation results:\n");
     for (const auto& price : prices) {
         LogPrintf("Oracle:   %s: %lld micro-USD (weight: %.1f)\n",
-                 price.exchange, price.price_cents, price.weight);
+                 price.exchange, price.price_micro_usd, price.weight);
     }
     LogPrintf("Oracle: Final aggregated price: %lld micro-USD ($%.6f)\n",
              final_price, static_cast<double>(final_price) / 1000000.0);

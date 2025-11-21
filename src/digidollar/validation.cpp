@@ -120,21 +120,30 @@ CAmount CalculateRequiredCollateral(CAmount ddAmount, int64_t lockTime,
              ddAmount, ddAmount / 100.0);
     LogPrint(BCLog::DIGIDOLLAR, "  Lock time: %lld blocks (~%lld days)\n",
              lockTime, lockTime / (24 * 60 * 4));
-    LogPrint(BCLog::DIGIDOLLAR, "  Oracle price: %lld cents ($%.2f per DGB)\n",
-             ctx.oraclePrice, ctx.oraclePrice / 100.0);
+    LogPrint(BCLog::DIGIDOLLAR, "  Oracle price: %lld micro-USD ($%.6f per DGB)\n",
+             ctx.oraclePrice, ctx.oraclePrice / 1000000.0);
     LogPrint(BCLog::DIGIDOLLAR, "  System health: %d%%\n", systemHealth);
 
     // Apply DCA multiplier based on system health from context
     int effectiveRatio = GetEffectiveCollateralRatio(baseRatio, systemHealth, ctx.params);
 
-    // Calculate required DGB: (DD amount in cents * DGB satoshis) / (price in cents) * (ratio% / 100)
+    // Calculate required DGB collateral
+    // DD amount is in cents (100 = $1.00 USD)
+    // Oracle price is in micro-USD (1,000,000 = $1.00 DGB price)
     // Use 64-bit arithmetic to prevent overflow
-    // Oracle price is in cents per DGB (e.g., 1 for $0.01/DGB, 100 for $1.00/DGB)
-    uint64_t dgbFor100Percent = (static_cast<uint64_t>(ddAmount) * static_cast<uint64_t>(COIN)) / static_cast<uint64_t>(ctx.oraclePrice);
-    uint64_t requiredDGB = (dgbFor100Percent * static_cast<uint64_t>(effectiveRatio)) / 100;
+    //
+    // Formula: Required_DGB_sats = (DD_cents * 10000 * COIN * ratio) / (oracle_micro_usd * 100)
+    // The 10000 factor converts cents to micro-USD (cents * 10000 = micro-USD)
+    // Example: $100 DD at $0.01234 DGB with 150% ratio
+    //   = (10000 cents * 10000 * COIN * 150) / (12340 micro-USD * 100)
+    //   = (10000 * 10000 * 100000000 * 150) / (12340 * 100)
+    //   = 1,215,805,062,000 sats = 12,158 DGB
+    uint64_t ddAmountMicroUSD = static_cast<uint64_t>(ddAmount) * 10000; // Convert cents to micro-USD
+    uint64_t requiredDGB = (ddAmountMicroUSD * static_cast<uint64_t>(COIN) * static_cast<uint64_t>(effectiveRatio)) /
+                           (static_cast<uint64_t>(ctx.oraclePrice) * 100);
 
-    LogPrint(BCLog::DIGIDOLLAR, "DCA: Collateral calculation: %lld cents * %lld / %lld = %llu sat (100%%), * %d%% / 100 = %llu sat\n",
-             ddAmount, COIN, ctx.oraclePrice, dgbFor100Percent, effectiveRatio, requiredDGB);
+    LogPrint(BCLog::DIGIDOLLAR, "DCA: Collateral calculation: %lld cents * 10000 * %lld * %d / (%lld micro-USD * 100) = %llu sat\n",
+             ddAmount, COIN, effectiveRatio, ctx.oraclePrice, requiredDGB);
 
     return requiredDGB;
 }
@@ -182,7 +191,9 @@ bool ValidateCollateralRatio(CAmount dgbLocked, CAmount ddMinted,
     }
 
     // Calculate actual collateral ratio for logging
-    CAmount dgbValueInCents = (dgbLocked * ctx.oraclePrice) / COIN;
+    // Oracle price is in micro-USD, DD is in cents
+    // Convert: (DGB_sats * oracle_micro_usd / COIN) / 10000 = DD_cents
+    CAmount dgbValueInCents = (dgbLocked * ctx.oraclePrice) / (COIN * 10000);
     int actualRatio = (dgbValueInCents * 100) / ddMinted;
 
     // Get expected ratio for comparison
@@ -194,7 +205,7 @@ bool ValidateCollateralRatio(CAmount dgbLocked, CAmount ddMinted,
     LogPrintf("  DGB locked: %d satoshis (%.2f DGB)\n", dgbLocked, dgbLocked / (double)COIN);
     LogPrintf("  DD minted: %d cents ($%.2f)\n", ddMinted, ddMinted / 100.0);
     LogPrintf("  Lock time: %d blocks (~%d days)\n", lockTime, lockTime / (24 * 60 * 4));
-    LogPrintf("  Oracle price: %d cents ($%.2f)\n", ctx.oraclePrice, ctx.oraclePrice / 100.0);
+    LogPrintf("  Oracle price: %d micro-USD ($%.6f per DGB)\n", ctx.oraclePrice, ctx.oraclePrice / 1000000.0);
     LogPrintf("  DGB value: %d cents ($%.2f)\n", dgbValueInCents, dgbValueInCents / 100.0);
     LogPrintf("  Base ratio: %d%%, Effective ratio: %d%%, Actual ratio: %d%%\n",
               baseRatio, effectiveRatio, actualRatio);
@@ -512,13 +523,14 @@ bool ValidateMintTransaction(const CTransaction& tx,
         }
 
         // Calculate max DD that can be minted with this collateral at minimum ratio
-        // DD_cents = (collateral_satoshis * price_cents_per_dgb * 100) / (min_ratio * COIN)
+        // Oracle price is in micro-USD (1,000,000 = $1.00), DD is in cents (100 = $1.00)
+        // DD_cents = (collateral_sats * price_micro_usd) / (min_ratio * COIN * 10000)
         // But we don't know the tier/ratio yet, so use a conservative 200% (tier 1)
         int minRatio = 200;
-        totalDD = (totalCollateral * oraclePrice * 100) / (minRatio * COIN);
+        totalDD = (totalCollateral * oraclePrice) / (minRatio * COIN * 10000);
 
-        LogPrintf("DigiDollar: Calculated DD amount from collateral: %d cents ($%.2f) from %d DGB\n",
-                  totalDD, totalDD / 100.0, totalCollateral / COIN);
+        LogPrintf("DigiDollar: Calculated DD amount from collateral: %d cents ($%.2f) from %d DGB at %d micro-USD\n",
+                  totalDD, totalDD / 100.0, totalCollateral / COIN, oraclePrice);
     }
 
     // 5. Ensure we have both required output types
@@ -573,7 +585,7 @@ bool ValidateMintTransaction(const CTransaction& tx,
     LogPrintf("  Total collateral: %d satoshis (%.2f DGB)\n", totalCollateral, totalCollateral / (double)COIN);
     LogPrintf("  Required collateral: %d satoshis (%.2f DGB)\n", requiredCollateral, requiredCollateral / (double)COIN);
     LogPrintf("  Lock time: %d blocks (~%d days)\n", lockTime, lockTime / (24 * 60 * 4));
-    LogPrintf("  Oracle price: %d cents ($%.2f)\n", ctx.oraclePrice, ctx.oraclePrice / 100.0);
+    LogPrintf("  Oracle price: %d micro-USD ($%.6f per DGB)\n", ctx.oraclePrice, ctx.oraclePrice / 1000000.0);
 
     return true;
 }
@@ -1205,7 +1217,9 @@ bool ValidateERRRedemption(const CTransaction& tx,
     }
 
     // Calculate expected collateral return with ERR adjustment
-    CAmount expectedFullCollateral = (ddInputAmount * COIN) / (ctx.oraclePrice / 100);
+    // Oracle price is in micro-USD, DD is in cents
+    // Collateral_sats = (DD_cents * 10000 * COIN) / oracle_micro_usd
+    CAmount expectedFullCollateral = (ddInputAmount * 10000 * COIN) / ctx.oraclePrice;
     CAmount expectedERRCollateral = DigiDollar::ERR::EmergencyRedemptionRatio::GetAdjustedRedemption(
         expectedFullCollateral, ctx.systemCollateral);
 

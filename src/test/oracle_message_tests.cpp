@@ -400,23 +400,30 @@ BOOST_AUTO_TEST_CASE(oracle_message_timestamp_validation)
     XOnlyPubKey pubkey(privkey.GetPubKey());
 
     COraclePriceMessage msg;
-    msg.oracle_pubkey = pubkey;                    // WILL FAIL
-    msg.price_micro_usd = 50000;                   // WILL FAIL
+    msg.oracle_id = 0;
+    msg.oracle_pubkey = pubkey;
+    msg.price_micro_usd = 50000;
+    msg.block_height = 1000;
+    msg.nonce = 12345;
 
     // Test current timestamp (should be valid)
     msg.timestamp = GetTime();
-    BOOST_CHECK(msg.IsValid());                     // Might work with current impl
+    BOOST_REQUIRE(msg.Sign(privkey));
+    BOOST_CHECK(msg.IsValid());
 
     // Test timestamp 1 minute ago (should be valid)
     msg.timestamp = GetTime() - 60;
+    BOOST_REQUIRE(msg.Sign(privkey));
     BOOST_CHECK(msg.IsValid());
 
     // Test timestamp 30 minutes ago (should be valid)
     msg.timestamp = GetTime() - 1800;
+    BOOST_REQUIRE(msg.Sign(privkey));
     BOOST_CHECK(msg.IsValid());
 
     // Test timestamp 59 minutes ago (should be valid, within 1 hour)
     msg.timestamp = GetTime() - 3540;
+    BOOST_REQUIRE(msg.Sign(privkey));
     BOOST_CHECK(msg.IsValid());
 }
 
@@ -432,15 +439,20 @@ BOOST_AUTO_TEST_CASE(oracle_message_reject_future_timestamp)
     XOnlyPubKey pubkey(privkey.GetPubKey());
 
     COraclePriceMessage msg;
-    msg.oracle_pubkey = pubkey;                    // WILL FAIL
-    msg.price_micro_usd = 50000;                   // WILL FAIL
+    msg.oracle_id = 0;
+    msg.oracle_pubkey = pubkey;
+    msg.price_micro_usd = 50000;
+    msg.block_height = 1000;
+    msg.nonce = 12345;
 
     // Test future timestamp (5 minutes ahead, should be invalid)
     msg.timestamp = GetTime() + 300;
-    BOOST_CHECK(!msg.IsValid());                    // Might work, depends on impl
+    BOOST_REQUIRE(msg.Sign(privkey));
+    BOOST_CHECK(!msg.IsValid());
 
     // Test far future (1 hour ahead, should be invalid)
     msg.timestamp = GetTime() + 3600;
+    BOOST_REQUIRE(msg.Sign(privkey));
     BOOST_CHECK(!msg.IsValid());
 
     // Test timestamp 2 minutes ahead (within clock skew tolerance, might be ok)
@@ -458,23 +470,36 @@ BOOST_AUTO_TEST_CASE(oracle_message_reject_old_timestamp)
 {
     CKey privkey;
     privkey.MakeNewKey(true);
-    XOnlyPubKey pubkey(privkey.GetPubKey());
-
-    COraclePriceMessage msg;
-    msg.oracle_pubkey = pubkey;                    // WILL FAIL
-    msg.price_micro_usd = 50000;                   // WILL FAIL
 
     // Test timestamp 61 minutes ago (should be invalid)
-    msg.timestamp = GetTime() - 3660;  // 61 minutes
-    BOOST_CHECK(!msg.IsValid());                    // Might work with current impl
+    COraclePriceMessage msg1;
+    msg1.oracle_id = 1;
+    msg1.price_micro_usd = 50000;
+    msg1.timestamp = GetTime() - 3660;  // 61 minutes
+    msg1.block_height = 0;
+    msg1.nonce = 0;
+    msg1.Sign(privkey);
+    BOOST_CHECK(!msg1.IsValid());  // Should fail due to old timestamp
 
     // Test timestamp 2 hours ago (should be invalid)
-    msg.timestamp = GetTime() - 7200;
-    BOOST_CHECK(!msg.IsValid());
+    COraclePriceMessage msg2;
+    msg2.oracle_id = 1;
+    msg2.price_micro_usd = 50000;
+    msg2.timestamp = GetTime() - 7200;
+    msg2.block_height = 0;
+    msg2.nonce = 0;
+    msg2.Sign(privkey);
+    BOOST_CHECK(!msg2.IsValid());
 
     // Test timestamp exactly 1 hour ago (boundary, should still be valid)
-    msg.timestamp = GetTime() - 3600;
-    BOOST_CHECK(msg.IsValid());
+    COraclePriceMessage msg3;
+    msg3.oracle_id = 1;
+    msg3.price_micro_usd = 50000;
+    msg3.timestamp = GetTime() - 3600;
+    msg3.block_height = 0;
+    msg3.nonce = 0;
+    msg3.Sign(privkey);
+    BOOST_CHECK(msg3.IsValid());
 }
 
 BOOST_AUTO_TEST_SUITE_END()

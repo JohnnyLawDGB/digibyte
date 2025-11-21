@@ -59,6 +59,7 @@
 #include <node/peerman_args.h>
 #include <node/ui_interface.h>
 #include <node/validation_cache_args.h>
+#include <oracle/bundle_manager.h>
 #include <policy/feerate.h>
 #include <policy/fees.h>
 #include <policy/fees_args.h>
@@ -2045,6 +2046,9 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
     if (!node.connman->Start(*node.scheduler, connOptions)) {
         return false;
     }
+
+    // Initialize oracle P2P connection for broadcasting
+    OracleBundleManager::GetInstance().SetConnman(node.connman.get());
 
     // ********************************************************* Step 13: finished
 

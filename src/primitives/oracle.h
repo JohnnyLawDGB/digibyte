@@ -15,6 +15,13 @@
 #include <string>
 #include <vector>
 
+//! Oracle consensus constants (defined before classes for use in default parameters)
+static constexpr int ORACLE_CONSENSUS_REQUIRED = 8;     // 8 of 15 required
+static constexpr int ORACLE_ACTIVE_COUNT = 15;         // 15 active oracles per epoch
+static constexpr int ORACLE_TOTAL_COUNT = 30;          // 30 total hardcoded oracles
+static constexpr int ORACLE_MAX_AGE_SECONDS = 3600;    // 1 hour max age for prices
+static constexpr int ORACLE_OUTLIER_THRESHOLD_PCT = 10; // 10% outlier threshold
+
 /**
  * Oracle Price Message
  * Individual price report from a single oracle node
@@ -107,14 +114,14 @@ public:
     }
 
     //! Validation
-    bool IsValid() const;                   // Validate bundle structure and signatures
+    bool IsValid(int min_required = ORACLE_CONSENSUS_REQUIRED) const;  // Validate bundle structure and signatures
 
     //! Message management
     bool AddMessage(const COraclePriceMessage& message);
 
     //! Consensus validation
-    bool HasConsensus() const;              // Requires 8 of 15 messages
-    uint64_t GetConsensusPrice() const;     // Median price calculation (micro-USD)
+    bool HasConsensus(int min_required = ORACLE_CONSENSUS_REQUIRED) const;   // Configurable consensus threshold (default: 8 of 15)
+    uint64_t GetConsensusPrice(int min_required = ORACLE_CONSENSUS_REQUIRED) const;     // Median price calculation (micro-USD)
     bool ValidateEpoch(int32_t current_epoch) const;
 
     //! Outlier filtering
@@ -185,13 +192,6 @@ std::vector<OracleNodeInfo> SelectOraclesForEpoch(const std::vector<OracleNodeIn
 
 //! Get current epoch based on block height
 int32_t GetCurrentEpoch(int32_t block_height);
-
-//! Oracle consensus constants
-static constexpr int ORACLE_CONSENSUS_REQUIRED = 8;     // 8 of 15 required
-static constexpr int ORACLE_ACTIVE_COUNT = 15;         // 15 active oracles per epoch
-static constexpr int ORACLE_TOTAL_COUNT = 30;          // 30 total hardcoded oracles
-static constexpr int ORACLE_MAX_AGE_SECONDS = 3600;    // 1 hour max age for prices
-static constexpr int ORACLE_OUTLIER_THRESHOLD_PCT = 10; // 10% outlier threshold
 
 //! Forward declarations for P2P
 class GetOracleDataMsg;

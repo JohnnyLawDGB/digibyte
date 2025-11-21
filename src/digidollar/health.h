@@ -61,7 +61,7 @@ struct SystemMetrics {
 
     // Oracle system status
     int activeOracles;          //!< Number of active oracles
-    CAmount lastOraclePrice;    //!< Last reported DGB price (cents)
+    CAmount lastOraclePrice;    //!< Last reported DGB price (micro-USD: 1,000,000 = $1.00)
     int64_t lastOracleUpdate;   //!< Block height of last oracle update
 
     // Historical tracking
@@ -220,7 +220,7 @@ namespace HealthUtils {
      * Calculate health ratio for given amounts
      * @param ddAmount DigiDollar amount (cents)
      * @param dgbAmount DGB collateral amount
-     * @param dgbPrice Current DGB price (cents)
+     * @param dgbPrice Current DGB price (micro-USD: 1,000,000 = $1.00)
      * @return Health ratio percentage
      */
     int CalculateHealthRatio(CAmount ddAmount, CAmount dgbAmount, CAmount dgbPrice);

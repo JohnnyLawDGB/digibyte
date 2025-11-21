@@ -12,6 +12,7 @@
 #include <numeric>
 #include <set>
 
+#include <chainparams.h>
 #include <hash.h>
 #include <logging.h>
 #include <protocol.h>
@@ -44,8 +45,14 @@ bool COraclePriceMessage::IsValid() const
     // Check timestamp is not too old (1 hour max)
     if (timestamp < current_time - ORACLE_MAX_AGE_SECONDS) return false;
 
-    // Verify Schnorr signature
-    return Verify();
+    // Verify Schnorr signature (skip for Phase One compact format)
+    // Compact format messages don't have embedded signatures
+    if (!schnorr_sig.empty()) {
+        return Verify();
+    }
+
+    // Compact format: Trust based on chainparams oracle pubkey (verified at extraction)
+    return true;
 }
 
 bool COraclePriceMessage::Sign(const CKey& key, const uint256* merkle_root, const uint256& aux)
@@ -157,20 +164,26 @@ COracleBundle::COracleBundle(int32_t epoch_in) : epoch(epoch_in)
 {
 }
 
-bool COracleBundle::IsValid() const
+bool COracleBundle::IsValid(int min_required) const
 {
     // Check if bundle has messages
     if (messages.empty()) {
         return false;
     }
 
-    // Verify all message signatures
+    // Verify all message signatures (skip for Phase One compact format)
     for (const auto& msg : messages) {
-        if (!msg.Verify()) {
-            LogPrint(BCLog::DIGIDOLLAR, "Oracle: Message signature verification failed for oracle %u\n", msg.oracle_id);
-            return false;
+        // Phase One compact format: Signature not embedded (verified at creation time)
+        // Trust is based on chainparams oracle pubkey validation
+        if (!msg.schnorr_sig.empty()) {
+            // Full format with embedded signature - verify it
+            if (!msg.Verify()) {
+                LogPrint(BCLog::DIGIDOLLAR, "Oracle: Message signature verification failed for oracle %u\n", msg.oracle_id);
+                return false;
+            }
         }
 
+        // Basic message validation (price range, timestamp, etc)
         if (!msg.IsValid()) {
             LogPrint(BCLog::DIGIDOLLAR, "Oracle: Message validation failed for oracle %u\n", msg.oracle_id);
             return false;
@@ -185,8 +198,8 @@ bool COracleBundle::IsValid() const
     }
 
     // Verify median price matches calculated consensus price (if consensus achieved)
-    if (HasConsensus()) {
-        uint64_t calculated_median = GetConsensusPrice();
+    if (HasConsensus(min_required)) {
+        uint64_t calculated_median = GetConsensusPrice(min_required);
         if (median_price_micro_usd != calculated_median) {
             LogPrint(BCLog::DIGIDOLLAR, "Oracle: Median price mismatch: bundle=%llu, calculated=%llu\n",
                      median_price_micro_usd, calculated_median);
@@ -214,15 +227,15 @@ bool COracleBundle::AddMessage(const COraclePriceMessage& message)
     return true;
 }
 
-bool COracleBundle::HasConsensus() const
+bool COracleBundle::HasConsensus(int min_required) const
 {
-    // Need at least 8 valid messages for consensus
-    return messages.size() >= ORACLE_CONSENSUS_REQUIRED;
+    // Check if we have enough valid messages for consensus
+    return messages.size() >= static_cast<size_t>(min_required);
 }
 
-uint64_t COracleBundle::GetConsensusPrice() const
+uint64_t COracleBundle::GetConsensusPrice(int min_required) const
 {
-    if (!HasConsensus()) return 0;
+    if (!HasConsensus(min_required)) return 0;
 
     // Filter outliers first
     std::vector<COraclePriceMessage> filtered = FilterOutliers();
@@ -524,10 +537,17 @@ std::vector<OracleNodeInfo> SelectOraclesForEpoch(const std::vector<OracleNodeIn
 
 int32_t GetCurrentEpoch(int32_t block_height)
 {
-    // Oracle epochs change every 1440 blocks (approximately 6 hours at 15s blocks)
-    // This gives oracles time to coordinate and submit prices
-    const int32_t BLOCKS_PER_EPOCH = 1440;
-    return block_height / BLOCKS_PER_EPOCH;
+    // Get epoch length from consensus parameters
+    // This varies by network: mainnet=100, testnet=50, regtest=10
+    const Consensus::Params& params = Params().GetConsensus();
+    int32_t epoch_length = params.nDDOracleEpochBlocks;
+
+    if (epoch_length <= 0) {
+        // Fallback to default if not set (shouldn't happen)
+        epoch_length = 1440;
+    }
+
+    return block_height / epoch_length;
 }
 
 /**

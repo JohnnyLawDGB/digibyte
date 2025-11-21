@@ -62,13 +62,12 @@ static COraclePriceMessage CreateValidOracleMessage(const CKey& privkey, uint32_
     msg.oracle_id = oracle_id;
     msg.price_micro_usd = 5000000; // 0.05 DGB per USD (typical price)
     msg.timestamp = timestamp;
+    msg.block_height = 0;
+    msg.nonce = 0;
 
-    // Sign message with ECDSA
-    uint256 hash = msg.GetSignatureHash();
-    std::vector<unsigned char> signature;
-    bool signed_ok = privkey.Sign(hash, signature);
+    // Sign message with Schnorr signature using msg.Sign()
+    bool signed_ok = msg.Sign(privkey);
     assert(signed_ok);
-    msg.schnorr_sig = signature;
 
     return msg;
 }
@@ -217,10 +216,13 @@ BOOST_AUTO_TEST_CASE(p2p_oracle_message_signature_verification)
     // Create message signed with privkey1
     COraclePriceMessage msg = CreateValidOracleMessage(privkey1);
 
-    // Should validate with correct pubkey
+    // Should validate with correct signature
     BOOST_CHECK(msg.Verify());
 
-    // Should NOT validate with wrong pubkey
+    // Modify the pubkey to simulate wrong pubkey attack
+    msg.oracle_pubkey = XOnlyPubKey(pubkey2);
+
+    // Should NOT validate with wrong pubkey (signature won't match)
     BOOST_CHECK(!msg.Verify());
 
     // Relay should fail if pubkey doesn't match
@@ -284,9 +286,9 @@ BOOST_AUTO_TEST_CASE(p2p_oracle_message_price_sanity_check)
         COraclePriceMessage msg = CreateValidOracleMessage(privkey);
         msg.price_micro_usd = price;
 
-        // Re-sign after modifying price
-        uint256 hash = msg.GetSignatureHash();
-        privkey.Sign(hash, msg.schnorr_sig);
+        // Re-sign after modifying price using Schnorr
+        bool sign_ok = msg.Sign(privkey);
+        BOOST_REQUIRE(sign_ok);
 
         BOOST_CHECK(msg.Verify());
         // BOOST_CHECK(ValidateOraclePriceMessage(msg, pubkey));
@@ -303,9 +305,9 @@ BOOST_AUTO_TEST_CASE(p2p_oracle_message_price_sanity_check)
         COraclePriceMessage msg = CreateValidOracleMessage(privkey);
         msg.price_micro_usd = price;
 
-        // Re-sign after modifying price
-        uint256 hash = msg.GetSignatureHash();
-        privkey.Sign(hash, msg.schnorr_sig);
+        // Re-sign after modifying price using Schnorr
+        bool sign_ok = msg.Sign(privkey);
+        BOOST_REQUIRE(sign_ok);
 
         // BOOST_CHECK(!ValidateOraclePriceMessage(msg, pubkey));
     }
@@ -337,9 +339,9 @@ BOOST_AUTO_TEST_CASE(p2p_oracle_message_duplicate_detection)
     COraclePriceMessage msg2 = CreateValidOracleMessage(privkey);
     msg2.timestamp = GetTime() + 1; // Different timestamp
 
-    // Re-sign
-    uint256 hash2 = msg2.GetSignatureHash();
-    privkey.Sign(hash2, msg2.schnorr_sig);
+    // Re-sign using Schnorr
+    bool sign_ok = msg2.Sign(privkey);
+    BOOST_REQUIRE(sign_ok);
 
     uint256 msg_hash2 = msg2.GetSignatureHash();
     BOOST_CHECK(msg_hash != msg_hash2); // Different hashes

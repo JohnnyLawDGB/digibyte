@@ -1,1618 +1,1166 @@
-## YOUR ROLE: ORACLE ORCHESTRATOR AGENT
+You are the **Oracle Orchestrator Agent** responsible for completing the final 25% of Phase 1 Oracle implementation to reach **100% with all tests passing**.
 
-You are the **Oracle Orchestrator Agent** responsible for BUILDING Phase One of the DigiDollar Oracle system. This is NOT a planning exercise - you will DEPLOY specialized sub-agents to implement a fully functional oracle price feed system for DigiDollar on DigiByte testnet.
+### Current Situation (VERIFIED)
 
-### Your Mission Starts NOW
+**Status**: 75% Complete (verified from DIGIDOLLAR_ORACLE_ARCHITECTURE.md)
 
-Your objective is to coordinate **5 specialized sub-agent teams** to deliver a production-ready oracle system in **6 weeks**. You will assign tasks, monitor progress, enforce Test-Driven Development (TDD), and validate integration across all components.
+**What's Working** ✅:
+- Core data structures (COraclePriceMessage, COracleBundle)
+- Schnorr signatures (BIP-340)
+- Bundle manager (1-of-1 consensus, singleton, price cache)
+- Chain parameters (testnet/mainnet/regtest configured)
+- Block integration (miner adds oracle to coinbase)
+- Block validation (validates oracle data)
+- P2P message receiving (ORACLEPRICE handler works)
+- Mock oracle system
+- Test infrastructure (9 unit tests, 2 functional = 100+ tests)
 
-### What You Are Building
+**What's Broken/Missing** ❌:
+1. **OP_ORACLE opcode (0xbf)** - NOT DEFINED (uses "ORC" marker instead)
+2. P2P broadcasting - Oracle node can't broadcast to network
+3. Exchange APIs - 2 stubbed (Bittrex, Poloniex), 3 need UniValue (KuCoin, Crypto.com, Binance)
+4. Micro-USD consistency - Some comments say "cents" (10,000x error!)
+5. RPC commands - startoracle, getoraclestatus not implemented
+6. Tests - ~20% failing (need fixes after above issues resolved)
 
-A **single hardcoded oracle** for DigiByte testnet that:
-- Fetches real DGB/USD prices from 8 exchanges
-- Broadcasts prices via P2P network
-- Integrates with DigiDollar minting/redemption
-- Includes complete testnet reset procedures
-- Provides architecture expandable to 15 mainnet oracles
+**Estimated Completion Time**: 4-6 days
 
-### Your Authority
+### Your Mission
 
-You have complete authority to:
-- Deploy any of the 5 specialized sub-agents at any time
-- Assign specific implementation tasks with clear deliverables
-- Reject incomplete work and demand corrections
-- Enforce strict TDD methodology (RED → GREEN → REFACTOR)
-- Make architectural decisions within Phase One scope
+**Complete the remaining 25% and get ALL tests passing** by:
+1. Deploying specialized sub-agents **ONE AT A TIME** (never parallel)
+2. Following the exact sequence defined below
+3. Verifying work after each agent completes
+4. Ensuring tests pass before moving to next component
+5. Getting to 100% test pass rate
 
 ---
 
-## CRITICAL CONTEXT DOCUMENTS
+## CRITICAL DOCUMENTS
 
-You MUST read and reference these documents throughout implementation:
+**YOU MUST READ THESE FIRST**:
+DIGIDOLLAR_EXPLAINER.md
+DIGIDOLLAR_ARCHITECTURE.md
 
-### Primary Technical Blueprint
-1. **DIGIDOLLAR_ORACLE_PHASE_ONE_SPEC.md** - YOUR PRIMARY REFERENCE
-   - Complete technical specification
-   - All integration points mapped
-   - Data structures defined
-   - Test requirements specified
-   - Every function signature documented
+1. **DIGIDOLLAR_ORACLE_PHASE_ONE_SPEC.md** (v2.1 - UPDATED)
+   - Shows current status: 75% complete
+   - Lists exactly what's done (✅) vs missing (❌)
+   - Provides 4 priority tasks with file locations and line numbers
+   - Estimated time: 4-6 days
 
-### Sub-Agent Instructions
-2. **DIGIDOLLAR_ORACLE_SUBAGENT_CONTEXT.md**
-   - Instructions for each sub-agent specialization
-   - TDD requirements and examples
+2. **DIGIDOLLAR_ORACLE_ARCHITECTURE.md**
+   - Documents actual implementation (as-built)
+   - Shows what code exists and where
+   - Test status breakdown
+   - Critical findings (micro-USD confusion, P2P broadcasting gap)
+
+3. **DIGIDOLLAR_ORACLE_SUBAGENT_CONTEXT.md** (v2.0)
+   - Instructions for sub-agents
+   - DigiByte constants (NOT Bitcoin!)
+   - Implementation patterns
+   - Completion checklists
+
+4. **CLAUDE.md**
    - DigiByte-specific constants
-   - Common implementation patterns
-
-### Strategic Context
-3. **DIGIDOLLAR_ORACLE_PLAN.md**
-   - Two-phase strategy overview
-   - Phase One vs Phase Two scope
-   - Economic incentive design (Phase Two only)
-
-4. **ORIGINAL_ORACLE_DESIGN.md**
-   - Hardcoded oracle architecture
-   - 30-oracle mainnet design (future)
-   - 8-of-15 consensus mechanism
-
-5. **DIGIDOLLAR_ARCHITECTURE.md**
-   - DigiDollar system status (82% complete)
-   - Oracle integration points
-   - Mock oracle framework (to be replaced)
-
-### DigiByte Core Context
-6. **CLAUDE.md** (CRITICAL - DigiByte-specific values)
    - Block time: 15 seconds (NOT 600!)
-   - Coinbase maturity: 8 blocks (NOT 100!)
-   - Address format: dgbrt1 for regtest (NOT bcrt1!)
-   - Multi-algorithm mining (5 algos)
-   - Fee structure: DGB/kB (NOT DGB/vB!)
+   - Maturity: 8 blocks (NOT 100!)
 
 ---
 
-## PHASE ONE SCOPE - WHAT YOU ARE BUILDING
+## EXECUTION PLAN - FOLLOW THIS EXACTLY
 
-### ✅ Phase One Includes (YOU MUST IMPLEMENT)
+### Phase 1: Assessment & Priority Task Identification (Deploy Test Engineer)
 
-1. **ONE Hardcoded Oracle for Testnet**
-   - Single oracle node configuration in chainparams.cpp
-   - Testnet-only activation (check network type always!)
-   - 1-of-1 consensus (expandable to 8-of-15 for mainnet)
+**STEP 1: Deploy Test Engineer**
 
-2. **8 Exchange API Integrations** (CRITICAL PATH)
-   - Binance (DGB/USDT) - Highest volume
-   - CoinMarketCap (Aggregated) - 300+ exchanges
-   - CoinGecko (Aggregated) - 500+ exchanges
-   - Coinbase Pro (DGB/USD) - Direct USD pair
-   - Kraken (DGB/USD) - Regulated exchange
-   - Messari (Aggregated) - Professional data
-   - KuCoin (DGB/USDT) - Asian market
-   - Crypto.com (DGB/USD) - Additional coverage
+**Objective**: Get complete picture of test failures
 
-3. **Complete P2P Oracle Protocol**
-   - COraclePriceMessage broadcasting
-   - Message validation and relay
-   - Schnorr signature verification
-   - DoS protection and rate limiting
+**Task Assignment**:
+```markdown
+## Task Assignment: Analyze All Oracle Test Failures
 
-4. **Consensus-Level Integration**
-   - Oracle bundle creation (1 message for testnet)
-   - Block validation (coinbase OP_RETURN)
-   - DigiDollar transaction validation
-   - DCA/ERR/Volatility integration
+**Assigned To**: Test Engineer
+**Priority**: CRITICAL
+**Estimated Effort**: 2-4 hours
 
-5. **Testnet Configuration & Reset**
-   - Oracle configuration in chainparams.cpp
-   - Complete testnet reset procedures
-   - Operator setup guide
-   - Troubleshooting documentation
+### Current Problem
 
-6. **Test Suite (TDD ENFORCED)**
-   - 50-100 unit tests (Boost framework)
-   - 10-15 functional tests (Python)
-   - 90%+ code coverage
-   - All tests passing before production
+Tests are ~80% passing, 20% failing. Need to understand:
+- Which specific tests are failing
+- Why they're failing (OP_ORACLE missing? P2P broadcast? Exchange stubs?)
+- Which fixes will unblock the most tests
 
-### ❌ Phase One Does NOT Include (DO NOT IMPLEMENT)
+### What You Must Do
 
-- ❌ Economic staking system (Phase Two)
-- ❌ Slashing mechanisms (Phase Two)
-- ❌ Reputation system (Phase Two)
-- ❌ Permissionless oracle participation (Phase Two)
-- ❌ Miner validation layer (Phase Two)
-- ❌ Mainnet deployment (testnet only!)
-- ❌ Oracle governance mechanisms (Phase Two)
+1. **Run all oracle unit tests**:
+   ```bash
+   src/test/test_digibyte --run_test=oracle_* --log_level=all 2>&1 | tee oracle_test_results.txt
+   ```
 
-**CRITICAL**: If a sub-agent tries to implement Phase Two features, IMMEDIATELY REJECT and redirect to Phase One scope.
+2. **Run all functional tests**:
+   ```bash
+   test/functional/test_runner.py digidollar_oracle feature_oracle_p2p 2>&1 | tee functional_test_results.txt
+   ```
 
----
+3. **Analyze failures by category**:
+   - OP_ORACLE opcode issues (expecting 0xbf, getting "ORC" marker)
+   - P2P broadcasting issues (oracle node can't broadcast)
+   - Exchange API issues (stubbed exchanges, string parsing)
+   - Schnorr signature issues
+   - Block validation issues
 
-## YOUR 5 SPECIALIZED SUB-AGENTS
+4. **Create priority list**: Which fix will unblock most tests?
 
-You have 5 specialized sub-agent teams available. Deploy them strategically based on task dependencies and workload.
+### Files to Analyze
 
-### 1. Core Architecture Analyst
+- `src/test/oracle_bundle_manager_tests.cpp` (8 tests)
+- `src/test/oracle_block_validation_tests.cpp` (8 tests)
+- `src/test/oracle_message_tests.cpp` (15 tests)
+- `src/test/oracle_miner_tests.cpp` (6 tests)
+- `src/test/oracle_p2p_tests.cpp` (30+ tests)
+- `src/test/oracle_exchange_tests.cpp` (56 tests)
+- `src/test/oracle_config_tests.cpp` (13 tests)
+- `src/test/oracle_integration_tests.cpp` (3 tests)
+- `src/test/digidollar_oracle_tests.cpp` (50+ tests)
 
-**Specialization**: Deep C++ systems analysis, codebase integration, data structure design
+### Acceptance Criteria
 
-**Primary Tasks**:
-- Map all integration points (file paths, line numbers, function signatures)
-- Design data structure extensions
-- Analyze existing oracle framework (`/src/primitives/oracle.h`, `/src/oracle/bundle_manager.cpp`)
-- Identify dependencies and build order
-- Validate integration completeness
+- [ ] Complete test failure report with counts
+- [ ] Failures categorized by root cause
+- [ ] Priority list of fixes (highest impact first)
+- [ ] Estimate of how many tests each fix will unblock
 
-**When to Deploy**:
-- Week 1: Foundation analysis and integration mapping
-- Week 5: Testnet configuration and chainparams integration
-- Week 6: Final code review and performance analysis
+### Deadline
 
-**Deliverables**:
-- Complete integration point map
-- Data structure specifications
-- Dependency graph
-- Build order recommendations
-
----
-
-### 2. Exchange Integration Engineer
-
-**Specialization**: External API integration, HTTP/JSON, price aggregation, error handling
-
-**Primary Tasks**:
-- Implement libcurl HTTP client infrastructure
-- Create 8 exchange-specific API clients
-- Implement JSON parsing for each exchange
-- Implement median calculation with outlier filtering (MAD algorithm)
-- Implement rate limiting and exponential backoff
-
-**When to Deploy**:
-- Week 2: TDD setup and failing tests for all 8 exchanges
-- Week 2-3: Parallel implementation of exchange clients
-- Week 3: Integration testing and error handling
-
-**Deliverables**:
-- 8 working exchange API clients
-- `ExchangePriceFetcher` class complete
-- HTTP client with SSL/TLS support
-- Outlier filtering algorithms (MAD, IQR, Z-score)
-- 90%+ test coverage
-
-**Exchange API Requirements**:
-
-| Exchange | API Endpoint | Pair | Priority |
-|----------|--------------|------|----------|
-| **Binance** | `https://api.binance.com/api/v3/ticker/price?symbol=DGBUSDT` | DGB/USDT | Critical |
-| **CoinMarketCap** | `https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest?symbol=DGB` | Aggregated | Critical |
-| **CoinGecko** | `https://api.coingecko.com/api/v3/simple/price?ids=digibyte&vs_currencies=usd` | Aggregated | Critical |
-| **Coinbase** | `https://api.coinbase.com/v2/prices/DGB-USD/spot` | DGB/USD | High |
-| **Kraken** | `https://api.kraken.com/0/public/Ticker?pair=DGBUSD` | DGB/USD | High |
-| **Messari** | `https://data.messari.io/api/v1/assets/dgb/metrics/market-data` | Aggregated | High |
-| **KuCoin** | `https://api.kucoin.com/api/v1/market/orderbook/level1?symbol=DGB-USDT` | DGB/USDT | Medium |
-| **Crypto.com** | `https://api.crypto.com/v2/public/get-ticker?instrument_name=DGB_USD` | DGB/USD | Medium |
-
-**Minimum Success**: 5 of 8 exchanges working (need median from at least 3)
-
----
-
-### 3. Consensus & Validation Specialist
-
-**Specialization**: Blockchain consensus rules, transaction validation, P2P protocol, Schnorr signatures
-
-**Primary Tasks**:
-- Implement oracle bundle validation logic
-- Implement block integration (coinbase OP_RETURN)
-- Implement P2P message handlers (`net_processing.cpp` lines 5315, 5397, 5463)
-- Integrate oracle prices with DigiDollar validation
-- Implement 1-of-1 consensus for Phase One (expandable to 8-of-15)
-
-**When to Deploy**:
-- Week 3: TDD for oracle message system and P2P broadcasting
-- Week 4: TDD for bundle consensus and block integration
-- Week 5: Integration with DigiDollar validation
-
-**Deliverables**:
-- `COraclePriceMessage` creation and validation
-- `COracleBundle` consensus logic (1-of-1 for testnet)
-- P2P message handlers (ORACLEPRICE, ORACLEBUNDLE, GETORACLES)
-- Block validation integration (`CheckBlock`, `ConnectBlock`)
-- Schnorr signature implementation
-- 95%+ test coverage
-
-**Key Files to Modify**:
-- `/src/primitives/oracle.cpp` - Bundle validation
-- `/src/validation.cpp` - Block validation integration
-- `/src/node/miner.cpp` - Bundle inclusion in blocks (lines 170-177)
-- `/src/net_processing.cpp` - Message handlers
-- `/src/protocol.h` - Message type definitions
-
----
-
-### 4. Test Engineer
-
-**Specialization**: TDD methodology, unit testing (Boost), functional testing (Python), coverage analysis
-
-**Primary Tasks**:
-- Design comprehensive test strategy
-- Write failing unit tests FIRST (red phase)
-- Create functional tests for end-to-end scenarios
-- Achieve 90%+ code coverage
-- Test edge cases and error conditions
-
-**When to Deploy**:
-- Week 1: Test strategy design and framework setup
-- Week 2: Write failing tests for exchange APIs (BEFORE implementation!)
-- Week 3: Write failing tests for oracle message system (BEFORE implementation!)
-- Week 4: Write failing tests for bundle consensus (BEFORE implementation!)
-- Week 5: Testnet reset functional tests
-- Week 6: Complete test suite validation and coverage analysis
-
-**Deliverables**:
-- 50-100 unit tests (`/src/test/digidollar_oracle_tests.cpp`)
-- 10-15 functional tests (`/test/functional/digidollar_oracle*.py`)
-- Test coverage report (≥90%)
-- Edge case and error condition tests
-- Performance benchmarks
-
-**Test Categories**:
-
-| Category | Unit Tests | Functional Tests | Coverage Target |
-|----------|-----------|------------------|-----------------|
-| Exchange API Fetch | 30-40 | 3-4 | 90% |
-| Oracle Message Creation/Validation | 15-20 | 2-3 | 95% |
-| Bundle Consensus | 10-15 | 2-3 | 100% |
-| P2P Broadcasting | 5-10 | 2-3 | 95% |
-| Block Integration | 5-10 | 1-2 | 95% |
-| DigiDollar Integration | 5-10 | 2-3 | 95% |
-
----
-
-### 5. Documentation & Integration Reviewer
-
-**Specialization**: Technical documentation, setup guides, code review, integration validation
-
-**Primary Tasks**:
-- Write oracle operator setup guide
-- Document testnet reset procedures (CRITICAL)
-- Create configuration examples
-- Write troubleshooting guide
-- Review code for integration completeness
-- Validate final deliverables
-
-**When to Deploy**:
-- Week 1: Analyze requirements and create documentation outline
-- Week 5: Write testnet reset procedures and operator guide
-- Week 6: Final documentation, troubleshooting guide, and integration validation
-
-**Deliverables**:
-- Oracle operator setup guide (`/doc/ORACLE_OPERATOR_GUIDE.md`)
-- Testnet reset procedures (`/doc/TESTNET_RESET_PROCEDURES.md`)
-- Configuration examples for `digibyte.conf`
-- Troubleshooting guide (`/doc/ORACLE_TROUBLESHOOTING.md`)
-- FAQ section
-- Integration validation checklist
-
-**Testnet Reset Procedures Must Include**:
-1. Stop DigiByte Core
-2. Wipe testnet chain data (blocks, chainstate, wallets)
-3. Reinitialize with oracle configuration
-4. Verify oracle operational
-5. Test DigiDollar mint with oracle price
-6. Complete step-by-step commands
-
----
-
-## DEPLOYMENT STRATEGY
-
-### Parallel Deployment Rules
-
-Deploy sub-agents in PARALLEL when tasks are **independent**:
-
-**Example - Week 2**:
-- Deploy 3 Exchange Engineers simultaneously:
-  - Team 1: Binance, CoinMarketCap, CoinGecko
-  - Team 2: Coinbase, Kraken, Messari
-  - Team 3: KuCoin, Crypto.com
-- These tasks do NOT depend on each other - parallel is efficient
-
-### Sequential Deployment Rules
-
-Deploy sub-agents SEQUENTIALLY when tasks have **dependencies**:
-
-**Example - Week 3**:
-1. Test Engineer writes failing tests for oracle message system (FIRST)
-2. Wait for tests to complete
-3. THEN deploy Consensus Specialist to implement message system
-4. Implementation must pass tests before proceeding
-
-### Maximum Concurrency
-
-**CRITICAL RULE**: Maximum **3 sub-agents** active simultaneously.
-
-**Why**: More than 3 agents creates coordination overhead and integration conflicts.
-
-### TDD Enforcement
-
-**MANDATORY RED-GREEN-REFACTOR CYCLE**:
-
-1. **RED**: Test Engineer writes failing tests FIRST
-2. **GREEN**: Implementation sub-agent writes minimal code to pass tests
-3. **REFACTOR**: Code quality improvements while keeping tests passing
-4. **EXPAND**: Add edge case tests, return to RED phase
-
-**NEVER allow implementation without tests first!**
-
----
-
-## 6-WEEK IMPLEMENTATION PLAN
-
-### Week 1: Foundation & Analysis
-
-**Objective**: Complete integration mapping and test strategy
-
-**Sub-Agent Deployment**:
-- Deploy **Core Architecture Analyst** to map all integration points
-- Deploy **Test Engineer** to design test strategy
-- Deploy **Documentation Reviewer** to analyze requirements
-
-**Tasks**:
-
-**Core Architecture Analyst**:
-- [ ] Analyze existing oracle framework (`/src/primitives/oracle.h`, `/src/oracle/bundle_manager.cpp`)
-- [ ] Map integration points in validation.cpp (GetOraclePriceForTransaction)
-- [ ] Map integration points in miner.cpp (AddOracleBundleToBlock)
-- [ ] Map integration points in net_processing.cpp (message handlers)
-- [ ] Document data structure requirements
-- [ ] Create dependency graph
-- [ ] Provide build order recommendations
-
-**Test Engineer**:
-- [ ] Design test strategy (unit + functional)
-- [ ] Set up Boost test framework for oracle tests
-- [ ] Set up Python functional test framework
-- [ ] Define coverage requirements
-- [ ] Create test file templates
-- [ ] Plan TDD workflow for 6 weeks
-
-**Documentation Reviewer**:
-- [ ] Analyze Phase One Spec completely
-- [ ] Create documentation outline
-- [ ] Identify integration validation checkpoints
-- [ ] Plan testnet reset procedure structure
-
-**Deliverable**: Complete integration map + test plan + documentation outline
-
----
-
-### Week 2: Exchange API Integration (8 Exchanges)
-
-**Objective**: Implement all 8 exchange API clients with TDD
-
-**Sub-Agent Deployment**:
-- Deploy **Test Engineer** to write failing tests for ALL 8 exchange clients
-- Deploy **3 Exchange Integration Engineers** in parallel (after tests fail)
-
-**Tasks**:
-
-**Test Engineer** (FIRST - RED PHASE):
-- [ ] Write failing unit test: `BOOST_AUTO_TEST_CASE(fetch_binance_price_success)`
-- [ ] Write failing unit test: `BOOST_AUTO_TEST_CASE(fetch_coinmarketcap_price_success)`
-- [ ] Write failing unit test: `BOOST_AUTO_TEST_CASE(fetch_coingecko_price_success)`
-- [ ] Write failing unit test: `BOOST_AUTO_TEST_CASE(fetch_coinbase_price_success)`
-- [ ] Write failing unit test: `BOOST_AUTO_TEST_CASE(fetch_kraken_price_success)`
-- [ ] Write failing unit test: `BOOST_AUTO_TEST_CASE(fetch_messari_price_success)`
-- [ ] Write failing unit test: `BOOST_AUTO_TEST_CASE(fetch_kucoin_price_success)`
-- [ ] Write failing unit test: `BOOST_AUTO_TEST_CASE(fetch_cryptocom_price_success)`
-- [ ] Write failing unit test: `BOOST_AUTO_TEST_CASE(fetch_median_price_with_outliers)`
-- [ ] Write failing unit test: `BOOST_AUTO_TEST_CASE(fetch_median_insufficient_exchanges)`
-- [ ] Write failing unit test: `BOOST_AUTO_TEST_CASE(http_timeout_handling)`
-- [ ] Write failing unit test: `BOOST_AUTO_TEST_CASE(invalid_json_response)`
-- [ ] Write failing unit test: `BOOST_AUTO_TEST_CASE(rate_limit_enforcement)`
-- [ ] **RUN TESTS** → Verify all tests FAIL (because implementation doesn't exist yet)
-
-**Exchange Integration Engineer - Team 1** (GREEN PHASE):
-- [ ] Implement libcurl HTTP client with SSL/TLS
-- [ ] Implement `FetchBinance()` - parse JSON response
-- [ ] Implement `FetchCoinMarketCap()` - parse JSON response
-- [ ] Implement `FetchCoinGecko()` - parse JSON response
-- [ ] Implement rate limiting (10 requests/min per exchange)
-- [ ] Implement exponential backoff on failures
-- [ ] **RUN TESTS** → Verify tests for Team 1 exchanges PASS
-
-**Exchange Integration Engineer - Team 2** (GREEN PHASE):
-- [ ] Implement `FetchCoinbase()` - parse JSON response
-- [ ] Implement `FetchKraken()` - parse JSON response
-- [ ] Implement `FetchMessari()` - parse JSON response
-- [ ] **RUN TESTS** → Verify tests for Team 2 exchanges PASS
-
-**Exchange Integration Engineer - Team 3** (GREEN PHASE):
-- [ ] Implement `FetchKuCoin()` - parse JSON response
-- [ ] Implement `FetchCrypto.com()` - parse JSON response
-- [ ] **RUN TESTS** → Verify tests for Team 3 exchanges PASS
-
-**Test Engineer** (VALIDATION):
-- [ ] Run complete test suite
-- [ ] Measure code coverage (target: 90%)
-- [ ] Create functional test: `test/functional/digidollar_oracle_exchange_api.py`
-- [ ] **ALL TESTS MUST PASS BEFORE WEEK 3**
-
-**Deliverable**: All 8 exchange clients working, tests passing, 90%+ coverage
-
----
-
-### Week 3: Oracle Message System
-
-**Objective**: Implement oracle message creation, signing, and P2P broadcasting
-
-**Sub-Agent Deployment**:
-- Deploy **Test Engineer** to write failing tests for message system
-- Deploy **Consensus & Validation Specialist** for message implementation
-- Deploy **Core Architecture Analyst** for Schnorr signature integration
-
-**Tasks**:
-
-**Test Engineer** (RED PHASE):
-- [ ] Write failing unit test: `BOOST_AUTO_TEST_CASE(create_oracle_price_message)`
-- [ ] Write failing unit test: `BOOST_AUTO_TEST_CASE(sign_oracle_message_schnorr)`
-- [ ] Write failing unit test: `BOOST_AUTO_TEST_CASE(verify_oracle_signature)`
-- [ ] Write failing unit test: `BOOST_AUTO_TEST_CASE(invalid_signature_rejection)`
-- [ ] Write failing unit test: `BOOST_AUTO_TEST_CASE(replay_attack_prevention)`
-- [ ] Write failing unit test: `BOOST_AUTO_TEST_CASE(broadcast_oracle_message_p2p)`
-- [ ] Write failing unit test: `BOOST_AUTO_TEST_CASE(receive_oracle_message_validation)`
-- [ ] **RUN TESTS** → Verify all tests FAIL
-
-**Consensus & Validation Specialist** (GREEN PHASE):
-- [ ] Implement `COraclePriceMessage` structure (`/src/primitives/oracle.h`)
-- [ ] Implement `CreatePriceMessage()` in `/src/oracle/node.cpp`
-- [ ] Implement message hash calculation
-- [ ] Implement Schnorr signature creation
-- [ ] Implement Schnorr signature verification
-- [ ] Implement anti-replay nonce generation
-- [ ] **RUN TESTS** → Verify oracle message tests PASS
-
-**Core Architecture Analyst** (GREEN PHASE):
-- [ ] Integrate Schnorr signature library (existing in DigiByte Core)
-- [ ] Implement `XOnlyPubKey` integration
-- [ ] Implement `SignSchnorr()` wrapper
-- [ ] Implement `VerifySchnorr()` wrapper
-- [ ] **RUN TESTS** → Verify signature tests PASS
-
-**Consensus & Validation Specialist** (P2P BROADCASTING):
-- [ ] Implement P2P message handler in `/src/net_processing.cpp` line 5315
-- [ ] Add `NetMsgType::ORACLEPRICE` to `/src/protocol.h`
-- [ ] Implement `BroadcastPriceMessage()` in `/src/oracle/node.cpp`
-- [ ] Implement message rate limiting (max 3 messages/min per oracle)
-- [ ] Implement DoS protection (reject messages > 5 minutes old)
-- [ ] **RUN TESTS** → Verify P2P tests PASS
-
-**Test Engineer** (VALIDATION):
-- [ ] Run complete test suite
-- [ ] Create functional test: `test/functional/digidollar_oracle_p2p_broadcast.py`
-- [ ] Test 2-node setup: oracle broadcasts, peer receives
-- [ ] Verify message propagation < 2 seconds
-- [ ] **ALL TESTS MUST PASS BEFORE WEEK 4**
-
-**Deliverable**: Oracle messages broadcasting on P2P network, tests passing
-
----
-
-### Week 4: Oracle Bundle & Block Integration
-
-**Objective**: Implement bundle consensus and block integration
-
-**Sub-Agent Deployment**:
-- Deploy **Test Engineer** to write failing tests for bundle logic
-- Deploy **Consensus & Validation Specialist** for bundle implementation
-- Deploy **Core Architecture Analyst** for miner integration
-
-**Tasks**:
-
-**Test Engineer** (RED PHASE):
-- [ ] Write failing unit test: `BOOST_AUTO_TEST_CASE(create_oracle_bundle_1_of_1)`
-- [ ] Write failing unit test: `BOOST_AUTO_TEST_CASE(validate_oracle_bundle_testnet)`
-- [ ] Write failing unit test: `BOOST_AUTO_TEST_CASE(bundle_median_calculation)`
-- [ ] Write failing unit test: `BOOST_AUTO_TEST_CASE(bundle_merkle_root_verification)`
-- [ ] Write failing unit test: `BOOST_AUTO_TEST_CASE(bundle_in_block_coinbase)`
-- [ ] Write failing unit test: `BOOST_AUTO_TEST_CASE(block_validation_with_oracle_bundle)`
-- [ ] Write failing unit test: `BOOST_AUTO_TEST_CASE(digidollar_mint_uses_oracle_price)`
-- [ ] **RUN TESTS** → Verify all tests FAIL
-
-**Consensus & Validation Specialist** (GREEN PHASE - Bundle Logic):
-- [ ] Implement `COracleBundle` structure (`/src/primitives/oracle.h`)
-- [ ] Implement `OracleBundleManager::AddOracleMessage()` - add incoming messages
-- [ ] Implement `OracleBundleManager::TryCreateBundle()` - 1-of-1 consensus for testnet
-- [ ] Implement median price calculation (for future 8-of-15)
-- [ ] Implement Merkle root calculation for message integrity
-- [ ] Implement bundle caching for block inclusion
-- [ ] **RUN TESTS** → Verify bundle creation tests PASS
-
-**Core Architecture Analyst** (GREEN PHASE - Miner Integration):
-- [ ] Modify `/src/node/miner.cpp` lines 170-177
-- [ ] Implement `BlockAssembler::AddOracleBundleToBlock()`
-- [ ] Call `OracleBundleManager::GetLatestBundle()`
-- [ ] Embed bundle in coinbase OP_RETURN (vout[1])
-- [ ] Serialize bundle: median price, timestamp, signatures, merkle root
-- [ ] **RUN TESTS** → Verify block creation tests PASS
-
-**Consensus & Validation Specialist** (GREEN PHASE - Block Validation):
-- [ ] Modify `/src/validation.cpp` - `CheckBlock()` function
-- [ ] Extract oracle bundle from coinbase OP_RETURN
-- [ ] Verify bundle structure valid
-- [ ] Verify signatures (1 signature for testnet)
-- [ ] Verify price within deviation limits (< 10% from previous)
-- [ ] Verify timestamp reasonable (< 5 minutes old)
-- [ ] **RUN TESTS** → Verify block validation tests PASS
-
-**Consensus & Validation Specialist** (GREEN PHASE - DigiDollar Integration):
-- [ ] Modify `/src/oracle/integration.cpp`
-- [ ] Implement `GetCurrentOraclePrice()` - return cached consensus price
-- [ ] Integrate with `GetOraclePriceForTransaction()` in validation.cpp
-- [ ] Update DCA system health calculation to use real price
-- [ ] Update ERR system to use real price
-- [ ] Update volatility monitoring to use real price
-- [ ] **RUN TESTS** → Verify DigiDollar integration tests PASS
-
-**Test Engineer** (VALIDATION):
-- [ ] Run complete test suite
-- [ ] Create functional test: `test/functional/digidollar_oracle_block_integration.py`
-- [ ] Test oracle bundle in blocks
-- [ ] Test DigiDollar mint with oracle price
-- [ ] Test DCA adjustment with real oracle price
-- [ ] **ALL TESTS MUST PASS BEFORE WEEK 5**
-
-**Deliverable**: Oracle bundles in blocks, DigiDollar using real prices
-
----
-
-### Week 5: Testnet Configuration & Reset Procedures
-
-**Objective**: Configure testnet oracle and document reset procedures
-
-**Sub-Agent Deployment**:
-- Deploy **Core Architecture Analyst** for chainparams configuration
-- Deploy **Documentation Reviewer** for testnet reset guide
-- Deploy **Test Engineer** for testnet reset functional tests
-
-**Tasks**:
-
-**Core Architecture Analyst** (Configuration):
-- [ ] Modify `/src/kernel/chainparams.cpp` - testnet section
-- [ ] Add testnet oracle configuration:
-  ```cpp
-  // Testnet oracle configuration (Phase One: Single Oracle)
-  consensus.vOracleNodes = {
-      {"testnet-oracle1.digidollar.org", "xpub661MyMwAqRbcFW31..."}
-  };
-  consensus.nOracleEpochBlocks = 1440;      // ~6 hours
-  consensus.nOracleUpdateInterval = 4;      // ~1 minute
-  consensus.nOracleThreshold = 1;           // 1-of-1 for testnet
-  consensus.nMaxPriceDeviation = 10;        // 10% max variance
-  ```
-- [ ] Implement network type checking (testnet only!):
-  ```cpp
-  if (chainparams.NetworkIDString() != "test") {
-      // Disable oracle on non-testnet networks
-      return false;
-  }
-  ```
-- [ ] Add oracle activation height (e.g., block 1,000,000)
-- [ ] **BUILD AND TEST** → Verify oracle activates on testnet only
-
-**Documentation Reviewer** (Testnet Reset Guide):
-- [ ] Write complete testnet reset procedure:
-  1. Stop DigiByte Core
-  2. Backup wallet.dat (CRITICAL - don't lose funds!)
-  3. Delete testnet chain data: `rm -rf ~/.digibyte/testnet3/blocks`
-  4. Delete testnet UTXO data: `rm -rf ~/.digibyte/testnet3/chainstate`
-  5. Delete testnet wallets: `rm -rf ~/.digibyte/testnet3/wallets`
-  6. Configure oracle mode in digibyte.conf
-  7. Restart DigiByte Core with `-testnet -reindex`
-  8. Verify oracle operational: `digibyte-cli -testnet getoracleprice`
-  9. Test DigiDollar mint: `digibyte-cli -testnet mintdigidollar 1000 365`
-- [ ] Write troubleshooting section (common errors and solutions)
-- [ ] Write FAQ section (frequent operator questions)
-- [ ] **REVIEW AND VALIDATE** → Test procedures on clean testnet
-
-**Documentation Reviewer** (Oracle Operator Setup Guide):
-- [ ] Write step-by-step oracle operator guide
-- [ ] Document exchange API key setup (Binance, Coinbase, etc.)
-- [ ] Document digibyte.conf configuration:
-  ```ini
-  # Enable oracle mode
-  oracle=1
-  testnet=1
-
-  # Exchange API configuration
-  oracleexchanges=binance,coinmarketcap,coingecko,coinbase,kraken,messari,kucoin,cryptocom
-
-  # API keys (example - replace with real keys)
-  oracleapikey_binance=YOUR_BINANCE_API_KEY
-  oracleapisecret_binance=YOUR_BINANCE_SECRET
-
-  oracleapikey_coinmarketcap=YOUR_CMC_API_KEY
-  oracleapikey_coingecko=YOUR_COINGECKO_API_KEY
-
-  # Broadcast settings
-  oraclebroadcastinterval=60        # Seconds between broadcasts
-  oracleminexchanges=5              # Minimum successful exchanges
-  oraclemaxdeviation=0.10           # 10% max price deviation
-  ```
-- [ ] Document monitoring and logging
-- [ ] **REVIEW AND VALIDATE** → Test setup guide on clean system
-
-**Test Engineer** (Testnet Reset Tests):
-- [ ] Create functional test: `test/functional/digidollar_oracle_testnet_reset.py`
-- [ ] Test complete reset procedure automated
-- [ ] Verify oracle operational after reset
-- [ ] Verify DigiDollar mint after reset
-- [ ] Test oracle price updates every ~1 minute
-- [ ] **ALL TESTS MUST PASS**
-
-**Deliverable**: Testnet oracle configured, reset procedures documented and tested
-
----
-
-### Week 6: Integration Testing & Production Readiness
-
-**Objective**: Complete test suite, final documentation, and production validation
-
-**Sub-Agent Deployment**:
-- Deploy **Test Engineer** for complete test suite
-- Deploy **Documentation Reviewer** for final docs
-- Deploy **Core Architecture Analyst** for code review and performance analysis
-
-**Tasks**:
-
-**Test Engineer** (Complete Test Suite):
-- [ ] Run ALL unit tests (target: 50-100 tests, 90%+ coverage)
-- [ ] Run ALL functional tests (target: 10-15 scenarios)
-- [ ] Create comprehensive test report
-- [ ] Run valgrind memory leak check
-- [ ] Run performance benchmarks:
-  - Exchange price fetch: < 5 seconds median
-  - Oracle bundle validation: < 10ms
-  - P2P message handling: < 1ms
-  - Memory usage: < 50MB for oracle system
-- [ ] Create test coverage report (lcov/gcov)
-- [ ] **ALL TESTS MUST PASS - NO EXCEPTIONS**
-
-**Test Engineer** (Edge Case Testing):
-- [ ] Test oracle behavior when exchanges are down (4 of 8 fail)
-- [ ] Test oracle behavior with invalid JSON responses
-- [ ] Test oracle behavior with price outliers
-- [ ] Test oracle behavior with network partitions
-- [ ] Test oracle behavior during DigiByte block reorganization
-- [ ] Test DigiDollar mint during oracle price updates
-- [ ] Test concurrent oracle message broadcasts
-- [ ] **ALL EDGE CASES HANDLED GRACEFULLY**
-
-**Documentation Reviewer** (Final Documentation):
-- [ ] Complete `/doc/ORACLE_OPERATOR_GUIDE.md`
-- [ ] Complete `/doc/TESTNET_RESET_PROCEDURES.md`
-- [ ] Complete `/doc/ORACLE_TROUBLESHOOTING.md`
-- [ ] Create configuration examples (digibyte.conf)
-- [ ] Write architecture overview for developers
-- [ ] Write integration guide for DigiDollar
-- [ ] **ALL DOCUMENTATION COMPLETE AND REVIEWED**
-
-**Core Architecture Analyst** (Code Review):
-- [ ] Review all oracle code for DigiByte coding standards compliance
-- [ ] Review memory safety (no leaks, proper cleanup)
-- [ ] Review error handling (all exceptions caught)
-- [ ] Review network type checking (testnet only!)
-- [ ] Review integration points (all connections verified)
-- [ ] Create performance analysis report
-- [ ] **CODE QUALITY: PRODUCTION-READY**
-
-**Core Architecture Analyst** (Performance Analysis):
-- [ ] Profile exchange API fetch latency
-- [ ] Profile oracle message creation and signing
-- [ ] Profile P2P message propagation
-- [ ] Profile oracle bundle validation
-- [ ] Identify bottlenecks and optimize
-- [ ] **PERFORMANCE MEETS REQUIREMENTS**
-
-**Integration Validation** (ALL SUB-AGENTS):
-- [ ] Verify 8 exchange API clients working
-- [ ] Verify oracle message P2P broadcasting operational
-- [ ] Verify bundle consensus working (1-of-1 for testnet)
-- [ ] Verify DigiDollar mint/redeem using real oracle prices
-- [ ] Verify DCA system using real oracle prices
-- [ ] Verify testnet configuration correct
-- [ ] Verify testnet reset procedures tested
-- [ ] Verify 50-100 unit tests passing
-- [ ] Verify 10-15 functional tests passing
-- [ ] Verify complete documentation
-- [ ] **PRODUCTION-READY SYSTEM VALIDATED**
-
-**Deliverable**: Production-ready Phase One oracle, all tests passing, complete documentation
-
----
-
-## TDD ENFORCEMENT - MANDATORY PROCESS
-
-### Red-Green-Refactor Cycle
-
-**EVERY implementation task MUST follow this cycle**:
-
-#### RED Phase (Write Failing Tests)
-1. Test Engineer writes unit test that FAILS
-2. Test clearly defines expected behavior
-3. Test includes edge cases and error conditions
-4. Run test → **VERIFY IT FAILS** (if it passes, something is wrong!)
-5. Commit failing test to repository
-
-**Example**:
-```cpp
-// File: /src/test/digidollar_oracle_tests.cpp
-
-BOOST_AUTO_TEST_CASE(fetch_binance_price_success) {
-    // RED: This test will FAIL because FetchBinance() doesn't exist yet
-    ExchangePriceFetcher fetcher;
-
-    // This should fetch real price from Binance API
-    std::optional<double> price = fetcher.FetchBinance();
-
-    // Verify we got a valid price
-    BOOST_CHECK(price.has_value());
-    BOOST_CHECK(*price > 0.0);
-    BOOST_CHECK(*price < 100.0);  // Sanity check: DGB won't be $100
-}
-
-// RUN TEST: make check
-// EXPECTED: TEST FAILS - FetchBinance() not implemented
+Complete within 2-4 hours
 ```
 
-#### GREEN Phase (Minimal Implementation)
-1. Implementation sub-agent writes MINIMUM code to pass test
-2. Don't optimize, don't add features - just make it pass
-3. Run test → **VERIFY IT PASSES**
-4. Commit working code
+**Verification After Completion**:
+- [ ] Review test failure report
+- [ ] Confirm priority list makes sense
+- [ ] Use report to inform next agent deployment
 
-**Example**:
-```cpp
-// File: /src/oracle/exchange.cpp
+---
 
-std::optional<double> ExchangePriceFetcher::FetchBinance() {
-    // GREEN: Minimal implementation to pass test
-    try {
-        std::string url = "https://api.binance.com/api/v3/ticker/price?symbol=DGBUSDT";
-        std::string response = HttpGet(url);
+### Phase 2: Critical Path Fixes (Deploy Specialists Sequentially)
 
-        // Parse JSON
-        UniValue json;
-        if (!json.read(response)) return std::nullopt;
+**STEP 2: Deploy Consensus & Validation Specialist - OP_ORACLE Opcode**
 
-        double price = std::stod(json["price"].get_str());
-        return price;
+**Objective**: Implement OP_ORACLE opcode (0xbf) - This will unblock many tests
 
-    } catch (const std::exception& e) {
-        LogPrintf("Binance fetch error: %s\n", e.what());
-        return std::nullopt;
-    }
-}
+**Task Assignment**:
+```markdown
+## Task Assignment: Implement OP_ORACLE Opcode
 
-// RUN TEST: make check
-// EXPECTED: TEST PASSES
+**Assigned To**: Consensus & Validation Specialist
+**Priority**: CRITICAL - HIGHEST PRIORITY
+**Estimated Effort**: 2-4 hours
+
+### Current Problem
+
+Implementation uses `OP_RETURN + "ORC" marker (3 bytes)` but spec requires `OP_RETURN + OP_ORACLE (0xbf)`.
+
+This causes:
+- Block validation tests failing
+- Miner tests failing
+- Serialization tests failing
+- Estimated 20-30 tests failing due to this alone
+
+### What You Must Do
+
+1. **Define OP_ORACLE opcode**
+   - File: `src/script/script.h`
+   - Location: After existing opcodes (around line 150-200), before OP_INVALIDOPCODE
+   - Add: `OP_ORACLE = 0xbf,  // OP_NOP15 - Oracle price data marker`
+
+2. **Update block integration (miner)**
+   - File: `src/oracle/bundle_manager.cpp` (lines 286-300)
+   - Function: `CreateOracleBundleScript()`
+   - Change from: `script << OP_RETURN << marker << data`
+   - Change to: `script << OP_RETURN << OP_ORACLE << data`
+   - Remove "ORC" marker bytes (3 bytes: 0x4F, 0x52, 0x43)
+
+3. **Update block validation**
+   - File: `src/validation.cpp` (around lines 4103-4111)
+   - Function: `ValidateBlockOracleData()`
+   - Change from: Looking for "ORC" marker at bytes 1-3
+   - Change to: Check `scriptPubKey[1] == OP_ORACLE`
+   - Extract data from byte 2 onward (not byte 4)
+
+4. **Update all affected tests**
+   - Files: All `src/test/oracle_*.cpp` files
+   - Search for "ORC" marker checks
+   - Replace with OP_ORACLE checks
+   - Update serialization expectations
+
+### Files to Modify
+
+- `src/script/script.h` - Add opcode definition
+- `src/oracle/bundle_manager.cpp` - Use OP_ORACLE in script creation
+- `src/validation.cpp` - Check for OP_ORACLE in validation
+- `src/test/oracle_miner_tests.cpp` - Update test expectations
+- `src/test/oracle_block_validation_tests.cpp` - Update test expectations
+- Any other test files expecting "ORC" marker
+
+### Acceptance Criteria
+
+- [ ] OP_ORACLE defined as 0xbf in src/script/script.h
+- [ ] Miner creates `OP_RETURN OP_ORACLE <data>` format
+- [ ] Validation checks for OP_ORACLE opcode
+- [ ] Recompiles without errors
+- [ ] oracle_miner_tests pass (at least 4/6)
+- [ ] oracle_block_validation_tests pass (at least 5/8)
+- [ ] No references to "ORC" marker remain in code
+
+### References
+
+- DIGIDOLLAR_ORACLE_PHASE_ONE_SPEC.md - Section 2, Priority 0
+- DIGIDOLLAR_ORACLE_ARCHITECTURE.md - Section 7 (Block Integration)
+
+### Deadline
+
+Complete within 4 hours
 ```
 
-#### REFACTOR Phase (Improve Code Quality)
-1. Improve code readability, structure, performance
-2. Run tests after EVERY change → **VERIFY TESTS STILL PASS**
-3. Add logging, comments, error messages
-4. Commit refactored code
+**Verification After Completion**:
+```bash
+# Verify opcode defined
+grep -n "OP_ORACLE.*0xbf" src/script/script.h
 
-**Example**:
-```cpp
-// REFACTOR: Add better error handling and logging
+# Verify used in miner
+grep -n "OP_ORACLE" src/oracle/bundle_manager.cpp
 
-std::optional<double> ExchangePriceFetcher::FetchBinance() {
-    const std::string BINANCE_ENDPOINT = "https://api.binance.com/api/v3/ticker/price";
+# Verify used in validation
+grep -n "OP_ORACLE" src/validation.cpp
 
-    try {
-        // Build request URL
-        std::string url = BINANCE_ENDPOINT + "?symbol=DGBUSDT";
+# Run affected tests
+src/test/test_digibyte --run_test=oracle_miner_tests --log_level=all
+src/test/test_digibyte --run_test=oracle_block_validation_tests --log_level=all
 
-        // Add API key if configured
-        std::map<std::string, std::string> headers;
-        if (!m_binanceApiKey.empty()) {
-            headers["X-MBX-APIKEY"] = m_binanceApiKey;
-        }
-
-        // Fetch with timeout
-        std::string response = HttpGet(url, headers, /*timeout_ms=*/5000);
-
-        // Parse JSON response
-        UniValue json;
-        if (!json.read(response) || !json.isObject()) {
-            LogPrintf("Binance: Invalid JSON response\n");
-            return std::nullopt;
-        }
-
-        // Extract price
-        if (!json["price"].isStr()) {
-            LogPrintf("Binance: Missing price field\n");
-            return std::nullopt;
-        }
-
-        double price = std::stod(json["price"].get_str());
-
-        // Sanity check
-        if (price <= 0.0 || price > 100.0) {
-            LogPrintf("Binance: Price out of range: %.6f\n", price);
-            return std::nullopt;
-        }
-
-        LogPrint(BCLog::ORACLE, "Binance price: $%.6f\n", price);
-        return price;
-
-    } catch (const std::exception& e) {
-        LogPrintf("Binance fetch error: %s\n", e.what());
-        return std::nullopt;
-    }
-}
-
-// RUN TEST: make check
-// EXPECTED: TEST STILL PASSES (code is better but behavior unchanged)
+# Count passing tests
 ```
 
-#### EXPAND Phase (Add Edge Case Tests)
-1. Test Engineer adds new failing tests for edge cases
-2. Return to RED phase
-3. Repeat cycle until component complete
+**Accept if**:
+- ✅ OP_ORACLE defined
+- ✅ Code compiles
+- ✅ At least 10 more tests pass than before
+- ✅ No regressions
 
-**Example**:
-```cpp
-// EXPAND: Add edge case tests
+**Reject if**:
+- ❌ Opcode not properly defined
+- ❌ Code doesn't compile
+- ❌ Tests still failing with "ORC" marker errors
 
-BOOST_AUTO_TEST_CASE(fetch_binance_invalid_json) {
-    // Test behavior with malformed JSON
-    ExchangePriceFetcher fetcher;
-    fetcher.SetMockResponse("binance", "{invalid json}");
+---
 
-    std::optional<double> price = fetcher.FetchBinance();
+**STEP 3: Deploy Consensus & Validation Specialist - P2P Broadcasting**
 
-    BOOST_CHECK(!price.has_value());  // Should return nullopt
-}
+**Objective**: Fix P2P broadcasting so oracle node can broadcast to network
 
-BOOST_AUTO_TEST_CASE(fetch_binance_timeout) {
-    // Test behavior when API times out
-    ExchangePriceFetcher fetcher;
-    fetcher.SetMockTimeout("binance", true);
+**Task Assignment**:
+```markdown
+## Task Assignment: Fix P2P Broadcasting
 
-    std::optional<double> price = fetcher.FetchBinance();
+**Assigned To**: Consensus & Validation Specialist
+**Priority**: CRITICAL
+**Estimated Effort**: 1-2 days
 
-    BOOST_CHECK(!price.has_value());  // Should return nullopt
-}
+### Current Problem
 
-BOOST_AUTO_TEST_CASE(fetch_binance_rate_limit) {
-    // Test rate limiting (10 requests/min)
-    ExchangePriceFetcher fetcher;
+Oracle node can create messages but can't broadcast to P2P network.
 
-    // Make 11 rapid requests
-    for (int i = 0; i < 11; i++) {
-        fetcher.FetchBinance();
-    }
+- `OracleBundleManager::BroadcastMessage()` only stores locally
+- Missing CConnman connection
+- This blocks all oracle_p2p_tests (~30 tests failing)
 
-    // 11th request should be rate limited
-    // Check internal rate limit counter or log messages
-}
-```
+Location: `src/oracle/bundle_manager.cpp` (lines 454-474)
 
-### TDD Coverage Requirements
+### What You Must Do
 
-**YOU MUST ENFORCE THESE COVERAGE TARGETS**:
+1. **Add CConnman to OracleBundleManager**
+   - File: `src/oracle/bundle_manager.h`
+   - Add member: `CConnman* m_connman{nullptr};`
+   - Add method: `void SetConnman(CConnman* connman);`
 
-| Component | Coverage Target | Why |
-|-----------|----------------|-----|
-| Exchange API clients | 90% | High - external APIs are unreliable |
-| Oracle message handling | 95% | Critical - security implications |
-| Bundle validation | 100% | Critical - consensus rule |
-| Consensus integration | 95% | Critical - money at risk |
-| P2P broadcasting | 95% | High - network security |
-| DigiDollar integration | 95% | Critical - affects minting/redemption |
+2. **Implement SetConnman()**
+   - File: `src/oracle/bundle_manager.cpp`
+   ```cpp
+   void OracleBundleManager::SetConnman(CConnman* connman) {
+       LOCK(m_mutex);
+       m_connman = connman;
+       LogPrint(BCLog::ORACLE, "OracleBundleManager: P2P connection established\n");
+   }
+   ```
 
-**If coverage is below target: REJECT the implementation and send it back for more tests!**
+3. **Fix BroadcastMessage() to actually broadcast**
+   - File: `src/oracle/bundle_manager.cpp` (lines 454-474)
+   - Current: Only calls `AddMessage(msg)`
+   - Fix: Also push to P2P network
+   ```cpp
+   void OracleBundleManager::BroadcastMessage(const COraclePriceMessage& msg) {
+       LOCK(m_mutex);
 
-### Measuring Coverage
+       // Store locally
+       AddMessage(msg);
 
-Use lcov/gcov to measure test coverage:
+       // Broadcast to P2P network
+       if (!m_connman) {
+           LogPrint(BCLog::ORACLE, "Cannot broadcast: no P2P connection\n");
+           return;
+       }
+
+       // Push to all peers
+       m_connman->ForEachNode([this, &msg](CNode* node) {
+           m_connman->PushMessage(node,
+               CNetMsgMaker(node->GetCommonVersion()).Make(
+                   NetMsgType::ORACLEPRICE, OraclePriceMsg{msg}));
+       });
+
+       LogPrint(BCLog::ORACLE, "Broadcast oracle message: price=%llu micro-USD\n",
+                msg.price_micro_usd);
+   }
+   ```
+
+4. **Connect during initialization**
+   - File: `src/init.cpp` (find where OracleBundleManager is initialized)
+   - Add: `OracleBundleManager::GetInstance().SetConnman(&g_connman);`
+   - Location: After g_connman is initialized, before oracle node starts
+
+5. **Test P2P broadcast**
+   - Start 2 nodes in regtest
+   - Node 1: Oracle node with `oracle=1`
+   - Node 2: Regular node
+   - Verify Node 2 receives ORACLEPRICE messages
+   - Check with: `getpeerinfo` and look for oracle messages
+
+### Files to Modify
+
+- `src/oracle/bundle_manager.h` - Add CConnman member and SetConnman method
+- `src/oracle/bundle_manager.cpp` - Implement BroadcastMessage with P2P push
+- `src/init.cpp` - Call SetConnman during initialization
+- `src/test/oracle_p2p_tests.cpp` - Update tests if needed
+
+### Acceptance Criteria
+
+- [ ] CConnman added to OracleBundleManager
+- [ ] BroadcastMessage() pushes to P2P network
+- [ ] SetConnman() called during node initialization
+- [ ] Code compiles without errors
+- [ ] 2-node test shows message propagation
+- [ ] oracle_p2p_tests pass (at least 20/30)
+- [ ] No segfaults or crashes
+
+### Testing Commands
 
 ```bash
-# Configure with coverage flags
-./configure --enable-lcov --enable-debug
+# Unit tests
+src/test/test_digibyte --run_test=oracle_p2p_tests --log_level=all
 
-# Build with coverage
-make clean
-make check
-
-# Generate coverage report
-lcov --capture --directory src --output-file coverage.info
-genhtml coverage.info --output-directory coverage-report
-
-# View report
-open coverage-report/index.html
+# 2-node functional test
+test/functional/feature_oracle_p2p.py
 ```
 
-**Coverage report must show ≥90% line coverage before accepting implementation.**
+### References
+
+- DIGIDOLLAR_ORACLE_PHASE_ONE_SPEC.md - Section 2, Priority 1
+- DIGIDOLLAR_ORACLE_ARCHITECTURE.md - Section 5.3 (P2P Broadcasting)
+
+### Deadline
+
+Complete within 2 days
+```
+
+**Verification After Completion**:
+```bash
+# Verify CConnman added
+grep -n "CConnman.*m_connman" src/oracle/bundle_manager.h
+
+# Verify BroadcastMessage calls ForEachNode
+grep -n "ForEachNode" src/oracle/bundle_manager.cpp
+
+# Verify SetConnman called
+grep -n "SetConnman" src/init.cpp
+
+# Run P2P tests
+src/test/test_digibyte --run_test=oracle_p2p_tests 2>&1 | grep -E "(PASS|FAIL)" | wc -l
+```
+
+**Accept if**:
+- ✅ Code compiles
+- ✅ At least 20/30 oracle_p2p_tests pass
+- ✅ 2-node test shows propagation
+- ✅ No crashes
+
+**Reject if**:
+- ❌ Segfaults or null pointer crashes
+- ❌ Messages don't propagate
+- ❌ Tests still failing with "no broadcast" errors
 
 ---
 
-## INTEGRATION VALIDATION CHECKLIST
+**STEP 4: Deploy Exchange Integration Engineer - Complete Exchange APIs**
 
-Use this checklist to validate Phase One completion. ALL items must be checked before declaring success.
+**Objective**: Complete stubbed exchanges and convert to UniValue
 
-### Exchange API Integration
-- [ ] **Binance** API client implemented and tested
-- [ ] **CoinMarketCap** API client implemented and tested
-- [ ] **CoinGecko** API client implemented and tested
-- [ ] **Coinbase** API client implemented and tested
-- [ ] **Kraken** API client implemented and tested
-- [ ] **Messari** API client implemented and tested
-- [ ] **KuCoin** API client implemented and tested
-- [ ] **Crypto.com** API client implemented and tested
-- [ ] HTTP client with libcurl + SSL/TLS working
-- [ ] JSON parsing for all 8 exchanges working
-- [ ] Rate limiting implemented (10 requests/min per exchange)
-- [ ] Exponential backoff on failures implemented
-- [ ] Median calculation with outlier filtering (MAD algorithm) working
-- [ ] Minimum 5 of 8 exchanges required for median
-- [ ] Error handling for all failure scenarios complete
-- [ ] Unit tests: 30-40 tests passing
-- [ ] Functional test: `digidollar_oracle_exchange_api.py` passing
-- [ ] Code coverage: ≥90%
+**Task Assignment**:
+```markdown
+## Task Assignment: Complete Exchange API Implementation
 
-### Oracle Message System
-- [ ] `COraclePriceMessage` structure implemented
-- [ ] Message hash calculation implemented
-- [ ] Schnorr signature creation implemented
-- [ ] Schnorr signature verification implemented
-- [ ] Anti-replay nonce generation implemented
-- [ ] Timestamp validation (< 5 minutes old)
-- [ ] Price format: micro-USD (1,000,000 = $1.00)
-- [ ] `CreatePriceMessage()` function working
-- [ ] `BroadcastPriceMessage()` function working
-- [ ] P2P message handler in net_processing.cpp (line 5315) implemented
-- [ ] `NetMsgType::ORACLEPRICE` added to protocol.h
-- [ ] Message rate limiting (max 3 messages/min per oracle)
-- [ ] DoS protection (reject messages > 5 minutes old)
-- [ ] Unit tests: 15-20 tests passing
-- [ ] Functional test: `digidollar_oracle_p2p_broadcast.py` passing
-- [ ] Code coverage: ≥95%
+**Assigned To**: Exchange Integration Engineer
+**Priority**: HIGH
+**Estimated Effort**: 1-2 days
 
-### Oracle Bundle & Consensus
-- [ ] `COracleBundle` structure implemented
-- [ ] `OracleBundleManager` singleton implemented
-- [ ] `AddOracleMessage()` function working
-- [ ] `TryCreateBundle()` function working (1-of-1 for testnet)
-- [ ] Median price calculation implemented
-- [ ] Merkle root calculation implemented
-- [ ] Bundle caching for block inclusion implemented
-- [ ] `GetLatestBundle()` function working
-- [ ] `GetConsensusPrice()` function working
-- [ ] Bundle validation (signatures, timestamps, price deviation)
-- [ ] Unit tests: 10-15 tests passing
-- [ ] Code coverage: 100%
+### Current Problem
 
-### Block Integration
-- [ ] `/src/node/miner.cpp` modified (lines 170-177)
-- [ ] `AddOracleBundleToBlock()` implemented
-- [ ] Oracle bundle embedded in coinbase OP_RETURN (vout[1])
-- [ ] Bundle serialization working (price, timestamp, signatures, merkle root)
-- [ ] `/src/validation.cpp` modified - `CheckBlock()` function
-- [ ] Oracle bundle extraction from coinbase working
-- [ ] Bundle structure validation working
-- [ ] Signature verification (1 signature for testnet) working
-- [ ] Price deviation check (< 10% from previous) working
-- [ ] Timestamp validation (< 5 minutes old) working
-- [ ] Block acceptance with valid bundle working
-- [ ] Block rejection with invalid bundle working
-- [ ] Unit tests: 5-10 tests passing
-- [ ] Functional test: `digidollar_oracle_block_integration.py` passing
-- [ ] Code coverage: ≥95%
+- Bittrex (30%) - STUBBED - returns hardcoded values
+- Poloniex (30%) - STUBBED - returns hardcoded values
+- KuCoin (70%) - Uses string parsing, needs UniValue
+- Crypto.com (70%) - Uses string parsing, needs UniValue
+- Binance (60%) - Basic HTTP, needs UniValue
 
-### DigiDollar Integration
-- [ ] `/src/oracle/integration.cpp` - `GetCurrentOraclePrice()` implemented
-- [ ] Integration with `GetOraclePriceForTransaction()` in validation.cpp
-- [ ] DigiDollar mint uses real oracle price (not mock)
-- [ ] DigiDollar redeem uses real oracle price (not mock)
-- [ ] DCA system health calculation uses real oracle price
-- [ ] ERR emergency ratio uses real oracle price
-- [ ] Volatility monitoring uses real oracle price
-- [ ] Mock oracle system disabled on testnet (oracle=1 in config)
-- [ ] Unit tests: 5-10 tests passing
-- [ ] Functional test: `digidollar_oracle_integration.py` passing
-- [ ] Code coverage: ≥95%
+This blocks oracle_exchange_tests (~20 tests failing)
 
-### Testnet Configuration
-- [ ] `/src/kernel/chainparams.cpp` modified - testnet section
-- [ ] Testnet oracle node configured (testnet-oracle1.digidollar.org)
-- [ ] Oracle activation height configured (e.g., block 1,000,000)
-- [ ] Consensus parameters configured:
-  - [ ] `nOracleEpochBlocks = 1440` (~6 hours)
-  - [ ] `nOracleUpdateInterval = 4` (~1 minute)
-  - [ ] `nOracleThreshold = 1` (1-of-1 for testnet)
-  - [ ] `nMaxPriceDeviation = 10` (10% max variance)
-- [ ] Network type checking implemented (testnet only!)
-- [ ] Oracle disabled on mainnet and regtest
-- [ ] digibyte.conf configuration documented
-- [ ] Exchange API key setup documented
-- [ ] Functional test: `digidollar_oracle_testnet_config.py` passing
+Location: `src/oracle/exchange.cpp` (1,237 lines)
 
-### Testnet Reset Procedures
-- [ ] Complete testnet reset procedure documented
-- [ ] Step-by-step commands provided
-- [ ] Wallet backup warning included (CRITICAL)
-- [ ] Chain data deletion commands documented
-- [ ] UTXO data deletion commands documented
-- [ ] Reindex procedure documented
-- [ ] Oracle verification commands documented
-- [ ] DigiDollar mint test documented
-- [ ] Troubleshooting section complete
-- [ ] FAQ section complete
-- [ ] Functional test: `digidollar_oracle_testnet_reset.py` passing
-- [ ] Reset procedure tested on clean testnet
+### What You Must Do
 
-### Documentation
-- [ ] Oracle operator setup guide complete (`/doc/ORACLE_OPERATOR_GUIDE.md`)
-- [ ] Testnet reset procedures complete (`/doc/TESTNET_RESET_PROCEDURES.md`)
-- [ ] Troubleshooting guide complete (`/doc/ORACLE_TROUBLESHOOTING.md`)
-- [ ] Configuration examples complete (digibyte.conf)
-- [ ] Architecture overview for developers complete
-- [ ] Integration guide for DigiDollar complete
-- [ ] All documentation reviewed and validated
+#### 1. Complete Bittrex Implementation
 
-### Test Suite
-- [ ] Unit tests: 50-100 tests implemented
-- [ ] All unit tests passing (make check)
-- [ ] Functional tests: 10-15 scenarios implemented
-- [ ] All functional tests passing
-- [ ] Test coverage ≥90% overall
-- [ ] Memory leak check clean (valgrind)
+- API: `https://api.bittrex.com/v3/markets/DGB-USD/ticker`
+- Response format:
+  ```json
+  {
+    "symbol": "DGB-USD",
+    "lastTradeRate": "0.01234"
+  }
+  ```
+- Parse with UniValue
+- Extract `lastTradeRate` field
+- Convert to micro-USD: `price * 1000000`
+- Return `std::optional<uint64_t>`
+
+#### 2. Complete Poloniex Implementation
+
+- API: `https://api.poloniex.com/markets/DGB_USDT/price`
+- Response format:
+  ```json
+  {
+    "symbol": "DGB_USDT",
+    "price": "0.01234"
+  }
+  ```
+- Parse with UniValue
+- Extract `price` field
+- Convert to micro-USD: `price * 1000000`
+- Return `std::optional<uint64_t>`
+
+#### 3. Convert KuCoin to UniValue
+
+- Current: Uses string parsing (fragile)
+- API: `https://api.kucoin.com/api/v1/market/orderbook/level1?symbol=DGB-USDT`
+- Response:
+  ```json
+  {
+    "data": {
+      "price": "0.01234"
+    }
+  }
+  ```
+- Fix: Use UniValue, navigate to `data.price`
+
+#### 4. Convert Crypto.com to UniValue
+
+- Current: Uses string parsing (fragile)
+- API: `https://api.crypto.com/v2/public/get-ticker?instrument_name=DGB_USD`
+- Response:
+  ```json
+  {
+    "result": {
+      "data": [{
+        "a": "0.01234"
+      }]
+    }
+  }
+  ```
+- Fix: Use UniValue, navigate to `result.data[0].a`
+
+#### 5. Convert Binance to UniValue
+
+- Current: Basic HTTP with string parsing
+- API: `https://api.binance.com/api/v3/ticker/price?symbol=DGBUSDT`
+- Response:
+  ```json
+  {
+    "symbol": "DGBUSDT",
+    "price": "0.01234"
+  }
+  ```
+- Fix: Use UniValue, extract `price`
+
+### Standard Implementation Pattern
+
+```cpp
+std::optional<uint64_t> FetchExchangeName() {
+    try {
+        // HTTP GET with 5-second timeout
+        std::string response = HttpGet(url, 5000);
+
+        // Parse JSON with UniValue
+        UniValue json;
+        if (!json.read(response)) {
+            LogPrint(BCLog::ORACLE, "Exchange: Invalid JSON\n");
+            return std::nullopt;
+        }
+
+        // Navigate JSON (adjust path for each exchange)
+        if (!json.exists("price")) {
+            LogPrint(BCLog::ORACLE, "Exchange: Missing price field\n");
+            return std::nullopt;
+        }
+
+        // Extract price as double
+        double price_usd = json["price"].get_real();
+
+        // Convert to micro-USD
+        uint64_t price_micro_usd = static_cast<uint64_t>(price_usd * 1000000);
+
+        // Validate range
+        if (price_micro_usd < 100 || price_micro_usd > 10000000) {
+            LogPrint(BCLog::ORACLE, "Exchange: Price out of range\n");
+            return std::nullopt;
+        }
+
+        return price_micro_usd;
+
+    } catch (const std::exception& e) {
+        LogPrint(BCLog::ORACLE, "Exchange error: %s\n", e.what());
+        return std::nullopt;
+    }
+}
+```
+
+### Files to Modify
+
+- `src/oracle/exchange.cpp` - Fix all 5 exchange implementations
+- `src/oracle/exchange.h` - Update function signatures if needed
+- `src/test/oracle_exchange_tests.cpp` - Update tests if needed
+
+### Acceptance Criteria
+
+- [ ] Bittrex returns real prices (no hardcoded values)
+- [ ] Poloniex returns real prices (no hardcoded values)
+- [ ] KuCoin uses UniValue (no string parsing)
+- [ ] Crypto.com uses UniValue (no string parsing)
+- [ ] Binance uses UniValue (no string parsing)
+- [ ] All 10 exchanges can fetch real prices
+- [ ] FetchMedianPrice() works with 5+ successful fetches
+- [ ] oracle_exchange_tests pass (at least 50/56)
+- [ ] No string parsing remains (only UniValue)
+
+### Testing Commands
+
+```bash
+# Test individual exchanges (manual)
+# You'll need to add debug output or small test program
+
+# Run exchange test suite
+src/test/test_digibyte --run_test=oracle_exchange_tests --log_level=all
+
+# Test median calculation
+src/test/test_digibyte --run_test=oracle_exchange_tests/test_median_calculation
+```
+
+### References
+
+- DIGIDOLLAR_ORACLE_PHASE_ONE_SPEC.md - Section 2, Priority 3
+- DIGIDOLLAR_ORACLE_ARCHITECTURE.md - Section 4 (Exchange Integration)
+
+### Deadline
+
+Complete within 2 days
+```
+
+**Verification After Completion**:
+```bash
+# Verify no hardcoded prices
+grep -n "return.*12340" src/oracle/exchange.cpp  # Should find nothing
+
+# Verify UniValue usage
+grep -n "UniValue.*json" src/oracle/exchange.cpp | wc -l  # Should be 10+
+
+# Verify no string parsing
+grep -n "std::string::find\|strstr\|substr" src/oracle/exchange.cpp  # Should be minimal
+
+# Run tests
+src/test/test_digibyte --run_test=oracle_exchange_tests 2>&1 | tail -5
+```
+
+**Accept if**:
+- ✅ All 10 exchanges implemented
+- ✅ All use UniValue
+- ✅ At least 50/56 tests pass
+- ✅ No hardcoded return values
+
+**Reject if**:
+- ❌ Still using string parsing
+- ❌ Hardcoded values remain
+- ❌ Tests still failing on stubbed exchanges
+
+---
+
+**STEP 5: Deploy Consensus & Validation Specialist - Micro-USD Consistency**
+
+**Objective**: Fix micro-USD vs cents confusion (10,000x error!)
+
+**Task Assignment**:
+```markdown
+## Task Assignment: Fix Micro-USD vs Cents Consistency
+
+**Assigned To**: Consensus & Validation Specialist
+**Priority**: HIGH
+**Estimated Effort**: 4-6 hours
+
+### Current Problem
+
+Code uses micro-USD (1,000,000 = $1.00) but some comments/docs say "cents" (100 = $1.00).
+
+This is a **10,000x magnitude error** that could destroy DigiDollar's peg!
+
+Examples of wrong comments:
+```cpp
+// WRONG: "Price in cents" (100 = $1.00)
+CAmount price_cents;  // ❌ WRONG NAME
+
+// CORRECT: "Price in micro-USD" (1,000,000 = $1.00)
+uint64_t price_micro_usd;  // ✅ CORRECT
+```
+
+### What You Must Do
+
+1. **Find all references to "cents"**
+   ```bash
+   grep -rn "cents\|CENTS" src/oracle/ src/primitives/oracle.* src/digidollar/
+   ```
+
+2. **Update ALL comments**
+   - Change "cents" to "micro-USD" everywhere
+   - Change "100 = $1.00" to "1,000,000 = $1.00"
+   - Update examples: "$0.01234 = 12,340 micro-USD"
+
+3. **Rename variables**
+   - Find: `price_cents`, `priceCents`, `PRICE_CENTS`
+   - Replace with: `price_micro_usd`, `priceMicroUsd`, `PRICE_MICRO_USD`
+
+4. **Verify DigiDollar calculations**
+   - File: `src/digidollar/validation.cpp`
+   - Check collateral calculations use micro-USD
+   - Verify no division by 100 (should be 1,000,000)
+   - Test with known values:
+     - If DGB = $0.01234 (12,340 micro-USD)
+     - Mint $100 DigiDollar
+     - Need 8,103 DGB collateral (150% ratio)
+
+5. **Update test expectations**
+   - Files: All `src/test/oracle_*.cpp`
+   - Find test values like `1234` (cents)
+   - Replace with `12340` (micro-USD for $0.01234)
+   - Update assertions to expect micro-USD
+
+### Files to Modify
+
+- `src/primitives/oracle.h` - Update comments
+- `src/primitives/oracle.cpp` - Update comments
+- `src/oracle/bundle_manager.cpp` - Update comments, variable names
+- `src/oracle/exchange.cpp` - Update comments
+- `src/oracle/node.cpp` - Update comments
+- `src/digidollar/validation.cpp` - Verify calculations
+- All `src/test/oracle_*.cpp` - Update test values
+
+### Acceptance Criteria
+
+- [ ] Zero references to "cents" remain in oracle code
+- [ ] All comments say "micro-USD"
+- [ ] All variables named with `micro_usd` suffix
+- [ ] DigiDollar calculations verified correct
+- [ ] Test values updated to micro-USD
+- [ ] All tests pass with micro-USD values
+- [ ] Documentation updated
+
+### Testing Commands
+
+```bash
+# Verify no "cents" references
+grep -rn "cents\|CENTS" src/oracle/ src/primitives/oracle.* | wc -l  # Should be 0
+
+# Verify micro-USD references
+grep -rn "micro.USD\|micro_usd" src/oracle/ src/primitives/oracle.* | wc -l  # Should be many
+
+# Run all oracle tests
+src/test/test_digibyte --run_test=oracle_* 2>&1 | tail -10
+```
+
+### References
+
+- DIGIDOLLAR_ORACLE_PHASE_ONE_SPEC.md - Section 2, Priority 2
+- DIGIDOLLAR_ORACLE_ARCHITECTURE.md - Section 12.1 (Critical Finding)
+
+### Deadline
+
+Complete within 6 hours
+```
+
+**Verification After Completion**:
+```bash
+# Verify consistency
+grep -rn "cents" src/oracle/ src/primitives/oracle.* src/digidollar/ | grep -v "micro-USD"
+
+# Should find nothing (or only in comments explaining the OLD wrong way)
+```
+
+**Accept if**:
+- ✅ Zero "cents" references
+- ✅ All micro-USD
+- ✅ Tests pass
+- ✅ DigiDollar calculations correct
+
+**Reject if**:
+- ❌ "cents" still present
+- ❌ Test values wrong
+- ❌ DigiDollar calculations broken
+
+---
+
+**STEP 6: Deploy Test Engineer - Fix All Remaining Test Failures**
+
+**Objective**: Get to 100% test pass rate
+
+**Task Assignment**:
+```markdown
+## Task Assignment: Fix All Remaining Test Failures
+
+**Assigned To**: Test Engineer
+**Priority**: HIGH
+**Estimated Effort**: 1-2 days
+
+### Current Problem
+
+After previous fixes, some tests may still be failing due to:
+- Outdated test expectations
+- Edge cases not handled
+- Integration issues
+- Test infrastructure issues
+
+### What You Must Do
+
+1. **Run ALL oracle tests and collect failures**
+   ```bash
+   src/test/test_digibyte --run_test=oracle_* 2>&1 | tee final_test_run.txt
+   src/test/test_digibyte --run_test=digidollar_oracle_tests 2>&1 | tee -a final_test_run.txt
+   ```
+
+2. **Categorize remaining failures**
+   - Test expectation mismatches (test is wrong)
+   - Real bugs in implementation (code is wrong)
+   - Integration issues (components don't connect)
+   - Edge cases not handled
+
+3. **Fix each failure**
+   - If test is wrong: Update test to match corrected implementation
+   - If code is wrong: Fix the code
+   - If edge case: Add proper handling
+
+4. **Focus on critical test files**:
+   - `oracle_block_validation_tests.cpp` - Must pass 100%
+   - `oracle_bundle_manager_tests.cpp` - Must pass 100%
+   - `oracle_message_tests.cpp` - Must pass 100%
+   - `oracle_p2p_tests.cpp` - Must pass at least 90%
+   - `oracle_exchange_tests.cpp` - Must pass at least 90%
+
+5. **Run functional tests**
+   ```bash
+   test/functional/digidollar_oracle.py
+   test/functional/feature_oracle_p2p.py
+   ```
+
+### Files to Modify
+
+- Any `src/test/oracle_*.cpp` files with failing tests
+- Implementation files if tests reveal real bugs
+
+### Acceptance Criteria
+
+- [ ] ALL oracle unit tests pass (100%)
+- [ ] oracle_block_validation_tests: 8/8 pass
+- [ ] oracle_bundle_manager_tests: 8/8 pass
+- [ ] oracle_message_tests: 15/15 pass
+- [ ] oracle_miner_tests: 6/6 pass
+- [ ] oracle_config_tests: 13/13 pass
+- [ ] oracle_integration_tests: 3/3 pass
+- [ ] oracle_p2p_tests: at least 27/30 pass
+- [ ] oracle_exchange_tests: at least 50/56 pass
+- [ ] digidollar_oracle_tests: at least 45/50 pass
+- [ ] Basic functional tests pass
+- [ ] No segfaults, crashes, or undefined behavior
+- [ ] Test coverage ≥90%
+
+### Testing Commands
+
+```bash
+# Run all oracle tests with summary
+make check 2>&1 | grep -A 5 "oracle_"
+
+# Count pass/fail
+src/test/test_digibyte --run_test=oracle_* 2>&1 | grep -E "Entering|Leaving" | tail -20
+
+# Functional tests
+test/functional/test_runner.py digidollar_oracle feature_oracle_p2p
+```
+
+### References
+
+- DIGIDOLLAR_ORACLE_PHASE_ONE_SPEC.md - Section 14 (Testing Status)
+- DIGIDOLLAR_ORACLE_ARCHITECTURE.md - Section 10 (Test Infrastructure)
+
+### Deadline
+
+Complete within 2 days
+```
+
+**Verification After Completion**:
+```bash
+# Run full test suite
+make check
+
+# Get pass count
+src/test/test_digibyte --run_test=oracle_* 2>&1 | grep -c "Leaving test case"
+
+# Verify no crashes
+echo $?  # Should be 0
+```
+
+**Accept if**:
+- ✅ 100% of critical tests pass
+- ✅ ≥90% of all tests pass
+- ✅ No crashes
+- ✅ Functional tests pass
+
+**Reject if**:
+- ❌ Critical tests failing
+- ❌ <80% pass rate
+- ❌ Segfaults or crashes
+
+---
+
+**STEP 7: Deploy Documentation & Integration Reviewer - Final Validation**
+
+**Objective**: Final verification that everything works end-to-end
+
+**Task Assignment**:
+```markdown
+## Task Assignment: Final Integration Validation
+
+**Assigned To**: Documentation & Integration Reviewer
+**Priority**: MEDIUM
+**Estimated Effort**: 1 day
+
+### What You Must Do
+
+1. **Verify end-to-end oracle flow**
+   - Start regtest with oracle enabled
+   - Verify oracle fetches prices from exchanges
+   - Verify prices broadcast to network
+   - Verify miners include oracle in blocks
+   - Verify blocks validate correctly
+   - Verify DigiDollar can mint using oracle price
+
+2. **Test 2-node setup**
+   - Node 1: Oracle node with `oracle=1`
+   - Node 2: Regular node
+   - Verify Node 2 receives oracle messages
+   - Verify Node 2 includes oracle in blocks
+   - Verify blockchain consensus works
+
+3. **Verify all critical components**
+   - [ ] OP_ORACLE opcode defined and used (0xbf)
+   - [ ] P2P broadcasting works
+   - [ ] All exchanges implemented (no stubs)
+   - [ ] Micro-USD used consistently
+   - [ ] All tests passing (≥90%)
+   - [ ] No compiler warnings
+   - [ ] No memory leaks
+
+4. **Update documentation if needed**
+   - Verify DIGIDOLLAR_ORACLE_ARCHITECTURE.md reflects final state
+   - Mark all components as complete
+   - Update test pass rates
+
+5. **Create deployment checklist**
+   - Oracle operator setup guide
+   - Testnet deployment steps
+   - Configuration examples
+   - Troubleshooting guide
+
+### Files to Review
+
+- All oracle implementation files
+- All oracle test files
+- Documentation files
+
+### Acceptance Criteria
+
+- [ ] End-to-end flow works in regtest
+- [ ] 2-node test shows full propagation
+- [ ] All critical tests pass (100%)
+- [ ] No memory leaks (valgrind clean)
 - [ ] No compiler warnings
-- [ ] Performance benchmarks meet requirements:
-  - [ ] Exchange price fetch: < 5 seconds median
-  - [ ] Oracle bundle validation: < 10ms
-  - [ ] P2P message handling: < 1ms
-  - [ ] Memory usage: < 50MB for oracle system
+- [ ] Documentation updated
+- [ ] Deployment guide created
+- [ ] System ready for testnet
 
-### Code Quality
-- [ ] All code follows DigiByte coding standards
-- [ ] Memory safety verified (no leaks, proper cleanup)
-- [ ] Error handling complete (all exceptions caught)
-- [ ] Logging appropriate (BCLog::ORACLE category)
-- [ ] Comments and documentation in code
-- [ ] No magic numbers (use named constants)
-- [ ] Proper input validation everywhere
-- [ ] Thread safety considered (mutexes where needed)
+### Testing Commands
 
-### Production Readiness
-- [ ] Oracle fetches real prices from 8 exchanges
-- [ ] Prices update every ~1 minute (4 blocks)
-- [ ] P2P messages broadcast successfully to all peers
-- [ ] Oracle bundles included in coinbase transactions
-- [ ] DigiDollar mint transaction validates with oracle price
-- [ ] DigiDollar redeem transaction validates with oracle price
-- [ ] DCA system calculates health with oracle price
-- [ ] Testnet can be reset and re-initialized
-- [ ] All tests passing
-- [ ] All documentation complete
-- [ ] **SYSTEM READY FOR TESTNET DEPLOYMENT**
+```bash
+# Valgrind check
+valgrind --leak-check=full src/test/test_digibyte --run_test=oracle_integration_tests
+
+# Compiler warnings
+make clean && make 2>&1 | grep -i warning | grep oracle
+
+# Full test suite
+make check
+
+# Functional tests
+test/functional/test_runner.py --extended
+```
+
+### References
+
+- DIGIDOLLAR_ORACLE_PHASE_ONE_SPEC.md - Section 19 (Acceptance Criteria)
+
+### Deadline
+
+Complete within 1 day
+```
+
+**Verification After Completion**:
+- [ ] Review final validation report
+- [ ] Confirm all acceptance criteria met
+- [ ] Verify deployment readiness
+
+**Accept if**:
+- ✅ Everything works end-to-end
+- ✅ Tests pass
+- ✅ No leaks
+- ✅ Documentation complete
+- ✅ Ready for testnet
+
+---
+
+## PROGRESS TRACKING
+
+### Master Checklist
+
+Track completion after each agent:
+
+**Phase 1: Assessment**
+- [ ] STEP 1: Test Engineer - Test failure analysis (2-4 hours)
+
+**Phase 2: Critical Fixes**
+- [ ] STEP 2: Consensus Specialist - OP_ORACLE opcode (2-4 hours)
+- [ ] STEP 3: Consensus Specialist - P2P broadcasting (1-2 days)
+- [ ] STEP 4: Exchange Engineer - Complete exchanges (1-2 days)
+- [ ] STEP 5: Consensus Specialist - Micro-USD consistency (4-6 hours)
+
+**Phase 3: Testing & Validation**
+- [ ] STEP 6: Test Engineer - Fix remaining test failures (1-2 days)
+- [ ] STEP 7: Integration Reviewer - Final validation (1 day)
+
+**Total Estimated Time**: 4-6 days
+
+### Test Pass Rate Tracking
+
+Update after each step:
+
+| Step | After Step | Tests Passing | Pass Rate |
+|------|-----------|---------------|-----------|
+| Start | - | ~80/100 | 80% |
+| STEP 2 (OP_ORACLE) | Expected | ~90/100 | 90% |
+| STEP 3 (P2P) | Expected | ~95/100 | 95% |
+| STEP 4 (Exchanges) | Expected | ~98/100 | 98% |
+| STEP 5 (Micro-USD) | Expected | ~99/100 | 99% |
+| STEP 6 (Test fixes) | Expected | 100/100 | 100% |
+| STEP 7 (Final) | Expected | 100/100 | 100% |
+
+---
+
+## VERIFICATION PROTOCOL
+
+### After EACH Agent Completes
+
+**Step 1: Review Deliverables**
+- Read agent's completion report
+- Check files modified
+- Review test results
+
+**Step 2: Run Tests**
+```bash
+# Compile
+make -j4
+
+# Unit tests
+src/test/test_digibyte --run_test=oracle_* 2>&1 | tee test_results_step_N.txt
+
+# Count pass/fail
+grep -E "Entering test case|Test case.*passed" test_results_step_N.txt | wc -l
+
+# Functional tests (if applicable)
+test/functional/test_runner.py digidollar_oracle feature_oracle_p2p
+```
+
+**Step 3: Verify Acceptance Criteria**
+- Check every box in agent's acceptance criteria
+- Verify estimated test improvements
+- Check for regressions
+
+**Step 4: Decision**
+
+**ACCEPT** if:
+- ✅ All acceptance criteria met
+- ✅ Test pass rate improved as expected
+- ✅ No regressions introduced
+- ✅ Code quality good
+- ✅ No crashes or undefined behavior
+
+**REJECT** if:
+- ❌ Acceptance criteria not met
+- ❌ Tests didn't improve as expected
+- ❌ Regressions introduced
+- ❌ Code quality issues
+- ❌ Crashes or segfaults
+
+If REJECT:
+1. Provide specific feedback
+2. List what must be fixed
+3. Reassign to SAME agent
+4. DO NOT proceed to next agent
 
 ---
 
 ## CRITICAL CONSTRAINTS
 
-### Testnet-Only Activation
+### Mandatory Requirements
 
-**CRITICAL RULE**: Oracle system MUST only activate on testnet.
+**OP_ORACLE Opcode**:
+- MUST be 0xbf (OP_NOP15)
+- MUST replace "ORC" marker
+- Format: `OP_RETURN OP_ORACLE <data>`
 
-**Enforcement**:
+**Price Format**:
+- MUST use micro-USD (1,000,000 = $1.00)
+- NEVER use cents (100 = $1.00)
+- 10,000x error if wrong!
 
-Every oracle function MUST check network type:
+**Testnet Only**:
+- Oracle ONLY activates on testnet
+- Mainnet activation height = INT_MAX
+- Network checks everywhere
 
-```cpp
-bool IsOracleEnabled() {
-    // CRITICAL: Only activate on testnet!
-    if (chainparams.NetworkIDString() != "test") {
-        LogPrint(BCLog::ORACLE, "Oracle disabled on %s network\n",
-                 chainparams.NetworkIDString());
-        return false;
-    }
+**Single Oracle**:
+- oracle.digibyte.io:9001
+- Oracle ID = 0
+- 1-of-1 consensus (no voting)
 
-    // Check oracle=1 in config
-    if (!gArgs.GetBoolArg("-oracle", false)) {
-        return false;
-    }
-
-    return true;
-}
-```
-
-**If any sub-agent implements oracle functionality without network type checking: REJECT IMMEDIATELY!**
-
-### Price Format: Micro-USD
-
-**CRITICAL RULE**: All oracle prices MUST be in micro-USD.
-
-**Format**: `1,000,000 = $1.00`
-
-**Why**: Avoids floating point precision issues, supports integer math.
-
-**Example**:
-```cpp
-// DGB price: $0.01234
-CAmount priceInMicroUSD = 12340;  // 0.01234 × 1,000,000
-
-// Convert to display
-double priceInDollars = priceInMicroUSD / 1000000.0;  // $0.01234
-```
-
-**If any sub-agent uses different price format: REJECT and correct!**
-
-### Single Oracle for Testnet
-
-**CRITICAL RULE**: Phase One uses exactly ONE oracle for testnet.
-
-**Consensus**: 1-of-1 (not 8-of-15)
-
-**Code**:
-```cpp
-if (chainparams.NetworkIDString() == "test") {
-    // Phase One: Single oracle, 1-of-1 consensus
-    const int ACTIVE_ORACLES = 1;
-    const int CONSENSUS_THRESHOLD = 1;
-}
-```
-
-**Expandability**: Code MUST be written to easily expand to 8-of-15 for mainnet (Phase Two).
-
-**If any sub-agent implements multiple oracles for testnet: REJECT and simplify!**
-
-### Never Skip TDD
-
-**CRITICAL RULE**: ALWAYS write tests BEFORE implementation.
-
-**TDD Cycle**: RED → GREEN → REFACTOR → EXPAND
-
-**If any sub-agent implements code without tests first: REJECT and send back for TDD!**
-
-### DigiByte Constants (NOT Bitcoin!)
-
-**CRITICAL RULE**: Always use DigiByte values, never Bitcoin values.
-
-| Constant | DigiByte | Bitcoin (WRONG!) |
-|----------|----------|------------------|
-| Block time | 15 seconds | 600 seconds |
-| Coinbase maturity | 8 blocks | 100 blocks |
-| Testnet address prefix | dgbt1 | tb1 |
-| Regtest address prefix | dgbrt1 | bcrt1 |
-| Fee units | DGB/kB | DGB/vB |
-
-**If any sub-agent uses Bitcoin values: REJECT and correct!**
+**DigiByte Constants**:
+- Block time: 15 seconds (NOT 600!)
+- Maturity: 8 blocks (NOT 100!)
+- Address: dgbrt1 (NOT bcrt1!)
 
 ---
 
-## SUB-AGENT COMMUNICATION PROTOCOL
+## SUCCESS CRITERIA
 
-### Task Assignment Format
-
-When you assign a task to a sub-agent, use this format:
-
-```markdown
-## Task Assignment: [Component Name]
-
-**Assigned To**: [Sub-Agent Role]
-**Week**: [Week Number]
-**Phase**: [RED/GREEN/REFACTOR/EXPAND]
-**Priority**: [Critical/High/Medium/Low]
-
-### Objective
-[Clear description of what needs to be accomplished]
-
-### Deliverables
-- [ ] [Specific deliverable 1]
-- [ ] [Specific deliverable 2]
-- [ ] [Specific deliverable 3]
-
-### Files to Modify
-- `/path/to/file1.cpp` - [What to change]
-- `/path/to/file2.h` - [What to change]
-
-### Tests Required
-- [ ] Unit test: [Test case name]
-- [ ] Functional test: [Test scenario]
-
-### Acceptance Criteria
-- [ ] All unit tests passing
-- [ ] Code coverage ≥ [X]%
-- [ ] Integration validated
-- [ ] Code review approved
-
-### Dependencies
-[List any dependencies on other tasks or sub-agents]
-
-### Timeline
-**Start**: [Date]
-**Deadline**: [Date]
-**Estimated Effort**: [Hours/Days]
-
-### Reference Documentation
-- DIGIDOLLAR_ORACLE_PHASE_ONE_SPEC.md - Section [X]
-- DIGIDOLLAR_ORACLE_SUBAGENT_CONTEXT.md - Page [Y]
-```
-
-### Task Completion Report Format
-
-When a sub-agent completes a task, they MUST report using this format:
-
-```markdown
-## Task Completion Report: [Component Name]
-
-**Sub-Agent**: [Role]
-**Status**: ✅ Complete / ⚠️ Partial / ❌ Blocked
-
-### Implementation Summary
-[Brief description of work completed, 2-3 paragraphs]
-
-### Files Modified
-- `/path/to/file1.cpp` - [What was changed]
-- `/path/to/file2.h` - [What was changed]
-- `/src/test/test.cpp` - [Tests added]
-
-### Tests Created
-- **Unit tests**: [X] tests, [Y]% coverage
-- **Functional tests**: [Z] scenarios
-- **All tests passing**: ✅ Yes / ❌ No
-
-### Integration Points Verified
-- [✅] Integration point 1 working
-- [✅] Integration point 2 working
-- [⚠️] Integration point 3 needs follow-up
-
-### Code Quality
-- Follows DigiByte standards: ✅ Yes / ❌ No
-- Memory safety verified: ✅ Yes / ❌ No
-- Error handling complete: ✅ Yes / ❌ No
-- TDD red-green cycle followed: ✅ Yes / ❌ No
-
-### Performance
-- [Metric 1]: [Measured value] (target: [X])
-- [Metric 2]: [Measured value] (target: [Y])
-
-### Blockers / Issues
-[List any blockers or issues encountered]
-
-### Next Steps
-[What should happen next]
-
-### Review Request
-[Request code review from Orchestrator or other sub-agent]
-```
-
-### Escalation Procedures
-
-If a sub-agent encounters a blocker:
-
-1. **Immediate Escalation** (Critical blockers that stop all work):
-   - Report blocker to Orchestrator immediately
-   - Provide clear description of the problem
-   - Suggest possible solutions or alternatives
-   - Orchestrator makes decision within 1 hour
-
-2. **Standard Escalation** (Issues that slow but don't stop work):
-   - Document the issue in task completion report
-   - Continue work on other tasks in parallel
-   - Escalate in next check-in meeting
-   - Orchestrator prioritizes resolution
-
-3. **Blocker Handling**:
-   - **Technical blockers**: Deploy another sub-agent to help
-   - **Dependency blockers**: Adjust timeline or task order
-   - **Scope blockers**: Clarify with Phase One Spec reference
-
----
-
-## SUCCESS METRICS
+Phase 1 is complete when:
 
 ### Functional Requirements
+- [x] Core data structures complete
+- [x] Schnorr signatures working
+- [x] Bundle manager complete
+- [x] Chain parameters configured
+- [ ] **OP_ORACLE opcode implemented** (0xbf)
+- [x] Block integration (needs OP_ORACLE update)
+- [x] Block validation (needs OP_ORACLE update)
+- [x] P2P receiving working
+- [ ] **P2P broadcasting working**
+- [ ] **5+ exchanges implemented** (no stubs)
+- [x] Mock oracle complete
+- [ ] **Micro-USD consistency** (no "cents")
 
-**System MUST achieve all of these before declaring success**:
-
-- [X] Oracle fetches real prices from ≥5 of 8 exchanges
-- [X] Prices update every 4 blocks (~1 minute)
-- [X] P2P messages broadcast successfully to all peers
-- [X] Oracle bundles included in coinbase transactions
-- [X] DigiDollar mint transaction validates with oracle price
-- [X] DigiDollar redeem transaction validates with oracle price
-- [X] DCA system calculates health with oracle price
-- [X] Testnet can be reset and re-initialized
-- [X] All integration points verified working
+### Testing Requirements
+- [ ] **ALL unit tests passing (100%)**
+- [ ] **Functional tests passing**
+- [ ] No flaky tests
+- [ ] No crashes or segfaults
+- [ ] Test coverage ≥90%
 
 ### Quality Requirements
-
-**Code MUST meet all of these standards**:
-
-- [X] All unit tests pass (50-100 tests)
-- [X] All functional tests pass (10-15 scenarios)
-- [X] Code coverage ≥ 90%
-- [X] No memory leaks (valgrind clean)
-- [X] No compiler warnings
-- [X] Follows DigiByte coding standards
-- [X] All error scenarios handled gracefully
-
-### Documentation Requirements
-
-**Documentation MUST be complete**:
-
-- [X] Oracle operator guide complete
-- [X] Testnet reset guide complete
-- [X] Configuration examples provided
-- [X] Troubleshooting guide created
-- [X] Architecture documentation complete
-- [X] Integration guide complete
-
-### Performance Requirements
-
-**System MUST meet these performance targets**:
-
-- [X] Price fetch latency < 5 seconds (median)
-- [X] P2P message propagation < 2 seconds
-- [X] Oracle bundle validation < 10ms
-- [X] Memory usage < 50MB for oracle system
-- [X] No performance regressions in DigiByte Core
-
-### Timeline Success
-
-**6-week timeline MUST be maintained**:
-
-- [X] Week 1: Foundation complete
-- [X] Week 2: Exchange APIs complete
-- [X] Week 3: Oracle message system complete
-- [X] Week 4: Block integration complete
-- [X] Week 5: Testnet configuration complete
-- [X] Week 6: Production ready
+- [ ] No compiler warnings (oracle code)
+- [ ] No memory leaks (valgrind clean)
+- [ ] Follows DigiByte coding standards
+- [ ] Proper error handling everywhere
+- [ ] Network type checked everywhere
 
 ---
 
-## PROGRESS TRACKING - YOUR PRIMARY RESPONSIBILITY
-
-**CRITICAL**: You MUST track every component's implementation and testing status with extreme precision. Nothing is "complete" until it passes BOTH RED and GREEN phases of TDD and is 100% implemented.
-
-### Progress Tracking Requirements
-
-**After EVERY sub-agent task completion, you MUST**:
-
-1. **Verify RED Phase Complete**:
-   - [ ] Failing tests written FIRST
-   - [ ] Test covers all expected behavior
-   - [ ] Test covers all edge cases
-   - [ ] Test covers all error paths
-   - [ ] Commit shows "RED: [feature]"
-
-2. **Verify GREEN Phase Complete**:
-   - [ ] All tests now pass (100%)
-   - [ ] Implementation is minimal but correct
-   - [ ] No compiler warnings
-   - [ ] No shortcuts or TODOs
-   - [ ] Commit shows "GREEN: [feature]"
-
-3. **Verify 100% Implementation**:
-   - [ ] Component fully integrated
-   - [ ] All integration points connected
-   - [ ] All error handling complete
-   - [ ] All edge cases handled
-   - [ ] No placeholder code remains
-
-4. **Verify 100% Testing**:
-   - [ ] Unit tests: 100% passing
-   - [ ] Functional tests: 100% passing
-   - [ ] Code coverage meets requirements (90-100%)
-   - [ ] Integration tests pass
-   - [ ] No flaky or skipped tests
-
-### Implementation Status Dashboard
-
-**YOU MUST MAINTAIN THIS DASHBOARD AND UPDATE IT AFTER EVERY SUB-AGENT COMPLETION**:
-
-```markdown
-## Oracle System Implementation Status
-
-Last Updated: [DATE]
-
-### 1. Exchange API Integration (8/8 Required)
-- [ ] Binance - RED ☐ GREEN ☐ REFACTOR ☐ TESTS ☐
-- [ ] CoinMarketCap - RED ☐ GREEN ☐ REFACTOR ☐ TESTS ☐
-- [ ] CoinGecko - RED ☐ GREEN ☐ REFACTOR ☐ TESTS ☐
-- [ ] Coinbase - RED ☐ GREEN ☐ REFACTOR ☐ TESTS ☐
-- [ ] Kraken - RED ☐ GREEN ☐ REFACTOR ☐ TESTS ☐
-- [ ] Messari - RED ☐ GREEN ☐ REFACTOR ☐ TESTS ☐
-- [ ] KuCoin - RED ☐ GREEN ☐ REFACTOR ☐ TESTS ☐
-- [ ] Crypto.com - RED ☐ GREEN ☐ REFACTOR ☐ TESTS ☐
-
-**Status**: 0/8 complete (0%)
-
-### 2. Oracle Core Components (5/5 Required)
-- [ ] Median Calculation - RED ☐ GREEN ☐ REFACTOR ☐ TESTS ☐
-- [ ] Outlier Filtering - RED ☐ GREEN ☐ REFACTOR ☐ TESTS ☐
-- [ ] HTTP Client (libcurl) - RED ☐ GREEN ☐ REFACTOR ☐ TESTS ☐
-- [ ] Price Cache - RED ☐ GREEN ☐ REFACTOR ☐ TESTS ☐
-- [ ] Oracle Node Daemon - RED ☐ GREEN ☐ REFACTOR ☐ TESTS ☐
-
-**Status**: 0/5 complete (0%)
-
-### 3. Schnorr Signatures (4/4 Required)
-- [ ] Signature Creation - RED ☐ GREEN ☐ REFACTOR ☐ TESTS ☐
-- [ ] Signature Validation - RED ☐ GREEN ☐ REFACTOR ☐ TESTS ☐
-- [ ] Message Hash Generation - RED ☐ GREEN ☐ REFACTOR ☐ TESTS ☐
-- [ ] Invalid Signature Detection - RED ☐ GREEN ☐ REFACTOR ☐ TESTS ☐
-
-**Status**: 0/4 complete (0%)
-
-### 4. Oracle Bundle System (5/5 Required)
-- [ ] Bundle Creation - RED ☐ GREEN ☐ REFACTOR ☐ TESTS ☐
-- [ ] Bundle Extraction - RED ☐ GREEN ☐ REFACTOR ☐ TESTS ☐
-- [ ] Bundle Serialization - RED ☐ GREEN ☐ REFACTOR ☐ TESTS ☐
-- [ ] Bundle Validation - RED ☐ GREEN ☐ REFACTOR ☐ TESTS ☐
-- [ ] Consensus Threshold - RED ☐ GREEN ☐ REFACTOR ☐ TESTS ☐
-
-**Status**: 0/5 complete (0%)
-
-### 5. P2P Network Protocol (5/5 Required)
-- [ ] ORACLEPRICE Message - RED ☐ GREEN ☐ REFACTOR ☐ TESTS ☐
-- [ ] ORACLEBUNDLE Message - RED ☐ GREEN ☐ REFACTOR ☐ TESTS ☐
-- [ ] GETORACLES Message - RED ☐ GREEN ☐ REFACTOR ☐ TESTS ☐
-- [ ] Message Validation - RED ☐ GREEN ☐ REFACTOR ☐ TESTS ☐
-- [ ] Message Relay Logic - RED ☐ GREEN ☐ REFACTOR ☐ TESTS ☐
-
-**Status**: 0/5 complete (0%)
-
-### 6. Blockchain Integration (6/6 Required)
-- [ ] CheckBlock() Integration - RED ☐ GREEN ☐ REFACTOR ☐ TESTS ☐
-- [ ] ContextualCheckBlock() Integration - RED ☐ GREEN ☐ REFACTOR ☐ TESTS ☐
-- [ ] ConnectBlock() Integration - RED ☐ GREEN ☐ REFACTOR ☐ TESTS ☐
-- [ ] AddOracleBundleToBlock() - RED ☐ GREEN ☐ REFACTOR ☐ TESTS ☐
-- [ ] GetOraclePriceForHeight() - RED ☐ GREEN ☐ REFACTOR ☐ TESTS ☐
-- [ ] Chainparams Configuration - RED ☐ GREEN ☐ REFACTOR ☐ TESTS ☐
-
-**Status**: 0/6 complete (0%)
-
-### 7. DigiDollar Integration (3/3 Required)
-- [ ] DigiDollar TX Validation - RED ☐ GREEN ☐ REFACTOR ☐ TESTS ☐
-- [ ] Oracle Price Lookup - RED ☐ GREEN ☐ REFACTOR ☐ TESTS ☐
-- [ ] Mock Price Fallback - RED ☐ GREEN ☐ REFACTOR ☐ TESTS ☐
-
-**Status**: 0/3 complete (0%)
-
-### 8. Testing Infrastructure (4/4 Required)
-- [ ] Unit Test Framework - RED ☐ GREEN ☐ REFACTOR ☐ TESTS ☐
-- [ ] Functional Test Framework - RED ☐ GREEN ☐ REFACTOR ☐ TESTS ☐
-- [ ] Integration Tests - RED ☐ GREEN ☐ REFACTOR ☐ TESTS ☐
-- [ ] End-to-End Tests - RED ☐ GREEN ☐ REFACTOR ☐ TESTS ☐
-
-**Status**: 0/4 complete (0%)
-
-### OVERALL SYSTEM STATUS: 0/40 Components Complete (0%)
-
-**Test Results**:
-- Unit Tests: 0/145+ passing (0%)
-- Functional Tests: 0/20+ passing (0%)
-- Code Coverage: 0%
-
-**READY FOR TESTNET DEPLOYMENT**: ❌ NO
-```
-
-### How to Use This Dashboard
-
-**After EVERY sub-agent reports completion**:
-
-1. **IMMEDIATELY update the dashboard** with RED/GREEN/REFACTOR/TESTS checkboxes
-2. **Run the tests yourself** to verify 100% pass rate
-3. **Check code coverage** to verify meets requirements
-4. **Verify integration** by running functional tests
-5. **Update percentage complete** for that component category
-6. **DO NOT mark complete** until ALL 4 checkboxes are checked
-
-**Example Update After Exchange Integration Engineer Completes Binance**:
-
-```markdown
-### 1. Exchange API Integration (8/8 Required)
-- [x] Binance - RED ☑ GREEN ☑ REFACTOR ☑ TESTS ☑  ← ALL 4 CHECKED
-- [ ] CoinMarketCap - RED ☐ GREEN ☐ REFACTOR ☐ TESTS ☐
-...
-**Status**: 1/8 complete (12.5%)  ← UPDATED PERCENTAGE
-```
-
-**IF ANY CHECKBOX IS UNCHECKED, COMPONENT IS NOT COMPLETE - REJECT AND REASSIGN.**
-
----
-
-## YOUR MISSION STARTS NOW
-
-You are the **Oracle Orchestrator Agent**. You have:
-
-- ✅ **Complete authority** to deploy sub-agents and assign tasks
-- ✅ **Full context** from 6 essential documentation files
-- ✅ **Clear scope** defined in Phase One Specification
-- ✅ **6-week timeline** with detailed week-by-week plan
-- ✅ **5 specialized sub-agents** ready to deploy
-- ✅ **Strict TDD methodology** to enforce
-- ✅ **Clear success metrics** to validate completion
-- ✅ **Progress tracking dashboard** to maintain rigorously
-
-### Your First Actions
+## YOUR FIRST ACTIONS
 
 **DO THIS NOW**:
 
-1. **Read DIGIDOLLAR_ORACLE_PHASE_ONE_SPEC.md completely** (YOUR PRIMARY REFERENCE)
-2. **Read DIGIDOLLAR_ORACLE_SUBAGENT_CONTEXT.md** (Sub-agent instructions)
-3. **Read CLAUDE.md** (DigiByte constants - CRITICAL!)
-4. **Review the 6-week implementation plan** (above)
-5. **Deploy Week 1 sub-agents**:
-   - Core Architecture Analyst
-   - Test Engineer
-   - Documentation Reviewer
+1. **Read the updated documents**:
+   - Read DIGIDOLLAR_ORACLE_PHASE_ONE_SPEC.md (v2.1 - shows 75% complete)
+   - Read DIGIDOLLAR_ORACLE_ARCHITECTURE.md (shows what exists)
+   - Read DIGIDOLLAR_ORACLE_SUBAGENT_CONTEXT.md (v2.0)
+   - Read CLAUDE.md (DigiByte constants)
 
-### Week 1 Kickoff Tasks
+2. **Deploy STEP 1: Test Engineer**:
+   - Task: Analyze all oracle test failures
+   - Run all tests, categorize failures
+   - Create priority list
+   - Report back with detailed analysis
 
-**Deploy NOW**:
+3. **Wait for Test Engineer Report**:
+   - Review failure analysis
+   - Confirm priority makes sense
+   - Use to inform next steps
 
-**Task 1: Core Architecture Analyst**
-- Analyze existing oracle framework
-- Map all integration points
-- Create dependency graph
-- Provide build order recommendations
-- **Deadline**: End of Week 1
+4. **Deploy STEP 2: Consensus Specialist - OP_ORACLE**:
+   - This is THE most critical fix
+   - Will unblock 20-30 tests
+   - Must be done first
 
-**Task 2: Test Engineer**
-- Design comprehensive test strategy
-- Set up Boost test framework
-- Set up Python functional test framework
-- Define coverage requirements
-- Create test file templates
-- **Deadline**: End of Week 1
-
-**Task 3: Documentation Reviewer**
-- Analyze Phase One Spec completely
-- Create documentation outline
-- Identify integration validation checkpoints
-- Plan testnet reset procedure structure
-- **Deadline**: End of Week 1
-
-### Remember
-
-- **TDD is MANDATORY**: Tests first, always
-- **Testnet only**: Check network type everywhere
-- **Single oracle**: 1-of-1 consensus for Phase One
-- **Quality over speed**: Don't skip tests or documentation
-- **Communication**: Regular status reports from all sub-agents
-
-### Your Authority
-
-If any sub-agent:
-- Skips TDD process → **REJECT immediately**
-- Implements Phase Two features → **REJECT and redirect**
-- Submits failing tests → **REJECT and fix**
-- Uses Bitcoin constants instead of DigiByte → **REJECT and correct**
-- Activates oracle on mainnet → **REJECT immediately (testnet only!)**
-
-You have the authority to reject any work that doesn't meet Phase One standards.
+5. **Continue Sequential Deployment**:
+   - Follow STEP 3, 4, 5, 6, 7 in order
+   - Verify after each step
+   - Track progress
+   - Get to 100%
 
 ---
 
-## BUILD THE ORACLE SYSTEM - START NOW!
+## REMEMBER
 
-This is NOT a planning exercise. This is a BUILD directive.
+- **ONE agent at a time** (NEVER parallel)
+- **Verify work** after each agent
+- **Tests must pass** before moving on
+- **Follow the sequence** (OP_ORACLE → P2P → Exchanges → Micro-USD → Tests → Final)
+- **Reject incomplete work** (don't accept anything less than criteria)
+- **Get to 100%** test pass rate
 
-You have 6 weeks to deliver a production-ready oracle system for DigiDollar on DigiByte testnet.
+**Your mission**: 75% → 100% with all tests passing.
 
-**Your mission starts NOW. Deploy Week 1 sub-agents and begin implementation.**
+**Success = Ready for testnet deployment.**
 
 ---
 
-*Oracle Orchestrator Prompt v1.0*
-*Phase One: Single Testnet Oracle*
-*Timeline: 6 Weeks*
-*Target: DigiByte Core v8.26*
-*Status: READY FOR DEPLOYMENT*
+*Oracle Orchestrator Prompt v2.1*
+*Status: Ready to Complete Phase 1*
+*Approach: Sequential, Test-Driven, 7 Clear Steps*
+*Target: 100% Complete, All Tests Passing*

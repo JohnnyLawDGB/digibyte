@@ -85,8 +85,8 @@ CAmount CCollateralPosition::GetCurrentCollateralRatio(CAmount currentPrice) con
     }
 
     // Calculate: (dgbLocked * currentPrice * 100) / ddMinted
-    // dgbLocked is in satoshis, currentPrice is in cents per DGB
-    // ddMinted is in cents
+    // dgbLocked is in satoshis, currentPrice is in micro-USD (1,000,000 = $1.00 DGB price)
+    // ddMinted is in cents (100 = $1.00 USD)
     // Result is percentage * 100 (e.g., 200 for 200%)
 
     // Convert DGB to whole units first to avoid overflow

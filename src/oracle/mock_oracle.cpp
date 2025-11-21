@@ -17,7 +17,7 @@
 MockOracleManager* MockOracleManager::instance = nullptr;
 
 MockOracleManager::MockOracleManager()
-    : mockPrice(1),            // Default: $0.01 per DGB = 1 cent per DGB
+    : mockPrice(10000),        // Default: $0.01 per DGB = 10,000 micro-USD
       lastUpdateHeight(0),
       enabled(true)
 {
@@ -47,10 +47,10 @@ void MockOracleManager::SetMockPrice(CAmount price)
         return;
     }
 
-    // Price is in cents per DGB
-    // Range: $0.0001 per DGB (0.01 cents) to $1000 per DGB (100,000 cents)
-    const CAmount MIN_PRICE = 1;              // 0.01 cents per DGB = $0.0001 per DGB (minimum reasonable)
-    const CAmount MAX_PRICE = 100000;         // 100,000 cents per DGB = $1000 per DGB (maximum reasonable)
+    // Price is in micro-USD (1,000,000 = $1.00)
+    // Range: $0.0001 per DGB (100 micro-USD) to $1000 per DGB (1,000,000,000 micro-USD)
+    const CAmount MIN_PRICE = 100;            // 100 micro-USD = $0.0001 per DGB (minimum reasonable)
+    const CAmount MAX_PRICE = 1000000000;     // 1,000,000,000 micro-USD = $1000 per DGB (maximum reasonable)
 
     if (price < MIN_PRICE || price > MAX_PRICE) {
         LogPrintf("MockOracleManager: Price %d out of reasonable range [%d, %d], clamping\n",
@@ -65,7 +65,7 @@ void MockOracleManager::SetMockPrice(CAmount price)
     // In production this would integrate with node context
     lastUpdateHeight = 0; // TODO: Get from node context when available
 
-    LogPrintf("MockOracleManager: Price updated to %d cents per DGB\n", mockPrice);
+    LogPrintf("MockOracleManager: Price updated to %d micro-USD ($%.6f per DGB)\n", mockPrice, mockPrice / 1000000.0);
 }
 
 bool MockOracleManager::IsEnabled() const
@@ -130,9 +130,9 @@ void MockOracleManager::SimulateVolatility(int percentChange)
     CAmount change = (mockPrice * percentChange) / 100;
     CAmount newPrice = mockPrice + change;
 
-    // Ensure price stays in reasonable range
-    const CAmount MIN_PRICE = 1000;           // $0.00001 per DGB
-    const CAmount MAX_PRICE = 10000000000LL;  // $100 per DGB
+    // Ensure price stays in reasonable range (micro-USD: 1,000,000 = $1.00)
+    const CAmount MIN_PRICE = 100;            // 100 micro-USD = $0.0001 per DGB
+    const CAmount MAX_PRICE = 10000000000LL;  // 10,000,000,000 micro-USD = $10,000 per DGB
 
     newPrice = std::max(MIN_PRICE, std::min(MAX_PRICE, newPrice));
 
@@ -141,17 +141,17 @@ void MockOracleManager::SimulateVolatility(int percentChange)
     // Update height is optional for mock oracle
     lastUpdateHeight = 0; // TODO: Get from node context when available
 
-    LogPrintf("MockOracleManager: Simulated %d%% volatility: %d -> %d satoshis/USD\n",
-              percentChange, oldPrice, mockPrice);
+    LogPrintf("MockOracleManager: Simulated %d%% volatility: %d -> %d micro-USD ($%.6f -> $%.6f per DGB)\n",
+              percentChange, oldPrice, mockPrice, oldPrice / 1000000.0, mockPrice / 1000000.0);
 }
 
 void MockOracleManager::Reset()
 {
     LOCK(cs_price);
 
-    mockPrice = 1;      // Reset to 1 cent per DGB = $0.01 per DGB
+    mockPrice = 10000;  // Reset to 10,000 micro-USD = $0.01 per DGB
     lastUpdateHeight = 0;
     enabled = true;
 
-    LogPrintf("MockOracleManager: Reset to default state (price: %d cents per DGB = $0.01/DGB)\n", mockPrice);
+    LogPrintf("MockOracleManager: Reset to default state (price: %d micro-USD = $0.01 per DGB)\n", mockPrice);
 }

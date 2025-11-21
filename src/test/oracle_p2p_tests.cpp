@@ -32,6 +32,7 @@
 #include <net.h>
 #include <net_processing.h>
 #include <netmessagemaker.h>
+#include <oracle/bundle_manager.h>
 #include <primitives/oracle.h>
 #include <protocol.h>
 #include <pubkey.h>
@@ -559,6 +560,21 @@ BOOST_AUTO_TEST_CASE(p2p_oracle_cinv_helpers)
 
     CInv inv_block(MSG_BLOCK, dummy_hash);
     BOOST_CHECK(!inv_block.IsOracleMsg());
+}
+
+/**
+ * Final cleanup test - MUST RUN LAST
+ * Cleans up Oracle singleton state to prevent interference with other test suites
+ * This test is placed in oracle_p2p_tests (last oracle test alphabetically) to ensure
+ * it runs after all other oracle tests but before validation tests.
+ */
+BOOST_AUTO_TEST_CASE(zzz_cleanup_oracle_singleton_state)
+{
+    OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    manager.Clear();
+    manager.SetEnabled(false);
+
+    LogPrintf("Test: Cleaned up OracleBundleManager singleton state to prevent test isolation issues\n");
 }
 
 BOOST_AUTO_TEST_SUITE_END()

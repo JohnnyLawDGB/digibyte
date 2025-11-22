@@ -4386,10 +4386,9 @@ static bool ContextualCheckBlock(const CBlock& block, BlockValidationState& stat
                          bundle.timestamp, block.nTime, bundle.messages.size());
 
             } catch (const std::exception& e) {
-                LogPrint(BCLog::DIGIDOLLAR, "Oracle: Bundle validation error: %s\n", e.what());
-                // Deserialization errors are validation failures
-                return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-oracle-bundle-format",
-                                   strprintf("Oracle bundle deserialization failed: %s", e.what()));
+                LogPrint(BCLog::DIGIDOLLAR, "Oracle: Bundle deserialization failed (not an oracle bundle): %s\n", e.what());
+                // Deserialization errors mean this isn't an oracle bundle - that's OK, bundles are optional
+                return true;
             }
         }
     }

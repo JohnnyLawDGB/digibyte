@@ -26,6 +26,7 @@
 #include <cassert>
 #include <cstdint>
 #include <cstring>
+#include <ctime>
 #include <type_traits>
 
 // Helper function to parse public key from hex string
@@ -370,10 +371,10 @@ public:
         consensus.nSubsidyHalvingInterval = 300;
         consensus.script_flag_exceptions.emplace( // BIP16 exception
             uint256S("0x00000000dd30457c001f4095d208cc1296b0eed002427aa599874af7a432b105"), SCRIPT_VERIFY_NONE);
-        consensus.BIP34Height = 500; // BIP34 activated on testnet (Used in functional tests)
+        consensus.BIP34Height = 1; // BIP34 activated on testnet (Testnet reset 2025)
         consensus.BIP34Hash = uint256S("0x0");
-        consensus.BIP65Height = 1351; // BIP65 activated on testnet (Used in functional tests)
-        consensus.BIP66Height = 1251; // BIP66 activated on testnet (Used in functional tests)
+        consensus.BIP65Height = 1; // BIP65 activated on testnet (Testnet reset 2025)
+        consensus.BIP66Height = 1; // BIP66 activated on testnet (Testnet reset 2025)
         consensus.CSVHeight = 1; // CSV activated on testnet (Used in rpc activation tests)
         consensus.SegwitHeight = 0; // SEGWIT is always activated on testnet unless overridden
         consensus.MinBIP9WarningHeight = 0;
@@ -418,12 +419,12 @@ public:
         consensus.nLocalTargetAdjustment = 4; // target adjustment per algo
         consensus.nLocalDifficultyAdjustment = 4; // difficulty adjustment per algo
 
-        // DigiByte Hard Fork Block Heights for testnet
-        consensus.multiAlgoDiffChangeTarget = 100; // Block 145,000 MultiAlgo Hard Fork
-        consensus.alwaysUpdateDiffChangeTarget = 400; // Block 400,000 MultiShield Hard Fork
-        consensus.workComputationChangeTarget = 1430; // Block 1,430,000 DigiSpeed Hard Fork
-        consensus.algoSwapChangeTarget = 20000; // Block 9,000,000 Odo PoW Hard Fork
-        consensus.OdoHeight = 600;
+        // DigiByte Hard Fork Block Heights for testnet (Testnet reset 2025)
+        consensus.multiAlgoDiffChangeTarget = 100; // Block 100 MultiAlgo Hard Fork (matches regtest)
+        consensus.alwaysUpdateDiffChangeTarget = 200; // Block 200 MultiShield Hard Fork (matches regtest)
+        consensus.workComputationChangeTarget = 400; // Block 400 DigiSpeed Hard Fork (matches regtest)
+        consensus.algoSwapChangeTarget = 600; // Block 600 Odo PoW Hard Fork (matches regtest)
+        consensus.OdoHeight = 600; // Odocrypt activation at height 600 (matches regtest)
         consensus.ReserveAlgoBitsHeight = 0;
         consensus.nOdoShapechangeInterval = 1*24*60*60; // 1 day
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].bit = 27;
@@ -437,28 +438,35 @@ public:
         consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].nTimeout = 1750457304; // 20th June 2025 Testnet
         consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].min_activation_height = 0; // No activation delay
 
-        // Deployment of DigiDollar stablecoin features (testnet - earlier activation)
+        // Deployment of DigiDollar stablecoin features (testnet - Testnet reset 2025)
         consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].bit = 23;
-        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nStartTime = 1704067200; // Jan 1, 2024 (earlier for testnet)
-        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nTimeout = 1735689600; // Jan 1, 2025 (earlier timeout)
-        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].min_activation_height = 0; // Aligned to confirmation window (0 * 5760)
+        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nStartTime = Consensus::BIP9Deployment::ALWAYS_ACTIVE;
+        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
+        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].min_activation_height = 650; // Activate at height 650 (after Odo at 600)
 
         consensus.nMinimumChainWork = uint256S("0x00");
         consensus.defaultAssumeValid = uint256S("0x00"); //1079274
 
-        pchMessageStart[0] = 0xfd;
-        pchMessageStart[1] = 0xc8;
-        pchMessageStart[2] = 0xbd;
-        pchMessageStart[3] = 0xdd;
-        nDefaultPort = 12026;
+        // NEW TESTNET MAGIC BYTES (2025) - DigiDollar Reset
+        pchMessageStart[0] = 0xfc;
+        pchMessageStart[1] = 0xd1;
+        pchMessageStart[2] = 0xb8;
+        pchMessageStart[3] = 0xe2;
+        nDefaultPort = 12028;
         nPruneAfterHeight = 1000;
         m_assumed_blockchain_size = 40;
         m_assumed_chain_state_size = 2;
 
-        genesis = CreateGenesisBlock(1516939474, 2411473, 0x1e0ffff0, 1, 8000);
+        // NEW TESTNET GENESIS (2025) - DigiDollar Phase One
+        // Timestamp message: "DigiDollar: A Fully Decentralized USD Stablecoin on The DigiByte Blockchain"
+        // Mined: November 23, 2025 using SCRYPT PoW algorithm
+        // PoW Hash (Scrypt): 000004fd72cff297655b6dffaea76e07788d40746126ab7f60810f9df54c4b09
+        const char* pszTimestamp = "DigiDollar: A Fully Decentralized USD Stablecoin on The DigiByte Blockchain";
+        const CScript genesisOutputScript = CScript() << 0x0 << OP_CHECKSIG;
+        genesis = CreateGenesisBlock(pszTimestamp, genesisOutputScript, 1763932527, 683428, 0x1e0ffff0, 1, 8000 * COIN);
         consensus.hashGenesisBlock = genesis.GetHash();
-        assert(consensus.hashGenesisBlock == uint256S("0x308ea0711d5763be2995670dd9ca9872753561285a84da1d58be58acaa822252"));
-        assert(genesis.hashMerkleRoot == uint256S("0x72ddd9496b004221ed0557358846d9248ecd4c440ebd28ed901efc18757d0fad"));
+        assert(consensus.hashGenesisBlock == uint256S("0xb1bde539fa2e0f45837a6639ea3f384ce5440a7f3e41eaeea8add9f86a28301a"));
+        assert(genesis.hashMerkleRoot == uint256S("0x2d81b8c3153f2e4e29c2ad9fc85b525d0cdcf327ac102318901816e3cdf6576d"));
 
         vFixedSeeds.clear();
         vSeeds.clear();
@@ -513,8 +521,8 @@ public:
         // Initialize DigiDollar Oracle Nodes (same as mainnet for compatibility)
         InitializeOracleNodes();
 
-        // Oracle system parameters (Phase One: Testnet)
-        consensus.nOracleActivationHeight = 1000000;  // Activate at height 1M on testnet
+        // Oracle system parameters (Phase One: Testnet - Testnet reset 2025)
+        consensus.nOracleActivationHeight = 650;  // Activate at height 650 (with DigiDollar)
         consensus.nOracleEpochLength = 1440;          // 24 hours (1440 blocks * 15 seconds)
         consensus.nOracleRequiredMessages = 1;        // Phase One: 1-of-1 consensus
         consensus.nOracleTotalOracles = 1;            // Phase One: Single oracle
@@ -533,7 +541,7 @@ public:
         // Testnet-specific oracle and activation settings
         consensus.nDDOracleEpochBlocks = 50;       // Rotate oracles every 50 blocks (~12.5 minutes)
         consensus.nDDOracleUpdateInterval = 2;     // Update price every 2 blocks (~30 seconds)
-        consensus.nDDActivationHeight = 1000;      // DigiDollar activation height (low for testing)
+        consensus.nDDActivationHeight = 650;       // DigiDollar activation height (Testnet reset 2025 - with Oracle)
     }
 
 private:

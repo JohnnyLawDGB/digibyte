@@ -22,7 +22,7 @@ DigiDollar is the world's first truly decentralized stablecoin built natively on
 - **Network-Wide Tracking**: Blockchain UTXO scanning shows identical stats to all nodes
 - **User Interface**: Complete wallet with 6 functional tabs
 - **Protection Systems**: DCA, ERR, and Volatility monitoring fully implemented (95%+)
-- **Comprehensive Testing**: 286 unit tests + 18 functional tests, all passing
+- **Comprehensive Testing**: 685 DigiDollar unit tests + 123 Oracle unit tests + 18 functional tests = 826 total tests, all passing
 
 🔄 **What's In Progress:**
 - **Oracle Price Feeds**: Framework complete, needs real exchange API connections
@@ -70,7 +70,7 @@ The DigiDollar system is built into DigiByte Core with code organized in these m
 - **`/src/consensus/`** - Network rules (DCA, ERR, volatility systems)
 - **`/src/rpc/`** - RPC commands (digidollar.cpp - 27 total: 20 registered + 7 wallet-layer)
 - **`/test/functional/`** - Automated tests (18 functional tests, all passing)
-- **`/src/test/`** - Unit tests (286 DigiDollar tests + 123 Oracle tests = 409 total)
+- **`/src/test/`** - Unit tests (685 DigiDollar tests + 123 Oracle tests = 808 total)
 
 ### 1.4 Development Phases - What's Been Built
 
@@ -290,11 +290,11 @@ class CDigiDollarAddress {
 // Actual encoding: (type << 24) | 0x000D0770
 enum DigiDollarTxType : uint8_t {
     DD_TX_NONE = 0,      // Not a DD transaction
-    DD_TX_MINT = 1,      // Encodes to 0x010D0770
-    DD_TX_TRANSFER = 2,  // Encodes to 0x020D0770
-    DD_TX_REDEEM = 3,    // Encodes to 0x030D0770
-    DD_TX_PARTIAL = 4,   // Encodes to 0x040D0770
-    DD_TX_ERR = 5        // Encodes to 0x050D0770
+    DD_TX_MINT = 1,      // Encodes to 0x01000770 (type << 24 | 0x0770)
+    DD_TX_TRANSFER = 2,  // Encodes to 0x02000770
+    DD_TX_REDEEM = 3,    // Encodes to 0x03000770
+    DD_TX_PARTIAL = 4,   // Encodes to 0x04000770
+    DD_TX_ERR = 5        // Encodes to 0x05000770
 };
 ```
 
@@ -1454,7 +1454,7 @@ void BroadcastOracleBundle(const COracleBundle& bundle) {
 | **GUI Implementation** | 92% | ✅ Functional | All widgets working, network stats display |
 | **RPC Interface** | 90% | ✅ Production Ready | 20 commands, only oracle APIs are mock |
 | **Database Persistence** | 85% | ✅ Core Working | Save/load operational |
-| **Test Coverage** | 100% | ✅ Comprehensive | 286 unit tests + 18 functional tests, all passing |
+| **Test Coverage** | 100% | ✅ Comprehensive | 808 unit tests (685 DigiDollar + 123 Oracle) + 18 functional tests, all passing |
 
 ### 16.2 Overall Implementation Status
 
@@ -1830,7 +1830,7 @@ test/functional/digidollar_oracle.py            # Oracle integration
 
 ### 21.6 Test Status: 100% Passing ✅
 
-All 427 tests pass successfully as of 2025-11-22. This comprehensive test suite provides:
+All 827 tests pass successfully as of 2025-11-22 (808 unit + 19 functional test runs including wallet variants). This comprehensive test suite provides:
 - ✅ Unit test coverage for all core components
 - ✅ Integration testing for end-to-end workflows
 - ✅ Network testing with multi-node scenarios
@@ -1862,7 +1862,7 @@ All 427 tests pass successfully as of 2025-11-22. This comprehensive test suite 
 - Theme-aware, professional Qt implementation
 
 ✅ **Testing** (Comprehensive):
-- **427 total tests**: 286 DigiDollar unit + 123 Oracle unit + 18 functional - ALL PASSING
+- **827 total tests**: 685 DigiDollar unit + 123 Oracle unit + 19 functional runs - ALL PASSING
 - Complete test coverage for all core features
 - Verified network-wide tracking with multi-node tests
 

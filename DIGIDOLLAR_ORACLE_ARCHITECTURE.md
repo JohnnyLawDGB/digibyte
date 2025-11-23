@@ -823,7 +823,7 @@ Phase One Compact Format (20 bytes):
 │13-20│ 8   │ i64 │ Timestamp    │ LE int64     │ Unix timestamp    │
 └─────┴─────┴─────┴─────┴──────────────┴──────────────┘
 
-Total: 21-22 bytes (includes PUSHDATA opcodes, within 83-byte MAX_OP_RETURN_RELAY limit) ✅
+Total: 22 bytes (OP_RETURN + OP_ORACLE + push(1) + version(1) + push(1) + data(17) = 22 bytes, within 83-byte MAX_OP_RETURN_RELAY limit) ✅
 ```
 
 #### 4.3.2 Encoding Implementation

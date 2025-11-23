@@ -30,7 +30,7 @@ The oracle is a **critical trust point** - if it reports a fake price, the entir
 
 Phase One implements a **streamlined testnet-ready system**:
 
-- **One Oracle Node**: Operated by DigiByte Foundation
+- **One Oracle Node**: Operated by DigiByte Devs For Testnet Only
 - **Testnet Only**: Not active on mainnet (safety first!)
 - **Simple Trust Model**: The single oracle's price is the consensus price
 - **Compact Storage**: Only 21 bytes per block (minimal blockchain overhead)
@@ -493,16 +493,17 @@ The full 128-byte message is too large to store in every block. Instead, the min
 ```
 Byte 0:      OP_RETURN (0x6a) - "This output is unspendable"
 Byte 1:      OP_ORACLE (0xbf) - "This is oracle data"
-Byte 2:      0x11 - "Push 17 bytes"
+Byte 2:      0x01 - "Push 1 byte" (for version)
 Byte 3:      0x01 - Version (Phase One format)
-Byte 4:      0x00 - Oracle ID (always 0)
-Bytes 5-12:  <Price in DigiDollar cents, 8 bytes>
-Bytes 13-20: <Timestamp, 8 bytes>
+Byte 4:      0x11 - "Push 17 bytes" (for data)
+Byte 5:      0x00 - Oracle ID (always 0)
+Bytes 6-13:  <Price in DigiDollar cents, 8 bytes>
+Bytes 14-21: <Timestamp, 8 bytes>
 ```
 
 **Example (hex format)**:
 ```
-6a bf 12 01 00 05 00 00 00 00 00 00 00 00 2f 50 65 00 00 00 00 00
+6a bf 01 01 11 00 05 00 00 00 00 00 00 00 00 2f 50 65 00 00 00 00 00
 │  │  │  │  │  └─────────────┘ └─────────────────┘
 │  │  │  │  │   Price: 5 cents  Timestamp: 1,700,000,000
 │  │  │  │  Oracle ID: 0
@@ -864,7 +865,7 @@ Position  Length  Type    Name         Value       Description
 13-20     8       int64   Timestamp    <LE bytes>  Unix timestamp
 ```
 
-**Total: 21 bytes (3 opcodes + 17 data bytes + 1 length prefix)**
+**Total: 22 bytes (2 marker opcodes + 2 push opcodes + 1 version byte + 17 data bytes)**
 
 ### What's Excluded (and Why It's Safe)
 

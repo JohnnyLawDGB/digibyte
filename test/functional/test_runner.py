@@ -128,8 +128,7 @@ BASE_SCRIPTS = [
     'wallet_backup.py --descriptors',
     'feature_segwit.py --legacy-wallet',
     'feature_segwit.py --descriptors',
-    # DigiByte: v2transport disabled
-    # 'feature_segwit.py --descriptors --v2transport',
+    'feature_segwit.py --descriptors --v2transport',
     'p2p_tx_download.py',
     'wallet_avoidreuse.py --legacy-wallet',
     'wallet_avoidreuse.py --descriptors',
@@ -181,6 +180,7 @@ BASE_SCRIPTS = [
     'wallet_labels.py --descriptors',
     'p2p_compactblocks.py',
     'p2p_compactblocks_blocksonly.py',
+    'p2p_block_sync.py --v2transport',
     'wallet_hd.py --legacy-wallet',
     'wallet_hd.py --descriptors',
     'wallet_blank.py --legacy-wallet',
@@ -239,16 +239,13 @@ BASE_SCRIPTS = [
     'wallet_transactiontime_rescan.py --legacy-wallet',
     'p2p_addrv2_relay.py',
     'p2p_compactblocks_hb.py',
-    # DigiByte: v2transport disabled
-    # 'p2p_compactblocks_hb.py --v2transport',
+    'p2p_compactblocks_hb.py --v2transport',
     'p2p_disconnect_ban.py',
-    # DigiByte: v2transport disabled
-    # 'p2p_disconnect_ban.py --v2transport',
+    'p2p_disconnect_ban.py --v2transport',
     'feature_posix_fs_permissions.py',
     'rpc_decodescript.py',
     'rpc_blockchain.py',
-    # DigiByte: v2transport disabled
-    # 'rpc_blockchain.py --v2transport',
+    'rpc_blockchain.py --v2transport',
     'rpc_deprecated.py',
     'wallet_disable.py',
     'wallet_change_address.py --legacy-wallet',
@@ -292,11 +289,9 @@ BASE_SCRIPTS = [
     'mining_prioritisetransaction.py',
     'p2p_invalid_locator.py',
     'p2p_invalid_block.py',
-    # DigiByte: v2transport disabled
-    # 'p2p_invalid_block.py --v2transport',
+    'p2p_invalid_block.py --v2transport',
     'p2p_invalid_tx.py',
-    # DigiByte: v2transport disabled
-    # 'p2p_invalid_tx.py --v2transport',
+    'p2p_invalid_tx.py --v2transport',
     'p2p_v2_transport.py',
     'example_test.py',
     'wallet_txn_doublespend.py --legacy-wallet',
@@ -319,15 +314,12 @@ BASE_SCRIPTS = [
     'wallet_importprunedfunds.py --legacy-wallet',
     'wallet_importprunedfunds.py --descriptors',
     'p2p_leak_tx.py',
-    # DigiByte: v2transport disabled
-    # 'p2p_leak_tx.py --v2transport',
+    'p2p_leak_tx.py --v2transport',
     'p2p_eviction.py',
     'p2p_ibd_stalling.py',
-    # DigiByte: v2transport disabled
-    # 'p2p_ibd_stalling.py --v2transport',
+    'p2p_ibd_stalling.py --v2transport',
     'p2p_net_deadlock.py',
-    # DigiByte: v2transport disabled
-    # 'p2p_net_deadlock.py --v2transport',
+    'p2p_net_deadlock.py --v2transport',
     'wallet_signmessagewithaddress.py',
     'rpc_signmessagewithprivkey.py',
     'rpc_generate.py',

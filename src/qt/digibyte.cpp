@@ -302,13 +302,15 @@ void DigiByteApplication::applyTheme()
         theme = "dark";
     }
     
-    // NOTE: CSS hot-loading functionality disabled for production
-    // Uncomment the following block to enable live CSS reloading from ~/.digibyte-dev/css/ for rapid development
+    // NOTE: CSS hot-loading functionality DISABLED for production
+    // To enable for development, uncomment the block below
+    // This allows live CSS reloading from ~/.digibyte-dev/css/ for rapid theming development
+
     /*
     // Check if we should use external CSS for live reloading (development mode)
     QString externalCssDir = QDir::homePath() + "/.digibyte-dev/css/";
     QString externalCssPath = externalCssDir + theme + ".css";
-    
+
     QFileInfo externalFile(externalCssPath);
     if (externalFile.exists() && externalFile.isReadable()) {
         // Use external CSS file for live reloading
@@ -316,7 +318,7 @@ void DigiByteApplication::applyTheme()
         qDebug() << "Using external CSS for live reloading:" << m_externalCssPath;
         qDebug() << "Press F5 to reload CSS manually";
         loadExternalStyleSheet();
-        
+
         // Set up file watcher
         if (!m_cssWatcher) {
             m_cssWatcher = new QFileSystemWatcher(this);
@@ -327,7 +329,7 @@ void DigiByteApplication::applyTheme()
             m_cssWatcher->removePaths(m_cssWatcher->files());
         }
         m_cssWatcher->addPath(m_externalCssPath);
-        
+
         return;
     }
     */
@@ -587,8 +589,9 @@ bool DigiByteApplication::event(QEvent* e)
         return true;
     }
     
-    // NOTE: F5 CSS reload functionality disabled for production
-    // Uncomment to enable F5 key CSS reloading when using external stylesheets
+    // NOTE: F5 CSS reload functionality DISABLED for production
+    // Uncomment to enable for development
+
     /*
     // Handle F5 key for CSS reload when using external stylesheets
     if (e->type() == QEvent::KeyPress && !m_externalCssPath.isEmpty()) {

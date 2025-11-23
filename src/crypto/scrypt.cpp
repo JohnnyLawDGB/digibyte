@@ -44,10 +44,9 @@
 #endif
 #endif
 
-// On macOS, be32enc is already defined in sys/endian.h
-// Only define it if not on macOS
-#ifndef __APPLE__
-static inline void be32enc(void *pp, uint32_t x)
+// Scrypt-specific endian function to avoid conflicts with system headers
+// This works with potentially unaligned pointers and is portable across all platforms
+static inline void scrypt_be32enc(void *pp, uint32_t x)
 {
 	uint8_t *p = (uint8_t *)pp;
 	p[3] = x & 0xff;
@@ -55,10 +54,6 @@ static inline void be32enc(void *pp, uint32_t x)
 	p[1] = (x >> 16) & 0xff;
 	p[0] = (x >> 24) & 0xff;
 }
-#else
-// On macOS, use the system provided function
-#include <sys/endian.h>
-#endif
 
 /**
  * PBKDF2_SHA256(passwd, passwdlen, salt, saltlen, c, buf, dkLen):
@@ -85,7 +80,7 @@ PBKDF2_SHA256(const uint8_t *passwd, size_t passwdlen, const uint8_t *salt,
 	/* Iterate through the blocks. */
 	for (i = 0; i * 32 < dkLen; i++) {
 		/* Generate INT(i + 1). */
-		be32enc(ivec, (uint32_t)(i + 1));
+		scrypt_be32enc(ivec, (uint32_t)(i + 1));
 
 		/* Compute U_1 = PRF(P, S || INT(i)). */
 		memcpy(&hctx, &PShctx, sizeof(CHMAC_SHA256));
@@ -197,7 +192,7 @@ void scrypt_1024_1_1_256_sp_generic(const char *input, char *output, char *scrat
 	PBKDF2_SHA256((const uint8_t *)input, 80, (const uint8_t *)input, 80, 1, B, 128);
 
 	for (k = 0; k < 32; k++)
-		X[k] = le32dec(&B[4 * k]);
+		X[k] = scrypt_le32dec(&B[4 * k]);
 
 	for (i = 0; i < 1024; i++) {
 		memcpy(&V[i * 32], X, 128);
@@ -213,7 +208,7 @@ void scrypt_1024_1_1_256_sp_generic(const char *input, char *output, char *scrat
 	}
 
 	for (k = 0; k < 32; k++)
-		le32enc(&B[4 * k], X[k]);
+		scrypt_le32enc(&B[4 * k], X[k]);
 
 	PBKDF2_SHA256((const uint8_t *)input, 80, B, 128, 1, (uint8_t *)output, 32);
 }

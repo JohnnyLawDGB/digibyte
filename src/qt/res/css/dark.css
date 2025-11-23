@@ -206,6 +206,10 @@ QWidget#centralWidget {
     color:#ffffff;
     }
 
+    QMessageBox QLabel {
+    color:#ffffff !important;
+    }
+
 /* Options Dialog and other dialog content */
 QDialog {
 background-color:#002352;
@@ -526,14 +530,15 @@ background-color:rgba(255, 255, 255, 0.15);
     border:0px solid #fff;
     }
 
-    QTableView::item { /* Table Item */
-    background-color:#fcfcfc;
+    QTableView::item { /* Table Item - DARK MODE FIX */
+    background-color: rgba(255, 255, 255, 0.05);
+    /* Don't override color here - let the model set red/green for amounts */
     font-size:9pt;
     }
 
     QTableView::item:selected { /* Table Item Selected */
-    background-color:#f0f0f0;
-    color:#333;
+    background-color:#0066CC;
+    color:#ffffff;
     }
 
     QScrollBar { /* Scroll Bar */
@@ -1868,6 +1873,14 @@ background-color:rgba(255, 255, 255, 0.15);
     color: #ffffff !important;
     }
 
+    /* Override inline styles from modaloverlay.ui */
+    ModalOverlay #infoText,
+    ModalOverlay #infoTextStrong,
+    ModalOverlay QLabel#infoText,
+    ModalOverlay QLabel#infoTextStrong {
+    color: #ffffff !important;
+    }
+
 
     /* SEND DIALOG */
 
@@ -2865,12 +2878,13 @@ TransactionView {
 TransactionView QTableView {
     background-color: rgba(255, 255, 255, 0.05);
     border: 1px solid rgba(255, 255, 255, 0.1);
-    color: #ffffff;
+    /* Don't override color here - let the model set red/green for amounts */
 }
 
 TransactionView QTableView::item {
     /* Don't override color here - let the model set red/green for amounts */
-    background-color: transparent;
+    background-color: #003366;
+    padding: 4px;
 }
 
 TransactionView QTableView::item:selected {
@@ -2879,7 +2893,7 @@ TransactionView QTableView::item:selected {
 }
 
 TransactionView QTableView::item:alternate {
-    background-color: rgba(255, 255, 255, 0.02);
+    background-color: #002952;
 }
 
 /* Transaction Table Headers */
@@ -2979,7 +2993,6 @@ QDialog#OptionsDialog .QTabWidget QTabBar::tab:selected {
 background-color: #0066CC;
 color: #ffffff !important;
 border: 1px solid #0066CC;
-color: #333333 \!important;
 }
 
 /* Modal Overlay Progress */

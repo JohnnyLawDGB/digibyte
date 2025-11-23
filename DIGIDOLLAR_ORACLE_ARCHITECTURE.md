@@ -806,24 +806,321 @@ Epoch 20: Blocks 1000 - 1049 (Oracle activation height)
 
 **Location**: `/home/jared/Code/digibyte/src/oracle/bundle_manager.cpp` (lines 277-324)
 
+#### 4.3.0 OP_ORACLE: Complete System Flow
+
+```
+┌────────────────────────────────────────────────────────────────────┐
+│  OP_ORACLE ARCHITECTURE: Technical Implementation Flow            │
+└────────────────────────────────────────────────────────────────────┘
+
+PHASE 1: MESSAGE CREATION (External Oracle Daemon)
+════════════════════════════════════════════════════════════════════
+┌───────────────────────────────────────────────────────────────┐
+│ Oracle Daemon (oracle.digibyte.io)                           │
+├───────────────────────────────────────────────────────────────┤
+│ 1. Fetch prices from 10 exchanges (Binance, Coinbase, etc.)  │
+│ 2. Calculate median with MAD outlier filtering               │
+│ 3. Create COraclePriceMessage structure:                     │
+│    ┌─────────────────────────────────────────────────────┐  │
+│    │ struct COraclePriceMessage {                        │  │
+│    │   uint32_t oracle_id;        // 0 (Phase One)      │  │
+│    │   uint64_t price_micro_usd;  // DigiDollar cents   │  │
+│    │   int64_t  timestamp;        // Unix time          │  │
+│    │   uint32_t block_height;     // Current height     │  │
+│    │   uint64_t nonce;            // Random nonce       │  │
+│    │   CPubKey  oracle_pubkey;    // 32-byte pubkey     │  │
+│    │   std::vector<uint8_t> schnorr_sig; // 64 bytes   │  │
+│    │ };                                                  │  │
+│    │ Total: 128 bytes                                    │  │
+│    └─────────────────────────────────────────────────────┘  │
+│ 4. Sign message with BIP-340 Schnorr signature               │
+│ 5. Broadcast via P2P: NetMsgType::ORACLEPRICE                │
+└───────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+                     P2P Network Relay
+                              │
+                              ▼
+PHASE 2: P2P VALIDATION (All Nodes - net_processing.cpp:5316-5430)
+════════════════════════════════════════════════════════════════════
+┌───────────────────────────────────────────────────────────────┐
+│ ProcessMessage(NetMsgType::ORACLEPRICE)                      │
+├───────────────────────────────────────────────────────────────┤
+│ Validation Steps:                                             │
+│ ✓ Deserialize 128-byte COraclePriceMessage                   │
+│ ✓ msg.IsValid() → Structural validation                      │
+│ ✓ msg.Verify() → BIP-340 Schnorr signature verification      │
+│ ✓ oracle_id == 0? (Phase One requirement)                    │
+│ ✓ Timestamp fresh? (age < 5 min, not > 1 min future)         │
+│ ✓ Rate limit: max 180 messages/hour from this peer           │
+│ ✓ Duplicate check: msg.GetHash() not in seen_messages        │
+│                                                               │
+│ If VALID:                                                     │
+│   → OracleBundleManager::AddOracleMessage(msg)               │
+│   → RelayOracleMessage(msg, exclude_peer_id)                 │
+│                                                               │
+│ If INVALID:                                                   │
+│   → Misbehavior(peer, 10-100 points)                         │
+│   → Drop message                                              │
+└───────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+PHASE 3: BLOCK INCLUSION (Miner - bundle_manager.cpp:277-324)
+════════════════════════════════════════════════════════════════════
+┌───────────────────────────────────────────────────────────────┐
+│ Miner calls CreateOracleScript()                              │
+├───────────────────────────────────────────────────────────────┤
+│ Input:  COracleBundle with 1 message (from P2P)              │
+│ Output: CScript with compact 22-byte OP_ORACLE data          │
+│                                                               │
+│ Encoding Process:                                             │
+│ 1. script << OP_RETURN << OP_ORACLE;  // 2 bytes             │
+│ 2. script << std::vector<uchar>{0x01}; // Version byte       │
+│ 3. Create compact data (17 bytes):                           │
+│    ┌────────────────────────────────────────────┐            │
+│    │ oracle_id (1) + price (8) + timestamp (8) │            │
+│    │          = 17 bytes total                  │            │
+│    └────────────────────────────────────────────┘            │
+│ 4. script << compact_data; // Push 17 bytes                  │
+│                                                               │
+│ Coinbase Transaction Structure:                              │
+│   vout[0]: 72,000 DGB → Miner reward                         │
+│   vout[1]: 0 DGB → OP_RETURN OP_ORACLE <22-byte data>  ◄──┐  │
+│   vout[2]: 0 DGB → Witness commitment                    │  │
+│                                                          │  │
+│ Final scriptPubKey (22 bytes):                          │  │
+│   6a bf 01 01 11 00 [price 8B] [timestamp 8B]          │  │
+│   │  │  │  │  │  │                                      │  │
+│   │  │  │  │  │  └─ Oracle ID                          │  │
+│   │  │  │  │  └──── PUSH 17 bytes                      │  │
+│   │  │  │  └─────── Version                            │  │
+│   │  │  └────────── PUSH 1 byte                        │  │
+│   │  └───────────── OP_ORACLE (0xbf) ◄─────────────────┘  │
+│   └──────────────── OP_RETURN (0x6a)                       │
+└───────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+PHASE 4: BLOCK VALIDATION (All Nodes - validation.cpp:4130)
+════════════════════════════════════════════════════════════════════
+┌───────────────────────────────────────────────────────────────┐
+│ CheckBlock() calls ValidateBlockOracleData()                  │
+├───────────────────────────────────────────────────────────────┤
+│ 1. Network Check:                                             │
+│    if (network != TESTNET && network != REGTEST)              │
+│        skip oracle validation; // Disabled on mainnet         │
+│                                                               │
+│ 2. Activation Height:                                         │
+│    if (block_height < 1,000,000)                              │
+│        skip oracle validation; // Not active yet              │
+│                                                               │
+│ 3. Find OP_ORACLE in coinbase:                                │
+│    ┌───────────────────────────────────────────────┐         │
+│    │ for vout in coinbase.vout:                    │         │
+│    │   if vout.scriptPubKey[0] == 0x6a:  // OP_RETURN        │
+│    │     if vout.scriptPubKey[1] == 0xbf:  // OP_ORACLE      │
+│    │       found = true;                            │         │
+│    └───────────────────────────────────────────────┘         │
+│                                                               │
+│ 4. Extract Compact Data (bundle_manager.cpp:333-410):        │
+│    ┌───────────────────────────────────────────────┐         │
+│    │ Parse 22-byte scriptPubKey:                   │         │
+│    │ - Byte 3: version (must be 0x01)             │         │
+│    │ - Byte 5: oracle_id (must be 0x00)           │         │
+│    │ - Bytes 6-13: price (LE uint64)              │         │
+│    │ - Bytes 14-21: timestamp (LE int64)          │         │
+│    └───────────────────────────────────────────────┘         │
+│                                                               │
+│ 5. Validate Bundle:                                           │
+│    ✓ version == 0x01                                         │
+│    ✓ oracle_id == 0                                          │
+│    ✓ price in range [1, 1000] cents                          │
+│    ✓ timestamp < block.nTime + 60                            │
+│    ✓ timestamp > block.nTime - 3600                          │
+│    ✓ messages.size() == 1 (Phase One)                        │
+│    ✓ GetOracleNode(oracle_id)->is_active == true             │
+│                                                               │
+│ 6. Result:                                                    │
+│    if (all_checks_pass)                                       │
+│        ACCEPT block;                                          │
+│    else                                                       │
+│        REJECT block; // Invalid oracle data                  │
+└───────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+PHASE 5: PRICE CACHE (ConnectBlock - validation.cpp:2826)
+════════════════════════════════════════════════════════════════════
+┌───────────────────────────────────────────────────────────────┐
+│ OracleBundleManager::UpdatePriceCache()                       │
+├───────────────────────────────────────────────────────────────┤
+│ Extract oracle price from connected block:                    │
+│   COracleBundle bundle;                                       │
+│   ExtractOracleBundle(coinbase_tx, bundle);                   │
+│                                                               │
+│ Update in-memory cache:                                       │
+│   ┌─────────────────────────────────────────┐                │
+│   │ std::map<int, uint64_t> height_to_price│                │
+│   ├─────────────────────────────────────────┤                │
+│   │ [695] → 49500 cents                    │                │
+│   │ [696] → 49800 cents                    │                │
+│   │ [697] → 50000 cents                    │                │
+│   │ [698] → 50200 cents                    │                │
+│   │ [699] → 50100 cents                    │                │
+│   │ [700] → 50000 cents  ◄── NEW           │                │
+│   └─────────────────────────────────────────┘                │
+│                                                               │
+│ Cache management:                                             │
+│   - Keep last 1,000 blocks                                    │
+│   - Thread-safe (RecursiveMutex)                              │
+│   - Auto-evict oldest entries                                 │
+└───────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+PHASE 6: DIGIDOLLAR USAGE (Minting/Redemption)
+════════════════════════════════════════════════════════════════════
+┌───────────────────────────────────────────────────────────────┐
+│ DigiDollar Minting Process                                    │
+├───────────────────────────────────────────────────────────────┤
+│ User calls: mintdigidollar(amount, lock_tier)                 │
+│                                                               │
+│ Query oracle price:                                           │
+│   uint64_t price = OracleBundleManager::GetInstance()         │
+│                      .GetLatestPrice();                       │
+│   // Returns: 50000 cents = $500.00 per DGB                   │
+│                                                               │
+│ Calculate collateral:                                         │
+│   ┌─────────────────────────────────────────────────┐        │
+│   │ Mint $100 DigiDollars (10,000 cents)           │        │
+│   │ Collateral ratio: 200% (Phase One)             │        │
+│   │ Oracle price: 50000 cents ($500.00/DGB)        │        │
+│   │                                                 │        │
+│   │ Required DGB:                                   │        │
+│   │   ($100 × 2) ÷ $500/DGB = 0.4 DGB              │        │
+│   │                                                 │        │
+│   │ Formula:                                        │        │
+│   │   collateral_sats = (dd_amount × COIN × 2) /   │        │
+│   │                     oracle_price                │        │
+│   │                   = (10000 × 100000000 × 2) /   │        │
+│   │                     50000                       │        │
+│   │                   = 40000000 sats (0.4 DGB)     │        │
+│   └─────────────────────────────────────────────────┘        │
+└───────────────────────────────────────────────────────────────┘
+```
+
 #### 4.3.1 Byte-by-Byte Format Specification
 
 ```
-Phase One Compact Format (20 bytes):
+┌────────────────────────────────────────────────────────────────────┐
+│  OP_ORACLE (0xbf): Custom Opcode for Oracle Data                  │
+└────────────────────────────────────────────────────────────────────┘
 
-┌─────┬─────┬─────┬─────┬──────────────┬──────────────┐
-│ Pos │ Len │ Type│ Name│ Value        │ Description  │
-├─────┼─────┼─────┼─────┼──────────────┼──────────────┤
-│ 0   │ 1   │ OP  │ OP_RETURN    │ 0x6a         │ Unspendable marker│
-│ 1   │ 1   │ OP  │ OP_ORACLE    │ 0xbf         │ Oracle data marker│
-│ 2   │ 1   │ OP  │ PUSHDATA     │ 0x12 (18)    │ Push 18 bytes     │
-│ 3   │ 1   │ u8  │ Version      │ 0x01         │ Phase One format  │
-│ 4   │ 1   │ u8  │ Oracle ID    │ 0x00         │ Oracle 0 (Phase 1)│
-│ 5-12│ 8   │ u64 │ Price        │ LE uint64    │ DigiDollar cents  │
-│13-20│ 8   │ i64 │ Timestamp    │ LE int64     │ Unix timestamp    │
-└─────┴─────┴─────┴─────┴──────────────┴──────────────┘
+OPCODE DEFINITION
+═══════════════════════════════════════════════════════════════════
+File: src/script/script.h:214
 
-Total: 22 bytes (OP_RETURN + OP_ORACLE + push(1) + version(1) + push(1) + data(17) = 22 bytes, within 83-byte MAX_OP_RETURN_RELAY limit) ✅
+OP_ORACLE = 0xbf  // Repurposed OP_NOP15 for oracle price data
+
+Context in DigiDollar Opcode Family:
+┌─────────────────────────────────────────────────────────────┐
+│ OP_DIGIDOLLAR      = 0xbb  (OP_NOP11) - DD output marker   │
+│ OP_DDVERIFY        = 0xbc  (OP_NOP12) - DD verification    │
+│ OP_CHECKPRICE      = 0xbd  (OP_NOP13) - Price checking     │
+│ OP_CHECKCOLLATERAL = 0xbe  (OP_NOP14) - Collateral check   │
+│ OP_ORACLE          = 0xbf  (OP_NOP15) - Oracle data ◄───┐  │
+└─────────────────────────────────────────────────────────────┘
+
+
+WHY A CUSTOM OPCODE?
+═══════════════════════════════════════════════════════════════════
+✓ Fast Detection: Nodes instantly recognize oracle data
+✓ Efficient Parsing: Skip non-oracle OP_RETURNs without parsing
+✓ Type Safety: Compiler enforces correct opcode usage
+✓ Extensibility: Future versions (0x02, 0x03) possible
+✓ Self-Documenting: Code intent is crystal clear
+
+
+DETECTION ALGORITHM
+═══════════════════════════════════════════════════════════════════
+Pseudocode (validation.cpp):
+
+for (const auto& tx : block.vtx) {
+    if (!tx.IsCoinBase()) continue;
+
+    for (const auto& out : tx.vout) {
+        const CScript& script = out.scriptPubKey;
+
+        // Check for OP_RETURN
+        if (script.size() < 2) continue;
+        if (script[0] != OP_RETURN) continue;  // 0x6a
+
+        // Check for OP_ORACLE ◄─── KEY CHECK
+        if (script[1] == OP_ORACLE) {  // 0xbf
+            // Found oracle data! Parse it.
+            ExtractOracleBundle(tx, bundle);
+            break;
+        }
+    }
+}
+
+
+COMPACT FORMAT STRUCTURE (22 bytes total)
+═══════════════════════════════════════════════════════════════════
+
+Phase One Compact Format:
+
+┌─────┬─────┬─────┬──────────────┬──────────────┬──────────────┐
+│ Pos │ Len │ Type│ Name         │ Value        │ Description  │
+├─────┼─────┼─────┼──────────────┼──────────────┼──────────────┤
+│ 0   │ 1   │ OP  │ OP_RETURN    │ 0x6a         │ Unspendable  │
+│ 1   │ 1   │ OP  │ OP_ORACLE    │ 0xbf         │ Oracle marker│
+│ 2   │ 1   │ OP  │ PUSHDATA     │ 0x01         │ Push 1 byte  │
+│ 3   │ 1   │ u8  │ Version      │ 0x01         │ Phase One    │
+│ 4   │ 1   │ OP  │ PUSHDATA     │ 0x11 (17)    │ Push 17 bytes│
+│ 5   │ 1   │ u8  │ Oracle ID    │ 0x00         │ Oracle 0     │
+│ 6-13│ 8   │ u64 │ Price        │ LE uint64    │ DD cents     │
+│14-21│ 8   │ i64 │ Timestamp    │ LE int64     │ Unix time    │
+└─────┴─────┴─────┴──────────────┴──────────────┴──────────────┘
+
+Total: 22 bytes (within 83-byte MAX_OP_RETURN_RELAY limit) ✅
+
+
+EXAMPLE: Real OP_ORACLE Output
+═══════════════════════════════════════════════════════════════════
+Hex Dump (22 bytes):
+6a bf 01 01 11 00 50 c3 00 00 00 00 00 00 00 2f 50 65 00 00 00 00
+
+Parsed:
+┌──────┬──────┬──────────────────────────────────────────────┐
+│ Pos  │ Hex  │ Meaning                                      │
+├──────┼──────┼──────────────────────────────────────────────┤
+│ 0    │ 6a   │ OP_RETURN: Output is unspendable            │
+│ 1    │ bf   │ OP_ORACLE: This is oracle data ✓            │
+│ 2    │ 01   │ PUSH 1: Next 1 byte is data                 │
+│ 3    │ 01   │ Version 1 (Phase One format)                │
+│ 4    │ 11   │ PUSH 17: Next 17 bytes are data             │
+│ 5    │ 00   │ Oracle ID = 0                               │
+│ 6-13 │ 50c3 │ Price = 0x000000000000c350 (LE)             │
+│      │ 0000 │       = 50000 cents = $500.00/DGB           │
+│      │ 0000 │                                              │
+│      │ 0000 │                                              │
+│14-21 │ 002f │ Timestamp = 0x0000000065502f00 (LE)         │
+│      │ 5065 │           = 1,700,000,000                   │
+│      │ 0000 │           = Nov 14, 2023 22:13:20 UTC       │
+│      │ 0000 │                                              │
+└──────┴──────┴──────────────────────────────────────────────┘
+
+
+SPACE EFFICIENCY ANALYSIS
+═══════════════════════════════════════════════════════════════════
+Full P2P Format:        128 bytes (includes signature)
+Compact Block Format:    22 bytes (no signature needed)
+Savings per block:      106 bytes (82.8% reduction)
+
+Annual savings (5,760 blocks/day × 365 days):
+  Full format:    269 MB/year
+  Compact format:  46 MB/year
+  Savings:        223 MB/year ✓
+
+10-year savings: 2.23 GB ✓
 ```
 
 #### 4.3.2 Encoding Implementation

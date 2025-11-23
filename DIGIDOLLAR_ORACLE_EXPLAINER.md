@@ -851,18 +851,362 @@ Savings: 219 MB/year (83.6% reduction!)
 
 Over 10 years, this saves **2.19 GB** of blockchain space - significant for a small 21-byte optimization!
 
-### Byte-by-Byte Breakdown
+### OP_ORACLE: Complete Lifecycle Flowchart
 
 ```
-Position  Length  Type    Name         Value       Description
+┌────────────────────────────────────────────────────────────────────┐
+│  OP_ORACLE COMPLETE LIFECYCLE: From Creation to DigiDollar Usage  │
+└────────────────────────────────────────────────────────────────────┘
+
+STEP 1: P2P BROADCAST (Full 128-byte Format)
+════════════════════════════════════════════════════════════════════
+External Oracle Daemon creates signed message:
+┌─────────────────────────────────────────┐
+│ ORACLEPRICE P2P Message (128 bytes)    │
+├─────────────────────────────────────────┤
+│ oracle_id:        0         [4 bytes]  │
+│ price:            50000     [8 bytes]  │  ← DigiDollar cents (500.00)
+│ timestamp:        1732204800 [8 bytes] │
+│ block_height:     700       [4 bytes]  │
+│ nonce:            0x123...  [8 bytes]  │
+│ oracle_pubkey:    <32 bytes>           │
+│ schnorr_sig:      <64 bytes>           │  ← BIP-340 signature
+└─────────────────────────────────────────┘
+                    │
+                    ▼
+         ┌──────────────────────┐
+         │ Broadcast to Network │
+         └──────────────────────┘
+                    │
+        ┌───────────┴───────────┐
+        │                       │
+        ▼                       ▼
+┌──────────────┐        ┌──────────────┐
+│  Node A      │        │  Node B      │
+│ Validates:   │        │ Validates:   │
+│ ✓ Signature  │        │ ✓ Signature  │
+│ ✓ Price range│        │ ✓ Price range│
+│ ✓ Timestamp  │        │ ✓ Timestamp  │
+└──────┬───────┘        └──────┬───────┘
+       │                       │
+       └───────────┬───────────┘
+                   ▼
+         Network-wide propagation
+         (95% coverage in 2-5s)
+
+
+STEP 2: BLOCK INCLUSION (Compact 22-byte Format with OP_ORACLE)
+════════════════════════════════════════════════════════════════════
+Miner creates coinbase transaction:
+┌───────────────────────────────────────────────────────────────┐
+│ Coinbase Transaction (First tx in block)                     │
+├───────────────────────────────────────────────────────────────┤
+│ vout[0]: 72,000 DGB  → Miner reward                          │
+│ vout[1]: 0 DGB       → OP_RETURN OP_ORACLE <compact data>    │ ◄── HERE!
+│ vout[2]: 0 DGB       → Witness commitment (SegWit)           │
+└───────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+        ┌─────────────────────────────────────────┐
+        │ OP_ORACLE OUTPUT STRUCTURE (22 bytes)  │
+        ├─────────────────────────────────────────┤
+        │ Byte  0: 0x6a  OP_RETURN               │ ◄── Makes output unspendable
+        │ Byte  1: 0xbf  OP_ORACLE               │ ◄── Oracle data marker
+        │ Byte  2: 0x01  PUSH 1 byte             │
+        │ Byte  3: 0x01  Version (Phase One)     │
+        │ Byte  4: 0x11  PUSH 17 bytes           │
+        │ Byte  5: 0x00  Oracle ID = 0           │
+        │ Bytes 6-13:    Price (50000 cents)     │ ◄── Little-endian uint64
+        │ Bytes 14-21:   Timestamp (Unix time)   │ ◄── Little-endian int64
+        └─────────────────────────────────────────┘
+                              │
+                              ▼
+                     Block is broadcast
+
+
+STEP 3: BLOCK VALIDATION (CheckBlock)
+════════════════════════════════════════════════════════════════════
+Every node validates the block:
+┌────────────────────────────────────────┐
+│ Node receives new block                │
+└────────────┬───────────────────────────┘
+             ▼
+    ┌────────────────────┐
+    │ Basic validation   │
+    │ (PoW, merkle, etc.)│
+    └────────┬───────────┘
+             ▼
+    ┌────────────────────────────────────────────┐
+    │ Oracle Validation (validation.cpp:4130)    │
+    ├────────────────────────────────────────────┤
+    │ 1. Find OP_ORACLE in coinbase vout[1]     │ ◄── Looks for 0x6a 0xbf
+    │ 2. Extract 22-byte compact data            │
+    │ 3. Parse: version, oracle_id, price, time  │
+    │ 4. Validate:                               │
+    │    ✓ Version == 0x01?                      │
+    │    ✓ Oracle ID == 0?                       │
+    │    ✓ Price: 1-1,000 cents?                 │
+    │    ✓ Timestamp not too old/future?         │
+    │    ✓ Exactly 1 oracle (Phase One)?         │
+    │    ✓ Oracle authorized in chainparams?     │
+    └────────┬───────────────────────────────────┘
+             │
+        ┌────┴────┐
+        │         │
+       PASS      FAIL
+        │         │
+        ▼         ▼
+    Accept    Reject Block
+    Block     (Invalid)
+
+
+STEP 4: PRICE CACHE UPDATE (ConnectBlock)
+════════════════════════════════════════════════════════════════════
+After block is accepted:
+┌─────────────────────────────────────────┐
+│ ConnectBlock() extracts oracle price   │
+└─────────────┬───────────────────────────┘
+              ▼
+┌─────────────────────────────────────────┐
+│ OracleBundleManager::UpdatePriceCache() │
+├─────────────────────────────────────────┤
+│ height_to_price[700] = 50000 cents      │ ◄── Cached in memory
+└─────────────┬───────────────────────────┘
+              │
+              ▼
+      ┌───────────────────┐
+      │ Price Cache (RAM) │
+      ├───────────────────┤
+      │ [695] = 49500     │
+      │ [696] = 49800     │
+      │ [697] = 50000     │
+      │ [698] = 50200     │
+      │ [699] = 50100     │
+      │ [700] = 50000  ◄─ Current price
+      └───────────────────┘
+
+
+STEP 5: DIGIDOLLAR USAGE
+════════════════════════════════════════════════════════════════════
+When user mints DigiDollars:
+┌──────────────────────────────────────────┐
+│ User: "I want to mint $100 DigiDollars" │
+└──────────────┬───────────────────────────┘
+               ▼
+┌──────────────────────────────────────────────────┐
+│ DigiDollar queries OracleBundleManager          │
+│ price = GetLatestPrice() → 50000 cents          │
+└──────────────┬───────────────────────────────────┘
+               ▼
+┌──────────────────────────────────────────────────┐
+│ Collateral Calculation:                         │
+│                                                  │
+│ Mint amount:    $100.00 = 10,000 cents          │
+│ Collateral:     200% (Phase One)                │
+│ Oracle price:   50000 cents = $500.00 per DGB   │
+│                                                  │
+│ Required DGB:                                    │
+│   ($100 × 2) ÷ $500/DGB = 0.4 DGB               │
+│                                                  │
+│ User must lock: 0.4 DGB to mint $100 DD         │
+└──────────────────────────────────────────────────┘
+```
+
+### OP_ORACLE Opcode: What Is It?
+
+```
+┌────────────────────────────────────────────────────────────────────┐
+│  OP_ORACLE (0xbf): The Oracle Data Marker                         │
+└────────────────────────────────────────────────────────────────────┘
+
+OPCODE DEFINITION (src/script/script.h:214)
 ═══════════════════════════════════════════════════════════════════
+OP_ORACLE = 0xbf  // Repurposed OP_NOP15 for oracle price data
+
+CONTEXT: DigiDollar Custom Opcodes
+─────────────────────────────────────────────────────────────────
+OP_DIGIDOLLAR      = 0xbb  (OP_NOP11) - Marks DD outputs
+OP_DDVERIFY        = 0xbc  (OP_NOP12) - Verify DD conditions
+OP_CHECKPRICE      = 0xbd  (OP_NOP13) - Check oracle price
+OP_CHECKCOLLATERAL = 0xbe  (OP_NOP14) - Verify collateral ratio
+OP_ORACLE          = 0xbf  (OP_NOP15) - Oracle price data marker ◄── THIS ONE
+
+
+WHAT DOES OP_ORACLE DO?
+═══════════════════════════════════════════════════════════════════
+Purpose: Marks an OP_RETURN output as containing oracle price data
+
+Usage Pattern:
+┌──────────────────────────────────────────────────────────────┐
+│ OP_RETURN OP_ORACLE <version> <oracle_id> <price> <timestamp>│
+│    0x6a      0xbf      0x01       0x00      ...      ...     │
+│     ▲         ▲                                               │
+│     │         │                                               │
+│     │         └─ Oracle marker (distinguishes from other data)│
+│     └─────────── Makes output unspendable                     │
+└──────────────────────────────────────────────────────────────┘
+
+WHY USE A CUSTOM OPCODE?
+═══════════════════════════════════════════════════════════════════
+✓ Instant recognition: "This is oracle data, not arbitrary data"
+✓ Efficient parsing: No need to parse entire OP_RETURN
+✓ Validation optimization: Nodes can skip non-oracle OP_RETURNs
+✓ Future extensibility: Can add OP_ORACLE2, OP_ORACLE3 for formats
+✓ Clear intent: Self-documenting code
+
+
+HOW NODES DETECT OP_ORACLE
+═══════════════════════════════════════════════════════════════════
+Step 1: Scan coinbase outputs for OP_RETURN
+┌────────────────────────────────────┐
+│ for (const auto& out : coinbase)  │
+│     if (out.scriptPubKey[0] == OP_RETURN)  // Found 0x6a
+│         check_for_oracle();        │
+└────────────────────────────────────┘
+
+Step 2: Check if next byte is OP_ORACLE
+┌────────────────────────────────────┐
+│ if (scriptPubKey[1] == OP_ORACLE)  │  // Found 0xbf
+│     parse_oracle_data();           │
+│ else                               │
+│     ignore; // Other OP_RETURN data│
+└────────────────────────────────────┘
+
+Step 3: Extract oracle price
+┌────────────────────────────────────┐
+│ ExtractOracleBundle(tx, bundle);  │
+│ // Parses version, oracle_id,     │
+│ // price, timestamp                │
+└────────────────────────────────────┘
+
+
+EXAMPLE: Finding OP_ORACLE in a Block
+═══════════════════════════════════════════════════════════════════
+Raw scriptPubKey hex:
+6a bf 01 01 11 00 50 c3 00 00 00 00 00 00 00 2f 50 65 00 00 00 00
+
+Byte-by-byte parsing:
+[0]  0x6a = OP_RETURN    ← "This output is unspendable"
+[1]  0xbf = OP_ORACLE    ← "This is oracle data!" ✓
+[2]  0x01 = PUSH 1       ← "Next 1 byte is data"
+[3]  0x01 = Version 1    ← "Phase One format"
+[4]  0x11 = PUSH 17      ← "Next 17 bytes are data"
+[5]  0x00 = Oracle ID 0  ← "Oracle #0"
+[6-13]    = Price        ← "50000 cents = $500.00/DGB"
+[14-21]   = Timestamp    ← "Unix time when price was set"
+```
+
+### Byte-by-Byte Structure Breakdown
+
+```
+┌────────────────────────────────────────────────────────────────────┐
+│  OP_ORACLE OUTPUT: Complete 22-Byte Structure                     │
+└────────────────────────────────────────────────────────────────────┘
+
+VISUAL BREAKDOWN
+═══════════════════════════════════════════════════════════════════
+
+Byte Position:  0    1    2    3    4    5    6-13        14-21
+               ┌────┬────┬────┬────┬────┬────┬──────────┬──────────┐
+Hex Value:     │ 6a │ bf │ 01 │ 01 │ 11 │ 00 │ 50c30... │ 002f50...│
+               └────┴────┴────┴────┴────┴────┴──────────┴──────────┘
+                 │    │    │    │    │    │       │          │
+                 │    │    │    │    │    │       │          │
+Names:     OP_RETURN │    │    │    │    │    Price    Timestamp
+              OP_ORACLE   │    │    │    │   (8 bytes)  (8 bytes)
+                     PUSH 1    │    │ Oracle
+                          Version  PUSH 17  ID
+
+
+DETAILED FIELD DESCRIPTIONS
+═══════════════════════════════════════════════════════════════════
+
+Position  Length  Type    Name         Value       Description
+─────────────────────────────────────────────────────────────────
 0         1       opcode  OP_RETURN    0x6a        Output is unspendable
 1         1       opcode  OP_ORACLE    0xbf        Oracle data marker
-2         1       opcode  PUSHDATA     0x11 (17)   Push next 17 bytes
+2         1       opcode  PUSHDATA     0x01        Push 1 byte (version)
 3         1       uint8   Version      0x01        Phase One format
-4         1       uint8   Oracle ID    0x00        Oracle 0 (Phase One)
-5-12      8       uint64  Price        <LE bytes>  DigiDollar cents
-13-20     8       int64   Timestamp    <LE bytes>  Unix timestamp
+4         1       opcode  PUSHDATA     0x11 (17)   Push 17 bytes (data)
+5         1       uint8   Oracle ID    0x00        Oracle 0 (Phase One)
+6-13      8       uint64  Price        <LE bytes>  DigiDollar cents
+14-21     8       int64   Timestamp    <LE bytes>  Unix timestamp
+
+
+FIELD-BY-FIELD EXPLANATION
+═══════════════════════════════════════════════════════════════════
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ BYTE 0: OP_RETURN (0x6a)                                    ┃
+┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
+┃ Purpose: Marks output as "provably unspendable"            ┃
+┃ Effect:  This output cannot be used as an input (no UTXO)  ┃
+┃ Why:     Data-only output, not meant to hold value         ┃
+┃ Size:    Does NOT count toward UTXO set (prunable)         ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ BYTE 1: OP_ORACLE (0xbf)                                    ┃
+┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
+┃ Purpose: Identifies this as oracle price data              ┃
+┃ Why:     Distinguishes from other OP_RETURN data           ┃
+┃ Usage:   Nodes check: if (script[1] == 0xbf) parse_oracle()┃
+┃ Benefit: Fast detection without parsing entire OP_RETURN   ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ BYTES 2-3: Version Header (0x01 0x01)                       ┃
+┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
+┃ Byte 2:  PUSH 1 byte (0x01)                                ┃
+┃ Byte 3:  Version number (0x01 = Phase One)                 ┃
+┃ Purpose: Forward compatibility for format changes          ┃
+┃ Future:  Phase Two might use 0x02 for multi-oracle format  ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ BYTES 4-5: Oracle ID (0x11 0x00)                            ┃
+┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
+┃ Byte 4:  PUSH 17 bytes (0x11)                              ┃
+┃ Byte 5:  Oracle ID = 0 (always 0 in Phase One)             ┃
+┃ Purpose: Identifies which oracle provided this price       ┃
+┃ Phase 2: Will support IDs 0-14 (15 oracles total)          ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ BYTES 6-13: Price (8 bytes, little-endian uint64)           ┃
+┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
+┃ Format:  DigiDollar cents (100 cents = $1.00)              ┃
+┃ Example: 50 00 00 00 00 00 00 00 (LE) = 50 cents = $0.50   ┃
+┃ Range:   1 to 1,000 cents ($0.01 to $10.00 per DGB)        ┃
+┃ Endian:  Little-endian (LSB first, Intel/AMD byte order)   ┃
+┃ Type:    uint64_t (unsigned 64-bit integer)                ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ BYTES 14-21: Timestamp (8 bytes, little-endian int64)       ┃
+┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
+┃ Format:  Unix timestamp (seconds since Jan 1, 1970 UTC)    ┃
+┃ Example: 00 2f 50 65 00 00 00 00 (LE) = 1,700,000,000      ┃
+┃          = Nov 14, 2023 22:13:20 UTC                        ┃
+┃ Range:   Must be within 1 hour of block time               ┃
+┃ Type:    int64_t (signed 64-bit integer)                   ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+
+TOTAL SIZE CALCULATION
+═══════════════════════════════════════════════════════════════════
+OP_RETURN:       1 byte
+OP_ORACLE:       1 byte
+PUSH (version):  1 byte
+Version:         1 byte
+PUSH (data):     1 byte
+Oracle ID:       1 byte
+Price:           8 bytes
+Timestamp:       8 bytes
+─────────────────────────
+TOTAL:          22 bytes ✓
+
+Percentage of MAX_OP_RETURN_RELAY (83 bytes): 26.5% ✓
 ```
 
 **Total: 22 bytes (2 marker opcodes + 2 push opcodes + 1 version byte + 17 data bytes)**

@@ -124,7 +124,7 @@ BOOST_AUTO_TEST_CASE(test_oracle_bundle_msg_serialization)
 
     // Add some test messages
     for (uint32_t i = 1; i <= 3; ++i) {
-        COraclePriceMessage msg{i, COIN * (5 + i * 100), GetTime()};
+        COraclePriceMessage msg{i, static_cast<uint64_t>(COIN * (5 + i * 100)), GetTime()};
         bundle.AddMessage(msg);
     }
 

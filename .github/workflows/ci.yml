@@ -51,7 +51,7 @@ jobs:
             ~/Library/Caches/Homebrew
             /opt/homebrew/Cellar
             /opt/homebrew/opt
-          key: ${{ github.job }}-brew-${{ hashFiles('.github/workflows/ci.yml') }}
+          key: ${{ github.job }}-brew-v1
           restore-keys: ${{ github.job }}-brew-
 
       - name: Install Homebrew packages
@@ -85,7 +85,7 @@ jobs:
         uses: actions/cache/restore@v3
         with:
           path: depends/arm64-apple-darwin
-          key: ${{ github.job }}-depends-${{ hashFiles('depends/packages/**') }}
+          key: ${{ github.job }}-depends-${{ github.sha }}
           restore-keys: ${{ github.job }}-depends-
 
       - name: Build Dependencies
@@ -100,7 +100,7 @@ jobs:
         if: github.event_name != 'pull_request' && steps.depends-cache.outputs.cache-hit != 'true'
         with:
           path: depends/arm64-apple-darwin
-          key: ${{ github.job }}-depends-${{ hashFiles('depends/packages/**') }}
+          key: ${{ github.job }}-depends-${{ github.sha }}
 
       - name: Cache build artifacts
         id: build-cache
@@ -113,7 +113,7 @@ jobs:
             src/qt/digibyte-qt
             src/test/test_digibyte
             src/bench/bench_digibyte
-          key: ${{ github.job }}-build-${{ hashFiles('src/**/*.cpp', 'src/**/*.h', 'depends/arm64-apple-darwin/**') }}
+          key: ${{ github.job }}-build-${{ github.sha }}
           restore-keys: ${{ github.job }}-build-
 
       - name: Configure and Build
@@ -156,7 +156,7 @@ jobs:
             ~/Library/Caches/Homebrew
             /opt/homebrew/Cellar
             /opt/homebrew/opt
-          key: ${{ github.job }}-brew-${{ hashFiles('.github/workflows/ci.yml') }}
+          key: ${{ github.job }}-brew-v1
 
   linux-native:
     name: 'Ubuntu 22.04 native, Qt GUI, with depends, unit tests, functional tests'
@@ -196,7 +196,7 @@ jobs:
         uses: actions/cache/restore@v3
         with:
           path: depends/x86_64-pc-linux-gnu
-          key: ${{ github.job }}-depends-${{ hashFiles('depends/packages/**') }}
+          key: ${{ github.job }}-depends-${{ github.sha }}
           restore-keys: ${{ github.job }}-depends-
 
       - name: Build Dependencies
@@ -211,7 +211,7 @@ jobs:
         if: github.event_name != 'pull_request' && steps.depends-cache.outputs.cache-hit != 'true'
         with:
           path: depends/x86_64-pc-linux-gnu
-          key: ${{ github.job }}-depends-${{ hashFiles('depends/packages/**') }}
+          key: ${{ github.job }}-depends-${{ github.sha }}
 
       - name: Cache build artifacts
         id: build-cache
@@ -224,7 +224,7 @@ jobs:
             src/qt/digibyte-qt
             src/test/test_digibyte
             src/bench/bench_digibyte
-          key: ${{ github.job }}-build-${{ hashFiles('src/**/*.cpp', 'src/**/*.h', 'depends/x86_64-pc-linux-gnu/**') }}
+          key: ${{ github.job }}-build-${{ github.sha }}
           restore-keys: ${{ github.job }}-build-
 
       - name: Configure and Build

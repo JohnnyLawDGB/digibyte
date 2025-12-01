@@ -2024,10 +2024,23 @@ static RPCHelpMan sendoracleprice()
             msg.price_micro_usd = price_micro_usd;
             msg.timestamp = GetTime();
 
-            // For testnet, we need to sign with the oracle's private key
-            // This would normally be done by the oracle operator daemon
-            // For now, we'll create an unsigned message (signature validation can be skipped in testnet)
-            // TODO: Add proper key management for testnet oracle operators
+            // Phase One testnet: Sign with hardcoded oracle key
+            // Private key = 0x01, Public key = G (generator point)
+            // This is a well-known test key - NEVER use on mainnet
+            CKey oracle_key;
+            std::vector<unsigned char> keydata = ParseHex(
+                "0000000000000000000000000000000000000000000000000000000000000001"
+            );
+            oracle_key.Set(keydata.begin(), keydata.end(), true);
+
+            if (!oracle_key.IsValid()) {
+                throw JSONRPCError(RPC_INTERNAL_ERROR, "Failed to create oracle key");
+            }
+
+            // Sign the message
+            if (!msg.Sign(oracle_key)) {
+                throw JSONRPCError(RPC_INTERNAL_ERROR, "Failed to sign oracle message");
+            }
 
             // Validate message
             if (!msg.IsValid()) {

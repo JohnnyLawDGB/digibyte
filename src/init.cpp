@@ -2047,6 +2047,8 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
         return false;
     }
 
+    // Initialize Oracle Bundle Manager with consensus parameters
+    OracleBundleManager::Initialize();
     // Initialize oracle P2P connection for broadcasting
     OracleBundleManager::GetInstance().SetConnman(node.connman.get());
 

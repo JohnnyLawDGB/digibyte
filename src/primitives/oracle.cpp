@@ -30,13 +30,13 @@ COraclePriceMessage::COraclePriceMessage(uint32_t oracle_id_in, uint64_t price_i
 bool COraclePriceMessage::IsValid(int64_t reference_time) const
 {
     // Check price is positive and in reasonable range
-    // DigiDollar cents format: 100 cents = $1.00
-    // Realistic DGB price range: $0.0001 to $10.00
-    static constexpr uint64_t MIN_PRICE_CENTS = 1;        // $0.01 (0.01 cents, minimum reasonable)
-    static constexpr uint64_t MAX_PRICE_CENTS = 1000;     // $10.00 (1000 cents)
+    // price_micro_usd format: 1,000,000 micro-USD = $1.00
+    // Realistic DGB price range: $0.0001 to $100.00
+    static constexpr uint64_t MIN_PRICE_MICRO_USD = 100;         // $0.0001 (minimum reasonable)
+    static constexpr uint64_t MAX_PRICE_MICRO_USD = 100000000;   // $100.00 (maximum reasonable)
 
-    if (price_micro_usd < MIN_PRICE_CENTS) return false;
-    if (price_micro_usd > MAX_PRICE_CENTS) return false;
+    if (price_micro_usd < MIN_PRICE_MICRO_USD) return false;
+    if (price_micro_usd > MAX_PRICE_MICRO_USD) return false;
 
     // Use provided reference time (block time during validation) or current time
     int64_t current_time = (reference_time > 0) ? reference_time : GetTime();

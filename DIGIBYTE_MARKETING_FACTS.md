@@ -22,7 +22,7 @@ DigiByte has pioneered multiple groundbreaking technologies now used across the 
 | **Transactions Per Second** | Up to 1,066 TPS |
 | **Daily Transaction Capacity** | 48+ million transactions |
 | **Mining Algorithms** | 5 simultaneous |
-| **Full Node Downloads** | 330,000+ (since 2017) |
+| **Full Node Downloads** | 80,000+ (since 2014) |
 
 ---
 

@@ -161,7 +161,7 @@ CAmount BaseExchangeFetcher::ConvertToMicroUSD(double price_usd)
  */
 
 BinanceFetcher::BinanceFetcher()
-    : BaseExchangeFetcher("Binance", "https://api.binance.com")
+    : BaseExchangeFetcher("Binance", "https://data-api.binance.vision")  // Use vision API - not geo-blocked
 {
 }
 
@@ -214,8 +214,63 @@ CAmount BinanceFetcher::FetchDGBUSDT()
 
 CAmount BinanceFetcher::FetchDGBBTC_BTCUSDT()
 {
-    // Mock implementation - would fetch both DGB/BTC and BTC/USDT rates
-    return ConvertToMicroUSD(0.05); // $0.05
+    // Fetch DGB/BTC first, then BTC/USDT, and calculate DGB/USD
+    // This is used when DGBUSDT pair is not available
+
+    // Fetch DGB/BTC
+    std::string dgb_btc_url = base_url + "/api/v3/ticker/price?symbol=DGBBTC";
+    std::string dgb_btc_response = HttpGet(dgb_btc_url);
+
+    if (dgb_btc_response.empty()) {
+        LogPrint(BCLog::DIGIDOLLAR, "BinanceFetcher: Empty DGB/BTC response\n");
+        return 0;
+    }
+
+    // Fetch BTC/USDT
+    std::string btc_usdt_url = base_url + "/api/v3/ticker/price?symbol=BTCUSDT";
+    std::string btc_usdt_response = HttpGet(btc_usdt_url);
+
+    if (btc_usdt_response.empty()) {
+        LogPrint(BCLog::DIGIDOLLAR, "BinanceFetcher: Empty BTC/USDT response\n");
+        return 0;
+    }
+
+    try {
+        UniValue dgb_btc_json;
+        if (!dgb_btc_json.read(dgb_btc_response)) {
+            LogPrint(BCLog::DIGIDOLLAR, "BinanceFetcher: Failed to parse DGB/BTC JSON\n");
+            return 0;
+        }
+
+        UniValue btc_usdt_json;
+        if (!btc_usdt_json.read(btc_usdt_response)) {
+            LogPrint(BCLog::DIGIDOLLAR, "BinanceFetcher: Failed to parse BTC/USDT JSON\n");
+            return 0;
+        }
+
+        if (!dgb_btc_json.isObject() || !dgb_btc_json.exists("price")) {
+            LogPrint(BCLog::DIGIDOLLAR, "BinanceFetcher: Missing 'price' in DGB/BTC\n");
+            return 0;
+        }
+
+        if (!btc_usdt_json.isObject() || !btc_usdt_json.exists("price")) {
+            LogPrint(BCLog::DIGIDOLLAR, "BinanceFetcher: Missing 'price' in BTC/USDT\n");
+            return 0;
+        }
+
+        double dgb_btc = std::stod(dgb_btc_json["price"].get_str());
+        double btc_usdt = std::stod(btc_usdt_json["price"].get_str());
+        double dgb_usd = dgb_btc * btc_usdt;
+
+        CAmount price_micro_usd = ConvertToMicroUSD(dgb_usd);
+        LogPrint(BCLog::DIGIDOLLAR, "Binance (via BTC): DGB/BTC=%f, BTC/USDT=%f, DGB/USD=%f (%lld micro-USD)\n",
+                 dgb_btc, btc_usdt, dgb_usd, price_micro_usd);
+        return price_micro_usd;
+
+    } catch (const std::exception& e) {
+        LogPrint(BCLog::DIGIDOLLAR, "BinanceFetcher: Error in DGB/BTC calculation: %s\n", e.what());
+        return 0;
+    }
 }
 
 /**
@@ -594,7 +649,9 @@ CryptoComFetcher::CryptoComFetcher()
 
 CAmount CryptoComFetcher::FetchPrice()
 {
-    std::string url = base_url + "/v2/public/get-ticker?instrument_name=DGB_USD";
+    // Crypto.com Exchange API v1: /exchange/v1/public/get-tickers
+    // Response: {"result":{"data":[{"i":"DGB_USD","a":"0.006314",...}]}}
+    std::string url = base_url + "/exchange/v1/public/get-tickers?instrument_name=DGB_USD";
     std::string response = HttpGet(url);
 
     if (response.empty()) {
@@ -602,9 +659,6 @@ CAmount CryptoComFetcher::FetchPrice()
         return 0;
     }
 
-    // Parse JSON using UniValue
-    // Expected format: {"result":{"data":{"a":"0.01234"}}}
-    // "a" = best ask price
     try {
         UniValue json;
         if (!json.read(response)) {
@@ -624,12 +678,18 @@ CAmount CryptoComFetcher::FetchPrice()
         }
 
         const UniValue& data = result["data"];
-        if (!data.isObject() || !data.exists("a")) {
-            LogPrint(BCLog::DIGIDOLLAR, "CryptoComFetcher: Missing 'a' field in data\n");
+        if (!data.isArray() || data.size() < 1) {
+            LogPrint(BCLog::DIGIDOLLAR, "CryptoComFetcher: 'data' is not an array or is empty\n");
             return 0;
         }
 
-        std::string price_str = data["a"].get_str();
+        const UniValue& ticker = data[0];
+        if (!ticker.isObject() || !ticker.exists("a")) {
+            LogPrint(BCLog::DIGIDOLLAR, "CryptoComFetcher: Missing 'a' (ask/price) field\n");
+            return 0;
+        }
+
+        std::string price_str = ticker["a"].get_str();
         CAmount price_micro_usd = ConvertToMicroUSD(price_str);
 
         // Validate range ($0.0001 to $10.00)
@@ -647,6 +707,121 @@ CAmount CryptoComFetcher::FetchPrice()
     }
 }
 
+
+/**
+ * GateIOFetcher Implementation
+ */
+
+GateIOFetcher::GateIOFetcher()
+    : BaseExchangeFetcher("Gate.io", "https://api.gateio.ws")
+{
+}
+
+CAmount GateIOFetcher::FetchPrice()
+{
+    // Gate.io API v4: /api/v4/spot/tickers?currency_pair=DGB_USDT
+    // Response: [{"currency_pair":"DGB_USDT","last":"0.006272",...}]
+    std::string url = base_url + "/api/v4/spot/tickers?currency_pair=DGB_USDT";
+    std::string response = HttpGet(url);
+
+    if (response.empty()) {
+        LogPrint(BCLog::DIGIDOLLAR, "GateIOFetcher: Empty response\n");
+        return 0;
+    }
+
+    try {
+        UniValue json;
+        if (!json.read(response)) {
+            LogPrint(BCLog::DIGIDOLLAR, "GateIOFetcher: Failed to parse JSON\n");
+            return 0;
+        }
+
+        // Response is an array with one element
+        if (!json.isArray() || json.size() < 1) {
+            LogPrint(BCLog::DIGIDOLLAR, "GateIOFetcher: Response is not an array or is empty\n");
+            return 0;
+        }
+
+        const UniValue& ticker = json[0];
+        if (!ticker.isObject() || !ticker.exists("last")) {
+            LogPrint(BCLog::DIGIDOLLAR, "GateIOFetcher: Missing 'last' field\n");
+            return 0;
+        }
+
+        std::string price_str = ticker["last"].get_str();
+        CAmount price_micro_usd = ConvertToMicroUSD(price_str);
+
+        // Validate range ($0.0001 to $10.00)
+        if (price_micro_usd < 100 || price_micro_usd > 10000000) {
+            LogPrint(BCLog::DIGIDOLLAR, "GateIOFetcher: Price out of range: %lld micro-USD\n", price_micro_usd);
+            return 0;
+        }
+
+        LogPrint(BCLog::DIGIDOLLAR, "Gate.io: %s (%lld micro-USD)\n", price_str.c_str(), price_micro_usd);
+        return price_micro_usd;
+
+    } catch (const std::exception& e) {
+        LogPrint(BCLog::DIGIDOLLAR, "GateIOFetcher: Error parsing response: %s\n", e.what());
+        return 0;
+    }
+}
+
+/**
+ * HTXFetcher Implementation
+ */
+
+HTXFetcher::HTXFetcher()
+    : BaseExchangeFetcher("HTX", "https://api.htx.com")
+{
+}
+
+CAmount HTXFetcher::FetchPrice()
+{
+    // HTX API: /market/detail/merged?symbol=dgbusdt
+    // Response: {"tick":{"close":0.006272,...}}
+    std::string url = base_url + "/market/detail/merged?symbol=dgbusdt";
+    std::string response = HttpGet(url);
+
+    if (response.empty()) {
+        LogPrint(BCLog::DIGIDOLLAR, "HTXFetcher: Empty response\n");
+        return 0;
+    }
+
+    try {
+        UniValue json;
+        if (!json.read(response)) {
+            LogPrint(BCLog::DIGIDOLLAR, "HTXFetcher: Failed to parse JSON\n");
+            return 0;
+        }
+
+        if (!json.isObject() || !json.exists("tick")) {
+            LogPrint(BCLog::DIGIDOLLAR, "HTXFetcher: Missing 'tick' field\n");
+            return 0;
+        }
+
+        const UniValue& tick = json["tick"];
+        if (!tick.isObject() || !tick.exists("close")) {
+            LogPrint(BCLog::DIGIDOLLAR, "HTXFetcher: Missing 'close' field in tick\n");
+            return 0;
+        }
+
+        double priceUSD = tick["close"].get_real();
+        CAmount price_micro_usd = ConvertToMicroUSD(priceUSD);
+
+        // Validate range ($0.0001 to $10.00)
+        if (price_micro_usd < 100 || price_micro_usd > 10000000) {
+            LogPrint(BCLog::DIGIDOLLAR, "HTXFetcher: Price out of range: %lld micro-USD\n", price_micro_usd);
+            return 0;
+        }
+
+        LogPrint(BCLog::DIGIDOLLAR, "HTX: $%.6f (%lld micro-USD)\n", priceUSD, price_micro_usd);
+        return price_micro_usd;
+
+    } catch (const std::exception& e) {
+        LogPrint(BCLog::DIGIDOLLAR, "HTXFetcher: Error parsing response: %s\n", e.what());
+        return 0;
+    }
+}
 
 /**
  * CoinMarketCapFetcher Implementation
@@ -825,15 +1000,28 @@ MultiExchangeAggregator::~MultiExchangeAggregator()
 
 void MultiExchangeAggregator::InitializeFetchers()
 {
-    // Initialize all 8 exchange fetchers as per Phase One spec
+    // Initialize exchange fetchers - only use exchanges that actually list DGB
+    // VERIFIED WORKING (Dec 2025):
+    // - Binance (via data-api.binance.vision - not geo-blocked)
+    // - CoinGecko (aggregator - always works)
+    // - KuCoin (DGB-USDT)
+    // - Gate.io (DGB_USDT)
+    // - HTX/Huobi (dgbusdt)
+    // - Crypto.com (DGB_USD via exchange/v1 API)
+    //
+    // NOT AVAILABLE / REMOVED:
+    // - Coinbase: DGB not tradeable (info page only)
+    // - Kraken: DGB not listed
+    // - Messari: Requires API key now
+    // - CoinMarketCap: Requires API key (kept but optional)
+
     fetchers.push_back(std::make_unique<BinanceFetcher>());
-    fetchers.push_back(std::make_unique<CoinMarketCapFetcher>());
     fetchers.push_back(std::make_unique<CoinGeckoFetcher>());
-    fetchers.push_back(std::make_unique<CoinbaseFetcher>());
-    fetchers.push_back(std::make_unique<KrakenFetcher>());
-    fetchers.push_back(std::make_unique<MessariFetcher>());
     fetchers.push_back(std::make_unique<KuCoinFetcher>());
+    fetchers.push_back(std::make_unique<GateIOFetcher>());
+    fetchers.push_back(std::make_unique<HTXFetcher>());
     fetchers.push_back(std::make_unique<CryptoComFetcher>());
+    fetchers.push_back(std::make_unique<CoinMarketCapFetcher>());  // Optional - requires API key
 
     LogPrintf("Oracle: Initialized %d exchange fetchers\n", fetchers.size());
 }

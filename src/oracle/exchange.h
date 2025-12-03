@@ -187,6 +187,30 @@ public:
 };
 
 /**
+ * Gate.io Exchange Fetcher
+ * Fetches DGB/USDT from Gate.io
+ * No API key required for public endpoints
+ */
+class GateIOFetcher : public BaseExchangeFetcher
+{
+public:
+    GateIOFetcher();
+    CAmount FetchPrice() override;
+};
+
+/**
+ * HTX (Huobi) Exchange Fetcher
+ * Fetches DGB/USDT from HTX
+ * No API key required for public endpoints
+ */
+class HTXFetcher : public BaseExchangeFetcher
+{
+public:
+    HTXFetcher();
+    CAmount FetchPrice() override;
+};
+
+/**
  * Multi-Exchange Price Aggregator
  * Fetches from multiple exchanges and calculates median/weighted average
  */
@@ -210,7 +234,7 @@ private:
     std::vector<ExchangePrice> last_prices;
 
     // Configuration
-    size_t min_required_sources{3};
+    size_t min_required_sources{2};  // Lowered from 3 - only need 2 working exchanges
     double outlier_threshold{0.10}; // 10% deviation
     bool use_weighted_median{false};
 

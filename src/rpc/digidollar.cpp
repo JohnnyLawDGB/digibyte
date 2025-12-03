@@ -1792,8 +1792,9 @@ static RPCHelpMan getoracleprice()
                 RPCResult{
                     RPCResult::Type::OBJ, "", "",
                     {
-                        {RPCResult::Type::STR_AMOUNT, "price_cents", "Current DGB price in cents per DGB"},
-                        {RPCResult::Type::NUM, "price_usd", "Current DGB price in USD"},
+                        {RPCResult::Type::NUM, "price_micro_usd", "Current DGB price in micro-USD (1,000,000 = $1.00)"},
+                        {RPCResult::Type::STR_AMOUNT, "price_cents", "Current DGB price in cents per DGB (rounded)"},
+                        {RPCResult::Type::NUM, "price_usd", "Current DGB price in USD (full precision)"},
                         {RPCResult::Type::NUM, "last_update_height", "Block height of last price update"},
                         {RPCResult::Type::NUM, "last_update_time", "Timestamp of last update"},
                         {RPCResult::Type::NUM, "validity_blocks", "Blocks remaining until price expires"},
@@ -1818,8 +1819,12 @@ static RPCHelpMan getoracleprice()
             OracleBundleManager& oracle_manager = OracleBundleManager::GetInstance();
             OracleBundleManager::OracleStats stats = oracle_manager.GetStats();
 
+            // Get the raw micro-USD price from the oracle (full precision)
+            CAmount priceMicroUSD = oracle_manager.GetLatestPrice();
+            // Get rounded cents price for internal calculations
             CAmount priceCents = OracleIntegration::GetCurrentOraclePrice();
-            double priceUSD = static_cast<double>(priceCents) / 100.0;
+            // Calculate true USD price from micro-USD (full precision)
+            double priceUSD = static_cast<double>(priceMicroUSD) / 1000000.0;
 
             // Get current blockchain info
             int lastUpdateHeight = chainman.ActiveChain().Height();
@@ -1840,6 +1845,7 @@ static RPCHelpMan getoracleprice()
             double volatility = 2.5; // Mock volatility
 
             UniValue result(UniValue::VOBJ);
+            result.pushKV("price_micro_usd", priceMicroUSD);
             result.pushKV("price_cents", priceCents);
             result.pushKV("price_usd", priceUSD);
             result.pushKV("last_update_height", lastUpdateHeight);
@@ -2237,7 +2243,17 @@ static RPCHelpMan startoracle()
                         success = oracle_manager.AddOracleNode(oracle_id, private_key_hex);
                         if (success) {
                             oracle_manager.EnableOracle(oracle_id, true);
-                            status_message = "Oracle added and started with provided private key";
+                            // Actually start the oracle's price fetching thread
+                            OracleNode* oracle = oracle_manager.GetOracleNode(oracle_id);
+                            if (oracle) {
+                                oracle->Start();
+                                if (oracle->IsRunning()) {
+                                    status_message = "Oracle added and started with provided private key";
+                                } else {
+                                    status_message = "Oracle added but failed to start price thread (check key validation)";
+                                    success = false;
+                                }
+                            }
                         } else {
                             status_message = "Failed to initialize oracle with provided private key";
                         }

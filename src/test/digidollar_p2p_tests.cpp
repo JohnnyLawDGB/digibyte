@@ -201,15 +201,15 @@ BOOST_AUTO_TEST_CASE(test_oracle_message_validation_timestamp)
     int64_t now = GetTime();
 
     // Valid message (recent timestamp)
-    COraclePriceMessage valid_msg{1, 5, now - 30}; // 30 seconds ago
+    COraclePriceMessage valid_msg{1, 6000, now - 30}; // 30 seconds ago, $0.006
     BOOST_CHECK(valid_msg.IsValid());
 
     // Message too far in future (should be invalid)
-    COraclePriceMessage future_msg{1, 5, now + 120}; // 2 minutes in future
+    COraclePriceMessage future_msg{1, 6000, now + 120}; // 2 minutes in future
     BOOST_CHECK(!future_msg.IsValid());
 
     // Message too old (should be invalid)
-    COraclePriceMessage old_msg{1, 5, now - 7200}; // 2 hours ago
+    COraclePriceMessage old_msg{1, 6000, now - 7200}; // 2 hours ago
     BOOST_CHECK(!old_msg.IsValid());
 }
 
@@ -221,7 +221,7 @@ BOOST_AUTO_TEST_CASE(test_oracle_message_validation_signature)
     CPubKey oracle_pubkey = oracle_key.GetPubKey();
     XOnlyPubKey oracle_xonly = XOnlyPubKey(oracle_pubkey);
 
-    COraclePriceMessage msg{1, 5, GetTime()};
+    COraclePriceMessage msg{1, 6000, GetTime()};
 
     // Sign with correct key using Schnorr signature
     BOOST_CHECK(msg.Sign(oracle_key));

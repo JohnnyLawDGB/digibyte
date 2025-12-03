@@ -77,7 +77,7 @@ BOOST_AUTO_TEST_CASE(add_oracle_bundle_to_coinbase)
     // Create oracle price message
     COraclePriceMessage msg;
     msg.oracle_id = 0;
-    msg.price_micro_usd = 5;  // $0.05 in micro-USD
+    msg.price_micro_usd = 6000;  // $0.006 (realistic DGB price)
     msg.timestamp = GetTime();
     msg.block_height = 101;
     msg.nonce = FastRandomContext().rand64();
@@ -137,7 +137,7 @@ BOOST_AUTO_TEST_CASE(oracle_bundle_serialization_format)
 
     COraclePriceMessage msg;
     msg.oracle_id = 0;
-    msg.price_micro_usd = 12;  // $0.123456 in micro-USD
+    msg.price_micro_usd = 12000;  // $0.012 (realistic DGB price)
     msg.timestamp = GetTime();
     msg.block_height = 101;
     msg.nonce = FastRandomContext().rand64();
@@ -272,7 +272,7 @@ BOOST_AUTO_TEST_CASE(create_new_block_includes_oracle_bundle)
 
     COraclePriceMessage msg;
     msg.oracle_id = 0;
-    msg.price_micro_usd = 5;  // $0.05
+    msg.price_micro_usd = 6000;  // $0.006 (realistic DGB price)
     msg.timestamp = GetTime();
     msg.block_height = m_node.chainman->ActiveHeight() + 1;
     msg.nonce = FastRandomContext().rand64();
@@ -415,7 +415,7 @@ BOOST_AUTO_TEST_CASE(create_new_block_phase_one_single_oracle)
 
     if (!extracted_bundle.messages.empty()) {
         BOOST_CHECK_EQUAL(extracted_bundle.messages[0].oracle_id, 0);
-        BOOST_CHECK_EQUAL(extracted_bundle.messages[0].price_micro_usd, 5);
+        BOOST_CHECK_EQUAL(extracted_bundle.messages[0].price_micro_usd, 6000);
         BOOST_CHECK_EQUAL(extracted_bundle.messages[0].timestamp, msg.timestamp);
     }
 }

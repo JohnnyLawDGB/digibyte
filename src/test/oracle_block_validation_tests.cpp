@@ -156,7 +156,7 @@ BOOST_AUTO_TEST_CASE(checkblock_accepts_valid_oracle_bundle)
     oracle_key.MakeNewKey(true);
 
     // Create block with valid oracle bundle
-    uint64_t price = 5; // $0.05 (5 cents) in micro-USD
+    uint64_t price = 50000; // 50000 micro-USD = $0.05 = 5 cents (valid range: 100 - 100000000 micro-USD)
     int64_t timestamp = GetTime();
     int32_t block_height = 700;  // Above activation height (600)
     CScript coinbase_script_sig = CScript() << block_height << OP_0;
@@ -363,7 +363,7 @@ BOOST_AUTO_TEST_CASE(contextual_checkblock_timestamp_validation)
 
     CBlock block = CreateBlockWithOracleBundle(
         oracle_key,
-        5,  // 5 cents = $0.05 (valid range: 1-1000 cents)
+        50000,  // 50000 micro-USD = $0.05 = 5 cents (valid range: 100 - 100000000 micro-USD)
         oracle_timestamp,
         block_height,
         CScript() << block_height << OP_0
@@ -424,7 +424,7 @@ BOOST_AUTO_TEST_CASE(contextual_checkblock_rejects_old_bundle)
 
     CBlock block = CreateBlockWithOracleBundle(
         oracle_key,
-        5,  // 5 cents = $0.05 (valid range: 1-1000 cents)
+        50000,  // 50000 micro-USD = $0.05 = 5 cents (valid range: 100 - 100000000 micro-USD)
         oracle_timestamp,
         block_height,
         CScript() << block_height << OP_0

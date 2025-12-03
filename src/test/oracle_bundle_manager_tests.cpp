@@ -35,7 +35,7 @@ BOOST_AUTO_TEST_CASE(phase_one_bundle_creation)
 
     // Create oracle price message
     uint32_t oracle_id = 0;
-    CAmount price_micro_usd = 5; // $0.05 (5 cents)
+    CAmount price_micro_usd = 6000; // $0.006 (realistic DGB price)
     int64_t timestamp = GetTime();
 
     COraclePriceMessage msg(oracle_id, price_micro_usd, timestamp);
@@ -93,11 +93,11 @@ BOOST_AUTO_TEST_CASE(message_validation)
     BOOST_CHECK(!invalid_msg.IsValid());
 
     // Test 2: Invalid timestamp (future)
-    COraclePriceMessage future_msg(0, 5, GetTime() + 3600);
+    COraclePriceMessage future_msg(0, 6000, GetTime() + 3600);
     BOOST_CHECK(!future_msg.IsValid());
 
     // Test 3: Valid message
-    COraclePriceMessage valid_msg(0, 5, GetTime());
+    COraclePriceMessage valid_msg(0, 6000, GetTime());
     BOOST_CHECK(valid_msg.Sign(oracle_key));
     BOOST_CHECK(valid_msg.IsValid());
 
@@ -182,7 +182,7 @@ BOOST_AUTO_TEST_CASE(oracle_node_price_fetching)
     BOOST_REQUIRE(oracle.Initialize(0, key_hex));
 
     // Create and sign a price message
-    CAmount test_price = 5;
+    CAmount test_price = 6000;
     int64_t test_timestamp = GetTime();
     COraclePriceMessage msg = oracle.CreatePriceMessage(test_price, test_timestamp);
 
@@ -212,7 +212,7 @@ BOOST_AUTO_TEST_CASE(bundle_validation_rules)
 
     // Create bundle with valid message
     COracleBundle bundle(epoch);
-    COraclePriceMessage msg(0, 5, GetTime());
+    COraclePriceMessage msg(0, 6000, GetTime());
     msg.Sign(oracle_key);
 
     BOOST_CHECK(bundle.AddMessage(msg));
@@ -244,7 +244,7 @@ BOOST_AUTO_TEST_CASE(phase_one_testnet_config)
     CKey oracle_key;
     oracle_key.MakeNewKey(true);
 
-    COraclePriceMessage msg(0, 5, GetTime());
+    COraclePriceMessage msg(0, 6000, GetTime());
     msg.Sign(oracle_key);
 
     BOOST_CHECK(manager.AddOracleMessage(msg));
@@ -279,7 +279,7 @@ BOOST_AUTO_TEST_CASE(oracle_stats_reporting)
     CKey oracle_key;
     oracle_key.MakeNewKey(true);
 
-    COraclePriceMessage msg(0, 5, GetTime());
+    COraclePriceMessage msg(0, 6000, GetTime());
     msg.Sign(oracle_key);
 
     manager.AddOracleMessage(msg);

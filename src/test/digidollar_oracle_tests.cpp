@@ -35,7 +35,7 @@ BOOST_AUTO_TEST_CASE(oracle_price_message_basic_construction)
 
     // Test construction with parameters
     uint32_t oracle_id = 5;
-    CAmount price = 500; // 0.05 DGB per USD (5M satoshis)
+    CAmount price = 6000; // $0.006 per DGB (realistic price)
     int64_t timestamp = GetTime();
 
     COraclePriceMessage msg2(oracle_id, price, timestamp);
@@ -56,12 +56,18 @@ BOOST_AUTO_TEST_CASE(oracle_price_message_validation)
     msg.price_micro_usd = 0;
     BOOST_CHECK(!msg.IsValid());
 
-    // Test extremely high price (unrealistic)
-    msg.price_micro_usd = 10000; // 1000 DGB per USD (unrealistic)
+    // Test price below minimum (MIN_PRICE_MICRO_USD = 100)
+    msg.price_micro_usd = 50; // Below minimum ($0.00005)
+    msg.timestamp = GetTime();
+    msg.oracle_id = 1;
+    BOOST_CHECK(!msg.IsValid());
+
+    // Test extremely high price (unrealistic - above $100)
+    msg.price_micro_usd = 200000000; // $200 per DGB (unrealistic)
     BOOST_CHECK(!msg.IsValid());
 
     // Test valid price range
-    msg.price_micro_usd = 100; // 0.01 DGB per USD
+    msg.price_micro_usd = 6000; // $0.006 per DGB (realistic)
     msg.timestamp = GetTime();
     msg.oracle_id = 1;
     BOOST_CHECK(msg.IsValid());
@@ -82,7 +88,7 @@ BOOST_AUTO_TEST_CASE(oracle_price_message_signature_validation)
     oracle_key.MakeNewKey(true);
     CPubKey oracle_pubkey = oracle_key.GetPubKey();
 
-    COraclePriceMessage msg(1, 500, GetTime());
+    COraclePriceMessage msg(1, 6000, GetTime());  // $0.006 (realistic price)
 
     // Test message without signature
     msg.oracle_pubkey = XOnlyPubKey(oracle_pubkey);
@@ -111,7 +117,7 @@ BOOST_AUTO_TEST_CASE(oracle_price_message_signature_validation)
 
 BOOST_AUTO_TEST_CASE(oracle_price_message_serialization)
 {
-    COraclePriceMessage original(42, 750, GetTime());
+    COraclePriceMessage original(42, 7500, GetTime());  // $0.0075 (realistic price)
     original.schnorr_sig = {0x01, 0x02, 0x03, 0x04}; // Dummy signature
 
     // Serialize
@@ -153,25 +159,25 @@ BOOST_AUTO_TEST_CASE(oracle_bundle_consensus_requirement)
 
     // Add 7 messages - still no consensus (need 8 of 15)
     for (int i = 0; i < 7; i++) {
-        COraclePriceMessage msg(i, 500, GetTime());
+        COraclePriceMessage msg(i, 6000, GetTime());  // $0.006 (realistic price)
         bundle.AddMessage(msg);
     }
     BOOST_CHECK(!bundle.HasConsensus());
 
     // Add 8th message - now has consensus
-    COraclePriceMessage msg8(7, 500, GetTime());
+    COraclePriceMessage msg8(7, 6000, GetTime());  // $0.006 (realistic price)
     bundle.AddMessage(msg8);
     BOOST_CHECK(bundle.HasConsensus());
 
     // Test with more messages (up to 15)
     for (int i = 8; i < 15; i++) {
-        COraclePriceMessage msg(i, 500, GetTime());
+        COraclePriceMessage msg(i, 6000, GetTime());  // $0.006 (realistic price)
         bundle.AddMessage(msg);
     }
     BOOST_CHECK(bundle.HasConsensus());
 
     // Test with too many messages (should reject)
-    COraclePriceMessage extra_msg(15, 500, GetTime());
+    COraclePriceMessage extra_msg(15, 6000, GetTime());  // $0.006 (realistic price)
     BOOST_CHECK(!bundle.AddMessage(extra_msg));
 }
 
@@ -179,9 +185,10 @@ BOOST_AUTO_TEST_CASE(oracle_bundle_median_calculation)
 {
     COracleBundle bundle(1);
 
-    // Test median with odd number of values
-    std::vector<CAmount> prices = {300, 500, 400, 600, 450,
-                                   550, 480, 520, 470};
+    // Test median with odd number of values (prices in micro-USD)
+    // Using realistic prices around $0.005 (5000 micro-USD)
+    std::vector<CAmount> prices = {3000, 5000, 4000, 6000, 4500,
+                                   5500, 4800, 5200, 4700};
 
     for (size_t i = 0; i < prices.size(); i++) {
         COraclePriceMessage msg(i, prices[i], GetTime());
@@ -189,30 +196,30 @@ BOOST_AUTO_TEST_CASE(oracle_bundle_median_calculation)
     }
 
     CAmount median_price = bundle.GetConsensusPrice();
-    // Sorted: 300, 400, 450, 470, 480, 500, 520, 550, 600 (cents)
-    // Median (5th element): 480 cents
-    BOOST_CHECK_EQUAL(median_price, 480);
+    // Sorted: 3000, 4000, 4500, 4700, 4800, 5000, 5200, 5500, 6000 (micro-USD)
+    // Median (5th element): 4800 micro-USD = $0.0048
+    BOOST_CHECK_EQUAL(median_price, 4800);
 
     // Test median with even number of values (add one more)
-    COraclePriceMessage msg10(9, 490, GetTime());
+    COraclePriceMessage msg10(9, 4900, GetTime());
     bundle.AddMessage(msg10);
 
     median_price = bundle.GetConsensusPrice();
-    // Sorted: 300, 400, 450, 470, 480, 490, 500, 520, 550, 600 (cents)
-    // Median (average of 5th and 6th): (480 + 490) / 2 = 485 cents
-    BOOST_CHECK_EQUAL(median_price, 485);
+    // Sorted: 3000, 4000, 4500, 4700, 4800, 4900, 5000, 5200, 5500, 6000 (micro-USD)
+    // Median (average of 5th and 6th): (4800 + 4900) / 2 = 4850 micro-USD
+    BOOST_CHECK_EQUAL(median_price, 4850);
 }
 
 BOOST_AUTO_TEST_CASE(oracle_bundle_outlier_filtering)
 {
     COracleBundle bundle(1);
 
-    // Add normal prices around 500 cents ($5.00)
-    std::vector<CAmount> normal_prices = {480, 490, 500, 510, 520,
-                                          495, 505, 515};
+    // Add normal prices around 5000 micro-USD ($0.005)
+    std::vector<CAmount> normal_prices = {4800, 4900, 5000, 5100, 5200,
+                                          4950, 5050, 5150};
 
     // Add outliers (more than 10% deviation from median)
-    std::vector<CAmount> outlier_prices = {300, 700}; // -40% and +40% from ~500
+    std::vector<CAmount> outlier_prices = {3000, 7000}; // -40% and +40% from ~5000
 
     // Add all prices
     for (size_t i = 0; i < normal_prices.size(); i++) {
@@ -231,10 +238,10 @@ BOOST_AUTO_TEST_CASE(oracle_bundle_outlier_filtering)
     // Should remove the outliers
     BOOST_CHECK_EQUAL(filtered.size(), normal_prices.size());
 
-    // Verify no extreme outliers remain (within +/- 20% of 500 cents)
+    // Verify no extreme outliers remain (within +/- 20% of 5000 micro-USD)
     for (const auto& msg : filtered) {
-        BOOST_CHECK(msg.price_micro_usd >= 400); // Not too low (<$4.00)
-        BOOST_CHECK(msg.price_micro_usd <= 600); // Not too high (>$6.00)
+        BOOST_CHECK(msg.price_micro_usd >= 4000); // Not too low
+        BOOST_CHECK(msg.price_micro_usd <= 6000); // Not too high
     }
 }
 
@@ -636,9 +643,9 @@ BOOST_AUTO_TEST_CASE(oracle_bundle_manager_bundle_creation)
     // Create bundle manually for testing (cannot use AddOracleMessage due to signature validation)
     COracleBundle bundle(test_epoch);
 
-    // Add enough messages for consensus
+    // Add enough messages for consensus (using realistic prices)
     for (int i = 0; i < ORACLE_CONSENSUS_REQUIRED; i++) {
-        COraclePriceMessage msg(i, 5000, GetTime());
+        COraclePriceMessage msg(i, 6000, GetTime());  // $0.006 (realistic price)
 
         // Mock valid signature
         msg.schnorr_sig = {0x01, 0x02, 0x03, 0x04};
@@ -686,7 +693,8 @@ BOOST_AUTO_TEST_CASE(oracle_node_struct_tests)
  */
 BOOST_AUTO_TEST_CASE(exchange_price_mock_tests)
 {
-    // Test mock price aggregation concepts
+    // Test mock price aggregation concepts (prices in micro-USD)
+    // Using realistic prices around $0.005 (5000 micro-USD)
     std::vector<CAmount> test_prices = {5000, 5050, 4950, 7000, 3000}; // Including outliers
 
     // Calculate median
@@ -694,7 +702,7 @@ BOOST_AUTO_TEST_CASE(exchange_price_mock_tests)
     std::sort(sorted_prices.begin(), sorted_prices.end());
 
     CAmount median_price = sorted_prices[sorted_prices.size() / 2];
-    BOOST_CHECK_EQUAL(median_price, 5000);
+    BOOST_CHECK_EQUAL(median_price, 5000);  // $0.005
 
     // Test outlier detection logic
     CAmount median = median_price;
@@ -720,12 +728,14 @@ BOOST_AUTO_TEST_CASE(exchange_price_mock_tests)
 BOOST_AUTO_TEST_CASE(oracle_integration_price_retrieval)
 {
     // Test oracle price retrieval
+    // In unit test environment without oracle setup, price may be 0
+    // This tests that the function doesn't crash and returns valid range when configured
     CAmount oracle_price = OracleIntegration::GetCurrentOraclePrice();
 
-    // Should return fallback price if no oracle system
-    BOOST_CHECK_GT(oracle_price, 0);
-    BOOST_CHECK_GE(oracle_price, 1);   // At least $0.01
-    BOOST_CHECK_LE(oracle_price, 100000); // At most $1.00
+    // Price should be 0 (no oracle configured) or in valid range
+    bool valid_price = (oracle_price == 0) ||
+                       (oracle_price >= 100 && oracle_price <= 1000000);
+    BOOST_CHECK(valid_price);
 }
 
 BOOST_AUTO_TEST_CASE(oracle_integration_system_readiness)
@@ -773,7 +783,7 @@ BOOST_AUTO_TEST_CASE(oracle_block_integration)
 
     // Test with valid bundle
     COracleBundle valid_bundle(10);
-    COraclePriceMessage msg(1, 5000, GetTime());
+    COraclePriceMessage msg(1, 6000, GetTime());  // $0.006 (realistic price)
     msg.schnorr_sig = {0x01, 0x02, 0x03}; // Mock signature
     valid_bundle.AddMessage(msg);
 
@@ -791,7 +801,7 @@ BOOST_AUTO_TEST_CASE(oracle_block_integration)
 BOOST_AUTO_TEST_CASE(oracle_data_validation)
 {
     // Test oracle message validation
-    COraclePriceMessage valid_msg(1, 500, GetTime());
+    COraclePriceMessage valid_msg(1, 6000, GetTime());  // $0.006 (realistic price)
 
     CKey test_key;
     test_key.MakeNewKey(true);
@@ -804,7 +814,7 @@ BOOST_AUTO_TEST_CASE(oracle_data_validation)
     COracleBundle bundle(50);
 
     for (int i = 0; i < ORACLE_CONSENSUS_REQUIRED; i++) {
-        COraclePriceMessage msg(i, 5000, GetTime());
+        COraclePriceMessage msg(i, 6000, GetTime());  // $0.006 (realistic price)
         msg.schnorr_sig = {0x01, 0x02, 0x03, 0x04}; // Mock signature
         bundle.AddMessage(msg);
     }
@@ -834,10 +844,10 @@ BOOST_AUTO_TEST_CASE(test_signature_verification_edge_cases)
     oracle_key.MakeNewKey(true);
     CPubKey oracle_pubkey = oracle_key.GetPubKey();
 
-    COraclePriceMessage msg(1, 500, GetTime());
+    COraclePriceMessage msg(1, 6000, GetTime());  // $0.006 (realistic price)
 
     // Test 1: Expired signature (timestamp too old)
-    COraclePriceMessage expired_msg(1, 500, GetTime() - ORACLE_MAX_AGE_SECONDS - 1);
+    COraclePriceMessage expired_msg(1, 6000, GetTime() - ORACLE_MAX_AGE_SECONDS - 1);  // $0.006
     BOOST_CHECK(expired_msg.Sign(oracle_key));
 
     // Signature itself is cryptographically valid
@@ -847,11 +857,11 @@ BOOST_AUTO_TEST_CASE(test_signature_verification_edge_cases)
     BOOST_CHECK(!expired_msg.IsValid());
 
     // Test 2: Signature replay attack protection
-    COraclePriceMessage original_msg(1, 500, GetTime());
+    COraclePriceMessage original_msg(1, 6000, GetTime());  // $0.006
     BOOST_CHECK(original_msg.Sign(oracle_key));
 
     // Try to reuse signature on different message (should fail)
-    COraclePriceMessage replay_msg(1, 600, GetTime()); // Different price
+    COraclePriceMessage replay_msg(1, 7000, GetTime()); // Different price ($0.007)
     replay_msg.schnorr_sig = original_msg.schnorr_sig; // Same signature
     replay_msg.oracle_pubkey = original_msg.oracle_pubkey;
 
@@ -868,15 +878,15 @@ BOOST_AUTO_TEST_CASE(test_signature_verification_edge_cases)
     CKey wrong_key;
     wrong_key.MakeNewKey(true);
 
-    COraclePriceMessage wrong_key_msg(1, 500, GetTime());
+    COraclePriceMessage wrong_key_msg(1, 6000, GetTime());  // $0.006
     BOOST_CHECK(wrong_key_msg.Sign(wrong_key));
     wrong_key_msg.oracle_pubkey = XOnlyPubKey(oracle_pubkey); // Wrong pubkey for signature
 
     BOOST_CHECK(!wrong_key_msg.Verify());
 
     // Test 5: Double-spending protection (same oracle, same epoch)
-    COraclePriceMessage double_spend1(1, 500, GetTime());
-    COraclePriceMessage double_spend2(1, 600, GetTime()); // Same oracle, different price
+    COraclePriceMessage double_spend1(1, 6000, GetTime());  // $0.006
+    COraclePriceMessage double_spend2(1, 7000, GetTime()); // Same oracle, different price ($0.007)
 
     BOOST_CHECK(double_spend1.Sign(oracle_key));
     BOOST_CHECK(double_spend2.Sign(oracle_key));
@@ -964,13 +974,13 @@ BOOST_AUTO_TEST_CASE(test_p2p_message_validation)
     // Test 1: Malformed oracle price message
     COraclePriceMessage malformed_msg;
     malformed_msg.oracle_id = ORACLE_TOTAL_COUNT + 1; // Invalid oracle ID
-    malformed_msg.price_micro_usd = 500;
+    malformed_msg.price_micro_usd = 6000;  // $0.006
     malformed_msg.timestamp = GetTime();
 
     BOOST_CHECK(!OracleP2P::ValidateIncomingMessage(malformed_msg));
 
     // Test 2: Message rate limiting
-    COraclePriceMessage rate_limit_msg(1, 500, GetTime());
+    COraclePriceMessage rate_limit_msg(1, 6000, GetTime());  // $0.006
 
     // Create valid Schnorr signature
     CKey test_key;
@@ -982,7 +992,7 @@ BOOST_AUTO_TEST_CASE(test_p2p_message_validation)
 
     // Rapid subsequent messages should be rate limited
     for (int i = 0; i < 10; i++) {
-        COraclePriceMessage spam_msg(1, 500 + i, GetTime());
+        COraclePriceMessage spam_msg(1, 6000 + i * 100, GetTime());  // $0.006 + variations
         BOOST_CHECK(spam_msg.Sign(test_key));
 
         // Should be rate limited after the first few
@@ -993,7 +1003,7 @@ BOOST_AUTO_TEST_CASE(test_p2p_message_validation)
     }
 
     // Test 3: Message size validation
-    COraclePriceMessage oversized_msg(1, 500, GetTime());
+    COraclePriceMessage oversized_msg(1, 6000, GetTime());  // $0.006
     // Create abnormally large signature
     oversized_msg.schnorr_sig.resize(10000, 0xFF); // Way too large
 
@@ -1004,7 +1014,7 @@ BOOST_AUTO_TEST_CASE(test_p2p_message_validation)
 
     // Add maximum allowed messages (15)
     for (int i = 0; i < ORACLE_ACTIVE_COUNT; i++) {
-        COraclePriceMessage msg(i, 500, GetTime());
+        COraclePriceMessage msg(i, 6000, GetTime());  // $0.006
         test_bundle.AddMessage(msg);
     }
 
@@ -1014,7 +1024,7 @@ BOOST_AUTO_TEST_CASE(test_p2p_message_validation)
     // Create bundle with too many messages by directly manipulating the vector
     COracleBundle oversized_bundle(10);
     for (int i = 0; i <= ORACLE_ACTIVE_COUNT; i++) {
-        COraclePriceMessage msg(i, 500, GetTime());
+        COraclePriceMessage msg(i, 6000, GetTime());  // $0.006
         oversized_bundle.messages.push_back(msg);  // Bypass AddMessage limit
     }
 

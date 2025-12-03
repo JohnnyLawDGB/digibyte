@@ -24,9 +24,9 @@ BOOST_AUTO_TEST_SUITE(digidollar_validation_tests)
 
 struct DigiDollarValidationTestSetup : public TestingSetup {
     DigiDollarValidationTestSetup() : TestingSetup(ChainType::REGTEST),
-        validationContext(1000, 50, 150, Params()) {
+        validationContext(1000, 500000, 150, Params()) {
         // Set up mock oracle price and system state
-        mockOraclePrice = 50; // $0.50 DGB (50 cents in unified format)
+        mockOraclePrice = 500000; // $0.50 DGB in micro-USD format (500,000 micro-USD = $0.50)
         mockSystemCollateral = 150; // 150% system-wide collateral
         mockHeight = 1000;
 

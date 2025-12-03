@@ -32,7 +32,7 @@ struct DigiDollarVolatilityTestSetup : public TestingSetup {
     DigiDollarVolatilityTestSetup() : TestingSetup(ChainType::REGTEST),
         validationContext(1000, 50, 150, Params()) {
         // Set up mock oracle price and system state
-        basePrice = 50; // $0.50 DGB (50 cents in unified format)
+        basePrice = 500000; // $0.50 DGB in micro-USD format (500,000 micro-USD = $0.50)
         mockHeight = 1000;
         mockTimestamp = GetTime();
 

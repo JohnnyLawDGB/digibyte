@@ -1616,6 +1616,16 @@ fi
 
 AM_CONDITIONAL([ENABLE_ZMQ], [test "$use_zmq" = "yes"])
 
+dnl libcurl check for oracle exchange API support
+
+use_libcurl=no
+PKG_CHECK_MODULES([LIBCURL], [libcurl >= 7.50.0],
+  [AC_DEFINE([HAVE_LIBCURL], [1], [Define this symbol if libcurl is available])
+   use_libcurl=yes],
+  [AC_MSG_WARN([libcurl not found, oracle will use mock exchange data])])
+
+AM_CONDITIONAL([HAVE_LIBCURL], [test "$use_libcurl" = "yes"])
+
 dnl libmultiprocess library check
 
 libmultiprocess_found=no

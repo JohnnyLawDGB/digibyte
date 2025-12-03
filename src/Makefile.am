@@ -383,7 +383,7 @@ obj/build.h: FORCE
 libdigibyte_util_a-clientversion.$(OBJEXT): obj/build.h
 
 # node #
-libdigibyte_node_a_CPPFLAGS = $(AM_CPPFLAGS) $(DIGIBYTE_INCLUDES) $(LEVELDB_CPPFLAGS) $(BOOST_CPPFLAGS) $(MINIUPNPC_CPPFLAGS) $(NATPMP_CPPFLAGS) $(EVENT_CFLAGS) $(EVENT_PTHREADS_CFLAGS)
+libdigibyte_node_a_CPPFLAGS = $(AM_CPPFLAGS) $(DIGIBYTE_INCLUDES) $(LEVELDB_CPPFLAGS) $(BOOST_CPPFLAGS) $(MINIUPNPC_CPPFLAGS) $(NATPMP_CPPFLAGS) $(EVENT_CFLAGS) $(EVENT_PTHREADS_CFLAGS) $(LIBCURL_CFLAGS)
 libdigibyte_node_a_CXXFLAGS = $(AM_CXXFLAGS) $(PIE_FLAGS)
 libdigibyte_node_a_SOURCES = \
   addrdb.cpp \
@@ -714,7 +714,7 @@ libdigibyte_consensus_a_SOURCES = \
 #
 
 # common #
-libdigibyte_common_a_CPPFLAGS = $(AM_CPPFLAGS) $(DIGIBYTE_INCLUDES) $(BOOST_CPPFLAGS)
+libdigibyte_common_a_CPPFLAGS = $(AM_CPPFLAGS) $(DIGIBYTE_INCLUDES) $(BOOST_CPPFLAGS) $(LIBCURL_CFLAGS)
 libdigibyte_common_a_CXXFLAGS = $(AM_CXXFLAGS) $(PIE_FLAGS)
 libdigibyte_common_a_SOURCES = \
   addresstype.cpp \
@@ -867,7 +867,7 @@ digibyte_bin_ldadd = \
   $(LIBMEMENV) \
   $(LIBSECP256K1)
 
-digibyte_bin_ldadd += $(BDB_LIBS) $(MINIUPNPC_LIBS) $(NATPMP_LIBS) $(EVENT_PTHREADS_LIBS) $(EVENT_LIBS) $(ZMQ_LIBS) $(SQLITE_LIBS)
+digibyte_bin_ldadd += $(BDB_LIBS) $(MINIUPNPC_LIBS) $(NATPMP_LIBS) $(EVENT_PTHREADS_LIBS) $(EVENT_LIBS) $(ZMQ_LIBS) $(SQLITE_LIBS) $(LIBCURL_LIBS)
 
 digibyted_SOURCES = $(digibyte_daemon_sources) init/digibyted.cpp
 digibyted_CPPFLAGS = $(digibyte_bin_cppflags)
@@ -939,7 +939,8 @@ digibyte_wallet_LDADD = \
   $(LIBMEMENV) \
   $(LIBSECP256K1) \
   $(BDB_LIBS) \
-  $(SQLITE_LIBS)
+  $(SQLITE_LIBS) \
+  $(LIBCURL_LIBS)
 
 if TARGET_WINDOWS
 digibyte_wallet_SOURCES += digibyte-wallet-res.rc

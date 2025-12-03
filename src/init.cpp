@@ -2051,6 +2051,8 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
     OracleBundleManager::Initialize();
     // Initialize oracle P2P connection for broadcasting
     OracleBundleManager::GetInstance().SetConnman(node.connman.get());
+    // Load oracle prices from blockchain (must be after chainstate is loaded)
+    OracleBundleManager::LoadPricesFromChain(chainman);
 
     // ********************************************************* Step 13: finished
 

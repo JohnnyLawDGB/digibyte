@@ -99,6 +99,19 @@ bool OracleBundleManager::AddOracleMessage(const COraclePriceMessage& message)
     // Note: Bundle creation happens in AddOracleBundleToBlock() or when explicitly requested
     // Don't auto-create here to avoid epoch mismatch issues
 
+    // Phase One (testnet): For single oracle (1-of-1 consensus), immediately update cached price
+    // This ensures getoracleprice returns the oracle price immediately, not a fallback
+    // The price is stored in micro-USD format
+    if (Params().GetChainType() == ChainType::TESTNET || Params().GetChainType() == ChainType::REGTEST) {
+        // Store the price in micro-USD directly - GetLatestPrice() returns this
+        // getoracleprice RPC handles conversion to cents/USD
+        std::lock_guard<std::mutex> price_lock(mtx_bundles);
+        cached_price = static_cast<CAmount>(message.price_micro_usd);
+        last_update_time = GetTime();
+        LogPrintf("Oracle: Phase One - Immediately cached price from oracle %d: %llu micro-USD ($%.6f)\n",
+                 message.oracle_id, message.price_micro_usd, message.price_micro_usd / 1000000.0);
+    }
+
     return true;
 }
 
@@ -590,6 +603,71 @@ void OracleBundleManager::Shutdown()
     }
 }
 
+void OracleBundleManager::LoadPricesFromChain(ChainstateManager& chainman)
+{
+    OracleBundleManager& manager = GetInstance();
+    const Consensus::Params& consensus = Params().GetConsensus();
+
+    LOCK(cs_main);
+
+    // Get the active chain tip
+    CBlockIndex* pindex = chainman.ActiveChain().Tip();
+    if (!pindex) {
+        LogPrintf("Oracle: No active chain tip, skipping price loading\n");
+        return;
+    }
+
+    int tip_height = pindex->nHeight;
+    int activation_height = consensus.nDDActivationHeight;
+
+    // Only scan if we're past the activation height
+    if (tip_height < activation_height) {
+        LogPrintf("Oracle: Chain height %d is below DigiDollar activation height %d, skipping price loading\n",
+                 tip_height, activation_height);
+        return;
+    }
+
+    // Scan back 20 blocks to find recent oracle prices (default validity window)
+    static constexpr int ORACLE_VALIDITY_BLOCKS = 20;
+    int scan_depth = std::min(ORACLE_VALIDITY_BLOCKS, tip_height - activation_height + 1);
+    int prices_found = 0;
+
+    LogPrintf("Oracle: Scanning last %d blocks for oracle prices (height %d to %d)...\n",
+             scan_depth, tip_height - scan_depth + 1, tip_height);
+
+    for (int height = tip_height; height >= tip_height - scan_depth + 1 && height >= activation_height; --height) {
+        CBlockIndex* block_index = chainman.ActiveChain()[height];
+        if (!block_index) continue;
+
+        CBlock block;
+        if (!chainman.m_blockman.ReadBlockFromDisk(block, *block_index)) {
+            LogPrintf("Oracle: Failed to read block at height %d\n", height);
+            continue;
+        }
+
+        // Extract oracle bundle from coinbase
+        if (block.vtx.empty()) continue;
+        const CTransaction& coinbase = *block.vtx[0];
+
+        COracleBundle bundle;
+        if (manager.ExtractOracleBundle(coinbase, bundle)) {
+            if (bundle.median_price_micro_usd > 0) {
+                manager.UpdatePriceCache(height, bundle.median_price_micro_usd);
+                prices_found++;
+                LogPrintf("Oracle: Found price %llu micro-USD at height %d\n",
+                         bundle.median_price_micro_usd, height);
+            }
+        }
+    }
+
+    if (prices_found > 0) {
+        LogPrintf("Oracle: Loaded %d oracle prices from blockchain, latest price: %llu micro-USD\n",
+                 prices_found, manager.GetLatestPrice());
+    } else {
+        LogPrintf("Oracle: No oracle prices found in recent blocks\n");
+    }
+}
+
 void OracleBundleManager::Clear()
 {
     // Clear all state for test isolation
@@ -761,16 +839,28 @@ bool OracleBundleManager::HasRequiredSignatures(const COracleBundle& bundle, int
 
 void OracleBundleManager::UpdatePriceCache(int height, uint64_t price_micro_usd)
 {
-    std::lock_guard<std::mutex> lock(mtx_price_cache);
-    height_to_price[height] = price_micro_usd;
+    // Update the height-to-price map
+    {
+        std::lock_guard<std::mutex> lock(mtx_price_cache);
+        height_to_price[height] = price_micro_usd;
 
-    // Keep cache size limited (last 1000 blocks)
-    if (height_to_price.size() > 1000) {
-        height_to_price.erase(height_to_price.begin());
+        // Keep cache size limited (last 1000 blocks)
+        if (height_to_price.size() > 1000) {
+            height_to_price.erase(height_to_price.begin());
+        }
     }
 
-    LogPrint(BCLog::DIGIDOLLAR, "Oracle: Price cache updated for height %d: %llu micro-USD\n",
-             height, price_micro_usd);
+    // CRITICAL: Also update cached_price so GetLatestPrice() returns the correct value
+    // This is the price that GetCurrentOraclePrice() uses for the DigiDollar system
+    // The price comes from oracle data embedded in blocks - this is the consensus price
+    {
+        std::lock_guard<std::mutex> lock(mtx_bundles);
+        cached_price = static_cast<CAmount>(price_micro_usd);
+        last_update_time = GetTime();
+    }
+
+    LogPrintf("Oracle: Price cache updated for height %d: %llu micro-USD ($%.6f) - cached_price updated\n",
+             height, price_micro_usd, price_micro_usd / 1000000.0);
 }
 
 uint64_t OracleBundleManager::GetOraclePriceForHeight(int height) const
@@ -1037,38 +1127,50 @@ CAmount GetCurrentOraclePrice()
     }
 
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
-    CAmount price = manager.GetLatestPrice();
+    CAmount price_micro_usd = manager.GetLatestPrice();
 
-    // Fallback to default price if no oracle data available
-    if (price <= 0) {
-        price = 5; // $0.05 per DGB default price (5 cents)
-        LogPrintf("Oracle: Using fallback price: %d cents ($%.2f)\n", price, price / 100.0);
+    // Phase One (testnet): cached_price is stored in micro-USD format
+    // Convert micro-USD to cents: cents = micro-USD / 10,000
+    // e.g. 50,000 micro-USD = $0.05 = 5 cents
+    // e.g. 6,310 micro-USD = $0.00631 = 0.631 cents (rounds to 1 cent)
+    if (price_micro_usd > 0) {
+        CAmount price_cents = (price_micro_usd + 5000) / 10000; // Round to nearest cent
+        if (price_cents == 0) {
+            price_cents = 1; // Minimum 1 cent for any non-zero price
+        }
+        LogPrintf("Oracle: GetCurrentOraclePrice returning %lld micro-USD = %lld cents ($%.4f)\n",
+                 price_micro_usd, price_cents, price_cents / 100.0);
+        return price_cents;
     }
 
-    return price;
+    // No oracle price available - return 0 to indicate no data
+    // Caller must handle this case appropriately
+    LogPrintf("Oracle: No oracle price available, returning 0\n");
+    return 0;
 }
 
 CAmount GetOraclePriceForHeight(int nHeight)
 {
-    // In RegTest mode, use MockOracleManager for testing
-    if (Params().GetChainType() == ChainType::REGTEST) {
-        CAmount mockPrice = MockOracleManager::GetInstance().GetCurrentPrice();
-        if (mockPrice > 0) {
-            LogPrint(BCLog::DIGIDOLLAR, "Oracle: Using mock price for height %d: %lld micro-USD\n",
-                     nHeight, mockPrice);
-            return mockPrice;
-        }
-    }
-
     // Get oracle bundle manager instance
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
 
     // Phase One: Try to get price from cache first (populated by ConnectBlock)
+    // This takes priority over MockOracleManager for accurate integration testing
     uint64_t cached_price = manager.GetOraclePriceForHeight(nHeight);
     if (cached_price > 0) {
         LogPrint(BCLog::DIGIDOLLAR, "Oracle: Using cached price for height %d: %llu micro-USD ($%.6f)\n",
                  nHeight, cached_price, cached_price / 1000000.0);
         return static_cast<CAmount>(cached_price);
+    }
+
+    // In RegTest mode, fall back to MockOracleManager for simple tests
+    if (Params().GetChainType() == ChainType::REGTEST) {
+        CAmount mockPrice = MockOracleManager::GetInstance().GetCurrentPrice();
+        if (mockPrice > 0) {
+            LogPrint(BCLog::DIGIDOLLAR, "Oracle: Using mock price for height %d: %lld (MockOracleManager fallback)\n",
+                     nHeight, mockPrice);
+            return mockPrice;
+        }
     }
 
     // Fallback: Try to get from current epoch bundle (for mempool transactions)

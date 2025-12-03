@@ -20,6 +20,7 @@ class CTransaction;
 class CBlockIndex;
 class BlockValidationState;
 class CConnman;
+class ChainstateManager;
 
 namespace Consensus { struct Params; }
 
@@ -109,6 +110,10 @@ public:
     static OracleBundleManager& GetInstance();
     static void Initialize();
     static void Shutdown();
+
+    //! Load oracle prices from blockchain on startup
+    //! Must be called after chainstate is fully loaded
+    static void LoadPricesFromChain(ChainstateManager& chainman);
 
     //! Clear all state (for testing)
     void Clear();

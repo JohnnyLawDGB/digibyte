@@ -39,6 +39,7 @@
 #include <QAbstractItemView>
 #include <QApplication>
 #include <QPalette>
+#include <QLocale>
 
 DigiDollarOverviewWidget::DigiDollarOverviewWidget(QWidget *parent) :
     QWidget(parent),
@@ -236,9 +237,21 @@ void DigiDollarOverviewWidget::setupSystemHealthSection()
 
     frameVLayout->addLayout(titleLayout);
 
-    // Grid layout for health items
-    m_systemHealthLayout = new QGridLayout();
-    m_systemHealthLayout->setSpacing(12); // Match main wallet spacing
+    // ========================================
+    // Split layout: Left stats | Right totals
+    // ========================================
+    QHBoxLayout* contentLayout = new QHBoxLayout();
+    contentLayout->setSpacing(20);
+    contentLayout->setObjectName("healthContentLayout");
+
+    // --- LEFT SIDE: Other stats (DGB/USD, System Health, DCA, ERR) ---
+    QFrame* leftStatsFrame = new QFrame(this);
+    leftStatsFrame->setObjectName("leftStatsFrame");
+    leftStatsFrame->setFrameShape(QFrame::NoFrame);
+
+    m_systemHealthLayout = new QGridLayout(leftStatsFrame);
+    m_systemHealthLayout->setSpacing(8);
+    m_systemHealthLayout->setContentsMargins(0, 0, 0, 0);
     m_systemHealthLayout->setObjectName("healthGridLayout");
 
     // Oracle Price
@@ -250,32 +263,8 @@ void DigiDollarOverviewWidget::setupSystemHealthSection()
     m_oraclePriceValue->setAlignment(Qt::AlignRight | Qt::AlignTrailing | Qt::AlignVCenter);
     m_oraclePriceValue->setTextInteractionFlags(Qt::LinksAccessibleByMouse | Qt::TextSelectableByKeyboard | Qt::TextSelectableByMouse);
     m_oraclePriceValue->setToolTip(tr("Current DigiByte to USD exchange rate from oracle"));
-    m_systemHealthLayout->addWidget(m_oraclePriceLabel, 1, 0);
-    m_systemHealthLayout->addWidget(m_oraclePriceValue, 1, 1);
-
-    // Network Total DD Supply
-    m_networkTotalDDLabel = new QLabel(tr("Network Total DD:"), this);
-    m_networkTotalDDLabel->setObjectName("networkTotalDDLabel");
-    m_networkTotalDDValue = new QLabel("Loading...", this);
-    m_networkTotalDDValue->setObjectName("networkTotalDDValue");
-    m_networkTotalDDValue->setCursor(QCursor(Qt::IBeamCursor));
-    m_networkTotalDDValue->setAlignment(Qt::AlignRight | Qt::AlignTrailing | Qt::AlignVCenter);
-    m_networkTotalDDValue->setTextInteractionFlags(Qt::LinksAccessibleByMouse | Qt::TextSelectableByKeyboard | Qt::TextSelectableByMouse);
-    m_networkTotalDDValue->setToolTip(tr("Total DigiDollar supply across the entire network"));
-    m_systemHealthLayout->addWidget(m_networkTotalDDLabel, 2, 0);
-    m_systemHealthLayout->addWidget(m_networkTotalDDValue, 2, 1);
-
-    // Network Total Collateral
-    m_networkTotalCollateralLabel = new QLabel(tr("Network Total Collateral:"), this);
-    m_networkTotalCollateralLabel->setObjectName("networkTotalCollateralLabel");
-    m_networkTotalCollateralValue = new QLabel("Loading...", this);
-    m_networkTotalCollateralValue->setObjectName("networkTotalCollateralValue");
-    m_networkTotalCollateralValue->setCursor(QCursor(Qt::IBeamCursor));
-    m_networkTotalCollateralValue->setAlignment(Qt::AlignRight | Qt::AlignTrailing | Qt::AlignVCenter);
-    m_networkTotalCollateralValue->setTextInteractionFlags(Qt::LinksAccessibleByMouse | Qt::TextSelectableByKeyboard | Qt::TextSelectableByMouse);
-    m_networkTotalCollateralValue->setToolTip(tr("Total DGB locked as collateral across the entire network"));
-    m_systemHealthLayout->addWidget(m_networkTotalCollateralLabel, 3, 0);
-    m_systemHealthLayout->addWidget(m_networkTotalCollateralValue, 3, 1);
+    m_systemHealthLayout->addWidget(m_oraclePriceLabel, 0, 0);
+    m_systemHealthLayout->addWidget(m_oraclePriceValue, 0, 1);
 
     // System Health Status
     m_systemHealthLabel = new QLabel(tr("System Health:"), this);
@@ -284,8 +273,8 @@ void DigiDollarOverviewWidget::setupSystemHealthSection()
     m_systemHealthValue->setObjectName("systemHealthValue");
     m_systemHealthValue->setAlignment(Qt::AlignRight | Qt::AlignTrailing | Qt::AlignVCenter);
     m_systemHealthValue->setToolTip(tr("Overall DigiDollar network-wide health status"));
-    m_systemHealthLayout->addWidget(m_systemHealthLabel, 4, 0);
-    m_systemHealthLayout->addWidget(m_systemHealthValue, 4, 1);
+    m_systemHealthLayout->addWidget(m_systemHealthLabel, 1, 0);
+    m_systemHealthLayout->addWidget(m_systemHealthValue, 1, 1);
 
     // DCA Level
     m_dcaLevelLabel = new QLabel(tr("DCA Level:"), this);
@@ -294,8 +283,8 @@ void DigiDollarOverviewWidget::setupSystemHealthSection()
     m_dcaLevelValue->setObjectName("dcaLevelValue");
     m_dcaLevelValue->setAlignment(Qt::AlignRight | Qt::AlignTrailing | Qt::AlignVCenter);
     m_dcaLevelValue->setToolTip(tr("Current Dollar-Cost Averaging intervention level"));
-    m_systemHealthLayout->addWidget(m_dcaLevelLabel, 5, 0);
-    m_systemHealthLayout->addWidget(m_dcaLevelValue, 5, 1);
+    m_systemHealthLayout->addWidget(m_dcaLevelLabel, 2, 0);
+    m_systemHealthLayout->addWidget(m_dcaLevelValue, 2, 1);
 
     // ERR Level
     m_errLevelLabel = new QLabel(tr("ERR Level:"), this);
@@ -304,10 +293,61 @@ void DigiDollarOverviewWidget::setupSystemHealthSection()
     m_errLevelValue->setObjectName("errLevelValue");
     m_errLevelValue->setAlignment(Qt::AlignRight | Qt::AlignTrailing | Qt::AlignVCenter);
     m_errLevelValue->setToolTip(tr("Current Emergency Response Reserve level"));
-    m_systemHealthLayout->addWidget(m_errLevelLabel, 6, 0);
-    m_systemHealthLayout->addWidget(m_errLevelValue, 6, 1);
+    m_systemHealthLayout->addWidget(m_errLevelLabel, 3, 0);
+    m_systemHealthLayout->addWidget(m_errLevelValue, 3, 1);
 
-    // System Health Progress Bar with improved styling
+    // --- RIGHT SIDE: Prominent Network Totals (DD Supply + Collateral) ---
+    QFrame* rightTotalsFrame = new QFrame(this);
+    rightTotalsFrame->setObjectName("networkTotalsFrame");
+    rightTotalsFrame->setFrameShape(QFrame::StyledPanel);
+    rightTotalsFrame->setFrameShadow(QFrame::Raised);
+
+    QVBoxLayout* totalsLayout = new QVBoxLayout(rightTotalsFrame);
+    totalsLayout->setSpacing(12);
+    totalsLayout->setContentsMargins(15, 15, 15, 15);
+
+    // Network Total DD Supply (prominent)
+    m_networkTotalDDLabel = new QLabel(tr("Total Network DigiDollars"), this);
+    m_networkTotalDDLabel->setObjectName("networkTotalDDLabel");
+    m_networkTotalDDLabel->setAlignment(Qt::AlignCenter);
+    totalsLayout->addWidget(m_networkTotalDDLabel);
+
+    m_networkTotalDDValue = new QLabel("Loading...", this);
+    m_networkTotalDDValue->setObjectName("networkTotalDDValue");
+    m_networkTotalDDValue->setCursor(QCursor(Qt::IBeamCursor));
+    m_networkTotalDDValue->setAlignment(Qt::AlignCenter);
+    m_networkTotalDDValue->setTextInteractionFlags(Qt::LinksAccessibleByMouse | Qt::TextSelectableByKeyboard | Qt::TextSelectableByMouse);
+    m_networkTotalDDValue->setToolTip(tr("Total DigiDollar supply across the entire network"));
+    totalsLayout->addWidget(m_networkTotalDDValue);
+
+    // Separator between totals
+    QFrame* separator = new QFrame(this);
+    separator->setObjectName("totalsSeparator");
+    separator->setFrameShape(QFrame::HLine);
+    separator->setFrameShadow(QFrame::Sunken);
+    totalsLayout->addWidget(separator);
+
+    // Network Total Collateral (prominent)
+    m_networkTotalCollateralLabel = new QLabel(tr("Total Network Locked DGB Collateral"), this);
+    m_networkTotalCollateralLabel->setObjectName("networkTotalCollateralLabel");
+    m_networkTotalCollateralLabel->setAlignment(Qt::AlignCenter);
+    totalsLayout->addWidget(m_networkTotalCollateralLabel);
+
+    m_networkTotalCollateralValue = new QLabel("Loading...", this);
+    m_networkTotalCollateralValue->setObjectName("networkTotalCollateralValue");
+    m_networkTotalCollateralValue->setCursor(QCursor(Qt::IBeamCursor));
+    m_networkTotalCollateralValue->setAlignment(Qt::AlignCenter);
+    m_networkTotalCollateralValue->setTextInteractionFlags(Qt::LinksAccessibleByMouse | Qt::TextSelectableByKeyboard | Qt::TextSelectableByMouse);
+    m_networkTotalCollateralValue->setToolTip(tr("Total DGB locked as collateral across the entire network"));
+    totalsLayout->addWidget(m_networkTotalCollateralValue);
+
+    // Add left and right to horizontal content layout
+    contentLayout->addWidget(leftStatsFrame, 1); // stretch factor 1
+    contentLayout->addWidget(rightTotalsFrame, 1); // stretch factor 1 (equal width)
+
+    frameVLayout->addLayout(contentLayout);
+
+    // System Health Progress Bar at bottom - spans full width
     m_systemHealthBar = new QProgressBar(this);
     m_systemHealthBar->setObjectName("systemHealthBar");
     m_systemHealthBar->setRange(0, 100);
@@ -316,13 +356,8 @@ void DigiDollarOverviewWidget::setupSystemHealthSection()
     m_systemHealthBar->setFormat("%p% Healthy");
     m_systemHealthBar->setMinimumHeight(20);
     m_systemHealthBar->setToolTip(tr("Visual indicator of overall network health"));
-    m_systemHealthLayout->addWidget(m_systemHealthBar, 7, 0, 1, 2);
+    frameVLayout->addWidget(m_systemHealthBar);
 
-    // Add horizontal spacer
-    QSpacerItem* horizontalSpacer = new QSpacerItem(40, 20, QSizePolicy::Expanding, QSizePolicy::Minimum);
-    m_systemHealthLayout->addItem(horizontalSpacer, 2, 2, 1, 1);
-
-    frameVLayout->addLayout(m_systemHealthLayout);
     // REMOVED: m_mainLayout->addWidget(m_systemHealthFrame);
     // Frame is now added to horizontal layout in setupUI()
 }
@@ -595,8 +630,17 @@ void DigiDollarOverviewWidget::updateSystemHealth()
         double totalDD = totalDDCents / 100.0; // Convert cents to DD
         double totalCollateralDGB = totalCollateralSats / 100000000.0; // Convert satoshis to DGB
 
-        m_networkTotalDDValue->setText(QString("$%1").arg(QString::number(totalDD, 'f', 2)));
-        m_networkTotalCollateralValue->setText(QString("%1 DGB").arg(QString::number(totalCollateralDGB, 'f', 2)));
+        // Format with commas for readability
+        QLocale locale(QLocale::English);
+        QString ddFormatted = locale.toString(totalDD, 'f', 2);
+        QString dgbFormatted = locale.toString(totalCollateralDGB, 'f', 2);
+
+        // Use rich text for colored formatting: white $ and DD, green numbers
+        m_networkTotalDDValue->setTextFormat(Qt::RichText);
+        m_networkTotalDDValue->setText(QString("<span style='color: white;'>$</span><span style='color: #00FF88; font-weight: bold;'>%1</span><span style='color: white;'> DD</span>").arg(ddFormatted));
+
+        m_networkTotalCollateralValue->setTextFormat(Qt::RichText);
+        m_networkTotalCollateralValue->setText(QString("<span style='color: #00FF88; font-weight: bold;'>%1</span><span style='color: white;'> DGB</span>").arg(dgbFormatted));
 
         // Update system health display
         // RPC returns health_percentage as actual percentage (e.g., 151 = 151%)
@@ -622,7 +666,7 @@ void DigiDollarOverviewWidget::updateSystemHealth()
         // Update progress bar (scale 0-500% to 0-100%)
         int barValue = std::min(100, static_cast<int>((healthPercent * 100) / 500));
         m_systemHealthBar->setValue(barValue);
-        m_systemHealthBar->setFormat(QString("%1% Network Health").arg(QString::number(healthPercent, 'f', 1)));
+        m_systemHealthBar->setFormat(QString("%1% Network Collateralization").arg(QString::number(healthPercent, 'f', 1)));
 
     } catch (const std::exception& e) {
         m_systemHealthValue->setText("Error");

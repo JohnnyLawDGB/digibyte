@@ -4244,19 +4244,19 @@ DigiDollarOverviewWidget .QFrame#systemHealthFrame > .QLabel {
     min-height: 30px;
 }
 
-/* System Health Labels */
+/* Left side stats labels */
 DigiDollarOverviewWidget .QFrame#systemHealthFrame .QLabel#oraclePriceLabel,
 DigiDollarOverviewWidget .QFrame#systemHealthFrame .QLabel#systemHealthLabel,
 DigiDollarOverviewWidget .QFrame#systemHealthFrame .QLabel#dcaLevelLabel,
 DigiDollarOverviewWidget .QFrame#systemHealthFrame .QLabel#errLevelLabel {
     qproperty-alignment: 'AlignVCenter | AlignRight';
-    min-width: 160px;
-    font-size: 11pt;
+    min-width: 120px;
+    font-size: 10pt;
     background-color: #0066cc;
     color: #ffffff;
     margin-right: 5px;
-    padding-right: 5px;
-    border-radius: 6px;
+    padding: 3px 8px;
+    border-radius: 4px;
 }
 
 DigiDollarOverviewWidget .QFrame#systemHealthFrame .QLabel#oraclePriceValue,
@@ -4264,9 +4264,57 @@ DigiDollarOverviewWidget .QFrame#systemHealthFrame .QLabel#systemHealthValue,
 DigiDollarOverviewWidget .QFrame#systemHealthFrame .QLabel#dcaLevelValue,
 DigiDollarOverviewWidget .QFrame#systemHealthFrame .QLabel#errLevelValue {
     qproperty-alignment: 'AlignVCenter | AlignLeft';
-    font-size: 13pt;
+    font-size: 11pt;
     color: #ffffff;
     margin-left: 0px;
+}
+
+/* ========================================= */
+/* Network Totals Frame - PROMINENT DISPLAY */
+/* ========================================= */
+DigiDollarOverviewWidget .QFrame#networkTotalsFrame {
+    background-color: #0a1525;
+    border: 3px solid #0088FF;
+    border-radius: 12px;
+    min-width: 220px;
+    padding: 10px;
+}
+
+/* Network Totals Labels - light blue text on dark blue */
+DigiDollarOverviewWidget .QFrame#networkTotalsFrame .QLabel#networkTotalDDLabel,
+DigiDollarOverviewWidget .QFrame#networkTotalsFrame .QLabel#networkTotalCollateralLabel {
+    color: #88BBFF;
+    font-size: 11pt;
+    font-weight: bold;
+    background-color: transparent;
+    padding: 4px;
+    text-transform: uppercase;
+}
+
+/* Network Totals Values - LARGE prominent text */
+DigiDollarOverviewWidget .QFrame#networkTotalsFrame .QLabel#networkTotalDDValue {
+    color: #00FF88;
+    font-size: 22pt;
+    font-weight: bold;
+    background-color: transparent;
+    padding: 8px;
+    min-height: 40px;
+}
+
+DigiDollarOverviewWidget .QFrame#networkTotalsFrame .QLabel#networkTotalCollateralValue {
+    color: #FFD700;
+    font-size: 22pt;
+    font-weight: bold;
+    background-color: transparent;
+    padding: 8px;
+    min-height: 40px;
+}
+
+/* Separator line in totals frame */
+DigiDollarOverviewWidget .QFrame#networkTotalsFrame .QFrame#totalsSeparator {
+    background-color: #0088FF;
+    max-height: 2px;
+    margin: 8px 0px;
 }
 
 /* Progress Bar */

@@ -167,9 +167,10 @@ public:
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].min_activation_height = 0; // No activation delay
 
         // Deployment of Taproot (BIPs 340-342)
+        // SAFETY: Dates far in future to prevent accidental activation during development
         consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].bit = 2;
-        consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].nStartTime = 1736510438; // 10th January 2025
-        consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].nTimeout = 1799582438; // 10th January 2027
+        consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].nStartTime = 1893456000; // 1st January 2030
+        consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].nTimeout = 2051222400; // 1st January 2035
         consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].min_activation_height = 0; // No activation delay
 
         // Deployment of DigiDollar stablecoin features

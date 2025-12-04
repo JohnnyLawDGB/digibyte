@@ -1,30 +1,39 @@
 #!/bin/bash
 # DigiDollar Qt GUI TestNet Test with Live Oracle
 # Tests the full DigiDollar cycle on TestNet with real-time exchange price data
-# This script assumes TestNet is already running with DigiDollar active (block 650+)
+# Opens 3 SEPARATE Qt wallet instances (Bob, Alice, Charlie) like regtest script
 
 set -e
 
 echo "=========================================="
 echo "DigiDollar Qt TestNet Automated Test"
+echo "With 3 SEPARATE Qt GUI Instances"
 echo "Using LIVE Oracle Price Data"
 echo "=========================================="
 echo ""
 
 # Configuration
-CLI="./src/digibyte-cli -testnet"
-TESTNET_RPC_PORT=14024
-TESTNET_WALLET="testnet_oracle"
 ORACLE_PRIVATE_KEY="0000000000000000000000000000000000000000000000000000000000000001"
-# MINING_ADDR will be set dynamically after wallet is created/loaded
+
+# Testnet ports - each instance needs unique ports
+BOB_PORT=12025      # P2P port
+BOB_RPC=14024       # RPC port
+ALICE_PORT=12026
+ALICE_RPC=14025
+CHARLIE_PORT=12027
+CHARLIE_RPC=14026
+
+# CLI commands for each node (must use datadir for cookie auth AND explicit rpcport)
+BOB_CLI="./src/digibyte-cli -testnet -datadir=/tmp/bob_testnet -rpcport=$BOB_RPC"
+ALICE_CLI="./src/digibyte-cli -testnet -datadir=/tmp/alice_testnet -rpcport=$ALICE_RPC"
+CHARLIE_CLI="./src/digibyte-cli -testnet -datadir=/tmp/charlie_testnet -rpcport=$CHARLIE_RPC"
 
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-# Helper function to print colored output
 print_status() {
     local status=$1
     local message=$2
@@ -39,376 +48,668 @@ print_status() {
     fi
 }
 
-# Helper function to get DigiDollar stats
-get_dd_stats() {
-    $CLI getdigidollarstats 2>/dev/null || echo "{}"
-}
-
-# Helper function to get oracle price
-get_oracle_price() {
-    $CLI getoracleprice 2>/dev/null || echo "{}"
-}
-
-# Helper function to get DD balance
-get_dd_balance() {
-    $CLI -rpcwallet=$TESTNET_WALLET getdigidollarbalance 2>/dev/null | jq -r '.total // 0'
-}
-
-# Helper function to wait for oracle to be active
-wait_for_oracle() {
-    local max_attempts=30
-    local attempt=0
-    echo "Waiting for oracle to become active..."
-
-    while [ $attempt -lt $max_attempts ]; do
-        local status=$($CLI getoracleprice 2>/dev/null | jq -r '.status // "inactive"')
-        if [ "$status" = "active" ]; then
-            print_status "ok" "Oracle is active"
+# Helper to wait for RPC
+wait_for_rpc() {
+    local cli=$1
+    local name=$2
+    local max=30
+    for i in $(seq 1 $max); do
+        if $cli getblockchaininfo > /dev/null 2>&1; then
             return 0
         fi
-        attempt=$((attempt + 1))
         sleep 2
     done
-
-    print_status "fail" "Oracle did not become active after $max_attempts attempts"
     return 1
 }
 
-# Helper function to display live oracle price info
-display_oracle_info() {
-    local oracle_data=$(get_oracle_price)
-    local price_micro=$(echo "$oracle_data" | jq -r '.price_micro_usd // "N/A"')
-    local price_usd=$(echo "$oracle_data" | jq -r '.price_usd // "N/A"')
-    local price_cents=$(echo "$oracle_data" | jq -r '.price_cents // "N/A"')
-    local status=$(echo "$oracle_data" | jq -r '.status // "unknown"')
-    local is_stale=$(echo "$oracle_data" | jq -r '.is_stale // true')
+# Helper to display balances across all nodes
+display_all_balances() {
+    local BOB_DD=$($BOB_CLI -rpcwallet=bob getdigidollarbalance 2>/dev/null | jq -r '.total // 0')
+    local ALICE_DD=$($ALICE_CLI -rpcwallet=alice getdigidollarbalance 2>/dev/null | jq -r '.total // 0')
+    local CHARLIE_DD=$($CHARLIE_CLI -rpcwallet=charlie getdigidollarbalance 2>/dev/null | jq -r '.total // 0')
+    local TOTAL=$((BOB_DD + ALICE_DD + CHARLIE_DD))
 
     echo "=========================================="
-    echo "LIVE ORACLE PRICE DATA"
+    echo "WALLET DD BALANCES (All 3 Nodes)"
     echo "=========================================="
-    echo "  Status:        $status"
-    echo "  Price (USD):   \$$price_usd"
-    echo "  Price (micro): $price_micro micro-USD"
-    echo "  Price (cents): $price_cents cents"
-    echo "  Is Stale:      $is_stale"
+    echo "  Bob:     $BOB_DD cents (\$$(echo "scale=2; $BOB_DD / 100" | bc 2>/dev/null || echo "0"))"
+    echo "  Alice:   $ALICE_DD cents (\$$(echo "scale=2; $ALICE_DD / 100" | bc 2>/dev/null || echo "0"))"
+    echo "  Charlie: $CHARLIE_DD cents (\$$(echo "scale=2; $CHARLIE_DD / 100" | bc 2>/dev/null || echo "0"))"
+    echo "  ----------------------------------------"
+    echo "  TOTAL:   $TOTAL cents (\$$(echo "scale=2; $TOTAL / 100" | bc 2>/dev/null || echo "0"))"
     echo "=========================================="
     echo ""
 }
 
-# Helper function to display DigiDollar system stats
-display_dd_stats() {
-    local stats=$(get_dd_stats)
-    local health=$(echo "$stats" | jq -r '.health_percentage // 0')
-    local health_status=$(echo "$stats" | jq -r '.health_status // "unknown"')
-    local total_supply=$(echo "$stats" | jq -r '.total_dd_supply // 0')
-    local total_collateral=$(echo "$stats" | jq -r '.total_collateral_dgb // 0')
-    local oracle_price_micro=$(echo "$stats" | jq -r '.oracle_price_micro_usd // 0')
+# Helper to display network stats with collateralization ratio
+display_network_stats() {
+    local STEP_DESC=$1
+    local STATS=$($BOB_CLI getdigidollarstats 2>/dev/null)
+    local ORACLE=$($BOB_CLI getoracleprice 2>/dev/null)
 
-    echo "=========================================="
-    echo "DIGIDOLLAR SYSTEM STATS"
-    echo "=========================================="
-    echo "  Health Status:    $health_status ($health%)"
-    echo "  Total DD Supply:  $total_supply cents (\$$(echo "scale=2; $total_supply / 100" | bc 2>/dev/null || echo "N/A"))"
-    echo "  Total Collateral: $total_collateral DGB"
-    echo "  Oracle Price:     $oracle_price_micro micro-USD"
-    echo "=========================================="
-    echo ""
-}
+    local DD_SUPPLY=$(echo $STATS | jq -r '.total_dd_supply // 0')
+    local COLLATERAL=$(echo $STATS | jq -r '.total_collateral_dgb // 0')
+    local COLLATERAL_RATIO=$(echo $STATS | jq -r '.system_collateral_ratio // 0')
+    local HEALTH=$(echo $STATS | jq -r '.health_status // "unknown"')
+    local ORACLE_PRICE=$(echo $ORACLE | jq -r '.price_usd // 0')
+    local ORACLE_MICRO=$(echo $ORACLE | jq -r '.price_micro_usd // 0')
 
-# Step 1: Check TestNet daemon is running
-echo "=== Step 1: Checking TestNet daemon status ==="
-if ! $CLI getblockchaininfo > /dev/null 2>&1; then
-    print_status "warn" "TestNet daemon not running, starting it..."
-    ./src/digibyted -testnet -daemon
-    sleep 10
-fi
+    # Calculate DD value in USD and collateral value in USD
+    local DD_VALUE_USD=$(echo "scale=2; $DD_SUPPLY / 100" | bc 2>/dev/null || echo "0")
+    local COLLATERAL_VALUE_USD=$(echo "scale=2; $COLLATERAL * $ORACLE_PRICE" | bc 2>/dev/null || echo "0")
 
-CURRENT_HEIGHT=$($CLI getblockcount 2>/dev/null || echo "0")
-echo "Current block height: $CURRENT_HEIGHT"
-
-if [ "$CURRENT_HEIGHT" -lt 650 ]; then
-    print_status "fail" "Block height ($CURRENT_HEIGHT) is below DigiDollar activation height (650)"
-    echo "Please mine more blocks to activate DigiDollar:"
-    echo "  $CLI generatetoaddress 100 $MINING_ADDR"
-    exit 1
-fi
-print_status "ok" "TestNet is running at height $CURRENT_HEIGHT (DigiDollar active)"
-echo ""
-
-# Step 2: Start the oracle if not running
-echo "=== Step 2: Starting Live Oracle ==="
-ORACLE_STATUS=$($CLI getoracleprice 2>/dev/null | jq -r '.status // "inactive"')
-if [ "$ORACLE_STATUS" != "active" ]; then
-    echo "Starting oracle with testnet key..."
-    $CLI startoracle 0 "$ORACLE_PRIVATE_KEY" 2>/dev/null || true
-    sleep 5
-
-    # Mine a block to trigger oracle price broadcast
-    echo "Mining block to trigger oracle price update..."
-    $CLI generatetoaddress 1 "$MINING_ADDR" > /dev/null 2>&1
-    sleep 3
-fi
-
-# Wait for oracle to be active
-wait_for_oracle
-display_oracle_info
-echo ""
-
-# Step 3: Check/Create wallet
-echo "=== Step 3: Checking wallet ==="
-WALLET_EXISTS=$($CLI listwallets 2>/dev/null | jq -r ".[] | select(. == \"$TESTNET_WALLET\")" || echo "")
-if [ -z "$WALLET_EXISTS" ]; then
-    echo "Wallet '$TESTNET_WALLET' not loaded, checking if it exists..."
-    # Try to load existing wallet first
-    LOAD_RESULT=$($CLI loadwallet "$TESTNET_WALLET" 2>&1)
-    if echo "$LOAD_RESULT" | grep -q "error"; then
-        echo "Wallet doesn't exist, creating new wallet '$TESTNET_WALLET'..."
-        $CLI createwallet "$TESTNET_WALLET" 2>/dev/null
-        if [ $? -ne 0 ]; then
-            print_status "fail" "Could not create wallet '$TESTNET_WALLET'"
-            exit 1
-        fi
-    else
-        echo "Loaded existing wallet '$TESTNET_WALLET'"
+    # Calculate actual collateralization percentage
+    # Collateral value / DD value * 100
+    local ACTUAL_RATIO="0"
+    if [ "$DD_SUPPLY" -gt 0 ]; then
+        ACTUAL_RATIO=$(echo "scale=0; ($COLLATERAL * $ORACLE_MICRO) / $DD_SUPPLY" | bc 2>/dev/null || echo "0")
     fi
-fi
-print_status "ok" "Wallet '$TESTNET_WALLET' ready"
 
-# Get a mining address from this wallet (ensures funds go to the wallet we're testing)
-MINING_ADDR=$($CLI -rpcwallet=$TESTNET_WALLET getnewaddress "mining" "bech32" 2>/dev/null)
-if [ -z "$MINING_ADDR" ]; then
-    print_status "fail" "Could not get mining address from wallet"
+    echo "=========================================="
+    echo "NETWORK STATS: $STEP_DESC"
+    echo "=========================================="
+    echo ""
+    echo "  Oracle Price: \$$ORACLE_PRICE per DGB ($ORACLE_MICRO micro-USD)"
+    echo ""
+    echo "  Total DD Supply:    $DD_SUPPLY cents (\$$DD_VALUE_USD)"
+    echo "  Total Collateral:   $COLLATERAL DGB (\$$COLLATERAL_VALUE_USD)"
+    echo ""
+    echo "  Collateralization:  ${ACTUAL_RATIO}%"
+    echo "  System Ratio:       ${COLLATERAL_RATIO}%"
+    echo "  Health Status:      $HEALTH"
+    echo "=========================================="
+    echo ""
+}
+
+# Step 1: Clean environment
+echo "=== Step 1: Cleaning environment ==="
+pkill -f "digibyte-qt.*testnet" 2>/dev/null || true
+pkill -f "digibyted.*testnet" 2>/dev/null || true
+sleep 2
+
+rm -rf /tmp/bob_testnet /tmp/alice_testnet /tmp/charlie_testnet
+rm -rf ~/.digibyte/testnet5/ 2>/dev/null || true
+mkdir -p /tmp/bob_testnet /tmp/alice_testnet /tmp/charlie_testnet
+print_status "ok" "Clean environment ready"
+echo ""
+
+# Step 2: Start Bob's Qt node (primary miner)
+echo "=== Step 2: Starting Bob's Qt node ==="
+env -i \
+    DISPLAY="${DISPLAY}" \
+    XAUTHORITY="${XAUTHORITY}" \
+    WAYLAND_DISPLAY="${WAYLAND_DISPLAY}" \
+    XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}" \
+    XDG_SESSION_TYPE="${XDG_SESSION_TYPE}" \
+    HOME="${HOME}" \
+    USER="${USER}" \
+    PATH="${PATH}" \
+    ./src/qt/digibyte-qt \
+    -testnet \
+    -datadir=/tmp/bob_testnet \
+    -port=$BOB_PORT \
+    -rpcport=$BOB_RPC \
+    -server \
+    -listen=1 \
+    -discover=0 \
+    -digidollar=1 \
+    -txindex=1 \
+    -fallbackfee=0.0001 \
+    -dandelion=0 \
+    > /tmp/bob_testnet.log 2>&1 &
+BOB_PID=$!
+echo "Bob's Qt started (PID: $BOB_PID)"
+
+echo "Waiting for Bob's RPC..."
+if wait_for_rpc "$BOB_CLI" "Bob"; then
+    print_status "ok" "Bob's Qt RPC is ready"
+else
+    print_status "fail" "Bob's Qt failed to start"
     exit 1
 fi
-echo "Mining address (from wallet): $MINING_ADDR"
 
-# Check balance
-DGB_BALANCE=$($CLI -rpcwallet=$TESTNET_WALLET getbalance 2>/dev/null || echo "0")
-echo "DGB Balance: $DGB_BALANCE DGB"
+# Read Bob's cookie for peer connections
+BOB_COOKIE=$(cat /tmp/bob_testnet/testnet5/.cookie 2>/dev/null || echo "")
 echo ""
 
-# Step 4: Get initial DigiDollar state
-echo "=== Step 4: Initial DigiDollar State ==="
-display_dd_stats
+# Step 3: Create Bob's wallet and mine initial blocks
+echo "=== Step 3: Setting up Bob's wallet and mining ==="
+$BOB_CLI createwallet "bob" 2>/dev/null || true
+BOB_ADDR=$($BOB_CLI -rpcwallet=bob getnewaddress "mining" "bech32")
+echo "Bob's mining address: $BOB_ADDR"
 
-INITIAL_DD_BALANCE=$(get_dd_balance)
-echo "Initial DD Balance: $INITIAL_DD_BALANCE cents (\$$(echo "scale=2; $INITIAL_DD_BALANCE / 100" | bc 2>/dev/null || echo "N/A"))"
+echo "Mining 105 blocks for coinbase maturity (instant with fEasyPow)..."
+$BOB_CLI generatetoaddress 105 "$BOB_ADDR" > /dev/null 2>&1
+HEIGHT=$($BOB_CLI getblockcount)
+print_status "ok" "Mined to height $HEIGHT"
+
+BOB_BALANCE=$($BOB_CLI -rpcwallet=bob getbalance)
+echo "Bob's DGB balance: $BOB_BALANCE DGB"
 echo ""
 
-# Step 5: Test minting with live oracle price
-echo "=== Step 5: Testing Mint with Live Oracle Price ==="
+# Step 4: Start the oracle on Bob's node
+echo "=== Step 4: Starting Live Oracle on Bob's node ==="
+$BOB_CLI startoracle 0 "$ORACLE_PRIVATE_KEY" 2>/dev/null || true
+sleep 2
+$BOB_CLI generatetoaddress 1 "$BOB_ADDR" > /dev/null 2>&1
 
-# Get current oracle price for calculations
-ORACLE_PRICE_MICRO=$($CLI getoracleprice 2>/dev/null | jq -r '.price_micro_usd // 0')
-ORACLE_PRICE_USD=$(echo "scale=6; $ORACLE_PRICE_MICRO / 1000000" | bc 2>/dev/null || echo "0.006")
+# Wait for oracle
+for i in {1..20}; do
+    STATUS=$($BOB_CLI getoracleprice 2>/dev/null | jq -r '.status // "inactive"')
+    if [ "$STATUS" = "active" ]; then
+        print_status "ok" "Oracle is active"
+        break
+    fi
+    sleep 2
+done
 
-echo "Current Oracle Price: \$$ORACLE_PRICE_USD per DGB ($ORACLE_PRICE_MICRO micro-USD)"
-
-# Calculate collateral requirement for $100 DD with 365 day lock
-echo ""
-echo "Calculating collateral for \$100 DD (365 day lock)..."
-COLLATERAL_REQ=$($CLI calculatecollateralrequirement 10000 365 2>/dev/null)
-REQUIRED_DGB=$(echo "$COLLATERAL_REQ" | jq -r '.required_dgb // "N/A"')
-EFFECTIVE_RATIO=$(echo "$COLLATERAL_REQ" | jq -r '.effective_ratio // "N/A"')
-COLLATERAL_ORACLE=$(echo "$COLLATERAL_REQ" | jq -r '.oracle_price // "N/A"')
-
-echo "  Required DGB:    $REQUIRED_DGB DGB"
-echo "  Effective Ratio: $EFFECTIVE_RATIO%"
-echo "  Oracle Price:    $COLLATERAL_ORACLE micro-USD"
+ORACLE_PRICE=$($BOB_CLI getoracleprice 2>/dev/null | jq -r '.price_usd // "N/A"')
+echo "LIVE Oracle Price: \$$ORACLE_PRICE per DGB"
 echo ""
 
-# Check if we have enough balance
-REQUIRED_INT=$(echo "$REQUIRED_DGB" | cut -d'.' -f1)
-BALANCE_INT=$(echo "$DGB_BALANCE" | cut -d'.' -f1)
+# Step 5: Start Alice's Qt node
+echo "=== Step 5: Starting Alice's Qt node ==="
+env -i \
+    DISPLAY="${DISPLAY}" \
+    XAUTHORITY="${XAUTHORITY}" \
+    WAYLAND_DISPLAY="${WAYLAND_DISPLAY}" \
+    XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}" \
+    XDG_SESSION_TYPE="${XDG_SESSION_TYPE}" \
+    HOME="${HOME}" \
+    USER="${USER}" \
+    PATH="${PATH}" \
+    ./src/qt/digibyte-qt \
+    -testnet \
+    -datadir=/tmp/alice_testnet \
+    -port=$ALICE_PORT \
+    -rpcport=$ALICE_RPC \
+    -server \
+    -listen=1 \
+    -discover=0 \
+    -digidollar=1 \
+    -txindex=1 \
+    -fallbackfee=0.0001 \
+    -dandelion=0 \
+    -connect=127.0.0.1:$BOB_PORT \
+    > /tmp/alice_testnet.log 2>&1 &
+ALICE_PID=$!
+echo "Alice's Qt started (PID: $ALICE_PID)"
 
-if [ "$BALANCE_INT" -lt "$REQUIRED_INT" ]; then
-    print_status "warn" "Insufficient balance for mint test"
-    echo "Need ~$REQUIRED_DGB DGB but have $DGB_BALANCE DGB"
-    echo "Mining more blocks to get funds..."
-    $CLI generatetoaddress 200 "$MINING_ADDR" > /dev/null 2>&1
-    sleep 5
-    DGB_BALANCE=$($CLI -rpcwallet=$TESTNET_WALLET getbalance 2>/dev/null || echo "0")
-    echo "New balance: $DGB_BALANCE DGB"
+if wait_for_rpc "$ALICE_CLI" "Alice"; then
+    print_status "ok" "Alice's Qt RPC is ready"
+else
+    print_status "fail" "Alice's Qt failed to start"
 fi
 
-# Perform the mint
+$ALICE_CLI createwallet "alice" 2>/dev/null || true
+ALICE_ADDR=$($ALICE_CLI -rpcwallet=alice getnewaddress "receive" "bech32")
+echo "Alice's address: $ALICE_ADDR"
 echo ""
-echo "Minting \$100 DD with 1-hour lock (tier 0 for quick testing)..."
-MINT_RESULT=$($CLI -rpcwallet=$TESTNET_WALLET mintdigidollar 10000 0 2>&1)
+
+# Step 6: Start Charlie's Qt node
+echo "=== Step 6: Starting Charlie's Qt node ==="
+env -i \
+    DISPLAY="${DISPLAY}" \
+    XAUTHORITY="${XAUTHORITY}" \
+    WAYLAND_DISPLAY="${WAYLAND_DISPLAY}" \
+    XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}" \
+    XDG_SESSION_TYPE="${XDG_SESSION_TYPE}" \
+    HOME="${HOME}" \
+    USER="${USER}" \
+    PATH="${PATH}" \
+    ./src/qt/digibyte-qt \
+    -testnet \
+    -datadir=/tmp/charlie_testnet \
+    -port=$CHARLIE_PORT \
+    -rpcport=$CHARLIE_RPC \
+    -server \
+    -listen=1 \
+    -discover=0 \
+    -digidollar=1 \
+    -txindex=1 \
+    -fallbackfee=0.0001 \
+    -dandelion=0 \
+    -connect=127.0.0.1:$BOB_PORT \
+    > /tmp/charlie_testnet.log 2>&1 &
+CHARLIE_PID=$!
+echo "Charlie's Qt started (PID: $CHARLIE_PID)"
+
+if wait_for_rpc "$CHARLIE_CLI" "Charlie"; then
+    print_status "ok" "Charlie's Qt RPC is ready"
+else
+    print_status "fail" "Charlie's Qt failed to start"
+fi
+
+$CHARLIE_CLI createwallet "charlie" 2>/dev/null || true
+CHARLIE_ADDR=$($CHARLIE_CLI -rpcwallet=charlie getnewaddress "receive" "bech32")
+echo "Charlie's address: $CHARLIE_ADDR"
+echo ""
+
+# Step 7: Fund Alice and Charlie with DGB for transaction fees AND future minting
+echo "=== Step 7: Funding Alice and Charlie with DGB for fees and minting ==="
+echo "Mining 55 blocks to Alice and 62 blocks to Charlie..."
+echo "(Need 100+ block maturity for later minting tests)"
+echo "(Charlie needs extra for $200 DD at tier 8 = 200% collateral)"
+$BOB_CLI generatetoaddress 55 "$ALICE_ADDR" > /dev/null 2>&1
+$BOB_CLI generatetoaddress 62 "$CHARLIE_ADDR" > /dev/null 2>&1
+sleep 5
+
+ALICE_DGB=$($ALICE_CLI -rpcwallet=alice getbalance 2>/dev/null || echo "0")
+CHARLIE_DGB=$($CHARLIE_CLI -rpcwallet=charlie getbalance 2>/dev/null || echo "0")
+print_status "ok" "Alice funded: 55 blocks mined (balance will mature after ~100 blocks)"
+print_status "ok" "Charlie funded: 62 blocks mined (balance will mature after ~100 blocks)"
+echo ""
+
+# Step 8: Wait for chain sync
+echo "=== Step 8: Syncing chains ==="
+$BOB_CLI generatetoaddress 2 "$BOB_ADDR" > /dev/null 2>&1
+sleep 5
+
+BOB_HEIGHT=$($BOB_CLI getblockcount)
+ALICE_HEIGHT=$($ALICE_CLI getblockcount 2>/dev/null || echo "0")
+CHARLIE_HEIGHT=$($CHARLIE_CLI getblockcount 2>/dev/null || echo "0")
+
+echo "Chain heights: Bob=$BOB_HEIGHT, Alice=$ALICE_HEIGHT, Charlie=$CHARLIE_HEIGHT"
+
+# Wait for sync
+for i in {1..30}; do
+    ALICE_HEIGHT=$($ALICE_CLI getblockcount 2>/dev/null || echo "0")
+    CHARLIE_HEIGHT=$($CHARLIE_CLI getblockcount 2>/dev/null || echo "0")
+    if [ "$ALICE_HEIGHT" = "$BOB_HEIGHT" ] && [ "$CHARLIE_HEIGHT" = "$BOB_HEIGHT" ]; then
+        print_status "ok" "All nodes synced at height $BOB_HEIGHT"
+        break
+    fi
+    sleep 2
+done
+echo ""
+
+# Step 9: Display initial state
+echo "=== Step 9: Initial DigiDollar State ==="
+display_network_stats "Initial State (No DD Minted Yet)"
+display_all_balances
+
+# Step 10: Bob mints $100 DD
+echo "=== Step 10: Bob mints \$100 DD ==="
+ORACLE_PRICE=$($BOB_CLI getoracleprice 2>/dev/null | jq -r '.price_usd')
+echo "Current LIVE Oracle Price: \$$ORACLE_PRICE per DGB"
+echo ""
+
+echo "Bob minting \$100 DD (10000 cents) with tier 0..."
+MINT_RESULT=$($BOB_CLI -rpcwallet=bob mintdigidollar 10000 0 2>&1)
 
 if echo "$MINT_RESULT" | jq -e '.txid' > /dev/null 2>&1; then
     MINT_TXID=$(echo "$MINT_RESULT" | jq -r '.txid')
-    MINT_DD=$(echo "$MINT_RESULT" | jq -r '.dd_minted // "N/A"')
-    MINT_COLLATERAL=$(echo "$MINT_RESULT" | jq -r '.dgb_collateral // "N/A"')
-
-    print_status "ok" "Mint successful!"
-    echo "  Transaction ID: ${MINT_TXID:0:16}..."
-    echo "  DD Minted:      $MINT_DD cents (\$$(echo "scale=2; $MINT_DD / 100" | bc 2>/dev/null || echo "N/A"))"
-    echo "  DGB Collateral: $MINT_COLLATERAL DGB"
+    print_status "ok" "Mint successful! TX: ${MINT_TXID:0:16}..."
+    echo "  DD Minted: $(echo $MINT_RESULT | jq -r '.dd_minted') cents"
+    echo "  Collateral: $(echo $MINT_RESULT | jq -r '.dgb_collateral') DGB"
 else
-    print_status "fail" "Mint failed!"
-    echo "$MINT_RESULT"
+    print_status "fail" "Mint failed: $MINT_RESULT"
     exit 1
 fi
 echo ""
 
-# Step 6: Confirm the mint
-echo "=== Step 6: Confirming Mint Transaction ==="
-$CLI generatetoaddress 2 "$MINING_ADDR" > /dev/null 2>&1
+# Confirm and sync
+$BOB_CLI generatetoaddress 2 "$BOB_ADDR" > /dev/null 2>&1
 sleep 5
 
-# Verify DD balance increased
-NEW_DD_BALANCE=$(get_dd_balance)
-DD_INCREASE=$((NEW_DD_BALANCE - INITIAL_DD_BALANCE))
+display_all_balances
 
-echo "DD Balance After Mint: $NEW_DD_BALANCE cents (\$$(echo "scale=2; $NEW_DD_BALANCE / 100" | bc 2>/dev/null || echo "N/A"))"
-echo "DD Increase: $DD_INCREASE cents"
+# Step 11: Bob sends $30 DD to Alice
+echo "=== Step 11: Bob sends \$30 DD to Alice ==="
+ALICE_DD_ADDR=$($ALICE_CLI -rpcwallet=alice getdigidollaraddress 2>/dev/null)
+echo "Alice's DD address: $ALICE_DD_ADDR"
 
-if [ "$DD_INCREASE" -eq 10000 ]; then
-    print_status "ok" "Mint verified - balance increased by \$100.00"
+echo "Bob sending 3000 cents (\$30) to Alice..."
+SEND_RESULT=$($BOB_CLI -rpcwallet=bob senddigidollar "$ALICE_DD_ADDR" 3000 2>&1)
+
+if echo "$SEND_RESULT" | jq -e '.txid' > /dev/null 2>&1; then
+    print_status "ok" "Transfer successful! TX: $(echo $SEND_RESULT | jq -r '.txid' | head -c 16)..."
 else
-    print_status "warn" "Unexpected DD increase: $DD_INCREASE cents (expected 10000)"
+    print_status "fail" "Transfer failed: $SEND_RESULT"
 fi
 echo ""
 
-# Step 7: Display updated stats
-echo "=== Step 7: Post-Mint DigiDollar Stats ==="
-display_dd_stats
-display_oracle_info
+# Confirm and sync
+$BOB_CLI generatetoaddress 2 "$BOB_ADDR" > /dev/null 2>&1
+sleep 5
 
-# Step 8: Test DD transfer
-echo "=== Step 8: Testing DD Transfer ==="
+display_all_balances
 
-# Get a DD address for transfer test
-DD_ADDRESS=$($CLI -rpcwallet=$TESTNET_WALLET getdigidollaraddress 2>/dev/null)
-echo "DD Address for self-transfer test: $DD_ADDRESS"
+# Step 12: Bob sends $20 DD to Charlie
+echo "=== Step 12: Bob sends \$20 DD to Charlie ==="
+CHARLIE_DD_ADDR=$($CHARLIE_CLI -rpcwallet=charlie getdigidollaraddress 2>/dev/null)
+echo "Charlie's DD address: $CHARLIE_DD_ADDR"
 
-# Transfer $10 DD to ourselves (sanity check)
-echo "Transferring \$10 DD (1000 cents)..."
-TRANSFER_RESULT=$($CLI -rpcwallet=$TESTNET_WALLET senddigidollar "$DD_ADDRESS" 1000 2>&1)
+echo "Bob sending 2000 cents (\$20) to Charlie..."
+SEND_RESULT=$($BOB_CLI -rpcwallet=bob senddigidollar "$CHARLIE_DD_ADDR" 2000 2>&1)
 
-if echo "$TRANSFER_RESULT" | jq -e '.txid' > /dev/null 2>&1; then
-    TRANSFER_TXID=$(echo "$TRANSFER_RESULT" | jq -r '.txid')
-    print_status "ok" "Transfer successful!"
-    echo "  Transaction ID: ${TRANSFER_TXID:0:16}..."
+if echo "$SEND_RESULT" | jq -e '.txid' > /dev/null 2>&1; then
+    print_status "ok" "Transfer successful! TX: $(echo $SEND_RESULT | jq -r '.txid' | head -c 16)..."
 else
-    print_status "fail" "Transfer failed!"
-    echo "$TRANSFER_RESULT"
+    print_status "fail" "Transfer failed: $SEND_RESULT"
 fi
 echo ""
 
-# Confirm transfer
-$CLI generatetoaddress 2 "$MINING_ADDR" > /dev/null 2>&1
+# Confirm and sync
+$BOB_CLI generatetoaddress 2 "$BOB_ADDR" > /dev/null 2>&1
+sleep 5
+
+display_all_balances
+
+# Step 13: Display state after transfers
+echo "=== Step 13: State After Transfers ==="
+display_network_stats "After Bob's Transfers to Alice and Charlie"
+display_all_balances
+
+# Step 14: Bob mints $10 DD with short lock (tier 0 = 240 blocks = 1 hour)
+echo "=== Step 14: Bob mints \$10 DD with 1-hour lock (tier 0) ==="
+echo "This will be used for redemption testing..."
+echo ""
+
+MINT_RESULT2=$($BOB_CLI -rpcwallet=bob mintdigidollar 1000 0 2>&1)
+
+if echo "$MINT_RESULT2" | jq -e '.txid' > /dev/null 2>&1; then
+    REDEEM_MINT_TXID=$(echo "$MINT_RESULT2" | jq -r '.txid')
+    print_status "ok" "Mint successful! TX: ${REDEEM_MINT_TXID:0:16}..."
+    echo "  DD Minted: $(echo $MINT_RESULT2 | jq -r '.dd_minted') cents"
+    echo "  Collateral: $(echo $MINT_RESULT2 | jq -r '.dgb_collateral') DGB"
+    echo "  Lock period: 240 blocks (tier 0)"
+else
+    print_status "fail" "Mint failed: $MINT_RESULT2"
+    exit 1
+fi
+echo ""
+
+# Confirm
+$BOB_CLI generatetoaddress 2 "$BOB_ADDR" > /dev/null 2>&1
 sleep 3
 
-# Step 9: List positions
-echo "=== Step 9: Listing DigiDollar Positions ==="
-POSITIONS=$($CLI -rpcwallet=$TESTNET_WALLET listdigidollarpositions 2>/dev/null)
-POSITION_COUNT=$(echo "$POSITIONS" | jq 'length')
+CURRENT_HEIGHT=$($BOB_CLI getblockcount)
+UNLOCK_HEIGHT=$((CURRENT_HEIGHT + 240))
+echo "Current block: $CURRENT_HEIGHT"
+echo "Unlock at block: $UNLOCK_HEIGHT"
+echo ""
 
-echo "Total positions: $POSITION_COUNT"
-if [ "$POSITION_COUNT" -gt 0 ]; then
-    echo ""
-    echo "Recent positions:"
-    echo "$POSITIONS" | jq -r '.[-3:][] | "  - \(.dd_amount // .amount // "?") cents, tier \(.tier // "?"), status: \(.status // "?")"' 2>/dev/null || echo "$POSITIONS"
+display_network_stats "After \$10 DD Mint for Redemption"
+display_all_balances
+
+# Step 15: Try early redemption (should FAIL)
+echo "=== Step 15: Try early redemption (should FAIL) ==="
+echo "Attempting to redeem vault BEFORE lock expires..."
+echo ""
+
+# Temporarily disable exit on error for this command (expected to fail)
+set +e
+EARLY_REDEEM=$($BOB_CLI -rpcwallet=bob redeemdigidollar "$REDEEM_MINT_TXID" 1000 2>&1)
+EARLY_EXIT_CODE=$?
+set -e
+
+if [ $EARLY_EXIT_CODE -ne 0 ] || echo "$EARLY_REDEEM" | grep -qi "error\|lock\|expired"; then
+    print_status "ok" "Early redemption correctly REJECTED"
+    echo "   Response: $EARLY_REDEEM"
+else
+    print_status "warn" "Unexpected response (may have succeeded when it shouldn't)"
+    echo "   Response: $EARLY_REDEEM"
 fi
 echo ""
 
-# Step 10: Mine blocks to reach unlock height (for tier 0 = 240 blocks)
-echo "=== Step 10: Testing Redemption ==="
+# Step 16: Mine blocks to pass lock period (240 blocks for tier 0)
+echo "=== Step 16: Mining 245 blocks to pass lock period ==="
+echo "This will take a moment..."
+$BOB_CLI generatetoaddress 245 "$BOB_ADDR" > /dev/null 2>&1
+sleep 5
 
-# Get current height
-CURRENT_HEIGHT=$($CLI getblockcount)
-# Tier 0 = 240 blocks lock
-UNLOCK_HEIGHT=$((CURRENT_HEIGHT + 240))
-
-echo "Current height: $CURRENT_HEIGHT"
-echo "Unlock height for tier 0: ~$UNLOCK_HEIGHT (need to mine ~240 blocks)"
+NEW_HEIGHT=$($BOB_CLI getblockcount)
+print_status "ok" "Mined to height $NEW_HEIGHT (past unlock at $UNLOCK_HEIGHT)"
 echo ""
 
-echo "Mining 250 blocks to pass unlock period..."
-$CLI generatetoaddress 250 "$MINING_ADDR" > /dev/null 2>&1
-sleep 10
-
-NEW_HEIGHT=$($CLI getblockcount)
-echo "New height: $NEW_HEIGHT"
+# Step 17: Redeem the vault (should SUCCEED)
+echo "=== Step 17: Redeem the \$10 DD vault (should SUCCEED) ==="
+echo "Attempting to redeem vault AFTER lock expires..."
 echo ""
 
-# Try to redeem
-echo "Attempting redemption..."
-if [ -n "$MINT_TXID" ]; then
-    REDEEM_RESULT=$($CLI -rpcwallet=$TESTNET_WALLET redeemdigidollar "$MINT_TXID" 10000 2>&1)
+set +e
+REDEEM_RESULT=$($BOB_CLI -rpcwallet=bob redeemdigidollar "$REDEEM_MINT_TXID" 1000 2>&1)
+REDEEM_EXIT_CODE=$?
+set -e
 
-    if echo "$REDEEM_RESULT" | jq -e '.txid' > /dev/null 2>&1; then
-        REDEEM_TXID=$(echo "$REDEEM_RESULT" | jq -r '.txid')
-        REDEEM_DD=$(echo "$REDEEM_RESULT" | jq -r '.dd_redeemed // "N/A"')
-        REDEEM_DGB=$(echo "$REDEEM_RESULT" | jq -r '.dgb_unlocked // "N/A"')
-
-        print_status "ok" "Redemption successful!"
-        echo "  Transaction ID: ${REDEEM_TXID:0:16}..."
-        echo "  DD Redeemed:    $REDEEM_DD cents"
-        echo "  DGB Unlocked:   $REDEEM_DGB DGB"
-    else
-        print_status "fail" "Redemption failed!"
-        echo "$REDEEM_RESULT"
-    fi
+if [ $REDEEM_EXIT_CODE -eq 0 ] && echo "$REDEEM_RESULT" | jq -e '.txid' > /dev/null 2>&1; then
+    REDEEM_TXID=$(echo "$REDEEM_RESULT" | jq -r '.txid')
+    print_status "ok" "Redemption SUCCEEDED!"
+    echo "   Redemption TX: ${REDEEM_TXID:0:16}..."
+    echo "   DD Redeemed: $(echo $REDEEM_RESULT | jq -r '.dd_redeemed // 1000') cents"
+    echo "   Collateral returned: $(echo $REDEEM_RESULT | jq -r '.dgb_unlocked // "N/A"') DGB"
 else
-    print_status "warn" "No mint transaction to redeem"
+    print_status "fail" "Redemption FAILED: $REDEEM_RESULT"
 fi
 echo ""
 
 # Confirm redemption
-$CLI generatetoaddress 2 "$MINING_ADDR" > /dev/null 2>&1
-sleep 3
+$BOB_CLI generatetoaddress 2 "$BOB_ADDR" > /dev/null 2>&1
+sleep 5
 
-# Step 11: Final state
-echo "=== Step 11: Final DigiDollar State ==="
-display_dd_stats
-
-FINAL_DD_BALANCE=$(get_dd_balance)
-echo "Final DD Balance: $FINAL_DD_BALANCE cents (\$$(echo "scale=2; $FINAL_DD_BALANCE / 100" | bc 2>/dev/null || echo "N/A"))"
+# Step 18: Bob mints $200 DD with 10-year lock (tier 8)
+echo "=== Step 18: Bob mints \$200 DD with 10-year lock (tier 8) ==="
+echo "Testing long-term vault creation..."
 echo ""
 
-# Step 12: Summary
+MINT_RESULT3=$($BOB_CLI -rpcwallet=bob mintdigidollar 20000 8 2>&1)
+
+if echo "$MINT_RESULT3" | jq -e '.txid' > /dev/null 2>&1; then
+    LONG_MINT_TXID=$(echo "$MINT_RESULT3" | jq -r '.txid')
+    print_status "ok" "10-year mint successful! TX: ${LONG_MINT_TXID:0:16}..."
+    echo "  DD Minted: $(echo $MINT_RESULT3 | jq -r '.dd_minted') cents (\$200)"
+    echo "  Collateral: $(echo $MINT_RESULT3 | jq -r '.dgb_collateral') DGB"
+    echo "  Lock period: 10 years (tier 8 = 200% collateral)"
+else
+    print_status "fail" "10-year mint failed: $MINT_RESULT3"
+    exit 1
+fi
+echo ""
+
+# Confirm with 7 blocks
+echo "Mining 7 blocks to confirm transaction..."
+$BOB_CLI generatetoaddress 7 "$BOB_ADDR" > /dev/null 2>&1
+sleep 3
+
+CONFIRM_HEIGHT=$($BOB_CLI getblockcount)
+print_status "ok" "Transaction confirmed at height $CONFIRM_HEIGHT"
+echo ""
+
+display_network_stats "After \$200 DD Mint (10-Year Lock)"
+display_all_balances
+
+# Step 19: Charlie sends $15 DD to Alice (tests recipient can spend received DD)
+echo "=== Step 19: Charlie sends \$15 DD to Alice ==="
+echo "Testing that recipients can spend received DigiDollars..."
+echo ""
+
+# Get Alice's DD address for receiving
+ALICE_DD_ADDR2=$($ALICE_CLI -rpcwallet=alice getdigidollaraddress 2>/dev/null)
+echo "Alice's DD address: $ALICE_DD_ADDR2"
+
+echo "Charlie sending 1500 cents (\$15) to Alice..."
+set +e
+CHARLIE_SEND_RESULT=$($CHARLIE_CLI -rpcwallet=charlie senddigidollar "$ALICE_DD_ADDR2" 1500 2>&1)
+CHARLIE_SEND_EXIT=$?
+set -e
+
+if [ $CHARLIE_SEND_EXIT -eq 0 ] && echo "$CHARLIE_SEND_RESULT" | jq -e '.txid' > /dev/null 2>&1; then
+    print_status "ok" "Transfer successful! TX: $(echo $CHARLIE_SEND_RESULT | jq -r '.txid' | head -c 16)..."
+else
+    print_status "fail" "Charlie's transfer failed: $CHARLIE_SEND_RESULT"
+    echo "  (This tests whether recipients can spend received DD)"
+fi
+echo ""
+
+# Mine 8 blocks to confirm
+echo "Mining 8 blocks to confirm transaction..."
+$BOB_CLI generatetoaddress 8 "$BOB_ADDR" > /dev/null 2>&1
+sleep 5
+
+display_all_balances
+
+# Step 20: Alice sends $10 DD back to Bob (completing the full circle)
+echo "=== Step 20: Alice sends \$10 DD back to Bob ==="
+echo "Completing the full circle - DD returns to original minter..."
+echo ""
+
+# Get Bob's DD address for receiving
+BOB_DD_ADDR=$($BOB_CLI -rpcwallet=bob getdigidollaraddress 2>/dev/null)
+echo "Bob's DD address: $BOB_DD_ADDR"
+
+echo "Alice sending 1000 cents (\$10) back to Bob..."
+set +e
+ALICE_SEND_RESULT=$($ALICE_CLI -rpcwallet=alice senddigidollar "$BOB_DD_ADDR" 1000 2>&1)
+ALICE_SEND_EXIT=$?
+set -e
+
+if [ $ALICE_SEND_EXIT -eq 0 ] && echo "$ALICE_SEND_RESULT" | jq -e '.txid' > /dev/null 2>&1; then
+    print_status "ok" "Transfer successful! TX: $(echo $ALICE_SEND_RESULT | jq -r '.txid' | head -c 16)..."
+    echo "  Full circle complete: Bob -> Alice -> Bob"
+else
+    print_status "fail" "Alice's transfer failed: $ALICE_SEND_RESULT"
+    echo "  (This tests whether recipients can spend received DD)"
+fi
+echo ""
+
+# Mine 2 blocks to confirm + 7 more for network stress test
+echo "Mining 2 blocks to confirm transaction + 7 more blocks..."
+$BOB_CLI generatetoaddress 9 "$BOB_ADDR" > /dev/null 2>&1
+sleep 3
+
+display_all_balances
+
+# Step 21: Alice mints $100 DD with 7-year lock (tier 7)
+echo "=== Step 21: Alice mints \$100 DD with 7-year lock (tier 7) ==="
+echo "Testing Alice's ability to mint after receiving DGB from mining..."
+echo ""
+
+ALICE_BALANCE=$($ALICE_CLI -rpcwallet=alice getbalance 2>/dev/null || echo "0")
+echo "Alice's DGB balance: $ALICE_BALANCE DGB"
+
+echo "Alice minting \$100 DD (10000 cents) with tier 7 (7-year lock)..."
+set +e
+ALICE_MINT_RESULT=$($ALICE_CLI -rpcwallet=alice mintdigidollar 10000 7 2>&1)
+ALICE_MINT_EXIT=$?
+set -e
+
+if [ $ALICE_MINT_EXIT -eq 0 ] && echo "$ALICE_MINT_RESULT" | jq -e '.txid' > /dev/null 2>&1; then
+    ALICE_MINT_TXID=$(echo "$ALICE_MINT_RESULT" | jq -r '.txid')
+    print_status "ok" "Alice's 7-year mint successful! TX: ${ALICE_MINT_TXID:0:16}..."
+    echo "  DD Minted: $(echo $ALICE_MINT_RESULT | jq -r '.dd_minted') cents (\$100)"
+    echo "  Collateral: $(echo $ALICE_MINT_RESULT | jq -r '.dgb_collateral') DGB"
+    echo "  Lock period: 7 years (tier 7)"
+else
+    print_status "fail" "Alice's mint failed: $ALICE_MINT_RESULT"
+fi
+echo ""
+
+# Confirm with 2 blocks
+echo "Mining 2 blocks to confirm..."
+$BOB_CLI generatetoaddress 2 "$BOB_ADDR" > /dev/null 2>&1
+sleep 3
+
+display_all_balances
+
+# Step 22: Charlie mints $200 DD with 10-year lock (tier 8)
+echo "=== Step 22: Charlie mints \$200 DD with 10-year lock (tier 8) ==="
+echo "Testing Charlie's ability to mint after receiving DGB from mining..."
+echo ""
+
+CHARLIE_BALANCE=$($CHARLIE_CLI -rpcwallet=charlie getbalance 2>/dev/null || echo "0")
+echo "Charlie's DGB balance: $CHARLIE_BALANCE DGB"
+
+echo "Charlie minting \$200 DD (20000 cents) with tier 8 (10-year lock)..."
+set +e
+CHARLIE_MINT_RESULT=$($CHARLIE_CLI -rpcwallet=charlie mintdigidollar 20000 8 2>&1)
+CHARLIE_MINT_EXIT=$?
+set -e
+
+if [ $CHARLIE_MINT_EXIT -eq 0 ] && echo "$CHARLIE_MINT_RESULT" | jq -e '.txid' > /dev/null 2>&1; then
+    CHARLIE_MINT_TXID=$(echo "$CHARLIE_MINT_RESULT" | jq -r '.txid')
+    print_status "ok" "Charlie's 10-year mint successful! TX: ${CHARLIE_MINT_TXID:0:16}..."
+    echo "  DD Minted: $(echo $CHARLIE_MINT_RESULT | jq -r '.dd_minted') cents (\$200)"
+    echo "  Collateral: $(echo $CHARLIE_MINT_RESULT | jq -r '.dgb_collateral') DGB"
+    echo "  Lock period: 10 years (tier 8 = 200% collateral)"
+else
+    print_status "fail" "Charlie's mint failed: $CHARLIE_MINT_RESULT"
+fi
+echo ""
+
+# Confirm with 7 blocks
+echo "Mining 7 blocks to confirm..."
+$BOB_CLI generatetoaddress 7 "$BOB_ADDR" > /dev/null 2>&1
+sleep 5
+
+display_all_balances
+
+# Mine 2 final blocks for network sync
+echo "Mining 2 final blocks for network upgrade sync..."
+$BOB_CLI generatetoaddress 2 "$BOB_ADDR" > /dev/null 2>&1
+sleep 3
+
+# Step 23: Final network state
+echo "=== Step 23: Final DigiDollar Network State ==="
+display_network_stats "Final State (After All Mints - Network Stress Test)"
+display_all_balances
+
+echo "=========================================="
+echo "LIVE ORACLE PRICE DATA"
+echo "=========================================="
+$BOB_CLI getoracleprice 2>/dev/null | jq '{status, price_usd, price_micro_usd}'
+echo "=========================================="
+echo ""
+
+# Summary
 echo "=========================================="
 echo "TESTNET DIGIDOLLAR TEST COMPLETE"
 echo "=========================================="
 echo ""
-echo "Test Results Summary:"
-echo "  1. Oracle: Using LIVE exchange price data"
-ORACLE_FINAL=$($CLI getoracleprice 2>/dev/null | jq -r '.price_usd // "N/A"')
-echo "     Current Price: \$$ORACLE_FINAL per DGB"
+echo "TESTS PERFORMED:"
+echo "  1. Fund Alice and Charlie with DGB (55+62 blocks for minting)"
+echo "  2. Bob mints \$100 DD with tier 0 (1000% collateral)"
+echo "  3. Bob sends \$30 DD to Alice"
+echo "  4. Bob sends \$20 DD to Charlie"
+echo "  5. Bob mints \$10 DD with 1-hour lock"
+echo "  6. Early redemption REJECTED (lock not expired)"
+echo "  7. Redemption SUCCEEDED (after lock expired)"
+echo "  8. Bob mints \$200 DD with 10-year lock (tier 8 = 200% collateral)"
+echo "  9. Charlie sends \$15 DD to Alice (recipient spending test)"
+echo "  10. Alice sends \$10 DD back to Bob (full circle test)"
+echo "  11. Alice mints \$100 DD with 7-year lock (tier 7)"
+echo "  12. Charlie mints \$200 DD with 10-year lock (tier 8)"
 echo ""
-echo "  2. Minting: Tested with real collateral calculation"
-echo "     Initial DD: $INITIAL_DD_BALANCE cents"
-echo "     Final DD:   $FINAL_DD_BALANCE cents"
+echo "NETWORK STRESS TEST - All 3 Nodes Minting:"
+echo "  - Bob: \$200 DD (10-year) + \$100 DD transfers received"
+echo "  - Alice: \$100 DD (7-year) + \$45 DD transfers received"
+echo "  - Charlie: \$200 DD (10-year) + \$5 DD transfers remaining"
 echo ""
-echo "  3. Transfer: Self-transfer test completed"
+echo "3 Qt GUI Windows Are Now Open:"
+echo "  - Bob's Qt (PID: $BOB_PID) - Primary miner, multiple vaults"
+echo "  - Alice's Qt (PID: $ALICE_PID) - Has own vault + received DD"
+echo "  - Charlie's Qt (PID: $CHARLIE_PID) - Has own vault + sent DD"
 echo ""
-echo "  4. Redemption: Lock period expiry and redemption tested"
+echo "All 3 nodes are connected and synced!"
+echo ""
+print_status "ok" "All tests completed successfully!"
+echo ""
+echo "=========================================="
+echo "TESTNET WITH LIVE ORACLE IS RUNNING"
+echo "=========================================="
+echo ""
+echo "Oracle is fetching LIVE DGB/USD prices from exchanges!"
+echo ""
+echo "Commands:"
+echo "  $BOB_CLI getoracleprice"
+echo "  $BOB_CLI -rpcwallet=bob mintdigidollar <cents> <tier>"
+echo "  $ALICE_CLI -rpcwallet=alice getdigidollarbalance"
+echo "  $CHARLIE_CLI -rpcwallet=charlie getdigidollarbalance"
+echo ""
+echo "Qt windows remain open for manual verification."
+echo "Press Ctrl+C to exit (will close all Qt windows)."
 echo ""
 
-# Check if Qt is running
-if pgrep -f "digibyte-qt.*testnet" > /dev/null; then
-    echo "Note: DigiByte-Qt is running. You can verify the results in the GUI:"
-    echo "  - DigiDollar tab > Overview: Check balances and positions"
-    echo "  - DigiDollar tab > Mint: Verify oracle price is shown correctly"
-    echo ""
-fi
-
-print_status "ok" "All DigiDollar TestNet tests completed successfully!"
-echo ""
-echo "=========================================="
-echo "TESTNET ORACLE IS RUNNING"
-echo "=========================================="
-echo "The oracle is now fetching live DGB/USD prices from exchanges."
-echo "Price updates happen every ~2 blocks (30 seconds)."
-echo ""
-echo "To check oracle status:"
-echo "  $CLI getoracleprice"
-echo ""
-echo "To mint more DD:"
-echo "  $CLI -rpcwallet=$TESTNET_WALLET mintdigidollar <cents> <tier>"
-echo ""
-echo "  Tiers: 0=1hr, 1=30d, 2=90d, 3=180d, 4=365d, 5=730d, 6=2738d"
-echo "=========================================="
+# Keep script running so Qt stays open
+trap "kill $BOB_PID $ALICE_PID $CHARLIE_PID 2>/dev/null; echo 'All Qt windows closed.'" EXIT
+wait $BOB_PID

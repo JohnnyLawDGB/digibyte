@@ -1789,25 +1789,43 @@ PackageMempoolAcceptResult ProcessNewPackage(Chainstate& active_chainstate, CTxM
  * For mempool transactions, it uses the most recent oracle price.
  * For block validation, it uses the price at the specific block height.
  *
+ * Price source priority:
+ * 1. Real oracle integration (testnet/mainnet)
+ * 2. Mock oracle (regtest) - converted from cents to micro-USD
+ * 3. Fallback default price
+ *
  * @param tx Transaction requiring price validation
- * @return Oracle price in cents (e.g., 50000 = $500.00 DGB)
+ * @return Oracle price in micro-USD (e.g., 6500 = $0.0065 DGB)
  */
 CAmount GetOraclePriceForTransaction(const CTransaction& tx, int nHeight) {
-    // Use the oracle integration system to get current price
-    CAmount oracle_price = OracleIntegration::GetCurrentOraclePrice();
+    // First, try the oracle integration system (for testnet/mainnet)
+    CAmount oracle_price_micro_usd = OracleIntegration::GetCurrentOraclePriceMicroUSD();
 
-    if (oracle_price > 0) {
-        LogPrintf("DigiDollar: Using oracle price: %d cents ($%.4f)\n",
-                  oracle_price, static_cast<double>(oracle_price) / 100.0);
-        return oracle_price;
+    if (oracle_price_micro_usd > 0) {
+        LogPrintf("DigiDollar: Using oracle price: %lld micro-USD ($%.6f)\n",
+                  oracle_price_micro_usd, static_cast<double>(oracle_price_micro_usd) / 1000000.0);
+        return oracle_price_micro_usd;
+    }
+
+    // For regtest, check the mock oracle
+    // Mock oracle now returns price directly in micro-USD (no conversion needed)
+    // e.g., 6500 micro-USD = $0.0065 per DGB
+    if (MockOracleManager::GetInstance().IsEnabled()) {
+        CAmount mock_price_micro_usd = MockOracleManager::GetInstance().GetCurrentPrice();
+        if (mock_price_micro_usd > 0) {
+            LogPrintf("DigiDollar: Using mock oracle price: %lld micro-USD ($%.6f)\n",
+                      mock_price_micro_usd, static_cast<double>(mock_price_micro_usd) / 1000000.0);
+            return mock_price_micro_usd;
+        }
     }
 
     // Fallback to safe default if oracle system unavailable
-    static const CAmount FALLBACK_ORACLE_PRICE = 5000; // $0.05 DGB
-    LogPrintf("DigiDollar: Oracle system unavailable, using fallback price: %d cents ($%.4f)\n",
-              FALLBACK_ORACLE_PRICE, static_cast<double>(FALLBACK_ORACLE_PRICE) / 100.0);
+    // $0.0065 per DGB = 6500 micro-USD (reasonable testnet default)
+    static const CAmount FALLBACK_ORACLE_PRICE_MICRO_USD = 6500;
+    LogPrintf("DigiDollar: Oracle system unavailable, using fallback price: %lld micro-USD ($%.6f)\n",
+              FALLBACK_ORACLE_PRICE_MICRO_USD, static_cast<double>(FALLBACK_ORACLE_PRICE_MICRO_USD) / 1000000.0);
 
-    return FALLBACK_ORACLE_PRICE;
+    return FALLBACK_ORACLE_PRICE_MICRO_USD;
 }
 
 CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams)
@@ -2697,12 +2715,11 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
                 }
 
                 // Create validation context with current blockchain state
-                // Note: For Phase 1, we use placeholder values for oracle price and system collateral
-                // In Phase 2, these would be retrieved from the oracle system
+                // Use real oracle price from GetOraclePriceForTransaction()
                 DigiDollar::ValidationContext ddContext(
                     pindex->nHeight,
-                    50000,  // Placeholder: $500.00 DGB price
-                    150,    // Placeholder: 150% system collateral
+                    GetOraclePriceForTransaction(tx, pindex->nHeight),  // Real oracle price in micro-USD
+                    DigiDollar::GetSystemCollateralRatio(),              // System collateral ratio
                     m_chainman.GetParams()
                 );
 

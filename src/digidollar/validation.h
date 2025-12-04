@@ -53,12 +53,12 @@ enum class RedemptionPath {
  */
 struct ValidationContext {
     int nHeight;                     // Current block height
-    CAmount oraclePrice;             // Current DGB price in cents (e.g., 5 = $0.05)
+    CAmount oraclePriceMicroUSD;     // Current DGB price in micro-USD (e.g., 6310 = $0.00631)
     int systemCollateral;            // System-wide collateral ratio percentage
     const CChainParams& params;      // Chain parameters including DD consensus params
 
-    ValidationContext(int height, CAmount price, int collateral, const CChainParams& chainParams)
-        : nHeight(height), oraclePrice(price), systemCollateral(collateral), params(chainParams) {}
+    ValidationContext(int height, CAmount price_micro_usd, int collateral, const CChainParams& chainParams)
+        : nHeight(height), oraclePriceMicroUSD(price_micro_usd), systemCollateral(collateral), params(chainParams) {}
 };
 
 // ============================================================================

@@ -181,7 +181,7 @@ BOOST_FIXTURE_TEST_CASE(test_calculatecollateral_basic, DigiDollarRPCTestSetup)
     BOOST_CHECK(result.exists("base_ratio"));
     BOOST_CHECK(result.exists("dca_multiplier"));
     BOOST_CHECK(result.exists("effective_ratio"));
-    BOOST_CHECK(result.exists("oracle_price"));
+    BOOST_CHECK(result.exists("oracle_price_micro_usd"));
     BOOST_CHECK(result.exists("system_health"));
     BOOST_CHECK(result.exists("dca_tier"));
 }
@@ -218,14 +218,14 @@ BOOST_FIXTURE_TEST_CASE(test_calculatecollateral_ratio_scaling, DigiDollarRPCTes
     BOOST_CHECK_GT(dgb365, dgb3650);
 }
 
-// Test 11: calculatecollateralrequirement - With Oracle Price
+// Test 11: calculatecollateralrequirement - With Oracle Price (in micro-USD)
 BOOST_FIXTURE_TEST_CASE(test_calculatecollateral_oracle_price, DigiDollarRPCTestSetup)
 {
-    // Test with custom oracle price
+    // Test with custom oracle price (500 micro-USD = $0.0005)
     UniValue result = CallRPC("calculatecollateralrequirement 10000 365 500");
 
     BOOST_CHECK(result.isObject());
-    BOOST_CHECK_EQUAL(result["oracle_price"].getInt<int>(), 500);
+    BOOST_CHECK_EQUAL(result["oracle_price_micro_usd"].getInt<int64_t>(), 500);
 }
 
 // Test 12: validateddaddress - Basic Test

@@ -71,7 +71,8 @@ BOOST_AUTO_TEST_CASE(txbuilder_basic_construction)
     // Test basic construction of transaction builders
     const CChainParams& params = Params();
     int height = 1000;
-    CAmount price = 5000; // $0.05 per DGB (5000 cents per DGB)
+    // Oracle price in micro-USD format (1,000,000 = $1.00)
+    CAmount price = 50000; // $0.05 per DGB (50,000 micro-USD)
 
     MintTxBuilder mintBuilder(params, height, price);
     TransferTxBuilder transferBuilder(params, height, price);
@@ -85,7 +86,8 @@ BOOST_AUTO_TEST_CASE(mint_transaction_basic)
 {
     const CChainParams& params = Params();
     int height = 1000;
-    CAmount price = 1000; // $0.01 per DGB (1000 cents per DGB) - matches default mock oracle
+    // Oracle price in micro-USD format (1,000,000 = $1.00)
+    CAmount price = 10000; // $0.01 per DGB (10,000 micro-USD)
 
     TestMintTxBuilder builder(params, height, price);
 
@@ -116,7 +118,7 @@ BOOST_AUTO_TEST_CASE(mint_transaction_insufficient_funds)
 {
     const CChainParams& params = Params();
     int height = 1000;
-    CAmount price = 1000; // $0.01 per DGB (1000 cents per DGB)
+    CAmount price = 10000; // $0.01 per DGB (10,000 micro-USD)
 
     TestMintTxBuilder builder(params, height, price);
 
@@ -141,7 +143,7 @@ BOOST_AUTO_TEST_CASE(mint_transaction_invalid_amount)
 {
     const CChainParams& params = Params();
     int height = 1000;
-    CAmount price = 1000; // $0.01 per DGB (1000 cents per DGB)
+    CAmount price = 10000; // $0.01 per DGB (10,000 micro-USD)
 
     TestMintTxBuilder builder(params, height, price);
 
@@ -167,7 +169,7 @@ BOOST_AUTO_TEST_CASE(collateral_calculation)
 {
     const CChainParams& params = Params();
     int height = 1000;
-    CAmount price = 1000; // $0.01 per DGB (1000 cents per DGB)
+    CAmount price = 10000; // $0.01 per DGB (10,000 micro-USD)
 
     TestMintTxBuilder builder(params, height, price);
 
@@ -192,7 +194,7 @@ BOOST_AUTO_TEST_CASE(transfer_transaction_basic)
 {
     const CChainParams& params = Params();
     int height = 1000;
-    CAmount price = 1000; // $0.01 per DGB (1000 cents per DGB)
+    CAmount price = 10000; // $0.01 per DGB (10,000 micro-USD)
 
     TestTransferTxBuilder builder(params, height, price);
 
@@ -237,7 +239,7 @@ BOOST_AUTO_TEST_CASE(transfer_transaction_invalid_address)
 {
     const CChainParams& params = Params();
     int height = 1000;
-    CAmount price = 1000; // $0.01 per DGB (1000 cents per DGB)
+    CAmount price = 10000; // $0.01 per DGB (10,000 micro-USD)
 
     TestTransferTxBuilder builder(params, height, price);
 
@@ -264,7 +266,7 @@ BOOST_AUTO_TEST_CASE(redeem_transaction_basic)
 {
     const CChainParams& params = Params();
     int height = 1000;
-    CAmount price = 1000; // $0.01 per DGB (1000 cents per DGB)
+    CAmount price = 10000; // $0.01 per DGB (10,000 micro-USD)
 
     TestRedeemTxBuilder builder(params, height, price);
 
@@ -305,7 +307,7 @@ BOOST_AUTO_TEST_CASE(redeem_transaction_different_paths)
 {
     const CChainParams& params = Params();
     int height = 1000;
-    CAmount price = 1000; // $0.01 per DGB (1000 cents per DGB)
+    CAmount price = 10000; // $0.01 per DGB (10,000 micro-USD)
 
     TestRedeemTxBuilder builder(params, height, price);
 
@@ -348,7 +350,7 @@ BOOST_AUTO_TEST_CASE(fee_calculation)
 {
     const CChainParams& params = Params();
     int height = 1000;
-    CAmount price = 1000; // $0.01 per DGB (1000 cents per DGB)
+    CAmount price = 10000; // $0.01 per DGB (10,000 micro-USD)
 
     TestMintTxBuilder builder(params, height, price);
 
@@ -394,7 +396,7 @@ BOOST_AUTO_TEST_CASE(transaction_validation_integration)
 {
     const CChainParams& params = Params();
     int height = 1000;
-    CAmount price = 1000; // $0.01 per DGB (1000 cents per DGB)
+    CAmount price = 10000; // $0.01 per DGB (10,000 micro-USD)
 
     TestMintTxBuilder builder(params, height, price);
 
@@ -428,7 +430,7 @@ BOOST_AUTO_TEST_CASE(edge_cases_and_error_handling)
 {
     const CChainParams& params = Params();
     int height = 1000;
-    CAmount price = 1000; // $0.01 per DGB (1000 cents per DGB)
+    CAmount price = 10000; // $0.01 per DGB (10,000 micro-USD)
 
     TestMintTxBuilder builder(params, height, price);
 

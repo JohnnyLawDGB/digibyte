@@ -177,8 +177,11 @@ BOOST_FIXTURE_TEST_CASE(collateral_ratio_validation_basic, DigiDollarValidationT
 {
     // Test 30-day lock requiring 500% collateral
     int64_t lockTime = 30 * 24 * 60 * 4; // 30 days in blocks
-    CAmount ddMinted = 10000; // $100.00
-    CAmount dgbRequired = (ddMinted * COIN) / mockOraclePrice * 500 / 100; // 500% ratio
+    CAmount ddMinted = 10000; // $100.00 (in cents)
+    // Formula: (ddAmount * COIN * ratio * 100) / oraclePriceMicroUSD
+    // With mockOraclePrice = 500000 micro-USD ($0.50/DGB), ddMinted = 10000 cents ($100), ratio = 500%
+    // Required = (10000 * 1e8 * 500 * 100) / 500000 = 1e11 satoshis = 1000 DGB
+    CAmount dgbRequired = (static_cast<uint64_t>(ddMinted) * COIN * 500 * 100) / mockOraclePrice;
 
     BOOST_CHECK(DigiDollar::ValidateCollateralRatio(dgbRequired, ddMinted, lockTime, validationContext));
     // Allow small precision tolerance for collateral validation
@@ -192,10 +195,11 @@ BOOST_FIXTURE_TEST_CASE(collateral_ratio_validation_dca_adjustment, DigiDollarVa
     validationContext.systemCollateral = 110; // Between 110-120% - requires +50% collateral
 
     int64_t lockTime = 30 * 24 * 60 * 4; // 30 days - normally 500%
-    CAmount ddMinted = 10000; // $100.00
+    CAmount ddMinted = 10000; // $100.00 (in cents)
 
     // With DCA multiplier of 1.5, effective ratio is 500% * 1.5 = 750%
-    CAmount dgbRequired = (ddMinted * COIN) / mockOraclePrice * 750 / 100;
+    // Formula: (ddAmount * COIN * ratio * 100) / oraclePriceMicroUSD
+    CAmount dgbRequired = (static_cast<uint64_t>(ddMinted) * COIN * 750 * 100) / mockOraclePrice;
 
     BOOST_CHECK(DigiDollar::ValidateCollateralRatio(dgbRequired, ddMinted, lockTime, validationContext));
 
@@ -211,7 +215,7 @@ BOOST_FIXTURE_TEST_CASE(collateral_ratio_validation_edge_cases, DigiDollarValida
     BOOST_CHECK(!DigiDollar::ValidateCollateralRatio(1000 * COIN, 0, 30 * 24 * 60 * 4, validationContext));
 
     // Test zero oracle price
-    validationContext.oraclePrice = 0;
+    validationContext.oraclePriceMicroUSD = 0;
     BOOST_CHECK(!DigiDollar::ValidateCollateralRatio(1000 * COIN, 10000, 30 * 24 * 60 * 4, validationContext));
 }
 
@@ -340,7 +344,7 @@ BOOST_FIXTURE_TEST_CASE(transaction_validation_mint_tx, DigiDollarValidationTest
     params.oracleKeys = DigiDollar::GetOracleKeys(15);
 
     CScript collateralScript = DigiDollar::CreateCollateralP2TR(params);
-    CAmount requiredCollateral = (params.ddAmount * COIN) / mockOraclePrice * 500 / 100;
+    CAmount requiredCollateral = (static_cast<uint64_t>(params.ddAmount) * COIN * 500 * 100) / mockOraclePrice;
 
     mtx.vout.resize(2);
     mtx.vout[0] = CTxOut(requiredCollateral, collateralScript);
@@ -454,7 +458,7 @@ BOOST_FIXTURE_TEST_CASE(mint_validation_valid_basic_mint, DigiDollarValidationTe
     // Create mint parameters
     CAmount ddAmount = 10000; // $100.00
     int64_t lockBlocks = 30 * 24 * 60 * 4; // 30 days
-    CAmount requiredCollateral = (ddAmount * COIN) / mockOraclePrice * 500 / 100; // 500% for 30 days
+    CAmount requiredCollateral = (static_cast<uint64_t>(ddAmount) * COIN * 500 * 100) / mockOraclePrice; // 500% for 30 days
 
     // Add collateral output (P2TR with proper lock script)
     DigiDollar::MintParams params;
@@ -491,7 +495,7 @@ BOOST_FIXTURE_TEST_CASE(mint_validation_insufficient_collateral, DigiDollarValid
 
     CAmount ddAmount = 10000; // $100.00
     int64_t lockBlocks = 30 * 24 * 60 * 4; // 30 days
-    CAmount requiredCollateral = (ddAmount * COIN) / mockOraclePrice * 500 / 100;
+    CAmount requiredCollateral = (static_cast<uint64_t>(ddAmount) * COIN * 500 * 100) / mockOraclePrice;
     CAmount insufficientCollateral = requiredCollateral - COIN; // 1 DGB short
 
     DigiDollar::MintParams params;
@@ -531,7 +535,7 @@ BOOST_FIXTURE_TEST_CASE(mint_validation_invalid_dd_amount, DigiDollarValidationT
     const auto& ddParams = Params().GetDigiDollarParams();
     CAmount ddAmount = ddParams.maxMintAmount + 1; // Above maximum
     int64_t lockBlocks = 30 * 24 * 60 * 4;
-    CAmount requiredCollateral = (ddAmount * COIN) / mockOraclePrice * 500 / 100;
+    CAmount requiredCollateral = (static_cast<uint64_t>(ddAmount) * COIN * 500 * 100) / mockOraclePrice;
 
     DigiDollar::MintParams params;
     params.ddAmount = ddAmount;
@@ -642,7 +646,7 @@ BOOST_FIXTURE_TEST_CASE(mint_validation_invalid_collateral_script, DigiDollarVal
     mtx.vin[0].prevout = COutPoint(uint256S("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"), 0);
 
     CAmount ddAmount = 10000; // $100.00
-    CAmount requiredCollateral = (ddAmount * COIN) / mockOraclePrice * 500 / 100;
+    CAmount requiredCollateral = (static_cast<uint64_t>(ddAmount) * COIN * 500 * 100) / mockOraclePrice;
 
     // Invalid collateral script (P2PKH instead of P2TR)
     CScript invalidCollateralScript = GetScriptForDestination(PKHash(testPubKey));
@@ -671,7 +675,7 @@ BOOST_FIXTURE_TEST_CASE(mint_validation_dd_output_nonzero_value, DigiDollarValid
 
     CAmount ddAmount = 10000; // $100.00
     int64_t lockBlocks = 30 * 24 * 60 * 4;
-    CAmount requiredCollateral = (ddAmount * COIN) / mockOraclePrice * 500 / 100;
+    CAmount requiredCollateral = (static_cast<uint64_t>(ddAmount) * COIN * 500 * 100) / mockOraclePrice;
 
     DigiDollar::MintParams params;
     params.ddAmount = ddAmount;
@@ -711,7 +715,7 @@ BOOST_FIXTURE_TEST_CASE(mint_validation_dca_multiplier_adjustment, DigiDollarVal
     int64_t lockBlocks = 30 * 24 * 60 * 4; // 30 days
 
     // With DCA, need 500% * 1.5 = 750% collateral
-    CAmount adjustedCollateral = (ddAmount * COIN) / mockOraclePrice * 750 / 100;
+    CAmount adjustedCollateral = (static_cast<uint64_t>(ddAmount) * COIN * 750 * 100) / mockOraclePrice;
 
     DigiDollar::MintParams params;
     params.ddAmount = ddAmount;
@@ -735,7 +739,7 @@ BOOST_FIXTURE_TEST_CASE(mint_validation_dca_multiplier_adjustment, DigiDollarVal
     BOOST_CHECK(state.IsValid());
 
     // Test with original 500% collateral - should fail
-    CAmount originalCollateral = (ddAmount * COIN) / mockOraclePrice * 500 / 100;
+    CAmount originalCollateral = (static_cast<uint64_t>(ddAmount) * COIN * 500 * 100) / mockOraclePrice;
     mtx.vout[0].nValue = originalCollateral;
     CTransaction tx2(mtx);
     TxValidationState state2;
@@ -758,7 +762,7 @@ BOOST_FIXTURE_TEST_CASE(mint_validation_multiple_dd_outputs, DigiDollarValidatio
     CAmount ddAmount2 = 5000; // $50.00
     CAmount totalDD = ddAmount1 + ddAmount2; // $100.00 total
     int64_t lockBlocks = 30 * 24 * 60 * 4;
-    CAmount requiredCollateral = (totalDD * COIN) / mockOraclePrice * 500 / 100;
+    CAmount requiredCollateral = (static_cast<uint64_t>(totalDD) * COIN * 500 * 100) / mockOraclePrice;
 
     DigiDollar::MintParams params;
     params.ddAmount = totalDD;
@@ -787,7 +791,7 @@ BOOST_FIXTURE_TEST_CASE(mint_validation_multiple_dd_outputs, DigiDollarValidatio
 BOOST_FIXTURE_TEST_CASE(mint_validation_invalid_oracle_price, DigiDollarValidationTestSetup)
 {
     // Test mint validation when oracle price is invalid/missing
-    validationContext.oraclePrice = 0; // Invalid price
+    validationContext.oraclePriceMicroUSD = 0; // Invalid price
 
     CMutableTransaction mtx;
     mtx.nVersion = 0x01000770; // DD_TX_MINT (type=1 in bits 24-31, marker=0x0770 in bits 0-15)
@@ -865,7 +869,7 @@ BOOST_FIXTURE_TEST_CASE(mint_validation_edge_case_exact_minimum, DigiDollarValid
 
     CAmount ddAmount = 10000; // Exactly $100.00 (minimum)
     int64_t lockBlocks = 30 * 24 * 60 * 4;
-    CAmount exactCollateral = (ddAmount * COIN) / mockOraclePrice * 500 / 100;
+    CAmount exactCollateral = (static_cast<uint64_t>(ddAmount) * COIN * 500 * 100) / mockOraclePrice;
 
     DigiDollar::MintParams params;
     params.ddAmount = ddAmount;
@@ -901,7 +905,7 @@ BOOST_FIXTURE_TEST_CASE(mint_validation_edge_case_exact_maximum, DigiDollarValid
     const auto& ddParams = Params().GetDigiDollarParams();
     CAmount ddAmount = ddParams.maxMintAmount; // Exactly maximum
     int64_t lockBlocks = 30 * 24 * 60 * 4;
-    CAmount requiredCollateral = (ddAmount * COIN) / mockOraclePrice * 500 / 100;
+    CAmount requiredCollateral = (static_cast<uint64_t>(ddAmount) * COIN * 500 * 100) / mockOraclePrice;
 
     DigiDollar::MintParams params;
     params.ddAmount = ddAmount;
@@ -1887,7 +1891,7 @@ BOOST_FIXTURE_TEST_CASE(err_validation_blocks_minting_during_err, DigiDollarVali
 
     CAmount ddAmount = 10000; // $100.00
     int64_t lockBlocks = 30 * 24 * 60 * 4;
-    CAmount requiredCollateral = (ddAmount * COIN) / mockOraclePrice * 500 / 100;
+    CAmount requiredCollateral = (static_cast<uint64_t>(ddAmount) * COIN * 500 * 100) / mockOraclePrice;
 
     DigiDollar::MintParams params;
     params.ddAmount = ddAmount;

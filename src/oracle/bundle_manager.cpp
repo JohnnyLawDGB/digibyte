@@ -1149,6 +1149,33 @@ CAmount GetCurrentOraclePrice()
     return 0;
 }
 
+CAmount GetCurrentOraclePriceMicroUSD()
+{
+    // In RegTest mode, use MockOracleManager for testing
+    // MockOracleManager stores and returns micro-USD directly (set via setmockoracleprice RPC)
+    if (Params().GetChainType() == ChainType::REGTEST) {
+        CAmount mockPriceMicroUSD = MockOracleManager::GetInstance().GetCurrentPrice();
+        if (mockPriceMicroUSD > 0) {
+            LogPrintf("Oracle: GetCurrentOraclePriceMicroUSD returning %lld micro-USD ($%.6f) from MockOracleManager\n",
+                     mockPriceMicroUSD, mockPriceMicroUSD / 1000000.0);
+            return mockPriceMicroUSD;
+        }
+    }
+
+    OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    CAmount price_micro_usd = manager.GetLatestPrice();
+
+    if (price_micro_usd > 0) {
+        LogPrintf("Oracle: GetCurrentOraclePriceMicroUSD returning %lld micro-USD ($%.6f)\n",
+                 price_micro_usd, price_micro_usd / 1000000.0);
+        return price_micro_usd;
+    }
+
+    // No oracle price available
+    LogPrintf("Oracle: No oracle price available in GetCurrentOraclePriceMicroUSD, returning 0\n");
+    return 0;
+}
+
 CAmount GetOraclePriceForHeight(int nHeight)
 {
     // Get oracle bundle manager instance

@@ -189,8 +189,15 @@ extern std::unique_ptr<OracleBundleManager> g_oracle_bundle_manager;
 //! Utility functions for integration with existing code
 namespace OracleIntegration {
 
-    //! Get current oracle price for DigiDollar operations
+    //! Get current oracle price for DigiDollar operations (LEGACY - returns cents)
+    //! WARNING: For sub-cent prices (< $0.01/DGB), this rounds to 1 cent minimum.
+    //! For precision with sub-cent prices, use GetCurrentOraclePriceMicroUSD() instead.
     CAmount GetCurrentOraclePrice();
+
+    //! Get current oracle price in micro-USD (1,000,000 = $1.00)
+    //! This provides full precision for sub-cent DGB prices.
+    //! @return Price in micro-USD, or 0 if not available
+    CAmount GetCurrentOraclePriceMicroUSD();
 
     //! Get oracle price for a specific block height
     //! @param nHeight Block height to query

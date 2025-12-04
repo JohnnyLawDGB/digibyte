@@ -26,6 +26,7 @@
 #include <wallet/spend.h>
 #include <wallet/coinselection.h>
 #include <wallet/digidollarwallet.h>
+#include <wallet/walletdb.h>
 #include <interfaces/wallet.h>
 #include <digidollar/txbuilder.h>
 #include <node/transaction.h>
@@ -88,6 +89,7 @@ RPCHelpMan getdigidollarstats()
                         {RPCResult::Type::NUM, "total_collateral_dgb", "Total DGB locked as collateral"},
                         {RPCResult::Type::NUM, "total_dd_supply", "Total DigiDollar supply in circulation (in cents)"},
                         {RPCResult::Type::NUM, "oracle_price_cents", "Current DGB/USD price from oracle (in cents per DGB)"},
+                        {RPCResult::Type::NUM, "oracle_price_micro_usd", "Current DGB/USD price from oracle in micro-USD (1,000,000 = $1.00)"},
                         {RPCResult::Type::BOOL, "is_emergency", "True if system is in emergency state (<100% collateralized)"},
                         {RPCResult::Type::NUM, "system_collateral_ratio", "Alias for health_percentage (for backward compatibility)"},
                         {RPCResult::Type::NUM, "total_collateral_locked", "Alias for total_collateral_dgb (in satoshis)"},
@@ -150,13 +152,26 @@ RPCHelpMan getdigidollarstats()
             totalCollateral = metrics.totalCollateral;
             totalDD = metrics.totalDDSupply;
 
-            // Get current oracle price from MockOracleManager
-            // Oracle price format: cents per DGB (e.g., 50 = $0.50/DGB)
-            CAmount oraclePrice = MockOracleManager::GetInstance().GetCurrentPrice();
+            // Get current oracle price in micro-USD from the real oracle system
+            // micro-USD format: 1,000,000 = $1.00, so 6310 = $0.00631
+            OracleBundleManager& oracle_manager = OracleBundleManager::GetInstance();
+            CAmount oraclePriceMicroUSD = oracle_manager.GetLatestPrice();
 
-            // Convert oracle price (cents per DGB) to millicents per DGB for CalculateSystemHealth
-            // Oracle returns cents/DGB, CalculateSystemHealth expects millicents/DGB (cents * 1000)
-            CAmount oraclePriceMillicents = oraclePrice * 1000;
+            // Fall back to MockOracleManager for regtest/testing if no real oracle data
+            if (oraclePriceMicroUSD <= 0 && Params().GetChainType() == ChainType::REGTEST) {
+                // MockOracleManager already returns micro-USD (see mock_oracle.cpp)
+                oraclePriceMicroUSD = MockOracleManager::GetInstance().GetCurrentPrice();
+            }
+
+            // Convert micro-USD to millicents for CalculateSystemHealth
+            // micro-USD / 10 = millicents (e.g., 6310 micro-USD / 10 = 631 millicents = $0.00631)
+            CAmount oraclePriceMillicents = oraclePriceMicroUSD / 10;
+
+            // Also calculate cents for display (rounded)
+            CAmount oraclePriceCents = (oraclePriceMicroUSD + 5000) / 10000;
+            if (oraclePriceCents == 0 && oraclePriceMicroUSD > 0) {
+                oraclePriceCents = 1; // Minimum 1 cent for any non-zero price
+            }
 
             // Calculate system health
             // IMPORTANT: Return 0% if no DD minted network-wide (instead of default 30000%)
@@ -179,7 +194,8 @@ RPCHelpMan getdigidollarstats()
             result.pushKV("health_status", tier.status);
             result.pushKV("total_collateral_dgb", ValueFromAmount(totalCollateral));
             result.pushKV("total_dd_supply", totalDD);
-            result.pushKV("oracle_price_cents", oraclePrice); // Oracle price is already in cents per DGB
+            result.pushKV("oracle_price_cents", oraclePriceCents);   // Rounded to cents for display
+            result.pushKV("oracle_price_micro_usd", oraclePriceMicroUSD); // Full precision micro-USD
             result.pushKV("is_emergency", isEmergency);
 
             // Add fields expected by tests
@@ -284,7 +300,8 @@ static RPCHelpMan calculatecollateralrequirement()
                         {RPCResult::Type::NUM, "base_ratio", "Base collateral ratio % for this lock period"},
                         {RPCResult::Type::NUM, "dca_multiplier", "DCA multiplier applied"},
                         {RPCResult::Type::NUM, "effective_ratio", "Final collateral ratio % (base * DCA)"},
-                        {RPCResult::Type::NUM, "oracle_price", "DGB price used (cents per DGB)"},
+                        {RPCResult::Type::NUM, "oracle_price_micro_usd", "DGB price used in micro-USD (1,000,000 = $1.00)"},
+                        {RPCResult::Type::NUM, "oracle_price_usd", "DGB price used in USD"},
                         {RPCResult::Type::NUM, "system_health", "Current system health %"},
                         {RPCResult::Type::STR, "dca_tier", "Current DCA tier status"}
                     }
@@ -300,8 +317,24 @@ static RPCHelpMan calculatecollateralrequirement()
             // Parse parameters
             CAmount ddAmount = request.params[0].getInt<int64_t>();
             int lockDays = request.params[1].getInt<int>();
-            CAmount oraclePrice = request.params.size() > 2 ?
-                request.params[2].getInt<int64_t>() : 5000; // Default $0.05 per DGB
+
+            // Get oracle price in micro-USD: use provided value or fetch from real oracle system
+            CAmount oraclePriceMicroUSD;
+            if (request.params.size() > 2 && !request.params[2].isNull()) {
+                // User-provided value is in micro-USD (1,000,000 = $1.00)
+                oraclePriceMicroUSD = request.params[2].getInt<int64_t>();
+            } else {
+                // Use real oracle price from OracleIntegration (returns micro-USD)
+                oraclePriceMicroUSD = OracleIntegration::GetCurrentOraclePriceMicroUSD();
+                if (oraclePriceMicroUSD <= 0) {
+                    // Fall back to mock oracle if real oracle not available
+                    // MockOracleManager already returns micro-USD (see mock_oracle.cpp)
+                    oraclePriceMicroUSD = MockOracleManager::GetInstance().GetCurrentPrice();
+                }
+                if (oraclePriceMicroUSD <= 0) {
+                    throw JSONRPCError(RPC_MISC_ERROR, "No oracle price available. Start the oracle first with startoracle command.");
+                }
+            }
 
             // Validate parameters
             if (ddAmount <= 0) {
@@ -310,7 +343,7 @@ static RPCHelpMan calculatecollateralrequirement()
             if (lockDays <= 0) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Lock days must be positive");
             }
-            if (oraclePrice <= 0) {
+            if (oraclePriceMicroUSD <= 0) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Oracle price must be positive");
             }
 
@@ -334,8 +367,14 @@ static RPCHelpMan calculatecollateralrequirement()
             int effectiveRatio = DynamicCollateralAdjustment::ApplyDCA(baseRatio, systemHealth);
             auto tier = DynamicCollateralAdjustment::GetCurrentTier(systemHealth);
 
-            // Calculate required DGB
-            CAmount requiredDGB = (ddAmount * effectiveRatio * COIN) / (oraclePrice / 100);
+            // Calculate required DGB using micro-USD precision
+            // Formula: Required_DGB_sats = (DD_cents * COIN * ratio * 100) / oracle_micro_usd
+            // Example: $100 DD at $0.00631 DGB with 150% ratio (oracle_micro_usd = 6310)
+            //   = (10000 cents * 100000000 * 150 * 100) / 6310
+            //   = 15,000,000,000,000,000 / 6310
+            //   = 2,377,179,080,509 sats = ~23,772 DGB
+            uint64_t requiredDGB = (static_cast<uint64_t>(ddAmount) * static_cast<uint64_t>(COIN) * static_cast<uint64_t>(effectiveRatio) * 100ULL) /
+                                   static_cast<uint64_t>(oraclePriceMicroUSD);
 
             UniValue result(UniValue::VOBJ);
             result.pushKV("required_dgb", ValueFromAmount(requiredDGB));
@@ -346,7 +385,8 @@ static RPCHelpMan calculatecollateralrequirement()
             result.pushKV("base_ratio", baseRatio);
             result.pushKV("dca_multiplier", dcaMultiplier);
             result.pushKV("effective_ratio", effectiveRatio);
-            result.pushKV("oracle_price", oraclePrice);
+            result.pushKV("oracle_price_micro_usd", oraclePriceMicroUSD);
+            result.pushKV("oracle_price_usd", oraclePriceMicroUSD / 1000000.0);
             result.pushKV("system_health", systemHealth);
             result.pushKV("dca_tier", tier.status);
 
@@ -506,10 +546,15 @@ RPCHelpMan mintdigidollar()
             // Get current height from wallet's chain interface
             int currentHeight = pwallet->GetLastBlockHeight();
 
-            // Get oracle price
-            CAmount oraclePrice = MockOracleManager::GetInstance().GetCurrentPrice();
-            if (oraclePrice <= 0) {
-                oraclePrice = 1; // Fallback to 1 cent per DGB = $0.01/DGB
+            // Get oracle price in micro-USD from real oracle system first, fall back to mock
+            CAmount oraclePriceMicroUSD = OracleIntegration::GetCurrentOraclePriceMicroUSD();
+            if (oraclePriceMicroUSD <= 0) {
+                // Fall back to mock oracle if real oracle not available
+                // MockOracleManager already returns micro-USD (see mock_oracle.cpp)
+                oraclePriceMicroUSD = MockOracleManager::GetInstance().GetCurrentPrice();
+            }
+            if (oraclePriceMicroUSD <= 0) {
+                throw JSONRPCError(RPC_MISC_ERROR, "No oracle price available. Start the oracle first with startoracle command.");
             }
 
             // Convert lock tier to days
@@ -561,7 +606,8 @@ RPCHelpMan mintdigidollar()
             };
 
             // Build mint transaction using custom RpcMintTxBuilder with UTXO value lookup
-            RpcMintTxBuilder builder(Params(), currentHeight, oraclePrice, utxoValues);
+            // Note: MintTxBuilder now expects micro-USD price
+            RpcMintTxBuilder builder(Params(), currentHeight, oraclePriceMicroUSD, utxoValues);
 
             DigiDollar::TxBuilderMintParams params;
             params.ddAmount = ddAmount;  // Amount in cents (e.g., 5000 = $50.00)
@@ -617,7 +663,27 @@ RPCHelpMan mintdigidollar()
                 // CRITICAL: Store the owner key for this position so we can spend it later
                 pwallet->GetDDWallet()->StoreOwnerKey(tx->GetHash(), ownerKey);
 
-                LogPrintf("DigiDollar RPC: Added position %s with %d DD cents and stored owner key\n",
+                // CRITICAL FIX: Track the DD UTXO so it can be found by GetDDUTXOs()
+                // The DD token output is always at vout[1] in a mint transaction:
+                //   vout[0] = Collateral (P2TR with timelock)
+                //   vout[1] = DD token output (P2TR with 0 value) <- THIS IS THE DD UTXO
+                //   vout[2] = OP_RETURN metadata
+                //   vout[3] = Change output (optional)
+                COutPoint ddOutpoint(tx->GetHash(), 1);
+                pwallet->GetDDWallet()->AddDDUTXO(ddOutpoint, ddAmount);
+
+                // CRITICAL FIX #2: Persist DD UTXO to wallet database so it survives daemon restart
+                {
+                    wallet::WalletBatch batch(pwallet->GetDatabase());
+                    if (batch.WriteDDUTXO(ddOutpoint, ddAmount)) {
+                        LogPrintf("DigiDollar RPC: Persisted DD UTXO %s:%d to database (amount=%d)\n",
+                                 ddOutpoint.hash.ToString(), ddOutpoint.n, ddAmount);
+                    } else {
+                        LogPrintf("DigiDollar RPC: WARNING - Failed to persist DD UTXO to database\n");
+                    }
+                }
+
+                LogPrintf("DigiDollar RPC: Added position %s with %d DD cents, stored owner key, and tracked DD UTXO at vout 1\n",
                          position.dd_timelock_id.ToString(), ddAmount);
             } else {
                 LogPrintf("DigiDollar RPC: WARNING - No DD wallet context, position not persisted\n");
@@ -1521,7 +1587,7 @@ static RPCHelpMan estimatecollateral()
                 {
                     {"dd_amount", RPCArg::Type::AMOUNT, RPCArg::Optional::NO, "DigiDollar amount to mint (in cents)"},
                     {"lock_tier", RPCArg::Type::NUM, RPCArg::Optional::NO, "Lock tier 0-8 (0=1h testing, 1=30d, 2=90d, 3=180d, 4=1y, 5=3y, 6=5y, 7=7y, 8=10y)"},
-                    {"oracle_price", RPCArg::Type::AMOUNT, RPCArg::Optional::OMITTED, "Custom DGB price in cents (uses current if omitted)"}
+                    {"oracle_price_micro_usd", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "Custom DGB price in micro-USD (1,000,000 = $1.00). Uses current oracle if omitted."}
                 },
                 RPCResult{
                     RPCResult::Type::OBJ, "", "",
@@ -1533,7 +1599,8 @@ static RPCHelpMan estimatecollateral()
                         {RPCResult::Type::NUM, "base_ratio", "Base collateral ratio percentage"},
                         {RPCResult::Type::NUM, "dca_multiplier", "DCA multiplier applied"},
                         {RPCResult::Type::NUM, "effective_ratio", "Final collateral ratio (base * DCA)"},
-                        {RPCResult::Type::STR_AMOUNT, "oracle_price", "DGB price used (cents per DGB)"},
+                        {RPCResult::Type::NUM, "oracle_price_micro_usd", "DGB price in micro-USD (1,000,000 = $1.00)"},
+                        {RPCResult::Type::NUM, "oracle_price_usd", "DGB price in USD"},
                         {RPCResult::Type::NUM, "system_health", "Current system health percentage"},
                         {RPCResult::Type::STR, "health_tier", "System health tier"},
                         {RPCResult::Type::STR_AMOUNT, "usd_value", "USD value of required DGB"}
@@ -1541,17 +1608,33 @@ static RPCHelpMan estimatecollateral()
                 },
                 RPCExamples{
                     HelpExampleCli("estimatecollateral", "10000 3") +
-                    HelpExampleCli("estimatecollateral", "50000 5 4500") +
+                    HelpExampleCli("estimatecollateral", "50000 5 6500") +
                     HelpExampleRpc("estimatecollateral", "10000, 3") +
-                    HelpExampleRpc("estimatecollateral", "50000, 5, 4500")
+                    HelpExampleRpc("estimatecollateral", "50000, 5, 6500")
                 },
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
         {
             // Parse parameters
             CAmount ddAmount = AmountFromValue(request.params[0]);
             int lockTier = request.params[1].getInt<int>();
-            CAmount oraclePrice = request.params.size() > 2 && !request.params[2].isNull() ?
-                                 AmountFromValue(request.params[2]) : 5000; // Default $0.05 per DGB
+
+            // Get oracle price in micro-USD: use provided value or fetch from real oracle system
+            CAmount oraclePriceMicroUSD;
+            if (request.params.size() > 2 && !request.params[2].isNull()) {
+                // User-provided value is in micro-USD (1,000,000 = $1.00)
+                oraclePriceMicroUSD = request.params[2].getInt<int64_t>();
+            } else {
+                // Use real oracle price from OracleIntegration (returns micro-USD)
+                oraclePriceMicroUSD = OracleIntegration::GetCurrentOraclePriceMicroUSD();
+                if (oraclePriceMicroUSD <= 0) {
+                    // Fall back to mock oracle if real oracle not available
+                    // MockOracleManager already returns micro-USD (see mock_oracle.cpp)
+                    oraclePriceMicroUSD = MockOracleManager::GetInstance().GetCurrentPrice();
+                }
+                if (oraclePriceMicroUSD <= 0) {
+                    throw JSONRPCError(RPC_MISC_ERROR, "Oracle price not available. Start oracle with 'startoracle' or provide price as third parameter.");
+                }
+            }
 
             // Validate parameters
             if (ddAmount <= 0) {
@@ -1560,11 +1643,11 @@ static RPCHelpMan estimatecollateral()
             if (lockTier < 0 || lockTier > 8) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Lock tier must be between 0 and 8 (0 = 1 hour testing tier)");
             }
-            if (oraclePrice <= 0) {
+            if (oraclePriceMicroUSD <= 0) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Oracle price must be positive");
             }
 
-            // Calculate collateral requirements (mock implementation)
+            // Calculate collateral requirements
             int lockDays = GetLockDaysForTier(lockTier);
             int baseRatio = GetMinCollateralRatio(lockTier);
 
@@ -1573,22 +1656,33 @@ static RPCHelpMan estimatecollateral()
             double dcaMultiplier = 1.0; // TODO: Get real DCA multiplier
             int effectiveRatio = static_cast<int>(baseRatio * dcaMultiplier);
 
-            // Calculate required DGB
-            CAmount requiredDGB = (ddAmount * effectiveRatio * COIN) / (oraclePrice * 100);
-            CAmount usdValue = (requiredDGB * oraclePrice) / COIN;
+            // Calculate required DGB using micro-USD precision
+            // Formula: DGB_sats = (DD_cents * COIN * ratio * 100) / oracle_micro_usd
+            // Example: $100 DD at $0.00631 DGB with 150% ratio (oracle_micro_usd = 6310)
+            //   = (10000 cents * 100000000 * 150 * 100) / 6310
+            //   = 15,000,000,000,000,000 / 6310
+            //   = 2,377,179,080,509 sats = ~23,772 DGB
+            uint64_t requiredDGB = (static_cast<uint64_t>(ddAmount) * static_cast<uint64_t>(COIN) * static_cast<uint64_t>(effectiveRatio) * 100ULL) /
+                                   static_cast<uint64_t>(oraclePriceMicroUSD);
+
+            // Calculate USD value of collateral
+            // USD_micro = (DGB_sats * oracle_micro_usd) / COIN
+            CAmount usdValueMicroUSD = (static_cast<int64_t>(requiredDGB) * oraclePriceMicroUSD) / COIN;
+            CAmount usdValueCents = usdValueMicroUSD / 10000;
 
             UniValue result(UniValue::VOBJ);
-            result.pushKV("required_dgb", ValueFromAmount(requiredDGB));
+            result.pushKV("required_dgb", ValueFromAmount(static_cast<CAmount>(requiredDGB)));
             result.pushKV("dd_amount", ddAmount);
             result.pushKV("lock_tier", lockTier);
             result.pushKV("lock_days", lockDays);
             result.pushKV("base_ratio", baseRatio);
             result.pushKV("dca_multiplier", dcaMultiplier);
             result.pushKV("effective_ratio", effectiveRatio);
-            result.pushKV("oracle_price", oraclePrice);
+            result.pushKV("oracle_price_micro_usd", oraclePriceMicroUSD);
+            result.pushKV("oracle_price_usd", oraclePriceMicroUSD / 1000000.0);
             result.pushKV("system_health", systemHealth);
             result.pushKV("health_tier", "healthy");
-            result.pushKV("usd_value", ValueFromAmount(usdValue));
+            result.pushKV("usd_value", ValueFromAmount(usdValueCents));
 
             return result;
         },
@@ -2438,25 +2532,26 @@ static RPCHelpMan setmockoracleprice()
     return RPCHelpMan{"setmockoracleprice",
                 "\nSet mock oracle price for testing (RegTest only).\n"
                 "This command allows setting a custom DGB/USD price for testing DigiDollar\n"
-                "functionality in RegTest mode without requiring real oracle nodes.\n",
+                "functionality in RegTest mode without requiring real oracle nodes.\n"
+                "Price is specified in micro-USD (1,000,000 = $1.00) for sub-cent precision.\n",
                 {
-                    {"price", RPCArg::Type::NUM, RPCArg::Optional::NO, "Price in cents per DGB (e.g., 50 = $0.50/DGB, 10000 = $100/DGB)", RPCArgOptions{.skip_type_check = true}}
+                    {"price", RPCArg::Type::NUM, RPCArg::Optional::NO, "Price in micro-USD per DGB (e.g., 6500 = $0.0065/DGB, 1000000 = $1.00/DGB)", RPCArgOptions{.skip_type_check = true}}
                 },
                 RPCResult{
                     RPCResult::Type::OBJ, "", "",
                     {
-                        {RPCResult::Type::NUM, "price", "New mock oracle price in cents per DGB"},
+                        {RPCResult::Type::NUM, "price_micro_usd", "New mock oracle price in micro-USD per DGB"},
                         {RPCResult::Type::STR, "price_usd", "Price formatted as USD per DGB"},
                         {RPCResult::Type::NUM, "update_height", "Block height of update"},
                         {RPCResult::Type::BOOL, "enabled", "Whether mock oracle is enabled"}
                     }
                 },
                 RPCExamples{
-                    HelpExampleCli("setmockoracleprice", "50") +
-                    "\nSet price to $0.50 per DGB (50 cents)\n" +
-                    HelpExampleCli("setmockoracleprice", "10000") +
-                    "\nSet price to $100.00 per DGB (10000 cents)\n" +
-                    HelpExampleRpc("setmockoracleprice", "50")
+                    HelpExampleCli("setmockoracleprice", "6500") +
+                    "\nSet price to $0.0065 per DGB (realistic DGB price)\n" +
+                    HelpExampleCli("setmockoracleprice", "1000000") +
+                    "\nSet price to $1.00 per DGB\n" +
+                    HelpExampleRpc("setmockoracleprice", "6500")
                 },
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
         {
@@ -2466,30 +2561,30 @@ static RPCHelpMan setmockoracleprice()
                     "setmockoracleprice is only available in RegTest mode");
             }
 
-            CAmount price = request.params[0].getInt<int64_t>();
+            CAmount price_micro_usd = request.params[0].getInt<int64_t>();
 
-            if (price <= 0) {
+            if (price_micro_usd <= 0) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER,
                     "Price must be positive");
             }
 
-            // Price should be reasonable (between $0.01 and $1000 per DGB in cents)
-            const CAmount MIN_PRICE = 1;         // 1 cent = $0.01 per DGB
-            const CAmount MAX_PRICE = 100000;    // 100,000 cents = $1000 per DGB
+            // Price should be reasonable (between $0.0001 and $1000 per DGB in micro-USD)
+            const CAmount MIN_PRICE = 100;              // 100 micro-USD = $0.0001 per DGB
+            const CAmount MAX_PRICE = 1000000000;       // 1,000,000,000 micro-USD = $1000 per DGB
 
-            if (price < MIN_PRICE || price > MAX_PRICE) {
+            if (price_micro_usd < MIN_PRICE || price_micro_usd > MAX_PRICE) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER,
-                    strprintf("Price must be between %d and %d cents per DGB", MIN_PRICE, MAX_PRICE));
+                    strprintf("Price must be between %lld and %lld micro-USD per DGB", MIN_PRICE, MAX_PRICE));
             }
 
-            // Set the mock price
-            MockOracleManager::GetInstance().SetMockPrice(price);
+            // Set the mock price (mock oracle now accepts micro-USD directly)
+            MockOracleManager::GetInstance().SetMockPrice(price_micro_usd);
 
             // Build result
             UniValue result(UniValue::VOBJ);
-            result.pushKV("price", price);
-            // Format as dollars (divide cents by 100)
-            result.pushKV("price_usd", strprintf("$%.2f", price / 100.0));
+            result.pushKV("price_micro_usd", price_micro_usd);
+            // Format as dollars (divide micro-USD by 1,000,000)
+            result.pushKV("price_usd", strprintf("$%.6f", price_micro_usd / 1000000.0));
             result.pushKV("update_height", MockOracleManager::GetInstance().GetLastUpdateHeight());
             result.pushKV("enabled", MockOracleManager::GetInstance().IsEnabled());
 
@@ -2503,13 +2598,14 @@ static RPCHelpMan getmockoracleprice()
     return RPCHelpMan{"getmockoracleprice",
                 "\nGet current mock oracle price (RegTest only).\n"
                 "Returns the current mock oracle price used for testing DigiDollar\n"
-                "functionality in RegTest mode.\n",
+                "functionality in RegTest mode.\n"
+                "Price is in micro-USD (1,000,000 = $1.00) for sub-cent precision.\n",
                 {},
                 RPCResult{
                     RPCResult::Type::OBJ, "", "",
                     {
-                        {RPCResult::Type::NUM, "price", "Current mock oracle price in satoshis per USD"},
-                        {RPCResult::Type::NUM, "price_usd", "Price as USD per DGB"},
+                        {RPCResult::Type::NUM, "price_micro_usd", "Current mock oracle price in micro-USD per DGB"},
+                        {RPCResult::Type::STR, "price_usd", "Price formatted as USD per DGB"},
                         {RPCResult::Type::NUM, "last_update_height", "Block height of last update"},
                         {RPCResult::Type::BOOL, "enabled", "Whether mock oracle is enabled"},
                         {RPCResult::Type::NUM, "current_height", "Current blockchain height"}
@@ -2527,7 +2623,7 @@ static RPCHelpMan getmockoracleprice()
                     "getmockoracleprice is only available in RegTest mode");
             }
 
-            CAmount price = MockOracleManager::GetInstance().GetCurrentPrice();
+            CAmount price_micro_usd = MockOracleManager::GetInstance().GetCurrentPrice();
             int64_t lastHeight = MockOracleManager::GetInstance().GetLastUpdateHeight();
             bool enabled = MockOracleManager::GetInstance().IsEnabled();
 
@@ -2545,8 +2641,9 @@ static RPCHelpMan getmockoracleprice()
             }
 
             UniValue result(UniValue::VOBJ);
-            result.pushKV("price", price);
-            result.pushKV("price_usd", ValueFromAmount(price));
+            result.pushKV("price_micro_usd", price_micro_usd);
+            // Format as dollars (divide micro-USD by 1,000,000)
+            result.pushKV("price_usd", strprintf("$%.6f", price_micro_usd / 1000000.0));
             result.pushKV("last_update_height", lastHeight);
             result.pushKV("enabled", enabled);
             result.pushKV("current_height", currentHeight);

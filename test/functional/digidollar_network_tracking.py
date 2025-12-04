@@ -52,8 +52,10 @@ class DigiDollarNetworkTrackingTest(DigiByteTestFramework):
         self.sync_all()
 
         # Set oracle price on both nodes (using $0.01 per DGB to match Qt test)
+        # Oracle price is in micro-USD: 1,000,000 micro-USD = $1.00
+        # So $0.01/DGB = 10,000 micro-USD
         for node in self.nodes:
-            node.setmockoracleprice(1)  # $0.01 per DGB
+            node.setmockoracleprice(10000)  # 10000 micro-USD = $0.01 per DGB
 
         # Phase 1: Bob mints 3 DigiDollars (matching Qt test structure)
         self.log.info("\n--- Phase 1: Bob (node 0) mints 3 DigiDollars ---")

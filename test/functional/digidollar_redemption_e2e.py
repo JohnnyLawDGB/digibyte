@@ -46,9 +46,11 @@ class DigiDollarRedemptionE2ETest(DigiByteTestFramework):
         self.sync_all()
 
         # Set mock oracle price to $0.01 per DGB (1 cent)
+        # Oracle price is in micro-USD: 1,000,000 micro-USD = $1.00
+        # So $0.01/DGB = 10,000 micro-USD
         self.log.info("Setting mock oracle price to 1 cent per DGB...")
-        bob.setmockoracleprice(1)
-        alice.setmockoracleprice(1)
+        bob.setmockoracleprice(10000)  # 10000 micro-USD = $0.01 per DGB
+        alice.setmockoracleprice(10000)
 
         initial_dgb_balance = bob.getbalance()
         self.log.info(f"Bob's initial DGB balance: {initial_dgb_balance}")

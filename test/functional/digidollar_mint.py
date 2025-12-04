@@ -60,7 +60,9 @@ class DigiDollarMintTest(DigiByteTestFramework):
         self.sync_all()
 
         # Set mock oracle price ($0.50 per DGB)
-        base_price = 50000  # 50000 satoshis per USD
+        # Oracle price is in micro-USD: 1,000,000 micro-USD = $1.00
+        # So $0.50/DGB = 500,000 micro-USD
+        base_price = 500000  # 500000 micro-USD = $0.50 per DGB
         for node in self.nodes:
             node.setmockoracleprice(base_price)
 
@@ -148,7 +150,7 @@ class DigiDollarMintTest(DigiByteTestFramework):
             # Verify required fields
             assert 'required_dgb' in req, "Missing required_dgb field"
             assert 'effective_ratio' in req, "Missing effective_ratio field"
-            assert 'oracle_price' in req, "Missing oracle_price field"
+            assert 'oracle_price_micro_usd' in req, "Missing oracle_price_micro_usd field"
             assert 'dca_multiplier' in req, "Missing dca_multiplier field"
 
             # Verify values are reasonable
@@ -184,11 +186,12 @@ class DigiDollarMintTest(DigiByteTestFramework):
         """Test oracle price integration in minting."""
         self.log.info("Testing oracle price integration...")
 
-        # Test with different oracle prices (in satoshis per USD, valid range 1-100000)
+        # Test with different oracle prices (in micro-USD per DGB)
+        # 1,000,000 micro-USD = $1.00
         price_scenarios = [
-            5000,    # Low price
-            50000,   # Medium price
-            100000,  # High price
+            50000,    # Low price ($0.05/DGB)
+            500000,   # Medium price ($0.50/DGB)
+            1000000,  # High price ($1.00/DGB)
         ]
 
         mint_amount = Decimal('1000.00')
@@ -206,14 +209,14 @@ class DigiDollarMintTest(DigiByteTestFramework):
             req = self.nodes[0].calculatecollateralrequirement(mint_amount_cents, lock_days)
 
             # Verify oracle price field exists
-            assert 'oracle_price' in req, "Missing oracle_price field"
+            assert 'oracle_price_micro_usd' in req, "Missing oracle_price_micro_usd field"
 
             # Verify collateral requirement is reasonable
             collateral_dgb = Decimal(req['required_dgb'])
             assert collateral_dgb > 0, "Collateral must be positive"
 
-        # Reset to original price
-        self.nodes[0].setmockoracleprice(50000)
+        # Reset to original price ($0.50/DGB = 500,000 micro-USD)
+        self.nodes[0].setmockoracleprice(500000)
 
     def test_mint_validation_rules(self):
         """Test mint validation rules and limits."""
@@ -324,8 +327,8 @@ class DigiDollarMintTest(DigiByteTestFramework):
             # Error is acceptable - negative prices should be rejected
             self.log.info(f"Invalid oracle price rejected: {e}")
 
-        # Reset to valid oracle price after test
-        self.nodes[0].setmockoracleprice(50000)
+        # Reset to valid oracle price after test ($0.50/DGB = 500,000 micro-USD)
+        self.nodes[0].setmockoracleprice(500000)
 
         # Test concurrent minting (stress test)
         import threading

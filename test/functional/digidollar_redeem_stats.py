@@ -19,7 +19,9 @@ from test_framework.util import assert_equal, assert_raises_rpc_error
 from decimal import Decimal
 
 COINBASE_MATURITY = 8
-ORACLE_PRICE_CENTS = 1  # 1 cent per DGB (0.01 USD)
+# Oracle price in micro-USD: 1,000,000 micro-USD = $1.00
+# For $0.01/DGB (1 cent per DGB), use 10,000 micro-USD
+ORACLE_PRICE_MICRO_USD = 10000  # 10,000 micro-USD = $0.01 per DGB
 TIER_0_RATIO = 1000  # 1000% collateral for 1-hour lock
 TIER_0_BLOCKS = 240  # 1 hour in regtest (15 seconds per block)
 
@@ -57,10 +59,10 @@ class DigiDollarRedeemStatsTest(DigiByteTestFramework):
 
         # Set oracle price on all nodes
         for node in [alice, bob, charlie]:
-            node.setmockoracleprice(ORACLE_PRICE_CENTS)
+            node.setmockoracleprice(ORACLE_PRICE_MICRO_USD)
 
         self.log.info(f"✓ All nodes synced at height {alice.getblockcount()}")
-        self.log.info(f"✓ Oracle price set to {ORACLE_PRICE_CENTS} cents")
+        self.log.info(f"✓ Oracle price set to {ORACLE_PRICE_MICRO_USD} micro-USD ($0.01/DGB)")
 
         self.log.info("=== Step 2: Alice mints $10 DD with 1-hour lock ===")
 

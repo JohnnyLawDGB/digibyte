@@ -65,7 +65,9 @@ class DigiDollarRedeemTest(DigiByteTestFramework):
         self.sync_all()
 
         # Set mock oracle price ($0.50 per DGB)
-        base_price = 50000  # 50000 satoshis per USD
+        # Oracle price is in micro-USD: 1,000,000 micro-USD = $1.00
+        # So $0.50/DGB = 500,000 micro-USD
+        base_price = 500000  # 500000 micro-USD = $0.50 per DGB
         for node in self.nodes:
             node.setmockoracleprice(base_price)
 
@@ -317,9 +319,10 @@ class DigiDollarRedeemTest(DigiByteTestFramework):
         self.log.info(f"Initial system health: {initial_health}")
         initial_ratio = Decimal(initial_health.get('system_collateral_ratio', 0))
 
-        # Dramatically increase oracle price to simulate DGB crash
+        # Dramatically decrease oracle price to simulate DGB crash
         # This reduces the value of collateral, triggering ERR
-        crisis_price = 10000  # $0.10 per DGB (from $0.50)
+        # Oracle price is in micro-USD: 1,000,000 micro-USD = $1.00
+        crisis_price = 100000  # 100000 micro-USD = $0.10 per DGB (from $0.50)
 
         self.log.info(f"Simulating DGB price crash by setting oracle price to {crisis_price}...")
         for node in self.nodes:
@@ -377,8 +380,8 @@ class DigiDollarRedeemTest(DigiByteTestFramework):
             assert 'err' in protection_status, "ERR protection status should be available"
             assert 'volatility' in protection_status, "Volatility protection status should be available"
 
-        # Restore normal price
-        self.nodes[0].setmockoracleprice(50000)
+        # Restore normal price ($0.50/DGB = 500,000 micro-USD)
+        self.nodes[0].setmockoracleprice(500000)
 
     def test_collateral_return_calculations(self):
         """Test accuracy of collateral return calculations."""
@@ -526,7 +529,8 @@ class DigiDollarRedeemTest(DigiByteTestFramework):
 
         # Test redemption during system stress
         # Modify oracle price to create stress
-        stress_price = 25000  # Half the normal price
+        # Oracle price is in micro-USD: 1,000,000 micro-USD = $1.00
+        stress_price = 250000  # 250000 micro-USD = $0.25 per DGB (half the normal $0.50)
         self.nodes[0].setmockoracleprice(stress_price)
 
         try:
@@ -545,8 +549,8 @@ class DigiDollarRedeemTest(DigiByteTestFramework):
         except Exception as e:
             self.log.info(f"Redemption during stress failed (may be acceptable): {e}")
 
-        # Restore normal price
-        self.nodes[0].setmockoracleprice(50000)
+        # Restore normal price ($0.50/DGB = 500,000 micro-USD)
+        self.nodes[0].setmockoracleprice(500000)
 
 
 if __name__ == '__main__':

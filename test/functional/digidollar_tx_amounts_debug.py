@@ -42,7 +42,9 @@ class DigiDollarTxAmountsTest(DigiByteTestFramework):
         self.log.info(f"✓ Alice initial balance: {alice_balance_initial} DGB")
 
         # Set oracle price
-        alice.setmockoracleprice(1)  # 1 cent = 0.01 USD per DGB
+        # Oracle price is in micro-USD: 1,000,000 micro-USD = $1.00
+        # So $0.01/DGB = 10,000 micro-USD
+        alice.setmockoracleprice(10000)  # 10000 micro-USD = $0.01 per DGB
         self.log.info("✓ Oracle price set to 1 cent per DGB")
 
         # Mint $10 DD with 1-hour lock

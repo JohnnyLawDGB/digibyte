@@ -90,7 +90,9 @@ class DigiDollarTransactionsTest(DigiByteTestFramework):
         self.sync_all()
 
         # Set mock oracle price ($0.01 per DGB = 1 cent)
-        base_price = 1  # 1 cent per DGB (as per architecture docs)
+        # Oracle price is in micro-USD: 1,000,000 micro-USD = $1.00
+        # So $0.01/DGB = 10,000 micro-USD
+        base_price = 10000  # 10000 micro-USD = $0.01 per DGB
         for node in self.nodes:
             node.setmockoracleprice(base_price)
 
@@ -282,11 +284,12 @@ class DigiDollarTransactionsTest(DigiByteTestFramework):
                     return True
 
         # Test cases with structured approach
-        # Note: setmockoracleprice takes an integer (cents), not a decimal
+        # Note: setmockoracleprice takes an integer (micro-USD), not cents
+        # 1,000,000 micro-USD = $1.00, so 50000 = $0.05
         positive_tests = [
             {
                 'description': 'Valid oracle price accepted',
-                'test': lambda: self.nodes[0].setmockoracleprice(5),  # 5 cents = $0.05
+                'test': lambda: self.nodes[0].setmockoracleprice(50000),  # 50000 micro-USD = $0.05
                 'expected': None  # Don't check return value, just verify it doesn't error
             }
         ]
@@ -717,7 +720,8 @@ class DigiDollarTransactionsTest(DigiByteTestFramework):
     def trigger_emergency_conditions(self):
         """Trigger conditions that activate ERR."""
         # GREEN phase: Just test the RPC call
-        self.nodes[0].setmockoracleprice(0.01)  # Very low price
+        # Use minimum valid price (100 micro-USD = $0.0001/DGB)
+        self.nodes[0].setmockoracleprice(100)  # Very low price (100 micro-USD = $0.0001)
 
     def create_large_dd_transaction(self):
         """Create transaction with many inputs/outputs."""

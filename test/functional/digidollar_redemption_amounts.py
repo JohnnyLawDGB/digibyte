@@ -48,7 +48,9 @@ class DigiDollarRedemptionAmountsTest(DigiByteTestFramework):
         self.log.info(f"Initial balance: {initial_balance} DGB")
 
         # Set oracle price
-        node.setmockoracleprice(1)
+        # Oracle price is in micro-USD: 1,000,000 micro-USD = $1.00
+        # So $0.01/DGB = 10,000 micro-USD
+        node.setmockoracleprice(10000)  # 10000 micro-USD = $0.01 per DGB
         self.log.info("Oracle price: 1 cent per DGB")
 
         # Mint DigiDollar

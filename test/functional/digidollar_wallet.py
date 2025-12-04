@@ -62,7 +62,9 @@ class DigiDollarWalletTest(DigiByteTestFramework):
         self.sync_all()
 
         # Set mock oracle price
-        base_price = 50000  # 50000 satoshis per USD
+        # Oracle price is in micro-USD: 1,000,000 micro-USD = $1.00
+        # So $0.50/DGB = 500,000 micro-USD
+        base_price = 500000  # 500000 micro-USD = $0.50 per DGB
         for node in self.nodes:
             node.setmockoracleprice(base_price)
 

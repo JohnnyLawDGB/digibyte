@@ -22,7 +22,7 @@ class MockOracleManager
 private:
     static MockOracleManager* instance;
 
-    CAmount mockPrice;              // Price in DigiDollar cents (e.g., 1 = $0.01/DGB, 100 = $1.00/DGB)
+    CAmount mockPriceMicroUSD;      // Price in micro-USD (e.g., 6500 = $0.0065/DGB, 1000000 = $1.00/DGB)
     int64_t lastUpdateHeight;       // Height of last price update
     bool enabled;                   // Whether mock oracle is enabled
 

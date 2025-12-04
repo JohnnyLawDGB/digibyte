@@ -390,6 +390,6 @@ const CRPCCommand digidollar_transaction_commands[] = {
     {"digidollar", "redeemdigidollar",         &redeemdigidollar,         {"collateral_outpoint", "amount"}},
     {"digidollar", "getredemptioninfo",        &getredemptioninfo,        {"collateral_outpoint"}},
     {"digidollar", "listredeemablepositions",  &listredeemablepositions,  {"min_height"}},
-    {"digidollar", "setmockoracleprice",       &setmockoracleprice,       {"price"}},
+    // setmockoracleprice removed - use implementation in rpc/digidollar.cpp instead
     {"digidollar", "createrawddtransaction",   &createrawddtransaction,   {"inputs", "outputs"}},
 };

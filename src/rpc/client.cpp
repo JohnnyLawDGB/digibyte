@@ -309,7 +309,7 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "calculatecollateralrequirement", 2, "oracle_price" },
     { "estimatecollateral", 0, "dd_amount" },
     { "estimatecollateral", 1, "lock_tier" },
-    { "estimatecollateral", 2, "oracle_price" },
+    { "estimatecollateral", 2, "oracle_price_micro_usd" },
     { "enablemockoracle", 0, "enable" },
     // DigiDollar wallet/transaction RPC commands
     { "mintdigidollar", 0, "dd_amount" },

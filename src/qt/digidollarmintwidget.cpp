@@ -154,6 +154,8 @@ void DigiDollarMintWidget::setupMintAmountSection()
     m_amountEdit->setValidator(m_amountValidator);
     m_amountEdit->setPlaceholderText("0.00000000");
     m_amountEdit->setToolTip(tr("The amount of DigiDollar to mint.\n\nSupported formats:\n• 0.00000001 (minimum)\n• Up to 8 decimal places\n• Maximum: 999,999,999.99999999"));
+    m_amountEdit->setFocusPolicy(Qt::StrongFocus);
+    m_amountEdit->setAttribute(Qt::WA_InputMethodEnabled, true);
     QFont monospaceFont = GUIUtil::fixedPitchFont();
     m_amountEdit->setFont(monospaceFont);
 
@@ -316,8 +318,8 @@ void DigiDollarMintWidget::setupCollateralSection()
     // Ratio progress bar
     m_ratioBar = new QProgressBar(this);
     m_ratioBar->setObjectName("ratioBar");
-    m_ratioBar->setRange(100, 500); // 100% to 500%
-    m_ratioBar->setValue(150);
+    m_ratioBar->setRange(200, 1000); // 200% (10 year) to 1000% (1 hour test tier)
+    m_ratioBar->setValue(500);
     m_ratioBar->setFormat("%v%");
     m_collateralLayout->addWidget(m_ratioBar, 4, 0, 1, 2);
 
@@ -485,6 +487,8 @@ void DigiDollarMintWidget::updateOraclePrice()
 void DigiDollarMintWidget::onAmountChanged()
 {
     QString amountText = m_amountEdit->text();
+    LogPrintf("DigiDollar Mint: onAmountChanged called - text='%s', isEnabled=%d, isReadOnly=%d\n",
+              amountText.toStdString().c_str(), m_amountEdit->isEnabled(), m_amountEdit->isReadOnly());
     if (!amountText.isEmpty()) {
         m_mintAmount = amountText.toDouble();
         double usdValue = m_mintAmount * 1.0; // DD should be pegged to $1

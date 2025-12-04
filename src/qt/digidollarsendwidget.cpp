@@ -135,6 +135,8 @@ void DigiDollarSendWidget::setupAddressSection()
     m_addressEdit->setValidator(m_addressValidator);
     m_addressEdit->setPlaceholderText("DD1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4");
     m_addressEdit->setToolTip(tr("The DigiDollar address to send the payment to.\n\nValid formats:\n• DD... (Mainnet)\n• TD... (Testnet)\n• RD... (Regtest)"));
+    m_addressEdit->setFocusPolicy(Qt::StrongFocus);
+    m_addressEdit->setAttribute(Qt::WA_InputMethodEnabled, true);
     QFont monospaceFont = GUIUtil::fixedPitchFont();
     m_addressEdit->setFont(monospaceFont);
 
@@ -190,6 +192,8 @@ void DigiDollarSendWidget::setupAmountSection()
     m_amountEdit->setValidator(m_amountValidator);
     m_amountEdit->setPlaceholderText("0.00000000");
     m_amountEdit->setToolTip(tr("The amount to send in DigiDollar.\n\nSupported formats:\n• 0.00000001 (minimum)\n• Up to 8 decimal places\n• Maximum: 999,999,999.99999999"));
+    m_amountEdit->setFocusPolicy(Qt::StrongFocus);
+    m_amountEdit->setAttribute(Qt::WA_InputMethodEnabled, true);
     QFont monospaceFont = GUIUtil::fixedPitchFont();
     m_amountEdit->setFont(monospaceFont);
 

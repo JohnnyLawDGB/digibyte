@@ -326,17 +326,17 @@ sleep 10
 # CLI shortcut
 CLI="$DIGIBYTE_DIR/src/digibyte-cli -datadir=$DATA_DIR"
 
-# Wait for RPC to be ready
-for i in {1..60}; do
+# Wait for RPC to be ready (up to 6 minutes for slow VPS)
+for i in {1..180}; do
     if $CLI getblockchaininfo &>/dev/null; then
         echo -e "${GREEN}Node is ready!${NC}"
         break
     fi
-    if [ $i -eq 60 ]; then
+    if [ $i -eq 180 ]; then
         echo -e "${RED}Node failed to start. Check logs: tail -f $DATA_DIR/testnet5/debug.log${NC}"
         exit 1
     fi
-    echo "Waiting for RPC... ($i/60)"
+    echo "Waiting for RPC... ($i/180)"
     sleep 2
 done
 

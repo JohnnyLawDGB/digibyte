@@ -11,6 +11,10 @@
 #include <consensus/amount.h>
 #include <base58.h>
 #include <logging.h>
+#include <kernel/chainparams.h>
+#include <oracle/mock_oracle.h>
+#include <interfaces/node.h>
+#include <univalue.h>
 
 #include <QLabel>
 #include <QLineEdit>
@@ -380,10 +384,26 @@ void DigiDollarSendWidget::updateBalance()
 
 void DigiDollarSendWidget::updateOraclePrice()
 {
-    // In a real implementation, this would get the oracle price
-    if (m_clientModel) {
-        // TODO: Get actual oracle price
-        // m_oraclePrice = m_clientModel->getOraclePrice();
+    // Get oracle price from RPC for testnet/mainnet, MockOracleManager for regtest
+    if (Params().GetChainType() == ChainType::REGTEST && MockOracleManager::GetInstance().IsEnabled()) {
+        // Get price from mock oracle (cents per DGB)
+        CAmount priceCents = MockOracleManager::GetInstance().GetCurrentPrice();
+        m_oraclePrice = priceCents / 100.0;
+    } else if (m_clientModel) {
+        // Get actual oracle price from RPC
+        try {
+            UniValue params(UniValue::VARR);
+            UniValue result = m_clientModel->node().executeRpc("getoracleprice", params, "");
+
+            // Price is returned in micro-USD (1,000,000 = $1.00)
+            int64_t priceMicroUsd = result.find_value("price_micro_usd").getInt<int64_t>();
+            m_oraclePrice = priceMicroUsd / 1000000.0; // Convert micro-USD to dollars
+        } catch (const std::exception& e) {
+            LogPrintf("DigiDollar Send: updateOraclePrice RPC error - %s\n", e.what());
+            m_oraclePrice = 0.0;
+        }
+    } else {
+        m_oraclePrice = 0.0;
     }
 
     updateUSDEquivalent();

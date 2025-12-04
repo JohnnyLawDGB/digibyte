@@ -524,7 +524,7 @@ void DigiDollarOverviewWidget::updateBalance()
 
 void DigiDollarOverviewWidget::updateOraclePrice()
 {
-    // Get price from MockOracleManager if in RegTest, otherwise use real oracle
+    // Get price from MockOracleManager if in RegTest, otherwise use real oracle via RPC
     if (Params().GetChainType() == ChainType::REGTEST && MockOracleManager::GetInstance().IsEnabled()) {
         // Get price from mock oracle
         // Oracle price format: CENTS per DGB
@@ -533,10 +533,21 @@ void DigiDollarOverviewWidget::updateOraclePrice()
 
         // Convert cents to dollars
         m_oraclePrice = priceCents / 100.0;
+    } else if (m_clientModel) {
+        // Get actual oracle price from RPC
+        try {
+            UniValue params(UniValue::VARR);
+            UniValue result = m_clientModel->node().executeRpc("getoracleprice", params, "");
+
+            // Price is returned in micro-USD (1,000,000 = $1.00)
+            int64_t priceMicroUsd = result.find_value("price_micro_usd").getInt<int64_t>();
+            m_oraclePrice = priceMicroUsd / 1000000.0; // Convert micro-USD to dollars
+        } catch (const std::exception& e) {
+            LogPrintf("DigiDollar: updateOraclePrice RPC error - %s\n", e.what());
+            m_oraclePrice = 0.0; // Show "Loading..." on error
+        }
     } else {
-        // TODO: Get actual oracle price from production oracle system
-        // For now, use a default price
-        m_oraclePrice = 0.015; // Default: $0.015 per DGB
+        m_oraclePrice = 0.0; // No client model available
     }
 
     if (m_oraclePrice > 0) {

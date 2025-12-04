@@ -12,6 +12,10 @@
 #include <consensus/amount.h>
 #include <logging.h>
 #include <node/interface_ui.h>
+#include <kernel/chainparams.h>
+#include <oracle/mock_oracle.h>
+#include <interfaces/node.h>
+#include <univalue.h>
 
 #include <QLabel>
 #include <QLineEdit>
@@ -140,7 +144,6 @@ void DigiDollarMintWidget::setupMintAmountSection()
     // Amount input
     m_amountLabel = new QLabel(tr("Amount to Mint:"), this);
     m_amountLabel->setToolTip(tr("Enter the amount of DigiDollar to mint"));
-    m_amountLabel->setBuddy(m_amountEdit);
 
     // Create horizontal layout for amount input and suffix
     QHBoxLayout* amountInputLayout = new QHBoxLayout();
@@ -153,6 +156,9 @@ void DigiDollarMintWidget::setupMintAmountSection()
     m_amountEdit->setToolTip(tr("The amount of DigiDollar to mint.\n\nSupported formats:\n• 0.00000001 (minimum)\n• Up to 8 decimal places\n• Maximum: 999,999,999.99999999"));
     QFont monospaceFont = GUIUtil::fixedPitchFont();
     m_amountEdit->setFont(monospaceFont);
+
+    // Set buddy AFTER m_amountEdit is created
+    m_amountLabel->setBuddy(m_amountEdit);
 
     m_amountSuffix = new QLabel("DD", this);
     m_amountSuffix->setObjectName("amountSuffix");
@@ -427,13 +433,52 @@ void DigiDollarMintWidget::updateBalance()
 
 void DigiDollarMintWidget::updateOraclePrice()
 {
-    // In a real implementation, this would get the oracle price
-    if (m_clientModel) {
-        // TODO: Get actual oracle price
-        // m_oraclePrice = m_clientModel->getOraclePrice();
+    LogPrintf("DigiDollar Mint: updateOraclePrice() called\n");
+
+    // Get oracle price from RPC for testnet/mainnet, MockOracleManager for regtest
+    ChainType chainType = Params().GetChainType();
+    LogPrintf("DigiDollar Mint: ChainType = %d (REGTEST=%d, TESTNET=%d, MAIN=%d)\n",
+              (int)chainType, (int)ChainType::REGTEST, (int)ChainType::TESTNET, (int)ChainType::MAIN);
+
+    if (chainType == ChainType::REGTEST && MockOracleManager::GetInstance().IsEnabled()) {
+        // Get price from mock oracle (cents per DGB)
+        CAmount priceCents = MockOracleManager::GetInstance().GetCurrentPrice();
+        m_oraclePrice = priceCents / 100.0;
+        LogPrintf("DigiDollar Mint: Using MockOracle, price = %f USD\n", m_oraclePrice);
+    } else if (m_clientModel) {
+        // Get actual oracle price from RPC
+        LogPrintf("DigiDollar Mint: Using RPC (m_clientModel is valid)\n");
+        try {
+            UniValue params(UniValue::VARR);
+            UniValue result = m_clientModel->node().executeRpc("getoracleprice", params, "");
+            LogPrintf("DigiDollar Mint: RPC call succeeded\n");
+
+            // Price is returned in micro-USD (1,000,000 = $1.00)
+            const UniValue& priceVal = result.find_value("price_micro_usd");
+            if (priceVal.isNull()) {
+                LogPrintf("DigiDollar Mint: price_micro_usd is NULL in response!\n");
+                m_oraclePrice = 0.0;
+            } else {
+                int64_t priceMicroUsd = priceVal.getInt<int64_t>();
+                m_oraclePrice = priceMicroUsd / 1000000.0; // Convert micro-USD to dollars
+                LogPrintf("DigiDollar Mint: Got price_micro_usd=%ld, m_oraclePrice=%f\n", priceMicroUsd, m_oraclePrice);
+            }
+        } catch (const std::exception& e) {
+            LogPrintf("DigiDollar Mint: updateOraclePrice RPC error - %s\n", e.what());
+            m_oraclePrice = 0.0; // Show error state
+        }
+    } else {
+        LogPrintf("DigiDollar Mint: m_clientModel is NULL!\n");
+        m_oraclePrice = 0.0;
     }
 
-    m_oraclePriceValue->setText(formatUSDAmount(m_oraclePrice) + " USD/DGB");
+    LogPrintf("DigiDollar Mint: Final m_oraclePrice = %f\n", m_oraclePrice);
+
+    if (m_oraclePrice > 0) {
+        m_oraclePriceValue->setText(formatUSDAmount(m_oraclePrice) + " USD/DGB");
+    } else {
+        m_oraclePriceValue->setText("Loading...");
+    }
     updateCollateralCalculation();
 }
 
@@ -584,6 +629,9 @@ void DigiDollarMintWidget::updateMintButton()
 {
     bool amountValid = validateAmount();
     bool collateralValid = validateCollateral();
+
+    LogPrintf("DigiDollar Mint: updateMintButton - amountValid=%d, collateralValid=%d, m_requiredCollateral=%f, m_availableDGBBalance=%f, m_oraclePrice=%f\n",
+              amountValid, collateralValid, m_requiredCollateral, m_availableDGBBalance, m_oraclePrice);
 
     m_mintButton->setEnabled(amountValid && collateralValid);
 }

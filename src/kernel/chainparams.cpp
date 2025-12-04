@@ -322,7 +322,8 @@ private:
         // These use compressed public keys (33 bytes) and unique endpoints
         vOracleNodes = {
             // Oracle 0-9: Primary Tier 1 providers
-            {0,  ParsePubKey("036b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b"), "oracle1.digidollar.org:9001", true},
+            // Oracle 0: Testnet primary oracle (uses G point key for Phase One testing)
+            {0,  ParsePubKey("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"), "oracle1.digibyte.io:9001", true},
             {1,  ParsePubKey("02d4735e3a265e16eee03f59718b9b5d03019c07d8b6c51f90da3a666eec13ab35"), "oracle2.digidollar.org:9002", true},
             {2,  ParsePubKey("034e07408562bedb8b60ce05c1decfe3ad16b72230967de01f640b7e4729b49fce"), "oracle3.digidollar.org:9003", true},
             {3,  ParsePubKey("024b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a"), "oracle4.digidollar.org:9004", true},
@@ -477,9 +478,7 @@ public:
         vSeeds.clear();
 
         // DigiByte TESTNET DNS Seed Servers:
-        vSeeds.emplace_back("testnetseed.diginode.tools"); // Olly Stedall @saltedlolly 
-        vSeeds.emplace_back("testseed.digibyteblockchain.org"); // John Song @j50ng
-        vSeeds.emplace_back("testnet.digibyteseed.com"); // Jan De Jong @jongjan88
+        vSeeds.emplace_back("testnetseed.digibyte.io"); // Jared Tate @JaredTate
         vSeeds.emplace_back("testnetseed.digibyte.link"); // Bastian Driessen @bastiandriessen
         vSeeds.emplace_back("testnetseed.digibyte.services"); // Craig Donnachie @cdonnachie
 

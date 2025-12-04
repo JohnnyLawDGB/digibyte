@@ -420,11 +420,12 @@ public:
         consensus.nLocalDifficultyAdjustment = 4; // difficulty adjustment per algo
 
         // DigiByte Hard Fork Block Heights for testnet (Testnet reset 2025)
-        consensus.multiAlgoDiffChangeTarget = 100; // Block 100 MultiAlgo Hard Fork (matches regtest)
-        consensus.alwaysUpdateDiffChangeTarget = 200; // Block 200 MultiShield Hard Fork (matches regtest)
-        consensus.workComputationChangeTarget = 400; // Block 400 DigiSpeed Hard Fork (matches regtest)
-        consensus.algoSwapChangeTarget = 600; // Block 600 Odo PoW Hard Fork (matches regtest)
-        consensus.OdoHeight = 600; // Odocrypt activation at height 600 (matches regtest)
+        // All forks activate at block 1 for consistent testnet behavior
+        consensus.multiAlgoDiffChangeTarget = 1; // Block 1 MultiAlgo Hard Fork
+        consensus.alwaysUpdateDiffChangeTarget = 1; // Block 1 MultiShield Hard Fork
+        consensus.workComputationChangeTarget = 1; // Block 1 DigiSpeed Hard Fork
+        consensus.algoSwapChangeTarget = 1; // Block 1 Odo PoW Hard Fork
+        consensus.OdoHeight = 1; // Odocrypt activation at height 1
         consensus.ReserveAlgoBitsHeight = 0;
         consensus.nOdoShapechangeInterval = 1*24*60*60; // 1 day
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].bit = 27;
@@ -524,7 +525,8 @@ public:
         InitializeOracleNodes();
 
         // Oracle system parameters (Phase One: Testnet - Testnet reset 2025)
-        consensus.nOracleActivationHeight = 650;  // Activate at height 650 (with DigiDollar)
+        // Activate at block 1 for consistent testnet behavior
+        consensus.nOracleActivationHeight = 1;        // Activate immediately
         consensus.nOracleEpochLength = 1440;          // 24 hours (1440 blocks * 15 seconds)
         consensus.nOracleRequiredMessages = 1;        // Phase One: 1-of-1 consensus
         consensus.nOracleTotalOracles = 1;            // Phase One: Single oracle
@@ -541,9 +543,10 @@ public:
         LogPrintf("Oracle: Phase One - 1-of-1 consensus with hardcoded oracle\n");
 
         // Testnet-specific oracle and activation settings
+        // Activate at block 1 for consistent testnet behavior
         consensus.nDDOracleEpochBlocks = 50;       // Rotate oracles every 50 blocks (~12.5 minutes)
         consensus.nDDOracleUpdateInterval = 2;     // Update price every 2 blocks (~30 seconds)
-        consensus.nDDActivationHeight = 650;       // DigiDollar activation height (Testnet reset 2025 - with Oracle)
+        consensus.nDDActivationHeight = 1;         // DigiDollar activation at block 1
     }
 
 private:

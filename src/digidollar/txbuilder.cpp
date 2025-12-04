@@ -116,18 +116,22 @@ CAmount MintTxBuilder::CalculateRequiredCollateral(CAmount ddAmount, int lockDay
     double adjustedRatio = baseRatio * dcaMultiplier;
 
     // Calculate required DGB
-    // DD amount is in cents (100 = $1.00), oracle price is in cents (100 = $1.00)
+    // DD amount is in cents (100 = $1.00), oracle price is in micro-USD (1,000,000 = $1.00)
     CAmount usdValue = ddAmount; // DD amount = USD value in cents
 
-    LogPrintf("DigiDollar TxBuilder: CalculateRequiredCollateral - DD: %d cents, Price: %d cents, BaseRatio: %d%%, DCA: %.2f, AdjustedRatio: %.2f%%\n",
-              ddAmount, oraclePrice, baseRatio, dcaMultiplier, adjustedRatio);
+    LogPrintf("DigiDollar TxBuilder: CalculateRequiredCollateral - DD: %d cents, Price: %lld micro-USD ($%.6f), BaseRatio: %d%%, DCA: %.2f, AdjustedRatio: %.2f%%\n",
+              ddAmount, oraclePrice, oraclePrice / 1000000.0, baseRatio, dcaMultiplier, adjustedRatio);
 
     // Use 64-bit arithmetic to prevent overflow
-    // Oracle price format: cents (100 = $1.00 DGB price)
-    // Both DD and oracle price are in cents (unified format)
-    // Formula: DGB_sats = (DD_cents * COIN * ratio) / (oracle_cents * 100)
-    uint64_t requiredCollateral = (static_cast<uint64_t>(usdValue) * static_cast<uint64_t>(COIN) * static_cast<uint64_t>(adjustedRatio)) /
-                                   (static_cast<uint64_t>(oraclePrice) * 100);
+    // Oracle price format: micro-USD (1,000,000 = $1.00 DGB price)
+    // DD amount is in cents (100 = $1.00 USD)
+    // Formula: DGB_sats = (DD_cents * COIN * ratio * 100) / oracle_micro_usd
+    // Example: $100 DD at $0.00631 DGB with 150% ratio (oracle_micro_usd = 6310)
+    //   = (10000 cents * 100000000 * 150 * 100) / 6310
+    //   = 15,000,000,000,000,000 / 6310
+    //   = 2,377,179,080,509 sats = ~23,772 DGB
+    uint64_t requiredCollateral = (static_cast<uint64_t>(usdValue) * static_cast<uint64_t>(COIN) * static_cast<uint64_t>(adjustedRatio) * 100ULL) /
+                                   static_cast<uint64_t>(oraclePrice);
 
     LogPrintf("DigiDollar TxBuilder: - Required collateral: %llu sats (%.8f DGB)\n",
               requiredCollateral, requiredCollateral / 100000000.0);

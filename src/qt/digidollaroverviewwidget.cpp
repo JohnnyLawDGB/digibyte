@@ -128,6 +128,7 @@ void DigiDollarOverviewWidget::setupBalanceSection()
     m_balanceFrame->setFrameShape(QFrame::StyledPanel);
     m_balanceFrame->setFrameShadow(QFrame::Raised);
     m_balanceFrame->setObjectName("balanceFrame");
+    m_balanceFrame->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
 
     QVBoxLayout* frameVLayout = new QVBoxLayout(m_balanceFrame);
     frameVLayout->setObjectName("frameVLayout");
@@ -213,6 +214,7 @@ void DigiDollarOverviewWidget::setupSystemHealthSection()
     m_systemHealthFrame->setFrameShape(QFrame::StyledPanel);
     m_systemHealthFrame->setFrameShadow(QFrame::Raised);
     m_systemHealthFrame->setObjectName("systemHealthFrame");
+    m_systemHealthFrame->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
 
     QVBoxLayout* frameVLayout = new QVBoxLayout(m_systemHealthFrame);
     frameVLayout->setObjectName("healthFrameVLayout");
@@ -357,12 +359,12 @@ void DigiDollarOverviewWidget::setupRecentTransactionsSection()
     m_transactionsList = new QListWidget(this);
     m_transactionsList->setObjectName("transactionsList");
     m_transactionsList->setFrameShape(QFrame::NoFrame);
-    m_transactionsList->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_transactionsList->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     m_transactionsList->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    m_transactionsList->setSizeAdjustPolicy(QAbstractScrollArea::AdjustToContents);
     m_transactionsList->setSelectionMode(QAbstractItemView::NoSelection);
     m_transactionsList->setUniformItemSizes(true);
-    m_transactionsList->setMinimumHeight(150); // Set reasonable height
+    m_transactionsList->setMinimumHeight(100); // Minimum height
+    m_transactionsList->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 
     // Info label for when no transactions exist
     m_recentTransactionsInfo = new QLabel(tr("No recent DigiDollar transactions"), this);
@@ -374,10 +376,11 @@ void DigiDollarOverviewWidget::setupRecentTransactionsSection()
     frameVLayout->addWidget(m_transactionsList);
     frameVLayout->addWidget(m_recentTransactionsInfo);
 
-    m_mainLayout->addWidget(m_transactionsFrame);
+    // Set transactions frame to expand vertically
+    m_transactionsFrame->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 
-    // Add stretch to push content to top
-    m_mainLayout->addStretch();
+    // Add transactions frame with stretch factor to fill remaining space
+    m_mainLayout->addWidget(m_transactionsFrame, 1); // stretch factor 1 = expand to fill
 }
 
 void DigiDollarOverviewWidget::connectSignals()

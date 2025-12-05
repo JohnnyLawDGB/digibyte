@@ -95,7 +95,7 @@ DigiDollar provides unprecedented financial flexibility for DGB holders, enablin
 ### The Technical Process
 
 #### 1. Lock DGB Collateral
-Users lock DigiByte as collateral in a smart contract. The amount depends on the lock period (150%-400% of DigiDollar value).
+Users lock DigiByte as collateral in a P2TR (Pay-to-Taproot) time-locked vault. The amount depends on the lock period (150%-400% of DigiDollar value).
 
 #### 2. Mint DigiDollars
 DigiDollars are automatically minted based on the locked DGB value and current USD exchange rate from decentralized oracles.
@@ -109,18 +109,19 @@ Use DigiDollars for stable transactions. Redeem them anytime to unlock your DGB 
 
 DigiDollar uses a sliding collateral scale to prevent attacks while rewarding long-term participants:
 
-| Lock Period | Collateral Ratio | Undercollateralized After | DGB for $100 |
-|------------|------------------|---------------------------|--------------|
-| 30 days    | 500%            | 80% drop                  | 500 DGB      |
-| 3 months   | 400%            | 75% drop                  | 400 DGB      |
-| 6 months   | 350%            | 71.4% drop                | 350 DGB      |
-| 1 year     | 300%            | 66.7% drop                | 300 DGB      |
-| 3 years    | 250%            | 60% drop                  | 250 DGB      |
-| 5 years    | 225%            | 55.6% drop                | 225 DGB      |
-| 7 years    | 212%            | 52.8% drop                | 212 DGB      |
-| 10 years   | 200%            | 50% drop                  | 200 DGB      |
+| Lock Period | Collateral Ratio | Undercollateralized After | DGB for $100 | Notes |
+|------------|------------------|---------------------------|--------------|-------|
+| 1 hour     | 1000%           | 90% drop                  | 1000 DGB     | Testing only (regtest/testnet) |
+| 30 days    | 500%            | 80% drop                  | 500 DGB      | |
+| 3 months   | 400%            | 75% drop                  | 400 DGB      | |
+| 6 months   | 350%            | 71.4% drop                | 350 DGB      | |
+| 1 year     | 300%            | 66.7% drop                | 300 DGB      | |
+| 3 years    | 250%            | 60% drop                  | 250 DGB      | |
+| 5 years    | 225%            | 55.6% drop                | 225 DGB      | |
+| 7 years    | 212%            | 52.8% drop                | 212 DGB      | |
+| 10 years   | 200%            | 50% drop                  | 200 DGB      | |
 
-**Note**: The updated collateral schedule (500% → 200%, up from 300% → 100%) provides enhanced stability. The "Undercollateralized After" column shows how much DGB price can drop before position becomes undercollateralized. 5 and 7 year options added for more flexibility.
+**Note**: The updated collateral schedule (1000% → 200%) provides enhanced stability. The 1-hour tier is only available on testnet/regtest for development testing. The "Undercollateralized After" column shows how much DGB price can drop before position becomes undercollateralized.
 
 ---
 
@@ -158,7 +159,7 @@ DigiDollar would be the world's first truly decentralized stablecoin built nativ
 Enhanced privacy using P2TR outputs and Schnorr signatures
 
 #### Decentralized Oracles
-15 independent price feeds with 8-of-15 consensus requirement
+Phase Two: 15 independent price feeds with 8-of-15 consensus requirement (Phase One uses single trusted oracle)
 
 #### MAST Implementation
 Efficient script execution with Merkleized Alternative Script Trees

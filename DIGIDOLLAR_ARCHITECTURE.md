@@ -1,6 +1,6 @@
 # DigiDollar Implementation Architecture
 **DigiByte v8.26 - Current Implementation Status**
-*Updated: 2025-11-22*
+*Updated: 2025-12-05*
 *Implementation Status: 82% Complete*
 
 ## Executive Summary
@@ -22,7 +22,7 @@ DigiDollar is the world's first truly decentralized stablecoin built natively on
 - **Network-Wide Tracking**: Blockchain UTXO scanning shows identical stats to all nodes
 - **User Interface**: Complete wallet with 6 functional tabs
 - **Protection Systems**: DCA, ERR, and Volatility monitoring fully implemented (95%+)
-- **Comprehensive Testing**: 685 DigiDollar unit tests + 123 Oracle unit tests + 18 functional tests = 826 total tests, all passing
+- **Comprehensive Testing**: 685 DigiDollar unit tests + 123 Oracle unit tests + 20 functional tests = 828 total tests, all passing
 
 🔄 **What's In Progress:**
 - **Oracle Price Feeds**: Framework complete, needs real exchange API connections
@@ -68,8 +68,8 @@ The DigiDollar system is built into DigiByte Core with code organized in these m
 - **`/src/qt/`** - User interface (7 widget .cpp + 7 .h files)
 - **`/src/wallet/`** - Wallet integration (digidollarwallet.cpp + .h)
 - **`/src/consensus/`** - Network rules (DCA, ERR, volatility systems)
-- **`/src/rpc/`** - RPC commands (digidollar.cpp - 27 total: 20 registered + 7 wallet-layer)
-- **`/test/functional/`** - Automated tests (18 functional tests, all passing)
+- **`/src/rpc/`** - RPC commands (digidollar.cpp - 28 total: 21 registered + 7 wallet-layer)
+- **`/test/functional/`** - Automated tests (20 functional tests, all passing)
 - **`/src/test/`** - Unit tests (685 DigiDollar tests + 123 Oracle tests = 808 total)
 
 ### 1.4 Development Phases - What's Been Built
@@ -286,15 +286,15 @@ class CDigiDollarAddress {
 
 ```cpp
 // Transaction type encoding in version field
-// Format: Base version 0x0D1D0770 with type in bits 24-31
-// Actual encoding: (type << 24) | 0x000D0770
+// Format: 0x4444XXYY where XX = transaction type, YY = version flags
+// The "DD" prefix (0x4444) identifies DigiDollar transactions
 enum DigiDollarTxType : uint8_t {
     DD_TX_NONE = 0,      // Not a DD transaction
-    DD_TX_MINT = 1,      // Encodes to 0x01000770 (type << 24 | 0x0770)
-    DD_TX_TRANSFER = 2,  // Encodes to 0x02000770
-    DD_TX_REDEEM = 3,    // Encodes to 0x03000770
-    DD_TX_PARTIAL = 4,   // Encodes to 0x04000770
-    DD_TX_ERR = 5        // Encodes to 0x05000770
+    DD_TX_MINT = 1,      // Encodes to 0x44440100
+    DD_TX_TRANSFER = 2,  // Encodes to 0x44440200
+    DD_TX_REDEEM = 3,    // Encodes to 0x44440300
+    DD_TX_PARTIAL = 4,   // Encodes to 0x44440400
+    DD_TX_ERR = 5        // Encodes to 0x44440500
 };
 ```
 
@@ -337,11 +337,12 @@ flowchart TD
 
 ### 3.2 Collateral Calculation Engine
 
-#### **8-Tier Lock System** (`/src/consensus/digidollar.cpp`)
+#### **9-Tier Lock System** (`/src/consensus/digidollar.cpp`)
 **Status: ✅ Production Ready**
 
 | Lock Period | Collateral Ratio | Rationale |
 |-------------|------------------|-----------|
+| 1 hour | 1000% | Testing tier (regtest/testnet only) |
 | 30 days | 500% | Maximum safety for short-term |
 | 3 months | 400% | High collateral for quarterly |
 | 6 months | 350% | Semi-annual with strong buffer |
@@ -410,7 +411,7 @@ tx.vout.push_back(CTxOut(0, ddScript));  // 0 DGB value
 **Status: ✅ Complete User Interface**
 
 **Features:**
-- ✅ Lock period dropdown with 8 tiers
+- ✅ Lock period dropdown with 9 tiers
 - ✅ Real-time collateral calculator
 - ✅ Oracle price display (currently mock $0.05)
 - ✅ Available balance checking
@@ -640,7 +641,7 @@ CAmount GetCurrentOraclePrice() {
 
 #### **Layer 1: Higher Collateral Ratios**
 **Status: ✅ Complete**
-- 8-tier system from 500% (30 days) to 200% (10 years)
+- 9-tier system from 1000% (1 hour) to 200% (10 years)
 - Provides substantial buffer against price volatility
 - Treasury model rewards longer commitments
 
@@ -873,7 +874,7 @@ class DigiDollarTab : public QWidget {
 
 #### **4. Mint Widget** (`/src/qt/digidollarmintwidget.cpp`)
 **Status: ✅ 90% Complete**
-- ✅ Lock period selection (8 tiers)
+- ✅ Lock period selection (9 tiers)
 - ✅ Real-time collateral calculator
 - ✅ Oracle price display (shows mock price)
 - ✅ Mint confirmation and execution
@@ -968,7 +969,7 @@ size_t LoadFromDatabase();  // ✅ Working - loads all DD data including UTXOs
 
 ### 10.1 Complete Command Implementation
 
-#### **27 Total RPC Commands (20 Registered, 7 Wallet-Layer)** (`/src/rpc/digidollar.cpp`)
+#### **28 Total RPC Commands (21 Registered, 7 Wallet-Layer)** (`/src/rpc/digidollar.cpp`)
 **Status: ✅ 90% Complete**
 
 **Registered RPC Commands:**
@@ -1044,7 +1045,7 @@ size_t LoadFromDatabase();  // ✅ Working - loads all DD data including UTXOs
         ┌─────────────────────────────────────────────────────────────┐
         │                    UI: CHOOSE PARAMETERS                     │
         ├─────────────────────────────────────────────────────────────┤
-        │ 1. Lock Period (8 tiers): 30d→10y (500%→200% collateral)   │
+        │ 1. Lock Period (9 tiers): 1h→10y (1000%→200% collateral)   │
         │ 2. DD Amount: $100 - $100,000 range                        │
         │ 3. Real-time collateral calculator shows required DGB       │
         │ CODE: /src/qt/digidollarmintwidget.cpp                      │
@@ -1286,7 +1287,7 @@ size_t LoadFromDatabase();  // ✅ Working - loads all DD data including UTXOs
 
 **Implementation Quality:**
 - ✅ **Bitcoin Core Compliance**: Follows Bitcoin Core coding standards and patterns
-- ✅ **Test Coverage**: Extensive testing with 409 unit tests (286 DigiDollar + 123 Oracle) + 18 functional tests
+- ✅ **Test Coverage**: Extensive testing with 409 unit tests (286 DigiDollar + 123 Oracle) + 20 functional tests
 - ✅ **Documentation**: Well-documented code with clear intent and usage examples
 - ✅ **Security Awareness**: Proper input validation, overflow protection, and access control
 
@@ -1326,7 +1327,7 @@ Based on recent git history (commits 6bee4371aa "DD Sending", f49028aba1 "DD Sig
 3. **Broadcasting Integration**: Full transaction broadcasting via wallet chain interface with error handling
 4. **Database Persistence**: Enhanced UTXO loading/saving with transaction history tracking
 5. **Validation Improvements**: Updated consensus validation with comprehensive error handling
-6. **Functional Testing**: 18 comprehensive functional test files covering all DigiDollar operations
+6. **Functional Testing**: 20 comprehensive functional test files covering all DigiDollar operations
 
 **🔄 Current Focus Areas:**
 1. **Oracle Integration**: Framework complete, working on real API implementation
@@ -1454,7 +1455,7 @@ void BroadcastOracleBundle(const COracleBundle& bundle) {
 | **GUI Implementation** | 92% | ✅ Functional | All widgets working, network stats display |
 | **RPC Interface** | 90% | ✅ Production Ready | 20 commands, only oracle APIs are mock |
 | **Database Persistence** | 85% | ✅ Core Working | Save/load operational |
-| **Test Coverage** | 100% | ✅ Comprehensive | 808 unit tests (685 DigiDollar + 123 Oracle) + 18 functional tests, all passing |
+| **Test Coverage** | 100% | ✅ Comprehensive | 808 unit tests (685 DigiDollar + 123 Oracle) + 20 functional tests, all passing |
 
 ### 16.2 Overall Implementation Status
 
@@ -1510,8 +1511,8 @@ Unlike Ethereum-based stablecoins, DigiDollar is built natively on UTXO architec
 - ✅ **No Smart Contract Risk**: Native blockchain integration without external dependencies
 
 #### **2. Treasury-Model Collateralization**
-Innovative 8-tier system that rewards longer commitments:
-- ✅ **Dynamic Ratios**: 500% (30 days) to 200% (10 years)
+Innovative 9-tier system that rewards longer commitments:
+- ✅ **Dynamic Ratios**: 1000% (1 hour) to 200% (10 years)
 - ✅ **Economic Incentives**: Lower collateral for longer commitments
 - ✅ **Risk Management**: Higher ratios for volatile shorter periods
 
@@ -1530,7 +1531,7 @@ Custom address prefixes for user experience:
 ### 17.2 Economic Model Innovations
 
 #### **Four-Layer Protection System**
-1. **Base Collateral**: Treasury model with 8 tiers
+1. **Base Collateral**: Treasury model with 9 tiers
 2. **Dynamic Adjustment**: Real-time system health monitoring
 3. **Emergency Ratios**: Under-collateralization handling
 4. **Market Forces**: Natural supply/demand dynamics
@@ -1648,7 +1649,7 @@ The DigiDollar implementation represents a **sophisticated and well-architected 
 The DigiDollar implementation showcases several **innovative architectural decisions**:
 
 1. **UTXO-Native Design**: First truly decentralized stablecoin built directly on UTXO blockchain
-2. **Treasury Model**: 8-tier collateral system with economic incentives for long-term commitment
+2. **Treasury Model**: 9-tier collateral system with economic incentives for long-term commitment
 3. **Four-Layer Protection**: Sophisticated multi-layer protection against various economic attacks
 4. **Taproot Integration**: Advanced P2TR scripts with MAST for future extensibility
 
@@ -1713,7 +1714,7 @@ This update adds several **major implemented features** that were missing from t
 
 ### ✅ **Test Coverage**
 - **Unit Tests**: 286 DigiDollar tests + 123 Oracle tests = 409 total
-- **Functional Tests**: 18 comprehensive end-to-end tests
+- **Functional Tests**: 20 comprehensive end-to-end tests
 - All tests passing including network tracking verification
 - Test: `digidollar_network_tracking.py` proves UTXO scanning works
 

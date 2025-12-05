@@ -4,13 +4,9 @@
 
 #include <consensus/digidollar.h>
 #include <consensus/params.h>
-#include <deploymentstatus.h>
-#include <validation.h>
 #include <tinyformat.h>
 #include <primitives/transaction.h>
 #include <script/script.h>
-#include <digidollar/scripts.h>
-#include <digidollar/validation.h>
 
 #include <algorithm>
 #include <sstream>
@@ -260,14 +256,10 @@ bool IsDDTokenScript(const CScript& script)
         }
     }
 
-    // Phase 1: For P2TR scripts (Taproot), check metadata
-    // The OP_DIGIDOLLAR is inside the Taproot script tree, not in scriptPubKey
-    // (Phase 2 will use UTXO database for actual deployment)
-    DigiDollar::ScriptMetadata metadata;
-    if (DigiDollar::GetScriptMetadata(script, metadata)) {
-        return metadata.type == DigiDollar::ScriptType::DD_TOKEN_OUTPUT;
-    }
-
+    // Note: For P2TR scripts, the OP_DIGIDOLLAR is inside the Taproot script tree,
+    // not directly visible in scriptPubKey. Full DD token detection requires
+    // UTXO database lookup (Phase 2). This consensus function only checks for
+    // explicit OP_DIGIDOLLAR in the script.
     return false;
 }
 
@@ -283,13 +275,9 @@ bool ExtractDDAmount(const CScript& script, CAmount& amount)
 
     // Check for OP_RETURN
     if (!script.GetOp(pc, opcode, data) || opcode != OP_RETURN) {
-        // Not an OP_RETURN, try fallback methods
-        // Phase 1: For P2TR scripts, try metadata lookup
-        DigiDollar::ScriptMetadata metadata;
-        if (DigiDollar::GetScriptMetadata(script, metadata)) {
-            amount = metadata.ddAmount;
-            return amount > 0;
-        }
+        // Not an OP_RETURN - full DD amount extraction for P2TR scripts
+        // requires UTXO database lookup (Phase 2). This consensus function
+        // only parses explicit OP_RETURN data.
         return false;
     }
 

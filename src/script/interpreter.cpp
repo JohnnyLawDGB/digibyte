@@ -12,8 +12,6 @@
 #include <script/script.h>
 #include <uint256.h>
 #include <consensus/amount.h>
-#include <logging.h>
-#include <util/strencodings.h>
 
 typedef std::vector<unsigned char> valtype;
 
@@ -1842,24 +1840,15 @@ bool GenericTransactionSignatureChecker<T>::CheckSchnorrSignature(Span<const uns
         return set_error(serror, SCRIPT_ERR_SCHNORR_SIG_HASHTYPE);
     }
 
-    LogPrintf("DigiDollar: CheckSchnorrSignature - pubkey: %s, sighash: %s, sig: %s\n",
-              HexStr(pubkey), sighash.ToString(), HexStr(sig));
-
     if (!VerifySchnorrSignature(sig, pubkey, sighash)) {
-        LogPrintf("DigiDollar: CheckSchnorrSignature - FAILED verification\n");
         return set_error(serror, SCRIPT_ERR_SCHNORR_SIG);
     }
-    LogPrintf("DigiDollar: CheckSchnorrSignature - PASSED verification\n");
     return true;
 }
 
 template <class T>
 bool GenericTransactionSignatureChecker<T>::CheckLockTime(const CScriptNum& nLockTime) const
 {
-    // DIAGNOSTIC: Log ALL values for debugging
-    LogPrintf("DigiDollar: CheckLockTime - script_value=%d, tx.nLockTime=%d, nIn=%d, sequence=0x%x\n",
-              nLockTime.GetInt64(), txTo->nLockTime, nIn, txTo->vin[nIn].nSequence);
-
     // There are two kinds of nLockTime: lock-by-blockheight
     // and lock-by-blocktime, distinguished by whether
     // nLockTime < LOCKTIME_THRESHOLD.
@@ -1871,15 +1860,12 @@ bool GenericTransactionSignatureChecker<T>::CheckLockTime(const CScriptNum& nLoc
         (txTo->nLockTime <  LOCKTIME_THRESHOLD && nLockTime <  LOCKTIME_THRESHOLD) ||
         (txTo->nLockTime >= LOCKTIME_THRESHOLD && nLockTime >= LOCKTIME_THRESHOLD)
     )) {
-        LogPrintf("DigiDollar: CheckLockTime FAILED - type mismatch\n");
         return false;
     }
 
     // Now that we're comparing apples-to-apples, the
     // comparison is a simple numeric one.
     if (nLockTime > (int64_t)txTo->nLockTime) {
-        LogPrintf("DigiDollar: CheckLockTime FAILED - script value %d > tx locktime %d\n",
-                  nLockTime.GetInt64(), txTo->nLockTime);
         return false;
     }
 
@@ -1894,12 +1880,9 @@ bool GenericTransactionSignatureChecker<T>::CheckLockTime(const CScriptNum& nLoc
     // inputs, but testing just this input minimizes the data
     // required to prove correct CHECKLOCKTIMEVERIFY execution.
     if (CTxIn::SEQUENCE_FINAL == txTo->vin[nIn].nSequence) {
-        LogPrintf("DigiDollar: CheckLockTime FAILED - input %d has SEQUENCE_FINAL (0x%x)\n",
-                  nIn, txTo->vin[nIn].nSequence);
         return false;
     }
 
-    LogPrintf("DigiDollar: CheckLockTime PASSED\n");
     return true;
 }
 

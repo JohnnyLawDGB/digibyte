@@ -552,44 +552,23 @@ public:
 
 private:
     void InitializeOracleNodes() {
-        // DigiDollar Oracle Nodes - Testnet uses valid secp256k1 test vectors
-        // These are placeholder keys for Phase 1, will be replaced with real oracle keys in Phase 2
+        // DigiDollar Oracle Nodes - Testnet
+        // Oracle 0 is the primary testnet oracle at oracle1.digibyte.io:12028
+        // Additional oracles will be added as the network grows
         vOracleNodes = {
-            // Oracle 0-9: Primary Tier 1 providers (using valid secp256k1 points)
-            {0,  ParsePubKey("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"), "oracle1.digidollar.org:9001", true},
-            {1,  ParsePubKey("02d4735e3a265e16eee03f59718b9b5d03019c07d8b6c51f90da3a666eec13ab35"), "oracle2.digidollar.org:9002", true},
-            {2,  ParsePubKey("034e07408562bedb8b60ce05c1decfe3ad16b72230967de01f640b7e4729b49fce"), "oracle3.digidollar.org:9003", true},
-            {3,  ParsePubKey("024b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a"), "oracle4.digidollar.org:9004", true},
-            {4,  ParsePubKey("03ef2d127de37b942baad06145e54b0c619a1f22327b2ebbcfbec78f5564afe39d"), "oracle5.digidollar.org:9005", true},
-            {5,  ParsePubKey("02e7f6c011776e8db7cd330b54174fd76f7d0216b612387a5ffcfb81e6f0919683"), "oracle6.digidollar.org:9006", true},
-            {6,  ParsePubKey("037902699be42c8a8e46fbbb4501726517e86b22c56a189f7625a6da49081b2451"), "oracle7.digidollar.org:9007", true},
-            {7,  ParsePubKey("022c624232cdd221771294dfbb310aca000a0df6ac8b66b696d90ef06fdefb64a3"), "oracle8.digidollar.org:9008", true},
-            {8,  ParsePubKey("0319581e27de7ced00ff1ce50b2047e7a567c76b1cbaebabe5ef03f7c3017bb5b7"), "oracle9.digidollar.org:9009", true},
-            {9,  ParsePubKey("024a44dc15364204a80fe80e9039455cc1608281820fe2b24f1e5233ade6af1dd5"), "oracle10.digidollar.org:9010", true},
+            // Oracle 0: Primary testnet oracle (using valid secp256k1 generator point)
+            {0,  ParsePubKey("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"), "oracle1.digibyte.io:12028", true},
 
-            // Oracle 10-19: Secondary Tier 2 providers
-            {10,  ParsePubKey("034fc82b26aecb47d2868c4efbe3581732a3e7cbcc6c2efb32062c08170a05eeb8"), "oracle11.digidollar.org:9011", true},
-            {11,  ParsePubKey("026b51d431df5d7f141cbececcf79edf3dd861c3b4069f0b11661a3eefacbba918"), "oracle12.digidollar.org:9012", true},
-            {12,  ParsePubKey("033fdba35f04dc8c462986c992bcf875546257113072a909c162f7e470e581e278"), "oracle13.digidollar.org:9013", true},
-            {13,  ParsePubKey("028527a891e224136950ff32ca212b45bc93f69fbb801c3b1ebedac52775f99e61"), "oracle14.digidollar.org:9014", true},
-            {14,  ParsePubKey("03e629fa6598d732768f7c726b4b621285f9c3b85303900aa912017db7617d8bdb"), "oracle15.digidollar.org:9015", true},
-            {15,  ParsePubKey("02b17ef6d19c7a5b1ee83b907c595526dcb1eb06db8227d650d5dda0a9f4ce8cd9"), "oracle16.digidollar.org:9016", true},
-            {16,  ParsePubKey("034523540f1504cd17100c4835e85b7eefd49911580f8efff0599a8f283be6b9e3"), "oracle17.digidollar.org:9017", true},
-            {17,  ParsePubKey("024ec9599fc203d176a301536c2e091a19bc852759b255bd6818810a42c5fed14a"), "oracle18.digidollar.org:9018", true},
-            {18,  ParsePubKey("039400f1b21cb527d7fa3d3eabba93557a18ebe7a2ca4e471cfe5e4c5b4ca7f767"), "oracle19.digidollar.org:9019", true},
-            {19,  ParsePubKey("02f5ca38f748a1d6eaf726b8a42fb575c3c71f1864a8143301782de13da2d9202b"), "oracle20.digidollar.org:9020", true},
-
-            // Oracle 20-29: Backup Tier 3 providers
-            {20,  ParsePubKey("026b17dedd3346cf0ee1a1edd41d00f6ad3e5e43f628582f59624821682a1c28e4"), "oracle21.digidollar.org:9021", true},
-            {21,  ParsePubKey("03d8c8994c3f8c5f9f6ff8f9f6c6a8e5e4a8c8e7f6a5d4c3b2a1f0e9d8c7b6a5f4"), "oracle22.digidollar.org:9022", true},
-            {22,  ParsePubKey("02356a192b7913b04c54574d18c28d46e6395428ab3e43ad63e5e5c4cf9ef18c0c"), "oracle23.digidollar.org:9023", true},
-            {23,  ParsePubKey("03da4b9237bacccdf19c0760cab7aec4a8359010b04d69a05fb6ed5a5e9cdb37f6"), "oracle24.digidollar.org:9024", true},
-            {24,  ParsePubKey("0277de68daecd823babbb58edb1c8e14d7106e83bb6d6ba7c1c6e0e476c6de5273"), "oracle25.digidollar.org:9025", true},
-            {25,  ParsePubKey("031b6453892473a467d07372d45eb05abc20316478a8f89a0e74023c3c05a8e1e7"), "oracle26.digidollar.org:9026", true},
-            {26,  ParsePubKey("02ac3478d69a3c81fa62e60f5c3696165a4e5e6ac4cda4d41d92ee258b91e23e38"), "oracle27.digidollar.org:9027", true},
-            {27,  ParsePubKey("03c1dfd96eea8cc2b62785275bca38ac261256e27864cf4f74db1c3bb5d8d08c42"), "oracle28.digidollar.org:9028", true},
-            {28,  ParsePubKey("02902ba3cda1883801594b6e1b452790cc53948fda6c45e47c74e0fb4e8a8088b9"), "oracle29.digidollar.org:9029", true},
-            {29,  ParsePubKey("03fe5dbbcea5ce7e2988b8c69bcfdfde8904aabc1f79c7b2bf6cd5dbec0d93c26c"), "oracle30.digidollar.org:9030", true}
+            // Oracle 1-9: Reserved for future testnet oracles (disabled until configured)
+            {1,  ParsePubKey("02d4735e3a265e16eee03f59718b9b5d03019c07d8b6c51f90da3a666eec13ab35"), "oracle2.digibyte.io:12025", false},
+            {2,  ParsePubKey("034e07408562bedb8b60ce05c1decfe3ad16b72230967de01f640b7e4729b49fce"), "oracle3.digibyte.io:12025", false},
+            {3,  ParsePubKey("024b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a"), "oracle4.digibyte.io:12025", false},
+            {4,  ParsePubKey("03ef2d127de37b942baad06145e54b0c619a1f22327b2ebbcfbec78f5564afe39d"), "oracle5.digibyte.io:12025", false},
+            {5,  ParsePubKey("02e7f6c011776e8db7cd330b54174fd76f7d0216b612387a5ffcfb81e6f0919683"), "oracle6.digibyte.io:12025", false},
+            {6,  ParsePubKey("037902699be42c8a8e46fbbb4501726517e86b22c56a189f7625a6da49081b2451"), "oracle7.digibyte.io:12025", false},
+            {7,  ParsePubKey("022c624232cdd221771294dfbb310aca000a0df6ac8b66b696d90ef06fdefb64a3"), "oracle8.digibyte.io:12025", false},
+            {8,  ParsePubKey("0319581e27de7ced00ff1ce50b2047e7a567c76b1cbaebabe5ef03f7c3017bb5b7"), "oracle9.digibyte.io:12025", false},
+            {9,  ParsePubKey("024a44dc15364204a80fe80e9039455cc1608281820fe2b24f1e5233ade6af1dd5"), "oracle10.digibyte.io:12025", false}
         };
     }
 };

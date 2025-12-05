@@ -307,9 +307,10 @@ void DigiDollarOverviewWidget::setupSystemHealthSection()
     totalsLayout->setContentsMargins(15, 15, 15, 15);
 
     // Network Total DD Supply (prominent)
-    m_networkTotalDDLabel = new QLabel(tr("Total Network DigiDollars"), this);
+    m_networkTotalDDLabel = new QLabel(tr("Network DD Supply"), this);
     m_networkTotalDDLabel->setObjectName("networkTotalDDLabel");
     m_networkTotalDDLabel->setAlignment(Qt::AlignCenter);
+    m_networkTotalDDLabel->setWordWrap(true);
     totalsLayout->addWidget(m_networkTotalDDLabel);
 
     m_networkTotalDDValue = new QLabel("Loading...", this);
@@ -328,9 +329,10 @@ void DigiDollarOverviewWidget::setupSystemHealthSection()
     totalsLayout->addWidget(separator);
 
     // Network Total Collateral (prominent)
-    m_networkTotalCollateralLabel = new QLabel(tr("Total Network Locked DGB Collateral"), this);
+    m_networkTotalCollateralLabel = new QLabel(tr("Network DGB Locked"), this);
     m_networkTotalCollateralLabel->setObjectName("networkTotalCollateralLabel");
     m_networkTotalCollateralLabel->setAlignment(Qt::AlignCenter);
+    m_networkTotalCollateralLabel->setWordWrap(true);
     totalsLayout->addWidget(m_networkTotalCollateralLabel);
 
     m_networkTotalCollateralValue = new QLabel("Loading...", this);

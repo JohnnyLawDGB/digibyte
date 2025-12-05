@@ -57,7 +57,7 @@ Phase One implements a **streamlined testnet-ready system**:
 - **Mainnet**: Completely disabled until Phase Two (safety guard)
 
 **The External Oracle Daemon** (separate from DigiByte Core):
-- Fetches prices from 10 exchanges every 15 seconds
+- Fetches prices from 12 exchanges every 15 seconds
 - Calculates median with MAD outlier filtering
 - Creates and signs 128-byte oracle messages
 - Broadcasts to P2P network (which DigiByte Core nodes receive)
@@ -176,7 +176,7 @@ Oracle Node
      │      │      │      │      │      │      │      │
      │  Each peer validates:                          │
      │  ✓ Schnorr signature correct?                  │
-     │  ✓ Price in range (1-1,000 cents)?             │
+     │  ✓ Price in range (100-100M micro-USD)?         │
      │  ✓ Timestamp fresh (<5 min old)?               │
      │  ✓ Not duplicate?                              │
      │                                                 │
@@ -262,8 +262,8 @@ New Block Received
          ▼
 ┌────────────────────────────────┐
 │ 6. Validate Price Range        │
-│    ✓ Price: 1-1,000 cents?     │
-│    ($0.01 - $10.00 per DGB)    │
+│    ✓ Price: 100-100M micro-USD?│
+│    ($0.0001 - $100.00 per DGB) │
 └────────┬───────────────────────┘
          │
          ▼
@@ -310,47 +310,48 @@ New Block Received
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│  DIGIDOLLAR CENTS FORMAT: Why 100 cents = $1.00?             │
+│  MICRO-USD FORMAT: Why 1,000,000 micro-USD = $1.00?          │
 └──────────────────────────────────────────────────────────────┘
 
 PROBLEM: Floating Point Errors
 ────────────────────────────────
-double price = 0.05;
+double price = 0.0065;
 double collateral = price * 2.0;
-Result: 0.10039999999999 ❌  (WRONG!)
+Result: 0.012999999999 ❌  (WRONG!)
 
 
-SOLUTION: Integer Arithmetic (DigiDollar Cents)
+SOLUTION: Integer Arithmetic (Micro-USD)
 ────────────────────────────────────────────────
-uint64_t price_cents = 5;     // 5 cents = $0.05
-uint64_t collateral_cents = price_cents * 2;
-Result: 10 ✓  (EXACT!)
+uint64_t price_micro_usd = 6500;     // 6500 micro-USD = $0.0065
+uint64_t collateral_micro_usd = price_micro_usd * 2;
+Result: 13000 ✓  (EXACT!)
 
 
 CONVERSION TABLE:
 ─────────────────
-USD Price    DigiDollar Cents    Storage (uint64_t)
-─────────    ────────────────    ──────────────────
-$0.01        1 cent              1
-$0.05        5 cents             5
-$0.10        10 cents            10
-$0.50        50 cents            50
-$1.00        100 cents           100
-$5.00        500 cents           500
-$10.00       1,000 cents         1,000
+USD Price    Micro-USD           Storage (uint64_t)
+─────────    ─────────           ──────────────────
+$0.0001      100                 100 (MIN)
+$0.001       1,000               1,000
+$0.0065      6,500               6,500 (realistic DGB price)
+$0.01        10,000              10,000
+$0.10        100,000             100,000
+$1.00        1,000,000           1,000,000
+$10.00       10,000,000          10,000,000
+$100.00      100,000,000         100,000,000 (MAX)
 
 
 VALIDATION LIMITS:
 ──────────────────
-MIN_PRICE_CENTS = 1      ($0.01 per DGB)
-MAX_PRICE_CENTS = 1,000  ($10.00 per DGB)
+MIN_PRICE_MICRO_USD = 100         ($0.0001 per DGB)
+MAX_PRICE_MICRO_USD = 100,000,000 ($100.00 per DGB)
 
 
 WHY THIS FORMAT?
 ────────────────
 ✓ Exact arithmetic (no rounding errors)
+✓ High precision (6 decimal places)
 ✓ Compact (fits in 8 bytes)
-✓ Familiar (everyone knows cents)
 ✓ Fast (integer operations)
 ✓ Safe (no float overflow issues)
 ```
@@ -363,9 +364,9 @@ WHY THIS FORMAT?
 │   final signed message via P2P and validate it (Steps 5-10).│
 └─────────────────────────────────────────────────────────────┘
 
-#### Step 1: Fetch Prices from 10 Exchanges (Every 15 seconds)
+#### Step 1: Fetch Prices from 12 Exchanges (Every 15 seconds)
 
-The oracle connects to 10 major cryptocurrency exchanges simultaneously:
+The oracle connects to 12 major cryptocurrency exchanges simultaneously:
 
 - Binance
 - Coinbase
@@ -377,6 +378,8 @@ The oracle connects to 10 major cryptocurrency exchanges simultaneously:
 - Messari
 - CoinMarketCap
 - CoinGecko
+- Gate.io
+- HTX (Huobi)
 
 **Example responses**:
 ```
@@ -407,24 +410,23 @@ The oracle uses **median calculation** (not average) to filter out outliers:
 - Prevents a single exchange from manipulating the price
 - Keeps the system resilient even if 2-3 exchanges have bad data
 
-#### Step 3: Convert to DigiDollar Cents
+#### Step 3: Convert to Micro-USD
 
-The oracle converts the price to **DigiDollar cents** format:
+The oracle converts the price to **micro-USD** format:
 
-**DigiDollar Cents Format**: `100 cents = $1.00 USD`
+**Micro-USD Format**: `1,000,000 micro-USD = $1.00 USD`
 
 Why this format?
-- ✅ **Precision**: 2 decimal places (perfect for crypto prices under $1)
+- ✅ **High Precision**: 6 decimal places (perfect for crypto prices at any level)
 - ✅ **No Floating Point**: Integer arithmetic prevents rounding errors
-- ✅ **Familiar**: Everyone understands cents (100 cents = 1 dollar)
+- ✅ **Wide Range**: Supports prices from $0.0001 to $100.00 per DGB
 - ✅ **Compact**: Fits in 8 bytes (uint64_t)
 
 **Conversion**:
 ```
-$0.05020 USD = 5.02 DigiDollar cents = 5 cents (rounded)
+$0.0065 USD = 6,500 micro-USD (realistic DGB price)
+$0.05020 USD = 50,200 micro-USD
 ```
-
-**Technical note**: The field is named `price_micro_usd` in the code for historical reasons, but it actually stores DigiDollar cents (not micro-USD). This naming inconsistency is being fixed in Phase Two.
 
 #### Step 4: Sign the Message with Schnorr Signature
 
@@ -432,7 +434,7 @@ The oracle creates a price message containing:
 
 ```
 Oracle ID:     0 (always 0 in Phase One)
-Price:         5 cents (DigiDollar cents format)
+Price:         6500 (micro-USD, = $0.0065 per DGB)
 Timestamp:     1732204800 (Unix timestamp)
 Block Height:  700 (current blockchain height)
 Nonce:         0x123456789ABCDEF0 (random number for uniqueness)
@@ -470,7 +472,7 @@ Payload: <128-byte signed message>
 1. ✅ Check Schnorr signature (authentic oracle?)
 2. ✅ Check oracle ID is 0 (Phase One requirement)
 3. ✅ Check timestamp (not too old, not in future)
-4. ✅ Check price range ($0.01 - $10.00 per DGB)
+4. ✅ Check price range ($0.0001 - $100.00 per DGB)
 5. ✅ Check for duplicates (already seen this message?)
 
 **Rate limiting**: Nodes reject more than 3 oracle messages per minute (180 per hour) from any single peer (prevents spam attacks).
@@ -497,7 +499,7 @@ Byte 2:      0x01 - "Push 1 byte" (for version)
 Byte 3:      0x01 - Version (Phase One format)
 Byte 4:      0x11 - "Push 17 bytes" (for data)
 Byte 5:      0x00 - Oracle ID (always 0)
-Bytes 6-13:  <Price in DigiDollar cents, 8 bytes>
+Bytes 6-13:  <Price in micro-USD, 8 bytes>
 Bytes 14-21: <Timestamp, 8 bytes>
 ```
 
@@ -505,7 +507,7 @@ Bytes 14-21: <Timestamp, 8 bytes>
 ```
 6a bf 01 01 11 00 05 00 00 00 00 00 00 00 00 2f 50 65 00 00 00 00 00
 │  │  │  │  │  └─────────────┘ └─────────────────┘
-│  │  │  │  │   Price: 5 cents  Timestamp: 1,700,000,000
+│  │  │  │  │   Price: 6500 micro-USD  Timestamp: 1,700,000,000
 │  │  │  │  Oracle ID: 0
 │  │  │  Version: 1
 │  │  Push 18 bytes
@@ -549,7 +551,7 @@ Every node validates incoming blocks. When a block contains oracle data, the val
 3. ✅ **Find OP_ORACLE output**: Look for `OP_RETURN OP_ORACLE` in coinbase vout[1]
 4. ✅ **Extract compact data**: Parse the 21-byte format
 5. ✅ **Validate structure**: Version byte = 0x01, Oracle ID = 0
-6. ✅ **Validate price range**: 1-1,000 DigiDollar cents ($0.01-$10.00 per DGB)
+6. ✅ **Validate price range**: 100-100,000,000 micro-USD ($0.0001-$100.00 per DGB)
 7. ✅ **Validate timestamp**: Not more than 1 hour old, not in future
 8. ✅ **Phase One consensus**: Exactly 1 message (reject if multiple oracles)
 9. ✅ **Oracle authorization**: Oracle ID 0 is in chainparams and active
@@ -564,7 +566,7 @@ After a valid block is connected to the blockchain, the oracle price is stored i
 
 **ConnectBlock() Updates**:
 ```cpp
-height_to_price[700] = 5 DigiDollar cents
+height_to_price[700] = 6500 micro-USD  // $0.0065 per DGB
 ```
 
 **Cache properties**:
@@ -574,12 +576,12 @@ height_to_price[700] = 5 DigiDollar cents
 
 **Example cache**:
 ```
-Block 695: 4 cents ($0.04 per DGB)
-Block 696: 4 cents ($0.04 per DGB)
-Block 697: 5 cents ($0.05 per DGB)
-Block 698: 5 cents ($0.05 per DGB)
-Block 699: 5 cents ($0.05 per DGB)
-Block 700: 5 cents ($0.05 per DGB) ← Current price
+Block 695: 6400 micro-USD ($0.0064 per DGB)
+Block 696: 6450 micro-USD ($0.00645 per DGB)
+Block 697: 6500 micro-USD ($0.0065 per DGB)
+Block 698: 6500 micro-USD ($0.0065 per DGB)
+Block 699: 6500 micro-USD ($0.0065 per DGB)
+Block 700: 6500 micro-USD ($0.0065 per DGB) ← Current price
 ```
 
 #### Step 9: DigiDollar Uses the Price
@@ -588,7 +590,7 @@ When you mint DigiDollars, the system queries the price cache:
 
 ```cpp
 uint64_t current_price = OracleBundleManager::GetInstance().GetLatestPrice();
-// Returns: 5 cents ($0.05 per DGB)
+// Returns: 6500 micro-USD ($0.0065 per DGB)
 ```
 
 **Collateral calculation example**:
@@ -628,7 +630,7 @@ The oracle system behaves differently on each network:
 
 **Example**:
 ```cpp
-MockOracleManager::GetInstance().SetMockPrice(5); // Set to 5 cents
+MockOracleManager::GetInstance().SetMockPrice(6500); // Set to 6500 micro-USD ($0.0065)
 ```
 
 **Why mock?**
@@ -649,7 +651,7 @@ MockOracleManager::GetInstance().SetMockPrice(5); // Set to 5 cents
 
 **How it works**:
 - Actual oracle daemon running at `oracle.digibyte.io:9001`
-- Fetches **real prices** from 10 exchanges
+- Fetches **real prices** from 12 exchanges
 - Broadcasts every 15 seconds via P2P
 - Miners include real oracle data in blocks
 
@@ -700,9 +702,9 @@ Phase One's single oracle (1-of-1 consensus) is **not secure enough for mainnet*
 
 ## The Price Feed Mechanism
 
-### 10 Exchange Data Sources
+### 12 Exchange Data Sources
 
-The oracle aggregates prices from **10 major exchanges** to ensure reliability:
+The oracle aggregates prices from **12 major exchanges** to ensure reliability:
 
 **High-Volume Exchanges** (Primary Sources):
 1. **Binance** - Largest crypto exchange globally
@@ -717,12 +719,14 @@ The oracle aggregates prices from **10 major exchanges** to ensure reliability:
 8. **Messari** - Professional crypto data aggregator
 9. **CoinMarketCap** - Most-visited crypto data site
 10. **CoinGecko** - Popular crypto data aggregator
+11. **Gate.io** - Large international exchange
+12. **HTX (Huobi)** - Major global exchange
 
-**Why 10 exchanges?**
+**Why 12 exchanges?**
 - ✅ **Redundancy**: If 2-3 exchanges are down, oracle still works
 - ✅ **Outlier detection**: Can identify and filter bad data
 - ✅ **Market representation**: Captures global DGB price across multiple markets
-- ✅ **Manipulation resistance**: Hard to manipulate 10 independent data sources
+- ✅ **Manipulation resistance**: Hard to manipulate 12 independent data sources
 
 **Minimum requirement**: At least **3 exchanges** must return valid prices (30% threshold). If fewer than 3 respond, the oracle doesn't update the price.
 
@@ -746,7 +750,7 @@ The average is **skewed by outliers**, while the median is **resistant to outlie
 2. If odd count: Take the middle value
 3. If even count: Average the two middle values
 
-**Example with 10 exchanges**:
+**Example with 12 exchanges**:
 ```
 Raw data: [$0.05017, $0.05021, $0.05018, $0.05020, $0.05024,
            $0.05020, $0.05019, $0.05022, $0.05023, $0.05021]
@@ -788,44 +792,47 @@ Final median: $0.05 (outlier removed)
 - ✅ **Self-adjusting**: Threshold adapts to market volatility
 - ✅ **Industry standard**: Used in professional trading systems
 
-### DigiDollar Cents Format (On-Chain Storage)
+### Micro-USD Format (On-Chain Storage)
 
-**Format**: `100 DigiDollar cents = $1.00 USD`
+**Format**: `1,000,000 micro-USD = $1.00 USD`
 
 **Why this format?**
 
 **Problem with floating point**:
 ```cpp
-double price = 0.05020;
-double collateral = price * 2.0;  // Should be 0.10040
-// Actual result: 0.10039999999999 (rounding error!)
+double price = 0.00650;
+double collateral = price * 2.0;  // Should be 0.01300
+// Actual result: 0.01299999999999 (rounding error!)
 ```
 
-**Solution with DigiDollar cents**:
+**Solution with micro-USD**:
 ```cpp
-uint64_t price_cents = 5;  // 5 cents = $0.05
-uint64_t collateral_cents = price_cents * 2;  // 10 cents (exact!)
+uint64_t price_micro_usd = 6500;  // 6500 micro-USD = $0.0065
+uint64_t collateral_micro_usd = price_micro_usd * 2;  // 13000 micro-USD (exact!)
 ```
 
 **Conversion examples**:
 
 ```
-USD Price    →  DigiDollar Cents  →  Storage (uint64_t)
-$0.01        →  1 cent             →  1
-$0.05        →  5 cents            →  5
-$0.10        →  10 cents           →  10
-$1.00        →  100 cents          →  100
-$10.00       →  1,000 cents        →  1,000
+USD Price    →  Micro-USD          →  Storage (uint64_t)
+$0.0001      →  100                →  100 (minimum)
+$0.0065      →  6,500              →  6,500 (realistic DGB price)
+$0.01        →  10,000             →  10,000
+$0.10        →  100,000            →  100,000
+$1.00        →  1,000,000          →  1,000,000
+$10.00       →  10,000,000         →  10,000,000
+$100.00      →  100,000,000        →  100,000,000 (maximum)
 ```
 
 **Validation constraints**:
-- ✅ **Minimum**: 1 cent ($0.01 per DGB) - prevents near-zero spam
-- ✅ **Maximum**: 1,000 cents ($10.00 per DGB) - reasonable upper bound
+- ✅ **Minimum**: 100 micro-USD ($0.0001 per DGB) - prevents near-zero spam
+- ✅ **Maximum**: 100,000,000 micro-USD ($100.00 per DGB) - reasonable upper bound
 
 **Mathematical properties**:
 - ✅ **Exact arithmetic**: No rounding errors
 - ✅ **Compact**: Fits in 8 bytes (uint64_t)
-- ✅ **Max value**: 18,446,744,073,709,551,615 cents = $184 billion per DGB (way beyond realistic range!)
+- ✅ **Precision**: 6 decimal places for USD values
+- ✅ **Max value**: 18,446,744,073,709,551,615 micro-USD = $18 trillion per DGB (way beyond realistic range!)
 
 ---
 
@@ -865,7 +872,7 @@ External Oracle Daemon creates signed message:
 │ ORACLEPRICE P2P Message (128 bytes)    │
 ├─────────────────────────────────────────┤
 │ oracle_id:        0         [4 bytes]  │
-│ price:            50000     [8 bytes]  │  ← DigiDollar cents (500.00)
+│ price:            6500      [8 bytes]  │  ← Micro-USD ($0.0065/DGB)
 │ timestamp:        1732204800 [8 bytes] │
 │ block_height:     700       [4 bytes]  │
 │ nonce:            0x123...  [8 bytes]  │
@@ -916,7 +923,7 @@ Miner creates coinbase transaction:
         │ Byte  3: 0x01  Version (Phase One)     │
         │ Byte  4: 0x11  PUSH 17 bytes           │
         │ Byte  5: 0x00  Oracle ID = 0           │
-        │ Bytes 6-13:    Price (50000 cents)     │ ◄── Little-endian uint64
+        │ Bytes 6-13:    Price (6500 micro-USD)  │ ◄── Little-endian uint64
         │ Bytes 14-21:   Timestamp (Unix time)   │ ◄── Little-endian int64
         └─────────────────────────────────────────┘
                               │
@@ -945,7 +952,7 @@ Every node validates the block:
     │ 4. Validate:                               │
     │    ✓ Version == 0x01?                      │
     │    ✓ Oracle ID == 0?                       │
-    │    ✓ Price: 1-1,000 cents?                 │
+    │    ✓ Price: 100-100M micro-USD?            │
     │    ✓ Timestamp not too old/future?         │
     │    ✓ Exactly 1 oracle (Phase One)?         │
     │    ✓ Oracle authorized in chainparams?     │
@@ -970,7 +977,7 @@ After block is accepted:
 ┌─────────────────────────────────────────┐
 │ OracleBundleManager::UpdatePriceCache() │
 ├─────────────────────────────────────────┤
-│ height_to_price[700] = 50000 cents      │ ◄── Cached in memory
+│ height_to_price[700] = 6500 micro-USD   │ ◄── Cached in memory
 └─────────────┬───────────────────────────┘
               │
               ▼
@@ -995,20 +1002,20 @@ When user mints DigiDollars:
                ▼
 ┌──────────────────────────────────────────────────┐
 │ DigiDollar queries OracleBundleManager          │
-│ price = GetLatestPrice() → 50000 cents          │
+│ price = GetLatestPrice() → 6500 micro-USD       │
 └──────────────┬───────────────────────────────────┘
                ▼
 ┌──────────────────────────────────────────────────┐
 │ Collateral Calculation:                         │
 │                                                  │
-│ Mint amount:    $100.00 = 10,000 cents          │
+│ Mint amount:    $100.00 = 100,000,000 micro-USD │
 │ Collateral:     200% (Phase One)                │
-│ Oracle price:   50000 cents = $500.00 per DGB   │
+│ Oracle price:   6500 micro-USD = $0.0065/DGB    │
 │                                                  │
 │ Required DGB:                                    │
-│   ($100 × 2) ÷ $500/DGB = 0.4 DGB               │
+│   ($100 × 2) ÷ $0.0065/DGB = 30,769 DGB         │
 │                                                  │
-│ User must lock: 0.4 DGB to mint $100 DD         │
+│ User must lock: 30,769 DGB to mint $100 DD      │
 └──────────────────────────────────────────────────┘
 ```
 
@@ -1175,9 +1182,9 @@ FIELD-BY-FIELD EXPLANATION
 ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
 ┃ BYTES 6-13: Price (8 bytes, little-endian uint64)           ┃
 ┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
-┃ Format:  DigiDollar cents (100 cents = $1.00)              ┃
-┃ Example: 50 00 00 00 00 00 00 00 (LE) = 50 cents = $0.50   ┃
-┃ Range:   1 to 1,000 cents ($0.01 to $10.00 per DGB)        ┃
+┃ Format:  Micro-USD (1,000,000 = $1.00)                     ┃
+┃ Example: 62 19 00 00 00 00 00 00 (LE) = 6,500 = $0.0065    ┃
+┃ Range:   100 to 100,000,000 ($0.0001 to $100.00 per DGB)   ┃
 ┃ Endian:  Little-endian (LSB first, Intel/AMD byte order)   ┃
 ┃ Type:    uint64_t (unsigned 64-bit integer)                ┃
 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
@@ -1252,7 +1259,7 @@ Percentage of MAX_OP_RETURN_RELAY (83 bytes): 26.5% ✓
 **Input data**:
 ```
 Oracle ID:  0
-Price:      5 cents ($0.05/DGB)
+Price:      6500 micro-USD ($0.0065/DGB)
 Timestamp:  1,700,000,000 (Unix timestamp)
 ```
 
@@ -1265,7 +1272,7 @@ script << OP_ORACLE;           // Byte 1: 0xbf
 script << std::vector<uchar>{  // Bytes 2+ (17 bytes of data):
     0x01,                      // Version
     0x00,                      // Oracle ID
-    0x05, 0x00, 0x00, 0x00,   // Price (5 cents, little-endian)
+    0x62, 0x19, 0x00, 0x00,   // Price (6500 micro-USD, little-endian)
     0x00, 0x00, 0x00, 0x00,
     0x00, 0x2f, 0x50, 0x65,   // Timestamp (little-endian)
     0x00, 0x00, 0x00, 0x00
@@ -1292,7 +1299,7 @@ if (scriptPubKey[0] == OP_RETURN && scriptPubKey[1] == OP_ORACLE) {
     for (int i = 0; i < 8; ++i) {
         price |= (uint64_t(scriptPubKey[5 + i]) << (i * 8));
     }
-    // Result: 5 cents
+    // Result: 6500 micro-USD
 
     // Timestamp (bytes 13-20, little-endian)
     int64_t timestamp = 0;
@@ -1305,8 +1312,8 @@ if (scriptPubKey[0] == OP_RETURN && scriptPubKey[1] == OP_ORACLE) {
 
 **Verification**:
 ```
-Price bytes (little-endian): 05 00 00 00 00 00 00 00
-  = 5 × 1 = 5 cents ✓
+Price bytes (little-endian): 62 19 00 00 00 00 00 00
+  = 0x62 + (0x19 << 8) = 98 + 6400 = 6500 micro-USD ✓
 
 Timestamp bytes (little-endian): 00 2f 50 65 00 00 00 00
   = 0x00 + (0x2f << 8) + (0x50 << 16) + (0x65 << 24)
@@ -1389,7 +1396,7 @@ if (!bundle.IsValid()) {
 ```
 
 **IsValid() checks**:
-- ✅ Price in valid range (1-1,000 cents)
+- ✅ Price in valid range (100-100M micro-USD)
 - ✅ Timestamp not in future (+60 second tolerance)
 - ✅ Timestamp not too old (≤1 hour)
 
@@ -1533,8 +1540,8 @@ Without cache cleanup during reorganizations, you could have:
 ```
 Oracle Node (oracle.digibyte.io)
     │
-    │ 1. Fetch prices from 10 exchanges
-    │ 2. Calculate median: 5 cents
+    │ 1. Fetch prices from 12 exchanges
+    │ 2. Calculate median: 6500 micro-USD
     │ 3. Create COraclePriceMessage (128 bytes)
     │ 4. Sign with Schnorr signature
     │
@@ -1872,7 +1879,7 @@ Final size: ~150 bytes (merkle_root + aggregated_sig + metadata)
 ## Summary: Oracle System at a Glance
 
 ### What It Does
-- ✅ **Fetches** real DGB/USD prices from 10 exchanges every 15 seconds (external daemon)
+- ✅ **Fetches** real DGB/USD prices from 12 exchanges every 15 seconds (external daemon)
 - ✅ **Calculates** median price with outlier filtering (MAD algorithm)
 - ✅ **Broadcasts** signed messages via P2P network (2-5 second propagation)
 - ✅ **Stores** compact 21-byte format in every block (25.3% of OP_RETURN limit)
@@ -1944,7 +1951,7 @@ Final size: ~150 bytes (merkle_root + aggregated_sig + metadata)
 Before testnet launch:
 
 - [ ] Oracle daemon runs continuously (24+ hours)
-- [ ] All 10 exchanges return valid prices
+- [ ] All 12 exchanges return valid prices
 - [ ] P2P messages propagate to 95% of network
 - [ ] Miners include oracle data in coinbase
 - [ ] Block validation accepts valid data, rejects invalid
@@ -2012,7 +2019,7 @@ Before testnet launch:
 
 2. **Block Validation**
    - Parse compact 21-byte oracle format
-   - Validate price range (1-1,000 cents)
+   - Validate price range (100-100M micro-USD)
    - Validate timestamp freshness
    - Check oracle authorization (chainparams)
    - Phase One consensus (exactly 1 oracle)

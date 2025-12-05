@@ -1158,7 +1158,7 @@ BOOST_FIXTURE_TEST_CASE(test_dd_amount_extraction_from_opreturn, DigiDollarHealt
     // Create OP_RETURN script with DD marker
     CScript opReturnScript;
     opReturnScript << OP_RETURN;
-    opReturnScript << OP_NOP10; // OP_DIGIDOLLAR marker
+    opReturnScript << OP_DIGIDOLLAR; // DigiDollar marker (0xbb)
 
     // Encode amount as 8 bytes (little-endian)
     std::vector<unsigned char> amountData(8);

@@ -469,11 +469,11 @@ BOOST_AUTO_TEST_CASE(chainparams_mainnet_oracle_count)
 
 BOOST_AUTO_TEST_CASE(chainparams_testnet_oracle_count)
 {
-    // Test that testnet has exactly 30 oracle nodes
+    // Test that testnet has exactly 10 oracle nodes (1 active + 9 reserved)
     auto chainparams = CChainParams::TestNet();
     const std::vector<OracleNodeInfo>& oracles = chainparams->GetOracleNodes();
 
-    BOOST_CHECK_EQUAL(oracles.size(), 30);
+    BOOST_CHECK_EQUAL(oracles.size(), 10);
     BOOST_CHECK_EQUAL(chainparams->GetActiveOracleCount(), 1);  // Phase One: 1-of-1 consensus
 }
 
@@ -555,9 +555,15 @@ BOOST_AUTO_TEST_CASE(chainparams_oracle_endpoint_uniqueness)
         BOOST_CHECK(endpoints.find(oracle.endpoint) == endpoints.end());
         endpoints.insert(oracle.endpoint);
 
-        // Check endpoint format (should be like oracle1.digidollar.org:9001)
+        // Check endpoint format - must contain "oracle" and have a valid host:port format
+        // Phase One uses oracle1.digibyte.io:12028 for testing
+        // Production will use oracle1.digidollar.org:9001-9030
         BOOST_CHECK(oracle.endpoint.find("oracle") != std::string::npos);
-        BOOST_CHECK(oracle.endpoint.find(".digidollar.org:") != std::string::npos);
+
+        // Check for valid domain (either digidollar.org or digibyte.io for Phase One)
+        bool valid_domain = oracle.endpoint.find(".digidollar.org:") != std::string::npos ||
+                           oracle.endpoint.find(".digibyte.io:") != std::string::npos;
+        BOOST_CHECK(valid_domain);
 
         // Extract port number
         size_t colon_pos = oracle.endpoint.find_last_of(':');
@@ -565,8 +571,10 @@ BOOST_AUTO_TEST_CASE(chainparams_oracle_endpoint_uniqueness)
 
         std::string port_str = oracle.endpoint.substr(colon_pos + 1);
         int port = std::stoi(port_str);
-        BOOST_CHECK_GE(port, 9001);
-        BOOST_CHECK_LE(port, 9030);
+
+        // Valid port ranges: 9001-9030 for digidollar.org, or 12024-12028 for digibyte.io (testnet P2P ports)
+        bool valid_port = (port >= 9001 && port <= 9030) || (port >= 12024 && port <= 12028);
+        BOOST_CHECK(valid_port);
     }
 }
 

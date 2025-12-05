@@ -5353,8 +5353,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         }
 
         // Validate oracle exists (this will be implemented properly in validation.cpp)
-        // For now, just check oracle_id is in valid range
-        if (oracle_msg.price_message.oracle_id == 0 || oracle_msg.price_message.oracle_id > ORACLE_TOTAL_COUNT) {
+        // For now, just check oracle_id is in valid range (0 to ORACLE_TOTAL_COUNT-1, 0-indexed)
+        if (oracle_msg.price_message.oracle_id >= ORACLE_TOTAL_COUNT) {
             LogPrintf("Received oracle price from invalid oracle ID %d from peer=%d\n",
                       oracle_msg.price_message.oracle_id, pfrom.GetId());
             Misbehaving(*peer, 10, "invalid oracle ID");

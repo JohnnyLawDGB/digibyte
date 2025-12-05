@@ -6,9 +6,7 @@
 #include <consensus/amount.h>
 #include <primitives/transaction.h>
 #include <consensus/validation.h>
-#include <digidollar/validation.h>
-#include <digidollar/digidollar.h>
-#include <chainparams.h>
+#include <consensus/digidollar.h>
 
 bool CheckTransaction(const CTransaction& tx, TxValidationState& state)
 {
@@ -75,18 +73,9 @@ bool CheckTransaction(const CTransaction& tx, TxValidationState& state)
                     return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-dd-tx-type");
             }
 
-            // Validate DD amounts in outputs don't exceed limits
-            for (const auto& output : tx.vout) {
-                if (DigiDollar::IsDDTokenScript(output.scriptPubKey)) {
-                    CAmount ddAmount;
-                    if (!DigiDollar::ExtractDDAmount(output.scriptPubKey, ddAmount)) {
-                        return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-dd-amount-extraction");
-                    }
-                    if (ddAmount <= 0 || ddAmount > MAX_DIGIDOLLAR) {
-                        return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-dd-amount-range");
-                    }
-                }
-            }
+            // Note: DD amount validation (IsDDTokenScript, ExtractDDAmount) is performed
+            // in digidollar/validation.cpp which has access to the Phase 1 metadata registry.
+            // This consensus-level check only validates transaction structure.
         } catch (const std::exception&) {
             return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-dd-tx-format");
         }

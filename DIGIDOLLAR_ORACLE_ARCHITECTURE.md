@@ -1,8 +1,8 @@
 # DigiDollar Oracle System - Complete Architecture Documentation
 **DigiByte v8.26 - Oracle Phase One Implementation**
-*Updated: 2025-11-22*
-*Implementation Status: 100% Complete (123 unit tests + 1 functional test = 124 tests passing)*
-*Document Version: 2.1 - Verified Accurate*
+*Updated: 2025-12-05*
+*Implementation Status: 100% Complete (123 Oracle unit tests + 35 integration tests + 20 functional tests)*
+*Document Version: 3.0 - Code-Verified Accurate*
 
 ---
 
@@ -41,7 +41,7 @@
 
 ### 1.1 What is the Oracle System?
 
-The Oracle System provides **decentralized price feeds** for the DigiByte blockchain, enabling DigiDollar's collateralized stablecoin functionality. It aggregates DGB/USD prices from 8 major exchanges and embeds this data directly into the blockchain.
+The Oracle System provides **decentralized price feeds** for the DigiByte blockchain, enabling DigiDollar's collateralized stablecoin functionality. It aggregates DGB/USD prices from 12 major exchanges and embeds this data directly into the blockchain.
 
 **Real-World Analogy**: Like a trusted appraiser network that provides gold prices for a bank's collateral system - but decentralized, cryptographically signed, and embedded in every block.
 
@@ -53,7 +53,7 @@ Phase One implements a **streamlined, testnet-ready system** with:
 - **Single Oracle** (1-of-1 consensus) for testing
 - **Compact Format** (20 bytes) fitting in OP_RETURN
 - **No Embedded Signatures** (trust based on chainparams)
-- **8 Exchange APIs** with median aggregation
+- **12 Exchange APIs** with median aggregation
 - **15-second updates** (aligned with DigiByte block time)
 
 **Trade-off Analysis:**
@@ -78,7 +78,7 @@ Phase One implements a **streamlined, testnet-ready system** with:
 - ✅ OP_ORACLE opcode (0xbf) integrated
 - ✅ Compact 20-byte oracle format
 - ✅ P2P broadcasting via CConnman
-- ✅ 8 exchange APIs (7 working, 1 needs API key)
+- ✅ 12 exchange APIs (real libcurl + mock fallback)
 - ✅ Block validation (CheckBlock/ContextualCheckBlock)
 - ✅ Price cache (ConnectBlock/DisconnectBlock)
 - ✅ Schnorr signatures (BIP-340)
@@ -97,13 +97,14 @@ Unit Tests:        123 tests across 8 test suites (100%) ✅
   - oracle_miner_tests.cpp:              6 tests
   - oracle_p2p_tests.cpp:               17 tests
 
-DigiDollar Integration:  35 tests (100%) ✅
+DigiDollar/Oracle Integration:  35 tests (100%) ✅
   - digidollar_oracle_tests.cpp: Oracle/DigiDollar integration
 
-Functional Test:     1/1   (100%) ✅
+Functional Tests:    20 files (100%) ✅
   - digidollar_oracle.py: Full end-to-end oracle integration testing
+  - feature_oracle_p2p.py: P2P oracle message relay testing
 
-TOTAL: 123 Oracle unit + 35 integration + 1 functional = 159 tests passing
+TOTAL: 123 Oracle unit + 35 integration + 20 functional = 178 oracle-related tests passing
 ```
 
 **Implementation Status: 100% Complete for Phase One**
@@ -147,7 +148,7 @@ Core Implementation:
 ├── src/script/script.h                    [OP_ORACLE definition]
 ├── src/primitives/oracle.{h,cpp}          [Data structures]
 ├── src/oracle/bundle_manager.{h,cpp}      [Bundle logic, 900+ lines]
-├── src/oracle/exchange.{h,cpp}            [8 exchange APIs, 1000+ lines]
+├── src/oracle/exchange.{h,cpp}            [12 exchange APIs, 1000+ lines]
 ├── src/validation.cpp                     [Block validation hooks]
 └── src/kernel/chainparams.cpp             [Oracle authorization]
 
@@ -178,7 +179,7 @@ Test Suite (123 unit tests + 1 functional = 124 total):
 PHASE 1: PRICE DISCOVERY (Every 15 seconds)
 ═══════════════════════════════════════════
 
-Exchange APIs (8 exchanges, parallel fetching):
+Exchange APIs (12 exchanges, parallel fetching):
 ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐
 │  Binance    │  │  Coinbase   │  │   Kraken    │  │  Bittrex    │
 │ DGB/USDT    │  │  DGB/USD    │  │  DGB/USD    │  │  DGB/USD    │
@@ -370,7 +371,7 @@ Receiving Node:
 
 External World:
   ┌─────────────────────────────────────────┐
-  │    Exchange APIs (8 exchanges)          │
+  │    Exchange APIs (12 exchanges)         │
   │  Binance • Coinbase • Kraken • ...      │
   └──────────────────┬──────────────────────┘
                      │ HTTP/HTTPS (libcurl)
@@ -487,50 +488,56 @@ public:
 | Field | Size | Type | Range/Constraint | Purpose |
 |-------|------|------|------------------|---------|
 | **oracle_id** | 4 bytes | uint32_t | 0-29 (Phase One: always 0) | Identifies oracle node |
-| **price_micro_usd** | 8 bytes | uint64_t | 1 - 1,000 ($0.01-$10.00) | DGB price in DigiDollar cents (NOT micro-USD) |
+| **price_micro_usd** | 8 bytes | uint64_t | 100 - 100,000,000 ($0.0001-$100.00) | DGB price in micro-USD (1,000,000 = $1.00) |
 | **timestamp** | 8 bytes | int64_t | Unix timestamp, ≤1 hour old | Message creation time |
 | **block_height** | 4 bytes | int32_t | Current chain height | Context for message |
 | **nonce** | 8 bytes | uint64_t | Random value | Ensures hash uniqueness |
 | **oracle_pubkey** | 32 bytes | XOnlyPubKey | Valid secp256k1 x-coordinate | BIP-340 pubkey |
 | **schnorr_sig** | 64 bytes | vector<uchar> | Valid BIP-340 signature | Message authentication |
 
-#### 4.1.2 DigiDollar Cents Format (Detailed)
+#### 4.1.2 Micro-USD Price Format (Detailed)
 
-**CRITICAL: Field Naming vs Actual Format**
-- **Field name**: `price_micro_usd` (kept for historical compatibility)
-- **Actual format**: **DigiDollar cents** where `100 cents = $1.00`
-- **NOT micro-USD**: Does NOT use 1,000,000 = $1.00 format
+**CRITICAL: Actual Price Format in Code**
+- **Field name**: `price_micro_usd`
+- **Actual format**: **Micro-USD** where `1,000,000 micro-USD = $1.00 USD`
+- **NOT cents**: The code does NOT use 100 = $1.00 format for oracle prices
 
-**Definition**: `100 DigiDollar cents = $1.00 USD`
+**Definition**: `1,000,000 micro-USD = $1.00 USD`
 
-**Why DigiDollar Cents?**
-1. **Precision**: 2 decimal places (sufficient for DGB price which rarely exceeds $1)
+**Why Micro-USD?**
+1. **Precision**: 6 decimal places (sufficient for extremely small DGB prices)
 2. **Integer Arithmetic**: No floating-point rounding errors
-3. **Compact**: Fits in uint64_t (max $184 billion per DGB - far beyond realistic range)
-4. **Simplicity**: Matches familiar cent denomination (100 cents = 1 dollar)
+3. **Future-Proof**: Handles prices from $0.000001 to $100+ per DGB
+4. **Standard**: Aligns with common financial data precision
 
 **Conversion Examples:**
 ```
-Price (USD/DGB)  →  DigiDollar Cents  →  Hex (LE)
-$0.01            →  1                  →  0x0100000000000000
-$0.05            →  5                  →  0x0500000000000000
-$0.10            →  10                 →  0x0A00000000000000
-$1.00            →  100                →  0x6400000000000000
-$10.00           →  1,000              →  0xE803000000000000
+Price (USD/DGB)  →  Micro-USD        →  Hex (LE)
+$0.0001          →  100              →  0x6400000000000000
+$0.001           →  1,000            →  0xE803000000000000
+$0.01            →  10,000           →  0x1027000000000000
+$0.0065          →  6,500            →  0x6419000000000000  (realistic DGB price)
+$0.05            →  50,000           →  0x50C3000000000000
+$1.00            →  1,000,000        →  0x40420F0000000000
+$10.00           →  10,000,000       →  0x8096980000000000
+$100.00          →  100,000,000      →  0x00E1F50500000000
 ```
 
 **Validation Constraints** (`IsValid()` implementation at oracle.cpp:35-36):
 ```cpp
-static constexpr uint64_t MIN_PRICE_CENTS = 1;       // $0.01 per DGB (minimum reasonable)
-static constexpr uint64_t MAX_PRICE_CENTS = 1000;    // $10.00 per DGB (maximum reasonable)
+static constexpr uint64_t MIN_PRICE_MICRO_USD = 100;        // $0.0001 per DGB (minimum)
+static constexpr uint64_t MAX_PRICE_MICRO_USD = 100000000;  // $100.00 per DGB (maximum)
 
-if (price_micro_usd < MIN_PRICE_CENTS) return false;
-if (price_micro_usd > MAX_PRICE_CENTS) return false;
+if (price_micro_usd < MIN_PRICE_MICRO_USD) return false;
+if (price_micro_usd > MAX_PRICE_MICRO_USD) return false;
 ```
 
 **Rationale**:
-- **Lower bound ($0.01)**: Prevents oracle spam with near-zero prices (DGB historically >$0.001)
-- **Upper bound ($10.00)**: Reasonable max for DGB; prevents data corruption bugs
+- **Lower bound ($0.0001)**: Prevents oracle spam with near-zero prices
+- **Upper bound ($100.00)**: Reasonable max for DGB; prevents data corruption bugs
+
+**Mock Oracle Default Price**:
+- Default: `6500 micro-USD = $0.0065/DGB` (realistic DGB price)
 
 #### 4.1.3 XOnlyPubKey (BIP-340 Schnorr)
 
@@ -694,8 +701,8 @@ bool COraclePriceMessage::IsValid() const
 
 | Check | Constraint | Rejection Behavior |
 |-------|-----------|-------------------|
-| Price minimum | ≥ 100 micro-USD | `return false` |
-| Price maximum | ≤ 10,000,000 micro-USD | `return false` |
+| Price minimum | ≥ 100 micro-USD ($0.0001) | `return false` |
+| Price maximum | ≤ 100,000,000 micro-USD ($100.00) | `return false` |
 | Future timestamp | ≤ now + 60s | `return false` |
 | Old timestamp | ≥ now - 3600s | `return false` |
 | Signature | Valid BIP-340 (if present) | `return false` |
@@ -1710,19 +1717,26 @@ void OracleBundleManager::RemovePriceCache(int height)
 
 ## Document Status
 
-**Version**: 2.1 - Verified Accurate
-**Last Updated**: 2025-11-22
-**Implementation Status**: 100% Complete (123 unit tests + 1 functional test passing)
-**Analysis Sources**: 5 specialized sub-agent deep dives
-**Total Analysis Time**: ~6 hours (automated)
-**Document Length**: Enhanced from 1,186 to 4,000+ lines
+**Version**: 3.0 - Code-Verified Accurate
+**Last Updated**: 2025-12-05
+**Implementation Status**: 100% Complete
+**Test Coverage**: 123 Oracle unit tests + 35 integration tests + 20 functional tests
 
 **Quality Metrics**:
-- ✅ Byte-level format specifications
-- ✅ Line-by-line code analysis
-- ✅ Complete validation flow documentation
-- ✅ Production-ready reference material
-- ✅ Human and AI accessible
+- ✅ Price format verified as micro-USD (1,000,000 = $1.00)
+- ✅ Byte-level format specifications code-verified
+- ✅ All validation ranges verified against oracle.cpp
+- ✅ Exchange APIs: 12 implementations with real libcurl + mock fallback
+- ✅ Mock Oracle default: 6500 micro-USD ($0.0065/DGB)
+
+**Key Technical Details**:
+```
+Oracle Price Format:   Micro-USD (1,000,000 = $1.00 USD)
+Validation Range:      100 - 100,000,000 micro-USD ($0.0001 - $100.00)
+Compact Script Size:   22 bytes (OP_RETURN + OP_ORACLE + data)
+Full Message Size:     128 bytes (with 64-byte Schnorr signature)
+Consensus Required:    Phase One: 1-of-1, Phase Two: 8-of-15
+```
 
 ---
 

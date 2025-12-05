@@ -73,12 +73,83 @@ ScriptType IdentifyScriptType(const CScript& script) {
     return ScriptType::NOT_DIGIDOLLAR;
 }
 
-// Note: The following functions are defined in consensus/digidollar.cpp
-// to avoid duplicate symbols (these were previously duplicated here):
-// - ExtractDDAmount()
-// - IsDDTokenScript()
-// - HasDigiDollarMarker()
-// - GetDigiDollarTxType()
+// Phase 1: These functions use the metadata registry for scripts created by
+// Create*P2TR functions. Phase 2 will use UTXO database tracking.
+// Note: HasDigiDollarMarker() and GetDigiDollarTxType() are still in
+// consensus/digidollar.cpp as they work on transaction version fields.
+
+bool IsDDTokenScript(const CScript& script) {
+    // Phase 1: Use metadata registry for scripts created by CreateDigiDollarP2TR
+    ScriptType type = IdentifyScriptType(script);
+    return type == ScriptType::DD_TOKEN_OUTPUT;
+}
+
+bool ExtractDDAmount(const CScript& script, CAmount& amount) {
+    // Phase 1: Use metadata registry for scripts created by Create*P2TR functions
+    ScriptMetadata metadata;
+    if (GetScriptMetadata(script, metadata)) {
+        if (metadata.type == ScriptType::DD_TOKEN_OUTPUT ||
+            metadata.type == ScriptType::COLLATERAL_LOCK) {
+            amount = metadata.ddAmount;
+            return true;
+        }
+    }
+
+    // Fallback: Try to parse from OP_RETURN format (for real transactions)
+    // This handles the case where scripts come from actual blockchain data
+    auto pc = script.begin();
+    opcodetype opcode;
+    std::vector<unsigned char> data;
+
+    // Check for OP_RETURN
+    if (!script.GetOp(pc, opcode, data) || opcode != OP_RETURN) {
+        amount = -1;
+        return false;
+    }
+
+    // Get next element
+    if (!script.GetOp(pc, opcode, data)) {
+        amount = -1;
+        return false;
+    }
+
+    // Format 1: OP_RETURN OP_DIGIDOLLAR <8-byte little-endian amount>
+    // OP_DIGIDOLLAR (0xbb) marks DigiDollar outputs
+    if (opcode == OP_DIGIDOLLAR) {
+        // Read the amount data
+        if (script.GetOp(pc, opcode, data) && data.size() == 8) {
+            // Parse 8-byte little-endian amount
+            amount = 0;
+            for (size_t i = 0; i < 8; i++) {
+                amount |= static_cast<int64_t>(data[i]) << (i * 8);
+            }
+            if (amount >= 1 && amount <= 100000000000LL) {
+                return true;
+            }
+        }
+    }
+    // Format 2: OP_RETURN <"DD"> <txType> <ddAmount> <lockHeight>
+    else if (data.size() == 2 && data[0] == 'D' && data[1] == 'D') {
+        // Skip txType
+        if (script.GetOp(pc, opcode, data)) {
+            // Get ddAmount
+            if (script.GetOp(pc, opcode, data)) {
+                try {
+                    CScriptNum scriptNum(data, false);
+                    amount = scriptNum.GetInt64();
+                    if (amount >= 1 && amount <= 100000000000LL) {
+                        return true;
+                    }
+                } catch (const scriptnum_error&) {
+                    // Fall through
+                }
+            }
+        }
+    }
+
+    amount = -1;
+    return false;
+}
 
 bool IsCollateralScript(const CScript& script) {
     // Phase 1: Use metadata to identify collateral scripts

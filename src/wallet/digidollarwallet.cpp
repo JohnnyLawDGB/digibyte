@@ -1400,6 +1400,31 @@ CAmount DigiDollarWallet::GetDDFromUTXO(const COutPoint& outpoint) const {
     return dd_amount;
 }
 
+bool DigiDollarWallet::IsDDTokenUnspent(const uint256& dd_timelock_id) const {
+    // DD token output is always at index 1 of the mint transaction
+    COutPoint dd_token_outpoint(dd_timelock_id, 1);
+
+    // Check if the DD token UTXO exists in our tracking map
+    auto it = dd_utxos.find(dd_token_outpoint);
+    if (it == dd_utxos.end()) {
+        // Not in our tracking map - could be already spent/transferred
+        LogPrintf("DigiDollar: IsDDTokenUnspent - UTXO %s:1 not in dd_utxos map\n",
+                  dd_timelock_id.ToString());
+        return false;
+    }
+
+    // Verify UTXO is still unspent in the wallet
+    if (m_wallet && m_wallet->IsSpent(dd_token_outpoint)) {
+        LogPrintf("DigiDollar: IsDDTokenUnspent - UTXO %s:1 is spent (transferred away)\n",
+                  dd_timelock_id.ToString());
+        return false;
+    }
+
+    LogPrintf("DigiDollar: IsDDTokenUnspent - UTXO %s:1 is still unspent (%d cents)\n",
+              dd_timelock_id.ToString(), it->second);
+    return true;
+}
+
 void DigiDollarWallet::AddCollateralPosition(const WalletCollateralPosition& position) {
     try {
         // Write position to database (this also updates the in-memory map)

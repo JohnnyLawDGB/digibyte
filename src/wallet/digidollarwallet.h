@@ -281,6 +281,14 @@ public:
     }
 
     /**
+     * Check if DD token UTXO for a position is still unspent
+     * Used to determine if a vault can still be redeemed
+     * @param dd_timelock_id Position ID (mint tx hash)
+     * @return true if DD token UTXO is still spendable
+     */
+    bool IsDDTokenUnspent(const uint256& dd_timelock_id) const;
+
+    /**
      * Add a collateral position to the wallet
      * @param position The position to add
      */

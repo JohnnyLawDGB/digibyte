@@ -1197,7 +1197,11 @@ RPCHelpMan listdigidollarpositions()
                 int healthRatio = (pos.dgb_collateral > 0) ?
                     ((pos.dd_minted * 100) / pos.dgb_collateral) : 0;
                 position.pushKV("health_ratio", healthRatio);
-                position.pushKV("can_redeem", blocksRemaining == 0 && pos.is_active);
+
+                // can_redeem requires: unlocked, active, AND has collateral
+                // Received DD (dgb_collateral=0) cannot be redeemed - only spent/transferred
+                bool canRedeem = blocksRemaining == 0 && pos.is_active && pos.dgb_collateral > 0;
+                position.pushKV("can_redeem", canRedeem);
 
                 // Dates (simple conversion)
                 position.pushKV("created_date", "N/A"); // TODO: Add creation timestamp

@@ -38,6 +38,7 @@
 #include <logging.h> // for LogPrintf
 #include <digidollar/txbuilder.h> // for MintTxBuilder
 #include <oracle/mock_oracle.h> // for MockOracleManager
+#include <QUrl> // for QUrl::toPercentEncoding
 #include <kernel/chainparams.h> // for CChainParams
 
 #include <stdint.h>
@@ -1036,7 +1037,10 @@ WalletModel::DigiDollarRedeemResult WalletModel::redeemDigiDollar(const QString&
 
         UniValue result;
         try {
-            result = m_node.executeRpc("redeemdigidollar", params, "");
+            // Construct wallet URI like rpcconsole does
+            QByteArray encodedName = QUrl::toPercentEncoding(getWalletName());
+            std::string uri = "/wallet/" + std::string(encodedName.constData(), encodedName.length());
+            result = m_node.executeRpc("redeemdigidollar", params, uri);
         } catch (const UniValue& objError) {
             std::string errorMsg = objError.find_value("message").get_str();
             LogPrintf("DigiDollar Qt: Redeem RPC failed - %s\n", errorMsg);
@@ -1166,7 +1170,10 @@ CAmount WalletModel::calculateRequiredCollateral(CAmount ddAmount, int lockTier)
 
 UniValue WalletModel::executeRpc(const std::string& command, const UniValue& params) const
 {
-    return m_node.executeRpc(command, params, "");
+    // Construct wallet URI like rpcconsole does
+    QByteArray encodedName = QUrl::toPercentEncoding(getWalletName());
+    std::string uri = "/wallet/" + std::string(encodedName.constData(), encodedName.length());
+    return m_node.executeRpc(command, params, uri);
 }
 
 QString WalletModel::getNewDigiDollarAddress(const QString& label)

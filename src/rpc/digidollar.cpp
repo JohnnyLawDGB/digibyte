@@ -906,6 +906,20 @@ RPCHelpMan redeemdigidollar()
                               ddAmount, foundPosition.dd_minted));
             }
 
+            // CRITICAL FIX: DD tokens are fungible - any DD can be used to redeem a vault
+            // Check if user has enough DD balance (from any source) to cover redemption
+            std::vector<COutPoint> selectedDDUtxos;
+            CAmount selectedDDTotal = 0;
+            if (!dd_wallet->SelectDDCoins(ddAmount, selectedDDUtxos, selectedDDTotal)) {
+                CAmount walletBalance = dd_wallet->GetDDBalance();
+                throw JSONRPCError(RPC_WALLET_ERROR,
+                    strprintf("Insufficient DD balance for redemption. Need %d cents, have %d cents. "
+                              "You can use DD from any source to redeem a vault.",
+                              ddAmount, walletBalance));
+            }
+            LogPrintf("DigiDollar: Selected %zu DD UTXOs totaling %d cents for redemption of %d cents\n",
+                      selectedDDUtxos.size(), selectedDDTotal, ddAmount);
+
             // Get oracle price
             CAmount oraclePrice = MockOracleManager::GetInstance().GetCurrentPrice();
             if (oraclePrice <= 0) {
@@ -924,7 +938,7 @@ RPCHelpMan redeemdigidollar()
 
             DigiDollar::TxBuilderRedeemParams redeemParams;
             redeemParams.collateralOutpoint = COutPoint(positionId, 0); // Collateral is at vout 0
-            redeemParams.ddUtxos = {COutPoint(positionId, 1)};  // DD output is at vout 1
+            redeemParams.ddUtxos = selectedDDUtxos;  // Use any DD from wallet (fungible)
             redeemParams.ddToRedeem = ddAmount;
             redeemParams.path = DigiDollar::RedemptionPath::NORMAL;
             redeemParams.ownerKey = redemptionKey;

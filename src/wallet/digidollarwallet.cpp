@@ -2652,32 +2652,47 @@ bool DigiDollarWallet::SignDDInputs(CMutableTransaction& tx,
         LogPrintf("DigiDollar: SignDDInputs - Actual output key in script: %s\n", HexStr(outputKeyBytes));
 
         // CRITICAL: Check if this is a DD output (vout 1) or collateral output (vout 0)
-        // DD outputs (vout 1) are simple P2TR with key-path only
-        // Collateral outputs (vout 0) have MAST and require script-path spending
+        // DD outputs are simple P2TR with key-path only
+        // Collateral outputs have MAST and require script-path spending
+        //
+        // To distinguish: first check if there's a collateral position for this outpoint
+        // If there IS a collateral position -> script-path signing
+        // If there is NO collateral position -> it's a DD token output -> key-path signing
 
-        // Check output index - DD is always vout[1] in mint transactions
-        if (outpoint.n == 1) {
-            // This is a DD token output (vout 1) - use KEY-PATH signing
-            LogPrintf("DigiDollar: SignDDInputs - Output %s:%d is vout[1] (DD token), using key-path signing\n",
+        // First, check if this is a collateral output by looking for a registered position
+        WalletCollateralPosition position;
+        bool is_collateral = false;
+        for (const auto& [pos_id, pos] : collateral_positions) {
+            if (pos_id == outpoint.hash && outpoint.n == 0) {  // Collateral is always vout[0]
+                position = pos;
+                is_collateral = true;
+                break;
+            }
+        }
+
+        if (!is_collateral) {
+            // This is a DD token output - use KEY-PATH signing
+            // DD outputs use standard Taproot P2TR with tweaked key (key-path only, no merkle root)
+            LogPrintf("DigiDollar: SignDDInputs - Output %s:%d is DD token (no collateral position), using key-path signing\n",
                       outpoint.hash.ToString(), outpoint.n);
 
+            // Compute the expected tweaked output key (same tweak as CreateDigiDollarP2TR)
             auto tweaked = ownerXOnly.CreateTapTweak(nullptr);  // nullptr = no merkle root
             if (!tweaked) {
                 LogPrintf("DigiDollar: SignDDInputs - Failed to create tap tweak for key-path signing\n");
                 return false;
             }
-
             XOnlyPubKey expected_output_key = tweaked->first;
 
-            // Verify the output key matches our expectation
+            // Verify the output key matches the tweaked key
             if (outputKeyBytes.size() != 32 ||
                 !std::equal(outputKeyBytes.begin(), outputKeyBytes.end(), expected_output_key.begin())) {
-                LogPrintf("DigiDollar: SignDDInputs - Output key mismatch for key-path (expected: %s, got: %s)\n",
+                LogPrintf("DigiDollar: SignDDInputs - Output key mismatch for key-path (expected tweaked: %s, got: %s)\n",
                          HexStr(expected_output_key), HexStr(outputKeyBytes));
                 return false;
             }
 
-            LogPrintf("DigiDollar: SignDDInputs - Using KEY-PATH signing for DD token\n");
+            LogPrintf("DigiDollar: SignDDInputs - Using KEY-PATH signing for DD token (tweaked key)\n");
 
             // Calculate sighash for Taproot KEY-PATH spending
             uint256 sighash;
@@ -2694,11 +2709,11 @@ bool DigiDollarWallet::SignDDInputs(CMutableTransaction& tx,
 
             LogPrintf("DigiDollar: SignDDInputs - KEY-PATH sighash: %s\n", sighash.ToString());
 
-            // Sign with tweaked key (key-path signing)
-            // For simple P2TR (no merkle root), pass empty hash to apply tweak
+            // Sign WITH the Taproot tweak (standard key-path signing)
+            // Pass empty merkle root (zero hash) to apply the standard tweak
             std::vector<unsigned char> sig(64);
             uint256 aux = GetRandHash();
-            uint256 empty_merkle_root;  // Null/zero hash for simple P2TR
+            uint256 empty_merkle_root;  // Zero hash = empty merkle root for simple P2TR
 
             if (!ownerKey.SignSchnorr(sighash, sig, &empty_merkle_root, aux)) {
                 LogPrintf("DigiDollar: SignDDInputs - Failed to create key-path signature for input %d\n", i);
@@ -2715,23 +2730,10 @@ bool DigiDollarWallet::SignDDInputs(CMutableTransaction& tx,
             continue;  // Move to next input
         }
 
-        // This is vout[0] (collateral) - get position data to reconstruct MAST tree
-        WalletCollateralPosition position;
-        bool found_position = false;
-        for (const auto& [pos_id, pos] : collateral_positions) {
-            if (pos_id == outpoint.hash) {
-                position = pos;
-                found_position = true;
-                break;
-            }
-        }
-
-        if (!found_position) {
-            // No position found for collateral output - this shouldn't happen
-            LogPrintf("DigiDollar: SignDDInputs - No position found for collateral %s:%d\n",
-                      outpoint.hash.ToString(), outpoint.n);
-            return false;
-        }
+        // This is collateral (vout[0]) - position already found above
+        // Use the position data to reconstruct MAST tree
+        LogPrintf("DigiDollar: SignDDInputs - Output %s:%d is collateral, using script-path signing\n",
+                  outpoint.hash.ToString(), outpoint.n);
 
         // Rebuild the MAST tree using the same parameters as mint
         TaprootBuilder builder;
@@ -3276,26 +3278,30 @@ bool DigiDollarWallet::SignRedemptionTransaction(CMutableTransaction& tx,
         // Check if this is a DD token output (vout[1])
         if (outpoint.n == 1) {
             // This is a DD token output (vout 1) - use KEY-PATH signing
+            // DD outputs use standard BIP-341 Taproot with a tweaked pubkey (no merkle root)
+            // The output key = internal_key + H(internal_key), so we sign with tweaked private key
             LogPrintf("DigiDollar: SignRedemptionTransaction - Output %s:%d is vout[1] (DD token), using key-path signing\n",
                       outpoint.hash.ToString(), outpoint.n);
 
-            auto tweaked = ddOwnerXOnly.CreateTapTweak(nullptr);
+            // DD outputs are created with CreateDigiDollarP2TR which applies a Taproot tweak
+            // (owner.CreateTapTweak(nullptr) - standard BIP-341 key-path only P2TR)
+            // We must compute the tweaked key for verification and sign with the tweaked key
+            auto tweaked = ddOwnerXOnly.CreateTapTweak(nullptr);  // nullptr = no merkle root
             if (!tweaked) {
-                LogPrintf("DigiDollar: SignRedemptionTransaction - Failed to create tap tweak for key-path signing\n");
+                LogPrintf("DigiDollar: SignRedemptionTransaction - Failed to compute tweaked key for DD input\n");
                 return false;
             }
+            XOnlyPubKey tweakedOutputKey = tweaked->first;
 
-            XOnlyPubKey expected_output_key = tweaked->first;
-
-            // Verify the output key matches our expectation
+            // Verify the output key matches the TWEAKED pubkey (not raw)
             if (outputKeyBytes.size() != 32 ||
-                !std::equal(outputKeyBytes.begin(), outputKeyBytes.end(), expected_output_key.begin())) {
-                LogPrintf("DigiDollar: SignRedemptionTransaction - Output key mismatch for key-path (expected: %s, got: %s)\n",
-                         HexStr(expected_output_key), HexStr(outputKeyBytes));
+                !std::equal(outputKeyBytes.begin(), outputKeyBytes.end(), tweakedOutputKey.begin())) {
+                LogPrintf("DigiDollar: SignRedemptionTransaction - Output key mismatch for key-path (expected tweaked: %s, got: %s)\n",
+                         HexStr(tweakedOutputKey), HexStr(outputKeyBytes));
                 return false;
             }
 
-            LogPrintf("DigiDollar: SignRedemptionTransaction - Using KEY-PATH signing for DD token\n");
+            LogPrintf("DigiDollar: SignRedemptionTransaction - Using KEY-PATH signing for DD token (tweaked pubkey)\n");
 
             // Calculate sighash for Taproot KEY-PATH spending
             uint256 dd_sighash;
@@ -3313,18 +3319,20 @@ bool DigiDollarWallet::SignRedemptionTransaction(CMutableTransaction& tx,
             LogPrintf("DigiDollar: SignRedemptionTransaction - DD input %d KEY-PATH sighash: %s\n",
                       input_index, dd_sighash.ToString());
 
-            // Sign with tweaked key (key-path signing)
-            // For simple P2TR (no merkle root), pass empty hash to apply tweak
+            // Sign WITH the standard Taproot tweak (key-path spending)
+            // CRITICAL: For key-path spending, we MUST use &empty_merkle_root (zero hash)
+            // to apply the proper Taproot tweak. Using nullptr means NO tweak!
+            // This matches the working SignDDInputs code at line ~2718
             std::vector<unsigned char> dd_sig(64);
             uint256 dd_aux = GetRandHash();
-            uint256 empty_merkle_root;  // Null/zero hash for simple P2TR
+            uint256 empty_merkle_root;  // Zero hash = standard key-path tweak
 
             if (!ddOwnerKey.SignSchnorr(dd_sighash, dd_sig, &empty_merkle_root, dd_aux)) {
                 LogPrintf("DigiDollar: SignRedemptionTransaction - Failed to create key-path signature for input %d\n", input_index);
                 return false;
             }
 
-            LogPrintf("DigiDollar: SignRedemptionTransaction - Created key-path signature: %s\n", HexStr(dd_sig));
+            LogPrintf("DigiDollar: SignRedemptionTransaction - Created key-path signature (tweaked): %s\n", HexStr(dd_sig));
 
             // For Taproot KEY-PATH spending, witness stack is: [signature]
             tx.vin[input_index].scriptWitness.stack.clear();

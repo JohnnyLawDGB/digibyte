@@ -225,18 +225,20 @@ CScript CreateDigiDollarP2TR(const XOnlyPubKey& owner, CAmount ddAmount)
     }
 
     try {
-        // CRITICAL: DD token output must use the SAME Taproot tweak as the collateral output
-        // Otherwise redemption will fail because they have different keys
-        // Since we don't have the merkle root here, we use the SAME logic as CreateCollateral P2TR
-        // which is key-path only (nullptr merkle root)
-        // Both outputs will use the same tweak for key-path spending
-        auto tweaked = owner.CreateTapTweak(nullptr);
+        // Standard Taproot P2TR output with tweaked key
+        // The owner's x-only pubkey is tweaked with nullptr merkle root (key-path only)
+        // This is standard BIP-341 behavior for simple P2TR outputs.
+        //
+        // When signing, the wallet must apply the same tweak to the private key.
+        // For minted DD: owner key is stored, tweak is applied during signing
+        // For received DD: wallet already knows the tweaked key from the output
+        auto tweaked = owner.CreateTapTweak(nullptr);  // nullptr = no merkle root, key-path only
         if (!tweaked) {
             return CScript();
         }
         XOnlyPubKey output_key = tweaked->first;
 
-        // Create P2TR output with the tweaked key
+        // Create P2TR output with the TWEAKED key (standard Taproot)
         CScript scriptPubKey;
         scriptPubKey << OP_1 << ToByteVector(output_key);
 

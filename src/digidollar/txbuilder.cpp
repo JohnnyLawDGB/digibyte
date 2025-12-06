@@ -595,24 +595,25 @@ TxBuilderResult TransferTxBuilder::BuildTransferTransaction(const TxBuilderTrans
     if (ddChange > 0) {
         // Only create change if above dust threshold
         if (ddChange >= minOutput) {
-            // Create change output using same approach as recipient outputs
-            // Use the spender's public key directly without extra tweaking
+            // Apply Taproot tweak to change output (same as CreateDigiDollarP2TR)
+            // This ensures SignDDInputs can verify and sign the change output correctly.
+            // The signing code expects tweaked keys for key-path spending.
             CPubKey changePubkey = params.spenderKey.GetPubKey();
             XOnlyPubKey xonly(changePubkey);
 
-            // Apply Taproot tweak to get the output key
-            // This matches what CreateDigiDollarP2TR does
+            // Apply the standard Taproot tweak (nullptr = no merkle root, key-path only)
             auto tweaked = xonly.CreateTapTweak(nullptr);
             if (!tweaked) {
-                result.error = "Failed to create Taproot tweak for change output";
+                result.error = "Failed to create Taproot tweak for DD change output";
                 return result;
             }
-            XOnlyPubKey output_key = tweaked->first;
+            XOnlyPubKey tweaked_key = tweaked->first;
 
+            // Create P2TR output with TWEAKED key (matches CreateDigiDollarP2TR)
             CScript changeScript;
-            changeScript << OP_1 << ToByteVector(output_key);
+            changeScript << OP_1 << ToByteVector(tweaked_key);
             tx.vout.push_back(CTxOut(0, changeScript));
-            LogPrintf("DigiDollar: Added DD change output: %d cents\n", ddChange);
+            LogPrintf("DigiDollar: Added DD change output: %d cents (tweaked key)\n", ddChange);
         } else {
             // If change is dust, add it to fees (this violates strict conservation but handles dust)
             result.error = "DD change amount is below dust threshold";

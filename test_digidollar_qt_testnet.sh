@@ -15,18 +15,24 @@ echo ""
 # Configuration
 ORACLE_PRIVATE_KEY="0000000000000000000000000000000000000000000000000000000000000001"
 
-# Testnet ports - each instance needs unique ports
-BOB_PORT=12025      # P2P port
-BOB_RPC=14024       # RPC port
-ALICE_PORT=12026
-ALICE_RPC=14025
-CHARLIE_PORT=12027
-CHARLIE_RPC=14026
+# Mini Testnet ports - separate from main testnet (12028) to avoid blockchain conflicts
+# Starting at 12027 for P2P to create an isolated mini testnet
+BOB_PORT=12027      # P2P port (mini testnet base)
+BOB_RPC=14027       # RPC port
+ALICE_PORT=12029
+ALICE_RPC=14029
+CHARLIE_PORT=12030
+CHARLIE_RPC=14030
+
+# Data directories - use minitestnet to separate from main testnet5 blockchain
+BOB_DATADIR="/tmp/bob_minitestnet"
+ALICE_DATADIR="/tmp/alice_minitestnet"
+CHARLIE_DATADIR="/tmp/charlie_minitestnet"
 
 # CLI commands for each node (must use datadir for cookie auth AND explicit rpcport)
-BOB_CLI="./src/digibyte-cli -testnet -datadir=/tmp/bob_testnet -rpcport=$BOB_RPC"
-ALICE_CLI="./src/digibyte-cli -testnet -datadir=/tmp/alice_testnet -rpcport=$ALICE_RPC"
-CHARLIE_CLI="./src/digibyte-cli -testnet -datadir=/tmp/charlie_testnet -rpcport=$CHARLIE_RPC"
+BOB_CLI="./src/digibyte-cli -testnet -datadir=$BOB_DATADIR -rpcport=$BOB_RPC"
+ALICE_CLI="./src/digibyte-cli -testnet -datadir=$ALICE_DATADIR -rpcport=$ALICE_RPC"
+CHARLIE_CLI="./src/digibyte-cli -testnet -datadir=$CHARLIE_DATADIR -rpcport=$CHARLIE_RPC"
 
 # Colors for output
 RED='\033[0;31m'
@@ -127,9 +133,8 @@ pkill -f "digibyte-qt.*testnet" 2>/dev/null || true
 pkill -f "digibyted.*testnet" 2>/dev/null || true
 sleep 2
 
-rm -rf /tmp/bob_testnet /tmp/alice_testnet /tmp/charlie_testnet
-rm -rf ~/.digibyte/testnet5/ 2>/dev/null || true
-mkdir -p /tmp/bob_testnet /tmp/alice_testnet /tmp/charlie_testnet
+rm -rf $BOB_DATADIR $ALICE_DATADIR $CHARLIE_DATADIR
+mkdir -p $BOB_DATADIR $ALICE_DATADIR $CHARLIE_DATADIR
 print_status "ok" "Clean environment ready"
 echo ""
 
@@ -146,7 +151,7 @@ env -i \
     PATH="${PATH}" \
     ./src/qt/digibyte-qt \
     -testnet \
-    -datadir=/tmp/bob_testnet \
+    -datadir=$BOB_DATADIR \
     -port=$BOB_PORT \
     -rpcport=$BOB_RPC \
     -server \
@@ -169,7 +174,7 @@ else
 fi
 
 # Read Bob's cookie for peer connections
-BOB_COOKIE=$(cat /tmp/bob_testnet/testnet5/.cookie 2>/dev/null || echo "")
+BOB_COOKIE=$(cat $BOB_DATADIR/testnet5/.cookie 2>/dev/null || echo "")
 echo ""
 
 # Step 3: Create Bob's wallet and mine initial blocks
@@ -220,7 +225,7 @@ env -i \
     PATH="${PATH}" \
     ./src/qt/digibyte-qt \
     -testnet \
-    -datadir=/tmp/alice_testnet \
+    -datadir=$ALICE_DATADIR \
     -port=$ALICE_PORT \
     -rpcport=$ALICE_RPC \
     -server \
@@ -259,7 +264,7 @@ env -i \
     PATH="${PATH}" \
     ./src/qt/digibyte-qt \
     -testnet \
-    -datadir=/tmp/charlie_testnet \
+    -datadir=$CHARLIE_DATADIR \
     -port=$CHARLIE_PORT \
     -rpcport=$CHARLIE_RPC \
     -server \

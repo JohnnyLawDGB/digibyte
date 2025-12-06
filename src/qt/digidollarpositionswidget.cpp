@@ -434,7 +434,13 @@ void DigiDollarPositionsWidget::loadPositionsFromWallet()
             continue;
         }
 
-        // Show ALL minted positions including redeemed ones
+        // Skip redeemed (inactive) positions - they no longer have active vaults
+        // The redemption TX will appear in the Overview tab with proper confirmation status
+        if (!wp.is_active) {
+            continue;
+        }
+
+        // Show only ACTIVE minted positions
         DigiDollarPosition pos;
 
         // Position ID (use txid as string)

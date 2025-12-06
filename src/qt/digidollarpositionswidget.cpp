@@ -417,9 +417,6 @@ void DigiDollarPositionsWidget::loadPositionsFromWallet()
         return;
     }
 
-    // Get wallet backend interface
-    interfaces::Wallet& wallet = m_walletModel->wallet();
-
     // Get current blockchain height for timelock calculations
     int currentHeight = m_clientModel->getNumBlocks();
 
@@ -431,7 +428,13 @@ void DigiDollarPositionsWidget::loadPositionsFromWallet()
     std::vector<WalletCollateralPosition> walletPositions = GetWalletPositions();
 
     for (const auto& wp : walletPositions) {
-        // Show ALL positions including redeemed ones
+        // Skip positions with 0 collateral - these are RECEIVED DD, not minted vaults
+        // Only minted vaults (where user locked collateral) should appear in the Vault tab
+        if (wp.dgb_collateral == 0) {
+            continue;
+        }
+
+        // Show ALL minted positions including redeemed ones
         DigiDollarPosition pos;
 
         // Position ID (use txid as string)

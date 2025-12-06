@@ -344,6 +344,7 @@ MINT_RESULT=$($BOB_CLI -rpcwallet=bob mintdigidollar 10000 0 2>&1)
 
 if echo "$MINT_RESULT" | jq -e '.txid' > /dev/null 2>&1; then
     MINT_TXID=$(echo "$MINT_RESULT" | jq -r '.txid')
+    BOB_FIRST_MINT_TX="$MINT_TXID"  # Save for later redemption test in Step 23
     print_status "ok" "Mint successful! TX: ${MINT_TXID:0:16}..."
     echo "  DD Minted: $(echo $MINT_RESULT | jq -r '.dd_minted') cents"
     echo "  Collateral: $(echo $MINT_RESULT | jq -r '.dgb_collateral') DGB"
@@ -649,13 +650,60 @@ sleep 5
 
 display_all_balances
 
+# Step 23: Bob redeems first $100 vault (fungible DD test)
+echo "=== Step 23: Bob redeems first \$100 vault (fungible DD) ==="
+echo "Testing that ANY DD can be used to redeem a vault (DD is fungible)..."
+echo "Bob originally minted \$100 DD, sent \$50 to others, but has \$260+ DD total now."
+echo ""
+
+BOB_DD_BALANCE=$($BOB_CLI -rpcwallet=bob getdigidollarbalance 2>/dev/null | jq -r '.dd_balance_cents' 2>/dev/null || echo "0")
+echo "Bob's current DD balance: $BOB_DD_BALANCE cents (\$$(echo "scale=2; $BOB_DD_BALANCE / 100" | bc))"
+
+echo "Attempting to redeem first vault (\$100 DD = 10000 cents) using $BOB_FIRST_MINT_TX..."
+set +e
+FINAL_REDEEM_RESULT=$($BOB_CLI -rpcwallet=bob redeemdigidollar $BOB_FIRST_MINT_TX 10000 2>&1)
+FINAL_REDEEM_EXIT=$?
+set -e
+
+if [ $FINAL_REDEEM_EXIT -eq 0 ] && echo "$FINAL_REDEEM_RESULT" | jq -e '.txid' > /dev/null 2>&1; then
+    FINAL_REDEEM_TXID=$(echo "$FINAL_REDEEM_RESULT" | jq -r '.txid')
+    print_status "ok" "Redemption SUCCEEDED! TX: ${FINAL_REDEEM_TXID:0:16}..."
+    echo "  DD Redeemed: $(echo $FINAL_REDEEM_RESULT | jq -r '.dd_redeemed') cents"
+    echo "  Collateral returned: $(echo $FINAL_REDEEM_RESULT | jq -r '.dgb_returned') DGB"
+
+    echo ""
+    echo "Mining 7 blocks to confirm redemption..."
+    $BOB_CLI generatetoaddress 7 "$BOB_ADDR" > /dev/null 2>&1
+    sleep 5
+
+    echo ""
+    echo "Verifying balances after redemption..."
+    display_all_balances
+
+    # Calculate expected totals after $100 redemption
+    # Before: Bob $260, Alice $135, Charlie $205 = $600 total
+    # After:  Bob $160, Alice $135, Charlie $205 = $500 total
+    TOTAL_AFTER=$($BOB_CLI getdigidollarstats 2>/dev/null | jq -r '.total_dd_supply' || echo "0")
+    echo "Total DD Supply after redemption: $TOTAL_AFTER cents"
+
+    if [ "$TOTAL_AFTER" -lt 60000 ]; then
+        print_status "ok" "Total reduced from 60000 to $TOTAL_AFTER cents (correct)"
+    else
+        print_status "fail" "Total should have reduced, got: $TOTAL_AFTER"
+    fi
+else
+    print_status "fail" "Redemption FAILED: $FINAL_REDEEM_RESULT"
+    echo "  This should not happen - Bob has sufficient DD balance for redemption"
+fi
+echo ""
+
 # Mine 2 final blocks for network sync
 echo "Mining 2 final blocks for network upgrade sync..."
 $BOB_CLI generatetoaddress 2 "$BOB_ADDR" > /dev/null 2>&1
 sleep 3
 
-# Step 23: Final network state
-echo "=== Step 23: Final DigiDollar Network State ==="
+# Step 24: Final network state
+echo "=== Step 24: Final DigiDollar Network State ==="
 display_network_stats "Final State (After All Mints - Network Stress Test)"
 display_all_balances
 

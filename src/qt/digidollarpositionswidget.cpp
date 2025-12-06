@@ -434,13 +434,17 @@ void DigiDollarPositionsWidget::loadPositionsFromWallet()
             continue;
         }
 
-        // Skip redeemed (inactive) positions - they no longer have active vaults
-        // The redemption TX will appear in the Overview tab with proper confirmation status
-        if (!wp.is_active) {
-            continue;
-        }
-
-        // Show only ACTIVE minted positions
+        // NOTE: We do NOT filter by IsDDTokenUnspent here anymore!
+        //
+        // When the user spends DD from a vault (e.g., sends $30 to Alice), the original mint
+        // output at txid:1 gets spent and user receives DD change at a NEW UTXO. But the
+        // collateral is STILL LOCKED in the vault! The vault should still be shown.
+        //
+        // Filtering by dgb_collateral > 0 (done above) is sufficient:
+        // - Minted vaults: dgb_collateral > 0, shown in Vault tab
+        // - Received DD: dgb_collateral = 0, skipped (correctly filtered above)
+        //
+        // Show ALL minted positions (active or redeemed) for the user who locked the collateral
         DigiDollarPosition pos;
 
         // Position ID (use txid as string)
@@ -462,6 +466,8 @@ void DigiDollarPositionsWidget::loadPositionsFromWallet()
         pos.health = CalculatePositionHealth(wp.dd_minted, wp.dgb_collateral, oraclePrice);
 
         // Can redeem if timelock expired AND position is still active
+        // NOTE: We trust that the user owns this vault (has collateral locked). The redemption
+        // process will validate the DD balance at redemption time.
         pos.canRedeem = (pos.blocksRemaining == 0) && wp.is_active;
 
         // Track redeemed status

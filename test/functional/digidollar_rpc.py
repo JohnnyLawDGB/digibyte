@@ -229,7 +229,11 @@ class DigiDollarRPCTest(DigiByteTestFramework):
 
         assert isinstance(dd_address, str)
         assert len(dd_address) > 20  # Reasonable address length
-        assert dd_address.startswith('DD')  # DD address prefix (base58 encoded)
+        # DD address prefix depends on network:
+        # - Mainnet: "DD" prefix
+        # - Testnet/Regtest: "RD" prefix (our base58.cpp uses correct network encoding)
+        assert dd_address.startswith('RD') or dd_address.startswith('DD'), \
+            f"DD address should start with 'DD' (mainnet) or 'RD' (testnet/regtest), got: {dd_address[:10]}"
 
         # SKIP validateddaddress - has implementation issues
         self.log.info("Skipping validateddaddress (implementation issues)")

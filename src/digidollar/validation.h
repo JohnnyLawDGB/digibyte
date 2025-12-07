@@ -14,6 +14,7 @@
 #include <consensus/digidollar.h>
 #include <primitives/transaction.h>
 #include <chainparams.h>
+#include <coins.h>
 
 #include <cstdint>
 #include <vector>
@@ -56,9 +57,12 @@ struct ValidationContext {
     CAmount oraclePriceMicroUSD;     // Current DGB price in micro-USD (e.g., 6310 = $0.00631)
     int systemCollateral;            // System-wide collateral ratio percentage
     const CChainParams& params;      // Chain parameters including DD consensus params
+    const CCoinsViewCache* coins;    // Coins view for UTXO lookups (nullptr if not available)
 
-    ValidationContext(int height, CAmount price_micro_usd, int collateral, const CChainParams& chainParams)
-        : nHeight(height), oraclePriceMicroUSD(price_micro_usd), systemCollateral(collateral), params(chainParams) {}
+    ValidationContext(int height, CAmount price_micro_usd, int collateral, const CChainParams& chainParams,
+                      const CCoinsViewCache* coins_view = nullptr)
+        : nHeight(height), oraclePriceMicroUSD(price_micro_usd), systemCollateral(collateral),
+          params(chainParams), coins(coins_view) {}
 };
 
 // ============================================================================

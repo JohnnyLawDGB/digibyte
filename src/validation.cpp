@@ -735,11 +735,13 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
         }
 
         // Create validation context with current blockchain state
+        // Pass coins tip for UTXO lookup in DD redemption validation
         DigiDollar::ValidationContext ddContext(
             m_active_chainstate.m_chain.Height() + 1,  // Height for next block
             GetOraclePriceForTransaction(tx),           // Current oracle price
             DigiDollar::GetSystemCollateralRatio(),     // System health
-            args.m_chainparams                          // Chain parameters
+            args.m_chainparams,                          // Chain parameters
+            &m_active_chainstate.CoinsTip()              // Coins view for UTXO lookup
         );
 
         if (!DigiDollar::ValidateDigiDollarTransaction(tx, ddContext, state)) {
@@ -2716,11 +2718,13 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
 
                 // Create validation context with current blockchain state
                 // Use real oracle price from GetOraclePriceForTransaction()
+                // Pass coins view for UTXO lookup in DD redemption validation
                 DigiDollar::ValidationContext ddContext(
                     pindex->nHeight,
                     GetOraclePriceForTransaction(tx, pindex->nHeight),  // Real oracle price in micro-USD
                     DigiDollar::GetSystemCollateralRatio(),              // System collateral ratio
-                    m_chainman.GetParams()
+                    m_chainman.GetParams(),
+                    &view                                                // Coins view for UTXO lookup
                 );
 
                 TxValidationState dd_state;

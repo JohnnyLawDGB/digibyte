@@ -740,23 +740,27 @@ RPCHelpMan senddigidollar()
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
         {
             // PHASE 7.7: Integration with backend TransferDigiDollar() from Phase 2.1
+            LogPrintf("DigiDollar RPC: senddigidollar called\n");
 
             // Get wallet
             std::shared_ptr<wallet::CWallet> const pwallet = wallet::GetWalletForJSONRPCRequest(request);
             if (!pwallet) {
                 throw JSONRPCError(RPC_WALLET_ERROR, "Wallet not found");
             }
+            LogPrintf("DigiDollar RPC: Got wallet\n");
 
             // Get DigiDollar wallet
             DigiDollarWallet* dd_wallet = pwallet->GetDDWallet();
             if (!dd_wallet) {
                 throw JSONRPCError(RPC_WALLET_ERROR, "DigiDollar wallet not initialized");
             }
+            LogPrintf("DigiDollar RPC: Got DD wallet\n");
 
             // Parse parameters
             std::string addressStr = request.params[0].get_str();
             CAmount amount = request.params[1].getInt<int64_t>();  // Amount in USD cents
             std::string comment = request.params.size() > 2 ? request.params[2].get_str() : "";
+            LogPrintf("DigiDollar RPC: Parsed params - address=%s, amount=%d\n", addressStr, amount);
 
             // Validate amount
             if (amount <= 0) {
@@ -768,9 +772,12 @@ RPCHelpMan senddigidollar()
             if (!dd_address.IsValid()) {
                 throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid DigiDollar address");
             }
+            LogPrintf("DigiDollar RPC: DD address validated\n");
 
             // Check balance
+            LogPrintf("DigiDollar RPC: Calling GetTotalDDBalance()...\n");
             CAmount balance = dd_wallet->GetTotalDDBalance();
+            LogPrintf("DigiDollar RPC: GetTotalDDBalance() returned %d\n", balance);
             if (amount > balance) {
                 throw JSONRPCError(RPC_WALLET_INSUFFICIENT_FUNDS,
                     strprintf("Insufficient DD balance (have %d cents, need %d cents)",
@@ -780,8 +787,9 @@ RPCHelpMan senddigidollar()
             // Execute transfer using backend function (Phase 2.1)
             std::string txid;
             std::string error;
-
+            LogPrintf("DigiDollar RPC: Calling TransferDigiDollar()...\n");
             bool success = dd_wallet->TransferDigiDollar(dd_address, amount, txid, error);
+            LogPrintf("DigiDollar RPC: TransferDigiDollar() returned success=%d\n", success);
 
             if (!success) {
                 throw JSONRPCError(RPC_WALLET_ERROR,
@@ -909,8 +917,9 @@ RPCHelpMan redeemdigidollar()
             // CRITICAL FIX: DD tokens are fungible - any DD can be used to redeem a vault
             // Check if user has enough DD balance (from any source) to cover redemption
             std::vector<COutPoint> selectedDDUtxos;
+            std::vector<CAmount> selectedDDAmounts;  // CRITICAL: Need amounts for DD change calculation
             CAmount selectedDDTotal = 0;
-            if (!dd_wallet->SelectDDCoins(ddAmount, selectedDDUtxos, selectedDDTotal)) {
+            if (!dd_wallet->SelectDDCoins(ddAmount, selectedDDUtxos, selectedDDTotal, &selectedDDAmounts)) {
                 CAmount walletBalance = dd_wallet->GetDDBalance();
                 throw JSONRPCError(RPC_WALLET_ERROR,
                     strprintf("Insufficient DD balance for redemption. Need %d cents, have %d cents. "
@@ -919,6 +928,7 @@ RPCHelpMan redeemdigidollar()
             }
             LogPrintf("DigiDollar: Selected %zu DD UTXOs totaling %d cents for redemption of %d cents\n",
                       selectedDDUtxos.size(), selectedDDTotal, ddAmount);
+            LogPrintf("DigiDollar: selectedDDAmounts.size() = %zu\n", selectedDDAmounts.size());
 
             // Get oracle price
             CAmount oraclePrice = MockOracleManager::GetInstance().GetCurrentPrice();
@@ -939,6 +949,7 @@ RPCHelpMan redeemdigidollar()
             DigiDollar::TxBuilderRedeemParams redeemParams;
             redeemParams.collateralOutpoint = COutPoint(positionId, 0); // Collateral is at vout 0
             redeemParams.ddUtxos = selectedDDUtxos;  // Use any DD from wallet (fungible)
+            redeemParams.ddAmounts = selectedDDAmounts;  // CRITICAL: Pass amounts for DD change calculation
             redeemParams.ddToRedeem = ddAmount;
             redeemParams.path = DigiDollar::RedemptionPath::NORMAL;
             redeemParams.ownerKey = redemptionKey;
@@ -1073,6 +1084,43 @@ RPCHelpMan redeemdigidollar()
             {
                 LOCK(pwallet->cs_wallet);
                 pwallet->CommitTransaction(redeemTx, {}, {});
+            }
+
+            // CRITICAL: Track DD change output if there was any
+            // AND persist to wallet database!
+            {
+                LOCK(pwallet->cs_wallet);
+                wallet::WalletBatch batch(pwallet->GetDatabase());
+
+                if (redeemResult.ddChange > 0) {
+                    LogPrintf("DigiDollar: Redemption has DD change of %d cents - tracking\n", redeemResult.ddChange);
+                    uint256 txid = redeemTx->GetHash();
+                    // Find the DD change output (P2TR with nValue=0)
+                    for (size_t i = 0; i < redeemTx->vout.size(); i++) {
+                        const CTxOut& vout = redeemTx->vout[i];
+                        // DD outputs are P2TR (34 bytes, starts with OP_1) with nValue=0
+                        if (vout.nValue == 0 && vout.scriptPubKey.size() == 34 && vout.scriptPubKey[0] == OP_1) {
+                            COutPoint changeOutpoint(txid, i);
+                            // Update in-memory map
+                            dd_wallet->AddDDUTXO(changeOutpoint, redeemResult.ddChange);
+                            // Persist to wallet database
+                            batch.WriteDDUTXO(changeOutpoint, redeemResult.ddChange);
+                            // Store owner key so we can spend the change later
+                            dd_wallet->StoreOwnerKey(txid, ownerKey);
+                            LogPrintf("DigiDollar: Tracked and persisted DD change output at %s:%d = %d cents\n",
+                                      txid.ToString(), i, redeemResult.ddChange);
+                            break;
+                        }
+                    }
+                }
+
+                // Also remove spent DD UTXOs from tracking and database
+                for (const auto& spentUtxo : selectedDDUtxos) {
+                    dd_wallet->RemoveDDUTXO(spentUtxo);
+                    batch.EraseDDUTXO(spentUtxo);
+                    LogPrintf("DigiDollar: Removed spent DD UTXO %s:%d from memory and database\n",
+                              spentUtxo.hash.ToString(), spentUtxo.n);
+                }
             }
 
             // Calculate collateral returned (proportional to DD redeemed)
@@ -1277,6 +1325,82 @@ RPCHelpMan getdigidollaraddress()
                 throw JSONRPCError(RPC_WALLET_KEYPOOL_RAN_OUT, util::ErrorString(op_dest).original);
             }
             CTxDestination dest = *op_dest;
+
+            // Generate a fresh random key for DD addresses instead of relying on wallet key extraction
+            // This is more reliable because descriptor wallets don't always allow key extraction via GetKeyByXOnly
+            LogPrintf("DigiDollar: getdigidollaraddress - generating fresh key for DD address\n");
+
+            // Generate a random private key
+            CKey dd_key;
+            dd_key.MakeNewKey(/*fCompressed=*/true);
+
+            // Create the P2TR output key from this key (key-path only, no script tree)
+            CPubKey dd_pubkey = dd_key.GetPubKey();
+            XOnlyPubKey internal_key(dd_pubkey);
+
+            // Compute the taptweak to get the output key
+            auto tweaked = internal_key.CreateTapTweak(nullptr); // No merkle root for key-path only
+            if (!tweaked) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "Failed to create taproot tweaked key");
+            }
+            XOnlyPubKey output_key = tweaked->first;
+            bool output_parity = tweaked->second;
+
+            LogPrintf("DigiDollar: Generated internal_key=%s, output_key=%s, parity=%d\n",
+                     HexStr(Span<const unsigned char>(internal_key.begin(), internal_key.end())),
+                     HexStr(Span<const unsigned char>(output_key.begin(), output_key.end())),
+                     output_parity);
+
+            // For spending, we need to negate the key if the output has odd parity
+            CKey tweaked_key = dd_key;
+            if (output_parity) {
+                // Negate the key for odd parity outputs
+                tweaked_key = dd_key; // The signing code will handle parity adjustment
+            }
+
+            // Store the key in DigiDollarWallet for later spending
+            DigiDollarWallet* dd_wallet = pwallet->GetDDWallet();
+            if (dd_wallet) {
+                // Store by output_key (what we'll see in the UTXO) with the internal key
+                // The signing code will handle the taproot tweak adjustment
+                dd_wallet->StoreAddressKey(output_key, dd_key);
+                LogPrintf("DigiDollar: Stored DD address key (output_key=%s)\n",
+                         HexStr(Span<const unsigned char>(output_key.begin(), output_key.end())));
+            } else {
+                LogPrintf("DigiDollar: ERROR - GetDDWallet returned nullptr\n");
+                throw JSONRPCError(RPC_WALLET_ERROR, "DigiDollar wallet not available");
+            }
+
+            // Create the destination from the output_key
+            dest = WitnessV1Taproot(output_key);
+
+            // Import the address as watch-only so wallet tracks incoming transactions
+            // This allows ScanForDDUTXOs to find received DD tokens in mapWallet
+            {
+                // Create a rawtr() descriptor for the output key
+                std::string output_key_hex = HexStr(Span<const unsigned char>(output_key.begin(), output_key.end()));
+                std::string descriptor_str = "rawtr(" + output_key_hex + ")";
+
+                // Parse the descriptor
+                FlatSigningProvider provider;
+                std::string error;
+                auto parsed_desc = Parse(descriptor_str, provider, error, /*require_checksum=*/false);
+
+                if (parsed_desc) {
+                    // Create import request
+                    wallet::WalletDescriptor wallet_desc(std::move(parsed_desc), /*timestamp=*/0, /*range_start=*/0, /*range_end=*/0, /*next_index=*/0);
+
+                    // Import as active (non-internal) for receiving
+                    LOCK(pwallet->cs_wallet);
+                    if (pwallet->AddWalletDescriptor(wallet_desc, provider, "", /*internal=*/false)) {
+                        LogPrintf("DigiDollar: Imported DD address as watch-only descriptor\n");
+                    } else {
+                        LogPrintf("DigiDollar: WARNING - Failed to import DD address as watch-only (may already exist)\n");
+                    }
+                } else {
+                    LogPrintf("DigiDollar: WARNING - Failed to parse DD address descriptor: %s\n", error);
+                }
+            }
 
             // Encode as DigiDollar address
             std::string newAddress = EncodeDigiDollarAddress(dest);

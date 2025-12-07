@@ -70,6 +70,8 @@ const std::string DD_TRANSACTION{"ddtx"};
 const std::string DD_BALANCE{"ddbalance"};
 const std::string DD_OUTPUT{"ddutxo"};
 const std::string DD_METADATA{"ddmeta"};
+const std::string DD_ADDRESS_KEY{"ddaddrkey"};  // DD address keys for received tokens
+const std::string DD_OWNER_KEY{"ddownerkey"};   // DD owner keys for minted tokens (vault redemption)
 
 const std::unordered_set<std::string> LEGACY_TYPES{CRYPTED_KEY, CSCRIPT, DEFAULTKEY, HDCHAIN, KEYMETA, KEY, OLD_KEY, POOL, WATCHMETA, WATCHS};
 } // namespace DBKeys
@@ -592,6 +594,88 @@ bool WalletBatch::EraseDDOutput(const uint256& output_id)
                  output_id.ToString());
     }
 
+    return success;
+}
+
+// DigiDollar address key persistence (for received DD tokens)
+bool WalletBatch::WriteDDAddressKey(const std::array<unsigned char, 32>& output_key, const CKey& key)
+{
+    // Serialize the private key
+    CPrivKey privkey = key.GetPrivKey();
+    bool success = WriteIC(std::make_pair(DBKeys::DD_ADDRESS_KEY, output_key), privkey);
+    if (success) {
+        LogPrint(BCLog::WALLETDB, "DigiDollar: Wrote DD address key for output key %s to database\n",
+                 HexStr(Span<const unsigned char>(output_key.data(), output_key.size())));
+    }
+    return success;
+}
+
+bool WalletBatch::ReadDDAddressKey(const std::array<unsigned char, 32>& output_key, CKey& key)
+{
+    CPrivKey privkey;
+    if (!m_batch->Read(std::make_pair(DBKeys::DD_ADDRESS_KEY, output_key), privkey)) {
+        return false;
+    }
+
+    // Load the key - we need to derive the public key from the private key
+    if (!key.Load(privkey, CPubKey(), true /* fSkipCheck - we don't have pubkey to verify */)) {
+        LogPrint(BCLog::WALLETDB, "DigiDollar: Failed to load DD address key from database\n");
+        return false;
+    }
+
+    LogPrint(BCLog::WALLETDB, "DigiDollar: Read DD address key for output key %s from database\n",
+             HexStr(Span<const unsigned char>(output_key.data(), output_key.size())));
+    return true;
+}
+
+bool WalletBatch::EraseDDAddressKey(const std::array<unsigned char, 32>& output_key)
+{
+    bool success = EraseIC(std::make_pair(DBKeys::DD_ADDRESS_KEY, output_key));
+    if (success) {
+        LogPrint(BCLog::WALLETDB, "DigiDollar: Erased DD address key for output key %s from database\n",
+                 HexStr(Span<const unsigned char>(output_key.data(), output_key.size())));
+    }
+    return success;
+}
+
+// DigiDollar owner key persistence (for minted DD token vault redemption)
+bool WalletBatch::WriteDDOwnerKey(const uint256& dd_timelock_id, const CKey& key)
+{
+    // Serialize the private key
+    CPrivKey privkey = key.GetPrivKey();
+    bool success = WriteIC(std::make_pair(DBKeys::DD_OWNER_KEY, dd_timelock_id), privkey);
+    if (success) {
+        LogPrint(BCLog::WALLETDB, "DigiDollar: Wrote DD owner key for timelock %s to database\n",
+                 dd_timelock_id.ToString());
+    }
+    return success;
+}
+
+bool WalletBatch::ReadDDOwnerKey(const uint256& dd_timelock_id, CKey& key)
+{
+    CPrivKey privkey;
+    if (!m_batch->Read(std::make_pair(DBKeys::DD_OWNER_KEY, dd_timelock_id), privkey)) {
+        return false;
+    }
+
+    // Load the key - we need to derive the public key from the private key
+    if (!key.Load(privkey, CPubKey(), true /* fSkipCheck - we don't have pubkey to verify */)) {
+        LogPrint(BCLog::WALLETDB, "DigiDollar: Failed to load DD owner key from database\n");
+        return false;
+    }
+
+    LogPrint(BCLog::WALLETDB, "DigiDollar: Read DD owner key for timelock %s from database\n",
+             dd_timelock_id.ToString());
+    return true;
+}
+
+bool WalletBatch::EraseDDOwnerKey(const uint256& dd_timelock_id)
+{
+    bool success = EraseIC(std::make_pair(DBKeys::DD_OWNER_KEY, dd_timelock_id));
+    if (success) {
+        LogPrint(BCLog::WALLETDB, "DigiDollar: Erased DD owner key for timelock %s from database\n",
+                 dd_timelock_id.ToString());
+    }
     return success;
 }
 

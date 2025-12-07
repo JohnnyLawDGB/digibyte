@@ -99,6 +99,8 @@ extern const std::string DD_TRANSACTION;   // "ddtx"       - DD transaction hist
 extern const std::string DD_BALANCE;       // "ddbalance"  - DD balance per address
 extern const std::string DD_OUTPUT;        // "ddutxo"     - DD UTXO tracking
 extern const std::string DD_METADATA;      // "ddmeta"     - DD wallet metadata
+extern const std::string DD_ADDRESS_KEY;   // "ddaddrkey"  - DD address keys for received tokens
+extern const std::string DD_OWNER_KEY;     // "ddownerkey" - DD owner keys for minted tokens (vault redemption)
 
 // Keys in this set pertain only to the legacy wallet (LegacyScriptPubKeyMan) and are removed during migration from legacy to descriptors.
 extern const std::unordered_set<std::string> LEGACY_TYPES;
@@ -301,6 +303,16 @@ public:
     bool EraseDDTransaction(const uint256& txid);
     bool EraseDDBalance(const std::string& address);
     bool EraseDDOutput(const uint256& output_id);
+
+    // DigiDollar address key persistence (for received DD tokens)
+    bool WriteDDAddressKey(const std::array<unsigned char, 32>& output_key, const CKey& key);
+    bool ReadDDAddressKey(const std::array<unsigned char, 32>& output_key, CKey& key);
+    bool EraseDDAddressKey(const std::array<unsigned char, 32>& output_key);
+
+    // DigiDollar owner key persistence (for minted DD token vault redemption)
+    bool WriteDDOwnerKey(const uint256& dd_timelock_id, const CKey& key);
+    bool ReadDDOwnerKey(const uint256& dd_timelock_id, CKey& key);
+    bool EraseDDOwnerKey(const uint256& dd_timelock_id);
 
     bool WriteAddressPreviouslySpent(const CTxDestination& dest, bool previously_spent);
     bool WriteAddressReceiveRequest(const CTxDestination& dest, const std::string& id, const std::string& receive_request);

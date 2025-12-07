@@ -900,8 +900,10 @@ bool ValidateRedemptionTransaction(const CTransaction& tx,
         return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-redeem-no-dgb-output");
     }
 
-    // Validate DD burning (inputs > outputs for full redemption)
-    if (txType == DD_TX_REDEEM && totalDDOutputs > 0) {
+    // Validate DD burning in redemption transactions
+    // CRITICAL FIX: Allow DD change outputs in redemption when more DD UTXOs are selected than needed
+    // The redemption is valid as long as DD inputs > DD outputs (some DD is burned)
+    if (txType == DD_TX_REDEEM && totalDDInputs <= totalDDOutputs) {
         return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-redeem-dd-not-burned");
     }
 

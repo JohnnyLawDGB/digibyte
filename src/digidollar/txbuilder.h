@@ -28,8 +28,9 @@ struct TxBuilderResult {
     std::string error;
     CAmount totalFees;
     CAmount collateralRequired;
+    CAmount ddChange;  // DD change returned (for redemption transactions)
 
-    TxBuilderResult() : success(false), totalFees(0), collateralRequired(0) {}
+    TxBuilderResult() : success(false), totalFees(0), collateralRequired(0), ddChange(0) {}
 };
 
 // Parameters for minting DigiDollars (txbuilder version)
@@ -67,6 +68,7 @@ struct TxBuilderRedeemParams {
     CKey ownerKey;                  // Owner's private key (for signing collateral input)
     CAmount feeRate;                // Fee rate in sat/vB
     std::vector<COutPoint> ddUtxos; // DD UTXOs to burn
+    std::vector<CAmount> ddAmounts;  // DD amounts for each UTXO (parallel to ddUtxos)
     std::vector<COutPoint> feeUtxos; // DGB UTXOs for fees
     std::vector<CAmount> feeAmounts; // Amounts of fee UTXOs
 

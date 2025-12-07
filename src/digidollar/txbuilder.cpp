@@ -1067,6 +1067,49 @@ TxBuilderResult RedeemTxBuilder::BuildRedemptionTransaction(const TxBuilderRedee
     tx.vout.push_back(CTxOut(dgbToRelease, GetScriptForDestination(dest)));
     LogPrintf("DigiDollar: Added DGB output to owner: %d sats\n", dgbToRelease);
 
+    // Calculate DD change - if we selected more DD UTXOs than needed, return the change
+    CAmount totalDDInput = 0;
+    for (const auto& amount : params.ddAmounts) {
+        totalDDInput += amount;
+    }
+    CAmount ddChange = totalDDInput - params.ddToRedeem;
+    LogPrintf("DigiDollar: DD input total: %d cents, to burn: %d cents, change: %d cents\n",
+              totalDDInput, params.ddToRedeem, ddChange);
+
+    // Add DD change output if needed (Output 1 or 2 depending on partial redemption)
+    if (ddChange > 0) {
+        // Create DD change output using owner's tweaked pubkey (same as minted DD)
+        CPubKey ownerPubKey = params.ownerKey.GetPubKey();
+        XOnlyPubKey ownerXOnly(ownerPubKey);
+        auto tweaked = ownerXOnly.CreateTapTweak(nullptr);  // Standard key-path P2TR
+        if (!tweaked) {
+            result.error = "Failed to create Taproot tweak for DD change output";
+            LogPrintf("DigiDollar: BuildRedemptionTransaction FAILED - %s\n", result.error);
+            return result;
+        }
+        XOnlyPubKey tweakedKey = tweaked->first;
+
+        // Create P2TR output for DD change (zero satoshi value)
+        CScript ddChangeScript;
+        ddChangeScript << OP_1;
+        ddChangeScript << std::vector<unsigned char>(tweakedKey.begin(), tweakedKey.end());
+        tx.vout.push_back(CTxOut(0, ddChangeScript));
+        LogPrintf("DigiDollar: Added DD change output: %d cents\n", ddChange);
+
+        // Add OP_RETURN marker with DD change amount so wallet can track it
+        // Format: OP_RETURN <"DD"> <txType=3 for REDEEM> <change_amount>
+        CScript metadataScript;
+        metadataScript << OP_RETURN
+                       << std::vector<unsigned char>{'D', 'D'}
+                       << CScriptNum(3)      // 3 = REDEEM transaction
+                       << CScriptNum(ddChange);
+        tx.vout.push_back(CTxOut(0, metadataScript));
+        LogPrintf("DigiDollar: Added OP_RETURN with DD change amount: %d cents\n", ddChange);
+
+        // Store the DD change amount in result for wallet tracking
+        result.ddChange = ddChange;
+    }
+
     // Output 1 (partial only): New collateral position
     if (params.path == RedemptionPath::PARTIAL) {
         // For partial redemption, create a new collateral output for the remainder

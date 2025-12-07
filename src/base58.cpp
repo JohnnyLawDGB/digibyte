@@ -6,6 +6,7 @@
 
 #include <addresstype.h>
 #include <hash.h>
+#include <chainparams.h>
 #include <kernel/chainparams.h>
 #include <pubkey.h>
 #include <uint256.h>
@@ -300,8 +301,18 @@ bool CDigiDollarAddress::IsValidDigiDollarAddress(const std::string& str)
 std::string EncodeDigiDollarAddress(const CTxDestination& dest)
 {
     CDigiDollarAddress addr;
-    // For now, default to mainnet - this should be determined by chain params
-    if (!addr.SetDigiDollar(dest, CChainParams::DIGIDOLLAR_ADDRESS)) {
+    // Determine network type from global chain params
+    const CChainParams& chainParams = Params();
+    std::string chainType = chainParams.GetChainTypeString();
+    int networkType;
+    if (chainType == "regtest") {
+        networkType = CChainParams::DIGIDOLLAR_ADDRESS_REGTEST;
+    } else if (chainType == "test") {
+        networkType = CChainParams::DIGIDOLLAR_ADDRESS_TESTNET;
+    } else {
+        networkType = CChainParams::DIGIDOLLAR_ADDRESS;
+    }
+    if (!addr.SetDigiDollar(dest, networkType)) {
         return "";
     }
     return addr.ToString();

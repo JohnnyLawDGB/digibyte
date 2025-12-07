@@ -100,10 +100,16 @@ size_t DigiDollarWallet::LoadFromDatabase()
         }
     }
 
-    size_t total = positions_loaded + balances_loaded + txs_loaded + utxos_loaded;
+    // Load DD address keys for received tokens (FIX for wallet restart key loss)
+    size_t addr_keys_loaded = LoadDDAddressKeys();
 
-    LogPrintf("DigiDollarWallet: Loaded %d positions, %d balances, %d transactions, %d DD UTXOs\n",
-              positions_loaded, balances_loaded, txs_loaded, utxos_loaded);
+    // Load DD owner keys for minted tokens (FIX for vault redemption after restart)
+    size_t owner_keys_loaded = LoadDDOwnerKeys();
+
+    size_t total = positions_loaded + balances_loaded + txs_loaded + utxos_loaded + addr_keys_loaded + owner_keys_loaded;
+
+    LogPrintf("DigiDollarWallet: Loaded %d positions, %d balances, %d transactions, %d DD UTXOs, %zu DD address keys, %zu DD owner keys\n",
+              positions_loaded, balances_loaded, txs_loaded, utxos_loaded, addr_keys_loaded, owner_keys_loaded);
 
     // Recalculate totals
     RecalculateTotals();
@@ -252,6 +258,150 @@ void DigiDollarWallet::RecalculateTotals()
              total_dd_balance, locked_collateral);
 }
 
+void DigiDollarWallet::StoreAddressKey(const XOnlyPubKey& output_key, const CKey& key)
+{
+    // Store in in-memory map
+    std::array<unsigned char, 32> key_bytes;
+    std::copy(output_key.begin(), output_key.end(), key_bytes.begin());
+    dd_address_keys[key_bytes] = key;
+
+    LogPrintf("DigiDollarWallet: Stored DD address key for output key %s\n",
+              HexStr(output_key));
+
+    // Persist to wallet database
+    if (m_wallet) {
+        wallet::WalletBatch batch(m_wallet->GetDatabase());
+        if (!batch.WriteDDAddressKey(key_bytes, key)) {
+            LogPrintf("DigiDollarWallet: WARNING - Failed to persist DD address key to database\n");
+        } else {
+            LogPrintf("DigiDollarWallet: Persisted DD address key to database\n");
+        }
+    }
+}
+
+size_t DigiDollarWallet::LoadDDAddressKeys()
+{
+    if (!m_wallet) {
+        LogPrint(BCLog::WALLETDB, "DigiDollarWallet::LoadDDAddressKeys - No wallet pointer\n");
+        return 0;
+    }
+
+    wallet::WalletBatch batch(m_wallet->GetDatabase());
+    size_t count = 0;
+
+    // Clear in-memory map before loading
+    dd_address_keys.clear();
+
+    // Iterate through database to find DD address keys
+    std::unique_ptr<wallet::DatabaseCursor> cursor = batch.GetNewCursor();
+    if (cursor) {
+        wallet::DatabaseCursor::Status status = wallet::DatabaseCursor::Status::MORE;
+        while (status == wallet::DatabaseCursor::Status::MORE) {
+            DataStream key_stream{};
+            DataStream value_stream{};
+            status = cursor->Next(key_stream, value_stream);
+
+            if (status != wallet::DatabaseCursor::Status::MORE) break;
+
+            std::string key_type;
+            key_stream >> key_type;
+
+            if (key_type == wallet::DBKeys::DD_ADDRESS_KEY) {
+                std::array<unsigned char, 32> output_key_bytes;
+                key_stream >> output_key_bytes;
+
+                CPrivKey privkey;
+                value_stream >> privkey;
+
+                CKey key;
+                if (key.Load(privkey, CPubKey(), /*fSkipCheck=*/true)) {
+                    dd_address_keys[output_key_bytes] = key;
+                    count++;
+
+                    LogPrint(BCLog::WALLETDB, "DigiDollarWallet: Loaded DD address key %s\n",
+                            HexStr(output_key_bytes));
+                } else {
+                    LogPrintf("DigiDollarWallet: WARNING - Failed to load DD address key from database\n");
+                }
+            }
+        }
+    }
+
+    LogPrintf("DigiDollarWallet: Loaded %zu DD address keys from database\n", count);
+    return count;
+}
+
+void DigiDollarWallet::StoreOwnerKey(const uint256& dd_timelock_id, const CKey& key)
+{
+    // Store in in-memory map
+    dd_owner_keys[dd_timelock_id] = key;
+
+    LogPrintf("DigiDollarWallet: Stored DD owner key for timelock %s\n",
+              dd_timelock_id.ToString());
+
+    // Persist to wallet database
+    if (m_wallet) {
+        wallet::WalletBatch batch(m_wallet->GetDatabase());
+        if (!batch.WriteDDOwnerKey(dd_timelock_id, key)) {
+            LogPrintf("DigiDollarWallet: WARNING - Failed to persist DD owner key to database\n");
+        } else {
+            LogPrintf("DigiDollarWallet: Persisted DD owner key to database\n");
+        }
+    }
+}
+
+size_t DigiDollarWallet::LoadDDOwnerKeys()
+{
+    if (!m_wallet) {
+        LogPrint(BCLog::WALLETDB, "DigiDollarWallet::LoadDDOwnerKeys - No wallet pointer\n");
+        return 0;
+    }
+
+    wallet::WalletBatch batch(m_wallet->GetDatabase());
+    size_t count = 0;
+
+    // Clear in-memory map before loading
+    dd_owner_keys.clear();
+
+    // Iterate through database to find DD owner keys
+    std::unique_ptr<wallet::DatabaseCursor> cursor = batch.GetNewCursor();
+    if (cursor) {
+        wallet::DatabaseCursor::Status status = wallet::DatabaseCursor::Status::MORE;
+        while (status == wallet::DatabaseCursor::Status::MORE) {
+            DataStream key_stream{};
+            DataStream value_stream{};
+            status = cursor->Next(key_stream, value_stream);
+
+            if (status != wallet::DatabaseCursor::Status::MORE) break;
+
+            std::string key_type;
+            key_stream >> key_type;
+
+            if (key_type == wallet::DBKeys::DD_OWNER_KEY) {
+                uint256 dd_timelock_id;
+                key_stream >> dd_timelock_id;
+
+                CPrivKey privkey;
+                value_stream >> privkey;
+
+                CKey key;
+                if (key.Load(privkey, CPubKey(), /*fSkipCheck=*/true)) {
+                    dd_owner_keys[dd_timelock_id] = key;
+                    count++;
+
+                    LogPrint(BCLog::WALLETDB, "DigiDollarWallet: Loaded DD owner key for timelock %s\n",
+                            dd_timelock_id.ToString());
+                } else {
+                    LogPrintf("DigiDollarWallet: WARNING - Failed to load DD owner key from database\n");
+                }
+            }
+        }
+    }
+
+    LogPrintf("DigiDollarWallet: Loaded %zu DD owner keys from database\n", count);
+    return count;
+}
+
 bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount amount,
                                         std::string& txid, std::string& error) {
     // Clear previous results
@@ -339,19 +489,149 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
         }
         params.feeAmounts = fee_amounts;  // Pass actual fee UTXO amounts
 
-        // Get spending key - must be from dd_owner_keys map so change is recognized as "mine"
-        // The dd_owner_keys map stores the owner key for each DD position (indexed by timelock txid)
+        // Get spending key - handles both minted DD (in dd_owner_keys) and received DD (in wallet)
+        // For minted DD: key is stored in dd_owner_keys map when we created the position
+        // For received DD: key is in wallet's standard P2TR key management
         CKey spenderKey;
-        if (!params.ddUtxos.empty() && dd_owner_keys.count(params.ddUtxos[0].hash) > 0) {
-            // Use the stored owner key for this DD UTXO
-            spenderKey = dd_owner_keys[params.ddUtxos[0].hash];
-            LogPrintf("DigiDollar: Using stored owner key for DD UTXO %s\n", params.ddUtxos[0].hash.ToString());
-        } else {
-            // Fallback: generate new key (for testing/mock scenarios)
-            // In production, this should never happen - all DD UTXOs should have owner keys
-            spenderKey.MakeNewKey(true);
-            LogPrintf("DigiDollar: WARNING - No owner key found for DD UTXO, using generated key\n");
+        bool found_key = false;
+
+        if (!params.ddUtxos.empty()) {
+            // First, try dd_owner_keys map (for minted DD)
+            if (dd_owner_keys.count(params.ddUtxos[0].hash) > 0) {
+                spenderKey = dd_owner_keys[params.ddUtxos[0].hash];
+                found_key = true;
+                LogPrintf("DigiDollar: Using stored owner key for DD UTXO %s\n", params.ddUtxos[0].hash.ToString());
+            }
+
+            // If not found (received DD), try to get key from wallet's P2TR key management
+            if (!found_key && m_wallet) {
+                LogPrintf("DigiDollar: DD UTXO not in dd_owner_keys, trying wallet key lookup for received DD\n");
+
+                // Get the scriptPubKey for the DD UTXO we're spending
+                const COutPoint& dd_outpoint = params.ddUtxos[0];
+                LogPrintf("DigiDollar: Looking up tx %s in mapWallet (size=%d)\n",
+                         dd_outpoint.hash.ToString(), m_wallet->mapWallet.size());
+
+                // Look up the transaction to get the scriptPubKey
+                auto wtx_it = m_wallet->mapWallet.find(dd_outpoint.hash);
+                if (wtx_it != m_wallet->mapWallet.end()) {
+                    LogPrintf("DigiDollar: Found tx in mapWallet, checking output %d (tx has %d outputs)\n",
+                             dd_outpoint.n, wtx_it->second.tx->vout.size());
+                    const auto& wtx = wtx_it->second;
+                    if (dd_outpoint.n < wtx.tx->vout.size()) {
+                        const CTxOut& txout = wtx.tx->vout[dd_outpoint.n];
+                        LogPrintf("DigiDollar: Got output, scriptPubKey size=%d\n", txout.scriptPubKey.size());
+
+                        // Get signing provider for this script
+                        auto provider = m_wallet->GetSolvingProvider(txout.scriptPubKey);
+                        if (provider) {
+                            LogPrintf("DigiDollar: Got signing provider\n");
+                            // Extract the P2TR destination
+                            CTxDestination dest;
+                            if (ExtractDestination(txout.scriptPubKey, dest)) {
+                                LogPrintf("DigiDollar: Extracted destination, checking if P2TR\n");
+                                if (auto* tr = std::get_if<WitnessV1Taproot>(&dest)) {
+                                    LogPrintf("DigiDollar: Got P2TR destination, output key=%s\n",
+                                             HexStr(Span<const unsigned char>(tr->begin(), tr->end())));
+                                    // Get TaprootSpendData to find the internal key
+                                    TaprootSpendData spenddata;
+                                    if (provider->GetTaprootSpendData(XOnlyPubKey(*tr), spenddata)) {
+                                        LogPrintf("DigiDollar: Got TaprootSpendData, internal_key valid=%d\n",
+                                                 spenddata.internal_key.IsFullyValid());
+                                        if (spenddata.internal_key.IsFullyValid()) {
+                                            LogPrintf("DigiDollar: internal_key=%s\n",
+                                                     HexStr(Span<const unsigned char>(spenddata.internal_key.begin(), spenddata.internal_key.end())));
+                                            // Try to get the private key for the internal key
+                                            if (provider->GetKeyByXOnly(spenddata.internal_key, spenderKey)) {
+                                                found_key = true;
+                                                LogPrintf("DigiDollar: Found key for received DD via GetKeyByXOnly\n");
+                                            } else {
+                                                LogPrintf("DigiDollar: GetKeyByXOnly failed for internal key\n");
+                                            }
+                                        }
+                                    } else {
+                                        LogPrintf("DigiDollar: GetTaprootSpendData returned false\n");
+                                    }
+
+                                    // Try dd_address_keys map (for addresses generated via getdigidollaraddress)
+                                    if (!found_key) {
+                                        CKey address_key;
+                                        if (GetAddressKey(XOnlyPubKey(*tr), address_key)) {
+                                            spenderKey = address_key;
+                                            found_key = true;
+                                            LogPrintf("DigiDollar: Found key for received DD via dd_address_keys map\n");
+                                        } else {
+                                            LogPrintf("DigiDollar: dd_address_keys lookup failed for output key\n");
+                                        }
+                                    }
+
+                                    // If still not found, try brute force scan through wallet keys
+                                    if (!found_key) {
+                                        LogPrintf("DigiDollar: Starting brute force P2TR wallet scan\n");
+                                        XOnlyPubKey target_output_key(*tr);
+                                        int scanned_txs = 0;
+                                        int scanned_outputs = 0;
+                                        for (const auto& [txid, scan_wtx] : m_wallet->mapWallet) {
+                                            scanned_txs++;
+                                            for (size_t n = 0; n < scan_wtx.tx->vout.size() && !found_key; n++) {
+                                                scanned_outputs++;
+                                                CTxDestination out_dest;
+                                                if (ExtractDestination(scan_wtx.tx->vout[n].scriptPubKey, out_dest)) {
+                                                    auto out_provider = m_wallet->GetSolvingProvider(scan_wtx.tx->vout[n].scriptPubKey);
+                                                    if (out_provider) {
+                                                        if (auto* scan_tr = std::get_if<WitnessV1Taproot>(&out_dest)) {
+                                                            TaprootSpendData scan_spenddata;
+                                                            if (out_provider->GetTaprootSpendData(XOnlyPubKey(*scan_tr), scan_spenddata)) {
+                                                                if (scan_spenddata.internal_key.IsFullyValid()) {
+                                                                    CKey test_key;
+                                                                    if (out_provider->GetKeyByXOnly(scan_spenddata.internal_key, test_key)) {
+                                                                        XOnlyPubKey test_xonly(test_key.GetPubKey());
+                                                                        auto tweaked = test_xonly.CreateTapTweak(nullptr);
+                                                                        if (tweaked && std::equal(target_output_key.begin(), target_output_key.end(),
+                                                                                                 tweaked->first.begin())) {
+                                                                            spenderKey = test_key;
+                                                                            found_key = true;
+                                                                            LogPrintf("DigiDollar: Found key for received DD via P2TR wallet scan\n");
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            if (found_key) break;
+                                        }
+                                        LogPrintf("DigiDollar: Wallet scan complete: %d txs, %d outputs scanned, found_key=%d\n",
+                                                 scanned_txs, scanned_outputs, found_key);
+                                    }
+                                } else {
+                                    LogPrintf("DigiDollar: Destination is not P2TR\n");
+                                }
+                            } else {
+                                LogPrintf("DigiDollar: ExtractDestination failed\n");
+                            }
+                        } else {
+                            LogPrintf("DigiDollar: GetSolvingProvider returned null\n");
+                        }
+                    } else {
+                        LogPrintf("DigiDollar: Output index %d out of range (tx has %d outputs)\n",
+                                 dd_outpoint.n, wtx.tx->vout.size());
+                    }
+                } else {
+                    LogPrintf("DigiDollar: TX %s not found in mapWallet\n", dd_outpoint.hash.ToString());
+                }
+            }
         }
+
+        if (!found_key) {
+            error = "Could not find spending key for DD UTXO";
+            LogPrintf("DigiDollar: Could not find spending key for DD UTXO %s:%d\n",
+                     params.ddUtxos.empty() ? "empty" : params.ddUtxos[0].hash.ToString().c_str(),
+                     params.ddUtxos.empty() ? 0 : params.ddUtxos[0].n);
+            return false;
+        }
+
         params.spenderKey = spenderKey;
 
         // Build transaction
@@ -492,9 +772,10 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
                         dd_utxos[new_utxo] = dd_amount;
 
                         // Store the owner key for this new DD UTXO so we can spend it later
-                        dd_owner_keys[result.tx.GetHash()] = spenderKey;
+                        // Use StoreOwnerKey to ensure persistence to database
+                        StoreOwnerKey(result.tx.GetHash(), spenderKey);
 
-                        // Persist to database
+                        // Persist DD UTXO to database
                         if (!batch.WriteDDUTXO(new_utxo, dd_amount)) {
                             LogPrintf("DigiDollar: WARNING - Failed to write DD UTXO %s:%d to database\n",
                                      new_utxo.hash.ToString(), i);
@@ -1507,10 +1788,11 @@ size_t DigiDollarWallet::ScanForDDUTXOs() {
     }
 
     try {
-        LogPrintf("DigiDollar: Starting UTXO scan for DD outputs\n");
+        LogPrintf("DigiDollar: Starting UTXO scan for DD outputs (OP_RETURN parsing)\n");
 
-        // Clear existing dd_balances
+        // Clear existing tracking data for fresh scan
         dd_balances.clear();
+        dd_utxos.clear();  // Clear UTXO tracking for fresh scan
         total_dd_balance = 0;
 
         size_t dd_utxo_count = 0;
@@ -1520,15 +1802,155 @@ size_t DigiDollarWallet::ScanForDDUTXOs() {
 
         // Iterate through all wallet transactions
         for (const auto& [txid, wtx] : m_wallet->mapWallet) {
-            // Check each output of the transaction
+            // First, find the OP_RETURN output and extract DD amounts
+            std::vector<CAmount> ddAmounts;
+            int ddTxType = 0;  // 0=none, 1=MINT, 2=TRANSFER
+
+            for (size_t i = 0; i < wtx.tx->vout.size(); ++i) {
+                const CScript& script = wtx.tx->vout[i].scriptPubKey;
+                if (script.size() > 0 && script[0] == OP_RETURN) {
+                    // Found OP_RETURN - try to parse DD data
+                    auto pc = script.begin();
+                    opcodetype opcode;
+                    std::vector<unsigned char> data;
+
+                    // Skip OP_RETURN
+                    if (!script.GetOp(pc, opcode, data) || opcode != OP_RETURN) continue;
+
+                    // Get DD marker
+                    if (!script.GetOp(pc, opcode, data)) continue;
+                    if (data.size() != 2 || data[0] != 'D' || data[1] != 'D') continue;
+
+                    // Get transaction type
+                    if (!script.GetOp(pc, opcode, data)) continue;
+                    try {
+                        CScriptNum txTypeNum(data, false);
+                        ddTxType = txTypeNum.getint();
+                    } catch (const scriptnum_error&) {
+                        continue;
+                    }
+
+                    if (ddTxType == 1) {
+                        // MINT: Format is <"DD"> <1> <ddAmount> <lockHeight>
+                        if (script.GetOp(pc, opcode, data)) {
+                            try {
+                                CScriptNum amtNum(data, false);
+                                ddAmounts.push_back(amtNum.GetInt64());
+                            } catch (const scriptnum_error&) {}
+                        }
+                    } else if (ddTxType == 2) {
+                        // TRANSFER: Format is <"DD"> <2> <amount1> <amount2> ... <amountN>
+                        while (script.GetOp(pc, opcode, data)) {
+                            try {
+                                CScriptNum amtNum(data, false);
+                                CAmount amt = amtNum.GetInt64();
+                                if (amt > 0 && amt <= 100000000000LL) {
+                                    ddAmounts.push_back(amt);
+                                }
+                            } catch (const scriptnum_error&) {
+                                break;
+                            }
+                        }
+                    } else if (ddTxType == 3) {
+                        // REDEEM: Format is <"DD"> <3> <change_amount>
+                        // DD change from redemption when more DD UTXOs selected than needed
+                        if (script.GetOp(pc, opcode, data)) {
+                            try {
+                                CScriptNum amtNum(data, false);
+                                CAmount changeAmt = amtNum.GetInt64();
+                                if (changeAmt > 0 && changeAmt <= 100000000000LL) {
+                                    ddAmounts.push_back(changeAmt);
+                                    LogPrintf("DigiDollar: ScanForDDUTXOs - Found REDEEM tx with DD change: %d cents\n", changeAmt);
+                                }
+                            } catch (const scriptnum_error&) {}
+                        }
+                    }
+                    break; // Found and parsed OP_RETURN
+                }
+            }
+
+            if (ddAmounts.empty()) {
+                continue; // No DD amounts found in this transaction
+            }
+
+            // Now find DD outputs (P2TR with value=0) and match to amounts
+            size_t ddOutputIndex = 0;
             for (size_t n = 0; n < wtx.tx->vout.size(); ++n) {
                 const CTxOut& txout = wtx.tx->vout[n];
 
-                // Check if this output is a DD token script
-                if (DigiDollar::IsDDTokenScript(txout.scriptPubKey)) {
-                    // Check if we own this output (IsMine check)
+                // DD outputs are P2TR (34 bytes, starts with OP_1) with value = 0
+                // For MINT: DD token is at output 1
+                // For TRANSFER: DD tokens are outputs 0..N-1 (before DGB change and OP_RETURN)
+                if (txout.scriptPubKey.size() == 34 &&
+                    txout.scriptPubKey[0] == OP_1 &&
+                    txout.nValue == 0) {
+
+                    // For MINT, skip output 0 (vault) - DD token is at index 1
+                    if (ddTxType == 1 && n == 0) {
+                        continue; // Skip vault output
+                    }
+
+                    // Check if we have an amount for this DD output
+                    size_t amountIndex = (ddTxType == 1) ? 0 : ddOutputIndex;
+                    if (amountIndex >= ddAmounts.size()) {
+                        continue; // No amount for this output
+                    }
+
+                    CAmount dd_amount = ddAmounts[amountIndex];
+                    ddOutputIndex++;
+
+                    // Check if we own this output
+                    // First check standard wallet ownership
                     wallet::isminetype mine = m_wallet->IsMine(txout);
-                    if (!(mine & wallet::ISMINE_SPENDABLE)) {
+                    bool is_ours = (mine & wallet::ISMINE_SPENDABLE);
+
+                    // Check dd_owner_keys - but VERIFY the key actually controls this output
+                    // The owner key, when tweaked, should produce the output key
+                    // This prevents marking recipient outputs as "ours" in transfer transactions
+                    if (!is_ours) {
+                        CKey owner_key;
+                        if (GetOwnerKey(txid, owner_key)) {
+                            // Extract the actual output key from scriptPubKey
+                            std::vector<unsigned char> output_key_bytes(txout.scriptPubKey.begin() + 2, txout.scriptPubKey.end());
+
+                            // Compute what the tweaked key should be from this owner_key
+                            XOnlyPubKey owner_xonly(owner_key.GetPubKey());
+                            auto tweaked = owner_xonly.CreateTapTweak(nullptr);
+                            if (tweaked) {
+                                // Check if tweaked key matches output key
+                                if (std::equal(output_key_bytes.begin(), output_key_bytes.end(),
+                                              tweaked->first.begin())) {
+                                    is_ours = true;
+                                    LogPrintf("DigiDollar: ScanForDDUTXOs - DD %s:%d owned via dd_owner_keys (verified, txType=%d)\n",
+                                              txid.GetHex(), n, ddTxType);
+                                } else {
+                                    LogPrintf("DigiDollar: ScanForDDUTXOs - DD %s:%d has dd_owner_key but tweaked key doesn't match output\n",
+                                              txid.GetHex(), n);
+                                }
+                            }
+                        }
+                    }
+
+                    // If standard wallet doesn't recognize it, check dd_address_keys
+                    // (for DD addresses generated via getdigidollaraddress)
+                    if (!is_ours) {
+                        // Extract the P2TR output key from the scriptPubKey
+                        // P2TR scripts are: OP_1 <32-byte-output-key>
+                        if (txout.scriptPubKey.size() == 34 && txout.scriptPubKey[0] == OP_1) {
+                            std::vector<unsigned char> output_key_bytes(txout.scriptPubKey.begin() + 2, txout.scriptPubKey.end());
+                            XOnlyPubKey output_key(output_key_bytes);
+
+                            // Check if we have the key for this output in dd_address_keys
+                            CKey address_key;
+                            if (GetAddressKey(output_key, address_key)) {
+                                is_ours = true;
+                                LogPrintf("DigiDollar: ScanForDDUTXOs - Output %s:%d owned via dd_address_keys\n",
+                                          txid.GetHex(), n);
+                            }
+                        }
+                    }
+
+                    if (!is_ours) {
                         continue; // Not owned by us or not spendable
                     }
 
@@ -1538,26 +1960,24 @@ size_t DigiDollarWallet::ScanForDDUTXOs() {
                         continue; // Already spent
                     }
 
-                    // Extract DD amount from the script
-                    CAmount dd_amount = 0;
-                    if (DigiDollar::ExtractDDAmount(txout.scriptPubKey, dd_amount)) {
-                        // Add to balance tracking
-                        // For now, aggregate all DD into a single balance entry
-                        // In future, could track per-address
-                        std::string key = "total"; // Aggregate key
+                    // Add to dd_utxos map for coin selection (CRITICAL FIX)
+                    // This enables GetDDUTXOs() to find received DD tokens
+                    dd_utxos[outpoint] = dd_amount;
 
-                        if (dd_balances.find(key) == dd_balances.end()) {
-                            CDigiDollarAddress emptyAddr; // Empty address for total
-                            dd_balances[key] = WalletDDBalance(emptyAddr, 0);
-                        }
+                    // Add to balance tracking
+                    std::string key = "total"; // Aggregate key
 
-                        dd_balances[key].balance += dd_amount;
-                        total_dd_balance += dd_amount;
-                        dd_utxo_count++;
-
-                        LogPrintf("DigiDollar: Found DD UTXO %s:%d - Amount: %d cents\n",
-                                  txid.GetHex(), n, dd_amount);
+                    if (dd_balances.find(key) == dd_balances.end()) {
+                        CDigiDollarAddress emptyAddr; // Empty address for total
+                        dd_balances[key] = WalletDDBalance(emptyAddr, 0);
                     }
+
+                    dd_balances[key].balance += dd_amount;
+                    total_dd_balance += dd_amount;
+                    dd_utxo_count++;
+
+                    LogPrintf("DigiDollar: Found DD UTXO %s:%d - Amount: %d cents (txType=%d, added to dd_utxos)\n",
+                              txid.GetHex(), n, dd_amount, ddTxType);
                 }
             }
         }
@@ -1708,29 +2128,175 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
 
         // Get the spending key from wallet
         // For DD transfers, we need the key that owns the first DD UTXO
+        LogPrintf("DigiDollar: TransferDigiDollar - Starting key lookup, dd_utxos.size()=%d\n", dd_utxos.size());
         if (dd_utxos.empty()) {
             LogPrintf("DigiDollar: No DD UTXOs available for transfer\n");
             return false;
         }
 
-        // Look up the position for the first DD UTXO
+        LogPrintf("DigiDollar: TransferDigiDollar - First DD UTXO: %s:%d\n", dd_utxos[0].hash.ToString(), dd_utxos[0].n);
+
+        // Try to get the spending key - two cases:
+        // 1. Minted DD: Key is in dd_owner_keys map (stored when we minted)
+        // 2. Received DD: Key is in wallet's standard key management (P2TR key)
+        CKey spenderKey;
+        bool found_key = false;
+
+        // First, try to get owner key from DD owner keys map (for minted DD)
+        LogPrintf("DigiDollar: TransferDigiDollar - collateral_positions.size()=%d\n", collateral_positions.size());
         auto it = collateral_positions.find(dd_utxos[0].hash);
-        if (it == collateral_positions.end()) {
-            LogPrintf("DigiDollar: DD UTXO position not found: %s\n", dd_utxos[0].hash.ToString());
-            return false;
+        if (it != collateral_positions.end()) {
+            // This is minted DD - try to get the stored owner key
+            LogPrintf("DigiDollar: TransferDigiDollar - Found in collateral_positions, trying GetOwnerKey\n");
+            if (GetOwnerKey(dd_utxos[0].hash, spenderKey)) {
+                found_key = true;
+                LogPrintf("DigiDollar: Retrieved owner key for DD transfer from minted position %s\n", dd_utxos[0].hash.ToString());
+            } else {
+                LogPrintf("DigiDollar: TransferDigiDollar - GetOwnerKey returned false\n");
+            }
+        } else {
+            LogPrintf("DigiDollar: TransferDigiDollar - UTXO NOT in collateral_positions (this is received DD)\n");
         }
 
-        const WalletCollateralPosition& position = it->second;
+        // If not found (received DD), try to get key from wallet's P2TR key management
+        if (!found_key && m_wallet) {
+            LogPrintf("DigiDollar: TransferDigiDollar - Trying wallet key lookup for received DD, m_wallet=%p\n", (void*)m_wallet);
 
-        // Retrieve owner key from DD owner keys map
-        CKey spenderKey;
-        if (!GetOwnerKey(dd_utxos[0].hash, spenderKey)) {
-            LogPrintf("DigiDollar: Owner key not found for DD UTXO %s\n", dd_utxos[0].hash.ToString());
+            // Get the scriptPubKey for the DD UTXO we're spending
+            // We need to find the actual output being spent
+            const COutPoint& dd_outpoint = dd_utxos[0];
+
+            // Look up the transaction to get the scriptPubKey
+            LogPrintf("DigiDollar: TransferDigiDollar - Looking up tx %s in mapWallet (size=%d)\n",
+                     dd_outpoint.hash.ToString(), m_wallet->mapWallet.size());
+            auto wtx_it = m_wallet->mapWallet.find(dd_outpoint.hash);
+            if (wtx_it != m_wallet->mapWallet.end()) {
+                LogPrintf("DigiDollar: TransferDigiDollar - Found tx in mapWallet\n");
+                const auto& wtx = wtx_it->second;
+                if (dd_outpoint.n < wtx.tx->vout.size()) {
+                    const CTxOut& txout = wtx.tx->vout[dd_outpoint.n];
+                    LogPrintf("DigiDollar: TransferDigiDollar - Got output %d, scriptPubKey size=%d\n",
+                             dd_outpoint.n, txout.scriptPubKey.size());
+
+                    // Get signing provider for this script
+                    auto provider = m_wallet->GetSolvingProvider(txout.scriptPubKey);
+                    if (provider) {
+                        LogPrintf("DigiDollar: TransferDigiDollar - Got signing provider\n");
+                        // Extract the P2TR destination
+                        CTxDestination dest;
+                        if (ExtractDestination(txout.scriptPubKey, dest)) {
+                            LogPrintf("DigiDollar: TransferDigiDollar - ExtractDestination succeeded, dest index=%d\n",
+                                     dest.index());
+                            if (auto* tr = std::get_if<WitnessV1Taproot>(&dest)) {
+                                LogPrintf("DigiDollar: TransferDigiDollar - Got WitnessV1Taproot destination\n");
+                                // Get TaprootSpendData to find the internal key
+                                TaprootSpendData spenddata;
+                                XOnlyPubKey output_key(*tr);
+                                LogPrintf("DigiDollar: TransferDigiDollar - Output key: %s\n", HexStr(output_key));
+                                if (provider->GetTaprootSpendData(output_key, spenddata)) {
+                                    LogPrintf("DigiDollar: TransferDigiDollar - GetTaprootSpendData succeeded\n");
+                                    if (spenddata.internal_key.IsFullyValid()) {
+                                        LogPrintf("DigiDollar: TransferDigiDollar - Internal key valid: %s\n",
+                                                 HexStr(spenddata.internal_key));
+                                        // Try to get the private key for the internal key
+                                        if (provider->GetKeyByXOnly(spenddata.internal_key, spenderKey)) {
+                                            found_key = true;
+                                            LogPrintf("DigiDollar: Found key for received DD via GetKeyByXOnly\n");
+                                        } else {
+                                            LogPrintf("DigiDollar: TransferDigiDollar - GetKeyByXOnly FAILED for internal key\n");
+                                        }
+                                    } else {
+                                        LogPrintf("DigiDollar: TransferDigiDollar - Internal key NOT valid\n");
+                                    }
+                                } else {
+                                    LogPrintf("DigiDollar: TransferDigiDollar - GetTaprootSpendData FAILED\n");
+                                    // Try alternate approach: look for key that matches the output key directly
+                                    LogPrintf("DigiDollar: TransferDigiDollar - Trying to get key by output key directly\n");
+                                    if (provider->GetKeyByXOnly(output_key, spenderKey)) {
+                                        found_key = true;
+                                        LogPrintf("DigiDollar: TransferDigiDollar - Found key by output key directly\n");
+                                    } else {
+                                        LogPrintf("DigiDollar: TransferDigiDollar - GetKeyByXOnly by output key FAILED\n");
+                                    }
+                                }
+
+                                // Try dd_address_keys map (for addresses generated via getdigidollaraddress)
+                                if (!found_key) {
+                                    CKey address_key;
+                                    if (GetAddressKey(XOnlyPubKey(*tr), address_key)) {
+                                        spenderKey = address_key;
+                                        found_key = true;
+                                        LogPrintf("DigiDollar: TransferDigiDollar - Found key for received DD via dd_address_keys map\n");
+                                    } else {
+                                        LogPrintf("DigiDollar: TransferDigiDollar - dd_address_keys lookup failed for output key\n");
+                                    }
+                                }
+
+                                // If still not found, try brute force scan through wallet keys
+                                if (!found_key) {
+                                    LogPrintf("DigiDollar: TransferDigiDollar - Starting brute force wallet scan\n");
+                                    XOnlyPubKey target_output_key(*tr);
+                                    int scan_count = 0;
+                                    for (const auto& [txid, scan_wtx] : m_wallet->mapWallet) {
+                                        for (size_t n = 0; n < scan_wtx.tx->vout.size() && !found_key; n++) {
+                                            CTxDestination out_dest;
+                                            if (ExtractDestination(scan_wtx.tx->vout[n].scriptPubKey, out_dest)) {
+                                                auto out_provider = m_wallet->GetSolvingProvider(scan_wtx.tx->vout[n].scriptPubKey);
+                                                if (out_provider) {
+                                                    if (auto* scan_tr = std::get_if<WitnessV1Taproot>(&out_dest)) {
+                                                        TaprootSpendData scan_spenddata;
+                                                        if (out_provider->GetTaprootSpendData(XOnlyPubKey(*scan_tr), scan_spenddata)) {
+                                                            if (scan_spenddata.internal_key.IsFullyValid()) {
+                                                                CKey test_key;
+                                                                if (out_provider->GetKeyByXOnly(scan_spenddata.internal_key, test_key)) {
+                                                                    scan_count++;
+                                                                    XOnlyPubKey test_xonly(test_key.GetPubKey());
+                                                                    auto tweaked = test_xonly.CreateTapTweak(nullptr);
+                                                                    if (tweaked && std::equal(target_output_key.begin(), target_output_key.end(),
+                                                                                             tweaked->first.begin())) {
+                                                                        spenderKey = test_key;
+                                                                        found_key = true;
+                                                                        LogPrintf("DigiDollar: Found key for received DD via P2TR wallet scan\n");
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        if (found_key) break;
+                                    }
+                                    LogPrintf("DigiDollar: TransferDigiDollar - Brute force scan checked %d keys, found_key=%d\n",
+                                             scan_count, found_key);
+                                }
+                            } else {
+                                LogPrintf("DigiDollar: TransferDigiDollar - Destination is NOT WitnessV1Taproot\n");
+                            }
+                        } else {
+                            LogPrintf("DigiDollar: TransferDigiDollar - ExtractDestination FAILED\n");
+                        }
+                    } else {
+                        LogPrintf("DigiDollar: TransferDigiDollar - GetSolvingProvider returned NULL\n");
+                    }
+                } else {
+                    LogPrintf("DigiDollar: TransferDigiDollar - Output index %d out of range (vout size=%d)\n",
+                             dd_outpoint.n, wtx.tx->vout.size());
+                }
+            } else {
+                LogPrintf("DigiDollar: TransferDigiDollar - TX NOT FOUND in mapWallet!\n");
+            }
+        } else if (!m_wallet) {
+            LogPrintf("DigiDollar: TransferDigiDollar - m_wallet is NULL, cannot look up wallet keys\n");
+        }
+
+        if (!found_key) {
+            LogPrintf("DigiDollar: Could not find spending key for DD UTXO %s:%d\n",
+                     dd_utxos[0].hash.ToString(), dd_utxos[0].n);
             return false;
         }
 
         params.spenderKey = spenderKey;
-        LogPrintf("DigiDollar: Retrieved owner key for DD transfer from position %s\n", dd_utxos[0].hash.ToString());
 
         // Get current chain height and oracle price (mock values for now)
         int currentHeight = 100000;  // TODO: Get actual height from chainstate
@@ -1897,11 +2463,17 @@ bool DigiDollarWallet::RedeemDigiDollar(const uint256& dd_timelock_id, const CAm
 
         params.feeRate = 100000; // 100,000 sat/kB (DigiByte minimum relay fee)
 
-        // Select DD UTXOs to burn
+        // Select DD UTXOs to burn (get amounts too for DD change calculation)
         CAmount selectedTotal = 0;
-        if (!SelectDDCoins(amount, params.ddUtxos, selectedTotal)) {
+        if (!SelectDDCoins(amount, params.ddUtxos, selectedTotal, &params.ddAmounts)) {
             LogPrintf("DigiDollar: Insufficient DD balance for redemption\n");
             return false;
+        }
+        LogPrintf("DigiDollar: Selected %d DD UTXOs totaling %d cents (need %d cents)\n",
+                  params.ddUtxos.size(), selectedTotal, amount);
+        LogPrintf("DigiDollar: ddAmounts size: %d\n", params.ddAmounts.size());
+        for (size_t i = 0; i < params.ddAmounts.size(); i++) {
+            LogPrintf("DigiDollar: ddAmounts[%d] = %d cents\n", i, params.ddAmounts[i]);
         }
 
         // Select DGB UTXOs for fees
@@ -1956,6 +2528,39 @@ bool DigiDollarWallet::RedeemDigiDollar(const uint256& dd_timelock_id, const CAm
         if (!CommitDDTransaction(tx_out, error)) {
             LogPrintf("DigiDollar: Failed to broadcast redemption transaction - %s\n", error);
             return false;
+        }
+
+        // Track DD change output if there was any
+        if (result.ddChange > 0) {
+            // DD change is at vout[1] (after DGB return at vout[0])
+            // Find the DD change output (P2TR with 0 value)
+            uint256 txid = tx_out->GetHash();
+            for (size_t i = 0; i < tx_out->vout.size(); i++) {
+                const CTxOut& vout = tx_out->vout[i];
+                // DD change output: zero value, P2TR (OP_1 + 32 bytes)
+                if (vout.nValue == 0 && vout.scriptPubKey.size() == 34 && vout.scriptPubKey[0] == OP_1) {
+                    COutPoint changeOutpoint(txid, i);
+                    dd_utxos[changeOutpoint] = result.ddChange;
+                    StoreOwnerKey(txid, ownerKey);  // Store owner key for change
+
+                    // Persist to database
+                    wallet::WalletBatch batch(m_wallet->GetDatabase());
+                    batch.WriteDDUTXO(changeOutpoint, result.ddChange);
+
+                    LogPrintf("DigiDollar: Tracked DD change output %s:%d (%d cents)\n",
+                              txid.ToString(), i, result.ddChange);
+                    break;
+                }
+            }
+        }
+
+        // Remove spent DD UTXOs from tracking
+        for (const auto& spentUtxo : params.ddUtxos) {
+            dd_utxos.erase(spentUtxo);
+            wallet::WalletBatch batch(m_wallet->GetDatabase());
+            batch.EraseDDUTXO(spentUtxo);
+            LogPrintf("DigiDollar: Removed spent DD UTXO %s:%d\n",
+                      spentUtxo.hash.ToString(), spentUtxo.n);
         }
 
         // Mark position as inactive
@@ -2540,7 +3145,9 @@ bool DigiDollarWallet::SignDDInputs(CMutableTransaction& tx,
         // Get block height for the transaction
         int prev_height = wtx.state<wallet::TxStateConfirmed>() ? wtx.state<wallet::TxStateConfirmed>()->confirmed_block_height : 0;
 
-        // Create Coin with DD output (value=0 for DD token outputs)
+        // Use the actual on-chain value for sighash calculation
+        // DD tokens have nValue=0 on-chain - we MUST use 0 here to match network verification
+        // The network validates using actual UTXO values from the chain, so we must sign with the same
         coins[outpoint] = Coin(txout, prev_height, wtx.IsCoinBase());
 
         LogPrintf("DigiDollar: SignDDInputs - Added DD coin for %s:%d at height %d, scriptPubKey size %d\n",
@@ -2586,8 +3193,18 @@ bool DigiDollarWallet::SignDDInputs(CMutableTransaction& tx,
         //  - RECEIVED DD inputs (wallet has keys from address generation)
         // It will NOT sign:
         //  - MINTED DD inputs (use custom owner keys not in wallet descriptors)
-        bool sign_result = m_wallet->SignTransaction(tx);
+        //
+        // IMPORTANT: We use the overload that accepts a coins map so that our
+        // modified DD coins (with dummy value=1) are used for Taproot sighash.
+        // The simple SignTransaction(tx) looks up coins from UTXO set which has value=0.
+        std::map<int, bilingual_str> input_errors;
+        bool sign_result = m_wallet->SignTransaction(tx, coins, SIGHASH_DEFAULT, input_errors);
         LogPrintf("DigiDollar: SignDDInputs - SignTransaction returned: %s\n", sign_result ? "true" : "false");
+        if (!sign_result) {
+            for (const auto& [idx, err] : input_errors) {
+                LogPrintf("DigiDollar: SignDDInputs - Input %d error: %s\n", idx, err.original);
+            }
+        }
 
         // Log DD input witness AFTER SignTransaction
         for (size_t i = 0; i < dd_utxos.size(); i++) {
@@ -2648,9 +3265,181 @@ bool DigiDollarWallet::SignDDInputs(CMutableTransaction& tx,
 
         const COutPoint& outpoint = dd_utxos[i];
 
-        // Get the owner key for this DD UTXO (minted DD)
+        // Get the owner key for this DD UTXO
+        // For MINTED DD: owner key is stored in dd_owner_keys
+        // For RECEIVED DD: we need to find the internal key in wallet that matches the tweaked output
         CKey ownerKey;
-        if (!GetOwnerKey(outpoint.hash, ownerKey)) {
+        bool found_key = GetOwnerKey(outpoint.hash, ownerKey);
+
+        if (!found_key) {
+            // This might be RECEIVED DD - try to find the internal key in wallet
+            // The DD output uses a tweaked P2TR key. We need to find which wallet key
+            // when tweaked matches the output key.
+            LogPrintf("DigiDollar: SignDDInputs - No owner key in dd_owner_keys, trying wallet keystore for received DD\n");
+
+            // Get the output key from the scriptPubKey
+            const Coin& search_coin = coins.at(outpoint);
+            const CTxOut& search_output = search_coin.out;
+
+            LogPrintf("DigiDollar: SignDDInputs - scriptPubKey: %s (size=%d)\n",
+                      HexStr(search_output.scriptPubKey), search_output.scriptPubKey.size());
+
+            if (search_output.scriptPubKey.size() == 34 && search_output.scriptPubKey[0] == OP_1) {
+                std::vector<unsigned char> target_output_key(search_output.scriptPubKey.begin() + 2, search_output.scriptPubKey.end());
+                LogPrintf("DigiDollar: SignDDInputs - Target output key (tweaked): %s\n", HexStr(target_output_key));
+
+                // FIRST: Try dd_address_keys map (for received DD tokens via getdigidollaraddress)
+                XOnlyPubKey xonly_output_key(target_output_key);
+                if (GetAddressKey(xonly_output_key, ownerKey)) {
+                    found_key = true;
+                    LogPrintf("DigiDollar: SignDDInputs - Found key via dd_address_keys for received DD\n");
+                }
+
+                // Try to find the internal key by iterating through wallet keys
+                // This is the key that when tweaked produces the target output key
+                // For descriptor wallets, we can use GetSolvingProvider
+                if (!found_key) {
+                auto provider = m_wallet->GetSolvingProvider(search_output.scriptPubKey);
+                LogPrintf("DigiDollar: SignDDInputs - GetSolvingProvider returned: %s\n", provider ? "valid" : "nullptr");
+
+                if (provider) {
+                    // The provider knows about this script - try to get the key
+                    // For Taproot, the key in WitnessV1Taproot is the tweaked output key
+                    // We need the internal key for signing
+
+                    // Extract destination and see if we can get signing info
+                    CTxDestination dest;
+                    if (ExtractDestination(search_output.scriptPubKey, dest)) {
+                        LogPrintf("DigiDollar: SignDDInputs - ExtractDestination succeeded, dest type index: %d\n", dest.index());
+                        if (auto* tr = std::get_if<WitnessV1Taproot>(&dest)) {
+                            LogPrintf("DigiDollar: SignDDInputs - Destination is WitnessV1Taproot\n");
+                            // Check if we have a key for this via TaprootSpendData
+                            TaprootSpendData spenddata;
+                            if (provider->GetTaprootSpendData(XOnlyPubKey(*tr), spenddata)) {
+                                LogPrintf("DigiDollar: SignDDInputs - GetTaprootSpendData succeeded, internal_key valid: %s\n",
+                                          spenddata.internal_key.IsFullyValid() ? "yes" : "no");
+                                // For key-path spending, the internal key is what we need
+                                // Try to get the private key for the internal key
+                                if (spenddata.internal_key.IsFullyValid()) {
+                                    LogPrintf("DigiDollar: SignDDInputs - Internal key: %s\n",
+                                              HexStr(Span<const unsigned char>(spenddata.internal_key.begin(), 32)));
+                                    CKeyID keyid = CKeyID(Hash160(std::vector<unsigned char>(
+                                        spenddata.internal_key.begin(),
+                                        spenddata.internal_key.begin() + 32)));
+                                    LogPrintf("DigiDollar: SignDDInputs - Trying GetKey with keyid: %s\n", keyid.ToString());
+
+                                    // Try getting key via FlatSigningProvider
+                                    if (provider->GetKey(keyid, ownerKey)) {
+                                        LogPrintf("DigiDollar: SignDDInputs - GetKey succeeded!\n");
+                                        // Verify this key when tweaked matches the output
+                                        XOnlyPubKey internal_xonly(ownerKey.GetPubKey());
+                                        auto tweaked = internal_xonly.CreateTapTweak(nullptr);
+                                        if (tweaked && std::equal(target_output_key.begin(), target_output_key.end(),
+                                                                 tweaked->first.begin())) {
+                                            found_key = true;
+                                            LogPrintf("DigiDollar: SignDDInputs - Found internal key via GetTaprootSpendData\n");
+                                        } else {
+                                            LogPrintf("DigiDollar: SignDDInputs - GetKey succeeded but tweak doesn't match target\n");
+                                        }
+                                    } else {
+                                        LogPrintf("DigiDollar: SignDDInputs - GetKey failed for keyid\n");
+                                        // Try GetKeyByXOnly instead
+                                        if (provider->GetKeyByXOnly(spenddata.internal_key, ownerKey)) {
+                                            LogPrintf("DigiDollar: SignDDInputs - GetKeyByXOnly succeeded!\n");
+                                            XOnlyPubKey internal_xonly(ownerKey.GetPubKey());
+                                            auto tweaked = internal_xonly.CreateTapTweak(nullptr);
+                                            if (tweaked && std::equal(target_output_key.begin(), target_output_key.end(),
+                                                                     tweaked->first.begin())) {
+                                                found_key = true;
+                                                LogPrintf("DigiDollar: SignDDInputs - Found internal key via GetKeyByXOnly\n");
+                                            } else {
+                                                LogPrintf("DigiDollar: SignDDInputs - GetKeyByXOnly succeeded but tweak doesn't match\n");
+                                            }
+                                        } else {
+                                            LogPrintf("DigiDollar: SignDDInputs - GetKeyByXOnly also failed\n");
+                                        }
+                                    }
+                                }
+                            } else {
+                                LogPrintf("DigiDollar: SignDDInputs - GetTaprootSpendData failed\n");
+                            }
+                        } else {
+                            LogPrintf("DigiDollar: SignDDInputs - Destination is NOT WitnessV1Taproot\n");
+                        }
+                    } else {
+                        LogPrintf("DigiDollar: SignDDInputs - ExtractDestination failed\n");
+                    }
+                }
+
+                // If still not found, try a brute force search through wallet keys
+                if (!found_key) {
+                    LogPrintf("DigiDollar: SignDDInputs - Starting brute force wallet key scan (mapWallet size: %d)\n",
+                              m_wallet->mapWallet.size());
+                    int pkh_count = 0, p2tr_count = 0;
+                    // Get all keys from mapWallet transactions and try each
+                    for (const auto& [txid, wtx] : m_wallet->mapWallet) {
+                        for (size_t n = 0; n < wtx.tx->vout.size(); n++) {
+                            CTxDestination out_dest;
+                            if (ExtractDestination(wtx.tx->vout[n].scriptPubKey, out_dest)) {
+                                // Check if this output belongs to our wallet and has a key
+                                auto out_provider = m_wallet->GetSolvingProvider(wtx.tx->vout[n].scriptPubKey);
+                                if (out_provider) {
+                                    // Try all key types
+                                    if (auto* pkh = std::get_if<PKHash>(&out_dest)) {
+                                        pkh_count++;
+                                        CKey test_key;
+                                        if (out_provider->GetKey(ToKeyID(*pkh), test_key)) {
+                                            XOnlyPubKey test_xonly(test_key.GetPubKey());
+                                            auto tweaked = test_xonly.CreateTapTweak(nullptr);
+                                            if (tweaked && std::equal(target_output_key.begin(), target_output_key.end(),
+                                                                     tweaked->first.begin())) {
+                                                ownerKey = test_key;
+                                                found_key = true;
+                                                LogPrintf("DigiDollar: SignDDInputs - Found matching key via wallet PKH scan\n");
+                                                break;
+                                            }
+                                        }
+                                    }
+                                    // Also try Taproot destinations (WitnessV1Taproot)
+                                    // The output key in P2TR is already tweaked, so we need to find
+                                    // the internal key that produces this tweaked output
+                                    else if (auto* tr = std::get_if<WitnessV1Taproot>(&out_dest)) {
+                                        p2tr_count++;
+                                        // For our wallet's own P2TR outputs, we can get the internal key
+                                        // via GetTaprootSpendData
+                                        TaprootSpendData tr_spenddata;
+                                        if (out_provider->GetTaprootSpendData(XOnlyPubKey(*tr), tr_spenddata)) {
+                                            if (tr_spenddata.internal_key.IsFullyValid()) {
+                                                // Try to get the private key for this internal key
+                                                CKey test_key;
+                                                if (out_provider->GetKeyByXOnly(tr_spenddata.internal_key, test_key)) {
+                                                    // Verify this key when tweaked matches our target output
+                                                    XOnlyPubKey test_xonly(test_key.GetPubKey());
+                                                    auto tweaked = test_xonly.CreateTapTweak(nullptr);
+                                                    if (tweaked && std::equal(target_output_key.begin(), target_output_key.end(),
+                                                                             tweaked->first.begin())) {
+                                                        ownerKey = test_key;
+                                                        found_key = true;
+                                                        LogPrintf("DigiDollar: SignDDInputs - Found matching key via wallet P2TR scan (internal key)\n");
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        if (found_key) break;
+                    }
+                    LogPrintf("DigiDollar: SignDDInputs - Brute force scan complete: checked %d PKH, %d P2TR outputs, found_key=%s\n",
+                              pkh_count, p2tr_count, found_key ? "true" : "false");
+                }
+                } // end if (!found_key) - wallet key lookup
+            }
+        }
+
+        if (!found_key) {
             LogPrintf("DigiDollar: SignDDInputs - DD input %d not signed and no owner key found for %s\n",
                       i, outpoint.hash.ToString());
             return false;
@@ -2734,11 +3523,14 @@ bool DigiDollarWallet::SignDDInputs(CMutableTransaction& tx,
 
             LogPrintf("DigiDollar: SignDDInputs - KEY-PATH sighash: %s\n", sighash.ToString());
 
-            // Sign WITH the Taproot tweak (standard key-path signing)
-            // Pass empty merkle root (zero hash) to apply the standard tweak
+            // Sign for Taproot key-path spending
+            // For BIP-341 key-path spending, we need to apply the standard tweak:
+            // - Wallet stores the INTERNAL private key
+            // - Output uses the TWEAKED public key (from CreateTapTweak(nullptr))
+            // - SignSchnorr with empty merkle root applies the same standard tweak
             std::vector<unsigned char> sig(64);
             uint256 aux = GetRandHash();
-            uint256 empty_merkle_root;  // Zero hash = empty merkle root for simple P2TR
+            uint256 empty_merkle_root;  // Zero hash = standard key-path tweak
 
             if (!ownerKey.SignSchnorr(sighash, sig, &empty_merkle_root, aux)) {
                 LogPrintf("DigiDollar: SignDDInputs - Failed to create key-path signature for input %d\n", i);
@@ -3276,8 +4068,26 @@ bool DigiDollarWallet::SignRedemptionTransaction(CMutableTransaction& tx,
 
         const COutPoint& outpoint = dd_utxos[i];
 
-        // DD tokens from the same mint transaction use the same owner key as the collateral
-        CKey ddOwnerKey = owner_key;
+        // Look up the owner key for this specific DD UTXO
+        // It could be from:
+        // - The same mint tx as collateral (use owner_key)
+        // - A different mint tx (use that tx's owner key)
+        // - A transfer tx (use that transfer's owner key)
+        CKey ddOwnerKey;
+        if (!GetOwnerKey(outpoint.hash, ddOwnerKey)) {
+            // Fallback to collateral's owner key if same mint tx
+            if (outpoint.hash == collateral_outpoint.hash) {
+                ddOwnerKey = owner_key;
+                LogPrintf("DigiDollar: SignRedemptionTransaction - Using collateral owner key for DD from same mint tx\n");
+            } else {
+                LogPrintf("DigiDollar: SignRedemptionTransaction - ERROR: No owner key found for DD UTXO %s\n",
+                          outpoint.hash.ToString());
+                return false;
+            }
+        } else {
+            LogPrintf("DigiDollar: SignRedemptionTransaction - Found owner key for DD UTXO %s\n",
+                      outpoint.hash.ToString());
+        }
 
         CPubKey ddOwnerPubKey = ddOwnerKey.GetPubKey();
         XOnlyPubKey ddOwnerXOnly(ddOwnerPubKey);
@@ -3299,79 +4109,73 @@ bool DigiDollarWallet::SignRedemptionTransaction(CMutableTransaction& tx,
         std::vector<unsigned char> outputKeyBytes(prevOutput.scriptPubKey.begin() + 2, prevOutput.scriptPubKey.end());
         LogPrintf("DigiDollar: SignRedemptionTransaction - Actual output key in script: %s\n", HexStr(outputKeyBytes));
 
-        // CRITICAL: DD token outputs (vout[1]) are simple P2TR with key-path only
-        // Check if this is a DD token output (vout[1])
-        if (outpoint.n == 1) {
-            // This is a DD token output (vout 1) - use KEY-PATH signing
-            // DD outputs use standard BIP-341 Taproot with a tweaked pubkey (no merkle root)
-            // The output key = internal_key + H(internal_key), so we sign with tweaked private key
-            LogPrintf("DigiDollar: SignRedemptionTransaction - Output %s:%d is vout[1] (DD token), using key-path signing\n",
-                      outpoint.hash.ToString(), outpoint.n);
+        // CRITICAL: DD token outputs are simple P2TR with key-path only (no MAST, no CLTV)
+        // DD can be at any vout index:
+        //   - vout[1] for minted DD (collateral at vout[0])
+        //   - vout[0] for transfer recipient DD
+        //   - vout[1+] for transfer change DD
+        // All use the same key-path signing approach
+        LogPrintf("DigiDollar: SignRedemptionTransaction - Output %s:%d (DD token), using key-path signing\n",
+                  outpoint.hash.ToString(), outpoint.n);
 
-            // DD outputs are created with CreateDigiDollarP2TR which applies a Taproot tweak
-            // (owner.CreateTapTweak(nullptr) - standard BIP-341 key-path only P2TR)
-            // We must compute the tweaked key for verification and sign with the tweaked key
-            auto tweaked = ddOwnerXOnly.CreateTapTweak(nullptr);  // nullptr = no merkle root
-            if (!tweaked) {
-                LogPrintf("DigiDollar: SignRedemptionTransaction - Failed to compute tweaked key for DD input\n");
-                return false;
-            }
-            XOnlyPubKey tweakedOutputKey = tweaked->first;
-
-            // Verify the output key matches the TWEAKED pubkey (not raw)
-            if (outputKeyBytes.size() != 32 ||
-                !std::equal(outputKeyBytes.begin(), outputKeyBytes.end(), tweakedOutputKey.begin())) {
-                LogPrintf("DigiDollar: SignRedemptionTransaction - Output key mismatch for key-path (expected tweaked: %s, got: %s)\n",
-                         HexStr(tweakedOutputKey), HexStr(outputKeyBytes));
-                return false;
-            }
-
-            LogPrintf("DigiDollar: SignRedemptionTransaction - Using KEY-PATH signing for DD token (tweaked pubkey)\n");
-
-            // Calculate sighash for Taproot KEY-PATH spending
-            uint256 dd_sighash;
-            ScriptExecutionData dd_execdata;
-            dd_execdata.m_annex_init = true;
-            dd_execdata.m_annex_present = false;
-            // For key-path: NO tapleaf hash (that's only for script-path)
-            dd_execdata.m_tapleaf_hash_init = false;
-
-            if (!SignatureHashSchnorr(dd_sighash, dd_execdata, tx, input_index, SIGHASH_DEFAULT, SigVersion::TAPROOT, txdata, MissingDataBehavior::FAIL)) {
-                LogPrintf("DigiDollar: SignRedemptionTransaction - Failed to compute key-path sighash for input %d\n", input_index);
-                return false;
-            }
-
-            LogPrintf("DigiDollar: SignRedemptionTransaction - DD input %d KEY-PATH sighash: %s\n",
-                      input_index, dd_sighash.ToString());
-
-            // Sign WITH the standard Taproot tweak (key-path spending)
-            // CRITICAL: For key-path spending, we MUST use &empty_merkle_root (zero hash)
-            // to apply the proper Taproot tweak. Using nullptr means NO tweak!
-            // This matches the working SignDDInputs code at line ~2718
-            std::vector<unsigned char> dd_sig(64);
-            uint256 dd_aux = GetRandHash();
-            uint256 empty_merkle_root;  // Zero hash = standard key-path tweak
-
-            if (!ddOwnerKey.SignSchnorr(dd_sighash, dd_sig, &empty_merkle_root, dd_aux)) {
-                LogPrintf("DigiDollar: SignRedemptionTransaction - Failed to create key-path signature for input %d\n", input_index);
-                return false;
-            }
-
-            LogPrintf("DigiDollar: SignRedemptionTransaction - Created key-path signature (tweaked): %s\n", HexStr(dd_sig));
-
-            // For Taproot KEY-PATH spending, witness stack is: [signature]
-            tx.vin[input_index].scriptWitness.stack.clear();
-            tx.vin[input_index].scriptWitness.stack.push_back(dd_sig);
-
-            LogPrintf("DigiDollar: SignRedemptionTransaction - DD input %d signed successfully with KEY-PATH (witness: sig %d bytes)\n",
-                      input_index, dd_sig.size());
-        } else {
-            // This shouldn't happen in normal redemption (DD is always vout[1])
-            // But handle it for safety by returning error
-            LogPrintf("DigiDollar: SignRedemptionTransaction - ERROR: DD input %d is from vout[%d], expected vout[1]\n",
-                      input_index, outpoint.n);
+        // DD outputs are created with CreateDigiDollarP2TR which applies a Taproot tweak
+        // (owner.CreateTapTweak(nullptr) - standard BIP-341 key-path only P2TR)
+        // We must compute the tweaked key for verification and sign with the tweaked key
+        auto tweaked = ddOwnerXOnly.CreateTapTweak(nullptr);  // nullptr = no merkle root
+        if (!tweaked) {
+            LogPrintf("DigiDollar: SignRedemptionTransaction - Failed to compute tweaked key for DD input\n");
             return false;
         }
+        XOnlyPubKey tweakedOutputKey = tweaked->first;
+
+        // Verify the output key matches the TWEAKED pubkey (not raw)
+        if (outputKeyBytes.size() != 32 ||
+            !std::equal(outputKeyBytes.begin(), outputKeyBytes.end(), tweakedOutputKey.begin())) {
+            LogPrintf("DigiDollar: SignRedemptionTransaction - Output key mismatch for key-path (expected tweaked: %s, got: %s)\n",
+                     HexStr(tweakedOutputKey), HexStr(outputKeyBytes));
+            return false;
+        }
+
+        LogPrintf("DigiDollar: SignRedemptionTransaction - Using KEY-PATH signing for DD token (tweaked pubkey)\n");
+
+        // Calculate sighash for Taproot KEY-PATH spending
+        uint256 dd_sighash;
+        ScriptExecutionData dd_execdata;
+        dd_execdata.m_annex_init = true;
+        dd_execdata.m_annex_present = false;
+        // For key-path: NO tapleaf hash (that's only for script-path)
+        dd_execdata.m_tapleaf_hash_init = false;
+
+        if (!SignatureHashSchnorr(dd_sighash, dd_execdata, tx, input_index, SIGHASH_DEFAULT, SigVersion::TAPROOT, txdata, MissingDataBehavior::FAIL)) {
+            LogPrintf("DigiDollar: SignRedemptionTransaction - Failed to compute key-path sighash for input %d\n", input_index);
+            return false;
+        }
+
+        LogPrintf("DigiDollar: SignRedemptionTransaction - DD input %d KEY-PATH sighash: %s\n",
+                  input_index, dd_sighash.ToString());
+
+        // Sign for Taproot key-path spending
+        // For BIP-341 key-path spending, we need to apply the standard tweak:
+        // - Wallet stores the INTERNAL private key
+        // - Output uses the TWEAKED public key (from CreateTapTweak(nullptr))
+        // - SignSchnorr with empty merkle root applies the same standard tweak
+        std::vector<unsigned char> dd_sig(64);
+        uint256 dd_aux = GetRandHash();
+        uint256 empty_merkle_root;  // Zero hash = standard key-path tweak
+
+        if (!ddOwnerKey.SignSchnorr(dd_sighash, dd_sig, &empty_merkle_root, dd_aux)) {
+            LogPrintf("DigiDollar: SignRedemptionTransaction - Failed to create key-path signature for input %d\n", input_index);
+            return false;
+        }
+
+        LogPrintf("DigiDollar: SignRedemptionTransaction - Created key-path signature (tweaked): %s\n", HexStr(dd_sig));
+
+        // For Taproot KEY-PATH spending, witness stack is: [signature]
+        tx.vin[input_index].scriptWitness.stack.clear();
+        tx.vin[input_index].scriptWitness.stack.push_back(dd_sig);
+
+        LogPrintf("DigiDollar: SignRedemptionTransaction - DD input %d signed successfully with KEY-PATH (witness: sig %d bytes)\n",
+                  input_index, dd_sig.size());
     }
 
     // 8. Verify all inputs are signed
@@ -3883,21 +4687,41 @@ bool DigiDollarWallet::DetectIncomingDDOutputs(const CTransactionRef& tx,
 
         // Check if it's a P2TR output (OP_1 + 32 bytes)
         if (txout.scriptPubKey.size() == 34 && txout.scriptPubKey[0] == OP_1) {
-            // This is a DD output - check if we own it
-            if (m_wallet) {
-                LOCK(m_wallet->cs_wallet);
+            // This is a DD output - check if we own it via dd_address_keys
+            // Extract the 32-byte output key from P2TR scriptPubKey (bytes 2-33)
+            std::array<unsigned char, 32> output_key;
+            std::copy(txout.scriptPubKey.begin() + 2, txout.scriptPubKey.begin() + 34, output_key.begin());
 
+            // Check if we have this key in our dd_address_keys map
+            bool have_key = false;
+            {
+                // Check dd_address_keys for the output key
+                auto it = dd_address_keys.find(output_key);
+                if (it != dd_address_keys.end()) {
+                    have_key = true;
+                    LogPrintf("DigiDollar: Found output key in dd_address_keys for vout[%d]\n", i);
+                }
+            }
+
+            // Also check if wallet recognizes it (for minted DD where we own the key)
+            if (!have_key && m_wallet) {
+                LOCK(m_wallet->cs_wallet);
                 wallet::isminetype mine = m_wallet->IsMine(txout);
                 if (mine & wallet::ISMINE_SPENDABLE) {
-                    if (dd_output_index < dd_amounts.size()) {
-                        CAmount dd_amount = dd_amounts[dd_output_index];
-                        LogPrintf("DigiDollar: Detected incoming DD output - vout[%d]: %d DD cents\n",
-                                  i, dd_amount);
-                        our_dd_outputs.push_back(std::make_pair(i, dd_amount));
-                    }
-                } else {
-                    LogPrint(BCLog::WALLETDB, "DigiDollar: Output %d is DD P2TR but not ours (mine=%d)\n", i, mine);
+                    have_key = true;
+                    LogPrintf("DigiDollar: Wallet IsMine returned spendable for vout[%d]\n", i);
                 }
+            }
+
+            if (have_key) {
+                if (dd_output_index < dd_amounts.size()) {
+                    CAmount dd_amount = dd_amounts[dd_output_index];
+                    LogPrintf("DigiDollar: Detected incoming DD output - vout[%d]: %d DD cents\n",
+                              i, dd_amount);
+                    our_dd_outputs.push_back(std::make_pair(i, dd_amount));
+                }
+            } else {
+                LogPrint(BCLog::WALLETDB, "DigiDollar: Output %d is DD P2TR but not ours (no key found)\n", i);
             }
             dd_output_index++;
         }
@@ -3928,52 +4752,61 @@ bool DigiDollarWallet::AddReceivedDDUTXO(const CTransactionRef& tx,
 
     uint256 txid = tx->GetHash();
 
-    // Check for duplicate processing
-    if (collateral_positions.find(txid) != collateral_positions.end()) {
+    // Check for duplicate processing using dd_utxos (NOT collateral_positions)
+    // Received DD is tracked in dd_utxos only, NOT in collateral_positions
+    // collateral_positions should ONLY contain actual minted collateral outputs
+    COutPoint received_utxo(txid, vout_index);
+    if (dd_utxos.find(received_utxo) != dd_utxos.end()) {
         LogPrint(BCLog::WALLETDB,
-                 "DigiDollar: AddReceivedDDUTXO - UTXO %s already exists, skipping\n",
-                 txid.ToString());
+                 "DigiDollar: AddReceivedDDUTXO - UTXO %s:%d already exists, skipping\n",
+                 txid.ToString(), vout_index);
         return true;  // Not an error, just already processed
     }
 
     LogPrintf("DigiDollar: AddReceivedDDUTXO - Adding received DD UTXO: %s:%d (%d DD cents)\n",
               txid.ToString(), vout_index, dd_amount);
 
+    // Look up the owner key from dd_address_keys and store in dd_owner_keys
+    // This allows GetOwnerKey to find the key by txid for spending
+    const CTxOut& txout = tx->vout[vout_index];
+    if (txout.scriptPubKey.size() == 34 && txout.scriptPubKey[0] == OP_1) {
+        // Extract the output key (tweaked pubkey) from the scriptPubKey
+        // dd_address_keys is indexed by std::array<unsigned char, 32>
+        std::array<unsigned char, 32> output_key_array;
+        std::copy(txout.scriptPubKey.begin() + 2, txout.scriptPubKey.end(), output_key_array.begin());
+
+        // Look up the internal key in dd_address_keys
+        // dd_address_keys is indexed by the tweaked output key
+        auto it = dd_address_keys.find(output_key_array);
+        if (it != dd_address_keys.end()) {
+            // Found the key! Store it under the txid so GetOwnerKey can find it
+            StoreOwnerKey(txid, it->second);
+            LogPrintf("DigiDollar: AddReceivedDDUTXO - Stored owner key from dd_address_keys for tx %s\n",
+                      txid.ToString());
+        } else {
+            LogPrintf("DigiDollar: AddReceivedDDUTXO - WARNING: No key found in dd_address_keys for output %s\n",
+                      HexStr(output_key_array));
+        }
+    }
+
     // Add to DD UTXO tracking (primary balance source)
-    COutPoint received_utxo(txid, vout_index);
+    // This is the ONLY tracking needed for received DD
+    // Note: DO NOT add to collateral_positions - that would cause script-path signing
+    // for DD token outputs, which is incorrect (they need key-path signing)
     dd_utxos[received_utxo] = dd_amount;
 
-    // NOTE: We don't need to extract owner keys for received DD
-    // The wallet already has the private keys for P2TR outputs it created
-    // Signing will be handled by the wallet's scriptPubKeyMan when spending
-
-    // Create new WalletCollateralPosition for received DD
-    // Key difference from minted DD: no collateral in our wallet
-    WalletCollateralPosition received_position;
-    received_position.dd_timelock_id = txid;
-    received_position.dd_minted = dd_amount;
-    received_position.dgb_collateral = 0;      // Received DD has no collateral in our wallet
-    received_position.lock_tier = 0;           // Not a mint position
-    received_position.unlock_height = 0;       // Not locked (immediately spendable)
-    received_position.is_active = true;        // Spendable immediately
-
-    // Add to in-memory cache
-    collateral_positions[txid] = received_position;
-
-    // Persist to database
+    // Persist DD UTXO to database
     if (m_wallet) {
         wallet::WalletBatch batch(m_wallet->GetDatabase());
-        if (!batch.WriteDDTimeLock(received_position)) {
-            LogPrintf("DigiDollar: AddReceivedDDUTXO - Failed to persist received DD UTXO to database\n");
-            // Remove from cache since DB write failed
-            collateral_positions.erase(txid);
+        if (!batch.WriteDDUTXO(received_utxo, dd_amount)) {
+            LogPrintf("DigiDollar: AddReceivedDDUTXO - Failed to persist DD UTXO to database\n");
+            dd_utxos.erase(received_utxo);
             return false;
         }
         LogPrint(BCLog::WALLETDB, "DigiDollar: Persisted received DD UTXO to wallet.dat\n");
     }
 
     // Balance updates automatically (UTXO-derived approach from Phase 5.1)
-    // GetTotalDDBalance() will now include this new position
     CAmount new_balance = GetTotalDDBalance();
     LogPrintf("DigiDollar: Balance after receive: %d DD cents\n", new_balance);
 

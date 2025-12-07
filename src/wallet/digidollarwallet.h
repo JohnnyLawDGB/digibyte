@@ -148,6 +148,11 @@ private:
     // Maps dd_timelock_id -> owner CKey
     std::map<uint256, CKey> dd_owner_keys;
 
+    // DD address keys storage (for received DD tokens)
+    // Maps XOnlyPubKey (output_key from P2TR address) -> owner CKey
+    // This enables spending DD received at addresses we generated via getdigidollaraddress
+    std::map<std::array<unsigned char, 32>, CKey> dd_address_keys;
+
     // Pointer to wallet for UTXO access
     wallet::CWallet* m_wallet;
 
@@ -167,10 +172,16 @@ public:
      * Store DD owner key for a time-lock position
      * @param dd_timelock_id The time-lock position ID (mint tx hash)
      * @param key The owner private key
+     * @note Persists the key to the wallet database for survival across restarts
      */
-    void StoreOwnerKey(const uint256& dd_timelock_id, const CKey& key) {
-        dd_owner_keys[dd_timelock_id] = key;
-    }
+    void StoreOwnerKey(const uint256& dd_timelock_id, const CKey& key);
+
+    /**
+     * Load DD owner keys from wallet database
+     * Called during wallet initialization to restore persisted keys
+     * @return Number of keys loaded
+     */
+    size_t LoadDDOwnerKeys();
 
     /**
      * Retrieve DD owner key for a time-lock position
@@ -181,6 +192,42 @@ public:
     bool GetOwnerKey(const uint256& dd_timelock_id, CKey& key) const {
         auto it = dd_owner_keys.find(dd_timelock_id);
         if (it == dd_owner_keys.end()) return false;
+        key = it->second;
+        return true;
+    }
+
+    // ====================================================================
+    // DD ADDRESS KEY MANAGEMENT (for received DD tokens)
+    // ====================================================================
+
+    /**
+     * Store DD address key for a P2TR output key
+     * Called when getdigidollaraddress generates a new address
+     * @param output_key The XOnlyPubKey (output key) from the P2TR address
+     * @param key The private key that can sign for this address
+     * @note Persists the key to the wallet database for survival across restarts
+     */
+    void StoreAddressKey(const XOnlyPubKey& output_key, const CKey& key);
+
+    /**
+     * Load DD address keys from wallet database
+     * Called during wallet initialization to restore persisted keys
+     * @return Number of keys loaded
+     */
+    size_t LoadDDAddressKeys();
+
+    /**
+     * Retrieve DD address key for a P2TR output key
+     * Used when spending received DD tokens
+     * @param output_key The XOnlyPubKey (output key) from the P2TR address
+     * @param key Output parameter for the private key
+     * @return true if key found
+     */
+    bool GetAddressKey(const XOnlyPubKey& output_key, CKey& key) const {
+        std::array<unsigned char, 32> key_bytes;
+        std::copy(output_key.begin(), output_key.end(), key_bytes.begin());
+        auto it = dd_address_keys.find(key_bytes);
+        if (it == dd_address_keys.end()) return false;
         key = it->second;
         return true;
     }

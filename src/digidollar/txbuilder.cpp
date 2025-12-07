@@ -1095,6 +1095,8 @@ TxBuilderResult RedeemTxBuilder::BuildRedemptionTransaction(const TxBuilderRedee
         ddChangeScript << std::vector<unsigned char>(tweakedKey.begin(), tweakedKey.end());
         tx.vout.push_back(CTxOut(0, ddChangeScript));
         LogPrintf("DigiDollar: Added DD change output: %d cents\n", ddChange);
+        // NOTE: Don't register metadata here - the OP_RETURN contains the authoritative amount
+        // and validation uses that instead. Registering would overwrite the original input amount.
 
         // Add OP_RETURN marker with DD change amount so wallet can track it
         // Format: OP_RETURN <"DD"> <txType=3 for REDEEM> <change_amount>

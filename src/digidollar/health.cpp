@@ -423,6 +423,17 @@ void SystemHealthMonitor::ScanUTXOSet(CCoinsView* view, CCoinsView* validation_v
                                              tx->vout[2].scriptPubKey.size() > 2 ? tx->vout[2].scriptPubKey[2] : 0,
                                              tx->vout[2].scriptPubKey.size() > 3 ? tx->vout[2].scriptPubKey[3] : 0);
 
+                                    // CRITICAL: Check txType to ensure this is a MINT (1), not REDEEM (3) or TRANSFER (2)
+                                    // Redemption transactions have similar structure but should NOT be counted as vaults
+                                    DigiDollarTxType txType = DigiDollar::GetDigiDollarTxType(*tx);
+                                    if (txType != DD_TX_MINT) {
+                                        LogPrint(BCLog::DIGIDOLLAR, "ScanUTXOSet: Skipping tx %s - txType=%d (not MINT)\n",
+                                                 txid.ToString(), static_cast<int>(txType));
+                                        processed_txids.insert(txid);
+                                        pcursor->Next();
+                                        continue;
+                                    }
+
                                     // Try to extract DD amount from OP_RETURN
                                     if (DigiDollar::ExtractDDAmount(tx->vout[2].scriptPubKey, ddAmount)) {
                                         isValidDDMint = true;

@@ -407,6 +407,110 @@ echo "=== Step 13: State After Transfers ==="
 display_network_stats "After Bob's Transfers to Alice and Charlie"
 display_all_balances
 
+# Step 13.5: WALLET RESTART TEST - Verify DD balance persists after Bob's wallet restart
+echo "=== Step 13.5: Bob Wallet Restart Test (DD Persistence) ==="
+echo "Recording Bob's DD balance before restart..."
+
+# Record balances before restart
+BOB_DD_BEFORE=$($BOB_CLI -rpcwallet=bob getdigidollarbalance 2>/dev/null | jq -r '.total // 0')
+BOB_DGB_BEFORE=$($BOB_CLI -rpcwallet=bob getbalance 2>/dev/null || echo "0")
+echo "  Before restart - Bob's DD balance: $BOB_DD_BEFORE cents"
+echo "  Before restart - Bob's DGB balance: $BOB_DGB_BEFORE DGB"
+echo ""
+
+echo "Stopping Bob's Qt wallet..."
+kill $BOB_PID 2>/dev/null || true
+
+# Wait for the process to fully terminate and lock file to be released
+echo "Waiting for Bob's wallet to fully close..."
+for i in {1..30}; do
+    if ! kill -0 $BOB_PID 2>/dev/null; then
+        # Process is dead, but wait a bit more for lock file release
+        sleep 2
+        break
+    fi
+    sleep 1
+done
+
+# Double-check lock file is gone
+LOCK_FILE="$BOB_DATADIR/testnet5/.lock"
+for i in {1..10}; do
+    if [ ! -f "$LOCK_FILE" ] || ! lsof "$LOCK_FILE" 2>/dev/null | grep -q .; then
+        break
+    fi
+    echo "  Waiting for lock file to be released..."
+    sleep 1
+done
+
+echo "Restarting Bob's Qt wallet..."
+env -i \
+    DISPLAY="${DISPLAY}" \
+    XAUTHORITY="${XAUTHORITY}" \
+    WAYLAND_DISPLAY="${WAYLAND_DISPLAY}" \
+    XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}" \
+    XDG_SESSION_TYPE="${XDG_SESSION_TYPE}" \
+    HOME="${HOME}" \
+    USER="${USER}" \
+    PATH="${PATH}" \
+    ./src/qt/digibyte-qt \
+    -testnet \
+    -datadir=$BOB_DATADIR \
+    -port=$BOB_PORT \
+    -rpcport=$BOB_RPC \
+    -server \
+    -listen=1 \
+    -discover=0 \
+    -digidollar=1 \
+    -txindex=1 \
+    -fallbackfee=0.0001 \
+    -dandelion=0 \
+    > /tmp/bob_testnet.log 2>&1 &
+BOB_PID=$!
+echo "Bob's Qt restarted (PID: $BOB_PID)"
+
+echo "Waiting for Bob's RPC..."
+if wait_for_rpc "$BOB_CLI" "Bob"; then
+    print_status "ok" "Bob's Qt RPC is ready after restart"
+else
+    print_status "fail" "Bob's Qt failed to restart"
+    exit 1
+fi
+
+# Load Bob's wallet
+echo "Loading Bob's wallet..."
+$BOB_CLI loadwallet "bob" 2>/dev/null || true
+sleep 2
+
+# Verify DD balance persisted
+BOB_DD_AFTER=$($BOB_CLI -rpcwallet=bob getdigidollarbalance 2>/dev/null | jq -r '.total // 0')
+BOB_DGB_AFTER=$($BOB_CLI -rpcwallet=bob getbalance 2>/dev/null || echo "0")
+echo "  After restart - Bob's DD balance: $BOB_DD_AFTER cents"
+echo "  After restart - Bob's DGB balance: $BOB_DGB_AFTER DGB"
+echo ""
+
+if [ "$BOB_DD_BEFORE" = "$BOB_DD_AFTER" ]; then
+    print_status "ok" "DD balance PERSISTED after wallet restart! ($BOB_DD_AFTER cents)"
+else
+    print_status "fail" "DD balance CHANGED after restart! Before: $BOB_DD_BEFORE, After: $BOB_DD_AFTER"
+fi
+
+# Restart the oracle on Bob's node (it was stopped when we killed Bob's Qt)
+echo "Restarting oracle on Bob's node..."
+$BOB_CLI startoracle 0 "$ORACLE_PRIVATE_KEY" 2>/dev/null || true
+sleep 2
+$BOB_CLI generatetoaddress 1 "$BOB_ADDR" > /dev/null 2>&1
+
+# Wait for oracle to be active again
+for i in {1..10}; do
+    STATUS=$($BOB_CLI getoracleprice 2>/dev/null | jq -r '.status // "inactive"')
+    if [ "$STATUS" = "active" ]; then
+        print_status "ok" "Oracle is active again"
+        break
+    fi
+    sleep 1
+done
+echo ""
+
 # Step 14: Bob mints $10 DD with short lock (tier 0 = 240 blocks = 1 hour)
 echo "=== Step 14: Bob mints \$10 DD with 1-hour lock (tier 0) ==="
 echo "This will be used for redemption testing..."
@@ -724,14 +828,15 @@ echo "  1. Fund Alice and Charlie with DGB (55+62 blocks for minting)"
 echo "  2. Bob mints \$100 DD with tier 0 (1000% collateral)"
 echo "  3. Bob sends \$30 DD to Alice"
 echo "  4. Bob sends \$20 DD to Charlie"
-echo "  5. Bob mints \$10 DD with 1-hour lock"
-echo "  6. Early redemption REJECTED (lock not expired)"
-echo "  7. Redemption SUCCEEDED (after lock expired)"
-echo "  8. Bob mints \$200 DD with 10-year lock (tier 8 = 200% collateral)"
-echo "  9. Charlie sends \$15 DD to Alice (recipient spending test)"
-echo "  10. Alice sends \$10 DD back to Bob (full circle test)"
-echo "  11. Alice mints \$100 DD with 7-year lock (tier 7)"
-echo "  12. Charlie mints \$200 DD with 10-year lock (tier 8)"
+echo "  5. BOB WALLET RESTART TEST (DD persistence verification)"
+echo "  6. Bob mints \$10 DD with 1-hour lock"
+echo "  7. Early redemption REJECTED (lock not expired)"
+echo "  8. Redemption SUCCEEDED (after lock expired)"
+echo "  9. Bob mints \$200 DD with 10-year lock (tier 8 = 200% collateral)"
+echo "  10. Charlie sends \$15 DD to Alice (recipient spending test)"
+echo "  11. Alice sends \$10 DD back to Bob (full circle test)"
+echo "  12. Alice mints \$100 DD with 7-year lock (tier 7)"
+echo "  13. Charlie mints \$200 DD with 10-year lock (tier 8)"
 echo ""
 echo "NETWORK STRESS TEST - All 3 Nodes Minting:"
 echo "  - Bob: \$200 DD (10-year) + \$100 DD transfers received"

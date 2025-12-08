@@ -511,12 +511,15 @@ bool ValidateMintTransaction(const CTransaction& tx,
             }
 
             // Check if it's P2TR (required for collateral)
+            // Non-P2TR outputs are allowed as change outputs - skip them
             if (!isP2TR) {
-                LogPrintf("DigiDollar: Collateral output is not P2TR\n");
-                return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-collateral-script");
+                // This is a change output (P2WPKH, P2SH, etc.) - not collateral
+                LogPrintf("DigiDollar: Output %zu is non-P2TR change output (value=%d, scriptSize=%d)\n",
+                         i, output.nValue, output.scriptPubKey.size());
+                continue;  // Skip to next output - change outputs are allowed
             }
 
-            // This is the collateral output
+            // This is a P2TR output with value - must be collateral
             if (!ValidateCollateralOutput(output, tx, state)) {
                 return false;
             }

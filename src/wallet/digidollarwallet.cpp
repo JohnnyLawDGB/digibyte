@@ -760,8 +760,8 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
                 // Extract DD amounts
                 while (txout.scriptPubKey.GetOp(pc, opcode, data)) {
                     if (data.size() > 0) {
-                        CScriptNum amount_num(data, true);
-                        dd_amounts.push_back(amount_num.getint());
+                        CScriptNum amount_num(data, true, 8);  // 8-byte max for large DD amounts
+                        dd_amounts.push_back(amount_num.GetInt64());
                     }
                 }
                 break;
@@ -4583,8 +4583,8 @@ void DigiDollarWallet::ProcessIncomingTransaction(const CTransactionRef& tx, con
                 // Extract DD amounts
                 while (vout.scriptPubKey.GetOp(pc, opcode, data)) {
                     if (data.size() > 0) {
-                        CScriptNum amount(data, true);
-                        dd_amounts.push_back(amount.getint());
+                        CScriptNum amount(data, true, 8);  // 8-byte max for large DD amounts
+                        dd_amounts.push_back(amount.GetInt64());
                     }
                 }
                 break;
@@ -4706,9 +4706,9 @@ bool DigiDollarWallet::DetectIncomingDDOutputs(const CTransactionRef& tx,
             // Extract DD amounts
             while (txout.scriptPubKey.GetOp(pc, opcode, data)) {
                 if (data.size() > 0) {
-                    CScriptNum amount(data, true);
-                    dd_amounts.push_back(amount.getint());
-                    LogPrintf("DigiDollar: Found DD amount in OP_RETURN: %d cents\n", amount.getint());
+                    CScriptNum amount(data, true, 8);  // 8-byte max for large DD amounts
+                    dd_amounts.push_back(amount.GetInt64());
+                    LogPrintf("DigiDollar: Found DD amount in OP_RETURN: %lld cents\n", (long long)amount.GetInt64());
                 }
             }
             break;  // Only one OP_RETURN per transaction

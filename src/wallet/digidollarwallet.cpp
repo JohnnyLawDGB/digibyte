@@ -634,6 +634,28 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
 
         params.spenderKey = spenderKey;
 
+        // CRITICAL FIX: Get a proper change address from the wallet for DGB change output
+        // This ensures the wallet recognizes the change output as its own!
+        // Without this, DGB would be sent to an address the wallet doesn't control.
+        if (m_wallet) {
+            // Get a new change address from wallet's internal keypool
+            auto op_dest = m_wallet->GetNewChangeDestination(OutputType::BECH32);
+            if (op_dest) {
+                params.dgbChangeDest = *op_dest;
+                LogPrintf("DigiDollar: Using wallet change address for DGB change output\n");
+            } else {
+                // Fallback: try to get any fresh address
+                LogPrintf("DigiDollar: WARNING - Could not get change destination, trying fresh address\n");
+                auto fresh_dest = m_wallet->GetNewDestination(OutputType::BECH32, std::string("DD_change"));
+                if (fresh_dest) {
+                    params.dgbChangeDest = *fresh_dest;
+                    LogPrintf("DigiDollar: Using fresh wallet address for DGB change output\n");
+                } else {
+                    LogPrintf("DigiDollar: WARNING - No wallet change address available, DGB change may be lost!\n");
+                }
+            }
+        }
+
         // Build transaction
         // Use current chain height and oracle price (mock for now)
         int currentHeight = 100000; // TODO: Get actual height from chainstate
@@ -2297,6 +2319,28 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
         }
 
         params.spenderKey = spenderKey;
+
+        // CRITICAL FIX: Get a proper change address from the wallet for DGB change output
+        // This ensures the wallet recognizes the change output as its own!
+        // Without this, DGB would be sent to an address the wallet doesn't control.
+        if (m_wallet) {
+            // Get a new change address from wallet's internal keypool
+            auto op_dest = m_wallet->GetNewChangeDestination(OutputType::BECH32);
+            if (op_dest) {
+                params.dgbChangeDest = *op_dest;
+                LogPrintf("DigiDollar: Using wallet change address for DGB change output\n");
+            } else {
+                // Fallback: try to get any fresh address
+                LogPrintf("DigiDollar: WARNING - Could not get change destination, trying fresh address\n");
+                auto fresh_dest = m_wallet->GetNewDestination(OutputType::BECH32, std::string("DD_change"));
+                if (fresh_dest) {
+                    params.dgbChangeDest = *fresh_dest;
+                    LogPrintf("DigiDollar: Using fresh wallet address for DGB change output\n");
+                } else {
+                    LogPrintf("DigiDollar: WARNING - No wallet change address available, DGB change may be lost!\n");
+                }
+            }
+        }
 
         // Get current chain height and oracle price (mock values for now)
         int currentHeight = 100000;  // TODO: Get actual height from chainstate

@@ -884,6 +884,19 @@ WalletModel::DigiDollarMintResult WalletModel::mintDigiDollar(CAmount ddAmount, 
         params.feeRate = 500000; // High fee rate to ensure >= 1 DGB total fee
         params.utxos = availableUtxos;
 
+        // CRITICAL FIX: Get a proper change address from the wallet for DGB change output
+        // This ensures the wallet recognizes the change output as its own!
+        {
+            LOCK(pWallet->cs_wallet);
+            auto op_dest = pWallet->GetNewChangeDestination(OutputType::BECH32);
+            if (op_dest) {
+                params.dgbChangeDest = *op_dest;
+                LogPrintf("DigiDollar Qt Mint: Using wallet change address for DGB change output\n");
+            } else {
+                LogPrintf("DigiDollar Qt Mint: WARNING - Could not get change destination!\n");
+            }
+        }
+
         LogPrintf("DigiDollar Qt: TxBuilder params - DD: %d cents, Days: %d, Height: %d, Price: %d, UTXOs: %d\n",
                   ddAmount, lockDays, currentHeight, oraclePrice, availableUtxos.size());
 

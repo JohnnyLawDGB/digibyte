@@ -616,6 +616,19 @@ RPCHelpMan mintdigidollar()
             params.feeRate = feeRate;
             params.utxos = availableUtxos;
 
+            // CRITICAL FIX: Get a proper change address from the wallet for DGB change output
+            // This ensures the wallet recognizes the change output as its own!
+            {
+                LOCK(pwallet->cs_wallet);
+                auto op_dest = pwallet->GetNewChangeDestination(OutputType::BECH32);
+                if (op_dest) {
+                    params.dgbChangeDest = *op_dest;
+                    LogPrintf("DigiDollar RPC Mint: Using wallet change address for DGB change output\n");
+                } else {
+                    LogPrintf("DigiDollar RPC Mint: WARNING - Could not get change destination!\n");
+                }
+            }
+
             DigiDollar::TxBuilderResult result = builder.BuildMintTransaction(params);
 
             if (!result.success) {

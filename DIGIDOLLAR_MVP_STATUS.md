@@ -8,7 +8,7 @@
 
 ## Executive Summary
 
-DigiDollar implementation is approximately **72% complete** for a basic MVP on testnet. Mainnet deployment requires additional work, primarily around oracle decentralization and system health monitoring. The core transaction mechanics (minting, transfers, redemption) are functional, but critical backend calculations for Dynamic Collateral Adjustment remain incomplete.
+DigiDollar implementation is approximately **72% complete** for a MVP on testnet. Mainnet deployment requires additional work, primarily around oracle decentralization and system health monitoring. The core transaction mechanics (minting, transfers, redemption) are functional, but critical backend calculations for Dynamic Collateral Adjustment remain incomplete.
 
 ### Quick Status
 

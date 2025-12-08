@@ -551,9 +551,9 @@ bool ValidateMintTransaction(const CTransaction& tx,
                 if (output.scriptPubKey.GetOp(pc, opcode, data)) {
                     try {
                         CScriptNum ddAmountNum(data, true);
-                        totalDD = ddAmountNum.getint();
-                        LogPrintf("DigiDollar: Extracted DD amount from OP_RETURN: %d cents ($%.2f)\n",
-                                  totalDD, totalDD / 100.0);
+                        totalDD = ddAmountNum.GetInt64();
+                        LogPrintf("DigiDollar: Extracted DD amount from OP_RETURN: %lld cents ($%.2f)\n",
+                                  static_cast<long long>(totalDD), totalDD / 100.0);
                     } catch (const std::exception&) {}
                 }
 
@@ -561,8 +561,8 @@ bool ValidateMintTransaction(const CTransaction& tx,
                 if (output.scriptPubKey.GetOp(pc, opcode, data)) {
                     try {
                         CScriptNum lockHeightNum(data, true);
-                        lockTime = lockHeightNum.getint();
-                        LogPrintf("DigiDollar: Extracted lock height from OP_RETURN: %d blocks\n", lockTime);
+                        lockTime = lockHeightNum.GetInt64();
+                        LogPrintf("DigiDollar: Extracted lock height from OP_RETURN: %lld blocks\n", static_cast<long long>(lockTime));
                     } catch (const std::exception&) {}
                 }
             }
@@ -715,7 +715,7 @@ bool ValidateTransferTransaction(const CTransaction& tx,
             while (output.scriptPubKey.GetOp(pc, opcode, data)) {
                 if (data.size() > 0) {
                     CScriptNum amount(data, true);
-                    dd_amounts.push_back(amount.getint());
+                    dd_amounts.push_back(amount.GetInt64());
                 }
             }
             break;
@@ -1285,7 +1285,7 @@ int64_t ExtractLockTime(const CScript& script) {
         if (data.size() >= 4 && data.size() <= 8) {
             try {
                 CScriptNum timelock(data, true, data.size());
-                int64_t lockValue = timelock.getint();
+                int64_t lockValue = timelock.GetInt64();
 
                 // Reasonable timelock range (between 1 day and 10 years)
                 int64_t minLock = 24 * 60 * 4; // 1 day

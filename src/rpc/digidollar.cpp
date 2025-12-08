@@ -130,22 +130,22 @@ RPCHelpMan getdigidollarstats()
             LogPrintf("DigiDollar: getdigidollarstats - ForceFlushStateToDisk completed\n");
 
             // Step 2: Now acquire lock and access the flushed CoinsDB
+            // CRITICAL: Hold cs_main lock during ScanUTXOSet to prevent race conditions
             CCoinsView* coins_view;
             node::BlockManager* blockman;
+            const CTxMemPool* mempool = node.mempool.get();
             {
                 LOCK(::cs_main);
                 coins_view = &active_chainstate.CoinsDB();
                 blockman = &active_chainstate.m_blockman;
+
+                // Scan UTXO set to find ALL DigiDollar vaults network-wide
+                // Pass BlockManager for full transaction access
+                // Pass both CoinsDB (for iteration) and CoinsTip (for validation)
+                LogPrintf("DigiDollar: getdigidollarstats - About to call ScanUTXOSet...\n");
+                DigiDollar::SystemHealthMonitor::ScanUTXOSet(coins_view, &active_chainstate.CoinsTip(), blockman, mempool);
+                LogPrintf("DigiDollar: getdigidollarstats - ScanUTXOSet completed\n");
             }
-
-            const CTxMemPool* mempool = node.mempool.get();
-
-            // Scan UTXO set to find ALL DigiDollar vaults network-wide
-            // Pass BlockManager for full transaction access
-            // Pass both CoinsDB (for iteration) and CoinsTip (for validation)
-            LogPrintf("DigiDollar: getdigidollarstats - About to call ScanUTXOSet...\n");
-            DigiDollar::SystemHealthMonitor::ScanUTXOSet(coins_view, &active_chainstate.CoinsTip(), blockman, mempool);
-            LogPrintf("DigiDollar: getdigidollarstats - ScanUTXOSet completed\n");
 
             // Get metrics from scanner
             DigiDollar::SystemMetrics metrics = DigiDollar::SystemHealthMonitor::GetSystemMetrics();
@@ -193,9 +193,9 @@ RPCHelpMan getdigidollarstats()
             result.pushKV("health_percentage", systemHealth);
             result.pushKV("health_status", tier.status);
             result.pushKV("total_collateral_dgb", ValueFromAmount(totalCollateral));
-            result.pushKV("total_dd_supply", totalDD);
-            result.pushKV("oracle_price_cents", oraclePriceCents);   // Rounded to cents for display
-            result.pushKV("oracle_price_micro_usd", oraclePriceMicroUSD); // Full precision micro-USD
+            result.pushKV("total_dd_supply", int64_t{totalDD});
+            result.pushKV("oracle_price_cents", int64_t{oraclePriceCents});   // Rounded to cents for display
+            result.pushKV("oracle_price_micro_usd", int64_t{oraclePriceMicroUSD}); // Full precision micro-USD
             result.pushKV("is_emergency", isEmergency);
 
             // Add fields expected by tests
@@ -378,14 +378,14 @@ static RPCHelpMan calculatecollateralrequirement()
 
             UniValue result(UniValue::VOBJ);
             result.pushKV("required_dgb", ValueFromAmount(requiredDGB));
-            result.pushKV("dd_amount_cents", ddAmount);
+            result.pushKV("dd_amount_cents", int64_t{ddAmount});
             result.pushKV("dd_amount_usd", ddAmount / 100.0);  // Convert cents to USD
             result.pushKV("lock_days", lockDays);
-            result.pushKV("lock_blocks", lockBlocks);
+            result.pushKV("lock_blocks", int64_t{lockBlocks});
             result.pushKV("base_ratio", baseRatio);
             result.pushKV("dca_multiplier", dcaMultiplier);
             result.pushKV("effective_ratio", effectiveRatio);
-            result.pushKV("oracle_price_micro_usd", oraclePriceMicroUSD);
+            result.pushKV("oracle_price_micro_usd", int64_t{oraclePriceMicroUSD});
             result.pushKV("oracle_price_usd", oraclePriceMicroUSD / 1000000.0);
             result.pushKV("system_health", systemHealth);
             result.pushKV("dca_tier", tier.status);
@@ -707,7 +707,7 @@ RPCHelpMan mintdigidollar()
 
             UniValue resultObj(UniValue::VOBJ);
             resultObj.pushKV("txid", tx->GetHash().GetHex());
-            resultObj.pushKV("dd_minted", ddAmount);
+            resultObj.pushKV("dd_minted", int64_t{ddAmount});
             resultObj.pushKV("dgb_collateral", ValueFromAmount(result.collateralRequired));
             resultObj.pushKV("lock_tier", lockTier);
             resultObj.pushKV("unlock_height", unlockHeight);
@@ -1173,7 +1173,7 @@ RPCHelpMan redeemdigidollar()
             UniValue result(UniValue::VOBJ);
             result.pushKV("txid", redeemTx->GetHash().GetHex());
             result.pushKV("position_id", positionIdStr);
-            result.pushKV("dd_redeemed", ddAmount);
+            result.pushKV("dd_redeemed", int64_t{ddAmount});
             result.pushKV("dgb_unlocked", ValueFromAmount(dgbUnlocked));
             result.pushKV("unlock_address", redeemAddress.empty() ? "auto" : redeemAddress);
             result.pushKV("fee_paid", ValueFromAmount(redeemResult.totalFees));
@@ -1254,7 +1254,7 @@ RPCHelpMan listdigidollarpositions()
 
                 UniValue position(UniValue::VOBJ);
                 position.pushKV("position_id", pos.dd_timelock_id.GetHex());
-                position.pushKV("dd_minted", pos.dd_minted);
+                position.pushKV("dd_minted", int64_t{pos.dd_minted});
                 position.pushKV("dgb_collateral", ValueFromAmount(pos.dgb_collateral));
                 position.pushKV("lock_tier", static_cast<int>(pos.lock_tier));
                 position.pushKV("lock_days", GetLockDaysForTier(pos.lock_tier));
@@ -1721,9 +1721,9 @@ RPCHelpMan getdigidollarbalance()
             }
 
             UniValue result(UniValue::VOBJ);
-            result.pushKV("confirmed", confirmedBalance);
-            result.pushKV("unconfirmed", unconfirmedBalance);
-            result.pushKV("total", confirmedBalance + unconfirmedBalance);
+            result.pushKV("confirmed", int64_t{confirmedBalance});
+            result.pushKV("unconfirmed", int64_t{unconfirmedBalance});
+            result.pushKV("total", int64_t{confirmedBalance + unconfirmedBalance});
             if (!addressStr.empty()) {
                 result.pushKV("address", addressStr);
             }
@@ -1827,13 +1827,13 @@ static RPCHelpMan estimatecollateral()
 
             UniValue result(UniValue::VOBJ);
             result.pushKV("required_dgb", ValueFromAmount(static_cast<CAmount>(requiredDGB)));
-            result.pushKV("dd_amount", ddAmount);
+            result.pushKV("dd_amount", int64_t{ddAmount});
             result.pushKV("lock_tier", lockTier);
             result.pushKV("lock_days", lockDays);
             result.pushKV("base_ratio", baseRatio);
             result.pushKV("dca_multiplier", dcaMultiplier);
             result.pushKV("effective_ratio", effectiveRatio);
-            result.pushKV("oracle_price_micro_usd", oraclePriceMicroUSD);
+            result.pushKV("oracle_price_micro_usd", int64_t{oraclePriceMicroUSD});
             result.pushKV("oracle_price_usd", oraclePriceMicroUSD / 1000000.0);
             result.pushKV("system_health", systemHealth);
             result.pushKV("health_tier", "healthy");
@@ -1904,12 +1904,12 @@ static RPCHelpMan getredemptioninfo()
             result.pushKV("position_id", positionIdStr);
             result.pushKV("can_redeem", canRedeem);
             result.pushKV("redemption_path", "normal");
-            result.pushKV("total_dd_minted", totalDDMinted);
-            result.pushKV("redeemable_dd", redeemableDD);
+            result.pushKV("total_dd_minted", int64_t{totalDDMinted});
+            result.pushKV("redeemable_dd", int64_t{redeemableDD});
             result.pushKV("dgb_return", ValueFromAmount(dgbReturn));
             result.pushKV("unlock_height", unlockHeight);
             result.pushKV("timelock_remaining", blocksRemaining);
-            result.pushKV("penalty_amount", penaltyAmount);
+            result.pushKV("penalty_amount", int64_t{penaltyAmount});
             result.pushKV("status", status);
             result.pushKV("unlock_date", "2024-12-31T23:59:59Z");
 

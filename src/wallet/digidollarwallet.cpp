@@ -94,8 +94,8 @@ size_t DigiDollarWallet::LoadFromDatabase()
                 dd_utxos[outpoint] = dd_amount;
                 utxos_loaded++;
 
-                LogPrint(BCLog::WALLETDB, "DigiDollarWallet: Loaded DD UTXO %s:%d (%d cents)\n",
-                        outpoint.hash.ToString(), outpoint.n, dd_amount);
+                LogPrint(BCLog::WALLETDB, "DigiDollarWallet: Loaded DD UTXO %s:%u (%lld cents)\n",
+                        outpoint.hash.ToString(), outpoint.n, static_cast<long long>(dd_amount));
             }
         }
     }
@@ -108,7 +108,7 @@ size_t DigiDollarWallet::LoadFromDatabase()
 
     size_t total = positions_loaded + balances_loaded + txs_loaded + utxos_loaded + addr_keys_loaded + owner_keys_loaded;
 
-    LogPrintf("DigiDollarWallet: Loaded %d positions, %d balances, %d transactions, %d DD UTXOs, %zu DD address keys, %zu DD owner keys\n",
+    LogPrintf("DigiDollarWallet: Loaded %zu positions, %zu balances, %zu transactions, %zu DD UTXOs, %zu DD address keys, %zu DD owner keys\n",
               positions_loaded, balances_loaded, txs_loaded, utxos_loaded, addr_keys_loaded, owner_keys_loaded);
 
     // Recalculate totals
@@ -254,8 +254,8 @@ void DigiDollarWallet::RecalculateTotals()
         }
     }
 
-    LogPrint(BCLog::WALLETDB, "DigiDollarWallet: Totals - DD Balance: %d, Locked: %d\n",
-             total_dd_balance, locked_collateral);
+    LogPrint(BCLog::WALLETDB, "DigiDollarWallet: Totals - DD Balance: %lld, Locked: %lld\n",
+             static_cast<long long>(total_dd_balance), static_cast<long long>(locked_collateral));
 }
 
 void DigiDollarWallet::StoreAddressKey(const XOnlyPubKey& output_key, const CKey& key)
@@ -409,7 +409,7 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
     error.clear();
 
     try {
-        LogPrintf("DigiDollar: Starting transfer - %d cents to %s\n", amount, to.ToString());
+        LogPrintf("DigiDollar: Starting transfer - %lld cents to %s\n", static_cast<long long>(amount), to.ToString());
 
         // Validate recipient address
         if (!to.IsValid()) {
@@ -439,10 +439,10 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
         }
 
         if (amount > currentBalance) {
-            error = strprintf("Insufficient DD balance. Available: %d cents, Required: %d cents",
-                            currentBalance, amount);
-            LogPrintf("DigiDollar: Insufficient balance - available: %d, required: %d\n",
-                     currentBalance, amount);
+            error = strprintf("Insufficient DD balance. Available: %lld cents, Required: %lld cents",
+                            static_cast<long long>(currentBalance), static_cast<long long>(amount));
+            LogPrintf("DigiDollar: Insufficient balance - available: %lld, required: %lld\n",
+                     static_cast<long long>(currentBalance), static_cast<long long>(amount));
             return false;
         }
 
@@ -467,9 +467,9 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
         // CRITICAL: Pass DD UTXO amounts to txbuilder (FIX #3 & #7)
         // Pass individual amounts for each UTXO (required by txbuilder)
         params.ddAmounts = selected_dd_amounts;
-        LogPrintf("DigiDollar: GUI Transfer - Passing %d DD UTXO amounts to txbuilder - total: %d cents\n",
-                  selected_dd_amounts.size(), selectedDDTotal);
-        LogPrintf("DigiDollar: GUI Transfer - ddUtxos.size()=%d, ddAmounts.size()=%d\n",
+        LogPrintf("DigiDollar: GUI Transfer - Passing %zu DD UTXO amounts to txbuilder - total: %lld cents\n",
+                  selected_dd_amounts.size(), static_cast<long long>(selectedDDTotal));
+        LogPrintf("DigiDollar: GUI Transfer - ddUtxos.size()=%zu, ddAmounts.size()=%zu\n",
                   params.ddUtxos.size(), params.ddAmounts.size());
 
         // Select DGB UTXOs for fees (estimated)
@@ -803,8 +803,8 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
                                      new_utxo.hash.ToString(), i);
                         }
 
-                        LogPrintf("DigiDollar: Added change DD UTXO %s:%d (%d cents)\n",
-                                  new_utxo.hash.ToString(), i, dd_amount);
+                        LogPrintf("DigiDollar: Added change DD UTXO %s:%d (%lld cents)\n",
+                                  new_utxo.hash.ToString(), i, static_cast<long long>(dd_amount));
                     }
                 }
                 dd_output_index++;
@@ -839,10 +839,10 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
 
         // Verify balance updated correctly
         CAmount newBalance = GetTotalDDBalance();
-        LogPrintf("DigiDollar: Transfer successful - %d cents to %s (txid: %s)\n",
-                  amount, to.ToString(), txid);
-        LogPrintf("DigiDollar: Balance updated: %d -> %d (change: %d)\n",
-                  currentBalance, newBalance, dd_change);
+        LogPrintf("DigiDollar: Transfer successful - %lld cents to %s (txid: %s)\n",
+                  static_cast<long long>(amount), to.ToString(), txid);
+        LogPrintf("DigiDollar: Balance updated: %lld -> %lld (change: %lld)\n",
+                  static_cast<long long>(currentBalance), static_cast<long long>(newBalance), static_cast<long long>(dd_change));
 
         return true;
 
@@ -871,7 +871,7 @@ std::vector<DDTransaction> DigiDollarWallet::GetDDTransactionHistory() const {
                   return a.timestamp > b.timestamp;
               });
 
-    LogPrintf("DigiDollar: GetDDTransactionHistory returning %d transactions\n", history.size());
+    LogPrintf("DigiDollar: GetDDTransactionHistory returning %zu transactions\n", history.size());
     return history;
 }
 
@@ -893,7 +893,7 @@ bool DigiDollarWallet::RedeemDigiDollar(const COutPoint& collateralUtxo,
     error.clear();
 
     try {
-        LogPrintf("DigiDollar: Starting redemption - %d cents via path %d\n", ddAmount, static_cast<int>(path));
+        LogPrintf("DigiDollar: Starting redemption - %lld cents via path %d\n", static_cast<long long>(ddAmount), static_cast<int>(path));
 
         // Validate inputs
         if (collateralUtxo.IsNull()) {
@@ -1168,11 +1168,11 @@ CAmount DigiDollarWallet::GetDGBBalance() const {
 // =============================================================================
 
 bool DigiDollarWallet::BurnDigiDollars(CAmount amount, std::vector<COutPoint>& burnedUtxos) {
-    LogPrintf("DigiDollar: BurnDigiDollars - Burning %d DD cents\n", amount);
+    LogPrintf("DigiDollar: BurnDigiDollars - Burning %lld DD cents\n", static_cast<long long>(amount));
 
     // Validate input
     if (amount <= 0) {
-        LogPrintf("DigiDollar: BurnDigiDollars - Invalid amount: %d\n", amount);
+        LogPrintf("DigiDollar: BurnDigiDollars - Invalid amount: %lld\n", static_cast<long long>(amount));
         return false;
     }
 
@@ -1194,21 +1194,21 @@ bool DigiDollarWallet::BurnDigiDollars(CAmount amount, std::vector<COutPoint>& b
         // Add this UTXO
         selected_utxos.push_back(utxo.outpoint);
         selected_amount += utxo.dd_amount;
-        LogPrintf("DigiDollar: BurnDigiDollars - Selected UTXO %s:%d (%d DD), total now: %d\n",
-                  utxo.outpoint.hash.ToString(), utxo.outpoint.n, utxo.dd_amount, selected_amount);
+        LogPrintf("DigiDollar: BurnDigiDollars - Selected UTXO %s:%u (%lld DD), total now: %lld\n",
+                  utxo.outpoint.hash.ToString(), utxo.outpoint.n, static_cast<long long>(utxo.dd_amount), static_cast<long long>(selected_amount));
 
         // Check if we now have enough
         if (selected_amount >= amount) {
-            LogPrintf("DigiDollar: BurnDigiDollars - Have enough DD (%d >= %d), stopping selection\n",
-                      selected_amount, amount);
+            LogPrintf("DigiDollar: BurnDigiDollars - Have enough DD (%lld >= %lld), stopping selection\n",
+                      static_cast<long long>(selected_amount), static_cast<long long>(amount));
             break;
         }
     }
 
     // Check if we have enough DD
     if (selected_amount < amount) {
-        LogPrintf("DigiDollar: BurnDigiDollars - Insufficient DD balance: need %d, have %d\n",
-                  amount, selected_amount);
+        LogPrintf("DigiDollar: BurnDigiDollars - Insufficient DD balance: need %lld, have %lld\n",
+                  static_cast<long long>(amount), static_cast<long long>(selected_amount));
         return false;
     }
 
@@ -1260,9 +1260,9 @@ bool DigiDollarWallet::BurnDigiDollars(CAmount amount, std::vector<COutPoint>& b
     // Step 7: Return burned UTXOs
     burnedUtxos = selected_utxos;
 
-    LogPrintf("DigiDollar: BurnDigiDollars - Successfully burned %d DD cents using %d UTXOs\n",
-              amount, burnedUtxos.size());
-    LogPrintf("DigiDollar: BurnDigiDollars - New total DD balance: %d cents\n", total_dd_balance);
+    LogPrintf("DigiDollar: BurnDigiDollars - Successfully burned %lld DD cents using %zu UTXOs\n",
+              static_cast<long long>(amount), burnedUtxos.size());
+    LogPrintf("DigiDollar: BurnDigiDollars - New total DD balance: %lld cents\n", static_cast<long long>(total_dd_balance));
 
     return true;
 }
@@ -1279,8 +1279,8 @@ bool DigiDollarWallet::CloseCollateralPosition(const COutPoint& outpoint, bool p
 
     // For partial redemptions, validate remaining DD
     if (partial && remainingDD <= 0) {
-        LogPrintf("DigiDollar: CloseCollateralPosition - Invalid remaining DD for partial redemption: %d\n",
-                  remainingDD);
+        LogPrintf("DigiDollar: CloseCollateralPosition - Invalid remaining DD for partial redemption: %lld\n",
+                  static_cast<long long>(remainingDD));
         return false;
     }
 
@@ -1315,17 +1315,17 @@ bool DigiDollarWallet::CloseCollateralPosition(const COutPoint& outpoint, bool p
         it->second.dgb_collateral -= released_dgb;
         it->second.is_active = true; // Keep active for partial redemption
 
-        LogPrintf("DigiDollar: CloseCollateralPosition - Partial redemption: %d DD redeemed, %d DD remaining\n",
-                  redeemed_dd, remainingDD);
-        LogPrintf("DigiDollar: CloseCollateralPosition - Partial redemption: %d DGB released, %d DGB remaining\n",
-                  released_dgb, it->second.dgb_collateral);
+        LogPrintf("DigiDollar: CloseCollateralPosition - Partial redemption: %lld DD redeemed, %lld DD remaining\n",
+                  static_cast<long long>(redeemed_dd), static_cast<long long>(remainingDD));
+        LogPrintf("DigiDollar: CloseCollateralPosition - Partial redemption: %lld DGB released, %lld DGB remaining\n",
+                  static_cast<long long>(released_dgb), static_cast<long long>(it->second.dgb_collateral));
     } else {
         // Full redemption: mark position as inactive
         it->second.is_active = false;
 
         LogPrintf("DigiDollar: CloseCollateralPosition - Full redemption: position marked inactive\n");
-        LogPrintf("DigiDollar: CloseCollateralPosition - Full redemption: %d DD redeemed, %d DGB released\n",
-                  original_dd, original_dgb);
+        LogPrintf("DigiDollar: CloseCollateralPosition - Full redemption: %lld DD redeemed, %lld DGB released\n",
+                  static_cast<long long>(original_dd), static_cast<long long>(original_dgb));
     }
 
     // Step 3: Persist changes to wallet database
@@ -1356,8 +1356,8 @@ bool DigiDollarWallet::CloseCollateralPosition(const COutPoint& outpoint, bool p
         }
         locked_collateral = total_locked;
 
-        LogPrintf("DigiDollar: CloseCollateralPosition - Updated total locked collateral: %d DGB\n",
-                  locked_collateral);
+        LogPrintf("DigiDollar: CloseCollateralPosition - Updated total locked collateral: %lld DGB\n",
+                  static_cast<long long>(locked_collateral));
     }
 
     // Step 5: Record closure in transaction history
@@ -1395,7 +1395,7 @@ bool DigiDollarWallet::WriteDDBalance(const CDigiDollarAddress& addr, const CAmo
     }
 
     if (balance < 0) {
-        LogPrintf("ERROR: DigiDollarWallet::WriteDDBalance - Negative balance: %d\n", balance);
+        LogPrintf("ERROR: DigiDollarWallet::WriteDDBalance - Negative balance: %lld\n", static_cast<long long>(balance));
         return error("DigiDollarWallet::WriteDDBalance: Negative balance not allowed");
     }
 
@@ -1430,7 +1430,7 @@ bool DigiDollarWallet::WriteDDBalance(const CDigiDollarAddress& addr, const CAmo
         if (m_wallet) {
             wallet::WalletBatch batch(m_wallet->GetDatabase());
 
-            LogPrintf("DEBUG: DigiDollarWallet::WriteDDBalance - Writing to database: addr=%s, balance=%d\n", addr_str, balance);
+            LogPrintf("DEBUG: DigiDollarWallet::WriteDDBalance - Writing to database: addr=%s, balance=%lld\n", addr_str, static_cast<long long>(balance));
             if (!batch.WriteDDBalance(addr_str, bal_record)) {
                 LogPrintf("ERROR: DigiDollarWallet::WriteDDBalance - Database write failed for %s\n", addr_str);
                 return error("DigiDollarWallet::WriteDDBalance: Database write failed for %s", addr_str.c_str());
@@ -1443,8 +1443,8 @@ bool DigiDollarWallet::WriteDDBalance(const CDigiDollarAddress& addr, const CAmo
             LogPrintf("DigiDollarWallet: WriteDDBalance in test mode (no database) - addr: %s\n", addr_str);
         }
 
-        LogPrint(BCLog::WALLETDB, "DigiDollarWallet: Wrote balance %d for %s (total: %d)\n",
-                 balance, addr_str, total);
+        LogPrint(BCLog::WALLETDB, "DigiDollarWallet: Wrote balance %lld for %s (total: %lld)\n",
+                 static_cast<long long>(balance), addr_str, static_cast<long long>(total));
         return true;
 
     } catch (const std::exception& e) {
@@ -1492,8 +1492,8 @@ bool DigiDollarWallet::WriteDDTimeLock(const WalletCollateralPosition& position)
             }
         }
 
-        LogPrint(BCLog::WALLETDB, "DigiDollarWallet: Wrote DDTimeLock %s (DD: %d, DGB: %d, tier: %d)\n",
-                 position.dd_timelock_id.ToString(), position.dd_minted, position.dgb_collateral, position.lock_tier);
+        LogPrint(BCLog::WALLETDB, "DigiDollarWallet: Wrote DDTimeLock %s (DD: %lld, DGB: %lld, tier: %u)\n",
+                 position.dd_timelock_id.ToString(), static_cast<long long>(position.dd_minted), static_cast<long long>(position.dgb_collateral), position.lock_tier);
         return true;
 
     } catch (const std::exception& e) {
@@ -1543,8 +1543,8 @@ bool DigiDollarWallet::UpdatePositionStatus(const uint256& dd_timelock_id, bool 
         locked_collateral = total_locked;
         batch.WriteDDMetadata("locked_collateral", std::to_string(total_locked));
 
-        LogPrint(BCLog::WALLETDB, "DigiDollarWallet: Updated position %s status to %s (locked: %d)\n",
-                 dd_timelock_id.ToString(), active ? "active" : "inactive", total_locked);
+        LogPrint(BCLog::WALLETDB, "DigiDollarWallet: Updated position %s status to %s (locked: %lld)\n",
+                 dd_timelock_id.ToString(), active ? "active" : "inactive", static_cast<long long>(total_locked));
     } else {
         LogPrintf("DigiDollarWallet: Updated mock position %s status to %s - NO DB\n",
                   dd_timelock_id.ToString(), active ? "active" : "inactive");
@@ -1581,7 +1581,7 @@ CAmount DigiDollarWallet::GetDDBalance(const CDigiDollarAddress& addr) const {
         auto it = dd_balances.find(key);
         CAmount balance = (it != dd_balances.end()) ? it->second.balance : 0;
 
-        LogPrintf("DigiDollar: GetDDBalance for %s returned %d cents\n", key, balance);
+        LogPrintf("DigiDollar: GetDDBalance for %s returned %lld cents\n", key, static_cast<long long>(balance));
         return balance;
 
     } catch (const std::exception& e) {
@@ -1606,8 +1606,8 @@ CAmount DigiDollarWallet::GetTotalDDBalance() const {
             }
         }
 
-        LogPrintf("DigiDollar: GetTotalDDBalance calculated %d cents from %d UTXOs\n",
-                  balance, dd_utxos.size());
+        LogPrintf("DigiDollar: GetTotalDDBalance calculated %lld cents from %zu UTXOs\n",
+                  static_cast<long long>(balance), dd_utxos.size());
         return balance;
 
     } catch (const std::exception& e) {
@@ -1625,7 +1625,7 @@ CAmount DigiDollarWallet::GetLockedCollateral() const {
             }
         }
 
-        LogPrintf("DigiDollar: GetLockedCollateral returned %d satoshis\n", locked);
+        LogPrintf("DigiDollar: GetLockedCollateral returned %lld satoshis\n", static_cast<long long>(locked));
         return locked;
 
     } catch (const std::exception& e) {
@@ -1644,7 +1644,7 @@ std::vector<WalletCollateralPosition> DigiDollarWallet::GetDDTimeLocks(bool acti
             }
         }
 
-        LogPrintf("DigiDollar: GetDDTimeLocks returned %d time-locked positions (active_only=%s)\n",
+        LogPrintf("DigiDollar: GetDDTimeLocks returned %zu time-locked positions (active_only=%s)\n",
                   positions.size(), active_only ? "true" : "false");
         return positions;
 
@@ -1671,11 +1671,11 @@ std::vector<DDUtxo> DigiDollarWallet::GetDDUTXOs() const {
         DDUtxo utxo(outpoint, dd_amount);
         utxos.push_back(utxo);
 
-        LogPrintf("DigiDollar: Found DD UTXO %s:%d (%d cents)\n",
-                  outpoint.hash.ToString(), outpoint.n, dd_amount);
+        LogPrintf("DigiDollar: Found DD UTXO %s:%u (%lld cents)\n",
+                  outpoint.hash.ToString(), outpoint.n, static_cast<long long>(dd_amount));
     }
 
-    LogPrintf("DigiDollar: GetDDUTXOs - Found %d spendable UTXOs\n", utxos.size());
+    LogPrintf("DigiDollar: GetDDUTXOs - Found %zu spendable UTXOs\n", utxos.size());
     return utxos;
 }
 
@@ -1697,8 +1697,8 @@ CAmount DigiDollarWallet::GetDDFromUTXO(const COutPoint& outpoint) const {
         return 0;
     }
 
-    LogPrintf("DigiDollar: GetDDFromUTXO - Found %d cents for UTXO %s:%d\n",
-              dd_amount, outpoint.hash.ToString(), outpoint.n);
+    LogPrintf("DigiDollar: GetDDFromUTXO - Found %lld cents for UTXO %s:%u\n",
+              static_cast<long long>(dd_amount), outpoint.hash.ToString(), outpoint.n);
 
     return dd_amount;
 }
@@ -1723,8 +1723,8 @@ bool DigiDollarWallet::IsDDTokenUnspent(const uint256& dd_timelock_id) const {
         return false;
     }
 
-    LogPrintf("DigiDollar: IsDDTokenUnspent - UTXO %s:1 is still unspent (%d cents)\n",
-              dd_timelock_id.ToString(), it->second);
+    LogPrintf("DigiDollar: IsDDTokenUnspent - UTXO %s:1 is still unspent (%lld cents)\n",
+              dd_timelock_id.ToString(), static_cast<long long>(it->second));
     return true;
 }
 
@@ -1736,16 +1736,16 @@ void DigiDollarWallet::AddCollateralPosition(const WalletCollateralPosition& pos
             return;
         }
 
-        LogPrintf("DigiDollar: Added collateral position - ID: %s, DD: %d, DGB: %d, Tier: %d, Active: %s\n",
-                  position.dd_timelock_id.GetHex(), position.dd_minted, position.dgb_collateral,
+        LogPrintf("DigiDollar: Added collateral position - ID: %s, DD: %lld, DGB: %lld, Tier: %u, Active: %s\n",
+                  position.dd_timelock_id.GetHex(), static_cast<long long>(position.dd_minted), static_cast<long long>(position.dgb_collateral),
                   position.lock_tier, position.is_active ? "YES" : "NO");
 
         // FIX #1: Add DD UTXO to tracking map
         // DD output from mint is always at vout 1
         COutPoint dd_outpoint(position.dd_timelock_id, 1);
         dd_utxos[dd_outpoint] = position.dd_minted;
-        LogPrintf("DigiDollar: Added DD UTXO to tracking - %s:%d (%d cents)\n",
-                  dd_outpoint.hash.ToString(), dd_outpoint.n, position.dd_minted);
+        LogPrintf("DigiDollar: Added DD UTXO to tracking - %s:%u (%lld cents)\n",
+                  dd_outpoint.hash.ToString(), dd_outpoint.n, static_cast<long long>(position.dd_minted));
 
         // Persist DD UTXO to database
         if (m_wallet) {
@@ -1794,8 +1794,8 @@ bool DigiDollarWallet::AddRedemptionToHistory(const DDTransaction& tx) {
             }
         }
 
-        LogPrintf("DigiDollar: Added redemption transaction to history - TxID: %s, Amount: %d cents\n",
-                  tx.txid, tx.amount);
+        LogPrintf("DigiDollar: Added redemption transaction to history - TxID: %s, Amount: %lld cents\n",
+                  tx.txid, static_cast<long long>(tx.amount));
         return true;
     } catch (const std::exception& e) {
         LogPrintf("DigiDollar: AddRedemptionToHistory exception - %s\n", e.what());
@@ -1882,7 +1882,7 @@ size_t DigiDollarWallet::ScanForDDUTXOs() {
                                 CAmount changeAmt = amtNum.GetInt64();
                                 if (changeAmt > 0 && changeAmt <= 100000000000LL) {
                                     ddAmounts.push_back(changeAmt);
-                                    LogPrintf("DigiDollar: ScanForDDUTXOs - Found REDEEM tx with DD change: %d cents\n", changeAmt);
+                                    LogPrintf("DigiDollar: ScanForDDUTXOs - Found REDEEM tx with DD change: %lld cents\n", static_cast<long long>(changeAmt));
                                 }
                             } catch (const scriptnum_error&) {}
                         }
@@ -1998,14 +1998,14 @@ size_t DigiDollarWallet::ScanForDDUTXOs() {
                     total_dd_balance += dd_amount;
                     dd_utxo_count++;
 
-                    LogPrintf("DigiDollar: Found DD UTXO %s:%d - Amount: %d cents (txType=%d, added to dd_utxos)\n",
-                              txid.GetHex(), n, dd_amount, ddTxType);
+                    LogPrintf("DigiDollar: Found DD UTXO %s:%zu - Amount: %lld cents (txType=%d, added to dd_utxos)\n",
+                              txid.GetHex(), n, static_cast<long long>(dd_amount), ddTxType);
                 }
             }
         }
 
-        LogPrintf("DigiDollar: Scan complete - Found %d DD UTXOs, Total balance: %d cents\n",
-                  dd_utxo_count, total_dd_balance);
+        LogPrintf("DigiDollar: Scan complete - Found %zu DD UTXOs, Total balance: %lld cents\n",
+                  dd_utxo_count, static_cast<long long>(total_dd_balance));
 
         return dd_utxo_count;
 
@@ -2021,7 +2021,7 @@ size_t DigiDollarWallet::ScanForDDUTXOs() {
 
 bool DigiDollarWallet::MintDigiDollar(const CAmount& dd_amount, uint32_t lock_tier, CTransactionRef& tx_out) {
     try {
-        LogPrintf("DigiDollar: MintDigiDollar called - amount: %d, tier: %d\n", dd_amount, lock_tier);
+        LogPrintf("DigiDollar: MintDigiDollar called - amount: %lld, tier: %u\n", static_cast<long long>(dd_amount), lock_tier);
 
         // RED phase implementation - validation only
         if (!ValidateMintParams(dd_amount, lock_tier)) {
@@ -2091,7 +2091,7 @@ bool DigiDollarWallet::MintDigiDollar(const CAmount& dd_amount, uint32_t lock_ti
 
 bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount amount, CTransactionRef& tx_out) {
     try {
-        LogPrintf("DigiDollar: TransferDigiDollar called - to: %s, amount: %d\n", to.ToString(), amount);
+        LogPrintf("DigiDollar: TransferDigiDollar called - to: %s, amount: %lld\n", to.ToString(), static_cast<long long>(amount));
 
         // Validate transfer parameters
         if (!ValidateTransferParams(to, amount)) {
@@ -2103,8 +2103,8 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
         std::vector<COutPoint> dd_utxos;
         CAmount selectedDDTotal = 0;
         if (!SelectDDCoins(amount, dd_utxos, selectedDDTotal)) {
-            LogPrintf("DigiDollar: Insufficient DD balance for transfer (need %d, have %d)\n",
-                      amount, GetTotalDDBalance());
+            LogPrintf("DigiDollar: Insufficient DD balance for transfer (need %lld, have %lld)\n",
+                      static_cast<long long>(amount), static_cast<long long>(GetTotalDDBalance()));
             return false;
         }
 
@@ -2432,10 +2432,10 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
         // Log balance update
         CAmount newBalance = GetTotalDDBalance();
         CAmount dd_change = selectedDDTotal - amount; // Calculate change from selected inputs
-        LogPrintf("DigiDollar: Transfer successful - %d cents to %s (txid: %s)\n",
-                  amount, to.ToString(), ddtx.txid);
-        LogPrintf("DigiDollar: Balance after transfer: %d (change: %d)\n",
-                  newBalance, dd_change);
+        LogPrintf("DigiDollar: Transfer successful - %lld cents to %s (txid: %s)\n",
+                  static_cast<long long>(amount), to.ToString(), ddtx.txid);
+        LogPrintf("DigiDollar: Balance after transfer: %lld (change: %lld)\n",
+                  static_cast<long long>(newBalance), static_cast<long long>(dd_change));
 
         return true;
 
@@ -2447,7 +2447,7 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
 
 bool DigiDollarWallet::RedeemDigiDollar(const uint256& dd_timelock_id, const CAmount& amount, CTransactionRef& tx_out) {
     try {
-        LogPrintf("DigiDollar: RedeemDigiDollar called - position: %s, amount: %d\n", dd_timelock_id.ToString(), amount);
+        LogPrintf("DigiDollar: RedeemDigiDollar called - position: %s, amount: %lld\n", dd_timelock_id.ToString(), static_cast<long long>(amount));
 
         // Validation
         if (!ValidateRedeemParams(dd_timelock_id, amount)) {
@@ -2513,11 +2513,11 @@ bool DigiDollarWallet::RedeemDigiDollar(const uint256& dd_timelock_id, const CAm
             LogPrintf("DigiDollar: Insufficient DD balance for redemption\n");
             return false;
         }
-        LogPrintf("DigiDollar: Selected %d DD UTXOs totaling %d cents (need %d cents)\n",
-                  params.ddUtxos.size(), selectedTotal, amount);
-        LogPrintf("DigiDollar: ddAmounts size: %d\n", params.ddAmounts.size());
+        LogPrintf("DigiDollar: Selected %zu DD UTXOs totaling %lld cents (need %lld cents)\n",
+                  params.ddUtxos.size(), static_cast<long long>(selectedTotal), static_cast<long long>(amount));
+        LogPrintf("DigiDollar: ddAmounts size: %zu\n", params.ddAmounts.size());
         for (size_t i = 0; i < params.ddAmounts.size(); i++) {
-            LogPrintf("DigiDollar: ddAmounts[%d] = %d cents\n", i, params.ddAmounts[i]);
+            LogPrintf("DigiDollar: ddAmounts[%zu] = %lld cents\n", i, static_cast<long long>(params.ddAmounts[i]));
         }
 
         // Select DGB UTXOs for fees
@@ -2528,14 +2528,14 @@ bool DigiDollarWallet::RedeemDigiDollar(const uint256& dd_timelock_id, const CAm
         CAmount estimatedFee = (400 * params.feeRate) / 1000; // Proper fee estimate
         // Add safety margin
         estimatedFee = estimatedFee + (estimatedFee * 50 / 100); // 50% margin for worst case
-        LogPrintf("DigiDollar: Estimated redemption fee: %d sats (%.8f DGB)\n", estimatedFee, estimatedFee / 100000000.0);
+        LogPrintf("DigiDollar: Estimated redemption fee: %lld sats (%.8f DGB)\n", static_cast<long long>(estimatedFee), estimatedFee / 100000000.0);
 
         // Build exclude list: collateral outpoint + all DD UTXOs that will be burned
         std::vector<COutPoint> exclude_utxos;
         exclude_utxos.push_back(params.collateralOutpoint);  // Don't select collateral as fee input
         exclude_utxos.insert(exclude_utxos.end(), params.ddUtxos.begin(), params.ddUtxos.end());  // Don't select DD UTXOs as fee inputs
 
-        LogPrintf("DigiDollar: Built exclude list with %d UTXOs (1 collateral + %d DD)\n",
+        LogPrintf("DigiDollar: Built exclude list with %zu UTXOs (1 collateral + %zu DD)\n",
                   exclude_utxos.size(), params.ddUtxos.size());
 
         CAmount selectedFeeTotal = 0;
@@ -2971,11 +2971,11 @@ bool DigiDollarWallet::SelectDDCoins(const CAmount& target_amount, std::vector<C
 
     // Validate target amount
     if (target_amount <= 0) {
-        LogPrintf("DigiDollar: SelectDDCoins - Invalid target amount %d\n", target_amount);
+        LogPrintf("DigiDollar: SelectDDCoins - Invalid target amount %lld\n", static_cast<long long>(target_amount));
         return false;
     }
 
-    LogPrintf("DigiDollar: SelectDDCoins - target: %d cents\n", target_amount);
+    LogPrintf("DigiDollar: SelectDDCoins - target: %lld cents\n", static_cast<long long>(target_amount));
 
     // Get all spendable DD UTXOs
     std::vector<DDUtxo> available_utxos = GetDDUTXOs();
@@ -3005,21 +3005,21 @@ bool DigiDollarWallet::SelectDDCoins(const CAmount& target_amount, std::vector<C
         // Store individual amounts if requested (CRITICAL FIX #7)
         if (amounts) amounts->push_back(utxo.dd_amount);
 
-        LogPrintf("DigiDollar: SelectDDCoins - Selected UTXO %s:%d (%d cents, total: %d)\n",
+        LogPrintf("DigiDollar: SelectDDCoins - Selected UTXO %s:%u (%lld cents, total: %lld)\n",
                   utxo.outpoint.hash.ToString(), utxo.outpoint.n,
-                  utxo.dd_amount, selected_total);
+                  static_cast<long long>(utxo.dd_amount), static_cast<long long>(selected_total));
     }
 
     bool success = (selected_total >= target_amount);
 
     if (!success) {
-        LogPrintf("DigiDollar: SelectDDCoins - FAILED: need %d, have %d\n",
-                  target_amount, selected_total);
+        LogPrintf("DigiDollar: SelectDDCoins - FAILED: need %lld, have %lld\n",
+                  static_cast<long long>(target_amount), static_cast<long long>(selected_total));
         selected_utxos.clear();
         selected_total = 0;
     } else {
-        LogPrintf("DigiDollar: SelectDDCoins - SUCCESS: selected %d cents from %d UTXOs\n",
-                  selected_total, selected_utxos.size());
+        LogPrintf("DigiDollar: SelectDDCoins - SUCCESS: selected %lld cents from %zu UTXOs\n",
+                  static_cast<long long>(selected_total), selected_utxos.size());
     }
 
     return success;
@@ -3033,7 +3033,7 @@ bool DigiDollarWallet::SelectFeeCoins(const CAmount& fee_amount, std::vector<COu
 
     // Validate fee amount
     if (fee_amount <= 0) {
-        LogPrintf("DigiDollar: SelectFeeCoins - Invalid fee amount %d\n", fee_amount);
+        LogPrintf("DigiDollar: SelectFeeCoins - Invalid fee amount %lld\n", static_cast<long long>(fee_amount));
         return false;
     }
 
@@ -3043,9 +3043,9 @@ bool DigiDollarWallet::SelectFeeCoins(const CAmount& fee_amount, std::vector<COu
         return false;
     }
 
-    LogPrintf("DigiDollar: SelectFeeCoins - target fee: %d satoshis\n", fee_amount);
+    LogPrintf("DigiDollar: SelectFeeCoins - target fee: %lld satoshis\n", static_cast<long long>(fee_amount));
     if (exclude_utxos && !exclude_utxos->empty()) {
-        LogPrintf("DigiDollar: SelectFeeCoins - excluding %d UTXOs from selection\n", exclude_utxos->size());
+        LogPrintf("DigiDollar: SelectFeeCoins - excluding %zu UTXOs from selection\n", exclude_utxos->size());
     }
 
     // Get available DGB UTXOs from wallet
@@ -3068,7 +3068,7 @@ bool DigiDollarWallet::SelectFeeCoins(const CAmount& fee_amount, std::vector<COu
         return false;
     }
 
-    LogPrintf("DigiDollar: SelectFeeCoins - Found %d available DGB UTXOs before filtering\n", available_coins.size());
+    LogPrintf("DigiDollar: SelectFeeCoins - Found %zu available DGB UTXOs before filtering\n", available_coins.size());
 
     // Sort by amount (smallest first for efficiency)
     std::sort(available_coins.begin(), available_coins.end(),
@@ -3101,21 +3101,21 @@ bool DigiDollarWallet::SelectFeeCoins(const CAmount& fee_amount, std::vector<COu
         if (selected_amounts) selected_amounts->push_back(amount);
         selected_total += amount;
 
-        LogPrintf("DigiDollar: SelectFeeCoins - Selected UTXO %s:%d (%d sats)\n",
-                  outpoint.hash.ToString(), outpoint.n, amount);
+        LogPrintf("DigiDollar: SelectFeeCoins - Selected UTXO %s:%u (%lld sats)\n",
+                  outpoint.hash.ToString(), outpoint.n, static_cast<long long>(amount));
     }
 
     bool success = (selected_total >= fee_amount);
 
     if (!success) {
-        LogPrintf("DigiDollar: SelectFeeCoins - FAILED: need %d sats, have %d\n",
-                  fee_amount, selected_total);
+        LogPrintf("DigiDollar: SelectFeeCoins - FAILED: need %lld sats, have %lld\n",
+                  static_cast<long long>(fee_amount), static_cast<long long>(selected_total));
         selected_utxos.clear();
         if (selected_amounts) selected_amounts->clear();
         selected_total = 0;
     } else {
-        LogPrintf("DigiDollar: SelectFeeCoins - SUCCESS: selected %d sats from %d UTXOs\n",
-                  selected_total, selected_utxos.size());
+        LogPrintf("DigiDollar: SelectFeeCoins - SUCCESS: selected %lld sats from %zu UTXOs\n",
+                  static_cast<long long>(selected_total), selected_utxos.size());
     }
 
     return success;

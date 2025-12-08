@@ -232,8 +232,8 @@ void SystemHealthMonitor::Initialize()
         return;
     }
 
-    LogPrint(BCLog::DIGIDOLLAR, "Initialize: Initializing DigiDollar health monitoring system (totalDDSupply=%ld)\n",
-             s_currentMetrics.totalDDSupply);
+    LogPrint(BCLog::DIGIDOLLAR, "Initialize: Initializing DigiDollar health monitoring system (totalDDSupply=%lld)\n",
+             static_cast<long long>(s_currentMetrics.totalDDSupply));
 
     // Don't reset metrics if they've already been populated by ScanUTXOSet
     if (s_currentMetrics.totalDDSupply == 0 && s_currentMetrics.totalCollateral == 0) {
@@ -247,8 +247,8 @@ void SystemHealthMonitor::Initialize()
             s_currentMetrics.tiers.emplace_back(lockDays, 0, 0, 0, 0);
         }
     } else {
-        LogPrint(BCLog::DIGIDOLLAR, "Initialize: Metrics already populated (totalDDSupply=%ld, totalCollateral=%ld), preserving data\n",
-                 s_currentMetrics.totalDDSupply, s_currentMetrics.totalCollateral);
+        LogPrint(BCLog::DIGIDOLLAR, "Initialize: Metrics already populated (totalDDSupply=%lld, totalCollateral=%lld), preserving data\n",
+                 static_cast<long long>(s_currentMetrics.totalDDSupply), static_cast<long long>(s_currentMetrics.totalCollateral));
         // Just ensure tiers are initialized if empty
         if (s_currentMetrics.tiers.empty()) {
             for (int lockDays : TIER_LOCK_DAYS) {
@@ -549,8 +549,8 @@ void SystemHealthMonitor::UpdateTierMetrics()
     // Update per-tier metrics
     // Note: In real implementation, this would analyze actual positions by tier
     // MOCK MODE DISABLED - Always use actual on-chain data from ScanUTXOSet
-    LogPrint(BCLog::DIGIDOLLAR, "UpdateTierMetrics: Using actual on-chain data (tiers.size()=%d, totalDDSupply=%ld)\n",
-             s_currentMetrics.tiers.size(), s_currentMetrics.totalDDSupply);
+    LogPrint(BCLog::DIGIDOLLAR, "UpdateTierMetrics: Using actual on-chain data (tiers.size()=%zu, totalDDSupply=%lld)\n",
+             s_currentMetrics.tiers.size(), static_cast<long long>(s_currentMetrics.totalDDSupply));
 
     // Mock mode completely disabled per user requirement: "do not fall back to mock data!!!"
     // When scanner finds 0 vaults, stats should correctly show 0, not mock data
@@ -661,10 +661,10 @@ void SystemHealthMonitor::UpdateOracleStatus()
     s_currentMetrics.lastOraclePrice = GetLastOraclePrice();
     s_currentMetrics.lastOracleUpdate = GetLastOracleUpdate();
 
-    LogPrint(BCLog::DIGIDOLLAR, "Oracle status updated: %d active, price=%s, last_update=%ld\n",
+    LogPrint(BCLog::DIGIDOLLAR, "Oracle status updated: %d active, price=%s, last_update=%lld\n",
              s_currentMetrics.activeOracles,
              FormatMoney(s_currentMetrics.lastOraclePrice),
-             s_currentMetrics.lastOracleUpdate);
+             static_cast<long long>(s_currentMetrics.lastOracleUpdate));
 }
 
 void SystemHealthMonitor::RecordHealthHistory(int64_t height, int health)

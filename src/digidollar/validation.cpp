@@ -135,7 +135,8 @@ bool ExtractDDAmount(const CScript& script, CAmount& amount) {
             // Get ddAmount
             if (script.GetOp(pc, opcode, data)) {
                 try {
-                    CScriptNum scriptNum(data, false);
+                    // Allow up to 8 bytes for DD amounts (int64_t range)
+                    CScriptNum scriptNum(data, false, 8);
                     amount = scriptNum.GetInt64();
                     if (amount >= 1 && amount <= 100000000000LL) {
                         return true;
@@ -550,7 +551,8 @@ bool ValidateMintTransaction(const CTransaction& tx,
                 // Extract DD amount in cents
                 if (output.scriptPubKey.GetOp(pc, opcode, data)) {
                     try {
-                        CScriptNum ddAmountNum(data, true);
+                        // Allow up to 8 bytes for DD amounts (int64_t range)
+                        CScriptNum ddAmountNum(data, true, 8);
                         totalDD = ddAmountNum.GetInt64();
                         LogPrintf("DigiDollar: Extracted DD amount from OP_RETURN: %lld cents ($%.2f)\n",
                                   static_cast<long long>(totalDD), totalDD / 100.0);
@@ -560,7 +562,8 @@ bool ValidateMintTransaction(const CTransaction& tx,
                 // Extract lock height
                 if (output.scriptPubKey.GetOp(pc, opcode, data)) {
                     try {
-                        CScriptNum lockHeightNum(data, true);
+                        // Allow up to 8 bytes for lock heights (int64_t range)
+                        CScriptNum lockHeightNum(data, true, 8);
                         lockTime = lockHeightNum.GetInt64();
                         LogPrintf("DigiDollar: Extracted lock height from OP_RETURN: %lld blocks\n", static_cast<long long>(lockTime));
                     } catch (const std::exception&) {}
@@ -714,7 +717,8 @@ bool ValidateTransferTransaction(const CTransaction& tx,
             // Extract DD amounts
             while (output.scriptPubKey.GetOp(pc, opcode, data)) {
                 if (data.size() > 0) {
-                    CScriptNum amount(data, true);
+                    // Allow up to 8 bytes for DD amounts (int64_t range)
+                    CScriptNum amount(data, true, 8);
                     dd_amounts.push_back(amount.GetInt64());
                 }
             }

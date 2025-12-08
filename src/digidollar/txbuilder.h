@@ -41,6 +41,10 @@ struct TxBuilderMintParams {
     CAmount feeRate;            // Fee rate in sat/vB
     std::vector<COutPoint> utxos; // Available UTXOs for collateral
 
+    // Optional: Destination for DGB change output (if not set, generates random key - BAD!)
+    // CRITICAL: Must be set to a wallet-controlled address to avoid losing DGB!
+    std::optional<CTxDestination> dgbChangeDest;
+
     TxBuilderMintParams() : ddAmount(0), lockDays(0), feeRate(1000) {} // Default 1000 sat/vB
 };
 
@@ -53,6 +57,10 @@ struct TxBuilderTransferParams {
     std::vector<COutPoint> feeUtxos;   // DGB UTXOs for fees
     std::vector<CAmount> feeAmounts;   // DGB amounts for each fee UTXO (parallel to feeUtxos)
     CKey spenderKey;            // Key for signing DD inputs
+
+    // Optional: Destination for DGB change output (if not set, uses spenderKey pubkey)
+    // CRITICAL: Must be set to a wallet-controlled address to avoid losing DGB!
+    std::optional<CTxDestination> dgbChangeDest;
 
     TxBuilderTransferParams() : feeRate(1000) {} // Default 1000 sat/vB
 };

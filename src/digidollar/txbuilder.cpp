@@ -320,11 +320,22 @@ TxBuilderResult MintTxBuilder::BuildMintTransaction(const TxBuilderMintParams& p
 
     // If we have significant change, add change output and recalculate
     if (change >= DUST_THRESHOLD) {
-        // Create change output
-        CKey changeKey = GenerateChangeKey();
-        CPubKey changePubkey = changeKey.GetPubKey();
-        CTxDestination changeDest{WitnessV1Taproot(XOnlyPubKey(changePubkey))};
-        tx.vout.push_back(CTxOut(change, GetScriptForDestination(changeDest)));
+        // CRITICAL FIX: Use wallet-provided change destination if available
+        // This ensures the wallet recognizes the change output as its own!
+        CScript changeScript;
+        if (params.dgbChangeDest.has_value()) {
+            // Use wallet-controlled change address (PREFERRED - fixes DGB loss bug)
+            changeScript = GetScriptForDestination(params.dgbChangeDest.value());
+            LogPrintf("DigiDollar: MINT using wallet-provided DGB change destination\n");
+        } else {
+            // Fallback to random key (WARNING: wallet will NOT recognize this!)
+            CKey changeKey = GenerateChangeKey();
+            CPubKey changePubkey = changeKey.GetPubKey();
+            CTxDestination changeDest{WitnessV1Taproot(XOnlyPubKey(changePubkey))};
+            changeScript = GetScriptForDestination(changeDest);
+            LogPrintf("DigiDollar: WARNING - MINT using random key for DGB change (wallet may not recognize!)\n");
+        }
+        tx.vout.push_back(CTxOut(change, changeScript));
 
         // Recalculate fee with change output included
         result.totalFees = CalculateFee(tx, params.feeRate);
@@ -633,9 +644,19 @@ TxBuilderResult TransferTxBuilder::BuildTransferTransaction(const TxBuilderTrans
     if (totalFeeIn > 0) {
         CAmount dgbChange = totalFeeIn - actualFee;
         if (dgbChange > 0 && dgbChange >= DUST_THRESHOLD) {
-            // Create DGB change output using a P2WPKH (not P2TR) to differentiate from DD outputs
-            // This ensures DGB change won't be confused with DD outputs
-            CScript dgbChangeScript = GetScriptForDestination(WitnessV0KeyHash(params.spenderKey.GetPubKey()));
+            // CRITICAL FIX: Use wallet-provided change destination if available
+            // This ensures the wallet recognizes the change output as its own!
+            CScript dgbChangeScript;
+            if (params.dgbChangeDest.has_value()) {
+                // Use wallet-controlled change address (PREFERRED - fixes DGB loss bug)
+                dgbChangeScript = GetScriptForDestination(params.dgbChangeDest.value());
+                LogPrintf("DigiDollar: Using wallet-provided DGB change destination\n");
+            } else {
+                // Fallback to spenderKey pubkey (WARNING: wallet may not recognize this!)
+                // Create DGB change output using a P2WPKH (not P2TR) to differentiate from DD outputs
+                dgbChangeScript = GetScriptForDestination(WitnessV0KeyHash(params.spenderKey.GetPubKey()));
+                LogPrintf("DigiDollar: WARNING - Using spenderKey for DGB change (wallet may not recognize!)\n");
+            }
             tx.vout.push_back(CTxOut(dgbChange, dgbChangeScript));
             LogPrintf("DigiDollar: Added DGB change output: %d sats\n", dgbChange);
         }

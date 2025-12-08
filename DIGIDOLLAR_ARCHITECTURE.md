@@ -189,10 +189,10 @@ The DigiDollar system is built into DigiByte Core with code organized in these m
 │         PROTECTION SYSTEMS CHECK             │
 ├─────────────────────────────────────────────┤
 │ DCA (Dynamic Collateral Adjustment):        │
-│ • System > 150%: Normal (1.0x multiplier)   │
-│ • 120-150%: Warning (1.2x multiplier)       │
-│ • 110-120%: Stressed (1.5x multiplier)      │
-│ • < 110%: Critical (2.0x multiplier)        │
+│ • System ≥ 150%: Healthy (1.0x multiplier)  │
+│ • 120-149%: Warning (1.2x multiplier)       │
+│ • 100-119%: Critical (1.5x multiplier)      │
+│ • < 100%: Emergency (2.0x multiplier)       │
 ├─────────────────────────────────────────────┤
 │ ERR (Emergency Redemption Ratio):           │
 │ • System < 100%: Require more DD to redeem  │
@@ -203,10 +203,10 @@ The DigiDollar system is built into DigiByte Core with code organized in these m
 │ • Cooldown period prevents manipulation     │
 ├─────────────────────────────────────────────┤
 │ Oracle System Integration:                  │
-│ • 15 active oracles per epoch (30 total)    │
-│ • 8-of-15 consensus threshold               │
-│ • Median price calculation with outliers    │
-│ • Currently: Mock prices, framework ready   │
+│ • Phase One: 1-of-1 consensus (testnet)     │
+│ • Phase Two: 8-of-15 consensus (planned)    │
+│ • Median price in micro-USD format          │
+│ • 7 exchange APIs with real libcurl         │
 └──────────────────────────────────────────────┘
 ```
 
@@ -222,7 +222,7 @@ The DigiDollar system is built into DigiByte Core with code organized in these m
 **Where the code lives**: `/src/digidollar/digidollar.h` - `CDigiDollarOutput` class
 
 **What it stores**:
-- **Amount**: How many DigiDollars (stored as cents, so 100 = $1.00)
+- **Amount**: How many DigiDollars (stored in satoshis internally, 1 DD = 100,000,000 satoshis)
 - **Vault Connection**: Which DGB vault this came from (if any)
 - **Lock Time**: When a vault can be opened (measured in blocks)
 - **Digital Keys**: Cryptographic data for security and privacy

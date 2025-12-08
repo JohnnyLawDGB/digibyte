@@ -230,10 +230,10 @@ The 500%→200% sliding scale provides massive buffer against price drops. Short
 
 As system health changes, collateral requirements automatically adjust:
 
-- **>150% healthy**: Normal operations
-- **120-150%**: +25% collateral required
-- **110-120%**: +50% collateral required
-- **<110%**: +100% collateral required
+- **≥150% healthy**: Normal operations (1.0x multiplier)
+- **120-149%**: Warning tier (+20% collateral required, 1.2x multiplier)
+- **100-119%**: Critical tier (+50% collateral required, 1.5x multiplier)
+- **<100%**: Emergency tier (+100% collateral required, 2.0x multiplier)
 
 ### 3️⃣ Emergency Redemption Ratio (Third Defense)
 

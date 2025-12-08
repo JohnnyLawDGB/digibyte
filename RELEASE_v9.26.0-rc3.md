@@ -42,426 +42,144 @@ DGB becomes the strategic reserve asset (21B max, only 2.23 DGB per person on Ea
 
 ## Quick Start Guide
 
-### Step 1: Download and Extract
+### Step 1: Download
 
-Download the appropriate file for your platform from the Downloads section below. Extract to a location of your choice.
-
----
-
-## Building From Source
-
-If you prefer to compile DigiByte from source, follow these instructions:
-
-### Prerequisites
-
-**Ubuntu/Debian:**
-```bash
-sudo apt-get update
-sudo apt-get install -y build-essential libtool autotools-dev automake pkg-config \
-    bsdmainutils python3 libssl-dev libevent-dev libboost-all-dev \
-    libsqlite3-dev libminiupnpc-dev libnatpmp-dev libzmq3-dev \
-    libqt5gui5 libqt5core5a libqt5dbus5 qttools5-dev qttools5-dev-tools \
-    libqrencode-dev
-```
-
-**macOS (with Homebrew):**
-```bash
-brew install automake libtool boost pkg-config libevent qt@5 qrencode \
-    miniupnpc libnatpmp zeromq sqlite
-```
-
-**Fedora/RHEL:**
-```bash
-sudo dnf install -y gcc-c++ libtool make autoconf automake python3 \
-    openssl-devel libevent-devel boost-devel sqlite-devel \
-    miniupnpc-devel libnatpmp-devel zeromq-devel qt5-qttools-devel \
-    qt5-qtbase-devel qrencode-devel
-```
-
-### Clone and Build
-
-```bash
-# Clone the repository
-git clone https://github.com/DigiByte-Core/digibyte.git
-cd digibyte
-
-# Checkout the RC3 tag
-git checkout v9.26.0-rc3
-
-# Generate build system
-./autogen.sh
-
-# Configure (adjust options as needed)
-./configure --with-gui=qt5 --enable-wallet
-
-# Build (use number of CPU cores for parallel build)
-make -j$(nproc)
-
-# Optional: Install system-wide
-sudo make install
-```
-
-### Build Options
-
-| Option | Description |
-|--------|-------------|
-| `--with-gui=qt5` | Build with Qt5 GUI (recommended) |
-| `--with-gui=no` | Build without GUI (daemon only) |
-| `--disable-wallet` | Build without wallet support |
-| `--enable-debug` | Build with debug symbols |
-| `--disable-tests` | Skip building tests |
-
-### Verify Build
-
-After building, verify the executable exists:
-```bash
-ls -la src/qt/digibyte-qt    # GUI wallet
-ls -la src/digibyted         # Daemon
-ls -la src/digibyte-cli      # Command-line interface
-```
-
----
-
-## Windows Setup (Detailed)
-
-### Step 1: Create Data Directory
-
-1. Press `Win + R` to open Run dialog
-2. Type `%USERPROFILE%` and press Enter
-3. Create a new folder called `DigiByte-DigiDollar`
-4. Inside that folder, create a new text file
+Download the appropriate file for your platform from the Downloads section below and extract it.
 
 ### Step 2: Create Config File
 
-1. Inside `DigiByte-DigiDollar`, right-click and select **New > Text Document**
-2. Name it exactly: `digibyte.conf` (make sure to remove `.txt` extension)
-3. If you can't see file extensions: In File Explorer, click **View** > check **File name extensions**
-4. Right-click `digibyte.conf` and select **Edit** (or open with Notepad)
-5. Paste this exact content:
+Create the config file in your platform's data directory with the following contents:
 
 ```ini
-# DigiDollar Testnet Configuration
 testnet=1
 server=1
 txindex=1
 
 [test]
 digidollar=1
-addnode=oracle1.digibyte.io:12029
+algo=sha256d
+addnode=oracle1.digibyte.io
 ```
-
-6. Save and close Notepad
-
-### Step 3: Create Shortcut to Launch
-
-**Option A: Command Prompt (Recommended for troubleshooting)**
-1. Open Command Prompt (search "cmd" in Start menu)
-2. Navigate to where you extracted the files, for example:
-   ```
-   cd C:\Users\YourName\Downloads\digibyte-9.26.0-rc3-win64\bin
-   ```
-3. Run:
-   ```
-   digibyte-qt.exe -datadir=%USERPROFILE%\DigiByte-DigiDollar
-   ```
-
-**Option B: Create Desktop Shortcut**
-1. Right-click on `digibyte-qt.exe` and select **Create shortcut**
-2. Right-click the new shortcut and select **Properties**
-3. In the **Target** field, add at the end (after the quotes):
-   ```
-    -datadir=%USERPROFILE%\DigiByte-DigiDollar
-   ```
-   So it looks like: `"C:\...\digibyte-qt.exe" -datadir=%USERPROFILE%\DigiByte-DigiDollar`
-4. Click **OK**
-5. Double-click the shortcut to launch
-
-### Step 4: Verify It's Working
-
-When the wallet opens:
-- The title bar should say **"DigiByte Core - Wallet [testnet7]"**
-- You should see a **DigiDollar** tab in the sidebar
-- The network should start syncing (may take a few minutes)
-
-**Common Windows Issues:**
-- If you see "testnet" in the title bar but no DigiDollar tab, your config file is missing `digidollar=1` under `[test]`
-- If Windows Security blocks the program, click "More info" then "Run anyway"
-- If the wallet crashes on startup, make sure the data directory exists and the config file is valid
 
 ---
 
-## macOS Setup (Detailed)
+## Windows Setup
 
-### For Apple Silicon (M1/M2/M3/M4)
+### Data Directory
+```
+%APPDATA%\DigiByte\
+```
+Config file: `%APPDATA%\DigiByte\digibyte.conf`
 
-Use the `arm64-apple-darwin` build for native performance on Apple Silicon Macs.
+Testnet data stored in: `%APPDATA%\DigiByte\testnet7\`
 
-### For Intel Macs
+### Steps:
+1. Press `Win + R`, type `%APPDATA%\DigiByte` and press Enter
+2. Create a new text file named `digibyte.conf` (make sure to remove `.txt` extension)
+3. Paste the config contents above and save
+4. Run `digibyte-qt.exe` from the extracted folder
+5. The wallet will create `testnet7\` subfolder automatically
 
-Use the `x86_64-apple-darwin` build for Intel-based Macs.
+### Verify It's Working
+- Title bar should say **"DigiByte Core - Wallet [testnet7]"**
+- You should see a **DigiDollar** tab in the sidebar
 
-### Step 1: Create Data Directory and Config
+---
 
-Open Terminal (Applications > Utilities > Terminal) and run these commands:
+## macOS Setup
 
+### Data Directory
+```
+~/Library/Application Support/DigiByte/
+```
+Config file: `~/Library/Application Support/DigiByte/digibyte.conf`
+
+Testnet data stored in: `~/Library/Application Support/DigiByte/testnet7/`
+
+### Steps:
+1. Open Terminal and create config:
 ```bash
-# Create data directory (using a separate directory to avoid conflicts with mainnet)
-mkdir -p ~/Library/Application\ Support/DigiByte-DigiDollar
-
-# Create config file
-cat > ~/Library/Application\ Support/DigiByte-DigiDollar/digibyte.conf << 'EOF'
-# DigiDollar Testnet Configuration
+mkdir -p ~/Library/Application\ Support/DigiByte
+cat > ~/Library/Application\ Support/DigiByte/digibyte.conf << 'EOF'
 testnet=1
 server=1
 txindex=1
 
 [test]
 digidollar=1
-addnode=oracle1.digibyte.io:12029
+algo=sha256d
+addnode=oracle1.digibyte.io
 EOF
 ```
 
-### Step 2: Extract and Prepare
-
+2. Extract the downloaded archive and remove quarantine:
 ```bash
-# Navigate to Downloads (or wherever you downloaded the file)
+xattr -cr ~/Downloads/digibyte-9.26.0-rc3-*-apple-darwin
+```
+
+3. Run the wallet:
+```bash
+# For Apple Silicon (M1/M2/M3/M4):
+~/Downloads/digibyte-9.26.0-rc3-arm64-apple-darwin/bin/digibyte-qt
+
+# For Intel Mac:
+~/Downloads/digibyte-9.26.0-rc3-x86_64-apple-darwin/bin/digibyte-qt
+```
+
+### Verify It's Working
+- Title bar should say **"DigiByte Core - Wallet [testnet7]"**
+- You should see a **DigiDollar** tab in the sidebar
+
+---
+
+## Ubuntu/Linux Setup
+
+### Data Directory
+```
+~/.digibyte/
+```
+Config file: `~/.digibyte/digibyte.conf`
+
+Testnet data stored in: `~/.digibyte/testnet7/`
+
+### Steps:
+1. Open Terminal and create config:
+```bash
+mkdir -p ~/.digibyte
+cat > ~/.digibyte/digibyte.conf << 'EOF'
+testnet=1
+server=1
+txindex=1
+
+[test]
+digidollar=1
+algo=sha256d
+addnode=oracle1.digibyte.io
+EOF
+```
+
+2. Extract and run:
+```bash
 cd ~/Downloads
-
-# For Apple Silicon:
-tar xzf digibyte-9.26.0-rc3-arm64-apple-darwin.tar.gz
-
-# For Intel Mac:
-tar xzf digibyte-9.26.0-rc3-x86_64-apple-darwin.tar.gz
-
-# Make executable (required on macOS)
-chmod +x digibyte-9.26.0-rc3-*/bin/*
+tar xzf digibyte-9.26.0-rc3-x86_64-linux-gnu.tar.gz
+./digibyte-9.26.0-rc3-x86_64-linux-gnu/bin/digibyte-qt
 ```
 
-### Step 3: Handle macOS Security (Gatekeeper)
-
-macOS will block unsigned applications. You have two options:
-
-**Option A: Remove Quarantine Attribute (Recommended)**
-```bash
-# For Apple Silicon:
-xattr -cr digibyte-9.26.0-rc3-arm64-apple-darwin
-
-# For Intel Mac:
-xattr -cr digibyte-9.26.0-rc3-x86_64-apple-darwin
-```
-
-**Option B: System Preferences**
-1. Try to run the app (it will be blocked)
-2. Go to **System Preferences > Security & Privacy > General**
-3. Click **"Allow Anyway"** next to the blocked app message
-4. Try running again and click **"Open"** in the dialog
-
-### Step 4: Launch the Wallet
-
-```bash
-# For Apple Silicon:
-~/Downloads/digibyte-9.26.0-rc3-arm64-apple-darwin/bin/digibyte-qt \
-    -datadir="$HOME/Library/Application Support/DigiByte-DigiDollar"
-
-# For Intel Mac:
-~/Downloads/digibyte-9.26.0-rc3-x86_64-apple-darwin/bin/digibyte-qt \
-    -datadir="$HOME/Library/Application Support/DigiByte-DigiDollar"
-```
-
-### Step 5: Create a Convenient Launch Script (Optional)
-
-```bash
-# Create a launch script
-cat > ~/Desktop/DigiDollar-Testnet.command << 'EOF'
-#!/bin/bash
-# Launch DigiDollar Testnet Wallet
-
-# Detect architecture and use appropriate binary
-ARCH=$(uname -m)
-if [ "$ARCH" = "arm64" ]; then
-    BINARY="$HOME/Downloads/digibyte-9.26.0-rc3-arm64-apple-darwin/bin/digibyte-qt"
-else
-    BINARY="$HOME/Downloads/digibyte-9.26.0-rc3-x86_64-apple-darwin/bin/digibyte-qt"
-fi
-
-# Launch with testnet data directory
-"$BINARY" -datadir="$HOME/Library/Application Support/DigiByte-DigiDollar"
-EOF
-
-# Make executable
-chmod +x ~/Desktop/DigiDollar-Testnet.command
-```
-
-Double-click `DigiDollar-Testnet.command` on your Desktop to launch.
-
-### Step 6: Create an App Bundle (Advanced)
-
-For a more native macOS experience, create an Automator application:
-
-1. Open **Automator** (Applications > Automator)
-2. Choose **"Application"** as document type
-3. Drag **"Run Shell Script"** from the library to the workflow
-4. Set **Shell** to `/bin/bash`
-5. Paste:
-```bash
-ARCH=$(uname -m)
-if [ "$ARCH" = "arm64" ]; then
-    "$HOME/Downloads/digibyte-9.26.0-rc3-arm64-apple-darwin/bin/digibyte-qt" \
-        -datadir="$HOME/Library/Application Support/DigiByte-DigiDollar"
-else
-    "$HOME/Downloads/digibyte-9.26.0-rc3-x86_64-apple-darwin/bin/digibyte-qt" \
-        -datadir="$HOME/Library/Application Support/DigiByte-DigiDollar"
-fi
-```
-6. Save as **"DigiDollar Testnet"** in Applications folder
-
-### Verify macOS Setup
-
-When the wallet opens:
-- The title bar should say **"DigiByte Core - Wallet [testnet7]"**
+### Verify It's Working
+- Title bar should say **"DigiByte Core - Wallet [testnet7]"**
 - You should see a **DigiDollar** tab in the sidebar
-- Check **Window > Console** and type `getdigidollarstats` to verify DigiDollar is active
-
-**Common macOS Issues:**
-- **"App is damaged and can't be opened"** - Run `xattr -cr` on the extracted folder
-- **"App can't be opened because it is from an unidentified developer"** - Use System Preferences to allow
-- **No DigiDollar tab** - Check that `digidollar=1` is under `[test]` in your config file
-- **Can't connect to network** - Verify firewall allows incoming connections on port 12029
-
----
-
-## Linux Setup
-
-### Step 1: Create Data Directory and Config
-
-Open a terminal and run:
-
-```bash
-# Create data directory
-mkdir -p ~/.digibyte-digidollar
-
-# Create config file
-cat > ~/.digibyte-digidollar/digibyte.conf << 'EOF'
-# DigiDollar Testnet Configuration
-testnet=1
-server=1
-txindex=1
-
-[test]
-digidollar=1
-addnode=oracle1.digibyte.io:12029
-EOF
-```
-
-### Step 2: Launch the Wallet
-
-```bash
-# Navigate to extracted folder (adjust path as needed)
-cd ~/Downloads/digibyte-9.26.0-rc3-x86_64-linux-gnu/bin
-
-# Make executable and run
-chmod +x digibyte-qt
-./digibyte-qt -datadir=~/.digibyte-digidollar
-```
-
-**Optional: Create Desktop Launcher**
-```bash
-cat > ~/.local/share/applications/digidollar-testnet.desktop << 'EOF'
-[Desktop Entry]
-Name=DigiDollar Testnet
-Exec=/path/to/digibyte-qt -datadir=%h/.digibyte-digidollar
-Icon=digibyte
-Type=Application
-Categories=Finance;
-EOF
-```
-
----
-
-## Raspberry Pi / ARM64 Setup
-
-For Raspberry Pi 4/5 or other ARM64 Linux devices:
-
-```bash
-# Download ARM64 build
-wget https://github.com/DigiByte-Core/digibyte/releases/download/v9.26.0-rc3/digibyte-9.26.0-rc3-aarch64-linux-gnu.tar.gz
-
-# Extract
-tar xzf digibyte-9.26.0-rc3-aarch64-linux-gnu.tar.gz
-
-# Create config (same as Linux)
-mkdir -p ~/.digibyte-digidollar
-cat > ~/.digibyte-digidollar/digibyte.conf << 'EOF'
-testnet=1
-server=1
-txindex=1
-
-[test]
-digidollar=1
-addnode=oracle1.digibyte.io:12029
-EOF
-
-# Run (daemon mode recommended for Pi)
-./digibyte-9.26.0-rc3-aarch64-linux-gnu/bin/digibyted -datadir=~/.digibyte-digidollar -daemon
-
-# Check status
-./digibyte-9.26.0-rc3-aarch64-linux-gnu/bin/digibyte-cli -datadir=~/.digibyte-digidollar getblockchaininfo
-```
-
----
-
-## Understanding the Config File
-
-The config file uses sections for network-specific settings:
-
-```ini
-# Global settings (apply to all networks)
-testnet=1          # Enables testnet mode
-server=1           # Enables RPC server
-txindex=1          # Full transaction index (required for DigiDollar)
-
-# Testnet-specific settings (only apply in testnet mode)
-[test]
-digidollar=1                         # Enable DigiDollar features
-addnode=oracle1.digibyte.io:12029    # Connect to oracle node
-debug=digidollar                     # Optional: Enable debug logging
-```
-
-**Important:** The `digidollar=1` MUST be under `[test]` section, not at the top of the file. The `testnet=1` enables testnet mode, but `digidollar=1` under `[test]` enables DigiDollar features specifically for testnet.
 
 ---
 
 ## Getting Testnet DGB
 
-Since no faucet is available yet, you'll mine testnet DGB directly. This only works on testnet.
+Mine testnet DGB directly using the GUI console:
 
-### Method 1: GUI Console (Easiest)
-
-1. In DigiByte-Qt, go to the **Receive** tab
-2. Click **Create new receiving address** and copy your `dgbt1...` address
-3. Go to **Window > Console**
-4. Type: `generatetoaddress 1 dgbt1qYOURADDRESSHERE`
-5. Press Enter - this mines 1 block
-6. Repeat or wait for 100 block confirmations before spending
-
-### Method 2: Command Line
-
-**Windows:**
-```cmd
-digibyte-cli.exe -datadir=%USERPROFILE%\DigiByte-DigiDollar generatetoaddress 1 dgbt1qYOURADDRESSHERE
-```
-
-**macOS:**
-```bash
-./digibyte-cli -datadir="$HOME/Library/Application Support/DigiByte-DigiDollar" generatetoaddress 1 dgbt1qYOURADDRESSHERE
-```
-
-**Linux:**
-```bash
-./digibyte-cli -datadir=~/.digibyte-digidollar generatetoaddress 1 dgbt1qYOURADDRESSHERE
-```
-
-**Note:** Mined coins require 100 block confirmations before spending.
+1. Go to the **Receive** tab and create a new address (copy your `dgbt1...` address)
+2. Go to **Window > Console**
+3. Type: `generatetoaddress 1 dgbt1qYOURADDRESSHERE`
+4. Press Enter to mine 1 block
+5. Wait for 100 confirmations before spending mined coins
 
 ---
 
@@ -492,43 +210,21 @@ Once your wallet is synced and you have testnet DGB:
 
 ### "DigiDollar tab not appearing"
 - Verify `digidollar=1` is under `[test]` section in config
-- Verify `testnet=1` is in config (not under any section)
+- Verify `testnet=1` is at the top of config (not under any section)
 - Restart the wallet after config changes
 
 ### "Not connecting to network"
 - Check your firewall allows port 12029
-- Add `addnode=oracle1.digibyte.io:12029` to config
-- Verify internet connection
+- Verify `addnode=oracle1.digibyte.io` is under `[test]` in config
 
 ### "Oracle price shows 0 or N/A"
 - Wait for sync to complete
 - The oracle broadcasts price updates every few minutes
 - Check Window > Console: `getoracleprice`
 
-### "Windows: Config file not found"
-- Make sure the file is named `digibyte.conf` not `digibyte.conf.txt`
-- Enable "File name extensions" in File Explorer to see real extensions
-- Config must be in the data directory, not the program folder
-
-### "macOS: App is damaged and can't be opened"
-- Run `xattr -cr` on the extracted folder to remove quarantine
-- Or allow in System Preferences > Security & Privacy
-
-### "Redemption fails with validation error"
-- Ensure you have waited for the time-lock period to expire
-- Check that you have sufficient DD balance
-- Verify the vault position exists: `listdigidollarpositions`
-
----
-
-## Documentation
-
-| Document | Description |
-|----------|-------------|
-| [DIGIDOLLAR_EXPLAINER.md](DIGIDOLLAR_EXPLAINER.md) | High-level overview of DigiDollar for users |
-| [DIGIDOLLAR_ARCHITECTURE.md](DIGIDOLLAR_ARCHITECTURE.md) | Technical architecture and implementation details |
-| [DIGIDOLLAR_ORACLE_EXPLAINER.md](DIGIDOLLAR_ORACLE_EXPLAINER.md) | How the oracle price feed system works |
-| [DIGIDOLLAR_ORACLE_ARCHITECTURE.md](DIGIDOLLAR_ORACLE_ARCHITECTURE.md) | Oracle network technical specification |
+### "Mining not working"
+- Ensure `algo=sha256d` is in your config under `[test]`
+- Default algorithm is scrypt which requires more computation
 
 ---
 
@@ -544,38 +240,19 @@ Once your wallet is synced and you have testnet DGB:
 
 ---
 
-## Full Changelog from RC2 (10 commits)
-
-| Commit | Description |
-|--------|-------------|
-| `2be430da28` | Revert "Reapply "EASY POW"" - Production mining difficulty |
-| `ae842cfeb4` | Update digibyte_wallet.png |
-| `729d03fbf4` | build: Bump version to 9.26.0-rc3 and reset testnet |
-| `8f76e2f0db` | test: Update expected error for non-P2TR collateral test |
-| `74cfa42b7c` | test: Enhance Qt testnet script with comprehensive balance tracking |
-| `404cb8dc29` | wallet: Use wallet-controlled change addresses for DD transactions |
-| `2a6f679ae8` | validation: Allow non-P2TR outputs as DGB change in mint transactions |
-| `969759daa5` | txbuilder: Add optional wallet-controlled change destination for DGB outputs |
-| `4e75c18812` | Create RELEASE_v9.26.0-rc2.md |
-| `fe1333b811` | Reapply "EASY POW" (subsequently reverted) |
-
----
-
 ## Upgrading from RC2
 
-**Important:** RC3 uses a new testnet (testnet7) with a different P2P port (12029). You will need to:
+**Important:** RC3 uses a new testnet (testnet7) with port 12029.
 
-1. Update your config file to use port 12029:
+1. Update your config to remove the port from addnode (12029 is now default):
    ```ini
-   addnode=oracle1.digibyte.io:12029
+   addnode=oracle1.digibyte.io
    ```
 
-2. Delete old testnet data (or use a new data directory):
-   - Windows: `%USERPROFILE%\DigiByte-DigiDollar\testnet5\` (delete this folder)
-   - macOS: `~/Library/Application Support/DigiByte-DigiDollar/testnet5/`
-   - Linux: `~/.digibyte-digidollar/testnet5/`
-
-3. The new testnet data will be stored in `testnet7/` subdirectory
+2. Old testnet5 data can be deleted - the new testnet7 data will be stored automatically in:
+   - Windows: `%APPDATA%\DigiByte\testnet7\`
+   - macOS: `~/Library/Application Support/DigiByte/testnet7/`
+   - Linux: `~/.digibyte/testnet7/`
 
 ---
 

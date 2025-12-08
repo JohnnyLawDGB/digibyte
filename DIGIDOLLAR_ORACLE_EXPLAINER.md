@@ -33,7 +33,7 @@ Phase One implements a **streamlined testnet-ready system**:
 - **One Oracle Node**: Operated by DigiByte Devs For Testnet Only
 - **Testnet Only**: Not active on mainnet (safety first!)
 - **Simple Trust Model**: The single oracle's price is the consensus price
-- **Compact Storage**: Only 21 bytes per block (minimal blockchain overhead)
+- **Compact Storage**: Only 20 bytes per block (minimal blockchain overhead)
 
 **This is like a prototype** - we're testing the concept before deploying the full multi-oracle system in Phase Two.
 
@@ -47,9 +47,9 @@ Phase One implements a **streamlined testnet-ready system**:
 - ✅ **Price cache system** - Stores oracle prices by block height
 - ✅ **Mock oracle for RegTest** - Testing infrastructure using `setmockoracleprice` RPC
 
-**What's NOT Yet Integrated into DigiByte Core**:
-- ❌ **Direct exchange fetching** - DigiByte Core doesn't fetch prices from exchanges
-- ❌ **Oracle daemon** - The price-fetching daemon is separate software (not part of Core)
+**What's Also Implemented in DigiByte Core**:
+- ✅ **Direct exchange fetching** - 7 exchange APIs with real libcurl (CoinGecko, CryptoCompare, Binance, KuCoin, Gate.io, OKX, Kraken)
+- ✅ **Oracle message creation** - Full oracle message creation and signing capability
 
 **How It Works Today**:
 - **RegTest**: Uses `setmockoracleprice` RPC command to manually set prices for testing
@@ -57,7 +57,7 @@ Phase One implements a **streamlined testnet-ready system**:
 - **Mainnet**: Completely disabled until Phase Two (safety guard)
 
 **The External Oracle Daemon** (separate from DigiByte Core):
-- Fetches prices from 12 exchanges every 15 seconds
+- Fetches prices from 7 exchanges every 15 seconds
 - Calculates median with MAD outlier filtering
 - Creates and signs 128-byte oracle messages
 - Broadcasts to P2P network (which DigiByte Core nodes receive)
@@ -85,8 +85,8 @@ Here's exactly what happens when the oracle updates the price:
                             ▼
             ┌───────────────────────────────┐
             │  1. Fetch Prices from         │
-            │     10 Exchanges              │
-            │     (Binance, Coinbase, etc.) │
+            │     7 Exchanges               │
+            │     (Binance, KuCoin, etc.)   │
             └───────────────┬───────────────┘
                             │
                             ▼

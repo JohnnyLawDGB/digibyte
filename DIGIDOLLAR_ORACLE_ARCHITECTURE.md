@@ -41,7 +41,7 @@
 
 ### 1.1 What is the Oracle System?
 
-The Oracle System provides **decentralized price feeds** for the DigiByte blockchain, enabling DigiDollar's collateralized stablecoin functionality. It aggregates DGB/USD prices from 12 major exchanges and embeds this data directly into the blockchain.
+The Oracle System provides **decentralized price feeds** for the DigiByte blockchain, enabling DigiDollar's collateralized stablecoin functionality. It aggregates DGB/USD prices from 7 major exchanges and embeds this data directly into the blockchain.
 
 **Real-World Analogy**: Like a trusted appraiser network that provides gold prices for a bank's collateral system - but decentralized, cryptographically signed, and embedded in every block.
 
@@ -53,7 +53,7 @@ Phase One implements a **streamlined, testnet-ready system** with:
 - **Single Oracle** (1-of-1 consensus) for testing
 - **Compact Format** (20 bytes) fitting in OP_RETURN
 - **No Embedded Signatures** (trust based on chainparams)
-- **12 Exchange APIs** with median aggregation
+- **7 Exchange APIs** with median aggregation
 - **15-second updates** (aligned with DigiByte block time)
 
 **Trade-off Analysis:**
@@ -78,7 +78,7 @@ Phase One implements a **streamlined, testnet-ready system** with:
 - ✅ OP_ORACLE opcode (0xbf) integrated
 - ✅ Compact 20-byte oracle format
 - ✅ P2P broadcasting via CConnman
-- ✅ 12 exchange APIs (real libcurl + mock fallback)
+- ✅ 7 exchange APIs (real libcurl + mock fallback)
 - ✅ Block validation (CheckBlock/ContextualCheckBlock)
 - ✅ Price cache (ConnectBlock/DisconnectBlock)
 - ✅ Schnorr signatures (BIP-340)
@@ -148,7 +148,7 @@ Core Implementation:
 ├── src/script/script.h                    [OP_ORACLE definition]
 ├── src/primitives/oracle.{h,cpp}          [Data structures]
 ├── src/oracle/bundle_manager.{h,cpp}      [Bundle logic, 900+ lines]
-├── src/oracle/exchange.{h,cpp}            [12 exchange APIs, 1000+ lines]
+├── src/oracle/exchange.{h,cpp}            [7 exchange APIs, 1000+ lines]
 ├── src/validation.cpp                     [Block validation hooks]
 └── src/kernel/chainparams.cpp             [Oracle authorization]
 
@@ -179,7 +179,7 @@ Test Suite (123 unit tests + 1 functional = 124 total):
 PHASE 1: PRICE DISCOVERY (Every 15 seconds)
 ═══════════════════════════════════════════
 
-Exchange APIs (12 exchanges, parallel fetching):
+Exchange APIs (7 exchanges, parallel fetching):
 ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐
 │  Binance    │  │  Coinbase   │  │   Kraken    │  │  Bittrex    │
 │ DGB/USDT    │  │  DGB/USD    │  │  DGB/USD    │  │  DGB/USD    │

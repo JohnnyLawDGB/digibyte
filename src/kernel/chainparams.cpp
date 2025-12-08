@@ -465,7 +465,7 @@ public:
         pchMessageStart[1] = 0xd1;
         pchMessageStart[2] = 0xb8;
         pchMessageStart[3] = 0xe2;
-        nDefaultPort = 12028;
+        nDefaultPort = 12029;
         nPruneAfterHeight = 1000;
         m_assumed_blockchain_size = 40;
         m_assumed_chain_state_size = 2;
@@ -560,22 +560,22 @@ public:
 private:
     void InitializeOracleNodes() {
         // DigiDollar Oracle Nodes - Testnet
-        // Oracle 0 is the primary testnet oracle at oracle1.digibyte.io:12028
+        // Oracle 0 is the primary testnet oracle at oracle1.digibyte.io:12029
         // Additional oracles will be added as the network grows
         vOracleNodes = {
             // Oracle 0: Primary testnet oracle (using valid secp256k1 generator point)
-            {0,  ParsePubKey("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"), "oracle1.digibyte.io:12028", true},
+            {0,  ParsePubKey("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"), "oracle1.digibyte.io:12029", true},
 
             // Oracle 1-9: Reserved for future testnet oracles (disabled until configured)
-            {1,  ParsePubKey("02d4735e3a265e16eee03f59718b9b5d03019c07d8b6c51f90da3a666eec13ab35"), "oracle2.digibyte.io:12025", false},
-            {2,  ParsePubKey("034e07408562bedb8b60ce05c1decfe3ad16b72230967de01f640b7e4729b49fce"), "oracle3.digibyte.io:12025", false},
-            {3,  ParsePubKey("024b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a"), "oracle4.digibyte.io:12025", false},
-            {4,  ParsePubKey("03ef2d127de37b942baad06145e54b0c619a1f22327b2ebbcfbec78f5564afe39d"), "oracle5.digibyte.io:12025", false},
-            {5,  ParsePubKey("02e7f6c011776e8db7cd330b54174fd76f7d0216b612387a5ffcfb81e6f0919683"), "oracle6.digibyte.io:12025", false},
-            {6,  ParsePubKey("037902699be42c8a8e46fbbb4501726517e86b22c56a189f7625a6da49081b2451"), "oracle7.digibyte.io:12025", false},
-            {7,  ParsePubKey("022c624232cdd221771294dfbb310aca000a0df6ac8b66b696d90ef06fdefb64a3"), "oracle8.digibyte.io:12025", false},
-            {8,  ParsePubKey("0319581e27de7ced00ff1ce50b2047e7a567c76b1cbaebabe5ef03f7c3017bb5b7"), "oracle9.digibyte.io:12025", false},
-            {9,  ParsePubKey("024a44dc15364204a80fe80e9039455cc1608281820fe2b24f1e5233ade6af1dd5"), "oracle10.digibyte.io:12025", false}
+            {1,  ParsePubKey("02d4735e3a265e16eee03f59718b9b5d03019c07d8b6c51f90da3a666eec13ab35"), "oracle2.digibyte.io:12029", false},
+            {2,  ParsePubKey("034e07408562bedb8b60ce05c1decfe3ad16b72230967de01f640b7e4729b49fce"), "oracle3.digibyte.io:12029", false},
+            {3,  ParsePubKey("024b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a"), "oracle4.digibyte.io:12029", false},
+            {4,  ParsePubKey("03ef2d127de37b942baad06145e54b0c619a1f22327b2ebbcfbec78f5564afe39d"), "oracle5.digibyte.io:12029", false},
+            {5,  ParsePubKey("02e7f6c011776e8db7cd330b54174fd76f7d0216b612387a5ffcfb81e6f0919683"), "oracle6.digibyte.io:12029", false},
+            {6,  ParsePubKey("037902699be42c8a8e46fbbb4501726517e86b22c56a189f7625a6da49081b2451"), "oracle7.digibyte.io:12029", false},
+            {7,  ParsePubKey("022c624232cdd221771294dfbb310aca000a0df6ac8b66b696d90ef06fdefb64a3"), "oracle8.digibyte.io:12029", false},
+            {8,  ParsePubKey("0319581e27de7ced00ff1ce50b2047e7a567c76b1cbaebabe5ef03f7c3017bb5b7"), "oracle9.digibyte.io:12029", false},
+            {9,  ParsePubKey("024a44dc15364204a80fe80e9039455cc1608281820fe2b24f1e5233ade6af1dd5"), "oracle10.digibyte.io:12029", false}
         };
     }
 };

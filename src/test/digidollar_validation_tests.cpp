@@ -661,7 +661,10 @@ BOOST_FIXTURE_TEST_CASE(mint_validation_invalid_collateral_script, DigiDollarVal
 
     BOOST_CHECK(!DigiDollar::ValidateDigiDollarTransaction(tx, validationContext, state));
     BOOST_CHECK(!state.IsValid());
-    BOOST_CHECK_EQUAL(state.GetRejectReason(), "bad-collateral-script");
+    // After allowing non-P2TR outputs as change, a P2PKH-only "collateral" results in
+    // missing-collateral-output since the P2PKH is skipped as a change output and
+    // no valid P2TR collateral is found
+    BOOST_CHECK_EQUAL(state.GetRejectReason(), "missing-collateral-output");
 }
 
 BOOST_FIXTURE_TEST_CASE(mint_validation_dd_output_nonzero_value, DigiDollarValidationTestSetup)

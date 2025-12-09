@@ -1166,9 +1166,9 @@ CAmount WalletModel::calculateRequiredCollateral(CAmount ddAmount, int lockTier)
 
     double collateralRatio = tierRatios[lockTier];
 
-    // Get oracle price (mock for RegTest)
-    // Default: 1 DGB = $0.01 USD
-    double dgbPriceUSD = 0.01; // Mock oracle price - will be updated from RPC
+    // Get actual oracle price from MockOracleManager (cents) and convert to USD
+    CAmount oraclePriceCents = MockOracleManager::GetInstance().GetCurrentPrice();
+    double dgbPriceUSD = oraclePriceCents / 100.0;
     double ddValueUSD = ddAmount / 100.0; // ddAmount is in cents, convert to dollars
 
     // Calculate required USD value of collateral

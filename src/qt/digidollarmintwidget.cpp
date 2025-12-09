@@ -654,15 +654,23 @@ void DigiDollarMintWidget::updateCollateralCalculation()
 
 void DigiDollarMintWidget::calculateRequiredCollateral()
 {
-    if (m_mintAmount > 0 && m_oraclePrice > 0) {
+    if (m_mintAmount > 0 && m_oraclePrice > 0 && m_walletModel) {
         m_collateralRatio = getCollateralRatioForTier(m_selectedTier);
 
-        // Calculate required DGB: (DD amount * $1 * ratio/100) / DGB price
-        // Example: 1000 DD * 500% = need $5000 of DGB collateral
-        // If DGB = $0.01, need 5000 / 0.01 = 500,000 DGB
-        double usdValue = m_mintAmount * 1.0; // DD is pegged to $1
-        double requiredUsdCollateral = usdValue * (m_collateralRatio / 100.0);
-        m_requiredCollateral = requiredUsdCollateral / m_oraclePrice;
+        // Use wallet model's calculation for consistency with actual minting
+        CAmount ddAmountCents = static_cast<CAmount>(m_mintAmount * 100);
+        CAmount requiredSatoshis = m_walletModel->calculateRequiredCollateral(ddAmountCents, m_selectedTier);
+        m_requiredCollateral = requiredSatoshis / 100000000.0; // Convert satoshis to DGB
+    } else if (m_mintAmount > 0 && m_oraclePrice > 0) {
+        // Fallback if wallet model not available - use consistent calculation
+        m_collateralRatio = getCollateralRatioForTier(m_selectedTier);
+
+        // DD amount in cents, oracle price in cents per DGB
+        // Formula: (DD_cents * COIN * ratio) / (100 * oracle_cents)
+        double ddCents = m_mintAmount * 100.0;
+        double oracleCents = m_oraclePrice * 100.0; // m_oraclePrice is in dollars, convert to cents
+        double requiredSats = (ddCents * 100000000.0 * m_collateralRatio) / (100.0 * oracleCents);
+        m_requiredCollateral = requiredSats / 100000000.0;
     } else {
         m_requiredCollateral = 0.0;
         m_collateralRatio = getCollateralRatioForTier(m_selectedTier);

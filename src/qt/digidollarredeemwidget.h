@@ -62,8 +62,8 @@ private Q_SLOTS:
     void onAmountChanged();
     /** Redeem button clicked */
     void onRedeemClicked();
-    /** Redeem all button clicked */
-    void onRedeemAllClicked();
+    /** Redeem all button clicked - REMOVED (exact-amount redemption only) */
+    // void onRedeemAllClicked();
     /** Clear all fields */
     void onClearClicked();
 
@@ -128,7 +128,7 @@ private:
     QFrame* m_buttonFrame;
     QHBoxLayout* m_buttonLayout;
     QPushButton* m_redeemButton;
-    QPushButton* m_redeemAllButton;
+    // QPushButton* m_redeemAllButton;  // REMOVED - exact-amount redemption only
     QPushButton* m_clearButton;
 
     // Validators

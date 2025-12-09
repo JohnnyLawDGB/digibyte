@@ -59,7 +59,7 @@ DigiDollarRedeemWidget::DigiDollarRedeemWidget(QWidget *parent) :
     m_buttonFrame(nullptr),
     m_buttonLayout(nullptr),
     m_redeemButton(nullptr),
-    m_redeemAllButton(nullptr),
+    // m_redeemAllButton(nullptr),  // REMOVED - exact-amount redemption only
     m_clearButton(nullptr),
     m_amountValidator(nullptr),
     m_walletModel(nullptr),
@@ -168,8 +168,8 @@ void DigiDollarRedeemWidget::setupAmountSection()
     m_amountLabel = new QLabel(tr("DD to Redeem:"), this);
     m_amountEdit = new QLineEdit(this);
     m_amountEdit->setObjectName("amountEdit");
-    m_amountEdit->setValidator(m_amountValidator);
-    m_amountEdit->setPlaceholderText("0.00000000");
+    m_amountEdit->setReadOnly(true);  // Make read-only - exact amount only
+    m_amountEdit->setPlaceholderText("Select a vault to auto-fill amount");
     QFont monospaceFont = GUIUtil::fixedPitchFont();
     m_amountEdit->setFont(monospaceFont);
 
@@ -181,7 +181,7 @@ void DigiDollarRedeemWidget::setupAmountSection()
     m_amountLayout->addWidget(m_amountSuffix, 1, 2);
 
     // Redeemable amount
-    m_redeemableLabel = new QLabel(tr("Max Redeemable:"), this);
+    m_redeemableLabel = new QLabel(tr("Amount to Redeem:"), this);  // Changed from "Max Redeemable"
     m_redeemableLabel->setObjectName("redeemableLabel");
     m_redeemableValue = new QLabel("0.00000000 DD", this);
     m_redeemableValue->setObjectName("redeemableValue");
@@ -278,15 +278,14 @@ void DigiDollarRedeemWidget::setupButtonSection()
     // Add stretch
     m_buttonLayout->addStretch();
 
-    // Redeem all button
-    m_redeemAllButton = new QPushButton(tr("Redeem All"), this);
-    m_redeemAllButton->setObjectName("redeemAllButton");
-    m_redeemAllButton->setEnabled(false);
-    // Theme will be applied in applyTheme()
-    m_buttonLayout->addWidget(m_redeemAllButton);
+    // Redeem all button - REMOVED (redundant with exact-amount redemption)
+    // m_redeemAllButton = new QPushButton(tr("Redeem All"), this);
+    // m_redeemAllButton->setObjectName("redeemAllButton");
+    // m_redeemAllButton->setEnabled(false);
+    // m_buttonLayout->addWidget(m_redeemAllButton);
 
     // Redeem button
-    m_redeemButton = new QPushButton(tr("Redeem"), this);
+    m_redeemButton = new QPushButton(tr("Close Vault"), this);  // Changed from "Redeem"
     m_redeemButton->setObjectName("redeemButton");
     m_redeemButton->setEnabled(false);
     // Theme will be applied in applyTheme()
@@ -308,8 +307,9 @@ void DigiDollarRedeemWidget::connectSignals()
     // Connect buttons
     connect(m_redeemButton, &QPushButton::clicked,
             this, &DigiDollarRedeemWidget::onRedeemClicked);
-    connect(m_redeemAllButton, &QPushButton::clicked,
-            this, &DigiDollarRedeemWidget::onRedeemAllClicked);
+    // Redeem All button removed - exact-amount redemption only
+    // connect(m_redeemAllButton, &QPushButton::clicked,
+    //         this, &DigiDollarRedeemWidget::onRedeemAllClicked);
     connect(m_clearButton, &QPushButton::clicked,
             this, &DigiDollarRedeemWidget::onClearClicked);
 }
@@ -415,10 +415,10 @@ void DigiDollarRedeemWidget::onRedeemClicked()
     // In a real implementation, this would create and broadcast the redeem transaction
     QMessageBox msgBox(this);
     msgBox.setWindowTitle(tr("Confirm Redeem"));
-    msgBox.setText(tr("Redeem %1 DD from position %2?")
-                  .arg(formatDDAmount(amount))
-                  .arg(m_selectedPositionId));
-    msgBox.setInformativeText(tr("This will release proportional DGB collateral."));
+    msgBox.setText(tr("Close vault %1 and redeem %2?")
+                  .arg(m_selectedPositionId)
+                  .arg(formatDDAmount(m_positionDDMinted)));
+    msgBox.setInformativeText(tr("This will close the vault and release all locked DGB collateral."));
     msgBox.setStandardButtons(QMessageBox::Yes | QMessageBox::No);
     msgBox.setDefaultButton(QMessageBox::No);
 
@@ -470,69 +470,70 @@ void DigiDollarRedeemWidget::onRedeemClicked()
     }
 }
 
-void DigiDollarRedeemWidget::onRedeemAllClicked()
-{
-    if (!m_positionFound || m_redeemableAmount <= 0) {
-        return;
-    }
-
-    // In a real implementation, this would create and broadcast the full redeem transaction
-    QMessageBox msgBox(this);
-    msgBox.setWindowTitle(tr("Confirm Redeem All"));
-    msgBox.setText(tr("Redeem entire position %1?")
-                  .arg(m_selectedPositionId));
-    msgBox.setInformativeText(tr("Amount: %1 DD\nThis will close the position and release all collateral.")
-                             .arg(formatDDAmount(m_redeemableAmount)));
-    msgBox.setStandardButtons(QMessageBox::Yes | QMessageBox::No);
-    msgBox.setDefaultButton(QMessageBox::No);
-
-    if (msgBox.exec() == QMessageBox::Yes) {
-        if (!m_walletModel) {
-            Q_EMIT message(tr("Error"), tr("No wallet model available"), QMessageBox::Critical);
-            return;
-        }
-
-        // Convert full redeemable amount from double to CAmount (cents)
-        CAmount amountCents = static_cast<CAmount>(m_redeemableAmount * 100);
-
-        // Call the wallet model to redeem the full position
-        WalletModel::DigiDollarRedeemResult result = m_walletModel->redeemDigiDollar(m_selectedPositionId, amountCents, "");
-
-        if (result.status == WalletModel::OK) {
-            Q_EMIT message(tr("Position Closed"),
-                        tr("DigiDollar position closed successfully!\n\nTransaction ID: %1")
-                        .arg(result.txid),
-                        QMessageBox::Information);
-            Q_EMIT redemptionCompleted(); // Notify other widgets
-            onClearClicked();
-            updateBalance(); // Refresh balance displays
-            updatePositions(); // Refresh positions
-        } else {
-            QString errorTitle;
-            QString errorMessage = result.reasonFailed;
-
-            switch (result.status) {
-            case WalletModel::InvalidAddress:
-                errorTitle = tr("Invalid Position");
-                break;
-            case WalletModel::InvalidAmount:
-                errorTitle = tr("Invalid Amount");
-                break;
-            case WalletModel::AmountExceedsBalance:
-                errorTitle = tr("Insufficient Redeemable Amount");
-                break;
-            case WalletModel::TransactionCreationFailed:
-                errorTitle = tr("Transaction Failed");
-                break;
-            default:
-                errorTitle = tr("Redeem Error");
-                break;
-            }
-
-            Q_EMIT message(errorTitle, errorMessage, QMessageBox::Critical);
-        }
-    }
-}
+// REMOVED: onRedeemAllClicked() - Redundant with exact-amount redemption
+// void DigiDollarRedeemWidget::onRedeemAllClicked()
+// {
+//     if (!m_positionFound || m_redeemableAmount <= 0) {
+//         return;
+//     }
+//
+//     // In a real implementation, this would create and broadcast the full redeem transaction
+//     QMessageBox msgBox(this);
+//     msgBox.setWindowTitle(tr("Confirm Redeem All"));
+//     msgBox.setText(tr("Redeem entire position %1?")
+//                   .arg(m_selectedPositionId));
+//     msgBox.setInformativeText(tr("Amount: %1 DD\nThis will close the position and release all collateral.")
+//                              .arg(formatDDAmount(m_redeemableAmount)));
+//     msgBox.setStandardButtons(QMessageBox::Yes | QMessageBox::No);
+//     msgBox.setDefaultButton(QMessageBox::No);
+//
+//     if (msgBox.exec() == QMessageBox::Yes) {
+//         if (!m_walletModel) {
+//             Q_EMIT message(tr("Error"), tr("No wallet model available"), QMessageBox::Critical);
+//             return;
+//         }
+//
+//         // Convert full redeemable amount from double to CAmount (cents)
+//         CAmount amountCents = static_cast<CAmount>(m_redeemableAmount * 100);
+//
+//         // Call the wallet model to redeem the full position
+//         WalletModel::DigiDollarRedeemResult result = m_walletModel->redeemDigiDollar(m_selectedPositionId, amountCents, "");
+//
+//         if (result.status == WalletModel::OK) {
+//             Q_EMIT message(tr("Position Closed"),
+//                         tr("DigiDollar position closed successfully!\n\nTransaction ID: %1")
+//                         .arg(result.txid),
+//                         QMessageBox::Information);
+//             Q_EMIT redemptionCompleted(); // Notify other widgets
+//             onClearClicked();
+//             updateBalance(); // Refresh balance displays
+//             updatePositions(); // Refresh positions
+//         } else {
+//             QString errorTitle;
+//             QString errorMessage = result.reasonFailed;
+//
+//             switch (result.status) {
+//             case WalletModel::InvalidAddress:
+//                 errorTitle = tr("Invalid Position");
+//                 break;
+//             case WalletModel::InvalidAmount:
+//                 errorTitle = tr("Invalid Amount");
+//                 break;
+//             case WalletModel::AmountExceedsBalance:
+//                 errorTitle = tr("Insufficient Redeemable Amount");
+//                 break;
+//             case WalletModel::TransactionCreationFailed:
+//                 errorTitle = tr("Transaction Failed");
+//                 break;
+//             default:
+//                 errorTitle = tr("Redeem Error");
+//                 break;
+//             }
+//
+//             Q_EMIT message(errorTitle, errorMessage, QMessageBox::Critical);
+//         }
+//     }
+// }
 
 void DigiDollarRedeemWidget::onClearClicked()
 {
@@ -549,7 +550,7 @@ void DigiDollarRedeemWidget::updateRedeemButtons()
     bool redeemableValid = validateRedeemable();
 
     m_redeemButton->setEnabled(positionValid && amountValid && redeemableValid);
-    m_redeemAllButton->setEnabled(positionValid && m_redeemableAmount > 0);
+    // m_redeemAllButton removed - exact-amount redemption only
 }
 
 void DigiDollarRedeemWidget::updatePositionInfo()
@@ -622,6 +623,8 @@ void DigiDollarRedeemWidget::loadPositionDetails()
                     m_positionBlocksRemaining = pos.find_value("blocks_remaining").getInt<int>();
                     m_positionHealth = pos.find_value("health_ratio").get_real();
                     m_redeemableAmount = m_positionDDMinted; // Can redeem full amount
+                    // Auto-fill the exact amount in the amount edit field
+                    m_amountEdit->setText(QString::number(m_positionDDMinted, 'f', 8));
                     break;
                 }
             }
@@ -676,7 +679,9 @@ bool DigiDollarRedeemWidget::validateRedeemable() const
     if (amountText.isEmpty()) return false;
 
     double amount = amountText.toDouble();
-    return amount > 0 && amount <= m_redeemableAmount;
+    // ENFORCE EXACT MATCH - allow tiny floating point tolerance
+    double tolerance = 0.00000001;  // 1 satoshi tolerance
+    return std::abs(amount - m_redeemableAmount) < tolerance;
 }
 
 QString DigiDollarRedeemWidget::formatDDAmount(double amount) const

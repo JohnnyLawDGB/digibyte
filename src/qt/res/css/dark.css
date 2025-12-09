@@ -5203,3 +5203,180 @@ DigiDollarPositionsWidget QTableWidget QScrollBar::handle:horizontal:hover {
     background-color: #0088ff;
 }
 
+/* ================================================
+   DigiDollar Transactions Widget Styling (Dark Theme)
+   ================================================ */
+
+/* Transactions Table with DigiByte Blue Styling (Dark Theme) */
+DigiDollarTransactionsWidget QTableWidget {
+    background-color: #2a2a2a;
+    color: #e0e0e0;
+    gridline-color: #4a4a4a;
+    selection-background-color: #0066CC;
+    selection-color: #ffffff;
+    border: 1px solid #4a4a4a;
+    border-radius: 8px;
+}
+
+DigiDollarTransactionsWidget QTableWidget::item {
+    padding: 8px 6px;
+    border-bottom: 1px solid #4a4a4a;
+    color: #e0e0e0;
+    background-color: #2a2a2a;
+}
+
+DigiDollarTransactionsWidget QTableWidget::item:alternate {
+    background-color: #252525;
+    color: #e0e0e0;
+}
+
+DigiDollarTransactionsWidget QTableWidget::item:hover {
+    background-color: rgba(0, 102, 204, 0.3);
+    color: #ffffff;
+}
+
+DigiDollarTransactionsWidget QTableWidget::item:selected {
+    background-color: #0066CC !important;
+    color: #ffffff !important;
+}
+
+/* Table Header with DigiByte Blue (Dark Theme) */
+DigiDollarTransactionsWidget QHeaderView::section {
+    background-color: #0066CC;
+    color: #ffffff;
+    padding: 10px 8px;
+    border: none;
+    border-right: 1px solid #4a4a4a;
+    border-bottom: 2px solid #4a4a4a;
+    font-weight: bold;
+    font-size: 12px;
+}
+
+DigiDollarTransactionsWidget QHeaderView::section:hover {
+    background-color: #0088ff;
+    color: #ffffff;
+}
+
+/* Filter controls styling (Dark Theme) */
+DigiDollarTransactionsWidget QComboBox {
+    background-color: #2a2a2a;
+    color: #e0e0e0;
+    border: 1px solid #4a4a4a;
+    border-radius: 4px;
+    padding: 6px 10px;
+}
+
+DigiDollarTransactionsWidget QComboBox:hover {
+    border-color: #0066CC;
+}
+
+DigiDollarTransactionsWidget QComboBox::drop-down {
+    border: none;
+    width: 20px;
+}
+
+DigiDollarTransactionsWidget QComboBox::down-arrow {
+    width: 0;
+    height: 0;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 6px solid #e0e0e0;
+}
+
+/* ComboBox dropdown list styling (Dark Theme) */
+DigiDollarTransactionsWidget QComboBox QAbstractItemView {
+    background-color: #2a2a2a;
+    color: #e0e0e0;
+    selection-background-color: #0066CC;
+    selection-color: #ffffff;
+    border: 1px solid #4a4a4a;
+}
+
+DigiDollarTransactionsWidget QComboBox QAbstractItemView::item {
+    color: #e0e0e0;
+    background-color: #2a2a2a;
+    padding: 8px;
+}
+
+DigiDollarTransactionsWidget QComboBox QAbstractItemView::item:selected {
+    background-color: #0066CC;
+    color: #ffffff;
+}
+
+DigiDollarTransactionsWidget QComboBox QAbstractItemView::item:hover {
+    background-color: #0066CC;
+    color: #ffffff;
+}
+
+DigiDollarTransactionsWidget QLineEdit {
+    background-color: #2a2a2a;
+    color: #e0e0e0;
+    border: 1px solid #4a4a4a;
+    border-radius: 4px;
+    padding: 6px 10px;
+}
+
+DigiDollarTransactionsWidget QLineEdit:focus {
+    border-color: #0066CC;
+}
+
+/* Refresh Button with DigiByte Blue (Dark Theme) */
+DigiDollarTransactionsWidget QPushButton {
+    background-color: #0066cc;
+    border: 1px solid #0066cc;
+    color: #ffffff;
+    border-radius: 6px;
+    padding: 8px 16px;
+    font-weight: bold;
+}
+
+DigiDollarTransactionsWidget QPushButton:hover {
+    background-color: #0088ff;
+    color: #ffffff;
+}
+
+DigiDollarTransactionsWidget QPushButton:pressed {
+    background-color: #004c99;
+    border: 1px solid #004c99;
+}
+
+/* Labels (Dark Theme) */
+DigiDollarTransactionsWidget QLabel {
+    color: #e0e0e0;
+}
+
+/* Scrollbar styling for table (Dark Theme) */
+DigiDollarTransactionsWidget QTableWidget QScrollBar:vertical {
+    background-color: #2a2a2a;
+    border: 1px solid #4a4a4a;
+    border-radius: 4px;
+    width: 12px;
+}
+
+DigiDollarTransactionsWidget QTableWidget QScrollBar::handle:vertical {
+    background-color: #0066CC;
+    border-radius: 4px;
+    min-height: 20px;
+}
+
+DigiDollarTransactionsWidget QTableWidget QScrollBar::handle:vertical:hover {
+    background-color: #0088ff;
+}
+
+DigiDollarTransactionsWidget QTableWidget QScrollBar:horizontal {
+    background-color: #2a2a2a;
+    border: 1px solid #4a4a4a;
+    border-radius: 4px;
+    height: 12px;
+}
+
+DigiDollarTransactionsWidget QTableWidget QScrollBar::handle:horizontal {
+    background-color: #0066CC;
+    border-radius: 4px;
+    min-width: 20px;
+}
+
+DigiDollarTransactionsWidget QTableWidget QScrollBar::handle:horizontal:hover {
+    background-color: #0088ff;
+}
+

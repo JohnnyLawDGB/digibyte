@@ -5,6 +5,7 @@
 #include <qt/digidollartransactionswidget.h>
 #include <qt/walletmodel.h>
 #include <qt/clientmodel.h>
+#include <qt/optionsmodel.h>
 #include <qt/guiutil.h>
 #include <wallet/digidollarwallet.h>
 #include <logging.h>
@@ -108,14 +109,19 @@ void DigiDollarTransactionsWidget::setupTable()
         tr("Confirmations")
     });
 
-    // Table settings
+    // Table settings - match TransactionView styling
     m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_table->setSelectionMode(QAbstractItemView::SingleSelection);
     m_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_table->setSortingEnabled(true);
     m_table->setAlternatingRowColors(true);
+    m_table->setShowGrid(false);
     m_table->setContextMenuPolicy(Qt::CustomContextMenu);
     m_table->verticalHeader()->setVisible(false);
+    m_table->horizontalHeader()->setSectionsClickable(true);
+
+    // Let the table inherit colors from the application palette/theme
+    // Don't override with custom colors - this ensures proper dark/light mode support
 
     // Column widths
     m_table->setColumnWidth(Column::Date, 150);
@@ -229,11 +235,9 @@ void DigiDollarTransactionsWidget::populateTable()
             amountItem->setData(Qt::UserRole, QVariant::fromValue(amount));
 
             // Color code: green for receives/mints, red for sends/redeems
-            if (category == "receive" || category == "mint") {
-                amountItem->setForeground(QColor("#28a745"));
-            } else {
-                amountItem->setForeground(QColor("#dc3545"));
-            }
+            // Use theme-appropriate colors that work in both light and dark mode
+            bool isPositive = (category == "receive" || category == "mint");
+            amountItem->setForeground(getAmountColor(isPositive));
             m_table->setItem(row, Column::Amount, amountItem);
 
             // TX ID (truncated for display)
@@ -330,6 +334,33 @@ void DigiDollarTransactionsWidget::showDetails()
                             .arg(confItem ? confItem->text() : "N/A");
 
         QMessageBox::information(this, tr("DigiDollar Transaction"), details);
+    }
+}
+
+bool DigiDollarTransactionsWidget::isDarkTheme() const
+{
+    if (!m_walletModel || !m_walletModel->getOptionsModel()) {
+        // Fallback: detect from window palette
+        int lightness = window()->palette().window().color().lightness();
+        return lightness < 128;  // Dark if lightness < 128
+    }
+
+    QString currentTheme = m_walletModel->getOptionsModel()->data(
+        m_walletModel->getOptionsModel()->index(OptionsModel::Theme),
+        Qt::EditRole).toString();
+    return (currentTheme == "dark");
+}
+
+QColor DigiDollarTransactionsWidget::getAmountColor(bool isPositive) const
+{
+    // Use colors consistent with TransactionTableModel
+    // These colors are designed to be readable in both light and dark themes
+    if (isDarkTheme()) {
+        // Dark theme: brighter colors for visibility
+        return isPositive ? QColor(100, 255, 100) : QColor(255, 70, 70);
+    } else {
+        // Light theme: darker colors
+        return isPositive ? QColor(0, 150, 0) : QColor(200, 0, 0);
     }
 }
 

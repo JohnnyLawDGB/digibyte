@@ -1,0 +1,358 @@
+// Copyright (c) 2025 The DigiByte Core developers
+// Distributed under the MIT software license, see the accompanying
+// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
+#include <qt/digidollartransactionswidget.h>
+#include <qt/walletmodel.h>
+#include <qt/clientmodel.h>
+#include <qt/guiutil.h>
+#include <wallet/digidollarwallet.h>
+#include <logging.h>
+#include <univalue.h>
+
+#include <QHeaderView>
+#include <QDateTime>
+#include <QClipboard>
+#include <QApplication>
+#include <QMessageBox>
+#include <QTableWidget>
+#include <QVBoxLayout>
+#include <QHBoxLayout>
+#include <QComboBox>
+#include <QLineEdit>
+#include <QPushButton>
+#include <QLabel>
+#include <QMenu>
+
+DigiDollarTransactionsWidget::DigiDollarTransactionsWidget(QWidget* parent)
+    : QWidget(parent)
+    , m_mainLayout(nullptr)
+    , m_filterLayout(nullptr)
+    , m_typeFilter(nullptr)
+    , m_searchEdit(nullptr)
+    , m_refreshButton(nullptr)
+    , m_table(nullptr)
+    , m_statusLabel(nullptr)
+    , m_contextMenu(nullptr)
+    , m_walletModel(nullptr)
+    , m_clientModel(nullptr)
+{
+    setupUI();
+    connectSignals();
+}
+
+DigiDollarTransactionsWidget::~DigiDollarTransactionsWidget()
+{
+}
+
+void DigiDollarTransactionsWidget::setupUI()
+{
+    m_mainLayout = new QVBoxLayout(this);
+    m_mainLayout->setContentsMargins(16, 16, 16, 16);
+    m_mainLayout->setSpacing(12);
+
+    setupFilterBar();
+    setupTable();
+
+    // Status label
+    m_statusLabel = new QLabel(this);
+    m_statusLabel->setAlignment(Qt::AlignCenter);
+    m_mainLayout->addWidget(m_statusLabel);
+
+    setLayout(m_mainLayout);
+}
+
+void DigiDollarTransactionsWidget::setupFilterBar()
+{
+    m_filterLayout = new QHBoxLayout();
+    m_filterLayout->setSpacing(8);
+
+    // Type filter
+    QLabel* typeLabel = new QLabel(tr("Type:"), this);
+    m_typeFilter = new QComboBox(this);
+    m_typeFilter->addItem(tr("All Types"), "");
+    m_typeFilter->addItem(tr("Mints"), "mint");
+    m_typeFilter->addItem(tr("Sends"), "send");
+    m_typeFilter->addItem(tr("Receives"), "receive");
+    m_typeFilter->addItem(tr("Redemptions"), "redeem");
+
+    // Search box
+    QLabel* searchLabel = new QLabel(tr("Search:"), this);
+    m_searchEdit = new QLineEdit(this);
+    m_searchEdit->setPlaceholderText(tr("TX ID or address..."));
+    m_searchEdit->setMinimumWidth(200);
+
+    // Refresh button
+    m_refreshButton = new QPushButton(tr("Refresh"), this);
+
+    m_filterLayout->addWidget(typeLabel);
+    m_filterLayout->addWidget(m_typeFilter);
+    m_filterLayout->addSpacing(20);
+    m_filterLayout->addWidget(searchLabel);
+    m_filterLayout->addWidget(m_searchEdit);
+    m_filterLayout->addStretch();
+    m_filterLayout->addWidget(m_refreshButton);
+
+    m_mainLayout->addLayout(m_filterLayout);
+}
+
+void DigiDollarTransactionsWidget::setupTable()
+{
+    m_table = new QTableWidget(this);
+    m_table->setColumnCount(Column::ColumnCount);
+    m_table->setHorizontalHeaderLabels({
+        tr("Date"),
+        tr("Type"),
+        tr("Amount (DD)"),
+        tr("Transaction ID"),
+        tr("Confirmations")
+    });
+
+    // Table settings
+    m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
+    m_table->setSelectionMode(QAbstractItemView::SingleSelection);
+    m_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    m_table->setSortingEnabled(true);
+    m_table->setAlternatingRowColors(true);
+    m_table->setContextMenuPolicy(Qt::CustomContextMenu);
+    m_table->verticalHeader()->setVisible(false);
+
+    // Column widths
+    m_table->setColumnWidth(Column::Date, 150);
+    m_table->setColumnWidth(Column::Type, 100);
+    m_table->setColumnWidth(Column::Amount, 150);
+    m_table->setColumnWidth(Column::TxId, 300);
+    m_table->setColumnWidth(Column::Confirmations, 100);
+
+    m_table->horizontalHeader()->setStretchLastSection(true);
+
+    // Context menu
+    m_contextMenu = new QMenu(this);
+    m_contextMenu->addAction(tr("Copy TX ID"), this, &DigiDollarTransactionsWidget::copyTxId);
+    m_contextMenu->addAction(tr("Copy Amount"), this, &DigiDollarTransactionsWidget::copyAmount);
+    m_contextMenu->addSeparator();
+    m_contextMenu->addAction(tr("Show Details"), this, &DigiDollarTransactionsWidget::showDetails);
+
+    m_mainLayout->addWidget(m_table, 1);
+}
+
+void DigiDollarTransactionsWidget::connectSignals()
+{
+    connect(m_typeFilter, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &DigiDollarTransactionsWidget::onTypeFilterChanged);
+    connect(m_searchEdit, &QLineEdit::textChanged,
+            this, &DigiDollarTransactionsWidget::onSearchTextChanged);
+    connect(m_refreshButton, &QPushButton::clicked,
+            this, &DigiDollarTransactionsWidget::updateTransactions);
+    connect(m_table, &QTableWidget::customContextMenuRequested,
+            this, &DigiDollarTransactionsWidget::showContextMenu);
+}
+
+void DigiDollarTransactionsWidget::setWalletModel(WalletModel* model)
+{
+    m_walletModel = model;
+    if (m_walletModel) {
+        updateTransactions();
+    }
+}
+
+void DigiDollarTransactionsWidget::setClientModel(ClientModel* model)
+{
+    m_clientModel = model;
+}
+
+void DigiDollarTransactionsWidget::updateView()
+{
+    updateTransactions();
+}
+
+void DigiDollarTransactionsWidget::updateTransactions()
+{
+    if (!m_walletModel) {
+        m_statusLabel->setText(tr("No wallet loaded"));
+        return;
+    }
+
+    populateTable();
+}
+
+void DigiDollarTransactionsWidget::populateTable()
+{
+    m_table->setRowCount(0);
+    m_table->setSortingEnabled(false);
+
+    try {
+        UniValue params(UniValue::VARR);
+        UniValue result = m_walletModel->executeRpc("listdigidollartxs", params);
+
+        if (!result.isArray()) {
+            m_statusLabel->setText(tr("No DigiDollar transactions found"));
+            m_statusLabel->setVisible(true);
+            m_table->setSortingEnabled(true);
+            return;
+        }
+
+        QString typeFilter = m_typeFilter->currentData().toString();
+        QString searchText = m_searchEdit->text().toLower();
+
+        int row = 0;
+        for (size_t i = 0; i < result.size(); ++i) {
+            const UniValue& tx = result[i];
+
+            QString category = QString::fromStdString(tx.find_value("category").get_str());
+            QString txid = QString::fromStdString(tx.find_value("txid").get_str());
+
+            // Apply filters
+            if (!typeFilter.isEmpty() && category != typeFilter) {
+                continue;
+            }
+            if (!searchText.isEmpty() && !txid.toLower().contains(searchText)) {
+                continue;
+            }
+
+            m_table->insertRow(row);
+
+            // Date
+            uint64_t timestamp = tx.find_value("time").getInt<uint64_t>();
+            QTableWidgetItem* dateItem = new QTableWidgetItem(formatTimestamp(timestamp));
+            dateItem->setData(Qt::UserRole, QVariant::fromValue(timestamp));
+            m_table->setItem(row, Column::Date, dateItem);
+
+            // Type
+            QTableWidgetItem* typeItem = new QTableWidgetItem(category.left(1).toUpper() + category.mid(1));
+            m_table->setItem(row, Column::Type, typeItem);
+
+            // Amount
+            CAmount amount = tx.find_value("amount").getInt<int64_t>();
+            QTableWidgetItem* amountItem = new QTableWidgetItem(formatDDAmount(amount));
+            amountItem->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+            amountItem->setData(Qt::UserRole, QVariant::fromValue(amount));
+
+            // Color code: green for receives/mints, red for sends/redeems
+            if (category == "receive" || category == "mint") {
+                amountItem->setForeground(QColor("#28a745"));
+            } else {
+                amountItem->setForeground(QColor("#dc3545"));
+            }
+            m_table->setItem(row, Column::Amount, amountItem);
+
+            // TX ID (truncated for display)
+            QString displayTxid = txid.left(16) + "..." + txid.right(8);
+            QTableWidgetItem* txidItem = new QTableWidgetItem(displayTxid);
+            txidItem->setData(Qt::UserRole, txid);  // Store full txid
+            txidItem->setToolTip(txid);
+            m_table->setItem(row, Column::TxId, txidItem);
+
+            // Confirmations
+            int confirmations = tx.find_value("confirmations").getInt<int>();
+            QTableWidgetItem* confItem = new QTableWidgetItem(formatConfirmations(confirmations));
+            confItem->setTextAlignment(Qt::AlignCenter);
+            m_table->setItem(row, Column::Confirmations, confItem);
+
+            ++row;
+        }
+
+        m_statusLabel->setVisible(row == 0);
+        if (row == 0) {
+            m_statusLabel->setText(tr("No transactions match the current filters"));
+        }
+
+    } catch (const std::exception& e) {
+        LogPrintf("DigiDollar Transactions: Error loading transactions - %s\n", e.what());
+        m_statusLabel->setText(tr("Error loading transactions"));
+        m_statusLabel->setVisible(true);
+    }
+
+    m_table->setSortingEnabled(true);
+    m_table->sortByColumn(Column::Date, Qt::DescendingOrder);
+}
+
+void DigiDollarTransactionsWidget::onTypeFilterChanged(int /*index*/)
+{
+    populateTable();
+}
+
+void DigiDollarTransactionsWidget::onSearchTextChanged()
+{
+    populateTable();
+}
+
+void DigiDollarTransactionsWidget::showContextMenu(const QPoint& pos)
+{
+    if (m_table->currentRow() >= 0) {
+        m_contextMenu->popup(m_table->viewport()->mapToGlobal(pos));
+    }
+}
+
+void DigiDollarTransactionsWidget::copyTxId()
+{
+    int row = m_table->currentRow();
+    if (row >= 0) {
+        QTableWidgetItem* item = m_table->item(row, Column::TxId);
+        if (item) {
+            QString txid = item->data(Qt::UserRole).toString();
+            QApplication::clipboard()->setText(txid);
+        }
+    }
+}
+
+void DigiDollarTransactionsWidget::copyAmount()
+{
+    int row = m_table->currentRow();
+    if (row >= 0) {
+        QTableWidgetItem* item = m_table->item(row, Column::Amount);
+        if (item) {
+            QApplication::clipboard()->setText(item->text());
+        }
+    }
+}
+
+void DigiDollarTransactionsWidget::showDetails()
+{
+    int row = m_table->currentRow();
+    if (row >= 0) {
+        QTableWidgetItem* txidItem = m_table->item(row, Column::TxId);
+        QTableWidgetItem* typeItem = m_table->item(row, Column::Type);
+        QTableWidgetItem* amountItem = m_table->item(row, Column::Amount);
+        QTableWidgetItem* dateItem = m_table->item(row, Column::Date);
+        QTableWidgetItem* confItem = m_table->item(row, Column::Confirmations);
+
+        QString details = tr("Transaction Details\n\n"
+                            "TX ID: %1\n"
+                            "Type: %2\n"
+                            "Amount: %3\n"
+                            "Date: %4\n"
+                            "Confirmations: %5")
+                            .arg(txidItem ? txidItem->data(Qt::UserRole).toString() : "N/A")
+                            .arg(typeItem ? typeItem->text() : "N/A")
+                            .arg(amountItem ? amountItem->text() : "N/A")
+                            .arg(dateItem ? dateItem->text() : "N/A")
+                            .arg(confItem ? confItem->text() : "N/A");
+
+        QMessageBox::information(this, tr("DigiDollar Transaction"), details);
+    }
+}
+
+QString DigiDollarTransactionsWidget::formatDDAmount(CAmount amount) const
+{
+    // Amount is in cents, convert to DD with 2 decimal places
+    double ddAmount = amount / 100.0;
+    QString prefix = ddAmount >= 0 ? "+" : "";
+    return prefix + "$" + QString::number(std::abs(ddAmount), 'f', 2) + " DD";
+}
+
+QString DigiDollarTransactionsWidget::formatTimestamp(uint64_t timestamp) const
+{
+    QDateTime dt = QDateTime::fromSecsSinceEpoch(timestamp);
+    return dt.toString("MMM dd, yyyy hh:mm");
+}
+
+QString DigiDollarTransactionsWidget::formatConfirmations(int confirmations) const
+{
+    if (confirmations == 0) {
+        return tr("Pending");
+    } else if (confirmations >= 6) {
+        return tr("Confirmed");
+    }
+    return QString::number(confirmations);
+}

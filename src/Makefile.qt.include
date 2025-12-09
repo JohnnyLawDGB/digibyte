@@ -95,7 +95,8 @@ QT_MOC_CPP = \
   qt/moc_digidollarpositionswidget.cpp \
   qt/moc_digidollarreceivewidget.cpp \
   qt/moc_digidollarredeemwidget.cpp \
-  qt/moc_digidollarsendwidget.cpp
+  qt/moc_digidollarsendwidget.cpp \
+  qt/moc_digidollartransactionswidget.cpp
 
 DIGIBYTE_MM = \
   qt/macdockiconhandler.mm \
@@ -181,7 +182,8 @@ DIGIBYTE_QT_H = \
   qt/digidollarpositionswidget.h \
   qt/digidollarreceivewidget.h \
   qt/digidollarredeemwidget.h \
-  qt/digidollarsendwidget.h
+  qt/digidollarsendwidget.h \
+  qt/digidollartransactionswidget.h
 
 QT_RES_FONTS = \
   qt/res/fonts/RobotoMono-Bold.ttf
@@ -300,7 +302,8 @@ DIGIBYTE_QT_WALLET_CPP = \
   qt/digidollarpositionswidget.cpp \
   qt/digidollarreceivewidget.cpp \
   qt/digidollarredeemwidget.cpp \
-  qt/digidollarsendwidget.cpp
+  qt/digidollarsendwidget.cpp \
+  qt/digidollartransactionswidget.cpp
 
 DIGIBYTE_QT_CPP = $(DIGIBYTE_QT_BASE_CPP)
 if TARGET_WINDOWS

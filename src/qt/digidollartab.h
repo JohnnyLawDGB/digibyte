@@ -13,6 +13,7 @@ class DigiDollarSendWidget;
 class DigiDollarMintWidget;
 class DigiDollarRedeemWidget;
 class DigiDollarPositionsWidget;
+class DigiDollarTransactionsWidget;
 class WalletModel;
 class ClientModel;
 
@@ -77,6 +78,7 @@ private:
     DigiDollarMintWidget* m_mintWidget;
     DigiDollarRedeemWidget* m_redeemWidget;
     DigiDollarPositionsWidget* m_positionsWidget;
+    DigiDollarTransactionsWidget* m_transactionsWidget;
 
     // Models
     WalletModel* m_walletModel;

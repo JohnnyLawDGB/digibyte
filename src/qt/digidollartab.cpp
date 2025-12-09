@@ -10,6 +10,7 @@
 #include <qt/digidollarmintwidget.h>
 #include <qt/digidollarredeemwidget.h>
 #include <qt/digidollarpositionswidget.h>
+#include <qt/digidollartransactionswidget.h>
 #include <qt/walletmodel.h>
 #include <qt/clientmodel.h>
 
@@ -27,6 +28,7 @@ DigiDollarTab::DigiDollarTab(QWidget *parent) :
     m_mintWidget(nullptr),
     m_redeemWidget(nullptr),
     m_positionsWidget(nullptr),
+    m_transactionsWidget(nullptr),
     m_walletModel(nullptr),
     m_clientModel(nullptr)
 {
@@ -67,13 +69,17 @@ void DigiDollarTab::setupUI()
     m_positionsWidget = new DigiDollarPositionsWidget(this);
     m_positionsWidget->setObjectName("positionsWidget");
 
-    // Add tabs in order: DD Overview, Send DD, Receive DD, Mint DD, Redeem DD, DD Vault
+    m_transactionsWidget = new DigiDollarTransactionsWidget(this);
+    m_transactionsWidget->setObjectName("transactionsWidget");
+
+    // Add tabs in order: DD Overview, Send DD, Receive DD, Mint DD, Redeem DD, DD Vault, DD Transactions
     m_tabWidget->addTab(m_overviewWidget, tr("DD Overview"));
     m_tabWidget->addTab(m_sendWidget, tr("Send DD"));
     m_tabWidget->addTab(m_receiveWidget, tr("Receive DD"));
     m_tabWidget->addTab(m_mintWidget, tr("Mint DD"));
     m_tabWidget->addTab(m_redeemWidget, tr("Redeem DD"));
     m_tabWidget->addTab(m_positionsWidget, tr("DD Vault"));
+    m_tabWidget->addTab(m_transactionsWidget, tr("DD Transactions"));
 
     // Add tab widget to main layout
     m_mainLayout->addWidget(m_tabWidget);
@@ -118,6 +124,11 @@ void DigiDollarTab::connectSignals()
         connect(m_positionsWidget, &DigiDollarPositionsWidget::redeemRequested,
                 this, &DigiDollarTab::onRedeemRequested);
     }
+
+    if (m_transactionsWidget) {
+        connect(m_transactionsWidget, &DigiDollarTransactionsWidget::message,
+                this, &DigiDollarTab::message);
+    }
 }
 
 void DigiDollarTab::setWalletModel(WalletModel* model)
@@ -137,6 +148,8 @@ void DigiDollarTab::setWalletModel(WalletModel* model)
         m_redeemWidget->setWalletModel(model);
     if (m_positionsWidget)
         m_positionsWidget->setWalletModel(model);
+    if (m_transactionsWidget)
+        m_transactionsWidget->setWalletModel(model);
 
     // Update view when wallet model changes
     updateView();
@@ -159,6 +172,8 @@ void DigiDollarTab::setClientModel(ClientModel* model)
         m_redeemWidget->setClientModel(model);
     if (m_positionsWidget)
         m_positionsWidget->setClientModel(model);
+    if (m_transactionsWidget)
+        m_transactionsWidget->setClientModel(model);
 }
 
 void DigiDollarTab::updateView()
@@ -176,6 +191,8 @@ void DigiDollarTab::updateView()
         m_redeemWidget->updateView();
     if (m_positionsWidget)
         m_positionsWidget->updateView();
+    if (m_transactionsWidget)
+        m_transactionsWidget->updateView();
 }
 
 void DigiDollarTab::incomingDDTransaction(const QString& date, const QString& amount,
@@ -253,6 +270,10 @@ void DigiDollarTab::onTabChanged(int index)
     case 5: // Vault
         if (m_positionsWidget)
             m_positionsWidget->updateView();
+        break;
+    case 6: // Transactions
+        if (m_transactionsWidget)
+            m_transactionsWidget->updateView();
         break;
     default:
         break;

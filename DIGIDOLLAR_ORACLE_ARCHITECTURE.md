@@ -1,6 +1,6 @@
 # DigiDollar Oracle System - Complete Architecture Documentation
 **DigiByte v8.26 - Oracle Phase One Implementation**
-*Updated: 2025-12-05*
+*Updated: 2025-12-08*
 *Implementation Status: 100% Complete (123 Oracle unit tests + 35 integration tests + 20 functional tests)*
 *Document Version: 3.0 - Code-Verified Accurate*
 
@@ -53,7 +53,7 @@ Phase One implements a **streamlined, testnet-ready system** with:
 - **Single Oracle** (1-of-1 consensus) for testing
 - **Compact Format** (20 bytes) fitting in OP_RETURN
 - **No Embedded Signatures** (trust based on chainparams)
-- **7 Exchange APIs** with median aggregation
+- **12+ Exchange APIs** with median aggregation (CoinGecko, CryptoCompare, Binance, KuCoin, Gate.io, OKX, Kraken, Messari, Crypto.com, HTX/Huobi, Poloniex, Bittrex)
 - **15-second updates** (aligned with DigiByte block time)
 
 **Trade-off Analysis:**
@@ -78,7 +78,7 @@ Phase One implements a **streamlined, testnet-ready system** with:
 - ✅ OP_ORACLE opcode (0xbf) integrated
 - ✅ Compact 20-byte oracle format
 - ✅ P2P broadcasting via CConnman
-- ✅ 7 exchange APIs (real libcurl + mock fallback)
+- ✅ 12+ exchange APIs (real libcurl + mock fallback)
 - ✅ Block validation (CheckBlock/ContextualCheckBlock)
 - ✅ Price cache (ConnectBlock/DisconnectBlock)
 - ✅ Schnorr signatures (BIP-340)

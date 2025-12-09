@@ -48,7 +48,7 @@ Phase One implements a **streamlined testnet-ready system**:
 - ✅ **Mock oracle for RegTest** - Testing infrastructure using `setmockoracleprice` RPC
 
 **What's Also Implemented in DigiByte Core**:
-- ✅ **Direct exchange fetching** - 7 exchange APIs with real libcurl (CoinGecko, CryptoCompare, Binance, KuCoin, Gate.io, OKX, Kraken)
+- ✅ **Direct exchange fetching** - 12+ exchange APIs with real libcurl (CoinGecko, CryptoCompare, Binance, KuCoin, Gate.io, OKX, Kraken, Messari, Crypto.com, HTX/Huobi, Poloniex, Bittrex)
 - ✅ **Oracle message creation** - Full oracle message creation and signing capability
 
 **How It Works Today**:
@@ -57,7 +57,7 @@ Phase One implements a **streamlined testnet-ready system**:
 - **Mainnet**: Completely disabled until Phase Two (safety guard)
 
 **The External Oracle Daemon** (separate from DigiByte Core):
-- Fetches prices from 7 exchanges every 15 seconds
+- Fetches prices from 12+ exchanges every 15 seconds
 - Calculates median with MAD outlier filtering
 - Creates and signs 128-byte oracle messages
 - Broadcasts to P2P network (which DigiByte Core nodes receive)

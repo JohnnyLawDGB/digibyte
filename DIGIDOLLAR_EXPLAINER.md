@@ -7,7 +7,7 @@ DigiDollar is the world's first truly decentralized stablecoin native on a UTXO 
 ### Key Points
 - **DGB becomes the strategic reserve asset** (21B max supply, 1.94 per person on Earth)
 - **Everything happens inside DigiByte Core wallet** - you never give up control of your private keys
-- **Status**: Proposed plan subject to change based on community feedback and technical review
+- **Status**: Testnet-ready implementation (Phase One) - see DIGIDOLLAR_MVP_STATUS.md for details
 
 ---
 
@@ -19,11 +19,13 @@ With a maximum supply of 21 billion DGB, there are only **1.94 DGB per person** 
 
 ### Simple Explanation
 
-DigiDollar is a proposed stable digital currency that would always equal $1 USD, created by locking up DigiByte (DGB) as collateral. DGB would become a strategic reserve asset - with only 21 billion max supply (just 1.94 DGB per person on Earth), it's a truly finite asset backing the stability of DigiDollars.
+DigiDollar is a stable digital currency that equals $1 USD, created by locking up DigiByte (DGB) as collateral. DGB becomes a strategic reserve asset - with only 21 billion max supply (just 1.94 DGB per person on Earth), it's a truly finite asset backing the stability of DigiDollars.
 
-Unlike traditional stablecoins backed by bank accounts, DigiDollar would be the world's first truly decentralized stablecoin on a UTXO blockchain. No company or bank would control it.
+Unlike traditional stablecoins backed by bank accounts, DigiDollar is the world's first truly decentralized stablecoin on a UTXO blockchain. No company or bank controls it.
 
-**Most importantly**: Everything would happen directly in your DigiByte Core wallet - you would never give up control of your private keys or trust a third party.
+**Most importantly**: Everything happens directly in your DigiByte Core wallet - you never give up control of your private keys or trust a third party.
+
+**Transaction Limits**: Minimum mint $100, maximum $100,000 per transaction. Minimum output $1.
 
 ### Key Benefits
 
@@ -95,7 +97,7 @@ DigiDollar provides unprecedented financial flexibility for DGB holders, enablin
 ### The Technical Process
 
 #### 1. Lock DGB Collateral
-Users lock DigiByte as collateral in a P2TR (Pay-to-Taproot) time-locked vault. The amount depends on the lock period (150%-400% of DigiDollar value).
+Users lock DigiByte as collateral in a P2TR (Pay-to-Taproot) time-locked vault. The amount depends on the lock period (200%-1000% of DigiDollar value, with shorter locks requiring more collateral).
 
 #### 2. Mint DigiDollars
 DigiDollars are automatically minted based on the locked DGB value and current USD exchange rate from decentralized oracles.
@@ -151,7 +153,9 @@ From supply chain to gaming, DigiDollar enables countless innovations
 
 ### Revolutionary Architecture
 
-DigiDollar would be the world's first truly decentralized stablecoin built natively on a UTXO (Unspent Transaction Output) blockchain. All operations occur directly in DigiByte Core wallet - users maintain complete control of their private keys throughout the entire process.
+DigiDollar is the world's first truly decentralized stablecoin built natively on a UTXO (Unspent Transaction Output) blockchain. All operations occur directly in DigiByte Core wallet - users maintain complete control of their private keys throughout the entire process.
+
+**Implementation Status**: Core transaction system 85% complete, GUI 90% complete, RPC interface 95% complete. See DIGIDOLLAR_MVP_STATUS.md for detailed status.
 
 ### Core Technologies
 
@@ -159,7 +163,7 @@ DigiDollar would be the world's first truly decentralized stablecoin built nativ
 Enhanced privacy using P2TR outputs and Schnorr signatures
 
 #### Decentralized Oracles
-Phase Two: 15 independent price feeds with 8-of-15 consensus requirement (Phase One uses single trusted oracle)
+30 hardcoded oracle nodes with 15 active per epoch. Phase One (testnet): 1-of-1 single oracle. Phase Two (mainnet): 8-of-15 Schnorr threshold signature consensus. Oracle prices use micro-USD format (1,000,000 = $1.00).
 
 #### MAST Implementation
 Efficient script execution with Merkleized Alternative Script Trees
@@ -237,13 +241,31 @@ As system health changes, collateral requirements automatically adjust:
 
 ### 3️⃣ Emergency Redemption Ratio (Third Defense)
 
-If system drops below 100% collateralized, redemptions require more DD to unlock collateral.
+If system drops below 100% collateralized, redemptions are adjusted by tier:
 
-**Formula**: Required DD = Original DD × (100% ÷ System %)
+| System Health | Collateral Return |
+|--------------|------------------|
+| 95-100% | 95% (5% loss) |
+| 90-95% | 90% (10% loss) |
+| 85-90% | 85% (15% loss) |
+| <85% | 80% (minimum guarantee) |
 
-**Example**: At 80% system health, need 125 DD to redeem position that minted 100 DD
+ERR requires 8-of-15 oracle consensus to activate and blocks new minting during crisis.
 
-### 4️⃣ Supply & Demand Dynamics (Natural Defense)
+### 4️⃣ Volatility Protection (Fourth Defense)
+
+Automatic freezes during extreme market volatility:
+
+| Timeframe | Threshold | Action |
+|-----------|-----------|--------|
+| 1-hour | 10% | Warning logged |
+| 1-hour | 20% | Freeze new minting |
+| 24-hour | 30% | Freeze all DD operations |
+| 7-day | 50% | Emergency mode |
+
+Cooldown period: 144 blocks (~36 hours) after volatility subsides. Oracle override available with 8-of-15 consensus.
+
+### 5️⃣ Supply & Demand Dynamics (Natural Defense)
 
 Locked DGB reduces circulating supply, creating natural price support. With only 21B DGB max, locking creates scarcity.
 
@@ -260,7 +282,7 @@ The system continuously tracks critical health metrics to ensure stability:
 
 Accessible via RPC command: `getdigidollarsystemstatus`
 
-**Key Insight**: These four layers work together without forced liquidations. Prevention (higher collateral), adaptation (dynamic adjustment), crisis management (emergency ratios), and market forces (scarcity) create a self-balancing, resilient system.
+**Key Insight**: These five layers work together without forced liquidations. Prevention (higher collateral), adaptation (dynamic adjustment), volatility freezes (circuit breakers), crisis management (emergency ratios), and market forces (scarcity) create a self-balancing, resilient system.
 
 ---
 

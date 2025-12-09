@@ -11,6 +11,7 @@
 #include <oracle/mock_oracle.h>
 #include <consensus/digidollar.h>
 #include <consensus/dca.h>
+#include <consensus/err.h>
 #include <digidollar/digidollar.h>
 #include <digidollar/health.h>
 #include <chainparams.h>
@@ -101,6 +102,12 @@ RPCHelpMan getdigidollarstats()
                                 {RPCResult::Type::NUM, "max_collateral", "Maximum collateral % for this tier"},
                                 {RPCResult::Type::NUM, "multiplier", "DCA multiplier for new mints in this tier"},
                                 {RPCResult::Type::STR, "status", "Tier status description"}
+                            }
+                        },
+                        {RPCResult::Type::OBJ, "err_tier", "Current Emergency Redemption Ratio (ERR) tier information",
+                            {
+                                {RPCResult::Type::NUM, "redemption_ratio", "Redemption ratio (e.g., 0.95 = 95% return on collateral)"},
+                                {RPCResult::Type::STR, "tier_description", "ERR tier description based on system health"}
                             }
                         }
                     }
@@ -210,6 +217,27 @@ RPCHelpMan getdigidollarstats()
             dcaTier.pushKV("multiplier", tier.multiplier);
             dcaTier.pushKV("status", tier.status);
             result.pushKV("dca_tier", dcaTier);
+
+            // Add ERR (Emergency Redemption Ratio) tier information
+            double errRatio = DigiDollar::ERR::EmergencyRedemptionRatio::CalculateERRAdjustment(systemHealth);
+            std::string errDescription;
+            if (systemHealth >= 100) {
+                errDescription = "healthy (100% redemption)";
+                errRatio = 1.0; // Full redemption when healthy
+            } else if (systemHealth >= 95) {
+                errDescription = "95-100% health: 95% redemption";
+            } else if (systemHealth >= 90) {
+                errDescription = "90-95% health: 90% redemption";
+            } else if (systemHealth >= 85) {
+                errDescription = "85-90% health: 85% redemption";
+            } else {
+                errDescription = "<85% health: 80% redemption (minimum)";
+            }
+
+            UniValue errTier(UniValue::VOBJ);
+            errTier.pushKV("redemption_ratio", errRatio);
+            errTier.pushKV("tier_description", errDescription);
+            result.pushKV("err_tier", errTier);
 
             return result;
         },

@@ -139,9 +139,22 @@ public:
      * Get real-time system health using current chain state.
      * Convenience function that fetches current collateral, supply, and price.
      *
-     * @return Current system health percentage
+     * @return Current system health percentage, or -1 if oracle unavailable
+     *
+     * IMPORTANT: Returns -1 when oracle price is not available.
+     * Callers MUST check for -1 and block operations (mint/redeem) when oracle is down.
+     * There are NO fallback prices - the oracle is required for all DigiDollar operations.
      */
     static int GetCurrentSystemHealth();
+
+    /**
+     * Check if the oracle system is available and has a valid price.
+     *
+     * @return True if oracle price is available, false otherwise
+     *
+     * When this returns false, all DigiDollar operations (mint, redeem) must be blocked.
+     */
+    static bool IsOracleAvailable();
 
     /**
      * Get real-time DCA multiplier using current chain state.

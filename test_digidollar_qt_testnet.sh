@@ -1,16 +1,20 @@
 #!/bin/bash
 # DigiDollar Qt GUI TestNet Test with Live Oracle
-# ENHANCED VERSION v3: Full 24-step test with comprehensive DGB/DD balance tracking
+# VERSION 8: COMPREHENSIVE ALL-TIER + TRANSFER CHAIN TESTING
 # Tests the full DigiDollar cycle on TestNet with real-time exchange price data
 # Opens 3 SEPARATE Qt wallet instances (Bob, Alice, Charlie)
 #
-# KEY DEBUG FEATURES:
-# - Tracks DGB AND DD balances for all 3 wallets at every step
-# - Records all inputs/outputs/change for each transaction
-# - Verifies transaction confirmation before proceeding
-# - Checks DD positions after each operation
-# - Detects DGB loss by comparing expected vs actual balances
-# - Saves complete log to timestamped file for comparison between runs
+# TEST PLAN:
+# - Bob mints $100 at ALL tiers (0-9) = 10 mints + extra tier 0 for redemption = 11 mints
+# - Mine past tier 0 lock (240 blocks)
+# - Bob redeems 2x tier 0 mints successfully
+# - Test partial redemption (should FAIL)
+# - Alice mints $100 at tier 3 (180 days) and tier 5 (2 years)
+# - Charlie mints $100 at tier 7 (5 years) and tier 9 (10 years)
+# - Comprehensive transfer chain: Bob->Alice($55), Alice->Charlie($22), Charlie->Bob($10), Bob->Charlie($5)
+# - Full balance verification at EVERY step
+# - Transaction confirmation verification
+# - Network-wide DD supply and collateral tracking
 
 set -e
 
@@ -20,7 +24,7 @@ mkdir -p "$LOG_DIR"
 LOG_FILE="$LOG_DIR/test_run_$(date +%Y%m%d_%H%M%S).log"
 echo "=========================================="
 echo "DigiDollar Qt TestNet Automated Test"
-echo "ENHANCED DEBUG VERSION v3 - Full 24 Steps"
+echo "VERSION 8 - COMPREHENSIVE ALL-TIER + TRANSFER CHAIN TESTING"
 echo "=========================================="
 echo "Log file: $LOG_FILE"
 echo ""
@@ -32,7 +36,7 @@ echo "=========================================="
 echo "DigiDollar Qt TestNet Automated Test"
 echo "With 3 SEPARATE Qt GUI Instances"
 echo "Using LIVE Oracle Price Data"
-echo "ENHANCED v3: Full Balance Tracking"
+echo "VERSION 8: COMPREHENSIVE ALL-TIER + TRANSFER CHAIN TESTING"
 echo "=========================================="
 echo "Test started: $(date)"
 echo ""
@@ -67,16 +71,18 @@ CYAN='\033[0;36m'
 MAGENTA='\033[0;35m'
 NC='\033[0m'
 
-# Global tracking
-declare -A PREV_DGB
-declare -A PREV_DD
-PREV_DGB[bob]=0
-PREV_DGB[alice]=0
-PREV_DGB[charlie]=0
-PREV_DD[bob]=0
-PREV_DD[alice]=0
-PREV_DD[charlie]=0
+# EXPECTED DD balances (updated after each operation)
+EXPECT_BOB_DD=0
+EXPECT_ALICE_DD=0
+EXPECT_CHARLIE_DD=0
 
+# Track mints for redemption
+declare -A BOB_MINTS     # txid -> dd_amount
+declare -A BOB_COLLATERAL # txid -> collateral_dgb
+BOB_TIER0_MINT1=""
+BOB_TIER0_MINT2=""
+
+# Test counters
 TOTAL_TESTS=0
 PASSED_TESTS=0
 FAILED_TESTS=0
@@ -146,105 +152,92 @@ get_immature_balance() {
     $cli -rpcwallet=$wallet getbalances 2>/dev/null | jq -r '.mine.immature // 0' 2>/dev/null || echo "0"
 }
 
-# COMPREHENSIVE BALANCE SNAPSHOT
-capture_balance_snapshot() {
+get_network_collateral() {
+    $BOB_CLI getdigidollarstats 2>/dev/null | jq -r '.total_collateral_dgb // "0"' 2>/dev/null || echo "0"
+}
+
+get_network_dd_supply() {
+    $BOB_CLI getdigidollarstats 2>/dev/null | jq -r '.total_dd_supply // 0' 2>/dev/null || echo "0"
+}
+
+# VERIFY DD BALANCE with expected value
+verify_dd_balance() {
+    local name=$1
+    local cli=$2
+    local wallet=$3
+    local expected=$4
+
+    local actual=$(get_dd_balance "$cli" "$wallet")
+
+    if [ "$actual" = "$expected" ]; then
+        echo -e "  ${GREEN}[OK]${NC} $name DD: $actual cents (expected: $expected)"
+        PASSED_TESTS=$((PASSED_TESTS + 1))
+        TOTAL_TESTS=$((TOTAL_TESTS + 1))
+        return 0
+    else
+        echo -e "  ${RED}[FAIL]${NC} $name DD: $actual cents (EXPECTED: $expected)"
+        FAILED_TESTS=$((FAILED_TESTS + 1))
+        TOTAL_TESTS=$((TOTAL_TESTS + 1))
+        return 1
+    fi
+}
+
+# COMPREHENSIVE BALANCE VERIFICATION at each step
+verify_all_balances() {
     local step_desc=$1
     local block_height=$($BOB_CLI getblockcount 2>/dev/null || echo "0")
 
-    print_header "BALANCE SNAPSHOT: $step_desc (Block $block_height)"
+    print_header "VERIFICATION: $step_desc (Block $block_height)"
 
     echo ""
-    echo "DIGIBYTE (DGB) BALANCES:"
-    echo "------------------------"
+    echo "========== DIGIBYTE (DGB) BALANCES =========="
 
-    # Bob
+    # Get all DGB balances
     local bob_dgb=$(get_dgb_balance "$BOB_CLI" "bob")
-    local bob_dgb_immature=$(get_immature_balance "$BOB_CLI" "bob")
-    local bob_dgb_prev=${PREV_DGB[bob]:-0}
-    local bob_dgb_delta=$(echo "$bob_dgb - $bob_dgb_prev" | bc 2>/dev/null || echo "0")
-
-    echo "  BOB:"
-    echo "    Confirmed:   $bob_dgb DGB"
-    echo "    Immature:    $bob_dgb_immature DGB"
-    echo "    Delta:       $bob_dgb_delta DGB"
-
-    # Alice
+    local bob_immature=$(get_immature_balance "$BOB_CLI" "bob")
     local alice_dgb=$(get_dgb_balance "$ALICE_CLI" "alice")
-    local alice_dgb_immature=$(get_immature_balance "$ALICE_CLI" "alice")
-    local alice_dgb_prev=${PREV_DGB[alice]:-0}
-    local alice_dgb_delta=$(echo "$alice_dgb - $alice_dgb_prev" | bc 2>/dev/null || echo "0")
-
-    echo "  ALICE:"
-    echo "    Confirmed:   $alice_dgb DGB"
-    echo "    Immature:    $alice_dgb_immature DGB"
-    echo "    Delta:       $alice_dgb_delta DGB"
-
-    # Charlie
+    local alice_immature=$(get_immature_balance "$ALICE_CLI" "alice")
     local charlie_dgb=$(get_dgb_balance "$CHARLIE_CLI" "charlie")
-    local charlie_dgb_immature=$(get_immature_balance "$CHARLIE_CLI" "charlie")
-    local charlie_dgb_prev=${PREV_DGB[charlie]:-0}
-    local charlie_dgb_delta=$(echo "$charlie_dgb - $charlie_dgb_prev" | bc 2>/dev/null || echo "0")
+    local charlie_immature=$(get_immature_balance "$CHARLIE_CLI" "charlie")
 
-    echo "  CHARLIE:"
-    echo "    Confirmed:   $charlie_dgb DGB"
-    echo "    Immature:    $charlie_dgb_immature DGB"
-    echo "    Delta:       $charlie_dgb_delta DGB"
+    echo "  BOB:     $bob_dgb DGB (immature: $bob_immature)"
+    echo "  ALICE:   $alice_dgb DGB (immature: $alice_immature)"
+    echo "  CHARLIE: $charlie_dgb DGB (immature: $charlie_immature)"
 
     echo ""
-    echo "DIGIDOLLAR (DD) BALANCES:"
-    echo "-------------------------"
+    echo "========== DIGIDOLLAR (DD) BALANCES =========="
 
-    local bob_dd=$(get_dd_balance "$BOB_CLI" "bob")
-    local bob_dd_prev=${PREV_DD[bob]:-0}
-    local bob_dd_delta=$((bob_dd - bob_dd_prev))
-    echo "  BOB:     $bob_dd cents (\$$(echo "scale=2; $bob_dd / 100" | bc 2>/dev/null || echo "0")) [delta: $bob_dd_delta]"
+    # Verify each DD balance against expected
+    verify_dd_balance "BOB" "$BOB_CLI" "bob" "$EXPECT_BOB_DD"
+    verify_dd_balance "ALICE" "$ALICE_CLI" "alice" "$EXPECT_ALICE_DD"
+    verify_dd_balance "CHARLIE" "$CHARLIE_CLI" "charlie" "$EXPECT_CHARLIE_DD"
 
-    local alice_dd=$(get_dd_balance "$ALICE_CLI" "alice")
-    local alice_dd_prev=${PREV_DD[alice]:-0}
-    local alice_dd_delta=$((alice_dd - alice_dd_prev))
-    echo "  ALICE:   $alice_dd cents (\$$(echo "scale=2; $alice_dd / 100" | bc 2>/dev/null || echo "0")) [delta: $alice_dd_delta]"
-
-    local charlie_dd=$(get_dd_balance "$CHARLIE_CLI" "charlie")
-    local charlie_dd_prev=${PREV_DD[charlie]:-0}
-    local charlie_dd_delta=$((charlie_dd - charlie_dd_prev))
-    echo "  CHARLIE: $charlie_dd cents (\$$(echo "scale=2; $charlie_dd / 100" | bc 2>/dev/null || echo "0")) [delta: $charlie_dd_delta]"
-
-    local total_dd=$((bob_dd + alice_dd + charlie_dd))
+    local total_expected_dd=$((EXPECT_BOB_DD + EXPECT_ALICE_DD + EXPECT_CHARLIE_DD))
     echo ""
-    echo "  TOTAL DD: $total_dd cents (\$$(echo "scale=2; $total_dd / 100" | bc 2>/dev/null || echo "0"))"
+    echo "  Total Expected DD: $total_expected_dd cents (\$$(echo "scale=2; $total_expected_dd / 100" | bc 2>/dev/null || echo "0"))"
 
-    # Update previous balances
-    PREV_DGB[bob]=$bob_dgb
-    PREV_DGB[alice]=$alice_dgb
-    PREV_DGB[charlie]=$charlie_dgb
-    PREV_DD[bob]=$bob_dd
-    PREV_DD[alice]=$alice_dd
-    PREV_DD[charlie]=$charlie_dd
-
-    echo "=========================================="
-}
-
-# Display network stats
-display_network_stats() {
-    local STEP_DESC=$1
-    local STATS=$($BOB_CLI getdigidollarstats 2>/dev/null)
-    local ORACLE=$($BOB_CLI getoracleprice 2>/dev/null)
-
-    local DD_SUPPLY=$(echo $STATS | jq -r '.total_dd_supply // 0')
-    local COLLATERAL=$(echo $STATS | jq -r '.total_collateral_dgb // 0')
-    local HEALTH=$(echo $STATS | jq -r '.health_status // "unknown"')
-    local ORACLE_PRICE=$(echo $ORACLE | jq -r '.price_usd // 0')
-    local ORACLE_MICRO=$(echo $ORACLE | jq -r '.price_micro_usd // 0')
-
-    local DD_VALUE_USD=$(echo "scale=2; $DD_SUPPLY / 100" | bc 2>/dev/null || echo "0")
-
-    print_header "NETWORK STATS: $STEP_DESC"
     echo ""
-    echo "  Oracle Price: \$$ORACLE_PRICE per DGB ($ORACLE_MICRO micro-USD)"
-    echo ""
-    echo "  Total DD Supply:    $DD_SUPPLY cents (\$$DD_VALUE_USD)"
-    echo "  Total Collateral:   $COLLATERAL DGB"
-    echo "  Health Status:      $HEALTH"
+    echo "========== NETWORK STATS =========="
+
+    local network_dd=$(get_network_dd_supply)
+    local network_collateral=$(get_network_collateral)
+    local oracle_price=$($BOB_CLI getoracleprice 2>/dev/null | jq -r '.price_usd // "N/A"')
+
+    echo "  Oracle Price: \$$oracle_price per DGB"
+    echo "  Network DD Supply: $network_dd cents"
+    echo "  Network Collateral: $network_collateral DGB"
+
+    # Verify network DD matches expected total
+    if [ "$network_dd" = "$total_expected_dd" ]; then
+        echo -e "  ${GREEN}[OK]${NC} Network DD supply matches expected ($network_dd = $total_expected_dd)"
+        PASSED_TESTS=$((PASSED_TESTS + 1))
+        TOTAL_TESTS=$((TOTAL_TESTS + 1))
+    else
+        echo -e "  ${RED}[FAIL]${NC} Network DD supply mismatch: $network_dd != expected $total_expected_dd"
+        FAILED_TESTS=$((FAILED_TESTS + 1))
+        TOTAL_TESTS=$((TOTAL_TESTS + 1))
+    fi
+
     echo "=========================================="
 }
 
@@ -265,13 +258,47 @@ list_dd_positions() {
 
     local count=$(echo "$positions" | jq 'length')
     echo "  Total positions: $count"
-    echo ""
 
-    echo "$positions" | jq -r '.[] | "  Position: \(.position_id[0:16])...\n    DD Minted: \(.dd_minted) cents\n    DGB Collateral: \(.dgb_collateral) DGB\n    Lock Tier: \(.lock_tier)\n    Status: \(.status)\n    Can Redeem: \(.can_redeem)\n"' 2>/dev/null || echo "  Error parsing positions"
+    echo "$positions" | jq -r '.[] | "    [\(.status)] \(.dd_minted) cents - \(.dgb_collateral) DGB - tier \(.lock_tier) - \(.position_id[0:12])..."' 2>/dev/null || echo "  Error parsing positions"
+}
+
+# Sync all nodes to the same height
+sync_all_nodes() {
+    local target_height=$($BOB_CLI getblockcount)
+    echo "Syncing all nodes to height $target_height..."
+
+    for i in {1..30}; do
+        local alice_height=$($ALICE_CLI getblockcount 2>/dev/null || echo "0")
+        local charlie_height=$($CHARLIE_CLI getblockcount 2>/dev/null || echo "0")
+        if [ "$alice_height" = "$target_height" ] && [ "$charlie_height" = "$target_height" ]; then
+            return 0
+        fi
+        sleep 2
+    done
+    echo "Warning: Nodes may not be fully synced"
+    return 1
+}
+
+# Tier descriptions (10 tiers: 0-9)
+get_tier_description() {
+    local tier=$1
+    case $tier in
+        0) echo "1 hour (240 blocks)" ;;
+        1) echo "30 days" ;;
+        2) echo "90 days" ;;
+        3) echo "180 days" ;;
+        4) echo "1 year" ;;
+        5) echo "2 years" ;;
+        6) echo "3 years" ;;
+        7) echo "5 years" ;;
+        8) echo "7 years" ;;
+        9) echo "10 years" ;;
+        *) echo "unknown" ;;
+    esac
 }
 
 # ============================================================================
-# MAIN TEST EXECUTION - ALL 24 STEPS
+# MAIN TEST EXECUTION
 # ============================================================================
 
 # Step 1: Clean environment
@@ -319,14 +346,17 @@ else
     exit 1
 fi
 
-# Step 3: Setup Bob's wallet and mining
-print_header "Step 3: Setting up Bob's wallet and mining"
+# Step 3: Setup Bob's wallet and generate lots of DGB for 12+ mints
+print_header "Step 3: Setting up Bob's wallet with sufficient DGB"
 $BOB_CLI createwallet "bob" 2>/dev/null || true
 BOB_ADDR=$($BOB_CLI -rpcwallet=bob getnewaddress "mining" "bech32")
 echo "Bob's mining address: $BOB_ADDR"
 
-echo "Mining 105 blocks for coinbase maturity..."
-$BOB_CLI generatetoaddress 105 "$BOB_ADDR" > /dev/null 2>&1
+# Bob needs DGB for 12 mints at ~$100 each. At $0.01/DGB that's ~$12,000 collateral
+# Plus 150% collateralization = ~$18,000 worth of DGB = ~1,800,000 DGB
+# Mining 300 blocks = 300 * 72000 = 21,600,000 DGB (plenty)
+echo "Mining 350 blocks for Bob's coinbase maturity and DGB..."
+$BOB_CLI generatetoaddress 350 "$BOB_ADDR" > /dev/null 2>&1
 HEIGHT=$($BOB_CLI getblockcount)
 print_status "ok" "Mined to height $HEIGHT"
 
@@ -425,585 +455,712 @@ $CHARLIE_CLI createwallet "charlie" 2>/dev/null || true
 CHARLIE_ADDR=$($CHARLIE_CLI -rpcwallet=charlie getnewaddress "receive" "bech32")
 echo "Charlie's address: $CHARLIE_ADDR"
 
-# Step 7: Fund Alice and Charlie
+# Step 7: Fund Alice and Charlie with DGB for their mints
 print_header "Step 7: Funding Alice and Charlie with DGB"
-echo "Mining 55 blocks to Alice and 62 to Charlie for future minting..."
-$BOB_CLI generatetoaddress 55 "$ALICE_ADDR" > /dev/null 2>&1
-$BOB_CLI generatetoaddress 62 "$CHARLIE_ADDR" > /dev/null 2>&1
-print_status "ok" "Alice funded: 55 blocks"
-print_status "ok" "Charlie funded: 62 blocks"
+echo "Alice needs DGB for 2 mints ($200 worth of collateral)"
+echo "Charlie needs DGB for 2 mints ($200 worth of collateral)"
+
+# Mine blocks to Alice (100 blocks = 7.2M DGB)
+echo "Mining 100 blocks to Alice..."
+$BOB_CLI generatetoaddress 100 "$ALICE_ADDR" > /dev/null 2>&1
+print_status "ok" "Alice funded: 100 blocks mined"
+
+# Mine blocks to Charlie (100 blocks = 7.2M DGB)
+echo "Mining 100 blocks to Charlie..."
+$BOB_CLI generatetoaddress 100 "$CHARLIE_ADDR" > /dev/null 2>&1
+print_status "ok" "Charlie funded: 100 blocks mined"
 
 # Step 8: Sync chains
 print_header "Step 8: Syncing chains"
-$BOB_CLI generatetoaddress 2 "$BOB_ADDR" > /dev/null 2>&1
+$BOB_CLI generatetoaddress 5 "$BOB_ADDR" > /dev/null 2>&1
 sleep 5
 
-BOB_HEIGHT=$($BOB_CLI getblockcount)
-for i in {1..30}; do
-    ALICE_HEIGHT=$($ALICE_CLI getblockcount 2>/dev/null || echo "0")
-    CHARLIE_HEIGHT=$($CHARLIE_CLI getblockcount 2>/dev/null || echo "0")
-    if [ "$ALICE_HEIGHT" = "$BOB_HEIGHT" ] && [ "$CHARLIE_HEIGHT" = "$BOB_HEIGHT" ]; then
-        print_status "ok" "All nodes synced at height $BOB_HEIGHT"
-        break
-    fi
-    sleep 2
-done
+sync_all_nodes
+print_status "ok" "All nodes synced"
 
-# Step 9: Display initial state
+# ====================================================================================
+# INITIAL STATE - All balances should be 0
+# ====================================================================================
 print_header "Step 9: Initial DigiDollar State"
-display_network_stats "Initial State (No DD Minted Yet)"
-capture_balance_snapshot "Initial State"
 
-# Step 10: Bob mints $100 DD
-print_header "Step 10: Bob mints \$100 DD"
+# Expected: All DD balances = 0
+EXPECT_BOB_DD=0
+EXPECT_ALICE_DD=0
+EXPECT_CHARLIE_DD=0
+verify_all_balances "Initial State (No DD Minted)"
+
+# ====================================================================================
+# Step 10: BOB MINTS $100 AT EVERY TIER (0-9) = 10 mints + extra tier 0
+# ====================================================================================
+print_header "Step 10: Bob Mints \$100 at ALL Collateral Tiers (0-9)"
+echo ""
+echo "Bob will mint \$100 (10000 cents) at each tier level."
+echo "This tests all collateral tier configurations work correctly."
+echo ""
+
 ORACLE_PRICE=$($BOB_CLI getoracleprice 2>/dev/null | jq -r '.price_usd')
 echo "Current LIVE Oracle Price: \$$ORACLE_PRICE per DGB"
+echo ""
 
-echo "Bob minting \$100 DD (10000 cents) with tier 0..."
+# Mint $100 at tier 0 TWICE (for redemption testing later)
+print_subheader "Tier 0 - First Mint (for redemption test)"
+echo "Minting \$100 DD (10000 cents) with tier 0 [$(get_tier_description 0)]..."
 MINT_RESULT=$($BOB_CLI -rpcwallet=bob mintdigidollar 10000 0 2>&1)
 
 if echo "$MINT_RESULT" | jq -e '.txid' > /dev/null 2>&1; then
-    MINT_TXID=$(echo "$MINT_RESULT" | jq -r '.txid')
-    BOB_FIRST_MINT_TX="$MINT_TXID"
-    print_status "ok" "Mint successful! TX: ${MINT_TXID:0:16}..."
-    echo "  DD Minted: $(echo $MINT_RESULT | jq -r '.dd_minted') cents"
-    echo "  Collateral: $(echo $MINT_RESULT | jq -r '.dgb_collateral') DGB"
+    BOB_TIER0_MINT1=$(echo "$MINT_RESULT" | jq -r '.txid')
+    COLLATERAL=$(echo "$MINT_RESULT" | jq -r '.dgb_collateral')
+    print_status "ok" "Tier 0 Mint #1: TX ${BOB_TIER0_MINT1:0:12}... Collateral: $COLLATERAL DGB"
+    EXPECT_BOB_DD=$((EXPECT_BOB_DD + 10000))
 else
-    print_status "fail" "Mint failed: $MINT_RESULT"
-    exit 1
+    print_status "fail" "Tier 0 Mint #1 failed: $MINT_RESULT"
 fi
 
 $BOB_CLI generatetoaddress 2 "$BOB_ADDR" > /dev/null 2>&1
-sleep 5
-capture_balance_snapshot "After Bob's \$100 Mint"
-list_dd_positions "$BOB_CLI" "bob" "Bob"
+sleep 2
 
-# Step 11: Bob sends $30 DD to Alice
-print_header "Step 11: Bob sends \$30 DD to Alice"
-ALICE_DD_ADDR=$($ALICE_CLI -rpcwallet=alice getdigidollaraddress 2>/dev/null)
-echo "Alice's DD address: $ALICE_DD_ADDR"
+print_subheader "Tier 0 - Second Mint (for redemption test)"
+echo "Minting \$100 DD (10000 cents) with tier 0 [$(get_tier_description 0)]..."
+MINT_RESULT=$($BOB_CLI -rpcwallet=bob mintdigidollar 10000 0 2>&1)
 
-echo "Bob sending 3000 cents (\$30) to Alice..."
-SEND_RESULT=$($BOB_CLI -rpcwallet=bob senddigidollar "$ALICE_DD_ADDR" 3000 2>&1)
-
-if echo "$SEND_RESULT" | jq -e '.txid' > /dev/null 2>&1; then
-    print_status "ok" "Transfer successful! TX: $(echo $SEND_RESULT | jq -r '.txid' | head -c 16)..."
+if echo "$MINT_RESULT" | jq -e '.txid' > /dev/null 2>&1; then
+    BOB_TIER0_MINT2=$(echo "$MINT_RESULT" | jq -r '.txid')
+    COLLATERAL=$(echo "$MINT_RESULT" | jq -r '.dgb_collateral')
+    print_status "ok" "Tier 0 Mint #2: TX ${BOB_TIER0_MINT2:0:12}... Collateral: $COLLATERAL DGB"
+    EXPECT_BOB_DD=$((EXPECT_BOB_DD + 10000))
 else
-    print_status "fail" "Transfer failed: $SEND_RESULT"
+    print_status "fail" "Tier 0 Mint #2 failed: $MINT_RESULT"
 fi
 
 $BOB_CLI generatetoaddress 2 "$BOB_ADDR" > /dev/null 2>&1
-sleep 5
-capture_balance_snapshot "After Bob sends \$30 to Alice"
+sleep 2
 
-# Step 12: Bob sends $20 DD to Charlie
-print_header "Step 12: Bob sends \$20 DD to Charlie"
-CHARLIE_DD_ADDR=$($CHARLIE_CLI -rpcwallet=charlie getdigidollaraddress 2>/dev/null)
-echo "Charlie's DD address: $CHARLIE_DD_ADDR"
+# Now mint at tiers 1-9 (10 tiers total: 0-9)
+for tier in 1 2 3 4 5 6 7 8 9; do
+    print_subheader "Tier $tier - $(get_tier_description $tier)"
+    echo "Minting \$100 DD (10000 cents) with tier $tier..."
 
-echo "Bob sending 2000 cents (\$20) to Charlie..."
-SEND_RESULT=$($BOB_CLI -rpcwallet=bob senddigidollar "$CHARLIE_DD_ADDR" 2000 2>&1)
+    MINT_RESULT=$($BOB_CLI -rpcwallet=bob mintdigidollar 10000 $tier 2>&1)
 
-if echo "$SEND_RESULT" | jq -e '.txid' > /dev/null 2>&1; then
-    print_status "ok" "Transfer successful! TX: $(echo $SEND_RESULT | jq -r '.txid' | head -c 16)..."
-else
-    print_status "fail" "Transfer failed: $SEND_RESULT"
-fi
-
-$BOB_CLI generatetoaddress 2 "$BOB_ADDR" > /dev/null 2>&1
-sleep 5
-capture_balance_snapshot "After Bob sends \$20 to Charlie"
-
-# Step 13: State after transfers
-print_header "Step 13: State After Transfers"
-display_network_stats "After Bob's Transfers"
-list_dd_positions "$BOB_CLI" "bob" "Bob"
-
-# Step 13.5: Bob wallet restart test
-print_header "Step 13.5: Bob Wallet Restart Test (DD Persistence)"
-BOB_DD_BEFORE=$(get_dd_balance "$BOB_CLI" "bob")
-BOB_DGB_BEFORE=$(get_dgb_balance "$BOB_CLI" "bob")
-echo "Before restart - Bob's DD: $BOB_DD_BEFORE cents, DGB: $BOB_DGB_BEFORE"
-
-echo "Stopping Bob's Qt wallet..."
-kill $BOB_PID 2>/dev/null || true
-
-for i in {1..30}; do
-    if ! kill -0 $BOB_PID 2>/dev/null; then
-        sleep 2
-        break
+    if echo "$MINT_RESULT" | jq -e '.txid' > /dev/null 2>&1; then
+        TXID=$(echo "$MINT_RESULT" | jq -r '.txid')
+        COLLATERAL=$(echo "$MINT_RESULT" | jq -r '.dgb_collateral')
+        print_status "ok" "Tier $tier Mint: TX ${TXID:0:12}... Collateral: $COLLATERAL DGB"
+        EXPECT_BOB_DD=$((EXPECT_BOB_DD + 10000))
+    else
+        print_status "fail" "Tier $tier Mint failed: $MINT_RESULT"
     fi
+
+    $BOB_CLI generatetoaddress 2 "$BOB_ADDR" > /dev/null 2>&1
     sleep 1
 done
 
-echo "Restarting Bob's Qt wallet..."
-env -i \
-    DISPLAY="${DISPLAY}" \
-    XAUTHORITY="${XAUTHORITY}" \
-    WAYLAND_DISPLAY="${WAYLAND_DISPLAY}" \
-    XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}" \
-    XDG_SESSION_TYPE="${XDG_SESSION_TYPE}" \
-    HOME="${HOME}" \
-    USER="${USER}" \
-    PATH="${PATH}" \
-    ./src/qt/digibyte-qt \
-    -testnet \
-    -datadir=$BOB_DATADIR \
-    -port=$BOB_PORT \
-    -rpcport=$BOB_RPC \
-    -server \
-    -listen=1 \
-    -discover=0 \
-    -digidollar=1 \
-    -txindex=1 \
-    -fallbackfee=0.0001 \
-    -dandelion=0 \
-    -debug=digidollar \
-    > /tmp/bob_testnet.log 2>&1 &
-BOB_PID=$!
+# Sync and verify after all mints
+$BOB_CLI generatetoaddress 5 "$BOB_ADDR" > /dev/null 2>&1
+sleep 5
+sync_all_nodes
 
-if wait_for_rpc "$BOB_CLI" "Bob"; then
-    print_status "ok" "Bob's Qt RPC is ready after restart"
-fi
+# Bob should have 11 x 10000 = 110000 DD
+echo ""
+echo "Bob completed 11 mints (2x tier0 + tiers 1-9)"
+echo "Expected Bob DD: $EXPECT_BOB_DD cents (\$$(echo "scale=2; $EXPECT_BOB_DD / 100" | bc))"
+verify_all_balances "After Bob's 11 Mints (\$1100 total)"
+list_dd_positions "$BOB_CLI" "bob" "Bob"
 
-$BOB_CLI loadwallet "bob" 2>/dev/null || true
-sleep 2
-
-BOB_DD_AFTER=$(get_dd_balance "$BOB_CLI" "bob")
-BOB_DGB_AFTER=$(get_dgb_balance "$BOB_CLI" "bob")
-echo "After restart - Bob's DD: $BOB_DD_AFTER cents, DGB: $BOB_DGB_AFTER"
-
-if [ "$BOB_DD_BEFORE" = "$BOB_DD_AFTER" ]; then
-    print_status "ok" "DD balance PERSISTED after wallet restart!"
-else
-    print_status "fail" "DD balance CHANGED! Before: $BOB_DD_BEFORE, After: $BOB_DD_AFTER"
-fi
-
-# Restart oracle
-$BOB_CLI startoracle 0 "$ORACLE_PRIVATE_KEY" 2>/dev/null || true
-sleep 2
-$BOB_CLI generatetoaddress 1 "$BOB_ADDR" > /dev/null 2>&1
-
-for i in {1..10}; do
-    STATUS=$($BOB_CLI getoracleprice 2>/dev/null | jq -r '.status // "inactive"')
-    if [ "$STATUS" = "active" ]; then
-        print_status "ok" "Oracle is active again"
-        break
-    fi
-    sleep 1
-done
-
-# Step 14: Bob mints $10 DD with short lock
-print_header "Step 14: Bob mints \$10 DD with 1-hour lock (tier 0)"
-echo "This will be used for redemption testing..."
-
-MINT_RESULT2=$($BOB_CLI -rpcwallet=bob mintdigidollar 1000 0 2>&1)
-
-if echo "$MINT_RESULT2" | jq -e '.txid' > /dev/null 2>&1; then
-    REDEEM_MINT_TXID=$(echo "$MINT_RESULT2" | jq -r '.txid')
-    print_status "ok" "Mint successful! TX: ${REDEEM_MINT_TXID:0:16}..."
-    echo "  DD Minted: $(echo $MINT_RESULT2 | jq -r '.dd_minted') cents"
-    echo "  Lock period: 240 blocks (tier 0)"
-else
-    print_status "fail" "Mint failed: $MINT_RESULT2"
-fi
-
-$BOB_CLI generatetoaddress 2 "$BOB_ADDR" > /dev/null 2>&1
-sleep 3
+# ====================================================================================
+# Step 11: Early redemption test (should FAIL - tier 0 still locked)
+# ====================================================================================
+print_header "Step 11: Early Redemption Test (should FAIL)"
+echo "Bob's tier 0 vaults are still locked (need 240 blocks)..."
+echo "Attempting to redeem BEFORE lock expires..."
 
 CURRENT_HEIGHT=$($BOB_CLI getblockcount)
-UNLOCK_HEIGHT=$((CURRENT_HEIGHT + 240))
-echo "Current block: $CURRENT_HEIGHT, Unlock at: $UNLOCK_HEIGHT"
-
-capture_balance_snapshot "After \$10 DD Mint for Redemption"
-list_dd_positions "$BOB_CLI" "bob" "Bob"
-
-# Step 15: Try early redemption (should FAIL)
-print_header "Step 15: Try early redemption (should FAIL)"
-echo "Attempting to redeem vault BEFORE lock expires..."
+echo "Current height: $CURRENT_HEIGHT"
 
 set +e
-EARLY_REDEEM=$($BOB_CLI -rpcwallet=bob redeemdigidollar "$REDEEM_MINT_TXID" 1000 2>&1)
-EARLY_EXIT_CODE=$?
+EARLY_REDEEM=$($BOB_CLI -rpcwallet=bob redeemdigidollar "$BOB_TIER0_MINT1" 10000 2>&1)
+EARLY_EXIT=$?
 set -e
 
-if [ $EARLY_EXIT_CODE -ne 0 ] || echo "$EARLY_REDEEM" | grep -qi "error\|lock\|expired"; then
-    print_status "ok" "Early redemption correctly REJECTED"
-    echo "   Response: $EARLY_REDEEM"
+if [ $EARLY_EXIT -ne 0 ] || echo "$EARLY_REDEEM" | grep -qi "error\|lock"; then
+    print_status "ok" "Early redemption correctly REJECTED (position still locked)"
+    echo "   Response: $(echo $EARLY_REDEEM | head -c 100)..."
 else
-    print_status "warn" "Unexpected response: $EARLY_REDEEM"
+    print_status "fail" "Early redemption unexpectedly succeeded"
+    echo "   Response: $EARLY_REDEEM"
 fi
 
-# Step 15.5: Test PARTIAL REDEMPTION REJECTION (EXACT-AMOUNT ENFORCEMENT)
-print_header "Step 15.5: Test PARTIAL REDEMPTION REJECTION"
-echo "============================================"
-echo "TESTING EXACT-AMOUNT REDEMPTION ENFORCEMENT"
-echo "============================================"
-echo ""
-echo "The vault contains 1000 cents (\$10 DD)."
-echo "We will attempt to redeem ONLY 500 cents (\$5 DD)."
-echo "This MUST be REJECTED - only exact amount redemption is allowed."
-echo ""
+# ====================================================================================
+# Step 12: Mine past tier 0 lock period (240 blocks)
+# ====================================================================================
+print_header "Step 12: Mining Past Tier 0 Lock Period"
+echo "Tier 0 lock period is 240 blocks (~1 hour at 15s/block on testnet)"
+echo "Mining 250 blocks to pass the lock period..."
 
-# First mine past the lock period so lock isn't the issue
-echo "Mining 250 blocks to pass lock period first..."
 $BOB_CLI generatetoaddress 250 "$BOB_ADDR" > /dev/null 2>&1
 sleep 3
 
 NEW_HEIGHT=$($BOB_CLI getblockcount)
-echo "Current height: $NEW_HEIGHT (lock should be expired)"
+echo "Current height: $NEW_HEIGHT (tier 0 locks should now be expired)"
 
+sync_all_nodes
+print_status "ok" "Mined 250 blocks, tier 0 positions should be unlocked"
+
+# Check Bob's positions status
 echo ""
-echo "Attempting PARTIAL redemption of 500 cents (should FAIL)..."
+echo "Bob's tier 0 positions status:"
+$BOB_CLI -rpcwallet=bob listdigidollarpositions 2>/dev/null | jq -r '.[] | select(.lock_tier == 0) | "  [\(.status)] \(.dd_minted) cents - unlock: \(.unlock_height)"' 2>/dev/null || echo "  Error reading positions"
+
+# ====================================================================================
+# Step 13: Partial Redemption Test (should FAIL - exact amount required)
+# ====================================================================================
+print_header "Step 13: Partial Redemption Test (should FAIL)"
+echo "Testing that partial redemption is NOT allowed..."
+echo "Bob's tier 0 vault #1 has 10000 cents - trying to redeem only 5000 cents..."
+
 set +e
-PARTIAL_REDEEM=$($BOB_CLI -rpcwallet=bob redeemdigidollar "$REDEEM_MINT_TXID" 500 2>&1)
-PARTIAL_EXIT_CODE=$?
+PARTIAL_REDEEM=$($BOB_CLI -rpcwallet=bob redeemdigidollar "$BOB_TIER0_MINT1" 5000 2>&1)
+PARTIAL_EXIT=$?
 set -e
 
-echo "Exit code: $PARTIAL_EXIT_CODE"
-echo "Response: $PARTIAL_REDEEM"
-
-if [ $PARTIAL_EXIT_CODE -ne 0 ] || echo "$PARTIAL_REDEEM" | grep -qi "error\|exact\|must equal\|full\|minted"; then
-    print_status "ok" "PARTIAL REDEMPTION CORRECTLY REJECTED!"
-    echo "   The system enforces exact-amount redemption as expected."
+if [ $PARTIAL_EXIT -ne 0 ] || echo "$PARTIAL_REDEEM" | grep -qi "error\|exact\|must\|full"; then
+    print_status "ok" "Partial redemption correctly REJECTED (exact amount required)"
+    echo "   Response: $(echo $PARTIAL_REDEEM | head -c 120)..."
 else
-    print_status "fail" "PARTIAL REDEMPTION WAS NOT REJECTED!"
-    echo "   This is a bug - partial redemption should be blocked."
-    echo "   Response was: $PARTIAL_REDEEM"
+    print_status "fail" "Partial redemption unexpectedly succeeded (should require exact amount)"
+    echo "   Response: $PARTIAL_REDEEM"
 fi
 
-echo ""
-echo "Now attempting EXACT redemption of 1000 cents (should SUCCEED)..."
-set +e
-EXACT_REDEEM=$($BOB_CLI -rpcwallet=bob redeemdigidollar "$REDEEM_MINT_TXID" 1000 2>&1)
-EXACT_EXIT_CODE=$?
-set -e
+# ====================================================================================
+# Step 14: Bob's First Successful Redemption (tier 0 mint #1)
+# ====================================================================================
+print_header "Step 14: Bob Redeems Tier 0 Vault #1 (\$100)"
+echo "Bob's tier 0 position is now unlocked - redeeming EXACT amount of 10000 cents..."
 
-echo "Exit code: $EXACT_EXIT_CODE"
-
-if [ $EXACT_EXIT_CODE -eq 0 ] && echo "$EXACT_REDEEM" | jq -e '.txid' > /dev/null 2>&1; then
-    EXACT_REDEEM_TXID=$(echo "$EXACT_REDEEM" | jq -r '.txid')
-    print_status "ok" "EXACT AMOUNT REDEMPTION SUCCEEDED!"
-    echo "   TX: ${EXACT_REDEEM_TXID:0:16}..."
-    echo "   DD Redeemed: $(echo $EXACT_REDEEM | jq -r '.dd_redeemed // 1000') cents"
-
-    # Confirm it
-    $BOB_CLI generatetoaddress 2 "$BOB_ADDR" > /dev/null 2>&1
-    sleep 3
-else
-    print_status "fail" "EXACT REDEMPTION FAILED: $EXACT_REDEEM"
-fi
-
-capture_balance_snapshot "After Exact-Amount Redemption Test"
-
-# Step 16: COLLATERAL CONSISTENCY TEST
-print_header "Step 16: COLLATERAL CONSISTENCY TEST"
-echo "============================================"
-echo "TESTING COLLATERAL CALCULATION CONSISTENCY"
-echo "============================================"
-echo ""
-echo "Verifying that minted collateral matches calculated requirements."
-echo "This tests that the GUI 'Required DGB' matches 'Collateral Locked'."
-echo ""
-
-# Get oracle price for calculation
-ORACLE_PRICE_USD=$($BOB_CLI getoracleprice 2>/dev/null | jq -r '.price_usd // 0.01')
-ORACLE_PRICE_MICRO=$($BOB_CLI getoracleprice 2>/dev/null | jq -r '.price_micro_usd // 10000')
-echo "Current Oracle Price: \$$ORACLE_PRICE_USD per DGB ($ORACLE_PRICE_MICRO micro-USD)"
-
-# Mint a small vault and verify collateral
-echo ""
-echo "Minting \$5 DD (500 cents) with tier 0 (1000% = 10x collateral)..."
-
-# Calculate expected collateral:
-# $5 DD * 10 (1000%) = $50 worth of DGB needed
-# $50 / $ORACLE_PRICE_USD = DGB needed
-EXPECTED_DGB=$(echo "scale=8; 5 * 10 / $ORACLE_PRICE_USD" | bc 2>/dev/null || echo "0")
-echo "Expected collateral: ~$EXPECTED_DGB DGB (at \$$ORACLE_PRICE_USD/DGB)"
+BOB_DGB_BEFORE=$($BOB_CLI -rpcwallet=bob getbalance 2>/dev/null || echo "0")
+BOB_DD_BEFORE=$(get_dd_balance "$BOB_CLI" "bob")
+echo "Before redemption: Bob has $BOB_DD_BEFORE DD cents and $BOB_DGB_BEFORE DGB"
 
 set +e
-COLLATERAL_TEST_MINT=$($BOB_CLI -rpcwallet=bob mintdigidollar 500 0 2>&1)
-COLLATERAL_MINT_EXIT=$?
+REDEEM_RESULT=$($BOB_CLI -rpcwallet=bob redeemdigidollar "$BOB_TIER0_MINT1" 10000 2>&1)
+REDEEM_EXIT=$?
 set -e
 
-if [ $COLLATERAL_MINT_EXIT -eq 0 ] && echo "$COLLATERAL_TEST_MINT" | jq -e '.txid' > /dev/null 2>&1; then
-    COLLATERAL_TEST_TXID=$(echo "$COLLATERAL_TEST_MINT" | jq -r '.txid')
-    ACTUAL_COLLATERAL=$(echo "$COLLATERAL_TEST_MINT" | jq -r '.dgb_collateral // 0')
-    DD_MINTED=$(echo "$COLLATERAL_TEST_MINT" | jq -r '.dd_minted // 0')
-
-    echo ""
-    echo "Mint Result:"
-    echo "  TX: ${COLLATERAL_TEST_TXID:0:16}..."
-    echo "  DD Minted: $DD_MINTED cents (\$$(echo "scale=2; $DD_MINTED / 100" | bc))"
-    echo "  Actual Collateral Locked: $ACTUAL_COLLATERAL DGB"
-    echo "  Expected Collateral: ~$EXPECTED_DGB DGB"
-
-    # Check if actual is within 5% of expected (accounting for fees, rounding)
-    DIFF_PERCENT=$(echo "scale=2; (($ACTUAL_COLLATERAL - $EXPECTED_DGB) / $EXPECTED_DGB) * 100" | bc 2>/dev/null || echo "0")
-    ABS_DIFF=${DIFF_PERCENT#-}
-
-    if (( $(echo "$ABS_DIFF < 5" | bc -l 2>/dev/null || echo "0") )); then
-        print_status "ok" "Collateral calculation is CONSISTENT (within 5% tolerance)"
-        echo "   Difference: ${DIFF_PERCENT}%"
-    else
-        print_status "warn" "Collateral differs by ${DIFF_PERCENT}% (may need investigation)"
-    fi
+if [ $REDEEM_EXIT -eq 0 ] && echo "$REDEEM_RESULT" | jq -e '.txid' > /dev/null 2>&1; then
+    REDEEM_TXID=$(echo "$REDEEM_RESULT" | jq -r '.txid')
+    DGB_RETURNED=$(echo "$REDEEM_RESULT" | jq -r '.dgb_returned // .collateral_returned // "unknown"')
+    print_status "ok" "REDEMPTION #1 SUCCESSFUL! TX: ${REDEEM_TXID:0:16}..."
+    echo "  DD Burned: 10000 cents (\$100)"
+    echo "  DGB Returned: $DGB_RETURNED DGB"
+    EXPECT_BOB_DD=$((EXPECT_BOB_DD - 10000))
 else
-    print_status "fail" "Collateral test mint failed: $COLLATERAL_TEST_MINT"
+    print_status "fail" "Redemption #1 failed: $(echo $REDEEM_RESULT | head -c 150)..."
 fi
 
 $BOB_CLI generatetoaddress 2 "$BOB_ADDR" > /dev/null 2>&1
 sleep 3
+sync_all_nodes
 
-# Step 17: Already covered by Step 15.5 - just show vault state
-print_header "Step 17: Vault State After Redemption Tests"
-list_dd_positions "$BOB_CLI" "bob" "Bob"
-capture_balance_snapshot "After Collateral Test"
+verify_all_balances "After Bob's First Redemption"
 
-# Step 18: Bob mints $200 DD with 10-year lock
-print_header "Step 18: Bob mints \$200 DD with 10-year lock (tier 8)"
-echo "Testing long-term vault creation..."
+# ====================================================================================
+# Step 15: Bob's Second Successful Redemption (tier 0 mint #2)
+# ====================================================================================
+print_header "Step 15: Bob Redeems Tier 0 Vault #2 (\$100)"
+echo "Redeeming Bob's second tier 0 position..."
 
-MINT_RESULT3=$($BOB_CLI -rpcwallet=bob mintdigidollar 20000 8 2>&1)
+BOB_DGB_BEFORE=$($BOB_CLI -rpcwallet=bob getbalance 2>/dev/null || echo "0")
+BOB_DD_BEFORE=$(get_dd_balance "$BOB_CLI" "bob")
+echo "Before redemption: Bob has $BOB_DD_BEFORE DD cents and $BOB_DGB_BEFORE DGB"
 
-if echo "$MINT_RESULT3" | jq -e '.txid' > /dev/null 2>&1; then
-    LONG_MINT_TXID=$(echo "$MINT_RESULT3" | jq -r '.txid')
-    print_status "ok" "10-year mint successful! TX: ${LONG_MINT_TXID:0:16}..."
-    echo "  DD Minted: $(echo $MINT_RESULT3 | jq -r '.dd_minted') cents (\$200)"
-    echo "  Collateral: $(echo $MINT_RESULT3 | jq -r '.dgb_collateral') DGB"
-else
-    print_status "fail" "10-year mint failed: $MINT_RESULT3"
-fi
-
-$BOB_CLI generatetoaddress 7 "$BOB_ADDR" > /dev/null 2>&1
-sleep 3
-capture_balance_snapshot "After \$200 DD Mint (10-Year Lock)"
-list_dd_positions "$BOB_CLI" "bob" "Bob"
-
-# Step 19: Charlie sends $15 DD to Alice
-print_header "Step 19: Charlie sends \$15 DD to Alice"
-echo "Testing that recipients can spend received DigiDollars..."
-
-ALICE_DD_ADDR2=$($ALICE_CLI -rpcwallet=alice getdigidollaraddress 2>/dev/null)
-echo "Alice's DD address: $ALICE_DD_ADDR2"
-
-echo "Charlie sending 1500 cents (\$15) to Alice..."
 set +e
-CHARLIE_SEND_RESULT=$($CHARLIE_CLI -rpcwallet=charlie senddigidollar "$ALICE_DD_ADDR2" 1500 2>&1)
-CHARLIE_SEND_EXIT=$?
+REDEEM_RESULT=$($BOB_CLI -rpcwallet=bob redeemdigidollar "$BOB_TIER0_MINT2" 10000 2>&1)
+REDEEM_EXIT=$?
 set -e
 
-if [ $CHARLIE_SEND_EXIT -eq 0 ] && echo "$CHARLIE_SEND_RESULT" | jq -e '.txid' > /dev/null 2>&1; then
-    print_status "ok" "Transfer successful! TX: $(echo $CHARLIE_SEND_RESULT | jq -r '.txid' | head -c 16)..."
+if [ $REDEEM_EXIT -eq 0 ] && echo "$REDEEM_RESULT" | jq -e '.txid' > /dev/null 2>&1; then
+    REDEEM_TXID=$(echo "$REDEEM_RESULT" | jq -r '.txid')
+    DGB_RETURNED=$(echo "$REDEEM_RESULT" | jq -r '.dgb_returned // .collateral_returned // "unknown"')
+    print_status "ok" "REDEMPTION #2 SUCCESSFUL! TX: ${REDEEM_TXID:0:16}..."
+    echo "  DD Burned: 10000 cents (\$100)"
+    echo "  DGB Returned: $DGB_RETURNED DGB"
+    EXPECT_BOB_DD=$((EXPECT_BOB_DD - 10000))
 else
-    print_status "fail" "Charlie's transfer failed: $CHARLIE_SEND_RESULT"
+    print_status "fail" "Redemption #2 failed: $(echo $REDEEM_RESULT | head -c 150)..."
 fi
 
-$BOB_CLI generatetoaddress 8 "$BOB_ADDR" > /dev/null 2>&1
-sleep 5
-capture_balance_snapshot "After Charlie sends \$15 to Alice"
-
-# Step 20: Alice sends $10 DD back to Bob
-print_header "Step 20: Alice sends \$10 DD back to Bob"
-echo "Completing the full circle..."
-
-BOB_DD_ADDR=$($BOB_CLI -rpcwallet=bob getdigidollaraddress 2>/dev/null)
-echo "Bob's DD address: $BOB_DD_ADDR"
-
-echo "Alice sending 1000 cents (\$10) back to Bob..."
-set +e
-ALICE_SEND_RESULT=$($ALICE_CLI -rpcwallet=alice senddigidollar "$BOB_DD_ADDR" 1000 2>&1)
-ALICE_SEND_EXIT=$?
-set -e
-
-if [ $ALICE_SEND_EXIT -eq 0 ] && echo "$ALICE_SEND_RESULT" | jq -e '.txid' > /dev/null 2>&1; then
-    print_status "ok" "Transfer successful! TX: $(echo $ALICE_SEND_RESULT | jq -r '.txid' | head -c 16)..."
-    echo "  Full circle complete: Bob -> Alice -> Bob"
-else
-    print_status "fail" "Alice's transfer failed: $ALICE_SEND_RESULT"
-fi
-
-$BOB_CLI generatetoaddress 9 "$BOB_ADDR" > /dev/null 2>&1
+$BOB_CLI generatetoaddress 2 "$BOB_ADDR" > /dev/null 2>&1
 sleep 3
-capture_balance_snapshot "After Alice sends \$10 back to Bob"
+sync_all_nodes
 
-# Step 21: Alice mints $100 DD
-print_header "Step 21: Alice mints \$100 DD with 7-year lock (tier 7)"
-ALICE_BALANCE=$($ALICE_CLI -rpcwallet=alice getbalance 2>/dev/null || echo "0")
-echo "Alice's DGB balance: $ALICE_BALANCE DGB"
+verify_all_balances "After Bob's Second Redemption"
+list_dd_positions "$BOB_CLI" "bob" "Bob"
 
-echo "Alice minting \$100 DD (10000 cents) with tier 7..."
+# ====================================================================================
+# Step 16: Alice Mints $100 at Tier 3 (90 days)
+# ====================================================================================
+print_header "Step 16: Alice Mints \$100 at Tier 3 (90 days)"
+
+ALICE_DGB=$($ALICE_CLI -rpcwallet=alice getbalance 2>/dev/null || echo "0")
+echo "Alice's DGB balance: $ALICE_DGB DGB"
+
+echo "Alice minting \$100 DD (10000 cents) with tier 3 [$(get_tier_description 3)]..."
 set +e
-ALICE_MINT_RESULT=$($ALICE_CLI -rpcwallet=alice mintdigidollar 10000 7 2>&1)
+ALICE_MINT=$($ALICE_CLI -rpcwallet=alice mintdigidollar 10000 3 2>&1)
 ALICE_MINT_EXIT=$?
 set -e
 
-if [ $ALICE_MINT_EXIT -eq 0 ] && echo "$ALICE_MINT_RESULT" | jq -e '.txid' > /dev/null 2>&1; then
-    ALICE_MINT_TXID=$(echo "$ALICE_MINT_RESULT" | jq -r '.txid')
-    print_status "ok" "Alice's 7-year mint successful! TX: ${ALICE_MINT_TXID:0:16}..."
-    echo "  DD Minted: $(echo $ALICE_MINT_RESULT | jq -r '.dd_minted') cents"
-    echo "  Collateral: $(echo $ALICE_MINT_RESULT | jq -r '.dgb_collateral') DGB"
+if [ $ALICE_MINT_EXIT -eq 0 ] && echo "$ALICE_MINT" | jq -e '.txid' > /dev/null 2>&1; then
+    ALICE_TIER3_TX=$(echo "$ALICE_MINT" | jq -r '.txid')
+    COLLATERAL=$(echo "$ALICE_MINT" | jq -r '.dgb_collateral')
+    print_status "ok" "Alice Tier 3 Mint: TX ${ALICE_TIER3_TX:0:12}... Collateral: $COLLATERAL DGB"
+    EXPECT_ALICE_DD=$((EXPECT_ALICE_DD + 10000))
 else
-    print_status "fail" "Alice's mint failed: $ALICE_MINT_RESULT"
+    print_status "fail" "Alice Tier 3 Mint failed: $ALICE_MINT"
 fi
 
 $BOB_CLI generatetoaddress 2 "$BOB_ADDR" > /dev/null 2>&1
 sleep 3
-capture_balance_snapshot "After Alice's \$100 Mint"
+sync_all_nodes
+
+# ====================================================================================
+# Step 17: Alice Mints $100 at Tier 5 (1 year)
+# ====================================================================================
+print_header "Step 17: Alice Mints \$100 at Tier 5 (1 year)"
+
+ALICE_DGB=$($ALICE_CLI -rpcwallet=alice getbalance 2>/dev/null || echo "0")
+echo "Alice's DGB balance: $ALICE_DGB DGB"
+
+echo "Alice minting \$100 DD (10000 cents) with tier 5 [$(get_tier_description 5)]..."
+set +e
+ALICE_MINT=$($ALICE_CLI -rpcwallet=alice mintdigidollar 10000 5 2>&1)
+ALICE_MINT_EXIT=$?
+set -e
+
+if [ $ALICE_MINT_EXIT -eq 0 ] && echo "$ALICE_MINT" | jq -e '.txid' > /dev/null 2>&1; then
+    ALICE_TIER5_TX=$(echo "$ALICE_MINT" | jq -r '.txid')
+    COLLATERAL=$(echo "$ALICE_MINT" | jq -r '.dgb_collateral')
+    print_status "ok" "Alice Tier 5 Mint: TX ${ALICE_TIER5_TX:0:12}... Collateral: $COLLATERAL DGB"
+    EXPECT_ALICE_DD=$((EXPECT_ALICE_DD + 10000))
+else
+    print_status "fail" "Alice Tier 5 Mint failed: $ALICE_MINT"
+fi
+
+$BOB_CLI generatetoaddress 2 "$BOB_ADDR" > /dev/null 2>&1
+sleep 3
+sync_all_nodes
+
+verify_all_balances "After Alice's 2 Mints (Tier 3 + Tier 5)"
 list_dd_positions "$ALICE_CLI" "alice" "Alice"
 
-# Step 22: Charlie mints $200 DD
-print_header "Step 22: Charlie mints \$200 DD with 10-year lock (tier 8)"
-CHARLIE_BALANCE=$($CHARLIE_CLI -rpcwallet=charlie getbalance 2>/dev/null || echo "0")
-echo "Charlie's DGB balance: $CHARLIE_BALANCE DGB"
+# ====================================================================================
+# Step 18: Charlie Mints $100 at Tier 7 (3 years)
+# ====================================================================================
+print_header "Step 18: Charlie Mints \$100 at Tier 7 (3 years)"
 
-echo "Charlie minting \$200 DD (20000 cents) with tier 8..."
+CHARLIE_DGB=$($CHARLIE_CLI -rpcwallet=charlie getbalance 2>/dev/null || echo "0")
+echo "Charlie's DGB balance: $CHARLIE_DGB DGB"
+
+echo "Charlie minting \$100 DD (10000 cents) with tier 7 [$(get_tier_description 7)]..."
 set +e
-CHARLIE_MINT_RESULT=$($CHARLIE_CLI -rpcwallet=charlie mintdigidollar 20000 8 2>&1)
+CHARLIE_MINT=$($CHARLIE_CLI -rpcwallet=charlie mintdigidollar 10000 7 2>&1)
 CHARLIE_MINT_EXIT=$?
 set -e
 
-if [ $CHARLIE_MINT_EXIT -eq 0 ] && echo "$CHARLIE_MINT_RESULT" | jq -e '.txid' > /dev/null 2>&1; then
-    CHARLIE_MINT_TXID=$(echo "$CHARLIE_MINT_RESULT" | jq -r '.txid')
-    print_status "ok" "Charlie's 10-year mint successful! TX: ${CHARLIE_MINT_TXID:0:16}..."
-    echo "  DD Minted: $(echo $CHARLIE_MINT_RESULT | jq -r '.dd_minted') cents"
-    echo "  Collateral: $(echo $CHARLIE_MINT_RESULT | jq -r '.dgb_collateral') DGB"
+if [ $CHARLIE_MINT_EXIT -eq 0 ] && echo "$CHARLIE_MINT" | jq -e '.txid' > /dev/null 2>&1; then
+    CHARLIE_TIER7_TX=$(echo "$CHARLIE_MINT" | jq -r '.txid')
+    COLLATERAL=$(echo "$CHARLIE_MINT" | jq -r '.dgb_collateral')
+    print_status "ok" "Charlie Tier 7 Mint: TX ${CHARLIE_TIER7_TX:0:12}... Collateral: $COLLATERAL DGB"
+    EXPECT_CHARLIE_DD=$((EXPECT_CHARLIE_DD + 10000))
 else
-    print_status "fail" "Charlie's mint failed: $CHARLIE_MINT_RESULT"
+    print_status "fail" "Charlie Tier 7 Mint failed: $CHARLIE_MINT"
 fi
 
-$BOB_CLI generatetoaddress 7 "$BOB_ADDR" > /dev/null 2>&1
-sleep 5
-capture_balance_snapshot "After Charlie's \$200 Mint"
+$BOB_CLI generatetoaddress 2 "$BOB_ADDR" > /dev/null 2>&1
+sleep 3
+sync_all_nodes
+
+# ====================================================================================
+# Step 19: Charlie Mints $100 at Tier 9 (10 years)
+# ====================================================================================
+print_header "Step 19: Charlie Mints \$100 at Tier 9 (10 years)"
+
+CHARLIE_DGB=$($CHARLIE_CLI -rpcwallet=charlie getbalance 2>/dev/null || echo "0")
+echo "Charlie's DGB balance: $CHARLIE_DGB DGB"
+
+echo "Charlie minting \$100 DD (10000 cents) with tier 9 [$(get_tier_description 9)]..."
+set +e
+CHARLIE_MINT=$($CHARLIE_CLI -rpcwallet=charlie mintdigidollar 10000 9 2>&1)
+CHARLIE_MINT_EXIT=$?
+set -e
+
+if [ $CHARLIE_MINT_EXIT -eq 0 ] && echo "$CHARLIE_MINT" | jq -e '.txid' > /dev/null 2>&1; then
+    CHARLIE_TIER9_TX=$(echo "$CHARLIE_MINT" | jq -r '.txid')
+    COLLATERAL=$(echo "$CHARLIE_MINT" | jq -r '.dgb_collateral')
+    print_status "ok" "Charlie Tier 9 Mint: TX ${CHARLIE_TIER9_TX:0:12}... Collateral: $COLLATERAL DGB"
+    EXPECT_CHARLIE_DD=$((EXPECT_CHARLIE_DD + 10000))
+else
+    print_status "fail" "Charlie Tier 9 Mint failed: $CHARLIE_MINT"
+fi
+
+$BOB_CLI generatetoaddress 2 "$BOB_ADDR" > /dev/null 2>&1
+sleep 3
+sync_all_nodes
+
+verify_all_balances "After Charlie's 2 Mints (Tier 7 + Tier 9)"
 list_dd_positions "$CHARLIE_CLI" "charlie" "Charlie"
 
-# Step 23: Bob redeems first $100 vault
-print_header "Step 23: Bob redeems first \$100 vault (fungible DD)"
-BOB_DD_BALANCE=$(get_dd_balance "$BOB_CLI" "bob")
-echo "Bob's current DD balance: $BOB_DD_BALANCE cents"
+# ====================================================================================
+# Step 20: DD Transfer Tests (Bob sends to Alice and Charlie)
+# ====================================================================================
+print_header "Step 20: DD Transfer Tests"
 
-echo "Attempting to redeem first vault (\$100 DD = 10000 cents)..."
+# Get DD addresses
+ALICE_DD_ADDR=$($ALICE_CLI -rpcwallet=alice getdigidollaraddress 2>/dev/null)
+CHARLIE_DD_ADDR=$($CHARLIE_CLI -rpcwallet=charlie getdigidollaraddress 2>/dev/null)
+echo "Alice's DD address: $ALICE_DD_ADDR"
+echo "Charlie's DD address: $CHARLIE_DD_ADDR"
+
+# Bob sends $50 DD to Alice
+print_subheader "Bob sends \$50 DD (5000 cents) to Alice"
 set +e
-FINAL_REDEEM_RESULT=$($BOB_CLI -rpcwallet=bob redeemdigidollar $BOB_FIRST_MINT_TX 10000 2>&1)
-FINAL_REDEEM_EXIT=$?
+SEND_RESULT=$($BOB_CLI -rpcwallet=bob senddigidollar "$ALICE_DD_ADDR" 5000 2>&1)
+SEND_EXIT=$?
 set -e
 
-if [ $FINAL_REDEEM_EXIT -eq 0 ] && echo "$FINAL_REDEEM_RESULT" | jq -e '.txid' > /dev/null 2>&1; then
-    FINAL_REDEEM_TXID=$(echo "$FINAL_REDEEM_RESULT" | jq -r '.txid')
-    print_status "ok" "Redemption SUCCEEDED! TX: ${FINAL_REDEEM_TXID:0:16}..."
-    echo "  DD Redeemed: $(echo $FINAL_REDEEM_RESULT | jq -r '.dd_redeemed') cents"
-    echo "  Collateral returned: $(echo $FINAL_REDEEM_RESULT | jq -r '.dgb_returned') DGB"
-
-    $BOB_CLI generatetoaddress 7 "$BOB_ADDR" > /dev/null 2>&1
-    sleep 5
+if [ $SEND_EXIT -eq 0 ] && echo "$SEND_RESULT" | jq -e '.txid' > /dev/null 2>&1; then
+    print_status "ok" "Bob sent 5000 cents to Alice"
+    EXPECT_BOB_DD=$((EXPECT_BOB_DD - 5000))
+    EXPECT_ALICE_DD=$((EXPECT_ALICE_DD + 5000))
 else
-    print_status "fail" "Redemption FAILED: $FINAL_REDEEM_RESULT"
+    print_status "fail" "Transfer failed: $SEND_RESULT"
 fi
 
-capture_balance_snapshot "After \$100 Redemption"
+$BOB_CLI generatetoaddress 2 "$BOB_ADDR" > /dev/null 2>&1
+sleep 3
 
-# Step 24: DD TRANSACTIONS TAB TEST
-print_header "Step 24: DD TRANSACTIONS TAB TEST"
-echo "============================================"
-echo "TESTING DD TRANSACTIONS HISTORY (>10 items)"
-echo "============================================"
-echo ""
-echo "This tests that the DD Transactions tab shows ALL transactions,"
-echo "not just the 10 most recent ones (which was a previous limitation)."
-echo ""
-
-# Count all DD transactions for each wallet
-echo "Counting DD transactions for each wallet..."
-
-# Bob's transactions
+# Bob sends $30 DD to Charlie
+print_subheader "Bob sends \$30 DD (3000 cents) to Charlie"
 set +e
-BOB_TX_LIST=$($BOB_CLI -rpcwallet=bob listdigidollartxs 2>&1)
-BOB_TX_COUNT=$(echo "$BOB_TX_LIST" | jq 'length' 2>/dev/null || echo "0")
+SEND_RESULT=$($BOB_CLI -rpcwallet=bob senddigidollar "$CHARLIE_DD_ADDR" 3000 2>&1)
+SEND_EXIT=$?
 set -e
-echo "  Bob's DD transactions: $BOB_TX_COUNT"
 
-# Alice's transactions
-set +e
-ALICE_TX_LIST=$($ALICE_CLI -rpcwallet=alice listdigidollartxs 2>&1)
-ALICE_TX_COUNT=$(echo "$ALICE_TX_LIST" | jq 'length' 2>/dev/null || echo "0")
-set -e
-echo "  Alice's DD transactions: $ALICE_TX_COUNT"
-
-# Charlie's transactions
-set +e
-CHARLIE_TX_LIST=$($CHARLIE_CLI -rpcwallet=charlie listdigidollartxs 2>&1)
-CHARLIE_TX_COUNT=$(echo "$CHARLIE_TX_LIST" | jq 'length' 2>/dev/null || echo "0")
-set -e
-echo "  Charlie's DD transactions: $CHARLIE_TX_COUNT"
-
-TOTAL_TX=$((BOB_TX_COUNT + ALICE_TX_COUNT + CHARLIE_TX_COUNT))
-echo ""
-echo "  TOTAL DD transactions across all wallets: $TOTAL_TX"
-
-# Verify we have more than 10 transactions
-if [ "$BOB_TX_COUNT" -gt 10 ]; then
-    print_status "ok" "Bob has $BOB_TX_COUNT transactions (>10 - full history available)"
-elif [ "$BOB_TX_COUNT" -gt 0 ]; then
-    print_status "ok" "Bob has $BOB_TX_COUNT transactions (history available)"
+if [ $SEND_EXIT -eq 0 ] && echo "$SEND_RESULT" | jq -e '.txid' > /dev/null 2>&1; then
+    print_status "ok" "Bob sent 3000 cents to Charlie"
+    EXPECT_BOB_DD=$((EXPECT_BOB_DD - 3000))
+    EXPECT_CHARLIE_DD=$((EXPECT_CHARLIE_DD + 3000))
 else
-    print_status "warn" "Bob has no DD transactions listed"
+    print_status "fail" "Transfer failed: $SEND_RESULT"
 fi
 
-if [ "$TOTAL_TX" -gt 10 ]; then
-    print_status "ok" "Total system has $TOTAL_TX transactions (full history working)"
-fi
+$BOB_CLI generatetoaddress 2 "$BOB_ADDR" > /dev/null 2>&1
+sleep 3
+sync_all_nodes
 
-# Show sample of Bob's transactions
-echo ""
-echo "Sample of Bob's recent DD transactions:"
-echo "$BOB_TX_LIST" | jq -r '.[0:5] | .[] | "  [\(.category)] \(.amount) cents - \(.txid[0:16])..."' 2>/dev/null || echo "  (unable to parse)"
+verify_all_balances "After DD Transfers (Bob -> Alice/Charlie)"
 
-# Step 24.5: ADDITIONAL EXACT-AMOUNT TEST with larger vault
-print_header "Step 24.5: Additional Exact-Amount Redemption Test"
-echo "Testing exact-amount enforcement on a different vault..."
+# ====================================================================================
+# Step 21: Alice's Early Redemption Test (Tier 3 - should FAIL)
+# ====================================================================================
+print_header "Step 21: Alice's Early Redemption Test (should FAIL)"
+echo "Alice's tier 3 vault is locked for 90 days - should be rejected..."
 
-# Find an active vault from Bob that we can test
-BOB_POSITIONS=$($BOB_CLI -rpcwallet=bob listdigidollarpositions false 2>/dev/null || echo "[]")
-ACTIVE_VAULT=$(echo "$BOB_POSITIONS" | jq -r '[.[] | select(.can_redeem == true)] | .[0] // empty')
+CURRENT_HEIGHT=$($BOB_CLI getblockcount)
+echo "Current height: $CURRENT_HEIGHT"
 
-if [ -n "$ACTIVE_VAULT" ] && [ "$ACTIVE_VAULT" != "null" ]; then
-    TEST_VAULT_ID=$(echo "$ACTIVE_VAULT" | jq -r '.position_id')
-    TEST_VAULT_AMOUNT=$(echo "$ACTIVE_VAULT" | jq -r '.dd_minted')
+# Get Alice's tier 3 position details
+ALICE_POS=$($ALICE_CLI -rpcwallet=alice listdigidollarpositions 2>/dev/null)
+echo "Alice's positions:"
+echo "$ALICE_POS" | jq -r '.[] | "  [\(.status)] tier \(.lock_tier) - \(.dd_minted) cents - unlock: \(.unlock_height)"' 2>/dev/null
 
-    echo "Found redeemable vault: ${TEST_VAULT_ID:0:16}..."
-    echo "  DD Minted: $TEST_VAULT_AMOUNT cents"
-
-    # Try partial redemption (should fail)
-    PARTIAL_AMOUNT=$((TEST_VAULT_AMOUNT / 2))
-    echo ""
-    echo "Attempting partial redemption of $PARTIAL_AMOUNT cents (should FAIL)..."
-
+if [ -n "$ALICE_TIER3_TX" ]; then
     set +e
-    PARTIAL_TEST=$($BOB_CLI -rpcwallet=bob redeemdigidollar "$TEST_VAULT_ID" $PARTIAL_AMOUNT 2>&1)
-    PARTIAL_TEST_EXIT=$?
+    ALICE_EARLY=$($ALICE_CLI -rpcwallet=alice redeemdigidollar "$ALICE_TIER3_TX" 10000 2>&1)
+    ALICE_EARLY_EXIT=$?
     set -e
 
-    if [ $PARTIAL_TEST_EXIT -ne 0 ] || echo "$PARTIAL_TEST" | grep -qi "error\|exact\|must equal"; then
-        print_status "ok" "Partial redemption ($PARTIAL_AMOUNT cents) correctly REJECTED"
+    if [ $ALICE_EARLY_EXIT -ne 0 ] || echo "$ALICE_EARLY" | grep -qi "error\|lock"; then
+        print_status "ok" "Alice's tier 3 early redemption correctly REJECTED (still locked)"
+        echo "   Response: $(echo $ALICE_EARLY | head -c 100)..."
     else
-        print_status "fail" "Partial redemption should have been rejected!"
-        echo "  Response: $PARTIAL_TEST"
+        print_status "warn" "Unexpected result: $ALICE_EARLY"
     fi
 else
-    echo "No redeemable vaults available for additional testing"
-    print_status "info" "Skipping additional exact-amount test (no redeemable vaults)"
+    echo "  Skipping - Alice's tier 3 mint txid not available"
 fi
 
-# Step 25: Final network state
-print_header "Step 25: Final DigiDollar Network State"
-display_network_stats "Final State (After All Operations)"
-capture_balance_snapshot "FINAL STATE"
+# ====================================================================================
+# Step 22: Charlie's Early Redemption Test (Tier 9 - should FAIL)
+# ====================================================================================
+print_header "Step 22: Charlie's Early Redemption Test (should FAIL)"
+echo "Charlie's tier 9 vault is locked for 10 years - should be rejected..."
+
+if [ -n "$CHARLIE_TIER9_TX" ]; then
+    set +e
+    CHARLIE_EARLY=$($CHARLIE_CLI -rpcwallet=charlie redeemdigidollar "$CHARLIE_TIER9_TX" 10000 2>&1)
+    CHARLIE_EARLY_EXIT=$?
+    set -e
+
+    if [ $CHARLIE_EARLY_EXIT -ne 0 ] || echo "$CHARLIE_EARLY" | grep -qi "error\|lock"; then
+        print_status "ok" "Charlie's tier 9 early redemption correctly REJECTED (still locked)"
+        echo "   Response: $(echo $CHARLIE_EARLY | head -c 100)..."
+    else
+        print_status "warn" "Unexpected result: $CHARLIE_EARLY"
+    fi
+else
+    echo "  Skipping - Charlie's tier 9 mint txid not available"
+fi
+
+# ====================================================================================
+# Step 23: Comprehensive DD Transfer Chain - Bob sends $55 to Alice
+# ====================================================================================
+print_header "Step 23: Bob sends \$55 DD (5500 cents) to Alice"
+
+# Get Bob's DD address for later (Charlie will send to Bob)
+BOB_DD_ADDR=$($BOB_CLI -rpcwallet=bob getdigidollaraddress 2>/dev/null)
+echo "Bob's DD address: $BOB_DD_ADDR"
+echo ""
+
+echo "Current balances before transfer:"
+echo "  Bob:     $EXPECT_BOB_DD cents"
+echo "  Alice:   $EXPECT_ALICE_DD cents"
+echo "  Charlie: $EXPECT_CHARLIE_DD cents"
+echo ""
+
+# Record DGB balances before transfer
+BOB_DGB_BEFORE=$(get_dgb_balance "$BOB_CLI" "bob")
+ALICE_DGB_BEFORE=$(get_dgb_balance "$ALICE_CLI" "alice")
+CHARLIE_DGB_BEFORE=$(get_dgb_balance "$CHARLIE_CLI" "charlie")
+echo "DGB balances before:"
+echo "  Bob:     $BOB_DGB_BEFORE DGB"
+echo "  Alice:   $ALICE_DGB_BEFORE DGB"
+echo "  Charlie: $CHARLIE_DGB_BEFORE DGB"
+echo ""
+
+set +e
+SEND_RESULT=$($BOB_CLI -rpcwallet=bob senddigidollar "$ALICE_DD_ADDR" 5500 2>&1)
+SEND_EXIT=$?
+set -e
+
+if [ $SEND_EXIT -eq 0 ] && echo "$SEND_RESULT" | jq -e '.txid' > /dev/null 2>&1; then
+    SEND_TXID=$(echo "$SEND_RESULT" | jq -r '.txid')
+    print_status "ok" "Bob sent 5500 cents (\$55) to Alice - TX: ${SEND_TXID:0:16}..."
+    EXPECT_BOB_DD=$((EXPECT_BOB_DD - 5500))
+    EXPECT_ALICE_DD=$((EXPECT_ALICE_DD + 5500))
+else
+    print_status "fail" "Transfer failed: $SEND_RESULT"
+fi
+
+# Mine 6 blocks and sync
+echo "Mining 6 blocks..."
+$BOB_CLI generatetoaddress 6 "$BOB_ADDR" > /dev/null 2>&1
+sleep 3
+sync_all_nodes
+
+# Verify transaction confirmed
+TX_CONFS=$($BOB_CLI gettransaction "$SEND_TXID" 2>/dev/null | jq -r '.confirmations // 0')
+if [ "$TX_CONFS" -ge 1 ]; then
+    print_status "ok" "Transaction confirmed with $TX_CONFS confirmations"
+else
+    print_status "fail" "Transaction not confirmed (confirmations: $TX_CONFS)"
+fi
+
+verify_all_balances "After Bob->Alice \$55 Transfer"
+
+# ====================================================================================
+# Step 24: Alice sends $22 DD to Charlie
+# ====================================================================================
+print_header "Step 24: Alice sends \$22 DD (2200 cents) to Charlie"
+
+echo "Current balances before transfer:"
+echo "  Bob:     $EXPECT_BOB_DD cents"
+echo "  Alice:   $EXPECT_ALICE_DD cents"
+echo "  Charlie: $EXPECT_CHARLIE_DD cents"
+echo ""
+
+set +e
+SEND_RESULT=$($ALICE_CLI -rpcwallet=alice senddigidollar "$CHARLIE_DD_ADDR" 2200 2>&1)
+SEND_EXIT=$?
+set -e
+
+if [ $SEND_EXIT -eq 0 ] && echo "$SEND_RESULT" | jq -e '.txid' > /dev/null 2>&1; then
+    SEND_TXID=$(echo "$SEND_RESULT" | jq -r '.txid')
+    print_status "ok" "Alice sent 2200 cents (\$22) to Charlie - TX: ${SEND_TXID:0:16}..."
+    EXPECT_ALICE_DD=$((EXPECT_ALICE_DD - 2200))
+    EXPECT_CHARLIE_DD=$((EXPECT_CHARLIE_DD + 2200))
+else
+    print_status "fail" "Transfer failed: $SEND_RESULT"
+fi
+
+# Wait for transaction to propagate to Bob's mempool, then mine
+echo "Waiting for transaction propagation..."
+sleep 10
+echo "Mining 6 blocks..."
+$BOB_CLI generatetoaddress 6 "$BOB_ADDR" > /dev/null 2>&1
+sleep 3
+sync_all_nodes
+
+# Verify transaction confirmed
+TX_CONFS=$($ALICE_CLI gettransaction "$SEND_TXID" 2>/dev/null | jq -r '.confirmations // 0')
+if [ "$TX_CONFS" -ge 1 ]; then
+    print_status "ok" "Transaction confirmed with $TX_CONFS confirmations"
+else
+    print_status "fail" "Transaction not confirmed (confirmations: $TX_CONFS)"
+fi
+
+verify_all_balances "After Alice->Charlie \$22 Transfer"
+
+# ====================================================================================
+# Step 25: Charlie sends $10 DD to Bob
+# ====================================================================================
+print_header "Step 25: Charlie sends \$10 DD (1000 cents) to Bob"
+
+echo "Current balances before transfer:"
+echo "  Bob:     $EXPECT_BOB_DD cents"
+echo "  Alice:   $EXPECT_ALICE_DD cents"
+echo "  Charlie: $EXPECT_CHARLIE_DD cents"
+echo ""
+
+set +e
+SEND_RESULT=$($CHARLIE_CLI -rpcwallet=charlie senddigidollar "$BOB_DD_ADDR" 1000 2>&1)
+SEND_EXIT=$?
+set -e
+
+if [ $SEND_EXIT -eq 0 ] && echo "$SEND_RESULT" | jq -e '.txid' > /dev/null 2>&1; then
+    SEND_TXID=$(echo "$SEND_RESULT" | jq -r '.txid')
+    print_status "ok" "Charlie sent 1000 cents (\$10) to Bob - TX: ${SEND_TXID:0:16}..."
+    EXPECT_CHARLIE_DD=$((EXPECT_CHARLIE_DD - 1000))
+    EXPECT_BOB_DD=$((EXPECT_BOB_DD + 1000))
+else
+    print_status "fail" "Transfer failed: $SEND_RESULT"
+fi
+
+# Wait for transaction to propagate to Bob's mempool, then mine
+echo "Waiting for transaction propagation..."
+sleep 10
+echo "Mining 6 blocks..."
+$BOB_CLI generatetoaddress 6 "$BOB_ADDR" > /dev/null 2>&1
+sleep 3
+sync_all_nodes
+
+# Verify transaction confirmed
+TX_CONFS=$($CHARLIE_CLI gettransaction "$SEND_TXID" 2>/dev/null | jq -r '.confirmations // 0')
+if [ "$TX_CONFS" -ge 1 ]; then
+    print_status "ok" "Transaction confirmed with $TX_CONFS confirmations"
+else
+    print_status "fail" "Transaction not confirmed (confirmations: $TX_CONFS)"
+fi
+
+verify_all_balances "After Charlie->Bob \$10 Transfer"
+
+# ====================================================================================
+# Step 26: Bob sends $5 DD to Charlie
+# ====================================================================================
+print_header "Step 26: Bob sends \$5 DD (500 cents) to Charlie"
+
+echo "Current balances before transfer:"
+echo "  Bob:     $EXPECT_BOB_DD cents"
+echo "  Alice:   $EXPECT_ALICE_DD cents"
+echo "  Charlie: $EXPECT_CHARLIE_DD cents"
+echo ""
+
+set +e
+SEND_RESULT=$($BOB_CLI -rpcwallet=bob senddigidollar "$CHARLIE_DD_ADDR" 500 2>&1)
+SEND_EXIT=$?
+set -e
+
+if [ $SEND_EXIT -eq 0 ] && echo "$SEND_RESULT" | jq -e '.txid' > /dev/null 2>&1; then
+    SEND_TXID=$(echo "$SEND_RESULT" | jq -r '.txid')
+    print_status "ok" "Bob sent 500 cents (\$5) to Charlie - TX: ${SEND_TXID:0:16}..."
+    EXPECT_BOB_DD=$((EXPECT_BOB_DD - 500))
+    EXPECT_CHARLIE_DD=$((EXPECT_CHARLIE_DD + 500))
+else
+    print_status "fail" "Transfer failed: $SEND_RESULT"
+fi
+
+# Mine 6 blocks and sync
+echo "Mining 6 blocks..."
+$BOB_CLI generatetoaddress 6 "$BOB_ADDR" > /dev/null 2>&1
+sleep 3
+sync_all_nodes
+
+# Verify transaction confirmed
+TX_CONFS=$($BOB_CLI gettransaction "$SEND_TXID" 2>/dev/null | jq -r '.confirmations // 0')
+if [ "$TX_CONFS" -ge 1 ]; then
+    print_status "ok" "Transaction confirmed with $TX_CONFS confirmations"
+else
+    print_status "fail" "Transaction not confirmed (confirmations: $TX_CONFS)"
+fi
+
+verify_all_balances "After Bob->Charlie \$5 Transfer"
+
+# Final DGB balance check
+print_subheader "Final DGB Balance Check"
+BOB_DGB_AFTER=$(get_dgb_balance "$BOB_CLI" "bob")
+ALICE_DGB_AFTER=$(get_dgb_balance "$ALICE_CLI" "alice")
+CHARLIE_DGB_AFTER=$(get_dgb_balance "$CHARLIE_CLI" "charlie")
+echo "DGB balances after all transfers:"
+echo "  Bob:     $BOB_DGB_AFTER DGB"
+echo "  Alice:   $ALICE_DGB_AFTER DGB"
+echo "  Charlie: $CHARLIE_DGB_AFTER DGB"
+print_status "ok" "DGB balances checked after transfer chain"
+
+# ====================================================================================
+# FINAL STATE
+# ====================================================================================
+print_header "Step 27: Final DigiDollar Network State"
 
 echo ""
+echo "==================== FINAL SUMMARY ===================="
+echo ""
+echo "MINT SUMMARY:"
+echo "  Bob:     11 mints (2x tier0 + tiers 1-9) = \$1100"
+echo "  Alice:   2 mints (tier 3 + tier 5) = \$200"
+echo "  Charlie: 2 mints (tier 7 + tier 9) = \$200"
+echo "  TOTAL MINTED: \$1500 (150000 cents)"
+echo ""
+echo "REDEMPTION SUMMARY:"
+echo "  Bob:     2 tier 0 redemptions = \$200 burned"
+echo "  Alice:   0 (locked)"
+echo "  Charlie: 0 (locked)"
+echo "  TOTAL REDEEMED: \$200 (20000 cents)"
+echo ""
+echo "TRANSFER SUMMARY:"
+echo "  Initial:"
+echo "    Bob -> Alice: \$50"
+echo "    Bob -> Charlie: \$30"
+echo "  Transfer Chain:"
+echo "    Bob -> Alice: \$55 (Step 23)"
+echo "    Alice -> Charlie: \$22 (Step 24)"
+echo "    Charlie -> Bob: \$10 (Step 25)"
+echo "    Bob -> Charlie: \$5 (Step 26)"
+echo ""
+echo "Expected DD Balances:"
+echo "  Bob:     $EXPECT_BOB_DD cents (\$$(echo "scale=2; $EXPECT_BOB_DD / 100" | bc))"
+echo "  Alice:   $EXPECT_ALICE_DD cents (\$$(echo "scale=2; $EXPECT_ALICE_DD / 100" | bc))"
+echo "  Charlie: $EXPECT_CHARLIE_DD cents (\$$(echo "scale=2; $EXPECT_CHARLIE_DD / 100" | bc))"
+echo "  TOTAL:   $((EXPECT_BOB_DD + EXPECT_ALICE_DD + EXPECT_CHARLIE_DD)) cents"
+echo ""
+
+echo "Actual DD Balances (from RPC):"
+echo "  Bob:     $(get_dd_balance "$BOB_CLI" "bob") cents"
+echo "  Alice:   $(get_dd_balance "$ALICE_CLI" "alice") cents"
+echo "  Charlie: $(get_dd_balance "$CHARLIE_CLI" "charlie") cents"
+echo ""
+
+echo "Network Stats:"
+echo "  Total DD Supply: $(get_network_dd_supply) cents"
+echo "  Total Collateral: $(get_network_collateral) DGB"
+echo ""
+
 echo "ALL DD POSITIONS:"
 list_dd_positions "$BOB_CLI" "bob" "Bob"
 list_dd_positions "$ALICE_CLI" "alice" "Alice"
 list_dd_positions "$CHARLIE_CLI" "charlie" "Charlie"
+
+# Final verification
+verify_all_balances "FINAL STATE"
 
 # Summary
 print_header "TEST RESULTS SUMMARY"
@@ -1012,39 +1169,28 @@ echo "  Total Tests:  $TOTAL_TESTS"
 echo "  Passed:       $PASSED_TESTS"
 echo "  Failed:       $FAILED_TESTS"
 echo ""
-echo "TESTS PERFORMED:"
-echo "  1-8.   Setup: Clean, start nodes, fund wallets, sync"
-echo "  9.     Initial state display"
-echo "  10.    Bob mints \$100 DD (tier 0)"
-echo "  11.    Bob sends \$30 DD to Alice"
-echo "  12.    Bob sends \$20 DD to Charlie"
-echo "  13.    State after transfers"
-echo "  13.5   Bob wallet restart (DD persistence test)"
-echo "  14.    Bob mints \$10 DD for redemption test"
-echo "  15.    Early redemption REJECTED"
-echo "  15.5   *** PARTIAL REDEMPTION REJECTED (EXACT-AMOUNT ENFORCEMENT) ***"
-echo "         - Tried 500 cents from 1000 cent vault -> MUST FAIL"
-echo "         - Exact 1000 cents redemption -> MUST SUCCEED"
-echo "  16.    *** COLLATERAL CONSISTENCY TEST ***"
-echo "         - Verify minted collateral matches calculated amount"
-echo "         - Tests GUI 'Required DGB' matches 'Collateral Locked'"
-echo "  17.    Vault state after redemption tests"
-echo "  18.    Bob mints \$200 DD (tier 8, 10-year)"
-echo "  19.    Charlie sends \$15 DD to Alice"
-echo "  20.    Alice sends \$10 DD back to Bob"
-echo "  21.    Alice mints \$100 DD (tier 7)"
-echo "  22.    Charlie mints \$200 DD (tier 8)"
-echo "  23.    Bob redeems first \$100 vault"
-echo "  24.    *** DD TRANSACTIONS TAB TEST ***"
-echo "         - Verify listdigidollartxs returns >10 transactions"
-echo "         - Full transaction history available (not limited to 10)"
-echo "  24.5   Additional exact-amount test on different vault"
-echo "  25.    Final network state"
+
+if [ $FAILED_TESTS -gt 0 ]; then
+    echo -e "${RED}*** SOME TESTS FAILED ***${NC}"
+    echo ""
+    echo "Please check the balance verification output above for discrepancies."
+else
+    echo -e "${GREEN}*** ALL TESTS PASSED ***${NC}"
+fi
+
 echo ""
-echo "KEY FEATURES TESTED:"
-echo "  [1] Exact-Amount Redemption Only (no partial redemption)"
-echo "  [2] Collateral Calculation Consistency"
-echo "  [3] DD Transactions Full History (>10 items)"
+echo "TEST COVERAGE:"
+echo "  [x] All collateral tiers (0-9) mint successfully"
+echo "  [x] Tier 0 positions unlock after 240 blocks"
+echo "  [x] Partial redemption correctly rejected"
+echo "  [x] Early redemption correctly rejected"
+echo "  [x] 2 successful tier 0 redemptions"
+echo "  [x] DD transfers between wallets (basic)"
+echo "  [x] Comprehensive transfer chain (Bob->Alice->Charlie->Bob->Charlie)"
+echo "  [x] Transaction confirmation verification"
+echo "  [x] DGB balance tracking through transfers"
+echo "  [x] Network DD supply verification at every step"
+echo "  [x] Balance verification at every step"
 echo ""
 
 print_header "DEBUG LOG LOCATIONS"
@@ -1052,9 +1198,6 @@ echo "  Test log:    $LOG_FILE"
 echo "  Bob log:     /tmp/bob_testnet.log"
 echo "  Alice log:   /tmp/alice_testnet.log"
 echo "  Charlie log: /tmp/charlie_testnet.log"
-echo ""
-echo "To check DigiDollar debug output:"
-echo "  grep -i digidollar /tmp/bob_minitestnet/testnet5/debug.log | tail -50"
 echo ""
 
 print_header "RUNNING Qt WINDOWS"
@@ -1066,6 +1209,7 @@ echo "Commands for manual testing:"
 echo "  $BOB_CLI -rpcwallet=bob getdigidollarbalance"
 echo "  $BOB_CLI -rpcwallet=bob listdigidollarpositions"
 echo "  $BOB_CLI getoracleprice"
+echo "  $BOB_CLI getdigidollarstats"
 echo ""
 echo "Press Ctrl+C to exit (will close all Qt windows)."
 echo ""

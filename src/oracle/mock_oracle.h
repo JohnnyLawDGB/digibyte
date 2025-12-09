@@ -41,15 +41,15 @@ public:
 
     /**
      * Get current mock oracle price
-     * @return Price in DigiDollar cents (100 = $1.00)
+     * @return Price in micro-USD (1,000,000 = $1.00)
      */
     CAmount GetCurrentPrice() const;
 
     /**
      * Set mock oracle price
-     * @param price Price in DigiDollar cents (100 = $1.00)
+     * @param price_micro_usd Price in micro-USD (1,000,000 = $1.00)
      */
-    void SetMockPrice(CAmount price);
+    void SetMockPrice(CAmount price_micro_usd);
 
     /**
      * Check if mock oracle is enabled

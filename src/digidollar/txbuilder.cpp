@@ -1018,8 +1018,10 @@ TxBuilderResult RedeemTxBuilder::BuildRedemptionTransaction(const TxBuilderRedee
 
     // Set type based on redemption path
     if (params.path == RedemptionPath::PARTIAL) {
-        tx.SetDigiDollarType(::DD_TX_PARTIAL); // Use partial redemption type
-        LogPrintf("DigiDollar: Using DD_TX_PARTIAL type\n");
+        // REJECT PARTIAL REDEMPTIONS - exact amount only
+        result.error = "Partial redemption not supported - must redeem exact minted amount";
+        LogPrintf("DigiDollar: REJECTED partial redemption attempt\n");
+        return result;
     } else if (params.path == RedemptionPath::EMERGENCY ||
                params.path == RedemptionPath::ERR) {
         tx.SetDigiDollarType(::DD_TX_EMERGENCY); // Use emergency type
@@ -1097,52 +1099,24 @@ TxBuilderResult RedeemTxBuilder::BuildRedemptionTransaction(const TxBuilderRedee
     LogPrintf("DigiDollar: DD input total: %d cents, to burn: %d cents, change: %d cents\n",
               totalDDInput, params.ddToRedeem, ddChange);
 
-    // Add DD change output if needed (Output 1 or 2 depending on partial redemption)
+    // Add DD change output if wallet selected more DD UTXOs than needed
+    // NOTE: DD is fungible - exact-amount enforcement is at the VAULT level (ddToRedeem == position.ddMinted)
+    // not at the DD input level. The wallet may select excess DD UTXOs and receive change.
     if (ddChange > 0) {
-        // Create DD change output using owner's tweaked pubkey (same as minted DD)
+        LogPrintf("DigiDollar: DD change: %d cents will be returned to owner\n", ddChange);
+        // Create DD change output back to the owner using P2TR
         CPubKey ownerPubKey = params.ownerKey.GetPubKey();
-        XOnlyPubKey ownerXOnly(ownerPubKey);
-        auto tweaked = ownerXOnly.CreateTapTweak(nullptr);  // Standard key-path P2TR
-        if (!tweaked) {
-            result.error = "Failed to create Taproot tweak for DD change output";
-            LogPrintf("DigiDollar: BuildRedemptionTransaction FAILED - %s\n", result.error);
-            return result;
-        }
-        XOnlyPubKey tweakedKey = tweaked->first;
-
-        // Create P2TR output for DD change (zero satoshi value)
-        CScript ddChangeScript;
-        ddChangeScript << OP_1;
-        ddChangeScript << std::vector<unsigned char>(tweakedKey.begin(), tweakedKey.end());
+        CScript ddChangeScript = CreateDigiDollarP2TR(XOnlyPubKey(ownerPubKey), ddChange);
         tx.vout.push_back(CTxOut(0, ddChangeScript));
-        LogPrintf("DigiDollar: Added DD change output: %d cents\n", ddChange);
-        // NOTE: Don't register metadata here - the OP_RETURN contains the authoritative amount
-        // and validation uses that instead. Registering would overwrite the original input amount.
-
-        // Add OP_RETURN marker with DD change amount so wallet can track it
-        // Format: OP_RETURN <"DD"> <txType=3 for REDEEM> <change_amount>
-        CScript metadataScript;
-        metadataScript << OP_RETURN
-                       << std::vector<unsigned char>{'D', 'D'}
-                       << CScriptNum(3)      // 3 = REDEEM transaction
-                       << CScriptNum(ddChange);
-        tx.vout.push_back(CTxOut(0, metadataScript));
-        LogPrintf("DigiDollar: Added OP_RETURN with DD change amount: %d cents\n", ddChange);
-
-        // Store the DD change amount in result for wallet tracking
-        result.ddChange = ddChange;
+    } else if (ddChange < 0) {
+        // This should never happen - SelectDDCoins should ensure enough DD
+        result.error = "Insufficient DD selected (input: " +
+                       std::to_string(totalDDInput) + ", need: " +
+                       std::to_string(params.ddToRedeem) + ")";
+        LogPrintf("DigiDollar: REJECTED - insufficient DD inputs\n");
+        return result;
     }
-
-    // Output 1 (partial only): New collateral position
-    if (params.path == RedemptionPath::PARTIAL) {
-        // For partial redemption, create a new collateral output for the remainder
-        // TODO: Implement partial collateral remainder logic
-        // This would create a new P2TR collateral output with:
-        // - Remaining DGB: position.dgbLocked - dgbToRelease
-        // - Remaining DD: position.ddMinted - params.ddToRedeem
-        // - Same unlock height
-        LogPrintf("DigiDollar: PARTIAL redemption - remainder output not yet implemented\n");
-    }
+    // If ddChange == 0, no change output needed - burning exact amount
 
     // Set transaction locktime to unlockHeight (critical for CLTV validation)
     tx.nLockTime = position.unlockHeight;

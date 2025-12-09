@@ -2955,8 +2955,9 @@ bool DigiDollarWallet::ValidateRedeemParams(const uint256& dd_timelock_id, const
         return false;
     }
 
-    if (amount > it->second.dd_minted) {
-        LogPrintf("DigiDollar: Redemption amount exceeds position: %d > %d\n", amount, it->second.dd_minted);
+    if (amount != it->second.dd_minted) {
+        LogPrintf("DigiDollar: EXACT-AMOUNT REDEMPTION ENFORCED - amount must equal dd_minted (provided: %d, required: %d)\n",
+                  amount, it->second.dd_minted);
         return false;
     }
 

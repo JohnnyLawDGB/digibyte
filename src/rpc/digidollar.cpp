@@ -920,11 +920,13 @@ RPCHelpMan redeemdigidollar()
                               foundPosition.unlock_height, currentHeight, foundPosition.unlock_height - currentHeight));
             }
 
-            // Validate amount
-            if (ddAmount > foundPosition.dd_minted) {
+            // EXACT-AMOUNT REDEMPTION ENFORCEMENT: Must redeem full vault amount
+            // Partial redemption is no longer supported - vault must be closed completely
+            if (ddAmount != foundPosition.dd_minted) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER,
-                    strprintf("Cannot redeem %d cents, position only has %d cents",
-                              ddAmount, foundPosition.dd_minted));
+                    strprintf("Exact-amount redemption required: must redeem full vault amount of %d cents (requested: %d cents). "
+                              "Partial redemption is not supported - the entire vault must be closed at once.",
+                              foundPosition.dd_minted, ddAmount));
             }
 
             // CRITICAL FIX: DD tokens are fungible - any DD can be used to redeem a vault

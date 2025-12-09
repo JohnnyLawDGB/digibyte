@@ -1010,11 +1010,11 @@ bool ValidateRedemptionTransaction(const CTransaction& tx,
             break;
 
         case DD_TX_PARTIAL:
-            // Partial redemption - validate partial conditions
-            if (!ValidatePartialRedemptionConditions(tx, ctx, state)) {
-                return false;
-            }
-            break;
+            // EXACT-AMOUNT REDEMPTION POLICY: Partial redemptions disabled
+            LogPrintf("DigiDollar: REJECTED DD_TX_PARTIAL - exact-amount redemption enforced\n");
+            return state.Invalid(TxValidationResult::TX_CONSENSUS,
+                                "partial-redemption-disabled",
+                                "Exact-amount redemption enforced - must redeem full minted amount");
 
         default:
             return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-redeem-invalid-type");
@@ -1080,14 +1080,11 @@ bool ValidateEmergencyRedemptionConditions(const CTransaction& tx,
 bool ValidatePartialRedemptionConditions(const CTransaction& tx,
                                        const ValidationContext& ctx,
                                        TxValidationState& state) {
-    // RED Phase: Not yet implemented
-    // This function should validate that:
-    // 1. Valid oracle price is available
-    // 2. Partial redemption leaves appropriate remainder collateral
-    // 3. Collateral ratio is maintained on remainder
-
-    LogPrintf("DigiDollar: Partial redemption validation not implemented (RED phase)\n");
-    return state.Invalid(TxValidationResult::TX_CONSENSUS, "partial-redemption-validation-incomplete");
+    // EXACT-AMOUNT REDEMPTION POLICY: Partial redemptions permanently disabled
+    LogPrintf("DigiDollar: Partial redemption permanently disabled\n");
+    return state.Invalid(TxValidationResult::TX_CONSENSUS,
+                        "partial-redemption-disabled",
+                        "Partial redemption is not supported - redeem full amount only");
 }
 
 bool ValidateCollateralReleaseAmount(const CTransaction& tx,

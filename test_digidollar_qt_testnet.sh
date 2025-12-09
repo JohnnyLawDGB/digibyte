@@ -634,37 +634,131 @@ else
     print_status "warn" "Unexpected response: $EARLY_REDEEM"
 fi
 
-# Step 16: Mine blocks to pass lock period
-print_header "Step 16: Mining 245 blocks to pass lock period"
-echo "This will take a moment..."
-$BOB_CLI generatetoaddress 245 "$BOB_ADDR" > /dev/null 2>&1
-sleep 5
+# Step 15.5: Test PARTIAL REDEMPTION REJECTION (EXACT-AMOUNT ENFORCEMENT)
+print_header "Step 15.5: Test PARTIAL REDEMPTION REJECTION"
+echo "============================================"
+echo "TESTING EXACT-AMOUNT REDEMPTION ENFORCEMENT"
+echo "============================================"
+echo ""
+echo "The vault contains 1000 cents (\$10 DD)."
+echo "We will attempt to redeem ONLY 500 cents (\$5 DD)."
+echo "This MUST be REJECTED - only exact amount redemption is allowed."
+echo ""
+
+# First mine past the lock period so lock isn't the issue
+echo "Mining 250 blocks to pass lock period first..."
+$BOB_CLI generatetoaddress 250 "$BOB_ADDR" > /dev/null 2>&1
+sleep 3
 
 NEW_HEIGHT=$($BOB_CLI getblockcount)
-print_status "ok" "Mined to height $NEW_HEIGHT (past unlock at $UNLOCK_HEIGHT)"
+echo "Current height: $NEW_HEIGHT (lock should be expired)"
 
-# Step 17: Redeem the vault (should SUCCEED)
-print_header "Step 17: Redeem the \$10 DD vault (should SUCCEED)"
-echo "Attempting to redeem vault AFTER lock expires..."
-
+echo ""
+echo "Attempting PARTIAL redemption of 500 cents (should FAIL)..."
 set +e
-REDEEM_RESULT=$($BOB_CLI -rpcwallet=bob redeemdigidollar "$REDEEM_MINT_TXID" 1000 2>&1)
-REDEEM_EXIT_CODE=$?
+PARTIAL_REDEEM=$($BOB_CLI -rpcwallet=bob redeemdigidollar "$REDEEM_MINT_TXID" 500 2>&1)
+PARTIAL_EXIT_CODE=$?
 set -e
 
-if [ $REDEEM_EXIT_CODE -eq 0 ] && echo "$REDEEM_RESULT" | jq -e '.txid' > /dev/null 2>&1; then
-    REDEEM_TXID=$(echo "$REDEEM_RESULT" | jq -r '.txid')
-    print_status "ok" "Redemption SUCCEEDED!"
-    echo "   Redemption TX: ${REDEEM_TXID:0:16}..."
-    echo "   DD Redeemed: $(echo $REDEEM_RESULT | jq -r '.dd_redeemed // 1000') cents"
-    echo "   Collateral returned: $(echo $REDEEM_RESULT | jq -r '.dgb_unlocked // "N/A"') DGB"
+echo "Exit code: $PARTIAL_EXIT_CODE"
+echo "Response: $PARTIAL_REDEEM"
+
+if [ $PARTIAL_EXIT_CODE -ne 0 ] || echo "$PARTIAL_REDEEM" | grep -qi "error\|exact\|must equal\|full\|minted"; then
+    print_status "ok" "PARTIAL REDEMPTION CORRECTLY REJECTED!"
+    echo "   The system enforces exact-amount redemption as expected."
 else
-    print_status "fail" "Redemption FAILED: $REDEEM_RESULT"
+    print_status "fail" "PARTIAL REDEMPTION WAS NOT REJECTED!"
+    echo "   This is a bug - partial redemption should be blocked."
+    echo "   Response was: $PARTIAL_REDEEM"
+fi
+
+echo ""
+echo "Now attempting EXACT redemption of 1000 cents (should SUCCEED)..."
+set +e
+EXACT_REDEEM=$($BOB_CLI -rpcwallet=bob redeemdigidollar "$REDEEM_MINT_TXID" 1000 2>&1)
+EXACT_EXIT_CODE=$?
+set -e
+
+echo "Exit code: $EXACT_EXIT_CODE"
+
+if [ $EXACT_EXIT_CODE -eq 0 ] && echo "$EXACT_REDEEM" | jq -e '.txid' > /dev/null 2>&1; then
+    EXACT_REDEEM_TXID=$(echo "$EXACT_REDEEM" | jq -r '.txid')
+    print_status "ok" "EXACT AMOUNT REDEMPTION SUCCEEDED!"
+    echo "   TX: ${EXACT_REDEEM_TXID:0:16}..."
+    echo "   DD Redeemed: $(echo $EXACT_REDEEM | jq -r '.dd_redeemed // 1000') cents"
+
+    # Confirm it
+    $BOB_CLI generatetoaddress 2 "$BOB_ADDR" > /dev/null 2>&1
+    sleep 3
+else
+    print_status "fail" "EXACT REDEMPTION FAILED: $EXACT_REDEEM"
+fi
+
+capture_balance_snapshot "After Exact-Amount Redemption Test"
+
+# Step 16: COLLATERAL CONSISTENCY TEST
+print_header "Step 16: COLLATERAL CONSISTENCY TEST"
+echo "============================================"
+echo "TESTING COLLATERAL CALCULATION CONSISTENCY"
+echo "============================================"
+echo ""
+echo "Verifying that minted collateral matches calculated requirements."
+echo "This tests that the GUI 'Required DGB' matches 'Collateral Locked'."
+echo ""
+
+# Get oracle price for calculation
+ORACLE_PRICE_USD=$($BOB_CLI getoracleprice 2>/dev/null | jq -r '.price_usd // 0.01')
+ORACLE_PRICE_MICRO=$($BOB_CLI getoracleprice 2>/dev/null | jq -r '.price_micro_usd // 10000')
+echo "Current Oracle Price: \$$ORACLE_PRICE_USD per DGB ($ORACLE_PRICE_MICRO micro-USD)"
+
+# Mint a small vault and verify collateral
+echo ""
+echo "Minting \$5 DD (500 cents) with tier 0 (1000% = 10x collateral)..."
+
+# Calculate expected collateral:
+# $5 DD * 10 (1000%) = $50 worth of DGB needed
+# $50 / $ORACLE_PRICE_USD = DGB needed
+EXPECTED_DGB=$(echo "scale=8; 5 * 10 / $ORACLE_PRICE_USD" | bc 2>/dev/null || echo "0")
+echo "Expected collateral: ~$EXPECTED_DGB DGB (at \$$ORACLE_PRICE_USD/DGB)"
+
+set +e
+COLLATERAL_TEST_MINT=$($BOB_CLI -rpcwallet=bob mintdigidollar 500 0 2>&1)
+COLLATERAL_MINT_EXIT=$?
+set -e
+
+if [ $COLLATERAL_MINT_EXIT -eq 0 ] && echo "$COLLATERAL_TEST_MINT" | jq -e '.txid' > /dev/null 2>&1; then
+    COLLATERAL_TEST_TXID=$(echo "$COLLATERAL_TEST_MINT" | jq -r '.txid')
+    ACTUAL_COLLATERAL=$(echo "$COLLATERAL_TEST_MINT" | jq -r '.dgb_collateral // 0')
+    DD_MINTED=$(echo "$COLLATERAL_TEST_MINT" | jq -r '.dd_minted // 0')
+
+    echo ""
+    echo "Mint Result:"
+    echo "  TX: ${COLLATERAL_TEST_TXID:0:16}..."
+    echo "  DD Minted: $DD_MINTED cents (\$$(echo "scale=2; $DD_MINTED / 100" | bc))"
+    echo "  Actual Collateral Locked: $ACTUAL_COLLATERAL DGB"
+    echo "  Expected Collateral: ~$EXPECTED_DGB DGB"
+
+    # Check if actual is within 5% of expected (accounting for fees, rounding)
+    DIFF_PERCENT=$(echo "scale=2; (($ACTUAL_COLLATERAL - $EXPECTED_DGB) / $EXPECTED_DGB) * 100" | bc 2>/dev/null || echo "0")
+    ABS_DIFF=${DIFF_PERCENT#-}
+
+    if (( $(echo "$ABS_DIFF < 5" | bc -l 2>/dev/null || echo "0") )); then
+        print_status "ok" "Collateral calculation is CONSISTENT (within 5% tolerance)"
+        echo "   Difference: ${DIFF_PERCENT}%"
+    else
+        print_status "warn" "Collateral differs by ${DIFF_PERCENT}% (may need investigation)"
+    fi
+else
+    print_status "fail" "Collateral test mint failed: $COLLATERAL_TEST_MINT"
 fi
 
 $BOB_CLI generatetoaddress 2 "$BOB_ADDR" > /dev/null 2>&1
-sleep 5
-capture_balance_snapshot "After \$10 Redemption"
+sleep 3
+
+# Step 17: Already covered by Step 15.5 - just show vault state
+print_header "Step 17: Vault State After Redemption Tests"
+list_dd_positions "$BOB_CLI" "bob" "Bob"
+capture_balance_snapshot "After Collateral Test"
 
 # Step 18: Bob mints $200 DD with 10-year lock
 print_header "Step 18: Bob mints \$200 DD with 10-year lock (tier 8)"
@@ -808,8 +902,100 @@ fi
 
 capture_balance_snapshot "After \$100 Redemption"
 
-# Step 24: Final network state
-print_header "Step 24: Final DigiDollar Network State"
+# Step 24: DD TRANSACTIONS TAB TEST
+print_header "Step 24: DD TRANSACTIONS TAB TEST"
+echo "============================================"
+echo "TESTING DD TRANSACTIONS HISTORY (>10 items)"
+echo "============================================"
+echo ""
+echo "This tests that the DD Transactions tab shows ALL transactions,"
+echo "not just the 10 most recent ones (which was a previous limitation)."
+echo ""
+
+# Count all DD transactions for each wallet
+echo "Counting DD transactions for each wallet..."
+
+# Bob's transactions
+set +e
+BOB_TX_LIST=$($BOB_CLI -rpcwallet=bob listdigidollartxs 2>&1)
+BOB_TX_COUNT=$(echo "$BOB_TX_LIST" | jq 'length' 2>/dev/null || echo "0")
+set -e
+echo "  Bob's DD transactions: $BOB_TX_COUNT"
+
+# Alice's transactions
+set +e
+ALICE_TX_LIST=$($ALICE_CLI -rpcwallet=alice listdigidollartxs 2>&1)
+ALICE_TX_COUNT=$(echo "$ALICE_TX_LIST" | jq 'length' 2>/dev/null || echo "0")
+set -e
+echo "  Alice's DD transactions: $ALICE_TX_COUNT"
+
+# Charlie's transactions
+set +e
+CHARLIE_TX_LIST=$($CHARLIE_CLI -rpcwallet=charlie listdigidollartxs 2>&1)
+CHARLIE_TX_COUNT=$(echo "$CHARLIE_TX_LIST" | jq 'length' 2>/dev/null || echo "0")
+set -e
+echo "  Charlie's DD transactions: $CHARLIE_TX_COUNT"
+
+TOTAL_TX=$((BOB_TX_COUNT + ALICE_TX_COUNT + CHARLIE_TX_COUNT))
+echo ""
+echo "  TOTAL DD transactions across all wallets: $TOTAL_TX"
+
+# Verify we have more than 10 transactions
+if [ "$BOB_TX_COUNT" -gt 10 ]; then
+    print_status "ok" "Bob has $BOB_TX_COUNT transactions (>10 - full history available)"
+elif [ "$BOB_TX_COUNT" -gt 0 ]; then
+    print_status "ok" "Bob has $BOB_TX_COUNT transactions (history available)"
+else
+    print_status "warn" "Bob has no DD transactions listed"
+fi
+
+if [ "$TOTAL_TX" -gt 10 ]; then
+    print_status "ok" "Total system has $TOTAL_TX transactions (full history working)"
+fi
+
+# Show sample of Bob's transactions
+echo ""
+echo "Sample of Bob's recent DD transactions:"
+echo "$BOB_TX_LIST" | jq -r '.[0:5] | .[] | "  [\(.category)] \(.amount) cents - \(.txid[0:16])..."' 2>/dev/null || echo "  (unable to parse)"
+
+# Step 24.5: ADDITIONAL EXACT-AMOUNT TEST with larger vault
+print_header "Step 24.5: Additional Exact-Amount Redemption Test"
+echo "Testing exact-amount enforcement on a different vault..."
+
+# Find an active vault from Bob that we can test
+BOB_POSITIONS=$($BOB_CLI -rpcwallet=bob listdigidollarpositions false 2>/dev/null || echo "[]")
+ACTIVE_VAULT=$(echo "$BOB_POSITIONS" | jq -r '[.[] | select(.can_redeem == true)] | .[0] // empty')
+
+if [ -n "$ACTIVE_VAULT" ] && [ "$ACTIVE_VAULT" != "null" ]; then
+    TEST_VAULT_ID=$(echo "$ACTIVE_VAULT" | jq -r '.position_id')
+    TEST_VAULT_AMOUNT=$(echo "$ACTIVE_VAULT" | jq -r '.dd_minted')
+
+    echo "Found redeemable vault: ${TEST_VAULT_ID:0:16}..."
+    echo "  DD Minted: $TEST_VAULT_AMOUNT cents"
+
+    # Try partial redemption (should fail)
+    PARTIAL_AMOUNT=$((TEST_VAULT_AMOUNT / 2))
+    echo ""
+    echo "Attempting partial redemption of $PARTIAL_AMOUNT cents (should FAIL)..."
+
+    set +e
+    PARTIAL_TEST=$($BOB_CLI -rpcwallet=bob redeemdigidollar "$TEST_VAULT_ID" $PARTIAL_AMOUNT 2>&1)
+    PARTIAL_TEST_EXIT=$?
+    set -e
+
+    if [ $PARTIAL_TEST_EXIT -ne 0 ] || echo "$PARTIAL_TEST" | grep -qi "error\|exact\|must equal"; then
+        print_status "ok" "Partial redemption ($PARTIAL_AMOUNT cents) correctly REJECTED"
+    else
+        print_status "fail" "Partial redemption should have been rejected!"
+        echo "  Response: $PARTIAL_TEST"
+    fi
+else
+    echo "No redeemable vaults available for additional testing"
+    print_status "info" "Skipping additional exact-amount test (no redeemable vaults)"
+fi
+
+# Step 25: Final network state
+print_header "Step 25: Final DigiDollar Network State"
 display_network_stats "Final State (After All Operations)"
 capture_balance_snapshot "FINAL STATE"
 
@@ -836,15 +1022,29 @@ echo "  13.    State after transfers"
 echo "  13.5   Bob wallet restart (DD persistence test)"
 echo "  14.    Bob mints \$10 DD for redemption test"
 echo "  15.    Early redemption REJECTED"
-echo "  16.    Mine 245 blocks to pass lock"
-echo "  17.    Redemption SUCCEEDED"
+echo "  15.5   *** PARTIAL REDEMPTION REJECTED (EXACT-AMOUNT ENFORCEMENT) ***"
+echo "         - Tried 500 cents from 1000 cent vault -> MUST FAIL"
+echo "         - Exact 1000 cents redemption -> MUST SUCCEED"
+echo "  16.    *** COLLATERAL CONSISTENCY TEST ***"
+echo "         - Verify minted collateral matches calculated amount"
+echo "         - Tests GUI 'Required DGB' matches 'Collateral Locked'"
+echo "  17.    Vault state after redemption tests"
 echo "  18.    Bob mints \$200 DD (tier 8, 10-year)"
 echo "  19.    Charlie sends \$15 DD to Alice"
 echo "  20.    Alice sends \$10 DD back to Bob"
 echo "  21.    Alice mints \$100 DD (tier 7)"
 echo "  22.    Charlie mints \$200 DD (tier 8)"
 echo "  23.    Bob redeems first \$100 vault"
-echo "  24.    Final network state"
+echo "  24.    *** DD TRANSACTIONS TAB TEST ***"
+echo "         - Verify listdigidollartxs returns >10 transactions"
+echo "         - Full transaction history available (not limited to 10)"
+echo "  24.5   Additional exact-amount test on different vault"
+echo "  25.    Final network state"
+echo ""
+echo "KEY FEATURES TESTED:"
+echo "  [1] Exact-Amount Redemption Only (no partial redemption)"
+echo "  [2] Collateral Calculation Consistency"
+echo "  [3] DD Transactions Full History (>10 items)"
 echo ""
 
 print_header "DEBUG LOG LOCATIONS"

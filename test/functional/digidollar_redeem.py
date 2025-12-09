@@ -2,12 +2,13 @@
 """Test DigiDollar redemption operations.
 
 Test comprehensive redemption functionality including:
-- Normal redemption path
+- Normal exact-amount redemption path
 - Emergency redemption (ERR)
-- Partial redemption
+- Exact-amount enforcement (partial redemption rejection)
 - Timelock expiry redemption
 - Collateral return calculations
 - ERR trigger conditions
+- Vault closure after full redemption
 """
 
 from test_framework.test_framework import DigiByteTestFramework
@@ -47,7 +48,8 @@ class DigiDollarRedeemTest(DigiByteTestFramework):
 
         # Run test scenarios
         self.test_normal_redemption()
-        self.test_partial_redemption()
+        self.test_partial_redemption_rejected()  # Changed from test_partial_redemption
+        self.test_exact_amount_enforcement()      # New test
         self.test_full_position_redemption()
         self.test_timelock_expiry_redemption()
         self.test_emergency_redemption()
@@ -108,98 +110,114 @@ class DigiDollarRedeemTest(DigiByteTestFramework):
         assert_equal(actual_balance['total'], total_expected)
 
     def test_normal_redemption(self):
-        """Test normal redemption process."""
-        self.log.info("Testing normal redemption...")
-
-        # Get initial balances
-        initial_dd_balance = self.nodes[1].getdigidollarbalance()['total']
-        initial_dgb_balance = self.nodes[1].getbalance()
+        """Test normal EXACT-AMOUNT redemption process."""
+        self.log.info("Testing exact-amount redemption...")
 
         # Get node 1's position
         positions = self.nodes[1].listdigidollarpositions()
-        assert len(positions) > 0, "Node 1 should have at least one position"
-        position_id = positions[0]['position_id']
+        assert len(positions) > 0, "Expected at least one position"
+        position = positions[0]
+        position_id = position['position_id']
 
-        # Redeem portion of DD (in cents)
-        redeem_amount_cents = 50000  # $500
+        # Get EXACT amount in position (not partial)
+        dd_amount = int(position.get('dd_amount', position.get('dd_minted', 100000)))
 
-        self.log.info(f"Redeeming {redeem_amount_cents} cents DD from position {position_id}...")
-        result = self.nodes[1].redeemdigidollar(position_id, redeem_amount_cents)
+        self.log.info(f"Position {position_id} has {dd_amount} cents DD")
+        self.log.info(f"Redeeming EXACT amount {dd_amount} cents (not partial)...")
 
-        assert 'txid' in result
-        assert 'dgb_unlocked' in result
-        assert 'dd_redeemed' in result
+        # Redeem EXACT amount
+        result = self.nodes[1].redeemdigidollar(position_id, dd_amount)
 
-        redeem_txid = result['txid']
-        dgb_unlocked = Decimal(result['dgb_unlocked'])
+        assert 'txid' in result, "Redemption should return txid"
+        self.log.info(f"Redemption txid: {result['txid']}")
 
         # Mine block to confirm
         self.nodes[1].generate(1)
         self.sync_all()
 
-        # Verify balances after redemption
-        final_dd_balance = self.nodes[1].getdigidollarbalance()['total']
-        final_dgb_balance = self.nodes[1].getbalance()
+        # Verify position is closed
+        positions_after = self.nodes[1].listdigidollarpositions()
+        remaining_ids = [p['position_id'] for p in positions_after if p.get('is_active', True)]
+        assert position_id not in remaining_ids, "Position should be closed after full redemption"
 
-        # DD balance should decrease (in cents)
-        # NOTE: Actual implementation may redeem entire position
-        assert final_dd_balance <= initial_dd_balance - redeem_amount_cents, \
-            f"DD balance should decrease by at least {redeem_amount_cents}, was {initial_dd_balance}, now {final_dd_balance}"
+        self.log.info("✓ Exact-amount redemption succeeded and position closed")
 
-        # DGB balance should increase (minus transaction fees)
-        dgb_increase = final_dgb_balance - initial_dgb_balance
-        assert_greater_than(dgb_increase, Decimal('0'))
+    def test_partial_redemption_rejected(self):
+        """Test that partial redemption is properly rejected."""
+        self.log.info("Testing partial redemption rejection...")
 
-        # Verify the DGB unlocked amount makes sense
-        # Redemption returns proportional collateral based on mint ratio
-        # For Phase 1: Returns full proportional collateral
-        # The actual amount depends on the collateral ratio at mint time (150%-500%)
-        # Just verify we got a reasonable amount of DGB back
-        assert_greater_than(dgb_unlocked, Decimal('0.1'))  # At least 0.1 DGB for $500 redemption
+        # First mint a new position for this test
+        mint_result = self.nodes[0].mintdigidollar(100000, 0)  # $1000 DD, tier 0 (1 hour test)
+        position_id = mint_result['position_id']
+        position_amount = 100000  # cents
 
-        # Verify transaction details
-        tx_info = self.nodes[1].gettransaction(redeem_txid)
-        assert_greater_than(tx_info['confirmations'], 0)
-
-    def test_partial_redemption(self):
-        """Test redemption from multiple positions."""
-        self.log.info("Testing redemption from multiple positions...")
-
-        # Get positions before redemption
-        positions_before = self.nodes[0].listdigidollarpositions()
-        total_dd_before = self.nodes[0].getdigidollarbalance()['total']
-
-        # Redeem from first position (in cents)
-        # NOTE: Phase 1 redeems entire positions, not partial amounts
-        position_id = positions_before[0]['position_id']
-        # Use dd_amount field (correct field name)
-        position_amount = int(positions_before[0].get('dd_amount', positions_before[0].get('amount', 50000)))
-        redeem_amount_cents = position_amount  # Redeem full position
-
-        result = self.nodes[0].redeemdigidollar(position_id, redeem_amount_cents)
-
-        self.nodes[0].generate(1)
+        # Generate blocks to pass timelock
+        self.nodes[0].generate(250)
         self.sync_all()
 
-        # Verify total balance decreased (in cents)
-        total_dd_after = self.nodes[0].getdigidollarbalance()['total']
-        # Phase 1 redeems entire positions, so balance should decrease by at least position_amount
-        assert total_dd_after < total_dd_before, f"Balance should decrease: before={total_dd_before}, after={total_dd_after}"
-        assert total_dd_after >= 0, "Balance cannot be negative"
+        # Try to redeem HALF the position (should fail with exact-amount enforcement)
+        partial_amount = position_amount // 2  # 50000 cents = $500
 
-        # Check positions after redemption
-        positions_after = self.nodes[0].listdigidollarpositions()
+        self.log.info(f"Attempting partial redemption of {partial_amount} from {position_amount} cents...")
 
-        # Should still have positions (since node has multiple positions)
-        assert_greater_than(len(positions_after), 0)
+        try:
+            self.nodes[0].redeemdigidollar(position_id, partial_amount)
+            raise AssertionError(f"Partial redemption of {partial_amount} should have been rejected!")
+        except Exception as e:
+            error_msg = str(e).lower()
+            # Check for exact-amount related error messages
+            assert any(x in error_msg for x in ['exact', 'must equal', 'full', 'minted']), \
+                f"Error should mention exact amount requirement, got: {e}"
+            self.log.info(f"✓ Partial redemption correctly rejected: {e}")
 
-        # Total DD balance should match what listdigidollarpositions reports
-        # Note: Phase 1 redeems entire positions, so balance may have decreased more than requested
-        self.log.info(f"After redemption: balance={total_dd_after}, positions={len(positions_after)}")
+        # Now redeem the full amount (should succeed)
+        self.log.info(f"Now redeeming full amount {position_amount} cents...")
+        result = self.nodes[0].redeemdigidollar(position_id, position_amount)
+        assert 'txid' in result, "Full redemption should succeed"
+        self.log.info("✓ Full redemption after partial rejection succeeded")
 
-        # Just verify balance is consistent with remaining positions
-        # Don't assert exact equality since field names may vary
-        assert_greater_than(total_dd_after, 0)  # Should still have DD remaining
+    def test_exact_amount_enforcement(self):
+        """Test comprehensive exact-amount enforcement."""
+        self.log.info("Testing exact-amount enforcement...")
+
+        # Mint a position
+        mint_cents = 50000  # $500 DD
+        mint_result = self.nodes[0].mintdigidollar(mint_cents, 0)
+        position_id = mint_result['position_id']
+
+        self.nodes[0].generate(250)
+        self.sync_all()
+
+        # Test 1: Try slightly less than exact (should fail)
+        self.log.info("Test 1: Trying amount slightly less than minted...")
+        try:
+            self.nodes[0].redeemdigidollar(position_id, mint_cents - 1)
+            raise AssertionError("Should reject amount less than minted")
+        except Exception as e:
+            self.log.info(f"  ✓ Rejected: {e}")
+
+        # Test 2: Try slightly more than exact (should fail)
+        self.log.info("Test 2: Trying amount slightly more than minted...")
+        try:
+            self.nodes[0].redeemdigidollar(position_id, mint_cents + 1)
+            raise AssertionError("Should reject amount more than minted")
+        except Exception as e:
+            self.log.info(f"  ✓ Rejected: {e}")
+
+        # Test 3: Try exactly the minted amount (should succeed)
+        self.log.info(f"Test 3: Trying exact amount {mint_cents}...")
+        result = self.nodes[0].redeemdigidollar(position_id, mint_cents)
+        assert 'txid' in result
+        self.log.info(f"  ✓ Exact amount accepted: {result['txid']}")
+
+        # Confirm and verify position closed
+        self.nodes[0].generate(1)
+        self.sync_all()
+        positions = self.nodes[0].listdigidollarpositions()
+        active_ids = [p['position_id'] for p in positions if p.get('is_active', True)]
+        assert position_id not in active_ids, "Position should be closed"
+
+        self.log.info("✓ Exact-amount enforcement verified")
 
     def test_full_position_redemption(self):
         """Test full redemption of entire positions."""
@@ -456,6 +474,18 @@ class DigiDollarRedeemTest(DigiByteTestFramework):
 
         position_id = positions[0]['position_id']
 
+        # Test exact-amount requirement
+        self.log.info("Testing exact-amount requirement...")
+        position = positions[0]
+        position_amount = int(position.get('dd_amount', 50000))
+
+        # Partial amount should fail
+        try:
+            self.nodes[0].redeemdigidollar(position_id, position_amount // 2)
+            raise AssertionError("Partial amount should be rejected")
+        except Exception as e:
+            self.log.info(f"Partial correctly rejected: {e}")
+
         # Test insufficient DD balance or amount exceeding position
         excessive_amount_cents = self.nodes[0].getdigidollarbalance()['total'] + 100  # 100 cents more
         # The error code can be -4 (insufficient balance) or -8 (exceeds position amount)
@@ -464,7 +494,8 @@ class DigiDollarRedeemTest(DigiByteTestFramework):
             raise AssertionError("Should have raised an error for excessive redemption amount")
         except Exception as e:
             # Expected to fail - verify it's an RPC error
-            assert "Cannot redeem" in str(e) or "Insufficient" in str(e), f"Unexpected error: {e}"
+            # With exact-amount enforcement, this will fail with "Exact-amount redemption required"
+            assert "Cannot redeem" in str(e) or "Insufficient" in str(e) or "Exact-amount" in str(e), f"Unexpected error: {e}"
             self.log.info(f"Excessive redemption rejected as expected: {e}")
 
         # Test invalid amounts

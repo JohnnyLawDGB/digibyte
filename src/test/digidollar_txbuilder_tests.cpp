@@ -285,6 +285,8 @@ BOOST_AUTO_TEST_CASE(redeem_transaction_basic)
     redeemParams.collateralAmount = 30000000000; // 300 DGB collateral (for 300% ratio)
     redeemParams.ddMinted = 10000; // $100 DD minted
     redeemParams.unlockHeight = 500; // Unlock at height 500 (current height is 1000, so timelock expired)
+    // EXACT-AMOUNT REDEMPTION: DD UTXOs must contain exactly the amount being redeemed
+    redeemParams.ddAmounts = {10000}; // DD UTXO contains exactly 10000 cents (matches ddMinted)
 
     // Build redeem transaction
     TxBuilderResult result = builder.BuildRedemptionTransaction(redeemParams);
@@ -334,6 +336,8 @@ BOOST_AUTO_TEST_CASE(redeem_transaction_different_paths)
         redeemParams.collateralAmount = 30000000000; // 300 DGB collateral (for 300% ratio)
         redeemParams.ddMinted = 10000; // $100 DD minted
         redeemParams.unlockHeight = 500; // Unlock at height 500 (current height is 1000, so timelock expired)
+        // EXACT-AMOUNT REDEMPTION: DD UTXOs must contain exactly the amount being redeemed
+        redeemParams.ddAmounts = {10000}; // DD UTXO contains exactly 10000 cents (matches ddMinted)
 
         TxBuilderResult result = builder.BuildRedemptionTransaction(redeemParams);
 

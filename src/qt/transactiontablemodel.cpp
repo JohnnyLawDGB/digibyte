@@ -379,6 +379,14 @@ QString TransactionTableModel::formatTxType(const TransactionRecord *wtx) const
         return tr("Sent to");
     case TransactionRecord::Generated:
         return tr("Mined");
+    case TransactionRecord::DDTimeLockCollateral:
+        return tr("DigiDollar Collateral Lock");
+    case TransactionRecord::DDCollateralReturn:
+        return tr("DigiDollar Collateral Unlock");
+    case TransactionRecord::DDSend:
+        return tr("DigiDollar Transfer (Out)");
+    case TransactionRecord::DDRecv:
+        return tr("DigiDollar Transfer (In)");
     default:
         return QString();
     }
@@ -396,6 +404,12 @@ QVariant TransactionTableModel::txAddressDecoration(const TransactionRecord *wtx
     case TransactionRecord::SendToAddress:
     case TransactionRecord::SendToOther:
         return QIcon(":/icons/tx_output");
+    case TransactionRecord::DDTimeLockCollateral:
+    case TransactionRecord::DDSend:
+        return QIcon(":/icons/tx_output");  // Use output icon for DD sends
+    case TransactionRecord::DDCollateralReturn:
+    case TransactionRecord::DDRecv:
+        return QIcon(":/icons/tx_input");   // Use input icon for DD receives
     default:
         return QIcon(":/icons/tx_inout");
     }
@@ -419,6 +433,14 @@ QString TransactionTableModel::formatTxToAddress(const TransactionRecord *wtx, b
         return lookupAddress(wtx->address, tooltip) + watchAddress;
     case TransactionRecord::SendToOther:
         return QString::fromStdString(wtx->address) + watchAddress;
+    case TransactionRecord::DDTimeLockCollateral:
+        return tr("DigiDollar Collateral (Locked)") + watchAddress;
+    case TransactionRecord::DDCollateralReturn:
+        return tr("DigiDollar Collateral (Unlocked)") + watchAddress;
+    case TransactionRecord::DDSend:
+        return tr("DigiDollar Transfer (Out)") + watchAddress;
+    case TransactionRecord::DDRecv:
+        return tr("DigiDollar Transfer (In)") + watchAddress;
     default:
         return tr("(n/a)") + watchAddress;
     }
@@ -440,6 +462,15 @@ QVariant TransactionTableModel::addressColor(const TransactionRecord *wtx) const
         {
         // Return theme-appropriate color for both labeled and unlabeled addresses
         return isDarkTheme ? QColor(255, 255, 255) : QColor(0, 51, 102);
+        } break;
+    case TransactionRecord::DDTimeLockCollateral:
+    case TransactionRecord::DDCollateralReturn:
+    case TransactionRecord::DDSend:
+    case TransactionRecord::DDRecv:
+        {
+        // DigiDollar transactions - use a distinctive color
+        // Gold/amber for DD related transactions
+        return isDarkTheme ? QColor(255, 193, 7) : QColor(184, 134, 11);  // Gold color
         } break;
     default:
         break;

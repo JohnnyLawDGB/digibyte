@@ -69,6 +69,10 @@ public:
         SendToOther,
         RecvWithAddress,
         RecvFromOther,
+        DDTimeLockCollateral,   // DigiDollar collateral locked in timelock
+        DDCollateralReturn,     // DigiDollar collateral returned from redemption
+        DDSend,                 // DigiDollar sent (0-value P2TR output)
+        DDRecv,                 // DigiDollar received (0-value P2TR output)
     };
 
     /** Number of confirmation recommended for accepting a transaction */

@@ -5,6 +5,7 @@
 #include <qt/transactionrecord.h>
 
 #include <chain.h>
+#include <consensus/digidollar.h>
 #include <interfaces/wallet.h>
 #include <key_io.h>
 #include <wallet/types.h>
@@ -54,6 +55,44 @@ QList<TransactionRecord> TransactionRecord::decomposeTransaction(const interface
         }
     }
 
+    // Check if this is a DigiDollar transaction and get its type (needed for special handling)
+    bool isDDTransaction = DigiDollar::HasDigiDollarMarker(*wtx.tx);
+    DigiDollar::DigiDollarTxType ddTxType = DigiDollar::GetDigiDollarTxType(*wtx.tx);
+
+    // Special handling for DigiDollar REDEEM transactions
+    // These have locked collateral inputs that aren't recognized as "mine" by standard wallet,
+    // so they would otherwise fall through to "mixed transaction" handling
+    if (isDDTransaction && ddTxType == DigiDollar::DD_TX_REDEEM) {
+        for (const isminetype mine : wtx.txout_is_mine) {
+            if (mine & ISMINE_WATCH_ONLY) involvesWatchAddress = true;
+        }
+
+        // For REDEEM transactions, only show the main collateral return (vout[0])
+        // Additional outputs are change and don't need separate display
+        if (wtx.tx->vout.size() > 0) {
+            const CTxOut& txout = wtx.tx->vout[0];
+            isminetype mine = wtx.txout_is_mine[0];
+
+            if (mine && txout.nValue > 0) {
+                TransactionRecord sub(hash, nTime);
+                sub.idx = 0;
+                // Include change in the total credit shown
+                CAmount totalCredit = 0;
+                for (unsigned int i = 0; i < wtx.tx->vout.size(); i++) {
+                    if (wtx.txout_is_mine[i]) {
+                        totalCredit += wtx.tx->vout[i].nValue;
+                    }
+                }
+                sub.credit = totalCredit;
+                sub.involvesWatchAddress = mine & ISMINE_WATCH_ONLY;
+                sub.type = TransactionRecord::DDCollateralReturn;
+                sub.address = EncodeDestination(wtx.txout_address[0]);
+                parts.append(sub);
+            }
+        }
+        return parts;
+    }
+
     if (fAllFromMe || !any_from_me) {
         for (const isminetype mine : wtx.txout_is_mine)
         {
@@ -65,6 +104,16 @@ QList<TransactionRecord> TransactionRecord::decomposeTransaction(const interface
         for(unsigned int i = 0; i < wtx.tx->vout.size(); i++)
         {
             const CTxOut& txout = wtx.tx->vout[i];
+
+            // Skip OP_RETURN outputs entirely (they have no value and are just data)
+            if (txout.scriptPubKey.size() > 0 && txout.scriptPubKey[0] == OP_RETURN) {
+                continue;
+            }
+
+            // Check if this is a DD token output (0-value P2TR)
+            // P2TR outputs start with OP_1 (0x51) and are 34 bytes
+            bool isDDTokenOutput = isDDTransaction && txout.nValue == 0 &&
+                txout.scriptPubKey.size() == 34 && txout.scriptPubKey[0] == 0x51;
 
             if (fAllFromMe) {
                 // Change is only really possible if we're the sender
@@ -81,7 +130,20 @@ QList<TransactionRecord> TransactionRecord::decomposeTransaction(const interface
                 sub.idx = i;
                 sub.involvesWatchAddress = involvesWatchAddress;
 
-                if (!std::get_if<CNoDestination>(&wtx.txout_address[i]))
+                // Check if this is a DigiDollar output (0-value P2TR) - DD Send
+                if (isDDTokenOutput) {
+                    sub.type = TransactionRecord::DDSend;
+                    sub.address = EncodeDestination(wtx.txout_address[i]);
+                }
+                // Check if this is a DigiDollar collateral output (MINT transaction, vout 0)
+                // Collateral is the first output (index 0) in a mint tx, has value > 0, P2TR
+                else if (isDDTransaction && ddTxType == DigiDollar::DD_TX_MINT &&
+                    i == 0 && txout.nValue > 0 &&
+                    txout.scriptPubKey.size() == 34 && txout.scriptPubKey[0] == 0x51) {
+                    sub.type = TransactionRecord::DDTimeLockCollateral;
+                    sub.address = EncodeDestination(wtx.txout_address[i]);
+                }
+                else if (!std::get_if<CNoDestination>(&wtx.txout_address[i]))
                 {
                     // Sent to DigiByte Address
                     sub.type = TransactionRecord::SendToAddress;
@@ -117,7 +179,20 @@ QList<TransactionRecord> TransactionRecord::decomposeTransaction(const interface
                 sub.idx = i; // vout index
                 sub.credit = txout.nValue;
                 sub.involvesWatchAddress = mine & ISMINE_WATCH_ONLY;
-                if (wtx.txout_address_is_mine[i])
+
+                // Check for DigiDollar-related received outputs
+                if (isDDTokenOutput) {
+                    // Received DigiDollar (0-value P2TR in DD transaction)
+                    sub.type = TransactionRecord::DDRecv;
+                    sub.address = EncodeDestination(wtx.txout_address[i]);
+                }
+                else if (isDDTransaction && ddTxType == DigiDollar::DD_TX_REDEEM &&
+                         txout.nValue > 0 && i == 0) {
+                    // Received collateral back (redemption) - first output with DGB value in REDEEM tx
+                    sub.type = TransactionRecord::DDCollateralReturn;
+                    sub.address = EncodeDestination(wtx.txout_address[i]);
+                }
+                else if (wtx.txout_address_is_mine[i])
                 {
                     // Received by DigiByte Address
                     sub.type = TransactionRecord::RecvWithAddress;

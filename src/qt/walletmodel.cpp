@@ -770,21 +770,41 @@ WalletModel::DigiDollarMintResult WalletModel::mintDigiDollar(CAmount ddAmount, 
         int currentHeight = m_client_model->getNumBlocks();
         LogPrintf("DigiDollar Qt: Step 2 - Current blockchain height: %d\n", currentHeight);
 
-        // Step 3: Get oracle price (use MockOracleManager for RegTest)
-        // Oracle price format: cents per DGB (how many USD cents to buy 1 DGB)
-        // For example: $0.01/DGB = 1 cent per DGB, so oraclePrice = 1
-        CAmount oraclePrice = MockOracleManager::GetInstance().GetCurrentPrice();
-        LogPrintf("DigiDollar Qt: Step 3 - MockOracleManager returned price: %d cents/DGB\n", oraclePrice);
+        // Step 3: Get oracle price (MockOracleManager for RegTest only, RPC for testnet/mainnet)
+        // Oracle price format: micro-USD per DGB (1,000,000 = $1.00)
+        CAmount oraclePriceMicroUSD = 0;
+        ChainType chainType = Params().GetChainType();
+        LogPrintf("DigiDollar Qt: Step 3 - Getting oracle price, ChainType=%d\n", (int)chainType);
 
-        if (oraclePrice <= 0) {
-            // Fallback to default price if mock oracle not initialized
-            // Default: $0.01/DGB = 1 cent per DGB
-            oraclePrice = 1; // 1 cent per DGB
-            LogPrintf("DigiDollar Qt: WARNING - Using fallback oracle price: %d cents/DGB\n", oraclePrice);
-            MockOracleManager::GetInstance().SetMockPrice(oraclePrice);
+        if (chainType == ChainType::REGTEST && MockOracleManager::GetInstance().IsEnabled()) {
+            // RegTest uses mock oracle
+            oraclePriceMicroUSD = MockOracleManager::GetInstance().GetCurrentPrice();
+            LogPrintf("DigiDollar Qt: Using MockOracle price: %ld micro-USD ($%.6f/DGB)\n",
+                      oraclePriceMicroUSD, oraclePriceMicroUSD / 1000000.0);
         } else {
-            LogPrintf("DigiDollar Qt: Using oracle price: %d cents per DGB\n", oraclePrice);
+            // Testnet/Mainnet uses real oracle via RPC
+            try {
+                UniValue params(UniValue::VARR);
+                UniValue result = m_node.executeRpc("getoracleprice", params, "");
+                const UniValue& priceVal = result.find_value("price_micro_usd");
+                if (!priceVal.isNull()) {
+                    oraclePriceMicroUSD = priceVal.getInt<int64_t>();
+                    LogPrintf("DigiDollar Qt: Using RPC oracle price: %ld micro-USD ($%.6f/DGB)\n",
+                              oraclePriceMicroUSD, oraclePriceMicroUSD / 1000000.0);
+                }
+            } catch (const std::exception& e) {
+                LogPrintf("DigiDollar Qt: ERROR getting oracle price from RPC: %s\n", e.what());
+            }
         }
+
+        if (oraclePriceMicroUSD <= 0) {
+            LogPrintf("DigiDollar Qt: ERROR - Oracle price not available\n");
+            return DigiDollarMintResult(TransactionCreationFailed, "", "", "Oracle price not available. Cannot mint DigiDollar.");
+        }
+
+        // Convert to the format expected by the mint transaction builder
+        // The builder expects micro-USD (1,000,000 = $1.00)
+        CAmount oraclePrice = oraclePriceMicroUSD;
 
         // Step 4: Get wallet pointer for accessing UTXOs and signing
         wallet::CWallet* pWallet = wallet().wallet();
@@ -1146,29 +1166,54 @@ bool WalletModel::validateDigiDollarAddress(const QString& address) const
 
 CAmount WalletModel::calculateRequiredCollateral(CAmount ddAmount, int lockTier) const
 {
-    // Collateral ratios from consensus (9-tier lock period system with 1-hour testing tier)
+    // Collateral ratios from consensus (10-tier lock period system with 1-hour testing tier)
     // Higher ratios for shorter locks (treasury model)
-    const double tierRatios[9] = {
+    const double tierRatios[10] = {
         1000.0, // Tier 0 (1 hour) - 1000% (TESTING ONLY)
         500.0,  // Tier 1 (30 days) - 500%
-        400.0,  // Tier 2 (3 months) - 400%
-        350.0,  // Tier 3 (6 months) - 350%
+        400.0,  // Tier 2 (90 days) - 400%
+        350.0,  // Tier 3 (180 days) - 350%
         300.0,  // Tier 4 (1 year) - 300%
-        250.0,  // Tier 5 (3 years) - 250%
-        225.0,  // Tier 6 (5 years) - 225%
-        212.0,  // Tier 7 (7 years) - 212%
-        200.0   // Tier 8 (10 years) - 200%
+        250.0,  // Tier 5 (2 years) - 250%
+        225.0,  // Tier 6 (3 years) - 225%
+        212.0,  // Tier 7 (5 years) - 212%
+        206.0,  // Tier 8 (7 years) - 206%
+        200.0   // Tier 9 (10 years) - 200%
     };
 
-    if (lockTier < 0 || lockTier > 8) {
+    if (lockTier < 0 || lockTier > 9) {
         return 0;
     }
 
     double collateralRatio = tierRatios[lockTier];
 
-    // Get actual oracle price from MockOracleManager (cents) and convert to USD
-    CAmount oraclePriceCents = MockOracleManager::GetInstance().GetCurrentPrice();
-    double dgbPriceUSD = oraclePriceCents / 100.0;
+    // Get oracle price based on network type
+    // MockOracleManager for RegTest only, RPC for testnet/mainnet
+    CAmount oraclePriceMicroUSD = 0;
+    ChainType chainType = Params().GetChainType();
+
+    if (chainType == ChainType::REGTEST && MockOracleManager::GetInstance().IsEnabled()) {
+        oraclePriceMicroUSD = MockOracleManager::GetInstance().GetCurrentPrice();
+    } else {
+        // Get from RPC for testnet/mainnet
+        try {
+            UniValue params(UniValue::VARR);
+            UniValue result = m_node.executeRpc("getoracleprice", params, "");
+            const UniValue& priceVal = result.find_value("price_micro_usd");
+            if (!priceVal.isNull()) {
+                oraclePriceMicroUSD = priceVal.getInt<int64_t>();
+            }
+        } catch (...) {
+            // If RPC fails, return 0 to indicate calculation failed
+            return 0;
+        }
+    }
+
+    if (oraclePriceMicroUSD <= 0) {
+        return 0;
+    }
+
+    double dgbPriceUSD = oraclePriceMicroUSD / 1000000.0;  // Convert micro-USD to USD
     double ddValueUSD = ddAmount / 100.0; // ddAmount is in cents, convert to dollars
 
     // Calculate required USD value of collateral

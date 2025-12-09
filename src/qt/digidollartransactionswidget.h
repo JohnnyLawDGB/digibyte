@@ -62,6 +62,8 @@ private:
     QString formatDDAmount(CAmount amount) const;
     QString formatTimestamp(uint64_t timestamp) const;
     QString formatConfirmations(int confirmations) const;
+    QString formatLockPeriod(int lockTier) const;
+    QString formatLockPeriodShort(int lockTier) const;
 
     // UI Components
     QVBoxLayout* m_mainLayout;
@@ -82,6 +84,7 @@ private:
         Date = 0,
         Type,
         Amount,
+        LockPeriod,
         TxId,
         Confirmations,
         ColumnCount

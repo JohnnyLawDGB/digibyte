@@ -21,6 +21,8 @@
 #include <univalue.h>
 #include <rpc/util.h>
 
+#include <algorithm>
+
 #include <QLabel>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -379,7 +381,7 @@ void DigiDollarOverviewWidget::setupRecentTransactionsSection()
     QHBoxLayout* titleLayout = new QHBoxLayout();
     titleLayout->setObjectName("transactionsTitleLayout");
 
-    m_transactionsTitle = new QLabel(tr("Recent DigiDollar transactions"), this);
+    m_transactionsTitle = new QLabel(tr("20 Most Recent DigiDollar Transactions"), this);
     QFont titleFont = m_transactionsTitle->font();
     titleFont.setBold(true);
     titleFont.setWeight(75); // Match main wallet weight
@@ -696,6 +698,12 @@ void DigiDollarOverviewWidget::updateRecentTransactions()
     // Get transaction history
     std::vector<DDTransaction> transactions = ddWallet->GetDDTransactionHistory();
 
+    // Sort transactions by timestamp descending (newest first)
+    std::sort(transactions.begin(), transactions.end(),
+        [](const DDTransaction& a, const DDTransaction& b) {
+            return a.timestamp > b.timestamp;
+        });
+
     // Update confirmations for all transactions based on current blockchain height
     if (m_clientModel) {
         int currentHeight = m_clientModel->getNumBlocks();
@@ -725,25 +733,43 @@ void DigiDollarOverviewWidget::updateRecentTransactions()
     // Clear existing items
     m_transactionsList->clear();
 
-    // Show recent transactions (last 10)
+    // Show recent transactions (first 20 - already sorted newest first)
     int count = 0;
-    for (auto it = transactions.rbegin(); it != transactions.rend() && count < 10; ++it, ++count) {
-        const DDTransaction& tx = *it;
+    for (const auto& tx : transactions) {
+        if (count >= 20) break;
+        ++count;
 
         // Create transaction item widget
         QWidget* itemWidget = new QWidget();
         QHBoxLayout* layout = new QHBoxLayout(itemWidget);
         layout->setContentsMargins(10, 5, 10, 5);
 
-        // Transaction type icon and category
+        // Transaction type icon and category with lock period for mints
         QString icon;
         QString categoryText;
+        QString lockPeriodStr;
+
+        // Format lock period based on tier
+        switch (tx.lock_tier) {
+            case 0:  lockPeriodStr = tr("1-hr"); break;
+            case 1:  lockPeriodStr = tr("30-day"); break;
+            case 2:  lockPeriodStr = tr("90-day"); break;
+            case 3:  lockPeriodStr = tr("180-day"); break;
+            case 4:  lockPeriodStr = tr("1-yr"); break;
+            case 5:  lockPeriodStr = tr("2-yr"); break;
+            case 6:  lockPeriodStr = tr("3-yr"); break;
+            case 7:  lockPeriodStr = tr("5-yr"); break;
+            case 8:  lockPeriodStr = tr("7-yr"); break;
+            case 9:  lockPeriodStr = tr("10-yr"); break;
+            default: lockPeriodStr = ""; break;
+        }
+
         if (tx.category == "mint") {
             icon = "🏦";
-            categoryText = tr("Mint");
+            categoryText = lockPeriodStr.isEmpty() ? tr("Mint") : tr("Mint %1").arg(lockPeriodStr);
         } else if (tx.category == "redeem") {
             icon = "💰";
-            categoryText = tr("Redeem");
+            categoryText = lockPeriodStr.isEmpty() ? tr("Redeem") : tr("Redeem %1").arg(lockPeriodStr);
         } else if (tx.category == "send") {
             icon = "📤";
             categoryText = tr("Send");
@@ -760,7 +786,7 @@ void DigiDollarOverviewWidget::updateRecentTransactions()
         layout->addWidget(iconLabel);
 
         QLabel* categoryLabel = new QLabel(categoryText);
-        categoryLabel->setFixedWidth(80);
+        categoryLabel->setFixedWidth(130);  // Wide enough for "Redeem 180-day"
         layout->addWidget(categoryLabel);
 
         // Amount

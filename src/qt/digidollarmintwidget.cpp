@@ -654,23 +654,17 @@ void DigiDollarMintWidget::updateCollateralCalculation()
 
 void DigiDollarMintWidget::calculateRequiredCollateral()
 {
-    if (m_mintAmount > 0 && m_oraclePrice > 0 && m_walletModel) {
+    if (m_mintAmount > 0 && m_oraclePrice > 0) {
+        // Use the already-fetched oracle price (from RPC on testnet/mainnet, mock on regtest)
+        // This ensures the GUI displays the same value as what will be used in the actual mint
         m_collateralRatio = getCollateralRatioForTier(m_selectedTier);
 
-        // Use wallet model's calculation for consistency with actual minting
-        CAmount ddAmountCents = static_cast<CAmount>(m_mintAmount * 100);
-        CAmount requiredSatoshis = m_walletModel->calculateRequiredCollateral(ddAmountCents, m_selectedTier);
-        m_requiredCollateral = requiredSatoshis / 100000000.0; // Convert satoshis to DGB
-    } else if (m_mintAmount > 0 && m_oraclePrice > 0) {
-        // Fallback if wallet model not available - use consistent calculation
-        m_collateralRatio = getCollateralRatioForTier(m_selectedTier);
-
-        // DD amount in cents, oracle price in cents per DGB
-        // Formula: (DD_cents * COIN * ratio) / (100 * oracle_cents)
-        double ddCents = m_mintAmount * 100.0;
-        double oracleCents = m_oraclePrice * 100.0; // m_oraclePrice is in dollars, convert to cents
-        double requiredSats = (ddCents * 100000000.0 * m_collateralRatio) / (100.0 * oracleCents);
-        m_requiredCollateral = requiredSats / 100000000.0;
+        // Calculate required collateral using the current oracle price
+        // m_mintAmount is DD dollars, m_oraclePrice is USD per DGB
+        // Formula: (DD_value_USD * collateral_ratio) / DGB_price_USD
+        double ddValueUSD = m_mintAmount;  // DD is 1:1 with USD
+        double requiredCollateralUSD = ddValueUSD * (m_collateralRatio / 100.0);
+        m_requiredCollateral = requiredCollateralUSD / m_oraclePrice;  // Convert to DGB
     } else {
         m_requiredCollateral = 0.0;
         m_collateralRatio = getCollateralRatioForTier(m_selectedTier);

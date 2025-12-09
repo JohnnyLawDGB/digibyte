@@ -105,6 +105,7 @@ void DigiDollarTransactionsWidget::setupTable()
         tr("Date"),
         tr("Type"),
         tr("Amount (DD)"),
+        tr("Lock Period"),
         tr("Transaction ID"),
         tr("Confirmations")
     });
@@ -120,14 +121,19 @@ void DigiDollarTransactionsWidget::setupTable()
     m_table->verticalHeader()->setVisible(false);
     m_table->horizontalHeader()->setSectionsClickable(true);
 
+    // Scroll bar settings - show vertical scroll when needed
+    m_table->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    m_table->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+
     // Let the table inherit colors from the application palette/theme
     // Don't override with custom colors - this ensures proper dark/light mode support
 
     // Column widths
     m_table->setColumnWidth(Column::Date, 150);
     m_table->setColumnWidth(Column::Type, 100);
-    m_table->setColumnWidth(Column::Amount, 150);
-    m_table->setColumnWidth(Column::TxId, 300);
+    m_table->setColumnWidth(Column::Amount, 130);
+    m_table->setColumnWidth(Column::LockPeriod, 100);
+    m_table->setColumnWidth(Column::TxId, 250);
     m_table->setColumnWidth(Column::Confirmations, 100);
 
     m_table->horizontalHeader()->setStretchLastSection(true);
@@ -188,7 +194,10 @@ void DigiDollarTransactionsWidget::populateTable()
     m_table->setSortingEnabled(false);
 
     try {
+        // Request up to 1000 transactions (max allowed by RPC) to show full history
         UniValue params(UniValue::VARR);
+        params.push_back(1000);  // count - get up to 1000 transactions
+        params.push_back(0);     // skip - start from the beginning
         UniValue result = m_walletModel->executeRpc("listdigidollartxs", params);
 
         if (!result.isArray()) {
@@ -224,8 +233,21 @@ void DigiDollarTransactionsWidget::populateTable()
             dateItem->setData(Qt::UserRole, QVariant::fromValue(timestamp));
             m_table->setItem(row, Column::Date, dateItem);
 
-            // Type
-            QTableWidgetItem* typeItem = new QTableWidgetItem(category.left(1).toUpper() + category.mid(1));
+            // Get lock tier early so we can use it for Type column
+            int lockTier = -1;
+            if (tx.exists("lock_tier")) {
+                lockTier = tx.find_value("lock_tier").getInt<int>();
+            }
+
+            // Type with lock period for mints/redeems
+            QString typeText = category.left(1).toUpper() + category.mid(1);
+            if ((category == "mint" || category == "redeem") && lockTier >= 0) {
+                QString lockPeriodShort = formatLockPeriodShort(lockTier);
+                if (!lockPeriodShort.isEmpty()) {
+                    typeText += " " + lockPeriodShort;
+                }
+            }
+            QTableWidgetItem* typeItem = new QTableWidgetItem(typeText);
             m_table->setItem(row, Column::Type, typeItem);
 
             // Amount
@@ -239,6 +261,11 @@ void DigiDollarTransactionsWidget::populateTable()
             bool isPositive = (category == "receive" || category == "mint");
             amountItem->setForeground(getAmountColor(isPositive));
             m_table->setItem(row, Column::Amount, amountItem);
+
+            // Lock Period (only for mints) - lockTier already extracted above
+            QTableWidgetItem* lockItem = new QTableWidgetItem(formatLockPeriod(lockTier));
+            lockItem->setTextAlignment(Qt::AlignCenter);
+            m_table->setItem(row, Column::LockPeriod, lockItem);
 
             // TX ID (truncated for display)
             QString displayTxid = txid.left(16) + "..." + txid.right(8);
@@ -386,4 +413,41 @@ QString DigiDollarTransactionsWidget::formatConfirmations(int confirmations) con
         return tr("Confirmed");
     }
     return QString::number(confirmations);
+}
+
+QString DigiDollarTransactionsWidget::formatLockPeriod(int lockTier) const
+{
+    // Tier mappings: 0-9 (10 tiers total)
+    // 0=1h (testing), 1=30d, 2=90d, 3=180d, 4=1y, 5=2y, 6=3y, 7=5y, 8=7y, 9=10y
+    switch (lockTier) {
+        case 0:  return tr("1 hour");
+        case 1:  return tr("30 days");
+        case 2:  return tr("90 days");
+        case 3:  return tr("180 days");
+        case 4:  return tr("1 year");
+        case 5:  return tr("2 years");
+        case 6:  return tr("3 years");
+        case 7:  return tr("5 years");
+        case 8:  return tr("7 years");
+        case 9:  return tr("10 years");
+        default: return QString("-");  // Non-mint or unknown
+    }
+}
+
+QString DigiDollarTransactionsWidget::formatLockPeriodShort(int lockTier) const
+{
+    // Short format for Type column display (e.g., "Mint 1-hr", "Mint 30-day")
+    switch (lockTier) {
+        case 0:  return tr("1-hr");
+        case 1:  return tr("30-day");
+        case 2:  return tr("90-day");
+        case 3:  return tr("180-day");
+        case 4:  return tr("1-yr");
+        case 5:  return tr("2-yr");
+        case 6:  return tr("3-yr");
+        case 7:  return tr("5-yr");
+        case 8:  return tr("7-yr");
+        case 9:  return tr("10-yr");
+        default: return QString("");
+    }
 }

@@ -31,6 +31,7 @@
 #include <httpserver.h>
 #include <index/blockfilterindex.h>
 #include <index/coinstatsindex.h>
+#include <index/digidollarstatsindex.h>
 #include <index/txindex.h>
 #include <init/common.h>
 #include <interfaces/chain.h>
@@ -249,6 +250,9 @@ void Interrupt(NodeContext& node)
     if (g_coin_stats_index) {
         g_coin_stats_index->Interrupt();
     }
+    if (g_digidollar_stats_index) {
+        g_digidollar_stats_index->Interrupt();
+    }
 }
 
 void Shutdown(NodeContext& node)
@@ -326,6 +330,10 @@ void Shutdown(NodeContext& node)
     if (g_coin_stats_index) {
         g_coin_stats_index->Stop();
         g_coin_stats_index.reset();
+    }
+    if (g_digidollar_stats_index) {
+        g_digidollar_stats_index->Stop();
+        g_digidollar_stats_index.reset();
     }
     ForEachBlockFilterIndex([](BlockFilterIndex& index) { index.Stop(); });
     DestroyAllBlockFilterIndexes();
@@ -463,6 +471,7 @@ void SetupServerArgs(ArgsManager& argsman)
     argsman.AddArg("-blockreconstructionextratxn=<n>", strprintf("Extra transactions to keep in memory for compact block reconstructions (default: %u)", DEFAULT_BLOCK_RECONSTRUCTION_EXTRA_TXN), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-blocksonly", strprintf("Whether to reject transactions from network peers. Automatic broadcast and rebroadcast of any transactions from inbound peers is disabled, unless the peer has the 'forcerelay' permission. RPC transactions are not affected. (default: %u)", DEFAULT_BLOCKSONLY), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-coinstatsindex", strprintf("Maintain coinstats index used by the gettxoutsetinfo RPC (default: %u)", DEFAULT_COINSTATSINDEX), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
+    argsman.AddArg("-digidollarstatsindex", strprintf("Maintain DigiDollar stats index for network-wide DD supply tracking (default: %u)", DEFAULT_DIGIDOLLARSTATSINDEX), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     if (!argsman.GetArgFlags("-conf")) {
         argsman.AddArg("-conf=<file>", strprintf("Specify path to read-only configuration file. Relative paths will be prefixed by datadir location (only useable from command line, not configuration file) (default: %s)", DIGIBYTE_CONF_FILENAME), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     }
@@ -1754,6 +1763,12 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
     if (args.GetBoolArg("-coinstatsindex", DEFAULT_COINSTATSINDEX)) {
         g_coin_stats_index = std::make_unique<CoinStatsIndex>(interfaces::MakeChain(node), /*cache_size=*/0, false, fReindex);
         node.indexes.emplace_back(g_coin_stats_index.get());
+    }
+
+    // Initialize DigiDollar stats index
+    if (args.GetBoolArg("-digidollarstatsindex", DEFAULT_DIGIDOLLARSTATSINDEX)) {
+        g_digidollar_stats_index = std::make_unique<DigiDollarStatsIndex>(interfaces::MakeChain(node), /*cache_size=*/0, false, fReindex);
+        node.indexes.emplace_back(g_digidollar_stats_index.get());
     }
 
     // Init indexes

@@ -172,6 +172,7 @@ DIGIBYTE_CORE_H = \
   index/base.h \
   index/blockfilterindex.h \
   index/coinstatsindex.h \
+  index/digidollarstatsindex.h \
   index/disktxpos.h \
   index/txindex.h \
   indirectmap.h \
@@ -406,6 +407,7 @@ libdigibyte_node_a_SOURCES = \
   index/base.cpp \
   index/blockfilterindex.cpp \
   index/coinstatsindex.cpp \
+  index/digidollarstatsindex.cpp \
   index/txindex.cpp \
   init.cpp \
   kernel/chain.cpp \

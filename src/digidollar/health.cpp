@@ -346,7 +346,6 @@ void SystemHealthMonitor::ScanUTXOSet(CCoinsView* view, CCoinsView* validation_v
 
         //  Skip spent coins - they are marked for deletion but haven't been pruned yet
         if (coin.IsSpent()) {
-            LogPrintf("DigiDollar: UTXO Scanner skipping spent coin: %s:%d\n", txid.ToString(), key.n);
             pcursor->Next();
             continue;
         }
@@ -358,10 +357,7 @@ void SystemHealthMonitor::ScanUTXOSet(CCoinsView* view, CCoinsView* validation_v
             // Check output 0
             if (key.n == 0) {
                 output0_checked++;
-                LogPrint(BCLog::DIGIDOLLAR, "ScanUTXOSet: Checking output 0 of tx %s (scriptSize=%d, firstByte=%d, value=%s)\n",
-                         txid.ToString(), coin.out.scriptPubKey.size(),
-                         coin.out.scriptPubKey.size() > 0 ? coin.out.scriptPubKey[0] : 0,
-                         FormatMoney(coin.out.nValue));
+                // Note: Removed per-UTXO logging - too verbose for networks with many UTXOs
 
                 // Check if output 0 is a P2TR collateral output (vaults are 34 bytes starting with OP_1)
                 // DigiDollar minting creates native P2TR (Taproot) outputs for collateral vaults

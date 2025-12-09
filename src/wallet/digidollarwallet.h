@@ -34,6 +34,7 @@ struct DDTransaction {
     CAmount fee;            // Transaction fee paid (0 if not applicable)
     std::string comment;    // Transaction comment (empty if none)
     bool abandoned;         // Whether transaction was abandoned
+    int lock_tier;          // Lock tier for mints (0-8), -1 for non-mint transactions
 
     DDTransaction();
 
@@ -51,6 +52,7 @@ struct DDTransaction {
         READWRITE(obj.fee);
         READWRITE(obj.comment);
         READWRITE(obj.abandoned);
+        READWRITE(obj.lock_tier);
     }
 };
 
@@ -709,14 +711,14 @@ public:
 namespace DigiDollarWalletUtils {
     /**
      * Convert lock tier to lock period in days
-     * @param tier Lock tier (1-8)
+     * @param tier Lock tier (0-9): 0=1h, 1=30d, 2=90d, 3=180d, 4=1y, 5=2y, 6=3y, 7=5y, 8=7y, 9=10y
      * @return Lock period in days
      */
     int GetLockDaysForTier(uint32_t tier);
 
     /**
      * Calculate minimum collateral ratio for lock tier
-     * @param tier Lock tier (1-8)
+     * @param tier Lock tier (0-9)
      * @return Collateral ratio percentage
      */
     int GetMinCollateralRatio(uint32_t tier);

@@ -32,7 +32,7 @@
 
 DDTransaction::DDTransaction()
     : amount(0), timestamp(0), confirmations(0), incoming(false), category("unknown"),
-      blockheight(-1), blockhash(""), fee(0), comment(""), abandoned(false) {}
+      blockheight(-1), blockhash(""), fee(0), comment(""), abandoned(false), lock_tier(-1) {}
 
 // =============================================================================
 // DigiDollarWallet Implementation
@@ -1369,6 +1369,7 @@ bool DigiDollarWallet::CloseCollateralPosition(const COutPoint& outpoint, bool p
     ddtx.incoming = false; // Redemption (DD going out, DGB coming in)
     ddtx.address = "";
     ddtx.category = partial ? "partial_redeem" : "redeem";
+    ddtx.lock_tier = static_cast<int>(it->second.lock_tier);  // Set lock tier from redeemed position
 
     if (m_wallet) {
         wallet::WalletBatch batch(m_wallet->GetDatabase());
@@ -1764,6 +1765,7 @@ void DigiDollarWallet::AddCollateralPosition(const WalletCollateralPosition& pos
         tx.incoming = true;
         tx.address = "";
         tx.category = "mint";
+        tx.lock_tier = static_cast<int>(position.lock_tier);  // Set lock tier from position
         transaction_history.push_back(tx);
 
         // Persist transaction to database
@@ -2621,6 +2623,7 @@ bool DigiDollarWallet::RedeemDigiDollar(const uint256& dd_timelock_id, const CAm
         ddtx.incoming = true;  // Receiving DGB back
         ddtx.address = "";
         ddtx.category = "redeem";
+        ddtx.lock_tier = static_cast<int>(it->second.lock_tier);  // Set lock tier from redeemed position
 
         wallet::WalletBatch batch(m_wallet->GetDatabase());
         if (!batch.WriteDDTransaction(ddtx)) {
@@ -3314,8 +3317,53 @@ bool DigiDollarWallet::SignDDInputs(CMutableTransaction& tx,
         // For MINTED DD: owner key is stored in dd_owner_keys
         // For RECEIVED DD: we need to find the internal key in wallet that matches the tweaked output
         CKey ownerKey;
-        bool found_key = GetOwnerKey(outpoint.hash, ownerKey);
+        bool found_key = false;
 
+        // First, extract the output key from scriptPubKey to verify any key we find
+        const Coin& coin_for_key = coins.at(outpoint);
+        const CTxOut& output_for_key = coin_for_key.out;
+        std::vector<unsigned char> target_output_key_verify;
+        if (output_for_key.scriptPubKey.size() == 34 && output_for_key.scriptPubKey[0] == OP_1) {
+            target_output_key_verify.assign(output_for_key.scriptPubKey.begin() + 2, output_for_key.scriptPubKey.end());
+        }
+
+        // FIRST: Try dd_address_keys (for received DD via getdigidollaraddress)
+        // This takes priority because dd_owner_keys is indexed by txid which can return wrong key
+        // for multi-output transfer transactions
+        if (!target_output_key_verify.empty()) {
+            XOnlyPubKey xonly_output(target_output_key_verify);
+            if (GetAddressKey(xonly_output, ownerKey)) {
+                found_key = true;
+                LogPrintf("DigiDollar: SignDDInputs - Found key via dd_address_keys for received DD (priority lookup)\n");
+            }
+        }
+
+        // SECOND: Try dd_owner_keys (for minted DD), but VERIFY the key matches this output
+        if (!found_key) {
+            CKey candidate_key;
+            if (GetOwnerKey(outpoint.hash, candidate_key)) {
+                // Verify this key produces the correct tweaked output key
+                if (!target_output_key_verify.empty()) {
+                    XOnlyPubKey internal_xonly(candidate_key.GetPubKey());
+                    auto tweaked = internal_xonly.CreateTapTweak(nullptr);
+                    if (tweaked && std::equal(target_output_key_verify.begin(), target_output_key_verify.end(),
+                                             tweaked->first.begin())) {
+                        ownerKey = candidate_key;
+                        found_key = true;
+                        LogPrintf("DigiDollar: SignDDInputs - Found verified key via dd_owner_keys for minted DD\n");
+                    } else {
+                        LogPrintf("DigiDollar: SignDDInputs - Key from dd_owner_keys doesn't match output (wrong key for this outpoint)\n");
+                    }
+                } else {
+                    // Can't verify, use it anyway (legacy behavior)
+                    ownerKey = candidate_key;
+                    found_key = true;
+                    LogPrintf("DigiDollar: SignDDInputs - Using unverified key from dd_owner_keys\n");
+                }
+            }
+        }
+
+        // THIRD: Fall back to wallet keystore search
         if (!found_key) {
             // This might be RECEIVED DD - try to find the internal key in wallet
             // The DD output uses a tweaked P2TR key. We need to find which wallet key

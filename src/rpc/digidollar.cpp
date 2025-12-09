@@ -6,6 +6,7 @@
 #include <rpc/util.h>
 #include <rpc/server_util.h>
 #include <rpc/blockchain.h>
+#include <rpc/digidollar_transactions.h>
 #include <oracle/bundle_manager.h>
 #include <oracle/node.h>
 #include <oracle/mock_oracle.h>
@@ -14,6 +15,7 @@
 #include <consensus/err.h>
 #include <digidollar/digidollar.h>
 #include <digidollar/health.h>
+#include <index/digidollarstatsindex.h>
 #include <chainparams.h>
 #include <kernel/chainparams.h>
 #include <node/context.h>
@@ -47,14 +49,15 @@ namespace {
     int GetLockDaysForTier(uint32_t tier) {
         switch (tier) {
             case 0: return 0;     // Special: 1 hour (240 blocks) - handled separately
-            case 1: return 30;
-            case 2: return 90;
-            case 3: return 180;
-            case 4: return 365;
-            case 5: return 1095;  // 3 years
-            case 6: return 1825;  // 5 years
-            case 7: return 2555;  // 7 years
-            case 8: return 3650;  // 10 years
+            case 1: return 30;    // 30 days
+            case 2: return 90;    // 90 days
+            case 3: return 180;   // 180 days
+            case 4: return 365;   // 1 year
+            case 5: return 730;   // 2 years
+            case 6: return 1095;  // 3 years
+            case 7: return 1825;  // 5 years
+            case 8: return 2555;  // 7 years
+            case 9: return 3650;  // 10 years
             default: return 0;
         }
     }
@@ -66,10 +69,11 @@ namespace {
             case 2: return 400;   // 400% for 90 days
             case 3: return 350;   // 350% for 180 days
             case 4: return 300;   // 300% for 1 year
-            case 5: return 250;   // 250% for 3 years
-            case 6: return 225;   // 225% for 5 years
-            case 7: return 212;   // 212% for 7 years
-            case 8: return 200;   // 200% for 10 years
+            case 5: return 275;   // 275% for 2 years
+            case 6: return 250;   // 250% for 3 years
+            case 7: return 225;   // 225% for 5 years
+            case 8: return 212;   // 212% for 7 years
+            case 9: return 200;   // 200% for 10 years
             default: return 500;
         }
     }
@@ -118,7 +122,7 @@ RPCHelpMan getdigidollarstats()
                 },
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
         {
-            // NETWORK-WIDE TRACKING: Scan UTXO set instead of just loaded wallets
+            // NETWORK-WIDE TRACKING: Use DigiDollar stats index for efficient tracking
             // This ensures all nodes see identical stats regardless of which wallets are loaded
             CAmount totalCollateral = 0;
             CAmount totalDD = 0;
@@ -127,37 +131,63 @@ RPCHelpMan getdigidollarstats()
             const node::NodeContext& node = EnsureAnyNodeContext(request.context);
             ChainstateManager& chainman = EnsureChainman(node);
 
-            // Access the UTXO set (like gettxoutsetinfo does)
-            // CRITICAL: Must flush OUTSIDE the lock, then re-acquire lock for scanning
-            Chainstate& active_chainstate = chainman.ActiveChainstate();
+            // Use the DigiDollar stats index for efficient network-wide tracking
+            if (g_digidollar_stats_index) {
+                if (!g_digidollar_stats_index->BlockUntilSyncedToCurrentChain()) {
+                    const IndexSummary summary{g_digidollar_stats_index->GetSummary()};
+                    throw JSONRPCError(RPC_INTERNAL_ERROR,
+                        strprintf("DigiDollar stats index is syncing. Current height: %d", summary.best_block_height));
+                }
 
-            // Step 1: Force flush all cached coins to disk (like gettxoutsetinfo does)
-            LogPrintf("DigiDollar: getdigidollarstats - About to ForceFlushStateToDisk...\n");
-            active_chainstate.ForceFlushStateToDisk();
-            LogPrintf("DigiDollar: getdigidollarstats - ForceFlushStateToDisk completed\n");
+                const CBlockIndex* pindex;
+                {
+                    LOCK(cs_main);
+                    pindex = chainman.ActiveChain().Tip();
+                }
 
-            // Step 2: Now acquire lock and access the flushed CoinsDB
-            // CRITICAL: Hold cs_main lock during ScanUTXOSet to prevent race conditions
-            CCoinsView* coins_view;
-            node::BlockManager* blockman;
-            const CTxMemPool* mempool = node.mempool.get();
-            {
-                LOCK(::cs_main);
-                coins_view = &active_chainstate.CoinsDB();
-                blockman = &active_chainstate.m_blockman;
+                if (pindex) {
+                    auto stats = g_digidollar_stats_index->LookUpStats(*pindex);
+                    if (stats) {
+                        totalDD = stats->total_dd_supply;
+                        totalCollateral = stats->total_collateral;
+                    }
+                }
+            } else {
+                // Fallback: Use UTXO scanning (slow but works without index)
+                LogPrintf("DigiDollar: getdigidollarstats - DigiDollar stats index not available, falling back to UTXO scan\n");
 
-                // Scan UTXO set to find ALL DigiDollar vaults network-wide
-                // Pass BlockManager for full transaction access
-                // Pass both CoinsDB (for iteration) and CoinsTip (for validation)
-                LogPrintf("DigiDollar: getdigidollarstats - About to call ScanUTXOSet...\n");
-                DigiDollar::SystemHealthMonitor::ScanUTXOSet(coins_view, &active_chainstate.CoinsTip(), blockman, mempool);
-                LogPrintf("DigiDollar: getdigidollarstats - ScanUTXOSet completed\n");
+                // Access the UTXO set (like gettxoutsetinfo does)
+                // CRITICAL: Must flush OUTSIDE the lock, then re-acquire lock for scanning
+                Chainstate& active_chainstate = chainman.ActiveChainstate();
+
+                // Step 1: Force flush all cached coins to disk (like gettxoutsetinfo does)
+                LogPrintf("DigiDollar: getdigidollarstats - About to ForceFlushStateToDisk...\n");
+                active_chainstate.ForceFlushStateToDisk();
+                LogPrintf("DigiDollar: getdigidollarstats - ForceFlushStateToDisk completed\n");
+
+                // Step 2: Now acquire lock and access the flushed CoinsDB
+                // CRITICAL: Hold cs_main lock during ScanUTXOSet to prevent race conditions
+                CCoinsView* coins_view;
+                node::BlockManager* blockman;
+                const CTxMemPool* mempool = node.mempool.get();
+                {
+                    LOCK(::cs_main);
+                    coins_view = &active_chainstate.CoinsDB();
+                    blockman = &active_chainstate.m_blockman;
+
+                    // Scan UTXO set to find ALL DigiDollar vaults network-wide
+                    // Pass BlockManager for full transaction access
+                    // Pass both CoinsDB (for iteration) and CoinsTip (for validation)
+                    LogPrintf("DigiDollar: getdigidollarstats - About to call ScanUTXOSet...\n");
+                    DigiDollar::SystemHealthMonitor::ScanUTXOSet(coins_view, &active_chainstate.CoinsTip(), blockman, mempool);
+                    LogPrintf("DigiDollar: getdigidollarstats - ScanUTXOSet completed\n");
+                }
+
+                // Get metrics from scanner
+                DigiDollar::SystemMetrics metrics = DigiDollar::SystemHealthMonitor::GetSystemMetrics();
+                totalCollateral = metrics.totalCollateral;
+                totalDD = metrics.totalDDSupply;
             }
-
-            // Get metrics from scanner
-            DigiDollar::SystemMetrics metrics = DigiDollar::SystemHealthMonitor::GetSystemMetrics();
-            totalCollateral = metrics.totalCollateral;
-            totalDD = metrics.totalDDSupply;
 
             // Get current oracle price in micro-USD from the real oracle system
             // micro-USD format: 1,000,000 = $1.00, so 6310 = $0.00631
@@ -526,7 +556,7 @@ RPCHelpMan mintdigidollar()
                 "The amount of collateral required depends on the lock period and current system health.\n",
                 {
                     {"dd_amount", RPCArg::Type::NUM, RPCArg::Optional::NO, "Amount of DigiDollar to mint (in USD cents, e.g., 10000 = $100)", RPCArgOptions{.skip_type_check = true}},
-                    {"lock_tier", RPCArg::Type::NUM, RPCArg::Optional::NO, "Lock tier 0-8 (0=1h testing, 1=30d, 2=90d, 3=180d, 4=1y, 5=3y, 6=5y, 7=7y, 8=10y)", RPCArgOptions{.skip_type_check = true}},
+                    {"lock_tier", RPCArg::Type::NUM, RPCArg::Optional::NO, "Lock tier 0-9 (0=1h testing, 1=30d, 2=90d, 3=180d, 4=1y, 5=2y, 6=3y, 7=5y, 8=7y, 9=10y)", RPCArgOptions{.skip_type_check = true}},
                     {"fee_rate", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "Fee rate in sat/kB (default: 100000)", RPCArgOptions{.skip_type_check = true}}
                 },
                 RPCResult{
@@ -567,8 +597,8 @@ RPCHelpMan mintdigidollar()
             if (ddAmount <= 0) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "DigiDollar amount must be positive");
             }
-            if (lockTier < 0 || lockTier > 8) {
-                throw JSONRPCError(RPC_INVALID_PARAMETER, "Lock tier must be between 0 and 8 (0 = 1 hour testing tier)");
+            if (lockTier < 0 || lockTier > 9) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Lock tier must be between 0 and 9 (0 = 1 hour testing tier)");
             }
 
             // Get current height from wallet's chain interface
@@ -1233,7 +1263,7 @@ RPCHelpMan listdigidollarpositions()
                                 {RPCResult::Type::STR, "position_id", "Unique position identifier"},
                                 {RPCResult::Type::STR_AMOUNT, "dd_minted", "DigiDollar amount minted"},
                                 {RPCResult::Type::STR_AMOUNT, "dgb_collateral", "DGB locked as collateral"},
-                                {RPCResult::Type::NUM, "lock_tier", "Lock tier (0-8, 0=1h testing)"},
+                                {RPCResult::Type::NUM, "lock_tier", "Lock tier (0-9, 0=1h testing)"},
                                 {RPCResult::Type::NUM, "lock_days", "Lock period in days"},
                                 {RPCResult::Type::NUM, "unlock_height", "Block height when unlockable"},
                                 {RPCResult::Type::NUM, "blocks_remaining", "Blocks until unlock (0 if unlocked)"},
@@ -1394,12 +1424,8 @@ RPCHelpMan getdigidollaraddress()
                      HexStr(Span<const unsigned char>(output_key.begin(), output_key.end())),
                      output_parity);
 
-            // For spending, we need to negate the key if the output has odd parity
-            CKey tweaked_key = dd_key;
-            if (output_parity) {
-                // Negate the key for odd parity outputs
-                tweaked_key = dd_key; // The signing code will handle parity adjustment
-            }
+            // Note: Parity adjustment for Schnorr signing is handled automatically by
+            // the secp256k1 library in SignSchnorr - we store the internal key as-is
 
             // Store the key in DigiDollarWallet for later spending
             DigiDollarWallet* dd_wallet = pwallet->GetDDWallet();
@@ -1417,28 +1443,38 @@ RPCHelpMan getdigidollaraddress()
             // Create the destination from the output_key
             dest = WitnessV1Taproot(output_key);
 
-            // Import the address as watch-only so wallet tracks incoming transactions
-            // This allows ScanForDDUTXOs to find received DD tokens in mapWallet
+            // Import the address WITH private key so wallet can sign spending transactions
+            // This allows wallet to automatically sign DD transfers like normal DGB transactions
             {
-                // Create a rawtr() descriptor for the output key
-                std::string output_key_hex = HexStr(Span<const unsigned char>(output_key.begin(), output_key.end()));
-                std::string descriptor_str = "rawtr(" + output_key_hex + ")";
+                // CRITICAL FIX: Use tr(INTERNAL_KEY) instead of rawtr(OUTPUT_KEY)
+                // rawtr() is watch-only and cannot provide signing information
+                // tr() with the internal key creates a proper signable descriptor
+                std::string internal_key_hex = HexStr(Span<const unsigned char>(internal_key.begin(), internal_key.end()));
+                std::string descriptor_str = "tr(" + internal_key_hex + ")";
 
-                // Parse the descriptor
+                // Parse the descriptor - this creates a TRDescriptor that will populate tr_trees
                 FlatSigningProvider provider;
                 std::string error;
                 auto parsed_desc = Parse(descriptor_str, provider, error, /*require_checksum=*/false);
 
                 if (parsed_desc) {
+                    // CRITICAL: Add the private key to the provider so wallet can sign
+                    // The key must be indexed by CKeyID (Hash160 of compressed pubkey)
+                    provider.keys[dd_pubkey.GetID()] = dd_key;
+                    provider.pubkeys[dd_pubkey.GetID()] = dd_pubkey;
+
+                    LogPrintf("DigiDollar: Added private key to provider, keyid=%s\n",
+                             dd_pubkey.GetID().ToString());
+
                     // Create import request
                     wallet::WalletDescriptor wallet_desc(std::move(parsed_desc), /*timestamp=*/0, /*range_start=*/0, /*range_end=*/0, /*next_index=*/0);
 
                     // Import as active (non-internal) for receiving
                     LOCK(pwallet->cs_wallet);
                     if (pwallet->AddWalletDescriptor(wallet_desc, provider, "", /*internal=*/false)) {
-                        LogPrintf("DigiDollar: Imported DD address as watch-only descriptor\n");
+                        LogPrintf("DigiDollar: Imported DD address as tr() descriptor WITH private key\n");
                     } else {
-                        LogPrintf("DigiDollar: WARNING - Failed to import DD address as watch-only (may already exist)\n");
+                        LogPrintf("DigiDollar: WARNING - Failed to import DD address descriptor (may already exist)\n");
                     }
                 } else {
                     LogPrintf("DigiDollar: WARNING - Failed to parse DD address descriptor: %s\n", error);
@@ -1771,7 +1807,7 @@ static RPCHelpMan estimatecollateral()
                 "Calculates the required DGB amount based on DD amount, lock tier, and current system conditions.\n",
                 {
                     {"dd_amount", RPCArg::Type::AMOUNT, RPCArg::Optional::NO, "DigiDollar amount to mint (in cents)"},
-                    {"lock_tier", RPCArg::Type::NUM, RPCArg::Optional::NO, "Lock tier 0-8 (0=1h testing, 1=30d, 2=90d, 3=180d, 4=1y, 5=3y, 6=5y, 7=7y, 8=10y)"},
+                    {"lock_tier", RPCArg::Type::NUM, RPCArg::Optional::NO, "Lock tier 0-9 (0=1h testing, 1=30d, 2=90d, 3=180d, 4=1y, 5=2y, 6=3y, 7=5y, 8=7y, 9=10y)"},
                     {"oracle_price_micro_usd", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "Custom DGB price in micro-USD (1,000,000 = $1.00). Uses current oracle if omitted."}
                 },
                 RPCResult{
@@ -1825,8 +1861,8 @@ static RPCHelpMan estimatecollateral()
             if (ddAmount <= 0) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "DD amount must be positive");
             }
-            if (lockTier < 0 || lockTier > 8) {
-                throw JSONRPCError(RPC_INVALID_PARAMETER, "Lock tier must be between 0 and 8 (0 = 1 hour testing tier)");
+            if (lockTier < 0 || lockTier > 9) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Lock tier must be between 0 and 9 (0 = 1 hour testing tier)");
             }
             if (oraclePriceMicroUSD <= 0) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Oracle price must be positive");
@@ -2052,6 +2088,7 @@ RPCHelpMan listdigidollartxs()
                 txInfo.pushKV("fee", ValueFromAmount(tx.fee));
                 txInfo.pushKV("comment", tx.comment);
                 txInfo.pushKV("abandoned", tx.abandoned);
+                txInfo.pushKV("lock_tier", tx.lock_tier);
 
                 result.push_back(txInfo);
                 processed++;
@@ -2993,4 +3030,9 @@ void RegisterDigiDollarRPCCommands(CRPCTable &t)
     for (const auto& c : commands) {
         t.appendCommand(c.name, &c);
     }
+
+    // DigiDollar wallet-based transaction commands are registered via
+    // GetWalletRPCCommands() in wallet/rpc/wallet.cpp for proper wallet context.
+    // Do NOT register them here - they won't have wallet context and will fail
+    // with "Wallet context not found".
 }

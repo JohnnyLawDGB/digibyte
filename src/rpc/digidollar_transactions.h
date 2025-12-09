@@ -63,7 +63,8 @@ UniValue setmockoracleprice(const JSONRPCRequest& request);
  */
 UniValue createrawddtransaction(const JSONRPCRequest& request);
 
-// Array of DigiDollar transaction RPC commands
-extern const CRPCCommand digidollar_transaction_commands[];
+// Get DigiDollar transaction RPC commands span
+#include <span.h>
+Span<const CRPCCommand> GetDigiDollarTransactionRPCCommands();
 
 #endif // DIGIBYTE_RPC_DIGIDOLLAR_TRANSACTIONS_H

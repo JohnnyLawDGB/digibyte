@@ -381,7 +381,7 @@ UniValue createrawddtransaction(const JSONRPCRequest& request)
 }
 
 // RPC command definitions
-const CRPCCommand digidollar_transaction_commands[] = {
+static const CRPCCommand digidollar_transaction_commands[] = {
     {"digidollar", "getdigidollarinfo",        &getdigidollarinfo,        {}},
     {"digidollar", "getdigidollaraddress",     &getdigidollaraddress,     {}},
     {"digidollar", "getdigidollarbalance",     &getdigidollarbalance,     {}},
@@ -393,3 +393,8 @@ const CRPCCommand digidollar_transaction_commands[] = {
     // setmockoracleprice removed - use implementation in rpc/digidollar.cpp instead
     {"digidollar", "createrawddtransaction",   &createrawddtransaction,   {"inputs", "outputs"}},
 };
+
+Span<const CRPCCommand> GetDigiDollarTransactionRPCCommands()
+{
+    return Span{digidollar_transaction_commands};
+}

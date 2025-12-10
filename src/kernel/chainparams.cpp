@@ -380,12 +380,19 @@ public:
         consensus.CSVHeight = 1; // CSV activated on testnet (Used in rpc activation tests)
         consensus.SegwitHeight = 0; // SEGWIT is always activated on testnet unless overridden
         consensus.MinBIP9WarningHeight = 0;
-        consensus.powLimit = ArithToUint256(~arith_uint256(0) >> 20);
-        consensus.initialTarget[ALGO_ODO] = ArithToUint256(~arith_uint256(0) >> 36); // 16 difficulty
+        // Easy mining for testnet development - same as regtest
+        consensus.powLimit = uint256S("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+        // Set initial targets for all algorithms (easy difficulty for testnet)
+        consensus.initialTarget[ALGO_SHA256D] = uint256S("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+        consensus.initialTarget[ALGO_SCRYPT] = uint256S("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+        consensus.initialTarget[ALGO_GROESTL] = uint256S("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+        consensus.initialTarget[ALGO_SKEIN] = uint256S("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+        consensus.initialTarget[ALGO_QUBIT] = uint256S("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+        consensus.initialTarget[ALGO_ODO] = uint256S("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.nPowTargetTimespan = 14 * 24 * 60 * 60; // two weeks
         consensus.nPowTargetSpacing = 60 / 4;
         consensus.fPowAllowMinDifficultyBlocks = true;
-        consensus.fEasyPow = false;
+        consensus.fEasyPow = true;  // Enable instant mining for testnet development
         consensus.fPowNoRetargeting = true;
         consensus.nRuleChangeActivationThreshold = 4032; // 4032 - 70% of 5760
         consensus.nMinerConfirmationWindow = 5760; // 1 day of blocks on testnet

@@ -800,7 +800,7 @@ BOOST_AUTO_TEST_CASE(edge_case_extreme_fee_rates)
         mintParams.ddAmount = 10000;
         mintParams.lockDays = 365;
         mintParams.ownerKey = CreateTestKey();
-        mintParams.feeRate = 10000000; // 10M sat/kB (way above max of 5M sat/kB)
+        mintParams.feeRate = 200000000; // 200M sat/kB (above max of 100M sat/kB)
         mintParams.utxos = utxos;
 
         TxBuilderResult result = builder.BuildMintTransaction(mintParams);

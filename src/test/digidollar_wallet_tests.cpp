@@ -1685,11 +1685,12 @@ BOOST_FIXTURE_TEST_CASE(test_wallet_redemption_fee_estimation, DDWalletTestFixtu
     COutPoint position(uint256S("7777777777777777777777777777777777777777777777777777777777777777"), 0);
     DigiDollar::RedemptionPath path = DigiDollar::RedemptionPath::NORMAL;
 
-    // Act: Estimate redemption fees - EXPECTED TO FAIL (RED phase)
+    // Act: Estimate redemption fees
     CAmount estimatedFee = wallet.EstimateRedemptionFee(position, path);
 
-    // Assert: Should return 0 since not implemented
-    BOOST_CHECK_EQUAL(estimatedFee, 0);
+    // Assert: Should return minimum DD fee (0.1 DGB = 10,000,000 satoshis)
+    // DigiDollar transactions require at least 0.1 DGB fee for network relay
+    BOOST_CHECK_EQUAL(estimatedFee, 10000000);
 
     // After GREEN phase:
     // Should return accurate fee estimate
@@ -2059,12 +2060,9 @@ BOOST_FIXTURE_TEST_CASE(test_calculate_transaction_fee_basic, DDWalletTestFixtur
     // Calculate fee
     CAmount fee = wallet.CalculateTransactionFee(tx);
 
-    // Fee should be positive
-    BOOST_CHECK_GT(fee, 0);
-
-    // Fee should be reasonable (not too high)
-    // For a ~300 byte tx at 10000 sats/KB: ~3000 sats
-    BOOST_CHECK_LT(fee, 10000);  // Less than 0.0001 DGB
+    // Fee should be the minimum DD fee (0.1 DGB = 10,000,000 satoshis)
+    // DigiDollar transactions require at least 0.1 DGB fee for network relay
+    BOOST_CHECK_EQUAL(fee, 10000000);
 }
 
 BOOST_FIXTURE_TEST_CASE(test_calculate_transaction_fee_large_tx, DDWalletTestFixture)
@@ -2087,13 +2085,10 @@ BOOST_FIXTURE_TEST_CASE(test_calculate_transaction_fee_large_tx, DDWalletTestFix
     // Calculate fee
     CAmount fee = wallet.CalculateTransactionFee(tx);
 
-    // Fee should be positive
-    BOOST_CHECK_GT(fee, 0);
-
-    // Larger transaction should have higher fee
-    // For a ~500 byte tx at 10000 sats/KB: ~5000 sats
-    BOOST_CHECK_GT(fee, 3000);  // At least 0.00003 DGB
-    BOOST_CHECK_LT(fee, 15000); // Less than 0.00015 DGB
+    // Fee should be the minimum DD fee (0.1 DGB = 10,000,000 satoshis)
+    // DigiDollar transactions require at least 0.1 DGB fee for network relay
+    // Even for larger transactions, the minimum fee floor applies
+    BOOST_CHECK_EQUAL(fee, 10000000);
 }
 
 BOOST_FIXTURE_TEST_CASE(test_calculate_transaction_fee_minimum, DDWalletTestFixture)

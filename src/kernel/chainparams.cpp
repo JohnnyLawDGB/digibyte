@@ -386,7 +386,7 @@ public:
         consensus.nPowTargetSpacing = 60 / 4;
         consensus.fPowAllowMinDifficultyBlocks = true;
         consensus.fEasyPow = false;
-        consensus.fPowNoRetargeting = false;
+        consensus.fPowNoRetargeting = true;
         consensus.nRuleChangeActivationThreshold = 4032; // 4032 - 70% of 5760
         consensus.nMinerConfirmationWindow = 5760; // 1 day of blocks on testnet
         consensus.fRbfEnabled = false;

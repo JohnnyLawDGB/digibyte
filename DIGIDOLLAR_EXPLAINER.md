@@ -250,7 +250,7 @@ If system drops below 100% collateralized, redemptions are adjusted by tier:
 | 85-90% | 85% (15% loss) |
 | <85% | 80% (minimum guarantee) |
 
-ERR requires 8-of-15 oracle consensus to activate and blocks new minting during crisis.
+ERR activates automatically when system health drops below 100%. Normal redemptions are blocked until health recovers - users must use ERR redemption path which returns reduced collateral.
 
 ### 4️⃣ Volatility Protection (Fourth Defense)
 

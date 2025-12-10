@@ -106,13 +106,13 @@ The DigiDollar system is built into DigiByte Core with code organized in these m
 │  • Receive: Generate DD addresses, detect incoming DD       │
 └─────────────────────────────────────────────────────────────┘
          │
-    ┌────┴────┬──────────┬───────────┬──────────┐
-    ▼         ▼          ▼           ▼          ▼
-┌────────┐ ┌──────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐
-│  MINT  │ │ TRANSFER │ │ RECEIVE │ │ REDEEM  │ │ PARTIAL │
-└────┬───┘ └────┬─────┘ └────┬────┘ └────┬────┘ └────┬────┘
-     │          │            │            │            │
-     ▼          ▼            ▼            ▼            ▼
+    ┌────┴────┬──────────┬───────────┐
+    ▼         ▼          ▼           ▼
+┌────────┐ ┌──────────┐ ┌─────────┐ ┌─────────┐
+│  MINT  │ │ TRANSFER │ │ RECEIVE │ │ REDEEM  │
+└────┬───┘ └────┬─────┘ └────┬────┘ └────┬────┘
+     │          │            │            │
+     ▼          ▼            ▼            ▼
 ┌─────────────────────────────────────────────┐
 │            MINT PROCESS                      │
 ├─────────────────────────────────────────────┤
@@ -164,25 +164,24 @@ The DigiDollar system is built into DigiByte Core with code organized in these m
 ┌─────────────────────────────────────────────┐
 │            REDEMPTION PROCESS                │
 ├─────────────────────────────────────────────┤
-│ 1. Check redemption path:                   │
-│    • Normal: Timelock expired               │
-│    • Emergency: 8-of-15 oracle approval     │
-│    • Partial: Redeem portion                │
-│    • ERR: System under 100% collateral      │
-│ 2. Calculate required DD amount             │
-│    (may be higher if ERR active)            │
-│ 3. Select DD UTXOs to burn                  │
-│ 4. Create redemption transaction with:      │
-│    • Input 0: Collateral (vout[0])          │
-│    • Input 1+: DD tokens (vout[1])          │
-│    • Input N: Fee input                     │
-│ 5. Sign inputs with TWO different methods:  │
-│    • Collateral: SCRIPT-PATH (MAST + sig)   │
-│    • DD tokens: KEY-PATH (signature only)   │
+│ 1. Check redemption path (2 paths only):    │
+│    • Normal: Timelock expired, health ≥100% │
+│      → Get 100% of locked collateral back   │
+│    • ERR: Timelock expired, health < 100%   │
+│      → Get 80-95% collateral (based on      │
+│        system health tier)                  │
+│ 2. Select DD UTXOs to burn (full amount)    │
+│ 3. Create redemption transaction with:      │
+│    • Input 0: Collateral vault (P2TR)       │
+│    • Input 1+: DD tokens to burn            │
+│    • Input N: DGB for fees                  │
+│ 4. Sign inputs:                             │
+│    • Collateral: Schnorr key-path signature │
+│    • DD tokens: Schnorr key-path signature  │
 │    • Fees: Standard ECDSA                   │
-│ 6. Burn DigiDollars (remove from UTXO)      │
-│ 7. Unlock proportional DGB collateral       │
-│ 8. Update or close position in database     │
+│ 5. Burn DigiDollars (remove from UTXO)      │
+│ 6. Release collateral to owner              │
+│ 7. Close position in database               │
 └──────────────────────────────────────────────┘
                     │
                     ▼
@@ -196,8 +195,11 @@ The DigiDollar system is built into DigiByte Core with code organized in these m
 │ • < 100%: Emergency (2.0x multiplier)       │
 ├─────────────────────────────────────────────┤
 │ ERR (Emergency Redemption Ratio):           │
-│ • System < 100%: Require more DD to redeem  │
-│ • Formula: Required = Original × 100/System%│
+│ • System < 100%: Get less collateral back   │
+│ • 95-100% health → 95% collateral returned  │
+│ • 90-95% health → 90% collateral returned   │
+│ • 85-90% health → 85% collateral returned   │
+│ • < 85% health → 80% collateral returned    │
 ├─────────────────────────────────────────────┤
 │ Volatility Protection:                      │
 │ • 20% price change triggers freeze          │
@@ -1082,10 +1084,10 @@ size_t LoadFromDatabase();  // ✅ Working - loads all DD data including UTXOs
         │                  BUILD MINT TRANSACTION                     │
         ├─────────────────────────────────────────────────────────────┤
         │ 1. Select DGB UTXOs (greedy algorithm for collateral+fees) │
-        │ 2. Create vout[0]: Collateral vault (P2TR with MAST)       │
-        │    • 4 redemption paths: Normal/Emergency/Partial/ERR      │
-        │    • CLTV timelock + complex script structure              │
-        │    • CreateCollateralScript() - MAST with 4 paths          │
+        │ 2. Create vout[0]: Collateral vault (P2TR with timelock)    │
+        │    • 2 redemption paths: Normal (100%) and ERR (80-95%)    │
+        │    • CLTV timelock for lock period enforcement             │
+        │    • CreateCollateralScript() - P2TR with timelock         │
         │ 3. Create vout[1]: DD token (SIMPLE P2TR, key-path only)   │
         │    • NO MAST, NO CLTV - freely transferable                │
         │    • CreateDDOutputScript() - just Taproot tweak           │
@@ -1188,11 +1190,11 @@ size_t LoadFromDatabase();  // ✅ Working - loads all DD data including UTXOs
         │       • This is the standard transfer case!                 │
         │                                                             │
         │    ELSE (outpoint.n == 0, collateral vault):                │
-        │    🔒 USE SCRIPT-PATH SIGNING:                              │
-        │       • Collateral has MAST tree with 4 redemption paths   │
-        │       • Reconstruct taproot tree from position data         │
-        │       • Sign with script-path leaf verification             │
-        │       • Witness stack: [sig, script, control_block]         │
+        │    🔒 COLLATERAL REDEMPTION:                                │
+        │       • Collateral uses P2TR with timelock                  │
+        │       • 2 paths: Normal (100%) or ERR (80-95%)             │
+        │       • Must wait for timelock to expire                    │
+        │       • Sign with Schnorr key-path signature                │
         │       • Only used during redemption, not transfers!         │
         │                                                             │
         │ 3. Validate: Check signatures, amounts, DD conservation     │

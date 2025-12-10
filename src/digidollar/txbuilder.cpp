@@ -82,9 +82,10 @@ bool TxBuilder::ValidateAmount(CAmount amount) const {
 bool TxBuilder::ValidateFeeRate(CAmount feeRate) const {
     // Fee rate is in sat/kB (used in formula: (vsize * feeRate) / 1000)
     // DigiByte minimum relay fee: 100,000 sat/kB (0.001 DGB/kB)
-    // For 1 DGB minimum fee on ~200 vB tx: need ~500,000 sat/kB
-    // Allow up to 10 DGB for flexibility: 5,000,000 sat/kB
-    return feeRate >= 100000 && feeRate <= 5000000; // 100k to 5M sat/kB
+    // DigiDollar transactions MUST pay at least 0.1 DGB fee to miners
+    // For 0.1 DGB min fee on ~300 vB tx: need ~33,333,333 sat/kB (we use 35M)
+    // Allow up to 100M sat/kB for flexibility (1 DGB/kB max)
+    return feeRate >= 100000 && feeRate <= 100000000; // 100k to 100M sat/kB
 }
 
 // ============================================================================

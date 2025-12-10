@@ -449,43 +449,37 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
         // Build transfer transaction using TxBuilder
         DigiDollar::TxBuilderTransferParams params;
         params.recipients.push_back({to.ToString(), amount});
-        params.feeRate = 100000; // 100,000 sat/kB (DigiByte minimum relay fee)
+        // DigiDollar transactions MUST pay at least 0.1 DGB fee to miners
+        params.feeRate = 35000000; // 0.35 DGB/kB = 0.105 DGB for 300 byte tx
 
         // Select DD UTXOs to cover the amount (with individual amounts - FIX #7)
         CAmount selectedDDTotal = 0;
         std::vector<CAmount> selected_dd_amounts;
         if (!SelectDDCoins(amount, params.ddUtxos, selectedDDTotal, &selected_dd_amounts)) {
-            // Fallback: Create mock DD UTXO for testing
-            LogPrintf("DigiDollar: No DD UTXOs found, using mock UTXO for testing\n");
-            uint256 mockTxid;
-            mockTxid.SetHex("dd1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcd");
-            COutPoint mockUtxo(mockTxid, 0);
-            params.ddUtxos.push_back(mockUtxo);
-            selectedDDTotal = currentBalance; // Assume mock UTXO has full balance
+            // CRITICAL: Do NOT use mock UTXOs - they cause "bad-txns-inputs-missingorspent" errors!
+            error = "No spendable DD UTXOs found. Make sure mint transaction is confirmed.";
+            LogPrintf("DigiDollar: Transfer failed - no DD UTXOs available\n");
+            return false;
         }
 
         // CRITICAL: Pass DD UTXO amounts to txbuilder (FIX #3 & #7)
         // Pass individual amounts for each UTXO (required by txbuilder)
         params.ddAmounts = selected_dd_amounts;
-        LogPrintf("DigiDollar: GUI Transfer - Passing %zu DD UTXO amounts to txbuilder - total: %lld cents\n",
+        LogPrintf("DigiDollar: Transfer - Selected %zu DD UTXOs totaling %lld cents\n",
                   selected_dd_amounts.size(), static_cast<long long>(selectedDDTotal));
-        LogPrintf("DigiDollar: GUI Transfer - ddUtxos.size()=%zu, ddAmounts.size()=%zu\n",
-                  params.ddUtxos.size(), params.ddAmounts.size());
 
         // Select DGB UTXOs for fees (estimated)
         // CRITICAL: Exclude DD UTXOs from fee selection to prevent double-spend
         std::vector<COutPoint> exclude_dd_utxos = params.ddUtxos;
-        CAmount estimatedFee = 100000; // 0.001 DGB estimated fee
+        // DigiDollar transactions MUST pay at least 0.1 DGB fee to miners
+        CAmount estimatedFee = 10000000; // 0.1 DGB minimum fee
         std::vector<CAmount> fee_amounts;
         CAmount selectedFeeTotal = 0;
         if (!SelectFeeCoins(estimatedFee, params.feeUtxos, selectedFeeTotal, &fee_amounts, &exclude_dd_utxos)) {
-            // Fallback: Create mock fee UTXO for testing
-            LogPrintf("DigiDollar: No DGB UTXOs found, using mock UTXO for fees\n");
-            uint256 mockFeeTxid;
-            mockFeeTxid.SetHex("fee1234567890abcdef1234567890abcdef1234567890abcdef1234567890ab");
-            COutPoint mockFeeUtxo(mockFeeTxid, 1);
-            params.feeUtxos.push_back(mockFeeUtxo);
-            fee_amounts.push_back(estimatedFee * 2);
+            // CRITICAL: Do NOT use mock UTXOs - they cause "bad-txns-inputs-missingorspent" errors!
+            error = "Insufficient DGB balance for transaction fees (need 0.1 DGB minimum)";
+            LogPrintf("DigiDollar: Transfer failed - no DGB UTXOs available for fees\n");
+            return false;
         }
         params.feeAmounts = fee_amounts;  // Pass actual fee UTXO amounts
 
@@ -1117,13 +1111,9 @@ std::vector<DDTransaction> DigiDollarWallet::GetRedemptionHistory() const {
 }
 
 CAmount DigiDollarWallet::EstimateRedemptionFee(const COutPoint& position, DigiDollar::RedemptionPath path) const {
-    // Placeholder implementation for RED phase
-    CAmount estimatedFee = 0;
-
-    // In GREEN phase, would estimate based on:
-    /*
-    // Get current fee rate
-    CAmount feeRate = GetCurrentFeeRate();
+    // DigiDollar transactions must pay at least 0.1 DGB fee to miners
+    static const CAmount MIN_DD_TX_FEE = 10000000;       // 0.1 DGB minimum
+    static const CAmount FEE_RATE_PER_KB = 200000;       // 0.002 DGB/kB
 
     // Estimate transaction size based on redemption path
     size_t estimatedSize = 250; // Base size
@@ -1143,10 +1133,11 @@ CAmount DigiDollarWallet::EstimateRedemptionFee(const COutPoint& position, DigiD
             break;
     }
 
-    estimatedFee = (estimatedSize * feeRate) / 1000;
-    */
+    // Calculate size-based fee
+    CAmount size_based_fee = (estimatedSize * FEE_RATE_PER_KB) / 1000;
 
-    return estimatedFee;
+    // DigiDollar transactions must pay at least 0.1 DGB fee
+    return std::max(size_based_fee, MIN_DD_TX_FEE);
 }
 
 CAmount DigiDollarWallet::GetDGBBalance() const {
@@ -2148,7 +2139,8 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
 
         params.feeUtxos = fee_utxos;
         params.feeAmounts = fee_amounts;  // Pass actual fee UTXO amounts
-        params.feeRate = 100000;  // 100,000 sat/kB (DigiByte minimum relay fee)
+        // DigiDollar transactions MUST pay at least 0.1 DGB fee to miners
+        params.feeRate = 35000000; // 0.35 DGB/kB = 0.105 DGB for 300 byte tx
 
         // Get the spending key from wallet
         // For DD transfers, we need the key that owns the first DD UTXO
@@ -2507,7 +2499,8 @@ bool DigiDollarWallet::RedeemDigiDollar(const uint256& dd_timelock_id, const CAm
             }
         }
 
-        params.feeRate = 100000; // 100,000 sat/kB (DigiByte minimum relay fee)
+        // DigiDollar transactions MUST pay at least 0.1 DGB fee to miners
+        params.feeRate = 35000000; // 0.35 DGB/kB = 0.105 DGB for 300 byte tx
 
         // Select DD UTXOs to burn (get amounts too for DD change calculation)
         CAmount selectedTotal = 0;
@@ -3128,31 +3121,38 @@ bool DigiDollarWallet::SelectFeeCoins(const CAmount& fee_amount, std::vector<COu
 CAmount DigiDollarWallet::CalculateTransactionFee(const CMutableTransaction& tx) const {
     // DigiDollar fee constants (match network requirements)
     // DigiByte uses KvB (kilobyte), not vB (virtual bytes)
-    static const CAmount MIN_RELAY_FEE_PER_KB = 1000;  // 0.00001 DGB/kB
-    static const CAmount DEFAULT_FEE_RATE = 10000;     // 0.0001 DGB/kB (10x min for faster confirmation)
+    // DEFAULT_MIN_RELAY_TX_FEE in policy.h is 100000 satoshis/kB (0.001 DGB/kB)
+    static const CAmount MIN_RELAY_FEE_PER_KB = 100000;  // 0.001 DGB/kB (matches network min relay fee)
+    static const CAmount DEFAULT_FEE_RATE = 200000;      // 0.002 DGB/kB (2x min for faster confirmation)
+
+    // DigiDollar transactions MUST pay at least 0.1 DGB fee to miners
+    static const CAmount MIN_DD_TX_FEE = 10000000;       // 0.1 DGB minimum for DigiDollar transactions
 
     // Calculate transaction size
     // NOTE: This is an estimate. Actual size determined after signing
     unsigned int tx_size = GetSerializeSize(tx, PROTOCOL_VERSION);
 
     // Add estimated witness size for P2TR inputs
-    // Each P2TR witness is approximately 64 bytes (Schnorr signature)
+    // Each P2TR witness is approximately 65 bytes (1 byte length + 64 byte Schnorr signature)
     size_t num_inputs = tx.vin.size();
-    unsigned int estimated_witness_size = num_inputs * 64;
+    unsigned int estimated_witness_size = num_inputs * 65;
     unsigned int total_size = tx_size + estimated_witness_size;
 
-    // Calculate fee in satoshis
+    // Calculate fee in satoshis based on size
     // Formula: (size_in_bytes / 1000) * fee_rate_per_KB
-    CAmount fee = (total_size * DEFAULT_FEE_RATE) / 1000;
+    CAmount size_based_fee = (total_size * DEFAULT_FEE_RATE) / 1000;
 
-    // Ensure minimum fee
-    CAmount min_fee = (total_size * MIN_RELAY_FEE_PER_KB) / 1000;
-    if (fee < min_fee) {
-        fee = min_fee;
+    // Ensure minimum relay fee is met
+    CAmount min_relay_fee = (total_size * MIN_RELAY_FEE_PER_KB) / 1000;
+    if (size_based_fee < min_relay_fee) {
+        size_based_fee = min_relay_fee;
     }
 
-    LogPrintf("DigiDollar: CalculateTransactionFee - size: %d bytes, fee: %d sats\n",
-              total_size, fee);
+    // DigiDollar transactions must pay at least 0.1 DGB fee
+    CAmount fee = std::max(size_based_fee, MIN_DD_TX_FEE);
+
+    LogPrintf("DigiDollar: CalculateTransactionFee - size: %d bytes, size_based_fee: %d sats, final_fee: %d sats (min 0.1 DGB)\n",
+              total_size, size_based_fee, fee);
 
     return fee;
 }

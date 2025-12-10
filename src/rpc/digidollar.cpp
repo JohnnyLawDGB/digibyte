@@ -590,8 +590,15 @@ RPCHelpMan mintdigidollar()
             // Parse parameters
             CAmount ddAmount = request.params[0].getInt<int64_t>();
             int lockTier = request.params[1].getInt<int>();
+
+            // DigiDollar transactions MUST pay at least 0.1 DGB fee to miners
+            // Use a high fee rate to ensure the minimum is met for all transaction sizes
+            // MIN_DD_TX_FEE = 10,000,000 satoshis = 0.1 DGB
+            // For a typical 300-byte tx, we need feeRate = 10,000,000 / 300 * 1000 = 33,333,333 sat/kB
+            // We use 35,000,000 sat/kB to ensure minimum is always met
+            static const CAmount MIN_DD_FEE_RATE = 35000000; // 0.35 DGB/kB ensures min 0.1 DGB for typical tx
             CAmount feeRate = request.params.size() > 2 && !request.params[2].isNull() ?
-                request.params[2].getInt<int64_t>() : 100000; // Default 100000 sat/kB (DigiByte minimum)
+                std::max(request.params[2].getInt<int64_t>(), MIN_DD_FEE_RATE) : MIN_DD_FEE_RATE;
 
             // Validate parameters
             if (ddAmount <= 0) {
@@ -1026,7 +1033,9 @@ RPCHelpMan redeemdigidollar()
             redeemParams.ddToRedeem = ddAmount;
             redeemParams.path = DigiDollar::RedemptionPath::NORMAL;
             redeemParams.ownerKey = redemptionKey;
-            redeemParams.feeRate = 100000; // 100000 sat/kB
+            // DigiDollar transactions MUST pay at least 0.1 DGB fee to miners
+            static const CAmount MIN_DD_FEE_RATE = 35000000; // 0.35 DGB/kB ensures min 0.1 DGB for typical tx
+            redeemParams.feeRate = MIN_DD_FEE_RATE;
 
             // Get the owner key for this position
             CKey ownerKey;
@@ -2010,7 +2019,8 @@ RPCHelpMan listdigidollartxs()
                                 {RPCResult::Type::NUM, "time", "Transaction timestamp"},
                                 {RPCResult::Type::STR_AMOUNT, "fee", "Transaction fee paid (if applicable)"},
                                 {RPCResult::Type::STR, "comment", "Transaction comment (if any)"},
-                                {RPCResult::Type::BOOL, "abandoned", "Whether transaction was abandoned"}
+                                {RPCResult::Type::BOOL, "abandoned", "Whether transaction was abandoned"},
+                                {RPCResult::Type::NUM, "lock_tier", "DCA lock tier for mint transactions (0-9)"}
                             }
                         }
                     }

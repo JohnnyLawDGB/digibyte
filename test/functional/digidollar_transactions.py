@@ -316,6 +316,11 @@ class DigiDollarTransactionsTest(DigiByteTestFramework):
         for test in negative_tests:
             expect_failure(test['description'], test['test'], test['keywords'])
 
+        # Reset oracle price on all nodes to ensure consistency for subsequent tests
+        base_price = 50000  # 50000 micro-USD = $0.05 per DGB
+        for node in self.nodes:
+            node.setmockoracleprice(base_price)
+
     def test_multi_node_consistency(self):
         """Test consistency across multiple nodes."""
         self.log.info("Testing multi-node consistency...")

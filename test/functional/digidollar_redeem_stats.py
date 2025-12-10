@@ -221,9 +221,10 @@ class DigiDollarRedeemStatsTest(DigiByteTestFramework):
         # During mint, we locked exactly collateral_dgb (10000 DGB)
         # During redemption, we should get back ~10000 DGB (minus small fee)
 
-        # Calculate expected fee (should be very small, ~0.0006 DGB for 400 byte tx at 100k sat/kB)
-        # Expected max fee: 600 bytes * 100,000 sat/kB / 1000 = 60,000 sats = 0.0006 DGB
-        max_reasonable_fee = Decimal('0.001')  # 0.001 DGB absolute maximum
+        # DigiDollar transactions require a minimum fee of 0.1 DGB (10,000,000 satoshis)
+        # to ensure network relay. With the 35M sat/kB fee rate on a ~300-400 byte tx,
+        # the expected fee is around 0.105-0.14 DGB
+        max_reasonable_fee = Decimal('0.15')  # 0.15 DGB maximum (accounts for fee rate overhead)
         expected_min_return = Decimal(str(collateral_dgb)) - max_reasonable_fee
 
         assert total_output_value >= expected_min_return, \

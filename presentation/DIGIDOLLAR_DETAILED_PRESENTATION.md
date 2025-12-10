@@ -430,17 +430,14 @@ Required DGB = ($100 × 300% × 1.0) / $0.01
 ```
 Type: Pay-to-Taproot (P2TR)
 Amount: 30,000 DGB (collateral)
-Script: Taproot tree with 4 redemption paths
-  Path 1 (Normal): Timelock (1 year) + user signature
-  Path 2 (Emergency): 8-of-15 oracle signatures + user signature
-  Path 3 (Partial): User signature + burn extra DD proportionally
-  Path 4 (ERR): User signature + burn DD at emergency ratio
+Script: Taproot with timelock (CLTV)
+  Path 1 (Normal): Timelock expires + system health ≥100% → 100% collateral back
+  Path 2 (ERR): Timelock expires + system health <100% → 80-95% collateral back
 
-Why 4 paths?
-- Normal: Standard case when time expires
-- Emergency: If system needs early exit (oracle consensus)
-- Partial: User wants some DGB back early
-- ERR: System <100% collateralized (crisis mode)
+Why 2 paths?
+- Normal: Standard case when timelock expires and system is healthy
+- ERR: System <100% collateralized - reduced return protects other users
+Note: Partial redemptions are NOT supported - must redeem full amount
 ```
 
 *Output 2: DigiDollar Output (P2TR)*
@@ -486,7 +483,7 @@ Wallet Database Adds:
   * DD minted amount ($100)
   * Lock expiration (block height + ~2,102,400 blocks = 1 year)
   * Collateral ratio (300%)
-  * 4 redemption script paths
+  * 2 redemption paths (Normal and ERR)
   * Health status (starts at 300% = healthy)
 
 - New DD UTXO record:
@@ -504,7 +501,7 @@ User Interface Updates:
 **Minting Complete!**
 - User has $100 DigiDollars to spend
 - 30,000 DGB locked in cryptographic vault for 1 year
-- Four different ways to eventually unlock the DGB
+- Two ways to unlock: Normal (100%) or ERR (80-95% if system health <100%)
 - All tracked in local wallet database
 
 ---
@@ -689,11 +686,15 @@ Balance Update:
 
 ## SLIDE 8: Redemption - Unlocking Your DGB
 
-### OPERATION 4: REDEEM - The Four Paths
+### OPERATION 4: REDEEM - The Two Paths
 
 **User Goal**: Burn DigiDollars, unlock DGB collateral
 
-**The Four Redemption Scenarios:**
+**The Two Redemption Scenarios:**
+- **Normal**: Timelock expired + system health ≥100% → get 100% collateral back
+- **ERR**: Timelock expired + system health <100% → get 80-95% collateral back
+
+**Note**: Partial redemptions are NOT supported. You must redeem the full DD amount.
 
 ### Path 1: Normal Redemption (Standard Case)
 
@@ -732,143 +733,73 @@ If DGB price is now $0.10 (10x gain):
 - Kept ALL the appreciation!
 ```
 
-### Path 2: Emergency Redemption (Oracle Approval)
+### Path 2: Emergency Redemption Ratio (ERR) - Low System Health
 
-**Scenario**: Timelock NOT expired, but oracles approve early exit
-
-```
-Example:
-- User locked 30,000 DGB for 1 year
-- Only 6 months have passed
-- Oracles detect system issue OR user emergency
-
-Process:
-1. User requests emergency redemption
-2. Oracles evaluate:
-   - Valid reason? (system health, user hardship, etc.)
-   - 8 of 15 oracles must sign approval
-3. If approved, oracles create 8-of-15 Schnorr threshold signature
-4. Transaction construction:
-   Inputs:
-   - Collateral vault UTXO
-   - DD UTXOs (may require MORE than original due to penalty)
-
-   Outputs:
-   - Unlocked DGB to user
-
-   Script Path: Path 2 (Emergency)
-   - Proves: 8-of-15 oracle signatures ✅
-   - Signature: User's private key
-
-5. Sign & broadcast with oracle signatures
-6. Result: Early exit granted by decentralized consensus
-
-Note: This path exists for system flexibility but requires decentralized approval
-```
-
-### Path 3: Partial Redemption (Unlock Some DGB Early)
-
-**Scenario**: User wants some DGB back before timelock expires
-
-```
-Example:
-- User locked 30,000 DGB for 1 year ($300 at $0.01)
-- Minted $100 DD
-- 6 months have passed (halfway)
-- User wants 15,000 DGB back (half the collateral)
-
-Process:
-1. Calculate required DD to burn:
-   - Original: $300 DGB locked → $100 DD minted (300% ratio)
-   - Want back: $150 DGB (half)
-   - Proportional DD needed: $100 × (15,000 / 30,000) = $50 DD
-   - Penalty: +10% for early unlock = $55 DD required
-
-2. User must have $55 DD to burn (not just $50)
-3. Transaction construction:
-   Inputs:
-   - Collateral vault UTXO (30,000 DGB)
-   - DD UTXOs totaling $55
-
-   Outputs:
-   - 15,000 DGB to user (unlocked portion)
-   - New vault with 15,000 DGB locked (remaining collateral)
-   - New DD output: $100 - $55 = $45 DD back to user (adjusted position)
-
-   Script Path: Path 3 (Partial)
-   - Proves: Proportional redemption math correct
-   - Signature: User's private key
-
-4. Sign & broadcast
-5. Result: Partial position remains, user got some DGB back early
-
-Updated Position:
-- DGB locked: 15,000 (was 30,000)
-- DD associated: $45 (was $100)
-- Ratio: Still 300%+ (maintained safety)
-- Lock timer: Continues (unchanged)
-```
-
-### Path 4: Emergency Redemption Ratio (ERR) - Crisis Mode
-
-**Scenario**: System <100% collateralized (crisis)
+**Scenario**: System <100% collateralized, lock period expired
 
 ```
 Example:
 - User locked 30,000 DGB at $0.01 ($300 value)
 - Minted $100 DD
-- DGB crashes to $0.003 (70% drop)
-- System collateralization: (30,000 × $0.003) / $100 = $90 / $100 = 90%
+- Lock period has expired
+- DGB crashed to $0.003 (70% drop)
+- System collateralization: 90%
 
 System Status: UNDER-COLLATERALIZED (<100%)
+ERR Tier: 90-95% → User receives 90% of collateral
 
 Process:
-1. ERR activates automatically when system <100%
-2. Calculate emergency ratio:
-   Required DD = Original DD × (100% / System Collateral %)
-   Required DD = $100 × (100% / 90%)
-   Required DD = $111.11
-
-3. User must burn $111.11 DD to redeem (not just $100)
-   Why? Protect remaining DD holders from being drained
+1. ERR activates AUTOMATICALLY when system health <100%
+2. User cannot use Normal redemption (blocked during low health)
+3. Determine ERR tier based on system health:
+   - 95-100%: User gets 95% of collateral (5% loss)
+   - 90-95%:  User gets 90% of collateral (10% loss)
+   - 85-90%:  User gets 85% of collateral (15% loss)
+   - <85%:    User gets 80% of collateral (20% loss - minimum guarantee)
 
 4. Transaction construction:
    Inputs:
    - Collateral vault UTXO (30,000 DGB)
-   - DD UTXOs totaling $111.11
+   - DD UTXOs totaling $100 (same as original)
 
    Outputs:
-   - 30,000 DGB to user
+   - 27,000 DGB to user (90% of 30,000)
+   - 3,000 DGB remains in system (absorbed loss)
 
-   Script Path: Path 4 (ERR)
-   - Proves: ERR math correct, system <100%
+   Script Path: Path 2 (ERR)
+   - Proves: Timelock expired (OP_CHECKLOCKTIMEVERIFY)
+   - Validates: System health tier
    - Signature: User's private key
 
 5. Sign & broadcast
-6. Result: User unlocks DGB but must burn extra DD
+6. Result: User unlocks 90% of DGB, burns $100 DD
 
 Economic Effect:
-- User pays penalty for redeeming during crisis
+- User receives LESS collateral back (not more DD required)
+- Loss shared proportionally based on system health tier
+- Protects remaining DD holders from total depletion
 - Discourages redemption runs during stress
-- Protects remaining DD holders
-- System gradually re-balances as DD supply decreases
+- 80% minimum guarantee ensures users always get something
 
-If user doesn't have extra DD:
-- Must acquire more DD from market
-- Or wait for system to recover >100%
-- Or use partial redemption
+If user doesn't want reduced collateral:
+- Wait for system to recover >100%
+- Then use Normal redemption for 100% return
 ```
 
-### Summary: Why Four Paths?
+**Important Notes**:
+- ERR activates AUTOMATICALLY based on system health (not by oracle vote)
+- User burns the SAME amount of DD, but receives LESS DGB back
+- No partial redemptions allowed - must redeem full DD amount
+- 80% minimum guarantee protects users even in severe crises
 
-| Path | When Used | Requirement | Purpose |
-|------|-----------|-------------|---------|
-| Normal | Timelock expired | Original DD amount | Standard happy path |
-| Emergency | Early exit approved | 8-of-15 oracles | Flexible crisis handling |
-| Partial | Want some DGB early | Proportional DD + penalty | User liquidity option |
-| ERR | System <100% | More DD than original | Protect remaining holders |
+### Summary: Why Two Paths?
 
-**Design Philosophy**: Give users multiple options while protecting system integrity
+| Path | When Used | DD Required | Collateral Return | Purpose |
+|------|-----------|-------------|-------------------|---------|
+| Normal | Timelock expired + system ≥100% | Original amount | 100% | Standard redemption |
+| ERR | Timelock expired + system <100% | Original amount | 80-95% (tiered) | Crisis protection |
+
+**Design Philosophy**: Simple, predictable redemption with automatic crisis protection. No early exits, no partial redemptions - users commit to their lock period and get full or tiered returns based on system health.
 
 ---
 
@@ -1215,26 +1146,37 @@ Status: SEVERELY UNDER-COLLATERALIZED
 
 **ERR Activation:**
 
-```
-Formula: Required DD = Original DD × (100% / System Health %)
+ERR activates AUTOMATICALLY when system health drops below 100%. Users burn the SAME amount of DD but receive LESS collateral back based on tiered system:
 
-In this crisis (37.5% health):
-- User originally minted: $100 DD by locking DGB
-- To redeem now requires: $100 × (100% / 37.5%) = $266.67 DD
+```
+ERR Tier System:
+| System Health | Collateral Return | Loss   |
+|---------------|-------------------|--------|
+| 95-100%       | 95%               | 5%     |
+| 90-95%        | 90%               | 10%    |
+| 85-90%        | 85%               | 15%    |
+| <85%          | 80% (minimum)     | 20%    |
+
+Example at 37.5% health (<85% tier):
+- User originally locked: 30,000 DGB
+- User minted: $100 DD
+- To redeem: Burn $100 DD (same amount)
+- Receives: 24,000 DGB (80% of 30,000 - minimum guarantee)
+- Lost: 6,000 DGB (20% absorbed by system)
 
 Effect:
-❌ User must burn $266.67 DD to unlock their DGB (not just $100)
-✅ User must acquire extra $166.67 DD from market
+✅ User burns SAME $100 DD (not more)
+✅ User gets 80% of collateral back (20% loss)
+✅ 80% minimum guarantee protects users
 ✅ Protects remaining DD holders from being drained
 ✅ Discourages redemption runs during crisis
-✅ Creates natural demand for DD (people need it to redeem)
+✅ Loss is shared proportionally
 
 Market Dynamics:
-1. ERR creates DD demand (people need more DD to redeem)
-2. DD demand increases DD price on exchanges
-3. Higher DD price attracts arbitrage
-4. Arbitrageurs mint new DD (if they can meet high DCA requirements)
-5. System gradually recovers as arbitrage restores balance
+1. ERR discourages redemption during crisis (users lose 5-20%)
+2. Users may prefer to wait for system recovery (100%+ health)
+3. Once recovered, users can use Normal redemption for 100% return
+4. System gradually recovers as DGB price stabilizes
 ```
 
 **Why ERR Works:**
@@ -1242,24 +1184,25 @@ Market Dynamics:
 *Without ERR:*
 ```
 System at 37.5% health
-User A: Has $100 DD → Redeems → Gets $37.50 worth of DGB (fair share)
-User B: Has $100 DD → Redeems → Gets $37.50 worth of DGB (fair share)
+User A: Has $100 DD → Redeems FIRST → Gets $100 worth of DGB (full value!)
+User B: Has $100 DD → Redeems SECOND → System depleted, gets nothing!
 ...
-Result: Fair distribution of remaining collateral
+Result: UNFAIR - First movers drain the system
 ```
 
-*Problem:* First redeemers get full value while later users get screwed
+*Problem:* First redeemers get full value while later users get nothing (bank run)
 
-*With ERR:*
+*With ERR (Tiered Loss Sharing):*
 ```
-System at 37.5% health
-User A: Has $100 DD → Needs $266.67 to redeem → Must buy $166.67 more
-User B: Has $100 DD → Needs $266.67 to redeem → Must buy $166.67 more
+System at 37.5% health (<85% tier = 80% return)
+User A: Burns $100 DD → Gets 80% of their locked DGB
+User B: Burns $100 DD → Gets 80% of their locked DGB
+User C: Burns $100 DD → Gets 80% of their locked DGB
 ...
-Result: Those who redeem pay penalty, protecting remaining holders
+Result: FAIR - Everyone takes same proportional loss
 ```
 
-*Solution:* Fair distribution AND economic incentive to not redeem during crisis
+*Solution:* Fair distribution with guaranteed minimum (80%) even in severe crises
 
 ### Layer 4: Market Forces & Supply Dynamics
 
@@ -1607,10 +1550,10 @@ Traditional Script (Pre-Taproot):
 - Privacy issue: Everyone sees all possible spending paths
 - Efficiency issue: Unused scripts waste space
 
-Example: Collateral vault with 4 redemption paths
-Traditional: Must put all 4 scripts in transaction
+Example: Collateral vault with 2 redemption paths (Normal/ERR)
+Traditional: Must put all scripts in transaction
 Size: Large, expensive
-Privacy: Everyone sees all 4 options
+Privacy: Everyone sees all options
 ```
 
 **MAST Solution:**
@@ -1625,22 +1568,18 @@ MAST (Merkleized Alternative Script Trees):
 
 DigiDollar Collateral Vault:
 Root
- ├─ Branch A
- │   ├─ Script 1: Normal Redemption (timelock + signature)
- │   └─ Script 2: Emergency (8-of-15 oracles + signature)
- └─ Branch B
-     ├─ Script 3: Partial Redemption (proportional)
-     └─ Script 4: ERR (emergency ratio)
+ ├─ Script 1: Normal Redemption (timelock expired + system healthy)
+ └─ Script 2: ERR Redemption (timelock expired + system <100% health)
 
 When redeeming normally:
 - Reveal: Script 1 only
 - Provide: Merkle proof that Script 1 is in tree
-- Hide: Scripts 2, 3, 4 (privacy ✅)
+- Hide: Script 2 (privacy ✅)
 - Size: Small (efficiency ✅)
 
 On blockchain:
 - Observers see: Someone spent a P2TR output
-- Observers DON'T see: What the other 3 spending paths were
+- Observers DON'T see: Which redemption path was used
 - Result: Privacy + flexibility
 ```
 
@@ -1737,9 +1676,9 @@ Format:
 Types:
 0x01000770 = Mint (create DigiDollars)
 0x02000770 = Transfer (send DigiDollars)
-0x03000770 = Redeem (unlock DGB)
-0x04000770 = Partial Redemption
-0x05000770 = ERR Redemption
+0x03000770 = Redeem (unlock DGB - Normal path)
+0x04000770 = (Reserved - Partial Redemption DISABLED)
+0x05000770 = ERR Redemption (unlock DGB during low system health)
 ```
 
 **Example: Mint Transaction**
@@ -1765,7 +1704,7 @@ Types:
         "address": "[32-byte taproot key]",
         "asm": "OP_1 <32-byte-pubkey>"
       },
-      // Hidden MAST tree with 4 redemption paths
+      // Hidden MAST tree with 2 redemption paths (Normal/ERR)
     },
     {
       "n": 1,
@@ -1856,7 +1795,7 @@ OP_RETURN <transfer_metadata>
 
 Redeem Transactions:
 OP_RETURN <redeem_metadata>
-  - Redemption path used: 1 byte (1-4)
+  - Redemption path used: 1 byte (1=Normal, 2=ERR)
   - ERR ratio if applicable: 2 bytes
   - Total: ~8 bytes
 
@@ -1945,7 +1884,7 @@ class CCollateralPosition {
     CAmount dd_minted;           // Amount of DD created
     uint32_t lock_expiration;    // Block height
     uint16_t collateral_ratio;   // 200-500%
-    std::array<CScript, 4> paths; // 4 redemption paths
+    std::array<CScript, 2> paths; // 2 redemption paths (Normal/ERR)
 
     // Advanced features:
     double GetHealthRatio() const;
@@ -2809,7 +2748,7 @@ Tasks:
 Deliverables:
 ✅ Real-time system health calculations
 ✅ DCA/ERR working with actual UTXO data
-✅ All 4 redemption paths validated
+✅ Both redemption paths validated (Normal and ERR)
 ✅ Complete user notifications
 
 Success Criteria:
@@ -3044,7 +2983,7 @@ Scenario:
 
 Mitigation:
 ✅ Four-layer protection system (detailed earlier)
-✅ ERR activates (requires more DD to redeem)
+✅ ERR activates (users get 80-95% collateral back with 80% minimum guarantee)
 ✅ No forced liquidations (users can wait for recovery)
 ✅ DCA prevents new over-minting during crisis
 ✅ Locked supply creates natural price floor

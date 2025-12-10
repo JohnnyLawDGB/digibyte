@@ -181,7 +181,7 @@ DigiDollar uses a sliding collateral scale for safety:
 ### Four-Layer Protection System
 1. **High Collateral** - Massive buffer against volatility
 2. **Dynamic Adjustment** - System auto-adjusts if health drops
-3. **Emergency Ratios** - Crisis handling without forced liquidations
+3. **ERR Protection** - Reduced returns during low health, no forced liquidations
 4. **Market Forces** - Locked supply naturally supports price
 
 > 🛡️ **The Safety Promise**: No forced liquidations. No margin calls. Your DGB stays locked until the time expires - period.

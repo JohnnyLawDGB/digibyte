@@ -211,9 +211,9 @@ When DGB is locked for DigiDollar:
 - Prevents over-minting during stress
 
 **Layer 3: Emergency Redemption Ratio (ERR)**
-- Activated if system <100% collateralized (crisis mode)
-- Requires more DD to redeem (protects remaining holders)
-- Prevents death spirals during extreme volatility
+- Activates automatically when system health < 100%
+- Users get less collateral back (80-95% instead of 100%)
+- Protects remaining holders and prevents death spirals
 
 **Layer 4: Market Forces**
 - Locked supply creates natural price support
@@ -236,7 +236,7 @@ When DGB is locked for DigiDollar:
 **Taproot Integration:**
 - Advanced script capabilities (MAST - Merkleized Alternative Script Trees)
 - Enhanced privacy (transactions look identical)
-- Efficient redemption paths (only reveal what you use)
+- Efficient script execution (only reveal what you use)
 
 **Schnorr Signatures:**
 - Smaller transactions → Lower fees

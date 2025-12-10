@@ -1254,18 +1254,32 @@ else
     print_status "fail" "Bob's Qt failed to restart"
 fi
 
-# Small delay to ensure wallet is fully loaded
+# Small delay to ensure node is fully initialized
 sleep 5
 
-# Verify Bob's wallet is loaded
+# Verify Bob's wallet is loaded - must explicitly load after restart
+echo "Checking if Bob's wallet is loaded..."
+LOADED_WALLETS=$($BOB_CLI listwallets 2>&1)
+if echo "$LOADED_WALLETS" | jq -e '.[] | select(. == "bob")' > /dev/null 2>&1; then
+    print_status "ok" "Bob's wallet 'bob' is already loaded"
+else
+    # Wallet not auto-loaded, must explicitly load it
+    echo "Bob's wallet not auto-loaded, loading explicitly..."
+    LOAD_RESULT=$($BOB_CLI loadwallet "bob" 2>&1)
+    if echo "$LOAD_RESULT" | jq -e '.name' > /dev/null 2>&1; then
+        print_status "ok" "Bob's wallet 'bob' loaded successfully"
+    else
+        print_status "fail" "Failed to load Bob's wallet: $LOAD_RESULT"
+    fi
+    sleep 3
+fi
+
+# Verify wallet is now accessible
 WALLET_INFO=$($BOB_CLI -rpcwallet=bob getwalletinfo 2>&1)
 if echo "$WALLET_INFO" | jq -e '.walletname' > /dev/null 2>&1; then
-    print_status "ok" "Bob's wallet 'bob' is loaded"
+    echo "  Wallet name: $(echo "$WALLET_INFO" | jq -r '.walletname')"
 else
-    # Try to load the wallet if not auto-loaded
-    echo "Attempting to load Bob's wallet..."
-    $BOB_CLI loadwallet "bob" 2>/dev/null || true
-    sleep 2
+    print_status "fail" "Bob's wallet still not accessible after load attempt"
 fi
 
 # Start oracle on restarted node
@@ -1640,7 +1654,6 @@ echo ""
 echo "=============================================="
 echo ""
 
-# Final verification
 verify_all_balances "FINAL STATE (After All Persistence Tests)"
 
 # Summary

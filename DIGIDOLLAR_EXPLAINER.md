@@ -222,7 +222,9 @@ After time lock expires (verified by CLTV), user can redeem DigiDollars to unloc
 
 ### The Time-Lock Challenge
 
-Since collateral is cryptographically time-locked, there are **NO forced liquidations or margin calls**. Positions must ride out the full term regardless of market conditions. This requires a unique protection approach.
+**CRITICAL RULE**: DGB locked as collateral **CAN NEVER BE UNLOCKED** until the timelock expires. No exceptions. No early redemption. Ever.
+
+Since collateral is cryptographically time-locked, there are **NO forced liquidations, NO margin calls, and NO early exit**. Positions must ride out the full term regardless of market conditions. This is intentional - it prevents manipulation and panic selling. This requires a unique protection approach.
 
 ### 1️⃣ Higher Collateral Requirements (First Defense)
 

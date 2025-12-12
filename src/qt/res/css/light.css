@@ -4412,18 +4412,18 @@ DigiDollarTab QTabBar::tab:hover:!selected {
 /* ============================= */
 
 /* Force all text in DigiDollar Overview to be dark blue */
-QWidget .QFrame#balanceFrame *,
-QWidget .QFrame#systemHealthFrame *,
-QWidget .QFrame#transactionsFrame * {
+DigiDollarOverviewWidget .QFrame#balanceFrame *,
+DigiDollarOverviewWidget .QFrame#systemHealthFrame *,
+DigiDollarOverviewWidget .QFrame#transactionsFrame * {
     color: #003366 !important;
 }
 
-QWidget {
+DigiDollarOverviewWidget {
     background-color: transparent;
 }
 
 /* Balance Frame */
-QWidget .QFrame#balanceFrame {
+DigiDollarOverviewWidget .QFrame#balanceFrame {
     min-width: 490px;
     margin-top: 15px;
     margin-left: 20px;
@@ -4434,14 +4434,14 @@ QWidget .QFrame#balanceFrame {
     padding: 12px;
 }
 
-QWidget .QFrame#balanceFrame > .QLabel {
+DigiDollarOverviewWidget .QFrame#balanceFrame > .QLabel {
     min-width: 190px;
     font-weight: normal;
     min-height: 30px;
 }
 
 /* Balance Labels - Match main wallet style */
-QWidget .QFrame#balanceFrame .QLabel#ddBalanceLabel {
+DigiDollarOverviewWidget .QFrame#balanceFrame .QLabel#ddBalanceLabel {
     qproperty-alignment: 'AlignVCenter | AlignRight';
     min-width: 160px;
     background-color: #003366;
@@ -4454,7 +4454,7 @@ QWidget .QFrame#balanceFrame .QLabel#ddBalanceLabel {
     border-radius: 6px;
 }
 
-QWidget .QFrame#balanceFrame .QLabel#ddBalanceValue {
+DigiDollarOverviewWidget .QFrame#balanceFrame .QLabel#ddBalanceValue {
     qproperty-alignment: 'AlignVCenter | AlignLeft';
     font-size: 14pt;
     color: #003366;
@@ -4462,7 +4462,7 @@ QWidget .QFrame#balanceFrame .QLabel#ddBalanceValue {
     font-weight: bold;
 }
 
-QWidget .QFrame#balanceFrame .QLabel#dgbCollateralLabel {
+DigiDollarOverviewWidget .QFrame#balanceFrame .QLabel#dgbCollateralLabel {
     qproperty-alignment: 'AlignVCenter | AlignRight';
     min-width: 160px;
     font-size: 11pt;
@@ -4473,14 +4473,14 @@ QWidget .QFrame#balanceFrame .QLabel#dgbCollateralLabel {
     border-radius: 6px;
 }
 
-QWidget .QFrame#balanceFrame .QLabel#dgbCollateralValue {
+DigiDollarOverviewWidget .QFrame#balanceFrame .QLabel#dgbCollateralValue {
     qproperty-alignment: 'AlignVCenter | AlignLeft';
     font-size: 13pt;
     color: #003366;
     margin-left: 0px;
 }
 
-QWidget .QFrame#balanceFrame .QLabel#usdValueLabel {
+DigiDollarOverviewWidget .QFrame#balanceFrame .QLabel#usdValueLabel {
     qproperty-alignment: 'AlignVCenter | AlignRight';
     min-width: 160px;
     font-size: 11pt;
@@ -4491,7 +4491,7 @@ QWidget .QFrame#balanceFrame .QLabel#usdValueLabel {
     border-radius: 6px;
 }
 
-QWidget .QFrame#balanceFrame .QLabel#usdValueValue {
+DigiDollarOverviewWidget .QFrame#balanceFrame .QLabel#usdValueValue {
     qproperty-alignment: 'AlignVCenter | AlignLeft';
     font-size: 13pt;
     color: #003366;
@@ -4499,7 +4499,7 @@ QWidget .QFrame#balanceFrame .QLabel#usdValueValue {
 }
 
 /* System Health Frame */
-QWidget .QFrame#systemHealthFrame {
+DigiDollarOverviewWidget .QFrame#systemHealthFrame {
     min-width: 490px;
     margin-top: 15px;
     margin-left: 20px;
@@ -4510,17 +4510,17 @@ QWidget .QFrame#systemHealthFrame {
     padding: 12px;
 }
 
-QWidget .QFrame#systemHealthFrame > .QLabel {
+DigiDollarOverviewWidget .QFrame#systemHealthFrame > .QLabel {
     min-width: 190px;
     font-weight: normal;
     min-height: 30px;
 }
 
 /* Left side stats labels */
-QWidget .QFrame#systemHealthFrame .QLabel#oraclePriceLabel,
-QWidget .QFrame#systemHealthFrame .QLabel#systemHealthLabel,
-QWidget .QFrame#systemHealthFrame .QLabel#dcaLevelLabel,
-QWidget .QFrame#systemHealthFrame .QLabel#errLevelLabel {
+DigiDollarOverviewWidget .QFrame#systemHealthFrame .QLabel#oraclePriceLabel,
+DigiDollarOverviewWidget .QFrame#systemHealthFrame .QLabel#systemHealthLabel,
+DigiDollarOverviewWidget .QFrame#systemHealthFrame .QLabel#dcaLevelLabel,
+DigiDollarOverviewWidget .QFrame#systemHealthFrame .QLabel#errLevelLabel {
     qproperty-alignment: 'AlignVCenter | AlignRight';
     min-width: 120px;
     font-size: 10pt;
@@ -4531,10 +4531,10 @@ QWidget .QFrame#systemHealthFrame .QLabel#errLevelLabel {
     border-radius: 4px;
 }
 
-QWidget .QFrame#systemHealthFrame .QLabel#oraclePriceValue,
-QWidget .QFrame#systemHealthFrame .QLabel#systemHealthValue,
-QWidget .QFrame#systemHealthFrame .QLabel#dcaLevelValue,
-QWidget .QFrame#systemHealthFrame .QLabel#errLevelValue {
+DigiDollarOverviewWidget .QFrame#systemHealthFrame .QLabel#oraclePriceValue,
+DigiDollarOverviewWidget .QFrame#systemHealthFrame .QLabel#systemHealthValue,
+DigiDollarOverviewWidget .QFrame#systemHealthFrame .QLabel#dcaLevelValue,
+DigiDollarOverviewWidget .QFrame#systemHealthFrame .QLabel#errLevelValue {
     qproperty-alignment: 'AlignVCenter | AlignLeft';
     font-size: 11pt;
     color: #003366;
@@ -4544,7 +4544,7 @@ QWidget .QFrame#systemHealthFrame .QLabel#errLevelValue {
 /* ========================================= */
 /* Network Totals Frame - PROMINENT DISPLAY */
 /* ========================================= */
-QWidget .QFrame#networkTotalsFrame {
+DigiDollarOverviewWidget .QFrame#networkTotalsFrame {
     background-color: #002244;
     border: 3px solid #0088FF;
     border-radius: 12px;
@@ -4554,8 +4554,8 @@ QWidget .QFrame#networkTotalsFrame {
 }
 
 /* Network Totals Labels - light blue text on dark blue */
-QWidget .QFrame#networkTotalsFrame .QLabel#networkTotalDDLabel,
-QWidget .QFrame#networkTotalsFrame .QLabel#networkTotalCollateralLabel {
+DigiDollarOverviewWidget .QFrame#networkTotalsFrame .QLabel#networkTotalDDLabel,
+DigiDollarOverviewWidget .QFrame#networkTotalsFrame .QLabel#networkTotalCollateralLabel {
     color: #99CCFF;
     font-size: 9pt;
     font-weight: bold;
@@ -4566,7 +4566,7 @@ QWidget .QFrame#networkTotalsFrame .QLabel#networkTotalCollateralLabel {
 }
 
 /* Network Totals Values - prominent but scalable text */
-QWidget .QFrame#networkTotalsFrame .QLabel#networkTotalDDValue {
+DigiDollarOverviewWidget .QFrame#networkTotalsFrame .QLabel#networkTotalDDValue {
     color: #00FF88;
     font-size: 16pt;
     font-weight: bold;
@@ -4575,7 +4575,7 @@ QWidget .QFrame#networkTotalsFrame .QLabel#networkTotalDDValue {
     min-height: 28px;
 }
 
-QWidget .QFrame#networkTotalsFrame .QLabel#networkTotalCollateralValue {
+DigiDollarOverviewWidget .QFrame#networkTotalsFrame .QLabel#networkTotalCollateralValue {
     color: #FFD700;
     font-size: 16pt;
     font-weight: bold;
@@ -4585,14 +4585,14 @@ QWidget .QFrame#networkTotalsFrame .QLabel#networkTotalCollateralValue {
 }
 
 /* Separator line in totals frame */
-QWidget .QFrame#networkTotalsFrame .QFrame#totalsSeparator {
+DigiDollarOverviewWidget .QFrame#networkTotalsFrame .QFrame#totalsSeparator {
     background-color: #0088FF;
     max-height: 2px;
     margin: 8px 0px;
 }
 
 /* Progress Bar */
-QWidget .QFrame#systemHealthFrame .QProgressBar#systemHealthBar {
+DigiDollarOverviewWidget .QFrame#systemHealthFrame .QProgressBar#systemHealthBar {
     background-color: #ffffff;
     border: 1px solid #8FB1E3;
     border-radius: 5px;
@@ -4601,13 +4601,13 @@ QWidget .QFrame#systemHealthFrame .QProgressBar#systemHealthBar {
     min-height: 20px;
 }
 
-QWidget .QFrame#systemHealthFrame .QProgressBar#systemHealthBar::chunk {
+DigiDollarOverviewWidget .QFrame#systemHealthFrame .QProgressBar#systemHealthBar::chunk {
     background-color: #28a745;
     border-radius: 5px;
 }
 
 /* Transactions Frame */
-QWidget .QFrame#transactionsFrame {
+DigiDollarOverviewWidget .QFrame#transactionsFrame {
     min-width: 490px;
     margin-top: 15px;
     margin-left: 20px;
@@ -4618,11 +4618,11 @@ QWidget .QFrame#transactionsFrame {
     padding: 12px;
 }
 
-QWidget .QFrame#transactionsFrame .QLabel {
+DigiDollarOverviewWidget .QFrame#transactionsFrame .QLabel {
     color: #003366;
 }
 
-QWidget .QFrame#transactionsFrame .QListWidget#transactionsList {
+DigiDollarOverviewWidget .QFrame#transactionsFrame .QListWidget#transactionsList {
     background-color: #ffffff;
     color: #003366;
     border: 1px solid #8FB1E3;
@@ -4630,7 +4630,7 @@ QWidget .QFrame#transactionsFrame .QListWidget#transactionsList {
     alternate-background-color: #f0f8ff;
 }
 
-QWidget .QFrame#transactionsFrame .QLabel#recentTransactionsInfo {
+DigiDollarOverviewWidget .QFrame#transactionsFrame .QLabel#recentTransactionsInfo {
     color: #6c757d;
     padding: 20px;
 }
@@ -4640,13 +4640,13 @@ QWidget .QFrame#transactionsFrame .QLabel#recentTransactionsInfo {
 /* ============================= */
 
 /* Main widget background - matches ReceiveCoinsDialog */
-QWidget {
+DigiDollarReceiveWidget {
     background-color: transparent;
     color: #003366;
 }
-QWidget QFrame#generateFrame,
-QWidget QFrame#qrFrame,
-QWidget QFrame#requestsFrame {
+DigiDollarReceiveWidget QFrame#generateFrame,
+DigiDollarReceiveWidget QFrame#qrFrame,
+DigiDollarReceiveWidget QFrame#requestsFrame {
     background-color: #A7C6ED;
     border: 1px solid #8FB1E3;
     border-radius: 8px;
@@ -4655,21 +4655,21 @@ QWidget QFrame#requestsFrame {
 }
 
 /* All labels - dark blue text */
-QWidget QLabel {
+DigiDollarReceiveWidget QLabel {
     color: #003366;
     font-weight: bold;
 }
 
 /* Title labels - larger and bold */
-QWidget QLabel#qrTitle,
-QWidget QLabel#requestsTitle {
+DigiDollarReceiveWidget QLabel#qrTitle,
+DigiDollarReceiveWidget QLabel#requestsTitle {
     color: #003366;
     font-weight: bold;
     font-size: 11pt;
 }
 
 /* Input fields - white background with dark blue border */
-QWidget QLineEdit {
+DigiDollarReceiveWidget QLineEdit {
     background-color: #ffffff;
     color: #003366;
     border: 2px solid #003366;
@@ -4679,19 +4679,19 @@ QWidget QLineEdit {
     min-height: 35px;
 }
 
-QWidget QLineEdit:focus {
+DigiDollarReceiveWidget QLineEdit:focus {
     border: 2px solid #0066CC;
     background-color: #ffffff;
 }
 
-QWidget QLineEdit:read-only {
+DigiDollarReceiveWidget QLineEdit:read-only {
     background-color: #ffffff;
     color: #003366;
     border: 2px solid #003366;
 }
 
 /* Generate button - blue background like main Receive button */
-QWidget QPushButton#generateButton {
+DigiDollarReceiveWidget QPushButton#generateButton {
     background-color: #0066cc;
     border: 1px solid #0066cc;
     color: #ffffff !important;
@@ -4704,22 +4704,22 @@ QWidget QPushButton#generateButton {
     border-radius: 4px;
 }
 
-QWidget QPushButton#generateButton:hover {
+DigiDollarReceiveWidget QPushButton#generateButton:hover {
     background-color: #0088ff;
     color: #ffffff !important;
 }
 
-QWidget QPushButton#generateButton:pressed {
+DigiDollarReceiveWidget QPushButton#generateButton:pressed {
     border: 1px solid #9e9e9e;
 }
 
 /* Secondary buttons - blue background matching main Receive tab */
-QWidget QPushButton#clearButton,
-QWidget QPushButton#copyAddressButton,
-QWidget QPushButton#copyQRButton,
-QWidget QPushButton#saveQRButton,
-QWidget QPushButton#showRequestButton,
-QWidget QPushButton#removeRequestButton {
+DigiDollarReceiveWidget QPushButton#clearButton,
+DigiDollarReceiveWidget QPushButton#copyAddressButton,
+DigiDollarReceiveWidget QPushButton#copyQRButton,
+DigiDollarReceiveWidget QPushButton#saveQRButton,
+DigiDollarReceiveWidget QPushButton#showRequestButton,
+DigiDollarReceiveWidget QPushButton#removeRequestButton {
     background-color: #0066cc;
     border: 1px solid #0066cc;
     color: #ffffff !important;
@@ -4731,27 +4731,27 @@ QWidget QPushButton#removeRequestButton {
     border-radius: 4px;
 }
 
-QWidget QPushButton#clearButton:hover,
-QWidget QPushButton#copyAddressButton:hover,
-QWidget QPushButton#copyQRButton:hover,
-QWidget QPushButton#saveQRButton:hover,
-QWidget QPushButton#showRequestButton:hover,
-QWidget QPushButton#removeRequestButton:hover {
+DigiDollarReceiveWidget QPushButton#clearButton:hover,
+DigiDollarReceiveWidget QPushButton#copyAddressButton:hover,
+DigiDollarReceiveWidget QPushButton#copyQRButton:hover,
+DigiDollarReceiveWidget QPushButton#saveQRButton:hover,
+DigiDollarReceiveWidget QPushButton#showRequestButton:hover,
+DigiDollarReceiveWidget QPushButton#removeRequestButton:hover {
     background-color: #0088ff;
     color: #ffffff !important;
 }
 
-QWidget QPushButton#clearButton:pressed,
-QWidget QPushButton#copyAddressButton:pressed,
-QWidget QPushButton#copyQRButton:pressed,
-QWidget QPushButton#saveQRButton:pressed,
-QWidget QPushButton#showRequestButton:pressed,
-QWidget QPushButton#removeRequestButton:pressed {
+DigiDollarReceiveWidget QPushButton#clearButton:pressed,
+DigiDollarReceiveWidget QPushButton#copyAddressButton:pressed,
+DigiDollarReceiveWidget QPushButton#copyQRButton:pressed,
+DigiDollarReceiveWidget QPushButton#saveQRButton:pressed,
+DigiDollarReceiveWidget QPushButton#showRequestButton:pressed,
+DigiDollarReceiveWidget QPushButton#removeRequestButton:pressed {
     border: 1px solid #9e9e9e;
 }
 
 /* Table widget - white background with DigiByte blue alternating rows */
-QWidget QTableWidget {
+DigiDollarReceiveWidget QTableWidget {
     background-color: #ffffff;
     color: #003366;
     gridline-color: #8FB1E3;
@@ -4759,22 +4759,22 @@ QWidget QTableWidget {
     alternate-background-color: #E8F0FF;
 }
 
-QWidget QTableWidget::item {
+DigiDollarReceiveWidget QTableWidget::item {
     color: #003366;
     padding: 8px;
 }
 
-QWidget QTableWidget::item:selected {
+DigiDollarReceiveWidget QTableWidget::item:selected {
     background-color: #0066cc;
     color: #ffffff;
 }
 
-QWidget QTableWidget::item:alternate {
+DigiDollarReceiveWidget QTableWidget::item:alternate {
     background-color: #E8F0FF;
 }
 
 /* Table header - blue background with white text */
-QWidget QHeaderView::section {
+DigiDollarReceiveWidget QHeaderView::section {
     background-color: #0066CC;
     color: #ffffff;
     border: none;
@@ -4789,10 +4789,10 @@ QWidget QHeaderView::section {
 /* ============================= */
 
 /* Main widget background - matches SendCoinsDialog */
-QWidget {
+DigiDollarSendWidget {
     background-color: transparent;
     background-color: #ffffff;
-QWidget {
+DigiDollarSendWidget {
     background-color: transparent;
     color: #003366;
 }
@@ -4804,24 +4804,24 @@ QWidget {
 }
 
 /* Button frame (no blue background) */
-QWidget QFrame#buttonFrame {
+DigiDollarSendWidget QFrame#buttonFrame {
     background-color: transparent;
     border: none;
     padding: 5px;
 }
 
 /* All labels - DigiByte dark blue */
-QWidget QLabel {
+DigiDollarSendWidget QLabel {
     color: #003366;
     font-weight: bold;
 }
 
 /* Field labels with white background like main Send tab */
-QWidget QLabel#addressLabel,
-QWidget QLabel#amountLabel,
-QWidget QLabel#feeLabel,
-QWidget QLabel#availableBalanceLabel,
-QWidget QLabel#usdEquivalentLabel {
+DigiDollarSendWidget QLabel#addressLabel,
+DigiDollarSendWidget QLabel#amountLabel,
+DigiDollarSendWidget QLabel#feeLabel,
+DigiDollarSendWidget QLabel#availableBalanceLabel,
+DigiDollarSendWidget QLabel#usdEquivalentLabel {
     background-color: #ffffff;
     color: #003366;
     padding: 8px 16px;
@@ -4832,7 +4832,7 @@ QWidget QLabel#usdEquivalentLabel {
 }
 
 /* Total label - emphasized like SendCoinsDialog balance */
-QWidget QLabel#totalLabel {
+DigiDollarSendWidget QLabel#totalLabel {
     background-color: #003366;
     color: #ffffff;
     padding: 8px 16px;
@@ -4843,10 +4843,10 @@ QWidget QLabel#totalLabel {
 }
 
 /* Value display labels */
-QWidget QLabel#availableBalanceValue,
-QWidget QLabel#usdEquivalentValue,
-QWidget QLabel#feeValue,
-QWidget QLabel#totalValue {
+DigiDollarSendWidget QLabel#availableBalanceValue,
+DigiDollarSendWidget QLabel#usdEquivalentValue,
+DigiDollarSendWidget QLabel#feeValue,
+DigiDollarSendWidget QLabel#totalValue {
     background-color: transparent;
     color: #003366;
     font-weight: bold;
@@ -4854,7 +4854,7 @@ QWidget QLabel#totalValue {
 }
 
 /* Validation label - lighter text */
-QWidget QLabel#addressValidationLabel {
+DigiDollarSendWidget QLabel#addressValidationLabel {
     background-color: transparent;
     color: #666666;
     font-weight: normal;
@@ -4862,8 +4862,8 @@ QWidget QLabel#addressValidationLabel {
 }
 
 /* Input fields - white background with DigiByte blue border like SendCoinsDialog */
-QWidget QLineEdit#addressEdit,
-QWidget QLineEdit#amountEdit {
+DigiDollarSendWidget QLineEdit#addressEdit,
+DigiDollarSendWidget QLineEdit#amountEdit {
     background-color: #ffffff;
     color: #003366;
     border: 2px solid #003366;
@@ -4873,14 +4873,14 @@ QWidget QLineEdit#amountEdit {
     min-height: 35px;
 }
 
-QWidget QLineEdit#addressEdit:focus,
-QWidget QLineEdit#amountEdit:focus {
+DigiDollarSendWidget QLineEdit#addressEdit:focus,
+DigiDollarSendWidget QLineEdit#amountEdit:focus {
     border-color: #0066CC;
     background-color: #ffffff;
 }
 
 /* Send button - DigiByte blue like SendCoinsDialog */
-QWidget QPushButton#sendButton {
+DigiDollarSendWidget QPushButton#sendButton {
     background-color: #0066CC;
     color: #ffffff !important;
     border: none;
@@ -4891,23 +4891,23 @@ QWidget QPushButton#sendButton {
     min-height: 40px;
 }
 
-QWidget QPushButton#sendButton:hover {
+DigiDollarSendWidget QPushButton#sendButton:hover {
     background-color: #0088ff;
     color: #ffffff !important;
 }
 
-QWidget QPushButton#sendButton:pressed {
+DigiDollarSendWidget QPushButton#sendButton:pressed {
     background-color: #0066CC;
     border: 1px solid #0066CC;
 }
 
-QWidget QPushButton#sendButton:disabled {
+DigiDollarSendWidget QPushButton#sendButton:disabled {
     background-color: #cccccc;
     color: #888888 !important;
 }
 
 /* Clear button - DigiByte blue like SendCoinsDialog */
-QWidget QPushButton#clearButton {
+DigiDollarSendWidget QPushButton#clearButton {
     background-color: #0066CC;
     color: #ffffff !important;
     border: none;
@@ -4917,18 +4917,18 @@ QWidget QPushButton#clearButton {
     min-height: 40px;
 }
 
-QWidget QPushButton#clearButton:hover {
+DigiDollarSendWidget QPushButton#clearButton:hover {
     background-color: #0088ff;
     color: #ffffff !important;
 }
 
-QWidget QPushButton#clearButton:pressed {
+DigiDollarSendWidget QPushButton#clearButton:pressed {
     background-color: #0066CC;
     border: 1px solid #0066CC;
 }
 
 /* Use available balance button - secondary style */
-QWidget QPushButton#useAvailableBalanceButton {
+DigiDollarSendWidget QPushButton#useAvailableBalanceButton {
     background-color: #ffffff;
     color: #0066CC;
     border: 2px solid #0066CC;
@@ -4938,17 +4938,17 @@ QWidget QPushButton#useAvailableBalanceButton {
     font-size: 10pt;
 }
 
-QWidget QPushButton#useAvailableBalanceButton:hover {
+DigiDollarSendWidget QPushButton#useAvailableBalanceButton:hover {
     background-color: #E8F0FF;
     color: #0066CC;
 }
 
-QWidget QPushButton#useAvailableBalanceButton:pressed {
+DigiDollarSendWidget QPushButton#useAvailableBalanceButton:pressed {
     background-color: #A7C6ED;
 }
 
 /* Paste address button - tool button styling */
-QWidget QToolButton {
+DigiDollarSendWidget QToolButton {
     background-color: #ffffff;
     color: #003366;
     border: 2px solid #003366;
@@ -4959,11 +4959,11 @@ QWidget QToolButton {
     max-width: 35px;
 }
 
-QWidget QToolButton:hover {
+DigiDollarSendWidget QToolButton:hover {
     background-color: #E8F0FF;
 }
 
-QWidget QToolButton:pressed {
+DigiDollarSendWidget QToolButton:pressed {
     background-color: #A7C6ED;
 }
 
@@ -4971,15 +4971,15 @@ QWidget QToolButton:pressed {
 /* DigiDollar Mint Widget - Matches Send/Receive Tab Styling */
 /* ============================= */
 
-QWidget {
+DigiDollarMintWidget {
     background-color: #ffffff;
     color: #003366;
 }
 
 /* Frames - DigiByte blue background like SendCoinsDialog */
-QWidget QFrame#amountFrame,
-QWidget QFrame#lockTierFrame,
-QWidget QFrame#collateralFrame {
+DigiDollarMintWidget QFrame#amountFrame,
+DigiDollarMintWidget QFrame#lockTierFrame,
+DigiDollarMintWidget QFrame#collateralFrame {
     background-color: #A7C6ED;
     border: 1px solid #8FB1E3;
     border-radius: 8px;
@@ -4987,26 +4987,26 @@ QWidget QFrame#collateralFrame {
     margin: 5px;
 }
 
-QWidget QFrame#buttonFrame {
+DigiDollarMintWidget QFrame#buttonFrame {
     background-color: transparent;
     border: none;
 }
 
 /* Labels - Default bold dark blue like SendCoinsDialog */
-QWidget QLabel {
+DigiDollarMintWidget QLabel {
     color: #003366;
     font-weight: bold;
 }
 
 /* Field labels (right-aligned labels) - white background */
-QWidget QLabel#amountLabel,
-QWidget QLabel#usdValueLabel,
-QWidget QLabel#lockTierLabel,
-QWidget QLabel#lockTierInfoLabel,
-QWidget QLabel#oraclePriceLabel,
-QWidget QLabel#collateralLabel,
-QWidget QLabel#ratioLabel,
-QWidget QLabel#availableDGBLabel {
+DigiDollarMintWidget QLabel#amountLabel,
+DigiDollarMintWidget QLabel#usdValueLabel,
+DigiDollarMintWidget QLabel#lockTierLabel,
+DigiDollarMintWidget QLabel#lockTierInfoLabel,
+DigiDollarMintWidget QLabel#oraclePriceLabel,
+DigiDollarMintWidget QLabel#collateralLabel,
+DigiDollarMintWidget QLabel#ratioLabel,
+DigiDollarMintWidget QLabel#availableDGBLabel {
     background-color: transparent;
     color: #003366 !important;
     padding: 0;
@@ -5014,19 +5014,19 @@ QWidget QLabel#availableDGBLabel {
 }
 
 /* Value labels - emphasized bold */
-QWidget QLabel#usdValueValue,
-QWidget QLabel#lockTierInfoValue,
-QWidget QLabel#oraclePriceValue,
-QWidget QLabel#collateralValue,
-QWidget QLabel#ratioValue,
-QWidget QLabel#availableDGBValue {
+DigiDollarMintWidget QLabel#usdValueValue,
+DigiDollarMintWidget QLabel#lockTierInfoValue,
+DigiDollarMintWidget QLabel#oraclePriceValue,
+DigiDollarMintWidget QLabel#collateralValue,
+DigiDollarMintWidget QLabel#ratioValue,
+DigiDollarMintWidget QLabel#availableDGBValue {
     color: #003366 !important;
     font-weight: bold;
     background-color: transparent;
 }
 
 /* Amount suffix label - DD */
-QWidget QLabel#amountSuffix {
+DigiDollarMintWidget QLabel#amountSuffix {
     color: #003366 !important;
     font-weight: bold;
     background-color: transparent;
@@ -5034,7 +5034,7 @@ QWidget QLabel#amountSuffix {
 }
 
 /* Input fields - white background with DigiByte blue border like SendCoinsDialog */
-QWidget QLineEdit#amountEdit {
+DigiDollarMintWidget QLineEdit#amountEdit {
     background-color: #ffffff;
     color: #003366;
     border: 2px solid #003366;
@@ -5044,13 +5044,13 @@ QWidget QLineEdit#amountEdit {
     min-height: 35px;
 }
 
-QWidget QLineEdit#amountEdit:focus {
+DigiDollarMintWidget QLineEdit#amountEdit:focus {
     border-color: #0066CC;
     background-color: #ffffff;
 }
 
 /* ComboBox - white background with DigiByte blue border */
-QWidget QComboBox#lockTierCombo {
+DigiDollarMintWidget QComboBox#lockTierCombo {
     background-color: #ffffff;
     color: #003366;
     border: 2px solid #003366;
@@ -5060,21 +5060,21 @@ QWidget QComboBox#lockTierCombo {
     min-height: 35px;
 }
 
-QWidget QComboBox#lockTierCombo:focus {
+DigiDollarMintWidget QComboBox#lockTierCombo:focus {
     border-color: #0066CC;
 }
 
-QWidget QComboBox#lockTierCombo:hover {
+DigiDollarMintWidget QComboBox#lockTierCombo:hover {
     background-color: #ffffff;
     border-color: #0066CC;
 }
 
-QWidget QComboBox#lockTierCombo::drop-down {
+DigiDollarMintWidget QComboBox#lockTierCombo::drop-down {
     border: none;
     width: 20px;
 }
 
-QWidget QComboBox#lockTierCombo::down-arrow {
+DigiDollarMintWidget QComboBox#lockTierCombo::down-arrow {
     width: 0;
     height: 0;
     border-left: 4px solid transparent;
@@ -5083,7 +5083,7 @@ QWidget QComboBox#lockTierCombo::down-arrow {
 }
 
 /* ComboBox dropdown list styling */
-QWidget QComboBox#lockTierCombo QAbstractItemView {
+DigiDollarMintWidget QComboBox#lockTierCombo QAbstractItemView {
     background-color: #ffffff;
     color: #003366;
     selection-background-color: #0066CC;
@@ -5091,24 +5091,24 @@ QWidget QComboBox#lockTierCombo QAbstractItemView {
     border: 2px solid #003366;
 }
 
-QWidget QComboBox#lockTierCombo QAbstractItemView::item {
+DigiDollarMintWidget QComboBox#lockTierCombo QAbstractItemView::item {
     color: #003366;
     background-color: transparent;
     padding: 8px;
 }
 
-QWidget QComboBox#lockTierCombo QAbstractItemView::item:selected {
+DigiDollarMintWidget QComboBox#lockTierCombo QAbstractItemView::item:selected {
     background-color: #0066CC;
     color: #ffffff;
 }
 
-QWidget QComboBox#lockTierCombo QAbstractItemView::item:hover {
+DigiDollarMintWidget QComboBox#lockTierCombo QAbstractItemView::item:hover {
     background-color: #A7C6ED;
     color: #003366;
 }
 
 /* Mint button - DigiByte blue like SendCoinsDialog sendButton */
-QWidget QPushButton#mintButton {
+DigiDollarMintWidget QPushButton#mintButton {
     background-color: #0066CC;
     color: #ffffff !important;
     border: 1px solid #0066CC;
@@ -5120,23 +5120,23 @@ QWidget QPushButton#mintButton {
     min-height: 40px;
 }
 
-QWidget QPushButton#mintButton:hover {
+DigiDollarMintWidget QPushButton#mintButton:hover {
     background-color: #0088ff;
     color: #ffffff !important;
 }
 
-QWidget QPushButton#mintButton:pressed {
+DigiDollarMintWidget QPushButton#mintButton:pressed {
     background-color: #005a9e;
     color: #ffffff !important;
 }
 
-QWidget QPushButton#mintButton:disabled {
+DigiDollarMintWidget QPushButton#mintButton:disabled {
     background-color: #cccccc;
     color: #888888 !important;
 }
 
 /* Clear button - DigiByte blue like SendCoinsDialog clearButton */
-QWidget QPushButton#clearButton {
+DigiDollarMintWidget QPushButton#clearButton {
     background-color: #0066CC;
     color: #ffffff !important;
     border: 1px solid #0066CC;
@@ -5148,19 +5148,19 @@ QWidget QPushButton#clearButton {
     min-height: 40px;
 }
 
-QWidget QPushButton#clearButton:hover {
+DigiDollarMintWidget QPushButton#clearButton:hover {
     background-color: #0088ff;
     border-color: #0088ff;
     color: #ffffff !important;
 }
 
-QWidget QPushButton#clearButton:pressed {
+DigiDollarMintWidget QPushButton#clearButton:pressed {
     background-color: #005a9e;
     color: #ffffff !important;
 }
 
 /* Progress bar - DigiByte blue theme */
-QWidget QProgressBar#ratioBar {
+DigiDollarMintWidget QProgressBar#ratioBar {
     background-color: #f0f0f0;
     border: 1px solid #8FB1E3;
     border-radius: 3px;
@@ -5170,7 +5170,7 @@ QWidget QProgressBar#ratioBar {
     min-height: 20px;
 }
 
-QWidget QProgressBar#ratioBar::chunk {
+DigiDollarMintWidget QProgressBar#ratioBar::chunk {
     background-color: #0066CC;
     border-radius: 2px;
 }
@@ -5179,15 +5179,15 @@ QWidget QProgressBar#ratioBar::chunk {
 /* DigiDollar Redeem Widget */
 /* ============================= */
 
-QWidget {
+DigiDollarRedeemWidget {
     background-color: #ffffff;
     color: #003366;
 }
 
 /* Frames - Match SendCoinsDialog and Mint styling */
-QWidget QFrame#positionFrame,
-QWidget QFrame#amountFrame,
-QWidget QFrame#positionInfoFrame {
+DigiDollarRedeemWidget QFrame#positionFrame,
+DigiDollarRedeemWidget QFrame#amountFrame,
+DigiDollarRedeemWidget QFrame#positionInfoFrame {
     background-color: #A7C6ED;
     border: 1px solid #8FB1E3;
     border-radius: 8px;
@@ -5195,20 +5195,20 @@ QWidget QFrame#positionInfoFrame {
     margin: 5px;
 }
 
-QWidget QFrame#buttonFrame {
+DigiDollarRedeemWidget QFrame#buttonFrame {
     background-color: transparent;
     border: none;
 }
 
 /* Labels - Default bold dark blue like SendCoinsDialog */
-QWidget QLabel {
+DigiDollarRedeemWidget QLabel {
     color: #003366;
     font-weight: bold;
 }
 
 /* Input fields - white background with DigiByte blue border */
-QWidget QLineEdit#positionIdEdit,
-QWidget QLineEdit#amountEdit {
+DigiDollarRedeemWidget QLineEdit#positionIdEdit,
+DigiDollarRedeemWidget QLineEdit#amountEdit {
     background-color: #ffffff;
     color: #003366;
     border: 2px solid #003366;
@@ -5218,14 +5218,14 @@ QWidget QLineEdit#amountEdit {
     min-height: 35px;
 }
 
-QWidget QLineEdit#positionIdEdit:focus,
-QWidget QLineEdit#amountEdit:focus {
+DigiDollarRedeemWidget QLineEdit#positionIdEdit:focus,
+DigiDollarRedeemWidget QLineEdit#amountEdit:focus {
     border-color: #0066CC;
     background-color: #ffffff;
 }
 
 /* Redeem button - DigiByte blue primary action */
-QWidget QPushButton#redeemButton {
+DigiDollarRedeemWidget QPushButton#redeemButton {
     background-color: #0066CC;
     color: #ffffff !important;
     border: 1px solid #0066CC;
@@ -5237,23 +5237,23 @@ QWidget QPushButton#redeemButton {
     min-height: 40px;
 }
 
-QWidget QPushButton#redeemButton:hover {
+DigiDollarRedeemWidget QPushButton#redeemButton:hover {
     background-color: #0088ff;
     color: #ffffff !important;
 }
 
-QWidget QPushButton#redeemButton:pressed {
+DigiDollarRedeemWidget QPushButton#redeemButton:pressed {
     background-color: #005a9e;
     color: #ffffff !important;
 }
 
-QWidget QPushButton#redeemButton:disabled {
+DigiDollarRedeemWidget QPushButton#redeemButton:disabled {
     background-color: #cccccc;
     color: #888888 !important;
 }
 
 /* Redeem All button - Warning orange for full redemption */
-QWidget QPushButton#redeemAllButton {
+DigiDollarRedeemWidget QPushButton#redeemAllButton {
     background-color: #ff9800;
     color: #ffffff !important;
     border: 1px solid #ff9800;
@@ -5265,23 +5265,23 @@ QWidget QPushButton#redeemAllButton {
     min-height: 40px;
 }
 
-QWidget QPushButton#redeemAllButton:hover {
+DigiDollarRedeemWidget QPushButton#redeemAllButton:hover {
     background-color: #ffb74d;
     color: #ffffff !important;
 }
 
-QWidget QPushButton#redeemAllButton:pressed {
+DigiDollarRedeemWidget QPushButton#redeemAllButton:pressed {
     background-color: #ff8f00;
     color: #ffffff !important;
 }
 
-QWidget QPushButton#redeemAllButton:disabled {
+DigiDollarRedeemWidget QPushButton#redeemAllButton:disabled {
     background-color: #cccccc;
     color: #888888 !important;
 }
 
 /* Clear button - DigiByte blue like SendCoinsDialog clearButton */
-QWidget QPushButton#clearButton {
+DigiDollarRedeemWidget QPushButton#clearButton {
     background-color: #0066CC;
     color: #ffffff !important;
     border: 1px solid #0066CC;
@@ -5293,19 +5293,19 @@ QWidget QPushButton#clearButton {
     min-height: 40px;
 }
 
-QWidget QPushButton#clearButton:hover {
+DigiDollarRedeemWidget QPushButton#clearButton:hover {
     background-color: #0088ff;
     border-color: #0088ff;
     color: #ffffff !important;
 }
 
-QWidget QPushButton#clearButton:pressed {
+DigiDollarRedeemWidget QPushButton#clearButton:pressed {
     background-color: #005a9e;
     color: #ffffff !important;
 }
 
 /* Progress bar - DigiByte blue theme */
-QWidget QProgressBar#healthBar {
+DigiDollarRedeemWidget QProgressBar#healthBar {
     background-color: #f0f0f0;
     border: 1px solid #8FB1E3;
     border-radius: 4px;
@@ -5316,25 +5316,25 @@ QWidget QProgressBar#healthBar {
 }
 
 /* Validation labels - info styling */
-QWidget QLabel#positionValidationLabel {
+DigiDollarRedeemWidget QLabel#positionValidationLabel {
     color: #666666;
     font-weight: normal;
     font-size: 10pt;
 }
 
 /* Value labels - monospace for amounts */
-QWidget QLabel#redeemableValue,
-QWidget QLabel#ddMintedValue,
-QWidget QLabel#dgbCollateralValue,
-QWidget QLabel#lockTierValue,
-QWidget QLabel#timeRemainingValue,
-QWidget QLabel#healthStatusValue {
+DigiDollarRedeemWidget QLabel#redeemableValue,
+DigiDollarRedeemWidget QLabel#ddMintedValue,
+DigiDollarRedeemWidget QLabel#dgbCollateralValue,
+DigiDollarRedeemWidget QLabel#lockTierValue,
+DigiDollarRedeemWidget QLabel#timeRemainingValue,
+DigiDollarRedeemWidget QLabel#healthStatusValue {
     font-family: monospace;
     color: #003366;
 }
 
 /* Amount suffix label */
-QWidget QLabel#amountSuffix {
+DigiDollarRedeemWidget QLabel#amountSuffix {
     color: #0066CC;
     font-weight: bold;
     font-size: 11pt;
@@ -5344,13 +5344,13 @@ QWidget QLabel#amountSuffix {
 /* DigiDollar Positions Widget */
 /* ============================= */
 
-QWidget {
+DigiDollarPositionsWidget {
     background-color: #ffffff;
     color: #003366;
 }
 
 /* Positions Table with DigiByte Blue Styling */
-QWidget QTableWidget {
+DigiDollarPositionsWidget QTableWidget {
     background-color: #A7C6ED;
     color: #003366;
     gridline-color: #8FB1E3;
@@ -5360,30 +5360,30 @@ QWidget QTableWidget {
     border-radius: 8px;
 }
 
-QWidget QTableWidget::item {
+DigiDollarPositionsWidget QTableWidget::item {
     padding: 10px 8px;
     border-bottom: 1px solid #8FB1E3;
     color: #003366;
     background-color: #A7C6ED;
 }
 
-QWidget QTableWidget::item:alternate {
+DigiDollarPositionsWidget QTableWidget::item:alternate {
     background-color: #9BB8E8;
     color: #003366;
 }
 
-QWidget QTableWidget::item:hover {
+DigiDollarPositionsWidget QTableWidget::item:hover {
     background-color: rgba(0, 102, 204, 0.3);
     color: #003366;
 }
 
-QWidget QTableWidget::item:selected {
+DigiDollarPositionsWidget QTableWidget::item:selected {
     background-color: #0066CC !important;
     color: #ffffff !important;
 }
 
 /* Table Header with DigiByte Blue */
-QWidget QHeaderView::section {
+DigiDollarPositionsWidget QHeaderView::section {
     background-color: #0066CC;
     color: #ffffff;
     padding: 12px 8px;
@@ -5395,13 +5395,13 @@ QWidget QHeaderView::section {
     text-transform: uppercase;
 }
 
-QWidget QHeaderView::section:hover {
+DigiDollarPositionsWidget QHeaderView::section:hover {
     background-color: #0088ff;
     color: #ffffff;
 }
 
 /* Refresh Button with DigiByte Blue */
-QWidget QPushButton#refreshButton {
+DigiDollarPositionsWidget QPushButton#refreshButton {
     background-color: #0066cc;
     border: 1px solid #0066cc;
     color: #ffffff !important;
@@ -5410,18 +5410,18 @@ QWidget QPushButton#refreshButton {
     font-weight: bold;
 }
 
-QWidget QPushButton#refreshButton:hover {
+DigiDollarPositionsWidget QPushButton#refreshButton:hover {
     background-color: #0088ff;
     color: #ffffff !important;
 }
 
-QWidget QPushButton#refreshButton:pressed {
+DigiDollarPositionsWidget QPushButton#refreshButton:pressed {
     background-color: #004c99;
     border: 1px solid #004c99;
 }
 
 /* Status Label */
-QWidget QLabel#statusLabel {
+DigiDollarPositionsWidget QLabel#statusLabel {
     color: #003366;
     background-color: #A7C6ED;
     border: 1px dashed #8FB1E3;
@@ -5430,44 +5430,44 @@ QWidget QLabel#statusLabel {
 }
 
 /* Title Label */
-QWidget QLabel#titleLabel {
+DigiDollarPositionsWidget QLabel#titleLabel {
     color: #003366;
     font-weight: bold;
     font-size: 16px;
 }
 
 /* Scrollbar styling for table */
-QWidget QTableWidget QScrollBar:vertical {
+DigiDollarPositionsWidget QTableWidget QScrollBar:vertical {
     background-color: #A7C6ED;
     border: 1px solid #8FB1E3;
     border-radius: 4px;
     width: 12px;
 }
 
-QWidget QTableWidget QScrollBar::handle:vertical {
+DigiDollarPositionsWidget QTableWidget QScrollBar::handle:vertical {
     background-color: #0066CC;
     border-radius: 4px;
     min-height: 20px;
 }
 
-QWidget QTableWidget QScrollBar::handle:vertical:hover {
+DigiDollarPositionsWidget QTableWidget QScrollBar::handle:vertical:hover {
     background-color: #0088ff;
 }
 
-QWidget QTableWidget QScrollBar:horizontal {
+DigiDollarPositionsWidget QTableWidget QScrollBar:horizontal {
     background-color: #A7C6ED;
     border: 1px solid #8FB1E3;
     border-radius: 4px;
     height: 12px;
 }
 
-QWidget QTableWidget QScrollBar::handle:horizontal {
+DigiDollarPositionsWidget QTableWidget QScrollBar::handle:horizontal {
     background-color: #0066CC;
     border-radius: 4px;
     min-width: 20px;
 }
 
-QWidget QTableWidget QScrollBar::handle:horizontal:hover {
+DigiDollarPositionsWidget QTableWidget QScrollBar::handle:horizontal:hover {
     background-color: #0088ff;
 }
 
@@ -5476,7 +5476,7 @@ QWidget QTableWidget QScrollBar::handle:horizontal:hover {
    ================================================ */
 
 /* Transactions Table with DigiByte Blue Styling */
-QWidget QTableWidget {
+DigiDollarTransactionsWidget QTableWidget {
     background-color: #A7C6ED;
     color: #003366;
     gridline-color: #8FB1E3;
@@ -5486,30 +5486,30 @@ QWidget QTableWidget {
     border-radius: 8px;
 }
 
-QWidget QTableWidget::item {
+DigiDollarTransactionsWidget QTableWidget::item {
     padding: 8px 6px;
     border-bottom: 1px solid #8FB1E3;
     color: #003366;
     background-color: #A7C6ED;
 }
 
-QWidget QTableWidget::item:alternate {
+DigiDollarTransactionsWidget QTableWidget::item:alternate {
     background-color: #9BB8E8;
     color: #003366;
 }
 
-QWidget QTableWidget::item:hover {
+DigiDollarTransactionsWidget QTableWidget::item:hover {
     background-color: rgba(0, 102, 204, 0.3);
     color: #003366;
 }
 
-QWidget QTableWidget::item:selected {
+DigiDollarTransactionsWidget QTableWidget::item:selected {
     background-color: #0066CC !important;
     color: #ffffff !important;
 }
 
 /* Table Header with DigiByte Blue */
-QWidget QHeaderView::section {
+DigiDollarTransactionsWidget QHeaderView::section {
     background-color: #0066CC;
     color: #ffffff;
     padding: 10px 8px;
@@ -5520,13 +5520,13 @@ QWidget QHeaderView::section {
     font-size: 12px;
 }
 
-QWidget QHeaderView::section:hover {
+DigiDollarTransactionsWidget QHeaderView::section:hover {
     background-color: #0088ff;
     color: #ffffff;
 }
 
 /* Filter controls styling */
-QWidget QComboBox {
+DigiDollarTransactionsWidget QComboBox {
     background-color: #ffffff;
     color: #003366;
     border: 1px solid #8FB1E3;
@@ -5534,16 +5534,16 @@ QWidget QComboBox {
     padding: 6px 10px;
 }
 
-QWidget QComboBox:hover {
+DigiDollarTransactionsWidget QComboBox:hover {
     border-color: #0066CC;
 }
 
-QWidget QComboBox::drop-down {
+DigiDollarTransactionsWidget QComboBox::drop-down {
     border: none;
     width: 20px;
 }
 
-QWidget QComboBox::down-arrow {
+DigiDollarTransactionsWidget QComboBox::down-arrow {
     width: 0;
     height: 0;
     border-left: 4px solid transparent;
@@ -5552,7 +5552,7 @@ QWidget QComboBox::down-arrow {
 }
 
 /* ComboBox dropdown list styling (Light Theme) */
-QWidget QComboBox QAbstractItemView {
+DigiDollarTransactionsWidget QComboBox QAbstractItemView {
     background-color: #ffffff;
     color: #003366;
     selection-background-color: #0066CC;
@@ -5560,23 +5560,23 @@ QWidget QComboBox QAbstractItemView {
     border: 1px solid #8FB1E3;
 }
 
-QWidget QComboBox QAbstractItemView::item {
+DigiDollarTransactionsWidget QComboBox QAbstractItemView::item {
     color: #003366;
     background-color: #ffffff;
     padding: 8px;
 }
 
-QWidget QComboBox QAbstractItemView::item:selected {
+DigiDollarTransactionsWidget QComboBox QAbstractItemView::item:selected {
     background-color: #0066CC;
     color: #ffffff;
 }
 
-QWidget QComboBox QAbstractItemView::item:hover {
+DigiDollarTransactionsWidget QComboBox QAbstractItemView::item:hover {
     background-color: #0066CC;
     color: #ffffff;
 }
 
-QWidget QLineEdit {
+DigiDollarTransactionsWidget QLineEdit {
     background-color: #ffffff;
     color: #003366;
     border: 1px solid #8FB1E3;
@@ -5584,12 +5584,12 @@ QWidget QLineEdit {
     padding: 6px 10px;
 }
 
-QWidget QLineEdit:focus {
+DigiDollarTransactionsWidget QLineEdit:focus {
     border-color: #0066CC;
 }
 
 /* Refresh Button with DigiByte Blue */
-QWidget QPushButton {
+DigiDollarTransactionsWidget QPushButton {
     background-color: #0066cc;
     border: 1px solid #0066cc;
     color: #ffffff;
@@ -5598,53 +5598,53 @@ QWidget QPushButton {
     font-weight: bold;
 }
 
-QWidget QPushButton:hover {
+DigiDollarTransactionsWidget QPushButton:hover {
     background-color: #0088ff;
     color: #ffffff;
 }
 
-QWidget QPushButton:pressed {
+DigiDollarTransactionsWidget QPushButton:pressed {
     background-color: #004c99;
     border: 1px solid #004c99;
 }
 
 /* Labels */
-QWidget QLabel {
+DigiDollarTransactionsWidget QLabel {
     color: #003366;
 }
 
 /* Scrollbar styling for table */
-QWidget QTableWidget QScrollBar:vertical {
+DigiDollarTransactionsWidget QTableWidget QScrollBar:vertical {
     background-color: #A7C6ED;
     border: 1px solid #8FB1E3;
     border-radius: 4px;
     width: 12px;
 }
 
-QWidget QTableWidget QScrollBar::handle:vertical {
+DigiDollarTransactionsWidget QTableWidget QScrollBar::handle:vertical {
     background-color: #0066CC;
     border-radius: 4px;
     min-height: 20px;
 }
 
-QWidget QTableWidget QScrollBar::handle:vertical:hover {
+DigiDollarTransactionsWidget QTableWidget QScrollBar::handle:vertical:hover {
     background-color: #0088ff;
 }
 
-QWidget QTableWidget QScrollBar:horizontal {
+DigiDollarTransactionsWidget QTableWidget QScrollBar:horizontal {
     background-color: #A7C6ED;
     border: 1px solid #8FB1E3;
     border-radius: 4px;
     height: 12px;
 }
 
-QWidget QTableWidget QScrollBar::handle:horizontal {
+DigiDollarTransactionsWidget QTableWidget QScrollBar::handle:horizontal {
     background-color: #0066CC;
     border-radius: 4px;
     min-width: 20px;
 }
 
-QWidget QTableWidget QScrollBar::handle:horizontal:hover {
+DigiDollarTransactionsWidget QTableWidget QScrollBar::handle:horizontal:hover {
     background-color: #0088ff;
 }
 

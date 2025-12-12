@@ -5664,3 +5664,54 @@ QToolTip * {
     background-color: transparent !important;
 }
 
+/* ============================================================
+   MACOS COMPATIBILITY - Object Name Selectors
+   ============================================================
+   macOS Qt doesn't recognize custom C++ class names in CSS.
+   These rules use #objectName selectors which work cross-platform.
+*/
+
+/* Transaction View (Transactions Page) - macOS fallback */
+QTableView#transactionView {
+    background-color: #f0f4f8;
+    alternate-background-color: #e8eef4;
+    /* Don't set color - let model provide red/green for amounts, dark blue for other columns */
+    border: none;
+    gridline-color: #c0d0e0;
+    selection-background-color: #0066cc;
+    selection-color: #ffffff;
+}
+
+QTableView#transactionView::item {
+    padding: 8px;
+    /* Don't set color here - let the model provide red/green for amounts */
+}
+
+QTableView#transactionView::item:alternate {
+    background-color: #e8eef4;
+}
+
+QTableView#transactionView::item:selected {
+    background-color: #0066cc;
+    color: #ffffff;
+}
+
+/* Transaction Overview Widget (Overview Page) - macOS fallback */
+QListView#listTransactions {
+    background: transparent;
+    border: none;
+}
+
+QListView#listTransactions::item {
+    background-color: transparent;
+    padding: 4px;
+}
+
+QListView#listTransactions::item:alternate {
+    background-color: rgba(0, 102, 204, 0.1);
+}
+
+QListView#listTransactions::item:hover {
+    background-color: rgba(0, 102, 204, 0.2);
+}
+

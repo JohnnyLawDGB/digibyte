@@ -7,6 +7,7 @@
 #include <qt/walletmodel.h>
 #include <qt/clientmodel.h>
 #include <qt/guiutil.h>
+#include <interfaces/node.h>
 #include <qt/digibyteunits.h>
 #include <interfaces/wallet.h>
 #include <wallet/digidollarwallet.h>
@@ -25,6 +26,7 @@
 #include <QFont>
 #include <QMessageBox>
 #include <QTimer>
+#include <QDateTime>
 #include <QFrame>
 #include <QApplication>
 #include <QPalette>
@@ -209,9 +211,10 @@ void DigiDollarPositionsWidget::connectClientSignals()
         return;
     }
 
-    // Connect to new blocks (for timelock countdown and health updates)
-    connect(m_clientModel, &ClientModel::numBlocksChanged,
-            this, &DigiDollarPositionsWidget::updatePositions);
+    // NOTE: We do NOT connect to numBlocksChanged for DD updates!
+    // Positions update when balance changes (via balanceChanged signal).
+    // This prevents constant updates during block sync.
+    // Timelock countdown and health are updated via the 60-second auto-refresh timer.
 }
 
 void DigiDollarPositionsWidget::setWalletModel(WalletModel* model)
@@ -245,6 +248,18 @@ void DigiDollarPositionsWidget::updateView()
 
 void DigiDollarPositionsWidget::updatePositions()
 {
+    // Skip updates during Initial Block Download - DD data only matters when synced
+    if (m_clientModel && m_clientModel->node().isInitialBlockDownload()) {
+        return;
+    }
+
+    // Throttle updates - skip if less than 5 seconds since last update
+    qint64 now = QDateTime::currentMSecsSinceEpoch();
+    if (now - m_lastUpdateTime < UPDATE_THROTTLE_MS) {
+        return; // Skip this update, too soon
+    }
+    m_lastUpdateTime = now;
+
     loadPositionsFromWallet();
     populatePositionsTable();
 }
@@ -252,6 +267,8 @@ void DigiDollarPositionsWidget::updatePositions()
 void DigiDollarPositionsWidget::onRefreshClicked()
 {
     m_statusLabel->setText(tr("Refreshing vaults..."));
+    // Force update - bypass throttle for manual refresh
+    m_lastUpdateTime = 0;
     updatePositions();
 }
 

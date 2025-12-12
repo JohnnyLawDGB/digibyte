@@ -31,6 +31,7 @@
 #include <QProgressBar>
 #include <QFont>
 #include <QTimer>
+#include <QDateTime>
 #include <QSpacerItem>
 #include <QListWidget>
 #include <QListWidgetItem>
@@ -465,15 +466,10 @@ void DigiDollarOverviewWidget::setClientModel(ClientModel* model)
     m_clientModel = model;
 
     if (m_clientModel) {
-        // Connect client model signals for updates on new blocks
-        connect(m_clientModel, &ClientModel::numBlocksChanged,
-                this, &DigiDollarOverviewWidget::updateOraclePrice);
-        connect(m_clientModel, &ClientModel::numBlocksChanged,
-                this, &DigiDollarOverviewWidget::updateSystemHealth);
-
-        // Update transaction confirmations on new blocks
-        connect(m_clientModel, &ClientModel::numBlocksChanged,
-                this, &DigiDollarOverviewWidget::updateRecentTransactions);
+        // NOTE: We do NOT connect to numBlocksChanged for DD updates!
+        // DD updates should only happen when balance changes (like DGB).
+        // Oracle price and system health are updated via the 30-second timer in updateView().
+        // This prevents constant updates during block sync.
 
         // Initial updates
         updateOraclePrice();
@@ -540,6 +536,19 @@ void DigiDollarOverviewWidget::incomingDDTransaction(const QString& date, const 
 
 void DigiDollarOverviewWidget::updateBalance()
 {
+    // Skip updates during Initial Block Download - balance only matters when synced
+    if (m_clientModel && m_clientModel->node().isInitialBlockDownload()) {
+        return;
+    }
+
+    // Throttle updates - skip if less than 5 seconds since last update
+    // This prevents UI freeze when balance changes flood in after IBD ends
+    qint64 now = QDateTime::currentMSecsSinceEpoch();
+    if (now - m_lastBalanceUpdateTime < UPDATE_THROTTLE_MS) {
+        return; // Skip this update, too soon
+    }
+    m_lastBalanceUpdateTime = now;
+
     // Get actual DigiDollar balance from wallet
     if (m_walletModel) {
         // Get DD balance from wallet (in cents)
@@ -566,6 +575,11 @@ void DigiDollarOverviewWidget::updateBalance()
 
 void DigiDollarOverviewWidget::updateOraclePrice()
 {
+    // Skip updates during Initial Block Download - oracle price only matters when synced
+    if (m_clientModel && m_clientModel->node().isInitialBlockDownload()) {
+        return;
+    }
+
     // Get price from MockOracleManager if in RegTest, otherwise use real oracle via RPC
     if (Params().GetChainType() == ChainType::REGTEST && MockOracleManager::GetInstance().IsEnabled()) {
         // Get price from mock oracle
@@ -601,6 +615,11 @@ void DigiDollarOverviewWidget::updateOraclePrice()
 
 void DigiDollarOverviewWidget::updateSystemHealth()
 {
+    // Skip updates during Initial Block Download - system health only matters when synced
+    if (m_clientModel && m_clientModel->node().isInitialBlockDownload()) {
+        return;
+    }
+
     // NETWORK-WIDE TRACKING: Call RPC to get network-wide system health
     // This ensures Bob and Alice both see identical stats across the entire network
 
@@ -689,13 +708,25 @@ void DigiDollarOverviewWidget::updateRecentTransactions()
         return;
     }
 
+    // Skip updates during Initial Block Download - DD data only matters when synced
+    if (m_clientModel && m_clientModel->node().isInitialBlockDownload()) {
+        return;
+    }
+
+    // Throttle updates - skip if less than 5 seconds since last update
+    qint64 now = QDateTime::currentMSecsSinceEpoch();
+    if (now - m_lastTxUpdateTime < UPDATE_THROTTLE_MS) {
+        return; // Skip this update, too soon
+    }
+    m_lastTxUpdateTime = now;
+
     // Get recent transactions from DigiDollarWallet
     DigiDollarWallet* ddWallet = m_walletModel->wallet().getDigiDollarWallet();
     if (!ddWallet) {
         return;
     }
 
-    // Get transaction history
+    // Get transaction history (confirmations are calculated on-demand inside this call)
     std::vector<DDTransaction> transactions = ddWallet->GetDDTransactionHistory();
 
     // Sort transactions by timestamp descending (newest first)
@@ -704,31 +735,8 @@ void DigiDollarOverviewWidget::updateRecentTransactions()
             return a.timestamp > b.timestamp;
         });
 
-    // Update confirmations for all transactions based on current blockchain height
-    if (m_clientModel) {
-        int currentHeight = m_clientModel->getNumBlocks();
-        for (auto& tx : transactions) {
-            // Try to get actual confirmation count from wallet
-            uint256 txHash;
-            txHash.SetHex(tx.txid);
-
-            // Get transaction details from wallet to update confirmations
-            interfaces::WalletTxStatus tx_status;
-            interfaces::WalletOrderForm order_form;
-            bool in_mempool;
-            int num_blocks;
-            interfaces::WalletTx wtx = m_walletModel->wallet().getWalletTxDetails(
-                txHash, tx_status, order_form, in_mempool, num_blocks);
-
-            if (!wtx.tx) {
-                // Transaction not found in wallet yet (might be in mempool)
-                tx.confirmations = 0;
-            } else {
-                // Use depth_in_main_chain as confirmations
-                tx.confirmations = tx_status.depth_in_main_chain;
-            }
-        }
-    }
+    // NOTE: Removed expensive per-transaction getWalletTxDetails loop
+    // Confirmations are now calculated on-demand in GetDDTransactionHistory()
 
     // Clear existing items
     m_transactionsList->clear();

@@ -120,6 +120,10 @@ private:
         COL_ACTIONS = 6,
         NUM_COLUMNS = 7
     };
+
+    // Throttling - minimum 5 seconds between updates during sync
+    qint64 m_lastUpdateTime{0};
+    static constexpr int UPDATE_THROTTLE_MS = 5000;
 };
 
 #endif // DIGIBYTE_QT_DIGIDOLLARPOSITIONSWIDGET_H

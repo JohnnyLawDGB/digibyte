@@ -121,6 +121,11 @@ private:
     QString m_systemHealthStatus;
     int m_dcaLevel;
     int m_errLevel;
+
+    // Throttling - minimum 5 seconds between updates during sync
+    qint64 m_lastBalanceUpdateTime{0};
+    qint64 m_lastTxUpdateTime{0};
+    static constexpr int UPDATE_THROTTLE_MS = 5000;
 };
 
 #endif // DIGIBYTE_QT_DIGIDOLLAROVERVIEWWIDGET_H

@@ -5,9 +5,12 @@
 
 #include <qt/transactiontablemodel.h>
 
+#include <QEvent>
+#include <QHelpEvent>
 #include <QListView>
 #include <QSize>
 #include <QSizePolicy>
+#include <QToolTip>
 
 TransactionOverviewWidget::TransactionOverviewWidget(QWidget* parent)
     : QListView(parent) {
@@ -25,4 +28,28 @@ void TransactionOverviewWidget::showEvent(QShowEvent* event)
     QSizePolicy sp = sizePolicy();
     sp.setHorizontalPolicy(QSizePolicy::Minimum);
     setSizePolicy(sp);
+}
+
+bool TransactionOverviewWidget::viewportEvent(QEvent* event)
+{
+    if (event->type() == QEvent::ToolTip) {
+        QHelpEvent* helpEvent = static_cast<QHelpEvent*>(event);
+        QModelIndex index = indexAt(helpEvent->pos());
+        if (index.isValid()) {
+            QString tooltipText = index.data(Qt::ToolTipRole).toString();
+            if (!tooltipText.isEmpty()) {
+                // Show tooltip with explicit HTML styling to ensure black text
+                QString styledTooltip = QString(
+                    "<div style='color: #000000; background-color: #ffffdc; padding: 4px;'>"
+                    "%1"
+                    "</div>"
+                ).arg(tooltipText.toHtmlEscaped().replace("\n", "<br>"));
+                QToolTip::showText(helpEvent->globalPos(), styledTooltip, this);
+                return true;
+            }
+        }
+        QToolTip::hideText();
+        return true;
+    }
+    return QListView::viewportEvent(event);
 }

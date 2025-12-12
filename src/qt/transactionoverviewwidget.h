@@ -8,6 +8,7 @@
 #include <QSize>
 
 QT_BEGIN_NAMESPACE
+class QHelpEvent;
 class QShowEvent;
 class QWidget;
 QT_END_NAMESPACE
@@ -22,6 +23,7 @@ public:
 
 protected:
     void showEvent(QShowEvent* event) override;
+    bool viewportEvent(QEvent* event) override;
 };
 
 #endif // DIGIBYTE_QT_TRANSACTIONOVERVIEWWIDGET_H

@@ -62,10 +62,12 @@
 #include <QLibraryInfo>
 #include <QLocale>
 #include <QMessageBox>
+#include <QPalette>
 #include <QSettings>
 #include <QStyleFactory>
 #include <QThread>
 #include <QTimer>
+#include <QToolTip>
 #include <QTranslator>
 #include <QWindow>
 
@@ -348,7 +350,14 @@ void DigiByteApplication::applyTheme()
         
         setStyleSheet(styleSheet);
         file.close();
-        
+
+        // Force tooltip palette for consistent cross-platform appearance
+        // Qt stylesheets don't always work for tooltips, especially in QListView
+        QPalette tooltipPalette = QToolTip::palette();
+        tooltipPalette.setColor(QPalette::ToolTipBase, QColor(255, 255, 220)); // Light yellow background
+        tooltipPalette.setColor(QPalette::ToolTipText, QColor(0, 0, 0));       // Black text
+        QToolTip::setPalette(tooltipPalette);
+
         qDebug() << "Applied theme:" << theme << "from" << cssPath;
     } else {
         qWarning() << "Failed to load theme:" << theme << "from" << cssPath;
@@ -371,7 +380,13 @@ void DigiByteApplication::loadExternalStyleSheet()
         
         setStyleSheet(styleSheet);
         file.close();
-        
+
+        // Force tooltip palette for consistent cross-platform appearance
+        QPalette tooltipPalette = QToolTip::palette();
+        tooltipPalette.setColor(QPalette::ToolTipBase, QColor(255, 255, 220)); // Light yellow background
+        tooltipPalette.setColor(QPalette::ToolTipText, QColor(0, 0, 0));       // Black text
+        QToolTip::setPalette(tooltipPalette);
+
         qDebug() << "Loaded external CSS from:" << m_externalCssPath;
     } else {
         qWarning() << "Failed to load external CSS from:" << m_externalCssPath;

@@ -2587,13 +2587,7 @@ QTreeView::item:hover {
     background-color: #004488;
 }
 
-/* Tooltips */
-QToolTip {
-    color: #000000;
-    background-color: #ffffdc;
-    border: 1px solid #000000;
-    padding: 2px;
-}
+/* Tooltips - See end of file for QToolTip styling */
 
 /* Group Boxes */
 QGroupBox {
@@ -4420,11 +4414,11 @@ DigiDollarReceiveWidget QLineEdit:read-only {
     border: 2px solid rgba(255, 255, 255, 0.3);
 }
 
-/* Generate button - white background with blue text like main Receive button in dark mode */
+/* Generate button - matches "Use available balance" button style */
 DigiDollarReceiveWidget QPushButton#generateButton {
     background-color: transparent;
-    border: 1px solid #ffffff;
-    color: #003366 !important;
+    border: 2px solid #0066cc;
+    color: #0066cc !important;
     padding-left: 20px;
     padding-right: 20px;
     padding-top: 10px;
@@ -4435,12 +4429,14 @@ DigiDollarReceiveWidget QPushButton#generateButton {
 }
 
 DigiDollarReceiveWidget QPushButton#generateButton:hover {
-    background-color: #f0f0f0;
-    color: #002352 !important;
+    background-color: #0066cc;
+    color: #ffffff !important;
 }
 
 DigiDollarReceiveWidget QPushButton#generateButton:pressed {
-    border: 1px solid #9e9e9e;
+    background-color: #004488;
+    border: 2px solid #004488;
+    color: #ffffff !important;
 }
 
 /* Secondary buttons - blue background matching main Receive tab dark mode */
@@ -5378,5 +5374,25 @@ DigiDollarTransactionsWidget QTableWidget QScrollBar::handle:horizontal {
 
 DigiDollarTransactionsWidget QTableWidget QScrollBar::handle:horizontal:hover {
     background-color: #0088ff;
+}
+
+/* ============================================================
+   GLOBAL TOOLTIP FIX - MUST BE AT END OF FILE
+   ============================================================
+   QToolTip is a top-level window that appears on hover.
+   These rules MUST be at the end to override any wildcard selectors.
+*/
+QToolTip {
+    color: #000000 !important;
+    background-color: #ffffdc !important;
+    border: 1px solid #000000 !important;
+    padding: 4px !important;
+    font-size: 10pt !important;
+}
+
+/* Force tooltip text color for any platform */
+QToolTip * {
+    color: #000000 !important;
+    background-color: transparent !important;
 }
 

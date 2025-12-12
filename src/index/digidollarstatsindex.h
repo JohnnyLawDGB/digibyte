@@ -15,7 +15,10 @@
 class CBlockIndex;
 class CDBBatch;
 
-static constexpr bool DEFAULT_DIGIDOLLARSTATSINDEX{true};
+// PERFORMANCE: Disabled by default - this index slows down initial sync significantly
+// The index processes every block looking for DD transactions.
+// Enable with -digidollarstatsindex=1 if network-wide DD stats are needed.
+static constexpr bool DEFAULT_DIGIDOLLARSTATSINDEX{false};
 
 /**
  * DigiDollarStats holds network-wide DigiDollar statistics at a specific block height.

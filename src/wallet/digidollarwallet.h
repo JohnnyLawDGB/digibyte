@@ -280,10 +280,19 @@ public:
 
     /**
      * Scan wallet UTXOs for DigiDollar outputs and populate dd_balances map
-     * Should be called after wallet loads and when new blocks are processed
+     * Should be called ONLY at wallet startup, not on every block!
      * @return Number of DD UTXOs found
      */
     size_t ScanForDDUTXOs();
+
+    /**
+     * Process a single transaction for DD UTXOs (incremental update)
+     * Called during block processing - much faster than full rescan
+     * @param tx Transaction to process
+     * @param txid Transaction ID
+     * @return true if any DD UTXOs were added/removed
+     */
+    bool ProcessTransactionForDD(const CTransaction& tx, const uint256& txid);
 
     /**
      * Get total locked collateral from active positions

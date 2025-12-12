@@ -859,6 +859,14 @@ std::vector<DDTransaction> DigiDollarWallet::GetDDTransactionHistory() const {
     // Add mock history for testing if present
     history.insert(history.end(), mockHistory.begin(), mockHistory.end());
 
+    // Calculate confirmations on-demand (not stored/updated on every block)
+    // This is the same pattern Bitcoin Core uses - confirmations computed dynamically
+    for (auto& ddtx : history) {
+        uint256 txid;
+        txid.SetHex(ddtx.txid);
+        ddtx.confirmations = GetDDTransactionConfirmations(txid);
+    }
+
     // Sort by timestamp (newest first)
     std::sort(history.begin(), history.end(),
               [](const DDTransaction& a, const DDTransaction& b) {
@@ -2006,6 +2014,153 @@ size_t DigiDollarWallet::ScanForDDUTXOs() {
         LogPrintf("DigiDollar: ScanForDDUTXOs exception - %s\n", e.what());
         return 0;
     }
+}
+
+// =============================================================================
+// INCREMENTAL DD UTXO PROCESSING (Performance Fix)
+// Process a single transaction instead of full wallet rescan on every block
+// =============================================================================
+
+bool DigiDollarWallet::ProcessTransactionForDD(const CTransaction& tx, const uint256& txid) {
+    if (!m_wallet) {
+        return false;
+    }
+
+    bool changed = false;
+
+    try {
+        // Step 1: Check if this transaction SPENDS any of our DD UTXOs
+        for (const CTxIn& txin : tx.vin) {
+            auto it = dd_utxos.find(txin.prevout);
+            if (it != dd_utxos.end()) {
+                // This TX spends one of our DD UTXOs - remove it
+                CAmount spent_amount = it->second;
+                total_dd_balance -= spent_amount;
+                dd_utxos.erase(it);
+                changed = true;
+                LogPrint(BCLog::WALLETDB, "DigiDollar: ProcessTxForDD - Spent DD UTXO %s:%d (%lld cents)\n",
+                         txin.prevout.hash.ToString(), txin.prevout.n, static_cast<long long>(spent_amount));
+            }
+        }
+
+        // Step 2: Check if this transaction CREATES DD outputs we own
+        // First find OP_RETURN with DD marker and parse amounts
+        std::vector<CAmount> ddAmounts;
+        int ddTxType = 0;
+
+        for (size_t i = 0; i < tx.vout.size(); ++i) {
+            const CScript& script = tx.vout[i].scriptPubKey;
+            if (script.size() > 0 && script[0] == OP_RETURN) {
+                auto pc = script.begin();
+                opcodetype opcode;
+                std::vector<unsigned char> data;
+
+                if (!script.GetOp(pc, opcode, data) || opcode != OP_RETURN) continue;
+                if (!script.GetOp(pc, opcode, data)) continue;
+                if (data.size() != 2 || data[0] != 'D' || data[1] != 'D') continue;
+
+                if (!script.GetOp(pc, opcode, data)) continue;
+                try {
+                    CScriptNum txTypeNum(data, false);
+                    ddTxType = txTypeNum.getint();
+                } catch (const scriptnum_error&) {
+                    continue;
+                }
+
+                if (ddTxType == 1) {
+                    // MINT
+                    if (script.GetOp(pc, opcode, data)) {
+                        try {
+                            CScriptNum amtNum(data, false);
+                            ddAmounts.push_back(amtNum.GetInt64());
+                        } catch (const scriptnum_error&) {}
+                    }
+                } else if (ddTxType == 2 || ddTxType == 3) {
+                    // TRANSFER or REDEEM (with change)
+                    while (script.GetOp(pc, opcode, data)) {
+                        try {
+                            CScriptNum amtNum(data, false);
+                            CAmount amt = amtNum.GetInt64();
+                            if (amt > 0 && amt <= 100000000000LL) {
+                                ddAmounts.push_back(amt);
+                            }
+                        } catch (const scriptnum_error&) {
+                            break;
+                        }
+                    }
+                }
+                break;
+            }
+        }
+
+        if (ddAmounts.empty()) {
+            return changed; // No DD amounts in this TX
+        }
+
+        // Match DD amounts to P2TR outputs we own (same logic as ScanForDDUTXOs)
+        LOCK(m_wallet->cs_wallet);
+        size_t ddOutputIndex = 0;
+
+        for (size_t n = 0; n < tx.vout.size(); ++n) {
+            const CTxOut& txout = tx.vout[n];
+
+            // DD outputs are P2TR with value=0
+            if (txout.nValue != 0) continue;
+            if (txout.scriptPubKey.size() != 34 || txout.scriptPubKey[0] != OP_1) continue;
+
+            // Check if we own this output
+            wallet::isminetype mine = m_wallet->IsMine(txout);
+            bool is_ours = (mine & wallet::ISMINE_SPENDABLE);
+
+            // Check dd_owner_keys with tweaked key verification
+            if (!is_ours) {
+                CKey owner_key;
+                if (GetOwnerKey(txid, owner_key)) {
+                    std::vector<unsigned char> output_key_bytes(txout.scriptPubKey.begin() + 2, txout.scriptPubKey.end());
+                    XOnlyPubKey owner_xonly(owner_key.GetPubKey());
+                    auto tweaked = owner_xonly.CreateTapTweak(nullptr);
+                    if (tweaked && std::equal(output_key_bytes.begin(), output_key_bytes.end(),
+                                              tweaked->first.begin())) {
+                        is_ours = true;
+                    }
+                }
+            }
+
+            // Check dd_address_keys
+            if (!is_ours) {
+                std::vector<unsigned char> output_key_bytes(txout.scriptPubKey.begin() + 2, txout.scriptPubKey.end());
+                XOnlyPubKey output_key(output_key_bytes);
+                CKey address_key;
+                if (GetAddressKey(output_key, address_key)) {
+                    is_ours = true;
+                }
+            }
+
+            if (!is_ours) continue;
+
+            // Check if already spent
+            COutPoint outpoint(txid, n);
+            if (m_wallet->IsSpent(outpoint)) continue;
+
+            // This is our DD output - add it
+            if (ddOutputIndex < ddAmounts.size()) {
+                CAmount dd_amount = ddAmounts[ddOutputIndex++];
+
+                if (dd_utxos.find(outpoint) == dd_utxos.end()) {
+                    dd_utxos[outpoint] = dd_amount;
+                    total_dd_balance += dd_amount;
+                    changed = true;
+                    LogPrint(BCLog::WALLETDB, "DigiDollar: ProcessTxForDD - Added DD UTXO %s:%zu (%lld cents)\n",
+                             txid.ToString(), n, static_cast<long long>(dd_amount));
+                }
+            }
+        }
+
+    } catch (const std::exception& e) {
+        LogPrintf("DigiDollar: ProcessTransactionForDD exception - %s\n", e.what());
+    }
+
+    return changed;
 }
 
 // =============================================================================

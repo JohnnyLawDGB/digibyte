@@ -1532,12 +1532,16 @@ void CWallet::blockConnected(ChainstateRole role, const interfaces::BlockInfo& b
         transactionRemovedFromMempool(block.data->vtx[index], MemPoolRemovalReason::BLOCK);
     }
 
-    // Rescan for DigiDollar UTXOs after block is connected
+    // Process DigiDollar UTXOs incrementally (Performance fix: don't do full rescan!)
+    // Only process transactions in THIS block, not a full wallet scan
     if (m_dd_wallet) {
-        m_dd_wallet->ScanForDDUTXOs();
-
-        // Update confirmation counts for all DD transactions
-        m_dd_wallet->UpdateDDConfirmations(block.hash);
+        // Process each transaction in the block for DD UTXO changes
+        for (const auto& tx : block.data->vtx) {
+            m_dd_wallet->ProcessTransactionForDD(*tx, tx->GetHash());
+        }
+        // NOTE: We no longer call UpdateDDConfirmations() on every block!
+        // Confirmations are calculated on-demand when GetDDTransactionHistory() is called.
+        // This avoids O(n) database writes per block during sync.
     }
 }
 

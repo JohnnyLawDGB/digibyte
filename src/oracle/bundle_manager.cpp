@@ -1138,7 +1138,8 @@ CAmount GetCurrentOraclePrice()
         if (price_cents == 0) {
             price_cents = 1; // Minimum 1 cent for any non-zero price
         }
-        LogPrintf("Oracle: GetCurrentOraclePrice returning %lld micro-USD = %lld cents ($%.4f)\n",
+        // Use LogPrint instead of LogPrintf to avoid log spam during sync
+        LogPrint(BCLog::NET, "Oracle: GetCurrentOraclePrice returning %lld micro-USD = %lld cents ($%.4f)\n",
                  price_micro_usd, price_cents, price_cents / 100.0);
         return price_cents;
     }

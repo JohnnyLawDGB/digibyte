@@ -5407,7 +5407,6 @@ QToolTip * {
 QTableView#transactionView {
     background-color: #001a33;
     alternate-background-color: #002244;
-    /* Don't set color - let model provide red/green for amounts, white for other columns */
     border: none;
     gridline-color: #003366;
     selection-background-color: #004488;
@@ -5416,7 +5415,20 @@ QTableView#transactionView {
 
 QTableView#transactionView::item {
     padding: 8px;
-    /* Don't set color here - let the model provide red/green for amounts */
+}
+
+/* Date column - white text */
+QTableView#transactionView QHeaderView::section:first {
+    color: #ffffff;
+}
+
+/* Ensure header sections are styled */
+QTableView#transactionView QHeaderView::section {
+    background-color: #0066cc;
+    color: #ffffff;
+    font-weight: bold;
+    border: 1px solid #0055aa;
+    padding: 6px;
 }
 
 QTableView#transactionView::item:alternate {

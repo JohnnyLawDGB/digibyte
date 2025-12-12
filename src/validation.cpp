@@ -2716,24 +2716,30 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
                                        "DigiDollar features not yet activated");
                 }
 
-                // Create validation context with current blockchain state
-                // Use real oracle price from GetOraclePriceForTransaction()
-                // Pass coins view for UTXO lookup in DD redemption validation
-                DigiDollar::ValidationContext ddContext(
-                    pindex->nHeight,
-                    GetOraclePriceForTransaction(tx, pindex->nHeight),  // Real oracle price in micro-USD
-                    DigiDollar::GetSystemCollateralRatio(),              // System collateral ratio
-                    m_chainman.GetParams(),
-                    &view                                                // Coins view for UTXO lookup
-                );
+                // IMPORTANT: Skip collateral validation during Initial Block Download (IBD)
+                // Historical blocks cannot be validated with current oracle prices.
+                // The oracle price at the time of block creation is not available during IBD.
+                // These blocks were already validated when they were first added to the chain.
+                if (!m_chainman.IsInitialBlockDownload()) {
+                    // Create validation context with current blockchain state
+                    // Use real oracle price from GetOraclePriceForTransaction()
+                    // Pass coins view for UTXO lookup in DD redemption validation
+                    DigiDollar::ValidationContext ddContext(
+                        pindex->nHeight,
+                        GetOraclePriceForTransaction(tx, pindex->nHeight),  // Real oracle price in micro-USD
+                        DigiDollar::GetSystemCollateralRatio(),              // System collateral ratio
+                        m_chainman.GetParams(),
+                        &view                                                // Coins view for UTXO lookup
+                    );
 
-                TxValidationState dd_state;
-                if (!DigiDollar::ValidateDigiDollarTransaction(tx, ddContext, dd_state)) {
-                    // DigiDollar validation failure is a consensus failure
-                    state.Invalid(BlockValidationResult::BLOCK_CONSENSUS,
-                                dd_state.GetRejectReason(), dd_state.GetDebugMessage());
-                    return error("%s: DigiDollar validation failed: %s, %s", __func__,
-                               tx.GetHash().ToString(), dd_state.ToString());
+                    TxValidationState dd_state;
+                    if (!DigiDollar::ValidateDigiDollarTransaction(tx, ddContext, dd_state)) {
+                        // DigiDollar validation failure is a consensus failure
+                        state.Invalid(BlockValidationResult::BLOCK_CONSENSUS,
+                                    dd_state.GetRejectReason(), dd_state.GetDebugMessage());
+                        return error("%s: DigiDollar validation failed: %s, %s", __func__,
+                                   tx.GetHash().ToString(), dd_state.ToString());
+                    }
                 }
             }
         }

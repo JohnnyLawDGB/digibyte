@@ -232,9 +232,9 @@ BOOST_AUTO_TEST_CASE(chainparams_digidollar_integration_test)
     BOOST_CHECK(DigiDollar::ValidateConsensusParams(regTestDD, strError));
 
     // Test network-specific differences (amounts are in CENTS, not satoshis)
-    BOOST_CHECK_EQUAL(mainDD.minMintAmount, 10000); // Mainnet: 10000 cents = $100.00 min
-    BOOST_CHECK_EQUAL(testDD.minMintAmount, 100);   // Testnet: 100 cents = $1.00 min
-    BOOST_CHECK_EQUAL(regTestDD.minMintAmount, 1);  // Regtest: 1 cent = $0.01 min
+    BOOST_CHECK_EQUAL(mainDD.minMintAmount, 10000);   // Mainnet: 10000 cents = $100.00 min
+    BOOST_CHECK_EQUAL(testDD.minMintAmount, 10000);   // Testnet: 10000 cents = $100.00 min
+    BOOST_CHECK_EQUAL(regTestDD.minMintAmount, 1);    // Regtest: 1 cent = $0.01 min
 
     BOOST_CHECK_EQUAL(mainDD.oracleThreshold, 8);  // Mainnet: 8-of-15 (Phase Two)
     BOOST_CHECK_EQUAL(testDD.oracleThreshold, 1);  // Testnet: 1-of-1 (Phase One)

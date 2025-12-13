@@ -516,8 +516,8 @@ public:
         digidollarParams = DigiDollar::ConsensusParams();
         // Testnet specific adjustments for easier testing
         // NOTE: DD amounts are in CENTS, not satoshis. 100 cents = $1.00
-        digidollarParams.minMintAmount = 100;              // 100 cents = $1 minimum for testing
-        digidollarParams.maxMintAmount = 1000000;          // 1,000,000 cents = $10k maximum for testing
+        digidollarParams.minMintAmount = 10000;            // 10,000 cents = $100 minimum
+        digidollarParams.maxMintAmount = 1000000;          // 1,000,000 cents = $10k maximum
         digidollarParams.oracleThreshold = 1;                         // 1-of-1 consensus for Phase One
         digidollarParams.activeOracles = 1;                           // Only 1 active oracle for Phase One
         digidollarParams.oracleCount = 1;                             // Total 1 oracle for Phase One

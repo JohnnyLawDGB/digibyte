@@ -5,6 +5,7 @@
 #include <consensus/digidollar_transaction_validation.h>
 
 #include <consensus/digidollar.h>
+#include <chainparams.h>
 #include <script/script.h>
 #include <script/interpreter.h>
 #include <primitives/transaction.h>
@@ -19,8 +20,9 @@
 // =====================================
 
 bool ValidateMintAmount(CAmount amount) {
-    DigiDollar::ConsensusParams params;
-    return DigiDollar::IsValidMintAmount(amount, params);
+    // Use network-specific params from the currently active chain
+    const auto& ddParams = Params().GetDigiDollarParams();
+    return DigiDollar::IsValidMintAmount(amount, ddParams);
 }
 
 bool ValidateCollateralRatio(CAmount ddAmount, CAmount collateralAmount, CAmount oraclePrice, int requiredRatio) {

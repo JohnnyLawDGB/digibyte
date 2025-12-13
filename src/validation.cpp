@@ -2716,30 +2716,28 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
                                        "DigiDollar features not yet activated");
                 }
 
-                // IMPORTANT: Skip collateral validation during Initial Block Download (IBD)
-                // Historical blocks cannot be validated with current oracle prices.
-                // The oracle price at the time of block creation is not available during IBD.
-                // These blocks were already validated when they were first added to the chain.
-                if (!m_chainman.IsInitialBlockDownload()) {
-                    // Create validation context with current blockchain state
-                    // Use real oracle price from GetOraclePriceForTransaction()
-                    // Pass coins view for UTXO lookup in DD redemption validation
-                    DigiDollar::ValidationContext ddContext(
-                        pindex->nHeight,
-                        GetOraclePriceForTransaction(tx, pindex->nHeight),  // Real oracle price in micro-USD
-                        DigiDollar::GetSystemCollateralRatio(),              // System collateral ratio
-                        m_chainman.GetParams(),
-                        &view                                                // Coins view for UTXO lookup
-                    );
+                // Create validation context with current blockchain state
+                // IMPORTANT: During block connect, skip oracle-dependent validation.
+                // Historical blocks were already validated when first mined with the oracle
+                // price that was valid at that time. We cannot re-validate them with current
+                // prices as that would cause consensus failures on valid historical blocks.
+                // Only mempool validation should use strict oracle price checking.
+                DigiDollar::ValidationContext ddContext(
+                    pindex->nHeight,
+                    GetOraclePriceForTransaction(tx, pindex->nHeight),  // Oracle price (may be 0 during IBD)
+                    DigiDollar::GetSystemCollateralRatio(),              // System collateral ratio
+                    m_chainman.GetParams(),
+                    &view,                                               // Coins view for UTXO lookup
+                    true                                                 // skipOracleValidation = true for block connect
+                );
 
-                    TxValidationState dd_state;
-                    if (!DigiDollar::ValidateDigiDollarTransaction(tx, ddContext, dd_state)) {
-                        // DigiDollar validation failure is a consensus failure
-                        state.Invalid(BlockValidationResult::BLOCK_CONSENSUS,
-                                    dd_state.GetRejectReason(), dd_state.GetDebugMessage());
-                        return error("%s: DigiDollar validation failed: %s, %s", __func__,
-                                   tx.GetHash().ToString(), dd_state.ToString());
-                    }
+                TxValidationState dd_state;
+                if (!DigiDollar::ValidateDigiDollarTransaction(tx, ddContext, dd_state)) {
+                    // DigiDollar validation failure is a consensus failure
+                    state.Invalid(BlockValidationResult::BLOCK_CONSENSUS,
+                                dd_state.GetRejectReason(), dd_state.GetDebugMessage());
+                    return error("%s: DigiDollar validation failed: %s, %s", __func__,
+                               tx.GetHash().ToString(), dd_state.ToString());
                 }
             }
         }

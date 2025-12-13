@@ -48,7 +48,7 @@ Phase One implements a **streamlined testnet-ready system**:
 - ✅ **Mock oracle for RegTest** - Testing infrastructure using `setmockoracleprice` RPC
 
 **What's Also Implemented in DigiByte Core**:
-- ✅ **Direct exchange fetching** - 13 exchange APIs with real libcurl (Binance, Coinbase, Kraken, KuCoin, Gate.io, HTX, Crypto.com, CoinGecko, Bittrex, Poloniex, Messari, CoinMarketCap, + MultiExchangeAggregator)
+- ✅ **Direct exchange fetching** - 7 active exchange APIs with real libcurl (Binance, KuCoin, Gate.io, HTX, Crypto.com, CoinGecko, CoinMarketCap), plus 5 additional defined but not active (Coinbase, Kraken, Bittrex, Poloniex, Messari)
 - ✅ **Oracle message creation** - Full oracle message creation and signing capability
 
 **How It Works Today**:
@@ -57,7 +57,7 @@ Phase One implements a **streamlined testnet-ready system**:
 - **Mainnet**: Completely disabled until Phase Two (safety guard)
 
 **The External Oracle Daemon** (separate from DigiByte Core):
-- Fetches prices from 13 exchanges every 15 seconds
+- Fetches prices from 7 active exchanges every 15 seconds
 - Calculates median with MAD outlier filtering
 - Creates and signs 128-byte oracle messages
 - Broadcasts to P2P network (which DigiByte Core nodes receive)
@@ -85,7 +85,7 @@ Here's exactly what happens when the oracle updates the price:
                             ▼
             ┌───────────────────────────────┐
             │  1. Fetch Prices from         │
-            │     7 Exchanges               │
+            │     7 Active Exchanges        │
             │     (Binance, KuCoin, etc.)   │
             └───────────────┬───────────────┘
                             │
@@ -364,22 +364,25 @@ WHY THIS FORMAT?
 │   final signed message via P2P and validate it (Steps 5-10).│
 └─────────────────────────────────────────────────────────────┘
 
-#### Step 1: Fetch Prices from 12 Exchanges (Every 15 seconds)
+#### Step 1: Fetch Prices from 7 Active Exchanges (Every 15 seconds)
 
-The oracle connects to 12 major cryptocurrency exchanges simultaneously:
+The oracle connects to 7 active cryptocurrency exchanges by default:
 
-- Binance
-- Coinbase
-- Kraken
-- KuCoin
-- Crypto.com
-- Bittrex
-- Poloniex
-- Messari
-- CoinMarketCap
-- CoinGecko
-- Gate.io
-- HTX (Huobi)
+**Active Exchanges (Initialized by Default):**
+- Binance (via data-api.binance.vision - not geo-blocked)
+- KuCoin (DGB-USDT)
+- Gate.io (DGB_USDT)
+- HTX/Huobi (dgbusdt)
+- Crypto.com (DGB_USD)
+- CoinGecko (aggregator)
+- CoinMarketCap (optional - requires API key)
+
+**Defined but Not Active (DGB not tradeable or requires API key):**
+- Coinbase (DGB info page only, not tradeable)
+- Kraken (DGB not listed)
+- Bittrex (defined but not initialized)
+- Poloniex (defined but not initialized)
+- Messari (requires API key now)
 
 **Example responses**:
 ```
@@ -702,33 +705,33 @@ Phase One's single oracle (1-of-1 consensus) is **not secure enough for mainnet*
 
 ## The Price Feed Mechanism
 
-### 12 Exchange Data Sources
+### 7 Active Exchange Data Sources
 
-The oracle aggregates prices from **12 major exchanges** to ensure reliability:
+The oracle aggregates prices from **7 active exchanges** by default (12 total defined):
 
-**High-Volume Exchanges** (Primary Sources):
-1. **Binance** - Largest crypto exchange globally
-2. **Coinbase** - Major US exchange (regulated)
-3. **Kraken** - Large US exchange (regulated)
-4. **KuCoin** - Popular international exchange
-5. **Crypto.com** - Growing exchange with good liquidity
+**Active Exchanges** (7 - Initialized by Default):
+1. **Binance** - Largest crypto exchange globally (via data-api.binance.vision)
+2. **KuCoin** - Popular international exchange (DGB-USDT)
+3. **Gate.io** - Large international exchange (DGB_USDT)
+4. **HTX (Huobi)** - Major global exchange (dgbusdt)
+5. **Crypto.com** - Growing exchange (DGB_USD via exchange/v1 API)
+6. **CoinGecko** - Popular crypto data aggregator (always works)
+7. **CoinMarketCap** - Most-visited crypto data site (optional - requires API key)
 
-**Additional Data Sources** (Backup/Verification):
-6. **Bittrex** - Established US exchange
-7. **Poloniex** - Long-running exchange
-8. **Messari** - Professional crypto data aggregator
-9. **CoinMarketCap** - Most-visited crypto data site
-10. **CoinGecko** - Popular crypto data aggregator
-11. **Gate.io** - Large international exchange
-12. **HTX (Huobi)** - Major global exchange
+**Defined but Not Active** (5 - Not initialized):
+- **Coinbase** - DGB info page only (not tradeable)
+- **Kraken** - DGB not listed
+- **Bittrex** - Defined but not initialized
+- **Poloniex** - Defined but not initialized
+- **Messari** - Requires API key now
 
-**Why 12 exchanges?**
+**Why 7 active exchanges?**
 - ✅ **Redundancy**: If 2-3 exchanges are down, oracle still works
 - ✅ **Outlier detection**: Can identify and filter bad data
 - ✅ **Market representation**: Captures global DGB price across multiple markets
-- ✅ **Manipulation resistance**: Hard to manipulate 12 independent data sources
+- ✅ **Manipulation resistance**: Hard to manipulate 7 independent data sources
 
-**Minimum requirement**: At least **3 exchanges** must return valid prices (30% threshold). If fewer than 3 respond, the oracle doesn't update the price.
+**Minimum requirement**: At least **3 exchanges** must return valid prices. If fewer than 3 respond, the oracle doesn't update the price.
 
 ### Median Calculation
 
@@ -2007,7 +2010,7 @@ Before testnet launch:
 | **Reputation System** | ❌ None | ❌ None | ✅ On-chain metrics |
 | **Status** | ✅ **Working now** | 🚧 **Ready (needs daemon)** | 📋 **Planned (2026)** |
 
-### **What Works Today (as of November 2025)**
+### **What Works Today (as of December 2025)**
 
 #### ✅ **DigiByte Core (v8.26) Includes:**
 1. **P2P Message Handling**

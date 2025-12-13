@@ -1,8 +1,8 @@
 # DigiDollar Oracle System - Complete Architecture Documentation
 **DigiByte v8.26 - Oracle Phase One Implementation**
-*Updated: 2025-12-08*
+*Updated: 2025-12-13*
 *Implementation Status: 100% Complete (123 Oracle unit tests across 8 files + 35 DigiDollar/Oracle integration tests + 18 functional tests)*
-*Document Version: 3.0 - Code-Verified Accurate*
+*Document Version: 4.0 - Post RC5 Code-Verified Accurate*
 
 ---
 
@@ -53,7 +53,7 @@ Phase One implements a **streamlined, testnet-ready system** with:
 - **Single Oracle** (1-of-1 consensus) for testing
 - **Compact Format** (20 bytes) fitting in OP_RETURN
 - **No Embedded Signatures** (trust based on chainparams)
-- **13 Exchange APIs** with median aggregation (Binance, Coinbase, Kraken, KuCoin, Gate.io, HTX, Crypto.com, CoinGecko, Bittrex, Poloniex, Messari, CoinMarketCap)
+- **7 Active Exchange APIs** with median aggregation (Binance, KuCoin, Gate.io, HTX, Crypto.com, CoinGecko, CoinMarketCap) + 5 additional defined (Coinbase, Kraken, Bittrex, Poloniex, Messari)
 - **15-second updates** (aligned with DigiByte block time)
 
 **Trade-off Analysis:**
@@ -78,7 +78,7 @@ Phase One implements a **streamlined, testnet-ready system** with:
 - ✅ OP_ORACLE opcode (0xbf) integrated
 - ✅ Compact 20-byte oracle format
 - ✅ P2P broadcasting via CConnman
-- ✅ 13 exchange APIs (real libcurl + mock fallback)
+- ✅ 7 active exchange APIs (real libcurl + mock fallback) + 5 additional defined
 - ✅ Block validation (CheckBlock/ContextualCheckBlock)
 - ✅ Price cache (ConnectBlock/DisconnectBlock)
 - ✅ Schnorr signatures (BIP-340)
@@ -100,9 +100,8 @@ Unit Tests:        123 tests across 8 test suites (100%) ✅
 DigiDollar/Oracle Integration:  35 tests (100%) ✅
   - digidollar_oracle_tests.cpp: Oracle/DigiDollar integration
 
-Functional Tests:    20 files (100%) ✅
+Functional Tests:    18 files (100%) ✅
   - digidollar_oracle.py: Full end-to-end oracle integration testing
-  - feature_oracle_p2p.py: P2P oracle message relay testing
 
 TOTAL: 123 Oracle unit + 35 integration + 18 functional = 176 oracle-related tests
 ```
@@ -179,20 +178,20 @@ Test Suite (123 unit tests + 1 functional = 124 total):
 PHASE 1: PRICE DISCOVERY (Every 15 seconds)
 ═══════════════════════════════════════════
 
-Exchange APIs (7 exchanges, parallel fetching):
+Exchange APIs (7 active exchanges, parallel fetching):
 ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐
-│  Binance    │  │  Coinbase   │  │   Kraken    │  │  Bittrex    │
-│ DGB/USDT    │  │  DGB/USD    │  │  DGB/USD    │  │  DGB/USD    │
-│ $0.05023    │  │  $0.05018   │  │  $0.05021   │  │  $0.05019   │
+│  Binance    │  │   KuCoin    │  │  Gate.io    │  │    HTX      │
+│ DGB/USDT    │  │  DGB/USDT   │  │ DGB_USDT    │  │ dgbusdt     │
+│ $0.05023    │  │  $0.05017   │  │  $0.05021   │  │  $0.05019   │
 └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘
        └─────────────────┴────────────┬────────────────────┘
                                       │
-┌─────────────┐  ┌─────────────┐  ┌──▼──────────┐  ┌─────────────┐
-│  Poloniex   │  │  Messari    │  │   KuCoin    │  │ Crypto.com  │
-│ DGB/USDT    │  │  Market     │  │  DGB/USDT   │  │  DGB/USD    │
-│ $0.05020    │  │  $0.05022   │  │  $0.05017   │  │  $0.05024   │
-└──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘
-       └─────────────────┴────────────────┴────────────────┘
+      ┌─────────────┐  ┌─────────────┐  ┌─────────────┐
+      │ Crypto.com  │  │  CoinGecko  │  │CoinMarketCap│
+      │  DGB/USD    │  │ (aggregator)│  │ (optional)  │
+      │ $0.05020    │  │  $0.05022   │  │  $0.05024   │
+      └──────┬──────┘  └──────┬──────┘  └──────┬──────┘
+             └────────────────┴────────────────┘
                                       │
                                       ▼
                     MultiExchangeAggregator
@@ -371,8 +370,8 @@ Receiving Node:
 
 External World:
   ┌─────────────────────────────────────────┐
-  │    Exchange APIs (12 exchanges)         │
-  │  Binance • Coinbase • Kraken • ...      │
+  │    Exchange APIs (7 active + 5 defined) │
+  │  Binance • KuCoin • Gate.io • HTX • ... │
   └──────────────────┬──────────────────────┘
                      │ HTTP/HTTPS (libcurl)
                      ▼
@@ -825,7 +824,7 @@ PHASE 1: MESSAGE CREATION (External Oracle Daemon)
 ┌───────────────────────────────────────────────────────────────┐
 │ Oracle Daemon (oracle.digibyte.io)                           │
 ├───────────────────────────────────────────────────────────────┤
-│ 1. Fetch prices from 10 exchanges (Binance, Coinbase, etc.)  │
+│ 1. Fetch prices from 7 active exchanges (Binance, KuCoin, etc.)│
 │ 2. Calculate median with MAD outlier filtering               │
 │ 3. Create COraclePriceMessage structure:                     │
 │    ┌─────────────────────────────────────────────────────┐  │
@@ -1717,8 +1716,8 @@ void OracleBundleManager::RemovePriceCache(int height)
 
 ## Document Status
 
-**Version**: 3.0 - Code-Verified Accurate
-**Last Updated**: 2025-12-05
+**Version**: 4.0 - Post RC5 Code-Verified Accurate
+**Last Updated**: 2025-12-13
 **Implementation Status**: 100% Complete
 **Test Coverage**: 123 Oracle unit tests + 35 integration tests + 18 functional tests
 
@@ -1726,7 +1725,7 @@ void OracleBundleManager::RemovePriceCache(int height)
 - ✅ Price format verified as micro-USD (1,000,000 = $1.00)
 - ✅ Byte-level format specifications code-verified
 - ✅ All validation ranges verified against oracle.cpp
-- ✅ Exchange APIs: 12 implementations with real libcurl + mock fallback
+- ✅ Exchange APIs: 7 active implementations + 5 defined (real libcurl + mock fallback)
 - ✅ Mock Oracle default: 6500 micro-USD ($0.0065/DGB)
 
 **Key Technical Details**:

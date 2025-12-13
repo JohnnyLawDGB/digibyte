@@ -1,7 +1,8 @@
 # DigiDollar Implementation Architecture
 **DigiByte v8.26 - Current Implementation Status**
-*Updated: 2025-12-10*
+*Updated: 2025-12-13*
 *Implementation Status: 85% Complete*
+*Document Version: 4.0 - Post RC5 Code-Verified*
 
 ## Executive Summary
 
@@ -22,7 +23,7 @@ DigiDollar is the world's first truly decentralized stablecoin built natively on
 - **Network-Wide Tracking**: Blockchain UTXO scanning shows identical stats to all nodes
 - **User Interface**: Complete wallet with 7 functional tabs (Overview, Receive, Send, Mint, Redeem, Positions, Transactions)
 - **Protection Systems**: DCA, ERR, and Volatility structure complete (70%) - depends on stub functions
-- **Comprehensive Testing**: 286 DigiDollar unit tests + 123 Oracle unit tests + 19 functional tests = 428 total tests
+- **Comprehensive Testing**: 286 DigiDollar unit tests + 123 Oracle unit tests + 18 functional tests = 427 total tests
 
 🔄 **What's In Progress:**
 - **System Health Functions**: `GetTotalSystemCollateral()` and `GetTotalDDSupply()` return stubs (blocks DCA/ERR)
@@ -70,7 +71,7 @@ The DigiDollar system is built into DigiByte Core with code organized in these m
 - **`/src/wallet/`** - Wallet integration (digidollarwallet.cpp + .h)
 - **`/src/consensus/`** - Network rules (DCA, ERR, volatility systems)
 - **`/src/rpc/`** - RPC commands (digidollar.cpp - 27+ commands including oracle RPCs)
-- **`/test/functional/`** - Automated tests (19 functional tests)
+- **`/test/functional/`** - Automated tests (18 functional tests)
 - **`/src/test/`** - Unit tests (286 DigiDollar tests across 26 files + 123 Oracle tests across 8 files = 409 total)
 
 ### 1.4 Development Phases - What's Been Built
@@ -284,21 +285,29 @@ class CDigiDollarAddress {
 
 ### 2.3 Transaction Type System
 
-#### **Version Encoding** (`/src/consensus/digidollar.h`)
+#### **Version Encoding** (`/src/primitives/transaction.h`)
 **Status: ✅ Complete Implementation**
 
 ```cpp
 // Transaction type encoding in version field
-// Format: 0x4444XXYY where XX = transaction type, YY = version flags
-// The "DD" prefix (0x4444) identifies DigiDollar transactions
+// Format: 0x0D1D0770 base marker with bit-shifted type and flags
+// Bits 0-15:  DD_VERSION_MASK (0x0000FFFF) - marker bits (0x0770)
+// Bits 16-23: DD_FLAGS_MASK (0x00FF0000) - flags
+// Bits 24-31: DD_TYPE_MASK (0xFF000000) - transaction type
+
+static constexpr int32_t DD_TX_VERSION = 0x0D1D0770;  // "DigiDollar" marker
+
 enum DigiDollarTxType : uint8_t {
     DD_TX_NONE = 0,      // Not a DD transaction
-    DD_TX_MINT = 1,      // Encodes to 0x44440100
-    DD_TX_TRANSFER = 2,  // Encodes to 0x44440200
-    DD_TX_REDEEM = 3,    // Encodes to 0x44440300
-    DD_TX_PARTIAL = 4,   // Encodes to 0x44440400
-    DD_TX_ERR = 5        // Encodes to 0x44440500
+    DD_TX_MINT = 1,      // Lock DGB, create DigiDollars
+    DD_TX_TRANSFER = 2,  // Transfer DigiDollars between addresses
+    DD_TX_REDEEM = 3,    // Burn DigiDollars, unlock DGB
+    DD_TX_PARTIAL = 4,   // Partial redemption
+    DD_TX_ERR = 5        // Emergency Redemption Ratio (ERR) redemption
 };
+
+// Version construction: (type << 24) | (flags << 16) | (DD_TX_VERSION & 0xFFFF)
+inline int32_t MakeDigiDollarVersion(DigiDollarTxType type, uint8_t flags = 0);
 ```
 
 **Benefits:**
@@ -306,6 +315,7 @@ enum DigiDollarTxType : uint8_t {
 - ✅ Enables type-specific validation
 - ✅ Maintains compatibility with existing infrastructure
 - ✅ Allows for future transaction type extensions
+- ✅ Unique marker (0x0D1D0770) prevents collision with other systems
 
 ---
 
@@ -1289,7 +1299,7 @@ size_t LoadFromDatabase();  // ✅ Working - loads all DD data including UTXOs
 
 **Implementation Quality:**
 - ✅ **Bitcoin Core Compliance**: Follows Bitcoin Core coding standards and patterns
-- ✅ **Test Coverage**: Extensive testing with 409 unit tests (286 DigiDollar + 123 Oracle) + 19 functional tests
+- ✅ **Test Coverage**: Extensive testing with 409 unit tests (286 DigiDollar + 123 Oracle) + 18 functional tests
 - ✅ **Documentation**: Well-documented code with clear intent and usage examples
 - ✅ **Security Awareness**: Proper input validation, overflow protection, and access control
 
@@ -1319,7 +1329,42 @@ size_t LoadFromDatabase();  // ✅ Working - loads all DD data including UTXOs
 
 ## 14. Recent Development Activity
 
-### 14.1 Latest Commits Analysis
+### 14.1 Latest Commits Analysis (Post RC5)
+
+**Critical Recent Fixes (December 2025):**
+
+#### **Descriptor Wallet Fix** (commit e4c7e2bc43)
+**Status: ✅ Fixed - Dec 12, 2025**
+
+DigiDollar transactions were failing with "Could not find spending key" in descriptor wallets (the default since v8.23). The fix adds `GetSigningProviderWithKeys()` method to properly access private keys in descriptor wallets.
+
+- **Files Changed**: `digidollarwallet.cpp`, `scriptpubkeyman.cpp`, `scriptpubkeyman.h`
+- **Impact**: Descriptor wallets now fully support all DigiDollar operations
+
+#### **Fee Requirements** (commit 46f809e414)
+**Status: ✅ Deployed - Dec 9, 2025**
+
+DigiDollar transactions now require minimum **0.1 DGB** fee (35M sat/kB rate) to ensure network relay.
+
+- **MIN_DD_FEE_RATE**: 35,000,000 sat/kB
+- **Minimum fee**: 10,000,000 satoshis (0.1 DGB)
+- **Max fee rate validation**: 100,000,000 sat/kB
+
+#### **IBD Performance Fix** (commit 4d6ca38ebf)
+**Status: ✅ Critical Fix - Dec 12, 2025**
+
+During Initial Block Download (IBD), DD collateral validation is skipped to prevent consensus failures when historical blocks were created at different oracle prices.
+
+- **Reason**: Historical blocks validated when first added; re-validating with different prices breaks consensus
+- **Implementation**: `IsInitialBlockDownload()` check wraps DD validation in `ConnectBlock()`
+
+#### **DigiDollarStatsIndex** (commit 82b500fc04)
+**Status: ✅ Added and Re-enabled**
+
+New blockchain index for aggregate DigiDollar statistics:
+- Tracks: `total_dd_supply`, `total_collateral`, `vault_count`
+- Default: Enabled (`-digidollarstatsindex=1`)
+- Disable with: `-digidollarstatsindex=0`
 
 Based on recent git history (commits 6bee4371aa "DD Sending", f49028aba1 "DD Signing & Broadcasting"):
 
@@ -1457,7 +1502,7 @@ void BroadcastOracleBundle(const COracleBundle& bundle) {
 | **GUI Implementation** | 92% | ✅ Functional | All widgets working, network stats display |
 | **RPC Interface** | 90% | ✅ Production Ready | 20 commands, only oracle APIs are mock |
 | **Database Persistence** | 100% | ✅ Complete | Save/load/restart/backup/restore all working (tested today) |
-| **Test Coverage** | 100% | ✅ Comprehensive | 409 unit tests (286 DigiDollar + 123 Oracle) across 34 files + 19 functional tests |
+| **Test Coverage** | 100% | ✅ Comprehensive | 409 unit tests (286 DigiDollar + 123 Oracle) across 34 files + 18 functional tests |
 
 ### 16.2 Overall Implementation Status
 
@@ -1721,7 +1766,7 @@ This update adds several **major implemented features** that were missing from t
 
 ### ✅ **Test Coverage**
 - **Unit Tests**: 286 DigiDollar tests + 123 Oracle tests = 409 total
-- **Functional Tests**: 20 comprehensive end-to-end tests
+- **Functional Tests**: 18 comprehensive end-to-end tests
 - All tests passing including network tracking verification
 - Test: `digidollar_network_tracking.py` proves UTXO scanning works
 
@@ -1745,11 +1790,11 @@ This update adds several **major implemented features** that were missing from t
 
 ### 21.1 Test Coverage Summary
 
-**Total Tests: 428 (All Passing ✅)**
+**Total Tests: 427 (All Passing ✅)**
 - **Unit Tests**: 409 tests
   - DigiDollar: 286 tests across 26 files
   - Oracle: 123 tests across 8 files
-- **Functional Tests**: 19 end-to-end integration tests
+- **Functional Tests**: 18 end-to-end integration tests
 
 ### 21.2 DigiDollar Unit Tests (286 tests)
 
@@ -1816,7 +1861,6 @@ This update adds several **major implemented features** that were missing from t
 | digidollar_transfer.py | Transfer operations |
 | digidollar_tx_amounts_debug.py | Transaction amount debugging |
 | digidollar_wallet.py | Wallet integration |
-| wallet_digidollar_persistence_restart.py | Restart persistence ✅ (tested today) |
 
 ### 21.5 Test Execution
 
@@ -1839,7 +1883,7 @@ test/functional/digidollar_oracle.py            # Oracle integration
 
 ### 21.6 Test Status: 100% Passing ✅
 
-All 428 tests pass successfully (409 unit + 19 functional test files). This comprehensive test suite provides:
+All 427 tests pass successfully (409 unit + 18 functional test files). This comprehensive test suite provides:
 - ✅ Unit test coverage for all core components
 - ✅ Integration testing for end-to-end workflows
 - ✅ Network testing with multi-node scenarios
@@ -1871,9 +1915,10 @@ All 428 tests pass successfully (409 unit + 19 functional test files). This comp
 - Theme-aware, professional Qt implementation
 
 ✅ **Testing** (Comprehensive):
-- **427 total tests**: 286 DigiDollar unit + 123 Oracle unit + 18 functional tests
+- **427 total tests**: 286 DigiDollar unit + 123 Oracle unit + 18 functional test files
 - Complete test coverage for all core features
 - Verified network-wide tracking with multi-node tests
+- Descriptor wallet support tested and verified
 
 ### What's NOT Working (The ONLY Gap):
 
@@ -1900,4 +1945,4 @@ Everything else - minting, sending, receiving, redemption, protection systems, n
 
 ---
 
-*This architecture document accurately reflects the DigiDollar implementation state as of 2025-12-10, based on comprehensive analysis of the actual codebase, functional test verification, and direct code inspection. All claims have been verified against source code and test results. Updated with code-verified corrections for: redemption paths (2 functional, not 4), oracle system (real libcurl + mock fallback), test count (19 functional tests), and wallet persistence (100% working).*
+*This architecture document accurately reflects the DigiDollar implementation state as of 2025-12-13 (Post RC5), based on comprehensive analysis of the actual codebase, functional test verification, and direct code inspection. All claims have been verified against source code and test results. Updated with code-verified corrections for: transaction version encoding (0x0D1D0770), descriptor wallet fix (e4c7e2bc43), fee requirements (0.1 DGB minimum), IBD behavior fix, redemption paths (2 functional, not 4), oracle system (real libcurl + mock fallback), and test count (18 functional tests).*

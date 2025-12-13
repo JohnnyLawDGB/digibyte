@@ -2877,7 +2877,9 @@ TransactionView QTableView {
 
 TransactionView QTableView::item {
     /* Don't override color here - let the model set red/green for amounts */
+    /* Force white text for macOS visibility */
     background-color: #003366;
+    color: #ffffff !important;
     padding: 4px;
 }
 

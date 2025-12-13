@@ -58,11 +58,12 @@ struct ValidationContext {
     int systemCollateral;            // System-wide collateral ratio percentage
     const CChainParams& params;      // Chain parameters including DD consensus params
     const CCoinsViewCache* coins;    // Coins view for UTXO lookups (nullptr if not available)
+    bool skipOracleValidation;       // Skip oracle-dependent validation (for historical blocks)
 
     ValidationContext(int height, CAmount price_micro_usd, int collateral, const CChainParams& chainParams,
-                      const CCoinsViewCache* coins_view = nullptr)
+                      const CCoinsViewCache* coins_view = nullptr, bool skip_oracle = false)
         : nHeight(height), oraclePriceMicroUSD(price_micro_usd), systemCollateral(collateral),
-          params(chainParams), coins(coins_view) {}
+          params(chainParams), coins(coins_view), skipOracleValidation(skip_oracle) {}
 };
 
 // ============================================================================

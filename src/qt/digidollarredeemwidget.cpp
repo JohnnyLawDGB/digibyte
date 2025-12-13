@@ -285,7 +285,7 @@ void DigiDollarRedeemWidget::setupButtonSection()
     // m_buttonLayout->addWidget(m_redeemAllButton);
 
     // Redeem button
-    m_redeemButton = new QPushButton(tr("Close Vault"), this);  // Changed from "Redeem"
+    m_redeemButton = new QPushButton(tr("Redeem && Unlock DGB"), this);
     m_redeemButton->setObjectName("redeemButton");
     m_redeemButton->setEnabled(false);
     // Theme will be applied in applyTheme()

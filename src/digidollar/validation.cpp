@@ -163,9 +163,15 @@ bool IsCollateralScript(const CScript& script) {
 // Amount and Collateral Validation
 // ============================================================================
 
-bool ValidateMintAmount(CAmount amount, const CChainParams& params) {
+bool ValidateMintAmount(CAmount amount, const CChainParams& params, int nHeight) {
     const auto& ddParams = params.GetDigiDollarParams();
-    return amount >= ddParams.minMintAmount && amount <= ddParams.maxMintAmount;
+
+    // Only enforce minMintAmount after the activation height
+    // This ensures historical blocks with lower amounts remain valid
+    CAmount effectiveMinMint = (nHeight >= ddParams.minMintAmountActivationHeight && ddParams.minMintAmountActivationHeight > 0)
+        ? ddParams.minMintAmount : 1;  // Before activation: 1 cent minimum
+
+    return amount >= effectiveMinMint && amount <= ddParams.maxMintAmount;
 }
 
 bool ValidateOutputAmount(CAmount amount, const CChainParams& params) {
@@ -453,7 +459,7 @@ bool ValidateMintTransaction(const CTransaction& tx,
             CAmount ddAmt = 0;
             if (ExtractDDAmount(output.scriptPubKey, ddAmt)) {
                 // Check both mint amount limits AND output amount limits
-                if (!ValidateMintAmount(ddAmt, ctx.params) || !ValidateOutputAmount(ddAmt, ctx.params)) {
+                if (!ValidateMintAmount(ddAmt, ctx.params, ctx.nHeight) || !ValidateOutputAmount(ddAmt, ctx.params)) {
                     LogPrintf("DigiDollar: Invalid DD mint/output amount detected: %d cents\n", ddAmt);
                     return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-dd-mint-amount");
                 }
@@ -466,21 +472,23 @@ bool ValidateMintTransaction(const CTransaction& tx,
         return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-mint-outputs");
     }
 
-    // 2. Oracle price validation
-    if (ctx.oraclePriceMicroUSD <= 0) {
+    // 2. Oracle price validation (skip for historical blocks)
+    if (!ctx.skipOracleValidation && ctx.oraclePriceMicroUSD <= 0) {
         LogPrintf("DigiDollar: Invalid oracle price: %d\n", ctx.oraclePriceMicroUSD);
         return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-oracle-price");
     }
 
-    // 3. Volatility protection checks for minting
-    if (Volatility::VolatilityMonitor::ShouldFreezeMinting()) {
-        LogPrintf("DigiDollar: Minting frozen due to high volatility\n");
-        return state.Invalid(TxValidationResult::TX_CONSENSUS, "minting-frozen-volatility");
-    }
+    // 3. Volatility protection checks for minting (skip for historical blocks)
+    if (!ctx.skipOracleValidation) {
+        if (Volatility::VolatilityMonitor::ShouldFreezeMinting()) {
+            LogPrintf("DigiDollar: Minting frozen due to high volatility\n");
+            return state.Invalid(TxValidationResult::TX_CONSENSUS, "minting-frozen-volatility");
+        }
 
-    if (Volatility::VolatilityMonitor::ShouldFreezeAll()) {
-        LogPrintf("DigiDollar: All DD operations frozen due to extreme volatility\n");
-        return state.Invalid(TxValidationResult::TX_CONSENSUS, "all-operations-frozen");
+        if (Volatility::VolatilityMonitor::ShouldFreezeAll()) {
+            LogPrintf("DigiDollar: All DD operations frozen due to extreme volatility\n");
+            return state.Invalid(TxValidationResult::TX_CONSENSUS, "all-operations-frozen");
+        }
     }
 
     // 4. Analyze outputs to find DD amounts and collateral
@@ -591,9 +599,9 @@ bool ValidateMintTransaction(const CTransaction& tx,
         }
     }
 
-    // 4. Calculate DD amount if not extracted from metadata
+    // 4. Calculate DD amount if not extracted from metadata (skip for historical blocks)
     // For mint transactions, DD amount = (collateral * oracle_price * 100) / (collateral_ratio * COIN)
-    if (hasDDOutput && totalDD == 0 && totalCollateral > 0) {
+    if (!ctx.skipOracleValidation && hasDDOutput && totalDD == 0 && totalCollateral > 0) {
         // Calculate DD amount from collateral and oracle price
         CAmount oraclePrice = ctx.oraclePriceMicroUSD;
         if (oraclePrice <= 0) {
@@ -631,31 +639,34 @@ bool ValidateMintTransaction(const CTransaction& tx,
     }
 
     // 6. Validate total DD amount against mint limits
-    if (!ValidateMintAmount(totalDD, ctx.params)) {
+    if (!ValidateMintAmount(totalDD, ctx.params, ctx.nHeight)) {
         LogPrintf("DigiDollar: Invalid total mint amount: %d cents (limits: %d - %d)\n",
                   totalDD, ctx.params.GetDigiDollarParams().minMintAmount,
                   ctx.params.GetDigiDollarParams().maxMintAmount);
         return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-dd-mint-amount");
     }
 
-    // 7. Calculate required collateral based on DD amount, lock time, and system state
-    CAmount requiredCollateral = CalculateRequiredCollateral(totalDD, lockTime, ctx);
-    if (requiredCollateral <= 0) {
-        LogPrintf("DigiDollar: Failed to calculate required collateral\n");
-        return state.Invalid(TxValidationResult::TX_CONSENSUS, "collateral-calculation-failed");
-    }
+    // 7. Calculate and verify collateral (skip for historical blocks - oracle price dependent)
+    CAmount requiredCollateral = 0;
+    if (!ctx.skipOracleValidation) {
+        requiredCollateral = CalculateRequiredCollateral(totalDD, lockTime, ctx);
+        if (requiredCollateral <= 0) {
+            LogPrintf("DigiDollar: Failed to calculate required collateral\n");
+            return state.Invalid(TxValidationResult::TX_CONSENSUS, "collateral-calculation-failed");
+        }
 
-    // 7. Verify sufficient collateral
-    if (totalCollateral < requiredCollateral) {
-        LogPrintf("DigiDollar: Insufficient collateral: provided %d, required %d\n",
-                  totalCollateral, requiredCollateral);
-        return state.Invalid(TxValidationResult::TX_CONSENSUS, "insufficient-collateral");
-    }
+        // Verify sufficient collateral
+        if (totalCollateral < requiredCollateral) {
+            LogPrintf("DigiDollar: Insufficient collateral: provided %d, required %d\n",
+                      totalCollateral, requiredCollateral);
+            return state.Invalid(TxValidationResult::TX_CONSENSUS, "insufficient-collateral");
+        }
 
-    // 8. Additional validation checks
-    if (!ValidateCollateralRatio(totalCollateral, totalDD, lockTime, ctx)) {
-        LogPrintf("DigiDollar: Collateral ratio validation failed\n");
-        return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-collateral-ratio");
+        // 8. Additional validation checks
+        if (!ValidateCollateralRatio(totalCollateral, totalDD, lockTime, ctx)) {
+            LogPrintf("DigiDollar: Collateral ratio validation failed\n");
+            return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-collateral-ratio");
+        }
     }
 
     // 9. Log successful validation
@@ -687,8 +698,8 @@ bool ValidateTransferTransaction(const CTransaction& tx,
         return state.Invalid(TxValidationResult::TX_CONSENSUS, "transfer-wrong-tx-type");
     }
 
-    // Volatility protection checks for transfers
-    if (Volatility::VolatilityMonitor::ShouldFreezeAll()) {
+    // Volatility protection checks for transfers (skip for historical blocks)
+    if (!ctx.skipOracleValidation && Volatility::VolatilityMonitor::ShouldFreezeAll()) {
         LogPrintf("DigiDollar: All DD operations frozen due to extreme volatility\n");
         return state.Invalid(TxValidationResult::TX_CONSENSUS, "all-operations-frozen");
     }
@@ -838,8 +849,8 @@ bool ValidateRedemptionTransaction(const CTransaction& tx,
         return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-redeem-no-inputs");
     }
 
-    // Volatility protection checks for redemptions
-    if (Volatility::VolatilityMonitor::ShouldFreezeAll()) {
+    // Volatility protection checks for redemptions (skip for historical blocks)
+    if (!ctx.skipOracleValidation && Volatility::VolatilityMonitor::ShouldFreezeAll()) {
         LogPrintf("DigiDollar: All DD operations frozen due to extreme volatility\n");
         return state.Invalid(TxValidationResult::TX_CONSENSUS, "all-operations-frozen");
     }
@@ -1052,9 +1063,9 @@ bool ValidateNormalRedemptionConditions(const CTransaction& tx,
                                     ctx.nHeight, tx.nLockTime));
     }
 
-    // Check if ERR (Emergency Redemption Ratio) is active
+    // Check if ERR (Emergency Redemption Ratio) is active (skip for historical blocks)
     // Use systemCollateral from context (percentage, where 100 = 100% collateralized)
-    if (ctx.systemCollateral < 100) {
+    if (!ctx.skipOracleValidation && ctx.systemCollateral < 100) {
         LogPrintf("DigiDollar: Normal redemption rejected - ERR active (system health: %d%%)\n", ctx.systemCollateral);
         return state.Invalid(TxValidationResult::TX_CONSENSUS, "redemption-err-active",
                             strprintf("ERR active - system health %d%% (normal redemptions blocked)", ctx.systemCollateral));

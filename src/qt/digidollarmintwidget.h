@@ -97,6 +97,7 @@ private:
     QLabel* m_amountSuffix;
     QLabel* m_usdValueLabel;
     QLabel* m_usdValueValue;
+    QLabel* m_amountWarningLabel;
 
     // Lock tier section
     QFrame* m_lockTierFrame;

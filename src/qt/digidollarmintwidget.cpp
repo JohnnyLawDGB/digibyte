@@ -41,6 +41,7 @@ DigiDollarMintWidget::DigiDollarMintWidget(QWidget *parent) :
     m_amountSuffix(nullptr),
     m_usdValueLabel(nullptr),
     m_usdValueValue(nullptr),
+    m_amountWarningLabel(nullptr),
     m_lockTierFrame(nullptr),
     m_lockTierLayout(nullptr),
     m_lockTierLabel(nullptr),
@@ -184,6 +185,13 @@ void DigiDollarMintWidget::setupMintAmountSection()
 
     m_amountLayout->addWidget(m_usdValueLabel, 2, 0);
     m_amountLayout->addWidget(m_usdValueValue, 2, 1);
+
+    // Warning label for min/max amount limits
+    m_amountWarningLabel = new QLabel(this);
+    m_amountWarningLabel->setObjectName("amountWarningLabel");
+    m_amountWarningLabel->setWordWrap(true);
+    m_amountWarningLabel->setVisible(false); // Hidden by default
+    m_amountLayout->addWidget(m_amountWarningLabel, 3, 0, 1, 2);
 
     // Add stretch to push everything left
     m_amountLayout->setColumnStretch(1, 0);
@@ -678,7 +686,17 @@ bool DigiDollarMintWidget::validateAmount() const
 
     int pos = 0;
     QString amountCopy = amountText;
-    return m_amountValidator->validate(amountCopy, pos) == QValidator::Acceptable;
+    if (m_amountValidator->validate(amountCopy, pos) != QValidator::Acceptable) {
+        return false;
+    }
+
+    // Check min/max limits from chain params (amounts in cents)
+    const auto& ddParams = Params().GetDigiDollarParams();
+    double minAmount = ddParams.minMintAmount / 100.0;  // Convert cents to dollars
+    double maxAmount = ddParams.maxMintAmount / 100.0;  // Convert cents to dollars
+
+    double amount = amountText.toDouble();
+    return amount >= minAmount && amount <= maxAmount;
 }
 
 bool DigiDollarMintWidget::validateCollateral() const
@@ -773,22 +791,50 @@ void DigiDollarMintWidget::updateAmountValidation()
     QString warningColor = isDarkTheme ? "#ff9800" : "#ffc107";
     QString errorColor = isDarkTheme ? "#f44336" : "#dc3545";
 
+    // Get min/max limits from chain params
+    const auto& ddParams = Params().GetDigiDollarParams();
+    double minAmount = ddParams.minMintAmount / 100.0;  // Convert cents to dollars
+    double maxAmount = ddParams.maxMintAmount / 100.0;  // Convert cents to dollars
+
     if (!amountText.isEmpty()) {
-        bool isValid = validateAmount();
+        int pos = 0;
+        QString amountCopy = amountText;
+        bool formatValid = m_amountValidator->validate(amountCopy, pos) == QValidator::Acceptable;
+        double amount = amountText.toDouble();
         bool hasCollateral = validateCollateral();
 
-        if (!isValid) {
+        if (!formatValid) {
             // Invalid format - only border color, let system handle background
             m_amountEdit->setStyleSheet(QString("QLineEdit { border: 2px solid %1; }").arg(errorColor));
+            m_amountWarningLabel->setText(tr("Invalid amount format"));
+            m_amountWarningLabel->setStyleSheet(QString("QLabel { color: %1; font-weight: bold; }").arg(errorColor));
+            m_amountWarningLabel->setVisible(true);
+        } else if (amount < minAmount) {
+            // Below minimum
+            m_amountEdit->setStyleSheet(QString("QLineEdit { border: 2px solid %1; }").arg(errorColor));
+            m_amountWarningLabel->setText(tr("⚠️ Minimum mint amount is $%1").arg(QString::number(minAmount, 'f', 2)));
+            m_amountWarningLabel->setStyleSheet(QString("QLabel { color: %1; font-weight: bold; }").arg(errorColor));
+            m_amountWarningLabel->setVisible(true);
+        } else if (amount > maxAmount) {
+            // Above maximum
+            m_amountEdit->setStyleSheet(QString("QLineEdit { border: 2px solid %1; }").arg(errorColor));
+            m_amountWarningLabel->setText(tr("⚠️ Maximum mint amount is $%1").arg(QString::number(maxAmount, 'f', 0)));
+            m_amountWarningLabel->setStyleSheet(QString("QLabel { color: %1; font-weight: bold; }").arg(errorColor));
+            m_amountWarningLabel->setVisible(true);
         } else if (!hasCollateral) {
             // Valid format but insufficient collateral
             m_amountEdit->setStyleSheet(QString("QLineEdit { border: 2px solid %1; }").arg(warningColor));
+            m_amountWarningLabel->setText(tr("⚠️ Insufficient DGB collateral for this amount"));
+            m_amountWarningLabel->setStyleSheet(QString("QLabel { color: %1; font-weight: bold; }").arg(warningColor));
+            m_amountWarningLabel->setVisible(true);
         } else {
             // Valid and sufficient collateral
             m_amountEdit->setStyleSheet(QString("QLineEdit { border: 2px solid %1; }").arg(successColor));
+            m_amountWarningLabel->setVisible(false);
         }
     } else {
         m_amountEdit->setStyleSheet("");
+        m_amountWarningLabel->setVisible(false);
     }
 }
 

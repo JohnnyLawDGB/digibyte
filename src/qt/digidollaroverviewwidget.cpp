@@ -804,9 +804,11 @@ void DigiDollarOverviewWidget::updateRecentTransactions()
         amountLabel->setAlignment(Qt::AlignRight);
         layout->addWidget(amountLabel);
 
-        // Confirmations
+        // Confirmations - also check for abandoned status
         QString confirmText;
-        if (tx.confirmations == 0) {
+        if (tx.abandoned) {
+            confirmText = tr("Abandoned");
+        } else if (tx.confirmations == 0) {
             confirmText = tr("Pending");
         } else if (tx.confirmations < 6) {
             confirmText = QString("%1 conf").arg(tx.confirmations);

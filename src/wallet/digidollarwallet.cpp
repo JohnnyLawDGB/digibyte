@@ -875,12 +875,23 @@ std::vector<DDTransaction> DigiDollarWallet::GetDDTransactionHistory() const {
     // Add mock history for testing if present
     history.insert(history.end(), mockHistory.begin(), mockHistory.end());
 
-    // Calculate confirmations on-demand (not stored/updated on every block)
+    // Calculate confirmations and abandoned status on-demand
     // This is the same pattern Bitcoin Core uses - confirmations computed dynamically
     for (auto& ddtx : history) {
         uint256 txid;
         txid.SetHex(ddtx.txid);
         ddtx.confirmations = GetDDTransactionConfirmations(txid);
+
+        // Check if transaction is abandoned
+        ddtx.abandoned = false;
+        if (m_wallet) {
+            LOCK(m_wallet->cs_wallet);
+            const wallet::CWalletTx* wtx = m_wallet->GetWalletTx(txid);
+            if (wtx && wtx->isAbandoned()) {
+                ddtx.abandoned = true;
+                ddtx.confirmations = -1; // Use -1 to indicate abandoned
+            }
+        }
     }
 
     // Sort by timestamp (newest first)

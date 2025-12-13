@@ -274,9 +274,15 @@ void DigiDollarTransactionsWidget::populateTable()
             txidItem->setToolTip(txid);
             m_table->setItem(row, Column::TxId, txidItem);
 
-            // Confirmations
+            // Confirmations - also check if transaction is abandoned
             int confirmations = tx.find_value("confirmations").getInt<int>();
-            QTableWidgetItem* confItem = new QTableWidgetItem(formatConfirmations(confirmations));
+            bool isAbandoned = false;
+            // Check abandoned flag directly from transaction (from listdigidollartxs RPC)
+            const UniValue& abandonedVal = tx.find_value("abandoned");
+            if (abandonedVal.isBool()) {
+                isAbandoned = abandonedVal.get_bool();
+            }
+            QTableWidgetItem* confItem = new QTableWidgetItem(formatConfirmations(confirmations, isAbandoned));
             confItem->setTextAlignment(Qt::AlignCenter);
             m_table->setItem(row, Column::Confirmations, confItem);
 
@@ -405,8 +411,11 @@ QString DigiDollarTransactionsWidget::formatTimestamp(uint64_t timestamp) const
     return dt.toString("MMM dd, yyyy hh:mm");
 }
 
-QString DigiDollarTransactionsWidget::formatConfirmations(int confirmations) const
+QString DigiDollarTransactionsWidget::formatConfirmations(int confirmations, bool isAbandoned) const
 {
+    if (isAbandoned) {
+        return tr("Abandoned");
+    }
     if (confirmations == 0) {
         return tr("Pending");
     } else if (confirmations >= 6) {

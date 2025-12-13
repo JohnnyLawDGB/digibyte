@@ -417,19 +417,18 @@ QString DigiDollarTransactionsWidget::formatConfirmations(int confirmations) con
 
 QString DigiDollarTransactionsWidget::formatLockPeriod(int lockTier) const
 {
-    // Tier mappings: 0-9 (10 tiers total)
-    // 0=1h (testing), 1=30d, 2=90d, 3=180d, 4=1y, 5=2y, 6=3y, 7=5y, 8=7y, 9=10y
+    // Tier mappings: 0-8 (9 tiers total) - matches consensus/digidollar.h
+    // 0=1h (testing), 1=30d, 2=3mo, 3=6mo, 4=1y, 5=3y, 6=5y, 7=7y, 8=10y
     switch (lockTier) {
         case 0:  return tr("1 hour");
         case 1:  return tr("30 days");
-        case 2:  return tr("90 days");
-        case 3:  return tr("180 days");
+        case 2:  return tr("3 months");
+        case 3:  return tr("6 months");
         case 4:  return tr("1 year");
-        case 5:  return tr("2 years");
-        case 6:  return tr("3 years");
-        case 7:  return tr("5 years");
-        case 8:  return tr("7 years");
-        case 9:  return tr("10 years");
+        case 5:  return tr("3 years");
+        case 6:  return tr("5 years");
+        case 7:  return tr("7 years");
+        case 8:  return tr("10 years");
         default: return QString("-");  // Non-mint or unknown
     }
 }
@@ -437,17 +436,17 @@ QString DigiDollarTransactionsWidget::formatLockPeriod(int lockTier) const
 QString DigiDollarTransactionsWidget::formatLockPeriodShort(int lockTier) const
 {
     // Short format for Type column display (e.g., "Mint 1-hr", "Mint 30-day")
+    // Tier mappings: 0-8 (9 tiers total) - matches consensus/digidollar.h
     switch (lockTier) {
         case 0:  return tr("1-hr");
         case 1:  return tr("30-day");
-        case 2:  return tr("90-day");
-        case 3:  return tr("180-day");
+        case 2:  return tr("3-mo");
+        case 3:  return tr("6-mo");
         case 4:  return tr("1-yr");
-        case 5:  return tr("2-yr");
-        case 6:  return tr("3-yr");
-        case 7:  return tr("5-yr");
-        case 8:  return tr("7-yr");
-        case 9:  return tr("10-yr");
+        case 5:  return tr("3-yr");
+        case 6:  return tr("5-yr");
+        case 7:  return tr("7-yr");
+        case 8:  return tr("10-yr");
         default: return QString("");
     }
 }

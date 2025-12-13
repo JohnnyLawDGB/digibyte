@@ -757,18 +757,17 @@ void DigiDollarOverviewWidget::updateRecentTransactions()
         QString categoryText;
         QString lockPeriodStr;
 
-        // Format lock period based on tier
+        // Format lock period based on tier (0-8, matches consensus/digidollar.h)
         switch (tx.lock_tier) {
             case 0:  lockPeriodStr = tr("1-hr"); break;
             case 1:  lockPeriodStr = tr("30-day"); break;
-            case 2:  lockPeriodStr = tr("90-day"); break;
-            case 3:  lockPeriodStr = tr("180-day"); break;
+            case 2:  lockPeriodStr = tr("3-mo"); break;
+            case 3:  lockPeriodStr = tr("6-mo"); break;
             case 4:  lockPeriodStr = tr("1-yr"); break;
-            case 5:  lockPeriodStr = tr("2-yr"); break;
-            case 6:  lockPeriodStr = tr("3-yr"); break;
-            case 7:  lockPeriodStr = tr("5-yr"); break;
-            case 8:  lockPeriodStr = tr("7-yr"); break;
-            case 9:  lockPeriodStr = tr("10-yr"); break;
+            case 5:  lockPeriodStr = tr("3-yr"); break;
+            case 6:  lockPeriodStr = tr("5-yr"); break;
+            case 7:  lockPeriodStr = tr("7-yr"); break;
+            case 8:  lockPeriodStr = tr("10-yr"); break;
             default: lockPeriodStr = ""; break;
         }
 

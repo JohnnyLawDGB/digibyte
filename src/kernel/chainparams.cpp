@@ -517,6 +517,7 @@ public:
         // Testnet specific adjustments for easier testing
         // NOTE: DD amounts are in CENTS, not satoshis. 100 cents = $1.00
         digidollarParams.minMintAmount = 10000;            // 10,000 cents = $100 minimum
+        digidollarParams.minMintAmountActivationHeight = 150000;  // Activate $100 min at height 150000
         digidollarParams.maxMintAmount = 1000000;          // 1,000,000 cents = $10k maximum
         digidollarParams.oracleThreshold = 1;                         // 1-of-1 consensus for Phase One
         digidollarParams.activeOracles = 1;                           // Only 1 active oracle for Phase One

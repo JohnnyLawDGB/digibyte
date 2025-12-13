@@ -63,6 +63,9 @@ struct ConsensusParams {
     CAmount maxMintAmount = 10000000;          // $100k maximum per tx (10000000 cents)
     CAmount minOutputAmount = 100;             // $1 minimum output (100 cents)
 
+    // Activation heights for rule changes
+    int minMintAmountActivationHeight = 0;     // Height at which minMintAmount rule activates
+
     // Oracle configuration
     uint32_t oracleCount = 30;                 // Total hardcoded oracles
     uint32_t activeOracles = 15;               // Active per epoch

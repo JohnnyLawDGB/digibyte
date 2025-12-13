@@ -211,9 +211,10 @@ bool ValidateERRRedemption(const CScript& script, int systemCollateral);
  *
  * @param amount Amount to validate (in cents)
  * @param params Chain parameters
+ * @param nHeight Current block height (for activation height checks)
  * @return true if amount is within valid range for minting
  */
-bool ValidateMintAmount(CAmount amount, const CChainParams& params);
+bool ValidateMintAmount(CAmount amount, const CChainParams& params, int nHeight = 0);
 
 /**
  * Validate DigiDollar output amount against minimum requirements

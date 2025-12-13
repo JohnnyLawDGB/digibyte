@@ -448,9 +448,9 @@ QString TransactionTableModel::formatTxToAddress(const TransactionRecord *wtx, b
 
 QVariant TransactionTableModel::addressColor(const TransactionRecord *wtx) const
 {
-    // Check if we're using dark theme
+    // Check if we're using dark theme (empty defaults to dark, matching applyTheme() behavior)
     QString currentTheme = walletModel->getOptionsModel()->data(walletModel->getOptionsModel()->index(OptionsModel::Theme), Qt::EditRole).toString();
-    bool isDarkTheme = (currentTheme == "dark");
+    bool isDarkTheme = (currentTheme.isEmpty() || currentTheme == "dark");
 
     // Always return the appropriate color for the current theme
     // Dark theme: white text, Light theme: dark blue text
@@ -607,9 +607,9 @@ QVariant TransactionTableModel::data(const QModelIndex &index, int role) const
         return column_alignments[index.column()];
     case Qt::ForegroundRole:
         {
-            // Check if we're using dark theme
+            // Check if we're using dark theme (empty defaults to dark, matching applyTheme() behavior)
             QString currentTheme = walletModel->getOptionsModel()->data(walletModel->getOptionsModel()->index(OptionsModel::Theme), Qt::EditRole).toString();
-            bool isDarkTheme = (currentTheme == "dark");
+            bool isDarkTheme = (currentTheme.isEmpty() || currentTheme == "dark");
             
             // Use the "danger" color for abandoned transactions
             if(rec->status.status == TransactionStatus::Abandoned)

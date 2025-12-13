@@ -2876,10 +2876,9 @@ TransactionView QTableView {
 }
 
 TransactionView QTableView::item {
-    /* Don't override color here - let the model set red/green for amounts */
-    /* Force white text for macOS visibility */
+    /* Don't override color here - let the model set red/green/yellow for amounts */
+    /* Model provides theme-aware colors for all columns including amounts */
     background-color: #003366;
-    color: #ffffff !important;
     padding: 4px;
 }
 
@@ -5406,17 +5405,18 @@ QToolTip * {
 */
 
 /* Transaction View (Transactions Page) - macOS fallback */
+/* NOTE: Do NOT set color property here - let model's ForegroundRole work for amount colors (red/green/yellow) */
 QTableView#transactionView {
     background-color: #001a33;
     alternate-background-color: #002244;
     border: none;
     gridline-color: #003366;
     selection-background-color: #004488;
-    selection-color: #ffffff;
 }
 
 QTableView#transactionView::item {
     padding: 8px;
+    /* No color property - model provides theme-aware colors for all columns */
 }
 
 /* Date column - white text */

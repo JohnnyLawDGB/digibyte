@@ -61,9 +61,18 @@ public:
         QString address = index.data(Qt::DisplayRole).toString();
         qint64 amount = index.data(TransactionTableModel::AmountRole).toLongLong();
         bool confirmed = index.data(TransactionTableModel::ConfirmedRole).toBool();
+
+        // Get foreground color from model's ForegroundRole
+        // The model returns theme-aware colors (white for dark theme, dark blue for light theme)
         QVariant value = index.data(Qt::ForegroundRole);
-        QColor foreground = option.palette.color(QPalette::Text);
-        if(value.canConvert<QBrush>())
+        // Use explicit white as default for dark theme (fixes macOS stylesheet issue)
+        QColor foreground = isDarkTheme ? QColor(255, 255, 255) : QColor(0, 51, 102);
+        if(value.canConvert<QColor>())
+        {
+            // Prefer direct QColor conversion
+            foreground = value.value<QColor>();
+        }
+        else if(value.canConvert<QBrush>())
         {
             QBrush brush = qvariant_cast<QBrush>(value);
             foreground = brush.color();
@@ -101,8 +110,19 @@ public:
         QRect amount_bounding_rect;
         painter->drawText(amountRect, Qt::AlignRight | Qt::AlignVCenter, amountText, &amount_bounding_rect);
 
-        // Use theme-aware color for date text
+        // Get date color from model's Date column ForegroundRole for theme consistency
+        QModelIndex dateIndex = index.sibling(index.row(), TransactionTableModel::Date);
+        QVariant dateValue = dateIndex.data(Qt::ForegroundRole);
         QColor dateColor = isDarkTheme ? QColor(255, 255, 255) : QColor(0, 51, 102);
+        if(dateValue.canConvert<QColor>())
+        {
+            dateColor = dateValue.value<QColor>();
+        }
+        else if(dateValue.canConvert<QBrush>())
+        {
+            QBrush brush = qvariant_cast<QBrush>(dateValue);
+            dateColor = brush.color();
+        }
         painter->setPen(dateColor);
         QRect date_bounding_rect;
         painter->drawText(amountRect, Qt::AlignLeft | Qt::AlignVCenter, GUIUtil::dateTimeStr(date), &date_bounding_rect);
@@ -264,9 +284,9 @@ void OverviewPage::setWalletModel(WalletModel *model)
     this->walletModel = model;
     if(model && model->getOptionsModel())
     {
-        // Check current theme and update delegate
+        // Check current theme and update delegate (empty defaults to dark, matching applyTheme())
         QString currentTheme = model->getOptionsModel()->data(model->getOptionsModel()->index(OptionsModel::Theme), Qt::EditRole).toString();
-        txdelegate->isDarkTheme = (currentTheme == "dark");
+        txdelegate->isDarkTheme = (currentTheme.isEmpty() || currentTheme == "dark");
         
         // Set up transaction list
         filter.reset(new TransactionFilterProxy());
@@ -332,9 +352,9 @@ void OverviewPage::updateDisplayUnit()
         // Update txdelegate->unit with the current unit
         txdelegate->unit = walletModel->getOptionsModel()->getDisplayUnit();
         
-        // Update theme too
+        // Update theme too (empty defaults to dark, matching applyTheme())
         QString currentTheme = walletModel->getOptionsModel()->data(walletModel->getOptionsModel()->index(OptionsModel::Theme), Qt::EditRole).toString();
-        txdelegate->isDarkTheme = (currentTheme == "dark");
+        txdelegate->isDarkTheme = (currentTheme.isEmpty() || currentTheme == "dark");
 
         ui->listTransactions->update();
     }

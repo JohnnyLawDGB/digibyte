@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <functional>
 #include <map>
 
 // Forward declare to avoid namespace conflicts
@@ -27,6 +28,7 @@ static const CAmount DUST_THRESHOLD = 1000;        // Minimum change output (100
 static const size_t ESTIMATED_TX_VSIZE = 500;      // Estimated transaction size in vB (increased for multiple inputs)
 static const int DEFAULT_SYSTEM_COLLATERAL = 150;   // Default system health (150%)
 static const double MAX_FEE_RATIO = 0.5;           // Maximum fee as ratio of total input
+static const size_t MAX_TX_INPUTS = 400;           // Maximum inputs per transaction to stay under MAX_STANDARD_TX_WEIGHT
 
 // ============================================================================
 // Base TxBuilder implementation
@@ -46,18 +48,49 @@ bool TxBuilder::SelectCoins(const std::vector<COutPoint>& utxos, CAmount target,
     total = 0;
     inputs.clear();
 
-    // Simple greedy selection - in production would use more sophisticated algorithm
+    // Sort UTXOs by value (largest first) for optimal selection
+    // This minimizes the number of inputs needed
+    std::vector<std::pair<CAmount, COutPoint>> sortedUtxos;
     for (const auto& utxo : utxos) {
-        // Use virtual GetUTXOValueVirtual to allow child classes to override UTXO lookup
         CAmount value = GetUTXOValueVirtual(utxo);
         if (value > 0) {
-            inputs.push_back(CTxIn(utxo));
-            total += value;
+            sortedUtxos.emplace_back(value, utxo);
+        }
+    }
+    std::sort(sortedUtxos.begin(), sortedUtxos.end(), std::greater<>());
+
+    // Greedy selection with input limit to prevent tx-size errors
+    // MAX_TX_INPUTS prevents transactions from exceeding MAX_STANDARD_TX_WEIGHT (400,000)
+    // Each input is ~41 bytes base + ~65 bytes witness = ~106 bytes = ~68 vB
+    // 400 inputs * 68 vB = ~27,200 vB which is well under 100,000 vB limit
+    for (const auto& [value, utxo] : sortedUtxos) {
+        inputs.push_back(CTxIn(utxo));
+        total += value;
+
+        // Stop if we have enough
+        if (total >= target) {
+            LogPrintf("DigiDollar: SelectCoins succeeded with %d inputs totaling %lld sats (target: %lld)\n",
+                      inputs.size(), total, target);
+            return true;
+        }
+
+        // CRITICAL: Stop if we've reached the input limit to prevent tx-size errors
+        if (inputs.size() >= MAX_TX_INPUTS) {
+            LogPrintf("DigiDollar: SelectCoins reached MAX_TX_INPUTS (%d) with total %lld sats (target: %lld)\n",
+                      MAX_TX_INPUTS, total, target);
             if (total >= target) {
                 return true;
             }
+            // Not enough funds within input limit - user needs to consolidate UTXOs
+            LogPrintf("DigiDollar: SelectCoins FAILED - insufficient funds within %d input limit. "
+                      "Need %lld sats, have %lld. Please consolidate UTXOs first.\n",
+                      MAX_TX_INPUTS, target, total);
+            return false;
         }
     }
+
+    LogPrintf("DigiDollar: SelectCoins FAILED - exhausted all UTXOs. Need %lld sats, have %lld\n",
+              target, total);
     return false;
 }
 
@@ -279,7 +312,14 @@ TxBuilderResult MintTxBuilder::BuildMintTransaction(const TxBuilderMintParams& p
     CAmount totalIn = 0;
     if (!SelectCoins(params.utxos, result.collateralRequired + estimatedFees,
                      inputs, totalIn)) {
-        result.error = "Insufficient funds for collateral and fees";
+        // Provide helpful error message distinguishing between truly insufficient funds
+        // and having too many small UTXOs (which would exceed tx size limits)
+        if (params.utxos.size() > MAX_TX_INPUTS) {
+            result.error = "Too many small UTXOs - please consolidate your wallet first. "
+                          "A regular DGB transaction can combine UTXOs before minting.";
+        } else {
+            result.error = "Insufficient funds for collateral and fees";
+        }
         return result;
     }
 

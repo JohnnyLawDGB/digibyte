@@ -6,6 +6,7 @@
 #include <wallet/wallet.h>
 #include <wallet/spend.h>
 #include <wallet/coincontrol.h>
+#include <wallet/scriptpubkeyman.h>
 #include <digidollar/txbuilder.h>
 #include <digidollar/validation.h>
 #include <digidollar/scripts.h>
@@ -501,6 +502,21 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
             if (!found_key && m_wallet) {
                 LogPrintf("DigiDollar: DD UTXO not in dd_owner_keys, trying wallet key lookup for received DD\n");
 
+                // Helper to get signing provider with private key access for descriptor wallets
+                auto getSigningProviderWithKeys = [this](const CScript& script) -> std::unique_ptr<SigningProvider> {
+                    const auto& spk_mans = m_wallet->GetScriptPubKeyMans(script);
+                    if (!spk_mans.empty()) {
+                        wallet::ScriptPubKeyMan* spk_man = *spk_mans.begin();
+                        wallet::DescriptorScriptPubKeyMan* desc_spk_man = dynamic_cast<wallet::DescriptorScriptPubKeyMan*>(spk_man);
+                        if (desc_spk_man) {
+                            LogPrintf("DigiDollar: Using DescriptorScriptPubKeyMan with private keys\n");
+                            return desc_spk_man->GetSigningProviderWithKeys(script);
+                        }
+                    }
+                    // Fallback for legacy wallets
+                    return m_wallet->GetSolvingProvider(script);
+                };
+
                 // Get the scriptPubKey for the DD UTXO we're spending
                 const COutPoint& dd_outpoint = params.ddUtxos[0];
                 LogPrintf("DigiDollar: Looking up tx %s in mapWallet (size=%d)\n",
@@ -516,8 +532,8 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
                         const CTxOut& txout = wtx.tx->vout[dd_outpoint.n];
                         LogPrintf("DigiDollar: Got output, scriptPubKey size=%d\n", txout.scriptPubKey.size());
 
-                        // Get signing provider for this script
-                        auto provider = m_wallet->GetSolvingProvider(txout.scriptPubKey);
+                        // Get signing provider for this script WITH PRIVATE KEY ACCESS
+                        auto provider = getSigningProviderWithKeys(txout.scriptPubKey);
                         if (provider) {
                             LogPrintf("DigiDollar: Got signing provider\n");
                             // Extract the P2TR destination
@@ -571,7 +587,7 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
                                                 scanned_outputs++;
                                                 CTxDestination out_dest;
                                                 if (ExtractDestination(scan_wtx.tx->vout[n].scriptPubKey, out_dest)) {
-                                                    auto out_provider = m_wallet->GetSolvingProvider(scan_wtx.tx->vout[n].scriptPubKey);
+                                                    auto out_provider = getSigningProviderWithKeys(scan_wtx.tx->vout[n].scriptPubKey);
                                                     if (out_provider) {
                                                         if (auto* scan_tr = std::get_if<WitnessV1Taproot>(&out_dest)) {
                                                             TaprootSpendData scan_spenddata;
@@ -2333,6 +2349,21 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
         if (!found_key && m_wallet) {
             LogPrintf("DigiDollar: TransferDigiDollar - Trying wallet key lookup for received DD, m_wallet=%p\n", (void*)m_wallet);
 
+            // Helper to get signing provider with private key access for descriptor wallets
+            auto getSigningProviderWithKeys = [this](const CScript& script) -> std::unique_ptr<SigningProvider> {
+                const auto& spk_mans = m_wallet->GetScriptPubKeyMans(script);
+                if (!spk_mans.empty()) {
+                    wallet::ScriptPubKeyMan* spk_man = *spk_mans.begin();
+                    wallet::DescriptorScriptPubKeyMan* desc_spk_man = dynamic_cast<wallet::DescriptorScriptPubKeyMan*>(spk_man);
+                    if (desc_spk_man) {
+                        LogPrintf("DigiDollar: TransferDigiDollar - Using DescriptorScriptPubKeyMan with private keys\n");
+                        return desc_spk_man->GetSigningProviderWithKeys(script);
+                    }
+                }
+                // Fallback for legacy wallets
+                return m_wallet->GetSolvingProvider(script);
+            };
+
             // Get the scriptPubKey for the DD UTXO we're spending
             // We need to find the actual output being spent
             const COutPoint& dd_outpoint = dd_utxos[0];
@@ -2349,8 +2380,8 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
                     LogPrintf("DigiDollar: TransferDigiDollar - Got output %d, scriptPubKey size=%d\n",
                              dd_outpoint.n, txout.scriptPubKey.size());
 
-                    // Get signing provider for this script
-                    auto provider = m_wallet->GetSolvingProvider(txout.scriptPubKey);
+                    // Get signing provider for this script WITH PRIVATE KEY ACCESS
+                    auto provider = getSigningProviderWithKeys(txout.scriptPubKey);
                     if (provider) {
                         LogPrintf("DigiDollar: TransferDigiDollar - Got signing provider\n");
                         // Extract the P2TR destination
@@ -2412,7 +2443,7 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
                                         for (size_t n = 0; n < scan_wtx.tx->vout.size() && !found_key; n++) {
                                             CTxDestination out_dest;
                                             if (ExtractDestination(scan_wtx.tx->vout[n].scriptPubKey, out_dest)) {
-                                                auto out_provider = m_wallet->GetSolvingProvider(scan_wtx.tx->vout[n].scriptPubKey);
+                                                auto out_provider = getSigningProviderWithKeys(scan_wtx.tx->vout[n].scriptPubKey);
                                                 if (out_provider) {
                                                     if (auto* scan_tr = std::get_if<WitnessV1Taproot>(&out_dest)) {
                                                         TaprootSpendData scan_spenddata;
@@ -3543,12 +3574,27 @@ bool DigiDollarWallet::SignDDInputs(CMutableTransaction& tx,
                     LogPrintf("DigiDollar: SignDDInputs - Found key via dd_address_keys for received DD\n");
                 }
 
+                // Helper to get signing provider with private key access for descriptor wallets
+                auto getSigningProviderWithKeys = [this](const CScript& script) -> std::unique_ptr<SigningProvider> {
+                    const auto& spk_mans = m_wallet->GetScriptPubKeyMans(script);
+                    if (!spk_mans.empty()) {
+                        wallet::ScriptPubKeyMan* spk_man = *spk_mans.begin();
+                        wallet::DescriptorScriptPubKeyMan* desc_spk_man = dynamic_cast<wallet::DescriptorScriptPubKeyMan*>(spk_man);
+                        if (desc_spk_man) {
+                            LogPrintf("DigiDollar: SignDDInputs - Using DescriptorScriptPubKeyMan with private keys\n");
+                            return desc_spk_man->GetSigningProviderWithKeys(script);
+                        }
+                    }
+                    // Fallback for legacy wallets
+                    return m_wallet->GetSolvingProvider(script);
+                };
+
                 // Try to find the internal key by iterating through wallet keys
                 // This is the key that when tweaked produces the target output key
-                // For descriptor wallets, we can use GetSolvingProvider
+                // For descriptor wallets, we need GetSigningProviderWithKeys
                 if (!found_key) {
-                auto provider = m_wallet->GetSolvingProvider(search_output.scriptPubKey);
-                LogPrintf("DigiDollar: SignDDInputs - GetSolvingProvider returned: %s\n", provider ? "valid" : "nullptr");
+                auto provider = getSigningProviderWithKeys(search_output.scriptPubKey);
+                LogPrintf("DigiDollar: SignDDInputs - GetSigningProvider returned: %s\n", provider ? "valid" : "nullptr");
 
                 if (provider) {
                     // The provider knows about this script - try to get the key
@@ -3629,8 +3675,8 @@ bool DigiDollarWallet::SignDDInputs(CMutableTransaction& tx,
                         for (size_t n = 0; n < wtx.tx->vout.size(); n++) {
                             CTxDestination out_dest;
                             if (ExtractDestination(wtx.tx->vout[n].scriptPubKey, out_dest)) {
-                                // Check if this output belongs to our wallet and has a key
-                                auto out_provider = m_wallet->GetSolvingProvider(wtx.tx->vout[n].scriptPubKey);
+                                // Check if this output belongs to our wallet and has a key (WITH PRIVATE KEY ACCESS)
+                                auto out_provider = getSigningProviderWithKeys(wtx.tx->vout[n].scriptPubKey);
                                 if (out_provider) {
                                     // Try all key types
                                     if (auto* pkh = std::get_if<PKHash>(&out_dest)) {
@@ -3958,6 +4004,21 @@ bool DigiDollarWallet::SignFeeInputs(CMutableTransaction& tx,
     LogPrintf("DigiDollar: SignFeeInputs - Signing %d fee inputs starting at index %d\n",
               fee_utxos.size(), fee_input_start);
 
+    // Helper to get signing provider with private key access for descriptor wallets
+    auto getSigningProviderWithKeys = [this](const CScript& script) -> std::unique_ptr<SigningProvider> {
+        const auto& spk_mans = m_wallet->GetScriptPubKeyMans(script);
+        if (!spk_mans.empty()) {
+            wallet::ScriptPubKeyMan* spk_man = *spk_mans.begin();
+            wallet::DescriptorScriptPubKeyMan* desc_spk_man = dynamic_cast<wallet::DescriptorScriptPubKeyMan*>(spk_man);
+            if (desc_spk_man) {
+                LogPrintf("DigiDollar: SignFeeInputs - Using DescriptorScriptPubKeyMan with private keys\n");
+                return desc_spk_man->GetSigningProviderWithKeys(script);
+            }
+        }
+        // Fallback for legacy wallets
+        return m_wallet->GetSolvingProvider(script);
+    };
+
     // Lock wallet for thread-safe access
     LOCK(m_wallet->cs_wallet);
 
@@ -3988,8 +4049,8 @@ bool DigiDollarWallet::SignFeeInputs(CMutableTransaction& tx,
         LogPrintf("DigiDollar: SignFeeInputs - Signing input %d: UTXO %s:%d, value: %d sats\n",
                   input_index, utxo.hash.ToString(), utxo.n, value);
 
-        // Get the signing provider for this script
-        std::unique_ptr<SigningProvider> provider = m_wallet->GetSolvingProvider(prevScript);
+        // Get the signing provider for this script WITH PRIVATE KEY ACCESS
+        std::unique_ptr<SigningProvider> provider = getSigningProviderWithKeys(prevScript);
         if (!provider) {
             LogPrintf("DigiDollar: SignFeeInputs - No signing provider for fee input %d\n", input_index);
             return false;

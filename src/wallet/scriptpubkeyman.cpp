@@ -2406,6 +2406,11 @@ std::unique_ptr<SigningProvider> DescriptorScriptPubKeyMan::GetSolvingProvider(c
     return GetSigningProvider(script, false);
 }
 
+std::unique_ptr<FlatSigningProvider> DescriptorScriptPubKeyMan::GetSigningProviderWithKeys(const CScript& script) const
+{
+    return GetSigningProvider(script, true);
+}
+
 bool DescriptorScriptPubKeyMan::CanProvide(const CScript& script, SignatureData& sigdata)
 {
     return IsMine(script);

@@ -644,6 +644,9 @@ public:
 
     std::unique_ptr<SigningProvider> GetSolvingProvider(const CScript& script) const override;
 
+    //! Get a signing provider that includes private keys for signing (DigiDollar support)
+    std::unique_ptr<FlatSigningProvider> GetSigningProviderWithKeys(const CScript& script) const;
+
     bool CanProvide(const CScript& script, SignatureData& sigdata) override;
 
     bool SignTransaction(CMutableTransaction& tx, const std::map<COutPoint, Coin>& coins, int sighash, std::map<int, bilingual_str>& input_errors) const override;

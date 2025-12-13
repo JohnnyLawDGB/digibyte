@@ -515,8 +515,59 @@ void DigiDollarMintWidget::onAmountChanged()
 
 void DigiDollarMintWidget::onLockTierChanged()
 {
-    m_selectedTier = m_lockTierCombo->currentData().toInt();
-    LogPrintf("DigiDollar Qt: Lock tier changed to: %d\n", m_selectedTier);
+    int newTier = m_lockTierCombo->currentData().toInt();
+    LogPrintf("DigiDollar Qt: Lock tier changed to: %d\n", newTier);
+
+    // Show warning for long lock periods (1 year or more = tier 4+)
+    if (newTier >= 4) {
+        QString lockPeriodStr = getLockTierDisplayName(newTier);
+        QString periodName;
+        switch (newTier) {
+            case 4: periodName = "1 YEAR"; break;
+            case 5: periodName = "3 YEARS"; break;
+            case 6: periodName = "5 YEARS"; break;
+            case 7: periodName = "7 YEARS"; break;
+            case 8: periodName = "10 YEARS"; break;
+            default: periodName = "EXTENDED PERIOD"; break;
+        }
+
+        QMessageBox warningBox(this);
+        warningBox.setWindowTitle(tr("⚠️ Long-Term Lock Warning"));
+        warningBox.setIcon(QMessageBox::Warning);
+        warningBox.setText(tr("<span style='font-size:16pt; font-weight:bold; color:#ff6600;'>⚠️ ATTENTION: %1 LOCK ⚠️</span>").arg(periodName));
+        warningBox.setInformativeText(tr(
+            "<p style='font-size:12pt;'><b>You are selecting a <span style='color:#ff0000;'>%1</span> time lock!</b></p>"
+            "<p style='font-size:11pt;'>This means:</p>"
+            "<ul style='font-size:11pt;'>"
+            "<li>Your DGB collateral will be <b>LOCKED</b> for %2</li>"
+            "<li>You will <b>NOT</b> be able to access your DGB during this time</li>"
+            "<li>There is <b>NO WAY</b> to unlock early under <b>ANY</b> condition</li>"
+            "</ul>"
+            "<p style='font-size:12pt; font-weight:bold; color:#ff6600;'>Do you understand and wish to continue with this lock period?</p>")
+            .arg(periodName)
+            .arg(periodName));
+        warningBox.setTextFormat(Qt::RichText);
+        warningBox.setStandardButtons(QMessageBox::Yes | QMessageBox::No);
+        warningBox.setDefaultButton(QMessageBox::No);
+
+        // Style the buttons
+        warningBox.button(QMessageBox::No)->setStyleSheet("QPushButton { background-color: #d32f2f; color: white; font-weight: bold; padding: 8px 16px; }");
+        warningBox.button(QMessageBox::Yes)->setStyleSheet("QPushButton { background-color: #1976d2; color: white; font-weight: bold; padding: 8px 16px; }");
+
+        if (warningBox.exec() != QMessageBox::Yes) {
+            // User cancelled - revert to previous safer tier (30 days)
+            m_lockTierCombo->blockSignals(true);
+            m_lockTierCombo->setCurrentIndex(1); // 30 days
+            m_lockTierCombo->blockSignals(false);
+            m_selectedTier = 1;
+            LogPrintf("DigiDollar Qt: User cancelled long lock, reverting to tier 1\n");
+        } else {
+            m_selectedTier = newTier;
+        }
+    } else {
+        m_selectedTier = newTier;
+    }
+
     double ratio = getCollateralRatioForTier(m_selectedTier);
     m_lockTierInfoValue->setText(formatRatio(ratio));
 
@@ -565,6 +616,52 @@ void DigiDollarMintWidget::onMintClicked()
     msgBox.setDefaultButton(QMessageBox::No);
 
     if (msgBox.exec() == QMessageBox::Yes) {
+        // SECOND WARNING - Final "Are you ABSOLUTELY sure?" confirmation
+        QString periodName;
+        switch (m_selectedTier) {
+            case 0: periodName = "1 HOUR"; break;
+            case 1: periodName = "30 DAYS"; break;
+            case 2: periodName = "3 MONTHS"; break;
+            case 3: periodName = "6 MONTHS"; break;
+            case 4: periodName = "1 YEAR"; break;
+            case 5: periodName = "3 YEARS"; break;
+            case 6: periodName = "5 YEARS"; break;
+            case 7: periodName = "7 YEARS"; break;
+            case 8: periodName = "10 YEARS"; break;
+            default: periodName = "SELECTED PERIOD"; break;
+        }
+
+        QMessageBox finalWarning(this);
+        finalWarning.setWindowTitle(tr("🚨 FINAL CONFIRMATION 🚨"));
+        finalWarning.setIcon(QMessageBox::Critical);
+        finalWarning.setText(tr("<span style='font-size:18pt; font-weight:bold; color:#ff0000;'>🚨 ARE YOU ABSOLUTELY SURE? 🚨</span>"));
+        finalWarning.setInformativeText(tr(
+            "<p style='font-size:14pt; font-weight:bold; color:#ff0000;'>YOUR DGB WILL BE LOCKED FOR %1!</p>"
+            "<p style='font-size:12pt;'><b>Amount to Lock:</b> <span style='color:#ff6600;'>%2</span></p>"
+            "<p style='font-size:12pt;'><b>DD to Receive:</b> <span style='color:#00aa00;'>%3</span></p>"
+            "<hr>"
+            "<p style='font-size:11pt;'>Once confirmed, this action <b>CANNOT BE UNDONE</b>.</p>"
+            "<p style='font-size:11pt;'>Your DGB collateral will remain locked until block <b>%4</b>.</p>"
+            "<p style='font-size:13pt; font-weight:bold; color:#ff0000;'>Click 'No' if you have ANY doubts!</p>")
+            .arg(periodName)
+            .arg(formatDGBAmount(m_requiredCollateral))
+            .arg(formatDDAmount(m_mintAmount))
+            .arg(unlockHeight));
+        finalWarning.setTextFormat(Qt::RichText);
+        finalWarning.setStandardButtons(QMessageBox::Yes | QMessageBox::No);
+        finalWarning.setDefaultButton(QMessageBox::No);
+
+        // Style buttons - No is RED and prominent, Yes is less prominent
+        finalWarning.button(QMessageBox::No)->setText(tr("❌ No, Cancel"));
+        finalWarning.button(QMessageBox::No)->setStyleSheet("QPushButton { background-color: #d32f2f; color: white; font-weight: bold; font-size: 12pt; padding: 10px 20px; }");
+        finalWarning.button(QMessageBox::Yes)->setText(tr("✓ Yes, I'm Sure"));
+        finalWarning.button(QMessageBox::Yes)->setStyleSheet("QPushButton { background-color: #388e3c; color: white; font-weight: bold; font-size: 11pt; padding: 8px 16px; }");
+
+        if (finalWarning.exec() != QMessageBox::Yes) {
+            LogPrintf("DigiDollar Qt: User cancelled at final confirmation\n");
+            return;
+        }
+
         if (!m_walletModel) {
             Q_EMIT message(tr("Error"), tr("No wallet model available"), QMessageBox::Critical);
             return;

@@ -7,6 +7,7 @@
 #include <consensus/digidollar_tx.h>
 #include <consensus/digidollar_transaction_validation.h>
 #include <consensus/amount.h>
+#include <chainparams.h>
 #include <uint256.h>
 #include <streams.h>
 #include <util/strencodings.h>
@@ -463,9 +464,10 @@ BOOST_FIXTURE_TEST_CASE(test_mint_amount_validation, DigiDollarTransactionTestFi
         {200000.0, false, "Well above maximum"}
     };
 
+    const auto& ddParams = Params().GetDigiDollarParams();
     for (const auto& test : testCases) {
         CAmount amount = CreateTestAmount(test.amount);
-        bool result = ValidateMintAmount(amount);
+        bool result = ValidateMintAmount(amount, ddParams);
         BOOST_CHECK_MESSAGE(result == test.shouldPass,
             "Amount validation failed for " + test.description +
             " ($" + std::to_string(test.amount) + ")");

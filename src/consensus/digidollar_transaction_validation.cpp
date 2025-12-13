@@ -5,7 +5,6 @@
 #include <consensus/digidollar_transaction_validation.h>
 
 #include <consensus/digidollar.h>
-#include <chainparams.h>
 #include <script/script.h>
 #include <script/interpreter.h>
 #include <primitives/transaction.h>
@@ -19,9 +18,7 @@
 // Mint Validation Functions
 // =====================================
 
-bool ValidateMintAmount(CAmount amount) {
-    // Use network-specific params from the currently active chain
-    const auto& ddParams = Params().GetDigiDollarParams();
+bool ValidateMintAmount(CAmount amount, const DigiDollar::ConsensusParams& ddParams) {
     return DigiDollar::IsValidMintAmount(amount, ddParams);
 }
 

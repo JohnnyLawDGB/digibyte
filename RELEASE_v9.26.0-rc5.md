@@ -6,30 +6,36 @@
 
 ---
 
-## What's New in RC5 (32 commits since RC4)
+## What's New in RC5
 
-### macOS Qt Fixes
-- **Fixed transaction view text visibility** - White text now renders correctly on macOS dark theme
-- **macOS-compatible CSS selectors** - Transaction views styled properly across all platforms
-- **Ubuntu & Mac theming fixes** - Consistent dark/light theme appearance
+### Wallet & Transaction Fixes
+- **Conflicted DD transactions handled properly** - Conflicted DigiDollar transactions now correctly show as abandoned
+- **Display abandoned status** - UI now shows abandoned status for DigiDollar transactions
+- **Tier label mapping fixed** - Corrected tier-to-label mapping in DD Overview and Transactions widgets
+- **Descriptor wallet DD spending** - Fixed DigiDollar spending for descriptor wallets
+- **Theme crash fix** - Fixed wallet crash related to theme switching
 
-### UI Improvements
-- **Tooltip fixes** - Improved tooltip display throughout the application
-- **Receive page fixes** - Enhanced receive address page functionality
+### Consensus & Validation
+- **Minimum mint amount rule** - Added activation height for minimum mint amount ($100 on testnet)
+- **Historical block validation** - Skip oracle-dependent validation for historical blocks during sync
+- **Oracle validation optimization** - Skip oracle validation during block connect for faster sync
+- **ValidationContext flag** - Added skipOracleValidation flag for cleaner validation logic
 
-### Performance Improvements
-- **Faster IBD sync** - Reduced IBD threshold from 24h to 1h for quicker initial sync
-- **DD widget throttling** - Added IBD checks to prevent GUI freezes during sync
-- **Incremental UTXO processing** - Replaced full DD UTXO scan with efficient incremental updates
+### UI/Qt Improvements
+- **Mint validation feedback** - Min/max amount validation feedback in Mint widget
+- **macOS CSS compatibility** - Fixed transaction view styling on macOS
+- **Cross-platform theming** - Ubuntu & Mac theming fixes for consistent appearance
+- **Tooltip & Receive page** - Various UI polish fixes
+
+### Performance
+- **MAX_TX_INPUTS limit** - Prevents oversized transactions from being rejected
+- **Faster IBD sync** - Reduced IBD threshold from 24h to 1h
 - **Reduced oracle log spam** - Cleaner logs during normal operation
-- **Skip DD validation during IBD** - Collateral validation deferred until sync complete
+- **IBD widget throttling** - DD widgets pause updates during initial sync
+- **Incremental UTXO processing** - Efficient DD UTXO tracking replaces full scans
 
-### Index Changes
+### Index
 - **DigiDollarStatsIndex enabled** - Network statistics index active by default
-
-### Documentation
-- **Updated test scripts** - Improved Qt testnet testing
-- **Documentation updates** - Various doc improvements
 
 ---
 
@@ -85,84 +91,114 @@ Download the appropriate file for your platform from the Downloads section below
 Create the config file in your platform's data directory with the following contents:
 
 ```ini
+# DigiByte Configuration
+# Global settings (apply to all networks)
 testnet=1
 server=1
 txindex=1
 
+# Testnet-specific settings
 [test]
 digidollar=1
-algo=sha256d
+digidollarstatsindex=1
+algo=scrypt
 addnode=oracle1.digibyte.io
+rpcuser=digibyte
+rpcpassword=digibyte123
 ```
 
 ---
 
 ## Windows Setup
 
-### Data Directory
-```
-%APPDATA%\DigiByte\
-```
-Config file: `%APPDATA%\DigiByte\digibyte.conf`
+### Step 1: Download and Install
+Download `digibyte-9.26.0-rc5-win64-setup.exe` and install normally.
 
-Testnet data stored in: `%APPDATA%\DigiByte\testnet8\`
+### Step 2: First Launch (Testnet Mode)
+You must launch in testnet mode. Open **PowerShell** and run:
+```powershell
+& "C:\Program Files\DigiByte\digibyte-qt.exe" -testnet
+```
 
-### Steps:
+The wallet will start in testnet mode and create the data directory automatically.
+
+### Step 3: Create Config File
 1. Press `Win + R`, type `%APPDATA%\DigiByte` and press Enter
-2. Create a new text file named `digibyte.conf` (make sure to remove `.txt` extension)
-3. Paste the config contents above and save
-4. Run `digibyte-qt.exe` from the extracted folder
-5. The wallet will create `testnet8\` subfolder automatically
+2. Create a new text file named `digibyte.conf` (remove the `.txt` extension)
+3. Paste the config contents from Step 2 above and save
+
+### Step 4: Restart
+Close the wallet and launch again from PowerShell:
+```powershell
+& "C:\Program Files\DigiByte\digibyte-qt.exe" -testnet
+```
 
 ### Verify It's Working
 - Title bar should say **"DigiByte Core - Wallet [testnet8]"**
 - You should see a **DigiDollar** tab in the sidebar
+
+### Data Directory Reference
+- Config: `%APPDATA%\DigiByte\digibyte.conf`
+- Testnet data: `%APPDATA%\DigiByte\testnet8\`
 
 ---
 
 ## macOS Setup
 
-### Data Directory
-```
-~/Library/Application Support/DigiByte/
-```
-Config file: `~/Library/Application Support/DigiByte/digibyte.conf`
+### Step 1: Download and Extract
+Download the `.dmg` file for your Mac and open it. Drag **DigiByte-Qt** to your Desktop.
 
-Testnet data stored in: `~/Library/Application Support/DigiByte/testnet8/`
+### Step 2: First Launch (Testnet Mode)
+You must launch in testnet mode. Open **Terminal** and run:
+```bash
+cd ~/Desktop
+./DigiByte-Qt.app/Contents/MacOS/DigiByte-Qt -testnet
+```
 
-### Steps:
-1. Open Terminal and create config:
+If you get a security warning, right-click the app and select "Open", or run:
+```bash
+xattr -cr ~/Desktop/DigiByte-Qt.app
+```
+Then try the launch command again.
+
+The wallet will start in testnet mode and create the data directory automatically.
+
+### Step 3: Create Config File
+In Terminal:
 ```bash
 mkdir -p ~/Library/Application\ Support/DigiByte
 cat > ~/Library/Application\ Support/DigiByte/digibyte.conf << 'EOF'
+# DigiByte Configuration
+# Global settings (apply to all networks)
 testnet=1
 server=1
 txindex=1
 
+# Testnet-specific settings
 [test]
 digidollar=1
-algo=sha256d
+digidollarstatsindex=1
+algo=scrypt
 addnode=oracle1.digibyte.io
+rpcuser=digibyte
+rpcpassword=digibyte123
 EOF
 ```
 
-2. Extract the downloaded archive and remove quarantine:
+### Step 4: Restart
+Close the wallet and launch again from Terminal:
 ```bash
-xattr -cr ~/Downloads/digibyte-9.26.0-rc5-*-apple-darwin
-```
-
-3. Run the wallet:
-```bash
-# For Apple Silicon (M1/M2/M3/M4):
-~/Downloads/digibyte-9.26.0-rc5-arm64-apple-darwin/bin/digibyte-qt
-
-# For Intel Mac:
-~/Downloads/digibyte-9.26.0-rc5-x86_64-apple-darwin/bin/digibyte-qt
+cd ~/Desktop
+./DigiByte-Qt.app/Contents/MacOS/DigiByte-Qt -testnet
 ```
 
 ### Verify It's Working
 - Title bar should say **"DigiByte Core - Wallet [testnet8]"**
 - You should see a **DigiDollar** tab in the sidebar
+
+### Data Directory Reference
+- Config: `~/Library/Application Support/DigiByte/digibyte.conf`
+- Testnet data: `~/Library/Application Support/DigiByte/testnet8/`
 
 ---
 
@@ -181,14 +217,20 @@ Testnet data stored in: `~/.digibyte/testnet8/`
 ```bash
 mkdir -p ~/.digibyte
 cat > ~/.digibyte/digibyte.conf << 'EOF'
+# DigiByte Configuration
+# Global settings (apply to all networks)
 testnet=1
 server=1
 txindex=1
 
+# Testnet-specific settings
 [test]
 digidollar=1
-algo=sha256d
+digidollarstatsindex=1
+algo=scrypt
 addnode=oracle1.digibyte.io
+rpcuser=digibyte
+rpcpassword=digibyte123
 EOF
 ```
 
@@ -207,6 +249,8 @@ tar xzf digibyte-9.26.0-rc5-x86_64-linux-gnu.tar.gz
 
 ## Getting Testnet DGB
 
+### Option 1: GUI Console Mining
+
 Mine testnet DGB directly using the GUI console:
 
 1. Go to the **Receive** tab and create a new address (copy your `dgbt1...` address)
@@ -214,6 +258,35 @@ Mine testnet DGB directly using the GUI console:
 3. Type: `generatetoaddress 1 dgbt1qYOURADDRESSHERE`
 4. Press Enter to mine 1 block
 5. Wait for 100 confirmations before spending mined coins
+
+### Option 2: CPU Miner (Recommended for Continuous Mining)
+
+Use cpuminer to mine testnet DGB in the background. Make sure your wallet is running and synced first.
+
+**Download cpuminer:** https://github.com/pooler/cpuminer
+
+Build from source or download a release for your platform.
+
+**Run cpuminer:**
+
+Linux/macOS:
+```bash
+./minerd -a scrypt -o http://127.0.0.1:14025 -O digibyte:digibyte123 -t 4 --coinbase-addr=dgbt1qYOURADDRESSHERE
+```
+
+Windows (PowerShell):
+```powershell
+.\minerd.exe -a scrypt -o http://127.0.0.1:14025 -O digibyte:digibyte123 -t 4 --coinbase-addr=dgbt1qYOURADDRESSHERE
+```
+
+**Parameters explained:**
+- `-a scrypt` - Use scrypt algorithm (matches `algo=scrypt` in config)
+- `-o http://127.0.0.1:14025` - RPC endpoint (testnet RPC port)
+- `-O digibyte:digibyte123` - RPC credentials from your config (user:password)
+- `-t 4` - Number of CPU threads to use (adjust based on your CPU)
+- `--coinbase-addr=dgbt1q...` - Your testnet receive address
+
+The miner will continuously mine blocks and send rewards to your address.
 
 ---
 
@@ -235,7 +308,7 @@ Once your wallet is synced and you have testnet DGB:
 |---------|-------|
 | Network | Testnet (testnet8) |
 | Default P2P Port | 12030 |
-| Default RPC Port | 14024 |
+| Default RPC Port | 14025 |
 | Oracle Node | oracle1.digibyte.io:12030 |
 | Address Prefix | dgbt1... (bech32) |
 
@@ -271,11 +344,12 @@ Once your wallet is synced and you have testnet DGB:
 
 | Platform | File |
 |----------|------|
+| Windows 64-bit (Installer) | `digibyte-9.26.0-rc5-win64-setup.exe` |
+| Windows 64-bit (Portable) | `digibyte-9.26.0-rc5-win64.zip` |
+| macOS Apple Silicon (M1/M2/M3/M4) | `digibyte-9.26.0-rc5-arm64-apple-darwin.dmg` |
+| macOS Intel | `digibyte-9.26.0-rc5-x86_64-apple-darwin.dmg` |
 | Linux x86_64 | `digibyte-9.26.0-rc5-x86_64-linux-gnu.tar.gz` |
 | Linux ARM64 (Raspberry Pi) | `digibyte-9.26.0-rc5-aarch64-linux-gnu.tar.gz` |
-| Windows 64-bit | `digibyte-9.26.0-rc5-win64.zip` |
-| macOS Intel | `digibyte-9.26.0-rc5-x86_64-apple-darwin.tar.gz` |
-| macOS Apple Silicon | `digibyte-9.26.0-rc5-arm64-apple-darwin.tar.gz` |
 
 ---
 

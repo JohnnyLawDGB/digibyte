@@ -22,7 +22,7 @@
  * Validate mint amount against consensus parameters.
  * Checks minimum and maximum limits for minting operations.
  */
-bool ValidateMintAmount(CAmount amount);
+bool ValidateMintAmount(CAmount amount, const DigiDollar::ConsensusParams& ddParams);
 
 /**
  * Validate collateral ratio for minting.

@@ -808,6 +808,8 @@ void DigiDollarOverviewWidget::updateRecentTransactions()
         QString confirmText;
         if (tx.abandoned) {
             confirmText = tr("Abandoned");
+        } else if (tx.confirmations < 0) {
+            confirmText = tr("Conflicted");
         } else if (tx.confirmations == 0) {
             confirmText = tr("Pending");
         } else if (tx.confirmations < 6) {

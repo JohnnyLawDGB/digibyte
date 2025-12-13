@@ -416,6 +416,9 @@ QString DigiDollarTransactionsWidget::formatConfirmations(int confirmations, boo
     if (isAbandoned) {
         return tr("Abandoned");
     }
+    if (confirmations < 0) {
+        return tr("Conflicted");
+    }
     if (confirmations == 0) {
         return tr("Pending");
     } else if (confirmations >= 6) {

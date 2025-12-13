@@ -882,14 +882,38 @@ std::vector<DDTransaction> DigiDollarWallet::GetDDTransactionHistory() const {
         txid.SetHex(ddtx.txid);
         ddtx.confirmations = GetDDTransactionConfirmations(txid);
 
-        // Check if transaction is abandoned
+        // Check if transaction is abandoned or effectively abandoned
         ddtx.abandoned = false;
         if (m_wallet) {
             LOCK(m_wallet->cs_wallet);
             const wallet::CWalletTx* wtx = m_wallet->GetWalletTx(txid);
-            if (wtx && wtx->isAbandoned()) {
-                ddtx.abandoned = true;
-                ddtx.confirmations = -1; // Use -1 to indicate abandoned
+            if (wtx) {
+                if (wtx->isAbandoned()) {
+                    // Directly abandoned
+                    ddtx.abandoned = true;
+                    ddtx.confirmations = -1;
+                } else if (ddtx.confirmations < 0) {
+                    // Transaction is conflicted (negative confirmations)
+                    // Check if ALL conflicting transactions are abandoned
+                    // If so, this transaction should also be considered abandoned
+                    std::set<uint256> conflicts = m_wallet->GetTxConflicts(*wtx);
+                    bool all_conflicts_abandoned = !conflicts.empty();
+                    for (const uint256& conflict_txid : conflicts) {
+                        const wallet::CWalletTx* conflict_wtx = m_wallet->GetWalletTx(conflict_txid);
+                        if (conflict_wtx && !conflict_wtx->isAbandoned()) {
+                            // Found a conflict that is NOT abandoned (it got confirmed or is pending)
+                            all_conflicts_abandoned = false;
+                            break;
+                        }
+                    }
+                    if (all_conflicts_abandoned) {
+                        // All conflicts are abandoned, so treat this as abandoned too
+                        ddtx.abandoned = true;
+                        ddtx.confirmations = -1;
+                        LogPrintf("DigiDollar: Transaction %s marked abandoned (all %zu conflicts are abandoned)\n",
+                                  ddtx.txid, conflicts.size());
+                    }
+                }
             }
         }
     }

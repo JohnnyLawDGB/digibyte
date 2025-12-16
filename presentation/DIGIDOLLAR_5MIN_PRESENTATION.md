@@ -1,451 +1,310 @@
-# DigiDollar: The World's First Truly Decentralized Stablecoin
-## 5-Minute High-Level Overview
+# DigiDollar: 5-Minute Presentation
+## The World's First UTXO-Native Stablecoin
+
+**Duration**: 5 minutes
+**Target Audience**: Newcomers, crypto enthusiasts, potential users
+**Goal**: Explain what DigiDollar is, why it matters, and how it works
+**Framework**: AIDA (Attention, Interest, Desire, Action)
 
 ---
 
-## SLIDE 1: Opening Hook - The Problem
+## SLIDE 1: Brand Introduction (0:00-0:20)
+### ATTENTION Phase
 
-### The Existential Threat to Financial Freedom
+**Visual**: Clean white background with DigiDollar logo, bold "$DGB DigiDollar" branding
 
-**2020-2022 revealed a terrifying reality**: Bank accounts frozen for challenging elections. Social media accounts banned for vaccine mandate questions. Payment processors weaponized against citizens. Not for crimes - for political speech and medical autonomy advocacy.
-
-**The next threat is even worse:**
-- Centralized stablecoins (USDT, USDC) controlled by AI algorithms
-- Automated censorship at the speed of machines
-- "Social credit scores" determining who can transact
-- Zero human oversight - just algorithmic enforcement
-- One company's decision = you're financially erased
-
-**In jurisdictions where political factions weaponize finance against each other, we need an alternative that can't be corrupted.**
-
-### The Personal Freedom Question
-
-**What if you could have stable money that NO entity can freeze, censor, or control?**
-
-- You hold DGB worth $10,000 today
-- You need $5,000 cash but don't want to sell
-- Traditional stablecoins: **Risk debanking, censorship, account freeze**
-- **DigiDollar solution**: Lock your DGB in YOUR wallet → Get DigiDollars → Nobody can stop you
-
-> 🗽 **Freedom Principle**: Your money. Your keys. Your sovereignty. No company, no AI algorithm, no government can take it away.
+### Content
+- **$DGB DigiDollar** (large, bold - blue gradient with green $ sign)
+- DigiByte | **DigiDollar** (green) | Stablecoin
+- "The world's first truly decentralized time-locked stablecoin built natively on a UTXO blockchain"
+- "No company to trust. No smart contract to hack. Just you, your keys, and mathematics."
 
 ---
 
-## SLIDE 2: What is DigiDollar?
+## SLIDE 2: What is DigiDollar? (0:20-0:45)
+### ATTENTION Phase - Simple Explanation
 
-### One Sentence Explanation
-**DigiDollar is a censorship-resistant, stable digital currency (always = $1 USD) created by locking DigiByte in your own wallet - making DGB a strategic reserve asset while protecting your financial sovereignty.**
+**Visual**: Clean explanation card with highlighted key phrases
 
-### Why This Matters for Freedom
-**In an era where:**
-- AI algorithms decide who can bank
-- Companies freeze accounts based on political views
-- Financial censorship happens at machine speed
-- "Social credit" threatens to control behavior
+### Content
+- DigiDollar lets you **lock your DGB** to create stable, dollar-pegged DigiDollars you can spend today
+- Your crypto stays safely time-locked in **your own wallet**
+- When the lock expires, **burn your DigiDollars** and get ALL your DGB back - including any price appreciation
 
-**DigiDollar offers an unbreakable alternative:**
-- ✅ **No AI Overlords**: Mathematics, not algorithms, control the system
-- ✅ **Uncensorable**: No company can freeze your DigiDollars
-- ✅ **Undebank-able**: Your keys = your sovereignty (always)
-- ✅ **Unstoppable**: Works even if governments or corporations oppose you
-- ✅ **True Americana**: Life, liberty, and the pursuit of happiness - protected by cryptography
-
-### Key Differentiators
-- ✅ **World's First**: Truly decentralized stablecoin on a UTXO blockchain
-- ✅ **You Stay In Control**: Everything happens in YOUR wallet with YOUR private keys
-- ✅ **No Company, No Bank, No AI**: Zero centralized control - purely blockchain-based
-- ✅ **DGB = Strategic Reserve**: Only 21 billion DGB (1.94 per person on Earth)
-- ✅ **Lightning Fast**: 15-second blocks, $0.01 fees (40x faster than Bitcoin)
-
-> 🗽 **The Big Idea**: DigiDollar turns DigiByte into digital gold - a finite, scarce reserve asset backing a stable currency that NO entity can censor, freeze, or control. This is financial freedom in its truest form.
+### Key Quote
+> "Your crypto never leaves your wallet. You're the bank."
 
 ---
 
-## SLIDE 3: The "Silver Safe" Analogy - How It Works
+## SLIDE 3: The Silver Safe Analogy (0:45-1:30)
+### INTEREST Phase
 
-### Imagine This Simple Scenario
+**Visual**: DigiDollar logo in stylized safe with 4-step process cards
 
-**You own $1,000 worth of silver** stored in your basement safe.
+### Four Steps
+1. **Your Wealth** - $10,000 of DGB sits in YOUR wallet
+2. **Lock It Away** - Time-lock for 30 days to 10 years
+3. **Spend Now** - Get stable DigiDollars instantly
+4. **Keep Potential Upside** - Unlock later & keep 100% of any appreciation
 
-**The Old Way (Selling)**:
-- ❌ Sell the silver → Get $1,000 cash
-- ❌ Pay taxes (20-40% = $200-400 gone)
-- ❌ Lose future gains (if silver goes to $10,000, you missed $9,000)
-
-**The DigiDollar Way (Locking)**:
-- ✅ Lock silver in a time-locked safe in YOUR basement
-- ✅ Safe gives you $500 cash to spend TODAY
-- ✅ Silver NEVER leaves your possession - you just can't access it yet
-- ✅ 10 years later, silver is worth $10,000 (10x gain!)
-- ✅ Return the $500 to the safe → Get your $10,000 silver back
-
-### That's EXACTLY How DigiDollar Works
-
-1. **Lock DGB** in your DigiByte Core wallet (you keep control)
-2. **Get DigiDollars** to spend immediately (stable $1 each)
-3. **Keep ALL appreciation** - your DGB grows in value while locked
-4. **Redeem anytime** - burn DigiDollar → unlock your DGB
-
-> 💰 **The Genius**: You get liquidity today AND keep all future gains. No selling. No taxes (in most jurisdictions). No giving up control.
+### Key Message
+> "You're not borrowing from a bank. You're borrowing from YOURSELF."
 
 ---
 
-## SLIDE 4: Why DigiByte? Why Not Bitcoin or Ethereum?
+## SLIDE 4: How DigiDollar Works (1:30-2:15)
+### INTEREST Phase - The Process
 
-### DigiByte is the ONLY Blockchain That Can Do This
+**Visual**: 4-step flow diagram with icons and numbered steps
 
-| Feature | DigiByte | Bitcoin | Ethereum |
-|---------|----------|---------|----------|
-| **Block Speed** | 15 seconds | 10 minutes | 12 seconds |
-| **Transaction Fee** | $0.01 | $5-50 | $2-100 |
-| **Truly Decentralized** | ✅ Yes | ✅ Yes | ❌ VC-backed |
-| **UTXO Architecture** | ✅ Yes | ✅ Yes | ❌ Account-based |
-| **Native Implementation** | ✅ Yes | ❌ Too slow | ❌ Smart contract risk |
-| **Max Supply** | 21 Billion | 21 Million | Unlimited |
+### Four Steps (Zero Middlemen)
+1. **Lock DGB** - Choose 30 days to 10 years
+2. **Get DigiDollars** - Stable, spendable DigiDollars
+3. **Use & Wait** - Spend DD, DGB appreciates
+4. **Redeem & Unlock** - Burn DD, get ALL DGB back
 
-### Why DigiByte Wins
-
-**Speed**: 40x faster than Bitcoin - instant settlements
-**Security**: 12 years, never hacked, truly decentralized
-**UTXO Model**: DigiDollar built natively into the blockchain (no smart contract vulnerabilities)
-**Scarcity**: Only 1.94 DGB per person on Earth - perfect for reserve asset
-**Cost**: Pennies per transaction vs. dollars on Bitcoin/Ethereum
-
-> ⚡ **Bottom Line**: Bitcoin is too slow. Ethereum has smart contract risks. Only DigiByte has the speed, security, and architecture for a truly decentralized stablecoin.
+### Key Quote
+> "Your private keys NEVER leave your possession. Ever."
 
 ---
 
-## SLIDE 5: Who Benefits? (The Hook for Every Audience)
+## SLIDE 5: Why DigiByte? (2:15-2:45)
+### DESIRE Phase
 
-### For Anyone Who Values Freedom
-- 🗽 **Uncensorable Money**: No AI algorithm can freeze your account
-- 🛡️ **Debanking Protection**: Your keys = your access (always)
-- 🚫 **No Social Credit**: Your political views don't matter - math doesn't discriminate
-- ⚖️ **True Neutrality**: Works the same for everyone, everywhere, regardless of ideology
+**Visual**: Three stat cards plus scarcity highlight
 
-### For Crypto Holders
-- 💰 **Tax Advantage**: Access liquidity without triggering capital gains
-- 📈 **Keep Upside**: Never sell DGB - keep ALL future gains
-- 🔒 **Sovereignty**: Your keys, your coins, your vault - no company can take it
+### Key Stats
+- **15s** Block Time (40x faster than Bitcoin)
+- **$0.01** Transaction Fee (Extremely inexpensive)
+- **12yr** Never Hacked (Battle-tested security)
 
-### For DGB Believers
-- 🚀 **Price Support**: Locking reduces supply → increases scarcity → drives price
-- 🌐 **Network Effect**: More DigiDollar usage → More DGB demand
-- 💎 **Strategic Reserve**: DGB becomes digital gold backing a censorship-resistant currency
-
-### For Dissidents & Activists (Anywhere)
-- 📢 **Financial Free Speech**: Support causes without fear of debanking
-- 🌍 **Cross-Border Freedom**: Send money to allies in oppressive regimes
-- 🔓 **Protest Without Permission**: Organize, fundraise, transact - unstoppably
-
-### For Businesses & Institutions
-- ⚡ **Instant Settlement**: 15-second blocks vs. 2-3 days traditional
-- 💵 **Stable Currency**: $1 = $1 always - predictable for accounting
-- 🌍 **Global Access**: No banks, no borders, no censorship, no AI gatekeepers
-
-### For Governments & Regulators (Good Actors)
-- ✅ **No Central Authority**: Can't be weaponized by authoritarian regimes
-- 🛡️ **Transparent**: All transactions on public blockchain
-- 🔐 **Secure**: Users control private keys - no custody risk
-- 📊 **Auditable**: Real-time system health monitoring
-- 🗳️ **Democratic Money**: Serves citizens, not corporations or AI overlords
-
-> 🎯 **Universal Benefit**: DigiDollar solves different problems for different people - that's why it has massive adoption potential.
+### Scarcity Message
+- 21 Billion Max Supply = 1.94 DGB Per Person on Earth
+- "That's not just scarcity. That's **extreme scarcity**."
 
 ---
 
-## SLIDE 6: The Economics - Why This Works
+## SLIDE 6: What Makes DigiDollar Different (2:45-3:15)
+### DESIRE Phase - Comparison
 
-### The Scarcity Equation
+**Visual**: Side-by-side comparison with checkmarks and X marks
 
-**21 billion DGB max supply ÷ 8.1 billion people = 1.94 DGB per person**
+### USDT / USDC / PyUSD (Bad)
+- Corporation controls your funds
+- Can freeze your account anytime
+- Your crypto is GONE (you sold it)
+- Counterparty & regulatory risk
+- Zero potential for appreciation
 
-When you lock DGB for DigiDollar:
-- **Reduced circulating supply** → Scarcity increases
-- **Less panic selling** → Price stability improves
-- **Supply shock potential** → Major locking creates squeeze
-- **Benefits ALL DGB holders** → Even unlocked DGB gains value
+### DigiDollar (Good)
+- YOU control your private keys
+- Impossible to freeze or seize
+- Your DGB stays in YOUR wallet
+- No counterparty risk - trustless
+- Keep 100% of potential upside
 
-### The Collateral Safety Model
-
-DigiDollar uses a sliding collateral scale for safety:
-
-| Lock Period | Collateral Required | DGB Can Drop Before Risk |
-|------------|---------------------|--------------------------|
-| 30 days | 500% | 80% drop |
-| 1 year | 300% | 66.7% drop |
-| 10 years | 200% | 50% drop |
-
-**Translation**: To get $100 DigiDollars with 1-year lock, you lock $300 worth of DGB. DGB price can drop 66% before any risk.
-
-### Four-Layer Protection System
-1. **High Collateral** - Massive buffer against volatility
-2. **Dynamic Adjustment** - System auto-adjusts if health drops
-3. **ERR Protection** - Reduced returns during low health, no forced liquidations
-4. **Market Forces** - Locked supply naturally supports price
-
-> 🛡️ **The Safety Promise**: No forced liquidations. No margin calls. Your DGB stays locked until the time expires - period.
+### Key Quote
+> "The world's first stablecoin where YOU hold the keys from start to finish."
 
 ---
 
-## SLIDE 7: Real-World Impact - The Use Cases
+## SLIDE 7: Four-Layer Protection (3:15-3:45)
+### DESIRE Phase - Security
 
-### Markets DigiDollar Disrupts
+**Visual**: Shield with four layers, protection list
 
-💼 **Corporate Bonds** - $140.7 Trillion market
-- Current: 2-3 day settlement
-- DigiDollar: 15-second settlement
-- **Impact**: Instant liquidity for massive markets
+### Four Protection Layers
+1. **Layer 1: High Collateral** - 200-1000% collateral ratios absorb volatility
+2. **Layer 2: DCA (Dynamic Collateral Adjustment)** - System automatically requires more collateral for new mints under stress
+3. **Layer 3: Emergency Redemption Ratio (ERR)** - Auto-activates during market stress to balance network collateral and smooth fluctuations
+4. **Layer 4: Volatility Freeze** - Automatic circuit breaker during extreme price swings
 
-🏠 **Real Estate** - $79.7 Trillion market
-- Current: Illiquid, expensive, exclusive
-- DigiDollar: Fractional ownership, instant trading
-- **Impact**: Democratize property investment
-
-🚗 **Autonomous Vehicles** - $13.7 Trillion by 2030
-- Current: Can't manage own finances
-- DigiDollar: Self-driving cars pay for charging, tolls, parking
-- **Impact**: Enable machine-to-machine economy
-
-💸 **Remittances** - $685 Billion annually
-- Current: 6.3% average fee, 2-7 days
-- DigiDollar: $0.01 fee, 15 seconds
-- **Impact**: Save billions for migrant workers
-
-🏥 **Healthcare Payments** - $550 Billion market
-- Current: Weeks to months for claims
-- DigiDollar: Real-time claim adjudication
-- **Impact**: Reduce administrative waste
-
-> 🌍 **Bottom Line**: DigiDollar enables use cases impossible with traditional stablecoins due to DigiByte's speed and decentralization.
+### Key Quote
+> "No forced liquidations. Your position rides out any storm."
 
 ---
 
-## SLIDE 8: Current Status - This is NOT Vaporware
+## SLIDE 8: Real-World Benefits (3:45-4:00)
+### DESIRE Phase - Benefits
 
-### Development Progress: **78% Complete**
+**Visual**: Six benefit cards in a grid
 
-✅ **What's Working RIGHT NOW:**
-- Complete address system (DD/TD/RD addresses)
-- Minting process - lock DGB, get DigiDollars
-- Sending/receiving DigiDollars between users
-- Full wallet interface with 6 functional tabs
-- Advanced protection systems (anti-crash mechanisms)
-- ~50,000 lines of functional, tested code
+### Six Benefits
+1. **Never Sell** - Keep 100% of potential upside
+2. **Tax-Efficient** - Locking does not equal selling in most cases*
+3. **15 Seconds** - Lightning-fast settlements
+4. **Penny Fees** - Extremely inexpensive transactions
+5. **Total Control** - Your keys, always
+6. **No Borders** - Works anywhere, anytime
 
-🔄 **What's In Progress:**
-- Oracle price feeds (framework complete, needs real exchange APIs)
-- Redemption system refinements
-- Final testing and optimization
-
-⏱️ **Timeline to Launch:**
-- **Testnet**: 4-6 weeks
-- **Mainnet**: 8-12 weeks
-
-> 💪 **The Reality**: DigiDollar has substantial, functional code. This is real engineering, not just a whitepaper.
+*Tax laws vary by jurisdiction. Consult a tax professional.
 
 ---
 
-## SLIDE 9: Why Now? The Perfect Storm
+## SLIDE 9: Live Demo - DD Overview (4:00-4:15)
+### ACTION Phase - Testnet Demo
 
-### The Imminent Threat: AI-Powered Financial Censorship
+**Visual**: Wallet screenshot showing DD Overview tab
 
-**The 2020-2022 Warning Shots:**
-- **2020 Election Aftermath**: Accounts banned for questioning results, election integrity advocates deplatformed
-- **Vaccine Mandates Era**: Doctors debanked for medical dissent, scientists frozen out for questioning policy
-- **Canadian Trucker Convoy**: Bank accounts frozen without trial for peaceful protest donations
-- **US Citizens**: Payment processors (PayPal, Stripe, Venmo) banning users for political speech
-- **Medical Freedom Advocates**: GoFundMe seizures, crowdfunding bans, financial censorship
-- **No crimes committed** - just dissenting views on elections, mandates, and public policy
+### Banner
+"LIVE ON TESTNET - USE IT TODAY"
 
-**The Coming AI Apocalypse:**
-- Centralized stablecoins governed by AI algorithms
-- Automated censorship at machine speed
-- "Social credit scores" determining financial access
-- Real-time thought policing of transactions
-- Zero human oversight - just algorithmic totalitarianism
-
-**Think about it:**
-- An AI scans your social media
-- Detects "wrongthink" based on corporate/government definitions
-- Instantly freezes your USDT/USDC
-- No appeal, no human review, no second chances
-- You're financially erased in milliseconds
-
-**This isn't science fiction. This is 2025-2030 if we don't act.**
-
-### Four Converging Crises
-
-**1. AI-Powered Financial Totalitarianism**
-- Tether/USDC will be AI-governed within 5 years
-- Automated debanking at scale
-- "Wrongthink" detection in real-time
-- **DigiDollar Solution**: Math, not AI, controls the system
-
-**2. Stablecoin Centralization Crisis**
-- Companies control $180B+ in stablecoins
-- One government order = mass freezing
-- Weaponized against political opponents
-- **DigiDollar Solution**: Zero centralized control, uncensorable
-
-**3. Erosion of Financial Freedom**
-- Pursuit of life, liberty, happiness under threat
-- Banking becomes a privilege, not a right
-- Dissent = Financial death sentence
-- **DigiDollar Solution**: Sovereignty guaranteed by cryptography
-
-**4. DGB Undervaluation Opportunity**
-- 12 years of security, never hacked
-- Fastest UTXO blockchain
-- Only 1.94 DGB per person
-- **DigiDollar Solution**: Showcases DGB as freedom money
-
-> 🗽 **The Moment**: In jurisdictions where political factions weaponize finance against each other, we need money that can't be corrupted. DigiDollar is that money. DigiByte is the only blockchain that can deliver it. The alternative is AI-controlled financial slavery.
+### Features Highlighted
+- Your DD Balance
+- Network Health Status
+- DCA & ERR Levels
+- Recent Transactions
 
 ---
 
-## SLIDE 10: The Vision - Where This Goes
+## SLIDE 10: Live Demo - DD Vault (4:15-4:30)
+### ACTION Phase - Testnet Demo
 
-### Phase 1: Launch (2025)
-- Testnet deployment
-- Community testing
-- Mainnet activation
-- Initial adoption with crypto holders
+**Visual**: Wallet screenshot showing DD Vault tab
 
-### Phase 2: Integration (2025-2026)
-- Exchange listings for DigiDollar
-- Merchant payment integration
-- DeFi protocol adoption
-- Mobile wallet support
+### Banner
+"YOUR VAULTS - YOUR KEYS"
 
-### Phase 3: Global Scale (2026+)
-- Corporate bond settlement
-- Real estate tokenization
-- Remittance disruption
-- Autonomous vehicle economy
-- Healthcare payment revolution
+### Subtitle
+"Manage your time-locked DGB collateral - from 30 days to 10 years"
 
-### The Ultimate Goal
-
-**Make DigiByte the global reserve asset backing a truly decentralized stable currency used by billions.**
-
-- DGB = Digital gold (store of value, scarce, finite)
-- DigiDollar = Digital cash (stable, fast, global)
-- Together = Complete financial system without banks
+### Features Highlighted
+- Multiple Lock Periods
+- Vault Health Indicators
+- Time Remaining
+- One-Click Redeem
 
 ---
 
-## SLIDE 11: Call to Action - What Happens Next
+## SLIDE 11: Live Demo - DD Transactions (4:30-4:45)
+### ACTION Phase - Testnet Demo
 
-### The Stakes Are Higher Than You Think
+**Visual**: Wallet screenshot showing DD Transactions tab
 
-**If we fail:**
-- AI algorithms will control all money within 10 years
-- Financial censorship will be automated and instant
-- Dissent will equal financial death
-- Freedom will be a memory
+### Banner
+"COMPLETE TRANSPARENCY"
 
-**If we succeed:**
-- Individuals keep financial sovereignty
-- No AI can freeze your access
-- Free speech remains free
-- The American dream survives
-
-### For Freedom Fighters Everywhere
-➡️ **Join the Resistance**:
-- Use DigiDollar when it launches (be uncensorable)
-- Run a node (strengthen the network)
-- Educate others (spread financial freedom)
-- Support development (this is the last line of defense)
-
-### For Technical Audience
-➡️ **Build Freedom**:
-- Review the code (transparency matters)
-- Contribute to development (we need you)
-- Integrate DigiDollar into your apps (expand freedom)
-- Create tools for sovereignty (empower users)
-
-### For Investors/Community
-➡️ **Invest in Liberty**:
-- Acquire DGB (become a reserve asset holder)
-- Lock for DigiDollar (prove the system)
-- Spread the message (freedom isn't free, but it's priceless)
-- Prepare for mainnet (history is being made)
-
-### For Regulators/Institutions (The Good Ones)
-➡️ **Protect Your Citizens**:
-- Study the model (true decentralization works)
-- Support innovation (don't ban what you can't control)
-- Recognize the threat (AI totalitarianism is real)
-- Enable freedom (history will judge you)
-
-### The Ask
-
-**Help us build the last bastion of financial freedom.**
-
-This isn't just another crypto project. This is the final stand against AI-powered financial totalitarianism. This is about preserving life, liberty, and the pursuit of happiness for future generations.
-
-**The alternative is a world where algorithms decide who can eat, who can transact, who can exist economically.**
-
-**We refuse to accept that future.**
+### Features Highlighted
+- Mint Transactions
+- Transfer History
+- Redemption Records
+- Searchable by TX ID
 
 ---
 
-## SLIDE 12: The One Thing to Remember
+## SLIDE 12: Call to Action (4:45-5:00)
+### ACTION Phase
 
-### If You Forget Everything Else, Remember This:
+**Visual**: DigiDollar logo, key stats, CTA buttons
 
-> **DigiDollar is the ONLY truly censorship-resistant stablecoin. No company can freeze it. No AI can ban it. No government can seize it. Your keys = your sovereignty = your freedom.**
+### Title
+**The Future of Decentralized Stablecoins**
 
-> **Lock DigiByte in YOUR wallet, get stable dollars to spend today, keep ALL future gains, and NEVER give up control of your private keys.**
+### Tagline
+"Spend today. Stay sovereign forever."
 
-**No company. No bank. No AI algorithm. No custody. Just you, the blockchain, and mathematical freedom.**
+### Key Stats
+- UTXO Native
+- Your Keys
+- 4-Layer Protection
+- 15-Second Settlement
 
-### Four Questions Answered
+### Key Quote
+> "Stop selling your future to pay for today."
 
-**Q: Is it really uncensorable?**
-A: Yes. It's mathematics, not a company. No one can freeze your DigiDollars. Ever.
+### Call to Action
+- **Try it on Testnet Today**
+- Download Wallet button
+- Learn More button
 
-**Q: Can AI control it?**
-A: No. Decentralized oracles, not corporate algorithms, determine prices. No central AI to weaponize.
-
-**Q: Is it safe?**
-A: Yes. High collateral ratios, four-layer protection, no forced liquidations. Proven security model.
-
-**Q: Is it real?**
-A: Yes. 78% complete, 50,000+ lines of code, launching in weeks. This is happening.
-
-### The Choice
-
-**Path 1:** Accept AI-controlled money, financial censorship, algorithmic tyranny.
-
-**Path 2:** Fight for DigiDollar, financial sovereignty, cryptographic freedom.
-
-**Which path leads to a future you want to live in?**
+### Closing Line
+> "Liquidity without selling. Sovereignty without compromise."
 
 ---
 
-## APPENDIX: Quick Reference
+## SPEAKER NOTES: Timing Guide
 
-### Key Numbers
-- **DGB Supply**: 21 billion max (1.94 per person)
-- **Block Time**: 15 seconds (40x faster than Bitcoin)
-- **Fees**: $0.01 average
-- **Collateral**: 200%-500% depending on lock time
-- **Development**: 78% complete
-
-### Key Links
-- White Paper: https://github.com/orgs/DigiByte-Core/discussions/319
-- Technical Specs: https://github.com/orgs/DigiByte-Core/discussions/324
-- Use Cases: https://github.com/orgs/DigiByte-Core/discussions/325
-
-### Contact & Resources
-- GitHub Discussions: https://github.com/orgs/DigiByte-Core/discussions
-- Test on RegTest: Available in DigiByte Core v8.26
-- Documentation: Full architecture docs in repository
+| Section | Duration | Cumulative | AIDA Phase |
+|---------|----------|------------|------------|
+| Brand Introduction | 0:20 | 0:20 | Attention |
+| What is DigiDollar | 0:25 | 0:45 | Attention |
+| Silver Safe Analogy | 0:45 | 1:30 | Interest |
+| How It Works | 0:45 | 2:15 | Interest |
+| Why DigiByte | 0:30 | 2:45 | Desire |
+| What Makes It Different | 0:30 | 3:15 | Desire |
+| Four-Layer Protection | 0:30 | 3:45 | Desire |
+| Real-World Benefits | 0:15 | 4:00 | Desire |
+| Demo: Overview | 0:15 | 4:15 | Action |
+| Demo: Vault | 0:15 | 4:30 | Action |
+| Demo: Transactions | 0:15 | 4:45 | Action |
+| Call to Action | 0:15 | 5:00 | Action |
 
 ---
 
-**END OF 5-MINUTE PRESENTATION**
+## APPENDIX: Memorable Quotes for Speakers
 
-*This presentation is designed to hook audiences of all backgrounds and lead them to the detailed 30-60 minute presentation for deeper understanding.*
+Use these quotable phrases throughout the presentation:
+
+1. "Your crypto never leaves your wallet. You're the bank."
+
+2. "1.94 DGB per person on Earth. That's not just scarcity - that's extreme scarcity."
+
+3. "Liquidity without selling. Sovereignty without compromise."
+
+4. "The world's first stablecoin where YOU hold the keys from start to finish."
+
+5. "Stop selling your future to pay for today."
+
+6. "Your private keys NEVER leave your possession. Ever."
+
+7. "No forced liquidations. Your position rides out any storm."
+
+8. "You're not borrowing from a bank. You're borrowing from yourself."
+
+---
+
+## APPENDIX: Key Messaging Guidelines
+
+### DO Say
+- "Keep 100% of **potential** upside"
+- "Extremely inexpensive fees"
+- "**Potential** price appreciation"
+- "Tax-efficient (in most jurisdictions)*"
+- "Redeem & Unlock"
+
+### DON'T Say
+- "Profit" or "guaranteed gains"
+- "Cheaper than Ethereum" (avoid direct comparisons)
+- "Tax-free" (always qualify)
+- "Redeem & Profit"
+
+### Always Include
+- Tax disclaimer: "*Tax laws vary by jurisdiction. Consult a tax professional."
+- Risk acknowledgment: "Potential" when discussing future value
+
+---
+
+## APPENDIX: Handling Common Questions
+
+### "Why do I need 200%-1000% collateral?"
+> "That's the price of true sovereignty. Other stablecoins offer lower collateral but can force-liquidate you in seconds. DigiDollar's higher collateral means NO forced liquidations, ever. You keep 100% of any potential upside on that collateral."
+
+### "What if DGB crashes during my lock period?"
+> "Your position rides it out. The four-layer protection system adapts WITHOUT destroying your position. There are no forced liquidations in DigiDollar. When the market recovers, so does your vault."
+
+### "Why not just use USDC or USDT?"
+> "Three reasons: DigiDollar keeps YOUR private keys - centralized stablecoins can freeze your account. DigiDollar has no forced liquidations. And you keep 100% of your DGB's potential appreciation - with USDC, your crypto is gone."
+
+---
+
+## PRESENTATION FILES
+
+- **HTML Presentation**: `presentation/slides/digidollar-5min.html`
+- **Theme**: Light (white background, dark text)
+- **Navigation**: Arrow keys, Space, click, or swipe
+- **Slides**: 12 total
+
+---
+
+*Document updated: December 2024*
+*AIDA Framework applied throughout for maximum engagement*

@@ -224,6 +224,13 @@ verify_all_balances() {
     echo ""
     echo "========== NETWORK STATS =========="
 
+    # IMPORTANT: Sync validation interface queue before checking network stats
+    # The DigiDollar stats index is updated asynchronously, so we need to wait
+    # for it to process all pending block notifications. Without this, the stats
+    # may lag behind by 1-2 blocks, causing supply mismatches.
+    $BOB_CLI syncwithvalidationinterfacequeue 2>/dev/null
+    sleep 1
+
     local network_dd=$(get_network_dd_supply)
     local network_collateral=$(get_network_collateral)
     local oracle_price=$($BOB_CLI getoracleprice 2>/dev/null | jq -r '.price_usd // "N/A"')

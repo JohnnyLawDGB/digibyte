@@ -731,7 +731,8 @@ else
     print_status "fail" "Alice Tier 3 Mint failed: $ALICE_MINT"
 fi
 
-$BOB_CLI generatetoaddress 2 "$BOB_ADDR" > /dev/null 2>&1
+# Alice generates her own block to include her TX (TX is in Alice's mempool, not Bob's)
+$ALICE_CLI generatetoaddress 2 "$ALICE_ADDR" > /dev/null 2>&1
 sleep 3
 sync_all_nodes
 
@@ -758,7 +759,8 @@ else
     print_status "fail" "Alice Tier 5 Mint failed: $ALICE_MINT"
 fi
 
-$BOB_CLI generatetoaddress 2 "$BOB_ADDR" > /dev/null 2>&1
+# Alice generates her own block to include her TX (TX is in Alice's mempool, not Bob's)
+$ALICE_CLI generatetoaddress 2 "$ALICE_ADDR" > /dev/null 2>&1
 sleep 3
 sync_all_nodes
 
@@ -788,7 +790,8 @@ else
     print_status "fail" "Charlie Tier 7 Mint failed: $CHARLIE_MINT"
 fi
 
-$BOB_CLI generatetoaddress 2 "$BOB_ADDR" > /dev/null 2>&1
+# Charlie generates his own block to include his TX (TX is in Charlie's mempool, not Bob's)
+$CHARLIE_CLI generatetoaddress 2 "$CHARLIE_ADDR" > /dev/null 2>&1
 sleep 3
 sync_all_nodes
 
@@ -815,7 +818,8 @@ else
     print_status "fail" "Charlie Tier 9 Mint failed: $CHARLIE_MINT"
 fi
 
-$BOB_CLI generatetoaddress 2 "$BOB_ADDR" > /dev/null 2>&1
+# Charlie generates his own block to include his TX (TX is in Charlie's mempool, not Bob's)
+$CHARLIE_CLI generatetoaddress 2 "$CHARLIE_ADDR" > /dev/null 2>&1
 sleep 3
 sync_all_nodes
 

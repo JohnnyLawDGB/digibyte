@@ -381,7 +381,17 @@ public:
         consensus.SegwitHeight = 0; // SEGWIT is always activated on testnet unless overridden
         consensus.MinBIP9WarningHeight = 0;
         consensus.powLimit = ArithToUint256(~arith_uint256(0) >> 20);
-        consensus.initialTarget[ALGO_ODO] = ArithToUint256(~arith_uint256(0) >> 20); // Same as other algos
+
+        // Initial difficulty targets for all algorithms (testnet)
+        // Using >> 28 for realistic testnet mining (~256x harder than minimum)
+        // This requires ~256 million hashes per block, taking a few seconds on modern hardware
+        consensus.initialTarget[ALGO_SHA256D] = ArithToUint256(~arith_uint256(0) >> 28);
+        consensus.initialTarget[ALGO_SCRYPT] = ArithToUint256(~arith_uint256(0) >> 20);  // Scrypt is slower, keep easier
+        consensus.initialTarget[ALGO_GROESTL] = ArithToUint256(~arith_uint256(0) >> 28);
+        consensus.initialTarget[ALGO_SKEIN] = ArithToUint256(~arith_uint256(0) >> 28);
+        consensus.initialTarget[ALGO_QUBIT] = ArithToUint256(~arith_uint256(0) >> 28);
+        consensus.initialTarget[ALGO_ODO] = ArithToUint256(~arith_uint256(0) >> 28);
+
         consensus.nPowTargetTimespan = 14 * 24 * 60 * 60; // two weeks
         consensus.nPowTargetSpacing = 60 / 4;
         consensus.fPowAllowMinDifficultyBlocks = false; // Disable min difficulty blocks for proper difficulty adjustment

@@ -278,6 +278,8 @@ BASE_SCRIPTS = [
     'digidollar_tx_amounts_debug.py',
     'wallet_digidollar_persistence_restart.py --legacy-wallet',
     'wallet_digidollar_persistence_restart.py --descriptors',
+    'wallet_digidollar_restore.py --legacy-wallet',
+    'wallet_digidollar_restore.py --descriptors',
     'rpc_net.py',
     'wallet_keypool.py --legacy-wallet',
     'wallet_keypool.py --descriptors',

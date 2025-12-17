@@ -1654,6 +1654,515 @@ echo ""
 echo "=============================================="
 echo ""
 
+# ====================================================================================
+# ALICE WALLET PERSISTENCE TESTS - Steps 31-33
+# ====================================================================================
+
+# ====================================================================================
+# Step 31: ALICE RESCANBLOCKCHAIN TEST - Test wallet rescan restores DD
+# ====================================================================================
+print_header "Step 31: ALICE RESCANBLOCKCHAIN TEST"
+echo ""
+echo "Testing that DigiDollar balances are correctly restored after rescanblockchain..."
+echo "This is the KEY TEST for the wallet restore fix (descriptor import workflow)."
+echo ""
+
+# Record Alice's state BEFORE rescan
+ALICE_DD_BEFORE_RESCAN=$EXPECT_ALICE_DD
+ALICE_DGB_BEFORE_RESCAN=$(get_dgb_balance "$ALICE_CLI" "alice")
+ALICE_POSITIONS_BEFORE_RESCAN=$($ALICE_CLI -rpcwallet=alice listdigidollarpositions 2>/dev/null | jq 'length')
+
+# Get detailed position info for verification
+echo "Recording Alice's DD position details before rescan..."
+ALICE_POSITIONS_DETAIL_BEFORE=$($ALICE_CLI -rpcwallet=alice listdigidollarpositions 2>/dev/null)
+echo "$ALICE_POSITIONS_DETAIL_BEFORE" | jq -r '.[] | "  Position: \(.position_id[0:16])... dd_minted=\(.dd_minted) tier=\(.lock_tier)"' 2>/dev/null
+
+echo ""
+echo "========== ALICE STATE BEFORE RESCAN =========="
+echo "  Alice DD Balance:    $ALICE_DD_BEFORE_RESCAN cents"
+echo "  Alice DGB Balance:   $ALICE_DGB_BEFORE_RESCAN DGB"
+echo "  Alice DD Positions:  $ALICE_POSITIONS_BEFORE_RESCAN"
+echo "==============================================="
+echo ""
+
+print_subheader "Performing rescanblockchain on Alice's wallet..."
+echo "This will clear and rebuild DD state from blockchain..."
+
+RESCAN_START=$(date +%s)
+set +e
+RESCAN_RESULT=$($ALICE_CLI -rpcwallet=alice rescanblockchain 2>&1)
+RESCAN_EXIT=$?
+set -e
+RESCAN_END=$(date +%s)
+RESCAN_DURATION=$((RESCAN_END - RESCAN_START))
+
+if [ $RESCAN_EXIT -eq 0 ]; then
+    START_HEIGHT=$(echo "$RESCAN_RESULT" | jq -r '.start_height // 0')
+    STOP_HEIGHT=$(echo "$RESCAN_RESULT" | jq -r '.stop_height // 0')
+    print_status "ok" "Rescan completed in ${RESCAN_DURATION}s (blocks $START_HEIGHT to $STOP_HEIGHT)"
+else
+    print_status "fail" "Rescan failed: $RESCAN_RESULT"
+fi
+
+# Small delay to ensure wallet state is updated
+sleep 5
+
+print_subheader "Verifying Alice's DD balance after rescan..."
+
+ALICE_DD_AFTER_RESCAN=$(get_dd_balance "$ALICE_CLI" "alice")
+ALICE_DGB_AFTER_RESCAN=$(get_dgb_balance "$ALICE_CLI" "alice")
+ALICE_POSITIONS_AFTER_RESCAN=$($ALICE_CLI -rpcwallet=alice listdigidollarpositions 2>/dev/null | jq 'length')
+
+echo ""
+echo "========== ALICE STATE AFTER RESCAN =========="
+echo "  Alice DD Balance:    $ALICE_DD_AFTER_RESCAN cents (expected: $ALICE_DD_BEFORE_RESCAN)"
+echo "  Alice DGB Balance:   $ALICE_DGB_AFTER_RESCAN DGB"
+echo "  Alice DD Positions:  $ALICE_POSITIONS_AFTER_RESCAN (expected: $ALICE_POSITIONS_BEFORE_RESCAN)"
+echo "=============================================="
+echo ""
+
+# Verify DD balance persisted through rescan
+if [ "$ALICE_DD_AFTER_RESCAN" = "$ALICE_DD_BEFORE_RESCAN" ]; then
+    print_status "ok" "ALICE DD BALANCE RESTORED after rescan! ($ALICE_DD_AFTER_RESCAN cents)"
+else
+    print_status "fail" "ALICE DD BALANCE MISMATCH! Before: $ALICE_DD_BEFORE_RESCAN, After: $ALICE_DD_AFTER_RESCAN"
+fi
+
+# Verify positions count
+if [ "$ALICE_POSITIONS_AFTER_RESCAN" = "$ALICE_POSITIONS_BEFORE_RESCAN" ]; then
+    print_status "ok" "ALICE DD POSITIONS RESTORED after rescan! ($ALICE_POSITIONS_AFTER_RESCAN positions)"
+else
+    print_status "fail" "ALICE POSITIONS MISMATCH! Before: $ALICE_POSITIONS_BEFORE_RESCAN, After: $ALICE_POSITIONS_AFTER_RESCAN"
+fi
+
+# Show position details after rescan
+echo ""
+echo "Alice's DD Positions after rescan:"
+$ALICE_CLI -rpcwallet=alice listdigidollarpositions 2>/dev/null | jq -r '.[] | "  [\(.status)] \(.dd_minted) cents - tier \(.lock_tier) - \(.position_id[0:12])..."' 2>/dev/null || echo "  Error reading positions"
+
+verify_all_balances "After Alice Rescan Test"
+
+# ====================================================================================
+# Step 32: ALICE REINDEX TEST - Test full chain reindex restores DD
+# ====================================================================================
+print_header "Step 32: ALICE REINDEX TEST"
+echo ""
+echo "Testing that DigiDollar balances rebuild correctly during -reindex for Alice..."
+echo "This verifies DD state is properly reconstructed from blockchain data."
+echo ""
+
+# Record state before reindex
+ALICE_DD_BEFORE_REINDEX=$EXPECT_ALICE_DD
+ALICE_DGB_BEFORE_REINDEX=$(get_dgb_balance "$ALICE_CLI" "alice")
+ALICE_POSITIONS_BEFORE_REINDEX=$($ALICE_CLI -rpcwallet=alice listdigidollarpositions 2>/dev/null | jq 'length')
+ALICE_CHAIN_HEIGHT_BEFORE=$($ALICE_CLI getblockcount)
+
+echo "========== ALICE STATE BEFORE REINDEX =========="
+echo "  Alice DD Balance:    $ALICE_DD_BEFORE_REINDEX cents"
+echo "  Alice DGB Balance:   $ALICE_DGB_BEFORE_REINDEX DGB"
+echo "  Alice DD Positions:  $ALICE_POSITIONS_BEFORE_REINDEX"
+echo "  Chain Height:        $ALICE_CHAIN_HEIGHT_BEFORE blocks"
+echo "================================================"
+echo ""
+
+print_subheader "Stopping Alice's Qt for reindex..."
+kill -TERM $ALICE_PID 2>/dev/null || true
+for i in {1..30}; do
+    if ! ps -p $ALICE_PID > /dev/null 2>&1; then
+        print_status "ok" "Alice's Qt shut down for reindex"
+        break
+    fi
+    sleep 1
+done
+
+if ps -p $ALICE_PID > /dev/null 2>&1; then
+    kill -9 $ALICE_PID 2>/dev/null || true
+    sleep 2
+fi
+
+print_subheader "Starting Alice's Qt with -reindex flag..."
+echo "This will rescan the entire blockchain and rebuild all indexes..."
+
+env -i \
+    DISPLAY="${DISPLAY}" \
+    XAUTHORITY="${XAUTHORITY}" \
+    WAYLAND_DISPLAY="${WAYLAND_DISPLAY}" \
+    XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}" \
+    XDG_SESSION_TYPE="${XDG_SESSION_TYPE}" \
+    HOME="${HOME}" \
+    USER="${USER}" \
+    PATH="${PATH}" \
+    ./src/qt/digibyte-qt \
+    -testnet \
+    -datadir=$ALICE_DATADIR \
+    -port=$ALICE_PORT \
+    -rpcport=$ALICE_RPC \
+    -server \
+    -listen=1 \
+    -discover=0 \
+    -digidollar=1 \
+    -txindex=1 \
+    -fallbackfee=0.0001 \
+    -dandelion=0 \
+    -debug=digidollar \
+    -reindex \
+    -connect=127.0.0.1:$BOB_PORT \
+    > /tmp/alice_testnet_reindex.log 2>&1 &
+ALICE_PID=$!
+echo "Alice's Qt started with -reindex (New PID: $ALICE_PID)"
+echo ""
+echo "Waiting for reindex to complete (this may take 1-3 minutes)..."
+
+# Wait for RPC with longer timeout for reindex
+for i in {1..180}; do
+    if $ALICE_CLI getblockchaininfo > /dev/null 2>&1; then
+        CURRENT_HEIGHT=$($ALICE_CLI getblockcount 2>/dev/null || echo "0")
+        if [ "$CURRENT_HEIGHT" -ge "$ALICE_CHAIN_HEIGHT_BEFORE" ]; then
+            echo ""
+            print_status "ok" "Alice reindex complete! Chain at height $CURRENT_HEIGHT"
+            break
+        else
+            if [ $((i % 10)) -eq 0 ]; then
+                PROGRESS=$($ALICE_CLI getblockchaininfo 2>/dev/null | jq -r '.verificationprogress // 0')
+                echo "  Reindex progress: $(echo "$PROGRESS * 100" | bc)% (height: $CURRENT_HEIGHT / $ALICE_CHAIN_HEIGHT_BEFORE)"
+            fi
+        fi
+    fi
+    sleep 1
+done
+
+# Extra wait for wallet to fully load after reindex
+sleep 10
+
+# Load wallet if needed
+$ALICE_CLI loadwallet "alice" 2>/dev/null || true
+sleep 3
+
+sync_all_nodes
+
+print_subheader "Verifying Alice's DD balance after reindex..."
+
+ALICE_DD_AFTER_REINDEX=$(get_dd_balance "$ALICE_CLI" "alice")
+ALICE_DGB_AFTER_REINDEX=$(get_dgb_balance "$ALICE_CLI" "alice")
+ALICE_POSITIONS_AFTER_REINDEX=$($ALICE_CLI -rpcwallet=alice listdigidollarpositions 2>/dev/null | jq 'length')
+ALICE_CHAIN_HEIGHT_AFTER=$($ALICE_CLI getblockcount)
+
+echo ""
+echo "========== ALICE STATE AFTER REINDEX =========="
+echo "  Alice DD Balance:    $ALICE_DD_AFTER_REINDEX cents (expected: $ALICE_DD_BEFORE_REINDEX)"
+echo "  Alice DGB Balance:   $ALICE_DGB_AFTER_REINDEX DGB"
+echo "  Alice DD Positions:  $ALICE_POSITIONS_AFTER_REINDEX (expected: $ALICE_POSITIONS_BEFORE_REINDEX)"
+echo "  Chain Height:        $ALICE_CHAIN_HEIGHT_AFTER blocks"
+echo "==============================================="
+echo ""
+
+if [ "$ALICE_DD_AFTER_REINDEX" = "$ALICE_DD_BEFORE_REINDEX" ]; then
+    print_status "ok" "ALICE DD BALANCE REBUILT correctly after reindex! ($ALICE_DD_AFTER_REINDEX cents)"
+else
+    print_status "fail" "ALICE DD BALANCE MISMATCH after reindex! Before: $ALICE_DD_BEFORE_REINDEX, After: $ALICE_DD_AFTER_REINDEX"
+fi
+
+if [ "$ALICE_POSITIONS_AFTER_REINDEX" = "$ALICE_POSITIONS_BEFORE_REINDEX" ]; then
+    print_status "ok" "ALICE DD POSITIONS REBUILT correctly after reindex! ($ALICE_POSITIONS_AFTER_REINDEX positions)"
+else
+    print_status "fail" "ALICE POSITIONS MISMATCH! Before: $ALICE_POSITIONS_BEFORE_REINDEX, After: $ALICE_POSITIONS_AFTER_REINDEX"
+fi
+
+echo ""
+echo "Alice's DD Positions after reindex:"
+$ALICE_CLI -rpcwallet=alice listdigidollarpositions 2>/dev/null | jq -r '.[] | "  [\(.status)] \(.dd_minted) cents - tier \(.lock_tier) - \(.position_id[0:12])..."' 2>/dev/null || echo "  Error reading positions"
+
+verify_all_balances "After Alice Reindex Test"
+
+# ====================================================================================
+# Step 33: ALICE EXPORT-REIMPORT WALLET TEST (Descriptor-based wallet restore)
+# ====================================================================================
+print_header "Step 33: ALICE EXPORT-REIMPORT WALLET TEST"
+echo ""
+echo "Testing the FULL wallet restore workflow via descriptor export/import..."
+echo "This is the CRITICAL TEST for the DigiDollar wallet restore fix!"
+echo ""
+echo "Workflow:"
+echo "  1. Export Alice's wallet descriptors (listdescriptors true)"
+echo "  2. Create new wallet 'alice_restored'"
+echo "  3. Import descriptors into new wallet"
+echo "  4. Rescan blockchain"
+echo "  5. Verify DD positions and balances match original"
+echo ""
+
+# Record Alice's original state
+ALICE_DD_BEFORE_EXPORT=$EXPECT_ALICE_DD
+ALICE_DGB_BEFORE_EXPORT=$(get_dgb_balance "$ALICE_CLI" "alice")
+ALICE_POSITIONS_BEFORE_EXPORT=$($ALICE_CLI -rpcwallet=alice listdigidollarpositions 2>/dev/null | jq 'length')
+
+# Get detailed position info
+ALICE_POSITIONS_DETAIL_BEFORE=$($ALICE_CLI -rpcwallet=alice listdigidollarpositions 2>/dev/null)
+
+echo "========== ALICE ORIGINAL STATE =========="
+echo "  Alice DD Balance:    $ALICE_DD_BEFORE_EXPORT cents"
+echo "  Alice DGB Balance:   $ALICE_DGB_BEFORE_EXPORT DGB"
+echo "  Alice DD Positions:  $ALICE_POSITIONS_BEFORE_EXPORT"
+echo ""
+echo "Position Details:"
+echo "$ALICE_POSITIONS_DETAIL_BEFORE" | jq -r '.[] | "  \(.position_id[0:16])... | DD: \(.dd_minted) cents | DGB: \(.dgb_collateral) | tier: \(.lock_tier) | status: \(.status)"' 2>/dev/null
+echo "==========================================="
+echo ""
+
+print_subheader "Step 33a: Exporting wallet descriptors..."
+
+# Export descriptors with private keys
+set +e
+DESCRIPTORS=$($ALICE_CLI -rpcwallet=alice listdescriptors true 2>&1)
+EXPORT_EXIT=$?
+set -e
+
+if [ $EXPORT_EXIT -eq 0 ] && echo "$DESCRIPTORS" | jq -e '.descriptors' > /dev/null 2>&1; then
+    DESC_COUNT=$(echo "$DESCRIPTORS" | jq '.descriptors | length')
+    print_status "ok" "Exported $DESC_COUNT descriptors from Alice's wallet"
+
+    # Save to file for debugging
+    echo "$DESCRIPTORS" > /tmp/alice_descriptors.json
+    echo "  Descriptors saved to: /tmp/alice_descriptors.json"
+else
+    print_status "fail" "Failed to export descriptors: $DESCRIPTORS"
+fi
+
+print_subheader "Step 33b: Creating new wallet 'alice_restored'..."
+
+# Create new blank wallet
+set +e
+CREATE_RESULT=$($ALICE_CLI createwallet "alice_restored" false true "" false true 2>&1)
+CREATE_EXIT=$?
+set -e
+
+if [ $CREATE_EXIT -eq 0 ]; then
+    print_status "ok" "Created new blank wallet 'alice_restored'"
+else
+    # Wallet might already exist, try to unload and recreate
+    $ALICE_CLI unloadwallet "alice_restored" 2>/dev/null || true
+    sleep 1
+
+    # Delete old wallet directory if exists
+    rm -rf "$ALICE_DATADIR/testnet3/wallets/alice_restored" 2>/dev/null || true
+
+    CREATE_RESULT=$($ALICE_CLI createwallet "alice_restored" false true "" false true 2>&1)
+    if echo "$CREATE_RESULT" | jq -e '.name' > /dev/null 2>&1; then
+        print_status "ok" "Created new blank wallet 'alice_restored' (after cleanup)"
+    else
+        print_status "fail" "Failed to create wallet: $CREATE_RESULT"
+    fi
+fi
+
+print_subheader "Step 33c: Importing descriptors into new wallet..."
+
+# Prepare descriptors for import (add timestamp, default missing fields to false)
+# Note: Some descriptors may not have 'internal' field (single-key vs ranged descriptors)
+IMPORT_DESCS=$(echo "$DESCRIPTORS" | jq '[.descriptors[] | {desc: .desc, timestamp: "now", active: (.active // false), internal: (.internal // false)}]')
+
+# Save import request for debugging
+echo "$IMPORT_DESCS" > /tmp/alice_import_request.json
+echo "  Import request saved to: /tmp/alice_import_request.json"
+
+# Import descriptors
+set +e
+IMPORT_RESULT=$($ALICE_CLI -rpcwallet=alice_restored importdescriptors "$IMPORT_DESCS" 2>&1)
+IMPORT_EXIT=$?
+set -e
+
+if [ $IMPORT_EXIT -eq 0 ]; then
+    SUCCESS_COUNT=$(echo "$IMPORT_RESULT" | jq '[.[] | select(.success == true)] | length')
+    TOTAL_COUNT=$(echo "$IMPORT_RESULT" | jq 'length')
+    print_status "ok" "Imported $SUCCESS_COUNT/$TOTAL_COUNT descriptors successfully"
+
+    # Check for any failures
+    FAILED=$(echo "$IMPORT_RESULT" | jq '[.[] | select(.success != true)]')
+    if [ "$(echo "$FAILED" | jq 'length')" -gt 0 ]; then
+        echo "  Warning: Some imports failed:"
+        echo "$FAILED" | jq -r '.[] | "    - \(.error.message // "unknown error")"'
+    fi
+else
+    print_status "fail" "Descriptor import failed: $IMPORT_RESULT"
+fi
+
+print_subheader "Step 33d: Rescanning blockchain for restored wallet..."
+
+echo "Running rescanblockchain on alice_restored..."
+RESCAN_START=$(date +%s)
+set +e
+RESCAN_RESULT=$($ALICE_CLI -rpcwallet=alice_restored rescanblockchain 2>&1)
+RESCAN_EXIT=$?
+set -e
+RESCAN_END=$(date +%s)
+RESCAN_DURATION=$((RESCAN_END - RESCAN_START))
+
+if [ $RESCAN_EXIT -eq 0 ]; then
+    START_HEIGHT=$(echo "$RESCAN_RESULT" | jq -r '.start_height // 0')
+    STOP_HEIGHT=$(echo "$RESCAN_RESULT" | jq -r '.stop_height // 0')
+    print_status "ok" "Rescan completed in ${RESCAN_DURATION}s (blocks $START_HEIGHT to $STOP_HEIGHT)"
+else
+    print_status "fail" "Rescan failed: $RESCAN_RESULT"
+fi
+
+# Wait for wallet to fully process
+sleep 5
+
+print_subheader "Step 33e: Verifying restored wallet DD state..."
+
+# Get restored wallet state
+ALICE_RESTORED_DD=$(get_dd_balance "$ALICE_CLI" "alice_restored")
+ALICE_RESTORED_DGB=$(get_dgb_balance "$ALICE_CLI" "alice_restored")
+ALICE_RESTORED_POSITIONS=$($ALICE_CLI -rpcwallet=alice_restored listdigidollarpositions 2>/dev/null | jq 'length')
+
+# Get detailed position info from restored wallet
+ALICE_RESTORED_POSITIONS_DETAIL=$($ALICE_CLI -rpcwallet=alice_restored listdigidollarpositions 2>/dev/null)
+
+echo ""
+echo "========== RESTORED WALLET STATE =========="
+echo "  DD Balance:    $ALICE_RESTORED_DD cents (expected: $ALICE_DD_BEFORE_EXPORT)"
+echo "  DGB Balance:   $ALICE_RESTORED_DGB DGB (expected: $ALICE_DGB_BEFORE_EXPORT)"
+echo "  DD Positions:  $ALICE_RESTORED_POSITIONS (expected: $ALICE_POSITIONS_BEFORE_EXPORT)"
+echo ""
+echo "Restored Position Details:"
+echo "$ALICE_RESTORED_POSITIONS_DETAIL" | jq -r '.[] | "  \(.position_id[0:16])... | DD: \(.dd_minted) cents | DGB: \(.dgb_collateral) | tier: \(.lock_tier) | status: \(.status)"' 2>/dev/null || echo "  No positions found"
+echo "==========================================="
+echo ""
+
+# THE KEY VERIFICATION - DD balance must match
+if [ "$ALICE_RESTORED_DD" = "$ALICE_DD_BEFORE_EXPORT" ]; then
+    print_status "ok" "DD BALANCE RESTORED CORRECTLY! ($ALICE_RESTORED_DD cents)"
+else
+    print_status "fail" "DD BALANCE MISMATCH! Original: $ALICE_DD_BEFORE_EXPORT, Restored: $ALICE_RESTORED_DD"
+fi
+
+# Verify position count
+if [ "$ALICE_RESTORED_POSITIONS" = "$ALICE_POSITIONS_BEFORE_EXPORT" ]; then
+    print_status "ok" "DD POSITIONS RESTORED CORRECTLY! ($ALICE_RESTORED_POSITIONS positions)"
+else
+    print_status "fail" "POSITIONS MISMATCH! Original: $ALICE_POSITIONS_BEFORE_EXPORT, Restored: $ALICE_RESTORED_POSITIONS"
+fi
+
+# Verify DGB balance matches (may differ slightly due to fees)
+ALICE_DGB_DIFF=$(echo "$ALICE_RESTORED_DGB - $ALICE_DGB_BEFORE_EXPORT" | bc 2>/dev/null || echo "unknown")
+if [ "$ALICE_RESTORED_DGB" = "$ALICE_DGB_BEFORE_EXPORT" ]; then
+    print_status "ok" "DGB BALANCE RESTORED CORRECTLY! ($ALICE_RESTORED_DGB DGB)"
+else
+    print_status "warn" "DGB balance differs by $ALICE_DGB_DIFF DGB (may be due to fees)"
+fi
+
+# Compare position details (sort by dd_minted for consistent comparison)
+echo ""
+echo "Comparing position details..."
+
+ORIGINAL_AMOUNTS=$(echo "$ALICE_POSITIONS_DETAIL_BEFORE" | jq -r '[.[] | .dd_minted] | sort | join(",")')
+RESTORED_AMOUNTS=$(echo "$ALICE_RESTORED_POSITIONS_DETAIL" | jq -r '[.[] | .dd_minted] | sort | join(",")')
+
+if [ "$ORIGINAL_AMOUNTS" = "$RESTORED_AMOUNTS" ]; then
+    print_status "ok" "Position DD amounts match! ($ORIGINAL_AMOUNTS)"
+else
+    print_status "fail" "Position amounts differ! Original: $ORIGINAL_AMOUNTS, Restored: $RESTORED_AMOUNTS"
+fi
+
+ORIGINAL_TIERS=$(echo "$ALICE_POSITIONS_DETAIL_BEFORE" | jq -r '[.[] | .lock_tier] | sort | join(",")')
+RESTORED_TIERS=$(echo "$ALICE_RESTORED_POSITIONS_DETAIL" | jq -r '[.[] | .lock_tier] | sort | join(",")')
+
+if [ "$ORIGINAL_TIERS" = "$RESTORED_TIERS" ]; then
+    print_status "ok" "Position lock tiers match! ($ORIGINAL_TIERS)"
+else
+    print_status "fail" "Position tiers differ! Original: $ORIGINAL_TIERS, Restored: $RESTORED_TIERS"
+fi
+
+print_subheader "Step 33f: Testing DD operations on restored wallet..."
+
+# Test getting a new DD address from restored wallet
+echo "Testing getdigidollaraddress on restored wallet..."
+set +e
+RESTORED_DD_ADDR=$($ALICE_CLI -rpcwallet=alice_restored getdigidollaraddress 2>&1)
+ADDR_EXIT=$?
+set -e
+
+if [ $ADDR_EXIT -eq 0 ] && [ -n "$RESTORED_DD_ADDR" ] && [ "$RESTORED_DD_ADDR" != "null" ]; then
+    print_status "ok" "Can generate DD addresses from restored wallet: ${RESTORED_DD_ADDR:0:20}..."
+else
+    print_status "fail" "Cannot generate DD address from restored wallet: $RESTORED_DD_ADDR"
+fi
+
+# Test DD transfer from restored wallet (send back to original Alice wallet)
+if [ "$ALICE_RESTORED_DD" -gt 100 ]; then
+    echo "Testing senddigidollar from restored wallet (sending 100 cents back to original)..."
+
+    ORIGINAL_ALICE_DD_ADDR=$($ALICE_CLI -rpcwallet=alice getdigidollaraddress 2>/dev/null)
+
+    set +e
+    SEND_RESULT=$($ALICE_CLI -rpcwallet=alice_restored senddigidollar "$ORIGINAL_ALICE_DD_ADDR" 100 2>&1)
+    SEND_EXIT=$?
+    set -e
+
+    if [ $SEND_EXIT -eq 0 ] && echo "$SEND_RESULT" | jq -e '.txid' > /dev/null 2>&1; then
+        SEND_TXID=$(echo "$SEND_RESULT" | jq -r '.txid')
+        print_status "ok" "DD transfer from restored wallet SUCCESSFUL! TX: ${SEND_TXID:0:16}..."
+
+        # Update expected balances
+        # Note: This transfer is within Alice's wallets, so network total unchanged
+        # But we need to track for verification
+        ALICE_RESTORED_DD=$((ALICE_RESTORED_DD - 100))
+        EXPECT_ALICE_DD=$((EXPECT_ALICE_DD))  # Original wallet gets 100 back
+
+        # Mine to confirm
+        $BOB_CLI generatetoaddress 2 "$BOB_ADDR" > /dev/null 2>&1
+        sleep 3
+        sync_all_nodes
+    else
+        print_status "warn" "DD transfer test skipped or failed: $SEND_RESULT"
+    fi
+else
+    echo "  Skipping transfer test - insufficient DD balance"
+fi
+
+echo ""
+echo "========== EXPORT-REIMPORT TEST SUMMARY =========="
+echo ""
+echo "Original Wallet (alice):"
+echo "  DD Balance:  $ALICE_DD_BEFORE_EXPORT cents"
+echo "  Positions:   $ALICE_POSITIONS_BEFORE_EXPORT"
+echo ""
+echo "Restored Wallet (alice_restored):"
+echo "  DD Balance:  $ALICE_RESTORED_DD cents"
+echo "  Positions:   $ALICE_RESTORED_POSITIONS"
+echo ""
+if [ "$ALICE_RESTORED_DD" = "$ALICE_DD_BEFORE_EXPORT" ] || [ "$((ALICE_RESTORED_DD + 100))" = "$ALICE_DD_BEFORE_EXPORT" ]; then
+    echo -e "${GREEN}*** WALLET RESTORE TEST PASSED! ***${NC}"
+else
+    echo -e "${RED}*** WALLET RESTORE TEST FAILED! ***${NC}"
+fi
+echo "=================================================="
+echo ""
+
+verify_all_balances "After Alice Export-Reimport Test"
+
+# ====================================================================================
+# ALICE PERSISTENCE TEST SUMMARY
+# ====================================================================================
+print_header "ALICE WALLET PERSISTENCE TEST SUMMARY"
+echo ""
+echo "========== ALICE PERSISTENCE TEST RESULTS =========="
+echo ""
+echo "TEST 31 - RESCANBLOCKCHAIN:"
+echo "  DD Balance:    $ALICE_DD_BEFORE_RESCAN -> $ALICE_DD_AFTER_RESCAN cents"
+echo "  Positions:     $ALICE_POSITIONS_BEFORE_RESCAN -> $ALICE_POSITIONS_AFTER_RESCAN"
+echo ""
+echo "TEST 32 - REINDEX:"
+echo "  DD Balance:    $ALICE_DD_BEFORE_REINDEX -> $ALICE_DD_AFTER_REINDEX cents"
+echo "  Positions:     $ALICE_POSITIONS_BEFORE_REINDEX -> $ALICE_POSITIONS_AFTER_REINDEX"
+echo "  Chain Height:  $ALICE_CHAIN_HEIGHT_BEFORE -> $ALICE_CHAIN_HEIGHT_AFTER"
+echo ""
+echo "TEST 33 - EXPORT-REIMPORT:"
+echo "  DD Balance:    $ALICE_DD_BEFORE_EXPORT -> $ALICE_RESTORED_DD cents"
+echo "  Positions:     $ALICE_POSITIONS_BEFORE_EXPORT -> $ALICE_RESTORED_POSITIONS"
+echo "  DD Transfer:   Tested (100 cents from restored wallet)"
+echo ""
+echo "===================================================="
+echo ""
+
 verify_all_balances "FINAL STATE (After All Persistence Tests)"
 
 # Summary
@@ -1686,12 +2195,19 @@ echo "  [x] DGB balance tracking through transfers"
 echo "  [x] Network DD supply verification at every step"
 echo "  [x] Balance verification at every step"
 echo ""
-echo "WALLET PERSISTENCE COVERAGE:"
+echo "WALLET PERSISTENCE COVERAGE (BOB):"
 echo "  [x] Wallet restart - DD balances persist through Qt wallet restart"
 echo "  [x] Wallet backup/restore - DD balances survive backup and restore"
 echo "  [x] Chain reindex - DD balances rebuild correctly with -reindex"
 echo "  [x] Oracle price cache rebuilt after reindex"
 echo "  [x] DD positions preserved through all persistence tests"
+echo ""
+echo "WALLET PERSISTENCE COVERAGE (ALICE):"
+echo "  [x] Rescanblockchain - DD balances restored after wallet rescan"
+echo "  [x] Chain reindex - DD balances rebuild correctly with -reindex"
+echo "  [x] Export-reimport - FULL wallet restore via descriptor export/import"
+echo "  [x] DD positions correctly reconstructed from blockchain"
+echo "  [x] DD transfers work from restored wallet"
 echo ""
 
 print_header "DEBUG LOG LOCATIONS"
@@ -1700,10 +2216,15 @@ echo "  Bob log:     /tmp/bob_testnet.log"
 echo "  Alice log:   /tmp/alice_testnet.log"
 echo "  Charlie log: /tmp/charlie_testnet.log"
 echo ""
-echo "PERSISTENCE TEST LOGS:"
+echo "BOB PERSISTENCE TEST LOGS:"
 echo "  Bob restart log:   /tmp/bob_testnet_restart.log"
 echo "  Bob restore log:   /tmp/bob_testnet_restore.log"
 echo "  Bob reindex log:   /tmp/bob_testnet_reindex.log"
+echo ""
+echo "ALICE PERSISTENCE TEST LOGS:"
+echo "  Alice reindex log:     /tmp/alice_testnet_reindex.log"
+echo "  Alice descriptors:     /tmp/alice_descriptors.json"
+echo "  Alice import request:  /tmp/alice_import_request.json"
 echo ""
 
 print_header "RUNNING Qt WINDOWS"

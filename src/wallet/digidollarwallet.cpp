@@ -1056,30 +1056,38 @@ uint32_t DigiDollarWallet::DeriveLockTierFromHeight(int64_t mint_height, int64_t
 {
     // Derive lock tier from block height difference
     // DigiByte has 15-second blocks: 4 blocks/minute, 240 blocks/hour, 5760 blocks/day
+    //
+    // IMPORTANT: We use <= for thresholds to handle the case where the mint
+    // transaction is created at block N but included in block N+1. This causes
+    // the calculated lock period to be 1 block shorter than intended:
+    //   unlock_height = N + lock_blocks (calculated at creation time)
+    //   mint_height = N+1 (block where TX was actually included)
+    //   blocks = unlock_height - mint_height = lock_blocks - 1
+    //
+    // By using <= instead of <, we ensure the tier is correctly identified
+    // even when blocks = tier_threshold - 1.
 
     int64_t blocks = unlock_height - mint_height;
-    LogPrintf("DigiDollar: DeriveLockTierFromHeight mint=%lld unlock=%lld blocks=%lld\n",
-              mint_height, unlock_height, blocks);
 
-    // Tier 0: up to (but not including) 1 hour (< 172800 blocks)
+    // Tier 0: Testing tier (1 hour = 240 blocks), anything under 30 days
     if (blocks < 172800) return 0;
 
-    // Tier 1: 30 days to (but not including) 90 days (< 518400 blocks)
-    if (blocks < 518400) return 1;
+    // Tier 1: 30 days = 172,800 blocks
+    if (blocks <= 518400) return 1;
 
-    // Tier 2: 90 days to (but not including) 180 days (< 1036800 blocks)
-    if (blocks < 1036800) return 2;
+    // Tier 2: 90 days = 518,400 blocks
+    if (blocks <= 1036800) return 2;
 
-    // Tier 3: 180 days to (but not including) 365 days (< 2102400 blocks)
-    if (blocks < 2102400) return 3;
+    // Tier 3: 180 days = 1,036,800 blocks
+    if (blocks <= 2102400) return 3;
 
-    // Tier 4: 365 days to (but not including) 730 days (< 4204800 blocks)
-    if (blocks < 4204800) return 4;
+    // Tier 4: 365 days = 2,102,400 blocks
+    if (blocks <= 4204800) return 4;
 
-    // Tier 5: 730 days to (but not including) 2738 days (< 15770880 blocks)
-    if (blocks < 15770880) return 5;
+    // Tier 5: 730 days = 4,204,800 blocks
+    if (blocks <= 15770880) return 5;
 
-    // Tier 6: 2738+ days
+    // Tier 6+: 2738+ days = 15,770,880+ blocks
     return 6;
 }
 

@@ -1057,38 +1057,42 @@ uint32_t DigiDollarWallet::DeriveLockTierFromHeight(int64_t mint_height, int64_t
     // Derive lock tier from block height difference
     // DigiByte has 15-second blocks: 4 blocks/minute, 240 blocks/hour, 5760 blocks/day
     //
-    // IMPORTANT: We use <= for thresholds to handle the case where the mint
-    // transaction is created at block N but included in block N+1. This causes
-    // the calculated lock period to be 1 block shorter than intended:
+    // IMPORTANT: We subtract 1 from thresholds to handle TX timing variance.
+    // When a mint TX is created at block N but included in block N+1:
     //   unlock_height = N + lock_blocks (calculated at creation time)
     //   mint_height = N+1 (block where TX was actually included)
     //   blocks = unlock_height - mint_height = lock_blocks - 1
     //
-    // By using <= instead of <, we ensure the tier is correctly identified
-    // even when blocks = tier_threshold - 1.
+    // Example: Tier 3 mint (180 days = 1,036,800 blocks)
+    //   unlock_height = N + 1,036,800
+    //   mint_height = N+1
+    //   blocks = 1,036,799 (one less than expected)
+    //
+    // By checking >= (threshold - 1), we correctly identify the tier.
 
     int64_t blocks = unlock_height - mint_height;
 
-    // Tier 0: Testing tier (1 hour = 240 blocks), anything under 30 days
-    if (blocks < 172800) return 0;
-
-    // Tier 1: 30 days = 172,800 blocks
-    if (blocks <= 518400) return 1;
-
-    // Tier 2: 90 days = 518,400 blocks
-    if (blocks <= 1036800) return 2;
-
-    // Tier 3: 180 days = 1,036,800 blocks
-    if (blocks <= 2102400) return 3;
-
-    // Tier 4: 365 days = 2,102,400 blocks
-    if (blocks <= 4204800) return 4;
+    // Check from highest tier down with -1 tolerance for TX timing
+    // Tier 6: 2738+ days = 15,770,880+ blocks
+    if (blocks >= 15770879) return 6;
 
     // Tier 5: 730 days = 4,204,800 blocks
-    if (blocks <= 15770880) return 5;
+    if (blocks >= 4204799) return 5;
 
-    // Tier 6+: 2738+ days = 15,770,880+ blocks
-    return 6;
+    // Tier 4: 365 days = 2,102,400 blocks
+    if (blocks >= 2102399) return 4;
+
+    // Tier 3: 180 days = 1,036,800 blocks
+    if (blocks >= 1036799) return 3;
+
+    // Tier 2: 90 days = 518,400 blocks
+    if (blocks >= 518399) return 2;
+
+    // Tier 1: 30 days = 172,800 blocks
+    if (blocks >= 172799) return 1;
+
+    // Tier 0: Testing tier (<30 days)
+    return 0;
 }
 
 bool DigiDollarWallet::ExtractPositionFromMintTx(const CTransaction& tx, int block_height, WalletCollateralPosition& pos_out)

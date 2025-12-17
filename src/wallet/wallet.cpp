@@ -1453,6 +1453,17 @@ void CWallet::SyncTransaction(const CTransactionRef& ptx, const SyncTxState& sta
     // DD UTXOs are detected and added regardless of IsMine() result
     if (m_dd_wallet && IsDigiDollarTransaction(*ptx)) {
         m_dd_wallet->ProcessIncomingDDTransaction(ptx);
+
+        // During rescan, reconstruct DD positions from blockchain
+        if (rescanning_old_block) {
+            int block_height = -1;
+            if (auto* conf = std::get_if<TxStateConfirmed>(&state)) {
+                block_height = conf->confirmed_block_height;
+            }
+            if (block_height >= 0) {
+                m_dd_wallet->ProcessDDTxForRescan(ptx, block_height);
+            }
+        }
     }
 
     if (!AddToWalletIfInvolvingMe(ptx, state, update_tx, rescanning_old_block))

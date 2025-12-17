@@ -414,6 +414,53 @@ public:
     bool ValidateDDAddress(const std::string& address) const;
 
     // ====================================================================
+    // WALLET RESTORE FUNCTIONS (Position reconstruction during rescan)
+    // ====================================================================
+
+    /**
+     * Extract DD amount from OP_RETURN metadata in a DD transaction
+     * @param tx Transaction to extract from
+     * @param dd_amount Output: extracted DD amount in cents
+     * @return true if extraction successful
+     */
+    static bool ExtractDDAmountFromOpReturn(const CTransaction& tx, CAmount& dd_amount);
+
+    /**
+     * Extract unlock height from OP_RETURN metadata in a DD mint transaction
+     * @param tx Transaction to extract from
+     * @param unlock_height Output: extracted unlock height
+     * @return true if extraction successful
+     */
+    static bool ExtractUnlockHeightFromOpReturn(const CTransaction& tx, int64_t& unlock_height);
+
+    /**
+     * Derive lock tier from mint height and unlock height
+     * @param mint_height Block height when minted
+     * @param unlock_height Block height when unlockable
+     * @return Lock tier (0-6)
+     */
+    static uint32_t DeriveLockTierFromHeight(int64_t mint_height, int64_t unlock_height);
+
+    /**
+     * Extract full position data from a mint transaction
+     * @param tx Mint transaction
+     * @param block_height Block height of the transaction
+     * @param pos_out Output: extracted position data
+     * @return true if extraction successful
+     */
+    bool ExtractPositionFromMintTx(const CTransaction& tx, int block_height, WalletCollateralPosition& pos_out);
+
+    /**
+     * Process DD transaction during wallet rescan to rebuild positions
+     * Called by wallet.cpp SyncTransaction() when rescanning_old_block=true
+     * Reconstructs position data from MINT transactions and marks positions
+     * inactive when REDEEM transactions are found.
+     * @param ptx Transaction reference
+     * @param block_height Block height of the transaction
+     */
+    void ProcessDDTxForRescan(const CTransactionRef& ptx, int block_height);
+
+    // ====================================================================
     // Redemption Functions (Task 3.9)
     // ====================================================================
 

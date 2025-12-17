@@ -933,6 +933,325 @@ bool DigiDollarWallet::ValidateDDAddress(const std::string& address) const {
 }
 
 // =============================================================================
+// Wallet Restore Function Implementations (Position reconstruction)
+// =============================================================================
+
+bool DigiDollarWallet::ExtractDDAmountFromOpReturn(const CTransaction& tx, CAmount& dd_amount)
+{
+    // Parse OP_RETURN output to extract DD amount
+    // Format: OP_RETURN <"DD"> <txType> <dd_amount> [additional fields]
+
+    for (const CTxOut& txout : tx.vout) {
+        if (txout.scriptPubKey.IsUnspendable() && txout.scriptPubKey.size() > 0) {
+            const CScript& script = txout.scriptPubKey;
+            auto pc = script.begin();
+            opcodetype opcode;
+            std::vector<unsigned char> data;
+
+            // Skip OP_RETURN
+            if (!script.GetOp(pc, opcode, data) || opcode != OP_RETURN)
+                continue;
+
+            // Get DD marker ("DD")
+            if (!script.GetOp(pc, opcode, data))
+                continue;
+            if (data.size() != 2 || data[0] != 'D' || data[1] != 'D')
+                continue;
+
+            // Get transaction type (1=MINT, 2=TRANSFER, 3=REDEEM)
+            if (!script.GetOp(pc, opcode, data))
+                continue;
+
+            uint8_t txType = 0;
+            try {
+                CScriptNum txTypeNum(data, false);
+                txType = static_cast<uint8_t>(txTypeNum.getint());
+            } catch (const scriptnum_error&) {
+                continue;
+            }
+
+            // Only process MINT, TRANSFER, and REDEEM types
+            if (txType < 1 || txType > 3)
+                continue;
+
+            // Get DD amount (next field in all transaction types)
+            if (!script.GetOp(pc, opcode, data))
+                continue;
+
+            try {
+                CScriptNum amtNum(data, false);
+                dd_amount = amtNum.GetInt64();
+                return dd_amount > 0;
+            } catch (const scriptnum_error&) {
+                continue;
+            }
+        }
+    }
+
+    dd_amount = 0;
+    return false;
+}
+
+bool DigiDollarWallet::ExtractUnlockHeightFromOpReturn(const CTransaction& tx, int64_t& unlock_height)
+{
+    // Parse OP_RETURN output to extract unlock height (only for MINT transactions)
+    // Format: OP_RETURN <"DD"> <1> <dd_amount> <unlock_height>
+
+    for (const CTxOut& txout : tx.vout) {
+        if (txout.scriptPubKey.IsUnspendable() && txout.scriptPubKey.size() > 0) {
+            const CScript& script = txout.scriptPubKey;
+            auto pc = script.begin();
+            opcodetype opcode;
+            std::vector<unsigned char> data;
+
+            // Skip OP_RETURN
+            if (!script.GetOp(pc, opcode, data) || opcode != OP_RETURN)
+                continue;
+
+            // Get DD marker ("DD")
+            if (!script.GetOp(pc, opcode, data))
+                continue;
+            if (data.size() != 2 || data[0] != 'D' || data[1] != 'D')
+                continue;
+
+            // Get transaction type - must be MINT (1)
+            if (!script.GetOp(pc, opcode, data))
+                continue;
+
+            uint8_t txType = 0;
+            try {
+                CScriptNum txTypeNum(data, false);
+                txType = static_cast<uint8_t>(txTypeNum.getint());
+            } catch (const scriptnum_error&) {
+                continue;
+            }
+
+            // Only MINT transactions have unlock_height
+            if (txType != 1)
+                continue;
+
+            // Skip DD amount field
+            if (!script.GetOp(pc, opcode, data))
+                continue;
+
+            // Get unlock_height (4th field in MINT OP_RETURN)
+            if (!script.GetOp(pc, opcode, data))
+                continue;
+
+            try {
+                CScriptNum heightNum(data, false);
+                unlock_height = heightNum.GetInt64();
+                return unlock_height > 0;
+            } catch (const scriptnum_error&) {
+                continue;
+            }
+        }
+    }
+
+    unlock_height = 0;
+    return false;
+}
+
+uint32_t DigiDollarWallet::DeriveLockTierFromHeight(int64_t mint_height, int64_t unlock_height)
+{
+    // Derive lock tier from block height difference
+    // DigiByte has 15-second blocks: 4 blocks/minute, 240 blocks/hour, 5760 blocks/day
+
+    int64_t blocks = unlock_height - mint_height;
+    LogPrintf("DigiDollar: DeriveLockTierFromHeight mint=%lld unlock=%lld blocks=%lld\n",
+              mint_height, unlock_height, blocks);
+
+    // Tier 0: up to (but not including) 1 hour (< 172800 blocks)
+    if (blocks < 172800) return 0;
+
+    // Tier 1: 30 days to (but not including) 90 days (< 518400 blocks)
+    if (blocks < 518400) return 1;
+
+    // Tier 2: 90 days to (but not including) 180 days (< 1036800 blocks)
+    if (blocks < 1036800) return 2;
+
+    // Tier 3: 180 days to (but not including) 365 days (< 2102400 blocks)
+    if (blocks < 2102400) return 3;
+
+    // Tier 4: 365 days to (but not including) 730 days (< 4204800 blocks)
+    if (blocks < 4204800) return 4;
+
+    // Tier 5: 730 days to (but not including) 2738 days (< 15770880 blocks)
+    if (blocks < 15770880) return 5;
+
+    // Tier 6: 2738+ days
+    return 6;
+}
+
+bool DigiDollarWallet::ExtractPositionFromMintTx(const CTransaction& tx, int block_height, WalletCollateralPosition& pos_out)
+{
+    // Extract complete position data from a MINT transaction
+    // DD_TX_MINT structure:
+    // vout[0]: P2TR Collateral Lock (nValue = dgb_collateral)
+    // vout[1]: P2TR DD Token (nValue = 0)
+    // vout[2]: OP_RETURN ("DD" | txType=1 | dd_minted | unlock_height)
+
+    // 1. Extract DD amount from OP_RETURN
+    CAmount dd_amount = 0;
+    if (!ExtractDDAmountFromOpReturn(tx, dd_amount))
+        return false;
+
+    // 2. Extract unlock height from OP_RETURN
+    int64_t unlock_height = 0;
+    if (!ExtractUnlockHeightFromOpReturn(tx, unlock_height))
+        return false;
+
+    // 3. Get collateral amount from vout[0]
+    if (tx.vout.empty())
+        return false;
+
+    CAmount dgb_collateral = tx.vout[0].nValue;
+
+    // 4. Derive lock tier from height difference
+    uint32_t lock_tier = DeriveLockTierFromHeight(block_height, unlock_height);
+
+    // 5. Build position structure
+    pos_out.dd_timelock_id = tx.GetHash();
+    pos_out.dd_minted = dd_amount;
+    pos_out.dgb_collateral = dgb_collateral;
+    pos_out.lock_tier = lock_tier;
+    pos_out.unlock_height = unlock_height;
+    pos_out.is_active = true;  // Will be updated if spent later
+
+    return true;
+}
+
+void DigiDollarWallet::ProcessDDTxForRescan(const CTransactionRef& ptx, int block_height) {
+    if (!m_wallet) return;
+
+    const CTransaction& tx = *ptx;
+    LogPrintf("DigiDollar: ProcessDDTxForRescan called for tx %s at height %d\n",
+              tx.GetHash().GetHex(), block_height);
+
+    // Parse OP_RETURN to determine DD transaction type
+    uint8_t ddTxType = 0;
+    for (const CTxOut& txout : tx.vout) {
+        if (txout.scriptPubKey.IsUnspendable() && txout.scriptPubKey.size() > 0) {
+            const CScript& script = txout.scriptPubKey;
+            auto pc = script.begin();
+            opcodetype opcode;
+            std::vector<unsigned char> data;
+
+            // Skip OP_RETURN
+            if (!script.GetOp(pc, opcode, data) || opcode != OP_RETURN)
+                continue;
+
+            // Get DD marker
+            if (!script.GetOp(pc, opcode, data))
+                continue;
+            if (data.size() != 2 || data[0] != 'D' || data[1] != 'D')
+                continue;
+
+            // Get transaction type
+            if (!script.GetOp(pc, opcode, data))
+                continue;
+
+            try {
+                CScriptNum txTypeNum(data, false);
+                ddTxType = static_cast<uint8_t>(txTypeNum.getint());
+                break;
+            } catch (const scriptnum_error&) {
+                continue;
+            }
+        }
+    }
+
+    if (ddTxType == 1) {  // MINT transaction
+        LogPrintf("DigiDollar: ProcessDDTxForRescan - Found MINT tx %s\n", tx.GetHash().GetHex());
+        if (tx.vout.empty()) return;
+
+        LOCK(m_wallet->cs_wallet);
+
+        // For restored wallets, IsMine(vout[0]) fails because the collateral uses
+        // a custom MAST tree that the wallet doesn't know about. Instead, check if
+        // we own any of the transaction's inputs or other outputs.
+        bool is_our_mint = false;
+
+        // Check if we funded any of the inputs
+        for (const CTxIn& txin : tx.vin) {
+            auto it = m_wallet->mapWallet.find(txin.prevout.hash);
+            if (it != m_wallet->mapWallet.end()) {
+                // We have the input transaction - check if we owned that output
+                if (txin.prevout.n < it->second.tx->vout.size()) {
+                    if (m_wallet->IsMine(it->second.tx->vout[txin.prevout.n]) != wallet::ISMINE_NO) {
+                        is_our_mint = true;
+                        LogPrintf("DigiDollar: ProcessDDTxForRescan - Our input found, this is our mint\n");
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Also check if we own any other outputs (DD tokens, change)
+        if (!is_our_mint) {
+            for (size_t i = 1; i < tx.vout.size(); ++i) {
+                if (tx.vout[i].scriptPubKey.IsUnspendable()) continue; // Skip OP_RETURN
+                if (m_wallet->IsMine(tx.vout[i]) != wallet::ISMINE_NO) {
+                    is_our_mint = true;
+                    LogPrintf("DigiDollar: ProcessDDTxForRescan - Our output found at vout[%zu], this is our mint\n", i);
+                    break;
+                }
+            }
+        }
+
+        if (!is_our_mint) {
+            LogPrintf("DigiDollar: ProcessDDTxForRescan - Not our mint transaction, skipping\n");
+            return;
+        }
+
+        // Extract position data from mint transaction
+        WalletCollateralPosition pos;
+        if (ExtractPositionFromMintTx(tx, block_height, pos)) {
+            // Check if position already exists
+            auto it = collateral_positions.find(pos.dd_timelock_id);
+            if (it == collateral_positions.end()) {
+                // Add new position
+                collateral_positions[pos.dd_timelock_id] = pos;
+                WriteDDTimeLock(pos);
+                LogPrintf("DigiDollar: Restored position %s from rescan (DD: %lld, DGB: %lld)\n",
+                          pos.dd_timelock_id.GetHex(), pos.dd_minted, pos.dgb_collateral);
+            }
+
+            // CRITICAL FIX: Also restore the DD UTXO (vout[1] contains the DD tokens)
+            // This is needed because dd_utxos map is not exported with descriptors
+            if (tx.vout.size() >= 2) {
+                COutPoint ddOutpoint(tx.GetHash(), 1);
+                // Check if not already tracked and not spent
+                if (dd_utxos.find(ddOutpoint) == dd_utxos.end()) {
+                    if (!m_wallet->IsSpent(ddOutpoint)) {
+                        dd_utxos[ddOutpoint] = pos.dd_minted;
+                        // Persist to database
+                        wallet::WalletBatch batch(m_wallet->GetDatabase());
+                        batch.WriteDDUTXO(ddOutpoint, pos.dd_minted);
+                        LogPrintf("DigiDollar: Restored DD UTXO %s:1 from rescan (DD: %lld)\n",
+                                  tx.GetHash().GetHex(), pos.dd_minted);
+                    }
+                }
+            }
+        }
+    }
+    else if (ddTxType == 3) {  // REDEEM transaction
+        // Find which position was redeemed and mark inactive
+        // REDEEM tx spends the collateral output (vout[0] of mint tx)
+        for (const CTxIn& txin : tx.vin) {
+            auto it = collateral_positions.find(txin.prevout.hash);
+            if (it != collateral_positions.end() && txin.prevout.n == 0) {
+                // This input spends vout[0] of a mint tx we track
+                it->second.is_active = false;
+                UpdatePositionStatus(it->first, false);
+                LogPrintf("DigiDollar: Marked position %s as redeemed during rescan\n",
+                          it->first.GetHex());
+            }
+        }
+    }
+}
+
+// =============================================================================
 // Redemption Function Implementations (Task 3.9)
 // =============================================================================
 

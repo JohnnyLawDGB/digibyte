@@ -1,6 +1,6 @@
 # DigiDollar Oracle System - Complete Architecture Documentation
 **DigiByte v8.26 - Oracle Phase One Implementation**
-*Updated: 2025-12-13*
+*Updated: 2025-12-16*
 *Implementation Status: 100% Complete (123 Oracle unit tests across 8 files + 35 DigiDollar/Oracle integration tests + 18 functional tests)*
 *Document Version: 4.0 - Post RC5 Code-Verified Accurate*
 
@@ -51,7 +51,7 @@ The Oracle System provides **decentralized price feeds** for the DigiByte blockc
 
 Phase One implements a **streamlined, testnet-ready system** with:
 - **Single Oracle** (1-of-1 consensus) for testing
-- **Compact Format** (20 bytes) fitting in OP_RETURN
+- **Compact Format** (22 bytes) fitting in OP_RETURN
 - **No Embedded Signatures** (trust based on chainparams)
 - **7 Active Exchange APIs** with median aggregation (Binance, KuCoin, Gate.io, HTX, Crypto.com, CoinGecko, CoinMarketCap) + 5 additional defined (Coinbase, Kraken, Bittrex, Poloniex, Messari)
 - **15-second updates** (aligned with DigiByte block time)
@@ -76,7 +76,7 @@ Phase One implements a **streamlined, testnet-ready system** with:
 
 **What's Working (100%):**
 - ✅ OP_ORACLE opcode (0xbf) integrated
-- ✅ Compact 20-byte oracle format
+- ✅ Compact 22-byte oracle format
 - ✅ P2P broadcasting via CConnman
 - ✅ 7 active exchange APIs (real libcurl + mock fallback) + 5 additional defined
 - ✅ Block validation (CheckBlock/ContextualCheckBlock)
@@ -249,7 +249,7 @@ OracleBundleManager
 PHASE 4: COMPACT FORMAT ENCODING
 ═════════════════════════════════
 
-CreateOracleScript(bundle) → Produces 20-byte compact format:
+CreateOracleScript(bundle) → Produces 22-byte compact format:
 
 ┌──────────────────────────────────────────────────────────┐
 │  Byte 0:      0x6a (OP_RETURN)                          │
@@ -260,7 +260,7 @@ CreateOracleScript(bundle) → Produces 20-byte compact format:
 │  Bytes 12-19: 0x8080AB67 00000000 (timestamp LE)        │
 └──────────────────────────────────────────────────────────┘
 
-Total: 20 bytes (24% of 83-byte OP_RETURN limit) ✅
+Total: 22 bytes (27% of 83-byte OP_RETURN limit) ✅
 
 KEY DESIGN DECISION:
 - Schnorr signature (64 bytes) NOT included → saves space
@@ -274,7 +274,7 @@ PHASE 5: BLOCK INCLUSION
 Miner (BlockAssembler::CreateNewBlock)
 ├─► AddOracleBundleToBlock(block, height)
 │     - Get latest bundle from OracleBundleManager
-│     - CreateOracleScript(bundle) → 20-byte OP_RETURN
+│     - CreateOracleScript(bundle) → 22-byte OP_RETURN
 │     - Add as coinbase output 1 (output 0 = miner reward)
 │
 └─► Coinbase Transaction:
@@ -288,7 +288,7 @@ PHASE 6: BLOCK VALIDATION
 CheckBlock(block, state, params)  [validation.cpp:4127]
 ├─► OracleDataValidator::ValidateBlockOracleData()
 │     │
-│     ├─► STEP 1: Extract compact format (20 bytes)
+│     ├─► STEP 1: Extract compact format (22 bytes)
 │     │     - Find OP_RETURN output
 │     │     - Check byte 1 == OP_ORACLE (0xbf)
 │     │     - Parse: version, oracle_id, price, timestamp

@@ -288,6 +288,57 @@ Accessible via RPC command: `getdigidollarsystemstatus`
 
 ---
 
+## Wallet Backup & Restore
+
+### How DigiDollar Keys Work
+
+DigiDollar uses HD (Hierarchical Deterministic) key derivation from your wallet's seed. This means:
+
+- ✅ **Keys are derived from your wallet seed** - Not generated randomly
+- ✅ **Positions can be restored from descriptors** - Using standard wallet backup
+- ✅ **All operations use HD keys** - Minting, redeeming, receiving
+
+### Backup Methods
+
+#### Method 1: Standard Wallet Backup
+```bash
+# Creates a complete backup including all DigiDollar data
+digibyte-cli backupwallet /path/to/backup.dat
+```
+
+#### Method 2: Descriptor Export (Recommended)
+```bash
+# Export descriptors with private keys
+digibyte-cli listdescriptors true > descriptors.json
+```
+
+### Restore Process
+
+```bash
+# 1. Create a new wallet
+digibyte-cli createwallet "restored" false false "" false true
+
+# 2. Import descriptors
+digibyte-cli -rpcwallet=restored importdescriptors '[...]'
+
+# 3. Rescan blockchain to reconstruct DD positions
+digibyte-cli -rpcwallet=restored rescanblockchain
+```
+
+**What gets restored during rescan:**
+- ✅ All DGB balances and UTXOs
+- ✅ DigiDollar positions (from OP_RETURN metadata)
+- ✅ DD token balances (from blockchain scan)
+- ✅ Position status (active/redeemed)
+
+### Important Notes
+
+- **Legacy wallets**: May have random keys that cannot be regenerated - always keep backups
+- **Descriptor wallets** (default since v8.23): Full restore capability via descriptors
+- **Position data**: Reconstructed from blockchain during rescan, not stored in descriptors
+
+---
+
 ## Learn More
 
 - **White Paper**: https://github.com/orgs/DigiByte-Core/discussions/319

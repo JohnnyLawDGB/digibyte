@@ -1,6 +1,6 @@
 # DigiDollar Implementation Architecture
 **DigiByte v8.26 - Current Implementation Status**
-*Updated: 2025-12-13*
+*Updated: 2025-12-16*
 *Implementation Status: 85% Complete*
 *Document Version: 4.0 - Post RC5 Code-Verified*
 
@@ -921,6 +921,199 @@ class DigiDollarTab : public QWidget {
 - 🔄 Some real-time notifications depend on oracle system completion
 - 🔄 Database loading for recent requests needs completion
 - 🔄 Advanced error scenarios could use better user messaging
+
+---
+
+## 8.5 HD Key Derivation for DigiDollar
+
+### 8.5.1 Overview
+
+DigiDollar uses HD (Hierarchical Deterministic) key derivation from the wallet's seed for all DigiDollar operations. This enables wallet restore via descriptors.
+
+**Implementation Location**: `src/rpc/digidollar.cpp` (lines 91-177)
+
+### 8.5.2 GetHDKeyForDigiDollar() Function
+
+```cpp
+CKey GetHDKeyForDigiDollar(wallet::CWallet* pwallet, const std::string& label)
+{
+    // Tries BECH32M (Taproot) first, then falls back to BECH32
+    // Uses GetSigningProviderWithKeys() for private key access (NOT GetSolvingProvider())
+    // Labels used: "dd-owner", "dd-redeem", "dd-address"
+}
+```
+
+**Key Design Decisions:**
+- **Uses `GetSigningProviderWithKeys()`**: Critical for Taproot - `GetSolvingProvider()` returns keys without private key access, causing signing failures
+- **Fallback to random key**: If HD derivation fails (legacy wallet), generates random key with `MakeNewKey(true)`
+- **Database persistence**: Keys stored via `StoreOwnerKey()` and `StoreAddressKey()`
+
+### 8.5.3 Usage in DigiDollar Operations
+
+| Operation | Label | Called From |
+|-----------|-------|-------------|
+| Mint DigiDollars | `"dd-owner"` | `mintdigidollar` RPC (line 747) |
+| Redeem DigiDollars | `"dd-redeem"` | `redeemdigidollar` RPC (line 1124) |
+| Generate DD Address | `"dd-address"` | `getdigidollaraddress` RPC (line 1519) |
+
+### 8.5.4 Wallet Restore Implications
+
+Because DD keys are derived from the wallet seed (when using descriptor wallets):
+- ✅ Keys can be regenerated from descriptors
+- ✅ `listdescriptors true` exports HD seed
+- ✅ `importdescriptors` + `rescanblockchain` restores positions
+- ⚠️ Legacy wallets may have random keys that cannot be regenerated
+
+---
+
+## 8.6 Position Reconstruction During Rescan
+
+### 8.6.1 Overview
+
+When a wallet is restored via descriptors and rescanned, DD positions must be reconstructed from blockchain data.
+
+**Implementation Location**: `src/wallet/digidollarwallet.cpp` (lines 1136-1264)
+
+### 8.6.2 ProcessDDTxForRescan() Function
+
+Called from `SyncTransaction()` in `wallet.cpp` when `rescanning_old_block=true`:
+
+```cpp
+void DigiDollarWallet::ProcessDDTxForRescan(
+    const CTransactionRef& ptx,
+    int block_height)
+{
+    // Handles MINT (type=1) and REDEEM (type=3) transactions
+    // Reconstructs positions from OP_RETURN metadata
+}
+```
+
+### 8.6.3 Ownership Detection (Critical Design Decision)
+
+**Problem**: Standard `IsMine(vout[0])` fails for DigiDollar MAST scripts because the wallet doesn't recognize complex Taproot scripts as its own.
+
+**Solution**: Detect ownership via **input inspection**:
+
+```cpp
+// Check if any input belongs to this wallet
+bool is_our_mint = false;
+for (const CTxIn& txin : tx.vin) {
+    auto it = m_wallet->mapWallet.find(txin.prevout.hash);
+    if (it != m_wallet->mapWallet.end()) {
+        if (m_wallet->IsMine(it->second.tx->vout[txin.prevout.n]) != wallet::ISMINE_NO) {
+            is_our_mint = true;
+            break;
+        }
+    }
+}
+```
+
+**Why this works**: If the wallet owns the inputs to a mint transaction, it must own the resulting position.
+
+### 8.6.4 Position Data Extraction
+
+All position data is extracted from on-chain OP_RETURN metadata:
+- **`dd_minted`**: From OP_RETURN
+- **`dgb_collateral`**: From `vout[0].nValue`
+- **`unlock_height`**: From OP_RETURN
+- **`lock_tier`**: Derived via `DeriveLockTierFromHeight()`
+- **`dd_timelock_id`**: Transaction hash
+- **`is_active`**: Check if vault UTXO is spent
+
+### 8.6.5 Tier Derivation with Tolerance
+
+**Implementation**: `DeriveLockTierFromHeight()` at lines 1055-1096
+
+```cpp
+uint32_t DeriveLockTierFromHeight(int64_t mint_height, int64_t unlock_height) {
+    int64_t blocks = unlock_height - mint_height;
+    // Uses -1 tolerance to handle TX timing variance
+    // (TX created at block N but included at N+1)
+    if (blocks >= 15770879) return 6;  // 15,770,880 - 1
+    if (blocks >= 4204799) return 5;   // 4,204,800 - 1
+    if (blocks >= 2102399) return 4;   // 2,102,400 - 1
+    if (blocks >= 1036799) return 3;   // 1,036,800 - 1
+    if (blocks >= 518399) return 2;    // 518,400 - 1
+    if (blocks >= 172799) return 1;    // 172,800 - 1
+    return 0;
+}
+```
+
+**Why -1 tolerance?** A transaction created at block height N may be included in block N+1, making the block difference one less than the exact tier threshold.
+
+---
+
+## 8.7 Wallet Restore Workflow
+
+### 8.7.1 Complete Restore Process
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                 WALLET RESTORE WORKFLOW                       │
+└──────────────────────────────────────────────────────────────┘
+
+1. EXPORT FROM ORIGINAL WALLET
+═══════════════════════════════
+   $ digibyte-cli listdescriptors true
+   Returns: {
+     "descriptors": [
+       {"desc": "tr([fingerprint/86'/20'/0']xprv.../0/*)", ...},
+       ...
+     ]
+   }
+
+2. CREATE NEW WALLET & IMPORT
+═══════════════════════════════
+   $ digibyte-cli createwallet "restored" false false "" false true
+   $ digibyte-cli -rpcwallet=restored importdescriptors '[...]'
+
+3. RESCAN BLOCKCHAIN
+═══════════════════════════════
+   $ digibyte-cli -rpcwallet=restored rescanblockchain
+
+   During rescan, for each block:
+   └─► SyncTransaction() called
+       └─► if (rescanning_old_block)
+           └─► ProcessDDTxForRescan()
+               └─► Extract position from OP_RETURN
+               └─► Check ownership via inputs
+               └─► Rebuild collateral_positions map
+               └─► Restore dd_utxos map
+
+4. VERIFICATION
+═══════════════════════════════
+   $ digibyte-cli -rpcwallet=restored listdigidollarpositions
+   $ digibyte-cli -rpcwallet=restored getdigidollarbalance
+```
+
+### 8.7.2 What Gets Restored
+
+| Data | Stored In | Restoration Method |
+|------|-----------|-------------------|
+| HD Keys | Descriptors | Imported directly |
+| DGB UTXOs | Blockchain | Standard rescan |
+| DD Positions | Blockchain OP_RETURN | `ProcessDDTxForRescan()` |
+| DD UTXOs | Blockchain | `ProcessDDTxForRescan()` |
+| Address Labels | Descriptors | Imported directly |
+
+### 8.7.3 What Is NOT Exported in Descriptors
+
+These maps are **rebuilt during rescan**, not exported:
+- `dd_owner_keys` - Rebuilt from HD derivation
+- `dd_utxos` - Rebuilt from blockchain scan
+- `dd_address_keys` - Rebuilt from HD derivation
+- `collateral_positions` - Rebuilt from OP_RETURN data
+
+### 8.7.4 Test File
+
+**Location**: `test/functional/wallet_digidollar_restore.py`
+
+Tests the complete workflow:
+1. Create wallet, mint DD positions
+2. Export descriptors
+3. Create new wallet, import descriptors
+4. Rescan blockchain
+5. Verify positions and balances match
 
 ---
 

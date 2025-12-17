@@ -33,7 +33,7 @@ Phase One implements a **streamlined testnet-ready system**:
 - **One Oracle Node**: Operated by DigiByte Devs For Testnet Only
 - **Testnet Only**: Not active on mainnet (safety first!)
 - **Simple Trust Model**: The single oracle's price is the consensus price
-- **Compact Storage**: Only 20 bytes per block (minimal blockchain overhead)
+- **Compact Storage**: Only 22 bytes per block (minimal blockchain overhead)
 
 **This is like a prototype** - we're testing the concept before deploying the full multi-oracle system in Phase Two.
 
@@ -134,7 +134,7 @@ Here's exactly what happens when the oracle updates the price:
                             ▼
             ┌───────────────────────────────┐
             │  7. Miner Includes in Block   │
-            │     (Compact 21-byte format)  │
+            │     (Compact 22-byte format)  │
             │     in Coinbase OP_RETURN     │
             └───────────────┬───────────────┘
                             │
@@ -249,7 +249,7 @@ New Block Received
 ┌────────────────────────────────┐
 │ 4. Parse Compact Format        │
 │    Extract: oracle_id, price,  │
-│    timestamp (21 bytes)        │
+│    timestamp (22 bytes)        │
 └────────┬───────────────────────┘
          │
          ▼
@@ -491,9 +491,9 @@ vout[1]: 0 DGB → OP_RETURN OP_ORACLE <compact oracle data>
 vout[2]: 0 DGB → Witness commitment (SegWit)
 ```
 
-**The compact 21-byte format** (blockchain storage):
+**The compact 22-byte format** (blockchain storage):
 
-The full 128-byte message is too large to store in every block. Instead, the miner creates a **compact 21-byte version**:
+The full 128-byte message is too large to store in every block. Instead, the miner creates a **compact 22-byte version**:
 
 ```
 Byte 0:      OP_RETURN (0x6a) - "This output is unspendable"
@@ -518,10 +518,10 @@ Bytes 14-21: <Timestamp, 8 bytes>
 OP_RETURN
 ```
 
-**Total: 21 bytes = 25.3% of the 83-byte OP_RETURN limit** ✅
+**Total: 22 bytes = 26.5% of the 83-byte OP_RETURN limit** ✅
 
 **Why compact format?**
-- ✅ **Saves space**: 128 bytes → 21 bytes (83.6% reduction!)
+- ✅ **Saves space**: 128 bytes → 22 bytes (82.8% reduction!)
 - ✅ **Fits easily**: Only 26% of OP_RETURN size limit
 - ✅ **Fast validation**: Minimal overhead during block verification
 - ✅ **Scalable**: Leaves room for future enhancements
@@ -552,7 +552,7 @@ Every node validates incoming blocks. When a block contains oracle data, the val
 1. ✅ **Network check**: Only validate on testnet/regtest (skip on mainnet)
 2. ✅ **Activation height**: Block height ≥ 1,000,000 (testnet activation)
 3. ✅ **Find OP_ORACLE output**: Look for `OP_RETURN OP_ORACLE` in coinbase vout[1]
-4. ✅ **Extract compact data**: Parse the 21-byte format
+4. ✅ **Extract compact data**: Parse the 22-byte format
 5. ✅ **Validate structure**: Version byte = 0x01, Oracle ID = 0
 6. ✅ **Validate price range**: 100-100,000,000 micro-USD ($0.0001-$100.00 per DGB)
 7. ✅ **Validate timestamp**: Not more than 1 hour old, not in future
@@ -851,7 +851,7 @@ Blocks per day: 5,760 (86,400 seconds ÷ 15)
 Data per day: 737,280 bytes = 720 KB/day
 Data per year: 262 MB/year
 
-Compact format: 21 bytes per block
+Compact format: 22 bytes per block
 Blocks per day: 5,760
 Data per day: 120,960 bytes = 118 KB/day
 Data per year: 43 MB/year
@@ -859,7 +859,7 @@ Data per year: 43 MB/year
 Savings: 219 MB/year (83.6% reduction!)
 ```
 
-Over 10 years, this saves **2.19 GB** of blockchain space - significant for a small 21-byte optimization!
+Over 10 years, this saves **2.19 GB** of blockchain space - significant for a small 22-byte optimization!
 
 ### OP_ORACLE: Complete Lifecycle Flowchart
 
@@ -1803,7 +1803,7 @@ Phase Two will implement a **fully decentralized multi-oracle system** for mainn
 
 **Storage impact**:
 ```
-Phase One: 21 bytes per block
+Phase One: 22 bytes per block
 Phase Two: ~150 bytes per block (8 signatures + metadata)
 
 Note: Phase Two will exceed 83-byte OP_RETURN limit - will require
@@ -1885,14 +1885,14 @@ Final size: ~150 bytes (merkle_root + aggregated_sig + metadata)
 - ✅ **Fetches** real DGB/USD prices from 12 exchanges every 15 seconds (external daemon)
 - ✅ **Calculates** median price with outlier filtering (MAD algorithm)
 - ✅ **Broadcasts** signed messages via P2P network (2-5 second propagation)
-- ✅ **Stores** compact 21-byte format in every block (25.3% of OP_RETURN limit)
+- ✅ **Stores** compact 22-byte format in every block (26.5% of OP_RETURN limit)
 - ✅ **Validates** all oracle data during block verification (CheckBlock)
 - ✅ **Caches** last 1,000 prices for DigiDollar collateral calculations
 
 ### How It Works
 1. **External oracle daemon** fetches prices → median → sign → broadcast
 2. **P2P network** (DigiByte Core nodes) validates signature → relays to all nodes
-3. **Miners** include compact 21-byte data in coinbase transaction
+3. **Miners** include compact 22-byte data in coinbase transaction
 4. **Validators** verify oracle data → reject invalid blocks
 5. **Price cache** stores height → price mapping
 6. **DigiDollar** queries cache for current DGB/USD rate
@@ -2003,7 +2003,7 @@ Before testnet launch:
 | **P2P Validation** | ✅ Implemented | ✅ Implemented | ✅ Implemented |
 | **Block Validation** | ✅ Implemented | ✅ Implemented | ✅ Implemented |
 | **Schnorr Signatures** | ❌ Not used (mock) | ✅ P2P only (not in blocks) | ✅ On-chain (8 signatures) |
-| **Compact Format** | ✅ 21 bytes | ✅ 21 bytes | ~150 bytes (with sigs) |
+| **Compact Format** | ✅ 22 bytes | ✅ 22 bytes | ~150 bytes (with sigs) |
 | **Price Cache** | ✅ Implemented | ✅ Implemented | ✅ Implemented |
 | **Activation Height** | Block 1 | Block 1,000,000 | TBD (governance) |
 | **Economic Incentives** | ❌ None | ❌ None (trust-based) | ✅ Staking/slashing |
@@ -2021,7 +2021,7 @@ Before testnet launch:
    - Anti-spam misbehavior penalties
 
 2. **Block Validation**
-   - Parse compact 21-byte oracle format
+   - Parse compact 22-byte oracle format
    - Validate price range (100-100M micro-USD)
    - Validate timestamp freshness
    - Check oracle authorization (chainparams)

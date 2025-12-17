@@ -405,9 +405,11 @@ public:
         consensus.nTargetTimespan =  0.10 * 24 * 60 * 60; // 2.4 hours
         consensus.nTargetSpacing = 60; // 60 seconds
         consensus.nInterval = consensus.nTargetTimespan / consensus.nTargetSpacing;
-        consensus.nDiffChangeTarget = 1; // DigiShield Hard Fork - active at block 1 for testnet
-        consensus.patchBlockRewardDuration = 10; // Old 1% monthly DGB Reward
-        consensus.patchBlockRewardDuration2 = 80; // 4 blocks per min
+        // Emission schedule heights (compressed for testnet, similar to regtest)
+        // These control BOTH DigiShield activation AND emission period boundaries
+        consensus.nDiffChangeTarget = 67; // DigiShield + Period III/IV boundary (mainnet: 67200)
+        consensus.patchBlockRewardDuration = 10; // Weekly reward decay blocks (same as regtest)
+        consensus.patchBlockRewardDuration2 = 80; // Monthly reward decay blocks (same as regtest)
         consensus.nTargetTimespanRe = 1*60; // 60 Seconds
         consensus.nTargetSpacingRe = 1*60; // 60 seconds
         consensus.nIntervalRe = consensus.nTargetTimespanRe / consensus.nTargetSpacingRe; // 1 block
@@ -431,13 +433,13 @@ public:
         consensus.nLocalTargetAdjustment = 4; // target adjustment per algo
         consensus.nLocalDifficultyAdjustment = 4; // difficulty adjustment per algo
 
-        // DigiByte Hard Fork Block Heights for testnet (Testnet reset 2025)
-        // All forks activate at block 1 for consistent testnet behavior
-        consensus.multiAlgoDiffChangeTarget = 1; // Block 1 MultiAlgo Hard Fork
-        consensus.alwaysUpdateDiffChangeTarget = 1; // Block 1 MultiShield Hard Fork
-        consensus.workComputationChangeTarget = 1; // Block 1 DigiSpeed Hard Fork
-        consensus.algoSwapChangeTarget = 1; // Block 1 Odo PoW Hard Fork
-        consensus.OdoHeight = 1; // Odocrypt activation at height 1
+        // DigiByte Hard Fork Block Heights for testnet (compressed like regtest)
+        // All features activate within first 500 blocks for rapid testing
+        consensus.multiAlgoDiffChangeTarget = 100; // Block 100 MultiAlgo Hard Fork
+        consensus.alwaysUpdateDiffChangeTarget = 200; // Block 200 MultiShield Hard Fork
+        consensus.workComputationChangeTarget = 400; // Block 400 DigiSpeed Hard Fork
+        consensus.algoSwapChangeTarget = 500; // Block 500 Odo PoW Hard Fork
+        consensus.OdoHeight = 500; // Odocrypt activation at height 500
         consensus.ReserveAlgoBitsHeight = 0;
         consensus.nOdoShapechangeInterval = 1*24*60*60; // 1 day
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].bit = 27;
@@ -558,7 +560,7 @@ public:
         // Activate at block 1 for consistent testnet behavior
         consensus.nDDOracleEpochBlocks = 50;       // Rotate oracles every 50 blocks (~12.5 minutes)
         consensus.nDDOracleUpdateInterval = 2;     // Update price every 2 blocks (~30 seconds)
-        consensus.nDDActivationHeight = 1;         // DigiDollar activation at block 1
+        consensus.nDDActivationHeight = 550;       // DigiDollar activation at block 550 (after Odocrypt at 500)
     }
 
 private:

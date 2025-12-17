@@ -691,30 +691,30 @@ void DigiDollarReceiveWidget::populateRecentRequests()
 void DigiDollarReceiveWidget::addRequestToTable(const QString& date, const QString& label,
                                                 const QString& amount, const QString& address)
 {
-    int row = m_requestsTable->rowCount();
-    m_requestsTable->insertRow(row);
+    // Insert at row 0 so newest entries appear at top
+    m_requestsTable->insertRow(0);
 
     // Date column
     QTableWidgetItem* dateItem = new QTableWidgetItem(date);
     dateItem->setToolTip(date);
-    m_requestsTable->setItem(row, 0, dateItem);
+    m_requestsTable->setItem(0, 0, dateItem);
 
     // Label column
     QTableWidgetItem* labelItem = new QTableWidgetItem(label.isEmpty() ? tr("-") : label);
     labelItem->setToolTip(label.isEmpty() ? tr("No label") : label);
-    m_requestsTable->setItem(row, 1, labelItem);
+    m_requestsTable->setItem(0, 1, labelItem);
 
     // Amount column
     QTableWidgetItem* amountItem = new QTableWidgetItem(amount);
     amountItem->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    m_requestsTable->setItem(row, 2, amountItem);
+    m_requestsTable->setItem(0, 2, amountItem);
 
     // Address column - store full address in UserRole for retrieval, show with tooltip
     QTableWidgetItem* addressItem = new QTableWidgetItem(address);
     addressItem->setData(Qt::UserRole, address);  // Store full address
     addressItem->setToolTip(address);  // Show full address on hover
     addressItem->setFont(GUIUtil::fixedPitchFont());
-    m_requestsTable->setItem(row, 3, addressItem);
+    m_requestsTable->setItem(0, 3, addressItem);
 
     // Show table, hide "no requests" label
     m_requestsTable->setVisible(true);

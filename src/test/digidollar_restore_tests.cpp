@@ -199,21 +199,36 @@ BOOST_AUTO_TEST_CASE(derive_lock_tier_from_heights)
 
 BOOST_AUTO_TEST_CASE(derive_lock_tier_edge_cases)
 {
-    // Test edge case: exact tier boundaries
+    // Test edge case: exact tier boundaries with TX timing variance
+    //
+    // IMPORTANT: DeriveLockTierFromHeight accounts for 1-block TX timing variance.
+    // When a mint TX is created at block N but included at block N+1:
+    //   - unlock_height = N + lock_blocks (calculated at creation)
+    //   - mint_height = N+1 (confirmation block)
+    //   - blocks = lock_blocks - 1
+    //
+    // So tier thresholds use >= (threshold - 1) to correctly identify tiers.
 
-    // Exactly 1 hour
+    // Exactly 1 hour (240 blocks) - tier 0
     uint32_t tier = DigiDollarWallet::DeriveLockTierFromHeight(1000, 1240);
     BOOST_CHECK_EQUAL(tier, 0);
 
-    // Exactly 30 days
+    // Exactly 30 days (172,800 blocks) - tier 1
     tier = DigiDollarWallet::DeriveLockTierFromHeight(1000, 173800);
     BOOST_CHECK_EQUAL(tier, 1);
 
-    // Just under 30 days should still map to tier 0
+    // 30 days with 1-block variance (172,799 blocks) - still tier 1
+    // This occurs when tier 1 mint TX is included 1 block after creation
     tier = DigiDollarWallet::DeriveLockTierFromHeight(1000, 173799);
+    BOOST_CHECK_EQUAL(tier, 1);
+
+    // Well under 30 days (172,798 blocks) - tier 0
+    // This is 2 blocks under the threshold, clearly not a tier 1 mint
+    tier = DigiDollarWallet::DeriveLockTierFromHeight(1000, 173798);
     BOOST_CHECK_EQUAL(tier, 0);
 
-    // Between tiers (should map to lower tier)
+    // Between tiers - values in this range can't occur from normal minting
+    // but we map them to the tier they're closest to from above
     tier = DigiDollarWallet::DeriveLockTierFromHeight(1000, 300000);  // Between 30d and 90d
     BOOST_CHECK_EQUAL(tier, 1);
 }

@@ -21,6 +21,7 @@
 #include <script/signingprovider.h>
 #include <script/interpreter.h>
 #include <random.h>
+#include <key_io.h>
 
 #include <algorithm>
 #include <regex>
@@ -1272,6 +1273,118 @@ void DigiDollarWallet::ProcessDDTxForRescan(const CTransactionRef& ptx, int bloc
                                   tx.GetHash().GetHex(), pos.dd_minted);
                     }
                 }
+            }
+        }
+    }
+    else if (ddTxType == 2) {  // TRANSFER transaction
+        // Reconstruct send transaction history for wallet restore
+        // A TRANSFER is "our send" if we owned any of the DD inputs
+        LogPrintf("DigiDollar: ProcessDDTxForRescan - Found TRANSFER tx %s\n", tx.GetHash().GetHex());
+
+        LOCK(m_wallet->cs_wallet);
+
+        // Check if we funded any of the DD inputs (meaning we sent this transfer)
+        bool is_our_send = false;
+        CAmount total_dd_sent = 0;
+        std::string recipient_address;
+
+        for (const CTxIn& txin : tx.vin) {
+            auto it = m_wallet->mapWallet.find(txin.prevout.hash);
+            if (it != m_wallet->mapWallet.end()) {
+                if (txin.prevout.n < it->second.tx->vout.size()) {
+                    const CTxOut& spent_output = it->second.tx->vout[txin.prevout.n];
+                    // Check if this is a DD output (P2TR with value=0) that we owned
+                    if (spent_output.nValue == 0 &&
+                        spent_output.scriptPubKey.size() == 34 &&
+                        spent_output.scriptPubKey[0] == OP_1) {
+                        // This is a DD UTXO - check if we owned it
+                        if (m_wallet->IsMine(spent_output) != wallet::ISMINE_NO) {
+                            is_our_send = true;
+                            // Look up the DD amount from our tracking (if available)
+                            COutPoint spent_outpoint(txin.prevout.hash, txin.prevout.n);
+                            auto dd_it = dd_utxos.find(spent_outpoint);
+                            if (dd_it != dd_utxos.end()) {
+                                total_dd_sent += dd_it->second;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (is_our_send) {
+            // Extract DD amounts from OP_RETURN to determine transfer amount
+            CAmount transfer_amount = 0;
+            for (const CTxOut& txout : tx.vout) {
+                if (txout.scriptPubKey.IsUnspendable() && txout.scriptPubKey.size() > 0) {
+                    const CScript& script = txout.scriptPubKey;
+                    auto pc = script.begin();
+                    opcodetype opcode;
+                    std::vector<unsigned char> data;
+
+                    // Skip OP_RETURN, DD marker, and tx type
+                    if (!script.GetOp(pc, opcode, data)) continue;  // OP_RETURN
+                    if (!script.GetOp(pc, opcode, data)) continue;  // "DD"
+                    if (!script.GetOp(pc, opcode, data)) continue;  // txType
+
+                    // First DD amount in TRANSFER is the recipient amount
+                    if (script.GetOp(pc, opcode, data)) {
+                        try {
+                            CScriptNum amtNum(data, false);
+                            transfer_amount = amtNum.GetInt64();
+                        } catch (const scriptnum_error&) {}
+                    }
+                    break;
+                }
+            }
+
+            // Find recipient address from first DD output (P2TR with value=0)
+            for (const CTxOut& txout : tx.vout) {
+                if (txout.nValue == 0 &&
+                    txout.scriptPubKey.size() == 34 &&
+                    txout.scriptPubKey[0] == OP_1) {
+                    // Check if this is NOT our output (recipient's output)
+                    if (m_wallet->IsMine(txout) == wallet::ISMINE_NO) {
+                        CTxDestination dest;
+                        if (ExtractDestination(txout.scriptPubKey, dest)) {
+                            recipient_address = EncodeDestination(dest);
+                        }
+                        break;  // First non-owned DD output is recipient
+                    }
+                }
+            }
+
+            // Check if this transaction already exists in history
+            bool already_exists = false;
+            std::string txid_str = tx.GetHash().GetHex();
+            for (const auto& existing_tx : transaction_history) {
+                if (existing_tx.txid == txid_str && existing_tx.category == "send") {
+                    already_exists = true;
+                    break;
+                }
+            }
+
+            if (!already_exists && transfer_amount > 0) {
+                // Add send transaction to history
+                DDTransaction ddtx;
+                ddtx.txid = txid_str;
+                ddtx.amount = transfer_amount;
+                ddtx.timestamp = 0;  // Will be set by block time if available
+                ddtx.confirmations = 0;  // Will be recalculated
+                ddtx.incoming = false;
+                ddtx.address = recipient_address;
+                ddtx.category = "send";
+                ddtx.blockheight = block_height;
+                ddtx.fee = 0;  // Fee info not easily recoverable during rescan
+
+                transaction_history.push_back(ddtx);
+
+                // Persist to database
+                wallet::WalletBatch batch(m_wallet->GetDatabase());
+                batch.WriteDDTransaction(ddtx);
+
+                LogPrintf("DigiDollar: Restored SEND transaction %s from rescan (amount: %lld, to: %s)\n",
+                          txid_str, static_cast<long long>(transfer_amount), recipient_address);
             }
         }
     }

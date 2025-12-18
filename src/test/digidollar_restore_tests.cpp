@@ -188,13 +188,21 @@ BOOST_AUTO_TEST_CASE(derive_lock_tier_from_heights)
     tier = DigiDollarWallet::DeriveLockTierFromHeight(1000, 2103400);
     BOOST_CHECK_EQUAL(tier, 4);
 
-    // Tier 5: 730 days (4,204,800 blocks)
-    tier = DigiDollarWallet::DeriveLockTierFromHeight(1000, 4205800);
+    // Tier 5: 3 years = 1095 days (6,307,200 blocks)
+    tier = DigiDollarWallet::DeriveLockTierFromHeight(1000, 6308200);
     BOOST_CHECK_EQUAL(tier, 5);
 
-    // Tier 6: 2738 days (15,770,880 blocks)
-    tier = DigiDollarWallet::DeriveLockTierFromHeight(1000, 15771880);
+    // Tier 6: 5 years = 1825 days (10,512,000 blocks)
+    tier = DigiDollarWallet::DeriveLockTierFromHeight(1000, 10513000);
     BOOST_CHECK_EQUAL(tier, 6);
+
+    // Tier 7: 7 years = 2555 days (14,716,800 blocks)
+    tier = DigiDollarWallet::DeriveLockTierFromHeight(1000, 14717800);
+    BOOST_CHECK_EQUAL(tier, 7);
+
+    // Tier 8: 10 years = 3650 days (21,024,000 blocks)
+    tier = DigiDollarWallet::DeriveLockTierFromHeight(1000, 21025000);
+    BOOST_CHECK_EQUAL(tier, 8);
 }
 
 BOOST_AUTO_TEST_CASE(derive_lock_tier_edge_cases)

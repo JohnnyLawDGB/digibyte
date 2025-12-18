@@ -70,7 +70,6 @@ private:
     QHBoxLayout* m_filterLayout;
     QComboBox* m_typeFilter;
     QLineEdit* m_searchEdit;
-    QPushButton* m_refreshButton;
     QTableWidget* m_table;
     QLabel* m_statusLabel;
     QMenu* m_contextMenu;

@@ -31,7 +31,6 @@ DigiDollarTransactionsWidget::DigiDollarTransactionsWidget(QWidget* parent)
     , m_filterLayout(nullptr)
     , m_typeFilter(nullptr)
     , m_searchEdit(nullptr)
-    , m_refreshButton(nullptr)
     , m_table(nullptr)
     , m_statusLabel(nullptr)
     , m_contextMenu(nullptr)
@@ -83,16 +82,12 @@ void DigiDollarTransactionsWidget::setupFilterBar()
     m_searchEdit->setPlaceholderText(tr("TX ID or address..."));
     m_searchEdit->setMinimumWidth(200);
 
-    // Refresh button
-    m_refreshButton = new QPushButton(tr("Refresh"), this);
-
     m_filterLayout->addWidget(typeLabel);
     m_filterLayout->addWidget(m_typeFilter);
     m_filterLayout->addSpacing(20);
     m_filterLayout->addWidget(searchLabel);
     m_filterLayout->addWidget(m_searchEdit);
     m_filterLayout->addStretch();
-    m_filterLayout->addWidget(m_refreshButton);
 
     m_mainLayout->addLayout(m_filterLayout);
 }
@@ -154,8 +149,6 @@ void DigiDollarTransactionsWidget::connectSignals()
             this, &DigiDollarTransactionsWidget::onTypeFilterChanged);
     connect(m_searchEdit, &QLineEdit::textChanged,
             this, &DigiDollarTransactionsWidget::onSearchTextChanged);
-    connect(m_refreshButton, &QPushButton::clicked,
-            this, &DigiDollarTransactionsWidget::updateTransactions);
     connect(m_table, &QTableWidget::customContextMenuRequested,
             this, &DigiDollarTransactionsWidget::showContextMenu);
 }

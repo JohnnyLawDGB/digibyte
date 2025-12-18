@@ -1271,6 +1271,19 @@ void DigiDollarWallet::ProcessDDTxForRescan(const CTransactionRef& ptx, int bloc
                         batch.WriteDDUTXO(ddOutpoint, pos.dd_minted);
                         LogPrintf("DigiDollar: Restored DD UTXO %s:1 from rescan (DD: %lld)\n",
                                   tx.GetHash().GetHex(), pos.dd_minted);
+                    } else {
+                        // DD UTXO was already spent (transferred or redeemed)
+                        // Update position to show no remaining DD tokens available for redemption
+                        // This prevents "already redeemed" positions from appearing redeemable
+                        auto pos_it = collateral_positions.find(pos.dd_timelock_id);
+                        if (pos_it != collateral_positions.end()) {
+                            pos_it->second.dd_minted = 0;
+                            // Persist updated position to database
+                            wallet::WalletBatch batch(m_wallet->GetDatabase());
+                            batch.WriteDDTimeLock(pos_it->second);
+                            LogPrintf("DigiDollar: Position %s DD UTXO is spent - set dd_minted=0 (not redeemable)\n",
+                                      pos.dd_timelock_id.GetHex());
+                        }
                     }
                 }
             }

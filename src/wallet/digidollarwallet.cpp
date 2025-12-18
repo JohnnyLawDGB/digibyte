@@ -847,6 +847,14 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
 
         transaction_history.push_back(tx);
 
+        // Persist transaction to database
+        if (m_wallet) {
+            wallet::WalletBatch batch(m_wallet->GetDatabase());
+            if (!batch.WriteDDTransaction(tx)) {
+                LogPrintf("DigiDollar: Warning - failed to persist send transaction %s to database\n", txid);
+            }
+        }
+
         // Verify balance updated correctly
         CAmount newBalance = GetTotalDDBalance();
         LogPrintf("DigiDollar: Transfer successful - %lld cents to %s (txid: %s)\n",

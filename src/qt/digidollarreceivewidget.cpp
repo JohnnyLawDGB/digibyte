@@ -4,6 +4,7 @@
 
 #include <qt/digidollarreceivewidget.h>
 
+#include <base58.h>
 #include <qt/walletmodel.h>
 #include <qt/clientmodel.h>
 #include <qt/guiutil.h>
@@ -655,6 +656,14 @@ void DigiDollarReceiveWidget::populateRecentRequests()
     for (int i = 0; i < rowCount; ++i) {
         const RecentRequestEntry& entry = model->entry(i);
 
+        // Get address
+        QString address = entry.recipient.address;
+
+        // Filter: Only show DigiDollar addresses (DD/TD/RD prefix)
+        if (!CDigiDollarAddress::IsValidDigiDollarAddress(address.toStdString())) {
+            continue;  // Skip non-DD addresses
+        }
+
         // Format date - compact format "Dec 17" with full date in tooltip
         QString dateStr = entry.date.toString("MMM dd");
 
@@ -670,9 +679,6 @@ void DigiDollarReceiveWidget::populateRecentRequests()
         } else {
             amountStr = tr("Any");
         }
-
-        // Get address
-        QString address = entry.recipient.address;
 
         // Add to table
         addRequestToTable(dateStr, label, amountStr, address);

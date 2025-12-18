@@ -847,11 +847,14 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
 
         transaction_history.push_back(tx);
 
-        // Persist transaction to database
-        if (m_wallet) {
-            wallet::WalletBatch batch(m_wallet->GetDatabase());
-            if (!batch.WriteDDTransaction(tx)) {
+        // Persist transaction to database with FRESH batch (same pattern as receives)
+        // Creating a new batch ensures proper flush when block ends
+        {
+            wallet::WalletBatch txBatch(m_wallet->GetDatabase());
+            if (!txBatch.WriteDDTransaction(tx)) {
                 LogPrintf("DigiDollar: Warning - failed to persist send transaction %s to database\n", txid);
+            } else {
+                LogPrintf("DigiDollar: Successfully persisted send transaction %s to database\n", txid);
             }
         }
 
@@ -5268,6 +5271,23 @@ void DigiDollarWallet::ProcessIncomingTransaction(const CTransactionRef& tx, con
 
                 LogPrintf("DigiDollar: Detected incoming DD transaction - txid: %s, vout: %d, amount: %d cents\n",
                           txid.GetHex(), n, dd_amount);
+
+                // Check if we already have a transaction with this txid (e.g., from a send)
+                // This prevents "receive" for change from overwriting our "send" transaction
+                bool txExists = false;
+                for (const auto& existing : transaction_history) {
+                    if (existing.txid == txid.GetHex()) {
+                        txExists = true;
+                        LogPrintf("DigiDollar: Skipping duplicate transaction %s (already exists as %s)\n",
+                                  txid.GetHex(), existing.category);
+                        break;
+                    }
+                }
+
+                if (txExists) {
+                    // Skip - this is likely our change from a send we already recorded
+                    continue;
+                }
 
                 // Add to transaction history (txType already checked above, only TRANSFER here)
                 DDTransaction ddtx;

@@ -242,7 +242,7 @@ BOOST_AUTO_TEST_CASE(chainparams_digidollar_integration_test)
 
     // Test activation heights
     BOOST_CHECK_EQUAL(mainParams->GetConsensus().nDDActivationHeight, 22000000); // Future block
-    BOOST_CHECK_EQUAL(testParams->GetConsensus().nDDActivationHeight, 1);        // Testnet: active from block 1
+    BOOST_CHECK_EQUAL(testParams->GetConsensus().nDDActivationHeight, 550);      // Testnet: active from block 550 (after Odocrypt at 500)
     BOOST_CHECK_EQUAL(regTestParams->GetConsensus().nDDActivationHeight, 650);   // After Odocrypt at 600
 }
 

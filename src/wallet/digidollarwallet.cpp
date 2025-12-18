@@ -1080,17 +1080,34 @@ uint32_t DigiDollarWallet::DeriveLockTierFromHeight(int64_t mint_height, int64_t
     //   blocks = 1,036,799 (one less than expected)
     //
     // By checking >= (threshold - 1), we correctly identify the tier.
+    //
+    // Lock tiers (must match getLockTierBlocks() in digidollarmintwidget.cpp):
+    //   Tier 0:  1 hour  =     240 blocks (testing only)
+    //   Tier 1: 30 days  = 172,800 blocks
+    //   Tier 2: 90 days  = 518,400 blocks (3 months)
+    //   Tier 3: 180 days = 1,036,800 blocks (6 months)
+    //   Tier 4: 365 days = 2,102,400 blocks (1 year)
+    //   Tier 5: 1095 days = 6,307,200 blocks (3 years)
+    //   Tier 6: 1825 days = 10,512,000 blocks (5 years)
+    //   Tier 7: 2555 days = 14,716,800 blocks (7 years)
+    //   Tier 8: 3650 days = 21,024,000 blocks (10 years)
 
     int64_t blocks = unlock_height - mint_height;
 
     // Check from highest tier down with -1 tolerance for TX timing
-    // Tier 6: 2738+ days = 15,770,880+ blocks
-    if (blocks >= 15770879) return 6;
+    // Tier 8: 10 years = 21,024,000 blocks
+    if (blocks >= 21023999) return 8;
 
-    // Tier 5: 730 days = 4,204,800 blocks
-    if (blocks >= 4204799) return 5;
+    // Tier 7: 7 years = 14,716,800 blocks
+    if (blocks >= 14716799) return 7;
 
-    // Tier 4: 365 days = 2,102,400 blocks
+    // Tier 6: 5 years = 10,512,000 blocks
+    if (blocks >= 10511999) return 6;
+
+    // Tier 5: 3 years = 6,307,200 blocks
+    if (blocks >= 6307199) return 5;
+
+    // Tier 4: 1 year = 2,102,400 blocks
     if (blocks >= 2102399) return 4;
 
     // Tier 3: 180 days = 1,036,800 blocks

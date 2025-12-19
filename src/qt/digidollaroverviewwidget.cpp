@@ -425,10 +425,10 @@ void DigiDollarOverviewWidget::setupRecentTransactionsSection()
 
 void DigiDollarOverviewWidget::connectSignals()
 {
-    // Connect update timer (every 30 seconds)
+    // Connect update timer (every 5 seconds for better sync across wallets)
     QTimer* updateTimer = new QTimer(this);
     connect(updateTimer, &QTimer::timeout, this, &DigiDollarOverviewWidget::updateView);
-    updateTimer->start(30000); // 30 seconds
+    updateTimer->start(5000); // 5 seconds - faster updates for network sync
 
     // Note: Additional wallet and client model signals will be connected
     // in setWalletModel() and setClientModel() once models are available
@@ -649,6 +649,11 @@ void DigiDollarOverviewWidget::updateSystemHealth()
         const UniValue& dcaTier = result.find_value("dca_tier");
         double dcaMultiplier = dcaTier.find_value("multiplier").get_real();
 
+        // Get ERR tier info
+        const UniValue& errTier = result.find_value("err_tier");
+        double errRatio = errTier.find_value("ratio").get_real();
+        double errBurnMultiplier = errTier.find_value("burn_multiplier").get_real();
+
         // Update network-wide stats
         double totalDD = totalDDCents / 100.0; // Convert cents to DD
         double totalCollateralDGB = totalCollateralSats / 100000000.0; // Convert satoshis to DGB
@@ -684,7 +689,17 @@ void DigiDollarOverviewWidget::updateSystemHealth()
 
         // Update DCA and ERR levels
         m_dcaLevelValue->setText(QString("%1x").arg(QString::number(dcaMultiplier, 'f', 1)));
-        m_errLevelValue->setText(isEmergency ? "ACTIVE" : "Inactive");
+
+        // Show ERR as percentage ratio and burn multiplier
+        // Normal: "100% (1.0x)" | Emergency: "80% (1.25x burn)"
+        if (isEmergency) {
+            int errPercent = static_cast<int>(errRatio * 100);
+            m_errLevelValue->setText(QString("%1% (%2x burn)")
+                .arg(errPercent)
+                .arg(QString::number(errBurnMultiplier, 'f', 2)));
+        } else {
+            m_errLevelValue->setText("100% (Normal)");
+        }
 
         // Update progress bar (scale 0-500% to 0-100%)
         int barValue = std::min(100, static_cast<int>((healthPercent * 100) / 500));

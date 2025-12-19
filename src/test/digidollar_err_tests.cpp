@@ -187,7 +187,8 @@ BOOST_FIXTURE_TEST_CASE(err_ratio_calculation_edge_cases, DigiDollarERRTestSetup
 }
 
 // ============================================================================
-// ERR Adjusted Redemption Tests (GREEN Phase)
+// ERR Collateral Return Tests (GREEN Phase)
+// CRITICAL: ERR returns FULL collateral, increases DD burn instead!
 // ============================================================================
 
 BOOST_FIXTURE_TEST_CASE(err_adjusted_redemption_calculation, DigiDollarERRTestSetup)
@@ -197,15 +198,23 @@ BOOST_FIXTURE_TEST_CASE(err_adjusted_redemption_calculation, DigiDollarERRTestSe
     int systemHealth = 90;
 
     // Act: Get adjusted redemption amount
+    // IMPORTANT: GetAdjustedRedemption returns FULL collateral (ERR doesn't reduce collateral!)
     CAmount adjustedRedemption = DigiDollar::ERR::EmergencyRedemptionRatio::GetAdjustedRedemption(normalRedemption, systemHealth);
 
-    // Assert: GREEN phase - verify correct behavior
-    BOOST_CHECK_EQUAL(adjustedRedemption, 90 * COIN); // 90% of 100 DGB
+    // Assert: ERR returns FULL collateral - DD burn is increased instead
+    BOOST_CHECK_EQUAL(adjustedRedemption, 100 * COIN); // FULL collateral returned
+
+    // Test the DD burn increase separately
+    CAmount originalDD = 100 * COIN;
+    CAmount requiredDDBurn = DigiDollar::ERR::EmergencyRedemptionRatio::GetRequiredDDBurn(originalDD, systemHealth);
+    // At 90% health, ratio is 0.90, so burn = 100/0.90 = 111.11 (ceiling)
+    BOOST_CHECK_GT(requiredDDBurn, originalDD); // Must burn MORE DD than originally minted
 }
 
 BOOST_FIXTURE_TEST_CASE(err_adjusted_redemption_various_amounts, DigiDollarERRTestSetup)
 {
-    // Test ERR adjustment with various redemption amounts
+    // Test ERR with various amounts
+    // CRITICAL: ERR returns FULL collateral, increases DD burn instead!
     std::vector<CAmount> testAmounts = {
         50 * COIN,   // 50 DGB
         100 * COIN,  // 100 DGB
@@ -213,29 +222,41 @@ BOOST_FIXTURE_TEST_CASE(err_adjusted_redemption_various_amounts, DigiDollarERRTe
         1000 * COIN  // 1000 DGB
     };
 
-    int systemHealth = 85; // 85% health = 85% return
+    int systemHealth = 85; // 85% health = 0.85 ratio = 1.176x DD burn
 
     for (CAmount amount : testAmounts) {
-        // Act: Get adjusted amount
+        // Act: GetAdjustedRedemption returns FULL collateral
         CAmount adjusted = DigiDollar::ERR::EmergencyRedemptionRatio::GetAdjustedRedemption(amount, systemHealth);
 
-        // Assert: GREEN phase - verify correct behavior
-        CAmount expected = (amount * 85) / 100;
-        BOOST_CHECK_EQUAL(adjusted, expected);
+        // Assert: FULL collateral returned (not reduced!)
+        BOOST_CHECK_EQUAL(adjusted, amount); // FULL amount returned
+
+        // Test DD burn increase separately
+        CAmount requiredBurn = DigiDollar::ERR::EmergencyRedemptionRatio::GetRequiredDDBurn(amount, systemHealth);
+        // At 85% health, ratio is 0.85, so burn = amount/0.85 = ~1.176x
+        BOOST_CHECK_GT(requiredBurn, amount); // Must burn MORE than original
     }
 }
 
 BOOST_FIXTURE_TEST_CASE(err_adjusted_redemption_minimum_ratio, DigiDollarERRTestSetup)
 {
     // Arrange: Test minimum 80% ratio for very low health
+    // CRITICAL: ERR returns FULL collateral, increases DD burn instead!
     CAmount normalRedemption = 200 * COIN;
-    int systemHealth = 50; // Very low health
+    int systemHealth = 50; // Very low health = 80% ratio = 1.25x DD burn
 
-    // Act: Get adjusted redemption
+    // Act: Get adjusted redemption (returns FULL collateral)
     CAmount adjustedRedemption = DigiDollar::ERR::EmergencyRedemptionRatio::GetAdjustedRedemption(normalRedemption, systemHealth);
 
-    // Assert: GREEN phase - verify correct behavior
-    BOOST_CHECK_EQUAL(adjustedRedemption, 160 * COIN); // 80% minimum
+    // Assert: FULL collateral returned (not 80%!)
+    BOOST_CHECK_EQUAL(adjustedRedemption, 200 * COIN); // FULL amount
+
+    // Test DD burn at minimum ratio (80% = 1.25x burn)
+    CAmount originalDD = 200 * COIN;
+    CAmount requiredBurn = DigiDollar::ERR::EmergencyRedemptionRatio::GetRequiredDDBurn(originalDD, systemHealth);
+    // At 80% ratio: 200 / 0.80 = 250 (1.25x)
+    CAmount expectedBurn = 250 * COIN;
+    BOOST_CHECK_EQUAL(requiredBurn, expectedBurn);
 }
 
 // ============================================================================
@@ -648,28 +669,37 @@ BOOST_FIXTURE_TEST_CASE(err_handles_extremely_high_system_health, DigiDollarERRT
 BOOST_FIXTURE_TEST_CASE(err_validates_minimum_redemption_amounts, DigiDollarERRTestSetup)
 {
     // Arrange: ERR redemption with very small amount
+    // CRITICAL: ERR returns FULL collateral (not reduced!)
     validationContext.systemCollateral = 90;
 
     CAmount tinyAmount = 1; // 1 satoshi
     CAmount adjustedAmount = DigiDollar::ERR::EmergencyRedemptionRatio::GetAdjustedRedemption(tinyAmount, 90);
 
-    // Act & Assert: GREEN phase - verify correct behavior
-    // Should handle tiny amounts correctly without underflow
-    BOOST_CHECK_EQUAL(adjustedAmount, 0); // May round down to 0 for tiny amounts
+    // Act & Assert: GetAdjustedRedemption returns FULL amount (even tiny amounts)
+    BOOST_CHECK_EQUAL(adjustedAmount, 1); // FULL amount returned
+
+    // Test DD burn for tiny amounts
+    CAmount requiredBurn = DigiDollar::ERR::EmergencyRedemptionRatio::GetRequiredDDBurn(tinyAmount, 90);
+    // At 90% ratio: 1 / 0.90 = 1.11 -> ceiling = 2
+    BOOST_CHECK_GE(requiredBurn, tinyAmount); // At least original amount
 }
 
 BOOST_FIXTURE_TEST_CASE(err_validates_maximum_redemption_amounts, DigiDollarERRTestSetup)
 {
     // Arrange: ERR redemption with maximum amount
+    // CRITICAL: ERR returns FULL collateral (not reduced!)
     validationContext.systemCollateral = 85;
 
     CAmount maxAmount = 1000000 * COIN; // 1M DGB
     CAmount adjustedAmount = DigiDollar::ERR::EmergencyRedemptionRatio::GetAdjustedRedemption(maxAmount, 85);
 
-    // Act & Assert: GREEN phase - verify correct behavior
-    // Should handle large amounts without overflow
-    CAmount expected = (maxAmount * 85) / 100;
-    BOOST_CHECK_EQUAL(adjustedAmount, expected);
+    // Act & Assert: FULL collateral returned (not 85%!)
+    BOOST_CHECK_EQUAL(adjustedAmount, maxAmount); // FULL amount
+
+    // Test DD burn for large amounts (should handle without overflow)
+    CAmount requiredBurn = DigiDollar::ERR::EmergencyRedemptionRatio::GetRequiredDDBurn(maxAmount, 85);
+    // At 85% ratio: burn = amount / 0.85 = ~1.176x
+    BOOST_CHECK_GT(requiredBurn, maxAmount); // Must burn MORE than original
 }
 
 // ============================================================================

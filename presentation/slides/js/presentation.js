@@ -182,11 +182,23 @@ class Presentation {
         const newSlide = this.slides[index];
 
         // Determine direction
-        const direction = index > this.currentSlide ? 'next' : 'prev';
+        const goingForward = index > this.currentSlide;
 
-        // Update classes
+        // Remove active from old slide
         oldSlide.classList.remove('active');
-        oldSlide.classList.add(direction === 'next' ? 'prev' : '');
+
+        if (goingForward) {
+            // Going forward: old slide goes left (prev), new slide comes from right
+            oldSlide.classList.add('prev');
+            newSlide.classList.remove('prev'); // Ensure it comes from right
+        } else {
+            // Going backward: old slide goes right, new slide comes from left (prev position)
+            oldSlide.classList.remove('prev');
+            newSlide.classList.add('prev'); // Position it on the left first
+            // Force reflow to apply the prev position before transition
+            newSlide.offsetHeight;
+            newSlide.classList.remove('prev'); // Then remove it so it slides in
+        }
 
         newSlide.classList.add('active');
 
@@ -199,7 +211,6 @@ class Presentation {
         // Reset animation lock
         setTimeout(() => {
             this.isAnimating = false;
-            oldSlide.classList.remove('prev');
         }, this.animationDuration);
     }
 

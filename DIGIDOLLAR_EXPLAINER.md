@@ -1,4 +1,6 @@
 # DigiDollar - Decentralized USD Stablecoin on DigiByte
+*Updated: 2025-12-18*
+*Document Version: 2.0 - ERR Semantics Corrected*
 
 ## Overview
 
@@ -243,16 +245,24 @@ As system health changes, collateral requirements automatically adjust:
 
 ### 3️⃣ Emergency Redemption Ratio (Third Defense)
 
-If system drops below 100% collateralized, redemptions are adjusted by tier:
+**CRITICAL: ERR increases DD burn requirement, NOT reduces collateral return!**
 
-| System Health | Collateral Return |
-|--------------|------------------|
-| 95-100% | 95% (5% loss) |
-| 90-95% | 90% (10% loss) |
-| 85-90% | 85% (15% loss) |
-| <85% | 80% (minimum guarantee) |
+If system drops below 100% collateralized, users must burn MORE DigiDollars to redeem their FULL collateral:
 
-ERR activates automatically when system health drops below 100%. Normal redemptions are blocked until health recovers - users must use ERR redemption path which returns reduced collateral.
+| System Health | ERR Ratio | DD Burn Required | Collateral Return |
+|--------------|-----------|------------------|-------------------|
+| 95-100% | 0.95 | 105.3% (1/0.95) | 100% (FULL) |
+| 90-95% | 0.90 | 111.1% (1/0.90) | 100% (FULL) |
+| 85-90% | 0.85 | 117.6% (1/0.85) | 100% (FULL) |
+| <85% | 0.80 | 125% (1/0.80) | 100% (FULL) |
+
+**Example**: At 80% system health with a $100 DD position:
+- You must burn: $100 / 0.80 = **$125 DD**
+- You receive back: **100% of your locked collateral** (not reduced!)
+
+**Why this design?** ERR creates buying pressure on DD during crises - people need more DD to redeem, which helps stabilize the system. Reducing collateral would harm innocent DD holders.
+
+ERR activates automatically when system health drops below 100%. New minting is BLOCKED during ERR until health recovers above 100%.
 
 ### 4️⃣ Volatility Protection (Fourth Defense)
 

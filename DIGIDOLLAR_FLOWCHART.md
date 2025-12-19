@@ -1,6 +1,7 @@
 # DigiDollar System Flowcharts
 **Technical Reference Guide for DigiByte v8.26**
-*Last Updated: 2025-12-10*
+*Last Updated: 2025-12-18*
+*Document Version: 2.0 - ERR Semantics Corrected*
 
 This document provides visual flowcharts explaining how DigiDollar works. Each flowchart includes the technical details from the actual implementation.
 
@@ -285,18 +286,21 @@ Burning DigiDollars to unlock your collateral DGB. There are **2 redemption path
 │  • Lock time has expired              │   │  • Lock time has expired              │
 │  • System health ≥ 100%               │   │  • System health < 100%               │
 │                                       │   │                                       │
-│  Requires:                            │   │  Requires:                            │
-│  • Burn ALL minted DD amount          │   │  • Burn ALL minted DD amount          │
+│  Requires:                            │   │  Requires (BURNS MORE DD!):           │
+│  • Burn original minted DD amount     │   │  • Burn MORE DD than you minted       │
 │  • Wait for timelock expiry           │   │  • Wait for timelock expiry           │
 │                                       │   │                                       │
-│  Returns:                             │   │  Returns (based on health tier):      │
-│  • 100% of locked collateral          │   │  • 95-100% health → 95% collateral    │
-│                                       │   │  • 90-95% health → 90% collateral     │
-│                                       │   │  • 85-90% health → 85% collateral     │
-│                                       │   │  • <85% health → 80% collateral       │
+│  Returns:                             │   │  DD Burn Required (by health tier):   │
+│  • 100% of locked collateral          │   │  • 95-100% health → Burn 105% DD      │
+│                                       │   │  • 90-95% health → Burn 111% DD       │
+│                                       │   │  • 85-90% health → Burn 118% DD       │
+│                                       │   │  • <85% health → Burn 125% DD (max)   │
+│                                       │   │                                       │
+│                                       │   │  Returns: 100% COLLATERAL (always!)   │
 └──────────────────────────────────────┘   └──────────────────────────────────────┘
 
-IMPORTANT: Partial redemptions are NOT supported. You must redeem the full DD amount.
+IMPORTANT: ERR increases DD burn, NOT reduces collateral. You always get 100% collateral back.
+IMPORTANT: New minting is BLOCKED when system health < 100%.
 ```
 
 ### Normal Redemption Flowchart
@@ -336,11 +340,13 @@ IMPORTANT: Partial redemptions are NOT supported. You must redeem the full DD am
 │                              │
 │  IF health ≥ 100%:           │
 │    → Normal redemption       │
+│    → Burn original DD        │
 │    → Get 100% collateral     │
 │                              │
 │  IF health < 100%:           │
 │    → ERR redemption          │
-│    → Get 80-95% collateral   │
+│    → Burn MORE DD (105-125%) │
+│    → Get 100% collateral     │
 └──────────────────────────────┘
                      │
                      ▼
@@ -352,12 +358,14 @@ IMPORTANT: Partial redemptions are NOT supported. You must redeem the full DD am
 │  ┌────────────────────────────────────────────────────────────────────┐     │
 │  │  INPUTS:                                                            │     │
 │  │    vin[0]: Collateral vault (P2TR with timelock)                   │     │
-│  │    vin[1]: DD tokens to burn (full amount)                         │     │
+│  │    vin[1]: DD tokens to burn                                       │     │
+│  │            • Normal: Original minted amount                         │     │
+│  │            • ERR: MORE DD (original / ERR ratio)                   │     │
 │  │    vin[2]: DGB for transaction fees                                │     │
 │  │                                                                     │     │
 │  │  OUTPUTS:                                                           │     │
 │  │    vout[0]: Returned collateral to owner                           │     │
-│  │             (100% if Normal, 80-95% if ERR)                         │     │
+│  │             (ALWAYS 100% - collateral never reduced!)               │     │
 │  │    vout[1]: OP_RETURN with DD_TX_REDEEM (0x44440300)               │     │
 │  │    vout[2]: DGB change (if any)                                    │     │
 │  └────────────────────────────────────────────────────────────────────┘     │
@@ -389,32 +397,44 @@ IMPORTANT: Partial redemptions are NOT supported. You must redeem the full DD am
 │                                                                              │
 │  RESULT (Normal - system health ≥ 100%):                                     │
 │  ✓ Collateral (230,769 DGB) returned to owner - 100%                         │
-│  ✓ $500 DD burned (removed from circulation)                                 │
+│  ✓ $500 DD burned (original minted amount)                                   │
 │  ✓ Vault closed permanently                                                  │
 │                                                                              │
 │  RESULT (ERR - system health < 100%):                                        │
-│  ✓ Collateral returned based on health tier (80-95%)                         │
-│  ✓ $500 DD burned (removed from circulation)                                 │
-│  ✓ Remainder goes to system reserve                                          │
+│  ✓ Collateral (230,769 DGB) returned to owner - 100% (FULL!)                │
+│  ✓ MORE DD burned (e.g., $625 DD at 80% health for $500 position)           │
+│  ✓ Extra DD burned creates buying pressure, stabilizing system               │
 │  ✓ Vault closed permanently                                                  │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### ERR Adjustment Tiers
 
+**CRITICAL: ERR increases DD burn requirement, NOT reduces collateral!**
+
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                    ERR (EMERGENCY REDEMPTION RATIO) TIERS                    │
+│                    ★ BURNS MORE DD, RETURNS FULL COLLATERAL ★               │
 └─────────────────────────────────────────────────────────────────────────────┘
 
-  System Health     │  Collateral Returned  │  Example (230,769 DGB locked)
-  ──────────────────┼───────────────────────┼─────────────────────────────────
-  95-100%           │  95%                  │  219,230 DGB returned
-  90-95%            │  90%                  │  207,692 DGB returned
-  85-90%            │  85%                  │  196,153 DGB returned
-  < 85%             │  80% (minimum)        │  184,615 DGB returned
+  System Health │ ERR Ratio │ DD Burn Required    │ Collateral Returned
+  ──────────────┼───────────┼─────────────────────┼─────────────────────────
+  95-100%       │  0.95     │ 105% (100/0.95)     │ 100% (FULL - 230,769 DGB)
+  90-95%        │  0.90     │ 111% (100/0.90)     │ 100% (FULL - 230,769 DGB)
+  85-90%        │  0.85     │ 118% (100/0.85)     │ 100% (FULL - 230,769 DGB)
+  < 85%         │  0.80     │ 125% (100/0.80)     │ 100% (FULL - 230,769 DGB)
 
-  The remaining collateral goes to the system reserve to help restore health.
+  Example: $500 DD position at 80% system health:
+  • Must burn: $500 / 0.80 = $625 DD (25% more than minted)
+  • Receives: 100% of locked collateral (230,769 DGB)
+  • Extra $125 DD burned creates buying pressure, helping system recover
+
+  WHY THIS DESIGN?
+  • Creates demand for DD during crises (people need more DD to redeem)
+  • Buying pressure helps stabilize DD price
+  • Collateral is NEVER taken from users
+  • Fair to all DD holders
 ```
 
 ### Key Code Locations
@@ -697,13 +717,14 @@ DCA increases collateral requirements when system health drops, protecting the s
 ## 6. Emergency Redemption Ratio (ERR)
 
 ### What is ERR?
-ERR activates when system health falls below 100%, protecting remaining users by adjusting redemption amounts.
+**ERR increases DD burn requirement when system health falls below 100%.** Collateral return is ALWAYS 100% - users never lose collateral. ERR creates buying pressure on DD during crises by requiring more DD to redeem.
 
 ### ERR Flowchart
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │              EMERGENCY REDEMPTION RATIO (ERR) FLOW                           │
+│              ★ BURNS MORE DD, RETURNS FULL COLLATERAL ★                      │
 └─────────────────────────────────────────────────────────────────────────────┘
 
                         ┌─────────────────────────┐
@@ -720,26 +741,27 @@ ERR activates when system health falls below 100%, protecting remaining users by
 │  ERR ACTIVATES               │    │  ERR INACTIVE                │
 │  ─────────────               │    │  ────────────                │
 │  System is under-            │    │  Normal operations           │
-│  collateralized!             │    │  100% redemption             │
+│  collateralized!             │    │  Burn original DD amount     │
+│  New minting BLOCKED!        │    │  Get 100% collateral         │
 └──────────────────────────────┘    └──────────────────────────────┘
                      │
                      ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│  STEP 1: CALCULATE ERR ADJUSTMENT                                            │
-│  ────────────────────────────────                                            │
+│  STEP 1: CALCULATE DD BURN REQUIREMENT                                       │
+│  ──────────────────────────────────────                                      │
 │                                                                              │
-│  ERR Tiers (src/consensus/err.cpp lines 27-32):                              │
+│  ERR Tiers (src/consensus/err.cpp):                                          │
 │                                                                              │
 │  ┌────────────────────────────────────────────────────────────────────┐     │
-│  │  SYSTEM HEALTH     ERR RATIO    USER RECEIVES                      │     │
+│  │  SYSTEM HEALTH     ERR RATIO    DD BURN REQUIRED    COLLATERAL     │     │
 │  │  ─────────────────────────────────────────────────────────────────│     │
-│  │  95% - 100%        0.95         95% of normal redemption           │     │
-│  │  90% - 95%         0.90         90% of normal redemption           │     │
-│  │  85% - 90%         0.85         85% of normal redemption           │     │
-│  │  < 85%             0.80         80% of normal redemption (minimum) │     │
+│  │  95% - 100%        0.95         105% (1/0.95)       100% (FULL)    │     │
+│  │  90% - 95%         0.90         111% (1/0.90)       100% (FULL)    │     │
+│  │  85% - 90%         0.85         118% (1/0.85)       100% (FULL)    │     │
+│  │  < 85%             0.80         125% (1/0.80) max   100% (FULL)    │     │
 │  └────────────────────────────────────────────────────────────────────┘     │
 │                                                                              │
-│  The "haircut" protects remaining users from a bank run scenario.            │
+│  CRITICAL: Collateral is NEVER reduced - only DD burn increases!             │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
@@ -747,17 +769,19 @@ ERR activates when system health falls below 100%, protecting remaining users by
 │  STEP 2: APPLY ERR TO REDEMPTION                                             │
 │  ───────────────────────────────                                             │
 │                                                                              │
-│  Formula (GetAdjustedRedemption):                                            │
+│  Formula (GetRequiredDDBurn):                                                │
 │  ┌────────────────────────────────────────────────────────────────────┐     │
-│  │  Adjusted Return = Normal Return × ERR Ratio                       │     │
+│  │  Required DD = Original DD Minted / ERR Ratio                      │     │
+│  │  Collateral Return = 100% (always full amount)                     │     │
 │  └────────────────────────────────────────────────────────────────────┘     │
 │                                                                              │
 │  Example (System health: 92%):                                               │
-│  • User wants to redeem $500 DD                                              │
-│  • Normal collateral return: 230,769 DGB                                     │
+│  • User wants to redeem $500 DD position                                     │
+│  • Collateral locked: 230,769 DGB                                            │
 │  • ERR tier: 90-95% → 0.90 ratio                                            │
-│  • Adjusted return: 230,769 × 0.90 = 207,692 DGB                            │
-│  • Difference (23,077 DGB) stays in system to protect others                 │
+│  • DD required to burn: $500 / 0.90 = $555.56 DD                            │
+│  • User burns $555.56 DD, receives ALL 230,769 DGB back                     │
+│  • Extra $55.56 DD burned creates buying pressure on DD market               │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
@@ -803,36 +827,40 @@ ERR activates when system health falls below 100%, protecting remaining users by
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                         ERR ACTIVATION TIMELINE                              │
+│                  ★ DD BURN INCREASES, COLLATERAL STAYS 100% ★               │
 └─────────────────────────────────────────────────────────────────────────────┘
 
   System
   Health %
      │
   150% ───────────────────────────────────────────────────────────
-     │  HEALTHY (DCA 1.0x)
+     │  HEALTHY (DCA 1.0x, burn 100% DD)
      │
   120% ───────────────────────────────────────────────────────────
-     │  WARNING (DCA 1.2x)
+     │  WARNING (DCA 1.2x, burn 100% DD)
      │
   100% ═══════════════════════════════════════════════════════════  ← ERR THRESHOLD
-     │        ERR ACTIVE           │         ERR INACTIVE
-     │                             │
-   95% ───────────────────┐        │
-     │                    │        │
-   90% ──────────┐        │        │
-     │           │        │        │
-   85% ──┐       │        │        │
-     │   │       │        │        │
-         │       │        │        │
-         ▼       ▼        ▼        │
-       80%     85%      90%       100%
-       return  return   return    return
+     │        ERR ACTIVE (MINTING BLOCKED)     │    ERR INACTIVE
+     │        Burn MORE DD to redeem           │    Normal operations
+   95% ───────────────────┐                    │
+     │  burn 105% DD      │                    │
+   90% ──────────┐        │                    │
+     │  burn 111%│        │                    │
+   85% ──┐       │        │                    │
+     │   │burn   │        │                    │
+         │118%   │        │                    │
+         ▼       ▼        ▼                    │
+       125%    118%     111%                  100%
+       DD burn DD burn  DD burn              DD burn
+       (max)                                 (normal)
+
+       COLLATERAL RETURN: ALWAYS 100% IN ALL TIERS!
 
   Time →
        ├────────────────────────────────────────────────────────────►
-       │  DGB price drops   │  Some users redeem  │  Price recovers  │
-       │  causing under-    │  at reduced rates   │  system healthy  │
-       │  collateralization │                     │  again           │
+       │  DGB price drops   │  Users redeem by    │  Price recovers  │
+       │  causing under-    │  burning MORE DD    │  system healthy  │
+       │  collateralization │  (creates DD demand)│  again           │
 ```
 
 ### Key Code Locations
@@ -1000,10 +1028,11 @@ Automatic freezes when DGB price moves too fast, preventing exploitation during 
   │ DD_TX_MINT   │ 0x44440100 │ Lock DGB, create new DigiDollars            │
   │ DD_TX_TRANSFER│ 0x44440200│ Move DD between addresses                   │
   │ DD_TX_REDEEM │ 0x44440300 │ Burn DD, unlock 100% collateral (normal)    │
-  │ DD_TX_ERR    │ 0x44440500 │ Burn DD, unlock 80-95% collateral (ERR)     │
+  │ DD_TX_ERR    │ 0x44440500 │ Burn MORE DD (105-125%), get 100% collateral│
   └──────────────┴────────────┴─────────────────────────────────────────────┘
 
   NOTE: DD_TX_PARTIAL (0x44440400) is disabled - partial redemptions not supported.
+  NOTE: ERR burns MORE DD, but collateral return is ALWAYS 100%.
 
   The 0x4444 prefix = "DD" in ASCII (DigiDollar identifier)
 ```
@@ -1055,9 +1084,9 @@ Automatic freezes when DGB price moves too fast, preventing exploitation during 
                    │                │                │
                    ▼                ▼                ▼
            ┌────────────────┐ ┌────────────┐ ┌────────────────┐
-           │ FREEZE         │ │ ADJUST     │ │ ADJUST         │
-           │ Operations     │ │ Collateral │ │ Redemption     │
-           │                │ │ Requirements│ │ Returns        │
+           │ FREEZE         │ │ ADJUST     │ │ INCREASE DD    │
+           │ Operations     │ │ Collateral │ │ BURN (not      │
+           │                │ │ Requirements│ │ collateral!)   │
            └───────┬────────┘ └─────┬──────┘ └───────┬────────┘
                    │                │                │
                    └────────────────┼────────────────┘
@@ -1075,6 +1104,13 @@ Automatic freezes when DGB price moves too fast, preventing exploitation during 
 
 ---
 
-*Document Version: 1.0*
+*Document Version: 2.0 - ERR Semantics Corrected*
 *Based on DigiByte v8.26 DigiDollar Implementation*
+*Updated: 2025-12-18*
 *Code locations verified against actual implementation*
+
+**Key Changes in v2.0:**
+- ERR now correctly documented as increasing DD burn requirement (not reducing collateral)
+- Collateral return is ALWAYS 100% in all ERR tiers
+- Minting is BLOCKED during ERR (system health < 100%)
+- Added formula: Required DD = Original DD / ERR Ratio

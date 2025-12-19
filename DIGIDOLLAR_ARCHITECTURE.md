@@ -1,8 +1,8 @@
 # DigiDollar Implementation Architecture
 **DigiByte v8.26 - Current Implementation Status**
-*Updated: 2025-12-16*
-*Implementation Status: 85% Complete*
-*Document Version: 4.0 - Post RC5 Code-Verified*
+*Updated: 2025-12-18*
+*Implementation Status: 90% Complete*
+*Document Version: 5.0 - ERR Semantics Corrected, DCA/ERR Fully Verified*
 
 ## Executive Summary
 
@@ -26,10 +26,16 @@ DigiDollar is the world's first truly decentralized stablecoin built natively on
 - **Comprehensive Testing**: 286 DigiDollar unit tests + 123 Oracle unit tests + 18 functional tests = 427 total tests
 
 🔄 **What's In Progress:**
-- **System Health Functions**: `GetTotalSystemCollateral()` and `GetTotalDDSupply()` return stubs (blocks DCA/ERR)
-- **Oracle Price Feeds**: 13 exchange APIs implemented, Phase Two (8-of-15 consensus) not yet functional
-- **Redemption System**: Basic version working, advanced features being refined
+- **System Health Functions**: `GetTotalSystemCollateral()` and `GetTotalDDSupply()` now use cached metrics from UTXO scanning
+- **Oracle Price Feeds**: 7 active exchange APIs, Phase Two infrastructure ready (3-of-10 testnet, 8-of-15 mainnet)
+- **Redemption System**: Basic version working, ERR redemptions with increased DD burn implemented
 - **Final Polish**: Minor notification improvements
+
+✅ **Recently Completed (Dec 2025):**
+- **ERR Semantics Corrected**: ERR now correctly increases DD burn requirement (not reduces collateral)
+- **DCA/ERR Integration**: Both systems now use cached system metrics from health monitor
+- **Qt Timer Optimization**: Reduced from 30s to 5s for better cross-wallet sync
+- **Oracle Phase Two Preparation**: 10 testnet oracle keys defined, validation infrastructure ready
 
 This document explains exactly how everything works, where the code lives, and what each component does - written for both technical developers and everyday users to understand.
 
@@ -167,11 +173,13 @@ The DigiDollar system is built into DigiByte Core with code organized in these m
 ├─────────────────────────────────────────────┤
 │ 1. Check redemption path (2 paths only):    │
 │    • Normal: Timelock expired, health ≥100% │
-│      → Get 100% of locked collateral back   │
+│      → Burn original DD, get 100% collateral│
 │    • ERR: Timelock expired, health < 100%   │
-│      → Get 80-95% collateral (based on      │
-│        system health tier)                  │
-│ 2. Select DD UTXOs to burn (full amount)    │
+│      → Burn MORE DD (up to 125%), get 100%  │
+│        collateral back (FULL amount)        │
+│ 2. Select DD UTXOs to burn:                 │
+│    • Normal: Burn original minted amount    │
+│    • ERR: Burn originalDD / ERRratio        │
 │ 3. Create redemption transaction with:      │
 │    • Input 0: Collateral vault (P2TR)       │
 │    • Input 1+: DD tokens to burn            │
@@ -181,7 +189,7 @@ The DigiDollar system is built into DigiByte Core with code organized in these m
 │    • DD tokens: Schnorr key-path signature  │
 │    • Fees: Standard ECDSA                   │
 │ 5. Burn DigiDollars (remove from UTXO)      │
-│ 6. Release collateral to owner              │
+│ 6. Release FULL collateral to owner         │
 │ 7. Close position in database               │
 └──────────────────────────────────────────────┘
                     │
@@ -196,11 +204,14 @@ The DigiDollar system is built into DigiByte Core with code organized in these m
 │ • < 100%: Emergency (2.0x multiplier)       │
 ├─────────────────────────────────────────────┤
 │ ERR (Emergency Redemption Ratio):           │
-│ • System < 100%: Get less collateral back   │
-│ • 95-100% health → 95% collateral returned  │
-│ • 90-95% health → 90% collateral returned   │
-│ • 85-90% health → 85% collateral returned   │
-│ • < 85% health → 80% collateral returned    │
+│ ★ BURNS MORE DD, NOT LESS COLLATERAL! ★     │
+│ • System < 100%: Must burn MORE DD to redeem│
+│ • 95-100% health → Burn 105% DD (1/0.95)    │
+│ • 90-95% health → Burn 111% DD (1/0.90)     │
+│ • 85-90% health → Burn 118% DD (1/0.85)     │
+│ • < 85% health → Burn 125% DD (1/0.80)      │
+│ • Collateral return: ALWAYS 100% (FULL)     │
+│ • New minting: BLOCKED during ERR           │
 ├─────────────────────────────────────────────┤
 │ Volatility Protection:                      │
 │ • 20% price change triggers freeze          │
@@ -249,8 +260,8 @@ The DigiDollar system is built into DigiByte Core with code organized in these m
 - **Exit Options**: 2 functional redemption paths (see below)
 
 **The 2 Ways to Get Your DGB Back** (Verified in Code):
-1. **Normal**: Timelock expired + system health ≥100% → Get 100% collateral back
-2. **ERR (Emergency Redemption Ratio)**: Timelock expired + system health <100% → Get 80-95% collateral back (tiered)
+1. **Normal**: Timelock expired + system health ≥100% → Burn original DD, get 100% collateral back
+2. **ERR (Emergency Redemption Ratio)**: Timelock expired + system health <100% → Burn MORE DD (105-125%), get 100% collateral back (FULL amount always returned)
 
 **CRITICAL RULE**: DGB locked as collateral **CAN NEVER BE UNLOCKED** until the timelock expires. No exceptions. No early redemption. Ever. Both paths REQUIRE the timelock to be expired first.
 
@@ -681,17 +692,38 @@ SystemHealthTier CalculateCurrentTier() {
 #### **Layer 3: Emergency Redemption Ratio (ERR)**
 **Status: ✅ FULLY IMPLEMENTED AND PRODUCTION-READY** (`/src/consensus/err.cpp`)
 
-```cpp
-CAmount GetAdjustedRedemption(CAmount normalRedemption, int systemHealth) {
-    if (normalRedemption <= 0 || systemHealth >= 100) return normalRedemption;
+**CRITICAL: ERR increases DD burn requirement, NOT reduces collateral return!**
 
-    // ERR implements a collateral haircut when system is undercollateralized
-    // Formula: Returned Collateral = Normal Amount × ERR Adjustment Ratio
-    // Example: 80% system health → receive 80% of collateral (20% haircut)
+```cpp
+// GetAdjustedRedemption is DEPRECATED - use GetRequiredDDBurn instead
+// This function now returns the FULL amount unchanged
+CAmount GetAdjustedRedemption(CAmount normalRedemption, int systemHealth) {
+    // DEPRECATED: ERR doesn't reduce collateral return
+    // Collateral is ALWAYS returned in full (100%)
+    return normalRedemption;  // Returns FULL amount
+}
+
+// NEW: Calculate required DD burn during ERR
+CAmount GetRequiredDDBurn(CAmount originalDDMinted, int systemHealth) {
+    if (systemHealth >= 100) return originalDDMinted;  // Normal redemption
+
+    // ERR increases DD burn requirement, collateral return stays 100%
+    // Formula: RequiredDD = OriginalDD / ERRRatio
+    // Example: At 80% health, ratio=0.80: 100 DD / 0.80 = 125 DD required
     double adjustmentRatio = CalculateERRAdjustment(systemHealth);
-    return static_cast<CAmount>(normalRedemption * adjustmentRatio);
+    return static_cast<CAmount>(std::ceil(originalDDMinted / adjustmentRatio));
 }
 ```
+
+**ERR Tiers (DD burn increase when health < 100%)**:
+| System Health | ERR Ratio | DD Burn Required | Collateral Return |
+|--------------|-----------|------------------|-------------------|
+| 95-100% | 0.95 | 105.3% | 100% (FULL) |
+| 90-95% | 0.90 | 111.1% | 100% (FULL) |
+| 85-90% | 0.85 | 117.6% | 100% (FULL) |
+| <85% | 0.80 | 125.0% | 100% (FULL) |
+
+**Additional ERR behavior**: New minting is BLOCKED when system health < 100%
 
 #### **Layer 4: Volatility Protection**
 **Status: ✅ FULLY IMPLEMENTED AND PRODUCTION-READY** (`/src/consensus/volatility.cpp`)

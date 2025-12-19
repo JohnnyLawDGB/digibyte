@@ -1,4 +1,6 @@
 # DigiDollar Oracle System - Simple Explainer
+*Updated: 2025-12-18*
+*Document Version: 2.0 - Phase Two Infrastructure Added*
 
 ## Overview
 
@@ -2071,25 +2073,104 @@ Before testnet launch:
 - [ ] Continuous operation (24/7)
 - [ ] Monitoring/alerting setup
 
-#### **Mainnet (Phase Two) - 📋 PLANNED (2026)**
-- [ ] Multi-oracle architecture designed
-- [ ] 15 oracle operators recruited
+#### **Mainnet (Phase Two) - 📋 INFRASTRUCTURE READY**
+- [x] Multi-oracle validation functions implemented
+- [x] 30 mainnet oracle nodes defined in chainparams
+- [x] 8-of-15 consensus configured
+- [x] IQR outlier filtering algorithm implemented
+- [x] nDigiDollarPhase2Height parameter ready
+- [ ] 15 oracle operators recruited and active
 - [ ] Economic incentive system (staking/slashing)
 - [ ] Reputation tracking system
-- [ ] On-chain signature aggregation
 - [ ] Security audits completed
 - [ ] Community governance approval
-- [ ] Protocol upgrade for larger oracle data
+
+---
+
+## Phase Two: Multi-Oracle Consensus (Infrastructure Ready)
+
+### What's Phase Two?
+
+Phase Two upgrades the oracle system from **1-of-1** to **multi-oracle consensus**:
+- **Testnet**: 3-of-10 (need 3 agreeing oracles from 10 total)
+- **Mainnet**: 8-of-15 (need 8 agreeing oracles from 15 total)
+
+This provides true decentralization - no single oracle can manipulate prices.
+
+### Phase Two Infrastructure (Already Implemented)
+
+**All 10 testnet oracle keys are defined** in `chainparams.cpp`:
+```
+Oracle 0: 79be667ef9dcbbac... (ACTIVE - Phase One)
+Oracle 1-9: Reserved for Phase Two (keys defined, ready to activate)
+```
+
+**Validation functions ready** in `bundle_manager.cpp`:
+- `ValidatePhaseTwoBundle()` - Validates multi-oracle bundles
+- `CalculateConsensusPrice()` - Median with IQR outlier filtering
+- `GetRequiredConsensus()` - Returns 1 (Phase One) or 3-8 (Phase Two)
+
+**Activation parameter**:
+```cpp
+consensus.nDigiDollarPhase2Height = INT_MAX;  // Not activated (current)
+consensus.nDigiDollarPhase2Height = 500000;   // Example: Activate at block 500,000
+```
+
+### IQR Outlier Filtering (Phase Two Price Consensus)
+
+When multiple oracles submit prices, the system uses **IQR (Interquartile Range)** filtering to reject outliers:
+
+```
+Example: 10 oracle prices
+─────────────────────────
+Prices: [$0.050, $0.051, $0.049, $0.052, $0.048, $0.051, $0.050, $0.049, $0.100, $0.051]
+                                                                           ↑
+                                                                      Outlier!
+
+Step 1: Sort prices
+[$0.048, $0.049, $0.049, $0.050, $0.050, $0.051, $0.051, $0.051, $0.052, $0.100]
+
+Step 2: Find Q1 (25th percentile) and Q3 (75th percentile)
+Q1 = $0.049, Q3 = $0.051
+
+Step 3: Calculate IQR
+IQR = Q3 - Q1 = $0.002
+
+Step 4: Calculate bounds
+Lower = Q1 - 1.5×IQR = $0.046
+Upper = Q3 + 1.5×IQR = $0.054
+
+Step 5: Filter outliers
+$0.100 > $0.054 → REJECTED ❌
+
+Step 6: Calculate median of remaining 9 prices
+Median = $0.050 ✓
+```
+
+### Summary: Phase One vs Phase Two
+
+| Aspect | Phase One (Current) | Phase Two (Ready) |
+|--------|---------------------|-------------------|
+| Consensus | 1-of-1 | 3-of-10 testnet, 8-of-15 mainnet |
+| Oracles Defined | 10 (1 active) | 10 testnet, 15 mainnet |
+| Signature Required | Optional | Required (all messages) |
+| Price Calculation | Direct | IQR-filtered median |
+| Manipulation Risk | Single point of failure | Requires majority collusion |
+| Status | ACTIVE on testnet | Infrastructure ready |
 
 ### **Key Takeaway**
 
-**DigiByte Core is ready** to validate and use oracle data. The **missing piece** is the **external oracle daemon** that fetches prices and broadcasts them to the network.
+**DigiByte Core is ready** to validate and use oracle data. The **Phase One system is active** on testnet with a single oracle. **Phase Two infrastructure is complete** - just awaiting:
+1. Oracle operator recruitment (10 testnet, 15 mainnet)
+2. Setting `nDigiDollarPhase2Height` to an activation block
 
 **For RegTest**: Use the built-in mock oracle (`setmockoracleprice`).
 
-**For Testnet**: Requires developing and deploying the external oracle daemon.
+**For Testnet Phase One**: Single oracle broadcasting via P2P.
 
-**For Mainnet**: Requires full multi-oracle system (Phase Two).
+**For Testnet Phase Two**: Set activation height, enable 3-of-10 consensus.
+
+**For Mainnet**: Requires full 8-of-15 multi-oracle system with operators.
 
 ---
 

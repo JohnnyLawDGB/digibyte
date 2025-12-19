@@ -1059,6 +1059,20 @@
                                 <div class="text-muted" style="font-size: 0.7rem;">Descriptors, rescan, recovery</div>
                             </div>
                         </div>
+                        <div class="topic-item">
+                            <div class="topic-number" style="background: var(--danger);">15</div>
+                            <div class="topic-content">
+                                <strong>Consensus Rules</strong>
+                                <div class="text-muted" style="font-size: 0.7rem;">Transaction &amp; block-level enforcement</div>
+                            </div>
+                        </div>
+                        <div class="topic-item">
+                            <div class="topic-number" style="background: var(--danger);">16</div>
+                            <div class="topic-content">
+                                <strong>Softfork Activation</strong>
+                                <div class="text-muted" style="font-size: 0.7rem;">BIP9, backwards compatibility</div>
+                            </div>
+                        </div>
                         <!-- Summary row spans both columns -->
                         <div class="topic-item" style="grid-column: span 2; justify-content: center; opacity: 0.7;">
                             <div class="topic-number" style="background: var(--success);">&#10003;</div>
@@ -2670,7 +2684,245 @@ $ digibyte-cli getoraclepubkey 0<br>
             </div>
         </section>
 
-        <!-- SLIDE 24: Technical Summary -->
+        <!-- SLIDE 24: Consensus-Enforced Rules (Transaction Level) -->
+        <section class="slide slide--blue">
+            <div class="slide-content" style="padding-top: 40px;">
+                <h2 class="slide-title--blue animate-fade-in-up" style="background: var(--gradient-blue); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;">Consensus-Enforced Rules</h2>
+                <p class="slide-subtitle animate-fade-in-up">Transaction-level validation enforced by ALL nodes</p>
+
+                <!-- Two column layout -->
+                <div class="grid-2 mt-1 animate-fade-in-up" style="max-width: 1050px; gap: 1.25rem;">
+                    <!-- Left: Mint Rules -->
+                    <div class="card" style="padding: 0.75rem; border: 2px solid var(--dgb-blue);">
+                        <h4 style="margin: 0 0 0.5rem; color: var(--dgb-blue); font-size: 0.9rem;">&#128274; Mint Transaction Rules</h4>
+                        <div style="font-size: 0.7rem; line-height: 1.6;">
+                            <div style="margin-bottom: 0.3rem;"><strong>Amount Limits:</strong> $100 min, $100,000 max per tx<br><span class="text-muted">validation.cpp:642-647</span></div>
+                            <div style="margin-bottom: 0.3rem;"><strong>Collateral Ratio:</strong> 200%-1000% based on lock tier<br><span class="text-muted">consensus/digidollar.h:49-59</span></div>
+                            <div style="margin-bottom: 0.3rem;"><strong>Output Structure:</strong> P2TR collateral + P2TR DD token<br><span class="text-muted">validation.cpp:532-587</span></div>
+                            <div style="margin-bottom: 0.3rem;"><strong>Oracle Price:</strong> Must be valid &amp; non-zero<br><span class="text-muted">validation.cpp:476-479</span></div>
+                            <div><strong>DCA Multiplier:</strong> 1.0x-2.0x based on system health<br><span class="text-muted">consensus/dca.cpp:20-25</span></div>
+                        </div>
+                    </div>
+
+                    <!-- Right: Redemption Rules -->
+                    <div class="card" style="padding: 0.75rem; border: 2px solid var(--dd-gold);">
+                        <h4 style="margin: 0 0 0.5rem; color: var(--dd-gold); font-size: 0.9rem;">&#128275; Redemption Rules</h4>
+                        <div style="font-size: 0.7rem; line-height: 1.6;">
+                            <div style="margin-bottom: 0.3rem;"><strong>Timelock (CLTV):</strong> Block height &ge; nLockTime<br><span class="text-muted">validation.cpp:1058-1064</span></div>
+                            <div style="margin-bottom: 0.3rem;"><strong>DD Burning:</strong> inputDD &gt; outputDD required<br><span class="text-muted">validation.cpp:986-989</span></div>
+                            <div style="margin-bottom: 0.3rem;"><strong>Partial Redemption:</strong> DISABLED (exact amounts only)<br><span class="text-muted">validation.cpp:1024-1028</span></div>
+                            <div style="margin-bottom: 0.3rem;"><strong>ERR Multiplier:</strong> Burn 105-125% DD when health &lt;100%<br><span class="text-muted">consensus/err.cpp:30-35</span></div>
+                            <div><strong>Normal Blocked:</strong> During ERR (health &lt;100%)<br><span class="text-muted">validation.cpp:1068-1072</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Transfer & Protection Rules -->
+                <div class="grid-2 mt-1 animate-fade-in-up" style="max-width: 1050px; gap: 1.25rem;">
+                    <div class="card" style="padding: 0.75rem; border: 2px solid var(--success);">
+                        <h4 style="margin: 0 0 0.5rem; color: var(--success); font-size: 0.9rem;">&#128257; Transfer Rules</h4>
+                        <div style="font-size: 0.7rem; line-height: 1.6;">
+                            <div style="margin-bottom: 0.3rem;"><strong>DD Conservation:</strong> inputDD == outputDD (NO creation/destruction)<br><span class="text-muted">validation.cpp:804-810 - CRITICAL</span></div>
+                            <div style="margin-bottom: 0.3rem;"><strong>Output Limit:</strong> Max $100,000 per output<br><span class="text-muted">validation.cpp:770-771</span></div>
+                            <div><strong>P2TR Required:</strong> All DD outputs must be Taproot<br><span class="text-muted">validation.cpp:752-776</span></div>
+                        </div>
+                    </div>
+
+                    <div class="card" style="padding: 0.75rem; border: 2px solid var(--danger);">
+                        <h4 style="margin: 0 0 0.5rem; color: var(--danger); font-size: 0.9rem;">&#128721; Volatility Protection</h4>
+                        <div style="font-size: 0.7rem; line-height: 1.6;">
+                            <div style="margin-bottom: 0.3rem;"><strong>20% (1hr):</strong> Freeze new minting<br><span class="text-muted">consensus/volatility.h:59</span></div>
+                            <div style="margin-bottom: 0.3rem;"><strong>30% (24hr):</strong> Freeze ALL DD operations<br><span class="text-muted">consensus/volatility.h:60</span></div>
+                            <div><strong>Cooldown:</strong> 144 blocks (~36 hours) after unfreeze<br><span class="text-muted">consensus/volatility.h:63</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="key-insight mt-1 animate-fade-in-up" style="max-width: 1000px; font-size: 0.8rem; padding: 0.65rem;">
+                    <strong>Why Consensus Matters:</strong> Every full node validates these rules. Invalid transactions are rejected network-wide. No central authority can override - the math is enforced by 1000+ nodes globally.
+                </div>
+            </div>
+        </section>
+
+        <!-- SLIDE 25: Consensus-Enforced Rules (Block Level) -->
+        <section class="slide slide--gold">
+            <div class="slide-content" style="padding-top: 40px;">
+                <h2 class="slide-title animate-fade-in-up">Block-Level Consensus Rules</h2>
+                <p class="slide-subtitle animate-fade-in-up">Oracle data and block validation enforced by ALL nodes</p>
+
+                <!-- Oracle Block Rules -->
+                <div class="grid-2 mt-1 animate-fade-in-up" style="max-width: 1050px; gap: 1.25rem;">
+                    <div class="card" style="padding: 0.75rem; border: 2px solid var(--dgb-blue);">
+                        <h4 style="margin: 0 0 0.5rem; color: var(--dgb-blue); font-size: 0.9rem;">&#9881; Miner Requirements</h4>
+                        <div style="font-size: 0.7rem; line-height: 1.6;">
+                            <div style="margin-bottom: 0.3rem;"><strong>Oracle Output:</strong> Coinbase vout[1] MUST contain oracle data<br><span class="text-muted">miner.cpp:170-175</span></div>
+                            <div style="margin-bottom: 0.3rem;"><strong>Format:</strong> OP_RETURN OP_ORACLE &lt;version&gt; &lt;id&gt; &lt;price&gt; &lt;time&gt;<br><span class="text-muted">bundle_manager.cpp:290-337</span></div>
+                            <div style="margin-bottom: 0.3rem;"><strong>Size:</strong> ~20 bytes (within 83-byte OP_RETURN limit)<br><span class="text-muted">bundle_manager.cpp:298</span></div>
+                            <div><strong>Consensus:</strong> Phase 1: 1-of-1, Phase 2: 8-of-15 Schnorr<br><span class="text-muted">bundle_manager.cpp:970-975</span></div>
+                        </div>
+                    </div>
+
+                    <div class="card" style="padding: 0.75rem; border: 2px solid var(--dd-gold);">
+                        <h4 style="margin: 0 0 0.5rem; color: var(--dd-gold); font-size: 0.9rem;">&#128338; Oracle Timestamp Rules</h4>
+                        <div style="font-size: 0.7rem; line-height: 1.6;">
+                            <div style="margin-bottom: 0.3rem;"><strong>Max Age:</strong> Oracle data &le; 3600 seconds old (1 hour)<br><span class="text-muted">bundle_manager.cpp:1000-1006</span></div>
+                            <div style="margin-bottom: 0.3rem;"><strong>Future Check:</strong> timestamp &le; block.nTime + 60s<br><span class="text-muted">bundle_manager.cpp:1009-1014</span></div>
+                            <div style="margin-bottom: 0.3rem;"><strong>Block Sync:</strong> |block.nTime - oracle.timestamp| &le; 3600s<br><span class="text-muted">validation.cpp:4389-4394</span></div>
+                            <div><strong>Signature:</strong> Schnorr signature verified if present<br><span class="text-muted">bundle_manager.cpp:988-996</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Custom Opcodes -->
+                <div class="card mt-1 animate-fade-in-up" style="max-width: 1050px; padding: 0.75rem; border: 2px solid #9c27b0;">
+                    <h4 style="margin: 0 0 0.5rem; color: #9c27b0; font-size: 0.9rem;">&#128187; Custom DigiDollar Opcodes (Soft-Fork via OP_NOP slots)</h4>
+                    <div class="grid-5" style="gap: 0.5rem; font-size: 0.65rem;">
+                        <div style="text-align: center; padding: 0.4rem; background: rgba(0,111,187,0.1); border-radius: 6px;">
+                            <code style="color: var(--dgb-blue);">OP_DIGIDOLLAR</code><br>
+                            <span style="font-family: var(--font-mono);">0xbb</span><br>
+                            <span class="text-muted">Marks DD outputs</span>
+                        </div>
+                        <div style="text-align: center; padding: 0.4rem; background: rgba(212,175,55,0.1); border-radius: 6px;">
+                            <code style="color: var(--dd-gold);">OP_DDVERIFY</code><br>
+                            <span style="font-family: var(--font-mono);">0xbc</span><br>
+                            <span class="text-muted">Verify conditions</span>
+                        </div>
+                        <div style="text-align: center; padding: 0.4rem; background: rgba(16,185,129,0.1); border-radius: 6px;">
+                            <code style="color: var(--success);">OP_CHECKPRICE</code><br>
+                            <span style="font-family: var(--font-mono);">0xbd</span><br>
+                            <span class="text-muted">Validate oracle</span>
+                        </div>
+                        <div style="text-align: center; padding: 0.4rem; background: rgba(239,68,68,0.1); border-radius: 6px;">
+                            <code style="color: var(--danger);">OP_CHECKCOLLATERAL</code><br>
+                            <span style="font-family: var(--font-mono);">0xbe</span><br>
+                            <span class="text-muted">Verify ratio</span>
+                        </div>
+                        <div style="text-align: center; padding: 0.4rem; background: rgba(156,39,176,0.1); border-radius: 6px;">
+                            <code style="color: #9c27b0;">OP_ORACLE</code><br>
+                            <span style="font-family: var(--font-mono);">0xbf</span><br>
+                            <span class="text-muted">Price marker</span>
+                        </div>
+                    </div>
+                    <div style="font-size: 0.65rem; margin-top: 0.5rem; color: var(--text-muted); text-align: center;">
+                        Defined in <code>script/script.h:209-214</code> | Interpreted in <code>script/interpreter.cpp:636-746</code> | All use reserved OP_NOP11-15 slots for backwards compatibility
+                    </div>
+                </div>
+
+                <!-- Block Validation Flow -->
+                <div class="card mt-1 animate-fade-in-up" style="max-width: 1050px; padding: 0.65rem;">
+                    <h4 style="margin: 0 0 0.4rem; font-size: 0.85rem;">&#128269; Block Validation Flow</h4>
+                    <div style="display: flex; justify-content: center; gap: 0.5rem; font-size: 0.65rem; flex-wrap: wrap;">
+                        <div style="padding: 0.35rem 0.6rem; background: var(--bg-secondary); border-radius: 4px; border: 1px solid rgba(0,0,0,0.1);">CheckBlock()</div>
+                        <span style="color: var(--dd-gold);">&#8594;</span>
+                        <div style="padding: 0.35rem 0.6rem; background: rgba(0,111,187,0.1); border-radius: 4px;">ValidateBlockOracleData()</div>
+                        <span style="color: var(--dd-gold);">&#8594;</span>
+                        <div style="padding: 0.35rem 0.6rem; background: rgba(212,175,55,0.1); border-radius: 4px;">ContextualCheckBlock()</div>
+                        <span style="color: var(--dd-gold);">&#8594;</span>
+                        <div style="padding: 0.35rem 0.6rem; background: rgba(16,185,129,0.1); border-radius: 4px;">ConnectBlock()</div>
+                        <span style="color: var(--dd-gold);">&#8594;</span>
+                        <div style="padding: 0.35rem 0.6rem; background: rgba(156,39,176,0.1); border-radius: 4px;">UpdatePriceCache()</div>
+                    </div>
+                </div>
+
+                <div class="key-insight mt-1 animate-fade-in-up" style="max-width: 1000px; font-size: 0.75rem; padding: 0.6rem;">
+                    <strong>Block Rejection:</strong> Blocks with invalid/missing oracle data are rejected by ALL nodes. Miners MUST include valid oracle bundles or their blocks will be orphaned.
+                </div>
+            </div>
+        </section>
+
+        <!-- SLIDE 26: Softfork Activation & Backwards Compatibility -->
+        <section class="slide slide--blue">
+            <div class="slide-content" style="padding-top: 40px;">
+                <h2 class="slide-title--blue animate-fade-in-up" style="background: var(--gradient-blue); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;">Softfork Activation Process</h2>
+                <p class="slide-subtitle animate-fade-in-up">BIP9 deployment with backwards-compatible activation</p>
+
+                <!-- BIP9 Deployment -->
+                <div class="grid-2 mt-1 animate-fade-in-up" style="max-width: 1050px; gap: 1.25rem;">
+                    <div class="card" style="padding: 0.75rem; border: 2px solid var(--dgb-blue);">
+                        <h4 style="margin: 0 0 0.5rem; color: var(--dgb-blue); font-size: 0.9rem;">&#128203; BIP9 Deployment Config</h4>
+                        <div style="font-size: 0.7rem; line-height: 1.7;">
+                            <div style="margin-bottom: 0.25rem;"><strong>Deployment:</strong> <code>DEPLOYMENT_DIGIDOLLAR</code><br><span class="text-muted">consensus/params.h:40</span></div>
+                            <div style="margin-bottom: 0.25rem;"><strong>Signal Bit:</strong> 23 (0x800000 in block version)<br><span class="text-muted">chainparams.cpp:176</span></div>
+                            <div style="margin-bottom: 0.25rem;"><strong>Mainnet Start:</strong> Jan 1, 2026 (timestamp: 1767225600)<br><span class="text-muted">chainparams.cpp:177</span></div>
+                            <div style="margin-bottom: 0.25rem;"><strong>Mainnet Timeout:</strong> Jan 1, 2028 (timestamp: 1830297600)<br><span class="text-muted">chainparams.cpp:178</span></div>
+                            <div><strong>Min Height:</strong> 22,014,720 (confirmation window aligned)<br><span class="text-muted">chainparams.cpp:179</span></div>
+                        </div>
+                    </div>
+
+                    <div class="card" style="padding: 0.75rem; border: 2px solid var(--dd-gold);">
+                        <h4 style="margin: 0 0 0.5rem; color: var(--dd-gold); font-size: 0.9rem;">&#128200; Activation State Machine</h4>
+                        <div style="font-size: 0.7rem; line-height: 1.5;">
+                            <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.3rem; flex-wrap: wrap;">
+                                <span style="padding: 0.2rem 0.5rem; background: rgba(0,0,0,0.05); border-radius: 4px;">DEFINED</span>
+                                <span>&#8594;</span>
+                                <span style="padding: 0.2rem 0.5rem; background: rgba(0,111,187,0.15); border-radius: 4px;">STARTED</span>
+                                <span>&#8594;</span>
+                                <span style="padding: 0.2rem 0.5rem; background: rgba(212,175,55,0.2); border-radius: 4px;">LOCKED_IN</span>
+                                <span>&#8594;</span>
+                                <span style="padding: 0.2rem 0.5rem; background: rgba(16,185,129,0.2); border-radius: 4px; font-weight: 600;">ACTIVE</span>
+                            </div>
+                            <div class="text-muted" style="font-size: 0.65rem;">
+                                <strong>Threshold:</strong> 70% of 40,320 blocks = 28,224 signals<br>
+                                <strong>Period:</strong> ~1 week at 15-second blocks<br>
+                                <strong>Testnet/RegTest:</strong> ALWAYS_ACTIVE (immediate)
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Backwards Compatibility -->
+                <div class="card mt-1 animate-fade-in-up" style="max-width: 1050px; padding: 0.75rem; border: 2px solid var(--danger);">
+                    <h4 style="margin: 0 0 0.5rem; color: var(--danger); font-size: 0.9rem;">&#9888; Why Everyone Must Upgrade</h4>
+                    <div class="grid-2" style="gap: 1rem; font-size: 0.7rem;">
+                        <div>
+                            <strong>Old Nodes (Pre-Activation):</strong>
+                            <ul style="margin: 0.25rem 0 0; padding-left: 1rem; line-height: 1.6;">
+                                <li>DD transactions rejected: <code>"digidollar-not-active"</code></li>
+                                <li>Blocks with DD txs rejected before activation height</li>
+                                <li>Custom opcodes behave as NOP (no effect)</li>
+                            </ul>
+                        </div>
+                        <div>
+                            <strong>Old Nodes (Post-Activation):</strong>
+                            <ul style="margin: 0.25rem 0 0; padding-left: 1rem; line-height: 1.6;">
+                                <li style="color: var(--danger);"><strong>Cannot validate DD transactions properly!</strong></li>
+                                <li>Will accept invalid DD txs (NOP behavior)</li>
+                                <li>Risk of following invalid chain fork</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div style="font-size: 0.65rem; margin-top: 0.5rem; padding: 0.4rem; background: rgba(239,68,68,0.1); border-radius: 4px; text-align: center;">
+                        <strong>CRITICAL:</strong> After activation, non-upgraded nodes may accept blocks that upgraded nodes reject, causing chain splits. <strong>ALL nodes must upgrade!</strong>
+                    </div>
+                </div>
+
+                <!-- Transaction Marker -->
+                <div class="grid-2 mt-1 animate-fade-in-up" style="max-width: 1050px; gap: 1.25rem;">
+                    <div class="card" style="padding: 0.65rem;">
+                        <h4 style="margin: 0 0 0.4rem; font-size: 0.85rem;">&#128279; DD Transaction Marker</h4>
+                        <div style="font-size: 0.7rem; line-height: 1.5;">
+                            <code style="background: rgba(0,0,0,0.05); padding: 0.15rem 0.3rem; border-radius: 3px;">tx.nVersion &amp; 0xFFFF == 0x0770</code><br>
+                            <span class="text-muted">Bits 24-31: Transaction type (MINT=1, TRANSFER=2, REDEEM=3)</span><br>
+                            <span class="text-muted">consensus/digidollar.cpp:189-207</span>
+                        </div>
+                    </div>
+                    <div class="card" style="padding: 0.65rem;">
+                        <h4 style="margin: 0 0 0.4rem; font-size: 0.85rem;">&#128736; Verification Flag</h4>
+                        <div style="font-size: 0.7rem; line-height: 1.5;">
+                            <code style="background: rgba(0,0,0,0.05); padding: 0.15rem 0.3rem; border-radius: 3px;">SCRIPT_VERIFY_DIGIDOLLAR = (1U &lt;&lt; 21)</code><br>
+                            <span class="text-muted">When flag NOT set: Opcodes behave as NOP (soft-fork safe)</span><br>
+                            <span class="text-muted">script/interpreter.cpp:145</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="key-insight mt-1 animate-fade-in-up" style="max-width: 1000px; font-size: 0.75rem; padding: 0.6rem;">
+                    <strong>Softfork Safety:</strong> DigiDollar uses reserved OP_NOP slots (0xbb-0xbf) for custom opcodes. Before activation, they're no-ops. After activation, they enforce consensus rules. This is the same technique used for SegWit and Taproot.
+                </div>
+            </div>
+        </section>
+
+        <!-- SLIDE 27: Technical Summary -->
         <section class="slide slide--hero">
             <div class="slide-content" style="padding-top: 70px;">
                 <h2 class="slide-title animate-fade-in-up">Technical Summary</h2>

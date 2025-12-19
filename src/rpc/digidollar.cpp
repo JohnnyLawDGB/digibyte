@@ -208,8 +208,9 @@ RPCHelpMan getdigidollarstats()
                         },
                         {RPCResult::Type::OBJ, "err_tier", "Current Emergency Redemption Ratio (ERR) tier information",
                             {
-                                {RPCResult::Type::NUM, "redemption_ratio", "Redemption ratio (e.g., 0.95 = 95% return on collateral)"},
-                                {RPCResult::Type::STR, "tier_description", "ERR tier description based on system health"}
+                                {RPCResult::Type::NUM, "ratio", "ERR ratio (0.80-1.0) - lower = more DD burn required"},
+                                {RPCResult::Type::NUM, "burn_multiplier", "DD burn multiplier (1.0-1.25x) - how much MORE DD to burn"},
+                                {RPCResult::Type::STR, "description", "ERR tier description with burn multiplier"}
                             }
                         }
                     }
@@ -347,24 +348,33 @@ RPCHelpMan getdigidollarstats()
             result.pushKV("dca_tier", dcaTier);
 
             // Add ERR (Emergency Redemption Ratio) tier information
+            // ERR increases DD burn requirement, NOT reduces collateral!
+            // ratio = how much of original DD is "worth" -> burn 1/ratio DD to get FULL collateral
             double errRatio = DigiDollar::ERR::EmergencyRedemptionRatio::CalculateERRAdjustment(systemHealth);
+            double burnMultiplier = 1.0;
             std::string errDescription;
             if (systemHealth >= 100) {
-                errDescription = "healthy (100% redemption)";
-                errRatio = 1.0; // Full redemption when healthy
+                errDescription = "Normal (1.0x burn)";
+                errRatio = 1.0;
+                burnMultiplier = 1.0;
             } else if (systemHealth >= 95) {
-                errDescription = "95-100% health: 95% redemption";
+                errDescription = "95-100%: 1.05x DD burn";
+                burnMultiplier = 1.0 / errRatio; // ~1.053x
             } else if (systemHealth >= 90) {
-                errDescription = "90-95% health: 90% redemption";
+                errDescription = "90-95%: 1.11x DD burn";
+                burnMultiplier = 1.0 / errRatio; // ~1.111x
             } else if (systemHealth >= 85) {
-                errDescription = "85-90% health: 85% redemption";
+                errDescription = "85-90%: 1.18x DD burn";
+                burnMultiplier = 1.0 / errRatio; // ~1.176x
             } else {
-                errDescription = "<85% health: 80% redemption (minimum)";
+                errDescription = "<85%: 1.25x DD burn (max)";
+                burnMultiplier = 1.0 / errRatio; // 1.25x
             }
 
             UniValue errTier(UniValue::VOBJ);
-            errTier.pushKV("redemption_ratio", errRatio);
-            errTier.pushKV("tier_description", errDescription);
+            errTier.pushKV("ratio", errRatio);
+            errTier.pushKV("burn_multiplier", burnMultiplier);
+            errTier.pushKV("description", errDescription);
             result.pushKV("err_tier", errTier);
 
             return result;
@@ -718,6 +728,45 @@ RPCHelpMan mintdigidollar()
             }
             if (oraclePriceMicroUSD <= 0) {
                 throw JSONRPCError(RPC_MISC_ERROR, "No oracle price available. Start the oracle first with startoracle command.");
+            }
+
+            // ERR CHECK: Block minting during emergency state
+            // Calculate health directly using wallet's DD positions and current oracle price
+            // This is more reliable than cached metrics which may be stale
+            if (pwallet->GetDDWallet()) {
+                LOCK(pwallet->cs_wallet);
+                CAmount totalDD = 0;
+                CAmount totalCollateral = 0;
+
+                // Get all active positions from wallet
+                auto positions = pwallet->GetDDWallet()->GetDDTimeLocks(true); // true = active only
+                for (const auto& pos : positions) {
+                    totalDD += pos.dd_minted;
+                    totalCollateral += pos.dgb_collateral;
+                }
+
+                // Only check health if there are existing DD positions
+                if (totalDD > 0 && totalCollateral > 0) {
+                    // Convert micro-USD to millicents for health calculation
+                    CAmount oraclePriceMillicents = oraclePriceMicroUSD / 10;
+
+                    int systemHealth = DynamicCollateralAdjustment::CalculateSystemHealth(
+                        totalCollateral, totalDD, oraclePriceMillicents);
+
+                    LogPrintf("DigiDollar RPC Mint: Health check - DD=%lld, collateral=%lld, price=%lld, health=%d%%\n",
+                              static_cast<long long>(totalDD),
+                              static_cast<long long>(totalCollateral),
+                              static_cast<long long>(oraclePriceMillicents),
+                              systemHealth);
+
+                    // Block minting if system health is below 100% (emergency state)
+                    if (systemHealth < 100) {
+                        throw JSONRPCError(RPC_MISC_ERROR,
+                            strprintf("Minting blocked: System is in emergency state (health: %d%%). "
+                                      "Wait for system health to recover above 100%% before minting new DigiDollars.",
+                                      systemHealth));
+                    }
+                }
             }
 
             // Convert lock tier to days

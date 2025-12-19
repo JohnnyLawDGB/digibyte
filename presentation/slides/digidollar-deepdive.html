@@ -670,6 +670,66 @@
             border: 1px solid var(--success);
         }
 
+        /* Definition List Styling */
+        .def-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.6rem 2rem;
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        .def-item {
+            display: flex;
+            gap: 0.75rem;
+            align-items: flex-start;
+            padding: 0.6rem 0.8rem;
+            background: var(--bg-card);
+            border-radius: 8px;
+            border-left: 3px solid var(--dgb-blue);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .def-item.highlight {
+            border-left-color: var(--dd-gold);
+            background: rgba(184, 134, 11, 0.03);
+        }
+
+        .def-term {
+            font-family: var(--font-mono);
+            font-weight: 600;
+            font-size: 0.8rem;
+            color: var(--dgb-blue);
+            min-width: 90px;
+            flex-shrink: 0;
+        }
+
+        .def-item.highlight .def-term {
+            color: var(--dd-gold);
+        }
+
+        .def-desc {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            line-height: 1.4;
+        }
+
+        .def-desc strong {
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+
+        .def-category {
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--dgb-blue);
+            margin-bottom: 0.5rem;
+            padding-bottom: 0.3rem;
+            border-bottom: 1px solid rgba(0, 111, 187, 0.2);
+        }
+
         /* Divider */
         .divider {
             width: 80px;
@@ -796,7 +856,151 @@
             </div>
         </section>
 
-        <!-- SLIDE 2: Technical Overview -->
+        <!-- SLIDE 2: Definitions - Blockchain Basics -->
+        <section class="slide slide--blue">
+            <div class="slide-content" style="padding-top: 60px;">
+                <span class="badge badge--gold animate-fade-in-up">Definitions</span>
+                <h2 class="slide-title animate-fade-in-up">Blockchain Basics</h2>
+                <p class="slide-subtitle animate-fade-in-up" style="margin-bottom: 1rem;">"To have an intelligent conversation, first define the terms."</p>
+
+                <div class="def-grid animate-fade-in-up">
+                    <div class="def-item highlight">
+                        <span class="def-term">Full Node</span>
+                        <span class="def-desc"><strong>Complete blockchain copy</strong> &mdash; Downloads &amp; validates every block since genesis. Trustless verification.</span>
+                    </div>
+                    <div class="def-item">
+                        <span class="def-term">Private Key</span>
+                        <span class="def-desc"><strong>Your secret password</strong> &mdash; A 256-bit number that proves ownership. Never share it.</span>
+                    </div>
+                    <div class="def-item highlight">
+                        <span class="def-term">Core Wallet</span>
+                        <span class="def-desc"><strong>DigiByte Core</strong> &mdash; Official full node + wallet. All DigiDollar operations happen here.</span>
+                    </div>
+                    <div class="def-item">
+                        <span class="def-term">Address</span>
+                        <span class="def-desc"><strong>Where coins are sent</strong> &mdash; DGB: <code>dgb1q...</code> (SegWit) or <code>dgb1p...</code> (Taproot)</span>
+                    </div>
+                    <div class="def-item">
+                        <span class="def-term">UTXO</span>
+                        <span class="def-desc"><strong>Unspent Transaction Output</strong> &mdash; Digital coins you own. Each is separate, like physical bills.</span>
+                    </div>
+                    <div class="def-item">
+                        <span class="def-term">Digital Sig</span>
+                        <span class="def-desc"><strong>Mathematical proof</strong> &mdash; Proves you own the private key without revealing it.</span>
+                    </div>
+                    <div class="def-item">
+                        <span class="def-term">Input</span>
+                        <span class="def-desc"><strong>Spending coins</strong> &mdash; References a UTXO you're consuming. Requires your signature.</span>
+                    </div>
+                    <div class="def-item">
+                        <span class="def-term">Output</span>
+                        <span class="def-desc"><strong>Creating coins</strong> &mdash; Specifies amount + recipient address. Becomes a new UTXO.</span>
+                    </div>
+                </div>
+
+                <div class="glow-box mt-3 animate-fade-in-up" style="max-width: 850px; text-align: center; padding: 0.5rem 1rem; font-size: 0.8rem;">
+                    <strong>Example Addresses:</strong> DGB Taproot: <code style="font-size: 0.7rem;">dgb1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxqkedrcr</code>
+                </div>
+            </div>
+        </section>
+
+        <!-- SLIDE 3: Definitions - Script & Signatures -->
+        <section class="slide slide--gold">
+            <div class="slide-content" style="padding-top: 60px;">
+                <span class="badge badge--gold animate-fade-in-up">Definitions</span>
+                <h2 class="slide-title animate-fade-in-up">Script &amp; Signatures</h2>
+                <p class="slide-subtitle animate-fade-in-up" style="margin-bottom: 1rem;">How transactions are authorized and validated</p>
+
+                <div class="def-grid animate-fade-in-up">
+                    <div class="def-item">
+                        <span class="def-term">Script</span>
+                        <span class="def-desc"><strong>Simple programming language</strong> &mdash; Stack-based commands that define spending conditions. No loops allowed.</span>
+                    </div>
+                    <div class="def-item">
+                        <span class="def-term">Schnorr</span>
+                        <span class="def-desc"><strong>Modern signature algorithm</strong> &mdash; Smaller, faster, supports aggregation. Required for Taproot.</span>
+                    </div>
+                    <div class="def-item">
+                        <span class="def-term">Opcode</span>
+                        <span class="def-desc"><strong>Single instruction</strong> &mdash; Commands like OP_CHECKSIG (verify signature) or OP_ADD (add numbers).</span>
+                    </div>
+                    <div class="def-item highlight">
+                        <span class="def-term">P2TR</span>
+                        <span class="def-desc"><strong>Pay-to-Taproot</strong> &mdash; Modern address format (<code>dgb1p...</code>). Combines Schnorr + MAST for privacy.</span>
+                    </div>
+                    <div class="def-item">
+                        <span class="def-term">ECDSA</span>
+                        <span class="def-desc"><strong>Original signature algorithm</strong> &mdash; Elliptic Curve Digital Signature. Used since Bitcoin's launch.</span>
+                    </div>
+                    <div class="def-item highlight">
+                        <span class="def-term">MAST</span>
+                        <span class="def-desc"><strong>Merkleized Alternative Script Trees</strong> &mdash; Multiple spending paths; only reveal the one you use.</span>
+                    </div>
+                    <div class="def-item">
+                        <span class="def-term">Witness</span>
+                        <span class="def-desc"><strong>Signature data</strong> &mdash; Stored separately from transaction (SegWit). Reduces TX size and fees.</span>
+                    </div>
+                    <div class="def-item">
+                        <span class="def-term">Tapscript</span>
+                        <span class="def-desc"><strong>Script inside Taproot</strong> &mdash; Enhanced Script with new opcodes. Used for DigiDollar MAST paths.</span>
+                    </div>
+                </div>
+
+                <div class="glow-box mt-3 animate-fade-in-up" style="max-width: 750px; text-align: center; padding: 0.5rem 1rem; font-size: 0.85rem;">
+                    <strong>Key Insight:</strong> Taproot makes all transactions look identical on-chain &mdash; simple sends and complex contracts appear the same.
+                </div>
+            </div>
+        </section>
+
+        <!-- SLIDE 4: Definitions - DigiDollar Terms -->
+        <section class="slide slide--blue">
+            <div class="slide-content" style="padding-top: 60px;">
+                <span class="badge badge--gold animate-fade-in-up">Definitions</span>
+                <h2 class="slide-title animate-fade-in-up">DigiDollar Terms</h2>
+                <p class="slide-subtitle animate-fade-in-up" style="margin-bottom: 1rem;">Specific concepts used in DigiDollar's implementation</p>
+
+                <div class="def-grid animate-fade-in-up">
+                    <div class="def-item highlight">
+                        <span class="def-term">CLTV</span>
+                        <span class="def-desc"><strong>CheckLockTimeVerify</strong> &mdash; Time-lock opcode. "Can't spend until block X." Enforces collateral lock.</span>
+                    </div>
+                    <div class="def-item">
+                        <span class="def-term">Oracle</span>
+                        <span class="def-desc"><strong>External data provider</strong> &mdash; Trusted sources providing DGB/USD price data to the blockchain.</span>
+                    </div>
+                    <div class="def-item">
+                        <span class="def-term">Lock Height</span>
+                        <span class="def-desc"><strong>Block number</strong> &mdash; The exact block when time-locked collateral becomes redeemable.</span>
+                    </div>
+                    <div class="def-item highlight">
+                        <span class="def-term">HD Keys</span>
+                        <span class="def-desc"><strong>Hierarchical Deterministic</strong> &mdash; One seed generates infinite keys. Backup once, recover all.</span>
+                    </div>
+                    <div class="def-item">
+                        <span class="def-term">Collateral</span>
+                        <span class="def-desc"><strong>Locked DGB</strong> &mdash; Backing asset in vault to mint DigiDollars. 200-1000% ratio required.</span>
+                    </div>
+                    <div class="def-item">
+                        <span class="def-term">Vault</span>
+                        <span class="def-desc"><strong>Time-locked P2TR</strong> &mdash; Holds collateral with MAST paths. Your keys, your coins.</span>
+                    </div>
+                    <div class="def-item highlight">
+                        <span class="def-term">OP_RETURN</span>
+                        <span class="def-desc"><strong>Data storage</strong> &mdash; Embeds up to 80 bytes on-chain. Used for DD metadata.</span>
+                    </div>
+                    <div class="def-item">
+                        <span class="def-term">RPC</span>
+                        <span class="def-desc"><strong>Remote Procedure Call</strong> &mdash; Node commands: <code>mintdigidollar</code>, <code>getddbalance</code>, etc.</span>
+                    </div>
+                </div>
+
+                <div class="glow-box mt-3 animate-fade-in-up" style="max-width: 850px; text-align: center; padding: 0.5rem 1rem; font-size: 0.8rem;">
+                    <strong>DD uses same address format:</strong> Both DGB and DigiDollar outputs use Taproot <code>dgb1p...</code> addresses
+                </div>
+            </div>
+        </section>
+
+        <!-- SLIDE 5: Technical Overview / Roadmap -->
         <section class="slide slide--blue">
             <div class="slide-content" style="padding-top: 70px;">
                 <h2 class="slide-title--blue animate-fade-in-up" style="background: var(--gradient-blue); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;">Technical Deep-Dive Roadmap</h2>
@@ -858,8 +1062,8 @@
                         <div class="topic-item">
                             <div class="topic-number">11</div>
                             <div class="topic-content">
-                                <strong>Wallet Storage Architecture</strong>
-                                <div class="text-muted" style="font-size: 0.75rem;">SQLite vs BerkeleyDB, WalletBatch</div>
+                                <strong>Address Formats</strong>
+                                <div class="text-muted" style="font-size: 0.75rem;">DGB vs DD, mainnet/testnet/regtest</div>
                             </div>
                         </div>
                         <div class="topic-item">
@@ -872,8 +1076,8 @@
                         <div class="topic-item">
                             <div class="topic-number">12</div>
                             <div class="topic-content">
-                                <strong>UTXO &amp; Private Key Mgmt</strong>
-                                <div class="text-muted" style="font-size: 0.75rem;">HD derivation, owner/address keys</div>
+                                <strong>Wallet Storage</strong>
+                                <div class="text-muted" style="font-size: 0.75rem;">SQLite vs BerkeleyDB, WalletBatch</div>
                             </div>
                         </div>
                         <div class="topic-item">
@@ -886,8 +1090,8 @@
                         <div class="topic-item">
                             <div class="topic-number">13</div>
                             <div class="topic-content">
-                                <strong>Backup &amp; Restore</strong>
-                                <div class="text-muted" style="font-size: 0.75rem;">rescanblockchain, -reindex, recovery</div>
+                                <strong>UTXO &amp; Key Management</strong>
+                                <div class="text-muted" style="font-size: 0.75rem;">HD derivation, owner/address keys</div>
                             </div>
                         </div>
                         <div class="topic-item">
@@ -897,11 +1101,18 @@
                                 <div class="text-muted" style="font-size: 0.75rem;">OP_ORACLE in coinbase outputs</div>
                             </div>
                         </div>
+                        <div class="topic-item">
+                            <div class="topic-number">14</div>
+                            <div class="topic-content">
+                                <strong>Backup &amp; Restore</strong>
+                                <div class="text-muted" style="font-size: 0.75rem;">rescanblockchain, -reindex, recovery</div>
+                            </div>
+                        </div>
                         <div class="topic-item" style="opacity: 0.6;">
                             <div class="topic-number" style="background: var(--success);">✓</div>
                             <div class="topic-content">
                                 <strong>Technical Summary</strong>
-                                <div class="text-muted" style="font-size: 0.75rem;">Key takeaways &amp; architecture review</div>
+                                <div class="text-muted" style="font-size: 0.75rem;">Key takeaways &amp; architecture</div>
                             </div>
                         </div>
                     </div>
@@ -913,7 +1124,7 @@
             </div>
         </section>
 
-        <!-- SLIDE 3: DD TX Process Flowchart -->
+        <!-- SLIDE 6: DD TX Process Flowchart -->
         <section class="slide slide--gold">
             <div class="slide-content" style="padding-top: 70px;">
                 <h2 class="slide-title animate-fade-in-up">DigiDollar Transaction Lifecycle</h2>
@@ -974,7 +1185,7 @@ version = (type &lt;&lt; 24) | 0x0770;
             </div>
         </section>
 
-        <!-- SLIDE 4: MAST vs OP_RETURN Architecture -->
+        <!-- SLIDE 7: MAST vs OP_RETURN Architecture -->
         <section class="slide slide--blue">
             <div class="slide-content" style="padding-top: 70px;">
                 <h2 class="slide-title--blue animate-fade-in-up" style="background: var(--gradient-blue); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;">MAST vs OP_RETURN: Where Opcodes Live</h2>
@@ -1028,7 +1239,7 @@ CScript metadataScript = CScript() &lt;&lt; <span class="opcode">OP_RETURN</span
             </div>
         </section>
 
-        <!-- SLIDE 5: MINT Transaction Anatomy -->
+        <!-- SLIDE 8: MINT Transaction Anatomy -->
         <section class="slide slide--gold">
             <div class="slide-content" style="padding-top: 70px;">
                 <h2 class="slide-title animate-fade-in-up">Mint Transaction: Creating DigiDollars</h2>
@@ -1093,7 +1304,7 @@ CScript metadataScript = CScript() &lt;&lt; <span class="opcode">OP_RETURN</span
             </div>
         </section>
 
-        <!-- SLIDE 5b: TRANSFER Transaction Anatomy -->
+        <!-- SLIDE 8b: TRANSFER Transaction Anatomy -->
         <section class="slide slide--gold">
             <div class="slide-content" style="padding-top: 70px;">
                 <h2 class="slide-title animate-fade-in-up">Transfer Transaction: Moving DigiDollars</h2>
@@ -1161,7 +1372,7 @@ CScript metadataScript = CScript() &lt;&lt; <span class="opcode">OP_RETURN</span
             </div>
         </section>
 
-        <!-- SLIDE 5c: REDEEM Transaction Anatomy -->
+        <!-- SLIDE 8c: REDEEM Transaction Anatomy -->
         <section class="slide slide--gold">
             <div class="slide-content" style="padding-top: 70px;">
                 <h2 class="slide-title animate-fade-in-up">Redeem Transaction: Unlocking Collateral</h2>
@@ -1237,7 +1448,7 @@ CScript metadataScript = CScript() &lt;&lt; <span class="opcode">OP_RETURN</span
             </div>
         </section>
 
-        <!-- SLIDE 6: Collateral Vault MAST Structure -->
+        <!-- SLIDE 9: Collateral Vault MAST Structure -->
         <section class="slide slide--blue">
             <div class="slide-content" style="padding-top: 70px;">
                 <h2 class="slide-title--blue animate-fade-in-up" style="background: var(--gradient-blue); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;">Collateral Vault: 2-Path MAST Structure</h2>
@@ -1302,7 +1513,7 @@ CScript metadataScript = CScript() &lt;&lt; <span class="opcode">OP_RETURN</span
             </div>
         </section>
 
-        <!-- SLIDE 7: DigiDollar Custom Opcodes -->
+        <!-- SLIDE 10: DigiDollar Custom Opcodes -->
         <section class="slide slide--gold">
             <div class="slide-content" style="padding-top: 70px;">
                 <h2 class="slide-title animate-fade-in-up">DigiDollar Custom Opcodes</h2>
@@ -1360,7 +1571,7 @@ OP_ORACLE          = <span class="number">0xbf</span>,  <span class="comment">//
             </div>
         </section>
 
-        <!-- SLIDE 8: OP_RETURN Metadata Format (CORRECTED) -->
+        <!-- SLIDE 11: OP_RETURN Metadata Format -->
         <section class="slide slide--blue">
             <div class="slide-content" style="padding-top: 70px;">
                 <h2 class="slide-title--blue animate-fade-in-up" style="background: var(--gradient-blue); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;">OP_RETURN Metadata: Actual Format</h2>
@@ -1430,7 +1641,7 @@ OP_ORACLE          = <span class="number">0xbf</span>,  <span class="comment">//
             </div>
         </section>
 
-        <!-- SLIDE 9: Oracle System -->
+        <!-- SLIDE 12: Oracle System -->
         <section class="slide slide--gold">
             <div class="slide-content" style="padding-top: 70px;">
                 <h2 class="slide-title animate-fade-in-up">OP_ORACLE: Price Data in Blocks</h2>
@@ -1531,7 +1742,7 @@ OP_ORACLE          = <span class="number">0xbf</span>,  <span class="comment">//
             </div>
         </section>
 
-        <!-- SLIDE 10: 9-Tier Collateral Scale -->
+        <!-- SLIDE 13: 9-Tier Collateral Scale -->
         <section class="slide slide--blue">
             <div class="slide-content" style="padding-top: 70px;">
                 <h2 class="slide-title--blue animate-fade-in-up" style="background: var(--gradient-blue); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;">9-Tier Collateral Scale</h2>
@@ -1610,7 +1821,7 @@ OP_ORACLE          = <span class="number">0xbf</span>,  <span class="comment">//
             </div>
         </section>
 
-        <!-- SLIDE 11: Four-Layer Protection System -->
+        <!-- SLIDE 14: Four-Layer Protection System -->
         <section class="slide slide--gold">
             <div class="slide-content" style="padding-top: 70px;">
                 <h2 class="slide-title animate-fade-in-up">Four-Layer Protection System</h2>
@@ -1675,7 +1886,7 @@ OP_ORACLE          = <span class="number">0xbf</span>,  <span class="comment">//
             </div>
         </section>
 
-        <!-- SLIDE 12: RPC & Qt Wallet -->
+        <!-- SLIDE 15: RPC & Qt Wallet -->
         <section class="slide slide--blue">
             <div class="slide-content" style="padding-top: 70px;">
                 <h2 class="slide-title--blue animate-fade-in-up" style="background: var(--gradient-blue); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;">DigiDollar RPC &amp; Qt Wallet</h2>
@@ -1741,7 +1952,104 @@ OP_ORACLE          = <span class="number">0xbf</span>,  <span class="comment">//
             </div>
         </section>
 
-        <!-- SLIDE 13: Wallet Storage Architecture -->
+        <!-- SLIDE 16: Address Formats - DGB vs DigiDollar -->
+        <section class="slide slide--gold">
+            <div class="slide-content" style="padding-top: 60px;">
+                <h2 class="slide-title animate-fade-in-up">Address Formats: DGB vs DigiDollar</h2>
+                <p class="slide-subtitle animate-fade-in-up">Same Taproot format, different UTXO tracking</p>
+
+                <div class="two-col mt-3" style="gap: 2rem; max-width: 1000px;">
+                    <!-- DGB Addresses -->
+                    <div class="card animate-fade-in-up" style="padding: 1.25rem;">
+                        <h3 style="color: var(--dgb-blue); margin: 0 0 1rem; font-size: 1.1rem;">DGB Address Formats</h3>
+                        <table class="compact-table" style="font-size: 0.75rem;">
+                            <thead>
+                                <tr>
+                                    <th>Network</th>
+                                    <th>Type</th>
+                                    <th>Prefix</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td rowspan="3" style="font-weight: 600; background: rgba(0,111,187,0.05);">Mainnet</td>
+                                    <td>Legacy</td>
+                                    <td><code>D...</code></td>
+                                </tr>
+                                <tr>
+                                    <td>SegWit</td>
+                                    <td><code>dgb1q...</code></td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Taproot</strong></td>
+                                    <td><code style="color: var(--success);">dgb1p...</code></td>
+                                </tr>
+                                <tr>
+                                    <td rowspan="2" style="font-weight: 600; background: rgba(245,158,11,0.05);">Testnet</td>
+                                    <td>SegWit</td>
+                                    <td><code>dgbt1q...</code></td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Taproot</strong></td>
+                                    <td><code style="color: var(--warning);">dgbt1p...</code></td>
+                                </tr>
+                                <tr>
+                                    <td rowspan="2" style="font-weight: 600; background: rgba(239,68,68,0.05);">Regtest</td>
+                                    <td>SegWit</td>
+                                    <td><code>dgbrt1q...</code></td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Taproot</strong></td>
+                                    <td><code style="color: var(--danger);">dgbrt1p...</code></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- DigiDollar Addresses -->
+                    <div class="card animate-fade-in-up" style="padding: 1.25rem;">
+                        <h3 style="color: var(--dd-gold); margin: 0 0 1rem; font-size: 1.1rem;">DigiDollar Outputs</h3>
+                        <div style="font-size: 0.85rem; margin-bottom: 1rem;">
+                            <strong>Same Taproot format as DGB!</strong><br>
+                            <span class="text-muted">DD outputs are standard P2TR UTXOs</span>
+                        </div>
+                        <table class="compact-table" style="font-size: 0.75rem;">
+                            <thead>
+                                <tr>
+                                    <th>Network</th>
+                                    <th>DD Address</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td style="font-weight: 600;">Mainnet</td>
+                                    <td><code style="color: var(--success);">dgb1p...</code></td>
+                                </tr>
+                                <tr>
+                                    <td style="font-weight: 600;">Testnet</td>
+                                    <td><code style="color: var(--warning);">dgbt1p...</code></td>
+                                </tr>
+                                <tr>
+                                    <td style="font-weight: 600;">Regtest</td>
+                                    <td><code style="color: var(--danger);">dgbrt1p...</code></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        <div style="margin-top: 1rem; padding: 0.75rem; background: rgba(184,134,11,0.05); border-radius: 8px; font-size: 0.8rem;">
+                            <strong>Key Difference:</strong><br>
+                            DD tracked via <code>OP_RETURN</code> metadata,<br>
+                            not address format
+                        </div>
+                    </div>
+                </div>
+
+                <div class="glow-box mt-3 animate-fade-in-up" style="max-width: 900px; text-align: center; padding: 0.6rem 1rem; font-size: 0.8rem;">
+                    <strong>Privacy Benefit:</strong> DigiDollar transactions look identical to regular DGB Taproot transactions on-chain
+                </div>
+            </div>
+        </section>
+
+        <!-- SLIDE 17: Wallet Storage Architecture -->
         <section class="slide slide--blue">
             <div class="slide-content" style="padding-top: 70px;">
                 <h2 class="slide-title animate-fade-in-up">Wallet Storage Architecture</h2>
@@ -1804,7 +2112,7 @@ OP_ORACLE          = <span class="number">0xbf</span>,  <span class="comment">//
             </div>
         </section>
 
-        <!-- SLIDE 14: UTXO & Private Key Management -->
+        <!-- SLIDE 18: UTXO & Private Key Management -->
         <section class="slide slide--gold">
             <div class="slide-content" style="padding-top: 70px;">
                 <h2 class="slide-title animate-fade-in-up">UTXO &amp; Private Key Management</h2>
@@ -1851,7 +2159,7 @@ OP_ORACLE          = <span class="number">0xbf</span>,  <span class="comment">//
             </div>
         </section>
 
-        <!-- SLIDE 15: Backup & Restore -->
+        <!-- SLIDE 19: Backup & Restore -->
         <section class="slide slide--blue">
             <div class="slide-content" style="padding-top: 70px;">
                 <h2 class="slide-title animate-fade-in-up">Backup &amp; Restore</h2>
@@ -1924,7 +2232,7 @@ OP_ORACLE          = <span class="number">0xbf</span>,  <span class="comment">//
             </div>
         </section>
 
-        <!-- SLIDE 16: Technical Summary -->
+        <!-- SLIDE 20: Technical Summary -->
         <section class="slide slide--hero">
             <div class="slide-content" style="padding-top: 70px;">
                 <h2 class="slide-title animate-fade-in-up">Technical Summary</h2>

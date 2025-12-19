@@ -1,12 +1,24 @@
 #!/bin/bash
-# DigiDollar Qt GUI Network-Wide Tracking Test
+# DigiDollar 3-Node Network Test
 # Tests network-wide statistics and DD transfers between Bob, Alice, and Charlie
 # Comprehensive balance tracking and verification throughout all operations
+# Supports both Qt and daemon modes - uses daemon if Qt not available
 
 set -e
 
+# Check if Qt is available, fall back to daemon
+if [ -x "./src/qt/digibyte-qt" ]; then
+    USE_QT=1
+    NODE_BINARY="./src/qt/digibyte-qt"
+    echo "Using Qt GUI nodes"
+else
+    USE_QT=0
+    NODE_BINARY="./src/digibyted"
+    echo "Qt not built - using daemon nodes (all functionality identical)"
+fi
+
 echo "=========================================="
-echo "DigiDollar Qt RegTest Automated Test"
+echo "DigiDollar 3-Node RegTest Automated Test"
 echo "Enhanced with 3-wallet DD transfers"
 echo "=========================================="
 echo ""
@@ -180,6 +192,9 @@ display_network_monitor() {
 echo "=== Step 1: Cleaning environment ==="
 pkill -f "digibyte-qt.*regtest" 2>/dev/null || true
 pkill -f "digibyted.*regtest" 2>/dev/null || true
+pkill -f "digibyted.*bob_regtest" 2>/dev/null || true
+pkill -f "digibyted.*alice_regtest" 2>/dev/null || true
+pkill -f "digibyted.*charlie_regtest" 2>/dev/null || true
 sleep 2
 rm -rf ~/.digibyte/regtest 2>/dev/null || true  # Linux path
 rm -rf ~/Library/Application\ Support/DigiByte/regtest 2>/dev/null || true  # macOS path
@@ -190,11 +205,11 @@ echo "✓ Clean environment ready"
 echo ""
 
 # Step 2: Start Bob's node
-echo "=== Step 2: Starting Bob's Qt node ==="
+echo "=== Step 2: Starting Bob's node ==="
 mkdir -p /tmp/bob_regtest
 
-# Launch Qt directly (clean environment was causing issues)
-./src/qt/digibyte-qt \
+# Launch node (Qt or daemon based on availability)
+$NODE_BINARY \
     -regtest \
     -datadir=/tmp/bob_regtest \
     -port=18444 \
@@ -206,14 +221,14 @@ mkdir -p /tmp/bob_regtest
     -txindex=1 \
     -fallbackfee=0.0001 \
     -dandelion=0 \
-    > /tmp/bob_qt.log 2>&1 &
+    > /tmp/bob_node.log 2>&1 &
 BOB_PID=$!
-echo "Bob's Qt started (PID: $BOB_PID)"
+echo "Bob's node started (PID: $BOB_PID)"
 
 # Wait for RPC to be ready (up to 60 seconds)
 if ! wait_for_rpc /tmp/bob_regtest 18443 60; then
-    echo "❌ Bob's Qt RPC failed to start"
-    cat /tmp/bob_qt.log 2>/dev/null | tail -20
+    echo "❌ Bob's node RPC failed to start"
+    cat /tmp/bob_node.log 2>/dev/null | tail -20
     exit 1
 fi
 
@@ -307,11 +322,11 @@ echo "✓ Bob's mints confirmed (height: $BOB_HEIGHT)"
 echo ""
 
 # Step 7: Start Alice's node
-echo "=== Step 7: Starting Alice's Qt node ==="
+echo "=== Step 7: Starting Alice's node ==="
 mkdir -p /tmp/alice_regtest
 
-# Launch Qt directly (clean environment was causing issues)
-./src/qt/digibyte-qt \
+# Launch node (Qt or daemon based on availability)
+$NODE_BINARY \
     -regtest \
     -datadir=/tmp/alice_regtest \
     -port=18445 \
@@ -324,14 +339,14 @@ mkdir -p /tmp/alice_regtest
     -fallbackfee=0.0001 \
     -dandelion=0 \
     -connect=127.0.0.1:18444 \
-    > /tmp/alice_qt.log 2>&1 &
+    > /tmp/alice_node.log 2>&1 &
 ALICE_PID=$!
-echo "Alice's Qt started (PID: $ALICE_PID)"
+echo "Alice's node started (PID: $ALICE_PID)"
 
 # Wait for RPC to be ready (up to 60 seconds)
 if ! wait_for_rpc /tmp/alice_regtest 18446 60; then
-    echo "❌ Alice's Qt RPC failed to start"
-    cat /tmp/alice_qt.log 2>/dev/null | tail -20
+    echo "❌ Alice's node RPC failed to start"
+    cat /tmp/alice_node.log 2>/dev/null | tail -20
     exit 1
 fi
 
@@ -349,11 +364,11 @@ ALICE_COOKIE=$(cat /tmp/alice_regtest/regtest/.cookie)
 echo ""
 
 # Step 9: Start Charlie's node
-echo "=== Step 9: Starting Charlie's Qt node ==="
+echo "=== Step 9: Starting Charlie's node ==="
 mkdir -p /tmp/charlie_regtest
 
-# Launch Qt directly (clean environment was causing issues)
-./src/qt/digibyte-qt \
+# Launch node (Qt or daemon based on availability)
+$NODE_BINARY \
     -regtest \
     -datadir=/tmp/charlie_regtest \
     -port=18448 \
@@ -366,14 +381,14 @@ mkdir -p /tmp/charlie_regtest
     -fallbackfee=0.0001 \
     -dandelion=0 \
     -connect=127.0.0.1:18444 \
-    > /tmp/charlie_qt.log 2>&1 &
+    > /tmp/charlie_node.log 2>&1 &
 CHARLIE_PID=$!
-echo "Charlie's Qt started (PID: $CHARLIE_PID)"
+echo "Charlie's node started (PID: $CHARLIE_PID)"
 
 # Wait for RPC to be ready (up to 60 seconds)
 if ! wait_for_rpc /tmp/charlie_regtest 18447 60; then
-    echo "❌ Charlie's Qt RPC failed to start"
-    cat /tmp/charlie_qt.log 2>/dev/null | tail -20
+    echo "❌ Charlie's node RPC failed to start"
+    cat /tmp/charlie_node.log 2>/dev/null | tail -20
     exit 1
 fi
 
@@ -842,11 +857,16 @@ echo "  - Warning (120-149%): 1.2x multiplier"
 echo "  - Critical (100-119%): 1.5x multiplier"
 echo "  - Emergency (<100%): 2.0x multiplier + ERR activates"
 echo ""
-echo "ERR Tiers (collateral returned on redemption when health <100%):"
-echo "  - 95-100%: 95% returned"
-echo "  - 90-95%: 90% returned"
-echo "  - 85-90%: 85% returned"
-echo "  - <85%: 80% returned (minimum)"
+echo "ERR Tiers (DD burn INCREASE on redemption when health <100%):"
+echo "  CRITICAL: ERR increases DD burn, NOT reduces collateral!"
+echo "  - 95-100%: Burn 105.3% DD (1/0.95) -> FULL collateral"
+echo "  - 90-95%:  Burn 111.1% DD (1/0.90) -> FULL collateral"
+echo "  - 85-90%:  Burn 117.6% DD (1/0.85) -> FULL collateral"
+echo "  - <85%:    Burn 125% DD (1/0.80) -> FULL collateral"
+echo ""
+echo "  Example: \$100 DD position at 80% health:"
+echo "    - Need to burn: \$100 / 0.80 = \$125 DD"
+echo "    - You get back: FULL collateral (not reduced!)"
 echo ""
 
 # Helper function to get DCA info
@@ -929,25 +949,27 @@ echo ""
 #   price_micro = 4565 micro-USD
 #
 # The formula in micro-USD directly:
-#   price_micro = (health% * DD_cents * 10000) / collateral_DGB
+#   price_micro = (health% * DD_cents * 100) / collateral_DGB
+#   This comes from: health% = (collateral * price_USD) / DD_USD * 100
+#   Solving for price and converting to micro-USD (1M micro = $1)
 
 # Calculate prices for each health tier target
 # Using 10% margin within each tier to ensure we hit the tier reliably
 if [ "$TOTAL_COLLATERAL" != "0" ] && [ "$TOTAL_COLLATERAL" != "null" ]; then
     # 200% health (well into HEALTHY tier)
-    PRICE_HEALTHY=$(echo "scale=0; (200 * $TOTAL_DD_CENTS * 10000) / $TOTAL_COLLATERAL" | bc 2>/dev/null || echo "100000")
+    PRICE_HEALTHY=$(echo "scale=0; (200 * $TOTAL_DD_CENTS * 100) / $TOTAL_COLLATERAL" | bc 2>/dev/null || echo "100000")
 
     # 135% health (middle of WARNING tier: 120-149%)
-    PRICE_WARNING=$(echo "scale=0; (135 * $TOTAL_DD_CENTS * 10000) / $TOTAL_COLLATERAL" | bc 2>/dev/null || echo "50000")
+    PRICE_WARNING=$(echo "scale=0; (135 * $TOTAL_DD_CENTS * 100) / $TOTAL_COLLATERAL" | bc 2>/dev/null || echo "50000")
 
     # 110% health (middle of CRITICAL tier: 100-119%)
-    PRICE_CRITICAL=$(echo "scale=0; (110 * $TOTAL_DD_CENTS * 10000) / $TOTAL_COLLATERAL" | bc 2>/dev/null || echo "30000")
+    PRICE_CRITICAL=$(echo "scale=0; (110 * $TOTAL_DD_CENTS * 100) / $TOTAL_COLLATERAL" | bc 2>/dev/null || echo "30000")
 
     # 80% health (well into EMERGENCY tier: <100%)
-    PRICE_EMERGENCY=$(echo "scale=0; (80 * $TOTAL_DD_CENTS * 10000) / $TOTAL_COLLATERAL" | bc 2>/dev/null || echo "20000")
+    PRICE_EMERGENCY=$(echo "scale=0; (80 * $TOTAL_DD_CENTS * 100) / $TOTAL_COLLATERAL" | bc 2>/dev/null || echo "20000")
 
     # 250% health for recovery (well into healthy)
-    PRICE_RECOVERY=$(echo "scale=0; (250 * $TOTAL_DD_CENTS * 10000) / $TOTAL_COLLATERAL" | bc 2>/dev/null || echo "150000")
+    PRICE_RECOVERY=$(echo "scale=0; (250 * $TOTAL_DD_CENTS * 100) / $TOTAL_COLLATERAL" | bc 2>/dev/null || echo "150000")
 else
     # Fallback prices if calculation fails
     echo "⚠️  Could not calculate prices dynamically, using fallback values"
@@ -1015,11 +1037,11 @@ TOTAL_DD_CENTS=$(echo "$SETUP_STATS" | jq -r '.result.total_dd_supply // 0')
 
 # Recalculate prices with new totals
 if [ "$TOTAL_COLLATERAL" != "0" ] && [ "$TOTAL_COLLATERAL" != "null" ]; then
-    PRICE_HEALTHY=$(echo "scale=0; (200 * $TOTAL_DD_CENTS * 10000) / $TOTAL_COLLATERAL" | bc 2>/dev/null || echo "$PRICE_HEALTHY")
-    PRICE_WARNING=$(echo "scale=0; (135 * $TOTAL_DD_CENTS * 10000) / $TOTAL_COLLATERAL" | bc 2>/dev/null || echo "$PRICE_WARNING")
-    PRICE_CRITICAL=$(echo "scale=0; (110 * $TOTAL_DD_CENTS * 10000) / $TOTAL_COLLATERAL" | bc 2>/dev/null || echo "$PRICE_CRITICAL")
-    PRICE_EMERGENCY=$(echo "scale=0; (80 * $TOTAL_DD_CENTS * 10000) / $TOTAL_COLLATERAL" | bc 2>/dev/null || echo "$PRICE_EMERGENCY")
-    PRICE_RECOVERY=$(echo "scale=0; (250 * $TOTAL_DD_CENTS * 10000) / $TOTAL_COLLATERAL" | bc 2>/dev/null || echo "$PRICE_RECOVERY")
+    PRICE_HEALTHY=$(echo "scale=0; (200 * $TOTAL_DD_CENTS * 100) / $TOTAL_COLLATERAL" | bc 2>/dev/null || echo "$PRICE_HEALTHY")
+    PRICE_WARNING=$(echo "scale=0; (135 * $TOTAL_DD_CENTS * 100) / $TOTAL_COLLATERAL" | bc 2>/dev/null || echo "$PRICE_WARNING")
+    PRICE_CRITICAL=$(echo "scale=0; (110 * $TOTAL_DD_CENTS * 100) / $TOTAL_COLLATERAL" | bc 2>/dev/null || echo "$PRICE_CRITICAL")
+    PRICE_EMERGENCY=$(echo "scale=0; (80 * $TOTAL_DD_CENTS * 100) / $TOTAL_COLLATERAL" | bc 2>/dev/null || echo "$PRICE_EMERGENCY")
+    PRICE_RECOVERY=$(echo "scale=0; (250 * $TOTAL_DD_CENTS * 100) / $TOTAL_COLLATERAL" | bc 2>/dev/null || echo "$PRICE_RECOVERY")
     echo "Updated target prices after new mint:"
     echo "  Total Collateral: $TOTAL_COLLATERAL DGB"
     echo "  Total DD: $TOTAL_DD_CENTS cents"
@@ -1105,9 +1127,9 @@ TOTAL_COLLATERAL=$(echo "$SETUP_STATS" | jq -r '.result.total_collateral_dgb // 
 TOTAL_DD_CENTS=$(echo "$SETUP_STATS" | jq -r '.result.total_dd_supply // 0')
 
 if [ "$TOTAL_COLLATERAL" != "0" ] && [ "$TOTAL_COLLATERAL" != "null" ]; then
-    PRICE_WARNING=$(echo "scale=0; (135 * $TOTAL_DD_CENTS * 10000) / $TOTAL_COLLATERAL" | bc 2>/dev/null || echo "$PRICE_WARNING")
-    PRICE_CRITICAL=$(echo "scale=0; (110 * $TOTAL_DD_CENTS * 10000) / $TOTAL_COLLATERAL" | bc 2>/dev/null || echo "$PRICE_CRITICAL")
-    PRICE_EMERGENCY=$(echo "scale=0; (80 * $TOTAL_DD_CENTS * 10000) / $TOTAL_COLLATERAL" | bc 2>/dev/null || echo "$PRICE_EMERGENCY")
+    PRICE_WARNING=$(echo "scale=0; (135 * $TOTAL_DD_CENTS * 100) / $TOTAL_COLLATERAL" | bc 2>/dev/null || echo "$PRICE_WARNING")
+    PRICE_CRITICAL=$(echo "scale=0; (110 * $TOTAL_DD_CENTS * 100) / $TOTAL_COLLATERAL" | bc 2>/dev/null || echo "$PRICE_CRITICAL")
+    PRICE_EMERGENCY=$(echo "scale=0; (80 * $TOTAL_DD_CENTS * 100) / $TOTAL_COLLATERAL" | bc 2>/dev/null || echo "$PRICE_EMERGENCY")
 fi
 
 # ============================================================================
@@ -1246,7 +1268,7 @@ fi
 echo ""
 
 # ============================================================================
-# STEP ERR-2: Test ERR redemption (should return reduced collateral)
+# STEP ERR-2: Test ERR redemption (requires MORE DD burned, returns FULL collateral)
 # ============================================================================
 
 echo "=========================================="
@@ -1254,11 +1276,16 @@ echo "ERR-2: Testing ERR Redemption"
 echo "=========================================="
 echo ""
 echo "Testing redemption during ERR..."
-echo "Collateral returned should be REDUCED based on health tier:"
-echo "  - 95-100%: 95% returned"
-echo "  - 90-95%: 90% returned"
-echo "  - 85-90%: 85% returned"
-echo "  - <85%: 80% returned (minimum protection)"
+echo "CRITICAL: ERR increases DD burn, NOT reduces collateral!"
+echo "DD burn INCREASE based on health tier (you burn MORE to get FULL collateral):"
+echo "  - 95-100%: Burn 105.3% DD (1/0.95) -> FULL collateral"
+echo "  - 90-95%:  Burn 111.1% DD (1/0.90) -> FULL collateral"
+echo "  - 85-90%:  Burn 117.6% DD (1/0.85) -> FULL collateral"
+echo "  - <85%:    Burn 125% DD (1/0.80) -> FULL collateral"
+echo ""
+echo "Example: \$100 DD vault at 80% health:"
+echo "  - You must burn: \$100 / 0.80 = \$125 DD"
+echo "  - You receive: FULL collateral back (not reduced!)"
 echo ""
 
 # Get Bob's positions to find the ERR test vault
@@ -1298,20 +1325,28 @@ if [ -n "$REDEEMABLE_VAULT" ] && [ "$REDEEMABLE_VAULT" != "null" ]; then
 
     if [ -n "$ERR_REDEEM_TXID" ]; then
         DGB_RETURNED=$(echo "$ERR_REDEEM" | jq -r '.result.dgb_unlocked // 0')
+        DD_BURNED=$(echo "$ERR_REDEEM" | jq -r '.result.dd_burned // "N/A"')
         echo "✅ ERR Redemption completed!"
         echo "   TXID: ${ERR_REDEEM_TXID:0:16}..."
+        echo "   Original vault DD: $VAULT_DD cents"
+        echo "   DD burned for redemption: $DD_BURNED cents"
         echo "   Original collateral: $VAULT_COLLATERAL DGB"
-        echo "   Returned collateral: $DGB_RETURNED DGB"
+        echo "   Collateral returned: $DGB_RETURNED DGB"
 
-        # Calculate percentage returned
-        if [ "$VAULT_COLLATERAL" != "0" ] && [ "$VAULT_COLLATERAL" != "null" ]; then
-            PCT_RETURNED=$(echo "scale=1; $DGB_RETURNED * 100 / $VAULT_COLLATERAL" | bc 2>/dev/null || echo "N/A")
-            LOSS_PCT=$(echo "scale=1; 100 - $PCT_RETURNED" | bc 2>/dev/null || echo "N/A")
+        # Calculate DD burn multiplier (should be > 1.0 under ERR)
+        if [ "$VAULT_DD" != "0" ] && [ "$VAULT_DD" != "null" ] && [ "$DD_BURNED" != "N/A" ]; then
+            BURN_MULT=$(echo "scale=2; $DD_BURNED / $VAULT_DD" | bc 2>/dev/null || echo "N/A")
             echo ""
-            echo "   Percentage returned: ${PCT_RETURNED}%"
-            echo "   Loss (absorbed by system): ${LOSS_PCT}%"
+            echo "   DD burn multiplier: ${BURN_MULT}x (1.0x = normal, >1.0x = ERR penalty)"
             echo ""
-            echo "   (Reduced collateral is expected under ERR - protects system stability)"
+            echo "   FULL collateral returned! ERR increases DD burn, NOT collateral reduction."
+        fi
+
+        # Verify FULL collateral returned (not reduced)
+        if [ "$DGB_RETURNED" = "$VAULT_COLLATERAL" ]; then
+            echo "   ✅ FULL collateral returned as expected under ERR"
+        else
+            echo "   ⚠️  Collateral: $DGB_RETURNED DGB (original: $VAULT_COLLATERAL DGB)"
         fi
 
         # Mine blocks to confirm
@@ -1410,8 +1445,8 @@ echo "  DCA-3: Expired ERR test vault lock (mined 250 blocks)"
 echo "  DCA-4: Tested WARNING tier (120-149% health, 1.2x multiplier)"
 echo "  DCA-5: Tested CRITICAL tier (100-119% health, 1.5x multiplier)"
 echo "  DCA-6: Tested EMERGENCY tier (<100% health, 2.0x multiplier)"
-echo "  ERR-1: Tested minting block during ERR"
-echo "  ERR-2: Tested ERR redemption (reduced collateral)"
+echo "  ERR-1: Tested minting block during ERR (new mints blocked)"
+echo "  ERR-2: Tested ERR redemption (DD burn increase, FULL collateral returned)"
 echo "  RECOVERY: Tested system recovery after price increase"
 echo "  RECOVERY-2: Tested minting restoration after ERR deactivates"
 echo ""
@@ -1435,38 +1470,33 @@ echo " 11. ✓ DD conservation verified (sum = network total)"
 echo ""
 
 echo "=========================================="
-echo "Qt GUI Windows Are Open"
+echo "3-Node Network Test COMPLETE"
 echo "=========================================="
 echo ""
-echo "Check the following in ALL THREE Qt windows:"
+
+if [ "$USE_QT" -eq 1 ]; then
+    echo "Qt GUI Windows Are Open - check visually:"
+    echo ""
+    echo "1. Navigate to: DigiDollar tab → Overview"
+    echo ""
+    echo "2. Verify 'Network DigiDollar Status' section shows:"
+    echo "   - Network Total DD: Should be IDENTICAL on all 3"
+    echo "   - Network Total Collateral: Should be IDENTICAL on all 3"
+    echo "   - System Health: Should be IDENTICAL on all 3"
+    echo ""
+    echo "Qt windows remain open for manual verification"
+else
+    echo "Daemon nodes running (use RPC to query state)"
+fi
+
 echo ""
-echo "1. Navigate to: DigiDollar tab → Overview"
-echo ""
-echo "2. Verify 'Network DigiDollar Status' section shows:"
-echo "   - Network Total DD: Should be IDENTICAL on all 3 (~\$175.00)"
-echo "   - Network Total Collateral: Should be IDENTICAL on all 3 (~57500 DGB)"
-echo "   - System Health: Should be IDENTICAL on all 3"
-echo ""
-echo "3. Personal balances should be DIFFERENT:"
-echo "   - Bob:     \$127.80 DD (12780 cents)"
-echo "   - Alice:   \$34.67 DD (3467 cents)"
-echo "   - Charlie: \$12.53 DD (1253 cents)"
-echo ""
-echo "4. The 4th mint (\$10 DD, 1-hour lock) was redeemed"
-echo ""
-echo "5. Transfer history should show:"
-echo "   - Bob: 2 sends to Alice and Charlie"
-echo "   - Alice: 1 receive from Bob"
-echo "   - Charlie: 1 receive from Bob"
-echo ""
-echo "Qt windows remain open for manual verification"
 echo "Process IDs:"
 echo "  Bob:     $BOB_PID"
 echo "  Alice:   $ALICE_PID"
 echo "  Charlie: $CHARLIE_PID"
 echo ""
-echo "Press Ctrl+C to stop the Qt clients"
+echo "Press Ctrl+C to stop the nodes"
 echo ""
 
-# Wait indefinitely - keeps Qt windows open for manual inspection
+# Wait indefinitely - keeps nodes running for manual inspection
 wait

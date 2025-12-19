@@ -802,76 +802,106 @@
                 <h2 class="slide-title--blue animate-fade-in-up" style="background: var(--gradient-blue); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;">Technical Deep-Dive Roadmap</h2>
                 <p class="slide-subtitle animate-fade-in-up" style="margin-bottom: 1.25rem;">Logical Flow: Transaction Types &rarr; Script Architecture &rarr; Oracle System</p>
 
-                <div class="card animate-fade-in-up" style="max-width: 950px; padding: 1.25rem 1.75rem;">
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.9rem 2rem; font-size: 0.9rem;">
+                <div class="card animate-fade-in-up" style="max-width: 1000px; padding: 1.25rem 1.75rem;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.7rem 2rem; font-size: 0.85rem;">
+                        <!-- Left Column: 1-7 -->
                         <div class="topic-item">
                             <div class="topic-number">1</div>
                             <div class="topic-content">
                                 <strong>DigiDollar TX Process Flow</strong>
-                                <div class="text-muted" style="font-size: 0.8rem;">Mint &rarr; Transfer &rarr; Redeem lifecycle</div>
+                                <div class="text-muted" style="font-size: 0.75rem;">Mint &rarr; Transfer &rarr; Redeem lifecycle</div>
                             </div>
                         </div>
+                        <!-- Right Column: 8 -->
                         <div class="topic-item">
-                            <div class="topic-number">6</div>
+                            <div class="topic-number">8</div>
                             <div class="topic-content">
-                                <strong>OP_RETURN Metadata Format</strong>
-                                <div class="text-muted" style="font-size: 0.8rem;">Variable-length CScriptNum encoding</div>
+                                <strong>9-Tier Collateral Scale</strong>
+                                <div class="text-muted" style="font-size: 0.75rem;">1000% &rarr; 200% by lock duration</div>
                             </div>
                         </div>
                         <div class="topic-item">
                             <div class="topic-number">2</div>
                             <div class="topic-content">
                                 <strong>MAST vs OP_RETURN Architecture</strong>
-                                <div class="text-muted" style="font-size: 0.8rem;">Where opcodes ARE vs ARE NOT used</div>
-                            </div>
-                        </div>
-                        <div class="topic-item">
-                            <div class="topic-number">7</div>
-                            <div class="topic-content">
-                                <strong>Oracle Price System</strong>
-                                <div class="text-muted" style="font-size: 0.8rem;">OP_ORACLE in coinbase outputs</div>
-                            </div>
-                        </div>
-                        <div class="topic-item">
-                            <div class="topic-number">3</div>
-                            <div class="topic-content">
-                                <strong>MINT Transaction Anatomy</strong>
-                                <div class="text-muted" style="font-size: 0.8rem;">3 outputs: Vault + DigiDollar + Metadata</div>
-                            </div>
-                        </div>
-                        <div class="topic-item">
-                            <div class="topic-number">8</div>
-                            <div class="topic-content">
-                                <strong>Protection Systems</strong>
-                                <div class="text-muted" style="font-size: 0.8rem;">DCA, ERR, Volatility Freeze</div>
-                            </div>
-                        </div>
-                        <div class="topic-item">
-                            <div class="topic-number">4</div>
-                            <div class="topic-content">
-                                <strong>Collateral Vault MAST Structure</strong>
-                                <div class="text-muted" style="font-size: 0.8rem;">2 redemption paths (both require CLTV)</div>
+                                <div class="text-muted" style="font-size: 0.75rem;">Where opcodes ARE vs ARE NOT used</div>
                             </div>
                         </div>
                         <div class="topic-item">
                             <div class="topic-number">9</div>
                             <div class="topic-content">
-                                <strong>9-Tier Collateral Scale</strong>
-                                <div class="text-muted" style="font-size: 0.8rem;">1000% &rarr; 200% by lock duration</div>
+                                <strong>Protection Systems</strong>
+                                <div class="text-muted" style="font-size: 0.75rem;">DCA, ERR, Volatility Freeze</div>
                             </div>
                         </div>
                         <div class="topic-item">
-                            <div class="topic-number">5</div>
+                            <div class="topic-number">3</div>
                             <div class="topic-content">
-                                <strong>DigiDollar Custom Opcodes</strong>
-                                <div class="text-muted" style="font-size: 0.8rem;">2 active + 3 reserved (soft-fork safe)</div>
+                                <strong>Transaction Anatomy</strong>
+                                <div class="text-muted" style="font-size: 0.75rem;">MINT, TRANSFER, REDEEM outputs</div>
                             </div>
                         </div>
                         <div class="topic-item">
                             <div class="topic-number">10</div>
                             <div class="topic-content">
                                 <strong>RPC &amp; Qt Wallet</strong>
-                                <div class="text-muted" style="font-size: 0.8rem;">27+ commands, 7 GUI tabs</div>
+                                <div class="text-muted" style="font-size: 0.75rem;">27+ commands, 7 GUI tabs</div>
+                            </div>
+                        </div>
+                        <div class="topic-item">
+                            <div class="topic-number">4</div>
+                            <div class="topic-content">
+                                <strong>Collateral Vault MAST</strong>
+                                <div class="text-muted" style="font-size: 0.75rem;">2 redemption paths (both require CLTV)</div>
+                            </div>
+                        </div>
+                        <div class="topic-item">
+                            <div class="topic-number">11</div>
+                            <div class="topic-content">
+                                <strong>Wallet Storage Architecture</strong>
+                                <div class="text-muted" style="font-size: 0.75rem;">SQLite vs BerkeleyDB, WalletBatch</div>
+                            </div>
+                        </div>
+                        <div class="topic-item">
+                            <div class="topic-number">5</div>
+                            <div class="topic-content">
+                                <strong>DigiDollar Custom Opcodes</strong>
+                                <div class="text-muted" style="font-size: 0.75rem;">2 active + 3 reserved (soft-fork safe)</div>
+                            </div>
+                        </div>
+                        <div class="topic-item">
+                            <div class="topic-number">12</div>
+                            <div class="topic-content">
+                                <strong>UTXO &amp; Private Key Mgmt</strong>
+                                <div class="text-muted" style="font-size: 0.75rem;">HD derivation, owner/address keys</div>
+                            </div>
+                        </div>
+                        <div class="topic-item">
+                            <div class="topic-number">6</div>
+                            <div class="topic-content">
+                                <strong>OP_RETURN Metadata Format</strong>
+                                <div class="text-muted" style="font-size: 0.75rem;">Variable-length CScriptNum encoding</div>
+                            </div>
+                        </div>
+                        <div class="topic-item">
+                            <div class="topic-number">13</div>
+                            <div class="topic-content">
+                                <strong>Backup &amp; Restore</strong>
+                                <div class="text-muted" style="font-size: 0.75rem;">rescanblockchain, -reindex, recovery</div>
+                            </div>
+                        </div>
+                        <div class="topic-item">
+                            <div class="topic-number">7</div>
+                            <div class="topic-content">
+                                <strong>Oracle Price System</strong>
+                                <div class="text-muted" style="font-size: 0.75rem;">OP_ORACLE in coinbase outputs</div>
+                            </div>
+                        </div>
+                        <div class="topic-item" style="opacity: 0.6;">
+                            <div class="topic-number" style="background: var(--success);">✓</div>
+                            <div class="topic-content">
+                                <strong>Technical Summary</strong>
+                                <div class="text-muted" style="font-size: 0.75rem;">Key takeaways &amp; architecture review</div>
                             </div>
                         </div>
                     </div>

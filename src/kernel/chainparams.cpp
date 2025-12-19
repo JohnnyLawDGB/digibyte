@@ -533,28 +533,38 @@ public:
         digidollarParams.maxMintAmount = 1000000;          // 1,000,000 cents = $10k maximum
         digidollarParams.oracleThreshold = 1;                         // 1-of-1 consensus for Phase One
         digidollarParams.activeOracles = 1;                           // Only 1 active oracle for Phase One
-        digidollarParams.oracleCount = 1;                             // Total 1 oracle for Phase One
+        digidollarParams.oracleCount = 10;                            // Total 10 oracles defined (for future Phase Two)
 
         // Initialize DigiDollar Oracle Nodes (same as mainnet for compatibility)
         InitializeOracleNodes();
 
-        // Oracle system parameters (Phase One: Testnet - Testnet reset 2025)
+        // Oracle system parameters (Phase One: Testnet - 1-of-1 consensus)
         // Activate at block 1 for consistent testnet behavior
         consensus.nOracleActivationHeight = 1;        // Activate immediately
         consensus.nOracleEpochLength = 1440;          // 24 hours (1440 blocks * 15 seconds)
         consensus.nOracleRequiredMessages = 1;        // Phase One: 1-of-1 consensus
-        consensus.nOracleTotalOracles = 1;            // Phase One: Single oracle
+        consensus.nOracleTotalOracles = 1;            // Phase One: Single oracle active
+        // Phase Two activation height (set high - not activated until explicitly enabled)
+        // When ready for Phase Two testnet: change to desired activation height
+        // Phase Two testnet will be 3-of-10, mainnet will be 8-of-15
+        consensus.nDigiDollarPhase2Height = std::numeric_limits<int>::max();  // Not activated yet
 
-        // Phase One: Hardcoded testnet oracle public key
-        // This is the XOnlyPubKey for the hardcoded testnet oracle
-        // Corresponds to private key: 0x0000000000000000000000000000000000000000000000000000000000000001
-        // XOnlyPubKey: G point on secp256k1 curve
-        consensus.vOraclePublicKeys.push_back(
-            "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"  // Hardcoded testnet oracle
-        );
+        // All 10 testnet oracle public keys defined (for future Phase Two)
+        // Phase One only uses oracle 0, others are ready for Phase Two
+        consensus.vOraclePublicKeys.clear();
+        consensus.vOraclePublicKeys.push_back("79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798");  // oracle 0 (ACTIVE)
+        consensus.vOraclePublicKeys.push_back("d4735e3a265e16eee03f59718b9b5d03019c07d8b6c51f90da3a666eec13ab35");  // oracle 1 (reserved)
+        consensus.vOraclePublicKeys.push_back("4e07408562bedb8b60ce05c1decfe3ad16b72230967de01f640b7e4729b49fce");  // oracle 2 (reserved)
+        consensus.vOraclePublicKeys.push_back("4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a");  // oracle 3 (reserved)
+        consensus.vOraclePublicKeys.push_back("ef2d127de37b942baad06145e54b0c619a1f22327b2ebbcfbec78f5564afe39d");  // oracle 4 (reserved)
+        consensus.vOraclePublicKeys.push_back("e7f6c011776e8db7cd330b54174fd76f7d0216b612387a5ffcfb81e6f0919683");  // oracle 5 (reserved)
+        consensus.vOraclePublicKeys.push_back("7902699be42c8a8e46fbbb4501726517e86b22c56a189f7625a6da49081b2451");  // oracle 6 (reserved)
+        consensus.vOraclePublicKeys.push_back("2c624232cdd221771294dfbb310aca000a0df6ac8b66b696d90ef06fdefb64a3");  // oracle 7 (reserved)
+        consensus.vOraclePublicKeys.push_back("19581e27de7ced00ff1ce50b2047e7a567c76b1cbaebabe5ef03f7c3017bb5b7");  // oracle 8 (reserved)
+        consensus.vOraclePublicKeys.push_back("4a44dc15364204a80fe80e9039455cc1608281820fe2b24f1e5233ade6af1dd5");  // oracle 9 (reserved)
 
         LogPrintf("Oracle: Testnet oracle activation height: %d\n", consensus.nOracleActivationHeight);
-        LogPrintf("Oracle: Phase One - 1-of-1 consensus with hardcoded oracle\n");
+        LogPrintf("Oracle: Phase One - 1-of-1 consensus (Phase Two configurable via nDigiDollarPhase2Height)\n");
 
         // Testnet-specific oracle and activation settings
         // Activate at block 1 for consistent testnet behavior
@@ -566,13 +576,14 @@ public:
 private:
     void InitializeOracleNodes() {
         // DigiDollar Oracle Nodes - Testnet
-        // Oracle 0 is the primary testnet oracle at oracle1.digibyte.io:12031
-        // Additional oracles will be added as the network grows
+        // Phase One: Only oracle 0 is active (1-of-1 consensus)
+        // Phase Two: Enable more oracles when ready (3-of-10 for testnet)
         vOracleNodes = {
-            // Oracle 0: Primary testnet oracle (using valid secp256k1 generator point)
+            // Oracle 0: Primary testnet oracle (ACTIVE for Phase One)
             {0,  ParsePubKey("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"), "oracle1.digibyte.io:12031", true},
 
-            // Oracle 1-9: Reserved for future testnet oracles (disabled until configured)
+            // Oracle 1-9: Reserved for Phase Two testnet (currently DISABLED)
+            // Enable these when activating Phase Two: set to true and lower nDigiDollarPhase2Height
             {1,  ParsePubKey("02d4735e3a265e16eee03f59718b9b5d03019c07d8b6c51f90da3a666eec13ab35"), "oracle2.digibyte.io:12031", false},
             {2,  ParsePubKey("034e07408562bedb8b60ce05c1decfe3ad16b72230967de01f640b7e4729b49fce"), "oracle3.digibyte.io:12031", false},
             {3,  ParsePubKey("024b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a"), "oracle4.digibyte.io:12031", false},

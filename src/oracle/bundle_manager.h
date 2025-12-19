@@ -89,6 +89,13 @@ public:
     bool ValidateOracleBundle(const COracleBundle& bundle, int32_t block_height, const Consensus::Params& params) const;
     bool ValidateOracleDataInBlock(const CBlock& block, int32_t block_height, const Consensus::Params& params) const;
 
+    //! Phase Two validation (static for reuse in consensus code)
+    static bool ValidatePhaseTwoBundle(const COracleBundle& bundle, const Consensus::Params& params);
+    static bool ValidatePhaseOneBundle(const COracleBundle& bundle, const Consensus::Params& params);
+    static bool ValidateBundle(const COracleBundle& bundle, int block_height, const Consensus::Params& params);
+    static int GetRequiredConsensus(int block_height, const Consensus::Params& params);
+    static CAmount CalculateConsensusPrice(const COracleBundle& bundle, const Consensus::Params& params);
+
     //! Network functions
     bool BroadcastMessage(const COraclePriceMessage& message);
     void ProcessIncomingMessage(const COraclePriceMessage& message);

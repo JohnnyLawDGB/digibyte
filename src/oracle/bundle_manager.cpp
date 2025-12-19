@@ -1111,6 +1111,195 @@ bool OracleDataValidator::CheckOracleConsensus(const COracleBundle& bundle)
 }
 
 /**
+ * Phase Two Bundle Validation Implementation
+ */
+
+bool OracleBundleManager::ValidateBundle(const COracleBundle& bundle, int block_height, const Consensus::Params& params)
+{
+    if (block_height >= params.nDigiDollarPhase2Height) {
+        return ValidatePhaseTwoBundle(bundle, params);
+    } else {
+        return ValidatePhaseOneBundle(bundle, params);
+    }
+}
+
+int OracleBundleManager::GetRequiredConsensus(int block_height, const Consensus::Params& params)
+{
+    if (block_height >= params.nDigiDollarPhase2Height) {
+        return params.nOracleRequiredMessages;  // 3 for testnet, 8 for mainnet
+    }
+    return 1;  // Phase One: 1-of-1
+}
+
+bool OracleBundleManager::ValidatePhaseOneBundle(const COracleBundle& bundle, const Consensus::Params& params)
+{
+    // Phase One: Must have exactly 1 message (1-of-1 consensus)
+    if (bundle.messages.size() != 1) {
+        LogPrintf("Oracle: Phase One requires exactly 1 oracle message, got %zu\n", bundle.messages.size());
+        return false;
+    }
+
+    const COraclePriceMessage& msg = bundle.messages[0];
+
+    // Verify message is valid
+    if (!msg.IsValid()) {
+        LogPrintf("Oracle: Phase One message validation failed\n");
+        return false;
+    }
+
+    // Verify median price matches single message price
+    if (bundle.median_price_micro_usd != msg.price_micro_usd) {
+        LogPrintf("Oracle: Phase One median price mismatch: bundle=%llu, message=%llu\n",
+                 bundle.median_price_micro_usd, msg.price_micro_usd);
+        return false;
+    }
+
+    // Phase One: Schnorr signature verification (if signature is present)
+    if (!msg.schnorr_sig.empty() && !msg.Verify()) {
+        LogPrintf("Oracle: Phase One signature verification failed\n");
+        return false;
+    }
+
+    return true;
+}
+
+bool OracleBundleManager::ValidatePhaseTwoBundle(const COracleBundle& bundle, const Consensus::Params& params)
+{
+    // Check minimum message count
+    int min_required = params.nOracleRequiredMessages;
+    if (bundle.messages.size() < static_cast<size_t>(min_required)) {
+        LogPrintf("Oracle: Phase Two requires at least %d messages, got %zu\n",
+                 min_required, bundle.messages.size());
+        return false;
+    }
+
+    // Check for duplicate oracle IDs
+    std::set<uint32_t> seen_oracles;
+    for (const auto& msg : bundle.messages) {
+        if (seen_oracles.count(msg.oracle_id) > 0) {
+            LogPrintf("Oracle: Phase Two detected duplicate oracle ID %d\n", msg.oracle_id);
+            return false;
+        }
+        seen_oracles.insert(msg.oracle_id);
+    }
+
+    // Get active oracle set for current epoch
+    std::vector<uint32_t> active_oracles = OracleBundleManager::GetInstance().GetActiveOraclesForEpoch(bundle.epoch);
+
+    // Verify each message is from an active oracle and has valid signature
+    int valid_count = 0;
+    for (const auto& msg : bundle.messages) {
+        // Check if oracle is in active set
+        auto it = std::find(active_oracles.begin(), active_oracles.end(), msg.oracle_id);
+        if (it == active_oracles.end()) {
+            LogPrintf("Oracle: Phase Two oracle %d not in active set for epoch %d\n",
+                     msg.oracle_id, bundle.epoch);
+            continue;  // Skip invalid oracle, don't fail entire bundle
+        }
+
+        // Verify message is valid
+        if (!msg.IsValid()) {
+            LogPrintf("Oracle: Phase Two message validation failed for oracle %d\n", msg.oracle_id);
+            continue;  // Skip invalid message
+        }
+
+        // Verify Schnorr signature
+        if (!msg.schnorr_sig.empty()) {
+            if (!msg.Verify()) {
+                LogPrintf("Oracle: Phase Two signature verification failed for oracle %d\n", msg.oracle_id);
+                continue;  // Skip message with invalid signature
+            }
+        } else {
+            LogPrintf("Oracle: Phase Two message missing signature for oracle %d\n", msg.oracle_id);
+            continue;  // Skip message without signature
+        }
+
+        valid_count++;
+    }
+
+    // Check if we have enough valid signatures
+    if (valid_count < min_required) {
+        LogPrintf("Oracle: Phase Two requires %d valid signatures, got %d\n",
+                 min_required, valid_count);
+        return false;
+    }
+
+    // Verify consensus price calculation
+    CAmount calculated_price = CalculateConsensusPrice(bundle, params);
+    if (calculated_price != static_cast<CAmount>(bundle.median_price_micro_usd)) {
+        LogPrintf("Oracle: Phase Two consensus price mismatch: calculated=%lld, bundle=%llu\n",
+                 calculated_price, bundle.median_price_micro_usd);
+        return false;
+    }
+
+    LogPrintf("Oracle: Phase Two bundle validated successfully: %d valid signatures (min: %d), price=%llu micro-USD\n",
+             valid_count, min_required, bundle.median_price_micro_usd);
+
+    return true;
+}
+
+CAmount OracleBundleManager::CalculateConsensusPrice(const COracleBundle& bundle, const Consensus::Params& params)
+{
+    // Collect all valid prices
+    std::vector<CAmount> prices;
+    for (const auto& msg : bundle.messages) {
+        if (msg.IsValid() && !msg.schnorr_sig.empty() && msg.Verify()) {
+            prices.push_back(static_cast<CAmount>(msg.price_micro_usd));
+        }
+    }
+
+    if (prices.empty()) {
+        return 0;  // No valid prices
+    }
+
+    // Sort prices for IQR calculation
+    std::sort(prices.begin(), prices.end());
+
+    // If less than 4 prices, just return median without outlier filtering
+    if (prices.size() < 4) {
+        size_t mid = prices.size() / 2;
+        if (prices.size() % 2 == 0) {
+            return (prices[mid - 1] + prices[mid]) / 2;
+        }
+        return prices[mid];
+    }
+
+    // Apply IQR outlier filtering (1.5 * IQR rule)
+    size_t q1_idx = prices.size() / 4;
+    size_t q3_idx = (prices.size() * 3) / 4;
+    CAmount q1 = prices[q1_idx];
+    CAmount q3 = prices[q3_idx];
+    CAmount iqr = q3 - q1;
+    CAmount lower_bound = q1 - (iqr * 3 / 2);  // 1.5 * IQR below Q1
+    CAmount upper_bound = q3 + (iqr * 3 / 2);  // 1.5 * IQR above Q3
+
+    // Filter outliers
+    std::vector<CAmount> filtered;
+    for (CAmount price : prices) {
+        if (price >= lower_bound && price <= upper_bound) {
+            filtered.push_back(price);
+        }
+    }
+
+    // If filtering removed all prices, fall back to unfiltered median
+    if (filtered.empty()) {
+        size_t mid = prices.size() / 2;
+        if (prices.size() % 2 == 0) {
+            return (prices[mid - 1] + prices[mid]) / 2;
+        }
+        return prices[mid];
+    }
+
+    // Calculate median of filtered prices
+    std::sort(filtered.begin(), filtered.end());
+    size_t mid = filtered.size() / 2;
+    if (filtered.size() % 2 == 0) {
+        return (filtered[mid - 1] + filtered[mid]) / 2;
+    }
+    return filtered[mid];
+}
+
+/**
  * OracleIntegration Utility Functions
  */
 

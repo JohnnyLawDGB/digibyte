@@ -1711,7 +1711,190 @@ OP_ORACLE          = <span class="number">0xbf</span>,  <span class="comment">//
             </div>
         </section>
 
-        <!-- SLIDE 13: Technical Summary -->
+        <!-- SLIDE 13: Wallet Storage Architecture -->
+        <section class="slide slide--blue">
+            <div class="slide-content" style="padding-top: 70px;">
+                <h2 class="slide-title animate-fade-in-up">Wallet Storage Architecture</h2>
+                <p class="slide-subtitle animate-fade-in-up">Database-agnostic design via WalletBatch abstraction</p>
+
+                <div class="grid-3 mt-3" style="max-width: 1100px; gap: 1rem;">
+                    <div class="card animate-fade-in-up" style="padding: 1rem;">
+                        <h4 class="text-blue" style="margin: 0 0 0.5rem;">Descriptor Wallets</h4>
+                        <div style="font-size: 0.85rem;">
+                            <strong>SQLite</strong> database<br>
+                            <span class="text-muted">Default since v8.23</span><br>
+                            <span class="text-muted">HD keys from seed</span>
+                        </div>
+                    </div>
+                    <div class="card animate-fade-in-up" style="padding: 1rem;">
+                        <h4 class="text-gold" style="margin: 0 0 0.5rem;">Legacy Wallets</h4>
+                        <div style="font-size: 0.85rem;">
+                            <strong>BerkeleyDB</strong> database<br>
+                            <span class="text-muted">Pre-v8.23 wallets</span><br>
+                            <span class="text-muted">Random keys in wallet</span>
+                        </div>
+                    </div>
+                    <div class="card animate-fade-in-up" style="padding: 1rem;">
+                        <h4 class="text-success" style="margin: 0 0 0.5rem;">DD Storage</h4>
+                        <div style="font-size: 0.85rem;">
+                            <strong>Same database</strong><br>
+                            <span class="text-muted">Prefixed keys (DD_*)</span><br>
+                            <span class="text-muted">Works with both!</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid-2 mt-2" style="max-width: 1050px; gap: 1rem;">
+                    <div class="card animate-fade-in-up" style="padding: 0.75rem;">
+                        <h4 class="text-blue" style="margin: 0 0 0.5rem; font-size: 0.9rem;">DD Database Keys</h4>
+                        <table class="rpc-table" style="font-size: 0.75rem;">
+                            <tr><td><code>DD_POSITION</code></td><td>Collateral positions</td></tr>
+                            <tr><td><code>DD_OUTPUT</code></td><td>DigiDollar UTXOs</td></tr>
+                            <tr><td><code>DD_BALANCE</code></td><td>Per-address balances</td></tr>
+                            <tr><td><code>DD_OWNER_KEY</code></td><td>Owner keys (redemption)</td></tr>
+                            <tr><td><code>DD_ADDRESS_KEY</code></td><td>Address keys (transfers)</td></tr>
+                        </table>
+                    </div>
+                    <div class="card animate-fade-in-up" style="padding: 0.75rem;">
+                        <h4 class="text-gold" style="margin: 0 0 0.5rem; font-size: 0.9rem;">WalletCollateralPosition</h4>
+                        <div style="font-size: 0.75rem; font-family: var(--font-mono); background: #1e1e2e; padding: 0.5rem; border-radius: 6px; color: #e0e0e0;">
+                            <div><span style="color: #4EC9B0;">uint256</span> dd_timelock_id;</div>
+                            <div><span style="color: #4EC9B0;">CAmount</span> dd_minted, dgb_collateral;</div>
+                            <div><span style="color: #4EC9B0;">uint32_t</span> lock_tier;</div>
+                            <div><span style="color: #4EC9B0;">int64_t</span> unlock_height;</div>
+                            <div><span style="color: #4EC9B0;">bool</span> is_active;</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="key-insight mt-2 animate-fade-in-up" style="max-width: 950px;">
+                    <strong>WalletBatch abstraction:</strong> All DD reads/writes go through <code>DatabaseBatch</code> interface<br>
+                    DD code doesn't know or care if backend is SQLite or BerkeleyDB - works identically with both
+                </div>
+            </div>
+        </section>
+
+        <!-- SLIDE 14: UTXO & Private Key Management -->
+        <section class="slide slide--gold">
+            <div class="slide-content" style="padding-top: 70px;">
+                <h2 class="slide-title animate-fade-in-up">UTXO &amp; Private Key Management</h2>
+                <p class="slide-subtitle animate-fade-in-up">Separate tracking for DigiDollar outputs and signing keys</p>
+
+                <div class="grid-2 mt-3" style="max-width: 1050px; gap: 1.5rem;">
+                    <div class="card animate-fade-in-up" style="padding: 1rem;">
+                        <h4 class="text-blue" style="margin: 0 0 0.75rem;">DD UTXO Tracking</h4>
+                        <ul style="font-size: 0.85rem; line-height: 1.7; margin: 0; padding-left: 1.25rem;">
+                            <li><strong>Separate from DGB:</strong> DD UTXOs tracked independently</li>
+                            <li><strong>Index:</strong> <code>COutPoint</code> (txid + vout)</li>
+                            <li><strong>Value:</strong> DD amount in cents</li>
+                            <li><strong>In-memory:</strong> <code>std::map&lt;COutPoint, CAmount&gt;</code></li>
+                            <li><strong>Functions:</strong> <code>GetDDUTXOs()</code>, <code>ScanForDDUTXOs()</code></li>
+                        </ul>
+                    </div>
+                    <div class="card animate-fade-in-up" style="padding: 1rem;">
+                        <h4 class="text-gold" style="margin: 0 0 0.75rem;">Two Key Types</h4>
+                        <div style="font-size: 0.85rem;">
+                            <div style="padding: 0.5rem; background: rgba(16, 185, 129, 0.08); border-left: 3px solid var(--success); margin-bottom: 0.5rem; border-radius: 0 6px 6px 0;">
+                                <strong>dd_owner_keys</strong><br>
+                                <span class="text-muted">For redemption signing (indexed by position ID)</span>
+                            </div>
+                            <div style="padding: 0.5rem; background: rgba(0, 111, 187, 0.08); border-left: 3px solid var(--dgb-blue); border-radius: 0 6px 6px 0;">
+                                <strong>dd_address_keys</strong><br>
+                                <span class="text-muted">For transfer signing (indexed by XOnlyPubKey)</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card mt-2 animate-fade-in-up" style="max-width: 900px; padding: 1rem;">
+                    <h4 class="text-blue" style="margin: 0 0 0.5rem;">HD Key Derivation</h4>
+                    <div style="font-size: 0.85rem;">
+                        <span class="badge--success" style="background: rgba(16,185,129,0.1); color: var(--success); padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem;">Standard BIP32</span>
+                        Uses wallet's <code>GetNewDestination(OutputType::BECH32M)</code> for Taproot keys<br>
+                        <span class="text-muted">Labels: "dd-owner", "dd-address", "dd-redeem" &bull; All keys derived from wallet seed</span>
+                    </div>
+                </div>
+
+                <div class="glow-box mt-2 animate-fade-in-up" style="max-width: 800px; text-align: center;">
+                    <strong>Source:</strong> src/wallet/digidollarwallet.cpp (lines 263-380) | src/rpc/digidollar.cpp (lines 91-150)
+                </div>
+            </div>
+        </section>
+
+        <!-- SLIDE 15: Backup & Restore -->
+        <section class="slide slide--blue">
+            <div class="slide-content" style="padding-top: 70px;">
+                <h2 class="slide-title animate-fade-in-up">Backup &amp; Restore</h2>
+                <p class="slide-subtitle animate-fade-in-up">Standard wallet backup preserves all DigiDollar data</p>
+
+                <div class="grid-2 mt-3" style="max-width: 1000px; gap: 1.5rem;">
+                    <div class="card animate-fade-in-up" style="padding: 1rem;">
+                        <h4 class="text-blue" style="margin: 0 0 0.75rem;">Descriptor Wallets (SQLite)</h4>
+                        <div style="font-size: 0.85rem; line-height: 1.7;">
+                            <strong>Backup:</strong> <code>listdescriptors true</code><br>
+                            <strong>Restore:</strong> <code>createwallet</code> + <code>importdescriptors</code><br>
+                            <strong>Then:</strong> <code>rescanblockchain</code><br>
+                            <span class="text-muted">All keys derived from seed - fully recoverable</span>
+                        </div>
+                    </div>
+                    <div class="card animate-fade-in-up" style="padding: 1rem;">
+                        <h4 class="text-gold" style="margin: 0 0 0.75rem;">Legacy Wallets (BerkeleyDB)</h4>
+                        <div style="font-size: 0.85rem; line-height: 1.7;">
+                            <strong>Backup:</strong> <code>backupwallet /path/backup.dat</code><br>
+                            <strong>Restore:</strong> Copy wallet.dat to data dir<br>
+                            <strong>Then:</strong> <code>rescanblockchain</code><br>
+                            <span class="text-muted">Random keys - MUST backup wallet file!</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card mt-2 animate-fade-in-up" style="max-width: 950px; padding: 1rem;">
+                    <h4 class="text-success" style="margin: 0 0 0.5rem;">Recovery Commands</h4>
+                    <div class="grid-3" style="gap: 1rem; font-size: 0.8rem;">
+                        <div style="padding: 0.5rem; background: rgba(0,111,187,0.05); border-radius: 6px;">
+                            <code style="color: var(--dgb-blue);">rescanblockchain</code><br>
+                            <span class="text-muted">Scan chain for wallet TXs<br>Rebuilds DD positions</span>
+                        </div>
+                        <div style="padding: 0.5rem; background: rgba(245,158,11,0.05); border-radius: 6px;">
+                            <code style="color: var(--warning);">-reindex</code><br>
+                            <span class="text-muted">Full chain reindex<br>Rebuilds UTXO set + wallet</span>
+                        </div>
+                        <div style="padding: 0.5rem; background: rgba(16,185,129,0.05); border-radius: 6px;">
+                            <code style="color: var(--success);">-rescan</code><br>
+                            <span class="text-muted">Startup flag<br>Forces wallet rescan</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid-2 mt-2" style="max-width: 950px; gap: 1rem;">
+                    <div class="card animate-fade-in-up" style="padding: 0.75rem;">
+                        <h4 class="text-blue" style="margin: 0 0 0.4rem; font-size: 0.85rem;">What Gets Reconstructed</h4>
+                        <ul style="font-size: 0.75rem; line-height: 1.5; margin: 0; padding-left: 1rem;">
+                            <li>DD positions (from OP_RETURN metadata)</li>
+                            <li>DD balances (from UTXO scan)</li>
+                            <li>Position status (active/redeemed)</li>
+                            <li>Lock tier (derived from heights)</li>
+                        </ul>
+                    </div>
+                    <div class="card animate-fade-in-up" style="padding: 0.75rem;">
+                        <h4 class="text-gold" style="margin: 0 0 0.4rem; font-size: 0.85rem;">Reconstruction Functions</h4>
+                        <ul style="font-size: 0.75rem; line-height: 1.5; margin: 0; padding-left: 1rem;">
+                            <li><code>ExtractPositionFromMintTx()</code></li>
+                            <li><code>ProcessDDTxForRescan()</code></li>
+                            <li><code>ExtractDDAmountFromOpReturn()</code></li>
+                            <li><code>DeriveLockTierFromHeight()</code></li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="key-insight mt-2 animate-fade-in-up" style="max-width: 900px;">
+                    <strong>Key Point:</strong> DD state is fully reconstructable from blockchain OP_RETURN metadata<br>
+                    Private keys must exist in wallet - then rescan/reindex rebuilds all DD data
+                </div>
+            </div>
+        </section>
+
+        <!-- SLIDE 16: Technical Summary -->
         <section class="slide slide--hero">
             <div class="slide-content" style="padding-top: 70px;">
                 <h2 class="slide-title animate-fade-in-up">Technical Summary</h2>

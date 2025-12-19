@@ -44,26 +44,32 @@ struct ERRState {
 /**
  * Emergency Redemption Ratio (ERR) System
  *
- * The ERR system protects DigiDollar holders during extreme market conditions
- * by allowing emergency redemptions with adjusted collateral requirements when
- * the system is under-collateralized.
+ * The ERR system activates when the DigiDollar system becomes under-collateralized
+ * (system health < 100%). During ERR, users can still redeem their FULL collateral,
+ * but they must burn MORE DigiDollars than they originally minted.
+ *
+ * KEY CONCEPT: ERR increases DD burn requirement, NOT reduces collateral return!
+ * - Normal redemption: Burn 100 DD → Get full collateral back
+ * - ERR at 80%: Burn 125 DD (100/0.80) → Get full collateral back
+ *
+ * This creates buying pressure on DD during crises (people need more DD to redeem),
+ * which helps stabilize the system.
  *
  * ERR Activation:
  * - Triggers when system health falls below 100% collateralization
- * - Requires 8-of-15 oracle consensus to activate
+ * - Requires oracle consensus to activate
  * - Automatically deactivates when system health recovers above 100%
  *
- * ERR Adjustment Tiers:
- * - 95-100% health: 95% collateral return
- * - 90-95% health: 90% collateral return
- * - 85-90% health: 85% collateral return
- * - <85% health: 80% collateral return (minimum protection)
+ * ERR Adjustment Tiers (DD burn multiplier):
+ * - 95-100% health: Burn 105.3% DD (1/0.95) to get full collateral
+ * - 90-95% health: Burn 111.1% DD (1/0.90) to get full collateral
+ * - 85-90% health: Burn 117.6% DD (1/0.85) to get full collateral
+ * - <85% health: Burn 125% DD (1/0.80) to get full collateral (max multiplier)
  *
  * Emergency Procedures:
  * - Blocks new mints during ERR period
  * - Prioritizes ERR redemptions over normal redemptions
  * - Implements fair pro-rata distribution for all redeemers
- * - Maintains minimum 80% collateral return guarantee
  */
 class EmergencyRedemptionRatio {
 public:
@@ -82,24 +88,33 @@ public:
      * Calculate ERR adjustment ratio based on system health severity.
      *
      * @param systemHealth Current system health percentage
-     * @return Adjustment ratio (0.80-0.95) for collateral redemption
+     * @return Adjustment ratio (0.80-0.95) - used to calculate required DD burn
      *
+     * The ratio is used in the formula: RequiredDD = OriginalDD / ratio
      * Adjustment tiers:
-     * - 95-100%: 0.95 (95% return)
-     * - 90-95%:  0.90 (90% return)
-     * - 85-90%:  0.85 (85% return)
-     * - <85%:    0.80 (80% return - minimum)
+     * - 95-100%: 0.95 → Burn 105.3% DD (1/0.95)
+     * - 90-95%:  0.90 → Burn 111.1% DD (1/0.90)
+     * - 85-90%:  0.85 → Burn 117.6% DD (1/0.85)
+     * - <85%:    0.80 → Burn 125% DD (1/0.80) - maximum multiplier
      */
     static double CalculateERRAdjustment(int systemHealth);
 
     /**
-     * Apply ERR adjustment to a normal redemption amount.
+     * Calculate the required DD burn amount for ERR redemption.
      *
-     * @param normalRedemption The collateral amount that would normally be returned
+     * @param originalDDMinted The DD amount originally minted for this position
      * @param systemHealth Current system health percentage
-     * @return Adjusted redemption amount with ERR penalty applied
+     * @return Required DD amount to burn to get FULL collateral back
      *
-     * Example: 100 DGB redemption at 90% health = 90 DGB return
+     * Example: 100 DD minted at 80% health → Must burn 125 DD to get full collateral
+     * Formula: RequiredDD = OriginalDD / ERRRatio
+     */
+    static CAmount GetRequiredDDBurn(CAmount originalDDMinted, int systemHealth);
+
+    /**
+     * DEPRECATED: Use GetRequiredDDBurn instead.
+     * This function name is misleading - ERR doesn't reduce collateral return.
+     * Kept for backwards compatibility but will be removed.
      */
     static CAmount GetAdjustedRedemption(CAmount normalRedemption, int systemHealth);
 

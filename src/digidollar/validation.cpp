@@ -1079,13 +1079,59 @@ bool ValidateNormalRedemptionConditions(const CTransaction& tx,
 bool ValidateEmergencyRedemptionConditions(const CTransaction& tx,
                                          const ValidationContext& ctx,
                                          TxValidationState& state) {
-    // RED Phase: Not yet implemented
-    // This function should validate that:
-    // 1. System is under-collateralized (ERR active), OR
-    // 2. 8-of-15 oracle signatures authorize emergency redemption
+    // ERR (Emergency Redemption Ratio) validation:
+    // KEY CONCEPT: ERR increases DD burn requirement, NOT reduces collateral return!
+    // - User must burn MORE DD than originally minted to get FULL collateral back
+    // - Example: At 80% ratio, burn 125 DD to get back collateral for 100 DD position
 
-    LogPrintf("DigiDollar: Emergency redemption validation not implemented (RED phase)\n");
-    return state.Invalid(TxValidationResult::TX_CONSENSUS, "emergency-redemption-validation-incomplete");
+    LogPrintf("DigiDollar: Validating emergency (ERR) redemption conditions\n");
+
+    // Get current system health
+    int systemHealth = DCA::DynamicCollateralAdjustment::GetCurrentSystemHealth();
+
+    // Check if ERR is needed (system health < 100%)
+    if (systemHealth >= 100) {
+        LogPrintf("DigiDollar: ERR redemption rejected - system health %d%% is healthy (ERR requires < 100%%)\n",
+                  systemHealth);
+        return state.Invalid(TxValidationResult::TX_CONSENSUS, "err-not-required",
+                            strprintf("ERR not needed - system health %d%% (ERR requires < 100%%)", systemHealth));
+    }
+
+    // Verify transaction has inputs
+    if (tx.vin.empty()) {
+        LogPrintf("DigiDollar: ERR redemption rejected - no inputs\n");
+        return state.Invalid(TxValidationResult::TX_CONSENSUS, "err-no-inputs");
+    }
+
+    // Verify timelock has expired (if using locktime)
+    // ERR redemptions still require timelock expiry
+    if (tx.nLockTime > 0 && ctx.nHeight < static_cast<int>(tx.nLockTime)) {
+        LogPrintf("DigiDollar: ERR redemption rejected - timelock not expired (current: %d, required: %d)\n",
+                  ctx.nHeight, tx.nLockTime);
+        return state.Invalid(TxValidationResult::TX_CONSENSUS, "err-timelock-active",
+                            strprintf("Timelock not expired (current height %d, required %d)",
+                                    ctx.nHeight, tx.nLockTime));
+    }
+
+    // Calculate ERR parameters
+    double errRatio = ERR::EmergencyRedemptionRatio::CalculateERRAdjustment(systemHealth);
+    double ddMultiplier = 1.0 / errRatio; // How much MORE DD is needed
+
+    LogPrintf("DigiDollar: ERR redemption - system health: %d%%, ratio: %.2f, DD burn multiplier: %.2fx\n",
+              systemHealth, errRatio, ddMultiplier);
+
+    // Note: The actual DD burn verification (checking that user burns >= RequiredDDBurn)
+    // happens in the transaction builder and full validation. Here we just verify:
+    // 1. ERR is needed (system health < 100%)
+    // 2. Timelock has expired
+    // 3. Transaction has valid structure
+
+    // During ERR, user burns MORE DD to get FULL collateral back
+    // The collateral return is NOT reduced - only the DD burn requirement increases
+
+    LogPrintf("DigiDollar: ERR redemption conditions validated - user must burn %.1f%% extra DD to get full collateral\n",
+              (ddMultiplier - 1.0) * 100);
+    return true;
 }
 
 bool ValidatePartialRedemptionConditions(const CTransaction& tx,

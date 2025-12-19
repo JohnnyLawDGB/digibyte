@@ -921,7 +921,7 @@
                 <div class="animate-fade-in-up" style="margin-bottom: 1.5rem;">
                     <img src="images/DigiDollar.jpg" alt="DigiDollar" style="width: 120px; height: 120px; border-radius: 50%; box-shadow: 0 0 40px rgba(0, 111, 187, 0.5);">
                 </div>
-                <span class="badge badge--gold animate-fade-in-up">Technical Deep-Dive</span>
+                <span class="badge badge--success animate-fade-in-up">Technical Deep-Dive</span>
                 <h1 class="slide-title animate-fade-in-up" style="font-size: clamp(2rem, 4vw, 3.5rem); margin: 1rem 0;">
                     DigiDollar: UTXO-Native TimeLock Stablecoin
                 </h1>
@@ -932,7 +932,7 @@
                 <div class="divider animate-fade-in-up"></div>
                 <div class="grid-4 mt-3" style="max-width: 800px;">
                     <div class="stat-box animate-fade-in-up">
-                        <div class="stat-value" style="font-size: 1.5rem;">85%</div>
+                        <div class="stat-value" style="font-size: 1.5rem;">90%</div>
                         <div class="stat-label">Complete</div>
                     </div>
                     <div class="stat-box animate-fade-in-up">
@@ -944,7 +944,7 @@
                         <div class="stat-label">Lines of Code</div>
                     </div>
                     <div class="stat-box animate-fade-in-up">
-                        <div class="stat-value" style="font-size: 1.5rem;">27+</div>
+                        <div class="stat-value" style="font-size: 1.5rem;">23+</div>
                         <div class="stat-label">RPC Commands</div>
                     </div>
                 </div>
@@ -1085,7 +1085,7 @@
                 </div>
 
                 <div class="glow-box mt-2 animate-fade-in-up" style="max-width: 800px; text-align: center; padding: 0.5rem 1rem; font-size: 0.85rem;">
-                    <strong>100% On-Chain | No External Dependencies | Full UTXO Transparency</strong>
+                    <strong>100% On-Chain | No Central Control | Full UTXO Transparency</strong>
                 </div>
             </div>
         </section>
@@ -1093,7 +1093,7 @@
         <!-- SLIDE 3: Definitions - Blockchain Basics -->
         <section class="slide slide--blue">
             <div class="slide-content" style="padding-top: 40px;">
-                <span class="badge badge--gold animate-fade-in-up">Definitions</span>
+                <span class="badge badge--success animate-fade-in-up">Definitions</span>
                 <h2 class="slide-title animate-fade-in-up">Blockchain Basics</h2>
                 <p class="slide-subtitle animate-fade-in-up" style="margin-bottom: 0.5rem;">"To have an intelligent conversation, first define the terms."</p>
 
@@ -1231,7 +1231,7 @@
         <!-- SLIDE 4: Definitions - Script & Signatures -->
         <section class="slide slide--gold">
             <div class="slide-content" style="padding-top: 60px;">
-                <span class="badge badge--gold animate-fade-in-up">Definitions</span>
+                <span class="badge badge--success animate-fade-in-up">Definitions</span>
                 <h2 class="slide-title animate-fade-in-up">Script &amp; Signatures</h2>
                 <p class="slide-subtitle animate-fade-in-up" style="margin-bottom: 1rem;">How transactions are authorized and validated</p>
 
@@ -1279,7 +1279,7 @@
         <!-- SLIDE 5: Definitions - DigiDollar Terms -->
         <section class="slide slide--blue">
             <div class="slide-content" style="padding-top: 60px;">
-                <span class="badge badge--gold animate-fade-in-up">Definitions</span>
+                <span class="badge badge--success animate-fade-in-up">Definitions</span>
                 <h2 class="slide-title animate-fade-in-up">DigiDollar Terms</h2>
                 <p class="slide-subtitle animate-fade-in-up" style="margin-bottom: 1rem;">Specific concepts used in DigiDollar's implementation</p>
 
@@ -1600,31 +1600,37 @@ version = (type &lt;&lt; 24) | 0x0770;
                 <h2 class="slide-title--blue animate-fade-in-up" style="background: var(--gradient-blue); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;">MAST vs OP_RETURN: Where Opcodes Live</h2>
                 <p class="slide-subtitle animate-fade-in-up">Critical distinction: Custom opcodes are in MAST, NOT in metadata</p>
 
-                <div class="two-col mt-3 animate-fade-in-up">
-                    <div class="card" style="border: 2px solid var(--success); padding: 1.25rem;">
-                        <h3 style="margin: 0 0 0.75rem; color: var(--success);">MAST (Collateral Vault)</h3>
-                        <p style="font-size: 0.85rem; margin: 0 0 0.75rem;">Custom opcodes ARE used here:</p>
-                        <ul style="font-size: 0.8rem; line-height: 1.7; margin: 0; padding-left: 1.25rem;">
+                <div class="two-col mt-2 animate-fade-in-up">
+                    <div class="card" style="border: 2px solid var(--success); padding: 1rem;">
+                        <h3 style="margin: 0 0 0.5rem; color: var(--success);">MAST (Collateral Vault)</h3>
+                        <p style="font-size: 0.75rem; margin: 0 0 0.5rem;">Custom opcodes ARE used here:</p>
+                        <ul style="font-size: 0.7rem; line-height: 1.5; margin: 0; padding-left: 1.1rem;">
                             <li><code class="text-danger">OP_DIGIDOLLAR (0xbb)</code> - Validates DD amount</li>
                             <li><code class="text-danger">OP_DDVERIFY (0xbc)</code> - Verifies DD conditions</li>
                             <li><code class="text-danger">OP_CHECKCOLLATERAL (0xbe)</code> - Verifies ratio</li>
                         </ul>
-                        <div style="margin-top: 0.75rem; padding: 0.5rem; background: rgba(0,200,81,0.1); border-radius: 6px; font-size: 0.8rem;">
+                        <div style="margin-top: 0.5rem; padding: 0.4rem; background: rgba(0,200,81,0.1); border-radius: 6px; font-size: 0.7rem;">
                             <strong>Where:</strong> Inside P2TR script-path leaves (Taproot MAST)
+                        </div>
+                        <div style="margin-top: 0.5rem; padding: 0.4rem; background: rgba(239,68,68,0.08); border-radius: 6px; font-size: 0.65rem; border-left: 3px solid var(--danger);">
+                            <strong style="color: var(--danger);">Why needed:</strong> Cryptographic enforcement. Only owner's signature can spend. Timelocks enforced by CLTV. Multi-path conditions (normal/emergency/ERR). Consensus-validated.
                         </div>
                     </div>
 
-                    <div class="card" style="border: 2px solid var(--dgb-blue); padding: 1.25rem;">
-                        <h3 style="margin: 0 0 0.75rem; color: var(--dgb-blue);">OP_RETURN (Metadata)</h3>
-                        <p style="font-size: 0.85rem; margin: 0 0 0.75rem;">Custom opcodes NOT used here:</p>
-                        <ul style="font-size: 0.8rem; line-height: 1.7; margin: 0; padding-left: 1.25rem;">
+                    <div class="card" style="border: 2px solid var(--dgb-blue); padding: 1rem;">
+                        <h3 style="margin: 0 0 0.5rem; color: var(--dgb-blue);">OP_RETURN (Metadata)</h3>
+                        <p style="font-size: 0.75rem; margin: 0 0 0.5rem;">Custom opcodes NOT used here:</p>
+                        <ul style="font-size: 0.7rem; line-height: 1.5; margin: 0; padding-left: 1.1rem;">
                             <li>Uses ASCII <code>"DD"</code> marker (0x44 0x44)</li>
                             <li>Variable-length CScriptNum encoding</li>
                             <li>Stores: txType, ddAmount, lockHeight</li>
                             <li>NOT fixed 21-byte format</li>
                         </ul>
-                        <div style="margin-top: 0.75rem; padding: 0.5rem; background: rgba(0,111,187,0.1); border-radius: 6px; font-size: 0.8rem;">
+                        <div style="margin-top: 0.5rem; padding: 0.4rem; background: rgba(0,111,187,0.1); border-radius: 6px; font-size: 0.7rem;">
                             <strong>Where:</strong> vout[2] of every DD transaction
+                        </div>
+                        <div style="margin-top: 0.5rem; padding: 0.4rem; background: rgba(239,68,68,0.08); border-radius: 6px; font-size: 0.65rem; border-left: 3px solid var(--danger);">
+                            <strong style="color: var(--danger);">Why needed:</strong> P2TR scripts are hashed - nodes can't read amounts from hash. Enables validation BEFORE spending. Allows DD conservation checks across network.
                         </div>
                     </div>
                 </div>
@@ -1640,9 +1646,8 @@ CScript metadataScript = CScript() &lt;&lt; <span class="opcode">OP_RETURN</span
                     </div>
                 </div>
 
-                <div class="warning-box mt-2 animate-fade-in-up" style="max-width: 700px;">
-                    <strong>Important:</strong> OP_DIGIDOLLAR (0xbb) is NOT used in the OP_RETURN output.<br>
-                    The "DD" marker is ASCII bytes (0x44 0x44), not an opcode.
+                <div class="key-insight mt-2 animate-fade-in-up" style="max-width: 850px; font-size: 0.75rem; padding: 0.6rem;">
+                    <strong>Why Both Are Required:</strong> MAST enforces WHO can spend (signatures, timelocks, conditions) - but scripts are hashed in P2TR outputs. OP_RETURN tells nodes WHAT amounts exist so they can validate conservation rules before spending occurs. Neither alone is sufficient.
                 </div>
             </div>
         </section>
@@ -2696,11 +2701,11 @@ $ digibyte-cli getoraclepubkey 0<br>
                     <div class="card" style="padding: 0.75rem; border: 2px solid var(--dgb-blue);">
                         <h4 style="margin: 0 0 0.5rem; color: var(--dgb-blue); font-size: 0.9rem;">&#128274; Mint Transaction Rules</h4>
                         <div style="font-size: 0.7rem; line-height: 1.6;">
-                            <div style="margin-bottom: 0.3rem;"><strong>Amount Limits:</strong> $100 min, $100,000 max per tx<br><span class="text-muted">validation.cpp:642-647</span></div>
-                            <div style="margin-bottom: 0.3rem;"><strong>Collateral Ratio:</strong> 200%-1000% based on lock tier<br><span class="text-muted">consensus/digidollar.h:49-59</span></div>
-                            <div style="margin-bottom: 0.3rem;"><strong>Output Structure:</strong> P2TR collateral + P2TR DD token<br><span class="text-muted">validation.cpp:532-587</span></div>
-                            <div style="margin-bottom: 0.3rem;"><strong>Oracle Price:</strong> Must be valid &amp; non-zero<br><span class="text-muted">validation.cpp:476-479</span></div>
-                            <div><strong>DCA Multiplier:</strong> 1.0x-2.0x based on system health<br><span class="text-muted">consensus/dca.cpp:20-25</span></div>
+                            <div style="margin-bottom: 0.3rem;"><strong>Amount Limits:</strong> $100 min, $100,000 max per mint<br><span class="text-muted">validation.cpp:642-647</span></div>
+                            <div style="margin-bottom: 0.3rem;"><strong>Collateral Ratio:</strong> 200%-1000% (longer lock = lower ratio)<br><span class="text-muted">consensus/digidollar.h:49-59</span></div>
+                            <div style="margin-bottom: 0.3rem;"><strong>Output Structure:</strong> Creates 2 Taproot outputs (vault + DD tokens)<br><span class="text-muted">validation.cpp:532-587</span></div>
+                            <div style="margin-bottom: 0.3rem;"><strong>Oracle Price:</strong> Current DGB/USD price must exist<br><span class="text-muted">validation.cpp:476-479</span></div>
+                            <div><strong>DCA Multiplier:</strong> 1.0x-2.0x extra collateral if system stressed<br><span class="text-muted">consensus/dca.cpp:20-25</span></div>
                         </div>
                     </div>
 
@@ -2708,11 +2713,11 @@ $ digibyte-cli getoraclepubkey 0<br>
                     <div class="card" style="padding: 0.75rem; border: 2px solid var(--dd-gold);">
                         <h4 style="margin: 0 0 0.5rem; color: var(--dd-gold); font-size: 0.9rem;">&#128275; Redemption Rules</h4>
                         <div style="font-size: 0.7rem; line-height: 1.6;">
-                            <div style="margin-bottom: 0.3rem;"><strong>Timelock (CLTV):</strong> Block height &ge; nLockTime<br><span class="text-muted">validation.cpp:1058-1064</span></div>
-                            <div style="margin-bottom: 0.3rem;"><strong>DD Burning:</strong> inputDD &gt; outputDD required<br><span class="text-muted">validation.cpp:986-989</span></div>
-                            <div style="margin-bottom: 0.3rem;"><strong>Partial Redemption:</strong> DISABLED (exact amounts only)<br><span class="text-muted">validation.cpp:1024-1028</span></div>
-                            <div style="margin-bottom: 0.3rem;"><strong>ERR Multiplier:</strong> Burn 105-125% DD when health &lt;100%<br><span class="text-muted">consensus/err.cpp:30-35</span></div>
-                            <div><strong>Normal Blocked:</strong> During ERR (health &lt;100%)<br><span class="text-muted">validation.cpp:1068-1072</span></div>
+                            <div style="margin-bottom: 0.3rem;"><strong>Timelock (CLTV):</strong> Must wait until lock period expires<br><span class="text-muted">validation.cpp:1058-1064</span></div>
+                            <div style="margin-bottom: 0.3rem;"><strong>DD Burning:</strong> Must destroy DD tokens to unlock DGB<br><span class="text-muted">validation.cpp:986-989</span></div>
+                            <div style="margin-bottom: 0.3rem;"><strong>Partial Redemption:</strong> DISABLED - must redeem full amount<br><span class="text-muted">validation.cpp:1024-1028</span></div>
+                            <div style="margin-bottom: 0.3rem;"><strong>ERR Multiplier:</strong> During crisis: burn 105-125% DD to redeem<br><span class="text-muted">consensus/err.cpp:30-35</span></div>
+                            <div><strong>Normal Blocked:</strong> Regular redemption blocked during crisis<br><span class="text-muted">validation.cpp:1068-1072</span></div>
                         </div>
                     </div>
                 </div>
@@ -2722,18 +2727,18 @@ $ digibyte-cli getoraclepubkey 0<br>
                     <div class="card" style="padding: 0.75rem; border: 2px solid var(--success);">
                         <h4 style="margin: 0 0 0.5rem; color: var(--success); font-size: 0.9rem;">&#128257; Transfer Rules</h4>
                         <div style="font-size: 0.7rem; line-height: 1.6;">
-                            <div style="margin-bottom: 0.3rem;"><strong>DD Conservation:</strong> inputDD == outputDD (NO creation/destruction)<br><span class="text-muted">validation.cpp:804-810 - CRITICAL</span></div>
-                            <div style="margin-bottom: 0.3rem;"><strong>Output Limit:</strong> Max $100,000 per output<br><span class="text-muted">validation.cpp:770-771</span></div>
-                            <div><strong>P2TR Required:</strong> All DD outputs must be Taproot<br><span class="text-muted">validation.cpp:752-776</span></div>
+                            <div style="margin-bottom: 0.3rem;"><strong>DD Conservation:</strong> Can't create/destroy DD in transfers<br><span class="text-muted">validation.cpp:804-810 - CRITICAL</span></div>
+                            <div style="margin-bottom: 0.3rem;"><strong>Output Limit:</strong> Max $100,000 per single output<br><span class="text-muted">validation.cpp:770-771</span></div>
+                            <div><strong>P2TR Required:</strong> All DD must use Taproot addresses<br><span class="text-muted">validation.cpp:752-776</span></div>
                         </div>
                     </div>
 
                     <div class="card" style="padding: 0.75rem; border: 2px solid var(--danger);">
                         <h4 style="margin: 0 0 0.5rem; color: var(--danger); font-size: 0.9rem;">&#128721; Volatility Protection</h4>
                         <div style="font-size: 0.7rem; line-height: 1.6;">
-                            <div style="margin-bottom: 0.3rem;"><strong>20% (1hr):</strong> Freeze new minting<br><span class="text-muted">consensus/volatility.h:59</span></div>
-                            <div style="margin-bottom: 0.3rem;"><strong>30% (24hr):</strong> Freeze ALL DD operations<br><span class="text-muted">consensus/volatility.h:60</span></div>
-                            <div><strong>Cooldown:</strong> 144 blocks (~36 hours) after unfreeze<br><span class="text-muted">consensus/volatility.h:63</span></div>
+                            <div style="margin-bottom: 0.3rem;"><strong>20% drop (1hr):</strong> New minting frozen<br><span class="text-muted">consensus/volatility.h:59</span></div>
+                            <div style="margin-bottom: 0.3rem;"><strong>30% drop (24hr):</strong> ALL DD operations frozen<br><span class="text-muted">consensus/volatility.h:60</span></div>
+                            <div><strong>Cooldown:</strong> 144 blocks (~36 hrs) after price stabilizes<br><span class="text-muted">consensus/volatility.h:63</span></div>
                         </div>
                     </div>
                 </div>
@@ -2767,15 +2772,15 @@ $ digibyte-cli getoraclepubkey 0<br>
                         <div style="font-size: 0.7rem; line-height: 1.6;">
                             <div style="margin-bottom: 0.3rem;"><strong>Max Age:</strong> Oracle data &le; 3600 seconds old (1 hour)<br><span class="text-muted">bundle_manager.cpp:1000-1006</span></div>
                             <div style="margin-bottom: 0.3rem;"><strong>Future Check:</strong> timestamp &le; block.nTime + 60s<br><span class="text-muted">bundle_manager.cpp:1009-1014</span></div>
-                            <div style="margin-bottom: 0.3rem;"><strong>Block Sync:</strong> |block.nTime - oracle.timestamp| &le; 3600s<br><span class="text-muted">validation.cpp:4389-4394</span></div>
+                            <div style="margin-bottom: 0.3rem;"><strong>Block Sync:</strong> |block.nTime - oracle.timestamp| &le; 3600s<br><span class="text-muted">bundle_manager.cpp:999-1014</span></div>
                             <div><strong>Signature:</strong> Schnorr signature verified if present<br><span class="text-muted">bundle_manager.cpp:988-996</span></div>
                         </div>
                     </div>
                 </div>
 
                 <!-- Custom Opcodes -->
-                <div class="card mt-1 animate-fade-in-up" style="max-width: 1050px; padding: 0.75rem; border: 2px solid #9c27b0;">
-                    <h4 style="margin: 0 0 0.5rem; color: #9c27b0; font-size: 0.9rem;">&#128187; Custom DigiDollar Opcodes (Soft-Fork via OP_NOP slots)</h4>
+                <div class="card mt-1 animate-fade-in-up" style="max-width: 1050px; padding: 0.75rem; border: 2px solid var(--success);">
+                    <h4 style="margin: 0 0 0.5rem; color: var(--success); font-size: 0.9rem;">&#128187; Custom DigiDollar Opcodes (Soft-Fork via OP_NOP slots)</h4>
                     <div class="grid-5" style="gap: 0.5rem; font-size: 0.65rem;">
                         <div style="text-align: center; padding: 0.4rem; background: rgba(0,111,187,0.1); border-radius: 6px;">
                             <code style="color: var(--dgb-blue);">OP_DIGIDOLLAR</code><br>
@@ -2797,8 +2802,8 @@ $ digibyte-cli getoraclepubkey 0<br>
                             <span style="font-family: var(--font-mono);">0xbe</span><br>
                             <span class="text-muted">Verify ratio</span>
                         </div>
-                        <div style="text-align: center; padding: 0.4rem; background: rgba(156,39,176,0.1); border-radius: 6px;">
-                            <code style="color: #9c27b0;">OP_ORACLE</code><br>
+                        <div style="text-align: center; padding: 0.4rem; background: rgba(16,185,129,0.1); border-radius: 6px;">
+                            <code style="color: var(--success);">OP_ORACLE</code><br>
                             <span style="font-family: var(--font-mono);">0xbf</span><br>
                             <span class="text-muted">Price marker</span>
                         </div>
@@ -2820,7 +2825,7 @@ $ digibyte-cli getoraclepubkey 0<br>
                         <span style="color: var(--dd-gold);">&#8594;</span>
                         <div style="padding: 0.35rem 0.6rem; background: rgba(16,185,129,0.1); border-radius: 4px;">ConnectBlock()</div>
                         <span style="color: var(--dd-gold);">&#8594;</span>
-                        <div style="padding: 0.35rem 0.6rem; background: rgba(156,39,176,0.1); border-radius: 4px;">UpdatePriceCache()</div>
+                        <div style="padding: 0.35rem 0.6rem; background: rgba(16,185,129,0.1); border-radius: 4px;">UpdatePriceCache()</div>
                     </div>
                 </div>
 
@@ -2922,56 +2927,22 @@ $ digibyte-cli getoraclepubkey 0<br>
             </div>
         </section>
 
-        <!-- SLIDE 27: Technical Summary -->
+        <!-- SLIDE 27: Live Demo -->
         <section class="slide slide--hero">
-            <div class="slide-content" style="padding-top: 70px;">
-                <h2 class="slide-title animate-fade-in-up">Technical Summary</h2>
-                <p class="slide-subtitle animate-fade-in-up">Code-Verified Implementation Details</p>
+            <div class="slide-content" style="padding-top: 120px; text-align: center;">
+                <div class="animate-fade-in-up" style="font-size: 4rem; margin-bottom: 1rem;">&#127909;</div>
+                <h2 class="slide-title animate-fade-in-up" style="font-size: 3rem;">Live Testnet Demo</h2>
+                <p class="slide-subtitle animate-fade-in-up" style="font-size: 1.3rem; margin-top: 1.5rem;">Let's see DigiDollar in action</p>
 
-                <div class="grid-2 mt-3" style="max-width: 1000px; gap: 1.5rem;">
-                    <div class="card animate-fade-in-up" style="padding: 1.25rem;">
-                        <h3 class="text-gold" style="margin: 0 0 0.75rem;">Script Architecture</h3>
-                        <ul style="font-size: 0.85rem; line-height: 1.8; margin: 0; padding-left: 1.25rem;">
-                            <li><strong>Collateral Vault:</strong> P2TR + MAST (2 paths, both CLTV)</li>
-                            <li><strong>DigiDollar Output:</strong> Simple P2TR key-path only</li>
-                            <li><strong>Metadata:</strong> OP_RETURN with "DD" ASCII marker</li>
-                            <li><strong>Oracle:</strong> OP_ORACLE (0xbf) in coinbase</li>
-                        </ul>
-                    </div>
-
-                    <div class="card animate-fade-in-up" style="padding: 1.25rem;">
-                        <h3 class="text-blue" style="margin: 0 0 0.75rem;">Opcode Usage</h3>
-                        <ul style="font-size: 0.85rem; line-height: 1.8; margin: 0; padding-left: 1.25rem;">
-                            <li><strong>OP_CHECKCOLLATERAL:</strong> In ERR redemption path</li>
-                            <li><strong>OP_ORACLE:</strong> In coinbase OP_RETURN</li>
-                            <li><strong>OP_CHECKLOCKTIMEVERIFY:</strong> In both redemption paths</li>
-                            <li><span class="text-muted">OP_DIGIDOLLAR, OP_DDVERIFY, OP_CHECKPRICE: Reserved</span></li>
-                        </ul>
+                <div class="card animate-fade-in-up" style="max-width: 600px; margin: 3rem auto; padding: 2rem; text-align: center;">
+                    <div style="font-size: 1.1rem; color: var(--text-secondary); line-height: 1.8;">
+                        <div style="margin-bottom: 1rem;"><strong style="color: var(--dgb-blue);">Mint</strong> &rarr; <strong style="color: var(--success);">Transfer</strong> &rarr; <strong style="color: var(--dd-gold);">Redeem</strong></div>
+                        <div class="text-muted">Full transaction lifecycle in DigiByte Core wallet</div>
                     </div>
                 </div>
 
-                <div class="glow-box mt-3 animate-fade-in-up" style="max-width: 850px; text-align: center; padding: 1rem;">
-                    <strong style="font-size: 1.1rem;">100% On-Chain | Fully Verified | Production Ready</strong><br>
-                    <span class="text-muted">Source: src/digidollar/*.cpp | src/script/interpreter.cpp | src/oracle/*.cpp</span>
-                </div>
-
-                <div class="grid-4 mt-3" style="max-width: 800px;">
-                    <div class="stat-box animate-fade-in-up">
-                        <div class="stat-value" style="font-size: 1.25rem;">427</div>
-                        <div class="stat-label">Tests Passing</div>
-                    </div>
-                    <div class="stat-box animate-fade-in-up">
-                        <div class="stat-value" style="font-size: 1.25rem;">2</div>
-                        <div class="stat-label">Active Opcodes</div>
-                    </div>
-                    <div class="stat-box animate-fade-in-up">
-                        <div class="stat-value" style="font-size: 1.25rem;">2</div>
-                        <div class="stat-label">MAST Paths</div>
-                    </div>
-                    <div class="stat-box animate-fade-in-up">
-                        <div class="stat-value" style="font-size: 1.25rem;">7</div>
-                        <div class="stat-label">Exchange APIs</div>
-                    </div>
+                <div class="glow-box animate-fade-in-up" style="max-width: 500px; margin: 2rem auto; padding: 1.25rem; text-align: center;">
+                    <strong style="font-size: 1.1rem;">Mainnet Activation Expected: 2026</strong>
                 </div>
             </div>
         </section>

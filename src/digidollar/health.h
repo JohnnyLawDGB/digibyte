@@ -169,6 +169,13 @@ public:
      */
     static void ScanUTXOSet(CCoinsView* view, CCoinsView* validation_view, const node::BlockManager* blockman, const CTxMemPool* mempool = nullptr);
 
+    /**
+     * Get cached metrics without triggering updates
+     * Use this for lightweight access to current values without expensive operations
+     * @return Const reference to current cached metrics
+     */
+    static const SystemMetrics& GetCachedMetrics() { return s_currentMetrics; }
+
 private:
     // Internal data structures
     static SystemMetrics s_currentMetrics;

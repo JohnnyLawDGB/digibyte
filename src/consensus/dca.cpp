@@ -5,6 +5,7 @@
 #include <consensus/dca.h>
 
 #include <consensus/digidollar.h>
+#include <digidollar/health.h>
 #include <logging.h>
 #include <util/string.h>
 
@@ -159,49 +160,60 @@ bool DynamicCollateralAdjustment::IsSystemEmergency(int systemHealth)
 
 CAmount DynamicCollateralAdjustment::GetTotalSystemCollateral()
 {
-    // NOTE: This is a stub function. The actual collateral data comes from
-    // getdigidollarstats RPC which does proper UTXO scanning with locking.
-    // DCA calculations should be done at the RPC layer where metrics are available.
-    // This function exists for interface compatibility but returns 0.
-    LogPrint(BCLog::DIGIDOLLAR, "DCA: GetTotalSystemCollateral() - stub returning 0 (use getdigidollarstats RPC)\n");
-    return 0;
+    // Return cached collateral from SystemHealthMonitor
+    // These are updated by ScanUTXOSet() called from RPC layer
+    // IMPORTANT: Use GetCachedMetrics() - doesn't trigger expensive updates
+    const SystemMetrics& metrics = SystemHealthMonitor::GetCachedMetrics();
+    return metrics.totalCollateral;
 }
 
 CAmount DynamicCollateralAdjustment::GetTotalDDSupply()
 {
-    // NOTE: This is a stub function. The actual DD supply data comes from
-    // getdigidollarstats RPC which does proper UTXO scanning with locking.
-    // DCA calculations should be done at the RPC layer where metrics are available.
-    // This function exists for interface compatibility but returns 0.
-    LogPrint(BCLog::DIGIDOLLAR, "DCA: GetTotalDDSupply() - stub returning 0 (use getdigidollarstats RPC)\n");
-    return 0;
+    // Return cached DD supply from SystemHealthMonitor
+    // These are updated by ScanUTXOSet() called from RPC layer
+    // IMPORTANT: Use GetCachedMetrics() - doesn't trigger expensive updates
+    const SystemMetrics& metrics = SystemHealthMonitor::GetCachedMetrics();
+    return metrics.totalDDSupply;
 }
 
 int DynamicCollateralAdjustment::GetCurrentSystemHealth()
 {
-    // NOTE: This is a stub function. System health should be calculated at the
-    // RPC layer (getdigidollarstats) where proper UTXO scanning with cs_main
-    // locking is performed. Calling this directly may return stale data.
-    // Returns 30000 (max health) as a safe default when no data available.
-    LogPrint(BCLog::DIGIDOLLAR, "DCA: GetCurrentSystemHealth() - stub returning 30000 (use getdigidollarstats RPC)\n");
-    return 30000; // Max health when no scan data available
+    // Return cached system health from SystemHealthMonitor
+    // IMPORTANT: Use GetCachedMetrics() - doesn't trigger expensive updates
+    const SystemMetrics& metrics = SystemHealthMonitor::GetCachedMetrics();
+
+    // If we have a cached health value, return it
+    if (metrics.systemHealth > 0) {
+        return metrics.systemHealth;
+    }
+
+    // If no DD in circulation, system is maximally healthy (no liabilities)
+    if (metrics.totalDDSupply == 0) {
+        return 30000; // Max health when no DD issued
+    }
+
+    // Calculate health from cached metrics if available
+    if (metrics.lastOraclePrice > 0 && metrics.totalCollateral > 0 && metrics.totalDDSupply > 0) {
+        return CalculateSystemHealth(metrics.totalCollateral, metrics.totalDDSupply, metrics.lastOraclePrice);
+    }
+
+    // Return max health as safe default when no data available
+    return 30000;
 }
 
 bool DynamicCollateralAdjustment::IsOracleAvailable()
 {
-    // NOTE: Oracle availability should be checked via the RPC layer.
-    // This stub returns true to avoid blocking operations incorrectly.
-    LogPrint(BCLog::DIGIDOLLAR, "DCA: IsOracleAvailable() - stub returning true\n");
-    return true;
+    // Check cached oracle data
+    // IMPORTANT: Use GetCachedMetrics() - doesn't trigger expensive updates
+    const SystemMetrics& metrics = SystemHealthMonitor::GetCachedMetrics();
+    return (metrics.lastOraclePrice > 0 && metrics.activeOracles > 0);
 }
 
 double DynamicCollateralAdjustment::GetCurrentDCAMultiplier()
 {
-    // NOTE: DCA multiplier should be calculated at the RPC layer where
-    // proper system health data is available from UTXO scanning.
-    // Returns 1.0 (healthy) as default when no scan data available.
-    LogPrint(BCLog::DIGIDOLLAR, "DCA: GetCurrentDCAMultiplier() - stub returning 1.0 (use getdigidollarstats RPC)\n");
-    return 1.0;
+    // Get DCA multiplier based on current system health
+    int systemHealth = GetCurrentSystemHealth();
+    return GetDCAMultiplier(systemHealth);
 }
 
 bool DynamicCollateralAdjustment::ValidateDCAConfig(std::string& error)

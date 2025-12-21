@@ -4377,25 +4377,21 @@ bool DigiDollarWallet::SignDDInputs(CMutableTransaction& tx,
         scriptParams.internalKey = ownerXOnly;
         scriptParams.oracleKeys = DigiDollar::GetOracleKeys(15); // Same as mint
 
-        // Add the 4 redemption paths in the same order as mint
+        // Add the 2 redemption paths in the same order as CreateCollateralP2TR in scripts.cpp
+        // DigiDollar uses exactly 2 MAST redemption paths:
+        // 1. Normal path: CLTV + owner signature (system health >= 100%)
+        // 2. ERR path: CLTV + OP_CHECKCOLLATERAL + owner signature (system health < 100%)
+        //
+        // CRITICAL: Both paths are at depth 1 to match CreateCollateralP2TR
+        // NOTE: Partial redemption and Emergency oracle override are NOT supported.
         CScript normalPath = DigiDollar::CreateNormalRedemptionPath(scriptParams);
         if (!normalPath.empty()) {
-            builder.Add(1, normalPath, 0xC0);
-        }
-
-        CScript partialPath = DigiDollar::CreatePartialRedemptionPath(scriptParams);
-        if (!partialPath.empty()) {
-            builder.Add(2, partialPath, 0xC0);
-        }
-
-        CScript emergencyPath = DigiDollar::CreateEmergencyPath(scriptParams);
-        if (!emergencyPath.empty()) {
-            builder.Add(3, emergencyPath, 0xC0);
+            builder.Add(1, normalPath, 0xC0);  // Leaf version 0xC0 for Tapscript
         }
 
         CScript errPath = DigiDollar::CreateERRPath(scriptParams);
         if (!errPath.empty()) {
-            builder.Add(3, errPath, 0xC0);
+            builder.Add(1, errPath, 0xC0);  // Leaf version 0xC0 for Tapscript
         }
 
         // Finalize with the internal key to get the merkle root
@@ -4789,25 +4785,21 @@ bool DigiDollarWallet::SignRedemptionTransaction(CMutableTransaction& tx,
         scriptParams.internalKey = ownerXOnly;
         scriptParams.oracleKeys = DigiDollar::GetOracleKeys(15);
 
-        // Add the 4 redemption paths in the same order as mint
+        // Add the 2 redemption paths in the same order as CreateCollateralP2TR in scripts.cpp
+        // DigiDollar uses exactly 2 MAST redemption paths:
+        // 1. Normal path: CLTV + owner signature (system health >= 100%)
+        // 2. ERR path: CLTV + OP_CHECKCOLLATERAL + owner signature (system health < 100%)
+        //
+        // CRITICAL: Both paths are at depth 1 to match CreateCollateralP2TR
+        // NOTE: Partial redemption and Emergency oracle override are NOT supported.
         CScript normalPath = DigiDollar::CreateNormalRedemptionPath(scriptParams);
         if (!normalPath.empty()) {
-            builder.Add(1, normalPath, 0xC0);
-        }
-
-        CScript partialPath = DigiDollar::CreatePartialRedemptionPath(scriptParams);
-        if (!partialPath.empty()) {
-            builder.Add(2, partialPath, 0xC0);
-        }
-
-        CScript emergencyPath = DigiDollar::CreateEmergencyPath(scriptParams);
-        if (!emergencyPath.empty()) {
-            builder.Add(3, emergencyPath, 0xC0);
+            builder.Add(1, normalPath, 0xC0);  // Leaf version 0xC0 for Tapscript
         }
 
         CScript errPath = DigiDollar::CreateERRPath(scriptParams);
         if (!errPath.empty()) {
-            builder.Add(3, errPath, 0xC0);
+            builder.Add(1, errPath, 0xC0);  // Leaf version 0xC0 for Tapscript
         }
 
         // Finalize with the internal key

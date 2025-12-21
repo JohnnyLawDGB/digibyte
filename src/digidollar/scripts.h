@@ -34,11 +34,14 @@ struct MintParams {
 /**
  * Create P2TR collateral locking script with MAST redemption paths
  *
- * This creates a Taproot output with 4 spending conditions:
- * 1. Normal redemption after timelock (weight 64 - most likely)
- * 2. Emergency override with 8-of-15 oracle consensus (weight 4 - rare)
- * 3. Partial redemption with price verification (weight 16 - medium)
- * 4. ERR redemption when system under-collateralized (weight 2 - very rare)
+ * This creates a Taproot output with 2 spending conditions:
+ * 1. Normal redemption after timelock (system health >= 100%)
+ * 2. ERR redemption after timelock when system under-collateralized (health < 100%)
+ *
+ * CRITICAL: Both paths REQUIRE the timelock (CLTV) to expire first.
+ * There is NO early redemption, NO forced liquidation, NO exceptions.
+ *
+ * NOTE: Partial redemption and Emergency oracle override are NOT supported.
  *
  * @param params Parameters including DD amount, lock period, keys, etc.
  * @return CScript P2TR script (OP_1 + 32-byte taproot output)

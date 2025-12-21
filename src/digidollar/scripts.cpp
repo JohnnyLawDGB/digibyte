@@ -127,12 +127,16 @@ CScript CreatePartialRedemptionPath(const MintParams& params)
 
 CScript CreateERRPath(const MintParams& params)
 {
-    if (params.ddAmount <= 0) {
+    if (params.ddAmount <= 0 || params.lockHeight < 0) {
         // LogPrintf("DigiDollar: Invalid parameters for ERR path\n");
         return CScript();
     }
 
     CScript script;
+
+    // ERR path also requires timelock expiry (same as Normal path)
+    // This ensures collateral is NEVER unlocked until timelock expires
+    script << params.lockHeight << OP_CHECKLOCKTIMEVERIFY << OP_DROP;
 
     // Check if system collateral ratio < 100%
     script << OP_CHECKCOLLATERAL << CScriptNum(100) << OP_LESSTHAN << OP_VERIFY;
@@ -143,7 +147,7 @@ CScript CreateERRPath(const MintParams& params)
     // Owner signature
     script << ToByteVector(params.ownerKey) << OP_CHECKSIG;
 
-    // LogPrintf("DigiDollar: Created ERR path for %d DD\n", params.ddAmount);
+    // LogPrintf("DigiDollar: Created ERR path for %d DD at height %d\n", params.ddAmount, params.lockHeight);
 
     return script;
 }
@@ -159,10 +163,15 @@ CScript CreateCollateralP2TR(const MintParams& params)
         // Use TaprootBuilder to create MAST
         TaprootBuilder builder;
 
-        // Add redemption paths with valid depths that form a proper binary tree
-        // For a 4-leaf tree, valid depth combinations are:
-        // - All at depth 2: (2,2,2,2) - balanced tree
-        // - Mixed: (1,2,3,3) or (2,2,2,2) - valid structures
+        // DigiDollar uses exactly 2 MAST redemption paths:
+        // 1. Normal path: CLTV + owner signature (system health >= 100%)
+        // 2. ERR path: CLTV + OP_CHECKCOLLATERAL + owner signature (system health < 100%)
+        //
+        // CRITICAL: Both paths REQUIRE the timelock (CLTV) to expire first.
+        // There is NO early redemption, NO forced liquidation, NO exceptions.
+        //
+        // NOTE: Partial redemption and Emergency oracle override are NOT supported.
+        // Users must redeem the full minted amount in a single transaction.
 
         // Normal path (most common) - depth 1
         CScript normalPath = CreateNormalRedemptionPath(params);
@@ -170,22 +179,10 @@ CScript CreateCollateralP2TR(const MintParams& params)
             builder.Add(1, normalPath, 0xC0);  // Leaf version 0xC0 for Tapscript
         }
 
-        // Partial path (medium) - depth 2
-        CScript partialPath = CreatePartialRedemptionPath(params);
-        if (!partialPath.empty()) {
-            builder.Add(2, partialPath, 0xC0);
-        }
-
-        // Emergency path (rare) - depth 3
-        CScript emergencyPath = CreateEmergencyPath(params);
-        if (!emergencyPath.empty()) {
-            builder.Add(3, emergencyPath, 0xC0);
-        }
-
-        // ERR path (very rare) - depth 3
+        // ERR path (rare - only when system < 100% collateralized) - depth 1
         CScript errPath = CreateERRPath(params);
         if (!errPath.empty()) {
-            builder.Add(3, errPath, 0xC0);
+            builder.Add(1, errPath, 0xC0);
         }
 
         // Finalize with internal key

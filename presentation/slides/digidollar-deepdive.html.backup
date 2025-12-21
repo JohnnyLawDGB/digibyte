@@ -947,7 +947,7 @@
             </div>
         </section>
 
-        
+
         <section class="slide slide--gold slide--compact">
             <div class="slide-content slide-content-safe">
                 <h2 class="slide-title animate-fade-in-up">Redemption Transaction Walkthrough</h2>
@@ -1376,7 +1376,7 @@
                         <span class="badge badge--blue">Testnet Active</span>
                     </div>
                     <div class="card animate-fade-in-up" style="transition-delay: 0.8s;">
-                        <h4 class="text-gold mb-1">Phase 2 (Mainnet)</h4>
+                        <h4 class="text-gold mb-1">Phase 2 (Testnet)</h4>
                         <p class="text-muted">8-of-15 Schnorr threshold</p>
                         <p class="text-muted">Byzantine fault tolerant</p>
                         <span class="badge badge--gold">Coming Soon</span>

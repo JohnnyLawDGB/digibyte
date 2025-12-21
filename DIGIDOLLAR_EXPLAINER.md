@@ -1,6 +1,6 @@
 # DigiDollar - Decentralized USD Stablecoin on DigiByte
-*Updated: 2025-12-18*
-*Document Version: 2.0 - ERR Semantics Corrected*
+*Updated: 2025-12-21*
+*Document Version: 3.0 - Implementation Verification Complete*
 
 ## Overview
 
@@ -168,7 +168,13 @@ Enhanced privacy using P2TR outputs and Schnorr signatures
 30 hardcoded oracle nodes with 15 active per epoch. Phase One (testnet): 1-of-1 single oracle. Phase Two (mainnet): 8-of-15 Schnorr threshold signature consensus. Oracle prices use micro-USD format (1,000,000 = $1.00).
 
 #### MAST Implementation
-Efficient script execution with Merkleized Alternative Script Trees
+Efficient script execution with Merkleized Alternative Script Trees. The collateral vault uses **2 redemption paths**:
+1. **Normal Path**: CLTV timelock expiry + owner signature (system health ≥ 100%)
+2. **ERR Path**: CLTV timelock expiry + OP_CHECKCOLLATERAL + owner signature (system health < 100%)
+
+Both paths **require the timelock to expire first** - there is no early redemption, no forced liquidation, and no exceptions.
+
+**Implementation Note**: Partial redemption is NOT supported. Users must redeem the full minted amount in a single transaction.
 
 ### Key Features
 
@@ -355,6 +361,25 @@ digibyte-cli -rpcwallet=restored rescanblockchain
 - **Tech Specs**: https://github.com/orgs/DigiByte-Core/discussions/324
 - **50 Use Cases**: https://github.com/orgs/DigiByte-Core/discussions/325
 - **Join Discussion**: https://github.com/orgs/DigiByte-Core/discussions
+
+---
+
+## Implementation Status & Code Alignment
+
+**Last Verified**: 2025-12-21
+
+| Feature | Document Spec | Code Status | Notes |
+|---------|---------------|-------------|-------|
+| 2 MAST Paths | Normal + ERR only | ⚠️ Code has 4 paths | Emergency + Partial exist but should be removed |
+| Partial Redemption | NOT supported | ✅ Disabled at validation | `DD_TX_PARTIAL` rejected with "partial-redemption-disabled" |
+| ERR Returns | 100% collateral, burns more DD | ✅ Correct | `GetRequiredDDBurn()` increases burn, `GetAdjustedRedemption()` returns 100% |
+| Minting Blocked During ERR | Yes | ✅ Correct | `ShouldBlockMinting()` returns true when health < 100% |
+| Timelock Required | Both paths need CLTV | ⚠️ Emergency path lacks CLTV | Code issue: Emergency path bypasses timelock |
+
+**Code Changes Needed**:
+1. Remove Emergency path from MAST tree (or add CLTV requirement)
+2. Remove Partial path from MAST tree entirely (dead code)
+3. Update `scripts.h` comments from "4 spending conditions" to "2 spending conditions"
 
 ---
 

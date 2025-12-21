@@ -1,6 +1,6 @@
 # DigiDollar Oracle System - Simple Explainer
-*Updated: 2025-12-18*
-*Document Version: 2.0 - Phase Two Infrastructure Added*
+*Updated: 2025-12-21*
+*Document Version: 3.0 - Price Format Corrections*
 
 ## Overview
 
@@ -1104,7 +1104,7 @@ Byte-by-byte parsing:
 [3]  0x01 = Version 1    ← "Phase One format"
 [4]  0x11 = PUSH 17      ← "Next 17 bytes are data"
 [5]  0x00 = Oracle ID 0  ← "Oracle #0"
-[6-13]    = Price        ← "50000 cents = $500.00/DGB"
+[6-13]    = Price        ← "6500 micro-USD = $0.0065/DGB"
 [14-21]   = Timestamp    ← "Unix time when price was set"
 ```
 
@@ -1141,7 +1141,7 @@ Position  Length  Type    Name         Value       Description
 3         1       uint8   Version      0x01        Phase One format
 4         1       opcode  PUSHDATA     0x11 (17)   Push 17 bytes (data)
 5         1       uint8   Oracle ID    0x00        Oracle 0 (Phase One)
-6-13      8       uint64  Price        <LE bytes>  DigiDollar cents
+6-13      8       uint64  Price        <LE bytes>  Micro-USD (1,000,000 = $1.00)
 14-21     8       int64   Timestamp    <LE bytes>  Unix timestamp
 
 

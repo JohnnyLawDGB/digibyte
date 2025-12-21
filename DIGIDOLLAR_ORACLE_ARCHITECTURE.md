@@ -1,8 +1,8 @@
 # DigiDollar Oracle System - Complete Architecture Documentation
 **DigiByte v8.26 - Oracle Phase One Implementation with Phase Two Preparation**
-*Updated: 2025-12-18*
+*Updated: 2025-12-21*
 *Implementation Status: 100% Complete Phase One, Phase Two Infrastructure Ready*
-*Document Version: 5.0 - Phase Two Validation Functions Added*
+*Document Version: 6.0 - Price Format Corrections (micro-USD)*
 
 ---
 
@@ -830,7 +830,7 @@ PHASE 1: MESSAGE CREATION (External Oracle Daemon)
 │    ┌─────────────────────────────────────────────────────┐  │
 │    │ struct COraclePriceMessage {                        │  │
 │    │   uint32_t oracle_id;        // 0 (Phase One)      │  │
-│    │   uint64_t price_micro_usd;  // DigiDollar cents   │  │
+│    │   uint64_t price_micro_usd;  // Micro-USD (1M = $1) │  │
 │    │   int64_t  timestamp;        // Unix time          │  │
 │    │   uint32_t block_height;     // Current height     │  │
 │    │   uint64_t nonce;            // Random nonce       │  │
@@ -939,7 +939,7 @@ PHASE 4: BLOCK VALIDATION (All Nodes - validation.cpp:4130)
 │ 5. Validate Bundle:                                           │
 │    ✓ version == 0x01                                         │
 │    ✓ oracle_id == 0                                          │
-│    ✓ price in range [1, 1000] cents                          │
+│    ✓ price in range [100, 100M] micro-USD                    │
 │    ✓ timestamp < block.nTime + 60                            │
 │    ✓ timestamp > block.nTime - 3600                          │
 │    ✓ messages.size() == 1 (Phase One)                        │
@@ -966,12 +966,12 @@ PHASE 5: PRICE CACHE (ConnectBlock - validation.cpp:2826)
 │   ┌─────────────────────────────────────────┐                │
 │   │ std::map<int, uint64_t> height_to_price│                │
 │   ├─────────────────────────────────────────┤                │
-│   │ [695] → 49500 cents                    │                │
-│   │ [696] → 49800 cents                    │                │
-│   │ [697] → 50000 cents                    │                │
-│   │ [698] → 50200 cents                    │                │
-│   │ [699] → 50100 cents                    │                │
-│   │ [700] → 50000 cents  ◄── NEW           │                │
+│   │ [695] → 6400 micro-USD ($0.0064)       │                │
+│   │ [696] → 6450 micro-USD ($0.00645)      │                │
+│   │ [697] → 6500 micro-USD ($0.0065)       │                │
+│   │ [698] → 6550 micro-USD ($0.00655)      │                │
+│   │ [699] → 6500 micro-USD ($0.0065)       │                │
+│   │ [700] → 6500 micro-USD ($0.0065) ◄ NEW │                │
 │   └─────────────────────────────────────────┘                │
 │                                                               │
 │ Cache management:                                             │
@@ -991,16 +991,16 @@ PHASE 6: DIGIDOLLAR USAGE (Minting/Redemption)
 │ Query oracle price:                                           │
 │   uint64_t price = OracleBundleManager::GetInstance()         │
 │                      .GetLatestPrice();                       │
-│   // Returns: 50000 cents = $500.00 per DGB                   │
+│   // Returns: 6500 micro-USD = $0.0065 per DGB                │
 │                                                               │
 │ Calculate collateral:                                         │
 │   ┌─────────────────────────────────────────────────┐        │
-│   │ Mint $100 DigiDollars (10,000 cents)           │        │
+│   │ Mint $100 DigiDollars (100,000,000 micro-USD)  │        │
 │   │ Collateral ratio: 200% (Phase One)             │        │
-│   │ Oracle price: 50000 cents ($500.00/DGB)        │        │
+│   │ Oracle price: 6500 micro-USD ($0.0065/DGB)     │        │
 │   │                                                 │        │
 │   │ Required DGB:                                   │        │
-│   │   ($100 × 2) ÷ $500/DGB = 0.4 DGB              │        │
+│   │   ($100 × 2) ÷ $0.0065/DGB = 30,769 DGB        │        │
 │   │                                                 │        │
 │   │ Formula:                                        │        │
 │   │   collateral_sats = (dd_amount × COIN × 2) /   │        │
@@ -1082,7 +1082,7 @@ Phase One Compact Format:
 │ 3   │ 1   │ u8  │ Version      │ 0x01         │ Phase One    │
 │ 4   │ 1   │ OP  │ PUSHDATA     │ 0x11 (17)    │ Push 17 bytes│
 │ 5   │ 1   │ u8  │ Oracle ID    │ 0x00         │ Oracle 0     │
-│ 6-13│ 8   │ u64 │ Price        │ LE uint64    │ DD cents     │
+│ 6-13│ 8   │ u64 │ Price        │ LE uint64    │ Micro-USD    │
 │14-21│ 8   │ i64 │ Timestamp    │ LE int64     │ Unix time    │
 └─────┴─────┴─────┴──────────────┴──────────────┴──────────────┘
 
@@ -1092,7 +1092,7 @@ Total: 22 bytes (within 83-byte MAX_OP_RETURN_RELAY limit) ✅
 EXAMPLE: Real OP_ORACLE Output
 ═══════════════════════════════════════════════════════════════════
 Hex Dump (22 bytes):
-6a bf 01 01 11 00 50 c3 00 00 00 00 00 00 00 2f 50 65 00 00 00 00
+6a bf 01 01 11 00 64 19 00 00 00 00 00 00 00 2f 50 65 00 00 00 00
 
 Parsed:
 ┌──────┬──────┬──────────────────────────────────────────────┐
@@ -1104,8 +1104,8 @@ Parsed:
 │ 3    │ 01   │ Version 1 (Phase One format)                │
 │ 4    │ 11   │ PUSH 17: Next 17 bytes are data             │
 │ 5    │ 00   │ Oracle ID = 0                               │
-│ 6-13 │ 50c3 │ Price = 0x000000000000c350 (LE)             │
-│      │ 0000 │       = 50000 cents = $500.00/DGB           │
+│ 6-13 │ 6419 │ Price = 0x0000000000001964 (LE)             │
+│      │ 0000 │       = 6500 micro-USD = $0.0065/DGB        │
 │      │ 0000 │                                              │
 │      │ 0000 │                                              │
 │14-21 │ 002f │ Timestamp = 0x0000000065502f00 (LE)         │
@@ -1179,7 +1179,7 @@ CScript OracleBundleManager::CreateOracleScript(const COracleBundle& bundle) con
 **Input Message**:
 ```
 oracle_id:        0
-price_micro_usd:  5 DigiDollar cents (= $0.05/DGB, stored as 5)
+price_micro_usd:  6500 micro-USD (= $0.0065/DGB)
 timestamp:        1700000000 (0x65502F00 in hex)
 ```
 
@@ -1190,7 +1190,7 @@ bf          - OP_ORACLE
 12          - OP_PUSHDATA (18 bytes following)
 01          - Version (0x01)
 00          - Oracle ID (0)
-05 00 00 00 00 00 00 00  - Price (5 DigiDollar cents = $0.05/DGB in little-endian)
+64 19 00 00 00 00 00 00  - Price (6500 micro-USD = $0.0065/DGB in little-endian)
 00 2f 50 65 00 00 00 00  - Timestamp (1,700,000,000 in little-endian)
 
 Total: 22 bytes (including OP_RETURN and OP_PUSHDATA opcodes)
@@ -1198,8 +1198,8 @@ Total: 22 bytes (including OP_RETURN and OP_PUSHDATA opcodes)
 
 **Verification (Little-Endian)**:
 ```
-Price bytes: 05 00 00 00 00 00 00 00
-  Value: 5 DigiDollar cents = $0.05 per DGB ✓
+Price bytes: 64 19 00 00 00 00 00 00
+  Value: 6500 micro-USD = $0.0065 per DGB ✓
 
 Timestamp bytes: 00 2f 50 65 00 00 00 00
   Step 1: 0x00                          = 0
@@ -1307,7 +1307,7 @@ FULL FORMAT (P2P Transmission):
 │ Field                │ Size     │
 ├──────────────────────┼──────────┤
 │ oracle_id            │  4 bytes │
-│ price_micro_usd*     │  8 bytes │  * Actually DigiDollar cents
+│ price_micro_usd      │  8 bytes │  (1,000,000 = $1.00)
 │ timestamp            │  8 bytes │
 │ block_height         │  4 bytes │
 │ nonce                │  8 bytes │
@@ -1326,7 +1326,7 @@ COMPACT FORMAT (Blockchain Storage):
 │ OP_PUSHDATA          │  1 byte  │
 │ Version              │  1 byte  │
 │ oracle_id            │  1 byte  │
-│ price_micro_usd*     │  8 bytes │  * Actually DigiDollar cents
+│ price_micro_usd      │  8 bytes │  (1,000,000 = $1.00)
 │ timestamp            │  8 bytes │
 ├──────────────────────┼──────────┤
 │ TOTAL                │ 22 bytes │

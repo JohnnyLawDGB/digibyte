@@ -1,8 +1,8 @@
 # DigiDollar Implementation Architecture
 **DigiByte v8.26 - Current Implementation Status**
-*Updated: 2025-12-18*
+*Updated: 2025-12-21*
 *Implementation Status: 90% Complete*
-*Document Version: 5.0 - ERR Semantics Corrected, DCA/ERR Fully Verified*
+*Document Version: 6.0 - Implementation Verification Complete*
 
 ## Executive Summary
 
@@ -2170,4 +2170,34 @@ Everything else - minting, sending, receiving, redemption, protection systems, n
 
 ---
 
-*This architecture document accurately reflects the DigiDollar implementation state as of 2025-12-13 (Post RC5), based on comprehensive analysis of the actual codebase, functional test verification, and direct code inspection. All claims have been verified against source code and test results. Updated with code-verified corrections for: transaction version encoding (0x0D1D0770), descriptor wallet fix (e4c7e2bc43), fee requirements (0.1 DGB minimum), IBD behavior fix, redemption paths (2 functional, not 4), oracle system (real libcurl + mock fallback), and test count (18 functional tests).*
+## 23. Implementation Verification (2025-12-21)
+
+### Code-to-Specification Alignment
+
+| Feature | Specification | Code Implementation | Status |
+|---------|---------------|---------------------|--------|
+| **MAST Paths** | 2 (Normal + ERR) | Code has 4 paths in MAST tree | ⚠️ Needs cleanup |
+| **Partial Redemption** | Not supported | Disabled at validation layer | ✅ Correct |
+| **ERR Behavior** | 100% collateral, 105-125% DD burn | Matches specification | ✅ Correct |
+| **Emergency Path** | Requires CLTV | Code lacks CLTV requirement | ⚠️ Needs fix |
+| **Minting During ERR** | Blocked | Correctly blocked | ✅ Correct |
+| **Oracle Price Format** | Micro-USD (1,000,000 = $1.00) | Micro-USD implemented | ✅ Correct |
+| **DD Amount Format** | Cents (100 = $1.00) | Cents implemented | ✅ Correct |
+
+### Required Code Changes
+
+1. **Remove Emergency Path** from MAST tree (or add CLTV requirement to match spec)
+2. **Remove Partial Path** from MAST tree entirely (dead code, increases complexity)
+3. **Update `scripts.h` comments** from "4 spending conditions" to "2 spending conditions"
+
+### Key File References
+
+- MAST path definitions: `src/digidollar/scripts.h:37-41`
+- Path creation: `src/digidollar/scripts.cpp:55-149`
+- MAST tree building: `src/digidollar/scripts.cpp:151-218`
+- Partial rejection: `src/digidollar/validation.cpp:1023-1028`
+- ERR burn calculation: `src/consensus/err.cpp:63-95`
+
+---
+
+*This architecture document accurately reflects the DigiDollar implementation state as of 2025-12-21 (Post RC5), based on comprehensive analysis of the actual codebase, functional test verification, and direct code inspection. All claims have been verified against source code and test results. Updated with code-verified corrections for: transaction version encoding (0x0D1D0770), descriptor wallet fix (e4c7e2bc43), fee requirements (0.1 DGB minimum), IBD behavior fix, redemption paths (2 functional, not 4), oracle system (real libcurl + mock fallback), and test count (18 functional tests).*

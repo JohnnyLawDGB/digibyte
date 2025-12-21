@@ -1149,6 +1149,18 @@ TxBuilderResult RedeemTxBuilder::BuildRedemptionTransaction(const TxBuilderRedee
         CPubKey ownerPubKey = params.ownerKey.GetPubKey();
         CScript ddChangeScript = CreateDigiDollarP2TR(XOnlyPubKey(ownerPubKey), ddChange);
         tx.vout.push_back(CTxOut(0, ddChangeScript));
+
+        // CRITICAL FIX: Add OP_RETURN with DD change amount so wallet can recognize it
+        // Format: OP_RETURN <"DD"> <txType=3 for REDEEM> <ddChangeAmount>
+        // Without this, the wallet cannot determine the DD value of the change output
+        // when scanning the blockchain (the P2TR output alone has 0 DGB value)
+        CScript metadataScript;
+        metadataScript << OP_RETURN
+                       << std::vector<unsigned char>{'D', 'D'}
+                       << CScriptNum(3)  // 3 = REDEEM transaction type
+                       << CScriptNum(ddChange);  // DD change amount in cents
+        tx.vout.push_back(CTxOut(0, metadataScript));
+        LogPrintf("DigiDollar: Added OP_RETURN for DD change: %d cents\n", ddChange);
     } else if (ddChange < 0) {
         // This should never happen - SelectDDCoins should ensure enough DD
         result.error = "Insufficient DD selected (input: " +

@@ -766,7 +766,8 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
                 // Get transaction type
                 if (!txout.scriptPubKey.GetOp(pc, opcode, data)) continue;
                 CScriptNum txType(data, true);
-                if (txType.getint() != 2) continue;  // Only TRANSFER transactions (type 2)
+                int type = txType.getint();
+                if (type != 2 && type != 3) continue;  // TRANSFER (2) or REDEEM (3) transactions
 
                 // Extract DD amounts
                 while (txout.scriptPubKey.GetOp(pc, opcode, data)) {
@@ -3208,13 +3209,14 @@ bool DigiDollarWallet::RedeemDigiDollar(const uint256& dd_timelock_id, const CAm
         // DigiDollar transactions MUST pay at least 0.1 DGB fee to miners
         params.feeRate = 35000000; // 0.35 DGB/kB = 0.105 DGB for 300 byte tx
 
-        // Select DD UTXOs to burn (get amounts too for DD change calculation)
+        // Select DD UTXOs to burn (any DD can be used - DD is fungible)
+        // The key is to burn the EXACT amount that was minted for this vault
         CAmount selectedTotal = 0;
         if (!SelectDDCoins(amount, params.ddUtxos, selectedTotal, &params.ddAmounts)) {
             LogPrintf("DigiDollar: Insufficient DD balance for redemption\n");
             return false;
         }
-        LogPrintf("DigiDollar: Selected %zu DD UTXOs totaling %lld cents (need %lld cents)\n",
+        LogPrintf("DigiDollar: Selected %zu DD UTXOs totaling %lld cents for redemption of %lld cents\n",
                   params.ddUtxos.size(), static_cast<long long>(selectedTotal), static_cast<long long>(amount));
         LogPrintf("DigiDollar: ddAmounts size: %zu\n", params.ddAmounts.size());
         for (size_t i = 0; i < params.ddAmounts.size(); i++) {
@@ -5495,14 +5497,15 @@ bool DigiDollarWallet::DetectIncomingDDOutputs(const CTransactionRef& tx,
             // Get transaction type
             if (!txout.scriptPubKey.GetOp(pc, opcode, data)) continue;
             CScriptNum txType(data, true);
-            if (txType.getint() != 2) continue;  // Only TRANSFER transactions (type 2)
+            int type = txType.getint();
+            if (type != 2 && type != 3) continue;  // TRANSFER (2) or REDEEM (3) transactions
 
             // Extract DD amounts
             while (txout.scriptPubKey.GetOp(pc, opcode, data)) {
                 if (data.size() > 0) {
                     CScriptNum amount(data, true, 8);  // 8-byte max for large DD amounts
                     dd_amounts.push_back(amount.GetInt64());
-                    LogPrintf("DigiDollar: Found DD amount in OP_RETURN: %lld cents\n", (long long)amount.GetInt64());
+                    LogPrintf("DigiDollar: Found DD amount in OP_RETURN: %lld cents (txType=%d)\n", (long long)amount.GetInt64(), type);
                 }
             }
             break;  // Only one OP_RETURN per transaction

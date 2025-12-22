@@ -5,10 +5,12 @@
 #include <qt/digidollarredeemwidget.h>
 
 #include <qt/digidollarsendwidget.h> // For AmountValidator
+#include <qt/digidollarcoincontroldialog.h>
 #include <qt/walletmodel.h>
 #include <qt/clientmodel.h>
 #include <qt/guiutil.h>
 #include <qt/digibyteunits.h>
+#include <wallet/ddcoincontrol.h>
 #include <consensus/amount.h>
 #include <univalue.h>
 #include <logging.h>
@@ -30,6 +32,11 @@
 DigiDollarRedeemWidget::DigiDollarRedeemWidget(QWidget *parent) :
     QWidget(parent),
     m_mainLayout(nullptr),
+    m_coinControlFrame(nullptr),
+    m_coinControlLayout(nullptr),
+    m_coinControlButton(nullptr),
+    m_coinControlQuantityLabel(nullptr),
+    m_coinControlAmountLabel(nullptr),
     m_positionFrame(nullptr),
     m_positionLayout(nullptr),
     m_positionIdLabel(nullptr),
@@ -94,6 +101,7 @@ void DigiDollarRedeemWidget::setupUI()
     m_amountValidator = new AmountValidator(0.00000001, 999999999.99999999, this);
 
     // Setup sections
+    setupCoinControlSection();
     setupPositionSection();
     setupAmountSection();
     setupPositionInfoSection();
@@ -103,6 +111,45 @@ void DigiDollarRedeemWidget::setupUI()
     m_mainLayout->addStretch();
 
     setLayout(m_mainLayout);
+}
+
+void DigiDollarRedeemWidget::setupCoinControlSection()
+{
+    // Create coin control frame
+    m_coinControlFrame = new QFrame(this);
+    m_coinControlFrame->setObjectName("coinControlFrame");
+    m_coinControlFrame->setFrameStyle(QFrame::StyledPanel);
+    m_coinControlFrame->setFrameShadow(QFrame::Sunken);
+
+    m_coinControlLayout = new QHBoxLayout(m_coinControlFrame);
+    m_coinControlLayout->setSpacing(10);
+    m_coinControlLayout->setContentsMargins(10, 8, 10, 8);
+
+    // "Inputs..." button to open coin control dialog
+    m_coinControlButton = new QPushButton(tr("Inputs..."), this);
+    m_coinControlButton->setObjectName("coinControlButton");
+    m_coinControlButton->setToolTip(tr("Manually select DD inputs to burn for redemption"));
+    m_coinControlButton->setMinimumWidth(80);
+    m_coinControlLayout->addWidget(m_coinControlButton);
+
+    // Quantity label (number of selected inputs)
+    m_coinControlQuantityLabel = new QLabel(this);
+    m_coinControlQuantityLabel->setObjectName("coinControlQuantityLabel");
+    m_coinControlQuantityLabel->setText(tr("Inputs: (auto)"));
+    m_coinControlLayout->addWidget(m_coinControlQuantityLabel);
+
+    // Amount label (total selected DD amount)
+    m_coinControlAmountLabel = new QLabel(this);
+    m_coinControlAmountLabel->setObjectName("coinControlAmountLabel");
+    m_coinControlAmountLabel->setText(QString());
+    m_coinControlLayout->addWidget(m_coinControlAmountLabel);
+
+    m_coinControlLayout->addStretch();
+
+    m_mainLayout->addWidget(m_coinControlFrame);
+
+    // Initially visible
+    m_coinControlFrame->setVisible(true);
 }
 
 void DigiDollarRedeemWidget::setupPositionSection()
@@ -312,6 +359,10 @@ void DigiDollarRedeemWidget::connectSignals()
     //         this, &DigiDollarRedeemWidget::onRedeemAllClicked);
     connect(m_clearButton, &QPushButton::clicked,
             this, &DigiDollarRedeemWidget::onClearClicked);
+
+    // Connect coin control button
+    connect(m_coinControlButton, &QPushButton::clicked,
+            this, &DigiDollarRedeemWidget::onCoinControlButtonClicked);
 }
 
 void DigiDollarRedeemWidget::setWalletModel(WalletModel* model)
@@ -780,5 +831,69 @@ void DigiDollarRedeemWidget::updateAmountValidation()
         m_amountEdit->setStyleSheet(QString("QLineEdit { border: 2px solid %1; }").arg(successColor));
     } else {
         m_amountEdit->setStyleSheet("");
+    }
+}
+
+void DigiDollarRedeemWidget::onCoinControlButtonClicked()
+{
+    if (!m_walletModel) {
+        return;
+    }
+
+    // Initialize coin control if not already done
+    if (!m_coinControl) {
+        m_coinControl = std::make_unique<wallet::DDCoinControl>();
+    }
+
+    // Open the coin control dialog
+    DigiDollarCoinControlDialog dlg(*m_coinControl, m_walletModel, nullptr, this);
+    dlg.exec();
+
+    // Update labels after dialog closes
+    updateCoinControlLabels();
+}
+
+void DigiDollarRedeemWidget::updateCoinControlLabels()
+{
+    if (!m_coinControl || !m_walletModel) {
+        // No coin control active, show auto message
+        if (m_coinControlQuantityLabel) {
+            m_coinControlQuantityLabel->setText(tr("Inputs: (auto)"));
+            m_coinControlQuantityLabel->setVisible(true);
+        }
+        if (m_coinControlAmountLabel) {
+            m_coinControlAmountLabel->setText(QString());
+            m_coinControlAmountLabel->setVisible(false);
+        }
+        return;
+    }
+
+    if (!m_coinControl->HasSelected()) {
+        // No inputs selected, show auto message
+        if (m_coinControlQuantityLabel) {
+            m_coinControlQuantityLabel->setText(tr("Inputs: (auto)"));
+            m_coinControlQuantityLabel->setVisible(true);
+        }
+        if (m_coinControlAmountLabel) {
+            m_coinControlAmountLabel->setText(QString());
+            m_coinControlAmountLabel->setVisible(false);
+        }
+        return;
+    }
+
+    // Count selected inputs and calculate total amount
+    std::vector<COutPoint> selectedInputs = m_coinControl->ListSelected();
+    int nQuantity = selectedInputs.size();
+
+    // Show quantity label
+    if (m_coinControlQuantityLabel) {
+        m_coinControlQuantityLabel->setText(tr("Inputs: %1").arg(nQuantity));
+        m_coinControlQuantityLabel->setVisible(true);
+    }
+
+    // Show manual selection indicator
+    if (m_coinControlAmountLabel) {
+        m_coinControlAmountLabel->setText(tr("(manual selection active)"));
+        m_coinControlAmountLabel->setVisible(true);
     }
 }

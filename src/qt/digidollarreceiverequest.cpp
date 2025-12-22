@@ -211,8 +211,8 @@ void DigiDollarReceiveRequestDialog::setInfo(const SendCoinsRecipient &info)
         m_saveQRButton->setEnabled(false);
     }
 
-    // Set URI content as clickable link
-    m_uriContent->setHtml("<a href=\"" + uri + "\">" + GUIUtil::HtmlEscape(uri) + "</a>");
+    // Set URI content as clickable link with readable color for dark/light themes
+    m_uriContent->setHtml("<a style=\"color: #66CCFF;\" href=\"" + uri + "\">" + GUIUtil::HtmlEscape(uri) + "</a>");
 
     // Set address
     m_addressContent->setText(info.address);

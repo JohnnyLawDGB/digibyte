@@ -27,11 +27,13 @@ std::vector<COutPoint> EmergencyRedemptionRatio::s_errQueue;
 std::map<COutPoint, std::pair<CAmount, uint32_t>> EmergencyRedemptionRatio::s_queuedRedemptions;
 
 // ERR adjustment tier thresholds and ratios
+// CRITICAL: ERR returns 100% collateral ALWAYS. Ratios determine DD burn multiplier.
+// Formula: RequiredDD = OriginalDD / ratio (lower ratio = MORE DD burn required)
 static const std::vector<std::pair<int, double>> ERR_TIERS = {
-    {95, 0.95},  // 95-100% health: 95% return
-    {90, 0.90},  // 90-95% health: 90% return
-    {85, 0.85},  // 85-90% health: 85% return
-    {0,  0.80}   // <85% health: 80% return (minimum)
+    {95, 0.95},  // 95-100% health: 1/0.95 = 1.053x DD burn (105.3% of original)
+    {90, 0.90},  // 90-95% health: 1/0.90 = 1.111x DD burn (111.1% of original)
+    {85, 0.85},  // 85-90% health: 1/0.85 = 1.176x DD burn (117.6% of original)
+    {0,  0.80}   // <85% health: 1/0.80 = 1.250x DD burn (125.0% of original, maximum)
 };
 
 // Oracle consensus requirements

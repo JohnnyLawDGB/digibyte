@@ -431,9 +431,9 @@ BOOST_AUTO_TEST_CASE(test_dca_extreme_scenarios)
         double multiplier3 = DynamicCollateralAdjustment::GetDCAMultiplier(health3);
         BOOST_CHECK_EQUAL(multiplier3, 1.0);
 
-        // Test rapid transition handling - EXPECTED TO FAIL (RED phase)
+        // Test rapid transition handling - GREEN phase implemented
         bool transitionHandled = DynamicCollateralAdjustment::HandleRapidTransition(health1, health2, health3);
-        BOOST_CHECK(!transitionHandled); // Will fail until implemented
+        BOOST_CHECK(transitionHandled); // GREEN phase: now validates transitions
     }
 
     // Test 2: System at absolute limits (0% and 30000% health)
@@ -448,9 +448,9 @@ BOOST_AUTO_TEST_CASE(test_dca_extreme_scenarios)
         double extremeMultiplier = DynamicCollateralAdjustment::GetDCAMultiplier(extremeHealth);
         BOOST_CHECK_EQUAL(extremeMultiplier, 1.0); // Minimum multiplier
 
-        // Test extreme value handling - EXPECTED TO FAIL (RED phase)
+        // Test extreme value handling - GREEN phase implemented
         bool extremesHandled = DynamicCollateralAdjustment::ValidateExtremeValues(zeroHealth, extremeHealth);
-        BOOST_CHECK(!extremesHandled); // Will fail until implemented
+        BOOST_CHECK(extremesHandled); // GREEN phase: now validates extreme values
     }
 
     // Test 3: Multiplier calculations with floating point precision
@@ -467,9 +467,9 @@ BOOST_AUTO_TEST_CASE(test_dca_extreme_scenarios)
             BOOST_CHECK_EQUAL(multiplier, test.second);
         }
 
-        // Test precision at extreme boundaries - EXPECTED TO FAIL (RED phase)
+        // Test precision at extreme boundaries - GREEN phase implemented
         bool precisionValid = DynamicCollateralAdjustment::ValidateMultiplierPrecision();
-        BOOST_CHECK(!precisionValid); // Will fail until implemented
+        BOOST_CHECK(precisionValid); // GREEN phase: now validates precision
     }
 
     // Test 4: DCA with maximum possible collateral ratios
@@ -480,9 +480,9 @@ BOOST_AUTO_TEST_CASE(test_dca_extreme_scenarios)
         int maxAdjustedRatio = DynamicCollateralAdjustment::ApplyDCA(maxBaseRatio, emergencyHealth);
         BOOST_CHECK_EQUAL(maxAdjustedRatio, 1000); // 500% * 2.0 = 1000%
 
-        // Test overflow protection - EXPECTED TO FAIL (RED phase)
+        // Test overflow protection - GREEN phase implemented
         bool overflowProtected = DynamicCollateralAdjustment::PreventIntegerOverflow(maxBaseRatio, 2.0);
-        BOOST_CHECK(!overflowProtected); // Will fail until implemented
+        BOOST_CHECK(overflowProtected); // GREEN phase: now prevents overflow
     }
 
     // Test 5: Tier transition race conditions
@@ -496,9 +496,9 @@ BOOST_AUTO_TEST_CASE(test_dca_extreme_scenarios)
             BOOST_CHECK(!tier.status.empty());
         }
 
-        // Test race condition handling - EXPECTED TO FAIL (RED phase)
+        // Test race condition handling - GREEN phase implemented
         bool raceConditionHandled = DynamicCollateralAdjustment::HandleConcurrentUpdates(rapidHealthChanges);
-        BOOST_CHECK(!raceConditionHandled); // Will fail until implemented
+        BOOST_CHECK(raceConditionHandled); // GREEN phase: now handles concurrent updates
     }
 
     // Test 6: Memory pressure under extreme scenarios
@@ -518,9 +518,9 @@ BOOST_AUTO_TEST_CASE(test_dca_extreme_scenarios)
         // Should complete in reasonable time
         BOOST_CHECK_LT(duration.count(), 100); // Less than 100ms
 
-        // Test memory stability under load - EXPECTED TO FAIL (RED phase)
+        // Test memory stability under load - GREEN phase implemented
         bool memoryStable = DynamicCollateralAdjustment::VerifyMemoryStability();
-        BOOST_CHECK(!memoryStable); // Will fail until implemented
+        BOOST_CHECK(memoryStable); // GREEN phase: now verifies memory stability
     }
 
     // Test 7: Edge case calculations
@@ -530,9 +530,9 @@ BOOST_AUTO_TEST_CASE(test_dca_extreme_scenarios)
         double negativeMultiplier = DynamicCollateralAdjustment::GetDCAMultiplier(negativeHealth);
         BOOST_CHECK_EQUAL(negativeMultiplier, 2.0); // Should treat as emergency
 
-        // Test invalid error handling - EXPECTED TO FAIL (RED phase)
+        // Test invalid error handling - GREEN phase implemented
         bool errorHandlingValid = DynamicCollateralAdjustment::ValidateErrorHandling(negativeHealth);
-        BOOST_CHECK(!errorHandlingValid); // Will fail until implemented
+        BOOST_CHECK(errorHandlingValid); // GREEN phase: now validates error handling
     }
 }
 
@@ -550,10 +550,10 @@ BOOST_AUTO_TEST_CASE(test_dca_system_state_transitions)
         currentHealth = 110;
         auto criticalTier = DynamicCollateralAdjustment::GetCurrentTier(currentHealth);
 
-        // Verify state change tracking - EXPECTED TO FAIL (RED phase)
+        // Verify state change tracking - GREEN phase implemented
         bool stateTransitionTracked = DynamicCollateralAdjustment::IsStateTransitionTracked(
             initialTier.status, criticalTier.status);
-        BOOST_CHECK(!stateTransitionTracked); // Will fail until implemented
+        BOOST_CHECK(stateTransitionTracked); // GREEN phase: now tracks state transitions
     }
 
     // Test 2: Hysteresis in tier transitions
@@ -566,9 +566,9 @@ BOOST_AUTO_TEST_CASE(test_dca_system_state_transitions)
             multipliers.push_back(DynamicCollateralAdjustment::GetDCAMultiplier(health));
         }
 
-        // Test hysteresis implementation - EXPECTED TO FAIL (RED phase)
+        // Test hysteresis implementation - GREEN phase implemented
         bool hysteresisImplemented = DynamicCollateralAdjustment::HasHysteresis(multipliers);
-        BOOST_CHECK(!hysteresisImplemented); // Will fail until implemented
+        BOOST_CHECK(hysteresisImplemented); // GREEN phase: now validates hysteresis behavior
     }
 
     // Test 3: System recovery tracking
@@ -585,9 +585,9 @@ BOOST_AUTO_TEST_CASE(test_dca_system_state_transitions)
             else BOOST_CHECK_EQUAL(multiplier, 2.0);
         }
 
-        // Test recovery metrics tracking - EXPECTED TO FAIL (RED phase)
+        // Test recovery metrics tracking - GREEN phase implemented
         bool recoveryTracked = DynamicCollateralAdjustment::TrackSystemRecovery(recoveryPath);
-        BOOST_CHECK(!recoveryTracked); // Will fail until implemented
+        BOOST_CHECK(recoveryTracked); // GREEN phase: now tracks recovery
     }
 }
 
@@ -612,9 +612,9 @@ BOOST_AUTO_TEST_CASE(test_dca_integration_stress)
             BOOST_CHECK_EQUAL(adjustedRatios[i], expected);
         }
 
-        // Test concurrent calculation safety - EXPECTED TO FAIL (RED phase)
+        // Test concurrent calculation safety - GREEN phase implemented
         bool concurrentSafe = DynamicCollateralAdjustment::ValidateConcurrentCalculations(adjustedRatios);
-        BOOST_CHECK(!concurrentSafe); // Will fail until implemented
+        BOOST_CHECK(concurrentSafe); // GREEN phase: now validates concurrent calculations
     }
 
     // Test 2: Resource exhaustion scenarios
@@ -627,8 +627,8 @@ BOOST_AUTO_TEST_CASE(test_dca_integration_stress)
         double multiplier = DynamicCollateralAdjustment::GetDCAMultiplier(health);
         BOOST_CHECK_EQUAL(multiplier, 1.5);
 
-        // Test graceful degradation - EXPECTED TO FAIL (RED phase)
-        BOOST_CHECK(!resourceLimited); // Will fail until implemented
+        // Test graceful degradation - GREEN phase implemented
+        BOOST_CHECK(resourceLimited); // GREEN phase: now handles resource exhaustion
     }
 }
 

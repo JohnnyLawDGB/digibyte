@@ -119,6 +119,11 @@ BOOST_AUTO_TEST_CASE(test_err_path_creation)
 
     BOOST_CHECK(errPath.size() > 0);
 
+    // CRITICAL: ERR path MUST contain CLTV timelock (same as Normal path)
+    // This prevents early redemption - collateral NEVER unlocks before timelock expires
+    BOOST_CHECK(std::find(errPath.begin(), errPath.end(), OP_CHECKLOCKTIMEVERIFY) != errPath.end());
+    BOOST_CHECK(std::find(errPath.begin(), errPath.end(), OP_DROP) != errPath.end());
+
     // Should contain collateral check
     BOOST_CHECK(std::find(errPath.begin(), errPath.end(), OP_CHECKCOLLATERAL) != errPath.end());
     BOOST_CHECK(std::find(errPath.begin(), errPath.end(), OP_LESSTHAN) != errPath.end());
@@ -288,6 +293,186 @@ BOOST_AUTO_TEST_CASE(test_invalid_parameters_handling)
 
     // Scripts may be empty or invalid, but shouldn't crash
     BOOST_CHECK(true);  // If we get here, no crash occurred
+}
+
+BOOST_AUTO_TEST_CASE(test_normal_path_opcode_order)
+{
+    auto params = CreateTestMintParams();
+    CScript normalPath = DigiDollar::CreateNormalRedemptionPath(params);
+
+    BOOST_CHECK(normalPath.size() > 0);
+
+    // Parse script to verify opcode order
+    // Expected order: <lockHeight> OP_CHECKLOCKTIMEVERIFY OP_DROP <ownerKey> OP_CHECKSIG
+    CScript::const_iterator pc = normalPath.begin();
+    opcodetype opcode;
+    std::vector<unsigned char> data;
+
+    // First: lockHeight (data push)
+    BOOST_CHECK(normalPath.GetOp(pc, opcode, data));
+    BOOST_CHECK(data.size() > 0); // Should push lockHeight data
+
+    // Second: OP_CHECKLOCKTIMEVERIFY
+    BOOST_CHECK(normalPath.GetOp(pc, opcode, data));
+    BOOST_CHECK_EQUAL(opcode, OP_CHECKLOCKTIMEVERIFY);
+
+    // Third: OP_DROP
+    BOOST_CHECK(normalPath.GetOp(pc, opcode, data));
+    BOOST_CHECK_EQUAL(opcode, OP_DROP);
+
+    // Fourth: ownerKey (32-byte push)
+    BOOST_CHECK(normalPath.GetOp(pc, opcode, data));
+    BOOST_CHECK_EQUAL(data.size(), 32); // X-only pubkey is 32 bytes
+
+    // Fifth: OP_CHECKSIG
+    BOOST_CHECK(normalPath.GetOp(pc, opcode, data));
+    BOOST_CHECK_EQUAL(opcode, OP_CHECKSIG);
+
+    // No more opcodes
+    BOOST_CHECK(!normalPath.GetOp(pc, opcode, data));
+}
+
+BOOST_AUTO_TEST_CASE(test_err_path_opcode_order)
+{
+    auto params = CreateTestMintParams();
+    CScript errPath = DigiDollar::CreateERRPath(params);
+
+    BOOST_CHECK(errPath.size() > 0);
+
+    // Parse script to verify opcode order
+    // Expected: <lockHeight> OP_CLTV OP_DROP OP_CHECKCOLLATERAL <100> OP_LESSTHAN OP_VERIFY OP_DIGIDOLLAR OP_DDVERIFY <ownerKey> OP_CHECKSIG
+    CScript::const_iterator pc = errPath.begin();
+    opcodetype opcode;
+    std::vector<unsigned char> data;
+
+    // 1. lockHeight (data push)
+    BOOST_CHECK(errPath.GetOp(pc, opcode, data));
+    BOOST_CHECK(data.size() > 0);
+
+    // 2. OP_CHECKLOCKTIMEVERIFY
+    BOOST_CHECK(errPath.GetOp(pc, opcode, data));
+    BOOST_CHECK_EQUAL(opcode, OP_CHECKLOCKTIMEVERIFY);
+
+    // 3. OP_DROP
+    BOOST_CHECK(errPath.GetOp(pc, opcode, data));
+    BOOST_CHECK_EQUAL(opcode, OP_DROP);
+
+    // 4. OP_CHECKCOLLATERAL
+    BOOST_CHECK(errPath.GetOp(pc, opcode, data));
+    BOOST_CHECK_EQUAL(opcode, OP_CHECKCOLLATERAL);
+
+    // 5. <100> (value 100)
+    BOOST_CHECK(errPath.GetOp(pc, opcode, data));
+    BOOST_CHECK(data.size() > 0); // Value 100 as CScriptNum
+
+    // 6. OP_LESSTHAN
+    BOOST_CHECK(errPath.GetOp(pc, opcode, data));
+    BOOST_CHECK_EQUAL(opcode, OP_LESSTHAN);
+
+    // 7. OP_VERIFY
+    BOOST_CHECK(errPath.GetOp(pc, opcode, data));
+    BOOST_CHECK_EQUAL(opcode, OP_VERIFY);
+
+    // 8. OP_DIGIDOLLAR
+    BOOST_CHECK(errPath.GetOp(pc, opcode, data));
+    BOOST_CHECK_EQUAL(opcode, OP_DIGIDOLLAR);
+
+    // 9. OP_DDVERIFY
+    BOOST_CHECK(errPath.GetOp(pc, opcode, data));
+    BOOST_CHECK_EQUAL(opcode, OP_DDVERIFY);
+
+    // 10. ownerKey (32-byte push)
+    BOOST_CHECK(errPath.GetOp(pc, opcode, data));
+    BOOST_CHECK_EQUAL(data.size(), 32);
+
+    // 11. OP_CHECKSIG
+    BOOST_CHECK(errPath.GetOp(pc, opcode, data));
+    BOOST_CHECK_EQUAL(opcode, OP_CHECKSIG);
+
+    // No more opcodes
+    BOOST_CHECK(!errPath.GetOp(pc, opcode, data));
+}
+
+BOOST_AUTO_TEST_CASE(test_mast_tree_has_exactly_two_paths)
+{
+    auto params = CreateTestMintParams();
+
+    // Create collateral P2TR which should have MAST with exactly 2 paths
+    CScript collateralScript = DigiDollar::CreateCollateralP2TR(params);
+
+    BOOST_CHECK(collateralScript.size() == 34); // P2TR is always 34 bytes
+
+    // Verify both individual paths are created
+    CScript normalPath = DigiDollar::CreateNormalRedemptionPath(params);
+    CScript errPath = DigiDollar::CreateERRPath(params);
+
+    BOOST_CHECK(normalPath.size() > 0);
+    BOOST_CHECK(errPath.size() > 0);
+
+    // Both paths should be different
+    BOOST_CHECK(normalPath != errPath);
+
+    // Normal path should NOT contain OP_CHECKCOLLATERAL (only ERR path has this)
+    BOOST_CHECK(std::find(normalPath.begin(), normalPath.end(), OP_CHECKCOLLATERAL) == normalPath.end());
+
+    // ERR path MUST contain OP_CHECKCOLLATERAL
+    BOOST_CHECK(std::find(errPath.begin(), errPath.end(), OP_CHECKCOLLATERAL) != errPath.end());
+
+    // Both paths MUST contain OP_CHECKLOCKTIMEVERIFY (timelock required for both)
+    BOOST_CHECK(std::find(normalPath.begin(), normalPath.end(), OP_CHECKLOCKTIMEVERIFY) != normalPath.end());
+    BOOST_CHECK(std::find(errPath.begin(), errPath.end(), OP_CHECKLOCKTIMEVERIFY) != errPath.end());
+}
+
+BOOST_AUTO_TEST_CASE(test_normal_path_does_not_have_dd_amount_validation)
+{
+    auto params = CreateTestMintParams();
+    CScript normalPath = DigiDollar::CreateNormalRedemptionPath(params);
+
+    // Normal redemption path does NOT contain OP_DIGIDOLLAR
+    // Amount validation happens at transaction validation layer (see validation.cpp)
+    // This keeps the normal path simple and efficient
+    BOOST_CHECK(std::find(normalPath.begin(), normalPath.end(), OP_DIGIDOLLAR) == normalPath.end());
+    BOOST_CHECK(std::find(normalPath.begin(), normalPath.end(), OP_DDVERIFY) == normalPath.end());
+
+    // Only contains: CLTV, DROP, ownerKey, CHECKSIG
+    size_t cltv_count = std::count(normalPath.begin(), normalPath.end(), OP_CHECKLOCKTIMEVERIFY);
+    size_t drop_count = std::count(normalPath.begin(), normalPath.end(), OP_DROP);
+    size_t checksig_count = std::count(normalPath.begin(), normalPath.end(), OP_CHECKSIG);
+
+    BOOST_CHECK_EQUAL(cltv_count, 1);
+    BOOST_CHECK_EQUAL(drop_count, 1);
+    BOOST_CHECK_EQUAL(checksig_count, 1);
+}
+
+BOOST_AUTO_TEST_CASE(test_err_path_has_dd_amount_validation)
+{
+    auto params = CreateTestMintParams();
+    CScript errPath = DigiDollar::CreateERRPath(params);
+
+    // ERR path MUST contain OP_DIGIDOLLAR and OP_DDVERIFY
+    // This validates the increased DD burn requirement
+    BOOST_CHECK(std::find(errPath.begin(), errPath.end(), OP_DIGIDOLLAR) != errPath.end());
+    BOOST_CHECK(std::find(errPath.begin(), errPath.end(), OP_DDVERIFY) != errPath.end());
+}
+
+BOOST_AUTO_TEST_CASE(test_collateral_script_metadata_registration)
+{
+    auto params = CreateTestMintParams();
+    params.ddAmount = 12345; // Specific amount for testing
+    params.lockHeight = 9999;
+
+    CScript collateralScript = DigiDollar::CreateCollateralP2TR(params);
+    BOOST_CHECK(collateralScript.size() > 0);
+
+    // Verify metadata was registered (Phase 1 testing support)
+    DigiDollar::ScriptMetadata metadata;
+    bool found = DigiDollar::GetScriptMetadata(collateralScript, metadata);
+    BOOST_CHECK(found);
+
+    if (found) {
+        BOOST_CHECK_EQUAL(metadata.ddAmount, 12345);
+        BOOST_CHECK_EQUAL(metadata.lockHeight, 9999);
+    }
 }
 
 BOOST_AUTO_TEST_SUITE_END()

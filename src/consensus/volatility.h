@@ -61,7 +61,6 @@ struct VolatilityThresholds {
     static constexpr double EMERGENCY_7D = 50.0;        //!< 50% in 7 days: emergency mode
 
     static constexpr uint32_t COOLDOWN_BLOCKS = 144;    //!< Cooldown period in blocks (~36 hours at 15s)
-    static constexpr size_t REQUIRED_ORACLE_APPROVALS = 8; //!< Required approvals for override (8 of 15)
 };
 
 // ============================================================================
@@ -92,7 +91,6 @@ private:
     static void CleanOldHistory() EXCLUSIVE_LOCKS_REQUIRED(cs_volatility);
     static std::vector<PricePoint> GetPricesInWindow(int64_t timeWindow) EXCLUSIVE_LOCKS_REQUIRED(cs_volatility);
     static double CalculateStandardDeviation(const std::vector<double>& values);
-    static bool ValidateOracleApprovals(const std::vector<COraclePriceMessage>& approvals);
 
 public:
     // ========================================================================
@@ -173,12 +171,6 @@ public:
     // Override Mechanism
     // ========================================================================
 
-    /**
-     * Override current freeze state with sufficient oracle approvals
-     * @param approvals Vector of oracle price messages approving the override
-     * @return True if override was successful
-     */
-    static bool OverrideFreeze(const std::vector<COraclePriceMessage>& approvals);
 
     /**
      * Manually trigger freeze (for testing or emergency)

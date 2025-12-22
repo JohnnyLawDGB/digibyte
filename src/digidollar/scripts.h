@@ -88,15 +88,11 @@ CScript CreateNormalRedemptionPath(const MintParams& params);
  */
 CScript CreateEmergencyPath(const MintParams& params);
 
-/**
- * Partial redemption path - with price verification
- * Script: OP_DIGIDOLLAR OP_DDVERIFY <ownerKey> OP_CHECKSIGVERIFY OP_CHECKPRICE
- */
-CScript CreatePartialRedemptionPath(const MintParams& params);
 
 /**
  * ERR (Emergency Redemption Ratio) path - when system < 100% collateralized
- * Script: OP_CHECKCOLLATERAL OP_100 OP_LESSTHAN OP_VERIFY OP_DIGIDOLLAR OP_DDVERIFY <ownerKey> OP_CHECKSIG
+ * CRITICAL: ERR path REQUIRES timelock expiry first (same as Normal path)
+ * Script: <lockHeight> OP_CHECKLOCKTIMEVERIFY OP_DROP OP_CHECKCOLLATERAL <100> OP_LESSTHAN OP_VERIFY OP_DIGIDOLLAR OP_DDVERIFY <ownerKey> OP_CHECKSIG
  */
 CScript CreateERRPath(const MintParams& params);
 

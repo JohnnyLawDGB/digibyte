@@ -55,10 +55,12 @@ struct AddressTableEntryLessThan
 constexpr AddressTableEntry::Type translateTransactionType(wallet::AddressPurpose purpose, bool isMine)
 {
     // "refund" addresses aren't shown, and change addresses aren't returned by getAddresses at all.
+    // DigiDollar addresses are also hidden from regular address book - they only appear in DD tab.
     switch (purpose) {
     case wallet::AddressPurpose::SEND: return AddressTableEntry::Sending;
     case wallet::AddressPurpose::RECEIVE: return AddressTableEntry::Receiving;
     case wallet::AddressPurpose::REFUND: return AddressTableEntry::Hidden;
+    case wallet::AddressPurpose::DIGIDOLLAR: return AddressTableEntry::Hidden;
     } // no default case, so the compiler can warn about missing cases
     assert(false);
 }

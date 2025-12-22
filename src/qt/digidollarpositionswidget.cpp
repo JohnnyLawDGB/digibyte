@@ -38,7 +38,6 @@ DigiDollarPositionsWidget::DigiDollarPositionsWidget(QWidget *parent) :
     m_mainLayout(nullptr),
     m_headerLayout(nullptr),
     m_titleLabel(nullptr),
-    m_refreshButton(nullptr),
     m_positionsTable(nullptr),
     m_statusLabel(nullptr),
     m_walletModel(nullptr),
@@ -70,13 +69,8 @@ void DigiDollarPositionsWidget::setupUI()
     titleFont.setPointSize(titleFont.pointSize() + 2);
     m_titleLabel->setFont(titleFont);
 
-    m_refreshButton = new QPushButton(tr("Refresh"), this);
-    m_refreshButton->setObjectName("refreshButton");
-    m_refreshButton->setFixedSize(100, 30);
-
     m_headerLayout->addWidget(m_titleLabel);
     m_headerLayout->addStretch();
-    m_headerLayout->addWidget(m_refreshButton);
 
     m_mainLayout->addLayout(m_headerLayout);
 
@@ -175,10 +169,6 @@ void DigiDollarPositionsWidget::setupTableHeader()
 
 void DigiDollarPositionsWidget::connectSignals()
 {
-    // Connect refresh button
-    connect(m_refreshButton, &QPushButton::clicked,
-            this, &DigiDollarPositionsWidget::onRefreshClicked);
-
     // Connect table clicks
     connect(m_positionsTable, &QTableWidget::cellClicked,
             this, &DigiDollarPositionsWidget::onPositionClicked);
@@ -262,14 +252,6 @@ void DigiDollarPositionsWidget::updatePositions()
 
     loadPositionsFromWallet();
     populatePositionsTable();
-}
-
-void DigiDollarPositionsWidget::onRefreshClicked()
-{
-    m_statusLabel->setText(tr("Refreshing vaults..."));
-    // Force update - bypass throttle for manual refresh
-    m_lastUpdateTime = 0;
-    updatePositions();
 }
 
 void DigiDollarPositionsWidget::onPositionClicked(int row, int column)

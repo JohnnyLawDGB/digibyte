@@ -3886,6 +3886,116 @@ QDialog#CoinControlDialog QLabel#labelCoinControlChange {
     font-weight: bold;
 }
 
+/******************************************************
+  DARK THEME - DIGIDOLLAR COIN CONTROL DIALOG
+  (Same styling as DGB Coin Control but for DD)
+*******************************************************/
+
+/* DigiDollar Coin Control Dialog */
+QDialog#DigiDollarCoinControlDialog {
+    background-color: #002352;
+}
+
+QDialog#DigiDollarCoinControlDialog QLabel {
+    color: #ffffff;
+}
+
+/* Style DigiDollar Coin Control Tree Widget like DGB Coin Control */
+QDialog#DigiDollarCoinControlDialog CoinControlTreeWidget,
+QDialog#DigiDollarCoinControlDialog QTreeWidget {
+    background-color: rgba(255, 255, 255, 0.05);
+    alternate-background-color: rgba(255, 255, 255, 0.08);
+    color: #ffffff;
+    selection-background-color: #0066CC;
+    selection-color: #ffffff;
+    border: none;
+    font-size: 11pt;
+    gridline-color: rgba(255, 255, 255, 0.2);
+}
+
+QDialog#DigiDollarCoinControlDialog QTreeWidget::item {
+    background-color: transparent;
+    color: #ffffff;
+    padding: 10px;
+    font-size: 11pt;
+}
+
+QDialog#DigiDollarCoinControlDialog QTreeWidget::item:selected {
+    background-color: #0066CC;
+    color: #ffffff;
+}
+
+QDialog#DigiDollarCoinControlDialog QTreeWidget::item:hover {
+    background-color: rgba(0, 102, 204, 0.3);
+    color: #ffffff;
+}
+
+/* Ensure alternating row colors are visible */
+QDialog#DigiDollarCoinControlDialog QTreeWidget::item:alternate {
+    background-color: rgba(255, 255, 255, 0.03);
+}
+
+/* Tree Widget Headers - Match DGB Coin Control style */
+QDialog#DigiDollarCoinControlDialog QHeaderView::section {
+    background-color: #0066CC;
+    color: #ffffff;
+    padding: 8px;
+    border: none;
+    font-weight: bold;
+    font-size: 11pt;
+}
+
+/* Checkboxes in DigiDollar Coin Control */
+QDialog#DigiDollarCoinControlDialog QCheckBox {
+    color: #ffffff;
+}
+
+QDialog#DigiDollarCoinControlDialog QCheckBox::indicator {
+    width: 16px;
+    height: 16px;
+    background-color: #ffffff;
+    border: 2px solid #0066cc;
+    border-radius: 3px;
+}
+
+QDialog#DigiDollarCoinControlDialog QCheckBox::indicator:checked {
+    background-color: #ffffff;
+    border: 2px solid #0066cc;
+    border-radius: 3px;
+}
+
+/* Buttons */
+QDialog#DigiDollarCoinControlDialog QPushButton#pushButtonSelectAll,
+QDialog#DigiDollarCoinControlDialog QPushButton {
+    background-color: #0066CC;
+    color: #ffffff;
+    border: none;
+    border-radius: 4px;
+    padding: 6px 16px;
+    font-weight: bold;
+}
+
+QDialog#DigiDollarCoinControlDialog QPushButton:hover {
+    background-color: #0088ff;
+}
+
+/* Radio buttons for tree/list mode */
+QDialog#DigiDollarCoinControlDialog QRadioButton {
+    color: #ffffff;
+    background-color: transparent;
+}
+
+/* Info labels */
+QDialog#DigiDollarCoinControlDialog QLabel#labelCoinControlQuantity,
+QDialog#DigiDollarCoinControlDialog QLabel#labelCoinControlAmount,
+QDialog#DigiDollarCoinControlDialog QLabel#labelCoinControlFee,
+QDialog#DigiDollarCoinControlDialog QLabel#labelCoinControlAfterFee,
+QDialog#DigiDollarCoinControlDialog QLabel#labelCoinControlBytes,
+QDialog#DigiDollarCoinControlDialog QLabel#labelCoinControlChange {
+    color: #ffffff;
+    font-weight: bold;
+}
+
 /* Options Dialog - Fix all labels */
 QDialog#OptionsDialog QLabel {
     color: #ffffff !important;

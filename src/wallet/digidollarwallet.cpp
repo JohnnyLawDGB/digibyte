@@ -5712,16 +5712,20 @@ bool DigiDollarWallet::ProcessIncomingDDTransaction(const CTransactionRef& tx) {
 namespace DigiDollarWalletUtils {
 
 int GetLockDaysForTier(uint32_t tier) {
-    // Lock tiers: 1=30d, 2=90d, 3=180d, 4=365d, 5=730d, 6=1095d, 7=1825d, 8=3650d
+    // Lock tiers must match consensus/digidollar.h collateralRatios:
+    // Tier 0: 1 hour (testing only - 240 blocks)
+    // Tier 1: 30 days, Tier 2: 90 days, Tier 3: 180 days, Tier 4: 1 year
+    // Tier 5: 3 years, Tier 6: 5 years, Tier 7: 7 years, Tier 8: 10 years
     switch (tier) {
-        case 1: return 30;
-        case 2: return 90;
-        case 3: return 180;
-        case 4: return 365;
-        case 5: return 730;   // 2 years
-        case 6: return 1095;  // 3 years
-        case 7: return 1825;  // 5 years
-        case 8: return 3650;  // 10 years
+        case 0: return 1;     // 1 hour (special case, handled separately as 240 blocks)
+        case 1: return 30;    // 30 days
+        case 2: return 90;    // 90 days (3 months)
+        case 3: return 180;   // 180 days (6 months)
+        case 4: return 365;   // 1 year
+        case 5: return 1095;  // 3 years (3 * 365)
+        case 6: return 1825;  // 5 years (5 * 365)
+        case 7: return 2555;  // 7 years (7 * 365)
+        case 8: return 3650;  // 10 years (10 * 365)
         default: return 30;   // Default to tier 1
     }
 }

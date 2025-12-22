@@ -294,17 +294,17 @@ sync_all_nodes() {
 # Tier descriptions (10 tiers: 0-9)
 get_tier_description() {
     local tier=$1
+    # Must match consensus/digidollar.h collateralRatios
     case $tier in
         0) echo "1 hour (240 blocks)" ;;
         1) echo "30 days" ;;
         2) echo "90 days" ;;
         3) echo "180 days" ;;
         4) echo "1 year" ;;
-        5) echo "2 years" ;;
-        6) echo "3 years" ;;
-        7) echo "5 years" ;;
-        8) echo "7 years" ;;
-        9) echo "10 years" ;;
+        5) echo "3 years" ;;
+        6) echo "5 years" ;;
+        7) echo "7 years" ;;
+        8) echo "10 years" ;;
         *) echo "unknown" ;;
     esac
 }

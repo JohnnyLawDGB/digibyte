@@ -19,6 +19,7 @@
 #include <test/util/setup_common.h>
 #include <util/strencodings.h>
 #include <chainparams.h>
+#include <cmath>
 #include <chrono>
 #include <algorithm>
 #include <limits>
@@ -1039,6 +1040,247 @@ BOOST_FIXTURE_TEST_CASE(test_err_oracle_consensus_stress, DigiDollarERRTestSetup
         // Test performance under load - GREEN phase
         bool performanceAcceptable = DigiDollar::ERR::EmergencyRedemptionRatio::ValidateConsensusPerformance(duration.count());
         BOOST_CHECK(performanceAcceptable); // Implementation performs within acceptable limits
+    }
+}
+
+// ============================================================================
+// ERR Formula Precision Tests - Added by GROUP 3
+// ============================================================================
+
+BOOST_FIXTURE_TEST_CASE(err_formula_exact_tier_boundaries, DigiDollarERRTestSetup)
+{
+    // Test ERR formula at exact tier boundaries
+    // Verify correct tier selection and DD burn calculation
+
+    struct TierTest {
+        int health;
+        double expectedRatio;
+        CAmount originalDD;
+        CAmount expectedBurn;
+    };
+
+    std::vector<TierTest> tests = {
+        // Tier boundary: 95% (exactly at boundary)
+        {95, 0.95, 100 * COIN, static_cast<CAmount>(std::ceil(100.0 * COIN / 0.95))},
+
+        // Tier boundary: 90% (exactly at boundary)
+        {90, 0.90, 100 * COIN, static_cast<CAmount>(std::ceil(100.0 * COIN / 0.90))},
+
+        // Tier boundary: 85% (exactly at boundary)
+        {85, 0.85, 100 * COIN, static_cast<CAmount>(std::ceil(100.0 * COIN / 0.85))},
+
+        // Below 85% (minimum tier)
+        {80, 0.80, 100 * COIN, static_cast<CAmount>(std::ceil(100.0 * COIN / 0.80))},
+        {50, 0.80, 100 * COIN, static_cast<CAmount>(std::ceil(100.0 * COIN / 0.80))},
+        {1, 0.80, 100 * COIN, static_cast<CAmount>(std::ceil(100.0 * COIN / 0.80))},
+    };
+
+    for (const auto& test : tests) {
+        double ratio = DigiDollar::ERR::EmergencyRedemptionRatio::CalculateERRAdjustment(test.health);
+        CAmount burn = DigiDollar::ERR::EmergencyRedemptionRatio::GetRequiredDDBurn(test.originalDD, test.health);
+
+        BOOST_CHECK_CLOSE(ratio, test.expectedRatio, 0.01);
+        BOOST_CHECK_EQUAL(burn, test.expectedBurn);
+
+        // Verify collateral return is FULL (not reduced)
+        CAmount collateral = DigiDollar::ERR::EmergencyRedemptionRatio::GetAdjustedRedemption(test.originalDD, test.health);
+        BOOST_CHECK_EQUAL(collateral, test.originalDD); // FULL amount returned
+    }
+}
+
+BOOST_FIXTURE_TEST_CASE(err_formula_between_tier_boundaries, DigiDollarERRTestSetup)
+{
+    // Test ERR formula between tier boundaries
+    // Implementation uses tiered approach (not continuous), so health values
+    // between boundaries use the lower tier's ratio
+
+    struct BetweenTierTest {
+        int health;
+        double expectedRatio; // Should use lower tier
+        std::string description;
+    };
+
+    std::vector<BetweenTierTest> tests = {
+        // Between 95-100%: should use 0.95 ratio
+        {96, 0.95, "96% health in 95-100% tier"},
+        {97, 0.95, "97% health in 95-100% tier"},
+        {99, 0.95, "99% health in 95-100% tier"},
+
+        // Between 90-95%: should use 0.90 ratio
+        {91, 0.90, "91% health in 90-95% tier"},
+        {92, 0.90, "92% health in 90-95% tier"},
+        {94, 0.90, "94% health in 90-95% tier"},
+
+        // Between 85-90%: should use 0.85 ratio
+        {86, 0.85, "86% health in 85-90% tier"},
+        {87, 0.85, "87% health in 85-90% tier"},
+        {89, 0.85, "89% health in 85-90% tier"},
+
+        // Below 85%: should use 0.80 ratio (minimum)
+        {84, 0.80, "84% health in <85% tier"},
+        {75, 0.80, "75% health in <85% tier"},
+        {50, 0.80, "50% health in <85% tier"},
+    };
+
+    for (const auto& test : tests) {
+        double ratio = DigiDollar::ERR::EmergencyRedemptionRatio::CalculateERRAdjustment(test.health);
+        BOOST_CHECK_CLOSE(ratio, test.expectedRatio, 0.01);
+    }
+}
+
+BOOST_FIXTURE_TEST_CASE(err_formula_precision_small_amounts, DigiDollarERRTestSetup)
+{
+    // Test ERR formula with very small DD amounts
+    // Ensure ceiling function doesn't cause issues
+
+    std::vector<CAmount> smallAmounts = {
+        1,        // 1 satoshi
+        10,       // 10 satoshis
+        100,      // 100 satoshis (1 cent)
+        1000,     // 1000 satoshis (10 cents)
+        10000,    // 10000 satoshis (1 DD)
+    };
+
+    int health = 90; // 90% tier -> 1/0.90 = 1.111x multiplier
+
+    for (CAmount amount : smallAmounts) {
+        CAmount requiredBurn = DigiDollar::ERR::EmergencyRedemptionRatio::GetRequiredDDBurn(amount, health);
+
+        // Should be ceiling(amount / 0.90)
+        CAmount expectedBurn = static_cast<CAmount>(std::ceil(static_cast<double>(amount) / 0.90));
+        BOOST_CHECK_EQUAL(requiredBurn, expectedBurn);
+
+        // Must burn MORE than original (except when amount=0)
+        if (amount > 0) {
+            BOOST_CHECK_GT(requiredBurn, amount);
+        }
+    }
+}
+
+BOOST_FIXTURE_TEST_CASE(err_formula_precision_large_amounts, DigiDollarERRTestSetup)
+{
+    // Test ERR formula with very large DD amounts
+    // Ensure no integer overflow
+
+    std::vector<CAmount> largeAmounts = {
+        1000000 * COIN,      // 1 million DD
+        10000000 * COIN,     // 10 million DD
+        100000000 * COIN,    // 100 million DD
+    };
+
+    int health = 80; // Worst case: 80% tier -> 1/0.80 = 1.25x multiplier
+
+    for (CAmount amount : largeAmounts) {
+        CAmount requiredBurn = DigiDollar::ERR::EmergencyRedemptionRatio::GetRequiredDDBurn(amount, health);
+
+        // Should be ceiling(amount / 0.80) = amount * 1.25
+        CAmount expectedBurn = static_cast<CAmount>(std::ceil(static_cast<double>(amount) / 0.80));
+        BOOST_CHECK_EQUAL(requiredBurn, expectedBurn);
+
+        // Must burn MORE than original
+        BOOST_CHECK_GT(requiredBurn, amount);
+
+        // Should not overflow (requiredBurn should be positive and reasonable)
+        BOOST_CHECK_GT(requiredBurn, 0);
+        BOOST_CHECK_LE(requiredBurn, amount * 2); // At most 2x (actually 1.25x)
+    }
+}
+
+BOOST_FIXTURE_TEST_CASE(err_formula_zero_and_negative_health, DigiDollarERRTestSetup)
+{
+    // Test ERR behavior with extreme health values
+
+    CAmount originalDD = 100 * COIN;
+
+    // Zero health (should use minimum 80% ratio)
+    {
+        int health = 0;
+        double ratio = DigiDollar::ERR::EmergencyRedemptionRatio::CalculateERRAdjustment(health);
+        CAmount burn = DigiDollar::ERR::EmergencyRedemptionRatio::GetRequiredDDBurn(originalDD, health);
+
+        BOOST_CHECK_CLOSE(ratio, 0.80, 0.01); // Minimum ratio
+        BOOST_CHECK_GT(burn, originalDD); // Must burn more
+    }
+
+    // Negative health (should use minimum 80% ratio)
+    {
+        int health = -50;
+        double ratio = DigiDollar::ERR::EmergencyRedemptionRatio::CalculateERRAdjustment(health);
+        CAmount burn = DigiDollar::ERR::EmergencyRedemptionRatio::GetRequiredDDBurn(originalDD, health);
+
+        BOOST_CHECK_CLOSE(ratio, 0.80, 0.01); // Minimum ratio
+        BOOST_CHECK_GT(burn, originalDD); // Must burn more
+    }
+}
+
+BOOST_FIXTURE_TEST_CASE(err_formula_exactly_100_percent_health, DigiDollarERRTestSetup)
+{
+    // Test ERR at exactly 100% health (boundary case)
+    // At 100%, ERR should NOT activate (normal redemption instead)
+
+    CAmount originalDD = 100 * COIN;
+    int health = 100;
+
+    // ERR should NOT activate at 100% health
+    bool shouldActivate = DigiDollar::ERR::EmergencyRedemptionRatio::ShouldActivateERR(health);
+    BOOST_CHECK(!shouldActivate);
+
+    // GetRequiredDDBurn should return original amount (no increase)
+    CAmount requiredBurn = DigiDollar::ERR::EmergencyRedemptionRatio::GetRequiredDDBurn(originalDD, health);
+    BOOST_CHECK_EQUAL(requiredBurn, originalDD); // No increase at 100% health
+}
+
+BOOST_FIXTURE_TEST_CASE(err_formula_rounding_accuracy, DigiDollarERRTestSetup)
+{
+    // Test that ERR formula uses ceiling (not floor or round)
+    // This ensures system never gets shortchanged
+
+    struct RoundingTest {
+        CAmount original;
+        int health;
+        CAmount expectedMin; // Minimum acceptable (ceiling)
+    };
+
+    std::vector<RoundingTest> tests = {
+        // Cases that would differ with floor vs ceiling
+        {100 * COIN + 1, 90, static_cast<CAmount>(std::ceil((100.0 * COIN + 1) / 0.90))},
+        {100 * COIN + 50, 85, static_cast<CAmount>(std::ceil((100.0 * COIN + 50) / 0.85))},
+        {999999, 95, static_cast<CAmount>(std::ceil(999999.0 / 0.95))},
+    };
+
+    for (const auto& test : tests) {
+        CAmount burn = DigiDollar::ERR::EmergencyRedemptionRatio::GetRequiredDDBurn(test.original, test.health);
+
+        // Should use ceiling (round up)
+        BOOST_CHECK_GE(burn, test.expectedMin);
+
+        // Should not be MORE than 1 satoshi above ceiling
+        BOOST_CHECK_LE(burn, test.expectedMin);
+    }
+}
+
+BOOST_FIXTURE_TEST_CASE(err_collateral_return_always_full, DigiDollarERRTestSetup)
+{
+    // CRITICAL TEST: Verify ERR ALWAYS returns 100% collateral
+    // regardless of system health or tier
+
+    std::vector<int> healthLevels = {99, 95, 92, 90, 87, 85, 80, 50, 10, 0, -10};
+    std::vector<CAmount> collateralAmounts = {
+        50 * COIN,
+        100 * COIN,
+        500 * COIN,
+        1000 * COIN,
+        1000000 * COIN
+    };
+
+    for (int health : healthLevels) {
+        for (CAmount collateral : collateralAmounts) {
+            // GetAdjustedRedemption should return FULL collateral (deprecated but still works)
+            CAmount returned = DigiDollar::ERR::EmergencyRedemptionRatio::GetAdjustedRedemption(collateral, health);
+
+            // CRITICAL: Must return FULL amount
+            BOOST_CHECK_EQUAL(returned, collateral);
+        }
     }
 }
 

@@ -428,16 +428,38 @@ BOOST_AUTO_TEST_CASE(test_normal_path_does_not_have_dd_amount_validation)
     auto params = CreateTestMintParams();
     CScript normalPath = DigiDollar::CreateNormalRedemptionPath(params);
 
-    // Normal redemption path does NOT contain OP_DIGIDOLLAR
+    // Normal redemption path does NOT contain OP_DIGIDOLLAR or OP_DDVERIFY
     // Amount validation happens at transaction validation layer (see validation.cpp)
     // This keeps the normal path simple and efficient
-    BOOST_CHECK(std::find(normalPath.begin(), normalPath.end(), OP_DIGIDOLLAR) == normalPath.end());
-    BOOST_CHECK(std::find(normalPath.begin(), normalPath.end(), OP_DDVERIFY) == normalPath.end());
+    //
+    // NOTE: We use proper script parsing (GetOp) instead of std::find on raw bytes
+    // because std::find can give false positives if data bytes match opcode values
 
-    // Only contains: CLTV, DROP, ownerKey, CHECKSIG
-    size_t cltv_count = std::count(normalPath.begin(), normalPath.end(), OP_CHECKLOCKTIMEVERIFY);
-    size_t drop_count = std::count(normalPath.begin(), normalPath.end(), OP_DROP);
-    size_t checksig_count = std::count(normalPath.begin(), normalPath.end(), OP_CHECKSIG);
+    CScript::const_iterator pc = normalPath.begin();
+    opcodetype opcode;
+    std::vector<unsigned char> data;
+    bool found_digidollar = false;
+    bool found_ddverify = false;
+
+    while (normalPath.GetOp(pc, opcode, data)) {
+        if (opcode == OP_DIGIDOLLAR) found_digidollar = true;
+        if (opcode == OP_DDVERIFY) found_ddverify = true;
+    }
+
+    BOOST_CHECK_MESSAGE(!found_digidollar, "Normal path should NOT contain OP_DIGIDOLLAR");
+    BOOST_CHECK_MESSAGE(!found_ddverify, "Normal path should NOT contain OP_DDVERIFY");
+
+    // Only contains: CLTV, DROP, ownerKey, CHECKSIG - count opcodes properly
+    pc = normalPath.begin();
+    size_t cltv_count = 0;
+    size_t drop_count = 0;
+    size_t checksig_count = 0;
+
+    while (normalPath.GetOp(pc, opcode, data)) {
+        if (opcode == OP_CHECKLOCKTIMEVERIFY) cltv_count++;
+        if (opcode == OP_DROP) drop_count++;
+        if (opcode == OP_CHECKSIG) checksig_count++;
+    }
 
     BOOST_CHECK_EQUAL(cltv_count, 1);
     BOOST_CHECK_EQUAL(drop_count, 1);

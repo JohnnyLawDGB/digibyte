@@ -1073,8 +1073,8 @@ bool ValidateEmergencyRedemptionConditions(const CTransaction& tx,
 
     LogPrintf("DigiDollar: Validating emergency (ERR) redemption conditions\n");
 
-    // Get current system health
-    int systemHealth = DCA::DynamicCollateralAdjustment::GetCurrentSystemHealth();
+    // Get system health from context (consistent with ValidateNormalRedemptionConditions)
+    int systemHealth = ctx.systemCollateral;
 
     // Check if ERR is needed (system health < 100%)
     if (systemHealth >= 100) {

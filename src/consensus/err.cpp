@@ -49,6 +49,12 @@ bool EmergencyRedemptionRatio::ShouldActivateERR(int systemHealth)
 
 double EmergencyRedemptionRatio::CalculateERRAdjustment(int systemHealth)
 {
+    // At >= 100% health, no ERR adjustment needed (ratio = 1.0)
+    // This means ERR returns same as normal redemption (full collateral, burn original DD)
+    if (systemHealth >= 100) {
+        return 1.0;
+    }
+
     // Find the appropriate ERR tier based on system health
     // Returns a ratio (0.80-0.95) used to calculate required DD burn
     // RequiredDD = OriginalDD / ratio (so lower ratio = more DD required)

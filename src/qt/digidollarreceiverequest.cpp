@@ -19,13 +19,21 @@
 #include <QStandardPaths>
 #include <QUrl>
 #include <QFont>
+#include <QStyle>
 
 DigiDollarReceiveRequestDialog::DigiDollarReceiveRequestDialog(QWidget *parent)
     : QDialog(parent, GUIUtil::dialog_flags),
       m_model(nullptr)
 {
+    // Set object name FIRST for CSS styling to work
+    setObjectName("DigiDollarReceiveRequestDialog");
+
     setupUI();
     GUIUtil::handleCloseWindowShortcut(this);
+
+    // Force style refresh after object name is set
+    style()->unpolish(this);
+    style()->polish(this);
 }
 
 DigiDollarReceiveRequestDialog::~DigiDollarReceiveRequestDialog()

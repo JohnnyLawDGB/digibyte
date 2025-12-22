@@ -4052,6 +4052,74 @@ QDialog#ReceiveRequestDialog QRImageWidget {
     padding: 10px;
 }
 
+/* DigiDollar Receive Request Dialog - Light Mode */
+#DigiDollarReceiveRequestDialog,
+QDialog#DigiDollarReceiveRequestDialog {
+    background-color: #ffffff !important;
+    color: #003366 !important;
+}
+
+#DigiDollarReceiveRequestDialog QWidget,
+QDialog#DigiDollarReceiveRequestDialog QWidget {
+    background-color: transparent;
+    color: #003366;
+}
+
+#DigiDollarReceiveRequestDialog QLabel,
+QDialog#DigiDollarReceiveRequestDialog QLabel {
+    color: #003366 !important;
+    background-color: transparent;
+}
+
+#DigiDollarReceiveRequestDialog QTextEdit,
+QDialog#DigiDollarReceiveRequestDialog QTextEdit {
+    background-color: #A7C6ED;
+    color: #0066CC;
+    border: 2px solid #e0e0e0;
+    border-radius: 4px;
+    padding: 5px;
+    font-size: 10pt;
+}
+
+#DigiDollarReceiveRequestDialog QLineEdit,
+QDialog#DigiDollarReceiveRequestDialog QLineEdit {
+    background-color: #A7C6ED;
+    color: #003366 !important;
+    border: 2px solid #e0e0e0;
+    border-radius: 4px;
+    padding: 5px;
+    font-size: 10pt;
+}
+
+/* QR Code styling */
+#DigiDollarReceiveRequestDialog QRImageWidget,
+QDialog#DigiDollarReceiveRequestDialog QRImageWidget {
+    background-color: #ffffff;
+    border: 2px solid #e0e0e0;
+    border-radius: 4px;
+    padding: 10px;
+}
+
+#DigiDollarReceiveRequestDialog QPushButton,
+QDialog#DigiDollarReceiveRequestDialog QPushButton {
+    background-color: #0066CC;
+    color: #ffffff !important;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-weight: bold;
+}
+
+#DigiDollarReceiveRequestDialog QPushButton:hover,
+QDialog#DigiDollarReceiveRequestDialog QPushButton:hover {
+    background-color: #0088ff;
+}
+
+#DigiDollarReceiveRequestDialog QPushButton:pressed,
+QDialog#DigiDollarReceiveRequestDialog QPushButton:pressed {
+    background-color: #0044aa;
+}
+
 /* Coin Control Dialog */
 QDialog#CoinControlDialog {
     background-color: #ffffff;

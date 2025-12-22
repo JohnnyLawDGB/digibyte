@@ -499,7 +499,12 @@ void DigiDollarReceiveWidget::generateNewAddress()
     QString amountStr = m_currentAmount.isEmpty() ? tr("Any") : formatDDAmount(m_currentAmount.toDouble());
     addRequestToTable(dateStr, m_currentLabel, amountStr, m_currentAddress);
 
-    Q_EMIT message(tr("Success"), tr("New DigiDollar address generated"), QMessageBox::Information);
+    // Show the QR code popup dialog (same as DGB receive behavior)
+    DigiDollarReceiveRequestDialog* dialog = new DigiDollarReceiveRequestDialog(this);
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
+    dialog->setModel(m_walletModel);
+    dialog->setInfo(recipient);
+    dialog->show();
 }
 
 void DigiDollarReceiveWidget::updateQRCode()

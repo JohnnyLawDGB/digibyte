@@ -1065,25 +1065,82 @@ bool DigiDollarWallet::ExtractUnlockHeightFromOpReturn(const CTransaction& tx, i
     return false;
 }
 
+bool DigiDollarWallet::ExtractTierFromOpReturn(const CTransaction& tx, uint32_t& lock_tier)
+{
+    // Parse OP_RETURN output to extract lock tier (only for new MINT transactions)
+    // New format: OP_RETURN <"DD"> <1> <dd_amount> <unlock_height> <lock_tier>
+    // Old format: OP_RETURN <"DD"> <1> <dd_amount> <unlock_height>
+    // Returns false for old transactions without explicit tier (caller should use DeriveLockTierFromHeight)
+
+    for (const CTxOut& txout : tx.vout) {
+        if (txout.scriptPubKey.IsUnspendable() && txout.scriptPubKey.size() > 0) {
+            const CScript& script = txout.scriptPubKey;
+            auto pc = script.begin();
+            opcodetype opcode;
+            std::vector<unsigned char> data;
+
+            // Skip OP_RETURN
+            if (!script.GetOp(pc, opcode, data) || opcode != OP_RETURN)
+                continue;
+
+            // Get DD marker ("DD")
+            if (!script.GetOp(pc, opcode, data))
+                continue;
+            if (data.size() != 2 || data[0] != 'D' || data[1] != 'D')
+                continue;
+
+            // Get transaction type - must be MINT (1)
+            if (!script.GetOp(pc, opcode, data))
+                continue;
+
+            uint8_t txType = 0;
+            try {
+                CScriptNum txTypeNum(data, false);
+                txType = static_cast<uint8_t>(txTypeNum.getint());
+            } catch (const scriptnum_error&) {
+                continue;
+            }
+
+            // Only MINT transactions have lock_tier
+            if (txType != 1)
+                continue;
+
+            // Skip DD amount field
+            if (!script.GetOp(pc, opcode, data))
+                continue;
+
+            // Skip unlock_height field
+            if (!script.GetOp(pc, opcode, data))
+                continue;
+
+            // Get lock_tier (5th field in new MINT OP_RETURN)
+            // If this field doesn't exist, it's an old transaction
+            if (!script.GetOp(pc, opcode, data)) {
+                lock_tier = 0;
+                return false;  // Old format - no tier stored
+            }
+
+            try {
+                CScriptNum tierNum(data, false);
+                lock_tier = static_cast<uint32_t>(tierNum.getint());
+                return lock_tier <= 8;  // Valid tier range is 0-8
+            } catch (const scriptnum_error&) {
+                continue;
+            }
+        }
+    }
+
+    lock_tier = 0;
+    return false;
+}
+
 uint32_t DigiDollarWallet::DeriveLockTierFromHeight(int64_t mint_height, int64_t unlock_height)
 {
-    // Derive lock tier from block height difference
-    // DigiByte has 15-second blocks: 4 blocks/minute, 240 blocks/hour, 5760 blocks/day
+    // DEPRECATED: This function is only for diagnostic/validation purposes.
+    // New MINT transactions store the tier explicitly in OP_RETURN.
+    // Use ExtractTierFromOpReturn() for position reconstruction.
     //
-    // IMPORTANT: We subtract 1 from thresholds to handle TX timing variance.
-    // When a mint TX is created at block N but included in block N+1:
-    //   unlock_height = N + lock_blocks (calculated at creation time)
-    //   mint_height = N+1 (block where TX was actually included)
-    //   blocks = unlock_height - mint_height = lock_blocks - 1
-    //
-    // Example: Tier 3 mint (180 days = 1,036,800 blocks)
-    //   unlock_height = N + 1,036,800
-    //   mint_height = N+1
-    //   blocks = 1,036,799 (one less than expected)
-    //
-    // By checking >= (threshold - 1), we correctly identify the tier.
-    //
-    // Lock tiers (must match getLockTierBlocks() in digidollarmintwidget.cpp):
+    // Lock tiers (must match consensus/digidollar.h collateralRatios):
     //   Tier 0:  1 hour  =     240 blocks (testing only)
     //   Tier 1: 30 days  = 172,800 blocks
     //   Tier 2: 90 days  = 518,400 blocks (3 months)
@@ -1096,30 +1153,30 @@ uint32_t DigiDollarWallet::DeriveLockTierFromHeight(int64_t mint_height, int64_t
 
     int64_t blocks = unlock_height - mint_height;
 
-    // Check from highest tier down with -1 tolerance for TX timing
+    // Check from highest tier down using exact thresholds
     // Tier 8: 10 years = 21,024,000 blocks
-    if (blocks >= 21023999) return 8;
+    if (blocks >= 21024000) return 8;
 
     // Tier 7: 7 years = 14,716,800 blocks
-    if (blocks >= 14716799) return 7;
+    if (blocks >= 14716800) return 7;
 
     // Tier 6: 5 years = 10,512,000 blocks
-    if (blocks >= 10511999) return 6;
+    if (blocks >= 10512000) return 6;
 
     // Tier 5: 3 years = 6,307,200 blocks
-    if (blocks >= 6307199) return 5;
+    if (blocks >= 6307200) return 5;
 
     // Tier 4: 1 year = 2,102,400 blocks
-    if (blocks >= 2102399) return 4;
+    if (blocks >= 2102400) return 4;
 
     // Tier 3: 180 days = 1,036,800 blocks
-    if (blocks >= 1036799) return 3;
+    if (blocks >= 1036800) return 3;
 
     // Tier 2: 90 days = 518,400 blocks
-    if (blocks >= 518399) return 2;
+    if (blocks >= 518400) return 2;
 
     // Tier 1: 30 days = 172,800 blocks
-    if (blocks >= 172799) return 1;
+    if (blocks >= 172800) return 1;
 
     // Tier 0: Testing tier (<30 days)
     return 0;
@@ -1128,29 +1185,52 @@ uint32_t DigiDollarWallet::DeriveLockTierFromHeight(int64_t mint_height, int64_t
 bool DigiDollarWallet::ExtractPositionFromMintTx(const CTransaction& tx, int block_height, WalletCollateralPosition& pos_out)
 {
     // Extract complete position data from a MINT transaction
-    // DD_TX_MINT structure:
+    // DD_TX_MINT structure (v2 - with explicit tier):
     // vout[0]: P2TR Collateral Lock (nValue = dgb_collateral)
     // vout[1]: P2TR DD Token (nValue = 0)
-    // vout[2]: OP_RETURN ("DD" | txType=1 | dd_minted | unlock_height)
+    // vout[2]: OP_RETURN ("DD" | txType=1 | dd_minted | unlock_height | lock_tier)
+    //
+    // NOTE: lock_tier is REQUIRED in OP_RETURN. Old format transactions without
+    // explicit tier are not supported (clean testnet restart).
 
     // 1. Extract DD amount from OP_RETURN
     CAmount dd_amount = 0;
-    if (!ExtractDDAmountFromOpReturn(tx, dd_amount))
+    if (!ExtractDDAmountFromOpReturn(tx, dd_amount)) {
+        LogPrintf("DigiDollar: ExtractPositionFromMintTx - Failed to extract DD amount\n");
         return false;
+    }
 
     // 2. Extract unlock height from OP_RETURN
     int64_t unlock_height = 0;
-    if (!ExtractUnlockHeightFromOpReturn(tx, unlock_height))
+    if (!ExtractUnlockHeightFromOpReturn(tx, unlock_height)) {
+        LogPrintf("DigiDollar: ExtractPositionFromMintTx - Failed to extract unlock height\n");
         return false;
+    }
 
     // 3. Get collateral amount from vout[0]
-    if (tx.vout.empty())
+    if (tx.vout.empty()) {
+        LogPrintf("DigiDollar: ExtractPositionFromMintTx - Transaction has no outputs\n");
         return false;
+    }
 
     CAmount dgb_collateral = tx.vout[0].nValue;
 
-    // 4. Derive lock tier from height difference
-    uint32_t lock_tier = DeriveLockTierFromHeight(block_height, unlock_height);
+    // 4. Extract lock tier from OP_RETURN (REQUIRED - no fallback to derivation)
+    uint32_t lock_tier = 0;
+    if (!ExtractTierFromOpReturn(tx, lock_tier)) {
+        LogPrintf("DigiDollar: ExtractPositionFromMintTx - FAILED: No lock_tier in OP_RETURN. "
+                  "Old format transactions not supported. TX: %s\n", tx.GetHash().GetHex());
+        return false;
+    }
+
+    // Validate tier is in valid range (0-8)
+    if (lock_tier > 8) {
+        LogPrintf("DigiDollar: ExtractPositionFromMintTx - Invalid tier %u (max 8). TX: %s\n",
+                  lock_tier, tx.GetHash().GetHex());
+        return false;
+    }
+
+    LogPrintf("DigiDollar: ExtractPositionFromMintTx - Extracted tier %u from OP_RETURN\n", lock_tier);
 
     // 5. Build position structure
     pos_out.dd_timelock_id = tx.GetHash();

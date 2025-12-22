@@ -5,12 +5,12 @@
 # Opens 3 SEPARATE Qt wallet instances (Bob, Alice, Charlie)
 #
 # TEST PLAN:
-# - Bob mints $100 at ALL tiers (0-9) = 10 mints + extra tier 0 for redemption = 11 mints
+# - Bob mints $100 at tier 0, then $110 at tier 0 and tiers 1-8 = 10 mints total
 # - Mine past tier 0 lock (240 blocks)
 # - Bob redeems 2x tier 0 mints successfully
 # - Test partial redemption (should FAIL)
-# - Alice mints $100 at tier 3 (180 days) and tier 5 (2 years)
-# - Charlie mints $100 at tier 7 (5 years) and tier 9 (10 years)
+# - Alice mints $100 at tier 3 (180 days) and tier 5 (3 years)
+# - Charlie mints $100 at tier 7 (7 years) and tier 8 (10 years)
 # - Comprehensive transfer chain: Bob->Alice($55), Alice->Charlie($22), Charlie->Bob($10), Bob->Charlie($5)
 # - Full balance verification at EVERY step
 # - Transaction confirmation verification
@@ -291,7 +291,7 @@ sync_all_nodes() {
     return 1
 }
 
-# Tier descriptions (10 tiers: 0-9)
+# Tier descriptions (9 tiers: 0-8)
 get_tier_description() {
     local tier=$1
     # Must match consensus/digidollar.h collateralRatios
@@ -502,12 +502,12 @@ EXPECT_CHARLIE_DD=0
 verify_all_balances "Initial State (No DD Minted)"
 
 # ====================================================================================
-# Step 10: BOB MINTS DD AT EVERY TIER (0-9) - First mint $100, rest $110 for DD change test
+# Step 10: BOB MINTS DD AT EVERY TIER (0-8) - First mint $100, rest $110 for DD change test
 # ====================================================================================
-print_header "Step 10: Bob Mints DD at ALL Collateral Tiers (0-9)"
+print_header "Step 10: Bob Mints DD at ALL Collateral Tiers (0-8)"
 echo ""
 echo "Bob will mint \$100 (first tier 0) and \$110 (all others) to test DD change."
-echo "Total: \$100 + 10x\$110 = \$1200 (120000 cents)"
+echo "Total: \$100 + 9x\$110 = \$1090 (109000 cents)"
 echo ""
 
 ORACLE_PRICE=$($BOB_CLI getoracleprice 2>/dev/null | jq -r '.price_usd')
@@ -547,8 +547,8 @@ fi
 $BOB_CLI generatetoaddress 2 "$BOB_ADDR" > /dev/null 2>&1
 sleep 2
 
-# Now mint at tiers 1-9 (10 tiers total: 0-9) - Using $110 to test DD change scenario
-for tier in 1 2 3 4 5 6 7 8 9; do
+# Now mint at tiers 1-8 (9 tiers total: 0-8) - Using $110 to test DD change scenario
+for tier in 1 2 3 4 5 6 7 8; do
     print_subheader "Tier $tier - $(get_tier_description $tier)"
     echo "Minting \$110 DD (11000 cents) with tier $tier..."
 
@@ -572,11 +572,11 @@ $BOB_CLI generatetoaddress 5 "$BOB_ADDR" > /dev/null 2>&1
 sleep 5
 sync_all_nodes
 
-# Bob should have 1 x 10000 + 10 x 11000 = 120000 DD
+# Bob should have 1 x 10000 + 9 x 11000 = 109000 DD
 echo ""
-echo "Bob completed 11 mints (tier0 \$100, tier0 \$110, tiers 1-9 \$110 each)"
+echo "Bob completed 10 mints (tier0 \$100, tier0 \$110, tiers 1-8 \$110 each)"
 echo "Expected Bob DD: $EXPECT_BOB_DD cents (\$$(echo "scale=2; $EXPECT_BOB_DD / 100" | bc))"
-verify_all_balances "After Bob's 11 Mints (\$1200 total)"
+verify_all_balances "After Bob's 10 Mints (\$1090 total)"
 list_dd_positions "$BOB_CLI" "bob" "Bob"
 
 # ====================================================================================
@@ -925,26 +925,26 @@ sleep 3
 sync_all_nodes
 
 # ====================================================================================
-# Step 19: Charlie Mints $100 at Tier 9 (10 years)
+# Step 19: Charlie Mints $100 at Tier 8 (10 years)
 # ====================================================================================
-print_header "Step 19: Charlie Mints \$100 at Tier 9 (10 years)"
+print_header "Step 19: Charlie Mints \$100 at Tier 8 (10 years)"
 
 CHARLIE_DGB=$($CHARLIE_CLI -rpcwallet=charlie getbalance 2>/dev/null || echo "0")
 echo "Charlie's DGB balance: $CHARLIE_DGB DGB"
 
-echo "Charlie minting \$100 DD (10000 cents) with tier 9 [$(get_tier_description 9)]..."
+echo "Charlie minting \$100 DD (10000 cents) with tier 8 [$(get_tier_description 8)]..."
 set +e
-CHARLIE_MINT=$($CHARLIE_CLI -rpcwallet=charlie mintdigidollar 10000 9 2>&1)
+CHARLIE_MINT=$($CHARLIE_CLI -rpcwallet=charlie mintdigidollar 10000 8 2>&1)
 CHARLIE_MINT_EXIT=$?
 set -e
 
 if [ $CHARLIE_MINT_EXIT -eq 0 ] && echo "$CHARLIE_MINT" | jq -e '.txid' > /dev/null 2>&1; then
-    CHARLIE_TIER9_TX=$(echo "$CHARLIE_MINT" | jq -r '.txid')
+    CHARLIE_TIER8_TX=$(echo "$CHARLIE_MINT" | jq -r '.txid')
     COLLATERAL=$(echo "$CHARLIE_MINT" | jq -r '.dgb_collateral')
-    print_status "ok" "Charlie Tier 9 Mint: TX ${CHARLIE_TIER9_TX:0:12}... Collateral: $COLLATERAL DGB"
+    print_status "ok" "Charlie Tier 8 Mint: TX ${CHARLIE_TIER8_TX:0:12}... Collateral: $COLLATERAL DGB"
     EXPECT_CHARLIE_DD=$((EXPECT_CHARLIE_DD + 10000))
 else
-    print_status "fail" "Charlie Tier 9 Mint failed: $CHARLIE_MINT"
+    print_status "fail" "Charlie Tier 8 Mint failed: $CHARLIE_MINT"
 fi
 
 # Charlie generates his own block to include his TX (TX is in Charlie's mempool, not Bob's)
@@ -952,7 +952,7 @@ $CHARLIE_CLI generatetoaddress 2 "$CHARLIE_ADDR" > /dev/null 2>&1
 sleep 3
 sync_all_nodes
 
-verify_all_balances "After Charlie's 2 Mints (Tier 7 + Tier 9)"
+verify_all_balances "After Charlie's 2 Mints (Tier 7 + Tier 8)"
 list_dd_positions "$CHARLIE_CLI" "charlie" "Charlie"
 
 # ====================================================================================
@@ -1036,25 +1036,25 @@ else
 fi
 
 # ====================================================================================
-# Step 22: Charlie's Early Redemption Test (Tier 9 - should FAIL)
+# Step 22: Charlie's Early Redemption Test (Tier 8 - should FAIL)
 # ====================================================================================
 print_header "Step 22: Charlie's Early Redemption Test (should FAIL)"
-echo "Charlie's tier 9 vault is locked for 10 years - should be rejected..."
+echo "Charlie's tier 8 vault is locked for 10 years - should be rejected..."
 
-if [ -n "$CHARLIE_TIER9_TX" ]; then
+if [ -n "$CHARLIE_TIER8_TX" ]; then
     set +e
-    CHARLIE_EARLY=$($CHARLIE_CLI -rpcwallet=charlie redeemdigidollar "$CHARLIE_TIER9_TX" 10000 2>&1)
+    CHARLIE_EARLY=$($CHARLIE_CLI -rpcwallet=charlie redeemdigidollar "$CHARLIE_TIER8_TX" 10000 2>&1)
     CHARLIE_EARLY_EXIT=$?
     set -e
 
     if [ $CHARLIE_EARLY_EXIT -ne 0 ] || echo "$CHARLIE_EARLY" | grep -qi "error\|lock"; then
-        print_status "ok" "Charlie's tier 9 early redemption correctly REJECTED (still locked)"
+        print_status "ok" "Charlie's tier 8 early redemption correctly REJECTED (still locked)"
         echo "   Response: $(echo $CHARLIE_EARLY | head -c 100)..."
     else
         print_status "warn" "Unexpected result: $CHARLIE_EARLY"
     fi
 else
-    echo "  Skipping - Charlie's tier 9 mint txid not available"
+    echo "  Skipping - Charlie's tier 8 mint txid not available"
 fi
 
 # ====================================================================================
@@ -1260,16 +1260,16 @@ echo ""
 echo "==================== FINAL SUMMARY ===================="
 echo ""
 echo "MINT SUMMARY:"
-echo "  Bob:     11 mints (2x tier0 + tiers 1-9) = \$1100"
+echo "  Bob:     10 mints (tier0 \$100, tier0 \$110, tiers 1-8 \$110 each) = \$1090"
 echo "  Alice:   2 mints (tier 3 + tier 5) = \$200"
-echo "  Charlie: 2 mints (tier 7 + tier 9) = \$200"
-echo "  TOTAL MINTED: \$1500 (150000 cents)"
+echo "  Charlie: 2 mints (tier 7 + tier 8) = \$200"
+echo "  TOTAL MINTED: \$1490 (149000 cents)"
 echo ""
 echo "REDEMPTION SUMMARY:"
-echo "  Bob:     2 tier 0 redemptions = \$200 burned"
+echo "  Bob:     2 tier 0 redemptions = \$210 burned (\$100 + \$110)"
 echo "  Alice:   0 (locked)"
 echo "  Charlie: 0 (locked)"
-echo "  TOTAL REDEEMED: \$200 (20000 cents)"
+echo "  TOTAL REDEEMED: \$210 (21000 cents)"
 echo ""
 echo "TRANSFER SUMMARY:"
 echo "  Initial:"
@@ -2323,7 +2323,7 @@ fi
 
 echo ""
 echo "TEST COVERAGE:"
-echo "  [x] All collateral tiers (0-9) mint successfully"
+echo "  [x] All collateral tiers (0-8) mint successfully"
 echo "  [x] Tier 0 positions unlock after 240 blocks"
 echo "  [x] Partial redemption correctly rejected"
 echo "  [x] Early redemption correctly rejected"

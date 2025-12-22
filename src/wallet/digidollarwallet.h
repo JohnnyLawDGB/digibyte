@@ -434,10 +434,21 @@ public:
     static bool ExtractUnlockHeightFromOpReturn(const CTransaction& tx, int64_t& unlock_height);
 
     /**
+     * Extract lock tier from OP_RETURN metadata in a DD mint transaction
+     * New MINT format includes tier explicitly to avoid derivation timing issues.
+     * @param tx Transaction to extract from
+     * @param lock_tier Output: extracted lock tier (0-8)
+     * @return true if extraction successful (false for old txs without tier)
+     */
+    static bool ExtractTierFromOpReturn(const CTransaction& tx, uint32_t& lock_tier);
+
+    /**
      * Derive lock tier from mint height and unlock height
+     * DEPRECATED: Use ExtractTierFromOpReturn when available.
+     * Kept for backward compatibility with older transactions.
      * @param mint_height Block height when minted
      * @param unlock_height Block height when unlockable
-     * @return Lock tier (0-6)
+     * @return Lock tier (0-8)
      */
     static uint32_t DeriveLockTierFromHeight(int64_t mint_height, int64_t unlock_height);
 

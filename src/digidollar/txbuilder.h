@@ -37,6 +37,7 @@ struct TxBuilderResult {
 struct TxBuilderMintParams {
     CAmount ddAmount;           // Amount of DD to mint (in cents)
     int lockDays;               // Lock period in days
+    uint32_t lockTier;          // Lock tier (0-8) - stored in OP_RETURN for exact reconstruction
     CKey ownerKey;              // Owner's private key
     CAmount feeRate;            // Fee rate in sat/vB
     std::vector<COutPoint> utxos; // Available UTXOs for collateral
@@ -45,7 +46,7 @@ struct TxBuilderMintParams {
     // CRITICAL: Must be set to a wallet-controlled address to avoid losing DGB!
     std::optional<CTxDestination> dgbChangeDest;
 
-    TxBuilderMintParams() : ddAmount(0), lockDays(0), feeRate(1000) {} // Default 1000 sat/vB
+    TxBuilderMintParams() : ddAmount(0), lockDays(0), lockTier(0), feeRate(1000) {} // Default 1000 sat/vB
 };
 
 // Parameters for transferring DigiDollars (V2 - enhanced for tests)

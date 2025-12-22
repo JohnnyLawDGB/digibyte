@@ -336,13 +336,16 @@ TxBuilderResult MintTxBuilder::BuildMintTransaction(const TxBuilderMintParams& p
     tx.vout.push_back(CTxOut(0, ddScript));
 
     // Add OP_RETURN output with metadata for validation
-    // Format: OP_RETURN <"DD"> <txType> <ddAmount> <lockHeight>
+    // Format: OP_RETURN <"DD"> <txType> <ddAmount> <lockHeight> <lockTier>
+    // NOTE: lockTier is stored explicitly to avoid deriving it from block heights
+    // during wallet restore, which has timing variance issues.
     int64_t lockHeight = currentHeight + LockDaysToBlocks(params.lockDays);
     CScript metadataScript = CScript() << OP_RETURN
                                        << std::vector<unsigned char>{'D', 'D'}
                                        << CScriptNum(1)  // 1 = MINT transaction
                                        << CScriptNum(params.ddAmount)  // DD amount in cents
-                                       << CScriptNum(lockHeight);  // Lock height in blocks
+                                       << CScriptNum(lockHeight)  // Lock height in blocks
+                                       << CScriptNum(params.lockTier);  // Lock tier (0-8)
     tx.vout.push_back(CTxOut(0, metadataScript));
 
     // Iterative fee calculation to account for change output

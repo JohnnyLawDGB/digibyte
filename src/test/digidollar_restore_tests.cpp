@@ -25,8 +25,8 @@ static CKey CreateTestKey() {
     return key;
 }
 
-// Helper function to create a mock mint transaction with OP_RETURN
-static CMutableTransaction CreateMockMintTx(CAmount dd_amount, int64_t unlock_height) {
+// Helper function to create a mock mint transaction with OP_RETURN (v2 format with tier)
+static CMutableTransaction CreateMockMintTx(CAmount dd_amount, int64_t unlock_height, uint32_t lock_tier) {
     CMutableTransaction mtx;
     mtx.nVersion = 2;
 
@@ -46,13 +46,14 @@ static CMutableTransaction CreateMockMintTx(CAmount dd_amount, int64_t unlock_he
     CScript ddScript = GetScriptForDestination(taproot_dest);
     mtx.vout.push_back(CTxOut(0, ddScript));
 
-    // vout[2]: OP_RETURN Metadata ("DD" | txType=1 | dd_minted | unlock_height)
-    // Format: OP_RETURN <"DD"> <txType> <ddAmount> <lockHeight>
+    // vout[2]: OP_RETURN Metadata (v2 format with explicit tier)
+    // Format: OP_RETURN <"DD"> <txType> <ddAmount> <lockHeight> <lockTier>
     CScript metadataScript = CScript() << OP_RETURN
                                        << std::vector<unsigned char>{'D', 'D'}
                                        << CScriptNum(1)  // 1 = MINT transaction
                                        << CScriptNum(dd_amount)  // DD amount in cents
-                                       << CScriptNum(unlock_height);  // Lock height in blocks
+                                       << CScriptNum(unlock_height)  // Lock height in blocks
+                                       << CScriptNum(lock_tier);  // Lock tier (0-8)
     mtx.vout.push_back(CTxOut(0, metadataScript));
 
     return mtx;
@@ -67,8 +68,9 @@ BOOST_AUTO_TEST_CASE(extract_dd_amount_from_opreturn)
     // Test extracting DD amount from a mint transaction OP_RETURN
     CAmount expected_amount = 10000;  // $100.00 in cents
     int64_t unlock_height = 100000;
+    uint32_t lock_tier = 1;  // 30 days
 
-    CMutableTransaction mtx = CreateMockMintTx(expected_amount, unlock_height);
+    CMutableTransaction mtx = CreateMockMintTx(expected_amount, unlock_height, lock_tier);
     CTransaction tx(mtx);
 
     // Test extraction
@@ -129,8 +131,9 @@ BOOST_AUTO_TEST_CASE(extract_unlock_height_from_opreturn)
     // Test extracting unlock height from a mint transaction OP_RETURN
     CAmount dd_amount = 10000;  // $100.00 in cents
     int64_t expected_unlock_height = 518640;  // 90 days from height 240 (518640 - 240 = 518400 blocks)
+    uint32_t lock_tier = 2;  // 90 days
 
-    CMutableTransaction mtx = CreateMockMintTx(dd_amount, expected_unlock_height);
+    CMutableTransaction mtx = CreateMockMintTx(dd_amount, expected_unlock_height, lock_tier);
     CTransaction tx(mtx);
 
     // Test extraction
@@ -161,7 +164,67 @@ BOOST_AUTO_TEST_CASE(extract_unlock_height_invalid_tx)
 }
 
 // ============================================================================
-// Test 3: Derive lock tier from mint height and unlock height
+// Test 2.5: Extract lock tier from OP_RETURN metadata (new v2 format)
+// ============================================================================
+
+BOOST_AUTO_TEST_CASE(extract_tier_from_opreturn)
+{
+    // Test extracting lock tier from a v2 mint transaction OP_RETURN
+    CAmount dd_amount = 10000;
+    int64_t unlock_height = 173800;
+    uint32_t expected_tier = 1;  // 30 days
+
+    CMutableTransaction mtx = CreateMockMintTx(dd_amount, unlock_height, expected_tier);
+    CTransaction tx(mtx);
+
+    uint32_t extracted_tier = 0;
+    bool result = DigiDollarWallet::ExtractTierFromOpReturn(tx, extracted_tier);
+
+    BOOST_CHECK(result);
+    BOOST_CHECK_EQUAL(extracted_tier, expected_tier);
+}
+
+BOOST_AUTO_TEST_CASE(extract_tier_from_opreturn_all_tiers)
+{
+    // Test tier extraction for all valid tiers (0-8)
+    for (uint32_t tier = 0; tier <= 8; ++tier) {
+        CMutableTransaction mtx = CreateMockMintTx(10000, 100000, tier);
+        CTransaction tx(mtx);
+
+        uint32_t extracted_tier = 99;  // Invalid value to verify extraction works
+        bool result = DigiDollarWallet::ExtractTierFromOpReturn(tx, extracted_tier);
+
+        BOOST_CHECK_MESSAGE(result, "Failed to extract tier " + std::to_string(tier));
+        BOOST_CHECK_EQUAL(extracted_tier, tier);
+    }
+}
+
+BOOST_AUTO_TEST_CASE(extract_tier_invalid_tx)
+{
+    // Test with a transaction that has no tier in OP_RETURN (old format)
+    CMutableTransaction mtx;
+    mtx.nVersion = 2;
+    mtx.vin.resize(1);
+    mtx.vin[0].prevout = COutPoint(uint256S("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"), 0);
+
+    // Create old format OP_RETURN (without tier)
+    CScript metadataScript = CScript() << OP_RETURN
+                                       << std::vector<unsigned char>{'D', 'D'}
+                                       << CScriptNum(1)
+                                       << CScriptNum(10000)
+                                       << CScriptNum(100000);  // No tier field
+    mtx.vout.push_back(CTxOut(0, metadataScript));
+
+    CTransaction tx(mtx);
+    uint32_t extracted_tier = 0;
+    bool result = DigiDollarWallet::ExtractTierFromOpReturn(tx, extracted_tier);
+
+    // Should fail for old format - tier is REQUIRED
+    BOOST_CHECK(!result);
+}
+
+// ============================================================================
+// Test 3: Derive lock tier from mint height and unlock height (DEPRECATED)
 // ============================================================================
 
 BOOST_AUTO_TEST_CASE(derive_lock_tier_from_heights)
@@ -207,38 +270,42 @@ BOOST_AUTO_TEST_CASE(derive_lock_tier_from_heights)
 
 BOOST_AUTO_TEST_CASE(derive_lock_tier_edge_cases)
 {
-    // Test edge case: exact tier boundaries with TX timing variance
+    // Test edge case: exact tier boundaries
     //
-    // IMPORTANT: DeriveLockTierFromHeight accounts for 1-block TX timing variance.
-    // When a mint TX is created at block N but included at block N+1:
-    //   - unlock_height = N + lock_blocks (calculated at creation)
-    //   - mint_height = N+1 (confirmation block)
-    //   - blocks = lock_blocks - 1
+    // NOTE: DeriveLockTierFromHeight is DEPRECATED for position reconstruction.
+    // New MINT transactions store tier explicitly in OP_RETURN.
+    // This function uses exact thresholds for diagnostic/validation purposes.
     //
-    // So tier thresholds use >= (threshold - 1) to correctly identify tiers.
+    // Lock tier block thresholds:
+    //   Tier 0: < 172,800 blocks (< 30 days)
+    //   Tier 1: >= 172,800 blocks (30 days)
+    //   Tier 2: >= 518,400 blocks (90 days)
+    //   etc.
 
-    // Exactly 1 hour (240 blocks) - tier 0
-    uint32_t tier = DigiDollarWallet::DeriveLockTierFromHeight(1000, 1240);
+    // Well under 30 days (172,799 blocks) - tier 0
+    uint32_t tier = DigiDollarWallet::DeriveLockTierFromHeight(1000, 173799);
     BOOST_CHECK_EQUAL(tier, 0);
 
     // Exactly 30 days (172,800 blocks) - tier 1
     tier = DigiDollarWallet::DeriveLockTierFromHeight(1000, 173800);
     BOOST_CHECK_EQUAL(tier, 1);
 
-    // 30 days with 1-block variance (172,799 blocks) - still tier 1
-    // This occurs when tier 1 mint TX is included 1 block after creation
-    tier = DigiDollarWallet::DeriveLockTierFromHeight(1000, 173799);
+    // Just over 30 days (172,801 blocks) - tier 1
+    tier = DigiDollarWallet::DeriveLockTierFromHeight(1000, 173801);
     BOOST_CHECK_EQUAL(tier, 1);
 
-    // Well under 30 days (172,798 blocks) - tier 0
-    // This is 2 blocks under the threshold, clearly not a tier 1 mint
-    tier = DigiDollarWallet::DeriveLockTierFromHeight(1000, 173798);
-    BOOST_CHECK_EQUAL(tier, 0);
-
-    // Between tiers - values in this range can't occur from normal minting
-    // but we map them to the tier they're closest to from above
+    // Between tiers - values in this range are mapped to the lower tier
+    // (300,000 blocks is between 172,800 and 518,400 so tier 1)
     tier = DigiDollarWallet::DeriveLockTierFromHeight(1000, 300000);  // Between 30d and 90d
     BOOST_CHECK_EQUAL(tier, 1);
+
+    // Exactly 90 days (518,400 blocks) - tier 2
+    tier = DigiDollarWallet::DeriveLockTierFromHeight(1000, 519400);
+    BOOST_CHECK_EQUAL(tier, 2);
+
+    // Test tier 0 boundary (1 hour = 240 blocks)
+    tier = DigiDollarWallet::DeriveLockTierFromHeight(1000, 1240);
+    BOOST_CHECK_EQUAL(tier, 0);
 }
 
 // ============================================================================
@@ -254,9 +321,10 @@ BOOST_AUTO_TEST_CASE(build_position_from_mint_tx)
     CAmount dd_amount = 50000;  // $500.00 in cents
     int64_t mint_height = 1000;
     int64_t unlock_height = mint_height + LockDaysToBlocks(90);  // 90 day lock
+    uint32_t expected_tier = 2;  // 90 days = tier 2
 
-    // Create mock mint transaction
-    CMutableTransaction mtx = CreateMockMintTx(dd_amount, unlock_height);
+    // Create mock mint transaction (v2 format with explicit tier)
+    CMutableTransaction mtx = CreateMockMintTx(dd_amount, unlock_height, expected_tier);
     CTransaction tx(mtx);
 
     // Extract position
@@ -267,7 +335,7 @@ BOOST_AUTO_TEST_CASE(build_position_from_mint_tx)
     BOOST_CHECK_EQUAL(position.dd_timelock_id, tx.GetHash());
     BOOST_CHECK_EQUAL(position.dd_minted, dd_amount);
     BOOST_CHECK_EQUAL(position.dgb_collateral, 100 * COIN);  // From vout[0]
-    BOOST_CHECK_EQUAL(position.lock_tier, 2);  // 90 days = tier 2
+    BOOST_CHECK_EQUAL(position.lock_tier, expected_tier);  // Tier from OP_RETURN
     BOOST_CHECK_EQUAL(position.unlock_height, unlock_height);
     BOOST_CHECK(position.is_active);
 }
@@ -298,6 +366,7 @@ BOOST_AUTO_TEST_CASE(build_position_invalid_tx)
 BOOST_AUTO_TEST_CASE(build_position_different_tiers)
 {
     // Test position extraction for different lock tiers
+    // Tier is now stored explicitly in OP_RETURN (not derived from block heights)
     DigiDollarWallet wallet;
 
     int64_t mint_height = 5000;
@@ -305,30 +374,48 @@ BOOST_AUTO_TEST_CASE(build_position_different_tiers)
     // Test tier 1 (30 days)
     {
         CAmount dd_amount = 10000;
+        uint32_t expected_tier = 1;
         int64_t unlock_height = mint_height + LockDaysToBlocks(30);
-        CMutableTransaction mtx = CreateMockMintTx(dd_amount, unlock_height);
+        CMutableTransaction mtx = CreateMockMintTx(dd_amount, unlock_height, expected_tier);
         CTransaction tx(mtx);
 
         WalletCollateralPosition position;
         bool result = wallet.ExtractPositionFromMintTx(tx, mint_height, position);
 
         BOOST_CHECK(result);
-        BOOST_CHECK_EQUAL(position.lock_tier, 1);
+        BOOST_CHECK_EQUAL(position.lock_tier, expected_tier);
         BOOST_CHECK_EQUAL(position.dd_minted, dd_amount);
     }
 
     // Test tier 4 (365 days)
     {
         CAmount dd_amount = 100000;
+        uint32_t expected_tier = 4;
         int64_t unlock_height = mint_height + LockDaysToBlocks(365);
-        CMutableTransaction mtx = CreateMockMintTx(dd_amount, unlock_height);
+        CMutableTransaction mtx = CreateMockMintTx(dd_amount, unlock_height, expected_tier);
         CTransaction tx(mtx);
 
         WalletCollateralPosition position;
         bool result = wallet.ExtractPositionFromMintTx(tx, mint_height, position);
 
         BOOST_CHECK(result);
-        BOOST_CHECK_EQUAL(position.lock_tier, 4);
+        BOOST_CHECK_EQUAL(position.lock_tier, expected_tier);
+        BOOST_CHECK_EQUAL(position.dd_minted, dd_amount);
+    }
+
+    // Test tier 8 (10 years)
+    {
+        CAmount dd_amount = 500000;
+        uint32_t expected_tier = 8;
+        int64_t unlock_height = mint_height + LockDaysToBlocks(3650);
+        CMutableTransaction mtx = CreateMockMintTx(dd_amount, unlock_height, expected_tier);
+        CTransaction tx(mtx);
+
+        WalletCollateralPosition position;
+        bool result = wallet.ExtractPositionFromMintTx(tx, mint_height, position);
+
+        BOOST_CHECK(result);
+        BOOST_CHECK_EQUAL(position.lock_tier, expected_tier);
         BOOST_CHECK_EQUAL(position.dd_minted, dd_amount);
     }
 }

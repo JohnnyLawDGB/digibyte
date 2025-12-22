@@ -897,6 +897,7 @@ WalletModel::DigiDollarMintResult WalletModel::mintDigiDollar(CAmount ddAmount, 
         DigiDollar::TxBuilderMintParams params;
         params.ddAmount = ddAmount;
         params.lockDays = lockDays;
+        params.lockTier = lockTier;  // Store tier explicitly in OP_RETURN for exact reconstruction
         params.ownerKey = ownerKey;
         // DigiDollar transactions require minimum 1 DGB fee
         // TxBuilder formula: (vsize * feeRate) / 1000

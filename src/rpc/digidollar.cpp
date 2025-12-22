@@ -826,6 +826,7 @@ RPCHelpMan mintdigidollar()
             DigiDollar::TxBuilderMintParams params;
             params.ddAmount = ddAmount;  // Amount in cents (e.g., 5000 = $50.00)
             params.lockDays = lockDays;
+            params.lockTier = lockTier;  // Store tier explicitly in OP_RETURN for exact reconstruction
             params.ownerKey = ownerKey;
             params.feeRate = feeRate;
             params.utxos = availableUtxos;

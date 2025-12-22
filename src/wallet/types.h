@@ -60,6 +60,7 @@ enum class AddressPurpose {
     RECEIVE,
     SEND,
     REFUND, //!< Never set in current code may be present in older wallet databases
+    DIGIDOLLAR, //!< DigiDollar receive addresses (DD/TD/RD prefix)
 };
 } // namespace wallet
 

@@ -350,6 +350,7 @@ DIGIBYTE_CORE_H = \
   wallet/crypter.h \
   wallet/db.h \
   wallet/digidollarwallet.h \
+  wallet/ddcoincontrol.h \
   wallet/dump.h \
   wallet/external_signer_scriptpubkeyman.h \
   wallet/feebumper.h \
@@ -513,6 +514,7 @@ libdigibyte_wallet_a_SOURCES = \
   wallet/crypter.cpp \
   wallet/db.cpp \
   wallet/digidollarwallet.cpp \
+  wallet/ddcoincontrol.cpp \
   wallet/dump.cpp \
   wallet/external_signer_scriptpubkeyman.cpp \
   wallet/feebumper.cpp \

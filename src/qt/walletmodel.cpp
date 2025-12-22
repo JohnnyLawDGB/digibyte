@@ -1270,8 +1270,11 @@ QString WalletModel::getNewDigiDollarAddress(const QString& label)
         LogPrintf("DigiDollar Qt: Generated DD address: %s\n", ddAddress);
 
         // Add address to address book with label if provided
+        // Use DIGIDOLLAR purpose to distinguish from regular DGB addresses
         if (!label.isEmpty()) {
-            m_wallet->setAddressBook(dest, label.toStdString(), wallet::AddressPurpose::RECEIVE);
+            m_wallet->setAddressBook(dest, label.toStdString(), wallet::AddressPurpose::DIGIDOLLAR);
+        } else {
+            m_wallet->setAddressBook(dest, "", wallet::AddressPurpose::DIGIDOLLAR);
         }
 
         return QString::fromStdString(ddAddress);
@@ -1280,4 +1283,9 @@ QString WalletModel::getNewDigiDollarAddress(const QString& label)
         LogPrintf("DigiDollar Qt: getNewDigiDollarAddress exception - %s\n", e.what());
         return QString();
     }
+}
+
+DigiDollarWallet* WalletModel::getDigiDollarWallet() const
+{
+    return m_wallet ? m_wallet->getDigiDollarWallet() : nullptr;
 }

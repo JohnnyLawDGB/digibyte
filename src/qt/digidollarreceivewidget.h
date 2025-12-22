@@ -10,6 +10,7 @@
 class WalletModel;
 class ClientModel;
 class QRImageWidget;
+class RecentRequestEntry;
 
 QT_BEGIN_NAMESPACE
 class QLabel;
@@ -22,6 +23,7 @@ class QFrame;
 class QToolButton;
 class QTableWidget;
 class QTableWidgetItem;
+class QMenu;
 QT_END_NAMESPACE
 
 /**
@@ -76,6 +78,20 @@ private Q_SLOTS:
     void onRemoveRequestClicked();
     /** Show selected request */
     void onShowRequestClicked();
+    /** Recent request row double-clicked */
+    void onRecentRequestDoubleClicked(int row, int column);
+    /** Show context menu for requests table */
+    void showContextMenu(const QPoint &point);
+    /** Context menu action: copy URI */
+    void copyURI();
+    /** Context menu action: copy address */
+    void copyAddress();
+    /** Context menu action: copy label */
+    void copyLabel();
+    /** Context menu action: copy message */
+    void copyMessage();
+    /** Context menu action: copy amount */
+    void copyAmount();
 
 private:
     void setupUI();
@@ -93,8 +109,11 @@ private:
     QString formatDDAmount(double amount) const;
     QString formatDDURI(const QString& address, const QString& label = QString(),
                        const QString& amount = QString(), const QString& message = QString()) const;
+    int selectedRow();
+    const RecentRequestEntry* getSelectedRequest();
 
     // UI components
+    QMenu* m_contextMenu;
     QVBoxLayout* m_mainLayout;
 
     // Generate section

@@ -62,8 +62,6 @@ public Q_SLOTS:
     void updatePositions();
 
 private Q_SLOTS:
-    /** Refresh button clicked */
-    void onRefreshClicked();
     /** Position table cell clicked */
     void onPositionClicked(int row, int column);
     /** Redeem button clicked for a specific position */
@@ -98,7 +96,6 @@ private:
     QVBoxLayout* m_mainLayout;
     QHBoxLayout* m_headerLayout;
     QLabel* m_titleLabel;
-    QPushButton* m_refreshButton;
     QTableWidget* m_positionsTable;
     QLabel* m_statusLabel;
 

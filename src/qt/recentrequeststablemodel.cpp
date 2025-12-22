@@ -178,8 +178,16 @@ void RecentRequestsTableModel::addNewRequest(const SendCoinsRecipient &recipient
     DataStream ss{};
     ss << newEntry;
 
+    // Save to wallet for persistence
     if (!walletModel->wallet().setAddressReceiveRequest(DecodeDestination(recipient.address.toStdString()), ToString(newEntry.id), ss.str()))
         return;
+
+    // Filter out DigiDollar addresses - they are saved to wallet but NOT added to DGB model
+    // DD = mainnet, TD = testnet, RD = regtest DigiDollar addresses
+    QString address = recipient.address;
+    if (address.startsWith("DD") || address.startsWith("TD") || address.startsWith("RD")) {
+        return;  // Saved to wallet, but not added to DGB model - handled by DigiDollarReceiveWidget
+    }
 
     addNewRequest(newEntry);
 }
@@ -198,6 +206,13 @@ void RecentRequestsTableModel::addNewRequest(const std::string &recipient)
 
     if (entry.id > nReceiveRequestsMaxId)
         nReceiveRequestsMaxId = entry.id;
+
+    // Filter out DigiDollar addresses - they should NOT appear in DGB Receive tab
+    // DD = mainnet, TD = testnet, RD = regtest DigiDollar addresses
+    QString address = entry.recipient.address;
+    if (address.startsWith("DD") || address.startsWith("TD") || address.startsWith("RD")) {
+        return;  // Skip DD addresses - they are handled by DigiDollarReceiveWidget
+    }
 
     addNewRequest(entry);
 }

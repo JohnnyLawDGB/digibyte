@@ -219,6 +219,9 @@ public:
     // Generate new DigiDollar receiving address
     QString getNewDigiDollarAddress(const QString& label = "");
 
+    // Get DigiDollarWallet for coin control
+    DigiDollarWallet* getDigiDollarWallet() const;
+
 private:
     std::unique_ptr<interfaces::Wallet> m_wallet;
     std::unique_ptr<interfaces::Handler> m_handler_unload;

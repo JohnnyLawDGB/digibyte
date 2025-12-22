@@ -13,12 +13,10 @@
 #include <QKeyEvent>
 #include <QMenu>
 #include <QPoint>
-#include <QSortFilterProxyModel>
 #include <QVariant>
 
 class PlatformStyle;
 class WalletModel;
-class RecentRequestsFilterProxy;
 
 namespace Ui {
     class ReceiveCoinsDialog;
@@ -54,7 +52,6 @@ public Q_SLOTS:
 private:
     Ui::ReceiveCoinsDialog *ui;
     WalletModel* model{nullptr};
-    RecentRequestsFilterProxy* proxyModel{nullptr};
     QMenu *contextMenu;
     QAction* copyLabelAction;
     QAction* copyMessageAction;

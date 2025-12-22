@@ -2286,6 +2286,115 @@ background-color:rgba(255, 255, 255, 0.15);
 
     }
 
+    /******************************************************
+      LIGHT THEME - DIGIDOLLAR COIN CONTROL DIALOG
+      (Same styling as DGB Coin Control but for DD)
+    *******************************************************/
+
+    /* DigiDollar Coin Control Dialog */
+    QDialog#DigiDollarCoinControlDialog {
+        background-color: #f5f5f5;
+    }
+
+    QDialog#DigiDollarCoinControlDialog QLabel {
+        color: #333333;
+    }
+
+    /* Style DigiDollar Coin Control Tree Widget */
+    QDialog#DigiDollarCoinControlDialog CoinControlTreeWidget,
+    QDialog#DigiDollarCoinControlDialog QTreeWidget {
+        background-color: #ffffff;
+        alternate-background-color: #f8f8f8;
+        color: #333333;
+        selection-background-color: #0066CC;
+        selection-color: #ffffff;
+        border: 1px solid #cccccc;
+        font-size: 11pt;
+        gridline-color: #e0e0e0;
+    }
+
+    QDialog#DigiDollarCoinControlDialog QTreeWidget::item {
+        background-color: transparent;
+        color: #333333;
+        padding: 10px;
+        font-size: 11pt;
+    }
+
+    QDialog#DigiDollarCoinControlDialog QTreeWidget::item:alternate {
+        background-color: #f8f8f8;
+    }
+
+    QDialog#DigiDollarCoinControlDialog QTreeWidget::item:selected {
+        background-color: #0066CC;
+        color: #ffffff;
+    }
+
+    QDialog#DigiDollarCoinControlDialog QTreeWidget::item:hover {
+        background-color: rgba(0, 102, 204, 0.2);
+        color: #333333;
+    }
+
+    /* Tree Widget Headers */
+    QDialog#DigiDollarCoinControlDialog QHeaderView::section {
+        background-color: #0066CC;
+        color: #ffffff;
+        padding: 8px;
+        border: none;
+        font-weight: bold;
+        font-size: 11pt;
+    }
+
+    /* Checkboxes */
+    QDialog#DigiDollarCoinControlDialog QCheckBox {
+        color: #333333;
+    }
+
+    QDialog#DigiDollarCoinControlDialog QCheckBox::indicator {
+        width: 16px;
+        height: 16px;
+        background-color: #ffffff;
+        border: 2px solid #0066cc;
+        border-radius: 3px;
+    }
+
+    QDialog#DigiDollarCoinControlDialog QCheckBox::indicator:checked {
+        background-color: #0066cc;
+        border: 2px solid #0066cc;
+        border-radius: 3px;
+    }
+
+    /* Buttons */
+    QDialog#DigiDollarCoinControlDialog QPushButton#pushButtonSelectAll,
+    QDialog#DigiDollarCoinControlDialog QPushButton {
+        background-color: #0066CC;
+        color: #ffffff;
+        border: none;
+        border-radius: 4px;
+        padding: 6px 16px;
+        font-weight: bold;
+    }
+
+    QDialog#DigiDollarCoinControlDialog QPushButton:hover {
+        background-color: #0088ff;
+    }
+
+    /* Radio buttons for tree/list mode */
+    QDialog#DigiDollarCoinControlDialog QRadioButton {
+        color: #333333;
+        background-color: transparent;
+    }
+
+    /* Info labels */
+    QDialog#DigiDollarCoinControlDialog QLabel#labelCoinControlQuantity,
+    QDialog#DigiDollarCoinControlDialog QLabel#labelCoinControlAmount,
+    QDialog#DigiDollarCoinControlDialog QLabel#labelCoinControlFee,
+    QDialog#DigiDollarCoinControlDialog QLabel#labelCoinControlAfterFee,
+    QDialog#DigiDollarCoinControlDialog QLabel#labelCoinControlBytes,
+    QDialog#DigiDollarCoinControlDialog QLabel#labelCoinControlChange {
+        color: #333333;
+        font-weight: bold;
+    }
+
     /* RECEIVE COINS */
 
     QWidget#ReceiveCoinsDialog .QFrame#frame2 .QLabel#label_2 { /* Label Label */

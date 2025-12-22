@@ -18,6 +18,7 @@ QT_FORMS_UI = \
   qt/forms/addressbookpage.ui \
   qt/forms/askpassphrasedialog.ui \
   qt/forms/coincontroldialog.ui \
+  qt/forms/digidollarcoincontroldialog.ui \
   qt/forms/createwalletdialog.ui \
   qt/forms/editaddressdialog.ui \
   qt/forms/helpmessagedialog.ui \
@@ -49,6 +50,7 @@ QT_MOC_CPP = \
   qt/moc_clientmodel.cpp \
   qt/moc_coincontroldialog.cpp \
   qt/moc_coincontroltreewidget.cpp \
+  qt/moc_digidollarcoincontroldialog.cpp \
   qt/moc_csvmodelwriter.cpp \
   qt/moc_editaddressdialog.cpp \
   qt/moc_guiutil.cpp \
@@ -93,6 +95,7 @@ QT_MOC_CPP = \
   qt/moc_digidollarmintwidget.cpp \
   qt/moc_digidollaroverviewwidget.cpp \
   qt/moc_digidollarpositionswidget.cpp \
+  qt/moc_digidollarreceiverequest.cpp \
   qt/moc_digidollarreceivewidget.cpp \
   qt/moc_digidollarredeemwidget.cpp \
   qt/moc_digidollarsendwidget.cpp \
@@ -127,6 +130,7 @@ DIGIBYTE_QT_H = \
   qt/clientmodel.h \
   qt/coincontroldialog.h \
   qt/coincontroltreewidget.h \
+  qt/digidollarcoincontroldialog.h \
   qt/createwalletdialog.h \
   qt/csvmodelwriter.h \
   qt/editaddressdialog.h \
@@ -180,6 +184,7 @@ DIGIBYTE_QT_H = \
   qt/digidollarmintwidget.h \
   qt/digidollaroverviewwidget.h \
   qt/digidollarpositionswidget.h \
+  qt/digidollarreceiverequest.h \
   qt/digidollarreceivewidget.h \
   qt/digidollarredeemwidget.h \
   qt/digidollarsendwidget.h \
@@ -271,6 +276,7 @@ DIGIBYTE_QT_WALLET_CPP = \
   qt/askpassphrasedialog.cpp \
   qt/coincontroldialog.cpp \
   qt/coincontroltreewidget.cpp \
+  qt/digidollarcoincontroldialog.cpp \
   qt/createwalletdialog.cpp \
   qt/editaddressdialog.cpp \
   qt/openuridialog.cpp \
@@ -300,6 +306,7 @@ DIGIBYTE_QT_WALLET_CPP = \
   qt/digidollarmintwidget.cpp \
   qt/digidollaroverviewwidget.cpp \
   qt/digidollarpositionswidget.cpp \
+  qt/digidollarreceiverequest.cpp \
   qt/digidollarreceivewidget.cpp \
   qt/digidollarredeemwidget.cpp \
   qt/digidollarsendwidget.cpp \

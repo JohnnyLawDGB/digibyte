@@ -20,41 +20,7 @@
 #include <QMessageBox>
 #include <QScrollBar>
 #include <QSettings>
-#include <QSortFilterProxyModel>
 #include <QTextDocument>
-
-// Filter proxy to exclude DigiDollar addresses from regular DGB Receive tab
-class RecentRequestsFilterProxy : public QSortFilterProxyModel
-{
-public:
-    explicit RecentRequestsFilterProxy(QObject* parent = nullptr)
-        : QSortFilterProxyModel(parent) {}
-
-    // Public method to trigger filter refresh
-    void refresh() { invalidateFilter(); }
-
-protected:
-    bool filterAcceptsRow(int sourceRow, const QModelIndex& sourceParent) const override
-    {
-        Q_UNUSED(sourceParent);
-        RecentRequestsTableModel* model = qobject_cast<RecentRequestsTableModel*>(sourceModel());
-        if (!model) return true;
-
-        if (sourceRow < 0 || sourceRow >= model->rowCount(QModelIndex())) {
-            return true;
-        }
-
-        const RecentRequestEntry& entry = model->entry(sourceRow);
-        QString address = entry.recipient.address;
-
-        // Filter OUT DigiDollar addresses - check prefix directly
-        // DD = mainnet, TD = testnet, RD = regtest
-        if (address.startsWith("DD") || address.startsWith("TD") || address.startsWith("RD")) {
-            return false;  // Exclude DD addresses from regular Receive tab
-        }
-        return true;  // Show regular DGB addresses
-    }
-};
 
 ReceiveCoinsDialog::ReceiveCoinsDialog(const PlatformStyle *_platformStyle, QWidget *parent) :
     QDialog(parent, GUIUtil::dialog_flags),
@@ -115,13 +81,9 @@ void ReceiveCoinsDialog::setModel(WalletModel *_model)
 
         QTableView* tableView = ui->recentRequestsView;
 
-        // Use filter proxy to exclude DigiDollar addresses from regular DGB Receive tab
-        proxyModel = new RecentRequestsFilterProxy(this);
-        proxyModel->setSourceModel(_model->getRecentRequestsTableModel());
-        proxyModel->setDynamicSortFilter(true);
-        tableView->setModel(proxyModel);
-        // Force filter application after setup
-        proxyModel->refresh();
+        // Use the model directly - DD addresses are now filtered at the model level
+        // (in RecentRequestsTableModel::addNewRequest) for clean DGB/DD separation
+        tableView->setModel(_model->getRecentRequestsTableModel());
         tableView->sortByColumn(RecentRequestsTableModel::Date, Qt::DescendingOrder);
 
         connect(tableView->selectionModel(),
@@ -269,9 +231,7 @@ void ReceiveCoinsDialog::on_removeRequestButton_clicked()
         return;
     // correct for selection mode ContiguousSelection
     QModelIndex firstIndex = selection.at(0);
-    // Map proxy index to source model index
-    QModelIndex sourceIndex = proxyModel ? proxyModel->mapToSource(firstIndex) : firstIndex;
-    model->getRecentRequestsTableModel()->removeRows(sourceIndex.row(), selection.length(), sourceIndex.parent());
+    model->getRecentRequestsTableModel()->removeRows(firstIndex.row(), selection.length(), firstIndex.parent());
 }
 
 QModelIndex ReceiveCoinsDialog::selectedRow()
@@ -282,9 +242,7 @@ QModelIndex ReceiveCoinsDialog::selectedRow()
     if(selection.empty())
         return QModelIndex();
     // correct for selection mode ContiguousSelection
-    QModelIndex firstIndex = selection.at(0);
-    // Map proxy index to source model index
-    return proxyModel ? proxyModel->mapToSource(firstIndex) : firstIndex;
+    return selection.at(0);
 }
 
 // copy column of selected row to clipboard

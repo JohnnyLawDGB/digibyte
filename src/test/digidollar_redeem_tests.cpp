@@ -64,10 +64,10 @@ struct DigiDollarRedeemTestSetup : public TestingSetup {
         position.ddMinted = ddAmount;
         position.unlockHeight = expired ? mockHeight - 100 : mockHeight + 100; // Expired or future
         position.collateralRatio = 500;
+        // NOTE: Only two redemption paths exist: Normal and ERR
+        // There is NO partial redemption in DigiDollar
         position.availablePaths = {
             CCollateralPosition::PATH_NORMAL,
-            CCollateralPosition::PATH_EMERGENCY,
-            CCollateralPosition::PATH_PARTIAL,
             CCollateralPosition::PATH_ERR
         };
         return position;
@@ -159,24 +159,8 @@ BOOST_FIXTURE_TEST_CASE(test_emergency_redemption_oracle_approval, DigiDollarRed
     // Verify oracle signature validation logic
 }
 
-BOOST_FIXTURE_TEST_CASE(test_partial_redemption_keep_position_open, DigiDollarRedeemTestSetup)
-{
-    // Test partial redemption where only part of position is redeemed
-    auto params = CreateRedeemParams(DigiDollar::RedemptionPath::PARTIAL, 5000); // Redeem half
-
-    // Act: Build partial redemption - EXPECTED TO FAIL (RED phase)
-    auto result = builder->BuildRedemptionTransaction(params);
-
-    // Assert: Should fail in RED phase
-    BOOST_CHECK(!result.success);
-
-    // After GREEN phase:
-    // BOOST_CHECK(result.success);
-    // Should have collateral remainder output
-    // BOOST_CHECK(result.tx.vout.size() >= 2); // DGB to user + new collateral position
-    // CAmount partialCollateral = CreateTestPosition().dgbLocked / 2;
-    // BOOST_CHECK_EQUAL(result.tx.vout[0].nValue, partialCollateral);
-}
+// DELETED: test_partial_redemption_keep_position_open - Partial redemption does not exist in DigiDollar
+// Only two redemption paths: Normal (full, after timelock) and ERR (full, more DD burned)
 
 BOOST_FIXTURE_TEST_CASE(test_full_redemption_entire_position, DigiDollarRedeemTestSetup)
 {
@@ -290,7 +274,7 @@ BOOST_FIXTURE_TEST_CASE(test_dd_burning_verification, DigiDollarRedeemTestSetup)
     // After GREEN phase:
     // BOOST_CHECK(result.success);
     // Verify DD inputs are consumed but no DD outputs created (burning)
-    // Check transaction has DD inputs but no DD outputs (except for partial redemption)
+    // NOTE: Partial redemption does not exist - all DD is burned in full redemption
 }
 
 BOOST_FIXTURE_TEST_CASE(test_oracle_price_integration, DigiDollarRedeemTestSetup)
@@ -447,23 +431,20 @@ BOOST_FIXTURE_TEST_CASE(test_verify_redemption_conditions_function, DigiDollarRe
 BOOST_FIXTURE_TEST_CASE(test_create_redemption_script_function, DigiDollarRedeemTestSetup)
 {
     // Test CreateRedemptionScript function for each path
+    // NOTE: Only two redemption paths exist in DigiDollar: Normal and ERR
+    // There is NO partial redemption and NO separate emergency path
     auto params = CreateRedeemParams(DigiDollar::RedemptionPath::NORMAL, 10000);
 
-    // Test each redemption path script creation - EXPECTED TO FAIL (RED phase)
+    // Test each redemption path script creation
     auto normalScript = builder->CreateRedemptionScript(DigiDollar::RedemptionPath::NORMAL, testKey);
-    auto emergencyScript = builder->CreateRedemptionScript(DigiDollar::RedemptionPath::EMERGENCY, testKey);
-    auto partialScript = builder->CreateRedemptionScript(DigiDollar::RedemptionPath::PARTIAL, testKey);
     auto errScript = builder->CreateRedemptionScript(DigiDollar::RedemptionPath::ERR, testKey);
 
-    // GREEN phase: Scripts should be created properly
+    // Scripts should be created properly
     BOOST_CHECK(!normalScript.empty());
-    BOOST_CHECK(!emergencyScript.empty());
-    BOOST_CHECK(!partialScript.empty());
     BOOST_CHECK(!errScript.empty());
 
-    // Scripts should be non-empty for all paths
-    // Note: In production, each path would have different script logic
-    // For Phase 1, they all use basic P2TR scripts
+    // NOTE: PARTIAL and EMERGENCY paths were removed - they do not exist in DigiDollar
+    // Only Normal (full redemption after timelock) and ERR (full redemption with more DD burned)
 }
 
 BOOST_FIXTURE_TEST_CASE(test_multiple_dd_inputs_burning, DigiDollarRedeemTestSetup)
@@ -543,10 +524,10 @@ BOOST_FIXTURE_TEST_CASE(test_edge_case_maximum_redemption_amount, DigiDollarRede
 BOOST_FIXTURE_TEST_CASE(test_redemption_transaction_version_markers, DigiDollarRedeemTestSetup)
 {
     // Test that different redemption paths use correct version markers
+    // NOTE: Only two redemption paths exist in DigiDollar: Normal and ERR
+    // There is NO partial redemption and NO separate emergency path
     std::vector<DigiDollar::RedemptionPath> paths = {
         DigiDollar::RedemptionPath::NORMAL,
-        DigiDollar::RedemptionPath::EMERGENCY,
-        DigiDollar::RedemptionPath::PARTIAL,
         DigiDollar::RedemptionPath::ERR
     };
 

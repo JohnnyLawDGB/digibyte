@@ -1911,11 +1911,10 @@ BOOST_AUTO_TEST_CASE(timelock_mast_path_selection)
     BOOST_TEST_MESSAGE("✓ MAST privacy: Only executed path revealed, other paths hidden");
 
     // Test 7: DigiDollar redemption paths as MAST
-    // Path A: Normal redemption (requires timelock)
-    // Path B: Emergency redemption (8-of-15 oracles)
-    // Path C: Partial redemption
-    // Path D: ERR redemption (Emergency Redemption Ratio)
-    BOOST_TEST_MESSAGE("✓ DigiDollar uses MAST for 4 redemption paths");
+    // Path A: Normal redemption (FULL position, requires timelock expiry)
+    // Path B: ERR redemption (FULL position, requires more DD burned when health < 100%)
+    // NOTE: There is NO partial redemption and NO emergency oracle override
+    BOOST_TEST_MESSAGE("✓ DigiDollar uses MAST for 2 redemption paths (Normal and ERR)");
 
     // Test 8: Timelock enforcement is path-specific
     // Path with no timelock: Always spendable
@@ -2604,103 +2603,15 @@ BOOST_AUTO_TEST_CASE(emergency_redemption_NEVER_bypasses_timelock)
         BOOST_TEST_MESSAGE("✓ " << test.description << " - timelock ABSOLUTE");
     }
 
-    // Test 5: Oracle emergency override also respects timelock
-    // Even with 8-of-15 oracle signatures, timelock CANNOT be bypassed
-    std::vector<std::vector<unsigned char>> mockOracleSigs;
-    for (size_t i = 0; i < 8; i++) {
-        mockOracleSigs.push_back(std::vector<unsigned char>(64, 0x42)); // Mock signatures
-    }
+    // DELETED: Test 5 about oracle emergency override - no such feature exists
+    // DigiDollar has NO emergency oracle override. Only Normal and ERR paths exist.
+    // ERR only affects DD burn amount, not timelock.
 
-    // Oracle override BEFORE timelock - signature validation occurs but timelock still enforced
-    bool oracleBeforeResult = DigiDollar::ValidateEmergencyRedemption(vaultScript, mockOracleSigs);
-    // Note: ValidateEmergencyRedemption checks signatures, not timelock
-    // Timelock is enforced at script execution level
-    BOOST_TEST_MESSAGE("✓ Oracle emergency override CANNOT bypass timelock");
-
-    BOOST_TEST_MESSAGE("✅ CRITICAL: Emergency redemption NEVER bypasses timelock - ERR is AMOUNT adjustment only!");
+    BOOST_TEST_MESSAGE("✅ CRITICAL: ERR is AMOUNT adjustment only - timelock ALWAYS enforced!");
 }
 
-BOOST_AUTO_TEST_CASE(partial_redemption_timelock)
-{
-    // Test that partial redemptions preserve original timelock
-    CKey ownerKey;
-    ownerKey.MakeNewKey(true);
-    XOnlyPubKey ownerXOnly(ownerKey.GetPubKey());
-
-    int64_t currentHeight = 1000000;
-    int64_t unlockHeight = currentHeight + 365 * DigiDollar::BLOCKS_PER_DAY; // 1 year
-
-    // Create vault with 10000 DD ($100.00)
-    DigiDollar::MintParams mintParams;
-    mintParams.ddAmount = 10000;
-    mintParams.lockHeight = unlockHeight;
-    mintParams.ownerKey = ownerXOnly;
-    mintParams.internalKey = ownerXOnly;
-    mintParams.oracleKeys = DigiDollar::GetOracleKeys(15);
-
-    CScript vaultScript = DigiDollar::CreateCollateralP2TR(mintParams);
-    BOOST_CHECK(!vaultScript.empty());
-    BOOST_CHECK(DigiDollar::IsCollateralScript(vaultScript));
-
-    // Test 1: Partial redemption BEFORE timelock - MUST FAIL
-    // Use ValidateNormalRedemption to test timelock enforcement
-    bool partialBefore = DigiDollar::ValidateNormalRedemption(vaultScript, currentHeight);
-    BOOST_CHECK(!partialBefore);
-    BOOST_TEST_MESSAGE("✓ Partial redemption BEFORE timelock REJECTED");
-
-    // Test 2: Partial redemption AT timelock expiry
-    // Note: Partial redemption respects same timelock as normal redemption
-    bool partialAt = DigiDollar::ValidateNormalRedemption(vaultScript, unlockHeight);
-    BOOST_CHECK(partialAt);
-    BOOST_TEST_MESSAGE("✓ Partial redemption AT timelock ACCEPTED");
-
-    // Test 3: Multiple partial redemptions (25%, 25%, 50%)
-    // Create vaults for each partial redemption scenario
-    DigiDollar::MintParams partial25Params = mintParams;
-    partial25Params.ddAmount = 2500; // 25% of original
-    CScript partial25Script = DigiDollar::CreateCollateralP2TR(partial25Params);
-
-    DigiDollar::MintParams remaining75Params = mintParams;
-    remaining75Params.ddAmount = 7500; // 75% remaining
-    remaining75Params.lockHeight = unlockHeight; // SAME original timelock
-    CScript remaining75Script = DigiDollar::CreateCollateralP2TR(remaining75Params);
-
-    // Verify remaining vault retains original timelock by testing redemption behavior
-    // The vault should NOT be redeemable before the original timelock
-    bool remainingBefore = DigiDollar::ValidateNormalRedemption(remaining75Script, currentHeight);
-    BOOST_CHECK(!remainingBefore);
-    // The vault SHOULD be redeemable at the original unlock height
-    bool remainingAt = DigiDollar::ValidateNormalRedemption(remaining75Script, unlockHeight);
-    BOOST_CHECK(remainingAt);
-    BOOST_TEST_MESSAGE("✓ Remaining vault retains original timelock after partial redemption");
-
-    // Test 4: Sequential partial redemptions preserve timelock
-    DigiDollar::MintParams remaining50Params = mintParams;
-    remaining50Params.ddAmount = 5000; // 50% remaining after 2nd partial
-    remaining50Params.lockHeight = unlockHeight; // STILL same original timelock
-    CScript remaining50Script = DigiDollar::CreateCollateralP2TR(remaining50Params);
-
-    // Verify by testing redemption behavior (not by extracting locktime)
-    bool remaining50Before = DigiDollar::ValidateNormalRedemption(remaining50Script, currentHeight);
-    BOOST_CHECK(!remaining50Before);
-    bool remaining50At = DigiDollar::ValidateNormalRedemption(remaining50Script, unlockHeight);
-    BOOST_CHECK(remaining50At);
-    BOOST_TEST_MESSAGE("✓ Multiple partial redemptions preserve original timelock");
-
-    // Test 5: Final partial redemption (100%) still respects timelock
-    DigiDollar::MintParams finalPartialParams = mintParams;
-    finalPartialParams.ddAmount = 5000; // Final 50%
-    finalPartialParams.lockHeight = unlockHeight; // Same original timelock
-    CScript finalPartialScript = DigiDollar::CreateCollateralP2TR(finalPartialParams);
-
-    bool finalBefore = DigiDollar::ValidateNormalRedemption(finalPartialScript, currentHeight);
-    BOOST_CHECK(!finalBefore);
-    bool finalAt = DigiDollar::ValidateNormalRedemption(finalPartialScript, unlockHeight);
-    BOOST_CHECK(finalAt);
-    BOOST_TEST_MESSAGE("✓ Final partial redemption respects timelock");
-
-    BOOST_TEST_MESSAGE("✅ Partial redemptions ALWAYS preserve original timelock");
-}
+// DELETED: partial_redemption_timelock test - Partial redemption does not exist in DigiDollar
+// Only two redemption paths: Normal (full, after timelock) and ERR (full, more DD burned)
 
 BOOST_AUTO_TEST_CASE(err_redemption_RESPECTS_timelock_ALWAYS)
 {

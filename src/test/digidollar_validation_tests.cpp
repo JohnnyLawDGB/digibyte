@@ -259,18 +259,8 @@ BOOST_FIXTURE_TEST_CASE(path_validation_emergency_redemption, DigiDollarValidati
     BOOST_CHECK(!DigiDollar::ValidateEmergencyRedemption(emergencyPath, noSigs));
 }
 
-BOOST_FIXTURE_TEST_CASE(path_validation_partial_redemption, DigiDollarValidationTestSetup)
-{
-    DigiDollar::MintParams params;
-    CScript partialPath = DigiDollar::CreatePartialRedemptionPath(params);
-
-    // Should pass with valid oracle price
-    BOOST_CHECK(DigiDollar::ValidatePartialRedemption(partialPath, mockOraclePrice));
-
-    // Should fail with stale/invalid price
-    BOOST_CHECK(!DigiDollar::ValidatePartialRedemption(partialPath, 0));
-    BOOST_CHECK(!DigiDollar::ValidatePartialRedemption(partialPath, -1));
-}
+// DELETED: path_validation_partial_redemption - Partial redemption does not exist in DigiDollar
+// Only two redemption paths: Normal (full, after timelock) and ERR (full, more DD burned)
 
 BOOST_FIXTURE_TEST_CASE(path_validation_err_redemption, DigiDollarValidationTestSetup)
 {
@@ -1490,45 +1480,8 @@ BOOST_FIXTURE_TEST_CASE(test_validate_collateral_release, DigiDollarValidationTe
     // BOOST_CHECK(!state.IsValid());
 }
 
-BOOST_FIXTURE_TEST_CASE(test_validate_partial_redemption_rules, DigiDollarValidationTestSetup)
-{
-    // Arrange: Create partial redemption transaction
-    CMutableTransaction mtx;
-    mtx.nVersion = 0x04000770; // DD_TX_PARTIAL (type=4 in bits 24-31, marker=0x0770 in bits 0-15)
-
-    // Add collateral input
-    mtx.vin.resize(1);
-    mtx.vin[0].prevout = COutPoint(uint256S("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"), 0);
-
-    // Add DD input to burn (partial amount)
-    mtx.vin.push_back(CTxIn(COutPoint(uint256S("abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"), 0)));
-
-    // Add partial DGB output to user
-    CAmount partialCollateral = 50 * COIN; // Half the collateral
-    CPubKey ownerPubkey = testKey.GetPubKey();
-    CTxDestination dest{WitnessV1Taproot(XOnlyPubKey(ownerPubkey))};
-    mtx.vout.resize(2);
-    mtx.vout[0] = CTxOut(partialCollateral, GetScriptForDestination(dest));
-
-    // Add new collateral output for remainder
-    CAmount remainderCollateral = 50 * COIN;
-    // Would use proper collateral script creation here
-    CScript remainderScript = GetScriptForDestination(dest); // Simplified
-    mtx.vout[1] = CTxOut(remainderCollateral, remainderScript);
-
-    CTransaction tx(mtx);
-    TxValidationState state;
-
-    // Act: Validate partial redemption - EXPECTED TO FAIL (RED phase)
-    bool result = DigiDollar::ValidateRedemptionTransaction(tx, validationContext, state);
-
-    // Assert: Should fail in RED phase
-    BOOST_CHECK(!result);
-    BOOST_CHECK(!state.IsValid());
-
-    // After GREEN phase:
-    // BOOST_CHECK(result); // Should pass for valid partial redemption
-}
+// DELETED: test_validate_partial_redemption_rules - Partial redemption does not exist
+// DigiDollar only supports FULL redemption (Normal after timelock, or ERR with more DD burned)
 
 BOOST_FIXTURE_TEST_CASE(test_validate_script_path_validation, DigiDollarValidationTestSetup)
 {
@@ -2213,70 +2166,8 @@ BOOST_FIXTURE_TEST_CASE(volatility_validation_cooldown_enforcement, DigiDollarVa
     // BOOST_CHECK(!VolatilityMonitor::InCooldownPeriod());
 }
 
-BOOST_FIXTURE_TEST_CASE(volatility_validation_override_mechanism, DigiDollarValidationTestSetup)
-{
-    using namespace DigiDollar::Volatility;
-
-    // Arrange: Trigger freeze
-    VolatilityMonitor::ClearHistory();
-    int64_t baseTime = GetTime();
-
-    VolatilityMonitor::RecordPrice(mockOraclePrice, baseTime, mockHeight);
-    VolatilityMonitor::RecordPrice(mockOraclePrice * 125 / 100, baseTime + 3600, mockHeight + 1);
-    VolatilityMonitor::UpdateState(mockHeight + 1);
-
-    BOOST_CHECK(VolatilityMonitor::ShouldFreezeMinting());
-
-    // Create sufficient oracle approvals for override
-    std::vector<COraclePriceMessage> approvals;
-    for (int i = 0; i < 8; i++) {
-        CKey oracleKey;
-        oracleKey.MakeNewKey(true);
-
-        COraclePriceMessage msg;
-        msg.price_micro_usd = mockOraclePrice;
-        msg.timestamp = GetTime(); // Use current time, not future time
-        msg.oracle_id = i; // Use loop index as oracle ID
-        msg.block_height = mockHeight + 1;
-        msg.oracle_pubkey = XOnlyPubKey(oracleKey.GetPubKey());
-
-        // Phase One compact format: no embedded signature
-        // Leave schnorr_sig empty to indicate compact format
-        msg.schnorr_sig.clear();
-
-        approvals.push_back(msg);
-    }
-
-    // Apply override
-    BOOST_CHECK(VolatilityMonitor::OverrideFreeze(approvals));
-    BOOST_CHECK(!VolatilityMonitor::ShouldFreezeMinting());
-
-    // Create mint transaction after override
-    CMutableTransaction mtx;
-    mtx.nVersion = 0x01000770; // DD_TX_MINT (type=1 in bits 24-31, marker=0x0770 in bits 0-15)
-    mtx.vin.resize(1);
-    mtx.vin[0].prevout = COutPoint(uint256S("5555555555555555555555555555555555555555555555555555555555555555"), 0);
-
-    CAmount ddAmount = 10000; // $100.00
-    CScript ddScript = DigiDollar::CreateDigiDollarP2TR(testXOnlyKey, ddAmount);
-    mtx.vout.resize(1);
-    mtx.vout[0] = CTxOut(0, ddScript);
-
-    CTransaction tx(mtx);
-    TxValidationState state;
-
-    // Act: Validate after override - EXPECTED TO FAIL (RED phase)
-    bool result = DigiDollar::ValidateMintTransaction(tx, validationContext, state);
-
-    // Assert: Should fail in RED phase
-    BOOST_CHECK(!result);
-
-    // After GREEN phase:
-    // Should pass - freeze was overridden by oracle consensus
-    // BOOST_CHECK(result);
-    // BOOST_CHECK(state.IsValid());
-    // BOOST_CHECK(!VolatilityMonitor::ShouldFreezeMinting());
-}
+// DELETED: volatility_validation_override_mechanism - OverrideFreeze does not exist
+// DigiDollar volatility freeze cannot be overridden by oracles. System must wait for cooldown.
 
 BOOST_FIXTURE_TEST_CASE(volatility_validation_gradual_unfreezing, DigiDollarValidationTestSetup)
 {

@@ -729,16 +729,18 @@ BOOST_FIXTURE_TEST_CASE(test_redemption_amount_validation, DigiDollarTransaction
         std::string description;
     };
 
+    // NOTE: DigiDollar only supports FULL redemption - no partial redemption allowed
     std::vector<RedemptionAmountTest> tests = {
         {1000.0, true,  true,  "Full redemption (exact match)"},
-        {1000.0, false, true,  "Partial redemption (100%)"},
-        {500.0,  false, true,  "Partial redemption (50%)"},
-        {100.0,  false, true,  "Small partial redemption (10%)"},
-        {1200.0, false, false, "Over-redemption (120%)"},
-        {999.0,  true,  false, "Full redemption (not exact)"},
-        {1001.0, true,  false, "Full redemption (over amount)"},
-        {0.0,    false, false, "Zero redemption"},
-        {-100.0, false, false, "Negative redemption"}
+        // DELETED: Partial redemption tests - partial redemption does not exist
+        // Only full redemption is allowed in DigiDollar
+        {1200.0, false, false, "Over-redemption (120%) - MUST FAIL"},
+        {999.0,  true,  false, "Full redemption (not exact) - MUST FAIL"},
+        {1001.0, true,  false, "Full redemption (over amount) - MUST FAIL"},
+        {0.0,    false, false, "Zero redemption - MUST FAIL"},
+        {-100.0, false, false, "Negative redemption - MUST FAIL"},
+        {500.0,  false, false, "Partial redemption (50%) - MUST FAIL (no partial allowed)"},
+        {100.0,  false, false, "Small partial redemption (10%) - MUST FAIL (no partial allowed)"}
     };
 
     for (const auto& test : tests) {

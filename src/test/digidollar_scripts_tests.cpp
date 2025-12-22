@@ -107,25 +107,8 @@ BOOST_AUTO_TEST_CASE(test_emergency_path_creation)
     BOOST_CHECK(std::find(emergencyPath.begin(), emergencyPath.end(), OP_EQUAL) != emergencyPath.end());
 }
 
-BOOST_AUTO_TEST_CASE(test_partial_redemption_path_creation)
-{
-    auto params = CreateTestMintParams();
-
-    // This should fail until we implement CreatePartialRedemptionPath
-    CScript partialPath = DigiDollar::CreatePartialRedemptionPath(params);
-
-    BOOST_CHECK(partialPath.size() > 0);
-
-    // Should contain OP_DIGIDOLLAR and OP_DDVERIFY
-    BOOST_CHECK(std::find(partialPath.begin(), partialPath.end(), OP_DIGIDOLLAR) != partialPath.end());
-    BOOST_CHECK(std::find(partialPath.begin(), partialPath.end(), OP_DDVERIFY) != partialPath.end());
-
-    // Should contain price check
-    BOOST_CHECK(std::find(partialPath.begin(), partialPath.end(), OP_CHECKPRICE) != partialPath.end());
-
-    // Should contain owner signature verification
-    BOOST_CHECK(std::find(partialPath.begin(), partialPath.end(), OP_CHECKSIGVERIFY) != partialPath.end());
-}
+// DELETED: test_partial_redemption_path_creation - Partial redemption does not exist in DigiDollar
+// Only two redemption paths: Normal (full, after timelock) and ERR (full, more DD burned)
 
 BOOST_AUTO_TEST_CASE(test_err_path_creation)
 {
@@ -245,19 +228,14 @@ BOOST_AUTO_TEST_CASE(test_script_size_limits)
     auto params = CreateTestMintParams();
 
     // Test all individual paths are within reasonable size limits
+    // NOTE: Only two redemption paths exist: Normal and ERR
     CScript normalPath = DigiDollar::CreateNormalRedemptionPath(params);
-    CScript emergencyPath = DigiDollar::CreateEmergencyPath(params);
-    CScript partialPath = DigiDollar::CreatePartialRedemptionPath(params);
     CScript errPath = DigiDollar::CreateERRPath(params);
+    // DELETED: partialPath - partial redemption does not exist
 
     // Individual scripts should be reasonable in size (under 1KB each)
     BOOST_CHECK(normalPath.size() < 1024);
-    BOOST_CHECK(emergencyPath.size() < 1024);
-    BOOST_CHECK(partialPath.size() < 1024);
     BOOST_CHECK(errPath.size() < 1024);
-
-    // Emergency path will be largest due to 15 oracle keys
-    BOOST_CHECK(emergencyPath.size() > normalPath.size());
 }
 
 BOOST_AUTO_TEST_CASE(test_script_validation_with_mock_execution)
@@ -303,10 +281,10 @@ BOOST_AUTO_TEST_CASE(test_invalid_parameters_handling)
 
     // These calls should not crash even with invalid params
     // (Though they may return empty/invalid scripts)
+    // NOTE: Only two redemption paths exist: Normal and ERR
     CScript normalPath = DigiDollar::CreateNormalRedemptionPath(params);
-    CScript emergencyPath = DigiDollar::CreateEmergencyPath(params);
-    CScript partialPath = DigiDollar::CreatePartialRedemptionPath(params);
     CScript errPath = DigiDollar::CreateERRPath(params);
+    // DELETED: partialPath - partial redemption does not exist
 
     // Scripts may be empty or invalid, but shouldn't crash
     BOOST_CHECK(true);  // If we get here, no crash occurred

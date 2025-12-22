@@ -1464,29 +1464,8 @@ BOOST_FIXTURE_TEST_CASE(test_wallet_redeem_full_position, DDWalletTestFixture)
     // Check wallet balance is updated
 }
 
-BOOST_FIXTURE_TEST_CASE(test_wallet_redeem_partial_position, DDWalletTestFixture)
-{
-    // Arrange: Create wallet with partial redemption scenario
-    DigiDollarWallet wallet;
-    COutPoint collateralUtxo(uint256S("abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"), 0);
-    CAmount partialAmount = TEST_DD_AMOUNT / 2; // $50.00 (half position)
-    DigiDollar::RedemptionPath path = DigiDollar::RedemptionPath::PARTIAL;
-    std::string txid;
-    std::string error;
-
-    // Act: Redeem partial position - EXPECTED TO FAIL (RED phase)
-    bool result = wallet.RedeemDigiDollar(collateralUtxo, partialAmount, path, txid, error);
-
-    // Assert: Should fail in RED phase
-    BOOST_CHECK(!result);
-    BOOST_CHECK(!error.empty());
-
-    // After GREEN phase:
-    // BOOST_CHECK(result);
-    // Verify remaining position exists
-    // Check partial collateral release
-    // Verify new collateral UTXO created
-}
+// DELETED: test_wallet_redeem_partial_position - Partial redemption does not exist in DigiDollar
+// Only two redemption paths: Normal (full, after timelock) and ERR (full, more DD burned)
 
 BOOST_FIXTURE_TEST_CASE(test_wallet_list_redeemable_positions, DDWalletTestFixture)
 {
@@ -2895,38 +2874,12 @@ BOOST_AUTO_TEST_CASE(test_update_ddtimelock_status_invalid_id)
     BOOST_CHECK(!result);
 }
 
-/**
- * Test: TrackPartialRedemption - Partial DD redemption tracking
- */
-BOOST_AUTO_TEST_CASE(test_track_partial_redemption)
-{
-    // Arrange: Create wallet with DDTimeLock containing 1000 DD
-    DigiDollarWallet wallet;
-    uint256 dd_timelock_id = InsecureRand256();
-    CAmount dd_minted = 100000;  // 1000 DD
-    CAmount dgb_collateral = 200000000;
-    uint32_t lock_tier = 1;
-    int64_t unlock_height = 1000;
-
-    WalletCollateralPosition position(dd_timelock_id, dd_minted, dgb_collateral, lock_tier, unlock_height);
-    wallet.AddCollateralPosition(position);
-
-    // Act: Redeem 400 DD (partial redemption)
-    CAmount dd_redeemed = 40000;  // 400 DD
-    bool result = wallet.TrackPartialRedemption(dd_timelock_id, dd_redeemed);
-
-    // Assert: Partial redemption tracked successfully
-    BOOST_CHECK(result);
-
-    // Verify remaining DD amount
-    auto positions = wallet.GetDDTimeLocks(true);
-    BOOST_CHECK_EQUAL(positions.size(), 1);
-    BOOST_CHECK_EQUAL(positions[0].dd_minted, 60000);  // 600 DD remaining
-    BOOST_CHECK(positions[0].is_active);  // Still active (not fully redeemed)
-}
+// DELETED: test_track_partial_redemption - Partial redemption does not exist in DigiDollar
+// Only two redemption paths: Normal (full, after timelock) and ERR (full, more DD burned)
 
 /**
- * Test: TrackPartialRedemption - Full redemption marks inactive
+ * Test: TrackRedemption - Full redemption marks inactive
+ * NOTE: Only FULL redemption is supported in DigiDollar
  */
 BOOST_AUTO_TEST_CASE(test_track_full_redemption)
 {
@@ -2958,35 +2911,8 @@ BOOST_AUTO_TEST_CASE(test_track_full_redemption)
     BOOST_CHECK_EQUAL(all_positions[0].dd_minted, 0);  // No DD remaining
 }
 
-/**
- * Test: TrackPartialRedemption - Redemption exceeds minted amount
- */
-BOOST_AUTO_TEST_CASE(test_track_partial_redemption_exceeds_minted)
-{
-    // Arrange: Create wallet with DDTimeLock containing 1000 DD
-    DigiDollarWallet wallet;
-    uint256 dd_timelock_id = InsecureRand256();
-    CAmount dd_minted = 100000;  // 1000 DD
-    CAmount dgb_collateral = 200000000;
-    uint32_t lock_tier = 1;
-    int64_t unlock_height = 1000;
-
-    WalletCollateralPosition position(dd_timelock_id, dd_minted, dgb_collateral, lock_tier, unlock_height);
-    wallet.AddCollateralPosition(position);
-
-    // Act: Try to redeem more than minted (1500 DD > 1000 DD)
-    CAmount dd_redeemed = 150000;  // 1500 DD - INVALID
-    bool result = wallet.TrackPartialRedemption(dd_timelock_id, dd_redeemed);
-
-    // Assert: Should fail - cannot redeem more than minted
-    BOOST_CHECK(!result);
-
-    // Verify position unchanged
-    auto positions = wallet.GetDDTimeLocks(true);
-    BOOST_CHECK_EQUAL(positions.size(), 1);
-    BOOST_CHECK_EQUAL(positions[0].dd_minted, 100000);  // Unchanged
-    BOOST_CHECK(positions[0].is_active);  // Still active
-}
+// DELETED: test_track_partial_redemption_exceeds_minted - Partial redemption does not exist in DigiDollar
+// Only two redemption paths: Normal (full, after timelock) and ERR (full, more DD burned)
 
 /**
  * Test: GetDDTimeLockStatus - Various lifecycle states
@@ -3100,41 +3026,8 @@ BOOST_AUTO_TEST_CASE(test_is_ddtimelock_redeemable_no_dd)
     BOOST_CHECK(!redeemable);
 }
 
-/**
- * Test: DDTimeLock status persistence across wallet operations
- */
-BOOST_AUTO_TEST_CASE(test_ddtimelock_status_persistence)
-{
-    // Arrange: Create wallet with DDTimeLock
-    DigiDollarWallet wallet;
-    uint256 dd_timelock_id = InsecureRand256();
-    CAmount dd_minted = 100000;
-    CAmount dgb_collateral = 200000000;
-    uint32_t lock_tier = 1;
-    int64_t unlock_height = 1000;
-
-    WalletCollateralPosition position(dd_timelock_id, dd_minted, dgb_collateral, lock_tier, unlock_height);
-    wallet.AddCollateralPosition(position);
-
-    // Act: Perform partial redemption
-    wallet.TrackPartialRedemption(dd_timelock_id, 40000);  // Redeem 400 DD
-
-    // Update status
-    wallet.UpdateDDTimeLockStatus(dd_timelock_id, true);  // Ensure still active
-
-    // Assert: Status persists correctly
-    auto positions = wallet.GetDDTimeLocks(true);
-    BOOST_CHECK_EQUAL(positions.size(), 1);
-    BOOST_CHECK_EQUAL(positions[0].dd_minted, 60000);  // 600 DD remaining
-    BOOST_CHECK(positions[0].is_active);
-
-    std::string status = wallet.GetDDTimeLockStatus(dd_timelock_id);
-    BOOST_CHECK_EQUAL(status, "active");
-
-    // Verify redeemability
-    bool redeemable = wallet.IsDDTimeLockRedeemable(dd_timelock_id, 1001);
-    BOOST_CHECK(redeemable);  // Unlocked and has DD remaining
-}
+// DELETED: test_ddtimelock_status_persistence - Tests partial redemption which does not exist
+// Only two redemption paths: Normal (full, after timelock) and ERR (full, more DD burned)
 
 // =============================================================================
 // PHASE 6: RECEIVE OPERATIONS (Tasks 6.1-6.3)
@@ -3512,38 +3405,8 @@ BOOST_AUTO_TEST_CASE(test_close_collateral_position_full) {
     BOOST_CHECK_EQUAL(positions[0].is_active, false);
 }
 
-BOOST_AUTO_TEST_CASE(test_close_collateral_position_partial) {
-    // Arrange: Setup wallet with position
-    DigiDollarWallet wallet;
-
-    uint256 position_id = InsecureRand256();
-    COutPoint position_outpoint(position_id, 0);
-
-    WalletCollateralPosition pos;
-    pos.dd_timelock_id = position_id;
-    pos.dd_minted = 10000; // $100.00
-    pos.dgb_collateral = 2000000; // 0.02 DGB
-    pos.lock_tier = 1;
-    pos.unlock_height = 1000;
-    pos.is_active = true;
-    wallet.AddCollateralPosition(pos);
-
-    // Act: Partial redemption - redeem 6000 cents, leaving 4000 cents
-    bool result = wallet.CloseCollateralPosition(position_outpoint, true, 4000);
-
-    // Assert: Position updated successfully
-    BOOST_CHECK(result);
-
-    // Verify position is still active with updated amounts
-    auto positions = wallet.GetDDTimeLocks(true); // Get active positions only
-    BOOST_CHECK_EQUAL(positions.size(), 1);
-    BOOST_CHECK_EQUAL(positions[0].is_active, true);
-    BOOST_CHECK_EQUAL(positions[0].dd_minted, 4000); // Remaining DD
-
-    // Verify proportional collateral release: (6000/10000) * 2000000 = 1200000 released
-    // Remaining: 2000000 - 1200000 = 800000
-    BOOST_CHECK_EQUAL(positions[0].dgb_collateral, 800000);
-}
+// DELETED: test_close_collateral_position_partial - Partial redemption does not exist in DigiDollar
+// Only two redemption paths: Normal (full, after timelock) and ERR (full, more DD burned)
 
 BOOST_AUTO_TEST_CASE(test_burn_and_close_integration) {
     // Arrange: Setup wallet with DD and position

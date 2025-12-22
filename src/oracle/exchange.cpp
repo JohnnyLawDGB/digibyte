@@ -103,9 +103,16 @@ std::string BaseExchangeFetcher::HttpGet(const std::string& url)
     } else if (url.find("kucoin") != std::string::npos) {
         return R"({"data":{"price":"0.05000"}})";
     } else if (url.find("crypto.com") != std::string::npos) {
-        return R"({"result":{"data":{"a":"0.05000"}}})";
+        // Crypto.com API returns data as an array of ticker objects
+        return R"({"result":{"data":[{"i":"DGB_USD","a":"0.05000"}]}})";
     } else if (url.find("messari") != std::string::npos) {
         return R"({"data":{"market_data":{"price_usd":0.01234}}})";
+    } else if (url.find("gateio") != std::string::npos) {
+        // Gate.io returns array of tickers
+        return R"([{"currency_pair":"DGB_USDT","last":"0.05100"}])";
+    } else if (url.find("htx") != std::string::npos) {
+        // HTX returns tick object with close price
+        return R"({"tick":{"close":0.04950}})";
     }
 
     return R"({"error":"Mock response"})";

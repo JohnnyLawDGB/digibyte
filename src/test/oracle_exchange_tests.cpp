@@ -473,13 +473,14 @@ BOOST_AUTO_TEST_CASE(parse_kucoin_json_format)
 
 /**
  * Test Crypto.com JSON parsing
- * Format: {"result":{"data":{"a":"0.01234"}}}
+ * Actual Format: {"result":{"data":[{"i":"DGB_USD","a":"0.01234",...}]}}
+ * Note: data is an ARRAY, not an object
  */
 BOOST_AUTO_TEST_CASE(parse_cryptocom_json_format)
 {
     // Crypto.com JSON parsing is implemented using UniValue
-    // This test verifies the format is correct
-    std::string mockResponse = R"({"result":{"data":{"a":"0.01234"}}})";
+    // This test verifies the actual API format (data is array of ticker objects)
+    std::string mockResponse = R"({"result":{"data":[{"i":"DGB_USD","a":"0.01234"}]}})";
 
     // Parse using UniValue (same as CryptoComFetcher::FetchPrice)
     UniValue json;
@@ -492,10 +493,14 @@ BOOST_AUTO_TEST_CASE(parse_cryptocom_json_format)
     BOOST_CHECK(result.exists("data"));
 
     const UniValue& data = result["data"];
-    BOOST_CHECK(data.isObject());
-    BOOST_CHECK(data.exists("a"));
+    BOOST_CHECK(data.isArray());  // data is an ARRAY
+    BOOST_CHECK(data.size() >= 1);
 
-    std::string priceStr = data["a"].get_str();
+    const UniValue& ticker = data[0];
+    BOOST_CHECK(ticker.isObject());
+    BOOST_CHECK(ticker.exists("a"));
+
+    std::string priceStr = ticker["a"].get_str();
     BOOST_CHECK(priceStr == "0.01234");
 }
 
@@ -534,7 +539,7 @@ BOOST_AUTO_TEST_CASE(outlier_filter_mad_removes_outliers)
 
     // Verify outlier is not in filtered list
     for (const auto& price : filtered) {
-        BOOST_CHECK(price.price_micro_usd != 5);
+        BOOST_CHECK(price.price_micro_usd != 50000);  // The outlier was 50000
     }
 }
 

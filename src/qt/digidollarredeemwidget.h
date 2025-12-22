@@ -6,10 +6,16 @@
 #define DIGIBYTE_QT_DIGIDOLLARREDEEMWIDGET_H
 
 #include <QWidget>
+#include <memory>
 
 class WalletModel;
 class ClientModel;
 class AmountValidator;
+class PlatformStyle;
+
+namespace wallet {
+class DDCoinControl;
+} // namespace wallet
 
 QT_BEGIN_NAMESPACE
 class QLabel;
@@ -66,9 +72,14 @@ private Q_SLOTS:
     // void onRedeemAllClicked();
     /** Clear all fields */
     void onClearClicked();
+    /** Coin control button clicked */
+    void onCoinControlButtonClicked();
+    /** Update coin control labels */
+    void updateCoinControlLabels();
 
 private:
     void setupUI();
+    void setupCoinControlSection();
     void setupPositionSection();
     void setupAmountSection();
     void setupPositionInfoSection();
@@ -91,6 +102,13 @@ private:
 
     // UI components
     QVBoxLayout* m_mainLayout;
+
+    // Coin control section
+    QFrame* m_coinControlFrame;
+    QHBoxLayout* m_coinControlLayout;
+    QPushButton* m_coinControlButton;
+    QLabel* m_coinControlQuantityLabel;
+    QLabel* m_coinControlAmountLabel;
 
     // Position section
     QFrame* m_positionFrame;
@@ -147,6 +165,9 @@ private:
     double m_positionHealth;
     double m_redeemableAmount;
     bool m_positionFound;
+
+    // Coin control
+    std::unique_ptr<wallet::DDCoinControl> m_coinControl;
 };
 
 #endif // DIGIBYTE_QT_DIGIDOLLARREDEEMWIDGET_H

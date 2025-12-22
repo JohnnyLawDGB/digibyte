@@ -58,6 +58,9 @@ double EmergencyRedemptionRatio::CalculateERRAdjustment(int systemHealth)
     // Find the appropriate ERR tier based on system health
     // Returns a ratio (0.80-0.95) used to calculate required DD burn
     // RequiredDD = OriginalDD / ratio (so lower ratio = more DD required)
+    //
+    // IMPORTANT: Check tiers from highest to lowest threshold to match correctly
+    // ERR_TIERS: {95, 0.95}, {90, 0.90}, {85, 0.85}, {0, 0.80}
     for (const auto& tier : ERR_TIERS) {
         if (systemHealth >= tier.first) {
             return tier.second;

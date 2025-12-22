@@ -642,7 +642,12 @@ TxBuilderResult TransferTxBuilder::BuildTransferTransaction(const TxBuilderTrans
         CScript ddScript;
         ddScript << OP_1 << ToByteVector(*taproot);
         tx.vout.push_back(CTxOut(0, ddScript)); // DD outputs always have 0 DGB value
-        LogPrintf("DigiDollar: Added DD output for %s: %d cents\n", address, amount);
+
+        // Register recipient DD output in metadata registry so future redemptions
+        // can extract the DD amount when spending this output
+        RegisterScriptMetadata(ddScript, ScriptType::DD_TOKEN_OUTPUT, amount, 0);
+
+        LogPrintf("DigiDollar: Added DD output for %s: %d cents (registered)\n", address, amount);
     }
 
     // Add DD change output if needed
@@ -668,7 +673,13 @@ TxBuilderResult TransferTxBuilder::BuildTransferTransaction(const TxBuilderTrans
             CScript changeScript;
             changeScript << OP_1 << ToByteVector(tweaked_key);
             tx.vout.push_back(CTxOut(0, changeScript));
-            LogPrintf("DigiDollar: Added DD change output: %d cents (tweaked key)\n", ddChange);
+
+            // CRITICAL FIX: Register change output in metadata registry so future redemptions
+            // can extract the DD amount. Without this, multi-input redemptions fail with
+            // "bad-redeem-dd-not-burned" because ExtractDDAmount can't find the amount.
+            RegisterScriptMetadata(changeScript, ScriptType::DD_TOKEN_OUTPUT, ddChange, 0);
+
+            LogPrintf("DigiDollar: Added DD change output: %d cents (tweaked key, registered)\n", ddChange);
         } else {
             // If change is dust, add it to fees (this violates strict conservation but handles dust)
             result.error = "DD change amount is below dust threshold";

@@ -13,6 +13,7 @@ using DigiDollar::GetScriptMetadata;
 #include <consensus/volatility.h>
 #include <consensus/dca.h>
 #include <consensus/err.h>
+#include <index/txindex.h>  // For decentralized DD amount lookup via g_txindex
 #include <script/standard.h>
 #include <script/solver.h>
 #include <script/interpreter.h>
@@ -149,6 +150,101 @@ bool ExtractDDAmount(const CScript& script, CAmount& amount) {
     }
 
     amount = -1;
+    return false;
+}
+
+/**
+ * Extract DD amount from the previous transaction's OP_RETURN metadata.
+ * This is the DECENTRALIZED approach - no local registry needed.
+ * The DD amount is stored in the creating transaction's OP_RETURN output.
+ *
+ * @param prevout The outpoint (txid + output index) of the DD UTXO
+ * @param amount Output: The DD amount in cents
+ * @return true if amount was successfully extracted
+ */
+bool ExtractDDAmountFromPrevTx(const COutPoint& prevout, CAmount& amount) {
+    amount = 0;
+
+    // Use txindex to look up the previous transaction
+    if (!g_txindex) {
+        LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: ExtractDDAmountFromPrevTx - txindex not available\n");
+        return false;
+    }
+
+    uint256 block_hash;
+    CTransactionRef prev_tx;
+    if (!g_txindex->FindTx(prevout.hash, block_hash, prev_tx)) {
+        LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: ExtractDDAmountFromPrevTx - could not find tx %s\n",
+                 prevout.hash.ToString());
+        return false;
+    }
+
+    // Parse the OP_RETURN in the previous transaction to get DD amounts
+    std::vector<CAmount> dd_amounts;
+    for (const auto& vout : prev_tx->vout) {
+        if (vout.scriptPubKey.size() > 0 && vout.scriptPubKey[0] == OP_RETURN) {
+            CScript::const_iterator pc = vout.scriptPubKey.begin();
+            opcodetype opcode;
+            std::vector<unsigned char> data;
+
+            // Skip OP_RETURN
+            if (!vout.scriptPubKey.GetOp(pc, opcode)) continue;
+
+            // Check for "DD" marker
+            if (!vout.scriptPubKey.GetOp(pc, opcode, data)) continue;
+            if (data.size() != 2 || data[0] != 'D' || data[1] != 'D') continue;
+
+            // Skip transaction type
+            if (!vout.scriptPubKey.GetOp(pc, opcode, data)) continue;
+
+            // Extract all DD amounts from OP_RETURN
+            while (vout.scriptPubKey.GetOp(pc, opcode, data)) {
+                if (data.size() > 0) {
+                    try {
+                        CScriptNum scriptNum(data, true, 8);  // 8-byte max for large DD amounts
+                        dd_amounts.push_back(scriptNum.GetInt64());
+                    } catch (const scriptnum_error&) {
+                        continue;
+                    }
+                }
+            }
+            break;  // Only process first DD OP_RETURN
+        }
+    }
+
+    if (dd_amounts.empty()) {
+        LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: ExtractDDAmountFromPrevTx - no DD amounts in tx %s\n",
+                 prevout.hash.ToString());
+        return false;
+    }
+
+    // Match output index to DD amount
+    // Count P2TR (DD) outputs to find the correct amount index
+    size_t dd_output_idx = 0;
+    for (uint32_t n = 0; n < prev_tx->vout.size(); ++n) {
+        const CTxOut& txout = prev_tx->vout[n];
+
+        // Skip non-DD outputs (OP_RETURN, non-zero value)
+        if (txout.scriptPubKey.size() > 0 && txout.scriptPubKey[0] == OP_RETURN) continue;
+        if (txout.nValue != 0) continue;
+
+        // Check if it's a P2TR output (OP_1 + 32 bytes = DD output)
+        if (txout.scriptPubKey.size() == 34 && txout.scriptPubKey[0] == OP_1) {
+            if (n == prevout.n) {
+                // Found the matching output
+                if (dd_output_idx < dd_amounts.size()) {
+                    amount = dd_amounts[dd_output_idx];
+                    LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: ExtractDDAmountFromPrevTx - tx %s vout %d = %lld cents\n",
+                             prevout.hash.ToString(), prevout.n, (long long)amount);
+                    return amount > 0;
+                }
+            }
+            dd_output_idx++;
+        }
+    }
+
+    LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: ExtractDDAmountFromPrevTx - output %d not found in tx %s\n",
+             prevout.n, prevout.hash.ToString());
     return false;
 }
 
@@ -876,9 +972,16 @@ bool ValidateRedemptionTransaction(const CTransaction& tx,
                         CAmount ddAmount = 0;
                         if (ExtractDDAmount(coin.out.scriptPubKey, ddAmount) && ddAmount > 0) {
                             totalDDInputs += ddAmount;
-                            LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: DD input %d - amount: %d cents\n", i, ddAmount);
+                            LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: DD input %d - amount: %lld cents (from registry)\n",
+                                     i, (long long)ddAmount);
+                        } else if (ExtractDDAmountFromPrevTx(input.prevout, ddAmount) && ddAmount > 0) {
+                            // DECENTRALIZED FALLBACK: Look up amount from creating tx's OP_RETURN
+                            // This is the fungible approach - works across all nodes
+                            totalDDInputs += ddAmount;
+                            LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: DD input %d - amount: %lld cents (from prev tx)\n",
+                                     i, (long long)ddAmount);
                         } else {
-                            LogPrintf("DigiDollar: WARNING - Could not extract DD amount from DD input %d\n", i);
+                            LogPrintf("DigiDollar: WARNING - Could not extract DD amount from DD input %d (tried registry and prev tx)\n", i);
                         }
                     } else {
                         // Fee UTXO (has satoshi value) - skip for DD tracking
@@ -1000,7 +1103,7 @@ bool ValidateRedemptionTransaction(const CTransaction& tx,
             }
             break;
 
-        case DD_TX_EMERGENCY:
+        case DD_TX_ERR:
             // Emergency/ERR redemption - validate system conditions
             if (!ValidateEmergencyRedemptionConditions(tx, ctx, state)) {
                 return false;
@@ -1041,7 +1144,8 @@ bool ValidateNormalRedemptionConditions(const CTransaction& tx,
     // 1. The transaction's nLockTime must have expired (current height >= nLockTime)
     // 2. No ERR is active (system health >= 100%)
 
-    // Check if nLockTime has been reached
+    // Check if nLockTime has been reached (CLTV uses >= semantics)
+    // Standard Bitcoin CLTV behavior: nHeight >= nLockTime is valid
     if (ctx.nHeight < static_cast<int>(tx.nLockTime)) {
         LogPrintf("DigiDollar: Normal redemption rejected - timelock not expired (current: %d, required: %d)\n",
                   ctx.nHeight, tx.nLockTime);
@@ -1073,16 +1177,8 @@ bool ValidateEmergencyRedemptionConditions(const CTransaction& tx,
 
     LogPrintf("DigiDollar: Validating emergency (ERR) redemption conditions\n");
 
-    // Get system health from context (consistent with ValidateNormalRedemptionConditions)
-    int systemHealth = ctx.systemCollateral;
-
-    // Check if ERR is needed (system health < 100%)
-    if (systemHealth >= 100) {
-        LogPrintf("DigiDollar: ERR redemption rejected - system health %d%% is healthy (ERR requires < 100%%)\n",
-                  systemHealth);
-        return state.Invalid(TxValidationResult::TX_CONSENSUS, "err-not-required",
-                            strprintf("ERR not needed - system health %d%% (ERR requires < 100%%)", systemHealth));
-    }
+    // IMPORTANT: Check structural requirements FIRST before checking ERR activation
+    // This ensures more specific error messages for invalid transactions
 
     // Verify transaction has inputs
     if (tx.vin.empty()) {
@@ -1098,6 +1194,17 @@ bool ValidateEmergencyRedemptionConditions(const CTransaction& tx,
         return state.Invalid(TxValidationResult::TX_CONSENSUS, "err-timelock-active",
                             strprintf("Timelock not expired (current height %d, required %d)",
                                     ctx.nHeight, tx.nLockTime));
+    }
+
+    // Get system health from context (consistent with ValidateNormalRedemptionConditions)
+    int systemHealth = ctx.systemCollateral;
+
+    // Check if ERR is needed (system health < 100%)
+    if (systemHealth >= 100) {
+        LogPrintf("DigiDollar: ERR redemption rejected - system health %d%% is healthy (ERR requires < 100%%)\n",
+                  systemHealth);
+        return state.Invalid(TxValidationResult::TX_CONSENSUS, "err-not-required",
+                            strprintf("ERR not needed - system health %d%% (ERR requires < 100%%)", systemHealth));
     }
 
     // Calculate ERR parameters
@@ -1118,7 +1225,11 @@ bool ValidateEmergencyRedemptionConditions(const CTransaction& tx,
 
     LogPrintf("DigiDollar: ERR redemption conditions validated - user must burn %.1f%% extra DD to get full collateral\n",
               (ddMultiplier - 1.0) * 100);
-    return true;
+
+    // RED Phase: ERR validation not fully implemented yet (oracle consensus needed)
+    // For now, reject all ERR transactions until GREEN phase
+    LogPrintf("DigiDollar: ERR redemption rejected - RED phase, validation incomplete\n");
+    return state.Invalid(TxValidationResult::TX_CONSENSUS, "err-validation-incomplete");
 }
 
 

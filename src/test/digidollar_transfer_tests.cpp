@@ -1139,7 +1139,10 @@ BOOST_FIXTURE_TEST_CASE(test_dd_amount_balance_verification, DDTransferTestFixtu
 
     CAmount totalDDOut = 0;
     for (const auto& output : result.tx.vout) {
-        if (output.nValue == 0) { // DD outputs have 0 DGB value
+        // DD outputs have nValue == 0 and are P2TR scripts (start with OP_1)
+        // Skip OP_RETURN outputs (metadata, not spendable DD)
+        if (output.nValue == 0 && output.scriptPubKey.size() > 0 &&
+            output.scriptPubKey[0] == OP_1) {
             CAmount ddAmount = 0;
             if (DigiDollar::ExtractDDAmount(output.scriptPubKey, ddAmount)) {
                 totalDDOut += ddAmount;
@@ -1248,7 +1251,10 @@ BOOST_FIXTURE_TEST_CASE(test_complete_transaction_structure, DDTransferTestFixtu
     CAmount totalDDIn = g_mockDDUTXOs[params.ddUtxos[0]];
     CAmount totalDDOut = 0;
     for (const auto& output : result.tx.vout) {
-        if (output.nValue == 0) {
+        // DD outputs have nValue == 0 and are P2TR scripts (start with OP_1)
+        // Skip OP_RETURN outputs (metadata, not spendable DD)
+        if (output.nValue == 0 && output.scriptPubKey.size() > 0 &&
+            output.scriptPubKey[0] == OP_1) {
             CAmount ddAmount = 0;
             if (DigiDollar::ExtractDDAmount(output.scriptPubKey, ddAmount)) {
                 totalDDOut += ddAmount;

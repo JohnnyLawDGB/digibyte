@@ -122,6 +122,17 @@ ScriptType IdentifyScriptType(const CScript& script);
 bool ExtractDDAmount(const CScript& script, CAmount& amount);
 
 /**
+ * Extract DD amount from the previous transaction's OP_RETURN metadata.
+ * This is the DECENTRALIZED approach - no local registry needed.
+ * The DD amount is stored in the creating transaction's OP_RETURN output.
+ *
+ * @param prevout The outpoint (txid + output index) of the DD UTXO
+ * @param amount Output: The DD amount in cents
+ * @return true if amount was successfully extracted
+ */
+bool ExtractDDAmountFromPrevTx(const COutPoint& prevout, CAmount& amount);
+
+/**
  * Check if script is a DigiDollar collateral locking script
  *
  * @param script Script to check

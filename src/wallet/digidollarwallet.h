@@ -598,13 +598,6 @@ public:
      */
     bool UpdateDDTimeLockStatus(const uint256& dd_timelock_id, bool new_status);
 
-    /**
-     * Track partial DD redemption from a DDTimeLock
-     * @param dd_timelock_id The DDTimeLock position ID
-     * @param dd_redeemed Amount of DD redeemed
-     * @return true if partial redemption tracked successfully
-     */
-    bool TrackPartialRedemption(const uint256& dd_timelock_id, CAmount dd_redeemed);
 
     /**
      * Get DDTimeLock lifecycle status

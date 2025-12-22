@@ -353,19 +353,6 @@ bool ValidateEmergencyRedemption(const CScript& script,
     return validSigs >= requiredSigs;
 }
 
-bool ValidatePartialRedemption(const CScript& script, CAmount oraclePrice) {
-    // Partial redemption requires current price data
-    // Price must be recent and valid
-
-    if (oraclePrice <= 0) {
-        LogPrintf("DigiDollar: Partial redemption failed - invalid price: %d\n", oraclePrice);
-        return false;
-    }
-
-    // In full implementation, would also check price staleness
-    // For testing, just validate price is positive
-    return true;
-}
 
 bool ValidateERRRedemption(const CScript& script, int systemCollateral) {
     // ERR (Emergency Redemption Ratio) activates when system < 100% collateralized
@@ -1134,15 +1121,6 @@ bool ValidateEmergencyRedemptionConditions(const CTransaction& tx,
     return true;
 }
 
-bool ValidatePartialRedemptionConditions(const CTransaction& tx,
-                                       const ValidationContext& ctx,
-                                       TxValidationState& state) {
-    // EXACT-AMOUNT REDEMPTION POLICY: Partial redemptions permanently disabled
-    LogPrintf("DigiDollar: Partial redemption permanently disabled\n");
-    return state.Invalid(TxValidationResult::TX_CONSENSUS,
-                        "partial-redemption-disabled",
-                        "Partial redemption is not supported - redeem full amount only");
-}
 
 bool ValidateCollateralReleaseAmount(const CTransaction& tx,
                                    const ValidationContext& ctx,

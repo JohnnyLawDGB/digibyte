@@ -180,16 +180,6 @@ bool ValidateNormalRedemption(const CScript& script, int currentHeight);
 bool ValidateEmergencyRedemption(const CScript& script,
                                 const std::vector<std::vector<unsigned char>>& sigs);
 
-/**
- * Validate partial redemption path conditions
- *
- * Checks that oracle price is current and conditions are met for partial redemption.
- *
- * @param script Partial redemption script
- * @param oraclePrice Current oracle price
- * @return true if partial redemption is valid
- */
-bool ValidatePartialRedemption(const CScript& script, CAmount oraclePrice);
 
 /**
  * Validate ERR (Emergency Redemption Ratio) path conditions
@@ -387,17 +377,6 @@ bool ValidateEmergencyRedemptionConditions(const CTransaction& tx,
                                          const ValidationContext& ctx,
                                          TxValidationState& state);
 
-/**
- * Validate partial redemption conditions
- *
- * @param tx Redemption transaction
- * @param ctx Validation context
- * @param state Transaction validation state
- * @return true if partial redemption conditions are met
- */
-bool ValidatePartialRedemptionConditions(const CTransaction& tx,
-                                       const ValidationContext& ctx,
-                                       TxValidationState& state);
 
 /**
  * Validate collateral release amount is reasonable

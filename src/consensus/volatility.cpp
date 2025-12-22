@@ -231,34 +231,6 @@ uint32_t VolatilityMonitor::GetCooldownEndHeight()
     return currentState.cooldownEndHeight;
 }
 
-bool VolatilityMonitor::OverrideFreeze(const std::vector<COraclePriceMessage>& approvals)
-{
-    LOCK(cs_volatility);
-
-    // Must have sufficient approvals
-    if (approvals.size() < VolatilityThresholds::REQUIRED_ORACLE_APPROVALS) {
-        LogPrintf("VolatilityMonitor: Override failed - insufficient approvals (%d < %d)\n",
-                 approvals.size(), VolatilityThresholds::REQUIRED_ORACLE_APPROVALS);
-        return false;
-    }
-
-    // Validate oracle approvals
-    if (!ValidateOracleApprovals(approvals)) {
-        LogPrintf("VolatilityMonitor: Override failed - invalid oracle approvals\n");
-        return false;
-    }
-
-    // Clear freeze state
-    currentState.mintingFrozen = false;
-    currentState.allOperationsFrozen = false;
-    currentState.freezeHeight = 0;
-    currentState.cooldownEndHeight = 0;
-
-    LogPrintf("VolatilityMonitor: OVERRIDE - Freeze cleared by oracle consensus (%d approvals)\n",
-              approvals.size());
-
-    return true;
-}
 
 void VolatilityMonitor::TriggerFreeze(bool freezeAll, uint32_t height)
 {
@@ -488,40 +460,6 @@ double VolatilityMonitor::CalculateStandardDeviation(const std::vector<double>& 
     return std::sqrt(variance);
 }
 
-bool VolatilityMonitor::ValidateOracleApprovals(const std::vector<COraclePriceMessage>& approvals)
-{
-    // Validate each oracle approval
-    for (const auto& approval : approvals) {
-        // Basic validation using the oracle's built-in method
-        if (!approval.IsValid()) {
-            LogPrintf("VolatilityMonitor: Invalid oracle message\n");
-            return false;
-        }
-
-        // Check timestamp is recent (within last hour)
-        if (std::abs(GetTime() - approval.timestamp) > 3600) {
-            LogPrintf("VolatilityMonitor: Oracle approval too old/new\n");
-            return false;
-        }
-
-        // Additional validation could include:
-        // - Check if oracle_id is in authorized oracle set
-        // - Verify price is reasonable
-        // - Validate signature using oracle registry pubkeys
-        // For now, we rely on the oracle's IsValid() method
-    }
-
-    // Check for unique oracles (no duplicates by oracle_id)
-    std::set<uint32_t> uniqueOracles;
-    for (const auto& approval : approvals) {
-        if (!uniqueOracles.insert(approval.oracle_id).second) {
-            LogPrintf("VolatilityMonitor: Duplicate oracle in approvals\n");
-            return false;
-        }
-    }
-
-    return true;
-}
 
 // ============================================================================
 // Utility Functions

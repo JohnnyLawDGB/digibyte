@@ -2877,39 +2877,8 @@ BOOST_AUTO_TEST_CASE(test_update_ddtimelock_status_invalid_id)
 // DELETED: test_track_partial_redemption - Partial redemption does not exist in DigiDollar
 // Only two redemption paths: Normal (full, after timelock) and ERR (full, more DD burned)
 
-/**
- * Test: TrackRedemption - Full redemption marks inactive
- * NOTE: Only FULL redemption is supported in DigiDollar
- */
-BOOST_AUTO_TEST_CASE(test_track_full_redemption)
-{
-    // Arrange: Create wallet with DDTimeLock containing 1000 DD
-    DigiDollarWallet wallet;
-    uint256 dd_timelock_id = InsecureRand256();
-    CAmount dd_minted = 100000;  // 1000 DD
-    CAmount dgb_collateral = 200000000;
-    uint32_t lock_tier = 1;
-    int64_t unlock_height = 1000;
-
-    WalletCollateralPosition position(dd_timelock_id, dd_minted, dgb_collateral, lock_tier, unlock_height);
-    wallet.AddCollateralPosition(position);
-
-    // Act: Redeem all 1000 DD (full redemption)
-    CAmount dd_redeemed = 100000;  // 1000 DD
-    bool result = wallet.TrackPartialRedemption(dd_timelock_id, dd_redeemed);
-
-    // Assert: Full redemption marks position inactive
-    BOOST_CHECK(result);
-
-    // Verify position is now inactive
-    auto active_positions = wallet.GetDDTimeLocks(true);
-    BOOST_CHECK_EQUAL(active_positions.size(), 0);  // No active positions
-
-    auto all_positions = wallet.GetDDTimeLocks(false);
-    BOOST_CHECK_EQUAL(all_positions.size(), 1);
-    BOOST_CHECK(!all_positions[0].is_active);  // Marked inactive
-    BOOST_CHECK_EQUAL(all_positions[0].dd_minted, 0);  // No DD remaining
-}
+// DELETED: test_track_full_redemption - Used TrackPartialRedemption function which does not exist
+// DigiDollar only supports FULL redemptions via Normal and ERR paths
 
 // DELETED: test_track_partial_redemption_exceeds_minted - Partial redemption does not exist in DigiDollar
 // Only two redemption paths: Normal (full, after timelock) and ERR (full, more DD burned)

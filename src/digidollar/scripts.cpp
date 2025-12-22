@@ -102,28 +102,6 @@ CScript CreateEmergencyPath(const MintParams& params)
     return script;
 }
 
-CScript CreatePartialRedemptionPath(const MintParams& params)
-{
-    if (params.ddAmount <= 0) {
-        // LogPrintf("DigiDollar: Invalid parameters for partial redemption path\n");
-        return CScript();
-    }
-
-    CScript script;
-
-    // DigiDollar verification (allows partial amounts)
-    script << OP_DIGIDOLLAR << OP_DDVERIFY;
-
-    // Owner signature verification (must sign before price check)
-    script << ToByteVector(params.ownerKey) << OP_CHECKSIGVERIFY;
-
-    // Verify current price from oracles
-    script << OP_CHECKPRICE;
-
-    // LogPrintf("DigiDollar: Created partial redemption path for %d DD\n", params.ddAmount);
-
-    return script;
-}
 
 CScript CreateERRPath(const MintParams& params)
 {

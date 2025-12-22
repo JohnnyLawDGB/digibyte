@@ -133,13 +133,17 @@ bool ValidateRedemptionPath(DigiDollarTxType type, int currentHeight, int lockHe
 }
 
 bool ValidateRedemptionAmount(CAmount redeemAmount, CAmount totalHeld, bool isFullRedeem) {
+    // DigiDollar only supports FULL redemption - no partial redemption allowed
     if (redeemAmount <= 0) return false;
     if (totalHeld <= 0) return false;
 
     if (isFullRedeem) {
+        // Full redemption must match exactly
         return redeemAmount == totalHeld;
     } else {
-        return redeemAmount <= totalHeld;
+        // Partial redemption is NOT allowed in DigiDollar
+        // All redemptions must be full redemptions
+        return false;
     }
 }
 

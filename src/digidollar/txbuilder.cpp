@@ -1161,6 +1161,10 @@ TxBuilderResult RedeemTxBuilder::BuildRedemptionTransaction(const TxBuilderRedee
                        << CScriptNum(ddChange);  // DD change amount in cents
         tx.vout.push_back(CTxOut(0, metadataScript));
         LogPrintf("DigiDollar: Added OP_RETURN for DD change: %d cents\n", ddChange);
+
+        // CRITICAL FIX: Store ddChange in result so wallet can track the change UTXO
+        // Without this, result.ddChange stays 0 and wallet never tracks the change!
+        result.ddChange = ddChange;
     } else if (ddChange < 0) {
         // This should never happen - SelectDDCoins should ensure enough DD
         result.error = "Insufficient DD selected (input: " +

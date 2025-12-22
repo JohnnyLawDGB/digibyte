@@ -8,6 +8,9 @@
 #include <qt/clientmodel.h>
 #include <qt/guiutil.h>
 #include <qt/digibyteunits.h>
+#include <qt/digidollarcoincontroldialog.h>
+#include <qt/platformstyle.h>
+#include <wallet/ddcoincontrol.h>
 #include <consensus/amount.h>
 #include <base58.h>
 #include <logging.h>
@@ -15,6 +18,8 @@
 #include <oracle/mock_oracle.h>
 #include <interfaces/node.h>
 #include <univalue.h>
+
+#include <chrono>
 
 #include <QLabel>
 #include <QLineEdit>
@@ -36,6 +41,8 @@
 #include <QPalette>
 #include <QProgressDialog>
 #include <QAbstractButton>
+
+using namespace std::chrono_literals;
 
 DigiDollarSendWidget::DigiDollarSendWidget(QWidget *parent) :
     QWidget(parent),
@@ -66,6 +73,11 @@ DigiDollarSendWidget::DigiDollarSendWidget(QWidget *parent) :
     m_buttonLayout(nullptr),
     m_sendButton(nullptr),
     m_clearButton(nullptr),
+    m_coinControlFrame(nullptr),
+    m_coinControlLayout(nullptr),
+    m_coinControlButton(nullptr),
+    m_coinControlQuantityLabel(nullptr),
+    m_coinControlAmountLabel(nullptr),
     m_addressValidator(nullptr),
     m_amountValidator(nullptr),
     m_walletModel(nullptr),
@@ -96,6 +108,7 @@ void DigiDollarSendWidget::setupUI()
     m_amountValidator = new AmountValidator(0.00000001, 999999999.99999999, this);
 
     // Setup sections
+    setupCoinControlSection();
     setupAddressSection();
     setupAmountSection();
     setupFeeSection();
@@ -105,6 +118,45 @@ void DigiDollarSendWidget::setupUI()
     m_mainLayout->addStretch();
 
     setLayout(m_mainLayout);
+}
+
+void DigiDollarSendWidget::setupCoinControlSection()
+{
+    // Create coin control frame
+    m_coinControlFrame = new QFrame(this);
+    m_coinControlFrame->setObjectName("coinControlFrame");
+    m_coinControlFrame->setFrameStyle(QFrame::StyledPanel);
+    m_coinControlFrame->setFrameShadow(QFrame::Sunken);
+
+    m_coinControlLayout = new QHBoxLayout(m_coinControlFrame);
+    m_coinControlLayout->setSpacing(10);
+    m_coinControlLayout->setContentsMargins(10, 8, 10, 8);
+
+    // "Inputs..." button to open coin control dialog
+    m_coinControlButton = new QPushButton(tr("Inputs..."), this);
+    m_coinControlButton->setObjectName("coinControlButton");
+    m_coinControlButton->setToolTip(tr("Manually select DD inputs to spend"));
+    m_coinControlButton->setMinimumWidth(80);
+    m_coinControlLayout->addWidget(m_coinControlButton);
+
+    // Quantity label (number of selected inputs)
+    m_coinControlQuantityLabel = new QLabel(this);
+    m_coinControlQuantityLabel->setObjectName("coinControlQuantityLabel");
+    m_coinControlQuantityLabel->setText(tr("Inputs: (auto)"));
+    m_coinControlLayout->addWidget(m_coinControlQuantityLabel);
+
+    // Amount label (total selected DD amount)
+    m_coinControlAmountLabel = new QLabel(this);
+    m_coinControlAmountLabel->setObjectName("coinControlAmountLabel");
+    m_coinControlAmountLabel->setText(QString());
+    m_coinControlLayout->addWidget(m_coinControlAmountLabel);
+
+    m_coinControlLayout->addStretch();
+
+    m_mainLayout->addWidget(m_coinControlFrame);
+
+    // Initially visible - will be hidden if coin control is disabled in settings
+    m_coinControlFrame->setVisible(true);
 }
 
 void DigiDollarSendWidget::setupAddressSection()
@@ -339,6 +391,10 @@ void DigiDollarSendWidget::connectSignals()
             this, &DigiDollarSendWidget::onUseAvailableBalanceClicked);
     connect(m_pasteAddressButton, &QToolButton::clicked,
             this, &DigiDollarSendWidget::onPasteAddressClicked);
+
+    // Connect coin control button
+    connect(m_coinControlButton, &QPushButton::clicked,
+            this, &DigiDollarSendWidget::onCoinControlButtonClicked);
 }
 
 void DigiDollarSendWidget::setWalletModel(WalletModel* model)
@@ -688,15 +744,19 @@ bool DigiDollarSendWidget::checkWalletState()
     return true;
 }
 
-// PHASE 7.2: Enhanced confirmation dialog
+// PHASE 7.2: Enhanced confirmation dialog with 3-second countdown
+// This matches the DGB send confirmation flow exactly
 bool DigiDollarSendWidget::showConfirmationDialog(const QString& address, double amount)
 {
     double total = amount + m_estimatedFee;
     double usdEquivalent = amount * m_oraclePrice; // DD should be pegged to $1
 
-    // Create confirmation message with detailed breakdown
+    // Create confirmation title
+    QString title = tr("Confirm DigiDollar Transfer");
+
+    // Create main confirmation message with detailed breakdown
     QString confirmMsg = tr(
-        "<b style='font-size: 14px;'>Confirm DigiDollar Transfer</b><br/><br/>"
+        "<b style='font-size: 14px;'>Review Transaction Details</b><br/><br/>"
         "<table cellpadding='4' style='font-size: 12px;'>"
         "<tr><td><b>Send to:</b></td><td style='font-family: monospace;'>%1</td></tr>"
         "<tr><td colspan='2'><hr/></td></tr>"
@@ -705,31 +765,33 @@ bool DigiDollarSendWidget::showConfirmationDialog(const QString& address, double
         "<tr><td colspan='2'><hr/></td></tr>"
         "<tr><td><b>Total Deducted:</b></td><td align='right'><b style='font-size: 13px;'>%4</b></td></tr>"
         "<tr><td>USD Equivalent:</td><td align='right'>%5</td></tr>"
-        "</table><br/>"
-        "<span style='color: #666; font-size: 11px;'>This transaction cannot be reversed once sent.</span>"
+        "</table>"
     ).arg(address)
      .arg(formatDDAmount(amount))
      .arg(formatDDAmount(m_estimatedFee))
      .arg(formatDDAmount(total))
      .arg(formatUSDAmount(usdEquivalent));
 
-    QMessageBox msgBox(this);
-    msgBox.setWindowTitle(tr("Confirm DigiDollar Transfer"));
-    msgBox.setText(confirmMsg);
-    msgBox.setStandardButtons(QMessageBox::Yes | QMessageBox::No);
-    msgBox.setDefaultButton(QMessageBox::No); // Safety: default to cancel
-    msgBox.setIcon(QMessageBox::Question);
+    // Informative text (warning message)
+    QString informativeText = tr(
+        "This transaction cannot be reversed once sent.\n"
+        "Please review the details carefully before confirming."
+    );
 
-    // Customize button text
-    QAbstractButton* yesButton = msgBox.button(QMessageBox::Yes);
-    yesButton->setText(tr("&Send DigiDollar"));
-    QAbstractButton* noButton = msgBox.button(QMessageBox::No);
-    noButton->setText(tr("&Cancel"));
+    // Create confirmation dialog with 3-second countdown
+    auto confirmationDialog = new DDSendConfirmationDialog(
+        title,
+        confirmMsg,
+        informativeText,
+        DD_SEND_CONFIRM_DELAY,
+        this
+    );
+    confirmationDialog->setAttribute(Qt::WA_DeleteOnClose);
 
-    int result = msgBox.exec();
+    int result = confirmationDialog->exec();
 
     if (result == QMessageBox::Yes) {
-        LogPrintf("DigiDollar: User confirmed transfer of %f DD to %s\n",
+        LogPrintf("DigiDollar: User confirmed transfer of %f DD to %s after 3-second review\n",
                   amount, address.toStdString());
         return true;
     } else {
@@ -976,6 +1038,61 @@ void DigiDollarSendWidget::updateAmountValidation()
     }
 }
 
+// DDSendConfirmationDialog implementation
+// Matches the DGB send confirmation dialog with 3-second countdown
+DDSendConfirmationDialog::DDSendConfirmationDialog(const QString& title, const QString& text,
+                                                     const QString& informative_text,
+                                                     int secDelay, QWidget* parent)
+    : QMessageBox(parent), secDelay(secDelay), confirmButtonText(tr("Send DigiDollar"))
+{
+    setIcon(QMessageBox::Question);
+    setWindowTitle(title);
+    setText(text);
+    if (!informative_text.isEmpty()) {
+        setInformativeText(informative_text);
+    }
+    setStandardButtons(QMessageBox::Yes | QMessageBox::Cancel);
+    setDefaultButton(QMessageBox::Cancel); // Safety: default to cancel
+
+    // Get the Yes button and customize it
+    yesButton = button(QMessageBox::Yes);
+    yesButton->setText(confirmButtonText);
+
+    // Set up timer
+    updateButtons();
+    connect(&countDownTimer, &QTimer::timeout, this, &DDSendConfirmationDialog::countDown);
+}
+
+int DDSendConfirmationDialog::exec()
+{
+    updateButtons();
+    countDownTimer.start(1s);
+    return QMessageBox::exec();
+}
+
+void DDSendConfirmationDialog::countDown()
+{
+    secDelay--;
+    updateButtons();
+
+    if (secDelay <= 0) {
+        countDownTimer.stop();
+    }
+}
+
+void DDSendConfirmationDialog::updateButtons()
+{
+    if (secDelay > 0) {
+        // Disable button and show countdown
+        yesButton->setEnabled(false);
+        yesButton->setText(confirmButtonText + QString(" (%1)").arg(secDelay));
+    } else {
+        // Enable button and remove countdown
+        yesButton->setEnabled(true);
+        yesButton->setText(confirmButtonText);
+    }
+}
+
 // DigiDollarAddressValidator implementation
 DigiDollarAddressValidator::DigiDollarAddressValidator(QObject* parent) :
     QValidator(parent)
@@ -1013,6 +1130,68 @@ bool DigiDollarAddressValidator::isValidDDAddress(const QString& address) const
     // Use the proper CDigiDollarAddress validation function
     // This ensures full validation including checksum verification
     return CDigiDollarAddress::IsValidDigiDollarAddress(address.toStdString());
+}
+
+void DigiDollarSendWidget::onCoinControlButtonClicked()
+{
+    if (!m_walletModel) {
+        return;
+    }
+
+    // Initialize coin control if not already done
+    if (!m_coinControl) {
+        m_coinControl = std::make_unique<wallet::DDCoinControl>();
+    }
+
+    // Open the coin control dialog
+    // Note: platformStyle would typically come from the main window
+    DigiDollarCoinControlDialog dlg(*m_coinControl, m_walletModel, nullptr, this);
+    dlg.exec();
+
+    // Update labels after dialog closes
+    updateCoinControlLabels();
+}
+
+void DigiDollarSendWidget::updateCoinControlLabels()
+{
+    if (!m_coinControl || !m_walletModel) {
+        // No coin control active, hide labels
+        if (m_coinControlQuantityLabel) {
+            m_coinControlQuantityLabel->setVisible(false);
+        }
+        if (m_coinControlAmountLabel) {
+            m_coinControlAmountLabel->setVisible(false);
+        }
+        return;
+    }
+
+    if (!m_coinControl->HasSelected()) {
+        // No inputs selected, hide labels
+        if (m_coinControlQuantityLabel) {
+            m_coinControlQuantityLabel->setVisible(false);
+        }
+        if (m_coinControlAmountLabel) {
+            m_coinControlAmountLabel->setVisible(false);
+        }
+        return;
+    }
+
+    // Count selected inputs and calculate total amount
+    std::vector<COutPoint> selectedInputs = m_coinControl->ListSelected();
+    int nQuantity = selectedInputs.size();
+
+    // Show quantity label
+    if (m_coinControlQuantityLabel) {
+        m_coinControlQuantityLabel->setText(tr("Inputs: %1").arg(nQuantity));
+        m_coinControlQuantityLabel->setVisible(true);
+    }
+
+    // Note: To show the actual DD amount, we would need to query the wallet
+    // for the DD value of each selected UTXO. For now, just show the count.
+    if (m_coinControlAmountLabel) {
+        m_coinControlAmountLabel->setText(tr("(manual selection active)"));
+        m_coinControlAmountLabel->setVisible(true);
+    }
 }
 
 // AmountValidator implementation

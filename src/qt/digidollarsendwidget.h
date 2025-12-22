@@ -7,11 +7,17 @@
 
 #include <QWidget>
 #include <QValidator>
+#include <QMessageBox>
+#include <QTimer>
 
 class WalletModel;
 class ClientModel;
 class DigiDollarAddressValidator;
 class AmountValidator;
+
+namespace wallet {
+class DDCoinControl;
+} // namespace wallet
 
 QT_BEGIN_NAMESPACE
 class QLabel;
@@ -24,7 +30,11 @@ class QFrame;
 class QToolButton;
 class QScrollArea;
 class QSpacerItem;
+class QAbstractButton;
 QT_END_NAMESPACE
+
+// 3-second confirmation delay constant (matches DGB send behavior)
+#define DD_SEND_CONFIRM_DELAY 3
 
 /**
  * DigiDollar send widget for sending DD to other addresses.
@@ -66,9 +76,14 @@ private Q_SLOTS:
     void onUseAvailableBalanceClicked();
     /** Paste address from clipboard */
     void onPasteAddressClicked();
+    /** Coin control button clicked */
+    void onCoinControlButtonClicked();
+    /** Update coin control labels */
+    void updateCoinControlLabels();
 
 private:
     void setupUI();
+    void setupCoinControlSection();
     void setupAddressSection();
     void setupAmountSection();
     void setupFeeSection();
@@ -135,6 +150,13 @@ private:
     QPushButton* m_sendButton;
     QPushButton* m_clearButton;
 
+    // Coin control section
+    QFrame* m_coinControlFrame;
+    QHBoxLayout* m_coinControlLayout;
+    QPushButton* m_coinControlButton;
+    QLabel* m_coinControlQuantityLabel;
+    QLabel* m_coinControlAmountLabel;
+
     // Validators
     DigiDollarAddressValidator* m_addressValidator;
     AmountValidator* m_amountValidator;
@@ -147,6 +169,9 @@ private:
     double m_availableBalance;
     double m_oraclePrice;
     double m_estimatedFee;
+
+    // Coin control
+    std::unique_ptr<wallet::DDCoinControl> m_coinControl;
 };
 
 /**
@@ -181,6 +206,36 @@ public:
 private:
     double m_min;
     double m_max;
+};
+
+/**
+ * Confirmation dialog with 3-second countdown timer for DigiDollar sends.
+ * This matches the DGB send confirmation behavior, requiring users to wait
+ * 3 seconds before the Send button becomes enabled, allowing them to review
+ * the transaction details before confirming.
+ */
+class DDSendConfirmationDialog : public QMessageBox
+{
+    Q_OBJECT
+
+public:
+    DDSendConfirmationDialog(const QString& title, const QString& text,
+                             const QString& informative_text = "",
+                             int secDelay = DD_SEND_CONFIRM_DELAY,
+                             QWidget* parent = nullptr);
+
+    /* Returns QMessageBox::Yes when "Send" is clicked, QMessageBox::Cancel otherwise */
+    int exec() override;
+
+private Q_SLOTS:
+    void countDown();
+    void updateButtons();
+
+private:
+    QAbstractButton* yesButton;
+    QTimer countDownTimer;
+    int secDelay;
+    QString confirmButtonText;
 };
 
 #endif // DIGIBYTE_QT_DIGIDOLLARSENDWIDGET_H

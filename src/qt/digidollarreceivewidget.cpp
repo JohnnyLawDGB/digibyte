@@ -5,14 +5,17 @@
 #include <qt/digidollarreceivewidget.h>
 
 #include <base58.h>
+#include <interfaces/wallet.h>
 #include <qt/walletmodel.h>
 #include <qt/clientmodel.h>
 #include <qt/guiutil.h>
 #include <qt/qrimagewidget.h>
 #include <qt/sendcoinsrecipient.h>
 #include <qt/recentrequeststablemodel.h>
+#include <qt/digidollarreceiverequest.h>
 #include <consensus/amount.h>
 #include <logging.h>
+#include <streams.h>
 
 #include <QLabel>
 #include <QLineEdit>
@@ -33,9 +36,13 @@
 #include <QPalette>
 #include <QUrl>
 #include <QStandardPaths>
+#include <QMenu>
+#include <QAction>
+#include <QCursor>
 
 DigiDollarReceiveWidget::DigiDollarReceiveWidget(QWidget *parent) :
     QWidget(parent),
+    m_contextMenu(nullptr),
     m_mainLayout(nullptr),
     m_generateFrame(nullptr),
     m_generateLayout(nullptr),
@@ -281,6 +288,8 @@ void DigiDollarReceiveWidget::setupRecentRequestsSection()
     m_requestsTable->setAlternatingRowColors(true);
     m_requestsTable->setShowGrid(false);
     m_requestsTable->setMinimumHeight(150);
+    m_requestsTable->setContextMenuPolicy(Qt::CustomContextMenu);
+    m_requestsTable->setSortingEnabled(true);
 
     // Set column widths - Date compact, Label medium, Amount compact, Address stretches
     m_requestsTable->setColumnWidth(0, 90);   // Date - compact "Dec 17"
@@ -358,6 +367,18 @@ void DigiDollarReceiveWidget::connectSignals()
             this, &DigiDollarReceiveWidget::onShowRequestClicked);
     connect(m_removeRequestButton, &QPushButton::clicked,
             this, &DigiDollarReceiveWidget::onRemoveRequestClicked);
+    connect(m_requestsTable, &QTableWidget::cellDoubleClicked,
+            this, &DigiDollarReceiveWidget::onRecentRequestDoubleClicked);
+    connect(m_requestsTable, &QWidget::customContextMenuRequested,
+            this, &DigiDollarReceiveWidget::showContextMenu);
+
+    // Create context menu
+    m_contextMenu = new QMenu(this);
+    m_contextMenu->addAction(tr("Copy &URI"), this, &DigiDollarReceiveWidget::copyURI);
+    m_contextMenu->addAction(tr("&Copy address"), this, &DigiDollarReceiveWidget::copyAddress);
+    m_contextMenu->addAction(tr("Copy &label"), this, &DigiDollarReceiveWidget::copyLabel);
+    m_contextMenu->addAction(tr("Copy &message"), this, &DigiDollarReceiveWidget::copyMessage);
+    m_contextMenu->addAction(tr("Copy &amount"), this, &DigiDollarReceiveWidget::copyAmount);
 }
 
 void DigiDollarReceiveWidget::setWalletModel(WalletModel* model)
@@ -584,33 +605,17 @@ void DigiDollarReceiveWidget::onRecentRequestSelected()
 
 void DigiDollarReceiveWidget::onShowRequestClicked()
 {
-    int row = m_requestsTable->currentRow();
-    if (row < 0) {
+    const RecentRequestEntry* entry = getSelectedRequest();
+    if (!entry) {
         return;
     }
 
-    QString label = m_requestsTable->item(row, 1)->text();
-    QString amount = m_requestsTable->item(row, 2)->text();
-    // Get full address from UserRole (in case display is truncated)
-    QTableWidgetItem* addrItem = m_requestsTable->item(row, 3);
-    QString address = addrItem->data(Qt::UserRole).toString();
-    if (address.isEmpty()) {
-        address = addrItem->text();  // Fallback to displayed text
-    }
-
-    // Load the selected request
-    m_labelEdit->setText(label == tr("-") ? QString() : label);
-    if (amount != tr("Any")) {
-        // Parse amount back from formatted string
-        m_amountEdit->setText(amount.left(amount.indexOf(" DD")));
-    } else {
-        m_amountEdit->clear();
-    }
-    m_currentAddress = address;
-    m_addressEdit->setText(address);
-
-    updateQRCode();
-    m_qrFrame->setVisible(true);
+    // Show detailed request dialog
+    DigiDollarReceiveRequestDialog* dialog = new DigiDollarReceiveRequestDialog(this);
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
+    dialog->setModel(m_walletModel);
+    dialog->setInfo(entry->recipient);
+    dialog->show();
 }
 
 void DigiDollarReceiveWidget::onRemoveRequestClicked()
@@ -642,19 +647,33 @@ void DigiDollarReceiveWidget::populateRecentRequests()
     // Clear existing table entries first
     m_requestsTable->setRowCount(0);
 
-    if (!m_walletModel || !m_walletModel->getRecentRequestsTableModel()) {
+    if (!m_walletModel) {
         m_requestsTable->setVisible(false);
         m_noRequestsLabel->setVisible(true);
         return;
     }
 
-    RecentRequestsTableModel* model = m_walletModel->getRecentRequestsTableModel();
-    int rowCount = model->rowCount(QModelIndex());
+    // Load DD addresses directly from wallet storage (not from RecentRequestsTableModel,
+    // which now filters out DD addresses to keep DGB and DD systems separate)
+    std::vector<std::string> requests = m_walletModel->wallet().getAddressReceiveRequests();
 
-    LogPrint(BCLog::QT, "DigiDollarReceiveWidget: Loading %d recent requests from wallet\n", rowCount);
+    LogPrint(BCLog::QT, "DigiDollarReceiveWidget: Loading DD requests from %d total wallet requests\n", (int)requests.size());
 
-    for (int i = 0; i < rowCount; ++i) {
-        const RecentRequestEntry& entry = model->entry(i);
+    for (const std::string& requestStr : requests) {
+        // Deserialize the entry
+        std::vector<uint8_t> data(requestStr.begin(), requestStr.end());
+        DataStream ss{data};
+
+        RecentRequestEntry entry;
+        try {
+            ss >> entry;
+        } catch (const std::exception&) {
+            continue;  // Skip malformed entries
+        }
+
+        if (entry.id == 0) {
+            continue;  // Should not happen
+        }
 
         // Get address
         QString address = entry.recipient.address;
@@ -753,4 +772,164 @@ QString DigiDollarReceiveWidget::formatDDURI(const QString& address, const QStri
     }
 
     return uri;
+}
+
+void DigiDollarReceiveWidget::onRecentRequestDoubleClicked(int row, int column)
+{
+    Q_UNUSED(column);
+
+    if (!m_walletModel || !m_walletModel->getRecentRequestsTableModel()) {
+        return;
+    }
+
+    RecentRequestsTableModel* model = m_walletModel->getRecentRequestsTableModel();
+
+    // Map table row to model row (accounting for DD-only filtering)
+    // We need to find which model entry corresponds to this table row
+    int modelRow = 0;
+    int tableRow = 0;
+    for (int i = 0; i < model->rowCount(QModelIndex()); ++i) {
+        const RecentRequestEntry& entry = model->entry(i);
+        QString address = entry.recipient.address;
+
+        // Skip non-DD addresses (same filter as populateRecentRequests)
+        if (!CDigiDollarAddress::IsValidDigiDollarAddress(address.toStdString())) {
+            continue;
+        }
+
+        if (tableRow == row) {
+            modelRow = i;
+            break;
+        }
+        tableRow++;
+    }
+
+    // Show request dialog
+    const RecentRequestEntry& entry = model->entry(modelRow);
+    DigiDollarReceiveRequestDialog* dialog = new DigiDollarReceiveRequestDialog(this);
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
+    dialog->setModel(m_walletModel);
+    dialog->setInfo(entry.recipient);
+    dialog->show();
+}
+
+int DigiDollarReceiveWidget::selectedRow()
+{
+    if (!m_requestsTable) {
+        return -1;
+    }
+    return m_requestsTable->currentRow();
+}
+
+const RecentRequestEntry* DigiDollarReceiveWidget::getSelectedRequest()
+{
+    int row = selectedRow();
+    if (row < 0 || !m_walletModel || !m_walletModel->getRecentRequestsTableModel()) {
+        return nullptr;
+    }
+
+    RecentRequestsTableModel* model = m_walletModel->getRecentRequestsTableModel();
+
+    // Map table row to model row (accounting for DD-only filtering)
+    int modelRow = 0;
+    int tableRow = 0;
+    for (int i = 0; i < model->rowCount(QModelIndex()); ++i) {
+        const RecentRequestEntry& entry = model->entry(i);
+        QString address = entry.recipient.address;
+
+        // Skip non-DD addresses (same filter as populateRecentRequests)
+        if (!CDigiDollarAddress::IsValidDigiDollarAddress(address.toStdString())) {
+            continue;
+        }
+
+        if (tableRow == row) {
+            modelRow = i;
+            break;
+        }
+        tableRow++;
+    }
+
+    return &model->entry(modelRow);
+}
+
+void DigiDollarReceiveWidget::showContextMenu(const QPoint &point)
+{
+    if (selectedRow() < 0) {
+        return;
+    }
+
+    const RecentRequestEntry* entry = getSelectedRequest();
+    if (!entry) {
+        return;
+    }
+
+    // Enable/disable menu items based on data availability
+    QList<QAction*> actions = m_contextMenu->actions();
+    if (actions.size() >= 5) {
+        // Copy label - disable if empty
+        actions[2]->setEnabled(!entry->recipient.label.isEmpty());
+        // Copy message - disable if empty
+        actions[3]->setEnabled(!entry->recipient.message.isEmpty());
+        // Copy amount - disable if zero
+        actions[4]->setEnabled(entry->recipient.amount > 0);
+    }
+
+    m_contextMenu->exec(QCursor::pos());
+}
+
+void DigiDollarReceiveWidget::copyURI()
+{
+    const RecentRequestEntry* entry = getSelectedRequest();
+    if (!entry) {
+        return;
+    }
+
+    QString uri = formatDDURI(entry->recipient.address,
+                              entry->recipient.label,
+                              entry->recipient.amount > 0 ? QString::number(entry->recipient.amount / 100.0, 'f', 8) : QString(),
+                              entry->recipient.message);
+    GUIUtil::setClipboard(uri);
+}
+
+void DigiDollarReceiveWidget::copyAddress()
+{
+    const RecentRequestEntry* entry = getSelectedRequest();
+    if (!entry) {
+        return;
+    }
+
+    GUIUtil::setClipboard(entry->recipient.address);
+}
+
+void DigiDollarReceiveWidget::copyLabel()
+{
+    const RecentRequestEntry* entry = getSelectedRequest();
+    if (!entry) {
+        return;
+    }
+
+    GUIUtil::setClipboard(entry->recipient.label);
+}
+
+void DigiDollarReceiveWidget::copyMessage()
+{
+    const RecentRequestEntry* entry = getSelectedRequest();
+    if (!entry) {
+        return;
+    }
+
+    GUIUtil::setClipboard(entry->recipient.message);
+}
+
+void DigiDollarReceiveWidget::copyAmount()
+{
+    const RecentRequestEntry* entry = getSelectedRequest();
+    if (!entry) {
+        return;
+    }
+
+    if (entry->recipient.amount > 0) {
+        double ddAmount = entry->recipient.amount / 100.0;
+        GUIUtil::setClipboard(QString::number(ddAmount, 'f', 8));
+    }
 }

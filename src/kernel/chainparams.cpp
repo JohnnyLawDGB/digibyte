@@ -380,20 +380,23 @@ public:
         consensus.CSVHeight = 1; // CSV activated on testnet (Used in rpc activation tests)
         consensus.SegwitHeight = 0; // SEGWIT is always activated on testnet unless overridden
         consensus.MinBIP9WarningHeight = 0;
-        // Easy mining for testnet development - same as regtest
-        consensus.powLimit = uint256S("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
-        // Set initial targets for all algorithms (easy difficulty for testnet)
-        consensus.initialTarget[ALGO_SHA256D] = uint256S("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
-        consensus.initialTarget[ALGO_SCRYPT] = uint256S("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
-        consensus.initialTarget[ALGO_GROESTL] = uint256S("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
-        consensus.initialTarget[ALGO_SKEIN] = uint256S("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
-        consensus.initialTarget[ALGO_QUBIT] = uint256S("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
-        consensus.initialTarget[ALGO_ODO] = uint256S("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+        consensus.powLimit = ArithToUint256(~arith_uint256(0) >> 20);
+
+        // Initial difficulty targets for all algorithms (testnet)
+        // Using >> 28 for realistic testnet mining (~256x harder than minimum)
+        // This requires ~256 million hashes per block, taking a few seconds on modern hardware
+        consensus.initialTarget[ALGO_SHA256D] = ArithToUint256(~arith_uint256(0) >> 28);
+        consensus.initialTarget[ALGO_SCRYPT] = ArithToUint256(~arith_uint256(0) >> 20);  // Scrypt is slower, keep easier
+        consensus.initialTarget[ALGO_GROESTL] = ArithToUint256(~arith_uint256(0) >> 28);
+        consensus.initialTarget[ALGO_SKEIN] = ArithToUint256(~arith_uint256(0) >> 28);
+        consensus.initialTarget[ALGO_QUBIT] = ArithToUint256(~arith_uint256(0) >> 28);
+        consensus.initialTarget[ALGO_ODO] = ArithToUint256(~arith_uint256(0) >> 28);
+
         consensus.nPowTargetTimespan = 14 * 24 * 60 * 60; // two weeks
         consensus.nPowTargetSpacing = 60 / 4;
-        consensus.fPowAllowMinDifficultyBlocks = true;
-        consensus.fEasyPow = true;  // Enable instant mining for testnet development
-        consensus.fPowNoRetargeting = true;
+        consensus.fPowAllowMinDifficultyBlocks = false; // Disable min difficulty blocks for proper difficulty adjustment
+        consensus.fEasyPow = false;
+        consensus.fPowNoRetargeting = false; // Enable difficulty retargeting
         consensus.nRuleChangeActivationThreshold = 4032; // 4032 - 70% of 5760
         consensus.nMinerConfirmationWindow = 5760; // 1 day of blocks on testnet
         consensus.fRbfEnabled = false;

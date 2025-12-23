@@ -359,9 +359,9 @@ Once your wallet is synced and you have testnet DGB:
 | Setting | Value |
 |---------|-------|
 | Network | Testnet (testnet10) |
-| Default P2P Port | 12032 |
+| Default P2P Port | 12033 |
 | Default RPC Port | 14026 |
-| Oracle Node | oracle1.digibyte.io:12032 |
+| Oracle Node | oracle1.digibyte.io:12033 |
 | Address Prefix | dgbt1... (bech32) |
 
 ### Fork Schedule (Testnet10)
@@ -391,7 +391,7 @@ Once your wallet is synced and you have testnet DGB:
 - Restart the wallet after config changes
 
 ### "Not connecting to network"
-- Check your firewall allows port 12032
+- Check your firewall allows port 12033
 - Verify `addnode=oracle1.digibyte.io` is under `[test]` in config
 
 ### "Oracle price shows 0 or N/A"

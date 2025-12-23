@@ -2604,6 +2604,10 @@ size_t DigiDollarWallet::ScanForDDUTXOs() {
                     // This enables GetDDUTXOs() to find received DD tokens
                     dd_utxos[outpoint] = dd_amount;
 
+                    // CRITICAL: Register in global metadata registry for validation
+                    // This enables ExtractDDAmount() to find DD amounts during redemption
+                    DigiDollar::RegisterScriptMetadata(txout.scriptPubKey, DigiDollar::ScriptType::DD_TOKEN_OUTPUT, dd_amount, 0);
+
                     // Add to balance tracking
                     std::string key = "total"; // Aggregate key
 
@@ -5415,6 +5419,12 @@ void DigiDollarWallet::ProcessIncomingTransaction(const CTransactionRef& tx, con
 
                 LogPrintf("DigiDollar: Detected incoming DD transaction - txid: %s, vout: %d, amount: %d cents\n",
                           txid.GetHex(), n, dd_amount);
+
+                // CRITICAL FIX: Register the DD amount in the global metadata registry
+                // This enables validation to find DD amounts for received UTXOs during redemption.
+                // Without this, multi-input redemptions fail with "bad-redeem-dd-not-burned"
+                // because ExtractDDAmount() can't find amounts for UTXOs received from other wallets.
+                DigiDollar::RegisterScriptMetadata(txout.scriptPubKey, DigiDollar::ScriptType::DD_TOKEN_OUTPUT, dd_amount, 0);
 
                 // Check if we already have a transaction with this txid (e.g., from a send)
                 // This prevents "receive" for change from overwriting our "send" transaction

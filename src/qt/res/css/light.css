@@ -3754,11 +3754,11 @@ SendCoinsEntry QPushButton#useAvailableBalanceButton:hover {
     background-color: #A7C6ED;
     border: 1px solid #8FB1E3;
     border-radius: 8px;
-    margin-top: 15px;
-    margin-left: 20px;
-    margin-right: 10px;
-    margin-bottom: 10px;
-    padding: 20px;
+    margin-top: 8px;
+    margin-left: 10px;
+    margin-right: 5px;
+    margin-bottom: 5px;
+    padding: 10px;
 }
 
 /* Style the form labels like Overview page */
@@ -3934,11 +3934,11 @@ QWidget#ReceiveCoinsDialog DigiByteAmountField QAbstractSpinBox::down-button,
     background-color: #A7C6ED;
     border: 1px solid #8FB1E3;
     border-radius: 8px;
-    margin-top: 15px;
-    margin-left: 20px;
-    margin-right: 10px;
-    margin-bottom: 10px;
-    padding: 20px;
+    margin-top: 8px;
+    margin-left: 10px;
+    margin-right: 5px;
+    margin-bottom: 5px;
+    padding: 10px;
 }
 
 /* History label - "Requested payments history" text */
@@ -4822,8 +4822,8 @@ DigiDollarReceiveWidget QFrame#requestsFrame {
     background-color: #A7C6ED;
     border: 1px solid #8FB1E3;
     border-radius: 8px;
-    padding: 12px;
-    margin: 5px;
+    padding: 8px;
+    margin: 3px;
 }
 
 /* All labels - dark blue text */
@@ -5362,8 +5362,8 @@ DigiDollarRedeemWidget QFrame#positionInfoFrame {
     background-color: #A7C6ED;
     border: 1px solid #8FB1E3;
     border-radius: 8px;
-    padding: 15px;
-    margin: 5px;
+    padding: 8px;
+    margin: 3px;
 }
 
 DigiDollarRedeemWidget QFrame#buttonFrame {

@@ -90,14 +90,15 @@ DigiByteGUI::DigiByteGUI(interfaces::Node& node, const PlatformStyle *_platformS
 {
     QSettings settings;
     if (!restoreGeometry(settings.value("MainWindowGeometry").toByteArray())) {
-        // Restore failed (perhaps missing setting), center the window
+        // Restore failed (perhaps missing setting), set default size and center
+        resize(1000, 750);  // Default opening size: 1000x750 pixels
         move(QGuiApplication::primaryScreen()->availableGeometry().center() - frameGeometry().center());
     }
 
     setContextMenuPolicy(Qt::PreventContextMenu);
 
     // Set minimum window width to prevent toolbar truncation and content overlap
-    setMinimumWidth(900);
+    setMinimumWidth(1000);
 
 #ifdef ENABLE_WALLET
     enableWallet = WalletModel::isWalletEnabled();

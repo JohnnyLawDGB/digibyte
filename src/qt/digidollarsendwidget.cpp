@@ -353,7 +353,7 @@ void DigiDollarSendWidget::setupButtonSection()
     m_clearButton->setObjectName("clearButton");
     m_clearButton->setToolTip(tr("Clear all fields"));
     m_clearButton->setAutoDefault(false);
-    m_clearButton->setMinimumHeight(32);
+    // Removed minimum height - CSS handles button sizing
     m_buttonLayout->addWidget(m_clearButton);
 
     // Add stretch to push send button to the right
@@ -365,7 +365,7 @@ void DigiDollarSendWidget::setupButtonSection()
     m_sendButton->setEnabled(false);
     m_sendButton->setDefault(true);
     m_sendButton->setAutoDefault(true);
-    m_sendButton->setMinimumHeight(32);
+    // Removed minimum height - CSS handles button sizing
     m_sendButton->setToolTip(tr("Confirm and send this DigiDollar transaction"));
     m_buttonLayout->addWidget(m_sendButton);
 

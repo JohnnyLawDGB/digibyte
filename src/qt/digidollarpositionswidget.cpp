@@ -87,7 +87,8 @@ void DigiDollarPositionsWidget::setupUI()
     // Setup table header
     setupTableHeader();
 
-    m_mainLayout->addWidget(m_positionsTable);
+    m_positionsTable->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    m_mainLayout->addWidget(m_positionsTable, 1);  // stretch factor 1 to fill space
 
     // Status label
     m_statusLabel = new QLabel(tr("Loading vaults..."), this);

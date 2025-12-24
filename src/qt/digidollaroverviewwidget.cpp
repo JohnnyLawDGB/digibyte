@@ -132,7 +132,7 @@ void DigiDollarOverviewWidget::setupBalanceSection()
     m_balanceFrame->setFrameShape(QFrame::StyledPanel);
     m_balanceFrame->setFrameShadow(QFrame::Raised);
     m_balanceFrame->setObjectName("balanceFrame");
-    m_balanceFrame->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    m_balanceFrame->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
 
     QVBoxLayout* frameVLayout = new QVBoxLayout(m_balanceFrame);
     frameVLayout->setObjectName("frameVLayout");
@@ -218,7 +218,7 @@ void DigiDollarOverviewWidget::setupSystemHealthSection()
     m_systemHealthFrame->setFrameShape(QFrame::StyledPanel);
     m_systemHealthFrame->setFrameShadow(QFrame::Raised);
     m_systemHealthFrame->setObjectName("systemHealthFrame");
-    m_systemHealthFrame->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    m_systemHealthFrame->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
 
     QVBoxLayout* frameVLayout = new QVBoxLayout(m_systemHealthFrame);
     frameVLayout->setObjectName("healthFrameVLayout");
@@ -403,7 +403,7 @@ void DigiDollarOverviewWidget::setupRecentTransactionsSection()
     m_transactionsList->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_transactionsList->setSelectionMode(QAbstractItemView::NoSelection);
     m_transactionsList->setUniformItemSizes(true);
-    m_transactionsList->setMinimumHeight(100); // Minimum height
+    // No minimum height - allow to shrink with window
     m_transactionsList->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 
     // Info label for when no transactions exist

@@ -363,7 +363,6 @@ void DigiDollarMintWidget::setupButtonSection()
     m_clearButton->setObjectName("clearButton");
     m_clearButton->setToolTip(tr("Clear all fields"));
     m_clearButton->setAutoDefault(false);
-    m_clearButton->setMinimumHeight(32);
     m_buttonLayout->addWidget(m_clearButton);
 
     // Add stretch to push mint button to the right
@@ -375,7 +374,6 @@ void DigiDollarMintWidget::setupButtonSection()
     m_mintButton->setEnabled(false);
     m_mintButton->setDefault(true);
     m_mintButton->setAutoDefault(true);
-    m_mintButton->setMinimumHeight(32);
     m_mintButton->setToolTip(tr("Confirm and create this DigiDollar mint transaction"));
     m_buttonLayout->addWidget(m_mintButton);
 

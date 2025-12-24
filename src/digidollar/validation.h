@@ -40,12 +40,11 @@ enum class ScriptType {
 
 /**
  * Collateral redemption paths available in P2TR MAST
+ * NOTE: Only 2 paths exist. NO partial redemption, NO emergency oracle override.
  */
 enum class RedemptionPath {
-    NORMAL = 0,      // Standard timelock expiry redemption
-    EMERGENCY = 1,   // Oracle-approved emergency override (8-of-15)
-    PARTIAL = 2,     // Partial redemption with price verification
-    ERR = 3          // Emergency Redemption Ratio (system under-collateralized)
+    NORMAL = 0,      // Standard timelock expiry redemption (health >= 100%)
+    ERR = 1          // Emergency Redemption Ratio (health < 100%, burn more DD)
 };
 
 /**

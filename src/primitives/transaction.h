@@ -31,15 +31,16 @@
  */
 static const int SERIALIZE_TRANSACTION_NO_WITNESS = 0x40000000;
 
-/** DigiDollar transaction types */
+/** DigiDollar transaction types
+ * NOTE: Only 4 types exist. There is NO partial redemption and NO emergency oracle override.
+ * ERR (Emergency Redemption Ratio) is handled via DD_TX_REDEEM with health-based DD burn adjustment.
+ */
 enum DigiDollarTxType : uint8_t {
     DD_TX_NONE = 0,
     DD_TX_MINT = 1,      // Lock DGB, create DigiDollars
     DD_TX_TRANSFER = 2,  // Transfer DigiDollars between addresses
-    DD_TX_REDEEM = 3,    // Burn DigiDollars, unlock DGB
-    DD_TX_PARTIAL = 4,   // Partial redemption
-    DD_TX_EMERGENCY = 5, // Emergency redemption with ERR
-    DD_TX_MAX = 6        // For validation
+    DD_TX_REDEEM = 3,    // Burn DigiDollars, unlock DGB (includes ERR path)
+    DD_TX_MAX = 4        // For validation
 };
 
 /** DigiDollar transaction marker in nVersion */

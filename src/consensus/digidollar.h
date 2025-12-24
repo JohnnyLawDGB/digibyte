@@ -28,13 +28,14 @@ static const int BLOCKS_PER_DAY = 24 * 60 * 4;  // 5760 blocks (15s blocks)
 static const CAmount CENT = 1000000;  // DigiDollar cent in satoshis
 
 // DigiDollar transaction types
+// NOTE: Only 4 types exist. NO partial redemption, NO emergency oracle override.
+// ERR (Emergency Redemption Ratio) uses DD_TX_REDEEM with health-based DD burn adjustment.
 enum DigiDollarTxType : uint8_t {
     DD_TX_NONE = 0,
     DD_TX_MINT = 1,      // Lock DGB, create DigiDollars
     DD_TX_TRANSFER = 2,  // Transfer DigiDollars between addresses
-    DD_TX_REDEEM = 3,    // Burn DigiDollars, unlock DGB
-    DD_TX_PARTIAL = 4,   // Partial redemption
-    DD_TX_ERR = 5        // Emergency Redemption Ratio (ERR) redemption
+    DD_TX_REDEEM = 3,    // Burn DigiDollars, unlock DGB (ERR handled via burn amount)
+    DD_TX_MAX = 4        // For validation
 };
 
 /**

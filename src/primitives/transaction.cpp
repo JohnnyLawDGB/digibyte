@@ -128,8 +128,6 @@ std::string GetDigiDollarTxTypeName(DigiDollarTxType type) {
         case DD_TX_MINT: return "MINT";
         case DD_TX_TRANSFER: return "TRANSFER";
         case DD_TX_REDEEM: return "REDEEM";
-        case DD_TX_PARTIAL: return "PARTIAL_REDEEM";
-        case DD_TX_EMERGENCY: return "EMERGENCY_REDEEM";
         default: return "UNKNOWN";
     }
 }

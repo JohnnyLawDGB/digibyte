@@ -65,12 +65,11 @@ public:
 class CCollateralPosition
 {
 public:
-    //! Taproot redemption paths
+    //! Taproot redemption paths (only 2 exist)
+    //! NOTE: NO partial redemption, NO emergency oracle override
     enum RedemptionPath {
-        PATH_NORMAL = 0,        //!< Standard timelock expiry
-        PATH_EMERGENCY = 1,     //!< Oracle-approved emergency
-        PATH_PARTIAL = 2,       //!< Partial redemption
-        PATH_ERR = 3            //!< Emergency Redemption Ratio
+        PATH_NORMAL = 0,        //!< Standard timelock expiry (health >= 100%)
+        PATH_ERR = 1            //!< Emergency Redemption Ratio (health < 100%)
     };
 
     COutPoint outpoint;         //!< The locked DGB UTXO

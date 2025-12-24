@@ -145,7 +145,7 @@ void DigiDollarOverviewWidget::setupBalanceSection()
     QHBoxLayout* titleLayout = new QHBoxLayout();
     titleLayout->setObjectName("titleLayout");
 
-    QLabel* balanceTitle = new QLabel(tr("Your DigiDollar Balances"), this);
+    QLabel* balanceTitle = new QLabel(tr("DigiDollar Balances"), this);
     QFont titleFont = balanceTitle->font();
     titleFont.setBold(true);
     titleFont.setWeight(75); // Match main wallet weight

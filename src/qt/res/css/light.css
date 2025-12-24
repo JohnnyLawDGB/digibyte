@@ -4611,62 +4611,62 @@ DigiDollarOverviewWidget .QFrame#balanceFrame > .QLabel {
     min-height: 20px;
 }
 
-/* Balance Labels - Compact */
+/* Balance Labels - Match main Overview tab styling */
 DigiDollarOverviewWidget .QFrame#balanceFrame .QLabel#ddBalanceLabel {
     qproperty-alignment: 'AlignVCenter | AlignRight';
-    min-width: 100px;
+    min-width: 160px;
     background-color: #003366;
     color: #ffffff;
-    margin-right: 6px;
-    padding: 2px 4px;
-    font-size: 8pt;
+    margin-right: 5px;
+    padding-right: 5px;
+    font-size: 10pt;
     font-weight: bold;
-    min-height: 22px;
-    border-radius: 3px;
+    min-height: 35px;
+    border-radius: 6px;
 }
 
 DigiDollarOverviewWidget .QFrame#balanceFrame .QLabel#ddBalanceValue {
     qproperty-alignment: 'AlignVCenter | AlignLeft';
-    font-size: 11pt;
+    font-size: 14pt;
     color: #003366;
-    margin-left: 4px;
+    margin-left: 0px;
     font-weight: bold;
 }
 
 DigiDollarOverviewWidget .QFrame#balanceFrame .QLabel#dgbCollateralLabel {
     qproperty-alignment: 'AlignVCenter | AlignRight';
-    min-width: 100px;
-    font-size: 8pt;
+    min-width: 160px;
+    font-size: 11pt;
     background-color: #ffffff;
     color: #003366;
-    margin-right: 6px;
-    padding: 2px 4px;
-    border-radius: 3px;
+    margin-right: 5px;
+    padding-right: 5px;
+    border-radius: 6px;
 }
 
 DigiDollarOverviewWidget .QFrame#balanceFrame .QLabel#dgbCollateralValue {
     qproperty-alignment: 'AlignVCenter | AlignLeft';
-    font-size: 10pt;
+    font-size: 13pt;
     color: #003366;
-    margin-left: 4px;
+    margin-left: 0px;
 }
 
 DigiDollarOverviewWidget .QFrame#balanceFrame .QLabel#usdValueLabel {
     qproperty-alignment: 'AlignVCenter | AlignRight';
-    min-width: 100px;
-    font-size: 8pt;
+    min-width: 160px;
+    font-size: 11pt;
     background-color: #ffffff;
     color: #003366;
-    margin-right: 6px;
-    padding: 2px 4px;
-    border-radius: 3px;
+    margin-right: 5px;
+    padding-right: 5px;
+    border-radius: 6px;
 }
 
 DigiDollarOverviewWidget .QFrame#balanceFrame .QLabel#usdValueValue {
     qproperty-alignment: 'AlignVCenter | AlignLeft';
-    font-size: 10pt;
+    font-size: 13pt;
     color: #003366;
-    margin-left: 4px;
+    margin-left: 0px;
 }
 
 /* System Health Frame - Compact */

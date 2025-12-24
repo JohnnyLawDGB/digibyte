@@ -480,12 +480,12 @@ void DigiDollarRedeemWidget::onRedeemClicked()
     double requiredDDBurn = m_positionDDMinted; // Start with original minted amount
 
     try {
-        // Query system health status via RPC
+        // Query system health status via RPC (using getdigidollarstats)
         UniValue params(UniValue::VARR);
-        UniValue healthResult = m_walletModel->executeRpc("getdigidollarsystemstatus", params);
+        UniValue healthResult = m_walletModel->executeRpc("getdigidollarstats", params);
 
         if (healthResult.isObject()) {
-            int systemHealth = healthResult.find_value("health_percent").getInt<int>();
+            int systemHealth = healthResult.find_value("health_percentage").getInt<int>();
 
             // If system health < 100%, ERR is active and we need MORE DD to redeem
             if (systemHealth < 100) {
@@ -508,6 +508,9 @@ void DigiDollarRedeemWidget::onRedeemClicked()
                          systemHealth, requiredDDBurn, errRatio);
             }
         }
+    } catch (const UniValue& objError) {
+        LogPrintf("DigiDollar Qt: Failed to query system health (RPC error) - assuming normal redemption\n");
+        // On error, proceed with normal redemption calculation
     } catch (const std::exception& e) {
         LogPrintf("DigiDollar Qt: Failed to query system health - %s (assuming normal redemption)\n", e.what());
         // On error, proceed with normal redemption calculation
@@ -843,12 +846,12 @@ bool DigiDollarRedeemWidget::validateDDBalance() const
     double requiredDDBurn = m_positionDDMinted; // Default: normal redemption
 
     try {
-        // Query system health status via RPC
+        // Query system health status via RPC (using getdigidollarstats)
         UniValue params(UniValue::VARR);
-        UniValue healthResult = m_walletModel->executeRpc("getdigidollarsystemstatus", params);
+        UniValue healthResult = m_walletModel->executeRpc("getdigidollarstats", params);
 
         if (healthResult.isObject()) {
-            int systemHealth = healthResult.find_value("health_percent").getInt<int>();
+            int systemHealth = healthResult.find_value("health_percentage").getInt<int>();
 
             // If system health < 100%, ERR is active and we need MORE DD to redeem
             if (systemHealth < 100) {
@@ -868,6 +871,9 @@ bool DigiDollarRedeemWidget::validateDDBalance() const
                 requiredDDBurn = m_positionDDMinted / errRatio;
             }
         }
+    } catch (const UniValue& objError) {
+        // On error, assume normal redemption and allow validation to proceed
+        LogPrintf("DigiDollar Qt: Failed to query system health in validateDDBalance (RPC error)\n");
     } catch (const std::exception& e) {
         // On error, assume normal redemption and allow validation to proceed
         LogPrintf("DigiDollar Qt: Failed to query system health in validateDDBalance - %s\n", e.what());

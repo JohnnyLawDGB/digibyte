@@ -827,19 +827,14 @@ TxBuilderResult TransferTxBuilder::BuildTransferTransaction(const TxBuilderTrans
 
 bool RedeemTxBuilder::ValidateRedemptionPath(const TxBuilderRedeemParams& params) const {
     // Validate that the chosen path is valid for current conditions
+    // NOTE: Only 2 paths exist - NORMAL and ERR
     switch (params.path) {
         case RedemptionPath::NORMAL:
-            // Would check if timelock has expired
-            return true; // Simplified
-        case RedemptionPath::EMERGENCY:
-            // Would check if oracle approval exists
-            return true; // Simplified
-        case RedemptionPath::PARTIAL:
-            // Would check if partial redemption is allowed
-            return true; // Simplified
+            // Check if timelock has expired (simplified)
+            return true;
         case RedemptionPath::ERR:
-            // Would check if system collateral < 100%
-            return true; // Simplified
+            // Check if system collateral < 100% (simplified)
+            return true;
         default:
             return false;
     }
@@ -931,6 +926,7 @@ bool RedeemTxBuilder::ValidateRedeemParams(const TxBuilderRedeemParams& params) 
 
 CScript RedeemTxBuilder::CreateRedemptionScript(RedemptionPath path, const CKey& owner) const {
     // Create the appropriate redemption script based on path
+    // NOTE: Only 2 paths exist - NORMAL and ERR
     CPubKey pubkey = owner.GetPubKey();
     XOnlyPubKey xonly(pubkey);
 
@@ -940,15 +936,6 @@ CScript RedeemTxBuilder::CreateRedemptionScript(RedemptionPath path, const CKey&
     switch (path) {
         case RedemptionPath::NORMAL:
             // Normal redemption: P2TR with timelock (CLTV)
-            return CScript() << xonly_bytes << OP_CHECKSIG;
-
-        case RedemptionPath::EMERGENCY:
-            // Emergency: Requires oracle signatures (8-of-15)
-            // For now, create a basic script that checks owner signature
-            return CScript() << xonly_bytes << OP_CHECKSIG;
-
-        case RedemptionPath::PARTIAL:
-            // Partial: Similar to normal but with price verification
             return CScript() << xonly_bytes << OP_CHECKSIG;
 
         case RedemptionPath::ERR:
@@ -1071,20 +1058,11 @@ TxBuilderResult RedeemTxBuilder::BuildRedemptionTransaction(const TxBuilderRedee
     // Step 5: Build transaction
     CMutableTransaction tx;
 
-    // Set type based on redemption path
-    if (params.path == RedemptionPath::PARTIAL) {
-        // REJECT PARTIAL REDEMPTIONS - exact amount only
-        result.error = "Partial redemption not supported - must redeem exact minted amount";
-        LogPrintf("DigiDollar: REJECTED partial redemption attempt\n");
-        return result;
-    } else if (params.path == RedemptionPath::EMERGENCY ||
-               params.path == RedemptionPath::ERR) {
-        tx.SetDigiDollarType(::DD_TX_EMERGENCY); // Use emergency type
-        LogPrintf("DigiDollar: Using DD_TX_EMERGENCY type\n");
-    } else {
-        tx.SetDigiDollarType(::DD_TX_REDEEM);
-        LogPrintf("DigiDollar: Using DD_TX_REDEEM type\n");
-    }
+    // Set type - always DD_TX_REDEEM (ERR is handled via burn amount, not tx type)
+    // NOTE: Only 2 paths exist - NORMAL and ERR. Both use DD_TX_REDEEM.
+    tx.SetDigiDollarType(::DD_TX_REDEEM);
+    LogPrintf("DigiDollar: Using DD_TX_REDEEM type (path=%s)\n",
+              params.path == RedemptionPath::ERR ? "ERR" : "NORMAL");
 
     // Input 0: Collateral UTXO (P2TR)
     // CRITICAL: nSequence must be < 0xFFFFFFFF to enable OP_CHECKLOCKTIMEVERIFY
@@ -1240,28 +1218,17 @@ TxBuilderResult RedeemTxBuilder::BuildRedemptionTransaction(const TxBuilderRedee
 }
 
 RedemptionPath RedeemTxBuilder::DetermineRedemptionPath(const TxBuilderRedeemParams& params) const {
-    // Analyze current conditions to determine optimal redemption path
+    // Determine redemption path based on system health
+    // NOTE: Only 2 paths exist - NORMAL and ERR
+    // Both require timelock expiry. Partial redemption is NOT supported.
 
     // Check if ERR conditions are met (system under-collateralized)
     if (GetCurrentSystemCollateral() < 100) {
         return RedemptionPath::ERR;
     }
 
-    // Get collateral position to check timelock
-    CCollateralPosition position = GetCollateralPosition(params.collateralOutpoint);
-
-    // Check if normal redemption is available (timelock expired)
-    if (currentHeight >= position.unlockHeight) {
-        return RedemptionPath::NORMAL;
-    }
-
-    // Check if partial redemption is requested
-    if (params.ddToRedeem < position.ddMinted) {
-        return RedemptionPath::PARTIAL;
-    }
-
-    // Default to emergency path if normal conditions not met
-    return RedemptionPath::EMERGENCY;
+    // Default: Normal redemption (system healthy)
+    return RedemptionPath::NORMAL;
 }
 
 CAmount RedeemTxBuilder::CalculateCollateralReturn(CAmount ddAmount, CAmount originalCollateral,
@@ -1305,45 +1272,18 @@ bool RedeemTxBuilder::VerifyRedemptionConditions(const TxBuilderRedeemParams& pa
                                                 RedemptionPath path,
                                                 const CCollateralPosition& position) const {
     // Verify conditions are met for the specified redemption path
-    // Note: position is passed in to avoid duplicate UTXO lookups
+    // NOTE: Only 2 paths exist - NORMAL and ERR. Both require timelock expiry.
+
+    // Both paths require timelock to be expired
+    if (currentHeight < position.unlockHeight) {
+        LogPrintf("DigiDollar: Redemption FAILED - timelock not expired (current: %d, unlock: %d)\n",
+                 currentHeight, position.unlockHeight);
+        return false;
+    }
 
     switch (path) {
         case RedemptionPath::NORMAL:
-            // Check if timelock has expired
-            if (currentHeight < position.unlockHeight) {
-                LogPrintf("DigiDollar: Normal redemption FAILED - timelock not expired (current: %d, unlock: %d)\n",
-                         currentHeight, position.unlockHeight);
-                return false;
-            }
             LogPrintf("DigiDollar: Normal redemption conditions met (timelock expired)\n");
-            return true;
-
-        case RedemptionPath::EMERGENCY:
-            // Check if emergency conditions are met (8-of-15 oracle signatures required)
-            // For Phase 1: Check if we have at least 8 oracle signatures in params
-            // TODO: Implement actual oracle signature verification
-            // For now, simplified check
-            LogPrintf("DigiDollar: Emergency redemption - oracle approval check (simplified)\n");
-            return true; // Simplified - would check oracle signatures
-
-        case RedemptionPath::PARTIAL:
-            // Check if partial redemption is allowed and oracle price is valid
-            if (params.ddToRedeem >= position.ddMinted) {
-                LogPrintf("DigiDollar: Partial redemption FAILED - amount too large (redeem: %d, minted: %d)\n",
-                         params.ddToRedeem, position.ddMinted);
-                return false;
-            }
-            if (oraclePrice <= 0) {
-                LogPrintf("DigiDollar: Partial redemption FAILED - invalid oracle price (%d)\n", oraclePrice);
-                return false;
-            }
-            // Also check timelock for partial redemption (same as NORMAL)
-            if (currentHeight < position.unlockHeight) {
-                LogPrintf("DigiDollar: Partial redemption FAILED - timelock not expired (current: %d, unlock: %d)\n",
-                         currentHeight, position.unlockHeight);
-                return false;
-            }
-            LogPrintf("DigiDollar: Partial redemption conditions met\n");
             return true;
 
         case RedemptionPath::ERR:

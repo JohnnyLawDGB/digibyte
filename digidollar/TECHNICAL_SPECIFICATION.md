@@ -73,10 +73,10 @@ enum DigiDollarTxType : uint8_t {
     DD_TX_NONE = 0,
     DD_TX_MINT = 1,      // Lock DGB, create DigiDollars
     DD_TX_TRANSFER = 2,  // Transfer DigiDollars between addresses
-    DD_TX_REDEEM = 3,    // Burn DigiDollars, unlock DGB
-    DD_TX_PARTIAL = 4,   // Partial redemption
-    DD_TX_EMERGENCY = 5  // Emergency redemption with ERR
+    DD_TX_REDEEM = 3,    // Burn DigiDollars, unlock DGB (NORMAL and ERR paths)
+    DD_TX_MAX = 4        // Sentinel for validation
 };
+// NOTE: ERR is a redemption PATH, not a tx type. Both paths use DD_TX_REDEEM.
 
 // DigiDollar transaction marker in nVersion
 static const int32_t DD_TX_VERSION = 0x0D1D0770;  // "DigiDollar" marker
@@ -126,12 +126,10 @@ public:
     int64_t unlockHeight;       // Block height when redeemable
     int collateralRatio;        // Initial collateral ratio used
 
-    // Taproot redemption paths
+    // Taproot redemption paths (only 2 paths - NO partial, NO oracle emergency override)
     enum RedemptionPath {
-        PATH_NORMAL = 0,        // Standard timelock expiry
-        PATH_EMERGENCY = 1,     // Oracle-approved emergency
-        PATH_PARTIAL = 2,       // Partial redemption
-        PATH_ERR = 3            // Emergency Redemption Ratio
+        PATH_NORMAL = 0,        // Standard timelock expiry (system health >= 100%)
+        PATH_ERR = 1            // Emergency Redemption Ratio (health < 100%, burn more DD)
     };
 
     TaprootSpendData spendData;

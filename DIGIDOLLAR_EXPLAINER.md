@@ -1,6 +1,6 @@
 # DigiDollar - Decentralized USD Stablecoin on DigiByte
-*Updated: 2025-12-21*
-*Document Version: 3.0 - Implementation Verification Complete*
+*Updated: 2025-12-23*
+*Document Version: 3.1 - Code Alignment Verification Complete*
 
 ## Overview
 
@@ -366,20 +366,33 @@ digibyte-cli -rpcwallet=restored rescanblockchain
 
 ## Implementation Status & Code Alignment
 
-**Last Verified**: 2025-12-21
+**Last Verified**: 2025-12-23
 
 | Feature | Document Spec | Code Status | Notes |
 |---------|---------------|-------------|-------|
-| 2 MAST Paths | Normal + ERR only | ⚠️ Code has 4 paths | Emergency + Partial exist but should be removed |
+| 2 MAST Paths | Normal + ERR only | ✅ Correct | Only 2 paths in MAST tree (scripts.cpp:133-193) |
+| Emergency Path | Not used | ✅ Dead code | `CreateEmergencyPath()` defined but NEVER added to TaprootBuilder |
 | Partial Redemption | NOT supported | ✅ Disabled at validation | `DD_TX_PARTIAL` rejected with "partial-redemption-disabled" |
 | ERR Returns | 100% collateral, burns more DD | ✅ Correct | `GetRequiredDDBurn()` increases burn, `GetAdjustedRedemption()` returns 100% |
 | Minting Blocked During ERR | Yes | ✅ Correct | `ShouldBlockMinting()` returns true when health < 100% |
-| Timelock Required | Both paths need CLTV | ⚠️ Emergency path lacks CLTV | Code issue: Emergency path bypasses timelock |
+| Timelock Required | Both paths need CLTV | ✅ Correct | Both Normal and ERR paths start with CLTV check |
 
-**Code Changes Needed**:
-1. Remove Emergency path from MAST tree (or add CLTV requirement)
-2. Remove Partial path from MAST tree entirely (dead code)
-3. Update `scripts.h` comments from "4 spending conditions" to "2 spending conditions"
+**Code Verification & Cleanup Complete** (2025-12-23):
+- MAST tree contains exactly 2 paths (Normal + ERR) - verified in `CreateCollateralP2TR()`
+- `CreateEmergencyPath()` function removed (was dead code)
+- Both redemption paths enforce CLTV timelock expiry before collateral can be unlocked
+- DD_TX_PARTIAL and DD_TX_EMERGENCY removed from transaction type enum
+- Only 4 transaction types remain: NONE=0, MINT=1, TRANSFER=2, REDEEM=3
+
+### Code Cleanup Completed (2025-12-23)
+
+Removed all partial redemption and emergency oracle override code:
+- Transaction types reduced from 6 to 4 (NONE, MINT, TRANSFER, REDEEM)
+- Redemption paths reduced from 4 to 2 (NORMAL, ERR)
+- `CreateEmergencyPath()` function removed
+- All tests updated
+
+**Presentation update needed**: Update `txType` table to show only types 0-3.
 
 ---
 

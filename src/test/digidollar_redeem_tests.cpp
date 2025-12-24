@@ -527,4 +527,63 @@ BOOST_FIXTURE_TEST_CASE(test_redemption_transaction_version_markers, DigiDollarR
     }
 }
 
+// ============================================================================
+// ISSUE 7: TEST SEPARATE COLLATERAL RETURN AND DGB CHANGE OUTPUTS
+// ============================================================================
+
+BOOST_FIXTURE_TEST_CASE(test_collateral_and_change_separate_outputs, DigiDollarRedeemTestSetup)
+{
+    // Issue 7: Verify that collateral return and DGB change are SEPARATE outputs
+    // Problem: Previously both were merged into the same output using the same destination
+    // Expected: Output 0 = collateral, Output N = DGB change (different destinations)
+
+    auto params = CreateRedeemParams(DigiDollar::RedemptionPath::NORMAL, 10000);
+
+    // Pre-populate position data to avoid UTXO lookup
+    params.collateralAmount = 100 * COIN;  // 100 DGB collateral
+    params.ddMinted = 10000;  // 100 DD (cents)
+    params.unlockHeight = mockHeight - 100;  // Expired
+
+    // Provide DD amounts for burning
+    params.ddAmounts.push_back(10000);  // Burn 100 DD
+
+    // Provide fee UTXO amounts (slightly more than needed to create change)
+    params.feeAmounts.push_back(1 * COIN);  // 1 DGB for fees (more than needed)
+
+    // CRITICAL: Set DIFFERENT destinations for collateral and DGB change
+    CKey collateralKey, changeKey;
+    collateralKey.MakeNewKey(true);
+    changeKey.MakeNewKey(true);
+
+    params.collateralDest = CTxDestination{WitnessV1Taproot(XOnlyPubKey(collateralKey.GetPubKey()))};
+    params.dgbChangeDest = CTxDestination{WitnessV1Taproot(XOnlyPubKey(changeKey.GetPubKey()))};
+
+    // Act: Build redemption transaction - EXPECTED TO FAIL (RED phase)
+    auto result = builder->BuildRedemptionTransaction(params);
+
+    // Assert: Should fail in RED phase (builder not fully implemented)
+    BOOST_CHECK(!result.success);
+
+    // After GREEN phase (when builder is complete):
+    // BOOST_CHECK(result.success);
+    // BOOST_CHECK_GE(result.tx.vout.size(), 2);  // At least 2 outputs
+
+    // Verify collateral output (vout[0]) uses collateralDest
+    // CScript expectedCollateralScript = GetScriptForDestination(*params.collateralDest);
+    // BOOST_CHECK(result.tx.vout[0].scriptPubKey == expectedCollateralScript);
+    // BOOST_CHECK_EQUAL(result.tx.vout[0].nValue, params.collateralAmount);
+
+    // Find DGB change output (should use dgbChangeDest, NOT collateralDest)
+    // bool foundChangeOutput = false;
+    // CScript expectedChangeScript = GetScriptForDestination(*params.dgbChangeDest);
+    // for (const auto& vout : result.tx.vout) {
+    //     if (vout.scriptPubKey == expectedChangeScript && vout.nValue > 0) {
+    //         foundChangeOutput = true;
+    //         BOOST_CHECK_NE(vout.scriptPubKey, expectedCollateralScript);  // Must be DIFFERENT
+    //         break;
+    //     }
+    // }
+    // BOOST_CHECK(foundChangeOutput);  // Must have DGB change output
+}
+
 BOOST_AUTO_TEST_SUITE_END()

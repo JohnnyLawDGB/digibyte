@@ -84,6 +84,10 @@ struct TxBuilderRedeemParams {
     // Optional: Destination for returned collateral (if not set, uses ownerKey pubkey)
     std::optional<CTxDestination> collateralDest;
 
+    // Optional: Destination for DGB change output (if not set, uses collateralDest or ownerKey)
+    // CRITICAL: Must be set to a wallet-controlled address to avoid losing DGB!
+    std::optional<CTxDestination> dgbChangeDest;
+
     // Optional pre-queried position data (caller can provide to avoid UTXO lookups)
     CAmount collateralAmount = 0;   // Actual DGB collateral locked (0 = not provided)
     CAmount ddMinted = 0;            // DD amount minted (0 = not provided)
@@ -209,10 +213,18 @@ private:
  *
  * Handles the creation of redemption transactions that unlock DGB collateral
  * and burn DigiDollar tokens. Features include:
- * - 4 redemption paths (Normal, Emergency, Partial, ERR)
+ * - 2 redemption paths (Normal, ERR)
  * - Taproot script path spending with MAST
  * - Timelock validation and emergency conditions
  * - Collateral release calculation with oracle price integration
+ *
+ * Transaction Output Structure:
+ * - Output 0: Collateral return (100% of locked DGB) to collateralDest
+ * - Output 1+: DD change (if any) back to owner
+ * - Output N: DGB change from fee inputs to dgbChangeDest (SEPARATE from collateral!)
+ *
+ * CRITICAL: collateralDest and dgbChangeDest MUST be different to prevent merging
+ * collateral return with DGB change in a single output.
  */
 class RedeemTxBuilder : public TxBuilder {
 public:

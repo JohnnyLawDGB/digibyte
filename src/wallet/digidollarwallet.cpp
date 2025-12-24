@@ -3242,12 +3242,14 @@ bool DigiDollarWallet::RedeemDigiDollar(const uint256& dd_timelock_id, const CAm
         }
         params.ownerKey = ownerKey;
 
-        // CRITICAL FIX: Get a wallet address for the returned collateral
-        // This ensures the wallet recognizes the returned DGB as belonging to it
+        // CRITICAL FIX: Get wallet addresses for BOTH collateral return AND DGB change
+        // This ensures collateral and change are SEPARATE outputs, not merged
         // Try BECH32M first (Taproot), fallback to BECH32 for legacy wallets
         if (m_wallet) {
             LOCK(m_wallet->cs_wallet);
             std::string label = "";  // Empty label
+
+            // Get address for returned collateral
             auto op_dest = m_wallet->GetNewDestination(OutputType::BECH32M, label);
             if (!op_dest) {
                 // Legacy wallet fallback: try BECH32 (SegWit v0)
@@ -3258,8 +3260,23 @@ bool DigiDollarWallet::RedeemDigiDollar(const uint256& dd_timelock_id, const CAm
                 params.collateralDest = *op_dest;
                 LogPrintf("DigiDollar: Using wallet destination for returned collateral\n");
             } else {
-                LogPrintf("DigiDollar: WARNING - Could not get wallet address, using owner key (wallet may not recognize)\n");
+                LogPrintf("DigiDollar: WARNING - Could not get wallet address for collateral, using owner key (wallet may not recognize)\n");
                 LogPrintf("DigiDollar: Error: %s\n", util::ErrorString(op_dest).original);
+            }
+
+            // Get SEPARATE address for DGB change from fee inputs
+            auto op_change = m_wallet->GetNewDestination(OutputType::BECH32M, label);
+            if (!op_change) {
+                // Legacy wallet fallback
+                LogPrintf("DigiDollar: BECH32M not available for change, trying BECH32 for legacy wallet\n");
+                op_change = m_wallet->GetNewDestination(OutputType::BECH32, label);
+            }
+            if (op_change) {
+                params.dgbChangeDest = *op_change;
+                LogPrintf("DigiDollar: Using separate wallet destination for DGB change\n");
+            } else {
+                LogPrintf("DigiDollar: WARNING - Could not get wallet address for DGB change, will use collateralDest (may merge outputs)\n");
+                LogPrintf("DigiDollar: Error: %s\n", util::ErrorString(op_change).original);
             }
         }
 

@@ -1479,40 +1479,29 @@ void DigiDollarWallet::ProcessDDTxForRescan(const CTransactionRef& ptx, int bloc
             if (it != m_wallet->mapWallet.end()) {
                 if (txin.prevout.n < it->second.tx->vout.size()) {
                     const CTxOut& spent_output = it->second.tx->vout[txin.prevout.n];
-                    // Check if this is a DD output (P2TR with value=0) that we owned
-                    if (spent_output.nValue == 0 &&
-                        spent_output.scriptPubKey.size() == 34 &&
-                        spent_output.scriptPubKey[0] == OP_1) {
-                        // This is a DD UTXO - check if we owned it
-                        if (m_wallet->IsMine(spent_output) != wallet::ISMINE_NO) {
-                            is_our_send = true;
-                            // Look up the DD amount from our tracking (if available)
-                            COutPoint spent_outpoint(txin.prevout.hash, txin.prevout.n);
-                            auto dd_it = dd_utxos.find(spent_outpoint);
-                            if (dd_it != dd_utxos.end()) {
-                                total_dd_sent += dd_it->second;
+                    // Check if this is a DD output that we owned
+                    // Use IsDDOutputMine() instead of IsMine() for descriptor wallet compatibility
+                    if (IsDDOutputMine(spent_output, txin.prevout.hash)) {
+                        is_our_send = true;
+                        // Look up the DD amount from our tracking (if available)
+                        COutPoint spent_outpoint(txin.prevout.hash, txin.prevout.n);
+                        auto dd_it = dd_utxos.find(spent_outpoint);
+                        if (dd_it != dd_utxos.end()) {
+                            total_dd_sent += dd_it->second;
 
-                                // CRITICAL FIX: Remove spent UTXO from tracking during rescan
-                                // This ensures the balance is calculated correctly after wallet restore
-                                LogPrintf("DigiDollar: Removing spent DD UTXO %s:%u during rescan (was %lld cents)\n",
-                                          txin.prevout.hash.GetHex(), txin.prevout.n, static_cast<long long>(dd_it->second));
-                                dd_utxos.erase(dd_it);
+                            // CRITICAL FIX: Remove spent UTXO from tracking during rescan
+                            // This ensures the balance is calculated correctly after wallet restore
+                            LogPrintf("DigiDollar: Removing spent DD UTXO %s:%u during rescan (was %lld cents)\n",
+                                      txin.prevout.hash.GetHex(), txin.prevout.n, static_cast<long long>(dd_it->second));
+                            dd_utxos.erase(dd_it);
 
-                                // Also remove from database
-                                wallet::WalletBatch batch(m_wallet->GetDatabase());
-                                batch.EraseDDUTXO(spent_outpoint);
+                            // Also remove from database
+                            wallet::WalletBatch batch(m_wallet->GetDatabase());
+                            batch.EraseDDUTXO(spent_outpoint);
 
-                                // If this was a MINT DD UTXO (vout[1] of a mint), update the position's dd_minted
-                                if (txin.prevout.n == 1) {
-                                    auto pos_it = collateral_positions.find(txin.prevout.hash);
-                                    if (pos_it != collateral_positions.end()) {
-                                        pos_it->second.dd_minted = 0;
-                                        batch.WriteDDTimeLock(pos_it->second);
-                                        LogPrintf("DigiDollar: Updated position %s dd_minted=0 (DD transferred)\n",
-                                                  txin.prevout.hash.GetHex());
-                                    }
-                                }
-                            }
+                            // NOTE: Do NOT set dd_minted=0 here! The dd_minted field should always
+                            // reflect the original minted amount (collateral backing). Transferring
+                            // DD tokens doesn't change the collateral locked in the position.
                         }
                     }
                 }
@@ -1545,13 +1534,15 @@ void DigiDollarWallet::ProcessDDTxForRescan(const CTransactionRef& ptx, int bloc
                 }
             }
 
-            // Find recipient address from first DD output (P2TR with value=0)
-            for (const CTxOut& txout : tx.vout) {
+            // Find recipient address from first DD output (P2TR with value=0) that's NOT ours
+            for (size_t i = 0; i < tx.vout.size(); i++) {
+                const CTxOut& txout = tx.vout[i];
                 if (txout.nValue == 0 &&
                     txout.scriptPubKey.size() == 34 &&
                     txout.scriptPubKey[0] == OP_1) {
                     // Check if this is NOT our output (recipient's output)
-                    if (m_wallet->IsMine(txout) == wallet::ISMINE_NO) {
+                    // Use IsDDOutputMine for proper descriptor wallet support
+                    if (!IsDDOutputMine(txout, tx.GetHash())) {
                         CTxDestination dest;
                         if (ExtractDestination(txout.scriptPubKey, dest)) {
                             recipient_address = EncodeDestination(dest);
@@ -1603,109 +1594,107 @@ void DigiDollarWallet::ProcessDDTxForRescan(const CTransactionRef& ptx, int bloc
 
         // CRITICAL FIX: Also check if we RECEIVED DD in this transfer
         // Check if any DD output (P2TR with value=0) is ours
+        // NOTE: We use IsDDOutputMine() instead of m_wallet->IsMine() because
+        // IsMine() may return false for 0-value P2TR outputs in descriptor wallets
         for (size_t i = 0; i < tx.vout.size(); i++) {
             const CTxOut& txout = tx.vout[i];
-            if (txout.nValue == 0 &&
-                txout.scriptPubKey.size() == 34 &&
-                txout.scriptPubKey[0] == OP_1) {
-                // This is a DD UTXO - check if it's ours
-                if (m_wallet->IsMine(txout) != wallet::ISMINE_NO) {
-                    COutPoint received_utxo(tx.GetHash(), i);
+            // IsDDOutputMine already checks for P2TR with value=0
+            if (IsDDOutputMine(txout, tx.GetHash())) {
+                COutPoint received_utxo(tx.GetHash(), i);
 
-                    // Check if not already tracked
-                    // NOTE: Don't check IsSpent() here - during rescan, IsSpent returns current state,
-                    // not state at time of this TX. We add all received UTXOs, and subsequent
-                    // TRANSFER/REDEEM processing will remove spent ones in chronological order.
-                    if (dd_utxos.find(received_utxo) == dd_utxos.end()) {
-                        // Extract DD amount from OP_RETURN
-                        CAmount received_dd = 0;
-                        int dd_output_index = 0;
-                        // Count which DD output this is (0=first, 1=second/change)
-                        for (size_t j = 0; j < i; j++) {
-                            if (tx.vout[j].nValue == 0 &&
-                                tx.vout[j].scriptPubKey.size() == 34 &&
-                                tx.vout[j].scriptPubKey[0] == OP_1) {
-                                dd_output_index++;
-                            }
+                // Check if not already tracked
+                // NOTE: Don't check IsSpent() here - during rescan, IsSpent returns current state,
+                // not state at time of this TX. We add all received UTXOs, and subsequent
+                // TRANSFER/REDEEM processing will remove spent ones in chronological order.
+                if (dd_utxos.find(received_utxo) == dd_utxos.end()) {
+                    // Extract DD amount from OP_RETURN
+                    CAmount received_dd = 0;
+                    int dd_output_index = 0;
+                    // Count which DD output this is (0=first, 1=second/change)
+                    for (size_t j = 0; j < i; j++) {
+                        if (tx.vout[j].nValue == 0 &&
+                            tx.vout[j].scriptPubKey.size() == 34 &&
+                            tx.vout[j].scriptPubKey[0] == OP_1) {
+                            dd_output_index++;
                         }
+                    }
 
-                        // Parse OP_RETURN for amounts
-                        for (const CTxOut& out : tx.vout) {
-                            if (out.scriptPubKey.IsUnspendable() && out.scriptPubKey.size() > 0) {
-                                const CScript& script = out.scriptPubKey;
-                                auto pc = script.begin();
-                                opcodetype opcode;
-                                std::vector<unsigned char> data;
+                    // Parse OP_RETURN for amounts
+                    for (const CTxOut& out : tx.vout) {
+                        if (out.scriptPubKey.IsUnspendable() && out.scriptPubKey.size() > 0) {
+                            const CScript& script = out.scriptPubKey;
+                            auto pc = script.begin();
+                            opcodetype opcode;
+                            std::vector<unsigned char> data;
 
-                                if (!script.GetOp(pc, opcode, data)) continue;  // OP_RETURN
-                                if (!script.GetOp(pc, opcode, data)) continue;  // "DD"
-                                if (!script.GetOp(pc, opcode, data)) continue;  // txType
+                            if (!script.GetOp(pc, opcode, data)) continue;  // OP_RETURN
+                            if (!script.GetOp(pc, opcode, data)) continue;  // "DD"
+                            if (!script.GetOp(pc, opcode, data)) continue;  // txType
 
-                                // Collect all amounts
-                                std::vector<CAmount> amounts;
-                                while (script.GetOp(pc, opcode, data) && !data.empty()) {
-                                    try {
-                                        CScriptNum amount(data, false);
-                                        amounts.push_back(amount.GetInt64());
-                                    } catch (...) {
-                                        break;
-                                    }
-                                }
-
-                                if (dd_output_index < static_cast<int>(amounts.size())) {
-                                    received_dd = amounts[dd_output_index];
-                                } else if (!amounts.empty()) {
-                                    received_dd = amounts[0];
-                                }
-                                break;
-                            }
-                        }
-
-                        if (received_dd > 0) {
-                            // Add to dd_utxos
-                            dd_utxos[received_utxo] = received_dd;
-
-                            // Persist to database
-                            wallet::WalletBatch batch(m_wallet->GetDatabase());
-                            batch.WriteDDUTXO(received_utxo, received_dd);
-
-                            LogPrintf("DigiDollar: Restored RECEIVED DD UTXO %s:%zu from rescan (DD: %lld)\n",
-                                      tx.GetHash().GetHex(), i, static_cast<long long>(received_dd));
-
-                            // Also add receive transaction to history if not already there
-                            std::string txid_str = tx.GetHash().GetHex();
-                            bool already_exists = false;
-                            for (const auto& existing : transaction_history) {
-                                if (existing.txid == txid_str && existing.category == "receive") {
-                                    already_exists = true;
+                            // Collect all amounts
+                            std::vector<CAmount> amounts;
+                            while (script.GetOp(pc, opcode, data) && !data.empty()) {
+                                try {
+                                    CScriptNum amount(data, false);
+                                    amounts.push_back(amount.GetInt64());
+                                } catch (...) {
                                     break;
                                 }
                             }
 
-                            if (!already_exists) {
-                                DDTransaction ddtx;
-                                ddtx.txid = txid_str;
-                                ddtx.amount = received_dd;
-                                // Get timestamp from block time (mapWallet may not be populated during rescan)
-                                int64_t block_time = 0;
-                                if (block_height >= 0) {
-                                    uint256 block_hash = m_wallet->chain().getBlockHash(block_height);
-                                    m_wallet->chain().findBlock(block_hash, interfaces::FoundBlock().time(block_time));
-                                }
-                                ddtx.timestamp = block_time;
-                                ddtx.confirmations = 0;
-                                ddtx.incoming = true;
-                                ddtx.address = "";  // Sender address not easily recoverable
-                                ddtx.category = "receive";
-                                ddtx.blockheight = block_height;
-                                ddtx.fee = 0;
-
-                                transaction_history.push_back(ddtx);
-                                batch.WriteDDTransaction(ddtx);
-
-                                LogPrintf("DigiDollar: Restored RECEIVE transaction %s from rescan (amount: %lld)\n",
-                                          txid_str, static_cast<long long>(received_dd));
+                            if (dd_output_index < static_cast<int>(amounts.size())) {
+                                received_dd = amounts[dd_output_index];
+                            } else if (!amounts.empty()) {
+                                received_dd = amounts[0];
                             }
+                            break;
+                        }
+                    }
+
+                    if (received_dd > 0) {
+                        // Add to dd_utxos
+                        dd_utxos[received_utxo] = received_dd;
+
+                        // Persist to database
+                        wallet::WalletBatch batch(m_wallet->GetDatabase());
+                        batch.WriteDDUTXO(received_utxo, received_dd);
+
+                        LogPrintf("DigiDollar: Restored RECEIVED DD UTXO %s:%zu from rescan (DD: %lld)\n",
+                                  tx.GetHash().GetHex(), i, static_cast<long long>(received_dd));
+
+                        // Also add receive transaction to history if not already there
+                        std::string txid_str = tx.GetHash().GetHex();
+                        bool already_exists = false;
+                        for (const auto& existing : transaction_history) {
+                            if (existing.txid == txid_str && existing.category == "receive") {
+                                already_exists = true;
+                                break;
+                            }
+                        }
+
+                        if (!already_exists) {
+                            DDTransaction ddtx;
+                            ddtx.txid = txid_str;
+                            ddtx.amount = received_dd;
+                            // Get timestamp from block time (mapWallet may not be populated during rescan)
+                            int64_t block_time = 0;
+                            if (block_height >= 0) {
+                                uint256 block_hash = m_wallet->chain().getBlockHash(block_height);
+                                m_wallet->chain().findBlock(block_hash, interfaces::FoundBlock().time(block_time));
+                            }
+                            ddtx.timestamp = block_time;
+                            ddtx.confirmations = 0;
+                            ddtx.incoming = true;
+                            ddtx.address = "";  // Sender address not easily recoverable
+                            ddtx.category = "receive";
+                            ddtx.blockheight = block_height;
+                            ddtx.fee = 0;
+
+                            transaction_history.push_back(ddtx);
+                            batch.WriteDDTransaction(ddtx);
+
+                            LogPrintf("DigiDollar: Restored RECEIVE transaction %s from rescan (amount: %lld)\n",
+                                      txid_str, static_cast<long long>(received_dd));
                         }
                     }
                 }

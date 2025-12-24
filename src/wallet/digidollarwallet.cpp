@@ -1543,29 +1543,20 @@ bool DigiDollarWallet::RedeemDigiDollar(const COutPoint& collateralUtxo,
         // Handle path-specific logic for all 4 redemption paths
         switch (path) {
             case DigiDollar::RedemptionPath::NORMAL:
-                LogPrintf("DigiDollar: Using NORMAL redemption (timelock expired)\n");
-                // Normal path: timelock has expired, full collateral return
-                // Validate timelock is expired
-                break;
-
-            case DigiDollar::RedemptionPath::EMERGENCY:
-                LogPrintf("DigiDollar: Using EMERGENCY redemption (oracle 8-of-15 signatures)\n");
-                // Emergency path: requires oracle approval
-                // Mock 8-of-15 oracle signatures for RegTest
-                // In production: verify oracle signatures
-                break;
-
-            case DigiDollar::RedemptionPath::PARTIAL:
-                LogPrintf("DigiDollar: Using PARTIAL redemption\n");
-                // Partial path: redeem portion of position
-                // Calculate proportional collateral release
+                LogPrintf("DigiDollar: Using NORMAL redemption (timelock expired, system healthy)\n");
+                // Normal path: timelock expired, system health >= 100%
                 break;
 
             case DigiDollar::RedemptionPath::ERR:
-                LogPrintf("DigiDollar: Using ERR redemption (system under-collateralized)\n");
-                // ERR path: system < 100% collateral, reduced recovery
-                // Apply Emergency Redemption Ratio
+                LogPrintf("DigiDollar: Using ERR redemption (timelock expired, system under-collateralized)\n");
+                // ERR path: timelock expired, system health < 100%
+                // User burns MORE DD to get full collateral back
                 break;
+
+            default:
+                LogPrintf("DigiDollar: Unknown redemption path\n");
+                error = "Unknown redemption path";
+                return false;
         }
 
         // For now, return placeholder implementation
@@ -1643,6 +1634,7 @@ CAmount DigiDollarWallet::CalculateRedemptionValue(const COutPoint& position) co
     CAmount redemptionValue = 0;
 
     // In GREEN phase, would calculate based on:
+    // NOTE: Only 2 paths exist - NORMAL and ERR. Both return 100% collateral.
     /*
     // Get position details
     auto positionData = GetCollateralPosition(position);
@@ -1654,18 +1646,9 @@ CAmount DigiDollarWallet::CalculateRedemptionValue(const COutPoint& position) co
     DigiDollar::RedemptionPath bestPath;
     if (CanRedeem(position, bestPath)) {
         // Calculate return based on path
-        switch (bestPath) {
-            case DigiDollar::RedemptionPath::NORMAL:
-                redemptionValue = positionData.dgbLocked;
-                break;
-            case DigiDollar::RedemptionPath::ERR:
-                redemptionValue = positionData.dgbLocked * 90 / 100; // 90% recovery
-                break;
-            case DigiDollar::RedemptionPath::EMERGENCY:
-            case DigiDollar::RedemptionPath::PARTIAL:
-                redemptionValue = positionData.dgbLocked;
-                break;
-        }
+        // Both NORMAL and ERR return 100% collateral
+        // ERR differs in requiring MORE DD to burn (105-125%)
+        redemptionValue = positionData.dgbLocked;
 
         // Subtract estimated fees
         CAmount fees = EstimateRedemptionFee(position, bestPath);
@@ -1681,6 +1664,7 @@ bool DigiDollarWallet::CanRedeem(const COutPoint& position, DigiDollar::Redempti
     availablePath = DigiDollar::RedemptionPath::NORMAL;
 
     // In GREEN phase, would check:
+    // NOTE: Only 2 paths exist - NORMAL and ERR. Both require timelock expiry.
     /*
     // Get position details
     auto positionData = GetCollateralPosition(position);
@@ -1691,29 +1675,20 @@ bool DigiDollarWallet::CanRedeem(const COutPoint& position, DigiDollar::Redempti
     int currentHeight = GetCurrentHeight();
     int systemCollateral = GetSystemCollateral();
 
-    // Check normal redemption (timelock expired)
-    if (currentHeight >= positionData.unlockHeight) {
-        availablePath = DigiDollar::RedemptionPath::NORMAL;
-        return true;
+    // Both paths require timelock to be expired
+    if (currentHeight < positionData.unlockHeight) {
+        return false; // Timelock not expired yet
     }
 
-    // Check ERR redemption (system unhealthy)
+    // Determine path based on system health
     if (systemCollateral < 100) {
+        // ERR path - user must burn MORE DD to get full collateral
         availablePath = DigiDollar::RedemptionPath::ERR;
-        return true;
+    } else {
+        // Normal path - user burns original DD amount
+        availablePath = DigiDollar::RedemptionPath::NORMAL;
     }
-
-    // Check emergency redemption (oracle approval)
-    if (HasEmergencyApproval()) {
-        availablePath = DigiDollar::RedemptionPath::EMERGENCY;
-        return true;
-    }
-
-    // Check partial redemption
-    if (GetOraclePrice() > 0) {
-        availablePath = DigiDollar::RedemptionPath::PARTIAL;
-        return true;
-    }
+    return true;
     */
 
     return false; // No redemption path available in RED phase
@@ -1741,20 +1716,18 @@ CAmount DigiDollarWallet::EstimateRedemptionFee(const COutPoint& position, DigiD
     static const CAmount FEE_RATE_PER_KB = 200000;       // 0.002 DGB/kB
 
     // Estimate transaction size based on redemption path
+    // NOTE: Only 2 paths exist - NORMAL and ERR
     size_t estimatedSize = 250; // Base size
 
     switch (path) {
         case DigiDollar::RedemptionPath::NORMAL:
             estimatedSize += 50; // Basic script path
             break;
-        case DigiDollar::RedemptionPath::EMERGENCY:
-            estimatedSize += 150; // Oracle signatures
-            break;
-        case DigiDollar::RedemptionPath::PARTIAL:
-            estimatedSize += 100; // Additional outputs
-            break;
         case DigiDollar::RedemptionPath::ERR:
             estimatedSize += 75; // ERR validation
+            break;
+        default:
+            estimatedSize += 50; // Fallback to NORMAL
             break;
     }
 

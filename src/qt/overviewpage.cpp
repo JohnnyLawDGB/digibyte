@@ -19,8 +19,10 @@
 #include <QAbstractItemDelegate>
 #include <QApplication>
 #include <QDateTime>
+#include <QHelpEvent>
 #include <QPainter>
 #include <QStatusTipEvent>
+#include <QToolTip>
 
 #include <algorithm>
 #include <map>
@@ -168,6 +170,22 @@ OverviewPage::OverviewPage(const PlatformStyle *platformStyle, QWidget *parent) 
     txdelegate(new TxViewDelegate(platformStyle, this))
 {
     ui->setupUi(this);
+
+    // Install event filter on balance labels for styled tooltips
+    ui->frame->installEventFilter(this);
+    ui->labelBalance->installEventFilter(this);
+    ui->labelUnconfirmed->installEventFilter(this);
+    ui->labelImmature->installEventFilter(this);
+    ui->labelTotal->installEventFilter(this);
+    ui->labelBalanceText->installEventFilter(this);
+    ui->labelPendingText->installEventFilter(this);
+    ui->labelImmatureText->installEventFilter(this);
+    ui->labelTotalText->installEventFilter(this);
+    // Watch-only labels
+    ui->labelWatchAvailable->installEventFilter(this);
+    ui->labelWatchPending->installEventFilter(this);
+    ui->labelWatchImmature->installEventFilter(this);
+    ui->labelWatchTotal->installEventFilter(this);
 
     // use a SingleColorIcon for the "out of sync warning" icon
     QIcon icon = m_platform_style->SingleColorIcon(QStringLiteral(":/icons/warning"));
@@ -385,4 +403,26 @@ void OverviewPage::setMonospacedFont(bool use_embedded_font)
     ui->labelWatchPending->setFont(f);
     ui->labelWatchImmature->setFont(f);
     ui->labelWatchTotal->setFont(f);
+}
+
+bool OverviewPage::eventFilter(QObject *obj, QEvent *event)
+{
+    if (event->type() == QEvent::ToolTip) {
+        QWidget* widget = qobject_cast<QWidget*>(obj);
+        if (widget) {
+            QString tooltipText = widget->toolTip();
+            if (!tooltipText.isEmpty()) {
+                QHelpEvent* helpEvent = static_cast<QHelpEvent*>(event);
+                // Show tooltip with explicit HTML styling to ensure black text on yellow background
+                QString styledTooltip = QString(
+                    "<div style='color: #000000; background-color: #ffffdc; padding: 4px;'>"
+                    "%1"
+                    "</div>"
+                ).arg(tooltipText.toHtmlEscaped().replace("\n", "<br>"));
+                QToolTip::showText(helpEvent->globalPos(), styledTooltip, widget);
+                return true;
+            }
+        }
+    }
+    return QWidget::eventFilter(obj, event);
 }

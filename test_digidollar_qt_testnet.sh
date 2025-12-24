@@ -2280,6 +2280,331 @@ echo ""
 verify_all_balances "After Alice Export-Reimport Test"
 
 # ====================================================================================
+# Step 34: BOB EXPORT-REIMPORT WALLET TEST (Descriptor-based wallet restore)
+# ====================================================================================
+print_header "Step 34: BOB EXPORT-REIMPORT WALLET TEST"
+echo ""
+echo "Testing wallet restore workflow for BOB via descriptor export/import..."
+echo "This tests that wallet recovery correctly handles:"
+echo "  - DD balance restoration"
+echo "  - DD position restoration (including redeemed positions marked inactive)"
+echo "  - DD transaction history restoration (mint, send, receive, redeem)"
+echo ""
+
+# Record Bob's original state
+BOB_DD_BEFORE_EXPORT=$EXPECT_BOB_DD
+BOB_DGB_BEFORE_EXPORT=$(get_dgb_balance "$BOB_CLI" "bob")
+BOB_POSITIONS_BEFORE_EXPORT=$($BOB_CLI -rpcwallet=bob listdigidollarpositions 2>/dev/null | jq 'length')
+
+# Get detailed position info
+BOB_POSITIONS_DETAIL_BEFORE=$($BOB_CLI -rpcwallet=bob listdigidollarpositions 2>/dev/null)
+
+# Get DD transaction history (all types)
+BOB_DD_TXS_BEFORE=$($BOB_CLI -rpcwallet=bob listdigidollartxs 100 0 2>/dev/null)
+BOB_MINT_COUNT_BEFORE=$(echo "$BOB_DD_TXS_BEFORE" | jq '[.[] | select(.category == "mint")] | length' 2>/dev/null || echo "0")
+BOB_SEND_COUNT_BEFORE=$(echo "$BOB_DD_TXS_BEFORE" | jq '[.[] | select(.category == "send")] | length' 2>/dev/null || echo "0")
+BOB_RECEIVE_COUNT_BEFORE=$(echo "$BOB_DD_TXS_BEFORE" | jq '[.[] | select(.category == "receive")] | length' 2>/dev/null || echo "0")
+BOB_REDEEM_COUNT_BEFORE=$(echo "$BOB_DD_TXS_BEFORE" | jq '[.[] | select(.category == "redeem")] | length' 2>/dev/null || echo "0")
+BOB_TOTAL_TXS_BEFORE=$(echo "$BOB_DD_TXS_BEFORE" | jq 'length' 2>/dev/null || echo "0")
+
+# Count inactive (redeemed) positions
+BOB_INACTIVE_POSITIONS_BEFORE=$(echo "$BOB_POSITIONS_DETAIL_BEFORE" | jq '[.[] | select(.is_active == false)] | length' 2>/dev/null || echo "0")
+BOB_ACTIVE_POSITIONS_BEFORE=$(echo "$BOB_POSITIONS_DETAIL_BEFORE" | jq '[.[] | select(.is_active == true)] | length' 2>/dev/null || echo "0")
+
+echo "========== BOB ORIGINAL STATE =========="
+echo "  DD Balance:          $BOB_DD_BEFORE_EXPORT cents"
+echo "  DGB Balance:         $BOB_DGB_BEFORE_EXPORT DGB"
+echo "  DD Positions:        $BOB_POSITIONS_BEFORE_EXPORT total"
+echo "    Active:            $BOB_ACTIVE_POSITIONS_BEFORE"
+echo "    Inactive/Redeemed: $BOB_INACTIVE_POSITIONS_BEFORE"
+echo ""
+echo "  DD Transactions:     $BOB_TOTAL_TXS_BEFORE total"
+echo "    Mint:              $BOB_MINT_COUNT_BEFORE"
+echo "    Send:              $BOB_SEND_COUNT_BEFORE"
+echo "    Receive:           $BOB_RECEIVE_COUNT_BEFORE"
+echo "    Redeem:            $BOB_REDEEM_COUNT_BEFORE"
+echo ""
+echo "Position Details:"
+echo "$BOB_POSITIONS_DETAIL_BEFORE" | jq -r '.[] | "  \(.position_id[0:16])... | DD: \(.dd_minted) cents | DGB: \(.dgb_collateral) | tier: \(.lock_tier) | active: \(.is_active) | status: \(.status)"' 2>/dev/null
+echo "==========================================="
+echo ""
+
+print_subheader "Step 34a: Exporting Bob's wallet descriptors..."
+
+# Export descriptors with private keys
+set +e
+BOB_DESCRIPTORS=$($BOB_CLI -rpcwallet=bob listdescriptors true 2>&1)
+BOB_EXPORT_EXIT=$?
+set -e
+
+if [ $BOB_EXPORT_EXIT -eq 0 ] && echo "$BOB_DESCRIPTORS" | jq -e '.descriptors' > /dev/null 2>&1; then
+    BOB_DESC_COUNT=$(echo "$BOB_DESCRIPTORS" | jq '.descriptors | length')
+    print_status "ok" "Exported $BOB_DESC_COUNT descriptors from Bob's wallet"
+
+    # Save to file for debugging
+    echo "$BOB_DESCRIPTORS" > /tmp/bob_descriptors.json
+    echo "  Descriptors saved to: /tmp/bob_descriptors.json"
+else
+    print_status "fail" "Failed to export descriptors: $BOB_DESCRIPTORS"
+fi
+
+print_subheader "Step 34b: Creating new wallet 'bob_restored'..."
+
+# Create new blank wallet
+set +e
+BOB_CREATE_RESULT=$($BOB_CLI createwallet "bob_restored" false true "" false true 2>&1)
+BOB_CREATE_EXIT=$?
+set -e
+
+if [ $BOB_CREATE_EXIT -eq 0 ]; then
+    print_status "ok" "Created new blank wallet 'bob_restored'"
+else
+    # Wallet might already exist, try to unload and recreate
+    $BOB_CLI unloadwallet "bob_restored" 2>/dev/null || true
+    sleep 1
+
+    # Delete old wallet directory if exists
+    rm -rf "$BOB_DATADIR/testnet3/wallets/bob_restored" 2>/dev/null || true
+
+    BOB_CREATE_RESULT=$($BOB_CLI createwallet "bob_restored" false true "" false true 2>&1)
+    if echo "$BOB_CREATE_RESULT" | jq -e '.name' > /dev/null 2>&1; then
+        print_status "ok" "Created new blank wallet 'bob_restored' (after cleanup)"
+    else
+        print_status "fail" "Failed to create wallet: $BOB_CREATE_RESULT"
+    fi
+fi
+
+print_subheader "Step 34c: Importing descriptors into Bob's restored wallet..."
+
+# Prepare descriptors for import
+BOB_IMPORT_DESCS=$(echo "$BOB_DESCRIPTORS" | jq '[.descriptors[] | {desc: .desc, timestamp: "now", active: (.active // false), internal: (.internal // false)}]')
+
+# Save import request for debugging
+echo "$BOB_IMPORT_DESCS" > /tmp/bob_import_request.json
+echo "  Import request saved to: /tmp/bob_import_request.json"
+
+# Import descriptors
+set +e
+BOB_IMPORT_RESULT=$($BOB_CLI -rpcwallet=bob_restored importdescriptors "$BOB_IMPORT_DESCS" 2>&1)
+BOB_IMPORT_EXIT=$?
+set -e
+
+if [ $BOB_IMPORT_EXIT -eq 0 ]; then
+    BOB_SUCCESS_COUNT=$(echo "$BOB_IMPORT_RESULT" | jq '[.[] | select(.success == true)] | length')
+    BOB_IMPORT_TOTAL=$(echo "$BOB_IMPORT_RESULT" | jq 'length')
+    print_status "ok" "Imported $BOB_SUCCESS_COUNT/$BOB_IMPORT_TOTAL descriptors successfully"
+
+    # Check for any failures
+    BOB_FAILED=$(echo "$BOB_IMPORT_RESULT" | jq '[.[] | select(.success != true)]')
+    if [ "$(echo "$BOB_FAILED" | jq 'length')" -gt 0 ]; then
+        echo "  Warning: Some imports failed:"
+        echo "$BOB_FAILED" | jq -r '.[] | "    - \(.error.message // "unknown error")"'
+    fi
+else
+    print_status "fail" "Descriptor import failed: $BOB_IMPORT_RESULT"
+fi
+
+print_subheader "Step 34d: Rescanning blockchain for Bob's restored wallet..."
+
+echo "Running rescanblockchain on bob_restored..."
+BOB_RESCAN_START=$(date +%s)
+set +e
+BOB_RESCAN_RESULT=$($BOB_CLI -rpcwallet=bob_restored rescanblockchain 2>&1)
+BOB_RESCAN_EXIT=$?
+set -e
+BOB_RESCAN_END=$(date +%s)
+BOB_RESCAN_DURATION=$((BOB_RESCAN_END - BOB_RESCAN_START))
+
+if [ $BOB_RESCAN_EXIT -eq 0 ]; then
+    BOB_START_HEIGHT=$(echo "$BOB_RESCAN_RESULT" | jq -r '.start_height // 0')
+    BOB_STOP_HEIGHT=$(echo "$BOB_RESCAN_RESULT" | jq -r '.stop_height // 0')
+    print_status "ok" "Rescan completed in ${BOB_RESCAN_DURATION}s (blocks $BOB_START_HEIGHT to $BOB_STOP_HEIGHT)"
+else
+    print_status "fail" "Rescan failed: $BOB_RESCAN_RESULT"
+fi
+
+# Wait for wallet to fully process
+sleep 5
+
+print_subheader "Step 34e: Verifying Bob's restored wallet DD state..."
+
+# Get restored wallet state
+BOB_RESTORED_DD=$(get_dd_balance "$BOB_CLI" "bob_restored")
+BOB_RESTORED_DGB=$(get_dgb_balance "$BOB_CLI" "bob_restored")
+BOB_RESTORED_POSITIONS=$($BOB_CLI -rpcwallet=bob_restored listdigidollarpositions 2>/dev/null | jq 'length')
+
+# Get detailed position info from restored wallet
+BOB_RESTORED_POSITIONS_DETAIL=$($BOB_CLI -rpcwallet=bob_restored listdigidollarpositions 2>/dev/null)
+
+# Get DD transaction history from restored wallet
+BOB_RESTORED_DD_TXS=$($BOB_CLI -rpcwallet=bob_restored listdigidollartxs 100 0 2>/dev/null)
+BOB_RESTORED_MINT_COUNT=$(echo "$BOB_RESTORED_DD_TXS" | jq '[.[] | select(.category == "mint")] | length' 2>/dev/null || echo "0")
+BOB_RESTORED_SEND_COUNT=$(echo "$BOB_RESTORED_DD_TXS" | jq '[.[] | select(.category == "send")] | length' 2>/dev/null || echo "0")
+BOB_RESTORED_RECEIVE_COUNT=$(echo "$BOB_RESTORED_DD_TXS" | jq '[.[] | select(.category == "receive")] | length' 2>/dev/null || echo "0")
+BOB_RESTORED_REDEEM_COUNT=$(echo "$BOB_RESTORED_DD_TXS" | jq '[.[] | select(.category == "redeem")] | length' 2>/dev/null || echo "0")
+BOB_RESTORED_TOTAL_TXS=$(echo "$BOB_RESTORED_DD_TXS" | jq 'length' 2>/dev/null || echo "0")
+
+# Count inactive (redeemed) positions in restored wallet
+BOB_RESTORED_INACTIVE_POSITIONS=$(echo "$BOB_RESTORED_POSITIONS_DETAIL" | jq '[.[] | select(.is_active == false)] | length' 2>/dev/null || echo "0")
+BOB_RESTORED_ACTIVE_POSITIONS=$(echo "$BOB_RESTORED_POSITIONS_DETAIL" | jq '[.[] | select(.is_active == true)] | length' 2>/dev/null || echo "0")
+
+echo ""
+echo "========== BOB RESTORED WALLET STATE =========="
+echo "  DD Balance:          $BOB_RESTORED_DD cents (expected: $BOB_DD_BEFORE_EXPORT)"
+echo "  DGB Balance:         $BOB_RESTORED_DGB DGB (expected: $BOB_DGB_BEFORE_EXPORT)"
+echo "  DD Positions:        $BOB_RESTORED_POSITIONS total (expected: $BOB_POSITIONS_BEFORE_EXPORT)"
+echo "    Active:            $BOB_RESTORED_ACTIVE_POSITIONS (expected: $BOB_ACTIVE_POSITIONS_BEFORE)"
+echo "    Inactive/Redeemed: $BOB_RESTORED_INACTIVE_POSITIONS (expected: $BOB_INACTIVE_POSITIONS_BEFORE)"
+echo ""
+echo "  DD Transactions:     $BOB_RESTORED_TOTAL_TXS total (expected: $BOB_TOTAL_TXS_BEFORE)"
+echo "    Mint:              $BOB_RESTORED_MINT_COUNT (expected: $BOB_MINT_COUNT_BEFORE)"
+echo "    Send:              $BOB_RESTORED_SEND_COUNT (expected: $BOB_SEND_COUNT_BEFORE)"
+echo "    Receive:           $BOB_RESTORED_RECEIVE_COUNT (expected: $BOB_RECEIVE_COUNT_BEFORE)"
+echo "    Redeem:            $BOB_RESTORED_REDEEM_COUNT (expected: $BOB_REDEEM_COUNT_BEFORE)"
+echo ""
+echo "Restored Position Details:"
+echo "$BOB_RESTORED_POSITIONS_DETAIL" | jq -r '.[] | "  \(.position_id[0:16])... | DD: \(.dd_minted) cents | DGB: \(.dgb_collateral) | tier: \(.lock_tier) | active: \(.is_active) | status: \(.status)"' 2>/dev/null || echo "  No positions found"
+echo "================================================"
+echo ""
+
+# KEY VERIFICATION 1: DD balance must match
+if [ "$BOB_RESTORED_DD" = "$BOB_DD_BEFORE_EXPORT" ]; then
+    print_status "ok" "DD BALANCE RESTORED CORRECTLY! ($BOB_RESTORED_DD cents)"
+else
+    print_status "fail" "DD BALANCE MISMATCH! Original: $BOB_DD_BEFORE_EXPORT, Restored: $BOB_RESTORED_DD"
+fi
+
+# KEY VERIFICATION 2: Position count must match
+if [ "$BOB_RESTORED_POSITIONS" = "$BOB_POSITIONS_BEFORE_EXPORT" ]; then
+    print_status "ok" "DD POSITIONS RESTORED CORRECTLY! ($BOB_RESTORED_POSITIONS positions)"
+else
+    print_status "fail" "POSITIONS COUNT MISMATCH! Original: $BOB_POSITIONS_BEFORE_EXPORT, Restored: $BOB_RESTORED_POSITIONS"
+fi
+
+# KEY VERIFICATION 3: Inactive (redeemed) positions must match
+if [ "$BOB_RESTORED_INACTIVE_POSITIONS" = "$BOB_INACTIVE_POSITIONS_BEFORE" ]; then
+    print_status "ok" "REDEEMED POSITIONS CORRECTLY MARKED INACTIVE! ($BOB_RESTORED_INACTIVE_POSITIONS redeemed)"
+else
+    print_status "fail" "REDEEMED POSITIONS MISMATCH! Original inactive: $BOB_INACTIVE_POSITIONS_BEFORE, Restored inactive: $BOB_RESTORED_INACTIVE_POSITIONS"
+    echo "  This is the critical bug - redeemed positions should NOT be redeemable again!"
+fi
+
+# KEY VERIFICATION 4: DD transaction history types must be present
+echo ""
+echo "Verifying DD transaction history categories..."
+
+if [ "$BOB_RESTORED_MINT_COUNT" -ge "$BOB_MINT_COUNT_BEFORE" ] 2>/dev/null; then
+    print_status "ok" "MINT transactions restored! ($BOB_RESTORED_MINT_COUNT)"
+else
+    print_status "fail" "MINT transactions missing! Original: $BOB_MINT_COUNT_BEFORE, Restored: $BOB_RESTORED_MINT_COUNT"
+fi
+
+if [ "$BOB_RESTORED_SEND_COUNT" -ge "$BOB_SEND_COUNT_BEFORE" ] 2>/dev/null; then
+    print_status "ok" "SEND transactions restored! ($BOB_RESTORED_SEND_COUNT)"
+else
+    print_status "warn" "SEND transactions differ! Original: $BOB_SEND_COUNT_BEFORE, Restored: $BOB_RESTORED_SEND_COUNT"
+fi
+
+if [ "$BOB_RESTORED_RECEIVE_COUNT" -ge "$BOB_RECEIVE_COUNT_BEFORE" ] 2>/dev/null; then
+    print_status "ok" "RECEIVE transactions restored! ($BOB_RESTORED_RECEIVE_COUNT)"
+else
+    print_status "warn" "RECEIVE transactions differ! Original: $BOB_RECEIVE_COUNT_BEFORE, Restored: $BOB_RESTORED_RECEIVE_COUNT"
+fi
+
+if [ "$BOB_RESTORED_REDEEM_COUNT" -ge "$BOB_REDEEM_COUNT_BEFORE" ] 2>/dev/null; then
+    print_status "ok" "REDEEM transactions restored! ($BOB_RESTORED_REDEEM_COUNT)"
+else
+    print_status "fail" "REDEEM transactions missing! Original: $BOB_REDEEM_COUNT_BEFORE, Restored: $BOB_RESTORED_REDEEM_COUNT"
+fi
+
+# Verify DGB balance matches
+BOB_DGB_DIFF=$(echo "$BOB_RESTORED_DGB - $BOB_DGB_BEFORE_EXPORT" | bc 2>/dev/null || echo "unknown")
+if [ "$BOB_RESTORED_DGB" = "$BOB_DGB_BEFORE_EXPORT" ]; then
+    print_status "ok" "DGB BALANCE RESTORED CORRECTLY! ($BOB_RESTORED_DGB DGB)"
+else
+    print_status "warn" "DGB balance differs by $BOB_DGB_DIFF DGB (may be due to fees)"
+fi
+
+print_subheader "Step 34f: Testing DD operations on Bob's restored wallet..."
+
+# Test getting a new DD address from restored wallet
+echo "Testing getdigidollaraddress on restored wallet..."
+set +e
+BOB_RESTORED_DD_ADDR=$($BOB_CLI -rpcwallet=bob_restored getdigidollaraddress 2>&1)
+BOB_ADDR_EXIT=$?
+set -e
+
+if [ $BOB_ADDR_EXIT -eq 0 ] && [ -n "$BOB_RESTORED_DD_ADDR" ] && [ "$BOB_RESTORED_DD_ADDR" != "null" ]; then
+    print_status "ok" "Can generate DD addresses from restored wallet: ${BOB_RESTORED_DD_ADDR:0:20}..."
+else
+    print_status "fail" "Cannot generate DD address from restored wallet: $BOB_RESTORED_DD_ADDR"
+fi
+
+# Test attempting to redeem an already-redeemed position (should fail gracefully)
+if [ "$BOB_RESTORED_INACTIVE_POSITIONS" -gt 0 ]; then
+    echo ""
+    echo "Testing that redeemed positions cannot be redeemed again..."
+
+    # Get an inactive position ID
+    INACTIVE_POSITION_ID=$(echo "$BOB_RESTORED_POSITIONS_DETAIL" | jq -r '[.[] | select(.is_active == false)][0].position_id' 2>/dev/null)
+
+    if [ -n "$INACTIVE_POSITION_ID" ] && [ "$INACTIVE_POSITION_ID" != "null" ]; then
+        echo "  Testing redemption of inactive position: ${INACTIVE_POSITION_ID:0:16}..."
+
+        set +e
+        REDEEM_RESULT=$($BOB_CLI -rpcwallet=bob_restored redeemdigidollar "$INACTIVE_POSITION_ID" 2>&1)
+        REDEEM_EXIT=$?
+        set -e
+
+        # Redemption should fail for inactive position
+        if [ $REDEEM_EXIT -ne 0 ] || echo "$REDEEM_RESULT" | grep -qi "error\|invalid\|cannot\|not.*active\|already.*redeemed"; then
+            print_status "ok" "Correctly rejected redemption of already-redeemed position"
+        else
+            print_status "fail" "CRITICAL: Allowed redemption of already-redeemed position! Result: $REDEEM_RESULT"
+        fi
+    else
+        echo "  No inactive position found to test"
+    fi
+fi
+
+echo ""
+echo "========== BOB EXPORT-REIMPORT TEST SUMMARY =========="
+echo ""
+echo "Original Wallet (bob):"
+echo "  DD Balance:          $BOB_DD_BEFORE_EXPORT cents"
+echo "  Positions:           $BOB_POSITIONS_BEFORE_EXPORT ($BOB_ACTIVE_POSITIONS_BEFORE active, $BOB_INACTIVE_POSITIONS_BEFORE redeemed)"
+echo "  Transactions:        $BOB_TOTAL_TXS_BEFORE (mint:$BOB_MINT_COUNT_BEFORE send:$BOB_SEND_COUNT_BEFORE recv:$BOB_RECEIVE_COUNT_BEFORE redeem:$BOB_REDEEM_COUNT_BEFORE)"
+echo ""
+echo "Restored Wallet (bob_restored):"
+echo "  DD Balance:          $BOB_RESTORED_DD cents"
+echo "  Positions:           $BOB_RESTORED_POSITIONS ($BOB_RESTORED_ACTIVE_POSITIONS active, $BOB_RESTORED_INACTIVE_POSITIONS redeemed)"
+echo "  Transactions:        $BOB_RESTORED_TOTAL_TXS (mint:$BOB_RESTORED_MINT_COUNT send:$BOB_RESTORED_SEND_COUNT recv:$BOB_RESTORED_RECEIVE_COUNT redeem:$BOB_RESTORED_REDEEM_COUNT)"
+echo ""
+
+# Overall test result
+BOB_RESTORE_PASS=true
+
+if [ "$BOB_RESTORED_DD" != "$BOB_DD_BEFORE_EXPORT" ]; then
+    BOB_RESTORE_PASS=false
+fi
+if [ "$BOB_RESTORED_POSITIONS" != "$BOB_POSITIONS_BEFORE_EXPORT" ]; then
+    BOB_RESTORE_PASS=false
+fi
+if [ "$BOB_RESTORED_INACTIVE_POSITIONS" != "$BOB_INACTIVE_POSITIONS_BEFORE" ]; then
+    BOB_RESTORE_PASS=false
+fi
+
+if [ "$BOB_RESTORE_PASS" = true ]; then
+    echo -e "${GREEN}*** BOB WALLET RESTORE TEST PASSED! ***${NC}"
+else
+    echo -e "${RED}*** BOB WALLET RESTORE TEST FAILED! ***${NC}"
+fi
+echo "======================================================="
+echo ""
+
+verify_all_balances "After Bob Export-Reimport Test"
+
+# ====================================================================================
 # ALICE PERSISTENCE TEST SUMMARY
 # ====================================================================================
 print_header "ALICE WALLET PERSISTENCE TEST SUMMARY"
@@ -2341,6 +2666,9 @@ echo "  [x] Wallet backup/restore - DD balances survive backup and restore"
 echo "  [x] Chain reindex - DD balances rebuild correctly with -reindex"
 echo "  [x] Oracle price cache rebuilt after reindex"
 echo "  [x] DD positions preserved through all persistence tests"
+echo "  [x] Export-reimport - FULL wallet restore via descriptor export/import"
+echo "  [x] Redeemed positions correctly marked inactive after recovery"
+echo "  [x] DD transaction history restored (mint, send, receive, redeem)"
 echo ""
 echo "WALLET PERSISTENCE COVERAGE (ALICE):"
 echo "  [x] Rescanblockchain - DD balances restored after wallet rescan"
@@ -2360,6 +2688,8 @@ echo "BOB PERSISTENCE TEST LOGS:"
 echo "  Bob restart log:   /tmp/bob_testnet_restart.log"
 echo "  Bob restore log:   /tmp/bob_testnet_restore.log"
 echo "  Bob reindex log:   /tmp/bob_testnet_reindex.log"
+echo "  Bob descriptors:   /tmp/bob_descriptors.json"
+echo "  Bob import req:    /tmp/bob_import_request.json"
 echo ""
 echo "ALICE PERSISTENCE TEST LOGS:"
 echo "  Alice reindex log:     /tmp/alice_testnet_reindex.log"

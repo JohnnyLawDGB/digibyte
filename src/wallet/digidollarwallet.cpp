@@ -1337,6 +1337,36 @@ void DigiDollarWallet::ProcessDDTxForRescan(const CTransactionRef& ptx, int bloc
                 WriteDDTimeLock(pos);
                 LogPrintf("DigiDollar: Restored position %s from rescan (DD: %lld, DGB: %lld)\n",
                           pos.dd_timelock_id.GetHex(), pos.dd_minted, pos.dgb_collateral);
+
+                // Also add MINT transaction to history
+                std::string txid_str = tx.GetHash().GetHex();
+                bool already_exists = false;
+                for (const auto& existing : transaction_history) {
+                    if (existing.txid == txid_str && existing.category == "mint") {
+                        already_exists = true;
+                        break;
+                    }
+                }
+
+                if (!already_exists) {
+                    DDTransaction ddtx;
+                    ddtx.txid = txid_str;
+                    ddtx.amount = pos.dd_minted;
+                    ddtx.timestamp = 0;  // Will be fixed in subsequent commit
+                    ddtx.blockheight = block_height;
+                    ddtx.fee = 0;
+                    ddtx.address = "";
+                    ddtx.category = "mint";
+                    ddtx.lock_tier = static_cast<int>(pos.lock_tier);
+
+                    transaction_history.push_back(ddtx);
+
+                    wallet::WalletBatch batch(m_wallet->GetDatabase());
+                    batch.WriteDDTransaction(ddtx);
+
+                    LogPrintf("DigiDollar: Restored MINT transaction %s from rescan (amount: %lld)\n",
+                              txid_str, static_cast<long long>(pos.dd_minted));
+                }
             }
 
             // CRITICAL FIX: Also restore the DD UTXO (vout[1] contains the DD tokens)
@@ -1355,15 +1385,24 @@ void DigiDollarWallet::ProcessDDTxForRescan(const CTransactionRef& ptx, int bloc
                     } else {
                         // DD UTXO was already spent (transferred or redeemed)
                         // Update position to show no remaining DD tokens available for redemption
-                        // This prevents "already redeemed" positions from appearing redeemable
                         auto pos_it = collateral_positions.find(pos.dd_timelock_id);
                         if (pos_it != collateral_positions.end()) {
                             pos_it->second.dd_minted = 0;
+
+                            // Also check if collateral (vout[0]) is spent - if so, position was REDEEMED
+                            COutPoint collateralOutpoint(tx.GetHash(), 0);
+                            if (m_wallet->IsSpent(collateralOutpoint)) {
+                                pos_it->second.is_active = false;
+                                LogPrintf("DigiDollar: Position %s collateral is spent - marking as redeemed\n",
+                                          pos.dd_timelock_id.GetHex());
+                            } else {
+                                LogPrintf("DigiDollar: Position %s DD UTXO spent but collateral locked - DD was transferred\n",
+                                          pos.dd_timelock_id.GetHex());
+                            }
+
                             // Persist updated position to database
                             wallet::WalletBatch batch(m_wallet->GetDatabase());
                             batch.WriteDDTimeLock(pos_it->second);
-                            LogPrintf("DigiDollar: Position %s DD UTXO is spent - set dd_minted=0 (not redeemable)\n",
-                                      pos.dd_timelock_id.GetHex());
                         }
                     }
                 }
@@ -1399,6 +1438,27 @@ void DigiDollarWallet::ProcessDDTxForRescan(const CTransactionRef& ptx, int bloc
                             auto dd_it = dd_utxos.find(spent_outpoint);
                             if (dd_it != dd_utxos.end()) {
                                 total_dd_sent += dd_it->second;
+
+                                // CRITICAL FIX: Remove spent UTXO from tracking during rescan
+                                // This ensures the balance is calculated correctly after wallet restore
+                                LogPrintf("DigiDollar: Removing spent DD UTXO %s:%u during rescan (was %lld cents)\n",
+                                          txin.prevout.hash.GetHex(), txin.prevout.n, static_cast<long long>(dd_it->second));
+                                dd_utxos.erase(dd_it);
+
+                                // Also remove from database
+                                wallet::WalletBatch batch(m_wallet->GetDatabase());
+                                batch.EraseDDUTXO(spent_outpoint);
+
+                                // If this was a MINT DD UTXO (vout[1] of a mint), update the position's dd_minted
+                                if (txin.prevout.n == 1) {
+                                    auto pos_it = collateral_positions.find(txin.prevout.hash);
+                                    if (pos_it != collateral_positions.end()) {
+                                        pos_it->second.dd_minted = 0;
+                                        batch.WriteDDTimeLock(pos_it->second);
+                                        LogPrintf("DigiDollar: Updated position %s dd_minted=0 (DD transferred)\n",
+                                                  txin.prevout.hash.GetHex());
+                                    }
+                                }
                             }
                         }
                     }
@@ -1463,7 +1523,7 @@ void DigiDollarWallet::ProcessDDTxForRescan(const CTransactionRef& ptx, int bloc
                 DDTransaction ddtx;
                 ddtx.txid = txid_str;
                 ddtx.amount = transfer_amount;
-                ddtx.timestamp = 0;  // Will be set by block time if available
+                ddtx.timestamp = 0;  // Will be fixed in subsequent commit
                 ddtx.confirmations = 0;  // Will be recalculated
                 ddtx.incoming = false;
                 ddtx.address = recipient_address;
@@ -1481,16 +1541,194 @@ void DigiDollarWallet::ProcessDDTxForRescan(const CTransactionRef& ptx, int bloc
                           txid_str, static_cast<long long>(transfer_amount), recipient_address);
             }
         }
+
+        // CRITICAL FIX: Also check if we RECEIVED DD in this transfer
+        // Check if any DD output (P2TR with value=0) is ours
+        for (size_t i = 0; i < tx.vout.size(); i++) {
+            const CTxOut& txout = tx.vout[i];
+            if (txout.nValue == 0 &&
+                txout.scriptPubKey.size() == 34 &&
+                txout.scriptPubKey[0] == OP_1) {
+                // This is a DD UTXO - check if it's ours
+                if (m_wallet->IsMine(txout) != wallet::ISMINE_NO) {
+                    COutPoint received_utxo(tx.GetHash(), i);
+
+                    // Check if not already tracked
+                    // NOTE: Don't check IsSpent() here - during rescan, IsSpent returns current state,
+                    // not state at time of this TX. We add all received UTXOs, and subsequent
+                    // TRANSFER/REDEEM processing will remove spent ones in chronological order.
+                    if (dd_utxos.find(received_utxo) == dd_utxos.end()) {
+                        // Extract DD amount from OP_RETURN
+                        CAmount received_dd = 0;
+                        int dd_output_index = 0;
+                        // Count which DD output this is (0=first, 1=second/change)
+                        for (size_t j = 0; j < i; j++) {
+                            if (tx.vout[j].nValue == 0 &&
+                                tx.vout[j].scriptPubKey.size() == 34 &&
+                                tx.vout[j].scriptPubKey[0] == OP_1) {
+                                dd_output_index++;
+                            }
+                        }
+
+                        // Parse OP_RETURN for amounts
+                        for (const CTxOut& out : tx.vout) {
+                            if (out.scriptPubKey.IsUnspendable() && out.scriptPubKey.size() > 0) {
+                                const CScript& script = out.scriptPubKey;
+                                auto pc = script.begin();
+                                opcodetype opcode;
+                                std::vector<unsigned char> data;
+
+                                if (!script.GetOp(pc, opcode, data)) continue;  // OP_RETURN
+                                if (!script.GetOp(pc, opcode, data)) continue;  // "DD"
+                                if (!script.GetOp(pc, opcode, data)) continue;  // txType
+
+                                // Collect all amounts
+                                std::vector<CAmount> amounts;
+                                while (script.GetOp(pc, opcode, data) && !data.empty()) {
+                                    try {
+                                        CScriptNum amount(data, false);
+                                        amounts.push_back(amount.GetInt64());
+                                    } catch (...) {
+                                        break;
+                                    }
+                                }
+
+                                if (dd_output_index < static_cast<int>(amounts.size())) {
+                                    received_dd = amounts[dd_output_index];
+                                } else if (!amounts.empty()) {
+                                    received_dd = amounts[0];
+                                }
+                                break;
+                            }
+                        }
+
+                        if (received_dd > 0) {
+                            // Add to dd_utxos
+                            dd_utxos[received_utxo] = received_dd;
+
+                            // Persist to database
+                            wallet::WalletBatch batch(m_wallet->GetDatabase());
+                            batch.WriteDDUTXO(received_utxo, received_dd);
+
+                            LogPrintf("DigiDollar: Restored RECEIVED DD UTXO %s:%zu from rescan (DD: %lld)\n",
+                                      tx.GetHash().GetHex(), i, static_cast<long long>(received_dd));
+
+                            // Also add receive transaction to history if not already there
+                            std::string txid_str = tx.GetHash().GetHex();
+                            bool already_exists = false;
+                            for (const auto& existing : transaction_history) {
+                                if (existing.txid == txid_str && existing.category == "receive") {
+                                    already_exists = true;
+                                    break;
+                                }
+                            }
+
+                            if (!already_exists) {
+                                DDTransaction ddtx;
+                                ddtx.txid = txid_str;
+                                ddtx.amount = received_dd;
+                                ddtx.timestamp = 0;  // Will be fixed in subsequent commit
+                                ddtx.confirmations = 0;
+                                ddtx.incoming = true;
+                                ddtx.address = "";  // Sender address not easily recoverable
+                                ddtx.category = "receive";
+                                ddtx.blockheight = block_height;
+                                ddtx.fee = 0;
+
+                                transaction_history.push_back(ddtx);
+                                batch.WriteDDTransaction(ddtx);
+
+                                LogPrintf("DigiDollar: Restored RECEIVE transaction %s from rescan (amount: %lld)\n",
+                                          txid_str, static_cast<long long>(received_dd));
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
     else if (ddTxType == 3) {  // REDEEM transaction
         // Find which position was redeemed and mark inactive
-        // REDEEM tx spends the collateral output (vout[0] of mint tx)
+        // REDEEM tx spends the collateral output (vout[0] of mint tx) AND DD UTXOs
+        LogPrintf("DigiDollar: ProcessDDTxForRescan - Found REDEEM tx %s\n", tx.GetHash().GetHex());
+
+        LOCK(m_wallet->cs_wallet);
+
+        // First, remove any DD UTXOs that were spent in this REDEEM transaction
+        for (const CTxIn& txin : tx.vin) {
+            COutPoint spent_outpoint(txin.prevout.hash, txin.prevout.n);
+            auto dd_it = dd_utxos.find(spent_outpoint);
+            if (dd_it != dd_utxos.end()) {
+                LogPrintf("DigiDollar: Removing spent DD UTXO %s:%u during REDEEM rescan (was %lld cents)\n",
+                          txin.prevout.hash.GetHex(), txin.prevout.n, static_cast<long long>(dd_it->second));
+                dd_utxos.erase(dd_it);
+
+                wallet::WalletBatch batch(m_wallet->GetDatabase());
+                batch.EraseDDUTXO(spent_outpoint);
+            }
+        }
+
         for (const CTxIn& txin : tx.vin) {
             auto it = collateral_positions.find(txin.prevout.hash);
             if (it != collateral_positions.end() && txin.prevout.n == 0) {
                 // This input spends vout[0] of a mint tx we track
                 it->second.is_active = false;
                 UpdatePositionStatus(it->first, false);
+
+                // Extract DD amount from OP_RETURN for transaction history
+                CAmount redeemed_dd = 0;
+                for (const CTxOut& txout : tx.vout) {
+                    if (txout.scriptPubKey.IsUnspendable() && txout.scriptPubKey.size() > 0) {
+                        const CScript& script = txout.scriptPubKey;
+                        auto pc = script.begin();
+                        opcodetype opcode;
+                        std::vector<unsigned char> data;
+
+                        if (!script.GetOp(pc, opcode, data)) continue;  // OP_RETURN
+                        if (!script.GetOp(pc, opcode, data)) continue;  // "DD"
+                        if (!script.GetOp(pc, opcode, data)) continue;  // txType
+
+                        // Next is the DD amount
+                        if (script.GetOp(pc, opcode, data) && !data.empty()) {
+                            try {
+                                CScriptNum amount(data, true);
+                                redeemed_dd = amount.GetInt64();
+                            } catch (...) {}
+                        }
+                        break;
+                    }
+                }
+
+                // Add REDEEM transaction to history
+                std::string txid_str = tx.GetHash().GetHex();
+                bool already_exists = false;
+                for (const auto& existing : transaction_history) {
+                    if (existing.txid == txid_str && existing.category == "redeem") {
+                        already_exists = true;
+                        break;
+                    }
+                }
+
+                if (!already_exists) {
+                    DDTransaction ddtx;
+                    ddtx.txid = txid_str;
+                    ddtx.amount = redeemed_dd > 0 ? redeemed_dd : it->second.dd_minted;
+                    ddtx.timestamp = 0;  // Will be fixed in subsequent commit
+                    ddtx.blockheight = block_height;
+                    ddtx.fee = 0;
+                    ddtx.address = "";
+                    ddtx.category = "redeem";
+                    ddtx.lock_tier = static_cast<int>(it->second.lock_tier);
+
+                    transaction_history.push_back(ddtx);
+
+                    wallet::WalletBatch batch(m_wallet->GetDatabase());
+                    batch.WriteDDTransaction(ddtx);
+
+                    LogPrintf("DigiDollar: Restored REDEEM transaction %s from rescan (amount: %lld)\n",
+                              txid_str, static_cast<long long>(ddtx.amount));
+                }
+
                 LogPrintf("DigiDollar: Marked position %s as redeemed during rescan\n",
                           it->first.GetHex());
             }

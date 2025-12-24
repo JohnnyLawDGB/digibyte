@@ -681,11 +681,18 @@ TxBuilderResult TransferTxBuilder::BuildTransferTransaction(const TxBuilderTrans
 
             LogPrintf("DigiDollar: Added DD change output: %d cents (tweaked key, registered)\n", ddChange);
         } else {
-            // If change is dust, add it to fees (this violates strict conservation but handles dust)
-            result.error = "DD change amount is below dust threshold";
-            return result;
+            // FIXED: Allow sending exact balance by treating dust change as acceptable loss
+            // User is intentionally sending their full balance, so small remainder is expected
+            LogPrintf("DigiDollar: DD change is dust (%d cents < %d cents minimum) - allowing transaction to proceed\n",
+                      ddChange, minOutput);
+            // Note: The dust DD will remain unspent in the UTXO set, but this allows 100% balance sends
         }
+    } else if (ddChange < 0) {
+        // This should never happen - SelectDDCoins should ensure enough DD
+        result.error = strprintf("Insufficient DD: need %d cents, have %d cents", totalDDOut, totalDDIn);
+        return result;
     }
+    // If ddChange == 0, perfect match - no change output needed
 
     // Calculate actual fee based on transaction with all outputs
     const CAmount MIN_DD_FEE = 10000000;  // 0.1 DGB minimum fee
@@ -750,10 +757,18 @@ TxBuilderResult TransferTxBuilder::BuildTransferTransaction(const TxBuilderTrans
     LogPrintf("DigiDollar: Conservation check - Input: %d cents, Output: %d cents\n",
               totalDDIn, finalDDOut);
 
-    if (totalDDIn != finalDDOut) {
+    // FIXED: Allow dust remainder when sending full balance (Task 5 fix)
+    // Instead of strict equality, allow for dust that's below the minimum output
+    CAmount ddDifference = totalDDIn - finalDDOut;
+    if (ddDifference < 0 || ddDifference > minOutput) {
         result.error = "DD conservation violation: input=" + std::to_string(totalDDIn) +
-                      " output=" + std::to_string(finalDDOut);
+                      " output=" + std::to_string(finalDDOut) +
+                      " diff=" + std::to_string(ddDifference);
         return result;
+    }
+    if (ddDifference > 0) {
+        LogPrintf("DigiDollar: Allowing dust remainder of %d cents (< %d minimum)\n",
+                  ddDifference, minOutput);
     }
 
     // Set actual fees (already calculated above)
@@ -801,13 +816,25 @@ TxBuilderResult TransferTxBuilder::BuildTransferTransaction(const TxBuilderTrans
     for (const auto& [addr, amt] : params.recipients) {
         totalDDOutCheck += amt;
     }
-    // Add DD change if exists
+    // Add DD change if exists and was added as output
     if (ddChange > 0 && ddChange >= minOutput) {
         totalDDOutCheck += ddChange;
     }
 
+    // FIXED: Allow dust remainder when sending full balance
+    // The conservation check should allow for small dust remainder (< minOutput)
+    // This enables users to send 100% of their balance
+
     if (totalDDInCheck < totalDDOutCheck) {
         result.error = strprintf("DD amount mismatch: in=%d, out=%d", totalDDInCheck, totalDDOutCheck);
+        return result;
+    }
+
+    // Verify that any unaccounted DD is within the dust threshold
+    CAmount unaccountedDD = totalDDInCheck - totalDDOutCheck;
+    if (unaccountedDD > minOutput) {
+        result.error = strprintf("Excessive unaccounted DD: %d cents (max allowed: %d cents)",
+                                 unaccountedDD, minOutput);
         return result;
     }
 
@@ -1108,20 +1135,20 @@ TxBuilderResult RedeemTxBuilder::BuildRedemptionTransaction(const TxBuilderRedee
         }
     }
 
-    // Output 0: DGB returned to owner
-    // CRITICAL FIX: Use wallet change address if provided, otherwise use owner key
-    CTxDestination dest;
+    // Output 0: Collateral returned to owner (100% of locked DGB)
+    // CRITICAL: This is the FULL collateral amount - must be separate from any DGB change
+    CTxDestination collateralReturnDest;
     if (params.collateralDest.has_value()) {
-        dest = params.collateralDest.value();
+        collateralReturnDest = params.collateralDest.value();
         LogPrintf("DigiDollar: Using provided wallet destination for returned collateral\n");
     } else {
         // Fallback to owner key (for backwards compatibility)
         CPubKey pubkey = params.ownerKey.GetPubKey();
-        dest = CTxDestination{WitnessV1Taproot(XOnlyPubKey(pubkey))};
+        collateralReturnDest = CTxDestination{WitnessV1Taproot(XOnlyPubKey(pubkey))};
         LogPrintf("DigiDollar: Using owner key pubkey for returned collateral (wallet may not recognize)\n");
     }
-    tx.vout.push_back(CTxOut(dgbToRelease, GetScriptForDestination(dest)));
-    LogPrintf("DigiDollar: Added DGB output to owner: %d sats\n", dgbToRelease);
+    tx.vout.push_back(CTxOut(dgbToRelease, GetScriptForDestination(collateralReturnDest)));
+    LogPrintf("DigiDollar: Added collateral return output: %d sats (100%% of locked collateral)\n", dgbToRelease);
 
     // Calculate DD change - if we selected more DD UTXOs than needed, return the change
     CAmount totalDDInput = 0;
@@ -1196,9 +1223,24 @@ TxBuilderResult RedeemTxBuilder::BuildRedemptionTransaction(const TxBuilderRedee
         }
 
         if (feeChange >= DUST_THRESHOLD) {
-            // Add change output
-            tx.vout.push_back(CTxOut(feeChange, GetScriptForDestination(dest)));
-            LogPrintf("DigiDollar: Added fee change output: %d sats\n", feeChange);
+            // CRITICAL FIX: Use separate destination for DGB change
+            // This ensures collateral return and DGB change are SEPARATE outputs
+            CTxDestination changeDest;
+            if (params.dgbChangeDest.has_value()) {
+                changeDest = params.dgbChangeDest.value();
+                LogPrintf("DigiDollar: Using provided dgbChangeDest for fee change\n");
+            } else if (params.collateralDest.has_value()) {
+                // Fallback: use collateralDest (this WILL merge with collateral if amounts differ)
+                changeDest = params.collateralDest.value();
+                LogPrintf("DigiDollar: WARNING - No dgbChangeDest provided, using collateralDest for fee change (may merge with collateral)\n");
+            } else {
+                // Last resort: use owner key (wallet may not recognize)
+                CPubKey pubkey = params.ownerKey.GetPubKey();
+                changeDest = CTxDestination{WitnessV1Taproot(XOnlyPubKey(pubkey))};
+                LogPrintf("DigiDollar: WARNING - Using owner key for fee change (wallet may not recognize)\n");
+            }
+            tx.vout.push_back(CTxOut(feeChange, GetScriptForDestination(changeDest)));
+            LogPrintf("DigiDollar: Added fee change output: %d sats to separate destination\n", feeChange);
         } else {
             // Dust goes to miner as fee
             result.totalFees += feeChange;

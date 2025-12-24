@@ -305,7 +305,7 @@ void DigiByteApplication::applyTheme()
     }
     
     // NOTE: CSS hot-loading functionality DISABLED for production
-    // To enable for development, uncomment the block below
+    // To enable for development, uncomment the block below.
     // This allows live CSS reloading from ~/.digibyte-dev/css/ for rapid theming development
 
     /*
@@ -605,8 +605,7 @@ bool DigiByteApplication::event(QEvent* e)
     }
     
     // NOTE: F5 CSS reload functionality DISABLED for production
-    // Uncomment to enable for development
-
+    // Uncomment to enable for development (requires CSS hot-loading block above)
     /*
     // Handle F5 key for CSS reload when using external stylesheets
     if (e->type() == QEvent::KeyPress && !m_externalCssPath.isEmpty()) {

@@ -15,6 +15,7 @@
 #include <qt/clientmodel.h>
 
 #include <QTabWidget>
+#include <QTabBar>
 #include <QVBoxLayout>
 #include <QTimer>
 
@@ -49,6 +50,9 @@ void DigiDollarTab::setupUI()
 
     // Create tab widget
     m_tabWidget = new QTabWidget(this);
+    m_tabWidget->tabBar()->setElideMode(Qt::ElideNone);      // Don't truncate tab text
+    m_tabWidget->tabBar()->setExpanding(true);               // Expand tabs to fill width
+    m_tabWidget->tabBar()->setUsesScrollButtons(true);       // Use scroll if needed
 
     // Create sub-widgets
     m_overviewWidget = new DigiDollarOverviewWidget(this);

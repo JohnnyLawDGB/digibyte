@@ -7,6 +7,7 @@
 #include <wallet/spend.h>
 #include <wallet/coincontrol.h>
 #include <wallet/scriptpubkeyman.h>
+#include <interfaces/chain.h>
 #include <digidollar/txbuilder.h>
 #include <digidollar/validation.h>
 #include <digidollar/scripts.h>
@@ -1352,7 +1353,13 @@ void DigiDollarWallet::ProcessDDTxForRescan(const CTransactionRef& ptx, int bloc
                     DDTransaction ddtx;
                     ddtx.txid = txid_str;
                     ddtx.amount = pos.dd_minted;
-                    ddtx.timestamp = 0;  // Will be fixed in subsequent commit
+                    // Get timestamp from block time (mapWallet may not be populated during rescan)
+                    int64_t block_time = 0;
+                    if (block_height >= 0) {
+                        uint256 block_hash = m_wallet->chain().getBlockHash(block_height);
+                        m_wallet->chain().findBlock(block_hash, interfaces::FoundBlock().time(block_time));
+                    }
+                    ddtx.timestamp = block_time;
                     ddtx.blockheight = block_height;
                     ddtx.fee = 0;
                     ddtx.address = "";
@@ -1523,7 +1530,13 @@ void DigiDollarWallet::ProcessDDTxForRescan(const CTransactionRef& ptx, int bloc
                 DDTransaction ddtx;
                 ddtx.txid = txid_str;
                 ddtx.amount = transfer_amount;
-                ddtx.timestamp = 0;  // Will be fixed in subsequent commit
+                // Get timestamp from block time (mapWallet may not be populated during rescan)
+                int64_t block_time = 0;
+                if (block_height >= 0) {
+                    uint256 block_hash = m_wallet->chain().getBlockHash(block_height);
+                    m_wallet->chain().findBlock(block_hash, interfaces::FoundBlock().time(block_time));
+                }
+                ddtx.timestamp = block_time;
                 ddtx.confirmations = 0;  // Will be recalculated
                 ddtx.incoming = false;
                 ddtx.address = recipient_address;
@@ -1627,7 +1640,13 @@ void DigiDollarWallet::ProcessDDTxForRescan(const CTransactionRef& ptx, int bloc
                                 DDTransaction ddtx;
                                 ddtx.txid = txid_str;
                                 ddtx.amount = received_dd;
-                                ddtx.timestamp = 0;  // Will be fixed in subsequent commit
+                                // Get timestamp from block time (mapWallet may not be populated during rescan)
+                                int64_t block_time = 0;
+                                if (block_height >= 0) {
+                                    uint256 block_hash = m_wallet->chain().getBlockHash(block_height);
+                                    m_wallet->chain().findBlock(block_hash, interfaces::FoundBlock().time(block_time));
+                                }
+                                ddtx.timestamp = block_time;
                                 ddtx.confirmations = 0;
                                 ddtx.incoming = true;
                                 ddtx.address = "";  // Sender address not easily recoverable
@@ -1713,7 +1732,13 @@ void DigiDollarWallet::ProcessDDTxForRescan(const CTransactionRef& ptx, int bloc
                     DDTransaction ddtx;
                     ddtx.txid = txid_str;
                     ddtx.amount = redeemed_dd > 0 ? redeemed_dd : it->second.dd_minted;
-                    ddtx.timestamp = 0;  // Will be fixed in subsequent commit
+                    // Get timestamp from block time (mapWallet may not be populated during rescan)
+                    int64_t block_time = 0;
+                    if (block_height >= 0) {
+                        uint256 block_hash = m_wallet->chain().getBlockHash(block_height);
+                        m_wallet->chain().findBlock(block_hash, interfaces::FoundBlock().time(block_time));
+                    }
+                    ddtx.timestamp = block_time;
                     ddtx.blockheight = block_height;
                     ddtx.fee = 0;
                     ddtx.address = "";

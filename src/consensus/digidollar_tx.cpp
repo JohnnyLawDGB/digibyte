@@ -7,7 +7,8 @@
 #include <digidollar/validation.h>
 
 bool IsValidDigiDollarType(DigiDollar::DigiDollarTxType type) {
-    return type >= DigiDollar::DD_TX_MINT && type <= DigiDollar::DD_TX_ERR;
+    // Valid types are MINT(1), TRANSFER(2), REDEEM(3) - not NONE(0) or MAX(4)
+    return type >= DigiDollar::DD_TX_MINT && type < DigiDollar::DD_TX_MAX;
 }
 
 bool ValidateDigiDollarTxStructure(const CTransaction& tx, std::string& strError) {
@@ -32,9 +33,7 @@ bool ValidateDigiDollarTxStructure(const CTransaction& tx, std::string& strError
             // TODO: Validate specific structure when DD output format is defined
             break;
         case DigiDollar::DD_TX_REDEEM:
-        case DigiDollar::DD_TX_PARTIAL:
-        case DigiDollar::DD_TX_ERR:
-            // Must burn DD and release collateral
+            // Must burn DD and release collateral (ERR handled via burn amount)
             // TODO: Validate specific structure when DD output format is defined
             break;
         default:

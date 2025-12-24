@@ -1079,11 +1079,7 @@ bool ValidateRedemptionTransaction(const CTransaction& tx,
             return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-redeem-dd-not-burned");
         }
 
-        // For partial redemption, some DD may remain but burning must still occur
-        if (txType == DD_TX_PARTIAL && totalDDInputs <= totalDDOutputs) {
-            LogPrintf("DigiDollar: Partial redemption rejected - no DD burned\n");
-            return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-partial-redeem-no-burning");
-        }
+        // NOTE: Partial redemption is NOT supported - must burn full DD amount
 
         LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: DD burning validated (inputs: %d, outputs: %d, burned: %d)\n",
                  totalDDInputs, totalDDOutputs, totalDDInputs - totalDDOutputs);
@@ -1094,31 +1090,24 @@ bool ValidateRedemptionTransaction(const CTransaction& tx,
                  ddInputIndices.size(), totalDDOutputs > 0 ? 1 : 0);
     }
 
-    // Validate redemption path conditions based on transaction type
-    switch (txType) {
-        case DD_TX_REDEEM:
-            // Normal redemption - validate timelock expiry
-            if (!ValidateNormalRedemptionConditions(tx, ctx, state)) {
-                return false;
-            }
-            break;
+    // Validate redemption conditions
+    // NOTE: Only DD_TX_REDEEM exists. ERR is handled via burn amount, not tx type.
+    if (txType != DD_TX_REDEEM) {
+        return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-redeem-invalid-type",
+                            "Only DD_TX_REDEEM type is valid for redemption");
+    }
 
-        case DD_TX_ERR:
-            // Emergency/ERR redemption - validate system conditions
-            if (!ValidateEmergencyRedemptionConditions(tx, ctx, state)) {
-                return false;
-            }
-            break;
-
-        case DD_TX_PARTIAL:
-            // EXACT-AMOUNT REDEMPTION POLICY: Partial redemptions disabled
-            LogPrintf("DigiDollar: REJECTED DD_TX_PARTIAL - exact-amount redemption enforced\n");
-            return state.Invalid(TxValidationResult::TX_CONSENSUS,
-                                "partial-redemption-disabled",
-                                "Exact-amount redemption enforced - must redeem full minted amount");
-
-        default:
-            return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-redeem-invalid-type");
+    // Validate redemption path (NORMAL or ERR) based on system health
+    if (ctx.systemCollateral < 100) {
+        // ERR path - validate system conditions
+        if (!ValidateEmergencyRedemptionConditions(tx, ctx, state)) {
+            return false;
+        }
+    } else {
+        // Normal path - validate timelock expiry
+        if (!ValidateNormalRedemptionConditions(tx, ctx, state)) {
+            return false;
+        }
     }
 
     // Validate collateral release amount is reasonable
@@ -1288,9 +1277,7 @@ bool ValidateDigiDollarTransaction(const CTransaction& tx,
     LogPrintf("DigiDollar: Validating %s transaction (txid: %s)\n",
               txType == DD_TX_MINT ? "MINT" :
               txType == DD_TX_TRANSFER ? "TRANSFER" :
-              txType == DD_TX_REDEEM ? "REDEEM" :
-              txType == DD_TX_PARTIAL ? "PARTIAL" :
-              txType == DD_TX_ERR ? "ERR" : "UNKNOWN",
+              txType == DD_TX_REDEEM ? "REDEEM" : "UNKNOWN",
               tx.GetHash().ToString());
 
     // Update volatility monitoring state if we have valid context
@@ -1318,6 +1305,8 @@ bool ValidateDigiDollarTransaction(const CTransaction& tx,
     }
 
     // Type-specific validation
+    // NOTE: Only 3 types exist - MINT, TRANSFER, REDEEM
+    // ERR is handled within REDEEM based on system health
     switch (txType) {
         case DD_TX_MINT:
             return ValidateMintTransaction(tx, ctx, state);
@@ -1327,12 +1316,6 @@ bool ValidateDigiDollarTransaction(const CTransaction& tx,
 
         case DD_TX_REDEEM:
             return ValidateRedemptionTransaction(tx, ctx, state);
-
-        case DD_TX_PARTIAL:
-            return ValidateRedemptionTransaction(tx, ctx, state); // Partial uses same validation as redemption
-
-        case DD_TX_ERR:
-            return ValidateERRRedemption(tx, ctx, state);
 
         default:
             LogPrintf("DigiDollar: Unknown transaction type: %d\n", static_cast<int>(txType));

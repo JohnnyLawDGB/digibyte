@@ -114,22 +114,13 @@ std::vector<size_t> SelectDDUTXOs(const std::vector<CAmount>& amounts, CAmount t
 // =====================================
 
 bool ValidateRedemptionPath(DigiDollarTxType type, int currentHeight, int lockHeight, bool errActive) {
-    switch (type) {
-        case DD_TX_REDEEM:
-            // Normal redeem requires expired timelock
-            return currentHeight >= lockHeight;
-
-        case DD_TX_PARTIAL:
-            // Partial redeem allowed even with active timelock
-            return true;
-
-        case DD_TX_EMERGENCY:
-            // Emergency redeem requires ERR activation
-            return errActive;
-
-        default:
-            return false;
+    // NOTE: Only DD_TX_REDEEM exists. ERR is handled via burn amount, not tx type.
+    // Both NORMAL and ERR paths require timelock expiry.
+    if (type != DD_TX_REDEEM) {
+        return false;
     }
+    // Timelock must be expired for all redemptions
+    return currentHeight >= lockHeight;
 }
 
 bool ValidateRedemptionAmount(CAmount redeemAmount, CAmount totalHeld, bool isFullRedeem) {
@@ -147,23 +138,14 @@ bool ValidateRedemptionAmount(CAmount redeemAmount, CAmount totalHeld, bool isFu
     }
 }
 
-bool ValidateTimelockForRedeem(DigiDollarTxType type, int currentHeight, int lockHeight, bool errActive) {
-    switch (type) {
-        case DD_TX_REDEEM:
-            // Normal redeem requires timelock expiry
-            return currentHeight >= lockHeight;
-
-        case DD_TX_PARTIAL:
-            // Partial redeem bypasses timelock (with penalties)
-            return true;
-
-        case DD_TX_EMERGENCY:
-            // Emergency redeem bypasses timelock when ERR active
-            return errActive || (currentHeight >= lockHeight);
-
-        default:
-            return false;
+bool ValidateTimelockForRedeem(DigiDollarTxType type, int currentHeight, int lockHeight, bool /* errActive */) {
+    // NOTE: Only DD_TX_REDEEM exists. Both NORMAL and ERR paths require timelock expiry.
+    // There is NO early redemption, NO partial redemption, NO emergency oracle override.
+    if (type != DD_TX_REDEEM) {
+        return false;
     }
+    // Timelock must be expired for all redemptions
+    return currentHeight >= lockHeight;
 }
 
 bool ShouldActivateERR(int collateralPercentage) {

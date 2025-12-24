@@ -83,13 +83,6 @@ std::vector<XOnlyPubKey> GetOracleKeys(size_t count = 15);
 CScript CreateNormalRedemptionPath(const MintParams& params);
 
 /**
- * Emergency redemption path - 8-of-15 oracle override
- * Script: OP_DIGIDOLLAR <amount> OP_EQUALVERIFY <15 oracle keys with OP_CHECKSIGADD> OP_8 OP_EQUAL
- */
-CScript CreateEmergencyPath(const MintParams& params);
-
-
-/**
  * ERR (Emergency Redemption Ratio) path - when system < 100% collateralized
  * CRITICAL: ERR path REQUIRES timelock expiry first (same as Normal path)
  * Script: <lockHeight> OP_CHECKLOCKTIMEVERIFY OP_DROP OP_CHECKCOLLATERAL <100> OP_LESSTHAN OP_VERIFY OP_DIGIDOLLAR OP_DDVERIFY <ownerKey> OP_CHECKSIG

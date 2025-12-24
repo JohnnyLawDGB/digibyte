@@ -74,34 +74,8 @@ CScript CreateNormalRedemptionPath(const MintParams& params)
     return script;
 }
 
-CScript CreateEmergencyPath(const MintParams& params)
-{
-    if (params.ddAmount <= 0 || params.oracleKeys.empty()) {
-        // LogPrintf("DigiDollar: Invalid parameters for emergency path\n");
-        return CScript();
-    }
-
-    CScript script;
-
-    // Verify DigiDollar amount first
-    // Use CScriptNum to ensure proper minimal encoding without OP_SUCCESSx bytes
-    script << OP_DIGIDOLLAR << CScriptNum(params.ddAmount) << OP_EQUALVERIFY;
-
-    // Add oracle multisig (8-of-15 or 8-of-N)
-    size_t oracleCount = std::min(params.oracleKeys.size(), size_t(15));
-    for (size_t i = 0; i < oracleCount; i++) {
-        script << ToByteVector(params.oracleKeys[i]) << OP_CHECKSIGADD;
-    }
-
-    // Require 8 signatures
-    script << OP_8 << OP_EQUAL;
-
-    // LogPrintf("DigiDollar: Created emergency path with %d oracles for %d DD\n",
-    //           oracleCount, params.ddAmount);
-
-    return script;
-}
-
+// NOTE: CreateEmergencyPath was removed - NO emergency oracle override exists
+// Only 2 redemption paths: Normal and ERR (both require timelock expiry)
 
 CScript CreateERRPath(const MintParams& params)
 {

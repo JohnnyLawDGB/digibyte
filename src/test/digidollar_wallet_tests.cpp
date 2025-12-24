@@ -1592,26 +1592,23 @@ BOOST_FIXTURE_TEST_CASE(test_wallet_redeem_err_path, DDWalletTestFixture)
     // BOOST_CHECK(result); // When ERR conditions are met
 }
 
-BOOST_FIXTURE_TEST_CASE(test_wallet_redeem_emergency_path, DDWalletTestFixture)
+// DELETED: test_wallet_redeem_emergency_path - Emergency redemption path does not exist in DigiDollar
+// Only two redemption paths: Normal (full, after timelock) and ERR (full, more DD burned)
+
+BOOST_FIXTURE_TEST_CASE(test_wallet_redeem_emergency_path_deleted, DDWalletTestFixture)
 {
-    // Arrange: Test emergency redemption with oracle approval
+    // DELETED: Emergency path test - this redemption path does not exist
+    // Emergency redemption was removed from DigiDollar design
+    // Only Normal and ERR paths remain
+
     DigiDollarWallet wallet;
     COutPoint collateralUtxo(uint256S("4444444444444444444444444444444444444444444444444444444444444444"), 0);
     CAmount ddAmount = TEST_DD_AMOUNT;
-    DigiDollar::RedemptionPath path = DigiDollar::RedemptionPath::EMERGENCY;
     std::string txid;
     std::string error;
 
-    // Act: Emergency redemption - EXPECTED TO FAIL (RED phase)
-    bool result = wallet.RedeemDigiDollar(collateralUtxo, ddAmount, path, txid, error);
-
-    // Assert: Should fail in RED phase
-    BOOST_CHECK(!result);
-    BOOST_CHECK(!error.empty());
-
-    // After GREEN phase:
-    // Should require oracle approval validation
-    // Should work with proper emergency conditions
+    // Placeholder test to maintain test structure
+    BOOST_CHECK(true);
 }
 
 BOOST_FIXTURE_TEST_CASE(test_wallet_redemption_history_tracking, DDWalletTestFixture)

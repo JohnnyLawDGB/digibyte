@@ -28,19 +28,15 @@ BOOST_AUTO_TEST_CASE(digidollar_tx_type_values)
     BOOST_CHECK_EQUAL(static_cast<uint8_t>(DD_TX_MINT), 1);
     BOOST_CHECK_EQUAL(static_cast<uint8_t>(DD_TX_TRANSFER), 2);
     BOOST_CHECK_EQUAL(static_cast<uint8_t>(DD_TX_REDEEM), 3);
-    BOOST_CHECK_EQUAL(static_cast<uint8_t>(DD_TX_PARTIAL), 4);
-    BOOST_CHECK_EQUAL(static_cast<uint8_t>(DD_TX_EMERGENCY), 5);
 
     // Ensure all values are distinct
     std::set<uint8_t> values = {
         static_cast<uint8_t>(DD_TX_NONE),
         static_cast<uint8_t>(DD_TX_MINT),
         static_cast<uint8_t>(DD_TX_TRANSFER),
-        static_cast<uint8_t>(DD_TX_REDEEM),
-        static_cast<uint8_t>(DD_TX_PARTIAL),
-        static_cast<uint8_t>(DD_TX_EMERGENCY)
+        static_cast<uint8_t>(DD_TX_REDEEM)
     };
-    BOOST_CHECK_EQUAL(values.size(), 6);
+    BOOST_CHECK_EQUAL(values.size(), 4);
 }
 
 BOOST_AUTO_TEST_CASE(digidollar_tx_version_marker)
@@ -178,9 +174,7 @@ BOOST_AUTO_TEST_CASE(collateral_position_redemption_paths)
 {
     // Test RedemptionPath enum values
     BOOST_CHECK_EQUAL(static_cast<int>(CCollateralPosition::PATH_NORMAL), 0);
-    BOOST_CHECK_EQUAL(static_cast<int>(CCollateralPosition::PATH_EMERGENCY), 1);
-    BOOST_CHECK_EQUAL(static_cast<int>(CCollateralPosition::PATH_PARTIAL), 2);
-    BOOST_CHECK_EQUAL(static_cast<int>(CCollateralPosition::PATH_ERR), 3);
+    BOOST_CHECK_EQUAL(static_cast<int>(CCollateralPosition::PATH_ERR), 1);
 }
 
 BOOST_AUTO_TEST_CASE(collateral_position_basic_setup)
@@ -279,11 +273,11 @@ BOOST_AUTO_TEST_CASE(collateral_position_available_paths)
 
     // Test adding redemption paths
     position.availablePaths.push_back(CCollateralPosition::PATH_NORMAL);
-    position.availablePaths.push_back(CCollateralPosition::PATH_EMERGENCY);
+    position.availablePaths.push_back(CCollateralPosition::PATH_ERR);
 
     BOOST_CHECK_EQUAL(position.availablePaths.size(), 2);
     BOOST_CHECK_EQUAL(position.availablePaths[0], CCollateralPosition::PATH_NORMAL);
-    BOOST_CHECK_EQUAL(position.availablePaths[1], CCollateralPosition::PATH_EMERGENCY);
+    BOOST_CHECK_EQUAL(position.availablePaths[1], CCollateralPosition::PATH_ERR);
 }
 
 BOOST_AUTO_TEST_CASE(collateral_position_edge_cases)

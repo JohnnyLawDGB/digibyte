@@ -84,28 +84,8 @@ BOOST_AUTO_TEST_CASE(test_normal_redemption_path_creation)
     BOOST_CHECK(std::find(normalPath.begin(), normalPath.end(), OP_CHECKSIG) != normalPath.end());
 }
 
-BOOST_AUTO_TEST_CASE(test_emergency_path_creation)
-{
-    auto params = CreateTestMintParams();
-
-    // This should fail until we implement CreateEmergencyPath
-    CScript emergencyPath = DigiDollar::CreateEmergencyPath(params);
-
-    BOOST_CHECK(emergencyPath.size() > 0);
-
-    // Should contain OP_DIGIDOLLAR for amount verification
-    BOOST_CHECK(std::find(emergencyPath.begin(), emergencyPath.end(), OP_DIGIDOLLAR) != emergencyPath.end());
-
-    // Should contain multiple CHECKSIGADD operations (for 15 oracle keys)
-    // Note: The script also includes key pushes (32 bytes each with size prefix)
-    // So we count >= 15 rather than exactly 15 to account for encoding
-    size_t checksigadd_count = std::count(emergencyPath.begin(), emergencyPath.end(), OP_CHECKSIGADD);
-    BOOST_CHECK(checksigadd_count >= 15);
-
-    // Should require 8-of-15 threshold
-    BOOST_CHECK(std::find(emergencyPath.begin(), emergencyPath.end(), OP_8) != emergencyPath.end());
-    BOOST_CHECK(std::find(emergencyPath.begin(), emergencyPath.end(), OP_EQUAL) != emergencyPath.end());
-}
+// DELETED: test_emergency_path_creation - Emergency redemption path does not exist in DigiDollar
+// Only two redemption paths: Normal (full, after timelock) and ERR (full, more DD burned)
 
 // DELETED: test_partial_redemption_path_creation - Partial redemption does not exist in DigiDollar
 // Only two redemption paths: Normal (full, after timelock) and ERR (full, more DD burned)
@@ -289,7 +269,6 @@ BOOST_AUTO_TEST_CASE(test_invalid_parameters_handling)
     // NOTE: Only two redemption paths exist: Normal and ERR
     CScript normalPath = DigiDollar::CreateNormalRedemptionPath(params);
     CScript errPath = DigiDollar::CreateERRPath(params);
-    // DELETED: partialPath - partial redemption does not exist
 
     // Scripts may be empty or invalid, but shouldn't crash
     BOOST_CHECK(true);  // If we get here, no crash occurred

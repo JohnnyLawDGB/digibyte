@@ -141,23 +141,8 @@ BOOST_FIXTURE_TEST_CASE(test_normal_redemption_before_timelock, DigiDollarRedeem
     // BOOST_CHECK(result.error.find("timelock") != std::string::npos);
 }
 
-BOOST_FIXTURE_TEST_CASE(test_emergency_redemption_oracle_approval, DigiDollarRedeemTestSetup)
-{
-    // Test emergency redemption with oracle approval (8-of-15 threshold)
-    auto params = CreateRedeemParams(DigiDollar::RedemptionPath::EMERGENCY, 15000);
-
-    // Act: Build emergency redemption - EXPECTED TO FAIL (RED phase)
-    auto result = builder->BuildRedemptionTransaction(params);
-
-    // Assert: Should fail in RED phase
-    BOOST_CHECK(!result.success);
-
-    // After GREEN phase:
-    // BOOST_CHECK(result.success);
-    // Check transaction has emergency marker
-    // BOOST_CHECK_EQUAL(result.tx.nVersion & 0xFF, static_cast<uint32_t>(DigiDollar::DD_TX_EMERGENCY));
-    // Verify oracle signature validation logic
-}
+// DELETED: test_emergency_redemption_oracle_approval - Emergency redemption path does not exist in DigiDollar
+// Only two redemption paths: Normal (full, after timelock) and ERR (full, more DD burned)
 
 // DELETED: test_partial_redemption_keep_position_open - Partial redemption does not exist in DigiDollar
 // Only two redemption paths: Normal (full, after timelock) and ERR (full, more DD burned)
@@ -377,10 +362,6 @@ BOOST_FIXTURE_TEST_CASE(test_redemption_path_determination_logic, DigiDollarRede
     auto normalPath = builder->DetermineRedemptionPath(params);
     // Should fail since method not implemented
 
-    // Emergency path
-    params.path = DigiDollar::RedemptionPath::EMERGENCY;
-    auto emergencyPath = builder->DetermineRedemptionPath(params);
-
     // ERR path (unhealthy system)
     validationContext.systemCollateral = 90;
     params.path = DigiDollar::RedemptionPath::ERR;
@@ -388,7 +369,6 @@ BOOST_FIXTURE_TEST_CASE(test_redemption_path_determination_logic, DigiDollarRede
 
     // After GREEN phase:
     // BOOST_CHECK_EQUAL(normalPath, DigiDollar::RedemptionPath::NORMAL);
-    // BOOST_CHECK_EQUAL(emergencyPath, DigiDollar::RedemptionPath::EMERGENCY);
     // BOOST_CHECK_EQUAL(errPath, DigiDollar::RedemptionPath::ERR);
 }
 

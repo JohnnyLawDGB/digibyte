@@ -318,9 +318,9 @@ BOOST_AUTO_TEST_CASE(redeem_transaction_different_paths)
 
     // Test different redemption paths
     // Note: ERR path requires system health < 100%, which we can't easily mock in this test
+    // DELETED: RedemptionPath::EMERGENCY - Emergency redemption path does not exist
     std::vector<RedemptionPath> paths = {
-        RedemptionPath::NORMAL,
-        RedemptionPath::EMERGENCY
+        RedemptionPath::NORMAL
     };
 
     for (RedemptionPath path : paths) {

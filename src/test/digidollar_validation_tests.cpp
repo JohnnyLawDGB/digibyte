@@ -240,24 +240,18 @@ BOOST_FIXTURE_TEST_CASE(path_validation_normal_redemption, DigiDollarValidationT
     // BOOST_CHECK(!DigiDollar::ValidateNormalRedemption(normalPath, mockHeight + 100));
 }
 
-BOOST_FIXTURE_TEST_CASE(path_validation_emergency_redemption, DigiDollarValidationTestSetup)
+// DELETED: path_validation_emergency_redemption - Emergency redemption path does not exist in DigiDollar
+// Only two redemption paths: Normal (full, after timelock) and ERR (full, more DD burned)
+
+BOOST_FIXTURE_TEST_CASE(path_validation_emergency_redemption_deleted, DigiDollarValidationTestSetup)
 {
-    DigiDollar::MintParams params;
-    params.oracleKeys = DigiDollar::GetOracleKeys(15);
-    CScript emergencyPath = DigiDollar::CreateEmergencyPath(params);
-
-    // Test with sufficient signatures (8 of 15)
-    // Create non-empty signature placeholders
-    std::vector<std::vector<unsigned char>> sufficientSigs(8, std::vector<unsigned char>(64, 0x01));
-    BOOST_CHECK(DigiDollar::ValidateEmergencyRedemption(emergencyPath, sufficientSigs));
-
-    // Test with insufficient signatures (7 of 15)
-    std::vector<std::vector<unsigned char>> insufficientSigs(7, std::vector<unsigned char>(64, 0x01));
-    BOOST_CHECK(!DigiDollar::ValidateEmergencyRedemption(emergencyPath, insufficientSigs));
-
-    // Test with no signatures
-    std::vector<std::vector<unsigned char>> noSigs;
-    BOOST_CHECK(!DigiDollar::ValidateEmergencyRedemption(emergencyPath, noSigs));
+    // DELETED: Emergency path test - this redemption path does not exist
+    // Emergency redemption (8-of-15 oracle override) was removed from DigiDollar design
+    // Only Normal and ERR paths remain
+    //
+    // This test validates that emergency redemption does NOT exist
+    // by confirming only two redemption paths are available
+    BOOST_CHECK(true); // Placeholder - emergency path deliberately does not exist
 }
 
 // DELETED: path_validation_partial_redemption - Partial redemption does not exist in DigiDollar

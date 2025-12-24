@@ -29,22 +29,18 @@ BOOST_AUTO_TEST_CASE(digidollar_tx_type_enum_values)
     BOOST_CHECK_EQUAL(static_cast<uint8_t>(DD_TX_MINT), 1);
     BOOST_CHECK_EQUAL(static_cast<uint8_t>(DD_TX_TRANSFER), 2);
     BOOST_CHECK_EQUAL(static_cast<uint8_t>(DD_TX_REDEEM), 3);
-    BOOST_CHECK_EQUAL(static_cast<uint8_t>(DD_TX_PARTIAL), 4);
-    BOOST_CHECK_EQUAL(static_cast<uint8_t>(DD_TX_EMERGENCY), 5);
 
     // Test MAX validation boundary
-    BOOST_CHECK_EQUAL(static_cast<uint8_t>(DD_TX_MAX), 6);
+    BOOST_CHECK_EQUAL(static_cast<uint8_t>(DD_TX_MAX), 4);
 
     // Test all values are distinct
     std::set<uint8_t> values = {
         static_cast<uint8_t>(DD_TX_NONE),
         static_cast<uint8_t>(DD_TX_MINT),
         static_cast<uint8_t>(DD_TX_TRANSFER),
-        static_cast<uint8_t>(DD_TX_REDEEM),
-        static_cast<uint8_t>(DD_TX_PARTIAL),
-        static_cast<uint8_t>(DD_TX_EMERGENCY)
+        static_cast<uint8_t>(DD_TX_REDEEM)
     };
-    BOOST_CHECK_EQUAL(values.size(), 6);
+    BOOST_CHECK_EQUAL(values.size(), 4);
 }
 
 BOOST_AUTO_TEST_CASE(digidollar_version_constants)
@@ -102,7 +98,7 @@ BOOST_AUTO_TEST_CASE(make_digidollar_version_all_types)
 {
     // Test version construction for all transaction types
     std::vector<DigiDollarTxType> types = {
-        DD_TX_MINT, DD_TX_TRANSFER, DD_TX_REDEEM, DD_TX_PARTIAL, DD_TX_EMERGENCY
+        DD_TX_MINT, DD_TX_TRANSFER, DD_TX_REDEEM
     };
 
     for (auto type : types) {
@@ -139,7 +135,7 @@ BOOST_AUTO_TEST_CASE(is_digidollar_transaction_detection)
 
     // Test different DigiDollar types
     std::vector<DigiDollarTxType> types = {
-        DD_TX_MINT, DD_TX_TRANSFER, DD_TX_REDEEM, DD_TX_PARTIAL, DD_TX_EMERGENCY
+        DD_TX_MINT, DD_TX_TRANSFER, DD_TX_REDEEM
     };
 
     for (auto type : types) {
@@ -160,7 +156,7 @@ BOOST_AUTO_TEST_CASE(get_digidollar_tx_type_extraction)
 
     // Test type extraction for each DigiDollar type
     std::vector<DigiDollarTxType> types = {
-        DD_TX_MINT, DD_TX_TRANSFER, DD_TX_REDEEM, DD_TX_PARTIAL, DD_TX_EMERGENCY
+        DD_TX_MINT, DD_TX_TRANSFER, DD_TX_REDEEM
     };
 
     for (auto expectedType : types) {
@@ -240,7 +236,7 @@ BOOST_AUTO_TEST_CASE(cmutable_transaction_get_dd_type)
 
     // Test all DigiDollar types
     std::vector<DigiDollarTxType> types = {
-        DD_TX_MINT, DD_TX_TRANSFER, DD_TX_REDEEM, DD_TX_PARTIAL, DD_TX_EMERGENCY
+        DD_TX_MINT, DD_TX_TRANSFER, DD_TX_REDEEM
     };
 
     for (auto expectedType : types) {
@@ -260,8 +256,6 @@ BOOST_AUTO_TEST_CASE(get_digidollar_tx_type_name)
     BOOST_CHECK_EQUAL(GetDigiDollarTxTypeName(DD_TX_MINT), "MINT");
     BOOST_CHECK_EQUAL(GetDigiDollarTxTypeName(DD_TX_TRANSFER), "TRANSFER");
     BOOST_CHECK_EQUAL(GetDigiDollarTxTypeName(DD_TX_REDEEM), "REDEEM");
-    BOOST_CHECK_EQUAL(GetDigiDollarTxTypeName(DD_TX_PARTIAL), "PARTIAL_REDEEM");
-    BOOST_CHECK_EQUAL(GetDigiDollarTxTypeName(DD_TX_EMERGENCY), "EMERGENCY_REDEEM");
 
     // Test invalid type
     BOOST_CHECK_EQUAL(GetDigiDollarTxTypeName(static_cast<DigiDollarTxType>(99)), "UNKNOWN");
@@ -295,8 +289,6 @@ BOOST_AUTO_TEST_CASE(is_valid_digidollar_type_validation)
     BOOST_CHECK(IsValidDigiDollarType(DigiDollar::DD_TX_MINT));
     BOOST_CHECK(IsValidDigiDollarType(DigiDollar::DD_TX_TRANSFER));
     BOOST_CHECK(IsValidDigiDollarType(DigiDollar::DD_TX_REDEEM));
-    BOOST_CHECK(IsValidDigiDollarType(DigiDollar::DD_TX_PARTIAL));
-    BOOST_CHECK(IsValidDigiDollarType(DigiDollar::DD_TX_ERR));
 
     // Test invalid types
     BOOST_CHECK(!IsValidDigiDollarType(static_cast<DigiDollar::DigiDollarTxType>(0))); // Invalid enum value
@@ -371,10 +363,10 @@ BOOST_AUTO_TEST_CASE(version_encoding_edge_cases)
 {
     // Test with maximum values
     uint8_t maxFlags = 0xFF;
-    int32_t version = MakeDigiDollarVersion(DD_TX_EMERGENCY, maxFlags);
+    int32_t version = MakeDigiDollarVersion(DD_TX_REDEEM, maxFlags);
 
     BOOST_CHECK_EQUAL((version & DD_VERSION_MASK), (DD_TX_VERSION & DD_VERSION_MASK));
-    BOOST_CHECK_EQUAL((version & DD_TYPE_MASK) >> 24, static_cast<uint8_t>(DD_TX_EMERGENCY));
+    BOOST_CHECK_EQUAL((version & DD_TYPE_MASK) >> 24, static_cast<uint8_t>(DD_TX_REDEEM));
     BOOST_CHECK_EQUAL((version & DD_FLAGS_MASK) >> 16, maxFlags);
 }
 
@@ -407,7 +399,7 @@ BOOST_AUTO_TEST_CASE(collision_detection)
     }
 
     // Test that all possible DigiDollar versions maintain the marker
-    for (uint8_t type = 1; type < 6; ++type) {
+    for (uint8_t type = 1; type < 4; ++type) {
         for (uint8_t flags = 0; flags < 3; ++flags) { // Test a few flag values
             int32_t ddVersion = MakeDigiDollarVersion(static_cast<DigiDollarTxType>(type), flags);
             BOOST_CHECK_EQUAL((ddVersion & DD_VERSION_MASK), (DD_TX_VERSION & DD_VERSION_MASK));
@@ -701,14 +693,8 @@ BOOST_FIXTURE_TEST_CASE(test_redemption_path_validation, DigiDollarTransactionTe
     };
 
     std::vector<RedemptionPathTest> tests = {
-        {DD_TX_REDEEM,    expiredLock, false, true,  "Normal redeem with expired lock"},
-        {DD_TX_REDEEM,    activeLock,  false, false, "Normal redeem with active lock"},
-        {DD_TX_PARTIAL,   expiredLock, false, true,  "Partial redeem with expired lock"},
-        {DD_TX_PARTIAL,   activeLock,  false, true,  "Partial redeem with active lock"},
-        {DD_TX_EMERGENCY, expiredLock, true,  true,  "Emergency redeem with ERR active"},
-        {DD_TX_EMERGENCY, activeLock,  true,  true,  "Emergency redeem with ERR and active lock"},
-        {DD_TX_EMERGENCY, expiredLock, false, false, "Emergency redeem without ERR"},
-        {DD_TX_EMERGENCY, activeLock,  false, false, "Emergency redeem without ERR and active lock"}
+        {DD_TX_REDEEM, expiredLock, false, true,  "Normal redeem with expired lock"},
+        {DD_TX_REDEEM, activeLock,  false, false, "Normal redeem with active lock"}
     };
 
     for (const auto& test : tests) {
@@ -767,15 +753,10 @@ BOOST_FIXTURE_TEST_CASE(test_timelock_validation, DigiDollarTransactionTestFixtu
     };
 
     std::vector<TimelockTest> tests = {
-        {DD_TX_REDEEM,    currentHeight - shortLockBlocks, false, true,  "Normal redeem, short lock expired"},
-        {DD_TX_REDEEM,    currentHeight + shortLockBlocks, false, false, "Normal redeem, short lock active"},
-        {DD_TX_REDEEM,    currentHeight - longLockBlocks,  false, true,  "Normal redeem, long lock expired"},
-        {DD_TX_REDEEM,    currentHeight + longLockBlocks,  false, false, "Normal redeem, long lock active"},
-        {DD_TX_PARTIAL,   currentHeight + shortLockBlocks, false, true,  "Partial redeem bypasses timelock"},
-        {DD_TX_PARTIAL,   currentHeight + longLockBlocks,  false, true,  "Partial redeem bypasses long timelock"},
-        {DD_TX_EMERGENCY, currentHeight + longLockBlocks,  true,  true,  "Emergency redeem bypasses with ERR"},
-        {DD_TX_EMERGENCY, currentHeight + longLockBlocks,  false, false, "Emergency redeem fails without ERR"},
-        {DD_TX_EMERGENCY, currentHeight - longLockBlocks,  false, true,  "Emergency redeem after lock expires"}
+        {DD_TX_REDEEM, currentHeight - shortLockBlocks, false, true,  "Normal redeem, short lock expired"},
+        {DD_TX_REDEEM, currentHeight + shortLockBlocks, false, false, "Normal redeem, short lock active"},
+        {DD_TX_REDEEM, currentHeight - longLockBlocks,  false, true,  "Normal redeem, long lock expired"},
+        {DD_TX_REDEEM, currentHeight + longLockBlocks,  false, false, "Normal redeem, long lock active"}
     };
 
     for (const auto& test : tests) {

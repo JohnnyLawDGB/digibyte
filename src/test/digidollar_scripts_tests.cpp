@@ -391,15 +391,54 @@ BOOST_AUTO_TEST_CASE(test_mast_tree_has_exactly_two_paths)
     // Both paths should be different
     BOOST_CHECK(normalPath != errPath);
 
+    // NOTE: We use proper script parsing (GetOp) instead of std::find on raw bytes
+    // because std::find can give false positives if data bytes (like pubkeys) match opcode values
+
     // Normal path should NOT contain OP_CHECKCOLLATERAL (only ERR path has this)
-    BOOST_CHECK(std::find(normalPath.begin(), normalPath.end(), OP_CHECKCOLLATERAL) == normalPath.end());
+    {
+        CScript::const_iterator pc = normalPath.begin();
+        opcodetype opcode;
+        std::vector<unsigned char> data;
+        bool found_checkcollateral = false;
+        while (normalPath.GetOp(pc, opcode, data)) {
+            if (opcode == OP_CHECKCOLLATERAL) found_checkcollateral = true;
+        }
+        BOOST_CHECK_MESSAGE(!found_checkcollateral, "Normal path should NOT contain OP_CHECKCOLLATERAL");
+    }
 
     // ERR path MUST contain OP_CHECKCOLLATERAL
-    BOOST_CHECK(std::find(errPath.begin(), errPath.end(), OP_CHECKCOLLATERAL) != errPath.end());
+    {
+        CScript::const_iterator pc = errPath.begin();
+        opcodetype opcode;
+        std::vector<unsigned char> data;
+        bool found_checkcollateral = false;
+        while (errPath.GetOp(pc, opcode, data)) {
+            if (opcode == OP_CHECKCOLLATERAL) found_checkcollateral = true;
+        }
+        BOOST_CHECK_MESSAGE(found_checkcollateral, "ERR path MUST contain OP_CHECKCOLLATERAL");
+    }
 
     // Both paths MUST contain OP_CHECKLOCKTIMEVERIFY (timelock required for both)
-    BOOST_CHECK(std::find(normalPath.begin(), normalPath.end(), OP_CHECKLOCKTIMEVERIFY) != normalPath.end());
-    BOOST_CHECK(std::find(errPath.begin(), errPath.end(), OP_CHECKLOCKTIMEVERIFY) != errPath.end());
+    {
+        CScript::const_iterator pc = normalPath.begin();
+        opcodetype opcode;
+        std::vector<unsigned char> data;
+        bool found_cltv = false;
+        while (normalPath.GetOp(pc, opcode, data)) {
+            if (opcode == OP_CHECKLOCKTIMEVERIFY) found_cltv = true;
+        }
+        BOOST_CHECK_MESSAGE(found_cltv, "Normal path MUST contain OP_CHECKLOCKTIMEVERIFY");
+    }
+    {
+        CScript::const_iterator pc = errPath.begin();
+        opcodetype opcode;
+        std::vector<unsigned char> data;
+        bool found_cltv = false;
+        while (errPath.GetOp(pc, opcode, data)) {
+            if (opcode == OP_CHECKLOCKTIMEVERIFY) found_cltv = true;
+        }
+        BOOST_CHECK_MESSAGE(found_cltv, "ERR path MUST contain OP_CHECKLOCKTIMEVERIFY");
+    }
 }
 
 BOOST_AUTO_TEST_CASE(test_normal_path_does_not_have_dd_amount_validation)

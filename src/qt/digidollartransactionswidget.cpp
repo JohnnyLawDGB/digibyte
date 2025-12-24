@@ -123,15 +123,16 @@ void DigiDollarTransactionsWidget::setupTable()
     // Let the table inherit colors from the application palette/theme
     // Don't override with custom colors - this ensures proper dark/light mode support
 
-    // Column widths
-    m_table->setColumnWidth(Column::Date, 150);
-    m_table->setColumnWidth(Column::Type, 100);
-    m_table->setColumnWidth(Column::Amount, 130);
-    m_table->setColumnWidth(Column::LockPeriod, 100);
-    m_table->setColumnWidth(Column::TxId, 250);
+    // Column widths - Transaction ID stretches to fill remaining space
+    m_table->setColumnWidth(Column::Date, 130);
+    m_table->setColumnWidth(Column::Type, 90);
+    m_table->setColumnWidth(Column::Amount, 110);
+    m_table->setColumnWidth(Column::LockPeriod, 90);
     m_table->setColumnWidth(Column::Confirmations, 100);
 
-    m_table->horizontalHeader()->setStretchLastSection(true);
+    // Make Transaction ID stretch to fill available width
+    m_table->horizontalHeader()->setStretchLastSection(false);
+    m_table->horizontalHeader()->setSectionResizeMode(Column::TxId, QHeaderView::Stretch);
 
     // Context menu
     m_contextMenu = new QMenu(this);

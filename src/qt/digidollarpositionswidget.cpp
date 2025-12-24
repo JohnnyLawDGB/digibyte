@@ -118,25 +118,25 @@ void DigiDollarPositionsWidget::setupTableHeader()
     header->setStretchLastSection(false);
     header->setDefaultAlignment(Qt::AlignCenter);
     header->setHighlightSections(true);
-    header->setMinimumSectionSize(80);
+    header->setMinimumSectionSize(50);
 
-    // Set column resize modes for optimal layout
-    header->setSectionResizeMode(COL_POSITION_ID, QHeaderView::Interactive);
+    // Set column resize modes - VAULT ID stretches to fill remaining space
+    header->setSectionResizeMode(COL_POSITION_ID, QHeaderView::Stretch);   // Stretch to fill width
     header->setSectionResizeMode(COL_DD_MINTED, QHeaderView::Interactive);
     header->setSectionResizeMode(COL_DGB_COLLATERAL, QHeaderView::Interactive);
     header->setSectionResizeMode(COL_LOCK_TIER, QHeaderView::Interactive);
     header->setSectionResizeMode(COL_TIME_REMAINING, QHeaderView::Interactive);
-    header->setSectionResizeMode(COL_HEALTH, QHeaderView::Interactive);
+    header->setSectionResizeMode(COL_HEALTH, QHeaderView::Fixed);
     header->setSectionResizeMode(COL_ACTIONS, QHeaderView::Fixed);
 
-    // Set optimized column widths for better readability
-    m_positionsTable->setColumnWidth(COL_POSITION_ID, 110);
-    m_positionsTable->setColumnWidth(COL_DD_MINTED, 130);
-    m_positionsTable->setColumnWidth(COL_DGB_COLLATERAL, 150);
-    m_positionsTable->setColumnWidth(COL_LOCK_TIER, 100);
-    m_positionsTable->setColumnWidth(COL_TIME_REMAINING, 120);
-    m_positionsTable->setColumnWidth(COL_HEALTH, 110);
-    m_positionsTable->setColumnWidth(COL_ACTIONS, 100);
+    // Set balanced column widths - VAULT ID stretches, others fixed
+    // Total fixed: 115 + 145 + 100 + 125 + 105 + 100 = 690px, leaves ~260px for VAULT ID
+    m_positionsTable->setColumnWidth(COL_DD_MINTED, 115);        // DD Minted
+    m_positionsTable->setColumnWidth(COL_DGB_COLLATERAL, 145);   // DGB Collateral
+    m_positionsTable->setColumnWidth(COL_LOCK_TIER, 100);        // Lock Period (+5)
+    m_positionsTable->setColumnWidth(COL_TIME_REMAINING, 125);   // Time Remaining (+5)
+    m_positionsTable->setColumnWidth(COL_HEALTH, 105);           // Health (+10)
+    m_positionsTable->setColumnWidth(COL_ACTIONS, 100);          // Actions
 
     // Add sort indicators to sortable columns
     m_positionsTable->setSortingEnabled(true);

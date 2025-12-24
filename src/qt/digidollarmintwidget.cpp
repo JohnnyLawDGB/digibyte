@@ -87,17 +87,17 @@ DigiDollarMintWidget::~DigiDollarMintWidget()
 
 void DigiDollarMintWidget::setupUI()
 {
-    // Create main layout
+    // Create main layout - compact like DGB tabs
     m_mainLayout = new QVBoxLayout(this);
-    m_mainLayout->setSpacing(12);
-    m_mainLayout->setContentsMargins(16, 16, 16, 16);
+    m_mainLayout->setSpacing(0);
+    m_mainLayout->setContentsMargins(0, 0, 0, 0);
 
     // Create validators
     m_amountValidator = new AmountValidator(0.00000001, 999999999.99999999, this);
 
     // Create horizontal layout for mint amount and lock period side-by-side
     QHBoxLayout* topLayout = new QHBoxLayout();
-    topLayout->setSpacing(12);
+    topLayout->setSpacing(6);
 
     // Setup sections
     setupMintAmountSection();

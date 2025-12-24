@@ -303,13 +303,13 @@ background-color:rgba(255, 255, 255, 0.15);
     border:0;
     border-radius:3px;
     color:#ffffff;
-    font-size:9pt;
+    font-size:8pt;
     font-weight:bold;
-    height: 26px;
-    padding-left:25px;
-    padding-right:25px;
-    padding-top:5px;
-    padding-bottom:5px;
+    height: 22px;
+    padding-left:12px;
+    padding-right:12px;
+    padding-top:3px;
+    padding-bottom:3px;
     }
 
     QPushButton:hover {
@@ -2845,13 +2845,14 @@ QPushButton:disabled {
 
 /* Dialog Button Boxes */
 QDialogButtonBox QPushButton {
-    min-width: 80px;
+    min-width: 60px;
     background-color: #0066CC;
-    color: #003366;
+    color: #ffffff;
     border: none;
-    padding: 8px 16px;
-    border-radius: 4px;
+    padding: 4px 10px;
+    border-radius: 3px;
     font-weight: bold;
+    font-size: 8pt;
 }
 
 QDialogButtonBox QPushButton:hover {
@@ -3688,13 +3689,13 @@ SendCoinsEntry QPushButton#useAvailableBalanceButton:hover {
 #SendCoinsDialog QPushButton#sendButton {
     background-color: #0066CC;
     color: #ffffff !important;
-    border: 1px solid #0066CC;
-    border-radius: 4px;
-    padding: 8px 24px;
+    border: none;
+    border-radius: 3px;
+    padding: 5px 12px;
     font-weight: bold;
-    font-size: 11pt;
-    min-width: 120px;
-    min-height: 40px;
+    font-size: 8pt;
+    min-width: 100px;
+    min-height: 28px;
 }
 
 #SendCoinsDialog QPushButton#sendButton:hover {
@@ -3705,13 +3706,13 @@ SendCoinsEntry QPushButton#useAvailableBalanceButton:hover {
 #SendCoinsDialog QPushButton#clearButton {
     background-color: #0066CC;
     color: #ffffff !important;
-    border: 1px solid #0066CC;
-    border-radius: 4px;
-    padding: 8px 24px;
+    border: none;
+    border-radius: 3px;
+    padding: 4px 10px;
     font-weight: bold;
-    font-size: 11pt;
-    min-width: 120px;
-    min-height: 40px;
+    font-size: 8pt;
+    min-width: 80px;
+    min-height: 28px;
 }
 
 #SendCoinsDialog QPushButton#clearButton:hover {
@@ -3723,13 +3724,13 @@ SendCoinsEntry QPushButton#useAvailableBalanceButton:hover {
 #SendCoinsDialog QPushButton#addButton {
     background-color: #0066CC;
     color: #ffffff !important;
-    border: 1px solid #0066CC;
-    border-radius: 4px;
-    padding: 8px 24px;
+    border: none;
+    border-radius: 3px;
+    padding: 4px 10px;
     font-weight: bold;
-    font-size: 11pt;
-    min-width: 120px;
-    min-height: 40px;
+    font-size: 8pt;
+    min-width: 80px;
+    min-height: 28px;
 }
 
 #SendCoinsDialog QPushButton#addButton:hover {
@@ -4563,8 +4564,8 @@ DigiDollarTab QTabBar::tab {
     background-color: #f5f5f5;
     color: #666666;
     border: 1px solid #d4d4d4;
-    padding: 8px 16px;
-    margin-right: 2px;
+    padding: 4px 8px;
+    margin-right: 1px;
 }
 
 DigiDollarTab QTabBar::tab:selected {
@@ -4593,113 +4594,113 @@ DigiDollarOverviewWidget {
     background-color: transparent;
 }
 
-/* Balance Frame */
+/* Balance Frame - Compact sizing */
 DigiDollarOverviewWidget .QFrame#balanceFrame {
-    min-width: 490px;
-    margin-top: 15px;
-    margin-left: 20px;
-    margin-right: 10px;
+    min-width: 280px;
+    margin-top: 6px;
+    margin-left: 8px;
+    margin-right: 4px;
     background-color: #A7C6ED;
     border: 1px solid #8FB1E3;
-    border-radius: 6px;
-    padding: 12px;
+    border-radius: 5px;
+    padding: 6px;
 }
 
 DigiDollarOverviewWidget .QFrame#balanceFrame > .QLabel {
-    min-width: 190px;
+    min-width: 100px;
     font-weight: normal;
-    min-height: 30px;
+    min-height: 20px;
 }
 
-/* Balance Labels - Match main wallet style */
+/* Balance Labels - Compact */
 DigiDollarOverviewWidget .QFrame#balanceFrame .QLabel#ddBalanceLabel {
     qproperty-alignment: 'AlignVCenter | AlignRight';
-    min-width: 160px;
+    min-width: 100px;
     background-color: #003366;
     color: #ffffff;
-    margin-right: 5px;
-    padding-right: 5px;
-    font-size: 10pt;
+    margin-right: 6px;
+    padding: 2px 4px;
+    font-size: 8pt;
     font-weight: bold;
-    min-height: 35px;
-    border-radius: 6px;
+    min-height: 22px;
+    border-radius: 3px;
 }
 
 DigiDollarOverviewWidget .QFrame#balanceFrame .QLabel#ddBalanceValue {
     qproperty-alignment: 'AlignVCenter | AlignLeft';
-    font-size: 14pt;
+    font-size: 11pt;
     color: #003366;
-    margin-left: 0px;
+    margin-left: 4px;
     font-weight: bold;
 }
 
 DigiDollarOverviewWidget .QFrame#balanceFrame .QLabel#dgbCollateralLabel {
     qproperty-alignment: 'AlignVCenter | AlignRight';
-    min-width: 160px;
-    font-size: 11pt;
+    min-width: 100px;
+    font-size: 8pt;
     background-color: #ffffff;
     color: #003366;
-    margin-right: 5px;
-    padding-right: 5px;
-    border-radius: 6px;
+    margin-right: 6px;
+    padding: 2px 4px;
+    border-radius: 3px;
 }
 
 DigiDollarOverviewWidget .QFrame#balanceFrame .QLabel#dgbCollateralValue {
     qproperty-alignment: 'AlignVCenter | AlignLeft';
-    font-size: 13pt;
+    font-size: 10pt;
     color: #003366;
-    margin-left: 0px;
+    margin-left: 4px;
 }
 
 DigiDollarOverviewWidget .QFrame#balanceFrame .QLabel#usdValueLabel {
     qproperty-alignment: 'AlignVCenter | AlignRight';
-    min-width: 160px;
-    font-size: 11pt;
+    min-width: 100px;
+    font-size: 8pt;
     background-color: #ffffff;
     color: #003366;
-    margin-right: 5px;
-    padding-right: 5px;
-    border-radius: 6px;
+    margin-right: 6px;
+    padding: 2px 4px;
+    border-radius: 3px;
 }
 
 DigiDollarOverviewWidget .QFrame#balanceFrame .QLabel#usdValueValue {
     qproperty-alignment: 'AlignVCenter | AlignLeft';
-    font-size: 13pt;
+    font-size: 10pt;
     color: #003366;
-    margin-left: 0px;
+    margin-left: 4px;
 }
 
-/* System Health Frame */
+/* System Health Frame - Compact */
 DigiDollarOverviewWidget .QFrame#systemHealthFrame {
-    min-width: 490px;
-    margin-top: 15px;
-    margin-left: 20px;
-    margin-right: 10px;
+    min-width: 320px;
+    margin-top: 6px;
+    margin-left: 8px;
+    margin-right: 4px;
     background-color: #A7C6ED;
     border: 1px solid #8FB1E3;
-    border-radius: 6px;
-    padding: 12px;
+    border-radius: 5px;
+    padding: 6px;
 }
 
 DigiDollarOverviewWidget .QFrame#systemHealthFrame > .QLabel {
-    min-width: 190px;
+    min-width: 100px;
     font-weight: normal;
-    min-height: 30px;
+    min-height: 20px;
 }
 
-/* Left side stats labels */
+/* Left side stats labels - Compact */
 DigiDollarOverviewWidget .QFrame#systemHealthFrame .QLabel#oraclePriceLabel,
 DigiDollarOverviewWidget .QFrame#systemHealthFrame .QLabel#systemHealthLabel,
 DigiDollarOverviewWidget .QFrame#systemHealthFrame .QLabel#dcaLevelLabel,
 DigiDollarOverviewWidget .QFrame#systemHealthFrame .QLabel#errLevelLabel {
     qproperty-alignment: 'AlignVCenter | AlignRight';
-    min-width: 120px;
-    font-size: 10pt;
+    min-width: 80px;
+    font-size: 7pt;
     background-color: #ffffff;
     color: #003366;
-    margin-right: 5px;
-    padding: 3px 8px;
-    border-radius: 4px;
+    margin-right: 6px;
+    padding: 2px 4px;
+    border-radius: 3px;
 }
 
 DigiDollarOverviewWidget .QFrame#systemHealthFrame .QLabel#oraclePriceValue,
@@ -4707,59 +4708,59 @@ DigiDollarOverviewWidget .QFrame#systemHealthFrame .QLabel#systemHealthValue,
 DigiDollarOverviewWidget .QFrame#systemHealthFrame .QLabel#dcaLevelValue,
 DigiDollarOverviewWidget .QFrame#systemHealthFrame .QLabel#errLevelValue {
     qproperty-alignment: 'AlignVCenter | AlignLeft';
-    font-size: 11pt;
+    font-size: 8pt;
     color: #003366;
-    margin-left: 0px;
+    margin-left: 4px;
 }
 
 /* ========================================= */
-/* Network Totals Frame - PROMINENT DISPLAY */
+/* Network Totals Frame - Compact */
 /* ========================================= */
 DigiDollarOverviewWidget .QFrame#networkTotalsFrame {
     background-color: #002244;
-    border: 3px solid #0088FF;
-    border-radius: 12px;
-    min-width: 200px;
-    max-width: 320px;
-    padding: 12px;
+    border: 2px solid #0088FF;
+    border-radius: 6px;
+    min-width: 120px;
+    max-width: 200px;
+    padding: 5px;
 }
 
 /* Network Totals Labels - light blue text on dark blue */
 DigiDollarOverviewWidget .QFrame#networkTotalsFrame .QLabel#networkTotalDDLabel,
 DigiDollarOverviewWidget .QFrame#networkTotalsFrame .QLabel#networkTotalCollateralLabel {
     color: #99CCFF;
-    font-size: 9pt;
+    font-size: 7pt;
     font-weight: bold;
     background-color: transparent;
-    padding: 2px 4px;
+    padding: 1px 3px;
     text-transform: uppercase;
     qproperty-wordWrap: true;
 }
 
-/* Network Totals Values - prominent but scalable text */
+/* Network Totals Values - prominent but compact */
 DigiDollarOverviewWidget .QFrame#networkTotalsFrame .QLabel#networkTotalDDValue {
     color: #00FF88;
-    font-size: 16pt;
+    font-size: 12pt;
     font-weight: bold;
     background-color: transparent;
-    padding: 4px;
-    min-height: 28px;
+    padding: 2px;
+    min-height: 22px;
 }
 
 DigiDollarOverviewWidget .QFrame#networkTotalsFrame .QLabel#networkTotalCollateralValue {
     color: #FFD700;
-    font-size: 16pt;
+    font-size: 12pt;
     font-weight: bold;
     background-color: transparent;
-    padding: 4px;
-    min-height: 28px;
+    padding: 2px;
+    min-height: 22px;
 }
 
 /* Separator line in totals frame */
 DigiDollarOverviewWidget .QFrame#networkTotalsFrame .QFrame#totalsSeparator {
     background-color: #0088FF;
     max-height: 2px;
-    margin: 8px 0px;
+    margin: 4px 0px;
 }
 
 /* Progress Bar */
@@ -4866,13 +4867,10 @@ DigiDollarReceiveWidget QPushButton#generateButton {
     background-color: transparent;
     border: 2px solid #0066cc;
     color: #0066cc !important;
-    padding-left: 20px;
-    padding-right: 20px;
-    padding-top: 10px;
-    padding-bottom: 10px;
+    padding: 4px 12px;
     font-weight: bold;
-    font-size: 11pt;
-    border-radius: 4px;
+    font-size: 8pt;
+    border-radius: 3px;
 }
 
 DigiDollarReceiveWidget QPushButton#generateButton:hover {
@@ -4896,12 +4894,10 @@ DigiDollarReceiveWidget QPushButton#removeRequestButton {
     background-color: #0066cc;
     border: 1px solid #0066cc;
     color: #ffffff !important;
-    padding-left: 10px;
-    padding-right: 10px;
-    padding-top: 8px;
-    padding-bottom: 8px;
+    padding: 4px 8px;
     font-weight: bold;
-    border-radius: 4px;
+    font-size: 8pt;
+    border-radius: 3px;
 }
 
 DigiDollarReceiveWidget QPushButton#clearButton:hover,
@@ -5057,11 +5053,12 @@ DigiDollarSendWidget QPushButton#sendButton {
     background-color: #0066CC;
     color: #ffffff !important;
     border: none;
-    border-radius: 4px;
-    padding: 10px 20px;
+    border-radius: 3px;
+    padding: 5px 12px;
     font-weight: bold;
-    min-width: 140px;
-    min-height: 40px;
+    font-size: 8pt;
+    min-width: 100px;
+    min-height: 28px;
 }
 
 DigiDollarSendWidget QPushButton#sendButton:hover {
@@ -5084,10 +5081,11 @@ DigiDollarSendWidget QPushButton#clearButton {
     background-color: #0066CC;
     color: #ffffff !important;
     border: none;
-    border-radius: 4px;
-    padding: 8px 16px;
+    border-radius: 3px;
+    padding: 4px 10px;
     font-weight: bold;
-    min-height: 40px;
+    font-size: 8pt;
+    min-height: 28px;
 }
 
 DigiDollarSendWidget QPushButton#clearButton:hover {
@@ -5105,10 +5103,10 @@ DigiDollarSendWidget QPushButton#useAvailableBalanceButton {
     background-color: #ffffff;
     color: #0066CC;
     border: 2px solid #0066CC;
-    border-radius: 4px;
-    padding: 6px 12px;
+    border-radius: 3px;
+    padding: 3px 8px;
     font-weight: bold;
-    font-size: 10pt;
+    font-size: 8pt;
 }
 
 DigiDollarSendWidget QPushButton#useAvailableBalanceButton:hover {
@@ -5284,13 +5282,13 @@ DigiDollarMintWidget QComboBox#lockTierCombo QAbstractItemView::item:hover {
 DigiDollarMintWidget QPushButton#mintButton {
     background-color: #0066CC;
     color: #ffffff !important;
-    border: 1px solid #0066CC;
-    border-radius: 4px;
-    padding: 8px 24px;
+    border: none;
+    border-radius: 3px;
+    padding: 5px 12px;
     font-weight: bold;
-    font-size: 11pt;
-    min-width: 140px;
-    min-height: 40px;
+    font-size: 8pt;
+    min-width: 100px;
+    min-height: 28px;
 }
 
 DigiDollarMintWidget QPushButton#mintButton:hover {
@@ -5312,13 +5310,13 @@ DigiDollarMintWidget QPushButton#mintButton:disabled {
 DigiDollarMintWidget QPushButton#clearButton {
     background-color: #0066CC;
     color: #ffffff !important;
-    border: 1px solid #0066CC;
-    border-radius: 4px;
-    padding: 8px 24px;
+    border: none;
+    border-radius: 3px;
+    padding: 4px 10px;
     font-weight: bold;
-    font-size: 11pt;
-    min-width: 120px;
-    min-height: 40px;
+    font-size: 8pt;
+    min-width: 80px;
+    min-height: 28px;
 }
 
 DigiDollarMintWidget QPushButton#clearButton:hover {
@@ -5401,13 +5399,13 @@ DigiDollarRedeemWidget QLineEdit#amountEdit:focus {
 DigiDollarRedeemWidget QPushButton#redeemButton {
     background-color: #0066CC;
     color: #ffffff !important;
-    border: 1px solid #0066CC;
-    border-radius: 4px;
-    padding: 8px 24px;
+    border: none;
+    border-radius: 3px;
+    padding: 5px 12px;
     font-weight: bold;
-    font-size: 11pt;
-    min-width: 140px;
-    min-height: 40px;
+    font-size: 8pt;
+    min-width: 100px;
+    min-height: 28px;
 }
 
 DigiDollarRedeemWidget QPushButton#redeemButton:hover {
@@ -5429,13 +5427,13 @@ DigiDollarRedeemWidget QPushButton#redeemButton:disabled {
 DigiDollarRedeemWidget QPushButton#redeemAllButton {
     background-color: #ff9800;
     color: #ffffff !important;
-    border: 1px solid #ff9800;
-    border-radius: 4px;
-    padding: 8px 24px;
+    border: none;
+    border-radius: 3px;
+    padding: 5px 12px;
     font-weight: bold;
-    font-size: 11pt;
-    min-width: 140px;
-    min-height: 40px;
+    font-size: 8pt;
+    min-width: 100px;
+    min-height: 28px;
 }
 
 DigiDollarRedeemWidget QPushButton#redeemAllButton:hover {
@@ -5457,13 +5455,13 @@ DigiDollarRedeemWidget QPushButton#redeemAllButton:disabled {
 DigiDollarRedeemWidget QPushButton#clearButton {
     background-color: #0066CC;
     color: #ffffff !important;
-    border: 1px solid #0066CC;
-    border-radius: 4px;
-    padding: 8px 24px;
+    border: none;
+    border-radius: 3px;
+    padding: 4px 10px;
     font-weight: bold;
-    font-size: 11pt;
-    min-width: 120px;
-    min-height: 40px;
+    font-size: 8pt;
+    min-width: 80px;
+    min-height: 28px;
 }
 
 DigiDollarRedeemWidget QPushButton#clearButton:hover {

@@ -48,8 +48,8 @@ DigiDollarTransactionsWidget::~DigiDollarTransactionsWidget()
 void DigiDollarTransactionsWidget::setupUI()
 {
     m_mainLayout = new QVBoxLayout(this);
-    m_mainLayout->setContentsMargins(16, 16, 16, 16);
-    m_mainLayout->setSpacing(12);
+    m_mainLayout->setContentsMargins(0, 0, 0, 0);
+    m_mainLayout->setSpacing(0);
 
     setupFilterBar();
     setupTable();

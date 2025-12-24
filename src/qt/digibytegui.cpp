@@ -95,8 +95,8 @@ DigiByteGUI::DigiByteGUI(interfaces::Node& node, const PlatformStyle *_platformS
     }
 
     setContextMenuPolicy(Qt::PreventContextMenu);
-    
-    // Set minimum window width to prevent toolbar text truncation
+
+    // Set minimum window width to prevent toolbar truncation and content overlap
     setMinimumWidth(900);
 
 #ifdef ENABLE_WALLET

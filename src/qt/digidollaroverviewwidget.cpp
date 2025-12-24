@@ -99,14 +99,14 @@ DigiDollarOverviewWidget::~DigiDollarOverviewWidget()
 
 void DigiDollarOverviewWidget::setupUI()
 {
-    // Create main layout
+    // Create main layout - reduced spacing for compact UI
     m_mainLayout = new QVBoxLayout(this);
-    m_mainLayout->setSpacing(12);
-    m_mainLayout->setContentsMargins(16, 16, 16, 16);
+    m_mainLayout->setSpacing(6);
+    m_mainLayout->setContentsMargins(8, 8, 8, 8);
 
     // Create horizontal layout for balance and system health side-by-side
     QHBoxLayout* topLayout = new QHBoxLayout();
-    topLayout->setSpacing(20);
+    topLayout->setSpacing(10);
 
     // Setup sections
     setupBalanceSection();
@@ -154,13 +154,13 @@ void DigiDollarOverviewWidget::setupBalanceSection()
 
     frameVLayout->addLayout(titleLayout);
 
-    // Grid layout for balance items
+    // Grid layout for balance items - reduced spacing for compact UI
     m_balanceLayout = new QGridLayout();
-    m_balanceLayout->setSpacing(12); // Match main wallet spacing
+    m_balanceLayout->setSpacing(6);
     m_balanceLayout->setObjectName("balanceGridLayout");
 
     // DD Balance (Available)
-    m_ddBalanceLabel = new QLabel(tr("Your DD Balance:"), this);
+    m_ddBalanceLabel = new QLabel(tr("DigiDollar Balance"), this);
     m_ddBalanceLabel->setObjectName("ddBalanceLabel");
     m_ddBalanceValue = new QLabel("0.00000000 DD", this);
     m_ddBalanceValue->setObjectName("ddBalanceValue");
@@ -172,7 +172,7 @@ void DigiDollarOverviewWidget::setupBalanceSection()
     m_balanceLayout->addWidget(m_ddBalanceValue, 1, 1);
 
     // DGB Collateral (Pending/Locked)
-    m_dgbCollateralLabel = new QLabel(tr("Your Locked Collateral:"), this);
+    m_dgbCollateralLabel = new QLabel(tr("Locked Collateral"), this);
     m_dgbCollateralLabel->setObjectName("dgbCollateralLabel");
     m_dgbCollateralValue = new QLabel("0.00000000 DGB", this);
     m_dgbCollateralValue->setObjectName("dgbCollateralValue");
@@ -244,7 +244,7 @@ void DigiDollarOverviewWidget::setupSystemHealthSection()
     // Split layout: Left stats | Right totals
     // ========================================
     QHBoxLayout* contentLayout = new QHBoxLayout();
-    contentLayout->setSpacing(20);
+    contentLayout->setSpacing(10);
     contentLayout->setObjectName("healthContentLayout");
 
     // --- LEFT SIDE: Other stats (DGB/USD, System Health, DCA, ERR) ---

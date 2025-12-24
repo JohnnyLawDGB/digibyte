@@ -1419,36 +1419,41 @@ void DigiDollarWallet::ProcessDDTxForRescan(const CTransactionRef& ptx, int bloc
 
             // CRITICAL FIX: Also restore the DD UTXO (vout[1] contains the DD tokens)
             // This is needed because dd_utxos map is not exported with descriptors
+            //
+            // IMPORTANT: We must ALWAYS add the DD UTXO here, even if IsSpent() returns true.
+            // This is because during rescan, transactions are processed in chronological order,
+            // but IsSpent() returns the CURRENT state (after full chain sync), not the historical
+            // state at the time of this MINT transaction.
+            //
+            // If we skip adding UTXOs that are "currently spent", then when TRANSFER/REDEEM
+            // transactions are processed later (in chronological order), they won't find the
+            // input UTXOs in dd_utxos, and the amounts will be lost.
+            //
+            // The TRANSFER/REDEEM processing will remove spent UTXOs from dd_utxos, so the
+            // final state will be correct.
             if (tx.vout.size() >= 2) {
                 COutPoint ddOutpoint(tx.GetHash(), 1);
-                // Check if not already tracked and not spent
+                // Check if not already tracked
                 if (dd_utxos.find(ddOutpoint) == dd_utxos.end()) {
+                    // Always add the DD UTXO - TRANSFER/REDEEM processing will remove if spent
+                    dd_utxos[ddOutpoint] = pos.dd_minted;
+                    LogPrintf("DigiDollar: Added DD UTXO %s:1 during MINT rescan (DD: %lld)\n",
+                              tx.GetHash().GetHex(), pos.dd_minted);
+
+                    // Only persist if not spent - spent UTXOs will be removed by TRANSFER/REDEEM
                     if (!m_wallet->IsSpent(ddOutpoint)) {
-                        dd_utxos[ddOutpoint] = pos.dd_minted;
-                        // Persist to database
                         wallet::WalletBatch batch(m_wallet->GetDatabase());
                         batch.WriteDDUTXO(ddOutpoint, pos.dd_minted);
-                        LogPrintf("DigiDollar: Restored DD UTXO %s:1 from rescan (DD: %lld)\n",
-                                  tx.GetHash().GetHex(), pos.dd_minted);
-                    } else {
-                        // DD UTXO was already spent (transferred or redeemed)
-                        // Update position to show no remaining DD tokens available for redemption
+                    }
+
+                    // Check if position should be marked as redeemed (collateral spent)
+                    COutPoint collateralOutpoint(tx.GetHash(), 0);
+                    if (m_wallet->IsSpent(collateralOutpoint)) {
                         auto pos_it = collateral_positions.find(pos.dd_timelock_id);
                         if (pos_it != collateral_positions.end()) {
-                            pos_it->second.dd_minted = 0;
-
-                            // Also check if collateral (vout[0]) is spent - if so, position was REDEEMED
-                            COutPoint collateralOutpoint(tx.GetHash(), 0);
-                            if (m_wallet->IsSpent(collateralOutpoint)) {
-                                pos_it->second.is_active = false;
-                                LogPrintf("DigiDollar: Position %s collateral is spent - marking as redeemed\n",
-                                          pos.dd_timelock_id.GetHex());
-                            } else {
-                                LogPrintf("DigiDollar: Position %s DD UTXO spent but collateral locked - DD was transferred\n",
-                                          pos.dd_timelock_id.GetHex());
-                            }
-
-                            // Persist updated position to database
+                            pos_it->second.is_active = false;
+                            LogPrintf("DigiDollar: Position %s collateral is spent - marking as redeemed\n",
+                                      pos.dd_timelock_id.GetHex());
                             wallet::WalletBatch batch(m_wallet->GetDatabase());
                             batch.WriteDDTimeLock(pos_it->second);
                         }

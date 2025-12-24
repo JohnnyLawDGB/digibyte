@@ -334,6 +334,47 @@ size_t DigiDollarWallet::LoadDDAddressKeys()
     return count;
 }
 
+bool DigiDollarWallet::IsDDOutputMine(const CTxOut& txout, const uint256& txid) const
+{
+    // First check if this is a DD output (P2TR with value=0)
+    if (txout.nValue != 0 || txout.scriptPubKey.size() != 34 || txout.scriptPubKey[0] != OP_1) {
+        return false;
+    }
+
+    // Try standard wallet IsMine first
+    if (m_wallet && m_wallet->IsMine(txout) != wallet::ISMINE_NO) {
+        return true;
+    }
+
+    // Extract the P2TR output key from the scriptPubKey
+    // P2TR scripts are: OP_1 <32-byte-output-key>
+    std::vector<unsigned char> output_key_bytes(txout.scriptPubKey.begin() + 2, txout.scriptPubKey.end());
+
+    // Check dd_owner_keys - verify the key actually controls this output
+    CKey owner_key;
+    if (GetOwnerKey(txid, owner_key)) {
+        // Compute what the tweaked key should be from this owner_key
+        XOnlyPubKey owner_xonly(owner_key.GetPubKey());
+        auto tweaked = owner_xonly.CreateTapTweak(nullptr);
+        if (tweaked) {
+            // Check if tweaked key matches output key
+            if (std::equal(output_key_bytes.begin(), output_key_bytes.end(),
+                          tweaked->first.begin())) {
+                return true;
+            }
+        }
+    }
+
+    // Check dd_address_keys (for DD addresses generated via getdigidollaraddress)
+    XOnlyPubKey output_key(output_key_bytes);
+    CKey address_key;
+    if (GetAddressKey(output_key, address_key)) {
+        return true;
+    }
+
+    return false;
+}
+
 void DigiDollarWallet::StoreOwnerKey(const uint256& dd_timelock_id, const CKey& key)
 {
     // Store in in-memory map

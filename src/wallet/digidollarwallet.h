@@ -234,6 +234,16 @@ public:
         return true;
     }
 
+    /**
+     * Check if a DD output belongs to this wallet
+     * Uses dd_owner_keys, dd_address_keys, and standard wallet IsMine
+     * This is needed because IsMine() may fail for 0-value P2TR outputs
+     * @param txout The transaction output to check
+     * @param txid The transaction ID (used to look up dd_owner_keys)
+     * @return true if we own this DD output
+     */
+    bool IsDDOutputMine(const CTxOut& txout, const uint256& txid) const;
+
     // ====================================================================
     // PHASE 5 TASK 5.1: DATABASE EXTENSION FUNCTIONS
     // ====================================================================

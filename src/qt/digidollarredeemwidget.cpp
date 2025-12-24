@@ -15,6 +15,8 @@
 #include <univalue.h>
 #include <logging.h>
 
+#include <cmath>
+
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
@@ -92,10 +94,10 @@ DigiDollarRedeemWidget::~DigiDollarRedeemWidget()
 
 void DigiDollarRedeemWidget::setupUI()
 {
-    // Create main layout
+    // Create main layout - compact like DGB tabs
     m_mainLayout = new QVBoxLayout(this);
-    m_mainLayout->setSpacing(12);
-    m_mainLayout->setContentsMargins(16, 16, 16, 16);
+    m_mainLayout->setSpacing(0);
+    m_mainLayout->setContentsMargins(0, 0, 0, 0);
 
     // Create validators
     m_amountValidator = new AmountValidator(0.00000001, 999999999.99999999, this);
@@ -122,8 +124,8 @@ void DigiDollarRedeemWidget::setupCoinControlSection()
     m_coinControlFrame->setFrameShadow(QFrame::Sunken);
 
     m_coinControlLayout = new QHBoxLayout(m_coinControlFrame);
-    m_coinControlLayout->setSpacing(10);
-    m_coinControlLayout->setContentsMargins(10, 8, 10, 8);
+    m_coinControlLayout->setSpacing(6);
+    m_coinControlLayout->setContentsMargins(6, 4, 6, 4);
 
     // "Inputs..." button to open coin control dialog
     m_coinControlButton = new QPushButton(tr("Inputs..."), this);
@@ -160,8 +162,8 @@ void DigiDollarRedeemWidget::setupPositionSection()
     m_positionFrame->setObjectName("positionFrame");
 
     m_positionLayout = new QGridLayout(m_positionFrame);
-    m_positionLayout->setSpacing(8);
-    m_positionLayout->setContentsMargins(10, 10, 10, 10);
+    m_positionLayout->setSpacing(4);
+    m_positionLayout->setContentsMargins(6, 6, 6, 6);
 
     // Title
     QLabel* positionTitle = new QLabel(tr("Select Time Lock"), this);
@@ -200,8 +202,8 @@ void DigiDollarRedeemWidget::setupAmountSection()
     m_amountFrame->setObjectName("amountFrame");
 
     m_amountLayout = new QGridLayout(m_amountFrame);
-    m_amountLayout->setSpacing(8);
-    m_amountLayout->setContentsMargins(10, 10, 10, 10);
+    m_amountLayout->setSpacing(4);
+    m_amountLayout->setContentsMargins(6, 6, 6, 6);
 
     // Title
     QLabel* amountTitle = new QLabel(tr("Redeem Amount"), this);
@@ -248,8 +250,8 @@ void DigiDollarRedeemWidget::setupPositionInfoSection()
     m_positionInfoFrame->setObjectName("positionInfoFrame");
 
     m_positionInfoLayout = new QGridLayout(m_positionInfoFrame);
-    m_positionInfoLayout->setSpacing(8);
-    m_positionInfoLayout->setContentsMargins(10, 10, 10, 10);
+    m_positionInfoLayout->setSpacing(4);
+    m_positionInfoLayout->setContentsMargins(6, 6, 6, 6);
 
     // Title
     m_positionInfoLabel = new QLabel(tr("Time Lock Details"), this);
@@ -314,8 +316,8 @@ void DigiDollarRedeemWidget::setupButtonSection()
     m_buttonFrame->setObjectName("buttonFrame");
 
     m_buttonLayout = new QHBoxLayout(m_buttonFrame);
-    m_buttonLayout->setSpacing(10);
-    m_buttonLayout->setContentsMargins(10, 10, 10, 10);
+    m_buttonLayout->setSpacing(6);
+    m_buttonLayout->setContentsMargins(6, 6, 6, 6);
 
     // Clear button
     m_clearButton = new QPushButton(tr("Clear"), this);
@@ -463,12 +465,102 @@ void DigiDollarRedeemWidget::onRedeemClicked()
     QString amountText = m_amountEdit->text();
     double amount = amountText.toDouble();
 
-    // In a real implementation, this would create and broadcast the redeem transaction
+    // CRITICAL: Check if user has enough DD balance BEFORE showing confirmation dialog
+    if (!m_walletModel) {
+        Q_EMIT message(tr("Error"), tr("No wallet model available"), QMessageBox::Critical);
+        return;
+    }
+
+    // Get user's current DD balance (in cents)
+    CAmount ddBalanceCents = m_walletModel->getDigiDollarBalance();
+    double ddBalance = ddBalanceCents / 100.0;
+
+    // Calculate required DD burn based on system health (ERR check)
+    // Need to query system health to determine if ERR is active
+    double requiredDDBurn = m_positionDDMinted; // Start with original minted amount
+
+    try {
+        // Query system health status via RPC
+        UniValue params(UniValue::VARR);
+        UniValue healthResult = m_walletModel->executeRpc("getdigidollarsystemstatus", params);
+
+        if (healthResult.isObject()) {
+            int systemHealth = healthResult.find_value("health_percent").getInt<int>();
+
+            // If system health < 100%, ERR is active and we need MORE DD to redeem
+            if (systemHealth < 100) {
+                // Calculate ERR adjustment ratio
+                double errRatio = 1.0;
+                if (systemHealth >= 95) {
+                    errRatio = 0.95;
+                } else if (systemHealth >= 90) {
+                    errRatio = 0.90;
+                } else if (systemHealth >= 85) {
+                    errRatio = 0.85;
+                } else {
+                    errRatio = 0.80; // Maximum multiplier
+                }
+
+                // Required DD = Original DD / ERR ratio (e.g., 100 / 0.80 = 125 DD)
+                requiredDDBurn = m_positionDDMinted / errRatio;
+
+                LogPrintf("DigiDollar Qt: ERR active (health: %d%%), required DD burn: %.8f (ratio: %.2f)\n",
+                         systemHealth, requiredDDBurn, errRatio);
+            }
+        }
+    } catch (const std::exception& e) {
+        LogPrintf("DigiDollar Qt: Failed to query system health - %s (assuming normal redemption)\n", e.what());
+        // On error, proceed with normal redemption calculation
+    }
+
+    // Check if user has enough DD balance to redeem
+    if (ddBalance < requiredDDBurn) {
+        QString errorMsg;
+        if (requiredDDBurn > m_positionDDMinted) {
+            // ERR mode active
+            errorMsg = tr("Insufficient DigiDollars for Emergency Redemption.\n\n"
+                         "You have: %1 DD\n"
+                         "Required: %2 DD\n\n"
+                         "System health is below 100%, requiring additional DD to redeem.\n"
+                         "You need %3 DD more to complete this redemption.")
+                .arg(QString::number(ddBalance, 'f', 8))
+                .arg(QString::number(requiredDDBurn, 'f', 8))
+                .arg(QString::number(requiredDDBurn - ddBalance, 'f', 8));
+        } else {
+            // Normal redemption
+            errorMsg = tr("Insufficient DigiDollars.\n\n"
+                         "You have: %1 DD\n"
+                         "Required: %2 DD\n\n"
+                         "You need %3 DD more to redeem this position.")
+                .arg(QString::number(ddBalance, 'f', 8))
+                .arg(QString::number(requiredDDBurn, 'f', 8))
+                .arg(QString::number(requiredDDBurn - ddBalance, 'f', 8));
+        }
+
+        Q_EMIT message(tr("Insufficient DigiDollar Balance"), errorMsg, QMessageBox::Warning);
+        return; // STOP - Do not show confirmation dialog
+    }
+
+    // Balance check passed - show confirmation dialog
     QMessageBox msgBox(this);
     msgBox.setWindowTitle(tr("Confirm Redeem"));
-    msgBox.setText(tr("Close vault %1 and redeem %2?")
-                  .arg(m_selectedPositionId)
-                  .arg(formatDDAmount(m_positionDDMinted)));
+
+    QString confirmText;
+    if (requiredDDBurn > m_positionDDMinted) {
+        // ERR mode - show additional DD burn requirement
+        confirmText = tr("Close vault %1 and redeem %2?\n\n"
+                        "Emergency Redemption Ratio (ERR) is active.\n"
+                        "Required DD burn: %3 DD")
+            .arg(m_selectedPositionId)
+            .arg(formatDDAmount(m_positionDDMinted))
+            .arg(QString::number(requiredDDBurn, 'f', 8));
+    } else {
+        confirmText = tr("Close vault %1 and redeem %2?")
+            .arg(m_selectedPositionId)
+            .arg(formatDDAmount(m_positionDDMinted));
+    }
+
+    msgBox.setText(confirmText);
     msgBox.setInformativeText(tr("This will close the vault and release all locked DGB collateral."));
     msgBox.setStandardButtons(QMessageBox::Yes | QMessageBox::No);
     msgBox.setDefaultButton(QMessageBox::No);
@@ -599,8 +691,10 @@ void DigiDollarRedeemWidget::updateRedeemButtons()
     bool positionValid = m_positionFound;
     bool amountValid = validateAmount();
     bool redeemableValid = validateRedeemable();
+    bool balanceValid = validateDDBalance();
 
-    m_redeemButton->setEnabled(positionValid && amountValid && redeemableValid);
+    // Only enable button if ALL validations pass, including DD balance check
+    m_redeemButton->setEnabled(positionValid && amountValid && redeemableValid && balanceValid);
     // m_redeemAllButton removed - exact-amount redemption only
 }
 
@@ -733,6 +827,54 @@ bool DigiDollarRedeemWidget::validateRedeemable() const
     // ENFORCE EXACT MATCH - allow tiny floating point tolerance
     double tolerance = 0.00000001;  // 1 satoshi tolerance
     return std::abs(amount - m_redeemableAmount) < tolerance;
+}
+
+bool DigiDollarRedeemWidget::validateDDBalance() const
+{
+    if (!m_positionFound || !m_walletModel) {
+        return false;
+    }
+
+    // Get user's current DD balance (in cents)
+    CAmount ddBalanceCents = m_walletModel->getDigiDollarBalance();
+    double ddBalance = ddBalanceCents / 100.0;
+
+    // Calculate required DD burn based on system health
+    double requiredDDBurn = m_positionDDMinted; // Default: normal redemption
+
+    try {
+        // Query system health status via RPC
+        UniValue params(UniValue::VARR);
+        UniValue healthResult = m_walletModel->executeRpc("getdigidollarsystemstatus", params);
+
+        if (healthResult.isObject()) {
+            int systemHealth = healthResult.find_value("health_percent").getInt<int>();
+
+            // If system health < 100%, ERR is active and we need MORE DD to redeem
+            if (systemHealth < 100) {
+                // Calculate ERR adjustment ratio
+                double errRatio = 1.0;
+                if (systemHealth >= 95) {
+                    errRatio = 0.95;
+                } else if (systemHealth >= 90) {
+                    errRatio = 0.90;
+                } else if (systemHealth >= 85) {
+                    errRatio = 0.85;
+                } else {
+                    errRatio = 0.80; // Maximum multiplier
+                }
+
+                // Required DD = Original DD / ERR ratio
+                requiredDDBurn = m_positionDDMinted / errRatio;
+            }
+        }
+    } catch (const std::exception& e) {
+        // On error, assume normal redemption and allow validation to proceed
+        LogPrintf("DigiDollar Qt: Failed to query system health in validateDDBalance - %s\n", e.what());
+    }
+
+    // Check if user has enough DD balance
+    return ddBalance >= requiredDDBurn;
 }
 
 QString DigiDollarRedeemWidget::formatDDAmount(double amount) const

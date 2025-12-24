@@ -87,10 +87,10 @@ DigiDollarReceiveWidget::~DigiDollarReceiveWidget()
 
 void DigiDollarReceiveWidget::setupUI()
 {
-    // Create main layout
+    // Create main layout - compact like DGB tabs
     m_mainLayout = new QVBoxLayout(this);
-    m_mainLayout->setSpacing(8);
-    m_mainLayout->setContentsMargins(12, 12, 12, 12);
+    m_mainLayout->setSpacing(0);
+    m_mainLayout->setContentsMargins(0, 0, 0, 0);
 
     // Setup sections
     setupGenerateSection();
@@ -112,8 +112,8 @@ void DigiDollarReceiveWidget::setupGenerateSection()
     m_generateFrame->setObjectName("generateFrame");
 
     m_generateLayout = new QGridLayout(m_generateFrame);
-    m_generateLayout->setSpacing(8);
-    m_generateLayout->setContentsMargins(10, 10, 10, 10);
+    m_generateLayout->setSpacing(4);
+    m_generateLayout->setContentsMargins(6, 6, 6, 6);
 
     // Label field (optional)
     m_labelLabel = new QLabel(tr("&Label:"), this);
@@ -265,8 +265,8 @@ void DigiDollarReceiveWidget::setupRecentRequestsSection()
     m_requestsFrame->setObjectName("requestsFrame");
 
     m_requestsLayout = new QVBoxLayout(m_requestsFrame);
-    m_requestsLayout->setSpacing(6);
-    m_requestsLayout->setContentsMargins(8, 8, 8, 8);
+    m_requestsLayout->setSpacing(4);
+    m_requestsLayout->setContentsMargins(6, 6, 6, 6);
 
     // Title
     m_requestsTitle = new QLabel(tr("Recent Payment Requests"), this);
@@ -287,7 +287,7 @@ void DigiDollarReceiveWidget::setupRecentRequestsSection()
     m_requestsTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_requestsTable->setAlternatingRowColors(true);
     m_requestsTable->setShowGrid(false);
-    m_requestsTable->setMinimumHeight(150);
+    // Removed setMinimumHeight - allow table to shrink with window
     m_requestsTable->setContextMenuPolicy(Qt::CustomContextMenu);
     m_requestsTable->setSortingEnabled(true);
 
@@ -305,7 +305,7 @@ void DigiDollarReceiveWidget::setupRecentRequestsSection()
     m_noRequestsLabel = new QLabel(tr("No recent payment requests"), this);
     m_noRequestsLabel->setObjectName("noRequestsLabel");
     m_noRequestsLabel->setAlignment(Qt::AlignCenter);
-    m_noRequestsLabel->setMinimumHeight(60);
+    // Removed setMinimumHeight - allow to shrink with window
 
     // Buttons
     m_requestsButtonLayout = new QHBoxLayout();
@@ -610,16 +610,68 @@ void DigiDollarReceiveWidget::onRecentRequestSelected()
 
 void DigiDollarReceiveWidget::onShowRequestClicked()
 {
-    const RecentRequestEntry* entry = getSelectedRequest();
-    if (!entry) {
+    if (!m_walletModel) {
         return;
+    }
+
+    int row = selectedRow();
+    if (row < 0 || row >= m_requestsTable->rowCount()) {
+        LogPrint(BCLog::QT, "DigiDollarReceiveWidget: No valid row selected for Show button\n");
+        return;
+    }
+
+    // Get data directly from table (don't rely on model lookup which can fail)
+    QTableWidgetItem* addressItem = m_requestsTable->item(row, 3);  // Address column
+    QTableWidgetItem* labelItem = m_requestsTable->item(row, 1);    // Label column
+    QTableWidgetItem* amountItem = m_requestsTable->item(row, 2);   // Amount column
+
+    if (!addressItem) {
+        LogPrint(BCLog::QT, "DigiDollarReceiveWidget: No address item at row %d\n", row);
+        return;
+    }
+
+    QString address = addressItem->data(Qt::UserRole).toString();
+    if (address.isEmpty()) {
+        address = addressItem->text();  // Fallback to display text
+    }
+
+    // Verify this is a DD address before showing dialog
+    if (!CDigiDollarAddress::IsValidDigiDollarAddress(address.toStdString())) {
+        LogPrint(BCLog::QT, "DigiDollarReceiveWidget: Address is not a valid DD address: %s\n",
+                address.toStdString());
+        Q_EMIT message(tr("Error"),
+                      tr("Selected address is not a valid DigiDollar address"),
+                      QMessageBox::Critical);
+        return;
+    }
+
+    // Construct recipient directly from table data (avoids model lookup issues)
+    SendCoinsRecipient recipient;
+    recipient.address = address;
+    recipient.label = labelItem ? labelItem->text() : QString();
+    if (recipient.label == tr("-")) {
+        recipient.label.clear();  // Clear placeholder label
+    }
+
+    // Parse amount if present (format: "X.XXXXXXXX DD" or "Any")
+    if (amountItem) {
+        QString amountStr = amountItem->text();
+        if (amountStr != tr("Any") && !amountStr.isEmpty()) {
+            // Remove " DD" suffix and parse
+            amountStr = amountStr.remove(" DD");
+            bool ok = false;
+            double ddAmount = amountStr.toDouble(&ok);
+            if (ok && ddAmount > 0) {
+                recipient.amount = static_cast<CAmount>(ddAmount * 100);  // Convert to cents
+            }
+        }
     }
 
     // Show detailed request dialog
     DigiDollarReceiveRequestDialog* dialog = new DigiDollarReceiveRequestDialog(this);
     dialog->setAttribute(Qt::WA_DeleteOnClose);
     dialog->setModel(m_walletModel);
-    dialog->setInfo(entry->recipient);
+    dialog->setInfo(recipient);
     dialog->show();
 }
 
@@ -787,34 +839,54 @@ void DigiDollarReceiveWidget::onRecentRequestDoubleClicked(int row, int column)
         return;
     }
 
-    RecentRequestsTableModel* model = m_walletModel->getRecentRequestsTableModel();
+    if (row < 0 || row >= m_requestsTable->rowCount()) {
+        LogPrint(BCLog::QT, "DigiDollarReceiveWidget: Invalid row %d for double-click\n", row);
+        return;
+    }
 
-    // Map table row to model row (accounting for DD-only filtering)
-    // We need to find which model entry corresponds to this table row
-    int modelRow = 0;
-    int tableRow = 0;
+    // Get address directly from the table (which only contains DD addresses)
+    QTableWidgetItem* addressItem = m_requestsTable->item(row, 3); // Address column
+    if (!addressItem) {
+        LogPrint(BCLog::QT, "DigiDollarReceiveWidget: No address item at row %d\n", row);
+        return;
+    }
+
+    QString address = addressItem->data(Qt::UserRole).toString();
+    if (address.isEmpty()) {
+        LogPrint(BCLog::QT, "DigiDollarReceiveWidget: Empty address at row %d\n", row);
+        return;
+    }
+
+    // Verify this is a valid DD address
+    if (!CDigiDollarAddress::IsValidDigiDollarAddress(address.toStdString())) {
+        LogPrint(BCLog::QT, "DigiDollarReceiveWidget: Address at row %d is not a valid DD address: %s\n",
+                row, address.toStdString());
+        return;
+    }
+
+    // Find this address in the underlying model to get full recipient data
+    RecentRequestsTableModel* model = m_walletModel->getRecentRequestsTableModel();
+    const RecentRequestEntry* foundEntry = nullptr;
+
     for (int i = 0; i < model->rowCount(QModelIndex()); ++i) {
         const RecentRequestEntry& entry = model->entry(i);
-        QString address = entry.recipient.address;
-
-        // Skip non-DD addresses (same filter as populateRecentRequests)
-        if (!CDigiDollarAddress::IsValidDigiDollarAddress(address.toStdString())) {
-            continue;
-        }
-
-        if (tableRow == row) {
-            modelRow = i;
+        if (entry.recipient.address == address) {
+            foundEntry = &entry;
             break;
         }
-        tableRow++;
+    }
+
+    if (!foundEntry) {
+        LogPrint(BCLog::QT, "DigiDollarReceiveWidget: Could not find entry for address %s\n",
+                address.toStdString());
+        return;
     }
 
     // Show request dialog
-    const RecentRequestEntry& entry = model->entry(modelRow);
     DigiDollarReceiveRequestDialog* dialog = new DigiDollarReceiveRequestDialog(this);
     dialog->setAttribute(Qt::WA_DeleteOnClose);
     dialog->setModel(m_walletModel);
-    dialog->setInfo(entry.recipient);
+    dialog->setInfo(foundEntry->recipient);
     dialog->show();
 }
 
@@ -829,32 +901,44 @@ int DigiDollarReceiveWidget::selectedRow()
 const RecentRequestEntry* DigiDollarReceiveWidget::getSelectedRequest()
 {
     int row = selectedRow();
-    if (row < 0 || !m_walletModel || !m_walletModel->getRecentRequestsTableModel()) {
+    if (row < 0 || row >= m_requestsTable->rowCount()) {
         return nullptr;
     }
 
-    RecentRequestsTableModel* model = m_walletModel->getRecentRequestsTableModel();
-
-    // Map table row to model row (accounting for DD-only filtering)
-    int modelRow = 0;
-    int tableRow = 0;
-    for (int i = 0; i < model->rowCount(QModelIndex()); ++i) {
-        const RecentRequestEntry& entry = model->entry(i);
-        QString address = entry.recipient.address;
-
-        // Skip non-DD addresses (same filter as populateRecentRequests)
-        if (!CDigiDollarAddress::IsValidDigiDollarAddress(address.toStdString())) {
-            continue;
-        }
-
-        if (tableRow == row) {
-            modelRow = i;
-            break;
-        }
-        tableRow++;
+    if (!m_walletModel || !m_walletModel->getRecentRequestsTableModel()) {
+        return nullptr;
     }
 
-    return &model->entry(modelRow);
+    // Get address directly from the table (which only contains DD addresses)
+    QTableWidgetItem* addressItem = m_requestsTable->item(row, 3); // Address column
+    if (!addressItem) {
+        return nullptr;
+    }
+
+    QString address = addressItem->data(Qt::UserRole).toString();
+    if (address.isEmpty()) {
+        return nullptr;
+    }
+
+    // Verify this is a valid DD address
+    if (!CDigiDollarAddress::IsValidDigiDollarAddress(address.toStdString())) {
+        LogPrint(BCLog::QT, "DigiDollarReceiveWidget: Address at row %d is not a valid DD address: %s\n",
+                row, address.toStdString());
+        return nullptr;
+    }
+
+    // Find this address in the underlying model to get full recipient data
+    RecentRequestsTableModel* model = m_walletModel->getRecentRequestsTableModel();
+
+    for (int i = 0; i < model->rowCount(QModelIndex()); ++i) {
+        const RecentRequestEntry& entry = model->entry(i);
+        if (entry.recipient.address == address) {
+            return &entry;
+        }
+    }
+
+    // Address not found in model
+    return nullptr;
 }
 
 void DigiDollarReceiveWidget::showContextMenu(const QPoint &point)

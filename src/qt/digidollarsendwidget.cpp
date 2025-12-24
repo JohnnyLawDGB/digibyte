@@ -98,10 +98,10 @@ DigiDollarSendWidget::~DigiDollarSendWidget()
 
 void DigiDollarSendWidget::setupUI()
 {
-    // Create main layout
+    // Create main layout - compact like DGB tabs
     m_mainLayout = new QVBoxLayout(this);
-    m_mainLayout->setSpacing(12);
-    m_mainLayout->setContentsMargins(16, 16, 16, 16);
+    m_mainLayout->setSpacing(0);
+    m_mainLayout->setContentsMargins(0, 0, 0, 0);
 
     // Create validators
     m_addressValidator = new DigiDollarAddressValidator(this);
@@ -252,7 +252,7 @@ void DigiDollarSendWidget::setupAmountSection()
     // Add stretch to push the button to the right
     m_useAvailableBalanceButton = new QPushButton(tr("Use available balance"), this);
     m_useAvailableBalanceButton->setObjectName("useAvailableBalanceButton");
-    m_useAvailableBalanceButton->setToolTip(tr("Use the full available DigiDollar balance minus transaction fee"));
+    m_useAvailableBalanceButton->setToolTip(tr("Use the full available DigiDollar balance (fees are paid in DGB)"));
 
     amountInputLayout->addWidget(m_amountEdit, 0);
     amountInputLayout->addWidget(m_useAvailableBalanceButton, 1);
@@ -307,21 +307,21 @@ void DigiDollarSendWidget::setupFeeSection()
     m_feeLabel = new QLabel(tr("Transaction fee:"), this);
     m_feeLabel->setObjectName("feeLabel");
     m_feeLabel->setAlignment(Qt::AlignRight | Qt::AlignTrailing | Qt::AlignVCenter);
-    m_feeLabel->setToolTip(tr("Network fee required to process this DigiDollar transaction"));
-    m_feeValue = new QLabel("0.001 DD", this);
+    m_feeLabel->setToolTip(tr("Network fee paid in DGB (not deducted from DD amount)"));
+    m_feeValue = new QLabel("~0.1 DGB", this);
     m_feeValue->setObjectName("feeValue");
     QFont monospaceFont = GUIUtil::fixedPitchFont();
     m_feeValue->setFont(monospaceFont);
-    m_feeValue->setToolTip(tr("Estimated network fee for this transaction"));
+    m_feeValue->setToolTip(tr("Estimated network fee paid in DGB from your DGB balance"));
 
     m_feeLayout->addWidget(m_feeLabel, 0, 0);
     m_feeLayout->addWidget(m_feeValue, 0, 1);
 
     // Total amount display
-    m_totalLabel = new QLabel(tr("Total:"), this);
+    m_totalLabel = new QLabel(tr("Total DD:"), this);
     m_totalLabel->setObjectName("totalLabel");
     m_totalLabel->setAlignment(Qt::AlignRight | Qt::AlignTrailing | Qt::AlignVCenter);
-    m_totalLabel->setToolTip(tr("Total amount that will be deducted from your wallet (amount + fee)"));
+    m_totalLabel->setToolTip(tr("Total DigiDollar amount to send (fee is paid separately in DGB)"));
     QFont boldFont = m_totalLabel->font();
     boldFont.setBold(true);
     m_totalLabel->setFont(boldFont);
@@ -329,7 +329,7 @@ void DigiDollarSendWidget::setupFeeSection()
     m_totalValue = new QLabel("0.000 DD", this);
     m_totalValue->setObjectName("totalValue");
     m_totalValue->setFont(monospaceFont);
-    m_totalValue->setToolTip(tr("Total amount to be deducted from your available balance"));
+    m_totalValue->setToolTip(tr("Total DD to send (DGB fee is paid from your DGB balance)"));
 
     m_feeLayout->addWidget(m_totalLabel, 1, 0);
     m_feeLayout->addWidget(m_totalValue, 1, 1);
@@ -438,8 +438,9 @@ void DigiDollarSendWidget::updateBalance()
 
     m_availableBalanceValue->setText(formatDDAmount(m_availableBalance));
 
-    // Update button state
-    m_useAvailableBalanceButton->setEnabled(m_availableBalance > m_estimatedFee);
+    // Update button state - enable if user has any DD balance
+    // Fees are paid in DGB, not DD, so no need to check for fee deduction
+    m_useAvailableBalanceButton->setEnabled(m_availableBalance > 0);
 }
 
 void DigiDollarSendWidget::updateOraclePrice()
@@ -482,12 +483,8 @@ void DigiDollarSendWidget::onAmountChanged()
 {
     QString amountText = m_amountEdit->text();
 
-    // Validate amount format first
-    if (!amountText.isEmpty()) {
-        updateAmountValidation();
-    } else {
-        updateAmountValidation();
-    }
+    // Validate amount format
+    updateAmountValidation();
 
     updateUSDEquivalent();
     updateFeeDisplay();
@@ -542,21 +539,17 @@ void DigiDollarSendWidget::onSendClicked()
     }
 
     double amount = amountText.toDouble();
-    double total = amount + m_estimatedFee;
 
     // Error: Insufficient balance
     if (!validateBalance()) {
         showError(tr("Insufficient DigiDollar Balance"),
                   tr("You don't have enough DigiDollar for this transfer.\n\n"
                      "Available balance: %1\n"
-                     "Amount to send: %2\n"
-                     "Transaction fee: %3\n"
-                     "Total required: %4\n\n"
+                     "Amount to send: %2\n\n"
+                     "Note: Transaction fees are paid in DGB (not DD).\n\n"
                      "Please enter a smaller amount or add more DD to your wallet.")
                   .arg(formatDDAmount(m_availableBalance))
-                  .arg(formatDDAmount(amount))
-                  .arg(formatDDAmount(m_estimatedFee))
-                  .arg(formatDDAmount(total)));
+                  .arg(formatDDAmount(amount)));
         m_amountEdit->setFocus();
         return;
     }
@@ -585,9 +578,11 @@ void DigiDollarSendWidget::onClearClicked()
 
 void DigiDollarSendWidget::onUseAvailableBalanceClicked()
 {
-    if (m_availableBalance > m_estimatedFee) {
-        double maxSendable = m_availableBalance - m_estimatedFee;
-        m_amountEdit->setText(QString::number(maxSendable, 'f', 8));
+    // FIXED: Fees are paid in DGB, not DD!
+    // Users can send their ENTIRE DD balance without any deduction
+    if (m_availableBalance > 0) {
+        // Set amount to full available balance (fees are paid separately in DGB)
+        m_amountEdit->setText(QString::number(m_availableBalance, 'f', 8));
         onAmountChanged();
     }
 }
@@ -626,15 +621,17 @@ void DigiDollarSendWidget::updateUSDEquivalent()
 
 void DigiDollarSendWidget::updateFeeDisplay()
 {
-    m_feeValue->setText(formatDDAmount(m_estimatedFee));
+    // FIXED: Display fee in DGB, not DD
+    // Fee is paid from DGB balance, not deducted from DD amount
+    m_feeValue->setText(QString("~0.1 DGB"));
 
     QString amountText = m_amountEdit->text();
     if (!amountText.isEmpty()) {
         double amount = amountText.toDouble();
-        double total = amount + m_estimatedFee;
-        m_totalValue->setText(formatDDAmount(total));
+        // Total DD sent equals the amount entered (fees don't reduce DD amount)
+        m_totalValue->setText(formatDDAmount(amount));
     } else {
-        m_totalValue->setText(formatDDAmount(m_estimatedFee));
+        m_totalValue->setText(formatDDAmount(0));
     }
 }
 
@@ -662,8 +659,9 @@ bool DigiDollarSendWidget::validateBalance() const
     if (amountText.isEmpty()) return true; // Empty is valid for enabling/disabling
 
     double amount = amountText.toDouble();
-    double total = amount + m_estimatedFee;
-    bool valid = total <= m_availableBalance && amount > 0;
+    // FIXED: Fees are paid in DGB, not DD!
+    // Only check if the DD amount is available, don't add fee to the check
+    bool valid = amount <= m_availableBalance && amount > 0;
 
     // Note: Cannot call updateAmountValidation() from const method
 
@@ -748,41 +746,57 @@ bool DigiDollarSendWidget::checkWalletState()
 // This matches the DGB send confirmation flow exactly
 bool DigiDollarSendWidget::showConfirmationDialog(const QString& address, double amount)
 {
-    double total = amount + m_estimatedFee;
-    double usdEquivalent = amount * m_oraclePrice; // DD should be pegged to $1
+    double usdEquivalent = amount * 1.0; // DD should be pegged to $1
 
-    // Create confirmation title
-    QString title = tr("Confirm DigiDollar Transfer");
+    // Create confirmation title - matches DGB "Confirm send coins"
+    QString title = tr("Confirm send DigiDollar");
 
-    // Create main confirmation message with detailed breakdown
-    QString confirmMsg = tr(
-        "<b style='font-size: 14px;'>Review Transaction Details</b><br/><br/>"
-        "<table cellpadding='4' style='font-size: 12px;'>"
-        "<tr><td><b>Send to:</b></td><td style='font-family: monospace;'>%1</td></tr>"
-        "<tr><td colspan='2'><hr/></td></tr>"
-        "<tr><td><b>Amount:</b></td><td align='right'><b style='font-size: 13px;'>%2</b></td></tr>"
-        "<tr><td>Network Fee:</td><td align='right'>%3</td></tr>"
-        "<tr><td colspan='2'><hr/></td></tr>"
-        "<tr><td><b>Total Deducted:</b></td><td align='right'><b style='font-size: 13px;'>%4</b></td></tr>"
-        "<tr><td>USD Equivalent:</td><td align='right'>%5</td></tr>"
-        "</table>"
-    ).arg(address)
-     .arg(formatDDAmount(amount))
-     .arg(formatDDAmount(m_estimatedFee))
-     .arg(formatDDAmount(total))
-     .arg(formatUSDAmount(usdEquivalent));
+    // Build confirmation message following DGB format exactly
+    QString question_string;
 
-    // Informative text (warning message)
-    QString informativeText = tr(
-        "This transaction cannot be reversed once sent.\n"
-        "Please review the details carefully before confirming."
-    );
+    // Main question - matches DGB
+    question_string.append(tr("Do you want to send this DigiDollar transaction?"));
+    question_string.append("<br /><span style='font-size:10pt;'>");
+    question_string.append(tr("Please, review your transaction."));
+    question_string.append("</span>%1");
 
-    // Create confirmation dialog with 3-second countdown
+    // Transaction fee section - matches DGB format exactly
+    question_string.append("<hr /><b>");
+    question_string.append(tr("Transaction fee"));
+    question_string.append("</b>");
+
+    // Append fee estimate - note: DD transactions are similar size to DGB, ~0.1 DGB fee
+    question_string.append(" (~250 vB): ");
+
+    // Fee value in red bold - matches DGB styling exactly
+    question_string.append("<span style='color:#aa0000; font-weight:bold;'>");
+    question_string.append("~0.1 DGB");
+    question_string.append("</span><br />");
+
+    // Total amount section - matches DGB format
+    question_string.append("<hr />");
+    question_string.append(QString("<b>%1</b>: <b>%2</b>").arg(tr("Total Amount"))
+        .arg(formatDDAmount(amount)));
+
+    // USD equivalent as alternative unit - matches DGB's "or" format
+    question_string.append(QString("<br /><span style='font-size:10pt; font-weight:normal;'>(=%1)</span>")
+        .arg(formatUSDAmount(usdEquivalent)));
+
+    // Recipient details - formatted to match DGB's recipient format
+    QString recipientElement;
+    recipientElement.append(tr("%1 to %2").arg(formatDDAmount(amount), address));
+
+    // Insert recipient details into placeholder
+    question_string = question_string.arg("<br /><br />" + recipientElement);
+
+    // Informative text - empty for single recipient like DGB
+    QString informative_text = "";
+
+    // Create confirmation dialog with 3-second countdown - matches DGB exactly
     auto confirmationDialog = new DDSendConfirmationDialog(
         title,
-        confirmMsg,
-        informativeText,
+        question_string,
+        informative_text,
         DD_SEND_CONFIRM_DELAY,
         this
     );
@@ -1039,26 +1053,20 @@ void DigiDollarSendWidget::updateAmountValidation()
 }
 
 // DDSendConfirmationDialog implementation
-// Matches the DGB send confirmation dialog with 3-second countdown
+// Matches the DGB send confirmation dialog with 3-second countdown exactly
 DDSendConfirmationDialog::DDSendConfirmationDialog(const QString& title, const QString& text,
                                                      const QString& informative_text,
                                                      int secDelay, QWidget* parent)
-    : QMessageBox(parent), secDelay(secDelay), confirmButtonText(tr("Send DigiDollar"))
+    : QMessageBox(parent), secDelay(secDelay)
 {
     setIcon(QMessageBox::Question);
-    setWindowTitle(title);
+    setWindowTitle(title); // On macOS, the window title is ignored (as required by the macOS Guidelines).
     setText(text);
-    if (!informative_text.isEmpty()) {
-        setInformativeText(informative_text);
-    }
+    setInformativeText(informative_text);
     setStandardButtons(QMessageBox::Yes | QMessageBox::Cancel);
-    setDefaultButton(QMessageBox::Cancel); // Safety: default to cancel
-
-    // Get the Yes button and customize it
+    setDefaultButton(QMessageBox::Cancel);
     yesButton = button(QMessageBox::Yes);
-    yesButton->setText(confirmButtonText);
-
-    // Set up timer
+    confirmButtonText = yesButton->text();  // Get standard button text (like DGB)
     updateButtons();
     connect(&countDownTimer, &QTimer::timeout, this, &DDSendConfirmationDialog::countDown);
 }

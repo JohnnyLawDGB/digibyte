@@ -210,7 +210,7 @@ private:
 
 /**
  * Confirmation dialog with 3-second countdown timer for DigiDollar sends.
- * This matches the DGB send confirmation behavior, requiring users to wait
+ * This matches the DGB send confirmation behavior exactly, requiring users to wait
  * 3 seconds before the Send button becomes enabled, allowing them to review
  * the transaction details before confirming.
  */
@@ -235,7 +235,7 @@ private:
     QAbstractButton* yesButton;
     QTimer countDownTimer;
     int secDelay;
-    QString confirmButtonText;
+    QString confirmButtonText{tr("Send")};  // Matches DGB default
 };
 
 #endif // DIGIBYTE_QT_DIGIDOLLARSENDWIDGET_H

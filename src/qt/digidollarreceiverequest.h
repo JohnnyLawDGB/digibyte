@@ -14,9 +14,7 @@ class QRImageWidget;
 
 QT_BEGIN_NAMESPACE
 class QLabel;
-class QLineEdit;
 class QPushButton;
-class QTextEdit;
 QT_END_NAMESPACE
 
 /**
@@ -50,10 +48,10 @@ private:
     QRImageWidget* m_qrWidget;
 
     QLabel* m_uriTagLabel;
-    QTextEdit* m_uriContent;
+    QLabel* m_uriContent;
 
     QLabel* m_addressTagLabel;
-    QLineEdit* m_addressContent;
+    QLabel* m_addressContent;
 
     QLabel* m_amountTagLabel;
     QLabel* m_amountContent;
@@ -71,7 +69,6 @@ private:
     QPushButton* m_copyAddressButton;
     QPushButton* m_saveQRButton;
     QPushButton* m_verifyButton;
-    QPushButton* m_closeButton;
 
     WalletModel* m_model;
     SendCoinsRecipient m_info;

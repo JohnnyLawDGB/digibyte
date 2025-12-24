@@ -95,6 +95,7 @@ private:
     bool validatePositionId() const;
     bool validateAmount() const;
     bool validateRedeemable() const;
+    bool validateDDBalance() const;
 
     QString formatDDAmount(double amount) const;
     QString formatDGBAmount(double amount) const;

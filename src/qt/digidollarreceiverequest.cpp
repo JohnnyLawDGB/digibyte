@@ -8,13 +8,11 @@
 #include <qt/qrimagewidget.h>
 #include <qt/walletmodel.h>
 
-#include <QVBoxLayout>
-#include <QHBoxLayout>
 #include <QGridLayout>
+#include <QHBoxLayout>
 #include <QLabel>
-#include <QLineEdit>
 #include <QPushButton>
-#include <QTextEdit>
+#include <QDialogButtonBox>
 #include <QFileDialog>
 #include <QStandardPaths>
 #include <QUrl>
@@ -44,146 +42,133 @@ DigiDollarReceiveRequestDialog::~DigiDollarReceiveRequestDialog()
 void DigiDollarReceiveRequestDialog::setupUI()
 {
     setWindowTitle(tr("DigiDollar Payment Request"));
-    setMinimumWidth(500);
 
-    QVBoxLayout* mainLayout = new QVBoxLayout(this);
+    // Use QGridLayout exactly like DGB's receiverequestdialog.ui
+    QGridLayout* gridLayout = new QGridLayout(this);
+    gridLayout->setSizeConstraint(QLayout::SetFixedSize);
+    gridLayout->setColumnStretch(0, 0);  // First column fixed width
+    gridLayout->setColumnStretch(1, 1);  // Second column stretches
 
-    // Title
-    m_titleLabel = new QLabel(this);
-    QFont titleFont = m_titleLabel->font();
-    titleFont.setPointSize(titleFont.pointSize() + 2);
-    titleFont.setBold(true);
-    m_titleLabel->setFont(titleFont);
-    m_titleLabel->setAlignment(Qt::AlignCenter);
-    mainLayout->addWidget(m_titleLabel);
-
-    // QR Code
-    m_qrWidget = new QRImageWidget(this);
-    m_qrWidget->setMinimumSize(300, 300);
-    m_qrWidget->setMaximumSize(300, 300);
-
-    QHBoxLayout* qrLayout = new QHBoxLayout();
-    qrLayout->addStretch();
-    qrLayout->addWidget(m_qrWidget);
-    qrLayout->addStretch();
-    mainLayout->addLayout(qrLayout);
-
-    // Details grid
-    QGridLayout* detailsLayout = new QGridLayout();
-    detailsLayout->setColumnStretch(1, 1);
-    detailsLayout->setVerticalSpacing(8);
-    detailsLayout->setHorizontalSpacing(12);
     int row = 0;
 
-    // URI
-    m_uriTagLabel = new QLabel(tr("URI:"), this);
-    m_uriTagLabel->setAlignment(Qt::AlignRight | Qt::AlignTop);
-    QFont boldFont = m_uriTagLabel->font();
+    // Row 0: QR Code - centered, spanning both columns (EXACTLY like DGB)
+    m_qrWidget = new QRImageWidget(this);
+    gridLayout->addWidget(m_qrWidget, row, 0, 1, 2, Qt::AlignHCenter);
+    row++;
+
+    // Row 1: "Payment information" header (matching DGB)
+    m_titleLabel = new QLabel(tr("Payment information"), this);
+    QFont boldFont = m_titleLabel->font();
     boldFont.setBold(true);
+    m_titleLabel->setFont(boldFont);
+    gridLayout->addWidget(m_titleLabel, row, 0, 1, 2);
+    row++;
+
+    // Row 2: URI
+    m_uriTagLabel = new QLabel(tr("URI:"), this);
     m_uriTagLabel->setFont(boldFont);
+    gridLayout->addWidget(m_uriTagLabel, row, 0, Qt::AlignRight | Qt::AlignTop);
 
-    m_uriContent = new QTextEdit(this);
-    m_uriContent->setReadOnly(true);
-    m_uriContent->setMaximumHeight(60);
-    m_uriContent->setFont(GUIUtil::fixedPitchFont());
-
-    detailsLayout->addWidget(m_uriTagLabel, row, 0);
-    detailsLayout->addWidget(m_uriContent, row, 1);
+    m_uriContent = new QLabel(this);
+    m_uriContent->setTextFormat(Qt::RichText);
+    m_uriContent->setWordWrap(true);
+    m_uriContent->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    gridLayout->addWidget(m_uriContent, row, 1, Qt::AlignTop);
     row++;
 
-    // Address
+    // Row 3: Address
     m_addressTagLabel = new QLabel(tr("Address:"), this);
-    m_addressTagLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     m_addressTagLabel->setFont(boldFont);
+    gridLayout->addWidget(m_addressTagLabel, row, 0, Qt::AlignRight | Qt::AlignTop);
 
-    m_addressContent = new QLineEdit(this);
-    m_addressContent->setReadOnly(true);
-    m_addressContent->setFont(GUIUtil::fixedPitchFont());
-
-    detailsLayout->addWidget(m_addressTagLabel, row, 0);
-    detailsLayout->addWidget(m_addressContent, row, 1);
+    m_addressContent = new QLabel(this);
+    m_addressContent->setTextFormat(Qt::PlainText);
+    m_addressContent->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    gridLayout->addWidget(m_addressContent, row, 1, Qt::AlignTop);
     row++;
 
-    // Amount
+    // Row 4: Amount (hidden if not specified)
     m_amountTagLabel = new QLabel(tr("Amount:"), this);
-    m_amountTagLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     m_amountTagLabel->setFont(boldFont);
+    gridLayout->addWidget(m_amountTagLabel, row, 0, Qt::AlignRight | Qt::AlignTop);
 
     m_amountContent = new QLabel(this);
-
-    detailsLayout->addWidget(m_amountTagLabel, row, 0);
-    detailsLayout->addWidget(m_amountContent, row, 1);
+    m_amountContent->setTextFormat(Qt::PlainText);
+    m_amountContent->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    gridLayout->addWidget(m_amountContent, row, 1, Qt::AlignTop);
     row++;
 
-    // Label
+    // Row 5: Label (hidden if not specified)
     m_labelTagLabel = new QLabel(tr("Label:"), this);
-    m_labelTagLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     m_labelTagLabel->setFont(boldFont);
+    gridLayout->addWidget(m_labelTagLabel, row, 0, Qt::AlignRight | Qt::AlignTop);
 
     m_labelContent = new QLabel(this);
+    m_labelContent->setTextFormat(Qt::PlainText);
     m_labelContent->setWordWrap(true);
-
-    detailsLayout->addWidget(m_labelTagLabel, row, 0);
-    detailsLayout->addWidget(m_labelContent, row, 1);
+    m_labelContent->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    gridLayout->addWidget(m_labelContent, row, 1, Qt::AlignTop);
     row++;
 
-    // Message
+    // Row 6: Message (hidden if not specified)
     m_messageTagLabel = new QLabel(tr("Message:"), this);
-    m_messageTagLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     m_messageTagLabel->setFont(boldFont);
+    gridLayout->addWidget(m_messageTagLabel, row, 0, Qt::AlignRight | Qt::AlignTop);
 
     m_messageContent = new QLabel(this);
+    m_messageContent->setTextFormat(Qt::PlainText);
     m_messageContent->setWordWrap(true);
-
-    detailsLayout->addWidget(m_messageTagLabel, row, 0);
-    detailsLayout->addWidget(m_messageContent, row, 1);
+    m_messageContent->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    gridLayout->addWidget(m_messageContent, row, 1, Qt::AlignTop);
     row++;
 
-    // Wallet
+    // Row 7: Wallet
     m_walletTagLabel = new QLabel(tr("Wallet:"), this);
-    m_walletTagLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     m_walletTagLabel->setFont(boldFont);
+    gridLayout->addWidget(m_walletTagLabel, row, 0, Qt::AlignRight | Qt::AlignTop);
 
     m_walletContent = new QLabel(this);
-
-    detailsLayout->addWidget(m_walletTagLabel, row, 0);
-    detailsLayout->addWidget(m_walletContent, row, 1);
+    m_walletContent->setTextFormat(Qt::PlainText);
+    m_walletContent->setWordWrap(true);
+    m_walletContent->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    gridLayout->addWidget(m_walletContent, row, 1, Qt::AlignTop);
     row++;
 
-    mainLayout->addLayout(detailsLayout);
-
-    // Buttons
+    // Row 8: Buttons (exactly like DGB)
     QHBoxLayout* buttonLayout = new QHBoxLayout();
 
     m_copyURIButton = new QPushButton(tr("Copy &URI"), this);
-    m_copyURIButton->setToolTip(tr("Copy the payment request URI to the clipboard"));
+    m_copyURIButton->setAutoDefault(false);
     connect(m_copyURIButton, &QPushButton::clicked, this, &DigiDollarReceiveRequestDialog::onCopyURIClicked);
 
     m_copyAddressButton = new QPushButton(tr("Copy &Address"), this);
-    m_copyAddressButton->setToolTip(tr("Copy the DigiDollar address to the clipboard"));
+    m_copyAddressButton->setAutoDefault(false);
     connect(m_copyAddressButton, &QPushButton::clicked, this, &DigiDollarReceiveRequestDialog::onCopyAddressClicked);
 
-    m_saveQRButton = new QPushButton(tr("&Save Image..."), this);
-    m_saveQRButton->setToolTip(tr("Save the QR code as an image file"));
-    connect(m_saveQRButton, &QPushButton::clicked, this, &DigiDollarReceiveRequestDialog::onSaveQRClicked);
-
     m_verifyButton = new QPushButton(tr("&Verify"), this);
-    m_verifyButton->setToolTip(tr("Verify this address on external signer"));
-    m_verifyButton->setVisible(false); // Hidden by default, shown if external signer available
+    m_verifyButton->setToolTip(tr("Verify this address on e.g. a hardware wallet screen"));
+    m_verifyButton->setAutoDefault(false);
+    m_verifyButton->setVisible(false);
 
-    m_closeButton = new QPushButton(tr("&Close"), this);
-    connect(m_closeButton, &QPushButton::clicked, this, &QDialog::accept);
+    m_saveQRButton = new QPushButton(tr("&Save Image..."), this);
+    m_saveQRButton->setAutoDefault(false);
+    connect(m_saveQRButton, &QPushButton::clicked, this, &DigiDollarReceiveRequestDialog::onSaveQRClicked);
 
     buttonLayout->addWidget(m_copyURIButton);
     buttonLayout->addWidget(m_copyAddressButton);
-    buttonLayout->addWidget(m_saveQRButton);
     buttonLayout->addWidget(m_verifyButton);
+    buttonLayout->addWidget(m_saveQRButton);
     buttonLayout->addStretch();
-    buttonLayout->addWidget(m_closeButton);
 
-    mainLayout->addLayout(buttonLayout);
+    gridLayout->addLayout(buttonLayout, row, 0, 1, 2);
+    row++;
 
-    setLayout(mainLayout);
+    // Button box (exactly like DGB's buttonBox - gets green checkmark styling)
+    QDialogButtonBox* buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok, this);
+    connect(buttonBox, &QDialogButtonBox::accepted, this, &QDialog::accept);
+    gridLayout->addWidget(buttonBox, row, 0, 1, 2);
+
+    setLayout(gridLayout);
 }
 
 void DigiDollarReceiveRequestDialog::setModel(WalletModel *model)
@@ -196,10 +181,9 @@ void DigiDollarReceiveRequestDialog::setInfo(const SendCoinsRecipient &info)
 {
     m_info = info;
 
-    // Set title
-    QString title = tr("Request payment to %1").arg(info.label.isEmpty() ? info.address : info.label);
+    // Set window title (like DGB: "Request payment to <address>...")
+    QString title = tr("Request payment to %1").arg(info.address);
     setWindowTitle(title);
-    m_titleLabel->setText(title);
 
     // Generate URI
     QString uri = formatDDURI(info);
@@ -211,10 +195,10 @@ void DigiDollarReceiveRequestDialog::setInfo(const SendCoinsRecipient &info)
         m_saveQRButton->setEnabled(false);
     }
 
-    // Set URI content as clickable link with readable color for dark/light themes
-    m_uriContent->setHtml("<a style=\"color: #66CCFF;\" href=\"" + uri + "\">" + GUIUtil::HtmlEscape(uri) + "</a>");
+    // Set URI content as clickable link (white text for dark theme readability)
+    m_uriContent->setText("<a style=\"color: white;\" href=\"" + uri + "\">" + GUIUtil::HtmlEscape(uri) + "</a>");
 
-    // Set address
+    // Set address (plain text, like DGB)
     m_addressContent->setText(info.address);
 
     // Set amount (or hide if not specified)

@@ -313,8 +313,8 @@ CScript CreateCollateralScript(const TxBuilderMintParams& params) {
 
 ```cpp
 enum RedemptionPath {
-    PATH_NORMAL = 0,     // 100% collateral return
-    PATH_ERR = 3         // 80-95% return (tiered)
+    PATH_NORMAL = 0,     // 100% collateral return, burn exact DD owed
+    PATH_ERR = 1         // 100% collateral return, burn MORE DD (105-125%)
 };
 ```
 

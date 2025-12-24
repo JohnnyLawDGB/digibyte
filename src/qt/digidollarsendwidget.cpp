@@ -263,7 +263,6 @@ void DigiDollarSendWidget::setupAmountSection()
     // USD equivalent display
     m_usdEquivalentLabel = new QLabel(tr("USD Equivalent:"), this);
     m_usdEquivalentLabel->setObjectName("usdEquivalentLabel");
-    m_usdEquivalentLabel->setAlignment(Qt::AlignRight | Qt::AlignTrailing | Qt::AlignVCenter);
     m_usdEquivalentLabel->setToolTip(tr("Equivalent value in US Dollars (DigiDollar is pegged to $1 USD)"));
     m_usdEquivalentValue = new QLabel("$0.00", this);
     m_usdEquivalentValue->setObjectName("usdEquivalentValue");
@@ -276,7 +275,6 @@ void DigiDollarSendWidget::setupAmountSection()
     // Available balance display
     m_availableBalanceLabel = new QLabel(tr("Available:"), this);
     m_availableBalanceLabel->setObjectName("availableBalanceLabel");
-    m_availableBalanceLabel->setAlignment(Qt::AlignRight | Qt::AlignTrailing | Qt::AlignVCenter);
     m_availableBalanceLabel->setToolTip(tr("Your current available DigiDollar balance"));
     m_availableBalanceValue = new QLabel("0.00000000 DD", this);
     m_availableBalanceValue->setObjectName("availableBalanceValue");
@@ -285,6 +283,11 @@ void DigiDollarSendWidget::setupAmountSection()
 
     m_amountLayout->addWidget(m_availableBalanceLabel, 2, 0);
     m_amountLayout->addWidget(m_availableBalanceValue, 2, 1);
+
+    // Set column widths to prevent layout distortion on initial display
+    m_amountLayout->setColumnMinimumWidth(0, 110);  // Label column
+    m_amountLayout->setColumnStretch(0, 0);
+    m_amountLayout->setColumnStretch(1, 1);
 
     m_mainLayout->addWidget(m_amountFrame);
 }

@@ -113,8 +113,9 @@ void DigiDollarOverviewWidget::setupUI()
     setupSystemHealthSection();
 
     // Add balance and system health frames to horizontal layout
-    topLayout->addWidget(m_balanceFrame);
-    topLayout->addWidget(m_systemHealthFrame);
+    // Both frames stretch to fill the same height for symmetry
+    topLayout->addWidget(m_balanceFrame, 1);
+    topLayout->addWidget(m_systemHealthFrame, 1);
 
     // Add the horizontal layout to main layout
     m_mainLayout->addLayout(topLayout);
@@ -132,10 +133,13 @@ void DigiDollarOverviewWidget::setupBalanceSection()
     m_balanceFrame->setFrameShape(QFrame::StyledPanel);
     m_balanceFrame->setFrameShadow(QFrame::Raised);
     m_balanceFrame->setObjectName("balanceFrame");
-    m_balanceFrame->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    m_balanceFrame->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 
     QVBoxLayout* frameVLayout = new QVBoxLayout(m_balanceFrame);
     frameVLayout->setObjectName("frameVLayout");
+
+    // Add top stretch to center content vertically
+    frameVLayout->addStretch(1);
 
     // Title with status indicator layout (similar to main wallet)
     QHBoxLayout* titleLayout = new QHBoxLayout();
@@ -207,6 +211,10 @@ void DigiDollarOverviewWidget::setupBalanceSection()
     m_balanceLayout->addItem(horizontalSpacer, 2, 2, 1, 1);
 
     frameVLayout->addLayout(m_balanceLayout);
+
+    // Add bottom stretch to center content vertically
+    frameVLayout->addStretch(1);
+
     // REMOVED: m_mainLayout->addWidget(m_balanceFrame);
     // Frame is now added to horizontal layout in setupUI()
 }
@@ -218,7 +226,7 @@ void DigiDollarOverviewWidget::setupSystemHealthSection()
     m_systemHealthFrame->setFrameShape(QFrame::StyledPanel);
     m_systemHealthFrame->setFrameShadow(QFrame::Raised);
     m_systemHealthFrame->setObjectName("systemHealthFrame");
-    m_systemHealthFrame->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    m_systemHealthFrame->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 
     QVBoxLayout* frameVLayout = new QVBoxLayout(m_systemHealthFrame);
     frameVLayout->setObjectName("healthFrameVLayout");

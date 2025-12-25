@@ -346,11 +346,21 @@ bool DigiDollarWallet::IsDDOutputMine(const CTxOut& txout, const uint256& txid) 
         return true;
     }
 
+    // Check if this is a MINT output that we've already identified as ours
+    // This handles the case where dd_owner_keys is empty (e.g., after wallet restore)
+    // but we've already processed the MINT tx and added it to collateral_positions
+    if (collateral_positions.count(txid) > 0) {
+        // This txid is a MINT we own - so vout[1] (the DD output) is ours
+        return true;
+    }
+
     // Extract the P2TR output key from the scriptPubKey
     // P2TR scripts are: OP_1 <32-byte-output-key>
     std::vector<unsigned char> output_key_bytes(txout.scriptPubKey.begin() + 2, txout.scriptPubKey.end());
 
-    // Check dd_owner_keys - verify the key actually controls this output
+    // Check dd_owner_keys - first try the specific txid, then check ALL owner keys
+    // This is needed because TRANSFER change outputs use the owner key from the original
+    // MINT (stored under MINT txid), not the TRANSFER txid.
     CKey owner_key;
     if (GetOwnerKey(txid, owner_key)) {
         // Compute what the tweaked key should be from this owner_key
@@ -358,6 +368,20 @@ bool DigiDollarWallet::IsDDOutputMine(const CTxOut& txout, const uint256& txid) 
         auto tweaked = owner_xonly.CreateTapTweak(nullptr);
         if (tweaked) {
             // Check if tweaked key matches output key
+            if (std::equal(output_key_bytes.begin(), output_key_bytes.end(),
+                          tweaked->first.begin())) {
+                return true;
+            }
+        }
+    }
+
+    // Check ALL owner keys - necessary for TRANSFER change outputs where the key
+    // is from the original MINT but we're checking with the TRANSFER's txid
+    for (const auto& [key_txid, key] : dd_owner_keys) {
+        if (key_txid == txid) continue;  // Already checked above
+        XOnlyPubKey owner_xonly(key.GetPubKey());
+        auto tweaked = owner_xonly.CreateTapTweak(nullptr);
+        if (tweaked) {
             if (std::equal(output_key_bytes.begin(), output_key_bytes.end(),
                           tweaked->first.begin())) {
                 return true;
@@ -1596,10 +1620,31 @@ void DigiDollarWallet::ProcessDDTxForRescan(const CTransactionRef& ptx, int bloc
         // Check if any DD output (P2TR with value=0) is ours
         // NOTE: We use IsDDOutputMine() instead of m_wallet->IsMine() because
         // IsMine() may return false for 0-value P2TR outputs in descriptor wallets
+        //
+        // ADDITIONAL FIX: If is_our_send is true, we need to also track change outputs.
+        // Change outputs are DD outputs after the first one (recipient). Without dd_owner_keys
+        // (e.g., after wallet restore), IsDDOutputMine can't identify change outputs, so we
+        // use the fact that we sent the transaction to infer ownership.
+        int dd_output_count = 0;
         for (size_t i = 0; i < tx.vout.size(); i++) {
             const CTxOut& txout = tx.vout[i];
-            // IsDDOutputMine already checks for P2TR with value=0
-            if (IsDDOutputMine(txout, tx.GetHash())) {
+            // Check if this is a DD output (P2TR with value=0)
+            if (txout.nValue != 0 || txout.scriptPubKey.size() != 34 || txout.scriptPubKey[0] != OP_1) {
+                continue;
+            }
+            dd_output_count++;
+
+            // Determine if this output is ours:
+            // 1. IsDDOutputMine returns true, OR
+            // 2. is_our_send is true AND this is not the first DD output (i.e., it's change)
+            bool is_ours = IsDDOutputMine(txout, tx.GetHash());
+            if (!is_ours && is_our_send && dd_output_count > 1) {
+                // This is a change output from our send
+                is_ours = true;
+                LogPrintf("DigiDollar: Identified change output via is_our_send at vout[%zu]\n", i);
+            }
+
+            if (is_ours) {
                 COutPoint received_utxo(tx.GetHash(), i);
 
                 // Check if not already tracked

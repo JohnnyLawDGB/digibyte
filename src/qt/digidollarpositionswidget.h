@@ -28,6 +28,7 @@ struct DigiDollarPosition {
     double ddMinted;
     double dgbCollateral;
     int lockTier;
+    int64_t unlockHeight;  // Block height when vault unlocks
     int blocksRemaining;
     double health;
     bool canRedeem;
@@ -91,6 +92,7 @@ private:
     CAmount GetMockOraclePrice() const;
     std::vector<WalletCollateralPosition> GetWalletPositions() const;
     double CalculatePositionHealth(CAmount ddAmount, CAmount dgbCollateral, CAmount oraclePrice) const;
+    int getLockTierBlocks(int tier) const;
 
     // UI components
     QVBoxLayout* m_mainLayout;
@@ -111,11 +113,12 @@ private:
         COL_POSITION_ID = 0,
         COL_DD_MINTED = 1,
         COL_DGB_COLLATERAL = 2,
-        COL_LOCK_TIER = 3,
-        COL_TIME_REMAINING = 4,
-        COL_HEALTH = 5,
-        COL_ACTIONS = 6,
-        NUM_COLUMNS = 7
+        COL_LOCK_DATE = 3,      // New: when vault was created
+        COL_LOCK_TIER = 4,      // Renamed from Lock Period
+        COL_TIME_REMAINING = 5,
+        COL_HEALTH = 6,
+        COL_ACTIONS = 7,
+        NUM_COLUMNS = 8
     };
 
     // Throttling - minimum 5 seconds between updates during sync

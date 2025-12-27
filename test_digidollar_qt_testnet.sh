@@ -2709,9 +2709,37 @@ echo "  - Bob's Qt (PID: $BOB_PID)"
 echo "  - Alice's Qt (PID: $ALICE_PID)"
 echo "  - Charlie's Qt (PID: $CHARLIE_PID)"
 echo ""
+
+# Show current balances for manual verification
+print_header "LIVE WALLET COMPARISON (bob vs bob_restored)"
+echo ""
+BOB_LIVE_DD=$(get_dd_balance "$BOB_CLI" "bob")
+BOB_RESTORED_LIVE_DD=$(get_dd_balance "$BOB_CLI" "bob_restored")
+echo "  bob DD Balance:          $BOB_LIVE_DD cents"
+echo "  bob_restored DD Balance: $BOB_RESTORED_LIVE_DD cents"
+echo ""
+if [ "$BOB_LIVE_DD" = "$BOB_RESTORED_LIVE_DD" ]; then
+    echo -e "  ${GREEN}[MATCH]${NC} Both wallets have the same DD balance!"
+else
+    echo -e "  ${RED}[MISMATCH]${NC} Balances differ! bob=$BOB_LIVE_DD, bob_restored=$BOB_RESTORED_LIVE_DD"
+fi
+echo ""
+BOB_LIVE_POS=$($BOB_CLI -rpcwallet=bob listdigidollarpositions 2>/dev/null | jq 'length')
+BOB_RESTORED_LIVE_POS=$($BOB_CLI -rpcwallet=bob_restored listdigidollarpositions 2>/dev/null | jq 'length')
+echo "  bob Positions:          $BOB_LIVE_POS"
+echo "  bob_restored Positions: $BOB_RESTORED_LIVE_POS"
+echo ""
+
 echo "Commands for manual testing:"
+echo "  # Compare bob vs bob_restored:"
 echo "  $BOB_CLI -rpcwallet=bob getdigidollarbalance"
+echo "  $BOB_CLI -rpcwallet=bob_restored getdigidollarbalance"
+echo ""
+echo "  # List positions:"
 echo "  $BOB_CLI -rpcwallet=bob listdigidollarpositions"
+echo "  $BOB_CLI -rpcwallet=bob_restored listdigidollarpositions"
+echo ""
+echo "  # Other commands:"
 echo "  $BOB_CLI getoracleprice"
 echo "  $BOB_CLI getdigidollarstats"
 echo ""

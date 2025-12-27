@@ -1509,6 +1509,14 @@ void DigiDollarWallet::ProcessDDTxForRescan(const CTransactionRef& ptx, int bloc
                     }
                 }
             }
+
+            // DEBUG: Summary of MINT processing
+            CAmount total_dd = 0;
+            for (const auto& [outpoint, amount] : dd_utxos) {
+                total_dd += amount;
+            }
+            LogPrintf("DigiDollar: MINT tx %s - END: dd_utxos.size()=%zu, total_dd=%lld cents\n",
+                      tx.GetHash().GetHex().substr(0, 16).c_str(), dd_utxos.size(), static_cast<long long>(total_dd));
         }
     }
     else if (ddTxType == 2) {  // TRANSFER transaction
@@ -1530,9 +1538,16 @@ void DigiDollarWallet::ProcessDDTxForRescan(const CTransactionRef& ptx, int bloc
             // where dd_owner_keys is empty and the txout-based check would fail.
             COutPoint spent_outpoint(txin.prevout.hash, txin.prevout.n);
 
+            // DEBUG: Log what we're checking
+            LogPrintf("DigiDollar: TRANSFER input check - outpoint %s:%u, in_dd_utxos=%d\n",
+                      spent_outpoint.hash.GetHex(), spent_outpoint.n,
+                      dd_utxos.find(spent_outpoint) != dd_utxos.end() ? 1 : 0);
+
             // Use COutPoint overload - checks dd_utxos first, then falls back to txout check
             if (IsDDOutputMine(spent_outpoint)) {
                 is_our_send = true;
+                LogPrintf("DigiDollar: TRANSFER - IsDDOutputMine returned true for input %s:%u, is_our_send=true\n",
+                          spent_outpoint.hash.GetHex(), spent_outpoint.n);
 
                 // Look up the DD amount from our tracking
                 auto dd_it = dd_utxos.find(spent_outpoint);
@@ -1553,8 +1568,15 @@ void DigiDollarWallet::ProcessDDTxForRescan(const CTransactionRef& ptx, int bloc
                     // reflect the original minted amount (collateral backing). Transferring
                     // DD tokens doesn't change the collateral locked in the position.
                 }
+            } else {
+                LogPrintf("DigiDollar: TRANSFER - IsDDOutputMine returned false for input %s:%u\n",
+                          spent_outpoint.hash.GetHex(), spent_outpoint.n);
             }
         }
+
+        // DEBUG: Log is_our_send after input loop
+        LogPrintf("DigiDollar: TRANSFER tx %s - after input loop: is_our_send=%d, total_dd_sent=%lld\n",
+                  tx.GetHash().GetHex().substr(0, 16).c_str(), is_our_send ? 1 : 0, static_cast<long long>(total_dd_sent));
 
         if (is_our_send) {
             // Extract DD amounts from OP_RETURN to determine transfer amount
@@ -1649,6 +1671,9 @@ void DigiDollarWallet::ProcessDDTxForRescan(const CTransactionRef& ptx, int bloc
         // Change outputs are DD outputs after the first one (recipient). Without dd_owner_keys
         // (e.g., after wallet restore), IsDDOutputMine can't identify change outputs, so we
         // use the fact that we sent the transaction to infer ownership.
+        LogPrintf("DigiDollar: TRANSFER tx %s - checking outputs, is_our_send=%d\n",
+                  tx.GetHash().GetHex().substr(0, 16).c_str(), is_our_send ? 1 : 0);
+
         int dd_output_count = 0;
         for (size_t i = 0; i < tx.vout.size(); i++) {
             const CTxOut& txout = tx.vout[i];
@@ -1662,6 +1687,8 @@ void DigiDollarWallet::ProcessDDTxForRescan(const CTransactionRef& ptx, int bloc
             // 1. IsDDOutputMine returns true, OR
             // 2. is_our_send is true AND this is not the first DD output (i.e., it's change)
             bool is_ours = IsDDOutputMine(txout, tx.GetHash());
+            LogPrintf("DigiDollar: TRANSFER output vout[%zu] - dd_output_count=%d, IsDDOutputMine=%d, is_our_send=%d\n",
+                      i, dd_output_count, is_ours ? 1 : 0, is_our_send ? 1 : 0);
             if (!is_ours && is_our_send && dd_output_count > 1) {
                 // This is a change output from our send
                 is_ours = true;
@@ -1769,6 +1796,14 @@ void DigiDollarWallet::ProcessDDTxForRescan(const CTransactionRef& ptx, int bloc
                 }
             }
         }
+
+        // DEBUG: Summary of TRANSFER processing
+        CAmount total_dd = 0;
+        for (const auto& [outpoint, amount] : dd_utxos) {
+            total_dd += amount;
+        }
+        LogPrintf("DigiDollar: TRANSFER tx %s - END: dd_output_count=%d, dd_utxos.size()=%zu, total_dd=%lld cents\n",
+                  tx.GetHash().GetHex().substr(0, 16).c_str(), dd_output_count, dd_utxos.size(), static_cast<long long>(total_dd));
     }
     else if (ddTxType == 3) {  // REDEEM transaction
         // Find which position was redeemed and mark inactive

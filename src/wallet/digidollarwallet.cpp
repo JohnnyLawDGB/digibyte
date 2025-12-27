@@ -399,6 +399,31 @@ bool DigiDollarWallet::IsDDOutputMine(const CTxOut& txout, const uint256& txid) 
     return false;
 }
 
+bool DigiDollarWallet::IsDDOutputMine(const COutPoint& outpoint) const
+{
+    // PRIMARY CHECK: If it's in dd_utxos, we own it
+    // This is the source of truth for DD ownership (like mapWallet for DGB)
+    // CRITICAL for detecting TRANSFER change outputs after wallet restore,
+    // where dd_owner_keys is empty and IsDDOutputMine(txout, txid) would fail.
+    if (dd_utxos.find(outpoint) != dd_utxos.end()) {
+        LogPrint(BCLog::DIGIDOLLAR, "IsDDOutputMine(COutPoint): %s:%u found in dd_utxos - returning true\n",
+                 outpoint.hash.GetHex(), outpoint.n);
+        return true;
+    }
+
+    // SECONDARY CHECK: Fall back to txout-based check for new outputs
+    // This handles outputs we haven't yet added to dd_utxos
+    if (m_wallet) {
+        LOCK(m_wallet->cs_wallet);
+        auto it = m_wallet->mapWallet.find(outpoint.hash);
+        if (it != m_wallet->mapWallet.end() && outpoint.n < it->second.tx->vout.size()) {
+            return IsDDOutputMine(it->second.tx->vout[outpoint.n], outpoint.hash);
+        }
+    }
+
+    return false;
+}
+
 void DigiDollarWallet::StoreOwnerKey(const uint256& dd_timelock_id, const CKey& key)
 {
     // Store in in-memory map
@@ -1499,35 +1524,34 @@ void DigiDollarWallet::ProcessDDTxForRescan(const CTransactionRef& ptx, int bloc
         std::string recipient_address;
 
         for (const CTxIn& txin : tx.vin) {
-            auto it = m_wallet->mapWallet.find(txin.prevout.hash);
-            if (it != m_wallet->mapWallet.end()) {
-                if (txin.prevout.n < it->second.tx->vout.size()) {
-                    const CTxOut& spent_output = it->second.tx->vout[txin.prevout.n];
-                    // Check if this is a DD output that we owned
-                    // Use IsDDOutputMine() instead of IsMine() for descriptor wallet compatibility
-                    if (IsDDOutputMine(spent_output, txin.prevout.hash)) {
-                        is_our_send = true;
-                        // Look up the DD amount from our tracking (if available)
-                        COutPoint spent_outpoint(txin.prevout.hash, txin.prevout.n);
-                        auto dd_it = dd_utxos.find(spent_outpoint);
-                        if (dd_it != dd_utxos.end()) {
-                            total_dd_sent += dd_it->second;
+            // Create COutPoint first - use the COutPoint overload of IsDDOutputMine
+            // which checks dd_utxos first (source of truth for DD ownership).
+            // This is CRITICAL for detecting TRANSFER change outputs after wallet restore,
+            // where dd_owner_keys is empty and the txout-based check would fail.
+            COutPoint spent_outpoint(txin.prevout.hash, txin.prevout.n);
 
-                            // CRITICAL FIX: Remove spent UTXO from tracking during rescan
-                            // This ensures the balance is calculated correctly after wallet restore
-                            LogPrintf("DigiDollar: Removing spent DD UTXO %s:%u during rescan (was %lld cents)\n",
-                                      txin.prevout.hash.GetHex(), txin.prevout.n, static_cast<long long>(dd_it->second));
-                            dd_utxos.erase(dd_it);
+            // Use COutPoint overload - checks dd_utxos first, then falls back to txout check
+            if (IsDDOutputMine(spent_outpoint)) {
+                is_our_send = true;
 
-                            // Also remove from database
-                            wallet::WalletBatch batch(m_wallet->GetDatabase());
-                            batch.EraseDDUTXO(spent_outpoint);
+                // Look up the DD amount from our tracking
+                auto dd_it = dd_utxos.find(spent_outpoint);
+                if (dd_it != dd_utxos.end()) {
+                    total_dd_sent += dd_it->second;
 
-                            // NOTE: Do NOT set dd_minted=0 here! The dd_minted field should always
-                            // reflect the original minted amount (collateral backing). Transferring
-                            // DD tokens doesn't change the collateral locked in the position.
-                        }
-                    }
+                    // CRITICAL FIX: Remove spent UTXO from tracking during rescan
+                    // This ensures the balance is calculated correctly after wallet restore
+                    LogPrintf("DigiDollar: Removing spent DD UTXO %s:%u during rescan (was %lld cents)\n",
+                              txin.prevout.hash.GetHex(), txin.prevout.n, static_cast<long long>(dd_it->second));
+                    dd_utxos.erase(dd_it);
+
+                    // Also remove from database
+                    wallet::WalletBatch batch(m_wallet->GetDatabase());
+                    batch.EraseDDUTXO(spent_outpoint);
+
+                    // NOTE: Do NOT set dd_minted=0 here! The dd_minted field should always
+                    // reflect the original minted amount (collateral backing). Transferring
+                    // DD tokens doesn't change the collateral locked in the position.
                 }
             }
         }

@@ -714,9 +714,16 @@ else
     print_status "warn" "Transfer 3 failed: $XFER3"
 fi
 
-$BOB_CLI generatetoaddress 2 "$BOB_ADDR" > /dev/null 2>&1
-sleep 2
+# Mine extra blocks and give wallet time to process incoming DD
+# This fixes timing issue where received DD isn't detected immediately
+$BOB_CLI generatetoaddress 5 "$BOB_ADDR" > /dev/null 2>&1
+sleep 3
 sync_all_nodes
+sleep 2
+
+# Force Bob's wallet to rescan for any missed DD UTXOs
+$BOB_CLI -rpcwallet=bob rescanblockchain > /dev/null 2>&1 || true
+sleep 2
 
 BOB_DD_AFTER=$(get_dd_balance "$BOB_CLI" "bob")
 echo ""

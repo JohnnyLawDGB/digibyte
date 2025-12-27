@@ -244,6 +244,16 @@ public:
      */
     bool IsDDOutputMine(const CTxOut& txout, const uint256& txid) const;
 
+    /**
+     * Check if a DD output belongs to this wallet using COutPoint
+     * This overload checks dd_utxos first (source of truth for owned DD)
+     * which is essential for detecting TRANSFER change outputs after wallet restore.
+     * Mirrors how normal DGB uses mapWallet as source of truth for UTXO ownership.
+     * @param outpoint The transaction outpoint to check
+     * @return true if we own this DD output
+     */
+    bool IsDDOutputMine(const COutPoint& outpoint) const;
+
     // ====================================================================
     // PHASE 5 TASK 5.1: DATABASE EXTENSION FUNCTIONS
     // ====================================================================

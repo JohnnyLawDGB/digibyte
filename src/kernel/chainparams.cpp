@@ -467,7 +467,7 @@ public:
         pchMessageStart[1] = 0xd1;
         pchMessageStart[2] = 0xb8;
         pchMessageStart[3] = 0xe2;
-        nDefaultPort = 12033;
+        nDefaultPort = 12034;
         nPruneAfterHeight = 1000;
         m_assumed_blockchain_size = 40;
         m_assumed_chain_state_size = 2;
@@ -577,7 +577,7 @@ private:
         // Phase Two: Enable more oracles when ready (3-of-10 for testnet)
         vOracleNodes = {
             // Oracle 0: Primary testnet oracle (ACTIVE for Phase One)
-            {0,  ParsePubKey("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"), "oracle1.digibyte.io:12031", true},
+            {0,  ParsePubKey("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"), "oracle1.digibyte.io:12034", true},
 
             // Oracle 1-9: Reserved for Phase Two testnet (currently DISABLED)
             // Enable these when activating Phase Two: set to true and lower nDigiDollarPhase2Height

@@ -315,13 +315,35 @@ get_tier_description() {
 
 # Step 1: Clean environment
 print_header "Step 1: Cleaning environment"
+
+# Kill any existing testnet processes (try graceful first, then force)
+echo "Stopping any existing testnet processes..."
 pkill -f "digibyte-qt.*testnet" 2>/dev/null || true
 pkill -f "digibyted.*testnet" 2>/dev/null || true
 sleep 2
 
+# Force kill if still running
+pkill -9 -f "digibyte-qt.*testnet" 2>/dev/null || true
+pkill -9 -f "digibyted.*testnet" 2>/dev/null || true
+sleep 1
+
+# Clean up ALL test data directories to prevent stale wallet data issues
+echo "Removing old test data directories..."
 rm -rf $BOB_DATADIR $ALICE_DATADIR $CHARLIE_DATADIR
+rm -rf /tmp/bob_testnet*.log /tmp/alice_testnet*.log /tmp/charlie_testnet*.log
+rm -rf /tmp/bob_descriptors.json /tmp/alice_descriptors.json
+rm -rf /tmp/bob_import_request.json /tmp/alice_import_request.json
+
+# Verify directories are actually removed
+if [ -d "$BOB_DATADIR" ] || [ -d "$ALICE_DATADIR" ] || [ -d "$CHARLIE_DATADIR" ]; then
+    echo -e "${RED}WARNING: Failed to remove data directories. Retrying...${NC}"
+    sleep 2
+    rm -rf $BOB_DATADIR $ALICE_DATADIR $CHARLIE_DATADIR
+fi
+
+# Create fresh directories
 mkdir -p $BOB_DATADIR $ALICE_DATADIR $CHARLIE_DATADIR
-print_status "ok" "Clean environment ready"
+print_status "ok" "Clean environment ready (all stale data removed)"
 
 # Step 2: Start Bob's Qt node
 print_header "Step 2: Starting Bob's Qt node"

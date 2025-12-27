@@ -6,111 +6,115 @@
 
 ---
 
-## What's New in RC9
+## What's New in RC10
 
 ### Critical Bug Fixes
-- **Fix multi-input DD redemption** - Received DD now properly registered in metadata for cross-wallet redemptions
-- **Fix critical DD change loss bug** - Redemption transactions now correctly preserve DD change
-- **Fix wallet restore tier mismatch** - Lock tier explicitly stored in MINT OP_RETURN
+- **Fix Lock Date display** - Now uses actual mint transaction timestamp instead of block calculation
+- **Fix wallet restore via descriptor import** - Full DD balance recovery with rescan
+- **Fix TRANSFER change detection** - Properly detects DD change outputs after wallet restore
+- **Fix MINT rescan chronological order** - Correct UTXO processing order during rescan
+- **Fix 1969 timestamps** - Transaction timestamps now display correctly after wallet restore
+- **Fix redeem button crash** - RPC name mismatch causing crash resolved
 
-### Coin Control & UI Improvements
-- **DD Coin Control for Redemptions** - Manual UTXO selection in Redeem DD tab
-- **DD Coin Control for Sends** - Manual UTXO selection for DigiDollar transfers
-- **QR Code Popup Dialog** - Theme-styled QR codes for DD Receive tab
-- **3-second Confirmation Delay** - Safety delay for DD send transactions
-- **Clean DGB/DD Address Separation** - DD addresses no longer appear in DGB Receive tab
+### Wallet Restore Improvements
+- **IsDDOutputMine()** - New function for descriptor wallet compatibility
+- **Descriptor wallet support** - TRANSFER rescan uses IsDDOutputMine for proper detection
+- **MINT/change output detection** - Wallet restore correctly identifies all DD outputs
 
-### Architecture Improvements
-- **Decentralized DD Amount Lookup** - Fallback via blockchain/txindex for DD amounts
-- **DCA System GREEN Phase** - Core Dynamic Collateral Adjustment functions implemented
-- **DIGIDOLLAR Address Purpose** - Clean separation of DGB and DD address types
+### UI/UX Improvements
+- **DD Vault tab overhaul** - Lock Date column, "Locked" button for immature vaults
+- **Compact GUI** - Reduced font sizes, padding, and minimum window heights
+- **Styled tooltips** - Consistent theming across Overview balance labels
+- **Table column balancing** - Improved layout for DD transaction tables
 
-### Testing & Documentation
-- **Comprehensive Validation Layer Tests** - GROUP 10 test coverage
-- **Script Validation Tests** - GROUP 9 opcode order validation
-- **ERR Tier Documentation** - GROUP 3 formula tests and clarification
+### Architecture Changes
+- **2-path redemption model** - Simplified to Normal and ERR paths only (removed 4 legacy paths)
+- **Separate change addresses** - Collateral and DGB change now use distinct wallet addresses
+- **Dust remainder handling** - DD transfers allow dust remainder for full balance sends
+
+### Network
+- **Testnet12** - New network on port 12034
 
 ---
 
-## Commits Since RC8
+## Commits Since RC9
 
-- Fix multi-input DD redemption by registering received DD in metadata
-- Fix DD amount extraction to be decentralized via blockchain lookup
-- Add coin control UI to Redeem DD tab for manual DD input selection
-- Add QR code popup dialog for DD Receive tab with theme styling
-- Fix critical DD change loss bug in redemption transactions
-- Store lock tier explicitly in MINT OP_RETURN to fix wallet restore tier mismatch
-- Fix lock tier mismatch causing wallet restore position tier errors
-- Implement DigiDollar Coin Control for manual UTXO selection
-- Add 3-second confirmation delay for DigiDollar send transactions
-- Fix DigiDollar addresses appearing in DGB Receive tab after wallet restart
-- Add DIGIDOLLAR address purpose for clean DGB/DD separation
-- Remove DD Vault Refresh Button (UI cleanup)
-- GROUP 10: Add comprehensive validation layer tests
-- GROUP 9: Add script validation tests for opcode order
-- GROUP 3: Clarify ERR tier documentation and add formula tests
-- GROUP 1: Implement DCA system GREEN phase functions
-- Fix ValidateRedemptionAmount to reject partial redemptions
-- Fix oracle exchange mock data and tests
-- Fix DigiDollar unit test failures
+- Fix Lock Date to use actual mint transaction timestamp
+- Improve DD Vault tab display with correct dates and statuses
+- Fix wallet restore via descriptor import + rescan
+- Fix TRANSFER change detection after wallet restore
+- Fix wallet restore detecting MINT and change outputs
+- Fix TRANSFER rescan to use IsDDOutputMine for descriptor wallets
+- Fix MINT rescan to use chronological UTXO processing
+- Add IsDDOutputMine() for descriptor wallet compatibility
+- Fix redeem button crash from RPC name mismatch
+- Fix transaction timestamps showing 1969 after wallet restore
+- Improve DD Vault tab UX with Lock Date column and status clarity
+- Compact GUI with reduced font sizes and padding
+- Improve window resizing with reduced minimum heights
+- Balance table columns and set minimum window height
+- Add styled tooltips to Overview balance labels
+- Use separate wallet addresses for collateral and DGB change
+- Allow DD transfers with dust remainder for full balance sends
+- Simplify to 2-path redemption model (Normal + ERR)
+- Update validation, transaction builder, and wallet code for 2-path model
 
 ---
 
 ## Upgrade Notes
 
-**RC9 uses the same testnet10 network as RC8. No data deletion required if upgrading from RC8.**
+**RC10 uses testnet12 network (port 12034). You must delete old testnet data when upgrading.**
 
-### If Upgrading from RC7 or Earlier:
+### If Upgrading from RC9 or Earlier:
 1. Close your old wallet
 2. Delete old testnet data:
-   - **Windows:** Delete `%APPDATA%\DigiByte\testnet9\`
-   - **macOS:** Delete `~/Library/Application Support/DigiByte/testnet9/`
-   - **Linux:** Delete `~/.digibyte/testnet9/`
-3. Download and install RC9
+   - **Windows:** Delete `%APPDATA%\DigiByte\testnet10\` and `testnet11\`
+   - **macOS:** Delete `~/Library/Application Support/DigiByte/testnet10/` and `testnet11/`
+   - **Linux:** Delete `~/.digibyte/testnet10/` and `~/.digibyte/testnet11/`
+3. Download and install RC10
 4. Launch with `-testnet` flag
 
 ---
 
 ## Key Features Since RC1 (Cumulative)
 
+### From RC9 - Coin Control & Multi-Input
+- DD Coin Control for Redemptions and Sends
+- QR Code Popup Dialog for DD Receive tab
+- 3-second Confirmation Delay for DD sends
+- Clean DGB/DD Address Separation
+- Decentralized DD Amount Lookup via blockchain
+
 ### From RC8 - MAST Simplification
 - Reduced to 2 redemption paths (Normal and ERR only)
 - Removed Partial Redemption (users must redeem full vault amounts)
 - Added CLTV to ERR path (both paths require timelock expiry)
-- Fixed SignRedemptionTransaction MAST mismatch
 
 ### From RC7 - ERR & Oracle Fixes
 - Corrected ERR semantics (increases DD burn, not reduces collateral)
 - Multi-oracle consensus infrastructure
 - Wallet restore fixes for redeemed vaults
-- UI improvements for DD address filtering
 
 ### From RC6 - Network Reset & HD Keys
 - Deterministic DigiDollar keys using HD derivation
 - Tier derivation fixes for wallet restore
-- UI improvements for Receive DD tab
 
 ### From RC5 - Wallet & Validation Fixes
 - Conflicted DD transactions handled properly
 - Minimum mint amount rule with activation height
-- Historical block validation optimization
-- Cross-platform theming fixes
 
 ### From RC4 - Network Reset & Core Fixes
 - Fix Qt freeze from verbose logging
 - Fix large DD amounts (8-byte CScriptNum)
 - DigiDollarStatsIndex for network metrics
-- Exact-amount redemptions
 
 ### From RC3 - Wallet Safety Fixes
 - DGB loss bug fixed with wallet-controlled change addresses
 - Non-P2TR outputs allowed for change
-- Windows 64-bit integer fixes
 
 ### From RC2 - Core Transaction Fixes
 - DD key persistence across wallet restarts
 - Taproot signing fixed for transfers and redemptions
-- UTXO scanning fixed for received DD tokens
 
 ---
 
@@ -163,7 +167,7 @@ rpcpassword=digibyte123
 ## Windows Setup
 
 ### Step 1: Download and Install
-Download `digibyte-9.26.0-rc9-win64-setup.exe` and install normally.
+Download `digibyte-9.26.0-rc10-win64-setup.exe` and install normally.
 
 ### Step 2: First Launch (Testnet Mode)
 You must launch in testnet mode. Open **PowerShell** and run:
@@ -185,12 +189,12 @@ Close the wallet and launch again from PowerShell:
 ```
 
 ### Verify It's Working
-- Title bar should say **"DigiByte Core - Wallet [testnet10]"**
+- Title bar should say **"DigiByte Core - Wallet [testnet12]"**
 - You should see a **DigiDollar** tab in the sidebar
 
 ### Data Directory Reference
 - Config: `%APPDATA%\DigiByte\digibyte.conf`
-- Testnet data: `%APPDATA%\DigiByte\testnet10\`
+- Testnet data: `%APPDATA%\DigiByte\testnet12\`
 
 ---
 
@@ -244,12 +248,12 @@ cd ~/Desktop
 ```
 
 ### Verify It's Working
-- Title bar should say **"DigiByte Core - Wallet [testnet10]"**
+- Title bar should say **"DigiByte Core - Wallet [testnet12]"**
 - You should see a **DigiDollar** tab in the sidebar
 
 ### Data Directory Reference
 - Config: `~/Library/Application Support/DigiByte/digibyte.conf`
-- Testnet data: `~/Library/Application Support/DigiByte/testnet10/`
+- Testnet data: `~/Library/Application Support/DigiByte/testnet12/`
 
 ---
 
@@ -261,7 +265,7 @@ cd ~/Desktop
 ```
 Config file: `~/.digibyte/digibyte.conf`
 
-Testnet data stored in: `~/.digibyte/testnet10/`
+Testnet data stored in: `~/.digibyte/testnet12/`
 
 ### Steps:
 1. Open Terminal and create config:
@@ -288,12 +292,12 @@ EOF
 2. Extract and run:
 ```bash
 cd ~/Downloads
-tar xzf digibyte-9.26.0-rc9-x86_64-linux-gnu.tar.gz
-./digibyte-9.26.0-rc9/bin/digibyte-qt
+tar xzf digibyte-9.26.0-rc10-x86_64-linux-gnu.tar.gz
+./digibyte-9.26.0-rc10/bin/digibyte-qt
 ```
 
 ### Verify It's Working
-- Title bar should say **"DigiByte Core - Wallet [testnet10]"**
+- Title bar should say **"DigiByte Core - Wallet [testnet12]"**
 - You should see a **DigiDollar** tab in the sidebar
 
 ---
@@ -308,7 +312,7 @@ Mine testnet DGB directly using the GUI console:
 2. Go to **Window > Console**
 3. Type: `generatetoaddress 1 dgbt1qYOURADDRESSHERE`
 4. Press Enter to mine 1 block
-5. Wait for 8 confirmations before spending mined coins (reduced from 100 in testnet10)
+5. Wait for 8 confirmations before spending mined coins (reduced from 100 in testnet12)
 
 ### Option 2: CPU Miner (Recommended for Continuous Mining)
 
@@ -358,13 +362,13 @@ Once your wallet is synced and you have testnet DGB:
 
 | Setting | Value |
 |---------|-------|
-| Network | Testnet (testnet10) |
-| Default P2P Port | 12033 |
+| Network | Testnet (testnet12) |
+| Default P2P Port | 12034 |
 | Default RPC Port | 14026 |
-| Oracle Node | oracle1.digibyte.io:12033 |
+| Oracle Node | oracle1.digibyte.io:12034 |
 | Address Prefix | dgbt1... (bech32) |
 
-### Fork Schedule (Testnet10)
+### Fork Schedule (Testnet12)
 | Feature | Block Height |
 |---------|--------------|
 | MultiAlgo | 100 |
@@ -373,7 +377,7 @@ Once your wallet is synced and you have testnet DGB:
 | Odocrypt | 500 |
 | DigiDollar | 550 |
 
-### Emission Schedule (Testnet10)
+### Emission Schedule (Testnet12)
 | Period | Block Range | Reward |
 |--------|-------------|--------|
 | Period I | 0-66 | 72,000 DGB |
@@ -391,7 +395,7 @@ Once your wallet is synced and you have testnet DGB:
 - Restart the wallet after config changes
 
 ### "Not connecting to network"
-- Check your firewall allows port 12033
+- Check your firewall allows port 12034
 - Verify `addnode=oracle1.digibyte.io` is under `[test]` in config
 
 ### "Oracle price shows 0 or N/A"
@@ -407,9 +411,9 @@ Once your wallet is synced and you have testnet DGB:
 - DigiDollar transactions require 0.1 DGB minimum fee - this is expected
 - This ensures reliable network propagation
 
-### "Old testnet9 data causing crashes"
-- Delete your testnet9 folder completely (see Upgrade Notes above)
-- RC8+ requires a fresh testnet10 blockchain
+### "Old testnet data causing crashes"
+- Delete your testnet10 and testnet11 folders completely (see Upgrade Notes above)
+- RC10 requires a fresh testnet12 blockchain
 
 ---
 
@@ -417,12 +421,12 @@ Once your wallet is synced and you have testnet DGB:
 
 | Platform | File |
 |----------|------|
-| Windows 64-bit (Installer) | `digibyte-9.26.0-rc9-win64-setup.exe` |
-| Windows 64-bit (Portable) | `digibyte-9.26.0-rc9-win64.zip` |
-| macOS Apple Silicon (M1/M2/M3/M4) | `digibyte-9.26.0-rc9-arm64-apple-darwin.dmg` |
-| macOS Intel | `digibyte-9.26.0-rc9-x86_64-apple-darwin.dmg` |
-| Linux x86_64 | `digibyte-9.26.0-rc9-x86_64-linux-gnu.tar.gz` |
-| Linux ARM64 (Raspberry Pi) | `digibyte-9.26.0-rc9-aarch64-linux-gnu.tar.gz` |
+| Windows 64-bit (Installer) | `digibyte-9.26.0-rc10-win64-setup.exe` |
+| Windows 64-bit (Portable) | `digibyte-9.26.0-rc10-win64.zip` |
+| macOS Apple Silicon (M1/M2/M3/M4) | `digibyte-9.26.0-rc10-arm64-apple-darwin.dmg` |
+| macOS Intel | `digibyte-9.26.0-rc10-x86_64-apple-darwin.dmg` |
+| Linux x86_64 | `digibyte-9.26.0-rc10-x86_64-linux-gnu.tar.gz` |
+| Linux ARM64 (Raspberry Pi) | `digibyte-9.26.0-rc10-aarch64-linux-gnu.tar.gz` |
 
 ---
 

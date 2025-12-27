@@ -33,6 +33,7 @@ struct DigiDollarPosition {
     double health;
     bool canRedeem;
     bool isRedeemed;
+    int64_t mintTime;      // Unix timestamp of mint transaction
 };
 
 /**

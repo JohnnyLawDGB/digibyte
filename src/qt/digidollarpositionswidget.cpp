@@ -482,14 +482,24 @@ void DigiDollarPositionsWidget::loadPositionsFromWallet()
         // Track redeemed status
         pos.isRedeemed = !wp.is_active;
 
+        // Get the mint transaction timestamp from the wallet
+        pos.mintTime = 0;  // Default to 0 (will show current time if not found)
+        try {
+            interfaces::WalletTx wtx = m_walletModel->wallet().getWalletTx(wp.dd_timelock_id);
+            if (wtx.tx) {
+                pos.mintTime = wtx.time;
+            }
+        } catch (...) {
+            // If transaction lookup fails, leave mintTime at 0
+        }
+
         m_positions.append(pos);
     }
 
-    // Sort positions by unlock_height descending (most recent mint first)
-    // Since unlock_height = mint_height + tier_blocks, higher unlock_height generally means more recent
+    // Sort positions by mintTime descending (most recent mint first)
     std::sort(m_positions.begin(), m_positions.end(),
               [](const DigiDollarPosition& a, const DigiDollarPosition& b) {
-                  return a.unlockHeight > b.unlockHeight;
+                  return a.mintTime > b.mintTime;
               });
 }
 
@@ -574,27 +584,30 @@ void DigiDollarPositionsWidget::addPositionToTable(const DigiDollarPosition& pos
 
     m_positionsTable->setItem(row, COL_DGB_COLLATERAL, dgbItem);
 
-    // Lock Date - Calculate when the vault was created
-    // Use elapsed time = tier_duration - time_remaining (more reliable than block height math)
+    // Lock Date - Use the actual mint transaction timestamp
+    QDateTime lockDate;
+    if (position.mintTime > 0) {
+        // Use the actual transaction timestamp
+        lockDate = QDateTime::fromSecsSinceEpoch(position.mintTime);
+    } else {
+        // Fallback: estimate from block heights (less accurate)
+        int lockTierBlocks = getLockTierBlocks(position.lockTier);
+        int64_t elapsedBlocks = lockTierBlocks - position.blocksRemaining;
+        elapsedBlocks = std::max<int64_t>(0, std::min<int64_t>(elapsedBlocks, lockTierBlocks));
+        int64_t elapsedSeconds = elapsedBlocks * 15; // 15 seconds per block
+        lockDate = QDateTime::currentDateTime().addSecs(-elapsedSeconds);
+    }
+
+    // Calculate estimated lock height for tooltip
     int lockTierBlocks = getLockTierBlocks(position.lockTier);
     int64_t lockHeight = position.unlockHeight - lockTierBlocks;
-
-    // Calculate elapsed time since mint based on how much of the lock period has passed
-    // This is more accurate than using block heights which can produce strange results
-    // when unlock_height is far in the future
-    int64_t elapsedBlocks = lockTierBlocks - position.blocksRemaining;
-    // Clamp to reasonable values (can't have elapsed more than the tier duration, or negative elapsed)
-    elapsedBlocks = std::max<int64_t>(0, std::min<int64_t>(elapsedBlocks, lockTierBlocks));
-    int64_t elapsedSeconds = elapsedBlocks * 15; // 15 seconds per block
-
-    QDateTime lockDate = QDateTime::currentDateTime().addSecs(-elapsedSeconds);
 
     QString lockDateStr = lockDate.toString("yyyy-MM-dd");
     QTableWidgetItem* lockDateItem = new QTableWidgetItem(lockDateStr);
     lockDateItem->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled);
     lockDateItem->setTextAlignment(Qt::AlignCenter);
-    // Store unlock_height as data for sorting (higher = more recent)
-    lockDateItem->setData(Qt::UserRole, QVariant::fromValue(position.unlockHeight));
+    // Store mintTime for sorting (higher = more recent)
+    lockDateItem->setData(Qt::UserRole, QVariant::fromValue(position.mintTime));
     lockDateItem->setToolTip(tr("Vault created: %1\nMint block height: %2\nUnlock block height: %3")
                             .arg(lockDate.toString("yyyy-MM-dd hh:mm"))
                             .arg(lockHeight)

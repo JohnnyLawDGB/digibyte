@@ -132,12 +132,12 @@ void DigiDollarPositionsWidget::setupTableHeader()
     header->setSectionResizeMode(COL_ACTIONS, QHeaderView::Fixed);
 
     // Set balanced column widths - VAULT ID stretches, others fixed
-    // Total fixed: 115 + 145 + 100 + 100 + 110 + 105 + 100 = 775px, leaves ~175px for VAULT ID
+    // Total fixed: 115 + 145 + 100 + 85 + 130 + 105 + 100 = 780px, leaves ~170px for VAULT ID
     m_positionsTable->setColumnWidth(COL_DD_MINTED, 115);        // DD Minted
     m_positionsTable->setColumnWidth(COL_DGB_COLLATERAL, 145);   // DGB Collateral
-    m_positionsTable->setColumnWidth(COL_LOCK_DATE, 100);        // Lock Date (same as Lock Tier)
-    m_positionsTable->setColumnWidth(COL_LOCK_TIER, 100);        // Lock Tier
-    m_positionsTable->setColumnWidth(COL_TIME_REMAINING, 110);   // Time Remaining
+    m_positionsTable->setColumnWidth(COL_LOCK_DATE, 100);        // Lock Date
+    m_positionsTable->setColumnWidth(COL_LOCK_TIER, 85);         // Lock Tier
+    m_positionsTable->setColumnWidth(COL_TIME_REMAINING, 130);   // Time Remaining (wider to fit header)
     m_positionsTable->setColumnWidth(COL_HEALTH, 105);           // Health
     m_positionsTable->setColumnWidth(COL_ACTIONS, 100);          // Actions
 
@@ -484,6 +484,13 @@ void DigiDollarPositionsWidget::loadPositionsFromWallet()
 
         m_positions.append(pos);
     }
+
+    // Sort positions by unlock_height descending (most recent mint first)
+    // Since unlock_height = mint_height + tier_blocks, higher unlock_height generally means more recent
+    std::sort(m_positions.begin(), m_positions.end(),
+              [](const DigiDollarPosition& a, const DigiDollarPosition& b) {
+                  return a.unlockHeight > b.unlockHeight;
+              });
 }
 
 void DigiDollarPositionsWidget::populatePositionsTable()
@@ -568,24 +575,30 @@ void DigiDollarPositionsWidget::addPositionToTable(const DigiDollarPosition& pos
     m_positionsTable->setItem(row, COL_DGB_COLLATERAL, dgbItem);
 
     // Lock Date - Calculate when the vault was created
-    // lock_height = unlock_height - lock_tier_blocks
+    // Use elapsed time = tier_duration - time_remaining (more reliable than block height math)
     int lockTierBlocks = getLockTierBlocks(position.lockTier);
     int64_t lockHeight = position.unlockHeight - lockTierBlocks;
 
-    // Convert block height to approximate date
-    // Get current height and calculate time difference
-    int currentHeight = m_clientModel ? m_clientModel->getNumBlocks() : 0;
-    int64_t blocksDiff = currentHeight - lockHeight;
-    int64_t secondsDiff = blocksDiff * 15; // 15 seconds per block
-    QDateTime lockDate = QDateTime::currentDateTime().addSecs(-secondsDiff);
+    // Calculate elapsed time since mint based on how much of the lock period has passed
+    // This is more accurate than using block heights which can produce strange results
+    // when unlock_height is far in the future
+    int64_t elapsedBlocks = lockTierBlocks - position.blocksRemaining;
+    // Clamp to reasonable values (can't have elapsed more than the tier duration, or negative elapsed)
+    elapsedBlocks = std::max<int64_t>(0, std::min<int64_t>(elapsedBlocks, lockTierBlocks));
+    int64_t elapsedSeconds = elapsedBlocks * 15; // 15 seconds per block
+
+    QDateTime lockDate = QDateTime::currentDateTime().addSecs(-elapsedSeconds);
 
     QString lockDateStr = lockDate.toString("yyyy-MM-dd");
     QTableWidgetItem* lockDateItem = new QTableWidgetItem(lockDateStr);
     lockDateItem->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled);
     lockDateItem->setTextAlignment(Qt::AlignCenter);
-    lockDateItem->setToolTip(tr("Vault created: %1\nBlock height: %2")
+    // Store unlock_height as data for sorting (higher = more recent)
+    lockDateItem->setData(Qt::UserRole, QVariant::fromValue(position.unlockHeight));
+    lockDateItem->setToolTip(tr("Vault created: %1\nMint block height: %2\nUnlock block height: %3")
                             .arg(lockDate.toString("yyyy-MM-dd hh:mm"))
-                            .arg(lockHeight));
+                            .arg(lockHeight)
+                            .arg(position.unlockHeight));
 
     // Apply redeemed styling
     if (position.isRedeemed) {
@@ -653,14 +666,14 @@ void DigiDollarPositionsWidget::addPositionToTable(const DigiDollarPosition& pos
 
     m_positionsTable->setItem(row, COL_LOCK_TIER, tierItem);
 
-    // Time Remaining
+    // Time Remaining - always show actual time remaining
     QString timeText;
     if (position.isRedeemed) {
         timeText = tr("Redeemed");
     } else if (position.blocksRemaining <= 0) {
         timeText = tr("Unlocked");  // Show "Unlocked" for expired but not redeemed
     } else {
-        timeText = formatBlockTime(position.blocksRemaining);
+        timeText = formatBlockTime(position.blocksRemaining);  // Show actual time remaining
     }
 
     QTableWidgetItem* timeItem = new QTableWidgetItem(timeText);
@@ -676,9 +689,6 @@ void DigiDollarPositionsWidget::addPositionToTable(const DigiDollarPosition& pos
         timeItem->setToolTip(tr("This vault has been redeemed"));
     } else if (position.blocksRemaining <= 0) {
         // Unlocked - ready to redeem (green success styling)
-        QPalette palette = QApplication::palette();
-        int lightness = palette.color(QPalette::WindowText).lightness();
-        bool isDarkTheme = lightness > 127;
         QString successColor = isDarkTheme ? "#4caf50" : "#28a745";
         QString successBg = isDarkTheme ? "#1e3d1e" : "#d4edda";
 
@@ -686,19 +696,11 @@ void DigiDollarPositionsWidget::addPositionToTable(const DigiDollarPosition& pos
         timeItem->setBackground(QBrush(QColor(successBg)));
         timeItem->setFont(QFont(timeItem->font().family(), timeItem->font().pointSize(), QFont::Bold));
         timeItem->setToolTip(tr("This vault is unlocked and ready to be redeemed"));
-    } else if (position.blocksRemaining <= 100) {
-        // Warning for positions expiring soon
-        QPalette palette = QApplication::palette();
-        int lightness = palette.color(QPalette::WindowText).lightness();
-        bool isDarkTheme = lightness > 127;
-        QString warningColor = isDarkTheme ? "#ff9800" : "#856404";
-        QString warningBg = isDarkTheme ? "#4a3d1a" : "#fff3cd";
-
-        timeItem->setForeground(QBrush(QColor(warningColor)));
-        timeItem->setBackground(QBrush(QColor(warningBg)));
-        timeItem->setToolTip(tr("⏰ This position expires soon (less than 100 blocks remaining)"));
     } else {
-        timeItem->setToolTip(tr("Time remaining until this position can be redeemed"));
+        // Still locked - normal styling with tooltip
+        timeItem->setToolTip(tr("Time remaining: %1\nBlocks remaining: %2")
+                            .arg(formatBlockTime(position.blocksRemaining))
+                            .arg(position.blocksRemaining));
     }
     m_positionsTable->setItem(row, COL_TIME_REMAINING, timeItem);
 
@@ -719,8 +721,19 @@ void DigiDollarPositionsWidget::addPositionToTable(const DigiDollarPosition& pos
 
 QPushButton* DigiDollarPositionsWidget::createRedeemButton(const QString& positionId, bool isRedeemed, bool canRedeem)
 {
-    // Set button text based on status
-    QString buttonText = isRedeemed ? tr("Redeemed") : tr("Redeem");
+    // Set button text based on status:
+    // - "Redeemed" if already redeemed (with strikethrough)
+    // - "Redeem" if can redeem now (green, clickable)
+    // - "Locked" if vault hasn't matured yet (grayed out)
+    QString buttonText;
+    if (isRedeemed) {
+        buttonText = tr("Redeemed");
+    } else if (canRedeem) {
+        buttonText = tr("Redeem");
+    } else {
+        buttonText = tr("Locked");
+    }
+
     QPushButton* button = new QPushButton(buttonText, this);
     button->setProperty("positionId", positionId);
     button->setFixedSize(80, 28);
@@ -784,9 +797,9 @@ QPushButton* DigiDollarPositionsWidget::createRedeemButton(const QString& positi
         tooltip = tr("Click to redeem this DigiDollar position\nThis will return your DGB collateral and burn the DD tokens");
         button->setEnabled(true);
     } else {
-        // Cannot redeem yet - disabled gray button
-        QString disabledBg = isDarkTheme ? "#555555" : "#cccccc";
-        QString disabledText = isDarkTheme ? "#999999" : "#888888";
+        // Locked - vault hasn't matured yet - grayed out button with dark text
+        QString lockedBg = isDarkTheme ? "#555555" : "#cccccc";
+        QString lockedText = isDarkTheme ? "#aaaaaa" : "#555555";  // Dark lettering
 
         buttonStyle = QString(
             "QPushButton { "
@@ -799,9 +812,9 @@ QPushButton* DigiDollarPositionsWidget::createRedeemButton(const QString& positi
             "  font-size: 11px; "
             "  min-width: 60px; "
             "}")
-            .arg(disabledBg)
-            .arg(disabledText);
-        tooltip = tr("This vault cannot be redeemed yet\nWait until the time lock expires");
+            .arg(lockedBg)
+            .arg(lockedText);
+        tooltip = tr("🔒 Vault is locked\nWait until the time lock expires to redeem");
         button->setEnabled(false);
     }
 

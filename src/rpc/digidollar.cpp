@@ -1219,6 +1219,22 @@ RPCHelpMan redeemdigidollar()
                     LogPrintf("DigiDollar: WARNING - Could not get wallet address, using owner key (wallet may not recognize)\n");
                     LogPrintf("DigiDollar: Error: %s\n", util::ErrorString(op_dest).original);
                 }
+
+                // CRITICAL FIX: Get a SEPARATE address for DGB fee change
+                // This ensures collateral and change go to DIFFERENT addresses
+                auto op_change = pwallet->GetNewDestination(OutputType::BECH32M, label);
+                if (!op_change) {
+                    // Legacy wallet fallback: try BECH32 (SegWit v0)
+                    LogPrintf("DigiDollar: BECH32M not available for change, trying BECH32 for legacy wallet\n");
+                    op_change = pwallet->GetNewDestination(OutputType::BECH32, label);
+                }
+                if (op_change) {
+                    redeemParams.dgbChangeDest = *op_change;
+                    LogPrintf("DigiDollar: Using separate wallet destination for DGB change\n");
+                } else {
+                    LogPrintf("DigiDollar: WARNING - Could not get wallet address for DGB change, will use collateralDest (may merge outputs)\n");
+                    LogPrintf("DigiDollar: Error: %s\n", util::ErrorString(op_change).original);
+                }
             }
 
             // CRITICAL FIX: Query wallet's position cache which has correct unlock heights

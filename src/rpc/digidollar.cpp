@@ -40,6 +40,7 @@
 #include <rpc/protocol.h>
 #include <versionbits.h>
 #include <deploymentstatus.h>
+#include <key_io.h>
 
 #include <univalue.h>
 
@@ -3160,6 +3161,485 @@ static RPCHelpMan enablemockoracle()
             result.pushKV("enabled", MockOracleManager::GetInstance().IsEnabled());
             result.pushKV("current_price", MockOracleManager::GetInstance().GetCurrentPrice());
             result.pushKV("current_height", currentHeight);
+
+            return result;
+        },
+    };
+}
+
+// =============================================================================
+// DIGIDOLLAR WALLET DATA EXPORT/IMPORT (Wallet Portability)
+// =============================================================================
+
+RPCHelpMan exportdigidollardata()
+{
+    return RPCHelpMan{"exportdigidollardata",
+                "\nExport all DigiDollar wallet data as JSON for wallet portability.\n"
+                "This includes DD UTXOs, owner keys, address keys, and positions.\n"
+                "Standard descriptor export doesn't include DD-specific database keys,\n"
+                "so this command enables full DD wallet portability.\n",
+                {},
+                RPCResult{
+                    RPCResult::Type::OBJ, "", "",
+                    {
+                        {RPCResult::Type::NUM, "version", "Export format version"},
+                        {RPCResult::Type::NUM, "timestamp", "Export timestamp (Unix epoch)"},
+                        {RPCResult::Type::STR, "network", "Network type (mainnet, testnet, regtest)"},
+                        {RPCResult::Type::ARR, "dd_utxos", "DigiDollar UTXOs",
+                            {
+                                {RPCResult::Type::OBJ, "", "",
+                                    {
+                                        {RPCResult::Type::STR, "txid", "Transaction ID"},
+                                        {RPCResult::Type::NUM, "vout", "Output index"},
+                                        {RPCResult::Type::NUM, "dd_amount", "DD amount in cents"}
+                                    }
+                                }
+                            }
+                        },
+                        {RPCResult::Type::ARR, "owner_keys", "DD owner keys for minted tokens (vault redemption)",
+                            {
+                                {RPCResult::Type::OBJ, "", "",
+                                    {
+                                        {RPCResult::Type::STR, "dd_timelock_id", "DDTimeLock position ID (mint txid)"},
+                                        {RPCResult::Type::STR, "privkey_wif", "Owner private key in WIF format"}
+                                    }
+                                }
+                            }
+                        },
+                        {RPCResult::Type::ARR, "address_keys", "DD address keys for received tokens",
+                            {
+                                {RPCResult::Type::OBJ, "", "",
+                                    {
+                                        {RPCResult::Type::STR, "output_key", "P2TR output key (hex)"},
+                                        {RPCResult::Type::STR, "privkey_wif", "Address private key in WIF format"}
+                                    }
+                                }
+                            }
+                        },
+                        {RPCResult::Type::ARR, "positions", "DDTimeLock collateral positions",
+                            {
+                                {RPCResult::Type::OBJ, "", "",
+                                    {
+                                        {RPCResult::Type::STR, "dd_timelock_id", "Position ID (mint txid)"},
+                                        {RPCResult::Type::NUM, "dd_minted", "DD amount minted (cents)"},
+                                        {RPCResult::Type::STR_AMOUNT, "dgb_collateral", "DGB collateral locked"},
+                                        {RPCResult::Type::NUM, "lock_tier", "Lock tier (0-9)"},
+                                        {RPCResult::Type::NUM, "unlock_height", "Block height when unlockable"},
+                                        {RPCResult::Type::BOOL, "is_active", "Whether position is active"}
+                                    }
+                                }
+                            }
+                        },
+                        {RPCResult::Type::NUM, "utxo_count", "Number of DD UTXOs exported"},
+                        {RPCResult::Type::NUM, "owner_key_count", "Number of owner keys exported"},
+                        {RPCResult::Type::NUM, "address_key_count", "Number of address keys exported"},
+                        {RPCResult::Type::NUM, "position_count", "Number of positions exported"}
+                    }
+                },
+                RPCExamples{
+                    HelpExampleCli("exportdigidollardata", "") +
+                    HelpExampleRpc("exportdigidollardata", "")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            std::shared_ptr<wallet::CWallet> const pwallet = wallet::GetWalletForJSONRPCRequest(request);
+            if (!pwallet) {
+                throw JSONRPCError(RPC_WALLET_NOT_FOUND, "Wallet not found");
+            }
+
+            DigiDollarWallet* dd_wallet = pwallet->GetDDWallet();
+            if (!dd_wallet) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "DigiDollar wallet not initialized");
+            }
+
+            LOCK(pwallet->cs_wallet);
+
+            // Ensure wallet is unlocked for exporting private keys
+            wallet::EnsureWalletIsUnlocked(*pwallet);
+
+            UniValue result(UniValue::VOBJ);
+            result.pushKV("version", 1);
+            result.pushKV("timestamp", GetTime());
+
+            // Network type
+            std::string network;
+            switch (Params().GetChainType()) {
+                case ChainType::MAIN: network = "mainnet"; break;
+                case ChainType::TESTNET: network = "testnet"; break;
+                case ChainType::REGTEST: network = "regtest"; break;
+                default: network = "unknown";
+            }
+            result.pushKV("network", network);
+
+            // Export DD UTXOs
+            UniValue utxos(UniValue::VARR);
+            wallet::WalletBatch batch(pwallet->GetDatabase());
+            std::unique_ptr<wallet::DatabaseCursor> cursor = batch.GetNewCursor();
+            int utxo_count = 0;
+            int owner_key_count = 0;
+            int address_key_count = 0;
+
+            if (cursor) {
+                wallet::DatabaseCursor::Status status = wallet::DatabaseCursor::Status::MORE;
+                while (status == wallet::DatabaseCursor::Status::MORE) {
+                    DataStream key{};
+                    DataStream value{};
+                    status = cursor->Next(key, value);
+
+                    if (status != wallet::DatabaseCursor::Status::MORE) break;
+
+                    std::string key_type;
+                    key >> key_type;
+
+                    if (key_type == wallet::DBKeys::DD_OUTPUT) {
+                        COutPoint outpoint;
+                        key >> outpoint;
+
+                        CAmount dd_amount;
+                        value >> dd_amount;
+
+                        UniValue utxo(UniValue::VOBJ);
+                        utxo.pushKV("txid", outpoint.hash.GetHex());
+                        utxo.pushKV("vout", (int)outpoint.n);
+                        utxo.pushKV("dd_amount", dd_amount);
+                        utxos.push_back(utxo);
+                        utxo_count++;
+                    }
+                }
+            }
+            result.pushKV("dd_utxos", utxos);
+
+            // Export owner keys (requires re-scanning database)
+            UniValue owner_keys(UniValue::VARR);
+            cursor = batch.GetNewCursor();
+            if (cursor) {
+                wallet::DatabaseCursor::Status status = wallet::DatabaseCursor::Status::MORE;
+                while (status == wallet::DatabaseCursor::Status::MORE) {
+                    DataStream key{};
+                    DataStream value{};
+                    status = cursor->Next(key, value);
+
+                    if (status != wallet::DatabaseCursor::Status::MORE) break;
+
+                    std::string key_type;
+                    key >> key_type;
+
+                    if (key_type == wallet::DBKeys::DD_OWNER_KEY) {
+                        uint256 dd_timelock_id;
+                        key >> dd_timelock_id;
+
+                        CPrivKey privkey;
+                        value >> privkey;
+
+                        CKey ckey;
+                        if (ckey.Load(privkey, CPubKey(), /*fSkipCheck=*/true)) {
+                            UniValue owner_key(UniValue::VOBJ);
+                            owner_key.pushKV("dd_timelock_id", dd_timelock_id.GetHex());
+                            owner_key.pushKV("privkey_wif", EncodeSecret(ckey));
+                            owner_keys.push_back(owner_key);
+                            owner_key_count++;
+                        }
+                    }
+                }
+            }
+            result.pushKV("owner_keys", owner_keys);
+
+            // Export address keys (for received DD tokens)
+            UniValue address_keys(UniValue::VARR);
+            cursor = batch.GetNewCursor();
+            if (cursor) {
+                wallet::DatabaseCursor::Status status = wallet::DatabaseCursor::Status::MORE;
+                while (status == wallet::DatabaseCursor::Status::MORE) {
+                    DataStream key{};
+                    DataStream value{};
+                    status = cursor->Next(key, value);
+
+                    if (status != wallet::DatabaseCursor::Status::MORE) break;
+
+                    std::string key_type;
+                    key >> key_type;
+
+                    if (key_type == wallet::DBKeys::DD_ADDRESS_KEY) {
+                        std::array<unsigned char, 32> output_key_bytes;
+                        key >> output_key_bytes;
+
+                        CPrivKey privkey;
+                        value >> privkey;
+
+                        CKey ckey;
+                        if (ckey.Load(privkey, CPubKey(), /*fSkipCheck=*/true)) {
+                            UniValue addr_key(UniValue::VOBJ);
+                            addr_key.pushKV("output_key", HexStr(output_key_bytes));
+                            addr_key.pushKV("privkey_wif", EncodeSecret(ckey));
+                            address_keys.push_back(addr_key);
+                            address_key_count++;
+                        }
+                    }
+                }
+            }
+            result.pushKV("address_keys", address_keys);
+
+            // Export positions
+            UniValue positions(UniValue::VARR);
+            std::vector<WalletCollateralPosition> all_positions = dd_wallet->GetDDTimeLocks(false);
+            for (const auto& pos : all_positions) {
+                UniValue position(UniValue::VOBJ);
+                position.pushKV("dd_timelock_id", pos.dd_timelock_id.GetHex());
+                position.pushKV("dd_minted", pos.dd_minted);
+                position.pushKV("dgb_collateral", ValueFromAmount(pos.dgb_collateral));
+                position.pushKV("lock_tier", (int)pos.lock_tier);
+                position.pushKV("unlock_height", pos.unlock_height);
+                position.pushKV("is_active", pos.is_active);
+                positions.push_back(position);
+            }
+            result.pushKV("positions", positions);
+
+            // Summary counts
+            result.pushKV("utxo_count", utxo_count);
+            result.pushKV("owner_key_count", owner_key_count);
+            result.pushKV("address_key_count", address_key_count);
+            result.pushKV("position_count", (int)all_positions.size());
+
+            return result;
+        },
+    };
+}
+
+RPCHelpMan importdigidollardata()
+{
+    return RPCHelpMan{"importdigidollardata",
+                "\nImport DigiDollar wallet data from JSON export.\n"
+                "Restores DD UTXOs, owner keys, address keys, and positions.\n"
+                "Use this after restoring a wallet from descriptors to restore DD functionality.\n",
+                {
+                    {"data", RPCArg::Type::OBJ, RPCArg::Optional::NO, "The DigiDollar data to import (from exportdigidollardata)",
+                        {
+                            {"version", RPCArg::Type::NUM, RPCArg::Optional::NO, "Export format version"},
+                            {"dd_utxos", RPCArg::Type::ARR, RPCArg::Optional::OMITTED, "DD UTXOs to import",
+                                {
+                                    {"", RPCArg::Type::OBJ, RPCArg::Optional::OMITTED, "",
+                                        {
+                                            {"txid", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "Transaction ID"},
+                                            {"vout", RPCArg::Type::NUM, RPCArg::Optional::NO, "Output index"},
+                                            {"dd_amount", RPCArg::Type::NUM, RPCArg::Optional::NO, "DD amount in cents"}
+                                        }
+                                    }
+                                }
+                            },
+                            {"owner_keys", RPCArg::Type::ARR, RPCArg::Optional::OMITTED, "Owner keys to import",
+                                {
+                                    {"", RPCArg::Type::OBJ, RPCArg::Optional::OMITTED, "",
+                                        {
+                                            {"dd_timelock_id", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "DDTimeLock position ID"},
+                                            {"privkey_wif", RPCArg::Type::STR, RPCArg::Optional::NO, "Private key in WIF format"}
+                                        }
+                                    }
+                                }
+                            },
+                            {"address_keys", RPCArg::Type::ARR, RPCArg::Optional::OMITTED, "Address keys to import",
+                                {
+                                    {"", RPCArg::Type::OBJ, RPCArg::Optional::OMITTED, "",
+                                        {
+                                            {"output_key", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "P2TR output key (hex)"},
+                                            {"privkey_wif", RPCArg::Type::STR, RPCArg::Optional::NO, "Private key in WIF format"}
+                                        }
+                                    }
+                                }
+                            },
+                            {"positions", RPCArg::Type::ARR, RPCArg::Optional::OMITTED, "Positions to import",
+                                {
+                                    {"", RPCArg::Type::OBJ, RPCArg::Optional::OMITTED, "",
+                                        {
+                                            {"dd_timelock_id", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "Position ID"},
+                                            {"dd_minted", RPCArg::Type::NUM, RPCArg::Optional::NO, "DD amount minted"},
+                                            {"dgb_collateral", RPCArg::Type::AMOUNT, RPCArg::Optional::NO, "DGB collateral"},
+                                            {"lock_tier", RPCArg::Type::NUM, RPCArg::Optional::NO, "Lock tier"},
+                                            {"unlock_height", RPCArg::Type::NUM, RPCArg::Optional::NO, "Unlock height"},
+                                            {"is_active", RPCArg::Type::BOOL, RPCArg::Optional::NO, "Active status"}
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    {"rescan", RPCArg::Type::BOOL, RPCArg::Default{false}, "Rescan the blockchain after import"}
+                },
+                RPCResult{
+                    RPCResult::Type::OBJ, "", "",
+                    {
+                        {RPCResult::Type::BOOL, "success", "Whether import was successful"},
+                        {RPCResult::Type::NUM, "utxos_imported", "Number of DD UTXOs imported"},
+                        {RPCResult::Type::NUM, "owner_keys_imported", "Number of owner keys imported"},
+                        {RPCResult::Type::NUM, "address_keys_imported", "Number of address keys imported"},
+                        {RPCResult::Type::NUM, "positions_imported", "Number of positions imported"},
+                        {RPCResult::Type::ARR, "warnings", "Any warnings during import",
+                            {
+                                {RPCResult::Type::STR, "", "Warning message"}
+                            }
+                        }
+                    }
+                },
+                RPCExamples{
+                    HelpExampleCli("importdigidollardata", "'{\"version\":1,\"dd_utxos\":[],\"owner_keys\":[],\"address_keys\":[],\"positions\":[]}'") +
+                    HelpExampleRpc("importdigidollardata", "{\"version\":1,\"dd_utxos\":[],\"owner_keys\":[],\"address_keys\":[],\"positions\":[]}")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            std::shared_ptr<wallet::CWallet> const pwallet = wallet::GetWalletForJSONRPCRequest(request);
+            if (!pwallet) {
+                throw JSONRPCError(RPC_WALLET_NOT_FOUND, "Wallet not found");
+            }
+
+            DigiDollarWallet* dd_wallet = pwallet->GetDDWallet();
+            if (!dd_wallet) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "DigiDollar wallet not initialized");
+            }
+
+            LOCK(pwallet->cs_wallet);
+
+            // Ensure wallet is unlocked for importing private keys
+            wallet::EnsureWalletIsUnlocked(*pwallet);
+
+            const UniValue& data = request.params[0].get_obj();
+            bool rescan = request.params.size() > 1 ? request.params[1].get_bool() : false;
+
+            // Validate version
+            if (!data.exists("version")) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Missing version field in import data");
+            }
+            int version = data["version"].getInt<int>();
+            if (version != 1) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Unsupported export version: %d (expected 1)", version));
+            }
+
+            UniValue warnings(UniValue::VARR);
+            int utxos_imported = 0;
+            int owner_keys_imported = 0;
+            int address_keys_imported = 0;
+            int positions_imported = 0;
+
+            wallet::WalletBatch batch(pwallet->GetDatabase());
+
+            // Import DD UTXOs
+            if (data.exists("dd_utxos") && data["dd_utxos"].isArray()) {
+                const UniValue& utxos = data["dd_utxos"].get_array();
+                for (size_t i = 0; i < utxos.size(); i++) {
+                    const UniValue& utxo = utxos[i];
+                    try {
+                        uint256 txid;
+                        txid.SetHex(utxo["txid"].get_str());
+                        int vout = utxo["vout"].getInt<int>();
+                        CAmount dd_amount = utxo["dd_amount"].getInt<int64_t>();
+
+                        COutPoint outpoint(txid, vout);
+                        if (batch.WriteDDUTXO(outpoint, dd_amount)) {
+                            dd_wallet->AddDDUTXO(outpoint, dd_amount);
+                            utxos_imported++;
+                        } else {
+                            warnings.push_back(strprintf("Failed to write UTXO %s:%d", txid.GetHex(), vout));
+                        }
+                    } catch (const std::exception& e) {
+                        warnings.push_back(strprintf("Error importing UTXO at index %d: %s", i, e.what()));
+                    }
+                }
+            }
+
+            // Import owner keys
+            if (data.exists("owner_keys") && data["owner_keys"].isArray()) {
+                const UniValue& keys = data["owner_keys"].get_array();
+                for (size_t i = 0; i < keys.size(); i++) {
+                    const UniValue& key_obj = keys[i];
+                    try {
+                        uint256 dd_timelock_id;
+                        dd_timelock_id.SetHex(key_obj["dd_timelock_id"].get_str());
+                        std::string wif = key_obj["privkey_wif"].get_str();
+
+                        CKey key = DecodeSecret(wif);
+                        if (!key.IsValid()) {
+                            warnings.push_back(strprintf("Invalid WIF for owner key %s", dd_timelock_id.GetHex()));
+                            continue;
+                        }
+
+                        dd_wallet->StoreOwnerKey(dd_timelock_id, key);
+                        owner_keys_imported++;
+                    } catch (const std::exception& e) {
+                        warnings.push_back(strprintf("Error importing owner key at index %d: %s", i, e.what()));
+                    }
+                }
+            }
+
+            // Import address keys
+            if (data.exists("address_keys") && data["address_keys"].isArray()) {
+                const UniValue& keys = data["address_keys"].get_array();
+                for (size_t i = 0; i < keys.size(); i++) {
+                    const UniValue& key_obj = keys[i];
+                    try {
+                        std::string output_key_hex = key_obj["output_key"].get_str();
+                        std::string wif = key_obj["privkey_wif"].get_str();
+
+                        // Parse output key from hex
+                        std::vector<unsigned char> output_key_vec = ParseHex(output_key_hex);
+                        if (output_key_vec.size() != 32) {
+                            warnings.push_back(strprintf("Invalid output key length at index %d", i));
+                            continue;
+                        }
+
+                        XOnlyPubKey output_key(output_key_vec);
+
+                        CKey key = DecodeSecret(wif);
+                        if (!key.IsValid()) {
+                            warnings.push_back(strprintf("Invalid WIF for address key at index %d", i));
+                            continue;
+                        }
+
+                        dd_wallet->StoreAddressKey(output_key, key);
+                        address_keys_imported++;
+                    } catch (const std::exception& e) {
+                        warnings.push_back(strprintf("Error importing address key at index %d: %s", i, e.what()));
+                    }
+                }
+            }
+
+            // Import positions
+            if (data.exists("positions") && data["positions"].isArray()) {
+                const UniValue& positions_arr = data["positions"].get_array();
+                for (size_t i = 0; i < positions_arr.size(); i++) {
+                    const UniValue& pos_obj = positions_arr[i];
+                    try {
+                        WalletCollateralPosition pos;
+                        pos.dd_timelock_id.SetHex(pos_obj["dd_timelock_id"].get_str());
+                        pos.dd_minted = pos_obj["dd_minted"].getInt<int64_t>();
+                        pos.dgb_collateral = AmountFromValue(pos_obj["dgb_collateral"]);
+                        pos.lock_tier = pos_obj["lock_tier"].getInt<int>();
+                        pos.unlock_height = pos_obj["unlock_height"].getInt<int64_t>();
+                        pos.is_active = pos_obj["is_active"].get_bool();
+
+                        if (batch.WriteDDTimeLock(pos)) {
+                            dd_wallet->AddCollateralPosition(pos);
+                            positions_imported++;
+                        } else {
+                            warnings.push_back(strprintf("Failed to write position %s", pos.dd_timelock_id.GetHex()));
+                        }
+                    } catch (const std::exception& e) {
+                        warnings.push_back(strprintf("Error importing position at index %d: %s", i, e.what()));
+                    }
+                }
+            }
+
+            // Note: rescan parameter is accepted for compatibility but automatic
+            // rescan is not performed here. Use `rescanblockchain` RPC manually
+            // if blockchain rescan is needed after importing DD data.
+            if (rescan) {
+                warnings.push_back("Automatic rescan not performed. Use 'rescanblockchain' RPC if needed.");
+            }
+
+            UniValue result(UniValue::VOBJ);
+            result.pushKV("success", true);
+            result.pushKV("utxos_imported", utxos_imported);
+            result.pushKV("owner_keys_imported", owner_keys_imported);
+            result.pushKV("address_keys_imported", address_keys_imported);
+            result.pushKV("positions_imported", positions_imported);
+            result.pushKV("warnings", warnings);
 
             return result;
         },

@@ -424,6 +424,8 @@ void DigiDollarMintWidget::updateView()
     updateBalance();
     updateOraclePrice();
     updateCollateralCalculation();
+    updateAmountValidation();  // Update visual feedback based on current balance/collateral
+    updateMintButton();
 }
 
 void DigiDollarMintWidget::updateBalance()
@@ -506,8 +508,10 @@ void DigiDollarMintWidget::onAmountChanged()
         updateUSDEquivalent();
     }
 
-    updateAmountValidation();
+    // IMPORTANT: Calculate collateral FIRST, then validate
+    // This ensures m_requiredCollateral is up-to-date when validateCollateral() is called
     updateCollateralCalculation();
+    updateAmountValidation();
     updateMintButton();
 }
 
@@ -569,7 +573,9 @@ void DigiDollarMintWidget::onLockTierChanged()
     double ratio = getCollateralRatioForTier(m_selectedTier);
     m_lockTierInfoValue->setText(formatRatio(ratio));
 
+    // Update collateral first, then validation to ensure m_requiredCollateral is current
     updateCollateralCalculation();
+    updateAmountValidation();  // Update border color/warning based on new collateral requirement
     updateMintButton();
 }
 

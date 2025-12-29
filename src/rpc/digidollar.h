@@ -37,10 +37,6 @@ RPCHelpMan listdigidollartxs();
 RPCHelpMan getoracleprice();
 RPCHelpMan getprotectionstatus();
 
-// Wallet data export/import commands (wallet portability)
-RPCHelpMan exportdigidollardata();
-RPCHelpMan importdigidollardata();
-
 // Register all DigiDollar RPC commands
 void RegisterDigiDollarRPCCommands(CRPCTable& t);
 

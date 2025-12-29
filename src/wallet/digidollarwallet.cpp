@@ -396,6 +396,132 @@ bool DigiDollarWallet::IsDDOutputMine(const CTxOut& txout, const uint256& txid) 
         return true;
     }
 
+    // WALLET RESTORE FIX: After descriptor import, dd_address_keys is empty.
+    // DD addresses are created by taking a wallet key and applying TapTweak(nullptr).
+    // The wallet has the base keys (from descriptors), but not the DD-tweaked versions.
+    // Try to find a wallet key that, when DD-tweaked, matches this output key.
+    //
+    // This is computationally intensive but only needed during rescan when
+    // dd_address_keys hasn't been rebuilt yet.
+    if (m_wallet && dd_address_keys.empty()) {
+        LogPrintf("DigiDollar: IsDDOutputMine: dd_address_keys empty, trying descriptor key derivation for TARGET output_key=%s\n",
+                  HexStr(output_key_bytes));
+
+        LOCK(m_wallet->cs_wallet);
+
+        int spk_man_count = 0;
+        int p2tr_script_count = 0;
+        int provider_count = 0;
+        int spenddata_count = 0;
+        int key_count = 0;
+        bool found_target_in_scripts = false;
+
+        // Enumerate ALL P2TR scripts from all descriptor managers
+        // This includes keys that were reserved via GetNewDestination but not used in transactions
+        for (auto* spk_man : m_wallet->GetAllScriptPubKeyMans()) {
+            auto* desc_spk = dynamic_cast<wallet::DescriptorScriptPubKeyMan*>(spk_man);
+            if (!desc_spk) continue;
+            spk_man_count++;
+
+            // Get all scripts this descriptor knows about
+            auto scripts = desc_spk->GetScriptPubKeys();
+            for (const auto& script : scripts) {
+                // Skip non-P2TR scripts
+                if (script.size() != 34 || script[0] != OP_1) {
+                    continue;
+                }
+                p2tr_script_count++;
+
+                // Extract the output key from this script (bytes 2-33)
+                std::vector<unsigned char> script_output_key(script.begin() + 2, script.end());
+
+                // Check if THIS script has our target output_key (direct match - no tweak needed)
+                if (std::equal(output_key_bytes.begin(), output_key_bytes.end(), script_output_key.begin())) {
+                    found_target_in_scripts = true;
+                    LogPrintf("DigiDollar: IsDDOutputMine - TARGET output_key FOUND directly in descriptor script!\n");
+
+                    // Get signing provider with keys for this script
+                    auto provider = desc_spk->GetSigningProviderWithKeys(script);
+                    if (provider) {
+                        CTxDestination dest;
+                        if (ExtractDestination(script, dest)) {
+                            auto* taproot_dest = std::get_if<WitnessV1Taproot>(&dest);
+                            if (taproot_dest) {
+                                TaprootSpendData spenddata;
+                                if (provider->GetTaprootSpendData(XOnlyPubKey(*taproot_dest), spenddata)) {
+                                    CKey internal_key;
+                                    if (provider->GetKeyByXOnly(spenddata.internal_key, internal_key)) {
+                                        // Store the internal key for this DD output
+                                        LogPrintf("DigiDollar: IsDDOutputMine - Direct match! Storing internal_key for DD output\n");
+                                        const_cast<DigiDollarWallet*>(this)->StoreAddressKey(output_key, internal_key);
+                                        return true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    LogPrintf("DigiDollar: IsDDOutputMine - TARGET found but couldn't extract key!\n");
+                }
+
+                // Get signing provider with keys for this script
+                auto provider = desc_spk->GetSigningProviderWithKeys(script);
+                if (!provider) continue;
+                provider_count++;
+
+                // Extract destination and get Taproot spend data
+                CTxDestination dest;
+                if (!ExtractDestination(script, dest)) {
+                    continue;
+                }
+
+                auto* taproot_dest = std::get_if<WitnessV1Taproot>(&dest);
+                if (!taproot_dest) {
+                    continue;
+                }
+
+                TaprootSpendData spenddata;
+                if (!provider->GetTaprootSpendData(XOnlyPubKey(*taproot_dest), spenddata)) {
+                    continue;
+                }
+                spenddata_count++;
+
+                if (!spenddata.internal_key.IsFullyValid()) {
+                    continue;
+                }
+
+                CKey test_key;
+                if (!provider->GetKeyByXOnly(spenddata.internal_key, test_key)) {
+                    continue;
+                }
+                key_count++;
+
+                // Apply DD tweak (nullptr merkle root) and check if it matches
+                XOnlyPubKey test_xonly(test_key.GetPubKey());
+                auto tweaked = test_xonly.CreateTapTweak(nullptr);
+
+                // Debug: Log first few computed DD output keys
+                if (key_count <= 3) {
+                    LogPrintf("DigiDollar: IsDDOutputMine - key %d: internal=%s, pubkey=%s, dd_tweaked=%s\n",
+                              key_count,
+                              HexStr(Span<const unsigned char>(spenddata.internal_key.begin(), spenddata.internal_key.end())),
+                              HexStr(Span<const unsigned char>(test_xonly.begin(), test_xonly.end())),
+                              tweaked ? HexStr(Span<const unsigned char>(tweaked->first.begin(), tweaked->first.end())) : "FAILED");
+                }
+
+                if (tweaked && std::equal(output_key_bytes.begin(), output_key_bytes.end(),
+                                         tweaked->first.begin())) {
+                    // Found a match! Cache it in dd_address_keys for future lookups
+                    LogPrintf("DigiDollar: IsDDOutputMine - Found key via descriptor scan (DD tweak match), caching in dd_address_keys\n");
+                    const_cast<DigiDollarWallet*>(this)->StoreAddressKey(output_key, test_key);
+                    return true;
+                }
+            }
+        }
+
+        LogPrintf("DigiDollar: IsDDOutputMine - No match found. Stats: spk_mans=%d, p2tr_scripts=%d, providers=%d, spenddata=%d, keys=%d, target_in_scripts=%d\n",
+                  spk_man_count, p2tr_script_count, provider_count, spenddata_count, key_count, found_target_in_scripts);
+    }
+
     return false;
 }
 

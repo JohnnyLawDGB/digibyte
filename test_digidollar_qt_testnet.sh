@@ -2155,6 +2155,11 @@ fi
 
 print_subheader "Step 33d: Rescanning blockchain for restored wallet..."
 
+echo ""
+echo "Testing that DigiDollar is AUTOMATICALLY restored via rescan."
+echo "NO export/import needed - DD state should be reconstructed from blockchain!"
+echo ""
+
 echo "Running rescanblockchain on alice_restored..."
 RESCAN_START=$(date +%s)
 set +e
@@ -2175,65 +2180,7 @@ fi
 # Wait for wallet to fully process
 sleep 5
 
-print_subheader "Step 33e: Exporting and importing DigiDollar data..."
-
-echo ""
-echo "Standard descriptor import only restores DGB keys, not DD-specific data."
-echo "Using exportdigidollardata/importdigidollardata to restore full DD state..."
-echo ""
-
-# Export DD data from original wallet
-echo "Exporting DD data from original 'alice' wallet..."
-set +e
-ALICE_DD_EXPORT=$($ALICE_CLI -rpcwallet=alice exportdigidollardata 2>&1)
-ALICE_DD_EXPORT_EXIT=$?
-set -e
-
-if [ $ALICE_DD_EXPORT_EXIT -eq 0 ] && echo "$ALICE_DD_EXPORT" | jq -e '.version' > /dev/null 2>&1; then
-    DD_UTXO_COUNT=$(echo "$ALICE_DD_EXPORT" | jq '.utxo_count')
-    DD_OWNER_KEY_COUNT=$(echo "$ALICE_DD_EXPORT" | jq '.owner_key_count')
-    DD_ADDR_KEY_COUNT=$(echo "$ALICE_DD_EXPORT" | jq '.address_key_count')
-    DD_POS_COUNT=$(echo "$ALICE_DD_EXPORT" | jq '.position_count')
-    print_status "ok" "Exported DD data: $DD_UTXO_COUNT UTXOs, $DD_OWNER_KEY_COUNT owner keys, $DD_ADDR_KEY_COUNT address keys, $DD_POS_COUNT positions"
-
-    # Save for debugging
-    echo "$ALICE_DD_EXPORT" > /tmp/alice_dd_export.json
-    echo "  DD export saved to: /tmp/alice_dd_export.json"
-else
-    print_status "fail" "Failed to export DD data: $ALICE_DD_EXPORT"
-fi
-
-# Import DD data into restored wallet
-echo ""
-echo "Importing DD data into 'alice_restored' wallet..."
-# Use file-based import to avoid shell JSON parsing issues
-echo "$ALICE_DD_EXPORT" > /tmp/alice_dd_import_data.json
-set +e
-ALICE_DD_IMPORT=$($ALICE_CLI -rpcwallet=alice_restored -named importdigidollardata data="$(cat /tmp/alice_dd_import_data.json)" 2>&1)
-ALICE_DD_IMPORT_EXIT=$?
-set -e
-
-if [ $ALICE_DD_IMPORT_EXIT -eq 0 ] && echo "$ALICE_DD_IMPORT" | jq -e '.success' > /dev/null 2>&1; then
-    IMPORTED_UTXOS=$(echo "$ALICE_DD_IMPORT" | jq '.utxos_imported')
-    IMPORTED_OWNER_KEYS=$(echo "$ALICE_DD_IMPORT" | jq '.owner_keys_imported')
-    IMPORTED_ADDR_KEYS=$(echo "$ALICE_DD_IMPORT" | jq '.address_keys_imported')
-    IMPORTED_POSITIONS=$(echo "$ALICE_DD_IMPORT" | jq '.positions_imported')
-    print_status "ok" "Imported DD data: $IMPORTED_UTXOS UTXOs, $IMPORTED_OWNER_KEYS owner keys, $IMPORTED_ADDR_KEYS address keys, $IMPORTED_POSITIONS positions"
-
-    # Check for warnings
-    WARNINGS=$(echo "$ALICE_DD_IMPORT" | jq '.warnings | length')
-    if [ "$WARNINGS" -gt 0 ]; then
-        echo "  Warnings during import:"
-        echo "$ALICE_DD_IMPORT" | jq -r '.warnings[]' | while read w; do echo "    - $w"; done
-    fi
-else
-    print_status "fail" "Failed to import DD data: $ALICE_DD_IMPORT"
-fi
-
-# Wait for wallet to process imported data
-sleep 2
-
-print_subheader "Step 33f: Verifying restored wallet DD state..."
+print_subheader "Step 33e: Verifying restored wallet DD state (NO export/import)..."
 
 # Get restored wallet state
 ALICE_RESTORED_DD=$(get_dd_balance "$ALICE_CLI" "alice_restored")
@@ -2298,7 +2245,7 @@ else
     print_status "fail" "Position tiers differ! Original: $ORIGINAL_TIERS, Restored: $RESTORED_TIERS"
 fi
 
-print_subheader "Step 33g: Testing DD operations on restored wallet..."
+print_subheader "Step 33f: Testing DD operations on restored wallet..."
 
 # Test getting a new DD address from restored wallet
 echo "Testing getdigidollaraddress on restored wallet..."
@@ -2493,6 +2440,11 @@ fi
 
 print_subheader "Step 34d: Rescanning blockchain for Bob's restored wallet..."
 
+echo ""
+echo "Testing that DigiDollar is AUTOMATICALLY restored via rescan."
+echo "NO export/import needed - DD state should be reconstructed from blockchain!"
+echo ""
+
 echo "Running rescanblockchain on bob_restored..."
 BOB_RESCAN_START=$(date +%s)
 set +e
@@ -2513,65 +2465,7 @@ fi
 # Wait for wallet to fully process
 sleep 5
 
-print_subheader "Step 34e: Exporting and importing DigiDollar data..."
-
-echo ""
-echo "Standard descriptor import only restores DGB keys, not DD-specific data."
-echo "Using exportdigidollardata/importdigidollardata to restore full DD state..."
-echo ""
-
-# Export DD data from original wallet
-echo "Exporting DD data from original 'bob' wallet..."
-set +e
-BOB_DD_EXPORT=$($BOB_CLI -rpcwallet=bob exportdigidollardata 2>&1)
-BOB_DD_EXPORT_EXIT=$?
-set -e
-
-if [ $BOB_DD_EXPORT_EXIT -eq 0 ] && echo "$BOB_DD_EXPORT" | jq -e '.version' > /dev/null 2>&1; then
-    DD_UTXO_COUNT=$(echo "$BOB_DD_EXPORT" | jq '.utxo_count')
-    DD_OWNER_KEY_COUNT=$(echo "$BOB_DD_EXPORT" | jq '.owner_key_count')
-    DD_ADDR_KEY_COUNT=$(echo "$BOB_DD_EXPORT" | jq '.address_key_count')
-    DD_POS_COUNT=$(echo "$BOB_DD_EXPORT" | jq '.position_count')
-    print_status "ok" "Exported DD data: $DD_UTXO_COUNT UTXOs, $DD_OWNER_KEY_COUNT owner keys, $DD_ADDR_KEY_COUNT address keys, $DD_POS_COUNT positions"
-
-    # Save for debugging
-    echo "$BOB_DD_EXPORT" > /tmp/bob_dd_export.json
-    echo "  DD export saved to: /tmp/bob_dd_export.json"
-else
-    print_status "fail" "Failed to export DD data: $BOB_DD_EXPORT"
-fi
-
-# Import DD data into restored wallet
-echo ""
-echo "Importing DD data into 'bob_restored' wallet..."
-# Use file-based import to avoid shell JSON parsing issues
-echo "$BOB_DD_EXPORT" > /tmp/bob_dd_import_data.json
-set +e
-BOB_DD_IMPORT=$($BOB_CLI -rpcwallet=bob_restored -named importdigidollardata data="$(cat /tmp/bob_dd_import_data.json)" 2>&1)
-BOB_DD_IMPORT_EXIT=$?
-set -e
-
-if [ $BOB_DD_IMPORT_EXIT -eq 0 ] && echo "$BOB_DD_IMPORT" | jq -e '.success' > /dev/null 2>&1; then
-    IMPORTED_UTXOS=$(echo "$BOB_DD_IMPORT" | jq '.utxos_imported')
-    IMPORTED_OWNER_KEYS=$(echo "$BOB_DD_IMPORT" | jq '.owner_keys_imported')
-    IMPORTED_ADDR_KEYS=$(echo "$BOB_DD_IMPORT" | jq '.address_keys_imported')
-    IMPORTED_POSITIONS=$(echo "$BOB_DD_IMPORT" | jq '.positions_imported')
-    print_status "ok" "Imported DD data: $IMPORTED_UTXOS UTXOs, $IMPORTED_OWNER_KEYS owner keys, $IMPORTED_ADDR_KEYS address keys, $IMPORTED_POSITIONS positions"
-
-    # Check for warnings
-    WARNINGS=$(echo "$BOB_DD_IMPORT" | jq '.warnings | length')
-    if [ "$WARNINGS" -gt 0 ]; then
-        echo "  Warnings during import:"
-        echo "$BOB_DD_IMPORT" | jq -r '.warnings[]' | while read w; do echo "    - $w"; done
-    fi
-else
-    print_status "fail" "Failed to import DD data: $BOB_DD_IMPORT"
-fi
-
-# Wait for wallet to process imported data
-sleep 2
-
-print_subheader "Step 34f: Verifying Bob's restored wallet DD state..."
+print_subheader "Step 34e: Verifying Bob's restored wallet DD state (NO export/import)..."
 
 # Get restored wallet state
 BOB_RESTORED_DD=$(get_dd_balance "$BOB_CLI" "bob_restored")
@@ -2670,7 +2564,7 @@ else
     print_status "warn" "DGB balance differs by $BOB_DGB_DIFF DGB (may be due to fees)"
 fi
 
-print_subheader "Step 34g: Testing DD operations on Bob's restored wallet..."
+print_subheader "Step 34f: Testing DD operations on Bob's restored wallet..."
 
 # Test getting a new DD address from restored wallet
 echo "Testing getdigidollaraddress on restored wallet..."

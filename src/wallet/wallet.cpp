@@ -1452,9 +1452,9 @@ void CWallet::SyncTransaction(const CTransactionRef& ptx, const SyncTxState& sta
     // We need to process DD transactions before AddToWalletIfInvolvingMe() so that
     // DD UTXOs are detected and added regardless of IsMine() result
     if (m_dd_wallet && IsDigiDollarTransaction(*ptx)) {
-        m_dd_wallet->ProcessIncomingDDTransaction(ptx);
-
-        // During rescan, reconstruct DD positions from blockchain
+        // During rescan, use ProcessDDTxForRescan EXCLUSIVELY
+        // It handles chronological UTXO tracking properly (add from MINT, remove on spend, add change/receive)
+        // ProcessIncomingDDTransaction can interfere because it adds UTXOs without chronological context
         if (rescanning_old_block) {
             int block_height = -1;
             if (auto* conf = std::get_if<TxStateConfirmed>(&state)) {
@@ -1463,6 +1463,9 @@ void CWallet::SyncTransaction(const CTransactionRef& ptx, const SyncTxState& sta
             if (block_height >= 0) {
                 m_dd_wallet->ProcessDDTxForRescan(ptx, block_height);
             }
+        } else {
+            // Normal operation (not rescanning): use ProcessIncomingDDTransaction
+            m_dd_wallet->ProcessIncomingDDTransaction(ptx);
         }
     }
 

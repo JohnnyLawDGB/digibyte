@@ -1,6 +1,6 @@
 # DigiDollar Oracle System - Simple Explainer
-*Updated: 2025-12-23*
-*Document Version: 3.1 - Code Verification Complete*
+*Updated: 2025-12-31*
+*Document Version: 3.2 - Codebase Verification Complete*
 
 ## Overview
 
@@ -656,7 +656,7 @@ MockOracleManager::GetInstance().SetMockPrice(6500); // Set to 6500 micro-USD ($
 
 **How it works**:
 - Actual oracle daemon running at `oracle.digibyte.io:9001`
-- Fetches **real prices** from 12 exchanges
+- Fetches **real prices** from 7 active exchanges
 - Broadcasts every 15 seconds via P2P
 - Miners include real oracle data in blocks
 

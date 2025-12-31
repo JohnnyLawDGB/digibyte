@@ -1,6 +1,6 @@
 # DigiDollar - Decentralized USD Stablecoin on DigiByte
-*Updated: 2025-12-23*
-*Document Version: 3.1 - Code Alignment Verification Complete*
+*Updated: 2025-12-31*
+*Document Version: 3.2 - Codebase Verification Complete*
 
 ## Overview
 
@@ -157,7 +157,7 @@ From supply chain to gaming, DigiDollar enables countless innovations
 
 DigiDollar is the world's first truly decentralized stablecoin built natively on a UTXO (Unspent Transaction Output) blockchain. All operations occur directly in DigiByte Core wallet - users maintain complete control of their private keys throughout the entire process.
 
-**Implementation Status**: Core transaction system 85% complete, GUI 90% complete, RPC interface 95% complete. See DIGIDOLLAR_MVP_STATUS.md for detailed status.
+**Implementation Status**: Core transaction system 90% complete, GUI 92% complete, RPC interface 95% complete. See DIGIDOLLAR_ARCHITECTURE.md for detailed status.
 
 ### Core Technologies
 
@@ -174,7 +174,7 @@ Efficient script execution with Merkleized Alternative Script Trees. The collate
 
 Both paths **require the timelock to expire first** - there is no early redemption, no forced liquidation, and no exceptions.
 
-**Implementation Note**: Partial redemption is NOT supported. Users must redeem the full minted amount in a single transaction.
+**Implementation Note**: Partial redemption IS supported at the wallet level. Users can redeem a portion of their DD position, with collateral released proportionally. The position remains active until fully redeemed.
 
 ### Key Features
 
@@ -298,7 +298,7 @@ The system continuously tracks critical health metrics to ensure stability:
 - Per-tier collateral ratios
 - Aggregate system health
 
-Accessible via RPC command: `getdigidollarsystemstatus`
+Accessible via RPC command: `getdigidollarstats`
 
 **Key Insight**: These five layers work together without forced liquidations. Prevention (higher collateral), adaptation (dynamic adjustment), volatility freezes (circuit breakers), crisis management (emergency ratios), and market forces (scarcity) create a self-balancing, resilient system.
 
@@ -366,33 +366,23 @@ digibyte-cli -rpcwallet=restored rescanblockchain
 
 ## Implementation Status & Code Alignment
 
-**Last Verified**: 2025-12-23
+**Last Verified**: 2025-12-31
 
 | Feature | Document Spec | Code Status | Notes |
 |---------|---------------|-------------|-------|
 | 2 MAST Paths | Normal + ERR only | ✅ Correct | Only 2 paths in MAST tree (scripts.cpp:133-193) |
-| Emergency Path | Not used | ✅ Dead code | `CreateEmergencyPath()` defined but NEVER added to TaprootBuilder |
-| Partial Redemption | NOT supported | ✅ Disabled at validation | `DD_TX_PARTIAL` rejected with "partial-redemption-disabled" |
+| Emergency Path | Not used | ✅ Removed | `CreateEmergencyPath()` was dead code and removed |
+| Partial Redemption | Wallet-level support | ✅ Correct | `CloseCollateralPosition()` supports proportional redemption |
 | ERR Returns | 100% collateral, burns more DD | ✅ Correct | `GetRequiredDDBurn()` increases burn, `GetAdjustedRedemption()` returns 100% |
 | Minting Blocked During ERR | Yes | ✅ Correct | `ShouldBlockMinting()` returns true when health < 100% |
 | Timelock Required | Both paths need CLTV | ✅ Correct | Both Normal and ERR paths start with CLTV check |
 
-**Code Verification & Cleanup Complete** (2025-12-23):
+**Code Verification Complete** (2025-12-31):
 - MAST tree contains exactly 2 paths (Normal + ERR) - verified in `CreateCollateralP2TR()`
-- `CreateEmergencyPath()` function removed (was dead code)
 - Both redemption paths enforce CLTV timelock expiry before collateral can be unlocked
-- DD_TX_PARTIAL and DD_TX_EMERGENCY removed from transaction type enum
-- Only 4 transaction types remain: NONE=0, MINT=1, TRANSFER=2, REDEEM=3
-
-### Code Cleanup Completed (2025-12-23)
-
-Removed all partial redemption and emergency oracle override code:
-- Transaction types reduced from 6 to 4 (NONE, MINT, TRANSFER, REDEEM)
-- Redemption paths reduced from 4 to 2 (NORMAL, ERR)
-- `CreateEmergencyPath()` function removed
-- All tests updated
-
-**Presentation update needed**: Update `txType` table to show only types 0-3.
+- Only 4 transaction types: NONE=0, MINT=1, TRANSFER=2, REDEEM=3
+- Partial redemption implemented at wallet level (`CloseCollateralPosition()`)
+- DD amounts stored in cents (100 = $1.00), oracle prices in micro-USD (1,000,000 = $1.00)
 
 ---
 

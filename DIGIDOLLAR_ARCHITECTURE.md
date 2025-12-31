@@ -1,8 +1,8 @@
 # DigiDollar Implementation Architecture
 **DigiByte v8.26 - Current Implementation Status**
-*Updated: 2025-12-23*
+*Updated: 2025-12-31*
 *Implementation Status: 90% Complete*
-*Document Version: 6.1 - Code Alignment Verification Complete*
+*Document Version: 6.2 - Codebase Verification Complete*
 
 ## Executive Summary
 
@@ -23,7 +23,7 @@ DigiDollar is the world's first truly decentralized stablecoin built natively on
 - **Network-Wide Tracking**: Blockchain UTXO scanning shows identical stats to all nodes
 - **User Interface**: Complete wallet with 7 functional tabs (Overview, Receive, Send, Mint, Redeem, Positions, Transactions)
 - **Protection Systems**: DCA, ERR, and Volatility structure complete (70%) - depends on stub functions
-- **Comprehensive Testing**: 286 DigiDollar unit tests + 123 Oracle unit tests + 18 functional tests = 427 total tests
+- **Comprehensive Testing**: 286 DigiDollar unit tests + 123 Oracle unit tests + 20 functional tests = 429 total tests
 
 🔄 **What's In Progress:**
 - **System Health Functions**: `GetTotalSystemCollateral()` and `GetTotalDDSupply()` now use cached metrics from UTXO scanning
@@ -76,8 +76,8 @@ The DigiDollar system is built into DigiByte Core with code organized in these m
 - **`/src/qt/`** - User interface (7 widget .cpp + 7 .h files)
 - **`/src/wallet/`** - Wallet integration (digidollarwallet.cpp + .h)
 - **`/src/consensus/`** - Network rules (DCA, ERR, volatility systems)
-- **`/src/rpc/`** - RPC commands (digidollar.cpp - 27+ commands including oracle RPCs)
-- **`/test/functional/`** - Automated tests (18 functional tests)
+- **`/src/rpc/`** - RPC commands (digidollar.cpp - 24 commands: 20 RPC + 4 wallet-layer)
+- **`/test/functional/`** - Automated tests (20 functional tests)
 - **`/src/test/`** - Unit tests (286 DigiDollar tests across 26 files + 123 Oracle tests across 8 files = 409 total)
 
 ### 1.4 Development Phases - What's Been Built
@@ -1525,7 +1525,7 @@ size_t LoadFromDatabase();  // ✅ Working - loads all DD data including UTXOs
 
 **Implementation Quality:**
 - ✅ **Bitcoin Core Compliance**: Follows Bitcoin Core coding standards and patterns
-- ✅ **Test Coverage**: Extensive testing with 409 unit tests (286 DigiDollar + 123 Oracle) + 18 functional tests
+- ✅ **Test Coverage**: Extensive testing with 409 unit tests (286 DigiDollar + 123 Oracle) + 20 functional tests
 - ✅ **Documentation**: Well-documented code with clear intent and usage examples
 - ✅ **Security Awareness**: Proper input validation, overflow protection, and access control
 
@@ -1728,7 +1728,7 @@ void BroadcastOracleBundle(const COracleBundle& bundle) {
 | **GUI Implementation** | 92% | ✅ Functional | All widgets working, network stats display |
 | **RPC Interface** | 90% | ✅ Production Ready | 20 commands, only oracle APIs are mock |
 | **Database Persistence** | 100% | ✅ Complete | Save/load/restart/backup/restore all working (tested today) |
-| **Test Coverage** | 100% | ✅ Comprehensive | 409 unit tests (286 DigiDollar + 123 Oracle) across 34 files + 18 functional tests |
+| **Test Coverage** | 100% | ✅ Comprehensive | 409 unit tests (286 DigiDollar + 123 Oracle) across 34 files + 20 functional tests |
 
 ### 16.2 Overall Implementation Status
 
@@ -1747,7 +1747,7 @@ void BroadcastOracleBundle(const COracleBundle& bundle) {
 - **7% improvement since Oct 4** reflecting newly documented and fixed features:
   - Network-wide UTXO tracking (100% complete - was not documented)
   - Protection systems upgraded to 95% (DCA/ERR/Volatility fully implemented)
-  - 19 functional tests all passing (was listed as 18)
+  - 20 functional tests all passing
   - Minting upgraded to 95% with full DCA integration
   - Transfer/Send confirmed at 98% with comprehensive testing
   - Database persistence upgraded to 100% (wallet restart/backup/restore tested Dec 10)
@@ -1901,7 +1901,7 @@ The DigiDollar implementation represents a **sophisticated and well-architected 
 
 **The DigiDollar implementation is NOT vaporware** - it represents ~85% completion of a sophisticated financial system with:
 - **~50,000+ lines of functional, tested code**
-- **19 functional tests, all passing**
+- **20 functional tests, all passing**
 - **Complete integration with Bitcoin Core infrastructure**
 - **Advanced protection mechanisms (DCA, ERR, volatility monitoring) - PRODUCTION-READY**
 - **Network-wide UTXO tracking - FULLY IMPLEMENTED AND VERIFIED**
@@ -1963,7 +1963,7 @@ The codebase represents **substantial, functional progress** rather than theoret
 #### **RPC Command Corrections**
 - **Removed non-existent commands**: `getdigidollarsystemhealth` does NOT exist
 - **Correct command**: Only `getdigidollarstats` exists (provides all system health + stats)
-- **Total commands**: 25 (18 registered RPC + 7 wallet-layer functions)
+- **Total commands**: 24 (20 registered RPC + 4 wallet-layer functions)
 - **Oracle commands**: All functional but use 100% mock data
 
 #### **What This Means**
@@ -1992,7 +1992,7 @@ This update adds several **major implemented features** that were missing from t
 
 ### ✅ **Test Coverage**
 - **Unit Tests**: 286 DigiDollar tests + 123 Oracle tests = 409 total
-- **Functional Tests**: 18 comprehensive end-to-end tests
+- **Functional Tests**: 20 comprehensive end-to-end tests
 - All tests passing including network tracking verification
 - Test: `digidollar_network_tracking.py` proves UTXO scanning works
 
@@ -2016,11 +2016,11 @@ This update adds several **major implemented features** that were missing from t
 
 ### 21.1 Test Coverage Summary
 
-**Total Tests: 427 (All Passing ✅)**
+**Total Tests: 429 (All Passing ✅)**
 - **Unit Tests**: 409 tests
   - DigiDollar: 286 tests across 26 files
   - Oracle: 123 tests across 8 files
-- **Functional Tests**: 18 end-to-end integration tests
+- **Functional Tests**: 20 end-to-end integration tests
 
 ### 21.2 DigiDollar Unit Tests (286 tests)
 
@@ -2063,7 +2063,7 @@ This update adds several **major implemented features** that were missing from t
 | oracle_p2p_tests.cpp | 17 | P2P oracle messaging |
 | **TOTAL** | **123** | **Complete oracle system** |
 
-### 21.4 Functional Tests (19 tests)
+### 21.4 Functional Tests (20 tests)
 
 **File Location**: `/home/jared/Code/digibyte/test/functional/`
 
@@ -2087,6 +2087,8 @@ This update adds several **major implemented features** that were missing from t
 | digidollar_transfer.py | Transfer operations |
 | digidollar_tx_amounts_debug.py | Transaction amount debugging |
 | digidollar_wallet.py | Wallet integration |
+| wallet_digidollar_persistence_restart.py | Position recovery on restart |
+| wallet_digidollar_restore.py | Wallet restore testing |
 
 ### 21.5 Test Execution
 
@@ -2109,7 +2111,7 @@ test/functional/digidollar_oracle.py            # Oracle integration
 
 ### 21.6 Test Status: 100% Passing ✅
 
-All 427 tests pass successfully (409 unit + 18 functional test files). This comprehensive test suite provides:
+All 429 tests pass successfully (409 unit + 20 functional test files). This comprehensive test suite provides:
 - ✅ Unit test coverage for all core components
 - ✅ Integration testing for end-to-end workflows
 - ✅ Network testing with multi-node scenarios
@@ -2118,7 +2120,7 @@ All 427 tests pass successfully (409 unit + 18 functional test files). This comp
 
 ---
 
-## 22. Executive Summary - Current State (As of 2025-11-22)
+## 22. Executive Summary - Current State (As of 2025-12-31)
 
 ### What's Working RIGHT NOW:
 
@@ -2141,7 +2143,7 @@ All 427 tests pass successfully (409 unit + 18 functional test files). This comp
 - Theme-aware, professional Qt implementation
 
 ✅ **Testing** (Comprehensive):
-- **427 total tests**: 286 DigiDollar unit + 123 Oracle unit + 18 functional test files
+- **429 total tests**: 286 DigiDollar unit + 123 Oracle unit + 20 functional test files
 - Complete test coverage for all core features
 - Verified network-wide tracking with multi-node tests
 - Descriptor wallet support tested and verified

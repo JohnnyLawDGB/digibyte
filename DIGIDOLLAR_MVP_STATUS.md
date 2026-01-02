@@ -1,6 +1,6 @@
 # DigiDollar MVP Status
 
-**Last Updated:** December 10, 2025
+**Last Updated:** January 1, 2026
 **Current Status:** ~85% Complete for Testnet MVP
 **Verified Against:** Actual codebase (5 sub-agents, code-verified)
 **Version:** v9.26.0-rc4
@@ -10,7 +10,7 @@
 
 ## Executive Summary
 
-DigiDollar implementation is **85% complete** for testnet MVP. Core transactions (minting, transfers, normal redemption) are fully functional. Phase One oracle with 12+ real exchange APIs is production-ready. Wallet persistence works 100% (positions, keys, UTXOs, backup/restore all tested today).
+DigiDollar implementation is **85% complete** for testnet MVP. Core transactions (minting, transfers, normal redemption) are fully functional. Phase One oracle with 7 active exchange APIs is production-ready. Wallet persistence works 100% (positions, keys, UTXOs, backup/restore all tested today).
 
 **What's LEFT to build:**
 1. 8-of-15 oracle consensus (infrastructure ready, needs keys + validation update)
@@ -43,13 +43,15 @@ That's it. Everything else works.
 ### Oracle System (Phase One - 95% Complete)
 | Feature | Status | Notes |
 |---------|--------|-------|
-| 12+ real exchange APIs | ✅ WORKING | libcurl HTTP requests |
+| 7 active exchange APIs | ✅ WORKING | libcurl HTTP requests |
 | Mock fallback | ✅ WORKING | When libcurl unavailable |
-| 20-byte compact format | ✅ WORKING | Efficient encoding |
+| 22-byte compact format | ✅ WORKING | OP_RETURN OP_ORACLE encoding |
 | BIP-340 Schnorr signatures | ✅ WORKING | Oracle message signing |
 | Single oracle consensus (1-of-1) | ✅ WORKING | Phase One testnet |
 
-**Exchanges:** CoinGecko, CryptoCompare, Binance, KuCoin, Gate.io, OKX, Kraken, Messari, Crypto.com, HTX, Poloniex, Bittrex
+**Active Exchanges (7):** Binance, KuCoin, Gate.io, HTX, Crypto.com, CoinGecko, CoinMarketCap (optional - requires API key)
+
+**Defined but not active (5):** Coinbase, Kraken, Bittrex, Poloniex, Messari
 
 ### System Health & Stats
 | Feature | Status | Notes |
@@ -90,15 +92,15 @@ That's it. Everything else works.
 6. `DigiDollarPositionsWidget` - Position list
 7. `DigiDollarTransactionsWidget` - Transaction history
 
-### RPC Commands (24 Total)
-**17 Registered + 7 Wallet-Layer** - See DIGIDOLLAR_ARCHITECTURE.md Section 10 for full list.
+### RPC Commands (25 Total)
+**20 DigiDollar + 5 Oracle** - See DIGIDOLLAR_ARCHITECTURE.md Section 10 for full list.
 
-### Test Suite (428 Tests - All Passing)
+### Test Suite (~458 Tests - All Passing)
 | Category | Count | Files |
 |----------|-------|-------|
-| DigiDollar unit tests | 286 | 26 files |
-| Oracle unit tests | 123 | 8 files |
-| Functional tests | 19 | 19 files |
+| DigiDollar unit tests | ~297 | 27 files |
+| Oracle unit tests | 143 | 9 files |
+| Functional tests | 18 | 18 files |
 
 ---
 

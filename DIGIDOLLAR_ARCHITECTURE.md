@@ -1,8 +1,8 @@
 # DigiDollar Implementation Architecture
 **DigiByte v8.26 - Current Implementation Status**
-*Updated: 2025-12-31*
-*Implementation Status: 90% Complete*
-*Document Version: 6.2 - Codebase Verification Complete*
+*Updated: 2026-01-01*
+*Implementation Status: 85% Complete*
+*Document Version: 6.3 - Test counts and mock price values corrected*
 
 ## Executive Summary
 
@@ -23,7 +23,7 @@ DigiDollar is the world's first truly decentralized stablecoin built natively on
 - **Network-Wide Tracking**: Blockchain UTXO scanning shows identical stats to all nodes
 - **User Interface**: Complete wallet with 7 functional tabs (Overview, Receive, Send, Mint, Redeem, Positions, Transactions)
 - **Protection Systems**: DCA, ERR, and Volatility structure complete (70%) - depends on stub functions
-- **Comprehensive Testing**: 286 DigiDollar unit tests + 123 Oracle unit tests + 20 functional tests = 429 total tests
+- **Comprehensive Testing**: ~307 DigiDollar unit tests + ~117 Oracle unit tests + 18 functional tests = ~442 total tests
 
 🔄 **What's In Progress:**
 - **System Health Functions**: `GetTotalSystemCollateral()` and `GetTotalDDSupply()` now use cached metrics from UTXO scanning
@@ -76,9 +76,9 @@ The DigiDollar system is built into DigiByte Core with code organized in these m
 - **`/src/qt/`** - User interface (7 widget .cpp + 7 .h files)
 - **`/src/wallet/`** - Wallet integration (digidollarwallet.cpp + .h)
 - **`/src/consensus/`** - Network rules (DCA, ERR, volatility systems)
-- **`/src/rpc/`** - RPC commands (digidollar.cpp - 24 commands: 20 RPC + 4 wallet-layer)
-- **`/test/functional/`** - Automated tests (20 functional tests)
-- **`/src/test/`** - Unit tests (286 DigiDollar tests across 26 files + 123 Oracle tests across 8 files = 409 total)
+- **`/src/rpc/`** - RPC commands (digidollar.cpp - 25 commands: 20 RPC + 5 wallet-layer)
+- **`/test/functional/`** - Automated tests (18 functional tests)
+- **`/src/test/`** - Unit tests (~307 DigiDollar tests across 18 files + ~117 Oracle tests across 8 files = ~424 total)
 
 ### 1.4 Development Phases - What's Been Built
 
@@ -438,7 +438,7 @@ tx.vout.push_back(CTxOut(0, ddScript));  // 0 DGB value
 **Features:**
 - ✅ Lock period dropdown with 9 tiers
 - ✅ Real-time collateral calculator
-- ✅ Oracle price display (currently mock $0.05)
+- ✅ Oracle price display (default mock: $0.0065/DGB = 6500 micro-USD)
 - ✅ Available balance checking
 - ✅ Progress indicators and error handling
 - ✅ Theme-aware styling
@@ -880,13 +880,14 @@ The DigiDollar GUI implementation is **90% complete** with all major widgets fun
 
 ```cpp
 class DigiDollarTab : public QWidget {
-    // 6 main sections, all functional:
+    // 7 main tabs, all functional:
     DigiDollarOverviewWidget* overviewWidget;
     DigiDollarSendWidget* sendWidget;
     DigiDollarReceiveWidget* receiveWidget;
     DigiDollarMintWidget* mintWidget;
     DigiDollarRedeemWidget* redeemWidget;
-    DigiDollarPositionsWidget* positionsWidget;
+    DigiDollarVaultWidget* vaultWidget;          // Vault Manager
+    DigiDollarTransactionsWidget* transWidget;   // Transaction History
 };
 ```
 
@@ -896,7 +897,7 @@ class DigiDollarTab : public QWidget {
 **Status: ✅ 95% Complete**
 - ✅ Total DD balance display
 - ✅ DGB locked collateral tracking
-- ✅ Current oracle price display (shows 100% mock price, default $0.01/DGB)
+- ✅ Current oracle price display (default mock: $0.0065/DGB = 6500 micro-USD)
 - ✅ System health indicators (network-wide UTXO scanning)
 - ✅ Recent transaction summary
 - 🔄 Real-time balance updates (minor notification gap)
@@ -923,7 +924,7 @@ class DigiDollarTab : public QWidget {
 - ✅ Real-time collateral calculator
 - ✅ Oracle price display (shows mock price)
 - ✅ Mint confirmation and execution
-- 🔄 Using 100% mock oracle price (default $0.01/DGB, configurable)
+- 🔄 Using mock oracle price (default $0.0065/DGB = 6500 micro-USD, configurable via `setmockoracleprice`)
 
 #### **5. Redeem Widget** (`/src/qt/digidollarredeemwidget.cpp`)
 **Status: ✅ 85% Complete**
@@ -1224,7 +1225,7 @@ size_t LoadFromDatabase();  // ✅ Working - loads all DD data including UTXOs
 | **Addresses** | `validateddaddress` | ✅ Complete | DD/TD/RD address validation |
 | | `listdigidollaraddresses` | ✅ Complete | List all DD addresses |
 | | `importdigidollaraddress` | ✅ Complete | Import DD address |
-| **Oracle System** | `getoracleprice` | ✅ Complete | Returns mock price (default $0.01/DGB) |
+| **Oracle System** | `getoracleprice` | ✅ Complete | Returns mock price (default $0.0065/DGB = 6500 micro-USD) |
 | | `sendoracleprice` | ✅ Complete | Send oracle price message (P2P broadcasting) |
 | | `listoracles` | ✅ Complete | Shows 30 configured oracle nodes |
 | | `startoracle` | 🔄 Mock | Mock oracle daemon (framework only) |
@@ -1250,7 +1251,7 @@ size_t LoadFromDatabase();  // ✅ Working - loads all DD data including UTXOs
 **Important Notes:**
 - All wallet commands are fully functional through the Qt GUI
 - Oracle system uses **100% mock prices** - no real exchange API integration
-- Mock price defaults to $0.01 per DGB (can be changed via `setmockoracleprice`)
+- Mock price defaults to $0.0065 per DGB = 6500 micro-USD (can be changed via `setmockoracleprice`)
 - Everything works correctly with mock prices for testing/development
 
 ### 10.2 RPC Implementation Quality
@@ -1295,8 +1296,8 @@ size_t LoadFromDatabase();  // ✅ Working - loads all DD data including UTXOs
         ├─────────────────────────────────────────────────────────────┤
         │ 1. Volatility Check: CVolatilityMonitor::IsVolatilityFreeze │
         │    → If 20%+ price swing in 1hr = REJECT MINT              │
-        │ 2. Oracle Price: Get current DGB/USD from 8-of-15 oracles  │
-        │    → Currently mock: $0.01 (MockOracleManager)             │
+│ 2. Oracle Price: Get current DGB/USD from oracles          │
+│    → Default mock: $0.0065 (6500 micro-USD)                │
         │ 3. System Health: DCA multiplier (1.0x - 2.0x)             │
         │ 4. Balance Check: Ensure sufficient DGB available           │
         │ CODE: /src/digidollar/validation.cpp                        │
@@ -1309,8 +1310,8 @@ size_t LoadFromDatabase();  // ✅ Working - loads all DD data including UTXOs
         │ Required DGB = (DD_Amount × Base_Ratio × DCA_Multiplier)    │
         │                         / Oracle_Price                      │
         │                                                             │
-        │ Example: $10 DD, 1yr lock, healthy system, $0.01 DGB:      │
-        │ Required = (1000¢ × 300% × 1.0) / $0.01 = 300,000 DGB     │
+│ Example: $10 DD, 1yr lock, healthy system, $0.0065 DGB:    │
+│ Required = (1000¢ × 300% × 1.0) / $0.0065 ≈ 461,538 DGB   │
         │                                                             │
         │ CODE: /src/digidollar/txbuilder.cpp - MintTxBuilder         │
         └─────────────────────────────────────────────────────────────┘
@@ -1476,7 +1477,7 @@ size_t LoadFromDatabase();  // ✅ Working - loads all DD data including UTXOs
 ### 12.1 External Dependencies
 
 #### **Oracle Price Integration**
-- **Current**: Mock oracle system with $0.05 DGB price
+- **Current**: Phase One oracle with real exchange APIs (libcurl) + mock fallback ($0.0065/DGB default)
 - **Dependency**: Real exchange API integration (Binance, Coinbase, Kraken, etc.)
 - **Impact**: All financial calculations currently use mock data
 - **Status**: Framework complete, APIs need implementation
@@ -1525,7 +1526,7 @@ size_t LoadFromDatabase();  // ✅ Working - loads all DD data including UTXOs
 
 **Implementation Quality:**
 - ✅ **Bitcoin Core Compliance**: Follows Bitcoin Core coding standards and patterns
-- ✅ **Test Coverage**: Extensive testing with 409 unit tests (286 DigiDollar + 123 Oracle) + 20 functional tests
+- ✅ **Test Coverage**: Extensive testing with ~424 unit tests (~307 DigiDollar + ~117 Oracle) + 18 functional tests
 - ✅ **Documentation**: Well-documented code with clear intent and usage examples
 - ✅ **Security Awareness**: Proper input validation, overflow protection, and access control
 
@@ -1728,7 +1729,7 @@ void BroadcastOracleBundle(const COracleBundle& bundle) {
 | **GUI Implementation** | 92% | ✅ Functional | All widgets working, network stats display |
 | **RPC Interface** | 90% | ✅ Production Ready | 20 commands, only oracle APIs are mock |
 | **Database Persistence** | 100% | ✅ Complete | Save/load/restart/backup/restore all working (tested today) |
-| **Test Coverage** | 100% | ✅ Comprehensive | 409 unit tests (286 DigiDollar + 123 Oracle) across 34 files + 20 functional tests |
+| **Test Coverage** | 100% | ✅ Comprehensive | ~424 unit tests (~307 DigiDollar + ~117 Oracle) across 26 files + 18 functional tests |
 
 ### 16.2 Overall Implementation Status
 
@@ -1747,7 +1748,7 @@ void BroadcastOracleBundle(const COracleBundle& bundle) {
 - **7% improvement since Oct 4** reflecting newly documented and fixed features:
   - Network-wide UTXO tracking (100% complete - was not documented)
   - Protection systems upgraded to 95% (DCA/ERR/Volatility fully implemented)
-  - 20 functional tests all passing
+  - 18 functional tests all passing
   - Minting upgraded to 95% with full DCA integration
   - Transfer/Send confirmed at 98% with comprehensive testing
   - Database persistence upgraded to 100% (wallet restart/backup/restore tested Dec 10)
@@ -1901,7 +1902,7 @@ The DigiDollar implementation represents a **sophisticated and well-architected 
 
 **The DigiDollar implementation is NOT vaporware** - it represents ~85% completion of a sophisticated financial system with:
 - **~50,000+ lines of functional, tested code**
-- **20 functional tests, all passing**
+- **18 functional tests, all passing**
 - **Complete integration with Bitcoin Core infrastructure**
 - **Advanced protection mechanisms (DCA, ERR, volatility monitoring) - PRODUCTION-READY**
 - **Network-wide UTXO tracking - FULLY IMPLEMENTED AND VERIFIED**
@@ -1991,7 +1992,7 @@ This update adds several **major implemented features** that were missing from t
 - All three systems fully implemented and tested
 
 ### ✅ **Test Coverage**
-- **Unit Tests**: 286 DigiDollar tests + 123 Oracle tests = 409 total
+- **Unit Tests**: ~307 DigiDollar tests + ~117 Oracle tests = ~424 total
 - **Functional Tests**: 20 comprehensive end-to-end tests
 - All tests passing including network tracking verification
 - Test: `digidollar_network_tracking.py` proves UTXO scanning works
@@ -2111,7 +2112,7 @@ test/functional/digidollar_oracle.py            # Oracle integration
 
 ### 21.6 Test Status: 100% Passing ✅
 
-All 429 tests pass successfully (409 unit + 20 functional test files). This comprehensive test suite provides:
+All ~442 tests pass successfully (~424 unit + 18 functional test files). This comprehensive test suite provides:
 - ✅ Unit test coverage for all core components
 - ✅ Integration testing for end-to-end workflows
 - ✅ Network testing with multi-node scenarios
@@ -2143,29 +2144,28 @@ All 429 tests pass successfully (409 unit + 20 functional test files). This comp
 - Theme-aware, professional Qt implementation
 
 ✅ **Testing** (Comprehensive):
-- **429 total tests**: 286 DigiDollar unit + 123 Oracle unit + 20 functional test files
+- **~442 total tests**: ~307 DigiDollar unit + ~117 Oracle unit + 18 functional test files
 - Complete test coverage for all core features
 - Verified network-wide tracking with multi-node tests
 - Descriptor wallet support tested and verified
 
-### What's NOT Working (The ONLY Gap):
+### What's In Progress:
 
-❌ **Oracle Price Feeds**:
-- **Status**: 100% mock implementation
-- **Current**: All prices from MockOracleManager (default $0.01/DGB)
-- **Missing**: Real HTTP requests to exchanges (Binance, Coinbase, Kraken, etc.)
-- **Impact**: Cannot use real market prices
-- **Files needing work**:
-  - `src/oracle/exchange.cpp` - Add real HTTP/CURL implementation
-  - `src/oracle/node.cpp` - Add real exchange API calls
-  - `src/oracle/bundle_manager.cpp` - Add P2P broadcasting
+🔄 **Phase Two Oracle Consensus**:
+- **Phase One Status**: ✅ Complete - 1-of-1 single oracle with 12+ real exchange APIs via libcurl
+- **Phase Two Status**: Infrastructure ready, not activated
+- **Current**: Real prices from exchanges when libcurl available, mock fallback ($0.0065/DGB = 6500 micro-USD)
+- **Remaining**:
+  - Phase Two 8-of-15 Schnorr threshold consensus (mainnet)
+  - ERR validation unblock (waiting on oracle consensus)
+  - P2P oracle message broadcasting
 
 ### Bottom Line:
 
 **DigiDollar is 85% complete** with ALL core functionality working. Phase One oracle uses real exchange APIs (12+ exchanges via libcurl when available, mock fallback otherwise). The remaining work is:
 - Phase Two 8-of-15 oracle consensus (mainnet)
 - ERR validation unblock (waiting on oracle consensus)
-- System health calculation stubs (GetTotalSystemCollateral/GetTotalDDSupply need real UTXO scanning - BY DESIGN for now)
+- System health uses cached metrics from UTXO scanning (implemented and tested)
 
 Everything else - minting, sending, receiving, redemption, protection systems, network tracking, GUI, database persistence - is production-ready and fully tested.
 

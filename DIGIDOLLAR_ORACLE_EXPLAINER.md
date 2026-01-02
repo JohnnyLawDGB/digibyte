@@ -1,6 +1,6 @@
 # DigiDollar Oracle System - Simple Explainer
 *Updated: 2025-12-31*
-*Document Version: 3.2 - Codebase Verification Complete*
+*Document Version: 3.3 - Exchange Counts and Tests Verified*
 
 ## Overview
 
@@ -1956,7 +1956,7 @@ Final size: ~150 bytes (merkle_root + aggregated_sig + metadata)
 Before testnet launch:
 
 - [ ] Oracle daemon runs continuously (24+ hours)
-- [ ] All 12 exchanges return valid prices
+- [ ] All 7 active exchanges return valid prices
 - [ ] P2P messages propagate to 95% of network
 - [ ] Miners include oracle data in coinbase
 - [ ] Block validation accepts valid data, rejects invalid
@@ -2000,7 +2000,7 @@ Before testnet launch:
 | **Component** | **RegTest (Now)** | **Testnet (Phase One)** | **Mainnet (Phase Two)** |
 |--------------|-------------------|-------------------------|-------------------------|
 | **Oracle Daemon** | Mock (built-in) | External daemon | 15 external daemons |
-| **Price Source** | Manual (`setmockoracleprice`) | 10 real exchanges | 10 real exchanges |
+| **Price Source** | Manual (`setmockoracleprice`) | 7 active exchanges | 7 active exchanges |
 | **Consensus Model** | N/A (mock) | 1-of-1 (single oracle) | 8-of-15 (majority) |
 | **P2P Validation** | ✅ Implemented | ✅ Implemented | ✅ Implemented |
 | **Block Validation** | ✅ Implemented | ✅ Implemented | ✅ Implemented |
@@ -2042,17 +2042,18 @@ Before testnet launch:
    - Functional test: `test/functional/digidollar_oracle.py`
    - Unit tests: `src/test/oracle_tests.cpp`
 
-#### ❌ **What's NOT in DigiByte Core:**
-1. **Oracle Daemon** (separate software)
-   - Exchange API integration
-   - Median calculation with MAD filtering
-   - Message creation and signing
-   - P2P broadcasting logic
+#### ✅ **Also Included in DigiByte Core:**
+1. **Exchange API Integration** (`src/oracle/exchange.cpp`)
+   - 7 active exchange APIs (Binance, KuCoin, Gate.io, HTX, Crypto.com, CoinGecko, CoinMarketCap)
+   - 5 additional defined but not active (Coinbase, Kraken, Bittrex, Poloniex, Messari)
+   - Real libcurl implementation when available
+   - Mock fallback responses when libcurl unavailable
+   - MultiExchangeAggregator with MAD outlier filtering
 
-2. **Direct Exchange Fetching**
-   - No Binance/Coinbase/etc. API calls in Core
-   - No price aggregation in Core
-   - No median calculation in Core (only validation)
+2. **Oracle Message Creation** (`src/oracle/node.cpp`)
+   - Full oracle message creation capability
+   - BIP-340 Schnorr signing
+   - P2P broadcasting via CConnman
 
 ### **Deployment Checklist**
 
@@ -2069,7 +2070,7 @@ Before testnet launch:
 - [x] Block validation working
 - [ ] **External oracle daemon developed** ← MISSING
 - [ ] Oracle daemon deployed to `oracle.digibyte.io`
-- [ ] 10 exchange APIs configured
+- [ ] 7 active exchange APIs configured
 - [ ] Continuous operation (24/7)
 - [ ] Monitoring/alerting setup
 

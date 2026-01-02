@@ -2,7 +2,7 @@
 **DigiByte v8.26 - Oracle Phase One Implementation with Phase Two Preparation**
 *Updated: 2025-12-31*
 *Implementation Status: 100% Complete Phase One, Phase Two Infrastructure Ready*
-*Document Version: 6.2 - Codebase Verification Complete*
+*Document Version: 6.3 - Oracle Test Counts Verified*
 
 ---
 
@@ -87,23 +87,21 @@ Phase One implements a **streamlined, testnet-ready system** with:
 
 **Test Coverage:**
 ```
-Unit Tests:        123 tests across 8 test suites (100%) ✅
-  - oracle_block_validation_tests.cpp:   5 tests
-  - oracle_bundle_manager_tests.cpp:     8 tests
-  - oracle_config_tests.cpp:            13 tests
-  - oracle_exchange_tests.cpp:          56 tests
-  - oracle_integration_tests.cpp:        3 tests
+Unit Tests:        143 tests across 9 test files (100%) ✅
+  - oracle_exchange_tests.cpp:          42 tests
+  - digidollar_oracle_tests.cpp:        35 tests
+  - oracle_p2p_tests.cpp:               15 tests
   - oracle_message_tests.cpp:           15 tests
+  - oracle_config_tests.cpp:            14 tests
+  - oracle_bundle_manager_tests.cpp:     8 tests
   - oracle_miner_tests.cpp:              6 tests
-  - oracle_p2p_tests.cpp:               17 tests
-
-DigiDollar/Oracle Integration:  35 tests (100%) ✅
-  - digidollar_oracle_tests.cpp: Oracle/DigiDollar integration
+  - oracle_block_validation_tests.cpp:   5 tests
+  - oracle_integration_tests.cpp:        3 tests
 
 Functional Tests:    18 files (100%) ✅
   - digidollar_oracle.py: Full end-to-end oracle integration testing
 
-TOTAL: 123 Oracle unit + 35 integration + 18 functional = 176 oracle-related tests
+TOTAL: 143 Oracle unit + 18 functional = 161 oracle-related tests
 ```
 
 **Implementation Status: 100% Complete for Phase One**
@@ -151,17 +149,17 @@ Core Implementation:
 ├── src/validation.cpp                     [Block validation hooks]
 └── src/kernel/chainparams.cpp             [Oracle authorization]
 
-Test Suite (123 unit tests + 1 functional = 124 total):
-├── src/test/oracle_block_validation_tests.cpp  [5 tests]
-├── src/test/oracle_bundle_manager_tests.cpp    [8 tests]
-├── src/test/oracle_config_tests.cpp            [13 tests]
-├── src/test/oracle_exchange_tests.cpp          [56 tests]
-├── src/test/oracle_integration_tests.cpp       [3 tests]
+Test Suite (143 unit tests + 18 functional = 161 total):
+├── src/test/oracle_exchange_tests.cpp          [42 tests]
+├── src/test/digidollar_oracle_tests.cpp        [35 tests]
+├── src/test/oracle_p2p_tests.cpp               [15 tests]
 ├── src/test/oracle_message_tests.cpp           [15 tests]
+├── src/test/oracle_config_tests.cpp            [14 tests]
+├── src/test/oracle_bundle_manager_tests.cpp    [8 tests]
 ├── src/test/oracle_miner_tests.cpp             [6 tests]
-├── src/test/oracle_p2p_tests.cpp               [17 tests]
-├── src/test/digidollar_oracle_tests.cpp        [35 tests - DigiDollar/Oracle integration]
-└── test/functional/digidollar_oracle.py        [1 functional test]
+├── src/test/oracle_block_validation_tests.cpp  [5 tests]
+├── src/test/oracle_integration_tests.cpp       [3 tests]
+└── test/functional/digidollar_*.py             [18 functional tests]
 ```
 
 ---
@@ -1819,7 +1817,7 @@ consensus.nOracleRequiredMessages = 3;  // 3-of-10 for testnet
 **Version**: 5.0 - Phase Two Validation Functions Added
 **Last Updated**: 2025-12-18
 **Implementation Status**: Phase One 100% Complete, Phase Two Infrastructure Ready
-**Test Coverage**: 123 Oracle unit tests + 35 integration tests + 18 functional tests
+**Test Coverage**: 143 Oracle unit tests + 18 functional tests
 
 **Quality Metrics**:
 - ✅ Price format verified as micro-USD (1,000,000 = $1.00)

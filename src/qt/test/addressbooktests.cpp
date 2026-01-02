@@ -54,6 +54,7 @@ void EditAddressAndSubmit(
     ConfirmMessage(&warning_text, 5ms);
     dialog->accept();
     QCOMPARE(warning_text, expected_msg);
+    qApp->processEvents();
 }
 
 /**

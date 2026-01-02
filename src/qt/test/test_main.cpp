@@ -19,6 +19,7 @@
 #ifdef ENABLE_WALLET
 #include <qt/test/addressbooktests.h>
 #include <qt/test/wallettests.h>
+#include <qt/test/digidollarwidgettests.h>
 #endif // ENABLE_WALLET
 
 #include <QApplication>
@@ -91,10 +92,12 @@ int main(int argc, char* argv[])
 
     int num_test_failures{0};
 
-    app.node().context()->args = &gArgs;     // Make gArgs available in the NodeContext
+    app.node().context()->args = &gArgs;
     
     AppTests app_tests(app);
     num_test_failures += QTest::qExec(&app_tests);
+
+    app.node().context()->args = &gArgs;
 
     OptionTests options_tests(app.node());
     num_test_failures += QTest::qExec(&options_tests);
@@ -111,6 +114,9 @@ int main(int argc, char* argv[])
 
     AddressBookTests test6(app.node());
     num_test_failures += QTest::qExec(&test6);
+
+    DigiDollarWidgetTests test7(app.node());
+    num_test_failures += QTest::qExec(&test7);
 #endif
 
     if (num_test_failures) {

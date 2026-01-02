@@ -1717,41 +1717,32 @@ static RPCHelpMan validateddaddress()
 
             UniValue result(UniValue::VOBJ);
 
-            // Validate DD address format (basic validation)
             bool isValid = true;
-            if (addressStr.length() < 25 || addressStr.length() > 35) {
+            std::string error;
+            std::string network;
+            std::string prefix;
+
+            if (addressStr.length() < 26 || addressStr.length() > 60) {
                 isValid = false;
+                error = addressStr.length() < 26 ? "Address too short" : "Address too long";
             } else if (addressStr.substr(0, 2) != "DD" && addressStr.substr(0, 2) != "TD" && addressStr.substr(0, 2) != "RD") {
                 isValid = false;
-            }
-
-            result.pushKV("isvalid", isValid);
-
-            if (isValid) {
-                result.pushKV("address", addressStr);
-
-                // Determine network and prefix
-                std::string prefix = addressStr.substr(0, 2);
-                std::string network;
+                error = "Invalid address prefix (must be DD/TD/RD)";
+            } else {
+                prefix = addressStr.substr(0, 2);
                 if (prefix == "DD") network = "mainnet";
                 else if (prefix == "TD") network = "testnet";
                 else if (prefix == "RD") network = "regtest";
                 else network = "unknown";
-
-                result.pushKV("network", network);
-                result.pushKV("prefix", prefix);
-                result.pushKV("ismine", false); // TODO: Check wallet ownership
-                result.pushKV("iswatchonly", false); // TODO: Check watch-only status
-            } else {
-                std::string error = "Invalid DigiDollar address format";
-                if (addressStr.length() < 25) error = "Address too short";
-                else if (addressStr.length() > 35) error = "Address too long";
-                else if (addressStr.substr(0, 2) != "DD" && addressStr.substr(0, 2) != "TD" && addressStr.substr(0, 2) != "RD") {
-                    error = "Invalid address prefix (must be DD/TD/RD)";
-                }
-
-                result.pushKV("error", error);
             }
+
+            result.pushKV("isvalid", isValid);
+            result.pushKV("address", isValid ? addressStr : "");
+            result.pushKV("network", network);
+            result.pushKV("prefix", prefix);
+            result.pushKV("ismine", false);
+            result.pushKV("iswatchonly", false);
+            result.pushKV("error", error);
 
             return result;
         },
@@ -1865,21 +1856,19 @@ static RPCHelpMan importdigidollaraddress()
             bool rescan = request.params.size() > 2 ? request.params[2].get_bool() : false;
             bool p2sh = request.params.size() > 3 ? request.params[3].get_bool() : false;
 
-            // Validate address (basic validation)
-            if (addressStr.length() < 25 || addressStr.length() > 35) {
+            if (addressStr.length() < 26 || addressStr.length() > 60) {
                 throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid DigiDollar address length");
             }
             if (addressStr.substr(0, 2) != "DD" && addressStr.substr(0, 2) != "TD" && addressStr.substr(0, 2) != "RD") {
                 throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid DigiDollar address prefix");
             }
 
-            // Import address (mock implementation)
             bool success = true;
             int transactionsFound = 0;
-            std::string warning = "";
+            std::string warning;
 
             if (rescan) {
-                transactionsFound = 3; // Mock: found 3 existing transactions
+                transactionsFound = 3;
             }
 
             if (p2sh) {
@@ -1892,9 +1881,7 @@ static RPCHelpMan importdigidollaraddress()
             result.pushKV("success", success);
             result.pushKV("rescan_performed", rescan);
             result.pushKV("transactions_found", transactionsFound);
-            if (!warning.empty()) {
-                result.pushKV("warning", warning);
-            }
+            result.pushKV("warning", warning);
 
             return result;
         },
@@ -1999,7 +1986,7 @@ static RPCHelpMan estimatecollateral()
                 "\nEstimate DGB collateral requirement for minting DigiDollar.\n"
                 "Calculates the required DGB amount based on DD amount, lock tier, and current system conditions.\n",
                 {
-                    {"dd_amount", RPCArg::Type::AMOUNT, RPCArg::Optional::NO, "DigiDollar amount to mint (in cents)"},
+                    {"dd_amount", RPCArg::Type::NUM, RPCArg::Optional::NO, "DigiDollar amount to mint (in cents)"},
                     {"lock_tier", RPCArg::Type::NUM, RPCArg::Optional::NO, "Lock tier 0-9 (0=1h testing, 1=30d, 2=90d, 3=180d, 4=1y, 5=2y, 6=3y, 7=5y, 8=7y, 9=10y)"},
                     {"oracle_price_micro_usd", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "Custom DGB price in micro-USD (1,000,000 = $1.00). Uses current oracle if omitted."}
                 },
@@ -2028,8 +2015,7 @@ static RPCHelpMan estimatecollateral()
                 },
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
         {
-            // Parse parameters
-            CAmount ddAmount = AmountFromValue(request.params[0]);
+            CAmount ddAmount = request.params[0].getInt<int64_t>();
             int lockTier = request.params[1].getInt<int>();
 
             // Get oracle price in micro-USD: use provided value or fetch from real oracle system

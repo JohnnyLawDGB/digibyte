@@ -206,6 +206,8 @@ void TestTransactionsWidget(interfaces::Node& node, const std::shared_ptr<wallet
     transactionsWidget.setClientModel(mini_gui.clientModel.get());
 
     QVERIFY(&transactionsWidget != nullptr);
+
+    transactionsWidget.updateView();
 }
 
 } // namespace
@@ -332,5 +334,5 @@ void DigiDollarWidgetTests::positionsWidgetTests()
 
 void DigiDollarWidgetTests::transactionsWidgetTests()
 {
-    QSKIP("Skipped: TransactionsWidget requires RPC infrastructure not available in Qt test environment");
+    QSKIP("TransactionsWidget::updateView() requires RPC infrastructure");
 }

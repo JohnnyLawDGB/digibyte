@@ -590,12 +590,12 @@ static RPCHelpMan getdigidollardeploymentinfo()
                         {RPCResult::Type::NUM, "start_time", "Start time for deployment signaling"},
                         {RPCResult::Type::NUM, "timeout", "Timeout for deployment"},
                         {RPCResult::Type::NUM, "min_activation_height", "Minimum activation height"},
-                        {RPCResult::Type::NUM, "activation_height", "Actual activation height (if activated)"},
-                        {RPCResult::Type::NUM, "blocks_until_timeout", "Blocks remaining until timeout (if applicable)"},
-                        {RPCResult::Type::NUM, "signaling_blocks", "Blocks signaling support in current period"},
-                        {RPCResult::Type::NUM, "threshold", "Threshold required for activation"},
-                        {RPCResult::Type::NUM, "period_blocks", "Number of blocks in signaling period"},
-                        {RPCResult::Type::NUM, "progress_percent", "Signaling progress as percentage"}
+                        {RPCResult::Type::NUM, "activation_height", /*optional=*/true, "Actual activation height (only present when active)"},
+                        {RPCResult::Type::NUM, "blocks_until_timeout", /*optional=*/true, "Blocks remaining until timeout (only during started/locked_in)"},
+                        {RPCResult::Type::NUM, "signaling_blocks", /*optional=*/true, "Blocks signaling support in current period (only during started/locked_in)"},
+                        {RPCResult::Type::NUM, "threshold", /*optional=*/true, "Threshold required for activation (only during started/locked_in)"},
+                        {RPCResult::Type::NUM, "period_blocks", /*optional=*/true, "Number of blocks in signaling period (only during started/locked_in)"},
+                        {RPCResult::Type::NUM, "progress_percent", /*optional=*/true, "Signaling progress as percentage (only during started/locked_in)"}
                     }
                 },
                 RPCExamples{

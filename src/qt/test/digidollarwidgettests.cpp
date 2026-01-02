@@ -334,5 +334,24 @@ void DigiDollarWidgetTests::positionsWidgetTests()
 
 void DigiDollarWidgetTests::transactionsWidgetTests()
 {
-    QSKIP("TransactionsWidget::updateView() requires RPC infrastructure");
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        QWARN("Skipping DigiDollarWidgetTests on mac build with 'minimal' platform set due to Qt bugs.");
+        return;
+    }
+#endif
+    TestChain100Setup test;
+    for (int i = 0; i < 5; ++i) {
+        test.CreateAndProcessBlock({}, GetScriptForRawPubKey(test.coinbaseKey.GetPubKey()));
+    }
+    auto wallet_loader = interfaces::MakeWalletLoader(*test.m_node.chain, *Assert(test.m_node.args));
+    test.m_node.wallet_loader = wallet_loader.get();
+    m_node.setContext(&test.m_node);
+
+    const std::shared_ptr<wallet::CWallet>& wallet = SetupDescriptorsWallet(m_node, test);
+    
+    // TransactionsWidget has exception handling in populateTable(), so it should
+    // gracefully handle the case where RPC (listdigidollartxs) is not available
+    // by displaying an error message rather than crashing.
+    TestTransactionsWidget(m_node, wallet);
 }

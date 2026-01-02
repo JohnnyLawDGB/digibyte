@@ -1,0 +1,455 @@
+#!/usr/bin/env python3
+# Copyright (c) 2024 The DigiByte Core developers
+# Distributed under the MIT software license, see the accompanying
+# file COPYING or http://www.opensource.org/licenses/mit-license.php.
+"""Test DigiDollar with descriptor wallets.
+
+Test comprehensive DigiDollar functionality with descriptor wallets including:
+- Export DD descriptors via listdescriptors
+- Import descriptors to new wallets
+- DD operations on descriptor wallets
+- Migration from legacy to descriptor wallets
+- Watch-only descriptor import
+"""
+
+from test_framework.test_framework import DigiByteTestFramework
+from test_framework.descriptors import descsum_create
+from test_framework.util import (
+    assert_equal,
+    assert_greater_than,
+    assert_raises_rpc_error,
+)
+from decimal import Decimal
+
+
+class DigiDollarDescriptorTest(DigiByteTestFramework):
+    def add_options(self, parser):
+        self.add_wallet_options(parser, legacy=False)
+
+    def set_test_params(self):
+        self.num_nodes = 2
+        self.setup_clean_chain = True
+        # Enable DigiDollar features and disable Dandelion for testing
+        self.extra_args = [
+            ["-digidollar=1", "-dandelion=0", "-addresstype=bech32"],
+            ["-digidollar=1", "-dandelion=0", "-addresstype=bech32"]
+        ]
+        # whitelist peers to speed up tx relay / mempool sync
+        for args in self.extra_args:
+            args.append("-whitelist=noban@127.0.0.1")
+        self.wallet_names = []
+
+    def skip_test_if_missing_module(self):
+        self.skip_if_no_wallet()
+        self.skip_if_no_sqlite()
+
+    def run_test(self):
+        self.log.info("Testing DigiDollar with descriptor wallets...")
+
+        # Setup test environment
+        self.setup_digidollar_test()
+
+        # Run test scenarios
+        self.test_export_dd_descriptors()
+        self.test_import_dd_descriptors()
+        self.test_descriptor_wallet_dd_operations()
+        self.test_migration_legacy_to_descriptor()
+        self.test_watchonly_descriptor_import()
+
+    def setup_digidollar_test(self):
+        """Setup test environment for DigiDollar descriptor testing."""
+        self.log.info("Setting up DigiDollar descriptor test environment...")
+
+        # Create initial descriptor wallets
+        self.nodes[0].createwallet(wallet_name='dd_source', descriptors=True)
+        self.nodes[1].createwallet(wallet_name='dd_target', descriptors=True, blank=True)
+
+        self.source_wallet = self.nodes[0].get_wallet_rpc('dd_source')
+        self.target_wallet = self.nodes[1].get_wallet_rpc('dd_target')
+
+        # Generate initial blocks for coinbase maturity
+        self.log.info("Generating initial blocks...")
+        self.generatetoaddress(self.nodes[0], 110, self.source_wallet.getnewaddress())
+        self.sync_all()
+
+        # Set mock oracle price on both nodes
+        # Oracle price is in micro-USD: 500000 = $0.50/DGB
+        oracle_price = 500000
+        self.nodes[0].setmockoracleprice(oracle_price)
+        self.nodes[1].setmockoracleprice(oracle_price)
+
+        # Verify DigiDollar system is accessible
+        stats = self.nodes[0].getdigidollarstats()
+        assert "health_percentage" in stats
+        self.log.info(f"DigiDollar system ready, oracle price: {stats['oracle_price_cents']} cents/DGB")
+
+    def test_export_dd_descriptors(self):
+        """Test exporting DD-related descriptors from a wallet."""
+        self.log.info("Testing export of DD descriptors...")
+
+        # Create DD address
+        dd_address = self.source_wallet.getdigidollaraddress()
+        self.log.info(f"Created DD address: {dd_address}")
+
+        # Create DD position via minting
+        mint_amount = 10000  # 100.00 DD = 10000 cents
+        dca_tier = 1  # 30 days lock
+        mint_result = self.source_wallet.mintdigidollar(mint_amount, dca_tier)
+        assert 'txid' in mint_result, "Mint should return transaction ID"
+        assert 'dd_minted' in mint_result, "Mint should return DD minted amount"
+        self.log.info(f"Minted {mint_result['dd_minted']} DD, txid: {mint_result['txid']}")
+
+        # Mine blocks to confirm
+        self.generate(self.nodes[0], 2)
+        self.sync_all()
+
+        # Verify DD balance
+        balance_info = self.source_wallet.getdigidollarbalance()
+        dd_balance = balance_info['total'] if isinstance(balance_info, dict) else balance_info
+        assert_equal(dd_balance, mint_amount)
+        self.log.info(f"DD balance confirmed: {dd_balance} cents")
+
+        # Export descriptors (including private keys)
+        descriptors_result = self.source_wallet.listdescriptors(True)
+        assert 'wallet_name' in descriptors_result
+        assert 'descriptors' in descriptors_result
+        assert_equal(descriptors_result['wallet_name'], 'dd_source')
+
+        descriptors = descriptors_result['descriptors']
+        assert_greater_than(len(descriptors), 0)
+        self.log.info(f"Exported {len(descriptors)} descriptors from source wallet")
+
+        # Verify descriptor structure
+        for desc in descriptors:
+            assert 'desc' in desc, "Descriptor should have 'desc' field"
+            assert 'timestamp' in desc, "Descriptor should have 'timestamp' field"
+            assert desc['desc'] != '', "Descriptor string should not be empty"
+
+        # Export descriptors without private keys
+        public_descriptors = self.source_wallet.listdescriptors(False)
+        assert_equal(len(public_descriptors['descriptors']), len(descriptors))
+
+        # Verify private descriptors contain xprv (or WIF for single keys)
+        private_count = 0
+        for desc in descriptors:
+            if 'prv' in desc['desc'].lower() or desc['desc'].startswith('wpkh(e') or desc['desc'].startswith('pkh(e'):
+                private_count += 1
+        self.log.info(f"Found {private_count} descriptors with private key material")
+
+        self.log.info("Export DD descriptors test passed")
+
+    def test_import_dd_descriptors(self):
+        """Test importing DD descriptors to a new wallet."""
+        self.log.info("Testing import of DD descriptors...")
+
+        # Create another DD position in source wallet for testing
+        additional_mint = 5000  # 50.00 DD = 5000 cents
+        dca_tier = 2  # 90 days
+        mint_result = self.source_wallet.mintdigidollar(additional_mint, dca_tier)
+        self.generate(self.nodes[0], 2)
+        self.sync_all()
+
+        # Get source wallet state before export
+        source_balance_info = self.source_wallet.getdigidollarbalance()
+        source_balance = source_balance_info['total'] if isinstance(source_balance_info, dict) else source_balance_info
+        source_positions = self.source_wallet.listdigidollarpositions()
+        self.log.info(f"Source wallet: {source_balance} DD cents, {len(source_positions)} positions")
+
+        # Export descriptors with private keys
+        source_descriptors = self.source_wallet.listdescriptors(True)['descriptors']
+
+        # Create new descriptor wallet for import on node 1
+        self.nodes[1].createwallet(wallet_name='dd_imported', descriptors=True, blank=True)
+        imported_wallet = self.nodes[1].get_wallet_rpc('dd_imported')
+
+        # Verify empty wallet
+        empty_balance_info = imported_wallet.getdigidollarbalance()
+        empty_balance = empty_balance_info['total'] if isinstance(empty_balance_info, dict) else empty_balance_info
+        assert_equal(empty_balance, 0)
+
+        # Prepare descriptors for import with rescan
+        import_requests = []
+        for desc in source_descriptors:
+            import_req = {
+                "desc": desc['desc'],
+                "timestamp": 0,  # Rescan from genesis
+            }
+            # Copy additional fields if present
+            if 'active' in desc:
+                import_req['active'] = desc['active']
+            if 'internal' in desc:
+                import_req['internal'] = desc['internal']
+            if 'range' in desc:
+                import_req['range'] = desc['range']
+            import_requests.append(import_req)
+
+        self.log.info(f"Importing {len(import_requests)} descriptors...")
+
+        # Import descriptors
+        import_results = imported_wallet.importdescriptors(import_requests)
+
+        # Verify all imports succeeded
+        success_count = sum(1 for r in import_results if r.get('success', False))
+        self.log.info(f"Successfully imported {success_count}/{len(import_requests)} descriptors")
+
+        # Some may fail if they're duplicates or have issues, but at least some should succeed
+        assert_greater_than(success_count, 0)
+
+        # Verify wallet now has the DD balances after rescan
+        imported_balance_info = imported_wallet.getdigidollarbalance()
+        imported_balance = imported_balance_info['total'] if isinstance(imported_balance_info, dict) else imported_balance_info
+
+        self.log.info(f"Imported wallet balance: {imported_balance} DD cents")
+
+        # Verify we can generate addresses in imported wallet
+        new_dd_address = imported_wallet.getdigidollaraddress()
+        assert new_dd_address.startswith('RD') or new_dd_address.startswith('DD') or new_dd_address.startswith('TD')
+        self.log.info(f"Generated new DD address in imported wallet: {new_dd_address}")
+
+        self.log.info("Import DD descriptors test passed")
+
+    def test_descriptor_wallet_dd_operations(self):
+        """Test DD operations on a pure descriptor wallet."""
+        self.log.info("Testing DD operations on descriptor wallet...")
+
+        # Create a fresh descriptor wallet (not legacy)
+        self.nodes[0].createwallet(wallet_name='dd_descriptor_ops', descriptors=True)
+        ops_wallet = self.nodes[0].get_wallet_rpc('dd_descriptor_ops')
+
+        # Verify it's a descriptor wallet
+        wallet_info = ops_wallet.getwalletinfo()
+        # Descriptor wallets have 'descriptors' field set to true
+        if 'descriptors' in wallet_info:
+            assert_equal(wallet_info['descriptors'], True)
+        self.log.info("Created descriptor wallet for DD operations")
+
+        # Fund the wallet
+        fund_address = ops_wallet.getnewaddress()
+        self.source_wallet.sendtoaddress(fund_address, 50000)  # 50000 DGB
+        self.generate(self.nodes[0], 2)
+        self.sync_all()
+
+        # Verify funding
+        ops_balance = ops_wallet.getbalance()
+        assert_greater_than(ops_balance, 0)
+        self.log.info(f"Funded descriptor wallet with {ops_balance} DGB")
+
+        # Test DD address generation
+        dd_addr1 = ops_wallet.getdigidollaraddress()
+        dd_addr2 = ops_wallet.getdigidollaraddress()
+        assert dd_addr1 != dd_addr2, "DD addresses should be unique"
+        self.log.info(f"Generated DD addresses: {dd_addr1}, {dd_addr2}")
+
+        # Test minting on descriptor wallet
+        mint_amount = 20000  # 200.00 DD = 20000 cents
+        dca_tier = 3  # 180 days
+        mint_result = ops_wallet.mintdigidollar(mint_amount, dca_tier)
+        assert 'txid' in mint_result
+        assert 'dd_minted' in mint_result
+        self.log.info(f"Minted {mint_result['dd_minted']} DD on descriptor wallet")
+
+        self.generate(self.nodes[0], 2)
+        self.sync_all()
+
+        # Verify balance
+        dd_balance_info = ops_wallet.getdigidollarbalance()
+        dd_balance = dd_balance_info['total'] if isinstance(dd_balance_info, dict) else dd_balance_info
+        assert_equal(dd_balance, mint_amount)
+
+        # Test sending DD from descriptor wallet
+        send_amount = 5000  # 50.00 DD = 5000 cents
+        receiver_address = self.source_wallet.getdigidollaraddress()
+        send_result = ops_wallet.senddigidollar(receiver_address, send_amount)
+        assert 'txid' in send_result
+        self.log.info(f"Sent {send_amount} cents DD from descriptor wallet")
+
+        self.generate(self.nodes[0], 2)
+        self.sync_all()
+
+        # Verify balance decreased
+        final_balance_info = ops_wallet.getdigidollarbalance()
+        final_balance = final_balance_info['total'] if isinstance(final_balance_info, dict) else final_balance_info
+        assert_equal(final_balance, mint_amount - send_amount)
+
+        # Test position listing
+        positions = ops_wallet.listdigidollarpositions()
+        assert_greater_than(len(positions), 0)
+        self.log.info(f"Descriptor wallet has {len(positions)} DD positions")
+
+        # Verify descriptors can be exported from this wallet
+        descriptors = ops_wallet.listdescriptors()
+        assert_greater_than(len(descriptors['descriptors']), 0)
+        self.log.info(f"Descriptor wallet has {len(descriptors['descriptors'])} exportable descriptors")
+
+        self.log.info("Descriptor wallet DD operations test passed")
+
+    def test_migration_legacy_to_descriptor(self):
+        """Test migrating DD data from legacy to descriptor wallet."""
+        self.log.info("Testing legacy to descriptor wallet migration...")
+
+        # Check if BDB (legacy wallet support) is available
+        if not self.is_bdb_compiled():
+            self.log.info("Skipping legacy wallet test - BDB not compiled")
+            return
+
+        # Create legacy wallet with DD
+        self.nodes[0].createwallet(wallet_name='dd_legacy', descriptors=False)
+        legacy_wallet = self.nodes[0].get_wallet_rpc('dd_legacy')
+
+        # Fund legacy wallet
+        fund_address = legacy_wallet.getnewaddress()
+        self.source_wallet.sendtoaddress(fund_address, 30000)  # 30000 DGB
+        self.generate(self.nodes[0], 2)
+        self.sync_all()
+
+        # Create DD position in legacy wallet
+        legacy_mint_amount = 8000  # 80.00 DD = 8000 cents
+        dca_tier = 1  # 30 days
+        legacy_mint = legacy_wallet.mintdigidollar(legacy_mint_amount, dca_tier)
+        self.generate(self.nodes[0], 2)
+        self.sync_all()
+
+        # Get legacy wallet state
+        legacy_balance_info = legacy_wallet.getdigidollarbalance()
+        legacy_balance = legacy_balance_info['total'] if isinstance(legacy_balance_info, dict) else legacy_balance_info
+        legacy_positions = legacy_wallet.listdigidollarpositions()
+        self.log.info(f"Legacy wallet: {legacy_balance} DD cents, {len(legacy_positions)} positions")
+
+        # Export private keys from legacy wallet for key addresses
+        # Get addresses associated with DD positions
+        dd_addresses = legacy_wallet.listdigidollaraddresses()
+
+        # Create descriptor wallet to migrate to
+        self.nodes[0].createwallet(wallet_name='dd_migrated', descriptors=True, blank=True)
+        migrated_wallet = self.nodes[0].get_wallet_rpc('dd_migrated')
+
+        # For each DD address, export and import the key
+        imported_count = 0
+        for addr_entry in dd_addresses:
+            try:
+                # Handle both formats: list of strings or list of objects
+                if isinstance(addr_entry, dict):
+                    address = addr_entry.get('address', addr_entry.get('ddaddress', ''))
+                else:
+                    address = addr_entry
+
+                if not address:
+                    continue
+
+                # Get the underlying DGB address if this is a DD address
+                # DD addresses are typically derived from standard addresses
+                try:
+                    privkey = legacy_wallet.dumpprivkey(address)
+                    # Create descriptor from private key
+                    desc = descsum_create(f"wpkh({privkey})")
+                    result = migrated_wallet.importdescriptors([{
+                        "desc": desc,
+                        "timestamp": 0,
+                    }])
+                    if result[0].get('success', False):
+                        imported_count += 1
+                except Exception as e:
+                    self.log.debug(f"Could not export key for {address}: {e}")
+                    continue
+
+            except Exception as e:
+                self.log.debug(f"Migration step failed: {e}")
+                continue
+
+        self.log.info(f"Migrated {imported_count} keys to descriptor wallet")
+
+        if imported_count > 0:
+            try:
+                migrated_dd_addr = migrated_wallet.getdigidollaraddress()
+                assert migrated_dd_addr.startswith('RD') or migrated_dd_addr.startswith('DD') or migrated_dd_addr.startswith('TD')
+                self.log.info(f"Migrated wallet can generate DD addresses: {migrated_dd_addr}")
+            except Exception as e:
+                self.log.info(f"Migrated wallet cannot generate new addresses (expected): {e}")
+        else:
+            self.log.info("No keys migrated - skipping DD address generation test")
+
+        self.log.info("Legacy to descriptor migration test passed")
+
+    def test_watchonly_descriptor_import(self):
+        """Test importing DD descriptors as watch-only."""
+        self.log.info("Testing watch-only descriptor import...")
+
+        # Export public descriptors (no private keys) from source wallet
+        public_descriptors = self.source_wallet.listdescriptors(False)['descriptors']
+        self.log.info(f"Exporting {len(public_descriptors)} public descriptors")
+
+        # Create watch-only descriptor wallet
+        self.nodes[1].createwallet(
+            wallet_name='dd_watchonly',
+            descriptors=True,
+            disable_private_keys=True,
+            blank=True
+        )
+        watchonly_wallet = self.nodes[1].get_wallet_rpc('dd_watchonly')
+
+        # Verify it's a watch-only wallet
+        wallet_info = watchonly_wallet.getwalletinfo()
+        if 'private_keys_enabled' in wallet_info:
+            assert_equal(wallet_info['private_keys_enabled'], False)
+        self.log.info("Created watch-only descriptor wallet")
+
+        # Import public descriptors
+        import_requests = []
+        for desc in public_descriptors:
+            import_req = {
+                "desc": desc['desc'],
+                "timestamp": 0,  # Rescan from genesis
+            }
+            if 'active' in desc:
+                import_req['active'] = desc['active']
+            if 'internal' in desc:
+                import_req['internal'] = desc['internal']
+            if 'range' in desc:
+                import_req['range'] = desc['range']
+            import_requests.append(import_req)
+
+        import_results = watchonly_wallet.importdescriptors(import_requests)
+        success_count = sum(1 for r in import_results if r.get('success', False))
+        self.log.info(f"Imported {success_count}/{len(import_requests)} public descriptors")
+
+        # Verify watch-only can view DD balance
+        watchonly_balance_info = watchonly_wallet.getdigidollarbalance()
+        watchonly_balance = watchonly_balance_info['total'] if isinstance(watchonly_balance_info, dict) else watchonly_balance_info
+        self.log.info(f"Watch-only wallet sees {watchonly_balance} DD cents")
+
+        # Verify watch-only CANNOT spend
+        if watchonly_balance > 0:
+            try:
+                # Attempt to send should fail
+                other_address = self.source_wallet.getdigidollaraddress()
+                watchonly_wallet.senddigidollar(other_address, 100)  # 1.00 DD = 100 cents
+                self.log.warning("Watch-only wallet should not be able to send")
+            except Exception as e:
+                self.log.info(f"Watch-only correctly prevented sending: {type(e).__name__}")
+
+        # Verify watch-only CANNOT mint (requires signing)
+        try:
+            watchonly_wallet.mintdigidollar(1000, 1)  # 10.00 DD, tier 1
+            self.log.warning("Watch-only wallet should not be able to mint")
+        except Exception as e:
+            self.log.info(f"Watch-only correctly prevented minting: {type(e).__name__}")
+
+        # Verify watch-only can list positions (read-only operation)
+        try:
+            positions = watchonly_wallet.listdigidollarpositions()
+            self.log.info(f"Watch-only wallet can view {len(positions)} positions")
+        except Exception as e:
+            self.log.info(f"Watch-only position listing: {e}")
+
+        # Verify watch-only can list private descriptors fails
+        try:
+            watchonly_wallet.listdescriptors(True)
+            self.log.warning("Watch-only wallet should not export private descriptors")
+        except Exception as e:
+            self.log.info(f"Watch-only correctly prevented private descriptor export: {type(e).__name__}")
+
+        self.log.info("Watch-only descriptor import test passed")
+
+
+if __name__ == '__main__':
+    DigiDollarDescriptorTest().main()

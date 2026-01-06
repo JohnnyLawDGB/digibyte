@@ -661,9 +661,6 @@ BOOST_AUTO_TEST_CASE(all_same_prices)
     LogPrintf("Test PASSED: All same prices = %lld\n", consensus);
 }
 
-/**
- * Test: Bundle with maximum price values
- */
 BOOST_AUTO_TEST_CASE(maximum_price_values)
 {
     LogPrintf("Test: Bundle with maximum price values\n");
@@ -678,8 +675,8 @@ BOOST_AUTO_TEST_CASE(maximum_price_values)
     bundle.epoch = GetCurrentEpoch(block_height);
     bundle.timestamp = timestamp;
 
-    // Use large but valid prices (100 million micro-USD = $100)
-    uint64_t prices[] = {99000000, 100000000, 101000000};
+    // MAX_PRICE_MICRO_USD = 100000000 ($100), so all prices must be <= 100000000
+    uint64_t prices[] = {98000000, 99000000, 100000000};
     for (size_t i = 0; i < 3; ++i) {
         bundle.messages.push_back(CreateSignedOracleMessage(
             oracle_keys[i], i, prices[i], timestamp, block_height));
@@ -687,8 +684,8 @@ BOOST_AUTO_TEST_CASE(maximum_price_values)
 
     CAmount consensus = OracleBundleManager::CalculateConsensusPrice(bundle, params);
 
-    // Should be median: 100000000
-    BOOST_CHECK_EQUAL(consensus, 100000000);
+    // Median of {98000000, 99000000, 100000000} = 99000000
+    BOOST_CHECK_EQUAL(consensus, 99000000);
 
     LogPrintf("Test PASSED: Maximum price consensus = %lld\n", consensus);
 }

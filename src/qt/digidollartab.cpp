@@ -13,13 +13,14 @@
 #include <qt/digidollartransactionswidget.h>
 #include <qt/walletmodel.h>
 #include <qt/clientmodel.h>
+#include <qt/platformstyle.h>
 
 #include <QTabWidget>
 #include <QTabBar>
 #include <QVBoxLayout>
 #include <QTimer>
 
-DigiDollarTab::DigiDollarTab(QWidget *parent) :
+DigiDollarTab::DigiDollarTab(const PlatformStyle *platformStyle, QWidget *parent) :
     QWidget(parent),
     m_tabWidget(nullptr),
     m_mainLayout(nullptr),
@@ -31,7 +32,8 @@ DigiDollarTab::DigiDollarTab(QWidget *parent) :
     m_positionsWidget(nullptr),
     m_transactionsWidget(nullptr),
     m_walletModel(nullptr),
-    m_clientModel(nullptr)
+    m_clientModel(nullptr),
+    m_platformStyle(platformStyle)
 {
     setupUI();
     connectSignals();
@@ -61,7 +63,7 @@ void DigiDollarTab::setupUI()
     m_receiveWidget = new DigiDollarReceiveWidget(this);
     m_receiveWidget->setObjectName("receiveWidget");
 
-    m_sendWidget = new DigiDollarSendWidget(this);
+    m_sendWidget = new DigiDollarSendWidget(m_platformStyle, this);
     m_sendWidget->setObjectName("sendWidget");
 
     m_mintWidget = new DigiDollarMintWidget(this);

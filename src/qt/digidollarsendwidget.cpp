@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <qt/digidollarsendwidget.h>
+#include <qt/ddaddressbookpage.h>
 
 #include <qt/walletmodel.h>
 #include <qt/clientmodel.h>
@@ -44,7 +45,7 @@
 
 using namespace std::chrono_literals;
 
-DigiDollarSendWidget::DigiDollarSendWidget(QWidget *parent) :
+DigiDollarSendWidget::DigiDollarSendWidget(const PlatformStyle *platformStyle, QWidget *parent) :
     QWidget(parent),
     m_mainLayout(nullptr),
     m_addressFrame(nullptr),
@@ -52,6 +53,7 @@ DigiDollarSendWidget::DigiDollarSendWidget(QWidget *parent) :
     m_addressLabel(nullptr),
     m_addressEdit(nullptr),
     m_pasteAddressButton(nullptr),
+    m_addressBookButton(nullptr),
     m_addressValidationLabel(nullptr),
     m_amountFrame(nullptr),
     m_amountLayout(nullptr),
@@ -78,10 +80,15 @@ DigiDollarSendWidget::DigiDollarSendWidget(QWidget *parent) :
     m_coinControlButton(nullptr),
     m_coinControlQuantityLabel(nullptr),
     m_coinControlAmountLabel(nullptr),
+    m_noteFrame(nullptr),
+    m_noteLayout(nullptr),
+    m_noteLabel(nullptr),
+    m_noteEdit(nullptr),
     m_addressValidator(nullptr),
     m_amountValidator(nullptr),
     m_walletModel(nullptr),
     m_clientModel(nullptr),
+    m_platformStyle(platformStyle),
     m_availableBalance(0.0),
     m_oraclePrice(1.0),
     m_estimatedFee(0.001)  // TODO: Implement dynamic fee estimation based on transaction size and network conditions
@@ -111,6 +118,7 @@ void DigiDollarSendWidget::setupUI()
     setupCoinControlSection();
     setupAddressSection();
     setupAmountSection();
+    setupNoteSection();
     setupFeeSection();
     setupButtonSection();
 
@@ -193,14 +201,19 @@ void DigiDollarSendWidget::setupAddressSection()
     m_addressEdit->setFont(monospaceFont);
 
     m_pasteAddressButton = new QToolButton(this);
-    m_pasteAddressButton->setText("");
     m_pasteAddressButton->setToolTip(tr("Paste address from clipboard (Alt+P)"));
-    m_pasteAddressButton->setIconSize(QSize(16, 16));
+    m_pasteAddressButton->setIconSize(QSize(22, 22));
     m_pasteAddressButton->setShortcut(QKeySequence("Alt+P"));
-    // Note: Icon would be set by platform style in real implementation
-    m_pasteAddressButton->setText("♾"); // Clipboard symbol as fallback
+    m_pasteAddressButton->setIcon(m_platformStyle->SingleColorIcon(":/icons/editpaste"));
+
+    m_addressBookButton = new QToolButton(this);
+    m_addressBookButton->setToolTip(tr("Choose from address book (Alt+A)"));
+    m_addressBookButton->setIconSize(QSize(22, 22));
+    m_addressBookButton->setShortcut(QKeySequence("Alt+A"));
+    m_addressBookButton->setIcon(m_platformStyle->SingleColorIcon(":/icons/address-book"));
 
     addressInputLayout->addWidget(m_addressEdit);
+    addressInputLayout->addWidget(m_addressBookButton);
     addressInputLayout->addWidget(m_pasteAddressButton);
 
     m_addressLayout->addWidget(m_addressLabel, 0, 0);
@@ -290,6 +303,38 @@ void DigiDollarSendWidget::setupAmountSection()
     m_amountLayout->setColumnStretch(1, 1);
 
     m_mainLayout->addWidget(m_amountFrame);
+}
+
+void DigiDollarSendWidget::setupNoteSection()
+{
+    m_noteFrame = new QFrame(this);
+    m_noteFrame->setFrameStyle(QFrame::StyledPanel);
+    m_noteFrame->setFrameShadow(QFrame::Sunken);
+    m_noteFrame->setObjectName("noteFrame");
+
+    m_noteLayout = new QGridLayout(m_noteFrame);
+    m_noteLayout->setSpacing(8);
+    m_noteLayout->setContentsMargins(10, 10, 10, 10);
+    m_noteLayout->setHorizontalSpacing(12);
+    m_noteLayout->setVerticalSpacing(8);
+
+    m_noteLabel = new QLabel(tr("Label:"), this);
+    m_noteLabel->setToolTip(tr("Enter a label to add this address to your address book"));
+
+    m_noteEdit = new QLineEdit(this);
+    m_noteEdit->setObjectName("noteEdit");
+    m_noteEdit->setPlaceholderText(tr("Enter a label for this address to add it to the list of used addresses"));
+    m_noteEdit->setMaxLength(256);
+    m_noteEdit->setToolTip(tr("Enter a label for this address to add it to your address book"));
+
+    m_noteLayout->addWidget(m_noteLabel, 0, 0);
+    m_noteLayout->addWidget(m_noteEdit, 0, 1);
+
+    m_noteLayout->setColumnMinimumWidth(0, 110);
+    m_noteLayout->setColumnStretch(0, 0);
+    m_noteLayout->setColumnStretch(1, 1);
+
+    m_mainLayout->addWidget(m_noteFrame);
 }
 
 void DigiDollarSendWidget::setupFeeSection()
@@ -394,6 +439,8 @@ void DigiDollarSendWidget::connectSignals()
             this, &DigiDollarSendWidget::onUseAvailableBalanceClicked);
     connect(m_pasteAddressButton, &QToolButton::clicked,
             this, &DigiDollarSendWidget::onPasteAddressClicked);
+    connect(m_addressBookButton, &QToolButton::clicked,
+            this, &DigiDollarSendWidget::onAddressBookClicked);
 
     // Connect coin control button
     connect(m_coinControlButton, &QPushButton::clicked,
@@ -575,8 +622,9 @@ void DigiDollarSendWidget::onClearClicked()
 {
     m_addressEdit->clear();
     m_amountEdit->clear();
-    onAddressChanged(); // Reset validation
-    onAmountChanged();  // Reset amounts
+    if (m_noteEdit) m_noteEdit->clear();
+    onAddressChanged();
+    onAmountChanged();
 }
 
 void DigiDollarSendWidget::onUseAvailableBalanceClicked()
@@ -594,6 +642,21 @@ void DigiDollarSendWidget::onPasteAddressClicked()
 {
     m_addressEdit->setText(QApplication::clipboard()->text());
     onAddressChanged();
+}
+
+void DigiDollarSendWidget::onAddressBookClicked()
+{
+    if (!m_walletModel) return;
+
+    DDAddressBookPage dlg(m_platformStyle, DDAddressBookPage::ForSelection, this);
+    dlg.setWalletModel(m_walletModel);
+    if (dlg.exec() == QDialog::Accepted) {
+        QString address = dlg.getReturnValue();
+        if (!address.isEmpty()) {
+            m_addressEdit->setText(address);
+            onAddressChanged();
+        }
+    }
 }
 
 // REMOVED: applyTheme() method
@@ -836,11 +899,10 @@ void DigiDollarSendWidget::executeTransfer(const QString& address, double amount
     m_clearButton->setEnabled(false);
     m_useAvailableBalanceButton->setEnabled(false);
 
-    // Convert amount from double to CAmount (cents)
     CAmount amountCents = static_cast<CAmount>(amount * 100);
+    QString note = m_noteEdit ? m_noteEdit->text().trimmed() : QString();
 
-    // Call the wallet model to send DigiDollar
-    WalletModel::DigiDollarSendResult result = m_walletModel->sendDigiDollar(address, amountCents, "");
+    WalletModel::DigiDollarSendResult result = m_walletModel->sendDigiDollar(address, amountCents, note);
 
     // Close progress dialog
     progress.close();

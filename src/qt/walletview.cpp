@@ -65,7 +65,7 @@ WalletView::WalletView(WalletModel* wallet_model, const PlatformStyle* _platform
     sendCoinsPage = new SendCoinsDialog(platformStyle);
     sendCoinsPage->setModel(walletModel);
 
-    digiDollarPage = new DigiDollarTab(this);
+    digiDollarPage = new DigiDollarTab(platformStyle, this);
     digiDollarPage->setWalletModel(walletModel);
 
     usedSendingAddressesPage = new AddressBookPage(platformStyle, AddressBookPage::ForEditing, AddressBookPage::SendingTab, this);

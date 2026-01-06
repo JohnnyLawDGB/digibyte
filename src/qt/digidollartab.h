@@ -16,6 +16,7 @@ class DigiDollarPositionsWidget;
 class DigiDollarTransactionsWidget;
 class WalletModel;
 class ClientModel;
+class PlatformStyle;
 
 QT_BEGIN_NAMESPACE
 class QTabWidget;
@@ -32,7 +33,7 @@ class DigiDollarTab : public QWidget
     Q_OBJECT
 
 public:
-    explicit DigiDollarTab(QWidget *parent = nullptr);
+    explicit DigiDollarTab(const PlatformStyle *platformStyle, QWidget *parent = nullptr);
     ~DigiDollarTab();
 
     void setWalletModel(WalletModel* model);
@@ -83,6 +84,7 @@ private:
     // Models
     WalletModel* m_walletModel;
     ClientModel* m_clientModel;
+    const PlatformStyle* m_platformStyle;
 };
 
 #endif // DIGIBYTE_QT_DIGIDOLLARTAB_H

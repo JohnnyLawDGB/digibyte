@@ -14,6 +14,8 @@ class WalletModel;
 class ClientModel;
 class DigiDollarAddressValidator;
 class AmountValidator;
+class DDAddressBookPage;
+class PlatformStyle;
 
 namespace wallet {
 class DDCoinControl;
@@ -46,7 +48,7 @@ class DigiDollarSendWidget : public QWidget
     Q_OBJECT
 
 public:
-    explicit DigiDollarSendWidget(QWidget *parent = nullptr);
+    explicit DigiDollarSendWidget(const PlatformStyle *platformStyle, QWidget *parent = nullptr);
     ~DigiDollarSendWidget();
 
     void setWalletModel(WalletModel* model);
@@ -74,9 +76,8 @@ private Q_SLOTS:
     void onClearClicked();
     /** Use available balance */
     void onUseAvailableBalanceClicked();
-    /** Paste address from clipboard */
     void onPasteAddressClicked();
-    /** Coin control button clicked */
+    void onAddressBookClicked();
     void onCoinControlButtonClicked();
     /** Update coin control labels */
     void updateCoinControlLabels();
@@ -86,6 +87,7 @@ private:
     void setupCoinControlSection();
     void setupAddressSection();
     void setupAmountSection();
+    void setupNoteSection();
     void setupFeeSection();
     void setupButtonSection();
     void setupStyleSheets();
@@ -122,6 +124,7 @@ private:
     QLabel* m_addressLabel;
     QLineEdit* m_addressEdit;
     QToolButton* m_pasteAddressButton;
+    QToolButton* m_addressBookButton;
     QLabel* m_addressValidationLabel;
 
     // Amount section
@@ -135,6 +138,12 @@ private:
     QLabel* m_usdEquivalentValue;
     QLabel* m_availableBalanceLabel;
     QLabel* m_availableBalanceValue;
+
+    // Note section
+    QFrame* m_noteFrame;
+    QGridLayout* m_noteLayout;
+    QLabel* m_noteLabel;
+    QLineEdit* m_noteEdit;
 
     // Fee section
     QFrame* m_feeFrame;
@@ -164,6 +173,7 @@ private:
     // Models
     WalletModel* m_walletModel;
     ClientModel* m_clientModel;
+    const PlatformStyle* m_platformStyle;
 
     // Data
     double m_availableBalance;

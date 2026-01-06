@@ -5896,3 +5896,109 @@ QListView#listTransactions::item:hover {
     background-color: rgba(0, 102, 204, 0.2);
 }
 
+/******************************************************
+  LIGHT THEME - DIGIDOLLAR ADDRESS BOOK STYLING
+*******************************************************/
+
+QDialog#DDAddressBookPage {
+    background-color: #ffffff;
+    color: #003366;
+}
+
+QDialog#DDAddressBookPage QLabel {
+    color: #003366;
+    font-weight: bold;
+}
+
+QDialog#DDAddressBookPage QTableWidget {
+    background-color: #A7C6ED;
+    alternate-background-color: #9BB8E8;
+    color: #003366;
+    selection-background-color: #0066CC;
+    selection-color: #ffffff;
+    border: 2px solid #e0e0e0;
+    gridline-color: #e0e0e0;
+    font-size: 11pt;
+}
+
+QDialog#DDAddressBookPage QTableWidget::item {
+    color: #003366 !important;
+    background-color: #A7C6ED !important;
+    padding: 8px;
+    border: none;
+}
+
+QDialog#DDAddressBookPage QTableWidget::item:alternate {
+    background-color: #9BB8E8 !important;
+    color: #003366 !important;
+}
+
+QDialog#DDAddressBookPage QTableWidget::item:selected {
+    background-color: #0066CC !important;
+    color: #ffffff !important;
+}
+
+QDialog#DDAddressBookPage QTableWidget::item:hover {
+    background-color: rgba(0, 102, 204, 0.3) !important;
+    color: #003366 !important;
+}
+
+QDialog#DDAddressBookPage QHeaderView::section {
+    background-color: #0066CC;
+    color: #ffffff;
+    padding: 10px;
+    border: none;
+    font-weight: bold;
+    font-size: 11pt;
+}
+
+QDialog#DDAddressBookPage QPushButton {
+    background-color: #0066CC;
+    color: #ffffff;
+    border: 2px solid #0066CC;
+    border-radius: 4px;
+    padding: 8px 16px;
+    font-weight: bold;
+    min-height: 30px;
+}
+
+QDialog#DDAddressBookPage QPushButton:hover {
+    background-color: #0088ff;
+    border-color: #0088ff;
+}
+
+QDialog#DDAddressBookPage QPushButton:pressed {
+    background-color: #0055aa;
+    border-color: #0055aa;
+}
+
+QDialog#DDAddressBookPage QLineEdit {
+    background-color: #ffffff;
+    color: #003366;
+    border: 2px solid #003366;
+    border-radius: 4px;
+    padding: 8px;
+    font-size: 11pt;
+}
+
+QDialog#DDAddressBookPage QLineEdit:focus {
+    border-color: #0066CC;
+    background-color: #f8f9fa;
+}
+
+QDialog#DDAddressBookPage * {
+    color: #003366 !important;
+}
+
+QDialog#DDAddressBookPage QTableWidget::item:selected * {
+    color: #ffffff !important;
+}
+
+QDialog#DDAddressBookPage QHeaderView::section * {
+    color: #ffffff !important;
+}
+
+QDialog#DDAddressBookPage QPushButton * {
+    color: #ffffff !important;
+}
+

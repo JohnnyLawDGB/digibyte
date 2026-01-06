@@ -5635,3 +5635,88 @@ QListView#listTransactions::item:hover {
     background-color: rgba(0, 68, 136, 0.5);
 }
 
+/******************************************************
+  DARK THEME - DIGIDOLLAR ADDRESS BOOK STYLING
+*******************************************************/
+
+QDialog#DDAddressBookPage {
+    background-color: #002352;
+}
+
+QDialog#DDAddressBookPage QLabel {
+    color: #ffffff !important;
+    font-weight: bold;
+}
+
+QDialog#DDAddressBookPage QTableWidget {
+    background-color: rgba(255, 255, 255, 0.12);
+    alternate-background-color: rgba(255, 255, 255, 0.08);
+    color: #ffffff !important;
+    selection-background-color: #0066CC;
+    selection-color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    gridline-color: rgba(255, 255, 255, 0.2);
+}
+
+QDialog#DDAddressBookPage QTableWidget::item {
+    color: #ffffff !important;
+    padding: 8px;
+}
+
+QDialog#DDAddressBookPage QTableWidget::item:selected {
+    background-color: #0066CC;
+    color: #ffffff;
+}
+
+QDialog#DDAddressBookPage QTableWidget::item:hover {
+    background-color: rgba(0, 102, 204, 0.3);
+    color: #ffffff;
+}
+
+QDialog#DDAddressBookPage QHeaderView::section {
+    background-color: #0066CC;
+    color: #ffffff;
+    padding: 8px;
+    border: none;
+    font-weight: bold;
+    font-size: 11pt;
+}
+
+QDialog#DDAddressBookPage QPushButton {
+    background-color: #0066cc;
+    border: 1px solid #0066cc;
+    color: #ffffff;
+    padding-left: 10px;
+    padding-right: 10px;
+    font-weight: bold;
+    border-radius: 4px;
+    min-height: 28px;
+}
+
+QDialog#DDAddressBookPage QPushButton:hover {
+    background-color: #0088ff;
+    color: #ffffff;
+}
+
+QDialog#DDAddressBookPage QPushButton:pressed {
+    border: 1px solid #9e9e9e;
+}
+
+QDialog#DDAddressBookPage QLineEdit {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+    padding: 6px;
+    font-size: 11pt;
+}
+
+QDialog#DDAddressBookPage QLineEdit:focus {
+    border-color: #0066CC;
+    background-color: rgba(255, 255, 255, 0.15);
+}
+
+QDialog#DDAddressBookPage * {
+    color: #ffffff !important;
+}
+

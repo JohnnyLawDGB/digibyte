@@ -42,6 +42,8 @@ DDAddressBookPage::DDAddressBookPage(const PlatformStyle *platformStyle, Mode mo
     , m_closeButton(nullptr)
     , m_contextMenu(nullptr)
 {
+    setObjectName("DDAddressBookPage");
+
     if (m_mode == ForSelection) {
         setWindowTitle(tr("Choose the address to send coins to"));
     } else {

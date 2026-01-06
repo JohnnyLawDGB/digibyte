@@ -6,6 +6,7 @@
 #include <qt/walletmodel.h>
 #include <qt/guiutil.h>
 #include <qt/platformstyle.h>
+#include <base58.h>
 #include <key_io.h>
 #include <wallet/types.h>
 
@@ -177,7 +178,7 @@ void DDAddressBookPage::refreshAddressList()
     for (const auto& addr : m_walletModel->wallet().getAddresses()) {
         if (addr.purpose == wallet::AddressPurpose::DIGIDOLLAR) {
             QString label = QString::fromStdString(addr.name);
-            QString addressStr = QString::fromStdString(EncodeDestination(addr.dest));
+            QString addressStr = QString::fromStdString(EncodeDigiDollarAddress(addr.dest));
 
             if (!searchText.isEmpty()) {
                 if (!label.toLower().contains(searchText) && !addressStr.toLower().contains(searchText)) {
@@ -259,7 +260,7 @@ void DDAddressBookPage::onEditAddress()
         tr("Label:"), QLineEdit::Normal, labelItem->text(), &ok);
 
     if (ok && newLabel != labelItem->text()) {
-        CTxDestination dest = DecodeDestination(addrItem->text().toStdString());
+        CTxDestination dest = DecodeDigiDollarAddress(addrItem->text().toStdString());
         if (IsValidDestination(dest)) {
             m_walletModel->wallet().setAddressBook(dest, newLabel.toStdString(),
                 wallet::AddressPurpose::DIGIDOLLAR);
@@ -280,7 +281,7 @@ void DDAddressBookPage::onDeleteAddress()
         .arg(address), QMessageBox::Yes | QMessageBox::No);
 
     if (reply == QMessageBox::Yes) {
-        CTxDestination dest = DecodeDestination(address.toStdString());
+        CTxDestination dest = DecodeDigiDollarAddress(address.toStdString());
         if (IsValidDestination(dest)) {
             m_walletModel->wallet().delAddressBook(dest);
             refreshAddressList();

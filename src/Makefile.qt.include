@@ -96,6 +96,7 @@ QT_MOC_CPP = \
   qt/moc_digidollaroverviewwidget.cpp \
   qt/moc_digidollarpositionswidget.cpp \
   qt/moc_digidollarreceiverequest.cpp \
+  qt/moc_ddaddressbookpage.cpp \
   qt/moc_digidollarreceivewidget.cpp \
   qt/moc_digidollarredeemwidget.cpp \
   qt/moc_digidollarsendwidget.cpp \
@@ -182,6 +183,7 @@ DIGIBYTE_QT_H = \
   qt/winshutdownmonitor.h \
   qt/digidollartab.h \
   qt/digidollarmintwidget.h \
+  qt/ddaddressbookpage.h \
   qt/digidollaroverviewwidget.h \
   qt/digidollarpositionswidget.h \
   qt/digidollarreceiverequest.h \
@@ -302,6 +304,7 @@ DIGIBYTE_QT_WALLET_CPP = \
   qt/walletmodel.cpp \
   qt/walletmodeltransaction.cpp \
   qt/walletview.cpp \
+  qt/ddaddressbookpage.cpp \
   qt/digidollartab.cpp \
   qt/digidollarmintwidget.cpp \
   qt/digidollaroverviewwidget.cpp \

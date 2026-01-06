@@ -24,10 +24,13 @@ private Q_SLOTS:
     void overviewWidgetTests();
     void mintWidgetTests();
     void sendWidgetTests();
+    void sendWidgetNoteFieldTests();
     void receiveWidgetTests();
     void redeemWidgetTests();
     void positionsWidgetTests();
+    void addressBookTests();
     void transactionsWidgetTests();
+    void transactionsWidgetExportTests();
 };
 
 #endif // DIGIBYTE_QT_TEST_DIGIDOLLARWIDGETTESTS_H

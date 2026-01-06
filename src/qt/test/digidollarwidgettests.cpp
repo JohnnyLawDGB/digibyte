@@ -19,6 +19,7 @@
 #include <qt/digidollarredeemwidget.h>
 #include <qt/digidollarpositionswidget.h>
 #include <qt/digidollartransactionswidget.h>
+#include <qt/ddaddressbookpage.h>
 #include <test/util/setup_common.h>
 #include <validation.h>
 #include <wallet/test/util.h>
@@ -142,7 +143,7 @@ void TestSendWidget(interfaces::Node& node, const std::shared_ptr<wallet::CWalle
     DigiDollarMiniGUI mini_gui(node);
     mini_gui.initModelForWallet(node, wallet);
 
-    DigiDollarSendWidget sendWidget;
+    DigiDollarSendWidget sendWidget(mini_gui.platformStyle.get());
     sendWidget.setWalletModel(mini_gui.walletModel.get());
     sendWidget.setClientModel(mini_gui.clientModel.get());
 
@@ -350,8 +351,112 @@ void DigiDollarWidgetTests::transactionsWidgetTests()
 
     const std::shared_ptr<wallet::CWallet>& wallet = SetupDescriptorsWallet(m_node, test);
     
-    // TransactionsWidget has exception handling in populateTable(), so it should
-    // gracefully handle the case where RPC (listdigidollartxs) is not available
-    // by displaying an error message rather than crashing.
     TestTransactionsWidget(m_node, wallet);
+}
+
+void DigiDollarWidgetTests::sendWidgetNoteFieldTests()
+{
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        QWARN("Skipping DigiDollarWidgetTests on mac build with 'minimal' platform set due to Qt bugs.");
+        return;
+    }
+#endif
+    TestChain100Setup test;
+    for (int i = 0; i < 5; ++i) {
+        test.CreateAndProcessBlock({}, GetScriptForRawPubKey(test.coinbaseKey.GetPubKey()));
+    }
+    auto wallet_loader = interfaces::MakeWalletLoader(*test.m_node.chain, *Assert(test.m_node.args));
+    test.m_node.wallet_loader = wallet_loader.get();
+    m_node.setContext(&test.m_node);
+
+    const std::shared_ptr<wallet::CWallet>& wallet = SetupDescriptorsWallet(m_node, test);
+
+    DigiDollarMiniGUI mini_gui(m_node);
+    mini_gui.initModelForWallet(m_node, wallet);
+
+    DigiDollarSendWidget sendWidget(mini_gui.platformStyle.get());
+    sendWidget.setWalletModel(mini_gui.walletModel.get());
+    sendWidget.setClientModel(mini_gui.clientModel.get());
+
+    QLineEdit* noteEdit = sendWidget.findChild<QLineEdit*>("noteEdit");
+    QVERIFY(noteEdit != nullptr);
+    
+    noteEdit->setText("Test transaction note");
+    QCOMPARE(noteEdit->text(), QString("Test transaction note"));
+    
+    QVERIFY(noteEdit->maxLength() == 256);
+}
+
+void DigiDollarWidgetTests::transactionsWidgetExportTests()
+{
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        QWARN("Skipping DigiDollarWidgetTests on mac build with 'minimal' platform set due to Qt bugs.");
+        return;
+    }
+#endif
+    TestChain100Setup test;
+    for (int i = 0; i < 5; ++i) {
+        test.CreateAndProcessBlock({}, GetScriptForRawPubKey(test.coinbaseKey.GetPubKey()));
+    }
+    auto wallet_loader = interfaces::MakeWalletLoader(*test.m_node.chain, *Assert(test.m_node.args));
+    test.m_node.wallet_loader = wallet_loader.get();
+    m_node.setContext(&test.m_node);
+
+    const std::shared_ptr<wallet::CWallet>& wallet = SetupDescriptorsWallet(m_node, test);
+
+    DigiDollarMiniGUI mini_gui(m_node);
+    mini_gui.initModelForWallet(m_node, wallet);
+
+    DigiDollarTransactionsWidget transactionsWidget;
+    transactionsWidget.setWalletModel(mini_gui.walletModel.get());
+    transactionsWidget.setClientModel(mini_gui.clientModel.get());
+
+    QPushButton* exportButton = transactionsWidget.findChild<QPushButton*>("m_exportButton");
+    if (!exportButton) {
+        QList<QPushButton*> buttons = transactionsWidget.findChildren<QPushButton*>();
+        for (QPushButton* btn : buttons) {
+            if (btn->text().contains("Export", Qt::CaseInsensitive)) {
+                exportButton = btn;
+                break;
+            }
+        }
+    }
+    QVERIFY(exportButton != nullptr);
+    QVERIFY(exportButton->isEnabled());
+}
+
+void DigiDollarWidgetTests::addressBookTests()
+{
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        QWARN("Skipping DigiDollarWidgetTests on mac build with 'minimal' platform set due to Qt bugs.");
+        return;
+    }
+#endif
+    TestChain100Setup test;
+    for (int i = 0; i < 5; ++i) {
+        test.CreateAndProcessBlock({}, GetScriptForRawPubKey(test.coinbaseKey.GetPubKey()));
+    }
+    auto wallet_loader = interfaces::MakeWalletLoader(*test.m_node.chain, *Assert(test.m_node.args));
+    test.m_node.wallet_loader = wallet_loader.get();
+    m_node.setContext(&test.m_node);
+
+    const std::shared_ptr<wallet::CWallet>& wallet = SetupDescriptorsWallet(m_node, test);
+
+    DigiDollarMiniGUI mini_gui(m_node);
+    mini_gui.initModelForWallet(m_node, wallet);
+
+    DDAddressBookPage addressBook(mini_gui.platformStyle.get(), DDAddressBookPage::ForEditing);
+    addressBook.setWalletModel(mini_gui.walletModel.get());
+
+    QVERIFY(&addressBook != nullptr);
+    
+    QPushButton* newButton = addressBook.findChild<QPushButton*>();
+    QVERIFY(newButton != nullptr);
+    
+    QTableWidget* table = addressBook.findChild<QTableWidget*>();
+    QVERIFY(table != nullptr);
+    QCOMPARE(table->columnCount(), 2);
 }

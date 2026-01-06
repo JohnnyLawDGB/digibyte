@@ -1240,10 +1240,9 @@ bool OracleBundleManager::ValidatePhaseTwoBundle(const COracleBundle& bundle, co
 
 CAmount OracleBundleManager::CalculateConsensusPrice(const COracleBundle& bundle, const Consensus::Params& params)
 {
-    // Collect all valid prices
     std::vector<CAmount> prices;
     for (const auto& msg : bundle.messages) {
-        if (msg.IsValid() && !msg.schnorr_sig.empty() && msg.Verify()) {
+        if (msg.IsValid()) {
             prices.push_back(static_cast<CAmount>(msg.price_micro_usd));
         }
     }

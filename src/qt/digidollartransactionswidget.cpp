@@ -24,6 +24,9 @@
 #include <QPushButton>
 #include <QLabel>
 #include <QMenu>
+#include <QFile>
+#include <QFileDialog>
+#include <QTextStream>
 
 DigiDollarTransactionsWidget::DigiDollarTransactionsWidget(QWidget* parent)
     : QWidget(parent)
@@ -31,6 +34,7 @@ DigiDollarTransactionsWidget::DigiDollarTransactionsWidget(QWidget* parent)
     , m_filterLayout(nullptr)
     , m_typeFilter(nullptr)
     , m_searchEdit(nullptr)
+    , m_exportButton(nullptr)
     , m_table(nullptr)
     , m_statusLabel(nullptr)
     , m_contextMenu(nullptr)
@@ -82,12 +86,16 @@ void DigiDollarTransactionsWidget::setupFilterBar()
     m_searchEdit->setPlaceholderText(tr("TX ID or address..."));
     m_searchEdit->setMinimumWidth(200);
 
+    m_exportButton = new QPushButton(tr("Export"), this);
+    m_exportButton->setToolTip(tr("Export the data in the current tab to a file"));
+
     m_filterLayout->addWidget(typeLabel);
     m_filterLayout->addWidget(m_typeFilter);
     m_filterLayout->addSpacing(20);
     m_filterLayout->addWidget(searchLabel);
     m_filterLayout->addWidget(m_searchEdit);
     m_filterLayout->addStretch();
+    m_filterLayout->addWidget(m_exportButton);
 
     m_mainLayout->addLayout(m_filterLayout);
 }
@@ -101,6 +109,7 @@ void DigiDollarTransactionsWidget::setupTable()
         tr("Type"),
         tr("Amount (DD)"),
         tr("Lock Period"),
+        tr("Note"),
         tr("Transaction ID"),
         tr("Confirmations")
     });
@@ -123,21 +132,20 @@ void DigiDollarTransactionsWidget::setupTable()
     // Let the table inherit colors from the application palette/theme
     // Don't override with custom colors - this ensures proper dark/light mode support
 
-    // Column widths - Transaction ID stretches to fill remaining space
     m_table->setColumnWidth(Column::Date, 130);
     m_table->setColumnWidth(Column::Type, 90);
     m_table->setColumnWidth(Column::Amount, 110);
     m_table->setColumnWidth(Column::LockPeriod, 90);
+    m_table->setColumnWidth(Column::Note, 150);
     m_table->setColumnWidth(Column::Confirmations, 100);
 
-    // Make Transaction ID stretch to fill available width
     m_table->horizontalHeader()->setStretchLastSection(false);
     m_table->horizontalHeader()->setSectionResizeMode(Column::TxId, QHeaderView::Stretch);
 
-    // Context menu
     m_contextMenu = new QMenu(this);
     m_contextMenu->addAction(tr("Copy TX ID"), this, &DigiDollarTransactionsWidget::copyTxId);
     m_contextMenu->addAction(tr("Copy Amount"), this, &DigiDollarTransactionsWidget::copyAmount);
+    m_contextMenu->addAction(tr("Copy Note"), this, &DigiDollarTransactionsWidget::copyNote);
     m_contextMenu->addSeparator();
     m_contextMenu->addAction(tr("Show Details"), this, &DigiDollarTransactionsWidget::showDetails);
 
@@ -152,6 +160,8 @@ void DigiDollarTransactionsWidget::connectSignals()
             this, &DigiDollarTransactionsWidget::onSearchTextChanged);
     connect(m_table, &QTableWidget::customContextMenuRequested,
             this, &DigiDollarTransactionsWidget::showContextMenu);
+    connect(m_exportButton, &QPushButton::clicked,
+            this, &DigiDollarTransactionsWidget::exportClicked);
 }
 
 void DigiDollarTransactionsWidget::setWalletModel(WalletModel* model)
@@ -256,12 +266,19 @@ void DigiDollarTransactionsWidget::populateTable()
             amountItem->setForeground(getAmountColor(isPositive));
             m_table->setItem(row, Column::Amount, amountItem);
 
-            // Lock Period (only for mints) - lockTier already extracted above
             QTableWidgetItem* lockItem = new QTableWidgetItem(formatLockPeriod(lockTier));
             lockItem->setTextAlignment(Qt::AlignCenter);
             m_table->setItem(row, Column::LockPeriod, lockItem);
 
-            // TX ID (truncated for display)
+            QString noteText;
+            const UniValue& commentVal = tx.find_value("comment");
+            if (commentVal.isStr()) {
+                noteText = QString::fromStdString(commentVal.get_str());
+            }
+            QTableWidgetItem* noteItem = new QTableWidgetItem(noteText);
+            noteItem->setToolTip(noteText);
+            m_table->setItem(row, Column::Note, noteItem);
+
             QString displayTxid = txid.left(16) + "..." + txid.right(8);
             QTableWidgetItem* txidItem = new QTableWidgetItem(displayTxid);
             txidItem->setData(Qt::UserRole, txid);  // Store full txid
@@ -338,6 +355,17 @@ void DigiDollarTransactionsWidget::copyAmount()
     }
 }
 
+void DigiDollarTransactionsWidget::copyNote()
+{
+    int row = m_table->currentRow();
+    if (row >= 0) {
+        QTableWidgetItem* item = m_table->item(row, Column::Note);
+        if (item) {
+            QApplication::clipboard()->setText(item->text());
+        }
+    }
+}
+
 void DigiDollarTransactionsWidget::showDetails()
 {
     int row = m_table->currentRow();
@@ -347,18 +375,23 @@ void DigiDollarTransactionsWidget::showDetails()
         QTableWidgetItem* amountItem = m_table->item(row, Column::Amount);
         QTableWidgetItem* dateItem = m_table->item(row, Column::Date);
         QTableWidgetItem* confItem = m_table->item(row, Column::Confirmations);
+        QTableWidgetItem* noteItem = m_table->item(row, Column::Note);
+
+        QString noteText = noteItem ? noteItem->text() : "";
+        QString noteSection = noteText.isEmpty() ? "" : tr("\nNote: %1").arg(noteText);
 
         QString details = tr("Transaction Details\n\n"
                             "TX ID: %1\n"
                             "Type: %2\n"
                             "Amount: %3\n"
                             "Date: %4\n"
-                            "Confirmations: %5")
+                            "Confirmations: %5%6")
                             .arg(txidItem ? txidItem->data(Qt::UserRole).toString() : "N/A")
                             .arg(typeItem ? typeItem->text() : "N/A")
                             .arg(amountItem ? amountItem->text() : "N/A")
                             .arg(dateItem ? dateItem->text() : "N/A")
-                            .arg(confItem ? confItem->text() : "N/A");
+                            .arg(confItem ? confItem->text() : "N/A")
+                            .arg(noteSection);
 
         QMessageBox::information(this, tr("DigiDollar Transaction"), details);
     }
@@ -441,8 +474,6 @@ QString DigiDollarTransactionsWidget::formatLockPeriod(int lockTier) const
 
 QString DigiDollarTransactionsWidget::formatLockPeriodShort(int lockTier) const
 {
-    // Short format for Type column display (e.g., "Mint 1-hr", "Mint 30-day")
-    // Tier mappings: 0-8 (9 tiers total) - matches consensus/digidollar.h
     switch (lockTier) {
         case 0:  return tr("1-hr");
         case 1:  return tr("30-day");
@@ -454,5 +485,60 @@ QString DigiDollarTransactionsWidget::formatLockPeriodShort(int lockTier) const
         case 7:  return tr("7-yr");
         case 8:  return tr("10-yr");
         default: return QString("");
+    }
+}
+
+void DigiDollarTransactionsWidget::exportClicked()
+{
+    QString filename = QFileDialog::getSaveFileName(this,
+        tr("Export DigiDollar Transaction History"),
+        QString(),
+        tr("Comma separated file") + QLatin1String(" (*.csv)"));
+
+    if (filename.isEmpty()) return;
+
+    if (!filename.endsWith(".csv", Qt::CaseInsensitive)) {
+        filename += ".csv";
+    }
+
+    QFile file(filename);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        QMessageBox::critical(this, tr("Export Failed"),
+            tr("Could not open file %1 for writing.").arg(filename));
+        return;
+    }
+
+    QTextStream out(&file);
+
+    QStringList headers;
+    headers << "Date" << "Type" << "Amount" << "Lock Period" << "Note" << "Transaction ID" << "Confirmations";
+    out << "\"" << headers.join("\",\"") << "\"\n";
+
+    for (int row = 0; row < m_table->rowCount(); ++row) {
+        QStringList rowData;
+        for (int col = 0; col < Column::ColumnCount; ++col) {
+            QTableWidgetItem* item = m_table->item(row, col);
+            QString value;
+            if (item) {
+                if (col == Column::TxId) {
+                    value = item->data(Qt::UserRole).toString();
+                } else {
+                    value = item->text();
+                }
+            }
+            value.replace("\"", "\"\"");
+            rowData << value;
+        }
+        out << "\"" << rowData.join("\",\"") << "\"\n";
+    }
+
+    file.close();
+
+    if (file.error() == QFile::NoError) {
+        QMessageBox::information(this, tr("Export Successful"),
+            tr("Transaction history was successfully saved to %1.").arg(filename));
+    } else {
+        QMessageBox::critical(this, tr("Export Failed"),
+            tr("Error writing to file %1.").arg(filename));
     }
 }

@@ -49,7 +49,9 @@ private Q_SLOTS:
     void showContextMenu(const QPoint& pos);
     void copyTxId();
     void copyAmount();
+    void copyNote();
     void showDetails();
+    void exportClicked();
 
 private:
     void setupUI();
@@ -70,6 +72,7 @@ private:
     QHBoxLayout* m_filterLayout;
     QComboBox* m_typeFilter;
     QLineEdit* m_searchEdit;
+    QPushButton* m_exportButton;
     QTableWidget* m_table;
     QLabel* m_statusLabel;
     QMenu* m_contextMenu;
@@ -78,12 +81,12 @@ private:
     WalletModel* m_walletModel;
     ClientModel* m_clientModel;
 
-    // Table column indices
     enum Column {
         Date = 0,
         Type,
         Amount,
         LockPeriod,
+        Note,
         TxId,
         Confirmations,
         ColumnCount

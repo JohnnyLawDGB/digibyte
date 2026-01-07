@@ -27,6 +27,7 @@
 #include <QFile>
 #include <QFileDialog>
 #include <QTextStream>
+#include <QTimer>
 
 DigiDollarTransactionsWidget::DigiDollarTransactionsWidget(QWidget* parent)
     : QWidget(parent)
@@ -162,6 +163,11 @@ void DigiDollarTransactionsWidget::connectSignals()
             this, &DigiDollarTransactionsWidget::showContextMenu);
     connect(m_exportButton, &QPushButton::clicked,
             this, &DigiDollarTransactionsWidget::exportClicked);
+
+    // Auto-refresh timer to update confirmation counts (matches DD Overview behavior)
+    QTimer* refreshTimer = new QTimer(this);
+    connect(refreshTimer, &QTimer::timeout, this, &DigiDollarTransactionsWidget::updateTransactions);
+    refreshTimer->start(5000); // 5 seconds - same interval as DD Overview
 }
 
 void DigiDollarTransactionsWidget::setWalletModel(WalletModel* model)

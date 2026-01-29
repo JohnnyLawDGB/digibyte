@@ -538,16 +538,15 @@ public:
         // Initialize DigiDollar Oracle Nodes (same as mainnet for compatibility)
         InitializeOracleNodes();
 
-        // Oracle system parameters (Phase One: Testnet - 1-of-1 consensus)
+        // Oracle system parameters (Phase Two: Testnet - 3-of-5 consensus)
         // Activate at block 1 for consistent testnet behavior
         consensus.nOracleActivationHeight = 1;        // Activate immediately
         consensus.nOracleEpochLength = 1440;          // 24 hours (1440 blocks * 15 seconds)
-        consensus.nOracleRequiredMessages = 1;        // Phase One: 1-of-1 consensus
-        consensus.nOracleTotalOracles = 1;            // Phase One: Single oracle active
-        // Phase Two activation height (set high - not activated until explicitly enabled)
-        // When ready for Phase Two testnet: change to desired activation height
-        // Phase Two testnet will be 3-of-10, mainnet will be 8-of-15
-        consensus.nDigiDollarPhase2Height = std::numeric_limits<int>::max();  // Not activated yet
+        consensus.nOracleRequiredMessages = 3;        // Phase Two: 3-of-5 consensus
+        consensus.nOracleTotalOracles = 5;            // Phase Two: 5 oracles active
+        // Phase Two activation height - activates at block 100 on testnet
+        // Phase Two testnet: 3-of-5, mainnet will be 8-of-15
+        consensus.nDigiDollarPhase2Height = 100;  // Phase Two activates at block 100
 
         // All 10 testnet oracle public keys defined (for future Phase Two)
         // Phase One only uses oracle 0, others are ready for Phase Two
@@ -564,7 +563,7 @@ public:
         consensus.vOraclePublicKeys.push_back("4a44dc15364204a80fe80e9039455cc1608281820fe2b24f1e5233ade6af1dd5");  // oracle 9 (reserved)
 
         LogPrintf("Oracle: Testnet oracle activation height: %d\n", consensus.nOracleActivationHeight);
-        LogPrintf("Oracle: Phase One - 1-of-1 consensus (Phase Two configurable via nDigiDollarPhase2Height)\n");
+        LogPrintf("Oracle: Phase Two - 3-of-5 consensus, activates at height %d\n", consensus.nDigiDollarPhase2Height);
 
         // Testnet-specific oracle and activation settings
         // Activate at block 1 for consistent testnet behavior
@@ -576,18 +575,18 @@ public:
 private:
     void InitializeOracleNodes() {
         // DigiDollar Oracle Nodes - Testnet
-        // Phase One: Only oracle 0 is active (1-of-1 consensus)
-        // Phase Two: Enable more oracles when ready (3-of-10 for testnet)
+        // Phase Two: Oracles 0-4 active (3-of-5 consensus)
+        // Oracles 5-9 reserved for future expansion
         vOracleNodes = {
-            // Oracle 0: Primary testnet oracle (ACTIVE for Phase One)
+            // Oracle 0: Primary testnet oracle (ACTIVE)
             {0,  ParsePubKey("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"), "oracle1.digibyte.io:12034", true},
 
-            // Oracle 1-9: Reserved for Phase Two testnet (currently DISABLED)
-            // Enable these when activating Phase Two: set to true and lower nDigiDollarPhase2Height
-            {1,  ParsePubKey("02d4735e3a265e16eee03f59718b9b5d03019c07d8b6c51f90da3a666eec13ab35"), "oracle2.digibyte.io:12031", false},
-            {2,  ParsePubKey("034e07408562bedb8b60ce05c1decfe3ad16b72230967de01f640b7e4729b49fce"), "oracle3.digibyte.io:12031", false},
-            {3,  ParsePubKey("024b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a"), "oracle4.digibyte.io:12031", false},
-            {4,  ParsePubKey("03ef2d127de37b942baad06145e54b0c619a1f22327b2ebbcfbec78f5564afe39d"), "oracle5.digibyte.io:12031", false},
+            // Oracles 1-4: Active for Phase Two testnet (3-of-5 consensus)
+            {1,  ParsePubKey("02d4735e3a265e16eee03f59718b9b5d03019c07d8b6c51f90da3a666eec13ab35"), "oracle2.digibyte.io:12031", true},
+            {2,  ParsePubKey("034e07408562bedb8b60ce05c1decfe3ad16b72230967de01f640b7e4729b49fce"), "oracle3.digibyte.io:12031", true},
+            {3,  ParsePubKey("024b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a"), "oracle4.digibyte.io:12031", true},
+            {4,  ParsePubKey("03ef2d127de37b942baad06145e54b0c619a1f22327b2ebbcfbec78f5564afe39d"), "oracle5.digibyte.io:12031", true},
+            // Oracles 5-9: Reserved for future expansion (currently DISABLED)
             {5,  ParsePubKey("02e7f6c011776e8db7cd330b54174fd76f7d0216b612387a5ffcfb81e6f0919683"), "oracle6.digibyte.io:12031", false},
             {6,  ParsePubKey("037902699be42c8a8e46fbbb4501726517e86b22c56a189f7625a6da49081b2451"), "oracle7.digibyte.io:12031", false},
             {7,  ParsePubKey("022c624232cdd221771294dfbb310aca000a0df6ac8b66b696d90ef06fdefb64a3"), "oracle8.digibyte.io:12031", false},

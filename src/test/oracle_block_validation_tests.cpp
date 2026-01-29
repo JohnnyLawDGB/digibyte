@@ -322,13 +322,13 @@ BOOST_AUTO_TEST_CASE(checkblock_rejects_bundle_wrong_consensus)
     // Since we're in transition period, blocks without oracle data are allowed
     // The proper fix is to test that CreateOracleScript returns empty for multi-message bundles
 
-    // Verify that CreateOracleScript properly rejects multi-message bundles
+    // In RegTest (Phase One, Phase Two not activated), CreateOracleScript rejects multi-message bundles
     OracleBundleManager& test_manager = OracleBundleManager::GetInstance();
     CScript oracle_script = test_manager.CreateOracleScript(bundle);
 
     BOOST_CHECK_MESSAGE(
         oracle_script.empty(),
-        "CreateOracleScript should return empty script for bundle with multiple messages"
+        "CreateOracleScript should return empty script for multi-message bundles when Phase Two is not active"
     );
 
     // If script is empty, CheckBlock will pass (transition period)

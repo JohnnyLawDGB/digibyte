@@ -72,6 +72,7 @@ const std::string DD_OUTPUT{"ddutxo"};
 const std::string DD_METADATA{"ddmeta"};
 const std::string DD_ADDRESS_KEY{"ddaddrkey"};  // DD address keys for received tokens
 const std::string DD_OWNER_KEY{"ddownerkey"};   // DD owner keys for minted tokens (vault redemption)
+const std::string ORACLE_KEY{"oraclekey"};       // Oracle private keys by oracle_id
 
 const std::unordered_set<std::string> LEGACY_TYPES{CRYPTED_KEY, CSCRIPT, DEFAULTKEY, HDCHAIN, KEYMETA, KEY, OLD_KEY, POOL, WATCHMETA, WATCHS};
 } // namespace DBKeys
@@ -675,6 +676,43 @@ bool WalletBatch::EraseDDOwnerKey(const uint256& dd_timelock_id)
     if (success) {
         LogPrint(BCLog::WALLETDB, "DigiDollar: Erased DD owner key for timelock %s from database\n",
                  dd_timelock_id.ToString());
+    }
+    return success;
+}
+
+// Oracle key persistence (for oracle node operation)
+bool WalletBatch::WriteOracleKey(uint32_t oracle_id, const CKey& key)
+{
+    CPrivKey privkey = key.GetPrivKey();
+    bool success = WriteIC(std::make_pair(DBKeys::ORACLE_KEY, oracle_id), privkey);
+    if (success) {
+        LogPrint(BCLog::WALLETDB, "Oracle: Wrote oracle key for oracle_id %u to database\n", oracle_id);
+    }
+    return success;
+}
+
+bool WalletBatch::ReadOracleKey(uint32_t oracle_id, CKey& key)
+{
+    CPrivKey privkey;
+    if (!m_batch->Read(std::make_pair(DBKeys::ORACLE_KEY, oracle_id), privkey)) {
+        return false;
+    }
+
+    CPubKey pubkey;
+    if (!key.Load(privkey, pubkey, true /* fSkipCheck */)) {
+        LogPrint(BCLog::WALLETDB, "Oracle: Failed to load oracle key for oracle_id %u from database\n", oracle_id);
+        return false;
+    }
+
+    LogPrint(BCLog::WALLETDB, "Oracle: Read oracle key for oracle_id %u from database\n", oracle_id);
+    return true;
+}
+
+bool WalletBatch::EraseOracleKey(uint32_t oracle_id)
+{
+    bool success = EraseIC(std::make_pair(DBKeys::ORACLE_KEY, oracle_id));
+    if (success) {
+        LogPrint(BCLog::WALLETDB, "Oracle: Erased oracle key for oracle_id %u from database\n", oracle_id);
     }
     return success;
 }

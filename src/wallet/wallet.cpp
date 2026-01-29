@@ -4443,4 +4443,17 @@ util::Result<MigrationResult> MigrateLegacyToDescriptor(const std::string& walle
     }
     return res;
 }
+// Oracle key management
+bool CWallet::StoreOracleKey(uint32_t oracle_id, const CKey& key)
+{
+    WalletBatch batch(GetDatabase());
+    return batch.WriteOracleKey(oracle_id, key);
+}
+
+bool CWallet::GetOracleKey(uint32_t oracle_id, CKey& key_out)
+{
+    WalletBatch batch(GetDatabase());
+    return batch.ReadOracleKey(oracle_id, key_out);
+}
+
 } // namespace wallet

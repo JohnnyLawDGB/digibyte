@@ -2677,7 +2677,90 @@ static RPCHelpMan listoracles()
     };
 }
 
-static RPCHelpMan startoracle()
+RPCHelpMan createoraclekey()
+{
+    return RPCHelpMan{"createoraclekey",
+                "\nGenerate an oracle keypair and store it in the loaded descriptor wallet.\n"
+                "The private key is stored securely in the wallet database, mapped to the oracle_id.\n"
+                "Share ONLY the returned pubkey with the DigiByte Core maintainer for chainparams inclusion.\n",
+                {
+                    {"oracle_id", RPCArg::Type::NUM, RPCArg::Optional::NO, "Oracle ID slot (0-29) to generate key for"},
+                },
+                RPCResult{
+                    RPCResult::Type::OBJ, "", "",
+                    {
+                        {RPCResult::Type::NUM, "oracle_id", "Oracle ID the key was generated for"},
+                        {RPCResult::Type::STR_HEX, "pubkey", "Compressed public key (33-byte, 02/03 prefix) — share this with the maintainer"},
+                        {RPCResult::Type::STR_HEX, "pubkey_xonly", "X-only public key (32-byte, for Schnorr/Taproot)"},
+                        {RPCResult::Type::BOOL, "stored_in_wallet", "Whether key was stored in wallet"},
+                        {RPCResult::Type::STR, "message", "Instructions for the operator"},
+                    }
+                },
+                RPCExamples{
+                    HelpExampleCli("createoraclekey", "5") +
+                    HelpExampleRpc("createoraclekey", "5")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            // Get wallet
+            std::shared_ptr<wallet::CWallet> pwallet = wallet::GetWalletForJSONRPCRequest(request);
+            if (!pwallet) throw JSONRPCError(RPC_WALLET_NOT_FOUND, "No wallet is loaded. A descriptor wallet is required.");
+
+            // Ensure wallet is unlocked
+            wallet::EnsureWalletIsUnlocked(*pwallet);
+
+            // Parse and validate oracle_id
+            uint32_t oracle_id = request.params[0].getInt<int>();
+            if (oracle_id >= (uint32_t)ORACLE_TOTAL_COUNT) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER,
+                    strprintf("Invalid oracle ID %u. Must be between 0 and %d", oracle_id, ORACLE_TOTAL_COUNT - 1));
+            }
+
+            // Check if key already exists for this oracle_id
+            CKey existing_key;
+            if (pwallet->GetOracleKey(oracle_id, existing_key)) {
+                throw JSONRPCError(RPC_WALLET_ERROR,
+                    strprintf("Oracle key already exists in wallet for oracle_id %u. "
+                              "Use the existing key or remove it first.", oracle_id));
+            }
+
+            // Generate new compressed keypair
+            CKey key;
+            key.MakeNewKey(true); // compressed = true
+
+            CPubKey pubkey = key.GetPubKey();
+            assert(pubkey.IsCompressed());
+            assert(key.VerifyPubKey(pubkey));
+
+            // Store in wallet
+            bool stored = pwallet->StoreOracleKey(oracle_id, key);
+            if (!stored) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "Failed to store oracle key in wallet database");
+            }
+
+            // Get x-only pubkey (32 bytes, strip the 02/03 prefix)
+            XOnlyPubKey xonly(pubkey);
+
+            LogPrintf("Oracle: Generated oracle key for oracle_id %u, pubkey=%s\n",
+                     oracle_id, HexStr(pubkey));
+
+            UniValue result(UniValue::VOBJ);
+            result.pushKV("oracle_id", (int)oracle_id);
+            result.pushKV("pubkey", HexStr(pubkey));
+            result.pushKV("pubkey_xonly", HexStr(xonly));
+            result.pushKV("stored_in_wallet", stored);
+            result.pushKV("message", strprintf(
+                "Oracle key generated and stored in wallet. "
+                "Share ONLY the pubkey with the DigiByte Core maintainer for chainparams inclusion. "
+                "Run 'startoracle %u' after your key is added to chainparams to begin oracle operation.",
+                oracle_id));
+
+            return result;
+        },
+    };
+}
+
+RPCHelpMan startoracle()
 {
     return RPCHelpMan{"startoracle",
                 "\nStart a local oracle node if configured.\n"
@@ -2761,8 +2844,41 @@ static RPCHelpMan startoracle()
                             success = existing_oracle->IsRunning();
                             status_message = success ? "Existing oracle started" : "Failed to start existing oracle";
                         } else {
-                            status_message = "Oracle not configured. Provide private_key parameter to configure.";
-                            warning = "Oracle private key must be provided for first-time setup";
+                            // Try to load oracle key from wallet
+                            bool loaded_from_wallet = false;
+                            try {
+                                std::shared_ptr<wallet::CWallet> pwallet = wallet::GetWalletForJSONRPCRequest(request);
+                                if (pwallet) {
+                                    CKey wallet_key;
+                                    if (pwallet->GetOracleKey(oracle_id, wallet_key)) {
+                                        std::string wallet_key_hex = HexStr(Span<const unsigned char>(wallet_key.begin(), wallet_key.end()));
+                                        success = oracle_manager.AddOracleNode(oracle_id, wallet_key_hex);
+                                        if (success) {
+                                            oracle_manager.EnableOracle(oracle_id, true);
+                                            OracleNode* oracle = oracle_manager.GetOracleNode(oracle_id);
+                                            if (oracle) {
+                                                oracle->Start();
+                                                loaded_from_wallet = true;
+                                                if (oracle->IsRunning()) {
+                                                    status_message = strprintf("Oracle started with key loaded from wallet '%s'", pwallet->GetName());
+                                                } else {
+                                                    // Oracle initialized but price thread not running
+                                                    // (expected on regtest where oracle only runs on testnet)
+                                                    status_message = strprintf("Oracle initialized with key from wallet '%s' (price thread not active on this network)", pwallet->GetName());
+                                                }
+                                            }
+                                        } else {
+                                            status_message = "Failed to initialize oracle with wallet key (key may not match chainparams pubkey)";
+                                        }
+                                    }
+                                }
+                            } catch (...) {
+                                // No wallet context available — fall through to error message
+                            }
+                            if (!loaded_from_wallet && !success) {
+                                status_message = "Oracle not configured. Provide private_key parameter or run createoraclekey first.";
+                                warning = "Oracle private key must be provided for first-time setup, or use createoraclekey to generate one";
+                            }
                         }
                     }
                 }
@@ -3197,7 +3313,7 @@ void RegisterDigiDollarRPCCommands(CRPCTable &t)
         // Oracle management commands
         {"oracle", &sendoracleprice},
         {"oracle", &listoracles},
-        {"oracle", &startoracle},
+        // {"oracle", &startoracle},  // Moved to wallet RPC table for wallet key loading
         {"oracle", &stoporacle},
         {"oracle", &getoraclepubkey},
 

@@ -37,6 +37,10 @@ RPCHelpMan listdigidollartxs();
 RPCHelpMan getoracleprice();
 RPCHelpMan getprotectionstatus();
 
+// Oracle key management
+RPCHelpMan createoraclekey();
+RPCHelpMan startoracle();
+
 // Register all DigiDollar RPC commands
 void RegisterDigiDollarRPCCommands(CRPCTable& t);
 

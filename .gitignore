@@ -162,3 +162,6 @@ DigiByte-Core.dmg
 .wslconfig
 APPLICATION_BUGS.md
 testnet_miner.sh
+
+# Audit files
+audit/

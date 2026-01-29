@@ -255,6 +255,24 @@ bool OracleBundleManager::AddOracleBundleToBlock(CBlock& block, int32_t block_he
         }
     }
 
+    // Phase Two: Create bundle from pending messages when enough are available
+    if (!bundle.HasConsensus(min_oracle_count) && min_oracle_count > 1) {
+        LogPrintf("Oracle: Phase Two mode - checking pending messages for %d-of-N consensus\n", min_oracle_count);
+        std::vector<COraclePriceMessage> pending = GetPendingMessages();
+        LogPrintf("Oracle: GetPendingMessages() returned %zu messages (need %d)\n", pending.size(), min_oracle_count);
+        
+        if (static_cast<int>(pending.size()) >= min_oracle_count) {
+            bundle = COracleBundle(epoch);
+            bundle.messages = pending;
+            // Calculate consensus price using the Phase Two algorithm
+            const Consensus::Params& cparams = Params().GetConsensus();
+            bundle.median_price_micro_usd = static_cast<uint64_t>(CalculateConsensusPrice(bundle, cparams));
+            bundle.timestamp = pending[0].timestamp;
+            LogPrintf("Oracle: Phase Two - Created bundle with %zu messages, consensus price=%llu\n",
+                     pending.size(), bundle.median_price_micro_usd);
+        }
+    }
+
     // If still no consensus, create empty bundle (graceful degradation)
     if (!bundle.HasConsensus(min_oracle_count)) {
         LogPrintf("Oracle: No consensus bundle available for block %d, creating empty oracle data\n", block_height);
@@ -297,12 +315,56 @@ CScript OracleBundleManager::CreateOracleScript(const COracleBundle& bundle) con
     // Format: OP_RETURN OP_ORACLE <version=0x01> <oracle_id> <price_micro_usd> <timestamp>
     // Total: ~20 bytes (well within 83 byte MAX_OP_RETURN_RELAY limit)
 
-    // Phase One: Must have exactly 1 message (1-of-1 consensus)
-    if (bundle.messages.size() != 1) {
-        LogPrintf("Oracle: Phase One requires exactly 1 message, got %d - returning empty script\n", bundle.messages.size());
-        return CScript(); // Invalid bundle for Phase One
+    if (bundle.messages.size() > 1) {
+        // Check if Phase Two is active — only create multi-oracle scripts when Phase Two is enabled
+        const Consensus::Params& cparams = Params().GetConsensus();
+        int current_height = 0; // Best effort — CreateOracleScript doesn't have height context
+        // If Phase Two is not activated (INT_MAX), reject multi-message bundles
+        if (cparams.nDigiDollarPhase2Height == std::numeric_limits<int>::max()) {
+            LogPrintf("Oracle: Phase Two not active, rejecting multi-message bundle (%zu messages)\n",
+                     bundle.messages.size());
+            return CScript(); // Phase One: reject multi-message bundles
+        }
+
+        // Phase Two: Compact multi-oracle format
+        // Format: OP_RETURN OP_ORACLE <version=0x02> <num_messages(1) + oracle_id(1) + price(8) + timestamp(8)>
+        CScript script;
+        script << OP_RETURN << OP_ORACLE;
+
+        // Version byte (0x02 = Phase Two compact format)
+        script << std::vector<unsigned char>{0x02};
+
+        const COraclePriceMessage& rep_msg = bundle.messages[0];
+
+        std::vector<unsigned char> compact_data;
+        compact_data.reserve(18);
+
+        // Number of oracle messages
+        compact_data.push_back(static_cast<unsigned char>(bundle.messages.size() & 0xFF));
+
+        // Representative oracle ID
+        compact_data.push_back(static_cast<unsigned char>(rep_msg.oracle_id & 0xFF));
+
+        // Consensus price in micro-USD (uint64, little-endian)
+        uint64_t p2_price = bundle.median_price_micro_usd;
+        for (int i = 0; i < 8; ++i) {
+            compact_data.push_back(static_cast<unsigned char>((p2_price >> (i * 8)) & 0xFF));
+        }
+
+        // Consensus timestamp (int64, little-endian)
+        int64_t p2_timestamp = bundle.timestamp;
+        for (int i = 0; i < 8; ++i) {
+            compact_data.push_back(static_cast<unsigned char>((p2_timestamp >> (i * 8)) & 0xFF));
+        }
+
+        script << compact_data;
+
+        LogPrintf("Oracle: Created Phase Two script with %zu oracle messages, price=%llu\n",
+                 bundle.messages.size(), p2_price);
+        return script;
     }
 
+    // Phase One: Must have exactly 1 message (1-of-1 consensus)
     CScript script;
     script << OP_RETURN << OP_ORACLE;
 
@@ -418,6 +480,55 @@ bool OracleBundleManager::ExtractOracleBundle(const CTransaction& coinbase_tx, C
                         bundle.timestamp = timestamp;
                         bundle.epoch = GetCurrentEpoch(msg.block_height);
 
+                        return true;
+                    }
+                    else if (data[0] == 0x02) {
+                        // Phase Two compact format
+                        if (data.size() < 19) {
+                            return false;
+                        }
+                        
+                        uint8_t num_messages = data[1];
+                        uint8_t representative_oracle_id = data[2];
+                        
+                        // Parse consensus price (uint64, little-endian)
+                        uint64_t price = 0;
+                        for (int i = 0; i < 8; ++i) {
+                            price |= (static_cast<uint64_t>(data[3 + i]) << (i * 8));
+                        }
+                        
+                        // Parse consensus timestamp (int64, little-endian)
+                        int64_t timestamp = 0;
+                        for (int i = 0; i < 8; ++i) {
+                            timestamp |= (static_cast<int64_t>(data[11 + i]) << (i * 8));
+                        }
+                        
+                        // Create representative message
+                        COraclePriceMessage msg;
+                        msg.oracle_id = representative_oracle_id;
+                        msg.price_micro_usd = price;
+                        msg.timestamp = timestamp;
+                        msg.block_height = 0;
+                        msg.nonce = 0;
+                        
+                        // Phase Two: Get oracle pubkey from chainparams
+                        const CChainParams& chainparams = Params();
+                        const OracleNodeInfo* oracle_info = chainparams.GetOracleNode(msg.oracle_id);
+                        if (oracle_info) {
+                            msg.oracle_pubkey = XOnlyPubKey(oracle_info->pubkey);
+                        }
+                        
+                        bundle.messages.clear();
+                        // For compact format, we store the representative message
+                        // The actual multi-oracle validation happened at block creation time
+                        bundle.messages.push_back(msg);
+                        bundle.median_price_micro_usd = price;
+                        bundle.timestamp = timestamp;
+                        bundle.epoch = 0;
+                        
+                        LogPrint(BCLog::DIGIDOLLAR, "Oracle: Extracted Phase Two bundle: %d oracles, price=%llu micro-USD\n",
+                                 num_messages, price);
+                        
                         return true;
                     }
 
@@ -967,23 +1078,44 @@ bool OracleDataValidator::ValidateBlockOracleData(const CBlock& block, const CBl
         return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-oracle-bundle", "invalid oracle bundle structure");
     }
 
-    // Phase One: Must have exactly 1 message (1-of-1 consensus)
-    if (bundle.messages.size() != 1) {
-        LogPrintf("Oracle: Phase One requires exactly 1 oracle message, got %d\n", bundle.messages.size());
-        return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-oracle-consensus",
-            strprintf("Phase One requires exactly 1 oracle message, got %d", bundle.messages.size()));
+    // STEP 7: PHASE-AWARE CONSENSUS VALIDATION
+    const Consensus::Params& consensusParams_ref = Params().GetConsensus();
+
+    if (block_height >= consensusParams_ref.nDigiDollarPhase2Height) {
+        // Phase Two: Multi-oracle validation
+        if (!OracleBundleManager::ValidatePhaseTwoBundle(bundle, consensusParams_ref)) {
+            LogPrintf("Oracle: Phase Two bundle validation failed at block %d\n", block_height);
+            return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS,
+                                "bad-oracle-phase2",
+                                "Phase Two oracle bundle validation failed");
+        }
+    } else {
+        // Phase One: Exactly 1 message required
+        if (bundle.messages.size() != 1) {
+            LogPrintf("Oracle: Phase One requires exactly 1 oracle message, got %zu\n",
+                     bundle.messages.size());
+            return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS,
+                                "bad-oracle-consensus",
+                                strprintf("Phase One requires exactly 1 oracle message, got %zu",
+                                         bundle.messages.size()));
+        }
+        
+        // Phase One: Median price must equal single message price
+        const COraclePriceMessage& msg_p1 = bundle.messages[0];
+        if (bundle.median_price_micro_usd != msg_p1.price_micro_usd) {
+            LogPrintf("Oracle: Median price mismatch: bundle=%llu, message=%llu\n",
+                     bundle.median_price_micro_usd, msg_p1.price_micro_usd);
+            return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS,
+                                "bad-oracle-median",
+                                strprintf("Median price mismatch: bundle=%llu, message=%llu",
+                                         bundle.median_price_micro_usd, msg_p1.price_micro_usd));
+        }
     }
 
-    // Verify median price matches message price (Phase One: 1 message = median)
+    // Use first message for remaining validation checks (works for both phases)
     const COraclePriceMessage& msg = bundle.messages[0];
-    if (bundle.median_price_micro_usd != msg.price_micro_usd) {
-        LogPrintf("Oracle: Median price mismatch: bundle=%llu, message=%llu\n",
-                 bundle.median_price_micro_usd, msg.price_micro_usd);
-        return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-oracle-median",
-            strprintf("Median price mismatch: bundle=%llu, message=%llu", bundle.median_price_micro_usd, msg.price_micro_usd));
-    }
 
-    // Verify Schnorr signature on the oracle message (skip for Phase One compact format)
+    // Verify Schnorr signature on the oracle message (skip for compact format)
     // Compact format doesn't embed signatures (verified at bundle creation time)
     if (!msg.schnorr_sig.empty()) {
         // Full format with embedded signature - verify it
@@ -994,21 +1126,20 @@ bool OracleDataValidator::ValidateBlockOracleData(const CBlock& block, const CBl
                 "Invalid oracle Schnorr signature");
         }
     }
-    // Phase One compact format: Trust based on chainparams oracle pubkey (validated at extraction)
 
     // Verify oracle timestamp is not too old (max 1 hour = 3600 seconds)
-    int64_t oracle_age = block.nTime - msg.timestamp;
+    int64_t oracle_age = block.nTime - bundle.timestamp;
     if (oracle_age > ORACLE_MAX_AGE_SECONDS) {
-        LogPrintf("Oracle: Oracle message too old: age=%d seconds (max=%d) in block %d\n",
-                 oracle_age, ORACLE_MAX_AGE_SECONDS, block_height);
+        LogPrintf("Oracle: Oracle message too old: age=%lld seconds (max=%d) in block %d\n",
+                 (long long)oracle_age, ORACLE_MAX_AGE_SECONDS, block_height);
         return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-oracle-timestamp",
-            strprintf("Oracle timestamp too old: age=%d seconds (max=%d)", oracle_age, ORACLE_MAX_AGE_SECONDS));
+            strprintf("Oracle timestamp too old: age=%lld seconds (max=%d)", (long long)oracle_age, ORACLE_MAX_AGE_SECONDS));
     }
 
     // Verify oracle timestamp is not in the future (with 60 second tolerance for clock skew)
-    if (msg.timestamp > block.nTime + 60) {
-        LogPrintf("Oracle: Oracle timestamp in future: oracle=%d, block=%d\n",
-                 msg.timestamp, block.nTime);
+    if (bundle.timestamp > block.nTime + 60) {
+        LogPrintf("Oracle: Oracle timestamp in future: oracle=%lld, block=%u\n",
+                 (long long)bundle.timestamp, block.nTime);
         return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-oracle-timestamp",
             "Oracle timestamp is in the future");
     }

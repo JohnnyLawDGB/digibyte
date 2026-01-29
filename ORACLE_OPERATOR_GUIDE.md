@@ -1,0 +1,218 @@
+# DigiDollar Oracle Operator Guide
+*How to become an oracle operator and get your key into DigiByte Core*
+
+---
+
+## Overview
+
+DigiDollar requires oracle operators to provide real-time DGB/USD price feeds. Oracle public keys are **hardcoded in `chainparams.cpp`** — every oracle operator must:
+
+1. Run DigiByte Core RC12 and create a descriptor wallet
+2. Run `createoraclekey` to generate their oracle keypair inside the wallet
+3. Send their **public key only** to the DigiByte Core maintainer
+4. The maintainer adds their key to `chainparams.cpp` and ships a new release
+5. The operator runs `startoracle` — the wallet provides the private key automatically
+
+---
+
+## Step-by-Step: For Oracle Operators
+
+### Step 1: Compile and Run DigiByte Core RC12
+
+```bash
+cd ~/Code/digibyte
+./autogen.sh
+./configure
+make -j$(nproc)
+```
+
+Start on testnet:
+```bash
+./src/digibyted -testnet
+```
+
+### Step 2: Create a Descriptor Wallet
+
+RC12 creates descriptor wallets by default. No special flags needed.
+
+```bash
+./src/digibyte-cli -testnet createwallet "oracle"
+```
+
+### Step 3: Generate Your Oracle Key
+
+```bash
+./src/digibyte-cli -testnet -rpcwallet=oracle createoraclekey 0
+```
+
+Replace `0` with the oracle ID slot assigned to you by the maintainer (0-29).
+
+**Output:**
+```json
+{
+  "oracle_id": 0,
+  "pubkey": "0398720f6d15252fb2c3501107d46129589d8ab56e0f967be2e470f40675eb7b57",
+  "pubkey_xonly": "98720f6d15252fb2c3501107d46129589d8ab56e0f967be2e470f40675eb7b57",
+  "stored_in_wallet": true,
+  "message": "Oracle key generated and stored in wallet. Share ONLY the pubkey..."
+}
+```
+
+**What happened:**
+- A new secp256k1 keypair was generated using the wallet's secure random number generator
+- The **private key** was stored securely in the wallet database (key: `oraclekey`)
+- The **compressed public key** (33 bytes, 02/03 prefix) was returned for you to share
+- The **x-only public key** (32 bytes, for Schnorr) was also returned
+
+### Step 4: Send Your Public Key to the Maintainer
+
+Send **only these two things**:
+1. Your **pubkey** from the output above (66-char hex starting with `02` or `03`)
+2. Your **server endpoint** (e.g., `myserver.com:12028`)
+
+**⚠️ NEVER share your private key. It stays in your wallet.**
+
+### Step 5: Wait for Updated Release
+
+The maintainer adds your key to `chainparams.cpp` and releases an updated binary.
+
+### Step 6: Download the Updated Binary and Start Your Oracle
+
+```bash
+# Start the node
+./src/digibyted -testnet
+
+# Start your oracle — key loads automatically from wallet!
+./src/digibyte-cli -testnet -rpcwallet=oracle startoracle 0
+```
+
+**No private key argument needed.** The `startoracle` command automatically retrieves your private key from the wallet where `createoraclekey` stored it.
+
+**Output (testnet):**
+```json
+{
+  "success": true,
+  "oracle_id": 0,
+  "status": "running",
+  "message": "Oracle started with key loaded from wallet 'oracle'"
+}
+```
+
+You can also provide the key explicitly if needed:
+```bash
+./src/digibyte-cli -testnet startoracle 0 "raw_hex_private_key"
+```
+
+### Step 7: Verify Your Oracle is Running
+
+```bash
+# Check oracle status
+./src/digibyte-cli -testnet getoraclepubkey 0
+
+# Expected output:
+# "authorized": true    ← Your key matches chainparams
+# "is_running": true    ← Price thread is active
+```
+
+### Step 8: Monitor
+
+```bash
+tail -f ~/.digibyte/testnet4/debug.log | grep -i oracle
+```
+
+---
+
+## What Your Oracle Does
+
+Once running, your oracle automatically:
+- Fetches DGB/USD prices from 7 exchanges every 15 seconds (Binance, KuCoin, Gate.io, HTX, Crypto.com, CoinGecko, CoinMarketCap)
+- Calculates median price with MAD outlier filtering
+- Signs the price with BIP-340 Schnorr using your wallet-stored private key
+- Broadcasts the signed 128-byte message to the P2P network
+
+---
+
+## Important Notes
+
+- **Key persists in wallet** — Your oracle key survives wallet unload/reload. But after restarting `digibyted`, you need to run `startoracle` again.
+- **One key per oracle ID** — `createoraclekey` rejects if a key already exists for that ID. This prevents accidental overwrites.
+- **Descriptor wallets only** — RC12 defaults to descriptor wallets. `dumpprivkey` is not available (by design).
+- **Backup your wallet** — `backupwallet` includes your oracle key. Losing the wallet means losing your oracle key.
+
+---
+
+## For the Maintainer: Adding an Operator's Key
+
+When an operator sends you their 33-byte compressed public key, add it to **two places** in `src/kernel/chainparams.cpp`:
+
+### 1. vOracleNodes (33-byte compressed CPubKey)
+
+In `InitializeOracleNodes()`:
+```cpp
+{5, ParsePubKey("0398720f6d15252fb2c3501107d46129589d8ab56e0f967be2e470f40675eb7b57"), "operator.server.com:12028", true},
+```
+
+### 2. consensus.vOraclePublicKeys (32-byte x-only key — strip the 02/03 prefix)
+
+```cpp
+consensus.vOraclePublicKeys.push_back("98720f6d15252fb2c3501107d46129589d8ab56e0f967be2e470f40675eb7b57");
+```
+
+**⚠️ Both locations must be updated.** `vOracleNodes` uses 33-byte compressed keys. `consensus.vOraclePublicKeys` uses 32-byte x-only keys. They must match.
+
+Then recompile and distribute the updated binary.
+
+---
+
+## Oracle Slots
+
+| Network | Total Slots | Active | Consensus |
+|---------|------------|--------|-----------|
+| Mainnet | 30 (IDs 0-29) | 15 | 8-of-15 (disabled until Phase Two) |
+| Testnet | 10 (IDs 0-9) | 5 | 3-of-5 planned |
+| Regtest | 5 (IDs 0-4) | 1 | 1-of-1 |
+
+---
+
+## Server Requirements
+
+| Requirement | Minimum | Recommended |
+|-------------|---------|-------------|
+| Uptime | 95% | 99.9% |
+| RAM | 2 GB | 4+ GB |
+| Disk | 20 GB | 50+ GB SSD |
+| Network | Outbound HTTPS | Static IP or DNS |
+| Ports | 12028 (testnet) | Open inbound + outbound |
+
+---
+
+## RPC Command Reference
+
+| Command | Description |
+|---------|-------------|
+| `createoraclekey <oracle_id>` | Generate oracle keypair in wallet (NEW) |
+| `startoracle <id> [privkey_hex]` | Start oracle — loads from wallet if no privkey given |
+| `stoporacle <id>` | Stop oracle price thread |
+| `getoraclepubkey <id>` | Check oracle key and status |
+| `listoracles [active_only]` | List all configured oracles |
+| `sendoracleprice <price>` | Manually send price (testnet only) |
+| `getoracleprice` | Get current oracle price |
+
+---
+
+## Code References
+
+| Component | File | Key Lines |
+|-----------|------|-----------|
+| `createoraclekey` RPC | `src/rpc/digidollar.cpp` | ~line 2680 |
+| `startoracle` RPC (wallet loading) | `src/rpc/digidollar.cpp` | ~line 2800 |
+| Wallet DB storage | `src/wallet/walletdb.cpp` | WriteOracleKey/ReadOracleKey |
+| CWallet key methods | `src/wallet/wallet.cpp` | StoreOracleKey/GetOracleKey |
+| OracleNodeInfo struct | `src/primitives/oracle.h` | Line 157 |
+| chainparams oracle slots | `src/kernel/chainparams.cpp` | InitializeOracleNodes() |
+| Unit tests | `src/test/oracle_wallet_key_tests.cpp` | 10 tests |
+| Functional test | `test/functional/digidollar_oracle_keygen.py` | End-to-end |
+
+---
+
+*This guide is verified against DigiByte Core RC12 codebase. All RPC commands tested in regtest.*

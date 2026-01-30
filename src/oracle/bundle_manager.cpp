@@ -154,6 +154,21 @@ size_t OracleBundleManager::GetPendingMessageCount() const
     return pending_messages.size();
 }
 
+void OracleBundleManager::ClearPendingMessages()
+{
+    std::lock_guard<std::recursive_mutex> lock(mtx_messages);
+    pending_messages.clear();
+    LogPrintf("Oracle: Manually cleared all pending messages\n");
+}
+
+void OracleBundleManager::InjectTestMessage(const COraclePriceMessage& message)
+{
+    std::lock_guard<std::recursive_mutex> lock(mtx_messages);
+    pending_messages[message.oracle_id] = message;
+    LogPrintf("Oracle: Injected test message for oracle %d, price=%llu\n",
+             message.oracle_id, message.price_micro_usd);
+}
+
 COracleBundle OracleBundleManager::GetCurrentBundle(int32_t epoch) const
 {
     std::lock_guard<std::mutex> lock(mtx_bundles);
@@ -213,7 +228,7 @@ void OracleBundleManager::CleanupOldBundles(int32_t current_epoch)
     }
 }
 
-bool OracleBundleManager::AddOracleBundleToBlock(CBlock& block, int32_t block_height) const
+bool OracleBundleManager::AddOracleBundleToBlock(CBlock& block, int32_t block_height)
 {
     LogPrintf("Oracle: AddOracleBundleToBlock called for height %d, enabled=%d, min_oracle_count=%d\n",
              block_height, enabled, min_oracle_count);
@@ -241,15 +256,23 @@ bool OracleBundleManager::AddOracleBundleToBlock(CBlock& block, int32_t block_he
     // This allows unit tests to work without full epoch consensus flow
     if (!bundle.HasConsensus(min_oracle_count) && min_oracle_count == 1) {
         LogPrintf("Oracle: Phase One mode - checking pending messages\n");
-        std::vector<COraclePriceMessage> pending = GetPendingMessages();
-        LogPrintf("Oracle: GetPendingMessages() returned %zu messages\n", pending.size());
+        std::lock_guard<std::recursive_mutex> lock(mtx_messages);
+        std::vector<COraclePriceMessage> pending;
+        pending.reserve(pending_messages.size());
+        for (const auto& pair : pending_messages) {
+            pending.push_back(pair.second);
+        }
+        LogPrintf("Oracle: Phase One - %zu pending messages\n", pending.size());
 
         if (!pending.empty()) {
             bundle = COracleBundle(epoch);
             bundle.messages = pending;
             bundle.median_price_micro_usd = pending[0].price_micro_usd;
-            LogPrintf("Oracle: Phase One - Using %d pending message(s) for block %d\n",
+            LogPrintf("Oracle: Phase One - Using %zu pending message(s) for block %d\n",
                      pending.size(), block_height);
+            // Clear pending messages after consuming them into a bundle
+            pending_messages.clear();
+            LogPrintf("Oracle: Phase One - Cleared pending messages after bundle creation\n");
         } else {
             LogPrintf("Oracle: Phase One - No pending messages available!\n");
         }
@@ -258,8 +281,13 @@ bool OracleBundleManager::AddOracleBundleToBlock(CBlock& block, int32_t block_he
     // Phase Two: Create bundle from pending messages when enough are available
     if (!bundle.HasConsensus(min_oracle_count) && min_oracle_count > 1) {
         LogPrintf("Oracle: Phase Two mode - checking pending messages for %d-of-N consensus\n", min_oracle_count);
-        std::vector<COraclePriceMessage> pending = GetPendingMessages();
-        LogPrintf("Oracle: GetPendingMessages() returned %zu messages (need %d)\n", pending.size(), min_oracle_count);
+        std::lock_guard<std::recursive_mutex> lock(mtx_messages);
+        std::vector<COraclePriceMessage> pending;
+        pending.reserve(pending_messages.size());
+        for (const auto& pair : pending_messages) {
+            pending.push_back(pair.second);
+        }
+        LogPrintf("Oracle: Phase Two - %zu pending messages (need %d)\n", pending.size(), min_oracle_count);
         
         if (static_cast<int>(pending.size()) >= min_oracle_count) {
             bundle = COracleBundle(epoch);
@@ -270,6 +298,10 @@ bool OracleBundleManager::AddOracleBundleToBlock(CBlock& block, int32_t block_he
             bundle.timestamp = pending[0].timestamp;
             LogPrintf("Oracle: Phase Two - Created bundle with %zu messages, consensus price=%llu\n",
                      pending.size(), bundle.median_price_micro_usd);
+            // Clear pending messages after consuming them into a bundle
+            // This ensures each block only uses fresh oracle submissions
+            pending_messages.clear();
+            LogPrintf("Oracle: Phase Two - Cleared pending messages after bundle creation\n");
         }
     }
 

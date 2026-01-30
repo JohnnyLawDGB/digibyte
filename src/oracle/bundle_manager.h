@@ -67,6 +67,10 @@ public:
     bool RemoveOracleMessage(uint32_t oracle_id);
     std::vector<COraclePriceMessage> GetPendingMessages() const;
     size_t GetPendingMessageCount() const;
+    void ClearPendingMessages();
+
+    //! For testing: directly inject a message into pending (bypasses validation)
+    void InjectTestMessage(const COraclePriceMessage& message);
 
     //! Bundle management
     COracleBundle GetCurrentBundle(int32_t epoch) const;
@@ -75,7 +79,7 @@ public:
     void CleanupOldBundles(int32_t current_epoch);
 
     //! Block integration
-    bool AddOracleBundleToBlock(CBlock& block, int32_t block_height) const;
+    bool AddOracleBundleToBlock(CBlock& block, int32_t block_height);
     CScript CreateOracleScript(const COracleBundle& bundle) const;
     bool ExtractOracleBundle(const CTransaction& coinbase_tx, COracleBundle& bundle) const;
     bool TryCreateBundle(int32_t epoch);  // Explicitly create bundle for given epoch

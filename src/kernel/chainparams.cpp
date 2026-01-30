@@ -456,7 +456,7 @@ public:
 
         // Deployment of DigiDollar stablecoin features (testnet - Testnet reset 2025)
         // Note: BIP9 deployment is ALWAYS_ACTIVE (min_activation_height must be 0 per BIP9 rules)
-        // Actual DigiDollar feature activation is controlled by nDDActivationHeight (650)
+        // Actual DigiDollar feature activation is controlled by nDDActivationHeight (550)
         consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].bit = 23;
         consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nStartTime = Consensus::BIP9Deployment::ALWAYS_ACTIVE;
         consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;

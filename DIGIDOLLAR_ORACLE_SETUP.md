@@ -52,8 +52,8 @@ txindex=1
 debug=digidollar
 debug=net
 listen=1
-port=12028
-rpcport=14024
+port=12034
+rpcport=14025
 rpcallowip=127.0.0.1
 rpcbind=127.0.0.1
 
@@ -121,7 +121,7 @@ RC12 creates descriptor wallets by default:
 
 Send **only**:
 1. Your **pubkey** (66-char hex, `02`/`03` prefix — the compressed public key)
-2. Your **server endpoint** (e.g., `myserver.com:12028`)
+2. Your **server endpoint** (e.g., `myserver.com:12034`)
 
 **⚠️ NEVER share your private key. It stays in your wallet.**
 
@@ -206,7 +206,7 @@ Once running, the oracle automatically:
 | Internal (wire) | micro-USD | `50000` = $0.05 |
 | RPC input | USD | `0.05` |
 | Conversion | `price_micro_usd = usd * 1,000,000` | |
-| Valid range | $0.0001 – $100.00 | 100 – 100,000,000 micro-USD |
+| Valid range | $0.0001 – $10.00 | 100 – 10,000,000 micro-USD |
 
 ### Exchange Sources
 
@@ -219,7 +219,7 @@ Once running, the oracle automatically:
 | Gate.io / HTX | No |
 | CoinMarketCap | **Yes** (optional, add `coinmarketcap-api-key` to config) |
 
-Minimum 3 valid sources required for a price to be accepted.
+Minimum 2 valid sources required for a price to be accepted.
 
 ---
 
@@ -272,7 +272,7 @@ Oracles are selected per-epoch using `SelectOraclesForEpoch()`. The `listoracles
 ### Monitor Oracle Activity
 
 ```bash
-tail -f ~/.digibyte/testnet4/debug.log | grep -i "oracle\|digidollar"
+tail -f ~/.digibyte/testnet12/debug.log | grep -i "oracle\|digidollar"
 ```
 
 ### Check Oracle Price
@@ -389,10 +389,10 @@ sendoracleprice <price_usd> [oracle_id]
 
 | Command | Description |
 |---------|-------------|
-| `setmockoracleprice <price>` | Set mock oracle price |
+| `setmockoracleprice <price_micro_usd>` | Set mock oracle price (in micro-USD, e.g. 6500 = $0.0065) |
 | `getmockoracleprice` | Get current mock price |
-| `simulatepricevolatility` | Simulate price volatility |
-| `enablemockoracle` | Enable mock oracle |
+| `simulatepricevolatility <percent>` | Simulate price volatility (e.g. 50 = +50%, -80 = -80%) |
+| `enablemockoracle <true\|false>` | Enable/disable mock oracle |
 
 ---
 
@@ -403,7 +403,7 @@ When an operator sends their 33-byte compressed public key:
 ### 1. Add to `vOracleNodes` in `InitializeOracleNodes()`
 
 ```cpp
-{5, ParsePubKey("0398720f6d15252fb2c3501107d46129589d8ab56e0f967be2e470f40675eb7b57"), "operator.server.com:12028", true},
+{5, ParsePubKey("0398720f6d15252fb2c3501107d46129589d8ab56e0f967be2e470f40675eb7b57"), "operator.server.com:12034", true},
 ```
 
 ### 2. Add to `consensus.vOraclePublicKeys`
@@ -428,7 +428,7 @@ Recompile and distribute the updated binary.
 | RAM | 2 GB | 4+ GB |
 | Disk | 20 GB | 50+ GB SSD |
 | Network | Outbound HTTPS | Static IP or DNS |
-| Ports | 12028 (testnet P2P) | Open inbound + outbound |
+| Ports | 12034 (testnet P2P) | Open inbound + outbound |
 
 ---
 
@@ -437,10 +437,10 @@ Recompile and distribute the updated binary.
 | Component | Path |
 |-----------|------|
 | Config | `~/.digibyte/digibyte.conf` |
-| Testnet data | `~/.digibyte/testnet4/` |
-| Debug log | `~/.digibyte/testnet4/debug.log` |
-| Wallets | `~/.digibyte/testnet4/wallets/` |
-| RPC cookie | `~/.digibyte/testnet4/.cookie` |
+| Testnet data | `~/.digibyte/testnet12/` |
+| Debug log | `~/.digibyte/testnet12/debug.log` |
+| Wallets | `~/.digibyte/testnet12/wallets/` |
+| RPC cookie | `~/.digibyte/testnet12/.cookie` |
 
 ---
 

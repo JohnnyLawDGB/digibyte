@@ -118,17 +118,37 @@ RC12 creates descriptor wallets by default:
 
 > ⚠️ **Wallet RPC:** `createoraclekey` is a wallet RPC — you MUST specify `-rpcwallet=<name>`.
 
+#### Understanding the Two Public Key Formats
+
+`createoraclekey` returns **two representations of the same public key:**
+
+| Field | Format | Size | Example |
+|-------|--------|------|---------|
+| `pubkey` | Compressed (with `02`/`03` prefix) | 33 bytes (66 hex chars) | `0398720f...eb7b57` |
+| `pubkey_xonly` | X-only (prefix stripped) | 32 bytes (64 hex chars) | `98720f...eb7b57` |
+
+They are the **same key**. `pubkey_xonly` is literally `pubkey` with the first byte (`02` or `03`) removed.
+
+**Why two formats?** Because chainparams stores the key in **two locations**, each requiring a different format:
+
+| Chainparams Location | Format Used | Purpose |
+|---------------------|-------------|---------|
+| `vOracleNodes` | `pubkey` (33-byte compressed) | Node identity and peer connections |
+| `consensus.vOraclePublicKeys` | `pubkey_xonly` (32-byte x-only) | Schnorr signature verification at consensus level |
+
+> **As an operator, you only share `pubkey`** (the 33-byte compressed key). The maintainer derives `pubkey_xonly` from it by stripping the prefix byte.
+
 ### Step 4: Send Your Public Key to the Maintainer
 
 Send **only**:
-1. Your **`pubkey`** from the output (66-char hex, starts with `02` or `03` — this is the 33-byte compressed public key)
+1. Your **`pubkey`** from the output (66-char hex, starts with `02` or `03` — the 33-byte compressed public key)
 2. Your **server endpoint** (e.g., `myserver.com:12034`)
 
-The maintainer uses this single key to populate **both** chainparams locations:
-- `vOracleNodes` gets the full 33-byte compressed key as-is
-- `consensus.vOraclePublicKeys` gets the 32-byte x-only version (the `02`/`03` prefix byte is stripped)
+The maintainer uses your single `pubkey` to populate **both** chainparams locations:
+- **`vOracleNodes`** → your `pubkey` as-is (33-byte compressed, with `02`/`03` prefix)
+- **`consensus.vOraclePublicKeys`** → your `pubkey_xonly` (32-byte, `02`/`03` prefix stripped)
 
-You do **not** need to send `pubkey_xonly` separately — it's derived from `pubkey`.
+You do **not** need to send `pubkey_xonly` separately — it's derived from `pubkey` by removing the first byte.
 
 **⚠️ NEVER share your private key. It stays in your wallet.**
 
@@ -136,10 +156,10 @@ You do **not** need to send `pubkey_xonly` separately — it's derived from `pub
 
 The maintainer adds your key to two locations in `src/kernel/chainparams.cpp`:
 
-1. **`vOracleNodes`** — 33-byte compressed CPubKey + endpoint
-2. **`consensus.vOraclePublicKeys`** — 32-byte x-only key (strip the `02`/`03` prefix)
+1. **`vOracleNodes`** — your full 33-byte compressed `pubkey` + endpoint (via `ParsePubKey()`)
+2. **`consensus.vOraclePublicKeys`** — your 32-byte `pubkey_xonly` (the `02`/`03` prefix is stripped)
 
-Both must match. See [Maintainer Section](#for-the-maintainer-adding-an-operators-key) below.
+**⚠️ Both locations MUST be updated and MUST correspond to the same key.** See [Maintainer Section](#for-the-maintainer-adding-an-operators-key) below.
 
 ### Step 6: Start Your Oracle
 
@@ -406,23 +426,35 @@ sendoracleprice <price_usd> [oracle_id]
 
 ## For the Maintainer: Adding an Operator's Key
 
-When an operator sends their 33-byte compressed public key:
+When an operator sends their `pubkey` (33-byte compressed, e.g. `0398720f...eb7b57`), you must add it to **two locations** in `src/kernel/chainparams.cpp`:
 
-### 1. Add to `vOracleNodes` in `InitializeOracleNodes()`
+### 1. Add to `vOracleNodes` — Full 33-byte compressed key
+
+Use the operator's `pubkey` exactly as they sent it (with the `02`/`03` prefix):
 
 ```cpp
+// pubkey goes here as-is (33-byte compressed, 02/03 prefix included)
 {5, ParsePubKey("0398720f6d15252fb2c3501107d46129589d8ab56e0f967be2e470f40675eb7b57"), "operator.server.com:12034", true},
 ```
 
-### 2. Add to `consensus.vOraclePublicKeys`
+### 2. Add to `consensus.vOraclePublicKeys` — 32-byte x-only key
 
-Strip the `02`/`03` prefix to get the 32-byte x-only key:
+Strip the first byte (`02` or `03`) from the operator's `pubkey` to get the x-only format:
+
+```
+Operator sends:  0398720f6d15252fb2c3501107d46129589d8ab56e0f967be2e470f40675eb7b57
+                 ^^
+                 Strip this prefix byte
+
+X-only result:   98720f6d15252fb2c3501107d46129589d8ab56e0f967be2e470f40675eb7b57
+```
 
 ```cpp
+// pubkey_xonly goes here (32-byte, 02/03 prefix REMOVED)
 consensus.vOraclePublicKeys.push_back("98720f6d15252fb2c3501107d46129589d8ab56e0f967be2e470f40675eb7b57");
 ```
 
-**⚠️ Both locations must be updated and must match.** `vOracleNodes` uses 33-byte compressed keys. `consensus.vOraclePublicKeys` uses 32-byte x-only keys.
+**⚠️ Both locations MUST be updated for the same oracle ID and MUST correspond to the same key.** If they don't match, the oracle will fail key validation at startup (`ValidateOracleKey()` compares the wallet key against the chainparams x-only key).
 
 Recompile and distribute the updated binary.
 

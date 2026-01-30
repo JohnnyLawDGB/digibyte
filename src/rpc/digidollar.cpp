@@ -2682,7 +2682,13 @@ RPCHelpMan createoraclekey()
     return RPCHelpMan{"createoraclekey",
                 "\nGenerate an oracle keypair and store it in the loaded descriptor wallet.\n"
                 "The private key is stored securely in the wallet database, mapped to the oracle_id.\n"
-                "Share ONLY the returned pubkey with the DigiByte Core maintainer for chainparams inclusion.\n",
+                "\nTwo public key formats are returned from the same keypair:\n"
+                "  - pubkey: 33-byte compressed key (02/03 prefix) — SEND THIS to the maintainer\n"
+                "  - pubkey_xonly: 32-byte x-only key (prefix stripped) — used internally for Schnorr signatures\n"
+                "\nThe maintainer uses your pubkey to populate both chainparams locations:\n"
+                "  - vOracleNodes: uses the full 33-byte compressed key as-is\n"
+                "  - consensus.vOraclePublicKeys: uses the 32-byte x-only version (02/03 prefix stripped)\n"
+                "\nAs an operator, you only need to share your pubkey. Never share your private key.\n",
                 {
                     {"oracle_id", RPCArg::Type::NUM, RPCArg::Optional::NO, "Oracle ID slot (0-29) to generate key for"},
                 },
@@ -2690,8 +2696,8 @@ RPCHelpMan createoraclekey()
                     RPCResult::Type::OBJ, "", "",
                     {
                         {RPCResult::Type::NUM, "oracle_id", "Oracle ID the key was generated for"},
-                        {RPCResult::Type::STR_HEX, "pubkey", "Compressed public key (33-byte, 02/03 prefix) — share this with the maintainer"},
-                        {RPCResult::Type::STR_HEX, "pubkey_xonly", "X-only public key (32-byte, for Schnorr/Taproot)"},
+                        {RPCResult::Type::STR_HEX, "pubkey", "Compressed public key (33-byte, 02/03 prefix) — SHARE THIS with the maintainer for chainparams inclusion"},
+                        {RPCResult::Type::STR_HEX, "pubkey_xonly", "X-only public key (32-byte, no prefix) — derived from pubkey, used internally for Schnorr signature verification. Do not share separately; the maintainer derives this from pubkey."},
                         {RPCResult::Type::BOOL, "stored_in_wallet", "Whether key was stored in wallet"},
                         {RPCResult::Type::STR, "message", "Instructions for the operator"},
                     }
@@ -2751,7 +2757,8 @@ RPCHelpMan createoraclekey()
             result.pushKV("stored_in_wallet", stored);
             result.pushKV("message", strprintf(
                 "Oracle key generated and stored in wallet. "
-                "Share ONLY the pubkey with the DigiByte Core maintainer for chainparams inclusion. "
+                "Share ONLY the pubkey (33-byte compressed, starting with 02/03) with the DigiByte Core maintainer for chainparams inclusion. "
+                "The pubkey_xonly is derived from it automatically — you do not need to send it separately. "
                 "Run 'startoracle %u' after your key is added to chainparams to begin oracle operation.",
                 oracle_id));
 

@@ -198,7 +198,7 @@ BOOST_AUTO_TEST_CASE(oracle_bundle_size_limit)
 
     COraclePriceMessage msg;
     msg.oracle_id = 0;
-    msg.price_micro_usd = 5;
+    msg.price_micro_usd = 50000; // 50000 micro-USD = $0.05 (minimum valid: 100)
     msg.timestamp = GetTime();
     msg.block_height = 50;  // Below Phase Two activation for Phase One testing
     msg.nonce = FastRandomContext().rand64();
@@ -373,6 +373,9 @@ BOOST_AUTO_TEST_CASE(create_new_block_phase_one_single_oracle)
 {
     // Add EXACTLY ONE oracle message (Phase One requirement)
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    manager.SetEnabled(true);
+    manager.SetMinOracleCount(1); // Phase One: 1-of-1 consensus
+    manager.ClearPendingMessages();
 
     CKey oracle_key;
     oracle_key.MakeNewKey(true);
@@ -380,7 +383,7 @@ BOOST_AUTO_TEST_CASE(create_new_block_phase_one_single_oracle)
 
     COraclePriceMessage msg;
     msg.oracle_id = 0;  // First oracle
-    msg.price_micro_usd = 5;
+    msg.price_micro_usd = 50000; // 50000 micro-USD = $0.05 (minimum valid: 100)
     msg.timestamp = GetTime();
     msg.block_height = m_node.chainman->ActiveHeight() + 1;
     msg.nonce = FastRandomContext().rand64();
@@ -415,7 +418,7 @@ BOOST_AUTO_TEST_CASE(create_new_block_phase_one_single_oracle)
 
     if (!extracted_bundle.messages.empty()) {
         BOOST_CHECK_EQUAL(extracted_bundle.messages[0].oracle_id, 0);
-        BOOST_CHECK_EQUAL(extracted_bundle.messages[0].price_micro_usd, 6000);
+        BOOST_CHECK_EQUAL(extracted_bundle.messages[0].price_micro_usd, 50000);
         BOOST_CHECK_EQUAL(extracted_bundle.messages[0].timestamp, msg.timestamp);
     }
 }

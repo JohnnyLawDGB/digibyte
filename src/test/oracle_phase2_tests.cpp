@@ -741,6 +741,10 @@ BOOST_FIXTURE_TEST_CASE(pending_messages_cleared_after_bundle, BasicTestingSetup
 {
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
 
+    // Reset singleton state to defaults (may be contaminated by prior tests)
+    manager.SetEnabled(true);
+    manager.SetMinOracleCount(ORACLE_CONSENSUS_REQUIRED);  // 8-of-15
+
     // Clear state using public API
     manager.ClearPendingMessages();
 
@@ -776,6 +780,8 @@ BOOST_FIXTURE_TEST_CASE(pending_messages_cleared_after_bundle, BasicTestingSetup
 BOOST_FIXTURE_TEST_CASE(pending_messages_preserved_when_insufficient, BasicTestingSetup)
 {
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    manager.SetEnabled(true);
+    manager.SetMinOracleCount(ORACLE_CONSENSUS_REQUIRED);  // 8-of-15
     manager.ClearPendingMessages();
 
     // Inject only 2 messages (below 3-of-5 threshold)
@@ -809,6 +815,8 @@ BOOST_FIXTURE_TEST_CASE(pending_messages_preserved_when_insufficient, BasicTesti
 BOOST_FIXTURE_TEST_CASE(no_stale_message_carryover, BasicTestingSetup)
 {
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    manager.SetEnabled(true);
+    manager.SetMinOracleCount(ORACLE_CONSENSUS_REQUIRED);  // 8-of-15
     manager.ClearPendingMessages();
 
     // Block 1: Inject 8 messages, create bundle

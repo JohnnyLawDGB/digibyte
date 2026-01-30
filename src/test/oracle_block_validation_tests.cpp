@@ -421,7 +421,7 @@ BOOST_AUTO_TEST_CASE(contextual_checkblock_rejects_old_bundle)
 
     int64_t block_time = GetTime();
     int64_t oracle_timestamp = block_time - 7200; // 2 hours old (invalid: > 1 hour)
-    int32_t block_height = 50;  // Below Phase Two activation (100) for Phase One testing  // Above activation height (600)
+    int32_t block_height = 700;  // Above DigiDollar activation height (650) so validation kicks in
 
     CBlock block = CreateBlockWithOracleBundle(
         oracle_key,

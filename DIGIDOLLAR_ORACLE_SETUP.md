@@ -53,7 +53,7 @@ txindex=1
 debug=digidollar
 debug=net
 listen=1
-port=12034
+port=12030
 rpcport=14025
 rpcallowip=127.0.0.1
 rpcbind=127.0.0.1
@@ -142,7 +142,7 @@ They are the **same key**. `pubkey_xonly` is literally `pubkey` with the first b
 
 Send **only**:
 1. Your **`pubkey`** from the output (66-char hex, starts with `02` or `03` — the 33-byte compressed public key)
-2. Your **server endpoint** (e.g., `myserver.com:12035`)
+2. Your **server endpoint** (e.g., `myserver.com:12030`)
 
 The maintainer uses your single `pubkey` to populate **both** chainparams locations:
 - **`vOracleNodes`** → your `pubkey` as-is (33-byte compressed, with `02`/`03` prefix)
@@ -434,7 +434,7 @@ Use the operator's `pubkey` exactly as they sent it (with the `02`/`03` prefix):
 
 ```cpp
 // pubkey goes here as-is (33-byte compressed, 02/03 prefix included)
-{5, ParsePubKey("0398720f6d15252fb2c3501107d46129589d8ab56e0f967be2e470f40675eb7b57"), "operator.server.com:12035", true},
+{5, ParsePubKey("0398720f6d15252fb2c3501107d46129589d8ab56e0f967be2e470f40675eb7b57"), "operator.server.com:12030", true},
 ```
 
 ### 2. Add to `consensus.vOraclePublicKeys` — 32-byte x-only key
@@ -468,7 +468,7 @@ Recompile and distribute the updated binary.
 | RAM | 2 GB | 4+ GB |
 | Disk | 20 GB | 50+ GB SSD |
 | Network | Outbound HTTPS | Static IP or DNS |
-| Ports | 12034 (testnet P2P) | Open inbound + outbound |
+| Ports | 12030 (testnet P2P) | Open inbound + outbound |
 
 ---
 

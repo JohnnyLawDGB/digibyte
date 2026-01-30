@@ -99,7 +99,7 @@ See **`DIGIDOLLAR_ORACLE_SETUP.md`** for the complete oracle operator guide.
 
 ## Upgrade Notes
 
-**RC12 uses testnet13 network (port 12035). This is a new testnet — fresh chain, no data carries over from RC10/RC11.**
+**RC12 uses testnet13 network (port 12030). This is a new testnet — fresh chain, no data carries over from RC10/RC11.**
 
 ### If Upgrading from RC9 or Earlier:
 1. Close your old wallet
@@ -388,9 +388,9 @@ For the complete guide including configuration, security, troubleshooting, and R
 | Setting | Value |
 |---------|-------|
 | Network | Testnet (testnet13) |
-| Default P2P Port | 12034 |
+| Default P2P Port | 12030 |
 | Default RPC Port | 14025 |
-| Oracle Node | oracle1.digibyte.io:12035 |
+| Oracle Node | oracle1.digibyte.io:12030 |
 | Address Prefix | dgbt1... (bech32) |
 | Phase Two Activation | Block 100 |
 | Oracle Consensus | 3-of-5 Schnorr threshold |
@@ -453,7 +453,7 @@ For the complete guide including configuration, security, troubleshooting, and R
 - Restart the wallet after config changes
 
 ### "Not connecting to network"
-- Check your firewall allows port 12034
+- Check your firewall allows port 12030
 - Verify `addnode=oracle1.digibyte.io` is under `[test]` in config
 
 ### "Oracle price shows 0 or N/A"

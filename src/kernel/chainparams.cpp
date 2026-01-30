@@ -969,15 +969,28 @@ public:
         // Oracle system parameters (RegTest uses MockOracleManager)
         consensus.nOracleActivationHeight = 1;     // Activate immediately
         consensus.nOracleEpochLength = 144;        // 2.4 hours (144 blocks * 15 seconds)
-        consensus.nOracleRequiredMessages = 1;     // 1-of-1 for testing
-        consensus.nOracleTotalOracles = 1;         // Single oracle for testing
+        consensus.nOracleRequiredMessages = 3;     // Phase Two: 3-of-5 for testing
+        consensus.nOracleTotalOracles = 5;         // Phase Two: 5 oracles for testing
+        consensus.nDigiDollarPhase2Height = 100;   // Phase Two activates at block 100
 
-        // RegTest: Use same hardcoded oracle key as testnet
+        // RegTest: Oracle public keys for all 5 oracles (match vOracleNodes)
         consensus.vOraclePublicKeys.push_back(
-            "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
+            "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"  // oracle 0
+        );
+        consensus.vOraclePublicKeys.push_back(
+            "c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5"  // oracle 1
+        );
+        consensus.vOraclePublicKeys.push_back(
+            "f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9"  // oracle 2
+        );
+        consensus.vOraclePublicKeys.push_back(
+            "88f7b0f632de8140fe337e62a37f3566500a99934c2231b6cb9fd7584b8e672c"  // oracle 3
+        );
+        consensus.vOraclePublicKeys.push_back(
+            "ba30c7a2323f0dcca829b8ab6a5b3b59ce5e0e6c0b16eaff5ba8e684b31b21d9"  // oracle 4
         );
 
-        LogPrintf("Oracle: RegTest oracle activation height: %d\n", consensus.nOracleActivationHeight);
+        LogPrintf("Oracle: RegTest Phase Two - 3-of-5 consensus, activates at height %d\n", consensus.nDigiDollarPhase2Height);
     }
 
 private:

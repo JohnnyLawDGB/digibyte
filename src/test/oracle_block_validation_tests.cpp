@@ -158,7 +158,7 @@ BOOST_AUTO_TEST_CASE(checkblock_accepts_valid_oracle_bundle)
     // Create block with valid oracle bundle
     uint64_t price = 50000; // 50000 micro-USD = $0.05 = 5 cents (valid range: 100 - 100000000 micro-USD)
     int64_t timestamp = GetTime();
-    int32_t block_height = 700;  // Above activation height (600)
+    int32_t block_height = 50;  // Below Phase Two activation (100) for Phase One testing  // Above activation height (600)
     CScript coinbase_script_sig = CScript() << block_height << OP_0;
 
     CBlock block = CreateBlockWithOracleBundle(oracle_key, price, timestamp, block_height, coinbase_script_sig);
@@ -280,7 +280,7 @@ BOOST_AUTO_TEST_CASE(checkblock_rejects_bundle_wrong_consensus)
     oracle_key2.MakeNewKey(true);
 
     int64_t timestamp = GetTime();
-    int32_t block_height = 700;  // Above activation height (600)
+    int32_t block_height = 50;  // Below Phase Two activation (100) for Phase One testing  // Above activation height (600)
 
     // Create bundle with TWO messages (violates Phase One 1-of-1)
     COraclePriceMessage msg1 = CreateValidOracleMessage(oracle_key1, 5, timestamp, block_height);
@@ -322,13 +322,14 @@ BOOST_AUTO_TEST_CASE(checkblock_rejects_bundle_wrong_consensus)
     // Since we're in transition period, blocks without oracle data are allowed
     // The proper fix is to test that CreateOracleScript returns empty for multi-message bundles
 
-    // In RegTest (Phase One, Phase Two not activated), CreateOracleScript rejects multi-message bundles
+    // RegTest now has Phase Two active (nDigiDollarPhase2Height = 100)
+    // Multi-message bundles should be ACCEPTED and produce a Phase Two script
     OracleBundleManager& test_manager = OracleBundleManager::GetInstance();
     CScript oracle_script = test_manager.CreateOracleScript(bundle);
 
     BOOST_CHECK_MESSAGE(
-        oracle_script.empty(),
-        "CreateOracleScript should return empty script for multi-message bundles when Phase Two is not active"
+        !oracle_script.empty(),
+        "CreateOracleScript should produce Phase Two script for multi-message bundles when Phase Two is active"
     );
 
     // If script is empty, CheckBlock will pass (transition period)
@@ -359,7 +360,7 @@ BOOST_AUTO_TEST_CASE(contextual_checkblock_timestamp_validation)
 
     int64_t block_time = GetTime();
     int64_t oracle_timestamp = block_time - 1800; // 30 minutes old (valid: < 1 hour)
-    int32_t block_height = 700;  // Above activation height (600)
+    int32_t block_height = 50;  // Below Phase Two activation (100) for Phase One testing  // Above activation height (600)
 
     CBlock block = CreateBlockWithOracleBundle(
         oracle_key,
@@ -420,7 +421,7 @@ BOOST_AUTO_TEST_CASE(contextual_checkblock_rejects_old_bundle)
 
     int64_t block_time = GetTime();
     int64_t oracle_timestamp = block_time - 7200; // 2 hours old (invalid: > 1 hour)
-    int32_t block_height = 700;  // Above activation height (600)
+    int32_t block_height = 50;  // Below Phase Two activation (100) for Phase One testing  // Above activation height (600)
 
     CBlock block = CreateBlockWithOracleBundle(
         oracle_key,

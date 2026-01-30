@@ -79,7 +79,7 @@ BOOST_AUTO_TEST_CASE(add_oracle_bundle_to_coinbase)
     msg.oracle_id = 0;
     msg.price_micro_usd = 6000;  // $0.006 (realistic DGB price)
     msg.timestamp = GetTime();
-    msg.block_height = 101;
+    msg.block_height = 50;  // Below Phase Two activation for Phase One testing
     msg.nonce = FastRandomContext().rand64();
     msg.oracle_pubkey = oracle_pubkey;
 
@@ -101,7 +101,7 @@ BOOST_AUTO_TEST_CASE(add_oracle_bundle_to_coinbase)
     block.vtx.push_back(MakeTransactionRef(coinbase));
 
     // Call AddOracleBundleToBlock
-    BOOST_CHECK(manager.AddOracleBundleToBlock(block, 101));
+    BOOST_CHECK(manager.AddOracleBundleToBlock(block, 50));
 
     // Verify oracle bundle was added to coinbase
     BOOST_REQUIRE(!block.vtx.empty());
@@ -139,7 +139,7 @@ BOOST_AUTO_TEST_CASE(oracle_bundle_serialization_format)
     msg.oracle_id = 0;
     msg.price_micro_usd = 12000;  // $0.012 (realistic DGB price)
     msg.timestamp = GetTime();
-    msg.block_height = 101;
+    msg.block_height = 50;  // Below Phase Two activation for Phase One testing
     msg.nonce = FastRandomContext().rand64();
     msg.oracle_pubkey = oracle_pubkey;
 
@@ -200,7 +200,7 @@ BOOST_AUTO_TEST_CASE(oracle_bundle_size_limit)
     msg.oracle_id = 0;
     msg.price_micro_usd = 5;
     msg.timestamp = GetTime();
-    msg.block_height = 101;
+    msg.block_height = 50;  // Below Phase Two activation for Phase One testing
     msg.nonce = FastRandomContext().rand64();
     msg.oracle_pubkey = oracle_pubkey;
 
@@ -236,7 +236,7 @@ BOOST_AUTO_TEST_CASE(oracle_bundle_size_limit)
     block.vtx.push_back(MakeTransactionRef(coinbase));
 
     // Should succeed for Phase One single oracle
-    BOOST_CHECK(manager.AddOracleBundleToBlock(block, 101));
+    BOOST_CHECK(manager.AddOracleBundleToBlock(block, 50));
 
     // Verify added OP_RETURN output is within size limits
     const CTransaction& updated_coinbase = *block.vtx[0];

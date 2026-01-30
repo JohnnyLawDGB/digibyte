@@ -142,7 +142,7 @@ They are the **same key**. `pubkey_xonly` is literally `pubkey` with the first b
 
 Send **only**:
 1. Your **`pubkey`** from the output (66-char hex, starts with `02` or `03` — the 33-byte compressed public key)
-2. Your **server endpoint** (e.g., `myserver.com:12034`)
+2. Your **server endpoint** (e.g., `myserver.com:12035`)
 
 The maintainer uses your single `pubkey` to populate **both** chainparams locations:
 - **`vOracleNodes`** → your `pubkey` as-is (33-byte compressed, with `02`/`03` prefix)
@@ -300,7 +300,7 @@ Oracles are selected per-epoch using `SelectOraclesForEpoch()`. The `listoracles
 ### Monitor Oracle Activity
 
 ```bash
-tail -f ~/.digibyte/testnet12/debug.log | grep -i "oracle\|digidollar"
+tail -f ~/.digibyte/testnet13/debug.log | grep -i "oracle\|digidollar"
 ```
 
 ### Check Oracle Price
@@ -434,7 +434,7 @@ Use the operator's `pubkey` exactly as they sent it (with the `02`/`03` prefix):
 
 ```cpp
 // pubkey goes here as-is (33-byte compressed, 02/03 prefix included)
-{5, ParsePubKey("0398720f6d15252fb2c3501107d46129589d8ab56e0f967be2e470f40675eb7b57"), "operator.server.com:12034", true},
+{5, ParsePubKey("0398720f6d15252fb2c3501107d46129589d8ab56e0f967be2e470f40675eb7b57"), "operator.server.com:12035", true},
 ```
 
 ### 2. Add to `consensus.vOraclePublicKeys` — 32-byte x-only key
@@ -477,10 +477,10 @@ Recompile and distribute the updated binary.
 | Component | Path |
 |-----------|------|
 | Config | `~/.digibyte/digibyte.conf` |
-| Testnet data | `~/.digibyte/testnet12/` |
-| Debug log | `~/.digibyte/testnet12/debug.log` |
-| Wallets | `~/.digibyte/testnet12/wallets/` |
-| RPC cookie | `~/.digibyte/testnet12/.cookie` |
+| Testnet data | `~/.digibyte/testnet13/` |
+| Debug log | `~/.digibyte/testnet13/debug.log` |
+| Wallets | `~/.digibyte/testnet13/wallets/` |
+| RPC cookie | `~/.digibyte/testnet13/.cookie` |
 
 ---
 

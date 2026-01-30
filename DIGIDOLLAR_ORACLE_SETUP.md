@@ -32,13 +32,14 @@ DigiDollar requires oracle operators to provide real-time DGB/USD price feeds. O
 ```bash
 cd ~/Code/digibyte
 ./autogen.sh
-./configure    # Ensure --with-curl for exchange price fetching
+./configure    # libcurl auto-detected via pkg-config for exchange price fetching
 make -j$(nproc)
 ```
 
-Verify curl support:
+Verify curl support (required for oracle price fetching):
 ```bash
 ldd ./src/digibyted | grep curl
+# If missing: sudo apt install libcurl4-openssl-dev (Debian/Ubuntu)
 ```
 
 ### Testnet Configuration
@@ -195,7 +196,7 @@ The command tries key sources in this order:
 
 Once running, the oracle automatically:
 - Fetches DGB/USD prices from multiple exchanges every 15 seconds
-- Calculates median price with MAD outlier filtering
+- Calculates median price with percentage-threshold outlier filtering
 - Signs the price with BIP-340 Schnorr using your wallet-stored private key
 - Broadcasts the signed message to the P2P network
 
@@ -216,7 +217,8 @@ Once running, the oracle automatically:
 | CoinGecko | No |
 | KuCoin | No |
 | Crypto.com | No |
-| Gate.io / HTX | No |
+| Gate.io | No |
+| HTX | No |
 | CoinMarketCap | **Yes** (optional, add `coinmarketcap-api-key` to config) |
 
 Minimum 2 valid sources required for a price to be accepted.
@@ -310,7 +312,7 @@ tail -f ~/.digibyte/testnet12/debug.log | grep -i "oracle\|digidollar"
 
 ## RPC Command Reference
 
-All oracle RPCs are in the `"oracle"` category except `getoracleprice` (in `"digidollar"`).
+Oracle management RPCs (`createoraclekey`, `startoracle`, `stoporacle`, `getoraclepubkey`, `listoracles`, `sendoracleprice`) are in the `"oracle"` category. `getoracleprice` and the mock oracle RPCs are in the `"digidollar"` category.
 
 ### `createoraclekey` *(wallet RPC)*
 

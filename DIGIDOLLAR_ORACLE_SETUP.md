@@ -17,7 +17,7 @@ DigiDollar requires oracle operators to provide real-time DGB/USD price feeds. O
 
 | Network | Total Slots | Active Oracles | Consensus Required | Phase 2 Activation |
 |---------|-------------|----------------|--------------------|--------------------|
-| **Mainnet** | 30 (IDs 0–29) | 15 | 8-of-15 | TBD |
+| **Mainnet** | 30 (IDs 0–29) | 15 | 8-of-15 | Disabled (`INT_MAX`) |
 | **Testnet** | 10 (IDs 0–9) | 5 (IDs 0–4) | 3-of-5 | Block 100 |
 | **Regtest** | 5 (IDs 0–4) | 5 | 3-of-5 | Block 100 |
 
@@ -231,14 +231,14 @@ Phase 2 enables multi-oracle consensus. On testnet, this means **3-of-5 oracles 
 
 | Parameter | Testnet | Regtest | Mainnet |
 |-----------|---------|---------|---------|
-| `nOracleActivationHeight` | 1 | 1 | TBD |
-| `nDigiDollarPhase2Height` | 100 | 100 | TBD |
+| `nOracleActivationHeight` | 1 | 1 | Disabled (`INT_MAX`) |
+| `nDigiDollarPhase2Height` | 100 | 100 | Disabled (`INT_MAX`) |
 | `nOracleRequiredMessages` | 3 | 3 | 8 |
 | `nOracleTotalOracles` | 5 | 5 | 15 |
 | `nOracleEpochLength` | 1440 blocks | 144 blocks | 1440 blocks |
-| `nDDOracleEpochBlocks` | 50 | 10 | TBD |
-| `nDDOracleUpdateInterval` | 2 blocks | 1 block | TBD |
-| `nDDActivationHeight` | 550 | 650 | TBD |
+| `nDDOracleEpochBlocks` | 50 | 10 | 100 |
+| `nDDOracleUpdateInterval` | 2 blocks | 1 block | 4 blocks |
+| `nDDActivationHeight` | 550 | 650 | 22,000,000 |
 
 ### Running Multiple Oracles (Testing)
 

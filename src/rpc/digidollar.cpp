@@ -2505,8 +2505,8 @@ static RPCHelpMan sendoracleprice()
             }
 
             // Validate oracle ID
-            if (oracle_id < 1 || oracle_id > ORACLE_TOTAL_COUNT) {
-                throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Oracle ID must be between 1 and %d", ORACLE_TOTAL_COUNT));
+            if (oracle_id >= (uint32_t)ORACLE_TOTAL_COUNT) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Oracle ID must be between 0 and %d", ORACLE_TOTAL_COUNT - 1));
             }
 
             // Get oracle config

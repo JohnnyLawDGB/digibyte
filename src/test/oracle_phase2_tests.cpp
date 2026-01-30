@@ -732,4 +732,128 @@ BOOST_AUTO_TEST_CASE(mainnet_configuration)
               mainnet_params.nOracleRequiredMessages, mainnet_params.nOracleTotalOracles);
 }
 
+// =============================================================================
+// PENDING MESSAGE LIFECYCLE TESTS
+// =============================================================================
+
+// Test: Pending messages are cleared after Phase Two bundle creation
+BOOST_FIXTURE_TEST_CASE(pending_messages_cleared_after_bundle, BasicTestingSetup)
+{
+    OracleBundleManager& manager = OracleBundleManager::GetInstance();
+
+    // Clear state using public API
+    manager.ClearPendingMessages();
+
+    // Inject 8 test messages (bypasses validation, meets 8-of-15 default threshold)
+    for (uint32_t i = 0; i < 8; ++i) {
+        COraclePriceMessage msg;
+        msg.oracle_id = i;
+        msg.price_micro_usd = 10000;
+        msg.timestamp = GetTime();
+        msg.block_height = 200;
+        msg.nonce = i;
+        manager.InjectTestMessage(msg);
+    }
+
+    // Verify 8 messages pending
+    BOOST_CHECK_EQUAL(manager.GetPendingMessageCount(), 8);
+
+    // Create a block — this should consume and clear pending messages
+    CBlock block;
+    block.nTime = GetTime();
+    manager.AddOracleBundleToBlock(block, 200);
+
+    // After bundle creation, pending messages should be cleared
+    BOOST_CHECK_MESSAGE(
+        manager.GetPendingMessageCount() == 0,
+        strprintf("Pending messages should be 0 after bundle creation, got %zu", manager.GetPendingMessageCount())
+    );
+
+    LogPrintf("Test PASSED: Pending messages cleared after Phase Two bundle creation\n");
+}
+
+// Test: With fewer than required messages, pending messages should NOT be cleared
+BOOST_FIXTURE_TEST_CASE(pending_messages_preserved_when_insufficient, BasicTestingSetup)
+{
+    OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    manager.ClearPendingMessages();
+
+    // Inject only 2 messages (below 3-of-5 threshold)
+    for (uint32_t i = 0; i < 2; ++i) {
+        COraclePriceMessage msg;
+        msg.oracle_id = i;
+        msg.price_micro_usd = 10000;
+        msg.timestamp = GetTime();
+        msg.block_height = 200;
+        msg.nonce = i;
+        manager.InjectTestMessage(msg);
+    }
+
+    BOOST_CHECK_EQUAL(manager.GetPendingMessageCount(), 2);
+
+    // Try to create block — should NOT form consensus
+    CBlock block;
+    block.nTime = GetTime();
+    manager.AddOracleBundleToBlock(block, 200);
+
+    // Messages should still be pending (not consumed)
+    BOOST_CHECK_MESSAGE(
+        manager.GetPendingMessageCount() == 2,
+        strprintf("Pending messages should remain at 2 when below threshold, got %zu", manager.GetPendingMessageCount())
+    );
+
+    LogPrintf("Test PASSED: Pending messages preserved when insufficient for consensus\n");
+}
+
+// Test: Fresh messages needed for each block (no stale carryover)
+BOOST_FIXTURE_TEST_CASE(no_stale_message_carryover, BasicTestingSetup)
+{
+    OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    manager.ClearPendingMessages();
+
+    // Block 1: Inject 8 messages, create bundle
+    for (uint32_t i = 0; i < 8; ++i) {
+        COraclePriceMessage msg;
+        msg.oracle_id = i;
+        msg.price_micro_usd = 10000;
+        msg.timestamp = GetTime();
+        msg.block_height = 200;
+        msg.nonce = i;
+        manager.InjectTestMessage(msg);
+    }
+
+    CBlock block1;
+    block1.nTime = GetTime();
+    manager.AddOracleBundleToBlock(block1, 200);
+
+    // Pending should be cleared after consuming into bundle
+    BOOST_CHECK_EQUAL(manager.GetPendingMessageCount(), 0);
+
+    // Block 2: Inject only 2 messages (insufficient)
+    for (uint32_t i = 0; i < 2; ++i) {
+        COraclePriceMessage msg;
+        msg.oracle_id = i;
+        msg.price_micro_usd = 10000;
+        msg.timestamp = GetTime();
+        msg.block_height = 201;
+        msg.nonce = i + 100;
+        manager.InjectTestMessage(msg);
+    }
+
+    // Should have exactly 2 (no carryover from block 1)
+    BOOST_CHECK_EQUAL(manager.GetPendingMessageCount(), 2);
+
+    CBlock block2;
+    block2.nTime = GetTime();
+    manager.AddOracleBundleToBlock(block2, 201);
+
+    // Messages should remain (below threshold, no bundle formed)
+    BOOST_CHECK_EQUAL(manager.GetPendingMessageCount(), 2);
+
+    // Cleanup
+    manager.ClearPendingMessages();
+
+    LogPrintf("Test PASSED: No stale message carryover between blocks\n");
+}
+
 BOOST_AUTO_TEST_SUITE_END()

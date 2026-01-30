@@ -63,8 +63,6 @@ void ReadRegTestArgs(const ArgsManager& args, CChainParams::RegTestOptions& opti
         }
     }
 
-    if (!args.IsArgSet("-vbparams")) return;
-
     for (const std::string& strDeployment : args.GetArgs("-vbparams")) {
         std::vector<std::string> vDeploymentParams = SplitString(strDeployment, ':');
         if (vDeploymentParams.size() < 3 || 4 < vDeploymentParams.size()) {
@@ -99,13 +97,15 @@ void ReadRegTestArgs(const ArgsManager& args, CChainParams::RegTestOptions& opti
     }
 
     // Handle DigiDollar specific activation height for regtest
+    // Uses real BIP9 signaling (not ALWAYS_ACTIVE) so the deployment goes through
+    // the full DEFINED → STARTED → LOCKED_IN → ACTIVE state machine.
     if (auto digidollar_height = args.GetIntArg("-digidollaractivationheight")) {
         CChainParams::VersionBitsParameters vbparams{};
-        vbparams.start_time = Consensus::BIP9Deployment::ALWAYS_ACTIVE;
+        vbparams.start_time = 0;  // Epoch 0: start signaling immediately (MTP will exceed this from block 1)
         vbparams.timeout = Consensus::BIP9Deployment::NO_TIMEOUT;
         vbparams.min_activation_height = *digidollar_height;
         options.version_bits_parameters[Consensus::DEPLOYMENT_DIGIDOLLAR] = vbparams;
-        LogPrintf("Setting DigiDollar activation height for regtest to %d\n", *digidollar_height);
+        LogPrintf("Setting DigiDollar activation height for regtest to %d (BIP9 signaling mode)\n", *digidollar_height);
     }
 }
 

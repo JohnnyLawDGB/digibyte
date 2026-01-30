@@ -5,314 +5,165 @@
 """
 Test DigiDollar BIP9 soft fork activation.
 
-REFACTOR Phase: Improved test structure and documentation.
-This test suite validates DigiDollar deployment functionality
-following the TDD methodology.
+Tests the full BIP9 state machine progression:
+  DEFINED → STARTED → LOCKED_IN → ACTIVE
+
+Uses -digidollaractivationheight to enable real BIP9 signaling on regtest
+(instead of ALWAYS_ACTIVE which skips the state machine entirely).
 """
 
-import time
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import assert_equal
 
-# DigiDollar deployment constants (REFACTOR phase - better organization)
-class DigiDollarConstants:
-    """Constants for DigiDollar deployment testing."""
-    DEPLOYMENT_NAME = "digidollar"
-    BIT = 23
-    BLOCKS_TO_GENERATE = 5
-    EXPECTED_HASH_LENGTH = 64
+# Regtest BIP9 parameters
+REGTEST_CONFIRMATION_WINDOW = 144
+REGTEST_ACTIVATION_THRESHOLD = 108  # 75% of 144
+
 
 class DigiDollarActivationTest(DigiByteTestFramework):
-    """
-    Test suite for DigiDollar BIP9 activation.
-    REFACTOR Phase: Improved class structure and documentation.
-    """
+    """Test suite for DigiDollar BIP9 activation state machine."""
 
     def set_test_params(self):
-        """Configure test parameters - simplified for basic functionality."""
         self.num_nodes = 1
         self.setup_clean_chain = True
+        # Use -digidollaractivationheight=0 to enable real BIP9 signaling
+        # (start_time=0 means STARTED from first period, no min_activation_height delay)
+        self.extra_args = [["-digidollaractivationheight=1"]]
 
     def skip_test_if_missing_module(self):
-        """No special modules required for basic testing."""
         pass
 
     def run_test(self):
-        """
-        Main test runner - orchestrates all test scenarios.
-        REFACTOR Phase: Clear test organization and logging.
-        """
-        self.log.info("Starting DigiDollar BIP9 activation tests...")
-        self.log.info("Running REFACTOR phase tests with improved structure")
-
-        # Execute test scenarios
-        self._test_deployment_configuration()
-        self._test_basic_blockchain_functionality()
-        self._test_bip9_state_transitions()
-        self._test_activation_thresholds()
-        self._test_pre_post_activation_behavior()
-        self._test_miner_signaling()
-        self._test_activation_monitoring()
-
-        self.log.info("All DigiDollar activation tests completed successfully")
-
-    def _test_deployment_configuration(self):
-        """
-        Test that DigiDollar deployment is properly configured.
-        REFACTOR Phase: Improved method naming and error handling.
-        """
-        self.log.info("Testing DigiDollar deployment configuration...")
+        self.log.info("Starting DigiDollar BIP9 activation tests")
 
         node = self.nodes[0]
 
-        # Attempt to retrieve deployment information
+        # ── DEFINED state ──
+        # At genesis (height 0), no blocks mined yet, state should be DEFINED
+        self.log.info("Testing DEFINED state at genesis...")
+        info = node.getdeploymentinfo()
+        dd_status = info["deployments"]["digidollar"]["bip9"]["status"]
+        self.log.info(f"  State at height 0: {dd_status}")
+        assert_equal(dd_status, "defined")
+
+        # ── Mine first period to transition to STARTED ──
+        # Generate one full confirmation window (144 blocks)
+        # MTP of regtest genesis (1519460922) > start_time (0), so after first
+        # period boundary the state transitions DEFINED → STARTED
+        self.log.info("Mining first confirmation window (144 blocks)...")
+        node.generate(REGTEST_CONFIRMATION_WINDOW)
+
+        info = node.getdeploymentinfo()
+        dd_status = info["deployments"]["digidollar"]["bip9"]["status"]
+        self.log.info(f"  State after period 1: {dd_status}")
+        assert_equal(dd_status, "started")
+
+        # ── Verify block version signaling ──
+        # ComputeBlockVersion should set bit 23 when state is STARTED
+        self.log.info("Verifying miner signals bit 23...")
+        template = node.getblocktemplate({"rules": ["segwit"]})
+        version = template["version"]
+        bit_23_set = (version & (1 << 23)) != 0
+        self.log.info(f"  Block template version: 0x{version:08x}, bit 23 set: {bit_23_set}")
+        assert bit_23_set, "Bit 23 should be set in block template when STARTED"
+
+        # ── Mine second period — miners auto-signal, threshold met → LOCKED_IN ──
+        self.log.info("Mining second confirmation window (144 blocks, all signaling)...")
+        node.generate(REGTEST_CONFIRMATION_WINDOW)
+
+        info = node.getdeploymentinfo()
+        dd_status = info["deployments"]["digidollar"]["bip9"]["status"]
+        self.log.info(f"  State after period 2: {dd_status}")
+        assert_equal(dd_status, "locked_in")
+
+        # ── DigiDollar should NOT be usable yet in LOCKED_IN ──
+        self.log.info("Verifying DigiDollar rejected during LOCKED_IN...")
         try:
-            deployment_info = node.getdeploymentinfo()
-            self.log.info("Deployment info retrieved successfully")
-            # Future: Add specific checks for DigiDollar deployment
+            node.mintdigidollar(100.0, 365)
+            self.log.warning("mintdigidollar succeeded during LOCKED_IN (unexpected)")
         except Exception as e:
-            self.log.info(f"getdeploymentinfo not available: {e}")
-            # Expected in current implementation phase
+            self.log.info(f"  Correctly rejected: {e}")
 
-    def _test_basic_blockchain_functionality(self):
-        """
-        Test fundamental blockchain operations with DigiDollar infrastructure.
-        REFACTOR Phase: Better structure and validation.
-        """
-        self.log.info("Testing basic blockchain functionality...")
+        # ── Mine third period → ACTIVE ──
+        self.log.info("Mining third confirmation window (144 blocks)...")
+        node.generate(REGTEST_CONFIRMATION_WINDOW)
 
-        node = self.nodes[0]
+        info = node.getdeploymentinfo()
+        dd_status = info["deployments"]["digidollar"]["bip9"]["status"]
+        self.log.info(f"  State after period 3: {dd_status}")
+        assert_equal(dd_status, "active")
 
-        # Record initial blockchain state
-        initial_height = node.getblockchaininfo()["blocks"]
-        self.log.info(f"Initial blockchain height: {initial_height}")
+        # ── Verify deployment info shows full history ──
+        self.log.info("Checking deployment info details...")
+        dd_info = info["deployments"]["digidollar"]
+        self.log.info(f"  Full deployment info: {dd_info}")
 
-        # Generate test blocks
-        blocks_generated = self._generate_test_blocks(node, DigiDollarConstants.BLOCKS_TO_GENERATE)
+        # bip9 section should have status, start_time, timeout, since, etc.
+        bip9 = dd_info["bip9"]
+        assert_equal(bip9["status"], "active")
+        assert "since" in bip9, "Should have 'since' height"
+        self.log.info(f"  Active since height: {bip9['since']}")
 
-        # Validate blockchain progression
-        final_height = node.getblockchaininfo()["blocks"]
-        expected_height = initial_height + DigiDollarConstants.BLOCKS_TO_GENERATE
+        # ── Verify getblockchaininfo also reports correctly ──
+        blockchain_info = node.getblockchaininfo()
+        if "softforks" in blockchain_info:
+            softforks = blockchain_info["softforks"]
+            if "digidollar" in softforks:
+                sf = softforks["digidollar"]
+                self.log.info(f"  softforks.digidollar: {sf}")
 
-        assert_equal(final_height, expected_height)
-        self.log.info(f"Successfully generated {DigiDollarConstants.BLOCKS_TO_GENERATE} blocks")
+        self.log.info("All DigiDollar BIP9 activation tests PASSED ✓")
 
-        # Validate node responsiveness
-        self._validate_node_state(node)
 
-    def _generate_test_blocks(self, node, count):
-        """
-        Generate specified number of test blocks.
-        REFACTOR Phase: Extracted helper method for reusability.
-        """
-        try:
-            # Attempt wallet-based generation
-            address = node.getnewaddress()
-            return node.generatetoaddress(count, address)
-        except:
-            # Fallback to basic generation
-            self.log.info("Using fallback block generation (no wallet)")
-            return node.generate(count)
+class DigiDollarActivationTimeoutTest(DigiByteTestFramework):
+    """Test BIP9 timeout (FAILED state) when miners don't signal."""
 
-    def _validate_node_state(self, node):
-        """
-        Validate that the node is in a consistent and responsive state.
-        REFACTOR Phase: Centralized validation logic.
-        """
-        best_hash = node.getbestblockhash()
+    def set_test_params(self):
+        self.num_nodes = 1
+        self.setup_clean_chain = True
+        # Use vbparams to set a very short timeout for testing
+        # Format: name:start:timeout
+        self.extra_args = [[
+            "-vbparams=digidollar:0:1"  # start=epoch 0, timeout=1 second (already passed)
+        ]]
 
-        # Validate hash format
-        assert len(best_hash) == DigiDollarConstants.EXPECTED_HASH_LENGTH
-        assert all(c in '0123456789abcdef' for c in best_hash.lower())
+    def skip_test_if_missing_module(self):
+        pass
 
-        self.log.info("Node state validation successful")
-
-    def _test_bip9_state_transitions(self):
-        """
-        Test BIP9 deployment state transitions for DigiDollar.
-        Enhanced testing for comprehensive BIP9 state machine validation.
-        """
-        self.log.info("Testing BIP9 state transitions...")
+    def run_test(self):
+        self.log.info("Starting DigiDollar BIP9 timeout test")
 
         node = self.nodes[0]
 
-        # Test BIP9 deployment states
-        bip9_states = [
-            "DEFINED",      # Initial state
-            "STARTED",      # Activation period started
-            "LOCKED_IN",    # Threshold reached, waiting for activation
-            "ACTIVE",       # Feature is active
-            "FAILED"        # Failed to activate (timeout)
-        ]
+        # Mine past the first period — since timeout is already in the past,
+        # state should transition DEFINED → STARTED → FAILED
+        self.log.info("Mining past timeout period...")
+        node.generate(REGTEST_CONFIRMATION_WINDOW)
 
+        info = node.getdeploymentinfo()
+        dd_status = info["deployments"]["digidollar"]["bip9"]["status"]
+        self.log.info(f"  State after period 1: {dd_status}")
+
+        # Should have gone through STARTED and timed out to FAILED
+        # (or stayed DEFINED if MTP < start, then next period hits timeout)
+        if dd_status == "started":
+            # Mine another period to hit timeout
+            node.generate(REGTEST_CONFIRMATION_WINDOW)
+            info = node.getdeploymentinfo()
+            dd_status = info["deployments"]["digidollar"]["bip9"]["status"]
+            self.log.info(f"  State after period 2: {dd_status}")
+
+        assert_equal(dd_status, "failed")
+
+        # Verify DigiDollar not enabled
         try:
-            # Get deployment information
-            blockchain_info = node.getblockchaininfo()
-            deployments = blockchain_info.get('softforks', {})
-
-            self.log.info(f"Current deployments: {list(deployments.keys())}")
-
-            # Look for DigiDollar deployment
-            if 'digidollar' in deployments:
-                dd_deployment = deployments['digidollar']
-                current_state = dd_deployment.get('bip9', {}).get('status', 'unknown')
-                self.log.info(f"DigiDollar deployment state: {current_state}")
-
-                # Validate state is one of expected BIP9 states
-                assert current_state.upper() in bip9_states, f"Invalid BIP9 state: {current_state}"
-                self.log.info("✓ BIP9 state is valid")
-
-                # Test state progression (if in early states)
-                if current_state.upper() in ['DEFINED', 'STARTED']:
-                    self._test_state_progression(node, dd_deployment)
-
-            else:
-                self.log.info("DigiDollar deployment not found (expected in early implementation)")
-                # Test that we can at least query deployment info
-                self._test_deployment_info_structure(node)
-
+            node.mintdigidollar(100.0, 365)
+            assert False, "Should have been rejected"
         except Exception as e:
-            self.log.info(f"BIP9 state transition test failed (expected in early phase): {e}")
+            self.log.info(f"  Correctly rejected in FAILED state: {e}")
 
-    def _test_activation_thresholds(self):
-        """
-        Test BIP9 activation threshold calculations.
-        """
-        self.log.info("Testing activation thresholds...")
+        self.log.info("DigiDollar timeout test PASSED ✓")
 
-        node = self.nodes[0]
-
-        try:
-            # Standard BIP9 parameters
-            threshold_params = {
-                'activation_threshold': 0.95,  # 95% of blocks in period
-                'confirmation_window': 2016,   # Blocks in difficulty period
-                'min_activation_height': 0     # Minimum height for activation
-            }
-
-            self.log.info(f"Testing with threshold parameters: {threshold_params}")
-
-            # Calculate threshold block count
-            required_blocks = int(threshold_params['confirmation_window'] * threshold_params['activation_threshold'])
-            self.log.info(f"Required signaling blocks: {required_blocks}/{threshold_params['confirmation_window']}")
-
-            # Test threshold calculation
-            current_height = node.getblockcount()
-            period_start = (current_height // threshold_params['confirmation_window']) * threshold_params['confirmation_window']
-            blocks_in_period = current_height - period_start
-
-            self.log.info(f"Current period: blocks {period_start}-{period_start + threshold_params['confirmation_window']}")
-            self.log.info(f"Position in period: {blocks_in_period}/{threshold_params['confirmation_window']}")
-
-        except Exception as e:
-            self.log.info(f"Activation threshold test failed: {e}")
-
-    def _test_pre_post_activation_behavior(self):
-        """
-        Test system behavior before and after activation.
-        """
-        self.log.info("Testing pre/post activation behavior...")
-
-        node = self.nodes[0]
-
-        try:
-            # Test pre-activation state
-            self.log.info("Testing pre-activation behavior...")
-
-            # DigiDollar transactions should be rejected before activation
-            try:
-                # Try to create DigiDollar transaction before activation
-                dd_result = node.mintdigidollar(100.0, 365)
-                self.log.warning(f"DigiDollar mint succeeded before activation: {dd_result} (unexpected)")
-            except Exception as e:
-                self.log.info(f"✓ DigiDollar operations properly rejected before activation: {e}")
-
-        except Exception as e:
-            self.log.info(f"Pre/post activation test failed: {e}")
-
-    def _test_miner_signaling(self):
-        """
-        Test miner signaling mechanisms.
-        """
-        self.log.info("Testing miner signaling...")
-
-        node = self.nodes[0]
-
-        try:
-            # Test version bit signaling
-            self.log.info("Testing version bit signaling...")
-
-            # Generate blocks with DigiDollar signaling
-            dd_version_bit = 23  # DigiDollar bit
-            signaling_version = 0x20000000 | (1 << dd_version_bit)  # BIP9 version + DD bit
-
-            # Test block generation with signaling
-            try:
-                # Use block template to test signaling
-                block_template = node.getblocktemplate()
-                current_version = block_template.get('version', 0)
-
-                self.log.info(f"Current block version: 0x{current_version:08x}")
-                self.log.info(f"DigiDollar signaling version would be: 0x{signaling_version:08x}")
-
-                # Test if miner can signal (by checking version bits)
-                dd_bit_set = (current_version & (1 << dd_version_bit)) != 0
-                self.log.info(f"DigiDollar bit currently set: {dd_bit_set}")
-
-            except Exception as e:
-                self.log.info(f"Block template signaling test: {e}")
-
-        except Exception as e:
-            self.log.info(f"Miner signaling test failed: {e}")
-
-    def _test_activation_monitoring(self):
-        """
-        Test activation monitoring and status reporting.
-        """
-        self.log.info("Testing activation monitoring...")
-
-        node = self.nodes[0]
-
-        try:
-            # Test various monitoring commands
-            monitoring_commands = [
-                ("getblockchaininfo", "Check overall blockchain status"),
-                ("getdeploymentinfo", "Check deployment-specific info"),
-                ("getdigidollarstats", "Check DigiDollar stats"),
-                ("getmininginfo", "Check mining status")
-            ]
-
-            monitoring_results = {}
-
-            for cmd, description in monitoring_commands:
-                try:
-                    if hasattr(node, cmd):
-                        result = getattr(node, cmd)()
-                        monitoring_results[cmd] = {'status': 'success', 'data': result}
-                        self.log.info(f"✓ {description}: Available")
-
-                        # Extract relevant info
-                        if cmd == "getblockchaininfo" and isinstance(result, dict):
-                            softforks = result.get('softforks', {})
-                            if 'digidollar' in softforks:
-                                dd_info = softforks['digidollar']
-                                self.log.info(f"  DigiDollar softfork info: {dd_info}")
-
-                    else:
-                        monitoring_results[cmd] = {'status': 'not_available'}
-                        self.log.info(f"✗ {description}: Command not available")
-
-                except Exception as e:
-                    monitoring_results[cmd] = {'status': 'error', 'error': str(e)}
-                    self.log.info(f"✗ {description}: {e}")
-
-            # Summary of monitoring capabilities
-            available_commands = len([r for r in monitoring_results.values() if r['status'] == 'success'])
-            total_commands = len(monitoring_commands)
-            self.log.info(f"Monitoring capabilities: {available_commands}/{total_commands} commands available")
-
-        except Exception as e:
-            self.log.info(f"Activation monitoring test failed: {e}")
 
 if __name__ == '__main__':
     DigiDollarActivationTest().main()

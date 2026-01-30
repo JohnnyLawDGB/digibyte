@@ -121,8 +121,14 @@ RC12 creates descriptor wallets by default:
 ### Step 4: Send Your Public Key to the Maintainer
 
 Send **only**:
-1. Your **pubkey** (66-char hex, `02`/`03` prefix — the compressed public key)
+1. Your **`pubkey`** from the output (66-char hex, starts with `02` or `03` — this is the 33-byte compressed public key)
 2. Your **server endpoint** (e.g., `myserver.com:12034`)
+
+The maintainer uses this single key to populate **both** chainparams locations:
+- `vOracleNodes` gets the full 33-byte compressed key as-is
+- `consensus.vOraclePublicKeys` gets the 32-byte x-only version (the `02`/`03` prefix byte is stripped)
+
+You do **not** need to send `pubkey_xonly` separately — it's derived from `pubkey`.
 
 **⚠️ NEVER share your private key. It stays in your wallet.**
 

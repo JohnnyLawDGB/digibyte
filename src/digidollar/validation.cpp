@@ -863,26 +863,41 @@ bool ValidateTransferTransaction(const CTransaction& tx,
         return state.Invalid(TxValidationResult::TX_CONSENSUS, "transfer-no-dd-outputs");
     }
 
-    // For full validation, we would look up inputs from UTXO set
-    // This is a simplified version for testing
-    // In production, we would:
-    // 1. Look up each input UTXO
-    // 2. Verify it's a valid DD UTXO
-    // 3. Extract DD amount from input script
-    // 4. Verify signatures against input scripts
-
-    // Check inputs contain DD UTXOs (simplified check)
+    // Check inputs contain DD UTXOs
     if (tx.vin.empty()) {
         return state.Invalid(TxValidationResult::TX_CONSENSUS, "transfer-no-inputs");
     }
 
-    // For testing purposes, assume input validation passes
-    // and calculate inputDD based on context or mock data
-    // In real implementation, this would query the UTXO set
+    // Look up input DD amounts from UTXO set
+    if (ctx.coins != nullptr) {
+        // Full validation: sum DD amounts from input UTXOs
+        for (const auto& txin : tx.vin) {
+            if (txin.prevout.IsNull()) continue;
 
-    // Mock input DD calculation for testing
-    // This would be replaced by actual UTXO lookup
-    inputDD = outputDD; // Assume conservation for basic testing
+            Coin coin;
+            if (!ctx.coins->GetCoin(txin.prevout, coin)) {
+                LogPrintf("DigiDollar: Transfer input UTXO not found: %s:%d\n",
+                          txin.prevout.hash.ToString(), txin.prevout.n);
+                return state.Invalid(TxValidationResult::TX_CONSENSUS, "transfer-input-utxo-not-found");
+            }
+
+            CAmount ddAmt = 0;
+            if (ExtractDDAmount(coin.out.scriptPubKey, ddAmt)) {
+                inputDD += ddAmt;
+                ddInputCount++;
+            }
+        }
+
+        if (ddInputCount == 0) {
+            LogPrintf("DigiDollar: Transfer has no DD inputs\n");
+            return state.Invalid(TxValidationResult::TX_CONSENSUS, "transfer-no-dd-inputs");
+        }
+    } else {
+        // Phase 1 backward compatibility: no coins view available
+        // Fall back to assuming conservation (inputDD = outputDD)
+        LogPrintf("DigiDollar: WARNING - No coins view available for transfer validation, using fallback\n");
+        inputDD = outputDD;
+    }
 
     // DD Conservation: Total DD in must equal total DD out
     if (inputDD != outputDD) {
@@ -1227,15 +1242,73 @@ bool ValidateCollateralReleaseAmount(const CTransaction& tx,
                                    CAmount ddBurned,
                                    TxValidationState& state) {
     // Validate collateral release amount for redemption transactions
-    // For now, allow any redemption amount - the RedeemTxBuilder already calculates
-    // the correct proportional collateral release based on the DD being burned.
-    //
-    // TODO for production:
-    // 1. Verify collateral release matches DD burned at oracle price
-    // 2. Apply ERR adjustment if system under-collateralized
-    // 3. Validate fees are reasonable
+    // Must verify that DGB released is proportional to DD burned
 
-    LogPrintf("DigiDollar: Collateral release validation passed (simplified for Phase 1)\n");
+    if (ctx.coins == nullptr) {
+        // Phase 1 backward compatibility: no UTXO access
+        LogPrintf("DigiDollar: WARNING - No coins view for collateral release validation, using fallback\n");
+        return true;
+    }
+
+    // Input 0 is assumed to be the collateral input
+    if (tx.vin.empty()) {
+        return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-collateral-release-no-inputs");
+    }
+
+    // Look up collateral UTXO to get locked DGB amount and original DD minted
+    Coin collateralCoin;
+    if (!ctx.coins->GetCoin(tx.vin[0].prevout, collateralCoin)) {
+        LogPrintf("DigiDollar: Could not find collateral UTXO for release validation\n");
+        return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-collateral-release-utxo-not-found");
+    }
+
+    CAmount lockedCollateral = collateralCoin.out.nValue;
+    if (lockedCollateral <= 0) {
+        LogPrintf("DigiDollar: Collateral UTXO has zero value\n");
+        return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-collateral-release-zero-collateral");
+    }
+
+    // Extract original DD amount from collateral script metadata
+    CAmount originalDDMinted = 0;
+    if (!ExtractDDAmount(collateralCoin.out.scriptPubKey, originalDDMinted) || originalDDMinted <= 0) {
+        LogPrintf("DigiDollar: Could not extract original DD amount from collateral script\n");
+        // Fallback: allow if we can't determine original amount
+        return true;
+    }
+
+    // Calculate proportionally allowed collateral release
+    // allowed_release = (dd_burned / original_dd_minted) * locked_collateral
+    // Use 64-bit math carefully to avoid overflow
+    CAmount allowedRelease;
+    if (ddBurned >= originalDDMinted) {
+        // Full redemption
+        allowedRelease = lockedCollateral;
+    } else {
+        // Partial redemption: proportional release
+        allowedRelease = (int64_t)((double)ddBurned / (double)originalDDMinted * (double)lockedCollateral);
+    }
+
+    // Small fee tolerance (0.1% or 1000 satoshis, whichever is larger)
+    CAmount feeTolerance = std::max((CAmount)1000, allowedRelease / 1000);
+
+    // Sum total DGB outputs in the transaction
+    CAmount totalDGBRelease = 0;
+    for (const auto& output : tx.vout) {
+        if (output.nValue > 0) {
+            totalDGBRelease += output.nValue;
+        }
+    }
+
+    if (totalDGBRelease > allowedRelease + feeTolerance) {
+        LogPrintf("DigiDollar: Collateral release too large - releasing: %lld, allowed: %lld (+ %lld tolerance), locked: %lld, ddBurned: %lld, originalDD: %lld\n",
+                  (long long)totalDGBRelease, (long long)allowedRelease, (long long)feeTolerance,
+                  (long long)lockedCollateral, (long long)ddBurned, (long long)originalDDMinted);
+        return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-collateral-release-excessive",
+                           strprintf("Collateral release %lld exceeds allowed %lld", (long long)totalDGBRelease, (long long)allowedRelease));
+    }
+
+    LogPrintf("DigiDollar: Collateral release validated - releasing: %lld, allowed: %lld, ddBurned: %lld/%lld\n",
+              (long long)totalDGBRelease, (long long)allowedRelease, (long long)ddBurned, (long long)originalDDMinted);
     return true;
 }
 
@@ -1298,11 +1371,15 @@ bool ValidateDigiDollarTransaction(const CTransaction& tx,
         return state.Invalid(TxValidationResult::TX_CONSENSUS, "minting-blocked-during-err");
     }
 
-    // ERR Pre-validation: Check if normal redemptions should be blocked during ERR
-    if (txType == DD_TX_REDEEM && ShouldBlockNormalRedemptionsDuringERR(ctx)) {
-        LogPrintf("DigiDollar: Normal redemptions blocked during ERR activation\n");
-        return state.Invalid(TxValidationResult::TX_CONSENSUS, "normal-redemption-blocked-during-err");
-    }
+    // BUG #3 FIX: Don't block normal redemptions during ERR until ERR path is implemented.
+    // The ERR redemption path (ValidateEmergencyRedemptionConditions) always returns
+    // "err-validation-incomplete", which means blocking normal redemptions creates a
+    // deadlock where NO redemption path is available.
+    // TODO: Re-enable this check when ERR redemption validation is implemented.
+    // if (txType == DD_TX_REDEEM && ShouldBlockNormalRedemptionsDuringERR(ctx)) {
+    //     LogPrintf("DigiDollar: Normal redemptions blocked during ERR activation\n");
+    //     return state.Invalid(TxValidationResult::TX_CONSENSUS, "normal-redemption-blocked-during-err");
+    // }
 
     // Type-specific validation
     // NOTE: Only 3 types exist - MINT, TRANSFER, REDEEM

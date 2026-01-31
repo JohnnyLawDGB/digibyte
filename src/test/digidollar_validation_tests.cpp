@@ -8,6 +8,7 @@
 #include <digidollar/validation.h>
 #include <digidollar/scripts.h>
 #include <digidollar/digidollar.h>
+#include <coins.h>
 #include <key.h>
 #include <pubkey.h>
 #include <script/script.h>
@@ -2847,6 +2848,350 @@ BOOST_FIXTURE_TEST_CASE(test_system_health_validation_boundary_conditions, DigiD
     validationContext.systemCollateral = 100;
     int ratio100 = DigiDollar::GetEffectiveCollateralRatio(200, 100, Params());
     BOOST_CHECK_EQUAL(ratio100, 300); // 1.5x multiplier
+}
+
+// ============================================================================
+// Bug #8: Transfer DD Conservation with UTXO Lookup Tests
+// ============================================================================
+
+BOOST_FIXTURE_TEST_CASE(bug8_transfer_conservation_utxo_mismatch, DigiDollarValidationTestSetup)
+{
+    // Test: Input DD (from UTXO) != Output DD should be REJECTED
+    // Create an input UTXO with 10000 DD cents ($100.00)
+    CAmount inputDDAmount = 10000;
+    CAmount outputDDAmount = 5000; // Only $50 output — conservation violation
+
+    // Use different keys for input and output to avoid metadata registry collision
+    // (Same key produces same P2TR script, overwriting metadata)
+    CKey inputKey;
+    inputKey.MakeNewKey(true);
+    XOnlyPubKey inputXOnlyKey(inputKey.GetPubKey());
+
+    CKey outputKey;
+    outputKey.MakeNewKey(true);
+    XOnlyPubKey outputXOnlyKey(outputKey.GetPubKey());
+
+    CScript inputScript = DigiDollar::CreateDigiDollarP2TR(inputXOnlyKey, inputDDAmount);
+    CScript outputScript = DigiDollar::CreateDigiDollarP2TR(outputXOnlyKey, outputDDAmount);
+
+    // Set up coins view with the input UTXO
+    CCoinsView baseView;
+    CCoinsViewCache coinsView(&baseView);
+
+    uint256 prevTxId = uint256S("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+    COutPoint prevOut(prevTxId, 0);
+    CTxOut prevTxOut(0, inputScript); // DD outputs have 0 DGB value
+    Coin coin(prevTxOut, 500, false); // height 500, not coinbase
+    coinsView.AddCoin(prevOut, std::move(coin), false);
+
+    // Build transfer tx: 1 input (10000 DD), 1 output (5000 DD)
+    CMutableTransaction mtx;
+    mtx.nVersion = 0x02000770; // DD_TX_TRANSFER
+
+    mtx.vin.resize(1);
+    mtx.vin[0].prevout = prevOut;
+
+    // DD output
+    mtx.vout.push_back(CTxOut(0, outputScript));
+
+    // OP_RETURN with DD amounts
+    CScript opReturn;
+    opReturn << OP_RETURN
+             << std::vector<unsigned char>{'D', 'D'}
+             << CScriptNum(2)  // TRANSFER type
+             << CScriptNum(outputDDAmount);
+    mtx.vout.push_back(CTxOut(0, opReturn));
+
+    CTransaction tx(mtx);
+    TxValidationState state;
+
+    // Create context WITH coins view
+    DigiDollar::ValidationContext ctxWithCoins(1000, 500000, 150, Params(), &coinsView);
+
+    bool result = DigiDollar::ValidateTransferTransaction(tx, ctxWithCoins, state);
+
+    // Should FAIL: input DD (10000) != output DD (5000)
+    BOOST_CHECK_MESSAGE(!result, "Transfer with DD conservation violation should be rejected");
+    BOOST_CHECK_MESSAGE(state.GetRejectReason().find("conservation") != std::string::npos,
+                       "Should fail with conservation error, got: " + state.GetRejectReason());
+}
+
+BOOST_FIXTURE_TEST_CASE(bug8_transfer_conservation_utxo_valid, DigiDollarValidationTestSetup)
+{
+    // Test: Input DD == Output DD should PASS
+    CAmount ddAmount = 10000; // $100.00
+
+    CScript inputScript = DigiDollar::CreateDigiDollarP2TR(testXOnlyKey, ddAmount);
+    CScript outputScript = DigiDollar::CreateDigiDollarP2TR(testXOnlyKey, ddAmount);
+
+    // Set up coins view
+    CCoinsView baseView;
+    CCoinsViewCache coinsView(&baseView);
+
+    uint256 prevTxId = uint256S("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+    COutPoint prevOut(prevTxId, 0);
+    CTxOut prevTxOut(0, inputScript);
+    Coin coin(prevTxOut, 500, false);
+    coinsView.AddCoin(prevOut, std::move(coin), false);
+
+    // Build valid transfer tx
+    CMutableTransaction mtx;
+    mtx.nVersion = 0x02000770;
+
+    mtx.vin.resize(1);
+    mtx.vin[0].prevout = prevOut;
+
+    mtx.vout.push_back(CTxOut(0, outputScript));
+
+    CScript opReturn;
+    opReturn << OP_RETURN
+             << std::vector<unsigned char>{'D', 'D'}
+             << CScriptNum(2)
+             << CScriptNum(ddAmount);
+    mtx.vout.push_back(CTxOut(0, opReturn));
+
+    CTransaction tx(mtx);
+    TxValidationState state;
+
+    DigiDollar::ValidationContext ctxWithCoins(1000, 500000, 150, Params(), &coinsView);
+
+    bool result = DigiDollar::ValidateTransferTransaction(tx, ctxWithCoins, state);
+
+    // Should PASS: input DD == output DD
+    BOOST_CHECK_MESSAGE(result, "Valid transfer should pass, got error: " + state.GetRejectReason());
+}
+
+BOOST_FIXTURE_TEST_CASE(bug8_transfer_conservation_nullptr_fallback, DigiDollarValidationTestSetup)
+{
+    // Test: When coins view is nullptr, should fall back to current behavior (Phase 1 compat)
+    CAmount ddAmount = 10000;
+
+    CScript outputScript = DigiDollar::CreateDigiDollarP2TR(testXOnlyKey, ddAmount);
+
+    CMutableTransaction mtx;
+    mtx.nVersion = 0x02000770;
+
+    mtx.vin.resize(1);
+    mtx.vin[0].prevout = COutPoint(uint256S("cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"), 0);
+
+    mtx.vout.push_back(CTxOut(0, outputScript));
+
+    CScript opReturn;
+    opReturn << OP_RETURN
+             << std::vector<unsigned char>{'D', 'D'}
+             << CScriptNum(2)
+             << CScriptNum(ddAmount);
+    mtx.vout.push_back(CTxOut(0, opReturn));
+
+    CTransaction tx(mtx);
+    TxValidationState state;
+
+    // Context WITHOUT coins view (nullptr) - should use fallback behavior
+    DigiDollar::ValidationContext ctxNoCoins(1000, 500000, 150, Params(), nullptr);
+
+    bool result = DigiDollar::ValidateTransferTransaction(tx, ctxNoCoins, state);
+
+    // Should PASS with fallback (inputDD = outputDD assumed)
+    BOOST_CHECK_MESSAGE(result, "Nullptr coins fallback should pass, got error: " + state.GetRejectReason());
+}
+
+// ============================================================================
+// Bug #4: Collateral Release Validation Tests
+// ============================================================================
+
+BOOST_FIXTURE_TEST_CASE(bug4_collateral_release_excessive, DigiDollarValidationTestSetup)
+{
+    // Test: Releasing MORE collateral than proportionally entitled → REJECT
+    // Scenario: Minted 10000 DD ($100) with 200 DGB collateral
+    // Burning all 10000 DD → should get at most 200 DGB back
+    // But tx tries to release 300 DGB → should be rejected
+
+    CKey collateralKey;
+    collateralKey.MakeNewKey(true);
+    XOnlyPubKey collateralXOnlyKey(collateralKey.GetPubKey());
+
+    CAmount originalDD = 10000; // $100 DD minted
+    CAmount lockedCollateral = 200 * COIN; // 200 DGB locked
+
+    // Create collateral UTXO
+    DigiDollar::MintParams params;
+    params.ddAmount = originalDD;
+    params.lockHeight = 500;
+    params.internalKey = collateralXOnlyKey;
+    params.ownerKey = collateralXOnlyKey;
+    CScript collateralScript = DigiDollar::CreateCollateralP2TR(params);
+
+    // Create DD token UTXO
+    CKey ddKey;
+    ddKey.MakeNewKey(true);
+    XOnlyPubKey ddXOnlyKey(ddKey.GetPubKey());
+    CScript ddScript = DigiDollar::CreateDigiDollarP2TR(ddXOnlyKey, originalDD);
+
+    // Set up coins view
+    CCoinsView baseView;
+    CCoinsViewCache coinsView(&baseView);
+
+    uint256 collTxId = uint256S("1111111111111111111111111111111111111111111111111111111111111111");
+    COutPoint collOutpoint(collTxId, 0);
+    coinsView.AddCoin(collOutpoint, Coin(CTxOut(lockedCollateral, collateralScript), 400, false), false);
+
+    uint256 ddTxId = uint256S("2222222222222222222222222222222222222222222222222222222222222222");
+    COutPoint ddOutpoint(ddTxId, 0);
+    coinsView.AddCoin(ddOutpoint, Coin(CTxOut(0, ddScript), 400, false), false);
+
+    // Build redemption tx: burn all DD, try to release 300 DGB (too much!)
+    CMutableTransaction mtx;
+    mtx.nVersion = 0x03000770; // DD_TX_REDEEM (type=3)
+
+    // Input 0: collateral
+    mtx.vin.push_back(CTxIn(collOutpoint));
+    // Input 1: DD to burn
+    mtx.vin.push_back(CTxIn(ddOutpoint));
+
+    // Output: release 300 DGB (more than the 200 locked!)
+    mtx.vout.push_back(CTxOut(300 * COIN, CScript() << OP_1 << ToByteVector(collateralXOnlyKey)));
+
+    CTransaction tx(mtx);
+    TxValidationState state;
+
+    DigiDollar::ValidationContext ctxWithCoins(1000, 500000, 150, Params(), &coinsView);
+
+    // Call ValidateCollateralReleaseAmount directly
+    bool result = DigiDollar::ValidateCollateralReleaseAmount(tx, ctxWithCoins, originalDD, state);
+
+    // Should FAIL: releasing 300 DGB when only 200 DGB locked
+    BOOST_CHECK_MESSAGE(!result, "Excessive collateral release should be rejected");
+}
+
+BOOST_FIXTURE_TEST_CASE(bug4_collateral_release_valid, DigiDollarValidationTestSetup)
+{
+    // Test: Releasing correct proportional collateral → PASS
+    // Minted 10000 DD with 200 DGB, burning all → release 200 DGB
+
+    CKey collateralKey;
+    collateralKey.MakeNewKey(true);
+    XOnlyPubKey collateralXOnlyKey(collateralKey.GetPubKey());
+
+    CAmount originalDD = 10000;
+    CAmount lockedCollateral = 200 * COIN;
+
+    DigiDollar::MintParams params;
+    params.ddAmount = originalDD;
+    params.lockHeight = 500;
+    params.internalKey = collateralXOnlyKey;
+    params.ownerKey = collateralXOnlyKey;
+    CScript collateralScript = DigiDollar::CreateCollateralP2TR(params);
+
+    CKey ddKey;
+    ddKey.MakeNewKey(true);
+    XOnlyPubKey ddXOnlyKey(ddKey.GetPubKey());
+    CScript ddScript = DigiDollar::CreateDigiDollarP2TR(ddXOnlyKey, originalDD);
+
+    CCoinsView baseView;
+    CCoinsViewCache coinsView(&baseView);
+
+    uint256 collTxId = uint256S("3333333333333333333333333333333333333333333333333333333333333333");
+    COutPoint collOutpoint(collTxId, 0);
+    coinsView.AddCoin(collOutpoint, Coin(CTxOut(lockedCollateral, collateralScript), 400, false), false);
+
+    uint256 ddTxId = uint256S("4444444444444444444444444444444444444444444444444444444444444444");
+    COutPoint ddOutpoint(ddTxId, 0);
+    coinsView.AddCoin(ddOutpoint, Coin(CTxOut(0, ddScript), 400, false), false);
+
+    CMutableTransaction mtx;
+    mtx.nVersion = 0x03000770; // DD_TX_REDEEM
+
+    mtx.vin.push_back(CTxIn(collOutpoint));
+    mtx.vin.push_back(CTxIn(ddOutpoint));
+
+    // Release exactly 200 DGB (correct amount)
+    mtx.vout.push_back(CTxOut(lockedCollateral, CScript() << OP_1 << ToByteVector(collateralXOnlyKey)));
+
+    CTransaction tx(mtx);
+    TxValidationState state;
+
+    DigiDollar::ValidationContext ctxWithCoins(1000, 500000, 150, Params(), &coinsView);
+
+    bool result = DigiDollar::ValidateCollateralReleaseAmount(tx, ctxWithCoins, originalDD, state);
+
+    // Should PASS
+    BOOST_CHECK_MESSAGE(result, "Valid collateral release should pass, got: " + state.GetRejectReason());
+}
+
+BOOST_FIXTURE_TEST_CASE(bug4_collateral_release_partial, DigiDollarValidationTestSetup)
+{
+    // Test: Partial redemption — burn half DD, get half collateral
+    // Minted 10000 DD with 200 DGB, burning 5000 DD → release 100 DGB
+
+    CKey collateralKey;
+    collateralKey.MakeNewKey(true);
+    XOnlyPubKey collateralXOnlyKey(collateralKey.GetPubKey());
+
+    CAmount originalDD = 10000;
+    CAmount lockedCollateral = 200 * COIN;
+    CAmount ddBurned = 5000; // Burning half
+
+    DigiDollar::MintParams params;
+    params.ddAmount = originalDD;
+    params.lockHeight = 500;
+    params.internalKey = collateralXOnlyKey;
+    params.ownerKey = collateralXOnlyKey;
+    CScript collateralScript = DigiDollar::CreateCollateralP2TR(params);
+
+    CKey ddKey;
+    ddKey.MakeNewKey(true);
+    XOnlyPubKey ddXOnlyKey(ddKey.GetPubKey());
+    CScript ddScript = DigiDollar::CreateDigiDollarP2TR(ddXOnlyKey, originalDD);
+
+    CCoinsView baseView;
+    CCoinsViewCache coinsView(&baseView);
+
+    uint256 collTxId = uint256S("5555555555555555555555555555555555555555555555555555555555555555");
+    COutPoint collOutpoint(collTxId, 0);
+    coinsView.AddCoin(collOutpoint, Coin(CTxOut(lockedCollateral, collateralScript), 400, false), false);
+
+    uint256 ddTxId = uint256S("6666666666666666666666666666666666666666666666666666666666666666");
+    COutPoint ddOutpoint(ddTxId, 0);
+    coinsView.AddCoin(ddOutpoint, Coin(CTxOut(0, ddScript), 400, false), false);
+
+    CMutableTransaction mtx;
+    mtx.nVersion = 0x03000770;
+
+    mtx.vin.push_back(CTxIn(collOutpoint));
+    mtx.vin.push_back(CTxIn(ddOutpoint));
+
+    // Release 100 DGB (proportional to 50% DD burned)
+    mtx.vout.push_back(CTxOut(100 * COIN, CScript() << OP_1 << ToByteVector(collateralXOnlyKey)));
+
+    CTransaction tx(mtx);
+    TxValidationState state;
+
+    DigiDollar::ValidationContext ctxWithCoins(1000, 500000, 150, Params(), &coinsView);
+
+    bool result = DigiDollar::ValidateCollateralReleaseAmount(tx, ctxWithCoins, ddBurned, state);
+
+    // Should PASS: burning half DD, releasing half collateral
+    BOOST_CHECK_MESSAGE(result, "Partial collateral release should pass, got: " + state.GetRejectReason());
+}
+
+BOOST_FIXTURE_TEST_CASE(bug4_collateral_release_nullptr_fallback, DigiDollarValidationTestSetup)
+{
+    // Test: When coins is nullptr, should pass (backward compat)
+    CMutableTransaction mtx;
+    mtx.nVersion = 0x03000770;
+    mtx.vin.push_back(CTxIn(COutPoint(uint256S("7777777777777777777777777777777777777777777777777777777777777777"), 0)));
+    mtx.vin.push_back(CTxIn(COutPoint(uint256S("8888888888888888888888888888888888888888888888888888888888888888"), 0)));
+    mtx.vout.push_back(CTxOut(500 * COIN, CScript() << OP_1 << ToByteVector(testXOnlyKey)));
+
+    CTransaction tx(mtx);
+    TxValidationState state;
+
+    DigiDollar::ValidationContext ctxNoCoins(1000, 500000, 150, Params(), nullptr);
+
+    bool result = DigiDollar::ValidateCollateralReleaseAmount(tx, ctxNoCoins, 10000, state);
+
+    // Should PASS with nullptr fallback
+    BOOST_CHECK_MESSAGE(result, "Nullptr coins fallback should pass, got: " + state.GetRejectReason());
 }
 
 BOOST_AUTO_TEST_SUITE_END()

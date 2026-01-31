@@ -216,6 +216,14 @@ public:
     static bool DeactivateERR(int currentHealth);
 
     /**
+     * Reconstruct ERR state from chain data after restart
+     * If system health < 100%, activates ERR; otherwise ensures ERR is inactive
+     * @param currentSystemHealth Current system health percentage
+     * @param currentHeight Current block height
+     */
+    static void ReconstructERRState(int currentSystemHealth, uint32_t currentHeight);
+
+    /**
      * Validate an ERR redemption transaction.
      *
      * @param tx The ERR redemption transaction

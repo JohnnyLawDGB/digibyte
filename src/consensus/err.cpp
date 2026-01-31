@@ -481,6 +481,29 @@ void EmergencyRedemptionRatio::UpdateERRState(const ERRState& newState)
     s_currentState = newState;
 }
 
+void EmergencyRedemptionRatio::ReconstructERRState(int currentSystemHealth, uint32_t currentHeight)
+{
+    ERRState newState;
+
+    if (currentSystemHealth < 100) {
+        // System is under-collateralized — activate ERR
+        newState.isActive = true;
+        newState.systemHealth = currentSystemHealth;
+        newState.adjustmentRatio = CalculateERRAdjustment(currentSystemHealth);
+        newState.activationHeight = currentHeight;
+        newState.activationTimestamp = GetTime();
+
+        LogPrintf("ERR: Reconstructed active state - health=%d%%, ratio=%.3f at height %d\n",
+                  currentSystemHealth, newState.adjustmentRatio, currentHeight);
+    } else {
+        // System is healthy — ensure ERR is inactive
+        LogPrintf("ERR: Reconstructed inactive state - health=%d%% (healthy) at height %d\n",
+                  currentSystemHealth, currentHeight);
+    }
+
+    UpdateERRState(newState);
+}
+
 void EmergencyRedemptionRatio::ClearERRQueue()
 {
     s_errQueue.clear();

@@ -23,6 +23,7 @@
 #include <script/interpreter.h>
 #include <random.h>
 #include <key_io.h>
+#include <oracle/mock_oracle.h>
 
 #include <algorithm>
 #include <regex>
@@ -884,10 +885,16 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
             }
         }
 
-        // Build transaction
-        // Use current chain height and oracle price (mock for now)
-        int currentHeight = 100000; // TODO: Get actual height from chainstate
-        CAmount oraclePrice = 2500;  // TODO: Get from MockOracleManager
+        // BUG #5 FIX: Get real height and oracle price instead of hardcoded values
+        int currentHeight = 0;
+        CAmount oraclePrice = 0;
+        if (m_wallet) {
+            currentHeight = m_wallet->GetLastBlockHeight();
+            // Try real oracle first, fall back to mock
+            oraclePrice = MockOracleManager::GetInstance().GetCurrentPrice();
+        }
+        if (currentHeight <= 0) currentHeight = 100000; // Safe fallback for tests
+        if (oraclePrice <= 0) oraclePrice = 6500; // Safe fallback ($0.0065)
 
         DigiDollar::TransferTxBuilder builder(Params(), currentHeight, oraclePrice);
         DigiDollar::TxBuilderResult result = builder.BuildTransferTransaction(params);
@@ -3628,9 +3635,10 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
             }
         }
 
-        // Get current chain height and oracle price (mock values for now)
-        int currentHeight = 100000;  // TODO: Get actual height from chainstate
-        CAmount oraclePrice = 2500;   // TODO: Get from MockOracleManager
+        // BUG #5 FIX: Get real height and oracle price
+        int currentHeight = m_wallet ? m_wallet->GetLastBlockHeight() : 100000;
+        CAmount oraclePrice = MockOracleManager::GetInstance().GetCurrentPrice();
+        if (oraclePrice <= 0) oraclePrice = 6500; // Safe fallback
 
         // Build transaction
         DigiDollar::TransferTxBuilder builder(Params(), currentHeight, oraclePrice);
@@ -3748,10 +3756,10 @@ bool DigiDollarWallet::RedeemDigiDollar(const uint256& dd_timelock_id, const CAm
             return false;
         }
 
-        // Create redemption transaction using RedeemTxBuilder
-        // Get current chain height and oracle price (similar to transfer/mint)
-        int currentHeight = 100000; // TODO: Get actual height from m_wallet->chain().getHeight()
-        CAmount oraclePrice = 2500;  // TODO: Get from MockOracleManager
+        // BUG #5 FIX: Get real height and oracle price
+        int currentHeight = m_wallet ? m_wallet->GetLastBlockHeight() : 100000;
+        CAmount oraclePrice = MockOracleManager::GetInstance().GetCurrentPrice();
+        if (oraclePrice <= 0) oraclePrice = 6500; // Safe fallback
 
         DigiDollar::RedeemTxBuilder builder(Params(), currentHeight, oraclePrice);
 

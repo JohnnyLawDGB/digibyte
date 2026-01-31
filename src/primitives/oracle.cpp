@@ -31,12 +31,9 @@ bool COraclePriceMessage::IsValid(int64_t reference_time) const
 {
     // Check price is positive and in reasonable range
     // price_micro_usd format: 1,000,000 micro-USD = $1.00
-    // Realistic DGB price range: $0.0001 to $100.00
-    static constexpr uint64_t MIN_PRICE_MICRO_USD = 100;         // $0.0001 (minimum reasonable)
-    static constexpr uint64_t MAX_PRICE_MICRO_USD = 100000000;   // $100.00 (maximum reasonable)
-
-    if (price_micro_usd < MIN_PRICE_MICRO_USD) return false;
-    if (price_micro_usd > MAX_PRICE_MICRO_USD) return false;
+    // Uses shared constants from oracle.h: ORACLE_MIN/MAX_PRICE_MICRO_USD
+    if (price_micro_usd < ORACLE_MIN_PRICE_MICRO_USD) return false;
+    if (price_micro_usd > ORACLE_MAX_PRICE_MICRO_USD) return false;
 
     // Use provided reference time (block time during validation) or current time
     int64_t current_time = (reference_time > 0) ? reference_time : GetTime();
@@ -318,15 +315,13 @@ std::vector<COraclePriceMessage> COracleBundle::FilterOutliersAdvanced() const
     std::vector<COraclePriceMessage> valid_messages;
     valid_messages.reserve(messages.size()); // Optimize memory allocation
 
-    // First pass: remove obviously invalid prices with defined bounds
-    static constexpr uint64_t MIN_REALISTIC_PRICE = 100;        // $0.0001 per DGB
-    static constexpr uint64_t MAX_REALISTIC_PRICE = 10000000;   // $10.00 per DGB
-
+    // First pass: remove obviously invalid prices
+    // Uses shared constants from oracle.h (BUG #1 FIX: was $10, now $100)
     for (const auto& msg : messages) {
         // Extreme bounds checking with early exit conditions
         if (msg.price_micro_usd == 0 ||
-            msg.price_micro_usd > MAX_REALISTIC_PRICE ||
-            msg.price_micro_usd < MIN_REALISTIC_PRICE) {
+            msg.price_micro_usd > ORACLE_MAX_PRICE_MICRO_USD ||
+            msg.price_micro_usd < ORACLE_MIN_PRICE_MICRO_USD) {
             LogPrint(BCLog::DIGIDOLLAR, "FilterOutliersAdvanced: Rejecting price %llu micro-USD from oracle %u (out of bounds)\n",
                      msg.price_micro_usd, msg.oracle_id);
             continue;

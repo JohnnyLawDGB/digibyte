@@ -21,6 +21,8 @@ static constexpr int ORACLE_ACTIVE_COUNT = 15;         // 15 active oracles per 
 static constexpr int ORACLE_TOTAL_COUNT = 30;          // 30 total hardcoded oracles
 static constexpr int ORACLE_MAX_AGE_SECONDS = 3600;    // 1 hour max age for prices
 static constexpr int ORACLE_OUTLIER_THRESHOLD_PCT = 10; // 10% outlier threshold
+static constexpr uint64_t ORACLE_MIN_PRICE_MICRO_USD = 100;          // $0.0001 minimum
+static constexpr uint64_t ORACLE_MAX_PRICE_MICRO_USD = 100000000;    // $100.00 maximum
 
 /**
  * Oracle Price Message

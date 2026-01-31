@@ -5376,11 +5376,9 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         }
 
         // Validate price is reasonable (basic sanity check)
-        // Micro-USD format: 1,000,000 = $1.00
-        static constexpr uint64_t MIN_PRICE_MICRO_USD = 100;        // $0.0001
-        static constexpr uint64_t MAX_PRICE_MICRO_USD = 10000000;   // $10.00
-        if (oracle_msg.price_message.price_micro_usd < MIN_PRICE_MICRO_USD ||
-            oracle_msg.price_message.price_micro_usd > MAX_PRICE_MICRO_USD) {
+        // Uses shared constants from oracle.h (BUG #1 FIX: was $10, now $100)
+        if (oracle_msg.price_message.price_micro_usd < ORACLE_MIN_PRICE_MICRO_USD ||
+            oracle_msg.price_message.price_micro_usd > ORACLE_MAX_PRICE_MICRO_USD) {
             LogPrintf("Oracle price out of reasonable range (%llu) from oracle %d peer=%d\n",
                       oracle_msg.price_message.price_micro_usd,
                       oracle_msg.price_message.oracle_id, pfrom.GetId());

@@ -49,22 +49,23 @@ using namespace DigiDollar::DCA;
 
 // Mock utility functions for RPC-only implementation
 namespace {
+    // BUG #2 FIX: Aligned with consensus/digidollar.h (9 tiers, no 2-year tier)
     int GetLockDaysForTier(uint32_t tier) {
         switch (tier) {
             case 0: return 0;     // Special: 1 hour (240 blocks) - handled separately
             case 1: return 30;    // 30 days
-            case 2: return 90;    // 90 days
-            case 3: return 180;   // 180 days
+            case 2: return 90;    // 90 days (3 months)
+            case 3: return 180;   // 180 days (6 months)
             case 4: return 365;   // 1 year
-            case 5: return 730;   // 2 years
-            case 6: return 1095;  // 3 years
-            case 7: return 1825;  // 5 years
-            case 8: return 2555;  // 7 years
-            case 9: return 3650;  // 10 years
+            case 5: return 1095;  // 3 years
+            case 6: return 1825;  // 5 years
+            case 7: return 2555;  // 7 years
+            case 8: return 3650;  // 10 years
             default: return 0;
         }
     }
 
+    // BUG #2 FIX: Aligned with consensus/digidollar.h collateralRatios
     int GetMinCollateralRatio(uint32_t tier) {
         switch (tier) {
             case 0: return 1000;  // 1000% for 1 hour (testing only)
@@ -72,11 +73,10 @@ namespace {
             case 2: return 400;   // 400% for 90 days
             case 3: return 350;   // 350% for 180 days
             case 4: return 300;   // 300% for 1 year
-            case 5: return 275;   // 275% for 2 years
-            case 6: return 250;   // 250% for 3 years
-            case 7: return 225;   // 225% for 5 years
-            case 8: return 212;   // 212% for 7 years
-            case 9: return 200;   // 200% for 10 years
+            case 5: return 250;   // 250% for 3 years
+            case 6: return 225;   // 225% for 5 years
+            case 7: return 212;   // 212% for 7 years
+            case 8: return 200;   // 200% for 10 years
             default: return 500;
         }
     }
@@ -1179,19 +1179,14 @@ RPCHelpMan redeemdigidollar()
                 oraclePrice = 1 * COIN; // Fallback
             }
 
-            // Generate redemption key from wallet using HD derivation
-            // This allows the key to be recovered from wallet seed
-            CKey redemptionKey;
-            {
-                LOCK(pwallet->cs_wallet);
-                redemptionKey = GetHDKeyForDigiDollar(pwallet.get(), "dd-redeem");
-                if (!redemptionKey.IsValid()) {
-                    throw JSONRPCError(RPC_WALLET_ERROR, "Failed to generate redemption key for DD redeem");
-                }
-            }
-
             // Build redemption transaction using RedeemTxBuilder
             DigiDollar::RedeemTxBuilder redeemBuilder(Params(), currentHeight, oraclePrice);
+
+            // Get the owner key for this position
+            CKey ownerKey;
+            if (!dd_wallet->GetOwnerKey(positionId, ownerKey)) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "Owner key not found for position");
+            }
 
             DigiDollar::TxBuilderRedeemParams redeemParams;
             redeemParams.collateralOutpoint = COutPoint(positionId, 0); // Collateral is at vout 0
@@ -1199,17 +1194,10 @@ RPCHelpMan redeemdigidollar()
             redeemParams.ddAmounts = selectedDDAmounts;  // CRITICAL: Pass amounts for DD change calculation
             redeemParams.ddToRedeem = ddAmount;
             redeemParams.path = DigiDollar::RedemptionPath::NORMAL;
-            redeemParams.ownerKey = redemptionKey;
+            redeemParams.ownerKey = ownerKey;  // BUG #10 FIX: Use position owner key directly
             // DigiDollar transactions MUST pay at least 0.1 DGB fee to miners
             static const CAmount MIN_DD_FEE_RATE = 35000000; // 0.35 DGB/kB ensures min 0.1 DGB for typical tx
             redeemParams.feeRate = MIN_DD_FEE_RATE;
-
-            // Get the owner key for this position
-            CKey ownerKey;
-            if (!dd_wallet->GetOwnerKey(positionId, ownerKey)) {
-                throw JSONRPCError(RPC_WALLET_ERROR, "Owner key not found for position");
-            }
-            redeemParams.ownerKey = ownerKey;
 
             // CRITICAL FIX: Get a wallet address for the returned collateral
             // This ensures the wallet recognizes the returned DGB as belonging to it
@@ -1987,7 +1975,7 @@ static RPCHelpMan estimatecollateral()
                 "Calculates the required DGB amount based on DD amount, lock tier, and current system conditions.\n",
                 {
                     {"dd_amount", RPCArg::Type::NUM, RPCArg::Optional::NO, "DigiDollar amount to mint (in cents)"},
-                    {"lock_tier", RPCArg::Type::NUM, RPCArg::Optional::NO, "Lock tier 0-9 (0=1h testing, 1=30d, 2=90d, 3=180d, 4=1y, 5=2y, 6=3y, 7=5y, 8=7y, 9=10y)"},
+                    {"lock_tier", RPCArg::Type::NUM, RPCArg::Optional::NO, "Lock tier 0-8 (0=1h testing, 1=30d, 2=90d, 3=180d, 4=1y, 5=3y, 6=5y, 7=7y, 8=10y)"},
                     {"oracle_price_micro_usd", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "Custom DGB price in micro-USD (1,000,000 = $1.00). Uses current oracle if omitted."}
                 },
                 RPCResult{

@@ -184,6 +184,14 @@ public:
      */
     static void ClearFreeze();
 
+    /**
+     * Reconstruct volatility state from block price data after restart
+     * Re-feeds saved price history and recalculates freeze state
+     * @param blockPrices Price points extracted from recent blocks
+     * @param currentHeight Current chain height
+     */
+    static void ReconstructFromBlockData(const std::vector<PricePoint>& blockPrices, uint32_t currentHeight);
+
     // ========================================================================
     // Diagnostic Functions
     // ========================================================================

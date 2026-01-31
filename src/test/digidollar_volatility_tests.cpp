@@ -852,4 +852,60 @@ BOOST_FIXTURE_TEST_CASE(test_volatility_integration_stress, DigiDollarVolatility
     }
 }
 
+// ============================================================================
+// Bug #7: Volatility State Persistence After Restart Tests
+// ============================================================================
+
+BOOST_FIXTURE_TEST_CASE(bug7_volatility_state_survives_restart, DigiDollarVolatilityTestSetup)
+{
+    // Test: Set volatility freeze, "restart" (clear state), reconstruct → freeze still active
+
+    // Step 1: Create price history that triggers a freeze (30%+ drop in 24h)
+    CAmount basePrice = 500000; // $5.00
+
+    // Record stable price first
+    VolatilityMonitor::RecordPrice(basePrice, mockTimestamp, mockHeight);
+    AdvanceTime(3600, 240);
+
+    // Record prices showing a crash (>30% in 24 hours → triggers all-freeze)
+    for (int i = 0; i < 12; ++i) {
+        CAmount crashPrice = basePrice * (100 - (i * 4)) / 100; // Gradual 48% crash
+        VolatilityMonitor::RecordPrice(crashPrice, mockTimestamp, mockHeight);
+        AdvanceTime(3600, 240);
+    }
+
+    // Save the price history before "restart"
+    std::vector<PricePoint> savedPrices = VolatilityMonitor::GetPriceHistory();
+    bool wasFrozen = VolatilityMonitor::ShouldFreezeAll();
+    bool wasMintFrozen = VolatilityMonitor::GetCurrentState().mintingFrozen;
+
+    // Verify we achieved a freeze (at least minting should be frozen)
+    BOOST_CHECK_MESSAGE(wasFrozen || wasMintFrozen,
+        "Test setup failed: should have triggered some freeze");
+
+    // Step 2: "Restart" — clear all static state
+    VolatilityMonitor::ClearFreeze();
+    VolatilityMonitor::ClearHistory();
+
+    // Verify state is cleared
+    BOOST_CHECK(!VolatilityMonitor::ShouldFreezeAll());
+    BOOST_CHECK(!VolatilityMonitor::GetCurrentState().mintingFrozen);
+
+    // Step 3: Reconstruct from saved price data
+    uint32_t currentHeight = mockHeight;
+    VolatilityMonitor::ReconstructFromBlockData(savedPrices, currentHeight);
+
+    // Step 4: Verify freeze state is restored
+    VolatilityState reconstructedState = VolatilityMonitor::GetCurrentState();
+
+    if (wasFrozen) {
+        BOOST_CHECK_MESSAGE(VolatilityMonitor::ShouldFreezeAll(),
+            "All-operations freeze should be restored after reconstruction");
+    }
+    if (wasMintFrozen) {
+        BOOST_CHECK_MESSAGE(reconstructedState.mintingFrozen,
+            "Minting freeze should be restored after reconstruction");
+    }
+}
+
 BOOST_AUTO_TEST_SUITE_END()

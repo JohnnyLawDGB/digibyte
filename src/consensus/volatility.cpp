@@ -261,6 +261,38 @@ void VolatilityMonitor::ClearFreeze()
     LogPrintf("VolatilityMonitor: MANUAL UNFREEZE - All freeze states cleared\n");
 }
 
+void VolatilityMonitor::ReconstructFromBlockData(const std::vector<PricePoint>& blockPrices, uint32_t currentHeight)
+{
+    LOCK(cs_volatility);
+
+    // Clear existing state
+    priceHistory.clear();
+    currentState = VolatilityState();
+    lastUpdateHeight = 0;
+
+    LogPrintf("VolatilityMonitor: Reconstructing state from %d block price points at height %d\n",
+              blockPrices.size(), currentHeight);
+
+    // Re-feed all price points (they're already sorted chronologically from blocks)
+    for (const auto& pp : blockPrices) {
+        priceHistory.emplace_back(pp);
+    }
+
+    // Update last known height
+    lastUpdateHeight = currentHeight;
+
+    // Clean old history to maintain size limits
+    CleanOldHistory();
+
+    // Recalculate volatility state from reconstructed history
+    if (!priceHistory.empty()) {
+        UpdateVolatilityState();
+    }
+
+    LogPrintf("VolatilityMonitor: Reconstruction complete - frozen=%d, mintFrozen=%d, pricePoints=%d\n",
+              currentState.allOperationsFrozen, currentState.mintingFrozen, priceHistory.size());
+}
+
 std::string VolatilityMonitor::GetDiagnosticInfo()
 {
     LOCK(cs_volatility);

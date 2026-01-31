@@ -451,9 +451,9 @@ void DigiDollarMintWidget::updateOraclePrice()
               (int)chainType, (int)ChainType::REGTEST, (int)ChainType::TESTNET, (int)ChainType::MAIN);
 
     if (chainType == ChainType::REGTEST && MockOracleManager::GetInstance().IsEnabled()) {
-        // Get price from mock oracle (cents per DGB)
-        CAmount priceCents = MockOracleManager::GetInstance().GetCurrentPrice();
-        m_oraclePrice = priceCents / 100.0;
+        // BUG #6 FIX: GetCurrentPrice() returns micro-USD, not cents
+        CAmount priceMicroUsd = MockOracleManager::GetInstance().GetCurrentPrice();
+        m_oraclePrice = priceMicroUsd / 1000000.0;
         LogPrintf("DigiDollar Mint: Using MockOracle, price = %f USD\n", m_oraclePrice);
     } else if (m_clientModel) {
         // Get actual oracle price from RPC

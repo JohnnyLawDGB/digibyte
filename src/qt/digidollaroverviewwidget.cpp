@@ -592,11 +592,12 @@ void DigiDollarOverviewWidget::updateOraclePrice()
     if (Params().GetChainType() == ChainType::REGTEST && MockOracleManager::GetInstance().IsEnabled()) {
         // Get price from mock oracle
         // Oracle price format: CENTS per DGB
-        // Example: 1 = $0.01 per DGB, 50 = $0.50 per DGB
-        CAmount priceCents = MockOracleManager::GetInstance().GetCurrentPrice();
+        // BUG #6 FIX: GetCurrentPrice() returns micro-USD, not cents
+        // 1,000,000 micro-USD = $1.00
+        CAmount priceMicroUsd = MockOracleManager::GetInstance().GetCurrentPrice();
 
-        // Convert cents to dollars
-        m_oraclePrice = priceCents / 100.0;
+        // Convert micro-USD to dollars
+        m_oraclePrice = priceMicroUsd / 1000000.0;
     } else if (m_clientModel) {
         // Get actual oracle price from RPC
         try {

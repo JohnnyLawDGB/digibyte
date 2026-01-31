@@ -497,9 +497,9 @@ void DigiDollarSendWidget::updateOraclePrice()
 {
     // Get oracle price from RPC for testnet/mainnet, MockOracleManager for regtest
     if (Params().GetChainType() == ChainType::REGTEST && MockOracleManager::GetInstance().IsEnabled()) {
-        // Get price from mock oracle (cents per DGB)
-        CAmount priceCents = MockOracleManager::GetInstance().GetCurrentPrice();
-        m_oraclePrice = priceCents / 100.0;
+        // BUG #6 FIX: GetCurrentPrice() returns micro-USD, not cents
+        CAmount priceMicroUsd = MockOracleManager::GetInstance().GetCurrentPrice();
+        m_oraclePrice = priceMicroUsd / 1000000.0;
     } else if (m_clientModel) {
         // Get actual oracle price from RPC
         try {

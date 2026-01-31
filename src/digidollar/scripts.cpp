@@ -215,9 +215,18 @@ CScript CreateDigiDollarP2TR(const XOnlyPubKey& owner, CAmount ddAmount)
 static std::map<uint256, ScriptMetadata> g_scriptMetadataMap;
 static RecursiveMutex g_scriptMetadataMutex;
 
+// BUG #9 FIX: Limit map size to prevent unbounded memory growth
+static constexpr size_t MAX_SCRIPT_METADATA_ENTRIES = 10000;
+
 void RegisterScriptMetadata(const CScript& script, DigiDollar::ScriptType type, CAmount ddAmount, int64_t lockHeight) {
     uint256 scriptHash = Hash(script);
     LOCK(g_scriptMetadataMutex);
+
+    // Evict oldest entries if map is too large (simple FIFO via erase from begin)
+    while (g_scriptMetadataMap.size() >= MAX_SCRIPT_METADATA_ENTRIES) {
+        g_scriptMetadataMap.erase(g_scriptMetadataMap.begin());
+    }
+
     g_scriptMetadataMap[scriptHash] = {type, ddAmount, lockHeight};
 }
 

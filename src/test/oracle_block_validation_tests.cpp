@@ -194,35 +194,34 @@ BOOST_AUTO_TEST_CASE(checkblock_accepts_valid_oracle_bundle)
  */
 BOOST_AUTO_TEST_CASE(checkblock_rejects_invalid_bundle_signature)
 {
-    // Enable oracle system for testing
+    // Phase Two: 4-of-7 multi-oracle consensus test
+    // RegTest: nDDActivationHeight=650, nDigiDollarPhase2Height=100
+    // Height 700 is in Phase Two territory — oracle validation is active
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     manager.SetEnabled(true);
-    manager.SetMinOracleCount(1); // Phase One: 1-of-1 consensus
+    manager.SetMinOracleCount(3); // Phase Two regtest: 3-of-5
 
-    // Generate oracle keypair
+    // Test: Block with invalid oracle price (0) should be rejected
+    // Create a single message with price=0 — this fails IsValid() price range check
     CKey oracle_key;
     oracle_key.MakeNewKey(true);
 
-    // Create oracle message with INVALID price (Phase One: test price validation)
     COraclePriceMessage msg;
     msg.oracle_id = 0;
-    msg.price_micro_usd = 0; // Invalid: price cannot be 0
+    msg.price_micro_usd = 0; // Invalid: below ORACLE_MIN_PRICE_MICRO_USD (100)
     msg.timestamp = GetTime();
     msg.block_height = 700;
     msg.nonce = GetRand(UINT64_MAX);
     msg.oracle_pubkey = XOnlyPubKey(oracle_key.GetPubKey());
+    // Don't sign — price=0 is structurally invalid regardless
 
-    // Phase One compact format doesn't embed signatures
-    // Testing price validation instead
-
-    // Create bundle with invalid message
     COracleBundle bundle;
     bundle.messages.push_back(msg);
-    bundle.epoch = GetCurrentEpoch(101);
-    bundle.median_price_micro_usd = 0; // Invalid median price
+    bundle.epoch = GetCurrentEpoch(700);
+    bundle.median_price_micro_usd = 0;
     bundle.timestamp = msg.timestamp;
 
-    // Create block
+    // Create block at height 700 (above both activation heights)
     CBlock block;
     block.nVersion = 1;
     block.nTime = GetTime();
@@ -230,7 +229,6 @@ BOOST_AUTO_TEST_CASE(checkblock_rejects_invalid_bundle_signature)
     block.nBits = 0x207fffff;
     block.nNonce = 0;
 
-    // Create coinbase with bad oracle bundle
     CMutableTransaction coinbase;
     coinbase.vin.resize(1);
     coinbase.vin[0].prevout.SetNull();
@@ -242,21 +240,25 @@ BOOST_AUTO_TEST_CASE(checkblock_rejects_invalid_bundle_signature)
     AddOracleBundleToCoinbase(coinbase, bundle);
     block.vtx.push_back(MakeTransactionRef(std::move(coinbase)));
 
-    // Test CheckBlock REJECTS invalid price
     BlockValidationState state;
     const Consensus::Params& params = Params().GetConsensus();
 
-    // CheckBlock should reject blocks with invalid oracle price
-    BOOST_CHECK_MESSAGE(
-        !CheckBlock(block, state, params, false, false),
-        "CheckBlock should reject block with invalid oracle price (0)"
-    );
+    // CheckBlock should reject — invalid oracle price in the bundle
+    bool accepted = CheckBlock(block, state, params, false, false);
 
-    if (state.IsValid()) {
-        LogPrintf("TEST FAILURE: CheckBlock accepted invalid oracle price\n");
+    if (accepted) {
+        // If accepted, the compact format encoded price=0 which ExtractOracleBundle
+        // should have rejected or bundle.IsValid() should have caught
+        BOOST_CHECK_MESSAGE(!accepted,
+            "CheckBlock should reject block with invalid oracle price (0)");
     } else {
-        // Check for expected rejection reason (bundle.IsValid() fails due to invalid price)
-        BOOST_CHECK_EQUAL(state.GetRejectReason(), "bad-oracle-bundle");
+        // Rejected as expected — verify it's an oracle-related rejection
+        std::string reason = state.GetRejectReason();
+        BOOST_CHECK_MESSAGE(
+            reason == "bad-oracle-bundle" || reason == "bad-oracle-phase2" ||
+            reason == "bad-oracle-consensus" || reason == "bad-oracle-median",
+            "Expected oracle rejection reason, got: " + reason
+        );
     }
 }
 

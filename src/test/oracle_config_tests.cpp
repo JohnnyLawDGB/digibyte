@@ -391,9 +391,9 @@ BOOST_AUTO_TEST_CASE(regtest_oracle_configuration)
     const std::vector<OracleNodeInfo>& oracle_nodes = params.GetOracleNodes();
     BOOST_REQUIRE(!oracle_nodes.empty());
 
-    // RegTest uses minimal oracle set (5 for testing)
+    // RegTest uses 7 oracles (4-of-7 consensus, matches testnet)
     BOOST_CHECK(oracle_nodes.size() >= 1);
-    BOOST_CHECK(oracle_nodes.size() <= 5);
+    BOOST_CHECK(oracle_nodes.size() <= 7);
 
     // Verify at least one oracle is active
     int active_count = 0;

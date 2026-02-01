@@ -552,8 +552,10 @@ static RPCHelpMan calculatecollateralrequirement()
             //   = (10000 cents * 100000000 * 150 * 100) / 6310
             //   = 15,000,000,000,000,000 / 6310
             //   = 2,377,179,080,509 sats = ~23,772 DGB
-            uint64_t requiredDGB = (static_cast<uint64_t>(ddAmount) * static_cast<uint64_t>(COIN) * static_cast<uint64_t>(effectiveRatio) * 100ULL) /
-                                   static_cast<uint64_t>(oraclePriceMicroUSD);
+            // Use __int128 to avoid uint64 overflow for large DD amounts
+            __int128 numerator = static_cast<__int128>(ddAmount) * static_cast<__int128>(COIN) *
+                                 static_cast<__int128>(effectiveRatio) * 100;
+            uint64_t requiredDGB = static_cast<uint64_t>(numerator / static_cast<__int128>(oraclePriceMicroUSD));
 
             UniValue result(UniValue::VOBJ);
             result.pushKV("required_dgb", ValueFromAmount(requiredDGB));

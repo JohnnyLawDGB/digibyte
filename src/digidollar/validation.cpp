@@ -313,8 +313,10 @@ CAmount CalculateRequiredCollateral(CAmount ddAmount, int64_t lockTime,
     //   = (10000 * 100000000 * 150 * 100) / 6310
     //   = 15,000,000,000,000,000 / 6310
     //   = 2,377,179,080,509 sats = ~23,772 DGB
-    uint64_t requiredDGB = (static_cast<uint64_t>(ddAmount) * static_cast<uint64_t>(COIN) * static_cast<uint64_t>(effectiveRatio) * 100ULL) /
-                           static_cast<uint64_t>(ctx.oraclePriceMicroUSD);
+    // Use __int128 to avoid uint64 overflow for large DD amounts (overflows at ~$18K@1000%)
+    __int128 numerator = static_cast<__int128>(ddAmount) * static_cast<__int128>(COIN) *
+                         static_cast<__int128>(effectiveRatio) * 100;
+    uint64_t requiredDGB = static_cast<uint64_t>(numerator / static_cast<__int128>(ctx.oraclePriceMicroUSD));
 
     LogPrint(BCLog::DIGIDOLLAR, "DCA: Collateral calculation: %lld cents * %lld * %d * 100 / %lld micro-USD = %llu sat (~%llu DGB)\n",
              ddAmount, COIN, effectiveRatio, ctx.oraclePriceMicroUSD, requiredDGB, requiredDGB / COIN);

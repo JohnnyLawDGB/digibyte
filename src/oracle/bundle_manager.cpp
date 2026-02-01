@@ -699,12 +699,13 @@ bool OracleBundleManager::BroadcastMessage(const COraclePriceMessage& message)
         return false;
     }
 
-    // Push message to all connected peers
-    // The message is serialized directly as COraclePriceMessage
-    m_connman->ForEachNode([this, &message](CNode* node) {
+    // Push message to all connected peers using OraclePriceMsg wrapper
+    OraclePriceMsg price_msg;
+    price_msg.price_message = message;
+    m_connman->ForEachNode([this, &price_msg](CNode* node) {
         m_connman->PushMessage(node,
             CNetMsgMaker(node->GetCommonVersion()).Make(
-                NetMsgType::ORACLEPRICE, message));
+                NetMsgType::ORACLEPRICE, price_msg));
     });
 
     LogPrint(BCLog::DIGIDOLLAR, "Oracle: Broadcast oracle message to network: oracle_id=%d, price=%llu micro-USD\n",

@@ -99,17 +99,31 @@ bool OracleBundleManager::AddOracleMessage(const COraclePriceMessage& message)
     // Note: Bundle creation happens in AddOracleBundleToBlock() or when explicitly requested
     // Don't auto-create here to avoid epoch mismatch issues
 
-    // Phase One (testnet): For single oracle (1-of-1 consensus), immediately update cached price
-    // This ensures getoracleprice returns the oracle price immediately, not a fallback
-    // The price is stored in micro-USD format
-    if (Params().GetChainType() == ChainType::TESTNET || Params().GetChainType() == ChainType::REGTEST) {
-        // Store the price in micro-USD directly - GetLatestPrice() returns this
-        // getoracleprice RPC handles conversion to cents/USD
-        std::lock_guard<std::mutex> price_lock(mtx_bundles);
-        cached_price = static_cast<CAmount>(message.price_micro_usd);
-        last_update_time = GetTime();
-        LogPrintf("Oracle: Phase One - Immediately cached price from oracle %d: %llu micro-USD ($%.6f)\n",
-                 message.oracle_id, message.price_micro_usd, message.price_micro_usd / 1000000.0);
+    // Update cached price only when consensus is met
+    // Phase One (1-of-1): any single message is consensus
+    // Phase Two (4-of-7): need min_oracle_count agreeing messages
+    {
+        std::lock_guard<std::recursive_mutex> pending_lock(mtx_messages);
+        if (static_cast<int>(pending_messages.size()) >= min_oracle_count) {
+            // Calculate median of pending messages for consensus price
+            std::vector<uint64_t> prices;
+            prices.reserve(pending_messages.size());
+            for (const auto& pair : pending_messages) {
+                prices.push_back(pair.second.price_micro_usd);
+            }
+            std::sort(prices.begin(), prices.end());
+            uint64_t median_price = prices[prices.size() / 2];
+
+            std::lock_guard<std::mutex> price_lock(mtx_bundles);
+            cached_price = static_cast<CAmount>(median_price);
+            last_update_time = GetTime();
+            LogPrintf("Oracle: Updated cached price with %d-of-%d consensus: %llu micro-USD ($%.6f)\n",
+                     (int)pending_messages.size(), min_oracle_count,
+                     median_price, median_price / 1000000.0);
+        } else {
+            LogPrintf("Oracle: %d pending messages, need %d for consensus - cached price unchanged\n",
+                     (int)pending_messages.size(), min_oracle_count);
+        }
     }
 
     return true;

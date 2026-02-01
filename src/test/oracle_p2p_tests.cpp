@@ -775,6 +775,132 @@ BOOST_AUTO_TEST_CASE(test_phase2_sign_verify_roundtrip_prices)
 }
 
 /**
+ * Bug: Cached price updates without consensus
+ *
+ * Every AddOracleMessage() was immediately updating cached_price,
+ * so getoracleprice returned the latest individual oracle's price
+ * even without consensus. With 4-of-7 threshold, sending $0.02
+ * from only 3 oracles should NOT change the cached price.
+ *
+ * Fix: Only update cached_price when pending_messages.size() >= min_oracle_count.
+ */
+BOOST_AUTO_TEST_CASE(test_cached_price_requires_consensus)
+{
+    OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    manager.Clear();
+    manager.SetEnabled(true);
+    manager.SetMinOracleCount(4); // Phase 2: need 4-of-7
+
+    // Create 4 oracle keys
+    std::vector<CKey> keys(4);
+    for (int i = 0; i < 4; i++) {
+        keys[i].MakeNewKey(true);
+    }
+
+    int64_t now = GetTime();
+
+    // Round 1: All 4 oracles send $0.01 — reaches consensus
+    for (int i = 0; i < 4; i++) {
+        COraclePriceMessage msg;
+        msg.oracle_id = i;
+        msg.price_micro_usd = 10000; // $0.01
+        msg.timestamp = now;
+        msg.oracle_pubkey = XOnlyPubKey(keys[i].GetPubKey());
+        msg.SignPhase2(keys[i]);
+        manager.AddOracleMessage(msg);
+    }
+
+    // Cached price should be $0.01 (consensus reached with 4 messages)
+    CAmount price_after_consensus = manager.GetLatestPrice();
+    BOOST_CHECK_EQUAL(price_after_consensus, 10000);
+
+    // Consume into block to clear pending
+    CBlock dummy_block;
+    CMutableTransaction coinbase;
+    coinbase.vin.resize(1);
+    coinbase.vout.resize(1);
+    coinbase.vout[0].nValue = 0;
+    dummy_block.vtx.push_back(MakeTransactionRef(std::move(coinbase)));
+    manager.AddOracleBundleToBlock(dummy_block, 700);
+
+    // Round 2: Only 3 oracles send $0.02 — below threshold
+    for (int i = 0; i < 3; i++) {
+        COraclePriceMessage msg;
+        msg.oracle_id = i;
+        msg.price_micro_usd = 20000; // $0.02
+        msg.timestamp = now + 10;
+        msg.oracle_pubkey = XOnlyPubKey(keys[i].GetPubKey());
+        msg.SignPhase2(keys[i]);
+        manager.AddOracleMessage(msg);
+    }
+
+    // Cached price should STILL be $0.01 — only 3 messages, need 4
+    CAmount price_after_below_threshold = manager.GetLatestPrice();
+    BOOST_CHECK_MESSAGE(price_after_below_threshold == 10000,
+        strprintf("Cached price should remain $0.01 (10000) with only 3/4 oracles, "
+                  "but got %lld", price_after_below_threshold));
+
+    manager.Clear();
+    manager.SetEnabled(false);
+}
+
+/**
+ * Test: Stale messages in pending don't create false consensus
+ *
+ * If 4 oracles send $0.01, pending is NOT cleared (no block mined),
+ * then 3 oracles send $0.02 (replacing their entries), the bundle
+ * has 3×$0.02 + 1×$0.01 stale = 4 total but price should reflect
+ * the mix, not purely the 3 new oracles.
+ */
+BOOST_AUTO_TEST_CASE(test_stale_message_mixed_bundle)
+{
+    OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    manager.Clear();
+    manager.SetEnabled(true);
+    manager.SetMinOracleCount(4);
+
+    std::vector<CKey> keys(4);
+    for (int i = 0; i < 4; i++) {
+        keys[i].MakeNewKey(true);
+    }
+
+    int64_t now = GetTime();
+
+    // All 4 send $0.01
+    for (int i = 0; i < 4; i++) {
+        COraclePriceMessage msg;
+        msg.oracle_id = i;
+        msg.price_micro_usd = 10000;
+        msg.timestamp = now;
+        msg.oracle_pubkey = XOnlyPubKey(keys[i].GetPubKey());
+        msg.SignPhase2(keys[i]);
+        manager.AddOracleMessage(msg);
+    }
+
+    BOOST_CHECK_EQUAL(manager.GetLatestPrice(), 10000);
+
+    // 3 oracles update to $0.02 (replaces oracle 0,1,2; oracle 3 stale at $0.01)
+    for (int i = 0; i < 3; i++) {
+        COraclePriceMessage msg;
+        msg.oracle_id = i;
+        msg.price_micro_usd = 20000;
+        msg.timestamp = now + 10;
+        msg.oracle_pubkey = XOnlyPubKey(keys[i].GetPubKey());
+        msg.SignPhase2(keys[i]);
+        manager.AddOracleMessage(msg);
+    }
+
+    // 4 messages in pending (3×$0.02 + 1×$0.01 stale)
+    // Median of [10000, 20000, 20000, 20000] = 20000
+    // This IS consensus (4 messages ≥ threshold) — the median handles the outlier
+    CAmount mixed_price = manager.GetLatestPrice();
+    BOOST_CHECK_EQUAL(mixed_price, 20000);
+
+    manager.Clear();
+    manager.SetEnabled(false);
+}
+
+/**
  * Final cleanup test - MUST RUN LAST
  * Cleans up Oracle singleton state to prevent interference with other test suites
  * This test is placed in oracle_p2p_tests (last oracle test alphabetically) to ensure

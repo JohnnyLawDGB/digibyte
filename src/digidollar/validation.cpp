@@ -1299,12 +1299,30 @@ bool ValidateCollateralReleaseAmount(const CTransaction& tx,
     CAmount feeTolerance = std::max((CAmount)1000, allowedRelease / 1000);
 
     // Sum total DGB outputs in the transaction
-    CAmount totalDGBRelease = 0;
+    CAmount totalDGBOutputs = 0;
     for (const auto& output : tx.vout) {
         if (output.nValue > 0) {
-            totalDGBRelease += output.nValue;
+            totalDGBOutputs += output.nValue;
         }
     }
+
+    // Subtract fee input values to get NET collateral release
+    // Fee inputs are non-collateral, non-DD inputs (inputs with nValue > 0 after input 0)
+    // Input 0 = collateral, then DD inputs (nValue=0), then fee inputs (nValue>0)
+    CAmount totalFeeInputs = 0;
+    for (size_t i = 1; i < tx.vin.size(); ++i) {
+        Coin coin;
+        if (ctx.coins->GetCoin(tx.vin[i].prevout, coin) && coin.out.nValue > 0) {
+            totalFeeInputs += coin.out.nValue;
+        }
+    }
+
+    // Net collateral release = total outputs - fee inputs returned as change
+    CAmount totalDGBRelease = totalDGBOutputs - totalFeeInputs;
+    if (totalDGBRelease < 0) totalDGBRelease = 0;
+
+    LogPrintf("DigiDollar: Collateral release check - totalOutputs: %lld, feeInputs: %lld, netRelease: %lld, allowed: %lld\n",
+              (long long)totalDGBOutputs, (long long)totalFeeInputs, (long long)totalDGBRelease, (long long)allowedRelease);
 
     if (totalDGBRelease > allowedRelease + feeTolerance) {
         LogPrintf("DigiDollar: Collateral release too large - releasing: %lld, allowed: %lld (+ %lld tolerance), locked: %lld, ddBurned: %lld, originalDD: %lld\n",

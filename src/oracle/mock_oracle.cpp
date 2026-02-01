@@ -6,7 +6,10 @@
 
 #include <chain.h>
 #include <chainparams.h>
+#include <crypto/sha256.h>
+#include <hash.h>
 #include <logging.h>
+#include <util/strencodings.h>
 #include <node/chainstate.h>
 #include <util/time.h>
 #include <validation.h>
@@ -21,6 +24,38 @@ MockOracleManager::MockOracleManager()
       lastUpdateHeight(0),
       enabled(true)
 {
+    InitTestKeys();
+}
+
+void MockOracleManager::InitTestKeys()
+{
+    // Generate deterministic test oracle private keys from SHA256("digibyte_regtest_oracle_N")
+    // 7 oracles for regtest (matches testnet 4-of-7 consensus)
+    for (uint32_t i = 0; i < 7; i++) {
+        std::string seed = "digibyte_regtest_oracle_" + std::to_string(i);
+        uint256 hash;
+        CSHA256().Write((const unsigned char*)seed.data(), seed.size()).Finalize(hash.begin());
+
+        CKey key;
+        key.Set(hash.begin(), hash.end(), true);
+        if (key.IsValid()) {
+            testOracleKeys[i] = key;
+            LogPrintf("MockOracleManager: Initialized test key for oracle %d (pubkey=%s)\n",
+                     i, HexStr(key.GetPubKey()));
+        } else {
+            LogPrintf("MockOracleManager: WARNING - Failed to create test key for oracle %d\n", i);
+        }
+    }
+}
+
+CKey MockOracleManager::GetTestKey(uint32_t oracle_id) const
+{
+    LOCK(cs_price);
+    auto it = testOracleKeys.find(oracle_id);
+    if (it != testOracleKeys.end()) {
+        return it->second;
+    }
+    return CKey(); // Invalid key
 }
 
 MockOracleManager& MockOracleManager::GetInstance()
@@ -96,24 +131,42 @@ COracleBundle MockOracleManager::CreateMockBundle(int height)
     COracleBundle bundle;
     bundle.epoch = GetCurrentEpoch(height);
 
-    // Create 8 mock oracle messages (minimum required for consensus)
-    for (uint32_t i = 0; i < ORACLE_CONSENSUS_REQUIRED; i++) {
+    // Determine how many oracle messages to create based on chain config
+    // Use min(available test keys, ORACLE_CONSENSUS_REQUIRED) for backward compat
+    uint32_t num_messages = std::min(static_cast<uint32_t>(testOracleKeys.size()),
+                                     static_cast<uint32_t>(ORACLE_CONSENSUS_REQUIRED));
+    if (num_messages == 0) num_messages = ORACLE_CONSENSUS_REQUIRED; // fallback
+
+    for (uint32_t i = 0; i < num_messages; i++) {
         COraclePriceMessage msg;
         msg.oracle_id = i;
         msg.price_micro_usd = mockPriceMicroUSD;
         msg.timestamp = GetTime();
+        msg.block_height = height;
 
-        // Create mock Schnorr signature (64 bytes of deterministic data)
-        msg.schnorr_sig.resize(64);
-        for (size_t j = 0; j < 64; j++) {
-            msg.schnorr_sig[j] = static_cast<unsigned char>((i * 64 + j) % 256);
+        // Sign with real Schnorr signature if test key is available
+        auto key_it = testOracleKeys.find(i);
+        if (key_it != testOracleKeys.end()) {
+            msg.oracle_pubkey = XOnlyPubKey(key_it->second.GetPubKey());
+            if (!msg.SignPhase2(key_it->second)) {
+                LogPrintf("MockOracleManager: WARNING - Failed to sign message for oracle %d\n", i);
+            }
+        } else {
+            // Fallback: fake signature (will fail verification but maintains backward compat)
+            msg.schnorr_sig.resize(64);
+            for (size_t j = 0; j < 64; j++) {
+                msg.schnorr_sig[j] = static_cast<unsigned char>((i * 64 + j) % 256);
+            }
         }
 
         bundle.messages.push_back(msg);
     }
 
-    LogPrint(BCLog::DIGIDOLLAR, "MockOracleManager: Created bundle for epoch %d with price %lld micro-USD\n",
-             bundle.epoch, mockPriceMicroUSD);
+    bundle.median_price_micro_usd = mockPriceMicroUSD;
+    bundle.timestamp = GetTime();
+
+    LogPrint(BCLog::DIGIDOLLAR, "MockOracleManager: Created bundle for epoch %d with %d messages, price %lld micro-USD\n",
+             bundle.epoch, num_messages, mockPriceMicroUSD);
 
     return bundle;
 }

@@ -961,40 +961,50 @@ public:
         // Oracle system parameters (RegTest uses MockOracleManager)
         consensus.nOracleActivationHeight = 1;     // Activate immediately
         consensus.nOracleEpochLength = 144;        // 2.4 hours (144 blocks * 15 seconds)
-        consensus.nOracleRequiredMessages = 3;     // Phase Two: 3-of-5 for testing
-        consensus.nOracleTotalOracles = 5;         // Phase Two: 5 oracles for testing
+        consensus.nOracleRequiredMessages = 4;     // Phase Two: 4-of-7 (matches testnet)
+        consensus.nOracleTotalOracles = 7;         // Phase Two: 7 oracles (matches testnet)
         consensus.nDigiDollarPhase2Height = 100;   // Phase Two activates at block 100
 
         // RegTest: Oracle public keys for all 5 oracles (match vOracleNodes)
+        // Deterministic keys derived from SHA256("digibyte_regtest_oracle_N")
+        // Matching private keys are in MockOracleManager for test signing
         consensus.vOraclePublicKeys.push_back(
-            "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"  // oracle 0
+            "8849d466503c5bb3875ada6bff3d6eec6299265b7b0a4e31bb58b7cecf6dd08f"  // oracle 0
         );
         consensus.vOraclePublicKeys.push_back(
-            "c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5"  // oracle 1
+            "9991f9e0c61dfe10896ee797f271f2f6d4e2545daf9a22732622c02ce39f43f0"  // oracle 1
         );
         consensus.vOraclePublicKeys.push_back(
-            "f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9"  // oracle 2
+            "d2292678e5c549e90420dc4c6311ef01bf014fb0f4b34d07e02b7b98bbc35e9a"  // oracle 2
         );
         consensus.vOraclePublicKeys.push_back(
-            "88f7b0f632de8140fe337e62a37f3566500a99934c2231b6cb9fd7584b8e672c"  // oracle 3
+            "f24df57d6ab29241f0f00dd87d7ce1418852684dc41d186650a452179618234f"  // oracle 3
         );
         consensus.vOraclePublicKeys.push_back(
-            "ba30c7a2323f0dcca829b8ab6a5b3b59ce5e0e6c0b16eaff5ba8e684b31b21d9"  // oracle 4
+            "aa1ebe314382eb820a040acf604a6617db3d063e9ee0640780774650649aaf47"  // oracle 4
+        );
+        consensus.vOraclePublicKeys.push_back(
+            "be6ad50e0bf26af3798af09a2824142fa79ff37f8730b7a54ba34c9fe6f1e8ec"  // oracle 5
+        );
+        consensus.vOraclePublicKeys.push_back(
+            "584d30f3650d998b0b5f8be52f46164aee5f10d332421e63f070da8a38693a96"  // oracle 6
         );
 
-        LogPrintf("Oracle: RegTest Phase Two - 3-of-5 consensus, activates at height %d\n", consensus.nDigiDollarPhase2Height);
+        LogPrintf("Oracle: RegTest Phase Two - 4-of-7 consensus, activates at height %d\n", consensus.nDigiDollarPhase2Height);
     }
 
 private:
     void InitializeOracleNodes() {
-        // DigiDollar Oracle Nodes - Minimal set for regtest (5 oracles)
-        // Small set for rapid testing, but enough to test selection algorithms
+        // DigiDollar Oracle Nodes - 7 oracles for regtest (matches testnet 4-of-7)
+        // Deterministic keys from SHA256("digibyte_regtest_oracle_N") - matching privkeys in MockOracleManager
         vOracleNodes = {
-            {0, ParsePubKey("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"), "localhost:9001", true},
-            {1, ParsePubKey("02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5"), "localhost:9002", true},
-            {2, ParsePubKey("02f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9"), "localhost:9003", true},
-            {3, ParsePubKey("0388f7b0f632de8140fe337e62a37f3566500a99934c2231b6cb9fd7584b8e672c"), "localhost:9004", true},
-            {4, ParsePubKey("03ba30c7a2323f0dcca829b8ab6a5b3b59ce5e0e6c0b16eaff5ba8e684b31b21d9"), "localhost:9005", true}
+            {0, ParsePubKey("038849d466503c5bb3875ada6bff3d6eec6299265b7b0a4e31bb58b7cecf6dd08f"), "localhost:9001", true},
+            {1, ParsePubKey("029991f9e0c61dfe10896ee797f271f2f6d4e2545daf9a22732622c02ce39f43f0"), "localhost:9002", true},
+            {2, ParsePubKey("02d2292678e5c549e90420dc4c6311ef01bf014fb0f4b34d07e02b7b98bbc35e9a"), "localhost:9003", true},
+            {3, ParsePubKey("02f24df57d6ab29241f0f00dd87d7ce1418852684dc41d186650a452179618234f"), "localhost:9004", true},
+            {4, ParsePubKey("02aa1ebe314382eb820a040acf604a6617db3d063e9ee0640780774650649aaf47"), "localhost:9005", true},
+            {5, ParsePubKey("03be6ad50e0bf26af3798af09a2824142fa79ff37f8730b7a54ba34c9fe6f1e8ec"), "localhost:9006", true},
+            {6, ParsePubKey("03584d30f3650d998b0b5f8be52f46164aee5f10d332421e63f070da8a38693a96"), "localhost:9007", true}
         };
     }
 };

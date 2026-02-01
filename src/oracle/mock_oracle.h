@@ -6,11 +6,13 @@
 #define DIGIBYTE_ORACLE_MOCK_ORACLE_H
 
 #include <consensus/amount.h>
+#include <key.h>
 #include <primitives/oracle.h>
 #include <sync.h>
 #include <uint256.h>
 
 #include <cstdint>
+#include <map>
 
 /**
  * Mock Oracle Manager for RegTest
@@ -26,10 +28,16 @@ private:
     int64_t lastUpdateHeight;       // Height of last price update
     bool enabled;                   // Whether mock oracle is enabled
 
+    //! Test oracle private keys (derived from SHA256("digibyte_regtest_oracle_N"))
+    std::map<uint32_t, CKey> testOracleKeys;
+
     mutable RecursiveMutex cs_price;
 
     // Private constructor for singleton
     MockOracleManager();
+
+    //! Initialize deterministic test oracle keys
+    void InitTestKeys();
 
 public:
     // Singleton access
@@ -82,6 +90,13 @@ public:
      * @param percentChange Percentage change (positive or negative)
      */
     void SimulateVolatility(int percentChange);
+
+    /**
+     * Get test private key for a specific oracle ID
+     * @param oracle_id Oracle ID (0-4 for regtest)
+     * @return CKey for the oracle, or invalid key if not found
+     */
+    CKey GetTestKey(uint32_t oracle_id) const;
 
     /**
      * Reset mock oracle to default state

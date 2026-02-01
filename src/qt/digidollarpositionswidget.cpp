@@ -348,10 +348,11 @@ void DigiDollarPositionsWidget::showContextMenu(const QPoint& point)
             case 2: lockPeriodName = tr("3 months"); break;
             case 3: lockPeriodName = tr("6 months"); break;
             case 4: lockPeriodName = tr("1 year"); break;
-            case 5: lockPeriodName = tr("3 years"); break;
-            case 6: lockPeriodName = tr("5 years"); break;
-            case 7: lockPeriodName = tr("7 years"); break;
-            case 8: lockPeriodName = tr("10 years"); break;
+            case 5: lockPeriodName = tr("2 years"); break;
+            case 6: lockPeriodName = tr("3 years"); break;
+            case 7: lockPeriodName = tr("5 years"); break;
+            case 8: lockPeriodName = tr("7 years"); break;
+            case 9: lockPeriodName = tr("10 years"); break;
             default: lockPeriodName = tr("1 year"); break;
         }
 
@@ -1039,10 +1040,11 @@ int DigiDollarPositionsWidget::getLockTierBlocks(int tier) const
     case 2: return 518400;      // 3 months (90 days)
     case 3: return 1036800;     // 6 months (180 days)
     case 4: return 2102400;     // 1 year (365 days)
-    case 5: return 6307200;     // 3 years
-    case 6: return 10512000;    // 5 years
-    case 7: return 14716800;    // 7 years
-    case 8: return 21024000;    // 10 years
+    case 5: return 4204800;     // 2 years (730 days)
+    case 6: return 6307200;     // 3 years
+    case 7: return 10512000;    // 5 years
+    case 8: return 14716800;    // 7 years
+    case 9: return 21024000;    // 10 years
     default: return 2102400;    // 1 year
     }
 }

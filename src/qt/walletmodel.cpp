@@ -718,7 +718,7 @@ WalletModel::DigiDollarMintResult WalletModel::mintDigiDollar(CAmount ddAmount, 
     LogPrintf("DigiDollar Qt: mintDigiDollar called - Amount: %d cents, Tier: %d\n", ddAmount, lockTier);
 
     // Validate lock tier
-    if (lockTier < 0 || lockTier > 8) {
+    if (lockTier < 0 || lockTier > 9) {
         LogPrintf("DigiDollar Qt: ERROR - Invalid lock tier: %d\n", lockTier);
         return DigiDollarMintResult(InvalidAmount, "", "", "Invalid lock tier. Must be between 0 and 8 (0 = 1 hour testing).");
     }
@@ -758,7 +758,7 @@ WalletModel::DigiDollarMintResult WalletModel::mintDigiDollar(CAmount ddAmount, 
 
     try {
         // Step 1: Convert lock tier to lock days for TxBuilder
-        const int lockDaysForTier[9] = {0, 30, 90, 180, 365, 1095, 1825, 2555, 3650};
+        const int lockDaysForTier[10] = {0, 30, 90, 180, 365, 730, 1095, 1825, 2555, 3650};
         int lockDays = lockDaysForTier[lockTier];
         LogPrintf("DigiDollar Qt: Step 1 - Lock days for tier %d: %d days\n", lockTier, lockDays);
 

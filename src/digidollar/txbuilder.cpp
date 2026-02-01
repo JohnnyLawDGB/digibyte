@@ -350,7 +350,7 @@ TxBuilderResult MintTxBuilder::BuildMintTransaction(const TxBuilderMintParams& p
                                        << CScriptNum(1)  // 1 = MINT transaction
                                        << CScriptNum(params.ddAmount)  // DD amount in cents
                                        << CScriptNum(lockHeight)  // Lock height in blocks
-                                       << CScriptNum(params.lockTier);  // Lock tier (0-8)
+                                       << CScriptNum(params.lockTier);  // Lock tier (0-9)
     tx.vout.push_back(CTxOut(0, metadataScript));
 
     // Iterative fee calculation to account for change output

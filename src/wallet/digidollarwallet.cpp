@@ -1347,7 +1347,7 @@ bool DigiDollarWallet::ExtractTierFromOpReturn(const CTransaction& tx, uint32_t&
             try {
                 CScriptNum tierNum(data, false);
                 lock_tier = static_cast<uint32_t>(tierNum.getint());
-                return lock_tier <= 8;  // Valid tier range is 0-8
+                return lock_tier <= 9;  // Valid tier range is 0-9
             } catch (const scriptnum_error&) {
                 continue;
             }
@@ -1447,9 +1447,9 @@ bool DigiDollarWallet::ExtractPositionFromMintTx(const CTransaction& tx, int blo
         return false;
     }
 
-    // Validate tier is in valid range (0-8)
-    if (lock_tier > 8) {
-        LogPrintf("DigiDollar: ExtractPositionFromMintTx - Invalid tier %u (max 8). TX: %s\n",
+    // Validate tier is in valid range (0-9)
+    if (lock_tier > 9) {
+        LogPrintf("DigiDollar: ExtractPositionFromMintTx - Invalid tier %u (max 9). TX: %s\n",
                   lock_tier, tx.GetHash().GetHex());
         return false;
     }
@@ -4142,7 +4142,7 @@ bool DigiDollarWallet::ValidateMintParams(const CAmount& dd_amount, uint32_t loc
         return false;
     }
 
-    if (lock_tier < 1 || lock_tier > 8) {
+    if (lock_tier < 1 || lock_tier > 9) {
         LogPrintf("DigiDollar: Invalid lock tier: %d\n", lock_tier);
         return false;
     }
@@ -6255,36 +6255,40 @@ bool DigiDollarWallet::ProcessIncomingDDTransaction(const CTransactionRef& tx) {
 namespace DigiDollarWalletUtils {
 
 int GetLockDaysForTier(uint32_t tier) {
-    // Lock tiers must match consensus/digidollar.h collateralRatios:
-    // Tier 0: 1 hour (testing only - 240 blocks)
-    // Tier 1: 30 days, Tier 2: 90 days, Tier 3: 180 days, Tier 4: 1 year
-    // Tier 5: 3 years, Tier 6: 5 years, Tier 7: 7 years, Tier 8: 10 years
+    // Lock tiers must match consensus/digidollar.h collateralRatios (10 tiers, 0-9):
+    // Tier 0: 1 hour, Tier 1: 30 days, Tier 2: 90 days, Tier 3: 180 days,
+    // Tier 4: 1 year, Tier 5: 2 years, Tier 6: 3 years, Tier 7: 5 years,
+    // Tier 8: 7 years, Tier 9: 10 years
     switch (tier) {
         case 0: return 1;     // 1 hour (special case, handled separately as 240 blocks)
         case 1: return 30;    // 30 days
         case 2: return 90;    // 90 days (3 months)
         case 3: return 180;   // 180 days (6 months)
         case 4: return 365;   // 1 year
-        case 5: return 1095;  // 3 years (3 * 365)
-        case 6: return 1825;  // 5 years (5 * 365)
-        case 7: return 2555;  // 7 years (7 * 365)
-        case 8: return 3650;  // 10 years (10 * 365)
+        case 5: return 730;   // 2 years (2 * 365)
+        case 6: return 1095;  // 3 years (3 * 365)
+        case 7: return 1825;  // 5 years (5 * 365)
+        case 8: return 2555;  // 7 years (7 * 365)
+        case 9: return 3650;  // 10 years (10 * 365)
         default: return 30;   // Default to tier 1
     }
 }
 
 int GetMinCollateralRatio(uint32_t tier) {
+    // Matches consensus/digidollar.h collateralRatios
     // Longer locks require less collateral
     switch (tier) {
-        case 1: return 180;  // 180% for 30 days
-        case 2: return 170;  // 170% for 90 days
-        case 3: return 160;  // 160% for 180 days
-        case 4: return 150;  // 150% for 1 year
-        case 5: return 140;  // 140% for 2 years
-        case 6: return 130;  // 130% for 3 years
-        case 7: return 120;  // 120% for 5 years
-        case 8: return 110;  // 110% for 10 years
-        default: return 180; // Default to tier 1
+        case 0: return 1000; // 1000% for 1 hour (testing only)
+        case 1: return 500;  // 500% for 30 days
+        case 2: return 400;  // 400% for 90 days
+        case 3: return 350;  // 350% for 180 days
+        case 4: return 300;  // 300% for 1 year
+        case 5: return 275;  // 275% for 2 years
+        case 6: return 250;  // 250% for 3 years
+        case 7: return 225;  // 225% for 5 years
+        case 8: return 212;  // 212% for 7 years
+        case 9: return 200;  // 200% for 10 years
+        default: return 500; // Default to tier 1
     }
 }
 

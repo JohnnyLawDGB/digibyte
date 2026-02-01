@@ -37,7 +37,7 @@ bool SystemHealthMonitor::s_initialized = false;
 
 // Standard tier definitions (lock days)
 // NOTE: Tier 0 uses 0 to represent 1 hour (240 blocks) - special case handled by LockDaysToBlocks()
-static const std::vector<int> TIER_LOCK_DAYS = {0, 30, 90, 180, 365, 730, 1825, 2555, 3650}; // 1h, 30d to 10y
+static const std::vector<int> TIER_LOCK_DAYS = {0, 30, 90, 180, 365, 730, 1095, 1825, 2555, 3650}; // 1h, 30d to 10y (10 tiers)
 
 SystemMetrics SystemHealthMonitor::GetSystemMetrics()
 {
@@ -594,7 +594,7 @@ void SystemHealthMonitor::UpdateTierMetrics()
             currentPrice
         );
 
-        // Tier 4: 730-day (mock data) - 200% ratio
+        // Tier 4: 365-day (mock data) - 300% ratio
         s_currentMetrics.tiers[4].ddMinted = 2500; // $25.00
         s_currentMetrics.tiers[4].dgbLocked = 10000000000; // 100 DGB worth $50
         s_currentMetrics.tiers[4].positions = 2;

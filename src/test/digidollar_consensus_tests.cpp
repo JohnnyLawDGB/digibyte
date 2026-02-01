@@ -20,6 +20,7 @@ BOOST_AUTO_TEST_CASE(collateral_ratio_lookup_test)
     BOOST_CHECK_EQUAL(DigiDollar::GetCollateralRatioForLockTime(90 * DigiDollar::BLOCKS_PER_DAY, params), 400);
     BOOST_CHECK_EQUAL(DigiDollar::GetCollateralRatioForLockTime(180 * DigiDollar::BLOCKS_PER_DAY, params), 350);
     BOOST_CHECK_EQUAL(DigiDollar::GetCollateralRatioForLockTime(365 * DigiDollar::BLOCKS_PER_DAY, params), 300);
+    BOOST_CHECK_EQUAL(DigiDollar::GetCollateralRatioForLockTime(2 * 365 * DigiDollar::BLOCKS_PER_DAY, params), 275);
     BOOST_CHECK_EQUAL(DigiDollar::GetCollateralRatioForLockTime(3 * 365 * DigiDollar::BLOCKS_PER_DAY, params), 250);
     BOOST_CHECK_EQUAL(DigiDollar::GetCollateralRatioForLockTime(5 * 365 * DigiDollar::BLOCKS_PER_DAY, params), 225);
     BOOST_CHECK_EQUAL(DigiDollar::GetCollateralRatioForLockTime(7 * 365 * DigiDollar::BLOCKS_PER_DAY, params), 212);
@@ -189,8 +190,12 @@ BOOST_AUTO_TEST_CASE(lock_tier_index_test)
     BOOST_CHECK_EQUAL(DigiDollar::GetLockTierIndex(90 * DigiDollar::BLOCKS_PER_DAY, params), 2); // Exactly 90 days
     BOOST_CHECK_EQUAL(DigiDollar::GetLockTierIndex(365 * DigiDollar::BLOCKS_PER_DAY, params), 4); // Exactly 365 days
 
+    // Test 2-year tier
+    BOOST_CHECK_EQUAL(DigiDollar::GetLockTierIndex(500 * DigiDollar::BLOCKS_PER_DAY, params), 5); // 2 year tier
+    BOOST_CHECK_EQUAL(DigiDollar::GetLockTierIndex(2 * 365 * DigiDollar::BLOCKS_PER_DAY, params), 5); // Exactly 2 years
+
     // Test beyond all tiers
-    BOOST_CHECK_EQUAL(DigiDollar::GetLockTierIndex(15 * 365 * DigiDollar::BLOCKS_PER_DAY, params), 8); // Last tier index (now 8 with new tier)
+    BOOST_CHECK_EQUAL(DigiDollar::GetLockTierIndex(15 * 365 * DigiDollar::BLOCKS_PER_DAY, params), 9); // Last tier index (10 tiers, 0-9)
 }
 
 BOOST_AUTO_TEST_CASE(format_lock_period_test)

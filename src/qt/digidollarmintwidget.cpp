@@ -230,8 +230,8 @@ void DigiDollarMintWidget::setupLockTierSection()
     m_lockTierCombo->setToolTip(tr("WARNING: Your DGB will be locked for this period and cannot be accessed until the timelock expires.\nLonger locks require less collateral (30 days: 500%, 10 years: 200%)"));
     m_lockTierLabel->setBuddy(m_lockTierCombo);
 
-    // Add all 9 lock periods (including 1-hour test tier)
-    for (int i = 0; i <= 8; ++i) {
+    // Add all 10 lock periods (including 1-hour test tier)
+    for (int i = 0; i <= 9; ++i) {
         m_lockTierCombo->addItem(getLockTierDisplayName(i), i);
     }
 
@@ -834,10 +834,11 @@ double DigiDollarMintWidget::getCollateralRatioForTier(int tier) const
     case 2: return 400.0;  // 3 months - High collateral for quarterly positions
     case 3: return 350.0;  // 6 months - Semi-annual positions with strong buffer
     case 4: return 300.0;  // 1 year - Annual positions with 3x collateral
-    case 5: return 250.0;  // 3 years - Medium-term stable positions
-    case 6: return 225.0;  // 5 years - Long-term positions
-    case 7: return 212.0;  // 7 years - Extended positions
-    case 8: return 200.0;  // 10 years - Minimum 2x collateral for decade locks
+    case 5: return 275.0;  // 2 years - Bridge between annual and multi-year
+    case 6: return 250.0;  // 3 years - Medium-term stable positions
+    case 7: return 225.0;  // 5 years - Long-term positions
+    case 8: return 212.0;  // 7 years - Extended positions
+    case 9: return 200.0;  // 10 years - Minimum 2x collateral for decade locks
     default: return 300.0;
     }
 }
@@ -851,10 +852,11 @@ QString DigiDollarMintWidget::getLockTierDisplayName(int tier) const
     case 2: return tr("3 months (400% collateral)");
     case 3: return tr("6 months (350% collateral)");
     case 4: return tr("1 year (300% collateral)");
-    case 5: return tr("3 years (250% collateral)");
-    case 6: return tr("5 years (225% collateral)");
-    case 7: return tr("7 years (212% collateral)");
-    case 8: return tr("10 years (200% collateral)");
+    case 5: return tr("2 years (275% collateral)");
+    case 6: return tr("3 years (250% collateral)");
+    case 7: return tr("5 years (225% collateral)");
+    case 8: return tr("7 years (212% collateral)");
+    case 9: return tr("10 years (200% collateral)");
     default: return tr("1 year (300% collateral)");
     }
 }
@@ -869,10 +871,11 @@ int DigiDollarMintWidget::getLockTierBlocks(int tier) const
     case 2: return 518400;      // 3 months (90 days)
     case 3: return 1036800;     // 6 months (180 days)
     case 4: return 2102400;     // 1 year (365 days)
-    case 5: return 6307200;     // 3 years
-    case 6: return 10512000;    // 5 years
-    case 7: return 14716800;    // 7 years
-    case 8: return 21024000;    // 10 years
+    case 5: return 4204800;     // 2 years (730 days)
+    case 6: return 6307200;     // 3 years
+    case 7: return 10512000;    // 5 years
+    case 8: return 14716800;    // 7 years
+    case 9: return 21024000;    // 10 years
     default: return 2102400;    // 1 year
     }
 }

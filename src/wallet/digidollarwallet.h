@@ -34,7 +34,7 @@ struct DDTransaction {
     CAmount fee;            // Transaction fee paid (0 if not applicable)
     std::string comment;    // Transaction comment (empty if none)
     bool abandoned;         // Whether transaction was abandoned
-    int lock_tier;          // Lock tier for mints (0-8), -1 for non-mint transactions
+    int lock_tier;          // Lock tier for mints (0-9), -1 for non-mint transactions
 
     DDTransaction();
 
@@ -379,7 +379,7 @@ public:
     /**
      * Create mint transaction using transaction builders
      * @param dd_amount Amount of DD to mint (in cents)
-     * @param lock_tier Lock tier (1-8)
+     * @param lock_tier Lock tier (1-9)
      * @param tx_out Output transaction reference
      * @return true if transaction created successfully
      */
@@ -457,7 +457,7 @@ public:
      * Extract lock tier from OP_RETURN metadata in a DD mint transaction
      * New MINT format includes tier explicitly to avoid derivation timing issues.
      * @param tx Transaction to extract from
-     * @param lock_tier Output: extracted lock tier (0-8)
+     * @param lock_tier Output: extracted lock tier (0-9)
      * @return true if extraction successful (false for old txs without tier)
      */
     static bool ExtractTierFromOpReturn(const CTransaction& tx, uint32_t& lock_tier);
@@ -468,7 +468,7 @@ public:
      * Kept for backward compatibility with older transactions.
      * @param mint_height Block height when minted
      * @param unlock_height Block height when unlockable
-     * @return Lock tier (0-8)
+     * @return Lock tier (0-9)
      */
     static uint32_t DeriveLockTierFromHeight(int64_t mint_height, int64_t unlock_height);
 

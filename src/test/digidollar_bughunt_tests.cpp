@@ -135,57 +135,45 @@ BOOST_AUTO_TEST_CASE(bughunt_1b_isvalid_vs_filter_inconsistency)
 // BUG #2: RPC Tier Mapping Mismatch (HIGH)
 // Files: src/rpc/digidollar.cpp:51-63, src/consensus/digidollar.h:55-63,
 //        src/wallet/digidollarwallet.cpp:6249-6267
-// Issue: RPC has 10 tiers (0-9) with a "2 years" tier at index 5 that doesn't
-//        exist in consensus. Consensus has 9 tiers (0-8). Tiers 5+ are shifted.
+// RESOLVED: 2-year tier now properly implemented across consensus, RPC, wallet, and GUI.
+// All layers use 10 tiers (0-9): 1hr, 30d, 90d, 180d, 1yr, 2yr, 3yr, 5yr, 7yr, 10yr.
 // =============================================================================
 
-BOOST_AUTO_TEST_CASE(bughunt_2_rpc_vs_wallet_vs_consensus_tier_mismatch)
+BOOST_AUTO_TEST_CASE(bughunt_2_all_tiers_aligned)
 {
-    // Consensus tier definitions from digidollar.h collateralRatios map
-    // Key is lock_blocks, value is collateral ratio percentage
-    // Tiers: 1hr, 30d, 90d, 180d, 1y, 3y, 5y, 7y, 10y (9 tiers, indices 0-8)
-
-    // Wallet GetLockDaysForTier (CORRECT - matches consensus):
-    // 0:1day, 1:30, 2:90, 3:180, 4:365, 5:1095(3yr), 6:1825(5yr), 7:2555(7yr), 8:3650(10yr)
-    int wallet_tier5 = 1095;  // 3 years - correct
-    int wallet_tier6 = 1825;  // 5 years - correct
-
-    // RPC GetLockDaysForTier (WRONG - has extra "2 years" tier):
-    // 0:0, 1:30, 2:90, 3:180, 4:365, 5:730(2yr), 6:1095(3yr), 7:1825(5yr), 8:2555(7yr), 9:3650(10yr)
-    int rpc_tier5 = 730;   // 2 years - WRONG, doesn't exist in consensus
-    int rpc_tier6 = 1095;  // 3 years - should be tier 5
-
-    // BUG: RPC tier 5 gives 730 days (2 years), wallet tier 5 gives 1095 days (3 years)
-    // When fixed, both should return the same value
-    BOOST_CHECK_MESSAGE(rpc_tier5 != wallet_tier5,
-        "BUG #2 FIXED? RPC tier 5 now matches wallet tier 5 (both " << wallet_tier5 << " days). "
-        "Remove this test.");
-
-    // Also verify consensus has no 2-year entry
-    // Consensus collateralRatios keys (in blocks): 240, 30*5760, 90*5760, 180*5760,
-    // 365*5760, 3*365*5760, 5*365*5760, 7*365*5760, 10*365*5760
-    // Note: 5760 = 24*60*4 blocks per day at 15-second blocks
-    const int BLOCKS_PER_DAY = 24 * 60 * 4; // 5760
-    int two_year_blocks = 730 * BLOCKS_PER_DAY;
-
-    // Check consensus params for a 2-year entry
+    // Verify consensus has exactly 10 tiers including the 2-year tier
     const auto& params = Params().GetDigiDollarConsensus();
-    bool has_two_year_tier = false;
+    BOOST_CHECK_EQUAL(params.collateralRatios.size(), 10u);
+
+    const int BLOCKS_PER_DAY = 24 * 60 * 4; // 5760
+
+    // Verify all 10 consensus tiers exist with correct ratios
+    BOOST_CHECK_EQUAL(params.collateralRatios.at(240), 1000);                          // Tier 0: 1 hour
+    BOOST_CHECK_EQUAL(params.collateralRatios.at(30 * BLOCKS_PER_DAY), 500);           // Tier 1: 30 days
+    BOOST_CHECK_EQUAL(params.collateralRatios.at(90 * BLOCKS_PER_DAY), 400);           // Tier 2: 90 days
+    BOOST_CHECK_EQUAL(params.collateralRatios.at(180 * BLOCKS_PER_DAY), 350);          // Tier 3: 180 days
+    BOOST_CHECK_EQUAL(params.collateralRatios.at(365 * BLOCKS_PER_DAY), 300);          // Tier 4: 1 year
+    BOOST_CHECK_EQUAL(params.collateralRatios.at(2 * 365 * BLOCKS_PER_DAY), 275);      // Tier 5: 2 years
+    BOOST_CHECK_EQUAL(params.collateralRatios.at(3 * 365 * BLOCKS_PER_DAY), 250);      // Tier 6: 3 years
+    BOOST_CHECK_EQUAL(params.collateralRatios.at(5 * 365 * BLOCKS_PER_DAY), 225);      // Tier 7: 5 years
+    BOOST_CHECK_EQUAL(params.collateralRatios.at(7 * 365 * BLOCKS_PER_DAY), 212);      // Tier 8: 7 years
+    BOOST_CHECK_EQUAL(params.collateralRatios.at(10 * 365 * BLOCKS_PER_DAY), 200);     // Tier 9: 10 years
+
+    // Verify collateral ratios decrease monotonically with longer lock periods
+    int prevRatio = 1001;
     for (const auto& [blocks, ratio] : params.collateralRatios) {
-        if (blocks == two_year_blocks) {
-            has_two_year_tier = true;
-            break;
-        }
+        BOOST_CHECK_MESSAGE(ratio < prevRatio,
+            "Collateral ratio should decrease for longer locks: " << ratio << "% at " << blocks << " blocks");
+        prevRatio = ratio;
     }
 
-    BOOST_CHECK_MESSAGE(!has_two_year_tier,
-        "BUG #2: Consensus now has a 2-year tier. If intentional, update RPC tiers 6-9 accordingly.");
-
-    // Show the full mismatch for tiers 5-8
-    // RPC:    5=730d(2yr), 6=1095d(3yr), 7=1825d(5yr), 8=2555d(7yr)
-    // Wallet: 5=1095d(3yr), 6=1825d(5yr), 7=2555d(7yr), 8=3650d(10yr)
-    BOOST_CHECK_MESSAGE(rpc_tier6 == wallet_tier5,
-        "RPC tier 6 (" << rpc_tier6 << "d) should match wallet tier 5 (" << wallet_tier5 << "d) due to off-by-one shift");
+    // Verify the wallet tier array matches consensus
+    const int walletTierDays[10] = {0, 30, 90, 180, 365, 730, 1095, 1825, 2555, 3650};
+    for (int i = 1; i < 10; ++i) {
+        int64_t blocks = static_cast<int64_t>(walletTierDays[i]) * BLOCKS_PER_DAY;
+        BOOST_CHECK_MESSAGE(params.collateralRatios.count(blocks) > 0,
+            "Wallet tier " << i << " (" << walletTierDays[i] << " days / " << blocks << " blocks) missing from consensus");
+    }
 }
 
 // =============================================================================

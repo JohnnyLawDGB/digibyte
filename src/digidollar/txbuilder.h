@@ -37,7 +37,7 @@ struct TxBuilderResult {
 struct TxBuilderMintParams {
     CAmount ddAmount;           // Amount of DD to mint (in cents)
     int lockDays;               // Lock period in days
-    uint32_t lockTier;          // Lock tier (0-8) - stored in OP_RETURN for exact reconstruction
+    uint32_t lockTier;          // Lock tier (0-9) - stored in OP_RETURN for exact reconstruction
     CKey ownerKey;              // Owner's private key
     CAmount feeRate;            // Fee rate in sat/vB
     std::vector<COutPoint> utxos; // Available UTXOs for collateral

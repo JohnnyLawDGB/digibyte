@@ -49,7 +49,7 @@ using namespace DigiDollar::DCA;
 
 // Mock utility functions for RPC-only implementation
 namespace {
-    // BUG #2 FIX: Aligned with consensus/digidollar.h (9 tiers, no 2-year tier)
+    // Aligned with consensus/digidollar.h (10 tiers, 0-9)
     int GetLockDaysForTier(uint32_t tier) {
         switch (tier) {
             case 0: return 0;     // Special: 1 hour (240 blocks) - handled separately
@@ -57,15 +57,16 @@ namespace {
             case 2: return 90;    // 90 days (3 months)
             case 3: return 180;   // 180 days (6 months)
             case 4: return 365;   // 1 year
-            case 5: return 1095;  // 3 years
-            case 6: return 1825;  // 5 years
-            case 7: return 2555;  // 7 years
-            case 8: return 3650;  // 10 years
+            case 5: return 730;   // 2 years
+            case 6: return 1095;  // 3 years
+            case 7: return 1825;  // 5 years
+            case 8: return 2555;  // 7 years
+            case 9: return 3650;  // 10 years
             default: return 0;
         }
     }
 
-    // BUG #2 FIX: Aligned with consensus/digidollar.h collateralRatios
+    // Aligned with consensus/digidollar.h collateralRatios (10 tiers, 0-9)
     int GetMinCollateralRatio(uint32_t tier) {
         switch (tier) {
             case 0: return 1000;  // 1000% for 1 hour (testing only)
@@ -73,10 +74,11 @@ namespace {
             case 2: return 400;   // 400% for 90 days
             case 3: return 350;   // 350% for 180 days
             case 4: return 300;   // 300% for 1 year
-            case 5: return 250;   // 250% for 3 years
-            case 6: return 225;   // 225% for 5 years
-            case 7: return 212;   // 212% for 7 years
-            case 8: return 200;   // 200% for 10 years
+            case 5: return 275;   // 275% for 2 years
+            case 6: return 250;   // 250% for 3 years
+            case 7: return 225;   // 225% for 5 years
+            case 8: return 212;   // 212% for 7 years
+            case 9: return 200;   // 200% for 10 years
             default: return 500;
         }
     }
@@ -679,7 +681,7 @@ RPCHelpMan mintdigidollar()
                 "The amount of collateral required depends on the lock period and current system health.\n",
                 {
                     {"dd_amount", RPCArg::Type::NUM, RPCArg::Optional::NO, "Amount of DigiDollar to mint (in USD cents, e.g., 10000 = $100)", RPCArgOptions{.skip_type_check = true}},
-                    {"lock_tier", RPCArg::Type::NUM, RPCArg::Optional::NO, "Lock tier 0-8 (0=1h testing, 1=30d, 2=90d, 3=180d, 4=1y, 5=3y, 6=5y, 7=7y, 8=10y)", RPCArgOptions{.skip_type_check = true}},
+                    {"lock_tier", RPCArg::Type::NUM, RPCArg::Optional::NO, "Lock tier 0-9 (0=1h testing, 1=30d, 2=90d, 3=180d, 4=1y, 5=2y, 6=3y, 7=5y, 8=7y, 9=10y)", RPCArgOptions{.skip_type_check = true}},
                     {"fee_rate", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "Fee rate in sat/kB (default: 100000)", RPCArgOptions{.skip_type_check = true}}
                 },
                 RPCResult{
@@ -727,8 +729,8 @@ RPCHelpMan mintdigidollar()
             if (ddAmount <= 0) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "DigiDollar amount must be positive");
             }
-            if (lockTier < 0 || lockTier > 8) {
-                throw JSONRPCError(RPC_INVALID_PARAMETER, "Lock tier must be between 0 and 8 (0 = 1 hour testing tier)");
+            if (lockTier < 0 || lockTier > 9) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Lock tier must be between 0 and 9 (0 = 1 hour testing tier)");
             }
 
             // Get current height from wallet's chain interface
@@ -1434,7 +1436,7 @@ RPCHelpMan listdigidollarpositions()
                 "Shows active and inactive positions with their current status.\n",
                 {
                     {"active_only", RPCArg::Type::BOOL, RPCArg::Default{true}, "Only show active positions"},
-                    {"tier_filter", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "Filter by specific lock tier (1-8)"},
+                    {"tier_filter", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "Filter by specific lock tier (1-9)"},
                     {"min_amount", RPCArg::Type::AMOUNT, RPCArg::Optional::OMITTED, "Minimum DD amount filter"}
                 },
                 RPCResult{
@@ -1977,7 +1979,7 @@ static RPCHelpMan estimatecollateral()
                 "Calculates the required DGB amount based on DD amount, lock tier, and current system conditions.\n",
                 {
                     {"dd_amount", RPCArg::Type::NUM, RPCArg::Optional::NO, "DigiDollar amount to mint (in cents)"},
-                    {"lock_tier", RPCArg::Type::NUM, RPCArg::Optional::NO, "Lock tier 0-8 (0=1h testing, 1=30d, 2=90d, 3=180d, 4=1y, 5=3y, 6=5y, 7=7y, 8=10y)"},
+                    {"lock_tier", RPCArg::Type::NUM, RPCArg::Optional::NO, "Lock tier 0-9 (0=1h testing, 1=30d, 2=90d, 3=180d, 4=1y, 5=2y, 6=3y, 7=5y, 8=7y, 9=10y)"},
                     {"oracle_price_micro_usd", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "Custom DGB price in micro-USD (1,000,000 = $1.00). Uses current oracle if omitted."}
                 },
                 RPCResult{
@@ -2030,8 +2032,8 @@ static RPCHelpMan estimatecollateral()
             if (ddAmount <= 0) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "DD amount must be positive");
             }
-            if (lockTier < 0 || lockTier > 8) {
-                throw JSONRPCError(RPC_INVALID_PARAMETER, "Lock tier must be between 0 and 8 (0 = 1 hour testing tier)");
+            if (lockTier < 0 || lockTier > 9) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Lock tier must be between 0 and 9 (0 = 1 hour testing tier)");
             }
             if (oraclePriceMicroUSD <= 0) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Oracle price must be positive");
@@ -2052,8 +2054,10 @@ static RPCHelpMan estimatecollateral()
             //   = (10000 cents * 100000000 * 150 * 100) / 6310
             //   = 15,000,000,000,000,000 / 6310
             //   = 2,377,179,080,509 sats = ~23,772 DGB
-            uint64_t requiredDGB = (static_cast<uint64_t>(ddAmount) * static_cast<uint64_t>(COIN) * static_cast<uint64_t>(effectiveRatio) * 100ULL) /
-                                   static_cast<uint64_t>(oraclePriceMicroUSD);
+            // Use __int128 to avoid uint64 overflow for large DD amounts
+            __int128 numerator = static_cast<__int128>(ddAmount) * static_cast<__int128>(COIN) *
+                                 static_cast<__int128>(effectiveRatio) * 100;
+            uint64_t requiredDGB = static_cast<uint64_t>(numerator / static_cast<__int128>(oraclePriceMicroUSD));
 
             // Calculate USD value of collateral
             // USD_micro = (DGB_sats * oracle_micro_usd) / COIN

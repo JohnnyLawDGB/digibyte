@@ -139,6 +139,37 @@ uint256 COraclePriceMessage::GetSignatureHash() const
     return ss.GetHash();
 }
 
+uint256 COraclePriceMessage::GetPhase2SignatureHash() const
+{
+    // Phase 2 signature hash: only consensus-critical fields
+    // block_height and nonce are NOT stored on-chain in Phase 2 format
+    CHashWriter ss(0);
+    ss << oracle_id;
+    ss << price_micro_usd;
+    ss << timestamp;
+    return ss.GetHash();
+}
+
+bool COraclePriceMessage::SignPhase2(const CKey& key)
+{
+    uint256 hash = GetPhase2SignatureHash();
+    schnorr_sig.resize(64);
+    if (!key.SignSchnorr(hash, schnorr_sig, nullptr, uint256())) {
+        schnorr_sig.clear();
+        return false;
+    }
+    oracle_pubkey = XOnlyPubKey(key.GetPubKey());
+    return true;
+}
+
+bool COraclePriceMessage::VerifyPhase2() const
+{
+    if (schnorr_sig.size() != 64) return false;
+    if (!oracle_pubkey.IsFullyValid()) return false;
+    uint256 hash = GetPhase2SignatureHash();
+    return oracle_pubkey.VerifySchnorr(hash, schnorr_sig);
+}
+
 bool operator==(const COraclePriceMessage& a, const COraclePriceMessage& b)
 {
     return a.oracle_id == b.oracle_id &&

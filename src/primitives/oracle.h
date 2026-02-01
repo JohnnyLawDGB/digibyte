@@ -78,6 +78,23 @@ public:
     uint256 GetSignatureHash() const;
 
     /**
+     * Get Phase 2 signature hash (covers only consensus-critical fields).
+     * Phase 2 on-chain format doesn't store block_height/nonce, so signatures
+     * must be over oracle_id + price + timestamp only.
+     */
+    uint256 GetPhase2SignatureHash() const;
+
+    /**
+     * Sign using Phase 2 hash (oracle_id + price + timestamp only)
+     */
+    bool SignPhase2(const CKey& key);
+
+    /**
+     * Verify using Phase 2 hash
+     */
+    bool VerifyPhase2() const;
+
+    /**
      * Check for conflicting messages from the same oracle.
      * Detects if an oracle has submitted multiple different price messages.
      * @param messages Vector of oracle messages to check

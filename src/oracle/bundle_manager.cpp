@@ -358,41 +358,59 @@ CScript OracleBundleManager::CreateOracleScript(const COracleBundle& bundle) con
             return CScript(); // Phase One: reject multi-message bundles
         }
 
-        // Phase Two: Compact multi-oracle format
-        // Format: OP_RETURN OP_ORACLE <version=0x02> <num_messages(1) + oracle_id(1) + price(8) + timestamp(8)>
+        // Phase Two: Full signature format — all signatures stored on-chain for verification
+        // Format: OP_RETURN OP_ORACLE <version=0x02> <data>
+        // Data layout:
+        //   num_messages (1 byte)
+        //   consensus_price (8 bytes, uint64 LE)
+        //   timestamp (8 bytes, int64 LE)
+        //   For each message:
+        //     oracle_id (1 byte)
+        //     schnorr_sig (64 bytes)
+        // Total for 4 oracles: 1+8+8 + 4*(1+64) = 277 bytes
+        // Exceeds 83-byte MAX_OP_RETURN_RELAY but coinbase is not subject to relay policy
+
         CScript script;
         script << OP_RETURN << OP_ORACLE;
 
-        // Version byte (0x02 = Phase Two compact format)
         script << std::vector<unsigned char>{0x02};
 
-        const COraclePriceMessage& rep_msg = bundle.messages[0];
-
-        std::vector<unsigned char> compact_data;
-        compact_data.reserve(18);
+        std::vector<unsigned char> p2_data;
+        size_t num_msgs = bundle.messages.size();
+        p2_data.reserve(17 + num_msgs * 65);
 
         // Number of oracle messages
-        compact_data.push_back(static_cast<unsigned char>(bundle.messages.size() & 0xFF));
-
-        // Representative oracle ID
-        compact_data.push_back(static_cast<unsigned char>(rep_msg.oracle_id & 0xFF));
+        p2_data.push_back(static_cast<unsigned char>(num_msgs & 0xFF));
 
         // Consensus price in micro-USD (uint64, little-endian)
         uint64_t p2_price = bundle.median_price_micro_usd;
         for (int i = 0; i < 8; ++i) {
-            compact_data.push_back(static_cast<unsigned char>((p2_price >> (i * 8)) & 0xFF));
+            p2_data.push_back(static_cast<unsigned char>((p2_price >> (i * 8)) & 0xFF));
         }
 
         // Consensus timestamp (int64, little-endian)
         int64_t p2_timestamp = bundle.timestamp;
         for (int i = 0; i < 8; ++i) {
-            compact_data.push_back(static_cast<unsigned char>((p2_timestamp >> (i * 8)) & 0xFF));
+            p2_data.push_back(static_cast<unsigned char>((p2_timestamp >> (i * 8)) & 0xFF));
         }
 
-        script << compact_data;
+        // Per-oracle entries: oracle_id + schnorr_sig
+        for (const auto& msg : bundle.messages) {
+            p2_data.push_back(static_cast<unsigned char>(msg.oracle_id & 0xFF));
+            if (msg.schnorr_sig.size() == 64) {
+                p2_data.insert(p2_data.end(), msg.schnorr_sig.begin(), msg.schnorr_sig.end());
+            } else {
+                // Pad with zeros if signature missing (will fail validation)
+                p2_data.insert(p2_data.end(), 64, 0x00);
+                LogPrintf("Oracle: WARNING - Phase Two message for oracle %d missing signature\n", msg.oracle_id);
+            }
+        }
 
-        LogPrintf("Oracle: Created Phase Two script with %zu oracle messages, price=%llu\n",
-                 bundle.messages.size(), p2_price);
+        // For data > 75 bytes, CScript << vector uses OP_PUSHDATA1/2 automatically
+        script << p2_data;
+
+        LogPrintf("Oracle: Created Phase Two script with %zu oracle messages, %zu bytes, price=%llu\n",
+                 num_msgs, p2_data.size(), p2_price);
         return script;
     }
 
@@ -445,10 +463,31 @@ bool OracleBundleManager::ExtractOracleBundle(const CTransaction& coinbase_tx, C
                     auto script_it = output.scriptPubKey.begin() + 2; // Skip OP_RETURN + OP_ORACLE
 
                     while (script_it < output.scriptPubKey.end()) {
-                        if (*script_it <= 75) { // OP_PUSHDATA1 range
+                        if (*script_it <= 75) { // Direct push (1-75 bytes)
                             unsigned char chunk_size = *script_it;
                             ++script_it;
-
+                            if (script_it + chunk_size <= output.scriptPubKey.end()) {
+                                data.insert(data.end(), script_it, script_it + chunk_size);
+                                script_it += chunk_size;
+                            } else {
+                                break;
+                            }
+                        } else if (*script_it == 0x4c) { // OP_PUSHDATA1: next byte is length
+                            ++script_it;
+                            if (script_it >= output.scriptPubKey.end()) break;
+                            unsigned int chunk_size = *script_it;
+                            ++script_it;
+                            if (script_it + chunk_size <= output.scriptPubKey.end()) {
+                                data.insert(data.end(), script_it, script_it + chunk_size);
+                                script_it += chunk_size;
+                            } else {
+                                break;
+                            }
+                        } else if (*script_it == 0x4d) { // OP_PUSHDATA2: next 2 bytes are length (LE)
+                            ++script_it;
+                            if (script_it + 2 > output.scriptPubKey.end()) break;
+                            unsigned int chunk_size = *script_it | (*(script_it + 1) << 8);
+                            script_it += 2;
                             if (script_it + chunk_size <= output.scriptPubKey.end()) {
                                 data.insert(data.end(), script_it, script_it + chunk_size);
                                 script_it += chunk_size;
@@ -515,50 +554,67 @@ bool OracleBundleManager::ExtractOracleBundle(const CTransaction& coinbase_tx, C
                         return true;
                     }
                     else if (data[0] == 0x02) {
-                        // Phase Two compact format
-                        if (data.size() < 19) {
+                        // Phase Two: Full signature format
+                        // Layout: version(1) + num_msgs(1) + price(8) + timestamp(8) + N*(oracle_id(1)+sig(64))
+                        if (data.size() < 18) { // minimum: version + num_msgs + price + timestamp
                             return false;
                         }
                         
                         uint8_t num_messages = data[1];
-                        uint8_t representative_oracle_id = data[2];
+                        
+                        // Validate we have enough data for all messages
+                        size_t expected_size = 1 + 1 + 8 + 8 + num_messages * 65; // version + header + per-msg
+                        if (data.size() < expected_size) {
+                            LogPrintf("Oracle: Phase Two data too short: %zu < %zu (for %d messages)\n",
+                                     data.size(), expected_size, num_messages);
+                            return false;
+                        }
                         
                         // Parse consensus price (uint64, little-endian)
                         uint64_t price = 0;
                         for (int i = 0; i < 8; ++i) {
-                            price |= (static_cast<uint64_t>(data[3 + i]) << (i * 8));
+                            price |= (static_cast<uint64_t>(data[2 + i]) << (i * 8));
                         }
                         
                         // Parse consensus timestamp (int64, little-endian)
                         int64_t timestamp = 0;
                         for (int i = 0; i < 8; ++i) {
-                            timestamp |= (static_cast<int64_t>(data[11 + i]) << (i * 8));
-                        }
-                        
-                        // Create representative message
-                        COraclePriceMessage msg;
-                        msg.oracle_id = representative_oracle_id;
-                        msg.price_micro_usd = price;
-                        msg.timestamp = timestamp;
-                        msg.block_height = 0;
-                        msg.nonce = 0;
-                        
-                        // Phase Two: Get oracle pubkey from chainparams
-                        const CChainParams& chainparams = Params();
-                        const OracleNodeInfo* oracle_info = chainparams.GetOracleNode(msg.oracle_id);
-                        if (oracle_info) {
-                            msg.oracle_pubkey = XOnlyPubKey(oracle_info->pubkey);
+                            timestamp |= (static_cast<int64_t>(data[10 + i]) << (i * 8));
                         }
                         
                         bundle.messages.clear();
-                        // For compact format, we store the representative message
-                        // The actual multi-oracle validation happened at block creation time
-                        bundle.messages.push_back(msg);
+                        const CChainParams& chainparams = Params();
+                        
+                        // Parse each oracle message (oracle_id + schnorr_sig)
+                        size_t offset = 18; // past version + num_msgs + price + timestamp
+                        for (uint8_t m = 0; m < num_messages; m++) {
+                            COraclePriceMessage msg;
+                            msg.oracle_id = data[offset];
+                            offset += 1;
+                            
+                            msg.schnorr_sig.assign(data.begin() + offset, data.begin() + offset + 64);
+                            offset += 64;
+                            
+                            // All oracles in the bundle attested to the same consensus price
+                            msg.price_micro_usd = price;
+                            msg.timestamp = timestamp;
+                            msg.block_height = 0;
+                            msg.nonce = 0;
+                            
+                            // Get oracle pubkey from chainparams for verification
+                            const OracleNodeInfo* oracle_info = chainparams.GetOracleNode(msg.oracle_id);
+                            if (oracle_info) {
+                                msg.oracle_pubkey = XOnlyPubKey(oracle_info->pubkey);
+                            }
+                            
+                            bundle.messages.push_back(msg);
+                        }
+                        
                         bundle.median_price_micro_usd = price;
                         bundle.timestamp = timestamp;
                         bundle.epoch = 0;
                         
-                        LogPrint(BCLog::DIGIDOLLAR, "Oracle: Extracted Phase Two bundle: %d oracles, price=%llu micro-USD\n",
+                        LogPrint(BCLog::DIGIDOLLAR, "Oracle: Extracted Phase Two bundle: %d oracles with signatures, price=%llu micro-USD\n",
                                  num_messages, price);
                         
                         return true;
@@ -919,26 +975,26 @@ void OracleBundleManager::UpdateEpochBundle(int32_t epoch)
 
 bool OracleBundleManager::IsValidOracleMessage(const COraclePriceMessage& message) const
 {
-    if (!message.IsValid()) {
-        return false;
-    }
-
     // Phase One: Skip chainparams check when min_oracle_count == 1 (testing mode)
-    // This allows unit tests to use arbitrary oracle keys
     if (min_oracle_count == 1) {
-        // Still verify the signature is valid for the embedded pubkey
+        if (!message.IsValid()) return false;
         return message.Verify();
     }
 
-    // Production: Verify oracle ID is in valid range and matches chainparams
+    // Phase Two (min_oracle_count > 1): Use Phase 2 signature hash
+    // Basic field validation without calling IsValid() which uses Phase 1 Verify()
+    if (message.price_micro_usd < ORACLE_MIN_PRICE_MICRO_USD) return false;
+    if (message.price_micro_usd > ORACLE_MAX_PRICE_MICRO_USD) return false;
+
+    // Verify oracle ID is in valid range and matches chainparams
     const CChainParams& params = Params();
     const OracleNodeInfo* oracle_config = params.GetOracleNode(message.oracle_id);
     if (!oracle_config) {
         return false;
     }
 
-    // Verify signature
-    return message.Verify();
+    // Verify Phase 2 Schnorr signature
+    return message.VerifyPhase2();
 }
 
 std::vector<uint32_t> OracleBundleManager::GetActiveOraclesForEpoch(int32_t epoch) const
@@ -1098,17 +1154,26 @@ bool OracleDataValidator::ValidateBlockOracleData(const CBlock& block, const CBl
     // IMPORTANT: Once we successfully extract a bundle, we MUST validate it fully
     // No transition period leniency for bundles that are present but invalid
 
-    // Validate bundle structure (use block time as reference for timestamp validation)
-    if (!bundle.IsValid(block.nTime)) {
-        LogPrintf("Oracle: Invalid oracle bundle in block %d\n", block_height);
-        return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-oracle-bundle", "invalid oracle bundle structure");
-    }
-
     // STEP 7: PHASE-AWARE CONSENSUS VALIDATION
     const Consensus::Params& consensusParams_ref = Params().GetConsensus();
 
+    // Phase 1: Use generic bundle.IsValid() which checks Phase 1 signatures
+    // Phase 2: Skip generic IsValid() — ValidatePhaseTwoBundle does Phase 2-specific validation
+    if (block_height < consensusParams_ref.nDigiDollarPhase2Height) {
+        if (!bundle.IsValid(block.nTime)) {
+            LogPrintf("Oracle: Invalid oracle bundle in block %d\n", block_height);
+            return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-oracle-bundle", "invalid oracle bundle structure");
+        }
+    } else {
+        // Phase 2: Basic structural checks only (signatures checked by ValidatePhaseTwoBundle)
+        if (bundle.messages.empty()) {
+            LogPrintf("Oracle: Empty oracle bundle in block %d\n", block_height);
+            return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-oracle-bundle", "empty oracle bundle");
+        }
+    }
+
     if (block_height >= consensusParams_ref.nDigiDollarPhase2Height) {
-        // Phase Two: Multi-oracle validation
+        // Phase Two: Full multi-oracle validation with on-chain signature verification
         if (!OracleBundleManager::ValidatePhaseTwoBundle(bundle, consensusParams_ref)) {
             LogPrintf("Oracle: Phase Two bundle validation failed at block %d\n", block_height);
             return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS,
@@ -1138,18 +1203,18 @@ bool OracleDataValidator::ValidateBlockOracleData(const CBlock& block, const CBl
         }
     }
 
-    // Use first message for remaining validation checks (works for both phases)
+    // Use first message for remaining validation checks
     const COraclePriceMessage& msg = bundle.messages[0];
 
-    // Verify Schnorr signature on the oracle message (skip for compact format)
-    // Compact format doesn't embed signatures (verified at bundle creation time)
-    if (!msg.schnorr_sig.empty()) {
-        // Full format with embedded signature - verify it
-        if (!msg.Verify()) {
-            LogPrintf("Oracle: Invalid Schnorr signature in oracle message (oracle_id=%d, block=%d)\n",
-                     msg.oracle_id, block_height);
-            return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-oracle-signature",
-                "Invalid oracle Schnorr signature");
+    // Phase 1: Verify Schnorr signature (Phase 2 signatures verified in ValidatePhaseTwoBundle)
+    if (block_height < consensusParams_ref.nDigiDollarPhase2Height) {
+        if (!msg.schnorr_sig.empty()) {
+            if (!msg.Verify()) {
+                LogPrintf("Oracle: Invalid Schnorr signature in oracle message (oracle_id=%d, block=%d)\n",
+                         msg.oracle_id, block_height);
+                return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-oracle-signature",
+                    "Invalid oracle Schnorr signature");
+            }
         }
     }
 
@@ -1354,15 +1419,16 @@ bool OracleBundleManager::ValidatePhaseTwoBundle(const COracleBundle& bundle, co
             continue;  // Skip invalid oracle, don't fail entire bundle
         }
 
-        // Verify message is valid
-        if (!msg.IsValid()) {
-            LogPrintf("Oracle: Phase Two message validation failed for oracle %d\n", msg.oracle_id);
-            continue;  // Skip invalid message
+        // Verify basic message fields (price range)
+        if (msg.price_micro_usd < ORACLE_MIN_PRICE_MICRO_USD ||
+            msg.price_micro_usd > ORACLE_MAX_PRICE_MICRO_USD) {
+            LogPrintf("Oracle: Phase Two message price out of range for oracle %d\n", msg.oracle_id);
+            continue;
         }
 
-        // Verify Schnorr signature
+        // Verify Schnorr signature using Phase 2 hash (oracle_id + price + timestamp only)
         if (!msg.schnorr_sig.empty()) {
-            if (!msg.Verify()) {
+            if (!msg.VerifyPhase2()) {
                 LogPrintf("Oracle: Phase Two signature verification failed for oracle %d\n", msg.oracle_id);
                 continue;  // Skip message with invalid signature
             }

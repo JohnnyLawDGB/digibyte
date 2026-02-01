@@ -1,0 +1,203 @@
+# Oracle Discovery Architecture
+
+## The Problem
+
+Currently, oracle endpoints (e.g., `oracle1.digibyte.io`) are hardcoded in chainparams. This creates several issues:
+
+1. **New oracles can't be added** without a software update
+2. **Oracle operators need domain names** — barrier to entry
+3. **Single points of failure** — if a domain goes down, that oracle is unreachable
+4. **Centralization risk** — whoever controls the DNS controls oracle discovery
+
+**Core question:** How do wallet nodes discover oracle endpoints for P2P oracle message relay, without hardcoding URLs?
+
+## Design Constraints
+
+- Must work without central servers
+- Must be resistant to Sybil attacks (can't just let anyone claim to be an oracle)
+- Oracle public keys ARE in chainparams — that's the trust anchor
+- Need to support adding new oracles over time
+- Should work even if most of the network is behind NAT
+
+## Proposed Solution: Multi-Layer Oracle Discovery
+
+### Layer 1: On-Chain Oracle Registry (Primary)
+
+**How it works:** Oracle operators register their endpoint information in a special OP_RETURN transaction, signed with their oracle key.
+
+```
+OP_RETURN OP_ORACLE_ENDPOINT <oracle_id> <endpoint_data> <schnorr_sig>
+```
+
+**Endpoint data format:**
+- IPv4/IPv6 address + port (16 bytes)
+- Optional: Tor .onion address (32 bytes)
+- Optional: DNS hostname (variable length)
+- Timestamp (prevents replay)
+
+**Why this works:**
+- Oracle keys are in chainparams — only authorized oracles can register
+- Registration is permanent on-chain — survives node restarts
+- No external infrastructure needed
+- Nodes scan the chain for the latest endpoint registration per oracle_id
+- Signature prevents spoofing
+
+**Updating endpoints:** Oracle just sends a new registration TX. Nodes use the most recent one per oracle_id.
+
+**Cost:** Minimal — one small TX per oracle when their endpoint changes. Could be free (coinbase) if they're also mining.
+
+### Layer 2: DNS Seeds (Bootstrap)
+
+**How it works:** Similar to Bitcoin's DNS seeds for node discovery, maintain DNS records that resolve to known oracle endpoints.
+
+```
+oracle-seeds.digibyte.io → A records pointing to oracle IPs
+```
+
+**DNS TXT records** can encode oracle_id → endpoint mappings:
+```
+TXT "oracle:0:203.0.113.10:12034"
+TXT "oracle:1:198.51.100.20:12034"
+```
+
+**Why this works:**
+- Fast bootstrap for new nodes
+- Multiple DNS seed operators for redundancy
+- Familiar pattern from Bitcoin node discovery
+- Works even before the node has synced the chain
+
+**Limitation:** Requires someone to maintain DNS records. But multiple community members can run seeds.
+
+### Layer 3: P2P Gossip (Runtime Discovery)
+
+**How it works:** Oracles announce themselves via a new P2P message type `oracleaddr`, similar to Bitcoin's `addr` message.
+
+```
+Message: oracleaddr
+Payload:
+  oracle_id (4 bytes)
+  services (8 bytes) — what the oracle provides
+  addr (16 bytes) — IPv6-mapped address
+  port (2 bytes)
+  timestamp (8 bytes)
+  schnorr_sig (64 bytes) — signed by oracle key
+```
+
+**Flow:**
+1. Oracle node starts → broadcasts `oracleaddr` to connected peers
+2. Peers verify signature against chainparams oracle keys
+3. Peers relay valid `oracleaddr` messages to their peers
+4. Nodes cache discovered oracle endpoints
+5. Periodic re-announcement (every 24 hours)
+
+**Why this works:**
+- No infrastructure needed
+- Real-time discovery
+- Signature prevents spoofing
+- Same gossip protocol used for node discovery
+- Oracles behind NAT can still announce (peers relay)
+
+### Layer 4: Hardcoded Fallbacks (Last Resort)
+
+Keep a small set of well-known oracle endpoints in chainparams as bootstrap fallbacks. These are only used if all other discovery methods fail.
+
+```cpp
+// Fallback oracle endpoints (used only when no other discovery works)
+consensus.vOracleFallbackEndpoints = {
+    {"oracle0.digibyte.io", 12034},
+    {"oracle1.digibyte.io", 12034},
+};
+```
+
+## Adding New Oracles Over Time
+
+### Option A: Soft Fork Activation (Recommended)
+
+New oracle public keys are added via BIP9-style activation:
+1. Propose new oracle key in software update
+2. Miners signal readiness
+3. After threshold, new oracle key is active
+4. New oracle operator registers endpoint via Layer 1 (on-chain)
+
+**Advantage:** Proven mechanism, requires network consensus.
+
+### Option B: On-Chain Governance Transaction
+
+A super-majority of existing oracles sign a "new oracle proposal" transaction:
+```
+OP_RETURN OP_ORACLE_GOVERNANCE <action:ADD_ORACLE> <new_pubkey> <signatures_from_existing_oracles>
+```
+
+Requires 5-of-7 (or similar threshold) existing oracle signatures to add a new oracle.
+
+**Advantage:** No software update needed. Existing oracles can vote on new members.
+**Risk:** Oracles could collude to add compromised members. Needs careful threshold design.
+
+### Option C: Hybrid Approach (Recommended for DigiDollar)
+
+- **Phase 1 (Now):** Oracle keys hardcoded in chainparams. Discovery via DNS seeds + P2P gossip.
+- **Phase 2 (Post-launch):** Add on-chain oracle registry for endpoint discovery.
+- **Phase 3 (Mature):** Add on-chain governance for oracle membership changes. Soft fork for major changes only.
+
+## Implementation Priority
+
+1. **P2P Gossip (Layer 3)** — Implement first. Oracles announce via signed `oracleaddr` messages. No infrastructure needed. Works immediately.
+
+2. **On-Chain Registry (Layer 1)** — Implement second. Permanent, decentralized, trustless endpoint discovery.
+
+3. **DNS Seeds (Layer 2)** — Easy to set up for bootstrap. Multiple community members can maintain them.
+
+4. **On-Chain Governance (Option B)** — Future enhancement for adding/removing oracles without software updates.
+
+## P2P Oracle Message Relay
+
+**Current state:** `sendoracleprice` stores the message locally in the bundle manager. No P2P broadcast.
+
+**Needed:** Oracle price messages need to be relayed to miners so they can include them in blocks.
+
+### P2P Message Flow
+
+```
+Oracle Node                    Regular Node                  Miner Node
+    |                              |                             |
+    |-- oraclepricemsg ---------->|                             |
+    |                              |-- oraclepricemsg --------->|
+    |                              |                             |
+    |                              |                   [validates sig]
+    |                              |                   [adds to bundle]
+    |                              |                   [mines block]
+```
+
+### New P2P Message: `oraclepricemsg`
+
+```
+Payload:
+  version (1 byte)
+  oracle_id (4 bytes)
+  price_micro_usd (8 bytes)
+  timestamp (8 bytes)
+  oracle_pubkey (32 bytes, x-only)
+  schnorr_sig (64 bytes)
+Total: 117 bytes
+```
+
+**Validation before relay:**
+1. oracle_id is in range [0, ORACLE_TOTAL_COUNT)
+2. oracle_pubkey matches chainparams for that oracle_id
+3. Schnorr signature is valid
+4. Timestamp is within acceptable range
+5. No duplicate from same oracle_id in last epoch
+
+**Rate limiting:** Max 1 message per oracle per epoch. Reject duplicates.
+
+## Summary
+
+The oracle discovery problem is solvable with the same patterns Bitcoin uses for node discovery:
+- **P2P gossip** for real-time endpoint announcements
+- **On-chain registry** for permanent endpoint records  
+- **DNS seeds** for bootstrap
+- **Hardcoded fallbacks** as last resort
+
+The key insight: **oracle public keys are the trust anchor**. Any announcement signed by a valid oracle key is trustworthy. No domains or central coordination needed.
+
+The P2P oracle message relay is equally important — oracle price messages need to propagate through the network to reach miners, not just stay on the oracle's local node.

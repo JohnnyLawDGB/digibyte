@@ -3916,7 +3916,23 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
         pfrom.fSuccessfullyConnected = true;
         LogPrintf("DEBUG: VERACK processing completed successfully for peer=%d\n", pfrom.GetId());
-        
+
+        // Request oracle data from new peer for discovery
+        // This enables newly connected/restarted nodes to catch up on oracle prices
+        {
+            const Consensus::Params& cparams = m_chainman.GetConsensus();
+            int chain_height = m_chainman.ActiveChain().Height();
+            if (chain_height >= cparams.nOracleActivationHeight) {
+                int32_t current_epoch = GetCurrentEpoch(chain_height);
+                GetOracleDataMsg oracle_request;
+                oracle_request.epoch = current_epoch;
+                oracle_request.oracle_id = 0xFFFFFFFF; // Request all oracles
+                m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETORACLES, oracle_request));
+                LogPrint(BCLog::NET, "Requested oracle data for epoch %d from new peer=%d\n",
+                         current_epoch, pfrom.GetId());
+            }
+        }
+
         // Schedule Dandelion discovery message if Dandelion is enabled and peer can relay transactions
         if (gArgs.GetBoolArg("-dandelion", DEFAULT_DANDELION) && pfrom.m_relays_txs) {
             pfrom.m_send_dandelion_discovery = true;
@@ -5386,8 +5402,10 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             return;
         }
 
-        // Validate oracle signature
-        if (!oracle_msg.price_message.Verify()) {
+        // Signature already validated by IsValid() above (supports both Phase 1 and Phase 2)
+        // Additional explicit signature check for defense-in-depth:
+        // VerifyPhase2() for Phase 2 messages, Verify() fallback for Phase 1
+        if (!oracle_msg.price_message.VerifyPhase2() && !oracle_msg.price_message.Verify()) {
             LogPrintf("Oracle message signature verification failed from oracle %d peer=%d\n",
                       oracle_msg.price_message.oracle_id, pfrom.GetId());
             Misbehaving(*peer, 20, "invalid oracle signature");
@@ -5484,12 +5502,22 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             return;
         }
 
-        // TODO: Store bundle for block validation
-        // TODO: Relay to other peers
+        // Store bundle messages in the bundle manager for block validation
+        OracleBundleManager& bundleManager = OracleBundleManager::GetInstance();
+        for (const auto& msg : bundle_msg.bundle.messages) {
+            bundleManager.AddOracleMessage(msg);
+        }
 
-        LogPrint(BCLog::NET, "Processed oracle bundle: epoch=%d, messages=%d, block_hash=%s, peer=%d\n",
+        LogPrint(BCLog::NET, "Stored oracle bundle: epoch=%d, messages=%d, block_hash=%s, peer=%d\n",
                  bundle_msg.bundle.epoch, bundle_msg.bundle.messages.size(),
                  bundle_msg.block_hash.ToString(), pfrom.GetId());
+
+        // Relay valid bundle to other peers (but not back to sender)
+        m_connman.ForEachNode([&bundle_msg, sender_id = pfrom.GetId(), this](CNode* pnode) {
+            if (pnode->GetId() == sender_id) return;
+            m_connman.PushMessage(pnode, CNetMsgMaker(pnode->GetCommonVersion()).Make(NetMsgType::ORACLEBUNDLE, bundle_msg));
+        });
+
         return;
     }
 
@@ -5505,11 +5533,25 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             return;
         }
 
-        // TODO: Send requested oracle data to peer
-        // TODO: Implement oracle data response logic
+        // Respond with our pending oracle messages for the requested epoch
+        OracleBundleManager& bundleManager = OracleBundleManager::GetInstance();
+        std::vector<COraclePriceMessage> pending = bundleManager.GetPendingMessages();
 
-        LogPrint(BCLog::NET, "Processed oracle data request for epoch %d, oracle_id=%d from peer=%d\n",
-                 request.epoch, request.oracle_id, pfrom.GetId());
+        // Send each matching oracle message to the requesting peer
+        int sent_count = 0;
+        for (const auto& msg : pending) {
+            // If specific oracle requested, only send that one
+            if (request.oracle_id != 0xFFFFFFFF && msg.oracle_id != request.oracle_id)
+                continue;
+
+            OraclePriceMsg price_msg;
+            price_msg.price_message = msg;
+            m_connman.PushMessage(&pfrom, CNetMsgMaker(pfrom.GetCommonVersion()).Make(NetMsgType::ORACLEPRICE, price_msg));
+            sent_count++;
+        }
+
+        LogPrint(BCLog::NET, "Sent %d oracle messages to peer=%d for epoch %d request\n",
+                 sent_count, pfrom.GetId(), request.epoch);
         return;
     }
 

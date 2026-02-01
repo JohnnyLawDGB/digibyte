@@ -47,6 +47,12 @@ bool COraclePriceMessage::IsValid(int64_t reference_time) const
     // Verify Schnorr signature (skip for Phase One compact format)
     // Compact format messages don't have embedded signatures
     if (!schnorr_sig.empty()) {
+        // Try Phase 2 verification first (signs only oracle_id + price + timestamp)
+        // Phase 2 messages don't include block_height/nonce in their signature hash
+        if (VerifyPhase2()) {
+            return true;
+        }
+        // Fall back to Phase 1 full verification (includes block_height + nonce)
         return Verify();
     }
 

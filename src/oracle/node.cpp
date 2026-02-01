@@ -337,35 +337,14 @@ bool OracleNode::ValidatePrivateKey() const
 
 CKey OracleNode::GetOraclePrivateKey()
 {
-    CKey key;
-
-    // Phase One: Hardcoded testnet oracle private key
-    // This is ONLY for testnet! Mainnet will use secure key management
-
-    // Hardcoded key: Private key corresponding to the testnet oracle public key
-    // Public key: 79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798
-    // This is a well-known test key (private key = 1)
-    std::vector<unsigned char> keydata = ParseHex(
-        "0000000000000000000000000000000000000000000000000000000000000001"
-    );
-
-    // CKey::Set() returns void, so we call it and then check if key is valid
-    key.Set(keydata.begin(), keydata.end(), true);
-
-    // Verify key is valid
-    if (!key.IsValid()) {
-        LogPrintf("Oracle: ERROR - Oracle private key is not valid\n");
-        return CKey();
+    // Return the private key set during Initialize() or via AddOracleNode()
+    if (private_key.IsValid()) {
+        LogPrint(BCLog::DIGIDOLLAR, "Oracle: Using oracle private key from initialization\n");
+        return private_key;
     }
 
-    // Verify key is compressed
-    if (!key.IsCompressed()) {
-        LogPrintf("Oracle: WARNING - Oracle key should be compressed\n");
-    }
-
-    LogPrint(BCLog::DIGIDOLLAR, "Oracle: Loaded hardcoded testnet oracle private key\n");
-
-    return key;
+    LogPrintf("Oracle: ERROR - No valid oracle private key available\n");
+    return CKey();
 }
 
 XOnlyPubKey OracleNode::GetOraclePublicKey()
@@ -784,19 +763,10 @@ void OracleManager::StartOracleService()
     OracleManager& manager = GetInstance();
     manager.Initialize();
 
-    // Phase One: Create single hardcoded testnet oracle (oracle_id = 0)
-    // WARNING: This is for testnet only! Mainnet will use different key management
-    const std::string testnet_oracle_key = "0000000000000000000000000000000000000000000000000000000000000001";
-
-    if (manager.AddOracleNode(0, testnet_oracle_key)) {
-        LogPrintf("Oracle: Added testnet oracle (id=0) with hardcoded key\n");
-
-        // Start the oracle
-        manager.StartAll();
-        LogPrintf("Oracle: Oracle service started on testnet (Phase One: 1-of-1 consensus)\n");
-    } else {
-        LogPrintf("Oracle: Failed to add testnet oracle\n");
-    }
+    // Phase Two: Do NOT auto-start with hardcoded key.
+    // Oracle operators must use 'startoracle <id> <privkey>' or 'createoraclekey' + 'startoracle'.
+    // This enables multi-oracle consensus where each node runs its own oracle with its own key.
+    LogPrintf("Oracle: Oracle service initialized. Use 'startoracle <id> <privkey>' to start an oracle.\n");
 }
 
 void OracleManager::StopOracleService()

@@ -2515,33 +2515,29 @@ static RPCHelpMan sendoracleprice()
             // Micro-USD format: 1,000,000 = $1.00
             uint64_t price_micro_usd = static_cast<uint64_t>(price_usd * 1000000);
 
-            // Create oracle message
+            // Get the oracle's private key from the running oracle node
+            OracleManager& oracleManager = OracleManager::GetInstance();
+            OracleNode* oracleNode = oracleManager.GetOracleNode(oracle_id);
+            if (!oracleNode) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Oracle %d is not running. Use 'startoracle %d <privkey>' first.", oracle_id, oracle_id));
+            }
+            CKey oracle_key = oracleNode->GetOraclePrivateKey();
+            if (!oracle_key.IsValid()) {
+                throw JSONRPCError(RPC_INTERNAL_ERROR, "Oracle private key is not valid");
+            }
+
+            // Create oracle message (Phase 2 format)
             COraclePriceMessage msg;
             msg.oracle_id = oracle_id;
             msg.price_micro_usd = price_micro_usd;
             msg.timestamp = GetTime();
+            msg.block_height = 0; // Will be set by block creation
+            msg.nonce = GetRand(std::numeric_limits<uint64_t>::max());
+            msg.oracle_pubkey = XOnlyPubKey(oracle_key.GetPubKey());
 
-            // Phase One testnet: Sign with hardcoded oracle key
-            // Private key = 0x01, Public key = G (generator point)
-            // This is a well-known test key - NEVER use on mainnet
-            CKey oracle_key;
-            std::vector<unsigned char> keydata = ParseHex(
-                "0000000000000000000000000000000000000000000000000000000000000001"
-            );
-            oracle_key.Set(keydata.begin(), keydata.end(), true);
-
-            if (!oracle_key.IsValid()) {
-                throw JSONRPCError(RPC_INTERNAL_ERROR, "Failed to create oracle key");
-            }
-
-            // Sign the message
-            if (!msg.Sign(oracle_key)) {
+            // Sign using Phase 2 Schnorr signing
+            if (!msg.SignPhase2(oracle_key)) {
                 throw JSONRPCError(RPC_INTERNAL_ERROR, "Failed to sign oracle message");
-            }
-
-            // Validate message
-            if (!msg.IsValid()) {
-                throw JSONRPCError(RPC_INTERNAL_ERROR, "Failed to create valid oracle message");
             }
 
             // Store in bundle manager

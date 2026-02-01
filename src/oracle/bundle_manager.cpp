@@ -720,17 +720,10 @@ void OracleBundleManager::Initialize()
         manager.SetEnabled(true);
     }
 
-    // Validate configuration
-    if (Params().GetChainType() == ChainType::TESTNET) {
-        if (consensus.nOracleRequiredMessages != 1) {
-            LogPrintf("Oracle: ERROR - Phase One requires 1-of-1 consensus, got %d-of-%d\n",
-                     consensus.nOracleRequiredMessages, consensus.nOracleTotalOracles);
-        }
-        if (consensus.vOraclePublicKeys.size() != 1) {
-            LogPrintf("Oracle: ERROR - Phase One requires exactly 1 oracle public key, got %zu\n",
-                     consensus.vOraclePublicKeys.size());
-        }
-    }
+    // Log oracle configuration
+    LogPrintf("Oracle: Testnet configured with %zu oracle keys, %d-of-%d consensus\n",
+             consensus.vOraclePublicKeys.size(),
+             consensus.nOracleRequiredMessages, consensus.nOracleTotalOracles);
 
     // Check epoch length is reasonable
     if (consensus.nOracleEpochLength < 144 || consensus.nOracleEpochLength > 10080) {
@@ -840,20 +833,21 @@ bool OracleBundleManager::ValidateConfiguration() const
 {
     const Consensus::Params& consensus = Params().GetConsensus();
 
-    // Check Phase One constraints
-    if (Params().GetChainType() == ChainType::TESTNET) {
-        if (consensus.nOracleRequiredMessages != 1) {
-            LogPrintf("Oracle: ERROR - Phase One requires 1-of-1 consensus, got %d-of-%d\n",
-                     consensus.nOracleRequiredMessages, consensus.nOracleTotalOracles);
-            return false;
-        }
-
-        if (consensus.vOraclePublicKeys.size() != 1) {
-            LogPrintf("Oracle: ERROR - Phase One requires exactly 1 oracle public key, got %zu\n",
-                     consensus.vOraclePublicKeys.size());
-            return false;
-        }
+    // Validate oracle configuration
+    if (consensus.vOraclePublicKeys.empty()) {
+        LogPrintf("Oracle: ERROR - No oracle public keys configured\n");
+        return false;
     }
+
+    if (consensus.nOracleRequiredMessages > consensus.nOracleTotalOracles) {
+        LogPrintf("Oracle: ERROR - Required messages (%d) exceeds total oracles (%d)\n",
+                 consensus.nOracleRequiredMessages, consensus.nOracleTotalOracles);
+        return false;
+    }
+
+    LogPrintf("Oracle: Configuration valid - %zu keys, %d-of-%d consensus\n",
+             consensus.vOraclePublicKeys.size(),
+             consensus.nOracleRequiredMessages, consensus.nOracleTotalOracles);
 
     // Check epoch length is reasonable
     if (consensus.nOracleEpochLength < 144 || consensus.nOracleEpochLength > 10080) {

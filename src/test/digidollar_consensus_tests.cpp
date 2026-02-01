@@ -242,7 +242,7 @@ BOOST_AUTO_TEST_CASE(chainparams_digidollar_integration_test)
     BOOST_CHECK_EQUAL(regTestDD.minMintAmount, 1);    // Regtest: 1 cent = $0.01 min
 
     BOOST_CHECK_EQUAL(mainDD.oracleThreshold, 8);  // Mainnet: 8-of-15 (Phase Two)
-    BOOST_CHECK_EQUAL(testDD.oracleThreshold, 1);  // Testnet: 1-of-1 (Phase One)
+    BOOST_CHECK_EQUAL(testDD.oracleThreshold, 4);  // Testnet: 4-of-7 (Phase Two)
     BOOST_CHECK_EQUAL(regTestDD.oracleThreshold, 1); // Regtest: 1-of-1 (Phase One)
 
     // Test activation heights

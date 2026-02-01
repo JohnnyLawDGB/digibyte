@@ -186,11 +186,11 @@ BOOST_AUTO_TEST_CASE(oracle_node_price_fetching)
     int64_t test_timestamp = GetTime();
     COraclePriceMessage msg = oracle.CreatePriceMessage(test_price, test_timestamp);
 
-    // Verify message
+    // Verify message (CreatePriceMessage uses Phase 2 signing)
     BOOST_CHECK(msg.IsValid());
     BOOST_CHECK_EQUAL(msg.oracle_id, 0);
     BOOST_CHECK_EQUAL(msg.price_micro_usd, test_price);
-    BOOST_CHECK(msg.Verify());
+    BOOST_CHECK(msg.VerifyPhase2());
 
     LogPrintf("Test: Oracle node price message creation successful\n");
 }

@@ -52,6 +52,8 @@ public:
 
     //! Configuration
     bool Initialize(uint32_t oracle_id_in, const std::string& private_key_hex);
+    /** Test-only: Initialize with CKey + CPubKey directly (no hex parsing) */
+    void Initialize(uint32_t oracle_id_in, const CKey& key, const CPubKey& pubkey);
     void SetExchangeEndpoints(const std::vector<std::string>& endpoints);
     void SetUpdateInterval(int seconds) { price_update_interval = seconds; }
     void SetBroadcastInterval(int seconds) { broadcast_interval = seconds; }

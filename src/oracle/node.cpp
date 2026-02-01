@@ -117,6 +117,15 @@ bool OracleNode::Initialize(uint32_t oracle_id_in, const std::string& private_ke
     return true;
 }
 
+void OracleNode::Initialize(uint32_t oracle_id_in, const CKey& key, const CPubKey& pubkey)
+{
+    oracle_id = oracle_id_in;
+    private_key = key;
+    public_key = pubkey;
+    enabled.store(true);
+    LogPrintf("Oracle: Test-initialized oracle %d\n", oracle_id);
+}
+
 void OracleNode::SetExchangeEndpoints(const std::vector<std::string>& endpoints)
 {
     exchange_endpoints = endpoints;
@@ -198,9 +207,10 @@ COraclePriceMessage OracleNode::CreatePriceMessage(CAmount price, int64_t timest
     // Set nonce for uniqueness
     message.nonce = GetRand<uint64_t>(std::numeric_limits<uint64_t>::max());
 
-    // Sign the message using Schnorr signature
-    if (!message.Sign(private_key)) {
-        LogPrintf("Oracle: Failed to create Schnorr signature for oracle %d\n", oracle_id);
+    // Sign the message using Phase 2 Schnorr signature (3-field hash: oracle_id + price + timestamp)
+    // Phase 2 is the standard for multi-oracle consensus — all oracle messages use this format
+    if (!message.SignPhase2(private_key)) {
+        LogPrintf("Oracle: Failed to create Phase 2 Schnorr signature for oracle %d\n", oracle_id);
         return COraclePriceMessage(); // Return empty message on failure
     }
 

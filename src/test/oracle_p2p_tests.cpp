@@ -28,11 +28,13 @@
 #include <util/strencodings.h>
 
 #include <consensus/amount.h>
+#include <crypto/sha256.h>
 #include <key.h>
 #include <net.h>
 #include <net_processing.h>
 #include <netmessagemaker.h>
 #include <oracle/bundle_manager.h>
+#include <oracle/node.h>
 #include <primitives/oracle.h>
 #include <protocol.h>
 #include <pubkey.h>
@@ -560,6 +562,216 @@ BOOST_AUTO_TEST_CASE(p2p_oracle_cinv_helpers)
 
     CInv inv_block(MSG_BLOCK, dummy_hash);
     BOOST_CHECK(!inv_block.IsOracleMsg());
+}
+
+// ============================================================================
+// CATEGORY 4: Oracle Propagation & Discovery Tests
+// Tests for Bug #1 (Sign/Verify mismatch), Bug #2 (net_processing Verify),
+// Bug #3 (bundle relay), Bug #4 (GETORACLES discovery)
+// ============================================================================
+
+/**
+ * Bug #1 Test: CreatePriceMessage must produce Phase2-valid signatures
+ *
+ * CreatePriceMessage() was calling Sign() (5-field hash) but
+ * IsValidOracleMessage() in Phase 2 mode calls VerifyPhase2() (3-field hash).
+ * The message must pass both VerifyPhase2() and IsValid().
+ */
+BOOST_AUTO_TEST_CASE(test_create_price_message_phase2_signature)
+{
+    // Create oracle node with known key
+    CKey privkey;
+    privkey.MakeNewKey(true);
+    CPubKey pubkey = privkey.GetPubKey();
+
+    OracleNode node;
+    node.Initialize(0, privkey, pubkey);
+
+    // CreatePriceMessage should produce a message that passes Phase 2 verification
+    COraclePriceMessage msg = node.CreatePriceMessage(5000, GetTime());
+    BOOST_CHECK(msg.price_micro_usd == 5000);
+    BOOST_CHECK(msg.oracle_id == 0);
+
+    // CRITICAL: Must pass Phase 2 verification (3-field hash)
+    BOOST_CHECK_MESSAGE(msg.VerifyPhase2(),
+        "CreatePriceMessage must produce Phase2-valid signatures");
+
+    // Must also pass IsValid() which tries Phase2 first
+    BOOST_CHECK_MESSAGE(msg.IsValid(),
+        "CreatePriceMessage output must pass IsValid()");
+}
+
+/**
+ * Bug #1 Test: Phase 2 signed messages must be accepted by BundleManager
+ *
+ * IsValidOracleMessage() in Phase 2 mode (min_oracle_count > 1) must
+ * accept messages signed with SignPhase2().
+ */
+BOOST_AUTO_TEST_CASE(test_phase2_message_accepted_by_bundle_manager)
+{
+    OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    manager.Clear();
+
+    // Setup Phase 2 mode (min_oracle_count > 1)
+    // We need the oracle's pubkey in chainparams for this to work
+    // Use regtest oracle keys which are deterministic
+    const CChainParams& params = Params();
+
+    // Get oracle 0's config
+    const OracleNodeInfo* oracle_config = params.GetOracleNode(0);
+    BOOST_REQUIRE(oracle_config != nullptr);
+
+    // Create message signed with Phase 2
+    COraclePriceMessage msg;
+    msg.oracle_id = 0;
+    msg.price_micro_usd = 5000;
+    msg.timestamp = GetTime();
+    msg.block_height = 0;
+    msg.nonce = GetRand<uint64_t>(std::numeric_limits<uint64_t>::max());
+
+    // We need the matching private key for oracle 0
+    // In regtest, keys are derived from SHA256("digibyte_regtest_oracle_0")
+    std::string seed = "digibyte_regtest_oracle_0";
+    uint256 hash;
+    CSHA256().Write((const unsigned char*)seed.data(), seed.size()).Finalize(hash.begin());
+    CKey oracle_key;
+    oracle_key.Set(hash.begin(), hash.end(), true);
+    BOOST_REQUIRE(oracle_key.IsValid());
+
+    msg.oracle_pubkey = XOnlyPubKey(oracle_key.GetPubKey());
+    BOOST_REQUIRE(msg.SignPhase2(oracle_key));
+    BOOST_CHECK(msg.VerifyPhase2());
+
+    // Enable manager in Phase 2 mode
+    manager.SetEnabled(true);
+    manager.SetMinOracleCount(4); // Phase 2
+
+    // Message must be accepted
+    bool added = manager.AddOracleMessage(msg);
+    BOOST_CHECK_MESSAGE(added,
+        "Phase 2 signed message must be accepted by BundleManager in Phase 2 mode");
+
+    manager.Clear();
+    manager.SetEnabled(false);
+}
+
+/**
+ * Bug #2 Test: net_processing signature validation must accept Phase 2 messages
+ *
+ * net_processing.cpp was calling Verify() (Phase 1 only) instead of IsValid()
+ * which supports both Phase 1 and Phase 2. Phase 2 messages must not be rejected.
+ */
+BOOST_AUTO_TEST_CASE(test_phase2_message_passes_isvalid)
+{
+    CKey privkey;
+    privkey.MakeNewKey(true);
+
+    COraclePriceMessage msg;
+    msg.oracle_id = 0;
+    msg.price_micro_usd = 5000;
+    msg.timestamp = GetTime();
+    msg.block_height = 0;
+    msg.nonce = 0;
+
+    // Sign with Phase 2 only
+    msg.oracle_pubkey = XOnlyPubKey(privkey.GetPubKey());
+    BOOST_REQUIRE(msg.SignPhase2(privkey));
+
+    // Phase 1 Verify() should FAIL (different hash)
+    BOOST_CHECK(!msg.Verify());
+
+    // But IsValid() should PASS (tries Phase 2 first)
+    BOOST_CHECK_MESSAGE(msg.IsValid(),
+        "IsValid() must accept Phase 2 signed messages (net_processing fix)");
+}
+
+/**
+ * Bug #2 Test: Phase 1 signed messages still work through IsValid()
+ *
+ * Ensure backward compatibility — Phase 1 Sign() messages must still
+ * pass IsValid() via the Phase 1 fallback path.
+ */
+BOOST_AUTO_TEST_CASE(test_phase1_message_still_passes_isvalid)
+{
+    CKey privkey;
+    privkey.MakeNewKey(true);
+
+    COraclePriceMessage msg;
+    msg.oracle_id = 0;
+    msg.price_micro_usd = 5000;
+    msg.timestamp = GetTime();
+    msg.block_height = 100;
+    msg.nonce = 42;
+
+    // Sign with Phase 1
+    BOOST_REQUIRE(msg.Sign(privkey));
+
+    // Phase 1 Verify() should pass
+    BOOST_CHECK(msg.Verify());
+
+    // IsValid() should also pass (tries Phase 2 first, falls back to Phase 1)
+    BOOST_CHECK_MESSAGE(msg.IsValid(),
+        "IsValid() must still accept Phase 1 signed messages");
+}
+
+/**
+ * Test: OracleNode::BroadcastPriceMessage validates before broadcasting
+ *
+ * Messages that fail IsValid() must not be broadcast.
+ */
+BOOST_AUTO_TEST_CASE(test_broadcast_rejects_invalid_message)
+{
+    CKey privkey;
+    privkey.MakeNewKey(true);
+    CPubKey pubkey = privkey.GetPubKey();
+
+    OracleNode node;
+    node.Initialize(0, privkey, pubkey);
+
+    // Create an invalid message (no signature)
+    COraclePriceMessage bad_msg;
+    bad_msg.oracle_id = 0;
+    bad_msg.price_micro_usd = 5000;
+    bad_msg.timestamp = GetTime();
+
+    BOOST_CHECK(!node.BroadcastPriceMessage(bad_msg));
+}
+
+/**
+ * Test: SignPhase2 and VerifyPhase2 roundtrip with different prices
+ *
+ * Ensures the 3-field hash (oracle_id + price + timestamp) works correctly
+ * across different price values.
+ */
+BOOST_AUTO_TEST_CASE(test_phase2_sign_verify_roundtrip_prices)
+{
+    CKey privkey;
+    privkey.MakeNewKey(true);
+
+    std::vector<uint64_t> test_prices = {
+        1,          // minimum
+        500,        // typical DGB
+        5000,       // ~$0.005
+        50000,      // ~$0.05
+        1000000,    // $1.00
+        10000000,   // $10.00
+        99999999999 // near max
+    };
+
+    for (uint64_t price : test_prices) {
+        if (price < ORACLE_MIN_PRICE_MICRO_USD || price > ORACLE_MAX_PRICE_MICRO_USD)
+            continue;
+
+        COraclePriceMessage msg;
+        msg.oracle_id = 3;
+        msg.price_micro_usd = price;
+        msg.timestamp = GetTime();
+        msg.oracle_pubkey = XOnlyPubKey(privkey.GetPubKey());
+
+        BOOST_REQUIRE(msg.SignPhase2(privkey));
+        BOOST_CHECK_MESSAGE(msg.VerifyPhase2(),
+            strprintf("Phase2 roundtrip failed for price %llu", price));
+    }
 }
 
 /**

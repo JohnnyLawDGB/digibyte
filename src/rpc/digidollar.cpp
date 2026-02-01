@@ -7,6 +7,7 @@
 #include <rpc/server_util.h>
 #include <rpc/blockchain.h>
 #include <rpc/digidollar_transactions.h>
+#include <random.h>
 #include <oracle/bundle_manager.h>
 #include <oracle/node.h>
 #include <oracle/mock_oracle.h>
@@ -3282,6 +3283,89 @@ static RPCHelpMan enablemockoracle()
     };
 }
 
+static RPCHelpMan submitoracleprice()
+{
+    return RPCHelpMan{"submitoracleprice",
+                "\nSubmit an individual oracle price message for Phase 2 testing (RegTest only).\n"
+                "Creates a signed oracle price message from the specified oracle ID and adds\n"
+                "it to the pending message pool. When enough messages are collected (>= min_required),\n"
+                "a Phase 2 bundle will be created in the next block.\n",
+                {
+                    {"oracle_id", RPCArg::Type::NUM, RPCArg::Optional::NO, "Oracle ID (0-4 for regtest)"},
+                    {"price_micro_usd", RPCArg::Type::NUM, RPCArg::Optional::NO, "Price in micro-USD per DGB (e.g., 6500 = $0.0065/DGB)"}
+                },
+                RPCResult{
+                    RPCResult::Type::OBJ, "", "",
+                    {
+                        {RPCResult::Type::NUM, "oracle_id", "Oracle ID used"},
+                        {RPCResult::Type::NUM, "price_micro_usd", "Price submitted"},
+                        {RPCResult::Type::BOOL, "accepted", "Whether message was accepted"},
+                        {RPCResult::Type::NUM, "pending_count", "Total pending oracle messages"},
+                        {RPCResult::Type::NUM, "min_required", "Minimum messages required for consensus"}
+                    }
+                },
+                RPCExamples{
+                    HelpExampleCli("submitoracleprice", "0 6500") +
+                    HelpExampleCli("submitoracleprice", "1 6500") +
+                    HelpExampleCli("submitoracleprice", "2 6500") +
+                    HelpExampleRpc("submitoracleprice", "0, 6500")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            if (Params().GetChainType() != ChainType::REGTEST) {
+                throw JSONRPCError(RPC_METHOD_NOT_FOUND,
+                    "submitoracleprice is only available in RegTest mode");
+            }
+
+            uint32_t oracle_id = request.params[0].getInt<int>();
+            CAmount price_micro_usd = request.params[1].getInt<int64_t>();
+
+            if (oracle_id > 6) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Oracle ID must be 0-6 for regtest");
+            }
+            if (price_micro_usd <= 0) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Price must be positive");
+            }
+
+            // Get test private key for this oracle
+            MockOracleManager& mock = MockOracleManager::GetInstance();
+            CKey key = mock.GetTestKey(oracle_id);
+            if (!key.IsValid()) {
+                throw JSONRPCError(RPC_INTERNAL_ERROR,
+                    strprintf("No test key available for oracle %d", oracle_id));
+            }
+
+            // Create and sign the oracle price message
+            COraclePriceMessage msg;
+            msg.oracle_id = oracle_id;
+            msg.price_micro_usd = static_cast<uint64_t>(price_micro_usd);
+            msg.timestamp = GetTime();
+            msg.block_height = 0; // Will be set by block creation
+            msg.nonce = GetRand(std::numeric_limits<uint64_t>::max());
+            msg.oracle_pubkey = XOnlyPubKey(key.GetPubKey());
+
+            if (!msg.SignPhase2(key)) {
+                throw JSONRPCError(RPC_INTERNAL_ERROR, "Failed to sign oracle message");
+            }
+
+            // Add to bundle manager's pending messages
+            OracleBundleManager& manager = OracleBundleManager::GetInstance();
+            bool accepted = manager.AddOracleMessage(msg);
+
+            const Consensus::Params& consensus = Params().GetConsensus();
+
+            UniValue result(UniValue::VOBJ);
+            result.pushKV("oracle_id", (int)oracle_id);
+            result.pushKV("price_micro_usd", price_micro_usd);
+            result.pushKV("accepted", accepted);
+            result.pushKV("pending_count", (int)manager.GetPendingMessageCount());
+            result.pushKV("min_required", consensus.nOracleRequiredMessages);
+
+            return result;
+        },
+    };
+}
+
 void RegisterDigiDollarRPCCommands(CRPCTable &t)
 {
     static const CRPCCommand commands[] = {
@@ -3322,7 +3406,10 @@ void RegisterDigiDollarRPCCommands(CRPCTable &t)
         {"digidollar", &setmockoracleprice},
         {"digidollar", &getmockoracleprice},
         {"digidollar", &simulatepricevolatility},
-        {"digidollar", &enablemockoracle}
+        {"digidollar", &enablemockoracle},
+
+        // Phase 2 oracle testing (RegTest only)
+        {"oracle", &submitoracleprice}
     };
     for (const auto& c : commands) {
         t.appendCommand(c.name, &c);

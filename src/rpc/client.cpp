@@ -342,6 +342,8 @@ static const CRPCConvertParam vRPCConvertParams[] =
     // DigiDollar simulation/test RPC commands
     { "setmockoracleprice", 0, "price" },
     { "simulatepricevolatility", 0, "percent_change" },
+    { "submitoracleprice", 0, "oracle_id" },
+    { "submitoracleprice", 1, "price_micro_usd" },
 };
 // clang-format on
 

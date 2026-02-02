@@ -19,6 +19,8 @@ sqlite_packages=sqlite
 
 zmq_packages=zeromq
 
+curl_packages=libcurl
+
 upnp_packages=miniupnpc
 natpmp_packages=libnatpmp
 

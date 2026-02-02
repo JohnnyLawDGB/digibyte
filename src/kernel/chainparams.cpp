@@ -397,8 +397,8 @@ public:
         consensus.fPowAllowMinDifficultyBlocks = false; // Disable min difficulty blocks for proper difficulty adjustment
         consensus.fEasyPow = false;
         consensus.fPowNoRetargeting = false; // Enable difficulty retargeting
-        consensus.nRuleChangeActivationThreshold = 4032; // 4032 - 70% of 5760
-        consensus.nMinerConfirmationWindow = 5760; // 1 day of blocks on testnet
+        consensus.nRuleChangeActivationThreshold = 140; // 140 - 70% of 200
+        consensus.nMinerConfirmationWindow = 200; // 200 blocks for fast BIP9 testing
         consensus.fRbfEnabled = false;
         
         // DigiByte Specific Consensus Code from v8.22.2
@@ -454,13 +454,13 @@ public:
         consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
         consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].min_activation_height = 0; // No activation delay
 
-        // Deployment of DigiDollar stablecoin features (testnet - Testnet reset 2025)
-        // Note: BIP9 deployment is ALWAYS_ACTIVE (min_activation_height must be 0 per BIP9 rules)
-        // Actual DigiDollar feature activation is controlled by nDDActivationHeight (550)
+        // Deployment of DigiDollar stablecoin features (testnet - real BIP9 signaling)
+        // Miners signal bit 23, 70% threshold (140/200 blocks)
+        // DEFINED until median time past reaches nStartTime, then STARTED, LOCKED_IN, ACTIVE
         consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].bit = 23;
-        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nStartTime = Consensus::BIP9Deployment::ALWAYS_ACTIVE;
-        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
-        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].min_activation_height = 0; // Must be 0 for ALWAYS_ACTIVE per BIP9
+        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nStartTime = 1770015600; // Feb 2, 2026
+        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nTimeout = 1833087600; // Feb 2, 2028
+        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].min_activation_height = 600; // Cannot activate before block 600
 
         consensus.nMinimumChainWork = uint256S("0x00");
         consensus.defaultAssumeValid = uint256S("0x00"); //1079274
@@ -539,14 +539,14 @@ public:
         InitializeOracleNodes();
 
         // Oracle system parameters — Testnet 4-of-7 consensus
-        // Oracle activation matches DigiDollar activation — everything at block 550
-        consensus.nOracleActivationHeight = 550;      // Same as nDDActivationHeight
+        // Oracle activation matches DigiDollar BIP9 activation — everything at block 600
+        consensus.nOracleActivationHeight = 600;      // Same as nDDActivationHeight
         consensus.nOracleEpochLength = 1440;          // 24 hours (1440 blocks * 15 seconds)
         consensus.nOracleRequiredMessages = 4;        // Phase Two: 4-of-7 consensus (strict majority)
         consensus.nOracleTotalOracles = 7;            // 7 oracles active
         // Multi-oracle activates at same height as DigiDollar (no separate phases)
         // Everything — DD minting, oracle consensus, multi-oracle — activates together
-        consensus.nDigiDollarPhase2Height = 550;  // Same as nDDActivationHeight
+        consensus.nDigiDollarPhase2Height = 600;  // Same as nDDActivationHeight
 
         // Testnet oracle public keys (x-only, 32 bytes) — must match vOracleNodes
         consensus.vOraclePublicKeys.clear();
@@ -567,7 +567,7 @@ public:
         // Activate at block 1 for consistent testnet behavior
         consensus.nDDOracleEpochBlocks = 50;       // Rotate oracles every 50 blocks (~12.5 minutes)
         consensus.nDDOracleUpdateInterval = 2;     // Update price every 2 blocks (~30 seconds)
-        consensus.nDDActivationHeight = 550;       // DigiDollar activation at block 550 (after Odocrypt at 500)
+        consensus.nDDActivationHeight = 600;       // DigiDollar BIP9 activation at block 600 (DEFINED→STARTED→LOCKED_IN→ACTIVE)
     }
 
 private:

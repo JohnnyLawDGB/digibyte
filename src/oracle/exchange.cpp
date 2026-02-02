@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <sys/stat.h>
 #include <iomanip>
 #include <regex>
 #include <sstream>
@@ -64,9 +65,39 @@ std::string BaseExchangeFetcher::HttpGet(const std::string& url)
     // Set User-Agent
     curl_easy_setopt(curl, CURLOPT_USERAGENT, "DigiByte-Oracle/1.0");
 
-    // Enable SSL certificate verification
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
+    // SSL certificate verification
+    // Try common CA bundle locations, fall back to no verification if not found
+    // This is needed because the statically-linked OpenSSL has no built-in CA path
+    static const char* ca_bundle_paths[] = {
+        "/etc/ssl/certs/ca-certificates.crt",     // Debian/Ubuntu
+        "/etc/pki/tls/certs/ca-bundle.crt",       // RHEL/CentOS
+        "/etc/ssl/ca-bundle.pem",                  // OpenSUSE
+        "/etc/ssl/cert.pem",                       // macOS/BSD
+        "/usr/share/ca-certificates/mozilla/",     // Alternate
+        nullptr
+    };
+    bool ca_found = false;
+    for (int i = 0; ca_bundle_paths[i] != nullptr; ++i) {
+        struct stat st;
+        if (stat(ca_bundle_paths[i], &st) == 0) {
+            if (S_ISDIR(st.st_mode)) {
+                curl_easy_setopt(curl, CURLOPT_CAPATH, ca_bundle_paths[i]);
+            } else {
+                curl_easy_setopt(curl, CURLOPT_CAINFO, ca_bundle_paths[i]);
+            }
+            curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
+            curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
+            ca_found = true;
+            break;
+        }
+    }
+    if (!ca_found) {
+        // No CA bundle found — disable verification with warning
+        // TODO: Ship CA bundle with DigiByte for production
+        LogPrintf("Oracle WARNING: No CA certificate bundle found, SSL verification disabled\n");
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+    }
 
     // Perform request
     res = curl_easy_perform(curl);
@@ -854,9 +885,29 @@ CAmount CoinMarketCapFetcher::FetchPrice()
         // Set User-Agent
         curl_easy_setopt(curl, CURLOPT_USERAGENT, "DigiByte-Oracle/1.0");
 
-        // Enable SSL
-        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
-        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
+        // SSL — use same CA detection as HttpGet
+        static const char* ca_paths[] = {
+            "/etc/ssl/certs/ca-certificates.crt",
+            "/etc/pki/tls/certs/ca-bundle.crt",
+            "/etc/ssl/ca-bundle.pem",
+            "/etc/ssl/cert.pem",
+            nullptr
+        };
+        bool found_ca = false;
+        for (int i = 0; ca_paths[i]; ++i) {
+            struct stat st;
+            if (stat(ca_paths[i], &st) == 0) {
+                curl_easy_setopt(curl, CURLOPT_CAINFO, ca_paths[i]);
+                curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
+                curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
+                found_ca = true;
+                break;
+            }
+        }
+        if (!found_ca) {
+            curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+            curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+        }
 
         // Perform request
         res = curl_easy_perform(curl);

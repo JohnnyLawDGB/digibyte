@@ -382,7 +382,7 @@ CAmount KrakenFetcher::FetchPrice()
 std::string KrakenFetcher::ParseKrakenResponse(const std::string& response)
 {
     // Deprecated - now using direct UniValue parsing in FetchPrice()
-    return "0.05050";
+    return "";
 }
 
 /**

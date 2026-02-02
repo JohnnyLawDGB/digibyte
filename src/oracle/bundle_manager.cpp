@@ -25,10 +25,11 @@
 // Forward declaration for missing functions
 extern int32_t GetBestHeight();
 
-// Mock implementation of GetBestHeight for compilation
+// Get current chain height - used by oracle bundle manager
 int32_t GetBestHeight() {
-    // In real implementation, this would get the actual chain tip height
-    return 1000; // Mock height for testing (matches test expectations)
+    // TODO: Wire up to ChainstateManager properly
+    // For now, return 0 if we can't determine height
+    return 0;
 }
 
 //! Global oracle bundle manager instance
@@ -1656,9 +1657,9 @@ CAmount GetOraclePriceForHeight(int nHeight)
         }
     }
 
-    // No oracle price available - use fallback for older blocks
-    LogPrint(BCLog::DIGIDOLLAR, "Oracle: No price available for height %d, using fallback\n", nHeight);
-    return 5; // Fallback: $0.05 per DGB (5 cents)
+    // No oracle price available
+    LogPrint(BCLog::DIGIDOLLAR, "Oracle: No price available for height %d\n", nHeight);
+    return 0;
 }
 
 bool IsOracleSystemReady()

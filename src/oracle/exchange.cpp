@@ -84,16 +84,24 @@ std::string BaseExchangeFetcher::HttpGet(const std::string& url)
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
 
+#ifdef WIN32
+    // On Windows, use the native Windows certificate store via curl
+    curl_easy_setopt(curl, CURLOPT_SSL_OPTIONS, CURLSSLOPT_NATIVE_CA);
+#endif
+
     static const char* ca_bundle_paths[] = {
         "/etc/ssl/certs/ca-certificates.crt",     // Debian/Ubuntu
         "/etc/pki/tls/certs/ca-bundle.crt",       // RHEL/CentOS
         "/etc/ssl/ca-bundle.pem",                  // OpenSUSE
-        "/etc/ssl/cert.pem",                       // macOS/BSD
+        "/etc/ssl/cert.pem",                       // macOS/BSD/FreeBSD
+        "/usr/local/share/certs/ca-root-nss.crt", // FreeBSD ports
+        "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem", // Fedora/RHEL newer
         nullptr
     };
     static const char* ca_dir_paths[] = {
         "/etc/ssl/certs",                          // Most Linux
         "/etc/pki/tls/certs",                      // RHEL/CentOS
+        "/usr/local/share/certs",                  // FreeBSD
         nullptr
     };
 

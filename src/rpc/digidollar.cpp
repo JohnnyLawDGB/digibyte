@@ -2455,6 +2455,185 @@ static RPCHelpMan getprotectionstatus()
     };
 }
 
+static RPCHelpMan getalloracleprices()
+{
+    return RPCHelpMan{"getalloracleprices",
+                "\nGet the individual price reported by each oracle.\n"
+                "Scans recent blocks for on-chain oracle bundles and shows each oracle's\n"
+                "submitted price, deviation from median, and status. Essential for monitoring\n"
+                "oracle health and detecting misbehaving oracles.\n",
+                {
+                    {"blocks", RPCArg::Type::NUM, RPCArg::Default{20}, "Number of recent blocks to scan (default: 20)"},
+                },
+                RPCResult{
+                    RPCResult::Type::OBJ, "", "",
+                    {
+                        {RPCResult::Type::NUM, "block_height", "Current block height"},
+                        {RPCResult::Type::NUM, "consensus_price_micro_usd", "Current consensus price in micro-USD"},
+                        {RPCResult::Type::NUM, "consensus_price_usd", "Current consensus price in USD"},
+                        {RPCResult::Type::NUM, "oracle_count", "Number of oracles that submitted prices"},
+                        {RPCResult::Type::NUM, "required", "Minimum oracles required for consensus"},
+                        {RPCResult::Type::NUM, "total_oracles", "Total configured oracles"},
+                        {RPCResult::Type::ARR, "oracles", "Per-oracle price data",
+                            {
+                                {RPCResult::Type::OBJ, "", "",
+                                    {
+                                        {RPCResult::Type::NUM, "oracle_id", "Oracle ID"},
+                                        {RPCResult::Type::STR, "name", "Oracle operator name"},
+                                        {RPCResult::Type::STR, "endpoint", "Oracle endpoint"},
+                                        {RPCResult::Type::NUM, "price_micro_usd", "Price reported by this oracle (micro-USD)"},
+                                        {RPCResult::Type::NUM, "price_usd", "Price reported by this oracle (USD)"},
+                                        {RPCResult::Type::NUM, "timestamp", "Timestamp of price submission"},
+                                        {RPCResult::Type::NUM, "block_height", "Block height where price was included"},
+                                        {RPCResult::Type::NUM, "deviation_pct", "Deviation from consensus median (%)"},
+                                        {RPCResult::Type::BOOL, "signature_valid", "Whether Schnorr signature is valid"},
+                                        {RPCResult::Type::STR, "status", "Oracle status: reporting/no_data/outlier"},
+                                    }
+                                }
+                            }
+                        },
+                        {RPCResult::Type::NUM, "last_bundle_height", "Block height of most recent oracle bundle"},
+                        {RPCResult::Type::NUM, "last_bundle_time", "Timestamp of most recent oracle bundle"},
+                    }
+                },
+                RPCExamples{
+                    HelpExampleCli("getalloracleprices", "") +
+                    HelpExampleCli("getalloracleprices", "50") +
+                    HelpExampleRpc("getalloracleprices", "")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            const ChainstateManager& chainman = EnsureAnyChainman(request.context);
+            const Consensus::Params& consensus = Params().GetConsensus();
+            OracleBundleManager& bundle_manager = OracleBundleManager::GetInstance();
+
+            int scan_blocks = request.params.size() > 0 ? request.params[0].getInt<int>() : 20;
+            if (scan_blocks < 1) scan_blocks = 1;
+            if (scan_blocks > 1000) scan_blocks = 1000;
+
+            int tip_height = chainman.ActiveChain().Height();
+
+            // Oracle names from chainparams
+            const std::vector<OracleNodeInfo>& oracle_nodes = Params().GetOracleNodes();
+            std::vector<std::string> oracle_names = {"Jared", "Green Candle", "Bastian", "DanGB", "Shenger", "Ycagel", "Aussie"};
+
+            // Track latest price per oracle from on-chain data
+            struct OracleData {
+                uint64_t price_micro_usd = 0;
+                int64_t timestamp = 0;
+                int32_t block_height = 0;
+                bool signature_valid = false;
+                bool has_data = false;
+            };
+            std::map<uint32_t, OracleData> oracle_data;
+
+            // Scan recent blocks for oracle bundles
+            int last_bundle_height = 0;
+            int64_t last_bundle_time = 0;
+            uint64_t consensus_price = 0;
+
+            LOCK(cs_main);
+            for (int h = tip_height; h >= std::max(0, tip_height - scan_blocks + 1); --h) {
+                CBlockIndex* pindex = chainman.ActiveChain()[h];
+                if (!pindex) continue;
+
+                CBlock block;
+                if (!chainman.m_blockman.ReadBlockFromDisk(block, *pindex)) continue;
+                if (block.vtx.empty()) continue;
+
+                COracleBundle bundle;
+                if (bundle_manager.ExtractOracleBundle(*block.vtx[0], bundle)) {
+                    // Track last bundle
+                    if (h > last_bundle_height) {
+                        last_bundle_height = h;
+                        last_bundle_time = bundle.timestamp;
+                        consensus_price = bundle.median_price_micro_usd;
+                    }
+
+                    // Record each oracle's price (only keep most recent per oracle)
+                    for (const auto& msg : bundle.messages) {
+                        if (oracle_data.find(msg.oracle_id) == oracle_data.end() || !oracle_data[msg.oracle_id].has_data) {
+                            OracleData& od = oracle_data[msg.oracle_id];
+                            od.price_micro_usd = msg.price_micro_usd;
+                            od.timestamp = msg.timestamp;
+                            od.block_height = h;
+                            od.signature_valid = msg.VerifyPhase2();
+                            od.has_data = true;
+                        }
+                    }
+                }
+            }
+
+            // Also check pending P2P messages for oracles not yet on-chain
+            std::vector<COraclePriceMessage> pending = bundle_manager.GetPendingMessages();
+            for (const auto& msg : pending) {
+                if (oracle_data.find(msg.oracle_id) == oracle_data.end() || !oracle_data[msg.oracle_id].has_data) {
+                    OracleData& od = oracle_data[msg.oracle_id];
+                    od.price_micro_usd = msg.price_micro_usd;
+                    od.timestamp = msg.timestamp;
+                    od.block_height = 0; // Not yet on-chain
+                    od.signature_valid = msg.VerifyPhase2();
+                    od.has_data = true;
+                }
+            }
+
+            // Build result
+            UniValue result(UniValue::VOBJ);
+            result.pushKV("block_height", tip_height);
+            result.pushKV("consensus_price_micro_usd", (int64_t)consensus_price);
+            result.pushKV("consensus_price_usd", static_cast<double>(consensus_price) / 1000000.0);
+
+            int reporting_count = 0;
+            UniValue oracles_arr(UniValue::VARR);
+
+            for (size_t i = 0; i < oracle_nodes.size() && i < 7; ++i) {
+                UniValue oracle_obj(UniValue::VOBJ);
+                oracle_obj.pushKV("oracle_id", (int)oracle_nodes[i].id);
+                oracle_obj.pushKV("name", i < oracle_names.size() ? oracle_names[i] : "Unknown");
+                oracle_obj.pushKV("endpoint", oracle_nodes[i].endpoint);
+
+                auto it = oracle_data.find(oracle_nodes[i].id);
+                if (it != oracle_data.end() && it->second.has_data) {
+                    const OracleData& od = it->second;
+                    oracle_obj.pushKV("price_micro_usd", (int64_t)od.price_micro_usd);
+                    oracle_obj.pushKV("price_usd", static_cast<double>(od.price_micro_usd) / 1000000.0);
+                    oracle_obj.pushKV("timestamp", od.timestamp);
+                    oracle_obj.pushKV("block_height", od.block_height);
+
+                    // Calculate deviation from consensus
+                    double deviation_pct = 0.0;
+                    if (consensus_price > 0) {
+                        deviation_pct = ((double)od.price_micro_usd - (double)consensus_price) / (double)consensus_price * 100.0;
+                    }
+                    oracle_obj.pushKV("deviation_pct", deviation_pct);
+                    oracle_obj.pushKV("signature_valid", od.signature_valid);
+                    oracle_obj.pushKV("status", "reporting");
+                    reporting_count++;
+                } else {
+                    oracle_obj.pushKV("price_micro_usd", 0);
+                    oracle_obj.pushKV("price_usd", 0.0);
+                    oracle_obj.pushKV("timestamp", 0);
+                    oracle_obj.pushKV("block_height", 0);
+                    oracle_obj.pushKV("deviation_pct", 0.0);
+                    oracle_obj.pushKV("signature_valid", false);
+                    oracle_obj.pushKV("status", "no_data");
+                }
+
+                oracles_arr.push_back(oracle_obj);
+            }
+
+            result.pushKV("oracle_count", reporting_count);
+            result.pushKV("required", consensus.nOracleRequiredMessages);
+            result.pushKV("total_oracles", (int)oracle_nodes.size());
+            result.pushKV("oracles", oracles_arr);
+            result.pushKV("last_bundle_height", last_bundle_height);
+            result.pushKV("last_bundle_time", last_bundle_time);
+
+            return result;
+        },
+    };
+}
+
 static RPCHelpMan sendoracleprice()
 {
     return RPCHelpMan{"sendoracleprice",
@@ -3387,6 +3566,7 @@ void RegisterDigiDollarRPCCommands(CRPCTable &t)
         {"digidollar", &getredemptioninfo},
         // {"digidollar", &listdigidollartxs},
         {"digidollar", &getoracleprice},
+        {"oracle", &getalloracleprices},
         {"digidollar", &getprotectionstatus},
 
         // Oracle management commands

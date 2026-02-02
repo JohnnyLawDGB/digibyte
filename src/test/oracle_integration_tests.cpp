@@ -100,9 +100,9 @@ BOOST_AUTO_TEST_CASE(end_to_end_oracle_flow)
     msg.oracle_pubkey = oracle_pubkey;
 
     // Sign the message with Schnorr signature
-    BOOST_REQUIRE(msg.Sign(oracle_key));
+    BOOST_REQUIRE(msg.SignPhase2(oracle_key));
     BOOST_REQUIRE(msg.IsValid());
-    BOOST_REQUIRE(msg.Verify());
+    BOOST_REQUIRE(msg.VerifyPhase2());
 
     LogPrintf("   - Created oracle message with Schnorr signature\n");
     LogPrintf("   - Oracle ID: %u\n", msg.oracle_id);

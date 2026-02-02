@@ -84,7 +84,7 @@ BOOST_AUTO_TEST_CASE(add_oracle_bundle_to_coinbase)
     msg.oracle_pubkey = oracle_pubkey;
 
     // Sign the message
-    BOOST_REQUIRE(msg.Sign(oracle_key));
+    BOOST_REQUIRE(msg.SignPhase2(oracle_key));
 
     // Add message to bundle manager
     BOOST_REQUIRE(manager.AddOracleMessage(msg));
@@ -144,7 +144,7 @@ BOOST_AUTO_TEST_CASE(oracle_bundle_serialization_format)
     msg.oracle_pubkey = oracle_pubkey;
 
     // Sign the message
-    BOOST_REQUIRE(msg.Sign(oracle_key));
+    BOOST_REQUIRE(msg.SignPhase2(oracle_key));
 
     // Create bundle with message
     COracleBundle bundle;
@@ -204,7 +204,7 @@ BOOST_AUTO_TEST_CASE(oracle_bundle_size_limit)
     msg.nonce = FastRandomContext().rand64();
     msg.oracle_pubkey = oracle_pubkey;
 
-    BOOST_REQUIRE(msg.Sign(oracle_key));
+    BOOST_REQUIRE(msg.SignPhase2(oracle_key));
 
     // Create bundle
     COracleBundle bundle;
@@ -278,7 +278,7 @@ BOOST_AUTO_TEST_CASE(create_new_block_includes_oracle_bundle)
     msg.nonce = FastRandomContext().rand64();
     msg.oracle_pubkey = oracle_pubkey;
 
-    BOOST_REQUIRE(msg.Sign(oracle_key));
+    BOOST_REQUIRE(msg.SignPhase2(oracle_key));
     manager.AddOracleMessage(msg);
 
     // Create new block using BlockAssembler
@@ -389,7 +389,7 @@ BOOST_AUTO_TEST_CASE(create_new_block_phase_one_single_oracle)
     msg.nonce = FastRandomContext().rand64();
     msg.oracle_pubkey = oracle_pubkey;
 
-    BOOST_REQUIRE(msg.Sign(oracle_key));
+    BOOST_REQUIRE(msg.SignPhase2(oracle_key));
     manager.AddOracleMessage(msg);
 
     // Do NOT add additional oracle messages (Phase One = single oracle)

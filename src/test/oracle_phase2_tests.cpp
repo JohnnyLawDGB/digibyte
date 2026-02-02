@@ -53,7 +53,7 @@ static COraclePriceMessage CreateSignedOracleMessage(
     msg.nonce = GetRand(UINT64_MAX);
     msg.oracle_pubkey = XOnlyPubKey(oracle_key.GetPubKey());
 
-    BOOST_REQUIRE(msg.Sign(oracle_key));
+    BOOST_REQUIRE(msg.SignPhase2(oracle_key));
     return msg;
 }
 

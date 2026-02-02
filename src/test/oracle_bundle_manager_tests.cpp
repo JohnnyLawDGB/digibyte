@@ -41,11 +41,11 @@ BOOST_AUTO_TEST_CASE(phase_one_bundle_creation)
     COraclePriceMessage msg(oracle_id, price_micro_usd, timestamp);
 
     // Sign the message with Schnorr signature
-    BOOST_CHECK(msg.Sign(oracle_key));
+    BOOST_CHECK(msg.SignPhase2(oracle_key));
 
     // Validate message
     BOOST_CHECK(msg.IsValid());
-    BOOST_CHECK(msg.Verify());
+    BOOST_CHECK(msg.VerifyPhase2());
 
     // Add message to bundle manager
     BOOST_CHECK(manager.AddOracleMessage(msg));
@@ -98,7 +98,7 @@ BOOST_AUTO_TEST_CASE(message_validation)
 
     // Test 3: Valid message
     COraclePriceMessage valid_msg(0, 6000, GetTime());
-    BOOST_CHECK(valid_msg.Sign(oracle_key));
+    BOOST_CHECK(valid_msg.SignPhase2(oracle_key));
     BOOST_CHECK(valid_msg.IsValid());
 
     LogPrintf("Test: Message validation working correctly\n");
@@ -148,7 +148,7 @@ BOOST_AUTO_TEST_CASE(bundle_persistence_cleanup)
     // Create messages for multiple epochs
     for (int32_t epoch = 0; epoch < 5; epoch++) {
         COraclePriceMessage msg(0, 50000 + epoch * 100, GetTime());
-        msg.Sign(oracle_key);
+        msg.SignPhase2(oracle_key);
 
         manager.AddOracleMessage(msg);
     }
@@ -213,7 +213,7 @@ BOOST_AUTO_TEST_CASE(bundle_validation_rules)
     // Create bundle with valid message
     COracleBundle bundle(epoch);
     COraclePriceMessage msg(0, 6000, GetTime());
-    msg.Sign(oracle_key);
+    msg.SignPhase2(oracle_key);
 
     BOOST_CHECK(bundle.AddMessage(msg));
 
@@ -245,7 +245,7 @@ BOOST_AUTO_TEST_CASE(phase_one_testnet_config)
     oracle_key.MakeNewKey(true);
 
     COraclePriceMessage msg(0, 6000, GetTime());
-    msg.Sign(oracle_key);
+    msg.SignPhase2(oracle_key);
 
     BOOST_CHECK(manager.AddOracleMessage(msg));
 
@@ -280,7 +280,7 @@ BOOST_AUTO_TEST_CASE(oracle_stats_reporting)
     oracle_key.MakeNewKey(true);
 
     COraclePriceMessage msg(0, 6000, GetTime());
-    msg.Sign(oracle_key);
+    msg.SignPhase2(oracle_key);
 
     manager.AddOracleMessage(msg);
 

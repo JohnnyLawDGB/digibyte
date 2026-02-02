@@ -225,7 +225,7 @@ bool OracleNode::BroadcastPriceMessage(const COraclePriceMessage& message)
     }
 
     // Validate Schnorr signature
-    if (!message.Verify()) {
+    if (!message.VerifyPhase2()) {
         LogPrintf("Oracle: Invalid Schnorr signature on price message for oracle %d\n", oracle_id);
         return false;
     }

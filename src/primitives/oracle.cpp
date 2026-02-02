@@ -216,7 +216,7 @@ bool COracleBundle::IsValid(int64_t reference_time, int min_required) const
         // Trust is based on chainparams oracle pubkey validation
         if (!msg.schnorr_sig.empty()) {
             // Full format with embedded signature - verify it
-            if (!msg.Verify()) {
+            if (!msg.VerifyPhase2()) {
                 LogPrint(BCLog::DIGIDOLLAR, "Oracle: Message signature verification failed for oracle %u\n", msg.oracle_id);
                 return false;
             }

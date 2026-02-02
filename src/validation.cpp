@@ -4401,7 +4401,7 @@ static bool ContextualCheckBlock(const CBlock& block, BlockValidationState& stat
 
                 // Verify oracle message signature
                 for (const auto& msg : bundle.messages) {
-                    if (!msg.Verify()) {
+                    if (!msg.VerifyPhase2()) {
                         return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-oracle-bundle-signature",
                                            "Oracle message signature verification failed");
                     }

@@ -993,7 +993,7 @@ bool OracleBundleManager::IsValidOracleMessage(const COraclePriceMessage& messag
     // Phase One: Skip chainparams check when min_oracle_count == 1 (testing mode)
     if (min_oracle_count == 1) {
         if (!message.IsValid()) return false;
-        return message.Verify();
+        return message.VerifyPhase2();
     }
 
     // Phase Two (min_oracle_count > 1): Use Phase 2 signature hash
@@ -1224,7 +1224,7 @@ bool OracleDataValidator::ValidateBlockOracleData(const CBlock& block, const CBl
     // Phase 1: Verify Schnorr signature (Phase 2 signatures verified in ValidatePhaseTwoBundle)
     if (block_height < consensusParams_ref.nDigiDollarPhase2Height) {
         if (!msg.schnorr_sig.empty()) {
-            if (!msg.Verify()) {
+            if (!msg.VerifyPhase2()) {
                 LogPrintf("Oracle: Invalid Schnorr signature in oracle message (oracle_id=%d, block=%d)\n",
                          msg.oracle_id, block_height);
                 return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-oracle-signature",
@@ -1299,7 +1299,7 @@ bool OracleDataValidator::ValidateOracleMessage(const COraclePriceMessage& messa
     }
 
     // Verify signature
-    return message.Verify();
+    return message.VerifyPhase2();
 }
 
 bool OracleDataValidator::ValidateOracleBundle(const COracleBundle& bundle, int32_t epoch, const Consensus::Params& params)
@@ -1392,7 +1392,7 @@ bool OracleBundleManager::ValidatePhaseOneBundle(const COracleBundle& bundle, co
     }
 
     // Phase One: Schnorr signature verification (if signature is present)
-    if (!msg.schnorr_sig.empty() && !msg.Verify()) {
+    if (!msg.schnorr_sig.empty() && !msg.VerifyPhase2()) {
         LogPrintf("Oracle: Phase One signature verification failed\n");
         return false;
     }

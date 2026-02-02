@@ -162,6 +162,7 @@ void OracleNode::Start()
     }
 
     running.store(true);
+    start_time = GetTime();
     price_thread = std::thread(&OracleNode::PriceThreadFunc, this);
     LogPrintf("Oracle: Started oracle %d on testnet (Phase One: 1-of-1 consensus)\n", oracle_id);
 }

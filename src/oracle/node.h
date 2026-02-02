@@ -37,6 +37,7 @@ private:
     CAmount current_price{0};
     int64_t last_update_time{0};
     int64_t last_broadcast_time{0};
+    int64_t start_time{0};
 
     // Configuration
     int price_update_interval{30};  // seconds
@@ -73,6 +74,8 @@ public:
     //! Oracle functions
     uint32_t GetOracleId() const { return oracle_id; }
     CPubKey GetPublicKey() const { return public_key; }
+    int64_t GetLastBroadcastTime() const { return last_broadcast_time; }
+    int64_t GetStartTime() const { return start_time; }
 
     //! Key management (Phase One: Testnet hardcoded key)
     /**

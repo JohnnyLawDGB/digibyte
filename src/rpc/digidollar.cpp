@@ -2742,11 +2742,12 @@ static RPCHelpMan sendoracleprice()
     };
 }
 
-static RPCHelpMan listoracles()
+static RPCHelpMan getoracles()
 {
-    return RPCHelpMan{"listoracles",
-                "\nList all configured oracle nodes and their status.\n"
-                "Returns information about all oracles including active/inactive status.\n",
+    return RPCHelpMan{"getoracles",
+                "\nGet all oracle nodes with their config, status, and network-reported prices.\n"
+                "Shows what the network sees — prices come from on-chain oracle bundles,\n"
+                "not just the local node. Use this for monitoring all oracle health.\n",
                 {
                     {"active_only", RPCArg::Type::BOOL, RPCArg::Default{false}, "Only show active oracles"}
                 },
@@ -2755,91 +2756,183 @@ static RPCHelpMan listoracles()
                     {
                         {RPCResult::Type::OBJ, "", "",
                             {
-                                {RPCResult::Type::NUM, "oracle_id", "Oracle ID (0-29)"},
+                                {RPCResult::Type::NUM, "oracle_id", "Oracle ID"},
+                                {RPCResult::Type::STR, "name", "Oracle operator name"},
                                 {RPCResult::Type::STR_HEX, "pubkey", "Oracle public key"},
                                 {RPCResult::Type::STR, "endpoint", "Oracle network endpoint"},
-                                {RPCResult::Type::BOOL, "is_active", "Whether oracle is currently active"},
-                                {RPCResult::Type::BOOL, "is_running", "Whether oracle daemon is running"},
-                                {RPCResult::Type::BOOL, "is_enabled", "Whether oracle is enabled"},
-                                {RPCResult::Type::STR_AMOUNT, "last_price", "Last reported price (if available)"},
-                                {RPCResult::Type::NUM, "last_update", "Timestamp of last update"},
-                                {RPCResult::Type::STR, "status", "Oracle status (running/stopped/error)"},
-                                {RPCResult::Type::BOOL, "selected_for_epoch", "Whether oracle is selected for current epoch"}
+                                {RPCResult::Type::BOOL, "is_active", "Whether oracle is configured as active"},
+                                {RPCResult::Type::NUM, "last_price_micro_usd", "Last reported price in micro-USD"},
+                                {RPCResult::Type::NUM, "last_price_usd", "Last reported price in USD"},
+                                {RPCResult::Type::NUM, "last_update", "Timestamp of last price"},
+                                {RPCResult::Type::STR, "price_source", "Where price came from: local/on-chain/none"},
+                                {RPCResult::Type::STR, "status", "Oracle status: reporting/stopped/no_data"},
+                                {RPCResult::Type::BOOL, "selected_for_epoch", "Whether oracle is selected for current epoch"},
+                                {RPCResult::Type::BOOL, "is_running_locally", "Whether this oracle is running on YOUR node"}
                             }
                         }
                     }
                 },
                 RPCExamples{
-                    HelpExampleCli("listoracles", "") +
-                    HelpExampleCli("listoracles", "true") +
-                    HelpExampleRpc("listoracles", "") +
-                    HelpExampleRpc("listoracles", "true")
+                    HelpExampleCli("getoracles", "") +
+                    HelpExampleCli("getoracles", "true") +
+                    HelpExampleRpc("getoracles", "")
                 },
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
         {
             bool activeOnly = request.params.size() > 0 ? request.params[0].get_bool() : false;
 
-            // Get chainman for blockchain info
             const ChainstateManager& chainman = EnsureAnyChainman(request.context);
-
-            // Get all oracle nodes from chainparams
             const CChainParams& params = Params();
             const std::vector<OracleNodeInfo>& all_oracles = params.GetOracleNodes();
+            OracleBundleManager& bundle_manager = OracleBundleManager::GetInstance();
+            OracleManager& oracle_manager = OracleManager::GetInstance();
 
-            // Get current epoch and selected oracles
+            std::vector<std::string> oracle_names = {"Jared", "Green Candle", "Bastian", "DanGB", "Shenger", "Ycagel", "Aussie"};
+
             int32_t current_height = chainman.ActiveChain().Height();
             int32_t current_epoch = GetCurrentEpoch(current_height);
             std::vector<OracleNodeInfo> selected_oracles = SelectOraclesForEpoch(all_oracles, current_epoch);
-
-            // Build set of selected oracle IDs for quick lookup
             std::set<uint32_t> selected_ids;
             for (const auto& oracle : selected_oracles) {
                 selected_ids.insert(oracle.id);
             }
 
-            // Get oracle manager for runtime status
-            OracleManager& oracle_manager = OracleManager::GetInstance();
-
-            UniValue result(UniValue::VARR);
-
-            for (const auto& oracle_config : all_oracles) {
-                // Apply active filter
-                if (activeOnly && !oracle_config.is_active) {
-                    continue;
+            // Scan last 20 blocks for on-chain oracle prices
+            struct OnChainPrice { uint64_t price = 0; int64_t timestamp = 0; bool found = false; };
+            std::map<uint32_t, OnChainPrice> onchain_prices;
+            {
+                LOCK(cs_main);
+                for (int h = current_height; h >= std::max(0, current_height - 19); --h) {
+                    CBlockIndex* pindex = chainman.ActiveChain()[h];
+                    if (!pindex) continue;
+                    CBlock block;
+                    if (!chainman.m_blockman.ReadBlockFromDisk(block, *pindex)) continue;
+                    if (block.vtx.empty()) continue;
+                    COracleBundle bundle;
+                    if (bundle_manager.ExtractOracleBundle(*block.vtx[0], bundle)) {
+                        for (const auto& msg : bundle.messages) {
+                            if (!onchain_prices[msg.oracle_id].found) {
+                                onchain_prices[msg.oracle_id] = {msg.price_micro_usd, msg.timestamp, true};
+                            }
+                        }
+                    }
                 }
-
-                bool is_selected = selected_ids.count(oracle_config.id) > 0;
-                bool is_running = oracle_manager.IsOracleRunning(oracle_config.id);
-                OracleNode* runtime_oracle = oracle_manager.GetOracleNode(oracle_config.id);
-
-                UniValue oracle_info(UniValue::VOBJ);
-                oracle_info.pushKV("oracle_id", static_cast<int>(oracle_config.id));
-                oracle_info.pushKV("pubkey", HexStr(oracle_config.pubkey));
-                oracle_info.pushKV("endpoint", oracle_config.endpoint);
-                oracle_info.pushKV("is_active", oracle_config.is_active);
-                oracle_info.pushKV("is_running", is_running);
-                oracle_info.pushKV("is_enabled", runtime_oracle ? runtime_oracle->IsEnabled() : false);
-
-                // Runtime status
-                if (runtime_oracle && runtime_oracle->HasValidPrice()) {
-                    oracle_info.pushKV("last_price", runtime_oracle->GetCurrentPrice());
-                    oracle_info.pushKV("last_update", runtime_oracle->GetLastUpdateTime());
-                } else {
-                    oracle_info.pushKV("last_price", 0);
-                    oracle_info.pushKV("last_update", 0);
-                }
-
-                // Status determination
-                std::string status = "stopped";
-                if (is_running) {
-                    status = runtime_oracle && runtime_oracle->HasValidPrice() ? "running" : "error";
-                }
-                oracle_info.pushKV("status", status);
-                oracle_info.pushKV("selected_for_epoch", is_selected);
-
-                result.push_back(oracle_info);
             }
 
+            UniValue result(UniValue::VARR);
+            for (size_t i = 0; i < all_oracles.size(); ++i) {
+                const auto& oc = all_oracles[i];
+                if (activeOnly && !oc.is_active) continue;
+
+                bool is_selected = selected_ids.count(oc.id) > 0;
+                bool is_running = oracle_manager.IsOracleRunning(oc.id);
+                OracleNode* runtime = oracle_manager.GetOracleNode(oc.id);
+
+                UniValue info(UniValue::VOBJ);
+                info.pushKV("oracle_id", static_cast<int>(oc.id));
+                info.pushKV("name", i < oracle_names.size() ? oracle_names[i] : "Unknown");
+                info.pushKV("pubkey", HexStr(oc.pubkey));
+                info.pushKV("endpoint", oc.endpoint);
+                info.pushKV("is_active", oc.is_active);
+
+                // Price: prefer local runtime, fall back to on-chain
+                uint64_t price = 0;
+                int64_t update_time = 0;
+                std::string price_source = "none";
+                std::string status = "no_data";
+
+                if (runtime && runtime->HasValidPrice()) {
+                    price = runtime->GetCurrentPrice();
+                    update_time = runtime->GetLastUpdateTime();
+                    price_source = "local";
+                    status = "reporting";
+                } else if (onchain_prices.count(oc.id) && onchain_prices[oc.id].found) {
+                    price = onchain_prices[oc.id].price;
+                    update_time = onchain_prices[oc.id].timestamp;
+                    price_source = "on-chain";
+                    status = "reporting";
+                }
+
+                info.pushKV("last_price_micro_usd", (int64_t)price);
+                info.pushKV("last_price_usd", static_cast<double>(price) / 1000000.0);
+                info.pushKV("last_update", update_time);
+                info.pushKV("price_source", price_source);
+                info.pushKV("status", status);
+                info.pushKV("selected_for_epoch", is_selected);
+                info.pushKV("is_running_locally", is_running);
+
+                result.push_back(info);
+            }
+            return result;
+        },
+    };
+}
+
+static RPCHelpMan listoracle()
+{
+    return RPCHelpMan{"listoracle",
+                "\nShow the status of the oracle running on this local node.\n"
+                "If no oracle is running, returns a message with instructions.\n",
+                {},
+                RPCResult{
+                    RPCResult::Type::OBJ, "", "",
+                    {
+                        {RPCResult::Type::BOOL, "running", "Whether an oracle is running locally"},
+                        {RPCResult::Type::NUM, "oracle_id", /*optional=*/ "Oracle ID (if running)"},
+                        {RPCResult::Type::STR, "name", /*optional=*/ "Oracle operator name"},
+                        {RPCResult::Type::STR_HEX, "pubkey", /*optional=*/ "Oracle public key"},
+                        {RPCResult::Type::NUM, "price_micro_usd", /*optional=*/ "Current price being reported"},
+                        {RPCResult::Type::NUM, "price_usd", /*optional=*/ "Current price in USD"},
+                        {RPCResult::Type::NUM, "last_update", /*optional=*/ "Last update timestamp"},
+                        {RPCResult::Type::BOOL, "enabled", /*optional=*/ "Whether oracle is enabled"},
+                        {RPCResult::Type::STR, "message", /*optional=*/ "Status message"}
+                    }
+                },
+                RPCExamples{
+                    HelpExampleCli("listoracle", "") +
+                    HelpExampleRpc("listoracle", "")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            OracleManager& oracle_manager = OracleManager::GetInstance();
+            std::vector<std::string> oracle_names = {"Jared", "Green Candle", "Bastian", "DanGB", "Shenger", "Ycagel", "Aussie"};
+
+            UniValue result(UniValue::VOBJ);
+
+            // Check all oracle IDs for a running instance
+            for (uint32_t id = 0; id < 7; ++id) {
+                if (oracle_manager.IsOracleRunning(id)) {
+                    OracleNode* node = oracle_manager.GetOracleNode(id);
+                    if (!node) continue;
+
+                    result.pushKV("running", true);
+                    result.pushKV("oracle_id", (int)id);
+                    result.pushKV("name", id < oracle_names.size() ? oracle_names[id] : "Unknown");
+
+                    const CChainParams& params = Params();
+                    const std::vector<OracleNodeInfo>& oracles = params.GetOracleNodes();
+                    if (id < oracles.size()) {
+                        result.pushKV("pubkey", HexStr(oracles[id].pubkey));
+                    }
+
+                    if (node->HasValidPrice()) {
+                        result.pushKV("price_micro_usd", (int64_t)node->GetCurrentPrice());
+                        result.pushKV("price_usd", static_cast<double>(node->GetCurrentPrice()) / 1000000.0);
+                        result.pushKV("last_update", node->GetLastUpdateTime());
+                    } else {
+                        result.pushKV("price_micro_usd", 0);
+                        result.pushKV("price_usd", 0.0);
+                        result.pushKV("last_update", 0);
+                    }
+
+                    result.pushKV("enabled", node->IsEnabled());
+                    result.pushKV("message", "Oracle is running");
+                    return result;
+                }
+            }
+
+            result.pushKV("running", false);
+            result.pushKV("message", "No oracle is running on this node. Use 'startoracle <id>' to start one.");
             return result;
         },
     };
@@ -3571,7 +3664,8 @@ void RegisterDigiDollarRPCCommands(CRPCTable &t)
 
         // Oracle management commands
         {"oracle", &sendoracleprice},
-        {"oracle", &listoracles},
+        {"oracle", &getoracles},
+        {"oracle", &listoracle},
         // {"oracle", &startoracle},  // Moved to wallet RPC table for wallet key loading
         {"oracle", &stoporacle},
         {"oracle", &getoraclepubkey},

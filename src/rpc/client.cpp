@@ -335,7 +335,7 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "createoraclekey", 0, "oracle_id" },
     { "startoracle", 0, "oracle_id" },
     { "stoporacle", 0, "oracle_id" },
-    { "listoracles", 0, "active_only" },
+    { "getoracles", 0, "active_only" },
     { "sendoracleprice", 0, "price_usd" },
     { "sendoracleprice", 1, "oracle_id" },
     { "getoraclepubkey", 0, "oracle_id" },

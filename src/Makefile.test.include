@@ -89,6 +89,7 @@ DIGIBYTE_TESTS =\
   test/oracle_message_tests.cpp \
   test/oracle_miner_tests.cpp \
   test/oracle_p2p_tests.cpp \
+  test/oracle_rpc_tests.cpp \
   test/oracle_wallet_key_tests.cpp \
   test/oracle_phase2_tests.cpp \
   test/digidollar_p2p_tests.cpp \

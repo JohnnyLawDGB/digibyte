@@ -18,10 +18,6 @@ inline unsigned int PowLimit(const Consensus::Params& params)
 
 unsigned int InitialDifficulty(const Consensus::Params& params, int algo)
 {
-    // Easy PoW mode: always use minimum difficulty (even for initial blocks)
-    if (params.fEasyPow) {
-        return PowLimit(params);
-    }
     const auto& it = params.initialTarget.find(algo);
     if (it == params.initialTarget.end())
         return PowLimit(params);

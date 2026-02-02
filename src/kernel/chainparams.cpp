@@ -380,8 +380,7 @@ public:
         consensus.CSVHeight = 1; // CSV activated on testnet (Used in rpc activation tests)
         consensus.SegwitHeight = 0; // SEGWIT is always activated on testnet unless overridden
         consensus.MinBIP9WarningHeight = 0;
-        // TEMPORARY: Easy powLimit for multi-oracle testing (original: >> 20)
-        consensus.powLimit = uint256S("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+        consensus.powLimit = ArithToUint256(~arith_uint256(0) >> 20);
 
         // Initial difficulty targets for all algorithms (testnet)
         // Using >> 28 for realistic testnet mining (~256x harder than minimum)
@@ -395,8 +394,8 @@ public:
 
         consensus.nPowTargetTimespan = 14 * 24 * 60 * 60; // two weeks
         consensus.nPowTargetSpacing = 60 / 4;
-        consensus.fPowAllowMinDifficultyBlocks = true; // Enable min difficulty for testing
-        consensus.fEasyPow = true; // Enable easy PoW for fast testnet mining
+        consensus.fPowAllowMinDifficultyBlocks = false; // Disable min difficulty blocks for proper difficulty adjustment
+        consensus.fEasyPow = false;
         consensus.fPowNoRetargeting = false; // Enable difficulty retargeting
         consensus.nRuleChangeActivationThreshold = 4032; // 4032 - 70% of 5760
         consensus.nMinerConfirmationWindow = 5760; // 1 day of blocks on testnet
@@ -550,17 +549,14 @@ public:
         consensus.nDigiDollarPhase2Height = 550;  // Same as nDDActivationHeight
 
         // Testnet oracle public keys (x-only, 32 bytes) — must match vOracleNodes
-        // TEMPORARY: Using deterministic test keys for multi-oracle testing
-        // Keys derived from SHA256("digibyte_testnet_oracle_N") — privkeys known for testing
-        // Original production keys backed up in chainparams.cpp.backup_original_oracle_keys
         consensus.vOraclePublicKeys.clear();
-        consensus.vOraclePublicKeys.push_back("a69d02b2e39684deacead23e3b34191af99a124411465b19bc0a6e1384f70dee");  // oracle 0 - test key
-        consensus.vOraclePublicKeys.push_back("56baa94b6a787502146177802820189113029d31c4d99b0a5ad59bbb776efc88");  // oracle 1 - test key
-        consensus.vOraclePublicKeys.push_back("df3f298148c79840218722a4dfc81413d3dd4597a1aa3b97f12b3810bb21e4e9");  // oracle 2 - test key
-        consensus.vOraclePublicKeys.push_back("692857a4e171ce477d16afc8c4f225d479f139eaa4baee796f195f7d67927d81");  // oracle 3 - test key
-        consensus.vOraclePublicKeys.push_back("977e8e7355bf6718adf79e3e0cc874f9c98893fa450bfe9d433ae7643b6f6440");  // oracle 4 - test key
-        consensus.vOraclePublicKeys.push_back("ccdca14f48d2e2c7225e378d3d0b40f6aebbc0aef783a6971479cae4d105fc5e");  // oracle 5 - test key
-        consensus.vOraclePublicKeys.push_back("f3c51b026ce02416d806c76e046fb8c32dce4e7ab82a1bb163a1a852f521a7ac");  // oracle 6 - test key
+        consensus.vOraclePublicKeys.push_back("e1dce189a530c1fb39dcd9282cf5f9de0e4eb257344be9fd94ce27c06005e8c7");  // oracle 0 - Jared
+        consensus.vOraclePublicKeys.push_back("3dfb7a36ab40fa6fbc69b4b499eaa17bfa1958aa89ec248efc24b4c18694f990");  // oracle 1 - Green Candle
+        consensus.vOraclePublicKeys.push_back("172755a320cec96c981d46c86d79a03578d73406a25e89d8edc616a8f361cb5c");  // oracle 2 - Bastian
+        consensus.vOraclePublicKeys.push_back("546c07ee9d21640c4b4e96e6954bd49c3ab5bcf36c6a512603ebf75f8609da0c");  // oracle 3 - DanGB
+        consensus.vOraclePublicKeys.push_back("9cef021f841794c1afc4e84d678f3c70dbe3a972330b2b6329852898443deb4f");  // oracle 4 - Shenger
+        consensus.vOraclePublicKeys.push_back("85016758856ed27388501a54031fa3a678df705bf811fb8bc9abd2d7cfb6d9f7");  // oracle 5 - Ycagel
+        consensus.vOraclePublicKeys.push_back("ec2122bab83d1199350d5bd3e5e88b305da873211b1876edd5170fbe9c7f962e");  // oracle 6 - Aussie
 
         LogPrintf("Oracle: Testnet oracle activation height: %d\n", consensus.nOracleActivationHeight);
         LogPrintf("Oracle: %d oracles configured, %d-of-%d consensus, Phase Two at height %d\n",
@@ -577,17 +573,16 @@ public:
 private:
     void InitializeOracleNodes() {
         // DigiDollar Oracle Nodes - Testnet
-        // TEMPORARY: Using deterministic test keys for multi-oracle testing
-        // Keys derived from SHA256("digibyte_testnet_oracle_N")
-        // Original production keys backed up in chainparams.cpp.backup_original_oracle_keys
+        // Phase Two: 7 oracles active (4-of-7 consensus)
         vOracleNodes = {
-            {0,  ParsePubKey("03a69d02b2e39684deacead23e3b34191af99a124411465b19bc0a6e1384f70dee"), "localhost:9001", true},  // test oracle 0
-            {1,  ParsePubKey("0356baa94b6a787502146177802820189113029d31c4d99b0a5ad59bbb776efc88"), "localhost:9002", true},  // test oracle 1
-            {2,  ParsePubKey("03df3f298148c79840218722a4dfc81413d3dd4597a1aa3b97f12b3810bb21e4e9"), "localhost:9003", true},  // test oracle 2
-            {3,  ParsePubKey("03692857a4e171ce477d16afc8c4f225d479f139eaa4baee796f195f7d67927d81"), "localhost:9004", true},  // test oracle 3
-            {4,  ParsePubKey("03977e8e7355bf6718adf79e3e0cc874f9c98893fa450bfe9d433ae7643b6f6440"), "localhost:9005", true},  // test oracle 4
-            {5,  ParsePubKey("02ccdca14f48d2e2c7225e378d3d0b40f6aebbc0aef783a6971479cae4d105fc5e"), "localhost:9006", true},  // test oracle 5
-            {6,  ParsePubKey("02f3c51b026ce02416d806c76e046fb8c32dce4e7ab82a1bb163a1a852f521a7ac"), "localhost:9007", true},  // test oracle 6
+            // 7 testnet oracles — compressed pubkeys must match consensus.vOraclePublicKeys (x-only)
+            {0,  ParsePubKey("03e1dce189a530c1fb39dcd9282cf5f9de0e4eb257344be9fd94ce27c06005e8c7"), "oracle1.digibyte.io:12030", true},  // Jared
+            {1,  ParsePubKey("033dfb7a36ab40fa6fbc69b4b499eaa17bfa1958aa89ec248efc24b4c18694f990"), "oracle2.digibyte.io:12030", true},  // Green Candle
+            {2,  ParsePubKey("03172755a320cec96c981d46c86d79a03578d73406a25e89d8edc616a8f361cb5c"), "oracle3.digibyte.io:12030", true},  // Bastian
+            {3,  ParsePubKey("03546c07ee9d21640c4b4e96e6954bd49c3ab5bcf36c6a512603ebf75f8609da0c"), "oracle4.digibyte.io:12030", true},  // DanGB
+            {4,  ParsePubKey("039cef021f841794c1afc4e84d678f3c70dbe3a972330b2b6329852898443deb4f"), "oracle5.digibyte.io:12030", true},  // Shenger
+            {5,  ParsePubKey("0285016758856ed27388501a54031fa3a678df705bf811fb8bc9abd2d7cfb6d9f7"), "oracle6.digibyte.io:12030", true},  // Ycagel
+            {6,  ParsePubKey("02ec2122bab83d1199350d5bd3e5e88b305da873211b1876edd5170fbe9c7f962e"), "oracle7.digibyte.io:12030", true},  // Aussie
         };
     }
 };

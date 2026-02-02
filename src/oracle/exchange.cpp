@@ -68,14 +68,6 @@ std::string BaseExchangeFetcher::HttpGet(const std::string& url)
     // SSL certificate verification
     // Try common CA bundle locations, fall back to no verification if not found
     // This is needed because the statically-linked OpenSSL has no built-in CA path
-    static const char* ca_bundle_paths[] = {
-        "/etc/ssl/certs/ca-certificates.crt",     // Debian/Ubuntu
-        "/etc/pki/tls/certs/ca-bundle.crt",       // RHEL/CentOS
-        "/etc/ssl/ca-bundle.pem",                  // OpenSUSE
-        "/etc/ssl/cert.pem",                       // macOS/BSD
-        "/usr/share/ca-certificates/mozilla/",     // Alternate
-        nullptr
-    };
     // Always explicitly set CA info to override any bad compiled-in defaults
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);

@@ -82,40 +82,10 @@ std::string BaseExchangeFetcher::HttpGet(const std::string& url)
     LogPrint(BCLog::DIGIDOLLAR, "HttpGet: Successfully fetched %d bytes from %s\n", response.size(), url);
     return response;
 #else
-    // Fallback mock implementation when libcurl is not available
-    LogPrintf("Oracle: Mock HTTP GET to %s (libcurl not available)\n", url);
-
-    // Simulate different responses based on URL
-    if (url.find("binance") != std::string::npos) {
-        return R"({"symbol":"DGBUSDT","price":"0.05000"})";
-    } else if (url.find("coinmarketcap") != std::string::npos) {
-        return R"({"data":{"DGB":{"quote":{"USD":{"price":0.01234}}}}})";
-    } else if (url.find("coingecko") != std::string::npos) {
-        return R"({"digibyte":{"usd":0.01234}})";
-    } else if (url.find("coinbase") != std::string::npos) {
-        return R"({"data":{"amount":"0.01234","currency":"USD"}})";
-    } else if (url.find("kraken") != std::string::npos) {
-        return R"({"result":{"DGBUSD":{"c":["0.05050","1.00000000"]}}})";
-    } else if (url.find("bittrex") != std::string::npos) {
-        return R"({"success":true,"message":"","result":{"Last":0.05025}})";
-    } else if (url.find("poloniex") != std::string::npos) {
-        return R"({"USDT_DGB":{"last":"0.04975"}})";
-    } else if (url.find("kucoin") != std::string::npos) {
-        return R"({"data":{"price":"0.05000"}})";
-    } else if (url.find("crypto.com") != std::string::npos) {
-        // Crypto.com API returns data as an array of ticker objects
-        return R"({"result":{"data":[{"i":"DGB_USD","a":"0.05000"}]}})";
-    } else if (url.find("messari") != std::string::npos) {
-        return R"({"data":{"market_data":{"price_usd":0.01234}}})";
-    } else if (url.find("gateio") != std::string::npos) {
-        // Gate.io returns array of tickers
-        return R"([{"currency_pair":"DGB_USDT","last":"0.05100"}])";
-    } else if (url.find("htx") != std::string::npos) {
-        // HTX returns tick object with close price
-        return R"({"tick":{"close":0.04950}})";
-    }
-
-    return R"({"error":"Mock response"})";
+    // libcurl not available — cannot make HTTP requests
+    // CRITICAL: Do NOT return fake/mock data here. Return empty string so the oracle fails gracefully.
+    LogPrintf("Oracle: ERROR - libcurl not available, cannot fetch price from %s. Build with libcurl support.\n", url);
+    return "";
 #endif
 }
 
@@ -900,8 +870,9 @@ CAmount CoinMarketCapFetcher::FetchPrice()
             return 0;
         }
 #else
-        // Mock implementation
-        std::string response = R"({"data":{"DGB":{"quote":{"USD":{"price":0.01234}}}}})";
+        // libcurl not available — cannot fetch CoinMarketCap data
+        LogPrintf("Oracle: ERROR - libcurl not available, cannot fetch CoinMarketCap price. Build with libcurl support.\n");
+        return 0;
 #endif
 
         // Parse JSON using UniValue

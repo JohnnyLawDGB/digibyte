@@ -24,6 +24,7 @@
 #include <random.h>
 #include <key_io.h>
 #include <oracle/mock_oracle.h>
+#include <oracle/bundle_manager.h>
 
 #include <algorithm>
 #include <regex>
@@ -890,7 +891,10 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
         CAmount oraclePrice = 0;
         if (m_wallet) {
             currentHeight = m_wallet->GetLastBlockHeight();
-            // Try real oracle first, fall back to mock
+        }
+        // Try real oracle first, fall back to mock only in regtest
+        oraclePrice = OracleBundleManager::GetInstance().GetLatestPrice();
+        if (oraclePrice <= 0 && Params().GetChainType() == ChainType::REGTEST) {
             oraclePrice = MockOracleManager::GetInstance().GetCurrentPrice();
         }
         if (currentHeight <= 0) currentHeight = 100000; // Safe fallback for tests
@@ -3637,7 +3641,10 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
 
         // BUG #5 FIX: Get real height and oracle price
         int currentHeight = m_wallet ? m_wallet->GetLastBlockHeight() : 100000;
-        CAmount oraclePrice = MockOracleManager::GetInstance().GetCurrentPrice();
+        CAmount oraclePrice = OracleBundleManager::GetInstance().GetLatestPrice();
+        if (oraclePrice <= 0 && Params().GetChainType() == ChainType::REGTEST) {
+            oraclePrice = MockOracleManager::GetInstance().GetCurrentPrice();
+        }
         if (oraclePrice <= 0) oraclePrice = 6500; // Safe fallback
 
         // Build transaction
@@ -3758,7 +3765,10 @@ bool DigiDollarWallet::RedeemDigiDollar(const uint256& dd_timelock_id, const CAm
 
         // BUG #5 FIX: Get real height and oracle price
         int currentHeight = m_wallet ? m_wallet->GetLastBlockHeight() : 100000;
-        CAmount oraclePrice = MockOracleManager::GetInstance().GetCurrentPrice();
+        CAmount oraclePrice = OracleBundleManager::GetInstance().GetLatestPrice();
+        if (oraclePrice <= 0 && Params().GetChainType() == ChainType::REGTEST) {
+            oraclePrice = MockOracleManager::GetInstance().GetCurrentPrice();
+        }
         if (oraclePrice <= 0) oraclePrice = 6500; // Safe fallback
 
         DigiDollar::RedeemTxBuilder builder(Params(), currentHeight, oraclePrice);

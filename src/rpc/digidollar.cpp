@@ -508,9 +508,8 @@ static RPCHelpMan calculatecollateralrequirement()
             } else {
                 // Use real oracle price from OracleIntegration (returns micro-USD)
                 oraclePriceMicroUSD = OracleIntegration::GetCurrentOraclePriceMicroUSD();
-                if (oraclePriceMicroUSD <= 0) {
-                    // Fall back to mock oracle if real oracle not available
-                    // MockOracleManager already returns micro-USD (see mock_oracle.cpp)
+                if (oraclePriceMicroUSD <= 0 && Params().GetChainType() == ChainType::REGTEST) {
+                    // Fall back to mock oracle ONLY in regtest
                     oraclePriceMicroUSD = MockOracleManager::GetInstance().GetCurrentPrice();
                 }
                 if (oraclePriceMicroUSD <= 0) {
@@ -737,11 +736,9 @@ RPCHelpMan mintdigidollar()
             // Get current height from wallet's chain interface
             int currentHeight = pwallet->GetLastBlockHeight();
 
-            // Get oracle price in micro-USD from real oracle system first, fall back to mock
+            // Get oracle price in micro-USD from real oracle system first, fall back to mock only in regtest
             CAmount oraclePriceMicroUSD = OracleIntegration::GetCurrentOraclePriceMicroUSD();
-            if (oraclePriceMicroUSD <= 0) {
-                // Fall back to mock oracle if real oracle not available
-                // MockOracleManager already returns micro-USD (see mock_oracle.cpp)
+            if (oraclePriceMicroUSD <= 0 && Params().GetChainType() == ChainType::REGTEST) {
                 oraclePriceMicroUSD = MockOracleManager::GetInstance().GetCurrentPrice();
             }
             if (oraclePriceMicroUSD <= 0) {
@@ -1178,10 +1175,13 @@ RPCHelpMan redeemdigidollar()
                       selectedDDUtxos.size(), selectedDDTotal, ddAmount);
             LogPrintf("DigiDollar: selectedDDAmounts.size() = %zu\n", selectedDDAmounts.size());
 
-            // Get oracle price
-            CAmount oraclePrice = MockOracleManager::GetInstance().GetCurrentPrice();
+            // Get oracle price - use real oracle, fall back to mock only in regtest
+            CAmount oraclePrice = OracleIntegration::GetCurrentOraclePriceMicroUSD();
+            if (oraclePrice <= 0 && Params().GetChainType() == ChainType::REGTEST) {
+                oraclePrice = MockOracleManager::GetInstance().GetCurrentPrice();
+            }
             if (oraclePrice <= 0) {
-                oraclePrice = 1 * COIN; // Fallback
+                throw JSONRPCError(RPC_MISC_ERROR, "No oracle price available for redemption");
             }
 
             // Build redemption transaction using RedeemTxBuilder
@@ -2019,9 +2019,7 @@ static RPCHelpMan estimatecollateral()
             } else {
                 // Use real oracle price from OracleIntegration (returns micro-USD)
                 oraclePriceMicroUSD = OracleIntegration::GetCurrentOraclePriceMicroUSD();
-                if (oraclePriceMicroUSD <= 0) {
-                    // Fall back to mock oracle if real oracle not available
-                    // MockOracleManager already returns micro-USD (see mock_oracle.cpp)
+                if (oraclePriceMicroUSD <= 0 && Params().GetChainType() == ChainType::REGTEST) {
                     oraclePriceMicroUSD = MockOracleManager::GetInstance().GetCurrentPrice();
                 }
                 if (oraclePriceMicroUSD <= 0) {

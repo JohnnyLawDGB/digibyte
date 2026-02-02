@@ -8,6 +8,8 @@
 #include <digidollar/health.h>
 #include <digidollar/validation.h>
 #include <oracle/mock_oracle.h>
+#include <oracle/bundle_manager.h>
+#include <chainparams.h>
 #include <primitives/oracle.h>
 #include <key.h>
 #include <pubkey.h>
@@ -352,8 +354,12 @@ bool EmergencyRedemptionRatio::ShouldBlockMinting()
     }
 
     // Need oracle price to calculate health
-    // Get price directly from MockOracleManager (for regtest) as cached metrics may be stale
-    CAmount oraclePriceMicroUSD = MockOracleManager::GetInstance().GetCurrentPrice();
+    CAmount oraclePriceMicroUSD = 0;
+    if (Params().GetChainType() == ChainType::REGTEST) {
+        oraclePriceMicroUSD = MockOracleManager::GetInstance().GetCurrentPrice();
+    } else {
+        oraclePriceMicroUSD = OracleBundleManager::GetInstance().GetLatestPrice();
+    }
 
     // If no oracle price available, we can't determine emergency state
     // Default to allowing minting (benefit of doubt)

@@ -1,6 +1,6 @@
 # DigiDollar - Decentralized USD Stablecoin on DigiByte
-*Updated: 2025-12-31*
-*Document Version: 3.3 - Test Counts Verified*
+*Updated: 2026-02-01*
+*Document Version: 3.4 - Code Verified with Subagent Analysis*
 
 ## Overview
 
@@ -27,7 +27,7 @@ Unlike traditional stablecoins backed by bank accounts, DigiDollar is the world'
 
 **Most importantly**: Everything happens directly in your DigiByte Core wallet - you never give up control of your private keys or trust a third party.
 
-**Transaction Limits**: Minimum mint $100, maximum $100,000 per transaction. Minimum output $1.
+**Transaction Limits**: Minimum mint $100, maximum $100,000 per transaction (testnet: $10,000 max). Minimum output $1.
 
 ### Key Benefits
 
@@ -120,6 +120,7 @@ DigiDollar uses a sliding collateral scale to prevent attacks while rewarding lo
 | 3 months   | 400%            | 75% drop                  | 400 DGB      | |
 | 6 months   | 350%            | 71.4% drop                | 350 DGB      | |
 | 1 year     | 300%            | 66.7% drop                | 300 DGB      | |
+| 2 years    | 275%            | 63.6% drop                | 275 DGB      | |
 | 3 years    | 250%            | 60% drop                  | 250 DGB      | |
 | 5 years    | 225%            | 55.6% drop                | 225 DGB      | |
 | 7 years    | 212%            | 52.8% drop                | 212 DGB      | |
@@ -174,7 +175,7 @@ Efficient script execution with Merkleized Alternative Script Trees. The collate
 
 Both paths **require the timelock to expire first** - there is no early redemption, no forced liquidation, and no exceptions.
 
-**Implementation Note**: Partial redemption IS supported at the wallet level. Users can redeem a portion of their DD position, with collateral released proportionally. The position remains active until fully redeemed.
+**Implementation Note**: Partial redemption has wallet-level code (`CloseCollateralPosition()`), but consensus rules enforce FULL redemption only. Each collateral UTXO must be fully redeemed in a single transaction - partial redemption is validated as INVALID at the consensus layer (digidollar.cpp:ValidateRedemption).
 
 ### Key Features
 
@@ -366,23 +367,44 @@ digibyte-cli -rpcwallet=restored rescanblockchain
 
 ## Implementation Status & Code Alignment
 
-**Last Verified**: 2025-12-31
+**Last Verified**: 2026-02-01
 
 | Feature | Document Spec | Code Status | Notes |
 |---------|---------------|-------------|-------|
 | 2 MAST Paths | Normal + ERR only | ✅ Correct | Only 2 paths in MAST tree (scripts.cpp:133-193) |
 | Emergency Path | Not used | ✅ Removed | `CreateEmergencyPath()` was dead code and removed |
-| Partial Redemption | Wallet-level support | ✅ Correct | `CloseCollateralPosition()` supports proportional redemption |
+| Partial Redemption | Consensus: FULL only | ⚠️ Clarified | Wallet code exists, but consensus enforces full redemption |
 | ERR Returns | 100% collateral, burns more DD | ✅ Correct | `GetRequiredDDBurn()` increases burn, `GetAdjustedRedemption()` returns 100% |
 | Minting Blocked During ERR | Yes | ✅ Correct | `ShouldBlockMinting()` returns true when health < 100% |
 | Timelock Required | Both paths need CLTV | ✅ Correct | Both Normal and ERR paths start with CLTV check |
+| Collateral Tiers | 10 tiers (1hr→10yr) | ✅ Correct | 2-year tier (275%) verified in collateral.cpp |
+| DCA Multipliers | 1.0x/1.2x/1.5x/2.0x | ✅ Correct | dca.cpp:GetMultiplier() matches documentation |
+| ERR Ratios | 0.95/0.90/0.85/0.80 | ✅ Correct | err.cpp:GetERRRatio() matches documentation |
 
-**Code Verification Complete** (2025-12-31):
+**Code Verification Complete** (2026-02-01):
 - MAST tree contains exactly 2 paths (Normal + ERR) - verified in `CreateCollateralP2TR()`
 - Both redemption paths enforce CLTV timelock expiry before collateral can be unlocked
 - Only 4 transaction types: NONE=0, MINT=1, TRANSFER=2, REDEEM=3
-- Partial redemption implemented at wallet level (`CloseCollateralPosition()`)
+- Partial redemption: wallet code exists but consensus enforces FULL redemption only
 - DD amounts stored in cents (100 = $1.00), oracle prices in micro-USD (1,000,000 = $1.00)
+
+---
+
+## 🚨 Critical Issues (Current State)
+
+**Implementation Completion: ~85%** - Core functionality works but critical production blockers remain.
+
+| Issue | Location | Impact |
+|-------|----------|--------|
+| System health hardcoded 150% | txbuilder.cpp:29,268 | ERR/DCA can never activate in production |
+| MockOracleManager in non-regtest | err.cpp:356 | Test mock leaks into mainnet code path |
+| Mainnet validation disabled | bundle_manager.cpp:1103 | Returns `true` without validating on mainnet |
+| GetBestHeight() stub | bundle_manager.cpp:28-31 | Returns hardcoded 1000 instead of actual height |
+| Tests use DD_TX_ERR=5 | test files | Transaction type 5 doesn't exist (only 0-3) |
+
+**What This Means**:
+- ✅ Testnet/Regtest: Fully functional for testing
+- ⚠️ Mainnet: Requires fixes before deployment - ERR and DCA tiers will never activate due to hardcoded 150% system health
 
 ---
 

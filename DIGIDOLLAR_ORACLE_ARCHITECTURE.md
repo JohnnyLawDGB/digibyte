@@ -1,8 +1,13 @@
 # DigiDollar Oracle System - Complete Architecture Documentation
 **DigiByte v8.26 - Oracle Phase One Implementation with Phase Two Preparation**
-*Updated: 2025-12-31*
-*Implementation Status: 100% Complete Phase One, Phase Two Infrastructure Ready*
-*Document Version: 6.3 - Oracle Test Counts Verified*
+*Updated: 2026-02-01*
+*Implementation Status: ~70% Complete Phase One (Testnet/Regtest Only), Mainnet DISABLED*
+*Document Version: 7.0 - Validated against actual codebase*
+*Validation Status: ⚠️ DEVELOPMENT BUILD - NOT PRODUCTION READY*
+
+> **⚠️ CRITICAL NOTICE**: This document reflects the ACTUAL state of the code as of February 2026.
+> Mainnet oracle validation is completely disabled (returns true at validation.cpp:1103).
+> Several components have stubs, TODOs, and mock implementations that leak into production code paths.
 
 ---
 
@@ -41,7 +46,9 @@
 
 ### 1.1 What is the Oracle System?
 
-The Oracle System provides **decentralized price feeds** for the DigiByte blockchain, enabling DigiDollar's collateralized stablecoin functionality. It aggregates DGB/USD prices from 7 major exchanges and embeds this data directly into the blockchain.
+The Oracle System provides **decentralized price feeds** for the DigiByte blockchain, enabling DigiDollar's collateralized stablecoin functionality. It aggregates DGB/USD prices from 7 working exchanges (out of 12 defined) and embeds this data directly into the blockchain.
+
+> **Note**: 4 exchange fetchers are currently broken (Coinbase, Kraken, Messari, Bittrex/Poloniex) due to API changes or exchange closures.
 
 **Real-World Analogy**: Like a trusted appraiser network that provides gold prices for a bank's collateral system - but decentralized, cryptographically signed, and embedded in every block.
 
@@ -53,7 +60,8 @@ Phase One implements a **streamlined, testnet-ready system** with:
 - **Single Oracle** (1-of-1 consensus) for testing
 - **Compact Format** (22 bytes) fitting in OP_RETURN
 - **No Embedded Signatures** (trust based on chainparams)
-- **7 Active Exchange APIs** with median aggregation (Binance, KuCoin, Gate.io, HTX, Crypto.com, CoinGecko, CoinMarketCap) + 5 additional defined (Coinbase, Kraken, Bittrex, Poloniex, Messari)
+- **7 Working Exchange APIs** with median aggregation (Binance, KuCoin, Gate.io, HTX, Crypto.com, CoinGecko, CoinMarketCap)
+- **4 Broken Exchange APIs** (Coinbase, Kraken, Messari, Bittrex/Poloniex - API changes or deprecated)
 - **15-second updates** (aligned with DigiByte block time)
 
 **Trade-off Analysis:**
@@ -68,43 +76,53 @@ Phase One implements a **streamlined, testnet-ready system** with:
 - No on-chain signature verification (compact format)
 - Single point of failure (1-of-1 consensus)
 - Limited to testnet/regtest (mainnet requires Phase Two)
+
+🚨 CRITICAL ISSUES (Current State) - ALL VERIFIED:
+- Mainnet validation DISABLED (bundle_manager.cpp:1103 returns true)
+- MockOracleManager leaks into non-regtest code (err.cpp:356 - no regtest check)
+- ERR system health hardcoded to 150% (txbuilder.cpp:29 DEFAULT_SYSTEM_COLLATERAL=150)
+- sendoracleprice RPC has TODO for P2P broadcast (digidollar.cpp:2550)
+- GetBestHeight() returns hardcoded 1000 (bundle_manager.cpp:28-31)
 ```
 
 ### 1.3 Implementation Status
 
-**✅ PHASE ONE: 97.6% COMPLETE**
+**⚠️ PHASE ONE: ~70% COMPLETE (TESTNET/REGTEST ONLY)**
 
-**What's Working (100%):**
+**What's Working:**
 - ✅ OP_ORACLE opcode (0xbf) integrated
 - ✅ Compact 22-byte oracle format
-- ✅ P2P broadcasting via CConnman
-- ✅ 7 active exchange APIs (real libcurl + mock fallback) + 5 additional defined
-- ✅ Block validation (CheckBlock/ContextualCheckBlock)
+- ✅ P2P message handling (ORACLEPRICE, ORACLEBUNDLE, GETORACLES)
+- ✅ 7 working exchange APIs (Binance, KuCoin, Gate.io, HTX, Crypto.com, CoinGecko, CoinMarketCap)
+- ✅ Block validation on TESTNET (activation height 550) and REGTEST (activation height 650)
 - ✅ Price cache (ConnectBlock/DisconnectBlock)
 - ✅ Schnorr signatures (BIP-340)
 - ✅ Timestamp validation (1-hour window)
-- ✅ Consensus enforcement (1-of-1 Phase One)
+- ✅ Data structures (COraclePriceMessage, COracleBundle, OracleNodeInfo)
+
+**What's NOT Working / Incomplete:**
+- ❌ **MAINNET VALIDATION DISABLED** - bundle_manager.cpp:1103 returns true immediately
+- ❌ 4 broken exchange APIs (Coinbase, Kraken, Messari, Bittrex/Poloniex)
+- ❌ `sendoracleprice` RPC has TODO for actual P2P broadcast
+- ❌ `GetBestHeight()` returns hardcoded 1000 (bundle_manager.cpp)
+- ❌ MockOracleManager leaks into production code (err.cpp:356, digidollarwallet.cpp)
+- ❌ ERR system health hardcoded to 150% - ERR ratio can never activate
+- ❌ Empty schnorr_sig accepted without verification (signature bypass)
 
 **Test Coverage:**
 ```
-Unit Tests:        143 tests across 9 test files (100%) ✅
-  - oracle_exchange_tests.cpp:          42 tests
-  - digidollar_oracle_tests.cpp:        35 tests
-  - oracle_p2p_tests.cpp:               15 tests
-  - oracle_message_tests.cpp:           15 tests
-  - oracle_config_tests.cpp:            14 tests
-  - oracle_bundle_manager_tests.cpp:     8 tests
-  - oracle_miner_tests.cpp:              6 tests
-  - oracle_block_validation_tests.cpp:   5 tests
-  - oracle_integration_tests.cpp:        3 tests
+Unit Tests:        826 tests across 38 test files ✅
+  - digidollar_*_tests.cpp:            Multiple test suites
+  - oracle_*_tests.cpp:                Oracle-specific tests
+  - (Many more than originally documented)
 
-Functional Tests:    18 files (100%) ✅
-  - digidollar_oracle.py: Full end-to-end oracle integration testing
+Functional Tests:    36 digidollar-related test files ✅
+  - test/functional/digidollar_*.py:   Full integration testing
 
-TOTAL: 143 Oracle unit + 18 functional = 161 oracle-related tests
+TOTAL: 826+ unit tests + 36 functional tests
 ```
 
-**Implementation Status: 100% Complete for Phase One**
+**Implementation Status: ~70% Complete - TESTNET/REGTEST ONLY**
 
 ---
 
@@ -143,23 +161,28 @@ int min_oracles = manager.GetMinOracleCount(); // Phase One: 1
 ```
 Core Implementation:
 ├── src/script/script.h                    [OP_ORACLE definition]
-├── src/primitives/oracle.{h,cpp}          [Data structures]
-├── src/oracle/bundle_manager.{h,cpp}      [Bundle logic, 900+ lines]
-├── src/oracle/exchange.{h,cpp}            [7 exchange APIs, 1000+ lines]
-├── src/validation.cpp                     [Block validation hooks]
-└── src/kernel/chainparams.cpp             [Oracle authorization]
+├── src/primitives/oracle.{h,cpp}          [Data structures - WORKING]
+├── src/oracle/bundle_manager.{h,cpp}      [Bundle logic - GetBestHeight() STUB]
+├── src/oracle/exchange.{h,cpp}            [12 exchange APIs - 7 working, 4 broken, 1 aggregator]
+├── src/oracle/mock_oracle.{h,cpp}         [Mock system - LEAKS to production]
+├── src/validation.cpp                     [Block validation - calls bundle_manager]
+├── src/net_processing.cpp                 [P2P handlers - WORKING with rate limiting]
+├── src/rpc/digidollar.cpp                 [12 RPC commands - sendoracleprice has TODO]
+├── src/consensus/err.cpp                  [ERR system - health HARDCODED to 150%]
+└── src/kernel/chainparams.cpp             [Oracle authorization - mainnet disabled]
 
-Test Suite (143 unit tests + 18 functional = 161 total):
-├── src/test/oracle_exchange_tests.cpp          [42 tests]
-├── src/test/digidollar_oracle_tests.cpp        [35 tests]
-├── src/test/oracle_p2p_tests.cpp               [15 tests]
-├── src/test/oracle_message_tests.cpp           [15 tests]
-├── src/test/oracle_config_tests.cpp            [14 tests]
-├── src/test/oracle_bundle_manager_tests.cpp    [8 tests]
-├── src/test/oracle_miner_tests.cpp             [6 tests]
-├── src/test/oracle_block_validation_tests.cpp  [5 tests]
-├── src/test/oracle_integration_tests.cpp       [3 tests]
-└── test/functional/digidollar_*.py             [18 functional tests]
+Test Suite (826 unit tests + 36 functional):
+├── src/test/digidollar_*_tests.cpp             [Multiple test suites]
+├── src/test/oracle_*_tests.cpp                 [Oracle-specific tests]
+├── src/test/err_*_tests.cpp                    [ERR system tests]
+└── test/functional/digidollar_*.py             [36 functional tests]
+
+Known Stubs/TODOs (VERIFIED):
+├── bundle_manager.cpp:1103: Mainnet validation returns true (DISABLED)
+├── bundle_manager.cpp:28-31: GetBestHeight() returns hardcoded 1000
+├── txbuilder.cpp:29,268: GetCurrentSystemCollateral() returns 150%
+├── err.cpp:356: MockOracleManager used without regtest check
+└── digidollar.cpp:2550: sendoracleprice P2P broadcast TODO
 ```
 
 ---
@@ -176,7 +199,7 @@ Test Suite (143 unit tests + 18 functional = 161 total):
 PHASE 1: PRICE DISCOVERY (Every 15 seconds)
 ═══════════════════════════════════════════
 
-Exchange APIs (7 active exchanges, parallel fetching):
+Exchange APIs (7 working exchanges, parallel fetching - 4 broken not shown):
 ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐
 │  Binance    │  │   KuCoin    │  │  Gate.io    │  │    HTX      │
 │ DGB/USDT    │  │  DGB/USDT   │  │ DGB_USDT    │  │ dgbusdt     │
@@ -367,10 +390,12 @@ Receiving Node:
 └──────────────────────────────────────────────────────────────────┘
 
 External World:
-  ┌─────────────────────────────────────────┐
-  │    Exchange APIs (7 active + 5 defined) │
-  │  Binance • KuCoin • Gate.io • HTX • ... │
-  └──────────────────┬──────────────────────┘
+  ┌─────────────────────────────────────────────────────────┐
+  │    Exchange APIs (7 WORKING + 4 BROKEN)                 │
+  │  ✅ Binance • KuCoin • Gate.io • HTX • Crypto.com       │
+  │  ✅ CoinGecko • CoinMarketCap                           │
+  │  ❌ Coinbase • Kraken • Messari • Bittrex/Poloniex     │
+  └──────────────────┬──────────────────────────────────────┘
                      │ HTTP/HTTPS (libcurl)
                      ▼
 Core Oracle Layer:
@@ -435,7 +460,7 @@ Validation Layer:              CheckBlock(block, state)
 ┌──────────────────────────────────────────────────────┐
 │  UpdatePriceCache(height, price)                     │
 │  ├─ height_to_price[700] = 50200                     │
-│  ├─ MockOracleManager (RegTest only)                 │
+│  ├─ MockOracleManager (⚠️ LEAKS to non-regtest!)     │
 │  └─ Log: "Oracle: Updated price cache at height 700" │
 └──────────────────┬───────────────────────────────────┘
                    │
@@ -684,12 +709,14 @@ bool COraclePriceMessage::IsValid() const
     if (timestamp < current_time - ORACLE_MAX_AGE_SECONDS) return false;
 
     // 3. SCHNORR SIGNATURE VERIFICATION (optional for compact format)
+    // ⚠️ SECURITY ISSUE: Empty signature BYPASSES all verification
     if (!schnorr_sig.empty()) {
         // Full format with embedded signature - verify it
         return Verify();  // Full BIP-340 verification
     }
 
-    // Compact format: Trust based on chainparams oracle pubkey
+    // ⚠️ WARNING: If schnorr_sig is empty, message passes validation!
+    // This is intentional for compact format but allows spoofing
     return true;
 }
 ```
@@ -702,7 +729,10 @@ bool COraclePriceMessage::IsValid() const
 | Price maximum | ≤ 100,000,000 micro-USD ($100.00) | `return false` |
 | Future timestamp | ≤ now + 60s | `return false` |
 | Old timestamp | ≥ now - 3600s | `return false` |
-| Signature | Valid BIP-340 (if present) | `return false` |
+| Signature | Valid BIP-340 (if present) | ⚠️ **Bypassed if empty** |
+
+> **⚠️ Security Note**: If `schnorr_sig` is empty, signature verification is completely skipped.
+> This means an attacker could submit unsigned messages that pass `IsValid()` checks.
 
 ### 4.2 COracleBundle - Complete Specification
 
@@ -822,7 +852,7 @@ PHASE 1: MESSAGE CREATION (External Oracle Daemon)
 ┌───────────────────────────────────────────────────────────────┐
 │ Oracle Daemon (oracle.digibyte.io)                           │
 ├───────────────────────────────────────────────────────────────┤
-│ 1. Fetch prices from 7 active exchanges (Binance, KuCoin, etc.)│
+│ 1. Fetch prices from 7 working exchanges (4 broken: Coinbase, etc.)│
 │ 2. Calculate median with MAD outlier filtering               │
 │ 3. Create COraclePriceMessage structure:                     │
 │    ┌─────────────────────────────────────────────────────┐  │
@@ -909,9 +939,9 @@ PHASE 4: BLOCK VALIDATION (All Nodes - validation.cpp:4130)
 ┌───────────────────────────────────────────────────────────────┐
 │ CheckBlock() calls ValidateBlockOracleData()                  │
 ├───────────────────────────────────────────────────────────────┤
-│ 1. Network Check:                                             │
+│ 1. Network Check (⚠️ MAINNET COMPLETELY BYPASSED):            │
 │    if (network != TESTNET && network != REGTEST)              │
-│        skip oracle validation; // Disabled on mainnet         │
+│        return true; // 🚨 ALL ORACLE DATA ACCEPTED ON MAINNET │
 │                                                               │
 │ 2. Activation Height:                                         │
 │    if (block_height < 1,000,000)                              │
@@ -1387,12 +1417,14 @@ bool OracleDataValidator::ValidateBlockOracleData(
     BlockValidationState& state)
 {
     //═══════════════════════════════════════════════════════════════════
-    // STEP 1: NETWORK FILTER (lines 804-807)
+    // STEP 1: NETWORK FILTER (lines 804-807) - ⚠️ MAINNET DISABLED
     //═══════════════════════════════════════════════════════════════════
-    // Phase One: Oracle validation on testnet and regtest only
+    // 🚨 CRITICAL: Mainnet validation COMPLETELY BYPASSED
+    // validation.cpp:1103 returns true immediately for mainnet
+    // This means ANY oracle data (valid or invalid) is accepted on mainnet
     if (Params().GetChainType() != ChainType::TESTNET &&
         Params().GetChainType() != ChainType::REGTEST) {
-        return true; // Oracle validation disabled on mainnet
+        return true; // ⚠️ MAINNET ORACLE VALIDATION DISABLED - ALL DATA ACCEPTED
     }
 
     //═══════════════════════════════════════════════════════════════════
@@ -1505,6 +1537,7 @@ bool OracleDataValidator::ValidateBlockOracleData(
 
     //═══════════════════════════════════════════════════════════════════
     // STEP 9: SCHNORR SIGNATURE VERIFICATION (lines 896-908)
+    // ⚠️ SECURITY ISSUE: Empty signature BYPASSES verification
     //═══════════════════════════════════════════════════════════════════
     // Phase One compact format: Trust based on chainparams (no embedded sig)
     if (!msg.schnorr_sig.empty()) {
@@ -1517,7 +1550,8 @@ bool OracleDataValidator::ValidateBlockOracleData(
                                 "Invalid oracle Schnorr signature");
         }
     }
-    // Compact format: Signature verified at bundle creation time
+    // ⚠️ WARNING: If schnorr_sig is empty, NO verification occurs!
+    // This allows any message without a signature to pass validation.
 
     //═══════════════════════════════════════════════════════════════════
     // STEP 10: TIMESTAMP AGE VALIDATION (lines 909-916)
@@ -1575,14 +1609,17 @@ bool OracleDataValidator::ValidateBlockOracleData(
 
 | Rule | Specification | Enforcement Point | Rejection Reason | Penalty |
 |------|---------------|-------------------|------------------|---------|
-| **Network Restriction** | Testnet/Regtest only | Line 805 | N/A | None (returns true) |
+| **Network Restriction** | Testnet/Regtest only | Line 805 | N/A | ⚠️ **MAINNET BYPASSED** |
 | **Activation Height** | height ≥ nDDActivationHeight | Line 833 | N/A | None (returns true) |
 | **Message Count** | Exactly 1 message (Phase One) | Line 881 | `bad-oracle-consensus` | Block rejected |
 | **Median Price** | median = message.price | Line 889 | `bad-oracle-median` | Block rejected |
 | **Timestamp Age** | ≤ 3600 seconds old | Line 911 | `bad-oracle-timestamp` | Block rejected |
 | **Future Timestamp** | ≤ block_time + 60s | Line 919 | `bad-oracle-timestamp` | Block rejected |
 | **Oracle Authorization** | oracle_id in chainparams & active | Line 930 | `bad-oracle-unauthorized` | Block rejected |
-| **Schnorr Signature** | Valid BIP-340 (if present) | Line 900 | `bad-oracle-signature` | Block rejected |
+| **Schnorr Signature** | Valid BIP-340 (if present) | Line 900 | `bad-oracle-signature` | ⚠️ Empty sig bypasses |
+
+> **⚠️ WARNING**: Network Restriction rule means mainnet validation is COMPLETELY DISABLED.
+> The Schnorr Signature rule has a bypass: if `schnorr_sig.empty()` returns true, verification is skipped.
 
 ### 5.4 ConnectBlock() Integration
 
@@ -1723,11 +1760,15 @@ int nOracleTotalOracles{1};      // Phase One: 1, Phase Two testnet: 10, mainnet
 
 ### 14.2 Network-Specific Configuration
 
-| Network | Phase | Consensus | Oracles Defined | Activation |
-|---------|-------|-----------|-----------------|------------|
-| Mainnet | One | DISABLED | 30 (reserved) | Never (INT_MAX) |
-| Testnet | One (Two ready) | 1-of-1 (3-of-10 ready) | 10 | Block 1 |
-| RegTest | One | 1-of-1 | 1 | Block 1 |
+| Network | Phase | Consensus | Oracles Defined | Activation Height | Status |
+|---------|-------|-----------|-----------------|-------------------|--------|
+| Mainnet | One | **DISABLED** | 30 (reserved) | Never (validation bypassed) | ❌ NOT FUNCTIONAL |
+| Testnet | One | 1-of-1 | 10 | Block 550 | ✅ Working |
+| RegTest | One | 1-of-1 | 1 | Block 650 | ✅ Working |
+
+> **⚠️ CRITICAL**: Mainnet oracle validation returns true at validation.cpp:1103.
+> This means mainnet will accept ANY oracle data without verification.
+> Phase Two infrastructure exists but cannot be enabled until mainnet validation is fixed.
 
 ### 14.3 Testnet Oracle Keys (All 10 Defined)
 
@@ -1814,19 +1855,28 @@ consensus.nOracleRequiredMessages = 3;  // 3-of-10 for testnet
 
 ## Document Status
 
-**Version**: 5.0 - Phase Two Validation Functions Added
-**Last Updated**: 2025-12-18
-**Implementation Status**: Phase One 100% Complete, Phase Two Infrastructure Ready
-**Test Coverage**: 143 Oracle unit tests + 18 functional tests
+**Version**: 7.0 - Validated Against Actual Codebase
+**Last Updated**: 2026-02-01
+**Implementation Status**: Phase One ~70% Complete (TESTNET/REGTEST ONLY)
+**Test Coverage**: 826+ unit tests + 36 functional tests
 
-**Quality Metrics**:
+**What's Verified Working**:
 - ✅ Price format verified as micro-USD (1,000,000 = $1.00)
 - ✅ Byte-level format specifications code-verified
-- ✅ All validation ranges verified against oracle.cpp
-- ✅ Exchange APIs: 7 active implementations + 5 defined (real libcurl + mock fallback)
+- ✅ Data structures (COraclePriceMessage, COracleBundle, OracleNodeInfo)
+- ✅ P2P message handling with rate limiting (100-180 msg/hr)
+- ✅ 7 exchange APIs working (Binance, KuCoin, Gate.io, HTX, Crypto.com, CoinGecko, CoinMarketCap)
+- ✅ Block validation on TESTNET (height 550) and REGTEST (height 650)
 - ✅ Mock Oracle default: 6500 micro-USD ($0.0065/DGB)
-- ✅ Phase Two validation functions implemented and tested
-- ✅ 10 testnet oracle keys defined (1 active, 9 reserved)
+
+**Critical Issues (Must Fix Before Mainnet)**:
+- ❌ **MAINNET VALIDATION DISABLED** - bundle_manager.cpp:1103 returns true
+- ❌ **4 broken exchange APIs** - Coinbase, Kraken, Messari, Bittrex/Poloniex
+- ❌ **MockOracleManager leaks** - err.cpp:356 uses it WITHOUT regtest check
+- ❌ **ERR system broken** - txbuilder.cpp:268 GetCurrentSystemCollateral() returns hardcoded 150%
+- ❌ **GetBestHeight() stub** - bundle_manager.cpp:30 returns hardcoded 1000
+- ❌ **sendoracleprice incomplete** - digidollar.cpp:2550 TODO for P2P broadcast
+- ❌ **Signature bypass** - Empty schnorr_sig accepted without verification
 
 **Key Technical Details**:
 ```
@@ -1834,10 +1884,24 @@ Oracle Price Format:   Micro-USD (1,000,000 = $1.00 USD)
 Validation Range:      100 - 100,000,000 micro-USD ($0.0001 - $100.00)
 Compact Script Size:   22 bytes (OP_RETURN + OP_ORACLE + data)
 Full Message Size:     128 bytes (with 64-byte Schnorr signature)
-Phase One Consensus:   1-of-1 (testnet active)
-Phase Two Consensus:   3-of-10 testnet, 8-of-15 mainnet (infrastructure ready)
-Activation Parameter:  nDigiDollarPhase2Height (currently INT_MAX)
+Phase One Consensus:   1-of-1 (testnet/regtest ONLY - mainnet disabled)
+Phase Two Consensus:   3-of-10 testnet, 8-of-15 mainnet (infrastructure exists)
+Activation Heights:    Mainnet=DISABLED, Testnet=550, Regtest=650
 ```
+
+## Known TODOs and Stubs (VERIFIED)
+
+| File:Line | Function | Issue | Priority |
+|-----------|----------|-------|----------|
+| `bundle_manager.cpp:1103` | ValidateBlockOracleData | Mainnet returns true immediately | CRITICAL |
+| `bundle_manager.cpp:28-31` | GetBestHeight() | Returns hardcoded 1000 | HIGH |
+| `txbuilder.cpp:29,268` | GetCurrentSystemCollateral() | Returns hardcoded 150% (ERR never activates) | HIGH |
+| `err.cpp:356` | ShouldBlockMinting() | Uses MockOracleManager without regtest check | HIGH |
+| `digidollar.cpp:2550` | sendoracleprice | TODO: P2P broadcast not implemented | MEDIUM |
+| `exchange.cpp` | Coinbase fetcher | Broken - API changed | LOW |
+| `exchange.cpp` | Kraken fetcher | Broken - API changed | LOW |
+| `exchange.cpp` | Messari fetcher | Broken - API deprecated | LOW |
+| `exchange.cpp` | Bittrex/Poloniex | Broken - Exchanges defunct | LOW |
 
 ---
 

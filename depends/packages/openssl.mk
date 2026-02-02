@@ -28,12 +28,12 @@ define $(package)_set_vars
 endef
 
 define $(package)_preprocess_cmds
-  sed -i.bak 's|define X509_CERT_FILE .*|define X509_CERT_FILE ""|' include/internal/cryptlib.h && \
-  sed -i.bak 's|define X509_CERT_DIR .*|define X509_CERT_DIR ""|' include/internal/cryptlib.h
+  sed -i.bak 's|define X509_CERT_FILE .*|define X509_CERT_FILE "/etc/ssl/certs/ca-certificates.crt"|' include/internal/cryptlib.h && \
+  sed -i.bak 's|define X509_CERT_DIR .*|define X509_CERT_DIR "/etc/ssl/certs"|' include/internal/cryptlib.h
 endef
 
 define $(package)_config_cmds
-  $($(package)_config_env) ./Configure $($(package)_config_opts) --prefix=$(host_prefix) --openssldir=$(host_prefix)/etc/openssl
+  $($(package)_config_env) ./Configure $($(package)_config_opts) --prefix=$(host_prefix) --openssldir=/etc/ssl
 endef
 
 define $(package)_build_cmds

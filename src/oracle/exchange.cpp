@@ -76,24 +76,45 @@ std::string BaseExchangeFetcher::HttpGet(const std::string& url)
         "/usr/share/ca-certificates/mozilla/",     // Alternate
         nullptr
     };
-    bool ca_found = false;
+    // Always explicitly set CA info to override any bad compiled-in defaults
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
+
+    static const char* ca_bundle_paths[] = {
+        "/etc/ssl/certs/ca-certificates.crt",     // Debian/Ubuntu
+        "/etc/pki/tls/certs/ca-bundle.crt",       // RHEL/CentOS
+        "/etc/ssl/ca-bundle.pem",                  // OpenSUSE
+        "/etc/ssl/cert.pem",                       // macOS/BSD
+        nullptr
+    };
+    static const char* ca_dir_paths[] = {
+        "/etc/ssl/certs",                          // Most Linux
+        "/etc/pki/tls/certs",                      // RHEL/CentOS
+        nullptr
+    };
+
+    bool ca_set = false;
+    // Try CA bundle files first
     for (int i = 0; ca_bundle_paths[i] != nullptr; ++i) {
         struct stat st;
-        if (stat(ca_bundle_paths[i], &st) == 0) {
-            if (S_ISDIR(st.st_mode)) {
-                curl_easy_setopt(curl, CURLOPT_CAPATH, ca_bundle_paths[i]);
-            } else {
-                curl_easy_setopt(curl, CURLOPT_CAINFO, ca_bundle_paths[i]);
-            }
-            curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
-            curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
-            ca_found = true;
+        if (stat(ca_bundle_paths[i], &st) == 0 && S_ISREG(st.st_mode) && st.st_size > 0) {
+            curl_easy_setopt(curl, CURLOPT_CAINFO, ca_bundle_paths[i]);
+            LogPrint(BCLog::DIGIDOLLAR, "HttpGet: Using CA bundle: %s\n", ca_bundle_paths[i]);
+            ca_set = true;
             break;
         }
     }
-    if (!ca_found) {
-        // No CA bundle found — disable verification with warning
-        // TODO: Ship CA bundle with DigiByte for production
+    // Also try CA directory
+    for (int i = 0; ca_dir_paths[i] != nullptr; ++i) {
+        struct stat st;
+        if (stat(ca_dir_paths[i], &st) == 0 && S_ISDIR(st.st_mode)) {
+            curl_easy_setopt(curl, CURLOPT_CAPATH, ca_dir_paths[i]);
+            LogPrint(BCLog::DIGIDOLLAR, "HttpGet: Using CA path: %s\n", ca_dir_paths[i]);
+            ca_set = true;
+            break;
+        }
+    }
+    if (!ca_set) {
         LogPrintf("Oracle WARNING: No CA certificate bundle found, SSL verification disabled\n");
         curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
         curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
@@ -885,28 +906,26 @@ CAmount CoinMarketCapFetcher::FetchPrice()
         // Set User-Agent
         curl_easy_setopt(curl, CURLOPT_USERAGENT, "DigiByte-Oracle/1.0");
 
-        // SSL — use same CA detection as HttpGet
-        static const char* ca_paths[] = {
-            "/etc/ssl/certs/ca-certificates.crt",
-            "/etc/pki/tls/certs/ca-bundle.crt",
-            "/etc/ssl/ca-bundle.pem",
-            "/etc/ssl/cert.pem",
-            nullptr
-        };
-        bool found_ca = false;
-        for (int i = 0; ca_paths[i]; ++i) {
-            struct stat st;
-            if (stat(ca_paths[i], &st) == 0) {
-                curl_easy_setopt(curl, CURLOPT_CAINFO, ca_paths[i]);
-                curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
-                curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
-                found_ca = true;
-                break;
+        // SSL — same CA detection as HttpGet
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
+        {
+            static const char* ca_files[] = {"/etc/ssl/certs/ca-certificates.crt", "/etc/pki/tls/certs/ca-bundle.crt", "/etc/ssl/cert.pem", nullptr};
+            for (int i = 0; ca_files[i]; ++i) {
+                struct stat st;
+                if (stat(ca_files[i], &st) == 0 && S_ISREG(st.st_mode) && st.st_size > 0) {
+                    curl_easy_setopt(curl, CURLOPT_CAINFO, ca_files[i]);
+                    break;
+                }
             }
-        }
-        if (!found_ca) {
-            curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
-            curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+            static const char* ca_dirs[] = {"/etc/ssl/certs", "/etc/pki/tls/certs", nullptr};
+            for (int i = 0; ca_dirs[i]; ++i) {
+                struct stat st;
+                if (stat(ca_dirs[i], &st) == 0 && S_ISDIR(st.st_mode)) {
+                    curl_easy_setopt(curl, CURLOPT_CAPATH, ca_dirs[i]);
+                    break;
+                }
+            }
         }
 
         // Perform request

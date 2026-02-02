@@ -9,6 +9,7 @@
 
 #include <chainparams.h>
 #include <consensus/consensus.h>
+#include <digidollar/digidollar.h>
 #include <kernel/chainparams.h>
 #include <logging.h>
 #include <net.h>
@@ -825,24 +826,23 @@ void OracleBundleManager::LoadPricesFromChain(ChainstateManager& chainman)
     }
 
     int tip_height = pindex->nHeight;
-    int activation_height = consensus.nDDActivationHeight;
 
-    // Only scan if we're past the activation height
-    if (tip_height < activation_height) {
-        LogPrintf("Oracle: Chain height %d is below DigiDollar activation height %d, skipping price loading\n",
-                 tip_height, activation_height);
+    // Only scan if DigiDollar is active via BIP9 deployment
+    if (!DigiDollar::IsDigiDollarEnabled(pindex, chainman)) {
+        LogPrintf("Oracle: DigiDollar not yet active (BIP9) at height %d, skipping price loading\n",
+                 tip_height);
         return;
     }
 
     // Scan back 20 blocks to find recent oracle prices (default validity window)
     static constexpr int ORACLE_VALIDITY_BLOCKS = 20;
-    int scan_depth = std::min(ORACLE_VALIDITY_BLOCKS, tip_height - activation_height + 1);
+    int scan_depth = std::min(ORACLE_VALIDITY_BLOCKS, tip_height);
     int prices_found = 0;
 
     LogPrintf("Oracle: Scanning last %d blocks for oracle prices (height %d to %d)...\n",
              scan_depth, tip_height - scan_depth + 1, tip_height);
 
-    for (int height = tip_height; height >= tip_height - scan_depth + 1 && height >= activation_height; --height) {
+    for (int height = tip_height; height >= tip_height - scan_depth + 1 && height >= 0; --height) {
         CBlockIndex* block_index = chainman.ActiveChain()[height];
         if (!block_index) continue;
 
@@ -1127,9 +1127,16 @@ bool OracleDataValidator::ValidateBlockOracleData(const CBlock& block, const CBl
         }
     }
 
-    // Check if oracle system is activated
-    if (block_height < params.nDDActivationHeight) {
-        return true; // Oracle validation not required before activation
+    // Check if DigiDollar is active via BIP9 deployment
+    if (pindex_prev) {
+        if (!DigiDollar::IsDigiDollarEnabled(pindex_prev, params)) {
+            return true; // Oracle validation not required before BIP9 activation
+        }
+    } else {
+        // Fallback when no block index available — use height-based check
+        if (block_height < params.nDDActivationHeight) {
+            return true;
+        }
     }
     if (coinbase.vout.size() < 2) {
         // Allow blocks without oracle data during transition

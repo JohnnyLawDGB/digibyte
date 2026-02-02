@@ -19,6 +19,7 @@ sqlite_packages=sqlite
 
 zmq_packages=zeromq
 
+openssl_packages=openssl
 curl_packages=libcurl
 
 upnp_packages=miniupnpc

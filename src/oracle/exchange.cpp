@@ -821,6 +821,7 @@ CAmount CoinMarketCapFetcher::FetchPrice()
 
         std::string url = base_url + "/v1/cryptocurrency/quotes/latest?symbol=DGB&convert=USD";
 
+        std::string response;
 #ifdef HAVE_LIBCURL
         // Real libcurl implementation with headers
         CURL* curl = curl_easy_init();
@@ -829,7 +830,6 @@ CAmount CoinMarketCapFetcher::FetchPrice()
             return 0;
         }
 
-        std::string response;
         CURLcode res;
 
         // Add API key header

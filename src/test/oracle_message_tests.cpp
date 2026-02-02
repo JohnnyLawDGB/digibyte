@@ -18,6 +18,87 @@
 BOOST_FIXTURE_TEST_SUITE(oracle_message_tests, BasicTestingSetup)
 
 //
+// CATEGORY 0: SIGNATURE ROUNDTRIP BUG TESTS (TDD — Schnorr mismatch fix)
+//
+
+/**
+ * TDD Test 1: SignPhase2 → VerifyPhase2 roundtrip MUST work
+ * This is the correct path used by all oracle signing code.
+ */
+BOOST_AUTO_TEST_CASE(signphase2_verifyphase2_roundtrip)
+{
+    CKey privkey;
+    privkey.MakeNewKey(true);
+
+    COraclePriceMessage msg;
+    msg.oracle_id = 0;
+    msg.price_micro_usd = 6000;
+    msg.timestamp = GetTime();
+    msg.block_height = 1000;
+    msg.nonce = 12345;
+    msg.oracle_pubkey = XOnlyPubKey(privkey.GetPubKey());
+
+    // Sign with Phase 2 (3-field hash: oracle_id + price + timestamp)
+    BOOST_REQUIRE(msg.SignPhase2(privkey));
+
+    // Verify with Phase 2 — MUST succeed
+    BOOST_CHECK_MESSAGE(msg.VerifyPhase2(), "SignPhase2 → VerifyPhase2 roundtrip MUST work");
+}
+
+/**
+ * TDD Test 2: SignPhase2 → Verify() MUST FAIL
+ * This documents the bug: signing uses 3-field hash, but Verify() uses 5-field hash.
+ * If this test passes (Verify returns false), the mismatch is confirmed.
+ */
+BOOST_AUTO_TEST_CASE(signphase2_verify_mismatch_fails)
+{
+    CKey privkey;
+    privkey.MakeNewKey(true);
+
+    COraclePriceMessage msg;
+    msg.oracle_id = 0;
+    msg.price_micro_usd = 6000;
+    msg.timestamp = GetTime();
+    msg.block_height = 1000;
+    msg.nonce = 12345;
+    msg.oracle_pubkey = XOnlyPubKey(privkey.GetPubKey());
+
+    // Sign with Phase 2 (3-field hash)
+    BOOST_REQUIRE(msg.SignPhase2(privkey));
+
+    // Verify with old Verify() (5-field hash) — MUST FAIL (this is the bug!)
+    BOOST_CHECK_MESSAGE(!msg.Verify(), "SignPhase2 → Verify() SHOULD fail due to hash mismatch");
+}
+
+/**
+ * TDD Test 3: Sign → Verify roundtrip works (old path, keep working)
+ * The old Sign()/Verify() path uses 5-field hash and must remain functional
+ * for backward compatibility and benchmarks.
+ */
+BOOST_AUTO_TEST_CASE(sign_verify_roundtrip)
+{
+    CKey privkey;
+    privkey.MakeNewKey(true);
+
+    COraclePriceMessage msg;
+    msg.oracle_id = 0;
+    msg.price_micro_usd = 6000;
+    msg.timestamp = GetTime();
+    msg.block_height = 1000;
+    msg.nonce = 12345;
+    msg.oracle_pubkey = XOnlyPubKey(privkey.GetPubKey());
+
+    // Sign with old Sign() (5-field hash)
+    BOOST_REQUIRE(msg.Sign(privkey));
+
+    // Verify with old Verify() — MUST succeed
+    BOOST_CHECK_MESSAGE(msg.Verify(), "Sign → Verify roundtrip MUST work");
+
+    // Cross-check: Sign() → VerifyPhase2() should FAIL (different hash)
+    BOOST_CHECK_MESSAGE(!msg.VerifyPhase2(), "Sign → VerifyPhase2 SHOULD fail due to hash mismatch");
+}
+
+//
 // CATEGORY 1: SCHNORR SIGNATURE TESTS (6 tests)
 //
 

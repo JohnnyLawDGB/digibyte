@@ -40,6 +40,13 @@ std::string BaseExchangeFetcher::HttpGet(const std::string& url)
 {
 #ifdef HAVE_LIBCURL
     // Real libcurl implementation
+    // Ensure OpenSSL + curl are globally initialized (safe to call multiple times)
+    static bool curl_initialized = []() {
+        curl_global_init(CURL_GLOBAL_DEFAULT);
+        return true;
+    }();
+    (void)curl_initialized;
+
     CURL* curl = curl_easy_init();
     if (!curl) {
         LogPrint(BCLog::DIGIDOLLAR, "HttpGet: Failed to initialize CURL\n");

@@ -13,6 +13,8 @@
 #include <wallet/digidollarwallet.h>
 #include <consensus/amount.h>
 #include <oracle/mock_oracle.h>
+#include <oracle/bundle_manager.h>
+#include <chainparams.h>
 #include <algorithm>
 
 #include <QTableWidget>
@@ -975,15 +977,17 @@ void DigiDollarPositionsWidget::applyTheme()
 
 CAmount DigiDollarPositionsWidget::GetMockOraclePrice() const
 {
-    // Get price from MockOracleManager
-    // Oracle price format: CENTS per DGB
-    // Example: 1 = $0.01 per DGB, 50 = $0.50 per DGB
-    if (MockOracleManager::GetInstance().IsEnabled()) {
+    // RegTest only: use MockOracleManager for testing
+    if (Params().GetChainType() == ChainType::REGTEST && MockOracleManager::GetInstance().IsEnabled()) {
         return MockOracleManager::GetInstance().GetCurrentPrice();
     }
 
-    // Fallback if mock oracle not enabled
-    return 1; // $0.01 per DGB default
+    // Testnet/Mainnet: use real oracle price from bundle manager
+    CAmount realPrice = OracleBundleManager::GetInstance().GetLatestPrice();
+    if (realPrice > 0) return realPrice;
+
+    // No oracle price available
+    return 0;
 }
 
 std::vector<WalletCollateralPosition> DigiDollarPositionsWidget::GetWalletPositions() const

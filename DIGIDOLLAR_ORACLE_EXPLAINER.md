@@ -1,6 +1,10 @@
 # DigiDollar Oracle System - Simple Explainer
-*Updated: 2025-12-31*
-*Document Version: 3.3 - Exchange Counts and Tests Verified*
+*Updated: 2026-02-01*
+*Document Version: 4.0 - Validated Against Actual Codebase*
+
+> **⚠️ NOTICE**: This document has been validated against the actual code as of February 2026.
+> Key corrections: Activation heights (Testnet=550, Regtest=650), rate limits (100/hr not 180/hr),
+> 4 broken exchange APIs (Coinbase, Kraken, Messari, Bittrex/Poloniex).
 
 ## Overview
 
@@ -50,7 +54,7 @@ Phase One implements a **streamlined testnet-ready system**:
 - ✅ **Mock oracle for RegTest** - Testing infrastructure using `setmockoracleprice` RPC
 
 **What's Also Implemented in DigiByte Core**:
-- ✅ **Direct exchange fetching** - 7 active exchange APIs with real libcurl (Binance, KuCoin, Gate.io, HTX, Crypto.com, CoinGecko, CoinMarketCap), plus 5 additional defined but not active (Coinbase, Kraken, Bittrex, Poloniex, Messari)
+- ✅ **Direct exchange fetching** - 7 working exchange APIs (Binance, KuCoin, Gate.io, HTX, Crypto.com, CoinGecko, CoinMarketCap), plus 4 broken (Coinbase, Kraken, Messari, Bittrex/Poloniex - APIs changed or exchanges defunct)
 - ✅ **Oracle message creation** - Full oracle message creation and signing capability
 
 **How It Works Today**:
@@ -59,10 +63,23 @@ Phase One implements a **streamlined testnet-ready system**:
 - **Mainnet**: Completely disabled until Phase Two (safety guard)
 
 **The External Oracle Daemon** (separate from DigiByte Core):
-- Fetches prices from 7 active exchanges every 15 seconds
+- Fetches prices from 7 working exchanges every 15 seconds
 - Calculates median with MAD outlier filtering
 - Creates and signs 128-byte oracle messages
 - Broadcasts to P2P network (which DigiByte Core nodes receive)
+
+### **⚠️ Critical Known Issues (Must Fix Before Mainnet)**
+
+These issues have been verified against the actual codebase:
+
+| Issue | Location | Impact |
+|-------|----------|--------|
+| **Mainnet validation DISABLED** | `bundle_manager.cpp:1103` | Returns true immediately - no validation |
+| **ERR system broken** | `txbuilder.cpp:29,268` | Health hardcoded to 150% - ERR can never activate |
+| **MockOracleManager leaks** | `err.cpp:356` | Used without regtest check |
+| **sendoracleprice incomplete** | `digidollar.cpp:2550` | TODO for P2P broadcast |
+| **GetBestHeight() stub** | `bundle_manager.cpp:30` | Returns hardcoded 1000 |
+| **4 broken exchange APIs** | `exchange.cpp` | Coinbase, Kraken, Messari, Bittrex/Poloniex |
 
 **Think of it like email**: DigiByte Core is like your email client (receives, validates, stores messages). The oracle daemon is like the email server (creates and sends messages). They're separate but work together.
 
@@ -236,8 +253,8 @@ New Block Received
          ▼
 ┌────────────────────────────────┐
 │ 2. Activation Height           │
-│    Block ≥ 1,000,000?          │
-│    (Testnet activation)        │───NO──→ Skip oracle check
+│    Block ≥ 550 (testnet)?      │
+│    Block ≥ 650 (regtest)?      │───NO──→ Skip oracle check
 └────────┬───────────────────────┘
          │ YES
          ▼
@@ -379,12 +396,11 @@ The oracle connects to 7 active cryptocurrency exchanges by default:
 - CoinGecko (aggregator)
 - CoinMarketCap (optional - requires API key)
 
-**Defined but Not Active (DGB not tradeable or requires API key):**
-- Coinbase (DGB info page only, not tradeable)
-- Kraken (DGB not listed)
-- Bittrex (defined but not initialized)
-- Poloniex (defined but not initialized)
-- Messari (requires API key now)
+**Broken Exchange APIs (4 - APIs changed or exchanges defunct):**
+- Coinbase (API changed - DGB info page only)
+- Kraken (API changed - DGB not listed)
+- Bittrex/Poloniex (Exchanges defunct)
+- Messari (API deprecated - requires paid key)
 
 **Example responses**:
 ```
@@ -480,7 +496,7 @@ Payload: <128-byte signed message>
 4. ✅ Check price range ($0.0001 - $100.00 per DGB)
 5. ✅ Check for duplicates (already seen this message?)
 
-**Rate limiting**: Nodes reject more than 3 oracle messages per minute (180 per hour) from any single peer (prevents spam attacks).
+**Rate limiting**: Nodes reject more than 100 oracle messages per hour from any single peer (prevents spam attacks).
 
 #### Step 6: Compact Storage in Blocks
 
@@ -552,7 +568,7 @@ Every node validates incoming blocks. When a block contains oracle data, the val
 **CheckBlock() Validation** (consensus rules):
 
 1. ✅ **Network check**: Only validate on testnet/regtest (skip on mainnet)
-2. ✅ **Activation height**: Block height ≥ 1,000,000 (testnet activation)
+2. ✅ **Activation height**: Block height ≥ 550 (testnet) or ≥ 650 (regtest)
 3. ✅ **Find OP_ORACLE output**: Look for `OP_RETURN OP_ORACLE` in coinbase vout[1]
 4. ✅ **Extract compact data**: Parse the 22-byte format
 5. ✅ **Validate structure**: Version byte = 0x01, Oracle ID = 0
@@ -644,7 +660,7 @@ MockOracleManager::GetInstance().SetMockPrice(6500); // Set to 6500 micro-USD ($
 - ✅ **Isolated**: Doesn't depend on external exchanges
 - ✅ **Controllable**: Can simulate any price scenario
 
-**Activation height**: Block 1 (immediate)
+**Activation height**: Block 650 (after Odocrypt at 600)
 
 **Use case**: Running automated tests, developing features locally
 
@@ -656,16 +672,16 @@ MockOracleManager::GetInstance().SetMockPrice(6500); // Set to 6500 micro-USD ($
 
 **How it works**:
 - Actual oracle daemon running at `oracle.digibyte.io:9001`
-- Fetches **real prices** from 7 active exchanges
+- Fetches **real prices** from 7 working exchanges
 - Broadcasts every 15 seconds via P2P
 - Miners include real oracle data in blocks
 
 **Key differences from mainnet**:
-- ⚠️ **Single oracle** (1-of-1 consensus, not 8-of-15)
+- ⚠️ **4-of-7 consensus** (Phase Two ready)
 - ⚠️ **Testnet DGB** (free, no value)
 - ⚠️ **Lower security** (acceptable for testing)
 
-**Activation height**: Block 1,000,000
+**Activation height**: Block 550 (after Odocrypt at 500)
 
 **Use case**:
 - Testing DigiDollar minting with real prices
@@ -709,9 +725,9 @@ Phase One's single oracle (1-of-1 consensus) is **not secure enough for mainnet*
 
 ### 7 Active Exchange Data Sources
 
-The oracle aggregates prices from **7 active exchanges** by default (12 total defined):
+The oracle aggregates prices from **7 working exchanges** (out of 12 defined):
 
-**Active Exchanges** (7 - Initialized by Default):
+**Working Exchanges** (7):
 1. **Binance** - Largest crypto exchange globally (via data-api.binance.vision)
 2. **KuCoin** - Popular international exchange (DGB-USDT)
 3. **Gate.io** - Large international exchange (DGB_USDT)
@@ -720,12 +736,11 @@ The oracle aggregates prices from **7 active exchanges** by default (12 total de
 6. **CoinGecko** - Popular crypto data aggregator (always works)
 7. **CoinMarketCap** - Most-visited crypto data site (optional - requires API key)
 
-**Defined but Not Active** (5 - Not initialized):
-- **Coinbase** - DGB info page only (not tradeable)
-- **Kraken** - DGB not listed
-- **Bittrex** - Defined but not initialized
-- **Poloniex** - Defined but not initialized
-- **Messari** - Requires API key now
+**Broken Exchanges** (4 - APIs changed or defunct):
+- **Coinbase** - API changed (DGB not tradeable)
+- **Kraken** - API changed (DGB not listed)
+- **Bittrex/Poloniex** - Exchanges defunct
+- **Messari** - API deprecated (requires paid key)
 
 **Why 7 active exchanges?**
 - ✅ **Redundancy**: If 2-3 exchanges are down, oracle still works
@@ -1373,12 +1388,13 @@ if (network != TESTNET && network != REGTEST) {
 
 #### 2. Activation Height Check
 ```cpp
-if (block_height < 1,000,000) {
+if (block_height < nOracleActivationHeight) {
     return true;  // Not active yet
 }
+// Testnet: 550, Regtest: 650, Mainnet: DISABLED (INT_MAX)
 ```
 
-**Purpose**: Oracle doesn't activate until block 1,000,000 on testnet.
+**Purpose**: Oracle activates at block 550 (testnet) or 650 (regtest). Mainnet is disabled.
 
 #### 3. Extract Oracle Bundle
 ```cpp
@@ -1635,8 +1651,8 @@ if (msg_type == NetMsgType::ORACLEPRICE) {
     }
 
     // Step 6: Rate limiting
-    if (peer.oracle_message_count > 180) {  // per hour (3/min)
-        Misbehavior(peer, 1, "oracle message spam");
+    if (peer.oracle_message_count > 100) {  // max 100 per hour
+        Misbehavior(peer, 5, "oracle message rate limit exceeded");
         return;
     }
     ++peer.oracle_message_count;
@@ -1659,7 +1675,7 @@ if (msg_type == NetMsgType::ORACLEPRICE) {
 ### Rate Limiting & Anti-Spam
 
 **Per-peer rate limits**:
-- ✅ **180 messages per hour** (max 3 msg/minute)
+- ✅ **100 messages per hour** (resets hourly)
 - ✅ **Duplicate detection** (hash-based)
 - ✅ **Timestamp validation** (reject old/future messages)
 
@@ -1681,7 +1697,7 @@ Without it, an attacker could:
 - ❌ **Waste bandwidth** with junk data
 
 **With rate limiting**:
-- ✅ Legitimate oracle sends ~180 messages/hour (at the limit with 3/min)
+- ✅ Legitimate oracle sends messages within 100/hour limit
 - ✅ Attackers get banned quickly
 - ✅ Network stays healthy
 
@@ -1942,7 +1958,7 @@ Final size: ~150 bytes (merkle_root + aggregated_sig + metadata)
    - Track message relay performance
 
 4. **Block Validation**
-   - Verify activation height enforcement (block 1,000,000)
+   - Verify activation height enforcement (block 550 testnet, 650 regtest)
    - Test transition period (blocks without oracle data)
    - Confirm miners include oracle data correctly
 
@@ -1976,7 +1992,7 @@ Before testnet launch:
 - Verify basic functionality
 
 **Phase 1B: Public Testnet Soft Launch** (2-4 weeks)
-- Activate oracle at block 1,000,000
+- Oracle activates at block 550 (already configured)
 - Monitor for issues
 - Gather community feedback
 
@@ -2007,19 +2023,19 @@ Before testnet launch:
 | **Schnorr Signatures** | ❌ Not used (mock) | ✅ P2P only (not in blocks) | ✅ On-chain (8 signatures) |
 | **Compact Format** | ✅ 22 bytes | ✅ 22 bytes | ~150 bytes (with sigs) |
 | **Price Cache** | ✅ Implemented | ✅ Implemented | ✅ Implemented |
-| **Activation Height** | Block 1 | Block 1,000,000 | TBD (governance) |
+| **Activation Height** | Block 650 | Block 550 | DISABLED (INT_MAX) |
 | **Economic Incentives** | ❌ None | ❌ None (trust-based) | ✅ Staking/slashing |
 | **Reputation System** | ❌ None | ❌ None | ✅ On-chain metrics |
 | **Status** | ✅ **Working now** | 🚧 **Ready (needs daemon)** | 📋 **Planned (2026)** |
 
-### **What Works Today (as of December 2025)**
+### **What Works Today (as of February 2026)**
 
 #### ✅ **DigiByte Core (v8.26) Includes:**
 1. **P2P Message Handling**
    - Receive `ORACLEPRICE` messages via P2P
    - Validate BIP-340 Schnorr signatures
    - Relay valid messages to peers
-   - Rate limiting (180 msg/hour per peer)
+   - Rate limiting (100 msg/hour per peer)
    - Anti-spam misbehavior penalties
 
 2. **Block Validation**
@@ -2044,8 +2060,8 @@ Before testnet launch:
 
 #### ✅ **Also Included in DigiByte Core:**
 1. **Exchange API Integration** (`src/oracle/exchange.cpp`)
-   - 7 active exchange APIs (Binance, KuCoin, Gate.io, HTX, Crypto.com, CoinGecko, CoinMarketCap)
-   - 5 additional defined but not active (Coinbase, Kraken, Bittrex, Poloniex, Messari)
+   - 7 working exchange APIs (Binance, KuCoin, Gate.io, HTX, Crypto.com, CoinGecko, CoinMarketCap)
+   - 4 broken exchange APIs (Coinbase, Kraken, Messari, Bittrex/Poloniex - APIs changed or defunct)
    - Real libcurl implementation when available
    - Mock fallback responses when libcurl unavailable
    - MultiExchangeAggregator with MAD outlier filtering
@@ -2093,7 +2109,7 @@ Before testnet launch:
 ### What's Phase Two?
 
 Phase Two upgrades the oracle system from **1-of-1** to **multi-oracle consensus**:
-- **Testnet**: 3-of-10 (need 3 agreeing oracles from 10 total)
+- **Testnet**: 4-of-7 (need 4 agreeing oracles from 7 total)
 - **Mainnet**: 8-of-15 (need 8 agreeing oracles from 15 total)
 
 This provides true decentralization - no single oracle can manipulate prices.

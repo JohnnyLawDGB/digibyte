@@ -1965,6 +1965,112 @@ class msg_dandeliontx:
     def __repr__(self):
         return "msg_dandeliontx(tx=%s)" % (repr(self.tx))
 
+# DigiDollar Oracle P2P Messages
+
+class msg_getoracles:
+    """getoracles message — requests oracle price data for an epoch."""
+    __slots__ = ("epoch", "oracle_id")
+    msgtype = b"getoracles"
+
+    def __init__(self, epoch=0, oracle_id=0xFFFFFFFF):
+        self.epoch = epoch
+        self.oracle_id = oracle_id
+
+    def deserialize(self, f):
+        self.epoch = struct.unpack("<i", f.read(4))[0]
+        self.oracle_id = struct.unpack("<I", f.read(4))[0]
+
+    def serialize(self):
+        r = struct.pack("<i", self.epoch)
+        r += struct.pack("<I", self.oracle_id)
+        return r
+
+    def __repr__(self):
+        return "msg_getoracles(epoch=%d, oracle_id=%d)" % (self.epoch, self.oracle_id)
+
+
+class msg_oracleprice:
+    """oracleprice message — a single oracle price report (wraps COraclePriceMessage)."""
+    __slots__ = ("oracle_id", "price_micro_usd", "timestamp", "block_height",
+                 "nonce", "oracle_pubkey", "schnorr_sig")
+    msgtype = b"oracleprice"
+
+    def __init__(self):
+        self.oracle_id = 0
+        self.price_micro_usd = 0
+        self.timestamp = 0
+        self.block_height = 0
+        self.nonce = 0
+        self.oracle_pubkey = b'\x00' * 32
+        self.schnorr_sig = b''
+
+    def deserialize(self, f):
+        self.oracle_id = struct.unpack("<I", f.read(4))[0]
+        self.price_micro_usd = struct.unpack("<Q", f.read(8))[0]
+        self.timestamp = struct.unpack("<q", f.read(8))[0]
+        self.block_height = struct.unpack("<i", f.read(4))[0]
+        self.nonce = struct.unpack("<Q", f.read(8))[0]
+        self.oracle_pubkey = f.read(32)
+        sig_len = deser_compact_size(f)
+        self.schnorr_sig = f.read(sig_len)
+
+    def serialize(self):
+        r = struct.pack("<I", self.oracle_id)
+        r += struct.pack("<Q", self.price_micro_usd)
+        r += struct.pack("<q", self.timestamp)
+        r += struct.pack("<i", self.block_height)
+        r += struct.pack("<Q", self.nonce)
+        r += self.oracle_pubkey
+        r += ser_compact_size(len(self.schnorr_sig))
+        r += self.schnorr_sig
+        return r
+
+    def __repr__(self):
+        return "msg_oracleprice(oracle_id=%d, price_micro_usd=%d, height=%d)" % (
+            self.oracle_id, self.price_micro_usd, self.block_height)
+
+
+class msg_oraclebundle:
+    """oraclebundle message — a bundle of oracle price messages with consensus data."""
+    __slots__ = ("messages", "epoch", "median_price_micro_usd", "timestamp", "block_hash")
+    msgtype = b"oraclebundle"
+
+    def __init__(self):
+        self.messages = []
+        self.epoch = 0
+        self.median_price_micro_usd = 0
+        self.timestamp = 0
+        self.block_hash = 0
+
+    def deserialize(self, f):
+        # messages is vector<COraclePriceMessage>
+        n_msgs = deser_compact_size(f)
+        self.messages = []
+        for _ in range(n_msgs):
+            msg = msg_oracleprice()
+            msg.deserialize(f)
+            self.messages.append(msg)
+        self.epoch = struct.unpack("<i", f.read(4))[0]
+        self.median_price_micro_usd = struct.unpack("<Q", f.read(8))[0]
+        self.timestamp = struct.unpack("<q", f.read(8))[0]
+        # block_hash from OracleBundleMsg wrapper
+        self.block_hash = deser_uint256(f)
+
+    def serialize(self):
+        r = ser_compact_size(len(self.messages))
+        for msg in self.messages:
+            r += msg.serialize()
+        r += struct.pack("<i", self.epoch)
+        r += struct.pack("<Q", self.median_price_micro_usd)
+        r += struct.pack("<q", self.timestamp)
+        r += ser_uint256(self.block_hash)
+        return r
+
+    def __repr__(self):
+        return "msg_oraclebundle(epoch=%d, n_messages=%d, median=%d)" % (
+            self.epoch, len(self.messages), self.median_price_micro_usd)
+
+
 class TestFrameworkScript(unittest.TestCase):
     def test_addrv2_encode_decode(self):
         def check_addrv2(ip, net):

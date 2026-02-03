@@ -625,6 +625,8 @@ void DigiDollarPositionsWidget::addPositionToTable(const DigiDollarPosition& pos
     m_positionsTable->setItem(row, COL_LOCK_DATE, lockDateItem);
 
     // Lock Tier (renamed from Lock Period)
+    // IMPORTANT: These tiers MUST match getLockTierDisplayName() in digidollarmintwidget.cpp
+    // and the consensus tier definitions in consensus/digidollar.h
     QString lockPeriodName;
     QString lockPeriodTooltip;
     switch(position.lockTier) {
@@ -649,24 +651,28 @@ void DigiDollarPositionsWidget::addPositionToTable(const DigiDollarPosition& pos
             lockPeriodTooltip = tr("1 year time lock (300% collateral)");
             break;
         case 5:
+            lockPeriodName = tr("2 years");
+            lockPeriodTooltip = tr("2 year time lock (275% collateral)");
+            break;
+        case 6:
             lockPeriodName = tr("3 years");
             lockPeriodTooltip = tr("3 year time lock (250% collateral)");
             break;
-        case 6:
+        case 7:
             lockPeriodName = tr("5 years");
             lockPeriodTooltip = tr("5 year time lock (225% collateral)");
             break;
-        case 7:
+        case 8:
             lockPeriodName = tr("7 years");
             lockPeriodTooltip = tr("7 year time lock (212% collateral)");
             break;
-        case 8:
+        case 9:
             lockPeriodName = tr("10 years");
             lockPeriodTooltip = tr("10 year time lock (200% collateral)");
             break;
         default:
-            lockPeriodName = tr("1 year");
-            lockPeriodTooltip = tr("1 year time lock (300% collateral)");
+            lockPeriodName = tr("Unknown");
+            lockPeriodTooltip = tr("Unknown lock tier");
     }
 
     QTableWidgetItem* tierItem = new QTableWidgetItem(lockPeriodName);

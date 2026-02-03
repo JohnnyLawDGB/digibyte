@@ -473,9 +473,15 @@ void DigiDollarMintWidget::updateOraclePrice()
                 m_oraclePrice = priceMicroUsd / 1000000.0; // Convert micro-USD to dollars
                 LogPrintf("DigiDollar Mint: Got price_micro_usd=%ld, m_oraclePrice=%f\n", priceMicroUsd, m_oraclePrice);
             }
+        } catch (const UniValue& e) {
+            LogPrintf("DigiDollar Mint: updateOraclePrice RPC error - %s\n", e.write());
+            m_oraclePrice = 0.0;
         } catch (const std::exception& e) {
-            LogPrintf("DigiDollar Mint: updateOraclePrice RPC error - %s\n", e.what());
-            m_oraclePrice = 0.0; // Show error state
+            LogPrintf("DigiDollar Mint: updateOraclePrice error - %s\n", e.what());
+            m_oraclePrice = 0.0;
+        } catch (...) {
+            LogPrintf("DigiDollar Mint: updateOraclePrice unknown error\n");
+            m_oraclePrice = 0.0;
         }
     } else {
         LogPrintf("DigiDollar Mint: m_clientModel is NULL!\n");
@@ -524,12 +530,14 @@ void DigiDollarMintWidget::onLockTierChanged()
     if (newTier >= 4) {
         QString lockPeriodStr = getLockTierDisplayName(newTier);
         QString periodName;
+        // IMPORTANT: These names MUST match getLockTierDisplayName() and consensus tier definitions
         switch (newTier) {
             case 4: periodName = "1 YEAR"; break;
-            case 5: periodName = "3 YEARS"; break;
-            case 6: periodName = "5 YEARS"; break;
-            case 7: periodName = "7 YEARS"; break;
-            case 8: periodName = "10 YEARS"; break;
+            case 5: periodName = "2 YEARS"; break;
+            case 6: periodName = "3 YEARS"; break;
+            case 7: periodName = "5 YEARS"; break;
+            case 8: periodName = "7 YEARS"; break;
+            case 9: periodName = "10 YEARS"; break;
             default: periodName = "EXTENDED PERIOD"; break;
         }
 
@@ -621,6 +629,7 @@ void DigiDollarMintWidget::onMintClicked()
 
     if (msgBox.exec() == QMessageBox::Yes) {
         // SECOND WARNING - Final "Are you ABSOLUTELY sure?" confirmation
+        // IMPORTANT: These names MUST match getLockTierDisplayName() and consensus tier definitions
         QString periodName;
         switch (m_selectedTier) {
             case 0: periodName = "1 HOUR"; break;
@@ -628,10 +637,11 @@ void DigiDollarMintWidget::onMintClicked()
             case 2: periodName = "3 MONTHS"; break;
             case 3: periodName = "6 MONTHS"; break;
             case 4: periodName = "1 YEAR"; break;
-            case 5: periodName = "3 YEARS"; break;
-            case 6: periodName = "5 YEARS"; break;
-            case 7: periodName = "7 YEARS"; break;
-            case 8: periodName = "10 YEARS"; break;
+            case 5: periodName = "2 YEARS"; break;
+            case 6: periodName = "3 YEARS"; break;
+            case 7: periodName = "5 YEARS"; break;
+            case 8: periodName = "7 YEARS"; break;
+            case 9: periodName = "10 YEARS"; break;
             default: periodName = "SELECTED PERIOD"; break;
         }
 

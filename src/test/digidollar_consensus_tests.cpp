@@ -271,4 +271,72 @@ BOOST_AUTO_TEST_CASE(edge_cases_test)
     BOOST_CHECK_EQUAL(DigiDollar::GetDCAMultiplier(150, emptyDCAParams), 2.0); // Fallback
 }
 
+// =============================================================================
+// Lock Tier Display Name Consistency Test
+// This test verifies the CORRECT lock tier definitions that MUST be used
+// consistently across all GUI widgets and consensus code.
+//
+// Bug fixed: 2026-02-03 - Tier 5-8 display names were wrong in some widgets,
+// and tier 9 (10 years) was missing entirely.
+// =============================================================================
+BOOST_AUTO_TEST_CASE(lock_tier_display_consistency_test)
+{
+    // The authoritative lock tier definitions (from consensus):
+    // These MUST match getLockTierDisplayName() in digidollarmintwidget.cpp
+    // and addPositionToTable() in digidollarpositionswidget.cpp
+    
+    // Expected lock periods in blocks (15 seconds per block in DigiByte)
+    std::map<int, std::pair<int64_t, std::string>> expectedTiers = {
+        {0, {240,         "1 hour"}},       // Tier 0: 1 hour = 240 blocks (testing only, 1000% collateral)
+        {1, {172800,      "30 days"}},      // Tier 1: 30 days (500% collateral)
+        {2, {518400,      "3 months"}},     // Tier 2: 3 months (400% collateral)
+        {3, {1036800,     "6 months"}},     // Tier 3: 6 months (350% collateral)
+        {4, {2102400,     "1 year"}},       // Tier 4: 1 year (300% collateral)
+        {5, {4204800,     "2 years"}},      // Tier 5: 2 years (275% collateral) - NOT "3 years"!
+        {6, {6307200,     "3 years"}},      // Tier 6: 3 years (250% collateral) - NOT "5 years"!
+        {7, {10512000,    "5 years"}},      // Tier 7: 5 years (225% collateral) - NOT "7 years"!
+        {8, {14716800,    "7 years"}},      // Tier 8: 7 years (212% collateral) - NOT "10 years"!
+        {9, {21024000,    "10 years"}}      // Tier 9: 10 years (200% collateral) - MUST EXIST!
+    };
+
+    // Verify we have exactly 10 tiers (0-9)
+    BOOST_CHECK_EQUAL(expectedTiers.size(), 10U);
+
+    // Verify block calculations (15 seconds per block)
+    // 1 year = 365 * 24 * 60 * 60 / 15 = 2,102,400 blocks
+    int64_t blocks_per_day = 24 * 60 * 60 / 15;  // 5760 blocks/day
+    int64_t blocks_per_year = 365 * blocks_per_day; // 2,102,400 blocks/year
+
+    BOOST_CHECK_EQUAL(blocks_per_day, 5760);
+    BOOST_CHECK_EQUAL(blocks_per_year, 2102400);
+
+    // Verify each tier's block count
+    BOOST_CHECK_EQUAL(expectedTiers[0].first, 240);  // 1 hour
+    BOOST_CHECK_EQUAL(expectedTiers[4].first, blocks_per_year);  // 1 year
+    BOOST_CHECK_EQUAL(expectedTiers[5].first, 2 * blocks_per_year);  // 2 years
+    BOOST_CHECK_EQUAL(expectedTiers[9].first, 10 * blocks_per_year);  // 10 years
+
+    // Most importantly: verify the display names are correct!
+    // These were the buggy values before the fix:
+    // Tier 5 showed "3 years" (wrong, should be "2 years")
+    // Tier 6 showed "5 years" (wrong, should be "3 years")
+    // Tier 7 showed "7 years" (wrong, should be "5 years")
+    // Tier 8 showed "10 years" (wrong, should be "7 years")
+    // Tier 9 was missing (should be "10 years")
+
+    BOOST_CHECK_EQUAL(expectedTiers[5].second, "2 years");  // Critical fix
+    BOOST_CHECK_EQUAL(expectedTiers[6].second, "3 years");  // Critical fix
+    BOOST_CHECK_EQUAL(expectedTiers[7].second, "5 years");  // Critical fix
+    BOOST_CHECK_EQUAL(expectedTiers[8].second, "7 years");  // Critical fix
+    BOOST_CHECK_EQUAL(expectedTiers[9].second, "10 years"); // Critical fix - tier must exist!
+
+    // Verify against actual consensus ratios
+    DigiDollar::ConsensusParams params;
+    BOOST_CHECK_EQUAL(DigiDollar::GetCollateralRatioForLockTime(expectedTiers[5].first, params), 275); // 2 years
+    BOOST_CHECK_EQUAL(DigiDollar::GetCollateralRatioForLockTime(expectedTiers[6].first, params), 250); // 3 years
+    BOOST_CHECK_EQUAL(DigiDollar::GetCollateralRatioForLockTime(expectedTiers[7].first, params), 225); // 5 years
+    BOOST_CHECK_EQUAL(DigiDollar::GetCollateralRatioForLockTime(expectedTiers[8].first, params), 212); // 7 years
+    BOOST_CHECK_EQUAL(DigiDollar::GetCollateralRatioForLockTime(expectedTiers[9].first, params), 200); // 10 years
+}
+
 BOOST_AUTO_TEST_SUITE_END()

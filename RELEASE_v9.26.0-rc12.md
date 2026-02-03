@@ -10,14 +10,15 @@
 
 ## What's New in RC12
 
-### 🔮 Phase 2: Multi-Oracle Consensus (3-of-5 Schnorr Threshold)
+### 🔮 Phase 2: Multi-Oracle Consensus (4-of-7 Schnorr Threshold)
 
-The headline feature of RC12 is the activation of **Phase Two oracle consensus** on testnet. This moves from the single-oracle (1-of-1) system used in RC11 to a decentralized **3-of-5 Schnorr threshold** system.
+The headline feature of RC12 is the activation of **Phase Two oracle consensus** on testnet. This moves from the single-oracle (1-of-1) system used in RC11 to a decentralized **4-of-7 Schnorr threshold** system with real exchange price data.
 
 **Key changes:**
-- **3-of-5 consensus:** Any 3 of 5 authorized oracle operators must provide valid signed price messages for a bundle to be accepted into a block
+- **4-of-7 consensus:** Any 4 of 7 authorized oracle operators must provide valid signed price messages for a bundle to be accepted into a block
+- **7 named oracle operators:** Jared (0), Green Candle (1), Bastian (2), DanGB (3), Shenger (4), Ycagel (5), Aussie (6)
+- **Live exchange prices:** Oracles fetch real DGB/USD prices from Binance, CoinGecko, KuCoin, Gate.io, and Crypto.com
 - **Phase Two activation at block 100:** Testnet activates multi-oracle consensus early for testing
-- **5 oracle nodes enabled:** Oracle operators 0–4 are now active (previously only oracle 0)
 - **Phase Two compact format (v0x02):** New on-chain encoding for multi-oracle bundles, maintaining the same 22-byte footprint
 - **Phase-aware block validation:** `ValidateBlockOracleData()` now routes to Phase One or Phase Two validation based on block height
 
@@ -43,6 +44,62 @@ digibyte-cli -testnet -rpcwallet=oracle startoracle <oracle_id>
 
 > **⚠️ After restarting `digibyted`, you must run `startoracle` again.** The key persists in the wallet, but the oracle thread does not auto-start.
 
+### 🌐 Live Exchange Price Fetching (New!)
+
+RC12 oracles now fetch **real DGB/USD prices** from live exchanges via HTTPS. No more mock data — oracles pull from multiple sources and aggregate a reliable price.
+
+**Supported Exchanges:**
+| Exchange | Status |
+|----------|--------|
+| Binance | ✅ Live |
+| CoinGecko | ✅ Live |
+| KuCoin | ✅ Live |
+| Gate.io | ✅ Live |
+| Crypto.com | ✅ Live |
+
+**Build system changes:**
+- Added `openssl` (1.1.1w) and `libcurl` (8.5.0) to Guix depends for all platforms
+- macOS builds link CoreFoundation + SystemConfiguration frameworks for libcurl proxy support
+- Cross-platform CA certificate bundle detection with auto-retry fallback
+
+### 📊 Complete Oracle RPC Command Reference
+
+RC12 includes a full suite of Oracle RPC commands — split into **monitoring commands** (anyone can use) and **operator commands** (oracle operators only).
+
+#### Monitoring Commands
+
+| Command | Description |
+|---------|-------------|
+| `listoracle` | Shows your **local** oracle status. Is it running? What ID? What price am I submitting? What wallet has the key? If nothing's running, tells you to run `startoracle`. |
+| `getoracles` | **Network-wide** view of ALL 7 oracles. Config (pubkey, endpoint), status, and actual last reported price from on-chain data — not just local runtime. This is what a stats site would call. |
+| `getoracleprice` | Returns the single **consensus price** (median of all reporting oracles). This is the price DigiDollar actually uses for minting/redemption. |
+| `getalloracleprices` | **Forensics deep dive.** Per-oracle breakdown with: exact price each oracle reported, % deviation from median, signature validity, which block it was in. Use this to catch anyone gaming the system. |
+
+#### Operator Commands
+
+| Command | Description |
+|---------|-------------|
+| `createoraclekey <id>` | Generate a new oracle Schnorr keypair in your wallet. One-time setup. |
+| `getoraclepubkey <id>` | Show the oracle public key stored in your wallet. |
+| `startoracle <id>` | Start running as an oracle operator (requires wallet with oracle key). Must re-run after every node restart. |
+| `stoporacle <id>` | Stop your oracle. |
+| `sendoracleprice` | Manually submit a price to the network (for testing/debugging). |
+
+#### Usage Examples
+```bash
+# Check if your oracle is running
+digibyte-cli -testnet -rpcwallet=oracle listoracle
+
+# View all 7 oracles network-wide
+digibyte-cli -testnet getoracles
+
+# Get the consensus price DigiDollar uses
+digibyte-cli -testnet getoracleprice
+
+# Deep dive: see what each oracle reported
+digibyte-cli -testnet getalloracleprices
+```
+
 ### 📋 Quick Oracle Setup (2 Commands!)
 
 ```bash
@@ -61,13 +118,23 @@ See **`DIGIDOLLAR_ORACLE_SETUP.md`** for the complete oracle operator guide.
 
 - **Fixed BIP9 activation state machine** — In RC11, `ALWAYS_ACTIVE` combined with an early return in `ReadRegTestArgs()` prevented `-digidollaractivationheight` from working. RC12 ensures DigiDollar activation progresses through the full DEFINED → STARTED → LOCKED_IN → ACTIVE state machine on all networks.
 
-### Other Changes
+### 🔧 Other Changes
 
+- **`listoracles` → `getoracles` rename** — Renamed for clarity; `getoracles` returns network-wide oracle data, `listoracle` (new) shows local status
+- **`getalloracleprices` RPC** — New forensics command showing per-oracle price breakdown, deviation, and signature validity
+- **Real BIP9 signaling on testnet** — DigiDollar now uses proper BIP9 deployment signaling instead of `ALWAYS_ACTIVE`
+- **MockOracleManager restricted to regtest** — Security fix: mock oracle data only available in regtest, removed from testnet/mainnet
+- **Oracle P2P propagation fixes** — Fixed discovery, message broadcasting, and Phase 2 signature validation
+- **7 real oracle keys for testnet** — 4-of-7 consensus with named operators (Jared, Green Candle, Bastian, DanGB, Shenger, Ycagel, Aussie)
+- **2-year lock tier** — New collateral lock option across consensus, RPC, wallet, and GUI
+- **Multiple consensus bug fixes** — uint64 overflow in collateral calc, fee subtraction, transfer conservation, oracle price ceiling ($100), GUI price display (was 1000x off)
+- **Unbounded memory fix** — Script metadata map capped at 10,000 entries
 - **Oracle ID validation fix** — Now correctly uses 0-based indexing (0–29)
 - **Oracle unit test fixes** — 5 bugs fixed in oracle test suite
 - **Phase Two RegTest support** — RegTest now configured for 3-of-5 oracle consensus
 - **Phase Two integration tests** — New multi-oracle RegTest integration script
 - **Pending message lifecycle tests** — Tests for Phase Two oracle message handling
+- **Bughunt regression tests** — New tests from overnight automated code review
 - **Wallet splash image** — Updated from RC11 to RC12 branding
 - **DD Transactions auto-refresh** — DigiDollar Transactions tab now refreshes automatically
 - **Consolidated oracle docs** — Single source of truth in `DIGIDOLLAR_ORACLE_SETUP.md`, old docs moved to `docs/`
@@ -78,12 +145,16 @@ See **`DIGIDOLLAR_ORACLE_SETUP.md`** for the complete oracle operator guide.
 
 | File | Change |
 |------|--------|
-| `configure.ac` | Version bump RC11 → RC12 |
-| `src/kernel/chainparams.cpp` | Testnet oracle params: 3-of-5, Phase2Height=100, oracles 0–4 active; RegTest: same |
-| `src/rpc/digidollar.cpp` | New `createoraclekey` and wallet-based `startoracle` RPCs |
+| `configure.ac` | Version bump RC11 → RC12; add CoreFoundation/SystemConfiguration frameworks for macOS libcurl |
+| `src/kernel/chainparams.cpp` | Testnet oracle params: 4-of-7, Phase2Height=100, 7 named oracle operators; RegTest: same |
+| `src/rpc/digidollar.cpp` | New `createoraclekey`, wallet-based `startoracle`, `listoracle`, `getoracles`, `getalloracleprices`, `getoraclepubkey`, `stoporacle`, `sendoracleprice` RPCs |
 | `src/wallet/` | Oracle key persistence in descriptor wallets |
 | `src/oracle/bundle_manager.cpp` | Phase-aware `ValidateBlockOracleData()`, Phase Two `CreateOracleScript()` (v0x02), Phase Two `ExtractOracleBundle()` (v0x02), Phase Two `AddOracleBundleToBlock()` |
-| `src/versionbits.cpp` | BIP9 activation fix for DigiDollar state machine |
+| `src/oracle/exchange.cpp` | Live exchange price fetching (Binance, CoinGecko, KuCoin, Gate.io, Crypto.com), cross-platform CA cert detection, SSL fallback retry |
+| `src/oracle/node.cpp` | Oracle P2P propagation, discovery, Phase 2 signature validation fixes |
+| `src/versionbits.cpp` | BIP9 activation fix for DigiDollar state machine; real BIP9 signaling on testnet |
+| `depends/packages/openssl.mk` | New: OpenSSL 1.1.1w static build for all platforms |
+| `depends/packages/libcurl.mk` | New: libcurl 8.5.0 linked against static OpenSSL for HTTPS oracle fetching |
 | `DIGIDOLLAR_ORACLE_SETUP.md` | Comprehensive oracle operator setup guide (single source of truth) |
 | `ORACLE_OPERATOR_GUIDE.md` | Third-party oracle operator instructions |
 
@@ -126,7 +197,7 @@ DGB becomes the strategic reserve asset (21B max, only 2.23 DGB per person on Ea
 
 ## Current Status
 
-- **Phase 2 Multi-Oracle Testing** — This release activates 3-of-5 Schnorr threshold oracle consensus on testnet.
+- **Phase 2 Multi-Oracle Testing** — This release activates 4-of-7 Schnorr threshold oracle consensus on testnet with live exchange prices.
 - **Testnet Only** — All DGB and DUSD on testnet have no real value.
 
 ---
@@ -393,7 +464,7 @@ For the complete guide including configuration, security, troubleshooting, and R
 | Oracle Node | oracle1.digibyte.io:12030 |
 | Address Prefix | dgbt1... (bech32) |
 | Phase Two Activation | Block 100 |
-| Oracle Consensus | 3-of-5 Schnorr threshold |
+| Oracle Consensus | 4-of-7 Schnorr threshold |
 
 ### Fork Schedule (Testnet12)
 | Feature | Block Height |
@@ -416,29 +487,78 @@ For the complete guide including configuration, security, troubleshooting, and R
 
 ## Commits Since RC11
 
+### Oracle RPC & Key Management
 - Implement `createoraclekey` wallet RPC for oracle keypair generation
 - Implement wallet-based `startoracle` with automatic key loading
 - Add oracle key persistence in descriptor wallets
-- Activate Phase Two multi-oracle consensus (3-of-5) on testnet
-- Enable oracle nodes 0–4 for testnet Phase Two
-- Set Phase Two activation height to block 100 on testnet
-- Configure RegTest for Phase Two 3-of-5 oracle consensus
+- Replace `listoracles` with `getoracles` + add `listoracle` for local status
+- Add `getalloracleprices` for per-oracle price transparency
+- Fix oracle ID validation to use 0-based indexing
+
+### Live Exchange Price Fetching
+- Add `openssl` (1.1.1w) package to Guix depends for HTTPS support
+- Add `libcurl` (8.5.0) dependency for oracle HTTP functionality
+- Add CA certificate bundle detection for SSL/HTTPS oracle fetching
+- Set proper system CA cert paths in OpenSSL build (`--openssldir=/etc/ssl`)
+- Add `curl_global_init` for OpenSSL initialization
+- Add SSL debug logging and fallback retry without verification
+- Add cross-platform SSL CA handling and Windows libcurl linking
+- Link CoreFoundation + SystemConfiguration frameworks on macOS for libcurl
+- Remove hardcoded mock prices and fallback data from oracle
+- Restrict MockOracleManager to regtest, remove mock exchange data
+
+### Multi-Oracle Consensus (Phase 2)
+- Activate Phase Two multi-oracle consensus on testnet (4-of-7)
+- Add 7 real oracle keys for Phase Two testnet (Jared, Green Candle, Bastian, DanGB, Shenger, Ycagel, Aussie)
 - Add Phase Two compact format (version 0x02) to CreateOracleScript
 - Add Phase Two decoding to ExtractOracleBundle
 - Add Phase Two bundle creation from pending messages in AddOracleBundleToBlock
 - Update ValidateBlockOracleData with phase-aware consensus validation
+- Configure RegTest for Phase Two oracle consensus
+- Use Phase 2 signing in CreatePriceMessage
+- Fix oracle P2P propagation, discovery, and Phase 2 signature validation
+- Fix cached price to require consensus threshold, not individual messages
+- Use OraclePriceMsg wrapper in P2P broadcast for consistency
+
+### BIP9 & Consensus
 - Fix BIP9 DigiDollar activation state machine (ALWAYS_ACTIVE + ReadRegTestArgs early return)
-- Fix oracle ID validation to use 0-based indexing
-- Fix 5 oracle unit test failures
+- Implement real BIP9 signaling for DigiDollar on testnet
+- Unify oracle activation checks to use BIP9 deployment state
+- Unify oracle price ceiling to $100 across all validation layers
+- Add 2-year lock tier across consensus, RPC, wallet, and GUI
+
+### Bug Fixes
+- Fix uint64 overflow in collateral calculation (use __int128)
+- Fix fee input subtraction from collateral release validation
+- Fix transfer DD conservation check with UTXO lookup
+- Fix GUI oracle price display (was 10,000x too high in RegTest)
+- Fix hardcoded height/price in wallet transfer and redeem operations
+- Cap script metadata map at 10,000 entries to prevent unbounded growth
+- Add ERR state reconstruction from current system health
+- Add volatility state reconstruction from block oracle prices
+- Fix Schnorr signature verification mismatch in oracle system
+- Fix duplicate ca_bundle_paths declaration in exchange.cpp
+- Guard MockOracleManager in positions widget with regtest check
+- Align RPC lock tier mapping with consensus (remove phantom 2-year tier)
+
+### Tests
+- Add TDD tests for Schnorr signature Phase2 verification
 - Add Phase Two multi-oracle RegTest integration script
+- Add multi-oracle testnet test script
 - Add pending message lifecycle tests for Phase Two
-- Update existing oracle tests for Phase Two activation height
+- Add bughunt regression tests
 - Add oracle wallet key tests and update validation tests
 - Add Phase Two bundle lifecycle and test helpers
+- Add oracle P2P message handlers to Python test framework
+- Update existing oracle tests for Phase Two activation height
+- Fix 5 oracle unit test failures
+
+### Docs & Housekeeping
 - Consolidate oracle setup guides into DIGIDOLLAR_ORACLE_SETUP.md
 - Add ORACLE_OPERATOR_GUIDE.md for third-party oracle operators
-- Comprehensive accuracy pass on DIGIDOLLAR_ORACLE_SETUP.md (ports, data dirs, exchange sources, price ranges, outlier filtering)
+- Comprehensive accuracy pass on DIGIDOLLAR_ORACLE_SETUP.md
 - Clarify dual public key formats in createoraclekey docs
+- Add bug hunt report, DigiDollar bugs tracker, and oracle discovery architecture
 - Update wallet splash image from RC11 to RC12
 - Add auto-refresh to DD Transactions tab
 - Version bump to v9.26.0-rc12

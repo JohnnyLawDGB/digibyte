@@ -30,6 +30,7 @@
 #include <QMessageBox>
 #include <QApplication>
 #include <QPalette>
+#include <QTimer>
 
 DigiDollarMintWidget::DigiDollarMintWidget(QWidget *parent) :
     QWidget(parent),
@@ -395,6 +396,14 @@ void DigiDollarMintWidget::connectSignals()
             this, &DigiDollarMintWidget::onMintClicked);
     connect(m_clearButton, &QPushButton::clicked,
             this, &DigiDollarMintWidget::onClearClicked);
+
+    // Auto-refresh oracle price every 30 seconds
+    // This ensures the displayed price stays current even when the user
+    // stays on the Mint tab without switching tabs.
+    // Matches the behavior of other DD widgets (overview uses 5s, positions uses 60s)
+    QTimer* oraclePriceTimer = new QTimer(this);
+    connect(oraclePriceTimer, &QTimer::timeout, this, &DigiDollarMintWidget::updateOraclePrice);
+    oraclePriceTimer->start(30000); // 30 seconds
 }
 
 void DigiDollarMintWidget::setWalletModel(WalletModel* model)

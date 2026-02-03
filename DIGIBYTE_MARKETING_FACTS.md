@@ -6,7 +6,7 @@
 
 ## Executive Summary
 
-**DigiByte (DGB)** is one of the world's longest-running, fastest, and most secure UTXO proof-of-work blockchains. Founded by **Jared Tate** on **January 10, 2014**, DigiByte has been continuously operating for over **11 years** with zero downtime.
+**DigiByte (DGB)** is one of the world's longest-running, fastest, and most secure UTXO proof-of-work blockchains. Founded by **Jared Tate** on **January 10, 2014**, DigiByte has been continuously operating for over **12 years** with zero downtime.
 
 DigiByte has pioneered multiple groundbreaking technologies now used across the cryptocurrency industry, most notably **DigiShield** - the real-time difficulty adjustment algorithm adopted by **Dogecoin, Zcash, Ethereum, Bitcoin Cash, and 25+ other blockchains**.
 

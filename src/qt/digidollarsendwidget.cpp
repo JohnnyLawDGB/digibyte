@@ -509,8 +509,14 @@ void DigiDollarSendWidget::updateOraclePrice()
             // Price is returned in micro-USD (1,000,000 = $1.00)
             int64_t priceMicroUsd = result.find_value("price_micro_usd").getInt<int64_t>();
             m_oraclePrice = priceMicroUsd / 1000000.0; // Convert micro-USD to dollars
+        } catch (const UniValue& e) {
+            LogPrintf("DigiDollar Send: updateOraclePrice RPC error - %s\n", e.write());
+            m_oraclePrice = 0.0;
         } catch (const std::exception& e) {
-            LogPrintf("DigiDollar Send: updateOraclePrice RPC error - %s\n", e.what());
+            LogPrintf("DigiDollar Send: updateOraclePrice error - %s\n", e.what());
+            m_oraclePrice = 0.0;
+        } catch (...) {
+            LogPrintf("DigiDollar Send: updateOraclePrice unknown error\n");
             m_oraclePrice = 0.0;
         }
     } else {

@@ -607,9 +607,15 @@ void DigiDollarOverviewWidget::updateOraclePrice()
             // Price is returned in micro-USD (1,000,000 = $1.00)
             int64_t priceMicroUsd = result.find_value("price_micro_usd").getInt<int64_t>();
             m_oraclePrice = priceMicroUsd / 1000000.0; // Convert micro-USD to dollars
+        } catch (const UniValue& e) {
+            LogPrintf("DigiDollar: updateOraclePrice RPC error - %s\n", e.write());
+            m_oraclePrice = 0.0;
         } catch (const std::exception& e) {
-            LogPrintf("DigiDollar: updateOraclePrice RPC error - %s\n", e.what());
-            m_oraclePrice = 0.0; // Show "Loading..." on error
+            LogPrintf("DigiDollar: updateOraclePrice error - %s\n", e.what());
+            m_oraclePrice = 0.0;
+        } catch (...) {
+            LogPrintf("DigiDollar: updateOraclePrice unknown error\n");
+            m_oraclePrice = 0.0;
         }
     } else {
         m_oraclePrice = 0.0; // No client model available
@@ -715,6 +721,14 @@ void DigiDollarOverviewWidget::updateSystemHealth()
         m_systemHealthBar->setValue(barValue);
         m_systemHealthBar->setFormat(QString("%1% Network Collateralization").arg(QString::number(healthPercent, 'f', 1)));
 
+    } catch (const UniValue& e) {
+        LogPrintf("DigiDollar: updateSystemHealth RPC error - %s\n", e.write());
+        m_systemHealthValue->setText("Loading...");
+        m_networkTotalDDValue->setText("Loading...");
+        m_networkTotalCollateralValue->setText("Loading...");
+        m_dcaLevelValue->setText("Loading...");
+        m_errLevelValue->setText("Loading...");
+        m_systemHealthBar->setValue(0);
     } catch (const std::exception& e) {
         m_systemHealthValue->setText("Error");
         m_networkTotalDDValue->setText("Error");

@@ -311,6 +311,10 @@ void DigiDollarTransactionsWidget::populateTable()
             m_statusLabel->setText(tr("No transactions match the current filters"));
         }
 
+    } catch (const UniValue& e) {
+        LogPrintf("DigiDollar Transactions: RPC error - %s\n", e.write());
+        m_statusLabel->setText(tr("Loading transactions..."));
+        m_statusLabel->setVisible(true);
     } catch (const std::exception& e) {
         LogPrintf("DigiDollar Transactions: Error loading transactions - %s\n", e.what());
         m_statusLabel->setText(tr("Error loading transactions"));

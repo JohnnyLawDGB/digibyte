@@ -787,6 +787,12 @@ void DigiDollarRedeemWidget::loadPositionDetails()
                 m_redeemableAmount = 0.0;
             }
         }
+    } catch (const UniValue& e) {
+        LogPrintf("DigiDollar Qt: Failed to load position details (RPC) - %s\n", e.write());
+        m_positionFound = false;
+        m_positionDDMinted = 0.0;
+        m_positionDGBCollateral = 0.0;
+        m_positionLockTier = 0;
     } catch (const std::exception& e) {
         LogPrintf("DigiDollar Qt: Failed to load position details - %s\n", e.what());
         m_positionFound = false;

@@ -531,9 +531,9 @@ public:
         digidollarParams.minMintAmount = 10000;            // 10,000 cents = $100 minimum
         digidollarParams.minMintAmountActivationHeight = 1;  // Activate $100 min at height 150000
         digidollarParams.maxMintAmount = 1000000;          // 1,000,000 cents = $10k maximum
-        digidollarParams.oracleThreshold = 4;                         // 4-of-7 consensus for Phase Two (strict majority)
-        digidollarParams.activeOracles = 7;                           // 7 active oracles
-        digidollarParams.oracleCount = 7;                             // Total 7 oracles defined
+        digidollarParams.oracleThreshold = 4;                         // 4-of-8 consensus for Phase Two (strict majority)
+        digidollarParams.activeOracles = 8;                           // 8 active oracles
+        digidollarParams.oracleCount = 8;                             // Total 8 oracles defined
 
         // Initialize DigiDollar Oracle Nodes (same as mainnet for compatibility)
         InitializeOracleNodes();

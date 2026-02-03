@@ -100,11 +100,11 @@ BOOST_AUTO_TEST_CASE(testnet_oracle_consensus_requirements)
     const CChainParams& params = Params();
     const DigiDollar::ConsensusParams& ddParams = params.GetDigiDollarParams();
 
-    // Verify Phase Two: 4-of-7 consensus for testnet
+    // Verify Phase Two: 4-of-8 consensus for testnet
     BOOST_CHECK_EQUAL(ddParams.oracleThreshold, 4);  // 4 signatures required
-    BOOST_CHECK_EQUAL(ddParams.activeOracles, 7);     // 7 active oracles
+    BOOST_CHECK_EQUAL(ddParams.activeOracles, 8);     // 8 active oracles
 
-    // Verify ratio is ~57% (4-of-7, strict majority)
+    // Verify ratio is 50% (4-of-8, strict majority)
     double consensus_ratio = static_cast<double>(ddParams.oracleThreshold) /
                             ddParams.activeOracles;
     BOOST_CHECK(consensus_ratio > 0.5);  // Must be strict majority
@@ -271,8 +271,8 @@ BOOST_AUTO_TEST_CASE(phase_one_single_oracle_requirement)
     const CChainParams& params = Params();
     const DigiDollar::ConsensusParams& ddParams = params.GetDigiDollarParams();
 
-    // Phase Two: 7 active oracles
-    BOOST_CHECK_EQUAL(ddParams.activeOracles, 7);
+    // Phase Two: 8 active oracles
+    BOOST_CHECK_EQUAL(ddParams.activeOracles, 8);
 
     // Verify oracle nodes match configuration
     const std::vector<OracleNodeInfo>& oracle_nodes = params.GetOracleNodes();
@@ -285,8 +285,8 @@ BOOST_AUTO_TEST_CASE(phase_one_single_oracle_requirement)
         }
     }
 
-    // Phase Two: All 7 oracles should be active
-    BOOST_CHECK_EQUAL(active_count, 7);
+    // Phase Two: All 8 oracles should be active
+    BOOST_CHECK_EQUAL(active_count, 8);
 
     LogPrintf("Phase Two oracle count: %d active, %d total\n",
               active_count, oracle_nodes.size());
@@ -308,9 +308,9 @@ BOOST_AUTO_TEST_CASE(phase_one_consensus_one_of_one)
     const CChainParams& params = Params();
     const DigiDollar::ConsensusParams& ddParams = params.GetDigiDollarParams();
 
-    // Phase Two: 4-of-7 consensus (strict majority)
+    // Phase Two: 4-of-8 consensus (strict majority)
     BOOST_CHECK_EQUAL(ddParams.oracleThreshold, 4);
-    BOOST_CHECK_EQUAL(ddParams.activeOracles, 7);
+    BOOST_CHECK_EQUAL(ddParams.activeOracles, 8);
 
     // Verify strict majority (threshold > activeOracles / 2)
     BOOST_CHECK(ddParams.oracleThreshold > ddParams.activeOracles / 2);

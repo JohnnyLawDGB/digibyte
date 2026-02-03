@@ -100,11 +100,11 @@ BOOST_AUTO_TEST_CASE(testnet_oracle_consensus_requirements)
     const CChainParams& params = Params();
     const DigiDollar::ConsensusParams& ddParams = params.GetDigiDollarParams();
 
-    // Verify Phase Two: 4-of-8 consensus for testnet
-    BOOST_CHECK_EQUAL(ddParams.oracleThreshold, 4);  // 4 signatures required
+    // Verify Phase Two: 5-of-8 consensus for testnet
+    BOOST_CHECK_EQUAL(ddParams.oracleThreshold, 5);  // 5 signatures required
     BOOST_CHECK_EQUAL(ddParams.activeOracles, 8);     // 8 active oracles
 
-    // Verify ratio is 50% (4-of-8, strict majority)
+    // Verify ratio is 62.5% (5-of-8, strict majority)
     double consensus_ratio = static_cast<double>(ddParams.oracleThreshold) /
                             ddParams.activeOracles;
     BOOST_CHECK(consensus_ratio > 0.5);  // Must be strict majority
@@ -308,8 +308,8 @@ BOOST_AUTO_TEST_CASE(phase_one_consensus_one_of_one)
     const CChainParams& params = Params();
     const DigiDollar::ConsensusParams& ddParams = params.GetDigiDollarParams();
 
-    // Phase Two: 4-of-8 consensus (strict majority)
-    BOOST_CHECK_EQUAL(ddParams.oracleThreshold, 4);
+    // Phase Two: 5-of-8 consensus (strict majority)
+    BOOST_CHECK_EQUAL(ddParams.oracleThreshold, 5);
     BOOST_CHECK_EQUAL(ddParams.activeOracles, 8);
 
     // Verify strict majority (threshold > activeOracles / 2)

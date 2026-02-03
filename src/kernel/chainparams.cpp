@@ -531,18 +531,18 @@ public:
         digidollarParams.minMintAmount = 10000;            // 10,000 cents = $100 minimum
         digidollarParams.minMintAmountActivationHeight = 1;  // Activate $100 min at height 150000
         digidollarParams.maxMintAmount = 1000000;          // 1,000,000 cents = $10k maximum
-        digidollarParams.oracleThreshold = 4;                         // 4-of-8 consensus for Phase Two (strict majority)
+        digidollarParams.oracleThreshold = 5;                         // 5-of-8 consensus for Phase Two (strict majority)
         digidollarParams.activeOracles = 8;                           // 8 active oracles
         digidollarParams.oracleCount = 8;                             // Total 8 oracles defined
 
         // Initialize DigiDollar Oracle Nodes (same as mainnet for compatibility)
         InitializeOracleNodes();
 
-        // Oracle system parameters — Testnet 4-of-8 consensus
+        // Oracle system parameters — Testnet 5-of-8 consensus
         // Oracle activation matches DigiDollar BIP9 activation — everything at block 600
         consensus.nOracleActivationHeight = 600;      // Same as nDDActivationHeight
         consensus.nOracleEpochLength = 1440;          // 24 hours (1440 blocks * 15 seconds)
-        consensus.nOracleRequiredMessages = 4;        // Phase Two: 4-of-8 consensus (strict majority)
+        consensus.nOracleRequiredMessages = 5;        // Phase Two: 5-of-8 consensus (strict majority)
         consensus.nOracleTotalOracles = 8;            // 8 oracles active
         // Multi-oracle activates at same height as DigiDollar (no separate phases)
         // Everything — DD minting, oracle consensus, multi-oracle — activates together
@@ -574,7 +574,7 @@ public:
 private:
     void InitializeOracleNodes() {
         // DigiDollar Oracle Nodes - Testnet
-        // Phase Two: 8 oracles active (4-of-8 consensus)
+        // Phase Two: 8 oracles active (5-of-8 consensus)
         vOracleNodes = {
             // 8 testnet oracles — compressed pubkeys must match consensus.vOraclePublicKeys (x-only)
             {0,  ParsePubKey("03e1dce189a530c1fb39dcd9282cf5f9de0e4eb257344be9fd94ce27c06005e8c7"), "oracle1.digibyte.io:12030", true},  // Jared

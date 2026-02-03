@@ -817,7 +817,7 @@ QString DigiDollarMintWidget::formatDGBAmount(double amount) const
 
 QString DigiDollarMintWidget::formatUSDAmount(double amount) const
 {
-    return "$" + QString::number(amount, 'f', 4);
+    return "$" + QString::number(amount, 'f', 6);
 }
 
 QString DigiDollarMintWidget::formatRatio(double ratio) const

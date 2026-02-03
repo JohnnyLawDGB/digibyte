@@ -474,7 +474,7 @@ BOOST_AUTO_TEST_CASE(chainparams_testnet_oracle_count)
     const std::vector<OracleNodeInfo>& oracles = chainparams->GetOracleNodes();
 
     BOOST_CHECK_EQUAL(oracles.size(), 8);
-    BOOST_CHECK_EQUAL(chainparams->GetActiveOracleCount(), 8);  // Phase Two: 4-of-8 consensus
+    BOOST_CHECK_EQUAL(chainparams->GetActiveOracleCount(), 8);  // Phase Two: 5-of-8 consensus
 }
 
 BOOST_AUTO_TEST_CASE(chainparams_regtest_oracle_count)

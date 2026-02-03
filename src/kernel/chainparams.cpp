@@ -458,9 +458,9 @@ public:
         // Miners signal bit 23, 70% threshold (140/200 blocks)
         // DEFINED until median time past reaches nStartTime, then STARTED, LOCKED_IN, ACTIVE
         consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].bit = 23;
-        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nStartTime = 1770015600; // Feb 2, 2026
-        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nTimeout = 1833087600; // Feb 2, 2028
-        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].min_activation_height = 600; // Cannot activate before block 600
+        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nStartTime = Consensus::BIP9Deployment::ALWAYS_ACTIVE;
+        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
+        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].min_activation_height = 0; // No activation delay for ALWAYS_ACTIVE
 
         consensus.nMinimumChainWork = uint256S("0x00");
         consensus.defaultAssumeValid = uint256S("0x00"); //1079274

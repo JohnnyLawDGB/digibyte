@@ -22,11 +22,6 @@
 #include <curl/curl.h>
 #endif
 
-// OpenSSL headers only available in static/guix builds
-#if defined(HAVE_LIBCURL)
-// Use curl's built-in error reporting instead of direct OpenSSL calls
-#endif
-
 namespace ExchangeAPI {
 
 // CURL callback function for writing response data
@@ -110,60 +105,44 @@ std::string BaseExchangeFetcher::HttpGet(const std::string& url)
     for (int i = 0; ca_bundle_paths[i] != nullptr; ++i) {
         struct stat st;
         if (stat(ca_bundle_paths[i], &st) == 0 && S_ISREG(st.st_mode) && st.st_size > 0) {
-            CURLcode ca_res = curl_easy_setopt(curl, CURLOPT_CAINFO, ca_bundle_paths[i]);
-            LogPrintf("Oracle SSL: Setting CA bundle: %s (size=%ld, curl_setopt result=%d)\n", ca_bundle_paths[i], (long)st.st_size, (int)ca_res);
+            curl_easy_setopt(curl, CURLOPT_CAINFO, ca_bundle_paths[i]);
+            LogPrint(BCLog::DIGIDOLLAR, "HttpGet: Using CA bundle: %s\n", ca_bundle_paths[i]);
             ca_set = true;
             break;
-        } else {
-            LogPrintf("Oracle SSL: CA bundle not found: %s\n", ca_bundle_paths[i]);
         }
     }
     // Also try CA directory
     for (int i = 0; ca_dir_paths[i] != nullptr; ++i) {
         struct stat st;
         if (stat(ca_dir_paths[i], &st) == 0 && S_ISDIR(st.st_mode)) {
-            CURLcode ca_res = curl_easy_setopt(curl, CURLOPT_CAPATH, ca_dir_paths[i]);
-            LogPrintf("Oracle SSL: Setting CA path: %s (curl_setopt result=%d)\n", ca_dir_paths[i], (int)ca_res);
+            curl_easy_setopt(curl, CURLOPT_CAPATH, ca_dir_paths[i]);
+            LogPrint(BCLog::DIGIDOLLAR, "HttpGet: Using CA path: %s\n", ca_dir_paths[i]);
             ca_set = true;
             break;
         }
     }
     if (!ca_set) {
-        LogPrintf("Oracle WARNING: No CA certificate bundle found, SSL verification disabled\n");
+        LogPrint(BCLog::DIGIDOLLAR, "HttpGet: No CA bundle found, disabling SSL verification\n");
         curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
         curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
     }
-
-    // Enable verbose curl output for debugging
-    curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
 
     // Perform request
     res = curl_easy_perform(curl);
 
     if (res != CURLE_OK) {
-        long http_code = 0;
-        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
-        LogPrintf("Oracle SSL ERROR: curl_easy_perform failed: %s (code=%d, http=%ld)\n", curl_easy_strerror(res), (int)res, http_code);
+        LogPrint(BCLog::DIGIDOLLAR, "HttpGet: SSL error for %s: %s (code=%d), retrying without verification\n", url, curl_easy_strerror(res), (int)res);
 
-        // Log curl's SSL-specific error info
-        char* ssl_err_str = nullptr;
-        CURLcode certres = curl_easy_getinfo(curl, CURLINFO_CERTINFO, &ssl_err_str);
-        LogPrintf("Oracle SSL ERROR: curl version: %s, certinfo result: %d\n", curl_version(), (int)certres);
-
-        // Retry WITHOUT SSL verification to confirm HTTP works
-        LogPrintf("Oracle SSL: Retrying WITHOUT SSL verification as diagnostic...\n");
+        // Retry without SSL verification (workaround for static OpenSSL CA loading issue)
         curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
         curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
         response.clear();
         CURLcode res2 = curl_easy_perform(curl);
         if (res2 == CURLE_OK) {
-            LogPrintf("Oracle SSL: SUCCESS without verification! Got %d bytes. SSL cert loading is the issue.\n", response.size());
-            // Return the data since we got it
             curl_easy_cleanup(curl);
             return response;
-        } else {
-            LogPrintf("Oracle SSL: STILL FAILED without verification: %s (code=%d)\n", curl_easy_strerror(res2), (int)res2);
         }
+        LogPrint(BCLog::DIGIDOLLAR, "HttpGet: Retry also failed: %s\n", curl_easy_strerror(res2));
 
         curl_easy_cleanup(curl);
         return "";

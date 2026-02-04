@@ -339,6 +339,7 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "sendoracleprice", 0, "price_usd" },
     { "sendoracleprice", 1, "oracle_id" },
     { "getoraclepubkey", 0, "oracle_id" },
+    { "getalloracleprices", 0, "blocks" },
     // DigiDollar simulation/test RPC commands
     { "setmockoracleprice", 0, "price" },
     { "simulatepricevolatility", 0, "percent_change" },

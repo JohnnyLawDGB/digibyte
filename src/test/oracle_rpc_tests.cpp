@@ -241,9 +241,10 @@ BOOST_AUTO_TEST_CASE(oracle_manager_out_of_range_id)
 }
 
 /**
- * Test: Price source logic — local vs on-chain vs none
+ * Test: Price source logic — local vs on-chain vs pending vs none
  *
- * getoracles prefers local runtime price, falls back to on-chain.
+ * getoracles prefers local runtime price, falls back to on-chain,
+ * then pending P2P messages, then "none".
  * Verify the precedence logic by checking HasValidPrice behavior.
  */
 BOOST_AUTO_TEST_CASE(getoracles_price_source_precedence)
@@ -253,8 +254,297 @@ BOOST_AUTO_TEST_CASE(getoracles_price_source_precedence)
     BOOST_CHECK_EQUAL(node.HasValidPrice(), false);
     BOOST_CHECK_EQUAL(node.GetCurrentPrice(), 0);
 
-    // This means getoracles would use "on-chain" or "none" as price_source
-    // (depending on whether blocks contain oracle bundles)
+    // This means getoracles would use "on-chain", "pending", or "none"
+    // as price_source (depending on available data)
+}
+
+// ============================================================================
+// PART 5: Pending P2P message integration (getoracles fix)
+// ============================================================================
+
+/**
+ * Test: GetPendingMessages returns empty when no messages injected
+ *
+ * getoracles now checks pending P2P messages as a fallback.
+ * Verify the base case returns empty.
+ */
+BOOST_AUTO_TEST_CASE(getoracles_pending_messages_empty_by_default)
+{
+    OracleBundleManager& mgr = OracleBundleManager::GetInstance();
+    mgr.ClearPendingMessages();
+
+    std::vector<COraclePriceMessage> pending = mgr.GetPendingMessages();
+    BOOST_CHECK(pending.empty());
+    BOOST_CHECK_EQUAL(mgr.GetPendingMessageCount(), 0u);
+}
+
+/**
+ * Test: InjectTestMessage makes messages available via GetPendingMessages
+ *
+ * Simulates receiving P2P oracle price messages from remote oracles.
+ * getoracles should see these as "pending" price sources.
+ */
+BOOST_AUTO_TEST_CASE(getoracles_pending_messages_after_inject)
+{
+    OracleBundleManager& mgr = OracleBundleManager::GetInstance();
+    mgr.ClearPendingMessages();
+
+    // Inject a price message for oracle 3
+    COraclePriceMessage msg;
+    msg.oracle_id = 3;
+    msg.price_micro_usd = 6500;  // $0.0065/DGB
+    msg.timestamp = 1700000000;
+    msg.block_height = 0;
+    msg.nonce = 42;
+
+    mgr.InjectTestMessage(msg);
+
+    std::vector<COraclePriceMessage> pending = mgr.GetPendingMessages();
+    BOOST_CHECK_EQUAL(pending.size(), 1u);
+    BOOST_CHECK_EQUAL(pending[0].oracle_id, 3u);
+    BOOST_CHECK_EQUAL(pending[0].price_micro_usd, 6500u);
+    BOOST_CHECK_EQUAL(pending[0].timestamp, 1700000000);
+
+    mgr.ClearPendingMessages();
+}
+
+/**
+ * Test: Multiple pending messages for different oracles
+ *
+ * getoracles iterates all 7 oracles. Pending messages should provide
+ * data for any oracle that doesn't have local or on-chain data.
+ */
+BOOST_AUTO_TEST_CASE(getoracles_multiple_pending_messages)
+{
+    OracleBundleManager& mgr = OracleBundleManager::GetInstance();
+    mgr.ClearPendingMessages();
+
+    // Inject messages for oracles 0, 2, 4, 6
+    for (uint32_t id : {0u, 2u, 4u, 6u}) {
+        COraclePriceMessage msg;
+        msg.oracle_id = id;
+        msg.price_micro_usd = 6000 + id * 100;
+        msg.timestamp = 1700000000 + id;
+        msg.block_height = 0;
+        msg.nonce = id;
+        mgr.InjectTestMessage(msg);
+    }
+
+    std::vector<COraclePriceMessage> pending = mgr.GetPendingMessages();
+    BOOST_CHECK_EQUAL(pending.size(), 4u);
+
+    // Build a lookup map like getoracles does
+    std::map<uint32_t, std::pair<uint64_t, int64_t>> pending_prices;
+    for (const auto& m : pending) {
+        pending_prices[m.oracle_id] = {m.price_micro_usd, m.timestamp};
+    }
+
+    // Verify all 4 oracles have pending data
+    BOOST_CHECK(pending_prices.count(0) > 0);
+    BOOST_CHECK(pending_prices.count(2) > 0);
+    BOOST_CHECK(pending_prices.count(4) > 0);
+    BOOST_CHECK(pending_prices.count(6) > 0);
+
+    // Verify oracles 1, 3, 5 do NOT have pending data
+    BOOST_CHECK(pending_prices.count(1) == 0);
+    BOOST_CHECK(pending_prices.count(3) == 0);
+    BOOST_CHECK(pending_prices.count(5) == 0);
+
+    // Verify prices are correct
+    BOOST_CHECK_EQUAL(pending_prices[0].first, 6000u);
+    BOOST_CHECK_EQUAL(pending_prices[2].first, 6200u);
+    BOOST_CHECK_EQUAL(pending_prices[4].first, 6400u);
+    BOOST_CHECK_EQUAL(pending_prices[6].first, 6600u);
+
+    mgr.ClearPendingMessages();
+}
+
+/**
+ * Test: InjectTestMessage overwrites existing message for same oracle_id
+ *
+ * The pending_messages map is keyed by oracle_id, so a newer message
+ * from the same oracle should replace the old one.
+ */
+BOOST_AUTO_TEST_CASE(getoracles_pending_message_overwrites)
+{
+    OracleBundleManager& mgr = OracleBundleManager::GetInstance();
+    mgr.ClearPendingMessages();
+
+    // First message for oracle 1
+    COraclePriceMessage msg1;
+    msg1.oracle_id = 1;
+    msg1.price_micro_usd = 5000;
+    msg1.timestamp = 1700000000;
+    msg1.block_height = 0;
+    msg1.nonce = 1;
+    mgr.InjectTestMessage(msg1);
+
+    // Second (newer) message for same oracle 1
+    COraclePriceMessage msg2;
+    msg2.oracle_id = 1;
+    msg2.price_micro_usd = 7000;
+    msg2.timestamp = 1700000015;
+    msg2.block_height = 0;
+    msg2.nonce = 2;
+    mgr.InjectTestMessage(msg2);
+
+    // Should only have 1 message (the newer one)
+    BOOST_CHECK_EQUAL(mgr.GetPendingMessageCount(), 1u);
+
+    std::vector<COraclePriceMessage> pending = mgr.GetPendingMessages();
+    BOOST_CHECK_EQUAL(pending.size(), 1u);
+    BOOST_CHECK_EQUAL(pending[0].oracle_id, 1u);
+    BOOST_CHECK_EQUAL(pending[0].price_micro_usd, 7000u);
+    BOOST_CHECK_EQUAL(pending[0].timestamp, 1700000015);
+
+    mgr.ClearPendingMessages();
+}
+
+/**
+ * Test: ClearPendingMessages resets all pending data
+ *
+ * After clearing, getoracles should find no pending data for any oracle.
+ */
+BOOST_AUTO_TEST_CASE(getoracles_clear_pending_messages)
+{
+    OracleBundleManager& mgr = OracleBundleManager::GetInstance();
+
+    // Inject messages for all 7 oracles
+    for (uint32_t id = 0; id < 7; ++id) {
+        COraclePriceMessage msg;
+        msg.oracle_id = id;
+        msg.price_micro_usd = 6000 + id * 50;
+        msg.timestamp = 1700000000;
+        msg.block_height = 0;
+        msg.nonce = id;
+        mgr.InjectTestMessage(msg);
+    }
+
+    BOOST_CHECK_EQUAL(mgr.GetPendingMessageCount(), 7u);
+
+    mgr.ClearPendingMessages();
+
+    BOOST_CHECK_EQUAL(mgr.GetPendingMessageCount(), 0u);
+    std::vector<COraclePriceMessage> pending = mgr.GetPendingMessages();
+    BOOST_CHECK(pending.empty());
+}
+
+/**
+ * Test: getoracles price source fallback priority simulation
+ *
+ * Simulates the exact logic in getoracles to verify the priority:
+ * 1. local runtime > 2. on-chain > 3. pending P2P > 4. none
+ */
+BOOST_AUTO_TEST_CASE(getoracles_price_source_fallback_priority)
+{
+    OracleManager& oracle_mgr = OracleManager::GetInstance();
+    OracleBundleManager& bundle_mgr = OracleBundleManager::GetInstance();
+    bundle_mgr.ClearPendingMessages();
+
+    // Simulate: oracle 5 has a pending P2P message but no local or on-chain data
+    COraclePriceMessage msg;
+    msg.oracle_id = 5;
+    msg.price_micro_usd = 8200;
+    msg.timestamp = 1700000042;
+    msg.block_height = 0;
+    msg.nonce = 99;
+    bundle_mgr.InjectTestMessage(msg);
+
+    // Simulate the getoracles fallback logic for oracle 5
+    uint32_t oracle_id = 5;
+    OracleNode* runtime = oracle_mgr.GetOracleNode(oracle_id);
+
+    // No local runtime
+    BOOST_CHECK(runtime == nullptr);
+
+    // No on-chain data (simulated empty map)
+    struct OnChainPrice { uint64_t price = 0; int64_t timestamp = 0; bool found = false; };
+    std::map<uint32_t, OnChainPrice> onchain_prices;
+
+    // Build pending prices map (like getoracles does)
+    std::map<uint32_t, std::pair<uint64_t, int64_t>> pending_prices;
+    {
+        std::vector<COraclePriceMessage> pending = bundle_mgr.GetPendingMessages();
+        for (const auto& m : pending) {
+            pending_prices[m.oracle_id] = {m.price_micro_usd, m.timestamp};
+        }
+    }
+
+    // Apply the same priority logic as getoracles
+    uint64_t price = 0;
+    int64_t update_time = 0;
+    std::string price_source = "none";
+    std::string status = "no_data";
+
+    if (runtime && runtime->HasValidPrice()) {
+        price = runtime->GetCurrentPrice();
+        update_time = runtime->GetLastUpdateTime();
+        price_source = "local";
+        status = "reporting";
+    } else if (onchain_prices.count(oracle_id) && onchain_prices[oracle_id].found) {
+        price = onchain_prices[oracle_id].price;
+        update_time = onchain_prices[oracle_id].timestamp;
+        price_source = "on-chain";
+        status = "reporting";
+    } else if (pending_prices.count(oracle_id)) {
+        price = pending_prices[oracle_id].first;
+        update_time = pending_prices[oracle_id].second;
+        price_source = "pending";
+        status = "reporting";
+    }
+
+    // Should use pending data
+    BOOST_CHECK_EQUAL(price_source, "pending");
+    BOOST_CHECK_EQUAL(status, "reporting");
+    BOOST_CHECK_EQUAL(price, 8200u);
+    BOOST_CHECK_EQUAL(update_time, 1700000042);
+
+    bundle_mgr.ClearPendingMessages();
+}
+
+/**
+ * Test: Oracle with no data from any source gets "none"/"no_data"
+ *
+ * Verifies that an oracle with no local, on-chain, or pending data
+ * correctly shows price_source="none" and status="no_data".
+ */
+BOOST_AUTO_TEST_CASE(getoracles_no_data_from_any_source)
+{
+    OracleManager& oracle_mgr = OracleManager::GetInstance();
+    OracleBundleManager& bundle_mgr = OracleBundleManager::GetInstance();
+    bundle_mgr.ClearPendingMessages();
+
+    uint32_t oracle_id = 2;
+    OracleNode* runtime = oracle_mgr.GetOracleNode(oracle_id);
+    BOOST_CHECK(runtime == nullptr);
+
+    struct OnChainPrice { uint64_t price = 0; int64_t timestamp = 0; bool found = false; };
+    std::map<uint32_t, OnChainPrice> onchain_prices;
+    std::map<uint32_t, std::pair<uint64_t, int64_t>> pending_prices;
+
+    // Apply fallback logic
+    uint64_t price = 0;
+    int64_t update_time = 0;
+    std::string price_source = "none";
+    std::string status = "no_data";
+
+    if (runtime && runtime->HasValidPrice()) {
+        price_source = "local";
+        status = "reporting";
+    } else if (onchain_prices.count(oracle_id) && onchain_prices[oracle_id].found) {
+        price_source = "on-chain";
+        status = "reporting";
+    } else if (pending_prices.count(oracle_id)) {
+        price_source = "pending";
+        status = "reporting";
+    }
+
+    BOOST_CHECK_EQUAL(price_source, "none");
+    BOOST_CHECK_EQUAL(status, "no_data");
+    BOOST_CHECK_EQUAL(price, 0u);
+    BOOST_CHECK_EQUAL(update_time, 0);
+
+    bundle_mgr.ClearPendingMessages();
 }
 
 /**

@@ -2764,7 +2764,7 @@ static RPCHelpMan getoracles()
                                 {RPCResult::Type::NUM, "last_price_micro_usd", "Last reported price in micro-USD"},
                                 {RPCResult::Type::NUM, "last_price_usd", "Last reported price in USD"},
                                 {RPCResult::Type::NUM, "last_update", "Timestamp of last price"},
-                                {RPCResult::Type::STR, "price_source", "Where price came from: local/on-chain/none"},
+                                {RPCResult::Type::STR, "price_source", "Where price came from: local/on-chain/pending/none"},
                                 {RPCResult::Type::STR, "status", "Oracle status: reporting/stopped/no_data"},
                                 {RPCResult::Type::BOOL, "selected_for_epoch", "Whether oracle is selected for current epoch"},
                                 {RPCResult::Type::BOOL, "is_running_locally", "Whether this oracle is running on YOUR node"}
@@ -2819,6 +2819,19 @@ static RPCHelpMan getoracles()
                 }
             }
 
+            // Also check pending P2P messages for oracles whose data
+            // hasn't been included in a block yet. This is critical for
+            // showing all oracle data when consensus threshold hasn't been
+            // met or when messages are still propagating.
+            struct PendingPrice { uint64_t price = 0; int64_t timestamp = 0; };
+            std::map<uint32_t, PendingPrice> pending_prices;
+            {
+                std::vector<COraclePriceMessage> pending = bundle_manager.GetPendingMessages();
+                for (const auto& msg : pending) {
+                    pending_prices[msg.oracle_id] = {msg.price_micro_usd, msg.timestamp};
+                }
+            }
+
             UniValue result(UniValue::VARR);
             for (size_t i = 0; i < all_oracles.size(); ++i) {
                 const auto& oc = all_oracles[i];
@@ -2835,7 +2848,7 @@ static RPCHelpMan getoracles()
                 info.pushKV("endpoint", oc.endpoint);
                 info.pushKV("is_active", oc.is_active);
 
-                // Price: prefer local runtime, fall back to on-chain
+                // Price: prefer local runtime, fall back to on-chain, then pending P2P
                 uint64_t price = 0;
                 int64_t update_time = 0;
                 std::string price_source = "none";
@@ -2850,6 +2863,11 @@ static RPCHelpMan getoracles()
                     price = onchain_prices[oc.id].price;
                     update_time = onchain_prices[oc.id].timestamp;
                     price_source = "on-chain";
+                    status = "reporting";
+                } else if (pending_prices.count(oc.id)) {
+                    price = pending_prices[oc.id].price;
+                    update_time = pending_prices[oc.id].timestamp;
+                    price_source = "pending";
                     status = "reporting";
                 }
 

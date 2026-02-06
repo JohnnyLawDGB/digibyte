@@ -2315,17 +2315,50 @@ static RPCHelpMan getoracleprice()
             // Calculate true USD price from micro-USD (full precision)
             double priceUSD = static_cast<double>(priceMicroUSD) / 1000000.0;
 
-            // Get current blockchain info
-            int lastUpdateHeight = chainman.ActiveChain().Height();
-            int64_t lastUpdateTime = stats.last_update > 0 ? stats.last_update : GetTime();
+            int currentHeight = chainman.ActiveChain().Height();
 
-            // Calculate validity and staleness
+            // Scan last 20 blocks to find the actual last oracle bundle height
+            // and count unique reporting oracles (same approach as getalloracleprices)
+            int lastBundleHeight = 0;
+            int64_t lastBundleTime = 0;
+            std::set<uint32_t> reportingOracleIds;
+            {
+                LOCK(cs_main);
+                for (int h = currentHeight; h >= std::max(0, currentHeight - 19); --h) {
+                    CBlockIndex* pindex = chainman.ActiveChain()[h];
+                    if (!pindex) continue;
+                    CBlock block;
+                    if (!chainman.m_blockman.ReadBlockFromDisk(block, *pindex)) continue;
+                    if (block.vtx.empty()) continue;
+                    COracleBundle bundle;
+                    if (oracle_manager.ExtractOracleBundle(*block.vtx[0], bundle)) {
+                        if (h > lastBundleHeight) {
+                            lastBundleHeight = h;
+                            lastBundleTime = bundle.timestamp;
+                        }
+                        for (const auto& msg : bundle.messages) {
+                            reportingOracleIds.insert(msg.oracle_id);
+                        }
+                    }
+                }
+            }
+
+            // Also count oracles with pending P2P messages not yet on-chain
+            {
+                std::vector<COraclePriceMessage> pending = oracle_manager.GetPendingMessages();
+                for (const auto& msg : pending) {
+                    reportingOracleIds.insert(msg.oracle_id);
+                }
+            }
+
+            // Calculate validity and staleness based on actual last bundle height
             int validityBlocks = 20; // Oracle data valid for 20 blocks
-            int blocksSinceUpdate = lastUpdateHeight - (stats.latest_epoch * 1440); // Approximate
-            bool isStale = blocksSinceUpdate > validityBlocks;
+            int lastUpdateHeight = lastBundleHeight > 0 ? lastBundleHeight : 0;
+            int64_t lastUpdateTime = lastBundleTime > 0 ? lastBundleTime : (stats.last_update > 0 ? stats.last_update : 0);
+            bool isStale = lastBundleHeight == 0 || (currentHeight - lastBundleHeight) > validityBlocks;
 
-            // Get oracle count and status
-            size_t activeOracleCount = oracle_manager.GetPendingMessageCount();
+            // Oracle count from actual unique reporting oracles (on-chain + pending)
+            size_t activeOracleCount = reportingOracleIds.size();
             std::string status = stats.has_consensus ? "active" : (activeOracleCount > 0 ? "warning" : "error");
 
             // Mock 24h data for now - would track historically in production
@@ -2515,7 +2548,7 @@ static RPCHelpMan getalloracleprices()
 
             // Oracle names from chainparams
             const std::vector<OracleNodeInfo>& oracle_nodes = Params().GetOracleNodes();
-            std::vector<std::string> oracle_names = {"Jared", "Green Candle", "Bastian", "DanGB", "Shenger", "Ycagel", "Aussie"};
+            std::vector<std::string> oracle_names = {"Jared", "Green Candle", "Bastian", "DanGB", "Shenger", "Ycagel", "Aussie", "LookInto"};
 
             // Track latest price per oracle from on-chain data
             struct OracleData {
@@ -2586,7 +2619,7 @@ static RPCHelpMan getalloracleprices()
             int reporting_count = 0;
             UniValue oracles_arr(UniValue::VARR);
 
-            for (size_t i = 0; i < oracle_nodes.size() && i < 7; ++i) {
+            for (size_t i = 0; i < oracle_nodes.size(); ++i) {
                 UniValue oracle_obj(UniValue::VOBJ);
                 oracle_obj.pushKV("oracle_id", (int)oracle_nodes[i].id);
                 oracle_obj.pushKV("name", i < oracle_names.size() ? oracle_names[i] : "Unknown");
@@ -2787,7 +2820,7 @@ static RPCHelpMan getoracles()
             OracleBundleManager& bundle_manager = OracleBundleManager::GetInstance();
             OracleManager& oracle_manager = OracleManager::GetInstance();
 
-            std::vector<std::string> oracle_names = {"Jared", "Green Candle", "Bastian", "DanGB", "Shenger", "Ycagel", "Aussie"};
+            std::vector<std::string> oracle_names = {"Jared", "Green Candle", "Bastian", "DanGB", "Shenger", "Ycagel", "Aussie", "LookInto"};
 
             int32_t current_height = chainman.ActiveChain().Height();
             int32_t current_epoch = GetCurrentEpoch(current_height);
@@ -2913,12 +2946,14 @@ static RPCHelpMan listoracle()
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
         {
             OracleManager& oracle_manager = OracleManager::GetInstance();
-            std::vector<std::string> oracle_names = {"Jared", "Green Candle", "Bastian", "DanGB", "Shenger", "Ycagel", "Aussie"};
+            std::vector<std::string> oracle_names = {"Jared", "Green Candle", "Bastian", "DanGB", "Shenger", "Ycagel", "Aussie", "LookInto"};
 
             UniValue result(UniValue::VOBJ);
 
             // Check all oracle IDs for a running instance
-            for (uint32_t id = 0; id < 7; ++id) {
+            const CChainParams& chainparams = Params();
+            const std::vector<OracleNodeInfo>& all_oracles = chainparams.GetOracleNodes();
+            for (uint32_t id = 0; id < all_oracles.size(); ++id) {
                 if (oracle_manager.IsOracleRunning(id)) {
                     OracleNode* node = oracle_manager.GetOracleNode(id);
                     if (!node) continue;

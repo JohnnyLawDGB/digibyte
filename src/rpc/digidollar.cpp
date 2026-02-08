@@ -2308,46 +2308,76 @@ static RPCHelpMan getoracleprice()
             OracleBundleManager& oracle_manager = OracleBundleManager::GetInstance();
             OracleBundleManager::OracleStats stats = oracle_manager.GetStats();
 
-            // Get the raw micro-USD price from the oracle (full precision)
-            CAmount priceMicroUSD = oracle_manager.GetLatestPrice();
-            // Get rounded cents price for internal calculations
-            CAmount priceCents = OracleIntegration::GetCurrentOraclePrice();
-            // Calculate true USD price from micro-USD (full precision)
-            double priceUSD = static_cast<double>(priceMicroUSD) / 1000000.0;
-
             int currentHeight = chainman.ActiveChain().Height();
 
-            // Scan last 20 blocks to find the actual last oracle bundle height
-            // and count unique reporting oracles (same approach as getalloracleprices)
+            // In RegTest mode, check MockOracleManager first
+            bool usingMockOracle = false;
+            CAmount priceMicroUSD = 0;
+            CAmount priceCents = 0;
+            double priceUSD = 0.0;
             int lastBundleHeight = 0;
             int64_t lastBundleTime = 0;
             std::set<uint32_t> reportingOracleIds;
-            {
-                LOCK(cs_main);
-                for (int h = currentHeight; h >= std::max(0, currentHeight - 19); --h) {
-                    CBlockIndex* pindex = chainman.ActiveChain()[h];
-                    if (!pindex) continue;
-                    CBlock block;
-                    if (!chainman.m_blockman.ReadBlockFromDisk(block, *pindex)) continue;
-                    if (block.vtx.empty()) continue;
-                    COracleBundle bundle;
-                    if (oracle_manager.ExtractOracleBundle(*block.vtx[0], bundle)) {
-                        if (h > lastBundleHeight) {
-                            lastBundleHeight = h;
-                            lastBundleTime = bundle.timestamp;
-                        }
-                        for (const auto& msg : bundle.messages) {
-                            reportingOracleIds.insert(msg.oracle_id);
+
+            if (Params().GetChainType() == ChainType::REGTEST) {
+                MockOracleManager& mock = MockOracleManager::GetInstance();
+                if (mock.IsEnabled()) {
+                    CAmount mockPrice = mock.GetCurrentPrice();
+                    if (mockPrice > 0) {
+                        usingMockOracle = true;
+                        priceMicroUSD = mockPrice;
+                        // Convert micro-USD to cents: cents = micro-USD / 10,000
+                        priceCents = (priceMicroUSD + 5000) / 10000;
+                        if (priceCents == 0) priceCents = 1; // Minimum 1 cent
+                        priceUSD = static_cast<double>(priceMicroUSD) / 1000000.0;
+                        // Mock oracle is always "current" - use current time
+                        lastBundleTime = GetTime();
+                        lastBundleHeight = currentHeight;
+                        // Mock uses 7 test oracles in regtest
+                        for (uint32_t i = 0; i < 7; i++) {
+                            reportingOracleIds.insert(i);
                         }
                     }
                 }
             }
 
-            // Also count oracles with pending P2P messages not yet on-chain
-            {
-                std::vector<COraclePriceMessage> pending = oracle_manager.GetPendingMessages();
-                for (const auto& msg : pending) {
-                    reportingOracleIds.insert(msg.oracle_id);
+            if (!usingMockOracle) {
+                // Get the raw micro-USD price from the oracle (full precision)
+                priceMicroUSD = oracle_manager.GetLatestPrice();
+                // Get rounded cents price for internal calculations
+                priceCents = OracleIntegration::GetCurrentOraclePrice();
+                // Calculate true USD price from micro-USD (full precision)
+                priceUSD = static_cast<double>(priceMicroUSD) / 1000000.0;
+
+                // Scan last 20 blocks to find the actual last oracle bundle height
+                // and count unique reporting oracles (same approach as getalloracleprices)
+                {
+                    LOCK(cs_main);
+                    for (int h = currentHeight; h >= std::max(0, currentHeight - 19); --h) {
+                        CBlockIndex* pindex = chainman.ActiveChain()[h];
+                        if (!pindex) continue;
+                        CBlock block;
+                        if (!chainman.m_blockman.ReadBlockFromDisk(block, *pindex)) continue;
+                        if (block.vtx.empty()) continue;
+                        COracleBundle bundle;
+                        if (oracle_manager.ExtractOracleBundle(*block.vtx[0], bundle)) {
+                            if (h > lastBundleHeight) {
+                                lastBundleHeight = h;
+                                lastBundleTime = bundle.timestamp;
+                            }
+                            for (const auto& msg : bundle.messages) {
+                                reportingOracleIds.insert(msg.oracle_id);
+                            }
+                        }
+                    }
+                }
+
+                // Also count oracles with pending P2P messages not yet on-chain
+                {
+                    std::vector<COraclePriceMessage> pending = oracle_manager.GetPendingMessages();
+                    for (const auto& msg : pending) {
+                        reportingOracleIds.insert(msg.oracle_id);
+                    }
                 }
             }
 
@@ -2355,7 +2385,7 @@ static RPCHelpMan getoracleprice()
             int validityBlocks = 20; // Oracle data valid for 20 blocks
             int lastUpdateHeight = lastBundleHeight > 0 ? lastBundleHeight : 0;
             int64_t lastUpdateTime = lastBundleTime > 0 ? lastBundleTime : (stats.last_update > 0 ? stats.last_update : 0);
-            bool isStale = lastBundleHeight == 0 || (currentHeight - lastBundleHeight) > validityBlocks;
+            bool isStale = !usingMockOracle && (lastBundleHeight == 0 || (currentHeight - lastBundleHeight) > validityBlocks);
 
             // Oracle count from actual unique reporting oracles (on-chain + pending)
             size_t activeOracleCount = reportingOracleIds.size();

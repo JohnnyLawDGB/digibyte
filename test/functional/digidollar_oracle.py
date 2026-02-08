@@ -125,13 +125,20 @@ class DigiDollarOracleTest(DigiByteTestFramework):
         """Test oracle price setting and retrieval."""
         self.log.info("Testing oracle price setting and retrieval...")
 
-        # Test setting different prices (in cents per DGB, valid range: 1-100000)
-        test_prices = [250, 500, 1000, 5000]  # Various DGB/USD prices in cents per DGB
+        # Test setting different prices in MICRO-USD (1,000,000 = $1.00)
+        # setmockoracleprice takes micro-USD, getoracleprice returns price_cents
+        # Conversion: cents = (micro_usd + 5000) / 10000 (rounded)
+        test_prices_micro_usd = [
+            (2500000, 250),   # $2.50 = 250 cents
+            (5000000, 500),   # $5.00 = 500 cents  
+            (10000000, 1000), # $10.00 = 1000 cents
+            (50000000, 5000), # $50.00 = 5000 cents
+        ]
 
-        for price in test_prices:
-            # Set price on all nodes
+        for price_micro_usd, expected_cents in test_prices_micro_usd:
+            # Set price on all nodes (in micro-USD)
             for node in self.nodes:
-                node.setmockoracleprice(price)
+                node.setmockoracleprice(price_micro_usd)
 
             # Verify price is retrievable
             oracle_info = self.nodes[0].getoracleprice()
@@ -139,10 +146,10 @@ class DigiDollarOracleTest(DigiByteTestFramework):
             # Verify expected fields from the actual implementation
             assert 'price_cents' in oracle_info or 'price_usd' in oracle_info, "Missing price fields"
 
-            # Use price_cents as the primary price field (satoshis per USD)
+            # Verify price_cents matches expected conversion from micro-USD
             if 'price_cents' in oracle_info:
                 retrieved_price = int(oracle_info['price_cents'])
-                assert_equal(retrieved_price, price)
+                assert_equal(retrieved_price, expected_cents)
 
             # Verify timestamp is recent (if available)
             if 'last_update_time' in oracle_info:

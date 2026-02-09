@@ -81,29 +81,198 @@ CoinMarketCap requires a paid API key, which is fundamentally incompatible with 
 
 ---
 
+## Technical Changes
+
+| File | Change |
+|------|--------|
+| `configure.ac` | Version bump RC14 → RC15 |
+| `src/kernel/chainparams.cpp` | Updated Aussie Epic (Oracle 6) pubkey |
+| `src/oracle/exchange.cpp` | Persistent CURL handle reuse (fix socket exhaustion); removed CoinMarketCap fetcher; hardened TLS (no fallback to unencrypted) |
+| `src/oracle/exchange.h` | Added `void* m_curl_handle` member for persistent connection; removed CoinMarketCapFetcher class |
+| `src/oracle/node.cpp` | Bind oracle pubkey verification against chainparams authorized keys |
+| `src/wallet/digidollarwallet.cpp` | Fix wallet rescan for self-minted DD; exclude unconfirmed DD from balance (using CachedTxIsTrusted); allow rapid consecutive transfers (fee change chaining + trusted DD change) |
+| `src/wallet/spend.cpp` | Allow unconfirmed DGB change for DD fee selection (`m_include_unsafe_inputs = true`) |
+| `src/consensus/tx_verify.cpp` | Reject DD transactions when validation data unavailable (no silent bypass) |
+| `src/script/digidollar.cpp` | NUMS point for collateral Taproot internal key (prevents key-path spend) |
+| `src/rpc/digidollar.cpp` | Re-lock DD collateral on block disconnection; protect DD locks from UnlockAllCoins/lockunspent |
+| `src/init.cpp` | Register all 17 DD + 9 Oracle RPC commands in help; add DIGIDOLLAR and ORACLE option categories; remove coinmarketcap-api-key |
+| `src/qt/utilitydialog.cpp` | Fix Help dialog parser for non-hyphenated commands; collapse empty left pane |
+| `src/qt/res/icons/digibyte_wallet.png` | Update wallet splash to RC15 |
+| `src/test/oracle_exchange_tests.cpp` | New CURL handle reuse tests; replace CMC test with CoinGecko |
+| `src/test/digidollar_rpc_tests.cpp` | Fix test failures from NUMS key and price unit changes |
+| `test/functional/digidollar_network_relay.py` | Fix getrawtransaction to work without -txindex |
+
+---
+
+## What is DigiDollar?
+
+DigiDollar is a USD-pegged stablecoin built natively into DigiByte. It uses an over-collateralized model where users lock DGB to mint DUSD at the current oracle price of DGB.
+
+The world's first truly decentralized stablecoin native on a UTXO blockchain, enabling stable value transactions without centralized control.
+
+DGB becomes the strategic reserve asset (21B max, only ~1.94 DGB per person on Earth). Everything happens inside DigiByte Core wallet. You never give up control of your private keys. No centralized company, fund or pool. Pure decentralization.
+
+**Learn more:** https://digibyte.io/digidollar
+
+---
+
+## Wallet GUI Guide
+
+### How to Use DigiDollar in the Wallet
+
+1. **Open the DigiDollar Tab** — Click "DigiDollar" in the top navigation bar
+2. **Mint DigiDollars** — Lock DGB as collateral to create DUSD. Enter the amount and confirm. Your DGB remains locked for the duration of the lock tier you select.
+3. **Send DigiDollars** — Click "Send DGB" but use a DD address (starts with `dgbt1...`). Or use the DigiDollar tab's send function.
+4. **Receive DigiDollars** — Click "Receive DGB" to get your DD-capable address, or use the DigiDollar tab.
+5. **View History** — DD Transactions tab shows complete transaction history (auto-refreshes)
+6. **Redeem DigiDollars** — Burn DUSD to unlock your DGB collateral after the lock period expires
+7. **Coin Control** — Use manual DD input selection for advanced redemptions
+8. **Address Book** — Save frequently used DD addresses for quick sending
+9. **Export History** — Export DD transactions to CSV for record keeping
+
+---
+
+## Oracle Operator Setup
+
+Want to run an oracle node? Here's the simple version:
+
+### Prerequisites
+- DigiByte Core RC15 built from source with curl support (or download the binary)
+- An assigned oracle ID (0–7 for testnet, contact the maintainer)
+
+### Two-Command Setup
+
+```bash
+# Step 1: Create wallet and generate oracle key (one-time)
+digibyte-cli -testnet createwallet "oracle"
+digibyte-cli -testnet -rpcwallet=oracle createoraclekey <your_oracle_id>
+
+# Step 2: Start your oracle (after every node restart)
+digibyte-cli -testnet -rpcwallet=oracle startoracle <your_oracle_id>
+```
+
+**Step 1** generates a Schnorr keypair, stores the private key in your wallet, and returns the public key. Send the **X-only public key** (32-byte hex) to the maintainer for inclusion in `chainparams.cpp`.
+
+**Step 2** loads the private key from your wallet and starts the oracle price feed thread. Your node will automatically fetch DGB/USD prices from multiple exchanges (minimum 2 sources required) and broadcast signed price messages to the network.
+
+> **⚠️ After restarting `digibyted`, you must run `startoracle` again.** The key persists in the wallet, but the oracle thread does not auto-start.
+
+For the complete guide, see **`DIGIDOLLAR_ORACLE_SETUP.md`**.
+
+### Current Oracle Operators (Testnet)
+
+| ID | Operator | Status |
+|----|----------|--------|
+| 0 | Jared | ✅ Active |
+| 1 | Green Candle | ✅ Active |
+| 2 | Bastian | ✅ Active |
+| 3 | DanGB | ✅ Active |
+| 4 | Shenger | ✅ Active |
+| 5 | Ycagel | ✅ Active |
+| 6 | Aussie Epic | 🔑 New key in RC15 |
+| 7 | LookIntoMyEyes | ✅ Active |
+
+---
+
+## Complete RPC Command Reference
+
+### DigiDollar Commands (Wallet)
+
+| Command | Description |
+|---------|-------------|
+| `mintdigidollar` | Mint DigiDollars by locking DGB as collateral |
+| `senddigidollar` | Send DigiDollars to another address |
+| `redeemdigidollar` | Redeem DigiDollars to unlock DGB collateral |
+| `getdigidollarbalance` | Show your DigiDollar balance |
+| `listdigidollarpositions` | List your active collateral positions |
+| `listdigidollartxs` | List your DigiDollar transaction history |
+| `getdigidollaraddress` | Get or create a DigiDollar receive address |
+| `validateddaddress` | Validate a DigiDollar address |
+| `listdigidollaraddresses` | List all DigiDollar addresses in your wallet |
+| `importdigidollaraddress` | Import a DigiDollar address for watch-only |
+| `getdigidollarstats` | Get network-wide DigiDollar statistics |
+| `getdigidollardeploymentinfo` | Get DigiDollar activation/deployment status |
+| `calculatecollateralrequirement` | Calculate DGB collateral needed for a DD mint |
+| `estimatecollateral` | Estimate collateral requirement by tier |
+| `getdcamultiplier` | Get the current DCA multiplier for collateral |
+| `getredemptioninfo` | Get info about redeeming a specific position |
+| `getprotectionstatus` | Check if liquidation protection is active |
+
+### Oracle Commands
+
+| Command | Description |
+|---------|-------------|
+| `createoraclekey <id>` | Generate a new oracle Schnorr keypair in your wallet (one-time) |
+| `getoraclepubkey <id>` | Show the oracle public key stored in your wallet |
+| `startoracle <id>` | Start running as an oracle operator (must re-run after restart) |
+| `stoporacle <id>` | Stop your oracle |
+| `getoracleprice` | Get the consensus price DigiDollar uses for minting/redemption |
+| `getalloracleprices` | Per-oracle breakdown: price, deviation, signature validity |
+| `getoracles` | Network-wide view of all oracle operators and their status |
+| `listoracle` | Show your local oracle status |
+| `sendoracleprice` | Manually submit a price (testing/debugging) |
+
+### Usage Examples
+```bash
+# Check the consensus price DigiDollar uses
+digibyte-cli -testnet getoracleprice
+
+# View all oracle operators network-wide
+digibyte-cli -testnet getoracles
+
+# See what each oracle reported (forensics)
+digibyte-cli -testnet getalloracleprices
+
+# Check your DD balance
+digibyte-cli -testnet -rpcwallet=default getdigidollarbalance
+
+# Mint 10 DUSD
+digibyte-cli -testnet -rpcwallet=default mintdigidollar 1000
+
+# Send 5 DUSD to someone
+digibyte-cli -testnet -rpcwallet=default senddigidollar dgbt1... 500
+```
+
+---
+
 ## Commits Since RC14
 
+### Security
 ```
-ca2d5cafdb docs: update RC15 release notes with bug fixes and CMC removal
-7b909ef23d fix: add all DD/Oracle RPC commands to Help dialog, fix empty left pane
-918c809572 remove: CoinMarketCap fetcher (paid API key incompatible with decentralized oracle)
-c2408fcc5f fix: allow rapid consecutive DD transfers (fee + change chaining)
-49315c6218 fix: add DigiDollar and Oracle categories to command-line help
-2d1032b456 fix: exclude unconfirmed DD UTXOs from spendable balance
-ab0b8fd60c fix: reuse persistent CURL handle to prevent Windows socket exhaustion
-ffa46cbb0d release: bump version to v9.26.0-rc15
-d0c9f008e5 update: Aussie Epic oracle 6 pubkey for RC15
+3a5101133c security: use NUMS point for collateral Taproot internal key (CVE-grade)
+a55ff1a54b security: bind oracle pubkey from chainparams before P2P signature verification
+d2be3ccbaa security: remove TLS fallback in exchange fetcher, harden curl settings
+cc21f0063d security: reject DD transactions when validation data unavailable instead of bypassing
+f659604ce0 security: protect DigiDollar locks from UnlockAllCoins and lockunspent RPC
+3559008524 security: re-lock DD collateral on block disconnection (reorg handler)
+```
+
+### Bug Fixes
+```
 91c854d08c fix: wallet rescan missing self-minted DigiDollars on fresh sync
 a5a752ac29 fix: universal DD amount extraction via block database lookup
+668a6696cd fix: universal DD amount extraction via block database lookup
 e1df0849f2 fix(oracle): use current height for staleness when pending messages exist
 1411390658 fix: resolve 3 root causes of DigiDollar test failures
 704e4fce72 fix: oracle_p2p_tests use wrong chainparams (mainnet vs regtest)
-3559008524 security: re-lock DD collateral on block disconnection (reorg handler)
-f659604ce0 security: protect DigiDollar locks from UnlockAllCoins and lockunspent RPC
-cc21f0063d security: reject DD transactions when validation data unavailable instead of bypassing
-d2be3ccbaa security: remove TLS fallback in exchange fetcher, harden curl settings
-a55ff1a54b security: bind oracle pubkey from chainparams before P2P signature verification
-3a5101133c security: use NUMS point for collateral Taproot internal key (CVE-grade)
+ab0b8fd60c fix: reuse persistent CURL handle to prevent Windows socket exhaustion
+2d1032b456 fix: exclude unconfirmed DD UTXOs from spendable balance
+c2408fcc5f fix: allow rapid consecutive DD transfers (fee + change chaining)
+44b86e9c7a fix: digidollar_network_relay.py use block hash for getrawtransaction
+```
+
+### Improvements
+```
+918c809572 remove: CoinMarketCap fetcher (paid API key incompatible with decentralized oracle)
+49315c6218 fix: add DigiDollar and Oracle categories to command-line help
+7b909ef23d fix: add all DD/Oracle RPC commands to Help dialog, fix empty left pane
+d0c9f008e5 update: Aussie Epic oracle 6 pubkey for RC15
+ffa46cbb0d release: bump version to v9.26.0-rc15
+```
+
+### Docs
+```
+d689a9afdc docs: update RC15 release notes with bug fixes and CMC removal
 ```
 
 ---
@@ -114,16 +283,51 @@ a55ff1a54b security: bind oracle pubkey from chainparams before P2P signature ve
 
 If you're upgrading from RC14, simply replace the binaries and restart.
 
+### If Upgrading from RC11 or Earlier:
+1. Close your old wallet
+2. Delete old testnet data:
+   - **Windows:** Delete `%APPDATA%\DigiByte\testnet10\` and `testnet11\`
+   - **macOS:** Delete `~/Library/Application Support/DigiByte/testnet10/` and `testnet11/`
+   - **Linux:** Delete `~/.digibyte/testnet10/` and `~/.digibyte/testnet11/`
+3. Download and install RC15
+4. Launch with `-testnet` flag
+
 **Aussie Epic (Oracle 6):** Your new key is active in this release. After upgrading, run `startoracle 6` to begin reporting prices.
 
 **Important:** DigiDollars minted on RC15 use a new collateral format (NUMS internal key). Existing mints from RC14 and earlier are unaffected and continue to work normally.
 
 ---
 
+## Configuration
+
+### Minimum digibyte.conf for DigiDollar Testing:
+```ini
+testnet=1
+
+[test]
+digidollar=1
+addnode=oracle1.digibyte.io
+```
+
+### Optional Settings:
+```ini
+[test]
+# Enable transaction index (useful for debugging, not required)
+txindex=1
+
+# Enable DigiDollar stats index for network-wide supply tracking
+digidollarstatsindex=1
+
+# For mining (SHA256d recommended for fastest CPU mining)
+algo=sha256d
+```
+
+---
+
 ## Known Issues
 
-- `digidollar_network_relay.py` functional test has a pre-existing getrawtransaction assertion failure — does not affect runtime behavior
 - Fixed testnet mining difficulty causes slower-than-normal block times on some algorithms
+- `startoracle` must be re-run after every `digibyted` restart
 
 ---
 
@@ -131,7 +335,7 @@ If you're upgrading from RC14, simply replace the binaries and restart.
 
 All tests validated:
 - ✅ 1,501 / 1,501 C++ unit tests pass (zero failures)
-- ✅ 7 / 8 DigiDollar functional tests pass (1 pre-existing `digidollar_network_relay.py` failure)
+- ✅ 8 / 8 DigiDollar functional tests pass
 
 ---
 
@@ -147,6 +351,19 @@ All tests validated:
 | Phase Two Activation | Block 100 |
 | Oracle Consensus | 5-of-8 Schnorr threshold |
 | Exchange Sources | 6 (Binance, CoinGecko, KuCoin, Gate.io, HTX, Crypto.com) |
+
+### Oracle Operators (Testnet)
+
+| ID | Name | Public Key (X-only, first 16 hex) |
+|----|------|-----------------------------------|
+| 0 | Jared | Lead maintainer |
+| 1 | Green Candle | Community |
+| 2 | Bastian | Community |
+| 3 | DanGB | Community |
+| 4 | Shenger | Community |
+| 5 | Ycagel | Community |
+| 6 | Aussie Epic | Community (new key in RC15) |
+| 7 | LookIntoMyEyes | Community |
 
 ---
 
@@ -165,7 +382,18 @@ All tests validated:
 
 ## Quick Start
 
-If you're new to DigiDollar testing, see the complete setup instructions in the [RC12 Release Notes](./RELEASE_v9.26.0-rc12.md) — the setup process is identical.
+### New to DigiDollar?
+
+1. Download the binary for your platform (see Downloads above)
+2. Create your config file (see Configuration section)
+3. Launch with `-testnet` flag: `./digibyte-qt -testnet`
+4. Wait for the blockchain to sync (should be quick on testnet)
+5. Once synced, the DigiDollar tab will appear
+6. You need DGB to mint — ask in Gitter and someone can send you testnet DGB
+
+### Want to Run an Oracle?
+
+See the **Oracle Operator Setup** section above, or read `DIGIDOLLAR_ORACLE_SETUP.md` for the complete guide.
 
 ---
 
@@ -174,6 +402,9 @@ If you're new to DigiDollar testing, see the complete setup instructions in the 
 ### "Self-minted DigiDollars not showing"
 - **If you deleted testnet13 and resynced:** This was fixed in RC15. Update to RC15 and resync — your self-minted DDs will now appear correctly.
 - **If balances appear in DD-Transaction/DD-Vault but not in the main overview:** Same issue, fixed in RC15.
+
+### "Failed to create or send the transaction" when sending multiple DDs
+- This was fixed in RC15. Update and retry. You can now chain unlimited consecutive sends.
 
 ### "DigiDollar tab not appearing"
 - Verify `digidollar=1` is under `[test]` section in config
@@ -190,7 +421,8 @@ If you're new to DigiDollar testing, see the complete setup instructions in the 
 - Check Window > Console: `getoracleprice`
 
 ### "Transaction stuck / unconfirmed"
-- Try: `abandontransaction <txid>` in the console
+- **If you upgraded from RC13:** This was a known bug fixed in RC14 where minting DD could cause subsequent DGB sends to get stuck. After upgrading, your wallet will automatically re-lock the correct UTXOs on startup.
+- If still stuck, try: `abandontransaction <txid>` in the console
 
 ### "No wallet is loaded" when running oracle commands
 - Add `-rpcwallet=oracle` to your `createoraclekey` and `startoracle` commands
@@ -198,10 +430,13 @@ If you're new to DigiDollar testing, see the complete setup instructions in the 
 ### "Oracle not configured" from `startoracle`
 - Run `createoraclekey` first to generate and store the key in your wallet
 
-### "Failed to create or send the transaction" when sending multiple DDs
-- This was fixed in RC15. Update and retry.
+### "Mining not working"
+- Ensure `algo=sha256d` is in your config under `[test]`
+- SHA256d is recommended for fastest CPU mining
 
-For complete troubleshooting, see [RC12 Release Notes](./RELEASE_v9.26.0-rc12.md).
+### "Old testnet data causing crashes"
+- Delete your testnet10 and testnet11 folders completely (see Upgrade Notes above)
+- RC15 uses testnet13 blockchain
 
 ---
 

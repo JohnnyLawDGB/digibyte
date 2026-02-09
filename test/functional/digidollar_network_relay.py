@@ -270,10 +270,26 @@ class DigiDollarNetworkRelayTest(DigiByteTestFramework):
             self.sync_blocks([self.nodes[0], self.nodes[1], self.nodes[2]])
 
         # Verify all transactions are confirmed on all nodes
+        # Use getblock + verbosity to find tx, since not all nodes have -txindex
         for node_idx in range(3):
+            best_hash = self.nodes[node_idx].getbestblockhash()
             for txid in txids:
-                tx_info = self.nodes[node_idx].getrawtransaction(txid, True)
-                assert_greater_than(tx_info['confirmations'], 0)
+                # Provide block hash so getrawtransaction works without -txindex
+                # Search recent blocks for the transaction
+                found = False
+                block_hash = best_hash
+                for _ in range(10):
+                    block = self.nodes[node_idx].getblock(block_hash)
+                    if txid in block['tx']:
+                        tx_info = self.nodes[node_idx].getrawtransaction(txid, True, block_hash)
+                        assert_greater_than(tx_info['confirmations'], 0)
+                        found = True
+                        break
+                    if 'previousblockhash' in block:
+                        block_hash = block['previousblockhash']
+                    else:
+                        break
+                assert found, f"Transaction {txid} not found in recent blocks on node {node_idx}"
 
         self.log.info(f"✓ All {len(txids)} transactions confirmed across all nodes")
 

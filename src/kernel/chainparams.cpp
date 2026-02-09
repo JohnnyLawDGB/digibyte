@@ -556,7 +556,7 @@ public:
         consensus.vOraclePublicKeys.push_back("546c07ee9d21640c4b4e96e6954bd49c3ab5bcf36c6a512603ebf75f8609da0c");  // oracle 3 - DanGB
         consensus.vOraclePublicKeys.push_back("9cef021f841794c1afc4e84d678f3c70dbe3a972330b2b6329852898443deb4f");  // oracle 4 - Shenger
         consensus.vOraclePublicKeys.push_back("85016758856ed27388501a54031fa3a678df705bf811fb8bc9abd2d7cfb6d9f7");  // oracle 5 - Ycagel
-        consensus.vOraclePublicKeys.push_back("e568a8c09fab74d84a91280053ec29495ec8ab0aada8c76a1ebc0f6434e069e6");  // oracle 6 - Aussie (new key RC13)
+        consensus.vOraclePublicKeys.push_back("2b6d8bf072cfa69f8d89001f90be1843c124e774f37b990a0781cfd7804446d0");  // oracle 6 - Aussie (new key RC14)
         consensus.vOraclePublicKeys.push_back("2d8c9f054d7087e263016c0800ad1c2f8106859e772766b9f8179042d1792a09");  // oracle 7 - LookInto (new key RC13)
 
         LogPrintf("Oracle: Testnet oracle activation height: %d\n", consensus.nOracleActivationHeight);
@@ -583,7 +583,7 @@ private:
             {3,  ParsePubKey("03546c07ee9d21640c4b4e96e6954bd49c3ab5bcf36c6a512603ebf75f8609da0c"), "oracle4.digibyte.io:12030", true},  // DanGB
             {4,  ParsePubKey("039cef021f841794c1afc4e84d678f3c70dbe3a972330b2b6329852898443deb4f"), "oracle5.digibyte.io:12030", true},  // Shenger
             {5,  ParsePubKey("0285016758856ed27388501a54031fa3a678df705bf811fb8bc9abd2d7cfb6d9f7"), "oracle6.digibyte.io:12030", true},  // Ycagel
-            {6,  ParsePubKey("02e568a8c09fab74d84a91280053ec29495ec8ab0aada8c76a1ebc0f6434e069e6"), "oracle7.digibyte.io:12030", true},  // Aussie (new key RC13)
+            {6,  ParsePubKey("032b6d8bf072cfa69f8d89001f90be1843c124e774f37b990a0781cfd7804446d0"), "oracle7.digibyte.io:12030", true},  // Aussie (new key RC14)
             {7,  ParsePubKey("032d8c9f054d7087e263016c0800ad1c2f8106859e772766b9f8179042d1792a09"), "oracle8.digibyte.io:12030", true},  // LookInto (new key RC13)
         };
     }

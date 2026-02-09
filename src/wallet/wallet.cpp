@@ -1571,6 +1571,26 @@ void CWallet::blockDisconnected(const interfaces::BlockInfo& block)
     m_last_block_processed_height = block.height - 1;
     m_last_block_processed = *Assert(block.prev_hash);
 
+    // SECURITY: Handle DigiDollar state on reorg.
+    // When a block is disconnected, any DD operations in that block are reversed.
+    // We must re-lock collateral for reorged-out redemptions to prevent double-spend.
+    DigiDollarWallet* dd_wallet = GetDDWallet();
+    if (dd_wallet) {
+        for (const CTransactionRef& ptx : Assert(block.data)->vtx) {
+            // Check if this TX spent any DD collateral (i.e., was a redemption)
+            // If so, re-lock the collateral since the redemption is no longer confirmed
+            for (const CTxIn& txin : ptx->vin) {
+                if (dd_wallet->IsLockedByDD(txin.prevout)) {
+                    // This input was DD collateral that got spent in a now-reorged block
+                    // Re-lock it since the redemption is being undone
+                    LockCoin(txin.prevout);
+                    LogPrintf("DigiDollar: Re-locked collateral %s after reorg at height %d\n",
+                              txin.prevout.ToString(), block.height);
+                }
+            }
+        }
+    }
+
     int disconnect_height = block.height;
 
     for (const CTransactionRef& ptx : Assert(block.data)->vtx) {

@@ -411,16 +411,21 @@ BOOST_FIXTURE_TEST_CASE(test_oracle_price_format, DigiDollarRPCTestSetup)
     int64_t cents = result["price_cents"].getInt<int64_t>();
     double usd = result["price_usd"].get_real();
 
-    // In unit test environment without oracle setup, values come from different sources:
-    // - price_cents comes from OracleIntegration::GetCurrentOraclePrice() (may have fallback)
-    // - price_usd comes from oracle_manager.GetLatestPrice() (may be 0 if no oracle)
-    // So we only check consistency when both values are non-zero from the same source
-    if (cents > 0 && usd > 0) {
-        BOOST_CHECK_CLOSE(usd, cents / 100.0, 0.01);
-    } else {
-        // In unit test environment, we just verify the response has valid structure
-        BOOST_CHECK(cents >= 0);
-        BOOST_CHECK(usd >= 0.0);
+    // Both price_cents and price_usd derive from the same micro-USD source.
+    // At sub-cent prices (like DGB at $0.0065), integer cents rounding is lossy:
+    // e.g., 6500 micro-USD = $0.0065 USD but rounds to 1 cent ($0.01).
+    // So we verify: (1) both are non-negative, (2) micro-USD is consistent with USD,
+    // and (3) cents is the correct rounding of micro-USD / 10000.
+    BOOST_CHECK(cents >= 0);
+    BOOST_CHECK(usd >= 0.0);
+    if (usd > 0) {
+        int64_t micro_usd = result["price_micro_usd"].getInt<int64_t>();
+        // USD should match micro-USD exactly
+        BOOST_CHECK_CLOSE(usd, static_cast<double>(micro_usd) / 1000000.0, 0.001);
+        // Cents should be micro-USD / 10000 rounded, minimum 1 if price > 0
+        int64_t expected_cents = (micro_usd + 5000) / 10000;
+        if (expected_cents == 0 && micro_usd > 0) expected_cents = 1;
+        BOOST_CHECK_EQUAL(cents, expected_cents);
     }
 }
 

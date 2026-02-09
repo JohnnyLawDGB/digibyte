@@ -2358,8 +2358,10 @@ static RPCHelpMan getoracleprice()
             if (!usingMockOracle) {
                 // Get the raw micro-USD price from the oracle (full precision)
                 priceMicroUSD = oracle_manager.GetLatestPrice();
-                // Get rounded cents price for internal calculations
-                priceCents = OracleIntegration::GetCurrentOraclePrice();
+                // Derive cents from the same micro-USD source for consistency
+                // cents = micro-USD / 10,000 (rounded)
+                priceCents = (priceMicroUSD + 5000) / 10000;
+                if (priceCents == 0 && priceMicroUSD > 0) priceCents = 1; // Minimum 1 cent if price exists
                 // Calculate true USD price from micro-USD (full precision)
                 priceUSD = static_cast<double>(priceMicroUSD) / 1000000.0;
 

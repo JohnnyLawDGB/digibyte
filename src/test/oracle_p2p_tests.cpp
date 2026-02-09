@@ -906,6 +906,42 @@ BOOST_AUTO_TEST_CASE(test_stale_message_mixed_bundle)
  * This test is placed in oracle_p2p_tests (last oracle test alphabetically) to ensure
  * it runs after all other oracle tests but before validation tests.
  */
+// ============================================================================
+// FIX-2: P2P oracle pubkey must be bound from chainparams, not message
+// ============================================================================
+
+BOOST_AUTO_TEST_CASE(test_fake_pubkey_rejected_by_bundle_manager)
+{
+    // An attacker generates their own keypair and signs an oracle message.
+    // Even though the signature is valid for the attacker's key, it must be
+    // rejected because IsValidOracleMessage binds the pubkey from chainparams.
+    OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    manager.Clear();
+    manager.SetEnabled(true);
+
+    // Generate attacker's key (NOT an authorized oracle key)
+    CKey attackerKey;
+    attackerKey.MakeNewKey(true);
+
+    COraclePriceMessage fake_msg;
+    fake_msg.oracle_id = 0;  // Pretend to be oracle 0
+    fake_msg.price_micro_usd = 5000;  // $0.005
+    fake_msg.timestamp = GetTime();
+    fake_msg.block_height = 100;
+
+    // Sign with attacker's key — signature is cryptographically valid
+    BOOST_CHECK(fake_msg.SignPhase2(attackerKey));
+    BOOST_CHECK(fake_msg.VerifyPhase2());  // Passes with attacker's own key
+
+    // AddOracleMessage calls IsValidOracleMessage internally, which binds
+    // the pubkey from chainparams. The attacker's key won't match.
+    bool accepted = manager.AddOracleMessage(fake_msg);
+    BOOST_CHECK(!accepted);  // MUST be rejected
+
+    manager.Clear();
+    manager.SetEnabled(false);
+}
+
 BOOST_AUTO_TEST_CASE(zzz_cleanup_oracle_singleton_state)
 {
     OracleBundleManager& manager = OracleBundleManager::GetInstance();

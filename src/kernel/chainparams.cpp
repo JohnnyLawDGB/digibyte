@@ -556,8 +556,8 @@ public:
         consensus.vOraclePublicKeys.push_back("546c07ee9d21640c4b4e96e6954bd49c3ab5bcf36c6a512603ebf75f8609da0c");  // oracle 3 - DanGB
         consensus.vOraclePublicKeys.push_back("9cef021f841794c1afc4e84d678f3c70dbe3a972330b2b6329852898443deb4f");  // oracle 4 - Shenger
         consensus.vOraclePublicKeys.push_back("85016758856ed27388501a54031fa3a678df705bf811fb8bc9abd2d7cfb6d9f7");  // oracle 5 - Ycagel
-        consensus.vOraclePublicKeys.push_back("ec2122bab83d1199350d5bd3e5e88b305da873211b1876edd5170fbe9c7f962e");  // oracle 6 - Aussie
-        consensus.vOraclePublicKeys.push_back("83b831f296bfd78940a8d1ee8868a692c7ccdb1b4b0250bffff47bc1ad91f7d0");  // oracle 7 - LookInto
+        consensus.vOraclePublicKeys.push_back("e568a8c09fab74d84a91280053ec29495ec8ab0aada8c76a1ebc0f6434e069e6");  // oracle 6 - Aussie (new key RC13)
+        consensus.vOraclePublicKeys.push_back("2d8c9f054d7087e263016c0800ad1c2f8106859e772766b9f8179042d1792a09");  // oracle 7 - LookInto (new key RC13)
 
         LogPrintf("Oracle: Testnet oracle activation height: %d\n", consensus.nOracleActivationHeight);
         LogPrintf("Oracle: %d oracles configured, %d-of-%d consensus, Phase Two at height %d\n",
@@ -583,8 +583,8 @@ private:
             {3,  ParsePubKey("03546c07ee9d21640c4b4e96e6954bd49c3ab5bcf36c6a512603ebf75f8609da0c"), "oracle4.digibyte.io:12030", true},  // DanGB
             {4,  ParsePubKey("039cef021f841794c1afc4e84d678f3c70dbe3a972330b2b6329852898443deb4f"), "oracle5.digibyte.io:12030", true},  // Shenger
             {5,  ParsePubKey("0285016758856ed27388501a54031fa3a678df705bf811fb8bc9abd2d7cfb6d9f7"), "oracle6.digibyte.io:12030", true},  // Ycagel
-            {6,  ParsePubKey("02ec2122bab83d1199350d5bd3e5e88b305da873211b1876edd5170fbe9c7f962e"), "oracle7.digibyte.io:12030", true},  // Aussie
-            {7,  ParsePubKey("0383b831f296bfd78940a8d1ee8868a692c7ccdb1b4b0250bffff47bc1ad91f7d0"), "oracle8.digibyte.io:12030", true},  // LookInto
+            {6,  ParsePubKey("02e568a8c09fab74d84a91280053ec29495ec8ab0aada8c76a1ebc0f6434e069e6"), "oracle7.digibyte.io:12030", true},  // Aussie (new key RC13)
+            {7,  ParsePubKey("032d8c9f054d7087e263016c0800ad1c2f8106859e772766b9f8179042d1792a09"), "oracle8.digibyte.io:12030", true},  // LookInto (new key RC13)
         };
     }
 };

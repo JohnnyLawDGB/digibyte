@@ -2790,7 +2790,18 @@ CAmount DigiDollarWallet::GetTotalDDBalance() const {
                 // Testing scenario: count all UTXOs in map
                 balance += dd_amount;
             } else if (!m_wallet->IsSpent(outpoint)) {
-                // Production scenario: only count unspent UTXOs
+                // FIX: Also require at least 1 confirmation before counting as spendable.
+                // Without this check, freshly minted DD from mintdigidollar (which calls
+                // AddDDUTXO immediately after broadcast) appears spendable while still
+                // unconfirmed, causing transfer to fail with conservation-violation.
+                LOCK(m_wallet->cs_wallet);
+                const wallet::CWalletTx* wtx = m_wallet->GetWalletTx(outpoint.hash);
+                if (!wtx || m_wallet->GetTxDepthInMainChain(*wtx) < 1) {
+                    LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: Skipping unconfirmed DD UTXO %s:%u in balance\n",
+                             outpoint.hash.ToString(), outpoint.n);
+                    continue;  // Skip unconfirmed or unknown UTXOs
+                }
+                // Production scenario: only count confirmed, unspent UTXOs
                 balance += dd_amount;
             }
         }
@@ -2855,6 +2866,18 @@ std::vector<DDUtxo> DigiDollarWallet::GetDDUTXOs() const {
             LogPrintf("DigiDollar: Skipping spent UTXO %s:%d\n",
                       outpoint.hash.ToString(), outpoint.n);
             continue; // Skip spent
+        }
+
+        // FIX: Also require at least 1 confirmation before returning as spendable.
+        // Same rationale as GetTotalDDBalance — unconfirmed mints are not spendable.
+        if (m_wallet) {
+            LOCK(m_wallet->cs_wallet);
+            const wallet::CWalletTx* wtx = m_wallet->GetWalletTx(outpoint.hash);
+            if (!wtx || m_wallet->GetTxDepthInMainChain(*wtx) < 1) {
+                LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: Skipping unconfirmed DD UTXO %s:%u\n",
+                         outpoint.hash.ToString(), outpoint.n);
+                continue;  // Skip unconfirmed or unknown UTXOs
+            }
         }
 
         DDUtxo utxo(outpoint, dd_amount);

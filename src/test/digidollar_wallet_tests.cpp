@@ -6,6 +6,9 @@
 #include <test/util/random.h>
 
 #include <wallet/digidollarwallet.h>
+#include <wallet/test/util.h>
+#include <wallet/transaction.h>
+#include <wallet/wallet.h>
 #include <digidollar/digidollar.h>
 #include <digidollar/validation.h>
 #include <primitives/transaction.h>
@@ -3410,6 +3413,212 @@ BOOST_AUTO_TEST_CASE(test_burn_and_close_integration) {
     // Position is inactive
     auto positions = wallet.GetDDTimeLocks(true);
     BOOST_CHECK_EQUAL(positions.size(), 0); // No active positions
+}
+
+// =============================================================================
+// Bug Fix: Unconfirmed DD Balance Must NOT Be Counted as Spendable
+// =============================================================================
+// After mintdigidollar broadcasts, AddDDUTXO() is called immediately.
+// GetTotalDDBalance() and GetDDUTXOs() only checked IsSpent() — never
+// confirmations. So unconfirmed mint outputs appeared as spendable,
+// then transfer failed with conservation-violation.
+//
+// Fix: Also check GetTxDepthInMainChain() >= 1 before counting a UTXO.
+// =============================================================================
+
+/**
+ * Test: Unconfirmed DD UTXO should NOT appear in GetTotalDDBalance()
+ *
+ * Scenario: mintdigidollar broadcasts and calls AddDDUTXO(). The transaction
+ * is in the mempool (0 confirmations). GetTotalDDBalance() must return 0.
+ */
+BOOST_FIXTURE_TEST_CASE(test_unconfirmed_dd_utxo_not_in_balance, TestingSetup)
+{
+    // Create a real CWallet so IsSpent/GetWalletTx/GetTxDepthInMainChain work
+    std::unique_ptr<wallet::WalletDatabase> database = wallet::CreateMockableWalletDatabase();
+    std::shared_ptr<wallet::CWallet> wallet = std::make_shared<wallet::CWallet>(m_node.chain.get(), "", std::move(database));
+
+    {
+        LOCK(wallet->cs_wallet);
+        wallet->SetLastBlockProcessed(m_node.chainman->ActiveChain().Height(),
+                                       m_node.chainman->ActiveChain().Tip()->GetBlockHash());
+    }
+
+    DigiDollarWallet dd_wallet(wallet.get());
+
+    // Build a simple transaction
+    CMutableTransaction mtx;
+    mtx.vin.resize(1);
+    mtx.vin[0].prevout = COutPoint(InsecureRand256(), 0);
+    mtx.vout.resize(2);
+    mtx.vout[0].nValue = 100 * COIN;  // Collateral output
+    mtx.vout[1].nValue = 546;          // DD dust output
+
+    CTransactionRef tx = MakeTransactionRef(std::move(mtx));
+    uint256 txid = tx->GetHash();
+
+    // Add transaction as unconfirmed (mempool state)
+    {
+        LOCK(wallet->cs_wallet);
+        wallet->AddToWallet(tx, wallet::TxStateInMempool{});
+    }
+
+    // Track the DD UTXO just as mintdigidollar RPC does
+    COutPoint dd_outpoint(txid, 1);
+    CAmount dd_amount = 50000;  // $500.00
+    dd_wallet.AddDDUTXO(dd_outpoint, dd_amount);
+
+    // *** KEY ASSERTION: Unconfirmed DD UTXO must NOT be counted ***
+    CAmount balance = dd_wallet.GetTotalDDBalance();
+    BOOST_CHECK_EQUAL(balance, 0);
+
+    // GetDDUTXOs() should also return empty
+    std::vector<DDUtxo> utxos = dd_wallet.GetDDUTXOs();
+    BOOST_CHECK_EQUAL(utxos.size(), 0);
+}
+
+/**
+ * Test: Confirmed DD UTXO (1+ confirmation) SHOULD appear in balance
+ *
+ * Same scenario but after the tx gets mined into a block.
+ */
+BOOST_FIXTURE_TEST_CASE(test_confirmed_dd_utxo_in_balance, TestingSetup)
+{
+    std::unique_ptr<wallet::WalletDatabase> database = wallet::CreateMockableWalletDatabase();
+    std::shared_ptr<wallet::CWallet> wallet = std::make_shared<wallet::CWallet>(m_node.chain.get(), "", std::move(database));
+
+    {
+        LOCK(wallet->cs_wallet);
+        wallet->SetLastBlockProcessed(m_node.chainman->ActiveChain().Height(),
+                                       m_node.chainman->ActiveChain().Tip()->GetBlockHash());
+    }
+
+    DigiDollarWallet dd_wallet(wallet.get());
+
+    // Build a simple transaction
+    CMutableTransaction mtx;
+    mtx.vin.resize(1);
+    mtx.vin[0].prevout = COutPoint(InsecureRand256(), 0);
+    mtx.vout.resize(2);
+    mtx.vout[0].nValue = 100 * COIN;
+    mtx.vout[1].nValue = 546;
+
+    CTransactionRef tx = MakeTransactionRef(std::move(mtx));
+    uint256 txid = tx->GetHash();
+
+    // Add transaction as confirmed (in a block)
+    {
+        LOCK(wallet->cs_wallet);
+        auto tip = m_node.chainman->ActiveChain().Tip();
+        wallet->AddToWallet(tx, wallet::TxStateConfirmed{tip->GetBlockHash(), tip->nHeight, /*index=*/0});
+    }
+
+    // Track the DD UTXO
+    COutPoint dd_outpoint(txid, 1);
+    CAmount dd_amount = 50000;  // $500.00
+    dd_wallet.AddDDUTXO(dd_outpoint, dd_amount);
+
+    // *** Confirmed UTXO SHOULD be counted ***
+    CAmount balance = dd_wallet.GetTotalDDBalance();
+    BOOST_CHECK_EQUAL(balance, 50000);
+
+    // GetDDUTXOs() should return the UTXO
+    std::vector<DDUtxo> utxos = dd_wallet.GetDDUTXOs();
+    BOOST_CHECK_EQUAL(utxos.size(), 1);
+    if (!utxos.empty()) {
+        BOOST_CHECK_EQUAL(utxos[0].dd_amount, 50000);
+    }
+}
+
+/**
+ * Test: Mixed confirmed and unconfirmed — only confirmed counted
+ *
+ * Two DD UTXOs: one confirmed, one not. Balance should only include confirmed.
+ */
+BOOST_FIXTURE_TEST_CASE(test_mixed_confirmed_unconfirmed_dd_balance, TestingSetup)
+{
+    std::unique_ptr<wallet::WalletDatabase> database = wallet::CreateMockableWalletDatabase();
+    std::shared_ptr<wallet::CWallet> wallet = std::make_shared<wallet::CWallet>(m_node.chain.get(), "", std::move(database));
+
+    {
+        LOCK(wallet->cs_wallet);
+        wallet->SetLastBlockProcessed(m_node.chainman->ActiveChain().Height(),
+                                       m_node.chainman->ActiveChain().Tip()->GetBlockHash());
+    }
+
+    DigiDollarWallet dd_wallet(wallet.get());
+
+    // Transaction 1: Confirmed
+    CMutableTransaction mtx1;
+    mtx1.vin.resize(1);
+    mtx1.vin[0].prevout = COutPoint(InsecureRand256(), 0);
+    mtx1.vout.resize(2);
+    mtx1.vout[0].nValue = 100 * COIN;
+    mtx1.vout[1].nValue = 546;
+    CTransactionRef tx1 = MakeTransactionRef(std::move(mtx1));
+
+    {
+        LOCK(wallet->cs_wallet);
+        auto tip = m_node.chainman->ActiveChain().Tip();
+        wallet->AddToWallet(tx1, wallet::TxStateConfirmed{tip->GetBlockHash(), tip->nHeight, 0});
+    }
+
+    COutPoint dd_out1(tx1->GetHash(), 1);
+    dd_wallet.AddDDUTXO(dd_out1, 30000);  // $300 confirmed
+
+    // Transaction 2: Unconfirmed (mempool)
+    CMutableTransaction mtx2;
+    mtx2.vin.resize(1);
+    mtx2.vin[0].prevout = COutPoint(InsecureRand256(), 0);
+    mtx2.vout.resize(2);
+    mtx2.vout[0].nValue = 50 * COIN;
+    mtx2.vout[1].nValue = 546;
+    CTransactionRef tx2 = MakeTransactionRef(std::move(mtx2));
+
+    {
+        LOCK(wallet->cs_wallet);
+        wallet->AddToWallet(tx2, wallet::TxStateInMempool{});
+    }
+
+    COutPoint dd_out2(tx2->GetHash(), 1);
+    dd_wallet.AddDDUTXO(dd_out2, 20000);  // $200 unconfirmed
+
+    // *** Only $300 (confirmed) should be counted ***
+    CAmount balance = dd_wallet.GetTotalDDBalance();
+    BOOST_CHECK_EQUAL(balance, 30000);
+
+    std::vector<DDUtxo> utxos = dd_wallet.GetDDUTXOs();
+    BOOST_CHECK_EQUAL(utxos.size(), 1);
+}
+
+/**
+ * Test: DD UTXO with no wallet tx found (orphaned) should NOT be counted
+ *
+ * If GetWalletTx returns nullptr, the UTXO is orphaned and should be skipped.
+ */
+BOOST_FIXTURE_TEST_CASE(test_orphaned_dd_utxo_not_in_balance, TestingSetup)
+{
+    std::unique_ptr<wallet::WalletDatabase> database = wallet::CreateMockableWalletDatabase();
+    std::shared_ptr<wallet::CWallet> wallet = std::make_shared<wallet::CWallet>(m_node.chain.get(), "", std::move(database));
+
+    {
+        LOCK(wallet->cs_wallet);
+        wallet->SetLastBlockProcessed(m_node.chainman->ActiveChain().Height(),
+                                       m_node.chainman->ActiveChain().Tip()->GetBlockHash());
+    }
+
+    DigiDollarWallet dd_wallet(wallet.get());
+
+    // Add a DD UTXO whose transaction is NOT in the wallet at all
+    COutPoint orphan_outpoint(InsecureRand256(), 1);
+    dd_wallet.AddDDUTXO(orphan_outpoint, 75000);  // $750
+
+    // Orphaned UTXO should not be counted
+    CAmount balance = dd_wallet.GetTotalDDBalance();
+    BOOST_CHECK_EQUAL(balance, 0);
+
+    std::vector<DDUtxo> utxos = dd_wallet.GetDDUTXOs();
+    BOOST_CHECK_EQUAL(utxos.size(), 0);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

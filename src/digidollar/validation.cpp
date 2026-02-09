@@ -898,11 +898,11 @@ bool ValidateTransferTransaction(const CTransaction& tx,
         }
 
         if (ddInputCount == 0) {
-            // Could not determine input DD amounts — fall back to conservation assumption
-            // This happens when txindex is not available (regtest without -txindex, etc.)
-            // Phase 2 will eliminate this fallback by storing DD amounts in UTXO DB.
-            LogPrintf("DigiDollar: WARNING - Could not determine input DD amounts (txindex unavailable?), using conservation fallback\n");
-            inputDD = outputDD;
+            // SECURITY: Cannot validate DD conservation without knowing input amounts.
+            // Reject the transaction instead of assuming conservation (which would allow unlimited DD creation).
+            LogPrintf("DigiDollar: REJECTED - Could not determine input DD amounts (txindex unavailable?)\n");
+            return state.Invalid(TxValidationResult::TX_CONSENSUS, "dd-transfer-no-input-amounts",
+                               "Cannot validate DD conservation without txindex");
         }
     }
 
@@ -1106,9 +1106,15 @@ bool ValidateRedemptionTransaction(const CTransaction& tx,
         LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: DD burning validated (inputs: %d, outputs: %d, burned: %d)\n",
                  totalDDInputs, totalDDOutputs, totalDDInputs - totalDDOutputs);
     } else {
-        // No coins view or couldn't extract amounts - structural validation only
-        // This can happen in unit tests or early validation stages
-        LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: Redemption structural validation only (%d DD inputs, %d DD change outputs)\n",
+        // SECURITY: Cannot validate DD burn without coins view.
+        // Reject redemption transactions instead of skipping burn validation
+        // (which would allow free collateral extraction without burning DD).
+        if (txType == DD_TX_REDEEM) {
+            LogPrintf("DigiDollar: REJECTED - Cannot validate DD burn without coins view\n");
+            return state.Invalid(TxValidationResult::TX_CONSENSUS, "dd-redeem-no-burn-validation",
+                               "Cannot validate DD burn without coins view");
+        }
+        LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: Non-redemption structural validation only (%d DD inputs, %d DD change outputs)\n",
                  ddInputIndices.size(), totalDDOutputs > 0 ? 1 : 0);
     }
 
@@ -1252,9 +1258,10 @@ bool ValidateCollateralReleaseAmount(const CTransaction& tx,
     // Must verify that DGB released is proportional to DD burned
 
     if (ctx.coins == nullptr) {
-        // Phase 1 backward compatibility: no UTXO access
-        LogPrintf("DigiDollar: WARNING - No coins view for collateral release validation, using fallback\n");
-        return true;
+        // SECURITY: Cannot validate collateral release without UTXO access.
+        // Reject instead of assuming validity (which would allow unlimited collateral extraction).
+        LogPrintf("DigiDollar: REJECTED - No coins view for collateral release validation\n");
+        return false;
     }
 
     // Input 0 is assumed to be the collateral input

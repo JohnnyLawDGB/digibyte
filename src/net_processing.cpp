@@ -5330,7 +5330,27 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
     }
 
     if (msg_type == NetMsgType::ORACLEPRICE) {
-        // Rate limiting: max 100 oracle messages per hour per peer
+        // Deserialize first - oracle messages are small and cheap to deserialize.
+        // We need the hash to check for duplicates before rate limiting.
+        OraclePriceMsg oracle_msg;
+        vRecv >> oracle_msg;
+
+        // Check for duplicate message BEFORE rate limiting.
+        // In a P2P gossip network, duplicate relays are the majority of traffic
+        // and must not count toward rate limits or we'll ban legitimate peers.
+        uint256 msg_hash = oracle_msg.GetHash();
+        OracleBundleManager& bundleManager = OracleBundleManager::GetInstance();
+
+        if (bundleManager.HasOracleMessage(msg_hash)) {
+            LogPrint(BCLog::NET, "Ignoring duplicate oracle message from oracle %d peer=%d\n",
+                     oracle_msg.price_message.oracle_id, pfrom.GetId());
+            return; // Don't relay duplicates, don't count toward rate limit
+        }
+
+        // Rate limiting for novel (non-duplicate) messages only.
+        // With duplicates filtered, only genuinely new messages count.
+        // 15 active oracles × ~3 epochs/hour = ~45 novel messages/hour expected;
+        // limit of 200 provides generous headroom.
         static std::map<NodeId, std::pair<int64_t, int>> oracle_rate_limit;
         int64_t now = GetTime();
 
@@ -5352,14 +5372,14 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             count = 0;
         }
 
-        if (++count > 100) {
-            LogPrintf("Oracle message rate limit exceeded from peer=%d (count=%d)\n", pfrom.GetId(), count);
-            Misbehaving(*peer, 5, "oracle message rate limit exceeded");
+        if (++count > 200) {
+            // Throttle log output: only log every 10th violation to avoid log flooding
+            if (count % 10 == 1) {
+                LogPrint(BCLog::NET, "Oracle message rate limit exceeded from peer=%d (count=%d novel msgs/hr)\n", pfrom.GetId(), count);
+            }
+            Misbehaving(*peer, 1, "oracle message rate limit exceeded");
             return;
         }
-
-        OraclePriceMsg oracle_msg;
-        vRecv >> oracle_msg;
 
         // Basic validation
         if (!oracle_msg.price_message.IsValid()) {
@@ -5412,16 +5432,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             return;
         }
 
-        // Check for duplicate message
-        uint256 msg_hash = oracle_msg.GetHash();
-        OracleBundleManager& bundleManager = OracleBundleManager::GetInstance();
-
-        if (bundleManager.HasOracleMessage(msg_hash)) {
-            LogPrint(BCLog::NET, "Ignoring duplicate oracle message from oracle %d peer=%d\n",
-                     oracle_msg.price_message.oracle_id, pfrom.GetId());
-            return; // Don't relay duplicates
-        }
-
         // Store in oracle bundle manager
         if (!bundleManager.AddOracleMessage(oracle_msg.price_message)) {
             LogPrint(BCLog::NET, "Failed to add oracle message to bundle manager from oracle %d peer=%d\n",
@@ -5446,9 +5456,33 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
     }
 
     if (msg_type == NetMsgType::ORACLEBUNDLE) {
-        // Rate limiting for bundles: max 10 per hour per peer
-        static std::map<NodeId, std::pair<int64_t, int>> bundle_rate_limit;
+        // Deserialize first - needed to check for duplicate bundles before rate limiting
+        OracleBundleMsg bundle_msg;
+        vRecv >> bundle_msg;
+
+        // Check for duplicate bundles BEFORE rate limiting.
+        // Same gossip-network duplicate relay issue as ORACLEPRICE.
+        static std::set<uint256> seen_bundle_hashes;
+        static int64_t last_bundle_cleanup = 0;
         int64_t now = GetTime();
+
+        // Periodic cleanup of seen bundles (every 2 hours)
+        if (now - last_bundle_cleanup > 7200) {
+            seen_bundle_hashes.clear();
+            last_bundle_cleanup = now;
+        }
+
+        uint256 bundle_hash = bundle_msg.GetHash();
+        if (seen_bundle_hashes.count(bundle_hash) > 0) {
+            LogPrint(BCLog::NET, "Ignoring duplicate oracle bundle epoch=%d peer=%d\n",
+                     bundle_msg.bundle.epoch, pfrom.GetId());
+            return; // Don't count duplicates toward rate limit
+        }
+        seen_bundle_hashes.insert(bundle_hash);
+
+        // Rate limiting for novel (non-duplicate) bundles only.
+        // Max 50 novel bundles per hour per peer (generous headroom).
+        static std::map<NodeId, std::pair<int64_t, int>> bundle_rate_limit;
 
         // Cleanup old entries (older than 2 hours)
         if (bundle_rate_limit.size() > 100) { // Only cleanup when map gets large
@@ -5468,14 +5502,14 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             count = 0;
         }
 
-        if (++count > 10) {
-            LogPrintf("Oracle bundle rate limit exceeded from peer=%d (count=%d)\n", pfrom.GetId(), count);
-            Misbehaving(*peer, 10, "oracle bundle rate limit exceeded");
+        if (++count > 50) {
+            // Throttle log output: only log every 10th violation
+            if (count % 10 == 1) {
+                LogPrint(BCLog::NET, "Oracle bundle rate limit exceeded from peer=%d (count=%d novel bundles/hr)\n", pfrom.GetId(), count);
+            }
+            Misbehaving(*peer, 2, "oracle bundle rate limit exceeded");
             return;
         }
-
-        OracleBundleMsg bundle_msg;
-        vRecv >> bundle_msg;
 
         // Validate bundle size is reasonable
         if (bundle_msg.bundle.messages.size() > ORACLE_ACTIVE_COUNT) {

@@ -1570,12 +1570,22 @@ void DigiDollarWallet::ProcessDDTxForRescan(const CTransactionRef& ptx, int bloc
         }
 
         // Also check if we own any other outputs (DD tokens, change)
+        // CRITICAL FIX: Use IsDDOutputMine() for 0-value P2TR outputs (DD tokens)
+        // because m_wallet->IsMine() returns false for these in descriptor wallets.
+        // This was causing self-minted DigiDollars to be missed during wallet rescan.
         if (!is_our_mint) {
             for (size_t i = 1; i < tx.vout.size(); ++i) {
                 if (tx.vout[i].scriptPubKey.IsUnspendable()) continue; // Skip OP_RETURN
+                // First try standard IsMine (works for non-DD outputs like change)
                 if (m_wallet->IsMine(tx.vout[i]) != wallet::ISMINE_NO) {
                     is_our_mint = true;
-                    LogPrintf("DigiDollar: ProcessDDTxForRescan - Our output found at vout[%zu], this is our mint\n", i);
+                    LogPrintf("DigiDollar: ProcessDDTxForRescan - Our output found at vout[%zu] via IsMine\n", i);
+                    break;
+                }
+                // Then try IsDDOutputMine for 0-value P2TR DD token outputs
+                if (tx.vout[i].nValue == 0 && IsDDOutputMine(tx.vout[i], tx.GetHash())) {
+                    is_our_mint = true;
+                    LogPrintf("DigiDollar: ProcessDDTxForRescan - Our DD output found at vout[%zu] via IsDDOutputMine\n", i);
                     break;
                 }
             }

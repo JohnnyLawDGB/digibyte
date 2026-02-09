@@ -669,9 +669,39 @@ void SetupServerArgs(ArgsManager& argsman)
     argsman.AddArg("-dandelion", strprintf("Enable Dandelion Transaction Relay Protocol (default: %d)", DEFAULT_DANDELION), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
 
     // DigiDollar stablecoin options
+    // DigiDollar startup options
     argsman.AddArg("-digidollar", "Enable DigiDollar stablecoin features (follows BIP9 activation by default)", ArgsManager::ALLOW_ANY, OptionsCategory::DIGIDOLLAR);
     argsman.AddArg("-digidollaractivationheight=<n>", "Set DigiDollar activation height for regtest (overrides BIP9 activation, regtest only)", ArgsManager::ALLOW_ANY | ArgsManager::DEBUG_ONLY, OptionsCategory::DIGIDOLLAR);
-    argsman.AddArg("-coinmarketcap-api-key=<key>", "CoinMarketCap API key for oracle exchange price fetching", ArgsManager::ALLOW_ANY | ArgsManager::SENSITIVE, OptionsCategory::ORACLE);
+
+    // DigiDollar RPC commands (use 'help <command>' in console for details)
+    argsman.AddArg("mintdigidollar", "Mint DigiDollars by locking DGB as collateral (RPC/console)", ArgsManager::ALLOW_ANY, OptionsCategory::DIGIDOLLAR);
+    argsman.AddArg("senddigidollar", "Send DigiDollars to another address (RPC/console)", ArgsManager::ALLOW_ANY, OptionsCategory::DIGIDOLLAR);
+    argsman.AddArg("redeemdigidollar", "Redeem DigiDollars to unlock DGB collateral (RPC/console)", ArgsManager::ALLOW_ANY, OptionsCategory::DIGIDOLLAR);
+    argsman.AddArg("getdigidollarbalance", "Show your DigiDollar balance (RPC/console)", ArgsManager::ALLOW_ANY, OptionsCategory::DIGIDOLLAR);
+    argsman.AddArg("listdigidollarpositions", "List all collateral positions and minted DD (RPC/console)", ArgsManager::ALLOW_ANY, OptionsCategory::DIGIDOLLAR);
+    argsman.AddArg("listdigidollartxs", "List DigiDollar transaction history (RPC/console)", ArgsManager::ALLOW_ANY, OptionsCategory::DIGIDOLLAR);
+    argsman.AddArg("getdigidollaraddress", "Get or create a DigiDollar receive address (RPC/console)", ArgsManager::ALLOW_ANY, OptionsCategory::DIGIDOLLAR);
+    argsman.AddArg("validateddaddress", "Validate a DigiDollar address (RPC/console)", ArgsManager::ALLOW_ANY, OptionsCategory::DIGIDOLLAR);
+    argsman.AddArg("listdigidollaraddresses", "List all DigiDollar addresses in wallet (RPC/console)", ArgsManager::ALLOW_ANY, OptionsCategory::DIGIDOLLAR);
+    argsman.AddArg("importdigidollaraddress", "Import a DigiDollar address for watch-only tracking (RPC/console)", ArgsManager::ALLOW_ANY, OptionsCategory::DIGIDOLLAR);
+    argsman.AddArg("getdigidollarstats", "Get network-wide DigiDollar statistics (RPC/console)", ArgsManager::ALLOW_ANY, OptionsCategory::DIGIDOLLAR);
+    argsman.AddArg("getdigidollardeploymentinfo", "Get DigiDollar activation/deployment status (RPC/console)", ArgsManager::ALLOW_ANY, OptionsCategory::DIGIDOLLAR);
+    argsman.AddArg("calculatecollateralrequirement", "Calculate DGB collateral needed for a DD mint (RPC/console)", ArgsManager::ALLOW_ANY, OptionsCategory::DIGIDOLLAR);
+    argsman.AddArg("estimatecollateral", "Estimate collateral requirement by tier (RPC/console)", ArgsManager::ALLOW_ANY, OptionsCategory::DIGIDOLLAR);
+    argsman.AddArg("getdcamultiplier", "Get the current DCA multiplier for collateral (RPC/console)", ArgsManager::ALLOW_ANY, OptionsCategory::DIGIDOLLAR);
+    argsman.AddArg("getredemptioninfo", "Get info about a collateral position for redemption (RPC/console)", ArgsManager::ALLOW_ANY, OptionsCategory::DIGIDOLLAR);
+    argsman.AddArg("getprotectionstatus", "Get liquidation protection status (RPC/console)", ArgsManager::ALLOW_ANY, OptionsCategory::DIGIDOLLAR);
+
+    // Oracle RPC commands
+    argsman.AddArg("createoraclekey", "Generate an oracle signing key in your wallet (RPC/console)", ArgsManager::ALLOW_ANY, OptionsCategory::ORACLE);
+    argsman.AddArg("startoracle", "Start oracle price reporting for your assigned ID (RPC/console)", ArgsManager::ALLOW_ANY, OptionsCategory::ORACLE);
+    argsman.AddArg("stoporacle", "Stop oracle price reporting (RPC/console)", ArgsManager::ALLOW_ANY, OptionsCategory::ORACLE);
+    argsman.AddArg("getoracleprice", "Get current oracle-reported DGB/USD price (RPC/console)", ArgsManager::ALLOW_ANY, OptionsCategory::ORACLE);
+    argsman.AddArg("getalloracleprices", "Get price history from all oracles (RPC/console)", ArgsManager::ALLOW_ANY, OptionsCategory::ORACLE);
+    argsman.AddArg("getoracles", "List all oracle nodes and their status (RPC/console)", ArgsManager::ALLOW_ANY, OptionsCategory::ORACLE);
+    argsman.AddArg("listoracle", "List oracle configuration and keys (RPC/console)", ArgsManager::ALLOW_ANY, OptionsCategory::ORACLE);
+    argsman.AddArg("getoraclepubkey", "Get the public key for an oracle ID (RPC/console)", ArgsManager::ALLOW_ANY, OptionsCategory::ORACLE);
+    argsman.AddArg("sendoracleprice", "Manually submit an oracle price (RPC/console)", ArgsManager::ALLOW_ANY, OptionsCategory::ORACLE);
 
 #if HAVE_DECL_FORK
     argsman.AddArg("-daemon", strprintf("Run in the background as a daemon and accept commands (default: %d)", DEFAULT_DAEMON), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);

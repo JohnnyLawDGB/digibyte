@@ -81,8 +81,10 @@ HelpMessageDialog::HelpMessageDialog(QWidget *parent, bool about) :
         bold.setFontWeight(QFont::Bold);
 
         for (const QString &line : coreOptions.split("\n")) {
-            if (line.startsWith("  -"))
+            if (line.startsWith("  -") || (line.startsWith("  ") && !line.startsWith("   ") && line.trimmed().length() > 0))
             {
+                // Lines starting with "  -" are startup options (e.g. "-digidollar")
+                // Lines starting with exactly "  " + non-space are RPC commands (e.g. "  mintdigidollar")
                 cursor.currentTable()->appendRows(1);
                 cursor.movePosition(QTextCursor::PreviousCell);
                 cursor.movePosition(QTextCursor::NextRow);
@@ -103,6 +105,11 @@ HelpMessageDialog::HelpMessageDialog(QWidget *parent, bool about) :
         ui->helpMessage->moveCursor(QTextCursor::Start);
         ui->scrollArea->setVisible(false);
         ui->aboutLogo->setVisible(false);
+        ui->frame->setVisible(false);
+        // Collapse the left logo layout so help text uses full width
+        ui->verticalLayoutLogo->setContentsMargins(0, 0, 0, 0);
+        ui->aboutLogo->setMaximumSize(0, 0);
+        ui->frame->setMaximumSize(0, 0);
     }
 
     GUIUtil::handleCloseWindowShortcut(this);

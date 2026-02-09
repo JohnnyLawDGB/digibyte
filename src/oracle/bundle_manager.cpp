@@ -68,6 +68,25 @@ bool OracleBundleManager::AddOracleMessage(const COraclePriceMessage& message)
 
     std::lock_guard<std::recursive_mutex> lock(mtx_messages);
 
+    // Purge stale messages from pending_messages.
+    // Messages older than ORACLE_MAX_AGE_SECONDS are from oracles that may no
+    // longer be active. Without this cleanup, oracle nodes accumulate entries
+    // from briefly-running oracles, inflating the consensus count (e.g. showing
+    // "7-of-5" instead of "5-of-5").
+    {
+        int64_t now = GetTime();
+        auto stale_it = pending_messages.begin();
+        while (stale_it != pending_messages.end()) {
+            if (now - stale_it->second.timestamp > ORACLE_MAX_AGE_SECONDS) {
+                LogPrint(BCLog::DIGIDOLLAR, "Oracle: Purging stale message from oracle %d (age %lld seconds)\n",
+                         stale_it->first, now - stale_it->second.timestamp);
+                stale_it = pending_messages.erase(stale_it);
+            } else {
+                ++stale_it;
+            }
+        }
+    }
+
     // Calculate message hash for duplicate detection
     uint256 msg_hash = message.GetSignatureHash();
 
@@ -79,6 +98,24 @@ bool OracleBundleManager::AddOracleMessage(const COraclePriceMessage& message)
 
     // Add to seen set
     seen_message_hashes.insert(msg_hash);
+
+    // Cap seen_message_hashes to prevent unbounded growth.
+    // Each oracle re-broadcasts every ~15 seconds with a new nonce, adding a
+    // new hash each time.  With 8 oracles broadcasting for hours, the set can
+    // grow very large.  Keep only the most recent hashes; old hashes are no
+    // longer needed because the corresponding messages have already expired
+    // from pending_messages (purged above) and from the P2P relay window.
+    static constexpr size_t MAX_SEEN_HASHES = 2048;
+    if (seen_message_hashes.size() > MAX_SEEN_HASHES) {
+        // std::set iteration is ordered; erasing from begin() removes the
+        // "smallest" hashes which, being random SHA-256 digests, are
+        // effectively arbitrary.  This is acceptable because the set is only
+        // a best-effort duplicate filter — true dedup is enforced by the
+        // pending_messages oracle_id key.
+        auto erase_end = seen_message_hashes.begin();
+        std::advance(erase_end, seen_message_hashes.size() - MAX_SEEN_HASHES);
+        seen_message_hashes.erase(seen_message_hashes.begin(), erase_end);
+    }
 
     // Check if we already have a message from this oracle for current epoch
     auto it = pending_messages.find(message.oracle_id);
@@ -104,10 +141,15 @@ bool OracleBundleManager::AddOracleMessage(const COraclePriceMessage& message)
     // Update cached price only when consensus is met
     // Phase One (1-of-1): any single message is consensus
     // Phase Two (4-of-7): need min_oracle_count agreeing messages
+    //
+    // Only count fresh messages (within ORACLE_MAX_AGE_SECONDS) for consensus.
+    // Stale entries were purged above, so pending_messages.size() is the
+    // fresh message count.
     {
         std::lock_guard<std::recursive_mutex> pending_lock(mtx_messages);
-        if (static_cast<int>(pending_messages.size()) >= min_oracle_count) {
-            // Calculate median of pending messages for consensus price
+        int fresh_count = static_cast<int>(pending_messages.size());
+        if (fresh_count >= min_oracle_count) {
+            // Calculate median of fresh pending messages for consensus price
             std::vector<uint64_t> prices;
             prices.reserve(pending_messages.size());
             for (const auto& pair : pending_messages) {
@@ -120,11 +162,11 @@ bool OracleBundleManager::AddOracleMessage(const COraclePriceMessage& message)
             cached_price = static_cast<CAmount>(median_price);
             last_update_time = GetTime();
             LogPrintf("Oracle: Updated cached price with %d-of-%d consensus: %llu micro-USD ($%.6f)\n",
-                     (int)pending_messages.size(), min_oracle_count,
+                     fresh_count, min_oracle_count,
                      median_price, median_price / 1000000.0);
         } else {
-            LogPrintf("Oracle: %d pending messages, need %d for consensus - cached price unchanged\n",
-                     (int)pending_messages.size(), min_oracle_count);
+            LogPrintf("Oracle: %d fresh messages, need %d for consensus - cached price unchanged\n",
+                     fresh_count, min_oracle_count);
         }
     }
 

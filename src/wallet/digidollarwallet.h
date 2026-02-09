@@ -645,6 +645,20 @@ public:
     void AddMockPosition(const uint256& id, CAmount dd, CAmount dgb, uint32_t tier, int64_t height);
     size_t GetBalanceCount() const { return dd_balances.size(); }
     size_t GetPositionCount() const { return collateral_positions.size(); }
+
+    /**
+     * Check if an outpoint is locked by DigiDollar (either collateral or DD token).
+     * Used to protect DD locks from being wiped by UnlockAllCoins.
+     */
+    bool IsLockedByDD(const COutPoint& outpoint) const {
+        // Check if it's a DD token UTXO
+        if (dd_utxos.count(outpoint)) return true;
+        // Check if it's a collateral output (index 0 of a known position's txid)
+        for (const auto& [id, pos] : collateral_positions) {
+            if (pos.is_active && COutPoint(id, 0) == outpoint) return true;
+        }
+        return false;
+    }
     void ClearWalletData();
 
     // Coin selection and fee calculation helpers (public for testing and integration)

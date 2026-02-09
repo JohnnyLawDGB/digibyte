@@ -2708,10 +2708,22 @@ bool CWallet::UnlockAllCoins()
     AssertLockHeld(cs_wallet);
     bool success = true;
     WalletBatch batch(GetDatabase());
-    for (auto it = setLockedCoins.begin(); it != setLockedCoins.end(); ++it) {
-        success &= batch.EraseLockedUTXO(*it);
+
+    // SECURITY: Preserve DigiDollar collateral/token locks.
+    // These are security-critical — unlocking them allows spending collateral
+    // while DigiDollars remain in circulation (unbacked stablecoins).
+    DigiDollarWallet* dd_wallet = GetDDWallet();
+    std::set<COutPoint> ddLocks;
+
+    for (const auto& outpoint : setLockedCoins) {
+        if (dd_wallet && dd_wallet->IsLockedByDD(outpoint)) {
+            ddLocks.insert(outpoint);
+            LogPrint(BCLog::DIGIDOLLAR, "UnlockAllCoins: Preserving DD lock on %s\n", outpoint.ToString());
+        } else {
+            success &= batch.EraseLockedUTXO(outpoint);
+        }
     }
-    setLockedCoins.clear();
+    setLockedCoins = std::move(ddLocks);
     return success;
 }
 

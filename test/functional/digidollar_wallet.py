@@ -27,9 +27,9 @@ class DigiDollarWalletTest(DigiByteTestFramework):
         self.setup_clean_chain = True
         # Enable DigiDollar features and multiple wallets, disable Dandelion for testing
         self.extra_args = [
-            ["-digidollar=1", "-mocktime=0", "-dandelion=0"],
-            ["-digidollar=1", "-mocktime=0", "-dandelion=0"],
-            ["-digidollar=1", "-mocktime=0", "-dandelion=0"]
+            ["-digidollar=1", "-mocktime=0", "-dandelion=0", "-txindex=1"],
+            ["-digidollar=1", "-mocktime=0", "-dandelion=0", "-txindex=1"],
+            ["-digidollar=1", "-mocktime=0", "-dandelion=0", "-txindex=1"]
         ]
 
     def add_options(self, parser):

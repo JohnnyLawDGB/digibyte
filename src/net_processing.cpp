@@ -5370,6 +5370,26 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             return;
         }
 
+        // ── Step 2.5: Bind oracle pubkey from chainparams (SECURITY CRITICAL) ──
+        // The deserialized message contains an attacker-supplied pubkey field.
+        // We MUST replace it with the authorized pubkey from chainparams before
+        // signature verification. Otherwise an attacker can generate their own
+        // keypair, sign any price, and pass verification.
+        {
+            const CChainParams& params = m_chainparams;
+            if (oracle_msg.price_message.oracle_id >= ORACLE_TOTAL_COUNT) {
+                Misbehaving(*peer, 10, "invalid oracle ID in price message");
+                return;
+            }
+            const OracleNodeInfo* oracle_config = params.GetOracleNode(oracle_msg.price_message.oracle_id);
+            if (!oracle_config) {
+                Misbehaving(*peer, 10, "unknown oracle ID");
+                return;
+            }
+            // Force the authorized pubkey — ignore whatever the sender supplied
+            oracle_msg.price_message.oracle_pubkey = XOnlyPubKey(oracle_config->pubkey);
+        }
+
         // ── Step 3: Signature verification EARLY (catch attackers before rate limiter) ──
         // This is critical: an attacker sending fake-signed messages must NOT consume
         // rate limit budget of honest peers. We verify crypto BEFORE touching the rate

@@ -1051,8 +1051,14 @@ bool OracleBundleManager::IsValidOracleMessage(const COraclePriceMessage& messag
         return false;
     }
 
-    // Verify Phase 2 Schnorr signature
-    return message.VerifyPhase2();
+    // SECURITY: Bind pubkey from chainparams before verification.
+    // The message may contain an attacker-supplied pubkey — we must verify
+    // against the authorized key, not whatever was deserialized from P2P.
+    COraclePriceMessage bound_msg = message;
+    bound_msg.oracle_pubkey = XOnlyPubKey(oracle_config->pubkey);
+
+    // Verify Phase 2 Schnorr signature against chainparams pubkey
+    return bound_msg.VerifyPhase2();
 }
 
 std::vector<uint32_t> OracleBundleManager::GetActiveOraclesForEpoch(int32_t epoch) const

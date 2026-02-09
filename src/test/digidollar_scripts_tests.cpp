@@ -29,9 +29,7 @@ DigiDollar::MintParams CreateTestMintParams()
     ownerKey.MakeNewKey(true);
     params.ownerKey = XOnlyPubKey(ownerKey.GetPubKey());
 
-    CKey internalKey;
-    internalKey.MakeNewKey(true);
-    params.internalKey = XOnlyPubKey(internalKey.GetPubKey());
+    params.internalKey = DigiDollar::GetCollateralNUMSKey();  // NUMS point — no key-path spend
 
     // Set test parameters
     params.ddAmount = 100 * 100;  // $100 in cents
@@ -513,6 +511,69 @@ BOOST_AUTO_TEST_CASE(test_collateral_script_metadata_registration)
         BOOST_CHECK_EQUAL(metadata.ddAmount, 12345);
         BOOST_CHECK_EQUAL(metadata.lockHeight, 9999);
     }
+}
+
+// ============================================================================
+// FIX-1: Taproot NUMS point tests — collateral must NOT be key-path spendable
+// ============================================================================
+
+BOOST_AUTO_TEST_CASE(test_collateral_internal_key_is_nums)
+{
+    // The collateral output MUST use the NUMS point as internal key,
+    // NOT the owner's pubkey. This prevents key-path spending which
+    // would bypass CLTV timelocks entirely.
+    XOnlyPubKey nums = DigiDollar::GetCollateralNUMSKey();
+    BOOST_CHECK(nums.IsFullyValid());
+
+    // Verify the NUMS point matches the BIP-341 recommended value
+    auto nums_hex = HexStr(Span<const unsigned char>(nums.data(), 32));
+    BOOST_CHECK_EQUAL(nums_hex, "50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0");
+}
+
+BOOST_AUTO_TEST_CASE(test_collateral_uses_nums_not_owner_key)
+{
+    // Create a collateral script and verify the internal key is NUMS
+    DigiDollar::MintParams params;
+    CKey ownerKey;
+    ownerKey.MakeNewKey(true);
+    params.ownerKey = XOnlyPubKey(ownerKey.GetPubKey());
+    params.internalKey = DigiDollar::GetCollateralNUMSKey();
+    params.ddAmount = 10000;  // $100
+    params.lockHeight = 1000;
+    params.oracleKeys = DigiDollar::GetOracleKeys(15);
+
+    CScript script = DigiDollar::CreateCollateralP2TR(params);
+    BOOST_CHECK(!script.empty());
+
+    // The internal key in params must be NUMS, not the owner key
+    BOOST_CHECK(params.internalKey != params.ownerKey);
+    BOOST_CHECK(params.internalKey == DigiDollar::GetCollateralNUMSKey());
+}
+
+BOOST_AUTO_TEST_CASE(test_collateral_script_path_still_works)
+{
+    // Script-path spending (via MAST leaves) must still be possible
+    // even with NUMS internal key. The MAST tree should have valid leaves.
+    DigiDollar::MintParams params;
+    CKey ownerKey;
+    ownerKey.MakeNewKey(true);
+    params.ownerKey = XOnlyPubKey(ownerKey.GetPubKey());
+    params.internalKey = DigiDollar::GetCollateralNUMSKey();
+    params.ddAmount = 10000;
+    params.lockHeight = 1000;
+    params.oracleKeys = DigiDollar::GetOracleKeys(15);
+
+    // Both redemption paths should still be created
+    CScript normalPath = DigiDollar::CreateNormalRedemptionPath(params);
+    CScript errPath = DigiDollar::CreateERRPath(params);
+    BOOST_CHECK(!normalPath.empty());
+    BOOST_CHECK(!errPath.empty());
+
+    // Full P2TR script should still be valid
+    CScript p2tr = DigiDollar::CreateCollateralP2TR(params);
+    BOOST_CHECK(!p2tr.empty());
+    BOOST_CHECK_EQUAL(p2tr.size(), 34);  // OP_1 + 32-byte key
+    BOOST_CHECK_EQUAL(p2tr[0], OP_1);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

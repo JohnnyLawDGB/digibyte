@@ -297,11 +297,11 @@ class DigiDollarOracleTest(DigiByteTestFramework):
             self.nodes[0].generate(1)
             self.sync_all()
 
-            # Verify aggregated price is reasonable
+            # Verify aggregated price is reasonable (compare in micro-USD units)
             oracle_info = self.nodes[0].getoracleprice()
-            aggregated_price = int(oracle_info.get('price_cents', oracle_info.get('price_usd', 0)))
+            aggregated_price = int(oracle_info.get('price_micro_usd', 0))
 
-            # Should be close to the median of non-outlier prices
+            # Should be close to the median of non-outlier prices (values are in micro-USD)
             tolerance = scenario['expected_median'] * 0.1  # 10% tolerance
             assert abs(aggregated_price - scenario['expected_median']) <= tolerance
 
@@ -347,9 +347,9 @@ class DigiDollarOracleTest(DigiByteTestFramework):
             node.setmockoracleprice(mixed_price)
 
         oracle_info = self.nodes[0].getoracleprice()
-        final_price = int(oracle_info.get('price_cents', oracle_info.get('price_usd', 0)))
+        final_price = int(oracle_info.get('price_micro_usd', 0))
 
-        # Final price should be close to normal price range
+        # Final price should be close to normal price range (values in micro-USD)
         assert abs(final_price - base_price) <= base_price * 0.15  # Within 15%
 
     def test_oracle_failure_handling(self):
@@ -530,7 +530,7 @@ class DigiDollarOracleTest(DigiByteTestFramework):
         for i, node in enumerate(self.nodes[1:], 1):
             try:
                 oracle_info = node.getoracleprice()
-                node_price = int(oracle_info.get('price_cents', oracle_info.get('price_usd', 0)))
+                node_price = int(oracle_info.get('price_micro_usd', 0))
                 assert_equal(node_price, test_price)
                 self.log.info(f"Node {i} price consensus: {node_price}")
             except Exception as e:

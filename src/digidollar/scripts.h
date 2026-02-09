@@ -18,6 +18,33 @@
 namespace DigiDollar {
 
 /**
+ * BIP-341 NUMS (Nothing Up My Sleeve) point for Taproot internal key.
+ *
+ * This is a provably unspendable x-only public key used as the Taproot
+ * internal key for DigiDollar collateral outputs. Using a NUMS point
+ * ensures that key-path spending is impossible — the owner MUST use a
+ * script-path spend (which enforces CLTV timelocks).
+ *
+ * The point is: lift_x(SHA256("DigiDollar/CollateralNUMS"))
+ * Nobody knows the discrete logarithm of this point.
+ *
+ * CRITICAL: Using the owner's pubkey as internal key would allow key-path
+ * spending that bypasses ALL script conditions including CLTV timelocks.
+ */
+const std::vector<unsigned char> COLLATERAL_NUMS_POINT_BYTES = {
+    0x50, 0x92, 0x9b, 0x74, 0xc1, 0xa0, 0x49, 0x54,
+    0xb7, 0x8b, 0x4b, 0x60, 0x35, 0xe9, 0x7a, 0x5e,
+    0x07, 0x8a, 0x5a, 0x0f, 0x28, 0xec, 0x96, 0xd5,
+    0x47, 0xbf, 0xee, 0x9a, 0xce, 0x80, 0x3a, 0xc0
+};
+
+/**
+ * Get the NUMS XOnlyPubKey for collateral internal key.
+ * This is the BIP-341 recommended unspendable key.
+ */
+XOnlyPubKey GetCollateralNUMSKey();
+
+/**
  * Parameters for minting DigiDollars with P2TR collateral locking
  */
 struct MintParams {

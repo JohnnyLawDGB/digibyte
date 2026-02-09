@@ -5,6 +5,7 @@
 #include <wallet/digidollarwallet.h>
 #include <wallet/wallet.h>
 #include <wallet/spend.h>
+#include <wallet/receive.h>
 #include <wallet/coincontrol.h>
 #include <wallet/scriptpubkeyman.h>
 #include <interfaces/chain.h>
@@ -2794,19 +2795,21 @@ CAmount DigiDollarWallet::GetTotalDDBalance() const {
                 // Without this check, freshly minted DD from mintdigidollar (which calls
                 // AddDDUTXO immediately after broadcast) appears spendable while still
                 // unconfirmed, causing transfer to fail with conservation-violation.
-                // FIX: Skip UTXOs whose transaction is known to the wallet but unconfirmed.
-                // This prevents freshly minted DD (added via AddDDUTXO immediately after
-                // broadcast) from appearing spendable before confirmation.
-                // If the tx is NOT in the wallet (e.g., loaded from dd_utxos database
-                // after rescan), we still count it — it was persisted for a reason.
+                // FIX: Skip unconfirmed DD UTXOs UNLESS they are "trusted" (self-created).
+                // Unconfirmed mints from third parties shouldn't be spendable, but our own
+                // transfer change outputs are safe to chain (all inputs were ours).
+                // If the tx is NOT in the wallet at all (rescan/database), still count it.
                 LOCK(m_wallet->cs_wallet);
                 const wallet::CWalletTx* wtx = m_wallet->GetWalletTx(outpoint.hash);
                 if (wtx && m_wallet->GetTxDepthInMainChain(*wtx) < 1) {
-                    LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: Skipping unconfirmed DD UTXO %s:%u in balance\n",
-                             outpoint.hash.ToString(), outpoint.n);
-                    continue;  // Skip unconfirmed UTXOs
+                    // Unconfirmed — only count if trusted (our own change)
+                    if (!wallet::CachedTxIsTrusted(*m_wallet, *wtx)) {
+                        LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: Skipping untrusted unconfirmed DD UTXO %s:%u in balance\n",
+                                 outpoint.hash.ToString(), outpoint.n);
+                        continue;  // Skip untrusted unconfirmed UTXOs
+                    }
                 }
-                // Count confirmed UTXOs, and UTXOs not tracked by wallet (rescan/external)
+                // Count: confirmed, trusted-unconfirmed, or not-in-wallet UTXOs
                 balance += dd_amount;
             }
         }
@@ -2873,16 +2876,17 @@ std::vector<DDUtxo> DigiDollarWallet::GetDDUTXOs() const {
             continue; // Skip spent
         }
 
-        // FIX: Skip UTXOs whose transaction is known to the wallet but unconfirmed.
-        // Same rationale as GetTotalDDBalance — unconfirmed mints are not spendable.
-        // If the tx is NOT in the wallet, we still return it (rescan/external source).
+        // FIX: Skip unconfirmed DD UTXOs UNLESS they are trusted (our own change).
+        // Same rationale as GetTotalDDBalance — untrusted unconfirmed mints not spendable.
         if (m_wallet) {
             LOCK(m_wallet->cs_wallet);
             const wallet::CWalletTx* wtx = m_wallet->GetWalletTx(outpoint.hash);
             if (wtx && m_wallet->GetTxDepthInMainChain(*wtx) < 1) {
-                LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: Skipping unconfirmed DD UTXO %s:%u\n",
-                         outpoint.hash.ToString(), outpoint.n);
-                continue;  // Skip unconfirmed UTXOs
+                if (!wallet::CachedTxIsTrusted(*m_wallet, *wtx)) {
+                    LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: Skipping untrusted unconfirmed DD UTXO %s:%u\n",
+                             outpoint.hash.ToString(), outpoint.n);
+                    continue;  // Skip untrusted unconfirmed UTXOs
+                }
             }
         }
 
@@ -4395,7 +4399,11 @@ bool DigiDollarWallet::SelectFeeCoins(const CAmount& fee_amount, std::vector<COu
     // Lock wallet and get available coins
     LOCK(m_wallet->cs_wallet);
     wallet::CCoinControl coin_control;
-    coin_control.m_include_unsafe_inputs = false;  // Only safe inputs
+    // Allow unconfirmed DGB change from our own previous transactions.
+    // This is required for rapid consecutive DD transfers — each transfer
+    // produces DGB change that's unconfirmed, and the next transfer needs
+    // it for fees. Since we created these UTXOs ourselves, they're safe.
+    coin_control.m_include_unsafe_inputs = true;
 
     wallet::CoinFilterParams filter_params;
     filter_params.only_spendable = true;

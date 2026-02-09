@@ -400,6 +400,15 @@ struct Peer {
     /** Whether this peer wants invs or headers (when possible) for block announcements */
     bool m_prefers_headers GUARDED_BY(NetEventsInterface::g_msgproc_mutex){false};
 
+    /** Protects oracle inventory data members */
+    Mutex m_oracle_inventory_mutex;
+    /** Rolling bloom filter of oracle message hashes known to this peer
+     *  (either they sent it to us, or we relayed it to them).
+     *  Used to avoid relaying oracle messages back to the peer that sent them.
+     *  Sized for ~500 entries with very low false positive rate — oracle traffic
+     *  is much lower volume than transactions. */
+    CRollingBloomFilter m_oracle_inventory_known_filter GUARDED_BY(m_oracle_inventory_mutex){500, 0.000001};
+
     explicit Peer(NodeId id, ServiceFlags our_services)
         : m_id{id}
         , m_our_services{our_services}
@@ -1130,6 +1139,21 @@ static void AddKnownTx(Peer& peer, const uint256& hash)
 
     LOCK(tx_relay->m_tx_inventory_mutex);
     tx_relay->m_tx_inventory_known_filter.insert(hash);
+}
+
+/** Mark an oracle message hash as known to a peer (they sent it to us or we relayed it to them).
+ *  Mirrors AddKnownTx() for transactions — prevents relaying messages back to the sender. */
+static void AddKnownOracle(Peer& peer, const uint256& hash)
+{
+    LOCK(peer.m_oracle_inventory_mutex);
+    peer.m_oracle_inventory_known_filter.insert(hash);
+}
+
+/** Check whether a peer already knows about an oracle message hash. */
+static bool PeerKnowsOracle(Peer& peer, const uint256& hash)
+{
+    LOCK(peer.m_oracle_inventory_mutex);
+    return peer.m_oracle_inventory_known_filter.contains(hash);
 }
 
 /** Whether this peer can serve us blocks. */
@@ -5330,35 +5354,45 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
     }
 
     if (msg_type == NetMsgType::ORACLEPRICE) {
-        // Deserialize first - oracle messages are small and cheap to deserialize.
-        // We need the hash to check for duplicates before rate limiting.
+        // ── Step 1: Deserialize (cheap, needed for hash) ──
         OraclePriceMsg oracle_msg;
         vRecv >> oracle_msg;
 
-        // Check for duplicate message BEFORE rate limiting.
-        // In a P2P gossip network, duplicate relays are the majority of traffic
-        // and must not count toward rate limits or we'll ban legitimate peers.
         uint256 msg_hash = oracle_msg.GetHash();
         OracleBundleManager& bundleManager = OracleBundleManager::GetInstance();
 
+        // ── Step 2: Duplicate check (silent return, no penalty) ──
+        // In a P2P gossip network, duplicate relays are the majority of traffic.
+        // Never penalize or rate-count duplicates — they're normal and expected.
         if (bundleManager.HasOracleMessage(msg_hash)) {
             LogPrint(BCLog::NET, "Ignoring duplicate oracle message from oracle %d peer=%d\n",
                      oracle_msg.price_message.oracle_id, pfrom.GetId());
-            return; // Don't relay duplicates, don't count toward rate limit
+            return;
         }
 
-        // Rate limiting for novel (non-duplicate) messages only.
-        // With duplicates filtered, only genuinely new messages count.
-        // 15 active oracles × ~3 epochs/hour = ~45 novel messages/hour expected;
-        // limit of 200 provides generous headroom.
+        // ── Step 3: Signature verification EARLY (catch attackers before rate limiter) ──
+        // This is critical: an attacker sending fake-signed messages must NOT consume
+        // rate limit budget of honest peers. We verify crypto BEFORE touching the rate
+        // limiter so forged messages are rejected and penalized immediately.
+        // Schnorr verification is ~50-100µs — cheap enough to do before rate limiting.
+        if (!oracle_msg.price_message.VerifyPhase2() && !oracle_msg.price_message.Verify()) {
+            LogPrint(BCLog::NET, "Oracle message signature verification failed from oracle %d peer=%d\n",
+                     oracle_msg.price_message.oracle_id, pfrom.GetId());
+            Misbehaving(*peer, 20, "invalid oracle signature");
+            return;
+        }
+
+        // ── Step 4: Rate limiting (novel, signature-verified messages only) ──
+        // With 8 oracles updating every ~2 min = ~30 novel messages/peer/hour.
+        // Limit of 50 provides safe headroom without enabling flood attacks.
         static std::map<NodeId, std::pair<int64_t, int>> oracle_rate_limit;
         int64_t now = GetTime();
 
-        // Cleanup old entries (older than 2 hours)
-        if (oracle_rate_limit.size() > 100) { // Only cleanup when map gets large
+        // Cleanup disconnected peers (only when map grows large)
+        if (oracle_rate_limit.size() > 100) {
             auto it = oracle_rate_limit.begin();
             while (it != oracle_rate_limit.end()) {
-                if (now - it->second.first > 7200) { // 2 hours
+                if (now - it->second.first > 7200) {
                     it = oracle_rate_limit.erase(it);
                 } else {
                     ++it;
@@ -5367,106 +5401,89 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         }
 
         auto& [last_reset, count] = oracle_rate_limit[pfrom.GetId()];
-        if (now - last_reset > 3600) { // Reset every hour
+        if (now - last_reset > 3600) {
             last_reset = now;
             count = 0;
         }
 
-        if (++count > 200) {
-            // Throttle log output: only log every 10th violation to avoid log flooding
+        if (++count > 50) {
+            // Throttle log: only every 10th violation to prevent log flooding
             if (count % 10 == 1) {
                 LogPrint(BCLog::NET, "Oracle message rate limit exceeded from peer=%d (count=%d novel msgs/hr)\n", pfrom.GetId(), count);
             }
-            Misbehaving(*peer, 1, "oracle message rate limit exceeded");
+            Misbehaving(*peer, 5, "oracle message rate limit exceeded");
             return;
         }
 
-        // Basic validation
-        if (!oracle_msg.price_message.IsValid()) {
-            LogPrintf("Received invalid oracle price message from peer=%d\n", pfrom.GetId());
-            Misbehaving(*peer, 10, "invalid oracle price message");
-            return;
-        }
-
-        // Validate oracle exists (this will be implemented properly in validation.cpp)
-        // For now, just check oracle_id is in valid range (0 to ORACLE_TOTAL_COUNT-1, 0-indexed)
+        // ── Step 5: Remaining validation (timestamp, price range, oracle ID) ──
         if (oracle_msg.price_message.oracle_id >= ORACLE_TOTAL_COUNT) {
-            LogPrintf("Received oracle price from invalid oracle ID %d from peer=%d\n",
+            LogPrint(BCLog::NET, "Received oracle price from invalid oracle ID %d from peer=%d\n",
                       oracle_msg.price_message.oracle_id, pfrom.GetId());
             Misbehaving(*peer, 10, "invalid oracle ID");
             return;
         }
 
-        // Enhanced timestamp validation
         int64_t msg_time = oracle_msg.price_message.timestamp;
-        if (msg_time > now + 60) { // Max 1 minute future
-            LogPrintf("Oracle message from future (msg_time=%d, now=%d, diff=%d) from peer=%d\n",
-                      msg_time, now, msg_time - now, pfrom.GetId());
+        if (msg_time > now + 60) {
+            LogPrint(BCLog::NET, "Oracle message from future (diff=%d) from peer=%d\n",
+                      msg_time - now, pfrom.GetId());
             Misbehaving(*peer, 2, "oracle message from future");
             return;
         }
-        if (msg_time < now - ORACLE_MAX_AGE_SECONDS) { // Max 1 hour old
-            LogPrintf("Oracle message too old (msg_time=%d, now=%d, age=%d) from peer=%d\n",
-                      msg_time, now, now - msg_time, pfrom.GetId());
-            return; // Don't penalize for old messages, just ignore
+        if (msg_time < now - ORACLE_MAX_AGE_SECONDS) {
+            LogPrint(BCLog::NET, "Oracle message too old (age=%d) from peer=%d\n",
+                      now - msg_time, pfrom.GetId());
+            return; // Stale messages aren't malicious, just ignore
         }
 
-        // Validate price is reasonable (basic sanity check)
-        // Uses shared constants from oracle.h (BUG #1 FIX: was $10, now $100)
         if (oracle_msg.price_message.price_micro_usd < ORACLE_MIN_PRICE_MICRO_USD ||
             oracle_msg.price_message.price_micro_usd > ORACLE_MAX_PRICE_MICRO_USD) {
-            LogPrintf("Oracle price out of reasonable range (%llu) from oracle %d peer=%d\n",
+            LogPrint(BCLog::NET, "Oracle price out of range (%llu) from oracle %d peer=%d\n",
                       oracle_msg.price_message.price_micro_usd,
                       oracle_msg.price_message.oracle_id, pfrom.GetId());
             Misbehaving(*peer, 5, "unreasonable oracle price");
             return;
         }
 
-        // Signature already validated by IsValid() above (supports both Phase 1 and Phase 2)
-        // Additional explicit signature check for defense-in-depth:
-        // VerifyPhase2() for Phase 2 messages, Verify() fallback for Phase 1
-        if (!oracle_msg.price_message.VerifyPhase2() && !oracle_msg.price_message.Verify()) {
-            LogPrintf("Oracle message signature verification failed from oracle %d peer=%d\n",
-                      oracle_msg.price_message.oracle_id, pfrom.GetId());
-            Misbehaving(*peer, 20, "invalid oracle signature");
-            return;
-        }
-
-        // Store in oracle bundle manager
+        // ── Step 6: Store + relay ──
         if (!bundleManager.AddOracleMessage(oracle_msg.price_message)) {
             LogPrint(BCLog::NET, "Failed to add oracle message to bundle manager from oracle %d peer=%d\n",
                      oracle_msg.price_message.oracle_id, pfrom.GetId());
             return;
         }
 
-        LogPrint(BCLog::NET, "Accepted oracle price message: oracle_id=%d, price=%llu micro-USD, timestamp=%d, peer=%d\n",
+        // Mark sender as knowing this oracle message (don't relay back to them)
+        AddKnownOracle(*peer, msg_hash);
+
+        LogPrint(BCLog::NET, "Accepted oracle price: oracle_id=%d, price=%llu, peer=%d\n",
                  oracle_msg.price_message.oracle_id, oracle_msg.price_message.price_micro_usd,
-                 oracle_msg.price_message.timestamp, pfrom.GetId());
+                 pfrom.GetId());
 
-        // Relay to other peers (but not back to sender)
-        m_connman.ForEachNode([&oracle_msg, sender_id = pfrom.GetId(), this](CNode* pnode) {
-            if (pnode->GetId() == sender_id) return; // Don't relay back to sender
+        // Relay to peers who don't already know this message
+        m_connman.ForEachNode([&oracle_msg, &msg_hash, this](CNode* pnode) {
+            PeerRef relay_peer = GetPeerRef(pnode->GetId());
+            if (!relay_peer) return;
 
+            // Skip peers who already know this message (sent it to us or we already relayed it)
+            if (PeerKnowsOracle(*relay_peer, msg_hash)) return;
+
+            AddKnownOracle(*relay_peer, msg_hash);
             m_connman.PushMessage(pnode, CNetMsgMaker(pnode->GetCommonVersion()).Make(NetMsgType::ORACLEPRICE, oracle_msg));
-
-            LogPrint(BCLog::NET, "Relayed oracle message to peer=%d\n", pnode->GetId());
         });
 
         return;
     }
 
     if (msg_type == NetMsgType::ORACLEBUNDLE) {
-        // Deserialize first - needed to check for duplicate bundles before rate limiting
+        // ── Step 1: Deserialize ──
         OracleBundleMsg bundle_msg;
         vRecv >> bundle_msg;
 
-        // Check for duplicate bundles BEFORE rate limiting.
-        // Same gossip-network duplicate relay issue as ORACLEPRICE.
+        // ── Step 2: Duplicate check (silent return) ──
         static std::set<uint256> seen_bundle_hashes;
         static int64_t last_bundle_cleanup = 0;
         int64_t now = GetTime();
 
-        // Periodic cleanup of seen bundles (every 2 hours)
         if (now - last_bundle_cleanup > 7200) {
             seen_bundle_hashes.clear();
             last_bundle_cleanup = now;
@@ -5476,19 +5493,38 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         if (seen_bundle_hashes.count(bundle_hash) > 0) {
             LogPrint(BCLog::NET, "Ignoring duplicate oracle bundle epoch=%d peer=%d\n",
                      bundle_msg.bundle.epoch, pfrom.GetId());
-            return; // Don't count duplicates toward rate limit
+            return;
         }
         seen_bundle_hashes.insert(bundle_hash);
 
-        // Rate limiting for novel (non-duplicate) bundles only.
-        // Max 50 novel bundles per hour per peer (generous headroom).
+        // ── Step 3: Signature verification EARLY on all messages in the bundle ──
+        // Verify every message signature before touching the rate limiter.
+        // An attacker sending bundles with forged signatures gets penalized immediately.
+        if (bundle_msg.bundle.messages.size() > ORACLE_ACTIVE_COUNT) {
+            LogPrint(BCLog::NET, "Oracle bundle too large (%d messages) from peer=%d\n",
+                      bundle_msg.bundle.messages.size(), pfrom.GetId());
+            Misbehaving(*peer, 10, "oversized oracle bundle");
+            return;
+        }
+        for (const auto& msg : bundle_msg.bundle.messages) {
+            if (!msg.schnorr_sig.empty()) {
+                if (!msg.VerifyPhase2() && !msg.Verify()) {
+                    LogPrint(BCLog::NET, "Oracle bundle contains invalid signature from oracle %d peer=%d\n",
+                              msg.oracle_id, pfrom.GetId());
+                    Misbehaving(*peer, 20, "invalid signature in oracle bundle");
+                    return;
+                }
+            }
+        }
+
+        // ── Step 4: Rate limiting (novel, sig-verified bundles only) ──
+        // Max 50 novel bundles per hour per peer.
         static std::map<NodeId, std::pair<int64_t, int>> bundle_rate_limit;
 
-        // Cleanup old entries (older than 2 hours)
-        if (bundle_rate_limit.size() > 100) { // Only cleanup when map gets large
+        if (bundle_rate_limit.size() > 100) {
             auto it = bundle_rate_limit.begin();
             while (it != bundle_rate_limit.end()) {
-                if (now - it->second.first > 7200) { // 2 hours
+                if (now - it->second.first > 7200) {
                     it = bundle_rate_limit.erase(it);
                 } else {
                     ++it;
@@ -5497,58 +5533,55 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         }
 
         auto& [last_reset, count] = bundle_rate_limit[pfrom.GetId()];
-        if (now - last_reset > 3600) { // Reset every hour
+        if (now - last_reset > 3600) {
             last_reset = now;
             count = 0;
         }
 
         if (++count > 50) {
-            // Throttle log output: only log every 10th violation
             if (count % 10 == 1) {
                 LogPrint(BCLog::NET, "Oracle bundle rate limit exceeded from peer=%d (count=%d novel bundles/hr)\n", pfrom.GetId(), count);
             }
-            Misbehaving(*peer, 2, "oracle bundle rate limit exceeded");
+            Misbehaving(*peer, 5, "oracle bundle rate limit exceeded");
             return;
         }
 
-        // Validate bundle size is reasonable
-        if (bundle_msg.bundle.messages.size() > ORACLE_ACTIVE_COUNT) {
-            LogPrintf("Oracle bundle too large (%d messages) from peer=%d\n",
-                      bundle_msg.bundle.messages.size(), pfrom.GetId());
-            Misbehaving(*peer, 10, "oversized oracle bundle");
-            return;
-        }
-
-        // Validate bundle has sufficient consensus
+        // ── Step 5: Remaining validation (consensus, epoch) ──
         if (!bundle_msg.bundle.HasConsensus()) {
-            LogPrintf("Oracle bundle lacks consensus (%d of %d required) from peer=%d\n",
+            LogPrint(BCLog::NET, "Oracle bundle lacks consensus (%d of %d required) from peer=%d\n",
                       bundle_msg.bundle.messages.size(), ORACLE_CONSENSUS_REQUIRED, pfrom.GetId());
             Misbehaving(*peer, 5, "oracle bundle lacks consensus");
             return;
         }
 
-        // Validate epoch is reasonable (not too far in past/future)
         int32_t current_epoch = GetCurrentEpoch(m_chainman.ActiveChain().Height());
         if (!bundle_msg.bundle.ValidateEpoch(current_epoch)) {
-            LogPrintf("Oracle bundle has invalid epoch %d (current=%d) from peer=%d\n",
+            LogPrint(BCLog::NET, "Oracle bundle has invalid epoch %d (current=%d) from peer=%d\n",
                       bundle_msg.bundle.epoch, current_epoch, pfrom.GetId());
             Misbehaving(*peer, 5, "invalid oracle bundle epoch");
             return;
         }
 
-        // Store bundle messages in the bundle manager for block validation
+        // ── Step 6: Store + relay ──
         OracleBundleManager& bundleManager = OracleBundleManager::GetInstance();
         for (const auto& msg : bundle_msg.bundle.messages) {
             bundleManager.AddOracleMessage(msg);
         }
 
-        LogPrint(BCLog::NET, "Stored oracle bundle: epoch=%d, messages=%d, block_hash=%s, peer=%d\n",
-                 bundle_msg.bundle.epoch, bundle_msg.bundle.messages.size(),
-                 bundle_msg.block_hash.ToString(), pfrom.GetId());
+        // Mark sender as knowing this bundle
+        AddKnownOracle(*peer, bundle_hash);
 
-        // Relay valid bundle to other peers (but not back to sender)
-        m_connman.ForEachNode([&bundle_msg, sender_id = pfrom.GetId(), this](CNode* pnode) {
-            if (pnode->GetId() == sender_id) return;
+        LogPrint(BCLog::NET, "Stored oracle bundle: epoch=%d, messages=%d, peer=%d\n",
+                 bundle_msg.bundle.epoch, bundle_msg.bundle.messages.size(), pfrom.GetId());
+
+        // Relay to peers who don't already know this bundle
+        m_connman.ForEachNode([&bundle_msg, &bundle_hash, this](CNode* pnode) {
+            PeerRef relay_peer = GetPeerRef(pnode->GetId());
+            if (!relay_peer) return;
+
+            if (PeerKnowsOracle(*relay_peer, bundle_hash)) return;
+
+            AddKnownOracle(*relay_peer, bundle_hash);
             m_connman.PushMessage(pnode, CNetMsgMaker(pnode->GetCommonVersion()).Make(NetMsgType::ORACLEBUNDLE, bundle_msg));
         });
 

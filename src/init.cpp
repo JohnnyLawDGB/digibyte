@@ -471,7 +471,7 @@ void SetupServerArgs(ArgsManager& argsman)
     argsman.AddArg("-blockreconstructionextratxn=<n>", strprintf("Extra transactions to keep in memory for compact block reconstructions (default: %u)", DEFAULT_BLOCK_RECONSTRUCTION_EXTRA_TXN), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-blocksonly", strprintf("Whether to reject transactions from network peers. Automatic broadcast and rebroadcast of any transactions from inbound peers is disabled, unless the peer has the 'forcerelay' permission. RPC transactions are not affected. (default: %u)", DEFAULT_BLOCKSONLY), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-coinstatsindex", strprintf("Maintain coinstats index used by the gettxoutsetinfo RPC (default: %u)", DEFAULT_COINSTATSINDEX), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
-    argsman.AddArg("-digidollarstatsindex", strprintf("Maintain DigiDollar stats index for network-wide DD supply tracking (default: %u)", DEFAULT_DIGIDOLLARSTATSINDEX), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
+    argsman.AddArg("-digidollarstatsindex", strprintf("Maintain DigiDollar stats index for network-wide DD supply tracking (default: %u)", DEFAULT_DIGIDOLLARSTATSINDEX), ArgsManager::ALLOW_ANY, OptionsCategory::DIGIDOLLAR);
     if (!argsman.GetArgFlags("-conf")) {
         argsman.AddArg("-conf=<file>", strprintf("Specify path to read-only configuration file. Relative paths will be prefixed by datadir location (only useable from command line, not configuration file) (default: %s)", DIGIBYTE_CONF_FILENAME), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     }
@@ -669,8 +669,9 @@ void SetupServerArgs(ArgsManager& argsman)
     argsman.AddArg("-dandelion", strprintf("Enable Dandelion Transaction Relay Protocol (default: %d)", DEFAULT_DANDELION), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
 
     // DigiDollar stablecoin options
-    argsman.AddArg("-digidollar", "Enable DigiDollar stablecoin features (follows BIP9 activation by default)", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
-    argsman.AddArg("-digidollaractivationheight=<n>", "Set DigiDollar activation height for regtest (overrides BIP9 activation, regtest only)", ArgsManager::ALLOW_ANY | ArgsManager::DEBUG_ONLY, OptionsCategory::DEBUG_TEST);
+    argsman.AddArg("-digidollar", "Enable DigiDollar stablecoin features (follows BIP9 activation by default)", ArgsManager::ALLOW_ANY, OptionsCategory::DIGIDOLLAR);
+    argsman.AddArg("-digidollaractivationheight=<n>", "Set DigiDollar activation height for regtest (overrides BIP9 activation, regtest only)", ArgsManager::ALLOW_ANY | ArgsManager::DEBUG_ONLY, OptionsCategory::DIGIDOLLAR);
+    argsman.AddArg("-coinmarketcap-api-key=<key>", "CoinMarketCap API key for oracle exchange price fetching", ArgsManager::ALLOW_ANY | ArgsManager::SENSITIVE, OptionsCategory::ORACLE);
 
 #if HAVE_DECL_FORK
     argsman.AddArg("-daemon", strprintf("Run in the background as a daemon and accept commands (default: %d)", DEFAULT_DAEMON), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);

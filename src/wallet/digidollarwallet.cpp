@@ -2794,14 +2794,19 @@ CAmount DigiDollarWallet::GetTotalDDBalance() const {
                 // Without this check, freshly minted DD from mintdigidollar (which calls
                 // AddDDUTXO immediately after broadcast) appears spendable while still
                 // unconfirmed, causing transfer to fail with conservation-violation.
+                // FIX: Skip UTXOs whose transaction is known to the wallet but unconfirmed.
+                // This prevents freshly minted DD (added via AddDDUTXO immediately after
+                // broadcast) from appearing spendable before confirmation.
+                // If the tx is NOT in the wallet (e.g., loaded from dd_utxos database
+                // after rescan), we still count it — it was persisted for a reason.
                 LOCK(m_wallet->cs_wallet);
                 const wallet::CWalletTx* wtx = m_wallet->GetWalletTx(outpoint.hash);
-                if (!wtx || m_wallet->GetTxDepthInMainChain(*wtx) < 1) {
+                if (wtx && m_wallet->GetTxDepthInMainChain(*wtx) < 1) {
                     LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: Skipping unconfirmed DD UTXO %s:%u in balance\n",
                              outpoint.hash.ToString(), outpoint.n);
-                    continue;  // Skip unconfirmed or unknown UTXOs
+                    continue;  // Skip unconfirmed UTXOs
                 }
-                // Production scenario: only count confirmed, unspent UTXOs
+                // Count confirmed UTXOs, and UTXOs not tracked by wallet (rescan/external)
                 balance += dd_amount;
             }
         }
@@ -2868,15 +2873,16 @@ std::vector<DDUtxo> DigiDollarWallet::GetDDUTXOs() const {
             continue; // Skip spent
         }
 
-        // FIX: Also require at least 1 confirmation before returning as spendable.
+        // FIX: Skip UTXOs whose transaction is known to the wallet but unconfirmed.
         // Same rationale as GetTotalDDBalance — unconfirmed mints are not spendable.
+        // If the tx is NOT in the wallet, we still return it (rescan/external source).
         if (m_wallet) {
             LOCK(m_wallet->cs_wallet);
             const wallet::CWalletTx* wtx = m_wallet->GetWalletTx(outpoint.hash);
-            if (!wtx || m_wallet->GetTxDepthInMainChain(*wtx) < 1) {
+            if (wtx && m_wallet->GetTxDepthInMainChain(*wtx) < 1) {
                 LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: Skipping unconfirmed DD UTXO %s:%u\n",
                          outpoint.hash.ToString(), outpoint.n);
-                continue;  // Skip unconfirmed or unknown UTXOs
+                continue;  // Skip unconfirmed UTXOs
             }
         }
 

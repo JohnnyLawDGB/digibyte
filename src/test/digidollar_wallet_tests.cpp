@@ -3592,11 +3592,14 @@ BOOST_FIXTURE_TEST_CASE(test_mixed_confirmed_unconfirmed_dd_balance, TestingSetu
 }
 
 /**
- * Test: DD UTXO with no wallet tx found (orphaned) should NOT be counted
+ * Test: DD UTXO with no wallet tx found should still be counted
  *
- * If GetWalletTx returns nullptr, the UTXO is orphaned and should be skipped.
+ * If GetWalletTx returns nullptr, the UTXO was likely loaded from the DD
+ * database after a rescan or external import. We still count it because
+ * AddDDUTXO persisted it for a reason. Only UTXOs whose transaction IS
+ * known to the wallet but unconfirmed get filtered out.
  */
-BOOST_FIXTURE_TEST_CASE(test_orphaned_dd_utxo_not_in_balance, TestingSetup)
+BOOST_FIXTURE_TEST_CASE(test_unknown_wallet_tx_dd_utxo_still_counted, TestingSetup)
 {
     std::unique_ptr<wallet::WalletDatabase> database = wallet::CreateMockableWalletDatabase();
     std::shared_ptr<wallet::CWallet> wallet = std::make_shared<wallet::CWallet>(m_node.chain.get(), "", std::move(database));
@@ -3609,16 +3612,16 @@ BOOST_FIXTURE_TEST_CASE(test_orphaned_dd_utxo_not_in_balance, TestingSetup)
 
     DigiDollarWallet dd_wallet(wallet.get());
 
-    // Add a DD UTXO whose transaction is NOT in the wallet at all
-    COutPoint orphan_outpoint(InsecureRand256(), 1);
-    dd_wallet.AddDDUTXO(orphan_outpoint, 75000);  // $750
+    // Add a DD UTXO whose transaction is NOT in the wallet (e.g., from rescan)
+    COutPoint external_outpoint(InsecureRand256(), 1);
+    dd_wallet.AddDDUTXO(external_outpoint, 75000);  // $750
 
-    // Orphaned UTXO should not be counted
+    // UTXO should still be counted — wallet doesn't know the tx but DD database does
     CAmount balance = dd_wallet.GetTotalDDBalance();
-    BOOST_CHECK_EQUAL(balance, 0);
+    BOOST_CHECK_EQUAL(balance, 75000);
 
     std::vector<DDUtxo> utxos = dd_wallet.GetDDUTXOs();
-    BOOST_CHECK_EQUAL(utxos.size(), 0);
+    BOOST_CHECK_EQUAL(utxos.size(), 1);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

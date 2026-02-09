@@ -634,6 +634,12 @@ std::string ArgsManager::GetHelpMessage() const
             case OptionsCategory::REGISTER_COMMANDS:
                 usage += HelpMessageGroup("Register Commands:");
                 break;
+            case OptionsCategory::DIGIDOLLAR:
+                usage += HelpMessageGroup("DigiDollar options:");
+                break;
+            case OptionsCategory::ORACLE:
+                usage += HelpMessageGroup("Oracle options:");
+                break;
             default:
                 break;
         }

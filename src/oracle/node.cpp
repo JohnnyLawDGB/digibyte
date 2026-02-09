@@ -183,19 +183,33 @@ void OracleNode::Stop()
 CAmount OracleNode::GetCurrentPrice() const
 {
     std::lock_guard<std::mutex> lock(mtx_price);
-    return current_price;
+    // Prefer fresh exchange price, fall back to last broadcast price
+    if (current_price > 0 && (GetTime() - last_update_time) < ORACLE_MAX_AGE_SECONDS) {
+        return current_price;
+    }
+    // We know what we last broadcast — return that
+    return last_broadcast_price > 0 ? last_broadcast_price : current_price;
 }
 
 int64_t OracleNode::GetLastUpdateTime() const
 {
     std::lock_guard<std::mutex> lock(mtx_price);
-    return last_update_time;
+    // Match the price source: if using broadcast price, use broadcast timestamp
+    if (current_price > 0 && (GetTime() - last_update_time) < ORACLE_MAX_AGE_SECONDS) {
+        return last_update_time;
+    }
+    return last_broadcast_timestamp > 0 ? last_broadcast_timestamp : last_update_time;
 }
 
 bool OracleNode::HasValidPrice() const
 {
     std::lock_guard<std::mutex> lock(mtx_price);
-    return current_price > 0 && (GetTime() - last_update_time) < ORACLE_MAX_AGE_SECONDS;
+    // Fresh from exchange fetch
+    if (current_price > 0 && (GetTime() - last_update_time) < ORACLE_MAX_AGE_SECONDS) {
+        return true;
+    }
+    // Or we successfully broadcast a price (we know what we reported)
+    return last_broadcast_price > 0;
 }
 
 COraclePriceMessage OracleNode::CreatePriceMessage(CAmount price, int64_t timestamp)
@@ -313,7 +327,13 @@ void OracleNode::BroadcastCurrentPrice()
 
     if (price > 0) {
         COraclePriceMessage message = CreatePriceMessage(price, timestamp);
-        BroadcastPriceMessage(message);
+        if (BroadcastPriceMessage(message)) {
+            // Ensure our last broadcast price is always stored —
+            // even if exchange fetch cache expired, we know what we reported
+            std::lock_guard<std::mutex> lock(mtx_price);
+            last_broadcast_price = price;
+            last_broadcast_timestamp = timestamp;
+        }
     }
 }
 

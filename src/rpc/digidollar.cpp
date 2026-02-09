@@ -3036,15 +3036,59 @@ static RPCHelpMan listoracle()
                         result.pushKV("pubkey", HexStr(oracles[id].pubkey));
                     }
 
+                    // Price: prefer local runtime, fall back to pending P2P, then on-chain
+                    uint64_t price = 0;
+                    int64_t update_time = 0;
+                    std::string price_source = "none";
+
                     if (node->HasValidPrice()) {
-                        result.pushKV("price_micro_usd", (int64_t)node->GetCurrentPrice());
-                        result.pushKV("price_usd", static_cast<double>(node->GetCurrentPrice()) / 1000000.0);
-                        result.pushKV("last_update", node->GetLastUpdateTime());
+                        price = node->GetCurrentPrice();
+                        update_time = node->GetLastUpdateTime();
+                        price_source = "local";
                     } else {
-                        result.pushKV("price_micro_usd", 0);
-                        result.pushKV("price_usd", 0.0);
-                        result.pushKV("last_update", 0);
+                        // Check pending P2P messages (our own broadcast may be there)
+                        OracleBundleManager& bundle_manager = OracleBundleManager::GetInstance();
+                        std::vector<COraclePriceMessage> pending = bundle_manager.GetPendingMessages();
+                        for (const auto& msg : pending) {
+                            if (msg.oracle_id == id) {
+                                price = msg.price_micro_usd;
+                                update_time = msg.timestamp;
+                                price_source = "pending";
+                                break;
+                            }
+                        }
+
+                        // Fall back to on-chain data
+                        if (price == 0) {
+                            const ChainstateManager& chainman = EnsureAnyChainman(request.context);
+                            LOCK(cs_main);
+                            int32_t current_height = chainman.ActiveChain().Height();
+                            for (int h = current_height; h >= std::max(0, current_height - 19); --h) {
+                                CBlockIndex* pindex = chainman.ActiveChain()[h];
+                                if (!pindex) continue;
+                                CBlock block;
+                                if (!chainman.m_blockman.ReadBlockFromDisk(block, *pindex)) continue;
+                                if (block.vtx.empty()) continue;
+                                COracleBundle bundle;
+                                if (bundle_manager.ExtractOracleBundle(*block.vtx[0], bundle)) {
+                                    for (const auto& msg : bundle.messages) {
+                                        if (msg.oracle_id == id) {
+                                            price = msg.price_micro_usd;
+                                            update_time = msg.timestamp;
+                                            price_source = "on-chain";
+                                            break;
+                                        }
+                                    }
+                                    if (price > 0) break;
+                                }
+                            }
+                        }
                     }
+
+                    result.pushKV("price_micro_usd", (int64_t)price);
+                    result.pushKV("price_usd", static_cast<double>(price) / 1000000.0);
+                    result.pushKV("last_update", update_time);
+                    result.pushKV("price_source", price_source);
 
                     result.pushKV("enabled", node->IsEnabled());
                     result.pushKV("message", "Oracle is running");

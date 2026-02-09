@@ -33,10 +33,14 @@ private:
     std::atomic<bool> enabled;
     mutable std::mutex mtx_price;
 
-    // Current price data
+    // Current price data (from exchange fetch)
     CAmount current_price{0};
     int64_t last_update_time{0};
     int64_t last_broadcast_time{0};
+
+    // Last successfully broadcast price (never expires — this is what we reported)
+    CAmount last_broadcast_price{0};
+    int64_t last_broadcast_timestamp{0};
     int64_t start_time{0};
 
     // Configuration

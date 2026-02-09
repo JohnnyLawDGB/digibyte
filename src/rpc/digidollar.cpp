@@ -2317,6 +2317,7 @@ static RPCHelpMan getoracleprice()
             double priceUSD = 0.0;
             int lastBundleHeight = 0;
             int64_t lastBundleTime = 0;
+            int64_t freshestPendingTime = 0;
             std::set<uint32_t> reportingOracleIds;
 
             if (Params().GetChainType() == ChainType::REGTEST) {
@@ -2372,20 +2373,39 @@ static RPCHelpMan getoracleprice()
                     }
                 }
 
-                // Also count oracles with pending P2P messages not yet on-chain
+                // Also count oracles with pending P2P messages not yet on-chain.
+                // Track the freshest pending timestamp for time-based staleness.
                 {
                     std::vector<COraclePriceMessage> pending = oracle_manager.GetPendingMessages();
                     for (const auto& msg : pending) {
                         reportingOracleIds.insert(msg.oracle_id);
+                        if (msg.timestamp > freshestPendingTime) {
+                            freshestPendingTime = msg.timestamp;
+                        }
                     }
                 }
             }
 
-            // Calculate validity and staleness based on actual last bundle height
+            // Calculate validity and staleness using dual threshold:
+            //
+            // Block-based: stale if no oracle bundle within N blocks of chain tip.
+            // Time-based:  stale if no oracle data (on-chain or pending) within
+            //              ORACLE_MAX_AGE_SECONDS (1 hour).
+            //
+            // Data is NOT stale if EITHER check says it's fresh.  This prevents
+            // false positives on networks with slow block production (e.g. testnet
+            // with fixed difficulty where inter-block time exceeds the normal
+            // 15-second target by orders of magnitude).  On mainnet, the block-based
+            // check dominates.  On slow testnets, the time-based check ensures that
+            // actively-reporting oracles are not flagged as stale.
             int validityBlocks = 20; // Oracle data valid for 20 blocks
             int lastUpdateHeight = lastBundleHeight > 0 ? lastBundleHeight : 0;
-            int64_t lastUpdateTime = lastBundleTime > 0 ? lastBundleTime : (stats.last_update > 0 ? stats.last_update : 0);
-            bool isStale = !usingMockOracle && (lastBundleHeight == 0 || (currentHeight - lastBundleHeight) > validityBlocks);
+            int64_t freshestDataTime = std::max(lastBundleTime, freshestPendingTime);
+            int64_t lastUpdateTime = freshestDataTime > 0 ? freshestDataTime : (stats.last_update > 0 ? stats.last_update : 0);
+
+            bool blockBasedFresh = lastBundleHeight > 0 && (currentHeight - lastBundleHeight) <= validityBlocks;
+            bool timeBasedFresh = freshestDataTime > 0 && (GetTime() - freshestDataTime) <= ORACLE_MAX_AGE_SECONDS;
+            bool isStale = !usingMockOracle && !(blockBasedFresh || timeBasedFresh);
 
             // Oracle count from actual unique reporting oracles (on-chain + pending)
             size_t activeOracleCount = reportingOracleIds.size();

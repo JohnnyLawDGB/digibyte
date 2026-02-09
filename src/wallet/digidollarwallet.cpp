@@ -4973,7 +4973,7 @@ bool DigiDollarWallet::SignDDInputs(CMutableTransaction& tx,
         scriptParams.ddAmount = position.dd_minted;
         scriptParams.lockHeight = position.unlock_height;
         scriptParams.ownerKey = ownerXOnly;
-        scriptParams.internalKey = ownerXOnly;
+        scriptParams.internalKey = DigiDollar::GetCollateralNUMSKey();  // Must match mint (txbuilder.cpp:199)
         scriptParams.oracleKeys = DigiDollar::GetOracleKeys(15); // Same as mint
 
         // Add the 2 redemption paths in the same order as CreateCollateralP2TR in scripts.cpp
@@ -4993,8 +4993,8 @@ bool DigiDollarWallet::SignDDInputs(CMutableTransaction& tx,
             builder.Add(1, errPath, 0xC0);  // Leaf version 0xC0 for Tapscript
         }
 
-        // Finalize with the internal key to get the merkle root
-        builder.Finalize(ownerXOnly);
+        // Finalize with the NUMS internal key to match mint (txbuilder.cpp:199)
+        builder.Finalize(DigiDollar::GetCollateralNUMSKey());
 
         if (!builder.IsValid() || !builder.IsComplete()) {
             LogPrintf("DigiDollar: SignDDInputs - Failed to rebuild Taproot tree for signing\n");
@@ -5381,7 +5381,7 @@ bool DigiDollarWallet::SignRedemptionTransaction(CMutableTransaction& tx,
         scriptParams.ddAmount = position.dd_minted;
         scriptParams.lockHeight = position.unlock_height;
         scriptParams.ownerKey = ownerXOnly;
-        scriptParams.internalKey = ownerXOnly;
+        scriptParams.internalKey = DigiDollar::GetCollateralNUMSKey();  // Must match mint (txbuilder.cpp:199)
         scriptParams.oracleKeys = DigiDollar::GetOracleKeys(15);
 
         // Add the 2 redemption paths in the same order as CreateCollateralP2TR in scripts.cpp
@@ -5401,8 +5401,8 @@ bool DigiDollarWallet::SignRedemptionTransaction(CMutableTransaction& tx,
             builder.Add(1, errPath, 0xC0);  // Leaf version 0xC0 for Tapscript
         }
 
-        // Finalize with the internal key
-        builder.Finalize(ownerXOnly);
+        // Finalize with the NUMS internal key to match mint (txbuilder.cpp:199)
+        builder.Finalize(DigiDollar::GetCollateralNUMSKey());
 
         if (!builder.IsValid() || !builder.IsComplete()) {
             LogPrintf("DigiDollar: SignRedemptionTransaction - Failed to rebuild Taproot tree for collateral\n");

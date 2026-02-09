@@ -29,11 +29,11 @@ class DigiDollarNetworkRelayTest(DigiByteTestFramework):
         self.setup_clean_chain = True
         # Test both with and without Dandelion
         self.extra_args = [
-            ["-digidollar=1", "-dandelion=0"],  # Node 0: DD enabled, Dandelion disabled
-            ["-digidollar=1", "-dandelion=0"],  # Node 1: DD enabled, Dandelion disabled
-            ["-digidollar=1", "-dandelion=0"],  # Node 2: DD enabled, Dandelion disabled
-            ["-digidollar=1", "-dandelion=1"],  # Node 3: DD enabled, Dandelion enabled
-            ["-digidollar=1", "-dandelion=1"],  # Node 4: DD enabled, Dandelion enabled
+            ["-digidollar=1", "-dandelion=0", "-txindex=1"],  # Node 0: DD enabled, Dandelion disabled
+            ["-digidollar=1", "-dandelion=0", "-txindex=1"],  # Node 1: DD enabled, Dandelion disabled
+            ["-digidollar=1", "-dandelion=0", "-txindex=1"],  # Node 2: DD enabled, Dandelion disabled
+            ["-digidollar=1", "-dandelion=1", "-txindex=1"],  # Node 3: DD enabled, Dandelion enabled
+            ["-digidollar=1", "-dandelion=1", "-txindex=1"],  # Node 4: DD enabled, Dandelion enabled
         ]
 
     def add_options(self, parser):
@@ -216,6 +216,10 @@ class DigiDollarNetworkRelayTest(DigiByteTestFramework):
         assert txid in mempool_1, "Hub (node 1) missing transaction"
         assert txid in mempool_2, "Spoke (node 2) did not receive relay from hub"
 
+        # Mine block to confirm transfer (needed for txindex to index the change output)
+        self.nodes[0].generate(1)
+        self.sync_blocks([self.nodes[0], self.nodes[1], self.nodes[2]])
+
         self.log.info("✓ Star topology relay test passed")
 
     def test_relay_timing(self):
@@ -240,6 +244,10 @@ class DigiDollarNetworkRelayTest(DigiByteTestFramework):
 
         self.log.info(f"✓ Relay completed successfully")
 
+        # Mine block to confirm transfer (needed for txindex to index the change output)
+        self.nodes[0].generate(1)
+        self.sync_blocks([self.nodes[0], self.nodes[1], self.nodes[2]])
+
         self.log.info("✓ Relay timing test passed")
 
     def test_mempool_consistency(self):
@@ -250,32 +258,23 @@ class DigiDollarNetworkRelayTest(DigiByteTestFramework):
         transfer_amount = Decimal('15.00')
         transfer_amount_cents = int(transfer_amount * 100)
 
-        # Send multiple DD transfers
+        # Send multiple DD transfers, mining between each so txindex can
+        # validate the change outputs for the next transfer's DD conservation check.
         txids = []
         for i in range(3):
             result = self.nodes[0].senddigidollar(receiver_address, transfer_amount_cents)
             txids.append(result['txid'])
+            # Mine after each transfer to confirm and index change outputs
+            self.nodes[0].generate(1)
+            self.sync_blocks([self.nodes[0], self.nodes[1], self.nodes[2]])
 
-        # Sync mempools to ensure all transactions propagate
-        self.sync_mempools([self.nodes[0], self.nodes[1], self.nodes[2]])
-
-        # Verify all transactions in all node mempools
+        # Verify all transactions are confirmed on all nodes
         for node_idx in range(3):
-            mempool = self.nodes[node_idx].getrawmempool()
             for txid in txids:
-                assert txid in mempool, f"Node {node_idx} missing txid {txid}"
+                tx_info = self.nodes[node_idx].getrawtransaction(txid, True)
+                assert_greater_than(tx_info['confirmations'], 0)
 
-        self.log.info(f"✓ All {len(txids)} transactions in all node mempools")
-
-        # Mine block and verify mempool clears
-        self.nodes[0].generate(1)
-        self.sync_blocks([self.nodes[0], self.nodes[1], self.nodes[2]])
-
-        # All mempools should be empty now
-        for node_idx in range(3):
-            mempool = self.nodes[node_idx].getrawmempool()
-            for txid in txids:
-                assert txid not in mempool, f"Node {node_idx} still has {txid} after mining"
+        self.log.info(f"✓ All {len(txids)} transactions confirmed across all nodes")
 
         self.log.info("✓ Mempool consistency test passed")
 

@@ -28,6 +28,7 @@ class DigiDollarNetworkRelayTest(DigiByteTestFramework):
         self.num_nodes = 5
         self.setup_clean_chain = True
         # Test both with and without Dandelion
+        # txindex needed for getrawtransaction on confirmed txs in test_mempool_consistency
         self.extra_args = [
             ["-digidollar=1", "-dandelion=0"],  # Node 0: DD enabled, Dandelion disabled
             ["-digidollar=1", "-dandelion=0"],  # Node 1: DD enabled, Dandelion disabled

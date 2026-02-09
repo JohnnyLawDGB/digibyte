@@ -29,11 +29,11 @@ class DigiDollarNetworkRelayTest(DigiByteTestFramework):
         self.setup_clean_chain = True
         # Test both with and without Dandelion
         self.extra_args = [
-            ["-digidollar=1", "-dandelion=0", "-txindex=1"],  # Node 0: DD enabled, Dandelion disabled
-            ["-digidollar=1", "-dandelion=0", "-txindex=1"],  # Node 1: DD enabled, Dandelion disabled
-            ["-digidollar=1", "-dandelion=0", "-txindex=1"],  # Node 2: DD enabled, Dandelion disabled
-            ["-digidollar=1", "-dandelion=1", "-txindex=1"],  # Node 3: DD enabled, Dandelion enabled
-            ["-digidollar=1", "-dandelion=1", "-txindex=1"],  # Node 4: DD enabled, Dandelion enabled
+            ["-digidollar=1", "-dandelion=0"],  # Node 0: DD enabled, Dandelion disabled
+            ["-digidollar=1", "-dandelion=0"],  # Node 1: DD enabled, Dandelion disabled
+            ["-digidollar=1", "-dandelion=0"],  # Node 2: DD enabled, Dandelion disabled
+            ["-digidollar=1", "-dandelion=1"],  # Node 3: DD enabled, Dandelion enabled
+            ["-digidollar=1", "-dandelion=1"],  # Node 4: DD enabled, Dandelion enabled
         ]
 
     def add_options(self, parser):

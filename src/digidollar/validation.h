@@ -17,6 +17,7 @@
 #include <coins.h>
 
 #include <cstdint>
+#include <functional>
 #include <vector>
 
 namespace DigiDollar {
@@ -51,6 +52,14 @@ enum class RedemptionPath {
  * Validation context for DigiDollar operations
  * Contains current blockchain state needed for validation
  */
+/**
+ * Look up a transaction from the block database by txid and coin creation height.
+ * Used to extract DD amounts from the creating transaction's OP_RETURN when
+ * txindex is unavailable. Every full node has every block on disk, so this
+ * provides a universal fallback for DD amount extraction.
+ */
+using TxLookupFn = std::function<bool(const uint256& txid, uint32_t coinHeight, CTransactionRef& tx_out)>;
+
 struct ValidationContext {
     int nHeight;                     // Current block height
     CAmount oraclePriceMicroUSD;     // Current DGB price in micro-USD (e.g., 6310 = $0.00631)
@@ -58,11 +67,14 @@ struct ValidationContext {
     const CChainParams& params;      // Chain parameters including DD consensus params
     const CCoinsViewCache* coins;    // Coins view for UTXO lookups (nullptr if not available)
     bool skipOracleValidation;       // Skip oracle-dependent validation (for historical blocks)
+    TxLookupFn txLookup;             // Look up tx from block database (for DD amount extraction)
 
     ValidationContext(int height, CAmount price_micro_usd, int collateral, const CChainParams& chainParams,
-                      const CCoinsViewCache* coins_view = nullptr, bool skip_oracle = false)
+                      const CCoinsViewCache* coins_view = nullptr, bool skip_oracle = false,
+                      TxLookupFn tx_lookup = nullptr)
         : nHeight(height), oraclePriceMicroUSD(price_micro_usd), systemCollateral(collateral),
-          params(chainParams), coins(coins_view), skipOracleValidation(skip_oracle) {}
+          params(chainParams), coins(coins_view), skipOracleValidation(skip_oracle),
+          txLookup(std::move(tx_lookup)) {}
 };
 
 // ============================================================================

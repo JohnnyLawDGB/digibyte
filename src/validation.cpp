@@ -736,12 +736,30 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
 
         // Create validation context with current blockchain state
         // Pass coins tip for UTXO lookup in DD redemption validation
+        // Include block-db tx lookup for DD amount extraction without txindex
+        auto txLookup = [this](const uint256& txid, uint32_t coinHeight, CTransactionRef& tx_out) -> bool {
+            AssertLockHeld(cs_main);
+            const CBlockIndex* pblockindex = m_active_chainstate.m_chain[coinHeight];
+            if (!pblockindex) return false;
+            CBlock block;
+            if (!m_active_chainstate.m_blockman.ReadBlockFromDisk(block, *pblockindex)) return false;
+            for (const auto& btx : block.vtx) {
+                if (btx->GetHash() == txid) {
+                    tx_out = btx;
+                    return true;
+                }
+            }
+            return false;
+        };
+
         DigiDollar::ValidationContext ddContext(
             m_active_chainstate.m_chain.Height() + 1,  // Height for next block
             GetOraclePriceForTransaction(tx),           // Current oracle price
             DigiDollar::GetSystemCollateralRatio(),     // System health
             args.m_chainparams,                          // Chain parameters
-            &m_active_chainstate.CoinsTip()              // Coins view for UTXO lookup
+            &m_active_chainstate.CoinsTip(),             // Coins view for UTXO lookup
+            false,                                       // Don't skip oracle validation in mempool
+            txLookup                                     // Block-db tx lookup for DD amounts
         );
 
         if (!DigiDollar::ValidateDigiDollarTransaction(tx, ddContext, state)) {
@@ -2722,13 +2740,32 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
                 // price that was valid at that time. We cannot re-validate them with current
                 // prices as that would cause consensus failures on valid historical blocks.
                 // Only mempool validation should use strict oracle price checking.
+                // Block-database tx lookup for DD amount extraction.
+                // When metadata registry and txindex both fail, this loads the
+                // creating transaction from the block at the coin's creation height.
+                // Every full node has every block — this is the universal fallback.
+                auto txLookup = [this, pindex](const uint256& txid, uint32_t coinHeight, CTransactionRef& tx_out) -> bool {
+                    const CBlockIndex* pblockindex = pindex->GetAncestor(coinHeight);
+                    if (!pblockindex) return false;
+                    CBlock block;
+                    if (!m_blockman.ReadBlockFromDisk(block, *pblockindex)) return false;
+                    for (const auto& btx : block.vtx) {
+                        if (btx->GetHash() == txid) {
+                            tx_out = btx;
+                            return true;
+                        }
+                    }
+                    return false;
+                };
+
                 DigiDollar::ValidationContext ddContext(
                     pindex->nHeight,
                     GetOraclePriceForTransaction(tx, pindex->nHeight),  // Oracle price (may be 0 during IBD)
                     DigiDollar::GetSystemCollateralRatio(),              // System collateral ratio
                     m_chainman.GetParams(),
                     &view,                                               // Coins view for UTXO lookup
-                    true                                                 // skipOracleValidation = true for block connect
+                    true,                                                // skipOracleValidation = true for block connect
+                    txLookup                                             // Block-db tx lookup for DD amounts
                 );
 
                 TxValidationState dd_state;

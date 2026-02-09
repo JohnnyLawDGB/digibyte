@@ -1391,6 +1391,19 @@ RPCHelpMan redeemdigidollar()
                 // Mark position as inactive
                 foundPosition.is_active = false;
                 dd_wallet->WriteDDTimeLock(foundPosition);
+
+                // CRITICAL FIX: Unlock the collateral and DD token UTXOs
+                // now that the position is fully redeemed
+                {
+                    LOCK(pwallet->cs_wallet);
+                    wallet::WalletBatch unlock_batch(pwallet->GetDatabase());
+                    COutPoint collateralOutpoint(positionId, 0);
+                    COutPoint ddTokenOutpoint(positionId, 1);
+                    pwallet->UnlockCoin(collateralOutpoint, &unlock_batch);
+                    pwallet->UnlockCoin(ddTokenOutpoint, &unlock_batch);
+                    LogPrintf("DigiDollar: Unlocked collateral+DD-token UTXOs for redeemed position %s\n",
+                             positionIdStr);
+                }
             } else {
                 // Update position with remaining amounts
                 CAmount remainingDD = foundPosition.dd_minted - ddAmount;

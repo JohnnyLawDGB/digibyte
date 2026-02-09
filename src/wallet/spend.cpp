@@ -26,6 +26,7 @@
 #include <wallet/spend.h>
 #include <wallet/transaction.h>
 #include <wallet/wallet.h>
+#include <primitives/transaction.h> // for IsDigiDollarTransaction, GetDigiDollarTxType
 
 #include <cmath>
 
@@ -392,6 +393,28 @@ CoinsResult AvailableCoins(const CWallet& wallet,
 
             if (wallet.IsLockedCoin(outpoint) && params.skip_locked)
                 continue;
+
+            // CRITICAL FIX: Skip outputs from DigiDollar transactions that are
+            // NOT regular DGB change. DD mint transactions have:
+            //   vout[0] = Collateral (locked DGB, P2TR with timelock - NOT spendable)
+            //   vout[1] = DD token output (0 DGB value)
+            //   vout[2] = OP_RETURN metadata
+            //   vout[3+] = DGB change (spendable)
+            // Only the change output(s) at index >= 3 should be available for
+            // regular DGB coin selection. The collateral is time-locked and must
+            // not be spent until the lock expires via the redemption path.
+            // DD transfer/redeem transactions also have non-spendable DD outputs.
+            if (IsDigiDollarTransaction(*wtx.tx)) {
+                DigiDollarTxType ddType = GetDigiDollarTxType(*wtx.tx);
+                if (ddType == DD_TX_MINT && i < 3) {
+                    // Skip collateral (0), DD token (1), and OP_RETURN (2)
+                    continue;
+                }
+                if ((ddType == DD_TX_TRANSFER || ddType == DD_TX_REDEEM) && output.nValue == 0) {
+                    // Skip 0-value DD token outputs in transfer/redeem TXs
+                    continue;
+                }
+            }
 
             if (wallet.IsSpent(outpoint))
                 continue;

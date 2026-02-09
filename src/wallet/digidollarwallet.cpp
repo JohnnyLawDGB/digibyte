@@ -116,6 +116,38 @@ size_t DigiDollarWallet::LoadFromDatabase()
     LogPrintf("DigiDollarWallet: Loaded %zu positions, %zu balances, %zu transactions, %zu DD UTXOs, %zu DD address keys, %zu DD owner keys\n",
               positions_loaded, balances_loaded, txs_loaded, utxos_loaded, addr_keys_loaded, owner_keys_loaded);
 
+    // CRITICAL FIX: Lock collateral UTXOs for all active DD positions
+    // This ensures the wallet's regular DGB coin selection never picks
+    // collateral UTXOs after a restart. Without this, the wallet could
+    // create transactions that try to spend time-locked collateral,
+    // causing them to get stuck as unconfirmed.
+    size_t locked_count = 0;
+    if (m_wallet) {
+        wallet::WalletBatch lock_batch(m_wallet->GetDatabase());
+        for (const auto& [pos_id, pos] : collateral_positions) {
+            if (pos.is_active) {
+                // Lock collateral output (vout[0] of mint TX)
+                COutPoint collateralOutpoint(pos.dd_timelock_id, 0);
+                if (!m_wallet->IsLockedCoin(collateralOutpoint)) {
+                    if (m_wallet->LockCoin(collateralOutpoint, &lock_batch)) {
+                        locked_count++;
+                    }
+                }
+                // Lock DD token output (vout[1] of mint TX)
+                COutPoint ddTokenOutpoint(pos.dd_timelock_id, 1);
+                if (!m_wallet->IsLockedCoin(ddTokenOutpoint)) {
+                    if (m_wallet->LockCoin(ddTokenOutpoint, &lock_batch)) {
+                        locked_count++;
+                    }
+                }
+            }
+        }
+        if (locked_count > 0) {
+            LogPrintf("DigiDollarWallet: Locked %zu collateral/DD-token UTXOs from %zu active positions\n",
+                     locked_count, collateral_positions.size());
+        }
+    }
+
     // Recalculate totals
     RecalculateTotals();
 
@@ -1644,6 +1676,24 @@ void DigiDollarWallet::ProcessDDTxForRescan(const CTransactionRef& ptx, int bloc
                             batch.WriteDDTimeLock(pos_it->second);
                         }
                     }
+                }
+            }
+
+            // CRITICAL FIX: Lock collateral and DD token UTXOs during rescan
+            // to prevent wallet coin selection from picking them for regular DGB sends.
+            {
+                COutPoint collateralOutpoint(tx.GetHash(), 0);
+                COutPoint ddTokenOutpoint(tx.GetHash(), 1);
+                wallet::WalletBatch lock_batch(m_wallet->GetDatabase());
+                if (!m_wallet->IsLockedCoin(collateralOutpoint)) {
+                    m_wallet->LockCoin(collateralOutpoint, &lock_batch);
+                    LogPrintf("DigiDollar: Locked collateral UTXO %s:0 during rescan\n",
+                              tx.GetHash().GetHex().substr(0, 16).c_str());
+                }
+                if (!m_wallet->IsLockedCoin(ddTokenOutpoint)) {
+                    m_wallet->LockCoin(ddTokenOutpoint, &lock_batch);
+                    LogPrintf("DigiDollar: Locked DD token UTXO %s:1 during rescan\n",
+                              tx.GetHash().GetHex().substr(0, 16).c_str());
                 }
             }
 

@@ -95,7 +95,11 @@ std::string BaseExchangeFetcher::HttpGet(const std::string& url)
     // Follow redirects
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 3L);
+#if CURL_AT_LEAST_VERSION(7, 85, 0)
     curl_easy_setopt(curl, CURLOPT_PROTOCOLS_STR, "https");
+#else
+    curl_easy_setopt(curl, CURLOPT_PROTOCOLS, CURLPROTO_HTTPS);
+#endif
     curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L);
 
     // Set User-Agent

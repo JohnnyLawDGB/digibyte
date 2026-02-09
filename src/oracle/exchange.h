@@ -102,17 +102,7 @@ private:
     std::string ParseKrakenResponse(const std::string& response);
 };
 
-/**
- * CoinMarketCap Fetcher
- * Fetches DGB/USD from CoinMarketCap Pro API
- * Requires API key configuration
- */
-class CoinMarketCapFetcher : public BaseExchangeFetcher
-{
-public:
-    CoinMarketCapFetcher();
-    CAmount FetchPrice() override;
-};
+// CoinMarketCap removed — requires paid API key, incompatible with decentralized oracle design
 
 /**
  * CoinGecko Fetcher

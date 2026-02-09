@@ -1080,20 +1080,20 @@ BOOST_AUTO_TEST_CASE(curl_handle_multiple_fetcher_instances)
 }
 
 /**
- * Test that CoinMarketCapFetcher (which uses HttpGetWithHeaders internally)
- * also properly reuses its CURL handle for the headers variant.
+ * Test that CoinGecko fetcher properly reuses its CURL handle
+ * across repeated calls without crash or socket exhaustion.
  */
-BOOST_AUTO_TEST_CASE(curl_handle_reuse_with_headers)
+BOOST_AUTO_TEST_CASE(curl_handle_reuse_coingecko)
 {
-    CoinMarketCapFetcher fetcher;
+    CoinGeckoFetcher fetcher;
     fetcher.SetTimeout(3);
 
-    // CoinMarketCap won't succeed without API key, but handle reuse should work
+    // Repeated calls should reuse handle without crash
     for (int i = 0; i < 3; i++) {
         CAmount price = fetcher.FetchPrice();
         (void)price;
     }
-    BOOST_CHECK(true); // No crash on repeated calls with headers variant
+    BOOST_CHECK(true); // No crash on repeated calls
 }
 
 BOOST_AUTO_TEST_SUITE_END()

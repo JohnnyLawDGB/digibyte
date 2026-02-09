@@ -882,135 +882,8 @@ CAmount HTXFetcher::FetchPrice()
     }
 }
 
-/**
- * CoinMarketCapFetcher Implementation
- */
-
-CoinMarketCapFetcher::CoinMarketCapFetcher()
-    : BaseExchangeFetcher("CoinMarketCap", "https://pro-api.coinmarketcap.com")
-{
-}
-
-CAmount CoinMarketCapFetcher::FetchPrice()
-{
-    try {
-        // Get API key from config
-        std::string apiKey = gArgs.GetArg("-coinmarketcap-api-key", "");
-        if (apiKey.empty()) {
-            LogPrint(BCLog::DIGIDOLLAR, "CoinMarketCap: No API key configured (use -coinmarketcap-api-key)\n");
-            return 0;
-        }
-
-        std::string url = base_url + "/v1/cryptocurrency/quotes/latest?symbol=DGB&convert=USD";
-
-        std::string response;
-#ifdef HAVE_LIBCURL
-        // Reuse persistent CURL handle (same fix as HttpGet — avoid socket exhaustion)
-        CURL* curl = static_cast<CURL*>(m_curl_handle);
-        if (!curl) {
-            LogPrint(BCLog::DIGIDOLLAR, "CoinMarketCap: No CURL handle available\n");
-            return 0;
-        }
-
-        curl_easy_reset(curl);
-        CURLcode res;
-
-        // Add API key header
-        struct curl_slist* headers = nullptr;
-        std::string authHeader = "X-CMC_PRO_API_KEY: " + apiKey;
-        headers = curl_slist_append(headers, authHeader.c_str());
-        headers = curl_slist_append(headers, "Accept: application/json");
-
-        // Set URL
-        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-
-        // Set headers
-        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
-
-        // Set write callback
-        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
-        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
-
-        // Set timeout
-        curl_easy_setopt(curl, CURLOPT_TIMEOUT, static_cast<long>(timeout_seconds));
-
-        // Set User-Agent
-        curl_easy_setopt(curl, CURLOPT_USERAGENT, "DigiByte-Oracle/1.0");
-
-        // SSL — same CA detection as HttpGet
-        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
-        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
-        {
-            static const char* ca_files[] = {"/etc/ssl/certs/ca-certificates.crt", "/etc/pki/tls/certs/ca-bundle.crt", "/etc/ssl/cert.pem", nullptr};
-            for (int i = 0; ca_files[i]; ++i) {
-                struct stat st;
-                if (stat(ca_files[i], &st) == 0 && S_ISREG(st.st_mode) && st.st_size > 0) {
-                    curl_easy_setopt(curl, CURLOPT_CAINFO, ca_files[i]);
-                    break;
-                }
-            }
-            static const char* ca_dirs[] = {"/etc/ssl/certs", "/etc/pki/tls/certs", nullptr};
-            for (int i = 0; ca_dirs[i]; ++i) {
-                struct stat st;
-                if (stat(ca_dirs[i], &st) == 0 && S_ISDIR(st.st_mode)) {
-                    curl_easy_setopt(curl, CURLOPT_CAPATH, ca_dirs[i]);
-                    break;
-                }
-            }
-        }
-
-        // Perform request
-        res = curl_easy_perform(curl);
-
-        // Free headers (but NOT the handle — it's persistent)
-        curl_slist_free_all(headers);
-
-        if (res != CURLE_OK) {
-            LogPrint(BCLog::DIGIDOLLAR, "CoinMarketCap: CURL error: %s\n", curl_easy_strerror(res));
-            return 0;
-        }
-#else
-        // libcurl not available — cannot fetch CoinMarketCap data
-        LogPrintf("Oracle: ERROR - libcurl not available, cannot fetch CoinMarketCap price. Build with libcurl support.\n");
-        return 0;
-#endif
-
-        // Parse JSON using UniValue
-        UniValue json;
-        if (!json.read(response)) {
-            LogPrint(BCLog::DIGIDOLLAR, "CoinMarketCap: Failed to parse JSON response\n");
-            return 0;
-        }
-
-        // Extract nested price: data.DGB.quote.USD.price
-        if (!json["data"].isObject() || !json["data"]["DGB"].isObject()) {
-            LogPrint(BCLog::DIGIDOLLAR, "CoinMarketCap: Invalid JSON structure (missing data.DGB)\n");
-            return 0;
-        }
-
-        UniValue dgb = json["data"]["DGB"];
-        if (!dgb["quote"].isObject() || !dgb["quote"]["USD"].isObject()) {
-            LogPrint(BCLog::DIGIDOLLAR, "CoinMarketCap: Invalid JSON structure (missing quote.USD)\n");
-            return 0;
-        }
-
-        UniValue usd = dgb["quote"]["USD"];
-        if (!usd["price"].isNum()) {
-            LogPrint(BCLog::DIGIDOLLAR, "CoinMarketCap: Price field is not a number\n");
-            return 0;
-        }
-
-        double priceUSD = usd["price"].get_real();
-        CAmount priceMicroUSD = ConvertToMicroUSD(priceUSD);
-
-        LogPrint(BCLog::DIGIDOLLAR, "CoinMarketCap: $%.6f (%lld micro-USD)\n", priceUSD, priceMicroUSD);
-        return priceMicroUSD;
-
-    } catch (const std::exception& e) {
-        LogPrint(BCLog::DIGIDOLLAR, "CoinMarketCap fetch error: %s\n", e.what());
-        return 0;
-    }
-}
+// CoinMarketCap fetcher removed — requires paid API key, incompatible with
+// decentralized oracle design. Each oracle must use freely available data sources.
 
 /**
  * CoinGeckoFetcher Implementation
@@ -1091,7 +964,7 @@ void MultiExchangeAggregator::InitializeFetchers()
     // - Coinbase: DGB not tradeable (info page only)
     // - Kraken: DGB not listed
     // - Messari: Requires API key now
-    // - CoinMarketCap: Requires API key (kept but optional)
+    // - CoinMarketCap: Removed (paid API key incompatible with decentralized design)
 
     fetchers.push_back(std::make_unique<BinanceFetcher>());
     fetchers.push_back(std::make_unique<CoinGeckoFetcher>());
@@ -1099,7 +972,7 @@ void MultiExchangeAggregator::InitializeFetchers()
     fetchers.push_back(std::make_unique<GateIOFetcher>());
     fetchers.push_back(std::make_unique<HTXFetcher>());
     fetchers.push_back(std::make_unique<CryptoComFetcher>());
-    fetchers.push_back(std::make_unique<CoinMarketCapFetcher>());  // Optional - requires API key
+    // CoinMarketCap removed — paid API key incompatible with decentralized design
 
     LogPrintf("Oracle: Initialized %d exchange fetchers\n", fetchers.size());
 }
@@ -1289,7 +1162,7 @@ double MultiExchangeAggregator::GetExchangeWeight(const std::string& exchange)
 {
     // Default weights for different exchanges (based on liquidity and reliability)
     if (exchange == "Binance") return 1.5;          // Higher weight for Binance (most liquid)
-    if (exchange == "CoinMarketCap") return 1.4;    // High weight for CMC (aggregated data)
+    // CoinMarketCap removed — paid API key incompatible with decentralized oracle design
     if (exchange == "CoinGecko") return 1.4;        // High weight for CoinGecko (aggregated data)
     if (exchange == "Coinbase") return 1.3;         // High weight for Coinbase
     if (exchange == "Kraken") return 1.2;           // Good weight for Kraken

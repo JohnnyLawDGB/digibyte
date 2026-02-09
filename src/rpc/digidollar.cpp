@@ -2414,7 +2414,10 @@ static RPCHelpMan getoracleprice()
             // check dominates.  On slow testnets, the time-based check ensures that
             // actively-reporting oracles are not flagged as stale.
             int validityBlocks = 20; // Oracle data valid for 20 blocks
-            int lastUpdateHeight = lastBundleHeight > 0 ? lastBundleHeight : 0;
+            // Use on-chain bundle height if available, otherwise use current
+            // height when oracles are actively reporting via P2P pending messages.
+            int lastUpdateHeight = lastBundleHeight > 0 ? lastBundleHeight :
+                (freshestPendingTime > 0 ? currentHeight : 0);
             int64_t freshestDataTime = std::max(lastBundleTime, freshestPendingTime);
             int64_t lastUpdateTime = freshestDataTime > 0 ? freshestDataTime : (stats.last_update > 0 ? stats.last_update : 0);
 

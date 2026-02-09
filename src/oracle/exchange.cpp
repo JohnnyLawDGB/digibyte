@@ -36,22 +36,47 @@ static size_t WriteCallback(void* contents, size_t size, size_t nmemb, std::stri
  * BaseExchangeFetcher Implementation
  */
 
-std::string BaseExchangeFetcher::HttpGet(const std::string& url)
+BaseExchangeFetcher::BaseExchangeFetcher(const std::string& name, const std::string& url)
+    : exchange_name(name), base_url(url)
 {
 #ifdef HAVE_LIBCURL
-    // Real libcurl implementation
-    // Ensure OpenSSL + curl are globally initialized (safe to call multiple times)
+    // Ensure curl is globally initialized (safe to call multiple times)
     static bool curl_initialized = []() {
         curl_global_init(CURL_GLOBAL_DEFAULT);
         return true;
     }();
     (void)curl_initialized;
 
-    CURL* curl = curl_easy_init();
+    m_curl_handle = curl_easy_init();
+    if (!m_curl_handle) {
+        LogPrintf("BaseExchangeFetcher: Failed to create persistent CURL handle for %s\n", name);
+    }
+#endif
+}
+
+BaseExchangeFetcher::~BaseExchangeFetcher()
+{
+#ifdef HAVE_LIBCURL
+    if (m_curl_handle) {
+        curl_easy_cleanup(static_cast<CURL*>(m_curl_handle));
+        m_curl_handle = nullptr;
+    }
+#endif
+}
+
+std::string BaseExchangeFetcher::HttpGet(const std::string& url)
+{
+#ifdef HAVE_LIBCURL
+    CURL* curl = static_cast<CURL*>(m_curl_handle);
     if (!curl) {
-        LogPrint(BCLog::DIGIDOLLAR, "HttpGet: Failed to initialize CURL\n");
+        LogPrint(BCLog::DIGIDOLLAR, "HttpGet: No CURL handle available\n");
         return "";
     }
+
+    // Reset all options to defaults while keeping the handle (and its connection
+    // cache / DNS cache / SSL session cache). This avoids creating a new socket
+    // per request — the fix for Windows TIME_WAIT port exhaustion.
+    curl_easy_reset(curl);
 
     std::string response;
     CURLcode res;
@@ -77,9 +102,6 @@ std::string BaseExchangeFetcher::HttpGet(const std::string& url)
     curl_easy_setopt(curl, CURLOPT_USERAGENT, "DigiByte-Oracle/1.0");
 
     // SSL certificate verification
-    // Try common CA bundle locations; refuse to connect if no CA bundle found
-    // This is needed because the statically-linked OpenSSL has no built-in CA path
-    // Always explicitly set CA info to override any bad compiled-in defaults
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
 
@@ -127,8 +149,7 @@ std::string BaseExchangeFetcher::HttpGet(const std::string& url)
     }
     if (!ca_set) {
         LogPrintf("HttpGet: SECURITY - No CA bundle found, refusing to make unverified request to %s\n", url);
-        curl_easy_cleanup(curl);
-        return "";  // Fail safe — don't fetch without TLS
+        return "";  // Fail safe — don't fetch without TLS (handle stays alive for next call)
     }
 
     // Perform request
@@ -136,8 +157,7 @@ std::string BaseExchangeFetcher::HttpGet(const std::string& url)
 
     if (res != CURLE_OK) {
         LogPrint(BCLog::DIGIDOLLAR, "HttpGet: Request failed for %s: %s (code=%d)\n", url, curl_easy_strerror(res), (int)res);
-        curl_easy_cleanup(curl);
-        return "";
+        return "";  // Handle stays alive for next call
     }
 
     LogPrint(BCLog::DIGIDOLLAR, "HttpGet: Successfully fetched %d bytes from %s\n", response.size(), url);
@@ -885,13 +905,14 @@ CAmount CoinMarketCapFetcher::FetchPrice()
 
         std::string response;
 #ifdef HAVE_LIBCURL
-        // Real libcurl implementation with headers
-        CURL* curl = curl_easy_init();
+        // Reuse persistent CURL handle (same fix as HttpGet — avoid socket exhaustion)
+        CURL* curl = static_cast<CURL*>(m_curl_handle);
         if (!curl) {
-            LogPrint(BCLog::DIGIDOLLAR, "CoinMarketCap: Failed to initialize CURL\n");
+            LogPrint(BCLog::DIGIDOLLAR, "CoinMarketCap: No CURL handle available\n");
             return 0;
         }
 
+        curl_easy_reset(curl);
         CURLcode res;
 
         // Add API key header
@@ -941,9 +962,8 @@ CAmount CoinMarketCapFetcher::FetchPrice()
         // Perform request
         res = curl_easy_perform(curl);
 
-        // Cleanup
+        // Free headers (but NOT the handle — it's persistent)
         curl_slist_free_all(headers);
-        curl_easy_cleanup(curl);
 
         if (res != CURLE_OK) {
             LogPrint(BCLog::DIGIDOLLAR, "CoinMarketCap: CURL error: %s\n", curl_easy_strerror(res));

@@ -27,11 +27,15 @@ protected:
     std::string base_url;
     int timeout_seconds{10};
 
-public:
-    BaseExchangeFetcher(const std::string& name, const std::string& url)
-        : exchange_name(name), base_url(url) {}
+    //! Persistent CURL handle — reused across requests to avoid socket exhaustion.
+    //! On Windows, curl_easy_init()/cleanup() per request causes TIME_WAIT buildup
+    //! that exhausts ephemeral ports after 6-24 hours with 7 exchanges @ 15s intervals.
+    void* m_curl_handle{nullptr};
 
-    virtual ~BaseExchangeFetcher() = default;
+public:
+    BaseExchangeFetcher(const std::string& name, const std::string& url);
+
+    virtual ~BaseExchangeFetcher();
 
     //! Fetch current DGB/USD price in micro-USD (e.g., 50000 = $0.05)
     virtual CAmount FetchPrice() = 0;

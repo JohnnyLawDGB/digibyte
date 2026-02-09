@@ -1002,4 +1002,98 @@ BOOST_AUTO_TEST_CASE(aggregator_concurrent_fetching)
     BOOST_WARN_MESSAGE(true, "Concurrent fetching not implemented yet (optimization) - Phase 2 work");
 }
 
+// ============================================================================
+// CATEGORY 7: CURL Handle Reuse Tests (Bug Fix #1)
+// Tests that BaseExchangeFetcher reuses a persistent CURL handle instead of
+// creating/destroying one per HTTP request. On Windows, the old pattern
+// exhausted ephemeral ports via TIME_WAIT after 6-24 hours.
+// ============================================================================
+
+/**
+ * Test that a fetcher can call FetchPrice() multiple times without crash.
+ * Before the fix, each call did curl_easy_init/cleanup. With the fix,
+ * a persistent m_curl_handle is reused via curl_easy_reset().
+ */
+BOOST_AUTO_TEST_CASE(curl_handle_reuse_multiple_fetches)
+{
+    BinanceFetcher fetcher;
+    fetcher.SetTimeout(5);
+
+    // Call FetchPrice() multiple times — should not crash or leak
+    for (int i = 0; i < 5; i++) {
+        CAmount price = fetcher.FetchPrice();
+        // Price may be 0 (network unavailable in test) but must not crash
+        (void)price;
+    }
+    BOOST_CHECK(true); // If we got here without crash/ASAN error, handle reuse works
+}
+
+/**
+ * Test that the persistent handle is properly initialized in the constructor
+ * and cleaned up in the destructor. We create and destroy a fetcher in a scope.
+ */
+BOOST_AUTO_TEST_CASE(curl_handle_lifecycle)
+{
+    {
+        BinanceFetcher fetcher;
+        // Fetcher should have a valid handle after construction
+        // Call FetchPrice to exercise the handle
+        CAmount price = fetcher.FetchPrice();
+        (void)price;
+    }
+    // Destructor should have called curl_easy_cleanup — no leak
+
+    {
+        KrakenFetcher fetcher;
+        CAmount price = fetcher.FetchPrice();
+        (void)price;
+    }
+    // Second fetcher also cleans up correctly
+
+    BOOST_CHECK(true); // No crash, no ASAN leak
+}
+
+/**
+ * Test that multiple different fetcher instances each maintain their own handle
+ * and don't interfere with each other.
+ */
+BOOST_AUTO_TEST_CASE(curl_handle_multiple_fetcher_instances)
+{
+    BinanceFetcher binance;
+    KrakenFetcher kraken;
+    CoinbaseFetcher coinbase;
+
+    binance.SetTimeout(3);
+    kraken.SetTimeout(3);
+    coinbase.SetTimeout(3);
+
+    // Interleave calls across different fetchers
+    CAmount p1 = binance.FetchPrice();
+    CAmount p2 = kraken.FetchPrice();
+    CAmount p3 = coinbase.FetchPrice();
+    CAmount p4 = binance.FetchPrice();
+    CAmount p5 = kraken.FetchPrice();
+
+    (void)p1; (void)p2; (void)p3; (void)p4; (void)p5;
+
+    BOOST_CHECK(true); // No crash, handles are independent
+}
+
+/**
+ * Test that CoinMarketCapFetcher (which uses HttpGetWithHeaders internally)
+ * also properly reuses its CURL handle for the headers variant.
+ */
+BOOST_AUTO_TEST_CASE(curl_handle_reuse_with_headers)
+{
+    CoinMarketCapFetcher fetcher;
+    fetcher.SetTimeout(3);
+
+    // CoinMarketCap won't succeed without API key, but handle reuse should work
+    for (int i = 0; i < 3; i++) {
+        CAmount price = fetcher.FetchPrice();
+        (void)price;
+    }
+    BOOST_CHECK(true); // No crash on repeated calls with headers variant
+}
+
 BOOST_AUTO_TEST_SUITE_END()

@@ -62,18 +62,22 @@ std::string BaseExchangeFetcher::HttpGet(const std::string& url)
     // Set write callback
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+    curl_easy_setopt(curl, CURLOPT_MAXFILESIZE, 1048576L);  // 1MB max response
 
     // Set timeout
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, static_cast<long>(timeout_seconds));
 
     // Follow redirects
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 3L);
+    curl_easy_setopt(curl, CURLOPT_PROTOCOLS_STR, "https");
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L);
 
     // Set User-Agent
     curl_easy_setopt(curl, CURLOPT_USERAGENT, "DigiByte-Oracle/1.0");
 
     // SSL certificate verification
-    // Try common CA bundle locations, fall back to no verification if not found
+    // Try common CA bundle locations; refuse to connect if no CA bundle found
     // This is needed because the statically-linked OpenSSL has no built-in CA path
     // Always explicitly set CA info to override any bad compiled-in defaults
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
@@ -122,28 +126,16 @@ std::string BaseExchangeFetcher::HttpGet(const std::string& url)
         }
     }
     if (!ca_set) {
-        LogPrint(BCLog::DIGIDOLLAR, "HttpGet: No CA bundle found, disabling SSL verification\n");
-        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
-        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+        LogPrintf("HttpGet: SECURITY - No CA bundle found, refusing to make unverified request to %s\n", url);
+        curl_easy_cleanup(curl);
+        return "";  // Fail safe — don't fetch without TLS
     }
 
     // Perform request
     res = curl_easy_perform(curl);
 
     if (res != CURLE_OK) {
-        LogPrint(BCLog::DIGIDOLLAR, "HttpGet: SSL error for %s: %s (code=%d), retrying without verification\n", url, curl_easy_strerror(res), (int)res);
-
-        // Retry without SSL verification (workaround for static OpenSSL CA loading issue)
-        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
-        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
-        response.clear();
-        CURLcode res2 = curl_easy_perform(curl);
-        if (res2 == CURLE_OK) {
-            curl_easy_cleanup(curl);
-            return response;
-        }
-        LogPrint(BCLog::DIGIDOLLAR, "HttpGet: Retry also failed: %s\n", curl_easy_strerror(res2));
-
+        LogPrint(BCLog::DIGIDOLLAR, "HttpGet: Request failed for %s: %s (code=%d)\n", url, curl_easy_strerror(res), (int)res);
         curl_easy_cleanup(curl);
         return "";
     }
@@ -196,6 +188,7 @@ CAmount BaseExchangeFetcher::ConvertToMicroUSD(const std::string& price_str)
 
 CAmount BaseExchangeFetcher::ConvertToMicroUSD(double price_usd)
 {
+    if (!std::isfinite(price_usd)) return 0;
     if (price_usd <= 0 || price_usd > 100) { // Sanity check
         return 0;
     }

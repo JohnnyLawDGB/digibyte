@@ -196,7 +196,7 @@ CScript MintTxBuilder::CreateCollateralScript(const TxBuilderMintParams& params)
 
     CPubKey pubkey = params.ownerKey.GetPubKey();
     scriptParams.ownerKey = XOnlyPubKey(pubkey);
-    scriptParams.internalKey = XOnlyPubKey(pubkey);
+    scriptParams.internalKey = DigiDollar::GetCollateralNUMSKey();  // NUMS point — key-path spend impossible
     scriptParams.oracleKeys = GetOracleKeys(15); // Mock oracle keys
 
     return CreateCollateralP2TR(scriptParams);

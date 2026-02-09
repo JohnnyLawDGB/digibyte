@@ -17,6 +17,12 @@
 
 namespace DigiDollar {
 
+XOnlyPubKey GetCollateralNUMSKey()
+{
+    XOnlyPubKey nums_key{Span<const unsigned char>(COLLATERAL_NUMS_POINT_BYTES.data(), 32)};
+    return nums_key;
+}
+
 std::vector<XOnlyPubKey> GetOracleKeys(size_t count)
 {
     std::vector<XOnlyPubKey> keys;

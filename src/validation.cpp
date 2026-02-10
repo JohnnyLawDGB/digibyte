@@ -2470,6 +2470,11 @@ static unsigned int GetBlockScriptFlags(const CBlockIndex& block_index, const Ch
         flags |= SCRIPT_VERIFY_NULLDUMMY;
     }
 
+    // Enforce DigiDollar opcodes (OP_DIGIDOLLAR, OP_DDVERIFY, OP_CHECKPRICE)
+    if (DeploymentActiveAt(block_index, chainman, Consensus::DEPLOYMENT_DIGIDOLLAR)) {
+        flags |= SCRIPT_VERIFY_DIGIDOLLAR;
+    }
+
     return flags;
 }
 

@@ -110,12 +110,8 @@ std::string BaseExchangeFetcher::HttpGet(const std::string& url)
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
 
 #ifdef WIN32
-    // On Windows, use the native Windows certificate store via curl.
-    // This is sufficient — no need to search for CA bundle files.
+    // On Windows, use the native Windows certificate store via curl
     curl_easy_setopt(curl, CURLOPT_SSL_OPTIONS, CURLSSLOPT_NATIVE_CA);
-    bool ca_set = true;
-#else
-    bool ca_set = false;
 #endif
 
     static const char* ca_bundle_paths[] = {
@@ -134,7 +130,8 @@ std::string BaseExchangeFetcher::HttpGet(const std::string& url)
         nullptr
     };
 
-    // Try CA bundle files first (on non-Windows, ca_set starts false)
+    bool ca_set = false;
+    // Try CA bundle files first
     for (int i = 0; ca_bundle_paths[i] != nullptr; ++i) {
         struct stat st;
         if (stat(ca_bundle_paths[i], &st) == 0 && S_ISREG(st.st_mode) && st.st_size > 0) {

@@ -368,7 +368,7 @@ Phase 2 enables multi-oracle consensus. On testnet, this means **5-of-8 oracles 
 | `nOracleEpochLength` | 1440 blocks | 144 blocks | 1440 blocks |
 | `nDDOracleEpochBlocks` | 50 | 10 | 100 |
 | `nDDOracleUpdateInterval` | 2 blocks | 1 block | 4 blocks |
-| `nDDActivationHeight` | 600 | 650 | 22,014,720 |
+| `nDDActivationHeight` | 600 | 650 | BIP9-activated (TBD) |
 
 ### Running Multiple Oracles (Testing)
 

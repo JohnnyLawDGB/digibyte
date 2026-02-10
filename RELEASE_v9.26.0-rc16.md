@@ -144,50 +144,65 @@ Want to run an oracle node? Here's the simple version:
 - DigiByte Core RC16 built from source with curl support (or download the binary)
 - An assigned oracle ID (0–7 for testnet, contact the maintainer)
 
-### Two-Command Setup
+### New Oracle Setup (First Time)
 
 ```bash
-# Step 1: Create wallet and generate oracle key (one-time)
+# Step 1: Start your node
+digibyted -testnet -daemon
+
+# Step 2: Create a wallet (use just the name, NOT a full file path!)
 digibyte-cli -testnet createwallet "oracle"
+
+# Step 3: Generate your oracle key (one-time)
 digibyte-cli -testnet -rpcwallet=oracle createoraclekey <your_oracle_id>
 
-# Step 2: Start your oracle (after every node restart)
+# Step 4: Start the oracle
 digibyte-cli -testnet -rpcwallet=oracle startoracle <your_oracle_id>
 ```
 
-**Step 1** generates a Schnorr keypair, stores the private key in your wallet, and returns the public key. Send the **X-only public key** (32-byte hex) to the maintainer for inclusion in `chainparams.cpp`.
+**Step 2** creates a new descriptor wallet. Use just the name `"oracle"` — do NOT use a full path like `"/home/user/.digibyte/testnet13/wallets/oracle/"` or your wallet name will display incorrectly.
 
-**Step 2** loads the private key from your wallet and starts the oracle price feed thread. Your node will automatically fetch DGB/USD prices from multiple exchanges (minimum 2 sources required) and broadcast signed price messages to the network.
+**Step 3** generates a Schnorr keypair, stores the private key in your wallet, and returns the public key. Send the **X-only public key** (32-byte hex) to the maintainer for inclusion in `chainparams.cpp`. You only need to do this once.
 
-> **⚠️ After restarting `digibyted`, you must run `startoracle` again.** The key persists in the wallet, but the oracle thread does not auto-start.
+**Step 4** loads the private key from your wallet and starts broadcasting signed price messages to the network.
 
-### Loading Your Wallet After Restart
+### Existing Oracle — Upgrading to RC16
 
-After restarting your node, you need to load your wallet before starting the oracle:
+If you already have an oracle wallet from a previous RC, your key is still there. You do NOT need to create a new wallet or generate a new key. Just:
 
 ```bash
-# Load the oracle wallet (required after every restart)
+# Step 1: Stop old node and replace binaries with RC16
+
+# Step 2: Start your node
+digibyted -testnet -daemon
+
+# Step 3: Load your existing wallet
 digibyte-cli -testnet loadwallet "oracle"
 
-# Then start the oracle
+# Step 4: Start the oracle
 digibyte-cli -testnet -rpcwallet=oracle startoracle <your_oracle_id>
 ```
 
-If using the **Qt wallet**, go to **File → Open Wallet → oracle** to load it.
+> **⚠️ After every node restart, you must repeat Steps 3 and 4.** The wallet is not auto-loaded and the oracle thread does not auto-start. Your key persists in the wallet — you never need to run `createoraclekey` again.
 
-> **⚠️ IMPORTANT: Use just the wallet NAME, not the full file path!**
->
-> ✅ Correct: `createwallet "oracle"` / `loadwallet "oracle"`
-> ❌ Wrong: `createwallet "/home/user/.digibyte/testnet13/wallets/oracle/"`
->
-> Using the full path causes the wallet name to display as the entire path instead of just "oracle". If you already created your wallet with the full path, fix it by running:
-> ```bash
-> # Unload using the full path name it was created with
-> digibyte-cli -testnet unloadwallet "/home/user/.digibyte/testnet13/wallets/oracle/"
-> # Reload using just the short name
-> digibyte-cli -testnet loadwallet "oracle"
-> ```
-> Verify with `getwalletinfo` — the `walletname` field should show just `oracle`.
+### Qt Wallet Users
+
+If using the Qt wallet instead of `digibyted`:
+1. Start DigiByte Qt with `-testnet`
+2. Go to **File → Open Wallet → oracle** to load your wallet
+3. Go to **Help → Debug Window → Console**
+4. Type: `startoracle <your_oracle_id>`
+
+### Fixing Wallet Name
+
+If your `getwalletinfo` shows the full path as the wallet name (e.g. `"/home/user/.digibyte/testnet13/wallets/oracle/"`), fix it:
+
+```bash
+digibyte-cli -testnet unloadwallet "/home/user/.digibyte/testnet13/wallets/oracle/"
+digibyte-cli -testnet loadwallet "oracle"
+```
+
+Verify with `getwalletinfo` — the `walletname` field should show just `oracle`.
 
 For the complete guide, see **`DIGIDOLLAR_ORACLE_SETUP.md`**.
 
@@ -451,10 +466,25 @@ See the **Oracle Operator Setup** section above, or read `DIGIDOLLAR_ORACLE_SETU
 - If still stuck, try: `abandontransaction <txid>` in the console
 
 ### "No wallet is loaded" when running oracle commands
-- Add `-rpcwallet=oracle` to your `createoraclekey` and `startoracle` commands
+- Your wallet is not auto-loaded after a node restart. Load it first:
+  ```
+  digibyte-cli -testnet loadwallet "oracle"
+  ```
+- For Qt wallet: **File → Open Wallet → oracle**
+- Then add `-rpcwallet=oracle` to your `createoraclekey` and `startoracle` commands
+
+### Wallet name shows full file path instead of "oracle"
+- This happens if you created your wallet using the full path instead of just the name
+- Fix it by unloading with the full path and reloading with just the name:
+  ```
+  digibyte-cli -testnet unloadwallet "/home/user/.digibyte/testnet13/wallets/oracle/"
+  digibyte-cli -testnet loadwallet "oracle"
+  ```
+- Verify with `getwalletinfo` — walletname should show just `oracle`
 
 ### "Oracle not configured" from `startoracle`
 - Run `createoraclekey` first to generate and store the key in your wallet
+- Make sure you load the correct wallet first: `loadwallet "oracle"`
 
 ### "Mining not working"
 - Ensure `algo=sha256d` is in your config under `[test]`

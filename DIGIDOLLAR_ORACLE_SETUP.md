@@ -75,15 +75,34 @@ rpcbind=127.0.0.1
 ./src/digibyte-cli -testnet getblockchaininfo
 ```
 
-### Step 2: Create a Descriptor Wallet
+### Step 2: Create or Load Your Wallet
 
-RC12 creates descriptor wallets by default:
+**New operators** — create a wallet using **just the name** (not a file path):
 
 ```bash
 ./src/digibyte-cli -testnet createwallet "oracle"
 ```
 
-### Step 3: Generate Your Oracle Key
+> **⚠️ IMPORTANT: Use just the name, not a full path!**
+>
+> ✅ Correct: `createwallet "oracle"`
+> ❌ Wrong: `createwallet "/home/user/.digibyte/testnet13/wallets/oracle/"`
+>
+> Using a full path causes the wallet name to display incorrectly. If you already did this, see [Fixing Wallet Name](#fixing-wallet-name) below.
+
+**Existing operators** (upgrading from a previous RC) — load your existing wallet:
+
+```bash
+./src/digibyte-cli -testnet loadwallet "oracle"
+```
+
+Your oracle key from the previous RC is still in your wallet. You do NOT need to run `createoraclekey` again. Skip to [Step 6: Start Your Oracle](#step-6-start-your-oracle).
+
+**Qt wallet users:** Go to **File → Open Wallet → oracle**
+
+> **⚠️ After every node restart, you must load your wallet again.** Wallets are not auto-loaded. Then start your oracle (Step 4).
+
+### Step 3: Generate Your Oracle Key (New Operators Only)
 
 ```bash
 ./src/digibyte-cli -testnet -rpcwallet=oracle createoraclekey <oracle_id>
@@ -502,4 +521,25 @@ Recompile and distribute the updated binary.
 
 ---
 
-*This guide consolidates and supersedes the previous `ORACLE_OPERATOR_GUIDE.md`, `DIGIDOLLAR_TESTNET_ORACLE_SETUP.md`, and `DIGIDOLLAR_ORACLE_SETUP_COMPLETE_GUIDE.md`. Verified against DigiByte Core RC12 source code.*
+## Fixing Wallet Name
+
+If you created your wallet using the full file path instead of just the name, `getwalletinfo` will show the path as the wallet name (e.g., `"/home/user/.digibyte/testnet13/wallets/oracle/"`).
+
+To fix this:
+
+```bash
+# 1. Unload using the full path name it was created with
+./src/digibyte-cli -testnet unloadwallet "/home/user/.digibyte/testnet13/wallets/oracle/"
+
+# 2. Reload using just the short name
+./src/digibyte-cli -testnet loadwallet "oracle"
+
+# 3. Verify
+./src/digibyte-cli -testnet -rpcwallet=oracle getwalletinfo
+```
+
+The `walletname` field should now show just `oracle`. Your wallet data is unchanged — this only fixes how it's referenced.
+
+---
+
+*This guide consolidates and supersedes the previous `ORACLE_OPERATOR_GUIDE.md`, `DIGIDOLLAR_TESTNET_ORACLE_SETUP.md`, and `DIGIDOLLAR_ORACLE_SETUP_COMPLETE_GUIDE.md`. Verified against DigiByte Core RC16 source code.*

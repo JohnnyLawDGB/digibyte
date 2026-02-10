@@ -3,6 +3,32 @@
 
 ---
 
+## Table of Contents
+
+- [Overview](#overview)
+- [Prerequisites](#prerequisites)
+- [Step-by-Step: Oracle Operator Setup](#step-by-step-oracle-operator-setup)
+  - [Step 1: Start the Node](#step-1-start-the-node)
+  - [Step 2: Create or Load Your Wallet](#step-2-create-or-load-your-wallet)
+  - [Step 3: Generate Your Oracle Key (New Operators Only)](#step-3-generate-your-oracle-key-new-operators-only)
+  - [Step 4: Send Your Public Key to the Maintainer](#step-4-send-your-public-key-to-the-maintainer)
+  - [Step 5: Wait for Updated Release](#step-5-wait-for-updated-release)
+  - [Step 6: Start Your Oracle](#step-6-start-your-oracle)
+  - [Step 7: Verify Your Oracle](#step-7-verify-your-oracle)
+- [Upgrading Your Oracle to a New Release](#upgrading-your-oracle-to-a-new-release)
+- [Restarting Your Oracle (After a Reboot or Crash)](#restarting-your-oracle-after-a-reboot-or-crash)
+- [What Your Oracle Does](#what-your-oracle-does)
+- [Multi-Oracle Setup (Phase 2)](#multi-oracle-setup-phase-2)
+- [Monitoring & Troubleshooting](#monitoring--troubleshooting)
+- [RPC Command Reference](#rpc-command-reference)
+- [For the Maintainer: Adding an Operator's Key](#for-the-maintainer-adding-an-operators-key)
+- [Server Requirements](#server-requirements)
+- [File Locations](#file-locations)
+- [Code References](#code-references)
+- [Fixing Wallet Name](#fixing-wallet-name)
+
+---
+
 ## Overview
 
 DigiDollar requires oracle operators to provide real-time DGB/USD price feeds. Oracle public keys are **hardcoded in `src/kernel/chainparams.cpp`**. Each operator:
@@ -47,19 +73,33 @@ ldd ./src/digibyted | grep curl
 Create or edit `~/.digibyte/digibyte.conf`:
 
 ```ini
+testnet=1
+
 [test]
+digidollar=1
 server=1
-txindex=1
+listen=1
+addnode=oracle1.digibyte.io
+
+# Debugging (optional but recommended for oracle operators)
 debug=digidollar
 debug=net
-listen=1
-port=12030
-rpcport=14025
-rpcallowip=127.0.0.1
-rpcbind=127.0.0.1
 ```
 
-> **Important:** Put testnet settings under the `[test]` section header, not globally.
+### Optional Settings:
+```ini
+[test]
+# Transaction index (useful for debugging)
+txindex=1
+
+# DigiDollar stats index for network-wide supply tracking
+digidollarstatsindex=1
+
+# For mining (SHA256d recommended for fastest CPU mining)
+algo=sha256d
+```
+
+> **Important:** `testnet=1` goes at the **top** of the file (not under any section). All other settings go under the `[test]` section header.
 
 ---
 

@@ -140,6 +140,10 @@ private:
     int m_selectedTier;
     double m_requiredCollateral;
     double m_collateralRatio;
+
+    // Tracks collateral shown to user so we can detect oracle price drift
+    double m_lastDisplayedCollateral;
+    double m_lastDisplayedOraclePrice;
 };
 
 #endif // DIGIBYTE_QT_DIGIDOLLARMINTWIDGET_H

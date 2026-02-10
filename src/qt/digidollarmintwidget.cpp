@@ -17,6 +17,8 @@
 #include <interfaces/node.h>
 #include <univalue.h>
 
+#include <cmath>
+
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
@@ -72,7 +74,9 @@ DigiDollarMintWidget::DigiDollarMintWidget(QWidget *parent) :
     m_mintAmount(0.0),
     m_selectedTier(0),
     m_requiredCollateral(0.0),
-    m_collateralRatio(0.0)
+    m_collateralRatio(0.0),
+    m_lastDisplayedCollateral(0.0),
+    m_lastDisplayedOraclePrice(0.0)
 {
     setupUI();
     connectSignals();
@@ -397,13 +401,12 @@ void DigiDollarMintWidget::connectSignals()
     connect(m_clearButton, &QPushButton::clicked,
             this, &DigiDollarMintWidget::onClearClicked);
 
-    // Auto-refresh oracle price every 30 seconds
-    // This ensures the displayed price stays current even when the user
-    // stays on the Mint tab without switching tabs.
-    // Matches the behavior of other DD widgets (overview uses 5s, positions uses 60s)
+    // Auto-refresh oracle price every 12 seconds
+    // This ensures the displayed collateral stays current as the oracle price moves.
+    // More frequent than the old 30s to minimize surprise changes at mint time.
     QTimer* oraclePriceTimer = new QTimer(this);
     connect(oraclePriceTimer, &QTimer::timeout, this, &DigiDollarMintWidget::updateOraclePrice);
-    oraclePriceTimer->start(30000); // 30 seconds
+    oraclePriceTimer->start(12000); // 12 seconds
 }
 
 void DigiDollarMintWidget::setWalletModel(WalletModel* model)
@@ -602,6 +605,55 @@ void DigiDollarMintWidget::onMintClicked()
         return;
     }
 
+    // --- Oracle price drift check ---
+    // Re-fetch the current oracle price and recalculate collateral.
+    // If the price moved since the user last saw the estimate, warn them
+    // so they can review before committing.
+    double previousCollateral = m_lastDisplayedCollateral;
+    double previousOraclePrice = m_lastDisplayedOraclePrice;
+
+    // Refresh oracle price (updates m_oraclePrice)
+    updateOraclePrice(); // also calls updateCollateralCalculation()
+
+    // Re-validate after refresh — balance may no longer cover new collateral
+    if (!validateCollateral()) {
+        Q_EMIT message(tr("Insufficient Collateral"),
+                       tr("The oracle price has changed and you no longer have "
+                          "enough DGB to cover the required collateral.\n\n"
+                          "Required: %1\nAvailable: %2")
+                       .arg(formatDGBAmount(m_requiredCollateral))
+                       .arg(formatDGBAmount(m_availableDGBBalance)),
+                       QMessageBox::Warning);
+        return;
+    }
+
+    // Use a small tolerance (0.001 DGB ≈ 100k satoshis) to avoid nagging on rounding noise
+    const double collateralDrift = std::abs(m_requiredCollateral - previousCollateral);
+    if (previousCollateral > 0 && collateralDrift > 0.001) {
+        QMessageBox priceChangeBox(this);
+        priceChangeBox.setWindowTitle(tr("Oracle Price Updated"));
+        priceChangeBox.setIcon(QMessageBox::Information);
+        priceChangeBox.setText(
+            tr("The oracle price changed while you were reviewing.\n\n"
+               "Required collateral is now %1 (was %2).\n"
+               "Oracle price: %3 USD/DGB (was %4 USD/DGB)\n\n"
+               "Would you like to continue with the updated amount?")
+            .arg(formatDGBAmount(m_requiredCollateral))
+            .arg(formatDGBAmount(previousCollateral))
+            .arg(formatUSDAmount(m_oraclePrice))
+            .arg(formatUSDAmount(previousOraclePrice)));
+        priceChangeBox.setStandardButtons(QMessageBox::Yes | QMessageBox::No);
+        priceChangeBox.setDefaultButton(QMessageBox::No);
+
+        if (priceChangeBox.exec() != QMessageBox::Yes) {
+            // User chose to review — form is already updated with new values
+            LogPrintf("DigiDollar Qt: User declined mint after oracle price change "
+                      "(collateral %.8f -> %.8f)\n", previousCollateral, m_requiredCollateral);
+            return;
+        }
+    }
+    // --- End oracle price drift check ---
+
     // Calculate unlock details for user warning
     int lockBlocks = getLockTierBlocks(m_selectedTier);
     int currentHeight = m_clientModel ? m_clientModel->getNumBlocks() : 0;
@@ -783,6 +835,10 @@ void DigiDollarMintWidget::updateCollateralCalculation()
     m_collateralValue->setText(formatDGBAmount(m_requiredCollateral));
     m_ratioValue->setText(formatRatio(m_collateralRatio));
     m_ratioBar->setValue(static_cast<int>(m_collateralRatio));
+
+    // Track what the user is currently seeing so we can detect drift at mint time
+    m_lastDisplayedCollateral = m_requiredCollateral;
+    m_lastDisplayedOraclePrice = m_oraclePrice;
 
     // REMOVED: Color-coded collateral displays - Let CSS handle theming
 }

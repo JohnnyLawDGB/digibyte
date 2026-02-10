@@ -30,6 +30,7 @@
 #include <QRegularExpression>
 #include <QApplication>
 #include <QPalette>
+#include <QTimer>
 
 DigiDollarRedeemWidget::DigiDollarRedeemWidget(QWidget *parent) :
     QWidget(parent),
@@ -365,6 +366,17 @@ void DigiDollarRedeemWidget::connectSignals()
     // Connect coin control button
     connect(m_coinControlButton, &QPushButton::clicked,
             this, &DigiDollarRedeemWidget::onCoinControlButtonClicked);
+
+    // Auto-refresh position details every 15 seconds so health/status stays current
+    QTimer* positionRefreshTimer = new QTimer(this);
+    connect(positionRefreshTimer, &QTimer::timeout, this, [this]() {
+        if (m_positionFound && !m_selectedPositionId.isEmpty()) {
+            loadPositionDetails();
+            updatePositionInfo();
+            updateRedeemButtons();
+        }
+    });
+    positionRefreshTimer->start(15000); // 15 seconds
 }
 
 void DigiDollarRedeemWidget::setWalletModel(WalletModel* model)

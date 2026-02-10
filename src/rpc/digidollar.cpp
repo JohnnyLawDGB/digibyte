@@ -2008,7 +2008,7 @@ RPCHelpMan getdigidollarbalance()
             } else {
                 // Get total wallet balance
                 confirmedBalance = dd_wallet->GetTotalDDBalance();
-                unconfirmedBalance = 0; // TODO: Track unconfirmed balance separately
+                unconfirmedBalance = dd_wallet->GetPendingDDBalance();
                 addressCount = dd_wallet->GetBalanceCount();
             }
 

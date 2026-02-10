@@ -705,16 +705,20 @@ RPCHelpMan mintdigidollar()
                 },
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
         {
-            // Check DigiDollar activation
-            const ChainstateManager& chainman = EnsureAnyChainman(request.context);
-            const CBlockIndex* tip = WITH_LOCK(cs_main, return chainman.ActiveChain().Tip());
-            if (!DigiDollar::IsDigiDollarEnabled(tip, chainman)) {
-                throw JSONRPCError(RPC_MISC_ERROR, "DigiDollar is not yet activated on this network");
-            }
-
-            // Get wallet
+            // Get wallet first (wallet RPCs have WalletContext, not NodeContext)
             std::shared_ptr<wallet::CWallet> pwallet = wallet::GetWalletForJSONRPCRequest(request);
             if (!pwallet) throw JSONRPCError(RPC_WALLET_NOT_FOUND, "No wallet is loaded");
+
+            // Check DigiDollar activation via wallet's chain interface
+            {
+                node::NodeContext* node_ctx = pwallet->chain().context();
+                if (!node_ctx) throw JSONRPCError(RPC_INTERNAL_ERROR, "Node context unavailable");
+                ChainstateManager& chainman = *node_ctx->chainman;
+                const CBlockIndex* tip = WITH_LOCK(cs_main, return chainman.ActiveChain().Tip());
+                if (!DigiDollar::IsDigiDollarEnabled(tip, chainman)) {
+                    throw JSONRPCError(RPC_MISC_ERROR, "DigiDollar is not yet activated on this network");
+                }
+            }
 
             // Ensure wallet is unlocked
             wallet::EnsureWalletIsUnlocked(*pwallet);
@@ -989,22 +993,24 @@ RPCHelpMan senddigidollar()
                 },
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
         {
-            // Check DigiDollar activation
+            // PHASE 7.7: Integration with backend TransferDigiDollar() from Phase 2.1
+            LogPrintf("DigiDollar RPC: senddigidollar called\n");
+
+            // Get wallet first (wallet RPCs have WalletContext, not NodeContext)
+            std::shared_ptr<wallet::CWallet> const pwallet = wallet::GetWalletForJSONRPCRequest(request);
+            if (!pwallet) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "Wallet not found");
+            }
+
+            // Check DigiDollar activation via wallet's chain interface
             {
-                const ChainstateManager& chainman = EnsureAnyChainman(request.context);
+                node::NodeContext* node_ctx = pwallet->chain().context();
+                if (!node_ctx) throw JSONRPCError(RPC_INTERNAL_ERROR, "Node context unavailable");
+                ChainstateManager& chainman = *node_ctx->chainman;
                 const CBlockIndex* tip = WITH_LOCK(cs_main, return chainman.ActiveChain().Tip());
                 if (!DigiDollar::IsDigiDollarEnabled(tip, chainman)) {
                     throw JSONRPCError(RPC_MISC_ERROR, "DigiDollar is not yet activated on this network");
                 }
-            }
-
-            // PHASE 7.7: Integration with backend TransferDigiDollar() from Phase 2.1
-            LogPrintf("DigiDollar RPC: senddigidollar called\n");
-
-            // Get wallet
-            std::shared_ptr<wallet::CWallet> const pwallet = wallet::GetWalletForJSONRPCRequest(request);
-            if (!pwallet) {
-                throw JSONRPCError(RPC_WALLET_ERROR, "Wallet not found");
             }
 
             // Ensure wallet is unlocked
@@ -1113,15 +1119,6 @@ RPCHelpMan redeemdigidollar()
                 },
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
         {
-            // Check DigiDollar activation
-            {
-                const ChainstateManager& chainman = EnsureAnyChainman(request.context);
-                const CBlockIndex* tip = WITH_LOCK(cs_main, return chainman.ActiveChain().Tip());
-                if (!DigiDollar::IsDigiDollarEnabled(tip, chainman)) {
-                    throw JSONRPCError(RPC_MISC_ERROR, "DigiDollar is not yet activated on this network");
-                }
-            }
-
             // Parse parameters
             std::string positionIdStr = request.params[0].get_str();
             CAmount ddAmount = request.params[1].getInt<int64_t>(); // DD amount in cents (not BTC format)
@@ -1136,9 +1133,20 @@ RPCHelpMan redeemdigidollar()
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid position ID format");
             }
 
-            // Get wallet
+            // Get wallet (wallet RPCs have WalletContext, not NodeContext)
             std::shared_ptr<wallet::CWallet> pwallet = wallet::GetWalletForJSONRPCRequest(request);
             if (!pwallet) throw JSONRPCError(RPC_WALLET_NOT_FOUND, "Wallet not found");
+
+            // Check DigiDollar activation via wallet's chain interface
+            {
+                node::NodeContext* node_ctx = pwallet->chain().context();
+                if (!node_ctx) throw JSONRPCError(RPC_INTERNAL_ERROR, "Node context unavailable");
+                ChainstateManager& chainman = *node_ctx->chainman;
+                const CBlockIndex* tip = WITH_LOCK(cs_main, return chainman.ActiveChain().Tip());
+                if (!DigiDollar::IsDigiDollarEnabled(tip, chainman)) {
+                    throw JSONRPCError(RPC_MISC_ERROR, "DigiDollar is not yet activated on this network");
+                }
+            }
 
             // Ensure wallet is unlocked
             wallet::EnsureWalletIsUnlocked(*pwallet);

@@ -143,41 +143,30 @@ class DigiDollarActivationBoundaryTest(DigiByteTestFramework):
         node.setmockoracleprice(500000)  # $0.50/DGB
 
         # mintdigidollar should now succeed
-        try:
-            result = node.mintdigidollar(100000, 4)  # $1000, tier 4
-            txid = result['txid']
-            self.log.info(f"  Mint succeeded: txid={txid}")
+        result = node.mintdigidollar(100000, 4)  # $1000, tier 4
+        txid = result['txid']
+        self.log.info(f"  Mint succeeded: txid={txid}")
 
-            # TX should be in mempool
-            mempool = node.getrawmempool()
-            assert txid in mempool, \
-                f"DD tx {txid} should be in mempool post-activation"
-            self.log.info(f"  TX in mempool: confirmed")
+        # TX should be in mempool
+        mempool = node.getrawmempool()
+        assert txid in mempool, \
+            f"DD tx {txid} should be in mempool post-activation"
+        self.log.info(f"  TX in mempool: confirmed")
 
-            # Mine block containing the DD transaction
-            block_hash = node.generate(1)[0]
-            block = node.getblock(block_hash)
-            assert txid in block['tx'], "DD tx should be in mined block"
-            self.log.info(f"  Block {block['height']} contains DD tx")
+        # Mine block containing the DD transaction
+        block_hash = node.generate(1)[0]
+        block = node.getblock(block_hash)
+        assert txid in block['tx'], "DD tx should be in mined block"
+        self.log.info(f"  Block {block['height']} contains DD tx")
 
-            # TX should be confirmed (no longer in mempool)
-            mempool = node.getrawmempool()
-            assert txid not in mempool, "TX should be confirmed"
+        # TX should be confirmed (no longer in mempool)
+        mempool = node.getrawmempool()
+        assert txid not in mempool, "TX should be confirmed"
 
-            # Verify position was created
-            positions = node.listdigidollarpositions()
-            assert len(positions) > 0, "Expected at least one DD position"
-            self.log.info(f"  Positions: {len(positions)}")
-
-        except Exception as e:
-            error_msg = str(e)
-            # "Node context not found" is a known bug in the wallet RPC gating code
-            # (commit 14374cd: uses EnsureAnyChainman in wallet RPC context)
-            if "Node context not found" in error_msg:
-                self.log.warning(f"  Known bug: wallet RPC missing node context: {error_msg}")
-                self.log.warning("  Skipping post-activation mint test (RPC context bug)")
-            else:
-                raise
+        # Verify position was created
+        positions = node.listdigidollarpositions()
+        assert len(positions) > 0, "Expected at least one DD position"
+        self.log.info(f"  Positions: {len(positions)}")
 
         # Final verification: deployment info still ACTIVE
         dep = node.getdigidollardeploymentinfo()
